@@ -9,7 +9,8 @@ LLM 0회. 재료 둘을 모아 `orchestrator/opportunity.find_opportunities` 에
 - 슬롯의 장소와 `planned_poi_ids` 는 이미 일정에 있는 곳이라 카드에서 뺀다.
 
 실패는 notes 로 말한다(INV-4 — 침묵 금지, 무발화의 관측은 WARN 한 줄):
-행사 미배선·실패 → 요즘 인기만 · 장소 조회 실패 → 빈 목록 · 시한 초과·슬롯 상한 → 부분 결과.
+행사 미배선·실패 → 요즘 인기만 · 장소 조회 실패 → 빈 목록 · 시한 초과·슬롯 상한 → 부분 결과 ·
+예산 안에서 시작한 조회가 예산을 넘겨 끝남 → 결과는 그대로(`poi_lookup_late`).
 `wiring.py` 는 경합 1위 파일이라 여기 둔다 — 거기엔 import 1줄과 위임 메서드만 있다.
 """
 
@@ -95,6 +96,8 @@ def _pois(poi_db: object, slots: Sequence[tuple[str, GeoPoint]], over_budget: Ca
         except Exception as e:  # 백엔드 장애 — 일부만 본 카드는 내지 않는다
             notes.append(f"poi_lookup_unavailable: {type(e).__name__}")
             return None
+    if over_budget():  # 진행 중인 조회는 끊지 못한다 — 백엔드 읽기 상한을 넘겼을 수 있음을 이쪽에도 남긴다
+        notes.append("poi_lookup_late")
     if len(slots) > MAX_LOOKUPS:
         notes.append("poi_lookup_partial: slot_cap")
     return tuple(found.values())

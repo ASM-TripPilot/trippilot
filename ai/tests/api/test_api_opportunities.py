@@ -10,7 +10,8 @@
   ④ 행사 미배선 → `events_unwired` · 행사 조회 실패·패킷 형식 위반 → `events_unavailable: …` — 요즘 인기는 낸다.
      저장소가 잘려 왔으면(LOW) 받은 만큼 쓰고 `events_low`
   ⑤ 장소 조회가 한 번이라도 실패하면 본 만큼도 내지 않는다 — 빈 목록 + `poi_lookup_unavailable: …`
-  ⑥ 시한의 70%를 넘기면 거기서 멈추고 부분 결과 + `poi_lookup_partial: deadline` (시한 미지정 = 제약 없음)
+  ⑥ 시한의 70%를 넘기면 거기서 멈추고 부분 결과 + `poi_lookup_partial: deadline` (시한 미지정 = 제약 없음).
+     예산 안에서 시작한 조회가 넘겨 끝났으면 결과는 다 내고 `poi_lookup_late`
   ⑦ 반경 조회는 슬롯 8개까지, 요청 순서대로 — 넘치면 `poi_lookup_partial: slot_cap`
   ⑧ 요청 검증 422: 슬롯 0개·31개, 일정 장소 301개, 모르는 키
   ⑨ [PBT] 요청·응답 스키마는 JSON 왕복에서 값이 보존된다 (situation-awareness NFR §8 — PBT-02 왕복 ③)
@@ -256,6 +257,18 @@ def test_시한의_70퍼센트를_넘기면_거기서_멈추고_부분_결과와
     assert len(poi_db.centers) == 1
     assert [o.key for o in response.opportunities] == ["event:tourapi-2786391"]  # 둘째 슬롯 근처는 못 봤다
     assert response.notes == ["poi_lookup_partial: deadline"]
+
+
+def test_예산_안에서_시작한_조회가_예산을_넘겨_끝나면_결과는_다_내고_노트로_말한다() -> None:
+    """시한 2s → 예산 1.4s. 둘째 조회는 1.0s 에 시작해 2.0s 에 끝났다 — 진행 중인 조회는 끊을 수 없으니
+    결과는 내되, 백엔드 읽기 상한을 넘겼을 수 있음을 AI 쪽에도 남긴다(노트 → WARN 한 줄)."""
+    poi_db = _TickingPoiDb(_POIS, step_s=1.0)
+
+    response = _find(poi_db, _body(request_meta=_meta(deadline_ms=2000)))
+
+    assert len(poi_db.centers) == 2
+    assert [o.key for o in response.opportunities] == ["event:tourapi-2786391", "trending:p-bakery"]
+    assert response.notes == ["poi_lookup_late"]
 
 
 def test_시한이_없으면_조회를_멈추지_않는다() -> None:
