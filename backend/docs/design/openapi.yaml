@@ -2327,11 +2327,13 @@ components:
 
     StaySearchResponse:
       type: object
-      required: [items, degraded, filterZeroReasons]
+      required: [items, degraded, filterZeroReasons, amenitiesKnown, truncated]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/StayItem' } }
         degraded: { type: boolean, description: 일부 공급자 실패 시 true(부분 결과·재시도 안내) }
         filterZeroReasons: { type: array, items: { type: string }, description: '필터로 0건일 때 완화 후보(예: stayType, amenity:오션뷰)' }
+        amenitiesKnown: { type: boolean, description: 'false = 편의시설 정보를 **아직 모른다**(없는 것이 아니다). 편의시설 필터 비활성화 또는 "정보 준비 중" 안내 — 안 그러면 0건이 "그런 숙소가 없다"로 읽힌다' }
+        truncated: { type: boolean, description: 'true = 지역 미선택이라 전국 중 **일부만** 본 결과. "조건에 맞는 숙소가 없다"고 단정하지 말고 지역 선택을 권한다' }
 
     CuratedStayList:
       type: object
@@ -2779,6 +2781,7 @@ components:
       required: [days]
       description: 편집(전체 교체) — 수정된 일자·슬롯 배열. 슬롯 순서 = 배열 순서
       properties:
+        reason: { type: string, nullable: true, maxLength: 500, description: 선택 — 변경 이력에 남는다 }
         days:
           type: array
           items:
@@ -3588,6 +3591,7 @@ components:
         ageConfirmation:
           allOf: [{ $ref: '#/components/schemas/AgeConfirmation' }]
           description: 신규 가입 시 필수, 기존 로그인 시 무시
+        deviceId: { type: string, nullable: true, description: 미제공 시 서버가 임의 부여(기기별 세션) }
 
     SocialTokenLoginRequest:
       type: object
