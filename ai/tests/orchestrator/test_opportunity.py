@@ -104,6 +104,16 @@ def test_행사장_후보가_여럿이면_이름이_긴_곳이_가까운_곳보�
     assert card.kind is OpportunityKind.EVENT_VENUE and card.poi == garden
 
 
+def test_슬롯에서_1km_넘게_떨어진_행사도_행사장이_슬롯_1km_안이면_카드다() -> None:
+    """행사 좌표는 슬롯에서 1.8km — 그래도 행사장(슬롯 0.9km · 행사 0.9km)은 남은 동선 근처다."""
+    market = _poi("p-market", "남대문시장", -900, category=PoiCategory.SHOPPING)
+    fest = _event("tourapi-130", "남대문시장 야시장 축제", -1800)
+
+    (card,) = _find([fest], [market])
+
+    assert card.kind is OpportunityKind.EVENT_VENUE and card.poi == market
+
+
 def test_두_글자_이름은_주소에_있어도_행사장으로_보지_않는다() -> None:
     namsan = _poi("p-namsan", "남산", 100, category=PoiCategory.NATURE)
     fest = _event("tourapi-120", "가을 숲길 축제", 150, address="서울 중구 남산 일원")
@@ -298,20 +308,26 @@ def _offset(limit_m: int):
 
 @st.composite
 def _scenes(draw):
+    """슬롯 1~3 · 장소 0~10(어느 슬롯 1.3km 안팎) · 행사 0~5(절반은 한 장소에서 1.1km 안팎에 걸친다).
+
+    장소·행사를 슬롯·장소 둘레에 모아야 1km·0.3km 경계와 '행사는 멀어도 행사장은 가까운' 경우가 자주 나온다.
+    """
     slots = tuple((f"s{i}", _at(*draw(_offset(1500)))) for i in range(draw(st.integers(1, 3))))
-    pois = tuple(
-        Poi(PoiId(f"p{i}"), draw(st.sampled_from(_GOOD_NAMES + _BAD_NAMES)), draw(st.sampled_from(list(PoiCategory))),
-            _at(*draw(_offset(2500))), draw(st.sampled_from(_HOURS)), None, None, DataQuality.FULL,
-            PoiSource.SEED, None,
-            tags=tuple(sorted(draw(st.sets(st.sampled_from((NIGHTLIFE_TAG, TRENDING_TAG)))))))
-        for i in range(draw(st.integers(0, 10)))
-    )
+    pois = []
+    for i in range(draw(st.integers(0, 10))):
+        nightlife, trending = draw(st.integers(0, 3)) == 0, draw(st.booleans())
+        pois.append(Poi(
+            PoiId(f"p{i}"), draw(st.sampled_from(_GOOD_NAMES + _BAD_NAMES)), draw(st.sampled_from(list(PoiCategory))),
+            _at(*draw(_offset(1300)), base=draw(st.sampled_from(slots))[1]), draw(st.sampled_from(_HOURS)),
+            None, None, DataQuality.FULL, PoiSource.SEED, None,
+            tags=tuple(t for t, on in ((NIGHTLIFE_TAG, nightlife), (TRENDING_TAG, trending)) if on)))
+    pois = tuple(pois)
     events = []
     for j in range(draw(st.integers(0, 5))):
         host = draw(st.sampled_from(pois)) if pois and draw(st.booleans()) else None
         venue = host.name if host is not None else draw(st.sampled_from(_GOOD_NAMES))
-        base = host.coord if host is not None else _at(*draw(_offset(2500)))
-        coord = None if draw(st.integers(0, 9)) == 0 else _at(*draw(_offset(900)), base=base)
+        base = host.coord if host is not None else draw(st.sampled_from(slots))[1]
+        coord = None if draw(st.integers(0, 9)) == 0 else _at(*draw(_offset(1100 if host else 2500)), base=base)
         start = _DAY + timedelta(days=draw(st.integers(-5, 2)))
         events.append(EventInfo(
             f"{draw(st.sampled_from(('tourapi-', 'popup-', 'evx-')))}{j}",
@@ -320,7 +336,7 @@ def _scenes(draw):
             start, start + timedelta(days=draw(st.integers(0, 40))), coord,
             draw(st.sampled_from((None, f"서울 {venue} 일원", "서울 중구 세종대로 110"))),
         ))
-    planned = frozenset(p.poi_id for p in pois if draw(st.booleans()))
+    planned = frozenset(p.poi_id for p in pois if draw(st.integers(0, 3)) == 0)
     return slots, tuple(events), pois, planned
 
 

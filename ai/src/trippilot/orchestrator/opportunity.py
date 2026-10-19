@@ -77,7 +77,11 @@ def find_opportunities(
         if near is not None and near[0] <= NEAR_KM:
             places[poi.poi_id] = (poi, near[1], near[0])
 
-    cards = [c for c in (_event_card(e, places.values()) for e in events if _shown(e, day)) if c is not None]
+    # 슬롯에서 NEAR_KM + 1km 보다 먼 행사는 카드가 될 장소를 가질 수 없다(삼각부등식) — 장소 대조 전에 거른다
+    reach = NEAR_KM + ATTACH_RADIUS_KM
+    shown = (e for e in events if _shown(e, day)
+             and min((haversine_km(c, e.coord) for _, c in slots), default=reach + 1) <= reach)
+    cards = [c for c in (_event_card(e, places.values()) for e in shown) if c is not None]
     cards += [Opportunity(f"trending:{p.poi_id}", OpportunityKind.TRENDING, p, slot, km)
               for p, slot, km in places.values() if TRENDING_TAG in p.tags]
     cards.sort(key=_rank)
