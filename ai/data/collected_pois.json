@@ -7,7 +7,7 @@
     "OVERTURE",
     "TOURAPI"
   ],
-  "collected_at": "2026-10-18T21:51:11.474131+00:00",
+  "collected_at": "2026-10-19T05:42:29.566072+00:00",
   "area_codes": [
     "1",
     "2",
@@ -35,7 +35,7 @@
     "39"
   ],
   "stats": {
-    "merged_runs": 1,
+    "merged_runs": 2,
     "unique_proposals": 59469
   },
   "merged_from": [
@@ -43,8 +43,46 @@
       "collected_at": "2026-10-18T21:51:11.474131+00:00",
       "proposals": 59469,
       "stats": {
-        "merged_runs": 2,
+        "merged_runs": 1,
         "unique_proposals": 59469
+      }
+    },
+    {
+      "collected_at": "2026-10-19T05:42:29.566072+00:00",
+      "proposals": 0,
+      "stats": {
+        "http_calls": 1020,
+        "listed": 1002,
+        "page_failures": 0,
+        "detail_failures": 985,
+        "category_unmapped": 993,
+        "address_missing": 1,
+        "merged": 0,
+        "passed": 0,
+        "skipped_unchanged": 671,
+        "rest_unparsed": 0,
+        "raw_reparse_mismatch": 0,
+        "gate_drops": {
+          "existence_out_of_service_region": 8
+        },
+        "budget_exhausted": false,
+        "per_area": {
+          "1": {
+            "calls": 465,
+            "passed": 0,
+            "skipped": 308
+          },
+          "6": {
+            "calls": 234,
+            "passed": 0,
+            "skipped": 121
+          },
+          "39": {
+            "calls": 321,
+            "passed": 0,
+            "skipped": 242
+          }
+        }
       }
     }
   ],

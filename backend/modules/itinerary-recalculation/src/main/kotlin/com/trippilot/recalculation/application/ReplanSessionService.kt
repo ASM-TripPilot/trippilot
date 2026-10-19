@@ -207,7 +207,14 @@ class ReplanSessionService(
         val draft = session.draft ?: throw ConflictDetected(message = "재계획안이 비어 있습니다.")
         replans.apply(accountId, tripId, ReplanProposal.fromMap(draft), changeReason(session))
         val applied = sessions.save(session.applied(clock.instant()))
-        events.publish(ItineraryRecalculated(tripId.toString(), sessionId.toString()))
+        events.publish(
+            ItineraryRecalculated(
+                tripId.toString(), sessionId.toString(),
+                // 근거 트리거와 다시 짠 날 — C9 가 날짜가 맞을 때만 그 트리거를 소비한다(다른 날 재계획이 닫지 않게).
+                triggerId = session.triggerId?.toString(),
+                targetDate = session.targetDate.toString(),
+            ),
+        )
         return applied
     }
 

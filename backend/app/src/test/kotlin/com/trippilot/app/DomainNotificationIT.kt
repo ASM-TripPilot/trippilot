@@ -8,6 +8,7 @@ import com.trippilot.core.event.DomainEvent
 import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.notification.domain.NotificationKind
 import com.trippilot.notification.domain.NotificationRepository
+import com.trippilot.planbdetection.api.event.DateRisk
 import com.trippilot.planbdetection.api.event.PlanBTriggered
 import com.trippilot.savedaccommodation.api.event.StayRegistered
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
@@ -138,6 +139,25 @@ class DomainNotificationIT : AbstractPostgresIntegrationTest() {
         notification.actionType shouldBe "PLANB_REPLAN"
         notification.actionPayload?.get("tripId") shouldBe tripId.toString()
         // 어느 트리거로 열린 재계획인지 실어야 화면이 사유를 다시 묻지 않는다.
+        notification.actionPayload?.get("triggerId") shouldBe triggerId
+    }
+
+    @Test
+    fun `새 필드를 실은 Plan-B 사건도 PLAN_B 알림이 된다 — 구독자는 모르는 키를 무시한다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        val triggerId = UUID.randomUUID().toString()
+        events.publish(
+            PlanBTriggered(
+                triggerId, accountId.toString(), tripId.toString(), "WEATHER", null, "오후에 비 소식이 있어요.",
+                affectedDate = "2026-08-11", scope = "PARTIAL_SLOTS", severity = "RISK", variant = "RAIN",
+                push = false, others = 2, dateRisks = listOf(DateRisk("WEATHER", "RAIN", listOf(UUID.randomUUID().toString()))),
+            ),
+        )
+        deliver()
+
+        val notification = notificationsOf(accountId, NotificationKind.PLAN_B).single()
+        notification.body shouldBe "오후에 비 소식이 있어요."
         notification.actionPayload?.get("triggerId") shouldBe triggerId
     }
 
