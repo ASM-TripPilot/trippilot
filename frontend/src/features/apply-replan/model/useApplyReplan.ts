@@ -5,6 +5,26 @@ import {
   getGetTripsTripIdTriggersQueryKey,
   usePostTripsTripIdReplanSessionsSessionIdApply,
 } from '@/shared/api/index.hooks';
+import type { ReplanSession, TriggerList } from '@/shared/api/index.schemas';
+
+/**
+ * 서버가 곧 소비할 트리거를 뺀 목록 — 소비 조건 그대로다(BR-SA-14: 같은 id ∧ affectedDate == 세션 targetDate). 날짜가
+ * 다르면 서버도 닫지 않으므로 남긴다. 근거 트리거가 없는 세션(수동 재계획)·캐시 없음이면 undefined — 캐시를 건드리지 않는다.
+ */
+function withoutConsumed(
+  list: TriggerList | undefined,
+  session: ReplanSession
+): TriggerList | undefined {
+  if (list === undefined || !session.triggerId) return undefined;
+  return {
+    ...list,
+    triggers: list.triggers.filter(
+      (item) =>
+        item.triggerId !== session.triggerId ||
+        item.affectedDate !== session.targetDate
+    ),
+  };
+}
 
 /**
  * TRIP-441 · AC-3 · BR-U4-28 · INV-U4-05 — 재계획 **확정(apply)** 배선의 얇은 래퍼.
@@ -28,14 +48,23 @@ export function useApplyReplan(): ReturnType<
 
   return usePostTripsTripIdReplanSessionsSessionIdApply({
     mutation: {
-      onSuccess: (_data, variables) => {
+      onSuccess: (session, variables) => {
         queryClient.invalidateQueries({
           queryKey: getGetTripsTripIdItineraryQueryKey(variables.tripId),
         });
-        // 적용이 트리거를 소비한다(BR-SA-14) — 소비된 트리거가 알약에 남지 않게 다시 받는다(상황 감지 FE-A).
-        queryClient.invalidateQueries({
-          queryKey: getGetTripsTripIdTriggersQueryKey(variables.tripId),
-        });
+        // 적용이 트리거를 소비한다(BR-SA-14, 상황 감지 FE-A) — 다만 서버는 적용 응답 **뒤에** 아웃박스 릴레이(2초 주기)로
+        // 닫아서, 지금 다시 받은 목록엔 그 트리거가 아직 있다. 그래서 다시 받되(바뀐 일정에 맞춘 나머지는 서버 그대로),
+        // 그 트리거는 받기 전·후 모두 캐시에서 뺀다. 뺀 목록은 새것이라 곧 열릴 허브가 소비 전 목록을 다시 받지 않는다.
+        // 'all' — 트리거 진입(푸시·알림함 → i04 → i06)은 적용 순간 목록을 보는 화면이 없다(i04 는 solving 으로 replace).
+        const triggersKey = getGetTripsTripIdTriggersQueryKey(variables.tripId);
+        const dropConsumed = () =>
+          queryClient.setQueryData<TriggerList>(triggersKey, (list) =>
+            withoutConsumed(list, session)
+          );
+        dropConsumed();
+        void queryClient
+          .invalidateQueries({ queryKey: triggersKey, refetchType: 'all' })
+          .then(dropConsumed);
       },
     },
   });
