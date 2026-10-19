@@ -457,7 +457,7 @@ LLM 0회(L-5). `hours_label` 은 `on` 의 요일(없으면 `now` 의 요일)로 
 | 값 | 티어 | effort | max_tokens | fallback_modes | 게이트 | 프롬프트 |
 |---|---|---|---|---|---|---|
 | `DIALOGUE_INTENT` | LIGHT | low | 1024(초판 256 — DEV 배포 smoke 실측 출력 239/256, 사고 포함, 2026-10-18) | `("llm_dialogue_intent", "out_of_scope")` | `IntentGate`(재사용) | `prompts/dialogue_intent.yaml` ~~v"0.2.1"(의도 정의·판단 순서·예시, 고정부 앞)~~ **[개정 · 2026-10-19 · 짧은 수락]** v"0.2.2"(의도 정의·판단 순서·예시 + 짧은 수락을 마지막 도우미 제안으로 푸는 규칙 한 줄·예시 2건, 고정부 앞) — `$utterance $intents $history $memory $trip` |
-| `DIALOGUE_ANSWER` | LIGHT | low | 512 | `("llm_dialogue_answer", "template_text")` | `DialogueAnswerGate`(신규 파일) | `prompts/dialogue_answer.yaml` ~~v"0.2.0"(답변 순서·예시, 고정부 앞)~~ **[개정 · 2026-10-19 · 친근한 말투]** v"0.3.0"(친근한 해요체 대화 — 맞장구 → 답 → 다음 한 걸음 제안·되묻기, 예시 2건 재작성·숫자 말 규칙, 고정부 앞) — `$intent $facts $utterance $history $memory $trip $style` |
+| `DIALOGUE_ANSWER` | LIGHT | low | 512 | `("llm_dialogue_answer", "template_text")` | `DialogueAnswerGate`(신규 파일) | `prompts/dialogue_answer.yaml` ~~v"0.2.0"(답변 순서·예시, 고정부 앞)~~ **[개정 · 2026-10-19 · 친근한 말투]** ~~v"0.3.0"(친근한 해요체 대화 — 맞장구 → 답 → 다음 한 걸음 제안·되묻기, 예시 2건 재작성·숫자 말 규칙, 고정부 앞)~~ **[개정 · 2026-10-19 · 여는 말]** v"0.3.1"(0.3.0 + 어디에나 붙는 여는 말 금지·질문과 이어지는 마무리 규칙, 예시 여는 말 제거 + 날씨 예시, 고정부 앞) — `$intent $facts $utterance $history $memory $trip $style` |
 | `DIALOGUE_MEMORY` | LIGHT | low | 2048(20줄×120자 ≈ 1,000~1,500 토큰 + JSON — 1024 는 잘림 위험; 상한은 잘림 방지용, 과금은 실 출력만) | `("llm_dialogue_memory", "deterministic_compress")` | `DialogueMemoryGate`(신규 파일) | `prompts/dialogue_memory.yaml` v"0.1.0" — `$previous_summary $recent_turns $trip` |
 
 **[개정 · 2026-10-19 · 친근한 말투]** 답변 프롬프트 0.3.0 — 사용자 요청 "지금은 너무 answer 만 띄워 주는 느낌". 0.2.0 은 "짧게 답하세요"·"첫 문장에 답,
