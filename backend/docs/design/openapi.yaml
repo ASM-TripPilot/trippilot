@@ -1638,11 +1638,15 @@ paths:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
     get:
       tags: [trips]
-      summary: 감지된 변화 — 발화 중인 것만(i08·i09)
+      summary: 감지된 변화 — 발화 중이고 지금 유효한 것만 + 감시 상태(i08·i09)
       description: >
         **발화 중인 트리거만 나간다**(INV-U4-01). 억제·무영향으로 남긴 판정은 "왜 알림이 안 왔나"를
         답하기 위한 관측 기록이며 사용자에게 어떤 형태로도 노출되지 않는다.
         트리거는 **제안까지만** 한다 — 어떤 트리거도 일정을 자동으로 바꾸지 않는다(BR-U4-09).
+
+        지난 날 · 지금 일정에서 빠진 슬롯 · 꺼진 감시 출처(스윕을 끄거나 그 출처를 빼면 즉시 숨는다)의 트리거는 내지 않는다.
+        정렬은 서버가 정한다 — 위험 → 영향 날짜 오름차순 → 감지 시각 내림차순. 화면은 받은 순서 그대로 쓴다.
+        `watch` 는 출처 묶음별 감시 상태다 — 꺼짐·확인 불가를 정상으로 말하지 않는다(INV-U4-09).
       responses:
         '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/TriggerList' } } } }
         '404': { description: 여행 없음/타 계정 }
@@ -1669,6 +1673,19 @@ paths:
           content: { application/json: { schema: { $ref: '#/components/schemas/Trigger' } } }
         '204': { description: 발화 없음(비 안 옴 · 확인 불가 · 억제 — 화면은 동일하게 배너 없음) }
         '404': { description: 여행 없음/타 계정 }
+  /trips/{tripId}/triggers/{triggerId}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: triggerId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [trips]
+      summary: 트리거 하나 — 지금 상태와 같은 대상의 현재 트리거
+      description: >
+        알림·푸시를 늦게 탭해도 앱이 이 트리거가 아직 유효한지, 해제 뒤 같은 대상에 새 트리거가 섰는지
+        (`currentTriggerId`) 안다. 목록에서 숨는 ACTIVE(지난 날 · 빠진 슬롯 · 꺼진 출처)는 `state` 가 EXPIRED 다.
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/TriggerDetail' } } } }
+        '404': { description: 여행 없음/타 계정/트리거 없음(다른 여행 소속 포함) }
   /trips/{tripId}/triggers/{triggerId}/dismiss:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -2885,6 +2902,7 @@ components:
       required: [triggers]
       properties:
         triggers: { type: array, items: { $ref: '#/components/schemas/Trigger' } }
+        watch: { $ref: '#/components/schemas/TriggerWatch' }
     Trigger:
       type: object
       required: [triggerId, kind, affectedDate, reason, detectedAt]
@@ -2908,6 +2926,66 @@ components:
           enum: [FULL_DAY, PARTIAL_SLOTS, NONE]
           description: 발화 시 재계획 범위 — [대안 보기] 가 이 값으로 세션을 연다
         detectedAt: { type: string, format: date-time }
+        severity:
+          type: string
+          enum: [RISK, CAUTION]
+          description: >
+            위험(RISK)은 일정을 막는다 — 푸시 대상. 주의(CAUTION)는 앱 안에만 보인다.
+            required 밖이다(옛 픽스처 · 프리뷰 보호) — 없으면 위험으로 읽는다.
+        variant:
+          type: string
+          nullable: true
+          enum: [RAIN, SNOW, WIND, HEAT, COLD, CLOUD, DUST, CLOSED_DAY, OUT_OF_HOURS, HOURS_MISMATCH, HOLIDAY, PERMANENTLY_CLOSED]
+          description: >
+            변형(닫힌 12종). 저장된 값을 모르면 null 이다 — 화면은 kind 라벨을 쓴다.
+            특보는 기존 변형으로 사상한다(호우 RAIN · 대설 SNOW · 강풍·태풍 WIND · 한파 COLD · 폭염 HEAT · 황사 DUST).
+        attribution:
+          type: string
+          nullable: true
+          description: >
+            출처 표기(공공누리) — 기상청 단기예보 · 기상청 기상특보 · 에어코리아. 표시 의무가 없는 원천이면 null.
+    TriggerWatch:
+      type: object
+      description: >
+        감시 상태 — 출처 묶음별(weather = 단기예보 · closure = 장소 · delay = 이동 지연).
+        스윕이 꺼져 있거나 그 출처를 감시하지 않으면 OFF 다 — 화면은 그 행을 숨긴다.
+      required: [weather, closure, delay]
+      properties:
+        weather: { $ref: '#/components/schemas/WatchState' }
+        closure: { $ref: '#/components/schemas/WatchState' }
+        delay: { $ref: '#/components/schemas/WatchState' }
+    WatchState:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [CHECKED, UNKNOWN, OFF]
+          description: >
+            CHECKED = 마지막 확인이 창 안(날씨 2시간 · 장소 14시간). UNKNOWN = 확인 불가(모름 · 오래됨 · 아직 안 봄).
+            OFF = 감시하지 않음. delay 는 감지기가 아직 없어 늘 OFF 다.
+        checkedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: 마지막으로 확인한 시각 — 확인한 적 없거나 마지막 관측이 모름이면 null
+    TriggerDetail:
+      description: >
+        트리거 하나 — Trigger 와 같은 필드에 지금 상태와 같은 대상의 현재 트리거를 더한다.
+      allOf:
+        - $ref: '#/components/schemas/Trigger'
+        - type: object
+          required: [state]
+          properties:
+            state:
+              type: string
+              enum: [ACTIVE, SUPPRESSED, CONSUMED, EXPIRED]
+              description: 지금 상태 — 목록에서 숨는 ACTIVE 는 EXPIRED 로 말한다
+            currentTriggerId:
+              type: string
+              format: uuid
+              nullable: true
+              description: 같은 대상(종류·날짜·슬롯)의 지금 보이는 ACTIVE — 자기 자신일 수 있다
     StayRecommendationRequest:
       type: object
       properties:

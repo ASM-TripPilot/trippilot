@@ -3,15 +3,8 @@ package com.trippilot.planbdetection.application
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.api.ItineraryFacade
 import com.trippilot.itinerarygeneration.api.ItineraryRef
-import com.trippilot.planbdetection.domain.PlanBTrigger
-import com.trippilot.planbdetection.domain.PlanBTriggerRepository
-import com.trippilot.planbdetection.domain.Sensitivity
-import com.trippilot.planbdetection.domain.SensitivityRepository
-import com.trippilot.planbdetection.domain.Suppression
-import com.trippilot.planbdetection.domain.SuppressionRepository
 import com.trippilot.planbdetection.domain.TriggerKind
 import com.trippilot.planbdetection.domain.TriggerScope
-import com.trippilot.planbdetection.domain.TriggerState
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripDestinationRef
 import com.trippilot.trip.api.TripGenerationContext
@@ -46,15 +39,6 @@ class WeatherTriggerServiceTest : StringSpec({
     val today = LocalDate.parse("2026-08-11")
     val slotA = "$today#${UUID.randomUUID()}"
 
-    class Triggers : PlanBTriggerRepository {
-        val stored = mutableListOf<PlanBTrigger>()
-        override fun save(trigger: PlanBTrigger) = trigger.also { stored += it }
-        override fun findById(triggerId: UUID) = stored.firstOrNull { it.triggerId == triggerId }
-        override fun findActiveByTrip(tripId: UUID) =
-            stored.filter { it.tripId == tripId && it.state == TriggerState.ACTIVE }
-        override fun countActivatedOn(tripId: UUID, date: LocalDate) = stored.count { it.shouldReplan }
-    }
-
     fun trips(destinations: List<String> = listOf("제주")) = object : TripFacade {
         override fun findPeriod(accountId: UUID, tripId: UUID) =
             if (accountId == acc) TripPeriod(today.minusDays(1), today.plusDays(1)) else null
@@ -83,29 +67,13 @@ class WeatherTriggerServiceTest : StringSpec({
         override fun readingForDisplay(gridKey: String, at: Instant): WeatherReading? = null
     }
 
-    fun service(weather: Weather, triggers: Triggers, destinations: List<String> = listOf("제주")): WeatherTriggerService {
+    fun service(weather: Weather, triggers: InMemoryTriggers, destinations: List<String> = listOf("제주")): WeatherTriggerService {
         val trips = trips(destinations)
-        val inner = TriggerService(
-            trips, itineraries, triggers,
-            object : SuppressionRepository {
-                val stored = mutableListOf<Suppression>()
-                override fun save(suppression: Suppression) = suppression.also { stored += it }
-                override fun findByTrip(tripId: UUID) = stored.toList()
-            },
-            object : SensitivityRepository {
-                override fun of(accountId: UUID) = Sensitivity.NORMAL
-
-                /** 이 대역은 읽기만 흉내 낸다 — 쓰기는 이 테스트의 관심이 아니다. */
-                override fun set(accountId: UUID, sensitivity: Sensitivity) = error("쓰기를 쓰지 않는 대역입니다.")
-            },
-            NoEvents,
-            clock,
-        )
-        return WeatherTriggerService(trips, weather, inner, clock)
+        return WeatherTriggerService(trips, weather, triggerService(trips, itineraries, clock, triggers), clock)
     }
 
     "임계를 넘으면 발화한다 — 하루 전체 범위" {
-        val triggers = Triggers()
+        val triggers = InMemoryTriggers()
         val fired = service(Weather(pop = 70), triggers).checkToday(acc, tripId)
 
         fired.shouldNotBeNullAnd {
@@ -121,8 +89,8 @@ class WeatherTriggerServiceTest : StringSpec({
 
     // 경계값을 박아 둔다 — 임계가 조용히 바뀌면 알림 양이 통째로 달라진다.
     "정확히 60% 면 발화하고 59% 면 발화하지 않는다" {
-        service(Weather(pop = 60), Triggers()).checkToday(acc, tripId)?.kind shouldBe TriggerKind.WEATHER
-        service(Weather(pop = 59), Triggers()).checkToday(acc, tripId).shouldBeNull()
+        service(Weather(pop = 60), InMemoryTriggers()).checkToday(acc, tripId)?.kind shouldBe TriggerKind.WEATHER
+        service(Weather(pop = 59), InMemoryTriggers()).checkToday(acc, tripId).shouldBeNull()
     }
 
     /**
@@ -132,7 +100,7 @@ class WeatherTriggerServiceTest : StringSpec({
      * 그래서 비교 이전에 끝낸다(INV-U4-09 · BR-U4-05).
      */
     "확인하지 못하면 무발화 — 행조차 만들지 않는다" {
-        val triggers = Triggers()
+        val triggers = InMemoryTriggers()
 
         service(Weather(pop = null), triggers).checkToday(acc, tripId).shouldBeNull()
 
@@ -141,7 +109,7 @@ class WeatherTriggerServiceTest : StringSpec({
     }
 
     "임계 미만이면 신호를 만들지 않는다 — 억제 판정까지 가지 않는다" {
-        val triggers = Triggers()
+        val triggers = InMemoryTriggers()
 
         service(Weather(pop = 10), triggers).checkToday(acc, tripId).shouldBeNull()
 
@@ -150,7 +118,7 @@ class WeatherTriggerServiceTest : StringSpec({
 
     "격자 키로 여행 목적지를 쓴다" {
         val weather = Weather(pop = 70)
-        service(weather, Triggers(), destinations = listOf("부산", "제주")).checkToday(acc, tripId)
+        service(weather, InMemoryTriggers(), destinations = listOf("부산", "제주")).checkToday(acc, tripId)
 
         weather.askedGridKeys shouldBe listOf("부산")
     }
@@ -159,14 +127,14 @@ class WeatherTriggerServiceTest : StringSpec({
     "목적지가 없으면 묻지 않는다" {
         val weather = Weather(pop = 70)
 
-        service(weather, Triggers(), destinations = emptyList()).checkToday(acc, tripId).shouldBeNull()
+        service(weather, InMemoryTriggers(), destinations = emptyList()).checkToday(acc, tripId).shouldBeNull()
 
         weather.askedGridKeys shouldBe emptyList()
     }
 
     "타 계정이면 404 — 존재를 숨긴다" {
         shouldThrow<ResourceNotFound> {
-            service(Weather(pop = 70), Triggers()).checkToday(UUID.randomUUID(), tripId)
+            service(Weather(pop = 70), InMemoryTriggers()).checkToday(UUID.randomUUID(), tripId)
         }
     }
 })

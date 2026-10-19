@@ -16,6 +16,7 @@ dependencies {
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)
+    implementation(libs.jackson.module.kotlin)   // 아웃박스 payload 트리 읽기(재계획 적용 소비) — notification·archive 와 같은 관례
     implementation(libs.kotlin.reflect)
 
     testImplementation(project(":common:test-support"))

@@ -26,12 +26,26 @@ data class PlanBTrigger(
     val reason: String,
     val state: TriggerState,
     val detectedAt: Instant,
+    /** 위험(일정을 막는다 — 푸시 대상)·주의(앱 안에만). 열 하나에만 둔다 — payload 에 겹쳐 적지 않는다. */
+    val severity: TriggerSeverity = TriggerSeverity.RISK,
+    /** 이 행을 실은 알림 사건의 최고 심각도. null = 조용한 발화(배너만)·무발화 — 같은 대상·같은 심각도로 두 번 알리지 않는 근거. */
+    val alertedSeverity: TriggerSeverity? = null,
+    /** 푸시 대상 사건의 대표였던 시각 — 여행·하루(KST) 푸시 상한을 센다. */
+    val pushedAt: Instant? = null,
+    /** 낙관적 잠금 판. null = 아직 저장 안 된 행(저장소가 INSERT 와 UPDATE 를 이것으로 가른다). */
+    val version: Long? = null,
 ) {
     companion object {
+        /** payload 키 — 한 키 한 뜻(CD5). 심각도는 열이라 여기 없다. */
+        const val PAYLOAD_VARIANT = "variant"
+        const val PAYLOAD_DETECTOR = "detector"
+        const val PAYLOAD_DATA_SOURCE = "dataSource"
+        const val PAYLOAD_POI_IDS = "poiIds"
         /** 발화한다 — 사용자에게 배너로 보인다. */
         fun active(
             tripId: UUID, itineraryId: UUID, kind: TriggerKind, affectedDate: LocalDate, slotKey: String?,
             payload: Map<String, Any>, scope: TriggerScope, reason: String, at: Instant,
+            severity: TriggerSeverity = TriggerSeverity.RISK,
         ): PlanBTrigger {
             // 발화했는데 범위가 NONE 이면 모순이다 — 배너는 뜨는데 [대안 보기] 가 열 세션의 범위를 못 정한다.
             // 재계획 세션의 범위는 PARTIAL_SLOTS·FULL_DAY 뿐이라 NONE 을 옮길 자리가 없다.
@@ -39,6 +53,7 @@ data class PlanBTrigger(
             return PlanBTrigger(
                 UUID.randomUUID(), tripId, itineraryId, kind, affectedDate, slotKey, payload,
                 shouldReplan = true, scope = scope, reason = reason, state = TriggerState.ACTIVE, detectedAt = at,
+                severity = severity,
             )
         }
 
@@ -49,14 +64,33 @@ data class PlanBTrigger(
         fun silent(
             tripId: UUID, itineraryId: UUID, kind: TriggerKind, affectedDate: LocalDate, slotKey: String?,
             payload: Map<String, Any>, reason: String, state: TriggerState, at: Instant,
+            severity: TriggerSeverity = TriggerSeverity.RISK,
         ): PlanBTrigger {
             require(state != TriggerState.ACTIVE) { "발화하지 않는 판정은 ACTIVE 일 수 없습니다." }
             return PlanBTrigger(
                 UUID.randomUUID(), tripId, itineraryId, kind, affectedDate, slotKey, payload,
                 shouldReplan = false, scope = TriggerScope.NONE, reason = reason, state = state, detectedAt = at,
+                severity = severity,
             )
         }
     }
+
+    /** 변형(CD6) — payload["variant"] 에 둔다(열을 늘리지 않는다). 모르는 값이면 null — 응답도 null, 화면은 kind 라벨. */
+    val variant: TriggerVariant? get() = TriggerVariant.of(payload[PAYLOAD_VARIANT] as? String)
+
+    /** 해제 자격(CD5) — 이 트리거를 띄운 스윕 출처. 없으면(날씨 확인·U10·옛 행) 시간·일정 만료로만 닫힌다. */
+    val detector: String? get() = payload[PAYLOAD_DETECTOR] as? String
+
+    /** 원천(CD5) — 화면 출처 표기(`attribution`)의 재료. */
+    val dataSource: String? get() = payload[PAYLOAD_DATA_SOURCE] as? String
+
+    /** 영향 POI(선계산 재료 `dateRisks.poiIds`). payload 에 없으면 슬롯 키(`{date}#{poiId}`)의 POI, 날짜 전체면 없음. */
+    val poiIds: List<String>
+        get() = (payload[PAYLOAD_POI_IDS] as? List<*>)?.filterIsInstance<String>()
+            ?: listOfNotNull(slotKey?.substringAfter('#', "")?.takeIf { it.isNotEmpty() })
+
+    /** 대상(규칙 6) — (kind, 영향 날짜, 슬롯). 대상당 ACTIVE 는 1개다(`ux_plan_b_trigger_active`). */
+    val target: TriggerLifecycle.Target get() = TriggerLifecycle.Target(kind, affectedDate, slotKey)
 
     /** 재계획 확정에 쓰였다 — 같은 신호로 다시 알리지 않는다. */
     fun consumed() = copy(state = TriggerState.CONSUMED)
@@ -76,6 +110,51 @@ enum class TriggerScope { FULL_DAY, PARTIAL_SLOTS, NONE }
 
 enum class TriggerState { ACTIVE, SUPPRESSED, CONSUMED, EXPIRED }
 
+/**
+ * 심각도 — 위험(일정을 막는다, 푸시 대상)·주의(앱 안에만). 기회(행사·인기)는 심각도가 아니라 트리거 밖이다.
+ * 비교는 [rank] 로 한다 — enum 선언 순서에 기대지 않는다.
+ */
+enum class TriggerSeverity(val rank: Int) {
+    RISK(2), CAUTION(1);
+
+    /** [other] 보다 무거운가. 아직 알린 적 없음(null)보다는 늘 무겁다. */
+    fun isAbove(other: TriggerSeverity?): Boolean = other == null || rank > other.rank
+}
+
+/**
+ * 변형 — 닫힌 12종(CD6 · C9 소유 → openapi enum → FE codegen). 종류(4종)는 늘리지 않는다(DEC-U4-4).
+ * 특보는 기존 변형으로 사상한다 — 호우 RAIN · 대설 SNOW · 강풍·태풍 WIND · 한파 COLD · 폭염 HEAT · 황사 DUST.
+ * DELAY 의 OVERSTAY·TRANSIT 은 U10 이 이 enum 에 더한다.
+ */
+enum class TriggerVariant(val kind: TriggerKind) {
+    RAIN(TriggerKind.WEATHER), SNOW(TriggerKind.WEATHER), WIND(TriggerKind.WEATHER), HEAT(TriggerKind.WEATHER),
+    COLD(TriggerKind.WEATHER), CLOUD(TriggerKind.WEATHER), DUST(TriggerKind.WEATHER),
+    CLOSED_DAY(TriggerKind.CLOSURE), OUT_OF_HOURS(TriggerKind.CLOSURE), HOURS_MISMATCH(TriggerKind.CLOSURE),
+    HOLIDAY(TriggerKind.CLOSURE), PERMANENTLY_CLOSED(TriggerKind.CLOSURE),
+    ;
+
+    companion object {
+        /** 저장된 문자열 → 변형. 모르는 값(옛 행·다른 판)은 null — 지어내지 않는다. */
+        fun of(raw: String?): TriggerVariant? = entries.firstOrNull { it.name == raw }
+    }
+}
+
+/** 스윕 출처 이름(CD5 `payload.detector` — 해제 자격). 감시 상태 묶음: 날씨 = [KMA_FORECAST], 휴무 = [PLACE]. */
+object SweepSource {
+    const val KMA_FORECAST = "kma-forecast"
+    const val PLACE = "place"
+}
+
+/**
+ * 원천 이름(CD5 `payload.dataSource`) — 감지기가 쓰고 응답 `attribution` 이 읽는다.
+ * 지금은 공공누리 표시 의무가 있는 기상 원천만 둔다 — 장소 원천은 그 감지기 PR 이 표기 문구와 함께 더한다.
+ */
+object DataSource {
+    const val KMA_VILAGE = "KMA_VILAGE"
+    const val KMA_WARNING = "KMA_WARNING"
+    const val AIRKOREA = "AIRKOREA"
+}
+
 /** 억제 레코드(정본 §2.2). `[끄기]` 는 화면에서 배너를 감추는 게 아니라 이 행을 만든다(BR-U4-15). */
 data class Suppression(
     val suppressionId: UUID,
@@ -86,6 +165,10 @@ data class Suppression(
     val suppressedAt: Instant,
     /** 없으면 여행 종료까지. */
     val expiresAt: Instant?,
+    /** 끈 트리거의 날짜(DAY 범위의 날짜). null = 옛 행 — 날짜를 가리지 않는다. */
+    val affectedDate: LocalDate? = null,
+    /** 이 심각도 이하만 덮는다. null = 전부(옛 행 동작 그대로). */
+    val maxSeverity: TriggerSeverity? = null,
 ) {
     init {
         require(scopeType != SuppressionScope.SLOT || slotKey != null) {
@@ -96,19 +179,34 @@ data class Suppression(
     /** 이 억제가 지금 유효한가. 만료된 억제는 없는 것과 같다(BR-U4-07 "억제가 만료되면 재발화"). */
     fun isEffectiveAt(at: Instant): Boolean = expiresAt == null || at < expiresAt
 
-    /** 이 조합을 덮는가. DAY·TRIP 범위는 슬롯을 가리지 않는다. */
-    fun covers(kind: TriggerKind, slotKey: String?): Boolean =
-        this.kind == kind && (scopeType != SuppressionScope.SLOT || this.slotKey == slotKey)
+    /**
+     * 이 신호를 덮는가(규칙 10) — 같은 kind ∧ (SLOT: 같은 슬롯 / DAY: 같은 날짜 / TRIP: 전부) ∧ 심각도 ≤ [maxSeverity].
+     * 주의를 끈 것이 같은 날 위험 격상을, 오늘을 끈 것이 내일 대상을 막지 않는다.
+     * 날짜·심각도가 없는 옛 행은 전부를 덮는다(종전 동작 — 날짜는 [expiresAt] 이 끊었다).
+     */
+    fun covers(kind: TriggerKind, slotKey: String?, affectedDate: LocalDate, severity: TriggerSeverity): Boolean =
+        this.kind == kind &&
+            when (scopeType) {
+                SuppressionScope.SLOT -> this.slotKey == slotKey
+                SuppressionScope.DAY -> this.affectedDate == null || this.affectedDate == affectedDate
+                SuppressionScope.TRIP -> true
+            } &&
+            (maxSeverity == null || severity.rank <= maxSeverity.rank)
 
     companion object {
-        fun of(tripId: UUID, kind: TriggerKind, slotKey: String?, scopeType: SuppressionScope, at: Instant, expiresAt: Instant? = null) =
-            Suppression(UUID.randomUUID(), tripId, kind, slotKey, scopeType, at, expiresAt)
+        fun of(
+            tripId: UUID, kind: TriggerKind, slotKey: String?, scopeType: SuppressionScope, at: Instant,
+            expiresAt: Instant? = null, affectedDate: LocalDate? = null, maxSeverity: TriggerSeverity? = null,
+        ) = Suppression(UUID.randomUUID(), tripId, kind, slotKey, scopeType, at, expiresAt, affectedDate, maxSeverity)
     }
 }
 
 enum class SuppressionScope { SLOT, DAY, TRIP }
 
-/** 알림 민감도. [dailyCap] 은 **하루에 새로 발화할 수 있는 수** — 임계값이 아니라 총량이다(BR-U4-08). */
+/**
+ * 알림 민감도. [dailyCap] 은 **여행·하루(KST) 푸시 상한** — 푸시 대상 사건의 대표가 될 수 있는 수다(규칙 11).
+ * 넘어도 사건·알림함·배너는 남는다(push=false). 값(코드 2·5·10 vs NFR 1·3·6)은 설계서 UQ9 — 코드값 유지.
+ */
 enum class Sensitivity(val dailyCap: Int) {
     LOW(2), NORMAL(5), HIGH(10)
 }
@@ -121,8 +219,11 @@ interface PlanBTriggerRepository {
     /** 발화 중인 것만 — INV-U4-01 때문에 화면에는 이것만 나간다. */
     fun findActiveByTrip(tripId: UUID): List<PlanBTrigger>
 
-    /** 그 날(여행지 기준) 새로 **발화한** 수 — 전역 빈도 상한 판정 입력(BR-U4-08). */
-    fun countActivatedOn(tripId: UUID, date: LocalDate): Int
+    /** 그 날짜들의 행 전부(상태 무관) — 알린 최고 심각도·연일 반복·무발화 중복 판정의 근거. */
+    fun findByTripOn(tripId: UUID, dates: Collection<LocalDate>): List<PlanBTrigger>
+
+    /** 그 날(KST) 푸시 대상 사건의 대표였던 수(`pushed_at`) — 하루 푸시 상한의 입력. */
+    fun countPushedOn(tripId: UUID, date: LocalDate): Int
 }
 
 interface SuppressionRepository {
@@ -137,4 +238,20 @@ interface SensitivityRepository {
 
     /** 계정당 1행 upsert. 되돌릴 수 있어야 하므로 단방향이 아니다. */
     fun set(accountId: UUID, sensitivity: Sensitivity): Sensitivity
+}
+
+/**
+ * 감시 상태 — (여행, 출처)의 마지막 관측(plan_b_watch). 스윕이 쓰고 GET /triggers 의 `watch` 가 읽는다.
+ * [checkedAt] 은 이 상태를 관측한 시각이다.
+ */
+data class PlanBWatch(val tripId: UUID, val source: String, val status: WatchStatus, val checkedAt: Instant)
+
+/** 관측 결과. '꺼짐(OFF)'은 저장하지 않는다 — 설정에서 그때그때 읽는다. */
+enum class WatchStatus { CHECKED, UNKNOWN }
+
+interface PlanBWatchRepository {
+    /** (여행, 출처)당 1행 — 있으면 덮는다. */
+    fun upsert(watch: PlanBWatch)
+
+    fun findByTrip(tripId: UUID): List<PlanBWatch>
 }
