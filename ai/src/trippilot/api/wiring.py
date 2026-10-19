@@ -114,7 +114,7 @@ from trippilot.domain.reflection import (
     VisitRecord, VisitRef,
 )
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
-from trippilot.assembly_engine.config import RAIN_OUTDOOR, AssemblyConfig
+from trippilot.assembly_engine.config import RAIN_OUTDOOR, AssemblyConfig, stay_for
 from trippilot.assembly_engine.facade import HybridAssemblyFacade, AssemblyConflictError
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
@@ -1182,6 +1182,54 @@ _LAYOUT_KEYS = frozenset({"EARLIER", "KEEP_DINNER", "END_NEAR_STAY"})
 
 # 저녁 식사창 — 조립의 식사 소프트 항과 같은 창(17~20시)이다. 창이 둘이면 "저녁"이 두 뜻이 된다.
 _DINNER_WINDOW_MIN = AssemblyConfig().dinner_window_min
+
+
+def _timed_blocks(
+    request: schemas.ReplanRequest, nl: nl_verify.VerifiedRequest, pool: CandidatePool,
+    blocks: tuple[FixedBlock, ...], anchor: GeoPoint, pace: Pace | None, tz: timezone, notes: list[str],
+) -> tuple[FixedBlock, ...]:
+    """"성심당은 5시에"·"3시에 카페" — 말한 시각에 그 곳을 잠근다(HC3, `_dinner_blocks` 와 같은 잠금).
+
+    시각은 사용자가 준 것이다 — 잠금과 같아 INV-2 와 어긋나지 않는다. 체류는 카테고리 기본(`stay_for`).
+    종류만 말했으면 원 일정의 그 종류를 먼저(같은 곳을 시각만 옮긴다), 없으면 가까운 곳. 그 시각에 영업이
+    증명되지 않은 곳(정보 없음은 막지 않는다 — `_dinner_blocks` 와 같은 판정)·다른 잠금과 겹치는 곳·제외 요청한
+    곳은 고르지 않는다. 고를 곳이 없으면 잠그지 않고 밝힌다(INV-4) — 그 종류는 구성 LLM 이 원문을 보고 고른다.
+    """
+    index = {p.poi_id: p for p in pool.pois}
+    excluded = set(request.excluded_poi_ids)
+    current = {s.poi_id for s in request.current_slots}
+    dow = request.target_date.weekday()
+    out: list[FixedBlock] = []
+
+    def block(poi: Poi, at: datetime) -> FixedBlock | None:
+        end = at + timedelta(minutes=stay_for(poi.category, pace))
+        s_min = at.hour * 60 + at.minute
+        e_min = s_min + stay_for(poi.category, pace)
+        if (str(poi.poi_id) in excluded
+                or any(b.poi_id == poi.poi_id or (at < b.window.end and b.window.start < end)
+                       for b in (*blocks, *out))
+                or (poi.open_hours and not any(oh.day_of_week == dow and oh.open_min <= s_min
+                                               and e_min <= oh.close_min for oh in poi.open_hours))):
+            return None
+        return FixedBlock(poi_id=poi.poi_id, window=TimeWindow(start=at, end=end), reason="nl_at")
+
+    for pid, at in nl.visit_at:
+        b = block(index[pid], at) if pid in index else None
+        if b is None:
+            notes.append(f"nl_at_skipped: {pid} {at:%H:%M}")
+        else:
+            out.append(b)
+    for cat, at in nl.category_at:
+        b = next((b for p in sorted((p for p in pool.pois if p.category is cat),
+                                    key=lambda p: (str(p.poi_id) not in current,
+                                                   haversine_km(anchor, p.coord), str(p.poi_id)))
+                  if (b := block(p, at)) is not None), None)
+        if b is None:
+            notes.append(f"nl_at_none: {cat.value} {at:%H:%M}")
+        else:
+            out.append(b)
+    notes += [f"nl_at_locked: {b.poi_id} {b.window.start:%H:%M}" for b in out]
+    return tuple(out)
 
 
 def _dinner_blocks(
@@ -2351,6 +2399,9 @@ class WiredItineraryOrchestrator:
                 generated_at=pool.generated_at, anchor=pool.anchor, radius_km=pool.radius_km)
             nl_near += [q.poi_id for q in around]
             notes.append(f"nl_nearby_added: {p.poi_id} +{len(around)}")
+        # "3시에 카페" — 말한 시각에 잠근다. 시간만 당기기는 장소·순서를 안 바꾼다는 요청이라 걸지 않는다.
+        if earlier is None:
+            blocks += _timed_blocks(request, nl, pool, blocks, anchor, pace, self._tz, notes)
         if nl.rain_confirmed and not (RAIN_OUTDOOR <= avoid):
             avoid = avoid | RAIN_OUTDOOR  # 말이 아니라 기상청이 확인한 비다
         drop = avoid - prefer
@@ -2483,6 +2534,9 @@ class WiredItineraryOrchestrator:
             p for p in composed if cat_of.get(p) in dict(nl.counts))
         if nl.only:
             add_one = add_one & nl.only  # "카페로만"에 "맛집 하나 추가"가 겹치면 종류 조건이 이긴다
+        # "3시에 카페"로 잠근 종류는 이미 들었다 — "카페 가고 싶어"가 한 곳 추가로도 읽혀 카페가 둘이었다
+        # (로컬 실측 2026-10-19).
+        add_one = add_one - {cat_of[b.poi_id] for b in blocks if b.reason == "nl_at" and b.poi_id in cat_of}
         add_one_asked = add_one
         if composed:
             # 고른 목록에 이미 든 종류의 "한 곳 추가"는 또 넣지 않는다(카페 두 곳).
@@ -2638,8 +2692,8 @@ class WiredItineraryOrchestrator:
                     notes.append(f"nl_category_unplaced: {cat.value} {got.count(cat)}/{n}")
         if outcome.solution is not None:
             # 필수 방문은 배치되면 고정으로 사영된다(`placed_fixed_blocks` — 같이 짜기의 필수방문용).
-            # 구성 LLM 이 고른 곳·이름으로 집은 곳·클럽·진행 중이라 둔 곳·"저녁은 그대로" 잠금(이번 재계획
-            # 한정)은 사용자가 고정한 곳이 아니다 — 고정으로 내면 BE 가 잠가서 다음 다시 짜기·교체에서 못
+            # 구성 LLM 이 고른 곳·이름으로 집은 곳·클럽·진행 중이라 둔 곳·"저녁은 그대로"·"3시에 카페" 잠금(이번
+            # 재계획 한정)은 사용자가 고정한 곳이 아니다 — 고정으로 내면 BE 가 잠가서 다음 다시 짜기·교체에서 못
             # 바꾼다. 그 표시만 걷는다(시각·순서는 그대로). **최종 해에서 한 번** — 다시 풀기(위) 앞에서 걷던
             # 동안 다시 푼 해는 같은 블록이 다시 실려 이름으로 집은 곳·클럽·진행 중이 고정으로 나갔다.
             picked = set(composed_r1) | set(composed) | set(nl_ids) | set(night)
@@ -2647,7 +2701,7 @@ class WiredItineraryOrchestrator:
                 replace(d, fixed_blocks=tuple(
                     fb for fb in d.fixed_blocks
                     if not ((fb.reason == "required_visit" and fb.poi_id in picked)
-                            or fb.reason in ("in_progress", "keep_dinner"))))
+                            or fb.reason in ("in_progress", "keep_dinner", "nl_at"))))
                 for d in outcome.solution.days)))
         return self._replan_projection(
             request, outcome, notes, resolved, unknown, retrieved=planb.retrieved,
