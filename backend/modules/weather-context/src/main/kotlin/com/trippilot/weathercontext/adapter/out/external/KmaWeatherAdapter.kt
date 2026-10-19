@@ -53,7 +53,8 @@ import java.util.concurrent.atomic.AtomicReference
  *
  * ## 격자 경로(상황 감지 단기예보 · [GridForecastPort])
  *
- * 같은 `getVilageFcst` 응답 1건에서 오늘·내일의 시간별(POP·PTY·SKY·TMP·WSD)과 날짜별(TMN·TMX)을 읽는다 — 추가 호출 0.
+ * 같은 `getVilageFcst` 응답 1건에서 오늘·내일(시간별은 자정을 넘긴 내일 슬롯 몫으로 모레까지)의 시간별(POP·PTY·SKY·TMP·WSD)과
+ * 날짜별(TMN·TMX)을 읽는다 — 추가 호출 0.
  * 이름 경로와 다른 점은 셋이다(RES-SA-02·03 · COST-SA-02).
  * - **03(NO_DATA)만 즉시 ≤2회 다시 묻는다** — 기상청은 03 을 200 으로, 좌표·발표분과 무관하게 섞어 준다(실측 15회 중 6회).
  *   계정·키 오류·시한·5xx 는 다시 부르지 않는다(재시도 없음 기반선의 유일한 예외).
@@ -88,7 +89,8 @@ class KmaWeatherAdapter(
             if (status !in 200..299) throw WeatherLookupFailed("기상청 격자 예보가 HTTP $status 로 응답했습니다. grid=$gridKey")
             val root = runCatching { MAPPER.readTree(body) }.getOrNull()
                 ?: throw WeatherLookupFailed("기상청 격자 예보 본문이 JSON 이 아닙니다. grid=$gridKey")
-            when (val code = root.at("/response/header/resultCode").asString()) {
+            // 응답 머리가 없는 본문(거절이 아닌 게이트웨이 응답 등)은 code = null → 장애다. asString() 은 거기서 라이브러리 예외를 던진다.
+            when (val code = root.at("/response/header/resultCode").valueText()) {
                 OK_CODE -> {
                     passed()
                     return gridOf(root, gridKey, base.atZone(KST).toInstant(), at)
@@ -175,28 +177,31 @@ class KmaWeatherAdapter(
     }
 
     /**
-     * 발표분 → 격자 예보. **묻는 날짜**([at] 의 KST 오늘·내일)만 담는다 — 발표 날짜가 아니다(자정 직후엔 어제 23시 발표분).
+     * 발표분 → 격자 예보. **묻는 날짜**([at] 의 KST 오늘)부터 고른다 — 발표 날짜가 아니다(자정 직후엔 어제 23시 발표분).
+     * 시간별은 오늘·내일과 **모레**까지 담는다 — 저녁 회차가 보는 내일 슬롯이 자정을 넘기면(23:30 끝 → 모레 00시 칸) 판정 시각이
+     * 모레에 걸린다. 날짜별(TMN·TMX)은 오늘·내일만 — 모레는 감시 지평 밖이다.
      * 오늘·내일 칸이 하나도 없으면 정상 코드여도 형식 깨짐이다 — 빈 예보를 '정상'으로 캐시하면 다음 발표까지 모름이 '확인'처럼 돈다.
      */
     private fun gridOf(root: JsonNode, gridKey: String, baseAt: Instant, at: Instant): GridForecast {
         val today = at.atZone(KST).toLocalDate()
-        val wanted = setOf(today, today.plusDays(1))
+        val horizon = setOf(today, today.plusDays(1))
+        val spill = today.plusDays(2)
         val hours = LinkedHashMap<LocalDateTime, MutableMap<String, String>>()
         val days = LinkedHashMap<LocalDate, MutableMap<String, String>>()
         for (item in root.at("/response/body/items/item")) {
             val date = runCatching { LocalDate.parse(item["fcstDate"].asString(), DATE) }.getOrNull() ?: continue
-            if (date !in wanted) continue
-            val category = item["category"]?.asString() ?: continue
-            val value = item["fcstValue"]?.asString()?.trim() ?: continue
+            if (date !in horizon && date != spill) continue
+            val category = item["category"].valueText() ?: continue
+            val value = item["fcstValue"].valueText()?.trim() ?: continue
             when (category) {
-                "TMN", "TMX" -> days.getOrPut(date) { HashMap() }[category] = value
+                "TMN", "TMX" -> if (date in horizon) days.getOrPut(date) { HashMap() }[category] = value
                 in HOURLY -> {
                     val time = runCatching { LocalTime.parse(item["fcstTime"].asString(), TIME) }.getOrNull() ?: continue
                     hours.getOrPut(date.atTime(time)) { HashMap() }[category] = value
                 }
             }
         }
-        if (hours.isEmpty()) throw WeatherLookupFailed("기상청 격자 예보에 오늘·내일 칸이 없습니다. grid=$gridKey")
+        if (hours.keys.none { it.toLocalDate() in horizon }) throw WeatherLookupFailed("기상청 격자 예보에 오늘·내일 칸이 없습니다. grid=$gridKey")
         return GridForecast(
             gridKey = gridKey,
             baseAt = baseAt,
@@ -219,7 +224,13 @@ class KmaWeatherAdapter(
     /** 기온 — 결측 표식(-999·900 류)이 기온으로 들어오면 한파·폭염 오탐이 된다. 지상 기온으로 있을 수 없는 값은 모름이다. */
     private fun celsius(raw: String?): Double? = raw?.toDoubleOrNull()?.takeIf { it in TEMP_RANGE }
 
-    /** 하루 상한 — KST 날짜가 바뀌면 다시 센다. 넘으면 false 이고 WARN 은 그 날 한 번이다. */
+    /**
+     * 하루 상한 — KST 날짜가 바뀌면 다시 센다. 넘으면 false 이고 WARN 은 그 날 한 번이다.
+     *
+     * **프로세스 수명 범위다** — 파드가 재기동하면(배포 포함) 0 부터 다시 센다. COST-SA-02 의 '복제본 × 3,000' 은 그 날 재기동이
+     * 없을 때의 상한이고, 재기동이 있던 날은 (재기동 수 + 1) × 3,000 까지 오를 수 있다. 상한은 폭주 방지 그물이다 — 평소 호출량은
+     * 회차 수 × 격자 수가 정하고(COST-SA-01), 키 한도에 닿으면 게이트웨이 거절(22)로 그 출처가 모름이 된다.
+     */
     private fun takeQuota(at: Instant): Boolean = synchronized(quotaLock) {
         val day = at.atZone(KST).toLocalDate()
         if (day != quotaDay) {
@@ -288,6 +299,9 @@ class KmaWeatherAdapter(
             kst.toLocalDate().atTime(hour, 0)
         }
     }
+
+    /** 값 노드의 글자 — 없거나 객체·배열이면 null 이다(Jackson 3 의 `asString()` 은 그 셋에서 라이브러리 예외를 던진다). */
+    private fun JsonNode?.valueText(): String? = this?.takeIf { it.isValueNode }?.asString()
 
     private companion object {
         private val log = LoggerFactory.getLogger(KmaWeatherAdapter::class.java)

@@ -10,6 +10,10 @@ import java.time.LocalDateTime
  * [ContextFacade] 와 **따로 둔다** — 그쪽은 도우미·감지 테스트가 익명 대역으로 물고 있어 메서드 하나가 그 전부를 흔든다.
  * 이름 경로(목적지 이름 → 그 날 강수확률 최댓값 하나)와 달리 **슬롯 좌표의 격자**를 시간별로 본다 — 다도시·동명이지역이
  * 섞이지 않고, '오후에만 비'를 오후 일정에만 건다.
+ *
+ * 정본의 두 메서드(`isLive` · `forecastForTrigger` — null = 모름)에 둘을 더했다 — [gridKeyOf](회차 안 실패 격자 기억의 키 ·
+ * RES-SA-04)와 [HourlyForecastUnavailable](출처의 고장을 모름 null 과 가른다 — 게이트웨이 거절은 그 출처 전체, 시한·5xx·형식
+ * 깨짐은 그 격자 · RES-SA-02·04). null 하나로는 감지기가 이 셋을 다르게 다룰 수 없다.
  */
 interface HourlyForecastFacade {
     /**
@@ -22,7 +26,7 @@ interface HourlyForecastFacade {
     fun gridKeyOf(lat: Double, lng: Double): String?
 
     /**
-     * **발화 판정용** — 그 좌표 격자의 신선한 최신 발표분(오늘·내일). 신선한 캐시가 없으면 한 번 조회해 정상(00)만 저장한다.
+     * **발화 판정용** — 그 좌표 격자의 신선한 최신 발표분(오늘·내일, 시간별은 모레까지). 신선한 캐시가 없으면 한 번 조회해 정상(00)만 저장한다.
      *
      * null = **모름**이다 — live 아님 · 자료 없음(03 재요청 소진) · 격자 경로 하루 호출 상한 초과 · 받은 값이 [at] 에 이미 낡음.
      * "비가 안 온다"가 아니다. 0·기본값으로 채우지 않는다(INV-U4-09).
@@ -34,7 +38,8 @@ interface HourlyForecastFacade {
 }
 
 /**
- * 한 격자의 한 발표분(api-safe). [hourly] 키는 **KST 정시**(오늘·내일)이고 응답에 없던 시각은 키가 없다.
+ * 한 격자의 한 발표분(api-safe). [hourly] 키는 **KST 정시**(오늘·내일 — 자정을 넘긴 내일 슬롯 몫으로 모레까지)이고 응답에 없던
+ * 시각은 키가 없다.
  * 칸이 null 이면 그 값을 모른다(숫자가 아니었거나 범위 밖) — 지어내지 않는다.
  */
 data class PointForecast(

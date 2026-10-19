@@ -53,9 +53,11 @@ class KmaGridForecastAdapterTest : StringSpec({
 
     /**
      * 같은 getVilageFcst 응답 한 건에서 **오늘·내일**의 시간별(POP·PTY·SKY·TMP·WSD)과 날짜별(TMN·TMX)을 읽는다 — 추가 호출 0.
+     * **모레는 시간별만** 담는다 — 저녁 회차가 보는 내일 슬롯이 자정을 넘기면(23:30 끝 → 모레 00시 칸) 판정 시각이 모레에 걸린다.
+     * 모레의 최저·최고는 감시 지평(오늘·내일) 밖이라 담지 않는다.
      * 표본은 실측 변주대로 값이 문자열이고, 읽지 않는 카테고리(PCP·REH·SNO·UUU·VVV·WAV·VEC)와 모레 값이 섞여 있다.
      */
-    "두 날짜 전 카테고리 표본에서 오늘·내일만 읽는다 — 모레와 읽지 않는 카테고리는 버린다" {
+    "두 날짜 전 카테고리 표본에서 오늘·내일과 모레 시간별을 읽는다 — 모레 최저·최고와 읽지 않는 카테고리는 버린다" {
         withGridServer(listOf(okReply(fullSample()))) { url, hits ->
             val grid = gridAdapter(url).fetchGrid("53,38", AT)
 
@@ -69,9 +71,16 @@ class KmaGridForecastAdapterTest : StringSpec({
             grid.fetchedAt shouldBe AT
             grid.hourly[hourOf("2026-10-20T10:00")] shouldBe GridHour(pop = 60, pty = 1, sky = 4, tmp = 18.0, wsd = 3.2)
             grid.hourly[hourOf("2026-10-21T15:00")] shouldBe GridHour(pop = 10, pty = 0, sky = 1, tmp = 21.0, wsd = 1.5)
-            grid.hourly.keys.map { it.toLocalDate() }.toSet() shouldBe setOf(TODAY, TOMORROW)
+            grid.hourly[hourOf("2026-10-22T00:00")] shouldBe GridHour(pop = 20, pty = 0, sky = 3, tmp = 9.0, wsd = 2.0)
+            grid.hourly.keys.map { it.toLocalDate() }.toSet() shouldBe setOf(TODAY, TOMORROW, TOMORROW.plusDays(1))
             // 오늘 최저(06시)는 08시 발표분에 없다 — 있는 것만 싣는다(지어내지 않는다).
             grid.daily shouldBe mapOf(TODAY to GridDay(tmn = null, tmx = 21.0), TOMORROW to GridDay(tmn = 10.0, tmx = 19.0))
+        }
+    }
+
+    "모레 칸만 있는 정상 응답은 형식 깨짐이다 — 오늘·내일을 판정할 수 없는 예보를 캐시하지 않는다" {
+        withGridServer(listOf(okReply(listOf(item("TMP", "20261022", "0000", "9"))))) { url, _ ->
+            shouldThrow<WeatherLookupFailed> { gridAdapter(url).fetchGrid("53,38", AT) }
         }
     }
 
@@ -109,6 +118,8 @@ class KmaGridForecastAdapterTest : StringSpec({
             """{"category":"TMP","fcstDate":"20261020","fcstTime":"12:00","fcstValue":"20"}""", // 시각 형식이 다르다
             """{"fcstDate":"20261020","fcstTime":"1200","fcstValue":"20"}""", // 카테고리 없음
             """{"category":"TMP","fcstDate":"20261020","fcstTime":"1200"}""", // 값 없음
+            """{"category":{"name":"TMP"},"fcstDate":"20261020","fcstTime":"1300","fcstValue":"30"}""", // 카테고리가 객체
+            """{"category":"WSD","fcstDate":"20261020","fcstTime":"1300","fcstValue":["3.0"]}""", // 값이 배열
             item("POP", "20261020", "1300", "-1"),
             item("PTY", "20261020", "1300", "-1"),
             item("TMP", "20261020", "1300", "21.5"),
@@ -206,13 +217,20 @@ class KmaGridForecastAdapterTest : StringSpec({
         }
     }
 
-    "5xx·깨진 본문·모르는 결과 코드는 장애다 — 다시 묻지 않는다(HTTP 1건)" {
+    /**
+     * 응답 머리(`response.header`)가 없는 JSON — 거절 코드가 아닌 게이트웨이 응답(12 서비스 없음 · 99 기타 등)이 이 모양이다.
+     * 라이브러리 예외가 그대로 새면 호출측이 장애로 갈라 받지 못한다(실패 격자 기억을 비켜 간다).
+     */
+    "5xx·깨진 본문·모르는 결과 코드·응답 머리 없는 본문은 장애다 — 다시 묻지 않는다(HTTP 1건)" {
         listOf(
             Reply(503, "text/plain", "busy"),
             Reply(200, "application/json", "{not json"),
             Reply(200, "text/html", "<html>gateway timeout</html>"),
             resultReply("99"),
             Reply(404, "text/plain", "no such api"),
+            Reply(200, "application/json", gatewayJson("12")),
+            Reply(200, "application/json", gatewayJson("99")),
+            Reply(200, "application/json", """{"response":{"header":{"resultCode":{"code":"00"}}}}"""),
         ).forEach { reply ->
             withGridServer(listOf(reply)) { url, hits ->
                 shouldThrow<WeatherLookupFailed> { gridAdapter(url).fetchGrid("53,38", AT) }
@@ -342,8 +360,12 @@ private fun okReply(items: List<String>) = Reply(
 private fun resultReply(code: String) =
     Reply(200, "application/json", """{"response":{"header":{"resultCode":"$code","resultMsg":"NO_DATA"}}}""")
 
+/** 거절 코드가 아닌 게이트웨이 응답의 JSON 모양 — 응답 머리(`response.header`)가 없다. */
+private fun gatewayJson(code: String) =
+    """{"OpenAPI_ServiceResponse":{"cmmMsgHeader":{"errMsg":"SERVICE ERROR","returnAuthMsg":"SERVICE ERROR","returnReasonCode":"$code"}}}"""
+
 /**
- * 08시 발표분의 모양 — 오늘 10시·내일 10·15시·모레 10시, 카테고리 14종 전부. 오늘 최저(06시)는 발표 전이라 없다.
+ * 08시 발표분의 모양 — 오늘 10시·내일 10·15시·모레 0·10시, 카테고리 14종 전부. 오늘 최저(06시)는 발표 전이라 없다.
  */
 private fun fullSample(): List<String> {
     fun hour(date: String, time: String, pop: String, pty: String, sky: String, tmp: String, wsd: String) = listOf(
@@ -358,6 +380,7 @@ private fun fullSample(): List<String> {
         hour("20261021", "1000", "10", "0", "1", "15", "1.5") +
         hour("20261021", "1500", "10", "0", "1", "21", "1.5") +
         item("TMX", "20261021", "1500", "19.0") +
+        hour("20261022", "0000", "20", "0", "3", "9", "2.0") +
         hour("20261022", "1000", "90", "1", "4", "12", "15.0") +
         item("TMN", "20261022", "0600", "-15.0") + item("TMX", "20261022", "1500", "36.0")
 }

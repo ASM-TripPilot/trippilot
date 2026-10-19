@@ -7,8 +7,9 @@ import java.time.LocalDateTime
 /**
  * 한 격자의 한 발표분 — 시간별 예보 캐시(weather_grid_forecast · domain-entities §8.1). 격자당 1행(덮어쓰기)이다.
  *
- * [hourly] 키는 KST 정시(오늘·내일), [daily] 키는 날짜다. 값은 **원천 코드 그대로**(PTY 0~4 · SKY 1·3·4)이고 어댑터가
- * 읽을 때 걸렀다 — 숫자가 아니거나 모르는 코드면 그 칸은 null 이다(지어내지 않는다). 뜻으로 옮기는 것은 공개 계약 쪽이다.
+ * [hourly] 키는 KST 정시(오늘·내일 — 자정을 넘긴 내일 슬롯 몫으로 모레까지), [daily] 키는 날짜(오늘·내일)다.
+ * 값은 **원천 코드 그대로**(PTY 0~4 · SKY 1·3·4)이고 어댑터가 읽을 때 걸렀다 — 숫자가 아니거나 모르는 코드면 그 칸은 null 이다
+ * (지어내지 않는다). 뜻으로 옮기는 것은 공개 계약 쪽이다.
  *
  * 만료는 **다음 발표가 실제로 제공되는 시각**(발표 + 3시간 + 10분)이다 — 그 10분 동안 손에 넣을 수 있는 가장 새 근거라서다.
  */
@@ -46,7 +47,7 @@ interface GridForecastPort {
     /** 기상청 격자 키 `"nx,ny"`. */
     fun gridKeyOf(lat: Double, lng: Double): String
 
-    /** 그 격자의 최신 발표분 — HTTP 1건(03 이면 즉시 ≤2회 더). [at] 의 KST 날짜로 오늘·내일을 고른다. */
+    /** 그 격자의 최신 발표분 — HTTP 1건(03 이면 즉시 ≤2회 더). [at] 의 KST 날짜로 오늘·내일(시간별은 모레까지)을 고른다. */
     fun fetchGrid(gridKey: String, at: Instant): GridForecast
 }
 

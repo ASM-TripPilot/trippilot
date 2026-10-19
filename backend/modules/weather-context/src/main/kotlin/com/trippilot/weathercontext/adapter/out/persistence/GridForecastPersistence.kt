@@ -63,6 +63,9 @@ class GridForecastPersistence(private val jpa: GridForecastJpaRepository) : Grid
     /**
      * jsonb 를 되읽으면 수 타입이 바뀐다 — `18.0` 이 정수로, `60` 이 실수로 돌아올 수 있다. 그래서 **Number 로 받아** 정규화한다
      * (`as? Double` 로 받으면 정수로 적힌 기온이 조용히 모름이 된다 — anti-patterns TRIP-854).
+     *
+     * 허용 편차(PBT-02 왕복 — `GridForecastPersistenceIT`): `-0.0` 은 `0.0` 으로 돌아온다. jsonb 의 수는 numeric 이라 음의 0 이
+     * 없다 — 임계 판정과 무관하다. 그 밖의 값은 같은 값으로 돌아온다.
      */
     private fun GridForecastEntity.toDomain() = GridForecast(
         gridKey = gridKey,
