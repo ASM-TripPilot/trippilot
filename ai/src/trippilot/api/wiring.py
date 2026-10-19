@@ -217,6 +217,7 @@ from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
 from trippilot.orchestrator.info_collector import InfoCollector
 from trippilot.ports.weather_port import WeatherPort
 from trippilot.ports.event_port import EventPort
+from trippilot.ports.holiday_calendar_port import HolidaySource
 from trippilot.providers.event import EventProvider
 from trippilot.providers.persona import PersonaProvider
 from trippilot.providers.place import PlaceProvider
@@ -974,8 +975,12 @@ def _solution_from_payload(
     )
 
 
-def _problem_for(solution: ItinerarySolution, tz: timezone) -> ItineraryProblem:
+def _problem_for(solution: ItinerarySolution, tz: timezone,
+                 holidays: HolidaySource | None = None) -> ItineraryProblem:
     """검증·수리용 문제 재구성. 와이어에 없는 원 컨텍스트는 **기본값**으로 채운다.
+
+    - holidays: 공휴일 달력(상황 감지 H1)은 이 진입점이 요청당 1회 조회한다 — 검증·수리·편집이 생성과 같은
+      휴일 규칙을 본다. 출처가 없거나 모드 off 면 None(공휴일 규칙 없음).
 
     - transport=PUBLIC · day_window=당일 00:00~23:59: 와이어에 원값이 없다(간극 —
       HC2·HC4 판정이 원 요청과 다를 수 있음 — repair 는 `transport_modes` 가 오면 덮어쓴다). 자정 초과 슬롯은 HC4로 표시될 수 있다
@@ -1005,6 +1010,8 @@ def _problem_for(solution: ItinerarySolution, tz: timezone) -> ItineraryProblem:
         # validate·repair 에서만 조용히 사라진다(TRIP-292 excluded_poi_ids 전례).
         # 체류 배율이 빠져도 HC 판정은 배치된 시각 그대로를 보므로 판정은 옳다.
         pace=None,
+        holidays=(holidays.between(min(d.date for d in solution.days), max(d.date for d in solution.days))
+                  if holidays is not None else None),
     )
 
 
@@ -1779,8 +1786,11 @@ class WiredItineraryOrchestrator:
         dialogue: DialogueInterpreter | None = None,
         memory_store: MemoryStorePort | None = None,
         dialogue_orchestrator: DialogueOrchestrator | None = None,
+        holidays: HolidaySource | None = None,
     ) -> None:
         self._orchestrator = orchestrator
+        # 공휴일 휴무(상황 감지 H1) — 진입점이 요청당 1회 부른다. 미주입 = off(None, 조회 0회).
+        self._holidays = holidays if holidays is not None else HolidaySource()
         # generate 와이어 변환에만 싣는 지터 폭 (TRIP-1180) — 설정의 상한 관계를 통과한 값.
         self._diversity_jitter = diversity_jitter
         self._assembly_provider = assembly_provider
@@ -3954,6 +3964,7 @@ def build_orchestrator(
     dialogue_orchestrator_enabled: bool = False,  # 도우미 턴을 AI 안에서 끝낸다(ANSWER) — env 해석은 main.py
     shadow_rate: float = 1.0,  # 3단 라우터 섀도 표본율 (DEV 1.0 · 운영 0.2)
     shadow_rng: random.Random | None = None,  # 테스트 결정론용, None 이면 SystemRandom
+    holidays: HolidaySource | None = None,  # 공휴일 휴무 모드·달력 — env 해석은 main.py, 기본 off
 ) -> WiredItineraryOrchestrator:
     """실 구성요소 조립 → `create_app(orchestrator=...)`에 꽂을 어댑터.
 
@@ -4026,7 +4037,7 @@ def build_orchestrator(
         ),
         provider,
         estimator,
-        lambda solution: _problem_for(solution, tz),
+        lambda solution: _problem_for(solution, tz, holidays),  # 편집 검증도 같은 휴일 규칙(요청당 1회)
         tz=tz,
     )
     # Reflect 경계 (TRIP-429) — 워커별 게이트 페어링은 위 explainer·edit와 동형
@@ -4168,6 +4179,7 @@ def build_orchestrator(
         directives=directives,
         embedding=embedding,
         vector_store=vector_store,
+        holidays=holidays,
     )
 
 
@@ -4333,6 +4345,7 @@ def build_dev_app(
     dialogue_orchestrator_enabled: bool = False,  # 도우미 턴을 AI 안에서 끝낸다 — env 해석은 main.py, 기본 off(종전 해석 경로)
     shadow_rate: float = 1.0,
     shadow_rng: random.Random | None = None,
+    holidays: HolidaySource | None = None,  # 공휴일 휴무(상황 감지 H1) — env 해석은 main.py, 기본 off
 ) -> FastAPI:
     """스모크·로컬 개발용 앱 — 기본은 in-memory fake 조립(실 LLM·실 DB 0, D37).
 
@@ -4392,5 +4405,6 @@ def build_dev_app(
         dialogue_orchestrator_enabled=dialogue_orchestrator_enabled,
         shadow_rate=shadow_rate,
         shadow_rng=shadow_rng,
+        holidays=holidays,
     )
     return create_app(orchestrator)

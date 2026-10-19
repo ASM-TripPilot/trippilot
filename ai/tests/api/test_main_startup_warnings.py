@@ -9,6 +9,9 @@
   ⑥ `TRIPPILOT_DIALOGUE_ORCHESTRATOR` on|off(기본 off, 오타는 기동 실패) · `TRIPPILOT_DIALOGUE_SHADOW_RATE` 0~1(기본 1.0,
      범위 밖·숫자 아님은 기동 실패) 이 `build_dev_app` 인자로 관통한다 — 오타가 조용히 off 로 떨어지면 "켰다"가 거짓이 된다
   ⑦ DSN 이 있으면 `PgDialogueMemoryStore`(연결은 지연 — 조립만, 실 DB 0), 없으면 None(= wiring 의 InMemory)
+  ⑧ `HOLIDAY_CLOSURE_MODE` off|on(기본 off, 오타는 기동 실패 — 상황 감지 H1) → `build_dev_app(holidays=)`. on 이면
+     특일 키(`PUBLIC_DATA_API_KEY`, 비면 `WEATHER_API`)로 달력, 키가 없으면 WARN + 달력 없음(날짜 명시형만).
+     어느 쪽이든 `ai-wiring:` 이 끌어올리는 `공휴일 휴무` 줄 하나, 키 값은 안 남는다
 조립 함수는 전부 스텁 — 실 HTTP·DB 호출 0.
 """
 
@@ -34,7 +37,8 @@ def _stub_assembly(monkeypatch: pytest.MonkeyPatch) -> None:
     for var in ("TRIPPILOT_WIRING", "TRIPPILOT_LLM_PROVIDER",
                 "TRIPPILOT_LLM_FEATURE_MODELS", "TRIPPILOT_LLM_RETRY_MODELS",
                 "TRIPPILOT_VECTOR_DB_URL", "TRIPPILOT_DIALOGUE_ORCHESTRATOR",
-                "TRIPPILOT_DIALOGUE_SHADOW_RATE"):
+                "TRIPPILOT_DIALOGUE_SHADOW_RATE", "HOLIDAY_CLOSURE_MODE", "PUBLIC_DATA_API_KEY",
+                "WEATHER_API"):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -186,3 +190,62 @@ def test_memory_store_is_pg_adapter_with_dsn_and_connects_lazily(monkeypatch):
     """조립은 연결하지 않는다 — 이 테스트가 실 DB 없이 도는 것이 그 증명이다."""
     monkeypatch.setenv("TRIPPILOT_VECTOR_DB_URL", "postgresql://ai_user:x@db.invalid:5432/ai_kb")
     assert isinstance(main._memory_store(), PgDialogueMemoryStore)
+
+
+# ── ⑧ 공휴일 휴무 모드 (상황 감지 H1) ─────────────────────────────────────────
+
+
+def _holiday_lines(caplog) -> list[str]:
+    return [r.getMessage() for r in caplog.records if r.name == "trippilot.main" and "공휴일 휴무" in r.getMessage()]
+
+
+def test_holiday_mode_default_is_off_without_calendar(monkeypatch, caplog):
+    from trippilot.ports.holiday_calendar_port import HolidaySource
+
+    with caplog.at_level(logging.INFO, logger="trippilot"):
+        kwargs = _dev_app_kwargs(monkeypatch)
+    assert kwargs["holidays"] == HolidaySource()  # off — 진입점이 None 을 내린다(조회 0회)
+    [line] = _holiday_lines(caplog)
+    assert "off" in line
+
+
+@pytest.mark.parametrize("raw", ["off", "", " off "])
+def test_holiday_mode_off_values(monkeypatch, raw):
+    assert _dev_app_kwargs(monkeypatch, HOLIDAY_CLOSURE_MODE=raw)["holidays"].enabled is False
+
+
+@pytest.mark.parametrize("env", [
+    {"PUBLIC_DATA_API_KEY": "portal-key+/="},
+    {"WEATHER_API": "portal-key+/="},                                # 같은 포털 디코딩 키(O-SA-1)
+    {"PUBLIC_DATA_API_KEY": "", "WEATHER_API": "portal-key+/="},     # compose 가 넘기는 빈 값은 미설정
+])
+def test_holiday_mode_on_builds_calendar_from_portal_key(monkeypatch, caplog, env):
+    from trippilot.poi_curation.adapters.kasi_holiday_calendar import KasiHolidayCalendarAdapter
+
+    with caplog.at_level(logging.INFO, logger="trippilot"):
+        kwargs = _dev_app_kwargs(monkeypatch, HOLIDAY_CLOSURE_MODE="on", **env)
+    source = kwargs["holidays"]
+    assert source.enabled is True and isinstance(source.calendar, KasiHolidayCalendarAdapter)
+    [line] = _holiday_lines(caplog)
+    assert "on" in line and "portal-key" not in caplog.text  # 키 값은 어디에도 안 남긴다
+
+
+def test_holiday_mode_on_without_key_warns_and_keeps_dated_rules_only(monkeypatch, caplog):
+    with caplog.at_level(logging.INFO, logger="trippilot"):
+        kwargs = _dev_app_kwargs(monkeypatch, HOLIDAY_CLOSURE_MODE="on")
+    source = kwargs["holidays"]
+    assert source.enabled is True and source.calendar is None
+    warns = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING and "공휴일 휴무" in r.getMessage()]
+    assert len(warns) == 1 and "미설정" in warns[0]  # `ai-wiring:` 표식 `미설정`
+
+
+@pytest.mark.parametrize("bad", ["On", "true", "1", "yes", "kma"])
+def test_holiday_mode_typo_fails_startup(monkeypatch, bad):
+    with pytest.raises(RuntimeError, match=f"HOLIDAY_CLOSURE_MODE.*{bad!r}"):
+        _dev_app_kwargs(monkeypatch, HOLIDAY_CLOSURE_MODE=bad)
+
+
+def test_holiday_mode_reaches_the_real_llm_branch(monkeypatch):
+    kwargs = _dev_app_kwargs(monkeypatch, TRIPPILOT_LLM_PROVIDER="anthropic", ANTHROPIC_API_KEY="dummy",
+                             HOLIDAY_CLOSURE_MODE="on", WEATHER_API="k")
+    assert kwargs["holidays"].enabled is True

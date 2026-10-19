@@ -30,6 +30,9 @@ env 스위치 (TRIP-344):
   떨어지면 "켰다"가 거짓이 된다). `TRIPPILOT_DIALOGUE_SHADOW_RATE`(0~1, 기본 1.0) — 종전 3단 라우터
   섀도 표본율, 범위 밖은 기동 실패. 도우미 장기 기억은 `TRIPPILOT_VECTOR_DB_URL` 이 있으면 그 DB
   (`dialogue_memory` 테이블), 없으면 프로세스 안 InMemory + WARN 1줄.
+- `HOLIDAY_CLOSURE_MODE`(on|off, 기본 off — 상황 감지 H1) — on 이면 공휴일 휴무 규칙을 생성·재계획·검증에
+  함께 쓴다(특일 달력 키 `PUBLIC_DATA_API_KEY`, 비면 `WEATHER_API`; 키가 없으면 날짜 명시형 규칙만 + WARN).
+  그 밖의 값은 **기동 실패**.
 
 `/health`는 기존 스텁과 동일한 `{"status": "UP", "service": "ai"}`를 유지한다
 (docker-compose 헬스체크 의존).
@@ -454,6 +457,41 @@ def _dialogue_orchestrator_enabled() -> bool:
     )
 
 
+def _holiday_source():
+    """`HOLIDAY_CLOSURE_MODE` — off|on, 미설정(빈 값 포함) = off (상황 감지 H1). 그 밖은 **기동 실패**.
+
+    on 이면 공공데이터포털 특일정보(`getRestDeInfo`) 달력을 조립한다 — 키는 `PUBLIC_DATA_API_KEY`, 비었으면
+    `WEATHER_API`(같은 포털 디코딩 키, O-SA-1). 키가 없으면 WARN 한 줄 + 달력 없음 = 날짜 명시형 휴일 규칙만
+    (정기 규칙 판정은 그대로). 어느 모드든 `공휴일 휴무` 줄 하나를 남긴다 — 배포 smoke 의 `ai-wiring:` 이
+    끌어올린다(`deploy/eks/runtime_smoke.py` 표식). 키 값은 남기지 않는다.
+    """
+    from trippilot.ports.holiday_calendar_port import HolidaySource
+
+    log = logging.getLogger("trippilot.main")
+    raw = _env("HOLIDAY_CLOSURE_MODE")
+    if raw is None or raw == "off":
+        log.info("공휴일 휴무 = off (HOLIDAY_CLOSURE_MODE) — 공휴일 규칙 없음")
+        return HolidaySource()
+    if raw != "on":
+        raise RuntimeError(
+            f"HOLIDAY_CLOSURE_MODE 미지원 값: {raw!r} — on|off (미설정 = off). "
+            "오타가 조용히 off 로 떨어지지 않게 기동 실패."
+        )
+    key = _env("PUBLIC_DATA_API_KEY") or _env("WEATHER_API")
+    if key is None:
+        log.warning("공휴일 휴무 = on 인데 특일 키 미설정(PUBLIC_DATA_API_KEY·WEATHER_API) — "
+                    "날짜 명시형 휴일 규칙만 쓴다")
+        return HolidaySource(enabled=True)
+    from trippilot.poi_curation.adapters.kasi_holiday_calendar import (
+        KasiHolidayCalendarAdapter, UrllibTextClient,
+    )
+
+    log.info("공휴일 휴무 = on · 특일 달력 = 공공데이터포털 특일정보(getRestDeInfo)")
+    # 소켓 작업당 2s — 요청당 1회(성공한 달은 24시간 기억)라 생성 시한을 크게 먹지 않는다. 실패는 빈 달력.
+    return HolidaySource(enabled=True,
+                         calendar=KasiHolidayCalendarAdapter(UrllibTextClient(timeout_sec=2.0), key))
+
+
 def _dialogue_shadow_rate() -> float:
     """`TRIPPILOT_DIALOGUE_SHADOW_RATE` — 0~1, 미설정 = 1.0(DEV 전수). 숫자가 아니거나 범위 밖이면 **기동 실패**."""
     raw = _env("TRIPPILOT_DIALOGUE_SHADOW_RATE")
@@ -784,6 +822,7 @@ def build_app_from_env() -> FastAPI:
     # 도우미 오케스트레이터 설정은 LLM 분기 전에 읽는다 — 오타는 fake 조립에서도 기동 실패여야 한다.
     memory_store = _memory_store()
     dialogue_on, shadow_rate = _dialogue_orchestrator_enabled(), _dialogue_shadow_rate()
+    holidays = _holiday_source()  # 오타는 fake 조립에서도 기동 실패 — 위 도우미 설정과 같은 자리
     provider = _env("TRIPPILOT_LLM_PROVIDER")
     if provider is None:
         _warn_unwired(weather=weather, embedding=embedding, feature_models=None, memory=memory_store)
@@ -794,7 +833,8 @@ def build_app_from_env() -> FastAPI:
                              bank=_intent_bank(), bank_embedding=_bank_embedding(),
                              bank_vectors=_bank_vectors(),
                              memory_store=memory_store,
-                             dialogue_orchestrator_enabled=dialogue_on, shadow_rate=shadow_rate)
+                             dialogue_orchestrator_enabled=dialogue_on, shadow_rate=shadow_rate,
+                             holidays=holidays)
     if provider == "openai":
         llm, model_id = _openai_llm_and_model()
     elif provider == "anthropic":
@@ -830,7 +870,8 @@ def build_app_from_env() -> FastAPI:
                          bank=_intent_bank(), bank_embedding=_bank_embedding(),
                          bank_vectors=_bank_vectors(),
                          memory_store=memory_store,
-                         dialogue_orchestrator_enabled=dialogue_on, shadow_rate=shadow_rate)
+                         dialogue_orchestrator_enabled=dialogue_on, shadow_rate=shadow_rate,
+                         holidays=holidays)
 
 
 # ASGI 진입점 — `uvicorn main:app` 으로도 기동 가능.
