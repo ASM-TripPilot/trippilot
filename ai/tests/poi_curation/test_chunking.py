@@ -85,7 +85,10 @@ def test_the_chunk_that_matches_the_situation_is_shown_not_the_opening() -> None
     index_documents(c.chunk_document(row), embedding, store)
     got, note = fetch_place_knowledge([_poi("123")], "비 오는 날 상황", embedding, store)
     assert note == ""
-    assert got["123"] == f"관람: {_RAIN}", got  # 종전엔 앞 160자(개요)가 붙었다 — 맞은 조각은 **통째로**
+    # 종전엔 앞 160자(개요)가 붙었다 — 이제 맞은 조각, 그 앞에 "이곳이 무엇인지" 말하는 도입부 첫 문장(2026-10-19 실측)
+    head = c.split_sentences(_S)[0][:100]
+    assert got["123"].startswith(f"{head} … {_RAIN[:40]}"), got
+    assert "관람: " not in got["123"]  # 절 제목은 떼고 본문만 잇는다
     assert 160 < len(got["123"]) <= MAX_DOC_CHARS
     got, _ = fetch_place_knowledge([_poi("123")], "맑은 날 상황", embedding, store)
     assert got["123"].startswith("개요: ")
