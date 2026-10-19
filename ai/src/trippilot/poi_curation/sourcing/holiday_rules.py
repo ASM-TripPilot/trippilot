@@ -27,6 +27,10 @@
   해석될 때만 목록으로 본다(`(전쟁박물관은 …)` 같은 딴 시설 이야기·조건은 한 절이라도 해석이 안 된다).
 - `임시 휴무`·`지정한 날`·`월 1회`·기간(`11월 1일 ~ 3월 31일 휴장`)·반나절(`설·추석 오전`)·`시설`의 설.
 - 수식된 공휴일(`일요일을 제외한 법정공휴일`·`평일 법정공휴일`)·`대체공휴일` 단독 — PUBLIC 으로 넓히지 않는다.
+- 여는 말이 휴무를 좁히는 꼴 — 여는 말로 끝나는 괄호(`공휴일(단, 3·1절과 광복절은 운영)`)는 **붙은 절**을,
+  구분자로 떨어진 여는 절(`공휴일/정상운영`)은 **원문 전체**를 모른다. 괄호만 버리면 여는 날까지 닫는다.
+  요일 절의 단서(`매주 월요일 (… 공휴일인 경우 정상 개관)`)는 그 절에 휴일 규칙이 없어 잃는 것이 없다.
+- 시설 머리가 여럿(`- 전망대 (연중무휴)- 홍보관 (1월 1일 …)`) — `[A] … [B] …` 처럼 어느 시설의 휴무인지 모른다.
 """
 
 from __future__ import annotations
@@ -71,6 +75,14 @@ _NAMED = {"신정": "01-01", "삼일절": "03-01", "근로자의날": "05-01", "
 _QUAL = {"eve": 0, "day": 1, "next": 2}  # 명절 튜플(전날·당일·다음날)의 자리
 _HOLIDAY_NAME = {"seol": SEOLLAL, "chuseok": CHUSEOK}
 _INVISIBLE = re.compile(r"[﻿​]")
+# 시설·시기 머리(`- 전망대 (연중무휴)- 홍보관 (1월 1일 …)`·`- 공원 : 연중무휴<br>- 감락원 : …`). 공유본 9건, 규칙이
+# 붙던 4건은 전부 한 시설이 연중무휴다 — 딴 시설의 휴무를 장소 전체에 붙였다. 머리가 휴일 낱말이면(`- 설날 (…)`)
+# 글머리표다.
+_FACILITY_HEAD = re.compile(r"(?:^|(?<=[\s)）]))-[ \t]*([^\s\-/,()（）:·]+)[ \t]*[:(（]")
+# 여는 말로 끝나는 괄호 — 붙은 절의 휴무를 좁히는 예외다(`공휴일(단, 3·1절과 광복절은 운영)`, 공유본 3건).
+_OPEN_TAIL = re.compile(r"(?:개관|개장|운영|영업)(?:함|합니다)?\s*$")
+# 여는 말뿐인 절(`공휴일/정상운영`) — 구분자 앞 어느 절을 여는지 모른다(공유본 0건).
+_OPEN_CLAUSE = re.compile(r"(?:정상[ \t]*)?(?:운영|영업|개관|개장)(?:함|합니다|중)?\.?")
 
 
 def parse_holiday_rules(rest_raw: str | None, hours_raw: str | None = None) -> frozenset[str]:
@@ -91,15 +103,20 @@ def parse_holiday_rules(rest_raw: str | None, hours_raw: str | None = None) -> f
 
 def _text_rules(raw: str) -> set[str]:
     text = _INVISIBLE.sub("", _REST_BREAK.sub("\n", raw)).strip()
-    if not text or len(_SECTION_HEAD.findall(text)) > 1:
-        return set()  # 구역이 여럿이면 어느 시설의 휴무인지 모른다(mapping 과 같다)
+    if (not text or len(_SECTION_HEAD.findall(text)) > 1
+            or sum(_clause(h) is None for h in _FACILITY_HEAD.findall(text)) > 1):
+        return set()  # 구역·시설이 여럿이면 어느 시설의 휴무인지 모른다(mapping 의 `[A] … [B]` 와 같다)
     text = _REST_REMARK.sub("", text)  # ※ 비고는 그 줄 끝까지 버린다 — 안의 괄호도 같이
+    # 괄호 단서는 걷어 내되, 여는 말로 끝나는 괄호가 붙은 절은 못 읽게 한다(NUL 은 낱말이 아니다)
+    body = _REST_PAREN.sub(lambda m: "\0" if _OPEN_TAIL.search(m.group(0)[1:-1]) else " ", text)
+    if any(_OPEN_CLAUSE.fullmatch(c.strip(" -")) for c in _REST_CLAUSE_SEP.split(body)):
+        return set()
     rules: set[str] = set()
     for paren in _REST_PAREN.finditer(text):
         listed = _clauses(paren.group(0)[1:-1], strict=True)
         if listed is not None:
             rules |= listed  # 휴무일 목록 괄호 — 절이 전부 해석될 때만
-    rules |= _clauses(_REST_PAREN.sub(" ", text), strict=False) or set()
+    rules |= _clauses(body, strict=False) or set()
     return rules
 
 
