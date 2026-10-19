@@ -13,6 +13,7 @@
   ③ 시간 표현(`reflection_template._TIME_EXPR`) — 소요시간은 INV-3, 시각은 스냅샷만 말한다(INV-2).
      다음 턴 프롬프트에 되돌아가는 값이라 여기서 끊어야 전파가 멎는다
   ④ 링크·연락처 꼴(`has_contact_like`) — 최근 턴에 실린 제3자 문자열이 요약으로 굳는 것을 막는다
+  ④′ 지시 주입·프롬프트 골격 꼴(`has_injection_like`) — 기억은 다음 턴마다 `$memory` 로 되돌아가 한 번 굳으면 매 턴 다시 주입된다
   ⑤ 중복(첫 등장 유지)
   ⑥ 개수 상한 `_MAX_LINES` — 초과분도 드롭으로 계측
 **전부 드롭 = 실패, 비운 배열 = 성공·0건** (TRIP-260 #5 의 추출 계열 쪽, 2026-10-19 개정): 게이트가 줄을 다 버렸으면
@@ -35,6 +36,7 @@ from trippilot.llm_gateway.gates.base import (
     _load_json_object,
     empty_result_error,
     has_contact_like,
+    has_injection_like,
 )
 from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
 
@@ -73,6 +75,7 @@ class DialogueMemoryGate:
                 or len(line) > _MAX_LINE_CHARS  # ②
                 or _TIME_EXPR.search(line) is not None  # ③ (INV-3·INV-2)
                 or has_contact_like(line)  # ④
+                or has_injection_like(line)  # ④′
                 or line in survivors  # ⑤
                 or len(survivors) >= _MAX_LINES  # ⑥
             ):

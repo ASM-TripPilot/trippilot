@@ -21,7 +21,7 @@ from typing import Protocol
 from trippilot.domain.common import TraceId
 from trippilot.domain.intent import Intent
 from trippilot.domain.llm import LlmFeature, TypedResult
-from trippilot.llm_gateway.gates.base import has_contact_like
+from trippilot.llm_gateway.gates.base import has_contact_like, has_injection_like
 from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import inline
@@ -121,13 +121,14 @@ def build_dialogue_answer_vars(
 
 
 def _safe_target(raw: object) -> str:
-    """대상 장소 이름 — 웹 수집분이라 게이트(시간 표현·연락처·길이)를 못 넘는 이름이면 BE 와 같은 대명사로."""
+    """대상 장소 이름 — 웹 수집분이라 게이트(시간 표현·연락처·주입 꼴·길이)를 못 넘는 이름이면 BE 와 같은 대명사로."""
     name = inline(str(raw)) if raw else ""
     if (
         not name
         or len(name) > _MAX_TARGET_CHARS
         or _TIME_EXPR.search(name) is not None
         or has_contact_like(name)
+        or has_injection_like(name)  # 게이트 ⑤ — "탈옥 방탈출카페"·"[여행] 게스트하우스" 같은 이름이 템플릿을 스스로 막지 않게
     ):
         return _FALLBACK_TARGET
     return name
