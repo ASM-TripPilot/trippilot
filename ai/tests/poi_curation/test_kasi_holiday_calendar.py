@@ -6,7 +6,8 @@
 증명하는 것:
   ① 실표본 두 벌 → 태그: isHoliday Y = PUBLIC, `설날` 연속 3일 = 전날·당일·다음날, 대체공휴일 = PUBLIC 만.
   ② 연속 판정은 달 경계를 넘는다 — 앞뒤 2일을 덮는 달을 모두 읽는다(2022 설날 1/31~2/2).
-  ③ 봉투 변주 — 1건이면 item 이 객체, 0건이면 items 가 빈 문자열. 성공은 resultCode "00" 표식으로만.
+  ③ 봉투 변주 — 1건이면 item 이 객체, 0건이면 items 가 빈 문자열. 성공은 resultCode "00" 표식 + 아는 봉투로만
+     (items 키 없음·null·빈 목록·totalCount 와 행 수 불일치는 실패).
   ④ 실패(XML 30 본문·HTTP 401·비정상 코드·형식 깨짐) → None + WARN 은 상태가 바뀔 때 1번, 키는 어디에도 안 남는다.
   ⑤ 성공한 달만 캐시 — 24시간 TTL(임시공휴일 지정 반영), 실패는 다음 호출이 다시 묻는다.
   ⑥ 모드 출처 `HolidaySource` — off 면 None·조회 0회, on 이면 달력(없거나 실패면 빈 매핑 = 날짜 명시형만).
@@ -36,9 +37,13 @@ _XML_30 = """<OpenAPI_ServiceResponse>
 </OpenAPI_ServiceResponse>"""
 
 
-def _envelope(items: object, code: str = "00") -> str:
+def _envelope(items: object, code: str = "00", total: int | None = None) -> str:
+    """실물 봉투 — totalCount 는 행 수다(0건 `""`, 1건 객체, n건 목록). `total` 로 어긋난 봉투를 만든다."""
+    if total is None:
+        rows = items.get("item") if isinstance(items, dict) else None
+        total = len(rows) if isinstance(rows, list) else 1 if isinstance(rows, dict) else 0
     return json.dumps({"response": {"header": {"resultCode": code, "resultMsg": "NORMAL SERVICE."},
-                                    "body": {"items": items, "numOfRows": 50, "pageNo": 1, "totalCount": 0}}},
+                                    "body": {"items": items, "numOfRows": 50, "pageNo": 1, "totalCount": total}}},
                       ensure_ascii=False)
 
 
@@ -164,6 +169,12 @@ def test_공휴일_아닌_특일은_싣지_않는다() -> None:
     _envelope("", code="22"),                             # 한도 초과 등 비정상 코드
     "{}",                                                 # 빈 응답은 성공이 아니다
     json.dumps({"response": {"header": {"resultCode": "00"}}}),          # 본문 없음
+    # 성공 코드여도 모르는 봉투는 '공휴일 0건'이 아니다 — 0건 성공으로 받으면 그 달 휴무가 24시간 지워진다(리뷰 재현)
+    json.dumps({"response": {"header": {"resultCode": "00"}, "body": {}}}),  # items 키 없음
+    _envelope(None),                                      # items null
+    _envelope({"item": []}),                              # 빈 목록 — 실물 0건은 items == ""
+    _envelope("", total=3),                               # 0건 봉투인데 totalCount 3
+    _envelope({"item": [_item(20270206, "설날"), _item(20270207, "설날")]}, total=3),  # 행이 모자란다
     _envelope({"item": [{"dateName": "설날", "isHoliday": "Y", "locdate": "2027-02-07"}]}),  # 날짜 형식 깨짐
     urllib.error.HTTPError("https://apis.data.go.kr/x", 401, "Unauthorized", {}, None),
     TimeoutError("timed out"),

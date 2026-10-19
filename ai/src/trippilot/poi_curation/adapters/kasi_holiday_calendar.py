@@ -7,8 +7,8 @@
 `response.header.resultCode == "00"` · `response.body.items.item[]` — 항목은 `dateKind "01"`·`dateName`·
 `isHoliday "Y"`·`locdate`(yyyymmdd 정수). 변주: **0건이면 `items` 가 빈 문자열**, **1건이면 `item` 이 객체**(목록
 아님). 키 미등록·인증 오류는 `_type=json` 을 줘도 **XML 본문**(`returnReasonCode` 30 등)으로 오고, HTTP 401·403
-으로 올 때도 있다. 성공은 resultCode "00" 표식으로만 판정한다 — 빈 응답·모르는 봉투를 "공휴일 없음"으로 읽으면
-진짜 공휴일 휴무가 지워진다(BR-SA-17).
+으로 올 때도 있다. 성공은 resultCode "00" 표식 **과 아는 봉투**(위 세 꼴, 정수 totalCount = 행 수)로만 판정한다 —
+빈 응답·모르는 봉투를 "공휴일 없음"으로 읽으면 진짜 공휴일 휴무가 지워진다(BR-SA-17).
 
 태그(`domain.poi`): isHoliday Y → PUBLIC. dateName 이 정확히 `설날`·`추석`인 **연속 3일** → (전날, 당일, 다음날)
 자리(+PUBLIC), `부처님오신날` → BUDDHA. `대체공휴일(…)` 은 PUBLIC 만이다. 연속 판정이 달을 넘을 수 있어(2022 설날
@@ -151,15 +151,21 @@ def _parse(body: str) -> tuple[tuple[date, str, bool], ...]:
     payload = resp.get("body")
     if not isinstance(payload, Mapping):
         raise _Failed("body 없음")
+    # 아는 봉투만 성공이다 — 0건 `""` · 1건 객체 · n건 목록. 성공 코드라도 키가 없거나 null·빈 목록이면 실패
+    # (0건 성공으로 받으면 그 달 휴무가 24시간 지워진다). totalCount 가 정수면 행 수와 맞아야 한다.
     items = payload.get("items")
-    if items == "" or items is None:
-        return ()  # 0건 — 빈 문자열로 온다
-    if not isinstance(items, Mapping):
+    raw = items.get("item") if isinstance(items, Mapping) else None
+    if items == "":
+        rows = []
+    elif isinstance(raw, Mapping):
+        rows = [raw]
+    elif isinstance(raw, list) and raw:
+        rows = raw
+    else:
         raise _Failed("items 모양")
-    raw = items.get("item")
-    rows = [raw] if isinstance(raw, Mapping) else raw if isinstance(raw, list) else None
-    if rows is None:
-        raise _Failed("item 모양")
+    total = payload.get("totalCount")
+    if isinstance(total, int) and total != len(rows):
+        raise _Failed(f"totalCount={total} 행={len(rows)}")
     out: list[tuple[date, str, bool]] = []
     for row in rows:
         try:
