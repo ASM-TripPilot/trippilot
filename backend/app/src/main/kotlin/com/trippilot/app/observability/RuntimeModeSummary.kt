@@ -82,6 +82,8 @@ class RuntimeModeSummary(private val env: Environment) {
             Triple("prepared", "trippilot.replan.prepared.mode", "off"),
             // 기회 카드(DEC-SA-6) AI 호출 — 배포는 차트가 http 를 고정 env 로 박는다(시크릿 아님, DEC-SA-8).
             Triple("opportunity", "trippilot.ai.opportunity.mode", "off"),
+            // 도우미 발화 해석(REL-U8-06) — off 는 운영자 킬 스위치(버튼 모드)라 켜졌는지가 이 줄에 보여야 한다.
+            Triple("assistant", "trippilot.assistant.interpret.mode", "fake"),
         )
 
         /**
