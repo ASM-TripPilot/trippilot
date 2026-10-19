@@ -110,16 +110,21 @@ def test_no_real_poi_name_is_flagged() -> None:
 
 
 def test_no_wiki_excerpt_sentence_is_flagged() -> None:
-    """KB-5 발췌도 같은 이유 — 위키 본문이 프롬프트를 거쳐 문장에 섞인다."""
-    raw = json.loads((_DATA / "place_docs.json").read_text(encoding="utf-8"))
+    """KB-5 발췌도 같은 이유 — 위키 본문이 프롬프트를 거쳐 문장에 섞인다. **실제로 싣는 원천**(본문 전문 코퍼스)을
+    본다 — 옛 통문서 파일을 보면 전문에 새로 들어온 연락처 문장을 못 잡는다(2026-10-18 청킹)."""
+    import gzip
+
+    from trippilot.poi_curation.chunking import chunk_corpus
+
+    with gzip.open(_DATA / "place_corpus_wiki.jsonl.gz", "rt", encoding="utf-8") as f:
+        docs = chunk_corpus(json.loads(line) for line in f if line.strip())
     sentences = [
         s.strip()
-        for d in raw["documents"]
-        if isinstance(d.get("text"), str)
-        for s in re.split(r"(?<=[.!?])\s+|\n+", d["text"])
+        for d in docs
+        for s in re.split(r"(?<=[.!?])\s+|\n+", d.text)
         if len(s.strip()) > 8
     ]
-    assert len(sentences) > 1_000
+    assert len(sentences) > 10_000
     assert [s for s in sentences if has_contact_like(s)] == []
 
 

@@ -85,8 +85,9 @@ def test_poi_curation_imports_only_stdlib_and_internal() -> None:
 
 
 def test_llm_gateway_imports_only_stdlib_and_internal() -> None:
-    """U4 DoD: llm_gateway(C1) 순수성 — 예외 2곳뿐: prompts.py의 yaml(프롬프트 정본 포맷),
-    adapters/의 벤더 SDK(anthropic·openai — SDK는 어댑터 한정, BR-U4-10)."""
+    """U4 DoD: llm_gateway(C1) 순수성 — 예외 3곳뿐: prompts.py의 yaml(프롬프트 정본 포맷),
+    adapters/의 벤더 SDK(anthropic·openai — SDK는 어댑터 한정, BR-U4-10),
+    adapters/deadline_http.py 의 httpx(그 SDK 들의 전송 계층)."""
     offenders: dict[str, set[str]] = {}
     for py in (_SRC / "llm_gateway").rglob("*.py"):
         bad = _external_imports(py)
@@ -94,6 +95,8 @@ def test_llm_gateway_imports_only_stdlib_and_internal() -> None:
             bad -= {"yaml"}
         if "adapters" in py.parts:
             bad -= {"anthropic", "openai"}
+        if py.name == "deadline_http.py":
+            bad -= {"httpx"}  # 두 SDK 의 전송 계층 — 총시간 시한을 거는 자리
         if bad:
             offenders[str(py.relative_to(_SRC))] = bad
     assert not offenders, f"llm_gateway에 외부 패키지 import 위반: {offenders}"

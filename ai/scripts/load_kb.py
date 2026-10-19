@@ -63,7 +63,11 @@ from trippilot.agents.planb.directives import (  # noqa: E402
 # KB-5(장소 지식)도 기본이다 — 빠져 있어 DEV 에는 상황·지시어만 적재돼 있었고, 재계획
 # 프롬프트의 후보 줄에 장소 설명이 한 건도 붙지 않았다(로컬은 손으로 넣어 1,470건).
 _DEFAULT_SEEDS = (
-    "data/planb_situation_kb.yaml", "data/replan_directives.yaml", "data/place_docs.json",
+    "data/planb_situation_kb.yaml", "data/replan_directives.yaml",
+    # KB-5 는 이제 **본문 전문 원천**이 정본이다(`poi_curation/chunking`). 종전 도입부 통문서 `place_docs.json`
+    # 은 싣지 않는다 — 코퍼스에 없는 옛 문서는 대부분 새 필터(체인·회사 문서·시군구 대조)가 **일부러 거른 오매칭**
+    # 이라 되살리면 필터가 무력해진다. 적재가 끝나면 코퍼스 밖 위키 행은 지운다(`load_corpus`).
+    "data/place_corpus_wiki.jsonl.gz",
 )
 # 지시 사전(KB-4)은 문서 형식이 다르다 — 루트가 `directives` 고 한 지시가 alias 만큼의
 # 문서로 펼쳐진다. 파일 이름으로 가르지 않고 **루트 키를 보고** 고른다: 이름 규칙에
@@ -129,6 +133,14 @@ def _documents_of(path: Path):
     라벨 + alias 수만큼의 문서로 펼쳐진다 — 합쳐 한 문서로 넣으면 개별 표현의 신호가
     희석돼 자유 입력 매칭이 나빠진다.
     """
+    if path.name.endswith(".jsonl.gz"):
+        import gzip
+        import json
+
+        from trippilot.poi_curation.chunking import chunk_corpus
+
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            return chunk_corpus(json.loads(line) for line in f if line.strip())
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     if isinstance(raw, dict) and "directives" in raw:
         return directive_documents(load_directive_file(path, yaml.safe_load))
@@ -190,6 +202,123 @@ def _use_load_timeout(environ) -> None:
         environ["TRIPPILOT_EMBEDDING_TIMEOUT_SEC"] = str(LOAD_TIMEOUT_SEC)
 
 
+# 원천 조각 적재의 시간 예산(초) — **미리 계산한 벡터가 없는 조각**(원천·청킹 규칙이 바뀐 것)만 원격 임베딩하고,
+# 그 몫이 이 예산을 넘으면 문서 단위로 끊고 정상 종료한다. 다음 배포가 이어받는다(upsert 멱등 + 기적재 건너뜀).
+# 배포 Job 은 90분·재시도 2회(`runtime_kb`)라 시도마다 예산이 새로 시작해도 셋이 들어가게 20분으로 둔다
+# (리뷰: 3600초면 한 번 실패한 뒤 재시도가 Job 마감에 잘려 배포가 빨강이 된다).
+KB_LOAD_BUDGET_SEC = float(os.environ.get("TRIPPILOT_KB_LOAD_BUDGET_SEC") or 1200)
+_BULK_ROWS = 500  # 미리 계산한 벡터를 한 번에 넣는 행 수(커넥션 하나·executemany)
+
+
+def _upsert_rows(store, collection: str, rows) -> None:
+    if hasattr(store, "upsert_many"):
+        for i in range(0, len(rows), _BULK_ROWS):
+            store.upsert_many(collection, rows[i:i + _BULK_ROWS])
+    else:
+        for item_id, vector, payload in rows:
+            store.upsert(collection, item_id, vector, payload)
+
+
+def _delete_ids(store, collection: str, ids) -> int:
+    ids = sorted(ids)
+    if hasattr(store, "delete_many"):
+        return store.delete_many(collection, ids)
+    for i in ids:
+        store.delete(collection, i)
+    return len(ids)
+
+
+def _index_corpus(documents, embedding, store, budget_sec: float = KB_LOAD_BUDGET_SEC, precomputed=None):
+    """조각을 적재한다. (적재 수, 끝난 원문 id, 원격 임베딩 수).
+
+    지문이 맞는 미리 계산 벡터는 그대로 넣고(임베딩 0회), 나머지만 **원문 문서 단위**로 임베딩한다 —
+    예산을 넘기면 다음 문서부터 멈춘다(문서가 반쯤 들어가는 일이 없다).
+    """
+    import time
+
+    from trippilot.agents.planb.kb_retrieval import INDEX_BATCH, collection_for
+    from trippilot.poi_curation.chunking import text_hash
+
+    ready, rest = [], []
+    for d in documents:
+        ok = precomputed is not None and precomputed.hash_of(d.doc_id) == text_hash(d.text)
+        (ready if ok else rest).append(d)
+    if ready:
+        coll = collection_for(ready[0].kb, embedding.model_id)
+        for i in range(0, len(ready), _BULK_ROWS):  # 벡터는 묶음마다 펼친다(Job 메모리 512Mi)
+            _upsert_rows(store, coll, [(d.doc_id, precomputed.vector(d.doc_id), d.payload())
+                                       for d in ready[i:i + _BULK_ROWS]])
+    pending_bases = {d.doc_id.split("#", 1)[0] for d in rest}
+    groups: dict[str, list] = {}
+    for d in rest:
+        groups.setdefault(d.doc_id.split("#", 1)[0], []).append(d)
+
+    start, count, done = time.monotonic(), len(ready), set()
+    batch: list = []
+    bases: list[str] = []
+    for base, docs in groups.items():
+        if time.monotonic() - start > budget_sec:
+            break
+        batch += docs
+        bases.append(base)
+        if len(batch) >= INDEX_BATCH:  # 문서 경계에서만 끊되 임베딩 요청은 꽉 채운다
+            count += index_documents(batch, embedding, store)
+            done.update(bases)
+            batch, bases = [], []
+    if batch:
+        count += index_documents(batch, embedding, store)
+        done.update(bases)
+    all_bases = {d.doc_id.split("#", 1)[0] for d in documents}
+    return count, frozenset((all_bases - pending_bases) | done), count - len(ready)
+
+
+def load_corpus(path: Path, documents, fresh, embedding, store, budget_sec: float = KB_LOAD_BUDGET_SEC) -> str:
+    """KB-5 원천 조각 적재 + 정리. 요약 한 줄을 돌려준다.
+
+    정리(조각이 **다 들어간** 문서만):
+    - 청킹 전 통문서 `wiki:{ref}` — 검색은 조각이 없는 동안 그것을 대신 쓴다(`place_knowledge`)
+    - 원문이 짧아져 남은 조각(`#n` 이후) — 검색이 `#0..#39` 를 펼쳐 찾으므로 안 지우면 낡은 문장이 붙는다
+    - 적재가 예산에 안 걸렸으면: 코퍼스 밖의 위키 행 전부(빠진 장소의 조각·옛 통문서) — 코퍼스가 정본이다
+    이 스크립트는 seed 에서 빠진 행을 원래 안 지운다(docstring) — 이 원천만 예외로 명시해서 지운다.
+    """
+    from trippilot.agents.planb.kb_retrieval import collection_for
+    from trippilot.poi_curation.chunking import MAX_CHUNKS_PER_DOC, base_ids, chunk_ids, load_chunk_vectors, vectors_path
+
+    if not documents:
+        return f"{path.name}: 조각 0건 — 원천이 비었다"
+    coll = collection_for(documents[0].kb, embedding.model_id)
+    loaded = load_chunk_vectors(vectors_path(path))
+    precomputed, why = None, "벡터 파일 없음"
+    if loaded is not None:
+        if loaded.model != embedding.model_id or loaded.dim != embedding.dim:
+            why = f"벡터 파일 모델·차원 {loaded.model}/{loaded.dim} != 현재 {embedding.model_id}/{embedding.dim}"
+        else:
+            precomputed, why = loaded, ""
+    count, done, embedded = _index_corpus(fresh, embedding, store, budget_sec, precomputed)
+    fresh_bases = base_ids(fresh)
+    pending = fresh_bases - done
+    complete = base_ids(documents) - pending
+    n_chunks: dict[str, int] = {}
+    for d in documents:
+        b = d.doc_id.split("#", 1)[0]
+        n_chunks[b] = n_chunks.get(b, 0) + 1
+    stale = set(complete)  # 통문서
+    for b in complete:
+        stale.update(chunk_ids(b)[n_chunks[b]:MAX_CHUNKS_PER_DOC])
+    orphan = 0
+    if not pending and hasattr(store, "item_ids_like"):
+        current = {d.doc_id for d in documents}
+        prefix = documents[0].doc_id.split(":", 1)[0]
+        gone = {i for i in store.item_ids_like(coll, f"{prefix}:%") if i not in current}
+        orphan = len(gone)
+        stale |= gone
+    removed = _delete_ids(store, coll, stale)
+    return (f"{path.name}: 조각 {len(documents)}건 중 {count}건 적재(원격 임베딩 {embedded}건"
+            + (f" — 미리 계산 벡터 미사용: {why}" if why else "") + f") · 정리 {removed}행"
+            + (f"(코퍼스 밖 위키 행 {orphan})" if orphan else "")
+            + (f" · 시간 예산으로 {len(pending)}문서 다음 배포로" if pending else ""))
+
+
 def main(argv: list[str]) -> int:
     # 대량 적재는 런타임 질의와 마감이 다르다. 어댑터 기본 5초는 **질의 1건** 기준이고,
     # 여기서는 한 요청에 수십 건을 태운다(로컬 KURE-v1 실측 건당 ~1.4초 — 기본 배치
@@ -200,21 +329,29 @@ def main(argv: list[str]) -> int:
     if not url:
         print("TRIPPILOT_VECTOR_DB_URL 미설정 — 적재 불가", file=sys.stderr)
         return 2
+    root = Path(__file__).resolve().parent.parent
+    paths = [Path(p) for p in (argv or [str(root / s) for s in _DEFAULT_SEEDS])]
+    missing = [str(p) for p in paths if not p.is_file()]
+    if missing:  # 임베딩·DB 를 열기 전에 — 없는 seed 로 Job 재시도를 90분 태우지 않는다
+        print(f"seed 파일 없음: {', '.join(missing)}", file=sys.stderr)
+        return 2
     import psycopg
 
     store = PgVectorStore(lambda: psycopg.connect(url))
     embedding = _embedding()
-    root = Path(__file__).resolve().parent.parent
-    paths = [Path(p) for p in (argv or [str(root / s) for s in _DEFAULT_SEEDS])]
     total = 0
     for path in paths:
         documents = _documents_of(path)
         kinds = sorted({d.kb.value for d in documents})
-        fresh = _skip_already_indexed(documents, embedding, url)
+        fresh = _skip_already_indexed(documents, embedding, url) if documents else []
         if len(fresh) != len(documents):
             print(f"{path.name}: 기적재 {len(documents) - len(fresh)}건 건너뜀")
-        count = index_documents(fresh, embedding, store)
-        print(f"{path.name}: {count}건 적재 (KB: {', '.join(kinds)})")
+        if path.name.endswith(".jsonl.gz"):
+            print(load_corpus(path, documents, fresh, embedding, store))
+            count = len(fresh)
+        else:
+            count = index_documents(fresh, embedding, store)
+            print(f"{path.name}: {count}건 적재 (KB: {', '.join(kinds) or '-'})")
         total += count
     provider = os.environ.get("TRIPPILOT_EMBEDDING_PROVIDER") or "openai"
     print(f"총 {total}건 (dim={embedding.dim}, provider={provider}, 멱등 upsert)")

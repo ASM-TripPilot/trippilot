@@ -386,6 +386,14 @@ class DevTargetValuesTests(unittest.TestCase):
                 for container in deployment["spec"]["template"]["spec"]["containers"]:
                     self.assertIn("memory", container["resources"]["limits"])
 
+    def test_dev_target_ai_reserves_one_core(self):
+        """개발 대상 AI 만 CPU 요청 1코어(10-19) — 200m 에선 붐비는 노드에서 조립이 진척 0 으로 멈췄다. 메모리 요청·상한은
+        기본값을 그대로 물려받아야 한다(요청만 덮어도 limits 가 빠지지 않는지)."""
+        deployments = {item["metadata"]["name"]: item for item in render("dev-target") if item["kind"] == "Deployment"}
+        resources = deployments["ai"]["spec"]["template"]["spec"]["containers"][0]["resources"]
+        self.assertEqual(resources["requests"], {"cpu": "1", "memory": "640Mi"})
+        self.assertEqual(resources["limits"], {"cpu": "2", "memory": "2Gi"})
+
     def test_dev_target_embedding_follows_the_deploy_input_with_one_replica(self):
         """개발 서버도 Plan-B KB 를 쓴다(10-15) — 켜면 임베딩 1개, 드레인을 막는 PDB·HPA 는 여전히 없다."""
         documents = render("dev-target", embedding=True)

@@ -90,7 +90,7 @@ def _wired(*, with_doc: bool) -> tuple[TestClient, _PromptSpy, dict[str, str]]:
     if with_doc:
         docs = []
         for poi in seed:  # 반경에 뭐가 남는지 모르니 **전원**에 넣는다
-            doc = make_doc("wiki", str(poi.source_ref), _doc_text(poi.name))
+            doc = make_doc("overview", str(poi.source_ref), _doc_text(poi.name))
             assert doc is not None
             docs.append(doc)
             expected[str(poi.poi_id)] = _doc_text(poi.name)

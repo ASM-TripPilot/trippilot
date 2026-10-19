@@ -689,7 +689,6 @@ def test_memory_runs_for_out_of_scope_and_clarify_turns_too() -> None:
 @pytest.mark.parametrize("memory_step", [
     RuntimeError("memory llm down"),
     "not json",
-    '{"lines": []}',  # 빈 결과 = 실패 (TRIP-260 #5)
     '{"lines": ["x\\ny"]}',  # 게이트는 넘겼지만 DialogueMemory 가 거절(줄 안 줄바꿈)
 ])
 def test_memory_llm_failure_falls_back_to_deterministic_compression(memory_step) -> None:
@@ -981,3 +980,35 @@ def test_unanchored_times_follow_snapshot_order_across_fields(text, footnote, sn
     out = b.orch.turn(_input("오늘 일정 알려줘", snapshot=snapshot))
     events = [e.reason for e in _fallbacks(b.trace) if e.from_mode == "llm_dialogue_answer"]
     assert (out.answer.text == text) is kept and events == ([] if kept else ["time_not_in_facts"])
+
+
+@pytest.mark.parametrize(("previous", "kept"), [
+    ((), ()),
+    (("사용자는 카페를 선호한다",), ("사용자는 카페를 선호한다",)),
+    # 앞선 실패가 압축으로 남긴 원문 조각은 비운 배열에서 지운다 — 남기면 다음 턴 [기억]·내보내기로 계속 나간다
+    (("사용자는 카페를 선호한다", "- 사용자: 안녕", "- 도우미: 안녕하세요!"), ("사용자는 카페를 선호한다",)),
+    # #1314 이전 압축이 남긴 연락처·소요시간 줄도 같은 술어로 다시 거른다 — 그대로 다시 저장하면 술어를 건너뛴다
+    (("사용자는 카페를 선호한다", "숙소 010-1234-5678 로 연락", "이동 40분이면 괜찮다"), ("사용자는 카페를 선호한다",)),
+])
+def test_empty_summary_keeps_previous_lines_and_stores_no_fragments(previous, kept, caplog) -> None:
+    """요약 LLM 이 비운 배열("새로 기억할 것 없음")은 실패가 아니다 — 이전 요약은 두고(압축이 남긴 원문 조각 줄만 지운다)
+    summarized_turn_index 를 이번 턴으로 옮긴다. 결정론 압축으로 떨어지면 "- 사용자: …" 원문 조각이 저장되고 다음 턴
+    [기억]·내보내기로 나간다(2026-10-19 배포 스모크 3/3, BR-AO-09). 0줄 성공은 폴백이 아니라서 건수 로그로 센다."""
+    store = InMemoryDialogueMemoryStore(now=lambda: _NOW)
+    turn = 20 if previous else 10
+    if previous:
+        earlier = _NOW - timedelta(days=1)
+        store.put(DialogueMemory("s-1", _ACCOUNT, "trip-1", previous, 10, earlier, earlier + timedelta(days=90)))
+    b = _build(_canned(Intent.GET_WEATHER, memory='{"lines": []}'), store=store)
+    turns = (RecentTurn("USER", "비 와?"), RecentTurn("ASSISTANT", "예보예요."))
+    with caplog.at_level(logging.INFO, logger="trippilot.orchestrator.dialogue_orchestrator"):
+        out = b.orch.turn(_input(turn_index=turn, recent_turns=turns))
+    assert out.outcome == "ANSWER"
+    mem = store.get("s-1")
+    assert mem.summary == kept and mem.summarized_turn_index == turn
+    assert not any(line.startswith("- ") for line in mem.summary)  # 원문 조각 없음
+    assert not any(m[1] == "llm_dialogue_memory" for m in _modes(b.trace))  # 폴백 아님
+    (event,) = [json.loads(r.getMessage().split(" ", 1)[1]) for r in caplog.records
+                if r.getMessage().startswith("dialogue_memory_empty ")]
+    assert event == {"event": "dialogue_memory_empty", "trace_id": _TID, "kept_lines": len(kept),
+                     "dropped_lines": len(previous) - len(kept)}

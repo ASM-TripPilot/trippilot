@@ -102,7 +102,7 @@ ai/
       workers/dialogue_answer.py  (신규) build vars($intent $facts $utterance $history $memory $trip $style) · compose(..., timeout_sec)
       workers/dialogue_memory.py  (신규) build vars($previous_summary $recent_turns $trip) · summarize(..., timeout_sec)
       gates/dialogue_answer.py    (신규) {"text","footnote"} → ≤400자·줄 ≤6·_TIME_EXPR·has_contact_like — BR-AO-04
-      gates/dialogue_memory.py    (신규) {"lines":[str]} → ≤20줄·줄 ≤120자·중복 제거·연락처·소요시간·빈 결과=실패 — BR-AO-09
+      gates/dialogue_memory.py    (신규) {"lines":[str]} → ≤20줄·줄 ≤120자·중복 제거·연락처·소요시간·~~빈 결과=실패~~ 전부 드롭=실패, LLM 이 비운 배열=새로 기억할 것 없음(성공·0건, 2026-10-19 개정) — BR-AO-09
       gates/intent.py             (기존 — 무변경) DIALOGUE_INTENT 가 feature 인자만 다르게 재사용
       config.py                   (+) tier_map·fallback_modes·effort/max_tokens 3표에 3행
     api/
@@ -279,7 +279,7 @@ facts = handler.assemble(ctx, results)                    # 순수 — 이름(na
 | 분류(2) | `{"intent": null}` · 게이트 전량 드롭 · LLM 실패·시한 | `TurnOutcome(OUT_OF_SCOPE, reason=거절 표지)` → BE SCOPE 카드 | `FallbackEvent(stage="llm", from="llm_dialogue_intent", to="out_of_scope")` — 게이트웨이가 낸다; 게이트웨이를 **부르지 못한** 잔여 0·워커 예외는 오케스트레이터가 같은 짝을 낸다(`_classify`) · reason 에 `not_classifiable`/`intent_not_routable`/`timeout`/`intent_error` |
 | 팬아웃(4) | Provider UNAVAILABLE·TIMEOUT · PlanB 후보 0 · 좌표 없음(params None) | 있는 것만 `Facts(status=PARTIAL, notes=…)`; 전부 없으면 `UNAVAILABLE` → 템플릿 | `TaskResult.status` → `Facts.notes`(사용자 문장 재료) + OK 아닌 작업마다 `FallbackEvent(stage="fanout", from=작업명, to=TIMEOUT\|UNAVAILABLE\|SKIPPED, reason=예외 타입까지)` 1건 — Provider 장애가 운영자에게 보이는 유일한 자리 |
 | 답변(5) | 게이트 실패(길이·줄·`_TIME_EXPR`·연락처·빈 문장) · LLM 실패 · 잔여 <1.5s | `DialogueAnswer.from_facts(facts, text=None)` = `Facts.template_text` | `FallbackEvent(from="llm_dialogue_answer", to="template_text")` + `GateDropEvent` |
-| 요약(6) | 게이트 실패(빈 결과·상한 초과) · LLM 실패 · 잔여 <2.5s · 잔여 ≤0 | `compress_fallback(recent_turns, previous)` → `put`; 잔여 ≤0 이면 압축·`put` 없이 건너뛴다(due 유지) | `FallbackEvent(stage="memory", from="llm_dialogue_memory", to="deterministic_compress")`(건너뛴 턴도 같은 stage 로 1건) |
+| 요약(6) | 게이트 실패(~~빈 결과~~ 전부 드롭·상한 초과 — LLM 이 비운 배열은 실패가 아니라 이전 요약 유지·원문 조각 줄 삭제·`dialogue_memory_empty` 건수 로그, 2026-10-19) · LLM 실패 · 잔여 <2.5s · 잔여 ≤0 | `compress_fallback(recent_turns, previous)` → `put`; 잔여 ≤0 이면 압축·`put` 없이 건너뛴다(due 유지) | `FallbackEvent(stage="memory", from="llm_dialogue_memory", to="deterministic_compress")`(건너뛴 턴도 같은 stage 로 1건) |
 | 메모리 읽기(2) | 스토어 예외 | 메모리 없이 진행(`$memory="(없음)"`) | WARN 1줄(`account_ref` 미포함) |
 | 메모리 쓰기(6) | 스토어 예외 | 이번 턴 포기, 다음 턴 due 유지(`summarized_turn_index` 불변) | `FallbackEvent(stage="memory")` |
 | 메모리 DSN 부재 | `TRIPPILOT_VECTOR_DB_URL` 없음 | `InMemoryDialogueMemoryStore`(프로세스 로컬 — 워커 2 × 파드라 "기억"은 성립하지 않는다) | **기동 WARN "도우미 메모리 미설정"**(ai-wiring 표식 토큰 `미설정`) |
@@ -304,7 +304,7 @@ turn 진입 ─▶ get(session_id) + recent_for_account(account_ref, exclude=ses
 turn 말미 ─▶ due(turn_index, current.summarized_turn_index if current else 0)?  ──아니오──▶ 끝
                       │예
                       ▼
-          잔여 ≥2.5s ──예──▶ DIALOGUE_MEMORY($previous_summary, $recent_turns, $trip; ≤2.0s) → DialogueMemoryGate(≤20줄·≤120자·중복·연락처·소요시간·빈 결과=실패)
+          잔여 ≥2.5s ──예──▶ DIALOGUE_MEMORY($previous_summary, $recent_turns, $trip; ≤2.0s) → DialogueMemoryGate(≤20줄·≤120자·중복·연락처·소요시간·~~빈 결과=실패~~ 전부 드롭=실패; 비운 배열 → 이전 요약 유지·원문 조각 줄 삭제)
                       │                    ├ 통과 ─▶ lines
                       │아니오               └ 실패 ─▶ lines = compress_fallback(recent_turns, previous)   + FallbackEvent
                       └──────────────────▶ lines = compress_fallback(...)                                 + FallbackEvent
