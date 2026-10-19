@@ -106,6 +106,8 @@ Terraform은 Secrets Manager **비밀값 저장소만** 만들고 비밀값은 T
 
 처음 비어 있는 저장소는 배포 도구가 DB 암호·서비스 토큰·RSA PKCS#8 JWT 서명키를 생성한다. 기존 값은 유지하므로 재배포할 때 토큰과 DB 자격증명이 바뀌지 않는다. 외부 API 키는 자동 생성하지 않는다. 지원되는 키와 검증은 `deploy/eks/runtime_secrets.py`가 정한다. AI에는 `TRIPPILOT_LLM_PROVIDER` 등 앱 환경변수 이름을 사용한다(Compose 별칭 `AI_LLM_PROVIDER`는 지원하지 않는다). 저장소의 Secret 이름·ARN은 Terraform outputs와 AWS 콘솔에서 확인한다.
 
+공공데이터포털 키 `PUBLIC_DATA_API_KEY`(기상특보·에어코리아·특일정보)의 정본은 GitHub 저장소 시크릿 `PUBLIC_DATA_API_KEY` 다 — 비밀값 동기화 단계가 매 배포 그 값을 backend·ai 저장소 둘 다에 쓴다(값이 다를 때만, Secrets Manager 손편집은 다음 배포에 덮인다). 시크릿이 비어 있으면 저장값을 그대로 둔다.
+
 DB 초기화 Job은 관리자 자격증명을 임시로 사용해 `app_migrate`, `app_user`, `app` 스키마 및 AI DB·pgvector 테이블을 준비한다. 런타임 SQL은 `app_user`, Flyway는 `app_migrate`로 동작한다. Job 종료 후 임시 관리자 Secret/Job을 삭제한다. 앱 Pod에는 RDS 관리자 암호를 전달하지 않는다. DB 초기화는 반복 실행할 수 있으며 DB/스키마를 삭제하지 않는다. SQL에는 원문 암호 대신 salt를 포함한 SCRAM-SHA-256 검증값을 전달한다. 사용자 지정 DB 암호는 출력 가능한 ASCII 문자열을 사용한다.
 
 `SERVICE_AUTH_REQUIRE_TOKEN`과 `JWT_REQUIRE_CONFIGURED_KEY`를 켜서 비밀값 누락 시 시작을 막는다. PRD의 여러 backend replica가 같은 JWT 키를 사용하므로 서로의 액세스 토큰을 검증할 수 있다. 비밀값을 수정한 뒤에는 수동 배포를 다시 실행해야 Pod에 반영된다. DB 암호를 바꾸는 경우 기존 연결에 영향을 줄 수 있으므로 계획된 배포로 수행한다.

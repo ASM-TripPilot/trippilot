@@ -102,7 +102,7 @@ internal class InMemoryWatches : PlanBWatchRepository {
 /** 스윕(PR-A2)이 낼 빈의 대역. 출처를 안 주면 빈이 없는 것과 같다 — 아무것도 감시하지 않는다. */
 internal fun watchingProvider(vararg sources: String): ObjectProvider<WatchingSources> =
     object : ObjectProvider<WatchingSources> {
-        private val bean: WatchingSources? = if (sources.isEmpty()) null else WatchingSources { it in sources }
+        private val bean: WatchingSources? = if (sources.isEmpty()) null else WatchingSources { source, _ -> source in sources }
         override fun getObject(): WatchingSources = bean ?: error("WatchingSources 빈이 없습니다.")
         override fun getIfAvailable(): WatchingSources? = bean
     }

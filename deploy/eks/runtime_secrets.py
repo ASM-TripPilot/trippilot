@@ -21,7 +21,8 @@ APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY SOCIAL_TOKEN_ENCRYPTION_KEY
 PUSH_EXPO_ACCESS_TOKEN PLACE_GEOCODE_MODE WEATHER_MODE PUSH_MODE AI_REMINDER_COPY_MODE
 AFFILIATE_MODE TRIPCOM_ALLIANCE_ID TRIPCOM_SID TRIPCOM_AD_ID
 ITINERARY_GENERATION_DAILY_LIMIT ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS
-KAKAO_APP_ID ASSISTANT_INTERPRET_MODE LOCATION_AUTOMATION_ENABLED
+KAKAO_APP_ID ASSISTANT_INTERPRET_MODE LOCATION_AUTOMATION_ENABLED PUBLIC_DATA_API_KEY
+PLANB_SITUATION_SWEEP PLANB_SITUATION_HORIZON PLANB_SITUATION_SWEEP_ACCOUNT_IDS PLANB_PREPARED_REPLAN
 """.split())
 AI_KEYS = frozenset("""
 TRIPPILOT_LLM_PROVIDER OPENAI_API_KEY OPENAI_BASE_URL OPENAI_MODEL OPENAI_API
@@ -29,7 +30,7 @@ ANTHROPIC_API_KEY ANTHROPIC_MODEL TRIPPILOT_LLM_FEATURE_MODELS TRIPPILOT_LLM_RET
 TRIPPILOT_LOCAL_LLM_BASE_URL TRIPPILOT_LOCAL_LLM_API_KEY WEATHER_API WEATHER_API_BASE KAKAO_REST_API_KEY
 EXISTENCE_MAX_CALLS TMAP_API_KEY ODSAY_API_KEY TRIPPILOT_EMBEDDING_TIMEOUT_SEC TRIPPILOT_EMBEDDING_MODEL
 TRIPPILOT_BEDROCK_MODEL_ARN TRIPPILOT_BEDROCK_REGION
-TRIPPILOT_DIALOGUE_ORCHESTRATOR TRIPPILOT_DIALOGUE_SHADOW_RATE
+TRIPPILOT_DIALOGUE_ORCHESTRATOR TRIPPILOT_DIALOGUE_SHADOW_RATE PUBLIC_DATA_API_KEY
 """.split())
 GROUP_KEYS = {
     "backend": BACKEND_KEYS, "ai": AI_KEYS,
@@ -200,6 +201,20 @@ def require(values, keys, condition):
         raise ValueError(f"{condition} requires configured keys: {', '.join(keys)}")
 
 
+def require_uuid_list(values, key):
+    """쉼표 구분 UUID 목록 — 비면 통과(없음). 백엔드는 항목마다 `UUID.fromString` 으로 읽고 틀리면 기동에서 죽는다."""
+    listed = values.get(key, "")
+    if not listed.strip():
+        return
+    try:
+        for item in (part.strip() for part in listed.split(",")):
+            # uuid.UUID 는 대시 없는 32자·중괄호·urn 접두도 받는데 백엔드(UUID.fromString)는 거기서 죽는다.
+            if str(uuid.UUID(item)) != item.lower():
+                raise ValueError(item)
+    except ValueError:
+        raise ValueError(f"{key} must be comma-separated UUIDs") from None
+
+
 def validate_groups(groups):
     for group, allowed in GROUP_KEYS.items():
         values = groups[group]
@@ -214,7 +229,12 @@ def validate_groups(groups):
              # http = 상대 AI 해석 경계(TRIP-1410). 오타는 백엔드가 기동에서 거부하므로 배포 전에 막는다.
              "ASSISTANT_INTERPRET_MODE": {"off", "fake", "http"},
              # U10 서버 킬 스위치(REL-U10-06). 없으면 켜짐이다. 끄려면 false 를 넣고 백엔드 파드를 다시 띄운다.
-             "LOCATION_AUTOMATION_ENABLED": {"true", "false"}}
+             "LOCATION_AUTOMATION_ENABLED": {"true", "false"},
+             # Plan-B 상황 감시(situation-awareness 설계서 §7). 없으면 off · today · off 다. 모르는 값은 백엔드가
+             # 바인딩에서 기동을 거부하므로 배포 전에 막는다(대소문자·밑줄 변주도 운영 스위치로는 받지 않는다).
+             "PLANB_SITUATION_SWEEP": {"off", "dry-run", "on"},
+             "PLANB_SITUATION_HORIZON": {"today", "tomorrow", "pre-trip"},
+             "PLANB_PREPARED_REPLAN": {"off", "on"}}
     for key, allowed in modes.items():
         if key in backend and backend[key] not in allowed:
             raise ValueError(f"Unsupported {key} in backend secret")
@@ -233,15 +253,13 @@ def validate_groups(groups):
     limit = backend.get("ITINERARY_GENERATION_DAILY_LIMIT")
     if limit is not None and not (limit.isascii() and limit.isdigit() and 1 <= int(limit) <= 2**31 - 1):
         raise ValueError("ITINERARY_GENERATION_DAILY_LIMIT must be a positive integer; remove the key to use the default")
-    exempt = backend.get("ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS", "")
-    if exempt.strip():
-        try:
-            for item in (part.strip() for part in exempt.split(",")):
-                # uuid.UUID 는 대시 없는 32자·중괄호·urn 접두도 받는데 백엔드(UUID.fromString)는 거기서 죽는다.
-                if str(uuid.UUID(item)) != item.lower():
-                    raise ValueError(item)
-        except ValueError:
-            raise ValueError("ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS must be comma-separated UUIDs") from None
+    require_uuid_list(backend, "ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS")
+    # 상황 감시 운영 카나리(스윕 대상 계정). 비면 전원이다 — 인가가 아니라 대상만 좁힌다(SEC-SA-04). 공백만 든 값은 '빈 값'이
+    # 아니다 — 백엔드 바인딩이 [null] 로 읽어 아무 계정도 안 맞는 목록(조용히 0 여행)이 되므로 백엔드가 기동에서 거부한다.
+    canary = backend.get("PLANB_SITUATION_SWEEP_ACCOUNT_IDS", "")
+    if canary and not canary.strip():
+        raise ValueError("PLANB_SITUATION_SWEEP_ACCOUNT_IDS must be empty or comma-separated UUIDs, not whitespace only")
+    require_uuid_list(backend, "PLANB_SITUATION_SWEEP_ACCOUNT_IDS")
     # 카카오 앱 ID(TRIP-1317)는 숫자다. REST API 키(32자 hex)를 잘못 넣으면 파드는 뜨는데 **카카오 로그인이
     # 전부 401** 이 된다(발급 앱과 영영 안 맞는다) — 가장 흔한 실수라 여기서 막는다. 빈 값은 "대조 안 함"이다.
     kakao_app_id = backend.get("KAKAO_APP_ID", "")
@@ -300,10 +318,15 @@ def open_gaps(groups):
     if backend.get("KAKAO_CLIENT_ID") and not backend.get("KAKAO_APP_ID"):
         yield ("KAKAO_APP_ID is not set in the backend secret: Kakao SDK-token logins are NOT checked against "
                "our app, so tokens issued to other Kakao apps can sign up (TRIP-1317)")
+    # 막지 않는다: 휴무(장소) 감지만으로 켜는 것도 정상 선택이다. 다만 날씨 감지기(단기예보·특보·대기질)는
+    # 실 기상청일 때만 살아 있어 — 모르고 켜면 '날씨 감시'가 조용히 꺼진 채 돈다.
+    if backend.get("PLANB_SITUATION_SWEEP", "off") != "off" and backend.get("WEATHER_MODE", "fake") != "kma":
+        yield ("PLANB_SITUATION_SWEEP is on but WEATHER_MODE is not kma: the weather detectors (forecast, warnings, "
+               "air quality) stay off, so the sweep watches closures only")
 
 
 def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None, dialogue_orchestrator=None,
-         llm_feature_models=None, target=None):
+         llm_feature_models=None, target=None, public_data_api_key=None):
     # embedding_enabled 는 runtime.py CLI 계약으로 남는다 — DSN 합성은 더 이상 이 값을 보지 않는다(runtime_manifests).
     region = outputs["aws_region"]
     groups = {name: get_secret(shell, region, arn) for name, arn in outputs["app_secret_arns"].items()}
@@ -328,6 +351,15 @@ def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None, dialog
         # None(유지)이면 저장된 값을 건드리지 않는다(보존 규칙 그대로).
         seeded["backend"] = {**seeded["backend"], "PUSH_MODE": push_mode}
         validate_groups(seeded)
+    # 공공데이터포털 키는 배포 입력이 아니라 GitHub 시크릿 → 스텝 env 로 온다(입력은 실행 화면에 보인다). 백엔드·AI 둘 다
+    # 읽으므로 두 그룹에 같이 쓰고, 저장값과 다른 그룹만 덮는다. 없거나 빈 값이면 저장값을 그대로 둔다 — 지우지 않는다.
+    public_data = (public_data_api_key or "").strip()
+    public_data_written = [name for name in ("backend", "ai")
+                           if public_data and seeded[name].get("PUBLIC_DATA_API_KEY") != public_data]
+    for name in public_data_written:
+        seeded[name] = {**seeded[name], "PUBLIC_DATA_API_KEY": public_data}
+    if public_data_written:
+        validate_groups(seeded)
     validate_rsa_key(seeded["backend"]["JWT_SIGNING_KEY"])
     for name, values in seeded.items():
         if values != groups[name]:
@@ -335,6 +367,8 @@ def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None, dialog
     written = sorted(key for key in ai if ai[key] != groups["ai"].get(key))
     if written:
         print(f"ai secret keys written by this deploy: {', '.join(written)}")  # 이름만 — 값은 찍지 않는다
+    if public_data_written:
+        print(f"public data key written: {', '.join(public_data_written)}")  # 그룹 이름만 — 값은 찍지 않는다
     # 도우미 경로의 백엔드 스위치(off|fake|http — 비밀 아님). AI 를 켜도 이것이 http 가 아니면 사용자는 버튼 모드다.
     print(f"backend ASSISTANT_INTERPRET_MODE={seeded['backend'].get('ASSISTANT_INTERPRET_MODE')}")
     for manifest in runtime_manifests(seeded, outputs, namespace):

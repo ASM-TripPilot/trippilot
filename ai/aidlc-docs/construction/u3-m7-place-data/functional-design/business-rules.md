@@ -17,7 +17,7 @@
 | 영업일 | 여행일 중 하루라도 영업. **open_hours 비면 통과** (U2 checker와 동일 철학) | — |
 | 품질 | MINIMAL 제외 | FULL·PARTIAL만 |
 | 인기 | saved_count desc → rating desc(None=0) → id asc | 결정론. 백엔드 PoiReadService 와 같은 신호 |
-| 상한 | 상위 N | 5,000 (G142) |
+| 상한 | 카테고리별 공평 몫 — 작은 카테고리는 통째로, 넘치는 쪽만 위 정렬의 앞부분 (2026-10-19 개정, 종전 "상위 N") | 5,000 (G142) |
 
 ## 3. 엔티티 해소 규칙 (AI-D04)
 

@@ -36,6 +36,10 @@ U4 (frontend — shared 승격)
 | 임계 | 강수 60%·이동 지연 15분·체류 초과 = **설정값**(BR-U2-15 승계, 하드코딩 금지). 체류 초과 값은 **O-U4-3 미결** |
 | 상태 | 무상태(판정 기록은 DB) |
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** LC-U4-1 — 수명 규칙·쓰기 경로 하나
+> 판정은 순수 수명 규칙(만료·관측 접기·결정표·대표 선택)으로 모으고 쓰기는 `TriggerService.reconcile` 하나다(`evaluate` 는 시그니처 유지). 통합에 감지기 4종과 trip·place-data·itinerary-generation·weather-context 의 새 퍼사드가 더해진다. 임계 행 — 상황 감시 임계는 C9 상수로 두고(강수 60% 도 `WeatherTriggerService.kt:93` 상수다), "설정값(BR-U2-15 승계, 하드코딩 금지)"과의 차이는 정본 승인 때 정한다.
+> → [DEC-SA-2](../../situation-awareness/functional-design/business-logic-model.md) · [BR-SA-05~10·15](../../situation-awareness/functional-design/business-rules.md)
+
 ### LC-U4-2. `SuppressionStore` (C9)
 | | |
 |---|---|
@@ -53,6 +57,10 @@ U4 (frontend — shared 승격)
 | 통합 | 짧은 타임아웃 · **재시도 없음** · **서킷 없음**(P-RES-U4-1) · 실패 시 **행을 만들지 않음**(INV-U4-09) |
 | 상태 | `weather_snapshot` 테이블. **Redis 미사용**(tech-stack 델타 4) |
 | 선결 | 공공데이터포털 API 키 발급 — 개발 중 처리 |
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** LC-U4-3 — weather-context 퍼사드 둘
+> weather-context 에 격자 시간별 예보 퍼사드(`ContextFacade` 와 분리)와 특보·대기질 퍼사드가 더해진다. 실 포트는 `WEATHER_MODE=kma` 일 때만 있고, 게이트웨이 오류(HTTP 401/403·`returnReasonCode`)는 캐시하지 않고 모름으로 돌려준다.
+> → [BR-SA-15·16](../../situation-awareness/functional-design/business-rules.md) · [SA nfr-requirements](../../situation-awareness/nfr-requirements/nfr-requirements.md)
 
 ### LC-U4-4. `ReplanSessionCoordinator` (C10)
 | | |
@@ -111,6 +119,10 @@ U4 (frontend — shared 승격)
 | 책임 | 평가 요청 발화점 4개(화면 진입 · 포그라운드 복귀 · 슬롯 경계 통과 · 방문 체크 직후)에서 신호를 모아 서버에 보냄 |
 | NFR | P-DET-U4-1(**임계를 모른다**) · PERF-U4-01(주기 폴링 없음) · P-PERF-U4-2(자연 상한) |
 | 금지 | 자체 판정으로 배너를 띄우지 않는다. 구조 가드 `liveTimeStructure.test.ts`가 시각 산술 0건을 잠근다 |
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** LC-U4-9 — 날씨·장소 클라 신호 없음
+> 날씨·장소는 클라 신호가 없다(서버 스윕이 직접 조회). 앱에는 트리거·감시 상태 조회, 진입 게이트, 기회 카드, 푸시 수신·탭 라우팅이 남고, 임계를 모른다는 금지와 주기 폴링 없음은 그대로다.
+> → [DEC-SA-1](../../situation-awareness/functional-design/business-logic-model.md) · [BR-SA-13·23](../../situation-awareness/functional-design/business-rules.md)
 
 ---
 

@@ -88,6 +88,10 @@
 
 > **[개정 · 2026-10-12] §5 `shared/push` — 재빌드 판단 정정.** `src/shared/push/`는 실재한다. 그러나 "EAS 재빌드 불필요할 가능성"은 **틀렸다** — iOS 빌드가 푸시 entitlement를 일부러 뺀다: `frontend/app.config.ts`가 `withEntitlementsPlist`로 `aps-environment`를 지운다(TRIP-935 심사 빌드 — 번들 ID에 Push 권한이 없어 서명 거부). 서버 푸시(Expo push, `ExpoPushAdapter`)를 실제로 켜려면 **App Store Connect에서 Push capability 활성화 → 래핑 제거 → 네이티브 재빌드**가 필요하다. 서버 측 발송 스위치 `PUSH_MODE`도 EKS 기본 `off`다(`deploy/eks/runtime_secrets.py`).
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** §5 `shared/push` — 수신·탭 핸들러
+> 수신·탭 핸들러가 더해지고 app 층 라우팅 훅이 탭을 알림 액션으로 옮긴다(홈이 그려진 뒤, 로그인 전 탭은 보류 후 1회, 모르는 액션은 이동 없음). 포그라운드 표시·탭 라우팅은 리마인드를 포함한 모든 푸시에 적용된다. iOS 도달은 위 개정 블록의 `aps-environment` 래핑을 걷는 재빌드가 선행이고, 안드로이드 `channelId` 는 이 개정의 범위 밖이다.
+> → [BR-SA-21·23](../../situation-awareness/functional-design/business-rules.md) · [DEC-SA-5](../../situation-awareness/functional-design/business-logic-model.md) · [SA frontend-components](../../situation-awareness/functional-design/frontend-components.md)
+
 ---
 
 ## 6. 구조 가드 (`src/__tests__/`)
