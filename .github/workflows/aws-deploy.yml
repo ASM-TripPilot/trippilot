@@ -246,6 +246,9 @@ jobs:
         if: steps.config.outputs.deploy_application == 'true'
         env:
           EMBEDDING_IMAGE_TAG: ${{ steps.embedding-tag.outputs.tag }}
+          # 공공데이터포털 키(기상특보·에어코리아·특일정보) — 입력이 아니라 저장소 시크릿이다(입력은 실행 화면에 보인다).
+          # 이 스텝에만 싣는다. sync-secrets 가 backend·ai 시크릿에 쓰고, 비어 있으면 저장값을 그대로 둔다.
+          PUBLIC_DATA_API_KEY: ${{ secrets.PUBLIC_DATA_API_KEY }}
         run: |
           embedding_args=()
           if [ "$EFFECTIVE_EMBEDDING" = true ]; then embedding_args+=(--embedding-enabled); fi

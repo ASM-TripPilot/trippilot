@@ -21,7 +21,7 @@ APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY SOCIAL_TOKEN_ENCRYPTION_KEY
 PUSH_EXPO_ACCESS_TOKEN PLACE_GEOCODE_MODE WEATHER_MODE PUSH_MODE AI_REMINDER_COPY_MODE
 AFFILIATE_MODE TRIPCOM_ALLIANCE_ID TRIPCOM_SID TRIPCOM_AD_ID
 ITINERARY_GENERATION_DAILY_LIMIT ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS
-KAKAO_APP_ID ASSISTANT_INTERPRET_MODE LOCATION_AUTOMATION_ENABLED
+KAKAO_APP_ID ASSISTANT_INTERPRET_MODE LOCATION_AUTOMATION_ENABLED PUBLIC_DATA_API_KEY
 PLANB_SITUATION_SWEEP PLANB_SITUATION_HORIZON PLANB_SITUATION_SWEEP_ACCOUNT_IDS PLANB_PREPARED_REPLAN
 """.split())
 AI_KEYS = frozenset("""
@@ -30,7 +30,7 @@ ANTHROPIC_API_KEY ANTHROPIC_MODEL TRIPPILOT_LLM_FEATURE_MODELS TRIPPILOT_LLM_RET
 TRIPPILOT_LOCAL_LLM_BASE_URL TRIPPILOT_LOCAL_LLM_API_KEY WEATHER_API WEATHER_API_BASE KAKAO_REST_API_KEY
 EXISTENCE_MAX_CALLS TMAP_API_KEY ODSAY_API_KEY TRIPPILOT_EMBEDDING_TIMEOUT_SEC TRIPPILOT_EMBEDDING_MODEL
 TRIPPILOT_BEDROCK_MODEL_ARN TRIPPILOT_BEDROCK_REGION
-TRIPPILOT_DIALOGUE_ORCHESTRATOR TRIPPILOT_DIALOGUE_SHADOW_RATE
+TRIPPILOT_DIALOGUE_ORCHESTRATOR TRIPPILOT_DIALOGUE_SHADOW_RATE PUBLIC_DATA_API_KEY
 """.split())
 GROUP_KEYS = {
     "backend": BACKEND_KEYS, "ai": AI_KEYS,
@@ -326,7 +326,7 @@ def open_gaps(groups):
 
 
 def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None, dialogue_orchestrator=None,
-         llm_feature_models=None, target=None):
+         llm_feature_models=None, target=None, public_data_api_key=None):
     # embedding_enabled 는 runtime.py CLI 계약으로 남는다 — DSN 합성은 더 이상 이 값을 보지 않는다(runtime_manifests).
     region = outputs["aws_region"]
     groups = {name: get_secret(shell, region, arn) for name, arn in outputs["app_secret_arns"].items()}
@@ -351,6 +351,15 @@ def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None, dialog
         # None(유지)이면 저장된 값을 건드리지 않는다(보존 규칙 그대로).
         seeded["backend"] = {**seeded["backend"], "PUSH_MODE": push_mode}
         validate_groups(seeded)
+    # 공공데이터포털 키는 배포 입력이 아니라 GitHub 시크릿 → 스텝 env 로 온다(입력은 실행 화면에 보인다). 백엔드·AI 둘 다
+    # 읽으므로 두 그룹에 같이 쓰고, 저장값과 다른 그룹만 덮는다. 없거나 빈 값이면 저장값을 그대로 둔다 — 지우지 않는다.
+    public_data = (public_data_api_key or "").strip()
+    public_data_written = [name for name in ("backend", "ai")
+                           if public_data and seeded[name].get("PUBLIC_DATA_API_KEY") != public_data]
+    for name in public_data_written:
+        seeded[name] = {**seeded[name], "PUBLIC_DATA_API_KEY": public_data}
+    if public_data_written:
+        validate_groups(seeded)
     validate_rsa_key(seeded["backend"]["JWT_SIGNING_KEY"])
     for name, values in seeded.items():
         if values != groups[name]:
@@ -358,6 +367,8 @@ def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None, dialog
     written = sorted(key for key in ai if ai[key] != groups["ai"].get(key))
     if written:
         print(f"ai secret keys written by this deploy: {', '.join(written)}")  # 이름만 — 값은 찍지 않는다
+    if public_data_written:
+        print(f"public data key written: {', '.join(public_data_written)}")  # 그룹 이름만 — 값은 찍지 않는다
     # 도우미 경로의 백엔드 스위치(off|fake|http — 비밀 아님). AI 를 켜도 이것이 http 가 아니면 사용자는 버튼 모드다.
     print(f"backend ASSISTANT_INTERPRET_MODE={seeded['backend'].get('ASSISTANT_INTERPRET_MODE')}")
     for manifest in runtime_manifests(seeded, outputs, namespace):

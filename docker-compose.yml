@@ -79,6 +79,8 @@ services:
       # 키는 아래 WEATHER_API 를 그대로 쓴다 — AI 컨테이너와 같은 값이다.
       WEATHER_MODE: ${WEATHER_MODE:-fake}
       WEATHER_API: ${WEATHER_API:-}
+      # 기상특보·에어코리아·특일정보용 공공데이터포털 키(.env.example 참고).
+      PUBLIC_DATA_API_KEY: ${PUBLIC_DATA_API_KEY:-}
       # 리마인드 문구 AI 채움(TRIP-836). 기본 off = 상수 문구. http 로 켜면 예약 적재 시 AI 를 부른다.
       AI_REMINDER_COPY_MODE: ${AI_REMINDER_COPY_MODE:-off}
       TRIPPILOT_AI_SCHEDULE_BASE_URL: ${AI_URL:-http://ai:8000}
@@ -276,6 +278,8 @@ services:
       TRIPPILOT_WIRING: ${AI_WIRING:-}
       # 기상청 단기예보(디코딩 키). 미설정 = 날씨 보정 없음.
       WEATHER_API: ${WEATHER_API:-}
+      # 기상특보·에어코리아·특일정보용 공공데이터포털 키(.env.example 참고).
+      PUBLIC_DATA_API_KEY: ${PUBLIC_DATA_API_KEY:-}
       # 카카오 로컬 REST 키 — 후보 POI 의 지도 실재 검증(TRIP-683). 미설정 = 검증 없음
       # (순위 강등이 일어나지 않고 기존 경로 그대로). 못 찾은 POI 는 **배제가 아니라
       # 강등**이다 — 실측상 영업 중의 4.0% 가 검색에 안 나오는데 폐업은 48.5% 만
