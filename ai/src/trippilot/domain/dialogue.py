@@ -28,6 +28,7 @@ from trippilot.domain.common import BudgetLevel, TransportMode
 from trippilot.domain.edit import EditOp
 from trippilot.domain.intent import ROUTABLE_INTENTS, Intent
 from trippilot.domain.persona import CompanionType
+from trippilot.domain.poi import PoiCategory
 from trippilot.domain.trigger import ReplanScope
 
 
@@ -312,6 +313,19 @@ ARGUMENT_TABLE: dict[Intent, tuple[ArgumentSpec, ...]] = {
         _spec("date", (_D,), False, "'월요일에 쉬어?' 처럼 요일·날짜가 걸린 경우",
               lands_in=BACKEND_PENDING),
     ),
+    Intent.EXPLORE_PLACES: (
+        # 필수 0 — 앵커는 region → 여행 일정 슬롯 → 여행 목적지 순으로 핸들러가 메우고, 셋 다 없을 때만 고정 문장으로 지역을 묻는다
+        # (`dialogue_handlers._explore_anchor`). 인자표의 required 로는 "일정이 없을 때만 필수"를 적을 수 없다.
+        _spec("region", (_RG,), False,
+              "어느 지역에서 찾을지. 없으면 여행 일정 근처에서 찾는다",
+              lands_in="dialogue_handlers._explore_anchor (지역 중심 좌표 표)"),
+        _spec("category", (_EN,), False, "장소 종류",
+              choices=tuple(c.value for c in PoiCategory if c is not PoiCategory.STAY),
+              lands_in="dialogue_handlers._plan_explore (풀 필터)"),
+        _spec("theme", (_FT,), False,
+              "'요즘 핫한'·'야경'·'분위기 좋은 바' 같은 분위기·조건",
+              lands_in="dialogue_handlers._explore_rank (태그 정렬)"),
+    ),
 }
 
 
@@ -385,7 +399,7 @@ def _schema_for(spec: ArgumentSpec) -> dict:
     return base
 
 
-def tool_specs() -> tuple[dict, ...]:
+def tool_specs(intents: frozenset[Intent] = ROUTABLE_INTENTS) -> tuple[dict, ...]:
     """인자표 → 도구 13종의 JSON Schema. **3차 프롬프트가 싣는 것도 이것이다.**
 
     **손으로 적은 스키마 파일을 두지 않는다** — 표가 정본이고 이건 순수 변환이다.
@@ -396,9 +410,11 @@ def tool_specs() -> tuple[dict, ...]:
     값이 버려지거나 주인이 따로 있는 칸을 스키마에 실으면 토큰을 쓰고 모델에게 지어낼
     자리를 주는데 결과는 쓰이지 않는다. 표에는 남겨 둔다 — 없는 것과 "있지만 안 묻는 것"은
     다르고, 후자는 근거가 사라지면 다시 넣자는 말이 나온다.
+
+    `intents` 기본값은 3단 라우터의 13종(intent.yaml — BR-AO-14 무변경). 도우미 분류는 `DIALOGUE_INTENTS` 를 넘긴다.
     """
     out = []
-    for intent in sorted(ROUTABLE_INTENTS, key=lambda i: i.value):
+    for intent in sorted(intents, key=lambda i: i.value):
         specs = asked_specs_of(intent)
         out.append({
             "name": intent.value,
@@ -414,5 +430,5 @@ def tool_specs() -> tuple[dict, ...]:
     return tuple(out)
 
 
-def tool_specs_json() -> str:
-    return json.dumps(list(tool_specs()), ensure_ascii=False, sort_keys=True)
+def tool_specs_json(intents: frozenset[Intent] = ROUTABLE_INTENTS) -> str:
+    return json.dumps(list(tool_specs(intents)), ensure_ascii=False, sort_keys=True)

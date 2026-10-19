@@ -24,7 +24,7 @@ from hypothesis import strategies as st
 
 from trippilot.domain.common import TraceId
 from trippilot.domain.dialogue import tool_specs_json
-from trippilot.domain.intent import ROUTABLE_INTENTS, Intent, IntentDraft
+from trippilot.domain.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent, IntentDraft
 from trippilot.domain.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.prompt import PromptRef
@@ -99,13 +99,13 @@ def _classify(worker: DialogueIntentWorker, utterance: str = _UTTERANCE, **kw):
 def test_prompt_loads_with_semver_and_carries_every_section() -> None:
     prompt, ref = PromptRegistry(_PROMPTS).render(_FEAT, _vars())
     assert (ref.prompt_id, ref.version, ref.feature) == (
-        "prompts/dialogue_intent.yaml", "0.2.2", "DIALOGUE_INTENT")
+        "prompts/dialogue_intent.yaml", "0.2.3", "DIALOGUE_INTENT")
     assert _UTTERANCE in prompt
     assert "- 사용자: 내일 경복궁 가는 날 날씨 어때?" in prompt
     assert "- 도우미: 내일 서울은 강수확률 20%예요." in prompt
     assert "- 사용자는 실내 장소를 선호한다" in prompt
     assert _TRIP in prompt
-    for intent in ROUTABLE_INTENTS:  # 13종 전부 — 서버 주입 closed-set (intent.yaml 과 같은 값)
+    for intent in DIALOGUE_INTENTS:  # 13종 + 장소 탐색 — 서버 주입 closed-set
         assert intent.value in prompt
     assert "OUT_OF_SCOPE" not in prompt  # 고를 수 없는 라벨은 목록에 없다 — 분류 불가는 null 로 받는다
 
@@ -139,6 +139,14 @@ def test_prompt_reads_short_acceptance_as_the_last_suggestion() -> None:
         "짧은 수락이면 [최근 대화]의 마지막 도우미 제안이 그 요청이다",  # 판단 순서 1 — "응" 홀로 null 로 닫지 않게
         "수락한 제안에 나온 장소·날짜",  # 판단 순서 5 — "발화에 나온 값만"으로 비우지 않게
     ):
+        assert phrase in prompt, phrase
+
+
+def test_prompt_separates_exploring_from_replacing_one_place() -> None:
+    """0.2.3 — "요즘 핫한 곳" 같은 탐색이 정의에 없어 null(범위 밖)로 떨어졌다. 정의·갈림("대신"·"바꿔")·판단 순서·예시."""
+    prompt, _ = PromptRegistry(_PROMPTS).render(_FEAT, _vars())
+    for phrase in ("- EXPLORE_PLACES: 지역·분위기·종류로 가 볼 만한 곳을 찾아 달라", '"대신"·"바꿔"처럼 일정의 한 곳을 갈아 끼우는 말',
+                   "가 볼 만한 곳 찾기(EXPLORE_PLACES)", '"intent": "EXPLORE_PLACES"'):
         assert phrase in prompt, phrase
 
 
@@ -191,7 +199,7 @@ def test_prompt_render_is_deterministic() -> None:
 
 def test_intents_variable_is_the_argument_table_schema() -> None:
     """`$intents` 는 intent.yaml 과 **같은 함수**에서 나온다 — 인자표 한 표 파생(드리프트 차단)."""
-    assert _vars()["intents"] == tool_specs_json()
+    assert _vars()["intents"] == tool_specs_json(DIALOGUE_INTENTS)
 
 
 def test_vars_are_all_str_with_none_markers_when_empty() -> None:

@@ -252,7 +252,7 @@ DialogueAnswer (frozen):
 | 조건 | 강제 |
 |---|---|
 | `kind = INFO` | `payload["infoKind"] ∈ {NEXT_SLOT, DISTANCE, PLACE, WEATHER}` ∧ `payload["rows"]` 가 **list**(빈 배열 허용, 누락 금지 — FE `rows.map` 크래시) ∧ 각 행 `{label, value}` 문자열 |
-| `kind = CANDIDATES` | `payload["candidates"]` list, 1..5 ∧ 각 `{poiId, name, distanceRange?, reason}` ∧ `quick_replies` 에 각 `poiId` 의 `PICK_CANDIDATE{poiId, slotKey}` 가 **정확히 하나** 있음(FE 후보 탭이 그 짝을 찾는다) |
+| `kind = CANDIDATES` | `payload["candidates"]` list, 1..5 ∧ 각 `{poiId, name, distanceRange?, reason}` ∧ `quick_replies` 에 각 `poiId` 의 `PICK_CANDIDATE{poiId, slotKey}` 가 **정확히 하나** 있음(FE 후보 탭이 그 짝을 찾는다) — **[개정 · 2026-10-19 · 장소 탐색]** 전부 있거나 전부 없다. 없으면(EXPLORE_PLACES) 후보마다 `OPEN_PLACE{poiId}` 가 next_actions 에 있고 탭은 조용히 무시된다. 대안(SUGGEST_ALTERNATIVE)의 "후보마다 하나"는 `Facts` post-init 이 지킨다 |
 | `kind = TEXT` | `payload = None` |
 | `text` | 비어 있지 않음 ∧ `len ≤ 400` ∧ 줄 수 ≤ 6 ∧ `_TIME_EXPR` 매치 없음(INV-3) ∧ `not has_contact_like(text)` — **게이트와 타입이 같은 검사**(어긋나면 게이트 통과값이 생성 불가가 된다) |
 | `next_actions` | `≥ 1` ∧ 전부 `type ∈ TYPES` ∧ `OPEN_PLACE ⇒ "poiId" in params` |
@@ -290,7 +290,7 @@ Handler (Protocol):
   def plan(self, ctx: TurnContext) -> tuple[tuple[HandlerTask, ...], ...]   # 파(wave) ≤ 2 — 파 안은 병렬, 파 사이는 순차
   def assemble(self, ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts   # **순수** — 같은 입력에 같은 Facts (BR-AO-16)
 
-HANDLERS: Mapping[Intent, Handler]   # 13종 전수 (OUT_OF_SCOPE 제외). 없는 의도는 기동 시 ValueError
+HANDLERS: Mapping[Intent, Handler]   # 13종 전수 (OUT_OF_SCOPE 제외) — [개정 · 2026-10-19 · 장소 탐색] DIALOGUE_INTENTS 14종. 없는 의도는 기동 시 ValueError
 ```
 
 `TurnContext` 는 `TurnInput` + 분류 프레임 + 로드된 메모리 + 잔여 시계(`remaining_ms()` 콜러블)를 묶은 읽기 전용 뷰다.
@@ -456,7 +456,7 @@ LLM 0회(L-5). `hours_label` 은 `on` 의 요일(없으면 `now` 의 요일)로 
 
 | 값 | 티어 | effort | max_tokens | fallback_modes | 게이트 | 프롬프트 |
 |---|---|---|---|---|---|---|
-| `DIALOGUE_INTENT` | LIGHT | low | 1024(초판 256 — DEV 배포 smoke 실측 출력 239/256, 사고 포함, 2026-10-18) | `("llm_dialogue_intent", "out_of_scope")` | `IntentGate`(재사용) | `prompts/dialogue_intent.yaml` ~~v"0.2.1"(의도 정의·판단 순서·예시, 고정부 앞)~~ **[개정 · 2026-10-19 · 짧은 수락]** v"0.2.2"(의도 정의·판단 순서·예시 + 짧은 수락을 마지막 도우미 제안으로 푸는 규칙 한 줄·예시 2건, 고정부 앞) — `$utterance $intents $history $memory $trip` |
+| `DIALOGUE_INTENT` | LIGHT | low | 1024(초판 256 — DEV 배포 smoke 실측 출력 239/256, 사고 포함, 2026-10-18) | `("llm_dialogue_intent", "out_of_scope")` | `IntentGate`(재사용) | `prompts/dialogue_intent.yaml` ~~v"0.2.1"(의도 정의·판단 순서·예시, 고정부 앞)~~ **[개정 · 2026-10-19 · 짧은 수락]** v"0.2.2"(의도 정의·판단 순서·예시 + 짧은 수락을 마지막 도우미 제안으로 푸는 규칙 한 줄·예시 2건, 고정부 앞) **[개정 · 2026-10-19 · 장소 탐색]** v"0.2.3"(+ EXPLORE_PLACES 정의 한 줄·SUGGEST_ALTERNATIVE 와의 갈림·판단 순서 4 한 갈래·예시 2건; `$intents` 는 `tool_specs_json(DIALOGUE_INTENTS)` — 14종, intent.yaml 은 13종 그대로 — BR-AO-27) — `$utterance $intents $history $memory $trip` |
 | `DIALOGUE_ANSWER` | LIGHT | low | 512 | `("llm_dialogue_answer", "template_text")` | `DialogueAnswerGate`(신규 파일) | `prompts/dialogue_answer.yaml` ~~v"0.2.0"(답변 순서·예시, 고정부 앞)~~ **[개정 · 2026-10-19 · 친근한 말투]** ~~v"0.3.0"(친근한 해요체 대화 — 맞장구 → 답 → 다음 한 걸음 제안·되묻기, 예시 2건 재작성·숫자 말 규칙, 고정부 앞)~~ **[개정 · 2026-10-19 · 여는 말]** v"0.3.1"(0.3.0 + 어디에나 붙는 여는 말 금지·질문과 이어지는 마무리 규칙, 예시 여는 말 제거 + 날씨 예시, 고정부 앞) — `$intent $facts $utterance $history $memory $trip $style` |
 | `DIALOGUE_MEMORY` | LIGHT | low | 2048(20줄×120자 ≈ 1,000~1,500 토큰 + JSON — 1024 는 잘림 위험; 상한은 잘림 방지용, 과금은 실 출력만) | `("llm_dialogue_memory", "deterministic_compress")` | `DialogueMemoryGate`(신규 파일) | `prompts/dialogue_memory.yaml` v"0.1.0" — `$previous_summary $recent_turns $trip` |
 

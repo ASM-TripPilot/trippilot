@@ -26,6 +26,7 @@ from __future__ import annotations
 import contextlib
 import contextvars
 import logging
+import re
 import threading
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -40,7 +41,7 @@ from trippilot.domain.dialogue import (
     missing_arguments,
     specs_of,
 )
-from trippilot.domain.intent import ROUTABLE_INTENTS, Intent, IntentMatch, MatchRoute
+from trippilot.domain.intent import DIALOGUE_INTENTS, Intent, IntentMatch, MatchRoute
 from trippilot.orchestrator.arguments import extract_argument
 from trippilot.orchestrator.intent_router import IntentRouter, normalize
 from trippilot.orchestrator.question_bank import BankEntry, BankLoadError, BankVectors, index_bank
@@ -55,6 +56,8 @@ MAX_CLARIFY_PER_REQUEST = 1
 # 되묻기에 대한 답으로 **문장 전체를 그 인자 값으로 받는** 길이 상한. 장소·항목을 묻는 질문의
 # 답은 짧다("카페 모카", "다음 일정"). 긴 문장은 답이 아니라 새 요청일 가능성이 높아 라우터로 보낸다.
 SHORT_ANSWER_CHARS = 20
+# 되묻기의 답이 아니라 새 요청으로 끝나는 꼴 — "…알려줘"·"…추천해 줘"·"…있어?" (answer_pending)
+_REQUEST_SHAPED = re.compile(r"(알려|추천해|찾아|보여|골라)\s?(줘|줄래|주세요|줄 수 있어)|있어\?|있을까|어디야|어때\?")
 # 보기(quick reply)로 내는 항목 상한 — 백엔드 칩 줄이 넘치지 않게.
 MAX_OPTIONS = 4
 # 규칙 추출기로는 못 뽑는 종류 — 되묻기의 답이면 문장 자체가 값이다.
@@ -115,7 +118,7 @@ class PendingFrame:
     @classmethod
     def from_dict(cls, d: Mapping) -> "PendingFrame":
         intent = Intent(d["intent"])
-        if intent not in ROUTABLE_INTENTS:
+        if intent not in DIALOGUE_INTENTS:
             raise ValueError(f"보류 프레임 의도가 위임 대상이 아니다: {intent.value}")
         # 타입은 여기서 막는다 — `.items()` 의 AttributeError 는 `DialogueContext.from_dict` 의
         # 복구 except 를 빠져나가 500 이 된다. `str()` 은 무엇이든 받아 줘서 리스트가 질문 이름이 됐다.
@@ -353,9 +356,10 @@ def answer_pending(
     value: str | None = None
     if spec is not None:  # 인자표 밖(예: 입력 필드)은 추출기를 돌리지 않는다
         value = extract_argument(text, spec)
-        if value is None and _reference_like(spec) and 0 < len(text) <= SHORT_ANSWER_CHARS:
+        if value is None and _reference_like(spec) and 0 < len(text) <= SHORT_ANSWER_CHARS and not _REQUEST_SHAPED.search(text):
             # 짧은 답이라도 **다른 요청이 확실하면** 답으로 삼키지 않는다 — "날씨 알려줘"를
-            # 목적지로 받으면 안 된다. 1차 매칭만 본다(LLM 0회).
+            # 목적지로 받으면 안 된다. 1차 매칭만 본다(LLM 0회). 요청 꼴로 끝나는 말("부산 핫한 곳 알려줘")은 뱅크가 모르는
+            # 의도(장소 탐색)일 수 있어 아예 삼키지 않는다 — 답이었다면 분류가 그 의도로 다시 읽는다(LLM 1회).
             other = confident_intent(text)
             if other is None or other is pending.intent:
                 value = text
@@ -370,7 +374,7 @@ def answer_pending(
 
 def from_match(match: IntentMatch, context: DialogueContext, trip: TripView) -> Interpretation:
     """매칭 결과 → 해석 — 필수 인자가 비면 요청당 1회 되묻는다(DEC-U8-11)."""
-    if match.match_route is MatchRoute.FALLBACK or match.intent not in ROUTABLE_INTENTS:
+    if match.match_route is MatchRoute.FALLBACK or match.intent not in DIALOGUE_INTENTS:
         return Interpretation(
             outcome="OUT_OF_SCOPE",
             frames=(Frame(Intent.OUT_OF_SCOPE, {}, (), 0.0, MatchRoute.FALLBACK.value),),

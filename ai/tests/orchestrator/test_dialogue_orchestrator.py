@@ -43,7 +43,7 @@ from trippilot.agents.adapters.memory_memory_store import InMemoryDialogueMemory
 from trippilot.domain.common import GeoPoint, TraceId
 from trippilot.domain.dialogue import CLARIFY_QUESTIONS
 from trippilot.domain.freshness import FreshnessMeta, InfoPacket, ProviderKind, ProviderStatus
-from trippilot.domain.intent import ROUTABLE_INTENTS, Intent, IntentMatch, MatchRoute
+from trippilot.domain.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent, IntentMatch, MatchRoute
 from trippilot.domain.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.prompt import PromptRef
@@ -296,7 +296,7 @@ def test_next_slot_answer_carries_the_alternative_quick_reply_and_live_action() 
     assert wire["quick_replies"][0]["action"] == "SEND_TEXT"
 
 
-@pytest.mark.parametrize("intent", sorted(ROUTABLE_INTENTS - {Intent.EDIT_SCHEDULE}, key=lambda i: i.value))
+@pytest.mark.parametrize("intent", sorted(DIALOGUE_INTENTS - {Intent.EDIT_SCHEDULE}, key=lambda i: i.value))
 def test_every_answer_intent_yields_a_valid_answer_with_one_frame(intent: Intent) -> None:
     b = _build(_canned(intent, target="우도", destination="해녀의집", place="우도"))
     out = b.orch.turn(_input("아무 말"))
@@ -862,7 +862,7 @@ _POLLUTED_ANSWERS = (
     json.dumps({"text": "괜찮은 답이에요.", "footnote": "각" * 121}),
     '{"text": "오후 3시에 가세요"}',
 )
-_ANSWER_INTENTS = sorted(ROUTABLE_INTENTS - {Intent.EDIT_SCHEDULE}, key=lambda i: i.value)
+_ANSWER_INTENTS = sorted(DIALOGUE_INTENTS - {Intent.EDIT_SCHEDULE}, key=lambda i: i.value)
 
 
 @settings(max_examples=80, deadline=None)
@@ -872,7 +872,9 @@ _ANSWER_INTENTS = sorted(ROUTABLE_INTENTS - {Intent.EDIT_SCHEDULE}, key=lambda i
                      st.text(max_size=60), st.just(RuntimeError("boom"))),
        with_trip=st.booleans())
 def test_any_llm_answer_yields_a_gated_answer_with_valid_next_actions(intent: Intent, raw, with_trip: bool) -> None:
-    b = _build(_canned(intent, answer=raw, target="우도", destination="해녀의집", place="우도"))
+    # 탐색(EXPLORE_PLACES)도 돈다 — region 을 실어 되묻기 없이 후보 답(CANDIDATES·OPEN_PLACE)까지 가게 풀 대역을 단다
+    b = _build(_canned(intent, answer=raw, target="우도", destination="해녀의집", place="우도", region="부산"),
+               ports=HandlerPorts(poi_info=_PoiInfo(), weather=_Weather(), pool_builder=_ExplorePool()))
     out = b.orch.turn(_input("아무 말", snapshot=_SNAP if with_trip else _NO_TRIP))
     assert out.outcome == "ANSWER"
     a = out.answer
@@ -1139,3 +1141,126 @@ def test_handoff_intents_answer_with_guidance_without_the_answer_llm(intent) -> 
     assert not [r for r in b.llm.requests if r.prompt_ref.feature == "DIALOGUE_ANSWER"]
     assert not [e for e in _fallbacks(b.trace) if e.from_mode == "llm_dialogue_answer"]  # 의도된 결정론 — 폴백 아님
 
+
+
+# ── EXPLORE_PLACES — 후보 답의 문장도 닫힌 목록 안 (INV-1) ─────────────────────────────────────────
+
+
+class _ExplorePool:
+    """CandidatePoolBuilder 대역 — 등록 POI 두 곳."""
+
+    def build(self, request, now):
+        from trippilot.domain.common import PoiId
+        from trippilot.domain.llm import CandidatePool
+        from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+
+        pois = tuple(Poi(poi_id=PoiId(str(uuid.uuid5(uuid.NAMESPACE_DNS, n))), name=n, category=c, coord=request.anchor,
+                         open_hours=(), avg_cost=None, rating=None, quality=DataQuality.FULL, source=PoiSource.SEED,
+                         confidence=None, tags=t)
+                     for n, c, t in (("감천문화마을", PoiCategory.SIGHT, ("요즘 인기",)), ("흰여울 카페", PoiCategory.CAFE, ())))
+        return CandidatePool(poi_ids=frozenset(p.poi_id for p in pois), pois=pois, generated_at=now)
+
+
+def _explore_turn(text: str) -> tuple[object, SimpleNamespace]:
+    answer = json.dumps({"text": text, "footnote": None}, ensure_ascii=False)
+    b = _build(_canned(Intent.EXPLORE_PLACES, answer=answer, region="부산", theme="요즘 핫한"),
+               ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool()))
+    return b.orch.turn(_input("부산 요즘 핫한 곳 알려줘", snapshot=_NO_TRIP)), b
+
+
+def test_explore_turn_answers_with_registered_places_without_a_trip() -> None:
+    out, b = _explore_turn("부산에서 요즘 인기 있는 감천문화마을과 흰여울 카페를 추천해요.")
+    assert out.outcome == "ANSWER" and out.frames[0].intent is Intent.EXPLORE_PLACES
+    a = out.answer
+    assert a.kind is AnswerKind.CANDIDATES and [c["name"] for c in a.payload["candidates"]] == ["감천문화마을", "흰여울 카페"]
+    assert a.text.startswith("부산에서") and a.quick_replies == ()
+    assert {x.type for x in a.next_actions} == {"OPEN_PLACE"} and _fallbacks(b.trace) == []
+
+
+@pytest.mark.parametrize("text", [
+    "부산이라면 해동용궁사 말고 송도해수욕장도 좋아요.",  # 풀 밖 장소 — 접미 '해수욕장'
+    "감천문화마을과 함께 국제시장에도 들러 보세요.",  # 하나는 풀, 하나는 밖 — 조사 '에도' 앞의 '국제시장'
+])
+def test_explore_answer_naming_a_place_outside_the_pool_falls_back_to_the_template(text: str) -> None:
+    out, b = _explore_turn(text)
+    assert out.answer.text == "가 볼 만한 곳을 찾아봤어요." and out.answer.kind is AnswerKind.CANDIDATES  # 카드는 그대로
+    assert ("llm", "llm_dialogue_answer", "template_text") in _modes(b.trace)
+    assert any(e.reason == "place_not_in_facts" for e in _fallbacks(b.trace))
+
+
+def test_explore_empty_answer_cannot_invent_a_place_either() -> None:
+    """빈 결과(말한 지역이 표에 없다)의 문장이 지어낸 장소를 권하면 템플릿 — 장소가 없는 답이 지어낼 자리가 가장 크다."""
+    answer = json.dumps({"text": "강원도라면 대신 경포해변은 어떠세요?", "footnote": None}, ensure_ascii=False)
+    b = _build(_canned(Intent.EXPLORE_PLACES, answer=answer, region="강원도"),
+               ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool()))
+    out = b.orch.turn(_input("강원도 가볼 만한 곳", snapshot=_NO_TRIP))
+    assert out.answer.text == "그 조건에 맞는 곳을 아직 찾지 못했어요." and out.answer.kind is AnswerKind.TEXT
+    assert any(e.reason == "place_not_in_facts" for e in _fallbacks(b.trace))
+
+
+
+def test_explore_without_any_anchor_asks_for_the_region_once_and_the_answer_runs_without_classifying() -> None:
+    """앵커(지역·일정·여행 목적지)가 하나도 없으면 지역을 되묻는다(요청당 1회) — 다음 턴의 "부산"은 분류 없이 그 답이다(LLM 0)."""
+    from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEXT
+
+    ports = HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool())
+    b = _build(_canned(Intent.EXPLORE_PLACES, theme="요즘 핫한"), ports=ports)
+    asked = b.orch.turn(_input("요즘 핫한 곳 알려줘", snapshot=_NO_TRIP, turn_index=3))
+    assert asked.outcome == "ARGUMENT_CLARIFY" and asked.answer is None
+    assert asked.clarify.argument == "region" and asked.clarify.question == EXPLORE_ASK_REGION_TEXT
+    assert asked.frames[0].missing == ("region",) and asked.frames[0].intent is Intent.EXPLORE_PLACES
+    assert asked.context.pending.intent is Intent.EXPLORE_PLACES and asked.context.pending.asked == "region"
+    assert asked.context.pending.arguments == {"theme": "요즘 핫한"}  # 처음 뽑은 주제는 답 턴까지 간다
+
+    answer = json.dumps({"text": "부산에서 감천문화마을과 흰여울 카페를 골라 봤어요.", "footnote": None}, ensure_ascii=False)
+    b2 = _build(_canned(Intent.GET_WEATHER, answer=answer), ports=ports)  # 분류가 불리면 날씨가 나올 것 — 불리지 않아야 한다
+    out = b2.orch.turn(_input("부산", snapshot=_NO_TRIP, context=asked.context, turn_index=4))
+    assert out.outcome == "ANSWER" and out.frames[0].match_route == "CLARIFY_ANSWER"
+    assert out.frames[0].arguments == {"theme": "요즘 핫한", "region": "부산"} and "DIALOGUE_INTENT" not in b2.llm.features()
+    assert out.answer.kind is AnswerKind.CANDIDATES and out.context.pending is None
+
+
+def test_a_request_shaped_reply_to_a_pending_question_is_classified_not_swallowed() -> None:
+    """장소를 되묻는 중에 온 "부산 요즘 핫한 곳 알려줘" — 뱅크는 탐색을 모르니(13종) 요청 꼴이면 삼키지 않고 분류한다."""
+    pending = DialogueContext(pending=PendingFrame(Intent.GET_POI_INFO, {}, "place", 0.9), turn_index=2, clarify_count=1)
+    b = _build(_canned(Intent.EXPLORE_PLACES, region="부산", theme="요즘 핫한"),
+               ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool()))
+    out = b.orch.turn(_input("부산 요즘 핫한 곳 알려줘", snapshot=_NO_TRIP, context=pending))
+    assert out.frames[0].intent is Intent.EXPLORE_PLACES and b.llm.features()[0] == "DIALOGUE_INTENT"
+    # 맨 이름은 종전대로 그 답이다(LLM 0)
+    b2 = _build(_canned(Intent.GET_WEATHER))
+    out2 = b2.orch.turn(_input("우도", context=pending))
+    assert out2.frames[0].intent is Intent.GET_POI_INFO and out2.frames[0].arguments == {"place": "우도"}
+    assert "DIALOGUE_INTENT" not in b2.llm.features()
+
+
+def test_explore_theme_times_are_not_facts() -> None:
+    """INV-2 — 발화에서 뽑은 theme("22:00 이후 야경")은 Facts 에 없다. 그 시각을 문장에 옮기면 템플릿(time_not_in_facts)."""
+    answer = json.dumps({"text": "22:00 이후에도 감천문화마을이 좋아요.", "footnote": None}, ensure_ascii=False)
+    b = _build(_canned(Intent.EXPLORE_PLACES, answer=answer, region="부산", theme="22:00 이후 야경"),
+               ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool()))
+    out = b.orch.turn(_input("부산 22:00 이후 야경", snapshot=_NO_TRIP))
+    assert out.answer.text == "가 볼 만한 곳을 찾아봤어요."
+    assert any(e.reason == "time_not_in_facts" for e in _fallbacks(b.trace))
+
+
+def test_explore_turn_is_not_submitted_to_the_shadow_router() -> None:
+    """3단 섀도는 13종 어휘라 탐색을 낼 수 없다 — 넘기면 일치율이 구조적으로 깎이고 섀도 LLM 만 쓴다(BR-AO-27)."""
+    s = _shadow()
+    b = _build(_canned(Intent.EXPLORE_PLACES, region="부산"), shadow=s.probe, shadow_meta=_META,
+               ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool()))
+    out = b.orch.turn(_input("부산 가볼 만한 곳", snapshot=_NO_TRIP))
+    assert out.outcome == "ANSWER" and s.router.calls == 0 and _shadow_lines(s.records) == []
+
+
+@settings(max_examples=150, deadline=None)
+@given(word=st.text(alphabet="가나다라마바사아자차카타파하궁감천", min_size=1, max_size=6),
+       suffix=st.sampled_from(["시장", "공원", "박물관", "해수욕장", "마을", "카페"]),
+       josa=st.sampled_from(["", "에", "에서", "과", "은", "에도", "으로"]))
+def test_foreign_place_flags_unknown_place_shaped_words_and_never_known_names(word: str, suffix: str, josa: str) -> None:
+    """INV-1 문장 검사 — 아는 이름(+조사)은 절대 걸리지 않고, 아는 이름과 겹치지 않는 "이름+장소 접미" 꼴은 걸린다."""
+    from trippilot.orchestrator.dialogue_orchestrator import _foreign_place
+
+    name = word + suffix
+    assert not _foreign_place(f"{name}{josa} 좋아요", (name,))
+    assert _foreign_place(f"{name}{josa} 좋아요", ("흰여울카페",)) is (name not in "흰여울카페")

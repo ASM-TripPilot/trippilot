@@ -95,6 +95,7 @@ description: "도우미 오케스트레이터 1단계 구현 태스크 (spec.md 
 - [ ] T030 리뷰: `invariant-reviewer`(INV-1~4·DL-5·L-규칙) + `canon-auditor`(FD ↔ 코드) 병렬 → 지적 0 까지 수정.
 - [ ] T031 실연동: 로컬 `docker compose --profile full up -d ai`(또는 `uv run uvicorn main:app` + `../.env`) + BE http 모드 또는 `curl` 로 `/ai/v1/dialogue/interpret` 한 턴(날씨·다음 장소·대안) → ANSWER 200·`intent_shadow` 로그 1건·메모리 행 1건(InMemory 면 로그) 확인. 결과를 PR 본문 "테스트 리포트" 절에.
 - [ ] T032 PR: 제목 `feat(ai,be): 도우미 오케스트레이터 — LLM 직접 분류·병렬 팬아웃·LLM 답변·세션 메모리·3단 섀도 측정 (assistant-orchestrator 1단계)`, 본문 8단계 매핑(정의=spec·설계=FD·테스트 시나리오=BR §2·구현 리포트·테스트 리포트·매뉴얼=README/openapi), 티켓 키 없음(조회 전), Co-Authored-By·세션 링크 금지. CI 초록이면 squash 머지(10-02 지시). 머지 뒤: DEV 시크릿 `TRIPPILOT_DIALOGUE_ORCHESTRATOR=on` + `TRIPPILOT_LLM_FEATURE_MODELS` 3항목 추가는 **쓰기 세션/사용자 몫** → 배포 → `ai-wiring:` 표식 확인.
+- [x] T033 **[개정 · 2026-10-19 · 장소 탐색]** EXPLORE_PLACES(FR-018 · BR-AO-27) — `DIALOGUE_INTENTS`·인자표 행·핸들러(지역 표·일정·여행 목적지 앵커, 조건부 지역 되묻기 `Handler.ask`)·분류 0.2.3·답변 문장 INV-1 검사·BE enum·디스패처·`OPEN_PLACE` 정본 대조. PBT: `test_explore_rank_stays_inside_the_pool_and_obeys_its_filters` · `test_foreign_place_flags_unknown_place_shaped_words_and_never_known_names` · AO-P1 적대 PBT·AO-P8 핸들러 PBT 에 탐색 포함.
 
 ---
 

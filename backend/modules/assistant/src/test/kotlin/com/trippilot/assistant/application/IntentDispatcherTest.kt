@@ -39,4 +39,12 @@ class IntentDispatcherTest : StringSpec({
             message.nextActions.size shouldBe 1 // "아래 버튼"이 가리키는 것이 정확히 하나다
         }
     }
+
+    "장소 탐색은 여행 없이도 처리기가 답한다 — 상대가 꺼진 대역 모드에서는 못 찾는다고 말하고 능력 안내로 잇는다" {
+        val dispatch = dispatcher(FakeTripData(acc))
+        val noTrip = ctx(false).copy(tripId = null, trip = null)
+        val message = dispatch.dispatch(Intent.EXPLORE_PLACES, noTrip)
+        message.text shouldBe "가 볼 만한 곳 찾기는 지금 도와드리기 어려워요. 아래 버튼에서 제가 할 수 있는 걸 확인해 보세요."
+        message.nextActions.map { it.type } shouldBe listOf("SHOW_CAPABILITIES")
+    }
 })

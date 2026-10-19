@@ -10,7 +10,7 @@ CI 밖 수동 실행 전용(실 API 를 부른다). few-shot·판단 순서(CoT)
     uv run --env-file ../.env python scripts/measure/measure_prompt_ab.py intent prompts 2
 
 종류:
-- `intent`  DIALOGUE_INTENT — `data/intent_eval_set.yaml`(사람 검수 87문장) + 지시어 사례 6건 + 짧은 수락 사례 8건. OUT_OF_SCOPE 의
+- `intent`  DIALOGUE_INTENT — `data/intent_eval_set.yaml`(사람 검수 87문장) + 지시어 사례 6건 + 짧은 수락 사례 8건 + 장소 탐색 6건. OUT_OF_SCOPE 의
   정답은 거절({"intent": null})이다. 평가셋 문장을 프롬프트 예시로 옮기면 이 숫자가 무의미해진다(leak).
 - `directive`  REPLAN_DIRECTIVE_TRANSLATION(sol) — 라벨은 `measure_directive_match.POSITIVES/NEGATIVES` + 부정·혼합
   6건. 완전 일치(겹쳐 고른 지시도 오답)와 허용(정답 포함·금지 지시 없음)을 같이 낸다. 시한 3.75s(DEV 실측 시한).
@@ -174,12 +174,25 @@ ACCEPT_CASES = [
 ]
 
 
+# 장소 탐색(dialogue_intent 0.2.3 — EXPLORE_PLACES) — 정의가 없던 판본은 이 말들을 null(범위 밖)로 닫았다. 마지막 한 건은
+# "대신·바꿔"가 있는 대안이라 탐색으로 읽으면 오답이다. 프롬프트 예시와 다른 문장이다.
+EXPLORE_CASES = [
+    ("EXPLORE_PLACES", "부산에 요즘 뜨는 데 어디야?"),
+    ("EXPLORE_PLACES", "제주 야경 예쁜 곳 추천해줘"),
+    ("EXPLORE_PLACES", "강릉 가면 꼭 가볼 만한 곳 있어?"),
+    ("EXPLORE_PLACES", "이 근처에 맛집 있을까"),
+    ("EXPLORE_PLACES", "전주에서 사진 찍기 좋은 데 알려줘"),
+    ("SUGGEST_ALTERNATIVE", "박물관 말고 바꿀 만한 다른 곳 있어?"),
+]
+
+
 def run_intent(prompts: Path, repeat: int) -> None:
     worker = DialogueIntentWorker(_gateway(prompts, LlmFeature.DIALOGUE_INTENT, IntentGate()))
     data = yaml.safe_load((_AI_ROOT / "data/intent_eval_set.yaml").read_text(encoding="utf-8"))
     cases = [(c["intent"], u, [], "eval") for c in data["cases"] for u in c["utterances"]]
     cases += [(label, u, _HISTORY, "context") for label, u in CONTEXT_CASES]
     cases += [(label, u, h, "accept") for label, u, h in ACCEPT_CASES]
+    cases += [(label, u, _HISTORY if label == "SUGGEST_ALTERNATIVE" else [], "explore") for label, u in EXPLORE_CASES]
 
     def one(item):
         i, (label, utt, history, kind) = item
@@ -199,12 +212,13 @@ def run_intent(prompts: Path, repeat: int) -> None:
         return round(sum(r["ok"] for r in sel) / len(sel), 4)
 
     print(json.dumps(dict(prompts=str(prompts), model=MODEL, n=len(rows), eval_acc=acc("eval"),
-                          context_acc=acc("context"), accept_acc=acc("accept"), **_timing(rows)), ensure_ascii=False))
+                          context_acc=acc("context"), accept_acc=acc("accept"), explore_acc=acc("explore"), **_timing(rows)),
+                     ensure_ascii=False))
     for r in rows:
         if not r["ok"]:
             print(f"  ✗ {r['label']:<20} got={r['got']!s:<20} {r['utt']}  ({r['err'] or ''})")
     for r in rows[: len(cases)]:
-        if r["kind"] in ("context", "accept"):
+        if r["kind"] in ("context", "accept", "explore"):
             print(f"  · {r['utt']} → {r['got']} {r['slots']}")
 
 

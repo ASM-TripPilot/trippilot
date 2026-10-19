@@ -454,6 +454,7 @@ class AssistantTurnService(
     private fun answered(answer: InterpretedAnswer, frame: IntentFrame?, session: AssistantSession): NewMessage? {
         var payload = answer.payload
         var shownPoiIds = emptySet<String>()
+        var canonicalNames = emptyMap<String, String>()
         if (answer.kind == AnswerKind.CANDIDATES) {
             // 상대가 준 후보는 장소 정본과 대조한다 — 없는 장소는 빼고, 이름은 정본값으로 덮는다(상대 문장은 못 고쳐도 카드 값은 고친다).
             val given = (payload?.get("candidates") as? List<*>).orEmpty().filterIsInstance<Map<*, *>>()
@@ -465,6 +466,16 @@ class AssistantTurnService(
             if (grounded.isEmpty()) return null
             payload = payload.orEmpty() + ("candidates" to grounded)
             shownPoiIds = grounded.map { it["poiId"] as String }.toSet()
+            canonicalNames = names
+        }
+        // 후보 카드의 장소 보기 버튼(장소 탐색)도 남은 후보에만, 이름은 정본값으로 — 카드에서 빠진 후보의 버튼이 남지 않게(INV-1 두 번째 방어선)
+        val nextActions = if (answer.kind != AnswerKind.CANDIDATES) answer.nextActions else answer.nextActions.mapNotNull { a ->
+            val poiId = a.params[ProposalCards.ARG_POI_ID]
+            when {
+                a.type != "OPEN_PLACE" -> a
+                poiId !in shownPoiIds -> null
+                else -> a.copy(label = canonicalNames[poiId]?.take(NEXT_ACTION_LABEL_MAX) ?: a.label)
+            }
         }
         // 고르기 버튼은 **지금 일정에 있는 슬롯**과 **남은 후보**의 짝에만 발급한다 — 지어낸 슬롯·장소로 교체를 시키지 못하게(SEC-U8-03).
         val picks = answer.quickReplies.orEmpty().filter { it.action == QuickReplyAction.PICK_CANDIDATE }
@@ -483,7 +494,7 @@ class AssistantTurnService(
                 AnswerKind.CANDIDATES -> MessageKind.CANDIDATES
             },
             text = answer.text, payload = payload,
-            nextActions = answer.nextActions.ifEmpty { listOf(AssistantTemplates.CAPABILITIES_ACTION) }, // 막다른 답은 없다(INV-U8-03)
+            nextActions = nextActions.ifEmpty { listOf(AssistantTemplates.CAPABILITIES_ACTION) }, // 막다른 답은 없다(INV-U8-03)
             quickReplies = quickReplies, footnote = answer.footnote,
             intent = frame?.intent?.name, matchRoute = frame?.matchRoute ?: "NONE", outcome = "ANSWER",
         )
@@ -590,6 +601,9 @@ class AssistantTurnService(
         }
         private val WINDOW: Duration = Duration.ofSeconds(60)
         private const val REFUSALS_BEFORE_GUIDE = 2
+
+        /** 버튼 라벨 상한 — 상대(AI) `NextAction.label` 과 같은 값(30자). 정본 이름으로 덮을 때 넘기지 않게 자른다. */
+        private const val NEXT_ACTION_LABEL_MAX = 30
         private val SERVER_ISSUED_ARGUMENTS = setOf(ProposalCards.ARG_SLOT_KEY, ProposalCards.ARG_POI_ID)
         private const val POLL_MS = 200L
         internal const val MAX_WAITERS_PER_TURN = 2
