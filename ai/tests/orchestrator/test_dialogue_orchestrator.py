@@ -78,8 +78,10 @@ from trippilot.orchestrator.dialogue_interpreter import (
 )
 from trippilot.orchestrator.dialogue_memory import MEMORY_TTL_DAYS, DialogueMemory
 from trippilot.orchestrator.dialogue_orchestrator import (
+    ACK_TEXT,
     CAPABILITIES_LITERAL,
     CAPABILITIES_TEXT,
+    THANKS_TEXT,
     DialogueAnswer,
     DialogueOrchestrator,
     RecentTurn,
@@ -469,6 +471,42 @@ def test_unclassifiable_outputs_converge_to_refused_out_of_scope(raw: str, utter
     out = b.orch.turn(_input(utterance))
     assert out.outcome == "OUT_OF_SCOPE" and out.frames == () and out.answer is None
     assert is_refusal(_as_match(out.reason))
+
+
+# ── 2″단 — 맞장구·인사 (BR-AO-26) ──────────────────────────────────────────
+
+
+@pytest.mark.parametrize(("utterance", "text"), [
+    ("고마워요!", THANKS_TEXT), ("감사합니다~", THANKS_TEXT), ("Thanks", THANKS_TEXT),
+    ("아니 괜찮아", ACK_TEXT), ("괜찮아요.", ACK_TEXT), ("응", ACK_TEXT), ("넵!!", ACK_TEXT),
+])
+def test_closer_the_classifier_closed_gets_a_short_reply_instead_of_the_scope_card(utterance: str, text: str) -> None:
+    b = _build(_canned(None))
+    out = b.orch.turn(_input(utterance, turn_index=3))
+    assert out.outcome == "ANSWER" and out.frames == () and out.clarify is None
+    assert out.answer.kind is AnswerKind.TEXT and out.answer.text == text and out.answer.quick_replies is None
+    assert [a.type for a in out.answer.next_actions] == ["OPEN_ITINERARY"]
+    # 분류가 먼저 돈다 — 제안 뒤의 "응"은 수락일 수 있어서다(dialogue_intent 0.2.2)
+    assert out.llm_calls == 1 and out.context == DialogueContext(turn_index=3) and is_refusal(_as_match(out.reason))
+    without_trip = _build(_canned(None)).orch.turn(_input(utterance, snapshot=_NO_TRIP))
+    assert [a.type for a in without_trip.answer.next_actions] == ["CREATE_TRIP"]
+
+
+@pytest.mark.parametrize("utterance", ["응?", "고마워 근데 내일 날씨는", "주식 어때"])
+def test_utterance_that_is_not_wholly_a_closer_stays_out_of_scope(utterance: str) -> None:
+    out = _build(_canned(None)).orch.turn(_input(utterance))
+    assert out.outcome == "OUT_OF_SCOPE" and out.answer is None
+
+
+def test_closer_on_an_infrastructure_failure_stays_out_of_scope() -> None:
+    """시한·벤더 실패는 판단이 아니다 — 제안 뒤의 "응"에 아무 일 없이 "알겠어요"로 답하면 수락을 삼킨다."""
+    out = _build({_INTENT: RuntimeError("vendor down")}).orch.turn(_input("응"))
+    assert out.outcome == "OUT_OF_SCOPE" and not is_refusal(_as_match(out.reason))
+
+
+def test_closer_the_classifier_routes_follows_the_classifier() -> None:
+    out = _build(_canned(Intent.GET_WEATHER)).orch.turn(_input("응"))
+    assert out.outcome == "ANSWER" and out.frames[0].intent is Intent.GET_WEATHER
 
 
 # ── 2′단 — 섀도 ─────────────────────────────────────────────────────────────

@@ -148,6 +148,7 @@ BE AssistantTurnService ──POST /ai/v1/dialogue/interpret──▶ api/dialog
                                                                └못 채움─▶ 보류 버림(BR-DLG-23) → 2
  2  메모리 로드(get + recent_for_account ≤2, 실패는 "없이 진행") → DIALOGUE_INTENT(LLM 1, timeout §4) → IntentGate
       ├ {"intent": null}·게이트 실패·시한 소진 ─▶ OUT_OF_SCOPE(reason: 거절 표지)                                            → 6
+      │   └ 2″ 거절 표지 ∧ 발화 전체가 맞장구·인사(BR-AO-26, 2026-10-19) ─▶ 받아 주는 한마디 ANSWER(TEXT, 프레임 없음)         → 6
       └ IntentMatch(LLM_DIRECT) ─▶ ShadowIntentProbe.submit(utterance, trace_id, now, service=match, ms, llm_calls, turn_index)  ※ 기다리지 않는다
  3  from_match(기존) — 필수 인자 비면 ARGUMENT_CLARIFY(CLARIFY_QUESTIONS 고정 문안, clarify_count ≤1)                           → 6
       └ EDIT_SCHEDULE 이면 FRAME(executable) — 1단계                                                                           → 6
@@ -167,7 +168,7 @@ BE answer(): ANSWER → 검증(text ≤2000 · TYPES · kind · quick reply 서�
 |---|---|---|---|---|
 | 0 | `normalize(utterance) == "내가 할 수 있는 것 보기"` 이면 BE `capabilities(hasTrip)` 문구를 이식한 결정론 ANSWER(TEXT) | 0 | 없음(순수) | §2.3 |
 | 1 | 보류 프레임이 있으면 **그 인자 종류의 추출기 하나만** 돌려 채운다(assistant-dialogue BR-DLG-22 그대로) | 0 | 못 채우면 보류를 버리고 2 로 — 같은 질문을 다시 하지 않는다(BR-DLG-23) | §1 재사용 |
-| 2 | `$utterance`·`$intents`(=`tool_specs_json()`)·`$history`·`$memory`·`$trip` 로 분류 1회. 산출을 `IntentMatch(match_route=LLM_DIRECT, confidence=draft.confidence or 0.5)` 로 조립 | 1 | 게이트가 산출을 받아들이지 못한 전부(`{"intent": null}` — 불확실·주입·역할변경·유해 —, closed-set 밖 라벨, 깨진 JSON, 슬롯 모양, 절단) → **OUT_OF_SCOPE + `not_classifiable` 표지**(intent_eval 이 거절로 센다); 시한·벤더 예외·비지원은 인프라 실패라 **표지 없이** OUT_OF_SCOPE(장애를 거절로 세면 정확도가 부풀려진다 — `_refusal_reason`) | §2.2 |
+| 2 | `$utterance`·`$intents`(=`tool_specs_json()`)·`$history`·`$memory`·`$trip` 로 분류 1회. 산출을 `IntentMatch(match_route=LLM_DIRECT, confidence=draft.confidence or 0.5)` 로 조립 | 1 | 게이트가 산출을 받아들이지 못한 전부(`{"intent": null}` — 불확실·주입·역할변경·유해 —, closed-set 밖 라벨, 깨진 JSON, 슬롯 모양, 절단) → **OUT_OF_SCOPE + `not_classifiable` 표지**(intent_eval 이 거절로 센다); 시한·벤더 예외·비지원은 인프라 실패라 **표지 없이** OUT_OF_SCOPE(장애를 거절로 세면 정확도가 부풀려진다 — `_refusal_reason`). **[개정 · 2026-10-19]** 거절 표지가 있고 발화 전체가 맞장구·인사면 범위 밖 카드 대신 결정론 ANSWER(BR-AO-26) | §2.2 |
 | 2′ | 분류 결과를 알게 된 직후 `ShadowIntentProbe.submit` — 샘플링(rng) 통과 ∧ in-flight <4 일 때만 스레드에 넘기고 **응답 경로는 계속 간다** | 0(서비스) | 포화·샘플 밖은 `intent_shadow_skipped` 1줄. 섀도 실패는 응답에 영향 0 | §2.7 |
 | 3 | 기존 `from_match` — `missing` 계산, 비면 `ArgumentClarify`(고정 문안). EDIT_SCHEDULE 은 인자 해소(day/target)만 하고 `FRAME` | 0 | `clarify_count ≥1` 이면 되묻지 않고 결정론 폴백(BR-DLG-33) | §2.2 |
 | 4 | `plan` → 팬아웃 → `assemble`. 여행이 없는데 여행이 필요한 의도면 플랜 없이 `needTrip` Facts | 0 | Provider/PlanB 실패·TIMEOUT 은 `TaskResult.status` 로 들어오고 `assemble` 이 `notes`·`FactStatus.PARTIAL` 로 적는다 — 있는 것만 조립 | §2.4·§2.5 |
@@ -288,7 +289,7 @@ facts = handler.assemble(ctx, results)                    # 순수 — 이름(na
 
 침묵 실패가 없는지 보는 방법은 한 가지다: **LLM 을 시도했거나 시도해야 했던(재료는 있는데 잔여 부족 포함) 턴의 `template_text` 응답과
 `compress_fallback` 쓰기·잔여 ≤0 건너뛰기에는 `FallbackEvent` 가 짝으로 있다**(AO-P5 가 시한 소진 경로에서 이것을 함께 단언한다).
-**의도된 결정론은 폴백이 아니다** — 0단계 능력 안내(BR-AO-18)·`needTrip`(BR-AO-23)·`Facts.status = UNAVAILABLE` 템플릿 직행·사실(rows·places·notes·detail) 없는 `Facts` 직행(BR-AO-25, 2026-10-19)에는
+**의도된 결정론은 폴백이 아니다** — 0단계 능력 안내(BR-AO-18)·`needTrip`(BR-AO-23)·`Facts.status = UNAVAILABLE` 템플릿 직행·사실(rows·places·notes·detail) 없는 `Facts` 직행(BR-AO-25, 2026-10-19)·맞장구·인사 답(BR-AO-26, 2026-10-19 — 분류 단계 이벤트는 분류가 낸 그대로)에는
 답변 단계 `FallbackEvent` 가 없다(팬아웃 실패는 `_fanout` 이 작업별 `FallbackEvent(stage="fanout")` 로 이미 보고했다); `recent_turns` 가
 비어 LLM 을 부르지 않는 압축도 같다. 둘을 가르지 않으면 정상 경로를 폴백으로 오보한다. 문장의 출처를 타입에 두던 `text_source` 와
 `TurnOutcome.notes` 는 와이어·로그 어디에도 안 실리는 테스트 전용 메타라 지웠다(2026-10-18 리뷰) — 관측은 트레이스 이벤트 한 길이다.

@@ -217,7 +217,7 @@ TurnOutcome (frozen):
 
 | 조건 | 강제 |
 |---|---|
-| `outcome = ANSWER` | `answer ≠ None` ∧ `len(frames) ≤ 1` — 분류를 거친 턴은 1(분류 프레임이 백엔드 관측 칸 `intent`·`match_route` 의 원천), 0단계 리터럴 능력 안내는 0(BE 는 `frames.firstOrNull()` 로 읽어 `intent null`·`match_route "NONE"` 저장 — 미결 #19 A) ∧ `clarify = None` |
+| `outcome = ANSWER` | `answer ≠ None` ∧ `len(frames) ≤ 1` — 분류를 거친 턴은 1(분류 프레임이 백엔드 관측 칸 `intent`·`match_route` 의 원천), 0단계 리터럴 능력 안내와 2″ 맞장구·인사 답(BR-AO-26)은 0(BE 는 `frames.firstOrNull()` 로 읽어 `intent null`·`match_route "NONE"` 저장 — 미결 #19 A) ∧ `clarify = None` |
 | `outcome = FRAME` | `answer = None` ∧ `len(frames) = 1` ∧ 그 프레임 `executable` — 1단계에서는 **`EDIT_SCHEDULE` 만** 여기로 온다 |
 | `outcome = ARGUMENT_CLARIFY` | `clarify ≠ None` ∧ `len(frames) = 1` ∧ `clarify.argument ∈ frames[0].missing` ∧ `answer = None` |
 | `outcome = OUT_OF_SCOPE` | `frames` 비어 있음 ∧ `answer = None` ∧ `reason ≠ None`(거절 표지 또는 실패 사유) — **문장 없음**(BE SCOPE 카드) |
@@ -467,6 +467,7 @@ LLM 0회(L-5). `hours_label` 은 `on` 의 요일(없으면 `now` 의 요일)로 
 옮기지 않는다(문장 속 시각은 Facts 로만 대조한다 — 발화는 사실이 아니다, §7 INV-2). 공유 정규식
 `_TIME_EXPR`·`_NUM`(리마인드·회고 게이트와 공유 — 바꾸지 않는다)이 "두 분이"·"이 분께"·"이 시간에는"을 소요 표현으로 읽어 답 전체가 템플릿으로 떨어지므로
 규칙 줄로 피하게 하고 예시에도 쓰지 않는다. 400자·6줄·이모지 한도·평문·시각 표기·주입 방어 규칙, 게이트·티어·effort·max_tokens 는 그대로.
+마무리 제안 규칙에는 "방금 확인할 수 없다고 한 것을 다시·더·따로 확인해 주겠다고 하지 말 것"·"길 안내·이동 경로" 금지를 함께 둔다 — 실 LLM 54회에서 "영업시간을 더 확인해 드릴까요?"(같은 답이 되풀이된다) 17회·"이동 경로" 3회가 나왔고, 이 줄을 넣은 판은 0·0(같은 시각 나란히, 게이트·지연 차이 없음 — 2026-10-19).
 
 **[개정 · 2026-10-19 · 짧은 수락]** 분류 프롬프트 0.2.2 — 위 답변 0.3.0 이 답을 제안·되묻기("…날씨도 확인해 드릴까요?")로 끝내므로 "응"·"좋아"·"그래"·"네 알려줘"
 같은 짧은 수락 턴이 는다. 0.2.1 에는 그 수락을 `$history` 의 마지막 도우미 제안으로 풀어 읽는 규칙·예시가 없어 `{"intent": null}`(→ OUT_OF_SCOPE)로 떨어질 수 있었다.
