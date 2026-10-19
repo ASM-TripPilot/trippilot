@@ -42,9 +42,10 @@ data class RiskEvent(
  * 세션을 먼저 열고 실행기에서 거절되면 FAILED 세션이 하루 상한을 먹는다. 지역 날씨 하나에 많은 여행이 함께 위험해지는 날이 그렇다.
  *
  * ## 전용 실행기 1스레드
- * 공용 비동기 풀(`backgroundTaskExecutor`)은 포화 시 **호출자 실행**이라 아웃박스 릴레이 스레드를 산출 시간(최대 25초)만큼 막는다.
- * 1 인 이유는 커넥션이다 — 재계획 산출이 읽기 전용 트랜잭션 안에서 AI 를 최대 25초 부른다(`ReplanFacadeService.propose`).
- * 사용자 재계획과 함께 Hikari(기본 10)를 말리지 않게 묶는다. 늘리려면 AI 호출을 트랜잭션 밖으로 빼는 변경이 먼저다.
+ * 공용 비동기 풀(`backgroundTaskExecutor`)은 포화 시 **호출자 실행**이라 아웃박스 릴레이 스레드를 산출 시간만큼 막는다.
+ * 1 인 이유는 커넥션이다 — 재계획 산출이 읽기 전용 트랜잭션 안에서 AI 를 부른다(`ReplanFacadeService.propose`). AI 예산은
+ * 25초지만 그것은 상대의 계산 예산이고, 우리는 생성 클라이언트의 소켓 read 상한까지 기다린다(배포 60초 + 여유 2초) — 그동안
+ * 커넥션을 쥔다. 사용자 재계획과 함께 Hikari(기본 10)를 말리지 않게 묶는다. 늘리려면 AI 호출을 트랜잭션 밖으로 빼는 변경이 먼저다.
  * 실행기는 빈이 아니다 — 공용 실행기와 타입이 겹쳐 `@Async` 의 실행기 선택을 흔들지 않게.
  *
  * 관측은 요약 로그 한 줄 `replan.prepared outcome=…` 이다(개인정보·좌표 없음 — 운영은 지표 내보내기가 꺼져 있다).
@@ -145,7 +146,7 @@ class PreparedReplanService internal constructor(
     }
 
     /**
-     * 종료 — 진행 중 산출을 기다린다(AI 시한 25초). 넘기면 대기열의 시작 못 한 산출을 FAILED 로 닫는다 — SOLVING 으로 남기면
+     * 종료 — 진행 중 산출을 소켓 read 상한까지 기다린다. 넘기면 대기열의 시작 못 한 산출을 FAILED 로 닫는다 — SOLVING 으로 남기면
      * 화면이 끝나지 않는 산출을 기다린다(INV-4). 이 빈이 저장소·솔버보다 먼저 닫히므로 DB 는 아직 살아 있다.
      */
     @PreDestroy
@@ -165,8 +166,11 @@ class PreparedReplanService internal constructor(
         /** 이보다 오래된 사건은 무시한다 — 초안이 이미 늦다(BR-SA-18 ①). */
         private val MAX_EVENT_AGE: Duration = Duration.ofMinutes(30)
 
-        /** AI 재계획 시한(25초)을 덮는다. */
-        private const val AWAIT_TERMINATION_SECONDS = 30L
+        /**
+         * 진행 중 산출의 소켓 read 상한(생성 클라이언트 — 배포 60초 + 여유 2초)을 덮는다. AI 예산 25초로 잡으면 예산을 넘긴 산출이
+         * 잘려(소켓 read 는 인터럽트로 깨지 않는다) 컨텍스트가 닫힌 뒤 기록을 못 하고 SOLVING 에 남는다. 종료 유예(배포 660초) 안이다.
+         */
+        private const val AWAIT_TERMINATION_SECONDS = 65L
 
         private val log = LoggerFactory.getLogger(PreparedReplanService::class.java)
 
