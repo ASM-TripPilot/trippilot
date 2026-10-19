@@ -34,7 +34,8 @@ import type { ItineraryDaysItem } from '@/shared/api/index.schemas';
  * - 상황 감지 FE-B(frontend-components §3.3) 선택 props — 진입 게이트(`PlanbEntryGate`)·기회 카드가 준다.
  *   시드 props 가 오면(빈 배열 포함) kind 자동 시드 대신 그것을 진입 때 한 번 켠다(흐림 같은 주의에 날씨 사유를 넣으면
  *   AI 가 일정을 과하게 바꾼다 — 게이트가 빈 시드를 준다). 시드가 왔으면 body `triggerId` 는 게이트가 상세로 확인한 그 id 다
- *   (활성 목록 도착·포함과 무관 — §3.2). 제외 POI 는 화면에 없고 body 에만 실린다. `prefill` 은 자유 입력
+ *   (활성 목록 도착·포함과 무관 — §3.2). 시드의 날씨는 감지 칩이 날씨가 아니어도 정적 칩으로 보이고 나간다(준비 세션은
+ *   같은 날 위험의 합집합 — BR-SA-18). 제외 POI 는 화면에 없고 body 에만 실린다. `prefill` 은 자유 입력
  *   초기값, `includePoiId` 는 서버에 보내지 않고 solving 라우트 파라미터로만 잇는다(i06 미포함 안내 재료).
  */
 
@@ -136,6 +137,9 @@ export function PlanbRequestPage(props: PlanbRequestPageProps): ReactElement {
   const setFreeText = useReplanFormStore((s) => s.setFreeText);
   const resetForm = useReplanFormStore((s) => s.reset);
   const [entrySeed] = useState(() => entrySeedOf(props));
+  // 진입 시드에 날씨가 있으면(준비 세션은 같은 날 위험의 합집합 — BR-SA-18) 감지 칩이 날씨가 아니어도 정적 날씨 칩을
+  // 남긴다. 숨기면 처음 켜 둔 사유가 화면에도 body 에도 없고, 목록 도착 전후로 요청이 갈린다.
+  const keepWeatherChip = entrySeed?.reasons.includes('WEATHER') === true;
 
   const trigger = triggerId
     ? triggers.data?.triggers.find((item) => item.triggerId === triggerId)
@@ -221,9 +225,13 @@ export function PlanbRequestPage(props: PlanbRequestPageProps): ReactElement {
         // 오늘이 아닌 날은 FULL_DAY 만(서버 400) — 스토어 값이 무엇이든 여기서 못 박는다.
         scope: validTargetDate ? 'FULL_DAY' : form.scope,
         targetDate: validTargetDate,
-        // 감지 칩이 숨긴 정적 "날씨"는 화면에 없으니 보내지 않는다(감지 칩 자신의 key 면 남긴다).
+        // 감지 칩이 숨긴 정적 "날씨"는 화면에 없으니 보내지 않는다(감지 칩 자신의 key 면 남긴다). 시드의 날씨는 보인다.
         reasons: form.reasons.filter(
-          (key) => !detected || key !== 'WEATHER' || key === detected.reasonKey
+          (key) =>
+            !detected ||
+            key !== 'WEATHER' ||
+            key === detected.reasonKey ||
+            keepWeatherChip
         ),
         directives: form.directives,
         freeText: form.freeText,
@@ -296,6 +304,7 @@ export function PlanbRequestPage(props: PlanbRequestPageProps): ReactElement {
       selectedDirectives={directives}
       freeText={freeText}
       detected={detected}
+      keepWeatherChip={keepWeatherChip}
       onSelectScope={setScope}
       onToggleReason={toggleReason}
       onToggleDirective={toggleDirective}

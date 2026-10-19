@@ -1244,4 +1244,55 @@ describe('🔴 상황 감지 FE-B · 시드 props·prefill·includePoiId (§3.3)
       '폭염 · 해운대 해변 17시'
     );
   });
+
+  // 리뷰 반영 — 준비 세션은 같은 날 위험의 합집합이라(BR-SA-18) 휴무 알림으로 들어와도 시드에 날씨가 있을 수 있다.
+  // 감지 칩(휴무)이 정적 날씨를 숨기면 처음 켜 둔 사유가 화면에도 body 에도 없게 된다.
+  const closureTomorrow = () =>
+    triggerList(
+      mkTrigger({
+        kind: 'CLOSURE',
+        variant: 'CLOSED_DAY',
+        affectedDate: TOMORROW,
+        slotKey: `${TOMORROW}#p9`,
+      })
+    );
+  const unionSeed = {
+    tripId: TRIP_ID,
+    triggerId: 'trg-1',
+    targetDate: TOMORROW,
+    seedReasons: ['WEATHER', 'TEMP_CLOSED'],
+    seedDirectives: [],
+    seedExcludedPoiIds: ['p9', 'poi-rain'],
+  };
+
+  it('F7 시드에 날씨가 있는데 감지 칩이 날씨가 아니면 정적 날씨 칩이 켜진 채 보이고 body 로 나간다', async () => {
+    mockTriggerData = closureTomorrow();
+    render(<PlanbRequestPage {...unionSeed} />);
+
+    expect(screen.getByTestId(TRIGGER_CHIP)).toBeSelected();
+    expect(screen.getByTestId('planb-request-reason-WEATHER')).toBeSelected();
+    // 감지 칩이 대신하는 임시 휴무 정적 칩은 종전대로 숨는다.
+    expect(screen.queryByTestId('planb-request-reason-TEMP_CLOSED')).toBeNull();
+
+    await submit();
+    expect(postedBody()).toEqual(
+      body({
+        scope: 'FULL_DAY',
+        reasons: ['WEATHER', 'TEMP_CLOSED'],
+        excludedPoiIds: ['p9', 'poi-rain'],
+        triggerId: 'trg-1',
+        targetDate: TOMORROW,
+      })
+    );
+  });
+
+  it('F7b 보이는 날씨 칩을 끄면 body 에서 빠진다 — 사용자가 고칠 수 있다', async () => {
+    mockTriggerData = closureTomorrow();
+    render(<PlanbRequestPage {...unionSeed} />);
+
+    fireEvent.press(screen.getByTestId('planb-request-reason-WEATHER'));
+
+    await submit();
+    expect(postedBody()).toMatchObject({ reasons: ['TEMP_CLOSED'] });
+  });
 });

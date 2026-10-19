@@ -61,6 +61,11 @@ export interface ReplanRequestSheetProps {
   scopeOptions?: ReplanScopeOption[];
   /** 트리거로 들어왔을 때만 — 사유 맨 앞 감지 칩. */
   detected?: ReplanDetectedChip | null;
+  /**
+   * 감지 칩이 있어도 정적 "날씨" 칩을 숨기지 않는다 — 진입 시드(준비 세션 입력)에 날씨가 있을 때만 배선판이 준다
+   * (상황 감지 FE-B §3.3 · 같은 날 위험 합집합 BR-SA-18). 감지 칩 자신이 날씨면 그 칩이 대신한다. 기본 거짓 = 종전 Q2.
+   */
+  keepWeatherChip?: boolean;
   onSelectScope: (scope: StartReplanRequestScope) => void;
   onToggleReason: (key: string) => void;
   onToggleDirective: (key: string) => void;
@@ -172,6 +177,7 @@ export function ReplanRequestSheet({
   freeText,
   scopeOptions = REPLAN_SCOPES,
   detected,
+  keepWeatherChip = false,
   onSelectScope,
   onToggleReason,
   onToggleDirective,
@@ -183,10 +189,12 @@ export function ReplanRequestSheet({
   submitting = false,
 }: ReplanRequestSheetProps): ReactElement {
   // 감지 칩이 있으면 그와 겹치는 정적 칩(날씨 · 감지 칩이 대신하는 사유)을 숨긴다(브리프 Q2).
+  // 단 진입 시드의 날씨(keepWeatherChip)는 남긴다 — 숨기면 처음 켜 둔 사유를 보지도 끄지도 못한다.
   const staticReasons = detected
     ? REPLAN_REASONS.filter(
         (reason) =>
-          reason.key !== 'WEATHER' && reason.key !== detected.reasonKey
+          (reason.key !== 'WEATHER' || keepWeatherChip) &&
+          reason.key !== detected.reasonKey
       )
     : REPLAN_REASONS;
 
