@@ -252,7 +252,7 @@ DialogueAnswer (frozen):
 | 조건 | 강제 |
 |---|---|
 | `kind = INFO` | `payload["infoKind"] ∈ {NEXT_SLOT, DISTANCE, PLACE, WEATHER}` ∧ `payload["rows"]` 가 **list**(빈 배열 허용, 누락 금지 — FE `rows.map` 크래시) ∧ 각 행 `{label, value}` 문자열 |
-| `kind = CANDIDATES` | `payload["candidates"]` list, 1..5 ∧ 각 `{poiId, name, distanceRange?, reason}` ∧ `quick_replies` 에 각 `poiId` 의 `PICK_CANDIDATE{poiId, slotKey}` 가 **정확히 하나** 있음(FE 후보 탭이 그 짝을 찾는다) |
+| `kind = CANDIDATES` | `payload["candidates"]` list, 1..5 ∧ 각 `{poiId, name, distanceRange?, reason}` ∧ `quick_replies` 에 각 `poiId` 의 `PICK_CANDIDATE{poiId, slotKey}` 가 **정확히 하나** 있음(FE 후보 탭이 그 짝을 찾는다) — **[개정 · 2026-10-19 · 장소 탐색]** 전부 있거나 전부 없다. 없으면(EXPLORE_PLACES) 후보마다 `OPEN_PLACE{poiId}` 가 next_actions 에 있고 탭은 조용히 무시된다. 대안(SUGGEST_ALTERNATIVE)의 "후보마다 하나"는 `Facts` post-init 이 지킨다 |
 | `kind = TEXT` | `payload = None` |
 | `text` | 비어 있지 않음 ∧ `len ≤ 400` ∧ 줄 수 ≤ 6 ∧ `_TIME_EXPR` 매치 없음(INV-3) ∧ `not has_contact_like(text)` — **게이트와 타입이 같은 검사**(어긋나면 게이트 통과값이 생성 불가가 된다) |
 | `next_actions` | `≥ 1` ∧ 전부 `type ∈ TYPES` ∧ `OPEN_PLACE ⇒ "poiId" in params` |
@@ -290,7 +290,7 @@ Handler (Protocol):
   def plan(self, ctx: TurnContext) -> tuple[tuple[HandlerTask, ...], ...]   # 파(wave) ≤ 2 — 파 안은 병렬, 파 사이는 순차
   def assemble(self, ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts   # **순수** — 같은 입력에 같은 Facts (BR-AO-16)
 
-HANDLERS: Mapping[Intent, Handler]   # 13종 전수 (OUT_OF_SCOPE 제외). 없는 의도는 기동 시 ValueError
+HANDLERS: Mapping[Intent, Handler]   # 13종 전수 (OUT_OF_SCOPE 제외) — [개정 · 2026-10-19 · 장소 탐색] DIALOGUE_INTENTS 14종. 없는 의도는 기동 시 ValueError
 ```
 
 `TurnContext` 는 `TurnInput` + 분류 프레임 + 로드된 메모리 + 잔여 시계(`remaining_ms()` 콜러블)를 묶은 읽기 전용 뷰다.

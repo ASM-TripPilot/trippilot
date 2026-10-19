@@ -862,7 +862,7 @@ _POLLUTED_ANSWERS = (
     json.dumps({"text": "괜찮은 답이에요.", "footnote": "각" * 121}),
     '{"text": "오후 3시에 가세요"}',
 )
-_ANSWER_INTENTS = sorted(ROUTABLE_INTENTS - {Intent.EDIT_SCHEDULE}, key=lambda i: i.value)
+_ANSWER_INTENTS = sorted(DIALOGUE_INTENTS - {Intent.EDIT_SCHEDULE}, key=lambda i: i.value)
 
 
 @settings(max_examples=80, deadline=None)
@@ -872,7 +872,9 @@ _ANSWER_INTENTS = sorted(ROUTABLE_INTENTS - {Intent.EDIT_SCHEDULE}, key=lambda i
                      st.text(max_size=60), st.just(RuntimeError("boom"))),
        with_trip=st.booleans())
 def test_any_llm_answer_yields_a_gated_answer_with_valid_next_actions(intent: Intent, raw, with_trip: bool) -> None:
-    b = _build(_canned(intent, answer=raw, target="우도", destination="해녀의집", place="우도"))
+    # 탐색(EXPLORE_PLACES)도 돈다 — region 을 실어 되묻기 없이 후보 답(CANDIDATES·OPEN_PLACE)까지 가게 풀 대역을 단다
+    b = _build(_canned(intent, answer=raw, target="우도", destination="해녀의집", place="우도", region="부산"),
+               ports=HandlerPorts(poi_info=_PoiInfo(), weather=_Weather(), pool_builder=_ExplorePool()))
     out = b.orch.turn(_input("아무 말", snapshot=_SNAP if with_trip else _NO_TRIP))
     assert out.outcome == "ANSWER"
     a = out.answer
@@ -1194,3 +1196,71 @@ def test_explore_empty_answer_cannot_invent_a_place_either() -> None:
     out = b.orch.turn(_input("강원도 가볼 만한 곳", snapshot=_NO_TRIP))
     assert out.answer.text == "그 조건에 맞는 곳을 아직 찾지 못했어요." and out.answer.kind is AnswerKind.TEXT
     assert any(e.reason == "place_not_in_facts" for e in _fallbacks(b.trace))
+
+
+
+def test_explore_without_any_anchor_asks_for_the_region_once_and_the_answer_runs_without_classifying() -> None:
+    """앵커(지역·일정·여행 목적지)가 하나도 없으면 지역을 되묻는다(요청당 1회) — 다음 턴의 "부산"은 분류 없이 그 답이다(LLM 0)."""
+    from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEXT
+
+    ports = HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool())
+    b = _build(_canned(Intent.EXPLORE_PLACES, theme="요즘 핫한"), ports=ports)
+    asked = b.orch.turn(_input("요즘 핫한 곳 알려줘", snapshot=_NO_TRIP, turn_index=3))
+    assert asked.outcome == "ARGUMENT_CLARIFY" and asked.answer is None
+    assert asked.clarify.argument == "region" and asked.clarify.question == EXPLORE_ASK_REGION_TEXT
+    assert asked.frames[0].missing == ("region",) and asked.frames[0].intent is Intent.EXPLORE_PLACES
+    assert asked.context.pending.intent is Intent.EXPLORE_PLACES and asked.context.pending.asked == "region"
+    assert asked.context.pending.arguments == {"theme": "요즘 핫한"}  # 처음 뽑은 주제는 답 턴까지 간다
+
+    answer = json.dumps({"text": "부산에서 감천문화마을과 흰여울 카페를 골라 봤어요.", "footnote": None}, ensure_ascii=False)
+    b2 = _build(_canned(Intent.GET_WEATHER, answer=answer), ports=ports)  # 분류가 불리면 날씨가 나올 것 — 불리지 않아야 한다
+    out = b2.orch.turn(_input("부산", snapshot=_NO_TRIP, context=asked.context, turn_index=4))
+    assert out.outcome == "ANSWER" and out.frames[0].match_route == "CLARIFY_ANSWER"
+    assert out.frames[0].arguments == {"theme": "요즘 핫한", "region": "부산"} and "DIALOGUE_INTENT" not in b2.llm.features()
+    assert out.answer.kind is AnswerKind.CANDIDATES and out.context.pending is None
+
+
+def test_a_request_shaped_reply_to_a_pending_question_is_classified_not_swallowed() -> None:
+    """장소를 되묻는 중에 온 "부산 요즘 핫한 곳 알려줘" — 뱅크는 탐색을 모르니(13종) 요청 꼴이면 삼키지 않고 분류한다."""
+    pending = DialogueContext(pending=PendingFrame(Intent.GET_POI_INFO, {}, "place", 0.9), turn_index=2, clarify_count=1)
+    b = _build(_canned(Intent.EXPLORE_PLACES, region="부산", theme="요즘 핫한"),
+               ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool()))
+    out = b.orch.turn(_input("부산 요즘 핫한 곳 알려줘", snapshot=_NO_TRIP, context=pending))
+    assert out.frames[0].intent is Intent.EXPLORE_PLACES and b.llm.features()[0] == "DIALOGUE_INTENT"
+    # 맨 이름은 종전대로 그 답이다(LLM 0)
+    b2 = _build(_canned(Intent.GET_WEATHER))
+    out2 = b2.orch.turn(_input("우도", context=pending))
+    assert out2.frames[0].intent is Intent.GET_POI_INFO and out2.frames[0].arguments == {"place": "우도"}
+    assert "DIALOGUE_INTENT" not in b2.llm.features()
+
+
+def test_explore_theme_times_are_not_facts() -> None:
+    """INV-2 — 발화에서 뽑은 theme("22:00 이후 야경")은 Facts 에 없다. 그 시각을 문장에 옮기면 템플릿(time_not_in_facts)."""
+    answer = json.dumps({"text": "22:00 이후에도 감천문화마을이 좋아요.", "footnote": None}, ensure_ascii=False)
+    b = _build(_canned(Intent.EXPLORE_PLACES, answer=answer, region="부산", theme="22:00 이후 야경"),
+               ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool()))
+    out = b.orch.turn(_input("부산 22:00 이후 야경", snapshot=_NO_TRIP))
+    assert out.answer.text == "가 볼 만한 곳을 찾아봤어요."
+    assert any(e.reason == "time_not_in_facts" for e in _fallbacks(b.trace))
+
+
+def test_explore_turn_is_not_submitted_to_the_shadow_router() -> None:
+    """3단 섀도는 13종 어휘라 탐색을 낼 수 없다 — 넘기면 일치율이 구조적으로 깎이고 섀도 LLM 만 쓴다(BR-AO-27)."""
+    s = _shadow()
+    b = _build(_canned(Intent.EXPLORE_PLACES, region="부산"), shadow=s.probe, shadow_meta=_META,
+               ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool()))
+    out = b.orch.turn(_input("부산 가볼 만한 곳", snapshot=_NO_TRIP))
+    assert out.outcome == "ANSWER" and s.router.calls == 0 and _shadow_lines(s.records) == []
+
+
+@settings(max_examples=150, deadline=None)
+@given(word=st.text(alphabet="가나다라마바사아자차카타파하궁감천", min_size=1, max_size=6),
+       suffix=st.sampled_from(["시장", "공원", "박물관", "해수욕장", "마을", "카페"]),
+       josa=st.sampled_from(["", "에", "에서", "과", "은", "에도", "으로"]))
+def test_foreign_place_flags_unknown_place_shaped_words_and_never_known_names(word: str, suffix: str, josa: str) -> None:
+    """INV-1 문장 검사 — 아는 이름(+조사)은 절대 걸리지 않고, 아는 이름과 겹치지 않는 "이름+장소 접미" 꼴은 걸린다."""
+    from trippilot.orchestrator.dialogue_orchestrator import _foreign_place
+
+    name = word + suffix
+    assert not _foreign_place(f"{name}{josa} 좋아요", (name,))
+    assert _foreign_place(f"{name}{josa} 좋아요", ("흰여울카페",)) is (name not in "흰여울카페")

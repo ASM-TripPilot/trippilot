@@ -39,12 +39,13 @@ _CENTERS: dict[str, tuple[float, float, float]] = {
 }
 
 
-def region_center(text: str) -> tuple[GeoPoint, float] | None:
-    """발화 속 지역 표현 → (중심, 반경 km). 표 이름이 **들어 있으면** 맞다고 본다("서울특별시"·"부산 해운대"·"강남역") —
+def region_center(text: str) -> tuple[str, GeoPoint, float] | None:
+    """발화 속 지역 표현 → (표 이름, 중심, 반경 km). 표 이름이 **들어 있으면** 맞다고 본다("서울특별시"·"부산 해운대"·"강남역") —
     여럿이면 반경이 가장 작은(구체적인) 곳("제주 애월" → 애월; 이름 길이로는 둘 다 두 글자라 못 가른다), 같으면 뒤에 나온 것.
-    없으면 None."""
+    없으면 None. 이름은 표의 것을 돌려준다 — 발화 원문(시각·지시가 섞일 수 있다)을 사실 칸에 옮기지 않게."""
     hits = [(-_CENTERS[name][2], text.rfind(name), name) for name in _CENTERS if name in text]
     if not hits:
         return None
-    lat, lng, km = _CENTERS[max(hits)[2]]
-    return GeoPoint(lat, lng), km
+    name = max(hits)[2]
+    lat, lng, km = _CENTERS[name]
+    return name, GeoPoint(lat, lng), km

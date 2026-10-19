@@ -64,7 +64,7 @@ __all__ = [
     "CANDIDATE_REASON", "HANDLERS", "INFO_KINDS", "NEXT_ACTION_TYPES", "QUICK_REPLY_ACTIONS", "TASK_STATUSES",
     "AnswerKind", "DayView", "FactPlace", "FactRow", "FactStatus", "Facts", "Handler", "HandlerPorts",
     "HandlerTask", "NextAction", "QuickReplyDraft", "SlotView", "TaskResult", "TripInfo", "TurnContext",
-    "TurnSnapshot", "edit_arguments", "need_trip_facts", "needs_trip", "next_slot_after",
+    "TurnSnapshot", "edit_arguments", "explore_needs_region", "need_trip_facts", "needs_trip", "next_slot_after",
     "parse_slot_key", "resolve_day", "resolve_slot", "validate_answer_shape", "validate_answer_text",
 ]
 
@@ -406,6 +406,10 @@ class Facts:
         clash = _RESERVED_FACT_KEYS & set(self.detail)
         if clash:
             raise ValueError(f"Facts.detail 이 예약 키를 덮는다: {sorted(clash)}")
+        # BR-AO-20 — 대안 후보는 고르기(바꿀 슬롯)가 후보마다 하나다. 모양 검사는 "전부 있거나 전부 없다"(탐색은 없다)라 여기서 조인다
+        if self.intent is Intent.SUGGEST_ALTERNATIVE and self.kind is AnswerKind.CANDIDATES and not any(
+                q.action == "PICK_CANDIDATE" for q in self.quick_replies or ()):
+            raise ValueError("SUGGEST_ALTERNATIVE 후보는 후보마다 PICK_CANDIDATE 가 하나씩 있어야 한다 (BR-AO-20)")
 
     def to_prompt_dict(self) -> dict:
         """`$facts` 재료 — 좌표·poi_id 는 넣지 않는다 (DE §2.5). `fallback_answer_text` 가 읽는 키(status·needs_trip·target)도 여기."""
@@ -1076,7 +1080,7 @@ def _explore_anchor(ctx: TurnContext) -> _Anchor | None:
     said = ctx.arguments.get("region")
     if said:
         hit = region_center(normalize(said))
-        return _Anchor(said, "region", *hit) if hit else None
+        return _Anchor(hit[0], "region", hit[1], hit[2]) if hit else None
     if ctx.ports.poi_info is not None:
         found = next_slot_after(ctx.snapshot, ctx.now, ctx.tz)
         slot = found[1] if found else next((s for _, s in ctx.snapshot.slots() if s.poi_id), None)
@@ -1086,8 +1090,13 @@ def _explore_anchor(ctx: TurnContext) -> _Anchor | None:
     for name in trip.regions if trip is not None else ():
         hit = region_center(normalize(name))
         if hit:
-            return _Anchor(name, "region", *hit)
+            return _Anchor(hit[0], "region", hit[1], hit[2])
     return None
+
+
+def explore_needs_region(ctx: TurnContext) -> bool:
+    """지역을 되물어야 하는가 — 발화에 지역이 없고 일정·여행 목적지로도 앵커를 못 잡을 때만(인자표 required 로는 못 적는 조건)."""
+    return not ctx.arguments.get("region") and _explore_anchor(ctx) is None
 
 
 def _explore_rank(pois: Iterable[Poi], category: str | None, theme: str | None) -> list[Poi]:
@@ -1154,12 +1163,13 @@ def _assemble_explore(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Fa
     said = ctx.arguments.get("region")
     anchor = _explore_anchor(ctx)
     if anchor is None and said:  # 말한 지역이 표에 없다 — 없는 곳이 아니라 "아직 못 찾는 지역"이다
-        return _text_facts(intent, FactStatus.EMPTY, home, notes=("지역 미확인 — 그 지역은 아직 찾아 줄 수 없다(없다는 뜻이 아니다)",),
-                           detail={"region": said})
+        # 발화 원문은 사실 칸에 싣지 않는다 — 시각 허용 집합(INV-2)이 Facts 를 보고, 답변 프롬프트는 발화를 따로 받는다
+        return _text_facts(intent, FactStatus.EMPTY, home, notes=("지역 미확인 — 그 지역은 아직 찾아 줄 수 없다(없다는 뜻이 아니다)",))
     if anchor is None:  # 앵커가 하나도 없다 — 지역을 묻는다 (사실 없음 → LLM 없이 이 문장 그대로, BR-AO-25)
         return Facts(intent, FactStatus.EMPTY, AnswerKind.TEXT, rows=(), places=(), notes=(), payload=None,
                      next_actions=home, quick_replies=(), template_text=EXPLORE_ASK_REGION_TEXT)
-    detail = {"anchor": anchor.label, "anchor_kind": anchor.kind, **({"theme": ctx.arguments["theme"]} if ctx.arguments.get("theme") else {})}
+    # theme(발화 자유문)은 싣지 않는다 — "22:00 이후 야경"의 시각이 Facts 시각으로 허용된다(INV-2). 답변 프롬프트는 발화를 따로 받는다
+    detail = {"anchor": anchor.label, "anchor_kind": anchor.kind}
     value = _value(results, "explore")
     if value is None or value.get("status") != "OK":
         return _text_facts(intent, FactStatus.UNAVAILABLE, home, notes=("장소 탐색 미확인",), detail=detail)
@@ -1222,13 +1232,15 @@ class Handler:
     plan: Callable[[TurnContext], tuple[HandlerTask, ...]]
     assemble: Callable[[TurnContext, Mapping[str, TaskResult]], Facts]
     handoff_frame: bool = False  # EDIT_SCHEDULE — outcome FRAME (BE 제안 경로), ANSWER 를 내지 않는다
+    # 조건부 필수 인자 — 인자표 required 로 못 적는 "이럴 때만 묻는다"(EXPLORE_PLACES 의 region). (인자 이름, 고정 문안) 또는 None
+    ask: Callable[[TurnContext], tuple[str, str] | None] | None = None
 
 
 def _handler(
     intent: Intent,
     assemble: Callable[[TurnContext, Mapping[str, TaskResult]], Facts],
     plan: Callable[[TurnContext], tuple[HandlerTask, ...]] = _plan_nothing,
-    *, handoff_frame: bool = False,
+    *, handoff_frame: bool = False, ask: Callable[[TurnContext], tuple[str, str] | None] | None = None,
 ) -> Handler:
     """여행 필수 의도는 여행이 없을 때 플랜 없이 needTrip Facts 로 끝낸다 (BLM §3 4단) — 핸들러마다 따로 적지 않는다."""
     guarded = needs_trip(intent)
@@ -1239,7 +1251,7 @@ def _handler(
     def assemble_(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts:
         return need_trip_facts(intent) if guarded and ctx.snapshot.trip is None else assemble(ctx, results)
 
-    return Handler(intent, plan_, assemble_, handoff_frame)
+    return Handler(intent, plan_, assemble_, handoff_frame, ask)
 
 
 # 넘기기 계열(GENERATE·REGENERATE·REPLAN·회고 3종)은 플랜 없이 한 줄 안내 — 표에 따로 표시하지 않는다(plan 이 비어 있는 것이 그 뜻)
@@ -1258,7 +1270,8 @@ HANDLERS: Mapping[Intent, Handler] = {
     Intent.GENERATE_REFLECTION: _handler(Intent.GENERATE_REFLECTION, _handoff_to(Intent.GENERATE_REFLECTION, "OPEN_REFLECTION")),
     Intent.TRIP_SUMMARY: _handler(Intent.TRIP_SUMMARY, _handoff_to(Intent.TRIP_SUMMARY, "OPEN_TRIP_SUMMARY")),
     Intent.STYLE_ANALYSIS: _handler(Intent.STYLE_ANALYSIS, _handoff_to(Intent.STYLE_ANALYSIS, "OPEN_STYLE")),
-    Intent.EXPLORE_PLACES: _handler(Intent.EXPLORE_PLACES, _assemble_explore, _plan_explore),
+    Intent.EXPLORE_PLACES: _handler(Intent.EXPLORE_PLACES, _assemble_explore, _plan_explore,
+                                    ask=lambda ctx: ("region", EXPLORE_ASK_REGION_TEXT) if explore_needs_region(ctx) else None),
 }
 
 if set(HANDLERS) != DIALOGUE_INTENTS:  # 의도가 늘면 기동이 멈춘다 — 조용한 빈칸 금지 (DE §2.4)

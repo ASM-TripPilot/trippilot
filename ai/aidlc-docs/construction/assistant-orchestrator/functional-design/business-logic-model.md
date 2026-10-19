@@ -85,7 +85,7 @@ ai/
     orchestrator/
       dialogue_orchestrator.py    (신규) DialogueOrchestrator.turn(TurnInput) -> TurnOutcome · TurnInput/TurnOutcome/DialogueAnswer/
                                          시한 모듈 상수(§4) · 파이프라인 §3 · 시한 배분 §4 · 팬아웃 §6
-      dialogue_handlers.py        (신규) HANDLERS(13종) · Handler.plan/assemble · resolve_slot · Facts · 템플릿 문구(BE 이식) — §5
+      dialogue_handlers.py        (신규) HANDLERS(13종 — [개정 · 2026-10-19] 탐색 포함 14종) · Handler.plan/assemble · resolve_slot · Facts · 템플릿 문구(BE 이식) — §5
       dialogue_memory.py          (신규) due · compress_fallback · expires_at_for — §8 ($memory 조립은 dialogue_orchestrator._memory_lines)
       shadow_probe.py             (신규) ShadowIntentProbe · ShadowCountingLlm · TaggedTrace · ShadowRecord — §9
       dialogue_interpreter.py     (기존 — 로직 무변경) _answer·_from_match 공개 승격(미결 #17) · CountingLlm 은 off 경로에 그대로
@@ -233,7 +233,7 @@ BE 쪽: `interpret-stage-max-ms` 5000→9000 · 해석 read timeout = interpret 
 | GET_DISTANCE | 1파 POI_INFO(dest=`resolve_slot`, origin=직전 슬롯) → 2파 TRANSIT(purpose INFO_DISPLAY, mode 인자 또는 PUBLIC) | INFO DISTANCE rows[직전 구간] | OPEN_ITINERARY | () | OK "일정에 적힌 거리예요." / EMPTY "구간 거리는 일정에서 확인할 수 있어요." | **거리만**(`to_public_dict` — INV-3). 해소 실패·TRANSIT UNAVAILABLE → 템플릿 **[개정 · 2026-10-19 · E2E]** 경로 API 가 빠져 Provider 가 하버사인×우회계수(`confidence` LOW)를 내면 거리 뒤에 "(추정)"을 붙이고 메모("직선 거리로 어림한 값")를 싣는다 — 경로 거리처럼 보이면 "약 3.1km"(실제 5.8km)가 됐다 |
 | GET_POI_INFO | 1파 POI_INFO(`resolve_slot(place)` 의 poi_id, on=날짜) | INFO PLACE rows[분류·영업시간·입장료] | OPEN_PLACE{poiId} | () | OK·PARTIAL "일정에 있는 장소예요." / EMPTY "장소 정보는 일정에서 장소를 눌러 볼 수 있어요." | 모르는 값은 "미확인"(~~hours_label None~~·fee None·장소 행 없음). **[개정 · 2026-10-19 · E2E]** `hours_label` None 은 "그 요일이 휴무로 읽혔다"라 **"휴무일 수 있음"**(단정하지 않는다 — 런타임 파서가 월 단위 휴무를 일정 배치용으로 매주로 넓혀 읽는다), 정보 없음은 Provider 문구("영업시간 정보 없음") 그대로, 영업시간 기준일이 오늘이 아니면 "날짜" 행을 앞에 둔다 — "미확인"으로 뭉개면 "오늘 영업 여부는 확인할 수 없어요"가 됐다. 일정 밖 장소명은 **해소하지 않는다**(지어내기 금지) → 템플릿 |
 | SUGGEST_ALTERNATIVE | 1파 POI_INFO(target 좌표) → 2파 [PLACE 풀(anchor=대상 좌표, dates=그 날, 반경 규칙 기본) ∥ WEATHER] → PLANB `run(use_llm=False, excluded=일정 전부, rain, deadline_ms=잔여)` | CANDIDATES ≤5 [poiId·name·distanceRange·reason] | OPEN_ITINERARY | 후보마다 PICK_CANDIDATE{poiId, slotKey} 정확 1개 | OK "{대상} 대신 갈 만한 곳이에요."(BE `ProposalCards` 앞 문장 — 대상 이름이 게이트를 못 넘으면 "그 장소") / EMPTY "근처에서 대신할 곳을 찾지 못했어요."(후보 0·대상 미해소; 풀·PlanB 실패는 UNAVAILABLE 공통 문구) | 풀 = `CandidatePoolBuilder` 반경(INV-1), 풀 조립 → PlanB 는 **한 스레드 체인**(`PlaceProvider.resolve` 1회 pop). PICK_CANDIDATE 는 BE 기존 ReplaceSlot 제안 경로 |
-| EXPLORE_PLACES ★ (2026-10-19) | 1파 [앵커: region → 지역 표 / 다음·첫 슬롯 → POI_INFO 좌표 / 여행 목적지 → 지역 표] → PLACE 풀(anchor, radius_override=앵커 반경, budget HIGH) → 결정론 정렬(BR-AO-27) | CANDIDATES ≤5 [poiId·name·reason("요즘 인기"/카테고리)·distanceRange(일정 근처일 때만)] | 후보마다 OPEN_PLACE | () — PICK 없음 | OK "가 볼 만한 곳을 찾아봤어요."★ / EMPTY "그 조건에 맞는 곳을 아직 찾지 못했어요."★ / 앵커 없음 "어느 지역에서 찾아 드릴까요? '부산 야경 좋은 곳'처럼 지역과 함께 말씀해 주세요."★ | 여행 불필요. 풀 실패 → UNAVAILABLE 템플릿. 말한 지역이 표에 없으면 EMPTY(다른 곳으로 바꿔 찾지 않는다) |
+| EXPLORE_PLACES ★ (2026-10-19) | 1파 [앵커: region → 지역 표 / 다음·첫 슬롯 → POI_INFO 좌표 / 여행 목적지 → 지역 표] → PLACE 풀(anchor, radius_override=앵커 반경, budget HIGH) → 결정론 정렬(BR-AO-27) | CANDIDATES ≤5 [poiId·name·reason("요즘 인기"/카테고리)·distanceRange(일정 근처일 때만)] | 후보마다 OPEN_PLACE | () — PICK 없음 | OK "가 볼 만한 곳을 찾아봤어요."★ / EMPTY "그 조건에 맞는 곳을 아직 찾지 못했어요."★ / 앵커 없음 → ARGUMENT_CLARIFY(region, "어느 지역에서 찾아 드릴까요? '부산'이나 '제주 애월'처럼 알려 주세요."★ — 요청당 1회, 이미 물은 뒤엔 같은 문장 TEXT) | 여행 불필요. 풀 실패 → UNAVAILABLE 템플릿. 말한 지역이 표에 없으면 EMPTY(다른 곳으로 바꿔 찾지 않는다) |
 | EDIT_SCHEDULE | 인자 해소만(day/target) — 팬아웃 없음 | **FRAME** | — | — | —(전수표 값 "일정은 편집 화면에서 바꿀 수 있어요." 는 AO-P17 검사용, 1단계 경로에선 나가지 않는다) | 1단계: BE `ProposalCards` `/edit` 재호출. 2단계 §12 |
 | GENERATE_SCHEDULE / REGENERATE | 없음 | TEXT 한 줄 | OPEN_ITINERARY_METHOD / OPEN_REGENERATE | () | ~~GENERATE_SCHEDULE "일정 만들기 화면으로 안내할게요." / REGENERATE "일정은 만들기 화면에서 다시 만들 수 있어요."~~ **[개정 · 2026-10-19 · 친근한 말투]** GENERATE_SCHEDULE "일정 만들기 화면으로 안내해 드릴게요. 아래 버튼을 누르면 바로 시작해요." / REGENERATE "일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 누르면 바로 시작해요."(EMPTY 없음 — 넘기기는 결과가 없다) | 여행 없으면 needTrip + CREATE_TRIP·OPEN_STAY_SEARCH. **넘기기 3행(6의도) 공통(2026-10-19)**: 사실이 비어 답변 LLM 을 부르지 않고 위 문구로 바로 답한다(BR-AO-25). **[개정 · 2026-10-19 · 친근한 말투]** 그래서 이 문구가 곧 그 턴의 답이다 — 안내 한 문장 + 아래 버튼(next_action 하나) 안내로 다듬었다(사용자 "지금은 너무 answer 만 띄워 주는 느낌", 프롬프트 0.3.0 과 같은 말투). 되묻기("…볼까요?")로 끝내지 않는다 — 분류 0.2.2 가 그 뒤의 "응"을 같은 의도로 읽어 같은 문장이 되풀이된다(2026-10-19 리뷰). BE `IntentDispatcher` 원문도 같은 문장으로 바꿨다(한 벌). 공유 정규식 오탐 표현("두 분이"·"이 시간에는")은 쓰지 않는다 — AO-P17 전수 검사 |
 | REPLAN | 없음 | TEXT | IN_TRIP 이면 OPEN_REPLAN, 아니면 OPEN_REGENERATE | () | ~~IN_TRIP "남은 일정은 다시 짜기에서 바꿀 수 있어요." / 그 밖에는 REGENERATE 문구 "일정은 만들기 화면에서 다시 만들 수 있어요."~~ **[개정 · 2026-10-19 · 친근한 말투]** IN_TRIP "남은 일정은 다시 짜기에서 지금 상황에 맞게 바꿀 수 있어요. 아래 버튼을 누르면 바로 시작해요." / 그 밖에는 REGENERATE 문구 "일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 누르면 바로 시작해요." | 재계획은 BE 봉투(/planb/replan)가 유일한 정직한 경로(스냅샷에 창·from_instant 없음) |
@@ -453,6 +453,10 @@ env **키**는 둘만 늘고(DEC-AO-13), LLM 배정은 기존 키 `TRIPPILOT_LLM
 ⑤ 실연동 1턴(날씨·다음 장소·대안) 왕복 + `intent_shadow` 1건 확인(§9.4) → DoD
 ⑥ 운영(prd): 시크릿 값은 미결 #1(SHADOW_RATE 0.2). 개발·운영 배포 분리 규칙(develop=dev, main 승격분=prod) 그대로
 ```
+
+**[개정 · 2026-10-19 · 장소 탐색]** 의도 EXPLORE_PLACES(BR-AO-27)는 순서가 **반대**다 — BE 가 먼저(또는 같이) 나가야 한다. 옛 BE 는 응답
+frames 의 `EXPLORE_PLACES` 를 모르는 의도로 읽어(`Intent.valueOf`) 해석 실패 → AI_UNAVAILABLE 폴백으로 답한다(그 사이 탐색 발화만 해당, 다른 의도는 영향 0).
+AI·BE 가 한 PR 이라 develop 머지 뒤 자동 배포가 둘을 함께 올리면 창은 배포 간격뿐이다.
 
 되돌리기는 시크릿 `TRIPPILOT_DIALOGUE_ORCHESTRATOR=off` 한 줄 — off 면 사영이 기존 `DialogueInterpreter` 경로를 그대로 타고 BE 는 종전 `FRAME`
 만 받는다(코드 롤백 불필요). 메모리 테이블은 남지만 쓰는 쪽이 없어 TTL 로 사라진다. feature 배정은 `.env.example` 정본 줄과 DEV 시크릿 **두 곳**이

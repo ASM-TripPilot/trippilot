@@ -907,7 +907,7 @@ def _snapshots(draw) -> TurnSnapshot:
         slots = tuple(SlotView.from_wire(f"{on.isoformat()}#{_U[nm]}", nm if draw(st.booleans()) else None, t, draw(_categories))
                       for nm, t in zip(names, times))
         days.append((on, slots))
-    trip = _TRIP if draw(st.booleans()) else TripInfo("trip-1", (), _D1, _D3, draw(st.sampled_from(["PLANNING", "ENDED"])))
+    trip = draw(st.sampled_from([_TRIP, TripInfo("trip-1", (), _D1, _D3, "PLANNING"), TripInfo("trip-1", (), _D1, _D3, "ENDED"), None]))
     return _snapshot(tuple(days), trip=trip, status=draw(st.sampled_from(["PLANNED", "CONFIRMED", None])))
 
 
@@ -1037,7 +1037,7 @@ def test_explore_region_anchor_ranks_trending_first_and_keeps_out_stays_and_nigh
 
     facts, builder = _explore({"region": "부산 해운대", "theme": "요즘 핫한"})
     (request, _), = builder.requests
-    center, km = region_center("부산 해운대")
+    _, center, km = region_center("부산 해운대")
     assert request.anchor == center and request.radius_override_km == km  # 더 구체적인 '해운대'
     assert facts.kind is AnswerKind.CANDIDATES and facts.status is FactStatus.OK and not facts.needs_trip
     names = _names_of(facts)
@@ -1047,7 +1047,7 @@ def test_explore_region_anchor_ranks_trending_first_and_keeps_out_stays_and_nigh
     assert facts.quick_replies == () and _types(facts) == ["OPEN_PLACE"] * len(names)  # 바꿀 슬롯이 없다 — 고르기 대신 장소 보기
     assert all(c["distanceRange"] is None for c in facts.payload["candidates"])  # 지역 중심에서의 거리는 싣지 않는다
     assert [p.name for p in facts.places] == names  # 문장 재료 = 카드 = 풀 (INV-1)
-    assert facts.detail["anchor"] == "부산 해운대"
+    assert facts.detail == {"anchor": "해운대", "anchor_kind": "region"}  # 표 이름 — theme 같은 발화 원문은 싣지 않는다(INV-2)
 
 
 def test_explore_night_theme_puts_night_view_and_nightlife_first() -> None:
@@ -1072,7 +1072,7 @@ def test_explore_without_region_or_slots_uses_the_trip_destination() -> None:
     from trippilot.domain.region_centers import region_center
 
     facts, builder = _explore({}, snapshot=_snapshot((), trip=_TRIP))
-    assert builder.requests[0][0].anchor == region_center("제주")[0]
+    assert builder.requests[0][0].anchor == region_center("제주")[1]
     assert facts.kind is AnswerKind.CANDIDATES
 
 
@@ -1088,7 +1088,7 @@ def test_explore_without_any_anchor_asks_for_a_region_without_calling_anything()
 def test_explore_unknown_region_is_empty_and_does_not_fall_back_to_the_trip() -> None:
     facts, builder = _explore({"region": "강원도"}, snapshot=_SNAP)
     assert builder.requests == [] and facts.status is FactStatus.EMPTY and facts.kind is AnswerKind.TEXT
-    assert facts.detail == {"region": "강원도"}
+    assert facts.detail == {} and facts.notes  # 발화 원문은 사실 칸에 옮기지 않는다
 
 
 @pytest.mark.parametrize("kw", [{"raise_": True}, {"pool": _pool()}])
@@ -1096,3 +1096,56 @@ def test_explore_pool_failure_is_unavailable_and_empty_pool_is_empty(kw) -> None
     facts, _ = _explore({"region": "부산"}, **kw)
     assert facts.kind is AnswerKind.TEXT
     assert facts.status is (FactStatus.UNAVAILABLE if kw.get("raise_") else FactStatus.EMPTY)
+
+
+
+def test_alternative_candidates_need_a_pick_each_but_explore_candidates_have_none() -> None:
+    """모양 검사는 "고르기 버튼이 전부 있거나 전부 없다"(탐색) — 대안만은 Facts 가 후보마다 하나를 다시 조인다(BR-AO-20)."""
+    cand = {"candidates": [{"poiId": "p", "name": "n", "reason": "r"}]}
+    with pytest.raises(ValueError):
+        _text_facts(intent=Intent.SUGGEST_ALTERNATIVE, kind=AnswerKind.CANDIDATES, payload=cand)
+    assert _text_facts(intent=Intent.EXPLORE_PLACES, kind=AnswerKind.CANDIDATES, payload=cand).quick_replies == ()
+
+
+def test_explore_asks_for_a_region_only_when_no_anchor_can_be_found() -> None:
+    ask = HANDLERS[Intent.EXPLORE_PLACES].ask
+    nothing = _ctx(_snapshot((), trip=None, status=None), ports=HandlerPorts(poi_info=_PoiInfo()))
+    assert ask(nothing)[0] == "region"
+    assert ask(_ctx(_snapshot((), trip=None, status=None), {"region": "강원도"})) is None  # 말했으면 묻지 않는다 — 못 찾으면 EMPTY
+    assert ask(_ctx(_SNAP, ports=HandlerPorts(poi_info=_PoiInfo()))) is None  # 일정 근처
+    assert ask(_ctx(_snapshot((), trip=_TRIP))) is None  # 여행 목적지
+    assert all(HANDLERS[i].ask is None for i in HANDLERS if i is not Intent.EXPLORE_PLACES)
+
+
+# ── EXPLORE_PLACES PBT (BR-AO-27) — 후보는 풀 안·≤5·결정론·입력 순서 무관, 숙소 0, 밤 주제가 아니면 나이트라이프 0, 종류 필터·한 종류 ≤2 ──
+
+
+_X_CATS = sorted(PoiCategory, key=lambda c: c.value)
+
+
+@st.composite
+def _explore_pois(draw) -> list[Poi]:
+    n = draw(st.integers(0, 14))
+    return [Poi(poi_id=PoiId(str(uuid.uuid5(uuid.NAMESPACE_DNS, f"pbt-{i}"))), name=draw(st.sampled_from(["감천문화마을", "흰여울 카페", "x", "루프탑 바"])) + str(i),
+                category=draw(st.sampled_from(_X_CATS)), coord=GeoPoint(35.1, 129.0), open_hours=(), avg_cost=None,
+                rating=draw(st.one_of(st.none(), st.floats(0, 5))), quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None,
+                saved_count=draw(st.integers(0, 50)), tags=tuple(draw(st.lists(st.sampled_from(["요즘 인기", "나이트라이프", "야경", "오션뷰"]), max_size=2, unique=True))))
+            for i in range(n)]
+
+
+@settings(max_examples=200, deadline=None)
+@given(pois=_explore_pois(), category=st.one_of(st.none(), st.sampled_from([c.value for c in _X_CATS if c is not PoiCategory.STAY])),
+       theme=st.one_of(st.none(), st.sampled_from(["요즘 핫한", "야경", "분위기 좋은 바", "오션뷰", "조용한"])), data=st.data())
+def test_explore_rank_stays_inside_the_pool_and_obeys_its_filters(pois, category, theme, data) -> None:
+    picked = dh._explore_rank(pois, category, theme)
+    ids = [p.poi_id for p in picked]
+    assert len(picked) <= dh.MAX_CANDIDATES and len(set(ids)) == len(ids) and set(ids) <= {p.poi_id for p in pois}  # INV-1
+    assert picked == dh._explore_rank(data.draw(st.permutations(pois)), category, theme)  # 입력 순서 무관 결정론
+    assert all(p.category is not PoiCategory.STAY for p in picked)
+    night = bool(theme and dh._NIGHT.search(theme)) or category == PoiCategory.NIGHT_VIEW.value
+    if not night:
+        assert all("나이트라이프" not in p.tags for p in picked)
+    if category is not None:
+        assert all(p.category.value == category for p in picked)
+    else:
+        assert all(sum(1 for q in picked if q.category is p.category) <= 2 for p in picked)

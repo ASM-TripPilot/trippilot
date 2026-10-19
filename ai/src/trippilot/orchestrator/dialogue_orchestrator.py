@@ -47,7 +47,7 @@ from datetime import date, datetime, tzinfo
 from trippilot.agents.schedule.agent import Clock
 from trippilot.domain.common import TraceId
 from trippilot.domain.context import PermissionDeniedError
-from trippilot.domain.intent import DIALOGUE_INTENTS, Intent, IntentDraft, IntentMatch, MatchRoute
+from trippilot.domain.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent, IntentDraft, IntentMatch, MatchRoute
 from trippilot.domain.observability import FallbackEvent
 from trippilot.llm_gateway.gates.base import has_injection_like
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, clock_spans, clock_times
@@ -75,6 +75,7 @@ from trippilot.orchestrator.dialogue_interpreter import (
     Clarify,
     DialogueContext,
     Frame,
+    PendingFrame,
     TripView,
     answer_pending,
     from_match,
@@ -440,7 +441,8 @@ _PLACE_LIKE = re.compile(r"[가-힣]{1,20}?(?:시장|공원|타워|해수욕장|
 def _known_names(facts: Facts, snapshot: TurnSnapshot) -> tuple[str, ...]:
     names = [p.name for p in facts.places] + [s.name for _, s in snapshot.slots() if s.name]
     names += [v for v in (facts.detail.get("target"), facts.detail.get("anchor")) if isinstance(v, str)]
-    return tuple(normalize(n).replace(" ", "") for n in names if n)
+    known = (normalize(n).replace(" ", "") for n in names if n)
+    return tuple(k for k in known if k)  # 빈 이름은 뺀다 — "" 는 모든 낱말의 접두라 검사가 꺼진다
 
 
 def _foreign_place(text: str, known: Sequence[str]) -> bool:
@@ -578,6 +580,14 @@ class DialogueOrchestrator:
         if handler.handoff_frame:  # EDIT_SCHEDULE — 1단계 FRAME (BR-AO-17): 인자만 정리하고 BE 제안 경로로
             tidy = replace(frame, arguments=edit_arguments(ctx))
             return TurnOutcome("FRAME", (tidy,), None, None, cleared, 0, interp.reason)
+        # 3′ — 조건부 필수 인자(BR-AO-27, 탐색의 지역): 3단계와 같은 요청당 1회 — 되묻기의 답으로 온 프레임에는 다시 묻지 않는다
+        ask = handler.ask(ctx) if handler.ask is not None and frame.match_route != "CLARIFY_ANSWER" else None
+        if ask is not None:
+            argument, question = ask
+            pending = PendingFrame(frame.intent, dict(frame.arguments), argument, frame.confidence)
+            return TurnOutcome(
+                "ARGUMENT_CLARIFY", (replace(frame, missing=(argument,)),), Clarify(0, argument, question, None), None,
+                DialogueContext(pending=pending, turn_index=inp.context.turn_index, clarify_count=1), 0, interp.reason)
         # 4 — 팬아웃 → Facts (순수 조립)
         results = self._fanout(inp, handler.plan(ctx))
         facts = handler.assemble(ctx, results)
@@ -626,10 +636,13 @@ class DialogueOrchestrator:
                         intent=draft.intent, slots=dict(draft.slots), confidence=max(0.0, min(1.0, confidence)),
                         match_route=MatchRoute.LLM_DIRECT,
                     )
-        self._submit_shadow(
-            inp, match if match is not None else _fallback_match(reason or "intent_fallback"),
-            service_ms=self._clock.monotonic_ms() - started, service_llm_calls=counter[0] - calls_before,
-        )
+        # 섀도(3단 라우터)는 13종 어휘라 도우미 전용 의도(탐색)를 낼 수 없다 — 내면 일치율이 탐색 비중만큼 구조적으로 깎이고 섀도
+        # LLM 만 쓴다. 비교할 수 있는 턴만 넘긴다(BR-AO-27)
+        if match is None or match.intent in ROUTABLE_INTENTS:
+            self._submit_shadow(
+                inp, match if match is not None else _fallback_match(reason or "intent_fallback"),
+                service_ms=self._clock.monotonic_ms() - started, service_llm_calls=counter[0] - calls_before,
+            )
         return match, reason
 
     def _submit_shadow(self, inp: TurnInput, service: IntentMatch, *, service_ms: int, service_llm_calls: int) -> None:

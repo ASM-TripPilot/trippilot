@@ -5,8 +5,8 @@ from trippilot.domain.region_centers import region_center
 
 
 def test_most_specific_name_wins_and_unknown_is_none() -> None:
-    assert region_center("부산 해운대") == (GeoPoint(35.1631, 129.1635), 3.0)  # '부산'보다 긴 '해운대'
-    assert region_center("제주 애월") == (GeoPoint(33.4628, 126.3316), 4.0)
-    assert region_center("서울특별시") == region_center("서울")
+    assert region_center("부산 해운대") == ("해운대", GeoPoint(35.1631, 129.1635), 3.0)  # 반경이 작은(구체적인) 쪽
+    assert region_center("제주 애월") == ("애월", GeoPoint(33.4628, 126.3316), 4.0)  # 같은 두 글자 — 길이로는 못 가른다
+    assert region_center("서울특별시 22:00") == region_center("서울")  # 이름은 표의 것 — 발화 원문이 아니다
     assert region_center("강원도") is None  # 도 이름은 한 점으로 대표할 수 없다
     assert region_center("") is None
