@@ -3,6 +3,7 @@ package com.trippilot.auth.adapter.`in`.web
 import com.trippilot.auth.application.SocialTokenLoginCommand
 import com.trippilot.auth.domain.Provider
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Size
 import java.util.UUID
 
 /**
@@ -13,6 +14,8 @@ data class SocialTokenLoginRequest(
     @field:NotBlank
     val accessToken: String,
     val ageConfirmation: SocialLoginRequest.AgeConfirmation? = null,
+    // 세션 컬럼(auth_session.device_id varchar(128))과 같은 상한 — 여기서 막지 않으면 저장에서 22001 → 500.
+    @field:Size(max = 128, message = "deviceId 는 128자 이하입니다.")
     val deviceId: String? = null,
     /**
      * 선택 — **애플만** 쓴다(TRIP-933). 로그인은 [accessToken](identityToken)으로 끝나고, 이 code 는 계정

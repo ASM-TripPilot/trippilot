@@ -130,6 +130,38 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     }
 
     /**
+     * 기기 식별자는 세션 컬럼(`auth_session.device_id varchar(128)`)에 그대로 들어간다. 요청에서 막지 않으면
+     * 저장에서 22001 이 나 로그인 트랜잭션 전체가 롤백되고 **500** 이 나간다 — 클라이언트 탓인데 서버 장애로 보인다.
+     */
+    @Test
+    fun `deviceId 가 128자를 넘으면 두 로그인 경로 모두 400 — 500 이 아니다`() {
+        val tooLong = "d".repeat(129)
+        val (codeStatus, codeBody) = post(
+            "/api/v1/auth/social/kakao",
+            """{"authorizationCode":"code","codeVerifier":"verifier","redirectUri":"trippilot://auth","ageConfirmation":{"method":"SELF_DECLARED"},"deviceId":"$tooLong"}""",
+        )
+        val (tokenStatus, tokenBody) = post(
+            "/api/v1/auth/social/kakao/token",
+            """{"accessToken":"sdk-access-token","ageConfirmation":{"method":"SELF_DECLARED"},"deviceId":"$tooLong"}""",
+        )
+
+        codeStatus shouldBe 400
+        codeBody["error"]["code"].asText() shouldBe "VALIDATION_ERROR"
+        tokenStatus shouldBe 400
+        tokenBody["error"]["code"].asText() shouldBe "VALIDATION_ERROR"
+    }
+
+    @Test
+    fun `deviceId 128자는 받는다 — 상한 경계`() {
+        val (status, _) = post(
+            "/api/v1/auth/social/kakao/token",
+            """{"accessToken":"sdk-access-token","ageConfirmation":{"method":"SELF_DECLARED"},"deviceId":"${"d".repeat(128)}"}""",
+        )
+
+        status shouldBe 200
+    }
+
+    /**
      * BR-U0-05 — "미충족 **422**, 계정 미생성". 오래도록 403 이 나가고 있었다(TRIP-249).
      *
      * 403 이면 클라이언트는 "권한 문제"로 읽어 재로그인·권한요청으로 유도한다 — 나이는 그걸로 바뀌지 않는다.
