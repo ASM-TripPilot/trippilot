@@ -18,6 +18,7 @@ import argparse
 import datetime as dt
 import os
 import sys
+import time
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -40,6 +41,7 @@ LDONG_REGION = {
     "11": "서울", "26": "부산", "27": "대구", "28": "인천", "29": "광주", "30": "대전",
     "31": "울산", "36": "세종", "41": "경기", "42": "강원", "51": "강원", "43": "충북",
     "44": "충남", "45": "전북", "52": "전북", "46": "전남", "47": "경북", "48": "경남", "50": "제주",
+    "12": "전남",   # 전남광주통합특별시(광주·전남 통합) — 10-18 탐침: 옛 29·46 은 0건
 }
 
 
@@ -59,9 +61,21 @@ def _coord(item: dict) -> GeoPoint | None:
     return GeoPoint(lat, lng) if lat and lng else None
 
 
+# 주소 첫 낱말 → 지역 — 법정동 코드가 비어 오는 항목의 보충(10-18 첫 실행: 220건 중 24건, 전남·광주 0건).
+_ADDR_REGION = {
+    "서울": "서울", "부산": "부산", "대구": "대구", "인천": "인천", "광주": "광주", "대전": "대전",
+    "울산": "울산", "세종": "세종", "경기": "경기", "강원": "강원", "충청북도": "충북", "충북": "충북",
+    "충청남도": "충남", "충남": "충남", "전라북도": "전북", "전북": "전북", "전라남도": "전남",
+    "전남": "전남", "경상북도": "경북", "경북": "경북", "경상남도": "경남", "경남": "경남", "제주": "제주",
+}
+
+
 def region_of(item: dict) -> str | None:
-    """`lDongRegnCd`(앞 두 자리)로 지역. 모르는 코드는 None — 지역을 지어내지 않는다."""
-    return LDONG_REGION.get(str(item.get("lDongRegnCd") or "")[:2])
+    """`lDongRegnCd`(앞 두 자리)로 지역, 비었으면 주소 첫 낱말로. 둘 다 모르면 None — 지어내지 않는다."""
+    if (region := LDONG_REGION.get(str(item.get("lDongRegnCd") or "")[:2])):
+        return region
+    head = (str(item.get("addr1") or "").split() or [""])[0]
+    return next((r for prefix, r in _ADDR_REGION.items() if head.startswith(prefix)), None)
 
 
 def to_event(item: dict, today: dt.date) -> EventInfo | None:
@@ -76,17 +90,21 @@ def to_event(item: dict, today: dt.date) -> EventInfo | None:
 
 
 def fetch_page(adapter: TourApiAdapter, open_from: str, page: int,
-               attempts: int = 2) -> tuple[list[dict], int] | None:
+               attempts: int = 3, pause_sec: float = 5.0) -> tuple[list[dict], int] | None:
     """한 쪽을 받는다 — 실패하면 한 번 더, 그래도 실패면 None(경고 로그).
 
     data.go.kr 은 GitHub 러너에서 SSL 핸드셰이크가 가끔 끊긴다 — POI 수집도 같은 오류로 쪽을
     건너뛴다(10-17 런). 첫 실행이 첫 호출에서 이걸 맞아 통째로 날아갔다(10-18, #1336).
+    끊김은 몇 초씩 이어진다 — 바로 다시 부르면 또 끊겼다(10-18 run 39135854660: 2회 연속).
+    그래서 시도 사이를 점점 벌린다(5s·10s). 받지 못한 날도 저장소의 어제 것은 그대로 남는다.
     """
     for n in range(1, attempts + 1):
         try:
             return adapter.search_festivals(open_from, page, ROWS)
         except SourcingError as e:
             print(f"[festivals] WARNING {page}쪽 실패({n}/{attempts}): {e}", file=sys.stderr)
+            if n < attempts:
+                time.sleep(pause_sec * n)
     return None
 
 

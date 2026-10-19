@@ -1,5 +1,6 @@
 package com.trippilot.assistant.application
 
+import com.trippilot.assistant.api.event.DialogueForgetRequested
 import com.trippilot.assistant.domain.AssistantMessage
 import com.trippilot.assistant.domain.AssistantMessageRepository
 import com.trippilot.assistant.domain.AssistantSession
@@ -7,11 +8,12 @@ import com.trippilot.assistant.domain.AssistantSessionRepository
 import com.trippilot.assistant.domain.DialogueMemoryPort
 import com.trippilot.assistant.domain.QuickReply
 import com.trippilot.core.error.FieldError
+import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.trip.api.TripListFacade
-import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 import java.time.Instant
 import java.util.UUID
@@ -29,6 +31,7 @@ class AssistantSessionService(
     private val tripList: TripListFacade,
     private val properties: AssistantProperties,
     private val memory: DialogueMemoryPort,
+    private val events: DomainEventPublisher,
     private val clock: Clock,
 ) {
     /**
@@ -78,8 +81,9 @@ class AssistantSessionService(
     /**
      * 여행이 지워졌다 — 그 여행의 대화를 지운다(FD §2.2). 같은 이벤트가 두 번 와도 결과가 같다.
      * 상대 요약도 함께 지운다(DE §4.1) — 대화가 이미 없어도 부른다: 앞선 파기가 실패했을 수 있고, 없으면 0 이다.
+     * **실패는 올린다** — 아웃박스 구독(`TripDeletedSubscriber`)에서 불리므로 릴레이가 재시도한다(미결 #13). 대화 삭제는 멱등이다.
      */
-    fun deleteForTrip(tripId: UUID): Int = sessions.deleteByTrip(tripId).also { forget("trip") { memory.deleteByTrip(tripId) } }
+    fun deleteForTrip(tripId: UUID): Int = sessions.deleteByTrip(tripId).also { memory.deleteByTrip(tripId) }
 
     /**
      * [before] 는 앞 응답의 `nextBefore` 를 그대로 돌려보내는 불투명 커서다.
@@ -105,19 +109,14 @@ class AssistantSessionService(
      * 대화를 지운다(hard delete — 메시지·제안이 함께 간다, DATA-U8-05). 이미 적용된 일정 변경과 그 이력은
      * 남는다(BR-U8-20). **멱등하다** — 없거나 남의 세션이어도 조용히 끝난다: 재시도한 삭제가 오류로 보일
      * 이유가 없고, 지워진 것이 없으니 새는 것도 없다.
+     *
+     * 상대 요약 파기는 **아웃박스로** 맡긴다(같은 트랜잭션) — 상대가 잠깐 불통이어도 재시도한다(미결 #13). 응답은 상대를 기다리지 않는다.
      */
+    @Transactional
     fun clear(accountId: UUID, sessionId: UUID) {
         // 실제로 지운 대화의 상대 요약만 지운다 — 세션 id 를 안다고 남의 기억을 지우게 두지 않는다(0행이면 내 것이 아니었거나 이미 없다).
         if (sessions.delete(accountId, sessionId) == 0) return
-        forget("session") { memory.deleteBySession(sessionId) }
-    }
-
-    /**
-     * 상대 메모리 파기는 **최선 노력**이다(BR-AO-10) — 실패해도 대화는 이미 지워졌고, 상대 TTL(90일)이 백스톱이다.
-     * 그 창("지웠는데 기억한다")은 미결 #13. 조용히 삼키지 않고 WARN 으로 남긴다(INV-4). 식별자는 싣지 않는다.
-     */
-    private fun forget(what: String, call: () -> Int) {
-        runCatching(call).onFailure { log.warn("도우미 상대 메모리 파기 실패({}) — 상대 TTL 이 백스톱입니다. type={}", what, it.javaClass.simpleName) }
+        events.publish(DialogueForgetRequested(sessionId.toString()))
     }
 
     companion object {
@@ -125,7 +124,6 @@ class AssistantSessionService(
         const val MAX_PAGE = 100
         private const val MAX_SESSIONS = 50
         private const val MAX_TRIPS = 200
-        private val log = LoggerFactory.getLogger(AssistantSessionService::class.java)
     }
 }
 

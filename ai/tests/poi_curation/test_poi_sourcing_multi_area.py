@@ -32,10 +32,11 @@ from trippilot.poi_curation.sourcing.state import (
     parse_state,
     state_to_dict,
 )
-from trippilot.poi_curation.sourcing.tourapi import TourApiAdapter
+from trippilot.poi_curation.sourcing.tourapi import LDONG_BY_AREA, TourApiAdapter
 
 from tests.fakes.fake_tourapi_http import (
     FakeTourApiHttp,
+    area_of,
     envelope,
     intro_item,
     list_item,
@@ -67,7 +68,7 @@ def _tiny(area: str) -> dict:
 def _area_calls(http: FakeTourApiHttp) -> dict[str, int]:
     counts: dict[str, int] = {}
     for _, params in http.calls:
-        area = params["areaCode"]
+        area = area_of(params)
         counts[area] = counts.get(area, 0) + 1
     return counts
 
@@ -100,7 +101,7 @@ def test_division_remainder_follows_rotation_pointer() -> None:
                            content_types=["12"], max_calls=7,
                            state=CollectState(next_area="2"))
     assert _area_calls(http) == {"2": 3, "39": 2, "1": 2}
-    assert http.calls[0][1]["areaCode"] == "2"       # 시작 지역 = 포인터
+    assert area_of(http.calls[0][1]) == "2"       # 시작 지역 = 포인터
     assert result.next_state.next_area == "39"       # 다음 실행은 그 다음 지역부터
 
 
@@ -126,7 +127,7 @@ def test_pointer_rotates_each_run_and_survives_state_roundtrip() -> None:
         return http, result
 
     http1, first = run(None)                          # 포인터 없음 → 목록 처음부터
-    assert http1.calls[0][1]["areaCode"] == "1"
+    assert area_of(http1.calls[0][1]) == "1"
     assert first.next_state.next_area == "2"
 
     # 직렬화 → 파싱 왕복 (스크립트 기록 경로와 동일한 형태)
@@ -135,11 +136,11 @@ def test_pointer_rotates_each_run_and_survives_state_roundtrip() -> None:
     assert restored.next_area == "2"
 
     http2, second = run(restored)
-    assert http2.calls[0][1]["areaCode"] == "2"       # 다음 실행은 다음 지역부터
+    assert area_of(http2.calls[0][1]) == "2"       # 다음 실행은 다음 지역부터
     assert second.next_state.next_area == "39"
 
     http3, third = run(second.next_state)
-    assert http3.calls[0][1]["areaCode"] == "39"
+    assert area_of(http3.calls[0][1]) == "39"
     assert third.next_state.next_area == "1"          # 순환 (wrap-around)
 
 
@@ -149,7 +150,7 @@ def test_pointer_area_missing_from_list_starts_from_head() -> None:
     result = collect_areas(_adapter(http), area_codes=["1", "2"],
                            content_types=["12"], max_calls=2,
                            state=CollectState(next_area="99"))
-    assert http.calls[0][1]["areaCode"] == "1"
+    assert area_of(http.calls[0][1]) == "1"
     assert result.next_state.next_area == "2"
 
 
@@ -182,17 +183,23 @@ def test_completed_area_visited_last_with_leftover_budget() -> None:
     http = FakeTourApiHttp(pages={**_tiny("1"), **_tiny("2")})
     result = collect_areas(_adapter(http), area_codes=["1", "2"],
                            content_types=["12"], max_calls=4, state=state)
-    assert [p["areaCode"] for _, p in http.calls] == ["2", "1"]
+    assert [area_of(p) for _, p in http.calls] == ["2", "1"]
     assert [a for a, _ in result.area_results] == ["2", "1"]
 
 
 # ── ⑤ env 해석 — 단수 하위호환 · 기본 17개 ───────────────────────
-def test_resolve_defaults_to_all_17_metro_areas() -> None:
+def test_resolve_defaults_to_all_metro_areas_once() -> None:
+    """광역 17곳 — 광주(5)는 전남(38)과 같은 법정동 코드(12, 전남광주통합특별시)라 한 번만 받는다."""
     codes = resolve_area_codes(None, None)
-    assert codes == ["1", "2", "3", "4", "5", "6", "7", "8", "31", "32", "33",
+    assert codes == ["1", "2", "3", "4", "6", "7", "8", "31", "32", "33",
                      "34", "35", "36", "37", "38", "39"]
     assert codes == list(DEFAULT_AREA_CODES)
     assert AREA_NAMES["39"] == "제주" and AREA_NAMES["1"] == "서울"
+    # 실호출 표본 주소로 바로잡은 라벨(10-18): 36 경상남도 · 37 전북특별자치도 · 38 전남광주
+    assert (AREA_NAMES["36"], AREA_NAMES["37"], AREA_NAMES["38"]) == ("경남", "전북", "전남")
+    # 조회는 법정동 코드 — 기본 순회의 코드가 서로 겹치지 않는다(같은 목록을 두 번 받지 않는다)
+    ldong = [LDONG_BY_AREA[c] for c in codes]
+    assert len(ldong) == len(set(ldong))
 
 
 def test_resolve_singular_env_wins_for_backward_compat() -> None:

@@ -58,7 +58,9 @@ def test_축제_목록은_searchFestival2_를_키와_함께_부른다() -> None:
 def test_지역은_법정동_시도_코드로_읽고_모르는_코드는_지어내지_않는다() -> None:
     assert region_of(_item(lDongRegnCd="50")) == "제주"
     assert region_of(_item(lDongRegnCd="51")) == region_of(_item(lDongRegnCd="42")) == "강원"
-    assert region_of(_item(lDongRegnCd="")) is None
+    assert region_of(_item(lDongRegnCd="", addr1="전라남도 여수시 돌산읍")) == "전남"   # 코드가 비면 주소로
+    assert region_of(_item(lDongRegnCd="", addr1="광주광역시 동구")) == "광주"
+    assert region_of(_item(lDongRegnCd="", addr1="")) is None
 
 
 class _Flaky:
@@ -75,7 +77,7 @@ class _Flaky:
         return [_item()], 1
 
 
-def test_한_번_끊기면_다시_받고_두_번_끊기면_그_쪽만_건너뛴다() -> None:
+def test_끊기면_간격을_두고_다시_받고_세_번_끊기면_그_쪽만_건너뛴다() -> None:
     from collect_tourapi_festivals import fetch_page
-    assert fetch_page(_Flaky(1), "20261018", 1) == ([_item()], 1)
-    assert fetch_page(_Flaky(2), "20261018", 1) is None
+    assert fetch_page(_Flaky(2), "20261018", 1, pause_sec=0) == ([_item()], 1)   # 두 번 끊겨도 세 번째에
+    assert fetch_page(_Flaky(3), "20261018", 1, pause_sec=0) is None
