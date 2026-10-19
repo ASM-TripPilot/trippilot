@@ -13,16 +13,19 @@
   ⑥ 시한의 70%를 넘기면 거기서 멈추고 부분 결과 + `poi_lookup_partial: deadline` (시한 미지정 = 제약 없음)
   ⑦ 반경 조회는 슬롯 8개까지, 요청 순서대로 — 넘치면 `poi_lookup_partial: slot_cap`
   ⑧ 요청 검증 422: 슬롯 0개·31개, 일정 장소 301개, 모르는 키
+  ⑨ [PBT] 요청·응답 스키마는 JSON 왕복에서 값이 보존된다 (situation-awareness NFR §8 — PBT-02 왕복 ③)
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import replace
-from datetime import date, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from trippilot.api import opportunities, schemas
 from trippilot.api.app import create_app
@@ -289,3 +292,33 @@ def test_계약_밖_요청은_422(over: dict) -> None:
     response = _post(build_dev_app(poi_db=InMemoryPoi(_POIS)), _body(**over))
 
     assert response.status_code == 422, response.text
+
+
+# ── ⑨ 스키마 왕복 (PBT) ──────────────────────────────────────────────
+
+_texts = st.text(min_size=1, max_size=12)
+_dates = st.dates(date(2000, 1, 1), date(2100, 12, 31))
+_metas = st.builds(
+    schemas.RequestMetaSchema, request_id=_texts,
+    requested_at=st.datetimes(datetime(2000, 1, 1), datetime(2100, 1, 1),
+                              timezones=st.sampled_from((None, timezone.utc, _KST))),
+    deadline_ms=st.none() | st.integers(1, 600_000))
+_slots = st.builds(
+    schemas.OpportunitySlotSchema, slot_key=st.text(min_size=1, max_size=80), poi_id=_texts,
+    coord=st.builds(schemas.CoordSchema, lat=st.floats(-90, 90), lng=st.floats(-180, 180)))
+_requests = st.builds(
+    schemas.OpportunitiesRequest, date=_dates, slots=st.lists(_slots, min_size=1, max_size=30),
+    planned_poi_ids=st.lists(_texts, max_size=8), request_meta=_metas)
+_cards = st.builds(
+    schemas.OpportunitySchema, key=_texts, kind=st.sampled_from(("EVENT_VENUE", "EVENT_NEARBY", "TRENDING")),
+    event_name=st.none() | _texts, start=st.none() | _dates, end=st.none() | _dates, poi_id=_texts,
+    poi_name=_texts, near_slot_key=_texts, distance_label=_texts)
+_responses = st.builds(
+    schemas.OpportunitiesResponse, opportunities=st.lists(_cards, max_size=3), notes=st.lists(_texts, max_size=4))
+
+
+@settings(max_examples=300, deadline=None)
+@given(st.one_of(_requests, _responses))
+def test_PBT_요청과_응답은_JSON_왕복에서_값이_보존된다(model) -> None:
+    """백엔드가 보내고 받는 와이어 그대로 — 날짜·시각대·None·kind 리터럴·최대 3장이 손실 없이 돌아온다."""
+    assert type(model).model_validate_json(model.model_dump_json()) == model
