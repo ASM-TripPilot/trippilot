@@ -42,6 +42,8 @@ subprojects {
 
     tasks.withType<Test>().configureEach {
         useJUnitPlatform()
+        // 계측은 우리 코드만 — 안 좁히면 Spring·Hibernate·Jackson 클래스까지 로딩마다 계측한다(리포트는 안 쓴다).
+        extensions.configure<JacocoTaskExtension> { includes = listOf("com.trippilot.*") }
         // **테스트 JVM 은 Gradle 데몬과 별도 프로세스라 `org.gradle.jvmargs` 를 안 물려받는다.**
         // 기본 512m 으로는 Spring 컨텍스트 + Testcontainers 가 든 IT 에서 OOM 이 난다
         // (2026-09-25 실측 — `TokenRefreshControllerIT` 가 `EnumSet.java:118` 에서 죽었다).

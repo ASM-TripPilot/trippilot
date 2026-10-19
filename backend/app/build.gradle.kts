@@ -98,3 +98,11 @@ tasks.named<Test>("test") {
 
 // 합산 리포트는 기본이 HTML 뿐이다 — 하한선 스크립트(scripts/coverage_gate.py)가 읽을 XML 을 켠다.
 tasks.withType<JacocoReport>().configureEach { reports.xml.required = true }
+
+// 커버리지 하한선 — 판정은 scripts/coverage_gate.py(모듈별 바닥이 필요해서 내장 Verification 대신).
+// 리포트 태스크 뒤에 붙여 **방금 만든 리포트로만** 판정한다. 스크립트를 따로 부르면 옛 XML 을 읽을 수 있다.
+tasks.register<Exec>("coverageGate") {
+    dependsOn("testCodeCoverageReport")
+    workingDir = rootDir
+    commandLine("python3", "scripts/coverage_gate.py")
+}

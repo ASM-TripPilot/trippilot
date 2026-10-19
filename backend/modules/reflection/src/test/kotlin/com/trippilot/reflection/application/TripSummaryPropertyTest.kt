@@ -33,6 +33,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.UUID
+import com.trippilot.testsupport.declaredFieldNames
 
 /**
  * 여행 요약의 **블로킹 게이트**(PBT-U5-1 · PBT-U5-5).
@@ -247,7 +248,7 @@ class TripSummaryPropertyTest : StringSpec({
     "PBT-U5-5 요약 수치에 소요시간 필드가 없다(INV-3)" {
         val forbidden = listOf("duration", "minutes", "eta", "travelTime", "dwell")
 
-        val fields = TripSummaryStats::class.java.declaredFields.filterNot { f -> f.isSynthetic }.map { it.name }
+        val fields = TripSummaryStats::class.java.declaredFieldNames()
 
         fields.filter { f -> forbidden.any { f.contains(it, ignoreCase = true) } }.shouldBeEmpty()
     }

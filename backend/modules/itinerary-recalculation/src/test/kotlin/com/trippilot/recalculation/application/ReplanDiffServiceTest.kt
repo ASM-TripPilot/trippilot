@@ -33,6 +33,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.util.UUID
+import com.trippilot.testsupport.declaredFieldNames
 
 /**
  * 확정 전 전후 비교(US-PLANB-08 · BR-U4-25·29 · TRIP-559).
@@ -363,7 +364,7 @@ class ReplanDiffServiceTest : StringSpec({
         val fields = listOf(
             ReplanDiffResponse::class, ReplanDiffSlotResponse::class,
             ReplanDiffEntryResponse::class, ReplanImpactResponse::class,
-        ).flatMap { it.java.declaredFields.filterNot { f -> f.isSynthetic }.map { f -> f.name } }
+        ).flatMap { it.java.declaredFieldNames() }
 
         val hits = fields.filter { f -> forbidden.any { f.contains(it, ignoreCase = true) } }
 

@@ -36,15 +36,16 @@ jobs:
           # (실측 ~4분/회 × 하루 20회+). buildkit mode=min 전환으로 캐시 자리를 먼저 비웠다 —
           # 10GB 상한이 꽉 찬 상태에서 붙이면 도커 레이어에 밀려 바로 증발한다.
           cache: gradle
-      # 커버리지 합산(`:app:testCodeCoverageReport`)을 **같은 호출에** 싣는다 — 따로 부르면 Gradle JVM·설정
-      # 단계를 한 번 더 거치고, test 하나라도 up-to-date 가 아니면 전체 테스트가 다시 돈다.
-      - name: gradle build (test 포함) + 커버리지 합산
+      - name: 커버리지 게이트 스크립트 검사
         working-directory: backend
-        run: ./gradlew build :app:testCodeCoverageReport --no-daemon
-      # 하한선(전체·모듈별)과 래칫 규칙은 scripts/coverage_gate.py. 표는 잡 요약(Summary 탭)에 남는다.
-      - name: 커버리지 하한선
+        run: python3 -m unittest scripts/test_coverage_gate.py
+      # 커버리지를 build 와 **같은 Gradle 호출에** 싣는다 — JVM 기동·설정 단계를 한 번만 거친다.
+      # 하한선 판정(`:app:coverageGate`, 규칙은 scripts/coverage_gate.py)은 **PR 에서만** 건다. develop push 에서
+      # 실패하면 이미 머지된 코드의 이미지 발행(image 잡)까지 막히기 때문이다 — push 는 리포트만 만든다.
+      # 표와 실패 사유는 잡 요약(Summary 탭)에 남는다.
+      - name: gradle build (test 포함) + 커버리지
         working-directory: backend
-        run: python3 scripts/coverage_gate.py
+        run: ./gradlew build ${{ github.event_name == 'pull_request' && ':app:coverageGate' || ':app:testCodeCoverageReport' }} --no-daemon
       - name: 커버리지 리포트 보관
         if: always()
         uses: actions/upload-artifact@v4

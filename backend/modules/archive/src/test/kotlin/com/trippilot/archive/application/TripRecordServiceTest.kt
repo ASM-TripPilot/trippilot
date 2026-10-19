@@ -27,6 +27,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.util.UUID
+import com.trippilot.testsupport.declaredFieldNames
 
 /**
  * 3종 비교(BR-U5-01·08·25·26·27·28).
@@ -196,7 +197,7 @@ class TripRecordServiceTest : StringSpec({
         val visit = svc.compare(acc, tripId).days.single().actual.single()
 
         // 필드 자체가 없어야 한다 — 값이 0/null 인 것과 다르다.
-        ActualVisitRecord::class.java.declaredFields.filterNot { f -> f.isSynthetic }.map { it.name }
+        ActualVisitRecord::class.java.declaredFieldNames()
             .none { it.contains("dwell", ignoreCase = true) } shouldBe true
         visit.completedAt shouldBe Instant.parse("2026-08-11T05:00:00Z")
     }
