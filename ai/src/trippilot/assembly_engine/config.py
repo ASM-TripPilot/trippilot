@@ -139,9 +139,10 @@ class AssemblyConfig:
     detour_factor: float = 1.3          # 직선거리 우회계수
     # 대중교통 요청이라도 이 거리(직선, km) 이하는 걷는다 — 계산상 대중교통이 빨라도.
     # 정류장까지 걸어가 기다리고 갈아타는 수고는 buffer_min 하나로 다 담기지 않고,
-    # 사람은 600m 를 버스로 가지 않는다. 현재 상수에서 손익분기(직선 약 0.7km)보다
-    # 안쪽이라 지금은 min() 과 결론이 같지만, 속도 상수가 바뀌어도 이 바닥은 유지된다.
-    public_walk_max_km: float = 0.6
+    # 사람은 600m 를 버스로 가지 않는다. 속도 상수가 바뀌어도 이 바닥은 유지된다.
+    # 2026-10-19 사용자 결정 0.6 → 0.7: "700m 이하면 그냥 걸어가게, 대중교통이랑 도보랑 섞는 거지".
+    # ODsay 가 -98 로 거절하는 거리(adapters/odsay `_MIN_KM`)와 같아서, 실측을 못 받는 구간은 전부 걷는다.
+    public_walk_max_km: float = 0.7
     speeds_kmph: dict[TransportMode, float] = field(default_factory=_default_speeds)
     # 긴 구간은 앞 `long_leg_km` 만 도시 속도, 나머지는 `long_speeds_kmph` 로 잰다(구간별 합 — 경계에서
     # 시간이 튀지 않는다). 도시 속도로만 재면 제주시 → 성산 38km 가 240분(실제 약 1.5~2시간)이라 이동
