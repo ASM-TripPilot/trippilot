@@ -73,6 +73,9 @@ class PreparedReplanService internal constructor(
     /**
      * 위험 사건 한 건의 선계산. 일시 오류(DB 등)는 **던진다** — 릴레이가 이벤트째 재시도하고(같은 이벤트의 알림 구독자는
      * 서로 독립으로 이미 돌았다, #1348), 재배달은 트리거당 1개 규칙이 받아 넘긴다(멱등). 판정 결과는 예외가 아니다.
+     *
+     * 트랜잭션 밖(릴레이 스레드)에서 불린다 — [ReplanSessionService.prepare] 가 커밋하고 돌아온 뒤에 실행기에 넘기므로
+     * 산출 스레드가 그 세션을 본다(트랜잭션 안에서 넘기면 다른 커넥션의 산출이 아직 없는 행을 읽고 SOLVING 에 멈춘다).
      */
     fun onRisk(event: RiskEvent, occurredAt: Instant) {
         if (properties.prepared.mode != PreparedMode.ON) return

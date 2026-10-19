@@ -269,6 +269,21 @@ class PreparedReplanPolicyTest : StringSpec({
         f.sessions.stored.getValue(todays.sessionId).status shouldBe ReplanStatus.CANCELED
     }
 
+    "지난 날의 열린 세션은 닫고 연다 — 이미 지나간 하루의 초안이 오늘을 막지 않는다" {
+        val f = Fixture(now = "07:15")
+        val yesterday = today.minusDays(1)
+        val stuck = f.sessions.save(
+            ReplanSession.start(
+                f.tripId, UUID.randomUUID(), UUID.randomUUID(), ReplanScope.FULL_DAY, yesterday, kst(yesterday, "20:15"),
+                ReplanOrigin(OriginKind.STAY_ANCHOR, null, null), listOf("WEATHER"), emptyList(), null, emptyList(), kst(yesterday, "20:15"),
+                initiatedBy = ReplanInitiator.SYSTEM,
+            ).solving().drafted(FakeReplans.sampleProposal(yesterday).toMap()),
+        )
+
+        f.prepare(f.triggers.add(f.tripId, today)).shouldBeInstanceOf<Prepared.Opened>()
+        f.sessions.stored.getValue(stuck.sessionId).status shouldBe ReplanStatus.CANCELED
+    }
+
     "같은 날·늦은 날의 선계산은 닫고 연다 — 새 위험 그림으로 갈아 끼우고, 대체된 것은 낡음(STALE)이다" {
         val f = Fixture(now = "07:15")
         val first = f.prepare(f.triggers.add(f.tripId, tomorrow)).opened()
