@@ -14,6 +14,7 @@ import com.trippilot.trip.api.TripFacade
 import com.trippilot.weathercontext.api.ActiveWarning
 import com.trippilot.weathercontext.api.AlertRead
 import com.trippilot.weathercontext.api.WeatherAlertFacade
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.time.Instant
 import java.time.LocalDate
@@ -30,6 +31,7 @@ import java.util.concurrent.atomic.AtomicReference
  * | 여행·목적지를 못 읽음 | 모름 |
  * | 아는 종류가 그 날의 목적지에 걸림 | 위험 신호(실외 슬롯 전부) — 실외 슬롯 없이 미분류만 남았으면 모름(지어내지 않는다) |
  * | 모르는 종류가 걸림 · 코드 없는 목적지(동명이지역)가 섞임 | 신호가 없으면 모름 — '특보 없음'으로 확인하지 않는다(INV-SA-2) |
+ * | 모르는 최상위 구역 이름 · 광역 하위 권역(산지)이 목적지 시군을 덮는지 가릴 수 없음 | 신호가 없으면 모름 — 모르는 이름은 바뀔 때 WARN 한 번 |
  * | 그 밖(걸린 특보 없음 — 특보 없음 `o 없 음` 포함) | 확인(날짜 전체) |
  *
  * **오늘만** 본다(`wants`) — 특보현황에 종료 시각이 없어 내일 이어질지 모른다. 실외 집합은 단기예보와 같은 [WeatherHazards.OUTDOOR] 다.
@@ -44,6 +46,9 @@ class KmaWarningDetector(private val alerts: WeatherAlertFacade, private val tri
 
     /** 회차 범위 기억 — 원천 모름만 기억한다(성공은 서비스가 20분 기억한다). 회차 키가 바뀌면 버린다. */
     private val memo = AtomicReference(RoundMemo(Instant.EPOCH))
+
+    /** 마지막으로 본 모르는 구역 이름 — 바뀔 때만 WARN 한다. */
+    private val seenUnknownAreas = AtomicReference<Set<String>>(emptySet())
 
     override fun wants(phase: SweepPhase, dayOffset: Int): Boolean = dayOffset == 0
 
@@ -63,22 +68,46 @@ class KmaWarningDetector(private val alerts: WeatherAlertFacade, private val tri
                 return Detection.Unknown(read.cause)
             }
         }
+        val live = warnings.filter { it.type !in WeatherAlerts.IGNORED_WARNINGS }
+        val unknownAreas = noteUnknownAreas(live)
         val destinations = dayDestinations(trips, target) ?: return Detection.Unknown(NO_DESTINATION)
         val places = destinations.mapNotNull { d -> d.regionCode?.let { WeatherAlerts.placeOf(it, d.name) } }
         val hits = mutableListOf<Pair<ActiveWarning, WeatherAlerts.Place>>()
         var unknownKind = false
-        for (w in warnings) {
-            if (w.type in WeatherAlerts.IGNORED_WARNINGS) continue
-            val place = places.firstOrNull { p -> w.areas.any { WeatherAlerts.covers(it, p) } } ?: continue
-            if (w.type in WeatherAlerts.WARNING_VARIANTS) hits += w to place else unknownKind = true
+        var unsure = false
+        for (w in live) {
+            fun matches(p: WeatherAlerts.Place, m: WeatherAlerts.Match) = w.areas.any { WeatherAlerts.match(it, p) == m }
+            val place = places.firstOrNull { matches(it, WeatherAlerts.Match.HIT) }
+            when {
+                place == null -> unsure = unsure || places.any { matches(it, WeatherAlerts.Match.UNSURE) }
+                w.type in WeatherAlerts.WARNING_VARIANTS -> hits += w to place
+                else -> unknownKind = true
+            }
         }
         return when {
             hits.isNotEmpty() && outdoor.isEmpty() -> Detection.Unknown(UNCLASSIFIED)
             hits.isNotEmpty() -> Detection.Checked(emptySet(), listOf(signalOf(hits, outdoor, target)))
             unknownKind -> Detection.Unknown(UNKNOWN_KIND)
+            unsure -> Detection.Unknown(if (unknownAreas.isNotEmpty()) UNKNOWN_AREA else UNATTRIBUTED)
             places.size < destinations.size -> Detection.Unknown(NO_REGION)
             else -> CONFIRMED
         }
+    }
+
+    /**
+     * 모르는 최상위 구역 이름(광역·섬 구역·바다가 아님 — `WeatherAlerts` 규칙 2) — t6 형식 변화·구역 개편의 신호라 바뀔 때만 WARN 한 번
+     * (파드 범위 · 같은 이름이 이어지면 조용하다). 구역 이름뿐이라 키·주소가 없다. 많거나 긴 이름은 잘라 싣는다.
+     */
+    private fun noteUnknownAreas(live: List<ActiveWarning>): Set<String> {
+        val names = live.flatMap { it.areas }.filterNot(WeatherAlerts::isKnownArea).map { it.name.trim().take(NAME_CAP) }.toSortedSet()
+        if (seenUnknownAreas.getAndSet(names) != names && names.isNotEmpty()) {
+            log.warn(
+                "기상특보 — 모르는 특보 구역 이름 {} 이 있습니다(t6 형식 변화·특보구역 개편). 그 구역은 목적지를 가릴 수 없어 '특보 없음'으로 " +
+                    "확인하지 않고 모름으로 둡니다 — WeatherAlerts 의 광역·섬 구역 표를 확인하십시오.",
+                names.take(NAMES_CAP),
+            )
+        }
+        return names
     }
 
     private fun signalOf(hits: List<Pair<ActiveWarning, WeatherAlerts.Place>>, outdoor: List<PlannedSlotView>, target: SweepTarget): DetectionSignal {
@@ -121,6 +150,7 @@ class KmaWarningDetector(private val alerts: WeatherAlertFacade, private val tri
     }
 
     private companion object {
+        private val log = LoggerFactory.getLogger(KmaWarningDetector::class.java)
         private val CONFIRMED = Detection.Checked(setOf(null), emptyList())
 
         private const val WARNING_LEVEL = "경보"
@@ -128,6 +158,15 @@ class KmaWarningDetector(private val alerts: WeatherAlertFacade, private val tri
         private const val NO_REGION = "no-region"
         private const val UNKNOWN_KIND = "unknown-warning"
         private const val UNCLASSIFIED = "unclassified-slots"
+
+        /** 표에 없는 최상위 구역 이름이 있다(규칙 2). */
+        private const val UNKNOWN_AREA = "unknown-area"
+
+        /** 광역 하위 권역(산지)이 목적지 시군을 덮는지 가릴 수 없다(규칙 8). */
+        private const val UNATTRIBUTED = "unattributed-zone"
+
+        private const val NAME_CAP = 30
+        private const val NAMES_CAP = 5
 
         private const val PAYLOAD_VARIANTS = "variants"
         private const val PAYLOAD_SLOT_KEYS = "slotKeys"

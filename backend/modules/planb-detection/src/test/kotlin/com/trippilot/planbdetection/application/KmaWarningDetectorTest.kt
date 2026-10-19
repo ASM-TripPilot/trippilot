@@ -1,5 +1,9 @@
 package com.trippilot.planbdetection.application
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.trippilot.planbdetection.application.AlertFixtures.DAY
 import com.trippilot.planbdetection.application.AlertFixtures.JEJU
 import com.trippilot.planbdetection.application.AlertFixtures.NEXT_ROUND
@@ -21,7 +25,9 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
+import org.slf4j.LoggerFactory
 import java.util.UUID
 
 /**
@@ -215,6 +221,85 @@ class KmaWarningDetectorTest : StringSpec({
         s.reason shouldBe "기상청이 제주에 대설경보를 발표했어요. 한라산 등 야외 일정 2곳이 영향을 받을 수 있어요."
     }
 
+    /**
+     * 표에 없는 최상위 이름(광역·섬·바다가 아님)은 어디인지 모른다 — '특보 없음'으로 확인하면 같은 출처가 띄운 트리거를 거짓 해제한다
+     * (INV-SA-2 · anti-patterns 모르는 어휘는 크게 실패). 행정 통합 이름 · 전각 괄호 · 끝 마침표는 파서가 구역 이름으로 받는다.
+     */
+    "모르는 최상위 구역 이름이면 확인이 아니라 모름 — 아는 구역에 걸린 특보는 그대로 발화한다" {
+        val mokpo = FakeTripDestinations().put(tripId, DAY, DAY.plusDays(1), TripDestinationRef("목포시", "12110", 1))
+        val day = target(tripId, slot("갓바위", "자연", "14:00", "15:00"))
+        listOf(WarningArea("전남광주통합특별시", listOf("목포")), WarningArea("경상북도（포항）"), WarningArea("울산.")).forEach { area ->
+            KmaWarningDetector(warned(ActiveWarning("호우", "경보", listOf(area))), mokpo).detect(day) shouldBe Detection.Unknown("unknown-area")
+        }
+        val odd = ActiveWarning("호우", "경보", listOf(WarningArea("경북특별자치도", listOf("포항"))))
+        (KmaWarningDetector(warned(odd, gale(gyeongbuk)), pohangTrip()).detect(target(tripId, slot("호미곶", "자연", "14:00", "15:00"))) as Detection.Checked)
+            .signals.single().variant shouldBe TriggerVariant.WIND
+    }
+
+    /** 모르는 이름은 t6 형식·구역 개편의 신호다 — 바뀔 때 WARN 한 번(구역 이름만 — t6 에 키는 없다). 같은 이름이 이어지면 조용하다. */
+    "모르는 구역 이름은 바뀔 때 WARN 한 번 — 같은 이름이 이어지면 다시 남기지 않는다" {
+        val alerts = warned(ActiveWarning("호우", "경보", listOf(WarningArea("전남광주통합특별시", listOf("목포")))))
+        val detector = KmaWarningDetector(alerts, pohangTrip())
+        val day = target(tripId, slot("호미곶", "자연", "14:00", "15:00"))
+
+        val warns = alertDetectorWarns {
+            detector.detect(day)
+            detector.detect(day)
+            alerts.warnings = AlertRead.Ok(listOf(gale(WarningArea("울산."))))
+            detector.detect(day)
+        }
+
+        warns.size shouldBe 2
+        warns[0] shouldContain "전남광주통합특별시"
+        warns[1] shouldContain "울산."
+    }
+
+    /** 섬 구역은 이름 앞붙음이 아니라 닫힌 표(구역 → 시군 코드)로 맞춘다 — 서해구(어간 '서해')는 서해5도가 아니고, 옹진은 서해5도다. */
+    "섬 구역은 그 섬이 속한 시군(과 그 광역 목적지)에만 걸린다" {
+        fun on(name: String, code: String) = FakeTripDestinations().put(tripId, DAY, DAY.plusDays(1), TripDestinationRef(name, code, 1))
+        fun island(zone: String) = warned(gale(WarningArea(zone)))
+        val day = target(tripId, slot("해변", "자연", "14:00", "15:00"))
+        fun fired(alerts: FakeAlerts, trips: FakeTripDestinations) = (KmaWarningDetector(alerts, trips).detect(day) as Detection.Checked).signals.size
+
+        KmaWarningDetector(island("서해5도"), on("서해구", "28275")).detect(day) shouldBe Detection.Checked(setOf(null), emptyList())
+        fired(island("서해5도"), on("옹진군", "28720")) shouldBe 1
+        fired(island("서해5도"), on("인천광역시", "28")) shouldBe 1
+        fired(island("추자도"), on("제주", "50")) shouldBe 1
+        fired(island("추자도"), on("제주시", "50110")) shouldBe 1
+        KmaWarningDetector(island("추자도"), on("서귀포시", "50130")).detect(day) shouldBe Detection.Checked(setOf(null), emptyList())
+        fired(island("흑산도.홍도"), on("신안군", "12870")) shouldBe 1
+        fired(island("거문도.초도"), on("여수시", "12130")) shouldBe 1
+        fired(island("울릉도.독도"), on("울릉군", "47940")) shouldBe 1
+        KmaWarningDetector(island("울릉도.독도"), pohangTrip()).detect(day) shouldBe Detection.Checked(setOf(null), emptyList())
+    }
+
+    /**
+     * 산지처럼 광역 이름으로 시작하는 하위 권역(강원중부산지 · 경북북동산지)은 어느 시군을 덮는지 이름으로 가릴 수 없다 — 평창의 평지만
+     * 풀리고 대관령(산지) 경보가 남은 회차를 '특보 없음'으로 확인하면 거짓 해제다(INV-SA-2). 산지 → 시군 표로 걸지는 정본 결정이다.
+     */
+    "도의 시군은 광역 하위 권역(산지)만 남으면 확인이 아니라 모름 — 제 이름이 걸리면 발화" {
+        val pyeongchang = FakeTripDestinations().put(tripId, DAY, DAY.plusDays(1), TripDestinationRef("평창군", "51760", 1))
+        val day = target(tripId, slot("대관령 양떼목장", "자연", "14:00", "15:00"))
+        fun snow(vararg zones: String) = warned(ActiveWarning("대설", "경보", listOf(WarningArea("강원도", zones.toList()))))
+
+        KmaWarningDetector(snow("강원중부산지", "강원남부산지"), pyeongchang).detect(day) shouldBe Detection.Unknown("unattributed-zone")
+        KmaWarningDetector(snow("강릉시평지", "강원북부산지"), pyeongchang).detect(day) shouldBe Detection.Unknown("unattributed-zone")
+        (KmaWarningDetector(snow("평창군평지", "강원중부산지"), pyeongchang).detect(day) as Detection.Checked).signals.single().variant shouldBe
+            TriggerVariant.SNOW
+        KmaWarningDetector(snow("강릉시평지"), pyeongchang).detect(day) shouldBe Detection.Checked(setOf(null), emptyList())
+    }
+
+    /** 광역시의 군(강화·옹진)은 구역 이름에 제 이름이 나온다 — 다른 군만 적힌 줄에 걸지 않는다. 권역 이름(부산동부)만 있으면 줄 전체다. */
+    "광역시의 군은 제 이름이 없는 군 구역 줄에 걸리지 않는다 — 권역 줄(부산동부)이면 걸린다" {
+        val ganghwa = FakeTripDestinations().put(tripId, DAY, DAY.plusDays(1), TripDestinationRef("강화군", "28710", 1))
+        val gijang = FakeTripDestinations().put(tripId, DAY, DAY.plusDays(1), TripDestinationRef("기장군", "26710", 1))
+        val day = target(tripId, slot("해변", "자연", "14:00", "15:00"))
+
+        KmaWarningDetector(warned(gale(WarningArea("인천", listOf("옹진")))), ganghwa).detect(day) shouldBe Detection.Checked(setOf(null), emptyList())
+        (KmaWarningDetector(warned(gale(WarningArea("인천", listOf("강화")))), ganghwa).detect(day) as Detection.Checked).signals.size shouldBe 1
+        (KmaWarningDetector(warned(gale(WarningArea("부산", listOf("부산동부")))), gijang).detect(day) as Detection.Checked).signals.size shouldBe 1
+    }
+
     "이름이 길어 200자를 넘기면 이름 없이 쓴다 — 가드에 걸려 신호를 통째로 잃지 않게" {
         val long = "호미곶".repeat(70)
 
@@ -225,3 +310,16 @@ class KmaWarningDetectorTest : StringSpec({
         reason.length shouldBeLessThanOrEqual SituationCopy.MAX_LENGTH
     }
 })
+
+/** [block] 동안 특보 감지기가 남긴 WARN 문장. */
+private fun alertDetectorWarns(block: () -> Unit): List<String> {
+    val logger = LoggerFactory.getLogger(KmaWarningDetector::class.java) as Logger
+    val appender = ListAppender<ILoggingEvent>().also { it.start() }
+    logger.addAppender(appender)
+    try {
+        block()
+    } finally {
+        logger.detachAppender(appender)
+    }
+    return appender.list.filter { it.level == Level.WARN }.map { it.formattedMessage }
+}
