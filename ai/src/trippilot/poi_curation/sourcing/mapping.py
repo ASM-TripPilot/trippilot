@@ -49,15 +49,48 @@ _CAT1_FOR_TOURIST_SPOT: dict[str, PoiCategory] = {
     "A05": PoiCategory.FOOD,
 }
 
+# ── 새 분류 체계(lclsSystm1~3) — 옛 cat 코드가 빈 항목용 (2026-10-19) ──────────
+# KorService2 가 분류를 lclsSystm 으로 옮기면서 **수정된 항목은 cat1~3 이 비어** 온다 — 지역 코드
+# (areacode → lDongRegnCd, #1350)와 같은 이관이다. 실측: 서울 관광지 100건 중 57건이 cat 빈 값,
+# 경복궁(HS/HS01)·해운대해수욕장(NA/NA02)·남산서울타워(VE/VE01)·천지연폭포(NA/NA01) 전부.
+# 그 57건이 cat 으로만 판정해 `category_unmapped` 로 버려졌다(10-19 서울·부산·제주 관광지 993건 중 99%).
+# 대응은 **옛 cat 판정과 같은 결과**가 나오게 잡는다 — 같은 장소가 체계만 바뀌어 카테고리가 뒤집히지
+# 않게: 역사(HS)·문화관광(VE) ≈ 인문 A02 → SIGHT, 단 전시·공연·행사·교육시설(VE06~09) ≈ 문화시설 A0206
+# → CULTURE, 레저시설 VE10·체험 EX ≈ A0203 → ACTIVITY(산업관광 EX06 ≈ A0204 → SIGHT), 축제·공연·행사
+# EV ≈ A0207/8 → CULTURE. 숙박(AC)·추천코스(C01)는 옛 체계처럼 매핑하지 않는다.
+# 코드표 출처: lclsSystmCode2 실호출(scripts/probe/probe_tourapi_lcls.py).
+_LCLS1: dict[str, PoiCategory] = {
+    "NA": PoiCategory.NATURE, "HS": PoiCategory.SIGHT, "VE": PoiCategory.SIGHT,
+    "EX": PoiCategory.ACTIVITY, "LS": PoiCategory.ACTIVITY, "SH": PoiCategory.SHOPPING,
+    "FD": PoiCategory.FOOD, "EV": PoiCategory.CULTURE,
+}
+_LCLS2_OVERRIDE: dict[str, PoiCategory] = {
+    "VE06": PoiCategory.CULTURE, "VE07": PoiCategory.CULTURE, "VE08": PoiCategory.CULTURE,
+    "VE09": PoiCategory.CULTURE, "VE10": PoiCategory.ACTIVITY, "EX06": PoiCategory.SIGHT,
+    "FD05": PoiCategory.CAFE,
+}
+_CAFE_LCLS2 = "FD05"
+
+
+def _lcls(codes: tuple[str, ...]) -> tuple[str | None, str | None]:
+    """category_codes 에서 lclsSystm1(영문 2자)·lclsSystm2(영문 2자+숫자 2자)."""
+    one = next((c for c in codes if re.fullmatch(r"[A-Z]{2}", c)), None)
+    two = next((c for c in codes if re.fullmatch(r"[A-Z]{2}\d{2}", c)), None)
+    return one, two
+
 
 def map_category(kind: str, category_codes: tuple[str, ...]) -> PoiCategory | None:
     """TourAPI 분류 → PoiCategory. 매핑 불가 None (호출측이 드롭+카운트)."""
+    lcls1, lcls2 = _lcls(category_codes)
     if kind == "39":
-        return PoiCategory.CAFE if _CAFE_CAT3 in category_codes else PoiCategory.FOOD
+        cafe = _CAFE_CAT3 in category_codes or lcls2 == _CAFE_LCLS2
+        return PoiCategory.CAFE if cafe else PoiCategory.FOOD
     if kind in _KIND_DIRECT:
         return _KIND_DIRECT[kind]
     if kind == "12":
         cat1 = next((c for c in category_codes if re.fullmatch(r"A\d{2}", c)), None)
+        if cat1 is None and lcls1 is not None:   # 옛 cat 이 빈 항목 — 새 분류로(위 표)
+            return _LCLS2_OVERRIDE.get(lcls2 or "") or _LCLS1.get(lcls1)
         cat2 = next((c for c in category_codes if re.fullmatch(r"A\d{4}", c)), None)
         if cat1 == "A02":
             if cat2 in _SIGHT_CAT2_OVERRIDE:
@@ -112,11 +145,32 @@ _CAT_LABELS: dict[str, str] = {
     "A05020100": "한식", "A05020200": "서양식", "A05020300": "일식",
     "A05020400": "중식", "A05020700": "이색음식점", "A05020900": "카페/전통찻집",
     "A05021000": "클럽",
+    # 새 분류 체계 중분류(lclsSystm2) — 옛 cat 이 빈 항목의 태그(위 `_LCLS1` 주석, lclsSystmCode2 실호출)
+    "EV01": "축제", "EV02": "공연", "EV03": "행사",
+    "EX01": "전통체험", "EX02": "공예체험", "EX03": "농산어촌 체험", "EX04": "산사체험",
+    "EX05": "웰니스관광", "EX06": "산업관광", "EX07": "기타체험",
+    "FD01": "한식", "FD02": "외국식", "FD03": "간이음식", "FD04": "주점", "FD05": "카페/찻집",
+    "HS01": "역사유적지", "HS02": "역사유물", "HS03": "종교성지", "HS04": "안보관광지",
+    "LS01": "육상 레포츠", "LS02": "수상 레포츠", "LS03": "항공 레포츠", "LS04": "복합 레포츠",
+    "NA01": "자연경관(산)", "NA02": "자연경관(하천·해양)", "NA03": "자연생태", "NA04": "자연공원",
+    "NA05": "기타자연관광",
+    "SH01": "백화점", "SH02": "쇼핑몰", "SH03": "대형마트", "SH04": "면세점", "SH05": "전문매장/상가",
+    "SH06": "시장", "SH07": "기타쇼핑시설",
+    "VE01": "랜드마크", "VE02": "테마공원", "VE03": "도시공원", "VE04": "도시·지역문화관광",
+    "VE05": "복합관광시설", "VE06": "공연시설", "VE07": "전시시설", "VE08": "행사시설",
+    "VE09": "교육시설", "VE10": "레저스포츠시설", "VE11": "교통시설", "VE12": "기타문화관광지",
 }
 
 
 def category_tags(category_codes: tuple[str, ...]) -> tuple[str, ...]:
-    """cat2/cat3 코드 → 태그 명칭 (미지 코드 스킵, 입력 순서 보존·중복 제거)."""
+    """cat2/cat3 코드 → 태그 명칭 (미지 코드 스킵, 입력 순서 보존·중복 제거).
+
+    옛 cat 코드가 있으면 그것만 쓴다 — 새 분류(lclsSystm) 태그는 cat 이 빈 항목에만 붙인다.
+    둘 다 붙이면 같은 장소에 `해수욕장`·`자연경관(하천·해양)` 처럼 겹친 태그가 생기고, 재수집될 때마다
+    기존 행의 태그가 바뀐다.
+    """
+    if any(re.fullmatch(r"A\d+", c) for c in category_codes):
+        category_codes = tuple(c for c in category_codes if re.fullmatch(r"A\d+", c))
     tags: list[str] = []
     for code in category_codes:
         label = _CAT_LABELS.get(code)

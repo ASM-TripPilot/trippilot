@@ -25,7 +25,9 @@ build(request: CandidatePoolRequest, now: datetime) -> CandidatePool
            (is_closed_today 당일 배치는 Plan-B 소유 — batch_check_closed는 후속 연결)
   ④ 품질: quality ∈ {FULL, PARTIAL} (MINIMAL 제외)
   ⑤ 인기: saved_count 내림차순 → rating 내림차순(None=0) → poi_id 오름차순 (결정론 tie-break)
-  ⑥ 상한: 상위 max_candidates(5천)
+  ⑥ 상한: max_candidates(5천) — 카테고리마다 공평한 몫(작은 카테고리는 통째로, 넘치는 쪽만 정렬 앞부분)
+         (2026-10-19 개정: 종전 "상위 N" 은 서울 반경 10km 에서 FOOD 가 앞을 다 차지해 자연 132→11·쇼핑 251→45 로
+          잘렸다 — `pool_builder._fair_cut`)
   → CandidatePool(poi_ids=frozenset, pois, generated_at=now, anchor, radius_km=r)
 ```
 

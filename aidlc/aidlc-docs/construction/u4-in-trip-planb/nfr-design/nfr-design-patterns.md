@@ -54,6 +54,10 @@
 | 재평가 | 벤더 실패율이 실측으로 문제가 되거나, 느린 실패로 응답 예산이 깨질 때 → Resilience4j 도입 + **U1 패턴 문서 소급** |
 | 문서 조치 | U1 `nfr-design-patterns.md`·`logical-components.md`의 Resilience4j 표기에 **"미실장 · U4에서 재확인(2026-08-09)"** 주석 상신 |
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** P-RES-U4-1 — 회차 단위 회로 차단
+> 서킷 라이브러리는 여전히 들이지 않는다. 대신 스윕 안에 회차 단위 출처별 회로 차단(같은 출처 연속 3실패 → 남은 여행은 그 출처를 모름으로)과 회차 안 실패 격자 메모를 둔다. 감지기 예외는 그 출처·여행·날짜만 모름이다. "재시도 없음"의 예외는 단기예보 `NO_DATA` 즉시 재요청(≤ 2회) 하나다.
+> → [BR-SA-03](../../situation-awareness/functional-design/business-rules.md) · [INV-SA-2](../../situation-awareness/functional-design/domain-entities.md)
+
 ### P-RES-U4-2 — 날씨의 stale-if-error **역방향 예외**
 U0·U1의 `stale-if-error`(P-RES-U1-3)는 "실패 시 마지막 값을 보여준다"이다. **날씨는 반대로 간다.**
 
@@ -102,6 +106,10 @@ U0·U1의 `stale-if-error`(P-RES-U1-3)는 "실패 시 마지막 값을 보여준
 
 ### P-PERF-U4-2 — 평가 요청의 자연 상한
 P-DET-U4-1의 평가는 **이벤트 기반**이라 주기 폴링이 없다(PERF-U4-01). 사용자 한 명이 만드는 평가 요청은 **화면 진입 + 포그라운드 복귀 + 슬롯 경계 + 방문 체크**로 상한이 자연히 잡힌다 — 별도 스로틀을 두지 않는다.
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** P-PERF-U4-1·2
+> 격자 시간별 예보 캐시는 격자당 1행, 만료 = 발표 + 3h + 10분(발표 지연 여유)이고 받은 값도 신선해야 쓴다. "평가 요청의 자연 상한"은 클라 경로에만 성립하고, 서버 스윕은 회차·여행·출처 단위 상한(병렬·예산·호출 상한)으로 묶는다.
+> → [BR-SA-01·03](../../situation-awareness/functional-design/business-rules.md) · [SA nfr-requirements](../../situation-awareness/nfr-requirements/nfr-requirements.md)
 
 ## 5. 데이터 패턴 (P-DATA-U4)
 
@@ -158,3 +166,7 @@ P-DET-U4-2가 침묵을 정상 동작으로 만들었으므로, **관측이 유�
 | 지오펜스 창 확대(2 → 전체) | 순서 건너뛰기 미감지가 실사용에서 문제로 실측될 때 |
 
 > **[개정 · 2026-10-12] §8 갱신.** ① "분산 락 미도입"은 U4 범위에서만 유효하다 — 백엔드에는 아웃박스 릴레이용 **ShedLock**이 들어왔다(`backend/gradle/libs.versions.toml` `shedlock`, TRIP-539, U6 개정 참조). ② "배포·클라우드 진입 결정 시" 조건은 도래했다 — AWS EKS로 배포됐고 공용 인프라는 `aidlc/aidlc-docs/construction/shared-infrastructure.md`가 다룬다. 서버 푸시는 U6에서 Expo push로 구현됐다. ③ 지오펜스 관련 행은 **[이연 · 2026-10-12 → U10]**.
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** §8 — 서버 스케줄러 기반 선제 평가 도입
+> "서버 스케줄러 기반 선제 평가"는 도입으로 닫는다(상황 감시 스윕). 큐·워커·Resilience4j·Redis·rate-limit 라이브러리 미도입은 유지한다. Hikari 최대치 상향은 보류한다 — RDS 연결 여유를 확인하지 못해 선계산 실행기를 1스레드로 묶는다.
+> → [DEC-SA-1](../../situation-awareness/functional-design/business-logic-model.md) · [BR-SA-18](../../situation-awareness/functional-design/business-rules.md)

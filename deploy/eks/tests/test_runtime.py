@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 import unittest
@@ -104,6 +105,56 @@ class SecretTests(unittest.TestCase):
             runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
                 "KAKAO_APP_ID": app_id}})
 
+    def test_situation_sweep_switches_are_allowlisted_and_validated(self):
+        """Plan-B 상황 감시 스위치 4종(situation-awareness 설계서 §7)은 backend 시크릿으로만 켠다. allowlist 에 없으면 시크릿에
+        넣는 순간 배포 전체가 거부되고, 값이 틀리면 백엔드가 기동에서 죽는다(모르는 모드·지평·UUID 오타 = 바인딩 실패) —
+        파드가 뜨다 죽기 전에 여기서 막는다. 운영 카나리 계정 목록은 생성 상한 예외 계정과 같은 규칙에 더해 공백만 든 값도 막는다."""
+        base = {name: {} for name in runtime_secrets.GROUP_KEYS}
+        oks = [{"PLANB_SITUATION_SWEEP": mode} for mode in ("off", "dry-run", "on")]
+        oks += [{"PLANB_SITUATION_HORIZON": horizon} for horizon in ("today", "tomorrow", "pre-trip")]
+        oks += [{"PLANB_PREPARED_REPLAN": mode} for mode in ("off", "on")]
+        oks += [{"PLANB_SITUATION_SWEEP_ACCOUNT_IDS": ids}
+                for ids in ("", "0D7F17AB-5c4b-4d6d-a7f7-484ba11dda46, 11111111-2222-4333-8444-555555555555")]
+        for ok in oks:
+            with self.subTest(ok=ok):
+                runtime_secrets.validate_groups({**base, "backend": ok})
+        bads = [{"PLANB_SITUATION_SWEEP": mode} for mode in ("dry_run", "ON", "true", "")]
+        bads += [{"PLANB_SITUATION_HORIZON": horizon} for horizon in ("d-1", "pretrip", "TOMORROW", "")]
+        bads += [{"PLANB_PREPARED_REPLAN": mode} for mode in ("dry-run", "true", "")]
+        # 파이썬 uuid 는 받지만 백엔드는 못 읽는 모양까지 — DB 도구에서 대시 없이 복사해 오는 것이 흔하다.
+        # 공백만 든 값은 '빈 값'이 아니다 — 백엔드 바인딩이 [null] 로 읽어 아무 계정도 안 맞는 목록이 된다(백엔드가 기동에서 거부).
+        bads += [{"PLANB_SITUATION_SWEEP_ACCOUNT_IDS": ids}
+                 for ids in ("not-a-uuid", "0d7f17ab5c4b4d6da7f7484ba11dda46", "{0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46}",
+                             "0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46,", " ", "\t")]
+        for bad in bads:
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                runtime_secrets.validate_groups({**base, "backend": bad})
+
+    def test_situation_keys_reach_both_the_allowlist_and_the_chart(self):
+        """정본 키 표(situation-awareness tech-stack 델타 6 — 백엔드 런타임 키 4종) ⊆ 허용목록 ∧ 차트가 파드에 싣는 목록.
+        허용목록에서 빠지면 시크릿에 넣는 순간 배포가 거부되고, 차트에서 빠지면 시크릿 값이 파드에 **조용히** 안 닿는다
+        (앱은 기본 off 로 뜬다). 차트가 싣는 backend 시크릿 키는 모두 허용목록 안이어야 한다 — 반대면 넣을 길이 없는 키다."""
+        chart = (Path(__file__).resolve().parents[1] / "chart" / "templates" / "backend.yaml").read_text()
+        line = next(text for text in chart.splitlines() if "range list" in text and '"GOOGLE_CLIENT_ID"' in text)
+        listed = set(re.findall(r'"([A-Z0-9_]+)"', line))
+        for key in ("PLANB_SITUATION_SWEEP", "PLANB_SITUATION_HORIZON", "PLANB_SITUATION_SWEEP_ACCOUNT_IDS",
+                    "PLANB_PREPARED_REPLAN"):
+            with self.subTest(key=key):
+                self.assertIn(key, runtime_secrets.BACKEND_KEYS)
+                self.assertIn(key, listed)
+        self.assertLessEqual(listed, runtime_secrets.BACKEND_KEYS)
+
+    def test_sweep_without_real_weather_is_called_out_on_every_deploy(self):
+        """스윕을 켰는데(dry-run·on) 날씨 모드가 kma 가 아니면 단기예보·특보·대기질 감지기가 꺼진 채 돈다(휴무만 본다).
+        배포는 막지 않는다 — 장소 감지만으로 켜는 것도 정상 선택이라서다. 대신 배포마다 크게 말한다."""
+        def gaps(backend):
+            return list(runtime_secrets.open_gaps({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": backend}))
+        self.assertEqual(len(gaps({"PLANB_SITUATION_SWEEP": "on"})), 1)  # 날씨 모드가 없으면 기본 fake 다
+        self.assertIn("WEATHER_MODE", gaps({"PLANB_SITUATION_SWEEP": "dry-run", "WEATHER_MODE": "fake"})[0])
+        self.assertEqual(gaps({"PLANB_SITUATION_SWEEP": "on", "WEATHER_MODE": "kma", "WEATHER_API": "key"}), [])
+        self.assertEqual(gaps({"PLANB_SITUATION_SWEEP": "off", "WEATHER_MODE": "fake"}), [])
+        self.assertEqual(gaps({"WEATHER_MODE": "fake"}), [])  # 스윕 키가 없으면 꺼짐이다
+
     def test_missing_kakao_app_id_is_called_out_on_every_deploy(self):
         """값이 빠져도 배포는 막지 않는다 — 대신 조용히 넘어가지 않는다(TRIP-1317). 로그인에 카카오를 쓰는데
         앱 ID 가 없으면 남의 앱 토큰으로 가입이 열린 채 돈다."""
@@ -147,6 +198,14 @@ class SecretTests(unittest.TestCase):
         for bad in ({"AI_LLM_PROVIDER": "openai"}, {"OPENAI_API_KEY": 123}, {"OPENAI_API_KEY": "a\x00b"}):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "ai": bad})
+
+    def test_public_data_key_is_allowlisted_in_backend_and_ai(self):
+        """공공데이터포털 키(기상특보·에어코리아·특일정보)는 백엔드·AI 둘 다 읽는다 — 한쪽 목록에서 빠지면 그 그룹에 넣는 순간
+        배포 전체가 거부된다."""
+        for group in ("backend", "ai"):
+            with self.subTest(group=group):
+                runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS},
+                                                 group: {"PUBLIC_DATA_API_KEY": "key"}})
 
     def test_runtime_secret_does_not_expose_master_or_cross_service_keys(self):
         groups = runtime_secrets.seed_groups({name: {} for name in runtime_secrets.GROUP_KEYS}, lambda: "pass/@'word", lambda: "rsa")
@@ -573,6 +632,43 @@ class RuntimeIntegrationTests(unittest.TestCase):
             runtime_secrets.sync(outputs(), "trippilot-dev", False, execute, target="dev")
             self.assertEqual(saved[ai_arn], {})
 
+    def test_sync_writes_the_public_data_key_to_backend_and_ai_without_printing_it(self):
+        """공공데이터포털 키는 GitHub 시크릿 → 배포 역할이 backend·ai 두 그룹에 쓴다 — 로컬 AWS 자격 없이. 한쪽만 들어가면
+        그쪽 기능만 조용히 빈다(날씨 키가 EKS 에서 겪는 두 그룹 함정). 값은 출력 어디에도 없다 — 쓴 그룹 이름만."""
+        arns = outputs()["app_secret_arns"]
+        saved, execute = self._saved_secrets({"OPENAI_API_KEY": "sk-x"})
+        printed = io.StringIO()
+        with patch("runtime_secrets.rsa_key", return_value="k"), patch("runtime_secrets.validate_rsa_key"):
+            with contextlib.redirect_stdout(io.StringIO()):
+                runtime_secrets.sync(outputs(), "trippilot", False, execute)  # 첫 배포 시드 — 아래 쓰기만 센다
+            self.writes.clear()
+            with contextlib.redirect_stdout(printed):
+                runtime_secrets.sync(outputs(), "trippilot", False, execute, public_data_api_key=" pd-secret-value\n")
+        for group in ("backend", "ai"):
+            self.assertEqual(saved[arns[group]]["PUBLIC_DATA_API_KEY"], "pd-secret-value")
+        self.assertEqual(sorted(write for write in self.writes if write != "apply"), sorted((arns["backend"], arns["ai"])))
+        self.assertEqual(saved[arns["ai"]]["OPENAI_API_KEY"], "sk-x")  # 다른 키는 그대로
+        self.assertIn("public data key written: backend, ai", printed.getvalue())
+        self.assertNotIn("pd-secret-value", printed.getvalue())
+
+    def test_sync_keeps_the_stored_public_data_key_when_absent_or_unchanged(self):
+        """시크릿이 없거나 빈 런은 저장값을 지우지 않고, 같은 값이면 쓰지 않는다 — 다른 변경이 없으면 put 0회."""
+        arns = outputs()["app_secret_arns"]
+        saved, execute = self._saved_secrets({"PUBLIC_DATA_API_KEY": "stored"})
+        with patch("runtime_secrets.rsa_key", return_value="k"), patch("runtime_secrets.validate_rsa_key"), \
+                patch("builtins.print") as printed:
+            runtime_secrets.sync(outputs(), "trippilot", False, execute)  # 첫 배포 시드
+            saved[arns["backend"]]["PUBLIC_DATA_API_KEY"] = "stored"
+            for given in (None, "", "  \n", "stored"):
+                with self.subTest(given=given):
+                    self.writes.clear()
+                    printed.reset_mock()
+                    runtime_secrets.sync(outputs(), "trippilot", False, execute, public_data_api_key=given)
+                    self.assertEqual([write for write in self.writes if write != "apply"], [])
+                    for group in ("backend", "ai"):
+                        self.assertEqual(saved[arns[group]]["PUBLIC_DATA_API_KEY"], "stored")
+                    self.assertNotIn("public data key written", " ".join(str(call.args[0]) for call in printed.call_args_list))
+
     def test_feature_model_overrides_reject_unknown_features_and_malformed_pairs_before_writing(self):
         """모르는 기능 이름이 배정에 들어가면 AI 가 기동에서 죽는다(`feature_models_from_env`) — 쓰기 전에 거절한다."""
         known = runtime_secrets.known_llm_features()
@@ -644,6 +740,20 @@ class RuntimeIntegrationTests(unittest.TestCase):
                 self.assertIsNone(sync.call_args.kwargs["push_mode"])
             with self.assertRaises(SystemExit), patch("sys.stderr"):
                 runtime.main(["sync-secrets", "--outputs", str(source), "--push-mode", "fcm"])
+
+    def test_sync_secrets_cli_reads_the_public_data_key_from_env_not_argv(self):
+        """비밀값은 argv 에 올리지 않는다(프로세스 목록·로그에 남는다) — 워크플로가 그 스텝 env 로만 싣는다."""
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "outputs.json"
+            source.write_text(json.dumps({key: {"value": value} for key, value in outputs().items()}))
+            with patch("runtime.runtime_secrets.sync") as sync, patch("builtins.print"):
+                with patch.dict(os.environ, {"PUBLIC_DATA_API_KEY": "pd-key"}):
+                    runtime.main(["sync-secrets", "--outputs", str(source)])
+                self.assertEqual(sync.call_args.kwargs["public_data_api_key"], "pd-key")
+                with patch.dict(os.environ):
+                    os.environ.pop("PUBLIC_DATA_API_KEY", None)
+                    runtime.main(["sync-secrets", "--outputs", str(source)])
+                self.assertIsNone(sync.call_args.kwargs["public_data_api_key"])
 
     def test_ensure_namespace_and_cli_commands_dispatch_with_validated_arguments(self):
         import tempfile

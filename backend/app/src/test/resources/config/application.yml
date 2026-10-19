@@ -67,3 +67,9 @@ trippilot:
   assistant:
     retention-sweep-ms: 3600000
     retention-initial-delay-ms: 3600000
+  # Plan-B 상황 감시 스윕도 같은 이유로 끈다. 이 잡은 cron 이라 주기 대신 Spring 의 끔 표기 "-" 를 쓴다(따옴표 필수 —
+  # 맨 `-` 는 YAML 목록이 된다). 동작은 `SituationSweepIT` 가 sweep(now) 직접 호출로 잰다.
+  planb:
+    situation-sweep:
+      cron: "-"
+      evening-cron: "-"
