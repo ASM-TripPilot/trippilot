@@ -12,6 +12,8 @@
   ② 큰 풀(한도에 끊기는 OR)·폴백(지금 위치에서의 도로 km × w 를 점수에서 뺀 순서 — 같은
      의미의 그리디판)은 풀마다가 아니라 집계로 준다.
   ③ 직렬화 왕복
+  ④ 앵커=숙소(생성, `ignore_anchor_distance`) — 숙소 출발·복귀 구간은 감점 밖이라 먼 동네의 좋은 곳을
+     고른다(OR·폴백). 꺼져 있으면(재계획 — 앵커=지금 위치) 종전처럼 숙소 옆을 고른다.
   (기본 0 이면 종전과 같은 해 — 같은 코드 경로끼리 비교하는 테스트는 아무것도 못 지켜서 두지
   않았다. 확인은 안정성 하네스 전후 동일 + 리뷰의 HEAD 사본 대조 40풀 해시 일치로 했다.)
 """
@@ -138,3 +140,53 @@ def test_직렬화_왕복과_음수_거부() -> None:
     assert ItineraryProblem.from_dict(old).travel_weight == 0.0
     with pytest.raises(ValueError):
         replace(problem, travel_weight=-0.1)
+
+
+# ④ ────────────────────────────────────────────────────────────────────────
+
+def _two_areas():
+    """숙소 옆(0.80 × 3) vs 8km 떨어진 동네(0.85 × 3), 하루 3곳 — 동네 안은 100m 간격."""
+    def poi(pid, lat, lng):
+        return Poi(poi_id=PoiId(pid), name=pid, category=PoiCategory.SIGHT, coord=GeoPoint(lat, lng),
+                   open_hours=(), avg_cost=None, rating=None, quality=DataQuality.FULL,
+                   source=PoiSource.SEED, confidence=None)
+    near = [poi(f"near{k}", _ANCHOR.lat + 0.001 * k, _ANCHOR.lng) for k in range(1, 4)]
+    far = [poi(f"far{k}", _ANCHOR.lat + 0.072 + 0.001 * k, _ANCHOR.lng) for k in range(1, 4)]
+    problem = ItineraryProblem(
+        schedule_id=ScheduleId("base"), days=(_DAY,),
+        candidates=tuple(ScoredPoi(p.poi_id, 0.80, True) for p in near)
+        + tuple(ScoredPoi(p.poi_id, 0.85, True) for p in far),
+        fixed_blocks=(), budget=BudgetLevel.MID, transport=TransportMode.PUBLIC,
+        day_window=TimeWindow(datetime(2026, 10, 14, 9, tzinfo=_KST),
+                              datetime(2026, 10, 14, 18, tzinfo=_KST)),
+        seed=7, anchor=_ANCHOR, travel_weight=0.02, max_visits_per_day=3)
+    return problem, {p.poi_id: p for p in near + far}
+
+
+@pytest.mark.parametrize("engine", ["or", "fallback"])
+@pytest.mark.parametrize("lodging_is_base, area", [(True, "far"), (False, "near")])
+def test_숙소는_오가는_곳이면_먼_동네의_좋은_곳을_고른다(engine, lodging_is_base, area) -> None:
+    """2026-10-19 사용자 — "꼭 숙소 근처만 있지 않아도 돼, 숙소로 다시 돌아오면 되지". 개발 서버 서울 생성이
+    숙소 반경 1~2km 에 몰렸다(공유본 실측: 방문지의 숙소 거리 중앙 0.5km). 왕복 약 21km × 0.02 = 0.42 가
+    점수 차 0.05 × 3 을 이겨 숙소 옆만 골랐다. 재계획(앵커=지금 위치)은 종전 그대로여야 한다."""
+    problem, index = _two_areas()
+    problem = replace(problem, ignore_anchor_distance=lodging_is_base)
+
+    if engine == "or":
+        solution = OrToolsAssembler(index, _EST, _CFG).solve(problem, remaining_ms=10_000)
+    else:
+        solution = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
+
+    picked = {str(s.poi_id) for d in solution.days for s in d.slots}
+    assert picked == {f"{area}{k}" for k in range(1, 4)}, picked
+    assert check_all(solution, problem, index, _EST) == []
+
+
+def test_숙소_표식도_직렬화_왕복한다() -> None:
+    problem, _ = _two_areas()
+    on = replace(problem, ignore_anchor_distance=True)
+    assert ItineraryProblem.from_dict(on.to_dict()) == on
+    old = problem.to_dict()
+    old.pop("ignore_anchor_distance")  # 키 없는 기존 덤프는 재계획과 같은 기본값
+    assert ItineraryProblem.from_dict(old).ignore_anchor_distance is False
+

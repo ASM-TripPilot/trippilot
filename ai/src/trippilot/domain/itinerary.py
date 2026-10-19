@@ -279,6 +279,10 @@ class ItineraryProblem:
     순서도 원 일정 그대로, 시각만 다시). 하드다 — 둘 다 놓이면 앞 것이 먼저 끝난다. 기본 False = 무영향.
     같은 날 고정 블록과 POI 가 같은 항목은 그 고정의 자리표다("저녁은 그대로" 잠금) — 앞 방문은 고정 전,
     뒤 방문은 고정 후에 놓인다.
+
+    ignore_anchor_distance: 앵커가 하루를 오가는 숙소다(생성) — 앵커와의 거리를 고르는 기준에서 뺀다.
+    `travel_weight` 는 방문지 사이 아크에만 걸고, 숙소 출발·복귀 아크엔 걸지 않는다(2026-10-19 사용자:
+    "꼭 숙소 근처만 있지 않아도 돼, 숙소로 다시 돌아오면 되지"). 재계획은 앵커가 지금 위치라 False.
     """
 
     schedule_id: ScheduleId
@@ -303,6 +307,7 @@ class ItineraryProblem:
     # `day_window` 의 시각을 쓴다. 읽는 쪽은 `window_on(day)` 하나로만 읽는다.
     day_windows: Mapping[date, TimeWindow] | None = None
     required_in_order: bool = False  # 필수 방문을 준 순서대로 — "시간만 당기기" (BR-U4-47)
+    ignore_anchor_distance: bool = False  # 앵커=숙소(생성) — 숙소 오가는 구간은 경로 감점 밖
 
     def window_on(self, day: date) -> TimeWindow:
         """그 날의 창 — 일자별 창이 있으면 그것, 없으면 공용 창의 시각을 그 날짜에 얹는다."""
@@ -352,6 +357,7 @@ class ItineraryProblem:
                 if self.day_windows else None
             ),
             "required_in_order": self.required_in_order,
+            "ignore_anchor_distance": self.ignore_anchor_distance,
             # date 키는 JSON 원시 타입이 아니다 → 정렬된 ISO 키 (결정론적 직렬화)
             "daily_rain_prob": (
                 {d.isoformat(): self.daily_rain_prob[d]
@@ -411,6 +417,7 @@ class ItineraryProblem:
                 if d.get("day_windows") else None
             ),
             required_in_order=d.get("required_in_order", False),
+            ignore_anchor_distance=d.get("ignore_anchor_distance", False),
         )
 
 

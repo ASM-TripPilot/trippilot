@@ -643,7 +643,10 @@ class OrToolsAssembler:
         w = problem.travel_weight
         if w <= 0:
             return []
-        return [-int(round(w * d)) * lit for _, _, lit, d in self._arc_meters(problem, arcs, coords)]
+        # 앵커=숙소(생성)면 숙소 출발·복귀 아크(노드 0)는 뺀다 — 동네를 정하는 것은 방문지 사이 이동이다.
+        free = problem.ignore_anchor_distance
+        return [-int(round(w * d)) * lit for i, j, lit, d in self._arc_meters(problem, arcs, coords)
+                if not (free and (i == 0 or j == 0))]
 
     def _end_near_terms(self, problem, arcs, coords) -> list:
         """숙소 근처에서 끝내기 — 마지막 방문지(끝 아크 i → 0)의 숙소까지 도로 km 감점 (BR-U4-47).

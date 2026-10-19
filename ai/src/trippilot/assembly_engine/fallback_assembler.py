@@ -350,7 +350,9 @@ class RuleFallbackAssembler:
                 # (말단 슬롯, 없으면 앵커)에서의 도로 km × travel_weight 를 점수에서 빼 다시 줄
                 # 세운다. 0 이면 ranked 순서 그대로(종전과 바이트 동일 — OR 웜스타트도 불변).
                 base = remaining
-                here = last_poi.coord if last_poi is not None else problem.anchor
+                # 앵커=숙소(생성)면 첫 곳은 숙소 거리로 줄 세우지 않는다 — OR 이 숙소 아크를 빼는 것과 같다.
+                here = (last_poi.coord if last_poi is not None
+                        else None if problem.ignore_anchor_distance else problem.anchor)
                 route_on = problem.travel_weight > 0 and here is not None
                 end = problem.end_near
                 # 숙소 근처에서 끝내기 — OR 의 끝 아크 감점의 그리디판. 그리디는 어느 삽입이 마지막인지
