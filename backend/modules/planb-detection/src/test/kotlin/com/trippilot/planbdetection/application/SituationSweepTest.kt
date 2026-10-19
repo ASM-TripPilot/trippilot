@@ -344,11 +344,28 @@ class SituationSweepTest : StringSpec({
         summary.unknown shouldBe mapOf(SweepSource.KMA_FORECAST to 5)
         summary.trips shouldBe 5
         summary.failed shouldBe 0 // 감지기 실패는 그 출처의 모름이지 여행 실패가 아니다
-        // 모름도 관측이다 — 감시 상태가 '확인 불가'로 바로 내려간다(거짓 정상 금지).
+        // 모름(회로 차단 포함)은 감시 상태를 건드리지 않는다 — 마지막 확인이 신선 창을 지나야 '확인 불가'가 된다(RES-SA-01).
         tripIds.forEach { id ->
-            world.watches.findByTrip(id).associate { it.source to it.status } shouldBe
-                mapOf(SweepSource.KMA_FORECAST to WatchStatus.UNKNOWN, SweepSource.PLACE to WatchStatus.CHECKED)
+            world.watches.findByTrip(id).associate { it.source to it.status } shouldBe mapOf(SweepSource.PLACE to WatchStatus.CHECKED)
         }
+    }
+
+    "모름 한 번은 마지막 확인을 지우지 않는다 — 신선 창이 흡수하고(PERF-SA-09), 다시 확인하면 시각만 앞으로 간다" {
+        val world = World()
+        val tripId = world.trip()
+        val forecast = FakeDetector(SweepSource.KMA_FORECAST)
+        world.sweep(props(), listOf(forecast), StepClock(at("12:15"))).sweep(at("12:15"))
+
+        forecast.answer = { Detection.Unknown("NO_DATA") }
+        world.sweep(props(), listOf(forecast), StepClock(at("13:15"))).sweep(at("13:15"))
+        forecast.answer = { throw IllegalStateException("시한 초과(대역)") }
+        world.sweep(props(), listOf(forecast), StepClock(at("14:15"))).sweep(at("14:15"))
+
+        world.watches.findByTrip(tripId).single() shouldBe PlanBWatch(tripId, SweepSource.KMA_FORECAST, WatchStatus.CHECKED, at("12:15"))
+
+        forecast.answer = { CLEAR }
+        world.sweep(props(), listOf(forecast), StepClock(at("15:15"))).sweep(at("15:15"))
+        world.watches.findByTrip(tripId).single() shouldBe PlanBWatch(tripId, SweepSource.KMA_FORECAST, WatchStatus.CHECKED, at("15:15"))
     }
 
     "성공이 끼면 연속이 끊긴다 — 실패·실패·성공·실패·실패는 회로를 열지 않는다" {
@@ -567,7 +584,7 @@ class SituationSweepTest : StringSpec({
         summary.trips shouldBe 1
     }
 
-    "감시 상태 — 쓰는 출처마다 확인·모름을 남기고 관찰 전용·안 부른 출처는 남기지 않는다, 날짜 하나라도 모르면 확인 불가" {
+    "감시 상태 — 쓰는 출처가 본 날짜를 모두 확인했을 때만 남긴다, 날짜 하나라도 모르면 행을 건드리지 않는다(관찰 전용·안 부른 출처도)" {
         val world = World()
         val tripId = world.trip(slots = listOf(DAY to "21:00-22:00", DAY.plusDays(1) to "10:00-11:00"))
         val forecast = FakeDetector(SweepSource.KMA_FORECAST, answer = { if (it.date == DAY) CLEAR else Detection.Unknown("NO_DATA") })
@@ -578,9 +595,8 @@ class SituationSweepTest : StringSpec({
         world.sweep(props(horizon = SweepHorizon.TOMORROW), listOf(forecast, place, air, warning), StepClock(at("20:15")))
             .sweep(at("20:15"))
 
-        world.watches.findByTrip(tripId).associate { it.source to it.status } shouldBe
-            mapOf(SweepSource.KMA_FORECAST to WatchStatus.UNKNOWN, SweepSource.PLACE to WatchStatus.CHECKED)
-        world.watches.findByTrip(tripId).map { it.checkedAt }.toSet() shouldBe setOf(at("20:15"))
+        // 내일을 모르는 단기예보는 오늘을 확인했어도 '확인'을 새로 쓰지 않는다 — 거짓 정상 금지.
+        world.watches.findByTrip(tripId) shouldBe listOf(PlanBWatch(tripId, SweepSource.PLACE, WatchStatus.CHECKED, at("20:15")))
     }
 
     "감시 상태를 못 남겨도 판정은 이미 썼다 — 그 여행을 실패로 세지 않고, 다음 회차가 다시 쓴다" {

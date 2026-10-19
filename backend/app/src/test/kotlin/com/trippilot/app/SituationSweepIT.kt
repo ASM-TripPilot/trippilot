@@ -205,18 +205,24 @@ class SituationSweepIT : AbstractPostgresIntegrationTest() {
         stub.answers[tripId] = ::rainTomorrow
         sweep.sweep(at("20:15"))
         val raised = triggers.findActiveByTrip(tripId).single()
+        val checked = watches.findByTrip(tripId).single() // 판정 시각 = 회차 시각 + 흐른 시간(실 시계)
 
         stub.answers[tripId] = { Detection.Unknown("SERVICE_KEY_IS_NOT_REGISTERED") }
         sweep.sweep(at("20:40"))
 
         triggers.findById(raised.triggerId)!!.state shouldBe TriggerState.ACTIVE // 모름은 해제가 아니다(INV-SA-2)
-        watches.findByTrip(tripId).single().status shouldBe WatchStatus.UNKNOWN
+        // 감시 상태도 건드리지 않는다 — 마지막 확인(20:15 회차)이 신선 창을 지나야 '확인 불가'가 된다(RES-SA-01).
+        watches.findByTrip(tripId).single() shouldBe checked
+        checked.status shouldBe WatchStatus.CHECKED
 
         stub.answers[tripId] = { Detection.Checked(setOf(null), emptyList()) }
         sweep.sweep(at("20:45"))
 
         triggers.findById(raised.triggerId)!!.state shouldBe TriggerState.EXPIRED
-        watches.findByTrip(tripId).single().status shouldBe WatchStatus.CHECKED
+        watches.findByTrip(tripId).single().let {
+            it.status shouldBe WatchStatus.CHECKED
+            it.checkedAt.isBefore(at("20:45")) shouldBe false // 확인이 다시 오면 시각이 앞으로 간다
+        }
         events(tripId).size shouldBe 1 // 해제는 알리지 않는다
     }
 

@@ -43,7 +43,7 @@ import kotlin.math.ceil
  *
  * 회차마다: 겹치는 여행을 시작 위치를 돌려 가며 읽고([roundOrder]) → 계정 허용목록 → 확정 일정만 → 그 날 끝나지 않은
  * 슬롯이 있는 날짜마다 감지기를 **트랜잭션 밖에서** 부르고 → 여행 하나씩 `TriggerService.reconcile`(여행 1개 = 트랜잭션 1개)
- * → 부른 출처의 감시 상태를 남긴다. 회차 요약은 INFO 1줄이다(운영은 지표 내보내기가 꺼져 있다 — OBS-SA-01·07).
+ * → 본 날짜를 모두 확인한 출처의 감시 상태(확인)를 남긴다. 회차 요약은 INFO 1줄이다(운영은 지표 내보내기가 꺼져 있다 — OBS-SA-01·07).
  *
  * - **쓰지 않는 경우**: 모드 dry-run(판정·요약만), 관찰 전용 출처(요약·표본 줄만), 20:58 이후(INV-SA-5).
  * - **멈추는 경우**: 예산·종료 신호·20:58 — 여행 사이에서 멈추고 정상 반환해 락을 푼다. 못 본 여행은 `skipped` 다.
@@ -211,11 +211,15 @@ class SituationSweep(
         }
     }
 
-    /** 감시 상태 — 쓴 출처마다 확인·모름(날짜 하나라도 모르면 모름 — 거짓 정상 금지). 관찰 전용·안 부른 출처는 쓰지 않는다. */
+    /**
+     * 감시 상태 — 쓴 출처가 이 회차에 본 날짜를 **모두 확인했을 때만** 확인을 남긴다(BR-SA-13 ③ · RES-SA-01).
+     * 모름(회로 차단 포함)이 낀 출처는 행을 건드리지 않는다 — 마지막 확인이 신선 창을 지나면 '확인 불가'가 된다.
+     * 그래서 일시 모름 한 번은 창이 흡수하고(PERF-SA-09) 거짓 '정상'도 새로 쓰지 않는다. 관찰 전용·안 부른 출처는 쓰지 않는다.
+     */
     private fun record(trip: WatchedTrip, written: List<Observation>, at: Instant) {
         written.groupBy { it.source }.forEach { (source, seen) ->
-            val status = if (seen.all { it.detection is Detection.Checked }) WatchStatus.CHECKED else WatchStatus.UNKNOWN
-            runCatching { watches.upsert(PlanBWatch(trip.tripId, source, status, at)) }
+            if (seen.any { it.detection !is Detection.Checked }) return@forEach
+            runCatching { watches.upsert(PlanBWatch(trip.tripId, source, WatchStatus.CHECKED, at)) }
                 .onFailure { log.warn("감시 상태를 남기지 못했습니다 — 다음 회차가 다시 씁니다. tripId={} source={}", trip.tripId, source, it) }
         }
     }
