@@ -51,11 +51,11 @@ def report(files):
 
 
 def by_segment(*paths):
-    """테스트용 소유 지도 — `com/trippilot/<x>/.../F.kt` 와 그 패키지를 모듈 `<x>` 가 갖는다."""
-    owners = {}
-    for p in paths:
-        owners[p] = owners[p.rsplit("/", 1)[0]] = {p.split("/")[2]}
-    return owners
+    """테스트용 소유 지도 — `com/trippilot/<x>/.../F.kt` 를 모듈 `<x>` 가 갖는다."""
+    return {p: {p.split("/")[2]} for p in paths}
+
+
+UNOWNED = "소유 모듈을 하나로 정할 수 없다(소스 폴더에 그 경로가 없거나 두 모듈에 있다 — package 선언·파일 위치를 본다)"
 
 
 def rows(totals, modules, failures):
@@ -99,24 +99,29 @@ class CoverageGateTest(unittest.TestCase):
     def test_새_모듈이_기존_모듈과_같은_패키지에_파일을_둬도_따로_센다(self):
         """패키지로 소유를 정하면 newmod 의 0% 가 trip 수천 분기에 섞여 사라진다."""
         files = {"com/trippilot/trip/A.kt": (10000, 0, 10000, 0), "com/trippilot/trip/B.kt": (0, 30, 0, 30)}
-        owners = {"com/trippilot/trip/A.kt": {"modules/trip"}, "com/trippilot/trip/B.kt": {"modules/newmod"},
-                  "com/trippilot/trip": {"modules/trip", "modules/newmod"}}
+        owners = {"com/trippilot/trip/A.kt": {"modules/trip"}, "com/trippilot/trip/B.kt": {"modules/newmod"}}
         _, modules, failures = gate.evaluate(report(files), owners)
         self.assertEqual(modules["modules/newmod"]["BRANCH"], 0.0)
         self.assertTrue(any(f.startswith("modules/newmod BRANCH") for f in failures), failures)
 
-    def test_인라인으로_생긴_리포에_없는_파일_이름은_패키지의_소유_모듈로_간다(self):
-        # compareBy 같은 인라인 함수가 만든 클래스는 표준 라이브러리 파일 이름(Comparisons.kt)을 달고 나온다.
-        files = {"com/trippilot/trip/A.kt": SAFE, "com/trippilot/trip/Comparisons.kt": SAFE}
-        owners = {"com/trippilot/trip/A.kt": {"modules/trip"}, "com/trippilot/trip": {"modules/trip"}}
-        _, modules, failures = gate.evaluate(report(files), owners)
+    def test_측정_대상이_0인_파일은_건너뛴다_인라인으로_생긴_남의_파일_이름(self):
+        # compareBy 같은 인라인 함수가 만든 클래스는 표준 라이브러리 파일 이름(Comparisons.kt)을 달고 0/0 으로 나온다.
+        files = {"com/trippilot/trip/A.kt": SAFE, "com/trippilot/trip/Comparisons.kt": (0, 0, 0, 0)}
+        _, modules, failures = gate.evaluate(report(files), by_segment("com/trippilot/trip/A.kt"))
         self.assertEqual(failures, [])
-        self.assertEqual(set(modules), {"modules/trip"})
+        self.assertEqual(set(modules), {"trip"})
 
-    def test_파일도_패키지도_못_찾으면_조용히_흘리지_않고_실패한다(self):
-        files = {"com/trippilot/trip/A.kt": SAFE, "com/trippilot/orphan/O.kt": SAFE}
-        failures = gate.evaluate(report(files), by_segment("com/trippilot/trip/A.kt"))[2]
-        self.assertIn("com/trippilot/orphan/O.kt: 소유 모듈을 못 찾았다(소스 폴더에 그 패키지가 없다)", failures)
+    def test_package_선언이_폴더와_다른_파일은_다른_모듈에_붙지_않고_실패한다(self):
+        # 리포트는 선언 패키지(trip/application)로 묶지만 파일은 foo 모듈의 다른 폴더에 있다.
+        files = {"com/trippilot/trip/application/A.kt": SAFE, "com/trippilot/trip/application/X.kt": SAFE}
+        owners = {"com/trippilot/trip/application/A.kt": {"modules/trip"}, "com/trippilot/foo/X.kt": {"modules/foo"}}
+        failures = gate.evaluate(report(files), owners)[2]
+        self.assertIn(f"com/trippilot/trip/application/X.kt: {UNOWNED}", failures)
+
+    def test_같은_경로를_두_모듈이_가지면_합치지_않고_실패한다(self):
+        files = {"com/trippilot/trip/Mappers.kt": SAFE}
+        failures = gate.evaluate(report(files), {"com/trippilot/trip/Mappers.kt": {"modules/trip", "modules/newmod"}})[2]
+        self.assertIn(f"com/trippilot/trip/Mappers.kt: {UNOWNED}", failures)
 
     def test_하위_패키지는_소유_모듈로_합친다(self):
         files = {"com/trippilot/trip/domain/A.kt": (10, 0, 10, 0), "com/trippilot/trip/adapter/in/web/B.kt": (0, 10, 0, 10)}
@@ -152,6 +157,22 @@ class CoverageGateTest(unittest.TestCase):
         self.assertIn("**실패:**", rendered)
         self.assertIn(failures[0], rendered)
 
+    def test_깨진_리포트는_막는_모드에선_예외_advisory_에선_경고와_0(self):
+        with tempfile.TemporaryDirectory() as d:
+            broken = os.path.join(d, "broken.xml")
+            open(broken, "w").close()
+            with self.assertRaises(ET.ParseError):
+                self.run_main([broken])
+            os.environ["COVERAGE_ADVISORY"] = "1"
+            self.assertEqual(self.run_main([broken])[0], 0)
+
+    def test_리포트가_없으면_요약에도_사유를_쓴다(self):
+        with tempfile.TemporaryDirectory() as d:
+            summary = os.path.join(d, "summary.md")
+            os.environ["GITHUB_STEP_SUMMARY"] = summary
+            self.run_main([os.path.join(d, "none.xml")])
+            self.assertIn("리포트가 없다", open(summary, encoding="utf-8").read())
+
     def test_리포트_경로가_없으면_exit_2(self):
         self.assertEqual(self.run_main([])[0], 2)
 
@@ -170,11 +191,11 @@ class CoverageGateTest(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertNotIn("::", out)  # 로컬(Actions 밖)에서는 주석을 내지 않는다
             os.environ["GITHUB_ACTIONS"] = "true"
-            self.assertIn("::error title=커버리지 하한 아래::", self.run_main([xml])[1])
+            self.assertIn("::error title=커버리지 게이트::", self.run_main([xml])[1])
             os.environ["COVERAGE_ADVISORY"] = "1"
             code, out = self.run_main([xml])
             self.assertEqual(code, 0)
-            self.assertIn("::warning title=커버리지 하한 아래(막지 않음)::", out)
+            self.assertIn("::warning title=커버리지 게이트(막지 않음)::", out)
 
     def test_실제_소스_트리에서_모듈_소유를_찾는다(self):
         # 특정 파일·모듈 이름을 박지 않는다 — 무관한 이름 변경 리팩터가 이 테스트를 깨면 안 된다.

@@ -9,8 +9,9 @@
 - Gradle 모듈별 표와 실패 사유를 stdout 에, CI 면 `$GITHUB_STEP_SUMMARY` 에도 쓴다. 모듈은 패키지 이름이
   아니라 **소스 파일이 실제로 있는 소스 폴더**로 정한다(리포트의 패키지 디렉터리 + 파일 이름). 패키지로 정하면
   새 모듈이 기존 모듈과 같은 패키지에 클래스를 둘 때 큰 모듈에 섞여 모듈 바닥이 0% 를 못 본다.
-  리포에 없는 파일 이름은 그 패키지의 소유 모듈로 보낸다 — 인라인 함수(`compareBy` 등)가 우리 패키지에 만든
-  클래스는 표준 라이브러리 파일 이름(`Comparisons.kt`)을 달고 나온다(실측). 패키지도 못 찾으면 실패한다.
+  측정 대상이 0 인 파일은 건너뛴다 — 인라인 함수(`compareBy` 등)가 우리 패키지에 만든 클래스는 표준 라이브러리
+  파일 이름(`Comparisons.kt`)을 달고 나오는데, 실측 17건이 전부 라인·분기 0/0 이었다. 그 밖에 소유를 못 찾거나
+  (`package` 선언이 폴더와 다른 파일 등) 같은 경로를 두 모듈이 가지면 판정할 수 없으니 실패한다.
 
 하한선은 **래칫**이다 — 오르면 상수를 올리는 PR 을 내고, 내리지 않는다. 처음부터 목표치(80% 같은)를
 걸면 첫날부터 빨갛거나 아무도 못 지키는 숫자가 되어 결국 게이트를 끄게 된다. 측정한 기준선에서 시작한다.
@@ -70,7 +71,7 @@ def fmt(value, floor):
 
 
 def source_owners(backend=BACKEND):
-    """소스 파일(`com/trippilot/.../X.kt`)과 그 패키지 디렉터리 → 가진 Gradle 모듈들. 둘 이상이면 두 모듈에 있다."""
+    """소스 파일(`com/trippilot/.../X.kt`) → 그 파일을 가진 Gradle 모듈들. 둘 이상이면 같은 경로가 두 모듈에 있다."""
     owners = defaultdict(set)
     for src in [*backend.glob("**/src/main/kotlin"), *backend.glob("**/src/main/java")]:
         if "build" in src.relative_to(backend).parts:
@@ -79,7 +80,6 @@ def source_owners(backend=BACKEND):
         for f in src.rglob("*"):
             if f.suffix in (".kt", ".java"):
                 owners[f.relative_to(src).as_posix()].add(module)
-                owners[f.parent.relative_to(src).as_posix()].add(module)
     return owners
 
 
@@ -88,11 +88,12 @@ def evaluate(root, owners):
     sums = defaultdict(lambda: {k: [0, 0] for k in KINDS})
     for package in root.iter("package"):
         for source in package.iter("sourcefile"):
+            if all(sum(counter(source, k)) == 0 for k in KINDS):
+                continue  # 측정 대상 없음(인라인 함수가 만든 클래스 등) — 어느 모듈 수치도 바꾸지 않는다
             path = f"{package.get('name')}/{source.get('name')}"
-            # 파일 → (리포에 없는 인라인 파일 이름이면) 패키지 → 둘 다 없으면 따로 모아 실패시킨다.
-            # 조용히 어느 모듈에 붙이면 그 모듈 수치가 엉뚱해진다.
-            found = owners.get(path) or owners.get(package.get("name"), ())
-            module = "+".join(sorted(found)) or f"?{path}"
+            found = owners.get(path, set())
+            # 못 찾았거나 두 모듈이 가지면 판정할 수 없다 — 조용히 어느 모듈에 붙이면 그 모듈 수치가 엉뚱해진다.
+            module = next(iter(found)) if len(found) == 1 else f"?{path}"
             for kind in KINDS:
                 covered, missed = counter(source, kind)
                 sums[module][kind][0] += covered
@@ -104,7 +105,10 @@ def evaluate(root, owners):
     failures = [f"전체 {k} 측정 대상이 없다(합산 대상·계측 범위 설정을 본다)" for k in KINDS if totals[k] is None]
     failures += [f"전체 {k} {totals[k]:.1f}% < 하한 {TOTAL_FLOORS[k]:g}%" for k in KINDS
                  if totals[k] is not None and totals[k] < TOTAL_FLOORS[k]]
-    failures += [f"{m[1:]}: 소유 모듈을 못 찾았다(소스 폴더에 그 패키지가 없다)" for m in sorted(modules) if m.startswith("?")]
+    failures += [
+        f"{m[1:]}: 소유 모듈을 하나로 정할 수 없다(소스 폴더에 그 경로가 없거나 두 모듈에 있다 — package 선언·파일 위치를 본다)"
+        for m in sorted(modules) if m.startswith("?")
+    ]
     failures += [
         f"{m} {k} {p[k]:.1f}% < 모듈 바닥 {MODULE_FLOORS[k]:g}%"
         for m, p in sorted(modules.items()) for k in KINDS
@@ -136,11 +140,17 @@ def render(totals, modules, failures):
     return "\n".join(lines)
 
 
+def write_summary(text):
+    if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(summary, "a", encoding="utf-8") as f:
+            f.write(text + "\n")
+
+
 def annotate(failures, advisory):
     """GitHub Actions 안에서만 실패 사유를 커밋 체크 주석으로 낸다(로컬에서는 잡음)."""
     if os.environ.get("GITHUB_ACTIONS") != "true":
         return
-    level, title = ("warning", "커버리지 하한 아래(막지 않음)") if advisory else ("error", "커버리지 하한 아래")
+    level, title = ("warning", "커버리지 게이트(막지 않음)") if advisory else ("error", "커버리지 게이트")
     for f in failures:
         print(f"::{level} title={title}::{f}")
 
@@ -158,15 +168,23 @@ def main(argv=None):
         reason = (f"리포트가 없다: {path} — 테스트 실행 데이터(.exec)가 없어 리포트가 생략됐을 수 있다. "
                   "`./gradlew build :app:coverageGate` 로 테스트부터 돌린다.")
         print(reason, file=sys.stderr)
+        write_summary(f"### 백엔드 커버리지 — 판정 못 함\n\n**실패:**\n- {reason}")
         annotate([reason], advisory)
         return 0 if advisory else 2
 
-    totals, modules, failures = evaluate(ET.parse(path).getroot(), source_owners())
+    try:
+        totals, modules, failures = evaluate(ET.parse(path).getroot(), source_owners())
+    except Exception as e:  # 깨진 XML 등 — advisory 면 push 의 이미지 발행을 막지 않는다
+        if not advisory:
+            raise
+        reason = f"리포트를 읽지 못했다: {path} — {e!r}"
+        print(reason, file=sys.stderr)
+        write_summary(f"### 백엔드 커버리지 — 판정 못 함\n\n**실패:**\n- {reason}")
+        annotate([reason], advisory)
+        return 0
     report = render(totals, modules, failures)
     print(report)
-    if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
-        with open(summary, "a", encoding="utf-8") as f:
-            f.write(report + "\n")
+    write_summary(report)
     for k in KINDS:
         if totals[k] is not None and totals[k] >= TOTAL_FLOORS[k] + 2:
             print(f"\n{k} 하한선을 {int(totals[k]) - 1}% 로 올릴 수 있다(TOTAL_FLOORS — 버림에서 1p 여유).")

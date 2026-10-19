@@ -104,13 +104,15 @@ tasks.withType<JacocoReport>().configureEach { reports.xml.required = true }
 // (리포트 태스크의 outputLocation 에서 파생하면 구성 시점에 그 태스크를 실현해야 한다 — layout 에서 정하면 안 그렇다.)
 val coverageReport = tasks.named<JacocoReport>("testCodeCoverageReport")
 val coverageXml = layout.buildDirectory.file("reports/jacoco/coverage.xml")
+val coverageHtml = layout.buildDirectory.dir("reports/jacoco/coverage-html")
 // 옛 산출물을 먼저 지운다 — 실행 데이터가 없으면 리포트 태스크가 SKIPPED 되고 옛 XML·HTML 이 남아
 // 그것으로 판정되거나 현재 수치로 읽힌다.
 val clearCoverageReport = tasks.register<Delete>("clearCoverageReport") {
-    delete(coverageXml, layout.buildDirectory.dir("reports/jacoco/testCodeCoverageReport"))
+    delete(coverageXml, coverageHtml)
 }
 coverageReport.configure {
     reports.xml.outputLocation.set(coverageXml)
+    reports.html.outputLocation.set(coverageHtml)
     mustRunAfter(clearCoverageReport)
 }
 tasks.register<Exec>("coverageGate") {
