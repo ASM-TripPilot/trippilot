@@ -281,9 +281,9 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     /** openapi 정본에서 스키마 하나의 property 이름 집합을 읽는다. */
     private fun schemaProperties(name: String): Set<String> = schemaPropertySpecs(name).keys
 
+    private val spec: Map<String, Any> by lazy { Yaml().load(ClassPathResource("static/openapi.yaml").inputStream) }
+
     private fun schemaPropertySpecs(name: String): Map<String, Any> {
-        @Suppress("UNCHECKED_CAST")
-        val spec = Yaml().load<Map<String, Any>>(ClassPathResource("static/openapi.yaml").inputStream)
         @Suppress("UNCHECKED_CAST")
         val schemas = (spec["components"] as Map<String, Any>)["schemas"] as Map<String, Map<String, Any>>
         val schema = requireNotNull(schemas[name]) { "openapi.yaml 에 $name 스키마가 없다" }

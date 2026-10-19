@@ -52,7 +52,8 @@ class RefreshSession private constructor(
 
         /** 새 체인의 첫 세션(로그인 시 발급). */
         fun issue(accountId: AccountId, deviceId: String, tokenHash: String, now: Instant, ttl: Duration): RefreshSession {
-            // 요청 DTO 가 먼저 막지만, DTO 를 거치지 않는 발급 경로가 생겨도 22001 → 500 이 돌아오지 않게 여기서도 막는다.
+            // 400 으로 막는 것은 요청 DTO 의 @Size 다. 여기는 DTO 를 거치지 않는 발급 경로가 생겨도 저장 **전에** 실패시켜,
+            // 원인이 DB 22001 대신 이 메시지로 남게 한다(응답은 여전히 500 — 그 경로를 만들 때 검증을 붙여야 한다).
             require(deviceId.length <= DEVICE_ID_MAX) { "기기 식별자는 $DEVICE_ID_MAX 자 이하여야 합니다." }
             return RefreshSession(RefreshSessionId.new(), accountId, deviceId, tokenHash, UUID.randomUUID(), now, now.plus(ttl), null, null)
         }

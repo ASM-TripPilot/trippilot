@@ -292,7 +292,8 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
     /**
      * `$ref` 를 풀고, `allOf`·`oneOf`·`anyOf` 는 구성원과 **같은 층의 `properties`** 를 합친다.
      * oneOf 를 합집합으로 보는 이유: 코드는 한 DTO 로 모든 갈래를 받으므로(예: TurnInputRequest)
-     * 그 DTO 의 속성 = 갈래들 속성의 합이다.
+     * 그 DTO 의 속성 = 갈래들 속성의 합이다. 한계: 같은 이름 속성은 **마지막 갈래가 이긴다** — 갈래마다 같은 이름
+     * 아래 다른 중첩 객체를 두면 앞 갈래의 중첩은 대조되지 않는다(지금 스펙의 oneOf 3곳은 겹치는 이름이 스칼라뿐이다).
      */
     @Suppress("UNCHECKED_CAST")
     private fun resolve(schema: Map<String, Any>): Map<String, Any> {
@@ -401,6 +402,7 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
         ((holder["content"] as? Map<String, Any>)?.get("application/json") as? Map<String, Any>)
             ?.get("schema") as? Map<String, Any>
 
-    /** JSON 으로 오가는 구조(DTO·컬렉션·Map) — 스칼라 본문(String 등)은 JSON 이 아니어도 된다. */
-    private fun isJsonStructure(type: JavaType): Boolean = type.isContainerType || !isLeaf(type)
+    /** JSON 으로 오가는 구조(DTO·컬렉션·Map·JsonNode) — 스칼라 본문(String 등)은 JSON 이 아니어도 된다. */
+    private fun isJsonStructure(type: JavaType): Boolean =
+        type.isContainerType || !isLeaf(type) || JsonNode::class.java.isAssignableFrom(type.rawClass)
 }
