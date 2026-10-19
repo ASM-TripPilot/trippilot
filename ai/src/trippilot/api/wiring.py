@@ -1180,7 +1180,9 @@ def _visit_cap(request: schemas.ReplanRequest, resolved: Sequence[str],
 #   KEEP_DINNER   원 일정의 저녁 식당을 잠근다(`_dinner_blocks`)
 #   EARLIER       장소는 그대로 두고 시각만 지금부터 다시 맞춘다(`_earlier_visits`)
 #   END_NEAR_STAY 마지막 방문지를 숙소 가까이(`ItineraryProblem.end_near`)
-_LAYOUT_KEYS = frozenset({"EARLIER", "KEEP_DINNER", "END_NEAR_STAY"})
+#   SHORTER_DAY   일찍 마무리 — 새 방문은 한 곳만, 숙소가 있으면 그 쪽에서 끝낸다
+#   END_DAY       오늘은 여기까지 — 새 방문 없이 하루를 끝낸다(`_replan_end_day`)
+_LAYOUT_KEYS = frozenset({"EARLIER", "KEEP_DINNER", "END_NEAR_STAY", "SHORTER_DAY", "END_DAY"})
 
 # 저녁 식사창 — 조립의 식사 소프트 항과 같은 창(17~20시)이다. 창이 둘이면 "저녁"이 두 뜻이 된다.
 _DINNER_WINDOW_MIN = AssemblyConfig().dinner_window_min
@@ -1330,11 +1332,12 @@ def _earlier_visits(
 
 def _end_near(request: schemas.ReplanRequest, resolved: Sequence[str],
               notes: list[str]) -> GeoPoint | None:
-    """END_NEAR_STAY("숙소 근처에서 끝내기") → 하루를 마칠 곳(그날 밤 숙소). 숙소가 없으면 None + 노트.
+    """END_NEAR_STAY("숙소 근처에서 끝내기")·SHORTER_DAY("일찍 마무리") → 하루를 마칠 곳(그날 밤 숙소).
+    숙소가 없으면 None + 노트.
 
     `anchor` 로 대신하지 않는다 — 그것은 GPS·수동·마지막 방문일 수 있어 숙소가 아니다.
     """
-    if "END_NEAR_STAY" not in resolved:
+    if "END_NEAR_STAY" not in resolved and "SHORTER_DAY" not in resolved:
         return None
     if request.stay_anchor is None:
         notes.append("end_near_stay_no_stay: 숙소 좌표가 없어 무효")
@@ -2359,6 +2362,8 @@ class WiredItineraryOrchestrator:
         overlapped = _overlapping_locks(tuple(b for b in blocks if b not in past))
         if overlapped:
             notes.append(f"locked_overlap: {','.join(str(b.poi_id) for b in overlapped)}")
+        if "END_DAY" in resolved:
+            return self._replan_end_day(request, blocks, notes, resolved, unknown, now, t0)
         # 시간만 당기기 — 원 일정의 남은 방문이 그대로 필수 방문이다. 장소를 안 바꾸므로 구성 LLM 도,
         # 방문을 줄이는 상한도, 회피 카테고리 제외도 타지 않는다(사용자가 "시간만"이라 했다).
         earlier = _earlier_visits(request, resolved, blocks, not_before, notes,
@@ -2463,6 +2468,11 @@ class WiredItineraryOrchestrator:
                 notes.append(f"planb_rank_trimmed: add_one dropped={dropped}")
 
         visit_cap = None if earlier is not None else _visit_cap(request, resolved, past, not_before)
+        if "SHORTER_DAY" in resolved and earlier is None:
+            # 일찍 마무리 — 진행 중·잠금은 그대로, 새 방문은 한 곳만(사용자 결정 2026-10-19). 상한은 잠금까지
+            # 세는 값이라(`free_visit_cap`) 솔버에 들어가는 잠금 수 + 1 이다.
+            visit_cap = sum(1 for b in blocks if b not in past and b not in overlapped) + 1
+            notes.append(f"shorter_day: +1 after {visit_cap - 1} kept")
         if visit_cap is not None:
             notes.append(f"planb_visit_cap: {visit_cap}")
         window = request.time_window
@@ -3312,6 +3322,41 @@ class WiredItineraryOrchestrator:
             radius_km=pool.radius_km,
         )
 
+    def _replan_end_day(
+        self, request: schemas.ReplanRequest, blocks: tuple[FixedBlock, ...], notes: list[str],
+        resolved: list[str], unknown: list[str], now: datetime, started_ms: int,
+    ) -> schemas.ReplanResponse:
+        """END_DAY("전부 취소"·"오늘은 여기까지") — 새 방문 없이 하루를 끝낸다(사용자 결정 2026-10-19).
+
+        다녀온 곳·진행 중·사용자 잠금(과 "저녁은 그대로")만 **원 시각 그대로** 든 하루를 낸다 — BE 는 응답
+        하루로 원 하루를 바꾸므로 그 밖의 슬롯이 빠진다. 시각은 원 일정 값이라 INV-2 와 어긋나지 않는다.
+        솔버·LLM 은 부르지 않는다(규칙으로 정해지는 하루라 `RULE_FALLBACK` — BE 에선 "결정론", 폴백은 아니다).
+        남길 곳이 없으면(아침에 하루 전체 취소) 빈 일정으로 위장하지 않는다(IO-7) — BE 도 빈 하루를 해 없음으로 접는다.
+        """
+        kept = tuple(sorted(blocks, key=lambda b: b.window.start))
+        if not kept:
+            notes.append("end_day_nothing_kept")
+            return self._replan_empty("NO_FEASIBLE_SLOT", notes, resolved, unknown)
+        kept_ids = {b.poi_id for b in kept}
+        dropped = sum(1 for s in request.current_slots if PoiId(s.poi_id) not in kept_ids)
+        notes.append(f"end_day: kept {len(kept)} dropped {dropped}")
+        slots = tuple(VisitSlot(
+            poi_id=b.poi_id, start_at=b.window.start, end_at=b.window.end,
+            stay_min=int((b.window.end - b.window.start).total_seconds() // 60),
+            score=0.0, is_llm_score=False) for b in kept)
+        solution = ItinerarySolution(
+            schedule_id=ScheduleId(request.trip_id),
+            days=(DaySolution(date=request.target_date, slots=slots, fixed_blocks=kept),),
+            is_fallback=False, solve_mode=SolveMode.RULE_FALLBACK, assembly_run=None)
+        outcome = core.GenerationOutcome(
+            status=core.GenerationStatus.SUCCESS, solution=solution, scoring_mode=core.ScoringMode.RULE,
+            explanations=(), degradations=(), candidate_count=0,
+            budget=core.allocate(_deadline_budget(request.request_meta), core.OrchestratorConfig()),
+            candidates_summary=None, solved_at=now, slot_alternatives={}, rule_backfill_count=0,
+            repair_hints=None)
+        return self._replan_projection(
+            request, outcome, notes, resolved, unknown, started_ms=started_ms, end_day=True)
+
     def _replan_empty(
         self, code: str, notes: list[str], resolved: list[str], unknown: list[str],
         retrieved: Mapping[str, int] | None = None,
@@ -3342,6 +3387,7 @@ class WiredItineraryOrchestrator:
         started_ms: int,
         past: tuple[FixedBlock, ...] = (),
         composed: bool = False,
+        end_day: bool = False,
     ) -> schemas.ReplanResponse:
         """`GenerationOutcome` → `ReplanResponse`. **예외로 올리지 않는다** (IO-7).
 
@@ -3387,7 +3433,8 @@ class WiredItineraryOrchestrator:
             placed = {(s.poi_id, s.start_at) for day in solution.days for s in day.slots}
         # 하한 뒤에 새 방문이 0건이면 잠금만 든 하루다 — 그걸 재계획안으로 내면 BE 가
         # 남은 슬롯을 전부 지운 하루로 읽는다. 남은 시간이 없다는 사실을 정직하게 낸다.
-        if not_before is not None and placed <= {(b.poi_id, b.window.start) for b in blocks}:
+        if (not end_day and not_before is not None
+                and placed <= {(b.poi_id, b.window.start) for b in blocks}):
             notes.append(f"no_slot_after_from_instant: {not_before:%H:%M}")
             return self._replan_empty(
                 "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved, params)
@@ -3399,7 +3446,7 @@ class WiredItineraryOrchestrator:
         # 구성 LLM 이 하루를 골랐으면 폴백이 아니다 — 점수는 부르지 않은 것이고, PlanB 랭킹은 구성
         # 프롬프트의 참고 재료라 그 강등은 노트(`planb_rank_skipped`)로만 남는다. 구성이 없을 때만
         # 아래 종전 규칙(점수든 PlanB 랭킹이든 규칙으로 내려갔으면 폴백)이다.
-        llm_ok = composed or (
+        llm_ok = composed or end_day or (
             outcome.scoring_mode is core.ScoringMode.LLM and not planb_fallback)
         # 두 순회 모두 1차 패스로 받아 적는다 — 좌표 미상 전파 규칙이 달라 구간 집합이
         # 다르다(`_total_distance_km` 은 직전 유효점을 잇는다). 한 표를 같이 쓰면 같은
