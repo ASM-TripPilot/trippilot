@@ -55,3 +55,52 @@ export function primeExpoToken(
     data: token,
   });
 }
+
+/**
+ * 상황 감지 FE-A · 푸시 한 건(실물 `Notification` 모양). 앱이 읽는 칸 — `request.identifier`·`request.content.data` —
+ * 은 실물과 같은 자리에 두고, 나머지 칸은 화면에 보이는 값만 채운다. data 는 서버가 `{actionType, ...actionPayload}` 를
+ * 펼쳐 싣는 모양이다(`PushDispatchService.toMessage`).
+ */
+export function fakePushNotification(
+  identifier: string,
+  data: Record<string, unknown> | null
+): NotificationsModule.Notification {
+  return {
+    date: 0,
+    request: {
+      identifier,
+      content: { title: '알림', subtitle: null, body: '본문', data },
+      trigger: null,
+    },
+  } as unknown as NotificationsModule.Notification;
+}
+
+/** 사용자가 그 푸시를 누른 응답(실물 `NotificationResponse` — 기본 동작 식별자 = 본문 탭). */
+export function fakePushResponse(
+  identifier: string,
+  data: Record<string, unknown> | null
+): NotificationsModule.NotificationResponse {
+  return {
+    actionIdentifier: 'expo.modules.notifications.actions.DEFAULT',
+    notification: fakePushNotification(identifier, data),
+  };
+}
+
+/** 앱이 가장 최근에 단 탭 리스너 — 테스트가 OS 대신 불러 "알림을 눌렀다"를 흉내 낸다. */
+export function lastPushTapListener(
+  notifications: Notifications
+): (response: NotificationsModule.NotificationResponse) => void {
+  const calls = (
+    notifications.addNotificationResponseReceivedListener as jest.Mock
+  ).mock.calls;
+  return calls[calls.length - 1][0];
+}
+
+/** 앱이 가장 최근에 단 포그라운드 수신 리스너 — 테스트가 OS 대신 불러 "앱이 켜진 채 푸시가 왔다"를 흉내 낸다. */
+export function lastPushReceiveListener(
+  notifications: Notifications
+): (notification: NotificationsModule.Notification) => void {
+  const calls = (notifications.addNotificationReceivedListener as jest.Mock)
+    .mock.calls;
+  return calls[calls.length - 1][0];
+}
