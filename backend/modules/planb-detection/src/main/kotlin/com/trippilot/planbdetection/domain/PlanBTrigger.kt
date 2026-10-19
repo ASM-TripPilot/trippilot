@@ -41,6 +41,8 @@ data class PlanBTrigger(
         const val PAYLOAD_DETECTOR = "detector"
         const val PAYLOAD_DATA_SOURCE = "dataSource"
         const val PAYLOAD_POI_IDS = "poiIds"
+        /** 장소 신호의 대상 POI(domain-entities §3.4) — 날씨의 [PAYLOAD_POI_IDS] 와 다른 키다. */
+        const val PAYLOAD_POI_ID = "poiId"
         /** 발화한다 — 사용자에게 배너로 보인다. */
         fun active(
             tripId: UUID, itineraryId: UUID, kind: TriggerKind, affectedDate: LocalDate, slotKey: String?,
@@ -152,12 +154,16 @@ object SweepSource {
 
 /**
  * 원천 이름(CD5 `payload.dataSource`) — 감지기가 쓰고 응답 `attribution` 이 읽는다.
- * 지금은 공공누리 표시 의무가 있는 기상 원천만 둔다 — 장소 원천은 그 감지기 PR 이 표기 문구와 함께 더한다.
+ * 표기 문구는 공공누리 표시 의무가 있는 기상 원천만 갖는다(BR-SA-24) — 장소 원천(AI 검증·장소 상태)은 표기 없이 원천만 남긴다.
  */
 object DataSource {
     const val KMA_VILAGE = "KMA_VILAGE"
     const val KMA_WARNING = "KMA_WARNING"
     const val AIRKOREA = "AIRKOREA"
+    /** 장소 — AI 하루 검증의 영업시간 위반(HC1). */
+    const val AI_VALIDATE = "AI_VALIDATE"
+    /** 장소 — POI 상태 `CLOSED`(폐업). */
+    const val PLACE_STATUS = "PLACE_STATUS"
 }
 
 /** 억제 레코드(정본 §2.2). `[끄기]` 는 화면에서 배너를 감추는 게 아니라 이 행을 만든다(BR-U4-15). */

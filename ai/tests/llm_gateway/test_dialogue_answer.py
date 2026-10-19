@@ -267,7 +267,7 @@ def test_prompt_renders_deterministically_with_ref() -> None:
     p1, ref = reg.render(_FEAT, _vars())
     p2, _ = reg.render(_FEAT, _vars())
     assert p1 == p2  # 결정론
-    assert ref.prompt_id == "prompts/dialogue_answer.yaml" and ref.version == "0.3.0"
+    assert ref.prompt_id == "prompts/dialogue_answer.yaml" and ref.version == "0.3.1"
     assert ref.feature == "DIALOGUE_ANSWER"
     assert "GET_WEATHER" in p1 and "최대 강수확률" in p1
     assert "- 사용자: 내일 비 와?" in p1 and "- 도우미: 내일 제주 예보예요." in p1
@@ -304,6 +304,9 @@ def test_prompt_states_friendly_turn_rules() -> None:
     assert "짧게 답하세요" not in prompt
     for phrase in ("해요체", "길지 않게(2~4문장)", "맞장구", "되물", "두 분이", "이 시간에는", "사용자가 말한 시각"):
         assert phrase in prompt, phrase
+    # 0.3.1 — 어디에나 붙는 여는 말 금지 · 질문과 이어지는 마무리 (예시가 "바로 알려 드릴게요!"로 시작해 모델이 매번 따라 했다)
+    for phrase in ("여는 말을 매번 붙이지 마세요", "알려 드릴게요", "방금 질문과 이어지는"):
+        assert phrase in prompt, phrase
 
 
 # 예시 한 건 = "확인된 사실 {…}" 줄 + 다음 줄 "→ {…}" (yaml 블록이 들여쓰기를 걷어 낸 렌더 결과 기준)
@@ -317,9 +320,10 @@ def test_prompt_examples_pass_gate_and_end_with_next_step() -> None:
     """
     prompt, _ = PromptRegistry(_PROMPTS).render(_FEAT, _vars())
     examples = _EXAMPLE.findall(prompt)
-    assert len(examples) == 2
+    assert len(examples) == 3
     for facts_raw, answer_raw in examples:
         text = json.loads(answer_raw)["text"]
+        assert not any(stock in text for stock in ("알려 드릴게요", "확인해 볼게요", "궁금하시")), text  # 0.3.1 — 모델이 여는 말을 베낀다
         assert not _violates(text, _MAX_LENGTH), text
         times, unverifiable = clock_times(text)
         assert not unverifiable and times <= clock_times(facts_raw)[0], text
