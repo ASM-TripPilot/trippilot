@@ -54,6 +54,16 @@ class ChartTests(unittest.TestCase):
         flag = ai["args"].index("--timeout-graceful-shutdown")
         self.assertEqual(ai["args"][flag + 1], "630")
 
+    def test_ai_workers_are_not_killed_while_still_starting(self):
+        """기본 5초 핑 시한이면 CPU 가 밀린 노드에서 기동 중인 작업 프로세스가 죽고 다시 뜨기를 되풀이한다(10-18 개발 롤아웃 12회 →
+        스모크 기억 삭제 500). 여러 작업 프로세스일 때만 감독자가 있으므로 차트 args 에만 둔다."""
+        for environment in ("dev", "prd"):
+            ai = next(item for item in render(environment)
+                      if item["kind"] == "Deployment" and item["metadata"]["name"] == "ai")
+            args = ai["spec"]["template"]["spec"]["containers"][0]["args"]
+            self.assertIn("--workers", args)
+            self.assertEqual(args[args.index("--timeout-worker-healthcheck") + 1], "30")
+
     def test_ai_disables_uvicorn_access_log_everywhere_it_is_launched(self):
         """메모리 경계(`DELETE|GET /ai/v1/dialogue/memory?account_ref=…`)는 계정 참조를 **쿼리 문자열**로 받는다. uvicorn 기본
         access log 는 쿼리까지 포함한 request_line 을 stdout 에 찍어 CloudWatch 로 나간다(SEC-U8-06·BR-AO-08③ 위반).
