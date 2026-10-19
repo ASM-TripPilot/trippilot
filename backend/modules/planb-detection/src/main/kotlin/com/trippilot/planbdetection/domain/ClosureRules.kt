@@ -14,6 +14,8 @@ import java.util.UUID
  * 1. 오늘은 계획 시작이 지금 이후인 슬롯만 본다 — 이미 시작한 방문은 알려도 바꿀 수 없다. 미래일은 전부 본다.
  * 2. 상태 `CLOSED` → `PERMANENTLY_CLOSED` — 영업시간보다 우선하고, 편집 때 볼 수 없었던 사실이라 경고 이력과 무관하게 알린다.
  * 3. 영업시간 위반(HC1)인데 편집 때 이미 본 경고가 아니면 `HOURS_MISMATCH` — 하위 코드(`CLOSED_DAY` 등)는 PR-H1 이 붙인다.
+ *    단 그 슬롯에 `PERMANENTLY_CLOSED` 가 떠 있는데 이번에 폐업 여부를 모르면(조회 실패·행 없음·OTHER) 내지 않는다 — 내면
+ *    판정이 떠 있는 폐업을 제자리에서 영업시간 위반으로 갈아 끼운다(모름은 트리거를 바꾸지 않는다 — INV-SA-2).
  * 4. 확인 = 상태 ACTIVE ∧ 판정 OK ∧ 그 슬롯의 ACTIVE 가 `HOLIDAY` 아님 — 공휴일 휴무는 감지기가 해제하지 않는다.
  *
  * 같은 장소를 같은 날 두 번 넣으면 slotKey(`{date}#{poiId}`)가 같다 — 대상 하나로 보고, 발견은 대상당 하나다.
@@ -40,23 +42,23 @@ object ClosureRules {
     /**
      * @param now 판정 시각 — '오늘'과 '지금'을 여행지 기준(KST)으로 정한다.
      * @param status 장소 상태. null = 조회 실패(폐업 판정·확인 없음, 영업시간 발견은 그대로). 키가 없는 POI 는 모름이다.
-     * @param holiday 그 날 ACTIVE 가 공휴일 휴무(`HOLIDAY`)인 슬롯.
+     * @param active 그 날 이 출처가 띄운 ACTIVE 의 변형(slotKey → variant) — 공휴일 휴무는 확인하지 않고, 폐업은 모르는 회차가 바꾸지 않는다.
      */
     fun judge(
         date: LocalDate,
         now: Instant,
         slots: List<CheckedSlot>,
         status: Map<UUID, PoiLifeStatus>?,
-        holiday: Set<String>,
+        active: Map<String, TriggerVariant>,
     ): Verdict {
         val today = LocalDate.ofInstant(now, TriggerLifecycle.TRAVEL_ZONE)
         val nowTime = LocalTime.ofInstant(now, TriggerLifecycle.TRAVEL_ZONE)
         val seen = slots.filter { date != today || it.startAt > nowTime }
         val targets = seen.groupBy { it.slotKey }
-        val findings = targets.mapNotNull { (key, group) -> findingOf(key, group, status, date, today) }
+        val findings = targets.mapNotNull { (key, group) -> findingOf(key, group, status, active[key], date, today) }
         val raised = findings.map { it.slotKey }.toSet()
         val checked = targets.filter { (key, group) ->
-            key !in raised && key !in holiday &&
+            key !in raised && active[key] != TriggerVariant.HOLIDAY &&
                 group.all { status?.get(it.poiId) == PoiLifeStatus.ACTIVE && it.hours == HoursVerdict.OK }
         }.keys
         val learned = seen.any { status?.get(it.poiId) == PoiLifeStatus.ACTIVE && it.hours != HoursVerdict.UNKNOWN }
@@ -64,11 +66,13 @@ object ClosureRules {
     }
 
     private fun findingOf(
-        key: String, group: List<CheckedSlot>, status: Map<UUID, PoiLifeStatus>?, date: LocalDate, today: LocalDate,
+        key: String, group: List<CheckedSlot>, status: Map<UUID, PoiLifeStatus>?, current: TriggerVariant?, date: LocalDate, today: LocalDate,
     ): Finding? {
         val slot = group.first() // 같은 키 = 같은 장소 — 상태·이름이 같다
+        val state = status?.get(slot.poiId)
         val (variant, source) = when {
-            status?.get(slot.poiId) == PoiLifeStatus.CLOSED -> TriggerVariant.PERMANENTLY_CLOSED to DataSource.PLACE_STATUS
+            state == PoiLifeStatus.CLOSED -> TriggerVariant.PERMANENTLY_CLOSED to DataSource.PLACE_STATUS
+            current == TriggerVariant.PERMANENTLY_CLOSED && state != PoiLifeStatus.ACTIVE -> return null // 폐업 여부를 모른다
             group.any { it.hours == HoursVerdict.VIOLATED && !it.hoursWarnedBefore } -> TriggerVariant.HOURS_MISMATCH to DataSource.AI_VALIDATE
             else -> return null
         }

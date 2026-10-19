@@ -212,6 +212,27 @@ class PlaceDetectorTest : StringSpec({
         appender.list.single().throwableProxy shouldBe null
     }
 
+    "상태 조회가 실패한 회차는 떠 있는 폐업을 영업시간 위반으로 갈아 끼우지 않는다 — 다른 슬롯의 영업시간 위반은 그대로 (INV-SA-2)" {
+        val day = DayCheck(true, listOf(checked(TOMORROW, poiA, "10:00", HoursVerdict.VIOLATED), checked(TOMORROW, poiB, "12:00", HoursVerdict.VIOLATED)))
+        val now = at(TODAY, "20:15")
+        val closed = PlanBTrigger.active(
+            tripId, UUID.randomUUID(), TriggerKind.CLOSURE, TOMORROW, "$TOMORROW#$poiA",
+            mapOf(PlanBTrigger.PAYLOAD_VARIANT to TriggerVariant.PERMANENTLY_CLOSED.name, PlanBTrigger.PAYLOAD_DETECTOR to SweepSource.PLACE),
+            TriggerScope.FULL_DAY, "10월 21일(수) ‘성산일출봉’은 폐업한 곳으로 확인됐어요", now,
+        )
+
+        // 변형 없는 옛 행·날짜 전체 행은 슬롯 변형이 아니다 — 무시한다(B 의 영업시간 발견을 막지 않는다).
+        val legacy = closed.copy(triggerId = UUID.randomUUID(), slotKey = "$TOMORROW#$poiB", payload = mapOf(PlanBTrigger.PAYLOAD_DETECTOR to SweepSource.PLACE))
+        val dateWide = closed.copy(triggerId = UUID.randomUUID(), slotKey = null)
+
+        val d = detector(FakeDays(day), FakeStatus(fail = true))
+            .detect(target(TOMORROW, now, SweepPhase.EVENING, active = listOf(closed, legacy, dateWide)))
+
+        d.shouldBeInstanceOf<Detection.Checked>().signals.map { it.slotKey to it.variant } shouldContainExactly
+            listOf("$TOMORROW#$poiB" to TriggerVariant.HOURS_MISMATCH)
+        d.checked.shouldBeEmpty()
+    }
+
     "상태 조회가 실패하고 영업시간 위반도 없으면 모름이다 — 빈 확인으로 내면 감시 상태가 '확인됨'이 된다" {
         val day = DayCheck(true, listOf(checked(TOMORROW, poiA, "10:00")))
 

@@ -10,7 +10,6 @@ import com.trippilot.planbdetection.domain.PlanBTrigger
 import com.trippilot.planbdetection.domain.SweepSource
 import com.trippilot.planbdetection.domain.TriggerKind
 import com.trippilot.planbdetection.domain.TriggerLifecycle
-import com.trippilot.planbdetection.domain.TriggerVariant
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.time.Instant
@@ -53,9 +52,10 @@ class PlaceDetector(
         val day = days.checkDay(target.accountId, target.tripId, target.date, judgeHours) ?: return Detection.Unknown(NO_DAY)
         if (judgeHours) hours.record(day)
         val status = statusOf(day.slots.map { it.poiId }.distinct(), target)
-        // 공휴일 휴무는 감지기가 해제하지 않는다 — 달력을 못 읽은 회차의 '정상'이 진짜 휴무를 지우지 않게(시간·일정 만료로만 닫힌다).
-        val holiday = target.active.filter { it.variant == TriggerVariant.HOLIDAY }.mapNotNull { it.slotKey }.toSet()
-        val verdict = ClosureRules.judge(target.date, target.now, day.slots, status, holiday)
+        // 떠 있는 변형 — 공휴일 휴무는 감지기가 해제하지 않고(달력을 못 읽은 회차의 '정상'이 진짜 휴무를 지우지 않게),
+        // 폐업은 폐업 여부를 모르는 회차가 영업시간 위반으로 갈아 끼우지 않는다(INV-SA-2).
+        val activeVariants = target.active.mapNotNull { t -> t.slotKey?.let { key -> t.variant?.let { key to it } } }.toMap()
+        val verdict = ClosureRules.judge(target.date, target.now, day.slots, status, activeVariants)
         if (verdict.blind) {
             return Detection.Unknown(
                 when {
