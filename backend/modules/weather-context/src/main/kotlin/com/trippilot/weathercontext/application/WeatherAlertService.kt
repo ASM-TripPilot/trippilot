@@ -22,7 +22,9 @@ import java.time.ZoneId
  *
  * - **특보 20분**(COST-SA-03 회차당 1콜). 같은 발표면 다시 파싱하지 않는 것은 어댑터 몫이다.
  * - **대기질 발표 단위**(COST-SA-04) — 받은 발표분의 다음 발표(+6시간: 05·11·17·23시) + 제공 지연 30분까지. 다음 발표가 늦어 옛
- *   발표분을 다시 받으면 20분은 그대로 둔다(회차 안 반복 호출 방지). 묻는 날짜(KST)가 바뀌면 기억을 쓰지 않는다.
+ *   발표분을 다시 받으면 20분은 그대로 둔다(회차 안 반복 호출 방지). 묻는 날짜(KST)가 바뀌면 기억을 쓰지 않는다. 기억이 **파드
+ *   메모리**라 복제본·재기동마다 따로 묻는다 — 조회 1번 = HTTP 1건이고 회차(07:15~20:40)에 닿는 발표가 05·11·17시 셋이라 성공 경로는
+ *   파드당 하루 3건 + 재기동마다 1건(+ 발표가 늦은 시간당 1건)이다.
  * - **실패는 기억하지 않는다**(게이트웨이 거절·장애 — COST-SA-05 다음 회차에 다시 묻는다). 한 회차 안의 반복 호출을 막는 것은
  *   감지기의 회차 기억이다.
  * - 처음 묻는 두 여행이 겹쳐도(여행 단위 병렬) 원천은 한 번만 부른다.
@@ -65,7 +67,7 @@ class WeatherAlertService(
                     is AlertRead.Unknown -> return read
                 }
         }
-        return forecast.byDate[date]?.let { AlertRead.Ok(it) } ?: AlertRead.Unknown(NO_FORECAST)
+        return forecast.byDate[date]?.let { AlertRead.Ok(it) } ?: AlertRead.Unknown(AlertRead.NO_FORECAST)
     }
 
     /** 포트의 실패 예외를 모름으로 — 원인 코드만(키·주소 없음). 그 밖의 예외는 결함이라 그대로 던진다. */
@@ -93,6 +95,5 @@ class WeatherAlertService(
 
         private const val OFF = "off"
         private const val UNAVAILABLE = "unavailable"
-        private const val NO_FORECAST = "no-forecast"
     }
 }

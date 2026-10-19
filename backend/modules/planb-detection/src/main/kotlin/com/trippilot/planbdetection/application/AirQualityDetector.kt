@@ -30,7 +30,9 @@ import java.util.concurrent.atomic.AtomicReference
  *   출처 표기는 문장에 박지 않는다(응답 `attribution` = 에어코리아).
  * - 목적지 권역은 행정구역 코드로만 정한다([AirRegion.of]) — 코드 없는 목적지(동명이지역)·시도 단위로 갈리는 곳은 권역을 모른다(§8.2).
  * - 모름(INV-SA-2): 원천 모름 · 여행·목적지를 못 읽음 · 권역을 모름 · 한쪽 등급을 모름(없음·모르는 문자열) · 실외 없이 미분류 슬롯만 남음 —
- *   신호가 없으면 확인하지 않는다. 원천 모름은 그 회차·그 날짜 동안 기억해 남은 여행은 부르지 않는다(COST-SA-05).
+ *   신호가 없으면 확인하지 않는다. 원천 모름(게이트웨이 거절·장애)은 그 회차 동안 날짜와 무관하게, 그 날 예보 없음은 그 회차·그 날짜만
+ *   기억해 남은 여행은 부르지 않는다 — 실패 경로는 회차당 ≤ 2콜(여행 단위 병렬 2가 처음에 겹칠 때 · 거절·장애는 첫 요청에서 끝난다),
+ *   하루 ≤ 30(COST-SA-05).
  * - 실외 슬롯·미분류 슬롯이 하나도 없으면 부르지 않고 확인이다(실내로 바꾼 날은 해제된다). 관찰 전용 목록에 든 채 출발한다(BR-SA-04).
  */
 @Component
@@ -40,7 +42,7 @@ class AirQualityDetector(private val alerts: WeatherAlertFacade, private val tri
 
     override val kind: TriggerKind = TriggerKind.WEATHER
 
-    /** 회차 범위 기억 — 날짜마다 원천 모름만(성공은 서비스가 발표 단위로 기억한다). 회차 키가 바뀌면 버린다. */
+    /** 회차 범위 기억 — 원천 모름과 날짜별 예보 없음만(성공은 서비스가 발표 단위로 기억한다). 회차 키가 바뀌면 버린다. */
     private val memo = AtomicReference(RoundMemo(Instant.EPOCH))
 
     /** 오늘은 모든 회차, 내일은 저녁 회차만(BR-SA-01). */
@@ -54,11 +56,11 @@ class AirQualityDetector(private val alerts: WeatherAlertFacade, private val tri
         val unclassified = target.slots.any { it.category == null }
         if (outdoor.isEmpty() && !unclassified) return CONFIRMED
         val round = memo.updateAndGet { if (it.round == target.round) it else RoundMemo(target.round) }
-        round.unknown[target.date]?.let { return Detection.Unknown(it) }
+        (round.source ?: round.noForecast[target.date])?.let { return Detection.Unknown(it) }
         val grades = when (val read = alerts.airGrades(target.date, target.now)) {
             is AlertRead.Ok -> read.value
             is AlertRead.Unknown -> {
-                round.unknown[target.date] = read.cause
+                if (read.cause == AlertRead.NO_FORECAST) round.noForecast[target.date] = read.cause else round.source = read.cause
                 return Detection.Unknown(read.cause)
             }
         }
@@ -122,8 +124,11 @@ class AirQualityDetector(private val alerts: WeatherAlertFacade, private val tri
 
     /** 한 회차의 기억 — 여행 단위 병렬이라 스레드 안전하다. */
     private class RoundMemo(val round: Instant) {
-        /** 날짜별 원천 모름의 원인 — 있으면 그 회차의 그 날짜는 부르지 않는다. */
-        val unknown = ConcurrentHashMap<LocalDate, String>()
+        /** 원천 모름(게이트웨이 거절·장애)의 원인 — 있으면 그 회차의 남은 여행은 날짜와 무관하게 부르지 않는다(한 조회가 오늘·내일을 함께 준다). */
+        @Volatile var source: String? = null
+
+        /** 그 날 예보 없음 — 그 날짜만 부르지 않는다. */
+        val noForecast = ConcurrentHashMap<LocalDate, String>()
     }
 
     private companion object {

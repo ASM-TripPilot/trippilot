@@ -148,8 +148,11 @@ class AirQualityDetectorTest : StringSpec({
         AirQualityDetector(graded(DAY, AirRegion.JEJU to AirGrade("좋음", "보통")), trips).detect(target(tripId, ghost)) shouldBe Detection.Checked(setOf(null), emptyList())
     }
 
-    /** 원천 모름은 그 회차·그 날짜에 한 번만 묻는다 — 다른 날짜·다음 회차에는 다시 묻는다(캐시 없음 · COST-SA-05). */
-    "원천이 모르면 모름 — 같은 회차·같은 날짜의 다른 여행은 부르지 않는다" {
+    /**
+     * 원천 모름(게이트웨이 거절·장애)은 그 회차 동안 날짜와 무관하게 다시 묻지 않는다 — 한 번의 조회가 오늘·내일을 함께 주므로 내일을
+     * 다시 물어도 같은 원천이 거절한다(COST-SA-05 회차당 1~2콜). 다음 회차에는 다시 묻는다(캐시 없음).
+     */
+    "원천이 모르면 모름 — 같은 회차의 다른 여행·다른 날짜는 부르지 않고, 다음 회차에 다시 묻는다" {
         val alerts = FakeAlerts().also { it.airByDate[DAY] = AlertRead.Unknown("gateway:30") }
         val other = UUID.randomUUID()
         val trips = FakeTripDestinations().put(tripId, DAY, DAY.plusDays(1), JEJU).put(other, DAY, DAY.plusDays(1), POHANG)
@@ -157,13 +160,26 @@ class AirQualityDetectorTest : StringSpec({
 
         detector.detect(target(tripId, slot("우도", "자연", "14:00", "16:00"))) shouldBe Detection.Unknown("gateway:30")
         detector.detect(target(other, slot("호미곶", "자연", "14:00", "16:00"))) shouldBe Detection.Unknown("gateway:30")
+        detector.detect(target(other, slot("호미곶", "자연", "14:00", "16:00", DAY.plusDays(1)), date = DAY.plusDays(1), phase = SweepPhase.EVENING)) shouldBe
+            Detection.Unknown("gateway:30")
         alerts.airCalls shouldBe listOf(DAY)
-
-        detector.detect(target(other, slot("호미곶", "자연", "14:00", "16:00", DAY.plusDays(1)), date = DAY.plusDays(1), phase = SweepPhase.EVENING))
-        alerts.airCalls shouldBe listOf(DAY, DAY.plusDays(1))
 
         alerts.airByDate[DAY] = AlertRead.Ok(mapOf(AirRegion.GYEONGBUK to AirGrade("좋음", "좋음")))
         detector.detect(target(other, slot("호미곶", "자연", "14:00", "16:00"), round = NEXT_ROUND)) shouldBe Detection.Checked(setOf(null), emptyList())
+    }
+
+    /** 예보에 그 날이 없는 것(no-forecast)은 그 날짜의 일이다 — 같은 회차의 그 날짜만 다시 묻지 않고, 다른 날짜는 묻는다. */
+    "그 날 예보가 없으면 그 날짜만 기억한다 — 다른 날짜는 묻는다" {
+        val alerts = FakeAlerts().also { it.airByDate[DAY.plusDays(1)] = AlertRead.Ok(mapOf(AirRegion.JEJU to AirGrade("좋음", "좋음"))) }
+        val other = UUID.randomUUID()
+        val trips = FakeTripDestinations().put(tripId, DAY, DAY.plusDays(1), JEJU).put(other, DAY, DAY.plusDays(1), JEJU)
+        val detector = AirQualityDetector(alerts, trips)
+
+        detector.detect(target(tripId, slot("우도", "자연", "14:00", "16:00"))) shouldBe Detection.Unknown("no-forecast")
+        detector.detect(target(other, slot("우도", "자연", "14:00", "16:00"))) shouldBe Detection.Unknown("no-forecast")
+        detector.detect(target(other, slot("우도", "자연", "14:00", "16:00", DAY.plusDays(1)), date = DAY.plusDays(1), phase = SweepPhase.EVENING)) shouldBe
+            Detection.Checked(setOf(null), emptyList())
+        alerts.airCalls shouldBe listOf(DAY, DAY.plusDays(1))
     }
 
     "여행을 못 읽으면 모름이다" {

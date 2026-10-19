@@ -17,7 +17,7 @@ interface WarningStatusPort {
     fun fetchWarnings(): List<ActiveWarning>
 }
 
-/** 대기질 예보 포트 — 그 날 발표된 예보통보(`getMinuDustFrcstDspth`)의 PM10·PM25(HTTP 2건). 실패는 [WarningStatusPort] 와 같다. */
+/** 대기질 예보 포트 — 그 날 발표된 예보통보(`getMinuDustFrcstDspth`)의 PM10·PM25(HTTP 1건 — PM25 줄이 없으면 2건). 실패는 [WarningStatusPort] 와 같다. */
 interface AirForecastPort {
     /** [searchDate](KST 오늘)에 발표된 예보통보 — 예보 날짜마다 권역 등급. */
     fun fetchAirForecast(searchDate: LocalDate): AirForecast

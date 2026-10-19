@@ -32,6 +32,14 @@ sealed interface AlertRead<out T> {
 
     /** 모름 — [cause] 는 요약·로그용 원인 이름(`gateway:30` · `unavailable` · `no-forecast`)이다. 키·주소를 싣지 않는다. */
     data class Unknown(val cause: String) : AlertRead<Nothing>
+
+    companion object {
+        /**
+         * 원천은 읽었는데 그 날 예보가 응답에 없다 — **그 날짜만**의 모름이다. 그 밖의 원인(게이트웨이 거절·장애)은 그 출처 전체의 모름이라
+         * 감지기가 회차 동안 날짜와 무관하게 다시 묻지 않는다(COST-SA-05).
+         */
+        const val NO_FORECAST = "no-forecast"
+    }
 }
 
 /**

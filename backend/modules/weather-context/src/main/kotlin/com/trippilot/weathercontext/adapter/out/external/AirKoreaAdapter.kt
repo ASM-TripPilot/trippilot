@@ -18,11 +18,12 @@ import java.time.ZoneId
 /**
  * 에어코리아 대기질 예보통보 실 어댑터(`ArpltnInforInqireSvc/getMinuDustFrcstDspth` · 설계서 §4.2 · BR-SA-16).
  *
- * 한 번의 [fetchAirForecast] = HTTP 2건(PM10 · PM25 — 발표 단위 캐시는 서비스 몫, COST-SA-04). 응답의 `informGrade`
+ * 한 번의 [fetchAirForecast] = HTTP 1건(PM25 줄이 없을 때만 2건 — 발표 단위 캐시는 서비스 몫, COST-SA-04). 응답의 `informGrade`
  * (`서울 : 좋음,제주 : 보통,…` 19 권역)를 권역별로 읽는다 — **등급 문자열은 그대로**다(공공누리 3유형 · 변경 금지, BR-SA-24).
  *
- * 실응답(2026-10-19)은 요청한 통보 코드와 무관하게 PM10·PM25·O3 와 그 날 발표분(05·11시 …)을 다 준다 — 그래서 응답마다 **요청한
- * 코드의 줄만** 읽고, (코드, 예보 날짜)마다 **가장 최근 발표분**을 쓴다. 권역 이름을 모르는 칸·날짜·발표 시각을 못 읽는 줄은 그것만
+ * 실응답(2026-10-19)은 요청한 통보 코드와 무관하게 PM10·PM25·O3 와 그 날 발표분(05·11시 …)을 다 준다(PM10·PM25 요청 표본이 바이트
+ * 단위로 같다) — 그래서 PM10 으로 한 번 묻고 **PM10·PM25 줄을 다** 읽는다. 원천이 요청 코드만 주게 바뀌어 PM25 줄이 없으면 PM25 를
+ * 따로 묻는다. (코드, 예보 날짜)마다 **가장 최근 발표분**을 쓴다. 권역 이름을 모르는 칸·날짜·발표 시각을 못 읽는 줄은 그것만
  * 버린다(다른 권역을 살린다). 두 코드 모두 등급이 하나도 없으면 형식 깨짐이다 — 빈 예보를 '좋음'으로 읽지 않는다(INV-SA-2).
  *
  * 실패는 예외다(재요청 없음): 게이트웨이 거절은 [com.trippilot.weathercontext.domain.WeatherGatewayRefused] — 첫 코드에서 막히면
@@ -37,9 +38,10 @@ class AirKoreaAdapter(
     private val call = PublicDataCall(client, SOURCE, log)
 
     override fun fetchAirForecast(searchDate: LocalDate): AirForecast {
-        val latest = CODES.associateWith { code -> latestOf(itemsOf(code, searchDate)) }
-        val pm10 = latest.getValue(PM10)
-        val pm25 = latest.getValue(PM25)
+        val first = rowsOf(PM10, searchDate)
+        val rows = if (first.any { it.informCode() == PM25 }) first else first + rowsOf(PM25, searchDate)
+        val pm10 = latestOf(rows.filter { it.informCode() == PM10 })
+        val pm25 = latestOf(rows.filter { it.informCode() == PM25 })
         val byDate = (pm10.keys + pm25.keys).associateWith { date ->
             val a = pm10[date]?.grades.orEmpty()
             val b = pm25[date]?.grades.orEmpty()
@@ -51,8 +53,8 @@ class AirKoreaAdapter(
         return AirForecast(issuedAt.atZone(KST).toInstant(), byDate)
     }
 
-    /** 그 코드로 물은 응답에서 그 코드의 줄만. */
-    private fun itemsOf(code: String, searchDate: LocalDate): List<JsonNode> {
+    /** 그 코드로 물은 응답의 줄 전부 — 응답이 요청 코드만 주지 않으므로 코드는 읽는 쪽이 가린다. */
+    private fun rowsOf(code: String, searchDate: LocalDate): List<JsonNode> {
         val body = call.get(uri(code, searchDate))
         val root = runCatching { MAPPER.readTree(body) }.getOrNull() ?: call.fail("형식 깨짐: JSON 아님")
         val result = root.at("/response/header/resultCode").valueText()
@@ -63,8 +65,10 @@ class AirKoreaAdapter(
             items.isObject && items.get("item") != null -> items.get("item").let { if (it.isArray) it else listOf(it) }
             else -> call.fail("형식 깨짐: 항목 없음")
         }
-        return rows.filter { it["informCode"].valueText() == code }
+        return rows.toList()
     }
+
+    private fun JsonNode.informCode(): String? = this["informCode"].valueText()
 
     /** 예보 날짜마다 가장 최근 발표분. */
     private fun latestOf(items: List<JsonNode>): Map<LocalDate, Release> {
@@ -115,7 +119,6 @@ class AirKoreaAdapter(
         private const val OK_CODE = "00"
         private const val PM10 = "PM10"
         private const val PM25 = "PM25"
-        private val CODES = listOf(PM10, PM25)
 
         /** 발표 시각 — `2026-10-19 11시 발표`. */
         private val DATA_TIME = Regex("^(\\d{4}-\\d{2}-\\d{2})\\s*(\\d{1,2})\\s*시")

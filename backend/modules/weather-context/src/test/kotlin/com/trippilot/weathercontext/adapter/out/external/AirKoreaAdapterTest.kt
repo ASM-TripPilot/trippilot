@@ -24,7 +24,8 @@ import java.util.Collections
  * 에어코리아 대기질 예보통보 어댑터(`getMinuDustFrcstDspth` · 설계서 T-D2-U 대기질) — 실 소켓, 실응답 표본 두 벌.
  *
  * 표본(2026-10-19 · 키 없음)은 PM10·PM25 요청 둘이 **같은 본문**이다 — 응답이 요청한 통보 코드만 주지 않고 PM10·PM25·O3 와
- * 그 날 발표분(05·11시)을 다 준다. 그래서 응답마다 요청한 코드의 줄만 읽고, (코드, 예보 날짜)마다 가장 최근 발표분을 쓴다.
+ * 그 날 발표분(05·11시)을 다 준다. 그래서 PM10 으로 한 번 묻고 PM10·PM25 줄을 다 읽는다(PM25 줄이 없을 때만 따로 묻는다).
+ * (코드, 예보 날짜)마다 가장 최근 발표분을 쓴다.
  * 등급 문자열은 바꾸지 않는다(공공누리 3유형 · 변경 금지 — BR-SA-24).
  */
 class AirKoreaAdapterTest : StringSpec({
@@ -41,20 +42,29 @@ class AirKoreaAdapterTest : StringSpec({
             forecast.byDate.getValue(TOMORROW)[AirRegion.GYEONGGI_SOUTH] shouldBe AirGrade(pm10 = "좋음", pm25 = "보통")
             forecast.byDate.getValue(TOMORROW)[AirRegion.YEONGDONG] shouldBe AirGrade(pm10 = "좋음", pm25 = "좋음")
             forecast.issuedAt shouldBe kst("2026-10-19T11:00")
-            hits.size shouldBe 2
+            hits.size shouldBe 1 // 한 벌에 PM10·PM25 가 다 있다 — 한 번만 묻는다(COST-SA-04)
         }
     }
 
-    "질의 — 오늘 날짜로 PM10·PM25 를 한 번씩, 키는 인코딩해서 JSON 으로 묻는다" {
+    "질의 — 오늘 날짜 PM10 으로 한 번, 키는 인코딩해서 JSON 으로 묻는다(응답이 PM25 도 준다)" {
         withAirServer(mapOf("PM10" to listOf(airOk(airSample("pm10"))), "PM25" to listOf(airOk(airSample("pm25"))))) { url, hits ->
             airAdapter(url, key = "AB+C/D==").fetchAirForecast(TODAY)
 
+            hits.map { it.substringAfter("InformCode=").substringBefore('&') } shouldBe listOf("PM10")
+            hits.single() shouldContain "searchDate=2026-10-19"
+            hits.single() shouldContain "returnType=json"
+            hits.single() shouldContain "serviceKey=AB%2BC%2FD%3D%3D"
+        }
+    }
+
+    /** 원천이 요청 코드만 주게 바뀌어도 PM25 를 잃지 않는다 — 첫 응답에 PM25 줄이 없을 때만 따로 묻는다. */
+    "첫 응답에 PM25 줄이 없으면 PM25 를 따로 묻는다 — 두 번" {
+        val pm10 = airBody(airItem("PM10", "2026-10-19", "2026-10-19 11시 발표", "제주 : 보통"))
+        val pm25 = airBody(airItem("PM25", "2026-10-19", "2026-10-19 11시 발표", "제주 : 나쁨"))
+        withAirServer(mapOf("PM10" to listOf(airOk(pm10)), "PM25" to listOf(airOk(pm25)))) { url, hits ->
+            airAdapter(url).fetchAirForecast(TODAY).byDate.getValue(TODAY)[AirRegion.JEJU] shouldBe AirGrade(pm10 = "보통", pm25 = "나쁨")
+
             hits.map { it.substringAfter("InformCode=").substringBefore('&') } shouldBe listOf("PM10", "PM25")
-            hits.forEach {
-                it shouldContain "searchDate=2026-10-19"
-                it shouldContain "returnType=json"
-                it shouldContain "serviceKey=AB%2BC%2FD%3D%3D"
-            }
         }
     }
 
@@ -72,11 +82,15 @@ class AirKoreaAdapterTest : StringSpec({
         }
     }
 
-    "응답이 요청하지 않은 코드(O3 등)를 같이 줘도 요청한 코드의 줄만 읽는다" {
-        val pm10 = airBody(airItem("PM25", "2026-10-19", "2026-10-19 11시 발표", "제주 : 매우나쁨"), airItem("PM10", "2026-10-19", "2026-10-19 11시 발표", "제주 : 보통"))
-        val pm25 = airBody(airItem("O3", "2026-10-19", "2026-10-19 11시 발표", "제주 : 나쁨"), airItem("PM25", "2026-10-19", "2026-10-19 11시 발표", "제주 : 좋음"))
-        withAirServer(mapOf("PM10" to listOf(airOk(pm10)), "PM25" to listOf(airOk(pm25)))) { url, _ ->
+    "응답의 다른 코드(O3 등)는 읽지 않는다 — PM10 줄은 PM10, PM25 줄은 PM25 로만" {
+        val all = airBody(
+            airItem("O3", "2026-10-19", "2026-10-19 11시 발표", "제주 : 매우나쁨"),
+            airItem("PM25", "2026-10-19", "2026-10-19 11시 발표", "제주 : 좋음"),
+            airItem("PM10", "2026-10-19", "2026-10-19 11시 발표", "제주 : 보통"),
+        )
+        withAirServer(mapOf("PM10" to listOf(airOk(all)), "PM25" to listOf(AirReply(500, "text/plain", "묻지 않는다")))) { url, hits ->
             airAdapter(url).fetchAirForecast(TODAY).byDate.getValue(TODAY)[AirRegion.JEJU] shouldBe AirGrade(pm10 = "보통", pm25 = "좋음")
+            hits.size shouldBe 1
         }
     }
 
@@ -119,7 +133,7 @@ class AirKoreaAdapterTest : StringSpec({
             mapOf("PM10" to listOf(AirReply(503, "text/plain", "busy")), "PM25" to listOf(airOk(airSample("pm25")))) to 1,
             mapOf("PM10" to listOf(AirReply(200, "application/json", "{oops")), "PM25" to listOf(airOk(airSample("pm25")))) to 1,
             mapOf("PM10" to listOf(AirReply(200, "application/json", """{"response":{"header":{"resultCode":"03","resultMsg":"NO_DATA"}}}""")), "PM25" to listOf(airOk(airSample("pm25")))) to 1,
-            mapOf("PM10" to listOf(airOk(airSample("pm10"))), "PM25" to listOf(AirReply(500, "text/plain", "oops"))) to 2,
+            mapOf("PM10" to listOf(airOk(airBody(airItem("PM10", "2026-10-19", "2026-10-19 11시 발표", "제주 : 보통")))), "PM25" to listOf(AirReply(500, "text/plain", "oops"))) to 2,
             mapOf("PM10" to listOf(airOk(airBody())), "PM25" to listOf(airOk(airBody()))) to 2,
         ).forEach { (replies, calls) ->
             withAirServer(replies) { url, hits ->
