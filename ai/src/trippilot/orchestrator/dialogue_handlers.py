@@ -89,7 +89,10 @@ _LABELS: Mapping[str, str] = {
     "OPEN_TRIP_SUMMARY": "여행 요약 보기", "OPEN_STYLE": "내 여행 스타일", "CREATE_TRIP": "여행 만들기",
 }
 _UNNAMED = "이름 미확인 장소"  # BE QueryCards: `nameKo ?: "이름 미확인 장소"`
-_UNKNOWN = "미확인"  # BLM §5: 모르는 값(hours_label None·fee None)은 "미확인"
+_UNKNOWN = "미확인"  # BLM §5: 모르는 값(fee None·장소 정보 없음)은 "미확인"
+# 행이 있는데 hours_label 이 None = 그 요일이 휴무로 읽혔다(providers.poi_info.hours_label) — 모르는 것이 아니다. 단정하지 않는다:
+# 런타임 파서가 "매월 둘째·넷째 일요일" 같은 월 단위 휴무를 일정 배치용으로 매주로 넓혀 읽는다(poi_curation/sourcing/mapping.py).
+_CLOSED = "휴무일 수 있음"
 # CANDIDATES 후보의 reason — 결정론 라벨 한 벌. `use_llm=False` 의 `Alternative.rationale` 은 PlanB 내부 출처 표기
 # (`"{trigger}/{reason} · rule_ranking"`)라 사용자 문장이 아니고, LLM 슬롯 값(`reason`)이 섞여 들어오는 자리다 — 싣지 않는다(DEC-AO-10).
 CANDIDATE_REASON = "근처의 대안"
@@ -692,6 +695,10 @@ def _changeable(ctx: TurnContext) -> bool:
 def _assemble_next_slot(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts:
     intent = Intent.GET_NEXT_SLOT
     found = _next_after(ctx.snapshot, ctx.now, ctx.tz)
+    if found is None and ctx.snapshot.itinerary_status is None:  # 일정 자체가 없다 — "남은 일정이 없어요"·[일정 보기]가 아니라 만들기로
+        return Facts(intent, FactStatus.EMPTY, AnswerKind.TEXT, rows=(), places=(), notes=(), payload=None,
+                     next_actions=(_itinerary_action(ctx.snapshot),), quick_replies=(),
+                     template_text=_template(Intent.SHOW_SCHEDULE, FactStatus.EMPTY))
     if found is None:
         return _text_facts(intent, FactStatus.EMPTY, (_action("OPEN_ITINERARY"),))
     on, slot = found
@@ -885,8 +892,12 @@ def _assemble_poi_info(ctx: TurnContext, results: Mapping[str, TaskResult]) -> F
         row = next((p for p in value.get("data", {}).get("pois", ()) if p.get("poi_id") == slot.poi_id), None)
     category = slot.category or (_CATEGORY_KO.get(str(row["category"]), str(row["category"])) if row else None)
     hours = row.get("hours_label") if row else None
+    if row is not None and "hours_label" in row and hours is None:
+        hours = _CLOSED  # "미확인"으로 뭉개면 "오늘 영업 여부는 확인할 수 없어요"가 된다(2026-10-19 E2E: 제주문학관 월요일)
     fee = row.get("fee") if row else None
-    rows = (FactRow("분류", category or _UNKNOWN), FactRow("영업시간", hours or _UNKNOWN), FactRow("입장료", _fee_label(fee)))
+    on = ctx.snapshot.day_of(slot) or ctx.today  # 영업시간은 이 날 기준(_plan_poi_info 와 같은 날) — 오늘이 아니면 날짜를 밝힌다
+    rows = ((FactRow("날짜", _date_label(on)),) if on != ctx.today else ()) + (
+        FactRow("분류", category or _UNKNOWN), FactRow("영업시간", hours or _UNKNOWN), FactRow("입장료", _fee_label(fee)))
     name = slot.name or (str(row["name"]) if row else _UNNAMED)
     status, notes = (FactStatus.OK, ()) if row else (FactStatus.PARTIAL, ("장소 정보 미확인 — 일정 값만 보인다",))
     actions = (_action("OPEN_PLACE", poiId=slot.poi_id),) if slot.poi_id else (_action("OPEN_ITINERARY"),)
@@ -923,6 +934,31 @@ def _same_role(pool: CandidatePool, target_id: str, excluded: frozenset[PoiId]) 
     return replace(pool, poi_ids=frozenset(p.poi_id for p in kept), pois=kept)
 
 
+# SUGGEST_ALTERNATIVE 의 reason 슬롯은 한글 자유문("오늘 휴관")이라 `_REASON_KO` 키와 같을 때만 넘기면 늘 none 이었다(2026-10-19
+# E2E — 휴관 대신 찾기가 사유 없이 돌았다). 앞에서부터 첫 일치. **오탐보다 미탐**(미탐은 지금처럼 none): weather 는 PlanB 가
+# 야외 후보를 내리는 유일한 사유라 오탐이 순위를 바꾼다 — "주차비가 비싸서"·"준비가"의 비, "날씨 좋으니까", "비가 안 와서"를
+# 날씨로 읽지 않게 낱말 경계·말꼴로 적는다(셀프 리뷰 실측). 휴관이 날씨보다 앞이다("비 와서 문 닫았대"는 그곳이 닫힌 것이 사유).
+_REASON_WORDS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("closed", re.compile(r"휴관|휴무|휴업|휴점|폐관|폐점|폐업|문\s?닫|영업\s?(안|종료|마감)|안\s?열|쉬는\s?날|정기\s?휴일")),
+    ("fully_booked", re.compile(r"예약이?\s?마감|매진|만석|꽉\s?찼|자리가?\s?없")),
+    ("canceled", re.compile(r"예약이?\s?취소|취소\s?(됐|되)")),
+    ("weather", re.compile(r"(?<![가-힣])(비|눈)(가|이)?\s?(와|온|오|내리|내려|올|소식|예보|많이|계속)|우천|소나기|폭우|폭설|태풍|강풍"
+                           r"|폭염|한파|미세\s?먼지|날씨가?\s?(안\s?좋|나빠|나쁘|궂|별로)")),
+    ("delay", re.compile(r"늦(어|었|잠)|늦게\s?일어|지연|막혀|밀려")),
+    ("fatigue", re.compile(r"피곤|지쳐|지쳤|다리\s?아|체력|쉬고\s?싶|컨디션|몸이\s?안\s?좋")),
+)
+
+
+def _planb_reason(said: object) -> str:
+    """발화에서 뽑힌 대체 사유 → PlanB 어휘(`_REASON_KO` 키). 모르면 "none"(사용자 요청 교체)."""
+    if not isinstance(said, str):
+        return "none"
+    text = said.strip()
+    if text in _REASON_KO:
+        return text
+    return next((key for key, pattern in _REASON_WORDS if pattern.search(text)), "none")
+
+
 def _plan_alternatives(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     target = _alt_target(ctx)
     builder, planb, trip = ctx.ports.pool_builder, ctx.ports.planb, ctx.snapshot.trip
@@ -930,10 +966,9 @@ def _plan_alternatives(ctx: TurnContext) -> tuple[HandlerTask, ...]:
         return ()
     on = ctx.snapshot.day_of(target) or ctx.today
     excluded = frozenset(PoiId(s.poi_id) for _, s in ctx.snapshot.slots() if s.poi_id)  # 일정 전부 (INV-1 — 있는 곳은 대안이 아니다)
-    # LLM 슬롯 `reason` 은 스펙이 `choices=()` 라 IntentGate 가 값을 거르지 않는다 — PlanB 가 아는 어휘(`_REASON_KO` 키)만 넘긴다.
+    # LLM 슬롯 `reason` 은 스펙이 `choices=()` 라 IntentGate 가 값을 거르지 않는다 — PlanB 가 아는 어휘(`_REASON_KO` 키)로 사상해 넘긴다.
     # ponytail: 인자표에 choices 를 채우는 것이 바른 자리지만 `$intents` 가 바뀌어 intent.yaml 재생 픽스처가 전건 미스다(BR-AO-14).
-    said_reason = ctx.arguments.get("reason")
-    reason = said_reason if said_reason in _REASON_KO else "none"
+    reason = _planb_reason(ctx.arguments.get("reason"))
     weather = ctx.ports.weather
 
     def fn() -> dict:

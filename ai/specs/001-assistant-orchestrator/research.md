@@ -109,7 +109,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.dialogue_memory TO ai_user;
 | GET_NEXT_SLOT | 스냅샷(now 이후 첫 슬롯) | INFO(NEXT_SLOT rows: 날짜·계획 시각) | OPEN_LIVE(여행 중)/OPEN_ITINERARY | quick reply "다른 곳 추천"(SEND_TEXT, params intent=SUGGEST_ALTERNATIVE, slotKey) |
 | GET_WEATHER | PoiInfo(좌표) → WeatherProvider(anchor, [date]) | INFO(WEATHER rows: 최대 강수확률·특보) | OPEN_ITINERARY | WEATHER_UNKNOWN → "지금 날씨를 확인할 수 없어요" |
 | GET_DISTANCE | 슬롯 해소(dest, origin=직전) → PoiInfo 좌표 → TransitProvider(purpose INFO_DISPLAY, mode 인자 또는 PUBLIC) | INFO(DISTANCE rows: 직전 구간 거리) | OPEN_ITINERARY | 거리만(INV-3). 해소 실패 → 일정 화면 안내 |
-| GET_POI_INFO | 슬롯 해소(place) → PoiInfoProvider(poi_id, date) | INFO(PLACE rows: 분류·영업시간·입장료) | OPEN_PLACE{poiId} | 모르는 값은 "미확인" |
+| GET_POI_INFO | 슬롯 해소(place) → PoiInfoProvider(poi_id, date) | INFO(PLACE rows: 분류·영업시간·입장료) | OPEN_PLACE{poiId} | 모르는 값은 "미확인"(영업시간은 "영업시간 정보 없음"·"휴무일 수 있음" — 2026-10-19 FD 개정) |
 | SUGGEST_ALTERNATIVE | 슬롯 해소(target) ∥ PoiInfo 좌표 → [풀 조립(anchor=대상 좌표, 반경 규칙) ∥ Weather] → PlanBAgent.run(use_llm=False, excluded=일정 전부, rain) | CANDIDATES(≤5: poiId·name·distanceRange·reason) | OPEN_ITINERARY | quick reply PICK_CANDIDATE{poiId, slotKey} → BE 기존 ReplaceSlot 제안 경로 |
 | EDIT_SCHEDULE | 인자 해소만(day/target) | **FRAME** | — | 1단계: BE ProposalCards 경로(/edit 재호출). 2단계에서 EditAgent 인프로세스 + PROPOSAL |
 | GENERATE_SCHEDULE / REGENERATE | 없음 | TEXT(LLM 한 줄) | OPEN_ITINERARY_METHOD / OPEN_REGENERATE | 여행 없으면 CREATE_TRIP·OPEN_STAY_SEARCH 안내 |
