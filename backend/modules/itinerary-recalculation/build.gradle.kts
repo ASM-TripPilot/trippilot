@@ -22,6 +22,7 @@ dependencies {
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)
+    implementation(libs.jackson.module.kotlin)              // 아웃박스 payload 트리 읽기(선계산 구독) — notification·planb-detection 과 같은 관례
     implementation(libs.kotlin.reflect)
 
     testImplementation(project(":common:test-support"))

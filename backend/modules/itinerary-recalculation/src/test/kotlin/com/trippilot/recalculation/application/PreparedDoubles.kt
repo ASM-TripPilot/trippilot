@@ -27,6 +27,10 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.UUID
+import java.util.concurrent.AbstractExecutorService
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.TimeUnit
 
 internal val KST: ZoneId = ZoneId.of("Asia/Seoul")
 
@@ -129,6 +133,49 @@ internal class RecalcFixture(
         ),
     )
 }
+
+/**
+ * 넘겨받은 산출을 쥐고만 있는 실행기 — 실행 자리가 다 찬 순간(BUSY)을 만든다. [runAll] 이 나중에 돌린다.
+ * [reject] 면 실물처럼 예외로 거절한다(종료 중) — 거울에 방어 코드를 더하지 않는다.
+ */
+internal class ParkedExecutor(var reject: Boolean = false) : AbstractExecutorService() {
+    val parked = ArrayDeque<Runnable>()
+    private var down = false
+
+    override fun execute(command: Runnable) {
+        if (reject || down) throw RejectedExecutionException("실행기가 닫혔습니다")
+        parked += command
+    }
+
+    fun runAll() { while (parked.isNotEmpty()) parked.removeFirst().run() }
+
+    override fun shutdown() { down = true }
+    override fun shutdownNow(): List<Runnable> { down = true; return parked.toList().also { parked.clear() } }
+    override fun isShutdown() = down
+    override fun isTerminated() = down && parked.isEmpty()
+    override fun awaitTermination(timeout: Long, unit: TimeUnit) = parked.isEmpty()
+}
+
+/** 그 자리에서 돌리는 실행기 — 산출까지 결정론으로 본다. */
+internal class DirectExecutor : AbstractExecutorService() {
+    private var down = false
+    override fun execute(command: Runnable) = command.run()
+    override fun shutdown() { down = true }
+    override fun shutdownNow(): List<Runnable> { down = true; return emptyList() }
+    override fun isShutdown() = down
+    override fun isTerminated() = down
+    override fun awaitTermination(timeout: Long, unit: TimeUnit) = true
+}
+
+/** 선계산 서비스 조립 — 스위치 켬. 실행기는 스펙이 고른다. */
+internal fun RecalcFixture.prepared(executor: ExecutorService = DirectExecutor(), mode: PreparedMode = PreparedMode.ON) =
+    PreparedReplanService(service(), repository, solver, ReplanProperties(horizon, ReplanProperties.Prepared(mode)), clock, executor)
+
+internal fun RecalcFixture.riskEvent(
+    triggerDate: LocalDate,
+    tripId: UUID = this.tripId,
+    risks: List<ReplanMaterial.Risk> = listOf(ReplanMaterial.Risk("WEATHER", "RAIN", emptyList(), null)),
+) = RiskEvent(acc, tripId, triggers.add(tripId, triggerDate), risks)
 
 internal fun plannedSlot(date: LocalDate, poiId: UUID, start: String, end: String) = PlannedSlotView(
     slotKey = "$date#$poiId", date = date, poiId = poiId, orderIndex = 0,
