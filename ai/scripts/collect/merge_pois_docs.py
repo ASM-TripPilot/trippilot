@@ -38,6 +38,20 @@ from trippilot.poi_curation.sourcing.overture import (  # noqa: E402
 )
 
 
+def dumps_doc(doc: dict) -> str:
+    """공유본 직렬화 — 머리는 들여쓰기, **제안은 한 행에 한 줄**(압축 JSON).
+
+    들여쓰기 2칸이면 72MB 였다(2026-10-18, 57,608행). GitHub 는 한 파일 100MB 를 거부하는데,
+    TourAPI 조회를 법정동 코드로 바꾸면 관광지가 지역별 1.7~2.9배로 늘어(같은 날 실측) 그 선을 넘는다.
+    한 행에 한 줄이면 46MB 이고 diff 는 여전히 행 단위로 읽힌다. 읽는 쪽은 전부 `json.load` 라 무관하다.
+    """
+    head = {k: v for k, v in doc.items() if k != "proposals"}
+    rows = ",\n".join("    " + json.dumps(p, ensure_ascii=False, separators=(",", ":"))
+                      for p in doc.get("proposals", ()))
+    return (json.dumps(head, ensure_ascii=False, indent=2)[:-2]
+            + ',\n  "proposals": [\n' + rows + "\n  ]\n}\n")
+
+
 def merge(docs: list[dict], *, allow_mixed: bool = False) -> dict:
     """수집 시각 순으로 합친다 — 나중 문서가 같은 content_id 를 덮어쓴다.
 
@@ -344,7 +358,7 @@ def main(argv: list[str]) -> int:
         out["stats"]["closed_dropped"] = closed
     if (trending := mark_trending(out["proposals"])):
         print(f"[merge] 요즘 인기 표지 — 기존 행 {trending}건", file=sys.stderr)
-    text = json.dumps(out, ensure_ascii=False, indent=2)
+    text = dumps_doc(out)
     if args.output:
         Path(args.output).write_text(text, encoding="utf-8")
     else:
