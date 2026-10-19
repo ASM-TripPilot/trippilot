@@ -205,7 +205,15 @@ class OrToolsAssembler:
         started = time.monotonic()
         for day in problem.days:
             slots = self._solve_day(problem, day, used, per_day_ms)
-            if slots is None and problem.pace is not None:
+            # 무보정 재시도는 **한 번 더 풀 시간이 있을 때만**(첫 시도 상한의 절반 이상 남았을 때) — 아래 몰아 재시도와
+            # 같은 원칙이다. 2026-10-18 개발 서버: 첫 시도가 잔여를 다 쓴 뒤에도 재시도가 또 돌아 조립 76초·생성 504
+            # (백스톱 뒤에도 백그라운드로 계속 돌아 같은 파드의 다음 요청까지 CPU 를 굶겼다).
+            pace_spare_ms = remaining_ms - int((time.monotonic() - started) * 1000)
+            pace_retry_fits = pace_spare_ms * 2 >= min(self._cfg.or_tools_limit_ms, per_day_ms)
+            if slots is None and problem.pace is not None and not pace_retry_fits:
+                _log.info("pace=%s 로 해 없음 — 남은 예산 %dms 로는 무보정 재시도를 못 한다, 다음 단계로 (day=%s)",
+                          problem.pace.value, pace_spare_ms, day)
+            if slots is None and problem.pace is not None and pace_retry_fits:
                 # **pace 는 소프트 선호다.** 지키려다 해를 못 내면 안 지키는 편이 낫다 —
                 # 여기서 포기하면 체인 다음 단계인 규칙 폴백(그리디)으로 내려가고,
                 # 그러면 "알차게를 골랐더니 일정이 더 성의 없어졌다"가 된다.
