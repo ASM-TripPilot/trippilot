@@ -188,6 +188,8 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
             when {
                 bodyParameter == null && hasDocumentedRequest -> mismatches += "$label 요청: 문서는 본문이 있는데 코드는 @RequestBody 가 없다"
                 bodyParameter != null && !hasDocumentedRequest -> mismatches += "$label 요청: 코드는 @RequestBody 를 받는데 문서에 requestBody 가 없다"
+                bodyParameter != null && request == null ->
+                    mismatches += "$label 요청: 코드는 JSON 본문을 받는데 문서 requestBody 에 application/json 이 없다"
                 bodyParameter != null && request != null -> compare(
                     mapper.typeFactory.constructType(bodyParameter.genericParameterType), request, "$label 요청", false,
                     mismatches, mutableSetOf(),
@@ -226,8 +228,7 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
         val items = resolved["items"] as? Map<String, Any>
         val shape = shapeOf(resolved)
 
-        // ByteArray 는 Jackson 이 base64 문자열로 쓴다 — 배열이 아니다(isLeaf 쪽).
-        if (type.isCollectionLikeType || (type.isArrayType && type.rawClass != ByteArray::class.java)) {
+        if (type.isCollectionLikeType || type.isArrayType) {
             if (items == null) out += "$where: 코드는 배열인데 문서는 $shape"
             else compare(type.contentType, items, where, serialize, out, visited, depth + 1)
             return
@@ -243,11 +244,12 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
             // 문서가 이름 있는 속성(닫힌 객체·oneOf)을 적어도 대조하지 않는다 — 손으로 짓는 Map 의 키는
             // 정적으로 알 수 없다(AssistantMessage.payload·Notification.actionPayload). 타입 있는 DTO 로 바꿔야 잡힌다.
             if (values != null) compare(type.contentType, values, "$where{값}", serialize, out, visited, depth + 1)
+            else if (isScalarSchema(resolved)) out += "$where: 코드는 Map(객체)인데 문서는 $shape"
             return
         }
         if (isLeaf(type)) {
-            val documentedAsObject = documented != null || resolved["additionalProperties"] is Map<*, *> ||
-                resolved["additionalProperties"] == true
+            val documentedAsObject = documented != null || resolved["type"] == "object" ||
+                resolved["additionalProperties"] is Map<*, *> || resolved["additionalProperties"] == true
             if (documentedAsObject && !JsonNode::class.java.isAssignableFrom(type.rawClass)) {
                 out += "$where: 문서는 ${documented?.let { "객체(${it.keys.sorted()})" } ?: shape}인데 코드는 ${type.rawClass.simpleName}"
             }
@@ -258,7 +260,9 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
             return
         }
         // 재귀 방지 키는 스키마 **이름**으로 — allOf 를 합치면 매번 새 Map 이 생겨 객체 동일성으로는 못 막는다.
-        if (!visited.add("$type|${refName(schema) ?: where}|$serialize")) return
+        // 같은 층에 속성이 붙은 `allOf: [{ $ref: X }] + properties` 는 X 와 다른 스키마다 — 이름 키를 쓰지 않는다.
+        val key = refName(schema).takeIf { properties(schema) == null } ?: where
+        if (!visited.add("$type|$key|$serialize")) return
 
         val description = if (serialize) mapper.serializationConfig.introspect(type) else mapper.deserializationConfig.introspect(type)
         val actual = description.findProperties()
@@ -297,10 +301,13 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
         return mapOf("type" to "object", "properties" to merged)
     }
 
+    /** `$ref`, 또는 null 이 아닌 갈래가 하나뿐인 감싸기(allOf·oneOf·anyOf — nullable 관용구 포함)가 가리키는 이름. */
     @Suppress("UNCHECKED_CAST")
-    private fun refName(schema: Map<String, Any>): String? =
-        (schema["\$ref"] as? String ?: (schema["allOf"] as? List<Map<String, Any>>)?.singleOrNull()?.get("\$ref") as? String)
-            ?.substringAfterLast('/')
+    private fun refName(schema: Map<String, Any>): String? {
+        (schema["\$ref"] as? String)?.let { return it.substringAfterLast('/') }
+        val members = listOf("allOf", "oneOf", "anyOf").flatMap { schema[it] as? List<Map<String, Any>> ?: emptyList() }
+        return members.filterNot { it["type"] == "null" }.singleOrNull()?.let(::refName)
+    }
 
     @Suppress("UNCHECKED_CAST")
     private fun properties(schema: Map<String, Any>): Map<String, Any>? = schema["properties"] as? Map<String, Any>
@@ -309,17 +316,24 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
         schema["additionalProperties"] == false -> "닫힌 객체(속성 없음)"
         schema["additionalProperties"] != null -> "자유형 객체(additionalProperties)"
         schema["type"] == "object" -> "속성 없는 객체"
-        schema["type"] != null -> "스칼라(${schema["type"]})"
+        isScalarSchema(schema) -> "스칼라(${schema["type"]})"
         else -> "형태 미지정"
     }
 
-    /** Jackson 이 스칼라로 쓰는 것. Pair·Triple 은 kotlin 패키지지만 객체({first, second})로 쓰인다. */
+    /**
+     * Jackson 이 스칼라로 쓰는 것 — 패키지 이름으로 어림한다. 웹 DTO 에 실제로 나오는 타입(문자열·수·UUID·시각·
+     * 열거형·JsonNode)에는 맞고, 예외(ByteArray 는 base64 문자열, kotlin.Pair 는 객체 등)는 리포에 없어서 다루지
+     * 않는다(backend/CLAUDE.md §2). 그런 타입이 들어오면 이 게이트가 오탐으로 알려 준다 — 그때 직렬화기에 묻는
+     * 방식(acceptJsonFormatVisitor)으로 바꾼다.
+     */
     private fun isLeaf(type: JavaType): Boolean {
         val raw = type.rawClass
-        if (raw == Pair::class.java || raw == Triple::class.java) return false
-        return type.isPrimitive || type.isEnumType || raw == ByteArray::class.java ||
-            raw.name.startsWith("java.") || raw.name.startsWith("kotlin.") || JsonNode::class.java.isAssignableFrom(raw)
+        return type.isPrimitive || type.isEnumType || raw.name.startsWith("java.") || raw.name.startsWith("kotlin.") ||
+            JsonNode::class.java.isAssignableFrom(raw)
     }
+
+    private fun isScalarSchema(schema: Map<String, Any>): Boolean =
+        schema["type"] in setOf("string", "integer", "number", "boolean")
 
     private fun isUnknown(type: JavaType): Boolean = type.rawClass == Any::class.java
 

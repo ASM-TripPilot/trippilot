@@ -112,13 +112,6 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
         body["account"]["socialProviders"].map { it.asText() } shouldBe listOf("APPLE")
     }
 
-    /** 요청 스키마도 계약과 맞는다 — 코드에 필드를 넣고 openapi 에 안 넣으면 프론트 orval 이 모른다. */
-    @Test
-    fun `SocialTokenLoginRequest 계약이 authorizationCode 를 선언한다`() {
-        schemaProperties("SocialTokenLoginRequest") shouldBe
-            setOf("accessToken", "ageConfirmation", "deviceId", "authorizationCode")
-    }
-
     @Test
     fun `신규 가입인데 연령확인 누락이면 400 VALIDATION_ERROR`() {
         val (status, body) = post(
@@ -232,9 +225,9 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     }
 
     // ── 응답 모양 게이트(TRIP-249 5번) ────────────────────────────────────────────
-    // OpenApiContractIT 는 **경로**가 맞는지만 본다. 응답 **본문 필드**는 아무도 안 봤고,
-    // 그래서 TokenPair 가 7필드를 선언하는 동안 서버는 3필드만 내보내도 전부 초록이었다.
-    // 아래 둘이 그 구멍을 막는다 — 계약이 선언한 키 집합과 실제 응답 키 집합을 정확히 대조한다.
+    // 당시 OpenApiContractIT 는 **경로**만 봤고, TokenPair 가 7필드를 선언하는 동안 서버가 3필드만 내도 초록이었다.
+    // 지금은 그 클래스의 필드 게이트가 DTO 와 스키마의 **이름**을 정적으로 대조한다(요청 본문 포함). 아래 둘은
+    // 그와 별개로 **실제 응답**의 키 집합을 본다 — 정적 대조가 못 보는 런타임 생략(NON_NULL 등)까지 잡는다.
 
     /**
      * 501 설명이 **통째로** 계약에 실린다(TRIP-1317). `{ description: … }` 흐름 매핑 안의 평문에 쉼표가 들면
