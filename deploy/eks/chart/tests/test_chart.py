@@ -360,9 +360,11 @@ class ChartTests(unittest.TestCase):
 class RequestSizingTests(unittest.TestCase):
     def test_requests_follow_measured_usage(self):
         """2026-10-16 실측으로 요청을 맞췄다 — CPU 요청이 커지면 Karpenter 가 다시 CPU 형 노드를 산다,
-        메모리 요청이 정점보다 작으면 노드 메모리가 빠듯할 때 먼저 쫓겨난다. 상한은 정점을 덮어야 한다."""
+        메모리 요청이 정점보다 작으면 노드 메모리가 빠듯할 때 먼저 쫓겨난다. 상한은 정점을 덮어야 한다.
+        **AI 만 CPU 1코어**(2026-10-19) — 평균은 낮아도 조립(CP-SAT)이 생성 순간 1~2코어를 쓴다. 200m 에선 붐비는 노드에서
+        풀이가 진척 0(det 0.00)으로 멈춰 개발 서버 생성이 전부 504 였다(values.yaml 주석)."""
         deployments = {item["metadata"]["name"]: item for item in render("dev", embedding=True) if item["kind"] == "Deployment"}
-        expected = {"backend": ("200m", "1280Mi", "2"), "ai": ("200m", "640Mi", "2"), "embedding": ("1", "5Gi", "2")}
+        expected = {"backend": ("200m", "1280Mi", "2"), "ai": ("1", "640Mi", "2"), "embedding": ("1", "5Gi", "2")}
         for name, (cpu, memory, cpu_limit) in expected.items():
             with self.subTest(name=name):
                 resources = deployments[name]["spec"]["template"]["spec"]["containers"][0]["resources"]
