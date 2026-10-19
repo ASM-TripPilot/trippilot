@@ -29,12 +29,16 @@ internal object PlanBNotificationCopy {
         else -> TITLE_OTHER
     }
 
+    /** 알림 본문 상한(BR-SA-12 ① '트리거 사유와 알림 본문은 200자 이하') — 사유 칸(200자)과 같다. */
+    private const val BODY_MAX = 200
+
     /**
-     * 사유 + 같이 알린 나머지가 있으면 ` (외 N건)`. 사유는 트리거 사유 칸(200자)에서 오므로 꼬리를 붙여도
-     * 알림 본문 상한(400자) 안이다.
+     * 사유 + 같이 알린 나머지가 있으면 ` (외 N건)`. 꼬리를 붙여 200자를 넘으면 **꼬리를 뺀다** — 사유를 자르면
+     * 날짜·장소 이름이 잘려 다른 말이 된다. 사유는 트리거 사유 칸(200자)에서 오므로 그 자체로 상한 안이다.
      */
     fun body(reason: String?, others: Int): String {
         val base = reason?.takeIf { it.isNotBlank() } ?: BODY_DEFAULT
-        return if (others > 0) "$base (외 ${others}건)" else base
+        val withOthers = "$base (외 ${others}건)"
+        return if (others > 0 && withOthers.length <= BODY_MAX) withOthers else base
     }
 }

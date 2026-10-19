@@ -25,6 +25,9 @@ import com.trippilot.notification.domain.PushToken
 import com.trippilot.notification.domain.PushTokenRepository
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.int
+import io.kotest.property.checkAll
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.slf4j.LoggerFactory
 import java.time.Clock
@@ -203,15 +206,34 @@ class PlanBTriggeredSubscriberTest : StringSpec({
         f.notifications.stored.single().body shouldBe "일정에 영향을 주는 상황이 감지됐어요"
     }
 
-    "트리거 사유 칸을 꽉 채운 사유에 외 N건이 붙어도 알림 본문 상한 안이다" {
-        val f = fixture()
-        val reason = "가".repeat(200) // plan_b_trigger.reason 칸 상한
+    "외 N건을 붙여 200자를 넘으면 꼬리를 뺀다 — 사유는 자르지 않는다(BR-SA-12 ①)" {
+        val fits = "가".repeat(193) // + " (외 2건)" 7자 = 200
+        val over = "가".repeat(194)
 
-        f.deliver(current(UUID.randomUUID(), reason = reason, others = Int.MAX_VALUE))
+        val a = fixture()
+        a.deliver(current(UUID.randomUUID(), reason = fits, others = 2))
+        a.notifications.stored.single().body shouldBe "$fits (외 2건)"
 
-        val body = f.notifications.stored.single().body
-        body shouldBe "$reason (외 2147483647건)"
-        (body.length <= 400) shouldBe true
+        val b = fixture()
+        b.deliver(current(UUID.randomUUID(), reason = over, others = 2))
+        b.notifications.stored.single().body shouldBe over
+
+        // 트리거 사유 칸(plan_b_trigger.reason 200자)을 꽉 채운 사유도 그대로다.
+        val full = fixture()
+        full.deliver(current(UUID.randomUUID(), reason = "가".repeat(200), others = Int.MAX_VALUE))
+        full.notifications.stored.single().body shouldBe "가".repeat(200)
+    }
+
+    "본문은 어떤 사유 길이·건수에서도 200자 이하다 — 사유는 온전하고 꼬리는 들어갈 때만 붙는다" {
+        checkAll(Arb.int(1..200), Arb.int(0..Int.MAX_VALUE)) { length, others ->
+            val reason = "가".repeat(length)
+            val tail = " (외 ${others}건)"
+
+            val body = PlanBNotificationCopy.body(reason, others)
+
+            (body.length <= 200) shouldBe true
+            body shouldBe if (others > 0 && length + tail.length <= 200) reason + tail else reason
+        }
     }
 
     "푸시 대상이 아닌 사건은 알림함에만 둔다 — 기기를 울리지 않는다" {
