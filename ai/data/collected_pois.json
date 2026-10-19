@@ -35,123 +35,16 @@
     "39"
   ],
   "stats": {
-    "merged_runs": 2,
+    "merged_runs": 1,
     "unique_proposals": 59469
   },
   "merged_from": [
     {
-      "collected_at": "2026-10-18T13:08:28.433891+00:00",
-      "proposals": 57608,
-      "stats": {
-        "merged_runs": 1,
-        "unique_proposals": 57608
-      }
-    },
-    {
       "collected_at": "2026-10-18T21:51:11.474131+00:00",
-      "proposals": 2212,
+      "proposals": 59469,
       "stats": {
-        "http_calls": 3000,
-        "listed": 3063,
-        "page_failures": 0,
-        "detail_failures": 960,
-        "category_unmapped": 815,
-        "address_missing": 0,
-        "merged": 3,
-        "passed": 2212,
-        "skipped_unchanged": 2225,
-        "rest_unparsed": 31,
-        "raw_reparse_mismatch": 0,
-        "gate_drops": {
-          "existence_out_of_service_region": 2,
-          "existence_closed_business": 1,
-          "policy_non_travel:convenience_store": 17,
-          "policy_non_travel:hypermarket": 12,
-          "policy_non_travel:dealership": 1
-        },
-        "budget_exhausted": true,
-        "per_area": {
-          "1": {
-            "calls": 0,
-            "passed": 0,
-            "skipped": 0
-          },
-          "2": {
-            "calls": 0,
-            "passed": 0,
-            "skipped": 0
-          },
-          "3": {
-            "calls": 0,
-            "passed": 0,
-            "skipped": 0
-          },
-          "4": {
-            "calls": 0,
-            "passed": 0,
-            "skipped": 0
-          },
-          "6": {
-            "calls": 0,
-            "passed": 0,
-            "skipped": 0
-          },
-          "7": {
-            "calls": 0,
-            "passed": 0,
-            "skipped": 0
-          },
-          "8": {
-            "calls": 0,
-            "passed": 0,
-            "skipped": 0
-          },
-          "31": {
-            "calls": 0,
-            "passed": 0,
-            "skipped": 0
-          },
-          "32": {
-            "calls": 2229,
-            "passed": 1586,
-            "skipped": 1556
-          },
-          "33": {
-            "calls": 770,
-            "passed": 626,
-            "skipped": 614
-          },
-          "34": {
-            "calls": 1,
-            "passed": 0,
-            "skipped": 55
-          },
-          "35": {
-            "calls": 0,
-            "passed": 0,
-            "skipped": 0
-          },
-          "36": {
-            "calls": 0,
-            "passed": 0,
-            "skipped": 0
-          },
-          "37": {
-            "calls": 0,
-            "passed": 0,
-            "skipped": 0
-          },
-          "38": {
-            "calls": 0,
-            "passed": 0,
-            "skipped": 0
-          },
-          "39": {
-            "calls": 0,
-            "passed": 0,
-            "skipped": 0
-          }
-        }
+        "merged_runs": 2,
+        "unique_proposals": 59469
       }
     }
   ],
@@ -58870,7 +58763,7 @@
     {"provisional_id":"tourapi-3580635","source":"TOURAPI","poi":{"poi_id":"tourapi-3580635","name":"온이","category":"FOOD","coord":{"lat":37.86558840474816,"lng":127.7193405474542},"open_hours":[{"day_of_week":1,"open_min":660,"close_min":1260},{"day_of_week":2,"open_min":660,"close_min":1260},{"day_of_week":3,"open_min":660,"close_min":1260},{"day_of_week":4,"open_min":660,"close_min":1260},{"day_of_week":5,"open_min":660,"close_min":1260},{"day_of_week":6,"open_min":660,"close_min":1260}],"avg_cost":null,"rating":null,"saved_count":0,"quality":"FULL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"춘천시","opening_hours_raw":"11:00~21:00\n휴무: 매주 월요일","provenance":{"content_id":"3580635","content_type_id":"39","address":"강원특별자치도 춘천시 영서로 2297 (온의동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/26/3580626_image2_1.jpg","modified_time":"20260424091626","detail":{"firstmenu":"온이 코르타도","treatmenu":"아메리카노 / 바닐라빈 라떼 / 브라운치즈 아이스크림 크로플 등","parkingfood":"가능","kidsfacility":"0"},"detail_fetched_on":"2026-10-18"}},
     {"provisional_id":"tourapi-3538994","source":"TOURAPI","poi":{"poi_id":"tourapi-3538994","name":"올데이스테이","category":"FOOD","coord":{"lat":37.87839007413287,"lng":127.77159548317357},"open_hours":[],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"춘천시","opening_hours_raw":"[카페/베이커리]- 11:00~21:00[브런치]- 11:00~15:00\n휴무: 연중무휴","provenance":{"content_id":"3538994","content_type_id":"39","address":"강원특별자치도 춘천시 동면 만천로 28-84","image_url":"https://tong.visitkorea.or.kr/cms/resource/63/3538963_image2_1.jpg","modified_time":"20260407094952","detail":{"firstmenu":"감자절미크림볼","treatmenu":"감태명란바게트 / 화이트크림볼 / 흑임자크림볼 등","parkingfood":"가능 (약 150대)","kidsfacility":"0"},"detail_fetched_on":"2026-10-18"}},
     {"provisional_id":"tourapi-2685206","source":"TOURAPI","poi":{"poi_id":"tourapi-2685206","name":"옹장골오리","category":"FOOD","coord":{"lat":37.5971375080431,"lng":128.312740937631},"open_hours":[{"day_of_week":0,"open_min":690,"close_min":1320},{"day_of_week":1,"open_min":690,"close_min":1320},{"day_of_week":2,"open_min":690,"close_min":1320},{"day_of_week":3,"open_min":690,"close_min":1320},{"day_of_week":4,"open_min":690,"close_min":1320},{"day_of_week":5,"open_min":690,"close_min":1320},{"day_of_week":6,"open_min":690,"close_min":1320}],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"평창군","opening_hours_raw":"- 11:30~22:00- 마지막 주문 21:00\n휴무: 연중무휴","provenance":{"content_id":"2685206","content_type_id":"39","address":"강원특별자치도 평창군 봉평면 경강로 464-23","image_url":null,"modified_time":"20260213135007","detail":{"firstmenu":"생오리구이","treatmenu":"된장찌개 / 돌솥밥 / 능이오리백숙 등","parkingfood":"가능","kidsfacility":"0"},"detail_fetched_on":"2026-10-18"}},
-    {"provisional_id":"tourapi-3038513","source":"TOURAPI","poi":{"poi_id":"tourapi-3038513","name":"완앤송","category":"FOOD","coord":{"lat":38.2216,"lng":128.589314},"open_hours":[{"day_of_week":0,"open_min":630,"close_min":930},{"day_of_week":2,"open_min":630,"close_min":1200},{"day_of_week":3,"open_min":630,"close_min":1200},{"day_of_week":4,"open_min":630,"close_min":1200},{"day_of_week":5,"open_min":630,"close_min":1200},{"day_of_week":6,"open_min":630,"close_min":1200}],"avg_cost":null,"rating":null,"saved_count":0,"quality":"FULL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"속초시","opening_hours_raw":"[월요일]- 10:30~15:30- 마지막 주문 14:30[수요일~일요일]- 10:30~20:00- 준비시간 14:30~17:30- 마지막 주문 19:30\n휴무: 매주 화요일","provenance":{"content_id":"3038513","content_type_id":"39","address":"강원 속초시 장사동 632-250","image_url":"https://tong.visitkorea.or.kr/cms/resource/02/3038502_image2_1.jpg","modified_time":"20260410102320","detail":{"firstmenu":"소고기 쌀국수","treatmenu":"타코라이스 / 치킨티카마살라 / 소고기 국밥 등","parkingfood":"가능","kidsfacility":"0"},"detail_fetched_on":"2026-10-18"}},
+    {"provisional_id":"tourapi-3038513","source":"TOURAPI","poi":{"poi_id":"tourapi-3038513","name":"완앤송","category":"FOOD","coord":{"lat":38.2216,"lng":128.589314},"open_hours":[{"day_of_week":0,"open_min":630,"close_min":930},{"day_of_week":2,"open_min":630,"close_min":1200},{"day_of_week":3,"open_min":630,"close_min":1200},{"day_of_week":4,"open_min":630,"close_min":1200},{"day_of_week":5,"open_min":630,"close_min":1200},{"day_of_week":6,"open_min":630,"close_min":1200}],"avg_cost":null,"rating":null,"saved_count":0,"quality":"FULL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"속초시","opening_hours_raw":"[월요일]- 10:30~15:30- 마지막 주문 14:30[수요일~일요일]- 10:30~20:00- 준비시간 14:30~17:30- 마지막 주문 19:30\n휴무: 매주 화요일","provenance":{"content_id":"3038513","content_type_id":"39","address":"강원특별자치도 속초시 장사동 632-250","image_url":"https://tong.visitkorea.or.kr/cms/resource/02/3038502_image2_1.jpg","modified_time":"20260410102320","detail":{"firstmenu":"소고기 쌀국수","treatmenu":"타코라이스 / 치킨티카마살라 / 소고기 국밥 등","parkingfood":"가능","kidsfacility":"0"},"detail_fetched_on":"2026-10-18"}},
     {"provisional_id":"tourapi-626427","source":"TOURAPI","poi":{"poi_id":"tourapi-626427","name":"왕건횟집","category":"FOOD","coord":{"lat":38.2129403489549,"lng":128.600810589467},"open_hours":[{"day_of_week":0,"open_min":600,"close_min":1320},{"day_of_week":1,"open_min":600,"close_min":1320},{"day_of_week":2,"open_min":600,"close_min":1320},{"day_of_week":3,"open_min":600,"close_min":1320},{"day_of_week":4,"open_min":600,"close_min":1320},{"day_of_week":5,"open_min":600,"close_min":1320},{"day_of_week":6,"open_min":600,"close_min":1320}],"avg_cost":null,"rating":null,"saved_count":0,"quality":"FULL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"속초시","opening_hours_raw":"10:00~22:00\n휴무: 연중무휴","provenance":{"content_id":"626427","content_type_id":"39","address":"강원특별자치도 속초시 영랑해안길 15","image_url":"https://tong.visitkorea.or.kr/cms/resource/72/588272_image2_1.jpg","modified_time":"20260220171536","detail":{"firstmenu":"활어회세트","treatmenu":"매운탕 / 전복죽 / 물회 등","parkingfood":"가능","kidsfacility":"0"},"detail_fetched_on":"2026-10-18"}},
     {"provisional_id":"tourapi-2824083","source":"TOURAPI","poi":{"poi_id":"tourapi-2824083","name":"왕박골식당","category":"FOOD","coord":{"lat":38.22569087670165,"lng":128.58642405838566},"open_hours":[{"day_of_week":0,"open_min":570,"close_min":1140},{"day_of_week":1,"open_min":570,"close_min":1140},{"day_of_week":2,"open_min":570,"close_min":1140},{"day_of_week":4,"open_min":570,"close_min":1140},{"day_of_week":5,"open_min":570,"close_min":1140},{"day_of_week":6,"open_min":570,"close_min":1140}],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"속초시","opening_hours_raw":"09:30~19:00 (마지막 주문 18:00)\n휴무: 매주 목요일","provenance":{"content_id":"2824083","content_type_id":"39","address":"강원특별자치도 속초시 중앙로 431-1 (장사동)","image_url":null,"modified_time":"20260414091950","detail":{"firstmenu":"장칼국수","treatmenu":"떡만두국 / 곤드레만두","parkingfood":"가능","kidsfacility":"0","packing":"가능"},"detail_fetched_on":"2026-10-18"}},
     {"provisional_id":"tourapi-2685215","source":"TOURAPI","poi":{"poi_id":"tourapi-2685215","name":"외갓집","category":"FOOD","coord":{"lat":37.6731137377958,"lng":128.708961439417},"open_hours":[{"day_of_week":0,"open_min":660,"close_min":1320},{"day_of_week":1,"open_min":660,"close_min":1320},{"day_of_week":2,"open_min":660,"close_min":1320},{"day_of_week":3,"open_min":660,"close_min":1320},{"day_of_week":4,"open_min":660,"close_min":1320},{"day_of_week":5,"open_min":660,"close_min":1320},{"day_of_week":6,"open_min":660,"close_min":1320}],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"평창군","opening_hours_raw":"11:00~22:00\n휴무: 연중무휴 (전화문의)","provenance":{"content_id":"2685215","content_type_id":"39","address":"강원특별자치도 평창군 대관령면 횡계2길 11","image_url":null,"modified_time":"20260213143634","detail":{"firstmenu":"오삼불고기","treatmenu":"생삼겹살 / 항정살 / 돼지갈비 / 물갈비 / 청국장 등","parkingfood":"가능","kidsfacility":"0"},"detail_fetched_on":"2026-10-18"}},
@@ -59066,7 +58959,7 @@
     {"provisional_id":"tourapi-2037663","source":"TOURAPI","poi":{"poi_id":"tourapi-2037663","name":"향교막국수","category":"FOOD","coord":{"lat":37.3372121255391,"lng":127.948372814791},"open_hours":[],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"원주시","opening_hours_raw":null,"provenance":{"content_id":"2037663","content_type_id":"39","address":"강원특별자치도 원주시 명륜로 10","image_url":null,"modified_time":"20260409140404"}},
     {"provisional_id":"tourapi-2681523","source":"TOURAPI","poi":{"poi_id":"tourapi-2681523","name":"향원","category":"FOOD","coord":{"lat":37.4596105971738,"lng":128.065352326575},"open_hours":[],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"횡성군","opening_hours_raw":null,"provenance":{"content_id":"2681523","content_type_id":"39","address":"강원특별자치도 횡성군 우천면 수남로 357","image_url":null,"modified_time":"20260213142711"}},
     {"provisional_id":"tourapi-2774530","source":"TOURAPI","poi":{"poi_id":"tourapi-2774530","name":"허니포레스트","category":"FOOD","coord":{"lat":37.3001359937,"lng":127.9446409329},"open_hours":[],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"원주시","opening_hours_raw":null,"provenance":{"content_id":"2774530","content_type_id":"39","address":"강원특별자치도 원주시 판부면 서곡길 255","image_url":"https://tong.visitkorea.or.kr/cms/resource/64/3578364_image2_1.jpg","modified_time":"20260804093355"}},
-    {"provisional_id":"tourapi-736118","source":"TOURAPI","poi":{"poi_id":"tourapi-736118","name":"현대막국수","category":"FOOD","coord":{"lat":37.616325309,"lng":128.3773479965},"open_hours":[],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"평창군","opening_hours_raw":null,"provenance":{"content_id":"736118","content_type_id":"39","address":"강원 평창군 봉평면 동이장터길 17","image_url":"https://tong.visitkorea.or.kr/cms/resource/13/2947613_image2_1.jpg","modified_time":"20260922092407"}},
+    {"provisional_id":"tourapi-736118","source":"TOURAPI","poi":{"poi_id":"tourapi-736118","name":"현대막국수","category":"FOOD","coord":{"lat":37.616325309,"lng":128.3773479965},"open_hours":[],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"평창군","opening_hours_raw":null,"provenance":{"content_id":"736118","content_type_id":"39","address":"강원특별자치도 평창군 봉평면 동이장터길 17","image_url":"https://tong.visitkorea.or.kr/cms/resource/13/2947613_image2_1.jpg","modified_time":"20260922092407"}},
     {"provisional_id":"tourapi-2688031","source":"TOURAPI","poi":{"poi_id":"tourapi-2688031","name":"현무암","category":"FOOD","coord":{"lat":38.1859684995014,"lng":127.286903744238},"open_hours":[],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"철원군","opening_hours_raw":null,"provenance":{"content_id":"2688031","content_type_id":"39","address":"강원특별자치도 철원군 동송읍 태봉로 1825","image_url":null,"modified_time":"20260227095027"}},
     {"provisional_id":"tourapi-135573","source":"TOURAPI","poi":{"poi_id":"tourapi-135573","name":"형곤하우스","category":"FOOD","coord":{"lat":37.6251191242,"lng":127.651223567},"open_hours":[],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"홍천군","opening_hours_raw":null,"provenance":{"content_id":"135573","content_type_id":"39","address":"강원특별자치도 홍천군 서면 한서로 1901","image_url":"https://tong.visitkorea.or.kr/cms/resource/87/449687_image2_1.jpg","modified_time":"20260818113935"}},
     {"provisional_id":"tourapi-134241","source":"TOURAPI","poi":{"poi_id":"tourapi-134241","name":"혜원가든","category":"FOOD","coord":{"lat":37.2268059618753,"lng":128.816631433748},"open_hours":[],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"정선군","opening_hours_raw":null,"provenance":{"content_id":"134241","content_type_id":"39","address":"강원특별자치도 정선군 사북읍 사북중앙로 18-1","image_url":"https://tong.visitkorea.or.kr/cms/resource/12/1822512_image2_1.jpg","modified_time":"20260224121340"}},
@@ -59352,7 +59245,7 @@
     {"provisional_id":"tourapi-2917526","source":"TOURAPI","poi":{"poi_id":"tourapi-2917526","name":"에잇세컨즈 청주성안길점","category":"SHOPPING","coord":{"lat":36.6367227503504,"lng":127.489317711959},"open_hours":[],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"청주시","opening_hours_raw":null,"provenance":{"content_id":"2917526","content_type_id":"38","address":"충청북도 청주시 상당구 성안로 1 (북문로1가)","image_url":"https://tong.visitkorea.or.kr/cms/resource/17/4017317_image2_1.jpg","modified_time":"20260318101005"}},
     {"provisional_id":"tourapi-2917541","source":"TOURAPI","poi":{"poi_id":"tourapi-2917541","name":"에잇세컨즈 현대백화점 충청점","category":"SHOPPING","coord":{"lat":36.6448651780226,"lng":127.426560206577},"open_hours":[],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"청주시","opening_hours_raw":null,"provenance":{"content_id":"2917541","content_type_id":"38","address":"충청북도 청주시 흥덕구 직지대로 308 (복대동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/47/4041947_image2_1.jpg","modified_time":"20260325093432"}},
     {"provisional_id":"tourapi-4026913","source":"TOURAPI","poi":{"poi_id":"tourapi-4026913","name":"엠픽 청주점","category":"SHOPPING","coord":{"lat":36.6362288474663,"lng":127.488877398956},"open_hours":[],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"청주시","opening_hours_raw":null,"provenance":{"content_id":"4026913","content_type_id":"38","address":"충청북도 청주시 상당구 성안로 8 (북문로1가)","image_url":"https://tong.visitkorea.or.kr/cms/resource/46/4042246_image2_1.png","modified_time":"20260326092041"}},
-    {"provisional_id":"tourapi-132569","source":"TOURAPI","poi":{"poi_id":"tourapi-132569","name":"영춘재래시장","category":"SHOPPING","coord":{"lat":37.079568,"lng":128.483691},"open_hours":[],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"단양군","opening_hours_raw":null,"provenance":{"content_id":"132569","content_type_id":"38","address":"충북 단양군 영춘면 상리 698","image_url":"https://tong.visitkorea.or.kr/cms/resource/58/1959758_image2_1.jpg","modified_time":"20260224181650"}},
+    {"provisional_id":"tourapi-132569","source":"TOURAPI","poi":{"poi_id":"tourapi-132569","name":"영춘재래시장","category":"SHOPPING","coord":{"lat":37.079568,"lng":128.483691},"open_hours":[],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"단양군","opening_hours_raw":null,"provenance":{"content_id":"132569","content_type_id":"38","address":"충청북도 단양군 영춘면 상리 698","image_url":"https://tong.visitkorea.or.kr/cms/resource/58/1959758_image2_1.jpg","modified_time":"20260224181650"}},
     {"provisional_id":"tourapi-3370844","source":"TOURAPI","poi":{"poi_id":"tourapi-3370844","name":"오래된 잡화점","category":"SHOPPING","coord":{"lat":37.1317246799469,"lng":128.218755647355},"open_hours":[],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"제천시","opening_hours_raw":null,"provenance":{"content_id":"3370844","content_type_id":"38","address":"충청북도 제천시 의병대로26라길 27 (동현동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/41/3372241_image2_1.JPG","modified_time":"20260402100940"}},
     {"provisional_id":"tourapi-132028","source":"TOURAPI","poi":{"poi_id":"tourapi-132028","name":"오창전통시장","category":"SHOPPING","coord":{"lat":36.741549,"lng":127.455868},"open_hours":[],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"청주시","opening_hours_raw":null,"provenance":{"content_id":"132028","content_type_id":"38","address":"충청북도 청주시 청원구 오창읍 장대리 183","image_url":"https://tong.visitkorea.or.kr/cms/resource/86/4088486_image2_1.jpg","modified_time":"20260716153045"}},
     {"provisional_id":"tourapi-4057386","source":"TOURAPI","poi":{"poi_id":"tourapi-4057386","name":"옥천로컬푸드직매장","category":"SHOPPING","coord":{"lat":36.3068410051441,"lng":127.562564669311},"open_hours":[],"avg_cost":null,"rating":null,"saved_count":0,"quality":"PARTIAL","source":"PLACES_API","confidence":null,"tags":[],"source_ref":null},"tags":[],"region":"옥천군","opening_hours_raw":null,"provenance":{"content_id":"4057386","content_type_id":"38","address":"충청북도 옥천군 옥천읍 가화길 88","image_url":"https://tong.visitkorea.or.kr/cms/resource/81/4057381_image2_1.jpg","modified_time":"20260414091950"}},

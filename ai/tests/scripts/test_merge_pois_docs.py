@@ -499,6 +499,32 @@ def test_큐레이션_목록은_항목마다_근거가_있다() -> None:
     assert all(s["evidence"] in seed["evidence"] for s in seed["places"])
 
 
+# ── 주소 시도 약칭 → 정식 이름 (2026-10-19) ─────────────────────────────
+def test_시도_약칭만_정식_이름으로_편다() -> None:
+    props = [{"provenance": {"address": "강원 속초시 장사동 632-250"}},
+             {"provenance": {"address": "충청북도 단양군 영춘면"}},          # 이미 정식 — 그대로
+             {"provenance": {"address": None}}]
+    abbrev = {"강원": "강원특별자치도", "충북": "충청북도"}
+    assert M.expand_sido_abbrev(props, abbrev) == 1
+    assert props[0]["provenance"]["address"] == "강원특별자치도 속초시 장사동 632-250"
+    assert props[1]["provenance"]["address"] == "충청북도 단양군 영춘면"
+    assert M.expand_sido_abbrev(props, abbrev) == 0                         # 멱등
+
+
+def test_공유본의_모든_주소는_백엔드가_시도를_정한다() -> None:
+    """**백엔드 실문서 IT(`regionUnresolved == 0`)의 거울.** 주소 첫 낱말이 카탈로그 시도 이름이 아니면
+    백엔드가 지역 코드를 못 붙여 커버리지 집계에서 빠진다 — #1352 가 약칭 3건으로 백엔드 CI 를 깼다.
+    여기서 먼저 잡는다(같은 카탈로그 파일을 읽는다)."""
+    from collect_localdata import _MIGRATION, load_regions
+    sido = {n for _, n, _, lvl, _ in load_regions(_MIGRATION / "R__seed_region_catalog.sql") if lvl == "SIDO"}
+    doc = json.loads((_DATA / "collected_pois.json").read_text(encoding="utf-8"))
+    bad = [(p["source"], p["provenance"]["content_id"], p["provenance"].get("address"))
+           for p in doc["proposals"]
+           if ((p.get("provenance") or {}).get("address") or "").split()[:1] != []
+           and p["provenance"]["address"].split()[0] not in sido]
+    assert bad == [], f"백엔드가 시도를 못 정하는 주소 {len(bad)}건: {bad[:5]}"
+
+
 # ── 공유본 직렬화 — 한 행에 한 줄 (2026-10-18) ─────────────────────────
 def test_공유본은_한_행에_한_줄이고_되읽으면_같다() -> None:
     doc = merge([_keyed_doc("TOURAPI", "1", "2")], allow_mixed=True)
