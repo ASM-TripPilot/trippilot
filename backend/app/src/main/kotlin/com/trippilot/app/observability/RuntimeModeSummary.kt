@@ -76,6 +76,10 @@ class RuntimeModeSummary(private val env: Environment) {
             Triple("push", "trippilot.push.mode", "off"),
             Triple("reminder", "trippilot.ai.reminder-copy.mode", "off"),
             Triple("affiliate", "trippilot.affiliate.mode", "fallback"),
+            // Plan-B 상황 감시(설계서 §7) — 스윕 · 지평 · 선계산. 실제로 무엇이 감시 중인지는 스윕의 기동 안내 줄이 말한다.
+            Triple("situation", "trippilot.planb.situation-sweep.mode", "off"),
+            Triple("horizon", "trippilot.planb.situation-sweep.horizon", "today"),
+            Triple("prepared", "trippilot.replan.prepared.mode", "off"),
         )
 
         /**

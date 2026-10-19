@@ -142,6 +142,8 @@ enum class TriggerVariant(val kind: TriggerKind) {
 /** 스윕 출처 이름(CD5 `payload.detector` — 해제 자격). 감시 상태 묶음: 날씨 = [KMA_FORECAST], 휴무 = [PLACE]. */
 object SweepSource {
     const val KMA_FORECAST = "kma-forecast"
+    const val KMA_WARNING = "kma-warning"
+    const val AIRKOREA = "airkorea"
     const val PLACE = "place"
 }
 
