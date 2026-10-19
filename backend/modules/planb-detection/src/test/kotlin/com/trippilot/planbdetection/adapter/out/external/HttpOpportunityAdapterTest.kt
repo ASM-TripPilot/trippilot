@@ -10,11 +10,17 @@ import io.kotest.assertions.throwables.shouldThrowAny
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.longs.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.longs.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotBeBlank
 import io.kotest.matchers.types.shouldBeInstanceOf
+import org.springframework.web.client.ResourceAccessException
+import org.springframework.web.client.RestClientException
 import java.net.InetSocketAddress
+import java.net.ServerSocket
+import java.net.Socket
+import java.net.SocketTimeoutException
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -29,6 +35,7 @@ import java.util.concurrent.TimeUnit
  * 포트 대역으로는 원리적으로 못 보는 것들이다: 경계 매퍼(snake_case·Jackson 3 Kotlin 모듈)를 지난 실제 본문,
  * 상대가 이상한 것을 줬을 때 **예외로 말하는가**(기본값으로 채워 정상처럼 넘기지 않는가), 읽기 상한이 실제로 걸렸는가.
  * 어댑터는 `@Bean` 이 만드는 그대로 쓴다 — 테스트가 클라이언트를 따로 조립하면 운영 경로의 설정을 아무도 안 잰다.
+ * 설정도 운영 기본값 그대로다 — 테스트가 시한·상한을 다시 적어 넘기면 기본값을 바꿔도(읽기 상한 10분 등) 전부 초록이었다.
  */
 class HttpOpportunityAdapterTest : StringSpec({
 
@@ -43,11 +50,9 @@ class HttpOpportunityAdapterTest : StringSpec({
     val clock = Clock.fixed(Instant.parse("2026-10-20T03:00:00Z"), ZoneOffset.UTC)
     val mapper = OpportunityConfiguration.boundaryMapper()
 
-    fun adapter(baseUrl: String, deadlineMs: Long = 3_000, readTimeoutMs: Long = 8_000, token: String = "") =
-        OpportunityConfiguration().httpOpportunityPort(
-            OpportunityProperties(mode = "http", baseUrl = baseUrl, deadlineMs = deadlineMs, readTimeoutMs = readTimeoutMs, serviceToken = token),
-            clock,
-        )
+    /** 연결·시한·읽기 상한은 운영 기본값 그대로다(위 KDoc). */
+    fun adapter(baseUrl: String, token: String = "") =
+        OpportunityConfiguration().httpOpportunityPort(OpportunityProperties(mode = "http", baseUrl = baseUrl, serviceToken = token), clock)
 
     "@Bean 이 실 HTTP 어댑터를 낸다" {
         adapter("http://127.0.0.1:1").shouldBeInstanceOf<HttpOpportunityAdapter>()
@@ -140,19 +145,40 @@ class HttpOpportunityAdapterTest : StringSpec({
     }
 
     /**
-     * 읽기 상한이 걸려 있어야 한다 — 없으면 상대가 멈췄을 때 허브 요청이 그 스레드를 붙잡고 매달린다.
-     * 마감을 1ms 로 줘 상한을 바닥(마감 + 백스톱 5s)으로 낮추고, 상대는 그보다 오래 붙잡는다.
+     * 읽기 상한이 운영 기본값으로 걸려 있어야 한다 — 없으면 상대가 멈췄을 때 허브 요청이 그 스레드를 붙잡고 매달린다.
+     * 기본값 그대로 태우므로 상한만큼 걸린다 — 느린 이유가 곧 재는 내용이다(anti-patterns `@Bean` 운영 경로).
      */
-    "읽기 상한을 넘기면 예외로 끝난다 — 매달리지 않는다" {
+    "읽기 상한(운영 기본 8s)에서 끊긴다 — 붙여 놓고 답하지 않는 상대에 매달리지 않는다" {
         val release = CountDownLatch(1)
         withServer(reply(), hold = release) { url, _ ->
             val began = System.nanoTime()
-            try {
-                shouldThrowAny { adapter(url, deadlineMs = 1, readTimeoutMs = 5_001).find(query) }
+            // 응답 머리를 본문 읽기에서 늦게 읽어 ResourceAccessException 이 아니라 그 상위 RestClientException 으로 온다(실측).
+            val thrown = try {
+                shouldThrow<RestClientException> { adapter(url).find(query) }
             } finally {
                 release.countDown()
             }
-            TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - began) shouldBeLessThan 9_000
+            val elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - began)
+
+            thrown.cause.shouldBeInstanceOf<SocketTimeoutException>()
+            elapsed shouldBeGreaterThanOrEqual 8_000L
+            elapsed shouldBeLessThan 9_500L
+        }
+    }
+
+    /**
+     * 연결 상한도 운영 기본값으로 걸려 있어야 한다 — 상대가 SYN 을 버리면(파드 교체·네트워크 분리) 상한이 없을 때
+     * OS 재시도(리눅스 약 2분)까지 허브 요청이 매달린다. 위 읽기 상한 테스트는 연결이 즉시 맺어져 이 설정을 재지 못한다.
+     */
+    "연결 상한(운영 기본 1s)에서 끊긴다 — 연결이 맺어지지 않는 상대에 매달리지 않는다" {
+        withUnconnectable { url ->
+            val began = System.nanoTime()
+            val thrown = shouldThrow<ResourceAccessException> { adapter(url).find(query) }
+            val elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - began)
+
+            thrown.cause.shouldBeInstanceOf<SocketTimeoutException>()
+            elapsed shouldBeGreaterThanOrEqual 1_000L
+            elapsed shouldBeLessThan 2_500L
         }
     }
 
@@ -179,8 +205,10 @@ class HttpOpportunityAdapterTest : StringSpec({
         OpportunityProperties(mode = "HTTP").mode shouldBe "HTTP" // 조건부 빈의 비교처럼 대소문자는 가리지 않는다
     }
 
-    "기본값은 꺼짐이다" {
-        OpportunityProperties().mode shouldBe "off"
+    /** 값이 조용히 늘면 '상한이 있다'는 사실만 남고 실효가 사라진다 — 바꿀 때는 근거와 함께 이 줄을 고친다. */
+    "운영 기본값은 꺼짐 · 연결 1s · 시한 3s · 읽기 상한 8s 다" {
+        OpportunityProperties().let { listOf(it.mode, it.connectTimeoutMs, it.deadlineMs, it.readTimeoutMs) } shouldBe
+            listOf("off", 1_000L, 3_000L, 8_000L)
     }
 })
 
@@ -215,5 +243,32 @@ private fun withServer(json: String?, hold: CountDownLatch? = null, block: (base
         block("http://127.0.0.1:${server.address.port}", seen)
     } finally {
         server.stop(0)
+    }
+}
+
+/**
+ * 연결이 맺어지지 않는 상대 — accept 하지 않는 리스너의 백로그를 채우면 그다음 SYN 은 커널이 버린다
+ * (백로그 1 에 리눅스는 2개·macOS 는 1개로 찬다 — 실측). 루프백에서 'SYN 을 버리는 상대'를 결정론으로 만든다.
+ */
+private fun withUnconnectable(block: (baseUrl: String) -> Unit) {
+    val server = ServerSocket()
+    server.bind(InetSocketAddress("127.0.0.1", 0), 1)
+    val fillers = mutableListOf<Socket>()
+    try {
+        while (true) {
+            val s = Socket()
+            try {
+                s.connect(server.localSocketAddress, 500)
+            } catch (full: SocketTimeoutException) {
+                s.close()
+                break
+            }
+            fillers += s
+            check(fillers.size < 64) { "백로그가 차지 않습니다 — 이 환경에서는 맺어지지 않는 연결을 만들 수 없습니다." }
+        }
+        block("http://127.0.0.1:${server.localPort}")
+    } finally {
+        fillers.forEach { runCatching { it.close() } }
+        server.close()
     }
 }
