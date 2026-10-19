@@ -143,8 +143,9 @@ class DomainNotificationIT : AbstractPostgresIntegrationTest() {
     }
 
     /**
-     * 옛 6필드 사건(새 선택 필드 없음) 회귀 — 아웃박스에 남아 있던 것·U10 지연이 이 모양이다.
-     * `push` 가 없으면 푸시 대상이다(BR-SA-21 ②) — 기기가 있으면 발송 시각이 찍힌다.
+     * 옛 6필드 사건(새 선택 필드 없음) 회귀 — 배포 순간 아웃박스에 남아 있던 것이 이 모양이다(지금 발행처는 날씨
+     * 확인을 포함해 언제나 새 필드를 싣는다). 제목은 종전 그대로이고(BR-SA-21 ①), `push` 가 없으면 푸시 대상이다
+     * (BR-SA-21 ②) — 기기가 있으면 발송 시각이 찍힌다.
      */
     @Test
     fun `Plan-B 발화 사건이 PLAN_B 알림이 된다 — 옛 6필드 사건도 사유가 실리고 푸시된다`() {
@@ -162,7 +163,7 @@ class DomainNotificationIT : AbstractPostgresIntegrationTest() {
         deliver()
 
         val notification = notificationsOf(accountId, NotificationKind.PLAN_B).single()
-        notification.title shouldBe "날씨가 일정에 영향을 줄 수 있어요"
+        notification.title shouldBe "일정을 다시 짜는 게 좋겠어요"
         notification.body shouldBe "비 예보로 실내 대안이 필요해요"
         // 일정 화면이 아니라 **재계획 진입**이다(BR-U6-08 '대안 일정 보기'). 일정만 열면
         // 사용자가 알림을 읽고도 무엇을 하라는 것인지 다시 찾아야 한다.

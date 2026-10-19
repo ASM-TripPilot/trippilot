@@ -120,7 +120,10 @@ class PlanBTriggeredSubscriberTest : StringSpec({
         "eventType" to "planb.PlanBTriggered", "aggregateType" to "PlanBTrigger",
     )
 
-    /** 새 필드가 생기기 전의 사건 — 위치 인자 6개뿐이다(아웃박스에 남아 있던 것·U10 지연). */
+    /**
+     * 새 필드가 생기기 전의 사건 — 위치 인자 6개뿐이다. 배포 순간 아웃박스에 남아 있던 것만 이 모양이다:
+     * 지금 발행처(`TriggerService.eventOf`)는 날씨 확인(`evaluate`)을 포함해 언제나 새 필드를 싣는다.
+     */
     fun legacy(tripId: UUID, kind: String, reason: String?): Map<String, Any?> = mapOf(
         "accountId" to acc.toString(), "tripId" to tripId.toString(), "kind" to kind,
         "slotKey" to "2026-10-19#${UUID.randomUUID()}", "reason" to reason,
@@ -246,18 +249,20 @@ class PlanBTriggeredSubscriberTest : StringSpec({
         f.suppressed("IN_APP_ONLY") shouldBe 1.0
     }
 
-    "push 필드가 없는 옛 사건도 푸시 대상이다 — 옛 6필드 사건 호환" {
-        val f = fixture()
-        val trip = UUID.randomUUID()
-        val triggerId = UUID.randomUUID().toString()
+    "push 필드가 없는 옛 사건은 종전 제목 그대로 푸시 대상이다 — kind 제목은 새 사건만(BR-SA-21 ①②)" {
+        listOf("WEATHER", "CLOSURE").forEach { kind ->
+            val f = fixture()
+            val trip = UUID.randomUUID()
+            val triggerId = UUID.randomUUID().toString()
 
-        f.deliver(legacy(trip, kind = "WEATHER", reason = "비 예보로 실내 대안이 필요해요"), triggerId)
+            f.deliver(legacy(trip, kind = kind, reason = "비 예보로 실내 대안이 필요해요"), triggerId)
 
-        val n = f.notifications.stored.single()
-        n.title shouldBe "날씨가 일정에 영향을 줄 수 있어요"
-        n.body shouldBe "비 예보로 실내 대안이 필요해요"
-        n.actionPayload shouldBe mapOf("tripId" to trip.toString(), "triggerId" to triggerId)
-        f.sender.messages.size shouldBe 1
+            val n = f.notifications.stored.single()
+            n.title shouldBe "일정을 다시 짜는 게 좋겠어요"
+            n.body shouldBe "비 예보로 실내 대안이 필요해요"
+            n.actionPayload shouldBe mapOf("tripId" to trip.toString(), "triggerId" to triggerId)
+            f.sender.messages.single().title shouldBe "일정을 다시 짜는 게 좋겠어요"
+        }
     }
 
     "모르는 kind 는 종전 제목으로 알림함에만 두고 경고를 남긴다 — 잘못 들어온 값이 기기를 울리지 않는다" {

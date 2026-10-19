@@ -66,7 +66,10 @@ class StayRegisteredSubscriber(
  * 거르지 않는 이유가 그것이다: 규칙이 두 곳에 흩어지면 한쪽만 고쳐도 아무도 모른다.
  *
  * **푸시 여부는 사건이 정한다**(BR-SA-21 ② · DEC-SA-5) — `kind`·`push`·`others` 를 트리로 읽는다.
- * 새 필드가 없는 옛 사건(위치 인자 6개)·날씨 확인·U10 지연은 푸시 대상이다.
+ * 발행처는 하나(`TriggerService.eventOf`)이고 날씨 확인(`evaluate`)도 거기를 지나 언제나 `push` 를 싣는다 — 위험
+ * 대표 ∧ 트리거 하루 푸시 상한(민감도별) 안이면 true, 아니면 false(알림함만). U10 지연은 아직 발행처가 없다 —
+ * `evaluate` 를 지나면 같은 규칙을 받는다. `push` 가 없는 것은 새 필드가 생기기 전에 발행돼 배포 순간 아웃박스에
+ * 남아 있던 옛 사건(위치 인자 6개)뿐이고, 종전처럼 푸시 대상이되 제목도 종전 그대로다(BR-SA-21 ①).
  */
 @Component
 class PlanBTriggeredSubscriber(
@@ -88,10 +91,12 @@ class PlanBTriggeredSubscriber(
         if (unknown) {
             log.warn("Plan-B 사건의 kind·push 를 모릅니다 — 옛 제목으로 알림함에만 둡니다. kind={} push={} eventId={}", kind, push, envelope.eventId)
         }
+        // 새 필드가 없는 옛 사건은 종전 제목이다(BR-SA-21 ① '그 밖·옛 사건') — kind 제목은 새 사건만 받는다.
+        val legacy = push == null
         notifications.raise(
             accountId = accountId,
             kind = NotificationKind.PLAN_B,
-            title = PlanBNotificationCopy.title(kind.takeUnless { unknown }),
+            title = PlanBNotificationCopy.title(kind.takeUnless { unknown || legacy }),
             // 사유는 있으면 싣는다 — "왜 바꾸라는지" 없이 오는 알림은 사용자가 무시한다.
             body = PlanBNotificationCopy.body(payload.text("reason"), payload.get("others")?.intValue() ?: 0),
             sourceEventId = envelope.eventId,

@@ -15,7 +15,7 @@ internal object PlanBNotificationCopy {
      */
     private val KINDS = setOf("WEATHER", "CLOSURE", "DELAY", "MANUAL")
 
-    /** 그 밖(지연·수동)·모르는 값의 제목 — 종전 상수 그대로다. */
+    /** 그 밖(지연·수동)·옛 사건·모르는 값의 제목 — 종전 상수 그대로다. */
     private const val TITLE_OTHER = "일정을 다시 짜는 게 좋겠어요"
 
     /** 사유가 없을 때. 상대 날짜어('오늘')를 담지 않는다 — 알림함에 남아 다음 날 틀린 말이 된다(BR-SA-12). */
