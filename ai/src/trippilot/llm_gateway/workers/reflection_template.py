@@ -44,12 +44,12 @@ def build_reflection_template_vars(request: ReflectionRequest) -> dict[str, str]
     )
     return {
         "kind": request.kind.value,
-        "region": request.region.strip() or "미지정",
+        "region": inline(request.region) or "미지정",
         "period": f"{request.start_date.isoformat()} ~ {request.end_date.isoformat()}",
         "visits": visits,  # post-init이 visits ≥ 1 보장 (BR-U6R-15) — 빈 목록 없음
         "events": events or "(이벤트 없음)",
-        "persona_summary": request.persona_summary.strip() or "(요약 없음)",
-        "weather_summary": request.weather_summary.strip() or "(요약 없음)",
+        "persona_summary": inline(request.persona_summary) or "(요약 없음)",
+        "weather_summary": inline(request.weather_summary) or "(요약 없음)",
     }
 
 

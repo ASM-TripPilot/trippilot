@@ -71,11 +71,13 @@ LlmPort 직접 import 금지(L-3) 전부 기존 아키텍처 테스트가 자동
 ④ 결정론 랭킹      (하드 수 ↑낮게, 소프트 수 ↑낮게, 장면 채움 ↑많게, 생성 차수 ↑이르게) 사전식 (계약 §4.2)
                    — LLM 심판(best-of-N judge) 금지 (1차)
 ⑤ 장면/필드 교체   최선 후보의 잔존 하드 위반만 §4 교체 맵으로 결정론 교체 — 전체 드롭 없음 (계약 §4.1)
-⑤′ 장소 이름 바인딩 `{poi:i.name}` → visits[i].poi_name (해시태그는 공백 제거) — 교체 **뒤**여야
-                   교체가 만든 안전 문구(`{poi:k.name}에서의 기억`)까지 채운다. 나머지 어휘는 렌더러 몫
-                   (계약 §2 개정 2026-10-19 · `composer.bind_poi_names`)
+⑤′ 자리표시자 바인딩 어휘 전부를 요청 값으로(장소 이름·지역·날짜·방문 수·사진 수, 해시태그는 공백 제거) —
+                   교체 **뒤**여야 교체가 만든 안전 문구(`{poi:k.name}에서의 기억`)까지 채운다. 못 채우는 토큰
+                   (`{distance_km}`·사진 0장의 `{photo_count}`·빈 이름)이 남은 문구는 안전 문구로 바꾼다.
+                   자리표시자뿐인 부제만 그대로 — FE 의 "서술 없음" 신호 (계약 §2 개정 2026-10-19 · `composer.bind_placeholders`)
 ⑥ 봉투 조립        ReflectionTemplate(is_fallback=False) — 3회 전부 파싱 실패 시 fallback.py 고정 템플릿
-                   (is_fallback=True) + FallbackEvent (INV-4 — 서버 숫자는 항상 참이므로 폴백도 거짓 없는 결과물)
+                   (is_fallback=True) + FallbackEvent (INV-4 — 서버 숫자는 항상 참이므로 폴백도 거짓 없는 결과물).
+                   폴백도 ⑤′ 바인딩을 지난다 — 안 그러면 `{region}에서 우리가 지나온 길` 이 화면에 그대로 나간다
 ⑦ 관측             시도별 LlmCallRecord(성공·실패 불문, BR-U4-03) · 드롭·폴백 이벤트 — 전부 동일 trace_id
 ```
 

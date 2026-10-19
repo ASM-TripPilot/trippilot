@@ -8,7 +8,8 @@
   판정은 게이트(gates/reflection_template.py) 몫, 타입은 대조 집합과 자리만 제공한다.
 - INV-2 비적용의 구조화 + INV-3: ReflectionTemplate에 시각·순서·duration 필드 자체가 없다.
 - 숫자 통계(방문 N·이동 km·사진 N)는 요청에 없다 — 캡션 속 숫자는 PLACEHOLDER_VOCAB
-  자리표시자로만 실리고, 실측값 바인딩은 렌더 시 서버가 한다 (숫자 환각 구조 차단, 계약 §2).
+  자리표시자로만 실리고, 값은 응답 전에 composer 가 요청에서 꺼내 채운다 (숫자 환각 구조 차단,
+  계약 §2 개정 2026-10-19 — 렌더러가 채운다는 종전 전제는 틀렸다).
 
 Phase 2(VisionInput·PhotoRef 등, FD §4)는 이 파일 범위 밖 — ReflectionRequest 후미
 기본값 필드로 후속 추가한다 (기존 호출 무영향 조건, FD business-logic §6.1).
@@ -447,7 +448,8 @@ class ShareCardCopy:
     (`{여행제목} 여행의 기록` · `#{지역}여행`)만 LLM 카피로 대체한다.
 
     숫자는 여기에도 직접 실리지 않는다 — 필요하면 `PLACEHOLDER_VOCAB` 자리표시자로만
-    담고 실측값 바인딩은 렌더 시 서버가 한다 (ReflectionTemplate과 같은 규약, 계약 §2).
+    담는다. 이 카피의 바인딩 주체는 아직 없다 — 회고 카드(ReflectionTemplate)는 2026-10-19 부터
+    AI 가 응답 전에 채우지만, 이 경계는 호출처가 0건이라 같이 옮기지 않았다.
     시각·소요시간 필드는 자리 자체가 없다 (INV-3).
     """
 

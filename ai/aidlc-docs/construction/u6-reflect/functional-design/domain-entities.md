@@ -55,9 +55,9 @@ POI 정본(백엔드 C7 단일 소유 — 정합성 점검 P1 합의)에 대한 
 |---|---|---|
 | `PhotoSlot` | `visit_ref: VisitRef` | 자리와 참조뿐 — 실제 사진 결합은 서비스 렌더 시 (business-logic-model §5) |
 | `Scene` | `layout: SceneLayout, photo_slot: PhotoSlot \| None, caption: str, source_event: SourceEventKind \| None` | `layout ∈ {PHOTO_FULL, PHOTO_CAPTION}` ⇒ `photo_slot` 필수 · `layout = EVENT` ⇒ `source_event` 필수 (post-init) |
-| `Cover` | `title: str, subtitle: str, photo_slot: PhotoSlot \| None` | subtitle 기본형 `{region} · {start_date}~{end_date}` — 자리표시자 |
+| `Cover` | `title: str, subtitle: str, photo_slot: PhotoSlot \| None` | subtitle 은 회고 한 문장(BR-U6R-18). 자리표시자 기본형 `{region} · {start_date}~{end_date}` 은 고정 폴백 전용 |
 | `ReflectionTemplate` | `template_id: str, kind, format, generated_at: datetime, is_fallback: bool, cover: Cover, scenes: tuple[Scene,...], hashtags: tuple[str,...]` | 계약 §3.1 봉투 + §3.2 본문. tz-aware. **시각·순서·duration 필드 자체가 없다** (INV-2 비적용의 구조화 + INV-3). `template_id` 생성 규칙은 미결 #3 |
-| `PLACEHOLDER_VOCAB` (상수) | `{visit_count} {distance_km} {photo_count} {region} {start_date} {end_date} {poi:i.name}` | **자리표시자 어휘도 closed-set** — 어휘 밖 참조·poi 인덱스 범위 밖 = 하드 위반. 어휘 확장 = 계약 개정 |
+| `PLACEHOLDER_VOCAB` (상수) | `{visit_count} {distance_km} {photo_count} {region} {start_date} {end_date} {poi:i.name}` | **자리표시자 어휘도 closed-set** — 어휘 밖 참조·poi 인덱스 범위 밖 = 하드 위반. 어휘 확장 = 계약 개정. 값은 응답 전에 AI 가 채운다(BR-U6R-17) — `{distance_km}` 는 값이 없어 프롬프트가 쓰지 말라고 한다 |
 | `TemplateViolation` | `grade: ViolationGrade, code: ViolationCode, scene_index: int \| None, detail: str` | 게이트 산출물 — 빈 튜플 = 위반 0 (조기 종료 조건) |
 | `TemplateCandidate` | `template: ReflectionTemplate, violations: tuple[TemplateViolation,...], attempt: int(1~3)` | 랭킹 입력 1건. **하드 위반이 있어도 후보는 유지** — 드롭이 아니라 N회 생성→최선 채택 (계약 §4) |
 
