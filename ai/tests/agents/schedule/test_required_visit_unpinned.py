@@ -20,7 +20,7 @@ HC3 핀 그대로다.
   ③′ 둘 다: 앵커 출발(창 시작 + 이동)·재계획 하한을 지킨다 · 다음 핀까지 이동이 안 들어가는
      점심창은 건너뛰고 저녁창으로 간다 · dwell 없으면 카테고리 기본 체류(pace 적용) ·
      로컬 재현 실표본(11~20시 식당 · 휴게 있는 두 창 식당 · 10시 개장 명소)
-  ④ 그리디: 같은 성질 + 틈 채우기는 필수 방문이 있는 날만(다른 날 패리티)
+  ④ 그리디: 같은 성질 + 틈 채우기는 필수 방문이나 고정 블록이 있는 날(없는 날은 말단 삽입 — 패리티)
   ⑤ 경로 e2e: 11시 개장 식당 · 10시 개장 명소를 start null 로 → 200, 영업시간 안(식당은
      식사창 안), is_fixed=true, 409 없음
   ⑥ INV-1: 풀 밖 필수 POI 는 인덱스에만 합류, 후보가 되지 않는다
@@ -603,11 +603,14 @@ def test_fallback_fills_the_morning_before_a_lunch_required_food() -> None:
     assert check_all(result, problem, index, _EST) == []
 
 
-def test_fallback_without_required_visits_does_not_gap_fill_before_a_pin() -> None:
-    """필수 방문이 없는 날은 종전 그대로 말단 삽입뿐 — 핀 앞 오전은 비어 있다(웜스타트 불변)."""
+def test_fallback_fills_the_morning_before_a_pin_without_required_visits() -> None:
+    """고정 블록만 있는 날도 핀 앞을 채운다. 종전엔 필수 방문이 있는 날만 틈을 채워(웜스타트 불변)
+    핀 앞 오전이 비었고, 그 해를 힌트로 받은 OR 도 그대로 냈다 — 서울 실데이터 강남 12:00 식당 고정에서
+    첫 방문 12:00(오전 3시간 공백) 5회 중 3회(2026-10-19 로컬 실측)."""
     problem, index = _problem(_sights(6), fixed=(_pin("s1", _at(13), _at(14)),))
     result = _fb_solve(problem, index)
-    assert result.days[0].slots[0].start_at == _at(13)
+    assert result.days[0].slots[0].start_at < _at(11)
+    assert check_all(result, problem, index, _EST) == []
 
 
 # ── ⑤ 경로 e2e — 실 조립 + fake 어댑터 ───────────────────────────────────

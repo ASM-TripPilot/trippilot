@@ -385,7 +385,7 @@ class TriggerService(
             variant = rep.variant?.name,
             push = a.push,
             others = a.others,
-            dateRisks = a.dateRisks.map { DateRisk(it.kind.name, it.variant?.name, it.poiIds) },
+            dateRisks = a.dateRisks.map { DateRisk(it.kind.name, it.variant?.name, it.poiIds, it.coverage) },
         )
     }
 

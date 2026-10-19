@@ -130,7 +130,9 @@ def main(argv: list[str]) -> int:
     if not keys:
         print("TOUR_API_KEY 없음 — 생략")
         return 0
-    per_key = 1000  # 개발계정 오퍼레이션별 일 한도 — 키링이 넘치면 다음 키로
+    # 키당 상한 — 오퍼레이션별 일 한도 1,000 에 여유를 둔다. 429 는 키 퇴출이 아니라 일시 장애로 올라오므로(포트 계약)
+    # 한 키가 한도를 넘기면 연속 실패로 그날 수집이 멈춘다 — 넘기지 않게 여기서 자른다.
+    per_key = int(os.environ.get("OVERVIEW_CALLS_PER_KEY") or "950")
     adapter = TourApiAdapter(UrllibHttpClient(), keys[0], extra_keys=keys[1:],
                              calls_per_key=per_key if len(keys) > 1 else None)
     todo = targets(json.loads(_POIS.read_text(encoding="utf-8"))["proposals"])

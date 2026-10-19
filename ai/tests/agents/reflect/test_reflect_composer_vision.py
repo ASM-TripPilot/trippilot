@@ -40,6 +40,7 @@ from hypothesis import strategies as st
 from trippilot.agents.reflect.agent import ReflectAgent, ReflectTask
 from trippilot.agents.reflect.composer import (
     MAX_ATTEMPTS,
+    bind_placeholders,
 )
 from trippilot.agents.reflect.fallback import build_fallback_template
 from trippilot.agents.reflect.highlight_rule import select_highlights
@@ -239,7 +240,7 @@ def test_budget_worst_case_total_failure_caps_template_calls_at_three() -> None:
     assert [bool(i) for i in template_llm.seen_images] == [True, False, False]
     assert highlight_llm.calls == 1
     assert template.is_fallback is True
-    assert template == build_fallback_template(_REQUEST.kind, _TID, _NOW)
+    assert template == bind_placeholders(build_fallback_template(_REQUEST.kind, _TID, _NOW), _REQUEST)
     # Phase 1 전 시도 실패와 같은 봉투 스키마 (VIS-P3 — 폴백까지 드롭인)
     phase1, _ = _run_phase1(FailingLlm())
     assert set(template.to_dict()) == set(phase1.to_dict())

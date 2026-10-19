@@ -5,6 +5,7 @@ LLM 시도 루프와 폴백 전환 발행은 `agent.py`의 `ReflectAgent` 가 �
 
 - `rank_key` / `finalize` : 후보 랭킹 → 위반 하드 교체 → 봉투(전 시도 실패면 고정 폴백)
 - `apply_hard_replacements` / `safe_caption` : 게이트 위반 코드별 결정론 치환
+- `bind_placeholders` : 자리표시자를 실제 값으로 — 와이어에 나가는 문구는 다 채워져 있다
 """
 
 from __future__ import annotations
@@ -59,6 +60,8 @@ _DETAIL_TOKEN = re.compile(r"\{([^{}]*)\}")  # detail 말미의 {토큰} — 게
 _HASHTAG_INDEX = re.compile(r"hashtags\[(\d+)\]")  # 게이트 라벨 인덱스형과 페어
 _PLACEHOLDER = re.compile(r"\{([^{}]*)\}")  # 게이트 `_PLACEHOLDER` 와 같은 토큰 경계
 _POI_TOKEN = re.compile(POI_PLACEHOLDER_PATTERN)  # 게이트와 같은 상수 — fullmatch(공백 불허)
+_DATE_RANGE = re.compile(r"\{start_date\}\s*~\s*\{end_date\}")
+_LAST_RESORT_TITLE = "여행의 기록"  # 지역까지 비어 폴백 제목도 못 채울 때 — BE 는 빈 제목 카드를 버린다
 
 
 def rank_key(candidate: TemplateCandidate) -> tuple[int, int, int, int]:
@@ -247,44 +250,91 @@ def apply_hard_replacements(
     return replace(template, cover=cover, scenes=tuple(scenes), hashtags=hashtags)
 
 
-def bind_poi_names(
-    template: ReflectionTemplate, poi_names: tuple[str, ...]
-) -> ReflectionTemplate:
-    """`{poi:i.name}` 을 i 번째 방문의 **실제 이름**으로 바꿔 내보낸다.
+def _is_template_only(text: str) -> bool:
+    """자리표시자·구분자(`·` `~`)·공백뿐인 문구 — FE `isTemplateOnly`(TRIP-1425)와 같은 판정."""
+    rest = _PLACEHOLDER.sub("", text)
+    return rest != text and not re.sub(r"[\s·~]", "", rest)
 
-    i 는 요청 `visits` 배열의 인덱스라 **그 순서를 정확히 아는 곳이 여기뿐**이다 —
-    FE·BE 가 순서를 재구성해 치환하면 다른 장소 이름이 들어갈 수 있다. 그래서 이 토큰만은
-    응답 전에 우리가 채운다(나머지 어휘 `{region}`·날짜·개수·거리는 렌더러가 자기 형식으로
-    채운다 — FE `fillTemplate`). LLM 이 이름을 지어내지 못하게 하는 자리표시자 설계는 그대로다:
-    LLM 은 인덱스만 고르고, 이름은 결정론 코드가 방문 기록에서 꺼낸다.
 
-    부수 효과로 BE 환각 대조(`HallucinationGate` — 건너뛴 장소 이름이 payload 에 있으면 강등)가
-    처음으로 장면 캡션 속 장소를 볼 수 있게 된다. 토큰 상태로는 무엇을 가리키는지 못 읽었다.
+def placeholder_values(request: ReflectionRequest) -> dict[str, str]:
+    """요청으로 **정확히 아는** 어휘 값. 여기 없는 토큰은 못 채운다.
 
-    - 해시태그는 공백을 담을 수 없어 이름의 공백을 지운다(`#해운대 해수욕장` → `#해운대해수욕장`)
-    - 범위 밖 인덱스·빈 이름은 손대지 않는다 — 하드 교체가 이미 범위 밖 토큰을 지웠으므로 방어선이다
+    - `{distance_km}` 는 요청에 거리가 없어 빠진다
+    - 사진이 0장이면 `{photo_count}` 를 비운다 — "사진 0장으로 남긴 기억" 은 참이지만 회고 문장이 아니다
     """
+    photos = sum(v.photo_count for v in request.visits)
+    values = {
+        "region": request.region.strip(),
+        "start_date": request.start_date.isoformat(),
+        "end_date": request.end_date.isoformat(),
+        "visit_count": str(len({v.ref for v in request.visits})),
+        "photo_count": str(photos) if photos else "",
+    }
+    return {k: v for k, v in values.items() if v}
 
-    def bind(text: str, *, tag: bool = False) -> str:
+
+def bind_placeholders(
+    template: ReflectionTemplate, request: ReflectionRequest
+) -> ReflectionTemplate:
+    """자리표시자를 실제 값으로 채워 내보낸다 — **와이어에 나가는 문구는 다 채워져 있다.**
+
+    렌더러가 채워 줄 거라는 전제는 틀렸다(2026-10-19 확인): FE 는 장면 캡션을 그대로 그리고
+    (`ReflectionScenes.tsx`), `fillTemplate` 은 부제에만 쓰며 region·날짜 3종만 안다. BE 는
+    아무것도 채우지 않는다. 숫자 환각 차단은 그대로다 — LLM 은 토큰만 고르고 값은 여기서 꺼낸다.
+    `{poi:i.name}` 의 i 는 요청 `visits` 인덱스라 그 순서를 아는 곳도 여기뿐이다.
+
+    - **못 채우면 문구를 바꾼다.** 캡션은 안전 문구 → 토큰 없는 문구, 제목은 폴백 제목, 태그는 뺀다.
+      토큰을 지우기만 하면 "{distance_km}km" 가 "km" 로 남는다
+    - **부제가 자리표시자뿐이면 그대로 둔다** — FE 가 그 꼴을 "서술 없음"으로 읽고 통계 문장을
+      그린다(TRIP-1425). 서술이 있는 부제는 채우고, 못 채우면 그 꼴(폴백 부제)로 되돌린다
+    - 시작=끝이면 `{start_date}~{end_date}` 를 날짜 하나로 접는다(FE 와 같은 규칙)
+    - 해시태그는 공백을 담을 수 없어 값의 공백을 지운다(`#해운대 해수욕장` → `#해운대해수욕장`)
+    - 빈 제목·빈 캡션도 같은 길로 간다 — BE 는 빈 제목 카드를 통째로 버리고, FE 는 빈 캡션 장면을 버린다
+    """
+    names = tuple(v.poi_name.strip() for v in request.visits)
+    values = placeholder_values(request)
+    same_day = request.start_date == request.end_date
+    valid_refs = tuple(v.ref for v in request.visits)
+
+    def bind(text: str, *, tag: bool = False) -> str | None:
+        """다 채운 문구, 못 채운 토큰이 남거나 비면 None."""
+        if same_day:
+            text = _DATE_RANGE.sub("{start_date}", text)
+        missing = False
+
         def sub(m: re.Match) -> str:
+            nonlocal missing
             poi_m = _POI_TOKEN.fullmatch(m.group(1))
-            if poi_m is None:
+            if poi_m is not None:
+                i = int(poi_m.group(1))
+                value = names[i] if i < len(names) else ""
+            else:
+                value = values.get(m.group(1), "")
+            if not value:
+                missing = True
                 return m.group(0)
-            i = int(poi_m.group(1))
-            if i >= len(poi_names) or not poi_names[i].strip():
-                return m.group(0)
-            name = poi_names[i].strip()
-            return name.replace(" ", "") if tag else name
+            return value.replace(" ", "") if tag else value
 
-        return _PLACEHOLDER.sub(sub, text)
+        out = _PLACEHOLDER.sub(sub, text).strip()
+        return None if missing or not out.lstrip("#") else out
 
+    subtitle = template.cover.subtitle
+    if not _is_template_only(subtitle):
+        subtitle = bind(subtitle) or FALLBACK_COVER_SUBTITLE
     cover = replace(
         template.cover,
-        title=bind(template.cover.title),
-        subtitle=bind(template.cover.subtitle),
+        title=bind(template.cover.title) or bind(FALLBACK_COVER_TITLE) or _LAST_RESORT_TITLE,
+        subtitle=subtitle,
     )
-    scenes = tuple(replace(sc, caption=bind(sc.caption)) for sc in template.scenes)
-    hashtags = tuple(bind(t, tag=True) for t in template.hashtags)
+    scenes = tuple(
+        replace(sc, caption=(
+            bind(sc.caption)
+            or bind(safe_caption(sc.layout, _ref_index(sc, valid_refs)))
+            or SAFE_CAPTION_BY_LAYOUT[SceneLayout.PHOTO_FULL]  # 토큰 없는 문구
+        ))
+        for sc in template.scenes
+    )
+    hashtags = tuple(t for t in (bind(t, tag=True) for t in template.hashtags) if t)
     return replace(template, cover=cover, scenes=scenes, hashtags=hashtags)
 
 
@@ -306,7 +356,7 @@ def finalize(
             to_mode="fixed_template",
             reason=f"reflection_all_attempts_failed:{MAX_ATTEMPTS}",
         ))
-        return build_fallback_template(request.kind, trace_id, now)
+        return bind_placeholders(build_fallback_template(request.kind, trace_id, now), request)
     best = min(candidates, key=rank_key)
     replaced = apply_hard_replacements(
         best,
@@ -315,4 +365,4 @@ def finalize(
         request.photoless_refs(),
     )
     # 교체가 만든 안전 문구(`{poi:k.name}에서의 기억`)까지 채우려면 교체 **뒤**여야 한다
-    return bind_poi_names(replaced, tuple(v.poi_name for v in request.visits))
+    return bind_placeholders(replaced, request)

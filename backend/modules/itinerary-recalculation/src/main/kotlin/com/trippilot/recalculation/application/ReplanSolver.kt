@@ -8,6 +8,7 @@ import com.trippilot.recalculation.domain.ReplanSessionRepository
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Async
 import com.trippilot.recalculation.domain.ReplanSession
+import com.trippilot.recalculation.domain.ReplanStatus
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Component
 import org.springframework.transaction.PlatformTransactionManager
@@ -33,13 +34,25 @@ class ReplanSolver(
 ) {
     private val tx = TransactionTemplate(transactionManager)
 
+    /** 사용자 진입의 산출 — 공용 비동기 풀에서 돈다(화면이 SOLVING 을 폴링해 로딩을 그린다). */
+    @Async
+    fun solve(accountId: UUID, sessionId: UUID) = solveNow(accountId, sessionId)
+
     /**
+     * 그 자리(호출 스레드)에서 산출한다 — 선계산은 전용 실행기가 이것을 부른다(공용 풀은 포화 시 호출자 실행이라
+     * 아웃박스 릴레이 스레드를 산출 시간만큼 막는다 — BR-SA-18).
+     *
+     * **SOLVING 이 아니면 AI 를 부르지 않는다.** 대기열에 있는 동안 새 선계산·사용자 진입에 대체돼 닫힌 세션은 비용 0 이다
+     * (종전에는 닫힌 세션에도 AI 를 끝까지 부르고 결과만 버렸다).
+     *
      * 실패는 삼키지 않고 `FAILED` 로 드러낸다 — 화면은 그걸 보고 수동 편집(i15)으로 넘긴다
      * (INV-4 · US-PLANB-11). 삼키면 사용자는 "생각 중"인 화면을 영원히 본다.
      */
-    @Async
-    fun solve(accountId: UUID, sessionId: UUID) {
-        val session = sessions.findById(sessionId) ?: return
+    fun solveNow(accountId: UUID, sessionId: UUID) {
+        val session = sessions.findById(sessionId)?.takeIf { it.status == ReplanStatus.SOLVING } ?: run {
+            log.info("재계획 산출 생략 — 세션이 산출 중이 아닙니다(대체·취소). session={}", sessionId)
+            return
+        }
         try {
             val proposal = replans.propose(
                 ReplanCommand(
@@ -73,6 +86,12 @@ class ReplanSolver(
             settle(sessionId) { it.failed(clock.instant()) }
         }
     }
+
+    /**
+     * 산출을 시작도 못 하고 포기한다(실행기 거절·종료) — `FAILED` 로 닫는다. 열어 둔 채 두면 화면은 끝난 적 없는 산출을
+     * 기다리고, 그 여행의 열린 세션 자리(INV-U4-06)를 붙잡는다.
+     */
+    fun giveUp(sessionId: UUID) = settle(sessionId) { it.failed(clock.instant()) }
 
     /**
      * 결과를 **자기 트랜잭션 안에서** 기록한다.

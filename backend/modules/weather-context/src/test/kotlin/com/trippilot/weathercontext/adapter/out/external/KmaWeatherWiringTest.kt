@@ -2,6 +2,7 @@ package com.trippilot.weathercontext.adapter.out.external
 
 import com.trippilot.placedata.api.RegionCenter
 import com.trippilot.placedata.api.RegionLookupFacade
+import com.trippilot.weathercontext.domain.GridForecastPort
 import com.trippilot.weathercontext.domain.WeatherPort
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
@@ -34,6 +35,25 @@ class KmaWeatherWiringTest : StringSpec({
             .kmaWeatherAdapter(regions, KmaWeatherProperties(mode = "kma", serviceKey = "키"))
 
         port.shouldBeInstanceOf<KmaWeatherAdapter>()
+    }
+
+    /**
+     * **빈의 선언 타입이 어댑터여야 한다** — 스프링은 인스턴스를 만들기 전에는 팩토리 메서드의 선언 타입으로 빈 타입을 예측한다.
+     * `WeatherPort` 로 선언하면 그 시점(지연 초기화·기동 중 조회)에는 격자 포트로 보이지 않아 격자 예보가 live 가 아니게 된다 —
+     * 단기예보 감지가 조용히 꺼진 채 돈다. 다 뜬 컨텍스트에서는 인스턴스 타입으로 맞춰 우연히 동작하므로(역검증으로 확인)
+     * 배선 테스트로는 안 보이고, 선언 타입을 여기서 직접 못 박는다.
+     */
+    "조립된 빈은 이름 경로 포트이자 격자 포트다 — 선언 타입이 어댑터다" {
+        val method = KmaWeatherConfiguration::class.java.getMethod(
+            "kmaWeatherAdapter", RegionLookupFacade::class.java, KmaWeatherProperties::class.java,
+        )
+        method.returnType shouldBe KmaWeatherAdapter::class.java
+        GridForecastPort::class.java.isAssignableFrom(method.returnType) shouldBe true
+        WeatherPort::class.java.isAssignableFrom(method.returnType) shouldBe true
+    }
+
+    "격자 경로 하루 상한 기본값은 3,000 이다" {
+        KmaWeatherProperties().gridDailyCap shouldBe 3_000
     }
 
     /**

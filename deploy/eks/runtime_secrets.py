@@ -31,6 +31,7 @@ TRIPPILOT_LOCAL_LLM_BASE_URL TRIPPILOT_LOCAL_LLM_API_KEY WEATHER_API WEATHER_API
 EXISTENCE_MAX_CALLS TMAP_API_KEY ODSAY_API_KEY TRIPPILOT_EMBEDDING_TIMEOUT_SEC TRIPPILOT_EMBEDDING_MODEL
 TRIPPILOT_BEDROCK_MODEL_ARN TRIPPILOT_BEDROCK_REGION
 TRIPPILOT_DIALOGUE_ORCHESTRATOR TRIPPILOT_DIALOGUE_SHADOW_RATE PUBLIC_DATA_API_KEY
+HOLIDAY_CLOSURE_MODE
 """.split())
 GROUP_KEYS = {
     "backend": BACKEND_KEYS, "ai": AI_KEYS,
@@ -284,6 +285,9 @@ def validate_groups(groups):
     # 기동에서 거부하므로(main.py) 파드가 뜨다 죽기 전에 여기서 막는다 — LOCATION_AUTOMATION_ENABLED 처럼 두 값만 받는다.
     if ai.get("TRIPPILOT_DIALOGUE_ORCHESTRATOR", "") not in ("", "on", "off"):
         raise ValueError("Unsupported TRIPPILOT_DIALOGUE_ORCHESTRATOR in ai secret; use on or off")
+    # 공휴일 휴무(상황 감지 H1). 없으면 off = 공휴일 규칙 없음. 오타는 AI 가 기동에서 거부하므로(main.py) 같은 두 값만 받는다.
+    if ai.get("HOLIDAY_CLOSURE_MODE", "") not in ("", "on", "off"):
+        raise ValueError("Unsupported HOLIDAY_CLOSURE_MODE in ai secret; use on or off")
     # 섀도 분류 측정의 샘플링 비율 0~1(없으면 1.0 — DEV 전부 · 운영 0.2 권고). 범위 밖·숫자 아님은 기동 실패다.
     rate = ai.get("TRIPPILOT_DIALOGUE_SHADOW_RATE", "")
     if rate:

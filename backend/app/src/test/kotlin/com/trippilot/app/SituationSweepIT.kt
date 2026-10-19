@@ -46,10 +46,9 @@ import org.springframework.aop.support.AopUtils
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.test.context.TestConfiguration
-import org.springframework.context.annotation.Bean
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
+import org.springframework.test.context.bean.override.convention.TestBean
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -87,14 +86,16 @@ class SituationSweepIT : AbstractPostgresIntegrationTest() {
         }
     }
 
-    @TestConfiguration
-    class StubDetectors {
-        @Bean
-        fun stubForecast() = StubForecast()
-    }
+    /**
+     * 실물 단기예보 감지기(`kmaForecastDetector`) **자리에** 선다 — 더하면 같은 출처의 감지기가 둘이 되어 스윕이 기동을 거부한다
+     * (어느 쪽이 해제 자격인지 갈린다). 실물의 판정·배선은 `KmaForecastDetectorTest`·`ForecastDetectorWiringTest` 가 본다.
+     */
+    @TestBean(name = "kmaForecastDetector", methodName = "stubForecast")
+    private lateinit var forecastDetector: SituationDetector // 이름으로 바꾸는 자리라 필드 타입은 실물과 같은 계약이어야 한다
+
+    private val stub: StubForecast get() = forecastDetector as StubForecast
 
     @Autowired private lateinit var sweep: SituationSweep
-    @Autowired private lateinit var stub: StubForecast
     @Autowired private lateinit var watching: WatchingSources
     @Autowired private lateinit var trips: TripRepository
     @Autowired private lateinit var itineraries: ItineraryRepository
@@ -273,7 +274,11 @@ class SituationSweepIT : AbstractPostgresIntegrationTest() {
         (sweep as Advised).advisors.map { it.javaClass.simpleName } shouldContain "MethodProxyScheduledLockAdvisor"
     }
 
-    private companion object {
+    companion object {
         private const val TYPE = "planb.PlanBTriggered"
+
+        /** [stub] 의 공장 — 정적이어야 한다(@TestBean). */
+        @JvmStatic
+        fun stubForecast(): SituationDetector = StubForecast()
     }
 }

@@ -258,6 +258,21 @@ class TriggerServiceTest : StringSpec({
         e.dateRisks shouldBe listOf(DateRisk("CLOSURE", "CLOSED_DAY", listOf(slotA.substringAfter('#'))))
     }
 
+    // G-SA-11 — 선계산(C10)은 날씨 위험의 영향 POI 를 영향 범위가 일부(SOME)일 때만 뺀다. 그 사실은 트리거 payload 에만
+    // 있어서 사건 항목에 실어야 C10 이 가를 수 있다(매핑은 C10 몫 — 여기서는 사실만 옮긴다).
+    "그 날 위험 항목에 날씨 영향 범위(coverage)가 실린다 — 없으면 null" {
+        val events = RecordingEvents()
+        service(InMemoryTriggers(), events = events).evaluate(
+            acc, tripId,
+            signal(slotKey = null).copy(variant = TriggerVariant.RAIN, payload = mapOf("pop" to 80, PlanBTrigger.PAYLOAD_COVERAGE to "SOME")),
+        )
+        (events.published.single() as PlanBTriggered).dateRisks!!.single().coverage shouldBe "SOME"
+
+        val plain = RecordingEvents()
+        service(InMemoryTriggers(), events = plain).evaluate(acc, tripId, signal(slotKey = null))
+        (plain.published.single() as PlanBTriggered).dateRisks!!.single().coverage shouldBe null
+    }
+
     "같은 대상이 이미 떠 있으면 제자리 갱신하고 null — 배너가 늘지 않는다(CD9)" {
         val triggers = InMemoryTriggers()
         val svc = service(triggers)

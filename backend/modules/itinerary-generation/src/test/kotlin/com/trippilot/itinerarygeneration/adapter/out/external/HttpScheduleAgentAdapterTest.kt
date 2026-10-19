@@ -25,6 +25,7 @@ import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.TimeWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
+import com.trippilot.itinerarygeneration.domain.Violation
 import io.kotest.assertions.throwables.shouldThrow
 import org.hamcrest.Matchers.nullValue
 import io.kotest.core.spec.style.StringSpec
@@ -567,6 +568,38 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         v.type shouldBe "OPENING_HOURS"
         v.dayIndex shouldBe null // 슬롯엔 못 붙지만 "위반 없음"으로 위장하지 않는다(INV-4)
         v.detail shouldBe null   // 빈 문자열은 사유 없음으로 본다
+        server.verify()
+    }
+
+    "validate — HC1 하위 코드(reason_code)를 그대로 싣고, 없으면 null 이다(상황 감지 H1)" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate"))
+            .andRespond(
+                withSuccess(
+                    """{"violations":[{"code":"HC1","slot_ref":"2026-08-01#p","detail":"공휴일 휴무","day_index":0,"slot_index":0,"reason_code":"HOLIDAY"},
+                       {"code":"HC2","slot_ref":"2026-08-01#q","detail":"이동이 빠듯해요","day_index":0,"slot_index":1}]}""",
+                    MediaType.APPLICATION_JSON,
+                ),
+            )
+
+        val (holiday, travel) = adapter.validate(dummyOutput())
+        holiday.reasonCode shouldBe "HOLIDAY"
+        travel.reasonCode shouldBe null // 옛 AI·다른 HC — 백엔드는 HOURS_MISMATCH 로 읽는다(BR-SA-17)
+        server.verify()
+    }
+
+    "repair — 되돌려 보내는 위반에 하위 코드도 싣는다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/repair"))
+            .andExpect(jsonPath("$.violations[0].reason_code").value("CLOSED_DAY"))
+            .andExpect(jsonPath("$.violations[1].reason_code").value(nullValue()))
+            .andRespond(withSuccess("""{"repaired":null,"changes":[]}""", MediaType.APPLICATION_JSON))
+
+        adapter.repair(
+            dummyOutput(),
+            listOf(Violation("HC1", 0, 0, "0요일 휴무", "2026-08-01#p", reasonCode = "CLOSED_DAY"),
+                   Violation("HC2", 0, 1, null, "2026-08-01#q")),
+        )
         server.verify()
     }
 

@@ -6,8 +6,10 @@ import com.trippilot.core.error.ValidationFailed
 import com.trippilot.recalculation.application.ReplanDiffService
 import com.trippilot.recalculation.application.ReplanDiffView
 import com.trippilot.recalculation.application.ReplanSessionService
+import com.trippilot.recalculation.application.SessionView
 import com.trippilot.recalculation.application.StartReplan
 import com.trippilot.recalculation.domain.OriginKind
+import com.trippilot.recalculation.domain.ReplanInitiator
 import com.trippilot.recalculation.domain.ReplanOrigin
 import com.trippilot.recalculation.domain.ReplanScope
 import com.trippilot.recalculation.domain.ReplanSession
@@ -15,12 +17,14 @@ import com.trippilot.recalculation.domain.ReplanStatus
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
+import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import java.security.Principal
@@ -49,29 +53,38 @@ class ReplanController(
         principal: Principal,
         @PathVariable tripId: UUID,
         @Valid @RequestBody request: StartReplanRequest,
-    ): ReplanSessionResponse =
-        ReplanSessionResponse.from(service.start(principal.accountId(), tripId, request.toCommand()))
+    ): ReplanSessionResponse = respond(principal) { service.start(it, tripId, request.toCommand()) }
+
+    /**
+     * 그 날짜의 준비된 대안(situation-awareness BR-SA-23) — 서버가 위험 알림 사건으로 미리 연 가장 최근 세션(닫힌 것 포함).
+     * 앱은 알림의 **날짜**로 묻는다 — 트리거에 세션을 매달지 않으므로 해제 뒤 다시 선 트리거에도 이어진다.
+     * 없거나 남의 여행이면 404(존재 은닉). `/{sessionId}` 보다 구체적인 경로라 먼저 매칭된다.
+     */
+    @GetMapping("/prepared")
+    fun prepared(
+        principal: Principal,
+        @PathVariable tripId: UUID,
+        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) date: LocalDate,
+    ): ReplanSessionResponse = respond(principal) { service.findPrepared(it, tripId, date) }
 
     @GetMapping("/{sessionId}")
     fun get(
         principal: Principal,
         @PathVariable tripId: UUID,
         @PathVariable sessionId: UUID,
-    ): ReplanSessionResponse =
-        ReplanSessionResponse.from(service.get(principal.accountId(), tripId, sessionId))
+    ): ReplanSessionResponse = respond(principal) { service.get(it, tripId, sessionId) }
 
     /** `i18` [취소] — 세션만 닫는다. 원 일정은 그대로다(INV-U4-05). */
     /**
      * `i18` [확정] — 초안을 일정에 반영한다. **일정이 바뀌는 유일한 지점**이다(INV-U4-05).
-     * 초안이 없거나(아직 산출 중·대안 없음) 이미 끝난 세션이면 409.
+     * 초안이 없거나(아직 산출 중·대안 없음) 이미 끝난 세션이면 409. 미리 짠 대안이 낡았으면 409 `EXPIRED`·`STALE`(BR-SA-19).
      */
     @PostMapping("/{sessionId}/apply")
     fun apply(
         principal: Principal,
         @PathVariable tripId: UUID,
         @PathVariable sessionId: UUID,
-    ): ReplanSessionResponse =
-        ReplanSessionResponse.from(service.apply(principal.accountId(), tripId, sessionId))
+    ): ReplanSessionResponse = respond(principal) { service.apply(it, tripId, sessionId) }
 
     /**
      * `i18` 전후 비교(US-PLANB-08 · BR-U4-25·29). **읽기만** 한다 — 원 일정은 확정 전까지 그대로다.
@@ -94,8 +107,13 @@ class ReplanController(
         principal: Principal,
         @PathVariable tripId: UUID,
         @PathVariable sessionId: UUID,
-    ): ReplanSessionResponse =
-        ReplanSessionResponse.from(service.cancel(principal.accountId(), tripId, sessionId))
+    ): ReplanSessionResponse = respond(principal) { service.cancel(it, tripId, sessionId) }
+
+    /** 모든 세션 응답이 같은 낡음 판정(`stale`)을 싣는다 — 화면 응답과 적용 거절이 다른 말을 하지 않게(BR-SA-19). */
+    private fun respond(principal: Principal, action: (UUID) -> ReplanSession): ReplanSessionResponse {
+        val accountId = principal.accountId()
+        return ReplanSessionResponse.from(service.view(accountId, action(accountId)))
+    }
 }
 
 /**
@@ -165,14 +183,24 @@ data class ReplanSessionResponse(
     val status: ReplanStatus,
     val createdAt: Instant,
     val closedAt: Instant?,
+    /** USER = 사용자 진입 · SYSTEM = 위험 알림으로 서버가 미리 짠 대안(화면이 `미리 준비한 대안` 표식을 단다). */
+    val initiatedBy: ReplanInitiator,
+    /**
+     * 낡은 선계산인가(BR-SA-19) — 적용하면 409 `EXPIRED`·`STALE` 가 나는 초안, 대체돼 닫힌 선계산, 2분 넘게 산출 중인 선계산.
+     * 사용자 세션은 늘 false 다. `APPLIED` 가 아니면 상태와 무관하게 '준비된 대안 없음'으로 읽는다 — 갈 곳은 BR-SA-23 판정표.
+     */
+    val stale: Boolean,
 ) {
     companion object {
-        fun from(s: ReplanSession) = ReplanSessionResponse(
-            s.sessionId, s.tripId, s.itineraryId, s.triggerId, s.scope, s.targetDate, s.fromInstant,
-            s.origin.kind, s.origin.lat, s.origin.lng, s.origin.isEstimated,
-            s.reasons, s.directives, s.freeText, s.excludedPoiIds,
-            s.status, s.createdAt, s.closedAt,
-        )
+        fun from(v: SessionView): ReplanSessionResponse {
+            val s = v.session
+            return ReplanSessionResponse(
+                s.sessionId, s.tripId, s.itineraryId, s.triggerId, s.scope, s.targetDate, s.fromInstant,
+                s.origin.kind, s.origin.lat, s.origin.lng, s.origin.isEstimated,
+                s.reasons, s.directives, s.freeText, s.excludedPoiIds,
+                s.status, s.createdAt, s.closedAt, s.initiatedBy, v.stale,
+            )
+        }
     }
 }
 

@@ -13,13 +13,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Collection, Mapping, Sequence
-from datetime import datetime
+from datetime import date, datetime
 
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.itinerary import VisitSlot
 from trippilot.domain.llm import CandidatePool
-from trippilot.domain.poi import NIGHTLIFE_TAG, Poi, PoiCategory
+from trippilot.domain.poi import NIGHTLIFE_TAG, HolidayCalendar, Poi, PoiCategory, open_windows_on
 
 # 카테고리마다 점수 상위 몇 곳을 후보로 줄까 — 맛집·카페·명소가 고루 보여야 식사창을 채운다.
 PER_CATEGORY = 6
@@ -105,11 +105,18 @@ def date_label(when: datetime) -> str:
     return f"{when:%Y-%m-%d} ({_WEEKDAYS[when.weekday()]})"
 
 
-def hours_label(poi: Poi, weekday: int) -> str | None:
-    """그날 영업시간 문구. 휴무가 **증명**되면 None(HC1 과 같은 판정 — 정보 없음은 막지 않는다)."""
-    if not poi.open_hours:
+def hours_label(poi: Poi, on: date | int, holidays: HolidayCalendar | None = None) -> str | None:
+    """그날 영업시간 문구. 휴무가 **증명**되면 None — 판정은 HC1 과 같은 `open_windows_on`(정보 없음은 막지 않는다).
+
+    `on` 이 날짜면 공휴일 휴무까지 본다(상황 감지 H1 — `holidays` None = 모드 off 면 요일 판정과 같다). 요일(int)만
+    넘기는 호출(`request_verification` — 이름으로 집은 곳의 사전 확인)은 종전 요일 판정 그대로다.
+    """
+    if isinstance(on, date):
+        ranges = open_windows_on(poi, on, holidays)
+    else:
+        ranges = tuple(h for h in poi.open_hours if h.day_of_week == on) if poi.open_hours else None
+    if ranges is None:
         return "밤 영업(추정 20:00~04:00)" if NIGHTLIFE_TAG in poi.tags else "영업시간 정보 없음"
-    ranges = [h for h in poi.open_hours if h.day_of_week == weekday]
     if not ranges:
         return None
     return ", ".join(f"{_hm(h.open_min)}~{_hm(h.close_min)}" for h in ranges)
@@ -175,19 +182,21 @@ def shortlist(
     *,
     keep: Collection[PoiId],
     excluded: Collection[PoiId],
-    weekday: int,
+    day: date,
     score: Callable[[Poi], float],
     cap: int = SHORTLIST_MAX,
+    holidays: HolidayCalendar | None = None,
 ) -> CandidatePool:
     """닫힌 집합 — `keep`(원 일정의 남은 곳·상황 추천)은 먼저, 나머지는 카테고리마다 점수 상위.
 
-    빼는 것: 제외(다녀온 곳·거절·휴무 사유 대상·피할 카테고리의 곳), 숙소, 그날 휴무가 증명된 곳.
-    `pool` 밖 id 는 `keep` 에 있어도 넣지 않는다 — 후보 자격은 풀이 정한다(INV-1).
+    빼는 것: 제외(다녀온 곳·거절·휴무 사유 대상·피할 카테고리의 곳), 숙소, 그날 휴무가 증명된 곳(정기·공휴일 —
+    조립과 같은 `open_windows_on`, 상황 감지 H1). `pool` 밖 id 는 `keep` 에 있어도 넣지 않는다 — 후보 자격은
+    풀이 정한다(INV-1).
     """
     def eligible(p: Poi) -> bool:
         return (p.poi_id not in excluded
                 and p.category is not PoiCategory.STAY
-                and hours_label(p, weekday) is not None)
+                and hours_label(p, day, holidays) is not None)
 
     by_id = {p.poi_id: p for p in pool.pois if eligible(p)}
     chosen: dict[PoiId, Poi] = {pid: by_id[pid] for pid in keep if pid in by_id}

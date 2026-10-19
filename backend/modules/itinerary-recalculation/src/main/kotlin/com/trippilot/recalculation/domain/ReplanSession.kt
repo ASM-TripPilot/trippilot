@@ -1,7 +1,10 @@
 package com.trippilot.recalculation.domain
 
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
 import java.util.UUID
 
 /**
@@ -45,8 +48,25 @@ data class ReplanSession(
     val draft: Map<String, Any>?,
     val createdAt: Instant,
     val closedAt: Instant?,
+    /**
+     * 누가 계산을 시작했나(situation-awareness BR-SA-18). [ReplanInitiator.SYSTEM] = 위험 알림 사건으로 서버가 미리 연 세션.
+     * **적용은 여전히 사용자만 한다**(INV-U4-05 · INV-SA-1) — 이 칸은 낡음 판정·트리거당 1개·하루 상한의 범위를 가를 뿐이다.
+     * 기본값을 두지 않는다 — 재구성(저장소)이 값을 빠뜨리면 컴파일이 막는다(기본값이 있으면 조용히 USER 로 뒤바뀐다).
+     */
+    val initiatedBy: ReplanInitiator,
 ) {
+    init {
+        // 근거 없는 선계산은 '왜 이 대안인가'를 잃는다 — DB CHECK(chk_replan_session_system_trigger)와 같은 규칙이다.
+        require(initiatedBy != ReplanInitiator.SYSTEM || triggerId != null) { "선계산 세션에는 근거 트리거가 있어야 합니다." }
+    }
+
     companion object {
+        /** 수집·산출이 이만큼 넘으면 고착으로 본다(파드 재시작) — 앱이 같은 입력으로 다시 요청한다(BR-SA-19). */
+        private val STUCK_AFTER: Duration = Duration.ofMinutes(2)
+
+        /** 여행 "오늘"·"지금"은 여행지 기준이다(서버 UTC 아님). */
+        private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
+
         fun start(
             tripId: UUID,
             itineraryId: UUID,
@@ -60,12 +80,47 @@ data class ReplanSession(
             freeText: String?,
             excludedPoiIds: List<UUID>,
             at: Instant,
+            /** 말하지 않으면 사용자다 — 종전 진입은 모두 사용자 진입이었다. */
+            initiatedBy: ReplanInitiator = ReplanInitiator.USER,
         ) = ReplanSession(
             UUID.randomUUID(), tripId, itineraryId, triggerId, scope, targetDate, fromInstant, origin,
             reasons, directives, freeText, excludedPoiIds,
-            ReplanStatus.COLLECTING, null, at, null,
+            ReplanStatus.COLLECTING, null, at, null, initiatedBy,
         )
     }
+
+    /**
+     * 낡음(BR-SA-19 · INV-SA-7) — **선계산(SYSTEM)만**, 시간 창이 아니라 사실로 판정한다. 사용자 세션은 늘 null 이다.
+     *
+     * ① 대상 날이 지났다 → EXPIRED ② 오늘이고 초안이 바꾸는 슬롯의 계획 시작이 지났다 → EXPIRED
+     * ③ 그 날 완료한 방문이 초안에 없다 → STALE ④ 대체돼 닫혔다(CANCELED) → STALE.
+     * 수집·산출이 [STUCK_AFTER] 를 넘으면 STALE 로 보인다(적용 대상은 아니다 — 초안이 없다).
+     *
+     * 시각을 다시 추정해 옮기지 않는다(DEC-U4-9) — 낡았으면 거절하고 앱이 새로 계산한다. 시간에 단조다(PBT-SA-16):
+     * 날짜가 지나면 ①, 그 날 안에서는 지금 시각이 커질수록 ②가 성립하기 쉬워질 뿐 풀리지 않는다.
+     */
+    fun stalenessAt(now: Instant, facts: DraftFacts): Staleness? {
+        if (initiatedBy != ReplanInitiator.SYSTEM) return null
+        return when (status) {
+            ReplanStatus.APPLIED -> null // 이미 반영됐다 — 낡음은 적용 전 초안의 말이다
+            ReplanStatus.CANCELED -> Staleness.STALE
+            else -> {
+                val today = LocalDate.ofInstant(now, TRAVEL_ZONE)
+                when {
+                    targetDate < today -> Staleness.EXPIRED
+                    status == ReplanStatus.COLLECTING || status == ReplanStatus.SOLVING ->
+                        Staleness.STALE.takeIf { Duration.between(createdAt, now) > STUCK_AFTER }
+                    status != ReplanStatus.DRAFT -> null // 대안 없음·실패 — 초안이 없어 날짜만 본다
+                    targetDate == today && facts.firstChangeAt?.let { it < LocalTime.ofInstant(now, TRAVEL_ZONE) } == true ->
+                        Staleness.EXPIRED
+                    facts.completedMissing -> Staleness.STALE
+                    else -> null
+                }
+            }
+        }
+    }
+
+    fun isStaleAt(now: Instant, facts: DraftFacts): Boolean = stalenessAt(now, facts) != null
 
     /** 열린 세션인가 — INV-U4-06 의 "최대 1개" 판정 기준이며, DB 부분 유니크 인덱스와 **같은 집합**이어야 한다. */
     val isOpen: Boolean
@@ -112,6 +167,42 @@ enum class ReplanScope { PARTIAL_SLOTS, FULL_DAY }
 
 enum class ReplanStatus { COLLECTING, SOLVING, DRAFT, APPLIED, CANCELED, FAILED, NO_SOLUTION }
 
+/** 누가 계산을 시작했나 — 사용자 진입 · 위험 알림 사건으로 서버가 미리 연 선계산(BR-SA-18). */
+enum class ReplanInitiator { USER, SYSTEM }
+
+/** 낡은 선계산 초안의 거절 사유(BR-SA-19) — 기존 오류 어휘 `ErrorCode.EXPIRED`·`STALE` 와 이름이 같다. */
+enum class Staleness { EXPIRED, STALE }
+
+/**
+ * 낡음 판정 재료 — 그 날의 사실(BR-SA-19 ②③). 서비스가 지금 일정·초안·방문 실적을 모아 [of] 로 만든다.
+ *
+ * @property firstChangeAt 초안이 바꾸는 슬롯(추가·삭제·이동)의 계획 시작 중 가장 이른 것. 지금 일정 쪽 시각과 초안 쪽
+ *   시각을 둘 다 본다 — 지난 시각에 있던 슬롯을 지우는 초안도, 지난 시각에 새 방문을 넣는 초안도 지난 하루를 다시 쓴다.
+ *   바꾸는 것이 없으면 null.
+ * @property completedMissing 그 날 완료한 방문 중 초안에 없는 것이 있는가(INV-U4-04 — 적용하면 다녀온 곳이 사라진다).
+ */
+data class DraftFacts(val firstChangeAt: LocalTime?, val completedMissing: Boolean) {
+    companion object {
+        /** 초안이 없는 상태(산출 중·대안 없음·닫힘) — 날짜·상태만으로 판정한다. */
+        val NONE = DraftFacts(null, false)
+
+        private val CHANGES = setOf(ReplanDiff.Change.ADDED, ReplanDiff.Change.REMOVED, ReplanDiff.Change.MOVED)
+
+        /**
+         * [before] = 그 날의 지금 일정, [after] = 초안, [completedSlotKeys] = 여행의 완료 슬롯 키(`{date}#{poiId}`).
+         * 무엇이 '바뀐 슬롯'인지는 전후 비교([ReplanDiff])와 같은 판정이다 — 두 곳이 다른 말을 하면 화면의 비교와 거절이 어긋난다.
+         */
+        fun of(date: LocalDate, before: List<ReplanDiff.SlotView>, after: List<ReplanDiff.SlotView>, completedSlotKeys: Collection<String>): DraftFacts {
+            val changed = ReplanDiff.of(before, after).entries.filter { it.change in CHANGES }
+            val inDraft = after.map { it.slotKey }.toSet()
+            return DraftFacts(
+                firstChangeAt = changed.flatMap { listOfNotNull(it.beforeStart, it.afterStart) }.minOrNull(),
+                completedMissing = completedSlotKeys.any { it.substringBefore('#') == date.toString() && it !in inDraft },
+            )
+        }
+    }
+}
+
 /**
  * 출발 기준점(정본 §5 사다리). GPS 가 없으면 수동 핀 → 마지막 방문지 → 숙소 순으로 내려간다.
  * 어느 단계에서 왔는지 남기는 이유: 화면이 "추정 출발지"임을 밝혀야 하기 때문이다(US-PLANB-10).
@@ -146,8 +237,13 @@ interface ReplanSessionRepository {
 
     fun findById(sessionId: UUID): ReplanSession?
 
-    /** 열린 세션(COLLECTING·SOLVING·DRAFT). INV-U4-06 판정 입력. */
-    fun findOpenByTrip(tripId: UUID): ReplanSession?
+    /**
+     * 열린 세션(COLLECTING·SOLVING·DRAFT)을 **행 잠금**으로 읽는다 — INV-U4-06 판정 입력이자 그 세션을 닫는 쪽(시작·선계산)의 읽기.
+     * 잠금 없이 읽어 두었다가 닫으면 그 사이 사용자가 적용한 세션을 CANCELED 로 덮는다(행 통째 UPDATE). 잠그면 상대의 커밋을
+     * 기다린 뒤 다시 보고, 이미 닫혔으면 없는 것으로 답한다. 트랜잭션 안에서, 그 세션을 처음 읽는 자리에서 부른다
+     * (먼저 읽어 둔 행은 잠가도 영속성 컨텍스트의 옛 값이 돌아온다).
+     */
+    fun findOpenByTripForUpdate(tripId: UUID): ReplanSession?
 
     /**
      * **행 잠금**으로 읽는다 — 산출(비동기)과 취소·재진입이 같은 세션을 두고 경합한다.
@@ -156,4 +252,13 @@ interface ReplanSessionRepository {
      * 부분 유니크 인덱스 위반으로 터졌다).
      */
     fun findByIdForUpdate(sessionId: UUID): ReplanSession?
+
+    /** 그 트리거로 연 선계산 세션 — 트리거당 1개다(`ux_replan_session_system_trigger` · 아웃박스 재배달 멱등). */
+    fun findSystemByTrigger(triggerId: UUID): ReplanSession?
+
+    /** 그 날짜의 가장 최근 선계산 세션(닫힌 것 포함) — 앱이 알림의 날짜로 준비된 대안을 찾는다(BR-SA-23). */
+    fun findLatestSystem(tripId: UUID, targetDate: LocalDate): ReplanSession?
+
+    /** [since] 이후 연 선계산 세션 수 — 하루 상한(BR-SA-18). [tripId] 가 null 이면 전체. */
+    fun countSystemSince(tripId: UUID?, since: Instant): Int
 }

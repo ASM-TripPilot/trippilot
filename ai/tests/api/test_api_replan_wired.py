@@ -198,11 +198,11 @@ def test_미배선_지시는_해석분에_넣되_무효를_밝힌다() -> None:
 
     섞으면 FE 가 "사전을 늘려야 하나"와 "솔버를 열어야 하나"를 못 가른다.
     """
-    body = _post(build_dev_app(directives=_DIRECTIVES), directives=["SHORTER_DAY"]).json()
+    body = _post(build_dev_app(directives=_DIRECTIVES), directives=["KEEP_BUDGET"]).json()
 
-    assert body["resolved_directives"] == ["SHORTER_DAY"]   # 사전이 아는 키다
+    assert body["resolved_directives"] == ["KEEP_BUDGET"]   # 사전이 아는 키다
     assert body["unknown_directives"] == []
-    assert any("directives_unwired" in n and "SHORTER_DAY" in n for n in body["notes"]), body["notes"]
+    assert any("directives_unwired" in n and "KEEP_BUDGET" in n for n in body["notes"]), body["notes"]
 
 
 def test_사전이_없으면_그_사실을_노트로_낸다() -> None:
@@ -452,3 +452,84 @@ def test_재계획_사유가_trace_와_함께_로그에_남는다(caplog: pytest
         "trace_id": "replan-wired-test", "reasons": ["fatigue", "closed"],
         "primary": "closed", "trigger": "CLOSURE",
     }
+
+
+# ── 하루 끝내기·일찍 마무리 ─────────────────────────────────────────────
+# 종전엔 "전부 취소"·"집에 가고 싶어"를 못 알아듣거나(미해석) 일찍 마무리(SHORTER_DAY)가 미배선이라
+# 하루를 새로 짰다(로컬 실측 2026-10-19). 사용자 결정(10-19): "전부 취소" 같은 말은 하루를 끝내고,
+# "집에 가고 싶어"·"빨리 끝내고 싶어"는 근처 한 곳만 더해 숙소 쪽에서 끝낸다.
+
+_PAST = {"poi_id": "e0000000-0000-4000-8000-000000000002", "start_at": "10:00", "end_at": "11:00",
+         "is_fixed": True}  # 다녀온 곳 — BE 는 지난 슬롯을 잠가 보낸다
+_NOW = {"poi_id": "e0000000-0000-4000-8000-000000000004", "start_at": "13:30", "end_at": "15:00",
+        "is_fixed": False}  # 진행 중(지금 14:00)
+_LATER = {"poi_id": "e0000000-0000-4000-8000-000000000001", "start_at": "16:00", "end_at": "17:30",
+          "is_fixed": False}
+
+
+def _in_trip(app=None, **over):
+    meta = {"request_id": "replan-end", "requested_at": "2026-09-21T14:00:00+09:00", "deadline_ms": 20000}
+    return _post(app or build_dev_app(directives=_DIRECTIVES), **{
+        "scope": "PARTIAL_SLOTS", "reasons": [], "from_instant": "2026-09-21T14:00:00+09:00",
+        "current_slots": [_PAST, _NOW, _LATER], "request_meta": meta, **over})
+
+
+def _slots(body) -> list[tuple[str, str]]:
+    return [(s["poi_id"], s["start_at"][:5]) for d in body["itinerary"]["days"] for s in d["slots"]]
+
+
+def test_하루_끝내기는_새_방문_없이_다녀온_곳과_진행_중만_남긴다() -> None:
+    """BE 는 응답 하루로 원 하루를 바꾼다 — 남은 슬롯이 빠진 하루가 곧 "여기서 끝"이다."""
+    response = _in_trip(directives=["END_DAY"])
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert _slots(body) == [(_PAST["poi_id"], "10:00"), (_NOW["poi_id"], "13:30")], body["notes"]
+    assert body["is_fallback"] is False and body["empty_reason"] is None
+    assert "end_day: kept 2 dropped 1" in body["notes"], body["notes"]
+
+
+def test_하루_끝내기는_솔버를_부르지_않는다() -> None:
+    app = build_dev_app(directives=_DIRECTIVES)
+    orchestrator = app.state.orchestrator
+    called: list[object] = []
+
+    class _Spy:
+        def run(self, task):
+            called.append(task)
+            raise AssertionError("하루 끝내기에 솔버를 불렀다")
+
+    object.__setattr__(orchestrator, "_schedule_agent", _Spy())
+    assert _in_trip(app, directives=["END_DAY"]).status_code == 200
+    assert called == []
+
+
+def test_남길_곳이_없으면_빈_일정으로_위장하지_않는다() -> None:
+    """아침에 하루 전체를 취소 — BE 는 빈 하루를 "해 없음"으로 접으므로 원 일정이 남는다(IO-7)."""
+    body = _post(build_dev_app(directives=_DIRECTIVES), reasons=[], directives=["END_DAY"],
+                 current_slots=[_LATER]).json()
+    assert body["itinerary"] is None and body["empty_reason"]["code"] == "NO_FEASIBLE_SLOT"
+    assert "end_day_nothing_kept" in body["notes"], body["notes"]
+
+
+def test_일찍_마무리는_진행_중_뒤에_한_곳만_더하고_숙소_쪽에서_끝낸다() -> None:
+    app = build_dev_app(directives=_DIRECTIVES)
+    orchestrator = app.state.orchestrator
+    real = orchestrator._schedule_agent
+    seen: list[object] = []
+
+    class _Spy:
+        def run(self, task):
+            seen.append(task.request)
+            return real.run(task)
+
+    object.__setattr__(orchestrator, "_schedule_agent", _Spy())
+    stay = {"lat": DEMO_ANCHOR.lat + 0.01, "lng": DEMO_ANCHOR.lng}
+    response = _in_trip(app, directives=["SHORTER_DAY"], stay_anchor=stay)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert not any("directives_unwired" in n for n in body["notes"]), body["notes"]
+    assert seen and seen[0].max_visits_per_day == 2  # 진행 중 1 + 새 방문 1
+    assert seen[0].end_near == GeoPoint(stay["lat"], stay["lng"])
+    after = [s for s in _slots(body) if s[1] >= "15:00"]
+    assert len(after) <= 1, body
+

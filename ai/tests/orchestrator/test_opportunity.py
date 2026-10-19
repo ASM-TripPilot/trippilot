@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import math
 import re
+from dataclasses import replace
 from datetime import date, timedelta
 
 from hypothesis import example, given, settings
@@ -481,3 +482,18 @@ def test_PBT_3장이_안_찼으면_자격_있는_요즘_인기와_행사를_빠�
         hosts = {p.poi_id for p in eligible if _venue_ok(e, p) or _nearby_ok(e, p)}
         if hosts:  # 카드가 있거나, 그 행사의 장소를 더 높은 카드가 이미 가져갔다(한 POI 한 장)
             assert f"event:{e.event_id}" in keys or hosts & used
+
+
+# ── 공휴일 휴무(상황 감지 H1) — 카드의 휴무 증명도 같은 헬퍼 ──────────────────
+
+
+def test_그날_휴일_규칙으로_닫힌_곳은_요즘_인기_카드가_아니다() -> None:
+    hours = tuple(OpenHour(d, 9 * 60, 18 * 60) for d in range(7))
+    closed = replace(_poi("p1", "국립 미술관", 200, tags=(TRENDING_TAG,), hours=hours),
+                     holiday_rules=frozenset({"PUBLIC"}))
+    holiday = {_DAY: frozenset({"PUBLIC"})}
+    found = find_opportunities(_DAY, _SLOTS, (), (closed,), frozenset(), holiday)
+    assert found == ()
+    # 모드 off(None)·그날이 공휴일 아님이면 종전대로 카드다 — 규칙이 둘이 되지 않는다.
+    assert [o.poi.poi_id for o in find_opportunities(_DAY, _SLOTS, (), (closed,), frozenset())] == ["p1"]
+    assert [o.poi.poi_id for o in find_opportunities(_DAY, _SLOTS, (), (closed,), frozenset(), {})] == ["p1"]

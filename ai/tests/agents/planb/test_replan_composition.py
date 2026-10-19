@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import pathlib
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 import yaml  # tests 는 `src/` 밖이라 yaml 규칙 대상이 아니다
@@ -438,7 +438,7 @@ def test_후보는_카테고리마다_상위_N곳에_keep_은_먼저() -> None:
     foods = [_poi(i, PoiCategory.FOOD) for i in range(10)]
     cafe = _poi(50, PoiCategory.CAFE)
     out = composition.shortlist(
-        _pool(*foods, cafe), keep=[PoiId("p09")], excluded=set(), weekday=0,
+        _pool(*foods, cafe), keep=[PoiId("p09")], excluded=set(), day=_MON,
         score=lambda p: -int(p.poi_id[1:]))
     ids = [p.poi_id for p in out.pois]
     assert ids[0] == "p09"  # keep 이 먼저 — 점수가 가장 낮아도
@@ -452,8 +452,37 @@ def test_후보에서_제외_회피_그날_휴무는_빠진다() -> None:
             _poi(3, PoiCategory.CAFE, monday_only), _poi(4, PoiCategory.SIGHT))
     out = composition.shortlist(
         _pool(*pois), keep=[PoiId("p02")], excluded={PoiId("p04"), PoiId("p02")},
-        weekday=1, score=lambda p: 0.0)
+        day=_MON + timedelta(days=1), score=lambda p: 0.0)
     assert {p.poi_id for p in out.pois} == {"p01"}  # keep 이어도 제외(피할 카테고리의 곳)는 뺀다
+
+
+# ── 공휴일 휴무 (상황 감지 H1) — 후보·영업시간 문구도 조립과 같은 그 날 창을 본다 ─────────
+
+_MON = date(2026, 10, 12)
+_HANGUL = date(2026, 10, 9)  # 한글날 — 금요일
+_CAL = {_HANGUL: frozenset({"PUBLIC"})}
+
+
+def test_영업시간_문구는_공휴일_휴무면_None_이다() -> None:
+    museum = _replace(_poi(1, PoiCategory.CULTURE, tuple(OpenHour(d, 540, 1080) for d in range(7))),
+                      holiday_rules=frozenset({"PUBLIC"}))
+    assert composition.hours_label(museum, _HANGUL, _CAL) is None
+    assert composition.hours_label(museum, _HANGUL) == "09:00~18:00"  # 모드 off
+    assert composition.hours_label(museum, _HANGUL.weekday()) == "09:00~18:00"  # 요일만 아는 호출 — 종전 그대로
+    unknown = _replace(_poi(2, PoiCategory.CULTURE), holiday_rules=frozenset({"PUBLIC"}))
+    assert composition.hours_label(unknown, _HANGUL, _CAL) is None  # 정보 없어도 휴무 원문이 닫았다
+    assert composition.hours_label(unknown, _HANGUL, {}) == "영업시간 정보 없음"
+
+
+def test_후보에서_그날_공휴일_휴무는_빠진다() -> None:
+    closed = _replace(_poi(1, PoiCategory.CULTURE), holiday_rules=frozenset({"PUBLIC"}))
+    open_ = _poi(2, PoiCategory.CULTURE)
+    on = composition.shortlist(_pool(closed, open_), keep=[closed.poi_id], excluded=set(), day=_HANGUL,
+                               holidays=_CAL, score=lambda p: 0.0)
+    assert {p.poi_id for p in on.pois} == {open_.poi_id}  # keep 이어도 그날 휴무면 뺀다
+    off = composition.shortlist(_pool(closed, open_), keep=[], excluded=set(), day=_HANGUL,
+                                score=lambda p: 0.0)
+    assert {p.poi_id for p in off.pois} == {closed.poi_id, open_.poi_id}
 
 
 def test_방문_수는_남은_시간과_상한으로_정한다() -> None:
@@ -537,3 +566,34 @@ def test_자유입력_끝_시각이_구성_창에도_실린다() -> None:
 
     assert spy.tasks[0].request.day_window.end.strftime("%H:%M") == "18:00"
     assert "09:00~18:00" in llm.compose_prompt()
+
+
+# ── 말로 온 "밤에 놀기"는 밤 낱말이 있어야 한다 ──────────────────────────────
+# alias "클럽 가고 싶어"·"바에 가고 싶어"가 "가고 싶어" 꼴 문장 전반에 임계(0.74)를 넘었다 — 로컬 KURE 실측
+# (2026-10-19): 카페 0.814·호텔 0.800·맛집 0.769·숙소 0.757·바다 0.752·공원 0.741. 걸리면 클럽이 강제로
+# 들어가고 그날 창이 23:59 로 늘어난다.
+
+@pytest.mark.parametrize("said, kept", [
+    ("카페 가고 싶어", False), ("호텔 가고 싶어", False), ("맛집 가고 싶어", False), ("바다 가고 싶어", False),
+    ("미술관 가고 싶어", False), ("바로 숙소 갈래", False), ("비어 있는 시간 채워줘", False),
+    ("클럽 가고 싶어", True), ("바에 가고 싶어", True), ("술 한잔 하고 싶어", True), ("와인바 가자", True),
+    ("칵테일 마시고 싶어", True), ("혼술하고 싶어", True), ("밤에 놀고 싶어", True), ("펍 가자", True),
+])
+def test_말로_온_밤에_놀기는_밤_낱말이_있을_때만_남는다(said: str, kept: bool) -> None:
+    from types import SimpleNamespace
+    from trippilot.api.wiring import _spoken_nightlife
+
+    notes: list[str] = []
+    out = _spoken_nightlife(SimpleNamespace(directives=[], free_text=said), ["ADD_CAFE", "NIGHTLIFE"], notes)
+    assert ("NIGHTLIFE" in out) is kept, notes
+    assert "ADD_CAFE" in out
+    assert ("nightlife_dropped: no_night_word" in notes) is (not kept)
+
+
+def test_칩으로_고른_밤에_놀기는_말과_상관없이_남는다() -> None:
+    from types import SimpleNamespace
+    from trippilot.api.wiring import _spoken_nightlife
+
+    out = _spoken_nightlife(SimpleNamespace(directives=["NIGHTLIFE"], free_text="카페 가고 싶어"),
+                            ["NIGHTLIFE"], [])
+    assert out == ["NIGHTLIFE"]

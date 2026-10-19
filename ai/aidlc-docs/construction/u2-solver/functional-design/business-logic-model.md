@@ -96,6 +96,8 @@ solve(problem, deadline_ms):
 ### 2.5 RuleFallbackAssembler (최후) + scorer.py
 
 - `build_rule_score(poi, budget_weight, seed)` — 카테고리 가중 + 인기(saved_count) 로그 정규화 + 예산 적합 − 거리 페널티 (정본 §4.3의 평점 항 대체 — 별점 소스 없음). 시드 고정 → U5-P3.
+  - 2026-10-19 개정: **생성**은 앵커가 숙소라 거리 페널티를 뺀다(`ignore_anchor_distance`). 경로 감점(0.02/km, TRIP-1398)도
+    방문지 사이 아크에만 건다 — 숙소는 오가는 곳이다(사용자 결정). 재계획(앵커=지금 위치)은 종전 그대로.
 - 구성 휴리스틱(정본 §4.3 단계 1): 고정 블록 → 점수 내림차순 삽입 → HC 위반 스킵 → 빈 슬롯 허용. **항상 해 반환** (최악 = 고정 블록만 = MINIMAL).
 - 지역 탐색(2-opt/or-opt)은 잔여 ≥ `local_search_min_remaining_ms`일 때만 (정본 규칙 그대로 — 시한 인지의 원형).
 - > 이 규칙 점수는 **ML 후보 1순위(A-1)의 폴백** — AI-D05. 함수 삭제 금지.

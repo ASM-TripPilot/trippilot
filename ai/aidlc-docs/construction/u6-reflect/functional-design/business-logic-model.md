@@ -30,6 +30,11 @@ prompts/
   reflection_template_vision.yaml  [P2 — 별도 feature 채택 시, 미결 #6]
 ```
 
+> **개정 2026-10-19 — 실제 배치(코드 정본).** 위 표의 역할 분담이 구현과 다르다.
+> `agent.py` 의 공개 API 는 `run(ReflectTask)` 하나다(봉투 `handle(AgentTask)` 는 없다 — §2 대화형 경로 개정 참조).
+> **생성 루프(≤3)·시간 예산은 `agent.py`**, `composer.py` 는 워커도 시계도 모르는 순수 단계
+> (`rank_key`·`apply_hard_replacements`·`bind_placeholders`·`finalize`)다. 프롬프트는 텍스트·vision 둘 다 v0.3.0.
+
 의존 방향: `agents/reflect → llm_gateway(워커)·domain` — c1 ↛ c2·m7(BR-U4-09)·agents 형제 상호 import 금지(L-2)·
 LlmPort 직접 import 금지(L-3) 전부 기존 아키텍처 테스트가 자동 커버. yaml은 prompts 한정, SDK는 adapters 한정 — 무변.
 
@@ -42,6 +47,15 @@ LlmPort 직접 import 금지(L-3) 전부 기존 아키텍처 테스트가 자동
 - **시간 예산: 수치 미확정** — deadline 미지정(TRIP-473 임시 해제 상태). N회 생성 비용은 백그라운드 작업 전제로만 허용하며,
   시간제약 재도입(2026-10 예정) 시 deadline 값·체인 스킵 조건은 **후속 결정** (BR-U6R-14).
 - 대화형 REFLECT intent(라우팅 테이블 — 수집 항목 없음) 경로는 AgentTask 봉투로 같은 compose 코어에 수렴 (BR-AF-01~05).
+
+> **개정 2026-10-19 — 위 두 줄은 실제와 다르다.**
+> ① **시간 예산은 있다.** BE 는 사용자 POST(j03 진입) 안에서 동기 호출하고 마감 15초를 보낸다
+> (`ReflectionAgentProperties.deadlineMs`). `ReflectAgent` 가 `request_meta.deadline_ms` 를 받아 시도마다 남은 시간을 나눈다 —
+> 여유 `SAFETY_MARGIN_SEC=0.5`, 남은 시간이 `MIN_ATTEMPT_SEC=5.0` 보다 적으면 재시도하지 않고 그 사실을 FallbackEvent 로 남긴다.
+> 실측(gpt-5.6-terra low): DAILY 1회 2~8초라 재시도는 대개 1회까지만 들어간다. 여행 요약(10곳·4일)은 1회로도 15초에 걸린다 —
+> BE 가 여행 요약을 붙일 때 백그라운드 생성이나 마감 상향이 필요하다(BE 회고 재료 티켓에 적었다).
+> ② **대화형 REFLECT 는 수렴하지 않는다.** 도우미의 `GENERATE_REFLECTION` 은 화면 이동 핸드오프(`OPEN_REFLECTION` 프레임,
+> `orchestrator/dialogue_handlers.py`)다 — 회고 생성은 j03 의 BE 경로 하나뿐이다.
 
 ### 2.1 `reflection_nudge` — 워커 직행이 **정식 패턴**이다 (2026-09-09 결정, Reflect 소유 세션)
 
@@ -71,11 +85,13 @@ LlmPort 직접 import 금지(L-3) 전부 기존 아키텍처 테스트가 자동
 ④ 결정론 랭킹      (하드 수 ↑낮게, 소프트 수 ↑낮게, 장면 채움 ↑많게, 생성 차수 ↑이르게) 사전식 (계약 §4.2)
                    — LLM 심판(best-of-N judge) 금지 (1차)
 ⑤ 장면/필드 교체   최선 후보의 잔존 하드 위반만 §4 교체 맵으로 결정론 교체 — 전체 드롭 없음 (계약 §4.1)
-⑤′ 장소 이름 바인딩 `{poi:i.name}` → visits[i].poi_name (해시태그는 공백 제거) — 교체 **뒤**여야
-                   교체가 만든 안전 문구(`{poi:k.name}에서의 기억`)까지 채운다. 나머지 어휘는 렌더러 몫
-                   (계약 §2 개정 2026-10-19 · `composer.bind_poi_names`)
+⑤′ 자리표시자 바인딩 어휘 전부를 요청 값으로(장소 이름·지역·날짜·방문 수·사진 수, 해시태그는 공백 제거) —
+                   교체 **뒤**여야 교체가 만든 안전 문구(`{poi:k.name}에서의 기억`)까지 채운다. 못 채우는 토큰
+                   (`{distance_km}`·사진 0장의 `{photo_count}`·빈 이름)이 남은 문구는 안전 문구로 바꾼다.
+                   자리표시자뿐인 부제만 그대로 — FE 의 "서술 없음" 신호 (계약 §2 개정 2026-10-19 · `composer.bind_placeholders`)
 ⑥ 봉투 조립        ReflectionTemplate(is_fallback=False) — 3회 전부 파싱 실패 시 fallback.py 고정 템플릿
-                   (is_fallback=True) + FallbackEvent (INV-4 — 서버 숫자는 항상 참이므로 폴백도 거짓 없는 결과물)
+                   (is_fallback=True) + FallbackEvent (INV-4 — 서버 숫자는 항상 참이므로 폴백도 거짓 없는 결과물).
+                   폴백도 ⑤′ 바인딩을 지난다 — 안 그러면 `{region}에서 우리가 지나온 길` 이 화면에 그대로 나간다
 ⑦ 관측             시도별 LlmCallRecord(성공·실패 불문, BR-U4-03) · 드롭·폴백 이벤트 — 전부 동일 trace_id
 ```
 

@@ -293,6 +293,8 @@ internal data class AiViolation(
     val detail: String = "",
     val dayIndex: Int? = null,
     val slotIndex: Int? = null,
+    /** HC1 하위 코드(`CLOSED_DAY`·`OUT_OF_HOURS`·`HOLIDAY`) — 상대 선택 필드, 없으면 null. */
+    val reasonCode: String? = null,
 )
 
 /** 우리가 보내는 산출물 본문 — 응답 수신형([AiScheduleResponse])과 필드가 같아 그대로 재사용한다. */
@@ -302,7 +304,7 @@ internal typealias AiSchedulePayload = AiScheduleResponse
 internal data class AiRequestMeta(val requestId: String, val requestedAt: Instant, val deadlineMs: Long?)
 
 internal fun AiViolation.toDomain(): Violation =
-    Violation(code, dayIndex, slotIndex, detail.takeIf { it.isNotBlank() }, slotRef)
+    Violation(code, dayIndex, slotIndex, detail.takeIf { it.isNotBlank() }, slotRef, reasonCode)
 
 /** 도메인 산출물 → 상대 본문. 왕복 형태가 같아(생성 응답 = 검증 요청) 그대로 되돌려 보낸다. */
 internal fun ScheduleAgentOutput.toWire(): AiSchedulePayload = AiSchedulePayload(
