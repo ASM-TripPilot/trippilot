@@ -80,6 +80,8 @@ class RuntimeModeSummary(private val env: Environment) {
             Triple("situation", "trippilot.planb.situation-sweep.mode", "off"),
             Triple("horizon", "trippilot.planb.situation-sweep.horizon", "today"),
             Triple("prepared", "trippilot.replan.prepared.mode", "off"),
+            // 기회 카드(DEC-SA-6) AI 호출 — 배포는 차트가 http 를 고정 env 로 박는다(시크릿 아님, DEC-SA-8).
+            Triple("opportunity", "trippilot.ai.opportunity.mode", "off"),
         )
 
         /**
