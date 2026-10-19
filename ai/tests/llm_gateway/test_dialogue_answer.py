@@ -384,13 +384,14 @@ def test_fallback_text_mirrors_backend_templates() -> None:
     assert fallback_answer_text(Intent.GET_POI_INFO, {}) == "일정에 있는 장소예요."
     assert fallback_answer_text(Intent.SUGGEST_ALTERNATIVE, {"target": "성산일출봉"}) == "성산일출봉 대신 갈 만한 곳이에요."
     assert fallback_answer_text(Intent.SUGGEST_ALTERNATIVE, {}) == "그 장소 대신 갈 만한 곳이에요."
-    # 넘기기 6의도 — 안내 한 문장 + 아래 버튼으로 이끄는 제안 (2026-10-19 친근한 말투, BE IntentDispatcher 도 같은 문장)
-    assert fallback_answer_text(Intent.GENERATE_SCHEDULE, {}) == "일정 만들기 화면으로 안내해 드릴게요. 아래 버튼을 눌러 바로 시작해 볼까요?"
-    assert fallback_answer_text(Intent.REGENERATE, {}) == "일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 눌러 볼까요?"
-    assert fallback_answer_text(Intent.REPLAN, {}) == "남은 일정은 다시 짜기에서 지금 상황에 맞게 바꿀 수 있어요. 아래 버튼을 눌러 볼까요?"
-    assert fallback_answer_text(Intent.GENERATE_REFLECTION, {}) == "회고는 기록 화면에서 만들 수 있어요. 아래 버튼으로 기록을 열어 볼까요?"
-    assert fallback_answer_text(Intent.TRIP_SUMMARY, {}) == "여행 요약은 기록 화면에서 볼 수 있어요. 아래 버튼으로 바로 열어 볼까요?"
-    assert fallback_answer_text(Intent.STYLE_ANALYSIS, {}) == "여행 스타일은 기록에서 볼 수 있어요. 아래 버튼으로 바로 확인해 볼까요?"
+    # 넘기기 6의도 — 안내 한 문장 + 아래 버튼 안내 (2026-10-19 친근한 말투, BE IntentDispatcher 도 같은 문장). 되묻기로 끝내지
+    # 않는다 — 분류 0.2.2 가 "…볼까요?" 뒤의 "응"을 그 의도로 읽어 같은 문장이 되풀이된다
+    assert fallback_answer_text(Intent.GENERATE_SCHEDULE, {}) == "일정 만들기 화면으로 안내해 드릴게요. 아래 버튼을 누르면 바로 시작해요."
+    assert fallback_answer_text(Intent.REGENERATE, {}) == "일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 누르면 바로 시작해요."
+    assert fallback_answer_text(Intent.REPLAN, {}) == "남은 일정은 다시 짜기에서 지금 상황에 맞게 바꿀 수 있어요. 아래 버튼을 누르면 바로 시작해요."
+    assert fallback_answer_text(Intent.GENERATE_REFLECTION, {}) == "회고는 기록 화면에서 만들 수 있어요. 아래 버튼을 누르면 기록이 열려요."
+    assert fallback_answer_text(Intent.TRIP_SUMMARY, {}) == "여행 요약은 기록 화면에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요."
+    assert fallback_answer_text(Intent.STYLE_ANALYSIS, {}) == "여행 스타일은 기록에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요."
     # 여행 없음 → BE needTrip 문구 (어느 의도든 같다)
     assert fallback_answer_text(Intent.GET_WEATHER, {"needs_trip": True}) == NEED_TRIP_TEXT
     assert NEED_TRIP_TEXT == "먼저 여행을 만들거나 숙소를 등록하면 일정을 함께 볼 수 있어요."

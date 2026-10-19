@@ -53,25 +53,25 @@ class IntentDispatcher(private val cards: QueryCards, private val proposals: Pro
             Intent.REPLAN ->
                 // 재계획은 여행 중에만 있다(FD §4). 그 밖(여행 전·후)에는 다시 만들기로 보낸다.
                 if (context.inTrip) {
-                    AssistantTemplates.handoff("남은 일정은 다시 짜기에서 지금 상황에 맞게 바꿀 수 있어요. 아래 버튼을 눌러 볼까요?", NextAction("OPEN_REPLAN", "다시 짜기"))
+                    AssistantTemplates.handoff("남은 일정은 다시 짜기에서 지금 상황에 맞게 바꿀 수 있어요. 아래 버튼을 누르면 바로 시작해요.", NextAction("OPEN_REPLAN", "다시 짜기"))
                 } else {
-                    AssistantTemplates.handoff("일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 눌러 볼까요?", NextAction("OPEN_REGENERATE", "일정 다시 만들기"))
+                    AssistantTemplates.handoff("일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 누르면 바로 시작해요.", NextAction("OPEN_REGENERATE", "일정 다시 만들기"))
                 }
             Intent.REGENERATE ->
-                AssistantTemplates.handoff("일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 눌러 볼까요?", NextAction("OPEN_REGENERATE", "일정 다시 만들기"))
+                AssistantTemplates.handoff("일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 누르면 바로 시작해요.", NextAction("OPEN_REGENERATE", "일정 다시 만들기"))
             Intent.GENERATE_SCHEDULE ->
-                AssistantTemplates.handoff("일정 만들기 화면으로 안내해 드릴게요. 아래 버튼을 눌러 바로 시작해 볼까요?", NextAction("OPEN_ITINERARY_METHOD", "일정 만들기"))
+                AssistantTemplates.handoff("일정 만들기 화면으로 안내해 드릴게요. 아래 버튼을 누르면 바로 시작해요.", NextAction("OPEN_ITINERARY_METHOD", "일정 만들기"))
             Intent.SHOW_SCHEDULE -> cards.review(context)
             Intent.GET_NEXT_SLOT -> cards.nextSlot(context)
             Intent.GET_DISTANCE -> cards.distance(context)
             Intent.GET_POI_INFO -> cards.place(context)
             Intent.GET_WEATHER -> cards.weather(context)
             Intent.GENERATE_REFLECTION ->
-                AssistantTemplates.handoff("회고는 기록 화면에서 만들 수 있어요. 아래 버튼으로 기록을 열어 볼까요?", NextAction("OPEN_REFLECTION", "기록 열기"))
+                AssistantTemplates.handoff("회고는 기록 화면에서 만들 수 있어요. 아래 버튼을 누르면 기록이 열려요.", NextAction("OPEN_REFLECTION", "기록 열기"))
             Intent.TRIP_SUMMARY ->
-                AssistantTemplates.handoff("여행 요약은 기록 화면에서 볼 수 있어요. 아래 버튼으로 바로 열어 볼까요?", NextAction("OPEN_TRIP_SUMMARY", "여행 요약 보기"))
+                AssistantTemplates.handoff("여행 요약은 기록 화면에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요.", NextAction("OPEN_TRIP_SUMMARY", "여행 요약 보기"))
             Intent.STYLE_ANALYSIS ->
-                AssistantTemplates.handoff("여행 스타일은 기록에서 볼 수 있어요. 아래 버튼으로 바로 확인해 볼까요?", NextAction("OPEN_STYLE", "내 여행 스타일"))
+                AssistantTemplates.handoff("여행 스타일은 기록에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요.", NextAction("OPEN_STYLE", "내 여행 스타일"))
             Intent.OUT_OF_SCOPE ->
                 AssistantTemplates.outOfScope(nearStay = context.surface == AssistantSurface.STAY_SEARCH || context.surface == AssistantSurface.STAY_DETAIL)
         }

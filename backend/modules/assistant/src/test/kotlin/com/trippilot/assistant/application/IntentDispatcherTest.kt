@@ -26,13 +26,13 @@ class IntentDispatcherTest : StringSpec({
     "넘기기 문장은 AI 템플릿과 한 벌이다 — 재계획은 여행 중에만, 그 밖에는 다시 만들기 문장" {
         val dispatch = dispatcher(FakeTripData(acc))
         listOf(
-            Triple(Intent.GENERATE_SCHEDULE, false, "일정 만들기 화면으로 안내해 드릴게요. 아래 버튼을 눌러 바로 시작해 볼까요?"),
-            Triple(Intent.REGENERATE, false, "일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 눌러 볼까요?"),
-            Triple(Intent.REPLAN, true, "남은 일정은 다시 짜기에서 지금 상황에 맞게 바꿀 수 있어요. 아래 버튼을 눌러 볼까요?"),
-            Triple(Intent.REPLAN, false, "일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 눌러 볼까요?"),
-            Triple(Intent.GENERATE_REFLECTION, false, "회고는 기록 화면에서 만들 수 있어요. 아래 버튼으로 기록을 열어 볼까요?"),
-            Triple(Intent.TRIP_SUMMARY, false, "여행 요약은 기록 화면에서 볼 수 있어요. 아래 버튼으로 바로 열어 볼까요?"),
-            Triple(Intent.STYLE_ANALYSIS, false, "여행 스타일은 기록에서 볼 수 있어요. 아래 버튼으로 바로 확인해 볼까요?"),
+            Triple(Intent.GENERATE_SCHEDULE, false, "일정 만들기 화면으로 안내해 드릴게요. 아래 버튼을 누르면 바로 시작해요."),
+            Triple(Intent.REGENERATE, false, "일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 누르면 바로 시작해요."),
+            Triple(Intent.REPLAN, true, "남은 일정은 다시 짜기에서 지금 상황에 맞게 바꿀 수 있어요. 아래 버튼을 누르면 바로 시작해요."),
+            Triple(Intent.REPLAN, false, "일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 누르면 바로 시작해요."),
+            Triple(Intent.GENERATE_REFLECTION, false, "회고는 기록 화면에서 만들 수 있어요. 아래 버튼을 누르면 기록이 열려요."),
+            Triple(Intent.TRIP_SUMMARY, false, "여행 요약은 기록 화면에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요."),
+            Triple(Intent.STYLE_ANALYSIS, false, "여행 스타일은 기록에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요."),
         ).forEach { (intent, inTrip, text) ->
             val message = dispatch.dispatch(intent, ctx(inTrip))
             message.text shouldBe text

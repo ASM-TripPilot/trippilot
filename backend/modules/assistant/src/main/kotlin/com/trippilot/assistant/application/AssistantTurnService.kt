@@ -484,10 +484,10 @@ class AssistantTurnService(
         )
     }
 
-    /** 단기 기억(BR-AO-11) — 이번 발화 앞의 메시지 중 원문이 있는 것만(가려진 입력은 원문이 없다), 오래된 것부터, 300자까지. 상대는 저장하지 않는다. */
+    /** 단기 기억(BR-AO-11) — 이번 발화 앞의 메시지 중 원문이 있는 것만(가려진 입력은 원문이 없다), 오래된 것부터, 300자까지([clip]). 상대는 저장하지 않는다. */
     private fun recentTurns(session: AssistantSession, beforeSeq: Long): List<RecentTurn> =
         messages.findPage(session.sessionId, beforeSeq, RECENT_TURNS).mapNotNull { m ->
-            m.text?.takeIf { it.isNotBlank() }?.let { RecentTurn(m.role, it.take(RECENT_TURN_CHARS)) }
+            m.text?.takeIf { it.isNotBlank() }?.let { RecentTurn(m.role, clip(it)) }
         }
 
     private fun dispatched(
@@ -569,6 +569,20 @@ class AssistantTurnService(
         /** 상대 계약 `recent_turns` 의 상한(건·자) — 넘기면 422 다. */
         private const val RECENT_TURNS = 20
         private const val RECENT_TURN_CHARS = 300
+        private const val RECENT_TURN_HEAD = 200
+
+        /**
+         * 최근 턴 한 줄을 300자 안으로 — 넘치면 앞 200자와 끝을 남기고 가운데를 "…"로 줄인다. 앞에는 지시어가 가리키는 이름이,
+         * 끝에는 답의 제안·되묻기가 있다(AI 답변 0.3.0 은 제안을 맨 끝에 두고, 분류는 그 제안 뒤의 "응"을 수락으로 읽는다) —
+         * 앞만 남기면 긴 답 뒤의 "응"이 무엇을 받는지 사라진다. 자르는 자리에서 서로게이트 쌍을 가르지 않는다(깨진 문자 금지).
+         */
+        internal fun clip(text: String): String {
+            if (text.length <= RECENT_TURN_CHARS) return text
+            val head = if (text[RECENT_TURN_HEAD - 1].isHighSurrogate()) RECENT_TURN_HEAD - 1 else RECENT_TURN_HEAD
+            var tail = text.length - (RECENT_TURN_CHARS - RECENT_TURN_HEAD - 1)
+            if (text[tail].isLowSurrogate()) tail++
+            return text.substring(0, head) + "…" + text.substring(tail)
+        }
         private val WINDOW: Duration = Duration.ofSeconds(60)
         private const val REFUSALS_BEFORE_GUIDE = 2
         private val SERVER_ISSUED_ARGUMENTS = setOf(ProposalCards.ARG_SLOT_KEY, ProposalCards.ARG_POI_ID)

@@ -53,12 +53,12 @@ _ANSWER_TEXT: dict[Intent, str] = {
     # TEXT 종류라 카드가 없다 — 요약 문장 없이 "정리했어요"라 할 수 없어 일정 화면 넘기기로 (QueryCards 넘기기 꼴)
     Intent.SHOW_SCHEDULE: "일정은 일정 화면에서 확인할 수 있어요.",
     Intent.EDIT_SCHEDULE: "일정은 편집 화면에서 바꿀 수 있어요.",
-    Intent.GENERATE_SCHEDULE: "일정 만들기 화면으로 안내해 드릴게요. 아래 버튼을 눌러 바로 시작해 볼까요?",
-    Intent.REGENERATE: "일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 눌러 볼까요?",
-    Intent.REPLAN: "남은 일정은 다시 짜기에서 지금 상황에 맞게 바꿀 수 있어요. 아래 버튼을 눌러 볼까요?",
-    Intent.GENERATE_REFLECTION: "회고는 기록 화면에서 만들 수 있어요. 아래 버튼으로 기록을 열어 볼까요?",
-    Intent.TRIP_SUMMARY: "여행 요약은 기록 화면에서 볼 수 있어요. 아래 버튼으로 바로 열어 볼까요?",
-    Intent.STYLE_ANALYSIS: "여행 스타일은 기록에서 볼 수 있어요. 아래 버튼으로 바로 확인해 볼까요?",
+    Intent.GENERATE_SCHEDULE: "일정 만들기 화면으로 안내해 드릴게요. 아래 버튼을 누르면 바로 시작해요.",
+    Intent.REGENERATE: "일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 누르면 바로 시작해요.",
+    Intent.REPLAN: "남은 일정은 다시 짜기에서 지금 상황에 맞게 바꿀 수 있어요. 아래 버튼을 누르면 바로 시작해요.",
+    Intent.GENERATE_REFLECTION: "회고는 기록 화면에서 만들 수 있어요. 아래 버튼을 누르면 기록이 열려요.",
+    Intent.TRIP_SUMMARY: "여행 요약은 기록 화면에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요.",
+    Intent.STYLE_ANALYSIS: "여행 스타일은 기록에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요.",
     Intent.OUT_OF_SCOPE: "그건 제가 도와드리기 어려워요.",
 }
 

@@ -10,7 +10,7 @@
 0  리터럴 "내가 할 수 있는 것 보기" → 결정론 능력 안내 ANSWER (LLM 0, BR-AO-18)
 1  보류 되묻기가 있으면 그 답으로 먼저 읽는다 (`dialogue_interpreter.answer_pending` 재사용, LLM 0)
 2  `DIALOGUE_INTENT` 1회 → `IntentGate` closed-set → `IntentMatch(LLM_DIRECT)`; 실패는 전부 OUT_OF_SCOPE + 사유 (BR-AO-02)
-2″ 분류가 할 일 없음으로 닫았고(거절 표지) 발화 전체가 맞장구·인사면 받아 주는 한마디 ANSWER — 범위 밖 카드 대신 (BR-AO-26)
+2″ 분류가 할 일 없음으로 닫았고(null·범위 밖 라벨) 발화가 맞장구·인사 낱말뿐이면 받아 주는 한마디 ANSWER — 범위 밖 카드 대신 (BR-AO-26)
 2′ 분류 결과를 알게 된 직후 `ShadowIntentProbe.submit` — 기다리지 않는다, 응답 영향 0 (BR-AO-08)
 3  필수 인자가 비면 ARGUMENT_CLARIFY (`from_match` 재사용 — 고정 문안·보기, 요청당 1회)
 4  `HANDLERS[intent].plan(ctx)` → 공유 풀 팬아웃(submit 전 마감 고정 → wait → cancel → 상태값) → `assemble` → `Facts` (BR-AO-12)
@@ -50,6 +50,7 @@ from trippilot.domain.context import PermissionDeniedError
 from trippilot.domain.intent import ROUTABLE_INTENTS, Intent, IntentDraft, IntentMatch, MatchRoute
 from trippilot.domain.observability import FallbackEvent
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, clock_spans, clock_times
+from trippilot.llm_gateway.gates.intent import NULL_INTENT
 from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker
 from trippilot.llm_gateway.workers.dialogue_intent import DialogueIntentWorker
 from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
@@ -87,7 +88,6 @@ from trippilot.orchestrator.dialogue_memory import (
     expires_at_for,
     is_turn_fragment,
 )
-from trippilot.orchestrator.intent_eval import is_refusal
 from trippilot.orchestrator.intent_router import normalize
 from trippilot.orchestrator.shadow_probe import ShadowIntentProbe
 from trippilot.ports.trace_port import TracePort
@@ -142,15 +142,18 @@ _OTHER_SESSIONS_LIMIT = 2  # "지난 여행 기억" — 같은 계정의 다른 
 CAPABILITIES_LITERAL = "내가 할 수 있는 것 보기"
 CAPABILITIES_LINE = "일정 검토, 다음 장소·날씨·거리 확인, 일정 변경 제안, 다시 짜기 안내를 도와드려요."
 CAPABILITIES_TEXT = f"이런 걸 도와드릴 수 있어요. {CAPABILITIES_LINE}"
-# 2″ — 맞장구·인사 (BR-AO-26). 분류가 할 일 없음으로 닫은(거절 표지) 말 가운데 발화 **전체**가 아래 목록인 것만.
-# 제안 뒤의 "응"은 분류가 먼저 그 제안의 의도로 읽고(dialogue_intent 0.2.2), 뒤에 요청이 붙은 말은 목록과 같지 않아 분류 몫이다.
-# 시한·벤더 실패(표지 없음)는 종전대로 범위 밖 — 제안 뒤 "응"에 아무 일 없이 "알겠어요"로 답하면 수락을 삼킨다.
-_THANKS = frozenset({"고마워", "고마워요", "고맙습니다", "감사해요", "감사합니다", "땡큐", "thanks", "thank you"})
+# 2″ — 맞장구·인사 (BR-AO-26). 분류가 할 일 없음으로 닫은 말(`{"intent": null}`·범위 밖 라벨) 가운데 낱말이 **전부**
+# 아래 목록인 것만. 제안 뒤의 "응"은 분류가 먼저 그 제안의 의도로 읽고(dialogue_intent 0.2.2), 요청이 섞인 말은 목록 밖
+# 낱말이 있어 분류 몫이다. 깨진 출력·절단·시한·벤더 실패는 판단이 아니라 종전대로 범위 밖 — 제안 뒤 "응"에 아무 일 없이
+# "알겠어요"로 답하면 수락을 삼킨다.
+_THANKS = frozenset({"고마워", "고마워요", "고맙습니다", "감사해요", "감사합니다", "땡큐", "thanks"})
 _ACKS = frozenset({
-    "응", "네", "넵", "예", "좋아", "좋아요", "그래", "그래요", "알겠어", "알겠어요", "알았어", "오케이", "ok",
-    "아니", "아니요", "아뇨", "괜찮아", "괜찮아요", "아니 괜찮아", "아니요 괜찮아요", "됐어", "됐어요", "다음에",
+    "응", "응응", "네", "네네", "넹", "넵", "예", "좋아", "좋아요", "그래", "그래요", "알겠어", "알겠어요", "알았어", "오케이", "ok",
+    "아니", "아니요", "아뇨", "괜찮아", "괜찮아요", "됐어", "됐어요", "다음에",
 })
-_CLOSER_TAIL = re.compile(r"[\s!~.ㅎㅋ]+$")  # "?"는 떼지 않는다 — "응?"은 수락이 아니라 되묻는 말이다
+# 낱말 사이·끝의 문장부호와 웃음. normalize(NFKC)가 ㅎ·ㅋ(호환 자모)를 첫소리 자모 ᄒ·ᄏ 로 바꾸므로 둘 다 적는다.
+# "?"는 떼지 않는다 — "응?"은 수락이 아니라 되묻는 말이다.
+_CLOSER_NOISE = re.compile(r"[\s!~.,ㅎㅋᄒᄏ]+")
 THANKS_TEXT = "천만에요! 더 궁금한 게 생기면 언제든 물어봐 주세요."
 ACK_TEXT = "알겠어요! 필요한 게 생기면 언제든 말씀해 주세요."
 OTHER_SESSIONS_HEADER = "지난 여행 기억:"  # `$memory` 에서 현재 세션 줄과 다른 세션 줄을 가르는 머리 (DE §6 `$memory`)
@@ -313,10 +316,18 @@ def capabilities_answer(has_trip: bool) -> DialogueAnswer:
 
 
 def closer_answer(text: str, has_trip: bool) -> DialogueAnswer | None:
-    """2″ — 정규화된 발화 전체가 맞장구·인사면 받아 주는 한마디(BR-AO-26), 아니면 None. 버튼·칩은 능력 안내와 같다."""
-    key = _CLOSER_TAIL.sub("", text).lower()
-    reply = THANKS_TEXT if key in _THANKS else ACK_TEXT if key in _ACKS else None
-    return None if reply is None else DialogueAnswer(AnswerKind.TEXT, reply, None, (_home_action(has_trip),), None, None)
+    """2″ — 정규화된 발화가 맞장구·인사 낱말뿐이면 받아 주는 한마디(BR-AO-26), 아니면 None. 감사가 하나라도 있으면 감사 답.
+    버튼·칩은 능력 안내와 같다."""
+    words = _CLOSER_NOISE.sub(" ", text.lower().replace("thank you", "thanks")).split()
+    if not words or not all(w in _THANKS or w in _ACKS for w in words):
+        return None
+    reply = THANKS_TEXT if any(w in _THANKS for w in words) else ACK_TEXT
+    return DialogueAnswer(AnswerKind.TEXT, reply, None, (_home_action(has_trip),), None, None)
+
+
+def _judged_nothing(reason: str) -> bool:
+    """분류가 판단해서 할 일 없음으로 닫았다 — `{"intent": null}` 또는 범위 밖 라벨. 깨진 출력·절단·시한·벤더 실패는 아니다."""
+    return NULL_INTENT in reason or reason == f"intent_not_routable({Intent.OUT_OF_SCOPE.value})"
 
 
 def _home_action(has_trip: bool) -> NextAction:
@@ -515,7 +526,7 @@ class DialogueOrchestrator:
             match, reason = self._classify(inp, text, memory_lines, trip_summary, counter)
             if match is None:
                 reason = reason or "intent_fallback"
-                closer = closer_answer(text, inp.snapshot.trip is not None) if is_refusal(_fallback_match(reason)) else None
+                closer = closer_answer(text, inp.snapshot.trip is not None) if _judged_nothing(reason) else None
                 if closer is not None:  # 2″ — 할 일이 없는 말에 범위 밖 카드를 내지 않는다(BR-AO-26)
                     return TurnOutcome("ANSWER", (), None, closer, cleared, 0, reason)
                 return self._out_of_scope(inp, reason)
