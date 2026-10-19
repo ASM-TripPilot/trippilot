@@ -42,20 +42,35 @@ class SolveMode(Enum):
 
 _FALLBACK_MODES = frozenset({SolveMode.RULE_FALLBACK, SolveMode.MINIMAL})
 
+# HC1 하위 코드 (상황 감지 H1 · BR-SA-17) — 닫힌 집합. 백엔드 장소 감지가 알림 변형으로 그대로 쓴다.
+CLOSED_DAY = "CLOSED_DAY"        # 정기 휴무 — 영업정보가 있는데 그 요일 창이 없다
+OUT_OF_HOURS = "OUT_OF_HOURS"    # 그 날 열지만 계획 시간이 영업창 밖
+HOLIDAY = "HOLIDAY"              # 휴일 규칙(공휴일·명절·날짜)이 그 날을 닫는다
+HC1_REASON_CODES = frozenset({CLOSED_DAY, OUT_OF_HOURS, HOLIDAY})
+
 
 @dataclass(frozen=True, slots=True)
 class Violation:
-    """하드 제약 위반 1건. 빈 리스트 = 유효 (INV-2 준비)."""
+    """하드 제약 위반 1건. 빈 리스트 = 유효 (INV-2 준비).
+
+    `reason_code` 는 HC1 하위 코드(`HC1_REASON_CODES`) — 다른 HC 와 옛 직렬화본은 None 이다.
+    """
 
     code: str  # HC1 ~ HC4
     slot_ref: PoiId | None
     detail: str
+    reason_code: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.reason_code is not None and self.reason_code not in HC1_REASON_CODES:
+            raise ValueError(f"reason_code 닫힌 집합 밖: {self.reason_code}")
 
     def to_dict(self) -> dict:
         return {
             "code": self.code,
             "slot_ref": str(self.slot_ref) if self.slot_ref is not None else None,
             "detail": self.detail,
+            "reason_code": self.reason_code,
         }
 
     @classmethod
@@ -64,6 +79,7 @@ class Violation:
             code=d["code"],
             slot_ref=PoiId(d["slot_ref"]) if d["slot_ref"] is not None else None,
             detail=d["detail"],
+            reason_code=d.get("reason_code"),  # 키 없는 옛 직렬화본 = 하위 코드 없음
         )
 
 
@@ -283,6 +299,11 @@ class ItineraryProblem:
     ignore_anchor_distance: 앵커가 하루를 오가는 숙소다(생성) — 앵커와의 거리를 고르는 기준에서 뺀다.
     `travel_weight` 는 방문지 사이 아크에만 걸고, 숙소 출발·복귀 아크엔 걸지 않는다(2026-10-19 사용자:
     "꼭 숙소 근처만 있지 않아도 돼, 숙소로 다시 돌아오면 되지"). 재계획은 앵커가 지금 위치라 False.
+    holidays: 특일 달력(날짜 → 그 날 태그, 상황 감지 H1). 진입점이 요청당 1회 조회해 싣고, 조립·검증은
+    `poi.open_windows_on` 으로만 읽는다(조립 루프는 I/O 를 타지 않는다). 기본 None = `HOLIDAY_CLOSURE_MODE=off`
+    — 공휴일 규칙 없음(기존 생성자 호출 전부 무영향). **빈 매핑은 None 이 아니다** — 모드는 켜졌는데 달력을
+    못 읽은 것이라 날짜 명시형 규칙("1월 1일 휴관")은 산다. 조립 체인의 최종 HC 검증과 validate 가 같은
+    값을 봐야 한다 — 아니면 조립이 둔 해를 검증이 거부한다.
     """
 
     schedule_id: ScheduleId
@@ -308,6 +329,7 @@ class ItineraryProblem:
     day_windows: Mapping[date, TimeWindow] | None = None
     required_in_order: bool = False  # 필수 방문을 준 순서대로 — "시간만 당기기" (BR-U4-47)
     ignore_anchor_distance: bool = False  # 앵커=숙소(생성) — 숙소 오가는 구간은 경로 감점 밖
+    holidays: Mapping[date, frozenset[str]] | None = None  # 특일 달력 — None = 모드 off (상황 감지 H1)
 
     def window_on(self, day: date) -> TimeWindow:
         """그 날의 창 — 일자별 창이 있으면 그것, 없으면 공용 창의 시각을 그 날짜에 얹는다."""
@@ -371,6 +393,12 @@ class ItineraryProblem:
                 if self.event_bonus is not None
                 else None
             ),
+            # 빈 매핑({})과 None 은 뜻이 다르다(달력 실패 ≠ 모드 off) — 둘을 구분해 싣는다
+            "holidays": (
+                {d.isoformat(): sorted(self.holidays[d]) for d in sorted(self.holidays)}
+                if self.holidays is not None
+                else None
+            ),
         }
 
     @classmethod
@@ -418,6 +446,10 @@ class ItineraryProblem:
             ),
             required_in_order=d.get("required_in_order", False),
             ignore_anchor_distance=d.get("ignore_anchor_distance", False),
+            holidays=(
+                {date.fromisoformat(k): frozenset(v) for k, v in d["holidays"].items()}
+                if d.get("holidays") is not None else None
+            ),
         )
 
 

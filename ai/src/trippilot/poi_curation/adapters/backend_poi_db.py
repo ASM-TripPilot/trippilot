@@ -39,7 +39,8 @@ from collections.abc import Mapping
 
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
-from trippilot.poi_curation.sourcing.mapping import parse_opening_hours_raw
+from trippilot.poi_curation.sourcing.holiday_rules import parse_holiday_rules
+from trippilot.poi_curation.sourcing.mapping import parse_opening_hours_raw, split_opening_hours_raw
 from trippilot.ports.http_json_port import HttpJson
 from trippilot.ports.poi_db_port import PoiLookup, PoiMiss
 
@@ -248,6 +249,7 @@ class BackendPoiDb:
         for field in ("poi_id", "name_ko", "lat", "lng"):
             if row.get(field) is None:
                 raise RowMappingError(field, "값 없음")
+        hours_raw, rest_raw = split_opening_hours_raw(row.get("opening_hours"))
         return Poi(
             poi_id=PoiId(str(row["poi_id"])),
             name=row["name_ko"],
@@ -269,4 +271,7 @@ class BackendPoiDb:
             # KB-5 조인 키 — 같은 PR(TRIP-870)로 열린 필드다. 없으면 장소 지식이
             # 후보에 못 붙고, 그때는 문서 없이 도는 것이 정상 동작이다(강등 아님).
             source_ref=(str(row["source_ref"]) if row.get("source_ref") else None),
+            # 공휴일 휴무(상황 감지 H1) — 같은 원문 칸의 휴무·영업 원문에서. 모드와 무관하게 늘 읽는다 —
+            # 판정은 달력이 있을 때만(`open_windows_on`), off 면 이 값은 무력하다.
+            holiday_rules=parse_holiday_rules(rest_raw, hours_raw),
         )
