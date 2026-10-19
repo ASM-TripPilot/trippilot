@@ -16,6 +16,8 @@ sys.modules["serving_judge"] = sj
 _spec.loader.exec_module(sj)
 
 LEDGER = (Path(__file__).resolve().parents[2] / "docs" / "mlops" / "serving-ledger.md").read_text()
+# 커밋된 원장에는 판정기가 매주 행을 붙인다(#1390 부터 auto-merge) — 테스트는 그 행 수에 기대지 않는다.
+PRIOR = sj.read_previous_verdicts(LEDGER)
 
 OPEN = sj.Gates(gpu_quota=True, zero_billing_verified=True, eks_p95_ms=3000, fill_deadline_ms=8000)
 
@@ -70,7 +72,7 @@ def test_ledger_gates_parse_committed_file():
     """커밋된 원장의 게이트 표를 파서가 읽는다 — 열 이름이 바뀌면 여기서 깨진다."""
     g = sj.read_gates(LEDGER)
     assert g == sj.Gates(gpu_quota=False, zero_billing_verified=False, eks_p95_ms=None, fill_deadline_ms=8000)
-    assert sj.read_previous_verdicts(LEDGER) == []
+    assert set(PRIOR) <= {sj.STAY, sj.HOLD, sj.SWITCH_TO_LOCAL, sj.SWITCH_TO_BEDROCK}
 
 
 def test_ledger_row_round_trips_verdict():
@@ -79,7 +81,7 @@ def test_ledger_row_round_trips_verdict():
     m = measured()
     v = sj.judge(m, OPEN, "bedrock", [])
     row = sj.ledger_row(dt.date(2026, 9, 28), m, "bedrock", v)
-    assert sj.read_previous_verdicts(LEDGER + row + "\n") == [v.verdict]
+    assert sj.read_previous_verdicts(LEDGER + row + "\n") == PRIOR + [v.verdict]
 
 
 VALUES = """ai:
@@ -157,5 +159,5 @@ def test_dry_run_appends_hold_row_and_never_flips(tmp_path):
     ledger = tmp_path / "ledger.md"; ledger.write_text(LEDGER)
     values = tmp_path / "values.yaml"; values.write_text(VALUES)
     assert sj.main(["--ledger", str(ledger), "--values", str(values), "--dry-run"]) == 0
-    assert sj.read_previous_verdicts(ledger.read_text()) == [sj.HOLD]
+    assert sj.read_previous_verdicts(ledger.read_text()) == PRIOR + [sj.HOLD]
     assert sj.read_transport(values) == "bedrock"
