@@ -796,6 +796,29 @@ def test_요청의_지시_카테고리가_규칙_점수에_실린다() -> None:
         "회피 지시가 점수를 전혀 안 바꿨다 — 요청→점수 고리가 끊겼다")
 
 
+def test_숙소가_오가는_곳이면_규칙_점수가_숙소_거리를_안_본다() -> None:
+    """`ignore_anchor_distance` → `build_rule_score(anchor=None)` 고리 (2026-10-19 — 생성이 숙소 옆에 몰렸다).
+
+    조립의 숙소 아크만 빼고 이 고리를 놓치면, LLM 에 보낼 후보(규칙 점수 상위)와 규칙 폴백 점수가
+    여전히 숙소에서 가까운 곳을 올린다 — 위 회피 고리와 같은 이유로 따로 지킨다.
+    """
+    from dataclasses import replace as _replace
+
+    from trippilot.assembly_engine.travel import haversine_km
+
+    pool = _pool()
+    agent, _, _ = _agent()
+    request = _request()
+    away = [p.poi_id for p in pool.pois if haversine_km(request.anchor, p.coord) > 0.1]
+    assert away, "숙소에서 떨어진 후보가 없으면 이 테스트가 아무것도 안 본다"
+
+    plain = {s.poi_id: s.score for s in agent._rule_scores(request, pool, None)}
+    free = {s.poi_id: s.score for s in agent._rule_scores(
+        _replace(request, ignore_anchor_distance=True), pool, None)}
+
+    assert all(free[k] > plain[k] for k in away), "숙소 거리 감점이 그대로다 — 요청→점수 고리가 끊겼다"
+
+
 # ── ②⁗ 영업시간 런타임 보강 (2026-09-26) ──────────────────────────
 # **이 단계의 유일한 실패 방식은 "값을 채웠는데 일정이 안 바뀌는 것"이다.**
 # `ScoredPoi` 에 `Poi` 본체가 없어 후보를 바꿔 봐야 HC1 에 안 닿고, 교체가
