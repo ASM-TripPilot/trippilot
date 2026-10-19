@@ -82,6 +82,8 @@ class ReplanExecutionTest : StringSpec({
     class Fixture(val replans: FakeReplans) {
         val sessions = ExecSessions()
         val events = CapturingReplanEvents()
+        /** 트리거 진입은 그 트리거의 날짜로 강제된다(BR-SA-20) — 진입하는 트리거는 여기 있어야 한다. */
+        val triggers = FakeTriggerLookup()
         lateinit var service: ReplanSessionService
     }
 
@@ -90,6 +92,7 @@ class ReplanExecutionTest : StringSpec({
         service = ReplanSessionService(
             trips, itineraries, sessions, OriginResolver(noAnchors), archive, surfaces,
             ReplanSolver(sessions, archive, replans, NOOP_TX, clock), replans, FakeLocationConsents(), CapturingLegalLogs(), FakeTripPurgeScope(), events, clock,
+            triggers, NO_PLANS, ReplanProperties(),
         )
     }
 
@@ -179,7 +182,7 @@ class ReplanExecutionTest : StringSpec({
         val opened = f.service.start(
             acc, trip,
             StartReplan(
-                triggerId = UUID.randomUUID(), targetDate = null, scope = ReplanScope.PARTIAL_SLOTS,
+                triggerId = f.triggers.add(trip, today), targetDate = null, scope = ReplanScope.PARTIAL_SLOTS,
                 origin = ReplanOrigin(OriginKind.GPS, 33.45, 126.56),
                 reasons = listOf("비가 와요"), directives = listOf("실내로"),
                 freeText = null, excludedPoiIds = emptyList(),
@@ -194,7 +197,7 @@ class ReplanExecutionTest : StringSpec({
     // 트리거 소비(C9)가 날짜까지 대조한다 — 내일 트리거로 연 재계획이 오늘을 다시 짜면 그 트리거를 닫지 않는다.
     "확정 사건은 근거 트리거와 다시 짠 날을 싣는다" {
         val f = fixture()
-        val triggerId = UUID.randomUUID()
+        val triggerId = f.triggers.add(trip, today)
         val opened = f.service.start(
             acc, trip,
             StartReplan(

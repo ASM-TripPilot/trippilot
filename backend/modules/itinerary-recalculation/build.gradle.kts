@@ -16,6 +16,9 @@ dependencies {
     implementation(project(":modules:place-data"))          // R1: 마지막 완료 방문지 좌표 — placedata.api
     implementation(project(":modules:archive"))             // R1: 방문 실적(잠금·마지막 방문지) — archive.api
     implementation(project(":modules:auth"))                // R1: 위치 동의·법정 로그(TRIP-992) — auth.api
+    // R1: 트리거 진입 날짜 강제(BR-SA-20) — planbdetection.api 의 TriggerLookupFacade 만. 감지는 재계획에 의존하지 않아
+    // 단방향이다(감지는 적용 사건을 이벤트 타입 문자열로 듣는다).
+    implementation(project(":modules:planb-detection"))
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)

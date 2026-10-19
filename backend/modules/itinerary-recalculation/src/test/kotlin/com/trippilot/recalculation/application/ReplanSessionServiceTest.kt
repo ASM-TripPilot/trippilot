@@ -131,6 +131,7 @@ class ReplanSessionServiceTest : StringSpec({
             archive, surfaces,
             ReplanSolver(sessions, archive, FakeReplans(), NOOP_TX, clock),
             FakeReplans(), consents, legalLogs, purgeScope, CapturingReplanEvents(), clock,
+            FakeTriggerLookup(), NO_PLANS, ReplanProperties(),
         )
 
     val gpsOrigin = ReplanOrigin(OriginKind.GPS, 33.45, 126.56)
