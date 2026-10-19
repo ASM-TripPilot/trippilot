@@ -39,13 +39,19 @@ class ClosureRulesTest : StringSpec({
     val pois = List(4) { UUID.nameUUIDFromBytes("poi-$it".toByteArray()) }
     val longName = "4시30분왕족발 제주시청점 2층 단체석 전용 예약 매장 별관"
     val names = Arb.element(null, "", "성산일출봉", "365분식", "오늘의커피", "[폐업] 사라진 카페", longName)
+    // HC1 하위 코드 — 없음·셋·모르는 값(옛 AI·오타)
+    val codes = Arb.element(null, "CLOSED_DAY", "OUT_OF_HOURS", "HOLIDAY", "BOGUS")
+    /** 기대 변형 — 새 위반 슬롯의 하위 코드 중 더 확실한 것, 없거나 모르면 HOURS_MISMATCH. */
+    fun expectedHours(fresh: List<CheckedSlot>): TriggerVariant =
+        listOf(TriggerVariant.CLOSED_DAY, TriggerVariant.HOLIDAY, TriggerVariant.OUT_OF_HOURS)
+            .firstOrNull { v -> fresh.any { it.reasonCode == v.name } } ?: TriggerVariant.HOURS_MISMATCH
 
     fun at(date: LocalDate, hhmm: String): Instant = date.atTime(LocalTime.parse(hhmm)).atZone(zone).toInstant()
 
     fun slot(
         poi: UUID, start: String, hours: HoursVerdict = HoursVerdict.OK, warned: Boolean = false,
-        name: String? = "성산일출봉", date: LocalDate = today,
-    ) = CheckedSlot("$date#$poi", poi, name, LocalTime.parse(start), hours, null, warned)
+        name: String? = "성산일출봉", date: LocalDate = today, code: String? = null,
+    ) = CheckedSlot("$date#$poi", poi, name, LocalTime.parse(start), hours, code, warned)
 
     data class Case(
         val date: LocalDate,
@@ -76,7 +82,7 @@ class ClosureRulesTest : StringSpec({
             val poi = Arb.element(pois).bind()
             CheckedSlot(
                 "$date#$poi", poi, nameOf.getValue(poi), LocalTime.of(Arb.int(0..23).bind(), Arb.int(0..59).bind()),
-                Arb.enum<HoursVerdict>().bind(), null, Arb.boolean().bind(),
+                Arb.enum<HoursVerdict>().bind(), codes.bind(), Arb.boolean().bind(),
             )
         }
         // 상태 조회 실패(null) · 없는 POI(키 빠짐) · 상태 4갈래를 섞는다.
@@ -103,11 +109,12 @@ class ClosureRulesTest : StringSpec({
                         group.any(c::closed) shouldBe true
                         f.dataSource shouldBe DataSource.PLACE_STATUS
                     }
-                    TriggerVariant.HOURS_MISMATCH -> {
+                    TriggerVariant.HOURS_MISMATCH, TriggerVariant.CLOSED_DAY, TriggerVariant.OUT_OF_HOURS, TriggerVariant.HOLIDAY -> {
                         (group.none(c::closed) && group.any(c::freshHours) && group.none(c::heldClosure)) shouldBe true
+                        f.variant shouldBe expectedHours(group.filter(c::freshHours))
                         f.dataSource shouldBe DataSource.AI_VALIDATE
                     }
-                    else -> error("이 PR 은 하위 코드 변형을 내지 않는다(PR-H1): ${f.variant}")
+                    else -> error("장소 감지기가 내지 않는 변형: ${f.variant}")
                 }
                 f.poiId shouldBe group.first().poiId
             }
@@ -117,7 +124,7 @@ class ClosureRulesTest : StringSpec({
                 when {
                     group.any(c::closed) -> found?.variant shouldBe TriggerVariant.PERMANENTLY_CLOSED
                     group.any(c::heldClosure) -> found.shouldBeNull() // 폐업 여부를 모르는 회차가 떠 있는 폐업을 바꾸지 않는다
-                    group.any(c::freshHours) -> found?.variant shouldBe TriggerVariant.HOURS_MISMATCH
+                    group.any(c::freshHours) -> found?.variant shouldBe expectedHours(group.filter(c::freshHours))
                     else -> found.shouldBeNull() // 이미 본 HC1 경고·OK·모름은 발화하지 않는다
                 }
             }
@@ -200,6 +207,43 @@ class ClosureRulesTest : StringSpec({
             "10월 21일(수) 방문 예정지 한 곳이 폐업한 곳으로 확인됐어요",
             "10월 21일(수) 계획한 시간엔 ‘${SituationCopy.shortName(longName)}’ 영업하지 않는 것으로 나와요",
         )
+    }
+
+    "예 — HC1 하위 코드로 휴무·영업시간 밖·공휴일을 가르고, 없거나 모르면 영업시간 확인이다(BR-SA-17)" {
+        val now = at(today, "20:15")
+        val v = ClosureRules.judge(
+            tomorrow, now,
+            listOf(
+                slot(pois[0], "10:00", HoursVerdict.VIOLATED, name = "국립제주박물관", date = tomorrow, code = "CLOSED_DAY"),
+                slot(pois[1], "12:00", HoursVerdict.VIOLATED, name = "흑돼지거리 식당", date = tomorrow, code = "OUT_OF_HOURS"),
+                slot(pois[2], "14:00", HoursVerdict.VIOLATED, name = null, date = tomorrow, code = "HOLIDAY"),
+                slot(pois[3], "16:00", HoursVerdict.VIOLATED, name = "오늘의커피", date = tomorrow, code = "BOGUS"),
+            ),
+            pois.associateWith { PoiLifeStatus.ACTIVE },
+            emptyMap(),
+        )
+
+        v.findings.map { it.variant to it.reason } shouldContainExactly listOf(
+            TriggerVariant.CLOSED_DAY to "10월 21일(수) ‘국립제주박물관’은 정기 휴무일로 나와요",
+            TriggerVariant.OUT_OF_HOURS to "10월 21일(수) 계획한 시간엔 ‘흑돼지거리 식당’ 문을 열지 않는 것으로 나와요",
+            TriggerVariant.HOLIDAY to "10월 21일(수) 공휴일이라 방문 예정지 한 곳이 쉬는 날로 나와요",
+            TriggerVariant.HOURS_MISMATCH to "10월 21일(수) 계획한 시간엔 ‘오늘의커피’ 영업하지 않는 것으로 나와요",
+        )
+    }
+
+    "예 — 같은 장소를 하루 두 번 넣었으면 더 확실한 하위 코드를 따른다(정기 휴무 > 공휴일 > 영업시간 밖)" {
+        val now = at(today, "20:15")
+        val v = ClosureRules.judge(
+            tomorrow, now,
+            listOf(
+                slot(pois[0], "10:00", HoursVerdict.VIOLATED, date = tomorrow, code = "OUT_OF_HOURS"),
+                slot(pois[0], "18:00", HoursVerdict.VIOLATED, date = tomorrow, code = "CLOSED_DAY"),
+            ),
+            mapOf(pois[0] to PoiLifeStatus.ACTIVE),
+            emptyMap(),
+        )
+
+        v.findings.map { it.variant } shouldContainExactly listOf(TriggerVariant.CLOSED_DAY)
     }
 
     "예 — 한글로 끝나지 않는 이름은 조사를 둘 다 적는다(지어내지 않는다)" {

@@ -60,10 +60,11 @@ class ItineraryDayCheckService(
             day.slots.any { surface[it.sourcePoiId]?.openingHoursKnown == true }
         val verdict = if (ask) Revalidation.attempt(scheduleAgent, outputOf(itinerary, day), tripId) else null
         // 하루만 보냈으니 그 날은 0번 날이다. 위치가 없거나 영업시간이 아닌 위반은 여기서 빠진다.
-        val violated = verdict?.violations().orEmpty()
+        // 슬롯 → HC1 하위 코드(없으면 null). 감지기가 하위 코드로 변형을 가른다(BR-SA-17).
+        val violated: Map<Int, String?> = verdict?.violations().orEmpty()
             .filter { it.dayIndex == 0 && ViolationText.isOpeningHours(it.type) }
-            .mapNotNull { it.slotIndex }
-            .toSet()
+            .mapNotNull { v -> v.slotIndex?.let { it to v.reasonCode } }
+            .toMap()
         return DayCheck(
             judged = verdict != Revalidation.Withheld, // 부르지 않은 날은 보류가 아니다 — 영업시간은 아래에서 UNKNOWN 이다
             slots = day.slots.mapIndexed { i, s ->
@@ -78,7 +79,7 @@ class ItineraryDayCheckService(
                         i in violated -> HoursVerdict.VIOLATED
                         else -> HoursVerdict.OK
                     },
-                    reasonCode = null, // 경계에 하위 코드가 아직 없다 — PR-H1 이 와이어와 함께 연다
+                    reasonCode = violated[i],
                     hoursWarnedBefore = s.hasViolation && ViolationText.mentionsOpeningHours(s.violationReason),
                 )
             },
