@@ -233,6 +233,8 @@ beforeEach(() => {
 afterEach(() => {
   server.resetHandlers();
   resetToast();
+  // G16 은 앱 기본 보관 시간(10분) 클라이언트를 쓴다 — 실패로 끝나도 남은 보관 타이머가 jest 종료를 붙잡지 않게 비운다.
+  client.clear();
 });
 afterAll(() => {
   server.close();
@@ -595,5 +597,91 @@ describe('🔴 PlanbEntryGate · 게이트가 고른 트리거가 i04 본문까�
       targetDate: TOMORROW,
     });
     listHang.release();
+  });
+
+  it('G14 해제 뒤 다시 선 트리거로 들어오면 i04 는 current 로 열리고 본문 triggerId 도 current 다', async () => {
+    server.use(
+      ...baseHandlers({
+        triggerDetail: () =>
+          HttpResponse.json(
+            detail({ state: 'EXPIRED', currentTriggerId: 'trg-2' })
+          ),
+        list: activeList({ triggerId: 'trg-2' }),
+      })
+    );
+
+    renderGate();
+
+    // URL 의 원 id(trg-1)로 열면 목록에 없어 감지 칩이 서지 않는다.
+    await waitFor(() =>
+      expect(screen.getByTestId('planb-request-trigger-chip')).toBeSelected()
+    );
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+
+    await waitFor(() => expect(postedBodies).toHaveLength(1));
+    expect(postedBodies[0]).toMatchObject({
+      triggerId: 'trg-2',
+      targetDate: TOMORROW,
+    });
+  });
+
+  it('G15 오늘 트리거의 범위가 FULL_DAY 면 URL 에 범위가 없어도 그 범위로 연다', async () => {
+    const todayFullDay = { affectedDate: TODAY, scope: 'FULL_DAY' } as const;
+    server.use(
+      ...baseHandlers({
+        triggerDetail: () => HttpResponse.json(detail(todayFullDay)),
+        list: activeList(todayFullDay),
+      })
+    );
+
+    renderGate();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('planb-request-trigger-chip')).toBeSelected()
+    );
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+
+    await waitFor(() => expect(postedBodies).toHaveLength(1));
+    // 스토어 기본(PARTIAL_SLOTS)이 아니라 트리거 범위 — 오늘이라 날짜 키는 없다.
+    expect(postedBodies[0]).toMatchObject({
+      scope: 'FULL_DAY',
+      triggerId: 'trg-1',
+    });
+    expect(postedBodies[0]).not.toHaveProperty('targetDate');
+  });
+});
+
+describe('🔴 PlanbEntryGate · 다음 진입은 지난 진입의 캐시로 판정하지 않는다 (§3.2 — 리뷰 반영)', () => {
+  it('G16 앱 기본 캐시(30초 신선·10분 보관)에서도 — DRAFT 로 i06 에 간 뒤 APPLIED 가 되면 다음 진입은 허브다', async () => {
+    // 이 파일의 기본 클라이언트는 전역 gcTime 0 이라 훅의 gcTime 0 을 재지 못한다 — 앱과 같은 기본값으로 바꾼다
+    // (AppProviders.tsx — staleTime 30_000 · gcTime 10분).
+    client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: 30_000, gcTime: 10 * 60_000 },
+      },
+    });
+    let status: ReplanSession['status'] = 'DRAFT';
+    server.use(
+      ...baseHandlers({
+        preparedSession: () => HttpResponse.json(prepared({ status })),
+      })
+    );
+
+    const first = renderGate();
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+    expect(mockReplace).toHaveBeenCalledWith(DRAFT_HREF('sys-1'));
+    first.unmount();
+    // 게이트를 떠난 뒤 시간이 흐른다 — 다음 매크로태스크에 보관 시간이 끝난 캐시가 비워진다.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    status = 'APPLIED';
+    renderGate();
+
+    await waitFor(() => expect(mockDismissTo).toHaveBeenCalledTimes(1));
+    expect(screen.getByText('이미 반영한 대안이에요')).toBeTruthy();
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(preparedQueries).toHaveLength(2);
   });
 });
