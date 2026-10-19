@@ -50,7 +50,8 @@ services:
   # 기본 기동에는 안 뜬다. 백엔드를 EVENT_BROKER=kafka 로 띄울 때만 필요하다 —
   # 호스트 bootRun 은 localhost:9092, compose 백엔드는 kafka:19092 로 붙는다. 배포(EKS)에는 브로커가 없다.
   # 9092 는 H2 TCP 서버의 기본 포트이기도 하다 — 호스트에 H2 가 떠 있으면 localhost:9092 가 H2 로 가서 클라이언트가
-  # "Buffer underflow" 로 실패한다(실측). 그때는 KAFKA_HOST_PORT=29092 와 KAFKA_BOOTSTRAP_SERVERS=localhost:29092 로 띄운다.
+  # "Buffer underflow" 로 실패한다(실측). 그때는 KAFKA_HOST_PORT=29092 로 띄우고, 호스트 bootRun 셸에
+  # KAFKA_BOOTSTRAP_SERVERS=localhost:29092 를 준다(compose 백엔드는 늘 kafka:19092 라 영향 없다).
   kafka:
     profiles: ["kafka"]
     image: apache/kafka:4.1.1
@@ -71,7 +72,8 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null"]
+      # DOCKER 리스너로 본다 — HOST 리스너가 광고하는 localhost:${KAFKA_HOST_PORT} 는 컨테이너 안에 없을 수 있다.
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka:19092 > /dev/null"]
       interval: 5s
       timeout: 10s
       retries: 20
@@ -104,7 +106,8 @@ services:
       DB_URL: jdbc:postgresql://db:5432/trippilot?currentSchema=app
       # 아웃박스 배달 경로(TRIP-1469). 기본 none = 폴링 배달(배포와 같다). kafka 는 위 kafka 서비스가 떠 있어야 한다.
       EVENT_BROKER: ${EVENT_BROKER:-none}
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:19092}
+      # 고정값이다 — 호스트 bootRun 용 KAFKA_BOOTSTRAP_SERVERS(localhost:…)가 .env 에 있어도 컨테이너로 새지 않게.
+      KAFKA_BOOTSTRAP_SERVERS: kafka:19092
       DB_USER: ${DB_USER:-app_user}
       DB_PASSWORD: ${DB_PASSWORD:-app_user}
       REDIS_HOST: ${REDIS_HOST:-redis}      # 숙소·여행 조회 캐시

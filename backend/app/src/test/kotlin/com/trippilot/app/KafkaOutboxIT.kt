@@ -77,6 +77,8 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var subscriber: Recording
     @Autowired private lateinit var registry: MeterRegistry
     @Autowired private lateinit var txManager: PlatformTransactionManager
+    @Autowired private lateinit var allSubscribers: List<OutboxSubscriber>
+    @Autowired private lateinit var kafkaTemplate: org.springframework.kafka.core.KafkaTemplate<String, String>
 
     private val tx by lazy { TransactionTemplate(txManager) }
 
@@ -112,6 +114,9 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
         relayUntilPublished("카프카")
         awaitReceived("카프카")
 
+        // 지연은 구독자가 돌아온 **뒤** 기록된다 — 받은 것을 본 직후 바로 읽으면 경합이다. 기록될 때까지 기다린다.
+        val deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos()
+        while ((registry.find(LATENCY).timer()?.count() ?: 0L) <= before && System.nanoTime() < deadline) Thread.sleep(20)
         (registry.find(LATENCY).timer()!!.count()) shouldBeGreaterThan before
     }
 
@@ -154,14 +159,16 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
 
     @Test
     fun `브로커가 실패하면 발행 표시하지 않고, 그 배치의 나머지는 보내지 않는다`() {
+        // 다른 IT 가 남긴 미발행 행을 먼저 비운다 — 배치(100건)가 그것으로 차면 이 테스트의 행이 안 들어간다.
+        repeat(20) { relay.relay() }
         tx.execute {
             publisher.publish(Probe("장애-1"))
             publisher.publish(Probe("장애-2"))
         }
         val down = mockk<KafkaOutboxBroker>()
-        every { down.send(any()) } throws IllegalStateException("의도된 브로커 장애")
+        every { down.send(any()) } throws org.apache.kafka.common.errors.TimeoutException("의도된 브로커 장애")
         // 실제 릴레이와 같은 테이블·같은 구독자 집합 — 브로커만 실패하는 것으로 바꾼다.
-        OutboxRelay(jdbc, SimpleMeterRegistry(), listOf(subscriber), Clock.systemUTC(), down).relay()
+        OutboxRelay(jdbc, SimpleMeterRegistry(), allSubscribers, Clock.systemUTC(), down).relay()
 
         verify(exactly = 1) { down.send(any()) } // 첫 실패에서 멈췄다 — 행마다 송신 시한을 기다리지 않는다
         unpublished("장애-1") shouldBe 1
@@ -175,10 +182,50 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
      * 판정은 하지 않는다 — 수치를 출력만 한다(PR·회고에 옮긴다).
      */
     @Test
+    fun `레코드만의 실패(크기 초과 등)는 그 행만 미루고 배치의 뒤는 보낸다`() {
+        repeat(20) { relay.relay() }
+        tx.execute {
+            publisher.publish(Probe("영구-1"))
+            publisher.publish(Probe("영구-2"))
+        }
+        val tooLarge = mockk<KafkaOutboxBroker>()
+        every { tooLarge.send(any()) } throws org.apache.kafka.common.errors.RecordTooLargeException("의도된 크기 초과")
+        OutboxRelay(jdbc, SimpleMeterRegistry(), allSubscribers, Clock.systemUTC(), tooLarge).relay()
+
+        verify(exactly = 2) { tooLarge.send(match { it.aggregateId.startsWith("영구-") }) } // 첫 실패에서 멈추지 않았다
+    }
+
+    @Test
+    fun `소비 재시도를 다 쓴 이벤트는 폴링 모드의 포기와 같은 조회로 찾힌다`() {
+        tx.execute { publisher.publish(Probe("포기")) }
+        relayUntilPublished("포기")
+        awaitReceived("포기")
+        val envelope = subscriber.received.first { it.aggregateId == "포기" }
+
+        relay.abandon(envelope, IllegalStateException("의도된 소진"))
+
+        jdbc.queryForObject(
+            "SELECT count(*) FROM outbox_event WHERE event_id = ? AND published_at IS NULL AND attempts >= 10",
+            Int::class.java, envelope.eventId,
+        ) shouldBe 1
+        relay.relay() // 시도 상한이라 다시 집히지 않는다
+        unpublished("포기") shouldBe 1
+    }
+
+    @Test
+    fun `봉투를 못 읽는 메시지는 재시도 없이 버려 같은 파티션의 뒤 이벤트를 막지 않는다`() {
+        kafkaTemplate.send(KafkaOutboxConfig.TOPIC, "독", "{깨진 봉투").get()
+        tx.execute { publisher.publish(Probe("독")) } // 같은 키 = 같은 파티션, 깨진 메시지 뒤
+        relayUntilPublished("독")
+
+        awaitReceived("독", Duration.ofSeconds(8)) // 재시도했다면 첫 백오프(2초)부터 쌓여 수십 초 걸린다
+    }
+
+    @Test
     @EnabledIfEnvironmentVariable(named = "MEASURE_OUTBOX", matches = "1")
     fun `측정 - 폴링 배달과 Kafka 배달의 지연 분포`() {
         val polling = Recording()
-        val pollingRelay = OutboxRelay(jdbc, SimpleMeterRegistry(), listOf(polling), Clock.systemUTC())
+        val pollingRelay = OutboxRelay(jdbc, SimpleMeterRegistry(), allSubscribers.filterNot { it === subscriber } + polling, Clock.systemUTC())
         val pollingResult = measure("폴링", polling) { pollingRelay.relay() }
         val kafkaResult = measure("카프카", subscriber) { relay.relay() }
         println("[OUTBOX-LATENCY] $pollingResult")

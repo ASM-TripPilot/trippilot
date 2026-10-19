@@ -1,8 +1,11 @@
 package com.trippilot.app.event
 
+import com.fasterxml.jackson.core.JsonProcessingException
+import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.core.event.EventEnvelope
 import org.apache.kafka.clients.admin.NewTopic
+import org.apache.kafka.common.errors.RetriableException
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
@@ -40,23 +43,33 @@ class KafkaOutboxConfig {
      *
      * 상한을 폴링 모드의 5분이 아니라 30초로 둔다: 재시도는 소비 스레드에서 기다리므로 총 대기(약 3분)가
      * `max.poll.interval.ms`(기본 5분)를 넘으면 브로커가 소비자를 그룹에서 빼고 재배치가 반복된다.
-     * 다 실패하면 폴링 모드처럼 오류 로그로 남기고 넘어간다(조회 대신 로그로 찾는다 — 아웃박스 행은 이미 발행 표시다).
+     * 다 실패하면 아웃박스 행을 폴링 모드의 포기와 같은 모양으로 되돌린다([OutboxRelay.abandon]) — 같은 조회로 찾는다.
+     * 봉투를 못 읽는 메시지는 재시도해도 같으므로 바로 포기한다(파티션을 3분 막지 않게).
      */
     @Bean
-    fun outboxConsumerErrorHandler(): DefaultErrorHandler = DefaultErrorHandler(
-        { record, e -> log.error("Kafka 이벤트 배달을 포기합니다 — key={} offset={}", record.key(), record.offset(), e) },
+    fun outboxConsumerErrorHandler(relay: OutboxRelay, mapper: ObjectMapper): DefaultErrorHandler = DefaultErrorHandler(
+        { record, e ->
+            val envelope = runCatching { readEnvelope(mapper, record.value() as String) }.getOrNull()
+            if (envelope != null) relay.abandon(envelope, e)
+            else log.error("봉투를 읽지 못한 Kafka 메시지를 버립니다 — key={} offset={} value={}",
+                record.key(), record.offset(), (record.value() as? String)?.take(500), e)
+        },
         ExponentialBackOffWithMaxRetries(MAX_ATTEMPTS - 1).apply {
             initialInterval = 2_000
             multiplier = 2.0
             maxInterval = 30_000
         },
-    )
+    ).apply { addNotRetryableExceptions(JsonProcessingException::class.java) }
 
     companion object {
         const val TOPIC = "trippilot.outbox"
         private const val PARTITIONS = 3
         private const val MAX_ATTEMPTS = 10
         private val log = LoggerFactory.getLogger(KafkaOutboxConfig::class.java)
+
+        /** 모르는 필드는 건너뛴다 — 롤링 배포 중 새 인스턴스가 봉투에 필드를 더해 보내도 옛 인스턴스가 읽는다. */
+        fun readEnvelope(mapper: ObjectMapper, value: String): EventEnvelope =
+            mapper.readerFor(EventEnvelope::class.java).without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).readValue(value)
     }
 }
 
@@ -72,8 +85,12 @@ class KafkaOutboxBroker(
             .get(SEND_TIMEOUT_SEC, TimeUnit.SECONDS)
     }
 
-    private companion object {
+    companion object {
         private const val SEND_TIMEOUT_SEC = 10L
+
+        /** 브로커에 닿지 못한 실패인가 — 그렇다면 같은 배치의 다음 송신도 같은 시한을 기다릴 뿐이다. */
+        fun unreachable(e: Throwable): Boolean = generateSequence(e) { it.cause }
+            .any { it is RetriableException || it is java.util.concurrent.TimeoutException }
     }
 }
 
@@ -84,5 +101,5 @@ class KafkaOutboxListener(
     private val mapper: ObjectMapper,
 ) {
     @KafkaListener(topics = [KafkaOutboxConfig.TOPIC], groupId = "trippilot-outbox")
-    fun onMessage(value: String) = relay.consume(mapper.readValue(value, EventEnvelope::class.java))
+    fun onMessage(value: String) = relay.consume(KafkaOutboxConfig.readEnvelope(mapper, value))
 }

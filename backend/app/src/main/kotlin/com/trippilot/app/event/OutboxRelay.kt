@@ -153,7 +153,9 @@ class OutboxRelay(
                     if (published && broker == null) recordLatency(envelope)
                 }
                 .onFailure { e ->
-                    if (broker != null) brokerDown = true
+                    // 브로커에 닿지 못한 것(시한 초과·연결 실패)만 배치를 멈춘다. 그 레코드만의 영구 실패(크기 초과·직렬화)는
+                    // 그 행만 백오프시키고 뒤는 보낸다 — 아니면 한 행이 시도마다 뒤 99건을 통째로 민다.
+                    if (broker != null && KafkaOutboxBroker.unreachable(e)) brokerDown = true
                     val attempts = bumpAttempts(envelope.eventId)
                     // 상한에 닿으면 조용히 사라지지 않게 올린다 — dead-letter 테이블 없이 조회로 찾는다.
                     if (attempts >= MAX_ATTEMPTS) {
@@ -175,6 +177,16 @@ class OutboxRelay(
         val targets = byType[envelope.eventType] ?: return
         deliver(envelope, targets)
         recordLatency(envelope)
+    }
+
+    /**
+     * Kafka 소비 재시도를 다 쓴 이벤트를 **폴링 모드의 포기와 같은 모양으로** 되돌린다 — 미발행·시도 상한.
+     * 행은 송신 때 이미 발행 표시라, 그대로 두면 포기 조회(`published_at IS NULL AND attempts >= 10`)에 안 잡혀
+     * 조용히 사라진다(INV-4). 시도 상한이라 폴링이 다시 집지는 않는다.
+     */
+    fun abandon(envelope: EventEnvelope, cause: Throwable) {
+        jdbc.update("UPDATE outbox_event SET published_at = NULL, attempts = ? WHERE event_id = ?", MAX_ATTEMPTS, envelope.eventId)
+        log.error("이벤트 배달을 포기합니다 — eventId={} type={} (Kafka 소비 재시도 소진)", envelope.eventId, envelope.eventType, cause)
     }
 
     private fun deliver(envelope: EventEnvelope, targets: List<OutboxSubscriber>) {
