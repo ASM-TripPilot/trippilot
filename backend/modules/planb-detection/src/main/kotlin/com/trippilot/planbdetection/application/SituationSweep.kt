@@ -18,6 +18,9 @@ import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.context.event.ApplicationReadyEvent
+import org.springframework.context.ApplicationContext
+import org.springframework.context.ApplicationContextAware
+import org.springframework.context.event.ContextClosedEvent
 import org.springframework.context.event.EventListener
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.scheduling.annotation.Scheduled
@@ -46,7 +49,7 @@ import kotlin.math.ceil
  * → 본 날짜를 모두 확인한 출처의 감시 상태(확인)를 남긴다. 회차 요약은 INFO 1줄이다(운영은 지표 내보내기가 꺼져 있다 — OBS-SA-01·07).
  *
  * - **쓰지 않는 경우**: 모드 dry-run(판정·요약만), 관찰 전용 출처(요약·표본 줄만), 20:58 이후(INV-SA-5).
- * - **멈추는 경우**: 예산·종료 신호·20:58 — 여행 사이에서 멈추고 정상 반환해 락을 푼다. 못 본 여행은 `skipped` 다.
+ * - **멈추는 경우**: 예산·종료 신호(컨텍스트 닫힘)·20:58 — 여행 사이에서 멈추고 정상 반환해 락을 푼다. 못 본 여행은 `skipped` 다.
  * - **격리**: 감지기 예외는 그 (출처, 여행, 날짜)만 모름, 같은 출처가 한 회차에서 연속 3번 던지면 남은 여행은 그 출처를
  *   모름으로 둔다(회로 차단). 여행 처리 예외는 그 여행만 실패(WARN)로 세고 다음 여행을 계속한다.
  *
@@ -64,12 +67,15 @@ class SituationSweep(
     /** 감지기 빈 — 0개여도 기동한다(감지기는 다음 변경들이 하나씩 더한다). */
     detectors: ObjectProvider<SituationDetector>,
     private val clock: Clock,
-) : WatchingSources {
+) : WatchingSources, ApplicationContextAware {
 
     private val detectors: List<SituationDetector> = detectors.orderedStream().toList()
 
     /** 종료 신호 — 받으면 여행 사이에서 멈춘다. */
     private val stopping = AtomicBoolean(false)
+
+    /** 이 빈이 든 컨텍스트 — 닫힘 사건이 내 것인지 가린다. */
+    @Volatile private var context: ApplicationContext? = null
 
     init {
         val doubled = this.detectors.groupBy { it.source }.filterValues { it.size > 1 }.keys
@@ -101,6 +107,22 @@ class SituationSweep(
         sweep(clock.instant())
     }
 
+    override fun setApplicationContext(applicationContext: ApplicationContext) {
+        context = applicationContext
+    }
+
+    /**
+     * 종료 신호는 **컨텍스트 닫힘 사건**에서 받는다(RES-SA-06). 닫힘 순서는 사건 → 스케줄러 생명주기 단계가 진행 중 회차를
+     * 단계 시한(운영 630초)까지 기다림 → 빈 파괴(DataSource 닫힘 · 스케줄러 인터럽트)다. 빈 파괴(`@PreDestroy`)에서야 알면
+     * 그 시한 내내 회차가 종료를 모른 채 쓰고·푸시하고(끄기 재배포가 늦게 먹는다), 락 해제 UPDATE 는 닫힌 풀에서 실패해
+     * 락이 상한까지 남는다. 자식 컨텍스트의 닫힘(부모로 전파된다)에는 멈추지 않는다 — 한 번 서면 재기동까지 회차가 빈다.
+     */
+    @EventListener
+    fun onContextClosed(event: ContextClosedEvent) {
+        if (event.applicationContext === context) stop()
+    }
+
+    /** 예비 — 컨텍스트 닫힘 없이 빈만 파괴되는 경우. */
     @PreDestroy
     fun stop() = stopping.set(true)
 

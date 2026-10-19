@@ -26,8 +26,12 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
+import org.springframework.beans.factory.DisposableBean
 import org.springframework.beans.factory.ObjectProvider
+import org.springframework.context.annotation.AnnotationConfigApplicationContext
+import org.springframework.context.support.DefaultLifecycleProcessor
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -39,7 +43,9 @@ import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import java.util.function.Supplier
 import java.util.stream.Stream
 import kotlin.concurrent.thread
 
@@ -126,6 +132,18 @@ private class LockedEvents : DomainEventPublisher {
     val published: MutableList<DomainEvent> = Collections.synchronizedList(mutableListOf())
     override fun publish(event: DomainEvent) {
         published += event
+    }
+}
+
+/** 닫히면 쓰기가 실패하는 자원(DataSource 대역) — 쓴 것과 닫힌 순서를 [order] 에 적는다. */
+private class ClosingResource(private val name: String, private val order: MutableList<String>) : DisposableBean {
+    @Volatile private var closed = false
+
+    fun use(what: String): String = if (closed) "$what FAILED: $name closed" else what
+
+    override fun destroy() {
+        closed = true
+        order += "$name closed"
     }
 }
 
@@ -408,21 +426,50 @@ class SituationSweepTest : StringSpec({
         summary.skipped shouldBe 2
     }
 
-    "종료 신호를 받으면 여행 사이에서 멈추고 정상으로 돌아온다 — 락을 쥔 채 죽지 않는다" {
+    "컨텍스트가 닫히면(배포 종료) 진행 중 여행만 마치고 돌아와 락을 푼다 — DataSource 가 닫히기 전에(RES-SA-06)" {
+        // 실 종료 순서: ContextClosedEvent → 스케줄러 생명주기 단계가 진행 중 작업을 단계 시한(운영 630초)까지 기다림 → 빈 파괴
+        // (DataSource 닫힘 · 스케줄러 shutdownNow 인터럽트). 종료를 빈 파괴에서야 알면 그 시한 내내 회차가 계속 쓰고·푸시하고,
+        // 락 해제 UPDATE 는 닫힌 풀에서 실패해 락이 상한까지 남는다.
         val world = World()
-        repeat(3) { world.trip() }
-        lateinit var sweep: SituationSweep
-        val forecast = FakeDetector(SweepSource.KMA_FORECAST, answer = { sweep.stop(); CLEAR })
-        sweep = world.sweep(props(), listOf(forecast), StepClock(at("12:15")))
+        val tripIds = List(5) { world.trip() }
+        val entered = CountDownLatch(1)
+        val forecast = FakeDetector(SweepSource.KMA_FORECAST, answer = { entered.countDown(); Thread.sleep(400); rain(it) })
+        val sweep = world.sweep(props(), listOf(forecast), StepClock(at("12:15")))
+        val order: MutableList<String> = Collections.synchronizedList(mutableListOf())
+        val dataSource = ClosingResource("DataSource", order)
+        val context = AnnotationConfigApplicationContext().apply {
+            // 단계 시한만 줄인다(재현을 빨리) — 나머지는 Boot 자동 구성 스케줄러와 같다(종료 대기 없음 = 빈 파괴 때 인터럽트).
+            registerBean("lifecycleProcessor", DefaultLifecycleProcessor::class.java, Supplier {
+                DefaultLifecycleProcessor().apply { setTimeoutPerShutdownPhase(1_000) }
+            })
+            registerBean("taskScheduler", ThreadPoolTaskScheduler::class.java, Supplier { ThreadPoolTaskScheduler().apply { poolSize = 4 } })
+            registerBean("dataSource", ClosingResource::class.java, Supplier { dataSource })
+            registerBean("situationSweep", SituationSweep::class.java, Supplier { sweep })
+            refresh()
+        }
+        val summary = AtomicReference<SweepSummary>()
+        val done = CountDownLatch(1)
+        context.getBean(ThreadPoolTaskScheduler::class.java).schedule({
+            // ShedLock(메서드 프록시)이 하는 일 — 회차가 돌아오면 같은 스케줄러 스레드에서 DB 로 락을 푼다.
+            try {
+                summary.set(sweep.sweep(at("12:15")))
+            } finally {
+                order += dataSource.use("unlock")
+                done.countDown()
+            }
+        }, Instant.now())
 
-        val summary = sweep.sweep(at("12:15"))
+        entered.await()
+        context.close()
+        done.await(10, TimeUnit.SECONDS) shouldBe true
 
-        forecast.calls.size shouldBe 1
-        summary.trips shouldBe 1 // 하던 여행은 마친다
-        summary.skipped shouldBe 2
+        order shouldBe listOf("unlock", "DataSource closed")
+        summary.get().trips shouldBe 1 // 하던 여행은 마친다
+        summary.get().skipped shouldBe 4
+        tripIds.count { world.rows(it).isNotEmpty() } shouldBe 1
     }
 
-    "회차 스레드가 끊기면(배포 종료) 진행 중 여행은 마치고 시작 안 한 여행은 건너뛴 뒤 돌아온다 — 락을 풀 때 도는 여행이 없다" {
+    "회차 스레드가 끊기면(종료 단계 시한을 넘겨 인터럽트) 진행 중 여행은 마치고 시작 안 한 여행은 건너뛴 뒤 돌아온다" {
         val world = World()
         repeat(3) { world.trip() }
         val entered = CountDownLatch(1)
