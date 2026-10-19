@@ -96,10 +96,13 @@ class KmaWarningDetector(private val alerts: WeatherAlertFacade, private val tri
 
     /**
      * 모르는 최상위 구역 이름(광역·섬 구역·바다가 아님 — `WeatherAlerts` 규칙 2) — t6 형식 변화·구역 개편의 신호라 바뀔 때만 WARN 한 번
-     * (파드 범위 · 같은 이름이 이어지면 조용하다). 구역 이름뿐이라 키·주소가 없다. 많거나 긴 이름은 잘라 싣는다.
+     * (파드 범위 · 같은 이름이 이어지면 조용하다). 많거나 긴 이름은 잘라 싣는다. t6 는 정상 응답의 구역 이름이라 키가 없지만, 응답에서 온
+     * 글자라 ASCII 영숫자는 가려 싣는다(SEC-SA-03 — 구역 이름은 한글·문장부호다).
      */
     private fun noteUnknownAreas(live: List<ActiveWarning>): Set<String> {
-        val names = live.flatMap { it.areas }.filterNot(WeatherAlerts::isKnownArea).map { it.name.trim().take(NAME_CAP) }.toSortedSet()
+        val names = live.flatMap { it.areas }.filterNot(WeatherAlerts::isKnownArea)
+            .map { area -> area.name.trim().take(NAME_CAP).map { if (it.code < 128 && it.isLetterOrDigit()) '*' else it }.joinToString("") }
+            .toSortedSet()
         if (seenUnknownAreas.getAndSet(names) != names && names.isNotEmpty()) {
             log.warn(
                 "기상특보 — 모르는 특보 구역 이름 {} 이 있습니다(t6 형식 변화·특보구역 개편). 그 구역은 목적지를 가릴 수 없어 '특보 없음'으로 " +

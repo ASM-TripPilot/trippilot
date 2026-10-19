@@ -26,6 +26,7 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import org.slf4j.LoggerFactory
 import java.util.UUID
@@ -256,11 +257,15 @@ class KmaWarningDetectorTest : StringSpec({
             detector.detect(day)
             alerts.warnings = AlertRead.Ok(listOf(gale(WarningArea("울산."))))
             detector.detect(day)
+            alerts.warnings = AlertRead.Ok(listOf(gale(WarningArea("serviceKey=SECRET2KEY"))))
+            detector.detect(day)
         }
 
-        warns.size shouldBe 2
+        warns.size shouldBe 3
         warns[0] shouldContain "전남광주통합특별시"
         warns[1] shouldContain "울산."
+        warns[2] shouldNotContain "SECRET" // 응답에서 온 글자라 ASCII 영숫자는 가려 싣는다
+        warns[2] shouldNotContain "serviceKey"
     }
 
     /** 섬 구역은 이름 앞붙음이 아니라 닫힌 표(구역 → 시군 코드)로 맞춘다 — 서해구(어간 '서해')는 서해5도가 아니고, 옹진은 서해5도다. */
