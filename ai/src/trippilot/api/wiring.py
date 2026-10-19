@@ -2750,7 +2750,7 @@ class WiredItineraryOrchestrator:
         meta = request.request_meta
         hints = outcome.repair_hints
         own = [p for p in missed if p not in nl_ids and p not in night]
-        if not own:  # 이름으로 집은 곳·클럽만 빠졌다 — 다른 곳을 골라도 그 요청은 안 채워진다
+        if not own:  # 이름으로 집은 곳·밤 일정 지시로 넣은 곳만 빠졌다 — 다른 곳을 골라도 그 요청은 안 채워진다
             notes.append("llm_repair_skipped: not_actionable")
             return outcome, composed
         if hints is None or ctx is None or self._composer is None:
