@@ -385,28 +385,21 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
             .filter { it.key.toString().startsWith("2") }
             .map { (_, value) ->
                 val response = value as Map<String, Any>
-                (response["\$ref"] as? String)
-                    ?.let { components("responses")[it.substringAfterLast('/')] as Map<String, Any> } ?: response
+                (response["\$ref"] as? String)?.let { ref ->
+                    // 끊긴 응답 참조는 참조 게이트(스키마만 본다)가 못 잡는다 — 여기서 원인을 말하며 멈춘다.
+                    components("responses")[ref.substringAfterLast('/')] as? Map<String, Any>
+                        ?: error("openapi 의 응답 참조가 끊겼다: $ref")
+                } ?: response
             }
 
     @Suppress("UNCHECKED_CAST")
-    private fun requestSchema(operation: Map<String, Any>): Map<String, Any>? {
-        val body = operation["requestBody"] as? Map<String, Any> ?: return null
-        // 공유 본문(`$ref: '#/components/requestBodies/X'`)도 응답처럼 푼다.
-        val resolved = (body["\$ref"] as? String)
-            ?.let { components("requestBodies")[it.substringAfterLast('/')] as? Map<String, Any> } ?: body
-        return jsonSchema(resolved)
-    }
+    private fun requestSchema(operation: Map<String, Any>): Map<String, Any>? =
+        (operation["requestBody"] as? Map<String, Any>)?.let(::jsonSchema)
 
-    /** JSON 미디어 타입(`application/json`·`…; charset=…`·`…+json` 접미 타입)의 본문 스키마. */
     @Suppress("UNCHECKED_CAST")
     private fun jsonSchema(holder: Map<String, Any>): Map<String, Any>? =
-        (holder["content"] as? Map<String, Any>).orEmpty().entries
-            .firstOrNull { (mediaType, _) ->
-                val subtype = mediaType.substringBefore(';').trim().lowercase().substringAfter('/', "")
-                subtype == "json" || subtype.endsWith("+json")
-            }
-            ?.let { (it.value as? Map<String, Any>)?.get("schema") as? Map<String, Any> }
+        ((holder["content"] as? Map<String, Any>)?.get("application/json") as? Map<String, Any>)
+            ?.get("schema") as? Map<String, Any>
 
     /** JSON 으로 오가는 구조(DTO·컬렉션·Map) — 스칼라 본문(String 등)은 JSON 이 아니어도 된다. */
     private fun isJsonStructure(type: JavaType): Boolean = type.isContainerType || !isLeaf(type)

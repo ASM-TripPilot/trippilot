@@ -51,8 +51,11 @@ class RefreshSession private constructor(
         const val DEVICE_ID_MAX = 128
 
         /** 새 체인의 첫 세션(로그인 시 발급). */
-        fun issue(accountId: AccountId, deviceId: String, tokenHash: String, now: Instant, ttl: Duration): RefreshSession =
-            RefreshSession(RefreshSessionId.new(), accountId, deviceId, tokenHash, UUID.randomUUID(), now, now.plus(ttl), null, null)
+        fun issue(accountId: AccountId, deviceId: String, tokenHash: String, now: Instant, ttl: Duration): RefreshSession {
+            // 요청 DTO 가 먼저 막지만, DTO 를 거치지 않는 발급 경로가 생겨도 22001 → 500 이 돌아오지 않게 여기서도 막는다.
+            require(deviceId.length <= DEVICE_ID_MAX) { "기기 식별자는 $DEVICE_ID_MAX 자 이하여야 합니다." }
+            return RefreshSession(RefreshSessionId.new(), accountId, deviceId, tokenHash, UUID.randomUUID(), now, now.plus(ttl), null, null)
+        }
 
         /** 회전 후속 — 이전 세션과 같은 체인에 새 토큰을 잇는다. */
         fun next(previous: RefreshSession, tokenHash: String, now: Instant, ttl: Duration): RefreshSession =

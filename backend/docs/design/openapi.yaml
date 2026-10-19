@@ -132,11 +132,7 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [refreshToken]
-              properties:
-                refreshToken: { type: string }
+            schema: { $ref: '#/components/schemas/RefreshTokenBody' }
       responses:
         '200':
           description: 회전된 토큰 쌍(isNewUser·account 없음 — 계정 요약은 GET /me 소관)
@@ -153,15 +149,13 @@ paths:
     post:
       tags: [auth]
       summary: 현재 기기 체인 revoke
+      description: 공개 경로다(서버 permitAll) — 만료된 액세스 토큰으로도 끊을 수 있어야 하므로 Bearer 를 요구하지 않는다.
+      security: []
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [refreshToken]
-              properties:
-                refreshToken: { type: string, description: 끊을 기기 체인의 리프레시 토큰 }
+            schema: { $ref: '#/components/schemas/RefreshTokenBody' }
       responses:
         '204': { description: 로그아웃 완료 }
 
@@ -3627,6 +3621,13 @@ components:
             `authorizationCode`. 로그인은 `accessToken`(identityToken)으로 끝나고, 이 값은 계정 파기 때
             Apple 토큰을 revoke 하기 위한 refresh_token 교환에만 쓴다(App Store 5.1.1(v)).
             교환이 실패해도 로그인은 성공한다(응답 무변화). 다른 제공자는 무시한다.
+
+    RefreshTokenBody:
+      type: object
+      description: 리프레시 토큰 하나를 실어 보내는 본문 — 회전(/auth/token/refresh)·로그아웃(/auth/logout) 공용
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
 
     RefreshedTokenPair:
       type: object

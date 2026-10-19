@@ -1,5 +1,6 @@
 package com.trippilot.auth.domain
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.core.spec.style.StringSpec
 import java.time.Duration
@@ -14,6 +15,14 @@ class RefreshSessionTest : StringSpec({
     val ttl = Duration.ofDays(90)
 
     fun issued() = RefreshSession.issue(accountId, "device-1", "hash-0", now, ttl)
+
+    "기기 식별자가 상한을 넘으면 발급하지 않는다 — 저장에서 22001 이 나기 전에" {
+        shouldThrow<IllegalArgumentException> {
+            RefreshSession.issue(accountId, "d".repeat(RefreshSession.DEVICE_ID_MAX + 1), "hash-0", now, ttl)
+        }
+        RefreshSession.issue(accountId, "d".repeat(RefreshSession.DEVICE_ID_MAX), "hash-0", now, ttl).deviceId.length shouldBe
+            RefreshSession.DEVICE_ID_MAX
+    }
 
     "발급 직후 세션은 현행이다" {
         val s = issued()
