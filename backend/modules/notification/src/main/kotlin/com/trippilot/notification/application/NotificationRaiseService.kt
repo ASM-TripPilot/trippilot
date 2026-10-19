@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
+import java.time.Duration
 import java.util.UUID
 
 /**
@@ -34,8 +35,8 @@ class NotificationRaiseService(
     private val clock: Clock,
 ) {
     /**
-     * 적재하고 푸시까지 시도한다. 이미 있는 사건이면(`source_event_id` UNIQUE) **아무 일도 하지
-     * 않는다** — at-least-once 재배달이 사용자에게 두 번 울리지 않는다(INV-U6-01 · BR-U6-34).
+     * 적재하고 [push] 정책대로 푸시를 시도한다. 이미 있는 사건이면(`source_event_id` UNIQUE) **아무 일도
+     * 하지 않는다** — at-least-once 재배달이 사용자에게 두 번 울리지 않는다(INV-U6-01 · BR-U6-34).
      */
     @Transactional
     fun raise(
@@ -47,6 +48,7 @@ class NotificationRaiseService(
         dedupKey: String?,
         actionType: String? = null,
         actionPayload: Map<String, String>? = null,
+        push: PushPolicy = PushPolicy.Always,
     ) {
         if (!toggles.allowsInApp(accountId, kind)) {
             log.debug("인앱 수신이 꺼진 종류라 적재하지 않습니다. kind={}", kind)
@@ -71,7 +73,37 @@ class NotificationRaiseService(
             metrics.suppressed(SuppressReason.DUPLICATE)
             return
         }
-        pushes.dispatch(notification)
+        // 정책 판정은 적재가 성공한 **뒤**다(BR-SA-21 ②) — 재배달은 위에서 끝났으므로 억제 지표를 두 번
+        // 세지 않는다. 막는 것은 푸시뿐이고, 알림함 행은 이미 있다(INV-U6-02).
+        when (push) {
+            PushPolicy.Always -> pushes.dispatch(notification)
+            PushPolicy.InAppOnly -> {
+                log.debug("푸시 대상이 아닌 사건이라 알림함에만 둡니다. eventId={}", sourceEventId)
+                metrics.suppressed(SuppressReason.IN_APP_ONLY)
+            }
+            is PushPolicy.OncePer -> if (pushedWithin(notification, push)) {
+                log.info("같은 묶음의 푸시가 {} 안에 나가 이번 푸시를 생략합니다. eventId={}", push.window, sourceEventId)
+                metrics.suppressed(SuppressReason.COALESCED)
+            } else {
+                pushes.dispatch(notification)
+            }
+        }
+    }
+
+    /**
+     * [policy] 접두의 알림 중 [PushPolicy.OncePer.window] 안에 **실제로 푸시된**(`push_sent_at`) 것이 있는가.
+     *
+     * 기존 조회(최근 [RECENT] 건)를 메모리에서 거른다 — 포트·SQL 을 늘리지 않는다. 그 대가로 한 계정에
+     * 창 안 알림이 [RECENT] 건을 넘으면 앞선 푸시를 못 볼 수 있다(감지는 여행·회차당 사건 1건이라 전제 밖 —
+     * INV-SA-3). 릴레이는 단일 실행(ShedLock)이라 같은 묶음의 두 사건이 이 판정을 동시에 지나지 않는다.
+     * 알림함만·실패·상한으로 안 나간 행은 발송 시각이 없어 근거가 되지 않는다 — 과잉 억제를 막는다.
+     */
+    private fun pushedWithin(notification: Notification, policy: PushPolicy.OncePer): Boolean {
+        val since = notification.occurredAt.minus(policy.window)
+        // 방금 적재한 행은 아직 발송 시각이 없어 스스로 걸리지 않는다.
+        return notifications.findByAccount(notification.accountId, unreadOnly = false, limit = RECENT).any {
+            it.dedupKey?.startsWith(policy.dedupPrefix) == true && it.pushSentAt?.isAfter(since) == true
+        }
     }
 
     /**
@@ -82,6 +114,23 @@ class NotificationRaiseService(
     fun ownerOfTrip(tripId: UUID): UUID? = trips.findOwnedPeriod(tripId)?.accountId
 
     private companion object {
+        /** 묶음 판정이 보는 최근 알림 수 — 알림함 목록 기본값과 같다. */
+        private const val RECENT = 50
+
         private val log = LoggerFactory.getLogger(NotificationRaiseService::class.java)
     }
+}
+
+/**
+ * 적재 뒤 푸시를 어떻게 할 것인가(BR-SA-21 ②). 판정은 적재가 성공한 뒤이고, 막는 것은 푸시뿐이다.
+ */
+sealed interface PushPolicy {
+    /** 언제나 시도한다 — 종전 동작(숙소·회고). */
+    data object Always : PushPolicy
+
+    /** 알림함에만 둔다 — 사건이 푸시 대상이 아니다(주의·하루 상한 초과·모르는 값). */
+    data object InAppOnly : PushPolicy
+
+    /** 같은 [dedupPrefix] 의 푸시가 [window] 안에 나갔으면 이번 푸시를 생략한다(BR-U6-09 개정). */
+    data class OncePer(val dedupPrefix: String, val window: Duration) : PushPolicy
 }
