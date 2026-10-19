@@ -13,6 +13,7 @@ import org.springframework.dao.DataIntegrityViolationException
 import java.time.Duration
 import java.time.LocalDate
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
 
 /**
  * 선계산 실행(BR-SA-18 ①③) — 거름·실행 자리·전용 실행기·실패 경로.
@@ -85,6 +86,26 @@ class PreparedReplanServiceTest : StringSpec({
         parked.runAll() // 자리가 비었다
         svc.onRisk(events.last(), f.clock.now) // 같은 사건의 재배달 — 트리거당 1회를 쓰지 않았으니 이번엔 연다
         f.sessions.openOf(trips.last()).single().initiatedBy shouldBe ReplanInitiator.SYSTEM
+    }
+
+    // 자리는 산출 작업의 finally 에서 돌아오고, 일꾼이 대기열에서 다음 것을 꺼내는 것은 그 뒤다 — 그 사이 대기열은 아직 꽉 차 있다.
+    // 거기서 자리를 얻은 사건을 실행기가 거절하면 세션이 FAILED 로 열려 트리거당 1회·하루 상한을 먹는다(자리 선점이 막으려던 바로 그것).
+    // 대역 실행기는 용량이 없어 이 창이 안 보인다 — 실물 실행기로 본다.
+    "실물 실행기 — 일꾼이 다음 산출을 꺼내기 전에 자리를 얻은 사건도 대기열이 받는다" {
+        val f = RecalcFixture(today, "07:15")
+        f.replans.proposal = FakeReplans.sampleProposal(today)
+        val executor = PreparedReplanService.newExecutor()
+        val svc = f.prepared(executor)
+        val gate = CountDownLatch(1)
+        executor.execute { gate.await() } // 자리를 이미 돌려준 산출이 일꾼을 아직 붙잡고 있는 순간 — 일꾼은 바쁘고 자리는 다 비었다
+        val trips = (1..PreparedReplanService.RUNNING + PreparedReplanService.WAITING).map { f.trips.add(today.minusDays(1), today.plusDays(1)) }
+
+        trips.forEach { svc.onRisk(f.riskEvent(today, tripId = it), f.clock.now) }
+        gate.countDown()
+        svc.shutdown() // 대기열을 다 돌 때까지 기다린다
+
+        f.sessions.system().size shouldBe trips.size
+        f.sessions.system().map { it.status }.toSet() shouldBe setOf(ReplanStatus.DRAFT)
     }
 
     "실행기가 거절하면(종료 중) 세션을 FAILED 로 닫는다 — 열린 자리를 붙잡지 않고 실행 자리도 돌려준다" {

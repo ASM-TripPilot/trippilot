@@ -167,10 +167,15 @@ class PreparedReplanService internal constructor(
 
         private val log = LoggerFactory.getLogger(PreparedReplanService::class.java)
 
-        private fun newExecutor(): ExecutorService {
+        /**
+         * 대기열은 대기 자리가 아니라 **자리 전부**를 받는다 — 자리는 산출 작업의 finally 에서 돌아오고 일꾼이 다음 것을 꺼내는 것은
+         * 그 뒤라, 그 사이 대기열은 아직 [WAITING] 개로 차 있다. 그때 자리를 얻은 사건을 거절하면 세션이 FAILED 로 열린다.
+         * 상한은 자리([slots])가 지므로 거절은 종료 때뿐이다.
+         */
+        internal fun newExecutor(): ExecutorService {
             val seq = AtomicInteger()
             return ThreadPoolExecutor(
-                RUNNING, RUNNING, 0L, TimeUnit.MILLISECONDS, LinkedBlockingQueue(WAITING),
+                RUNNING, RUNNING, 0L, TimeUnit.MILLISECONDS, LinkedBlockingQueue(RUNNING + WAITING),
                 { r -> Thread(r, "tp-prepared-${seq.incrementAndGet()}").apply { isDaemon = true } },
                 ThreadPoolExecutor.AbortPolicy(),
             )
