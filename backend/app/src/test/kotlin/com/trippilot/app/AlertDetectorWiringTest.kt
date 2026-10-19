@@ -54,7 +54,7 @@ class AlertDetectorWiringTest : StringSpec({
         .withBean(Clock::class.java, Supplier { Clock.systemUTC() })
         .withPropertyValues(
             "trippilot.planb.situation-sweep.mode=on",
-            // 운영 yml 과 같은 목록 — 기본값(코드)도 같지만 배포 설정 그대로 조립한다.
+            // 운영 yml 과 같은 값을 리터럴로 넣는다(yml 을 읽지 않는다 — yml 값은 SituationSweepWiringTest 가 잠근다).
             "trippilot.planb.situation-sweep.observe-only=kma-warning,airkorea",
         )
 
