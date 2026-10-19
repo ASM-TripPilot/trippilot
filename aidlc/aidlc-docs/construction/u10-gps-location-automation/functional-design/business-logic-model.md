@@ -454,3 +454,7 @@ POST /trips/{tripId}/location-automation/intervals
 | **G-U10-13** | 선재 `전체-최소-스키마.dbml`의 `gps_track(polyline·distance_m·steps)`와 차이 확대(G-U5-3 승계) — `steps` 금지 · 소유 archive · 일 단위 · 세그먼트 배열 | backend 패키지 문서 — 팀 협의 |
 | **G-U10-14** | 백그라운드 태스크·지오펜스 발화·OS 강등 전이는 **jest가 원리적으로 못 본다** | 순수 판정 함수(fast-check PBT) + 6-b 실기 체크리스트(`frontend-components.md` §8) |
 | **G-U10-15** | 두 `useVisitCheck`가 있다 — `features/check-visit/model/` · `pages/live/live-itinerary/model/`(리포 실측) | 자동 기록 표시·되돌리기를 어느 훅에 붙일지 FE 착수 시 하나로 정리(`frontend-components.md` §3) |
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** G-U10-3 — 스케줄러 경로의 계정
+> 스케줄러 경로의 계정은 trip `api` 의 새 좁은 퍼사드 `TripWatchFacade` 가 진행 중 여행과 함께 돌려준다(`TripFacade` 대역 보호). 단건 소유자 조회는 `TripOwnerFacade.findOwnedPeriod(tripId)`(`backend/modules/trip/src/main/kotlin/com/trippilot/trip/api/TripOwnerFacade.kt` — 알림 구독자 선례)가 맡는다. U10 의 진행 중 판정 스케줄러도 이 경로로 계정을 얻을 수 있고, 락·파일·설정 키는 상황 감시와 분리한다.
+> → [DEC-SA-1](../../situation-awareness/functional-design/business-logic-model.md) · [BR-SA-02](../../situation-awareness/functional-design/business-rules.md)
