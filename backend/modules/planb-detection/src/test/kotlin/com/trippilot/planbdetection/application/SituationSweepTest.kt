@@ -44,6 +44,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import java.util.function.Supplier
 import java.util.stream.Stream
@@ -490,6 +491,20 @@ class SituationSweepTest : StringSpec({
         result.get().trips shouldBe 1
         result.get().skipped shouldBe 2
         forecast.calls.size shouldBe 1
+    }
+
+    "여행 처리가 Error 로 끝나면(격리 밖) 남은 여행을 시작하지 않고, 진행 중 여행을 기다린 뒤 그대로 던진다 — 락이 풀린 뒤 도는 여행이 없다" {
+        val world = World()
+        repeat(4) { world.trip() }
+        val seen = AtomicInteger()
+        val forecast = FakeDetector(SweepSource.KMA_FORECAST, answer = { if (seen.getAndIncrement() == 0) TODO("감지기 미구현(대역)") else CLEAR })
+        val sweep = world.sweep(props(), listOf(forecast), StepClock(at("12:15")))
+
+        shouldThrow<NotImplementedError> { sweep.sweep(at("12:15")) }
+
+        // 던지고 돌아온 뒤에 남은 여행이 데몬 스레드에서 판정·쓰기·푸시를 이어 가면 그건 락 밖의 회차다.
+        forecast.calls.size shouldBe 1
+        world.watches.all.shouldBeEmpty()
     }
 
     "20:58 이후에는 쓰지 않는다 — 회차가 흐르다 컷을 넘기면 감지한 여행도 쓰지 않고 그 뒤는 보지 않는다(INV-SA-5)" {

@@ -35,6 +35,8 @@ import java.time.temporal.ChronoUnit
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -51,7 +53,8 @@ import kotlin.math.ceil
  * - **쓰지 않는 경우**: 모드 dry-run(판정·요약만), 관찰 전용 출처(요약·표본 줄만), 20:58 이후(INV-SA-5).
  * - **멈추는 경우**: 예산·종료 신호(컨텍스트 닫힘)·20:58 — 여행 사이에서 멈추고 정상 반환해 락을 푼다. 못 본 여행은 `skipped` 다.
  * - **격리**: 감지기 예외는 그 (출처, 여행, 날짜)만 모름, 같은 출처가 한 회차에서 연속 3번 던지면 남은 여행은 그 출처를
- *   모름으로 둔다(회로 차단). 여행 처리 예외는 그 여행만 실패(WARN)로 세고 다음 여행을 계속한다.
+ *   모름으로 둔다(회로 차단). 여행 처리 예외는 그 여행만 실패(WARN)로 세고 다음 여행을 계속한다. Error 는 격리하지 않는다 —
+ *   남은 여행을 멈추고 진행 중 여행을 기다린 뒤 요약·ERROR 를 남기고 던진다.
  *
  * 이 빈이 [WatchingSources] 다 — 지금 감시 중인 출처를 조회 API(회수 필터·감시 상태 OFF)에 알려 준다.
  */
@@ -154,19 +157,46 @@ class SituationSweep(
             Thread(r, "planb-sweep-${seq.incrementAndGet()}").apply { isDaemon = true }
         }
         try {
-            order.map { trip -> pool.submit(Runnable { visit(trip, round) }) }.forEach { it.get() }
+            order.map { trip -> pool.submit(Runnable { guarded(trip, round) }) }.forEach { it.get() }
         } catch (e: InterruptedException) {
-            // 배포 종료 등으로 회차 스레드가 끊겼다(RES-SA-06). 시작 안 한 여행은 건너뛰고, 진행 중 여행은 마치게 둔 뒤 돌아온다 —
-            // 먼저 돌아오면 락이 풀린 뒤에도 그 여행이 쓰고, 요약이 실제와 다른 수를 말한다.
+            // 종료 단계 시한을 넘겨 회차 스레드가 끊겼다(RES-SA-06 예비 경로 — 보통은 닫힘 사건이 먼저 멈춘다). 시작 안 한 여행은
+            // 건너뛰고, 진행 중 여행은 마치게 둔 뒤 돌아온다 — 먼저 돌아오면 락이 풀린 뒤에도 그 여행이 쓰고, 요약이 실제와 다른 수를 말한다.
             round.aborted.set(true)
-            pool.shutdown()
-            runCatching { pool.awaitTermination(IN_FLIGHT_GRACE.seconds, TimeUnit.SECONDS) }
+            drain(pool)
             Thread.currentThread().interrupt()
             log.warn("상황 스윕 회차가 끊겼습니다 — 남은 여행은 다음 회차가 봅니다.")
+        } catch (e: ExecutionException) {
+            // 여행 처리가 격리(Exception) 밖의 Error 로 끝났다 — 그 스레드가 이미 회차를 멈췄다([guarded]). 진행 중 여행을 기다리고
+            // 요약을 남긴 뒤 그대로 던진다. 기다리지 않고 던지면 락이 풀린 뒤에도 남은 여행이 판정·쓰기·푸시를 이어 간다.
+            drain(pool)
+            val cause = e.cause ?: e
+            log.info(round.summary().line())
+            log.error("상황 스윕 회차가 오류로 멈췄습니다 — 남은 여행은 다음 회차가 봅니다.", cause)
+            throw cause
         } finally {
-            pool.shutdown()
+            pool.shutdownNow() // 정상 경로에서는 모든 여행이 끝난 뒤라 무해하다 — 남은 대기 작업을 실행하지 않고 버린다.
         }
         return round.summary().also { log.info(it.line()) }
+    }
+
+    /**
+     * 여행 하나 — Exception 은 [visit] 이 그 여행 안에서 격리한다. 그 밖(Error — 미구현 `TODO()`·클래스 초기화 실패·스택 넘침)이면
+     * 이 스레드에서 바로 회차를 멈춘다: 회차 스레드가 알아채기 전에 다음 여행이 시작하지 않게.
+     */
+    private fun guarded(trip: WatchedTrip, round: Round) {
+        try {
+            visit(trip, round)
+        } catch (t: Throwable) {
+            round.aborted.set(true)
+            round.failed.incrementAndGet()
+            throw t
+        }
+    }
+
+    /** 대기 중 여행은 회차 중단을 보고 바로 건너뛰고, 진행 중 여행은 상한까지 마치게 둔다. */
+    private fun drain(pool: ExecutorService) {
+        pool.shutdown()
+        runCatching { pool.awaitTermination(IN_FLIGHT_GRACE.seconds, TimeUnit.SECONDS) }
     }
 
     private fun visit(trip: WatchedTrip, round: Round) {
