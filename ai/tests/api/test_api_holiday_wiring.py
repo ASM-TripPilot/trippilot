@@ -103,6 +103,57 @@ def test_generate_여러_앵커_구간이어도_달력은_1회다() -> None:
     assert len(spy.calls) == 1
 
 
+class _SlowCalendar(_SpyCalendar):
+    """조회에 시간이 드는 달력 — 주입한 FakeClock 을 민다(실 대기 0)."""
+
+    def __init__(self, days: tuple[date, ...], clock: FakeClock, cost_ms: int) -> None:
+        super().__init__(days)
+        self.clock, self.cost_ms = clock, cost_ms
+
+    def holidays_between(self, start: date, end: date):
+        self.clock.advance(self.cost_ms)
+        return super().holidays_between(start, end)
+
+
+class _DeadlineSpy:
+    """조립 오케스트레이터가 받은 시한을 적고 그대로 넘긴다."""
+
+    def __init__(self, inner) -> None:
+        self.inner, self.deadlines = inner, []
+
+    def generate(self, request, deadline_ms, trace_id, now):
+        self.deadlines.append(deadline_ms)
+        return self.inner.generate(request, deadline_ms, trace_id, now)
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+
+def _timed_generate(request: dict, cost_ms: int) -> list[int]:
+    clock = FakeClock()
+    orch = build_orchestrator(llm=FailingLlm(), poi_db=InMemoryPoi(_NEAR), context_store=_PersonaStore(),
+                              c1_config=_C1CFG, clock=clock, trace=InMemoryTrace(),
+                              holidays=HolidaySource(enabled=True, calendar=_SlowCalendar((_D1,), clock, cost_ms)))
+    spy = _DeadlineSpy(orch._orchestrator)
+    orch._orchestrator = spy
+    with TestClient(create_app(orch)) as client:
+        assert client.post("/ai/v1/itinerary/generate", json=request).status_code == 200
+    return spy.deadlines
+
+
+def test_generate_는_달력_조회_시간도_시한에서_뺀다() -> None:
+    """재계획은 시계 원점을 조회 앞에 둔다 — 생성만 뒤에 두면 특일 API 가 느릴 때(소켓 2s) 그 시간이 예산 밖에서
+    더 걸려 BE read 여유(2s)를 넘긴다(리뷰 재현). 시한 20s · 조회 2s → 조립이 받는 시한 18s."""
+    assert _timed_generate(_request((_D1, _D2), []), 2_000) == [18_000]
+
+
+def test_generate_여러_구간의_몫도_조회_시간을_뺀_잔여로_나눈다() -> None:
+    request = _request((_D1, _D2), [])
+    request["anchors"] = [{"date": _D1.isoformat(), "lat": _ANCHOR.lat, "lng": _ANCHOR.lng},
+                          {"date": _D2.isoformat(), "lat": _ANCHOR.lat + 0.01, "lng": _ANCHOR.lng}]
+    assert _timed_generate(request, 2_000) == [9_000, 18_000]  # (20s − 2s) 의 절반, 그 뒤 남은 전부
+
+
 # ── ②·③ validate · repair ───────────────────────────────────────────
 
 
@@ -198,3 +249,16 @@ def test_편집_검증의_문제_재구성도_같은_달력을_싣는다() -> No
         is_fallback=False, solve_mode=SolveMode.OR_TOOLS, assembly_run=None)
     assert orch._edit_agent._problem_for(sol).holidays == {_D1: frozenset({"PUBLIC"})}
     assert _orchestrator(None)._edit_agent._problem_for(sol).holidays is None
+
+
+def test_편집_요청도_달력은_1회다() -> None:
+    """경계의 일정 재구성(`_reconstruct`)이 버리는 문제에도 달력을 물어 편집 한 번에 2회였다 — 특일 API 가
+    불통이면 소켓 대기도 두 번이다. 에이전트 검증이 쓰는 1회만 남는다."""
+    from tests.api.test_api_edit import _HALLASAN, _PORK, _body
+
+    spy = _SpyCalendar(())
+    with TestClient(build_dev_app(holidays=HolidaySource(enabled=True, calendar=spy))) as client:
+        response = client.post("/ai/v1/itinerary/edit", json=_body(command={
+            "op": "MOVE_SLOT", "params": {"beforePoiId": _PORK}, "affected_slots": [_HALLASAN]}))
+    assert response.json()["status"] == "APPLIED", response.text
+    assert len(spy.calls) == 1

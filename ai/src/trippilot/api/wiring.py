@@ -1851,13 +1851,16 @@ class WiredItineraryOrchestrator:
         시한은 남은 시간을 남은 날 수로 나누고, 몫이 바닥 아래면 남은 구간을 한 번에 푼다.
         """
         runs = _anchor_runs(request)
+        meta = request.request_meta
+        entered_ms = self._clock.monotonic_ms()  # 시한 원점 — 달력 조회 시간도 예산에서 빠진다(재계획과 같다)
         # 공휴일 달력 — 요청당 1회(상황 감지 H1). 구간마다 다시 묻지 않고 모든 구간 풀이가 같은 매핑을 본다.
         trip_days = [w.date for w in request.time_windows]
         holidays = self._holidays.between(min(trip_days), max(trip_days)) if trip_days else None
         if len(runs) == 1:
+            if holidays is not None and meta.deadline_ms is not None:  # 모드 off 면 종전 그대로
+                request = request.model_copy(update={"request_meta": meta.model_copy(update={
+                    "deadline_ms": max(1, meta.deadline_ms - (self._clock.monotonic_ms() - entered_ms))})})
             return self._with_findings(request, self._generate_run(request, holidays))
-        meta = request.request_meta
-        entered_ms = self._clock.monotonic_ms()
         fixed = {b.poi_id for b in request.fixed_blocks}
         outs: list[WiredOutcome] = []
         placed: list[str] = []
@@ -2117,14 +2120,15 @@ class WiredItineraryOrchestrator:
 
     def _reconstruct(
         self, payload: schemas.ItineraryPayload, meta: schemas.RequestMetaSchema,
-        *, untimed: str,
+        *, untimed: str, lookup_holidays: bool = True,
     ) -> tuple[
         ItinerarySolution, ItineraryProblem, dict[PoiId, Poi],
         tuple[WiredUnverifiedSlot, ...],
     ]:
         solution = _solution_from_payload(
             payload, ScheduleId(meta.request_id), self._tz, untimed=untimed)
-        problem = _problem_for(solution, self._tz, self._holidays)  # 공휴일 달력 — 요청당 1회(상황 감지 H1)
+        problem = _problem_for(  # 공휴일 달력 — 요청당 1회(상황 감지 H1)
+            solution, self._tz, self._holidays if lookup_holidays else None)
         ids = frozenset(s.poi_id for day in solution.days for s in day.slots)
         # 미등록 POI는 인덱스에 없다 → HC1·HC2 미적용("정보 없음은 막지 않는다", c2 규칙).
         # 규칙은 그대로 두되 **무엇이 빠졌는지는 값으로 들고 나간다**(TRIP-537, INV-4) —
@@ -3681,6 +3685,7 @@ class WiredItineraryOrchestrator:
         solution, _, poi_index, _ = self._reconstruct(
             request.itinerary, meta,
             untimed="reject",  # 편집 결과가 곧 응답 일정 — 건너뛰면 저장 슬롯 소실
+            lookup_holidays=False,  # 이 문제는 버린다 — 달력은 에이전트 검증(`_problem_for`)이 1회 묻는다
         )
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
