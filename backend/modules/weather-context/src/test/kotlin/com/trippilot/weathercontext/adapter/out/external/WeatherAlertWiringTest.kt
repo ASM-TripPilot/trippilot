@@ -1,5 +1,6 @@
 package com.trippilot.weathercontext.adapter.out.external
 
+import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
@@ -98,6 +99,25 @@ class WeatherAlertWiringTest : StringSpec({
         }
     }
 
+    /**
+     * 인코딩 키(`%2B` · `%3D`)를 넣으면 질의에서 한 번 더 인코딩돼(`%252B`) 매 회차 게이트웨이 거절(403·30)이고, 남는 것은 원인 코드뿐이라
+     * 키 미등록처럼 보인다(anti-patterns — 실측으로 겪은 실수). 기동에서 env 이름으로 짚는다 — 값은 싣지 않는다.
+     */
+    "PUBLIC_DATA_API_KEY 에 '%' 가 있으면 기동 WARN 한 줄 — env 이름만, 값은 싣지 않는다" {
+        val warns = configurationWarns {
+            runner().withPropertyValues(
+                "trippilot.weather.mode=kma", "trippilot.weather.service-key=weather-secret", "trippilot.weather.public-data-key=pub%2Bsecret%3D%3D",
+            ).run { it.getBean(WarningStatusPort::class.java) }
+            runner().withPropertyValues(
+                "trippilot.weather.mode=kma", "trippilot.weather.service-key=weather-secret", "trippilot.weather.public-data-key=pub+secret==",
+            ).run { it.getBean(WarningStatusPort::class.java) }
+        }
+
+        warns.size shouldBe 1
+        warns.single() shouldContain "PUBLIC_DATA_API_KEY"
+        warns.single() shouldNotContain "secret"
+    }
+
     "기본 원천 주소 — 기상특보 조회서비스 · 에어코리아 대기오염정보" {
         val properties = KmaWeatherProperties()
         properties.warningBaseUrl shouldBe "https://apis.data.go.kr/1360000/WthrWrnInfoService"
@@ -124,7 +144,14 @@ private fun withQueryServer(block: (baseUrl: String, queries: List<String>) -> U
 }
 
 /** 설정 클래스의 INFO 기동 줄. */
-private fun configurationLogs(block: () -> Unit): List<String> {
+private fun configurationLogs(block: () -> Unit): List<String> =
+    configurationEvents(block).filter { it.level == Level.INFO }.map { it.formattedMessage }
+
+/** 설정 클래스의 WARN 줄. */
+private fun configurationWarns(block: () -> Unit): List<String> =
+    configurationEvents(block).filter { it.level == Level.WARN }.map { it.formattedMessage }
+
+private fun configurationEvents(block: () -> Unit): List<ILoggingEvent> {
     val logger = LoggerFactory.getLogger(WeatherAlertConfiguration::class.java) as Logger
     val appender = ListAppender<ILoggingEvent>().apply { start() }
     logger.addAppender(appender)
@@ -133,5 +160,5 @@ private fun configurationLogs(block: () -> Unit): List<String> {
     } finally {
         logger.detachAppender(appender)
     }
-    return appender.list.map { it.formattedMessage }
+    return appender.list.toList()
 }

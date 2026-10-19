@@ -30,6 +30,14 @@ class WeatherAlertConfiguration(private val properties: KmaWeatherProperties) {
     init {
         val source = if (properties.publicDataKey.isNotBlank()) "PUBLIC_DATA_API_KEY" else "WEATHER_API(PUBLIC_DATA_API_KEY 비어 대체)"
         log.info("기상특보·대기질 조회 = 실 공공데이터포털 · 키={}", source)
+        // 인코딩 키는 질의에서 한 번 더 인코딩돼(%252B) 매 회차 게이트웨이 거절(403·30)이고 원인이 안 보인다 — 기동에서 한 번 짚는다.
+        // WEATHER_API 쪽은 KmaWeatherConfiguration 이 같은 검사를 한다.
+        if ('%' in properties.publicDataKey) {
+            log.warn(
+                "PUBLIC_DATA_API_KEY 에 '%' 가 있습니다 — **인코딩 키**로 보입니다. 한 번 더 인코딩돼 기상특보·대기질 조회가 게이트웨이 거절(403·30)로 " +
+                    "끝납니다. 포털의 **일반 인증키(Decoding)** 를 넣으십시오.",
+            )
+        }
     }
 
     @Bean
