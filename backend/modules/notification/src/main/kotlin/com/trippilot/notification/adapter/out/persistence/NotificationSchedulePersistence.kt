@@ -48,6 +48,12 @@ class NotificationScheduleRepositoryAdapter(
      * 삭제 대상을 **미발화·미취소로 좁히는 것이 핵심**이다. 이미 발화한 행까지 지우면 같은 이벤트가 두 번
      * 배달됐을 때(at-least-once) 보냈던 알림을 또 예약하게 된다.
      */
+    override fun lockTrip(tripId: UUID) {
+        // 트랜잭션 범위 권고 잠금 — 커밋·롤백에 풀린다. (분류, 여행) 두 칸 꼴이라 다른 권고 잠금과 안 섞인다.
+        // hashCode 충돌은 서로 다른 여행을 잠깐 줄 세울 뿐이다(정합성 영향 없음).
+        jdbc.queryForList("SELECT pg_advisory_xact_lock(?, ?)", LOCK_CLASS_REMINDER_RELOAD, tripId.hashCode())
+    }
+
     override fun replacePending(tripId: UUID, schedules: List<NotificationSchedule>) {
         jdbc.update(
             "DELETE FROM notification_schedule WHERE trip_id = ? AND fired_at IS NULL AND canceled_at IS NULL",
@@ -128,3 +134,6 @@ class NotificationScheduleRepositoryAdapter(
         body = getString("body"),
     )
 }
+
+/** 권고 잠금 분류 칸 — 알림 예약 적재(reload) 전용. 다른 권고 잠금과 (분류, 키) 로 갈린다. */
+private const val LOCK_CLASS_REMINDER_RELOAD = 0x4E53

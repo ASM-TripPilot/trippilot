@@ -117,6 +117,79 @@ def test_non_transit_modes_are_refused_without_a_call(mode):
     assert http.calls == []
 
 
+# ── ②′ 일 한도 아끼기 (2026-10-19) ─────────────────────────────────
+
+
+def test_same_leg_is_called_once_and_reused():
+    http = FakeHttp(_payload(47, 31250))
+    odsay = OdsayTransitAdapter(http, "k")
+
+    first = odsay.measure(_FROM, _TO, TransportMode.PUBLIC)
+    second = odsay.measure(_FROM, _TO, TransportMode.PUBLIC)
+
+    assert first == second
+    assert len(http.calls) == 1
+
+
+def test_reverse_direction_is_a_different_leg():
+    http = FakeHttp(_payload(47, 31250))
+    odsay = OdsayTransitAdapter(http, "k")
+
+    odsay.measure(_FROM, _TO, TransportMode.PUBLIC)
+    odsay.measure(_TO, _FROM, TransportMode.PUBLIC)
+
+    assert len(http.calls) == 2  # 대중교통은 방향마다 노선이 다르다
+
+
+def test_failures_are_not_reused():
+    http = FakeHttp(error=TimeoutError("timed out"))
+    odsay = OdsayTransitAdapter(http, "k")
+
+    for _ in range(2):
+        with pytest.raises(TravelTimeError):
+            odsay.measure(_FROM, _TO, TransportMode.PUBLIC)
+
+    assert len(http.calls) == 2
+
+
+def test_legs_within_700m_are_refused_without_a_call():
+    http = FakeHttp(_payload(5, 600))
+    near = GeoPoint(_FROM.lat + 0.004, _FROM.lng)  # 약 445m
+
+    with pytest.raises(TravelTimeError) as exc:
+        OdsayTransitAdapter(http, "k").measure(_FROM, near, TransportMode.PUBLIC)
+
+    assert http.calls == []
+    assert exc.value.__cause__.code == "-98"  # ODsay 가 낼 오류와 같게 — 체인 경고·폴백이 그대로다
+
+
+@pytest.mark.parametrize("quota", [
+    {"error": {"code": "429", "msg": "일일 호출 한도 초과"}},
+    {"error": [{"code": 429, "message": "Too Many Requests"}]},
+])
+def test_quota_exhaustion_pauses_calls_until_midnight_kst(quota):
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    now = [datetime(2026, 10, 19, 11, 57, tzinfo=ZoneInfo("Asia/Seoul"))]
+    http = FakeHttp(quota)
+    odsay = OdsayTransitAdapter(http, "k", now=lambda: now[0])
+    other = GeoPoint(_TO.lat + 0.05, _TO.lng)
+
+    with pytest.raises(TravelTimeError):
+        odsay.measure(_FROM, _TO, TransportMode.PUBLIC)
+    now[0] += timedelta(hours=12)  # 23:57 — 아직 같은 날
+    with pytest.raises(TravelTimeError) as exc:
+        odsay.measure(_FROM, other, TransportMode.PUBLIC)
+    assert len(http.calls) == 1, "한도 소진 뒤에도 불렀다"
+    assert exc.value.__cause__.code == "429"
+
+    now[0] += timedelta(minutes=4)  # 00:01 — 한도가 풀린 다음 날
+    with pytest.raises(TravelTimeError):
+        odsay.measure(_FROM, other, TransportMode.PUBLIC)
+    assert len(http.calls) == 2
+
+
 # ── ③ 수단별 1차 ─────────────────────────────────────────────────────
 
 

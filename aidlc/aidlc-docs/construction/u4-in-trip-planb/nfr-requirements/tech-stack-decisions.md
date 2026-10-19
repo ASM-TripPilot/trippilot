@@ -85,6 +85,10 @@ U3가 이미 `markers[]`·`polyline[]`·`center` 갱신·`MARKER_TAP`을 요구�
 
 > DEC-U4-6의 "트리거 평가용 서버 스케줄러 없음"과 모순되지 않는다 — **평가는 클라 요청에 응답해서 하고**, 스케줄러는 **정리 작업에만** 쓴다.
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** 델타 5 — 평가용 스케줄 잡
+> 평가용 스케줄 잡이 하나 생긴다(DEC-U4-6 개정 블록). 새 라이브러리·큐·워커는 없다: 기존 `@EnableScheduling` + ShedLock(락 이름은 U10 `DELAY` 와 분리) + 스케줄러 풀 4. 새 외부 의존은 공공데이터 2종(기상특보·대기질, 서비스 키 기본값 `WEATHER_API`)과 AI 특일정보이고 새 AWS 자원은 없다. 스위치는 backend 4 + AI 1 이다.
+> → [DEC-SA-1·8](../../situation-awareness/functional-design/business-logic-model.md) · [SA tech-stack-decisions](../../situation-awareness/nfr-requirements/tech-stack-decisions.md)
+
 ### 델타 6 — backend 신규 모듈 3 + 마이그레이션
 
 | 항목 | 내용 |

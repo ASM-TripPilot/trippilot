@@ -32,6 +32,10 @@
 > - **DEC-U4-6** "앱 꺼짐 = 지오펜스 wake 1회 판정 · 서버 스케줄러 없음"은 **폐기**한다. wake 판정은 기기 좌표를 서버로 보내야 성립하는데 U10 DEC-U10-8(지오펜스 판정은 기기에서, 서버엔 결과만 — Q11=A)이 그것을 막는다. 대신 `DELAY`는 **서버가 방문 체크 시각만으로 파생**하고, 진행 중 체류 초과·이동 지연은 **서버 스케줄러**가 판정한다 — 단 자동 기록이 무장된 여행에만(U10 DEC-U10-9 · BR-U10-23~28). "클라 신호 수집 + 서버 판정" 중 **서버 판정 소유(C9)는 그대로**다.
 > - **DEC-U4-7** "연속 위치 추적 없음 · 앱을 켜 둔 구간만"은 **개정**한다(Q3=B 사용자 선택): OS '항상 허용' + 정확한 위치 + 앱 위치 동의(L2·L3) + 여행 날짜 구간 안 + 기능 플래그 ON일 때 **백그라운드 저전력 연속 기록**을 한다. 원시 좌표는 **기기 밖으로 나가지 않고** 하루치 다운샘플 폴리라인 + 거리만 서버(`archive` `actual_route_day`)에 올린다(DEC-U10-3·4). when-in-use 사용자의 포그라운드 구간 경로는 **기록하지 않는다**(Q3=B 문면). 근거: `construction/u10-gps-location-automation/functional-design/business-logic-model.md` §1·§2.
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** DEC-U4-6 — 서버 감시 스윕을 날씨·장소·여행 전날(D-1)로 넓힌다(원문 보존)
+> U10 이 `DELAY` 에 대해 연 서버 스케줄러 옆에 같은 모듈의 상황 감시 스윕(KST 매시 :15 + 20:40 보충, 밤 없음, 락 분리)이 선다. 판정 소유(C9)와 `DELAY` 의 U10 소관은 그대로다. AI 설계(`ai/aidlc-docs/inception/design-artifacts/ai-architecture.md` §6.2 — 날씨 서버 폴링·휴무 아침 배치)와 감지 방식이 다시 맞지만, 그 표의 30분·시간당 2회/하루 8회는 근거로 쓰지 않는다.
+> → [DEC-SA-1·7](../../situation-awareness/functional-design/business-logic-model.md) · [BR-SA-01](../../situation-awareness/functional-design/business-rules.md)
+
 ---
 
 ## 2. 트리거 판정 파이프라인 (C9 · US-PLANB-02)
@@ -57,6 +61,10 @@
 
 **`i09 감지된 변화`는 판정 결과의 열람 화면**이다 — 감시 항목 3종(날씨·이동 지연·영업·휴무) 각각의 최신 평가 상태(`활성`/`정상`)를 보여준다. `MANUAL`은 사용자가 만드는 것이라 감시 목록에 없다.
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** §2 — 스윕 경로
+> 파이프라인 앞에 스윕 경로가 선다: 스케줄러 → 대상 여행 → 감지기(계약 하나, 저장·이벤트 없음, 결과 = 확인함 | 모름) → 판정 `reconcile`(여행 1개 = 트랜잭션 1개 — 만료·해제·발화·감시 상태·알림 사건 ≤ 1) → 아웃박스. 쓰기 경로는 `reconcile` 하나이고, 날씨 확인·U10 의 `evaluate` 도 같은 수명 규칙을 탄다. "외부 API 실패 = 무발화"는 무해제까지 넓히고, `i09` 감시 항목은 트리거 목록 응답의 감시 상태(확인함·확인 불가·꺼짐)가 맡는다.
+> → [DEC-SA-2](../../situation-awareness/functional-design/business-logic-model.md) · [BR-SA-05~08·13](../../situation-awareness/functional-design/business-rules.md) · [INV-SA-2·3](../../situation-awareness/functional-design/domain-entities.md)
+
 ### 2.1 신호원 매핑
 
 | `TriggerKind` | 신호원 | 소유 | 실패 시 |
@@ -67,6 +75,12 @@
 | `MANUAL` | 사용자가 `i01` FAB·`i08` 칩·`i10` 진입 | — | — |
 
 > **G-U4-2**: 기상 특보/강수확률 임계(60%+)와 이동 지연 임계(기본 15분)는 인셉션 스토리 값이다. ai `TriggerParams.payload`가 자유 dict이므로 **임계 판정은 백엔드 C9가 소유**한다 — ai는 임계를 모른다. 임계값 튜닝 지점을 설정으로 뺄지는 NFR 단계 몫.
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** §2.1 신호원 · G-U4-2
+> - **WEATHER**: 출처별 감지기 셋 — 기상청 단기예보(격자 시간별)·기상특보현황·에어코리아 대기질 예보. 원천 조회는 C11, 판정은 C9 다. 특보·대기질은 키가 통하지 않으면 그 감지기만 모름이고, 관찰 전용 목록에 든 채 출발한다. → [BR-SA-04·15·16](../../situation-awareness/functional-design/business-rules.md)
+> - **CLOSURE**: AI validate 의 HC1(그 날 하루 재검증, LLM 0회)과 place-data 폐업 상태. 영업시간 원문 해석은 AI 한 곳이고 `LOST`·지도 `NOT_FOUND` 는 폐업 근거가 아니다. 공휴일 휴무는 AI 특일 달력으로 판정한다. → [BR-SA-17](../../situation-awareness/functional-design/business-rules.md)
+> - **실패 시**: "무발화 · `i09` 확인 불가"는 출처별 무발화·무해제 + 감시 상태 '확인 불가'로 읽는다. → [INV-SA-2](../../situation-awareness/functional-design/domain-entities.md)
+> - **G-U4-2**: 임계는 C9 소유이고 발화·해제 두 단이다(이력 현상). 강수 발화 60%(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/application/WeatherTriggerService.kt:93`)는 유지하고 AI 의 80(`ai/src/trippilot/providers/weather.py:38` — 다른 층)과 맞추지 않는다. 임계를 C9 상수로 두는 결정은 U2 BR-U2-15(임계 하드코딩 금지 — 필요하면 설정값)와 어긋나 정본 승인 때 함께 정한다. → [BR-SA-15](../../situation-awareness/functional-design/business-rules.md) · [DEC-SA-2](../../situation-awareness/functional-design/business-logic-model.md)
 
 ---
 
@@ -100,6 +114,10 @@
 ```
 
 **확정 전에는 아무것도 바뀌지 않는다.** `i13`·`i14`는 초안이고, 원 일정에 반영되는 지점은 `i18`의 [확정] 하나뿐이다(US-PLANB-08 '취소=원상복구'가 성립하는 근거).
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** §3 — 자동 진입의 준비된 대안 분기
+> 자동 진입(알림 탭·알림함·허브 알약)은 진입 게이트를 먼저 지난다. 게이트는 트리거 상세와 그 트리거 날짜의 준비된 대안을 함께 보고 재계획안·대안 없음(i06 · 옛 i13·i16), 계산 중(i05 · 옛 i12), 허브 안내, 요청 시트(i04 · 옛 i10 — 대상 일자 = 트리거 날짜) 중 하나로 보낸다. 준비된 대안은 C10 이 `planb.PlanBTriggered` 를 구독해 SYSTEM 세션으로 미리 산출한 초안이다 — 확정 전 무변경은 그대로이고 낡은 SYSTEM 초안은 적용하지 않는다.
+> → [DEC-SA-4](../../situation-awareness/functional-design/business-logic-model.md) · [BR-SA-18·19·23](../../situation-awareness/functional-design/business-rules.md) · [INV-SA-1·7](../../situation-awareness/functional-design/domain-entities.md)
 
 ### 3.1 AI 경계 — `replan` (DEC-U4-5)
 
@@ -268,3 +286,7 @@ i01 여행 중 일정 (일정 | 지도 세그먼트)
 > - **서버가 지키는 경계**(`ReplanSessionService` — 일자 판정은 `resolveTargetDate`, 기준점은 세션 시작부의 `OriginResolver` 호출): 지난 날 · 여행 기간 밖 · 그 날 일정이 아직 없음(부분 생성) → 409. 오늘이 아닌 날 + `PARTIAL_SLOTS` → 400 — 그 날의 '지금'이 없어 `지금 이후`가 성립하지 않는다. 오늘이 아닌 날에는 요청 위치·마지막 방문 좌표를 기준점으로 쓰지 않고 §5 사다리의 숙소 단으로 내려간다.
 > - **앱이 한 것**(TRIP-1195): 날짜를 고르는 입력을 새로 두지 않았다. **허브가 보고 있는 일차**가 오늘 이후의 다른 날이면 그 날짜로 i10 을 열고(`LiveItineraryPage` → `/planb?targetDate=`), 범위 칩을 `{N}일차 전체` 하나로 줄인다(`replanScopeOptions` — 일차를 모르면 `이 날 전체`) — `지금 이후` 칩은 그 날 나오지 않는다. 지난 일차와 여행 시작 전에는 AI 재계획 진입 자체가 없다. 재계획안 페이지의 **대안 없음** 얼굴(i16)에는, 오늘 세션이고 내일이 일정에 있을 때만 [내일 일정 다시 짜기]가 뜬다(`targetDate`=내일 · `FULL_DAY`, `PlanbDraftPage`).
 > - **G-U4-8** "`1일차` 칩은 불필요(범위가 오늘 단위)"는 근거가 사라졌다 — 일차 표시는 이제 어느 날을 다시 짜는지 알리는 값이다. 남은 것은 위 앱 동작을 **디자인(Figma)이 추인**하는 일이다.
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** G-U4-2 — 임계 소유·설정화
+> 소유는 C9 로 닫혔고, 설정 노출 여부는 §2.1 개정 블록이 다룬다(C9 상수 — U2 BR-U2-15 와의 차이는 정본 승인 때 정한다).
+> → [BR-SA-15](../../situation-awareness/functional-design/business-rules.md) · [G-SA-14](../../situation-awareness/functional-design/business-logic-model.md)
