@@ -2749,13 +2749,16 @@ class WiredItineraryOrchestrator:
         """
         meta = request.request_meta
         hints = outcome.repair_hints
+        own = [p for p in missed if p not in nl_ids and p not in night]
+        if not own:  # 이름으로 집은 곳·클럽만 빠졌다 — 다른 곳을 골라도 그 요청은 안 채워진다
+            notes.append("llm_repair_skipped: not_actionable")
+            return outcome, composed
         if hints is None or ctx is None or self._composer is None:
             notes.append("llm_repair_skipped: no_hints")
             return outcome, composed
         inp, excluded = ctx
-        drop = [p for p in missed if hints.why.get(p) in composition.REPAIR_LABELS
-                and p not in nl_ids and p not in night]
-        if not drop:  # 틈은 있는데 솔버가 멈춘 것(fits)·이름으로 집은 곳·클럽은 다른 곳을 골라도 안 낫다
+        drop = [p for p in own if hints.why.get(p) in composition.REPAIR_LABELS]
+        if not drop:  # 틈은 있는데 솔버가 멈춘 것(fits)은 다른 곳을 골라도 안 낫다
             notes.append("llm_repair_skipped: not_actionable")
             return outcome, composed
         rem = budget.total_ms - (self._clock.monotonic_ms() - t0) - budget.c2_reserved_ms
