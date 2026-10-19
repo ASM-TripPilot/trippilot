@@ -54,6 +54,16 @@ class ChartTests(unittest.TestCase):
         flag = ai["args"].index("--timeout-graceful-shutdown")
         self.assertEqual(ai["args"][flag + 1], "630")
 
+    def test_ai_workers_are_not_killed_while_still_starting(self):
+        """기본 5초 핑 시한이면 CPU 가 밀린 노드에서 기동 중인 작업 프로세스가 죽고 다시 뜨기를 되풀이한다(10-18 개발 롤아웃 12회 →
+        스모크 기억 삭제 500). 여러 작업 프로세스일 때만 감독자가 있으므로 차트 args 에만 둔다."""
+        for environment in ("dev", "prd"):
+            ai = next(item for item in render(environment)
+                      if item["kind"] == "Deployment" and item["metadata"]["name"] == "ai")
+            args = ai["spec"]["template"]["spec"]["containers"][0]["args"]
+            self.assertIn("--workers", args)
+            self.assertEqual(args[args.index("--timeout-worker-healthcheck") + 1], "30")
+
     def test_ai_disables_uvicorn_access_log_everywhere_it_is_launched(self):
         """메모리 경계(`DELETE|GET /ai/v1/dialogue/memory?account_ref=…`)는 계정 참조를 **쿼리 문자열**로 받는다. uvicorn 기본
         access log 는 쿼리까지 포함한 request_line 을 stdout 에 찍어 CloudWatch 로 나간다(SEC-U8-06·BR-AO-08③ 위반).
@@ -375,6 +385,14 @@ class DevTargetValuesTests(unittest.TestCase):
                 self.assertEqual(deployment["spec"]["replicas"], 1)
                 for container in deployment["spec"]["template"]["spec"]["containers"]:
                     self.assertIn("memory", container["resources"]["limits"])
+
+    def test_dev_target_ai_reserves_one_core(self):
+        """개발 대상 AI 만 CPU 요청 1코어(10-19) — 200m 에선 붐비는 노드에서 조립이 진척 0 으로 멈췄다. 메모리 요청·상한은
+        기본값을 그대로 물려받아야 한다(요청만 덮어도 limits 가 빠지지 않는지)."""
+        deployments = {item["metadata"]["name"]: item for item in render("dev-target") if item["kind"] == "Deployment"}
+        resources = deployments["ai"]["spec"]["template"]["spec"]["containers"][0]["resources"]
+        self.assertEqual(resources["requests"], {"cpu": "1", "memory": "640Mi"})
+        self.assertEqual(resources["limits"], {"cpu": "2", "memory": "2Gi"})
 
     def test_dev_target_embedding_follows_the_deploy_input_with_one_replica(self):
         """개발 서버도 Plan-B KB 를 쓴다(10-15) — 켜면 임베딩 1개, 드레인을 막는 PDB·HPA 는 여전히 없다."""

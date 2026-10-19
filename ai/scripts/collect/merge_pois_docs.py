@@ -25,17 +25,33 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from collect_pois import load_closed_refs  # noqa: E402  (같은 디렉토리 — refetch_intro 와 같은 방식)
+from collect_localdata import _MIGRATION, load_regions  # noqa: E402  (같은 디렉토리)
+from collect_pois import load_closed_refs  # noqa: E402  (같은 디렉토리)
 from trippilot.domain.poi import TRENDING_TAG  # noqa: E402
 from trippilot.poi_curation.sourcing.mapping import (  # noqa: E402
     non_travel_reason,
     parse_opening_hours_raw,
 )
+from trippilot.poi_curation.sourcing.overture_address import expand_sido, sido_abbreviations  # noqa: E402
 from trippilot.poi_curation.sourcing.overture import (  # noqa: E402
     NIGHTLIFE_DETAIL,
     NIGHTLIFE_TAG,
     nightlife_tags,
 )
+
+
+def dumps_doc(doc: dict) -> str:
+    """공유본 직렬화 — 머리는 들여쓰기, **제안은 한 행에 한 줄**(압축 JSON).
+
+    들여쓰기 2칸이면 72MB 였다(2026-10-18, 57,608행). GitHub 는 한 파일 100MB 를 거부하는데,
+    TourAPI 조회를 법정동 코드로 바꾸면 관광지가 지역별 1.7~2.9배로 늘어(같은 날 실측) 그 선을 넘는다.
+    한 행에 한 줄이면 46MB 이고 diff 는 여전히 행 단위로 읽힌다. 읽는 쪽은 전부 `json.load` 라 무관하다.
+    """
+    head = {k: v for k, v in doc.items() if k != "proposals"}
+    rows = ",\n".join("    " + json.dumps(p, ensure_ascii=False, separators=(",", ":"))
+                      for p in doc.get("proposals", ()))
+    return (json.dumps(head, ensure_ascii=False, indent=2)[:-2]
+            + ',\n  "proposals": [\n' + rows + "\n  ]\n}\n")
 
 
 def merge(docs: list[dict], *, allow_mixed: bool = False) -> dict:
@@ -166,6 +182,26 @@ def drop_non_travel(proposals: list[dict]) -> dict[str, int]:
 
 _VERDICTS = Path(__file__).resolve().parents[2] / "data" / "overture_nonfood_verdicts.json"
 _TRENDING = Path(__file__).resolve().parents[2] / "data" / "curated_trending_refs.json"
+
+
+def expand_sido_abbrev(proposals: list[dict], abbrev: dict[str, str] | None = None) -> int:
+    """주소 첫 낱말이 시도 **약칭**이면 정식 이름으로 편다. 고친 건수를 돌려준다.
+
+    백엔드 `RegionResolver` 는 주소 첫 낱말이 카탈로그의 시도 이름과 **정확히** 같아야 지역 코드를
+    붙인다. TourAPI 는 일부 주소를 약칭으로 준다 — 법정동 목록으로 바꾼 첫 수집(#1352)에서
+    `강원 속초시 …`·`충북 단양군 …` 3건이 들어와 백엔드 실문서 IT(`regionUnresolved == 0`)가 깨졌다.
+    약칭 표는 카탈로그에서 유도한다(`sido_abbreviations` — Overture 주소 복원과 같은 표).
+    """
+    abbrev = abbrev if abbrev is not None else sido_abbreviations(
+        load_regions(_MIGRATION / "R__seed_region_catalog.sql"))
+    n = 0
+    for p in proposals:
+        prov = p.get("provenance") or {}
+        addr = prov.get("address")
+        if addr and (full := expand_sido(addr, abbrev)) != addr:
+            prov["address"] = full
+            n += 1
+    return n
 
 
 def mark_trending(proposals: list[dict], path: Path = _TRENDING) -> int:
@@ -342,9 +378,11 @@ def main(argv: list[str]) -> int:
         print(f"[merge] 폐업 제거 — {closed}건", file=sys.stderr)
         out["stats"]["unique_proposals"] = len(out["proposals"])
         out["stats"]["closed_dropped"] = closed
+    if (expanded := expand_sido_abbrev(out["proposals"])):
+        print(f"[merge] 주소 시도 약칭 → 정식 이름 — {expanded}건", file=sys.stderr)
     if (trending := mark_trending(out["proposals"])):
         print(f"[merge] 요즘 인기 표지 — 기존 행 {trending}건", file=sys.stderr)
-    text = json.dumps(out, ensure_ascii=False, indent=2)
+    text = dumps_doc(out)
     if args.output:
         Path(args.output).write_text(text, encoding="utf-8")
     else:

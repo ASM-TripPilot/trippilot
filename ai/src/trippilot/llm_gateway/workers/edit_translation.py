@@ -32,7 +32,10 @@ from trippilot.domain.poi import Poi
 _OP_GUIDE: dict[EditOp, str] = {
     EditOp.ADD_SLOT: "후보 1곳을 그 날에 추가 — params.targetPoiId=후보 poiId, affectedSlots=[]",
     EditOp.REMOVE_SLOT: "기존 슬롯 삭제 — affectedSlots=[뺄 슬롯 poiId]",
-    EditOp.MOVE_SLOT: "기존 슬롯 1곳의 순서 이동 — affectedSlots=[옮길 슬롯 poiId]",
+    EditOp.MOVE_SLOT: (
+        "기존 슬롯 1곳의 순서 이동 — affectedSlots=[옮길 슬롯 poiId], 그리고 "
+        "params.afterPoiId=옮긴 뒤 바로 앞에 올 현재 슬롯 poiId 또는 "
+        "params.beforePoiId=바로 뒤에 올 현재 슬롯 poiId 중 정확히 하나"),
     EditOp.REPLACE_SLOT: (
         "기존 슬롯 1곳을 후보로 교체 — affectedSlots=[바꿀 슬롯 poiId], "
         "params.targetPoiId=후보 poiId"),

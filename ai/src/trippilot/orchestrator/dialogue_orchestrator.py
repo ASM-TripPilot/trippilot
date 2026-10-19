@@ -84,6 +84,7 @@ from trippilot.orchestrator.dialogue_memory import (
     compress_fallback,
     due,
     expires_at_for,
+    is_turn_fragment,
 )
 from trippilot.orchestrator.intent_router import normalize
 from trippilot.orchestrator.shadow_probe import ShadowIntentProbe
@@ -325,24 +326,26 @@ def _memory_lines(current: DialogueMemory | None, others: Sequence[DialogueMemor
     return tuple(lines)
 
 
-def _slot_times(value: object) -> frozenset[tuple[str, str]]:
-    """Facts 안의 (장소 이름, 계획 시각) 짝 — `{"name", "start_at"}` 를 가진 dict 전부(일정 슬롯·다음 장소)."""
-    found: set[tuple[str, str]] = set()
+def _slot_times(value: object) -> tuple[tuple[str | None, str], ...]:
+    """Facts 안의 (장소 이름, 계획 시각) 짝 — `{"name", "start_at"}` 를 가진 dict 전부(일정 슬롯·다음 장소), 스냅샷 순서대로.
+    같은 짝은 처음 자리 하나만 둔다(다음 장소는 일정 슬롯과 같은 짝이다). 이름 없는 슬롯(BE 가 nameKo null 로 보낼 수 있다)도
+    순서에는 들어야 하므로 이름 None 으로 담는다 — 짝 검사는 이름 있는 것만 쓴다."""
+    found: list[tuple[str | None, str]] = []
     if isinstance(value, Mapping):
-        if isinstance(value.get("name"), str) and isinstance(value.get("start_at"), str):
-            found.add((value["name"], value["start_at"]))
+        if "name" in value and isinstance(value.get("start_at"), str):
+            found.append((value["name"] if isinstance(value["name"], str) else None, value["start_at"]))
         for item in value.values():
-            found |= _slot_times(item)
+            found += _slot_times(item)
     elif isinstance(value, (list, tuple)):
         for item in value:
-            found |= _slot_times(item)
-    return frozenset(found)
+            found += _slot_times(item)
+    return tuple(dict.fromkeys(found))
 
 
 _SEGMENT = re.compile(r"[,，·/;→\n]|\s그리고\s")
 
 
-def _misplaced_time(text: str, pairs: frozenset[tuple[str, str]]) -> bool:
+def _misplaced_time(text: str, pairs: tuple[tuple[str | None, str], ...]) -> bool:
     """구획(쉼표·줄 등) 안에서 시각에 가장 가까운 장소 이름이 Facts 에서 그 시각과 짝이 아니면 참. 이름이 없으면 판정하지 않는다."""
     names = sorted({name for name, _ in pairs if name}, key=len, reverse=True)
     for segment in _SEGMENT.split(text):
@@ -361,6 +364,28 @@ def _misplaced_time(text: str, pairs: frozenset[tuple[str, str]]) -> bool:
             near = [(t_start - e if e <= t_start else s - t_end, n) for s, e, n in spots if e <= t_start or s >= t_end]
             if near and (min(near)[1], hm) not in pairs:
                 return True
+    return False
+
+
+def _out_of_order(text: str, pairs: tuple[tuple[str | None, str], ...]) -> bool:
+    """장소 이름 없이 떠 있는 슬롯 시각끼리 스냅샷 순서를 거스르면 참 — "12:00에 첫 일정, 09:00에 다음 일정"은 구획에 이름이
+    없어 `_misplaced_time` 이 못 본다(2026-10-18 2차 리뷰). 이름이 있는 구획의 시각은 짝 검사가 맞췄으므로 언급 순서를 따지지
+    않는다 — "저녁은 18:00 흑돼지거리, 점심은 12:00 해녀의집" 같은 맞는 답을 막으면 날짜·개수뿐인 일정 템플릿으로 답을 잃는다.
+    ponytail: 날짜와 서수어는 보지 않는다 — 여러 날 Facts 의 날 넘김, 이름 붙은 시각 뒤의 떠 있는 시각("해녀의집 12:00 이 첫
+    일정, 09:00 이 다음"), 시각 하나뿐인 서수 오류("첫 일정은 12:00")는 못 가린다. 가리려면 서수·날짜 표기 인식이 먼저다."""
+    names = [name for name, _ in pairs if name]
+    order = [hm for _, hm in pairs]
+    at = 0
+    for segment in _SEGMENT.split(text):
+        if any(name in segment for name in names):
+            continue  # 이름에 붙은 시각 — 짝 검사 몫
+        for _, _, hm in clock_spans(segment):
+            if hm not in order:
+                continue  # 영업시간처럼 슬롯이 아닌 Facts 시각
+            nxt = next((i for i in range(at, len(order)) if order[i] == hm), None)
+            if nxt is None:
+                return True
+            at = nxt
     return False
 
 
@@ -630,17 +655,21 @@ class DialogueOrchestrator:
         draft = result.value
         if result.is_fallback or draft is None:  # FallbackEvent 는 게이트웨이가 냈다
             return DialogueAnswer.from_facts(facts)
-        # INV-2 — 문장 속 시각은 Facts 값이어야 하고, 장소와 붙어 있으면 그 장소의 시각이어야 한다(시각은 다 맞는데 장소끼리
-        # 바꿔 붙인 "해녀의집 15:00, 카페 모카 12:00" 도 순서·시각 위반이다). 대조는 Facts 로만 한다 — 프롬프트에는 발화
-        # "16:30에 가도 돼?" 가 들어간다(2026-10-18 리뷰).
+        # INV-2 — 문장 속 시각은 Facts 값이어야 하고, 장소와 붙어 있으면 그 장소의 시각이어야 하고, 이름 없이 떠 있는 시각끼리는
+        # 스냅샷 순서를 따라야 한다(시각은 다 맞는데 장소끼리 바꿔 붙인 "해녀의집 15:00, 카페 모카 12:00" 도, 이름 없이 "12:00 첫
+        # 일정, 09:00 다음 일정" 도 순서·시각 위반이다). 대조는 Facts 로만 한다 — 프롬프트에는 발화 "16:30에 가도 돼?" 가
+        # 들어간다(2026-10-18 리뷰 1·2차). 순서는 본문·각주를 이어서 본다 — 같은 역순이 칸 배치로 갈리지 않게.
         prompt_facts = facts.to_prompt_dict()
         allowed, _ = clock_times(json.dumps(prompt_facts, ensure_ascii=False, default=str))
         pairs = _slot_times(prompt_facts)
-        for part in (draft.text, draft.footnote or ""):
+        parts = (draft.text, draft.footnote or "")
+        bad = _out_of_order("\n".join(parts), pairs)
+        for part in parts:
             times, unverifiable = clock_times(part)
-            if unverifiable or not times <= allowed or _misplaced_time(part, pairs):
-                self._fallback(inp, "llm", *_ANSWER_MODES, "time_not_in_facts")
-                return DialogueAnswer.from_facts(facts)
+            bad = bad or unverifiable or not times <= allowed or _misplaced_time(part, pairs)
+        if bad:
+            self._fallback(inp, "llm", *_ANSWER_MODES, "time_not_in_facts")
+            return DialogueAnswer.from_facts(facts)
         try:
             return DialogueAnswer.from_facts(facts, text=draft.text, footnote=draft.footnote)
         except ValueError as e:  # 게이트와 같은 검사라 여기 오면 게이트가 어긋난 것 — 그래도 템플릿
@@ -728,9 +757,18 @@ class DialogueOrchestrator:
         except Exception as e:  # noqa: BLE001
             self._fallback(inp, "memory", *_MEMORY_MODES, f"memory_error: {type(e).__name__}: {e}")
             return compress_fallback(turns, previous)
-        if result.is_fallback or not result.value:  # FallbackEvent 는 게이트웨이가 냈다 (빈 결과 = 실패)
+        if result.is_fallback:  # FallbackEvent 는 게이트웨이가 냈다 (파싱 실패·전부 드롭 = 실패)
             return compress_fallback(turns, previous)
-        return tuple(result.value)
+        if result.value:
+            return tuple(result.value)
+        # 비운 배열 = 새로 기억할 것 없음 → 이전 요약은 두되 앞선 압축이 남긴 원문 조각 줄은 지운다(BR-AO-09). 이전 줄도
+        # 압축과 같은 술어로 다시 거른다 — #1314 이전 압축이 남긴 연락처·소요시간 줄이 술어 없이 되살지 않게(2026-10-19 리뷰).
+        # 폴백이 아니라서 이벤트가 없다 — 모델이 늘 비우는 고장이 보이도록 건수만 한 줄 남긴다(내용·account_ref 없음).
+        kept = tuple(line for line in compress_fallback((), previous) if not is_turn_fragment(line))
+        log.info("dialogue_memory_empty %s", json.dumps({
+            "event": "dialogue_memory_empty", "trace_id": inp.trace_id, "kept_lines": len(kept),
+            "dropped_lines": len(previous) - len(kept)}))
+        return kept
 
     # ── 공통 ─────────────────────────────────────────────────────────────
 

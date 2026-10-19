@@ -105,7 +105,7 @@ class JsonEventStore:
         return self._doc["coverage"].get(region)
 
     def upsert(
-        self, region: str, events: Iterable[EventInfo], now: datetime
+        self, region: str, events: Iterable[EventInfo], now: datetime, *, covered: bool = True
     ) -> tuple[int, int]:
         """dedup 등록 + 좌표 백필 + 커버리지 갱신 — (신규, 좌표백필) 건수 반환.
 
@@ -135,7 +135,8 @@ class JsonEventStore:
             index[key] = record
             self._doc["events"].append(record)
             added += 1
-        self._doc["coverage"][region] = to_iso(now)
+        if covered:  # 큐레이션 입력(팝업)은 "그 지역을 긁었다"가 아니다 — 부족 신호를 흐리지 않는다
+            self._doc["coverage"][region] = to_iso(now)
         return added, backfilled
 
     def purge_expired(self, today: date) -> int:

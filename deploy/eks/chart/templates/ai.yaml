@@ -40,7 +40,12 @@ spec:
           # --no-access-log: uvicorn's access line carries the query string, and the memory boundary
           # takes account_ref as a query parameter (DELETE|GET /ai/v1/dialogue/memory?account_ref=...).
           # TraceMiddleware already logs http_request with the path only (SEC-U8-06; same flag as the image CMD).
-          args: ["main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--timeout-graceful-shutdown", "630", "--no-access-log"]
+          # --timeout-worker-healthcheck 30: the multi-worker supervisor kills a worker that misses its ping for
+          # 5s (default). On a CPU-starved node a worker still loading the app misses it, gets killed and respawned,
+          # which burns more CPU — 12 restarts in 2 minutes on the dev rollout of 10-18, and the smoke turn's memory
+          # DELETE timed out into a 500. A genuinely hung worker is still caught, 30s later. Single-process image CMD
+          # has no supervisor, so the flag lives here only.
+          args: ["main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--timeout-graceful-shutdown", "630", "--timeout-worker-healthcheck", "30", "--no-access-log"]
           ports:
             - { name: http, containerPort: 8000 }
           securityContext:

@@ -156,7 +156,8 @@ uv run python scripts/collect/merge_pois_docs.py -o data/collected_pois.json /tm
   실제로 채워져 오던 필드만이고 **소요시간(`spendtime`)은 절대 싣지 않는다**(INV-3). 하나도 없으면 키 자체가
   없다. ⚠️ **기수집분에는 없다** — 증분 색인이 "변경 없음"을 스킵해 상세를 다시 안 받으므로, 이 키는
   2026-09-19 이후 신규·변경분에만 붙는다. 소급은 항목당 1콜 — 전량이면 며칠치 일일 예산이고, 그건 장소 상세
-  4필드 수집(TRIP-897 — `detailCommon`·`detailImage2`)과 같은 되감기 패스에서 한 번에 받는 것이 맞다
+  4필드 수집(TRIP-897 — `detailCommon`·`detailImage2`)을 하게 되면 같은 되감기 방식(아래 절, `pipeline.refresh_proposal`)으로
+  한 번에 받는 것이 맞다
 - `opening_hours_raw` — 백엔드 `poi.opening_hours varchar(200)` 로 그대로 가는 **원문 칸**이다. 영업 원문 뒤에
   휴무 원문을 `\n휴무: ` 로 이어 싣는다(TRIP-1226 — AI 런타임은 이 칸만 다시 파싱하므로 휴무가 여기 없으면
   휴무일에도 영업으로 읽힌다). 200자를 넘으면 휴무를 보존하고 영업을 먼저 자른다. 형식 정본은 `mapping.py` 의
@@ -170,7 +171,12 @@ uv run python scripts/collect/merge_pois_docs.py -o data/collected_pois.json /tm
   무화과식당 2809043 은 영업 원문이 `목요일~일요일` 이라 월~수 휴무로 보인다). 재수집하면 벤더 원문으로 덮이니
   그때 이 건들을 대조할 것. 휴무를 해석 못 하는 경우는 아래 절
 
-### 상세 되감기 재조회 — 옛 수집분에 휴무 원문 (2026-10-05, TRIP-1230 후속)
+### 상세 되감기 재조회 — 옛 수집분에 휴무 원문 (2026-10-05 ~ 10-15, TRIP-1230 후속 · 끝남)
+
+> **끝났다.** 남은 대기가 10-14 7건 → 10-15·16·17 사흘 연속 0 이라 스텝(develop·main 사본)과
+> `scripts/collect/refetch_intro.py`·그 테스트를 지웠다. 코드는 git 이력에 있고, 제안을 다시 만드는
+> `pipeline.refresh_proposal` 은 다음 되감기(예: TRIP-897)가 다시 쓰도록 테스트와 함께 남겼다.
+> 아래는 돌던 동안의 기록이다.
 
 일일 수집은 기제안·변경 없음(modifiedtime 동일) 항목의 상세를 다시 받지 않는다 — #949 이전 수집분에는 벤더가 원본을
 고치지 않는 한 휴무 원문이 영영 안 붙는다. `ai-poi-collect` 의 「상세 되감기 재조회」 스텝(`scripts/collect/refetch_intro.py`)이
@@ -360,6 +366,10 @@ compose 가 `EVENTS_STORE=data/collected_events.json` 으로 가리킨다.
 git fetch origin collect-state
 git show origin/collect-state:collected_events.json > ai/data/collected_events.json
 ```
+
+**배포는 이 갱신을 자동으로 한다**(10-18~) — `aws-deploy.yml` 이 AI 이미지를 굽기 직전에 collect-state 정본으로
+갈아 끼운다(`deploy/eks/refresh_events.py`). 동봉본에만 있는 행사(PR 로 손으로 넣은 것)는 종료 + 7일 전이면 남는다.
+그래서 여기 커밋된 사본이 낡아도 배포된 AI 는 배포 시점의 정본을 읽는다.
 
 ### 알아둘 것
 

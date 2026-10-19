@@ -456,8 +456,8 @@ LLM 0회(L-5). `hours_label` 은 `on` 의 요일(없으면 `now` 의 요일)로 
 
 | 값 | 티어 | effort | max_tokens | fallback_modes | 게이트 | 프롬프트 |
 |---|---|---|---|---|---|---|
-| `DIALOGUE_INTENT` | LIGHT | low | 1024(초판 256 — DEV 배포 smoke 실측 출력 239/256, 사고 포함, 2026-10-18) | `("llm_dialogue_intent", "out_of_scope")` | `IntentGate`(재사용) | `prompts/dialogue_intent.yaml` v"0.1.0" — `$utterance $intents $history $memory $trip` |
-| `DIALOGUE_ANSWER` | LIGHT | low | 512 | `("llm_dialogue_answer", "template_text")` | `DialogueAnswerGate`(신규 파일) | `prompts/dialogue_answer.yaml` v"0.1.0" — `$intent $facts $utterance $history $memory $trip $style` |
+| `DIALOGUE_INTENT` | LIGHT | low | 1024(초판 256 — DEV 배포 smoke 실측 출력 239/256, 사고 포함, 2026-10-18) | `("llm_dialogue_intent", "out_of_scope")` | `IntentGate`(재사용) | `prompts/dialogue_intent.yaml` v"0.2.1"(의도 정의·판단 순서·예시, 고정부 앞) — `$utterance $intents $history $memory $trip` |
+| `DIALOGUE_ANSWER` | LIGHT | low | 512 | `("llm_dialogue_answer", "template_text")` | `DialogueAnswerGate`(신규 파일) | `prompts/dialogue_answer.yaml` v"0.2.0"(답변 순서·예시, 고정부 앞) — `$intent $facts $utterance $history $memory $trip $style` |
 | `DIALOGUE_MEMORY` | LIGHT | low | 2048(20줄×120자 ≈ 1,000~1,500 토큰 + JSON — 1024 는 잘림 위험; 상한은 잘림 방지용, 과금은 실 출력만) | `("llm_dialogue_memory", "deterministic_compress")` | `DialogueMemoryGate`(신규 파일) | `prompts/dialogue_memory.yaml` v"0.1.0" — `$previous_summary $recent_turns $trip` |
 
 출력 모양 — INTENT: `{"intent": str|null, "slots": {...}, "confidence": n}`(intent.yaml 과 동형) · ANSWER: `{"text": str, "footnote": str|null}` ·
@@ -595,7 +595,7 @@ AI 메모리가 생기지 않으니 지울 것도 없다.
 | 불변식 | 이 FD 에서의 의미 |
 |---|---|
 | **INV-1** | 의도 라벨은 `Intent` enum — `IntentGate` 가 `DIALOGUE_INTENT` 산출을 closed-set 으로 검사(벤더 아님). 후보(`CANDIDATES`)는 `PlanBAgent` 가 **반경 풀**(`CandidatePool`) 안에서만 고르고 일정 전부를 `excluded` 로 뺀다; `Facts.places` 는 배치 조회·풀에서 온 닫힌 목록이다. **LLM 문장 안의 장소명은 검사하지 못한다** — 그러나 그 문장은 선택·저장을 일으키지 않으므로 INV-1(후보 선택) 위반이 아니라 "보이는 문장 오염"이고, 수용된 blast radius 다(메모리 노트 prompt-injection-blast-radius, 재제안 금지) |
-| **INV-2** | 사용자에게 보이는 시각은 **스냅샷 `start_at`**(백엔드가 저장·검증한 값)만, 순서는 스냅샷 순서만. `PlanBRagResult.alternatives` 에는 시각 필드가 없다. LLM 은 `$facts` 밖 시각을 만들지 않도록 프롬프트 규칙 + `_TIME_EXPR` 게이트 + **Facts 대조(2026-10-18 — 문장 시각 ⊆ Facts, 장소에 붙은 시각은 그 장소의 값, BR §6 ③)**가 막는다(`N시`·`오전/오후 N시` 매치 → 드롭 → 템플릿; `HH:MM` 은 Facts 복사만 — 프롬프트 규칙, BR-AO-05). `EDIT_SCHEDULE` 을 1단계에서 FRAME 으로 두는 이유도 이것이다 — 스냅샷에 `end_at`·`is_fixed` 가 없어 AI 가 시각을 지어내야 EditTask 가 만들어진다 |
+| **INV-2** | 사용자에게 보이는 시각은 **스냅샷 `start_at`**(백엔드가 저장·검증한 값)만, 순서는 스냅샷 순서만. `PlanBRagResult.alternatives` 에는 시각 필드가 없다. LLM 은 `$facts` 밖 시각을 만들지 않도록 프롬프트 규칙 + `_TIME_EXPR` 게이트 + **Facts 대조(2026-10-18 — 문장 시각 ⊆ Facts, 장소에 붙은 시각은 그 장소의 값, BR §6 ③; 이름 없이 떠 있는 슬롯 시각끼리는 스냅샷 순서를 따른다, BR §6 ⑨)**가 막는다(`N시`·`오전/오후 N시` 매치 → 드롭 → 템플릿; `HH:MM` 은 Facts 복사만 — 프롬프트 규칙, BR-AO-05). `EDIT_SCHEDULE` 을 1단계에서 FRAME 으로 두는 이유도 이것이다 — 스냅샷에 `end_at`·`is_fixed` 가 없어 AI 가 시각을 지어내야 EditTask 가 만들어진다 |
 | **INV-3** | 거리만 — `TransitInfo.to_public_dict`(`distance_range`), `FactPlace.distance_range`. 소요시간 필드·문장 없음: 스키마 필드명 게이트 + `_TIME_EXPR` 출구 게이트 + AO-P2 |
 | **INV-4** | 계단 전부 결정론 수렴(BLM §7): 분류 실패 → OUT_OF_SCOPE(거절 표지 사유), 답변 실패 → `template_text`, 메모리 실패 → `compress_fallback`, Provider 실패 → 있는 것만 + `notes`, PlanB 실패 → TEXT 안내. 모두 `FallbackEvent`/`notes` 로 보고하고 침묵하지 않는다. 섀도 실패는 응답에 영향 없이 skip 로그 |
 | **DL-3** | 분류 1회(`DIALOGUE_INTENT`). Handler·PlanB 는 프레임의 intent 를 재해석하지 않는다; 섀도는 **관측 전용**으로 서비스 판정에 영향 0 |

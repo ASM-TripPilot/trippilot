@@ -1,7 +1,10 @@
 package com.trippilot.assistant.application
 
+import com.trippilot.assistant.adapter.`in`.event.DialogueForgetSubscriber
+import com.trippilot.assistant.api.event.DialogueForgetRequested
 import com.trippilot.assistant.domain.AssistantSession
 import com.trippilot.assistant.domain.MemoryItem
+import com.trippilot.core.event.EventEnvelope
 import com.trippilot.savedaccommodation.api.DayBaseStayView
 import com.trippilot.savedaccommodation.api.TripBaseStayFacade
 import com.trippilot.trip.api.TripFacade
@@ -43,36 +46,50 @@ class DialogueMemoryHooksTest : StringSpec({
         override fun hasAnyTrip(accountId: UUID) = true
     }
 
-    fun sessionService(sessions: FakeSessions, memory: FakeDialogueMemory) =
-        AssistantSessionService(sessions, FakeMessages(), TripContextReader(trips, stays), tripList, AssistantProperties(), memory, clock)
+    fun sessionService(sessions: FakeSessions, memory: FakeDialogueMemory, events: CapturingEvents = CapturingEvents()) =
+        AssistantSessionService(sessions, FakeMessages(), TripContextReader(trips, stays), tripList, AssistantProperties(), memory, events, clock)
 
-    "이력 지우기는 지운 대화의 상대 메모리도 지운다 — 남의 요청·없는 대화는 상대도 건드리지 않는다" {
+    "이력 지우기는 지운 대화의 상대 메모리 파기를 아웃박스에 맡긴다 — 남의 요청·없는 대화는 맡기지 않는다" {
         val sessions = FakeSessions()
         val memory = FakeDialogueMemory()
-        val svc = sessionService(sessions, memory)
+        val events = CapturingEvents()
+        val svc = sessionService(sessions, memory, events)
         val id = svc.open(acc, null).session.sessionId
 
         svc.clear(UUID.randomUUID(), id) // 남의 요청 — 세션 id 를 안다고 남의 기억을 지우게 두지 않는다
-        memory.deleted shouldBe emptyList()
+        events.published shouldBe emptyList()
 
         svc.clear(acc, id)
-        memory.deleted shouldContainExactly listOf("session:$id")
-        svc.clear(acc, id) // 재시도 — 지울 대화가 없으니 상대도 부르지 않는다
-        memory.deleted.size shouldBe 1
+        events.published shouldContainExactly listOf(DialogueForgetRequested(id.toString()))
+        memory.deleted shouldBe emptyList() // 응답은 상대를 기다리지 않는다 — 구독자가 지운다
+        svc.clear(acc, id) // 재시도 — 지울 대화가 없으니 맡기지도 않는다
+        events.published.size shouldBe 1
     }
 
-    "이력 지우기·여행 삭제의 메모리 파기 실패는 삼킨다 — 대화는 지워지고 상대 TTL 이 백스톱이다" {
+    "이력 지우기의 파기 구독자는 실패를 올려 릴레이가 재시도하게 한다 — 상대가 돌아오면 지운다(미결 #13)" {
+        val memory = FakeDialogueMemory().apply { fail = true }
+        val subscriber = DialogueForgetSubscriber(memory)
+        val sessionId = UUID.randomUUID()
+        val envelope = EventEnvelope(UUID.randomUUID(), subscriber.eventType, 1, "AssistantSession", sessionId.toString(), null, now, "{}")
+
+        shouldThrow<IllegalStateException> { subscriber.handle(envelope) }
+        memory.fail = false
+        subscriber.handle(envelope) // 재배달
+        memory.deleted shouldContainExactly listOf("session:$sessionId")
+        shouldThrow<IllegalStateException> { subscriber.handle(envelope.copy(aggregateId = "not-a-uuid")) }
+    }
+
+    "여행 삭제의 메모리 파기 실패는 올린다 — 구독이 재시도하고, 대화 삭제는 멱등이라 재시도가 해롭지 않다" {
         val sessions = FakeSessions()
         val memory = FakeDialogueMemory().apply { fail = true }
         val svc = sessionService(sessions, memory)
-        val id = svc.open(acc, tripId).session.sessionId
-
-        svc.clear(acc, id)
-        sessions.rows shouldBe emptyList()
-
         svc.open(acc, tripId)
-        svc.deleteForTrip(tripId) shouldBe 1
+
+        shouldThrow<IllegalStateException> { svc.deleteForTrip(tripId) }
+        memory.fail = false
+        svc.deleteForTrip(tripId) // 재배달
         sessions.rows shouldBe emptyList()
+        memory.deleted shouldContainExactly listOf("trip:$tripId")
     }
 
     "여행 삭제는 그 여행의 상대 메모리를 지운다 — 대화가 이미 없어도 부른다(앞선 파기가 실패했을 수 있다)" {

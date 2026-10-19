@@ -458,7 +458,7 @@ few-shot 예시는 아직 별도 파일로 분리하지 않았다 — 현재는 
 | # | 항목 | 비고 |
 |---|---|---|
 | 1 | 경량/상위 모델 실체 | D11 운영 결정 미확정 |
-| 2 | PreferenceScoring few-shot 예시 | 실제 POI 데이터로 작성 필요 |
+| 2 | ~~PreferenceScoring few-shot 예시~~ | **해소 — 넣지 않기로**(2026-10-18 실측). 실 POI(제주시) 예시 2건·점수 기준·판단 순서를 넣은 판본이 청크 간 일관성·취향 정합을 못 올리고 출력 토큰·지연만 늘렸다. 수치는 `prompts/preference_scoring.yaml` 머리 주석, 재현은 `scripts/measure/measure_prompt_ab.py scoring` |
 | 3 | 취향 7축 택소노미 태그 목록 | 온보딩 설계와 연동 |
 | 4 | INTENT 라우터 의도·편집 op 목록 | AI 도우미(M16) 착수 시 확정 |
 | 5 | ~~프롬프트 파일 저장 위치 (코드 내 vs 외부 스토어)~~ | **해소 — 저장소 내 `ai/prompts/*.yaml` 평면 + 파일 내 semver 로 확정**(`llm_gateway/prompts.py` `PromptRegistry`, §3.3). 외부 스토어 이전은 재논의 시 새 항목으로 |
