@@ -641,7 +641,7 @@ def _compose_case(sc: dict, jeju: list):
     pool = CandidatePool(poi_ids=frozenset(p.poi_id for p in pool_pois), pois=tuple(pool_pois),
                          generated_at=start, anchor=_JEJU, radius_km=7.0)
     shortlist = composition.shortlist(pool, keep=[*slots, *planb, *nearby], excluded=excluded,
-                                      weekday=weekday, score=score)
+                                      day=_C_DATE, score=score)
     index = {p.poi_id: p for p in pool_pois}
 
     def status(pid) -> str:

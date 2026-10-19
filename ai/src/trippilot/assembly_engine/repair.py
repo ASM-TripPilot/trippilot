@@ -20,6 +20,7 @@ from datetime import date, datetime, timedelta
 from enum import Enum
 from typing import Mapping
 
+from trippilot.assembly_engine.constraints import open_hours_ok
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.itinerary import (
     DaySolution,
@@ -51,17 +52,6 @@ class RepairResult:
 
 def _mod(dt: datetime) -> int:
     return dt.hour * 60 + dt.minute
-
-
-def _fits_open_hours(poi: Poi, start: datetime, end: datetime) -> bool:
-    if not poi.open_hours:
-        return True
-    todays = [oh for oh in poi.open_hours if oh.day_of_week == start.weekday()]
-    if not todays:
-        return False
-    s = _mod(start)
-    e = s + int((end - start).total_seconds() // 60)
-    return any(oh.open_min <= s and e <= oh.close_min for oh in todays)
 
 
 def repair(solution: ItinerarySolution, problem: ItineraryProblem,
@@ -119,8 +109,8 @@ def repair(solution: ItinerarySolution, problem: ItineraryProblem,
             if _mod(start) + stay > we_min:  # HC4 (day window 초과)
                 return RepairResult(repaired=None, changes=())
             poi = poi_index.get(slot.poi_id)
-            if poi is not None and not _fits_open_hours(poi, start, end):
-                return RepairResult(repaired=None, changes=())  # HC1 깨짐
+            if poi is not None and not open_hours_ok(poi, start, end, problem.holidays):
+                return RepairResult(repaired=None, changes=())  # HC1 깨짐 — 검증과 같은 함수(공휴일 포함)
 
             if start != slot.start_at:
                 changes.append(RepairChange(slot.poi_id, "start_at",

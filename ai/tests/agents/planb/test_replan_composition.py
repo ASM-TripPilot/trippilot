@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import pathlib
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 import yaml  # tests 는 `src/` 밖이라 yaml 규칙 대상이 아니다
@@ -438,7 +438,7 @@ def test_후보는_카테고리마다_상위_N곳에_keep_은_먼저() -> None:
     foods = [_poi(i, PoiCategory.FOOD) for i in range(10)]
     cafe = _poi(50, PoiCategory.CAFE)
     out = composition.shortlist(
-        _pool(*foods, cafe), keep=[PoiId("p09")], excluded=set(), weekday=0,
+        _pool(*foods, cafe), keep=[PoiId("p09")], excluded=set(), day=_MON,
         score=lambda p: -int(p.poi_id[1:]))
     ids = [p.poi_id for p in out.pois]
     assert ids[0] == "p09"  # keep 이 먼저 — 점수가 가장 낮아도
@@ -452,8 +452,37 @@ def test_후보에서_제외_회피_그날_휴무는_빠진다() -> None:
             _poi(3, PoiCategory.CAFE, monday_only), _poi(4, PoiCategory.SIGHT))
     out = composition.shortlist(
         _pool(*pois), keep=[PoiId("p02")], excluded={PoiId("p04"), PoiId("p02")},
-        weekday=1, score=lambda p: 0.0)
+        day=_MON + timedelta(days=1), score=lambda p: 0.0)
     assert {p.poi_id for p in out.pois} == {"p01"}  # keep 이어도 제외(피할 카테고리의 곳)는 뺀다
+
+
+# ── 공휴일 휴무 (상황 감지 H1) — 후보·영업시간 문구도 조립과 같은 그 날 창을 본다 ─────────
+
+_MON = date(2026, 10, 12)
+_HANGUL = date(2026, 10, 9)  # 한글날 — 금요일
+_CAL = {_HANGUL: frozenset({"PUBLIC"})}
+
+
+def test_영업시간_문구는_공휴일_휴무면_None_이다() -> None:
+    museum = _replace(_poi(1, PoiCategory.CULTURE, tuple(OpenHour(d, 540, 1080) for d in range(7))),
+                      holiday_rules=frozenset({"PUBLIC"}))
+    assert composition.hours_label(museum, _HANGUL, _CAL) is None
+    assert composition.hours_label(museum, _HANGUL) == "09:00~18:00"  # 모드 off
+    assert composition.hours_label(museum, _HANGUL.weekday()) == "09:00~18:00"  # 요일만 아는 호출 — 종전 그대로
+    unknown = _replace(_poi(2, PoiCategory.CULTURE), holiday_rules=frozenset({"PUBLIC"}))
+    assert composition.hours_label(unknown, _HANGUL, _CAL) is None  # 정보 없어도 휴무 원문이 닫았다
+    assert composition.hours_label(unknown, _HANGUL, {}) == "영업시간 정보 없음"
+
+
+def test_후보에서_그날_공휴일_휴무는_빠진다() -> None:
+    closed = _replace(_poi(1, PoiCategory.CULTURE), holiday_rules=frozenset({"PUBLIC"}))
+    open_ = _poi(2, PoiCategory.CULTURE)
+    on = composition.shortlist(_pool(closed, open_), keep=[closed.poi_id], excluded=set(), day=_HANGUL,
+                               holidays=_CAL, score=lambda p: 0.0)
+    assert {p.poi_id for p in on.pois} == {open_.poi_id}  # keep 이어도 그날 휴무면 뺀다
+    off = composition.shortlist(_pool(closed, open_), keep=[], excluded=set(), day=_HANGUL,
+                                score=lambda p: 0.0)
+    assert {p.poi_id for p in off.pois} == {closed.poi_id, open_.poi_id}
 
 
 def test_방문_수는_남은_시간과_상한으로_정한다() -> None:
