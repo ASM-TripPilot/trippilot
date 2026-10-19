@@ -20,7 +20,7 @@ data class SocialLoginRequest(
     @field:NotBlank
     val redirectUri: String,
     val ageConfirmation: AgeConfirmation? = null,
-    // 세션 컬럼(auth_session.device_id varchar(128))과 같은 상한 — 여기서 막지 않으면 저장에서 22001 → 500.
+    // 세션 컬럼(refresh_session.device_id varchar(128))과 같은 상한 — 여기서 막지 않으면 저장에서 22001 → 500.
     @field:Size(max = 128, message = "deviceId 는 128자 이하입니다.")
     val deviceId: String? = null,
 ) {

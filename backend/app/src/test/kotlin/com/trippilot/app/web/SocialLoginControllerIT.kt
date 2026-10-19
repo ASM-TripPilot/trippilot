@@ -6,6 +6,7 @@ import com.trippilot.auth.domain.Provider
 import com.trippilot.auth.domain.SocialProfile
 import com.trippilot.auth.domain.port.SocialAuthPort
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
+import io.kotest.assertions.withClue
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotBeBlank
@@ -130,35 +131,39 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     }
 
     /**
-     * 기기 식별자는 세션 컬럼(`auth_session.device_id varchar(128)`)에 그대로 들어간다. 요청에서 막지 않으면
+     * 기기 식별자는 세션 컬럼(`refresh_session.device_id varchar(128)`)에 그대로 들어간다. 요청에서 막지 않으면
      * 저장에서 22001 이 나 로그인 트랜잭션 전체가 롤백되고 **500** 이 나간다 — 클라이언트 탓인데 서버 장애로 보인다.
+     * 두 로그인 경로가 각자 DTO 를 가지므로 둘 다 본다.
      */
-    @Test
-    fun `deviceId 가 128자를 넘으면 두 로그인 경로 모두 400 — 500 이 아니다`() {
-        val tooLong = "d".repeat(129)
-        val (codeStatus, codeBody) = post(
-            "/api/v1/auth/social/kakao",
-            """{"authorizationCode":"code","codeVerifier":"verifier","redirectUri":"trippilot://auth","ageConfirmation":{"method":"SELF_DECLARED"},"deviceId":"$tooLong"}""",
-        )
-        val (tokenStatus, tokenBody) = post(
-            "/api/v1/auth/social/kakao/token",
-            """{"accessToken":"sdk-access-token","ageConfirmation":{"method":"SELF_DECLARED"},"deviceId":"$tooLong"}""",
-        )
+    private val loginBodies = mapOf(
+        "/api/v1/auth/social/kakao" to { deviceId: String ->
+            """{"authorizationCode":"code","codeVerifier":"verifier","redirectUri":"trippilot://auth","ageConfirmation":{"method":"SELF_DECLARED"},"deviceId":"$deviceId"}"""
+        },
+        "/api/v1/auth/social/kakao/token" to { deviceId: String ->
+            """{"accessToken":"sdk-access-token","ageConfirmation":{"method":"SELF_DECLARED"},"deviceId":"$deviceId"}"""
+        },
+    )
 
-        codeStatus shouldBe 400
-        codeBody["error"]["code"].asText() shouldBe "VALIDATION_ERROR"
-        tokenStatus shouldBe 400
-        tokenBody["error"]["code"].asText() shouldBe "VALIDATION_ERROR"
+    @Test
+    fun `deviceId 가 128자를 넘으면 두 로그인 경로 모두 400 — deviceId 검증 실패로, 500 이 아니다`() {
+        loginBodies.forEach { (path, body) ->
+            val (status, response) = post(path, body("d".repeat(129)))
+
+            withClue(path) {
+                status shouldBe 400
+                response["error"]["code"].asText() shouldBe "VALIDATION_ERROR"
+                response["error"]["fields"].map { it["field"].asText() } shouldBe listOf("deviceId")
+            }
+        }
     }
 
     @Test
-    fun `deviceId 128자는 받는다 — 상한 경계`() {
-        val (status, _) = post(
-            "/api/v1/auth/social/kakao/token",
-            """{"accessToken":"sdk-access-token","ageConfirmation":{"method":"SELF_DECLARED"},"deviceId":"${"d".repeat(128)}"}""",
-        )
+    fun `deviceId 128자는 두 로그인 경로 모두 받는다 — 상한 경계`() {
+        loginBodies.forEach { (path, body) ->
+            val (status, _) = post(path, body("d".repeat(128)))
 
-        status shouldBe 200
+            withClue(path) { status shouldBe 200 }
+        }
     }
 
     /**

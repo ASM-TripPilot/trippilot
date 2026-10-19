@@ -13,6 +13,7 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.core.io.ClassPathResource
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.method.HandlerMethod
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping
 import org.yaml.snakeyaml.LoaderOptions
 import org.yaml.snakeyaml.Yaml
@@ -52,8 +53,6 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
 
     /** openapi.yaml(빌드가 복사한 classpath 정본)의 paths 를 "METHOD 절대경로" 집합으로. */
     private fun documentedEndpoints(): Set<String> {
-        @Suppress("UNCHECKED_CAST")
-        val spec = Yaml().load<Map<String, Any>>(ClassPathResource("static/openapi.yaml").inputStream)
         @Suppress("UNCHECKED_CAST")
         val paths = spec["paths"] as Map<String, Map<String, Any>>
         return paths.entries.flatMap { (path, ops) ->
@@ -120,12 +119,18 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
     }
 
     /** Spring 핸들러 매핑을 "METHOD 절대경로" 집합으로. 서비스 표면(base 하위)만. */
-    private fun implementedApiEndpoints(): Set<String> =
-        handlerMapping.handlerMethods.keys.flatMap { info ->
-            val patterns = info.pathPatternsCondition?.patternValues ?: emptySet()
+    private fun implementedApiEndpoints(): Set<String> = apiHandlers().map { (method, pattern) -> "$method $pattern" }.toSet()
+
+    /**
+     * 서비스 표면의 (메서드, 절대경로, 핸들러) — 경로 게이트와 필드 게이트가 **같은 펼침**을 본다.
+     * 한 핸들러가 경로·메서드를 여럿 가지면 곱으로 펼친다.
+     */
+    private fun apiHandlers(): List<Triple<String, String, HandlerMethod>> =
+        handlerMapping.handlerMethods.flatMap { (info, handler) ->
+            val patterns = info.pathPatternsCondition?.patternValues.orEmpty().filter { it.startsWith("$basePath/") }
             val methods = info.methodsCondition.methods.map { it.name }
-            patterns.flatMap { p -> methods.map { m -> "$m $p" } }
-        }.filter { it.substringAfter(" ").startsWith("$basePath/") }.toSet()
+            patterns.flatMap { p -> methods.map { m -> Triple(m, p, handler) } }
+        }
 
     // ── 필드 계약 ──────────────────────────────────────────────────────────────────────────────
 
@@ -157,36 +162,36 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
     @Test
     fun `응답·요청 본문의 유무와 필드 이름이 openapi 스키마와 일치한다`() {
         val mismatches = mutableListOf<String>()
-        handlerMapping.handlerMethods.forEach { (info, handler) ->
-            val patterns = info.pathPatternsCondition?.patternValues.orEmpty().filter { it.startsWith("$basePath/") }
-            val methods = info.methodsCondition.methods.map { it.name }
+        for ((method, pattern, handler) in apiHandlers()) {
+            val operation = operation(pattern.removePrefix(basePath), method) ?: continue
+            val label = "$method $pattern"
             val responseType = unwrap(mapper.typeFactory.constructType(handler.returnType.genericParameterType))
             val bodyParameter = handler.methodParameters.firstOrNull { it.hasParameterAnnotation(RequestBody::class.java) }
-            for (pattern in patterns) for (method in methods) {
-                val operation = operation(pattern.removePrefix(basePath), method) ?: continue
-                val label = "$method $pattern"
 
-                // 유무는 content 종류와 무관하게 본다(JSON 아닌 본문도 본문이다). 이름 대조는 JSON 만.
-                val hasDocumentedBody = successResponses(operation).any { it["content"] != null }
-                val documented = successResponses(operation).mapNotNull(::jsonSchema)
-                when {
-                    responseType == null -> Unit // ResponseEntity<*> 등 — 코드가 본문 타입을 말하지 않는다
-                    isNoBody(responseType) && hasDocumentedBody -> mismatches += "$label 응답: 문서는 본문이 있는데 코드는 본문이 없다"
-                    !isNoBody(responseType) && !hasDocumentedBody ->
-                        mismatches += "$label 응답: 코드는 본문(${responseType.rawClass.simpleName})을 내는데 문서 2xx 에 본문이 없다"
-                    else -> documented.forEach { compare(responseType, it, "$label 응답", true, mismatches, mutableSetOf()) }
-                }
+            // 유무는 content 종류와 무관하게 본다(JSON 아닌 본문도 본문이다). 이름 대조는 JSON 만 —
+            // 그래서 코드가 JSON DTO 를 내는데 문서 본문이 전부 JSON 이 아니면 그것 자체를 불일치로 낸다.
+            val responses = successResponses(operation)
+            val hasDocumentedBody = responses.any { it["content"] != null }
+            val documented = responses.mapNotNull(::jsonSchema)
+            when {
+                responseType == null -> Unit // ResponseEntity<*> 등 — 코드가 본문 타입을 말하지 않는다
+                isNoBody(responseType) -> if (hasDocumentedBody) mismatches += "$label 응답: 문서는 본문이 있는데 코드는 본문이 없다"
+                !hasDocumentedBody ->
+                    mismatches += "$label 응답: 코드는 본문(${responseType.rawClass.simpleName})을 내는데 문서 2xx 에 본문이 없다"
+                documented.isEmpty() && !isLeaf(responseType) ->
+                    mismatches += "$label 응답: 코드는 JSON 객체(${responseType.rawClass.simpleName})를 내는데 문서 본문에 application/json 이 없다"
+                else -> documented.forEach { compare(responseType, it, "$label 응답", true, mismatches, mutableSetOf()) }
+            }
 
-                val hasDocumentedRequest = operation["requestBody"] != null
-                val request = requestSchema(operation)
-                when {
-                    bodyParameter == null && hasDocumentedRequest -> mismatches += "$label 요청: 문서는 본문이 있는데 코드는 @RequestBody 가 없다"
-                    bodyParameter != null && !hasDocumentedRequest -> mismatches += "$label 요청: 코드는 @RequestBody 를 받는데 문서에 requestBody 가 없다"
-                    bodyParameter != null && request != null -> compare(
-                        mapper.typeFactory.constructType(bodyParameter.genericParameterType), request, "$label 요청", false,
-                        mismatches, mutableSetOf(),
-                    )
-                }
+            val hasDocumentedRequest = operation["requestBody"] != null
+            val request = requestSchema(operation)
+            when {
+                bodyParameter == null && hasDocumentedRequest -> mismatches += "$label 요청: 문서는 본문이 있는데 코드는 @RequestBody 가 없다"
+                bodyParameter != null && !hasDocumentedRequest -> mismatches += "$label 요청: 코드는 @RequestBody 를 받는데 문서에 requestBody 가 없다"
+                bodyParameter != null && request != null -> compare(
+                    mapper.typeFactory.constructType(bodyParameter.genericParameterType), request, "$label 요청", false,
+                    mismatches, mutableSetOf(),
+                )
             }
         }
 
@@ -210,16 +215,21 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
         serialize: Boolean,
         out: MutableList<String>,
         visited: MutableSet<String>,
+        depth: Int = 0,
     ) {
+        // 재귀 바닥 — 아래 visited 키가 못 알아보는 감싸기(oneOf 갈래 등)로 자기 참조가 와도 스택이 넘치지 않게.
+        if (depth > maxCompareDepth) return
+        if (isUnknown(type)) return // Any·Object — 코드가 모양을 말하지 않는다
         val resolved = resolve(schema)
         val documented = properties(resolved)
         @Suppress("UNCHECKED_CAST")
         val items = resolved["items"] as? Map<String, Any>
         val shape = shapeOf(resolved)
 
-        if (type.isCollectionLikeType || type.isArrayType) {
+        // ByteArray 는 Jackson 이 base64 문자열로 쓴다 — 배열이 아니다(isLeaf 쪽).
+        if (type.isCollectionLikeType || (type.isArrayType && type.rawClass != ByteArray::class.java)) {
             if (items == null) out += "$where: 코드는 배열인데 문서는 $shape"
-            else compare(type.contentType, items, where, serialize, out, visited)
+            else compare(type.contentType, items, where, serialize, out, visited, depth + 1)
             return
         }
         if (items != null) {
@@ -230,12 +240,16 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
             // 키는 런타임 값이라 이름을 대조할 수 없다. 값 타입은 대조할 수 있다.
             @Suppress("UNCHECKED_CAST")
             val values = resolved["additionalProperties"] as? Map<String, Any>
-            if (values != null) compare(type.contentType, values, "$where{값}", serialize, out, visited)
+            // 문서가 이름 있는 속성(닫힌 객체·oneOf)을 적어도 대조하지 않는다 — 손으로 짓는 Map 의 키는
+            // 정적으로 알 수 없다(AssistantMessage.payload·Notification.actionPayload). 타입 있는 DTO 로 바꿔야 잡힌다.
+            if (values != null) compare(type.contentType, values, "$where{값}", serialize, out, visited, depth + 1)
             return
         }
         if (isLeaf(type)) {
-            if (documented != null && !JsonNode::class.java.isAssignableFrom(type.rawClass)) {
-                out += "$where: 문서는 객체(${documented.keys.sorted()})인데 코드는 ${type.rawClass.simpleName}"
+            val documentedAsObject = documented != null || resolved["additionalProperties"] is Map<*, *> ||
+                resolved["additionalProperties"] == true
+            if (documentedAsObject && !JsonNode::class.java.isAssignableFrom(type.rawClass)) {
+                out += "$where: 문서는 ${documented?.let { "객체(${it.keys.sorted()})" } ?: shape}인데 코드는 ${type.rawClass.simpleName}"
             }
             return
         }
@@ -257,7 +271,7 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
         (actual.keys intersect documented.keys).forEach { name ->
             @Suppress("UNCHECKED_CAST")
             val child = documented[name] as? Map<String, Any> ?: return@forEach
-            compare(actual.getValue(name).primaryType, child, "$owner.$name", serialize, out, visited)
+            compare(actual.getValue(name).primaryType, child, "$owner.$name", serialize, out, visited, depth + 1)
         }
     }
 
@@ -273,8 +287,11 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
         val members = listOf("allOf", "oneOf", "anyOf").flatMap { schema[it] as? List<Map<String, Any>> ?: emptyList() }
         if (members.isEmpty()) return schema
         val resolvedMembers = members.map(::resolve)
-        // 설명을 달려고 한 칸만 감싼 `allOf: [{ $ref: X }]` 는 X 그대로다(X 가 열거형·배열이어도).
-        if (resolvedMembers.size == 1 && properties(schema) == null) return resolvedMembers.single()
+        // 속성을 가진 갈래가 하나도 없으면 객체로 합치지 않는다 — 합치면 빈 객체가 만들어져 열거형·배열 필드가
+        // "문서는 객체"로 오판된다. `allOf: [{ $ref: X }]`(설명용 감싸기)·`anyOf: [X, {type: 'null'}]`(nullable)는 X 다.
+        if (resolvedMembers.none { properties(it) != null } && properties(schema) == null) {
+            return resolvedMembers.filterNot { it["type"] == "null" }.singleOrNull() ?: schema
+        }
         val merged = (resolvedMembers.mapNotNull(::properties) + listOfNotNull(properties(schema)))
             .fold(emptyMap<String, Any>()) { a, b -> a + b }
         return mapOf("type" to "object", "properties" to merged)
@@ -289,17 +306,24 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
     private fun properties(schema: Map<String, Any>): Map<String, Any>? = schema["properties"] as? Map<String, Any>
 
     private fun shapeOf(schema: Map<String, Any>): String = when {
+        schema["additionalProperties"] == false -> "닫힌 객체(속성 없음)"
         schema["additionalProperties"] != null -> "자유형 객체(additionalProperties)"
         schema["type"] == "object" -> "속성 없는 객체"
         schema["type"] != null -> "스칼라(${schema["type"]})"
         else -> "형태 미지정"
     }
 
+    /** Jackson 이 스칼라로 쓰는 것. Pair·Triple 은 kotlin 패키지지만 객체({first, second})로 쓰인다. */
     private fun isLeaf(type: JavaType): Boolean {
-        val name = type.rawClass.name
-        return type.isPrimitive || type.isEnumType || name.startsWith("java.") || name.startsWith("kotlin.") ||
-            JsonNode::class.java.isAssignableFrom(type.rawClass)
+        val raw = type.rawClass
+        if (raw == Pair::class.java || raw == Triple::class.java) return false
+        return type.isPrimitive || type.isEnumType || raw == ByteArray::class.java ||
+            raw.name.startsWith("java.") || raw.name.startsWith("kotlin.") || JsonNode::class.java.isAssignableFrom(raw)
     }
+
+    private fun isUnknown(type: JavaType): Boolean = type.rawClass == Any::class.java
+
+    private val maxCompareDepth = 32
 
     private fun isNoBody(type: JavaType): Boolean =
         type.rawClass == Void.TYPE || type.rawClass == Void::class.java || type.rawClass == Unit::class.java
