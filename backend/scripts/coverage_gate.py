@@ -7,19 +7,22 @@
 
 - 전체 라인·분기가 TOTAL_FLOORS 아래거나, 어느 모듈이든 MODULE_FLOORS 아래면 exit 1(머지 차단).
 - Gradle 모듈별 표와 실패 사유를 stdout 에, CI 면 `$GITHUB_STEP_SUMMARY` 에도 쓴다. 모듈은 패키지 이름이
-  아니라 **그 패키지 디렉터리를 가진 소스 폴더**로 정한다 — 새 모듈이 기존 모듈과 같은 패키지 아래에 클래스를
-  두면 이름으로는 큰 모듈에 섞여 모듈 바닥이 0% 를 못 본다(모듈↔패키지 일치를 강제하는 아키텍처 규칙은 없다).
+  아니라 **소스 파일이 실제로 있는 소스 폴더**로 정한다(리포트의 패키지 디렉터리 + 파일 이름). 패키지로 정하면
+  새 모듈이 기존 모듈과 같은 패키지에 클래스를 둘 때 큰 모듈에 섞여 모듈 바닥이 0% 를 못 본다.
+  리포에 없는 파일 이름은 그 패키지의 소유 모듈로 보낸다 — 인라인 함수(`compareBy` 등)가 우리 패키지에 만든
+  클래스는 표준 라이브러리 파일 이름(`Comparisons.kt`)을 달고 나온다(실측). 패키지도 못 찾으면 실패한다.
 
 하한선은 **래칫**이다 — 오르면 상수를 올리는 PR 을 내고, 내리지 않는다. 처음부터 목표치(80% 같은)를
 걸면 첫날부터 빨갛거나 아무도 못 지키는 숫자가 되어 결국 게이트를 끄게 된다. 측정한 기준선에서 시작한다.
 
-`COVERAGE_ADVISORY=1` 이면 판정을 막지 않는다 — 실패를 `::warning::` 주석으로 커밋 체크에 남기고 exit 0
-(develop push 용: 막으면 이미 머지된 코드의 이미지 발행이 멈춘다).
+`COVERAGE_ADVISORY=1` 이면 판정을 막지 않는다 — 하한 아래·리포트 없음 모두 exit 0
+(develop push 용: 막으면 이미 머지된 코드의 이미지 발행이 멈춘다). GitHub Actions 안에서는 실패 사유를
+커밋 체크 주석으로도 낸다 — 막는 모드는 `::error::`, advisory 는 `::warning::`.
 
 Gradle 내장 `JacocoCoverageVerification` 을 쓰지 않은 이유: 모듈마다 검증 태스크를 등록하면 모듈별 바닥도
 표현은 된다. 다만 판정이 모듈 수만큼 흩어지고, 전체·모듈 실패 사유와 표를 잡 요약 한 곳에 모으려면 어차피
 요약 스크립트가 필요하다. 그래서 판정과 요약을 한 스크립트에 두었다. 그 대가로 모듈 소유를 소스 폴더에서
-읽는다(package_owners) — 소유를 못 찾으면 조용히 넘기지 않고 실패한다.
+읽는다(source_owners) — 소유를 못 찾으면 조용히 넘기지 않고 실패한다.
 
 검사: `python3 -m unittest scripts/test_coverage_gate.py`
 """
@@ -66,16 +69,17 @@ def fmt(value, floor):
     return f"{value:.1f}%" + (" ❌" if value < floor else "")
 
 
-def package_owners(backend=BACKEND):
-    """패키지 디렉터리(`com/trippilot/...`) → 그것을 가진 Gradle 모듈들. 둘 이상이면 리포트에서 합쳐진 것이다."""
+def source_owners(backend=BACKEND):
+    """소스 파일(`com/trippilot/.../X.kt`)과 그 패키지 디렉터리 → 가진 Gradle 모듈들. 둘 이상이면 두 모듈에 있다."""
     owners = defaultdict(set)
     for src in [*backend.glob("**/src/main/kotlin"), *backend.glob("**/src/main/java")]:
         if "build" in src.relative_to(backend).parts:
             continue
         module = src.parent.parent.parent.relative_to(backend).as_posix()
-        for d in src.rglob("*"):
-            if d.is_dir() and any(f.suffix in (".kt", ".java") for f in d.iterdir()):
-                owners[d.relative_to(src).as_posix()].add(module)
+        for f in src.rglob("*"):
+            if f.suffix in (".kt", ".java"):
+                owners[f.relative_to(src).as_posix()].add(module)
+                owners[f.parent.relative_to(src).as_posix()].add(module)
     return owners
 
 
@@ -83,13 +87,16 @@ def evaluate(root, owners):
     """(전체 비율, 모듈별 비율, 실패 사유 목록). 전체 비율이 None 이면 측정 대상이 없는 것이다."""
     sums = defaultdict(lambda: {k: [0, 0] for k in KINDS})
     for package in root.iter("package"):
-        name = package.get("name")
-        # 소유를 못 찾은 패키지를 패키지 이름으로 흘리면 하위 패키지마다 '모듈'이 생겨 바닥 판정이 엉뚱해진다.
-        module = "+".join(sorted(owners.get(name, ()))) or f"?{name}"
-        for kind in KINDS:
-            covered, missed = counter(package, kind)
-            sums[module][kind][0] += covered
-            sums[module][kind][1] += missed
+        for source in package.iter("sourcefile"):
+            path = f"{package.get('name')}/{source.get('name')}"
+            # 파일 → (리포에 없는 인라인 파일 이름이면) 패키지 → 둘 다 없으면 따로 모아 실패시킨다.
+            # 조용히 어느 모듈에 붙이면 그 모듈 수치가 엉뚱해진다.
+            found = owners.get(path) or owners.get(package.get("name"), ())
+            module = "+".join(sorted(found)) or f"?{path}"
+            for kind in KINDS:
+                covered, missed = counter(source, kind)
+                sums[module][kind][0] += covered
+                sums[module][kind][1] += missed
 
     totals = {k: pct(*counter(root, k)) for k in KINDS}
     modules = {m: {k: pct(*c[k]) for k in KINDS} for m, c in sums.items()}
@@ -97,7 +104,7 @@ def evaluate(root, owners):
     failures = [f"전체 {k} 측정 대상이 없다(합산 대상·계측 범위 설정을 본다)" for k in KINDS if totals[k] is None]
     failures += [f"전체 {k} {totals[k]:.1f}% < 하한 {TOTAL_FLOORS[k]:g}%" for k in KINDS
                  if totals[k] is not None and totals[k] < TOTAL_FLOORS[k]]
-    failures += [f"{m[1:]}: 소유 모듈을 못 찾았다(소스 디렉터리와 package 선언이 어긋났나)" for m in sorted(modules) if m.startswith("?")]
+    failures += [f"{m[1:]}: 소유 모듈을 못 찾았다(소스 폴더에 그 패키지가 없다)" for m in sorted(modules) if m.startswith("?")]
     failures += [
         f"{m} {k} {p[k]:.1f}% < 모듈 바닥 {MODULE_FLOORS[k]:g}%"
         for m, p in sorted(modules.items()) for k in KINDS
@@ -129,8 +136,18 @@ def render(totals, modules, failures):
     return "\n".join(lines)
 
 
+def annotate(failures, advisory):
+    """GitHub Actions 안에서만 실패 사유를 커밋 체크 주석으로 낸다(로컬에서는 잡음)."""
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return
+    level, title = ("warning", "커버리지 하한 아래(막지 않음)") if advisory else ("error", "커버리지 하한 아래")
+    for f in failures:
+        print(f"::{level} title={title}::{f}")
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    advisory = os.environ.get("COVERAGE_ADVISORY") == "1"
     if len(argv) != 1:
         print("리포트 경로가 필요하다 — `./gradlew :app:coverageGate` 로 부른다(리포트를 만들고 그 경로를 넘긴다).",
               file=sys.stderr)
@@ -138,11 +155,13 @@ def main(argv=None):
     path = argv[0]
     if not os.path.exists(path):
         # coverageGate 는 옛 XML 을 지우고 리포트를 다시 만든다. 그래도 없으면 실행 데이터가 없어 리포트가 생략된 것이다.
-        print(f"리포트가 없다: {path}\n테스트 실행 데이터(.exec)가 없어 리포트가 생략됐을 수 있다 — "
-              "`./gradlew build :app:coverageGate` 로 테스트부터 돌린다.", file=sys.stderr)
-        return 2
+        reason = (f"리포트가 없다: {path} — 테스트 실행 데이터(.exec)가 없어 리포트가 생략됐을 수 있다. "
+                  "`./gradlew build :app:coverageGate` 로 테스트부터 돌린다.")
+        print(reason, file=sys.stderr)
+        annotate([reason], advisory)
+        return 0 if advisory else 2
 
-    totals, modules, failures = evaluate(ET.parse(path).getroot(), package_owners())
+    totals, modules, failures = evaluate(ET.parse(path).getroot(), source_owners())
     report = render(totals, modules, failures)
     print(report)
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
@@ -151,9 +170,8 @@ def main(argv=None):
     for k in KINDS:
         if totals[k] is not None and totals[k] >= TOTAL_FLOORS[k] + 2:
             print(f"\n{k} 하한선을 {int(totals[k]) - 1}% 로 올릴 수 있다(TOTAL_FLOORS — 버림에서 1p 여유).")
-    if failures and os.environ.get("COVERAGE_ADVISORY") == "1":
-        for f in failures:
-            print(f"::warning title=커버리지 하한 아래(막지 않음)::{f}")
+    annotate(failures, advisory)
+    if advisory:
         return 0
     return 1 if failures else 0
 
