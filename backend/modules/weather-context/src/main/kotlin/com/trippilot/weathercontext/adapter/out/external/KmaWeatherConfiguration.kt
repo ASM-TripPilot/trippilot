@@ -35,6 +35,15 @@ data class KmaWeatherProperties(
      * 복제본 2 × 3,000 = 6,000 이라 키 한도(개발계정 10,000/일)의 나머지가 AI·이름 경로 몫으로 남는다. 배포 스위치로 열지 않는다.
      */
     val gridDailyCap: Int = 3_000,
+    /**
+     * 기상특보·에어코리아 키(`PUBLIC_DATA_API_KEY` — 특보·대기질 활용신청 계정, **디코딩 키**). 비면 [serviceKey] 로 대신한다
+     * ([WeatherAlertConfiguration]) — compose 가 설정하지 않은 env 를 빈 문자열로 넘겨 yml 중첩 기본값으로는 대신이 안 된다.
+     */
+    val publicDataKey: String = "",
+    /** 기상특보 조회서비스(특보현황 `getPwnStatus`). */
+    val warningBaseUrl: String = "https://apis.data.go.kr/1360000/WthrWrnInfoService",
+    /** 에어코리아 대기오염정보(대기질 예보통보 `getMinuDustFrcstDspth`). */
+    val airBaseUrl: String = "https://apis.data.go.kr/B552584/ArpltnInforInqireSvc",
 )
 
 @Configuration
