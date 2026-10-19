@@ -3629,7 +3629,7 @@ components:
       description: 리프레시 토큰 하나를 실어 보내는 본문 — 회전(/auth/token/refresh)·로그아웃(/auth/logout) 공용
       required: [refreshToken]
       properties:
-        refreshToken: { type: string, minLength: 1, description: 비면 400(VALIDATION_ERROR) }
+        refreshToken: { type: string, pattern: '\S', description: '비거나 공백뿐이면 400(VALIDATION_ERROR) — 서버 @NotBlank' }
 
     RefreshedTokenPair:
       type: object

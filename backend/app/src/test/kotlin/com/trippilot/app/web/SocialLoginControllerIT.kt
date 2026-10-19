@@ -18,11 +18,9 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Primary
-import org.springframework.core.io.ClassPathResource
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.web.client.RestClient
-import org.yaml.snakeyaml.Yaml
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
@@ -264,8 +262,7 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     fun `두 로그인 경로의 501 설명이 잘리지 않는다 — 닫아 둔 제공자를 계약이 말한다`() {
         @Suppress("UNCHECKED_CAST")
         fun response501(path: String): Map<String, Any?> {
-            val spec = Yaml().load<Map<String, Any>>(ClassPathResource("static/openapi.yaml").inputStream)
-            val post = ((spec["paths"] as Map<String, Any>)[path] as Map<String, Any>)["post"] as Map<String, Any>
+            val post = ((OpenApiSpec.document["paths"] as Map<String, Any>)[path] as Map<String, Any>)["post"] as Map<String, Any>
             return (post["responses"] as Map<Any, Any>).entries.single { it.key.toString() == "501" }.value as Map<String, Any?>
         }
 
