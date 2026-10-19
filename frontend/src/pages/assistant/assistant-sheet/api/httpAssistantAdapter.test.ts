@@ -1,7 +1,7 @@
 import type { AxiosRequestConfig } from 'axios';
 import { AxiosError, AxiosHeaders, CanceledError } from 'axios';
 
-import type { SendTurnRequest } from './assistantContract';
+import type { FeedbackRequest, SendTurnRequest } from './assistantContract';
 import { AssistantApiError } from './assistantPort';
 import { HttpAssistantAdapter, toAssistantError } from './httpAssistantAdapter';
 
@@ -94,6 +94,50 @@ describe('경로 — 포트 메서드 ↔ BE 엔드포인트', () => {
     const error = await adapter.listSessions().catch((e: unknown) => e);
     expect(error).toBeInstanceOf(AssistantApiError);
     expect((error as AssistantApiError).code).toBe('SERVER');
+  });
+
+  it('답 평가(US-ASSIST-09) — PUT 은 본문 그대로, 취소는 같은 경로 DELETE', async () => {
+    // Arrange
+    const { calls, adapter } = recorder();
+    const body: FeedbackRequest = {
+      rating: 'DOWN',
+      reason: 'WRONG',
+      comment: '동선이 너무 길어요',
+    };
+
+    // Act
+    await adapter.putFeedback('s1', 'm1', body);
+    await adapter.deleteFeedback('s1', 'm1');
+
+    // Assert
+    expect(calls).toEqual([
+      {
+        method: 'PUT',
+        url: '/assistant/sessions/s1/messages/m1/feedback',
+        data: body,
+      },
+      { method: 'DELETE', url: '/assistant/sessions/s1/messages/m1/feedback' },
+    ]);
+  });
+
+  it('답 평가 실패(404 남의·만료·없는 메시지 · 400 대상 아님)도 AssistantApiError 로 던진다', async () => {
+    const notFound = new HttpAssistantAdapter(() =>
+      Promise.reject(httpError(404))
+    );
+    const invalid = new HttpAssistantAdapter(() =>
+      Promise.reject(httpError(400, { error: { code: 'VALIDATION_FAILED' } }))
+    );
+    const up: FeedbackRequest = { rating: 'UP', reason: null, comment: null };
+
+    const errors = [
+      await notFound.putFeedback('s1', 'm1', up).catch((e: unknown) => e),
+      await invalid.deleteFeedback('s1', 'm1').catch((e: unknown) => e),
+    ];
+
+    errors.forEach((error) => {
+      expect(error).toBeInstanceOf(AssistantApiError);
+      expect((error as AssistantApiError).code).toBe('SERVER');
+    });
   });
 });
 
