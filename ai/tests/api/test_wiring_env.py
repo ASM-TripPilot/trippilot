@@ -298,6 +298,7 @@ def test_env_anthropic_provider_assembles(monkeypatch):
 
     fake_sdk = types.ModuleType("anthropic")
     fake_sdk.Anthropic = _FakeAnthropicClient
+    fake_sdk.DefaultHttpxClient = lambda **kwargs: kwargs["transport"]
     monkeypatch.setitem(sys.modules, "anthropic", fake_sdk)
     monkeypatch.setenv("TRIPPILOT_LLM_PROVIDER", "anthropic")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "k-test")
@@ -309,6 +310,8 @@ def test_env_anthropic_provider_assembles(monkeypatch):
     from trippilot.llm_gateway.adapters.anthropic_adapter import AnthropicAdapter
     assert isinstance(llm, AnthropicAdapter)
     assert model_id == "claude-x"
+    from trippilot.llm_gateway.adapters.deadline_http import DeadlineTransport
+    assert isinstance(calls.pop("http_client"), DeadlineTransport)  # 총시간 시한
     assert calls == {"api_key": "k-test", "max_retries": 0}  # 재시도 무익 정책 (TRIP-381)
 
 
