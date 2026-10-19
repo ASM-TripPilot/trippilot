@@ -177,15 +177,16 @@ def test_키_관련_resultCode_도_퇴출_사유() -> None:
     assert _service_keys(http)[1] == "k2"
 
 
-def test_일시_장애는_퇴출_사유가_아니다() -> None:
-    """타임아웃·429 는 그 시점 API 상태다 — 실측으로 살아있는 키도 함께 타임아웃했다.
-
-    잘못 퇴출하면 멀쩡한 키를 잃는다. 429 는 키를 바꾸지 않고 그 호출만 실패한다.
-    """
+def test_429_는_그_키의_하루_한도다_다음_키로_넘어간다() -> None:
+    """종전엔 429 를 일시 장애로 보고 같은 키로 계속 불렀다. 실측(2026-10-19)으로 data.go.kr 429 는
+    **그 키·그 오퍼레이션의 하루 한도 소진**이다 — 같은 키로 목록·detailCommon2 는 통과하는데
+    detailIntro2 만 429 였고, 그날 정기 수집은 한도 끝난 KEY3 로 960번을 더 불렀다(전부 429).
+    타임아웃·5xx 는 여전히 퇴출 사유가 아니다(`_KEY_DEAD_HTTP` 에 없다)."""
     http = FakeTourApiHttp(pages=_two_page_http()._pages, dead_keys={"k1": 429})
     adapter = TourApiAdapter(http, "k1", extra_keys=("k2",), calls_per_key=10)
-    collect(adapter, area_code="39", content_types=["12"], max_calls=4, rows_per_page=2)
-    assert set(_service_keys(http)) == {"k1"}   # 여전히 1번 키를 쓴다
+    result = collect(adapter, area_code="39", content_types=["12"], max_calls=4, rows_per_page=2)
+    assert _service_keys(http)[0] == "k1" and set(_service_keys(http)[1:]) == {"k2"}
+    assert result.stats.passed > 0                 # 같은 요청을 다음 키로 다시 걸어 받는다
 
 
 def test_전부_죽으면_HTTP_를_더_쓰지_않는다() -> None:
