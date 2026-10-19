@@ -113,9 +113,15 @@ class ChangeLogSnapshotReadTest : StringSpec({
     }
 
     "V2.8 이전 행처럼 isFixed·endsNextDay 가 없거나 타입이 틀리면 false 로 읽는다" {
-        val old = goodSlot - "endsNextDay" + ("isFixed" to "yes")
-        val s = read(mapOf("days" to listOf(mapOf("date" to "2026-08-01", "slots" to listOf(old))))).days.single().slots.single()
-        s.isFixed shouldBe false
-        s.endsNextDay shouldBe false
+        val slots = listOf(
+            goodSlot - "endsNextDay" + ("isFixed" to "yes"),
+            goodSlot - "isFixed" + ("endsNextDay" to "yes"),
+        )
+        val read = read(mapOf("days" to listOf(mapOf("date" to "2026-08-01", "slots" to slots)))).days.single().slots
+        read.size shouldBe 2
+        read.forEach {
+            it.isFixed shouldBe false
+            it.endsNextDay shouldBe false
+        }
     }
 })

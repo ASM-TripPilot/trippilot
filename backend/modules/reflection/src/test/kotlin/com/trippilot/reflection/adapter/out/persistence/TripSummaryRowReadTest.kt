@@ -10,6 +10,7 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import tools.jackson.databind.json.JsonMapper
 import java.time.Instant
 import java.time.LocalDate
 import java.util.Optional
@@ -99,7 +100,18 @@ class TripSummaryRowReadTest : StringSpec({
             TripSummaryStats(2, 3.0, DistanceSource.VISIT_LINE, 1, hasLocationData = true), ReflectionSource.AI, t0,
         )
 
-        TripSummaryRepositoryAdapter(jpa).upsert(summary) shouldBe summary
+        val adapter = TripSummaryRepositoryAdapter(jpa)
+        adapter.upsert(summary) shouldBe summary
+
+        // jsonb 왕복을 흉내 낸다 — 메모리 Map 을 그대로 돌려주면 직렬화로 바뀌는 것(숫자 타입·null 칸)이 안 보인다.
+        val json = JsonMapper()
+        val row = saved.captured
+        @Suppress("UNCHECKED_CAST")
+        row.highlights = json.readValue(json.writeValueAsString(row.highlights), List::class.java) as List<Map<String, Any?>>
+        @Suppress("UNCHECKED_CAST")
+        row.stats = json.readValue(json.writeValueAsString(row.stats), Map::class.java) as Map<String, Any?>
+        every { jpa.findById(trip) } returns Optional.of(row)
+        adapter.find(trip) shouldBe summary
     }
 
     "기존 요약이 있으면 그 행을 덮어쓴다 — 여행당 하나" {

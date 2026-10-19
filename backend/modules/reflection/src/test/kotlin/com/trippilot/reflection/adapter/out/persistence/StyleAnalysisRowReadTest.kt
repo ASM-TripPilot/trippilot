@@ -8,6 +8,7 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import tools.jackson.databind.json.JsonMapper
 import java.time.Instant
 import java.util.Optional
 import java.util.UUID
@@ -63,6 +64,18 @@ class StyleAnalysisRowReadTest : StringSpec({
 
         every { jpa.findById(acc) } returns Optional.empty()
         StyleAnalysisRepositoryAdapter(jpa).upsert(analysis) shouldBe analysis
+
+        // jsonb 왕복을 흉내 낸다 — 게이지·비율이 JSON 숫자로 돌아와도 같은 값으로 읽혀야 한다.
+        val json = JsonMapper()
+        val row = saved.captured
+        @Suppress("UNCHECKED_CAST")
+        row.traitGauges = json.readValue(json.writeValueAsString(row.traitGauges), Map::class.java) as Map<String, Any?>
+        @Suppress("UNCHECKED_CAST")
+        row.categoryBreakdown = json.readValue(json.writeValueAsString(row.categoryBreakdown), List::class.java) as List<Map<String, Any?>>
+        @Suppress("UNCHECKED_CAST")
+        row.descriptors = json.readValue(json.writeValueAsString(row.descriptors), List::class.java) as List<String>
+        every { jpa.findById(acc) } returns Optional.of(row)
+        StyleAnalysisRepositoryAdapter(jpa).find(acc) shouldBe analysis
 
         every { jpa.findById(acc) } returns Optional.of(existing)
         StyleAnalysisRepositoryAdapter(jpa).upsert(analysis) shouldBe analysis

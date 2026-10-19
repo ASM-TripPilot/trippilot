@@ -35,8 +35,13 @@ class NotificationInvariantsTest : StringSpec({
         raise("제목", "가".repeat(400)).body.length shouldBe 400
     }
 
-    "시각으로 발화하지 않는 종류는 예약할 수 없다" {
-        (NotificationKind.entries - NotificationKind.REMINDERS).forEach { kind ->
+    "시각으로 발화하지 않는 종류는 예약할 수 없고, 리마인드 세 종류만 예약된다" {
+        val eventOnly = NotificationKind.entries - NotificationKind.REMINDERS
+        eventOnly.toSet() shouldBe setOf(
+            NotificationKind.STAY, NotificationKind.PLAN_B, NotificationKind.REFLECTION, NotificationKind.COMMUNITY, NotificationKind.SYSTEM,
+        )
+        NotificationKind.REMINDERS.forEach { NotificationSchedule.pending(acc, trip, it, at).kind shouldBe it }
+        eventOnly.forEach { kind ->
             shouldThrow<IllegalArgumentException> { NotificationSchedule.pending(acc, trip, kind, at) }
         }
     }

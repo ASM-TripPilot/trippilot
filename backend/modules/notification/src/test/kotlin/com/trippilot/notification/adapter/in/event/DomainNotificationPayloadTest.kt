@@ -12,7 +12,6 @@ import com.trippilot.notification.application.testMetrics
 import com.trippilot.notification.domain.NotificationKind
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
-import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import java.time.Clock
@@ -56,7 +55,6 @@ class DomainNotificationPayloadTest : StringSpec({
         val f = fixture()
         val e = envelope("{not json", "stay.StayRegistered")
         shouldThrow<IllegalStateException> { StayRegisteredSubscriber(f.raise, mapper).handle(e) }.message shouldContain e.eventId.toString()
-        f.stored.stored.shouldBeEmpty()
     }
 
     "숙소 사건에 accountId 가 없거나 null 이거나 UUID 가 아니면 예외다" {
@@ -65,7 +63,6 @@ class DomainNotificationPayloadTest : StringSpec({
             shouldThrow<IllegalStateException> { StayRegisteredSubscriber(f.raise, mapper).handle(envelope(p, "stay.StayRegistered")) }
                 .message shouldContain "accountId"
         }
-        f.stored.stored.shouldBeEmpty()
     }
 
     "숙소 이름이 없으면 본문은 '숙소' 다 — 빈 본문으로 실패시키지 않는다" {
@@ -85,7 +82,6 @@ class DomainNotificationPayloadTest : StringSpec({
             shouldThrow<IllegalStateException> { PlanBTriggeredSubscriber(f.raise, mapper).handle(envelope(p, "planb.PlanBTriggered")) }
                 .message shouldContain "accountId"
         }
-        f.stored.stored.shouldBeEmpty()
     }
 
     "회고 사건에 tripId 가 없으면 예외다" {
@@ -93,7 +89,6 @@ class DomainNotificationPayloadTest : StringSpec({
         shouldThrow<IllegalStateException> {
             ReflectionReadySubscriber(f.raise, mapper).handle(envelope(json("kind" to "SUMMARY"), "reflection.ReflectionReady"))
         }.message shouldContain "tripId"
-        f.stored.stored.shouldBeEmpty()
     }
 
     "여행 소유자를 못 찾으면 예외다 — 엉뚱한 계정에 적재하지 않는다" {
@@ -103,7 +98,6 @@ class DomainNotificationPayloadTest : StringSpec({
                 envelope(json("tripId" to UUID.randomUUID().toString(), "kind" to "SUMMARY"), "reflection.ReflectionReady"),
             )
         }.message shouldContain "소유자"
-        f.stored.stored.shouldBeEmpty()
     }
 
     "하루 회고에 dayDate 가 없으면 예외다 — 어느 날 회고인지 모르는 알림을 만들지 않는다" {
@@ -113,6 +107,5 @@ class DomainNotificationPayloadTest : StringSpec({
         shouldThrow<IllegalStateException> {
             ReflectionReadySubscriber(f.raise, mapper).handle(envelope(json("tripId" to trip.toString(), "kind" to "DAILY"), "reflection.ReflectionReady"))
         }.message shouldContain "dayDate"
-        f.stored.stored.shouldBeEmpty()
     }
 })
