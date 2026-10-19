@@ -50,6 +50,8 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             LlmFeature.DIALOGUE_INTENT: ModelTier.LIGHT,
             LlmFeature.DIALOGUE_ANSWER: ModelTier.LIGHT,
             LlmFeature.DIALOGUE_MEMORY: ModelTier.LIGHT,
+            # 범위 밖 질문의 도구 계획 — 분류와 같은 급(닫힌 이름 고르기 + 짧은 인자), 같은 9s 안이라 LIGHT (BR-AO-28)
+            LlmFeature.DIALOGUE_PLAN: ModelTier.LIGHT,
             LlmFeature.EXPLANATION: ModelTier.HEAVY,
             # 차선책 근거 문장 — 설명(EXPLANATION)과 같은 급의 취향 그라운딩 문장 (TRIP-887)
             LlmFeature.ALTERNATIVE_EXPLANATION: ModelTier.HEAVY,
@@ -134,6 +136,9 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # 같은 곳 — 요약 실패면 최근 턴을 줄로 잘라 붙이는 결정론 압축
             # (orchestrator/dialogue_memory.compress_fallback, T007)으로 전진하고 다음 턴에 다시 시도한다.
             LlmFeature.DIALOGUE_MEMORY: ("llm_dialogue_memory", "deterministic_compress"),
+            # 같은 곳 2‴ — 계획 실패(시한·벤더·깨진 출력·전량 드롭)면 계획 없이 종전 범위 밖(BE SCOPE 카드)으로 수렴한다.
+            # 도구 없음·거절(calls=[]·refused)은 성공·0건이라 이 짝이 나가지 않는다(의도된 결정론, BR-AO-28).
+            LlmFeature.DIALOGUE_PLAN: ("llm_dialogue_plan", "out_of_scope"),
             # intent_router `_vote` — 유사질문이 없으면 투표를 접고 3차(LLM 직접
             # 분류)로 **승급**한다. 규칙으로 내려가는 강등이 아니다.
             LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
@@ -205,6 +210,8 @@ def default_feature_max_tokens() -> Mapping[LlmFeature, int]:
             LlmFeature.DIALOGUE_INTENT: 1024,
             LlmFeature.DIALOGUE_ANSWER: 512,
             LlmFeature.DIALOGUE_MEMORY: 2048,
+            # 계획 — 분류와 같은 근거(JSON 한 줄 + 사고 토큰, 분류 실측 출력 239/256 사고 포함). 잘리면 계획 없이 범위 밖이다
+            LlmFeature.DIALOGUE_PLAN: 1024,
         }
     )
 
@@ -247,6 +254,8 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
             LlmFeature.DIALOGUE_INTENT: "low",
             LlmFeature.DIALOGUE_ANSWER: "low",
             LlmFeature.DIALOGUE_MEMORY: "low",
+            # 계획(2‴) — 같은 9s 안에서 분류 뒤 ≤3.0s(잔여×0.45)라 사고를 낮춘다 (BR-AO-28)
+            LlmFeature.DIALOGUE_PLAN: "low",
         }
     )
 

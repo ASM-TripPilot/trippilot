@@ -114,6 +114,7 @@ def test_max_tokens_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         LlmFeature.DIALOGUE_INTENT: 1024,  # DEV 실측 출력 239/256 — 사고 토큰이 상한에 붙었다
         LlmFeature.DIALOGUE_ANSWER: 512,
         LlmFeature.DIALOGUE_MEMORY: 2048,
+        LlmFeature.DIALOGUE_PLAN: 1024,  # 분류와 같은 근거 — JSON 한 줄 + 사고 토큰(출력 239/256 실측)
     }.get(feature, 1024)
     assert [r.max_tokens for r in llm.requests] == [expected]
 
@@ -149,6 +150,7 @@ def test_effort_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         LlmFeature.DIALOGUE_INTENT: "low",
         LlmFeature.DIALOGUE_ANSWER: "low",
         LlmFeature.DIALOGUE_MEMORY: "low",
+        LlmFeature.DIALOGUE_PLAN: "low",  # 같은 9s 안의 2‴ 계획(≤3.0s)
     }.get(feature)
     assert [r.effort for r in llm.requests] == [expected]
 
