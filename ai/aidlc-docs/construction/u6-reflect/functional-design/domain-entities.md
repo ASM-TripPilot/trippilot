@@ -4,6 +4,11 @@
 > 근거 정본: `reflection-template-design.md`(#334 머지 — **출력 계약, 본 FD는 이 계약을 변경하지 않는다**),
 > `reflect-agent-design.md` §4·5(트리거·상태 머신 — 무변), `agent-structure-v2.md` §3·4(Reflect 전속 도구·어셈블리 관문 스킵),
 > 프롬프트 정본 §2.7(REFLECTION_NUDGE)·§2.8(REFLECTION_TEMPLATE — §2.3 REFLECTION은 2026-08-25 흡수·폐지), AI-D06, agent-foundation FD(BR-AF-07 절차).
+> **개정 2026-10-19**: `ai-prompt-design.md` §2.8 은 AlternativeExplanation 이다 — REFLECTION_TEMPLATE·VISION·PHOTO_HIGHLIGHT 전용 절은 없고
+> 프롬프트 정본은 `ai/prompts/reflection_template{,_vision}.yaml` 머리 주석과 계약(reflection-template-design.md)이다.
+> 아래 §2 `ReflectionRequest.vision` 은 구현에서 `agents/reflect/agent.py` 의 `ReflectTask.vision` 으로 갔고(요청 와이어 무변),
+> §4 `PhotoRef.image_ref` 는 없다 — 이미지는 `ReflectTask.images`(불투명 payload)로 따로 간다. 사진 회고 방향은 2026-10-18 에
+> "사진은 기기를 떠나지 않는다 — AI 는 사진 자리만, FE 가 기기 사진으로 채운다"로 정해져 vision 경로는 미개통이다.
 > 규칙은 U1과 동일: `frozen=True, slots=True` · tz-aware · `from_dict(to_dict(x)) == x`(U5-P10) · 컬렉션은 tuple/frozenset만.
 
 ---

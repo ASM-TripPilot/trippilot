@@ -4,7 +4,7 @@
 N회 생성 → 최선 채택"이고, 시도의 실패는 **파싱 실패(스키마 불성립)뿐**이다.
 검증 가능 항목의 위반은 TemplateViolation 목록으로 동봉해 후보를 살려 반환한다
 (GateOutcome.value = TemplateCandidate — FD business-logic §3 ③). N회 루프·랭킹·
-장면 교체는 agents/reflect(composer, 후속) 소유 — 게이트는 판정만 한다.
+장면 교체는 agents/reflect/composer.py 소유 — 게이트는 판정만 한다.
 
 파싱 실패(= error, 게이트웨이가 폴백 신호로 전환)의 경계는 도메인 타입 성립 여부다:
 JSON 아님 · 최상위 {"template": …} 아님 · 필드 누락/타입 오류 · layout·source_event
@@ -22,7 +22,7 @@ enum 밖 · PHOTO_* 장면에 photo_slot 없음 · EVENT 장면에 source_event 
   소프트 — CAPTION_LEN(40자 초과) · SCENE_COUNT(3~8 밖) · DUP_VISIT_REF(장면 간 중복) ·
          HASHTAG_OUT(지역·방문지·브랜드 파생 아님 — TRIP-558로 하드에서 강등)
 해시태그도 TIME_EXPR·PLACEHOLDER_OUT 검사는 받고, 그쪽은 하드다 (BR-U6R-04).
-장면 3~8·캡션 40자는 잠정값 (FD 미결 #4 — remote config 후보).
+장면 3~8·캡션 40자는 FD 미결 #4 에서 확정 (FE 의견이 오면 상수만 조정).
 
 "error 있으면 value 비움" 불변식은 base.GateOutcome이 강제한다. 산출이 **후보 1건**
 이라 "빈 결과"라는 상태가 없다 — TemplateCandidate가 성립하거나 error다
@@ -59,7 +59,7 @@ from trippilot.domain.reflection import (
     VisitRef,
 )
 
-# 잠정값 (FD 미결 #4 — FE 렌더러 의견 시 값만 조정, 프롬프트 문구와 동일 값을 테스트가 고정)
+# FD 미결 #4 에서 확정 (FE 렌더러 의견 시 값만 조정, 프롬프트 문구와 동일 값을 테스트가 고정)
 _SCENE_MIN = 3
 _SCENE_MAX = 8
 _CAPTION_MAX = 40

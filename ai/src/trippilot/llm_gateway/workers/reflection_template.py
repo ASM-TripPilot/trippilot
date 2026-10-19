@@ -1,7 +1,7 @@
 """ReflectionTemplateWorker — 회고 연출 템플릿 1회 호출 조립, 상위 티어 (TRIP-429).
 
 N회 생성 루프(≤3)·결정론 랭킹·장면/필드 교체·봉투 조립·고정 폴백 템플릿은
-agents/reflect(composer·fallback, 후속) 소유 (FD business-logic §3 ③~⑥) —
+agents/reflect(agent.py 루프 · composer.py 랭킹·교체·바인딩 · fallback.py) 소유 (FD business-logic §3 ③~⑥) —
 워커는 vars 조립 → gateway.call 1회까지만 (reflection_nudge 워커와 같은 형).
 
 입력(방문 기록·이벤트·페르소나 요약)은 백엔드가 조립해 전달한다 (계약 §5,

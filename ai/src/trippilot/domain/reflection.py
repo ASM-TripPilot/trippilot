@@ -11,8 +11,9 @@
   자리표시자로만 실리고, 값은 응답 전에 composer 가 요청에서 꺼내 채운다 (숫자 환각 구조 차단,
   계약 §2 개정 2026-10-19 — 렌더러가 채운다는 종전 전제는 틀렸다).
 
-Phase 2(VisionInput·PhotoRef 등, FD §4)는 이 파일 범위 밖 — ReflectionRequest 후미
-기본값 필드로 후속 추가한다 (기존 호출 무영향 조건, FD business-logic §6.1).
+Phase 2 타입(PhotoRef·VisionInput 등, FD §4)은 이 파일 후미에 있다. vision 재료는
+`ReflectionRequest` 가 아니라 `agents/reflect/agent.py` 의 `ReflectTask.vision` 이 나른다 —
+요청 와이어는 Phase 1 그대로다 (사진은 서버로 오지 않는다, 2026-10-18 방향).
 규칙은 U1과 동일: frozen+slots · tz-aware · from_dict(to_dict(x)) == x (RFL-P6).
 """
 
@@ -409,7 +410,7 @@ class TemplateCandidate:
     """랭킹 입력 1건 — **하드 위반이 있어도 후보는 유지** (계약 §4 "드롭이 아니라 최선 채택").
 
     attempt는 생성 차수(1~3). 게이트는 차수를 모르므로 기본 1로 승격하고,
-    N회 루프 소유자(agents/reflect composer, 후속)가 dataclasses.replace로 부여한다.
+    N회 루프 소유자(agents/reflect/agent.py `ReflectAgent`)가 dataclasses.replace로 부여한다.
     """
 
     template: ReflectionTemplate
