@@ -35,6 +35,11 @@ class ReplanPropertiesTest : StringSpec({
         p.prepared.mode shouldBe PreparedMode.OFF
     }
 
+    "대소문자·구분자와 true/false 는 관대하게 붙는다 — 스윕과 같은 바인더라 두 쪽 해석이 같다" {
+        bind("horizon" to "pre_trip").horizon shouldBe ReplanHorizon.PRE_TRIP
+        bind("prepared.mode" to "true").prepared.mode shouldBe PreparedMode.ON
+    }
+
     "모르는 값은 기동을 막는다 — 조용히 오늘·꺼짐으로 떨어지지 않는다" {
         shouldThrow<BindException> { bind("horizon" to "d-1") }
         shouldThrow<BindException> { bind("prepared.mode" to "yes") }

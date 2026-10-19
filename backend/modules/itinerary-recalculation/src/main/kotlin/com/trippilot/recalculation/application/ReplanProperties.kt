@@ -16,7 +16,8 @@ enum class PreparedMode { OFF, ON }
 /**
  * 재계획 설정(situation-awareness §7 · 배포 키 배선은 상황 감시 스윕 변경이 먼저 했다).
  *
- * 모르는 값(`pre_trip`·`yes` 같은 오타)은 **바인딩 실패 = 기동 실패**다 — 켰다고 믿는데 꺼진 채 도는 것보다 낫다.
+ * 모르는 값(`yes`·`d-1` 같은 오타)은 **바인딩 실패 = 기동 실패**다 — 켰다고 믿는데 꺼진 채 도는 것보다 낫다. 대소문자·구분자
+ * (`pre_trip`·`PRE-TRIP`)와 `true`·`false`(→ on·off)는 스프링 관대 바인딩이 붙인다 — 스윕도 같은 바인더라 두 쪽이 엇갈리지 않는다.
  * 하루 상한(여행 3·전체 100)과 대기 자리(실행 1 + 대기 10)는 설정이 아니라 상수다(O-SA-10 초기값 — 요청되지 않은 설정화 금지).
  */
 @ConfigurationProperties(prefix = "trippilot.replan")
