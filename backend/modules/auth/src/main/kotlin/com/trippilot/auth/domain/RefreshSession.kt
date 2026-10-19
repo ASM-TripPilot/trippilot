@@ -46,17 +46,14 @@ class RefreshSession private constructor(
     companion object {
         /**
          * 기기 식별자 상한 — 세션 컬럼(`refresh_session.device_id varchar(128)`)과 같은 값. 요청 DTO 가 이 값으로
-         * 막는다(넘기면 저장에서 22001 → 로그인 500). 컬럼과 갈라지면 SocialLoginControllerIT 가 실패한다.
+         * 막는다(넘기면 저장에서 22001 → 로그인 500). 컬럼·계약 maxLength 와 갈라지면 SocialLoginControllerIT 가 실패한다.
+         * 발급(issue)에는 검사를 두지 않는다 — 호출자는 이 DTO 를 거치는 경로 하나뿐이다(DTO 없는 발급 경로를 만들 때 붙인다).
          */
         const val DEVICE_ID_MAX = 128
 
         /** 새 체인의 첫 세션(로그인 시 발급). */
-        fun issue(accountId: AccountId, deviceId: String, tokenHash: String, now: Instant, ttl: Duration): RefreshSession {
-            // 400 으로 막는 것은 요청 DTO 의 @Size 다. 여기는 DTO 를 거치지 않는 발급 경로가 생겨도 저장 **전에** 실패시켜,
-            // 원인이 DB 22001 대신 이 메시지로 남게 한다(응답은 여전히 500 — 그 경로를 만들 때 검증을 붙여야 한다).
-            require(deviceId.length <= DEVICE_ID_MAX) { "기기 식별자는 $DEVICE_ID_MAX 자 이하여야 합니다." }
-            return RefreshSession(RefreshSessionId.new(), accountId, deviceId, tokenHash, UUID.randomUUID(), now, now.plus(ttl), null, null)
-        }
+        fun issue(accountId: AccountId, deviceId: String, tokenHash: String, now: Instant, ttl: Duration): RefreshSession =
+            RefreshSession(RefreshSessionId.new(), accountId, deviceId, tokenHash, UUID.randomUUID(), now, now.plus(ttl), null, null)
 
         /** 회전 후속 — 이전 세션과 같은 체인에 새 토큰을 잇는다. */
         fun next(previous: RefreshSession, tokenHash: String, now: Instant, ttl: Duration): RefreshSession =

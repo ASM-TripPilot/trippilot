@@ -139,6 +139,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RefreshedTokenPair' }
+        '400': { $ref: '#/components/responses/ValidationError' }
         '401':
           description: 무효·만료 또는 회전 토큰 재사용(체인 무효화)
           content:
@@ -158,6 +159,7 @@ paths:
             schema: { $ref: '#/components/schemas/RefreshTokenBody' }
       responses:
         '204': { description: 로그아웃 완료 }
+        '400': { $ref: '#/components/responses/ValidationError' }
 
   /terms:
     get:
@@ -3627,7 +3629,7 @@ components:
       description: 리프레시 토큰 하나를 실어 보내는 본문 — 회전(/auth/token/refresh)·로그아웃(/auth/logout) 공용
       required: [refreshToken]
       properties:
-        refreshToken: { type: string }
+        refreshToken: { type: string, minLength: 1, description: 비면 400(VALIDATION_ERROR) }
 
     RefreshedTokenPair:
       type: object

@@ -153,7 +153,9 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
      *
      * 왜 필요한가: 위의 경로 대조는 응답에 필드를 더하거나 이름을 바꾸고 문서를 안 고쳐도 초록이다.
      * 프론트는 orval 이 **문서로** 만든 타입을 쓰므로 새 필드를 못 보거나 없는 필드를 읽는다(undefined).
-     * 실측: 이 게이트를 처음 돌렸을 때 코드에만 있는 필드 4개와, 응답 본문이 통째로 문서에 없는 경로가 나왔다.
+     * 실측(이력 순서대로): 이름만 대조한 첫 판이 코드에만 있는 필드 4개를 찾았고, 본문 유무를 보게 넓히자
+     * 응답 본문이 통째로 없는 경로 1개·요청 본문이 없는 경로 1개가, 모양을 보게 넓히자 자유형 객체로만 적힌
+     * 필드 1개가 더 나왔다 — 이름 대조 하나로는 부족했다.
      *
      * 무엇과 맞대는가: DTO 의 Kotlin 필드가 아니라 **MVC 컨버터의 매퍼가 보는 속성** — `@JsonProperty`·
      * `@JsonIgnore` 까지 반영된 와이어 이름이다. 응답은 직렬화, 요청 본문은 역직렬화 쪽으로 따로 본다.
@@ -181,7 +183,7 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
                 !hasDocumentedBody ->
                     mismatches += "$label 응답: 코드는 본문(${responseType.rawClass.simpleName})을 내는데 문서 2xx 에 본문이 없다"
                 documented.isEmpty() && isJsonStructure(responseType) ->
-                    mismatches += "$label 응답: 코드는 JSON 객체(${responseType.rawClass.simpleName})를 내는데 문서 본문에 application/json 이 없다"
+                    mismatches += "$label 응답: 코드는 JSON 객체(${responseType.rawClass.simpleName})를 내는데 문서 본문에 application/json 스키마가 없다"
                 else -> documented.forEach { compare(responseType, it, "$label 응답", true, mismatches, mutableSetOf()) }
             }
 
@@ -191,7 +193,7 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
                 bodyParameter == null && hasDocumentedRequest -> mismatches += "$label 요청: 문서는 본문이 있는데 코드는 @RequestBody 가 없다"
                 bodyParameter != null && !hasDocumentedRequest -> mismatches += "$label 요청: 코드는 @RequestBody 를 받는데 문서에 requestBody 가 없다"
                 bodyParameter != null && request == null && isJsonStructure(requestType(bodyParameter)) ->
-                    mismatches += "$label 요청: 코드는 JSON 객체를 받는데 문서 requestBody 에 application/json 이 없다"
+                    mismatches += "$label 요청: 코드는 JSON 객체를 받는데 문서 requestBody 에 application/json 스키마가 없다"
                 bodyParameter != null && request != null -> compare(
                     requestType(bodyParameter), request, "$label 요청", false,
                     mismatches, mutableSetOf(),
@@ -337,14 +339,13 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
 
     /**
      * Jackson 이 스칼라로 쓰는 것 — 패키지 이름으로 어림한다. 웹 DTO 에 실제로 나오는 타입(문자열·수·UUID·시각·
-     * 열거형·JsonNode)에는 맞고, 예외(ByteArray 는 base64 문자열, kotlin.Pair 는 객체 등)는 리포에 없어서 다루지
+     * 열거형)에는 맞고, 예외(ByteArray 는 base64 문자열, kotlin.Pair 는 객체 등)는 리포에 없어서 다루지
      * 않는다(backend/CLAUDE.md §2). 그런 타입이 들어오면 이 게이트가 오탐으로 알려 준다 — 그때 직렬화기에 묻는
      * 방식(acceptJsonFormatVisitor)으로 바꾼다.
      */
     private fun isLeaf(type: JavaType): Boolean {
         val raw = type.rawClass
-        return type.isPrimitive || type.isEnumType || raw.name.startsWith("java.") || raw.name.startsWith("kotlin.") ||
-            JsonNode::class.java.isAssignableFrom(raw)
+        return type.isPrimitive || type.isEnumType || raw.name.startsWith("java.") || raw.name.startsWith("kotlin.")
     }
 
     private fun isScalarSchema(schema: Map<String, Any>): Boolean =
@@ -364,10 +365,7 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
         return body?.takeUnless { it.rawClass == Any::class.java }
     }
 
-    @Suppress("UNCHECKED_CAST")
-    private val spec: Map<String, Any> by lazy {
-        Yaml().load<Map<String, Any>>(ClassPathResource("static/openapi.yaml").inputStream)
-    }
+    private val spec: Map<String, Any> get() = OpenApiSpec.document
 
     @Suppress("UNCHECKED_CAST")
     private fun components(kind: String): Map<String, Any> =
@@ -403,6 +401,5 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
             ?.get("schema") as? Map<String, Any>
 
     /** JSON 으로 오가는 구조(DTO·컬렉션·Map·JsonNode) — 스칼라 본문(String 등)은 JSON 이 아니어도 된다. */
-    private fun isJsonStructure(type: JavaType): Boolean =
-        type.isContainerType || !isLeaf(type) || JsonNode::class.java.isAssignableFrom(type.rawClass)
+    private fun isJsonStructure(type: JavaType): Boolean = type.isContainerType || !isLeaf(type)
 }
