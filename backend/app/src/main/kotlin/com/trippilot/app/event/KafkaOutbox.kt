@@ -50,7 +50,8 @@ class KafkaOutboxConfig {
      * 상한을 폴링 모드의 5분이 아니라 30초로 둔다: 재시도는 소비 스레드에서 기다리므로 총 대기가
      * `max.poll.interval.ms`(기본 5분)를 넘으면 브로커가 소비자를 그룹에서 빼고 재배치가 반복된다. 대가로 3~13분짜리
      * 장애는 폴링 모드라면 넘기지만 여기서는 포기된다 — 포기는 [OutboxRelay.abandon] 이 폴링 모드와 같은 조회로 찾게 남긴다.
-     * 재시도 중에는 같은 파티션의 뒤 이벤트가 기다린다(KafkaOutboxConfig 문서 참고).
+     * 재시도 중에는 같은 파티션의 뒤 이벤트가 기다린다(KafkaOutboxConfig 문서 참고). 재시도 횟수는 메모리에만 있어 앱을
+     * 재시작하면 그 레코드는 처음부터 다시 센다(오프셋을 커밋하지 않았으므로 다시 받는다 — 유실은 아니다).
      * 봉투를 못 읽는 메시지는 재시도해도 같으므로 바로 포기한다(파티션을 막지 않게).
      */
     @Bean
@@ -77,6 +78,9 @@ class KafkaOutboxConfig {
             maxInterval = maxMs
         },
     ).apply {
+        // 예외 종류가 바뀌어도 시도 횟수를 이어 센다 — 기본(true)이면 연결 거부·시한 초과가 번갈아 나는 구독자는 매번 0 부터
+        // 다시 세어 상한에 영영 닿지 않는다(폴링 모드는 종류와 무관하게 DB 에 센다).
+        setResetStateOnExceptionChange(false)
         // 분류표를 **통째로 바꾼다.** 기본표(ClassCastException 등)와 원인 사슬 검사는 구독자 안에서 난 예외에도 걸려,
         // 폴링 모드라면 10번 재시도했을 일시 오류(응답 본문 파싱 실패 등)를 첫 실패에서 포기시킨다. 즉시 포기는 봉투를
         // 못 읽은 경우([UnreadableEnvelope])와 스프링이 인자를 못 만든 경우(값 없는 레코드 등 — 리스너 본문 전)뿐이다.
@@ -144,7 +148,9 @@ class KafkaOutboxBroker(
 @Component
 @ConditionalOnProperty(name = ["trippilot.outbox.broker"], havingValue = "kafka")
 class KafkaOutboxListener(private val relay: OutboxRelay, private val broker: KafkaOutboxBroker) {
-    @KafkaListener(topics = [KafkaOutboxConfig.TOPIC], groupId = "trippilot-outbox")
+    // 파티션 수만큼 소비 스레드를 둔다 — 하나면 백오프가 그 스레드를 재워 실패한 이벤트 하나가 세 파티션 전부를 멈춘다.
+    // 구독자는 종전에도 eventId 멱등·무상태 계약이라 동시에 불려도 된다(폴링 모드도 다중 인스턴스에서 동시에 돈다).
+    @KafkaListener(topics = [KafkaOutboxConfig.TOPIC], groupId = "trippilot-outbox", concurrency = "3")
     // 값 없는 레코드(tombstone)는 여기까지 오지 않는다 — 스프링이 인자 변환에서 비재시도 실패로 분류해 회수기로 바로 보낸다
     // (실측: "eventId 도 못 읽은 … value=null" 한 줄, 재시도 0). KafkaOutboxIT 가 그 동작을 지킨다.
     fun onMessage(value: String) {

@@ -60,10 +60,15 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
         val latencies = java.util.concurrent.ConcurrentHashMap<String, Duration>()
         @Volatile var failNext = false
         @Volatile var failAlways = false
+        /** 계속 실패하되 예외 종류를 번갈아 — 종류가 바뀔 때마다 재시도 횟수가 리셋되면 영영 포기되지 않는다. */
+        private var flip = false
         /** 구독자 안에서 JSON 파싱 계열 예외가 한 번 난다(외부 응답 본문이 잘린 경우) — 재시도 대상이어야 한다. */
         @Volatile var failNextWithParse = false
+        /** 이 aggregateId 만 계속 실패 — 다른 이벤트는 통과. */
+        @Volatile var failOnly: String? = null
         override fun handle(envelope: EventEnvelope) {
-            if (failAlways) error("의도된 계속 실패")
+            if (failAlways) { flip = !flip; if (flip) error("의도된 계속 실패") else throw java.io.UncheckedIOException(java.io.IOException("의도된 연결 실패")) }
+            if (failOnly != null && envelope.aggregateId == failOnly) error("의도된 특정 이벤트 실패")
             if (failNextWithParse) {
                 failNextWithParse = false
                 throw IllegalStateException("의도된 응답 파싱 실패", com.fasterxml.jackson.core.JsonParseException(null, "잘린 본문"))
@@ -92,6 +97,7 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var registry: MeterRegistry
     @Autowired private lateinit var txManager: PlatformTransactionManager
     @Autowired private lateinit var allSubscribers: List<OutboxSubscriber>
+    @Autowired private lateinit var listeners: org.springframework.kafka.config.KafkaListenerEndpointRegistry
     @Autowired private lateinit var kafkaTemplate: org.springframework.kafka.core.KafkaTemplate<String, String>
 
     private val tx by lazy { TransactionTemplate(txManager) }
@@ -104,6 +110,7 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
         subscriber.failNext = false
         subscriber.failAlways = false
         subscriber.failNextWithParse = false
+        subscriber.failOnly = null
     }
 
     private fun unpublished(note: String) = jdbc.queryForObject(
@@ -215,7 +222,7 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
         tx.execute { publisher.publish(Probe("포기")) }
         relayUntilPublished("포기") // 송신 = 발행 표시
 
-        // 오류 처리기의 재시도 소진 → 회수기 → abandon 까지 실제 배선으로 돈다(약 17초).
+        // 오류 처리기의 재시도 소진 → 회수기 → abandon 까지 실제 배선으로 돈다(약 17초). 예외 종류가 번갈아 나도 이어 센다.
         val abandoned = "SELECT count(*) FROM outbox_event WHERE aggregate_id = ? AND published_at IS NULL AND attempts >= 10"
         val deadline = System.nanoTime() + Duration.ofSeconds(60).toNanos()
         while (jdbc.queryForObject(abandoned, Int::class.java, "포기") == 0 && System.nanoTime() < deadline) Thread.sleep(200)
@@ -307,6 +314,35 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
         OutboxRelay(markFails, SimpleMeterRegistry(), allSubscribers, Clock.systemUTC(), ok).relay()
 
         jdbc.queryForObject("SELECT attempts FROM outbox_event WHERE aggregate_id = ?", Int::class.java, "표시실패") shouldBe 1
+    }
+
+    @Test
+    fun `한 파티션의 이벤트가 재시도 중이어도 다른 파티션의 이벤트는 기다리지 않는다`() {
+        // 구조부터 — 파티션마다 소비 스레드가 따로다. 아래 행동 검증만으로는 못 잡는다: 스레드가 하나여도 poll 묶음 안에서
+        // 다른 파티션 레코드가 앞에 오면 먼저 처리되어 통과할 수 있다(실측: concurrency=1 로 바꿔도 통과했다).
+        val container = listeners.listenerContainers.single() as org.springframework.kafka.listener.ConcurrentMessageListenerContainer<*, *>
+        container.containers.size shouldBe 3
+
+        // 서로 다른 파티션에 떨어지는 두 키를 고른다(프로듀서 기본 분할: murmur2(key) % 파티션 수).
+        fun partition(key: String) = org.apache.kafka.common.utils.Utils.toPositive(
+            org.apache.kafka.common.utils.Utils.murmur2(key.toByteArray()),
+        ) % 3
+        val stuck = (0..50).map { "막힘-$it" }.first()
+        val free = (0..50).map { "통과-$it" }.first { partition(it) != partition(stuck) }
+
+        subscriber.failAlways = true
+        tx.execute { publisher.publish(Probe(stuck)) }
+        relayUntilPublished(stuck)
+        Thread.sleep(500) // 막힌 이벤트가 먼저 재시도에 들어가게
+        subscriber.failAlways = false.also { subscriber.failOnly = stuck }
+        tx.execute { publisher.publish(Probe(free)) }
+        relayUntilPublished(free)
+
+        awaitReceived(free, Duration.ofSeconds(5)) // 같은 스레드였다면 막힌 쪽 백오프(1·2초…) 동안 못 온다
+
+        // 막힌 쪽을 풀어 배달까지 기다린다 — 남겨 두면 그 파티션이 재시도로 묶여 뒤 테스트가 기다린다.
+        subscriber.failOnly = null
+        awaitReceived(stuck)
     }
 
     @Test
