@@ -7,6 +7,7 @@ import com.trippilot.weathercontext.api.WarningArea
  * 특보현황 `t6`(발효 중 특보) 문장 → 특보 목록(BR-SA-16 — 형식은 실응답 표본으로 고정한다).
  *
  * 형식: 줄마다 `o {종류}{주의보|경보} : {구역}, {구역}…`, 구역 = `광역(하위, 하위)` · `광역` · `광역(하위, 하위 제외)` · `울릉도.독도`.
+ * 하위 구역 이름 안에 괄호가 올 수 있다(`신안(흑산면제외)`) — 이름의 일부로 읽는다.
  * 특보가 없으면 `o 없 음` 이다(공백 변주가 실재한다 — 2026-10-19 실응답). 글머리 없는 줄은 앞 줄이 접힌 것으로 본다.
  * 원문 이름을 고치지 않는다 — 바다 구역·광역 별칭·시군 어간 매칭은 감지기 몫이다(BR-SA-16).
  *
@@ -68,16 +69,19 @@ internal object KmaWarningText {
         return pieces.takeIf { all -> all.none { it.isEmpty() } }
     }
 
-    /** `경상북도(영덕, 포항)` · `울산` · `인천(강화군, 옹진군 제외)` → 구역 한 칸. */
+    /**
+     * `경상북도(영덕, 포항)` · `울산` · `인천(강화군, 옹진군 제외)` → 구역 한 칸. 하위 구역 이름 안의 괄호(`전라남도(신안(흑산면제외), 진도)`)는
+     * 이름의 일부로 둔다 — 하위 구역도 괄호 밖 쉼표로만 가른다.
+     */
     private fun areaOf(piece: String): WarningArea? {
         val open = piece.indexOf('(')
         if (open < 0) return WarningArea(piece).takeIf { ')' !in piece }
         if (!piece.endsWith(")")) return null
         val name = piece.substring(0, open).trim().takeIf { it.isNotEmpty() } ?: return null
-        val zones = piece.substring(open + 1, piece.length - 1).split(',').map { it.trim() }.toMutableList()
+        val zones = splitTopLevel(piece.substring(open + 1, piece.length - 1))?.toMutableList() ?: return null
         val excluding = zones.last().endsWith(EXCLUDING)
         if (excluding) zones[zones.lastIndex] = zones.last().removeSuffix(EXCLUDING).trim()
-        if (zones.any { it.isEmpty() || '(' in it || ')' in it }) return null
+        if (zones.any { it.isEmpty() || it.startsWith('(') }) return null
         return WarningArea(name, zones, excluding)
     }
 }

@@ -62,6 +62,20 @@ class KmaWarningTextTest : StringSpec({
         )
     }
 
+    /**
+     * 하위 구역 이름 안의 괄호(`신안(흑산면제외)` — 흑산도.홍도가 따로 나오는 신안)는 이름의 일부다. 못 읽으면 '한 줄이라도 못 읽으면 전부
+     * null' 이라 그 특보가 발효 중인 동안 모든 여행의 특보 출처가 모름이 된다. 이름은 고치지 않는다(어간 매칭은 감지기 몫).
+     */
+    "하위 구역 이름 안의 괄호(신안(흑산면제외))는 이름째 읽는다 — 다른 줄도 함께 읽힌다" {
+        KmaWarningText.parse("o 강풍주의보 : 전라남도(신안(흑산면제외), 진도), 흑산도.홍도\r\n o 호우주의보 : 울산") shouldBe listOf(
+            ActiveWarning("강풍", "주의보", listOf(WarningArea("전라남도", listOf("신안(흑산면제외)", "진도")), WarningArea("흑산도.홍도"))),
+            ActiveWarning("호우", "주의보", listOf(WarningArea("울산"))),
+        )
+        KmaWarningText.parse("o 강풍주의보 : 전라남도(진도, 신안(흑산면 제외))") shouldBe listOf(
+            ActiveWarning("강풍", "주의보", listOf(WarningArea("전라남도", listOf("진도", "신안(흑산면 제외)")))),
+        )
+    }
+
     "바다 구역·바다 특보도 읽기는 그대로 한다 — 거르는 것은 감지기 몫이다" {
         KmaWarningText.parse("o 풍랑주의보 : 동해중부안쪽먼바다, 제주도남쪽먼바다") shouldBe listOf(
             ActiveWarning("풍랑", "주의보", listOf(WarningArea("동해중부안쪽먼바다"), WarningArea("제주도남쪽먼바다"))),
@@ -90,6 +104,9 @@ class KmaWarningTextTest : StringSpec({
             "o 강풍주의보 : ",
             "o 강풍주의보 : 울산, , 부산",
             "o 강풍주의보 : 경상북도()",
+            "o 강풍주의보 : 전라남도(신안(흑산면제외), 진도",
+            "o 강풍주의보 : 전라남도((흑산면제외), 진도)",
+            "o 강풍주의보 : 경상북도(영덕)(포항)",
             "강풍주의보 : 울산",
             "o 주의보 : 울산",
             "o 강풍주의보 : 울산\r\no 없 음",

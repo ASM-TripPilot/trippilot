@@ -163,6 +163,8 @@ class WeatherAlertsTest : StringSpec({
             Triple(WarningArea("흑산도.홍도"), sinan, HIT),
             Triple(WarningArea("흑산도.홍도"), mokpo, MISS),
             Triple(WarningArea("거문도.초도"), yeosu, HIT),
+            Triple(WarningArea("전라남도", listOf("신안(흑산면제외)", "진도")), sinan, HIT), // 이름 안 괄호는 이름의 일부 — 어간으로 맞는다
+            Triple(WarningArea("전라남도", listOf("신안(흑산면제외)", "진도")), mokpo, MISS),
             Triple(WarningArea("인천", listOf("서해5도")), ongjin, HIT), // 줄 안의 섬 구역도 같은 표
             Triple(WarningArea("인천", listOf("서해5도")), ganghwa, MISS),
             Triple(WarningArea("인천", listOf("서해5도"), excluding = true), ongjin, HIT), // 섬 하나를 뺀다고 옹진 전체가 빠지지 않는다
