@@ -8,6 +8,7 @@ CI 환경 변수(GITHUB_STEP_SUMMARY·GITHUB_ACTIONS·COVERAGE_ADVISORY)는 떼�
 import contextlib
 import io
 import os
+import pathlib
 import sys
 import tempfile
 import unittest
@@ -20,7 +21,7 @@ import coverage_gate as gate  # noqa: E402
 TOTAL, MODULE = gate.TOTAL_FLOORS, gate.MODULE_FLOORS
 SAFE_LINE = min(max(TOTAL["LINE"], MODULE["LINE"]) + 1, 100)       # 전체·모듈 하한 모두 위
 SAFE_BRANCH = min(max(TOTAL["BRANCH"], MODULE["BRANCH"]) + 1, 100)
-UNOWNED = "소유 모듈을 하나로 정할 수 없다(어느 모듈의 build/classes 에도 없거나 두 모듈에 있다)"
+UNOWNED = "의 소유 모듈을 하나로 정할 수 없다"
 
 
 def counts(line_pct, branch_pct, total=1000):
@@ -52,7 +53,8 @@ def report(classes):
 
 
 def by_segment(*names):
-    """테스트용 소유 지도 — `com/trippilot/<x>/...` 클래스를 모듈 `<x>` 가 갖는다."""
+    """테스트 픽스처일 뿐이다 — `com/trippilot/<x>/...` 클래스를 모듈 `<x>` 가 가진 것으로 손으로 지어 준다.
+    실제 소유 판정(class_owners)은 아래 합성 트리 테스트가 따로 본다."""
     return {n: {n.split("/")[2]} for n in names}
 
 
@@ -103,7 +105,7 @@ class CoverageGateTest(unittest.TestCase):
         classes = {"com/trippilot/trip/A": (10000, 0, 10000, 0), "com/trippilot/newmod/B": (0, 30, 0, 30)}
         totals, _, failures = gate.evaluate(report(classes), by_segment(*classes))
         self.assertGreater(totals["BRANCH"], TOTAL["BRANCH"])
-        self.assertTrue(any(f.startswith("newmod BRANCH 0.0%") for f in failures), failures)
+        self.assertTrue(any(f.startswith("newmod BRANCH 0.00%") for f in failures), failures)
 
     def test_새_모듈이_기존_모듈과_같은_패키지에_클래스를_둬도_따로_센다(self):
         """패키지로 소유를 정하면 newmod 의 0% 가 trip 수천 분기에 섞여 사라진다."""
@@ -116,15 +118,48 @@ class CoverageGateTest(unittest.TestCase):
     def test_어느_모듈에도_없는_클래스는_조용히_흘리지_않고_실패하고_표에는_안_나온다(self):
         classes = {"com/trippilot/trip/A": SAFE, "com/trippilot/orphan/O": counts(10, 10)}
         totals, modules, failures = gate.evaluate(report(classes), by_segment("com/trippilot/trip/A"))
-        self.assertIn(f"com/trippilot/orphan/O: {UNOWNED}", failures)
+        self.assertTrue(any(UNOWNED in f and "com/trippilot/orphan/O" in f for f in failures), failures)
         self.assertFalse(any(r.startswith("| ?") for r in rows(totals, modules, failures)))
 
     def test_같은_클래스를_두_모듈이_가지면_합치지_않고_실패한다(self):
         classes = {"com/trippilot/trip/Mappers": SAFE}
         failures = gate.evaluate(report(classes), {"com/trippilot/trip/Mappers": {"modules/trip", "modules/newmod"}})[2]
-        self.assertIn(f"com/trippilot/trip/Mappers: {UNOWNED}", failures)
+        self.assertTrue(any(UNOWNED in f and "com/trippilot/trip/Mappers" in f for f in failures), failures)
 
-    def test_하위_패키지는_소유_모듈로_합친다(self):
+    def test_소유_못_찾은_클래스가_많아도_사유는_한_줄로_묶는다(self):
+        classes = {f"com/trippilot/orphan/C{i}": counts(10, 10) for i in range(40)}
+        failures = gate.evaluate(report(classes), {})[2]
+        unowned = [f for f in failures if UNOWNED in f]
+        self.assertEqual(len(unowned), 1, failures)
+        self.assertIn("클래스 40개", unowned[0])
+        self.assertIn(f"외 {40 - gate.UNOWNED_SHOWN}개", unowned[0])
+
+    def test_settings_에_있는데_합산_리포트에_없는_모듈은_실패한다(self):
+        classes = {"com/trippilot/trip/A": SAFE}
+        failures = gate.evaluate(report(classes), by_segment(*classes), expected={"trip", "newmod"})[2]
+        self.assertIn("newmod: 합산 리포트에 없다(app 이 implementation(project) 로 잇는지 본다)", failures)
+
+    def test_class_owners_는_settings_모듈의_빌드_산출물로만_소유를_정한다(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            (root / "settings.gradle.kts").write_text('include(":app")\ninclude(":modules:trip")   // 주석\n')
+
+            def classfile(module, name):
+                f = root / module / "build" / "classes" / "kotlin" / "main" / f"{name}.class"
+                f.parent.mkdir(parents=True, exist_ok=True)
+                f.write_bytes(b"")
+
+            classfile("modules/trip", "com/trippilot/trip/Foo")
+            classfile("modules/trip", "com/trippilot/trip/Foo$Inner")
+            classfile("app", "com/trippilot/app/Main")
+            classfile("modules/old-trip", "com/trippilot/trip/Foo")   # 옮긴 뒤 남은 옛 build 폴더
+            owners = gate.class_owners(root)
+            self.assertEqual(gate.settings_modules(root), {"app", "modules/trip"})
+            self.assertEqual(owners["com/trippilot/trip/Foo"], {"modules/trip"})   # 옛 폴더를 세지 않는다
+            self.assertEqual(owners["com/trippilot/trip/Foo$Inner"], {"modules/trip"})
+            self.assertEqual(owners["com/trippilot/app/Main"], {"app"})
+
+    def test_같은_모듈의_클래스는_합산한다(self):
         classes = {"com/trippilot/trip/domain/A": (10, 0, 10, 0), "com/trippilot/trip/adapter/in/web/B": (0, 10, 0, 10)}
         _, modules, _ = gate.evaluate(report(classes), by_segment(*classes))
         self.assertEqual(modules["trip"]["LINE"], 50.0)

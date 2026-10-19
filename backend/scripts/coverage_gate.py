@@ -29,6 +29,7 @@ Gradle 내장 `JacocoCoverageVerification` 을 쓰지 않은 이유: 모듈마�
 
 import os
 import pathlib
+import re
 import sys
 import xml.etree.ElementTree as ET
 from collections import defaultdict
@@ -48,6 +49,12 @@ TOTAL_FLOORS = {"LINE": 94.0, "BRANCH": 83.0}
 MODULE_FLOORS = {"LINE": 70.0, "BRANCH": 40.0}
 
 BACKEND = pathlib.Path(__file__).resolve().parent.parent
+
+# 합산 리포트에 안 들어가도 되는 모듈 — app 이 testImplementation 으로만 쓰는 테스트 하네스다.
+NOT_AGGREGATED = {"common/test-support"}
+
+# 소유를 못 찾은 클래스는 이만큼만 이름을 보이고 나머지는 개수로 — 넓게 깨지면 수백 줄이 되어 원인이 묻힌다.
+UNOWNED_SHOWN = 5
 
 
 def counter(element, kind):
@@ -69,18 +76,33 @@ def fmt(value, floor):
     return f"{value:.1f}%" + (" ❌" if value < floor else "")
 
 
-def class_owners(backend=BACKEND):
-    """클래스(`com/trippilot/.../X`, 내부 클래스 포함) → 그 클래스 파일을 컴파일한 Gradle 모듈들."""
+def settings_modules(backend=BACKEND):
+    """settings.gradle.kts 가 include 한 모듈 디렉터리(`modules/trip` 등) — 빌드가 실제로 아는 모듈."""
+    text = (backend / "settings.gradle.kts").read_text(encoding="utf-8")
+    return {m.lstrip(":").replace(":", "/") for m in re.findall(r'^\s*include\("([^"]+)"\)', text, re.M)}
+
+
+def class_owners(backend=BACKEND, modules=None):
+    """클래스(`com/trippilot/.../X`, 내부 클래스 포함) → 그 클래스 파일을 컴파일한 Gradle 모듈들.
+
+    settings 에 있는 모듈의 build 만 본다 — 모듈을 옮기거나 지운 뒤 남은 옛 build 폴더(gitignore 라 남는다)를
+    세면 이관된 클래스가 "두 모듈에 있다"로 거짓 실패한다.
+    """
+    modules = settings_modules(backend) if modules is None else modules
     owners = defaultdict(set)
-    for classes in backend.glob("**/build/classes/*/main"):
-        module = classes.parents[3].relative_to(backend).as_posix()   # <모듈>/build/classes/<언어>/main
-        for f in classes.rglob("*.class"):
-            owners[f.relative_to(classes).with_suffix("").as_posix()].add(module)
+    for module in modules:
+        for classes in (backend / module / "build" / "classes").glob("*/main"):
+            for f in classes.rglob("*.class"):
+                owners[f.relative_to(classes).with_suffix("").as_posix()].add(module)
     return owners
 
 
-def evaluate(root, owners):
-    """(전체 비율, 모듈별 비율, 실패 사유 목록). 전체 비율이 None 이면 측정 대상이 없는 것이다."""
+def evaluate(root, owners, expected=None):
+    """(전체 비율, 모듈별 비율, 실패 사유 목록). 전체 비율이 None 이면 측정 대상이 없는 것이다.
+
+    expected: 리포트에 있어야 할 모듈들(settings 의 모듈 − NOT_AGGREGATED). 주면 빠진 모듈도 실패로 낸다 —
+    app 이 implementation(project) 로 잇지 않은 모듈은 합산에서 조용히 빠져 모듈 바닥을 안 받는다.
+    """
     sums = defaultdict(lambda: {k: [0, 0] for k in KINDS})
     for cls in root.iter("class"):
         found = owners.get(cls.get("name"), set())
@@ -94,15 +116,20 @@ def evaluate(root, owners):
     totals = {k: pct(*counter(root, k)) for k in KINDS}
     modules = {m: {k: pct(*c[k]) for k in KINDS} for m, c in sums.items()}
     # 측정 대상이 없는 것을 0% 로 바꾸면 "커버리지 하락"으로 보고된다 — 원인(합산 대상·계측 범위)이 따로 있다.
+    # 실패 사유의 수치는 소수 둘째 자리까지 — 판정은 원값이라 .1f 면 "94.0% < 하한 94%" 처럼 자기모순으로 보인다.
     failures = [f"전체 {k} 측정 대상이 없다(합산 대상·계측 범위 설정을 본다)" for k in KINDS if totals[k] is None]
-    failures += [f"전체 {k} {totals[k]:.1f}% < 하한 {TOTAL_FLOORS[k]:g}%" for k in KINDS
+    failures += [f"전체 {k} {totals[k]:.2f}% < 하한 {TOTAL_FLOORS[k]:g}%" for k in KINDS
                  if totals[k] is not None and totals[k] < TOTAL_FLOORS[k]]
+    unowned = sorted(m[1:] for m in modules if m.startswith("?"))
+    if unowned:
+        shown = ", ".join(unowned[:UNOWNED_SHOWN]) + (f" 외 {len(unowned) - UNOWNED_SHOWN}개" if len(unowned) > UNOWNED_SHOWN else "")
+        failures.append(f"클래스 {len(unowned)}개의 소유 모듈을 하나로 정할 수 없다"
+                        f"(settings 모듈의 build/classes 에 없거나 두 모듈에 있다): {shown}")
+    if expected is not None:
+        missing = sorted(set(expected) - set(modules))
+        failures += [f"{m}: 합산 리포트에 없다(app 이 implementation(project) 로 잇는지 본다)" for m in missing]
     failures += [
-        f"{m[1:]}: 소유 모듈을 하나로 정할 수 없다(어느 모듈의 build/classes 에도 없거나 두 모듈에 있다)"
-        for m in sorted(modules) if m.startswith("?")
-    ]
-    failures += [
-        f"{m} {k} {p[k]:.1f}% < 모듈 바닥 {MODULE_FLOORS[k]:g}%"
+        f"{m} {k} {p[k]:.2f}% < 모듈 바닥 {MODULE_FLOORS[k]:g}%"
         for m, p in sorted(modules.items()) for k in KINDS
         if not m.startswith("?") and p[k] is not None and p[k] < MODULE_FLOORS[k]
     ]
@@ -172,7 +199,8 @@ def main(argv=None):
     except ET.ParseError as e:
         return undecidable(f"리포트를 읽지 못했다: {path} — {e}", advisory)
 
-    totals, modules, failures = evaluate(root, class_owners())
+    expected = settings_modules() - NOT_AGGREGATED
+    totals, modules, failures = evaluate(root, class_owners(modules=expected), expected)
     report = render(totals, modules, failures)
     print(report)
     write_summary(report)
