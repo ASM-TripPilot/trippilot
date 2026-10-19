@@ -99,17 +99,24 @@ tasks.named<Test>("test") {
 // 합산 리포트는 기본이 HTML 뿐이다 — 하한선 스크립트(scripts/coverage_gate.py)가 읽을 XML 을 켠다.
 tasks.withType<JacocoReport>().configureEach { reports.xml.required = true }
 
-// 커버리지 하한선 — 판정은 scripts/coverage_gate.py(모듈별 바닥이 필요해서 내장 Verification 대신).
-// 리포트 태스크 뒤에 붙이고 **그 태스크의 실제 XML 출력 경로**를 넘긴다 — 스크립트에 경로를 박아 두면
-// 리포트 위치가 바뀐 날 옛 XML 을 읽는다.
+// 커버리지 하한선 — 판정은 scripts/coverage_gate.py(전체·모듈별 바닥과 요약 표·실패 사유를 한 곳에서 낸다).
+// 리포트 XML 위치를 **여기서 정해** 리포트 태스크와 판정이 같은 provider 를 본다 — 위치를 두 곳에 적으면 갈린다.
+// (리포트 태스크의 outputLocation 에서 파생하면 구성 시점에 그 태스크를 실현해야 한다 — layout 에서 정하면 안 그렇다.)
 val coverageReport = tasks.named<JacocoReport>("testCodeCoverageReport")
-// 구성 시점에 문자열로 푼다 — 출력 위치 provider 는 구성 캐시가 직렬화하지 못한다(실측).
-val coverageXml = coverageReport.get().reports.xml.outputLocation.get().asFile
-// 옛 XML 을 먼저 지운다 — 실행 데이터가 없으면 리포트 태스크가 SKIPPED 되고 옛 XML 이 남아 그것으로 판정된다.
-val clearCoverageXml = tasks.register<Delete>("clearCoverageXml") { delete(coverageXml) }
-coverageReport.configure { mustRunAfter(clearCoverageXml) }
+val coverageXml = layout.buildDirectory.file("reports/jacoco/coverage.xml")
+// 옛 산출물을 먼저 지운다 — 실행 데이터가 없으면 리포트 태스크가 SKIPPED 되고 옛 XML·HTML 이 남아
+// 그것으로 판정되거나 현재 수치로 읽힌다.
+val clearCoverageReport = tasks.register<Delete>("clearCoverageReport") {
+    delete(coverageXml, layout.buildDirectory.dir("reports/jacoco/testCodeCoverageReport"))
+}
+coverageReport.configure {
+    reports.xml.outputLocation.set(coverageXml)
+    mustRunAfter(clearCoverageReport)
+}
 tasks.register<Exec>("coverageGate") {
-    dependsOn(clearCoverageXml, coverageReport)
+    dependsOn(clearCoverageReport, coverageReport)
     workingDir = rootDir
-    commandLine("python3", "scripts/coverage_gate.py", coverageXml.absolutePath)
+    // layout provider 라 지금 풀어도 리포트 태스크를 실현하지 않는다. 람다(argumentProviders)는 구성 캐시가
+    // 스크립트 참조를 직렬화하지 못해 실패했다(실측).
+    commandLine("python3", "scripts/coverage_gate.py", coverageXml.get().asFile.absolutePath)
 }

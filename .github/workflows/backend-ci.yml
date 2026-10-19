@@ -39,25 +39,23 @@ jobs:
       - name: 커버리지 게이트 스크립트 검사
         working-directory: backend
         run: python3 -m unittest scripts/test_coverage_gate.py
-      # 커버리지를 build 와 **같은 Gradle 호출에** 싣는다 — JVM 기동·설정 단계를 한 번만 거친다.
-      # 하한선 판정(`:app:coverageGate`, 규칙은 scripts/coverage_gate.py)은 **PR 에서만 차단**한다. develop push 에서
-      # 막으면 이미 머지된 코드의 이미지 발행(image 잡)까지 멈춘다. 대신 push 는 아래에서 **막지 않고** 판정만 남긴다 —
-      # 각자 통과한 PR 둘이 합쳐 하한을 넘은 시점을 머지 커밋의 Summary 탭에서 보게(안 남기면 무관한 다음 PR 이
-      # 처음 빨개져 원인을 거꾸로 추적해야 한다). 표와 실패 사유는 잡 요약에 남는다.
-      - name: gradle build (test 포함) + 커버리지(PR)
+      # 커버리지를 build 와 **같은 Gradle 호출에** 싣는다 — JVM 기동·구성 단계를 한 번만 거친다.
+      # 하한선(전체·모듈별, 규칙은 scripts/coverage_gate.py)은 PR·수동 실행(스택 PR 검증에 쓴다)에서 **막는다**.
+      # develop push 는 막지 않는다 — 막으면 이미 머지된 코드의 이미지 발행(image 잡)이 멈춘다. 대신 실패를
+      # `::warning::` 주석으로 커밋 체크에 남긴다(COVERAGE_ADVISORY). 각자 통과한 PR 둘이 합쳐 하한을 넘은 시점이
+      # 그 머지 커밋에 보이게 — 안 남기면 무관한 다음 PR 이 처음 빨개져 원인을 거꾸로 추적해야 한다.
+      # 표와 실패 사유는 잡 요약(Summary 탭)에 남는다.
+      - name: gradle build (test 포함) + 커버리지
         working-directory: backend
-        run: ./gradlew build ${{ github.event_name == 'pull_request' && ':app:coverageGate' || '' }} --no-daemon
-      - name: 커버리지 기록(develop push — 막지 않음)
-        if: github.event_name == 'push'
-        continue-on-error: true
-        working-directory: backend
-        run: ./gradlew :app:coverageGate --no-daemon
+        env:
+          COVERAGE_ADVISORY: ${{ github.event_name == 'push' && '1' || '' }}
+        run: ./gradlew build :app:coverageGate --no-daemon
       - name: 커버리지 리포트 보관
-        if: ${{ !cancelled() && github.event_name == 'pull_request' }}   # 실패해도 남기되, 취소된 실행은 건너뛴다
+        if: ${{ !cancelled() && github.event_name != 'push' }}   # 검토용(PR·수동) — 실패해도 남기되, 취소된 실행은 건너뛴다
         uses: actions/upload-artifact@v4
         with:
           name: backend-coverage
-          path: backend/app/build/reports/jacoco/testCodeCoverageReport/
+          path: backend/app/build/reports/jacoco/
           if-no-files-found: ignore
           retention-days: 7   # PR 검토 동안만 쓸모 있다 — 기본 90일이면 하루 20회+ 실행분이 할당량을 쌓는다
 

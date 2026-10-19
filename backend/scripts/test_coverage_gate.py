@@ -82,7 +82,8 @@ class CoverageGateTest(unittest.TestCase):
         self.assertEqual(modules["trip"]["LINE"], 50.0)
 
     def test_분기가_없는_모듈은_n_a_이고_실패도_정렬_맨위도_아니다(self):
-        pkg = {"com/trippilot/dto": (10, 0, 0, 0), "com/trippilot/trip": ABOVE}
+        # 전체는 하한 바로 위로 두고, trip 의 라인 여유(하한+1 − 바닥)를 dto 의 라인 여유(100 − 바닥)보다 작게 한다.
+        pkg = {"com/trippilot/dto": (10, 0, 0, 0), "com/trippilot/trip": counts(min(LINE_FLOOR + 1, 99), BRANCH_FLOOR + 1)}
         totals, modules, failures = gate.evaluate(report(pkg), by_segment(*pkg))
         self.assertIsNone(modules["dto"]["BRANCH"])
         self.assertEqual(failures, [])
@@ -103,6 +104,17 @@ class CoverageGateTest(unittest.TestCase):
         rendered = gate.render(totals, modules, failures)
         self.assertIn("**실패:**", rendered)
         self.assertIn(failures[0], rendered)
+
+    def test_advisory_모드는_실패를_경고로만_남기고_통과한다(self):
+        with tempfile.TemporaryDirectory() as d:
+            xml = os.path.join(d, "r.xml")
+            ET.ElementTree(report({"com/trippilot/orphan": counts(10, 10)})).write(xml)
+            os.environ["COVERAGE_ADVISORY"] = "1"
+            try:
+                self.assertEqual(gate.main([xml]), 0)
+            finally:
+                del os.environ["COVERAGE_ADVISORY"]
+            self.assertEqual(gate.main([xml]), 1)
 
     def test_리포트_경로가_없으면_exit_2(self):
         self.assertEqual(gate.main([]), 2)
@@ -125,7 +137,9 @@ class CoverageGateTest(unittest.TestCase):
         self.assertIn("com/trippilot/orphan: 소유 모듈을 못 찾았다(소스 디렉터리와 package 선언이 어긋났나)", failures)
 
     def test_라인만_바닥을_어긴_모듈도_표_맨_위에_온다(self):
-        pkg = {"com/trippilot/a": counts(100, 51), "com/trippilot/b": counts(gate.MODULE_FLOORS["LINE"] - 10, 100)}
+        # a 는 분기가 낮지만 바닥 위, b 는 분기 100% 지만 라인이 바닥 아래 — 여유가 음수인 b 가 맨 위다.
+        floors = gate.MODULE_FLOORS
+        pkg = {"com/trippilot/a": counts(100, floors["BRANCH"] + 1), "com/trippilot/b": counts(floors["LINE"] - 10, 100)}
         totals, modules, failures = gate.evaluate(report(pkg), by_segment(*pkg))
         rows = [r for r in gate.render(totals, modules, failures).splitlines() if r.startswith("| ") and "모듈" not in r]
         self.assertTrue(rows[0].startswith("| b"), rows)

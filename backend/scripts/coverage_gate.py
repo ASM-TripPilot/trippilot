@@ -13,8 +13,13 @@
 하한선은 **래칫**이다 — 오르면 상수를 올리는 PR 을 내고, 내리지 않는다. 처음부터 목표치(80% 같은)를
 걸면 첫날부터 빨갛거나 아무도 못 지키는 숫자가 되어 결국 게이트를 끄게 된다. 측정한 기준선에서 시작한다.
 
-Gradle 내장 `JacocoCoverageVerification` 을 안 쓰는 이유: 합산 리포트에서 규칙을 걸 수 있는 단위가
-번들·패키지·클래스뿐이라 **모듈**(하위 패키지 여럿의 합)별 바닥을 표현할 수 없다.
+`COVERAGE_ADVISORY=1` 이면 판정을 막지 않는다 — 실패를 `::warning::` 주석으로 커밋 체크에 남기고 exit 0
+(develop push 용: 막으면 이미 머지된 코드의 이미지 발행이 멈춘다).
+
+Gradle 내장 `JacocoCoverageVerification` 을 쓰지 않은 이유: 모듈마다 검증 태스크를 등록하면 모듈별 바닥도
+표현은 된다. 다만 판정이 모듈 수만큼 흩어지고, 전체·모듈 실패 사유와 표를 잡 요약 한 곳에 모으려면 어차피
+요약 스크립트가 필요하다. 그래서 판정과 요약을 한 스크립트에 두었다. 그 대가로 모듈 소유를 소스 폴더에서
+읽는다(package_owners) — 소유를 못 찾으면 조용히 넘기지 않고 실패한다.
 
 검사: `python3 -m unittest scripts/test_coverage_gate.py`
 """
@@ -146,6 +151,10 @@ def main(argv=None):
     for k in KINDS:
         if totals[k] is not None and totals[k] >= TOTAL_FLOORS[k] + 2:
             print(f"\n{k} 하한선을 {int(totals[k]) - 1}% 로 올릴 수 있다(TOTAL_FLOORS — 버림에서 1p 여유).")
+    if failures and os.environ.get("COVERAGE_ADVISORY") == "1":
+        for f in failures:
+            print(f"::warning title=커버리지 하한 아래(막지 않음)::{f}")
+        return 0
     return 1 if failures else 0
 
 
