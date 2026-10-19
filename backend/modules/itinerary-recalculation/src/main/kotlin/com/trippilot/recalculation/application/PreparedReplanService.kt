@@ -84,6 +84,9 @@ class PreparedReplanService internal constructor(
             return
         }
         if (Duration.between(occurredAt, clock.instant()) > MAX_EVENT_AGE) return summary("OLD", event)
+        // 종료가 시작됐다(이미 돌던 릴레이 배치가 아직 넘긴다). 열면 실행기가 거절해 FAILED 가 그 트리거의 선계산 1회를 먹는다 —
+        // 던지면 릴레이가 이벤트째 다음 파드에 다시 배달한다.
+        check(!executor.isShutdown) { "선계산 실행기가 닫히는 중입니다 — 이 사건은 다음 파드가 다시 받습니다." }
         if (!slots.tryAcquire()) return summary(PrepareSkip.BUSY.name, event)
 
         var handedOff = false

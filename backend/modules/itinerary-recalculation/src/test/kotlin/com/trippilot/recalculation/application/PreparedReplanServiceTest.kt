@@ -122,6 +122,21 @@ class PreparedReplanServiceTest : StringSpec({
         closing.parked.size shouldBe 11 // 거절된 한 건이 자리를 새게 했다면 11번째는 BUSY 였다
     }
 
+    // 종료가 시작된 뒤에도 이미 돌던 릴레이 배치는 사건을 넘긴다. 그때 세션을 열면 실행기가 거절해 FAILED 가 그 트리거의 선계산 1회를
+    // 먹고(트리거당 1개) 새 파드에서도 다시 준비되지 않는다 — 앱은 i04 대신 실패 얼굴을 본다. 열지 않고 던지면 다음 파드가 다시 받는다.
+    "종료가 시작된 뒤 온 사건은 세션을 열지 않고 던진다 — 다음 파드가 같은 사건으로 연다" {
+        val f = RecalcFixture(today, "07:15")
+        val closing = f.prepared(ParkedExecutor())
+        closing.shutdown()
+        val event = f.riskEvent(today)
+
+        shouldThrow<IllegalStateException> { closing.onRisk(event, f.clock.now) }
+        f.sessions.stored shouldBe emptyMap()
+
+        f.prepared(ParkedExecutor()).onRisk(event, f.clock.now) // 새 파드의 재배달
+        f.sessions.system().single().status shouldBe ReplanStatus.SOLVING
+    }
+
     "사용자 시작과 같은 순간 저장이 겹치면(부분 유니크) OPEN_SESSION 으로 접는다 — 던지지 않는다" {
         val f = RecalcFixture(today, "07:15")
         val real = f.sessions
