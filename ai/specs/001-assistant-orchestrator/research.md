@@ -109,7 +109,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.dialogue_memory TO ai_user;
 | GET_NEXT_SLOT | 스냅샷(now 이후 첫 슬롯) | INFO(NEXT_SLOT rows: 날짜·계획 시각) | OPEN_LIVE(여행 중)/OPEN_ITINERARY | quick reply "다른 곳 추천"(SEND_TEXT, params intent=SUGGEST_ALTERNATIVE, slotKey) |
 | GET_WEATHER | PoiInfo(좌표) → WeatherProvider(anchor, [date]) | INFO(WEATHER rows: 최대 강수확률·특보) | OPEN_ITINERARY | WEATHER_UNKNOWN → "지금 날씨를 확인할 수 없어요" |
 | GET_DISTANCE | 슬롯 해소(dest, origin=직전) → PoiInfo 좌표 → TransitProvider(purpose INFO_DISPLAY, mode 인자 또는 PUBLIC) | INFO(DISTANCE rows: 직전 구간 거리) | OPEN_ITINERARY | 거리만(INV-3). 해소 실패 → 일정 화면 안내 |
-| GET_POI_INFO | 슬롯 해소(place) → PoiInfoProvider(poi_id, date) | INFO(PLACE rows: 분류·영업시간·입장료) | OPEN_PLACE{poiId} | 모르는 값은 "미확인" |
+| GET_POI_INFO | 슬롯 해소(place) → PoiInfoProvider(poi_id, date) | INFO(PLACE rows: 분류·영업시간·입장료) | OPEN_PLACE{poiId} | 모르는 값은 "미확인"(영업시간은 "영업시간 정보 없음"·"휴무일 수 있음" — 2026-10-19 FD 개정) |
 | SUGGEST_ALTERNATIVE | 슬롯 해소(target) ∥ PoiInfo 좌표 → [풀 조립(anchor=대상 좌표, 반경 규칙) ∥ Weather] → PlanBAgent.run(use_llm=False, excluded=일정 전부, rain) | CANDIDATES(≤5: poiId·name·distanceRange·reason) | OPEN_ITINERARY | quick reply PICK_CANDIDATE{poiId, slotKey} → BE 기존 ReplaceSlot 제안 경로 |
 | EDIT_SCHEDULE | 인자 해소만(day/target) | **FRAME** | — | 1단계: BE ProposalCards 경로(/edit 재호출). 2단계에서 EditAgent 인프로세스 + PROPOSAL |
 | GENERATE_SCHEDULE / REGENERATE | 없음 | TEXT(LLM 한 줄) | OPEN_ITINERARY_METHOD / OPEN_REGENERATE | 여행 없으면 CREATE_TRIP·OPEN_STAY_SEARCH 안내 |
@@ -143,6 +143,7 @@ BE: `interpret-stage-max-ms` 5000→9000, 해석 read timeout = interpret + 5000
 
 BE 1차(금칙어 fail-closed·분당 20·스냅샷 화이트리스트) 유지 → AI: normalize·500자 거절 → 분류 프롬프트 규칙(목록 밖/주입/역할변경/유출/유해 → `{"intent": null}`) + IntentGate closed-set → OUT_OF_SCOPE(문장 없음, BE SCOPE 카드·거절 스트릭) → 답변 출구 게이트(길이·INV-3·연락처·줄 수) → 폴백 템플릿. 허용된 blast radius = "보이는 문장 오염"까지(메모리 노트 prompt-injection-blast-radius, 재제안 금지).
 
+**[개정 · 2026-10-19 · FD BR-AO-21]** normalize·500자 거절 뒤에 0′ 결정론 거름을 둔다 — 주입 꼴(`gates.base.has_injection_like`)이면 LLM 0회 OUT_OF_SCOPE(`not_classifiable: injection_suspected`, 운영 집계 로그 `dialogue_injection_suspected`). 같은 술어로 지난 턴·기억 줄을 다시 싣지 않고(분류·답변·요약), 답변 출구 게이트(⑤)·기억 게이트(④′)·`compress_fallback` 이 거른다.
 ## 3. BE 변경 (같은 PR, 최소)
 
 1. `Dialogue.kt`: `InterpretOutcome.ANSWER`, `Interpretation.answer: InterpretedAnswer?`(kind·text·payload·nextActions·quickReplies·footnote), `InterpretRequest` += `sessionId`, `accountRef`, `recentTurns`.

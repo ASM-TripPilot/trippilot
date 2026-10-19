@@ -14,10 +14,12 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import { router } from 'expo-router';
 
 import { server } from '@/mocks/server';
+import { getGetTripsTripIdItineraryQueryKey } from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Place } from '@/shared/api/index.schemas';
 import { RecordAddVisitPage } from '@/pages/record/record-add-visit';
 import { TripRecordsPage } from '@/pages/record/trip-records';
+import { recordsHandler } from '@/test-support/tripRecordsFixtures';
 
 /**
  * 🔴 TRIP-1072 · AC-5~12·AC-14 — j01 [방문 추가] 장소 피커(즉석 방문 = 계획에 없던 곳의 도착 기록).
@@ -262,6 +264,8 @@ beforeEach(() => {
     http.get(`${BASE}/trips/:tripId/visits/:visitCheckId/photos`, () =>
       HttpResponse.json({ items: [], count: 0 })
     ),
+    // TRIP-1415 — 방문 카드가 서버 메모(records)를 조회한다(기본 실적 0건).
+    recordsHandler(),
     http.post(`${BASE}/trips/:tripId/visits`, async ({ request }) => {
       const body = (await request.json()) as PostBody;
       postBodies.push(body);
@@ -660,5 +664,296 @@ describe('🔴 AC-14 · 검색칸은 바텀시트 안에 있다', () => {
       .UNSAFE_getAllByType(BottomSheetTextInput)
       .map((node) => node.props.testID);
     expect(inputIds).toContain('record-add-visit-search');
+  });
+});
+
+/* ──── TRIP-1416 · 방문 추가 피커 지도는 그날 일정 핀으로 연다 (Q-115 후반) ────
+ * 지금 피커는 장소 조회 첫 항목(이름순) 좌표를 중심으로, 핀 없이 연다 — 해운대 날에 부산 연산동이 뜬다.
+ * 고친 뒤: 라우트 `day` 의 일정 슬롯 중 좌표 있는 곳으로 번호 핀을 세우고(h13 `buildDraftPins` 선례, Seed Q5)
+ * 셸의 핀 맞춤(`fitPins`)을 켠다. 일정 조회는 j01 과 같은 캐시 키다.
+ *
+ * 무엇을 보장하나:
+ *  - 🔴 PM1 (AC-6) 그날 좌표 있는 슬롯 2곳만 핀이 되고(좌표 없는 슬롯·다른 날 슬롯은 빠짐) fitPins 가 켜진다.
+ *  - 🟢 PM2 (AC-7) 그날 슬롯에 좌표가 없으면 핀 0 · 지금처럼 첫 후보 중심.
+ *  - 🟢 PM3 (AC-7) 일정에 그날이 없으면 핀 0 · 첫 후보 중심(첫 날로 폴백하지 않는다 — PlaceAddPage 와 다르다).
+ *  - 🟢 PM4 (AC-7·INV-4) 일정 조회가 실패해도 후보 목록·고르기가 그대로 된다 · 첫 후보 중심.
+ *  - 🟢 PM5 (AC-7) 후보도 없고 그날 좌표도 없으면 서울 기본 중심.
+ * ⚠️ 이 파일은 지도를 관찰 목(`map-root`)으로 바꾼다 → region 을 못 본다. 여기선 **페이지가 넘기는 핀·fitPins**
+ *   까지만 보고, 띠 맞춤 자체는 같은 셸을 실물 지도로 태우는 `MapSheetShell.test.tsx` FB1 이 지킨다(02a §3-5).
+ *   실제 화면에 핀이 보이는지는 6-b(AC-11).
+ *
+ * 3동작 뼈대: 준비=일정 응답/캐시 선적재 → 실행=피커 렌더(·고르기) → 단언=map-root 의 pins·fitPins·중심 텍스트.
+ */
+
+const NEXT_DAY = '2026-08-21';
+const FIRST_CANDIDATE_TEXT = '35.1587,129.1604';
+const SEOUL_TEXT = '37.5665,126.978';
+
+function slotAt(poiId: string, lat: number | null, lng: number | null) {
+  return {
+    poiId,
+    nameKo: poiId,
+    startAt: '10:00:00',
+    endAt: '11:00:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    tags: [] as string[],
+    alternatives: [] as never[],
+    lat,
+    lng,
+  };
+}
+
+function itineraryOf(
+  days: { date: string; slots: ReturnType<typeof slotAt>[] }[]
+) {
+  return { ...itinerary(), days };
+}
+
+/** 그날 = 해운대(좌표) · 좌표 없음 · 광안리(좌표), 다음 날 = 감천(좌표). */
+const DAY_WITH_COORDS = itineraryOf([
+  {
+    date: DAY,
+    slots: [
+      slotAt('haeundae', 35.1631, 129.1635),
+      slotAt('nocoord', null, null),
+      slotAt('gwangalli', 35.1532, 129.1186),
+    ],
+  },
+  { date: NEXT_DAY, slots: [slotAt('gamcheon', 35.0975, 129.0106)] },
+]);
+
+function mapPins(): { lat: number; lng: number }[] {
+  return (
+    (screen.getByTestId('map-root').props.pins as
+      { lat: number; lng: number }[] | undefined) ?? []
+  );
+}
+
+/** 일정을 캐시에 먼저 넣고 피커를 그린다 — j01 에서 들어오는 실제 경로와 같고, "핀 0" 단언의 시점을 고정한다(02a ★9). */
+async function renderPickerWithCachedItinerary(
+  data: ReturnType<typeof itineraryOf>
+): Promise<void> {
+  server.use(
+    http.get(`${BASE}/trips/:tripId/itinerary`, () => HttpResponse.json(data))
+  );
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: Infinity },
+      mutations: { gcTime: 0 },
+    },
+  });
+  client.setQueryData(getGetTripsTripIdItineraryQueryKey(TRIP_ID), data);
+  render(<RecordAddVisitPage tripId={TRIP_ID} day={DAY} />, {
+    wrapper: wrapperFor(client),
+  });
+  await screen.findByTestId(rowId('p1'));
+}
+
+describe('방문 추가 피커 · 그날 일정 핀 (AC-6·AC-7 · Q-115)', () => {
+  // TRIP-1416
+  it('PM1 그날 좌표 있는 슬롯 2곳(해운대·광안리)만 핀이 되고 fitPins 가 켜진다 — 좌표 없는 슬롯·다음 날 슬롯은 빠진다', async () => {
+    // 준비
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json(DAY_WITH_COORDS)
+      )
+    );
+
+    // 실행
+    await renderPicker();
+
+    // 단언 — 일정이 늦게 와도 도착하면 그날 핀으로 바뀐다(Seed Q6).
+    await waitFor(() =>
+      expect(mapPins().map((pin) => [pin.lat, pin.lng])).toEqual([
+        [35.1631, 129.1635],
+        [35.1532, 129.1186],
+      ])
+    );
+    expect(screen.getByTestId('map-root').props.fitPins).toBe(true);
+  });
+
+  it('PM2 그날 슬롯에 좌표가 없으면 핀이 없고 지금처럼 첫 후보 좌표가 중심이다', async () => {
+    await renderPickerWithCachedItinerary(
+      itineraryOf([
+        { date: DAY, slots: [slotAt('nocoord', null, null)] },
+        { date: NEXT_DAY, slots: [slotAt('gamcheon', 35.0975, 129.0106)] },
+      ])
+    );
+
+    expect(mapPins()).toHaveLength(0);
+    expect(screen.getByTestId('map-root')).toHaveTextContent(
+      FIRST_CANDIDATE_TEXT
+    );
+  });
+
+  it('PM3 일정에 그날이 없으면 첫 날로 폴백하지 않는다 — 핀 없이 첫 후보 좌표가 중심이다', async () => {
+    await renderPickerWithCachedItinerary(
+      itineraryOf([
+        { date: NEXT_DAY, slots: [slotAt('gamcheon', 35.0975, 129.0106)] },
+      ])
+    );
+
+    expect(mapPins()).toHaveLength(0);
+    expect(screen.getByTestId('map-root')).toHaveTextContent(
+      FIRST_CANDIDATE_TEXT
+    );
+  });
+
+  it('PM4 일정 조회가 실패해도 후보가 뜨고 고를 수 있으며, 지도는 첫 후보 중심이다 (INV-4)', async () => {
+    // 준비
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json({ message: 'boom' }, { status: 500 })
+      )
+    );
+    await renderPicker();
+    await flush();
+
+    // 실행
+    fireEvent.press(screen.getByTestId(pickId('p2')));
+
+    // 단언
+    await waitFor(() => expect(postHits()).toHaveLength(1));
+    expect(mapPins()).toHaveLength(0);
+    expect(screen.getByTestId('map-root')).toHaveTextContent(
+      FIRST_CANDIDATE_TEXT
+    );
+  });
+
+  it('PM5 후보도 없고 그날 좌표도 없으면 서울 기본 중심이다', async () => {
+    // 준비 — 장소 0건.
+    server.use(
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: [], nextCursor: null })
+      )
+    );
+
+    // 실행
+    render(<RecordAddVisitPage tripId={TRIP_ID} day={DAY} />, {
+      wrapper: wrapperFor(makeClient()),
+    });
+    await waitFor(() => expect(placeHits().length).toBeGreaterThan(0));
+    await flush();
+
+    // 단언
+    expect(mapPins()).toHaveLength(0);
+    expect(screen.getByTestId('map-root')).toHaveTextContent(SEOUL_TEXT);
+  });
+});
+
+/**
+ * TRIP-1433 · Q-142 — 즉석 방문 피커도 장소 추가와 같은 규칙으로 같은 이름 장소를 지역·주소로 가른다.
+ *
+ * 1줄 = [지역(있을 때만), #태그…, 카테고리] · 2줄 = 주소(있을 때만, testID `record-add-visit-address-{poiId}`).
+ * null·키 없음·빈 문자열·공백뿐은 없음 — 지금 부제 그대로. 이름은 원문 그대로. 고르기 동작은 그대로.
+ *
+ * ⚠️ 이 파일의 기본 장소 핸들러는 쿼리 `region`(목적지 '부산')과 `Place.region` 이 같은 것만 남긴다. 시군구
+ *   '종로구' 같은 표시명은 거기서 지워지므로, 이 묶음은 `/places` 를 쿼리를 보지 않는 고정 응답으로 덮는다.
+ * 생김새(줄 수·색·말줄임)는 재지 않는다(README 판정 4 — 6-b 실기 몫).
+ *
+ * 3동작 뼈대: 준비=고정 응답 → 실행=피커 렌더(·기록) → 단언=행 안의 1줄 문자열·주소 줄 testID·나간 POST.
+ */
+describe('방문 추가 피커 행 부제 — 같은 이름 장소를 지역·주소로 가른다', () => {
+  const ADDRESS_K1 = '서울특별시 종로구 사직로 161';
+  const ADDRESS_K5 = '서울특별시 마포구 월드컵북로 400';
+
+  function samePlace(
+    poiId: string,
+    nameKo: string,
+    category: Place['category'],
+    tags: string[],
+    region: string | null | undefined,
+    address: string | null
+  ): Place {
+    return {
+      ...makePlace(poiId, nameKo, category, '부산'),
+      tags,
+      region,
+      address,
+    };
+  }
+
+  // k5 의 region undefined 는 JSON 으로 나갈 때 키째 빠진다(생성 타입 `region?` 경로).
+  const SAME_NAME: Place[] = [
+    samePlace('k1', '경복궁', '명소', ['고궁'], '종로구', ADDRESS_K1),
+    samePlace('k2', '경복궁', '맛집', ['한식'], '중구', null),
+    samePlace('k3', '경복궁', '맛집', ['한식'], null, null),
+    samePlace('k4', '경복궁', '맛집', ['한식'], '   ', '  '),
+    samePlace('k5', '경복궁', '맛집', ['한식'], undefined, ADDRESS_K5),
+    samePlace('k6', '[백년가게]옥미아구찜', '맛집', [], '마산합포구', null),
+  ];
+
+  const row = (poiId: string) => screen.getByTestId(rowId(poiId));
+  const addressId = (poiId: string) => `record-add-visit-address-${poiId}`;
+
+  beforeEach(() => {
+    server.use(
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: SAME_NAME, nextCursor: null })
+      )
+    );
+  });
+
+  // 피커만 그린다 — j01 글자가 섞이면 행 밖 글자까지 모집단이 흐려진다.
+  async function renderSameNamePicker(): Promise<void> {
+    render(<RecordAddVisitPage tripId={TRIP_ID} day={DAY} />, {
+      wrapper: wrapperFor(makeClient()),
+    });
+    await screen.findByTestId(rowId('k1'));
+  }
+
+  it('🔴 R1 · 이름이 같은 두 행은 1줄 맨 앞의 지역이 달라 서로 구분된다', async () => {
+    await renderSameNamePicker();
+
+    expect(within(row('k1')).getByText('경복궁')).toBeTruthy();
+    expect(within(row('k2')).getByText('경복궁')).toBeTruthy();
+    expect(within(row('k1')).getByText('종로구 · #고궁 · 명소')).toBeTruthy();
+    expect(within(row('k2')).getByText('중구 · #한식 · 맛집')).toBeTruthy();
+  });
+
+  it('🔴 R2 · 주소가 있는 행만 그 행 안에 주소 줄이 원문으로 뜬다', async () => {
+    await renderSameNamePicker();
+
+    expect(within(row('k1')).getByTestId(addressId('k1'))).toHaveTextContent(
+      ADDRESS_K1
+    );
+    expect(within(row('k5')).getByText('#한식 · 맛집')).toBeTruthy();
+    expect(within(row('k5')).getByTestId(addressId('k5'))).toHaveTextContent(
+      ADDRESS_K5
+    );
+    expect(screen.queryByTestId(addressId('k2'))).toBeNull();
+  });
+
+  it('🔴 R3 · 지역·주소가 null·빈 문자열·공백뿐이면 지금 부제 그대로고 주소 줄·"null"·"미확인" 글자가 없다', async () => {
+    await renderSameNamePicker();
+    // 앵커 — 주소 줄을 그리는 화면에서만 "없다"가 의미 있다.
+    expect(within(row('k1')).getByTestId(addressId('k1'))).toBeTruthy();
+
+    for (const poiId of ['k3', 'k4']) {
+      expect(within(row(poiId)).getByText('#한식 · 맛집')).toBeTruthy();
+      expect(screen.queryByTestId(addressId(poiId))).toBeNull();
+      expect(
+        within(row(poiId)).queryAllByText(/null|undefined|미확인/)
+      ).toEqual([]);
+    }
+  });
+
+  it('R4 · 이름 접두([백년가게])는 원문 그대로다 (사용자 결정 · 선제 green)', async () => {
+    await renderSameNamePicker();
+
+    expect(within(row('k6')).getByText('[백년가게]옥미아구찜')).toBeTruthy();
+  });
+
+  it('R5 · 같은 이름 중 둘째 행(k2)을 고르면 k2 로 도착 1회를 기록하고 뒤로 간다 (무회귀 · 선제 green)', async () => {
+    await renderSameNamePicker();
+
+    fireEvent.press(screen.getByTestId(pickId('k2')));
+
+    await waitFor(() => expect(router.back).toHaveBeenCalledTimes(1));
+    expect(postBodies).toEqual([
+      { slotKey: null, poiId: 'k2', source: 'MANUAL' },
+    ]);
   });
 });

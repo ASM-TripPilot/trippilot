@@ -7,7 +7,9 @@ CachePort에 저장되는 직렬화 경로에서 구조적으로 차단.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date
 from enum import Enum
 
 from trippilot.domain.common import GeoPoint, PoiId
@@ -16,6 +18,9 @@ from trippilot.domain.common import GeoPoint, PoiId
 # 밤에 노는 곳(댄스 클럽·칵테일바·와인바·재즈바·루프탑바) — 경계 8종엔 칸이 없어 ACTIVITY 에 태그로 싣는다
 # (2026-10-15 사용자 결정 "클럽·바를 수집해 액티비티로"). 다시 짜기 "밤에 놀기" 지시와 추정 영업시간이 이 태그를 본다.
 NIGHTLIFE_TAG = "나이트라이프"
+# 웹 검색으로 "요즘 많이 가는 곳"이라 확인한 장소(`data/curated_popular_places.json`, 항목마다 근거 URL).
+# 규칙 점수의 인기 항 바닥을 올린다(`scorer._popularity_norm`) — 인앱 저장 수가 아직 전부 0이라 대역이다.
+TRENDING_TAG = "요즘 인기"
 
 
 class PoiCategory(Enum):
@@ -60,6 +65,63 @@ def counts_as_food(poi: Poi) -> bool:
     """FOOD 이거나 이름이 음식 골목인 POI — 조립의 FOOD 하루 상한이 세는 기준."""
     return (poi.category is PoiCategory.FOOD
             or EATERY_NAME.search(_NAME_NOISE.sub("", poi.name)) is not None)
+
+
+# ── 공휴일 휴무 (상황 감지 H1 · BR-SA-17) ─────────────────────────────────
+# 휴일 규칙 토큰의 닫힌 집합. 태그는 특일 달력(`ports.holiday_calendar_port`)이 그 날에 붙이는 어휘와 같고,
+# 날짜 명시형 "MM-DD"(`1월 1일`·`성탄절`)는 달력 없이도 그 날을 닫는다. 규칙은 휴무 원문에서
+# `poi_curation.sourcing.holiday_rules` 가 읽는다. 명절 튜플은 (전날, 당일, 다음날) 순 — 파서의 한정자와
+# 달력의 연속 3일이 같은 자리를 쓴다.
+PUBLIC_HOLIDAY = "PUBLIC"
+SEOLLAL = ("SEOLLAL_EVE", "SEOLLAL_DAY", "SEOLLAL_NEXT")
+CHUSEOK = ("CHUSEOK_EVE", "CHUSEOK_DAY", "CHUSEOK_NEXT")
+BUDDHA = "BUDDHA"
+HOLIDAY_TAGS = frozenset({PUBLIC_HOLIDAY, *SEOLLAL, *CHUSEOK, BUDDHA})
+_DATED_RULE = re.compile(r"\d{2}-\d{2}")
+
+# 날짜 → 그 날 태그 (특일 달력). None 이 아니라 **빈 매핑**이면 모드는 켜졌는데 달력을 못 읽은 것이다
+# (실패·키 미등록) — 그때도 날짜 명시형 규칙은 산다.
+HolidayCalendar = Mapping[date, frozenset[str]]
+
+
+def is_holiday_rule(token: str) -> bool:
+    """닫힌 집합 — 태그 8종 또는 실제로 있는 날짜의 "MM-DD"(윤일 02-29 포함)."""
+    if token in HOLIDAY_TAGS:
+        return True
+    if not _DATED_RULE.fullmatch(token):
+        return False
+    try:
+        date(2000, int(token[:2]), int(token[3:]))  # 2000 = 윤년
+    except ValueError:
+        return False
+    return True
+
+
+def closed_by_holiday(poi: Poi, day: date, holidays: HolidayCalendar | None) -> bool:
+    """휴일 규칙이 그 날을 닫는가 — 날짜 명시형이 그 날이거나 규칙이 달력 태그와 겹친다. None(모드 off)이면 거짓."""
+    if holidays is None or not poi.holiday_rules:
+        return False
+    return (f"{day:%m-%d}" in poi.holiday_rules
+            or not poi.holiday_rules.isdisjoint(holidays.get(day, ())))
+
+
+def open_windows_on(
+    poi: Poi, day: date, holidays: HolidayCalendar | None = None,
+) -> tuple[OpenHour, ...] | None:
+    """그 날 영업 창 — None = 모름(영업정보 없음, 막지 않는다), () = 그 날 휴무가 **증명**됐다.
+
+    HC1 검증과 조립 전 경로(그 날 창·필수 방문 정의역·차선책·후보 거르기)가 **이것 하나**를 본다 — 규칙이
+    둘이면 조립이 둔 핀을 검증이 거부한다. `day` 는 날짜다(datetime 이 아니라 — 달력 키가 날짜다).
+
+    `holidays` None(`HOLIDAY_CLOSURE_MODE=off`)이면 공휴일을 보지 않는다 — 종전 요일 판정과 같다.
+    매핑이 오면 휴일 규칙이 그 날을 닫는 곳은 주간 영업정보가 없어도 () 다(휴무 원문이 그 날 닫는다고 말했다).
+    정기 휴무(그 요일 창 없음)는 공휴일과 무관하게 종전대로다.
+    """
+    if closed_by_holiday(poi, day, holidays):
+        return ()
+    if not poi.open_hours:
+        return None
+    return tuple(oh for oh in poi.open_hours if oh.day_of_week == day.weekday())
 
 
 class DataQuality(Enum):
@@ -132,6 +194,9 @@ class Poi:
     # 백엔드가 2026-09-16 에 내부 read DTO 로 열었다(`PoiReadResponse.sourceRef`).
     # POI 정본은 여전히 백엔드 단독 소유다 — 우리가 드는 건 POI 가 아니라 파생 지식이다.
     source_ref: str | None = None
+    # 휴일 규칙 (상황 감지 H1) — 휴무 원문이 말한 공휴일·명절·날짜 휴무. 런타임 적재(backend_poi_db)가 원문
+    # 칸에서 읽어 채우고, 판정은 `open_windows_on` 이 달력과 함께 한다. 모드 off 면 읽어도 무력하다.
+    holiday_rules: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         if not self.poi_id:
@@ -142,9 +207,12 @@ class Poi:
             raise ValueError(f"avg_cost 음수: {self.avg_cost}")
         if self.saved_count < 0:
             raise ValueError(f"saved_count 음수: {self.saved_count}")
+        bad = sorted(r for r in self.holiday_rules if not is_holiday_rule(r))
+        if bad:
+            raise ValueError(f"휴일 규칙 토큰이 닫힌 집합 밖: {bad}")
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "poi_id": str(self.poi_id),
             "name": self.name,
             "category": self.category.value,
@@ -159,6 +227,11 @@ class Poi:
             "tags": list(self.tags),
             "source_ref": self.source_ref,
         }
+        # 규칙이 없으면 키를 싣지 않는다 — 수집 제안 문서(백엔드 수신 `PoiProposalDocument`·공유본)가 이 직렬화를
+        # 그대로 싣는다. 규칙은 런타임 적재만 채우므로 그 와이어·공유본 모양은 바뀌지 않는다.
+        if self.holiday_rules:
+            d["holiday_rules"] = sorted(self.holiday_rules)
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "Poi":
@@ -176,6 +249,7 @@ class Poi:
             confidence=d["confidence"],
             tags=tuple(d.get("tags") or ()),  # 구 캐시 호환 (saved_count 선례)
             source_ref=d.get("source_ref"),
+            holiday_rules=frozenset(d.get("holiday_rules") or ()),  # 키 없는 옛 직렬화본 = 규칙 없음
         )
 
     def to_cacheable_dict(self) -> dict:

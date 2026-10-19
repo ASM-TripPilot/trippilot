@@ -21,6 +21,7 @@ from datetime import date, datetime, timedelta, timezone
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from trippilot.assembly_engine import ortools_assembler
 from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.ortools_assembler import (
     _PREFILTER_TOP_K,
@@ -179,6 +180,9 @@ def test_pace_retry_does_not_double_count_the_cut(caplog, monkeypatch) -> None:
         return None if problem.pace is not None else out   # pace 시도는 해 없음으로
 
     monkeypatch.setattr(OrToolsAssembler, "_solve_day", first_fails)
+    # 재시도는 남은 예산이 있을 때만 돈다 — 시계를 멈춰 CI 속도와 무관하게 재시도가 돌게 한다
+    # (느린 러너에서 첫 풀이가 150ms 를 넘기면 재시도가 빠져 이 전제가 깨졌다).
+    monkeypatch.setattr(ortools_assembler.time, "monotonic", lambda: 0.0)
     problem = ItineraryProblem(
         schedule_id=ScheduleId("s-908"), days=(_DAY,), candidates=tuple(cands),
         fixed_blocks=(), budget=BudgetLevel.MID, transport=TransportMode.PUBLIC,
@@ -188,5 +192,7 @@ def test_pace_retry_does_not_double_count_the_cut(caplog, monkeypatch) -> None:
     with caplog.at_level(logging.INFO, logger="trippilot.assembly_engine.ortools_assembler"):
         OrToolsAssembler(index, TravelEstimator(_CFG), _CFG).solve(problem, 200)
 
-    assert len(calls) == 2 and calls[1] is None          # 전제 — 재시도가 실제로 돌았다
+    # 전제 — 무보정 재시도가 실제로 돌았다. 시계가 멈춰 있어 그 뒤 몰아 재시도(TRIP-907)까지 돌 수 있는데,
+    # 그쪽도 절단을 다시 세지 않아야 하므로 아래 단언이 함께 덮는다.
+    assert calls[0] is not None and calls[1] is None
     assert len([r for r in caplog.records if "프리필터" in r.getMessage()]) == 1

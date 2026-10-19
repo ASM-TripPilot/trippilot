@@ -26,14 +26,16 @@ import {
  *  - done     = 이름 › + 우측 실제 방문 시각 "09:30" + "방문"(TRIP-1220 — 실제 시각이 없으면 계획 시각 + "계획") / 사진 N장 / 후기. 사진·후기가 없으면 그 칸을
  *               통째로 안 그린다(G6 — 실앱은 조회 계약이 없어 늘 없다). 사진·메모 콜백을 받으면 active 와 같은
  *               [사진]·[메모]와 안내 줄(TRIP-1203 — testID 는 `execution-live-slot-done-*-{slotKey}`).
- *  - active   = 상태줄 "13:00 도착 · 지금 관람 중"(D4 고정) + [방문 완료]·[사진]·[메모] + (있으면) 메모 박스(TRIP-1117).
+ *  - active   = 상태줄 "13:00 도착 · 지금 관람 중"(시각 = 실제 도착 `visitedLabel`, TRIP-1419 — 없으면 "지금 관람 중")
+ *               + [방문 완료]·[사진]·[메모] + (있으면) 메모 박스(TRIP-1117).
  *               [사진]은 `onPressPhoto`, [메모]는 `onPressMemo` 를 부른다(TRIP-1070). 받지 않은 버튼은
  *               그리지 않는다(TRIP-939 — 심사 2.1). 사진 안내 한 줄(`photoNotice`)의 상태는 부모가 쥔다.
  *  - upcoming = "예정" 알약(트리거 영향이면 `badgeLabel` 분홍 배지, TRIP-748) + 상태줄 "15:00 도착 예정 · {영업시간}"
  *               (한 줄 말줄임, TRIP-1021) + 누를 수 없는 아이콘 3개. `onPressArrive` 를 받으면 같은 줄 오른쪽에
  *               수동 [✓ 도착](TRIP-1021 — 자동 도착 TRIP-1018 보류 중 유일한 도착 경로). 누가 받을지는 허브가 정한다.
  *
- * 시각은 서버 `startAt` 을 자를 뿐(BR-U4-34). 각 leaf 는 값 하나 — 시각과 "방문" 은 형제 leaf 다.
+ * 예정 시각은 서버 계획 `startAt` 을 자를 뿐(BR-U4-34). 관람 중·완료 시각은 부모가 내린 서버 실제 도착(`visitedLabel`)이고
+ * 카드는 계산하지 않는다. 각 leaf 는 값 하나 — 시각과 "방문" 은 형제 leaf 다.
  */
 
 // 그림자 색은 토큰이 없다 — SlotStopCard·DayChipOverlay 의 `#000000` 스타일 객체 관례.
@@ -59,7 +61,10 @@ export interface SlotProgressCardProps {
   state: SlotProgressState;
   /** done 전용. 비었으면 사진 행을 통째로 안 그린다. */
   photos?: ImageSourcePropType[];
-  /** done 전용(TRIP-1220) — 실제 방문 시각 'HH:mm'(KST, 기록 j01 과 같은 값). 없으면 계획 시각 + "계획" 으로 표시한다. */
+  /**
+   * done·active — 실제 도착 시각 'HH:mm'(KST, 기록 j01 과 같은 값). done 은 없으면 계획 시각 + "계획"(TRIP-1220),
+   * active 는 없으면 시각 없이 "지금 관람 중"(TRIP-1419). upcoming 은 무시한다(계획값만, BR-U4-34).
+   */
   visitedLabel?: string | null;
   /** done·active(TRIP-1117). null/미전달이면 메모 박스를 안 그린다. */
   memo?: string | null;
@@ -371,7 +376,9 @@ export function SlotProgressCard({
           testID={fieldId('time')}
           className="font-noto text-caption text-muted"
         >
-          {`${hhmm} 도착 · 지금 관람 중`}
+          {visitedLabel
+            ? `${visitedLabel} 도착 · 지금 관람 중`
+            : '지금 관람 중'}
         </Text>
         <View className="flex-row flex-wrap items-center gap-sm">
           <Pressable

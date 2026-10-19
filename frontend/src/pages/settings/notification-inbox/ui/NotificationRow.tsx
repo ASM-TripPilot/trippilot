@@ -13,8 +13,8 @@ import type { NotificationRowVM } from './NotificationInboxScreen';
  *  - 아이콘 타일 40px(bg surface-strong) + kind 글리프 22px.
  *  - 제목 + 메타("라벨 · 상대시각") 단일 Text 노드씩(§5-A 완전일치 매칭 보존).
  *  - 본문(TRIP-1075): 제목과 메타 사이, 서버 `body` 가공 없이 2줄 말줄임. 공백뿐이면 줄 자체를 안 그린다.
- *  - 인라인 액션(`inlineActionLabel`≠null = PLAN_B): `notification-inbox-action` press→onNavigate(route).
- *  - 행 자체 press: 인라인 액션이 없고 route≠null(=REFLECTION)일 때만 onNavigate(route).
+ *  - 인라인 액션(`inlineActionLabel`≠null = PLAN_B): `notification-inbox-action` press→onNavigate(route, id).
+ *  - 행 자체 press: 인라인 액션이 없고 route≠null 일 때만 onNavigate(route, id).
  *    route=null(데이터없음 회고·딥링크 없는 kind)이면 press 무동작.
  *
  * testID: notification-inbox-row / -unread-dot / -body / -action.
@@ -22,7 +22,7 @@ import type { NotificationRowVM } from './NotificationInboxScreen';
 
 export interface NotificationRowProps {
   row: NotificationRowVM;
-  onNavigate: (route: string) => void;
+  onNavigate: (route: string, notificationId: string) => void;
   /** 카드 안 두 번째 행부터 상단 hairline 구분선. */
   showDivider?: boolean;
 }
@@ -36,7 +36,7 @@ export function NotificationRow({
   // 행 전체 press 는 인라인 액션이 없을 때만(REFLECTION). PLAN_B 는 인라인 링크가 진다.
   const pressRow =
     route != null && inlineActionLabel == null
-      ? () => onNavigate(route)
+      ? () => onNavigate(route, row.id)
       : undefined;
 
   return (
@@ -82,7 +82,7 @@ export function NotificationRow({
           <Pressable
             testID="notification-inbox-action"
             accessibilityRole="button"
-            onPress={() => onNavigate(route)}
+            onPress={() => onNavigate(route, row.id)}
             className="pt-[2px]"
           >
             <Text className="font-noto-medium text-label text-primary">

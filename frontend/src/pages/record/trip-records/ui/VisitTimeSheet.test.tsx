@@ -13,15 +13,16 @@ import { VisitTimeSheet } from './VisitTimeSheet';
  * 시트는 서버 순간(`Z`)을 **서울 시계**로 읽어 시·분 셀에 시드하고, [저장]에서 "원본의 서울 날짜 +
  * 고른 서울 HH:mm" 을 다시 UTC 순간(`Z`)으로 되돌려, 분 단위로 **실제로 바뀐 필드만** `onSave` 한다.
  * 클라 선검증(`adjustTimesDraft`) 위반이면 인라인 오류 + onSave 0회(서버 재검증이 최종 — INV-2).
- * 완료 칸은 원본 완료가 있을 때만 고칠 수 있다(01b D1 — PATCH 완료는 BR-U5-06·09 를 우회한다).
+ * 완료 칸은 원본 완료가 있을 때만 고칠 수 있다(01b D1 — PATCH 완료는 BR-U5-06·09 를 우회한다). 완료가 없으면
+ * 완료 휠 대신 "아직 완료 전" 자리 표시만 둔다(TRIP-1437 Q-116 — 닫힌 휠의 흐린 '00:00' 폐기).
  *
  * *(개념)* **순간 vs 벽시계** — `2026-08-31T05:20:00Z` 는 지구상 한 순간이고, 서울 시계로는 14:20 이다.
  *   문자열을 잘라(slice) 쓰면 05:20 이 보이고, 기기 시계(getHours)로 읽으면 기기마다 다르다.
  * *(개념)* 이 파일은 기기 시간대를 **LA 로 바꿔** 돈다 — 로컬 개발기가 KST 라 그냥 돌리면 기기 시계
  *   구현도 통과해 버린다(seoulDate.test 선례).
  * *(개념)* `@gorhom/bottom-sheet` 목은 children 을 무조건 렌더한다 — 딤·개폐는 6-b(AC-11).
- * *(개념)* `fireEvent.press` 는 `disabled` Pressable 을 막는다(RNTL 13.3.3 실측, TRIP-1080 02a §5) — 그래도
- *   "완료가 실리지 않는다"는 막는 방식과 무관하게 onSave 인자로 판정한다.
+ * *(개념)* "완료가 실리지 않는다"는 막는 방식과 무관하게 onSave 인자로 판정한다(TRIP-1437 부터 완료 전이면
+ *   완료 셀 자체가 없다).
  *
  * 3동작: 준비 = 원본 순간·now 로 렌더 → 실행 = 셀·버튼 press → 단언 = 선택 셀·오류·onSave 인자.
  */
@@ -193,6 +194,10 @@ describe('S8 · AC-8 · D1 — 완료 칸은 원본 완료가 있을 때만 고�
     expect(
       screen.getByTestId('record-trip-visit-time-completed')
     ).not.toBeDisabled();
+    // TRIP-1437 AC-16 짝 — 완료가 있으면 "완료 전" 자리 표시는 없다.
+    expect(
+      screen.queryByTestId('record-trip-visit-time-completed-pending')
+    ).not.toBeOnTheScreen();
 
     press(cell('completed', 'h', '16'));
     save();
@@ -294,7 +299,8 @@ describe('S9 · 취소 — onCancel 만, onSave 는 안 부른다', () => {
  *  - W1 시트를 열면 네 휠이 **현재 서울 시각 위치**에서 시작한다(00 부터가 아니라).
  *  - W2·W3 스크롤이 멈춘 값이 곧 선택이고 저장에 실린다(TRIP-990 D21 — 굴린 값이 버려지지 않는다, INV-4).
  *  - W5 딤 탭 등으로 시트가 닫히면 `onCancel` 을 불러 페이지의 편집 상태를 푼다(다시 열 수 있게).
- *  - W6·W7 원본 완료가 없으면 완료 휠이 닫힌다(TRIP-1069 D1) — 있으면 평소대로 움직인다.
+ *  - W6·W7 원본 완료가 없으면 완료 휠 대신 자리 표시만 있다(TRIP-1437 — 옛 "닫힌 휠", TRIP-1069 D1) —
+ *    있으면 평소대로 움직인다.
  *  - W8 현재 위치에서 멈춰도 "바뀜"이 아니다(분 단위 diff — 헛 PATCH 없음, TRIP-1069 AC-7).
  *
  * *(개념)* `contentOffset` = 스크롤뷰가 처음에 몇 px 내려간 곳에서 시작하는지. jest 는 실제로 굴리지
@@ -302,7 +308,7 @@ describe('S9 · 취소 — onCancel 만, onSave 는 안 부른다', () => {
  * *(개념)* `fireEvent(휠, 'momentumScrollEnd', …)` = "관성 스크롤이 이 위치에서 멈췄다"는 신호를 직접 쏜다.
  *
  * 커버하지 않는 것(6-b 실기): 실제 스냅·관성, 관성 없이 손을 뗄 때 정지 이벤트가 오는지, 휠을 끌 때
- *   시트가 정말 안 따라오는지(목은 prop 만 받는다), 닫힌 완료 휠의 흐린 모양.
+ *   시트가 정말 안 따라오는지(목은 prop 만 받는다), 완료 전 자리 표시의 모양.
  *
  * 3동작 뼈대: 준비=원본 순간으로 렌더 → 실행=휠 정지·닫힘 신호·[저장] → 단언=휠 위치·선택 표식·onSave 인자.
  */
@@ -397,44 +403,42 @@ describe('🔴 W · TRIP-1080 — 공용 휠 4열 시트', () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  it('W6 · AC-8 · D1 — 완료 없는 방문: 완료 휠은 닫혀 멈춤·press 로 선택이 안 생기고, 저장엔 도착만 실린다', () => {
+  // TRIP-1437 (Q-116) — 옛 W6 는 "완료 셀 84개가 있되 닫혀 있다(scrollEnabled false·선택 없음)"를 잠갔다.
+  // 닫힌 휠도 가운데 띠 안에 흐린 '00' 이 서 있었다 → 완료 전이면 셀을 아예 그리지 않고 자리 표시만 둔다(01b Q1).
+  it('W6 · AC-15 · BR-U5-05 — 완료 없는 방문: 완료 셀 0개·완료 칸에 숫자 없음·"아직 완료 전이에요" 자리 표시, 도착은 고쳐 저장에 도착만 실린다', () => {
     renderSheet({ ...LATE, completedAt: null });
     const COMPLETED_CELL = /^record-trip-visit-time-completed-[hm]-\d{2}$/;
-    const selectedCompleted = () =>
-      screen
-        .queryAllByTestId(COMPLETED_CELL)
-        .filter((node) => node.props.accessibilityState?.selected === true)
-        .map((node) => node.props.testID as string);
+    const completedGroup = screen.getByTestId(
+      'record-trip-visit-time-completed'
+    );
 
-    // 모집단 앵커 — 완료 셀 24(시)+60(분)이 실재해야 아래 [] 가 뜻을 가진다(02a ★9).
-    expect(screen.queryAllByTestId(COMPLETED_CELL).length).toBe(84);
-    expect(
-      screen.getByTestId('record-trip-visit-time-completed')
-    ).toBeDisabled();
-    // 완료 휠 둘은 스크롤이 꺼지고, 도착 휠은 아니다(짝).
-    expect(
-      screen.getByTestId(wheel('completed', 'h')).props.scrollEnabled
-    ).toBe(false);
-    expect(
-      screen.getByTestId(wheel('completed', 'm')).props.scrollEnabled
-    ).toBe(false);
+    // 완료 휠·셀이 없다 — 그래서 띠 안 '00:00' 이 설 자리도 없다.
+    expect(screen.queryAllByTestId(COMPLETED_CELL).length).toBe(0);
+    expect(screen.queryByTestId(wheel('completed', 'h'))).not.toBeOnTheScreen();
+    expect(screen.queryByTestId(wheel('completed', 'm'))).not.toBeOnTheScreen();
+    // 완료 칸 안 글자에 숫자가 하나도 없다(라벨 '완료' + 자리 표시 문구뿐).
+    expect(completedGroup).not.toHaveTextContent(/\d/);
+    // 자리 표시 — 완료 칸 안에 있고 문구는 완전 일치(01b Q1). 칸은 여전히 비활성으로 알린다.
+    const pending = screen.getByTestId(
+      'record-trip-visit-time-completed-pending'
+    );
+    expect(pending).toHaveTextContent('아직 완료 전이에요');
+    expect(completedGroup.findAll((node) => node === pending).length).toBe(1);
+    expect(completedGroup).toBeDisabled();
+
+    // 짝 — 도착 휠은 살아 있다: 굴려 멈춘 값이 저장에 실린다(공허 통과 방지).
     expect(
       screen.getByTestId(wheel('arrived', 'h')).props.scrollEnabled
     ).not.toBe(false);
-    expect(selectedCompleted()).toEqual([]);
-
-    settle('completed', 'h', 15);
-    settle('completed', 'm', 45);
-    press(cell('completed', 'h', '16'));
     settle('arrived', 'h', 20);
-
-    expect(selectedCompleted()).toEqual([]);
     save();
 
     expect(onSave).toHaveBeenCalledTimes(1);
     const [patch] = onSave.mock.calls[0]!;
-    // 짝 — 도착은 실린다(공허 통과 방지), 완료는 안 실린다.
     expect(Object.keys(patch)).toEqual(['arrivedAt']);
+    expect(Date.parse(patch.arrivedAt!)).toBe(
+      Date.parse('2026-09-28T11:42:00Z')
+    );
   });
 
   it('W7 · AC-8 짝 — 완료가 있는 방문은 완료 시 휠이 23 에서 멈추면 선택이 옮겨 가고 14:30Z 로 실린다', () => {

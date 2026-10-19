@@ -26,8 +26,7 @@ export const REPLAN_REASONS: ReplanChoice[] = [
 
 /**
  * '어떻게 바꿀까요' 10종(다중 선택). 순서 = Figma 칩 순서.
- * `EARLIER` 는 ai 지시 사전의 키 이름이다. `AVOID_OUTDOOR` 는 ai 사전에 아직 없어 서버가
- * 모르는 지시로 흘려보낸다(D5 — 400 아님).
+ * `EARLIER`·`AVOID_OUTDOOR` 는 ai 지시 사전(`replan_directives.yaml`)의 키 이름이다.
  * Figma 의 '예산 유지'(`KEEP_BUDGET`)는 뺐다 — 서버가 집행할 가격 데이터가 없어 골라도 일정이
  * 그대로였다(ai `replan_directives.yaml` 미배선). 데이터가 생기면 되살린다.
  */

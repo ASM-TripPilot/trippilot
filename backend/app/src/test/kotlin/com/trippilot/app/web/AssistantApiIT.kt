@@ -9,6 +9,7 @@ import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
@@ -43,6 +44,7 @@ class AssistantApiIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var jdbc: JdbcTemplate
     @Autowired private lateinit var relay: OutboxRelay
+    @Autowired private lateinit var subscribers: List<com.trippilot.core.event.OutboxSubscriber>
 
     private companion object {
         const val CONCURRENT_OPENS = 8
@@ -102,6 +104,8 @@ class AssistantApiIT : AbstractPostgresIntegrationTest() {
         call(HttpMethod.DELETE, "/api/v1/assistant/sessions/$id", null).first shouldBe 401
         call(HttpMethod.POST, "/api/v1/assistant/sessions/$id/turns", null, "{}").first shouldBe 401
         call(HttpMethod.POST, "/api/v1/assistant/proposals/$id/apply", null).first shouldBe 401
+        call(HttpMethod.PUT, "/api/v1/assistant/sessions/$id/messages/$id/feedback", null, """{"rating":"UP"}""").first shouldBe 401
+        call(HttpMethod.DELETE, "/api/v1/assistant/sessions/$id/messages/$id/feedback", null).first shouldBe 401
     }
 
     @Test
@@ -221,6 +225,15 @@ class AssistantApiIT : AbstractPostgresIntegrationTest() {
         call(HttpMethod.GET, "/api/v1/assistant/sessions", token).second.map { it["id"].asText() } shouldContainExactly listOf(session)
         call(HttpMethod.DELETE, "/api/v1/assistant/sessions/$session", token).first shouldBe 204
         call(HttpMethod.DELETE, "/api/v1/assistant/sessions/$session", token).first shouldBe 204
+
+        // 상대(AI) 기억 파기는 대화 삭제와 같은 트랜잭션의 아웃박스로 맡긴다 — 한 번만(두 번째 삭제는 지운 것이 없다).
+        // 릴레이가 구독자에 배달하면 발행으로 닫힌다(상대가 불통이면 열린 채 재시도된다, 미결 #13).
+        val forget = "SELECT count(*) FROM outbox_event WHERE event_type = 'assistant.DialogueForgetRequested' AND aggregate_id = ?"
+        jdbc.queryForObject(forget, Int::class.java, session) shouldBe 1
+        repeat(3) { relay.relay() }
+        jdbc.queryForObject("$forget AND published_at IS NOT NULL", Int::class.java, session) shouldBe 1
+        // 구독자 없는 이벤트도 릴레이는 닫는다 — 위 단언만으로는 구독자가 붙었는지 모른다
+        subscribers.map { it.eventType } shouldContain "assistant.DialogueForgetRequested"
 
         count("assistant_message", session) shouldBe 0
         count("assistant_proposal", session) shouldBe 0

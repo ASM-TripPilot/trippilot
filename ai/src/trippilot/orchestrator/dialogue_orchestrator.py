@@ -10,6 +10,7 @@
 0  리터럴 "내가 할 수 있는 것 보기" → 결정론 능력 안내 ANSWER (LLM 0, BR-AO-18)
 1  보류 되묻기가 있으면 그 답으로 먼저 읽는다 (`dialogue_interpreter.answer_pending` 재사용, LLM 0)
 2  `DIALOGUE_INTENT` 1회 → `IntentGate` closed-set → `IntentMatch(LLM_DIRECT)`; 실패는 전부 OUT_OF_SCOPE + 사유 (BR-AO-02)
+2″ 분류가 할 일 없음으로 닫았고(null·범위 밖 라벨) 발화가 맞장구·인사 낱말뿐이면 받아 주는 한마디 ANSWER — 범위 밖 카드 대신 (BR-AO-26)
 2′ 분류 결과를 알게 된 직후 `ShadowIntentProbe.submit` — 기다리지 않는다, 응답 영향 0 (BR-AO-08)
 3  필수 인자가 비면 ARGUMENT_CLARIFY (`from_match` 재사용 — 고정 문안·보기, 요청당 1회)
 4  `HANDLERS[intent].plan(ctx)` → 공유 풀 팬아웃(submit 전 마감 고정 → wait → cancel → 상태값) → `assemble` → `Facts` (BR-AO-12)
@@ -26,7 +27,7 @@
   내리고 잔여 ≤0 이면 부르지 않는다(DL-4, BR-AO-01).
 - **발화 원문·account_ref 를 로그에 싣지 않는다**(SEC-U8-06) — 로그는 trace_id·예외 타입까지.
 - 보이는 시각·순서·거리·장소는 `Facts` 에서만(INV-2·3), 후보는 풀 안에서만(INV-1), 폴백은 전부 결정론 + 보고(INV-4).
-  **의도된 결정론은 폴백이 아니다**(BLM §7) — 0단계·needTrip·`Facts.status=UNAVAILABLE` 직행에는 `FallbackEvent` 가 없다
+  **의도된 결정론은 폴백이 아니다**(BLM §7) — 0단계·needTrip·`Facts.status=UNAVAILABLE`·사실 없는 `Facts` 직행·맞장구 답(2″)에는 답변 단계 `FallbackEvent` 가 없다
   (팬아웃 실패는 작업별 `FallbackEvent(stage="fanout")` 로 이미 보고됐다). LLM 을 시도했거나 시도해야 했던 턴의 템플릿,
   게이트웨이를 부르지 못한 분류 폴백(잔여 0·워커 예외)에는 짝이 있다 — 관측은 트레이스 이벤트 한 길이다.
 - **시한·상한은 모듈 상수**(BLM §4 배분표 — `_INTENT_CAP_MS`…) — env 로도 생성자로도 노출하지 않는다(BR-AO-13, 바뀌지 않는 값의
@@ -35,7 +36,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Executor, ThreadPoolExecutor, wait
 from dataclasses import dataclass, replace
@@ -44,9 +47,11 @@ from datetime import date, datetime, tzinfo
 from trippilot.agents.schedule.agent import Clock
 from trippilot.domain.common import TraceId
 from trippilot.domain.context import PermissionDeniedError
-from trippilot.domain.intent import ROUTABLE_INTENTS, Intent, IntentDraft, IntentMatch, MatchRoute
+from trippilot.domain.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent, IntentDraft, IntentMatch, MatchRoute
 from trippilot.domain.observability import FallbackEvent
-from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE
+from trippilot.llm_gateway.gates.base import has_injection_like
+from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, clock_spans, clock_times
+from trippilot.llm_gateway.gates.intent import NULL_INTENT
 from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker
 from trippilot.llm_gateway.workers.dialogue_intent import DialogueIntentWorker
 from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
@@ -70,6 +75,7 @@ from trippilot.orchestrator.dialogue_interpreter import (
     Clarify,
     DialogueContext,
     Frame,
+    PendingFrame,
     TripView,
     answer_pending,
     from_match,
@@ -82,18 +88,21 @@ from trippilot.orchestrator.dialogue_memory import (
     compress_fallback,
     due,
     expires_at_for,
+    is_turn_fragment,
 )
 from trippilot.orchestrator.intent_router import normalize
 from trippilot.orchestrator.shadow_probe import ShadowIntentProbe
 from trippilot.ports.trace_port import TracePort
 
 __all__ = [
+    "ACK_TEXT",
     "CAPABILITIES_LITERAL",
     "CAPABILITIES_TEXT",
     "DEFAULT_DEADLINE_MS",
     "MAX_RECENT_TURNS",
     "OUTCOMES",
     "RECENT_TURN_CHARS",
+    "THANKS_TEXT",
     "UTTERANCE_MAX_CHARS",
     "Clarify",
     "DialogueAnswer",
@@ -103,6 +112,7 @@ __all__ = [
     "TurnInput",
     "TurnOutcome",
     "capabilities_answer",
+    "closer_answer",
 ]
 
 log = logging.getLogger(__name__)
@@ -125,6 +135,8 @@ _ANSWER_RESERVE_MS = 400  # 게이트·사영·직렬화 몫
 _ANSWER_MIN_REMAINING_MS = 1_500  # 미만이면 답변 LLM 을 부르지 않고 템플릿 (> _ANSWER_RESERVE_MS — 아니면 시한이 0 이하)
 _MEMORY_MIN_REMAINING_MS = 2_500  # 미만이면 결정론 압축
 _MEMORY_CAP_MS = 2_000
+_HEALTHY_STATUSES = frozenset({"OK", "LOW"})  # 작업 값의 status 중 강등이 아닌 것 (ProviderStatus OK·LOW)
+_REASON_CODE = re.compile(r"[a-z_]{1,40}(?::[A-Za-z_]{1,60})?")  # 이벤트 사유는 코드만 — 예외 메시지(키 든 URL)는 싣지 않는다
 _OTHER_SESSIONS_LIMIT = 2  # "지난 여행 기억" — 같은 계정의 다른 세션 ≤2
 
 # 0단계 — FE 상시 칩이 서버 발급 SHOW_CAPABILITIES 가 없을 때 이 문자열을 TEXT 턴으로 보낸다(BR-AO-18).
@@ -132,6 +144,22 @@ _OTHER_SESSIONS_LIMIT = 2  # "지난 여행 기억" — 같은 계정의 다른 
 CAPABILITIES_LITERAL = "내가 할 수 있는 것 보기"
 CAPABILITIES_LINE = "일정 검토, 다음 장소·날씨·거리 확인, 일정 변경 제안, 다시 짜기 안내를 도와드려요."
 CAPABILITIES_TEXT = f"이런 걸 도와드릴 수 있어요. {CAPABILITIES_LINE}"
+# 0′ 입구 거절 사유 — `intent_eval.is_refusal` 이 "판단해서 거절"로 세는 표지(`not_classifiable`)를 단다(장애로 세지 않게)
+INJECTION_REASON = "intent_fallback: not_classifiable: injection_suspected"
+# 2″ — 맞장구·인사 (BR-AO-26). 분류가 할 일 없음으로 닫은 말(`{"intent": null}`·범위 밖 라벨) 가운데 낱말이 **전부**
+# 아래 목록인 것만. 제안 뒤의 "응"은 분류가 먼저 그 제안의 의도로 읽고(dialogue_intent 0.2.2), 요청이 섞인 말은 목록 밖
+# 낱말이 있어 분류 몫이다. 깨진 출력·절단·시한·벤더 실패는 판단이 아니라 종전대로 범위 밖 — 제안 뒤 "응"에 아무 일 없이
+# "알겠어요"로 답하면 수락을 삼킨다.
+_THANKS = frozenset({"고마워", "고마워요", "고맙습니다", "감사해요", "감사합니다", "땡큐", "thanks"})
+_ACKS = frozenset({
+    "응", "응응", "네", "네네", "넹", "넵", "예", "좋아", "좋아요", "그래", "그래요", "알겠어", "알겠어요", "알았어", "오케이", "ok",
+    "아니", "아니요", "아뇨", "괜찮아", "괜찮아요", "됐어", "됐어요", "다음에",
+})
+# 낱말 사이·끝의 문장부호와 웃음. normalize(NFKC)가 ㅎ·ㅋ(호환 자모)를 첫소리 자모 ᄒ·ᄏ 로 바꾸므로 둘 다 적는다.
+# "?"는 떼지 않는다 — "응?"은 수락이 아니라 되묻는 말이다.
+_CLOSER_NOISE = re.compile(r"[\s!~.,ㅎㅋᄒᄏ]+")
+THANKS_TEXT = "천만에요! 더 궁금한 게 생기면 언제든 물어봐 주세요."
+ACK_TEXT = "알겠어요! 필요한 게 생기면 언제든 말씀해 주세요."
 OTHER_SESSIONS_HEADER = "지난 여행 기억:"  # `$memory` 에서 현재 세션 줄과 다른 세션 줄을 가르는 머리 (DE §6 `$memory`)
 
 # 게이트웨이 `default_fallback_modes` 와 같은 라벨 — LLM 을 **부르지 않고** 폴백한 턴(잔여 부족·워커 예외)에도 같은 짝을 남긴다
@@ -142,7 +170,9 @@ _MEMORY_MODES = ("llm_dialogue_memory", "deterministic_compress")
 _INFRA_PREFIXES = ("timeout", "llm_error", "unsupported", "intent_error")
 
 # 팬아웃 풀 — 프로세스에 하나(BLM §6 "요청마다 만들지 않는다"). 스레드는 첫 submit 때 생긴다.
-_DLG_POOL = ThreadPoolExecutor(8, thread_name_prefix="dialogue")
+# 32: 시한을 넘긴 작업도 소켓 시한(BackendPoiDb 10s·기상청 4s)까지 스레드를 쥔다 — 8 이면 느린 작업 8개가 다음 턴들을
+# 풀 대기만으로 TIMEOUT 시켰다(2026-10-18 리뷰 재현). 프로세스당 I/O 대기 스레드라 값싸다.
+_DLG_POOL = ThreadPoolExecutor(32, thread_name_prefix="dialogue")
 
 
 # ── 입력 (DE §2.1) ───────────────────────────────────────────────────────────
@@ -286,8 +316,26 @@ class TurnOutcome:
 def capabilities_answer(has_trip: bool) -> DialogueAnswer:
     """0단계 — BE `AssistantTemplates.capabilities(hasTrip)` 이식. `quick_replies=None` 은 "시작 칩 복귀"
     (예시 빠른 답 StartQuickReplies 는 서버 발급이라 백엔드가 다시 보인다)."""
-    action = NextAction("OPEN_ITINERARY", "일정 보기") if has_trip else NextAction("CREATE_TRIP", "여행 만들기")
-    return DialogueAnswer(AnswerKind.TEXT, CAPABILITIES_TEXT, None, (action,), None, None)
+    return DialogueAnswer(AnswerKind.TEXT, CAPABILITIES_TEXT, None, (_home_action(has_trip),), None, None)
+
+
+def closer_answer(text: str, has_trip: bool) -> DialogueAnswer | None:
+    """2″ — 정규화된 발화가 맞장구·인사 낱말뿐이면 받아 주는 한마디(BR-AO-26), 아니면 None. 감사가 하나라도 있으면 감사 답.
+    버튼·칩은 능력 안내와 같다."""
+    words = _CLOSER_NOISE.sub(" ", text.lower().replace("thank you", "thanks")).split()
+    if not words or not all(w in _THANKS or w in _ACKS for w in words):
+        return None
+    reply = THANKS_TEXT if any(w in _THANKS for w in words) else ACK_TEXT
+    return DialogueAnswer(AnswerKind.TEXT, reply, None, (_home_action(has_trip),), None, None)
+
+
+def _judged_nothing(reason: str) -> bool:
+    """분류가 판단해서 할 일 없음으로 닫았다 — `{"intent": null}` 또는 범위 밖 라벨. 깨진 출력·절단·시한·벤더 실패는 아니다."""
+    return NULL_INTENT in reason or reason == f"intent_not_routable({Intent.OUT_OF_SCOPE.value})"
+
+
+def _home_action(has_trip: bool) -> NextAction:
+    return NextAction("OPEN_ITINERARY", "일정 보기") if has_trip else NextAction("CREATE_TRIP", "여행 만들기")
 
 
 def _trip_view(snapshot: TurnSnapshot) -> TripView:
@@ -311,12 +359,98 @@ def _trip_summary(snapshot: TurnSnapshot, today: date) -> str:
 
 
 def _memory_lines(current: DialogueMemory | None, others: Sequence[DialogueMemory]) -> tuple[str, ...]:
-    """`$memory` 재료 — 현재 세션 줄들 + 헤더 + 다른 세션(≤2) 줄들 (DE §6 `$memory`). 줄의 `inline()` 은 워커가 한다."""
-    lines = list(current.summary) if current is not None else []
-    other_lines = [line for m in others for line in m.summary]
+    """`$memory` 재료 — 현재 세션 줄들 + 헤더 + 다른 세션(≤2) 줄들 (DE §6 `$memory`). 줄의 `inline()` 은 워커가 한다.
+    지시 주입 꼴 줄은 싣지 않는다 — 기억 게이트가 이제 막지만 그 전에 저장된 줄(TTL 90일)이 남아 있을 수 있다."""
+    lines = [line for line in current.summary if not has_injection_like(line)] if current is not None else []
+    other_lines = [line for m in others for line in m.summary if not has_injection_like(line)]
     if other_lines:
         lines += [OTHER_SESSIONS_HEADER, *other_lines]
     return tuple(lines)
+
+
+def _slot_times(value: object) -> tuple[tuple[str | None, str], ...]:
+    """Facts 안의 (장소 이름, 계획 시각) 짝 — `{"name", "start_at"}` 를 가진 dict 전부(일정 슬롯·다음 장소), 스냅샷 순서대로.
+    같은 짝은 처음 자리 하나만 둔다(다음 장소는 일정 슬롯과 같은 짝이다). 이름 없는 슬롯(BE 가 nameKo null 로 보낼 수 있다)도
+    순서에는 들어야 하므로 이름 None 으로 담는다 — 짝 검사는 이름 있는 것만 쓴다."""
+    found: list[tuple[str | None, str]] = []
+    if isinstance(value, Mapping):
+        if "name" in value and isinstance(value.get("start_at"), str):
+            found.append((value["name"] if isinstance(value["name"], str) else None, value["start_at"]))
+        for item in value.values():
+            found += _slot_times(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            found += _slot_times(item)
+    return tuple(dict.fromkeys(found))
+
+
+_SEGMENT = re.compile(r"[,，·/;→\n]|\s그리고\s")
+
+
+def _misplaced_time(text: str, pairs: tuple[tuple[str | None, str], ...]) -> bool:
+    """구획(쉼표·줄 등) 안에서 시각에 가장 가까운 장소 이름이 Facts 에서 그 시각과 짝이 아니면 참. 이름이 없으면 판정하지 않는다."""
+    names = sorted({name for name, _ in pairs if name}, key=len, reverse=True)
+    for segment in _SEGMENT.split(text):
+        times = clock_spans(segment)
+        if not times:
+            continue
+        spots: list[tuple[int, int, str]] = []
+        for name in names:  # 긴 이름부터 — "카페 모카" 안의 "카페" 를 따로 세지 않는다
+            start = segment.find(name)
+            while start >= 0:
+                end = start + len(name)
+                if not any(s <= start and end <= e for s, e, _ in spots):
+                    spots.append((start, end, name))
+                start = segment.find(name, end)
+        for t_start, t_end, hm in times:
+            near = [(t_start - e if e <= t_start else s - t_end, n) for s, e, n in spots if e <= t_start or s >= t_end]
+            if near and (min(near)[1], hm) not in pairs:
+                return True
+    return False
+
+
+def _out_of_order(text: str, pairs: tuple[tuple[str | None, str], ...]) -> bool:
+    """장소 이름 없이 떠 있는 슬롯 시각끼리 스냅샷 순서를 거스르면 참 — "12:00에 첫 일정, 09:00에 다음 일정"은 구획에 이름이
+    없어 `_misplaced_time` 이 못 본다(2026-10-18 2차 리뷰). 이름이 있는 구획의 시각은 짝 검사가 맞췄으므로 언급 순서를 따지지
+    않는다 — "저녁은 18:00 흑돼지거리, 점심은 12:00 해녀의집" 같은 맞는 답을 막으면 날짜·개수뿐인 일정 템플릿으로 답을 잃는다.
+    ponytail: 날짜와 서수어는 보지 않는다 — 여러 날 Facts 의 날 넘김, 이름 붙은 시각 뒤의 떠 있는 시각("해녀의집 12:00 이 첫
+    일정, 09:00 이 다음"), 시각 하나뿐인 서수 오류("첫 일정은 12:00")는 못 가린다. 가리려면 서수·날짜 표기 인식이 먼저다."""
+    names = [name for name, _ in pairs if name]
+    order = [hm for _, hm in pairs]
+    at = 0
+    for segment in _SEGMENT.split(text):
+        if any(name in segment for name in names):
+            continue  # 이름에 붙은 시각 — 짝 검사 몫
+        for _, _, hm in clock_spans(segment):
+            if hm not in order:
+                continue  # 영업시간처럼 슬롯이 아닌 Facts 시각
+            nxt = next((i for i in range(at, len(order)) if order[i] == hm), None)
+            if nxt is None:
+                return True
+            at = nxt
+    return False
+
+
+# INV-1 — 후보 목록 답(CANDIDATES)의 문장이 Facts 밖 장소 이름을 꺼내면 템플릿으로. 장소 이름 사전이 없어 **이름 꼴**로 본다:
+# 한글 낱말의 앞부분이 "이름 + 장소 접미(시장·공원·박물관…)" 꼴인데(뒤의 조사는 그래서 상관없다) 아는 이름 어디에도 겹치지 않으면 밖이다.
+# '거리'는 접미에서 뺐다 — "볼거리가 많아요"가 걸린다.
+# ponytail: 접미 없는 고유명("서울숲"·"성심당")과 동네 이름("성수동")은 못 본다 — 막으려면 등록 POI 이름 사전 대조가 필요하다.
+_PLACE_LIKE = re.compile(r"[가-힣]{1,20}?(?:시장|공원|타워|해수욕장|박물관|미술관|전망대|폭포|오름|성당|궁|해변|마을|카페|호텔|랜드|파크|브루어리)")
+
+
+def _known_names(facts: Facts, snapshot: TurnSnapshot) -> tuple[str, ...]:
+    names = [p.name for p in facts.places] + [s.name for _, s in snapshot.slots() if s.name]
+    names += [v for v in (facts.detail.get("target"), facts.detail.get("anchor")) if isinstance(v, str)]
+    known = (normalize(n).replace(" ", "") for n in names if n)
+    return tuple(k for k in known if k)  # 빈 이름은 뺀다 — "" 는 모든 낱말의 접두라 검사가 꺼진다
+
+
+def _foreign_place(text: str, known: Sequence[str]) -> bool:
+    for word in re.findall(r"[가-힣]+", text):
+        m = _PLACE_LIKE.match(word)
+        if m and not any(word.startswith(k) or m.group(0) in k for k in known):
+            return True
+    return False
 
 
 def _refusal_reason(error: str) -> str:
@@ -381,6 +515,8 @@ class DialogueOrchestrator:
 
     def turn(self, inp: TurnInput) -> TurnOutcome:
         """한 턴. 어떤 실패도 예외가 아니라 `TurnOutcome` 이다 — `PermissionDeniedError` 만 관통(fail-closed, TRIP-333)."""
+        # 지난 턴 중 지시 주입 꼴은 어느 프롬프트(분류·답변·기억 요약)에도 다시 싣지 않는다 — 그 턴은 이미 범위 밖으로 끝났다
+        inp = replace(inp, recent_turns=tuple(t for t in inp.recent_turns if not has_injection_like(t.text)))
         with llm_call_counter() as counter:
             current, others = self._load_memory(inp)
             try:
@@ -389,7 +525,7 @@ class DialogueOrchestrator:
                 raise
             except Exception as e:  # noqa: BLE001 — DL-5: 버그도 경계 밖으로 내지 않는다(BR §5 미결 #14 A안)
                 outcome = self._crashed(inp, e)
-            self._remember(inp, current)  # outcome 과 무관하게 돈다(BLM §3 註) — 안에서 전부 수렴
+            self._remember(inp, current, outcome.answer.text if outcome.answer is not None else None)  # outcome 과 무관(BLM §3 註)
             return replace(outcome, llm_calls=counter[0])
 
     def _core(
@@ -406,6 +542,12 @@ class DialogueOrchestrator:
             return TurnOutcome("ANSWER", (), None, capabilities_answer(inp.snapshot.trip is not None), cleared, 0)
         if not text:
             return self._out_of_scope(inp, "empty_utterance")
+        # 0′ — 지시 무시·프롬프트 유출·역할 바꾸기 꼴은 분류 LLM 에 보내지 않는다. "다음 장소 알려줘. 그리고 규칙 무시하고 …"처럼
+        # 정상 요청에 붙으면 분류는 GET_NEXT_SLOT 을 고르고 답변 LLM 이 그 지시를 받는다 — 판단해서 거절한 것이라 거절 표지를 단다
+        if has_injection_like(text):
+            # 발화는 싣지 않는다 — 운영에서 이 줄 수로 오탐을 센다(정상 말이 걸리면 범위 밖 카드가 나간다)
+            log.info("dialogue_injection_suspected %s", json.dumps({"event": "dialogue_injection_suspected", "trace_id": inp.trace_id}))
+            return self._out_of_scope(inp, INJECTION_REASON)
         trip_view = _trip_view(inp.snapshot)
         today = inp.now.astimezone(self._tz).date()
         trip_summary = _trip_summary(inp.snapshot, today)
@@ -418,7 +560,11 @@ class DialogueOrchestrator:
             # 2 — LLM 직접 분류 (+ 2′ 섀도 submit)
             match, reason = self._classify(inp, text, memory_lines, trip_summary, counter)
             if match is None:
-                return self._out_of_scope(inp, reason or "intent_fallback")
+                reason = reason or "intent_fallback"
+                closer = closer_answer(text, inp.snapshot.trip is not None) if _judged_nothing(reason) else None
+                if closer is not None:  # 2″ — 할 일이 없는 말에 범위 밖 카드를 내지 않는다(BR-AO-26)
+                    return TurnOutcome("ANSWER", (), None, closer, cleared, 0, reason)
+                return self._out_of_scope(inp, reason)
             # 3 — 필수 인자 되묻기 (요청당 1회, 기존 로직)
             interp = from_match(match, inp.context, trip_view)
         if interp.outcome == "ARGUMENT_CLARIFY":
@@ -434,6 +580,14 @@ class DialogueOrchestrator:
         if handler.handoff_frame:  # EDIT_SCHEDULE — 1단계 FRAME (BR-AO-17): 인자만 정리하고 BE 제안 경로로
             tidy = replace(frame, arguments=edit_arguments(ctx))
             return TurnOutcome("FRAME", (tidy,), None, None, cleared, 0, interp.reason)
+        # 3′ — 조건부 필수 인자(BR-AO-27, 탐색의 지역): 3단계와 같은 요청당 1회 — 되묻기의 답으로 온 프레임에는 다시 묻지 않는다
+        ask = handler.ask(ctx) if handler.ask is not None and frame.match_route != "CLARIFY_ANSWER" else None
+        if ask is not None:
+            argument, question = ask
+            pending = PendingFrame(frame.intent, dict(frame.arguments), argument, frame.confidence)
+            return TurnOutcome(
+                "ARGUMENT_CLARIFY", (replace(frame, missing=(argument,)),), Clarify(0, argument, question, None), None,
+                DialogueContext(pending=pending, turn_index=inp.context.turn_index, clarify_count=1), 0, interp.reason)
         # 4 — 팬아웃 → Facts (순수 조립)
         results = self._fanout(inp, handler.plan(ctx))
         facts = handler.assemble(ctx, results)
@@ -474,7 +628,7 @@ class DialogueOrchestrator:
                 draft = result.value
                 if result.is_fallback or not isinstance(draft, IntentDraft):
                     reason = _refusal_reason(result.error or "intent_bad_shape")
-                elif draft.intent not in ROUTABLE_INTENTS:  # OUT_OF_SCOPE 라벨 = 위임 불가 (IntentRouter 와 같은 분담)
+                elif draft.intent not in DIALOGUE_INTENTS:  # OUT_OF_SCOPE 라벨 = 위임 불가 (IntentRouter 와 같은 분담)
                     reason = f"intent_not_routable({draft.intent.value})"
                 else:
                     confidence = draft.confidence if draft.confidence is not None else 0.5
@@ -482,10 +636,13 @@ class DialogueOrchestrator:
                         intent=draft.intent, slots=dict(draft.slots), confidence=max(0.0, min(1.0, confidence)),
                         match_route=MatchRoute.LLM_DIRECT,
                     )
-        self._submit_shadow(
-            inp, match if match is not None else _fallback_match(reason or "intent_fallback"),
-            service_ms=self._clock.monotonic_ms() - started, service_llm_calls=counter[0] - calls_before,
-        )
+        # 섀도(3단 라우터)는 13종 어휘라 도우미 전용 의도(탐색)를 낼 수 없다 — 내면 일치율이 탐색 비중만큼 구조적으로 깎이고 섀도
+        # LLM 만 쓴다. 비교할 수 있는 턴만 넘긴다(BR-AO-27)
+        if match is None or match.intent in ROUTABLE_INTENTS:
+            self._submit_shadow(
+                inp, match if match is not None else _fallback_match(reason or "intent_fallback"),
+                service_ms=self._clock.monotonic_ms() - started, service_llm_calls=counter[0] - calls_before,
+            )
         return match, reason
 
     def _submit_shadow(self, inp: TurnInput, service: IntentMatch, *, service_ms: int, service_llm_calls: int) -> None:
@@ -540,6 +697,13 @@ class DialogueOrchestrator:
                     continue
                 if isinstance(value, Mapping):
                     results[name] = TaskResult.ok(name, value)
+                    # Provider 는 장애를 예외가 아니라 상태값(WEATHER_UNKNOWN·UNAVAILABLE…)으로 돌려준다 — 전송은 OK 라도
+                    # 그 상태가 강등이면 여기서 보고한다(아니면 기상청·POI 장애가 이벤트 0·로그 0, 2026-10-18 리뷰 재현).
+                    status = value.get("status")
+                    if isinstance(status, str) and status not in _HEALTHY_STATUSES:
+                        code = value.get("reason")
+                        self._fallback(inp, "fanout", name, status,
+                                       code if isinstance(code, str) and _REASON_CODE.fullmatch(code) else "provider_status")
                 else:
                     results[name] = self._failed_task(inp, name, "UNAVAILABLE", "bad_shape")
         return results
@@ -558,9 +722,13 @@ class DialogueOrchestrator:
         memory_lines: Sequence[str],
         trip_summary: str,
     ) -> DialogueAnswer:
-        """LLM 문장 ≤1회. 의도된 결정론(needTrip·UNAVAILABLE)은 LLM 미시도·FallbackEvent 없음(BR-AO-23·25 — 팬아웃 실패는
+        """LLM 문장 ≤1회. 의도된 결정론(needTrip·UNAVAILABLE·사실 없음)은 LLM 미시도·FallbackEvent 없음(BR-AO-23·25 — 팬아웃 실패는
         `_fanout` 이 작업별로 이미 냈다); 시도했거나 해야 했던 턴의 템플릿에는 FallbackEvent 짝(게이트웨이가 냈거나 여기서 낸다)."""
         if facts.needs_trip or facts.status is FactStatus.UNAVAILABLE:
+            return DialogueAnswer.from_facts(facts)
+        if not (facts.rows or facts.places or facts.notes or facts.detail):
+            # 넘기기 의도(다시 짜기·만들기·회고 등)·남은 일정 없음은 사실 없이 다음 행동 버튼뿐이다 — 빈 재료로 LLM 을 부르면 "확인된 정보가 없어
+            # … 할 수 없어요"처럼 실패로 들린다(2026-10-19 E2E 18 중 12~14). BR-AO-25 의 의도된 결정론 — 안내 문구로 바로 답한다
             return DialogueAnswer.from_facts(facts)
         remaining = self._remaining(inp)
         if remaining < _ANSWER_MIN_REMAINING_MS:
@@ -577,6 +745,27 @@ class DialogueOrchestrator:
             return DialogueAnswer.from_facts(facts)
         draft = result.value
         if result.is_fallback or draft is None:  # FallbackEvent 는 게이트웨이가 냈다
+            return DialogueAnswer.from_facts(facts)
+        # INV-2 — 문장 속 시각은 Facts 값이어야 하고, 장소와 붙어 있으면 그 장소의 시각이어야 하고, 이름 없이 떠 있는 시각끼리는
+        # 스냅샷 순서를 따라야 한다(시각은 다 맞는데 장소끼리 바꿔 붙인 "해녀의집 15:00, 카페 모카 12:00" 도, 이름 없이 "12:00 첫
+        # 일정, 09:00 다음 일정" 도 순서·시각 위반이다). 대조는 Facts 로만 한다 — 프롬프트에는 발화 "16:30에 가도 돼?" 가
+        # 들어간다(2026-10-18 리뷰 1·2차). 순서는 본문·각주를 이어서 본다 — 같은 역순이 칸 배치로 갈리지 않게.
+        prompt_facts = facts.to_prompt_dict()
+        allowed, _ = clock_times(json.dumps(prompt_facts, ensure_ascii=False, default=str))
+        pairs = _slot_times(prompt_facts)
+        parts = (draft.text, draft.footnote or "")
+        bad = _out_of_order("\n".join(parts), pairs)
+        for part in parts:
+            times, unverifiable = clock_times(part)
+            bad = bad or unverifiable or not times <= allowed or _misplaced_time(part, pairs)
+        if bad:
+            self._fallback(inp, "llm", *_ANSWER_MODES, "time_not_in_facts")
+            return DialogueAnswer.from_facts(facts)
+        # INV-1 — 후보 답(대안·탐색)과 탐색의 빈 결과 답이 목록 밖 장소를 권했다. 탐색 EMPTY 는 장소가 없어 "대신 ○○해변은
+        # 어떠세요?"를 지어낼 자리가 가장 큰 답이다
+        closed = facts.kind is AnswerKind.CANDIDATES or intent is Intent.EXPLORE_PLACES
+        if closed and any(_foreign_place(part, _known_names(facts, inp.snapshot)) for part in parts):
+            self._fallback(inp, "llm", *_ANSWER_MODES, "place_not_in_facts")
             return DialogueAnswer.from_facts(facts)
         try:
             return DialogueAnswer.from_facts(facts, text=draft.text, footnote=draft.footnote)
@@ -604,25 +793,31 @@ class DialogueOrchestrator:
                 log.warning("지난 여행 기억 읽기 실패(%s) — 현재 세션 기억만 (trace_id=%s)", type(e).__name__, inp.trace_id)
         return current, others
 
-    def _remember(self, inp: TurnInput, current: DialogueMemory | None) -> None:
+    def _remember(self, inp: TurnInput, current: DialogueMemory | None, answer_text: str | None = None) -> None:
         if self._store is None or not inp.session_id:
             return
         summarized = current.summarized_turn_index if current is not None else 0
         if not due(inp.context.turn_index, summarized, every=SUMMARY_EVERY_TURNS):
             return
         try:
-            self._summarize_and_put(inp, current)
+            self._summarize_and_put(inp, current, answer_text)
         except Exception as e:  # noqa: BLE001 — 기억은 응답 품질과 무관하다: 어떤 실패도 턴을 막지 않는다
             self._fallback(inp, "memory", _MEMORY_MODES[0], "skipped", f"memory_error: {type(e).__name__}: {e}")
 
-    def _summarize_and_put(self, inp: TurnInput, current: DialogueMemory | None) -> None:
+    def _summarize_and_put(self, inp: TurnInput, current: DialogueMemory | None, answer_text: str | None = None) -> None:
         """BLM §8 — 잔여 ≥2.5s 면 LLM 요약, 미만이면 결정론 압축, ≤0 이면 압축·put 없이 미룬다(due 유지). 실패는 전부 압축."""
         remaining = self._remaining(inp)
-        previous = current.summary if current is not None else ()
+        # 예전에 저장된 지시문 꼴 줄은 요약에 넘기지 않는다 — 이번 갱신으로 저장본에서도 빠진다(`_memory_lines` 와 같은 거름)
+        previous = tuple(line for line in current.summary if not has_injection_like(line)) if current is not None else ()
         if remaining <= 0:
             self._fallback(inp, "memory", _MEMORY_MODES[0], "deferred", f"budget_exhausted(remaining_ms={remaining})")
             return
-        turns = inp.recent_turns
+        # 이번 턴(발화·답)도 재료에 넣는다 — summarized_turn_index 를 이번 턴으로 적으면서 백엔드가 싣는 recent_turns(이번 발화
+        # **앞** 메시지)만 요약하면 이번 턴이 장기 기억에서 영영 빠진다(2026-10-18 리뷰 재현).
+        turns = inp.recent_turns + tuple(
+            RecentTurn(role, text[:RECENT_TURN_CHARS])
+            for role, text in (("USER", inp.utterance.strip()), ("ASSISTANT", (answer_text or "").strip()))
+            if text and not has_injection_like(text))  # 0′ 에서 거절한 발화도 요약 차례면 여기로 온다 — 지난 턴과 같은 거름
         today = inp.now.astimezone(self._tz).date()
         if not turns:  # 재료 없이 LLM 을 부르지 않는다 — 의도된 결정론, 폴백 아님 (BR-AO-25)
             lines = compress_fallback((), previous)
@@ -661,9 +856,18 @@ class DialogueOrchestrator:
         except Exception as e:  # noqa: BLE001
             self._fallback(inp, "memory", *_MEMORY_MODES, f"memory_error: {type(e).__name__}: {e}")
             return compress_fallback(turns, previous)
-        if result.is_fallback or not result.value:  # FallbackEvent 는 게이트웨이가 냈다 (빈 결과 = 실패)
+        if result.is_fallback:  # FallbackEvent 는 게이트웨이가 냈다 (파싱 실패·전부 드롭 = 실패)
             return compress_fallback(turns, previous)
-        return tuple(result.value)
+        if result.value:
+            return tuple(result.value)
+        # 비운 배열 = 새로 기억할 것 없음 → 이전 요약은 두되 앞선 압축이 남긴 원문 조각 줄은 지운다(BR-AO-09). 이전 줄도
+        # 압축과 같은 술어로 다시 거른다 — #1314 이전 압축이 남긴 연락처·소요시간 줄이 술어 없이 되살지 않게(2026-10-19 리뷰).
+        # 폴백이 아니라서 이벤트가 없다 — 모델이 늘 비우는 고장이 보이도록 건수만 한 줄 남긴다(내용·account_ref 없음).
+        kept = tuple(line for line in compress_fallback((), previous) if not is_turn_fragment(line))
+        log.info("dialogue_memory_empty %s", json.dumps({
+            "event": "dialogue_memory_empty", "trace_id": inp.trace_id, "kept_lines": len(kept),
+            "dropped_lines": len(previous) - len(kept)}))
+        return kept
 
     # ── 공통 ─────────────────────────────────────────────────────────────
 

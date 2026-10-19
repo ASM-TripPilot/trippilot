@@ -18,6 +18,23 @@ class CommandError(RuntimeError):
         self.detail = detail
 
 
+# Job 이 끝났다는 True 조건 — Complete·Failed(쿠버네티스 1.31+ 는 그 앞에 SuccessCriteriaMet·FailureTarget 이 선다).
+_JOB_DONE = '{.status.conditions[?(@.status=="True")].type}'
+
+
+def wait_job(shell, namespace, name, timeout_sec):
+    """Job 이 성공하든 실패하든 끝나면 깬다 — 실패면 CommandError(호출자가 로그를 보이고 다시 던진다).
+
+    `kubectl wait --for=condition=complete` 는 Failed 를 영영 못 봐서, 실패한 Job 이 시한(KB 적재 90분)을
+    다 태운 뒤에야 배포가 멈췄다(10-18 장소 지식 청킹 리뷰). 여러 `--for` 는 AND 라 OR 를 쓸 수 없다 —
+    True 조건이 하나라도 생기길 기다리고, 같은 호출의 출력으로 그 종류를 받는다.
+    """
+    states = set(shell(["kubectl", "wait", "--namespace", namespace, f"--for=jsonpath={_JOB_DONE}",
+                        f"job/{name}", f"--timeout={timeout_sec}s", "-o", f"jsonpath={_JOB_DONE}"]).split())
+    if states & {"Failed", "FailureTarget"} or not states & {"Complete", "SuccessCriteriaMet"}:
+        raise CommandError("kubectl", f"job/{name} did not succeed: {' '.join(sorted(states)) or 'no condition'}")
+
+
 def command(argv, payload=None):
     result = subprocess.run(
         argv, input=payload, text=True, capture_output=True, check=False,

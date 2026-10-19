@@ -28,7 +28,7 @@
 
 **Constraints**: INV-1~4 · DL-5(경계 예외 금지) · L-규칙(agents ↛ orchestrator/providers/LlmPort) · `wiring.py` 최소 줄 · yaml 은 `main.py` 로드 · CI 실 외부 호출 0 · 응답 키 집합 BE 정확 일치 게이트(한 PR) · 발화 원문 로그 금지 · 모델 문자열 하드코딩 금지
 
-**Scale/Scope**: 의도 13종 + 범위 밖, 신규 LLM feature 3, 신규 Provider 1, 새 경계 2, BE 변경 파일 ≈8, 배포 파일 ≈6
+**Scale/Scope**: 의도 13종 + 범위 밖(**[개정 · 2026-10-19 · 장소 탐색]** + 장소 탐색 = 14종, 3단 섀도는 13종 그대로), 신규 LLM feature 3, 신규 Provider 1, 새 경계 2, BE 변경 파일 ≈8, 배포 파일 ≈6
 
 ## Constitution Check
 

@@ -51,6 +51,7 @@ export {
   resolvePlanState,
 } from './model/planState';
 export { resolvePlanMapCenter } from './model/planMapCenter';
+export { placeAddSubtitle } from './model/placeAddSubtitle';
 export { resolveUnplacedNames } from './model/unplacedMustVisits';
 export {
   AlertCircleGlyph,

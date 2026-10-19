@@ -9,6 +9,7 @@ import com.trippilot.savedaccommodation.api.BaseAnchorFacade
 import com.trippilot.savedaccommodation.api.DayAnchorView
 import com.trippilot.placedata.api.PoiSurfaceFacade
 import com.trippilot.placedata.api.PoiSurfaceView
+import com.trippilot.recalculation.api.event.ItineraryRecalculated
 import com.trippilot.recalculation.domain.OriginKind
 import com.trippilot.recalculation.domain.ReplanOrigin
 import com.trippilot.recalculation.domain.ReplanScope
@@ -34,7 +35,10 @@ private class ExecSessions : ReplanSessionRepository {
     override fun findById(sessionId: UUID) = store[sessionId]
     // 단일 스레드 테스트라 잠금은 의미가 없다 — 경합 자체는 실 DB IT 가 검증한다.
     override fun findByIdForUpdate(sessionId: UUID) = store[sessionId]
-    override fun findOpenByTrip(tripId: UUID) = store.values.firstOrNull { it.tripId == tripId && it.isOpen }
+    override fun findOpenByTripForUpdate(tripId: UUID) = store.values.firstOrNull { it.tripId == tripId && it.isOpen }
+    override fun findSystemByTrigger(triggerId: UUID) = store.values.systemByTrigger(triggerId)
+    override fun findLatestSystem(tripId: UUID, targetDate: LocalDate) = store.values.latestSystem(tripId, targetDate)
+    override fun countSystemSince(tripId: UUID?, since: Instant) = store.values.countSystemSince(tripId, since)
     override fun purgeOrigins(tripIds: List<UUID>): Int {
         val hit = store.values.filter { it.tripId in tripIds && it.origin.kind in setOf(OriginKind.GPS, OriginKind.MANUAL) }
         hit.forEach { store[it.sessionId] = it.copy(origin = ReplanOrigin(OriginKind.PURGED, null, null)) }
@@ -78,6 +82,8 @@ class ReplanExecutionTest : StringSpec({
     class Fixture(val replans: FakeReplans) {
         val sessions = ExecSessions()
         val events = CapturingReplanEvents()
+        /** 트리거 진입은 그 트리거의 날짜로 강제된다(BR-SA-20) — 진입하는 트리거는 여기 있어야 한다. */
+        val triggers = FakeTriggerLookup()
         lateinit var service: ReplanSessionService
     }
 
@@ -86,6 +92,7 @@ class ReplanExecutionTest : StringSpec({
         service = ReplanSessionService(
             trips, itineraries, sessions, OriginResolver(noAnchors), archive, surfaces,
             ReplanSolver(sessions, archive, replans, NOOP_TX, clock), replans, FakeLocationConsents(), CapturingLegalLogs(), FakeTripPurgeScope(), events, clock,
+            triggers, NO_PLANS, ReplanProperties(),
         )
     }
 
@@ -175,7 +182,7 @@ class ReplanExecutionTest : StringSpec({
         val opened = f.service.start(
             acc, trip,
             StartReplan(
-                triggerId = UUID.randomUUID(), targetDate = null, scope = ReplanScope.PARTIAL_SLOTS,
+                triggerId = f.triggers.add(trip, today), targetDate = null, scope = ReplanScope.PARTIAL_SLOTS,
                 origin = ReplanOrigin(OriginKind.GPS, 33.45, 126.56),
                 reasons = listOf("비가 와요"), directives = listOf("실내로"),
                 freeText = null, excludedPoiIds = emptyList(),
@@ -185,6 +192,35 @@ class ReplanExecutionTest : StringSpec({
         f.service.apply(acc, trip, opened.sessionId)
 
         f.replans.appliedReasons.single() shouldBe "자동 감지 · 비가 와요 · 실내로"
+    }
+
+    // 트리거 소비(C9)가 날짜까지 대조한다 — 내일 트리거로 연 재계획이 오늘을 다시 짜면 그 트리거를 닫지 않는다.
+    "확정 사건은 근거 트리거와 다시 짠 날을 싣는다" {
+        val f = fixture()
+        val triggerId = f.triggers.add(trip, today)
+        val opened = f.service.start(
+            acc, trip,
+            StartReplan(
+                triggerId = triggerId, targetDate = null, scope = ReplanScope.PARTIAL_SLOTS,
+                origin = ReplanOrigin(OriginKind.GPS, 33.45, 126.56),
+                reasons = listOf("비가 와요"), directives = emptyList(), freeText = null, excludedPoiIds = emptyList(),
+            ),
+        )
+
+        f.service.apply(acc, trip, opened.sessionId)
+
+        val event = f.events.published.single() as ItineraryRecalculated
+        event.triggerId shouldBe triggerId.toString()
+        event.targetDate shouldBe today.toString()
+    }
+
+    "수동 재계획 확정 사건에는 트리거가 없다 — 소비할 것이 없다" {
+        val f = fixture()
+        val opened = f.start()
+
+        f.service.apply(acc, trip, opened.sessionId)
+
+        (f.events.published.single() as ItineraryRecalculated).triggerId shouldBe null
     }
 
     // 사유를 하나도 안 고르고 확정할 수 있다 — 그때도 빈 칸으로 남기지 않는다.

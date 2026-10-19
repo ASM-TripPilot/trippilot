@@ -1,4 +1,5 @@
 import type { AccountExport } from '@/shared/api/index.schemas';
+import { seoulDate } from '@/shared/lib/seoulDate';
 
 /**
  * 내보내기 잘림 고지 조립 (AC-5 · INV-4) — 순수 함수.
@@ -9,7 +10,6 @@ import type { AccountExport } from '@/shared/api/index.schemas';
  */
 export interface ExportSummary {
   truncatedLabel: string | null;
-  sectionCount: number;
 }
 
 export function resolveExportSummary(exportData: AccountExport): ExportSummary {
@@ -19,6 +19,20 @@ export function resolveExportSummary(exportData: AccountExport): ExportSummary {
       truncated.length === 0
         ? null
         : `일부 항목이 잘렸어요: ${truncated.join(', ')}`,
-    sectionCount: exportData.sections.length,
   };
+}
+
+/**
+ * TRIP-1422 · 내보내기 `.json` 파일의 이름과 내용 — 순수 함수. 내용은 응답 그대로(2칸 들여쓰기만).
+ * 이름의 날짜는 서울 기준이고, `exportedAt` 을 날짜로 못 읽으면 날짜 없이 짓는다(`toISOString` 은 던진다).
+ */
+export function buildExportFile(data: AccountExport): {
+  name: string;
+  content: string;
+} {
+  const at = new Date(data.exportedAt);
+  const name = Number.isNaN(at.getTime())
+    ? 'trippilot-export.json'
+    : `trippilot-export-${seoulDate(at)}.json`;
+  return { name, content: JSON.stringify(data, null, 2) };
 }

@@ -33,9 +33,14 @@ class NotificationScheduleService(
     // 문구의 재료 — 그 날 갈 곳의 이름. R1: api 퍼사드만 본다.
     private val plans: ItineraryPlanFacade,
     private val clock: Clock,
+    // 문구를 하나도 못 받은 적재를 몇 분 뒤 한 번 더 — 모델 콜드스타트 대응([ReminderCopyRetries]).
+    private val retries: ReminderCopyRetries,
 ) {
+    /** [retryIfNoCopy] 는 재시도 폴러만 false 로 부른다 — 재시도의 재시도는 없다. */
     @Transactional
-    fun reload(tripId: UUID) {
+    fun reload(tripId: UUID, retryIfNoCopy: Boolean = true) {
+        // 같은 여행의 다른 적재(릴레이·재시도 폴러)와 겹치지 않게 — 겹치면 하루 리마인드가 두 벌이 된다.
+        schedules.lockTrip(tripId)
         val now = clock.instant()
         val trip = trips.findOwnedPeriod(tripId)
         if (trip == null) {
@@ -44,12 +49,16 @@ class NotificationScheduleService(
             log.info("여행이 없어 리마인드 예약을 비웠습니다. tripId={}", tripId)
             return
         }
-        val planned = withCopies(tripId, trip, plan(tripId, trip, now))
+        val (planned, missed) = withCopies(tripId, trip, plan(tripId, trip, now))
         schedules.replacePending(tripId, planned)
         log.info(
             "리마인드 예약 {}건을 적재했습니다. tripId={} AI문구={}건",
             planned.size, tripId, planned.count { it.title != null },
         )
+        if (missed && retryIfNoCopy) {
+            retries.later(tripId, now)
+            log.info("리마인드 문구를 하나도 받지 못했습니다 — 잠시 뒤 한 번 더 묻습니다. tripId={}", tripId)
+        }
     }
 
     private fun plan(tripId: UUID, trip: OwnedTripPeriod, now: Instant): List<NotificationSchedule> {
@@ -77,34 +86,42 @@ class NotificationScheduleService(
      * **못 받으면 그대로 간다** — 예외를 잡지 않는 이유는 포트가 이미 빈 맵으로 낮추기 때문이고,
      * 그래도 여기서 한 번 더 감싸는 것은 **문구 때문에 예약 적재가 실패하면 리마인드가 통째로
      * 사라지기** 때문이다. 밋밋한 문구보다 그쪽이 훨씬 나쁘다(INV-4).
+     *
+     * 둘째 값은 **물을 것이 있었는데 하나도 못 받았는가**다 — 재시도 판단에 쓴다. 재료(슬롯)가 없는
+     * 날만 있으면 어댑터가 애초에 안 물으므로 못 받은 것이 아니다.
      */
-    private fun withCopies(tripId: UUID, trip: OwnedTripPeriod, planned: List<NotificationSchedule>): List<NotificationSchedule> {
-        if (!copies.enabled || planned.isEmpty()) return planned
+    private fun withCopies(
+        tripId: UUID,
+        trip: OwnedTripPeriod,
+        planned: List<NotificationSchedule>,
+    ): Pair<List<NotificationSchedule>, Boolean> {
+        if (!copies.enabled || planned.isEmpty()) return planned to false
+        var asked = false
         val received = runCatching {
             // 한 번만 묻는다 — 예약마다 부르면 여행 일수만큼 조회가 늘고, 그 사이 일정이 바뀌면
             // 같은 적재 안에서 날짜별로 다른 일정을 말하게 된다.
             val placesByDate = plans.findPlannedPlaces(trip.accountId, tripId)
-            copies.copiesFor(
-                tripTitle = null, // 여행 제목은 trip.api 가 아직 안 준다 — 상대는 선택 필드로 받는다
-                items = planned.map {
-                    val subject = subjectDate(it)
-                    ReminderCopyRequest(
-                        scheduleKey = it.scheduleId.toString(),
-                        kind = it.kind,
-                        date = subject,
-                        slots = placesByDate[subject].orEmpty().map { p -> ReminderSlot(p.nameKo, p.categoryCode) },
-                    )
-                },
-            )
+            val items = planned.map {
+                val subject = subjectDate(it)
+                ReminderCopyRequest(
+                    scheduleKey = it.scheduleId.toString(),
+                    kind = it.kind,
+                    date = subject,
+                    slots = placesByDate[subject].orEmpty().map { p -> ReminderSlot(p.nameKo, p.categoryCode) },
+                )
+            }
+            asked = items.any { it.slots.isNotEmpty() }
+            // 여행 제목은 trip.api 가 아직 안 준다 — 상대는 선택 필드로 받는다
+            copies.copiesFor(tripTitle = null, items = items)
         }.onFailure { log.warn("리마인드 문구를 받지 못했습니다 — 상수 문구로 갑니다.", it) }
             .getOrDefault(emptyMap())
 
-        if (received.isEmpty()) return planned
+        if (received.isEmpty()) return planned to asked
         return planned.map { row ->
             received[row.scheduleId.toString()]
                 ?.let { row.copy(title = it.title, body = it.body) }
                 ?: row
-        }
+        } to false
     }
 
     /**

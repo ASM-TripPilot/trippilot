@@ -25,14 +25,17 @@ from hypothesis import strategies as st
 from trippilot.agents.planb.rag import Alternative, PlanBRagRequest, PlanBRagResult
 from trippilot.domain.common import GeoPoint, PoiId, TraceId
 from trippilot.domain.freshness import FreshnessMeta, InfoPacket, ProviderKind, ProviderStatus
-from trippilot.domain.intent import ROUTABLE_INTENTS, Intent
+from trippilot.domain.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent
 from trippilot.domain.llm import CandidatePool
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.trigger import TriggerKind
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_LENGTH, _violates
 from trippilot.llm_gateway.workers.dialogue_answer import NEED_TRIP_TEXT, fallback_answer_text
 from trippilot.orchestrator import dialogue_handlers as dh
+from trippilot.agents.planb.rag import _REASON_KO
 from trippilot.orchestrator.dialogue_handlers import (
+    _REASON_WORDS,
+    _planb_reason,
     CANDIDATE_REASON,
     HANDLERS,
     NEXT_ACTION_TYPES,
@@ -129,7 +132,8 @@ class _PoiInfo:
                 continue
             pois.append({"poi_id": str(pid), "name": name, "category": "FOOD" if name in ("올레국수", "해녀의집", "흑돼지거리") else "SIGHT",
                          "lat": _COORD[name].lat, "lng": _COORD[name].lng,
-                         "hours_label": "09:00~18:00" if name != "우도" else None, "fee": 0 if name == "우도" else 5000,
+                         # 정보 없음은 실물(providers.poi_info.hours_label)처럼 문구로 온다 — None 은 "그 요일 휴무 증명"이다
+                         "hours_label": "09:00~18:00" if name != "우도" else "영업시간 정보 없음", "fee": 0 if name == "우도" else 5000,
                          "source_ref": None})
         status = ProviderStatus.OK if not misses else ProviderStatus.LOW
         return InfoPacket(ProviderKind.POI_INFO, status, {"pois": pois, "misses": misses}, _fresh(params["now"]))
@@ -150,9 +154,9 @@ class _Weather:
 
 
 class _Transit:
-    def __init__(self, *, fail: bool = False) -> None:
+    def __init__(self, *, fail: bool = False, confidence: str = "LOW") -> None:
         self.calls: list[dict] = []
-        self._fail = fail
+        self._fail, self._confidence = fail, confidence
 
     def fetch(self, params: dict) -> InfoPacket:
         self.calls.append(params)
@@ -161,7 +165,8 @@ class _Transit:
         # TransitProvider 는 내부용 internal_minutes 까지 싣는다 — 핸들러가 떨어뜨려야 한다(INV-3)
         return InfoPacket(ProviderKind.TRANSIT, ProviderStatus.OK,
                           {"distance_m": 1200, "distance_range": "약 1.2km", "internal_minutes": 17,
-                           "confidence": "LOW", "source": "haversine_x_detour", "delay_trigger": None,
+                           "confidence": self._confidence,
+                           "source": "haversine_x_detour" if self._confidence == "LOW" else "odsay_transit", "delay_trigger": None,
                            "freshness": _fresh(params["now"]).to_dict()}, _fresh(params["now"]))
 
 
@@ -220,7 +225,7 @@ def _types(facts: Facts) -> list[str]:
 
 
 def test_handlers_cover_exactly_the_routable_intents() -> None:
-    assert set(HANDLERS) == ROUTABLE_INTENTS
+    assert set(HANDLERS) == DIALOGUE_INTENTS
     assert Intent.OUT_OF_SCOPE not in HANDLERS
     assert all(HANDLERS[i].intent is i for i in HANDLERS)
 
@@ -560,17 +565,30 @@ def test_distance_uses_previous_slot_as_origin_and_keeps_only_distance_strings()
     assert call["mode"] == "PUBLIC" and call["purpose"] == "info_display" and call["now"] == _NOW
     assert "internal_minutes" not in value and value["distance_range"] == "약 1.2km"  # INV-3
     facts = HANDLERS[Intent.GET_DISTANCE].assemble(ctx, {"transit": TaskResult.ok("transit", value)})
-    assert facts.payload == {"infoKind": "DISTANCE", "title": "해녀의집", "rows": [{"label": "직전 구간", "value": "약 1.2km"}]}
+    # 대역 기본은 실 경로 API 가 안 될 때의 하버사인×우회계수(LOW) — 경로 거리가 아니라서 추정으로 밝힌다
+    assert facts.payload == {"infoKind": "DISTANCE", "title": "해녀의집", "rows": [{"label": "직전 구간", "value": "약 1.2km(추정)"}]}
     assert facts.template_text == "일정에 적힌 거리예요." and _types(facts) == ["OPEN_ITINERARY"]
     assert facts.detail == {"origin": "우도", "destination": "해녀의집", "mode": "PUBLIC"}
     assert any("PUBLIC" in n for n in facts.notes)  # 가정한 수단을 남긴다
+    assert any("직선" in n for n in facts.notes)  # 답변 LLM 이 경로 거리처럼 말하지 않게
 
 
 def test_distance_mode_argument_is_passed_through() -> None:
-    transit = _Transit()
+    transit = _Transit(confidence="HIGH")
     ctx = _ctx(arguments={"destination": "해녀의집", "mode": "WALK"}, ports=HandlerPorts(poi_info=_PoiInfo(), transit=transit))
     facts = _run(HANDLERS[Intent.GET_DISTANCE], ctx)
     assert transit.calls[0]["mode"] == "WALK" and facts.detail["mode"] == "WALK" and not facts.notes
+
+
+def test_route_distance_is_shown_as_is_and_straight_line_estimate_is_marked() -> None:
+    """경로 API(ODsay·TMAP)가 한도 초과로 빠지면 Provider 는 하버사인×우회계수(confidence LOW)로 상태 OK 를 낸다 — 그 값을
+    경로 거리처럼 보이면 "약 3.1km"(실제 5.8km)가 된다(2026-10-19 E2E). LOW 만 "(추정)"을 붙이고 메모를 남긴다."""
+    ctx = lambda transit: _ctx(arguments={"destination": "해녀의집", "mode": "WALK"}, ports=HandlerPorts(poi_info=_PoiInfo(), transit=transit))
+    route = _run(HANDLERS[Intent.GET_DISTANCE], ctx(_Transit(confidence="HIGH")))
+    assert route.payload["rows"] == [{"label": "직전 구간", "value": "약 1.2km"}] and not route.notes
+    guess = _run(HANDLERS[Intent.GET_DISTANCE], ctx(_Transit(confidence="LOW")))
+    assert guess.payload["rows"] == [{"label": "직전 구간", "value": "약 1.2km(추정)"}]
+    assert guess.places[-1].distance_range == "약 1.2km(추정)" and any("직선" in n for n in guess.notes)
 
 
 @pytest.mark.parametrize("arguments", [
@@ -616,10 +634,13 @@ def test_poi_info_card_rows_and_open_place_action() -> None:
     assert (place.poi_id, place.hours_label, place.fee) == (_U["해녀의집"], "09:00~18:00", 5000)
 
 
-def test_poi_info_unknown_values_say_unconfirmed_and_free_is_free() -> None:
+def test_poi_info_unknown_hours_keep_the_provider_wording_and_free_is_free() -> None:
+    """영업시간 정보가 없으면 Provider 문구("영업시간 정보 없음")를 그대로 싣는다 — 대역이 None 으로 "모름"을 흉내 내던 동안
+    실물에서 None 이 뜻하는 "그 요일 휴무"가 "미확인"으로 뭉개졌다(2026-10-19 E2E)."""
     ctx = _ctx(arguments={"place": "우도"}, ports=HandlerPorts(poi_info=_PoiInfo()))
     facts = _run(HANDLERS[Intent.GET_POI_INFO], ctx)
-    assert facts.payload["rows"] == [{"label": "분류", "value": "자연"}, {"label": "영업시간", "value": "미확인"}, {"label": "입장료", "value": "무료"}]
+    assert facts.payload["rows"] == [{"label": "분류", "value": "자연"}, {"label": "영업시간", "value": "영업시간 정보 없음"},
+                                     {"label": "입장료", "value": "무료"}]
 
 
 def test_poi_info_date_argument_sets_the_weekday_lookup() -> None:
@@ -700,7 +721,7 @@ def test_alternatives_default_reason_none_and_no_weather_port() -> None:
 
 @pytest.mark.parametrize("said,expected", [
     ("weather", "weather"), ("fully_booked", "fully_booked"), ("none", "none"),
-    ("비 와서 10분 거리로 바꿔줘", "none"),  # 모델이 슬롯에 임의 문장을 넣어도 PlanB 에는 닫힌 어휘만 간다
+    ("비 와서 10분 거리로 바꿔줘", "weather"),  # 임의 문장도 키워드로 닫힌 어휘에 사상된다 — PlanB 에는 닫힌 어휘만 간다
     ("WEATHER", "none"), ("", "none"),
 ])
 def test_alternatives_reason_slot_is_folded_to_the_planb_closed_set(said: str, expected: str) -> None:
@@ -768,6 +789,18 @@ def test_alternatives_infrastructure_failure_is_unavailable_text(make) -> None:
     assert facts.template_text == fallback_answer_text(Intent.SUGGEST_ALTERNATIVE, {"status": "UNAVAILABLE"})
 
 
+def test_alternatives_planb_pipeline_error_is_unavailable_not_empty() -> None:
+    """KB·DB 장애(PlanB `empty_reason="pipeline_error"`)는 "대안이 없다"(EMPTY)가 아니라 "확인할 수 없다"다 — 그래야 팬아웃이
+    상태값으로 보고하고(2026-10-18 리뷰: 이벤트 0·로그 0 이었다) 사용자 문장도 정직하다. 사유는 코드만(예외 메시지 없음)."""
+    failed = PlanBRagResult(alternatives=(), is_fallback=True, fallback_level=2, notes=("pipeline_error: OperationalError: x",),
+                            retrieved={}, dropped_out_of_pool=(), empty_reason="pipeline_error")
+    ports, _, _ = _alt_ports(result=failed)
+    (task,) = HANDLERS[Intent.SUGGEST_ALTERNATIVE].plan(_ctx(arguments={"target": "우도"}, ports=ports))
+    assert task.fn() == {"status": "UNAVAILABLE", "reason": "planb_pipeline_error"}
+    facts = _run(HANDLERS[Intent.SUGGEST_ALTERNATIVE], _ctx(arguments={"target": "우도"}, ports=ports))
+    assert facts.status is FactStatus.UNAVAILABLE
+
+
 def test_alternatives_timeout_is_unavailable_text() -> None:
     ports, _, _ = _alt_ports()
     facts = _run(HANDLERS[Intent.SUGGEST_ALTERNATIVE], _ctx(arguments={"target": "우도"}, ports=ports), fail={"alternatives": "TIMEOUT"})
@@ -797,7 +830,10 @@ def _text_facts(**over) -> Facts:
     {"kind": AnswerKind.INFO, "payload": {"infoKind": "PLACE", "title": "t"}},  # rows 누락 — FE 크래시
     {"kind": AnswerKind.INFO, "payload": {"infoKind": "NOPE", "title": "t", "rows": []}},
     {"kind": AnswerKind.CANDIDATES, "payload": {"candidates": []}},
-    {"kind": AnswerKind.CANDIDATES, "payload": {"candidates": [{"poiId": "p", "name": "n", "reason": "r"}]}},  # PICK 없음
+    # 고르기 버튼은 전부 있거나 전부 없다 — 일부만 있으면 거부 (장소 탐색은 전부 없다)
+    {"kind": AnswerKind.CANDIDATES, "payload": {"candidates": [{"poiId": "p", "name": "n", "reason": "r"},
+                                                               {"poiId": "q", "name": "m", "reason": "r"}]},
+     "quick_replies": (dh.QuickReplyDraft("n", "PICK_CANDIDATE", {"poiId": "p", "slotKey": "k"}),)},
     {"detail": {"status": "x"}},  # 예약 키
     # 후보 reason 은 사용자 카드에 그대로 그려진다(FE AssistantCards) — 문장 게이트와 같은 검사(시간 표현·연락처·빈 값)
     {"kind": AnswerKind.CANDIDATES, "payload": {"candidates": [{"poiId": "p", "name": "n", "reason": "걸어서 30분 거리"}]},
@@ -871,7 +907,7 @@ def _snapshots(draw) -> TurnSnapshot:
         slots = tuple(SlotView.from_wire(f"{on.isoformat()}#{_U[nm]}", nm if draw(st.booleans()) else None, t, draw(_categories))
                       for nm, t in zip(names, times))
         days.append((on, slots))
-    trip = _TRIP if draw(st.booleans()) else TripInfo("trip-1", (), _D1, _D3, draw(st.sampled_from(["PLANNING", "ENDED"])))
+    trip = draw(st.sampled_from([_TRIP, TripInfo("trip-1", (), _D1, _D3, "PLANNING"), TripInfo("trip-1", (), _D1, _D3, "ENDED"), None]))
     return _snapshot(tuple(days), trip=trip, status=draw(st.sampled_from(["PLANNED", "CONFIRMED", None])))
 
 
@@ -880,6 +916,8 @@ _arguments = st.fixed_dictionaries({}, optional={
     "place": st.one_of(_names, st.text(max_size=6)), "origin": _names, "mode": st.sampled_from(["WALK", "CAR", "PUBLIC", "택시"]),
     "day": st.sampled_from(["1일차", "2일차", "둘째 날", "오늘", "x"]), "date": st.sampled_from(["오늘", "내일", "10월 18일", "x"]),
     "scope": st.sampled_from(["ALL", "REMAINING"]), "reason": st.sampled_from(["weather", "closed", "none"]),
+    "region": st.sampled_from(["부산", "제주 애월", "강원도", ""]), "category": st.sampled_from(["CAFE", "NIGHT_VIEW", "FOOD"]),
+    "theme": st.sampled_from(["요즘 핫한", "야경", "분위기 좋은 바"]),
 })
 _outcomes = st.sampled_from(["ok", "TIMEOUT", "UNAVAILABLE"])
 
@@ -895,7 +933,7 @@ def _random_ports(draw) -> HandlerPorts:
 
 
 @settings(max_examples=250, deadline=None)
-@given(data=st.data(), intent=st.sampled_from(sorted(ROUTABLE_INTENTS, key=lambda i: i.value)),
+@given(data=st.data(), intent=st.sampled_from(sorted(DIALOGUE_INTENTS, key=lambda i: i.value)),
        snapshot=_snapshots(), arguments=_arguments, now=st.sampled_from([_NOW, datetime(2026, 10, 10, 9, tzinfo=_KST)]))
 def test_every_handler_is_deterministic_valid_and_free_of_duration(data, intent: Intent, snapshot: TurnSnapshot,
                                                                    arguments: dict, now: datetime) -> None:
@@ -916,6 +954,198 @@ def test_every_handler_is_deterministic_valid_and_free_of_duration(data, intent:
                        "detail": first.to_prompt_dict()}, ensure_ascii=False, default=str).lower()
     assert not any(tok in wire for tok in _INV3_TOKENS)
     if snapshot.trip is None:
-        assert first.needs_trip is (intent is not Intent.STYLE_ANALYSIS)
+        assert first.needs_trip is (intent not in (Intent.STYLE_ANALYSIS, Intent.EXPLORE_PLACES))
     for task in tasks:
         assert task.fn() == task.fn()  # 콜러블도 결정론 (대역이 결정론이라 그렇다 — 핸들러가 상태를 섞지 않는다)
+
+
+@pytest.mark.parametrize(("said", "reason"), [
+    ("오늘 휴관", "closed"), ("문 닫았대", "closed"), ("closed", "closed"),
+    ("비가 와서", "weather"), ("눈이 많이 와", "weather"),
+    ("늦게 일어나서", "delay"), ("차가 막혀서", "delay"),
+    ("너무 피곤해", "fatigue"),
+    ("예약이 꽉 찼대", "fully_booked"), ("예약이 취소됐어", "canceled"),
+    ("비싸서", "none"), ("그냥", "none"), (None, "none"),  # "비싸서"의 "비"를 날씨로 읽지 않는다
+    # 셀프 리뷰 오탐 실측 — weather 는 PlanB 가 야외 후보를 내리는 사유라 오탐이 순위를 바꾼다
+    ("주차비가 비싸서", "none"), ("가성비가 별로라서", "none"), ("날씨 좋으니까 야외로", "none"), ("비가 안 와서", "none"),
+    ("눈이 아파서", "none"), ("그냥 취소하고 다른 데", "none"), ("늦게까지 하는 데로", "none"), ("주차가 힘들어서", "none"),
+    ("준비가 늦어져서", "delay"), ("도로 공사로 길이 막혀서", "delay"), ("영업 마감했대", "closed"), ("날씨가 안 좋아서", "weather"),
+    ("비 와서 문 닫았대", "closed"),  # 그곳이 닫힌 것이 사유 — 휴관이 날씨보다 앞
+])
+def test_alternative_reason_maps_free_korean_to_planb_vocabulary(said, reason) -> None:
+    """SUGGEST_ALTERNATIVE 의 reason 슬롯은 한글 자유문("오늘 휴관")이다 — `_REASON_KO` 키와 같을 때만 넘기면 늘 none 이라
+    휴관 대신 찾기가 "근처의 대안"으로만 나왔다(2026-10-19 E2E). 키워드로 PlanB 어휘에 사상한다."""
+    assert _planb_reason(said) == reason
+
+
+def test_reason_words_only_name_planb_reasons() -> None:
+    assert {key for key, _ in _REASON_WORDS} <= set(_REASON_KO)
+
+
+@given(said=st.one_of(st.none(), st.integers(), st.text(max_size=80), st.lists(st.text(max_size=10), max_size=3)))
+def test_pbt_planb_reason_always_lands_in_the_closed_vocabulary(said) -> None:
+    """LLM 슬롯 출구 — 무엇이 와도 PlanB 어휘 안이고 예외가 없다(INV-1 닫힌 어휘, DL-5)."""
+    assert _planb_reason(said) in _REASON_KO
+
+
+def test_poi_info_on_another_day_names_the_day() -> None:
+    """영업시간은 그 장소가 든 날 기준이다 — 오늘이 아니면 날짜 행을 밝힌다("휴무일 수 있음"이 오늘로 읽히지 않게, 셀프 리뷰)."""
+    facts = _run(HANDLERS[Intent.GET_POI_INFO], _ctx(arguments={"place": "성산"}, ports=HandlerPorts(poi_info=_PoiInfo())))
+    assert facts.payload["rows"][0] == {"label": "날짜", "value": "10월 18일"}
+
+
+def test_next_slot_without_any_itinerary_offers_to_make_one() -> None:
+    """일정 자체가 없는데 "남은 일정이 없어요"·[일정 보기]로 답하면 틀린다 — 사실이 비어 템플릿 직행이라(BR-AO-25) LLM 이
+    고쳐 말해 주지도 않는다(셀프 리뷰). 만들기로 보낸다(BE QueryCards.noItinerary)."""
+    facts = _run(HANDLERS[Intent.GET_NEXT_SLOT], _ctx(_EMPTY_SNAP))
+    assert facts.template_text == "아직 일정에 장소가 없어요."
+    assert [a.type for a in facts.next_actions] == ["OPEN_ITINERARY_METHOD"]
+
+
+
+# ── EXPLORE_PLACES — 지역·일정 근처 등록 POI 탐색 (INV-1: 풀 안에서만) ─────────────────────────────────
+
+
+def _xpoi(name: str, category: PoiCategory = PoiCategory.SIGHT, *, tags: tuple[str, ...] = (), saved: int = 0) -> Poi:
+    return Poi(poi_id=PoiId(str(uuid.uuid5(uuid.NAMESPACE_DNS, "x-" + name))), name=name, category=category,
+               coord=GeoPoint(35.16, 129.16), open_hours=(), avg_cost=None, rating=None, quality=DataQuality.FULL,
+               source=PoiSource.SEED, confidence=None, saved_count=saved, tags=tags)
+
+
+_X_POOL = _pool(
+    _xpoi("평범한 식당", PoiCategory.FOOD, saved=9), _xpoi("인기 식당", PoiCategory.FOOD, tags=("요즘 인기",)),
+    _xpoi("셋째 식당", PoiCategory.FOOD, saved=5), _xpoi("인기 카페", PoiCategory.CAFE, tags=("요즘 인기",)),
+    _xpoi("바다 전망 카페", PoiCategory.CAFE), _xpoi("황령산 야경", PoiCategory.NIGHT_VIEW),
+    _xpoi("루프탑 바", PoiCategory.FOOD, tags=("나이트라이프",)), _xpoi("해변 호텔", PoiCategory.STAY),
+)
+_EXPLORE = HANDLERS[Intent.EXPLORE_PLACES]
+
+
+def _explore(arguments: dict, *, snapshot: TurnSnapshot = _EMPTY_SNAP, pool: CandidatePool = _X_POOL,
+             raise_: bool = False) -> tuple[Facts, _PoolBuilder]:
+    builder = _PoolBuilder(pool, raise_=raise_)
+    ctx = _ctx(snapshot, arguments, ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=builder))
+    return _run(_EXPLORE, ctx), builder
+
+
+def _names_of(facts: Facts) -> list[str]:
+    return [c["name"] for c in facts.payload["candidates"]]
+
+
+def test_explore_region_anchor_ranks_trending_first_and_keeps_out_stays_and_nightlife() -> None:
+    from trippilot.domain.region_centers import region_center
+
+    facts, builder = _explore({"region": "부산 해운대", "theme": "요즘 핫한"})
+    (request, _), = builder.requests
+    _, center, km = region_center("부산 해운대")
+    assert request.anchor == center and request.radius_override_km == km  # 더 구체적인 '해운대'
+    assert facts.kind is AnswerKind.CANDIDATES and facts.status is FactStatus.OK and not facts.needs_trip
+    names = _names_of(facts)
+    assert set(names[:2]) == {"인기 식당", "인기 카페"}  # "요즘 인기" 태그가 먼저(그 안은 poi_id)
+    assert "해변 호텔" not in names and "루프탑 바" not in names  # 숙소·나이트라이프는 밤 주제일 때만
+    assert sum(1 for n in names if "식당" in n) == 2  # 종류를 안 정하면 한 종류 ≤2
+    assert facts.quick_replies == () and _types(facts) == ["OPEN_PLACE"] * len(names)  # 바꿀 슬롯이 없다 — 고르기 대신 장소 보기
+    assert all(c["distanceRange"] is None for c in facts.payload["candidates"])  # 지역 중심에서의 거리는 싣지 않는다
+    assert [p.name for p in facts.places] == names  # 문장 재료 = 카드 = 풀 (INV-1)
+    assert facts.detail == {"anchor": "해운대", "anchor_kind": "region"}  # 표 이름 — theme 같은 발화 원문은 싣지 않는다(INV-2)
+
+
+def test_explore_night_theme_puts_night_view_and_nightlife_first() -> None:
+    facts, _ = _explore({"region": "부산", "theme": "분위기 좋은 바"})
+    assert set(_names_of(facts)[:2]) == {"황령산 야경", "루프탑 바"}
+
+
+def test_explore_category_filters_the_pool() -> None:
+    facts, _ = _explore({"region": "부산", "category": "CAFE"})
+    assert _names_of(facts) == ["인기 카페", "바다 전망 카페"]
+
+
+def test_explore_without_region_uses_the_next_itinerary_slot_with_distance() -> None:
+    facts, builder = _explore({}, snapshot=_SNAP)
+    (request, _), = builder.requests
+    assert request.anchor == _COORD["해녀의집"] and request.radius_override_km == dh._NEAR_SLOT_KM  # 10:00 이후 첫 슬롯
+    assert facts.detail["anchor_kind"] == "itinerary"
+    assert all(c["distanceRange"] for c in facts.payload["candidates"])
+
+
+def test_explore_without_region_or_slots_uses_the_trip_destination() -> None:
+    from trippilot.domain.region_centers import region_center
+
+    facts, builder = _explore({}, snapshot=_snapshot((), trip=_TRIP))
+    assert builder.requests[0][0].anchor == region_center("제주")[1]
+    assert facts.kind is AnswerKind.CANDIDATES
+
+
+def test_explore_without_any_anchor_asks_for_a_region_without_calling_anything() -> None:
+    from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEXT
+
+    facts, builder = _explore({}, snapshot=_snapshot((), trip=None, status=None))
+    assert builder.requests == [] and facts.template_text == EXPLORE_ASK_REGION_TEXT and not facts.needs_trip
+    assert not (facts.rows or facts.places or facts.notes or facts.detail)  # 사실 없음 → 오케스트레이터가 LLM 없이 이 문장 그대로
+    assert _types(facts) == ["CREATE_TRIP"]
+
+
+def test_explore_unknown_region_is_empty_and_does_not_fall_back_to_the_trip() -> None:
+    facts, builder = _explore({"region": "강원도"}, snapshot=_SNAP)
+    assert builder.requests == [] and facts.status is FactStatus.EMPTY and facts.kind is AnswerKind.TEXT
+    assert facts.detail == {} and facts.notes  # 발화 원문은 사실 칸에 옮기지 않는다
+
+
+@pytest.mark.parametrize("kw", [{"raise_": True}, {"pool": _pool()}])
+def test_explore_pool_failure_is_unavailable_and_empty_pool_is_empty(kw) -> None:
+    facts, _ = _explore({"region": "부산"}, **kw)
+    assert facts.kind is AnswerKind.TEXT
+    assert facts.status is (FactStatus.UNAVAILABLE if kw.get("raise_") else FactStatus.EMPTY)
+
+
+
+def test_alternative_candidates_need_a_pick_each_but_explore_candidates_have_none() -> None:
+    """모양 검사는 "고르기 버튼이 전부 있거나 전부 없다"(탐색) — 대안만은 Facts 가 후보마다 하나를 다시 조인다(BR-AO-20)."""
+    cand = {"candidates": [{"poiId": "p", "name": "n", "reason": "r"}]}
+    with pytest.raises(ValueError):
+        _text_facts(intent=Intent.SUGGEST_ALTERNATIVE, kind=AnswerKind.CANDIDATES, payload=cand)
+    assert _text_facts(intent=Intent.EXPLORE_PLACES, kind=AnswerKind.CANDIDATES, payload=cand).quick_replies == ()
+
+
+def test_explore_asks_for_a_region_only_when_no_anchor_can_be_found() -> None:
+    ask = HANDLERS[Intent.EXPLORE_PLACES].ask
+    nothing = _ctx(_snapshot((), trip=None, status=None), ports=HandlerPorts(poi_info=_PoiInfo()))
+    assert ask(nothing)[0] == "region"
+    assert ask(_ctx(_snapshot((), trip=None, status=None), {"region": "강원도"})) is None  # 말했으면 묻지 않는다 — 못 찾으면 EMPTY
+    assert ask(_ctx(_SNAP, ports=HandlerPorts(poi_info=_PoiInfo()))) is None  # 일정 근처
+    assert ask(_ctx(_snapshot((), trip=_TRIP))) is None  # 여행 목적지
+    assert all(HANDLERS[i].ask is None for i in HANDLERS if i is not Intent.EXPLORE_PLACES)
+
+
+# ── EXPLORE_PLACES PBT (BR-AO-27) — 후보는 풀 안·≤5·결정론·입력 순서 무관, 숙소 0, 밤 주제가 아니면 나이트라이프 0, 종류 필터·한 종류 ≤2 ──
+
+
+_X_CATS = sorted(PoiCategory, key=lambda c: c.value)
+
+
+@st.composite
+def _explore_pois(draw) -> list[Poi]:
+    n = draw(st.integers(0, 14))
+    return [Poi(poi_id=PoiId(str(uuid.uuid5(uuid.NAMESPACE_DNS, f"pbt-{i}"))), name=draw(st.sampled_from(["감천문화마을", "흰여울 카페", "x", "루프탑 바"])) + str(i),
+                category=draw(st.sampled_from(_X_CATS)), coord=GeoPoint(35.1, 129.0), open_hours=(), avg_cost=None,
+                rating=draw(st.one_of(st.none(), st.floats(0, 5))), quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None,
+                saved_count=draw(st.integers(0, 50)), tags=tuple(draw(st.lists(st.sampled_from(["요즘 인기", "나이트라이프", "야경", "오션뷰"]), max_size=2, unique=True))))
+            for i in range(n)]
+
+
+@settings(max_examples=200, deadline=None)
+@given(pois=_explore_pois(), category=st.one_of(st.none(), st.sampled_from([c.value for c in _X_CATS if c is not PoiCategory.STAY])),
+       theme=st.one_of(st.none(), st.sampled_from(["요즘 핫한", "야경", "분위기 좋은 바", "오션뷰", "조용한"])), data=st.data())
+def test_explore_rank_stays_inside_the_pool_and_obeys_its_filters(pois, category, theme, data) -> None:
+    picked = dh._explore_rank(pois, category, theme)
+    ids = [p.poi_id for p in picked]
+    assert len(picked) <= dh.MAX_CANDIDATES and len(set(ids)) == len(ids) and set(ids) <= {p.poi_id for p in pois}  # INV-1
+    assert picked == dh._explore_rank(data.draw(st.permutations(pois)), category, theme)  # 입력 순서 무관 결정론
+    assert all(p.category is not PoiCategory.STAY for p in picked)
+    night = bool(theme and dh._NIGHT.search(theme)) or category == PoiCategory.NIGHT_VIEW.value
+    if not night:
+        assert all("나이트라이프" not in p.tags for p in picked)
+    if category is not None:
+        assert all(p.category.value == category for p in picked)
+    else:
+        assert all(sum(1 for q in picked if q.category is p.category) <= 2 for p in picked)

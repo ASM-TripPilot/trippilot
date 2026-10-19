@@ -6,8 +6,12 @@ import com.trippilot.affiliatelink.domain.OutboundClick
 import com.trippilot.affiliatelink.domain.OutboundClickPort
 import com.trippilot.affiliatelink.domain.OutboundLink
 import com.trippilot.affiliatelink.domain.OutboundQuery
+import com.trippilot.affiliatelink.domain.OutboundRegion
 import com.trippilot.affiliatelink.domain.OutboundStay
+import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.core.error.ValidationFailed
+import com.trippilot.placedata.api.RegionLookupFacade
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.time.Clock
@@ -24,21 +28,54 @@ class OutboundService(
     private val stays: StayLookupFacade,
     private val deeplink: OtaDeeplinkPort,
     private val clicks: OutboundClickPort,
+    private val regions: RegionLookupFacade,
     private val clock: Clock,
 ) {
     fun outbound(accountId: UUID?, stayId: String, query: OutboundQuery): OutboundLink {
         val name = stays.findName(stayId) ?: throw ResourceNotFound()
         val clickId = UUID.randomUUID()
         val link = deeplink.buildOutbound(OutboundStay(stayId, name), query, clickId)
+        record(clickId, accountId, stayId, link, query)
+        return link
+    }
+
+    /**
+     * 지역 숙소 전체 보기 — OTA 의 지역 목록으로 보낸다(앱은 숙소 목록을 갖지 않는다).
+     * 클릭의 stay_id 자리에는 `"REGION:{코드 또는 이름}"` 을 남긴다 — 숙소 클릭과 한 표에서 갈린다.
+     */
+    fun regionOutbound(accountId: UUID?, regionCode: String?, regionName: String, query: OutboundQuery): OutboundLink {
+        val name = regionName.trim()
+        val code = regionCode?.trim()?.takeIf { it.isNotEmpty() }
+        // 지역 카탈로그에 있는 것만 받는다 — 익명·무제한 경로라 자유 문자열을 그대로 받으면 클릭 지표가 오염된다.
+        // 코드는 "선택 가능"만으로 거르지 않는다 — 이름으로 만든 여행에는 도(41 경기도)·일반시의 구(47113 포항시
+        // 북구) 같은 선택 불가 코드가 저장돼 화면으로 내려온다. 그래서 선택 가능하거나, 함께 온 이름이 그 코드를
+        // 가리키면 통과다(여행 목적지의 이름·코드 짝). 코드가 없으면 이름이 카탈로그에 있어야 한다.
+        val known = if (code != null) {
+            CODE.matches(code) && (regions.isSelectableCode(code) || code in regions.codesOf(name))
+        } else {
+            name.length <= MAX_REGION_NAME && regions.codesOf(name).isNotEmpty()
+        }
+        if (name.isEmpty() || name.length > MAX_REGION_NAME || !known) {
+            throw ValidationFailed(listOf(FieldError("region", "지역 카탈로그에 있는 지역 이름·코드로 요청하세요.")))
+        }
+        val clickId = UUID.randomUUID()
+        val link = deeplink.buildRegionOutbound(OutboundRegion(code, name), query, clickId)
+        record(clickId, accountId, "$REGION_PREFIX${code ?: name}", link, query)
+        return link
+    }
+
+    private fun record(clickId: UUID, accountId: UUID?, stayId: String, link: OutboundLink, query: OutboundQuery) {
         // 기록 실패가 이동을 막지 않는다 — 막으면 사용자에겐 "예약 버튼이 안 눌리는" 장애다.
         // 침묵도 아니다(INV-4): 에러 로그가 남고, 클릭 한 건 유실은 이동 실패보다 싸다.
         runCatching {
             clicks.record(OutboundClick(clickId, accountId, stayId, link.vendor, query, clock.instant()))
         }.onFailure { log.error("아웃바운드 클릭 기록 실패 — 이동은 계속한다. stayId={}", stayId, it) }
-        return link
     }
 
     private companion object {
         private val log = LoggerFactory.getLogger(OutboundService::class.java)
+        private const val REGION_PREFIX = "REGION:"
+        private const val MAX_REGION_NAME = 40 // affiliate_click.stay_id(120) 안에 접두사와 함께 들어간다
+        private val CODE = Regex("^[0-9]{2,10}$")
     }
 }

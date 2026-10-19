@@ -63,6 +63,17 @@ interface NotificationScheduleRepository {
      */
     fun replacePending(tripId: UUID, schedules: List<NotificationSchedule>)
 
+    /**
+     * 그 여행의 적재를 **트랜잭션이 끝날 때까지** 줄 세운다 — 같은 여행의 다른 적재는 이 커밋을 기다린다.
+     *
+     * [replacePending] 은 "미발화분 DELETE → INSERT" 이고 미발화분 유일 제약이 없다. 두 적재가 겹치면
+     * (READ COMMITTED) 뒤엣것의 DELETE 가 앞엣것이 막 넣은 행을 못 보고 자기 행을 더 넣어 **하루 리마인드가
+     * 두 벌** → 푸시가 두 번 간다. 아웃박스 릴레이와 문구 재시도 폴러가 같은 여행을 동시에 적재하면 생긴다
+     * (스케줄 풀이 1 일 땐 둘이 한 스레드라 안 겹쳤다). 적재 **시작**에 잡는 이유: 기다린 쪽이 최신 일정을
+     * 다시 읽어야 늦게 커밋한 쪽이 옛 일정으로 덮지 않는다. 파드 사이에도 막힌다(DB 잠금).
+     */
+    fun lockTrip(tripId: UUID)
+
     /** 발화 시각이 [now] 이하인 미발화·미취소 예약. */
     fun findDue(now: Instant, limit: Int): List<NotificationSchedule>
 

@@ -3,8 +3,12 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
+import { closestScrollView, stubScrollTo } from '@/test-support/sheetTree';
 
-import type { MustVisitTimeForm } from '@/features/add-must-visit';
+import {
+  startTimeOptions,
+  type MustVisitTimeForm,
+} from '@/features/add-must-visit';
 import { MustVisitTimeScreen } from './MustVisitTimeScreen';
 
 /**
@@ -32,12 +36,18 @@ const DAY_CHIPS = [
   { date: '2026-06-12', label: '6.12 (금)' },
 ];
 
-/** 30분 간격 하루치(D2). 화면은 받은 목록을 그대로 그린다 — 만드는 것은 순수 함수 몫이다. */
-const START_OPTIONS = Array.from({ length: 48 }, (_, index) => {
-  const hour = String(Math.floor(index / 2)).padStart(2, '0');
-  const minute = index % 2 === 0 ? '00' : '30';
-  return `${hour}:${minute}`;
-});
+/** 시·분 두 열 목록(TRIP-1437 결정 1=A). 배선이 순수 함수 결과를 그대로 넘기는 모양 그대로 넘긴다. */
+const START_OPTIONS = startTimeOptions();
+/** 단언 기준 — 목록 생성 함수와 따로 손으로 적는다(함수가 틀려도 화면 단언이 같이 틀리지 않게). */
+const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0'));
+const MINUTES = Array.from({ length: 60 }, (_, m) =>
+  String(m).padStart(2, '0')
+);
+/**
+ * 시작 시각이 비었을 때 휠을 세울 자리(TRIP-1437 · 배선이 여행 일과 시작에서 계산해 내린다).
+ * 분이 0 이 아닌 표본이다 — '10:00' 이면 분 열 위치가 기본값(맨 위)과 같아 "세웠다"를 못 가른다(02a ★5).
+ */
+const START_ANCHOR = '10:30';
 
 const FORM: MustVisitTimeForm = {
   fixed: true,
@@ -57,6 +67,7 @@ function renderScreen(
       imageUrl={null}
       dayChips={DAY_CHIPS}
       startOptions={START_OPTIONS}
+      startAnchor={START_ANCHOR}
       form={FORM}
       {...over}
     />
@@ -105,6 +116,30 @@ function startOptionCount(): number {
   return screen.queryAllByTestId(/^itinerary-mustvisit-time-start-option-/)
     .length;
 }
+
+/** 한 열의 셀 testID 를 트리 순서대로 — 요소 배열 대신 문자열로 단언한다(실패 메시지 메모리 폭주 방지, A 블록 주석). */
+function startCellIds(unit: 'h' | 'm'): string[] {
+  return screen
+    .queryAllByTestId(
+      new RegExp(`^itinerary-mustvisit-time-start-option-${unit}-`)
+    )
+    .map((node) => String(node.props.testID));
+}
+
+/** 시작 시트 안에서 selected 인 셀 testID 전부. */
+function selectedStartCells(): string[] {
+  return screen
+    .queryAllByTestId(/^itinerary-mustvisit-time-start-option-/)
+    .filter((node) => node.props.accessibilityState?.selected === true)
+    .map((node) => String(node.props.testID));
+}
+
+const H_WHEEL = 'itinerary-mustvisit-time-start-wheel-h';
+const M_WHEEL = 'itinerary-mustvisit-time-start-wheel-m';
+const hourCell = (hh: string): string =>
+  `itinerary-mustvisit-time-start-option-h-${hh}`;
+const minuteCell = (mm: string): string =>
+  `itinerary-mustvisit-time-start-option-m-${mm}`;
 
 describe('C25 · AC-6 · AC-V4 — 날짜 칩은 여행 기간에서만 나오고 선택 상태를 노출한다', () => {
   it('칩 3개가 기간 날짜 그대로이고 고른 칩만 selected 다', () => {
@@ -155,7 +190,8 @@ describe('C26 · D2 — 시작 시각은 바텀시트 목록에서 고른다', (
    * **조건부 마운트를 강제하는 심판**이다(`TripWizardStep2Screen` 의 `fixSheet === undefined ?
    * null : …` 선례와 같은 형태).
    */
-  it('열기 전에는 시트도 옵션도 없고, 필드를 누르면 48개가 뜬다', () => {
+  // TRIP-1437 — 옛 단언은 "48개 한 열 · `start-option-13:00`" 이었다. 시·분 두 열로 바뀌었다(AC-1).
+  it('열기 전에는 시트도 옵션도 없고, 필드를 누르면 시 24칸·분 60칸 두 열이 뜬다 (AC-1)', () => {
     const onPickStart = jest.fn();
     renderScreen({ onPickStart });
 
@@ -169,14 +205,22 @@ describe('C26 · D2 — 시작 시각은 바텀시트 목록에서 고른다', (
     expect(
       screen.getByTestId('itinerary-mustvisit-time-start-sheet')
     ).toBeOnTheScreen();
-    expect(startOptionCount()).toBe(48);
+    expect(screen.getByTestId(H_WHEEL)).toBeOnTheScreen();
+    expect(screen.getByTestId(M_WHEEL)).toBeOnTheScreen();
+    // 완전 일치 — 개수·순서·zero-pad. 옛 한 열 셀(`-start-option-13:00`)은 0개다.
+    expect(startCellIds('h')).toEqual(HOURS.map(hourCell));
+    expect(startCellIds('m')).toEqual(MINUTES.map(minuteCell));
+    expect(
+      screen.queryAllByTestId(
+        /^itinerary-mustvisit-time-start-option-\d{2}:\d{2}$/
+      ).length
+    ).toBe(0);
 
-    // 고르면 그 시각이 넘어간다. 필드를 누르는 것만으로는 아무 값도 정해지지 않는다.
+    // 고르면 그 시각이 넘어간다 — 시 15 를 누르면 분은 지금 값(13:00 의 00)을 그대로 쓴다.
+    // 필드를 누르는 것만으로는 아무 값도 정해지지 않는다.
     expect(onPickStart).not.toHaveBeenCalled();
-    fireEvent.press(
-      screen.getByTestId('itinerary-mustvisit-time-start-option-13:00')
-    );
-    expect(onPickStart).toHaveBeenCalledWith('13:00');
+    fireEvent.press(screen.getByTestId(hourCell('15')));
+    expect(onPickStart).toHaveBeenCalledWith('15:00');
     expect(onPickStart).toHaveBeenCalledTimes(1);
   });
 
@@ -186,16 +230,14 @@ describe('C26 · D2 — 시작 시각은 바텀시트 목록에서 고른다', (
    * `selected` 를 실제로 넘겨 배선하는지를 통합 지점에서 잰다 — 안 넘기면 아무 셀도 selected 가
    * 아니어서 red 다. (교체 전 평면 리스트도 같은 계약을 만족하므로 지금은 선제 green 이다.)
    */
-  it('D2-b 열린 시트에서 지금 선택된 시각(13:00) 셀만 selected 다', () => {
+  it('D2-b 열린 시트에서 지금 선택된 시각(13:00)의 시 13·분 00 셀만 selected 다', () => {
     renderScreen();
     fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-field'));
 
-    expect(
-      screen.getByTestId('itinerary-mustvisit-time-start-option-13:00')
-    ).toBeSelected();
-    expect(
-      screen.getByTestId('itinerary-mustvisit-time-start-option-09:00')
-    ).not.toBeSelected();
+    // TRIP-1437 — 두 열이라 선택 셀도 둘이다. 일과 시작 자리(10·30)는 선택이 아니다.
+    expect(selectedStartCells()).toEqual([hourCell('13'), minuteCell('00')]);
+    expect(screen.getByTestId(hourCell('09'))).not.toBeSelected();
+    expect(screen.getByTestId(hourCell('10'))).not.toBeSelected();
   });
 });
 
@@ -373,7 +415,7 @@ describe('C31 · AC-9 · INV-3 — h07 에도 소요시간 문자열이 없다',
     expect(texts.some((text) => text.includes('13:00'))).toBe(true);
 
     // 부정 — 체류 3단계가 라벨뿐이라 분값이 새어 나올 자리가 없다. 시트를 연 상태까지 훑는다
-    // (48개 시각 옵션이 `분` 으로 읽히지 않는 것도 함께 본다).
+    // (시·분 두 열 셀이 `시`·`분` 으로 읽히지 않는 것도 함께 본다 — 셀은 bare 숫자, TRIP-1437).
     expect(texts.filter((text) => DURATION_TEXT.test(text))).toEqual([]);
   });
 });
@@ -471,14 +513,15 @@ describe('🔴 C34 · AC-b1 · AC-b2 — 저장 실패 행이 안내 배너 아�
  * 사용자가 "닫기"를 눌러서만 한다.
  *
  * 무엇을 보장하나:
- *  - 휠이 12:00 칸(48개 중 24번째)에서 멈추면 `onPickStart('12:00')` 가 1회 불리고 시트는 열린 채다.
+ *  - 시 휠이 12 칸에서 멈추면 `onPickStart('12:00')` 가 1회 불리고 시트는 열린 채다(TRIP-1437 — 두 열이라
+ *    분은 지금 값 13:00 의 00 을 쓴다).
  *  - 셀을 탭해도 값만 넘어가고 시트는 열린 채다. "닫기"를 누르면 그때 닫힌다.
  *
  * 3동작 뼈대: 준비=시트를 연다 → 실행=휠 정지 / 셀 탭 / 닫기 → 단언=넘어간 값·시트 존재 여부.
  */
 describe('🔴 W3 · 휠 정지 확정 + 휠 정지·셀 탭으로는 닫히지 않음 (D21 · Q6)', () => {
   const SHEET = 'itinerary-mustvisit-time-start-sheet';
-  const WHEEL = 'itinerary-mustvisit-time-start-wheel';
+  const WHEEL = H_WHEEL;
 
   function openSheet(onPickStart: jest.Mock): void {
     renderScreen({ onPickStart });
@@ -493,7 +536,7 @@ describe('🔴 W3 · 휠 정지 확정 + 휠 정지·셀 탭으로는 닫히지 
       nativeEvent: {
         contentOffset: {
           x: 0,
-          y: START_OPTIONS.indexOf('12:00') * WHEEL_CELL_HEIGHT,
+          y: HOURS.indexOf('12') * WHEEL_CELL_HEIGHT,
         },
       },
     });
@@ -507,11 +550,9 @@ describe('🔴 W3 · 휠 정지 확정 + 휠 정지·셀 탭으로는 닫히지 
     const onPickStart = jest.fn();
     openSheet(onPickStart);
 
-    fireEvent.press(
-      screen.getByTestId('itinerary-mustvisit-time-start-option-13:00')
-    );
+    fireEvent.press(screen.getByTestId(hourCell('14')));
 
-    expect(onPickStart).toHaveBeenCalledWith('13:00');
+    expect(onPickStart).toHaveBeenCalledWith('14:00');
     expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
 
     fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-close'));
@@ -575,9 +616,7 @@ describe('🔴 A · S1 시트가 딤·끌기로 닫혀도 다시 열린다 (TRIP
     fireEvent.press(screen.getByTestId(FIELD));
 
     expect(screen.getAllByTestId(SHEET).length).toBe(1);
-    expect(
-      screen.getByTestId('itinerary-mustvisit-time-start-option-13:00')
-    ).toBeOnTheScreen();
+    expect(screen.getByTestId(hourCell('13'))).toBeOnTheScreen();
   });
 
   it('A3 · 닫힘을 쥔 엘리먼트가 아래로 끌어 닫기를 켜고 본문 끌기는 끈다', () => {
@@ -593,5 +632,207 @@ describe('🔴 A · S1 시트가 딤·끌기로 닫혀도 다시 열린다 (TRIP
     expect(owner?.props.enablePanDownToClose).toBe(true);
     // not.toBe(true) 가 아니라 toBe(false) — prop 을 지우면(undefined) 라이브러리 기본값 true 로 돌아간다.
     expect(owner?.props.enableContentPanningGesture).toBe(false);
+  });
+});
+
+/**
+ * TRIP-1437 (QA Q-066·Q-116) — 방문 시각 지정의 시각 표기·휠 위치·배지·토글 행.
+ *
+ * 무엇을 보장하나:
+ *  - AC-5 시작 시각 칸은 `HH:mm` 한 가지로만 보인다("오후 1:00 (13:00)" 이중 표기 폐기).
+ *  - AC-7 값이 비어 있으면 휠은 배선이 내린 자리(`startAnchor`, 그 여행 일과 시작)에 서고 선택 표시는 없다.
+ *  - AC-8 시트를 열고 레이아웃만 받고 닫으면 값이 정해지지 않는다(BR-U1-49 — 보기만으로 값 설정 금지).
+ *  - AC-9 값이 있으면 그 값이 선택·위치이고 일과 시작 자리는 무시된다.
+ *  - AC-10 한 열만 고르면 다른 열은 화면에 서 있던 값이다(01b Q3 — 값이 비었으면 세운 자리의 값).
+ *  - AC-11 '고정' 배지는 토글이 켜졌을 때만 있다(BR-U1-48 — 꺼짐 = ANYTIME).
+ *  - AC-12 토글은 행 전체가 누름 대상이고 role switch·checked 는 그 행 하나(testID 그대로)에 있다.
+ *
+ * *(개념)* **위치(anchor) vs 선택(selected)** — 선택은 저장될 값, 위치는 눈이 머무는 칸이다. 이번 칸은
+ *   값은 비운 채 위치만 일과 시작으로 옮긴다.
+ * *(개념)* `stubScrollTo` — RN jest 목의 `scrollTo` 는 모든 스크롤뷰가 함께 쓰는 가짜라, 이 열 인스턴스에
+ *   새 가짜를 꽂아 이 열 호출만 센다(1417 02a ★1).
+ *
+ * 커버하지 않는 것(6-b): 휠이 실기에서 정말 그 칸에 서는지, 프로그램 스크롤이 정지 이벤트를 쏴서 값이
+ *   정해지는 길이 있는지(jest 의 scrollTo 는 그 이벤트를 안 낸다), 배지·토글 행의 모양.
+ *
+ * 3동작 뼈대: 준비=폼·자리로 렌더(·시트 열기) → 실행=레이아웃·셀·행 누르기 → 단언=칸 글자·위치·콜백.
+ */
+describe('🔴 TRIP-1437 · 방문 시각 지정 — 24시간 표기·휠 위치·배지·토글 행', () => {
+  function openSheet(): void {
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-field'));
+  }
+
+  /** 두 열에 가짜 scrollTo 를 꽂고(아직 0회 앵커), 레이아웃을 쏜 뒤 열별 가짜를 돌려준다. */
+  function layoutBothColumns(): { h: jest.Mock; m: jest.Mock } {
+    const stub = (cell: string): jest.Mock => {
+      const scroll = closestScrollView(screen.getByTestId(cell));
+      expect(scroll).not.toBeNull();
+      const scrollTo = stubScrollTo(scroll!);
+      expect(scrollTo).not.toHaveBeenCalled();
+      return scrollTo;
+    };
+    const h = stub(hourCell('00'));
+    const m = stub(minuteCell('00'));
+    [H_WHEEL, M_WHEEL].forEach((wheel) =>
+      fireEvent(screen.getByTestId(wheel), 'layout', {
+        nativeEvent: { layout: { x: 0, y: 0, width: 100, height: 220 } },
+      })
+    );
+    return { h, m };
+  }
+
+  const offsetY = (wheel: string): unknown =>
+    screen.getByTestId(wheel).props.contentOffset?.y;
+
+  it('AC-5 · 시작 시각 13:00 은 칸에 정확히 "13:00" 으로만 보인다 — 오전·오후·괄호 없음', () => {
+    renderScreen();
+
+    // 완전 일치 — 칸 안 글자 전부가 이 다섯 글자다(아이콘은 글자가 없다, 02a §5).
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-start-field')
+    ).toHaveTextContent('13:00');
+
+    // 시트를 연 상태까지 — 어디에도 12시간 표기가 없다.
+    openSheet();
+    expect(renderedTexts().filter((t) => /오전|오후/.test(t))).toEqual([]);
+  });
+
+  it('AC-7 · 값이 비면 시 열은 10칸(440)·분 열은 30칸(1320)에 서고, 어떤 셀도 선택돼 있지 않다', () => {
+    const onPickStart = jest.fn();
+    renderScreen({ form: { ...FORM, fixedStart: null }, onPickStart });
+    openSheet();
+
+    // 첫 프레임 위치(contentOffset) — 자정(0)이 아니라 일과 시작 10:30.
+    expect(offsetY(H_WHEEL)).toBe(10 * WHEEL_CELL_HEIGHT);
+    expect(offsetY(M_WHEEL)).toBe(30 * WHEEL_CELL_HEIGHT);
+
+    // 레이아웃 뒤 다시 맞추기(1417 L 패턴)도 같은 자리로.
+    const { h, m } = layoutBothColumns();
+    expect(h).toHaveBeenCalledWith(
+      expect.objectContaining({ y: 10 * WHEEL_CELL_HEIGHT, animated: false })
+    );
+    expect(m).toHaveBeenCalledWith(
+      expect.objectContaining({ y: 30 * WHEEL_CELL_HEIGHT, animated: false })
+    );
+
+    // 위치일 뿐 선택이 아니다.
+    expect(selectedStartCells()).toEqual([]);
+    expect(onPickStart).not.toHaveBeenCalled();
+  });
+
+  it('AC-8 · 열고 레이아웃만 받고 닫으면 onPickStart 0회이고 칸은 여전히 "시각 선택"이다', () => {
+    const onPickStart = jest.fn();
+    renderScreen({ form: { ...FORM, fixedStart: null }, onPickStart });
+    // 앵커 — 열기 전 칸은 빈 자리 문구다.
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-start-field')
+    ).toHaveTextContent('시각 선택');
+
+    openSheet();
+    layoutBothColumns();
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-close'));
+
+    expect(onPickStart).not.toHaveBeenCalled();
+    expect(
+      screen.queryByTestId('itinerary-mustvisit-time-start-sheet')
+    ).not.toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-start-field')
+    ).toHaveTextContent('시각 선택');
+  });
+
+  it('AC-9 · 값 13:07 이 있으면 시 13·분 07 이 선택이고 그 자리(572 / 308)에 선다 — 일과 시작은 무시', () => {
+    renderScreen({ form: { ...FORM, fixedStart: '13:07' } });
+    openSheet();
+
+    expect(selectedStartCells()).toEqual([hourCell('13'), minuteCell('07')]);
+    expect(offsetY(H_WHEEL)).toBe(13 * WHEEL_CELL_HEIGHT);
+    expect(offsetY(M_WHEEL)).toBe(7 * WHEEL_CELL_HEIGHT);
+
+    const { h, m } = layoutBothColumns();
+    expect(h).toHaveBeenCalledWith(
+      expect.objectContaining({ y: 13 * WHEEL_CELL_HEIGHT, animated: false })
+    );
+    expect(m).toHaveBeenCalledWith(
+      expect.objectContaining({ y: 7 * WHEEL_CELL_HEIGHT, animated: false })
+    );
+  });
+
+  it.each<[string | null, 'h' | 'm', string, string, string]>([
+    [null, 'h', '19', '19:30', '값이 비면 분은 세운 자리 30'],
+    [null, 'm', '45', '10:45', '값이 비면 시는 세운 자리 10'],
+    ['13:07', 'h', '19', '19:07', '값이 있으면 분은 그 값 07'],
+  ])(
+    'AC-10 · 값 %s 에서 %s 열 %s 를 누르면 onPickStart(%s) 1회 (%s)',
+    (fixedStart, unit, cellValue, expected) => {
+      const onPickStart = jest.fn();
+      renderScreen({ form: { ...FORM, fixedStart }, onPickStart });
+      openSheet();
+
+      fireEvent.press(
+        screen.getByTestId(
+          unit === 'h' ? hourCell(cellValue) : minuteCell(cellValue)
+        )
+      );
+
+      expect(onPickStart).toHaveBeenCalledWith(expected);
+      expect(onPickStart).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it('AC-11 · 토글이 꺼져 있으면 장소 카드에 "고정" 배지가 없다 — 짝: 켜면 있다', () => {
+    renderScreen({ form: { ...FORM, fixed: false } });
+
+    expect(
+      screen.queryByTestId('itinerary-mustvisit-time-fixed-badge')
+    ).not.toBeOnTheScreen();
+    // 글자로도 없다 — testID 만 떼고 글자를 남기는 구현을 막는다('시각 고정' 제목·CTA 는 완전 일치에 안 걸린다).
+    expect(screen.queryAllByText('고정').length).toBe(0);
+
+    screen.unmount();
+    renderScreen({ form: { ...FORM, fixed: true } });
+
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-fixed-badge')
+    ).toHaveTextContent('고정');
+    expect(screen.queryAllByText('고정').length).toBe(1);
+  });
+
+  it.each<[boolean, string]>([
+    [false, '시각 고정'],
+    [true, '시각 고정'],
+    [false, '예약·공연처럼 시간이 정해진 곳에 켜세요'],
+  ])(
+    'AC-12 · 켜짐=%s 에서 스위치가 아니라 행 글자 "%s" 를 눌러도 onToggleFixed(반대 값) 1회',
+    (fixed, label) => {
+      const onToggleFixed = jest.fn();
+      renderScreen({ form: { ...FORM, fixed }, onToggleFixed });
+
+      // 행 글자를 누른다 — 누름 손잡이가 위에 없으면 RNTL 은 조용히 아무것도 안 한다(02a §5).
+      fireEvent.press(screen.getByText(label));
+
+      expect(onToggleFixed).toHaveBeenCalledWith(!fixed);
+      expect(onToggleFixed).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it('AC-12 · switch 는 화면에 정확히 하나이고, 그것이 testID 토글 요소이며 checked 가 토글 상태를 따른다', () => {
+    renderScreen({ form: { ...FORM, fixed: true } });
+
+    const switches = screen.getAllByRole('switch');
+    expect(switches.length).toBe(1);
+    const toggle = screen.getByTestId('itinerary-mustvisit-time-toggle');
+    expect(switches[0]).toBe(toggle);
+    expect(toggle).toBeChecked();
+    // 페이지 배선·연타 가드 테스트가 이 요소의 accessibilityState 를 직접 읽는다(02a ★9).
+    expect(toggle.props.accessibilityState?.checked).toBe(true);
+    // 행 안에 스위치 글자가 함께 있다 — 스위치만 따로 떼 둔 구현이면 이 요소에 제목이 없다.
+    expect(toggle).toHaveTextContent(/시각 고정/);
+
+    screen.unmount();
+    renderScreen({ form: { ...FORM, fixed: false } });
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-toggle')
+    ).not.toBeChecked();
   });
 });

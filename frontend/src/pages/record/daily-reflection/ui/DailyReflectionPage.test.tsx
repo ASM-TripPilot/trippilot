@@ -8,6 +8,8 @@ import {
 } from '@testing-library/react-native';
 import { router } from 'expo-router';
 
+import { basicNarrative } from '../model/reflectionFallback';
+import { statsCard } from '../model/statsCard';
 import { useDailyReflection } from '../model/useDailyReflection';
 import type {
   Reflection,
@@ -45,6 +47,10 @@ jest.mock('expo-router', () => ({
 
 jest.mock('../model/useDailyReflection', () => ({
   useDailyReflection: jest.fn(),
+}));
+
+jest.mock('../model/useReflectionPhotos', () => ({
+  useReflectionPhotos: jest.fn(() => []),
 }));
 
 jest.mock('@/shared/api/generated/trips/trips', () => ({
@@ -223,39 +229,49 @@ describe('얼굴 — 레코드 없음 ≠ 활동 없음, 생성 조건', () => {
     });
   });
 
-  describe('TRIP-1212 · 서버가 미치환 템플릿을 내려줘도 화면엔 중괄호가 없다', () => {
+  // TRIP-1425 · Q-111 — 옛 계약(여행 전체 지역·기간으로 치환)을 뒤집었다: 템플릿뿐이면 stats 문장, 섞이면 그날 값.
+  describe('TRIP-1212 · TRIP-1425 · 회고 표지 템플릿 — 템플릿뿐이면 stats 문장, 섞이면 그날 값', () => {
     const TEMPLATE = '{region} · {start_date}~{end_date}';
 
-    it('본문·편집 시드 모두 여행의 지역·기간으로 치환된다', () => {
-      arrange({
-        reflection: record(
-          { visitCount: 2, photoCount: 1 },
-          { card: card(TEMPLATE) }
-        ),
-      });
+    /** 여행 조회 목을 덮는다(arrange 의 기본 여행 뒤에 부른다). */
+    function tripWith(over: Record<string, unknown>) {
       (useGetTripsTripId as jest.Mock).mockReturnValue({
         data: {
           tripId: TRIP_ID,
           startDate: '2026-09-24',
           endDate: '2026-09-25',
           destinations: [{ seq: 1, region: '부산', nights: 1 }],
+          ...over,
         },
         isPending: false,
         isError: false,
       });
+    }
+
+    it('템플릿뿐이면 본문은 stats 문장이고 편집 시드는 빈칸이다 — 여행 끝 날짜·기간·중괄호가 없다 (AC-1·AC-2)', () => {
+      const stats: ReflectionStats = {
+        visitCount: 2,
+        photoCount: 1,
+        distanceKm: 3,
+        distanceSource: 'VISIT_LINE',
+      };
+      arrange({ reflection: record(stats, { card: card(TEMPLATE) }) });
+      tripWith({});
 
       render(page(PAST_TODAY));
 
-      expect(
-        screen.getByTestId('reflection-daily-narrative')
-      ).toHaveTextContent('부산 · 2026-09-24~2026-09-25');
+      const body = screen.getByTestId('reflection-daily-narrative');
+      expect(body).toHaveTextContent(basicNarrative(statsCard(stats)));
+      expect(body).not.toHaveTextContent(/2026-09-25/);
+      expect(body).not.toHaveTextContent(/\d{4}-\d{2}-\d{2}~\d{4}-\d{2}-\d{2}/);
+      expect(body).not.toHaveTextContent(/[{}]/);
       fireEvent.press(screen.getByTestId('reflection-daily-narrative-edit'));
       expect(
         screen.getByTestId('reflection-daily-edit-input').props.value
-      ).toBe('부산 · 2026-09-24~2026-09-25');
+      ).toBe('');
     });
 
-    it('여행 정보가 없으면 중괄호를 지우고 stats 문장으로 폴백한다(빈 본문 아님)', () => {
+    it('여행 정보가 없어도 템플릿뿐이면 중괄호 없는 stats 문장이다(빈 본문 아님)', () => {
       arrange({
         reflection: record(
           { visitCount: 2, photoCount: 1 },
@@ -273,6 +289,55 @@ describe('얼굴 — 레코드 없음 ≠ 활동 없음, 생성 조건', () => {
       const text = screen.getByTestId('reflection-daily-narrative');
       expect(text).not.toHaveTextContent(/[{}]/);
       expect(text).toHaveTextContent(/방문 2곳/);
+    });
+
+    it('섞인 문장은 그날 지역·그날 날짜로 채운다 — 2일차는 제주·09-25 (AC-3 · BR-U5-27·31)', () => {
+      // 2일차로 재야 "첫 여행지"·"여행 시작일"을 쓰는 구현이 갈린다(02a ★4).
+      arrange({
+        reflection: record(
+          { visitCount: 2, photoCount: 1 },
+          { card: card('{region}에서 보낸 {start_date}') }
+        ),
+      });
+      tripWith({
+        endDate: '2026-09-26',
+        destinations: [
+          { seq: 1, region: '부산', nights: 1 },
+          { seq: 2, region: '제주', nights: 2 },
+        ],
+      });
+
+      render(
+        <DailyReflectionPage
+          tripId={TRIP_ID}
+          date="2026-09-25"
+          today={PAST_TODAY}
+        />
+      );
+
+      expect(
+        screen.getByTestId('reflection-daily-narrative')
+      ).toHaveTextContent('제주에서 보낸 2026-09-25');
+      fireEvent.press(screen.getByTestId('reflection-daily-narrative-edit'));
+      expect(
+        screen.getByTestId('reflection-daily-edit-input').props.value
+      ).toBe('제주에서 보낸 2026-09-25');
+    });
+
+    it('섞인 문장의 {start_date}~{end_date} 는 그날 날짜 한 번이다 (AC-4)', () => {
+      arrange({
+        reflection: record(
+          { visitCount: 2, photoCount: 1 },
+          { card: card('{start_date}~{end_date}의 바다') }
+        ),
+      });
+      tripWith({});
+
+      render(page(PAST_TODAY));
+
+      expect(
+        screen.getByTestId('reflection-daily-narrative')
+      ).toHaveTextContent('2026-09-24의 바다');
     });
   });
 
@@ -793,6 +858,62 @@ describe('"오늘" 칩·지난 날 문구 — KST 실제 오늘', () => {
         `/trips/${TRIP_ID}/records/reflection/2026-09-25`
       );
       expect(router.push).not.toHaveBeenCalled();
+    });
+  });
+
+  // TRIP-1425 · Q-113·114 — 아직 오지 않은 날은 회고를 만들지 않는다(TRIP-1068 결정) → 칩도 누를 수 없다.
+  describe('TRIP-1425 · 아직 오지 않은 날 칩은 누를 수 없다', () => {
+    /** 3일 여행(09-24~09-26)으로 덮는다 — 보는 날은 늘 09-24(1일차), 레코드 없음. */
+    function arrangeThreeDays() {
+      arrange(undefined);
+      (useGetTripsTripId as jest.Mock).mockReturnValue({
+        data: {
+          tripId: TRIP_ID,
+          startDate: '2026-09-24',
+          endDate: '2026-09-26',
+        },
+        isPending: false,
+        isError: false,
+      });
+    }
+
+    function isDisabled(day: number): unknown {
+      return tab(day).props.accessibilityState?.disabled;
+    }
+
+    it('오늘이 1일차면 2·3일차 칩은 비활성이고, 1일차는 활성(선택) 그대로다 (AC-8)', () => {
+      arrangeThreeDays();
+
+      renderPage('2026-09-24');
+
+      expect(isDisabled(2)).toBe(true);
+      expect(isDisabled(3)).toBe(true);
+      expect(isDisabled(1)).not.toBe(true);
+      expect(isSelected(1)).toBe(true);
+    });
+
+    it('2·3일차 칩을 눌러도 화면을 바꾸지 않는다 — replace 0회 (AC-7)', () => {
+      arrangeThreeDays();
+      renderPage('2026-09-24');
+
+      fireEvent.press(tab(2));
+      fireEvent.press(tab(3));
+
+      expect(router.replace).not.toHaveBeenCalled();
+    });
+
+    it('오늘 칩은 누를 수 있고 내일 칩만 막힌다 — 경계는 오늘 다음 날부터 (AC-10)', () => {
+      arrangeThreeDays();
+      renderPage('2026-09-25');
+
+      fireEvent.press(tab(2));
+
+      expect(isDisabled(2)).not.toBe(true);
+      expect(isDisabled(3)).toBe(true);
+      expect(router.replace).toHaveBeenCalledTimes(1);
+      expect(router.replace).toHaveBeenCalledWith(
+        `/trips/${TRIP_ID}/records/reflection/2026-09-25`
+      );
     });
   });
 });

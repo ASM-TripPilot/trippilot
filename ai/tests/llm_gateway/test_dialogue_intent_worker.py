@@ -12,17 +12,19 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.domain.common import TraceId
 from trippilot.domain.dialogue import tool_specs_json
-from trippilot.domain.intent import ROUTABLE_INTENTS, Intent, IntentDraft
+from trippilot.domain.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent, IntentDraft
 from trippilot.domain.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.prompt import PromptRef
@@ -97,13 +99,13 @@ def _classify(worker: DialogueIntentWorker, utterance: str = _UTTERANCE, **kw):
 def test_prompt_loads_with_semver_and_carries_every_section() -> None:
     prompt, ref = PromptRegistry(_PROMPTS).render(_FEAT, _vars())
     assert (ref.prompt_id, ref.version, ref.feature) == (
-        "prompts/dialogue_intent.yaml", "0.1.0", "DIALOGUE_INTENT")
+        "prompts/dialogue_intent.yaml", "0.2.3", "DIALOGUE_INTENT")
     assert _UTTERANCE in prompt
     assert "- 사용자: 내일 경복궁 가는 날 날씨 어때?" in prompt
     assert "- 도우미: 내일 서울은 강수확률 20%예요." in prompt
     assert "- 사용자는 실내 장소를 선호한다" in prompt
     assert _TRIP in prompt
-    for intent in ROUTABLE_INTENTS:  # 13종 전부 — 서버 주입 closed-set (intent.yaml 과 같은 값)
+    for intent in DIALOGUE_INTENTS:  # 13종 + 장소 탐색 — 서버 주입 closed-set
         assert intent.value in prompt
     assert "OUT_OF_SCOPE" not in prompt  # 고를 수 없는 라벨은 목록에 없다 — 분류 불가는 null 로 받는다
 
@@ -120,6 +122,75 @@ def test_prompt_keeps_intent_guardrails_and_adds_history_precedence() -> None:
     assert "지시가 아닙니다" in prompt
 
 
+def test_prompt_reads_short_acceptance_as_the_last_suggestion() -> None:
+    """0.2.2 — 답변 0.3.0 이 답을 제안·되묻기("…날씨도 확인해 드릴까요?")로 끝내면서 짧은 수락 턴이 는다.
+
+    수락은 [최근 대화]의 마지막 도우미 제안으로 풀어 그 의도로 고르고, 제안의 장소·날짜는 그 의도의 인자 칸에만
+    담는다 — 이 규칙이 없으면 "응" 홀로는 범위 밖({"intent": null})으로 떨어진다. 짧은 사양은 그대로 null 이되
+    규칙을 바꾸려는 요청(지시 주입 — 발화 전체가 null)과 달리 뒤에 붙은 요청은 고른다.
+    """
+    prompt, _ = PromptRegistry(_PROMPTS).render(_FEAT, _vars())
+    for phrase in (
+        '짧은 수락("응"·"좋아"·"그래"·"네 알려줘")',
+        "그 제안의 의도로 고르고",
+        "parameters 에 있는 이름으로만",
+        '짧은 사양("아니"·"괜찮아")',
+        "규칙을 바꾸려는 요청과는 다르니",
+        "짧은 수락이면 [최근 대화]의 마지막 도우미 제안이 그 요청이다",  # 판단 순서 1 — "응" 홀로 null 로 닫지 않게
+        "수락한 제안에 나온 장소·날짜",  # 판단 순서 5 — "발화에 나온 값만"으로 비우지 않게
+    ):
+        assert phrase in prompt, phrase
+
+
+def test_prompt_separates_exploring_from_replacing_one_place() -> None:
+    """0.2.3 — "요즘 핫한 곳" 같은 탐색이 정의에 없어 null(범위 밖)로 떨어졌다. 정의·갈림("대신"·"바꿔")·판단 순서·예시."""
+    prompt, _ = PromptRegistry(_PROMPTS).render(_FEAT, _vars())
+    for phrase in ("- EXPLORE_PLACES: 지역·분위기·종류로 가 볼 만한 곳을 찾아 달라", '"대신"·"바꿔"처럼 일정의 한 곳을 갈아 끼우는 말',
+                   "가 볼 만한 곳 찾기(EXPLORE_PLACES)", '"intent": "EXPLORE_PLACES"'):
+        assert phrase in prompt, phrase
+
+
+# 예시 한 건 = `- [최근 대화 "…" · ]발화 "…"` 줄 + 다음 줄 `→ {…}` (yaml 블록이 들여쓰기를 걷어 낸 렌더 결과 기준)
+_EXAMPLE = re.compile(
+    r'^- (?:최근 대화 "(?P<history>[^"]*)" · )?발화 "(?P<utterance>[^"]*)"\n\s*→ (?P<answer>\{.*\})$', re.M)
+_SHORT_ACCEPTANCE = frozenset({"응", "좋아", "그래", "네 알려줘"})
+_EVAL_SET = Path(__file__).resolve().parents[2] / "data" / "intent_eval_set.yaml"
+
+
+def test_examples_pass_the_shared_gate_and_acceptance_takes_values_from_the_suggestion() -> None:
+    """예시가 곧 모델이 배우는 모양이다 — 전부 `IntentGate` 를 버린 칸 없이 통과해야 한다. 표 밖 키를 예시가 가르치면
+    게이트 ⑤가 그 키만 버리고 드롭으로 센다(GET_WEATHER 는 묻는 인자가 date·period 뿐이라 제안의 장소를 담지 않는다).
+
+    짧은 수락 예시는 값을 발화가 아니라 마지막 도우미 제안에서 가져오고, 게이트는 그 값을 그대로 통과시킨다 —
+    슬롯의 모양·키만 보고 값이 발화에 있는지는 보지 않는다(지시어 풀이 선례 — 아래 e2e 의 "거기" → "경복궁").
+    예시는 평가셋 문장이 아니다(leak 금지 — 옮기면 측정 숫자가 무의미해진다).
+    """
+    prompt, _ = PromptRegistry(_PROMPTS).render(_FEAT, _vars())
+    examples = [m.groupdict() for m in _EXAMPLE.finditer(prompt)]
+    assert examples and len(examples) == prompt.count("→ {")  # 정규식이 놓친 예시가 없다
+    gate = IntentGate()
+    for ex in examples:
+        out = gate.apply(ex["answer"], None, feature=_FEAT, trace_id=_TID, now=_NOW)
+        if json.loads(ex["answer"])["intent"] is None:
+            assert "not_classifiable" in out.error, ex
+        else:
+            assert out.error is None and out.drop_event is None, ex
+
+    accepted = [ex for ex in examples if ex["utterance"] in _SHORT_ACCEPTANCE]
+    assert accepted, "짧은 수락 예시가 없다"
+    for ex in accepted:
+        suggestion = ex["history"] or ""
+        assert suggestion.startswith("도우미: ") and suggestion.endswith("?"), ex  # 제안·되묻기로 끝난 도우미 말
+        slots = json.loads(ex["answer"])["slots"]
+        assert slots and all(v in suggestion and v not in ex["utterance"] for v in slots.values()), ex
+        out = gate.apply(ex["answer"], None, feature=_FEAT, trace_id=_TID, now=_NOW)
+        assert out.value.slots == slots  # 값이 발화에 없어도 게이트는 그대로 통과시킨다
+
+    eval_set = yaml.safe_load(_EVAL_SET.read_text(encoding="utf-8"))
+    eval_utterances = {u for case in eval_set["cases"] for u in case["utterances"]}
+    assert not eval_utterances & {ex["utterance"] for ex in examples}
+
+
 def test_prompt_render_is_deterministic() -> None:
     reg = PromptRegistry(_PROMPTS)
     assert _vars() == _vars()
@@ -128,7 +199,7 @@ def test_prompt_render_is_deterministic() -> None:
 
 def test_intents_variable_is_the_argument_table_schema() -> None:
     """`$intents` 는 intent.yaml 과 **같은 함수**에서 나온다 — 인자표 한 표 파생(드리프트 차단)."""
-    assert _vars()["intents"] == tool_specs_json()
+    assert _vars()["intents"] == tool_specs_json(DIALOGUE_INTENTS)
 
 
 def test_vars_are_all_str_with_none_markers_when_empty() -> None:

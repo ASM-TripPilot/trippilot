@@ -85,7 +85,7 @@ ai/
     orchestrator/
       dialogue_orchestrator.py    (신규) DialogueOrchestrator.turn(TurnInput) -> TurnOutcome · TurnInput/TurnOutcome/DialogueAnswer/
                                          시한 모듈 상수(§4) · 파이프라인 §3 · 시한 배분 §4 · 팬아웃 §6
-      dialogue_handlers.py        (신규) HANDLERS(13종) · Handler.plan/assemble · resolve_slot · Facts · 템플릿 문구(BE 이식) — §5
+      dialogue_handlers.py        (신규) HANDLERS(13종 — [개정 · 2026-10-19] 탐색 포함 14종) · Handler.plan/assemble · resolve_slot · Facts · 템플릿 문구(BE 이식) — §5
       dialogue_memory.py          (신규) due · compress_fallback · expires_at_for — §8 ($memory 조립은 dialogue_orchestrator._memory_lines)
       shadow_probe.py             (신규) ShadowIntentProbe · ShadowCountingLlm · TaggedTrace · ShadowRecord — §9
       dialogue_interpreter.py     (기존 — 로직 무변경) _answer·_from_match 공개 승격(미결 #17) · CountingLlm 은 off 경로에 그대로
@@ -102,7 +102,7 @@ ai/
       workers/dialogue_answer.py  (신규) build vars($intent $facts $utterance $history $memory $trip $style) · compose(..., timeout_sec)
       workers/dialogue_memory.py  (신규) build vars($previous_summary $recent_turns $trip) · summarize(..., timeout_sec)
       gates/dialogue_answer.py    (신규) {"text","footnote"} → ≤400자·줄 ≤6·_TIME_EXPR·has_contact_like — BR-AO-04
-      gates/dialogue_memory.py    (신규) {"lines":[str]} → ≤20줄·줄 ≤120자·중복 제거·연락처·소요시간·빈 결과=실패 — BR-AO-09
+      gates/dialogue_memory.py    (신규) {"lines":[str]} → ≤20줄·줄 ≤120자·중복 제거·연락처·소요시간·~~빈 결과=실패~~ 전부 드롭=실패, LLM 이 비운 배열=새로 기억할 것 없음(성공·0건, 2026-10-19 개정) — BR-AO-09
       gates/intent.py             (기존 — 무변경) DIALOGUE_INTENT 가 feature 인자만 다르게 재사용
       config.py                   (+) tier_map·fallback_modes·effort/max_tokens 3표에 3행
     api/
@@ -148,13 +148,14 @@ BE AssistantTurnService ──POST /ai/v1/dialogue/interpret──▶ api/dialog
                                                                └못 채움─▶ 보류 버림(BR-DLG-23) → 2
  2  메모리 로드(get + recent_for_account ≤2, 실패는 "없이 진행") → DIALOGUE_INTENT(LLM 1, timeout §4) → IntentGate
       ├ {"intent": null}·게이트 실패·시한 소진 ─▶ OUT_OF_SCOPE(reason: 거절 표지)                                            → 6
+      │   └ 2″ null·범위 밖 라벨 ∧ 발화가 맞장구·인사 낱말뿐(BR-AO-26, 2026-10-19) ─▶ 받아 주는 한마디 ANSWER(TEXT, 프레임 없음)  → 6
       └ IntentMatch(LLM_DIRECT) ─▶ ShadowIntentProbe.submit(utterance, trace_id, now, service=match, ms, llm_calls, turn_index)  ※ 기다리지 않는다
  3  from_match(기존) — 필수 인자 비면 ARGUMENT_CLARIFY(CLARIFY_QUESTIONS 고정 문안, clarify_count ≤1)                           → 6
       └ EDIT_SCHEDULE 이면 FRAME(executable) — 1단계                                                                           → 6
  4  HANDLERS[intent].plan(ctx) → 파 ≤2 → 공유 풀 팬아웃(§6: submit 전 마감 → wait → cancel → TaskResult) → assemble(ctx, results) -> Facts
  5  DIALOGUE_ANSWER(LLM ≤1, timeout §4; 잔여 <1.5s 면 호출 자체 생략) → DialogueAnswerGate
       ├ 통과 ─▶ DialogueAnswer.from_facts(facts, text=llm_text)           (LLM 문장 — LlmCallRecord 성공)
-      └ 실패·생략 ─▶ DialogueAnswer.from_facts(facts, text=None)          (템플릿 — FallbackEvent 짝은 LLM 을 시도했거나 시도해야 했던 턴만; Facts UNAVAILABLE 직행·needTrip 은 의도된 결정론, 답변 단계 FallbackEvent 없음 — 팬아웃 실패는 4단이 작업별로 냈다)
+      └ 실패·생략 ─▶ DialogueAnswer.from_facts(facts, text=None)          (템플릿 — FallbackEvent 짝은 LLM 을 시도했거나 시도해야 했던 턴만; Facts UNAVAILABLE 직행·needTrip·사실 없는 Facts 직행(2026-10-19)은 의도된 결정론, 답변 단계 FallbackEvent 없음 — 팬아웃 실패는 4단이 작업별로 냈다)
  6  메모리: session_id 있고 due(turn_index − summarized_turn_index ≥ 10) 이면 잔여 ≥2.5s → DIALOGUE_MEMORY(LLM 1, ≤2.0s) → put
       └ 잔여 부족·LLM 실패·게이트 실패 ─▶ compress_fallback(결정론) → put + FallbackEvent(stage="memory") · 잔여 ≤0 ─▶ 압축·put 없이 건너뛴다(due 유지) + FallbackEvent(stage="memory")
  7  TurnOutcome(outcome, frames ≤1, clarify, answer, context, llm_calls=서비스 호출 수, reason) → 사영 → 응답
@@ -167,7 +168,7 @@ BE answer(): ANSWER → 검증(text ≤2000 · TYPES · kind · quick reply 서�
 |---|---|---|---|---|
 | 0 | `normalize(utterance) == "내가 할 수 있는 것 보기"` 이면 BE `capabilities(hasTrip)` 문구를 이식한 결정론 ANSWER(TEXT) | 0 | 없음(순수) | §2.3 |
 | 1 | 보류 프레임이 있으면 **그 인자 종류의 추출기 하나만** 돌려 채운다(assistant-dialogue BR-DLG-22 그대로) | 0 | 못 채우면 보류를 버리고 2 로 — 같은 질문을 다시 하지 않는다(BR-DLG-23) | §1 재사용 |
-| 2 | `$utterance`·`$intents`(=`tool_specs_json()`)·`$history`·`$memory`·`$trip` 로 분류 1회. 산출을 `IntentMatch(match_route=LLM_DIRECT, confidence=draft.confidence or 0.5)` 로 조립 | 1 | 게이트가 산출을 받아들이지 못한 전부(`{"intent": null}` — 불확실·주입·역할변경·유해 —, closed-set 밖 라벨, 깨진 JSON, 슬롯 모양, 절단) → **OUT_OF_SCOPE + `not_classifiable` 표지**(intent_eval 이 거절로 센다); 시한·벤더 예외·비지원은 인프라 실패라 **표지 없이** OUT_OF_SCOPE(장애를 거절로 세면 정확도가 부풀려진다 — `_refusal_reason`) | §2.2 |
+| 2 | `$utterance`·`$intents`(=`tool_specs_json()`)·`$history`·`$memory`·`$trip` 로 분류 1회. 산출을 `IntentMatch(match_route=LLM_DIRECT, confidence=draft.confidence or 0.5)` 로 조립 | 1 | 게이트가 산출을 받아들이지 못한 전부(`{"intent": null}` — 불확실·주입·역할변경·유해 —, closed-set 밖 라벨, 깨진 JSON, 슬롯 모양, 절단) → **OUT_OF_SCOPE + `not_classifiable` 표지**(intent_eval 이 거절로 센다); 시한·벤더 예외·비지원은 인프라 실패라 **표지 없이** OUT_OF_SCOPE(장애를 거절로 세면 정확도가 부풀려진다 — `_refusal_reason`). **[개정 · 2026-10-19]** 분류가 null·범위 밖 라벨로 닫았고(깨진 출력·절단은 아니다) 발화가 맞장구·인사 낱말뿐이면 범위 밖 카드 대신 결정론 ANSWER(BR-AO-26) | §2.2 |
 | 2′ | 분류 결과를 알게 된 직후 `ShadowIntentProbe.submit` — 샘플링(rng) 통과 ∧ in-flight <4 일 때만 스레드에 넘기고 **응답 경로는 계속 간다** | 0(서비스) | 포화·샘플 밖은 `intent_shadow_skipped` 1줄. 섀도 실패는 응답에 영향 0 | §2.7 |
 | 3 | 기존 `from_match` — `missing` 계산, 비면 `ArgumentClarify`(고정 문안). EDIT_SCHEDULE 은 인자 해소(day/target)만 하고 `FRAME` | 0 | `clarify_count ≥1` 이면 되묻지 않고 결정론 폴백(BR-DLG-33) | §2.2 |
 | 4 | `plan` → 팬아웃 → `assemble`. 여행이 없는데 여행이 필요한 의도면 플랜 없이 `needTrip` Facts | 0 | Provider/PlanB 실패·TIMEOUT 은 `TaskResult.status` 로 들어오고 `assemble` 이 `notes`·`FactStatus.PARTIAL` 로 적는다 — 있는 것만 조립 | §2.4·§2.5 |
@@ -229,13 +230,14 @@ BE 쪽: `interpret-stage-max-ms` 5000→9000 · 해석 read timeout = interpret 
 | SHOW_SCHEDULE | COMPUTE 스냅샷(scope: 오늘 남은/전체/N일차 — `scope` 인자·DATE·ORDINAL) | TEXT | OPEN_ITINERARY | () | OK: 결정론 요약 `"{날짜 라벨} {N}곳, … 일정이 있어요."`(`dialogue_handlers._assemble_show_schedule` 조립 — 길이 게이트를 넘으면 "일정은 일정 화면에서 확인할 수 있어요."★) / EMPTY "아직 일정에 장소가 없어요." | 문장이 길어지는 자리 — ≤400자·줄 ≤6 게이트에 가장 자주 걸린다 |
 | GET_NEXT_SLOT | COMPUTE 스냅샷(now 이후 첫 슬롯) | INFO NEXT_SLOT rows[날짜·계획 시각] | OPEN_LIVE(IN_TRIP) / OPEN_ITINERARY | "다른 곳 추천"(SEND_TEXT, params intent=SUGGEST_ALTERNATIVE·slotKey) | OK "다음 장소예요." / EMPTY "남은 일정이 없어요." | 계획 시각은 스냅샷 `start_at` 그대로(INV-2). **params.intent 가 있는 quick reply 는 BE 가 해석 없이 `dispatched` 로 처리**(BE ACTION 규칙) → BE `ProposalCards.alternatives` 경로 — 미결 #6 |
 | GET_WEATHER | 1파 POI_INFO(대상 슬롯 또는 당일 첫 슬롯 poi) → 2파 WEATHER(anchor=좌표, days=[date]) | INFO WEATHER rows[오늘 최대 강수확률] — BE 카드의 "특보" 행은 없다: AI `WeatherProvider` 패킷에 특보 칸이 없고 `triggers` 는 강수 임계를 넘긴 **날짜** 목록이라 특보가 아니다(2026-10-18 리뷰) | OPEN_ITINERARY | () | OK "오늘 예보예요." / EMPTY "지금 날씨를 확인할 수 없어요." | WEATHER_UNKNOWN·좌표 없음 → 템플릿. 일정이 없으면 좌표를 얻을 길이 없다 → 템플릿 + OPEN_ITINERARY_METHOD |
-| GET_DISTANCE | 1파 POI_INFO(dest=`resolve_slot`, origin=직전 슬롯) → 2파 TRANSIT(purpose INFO_DISPLAY, mode 인자 또는 PUBLIC) | INFO DISTANCE rows[직전 구간] | OPEN_ITINERARY | () | OK "일정에 적힌 거리예요." / EMPTY "구간 거리는 일정에서 확인할 수 있어요." | **거리만**(`to_public_dict` — INV-3). 해소 실패·TRANSIT UNAVAILABLE → 템플릿 |
-| GET_POI_INFO | 1파 POI_INFO(`resolve_slot(place)` 의 poi_id, on=날짜) | INFO PLACE rows[분류·영업시간·입장료] | OPEN_PLACE{poiId} | () | OK·PARTIAL "일정에 있는 장소예요." / EMPTY "장소 정보는 일정에서 장소를 눌러 볼 수 있어요." | 모르는 값은 "미확인"(hours_label None·fee None). 일정 밖 장소명은 **해소하지 않는다**(지어내기 금지) → 템플릿 |
+| GET_DISTANCE | 1파 POI_INFO(dest=`resolve_slot`, origin=직전 슬롯) → 2파 TRANSIT(purpose INFO_DISPLAY, mode 인자 또는 PUBLIC) | INFO DISTANCE rows[직전 구간] | OPEN_ITINERARY | () | OK "일정에 적힌 거리예요." / EMPTY "구간 거리는 일정에서 확인할 수 있어요." | **거리만**(`to_public_dict` — INV-3). 해소 실패·TRANSIT UNAVAILABLE → 템플릿 **[개정 · 2026-10-19 · E2E]** 경로 API 가 빠져 Provider 가 하버사인×우회계수(`confidence` LOW)를 내면 거리 뒤에 "(추정)"을 붙이고 메모("직선 거리로 어림한 값")를 싣는다 — 경로 거리처럼 보이면 "약 3.1km"(실제 5.8km)가 됐다 |
+| GET_POI_INFO | 1파 POI_INFO(`resolve_slot(place)` 의 poi_id, on=날짜) | INFO PLACE rows[분류·영업시간·입장료] | OPEN_PLACE{poiId} | () | OK·PARTIAL "일정에 있는 장소예요." / EMPTY "장소 정보는 일정에서 장소를 눌러 볼 수 있어요." | 모르는 값은 "미확인"(~~hours_label None~~·fee None·장소 행 없음). **[개정 · 2026-10-19 · E2E]** `hours_label` None 은 "그 요일이 휴무로 읽혔다"라 **"휴무일 수 있음"**(단정하지 않는다 — 런타임 파서가 월 단위 휴무를 일정 배치용으로 매주로 넓혀 읽는다), 정보 없음은 Provider 문구("영업시간 정보 없음") 그대로, 영업시간 기준일이 오늘이 아니면 "날짜" 행을 앞에 둔다 — "미확인"으로 뭉개면 "오늘 영업 여부는 확인할 수 없어요"가 됐다. 일정 밖 장소명은 **해소하지 않는다**(지어내기 금지) → 템플릿 |
 | SUGGEST_ALTERNATIVE | 1파 POI_INFO(target 좌표) → 2파 [PLACE 풀(anchor=대상 좌표, dates=그 날, 반경 규칙 기본) ∥ WEATHER] → PLANB `run(use_llm=False, excluded=일정 전부, rain, deadline_ms=잔여)` | CANDIDATES ≤5 [poiId·name·distanceRange·reason] | OPEN_ITINERARY | 후보마다 PICK_CANDIDATE{poiId, slotKey} 정확 1개 | OK "{대상} 대신 갈 만한 곳이에요."(BE `ProposalCards` 앞 문장 — 대상 이름이 게이트를 못 넘으면 "그 장소") / EMPTY "근처에서 대신할 곳을 찾지 못했어요."(후보 0·대상 미해소; 풀·PlanB 실패는 UNAVAILABLE 공통 문구) | 풀 = `CandidatePoolBuilder` 반경(INV-1), 풀 조립 → PlanB 는 **한 스레드 체인**(`PlaceProvider.resolve` 1회 pop). PICK_CANDIDATE 는 BE 기존 ReplaceSlot 제안 경로 |
+| EXPLORE_PLACES ★ (2026-10-19) | 1파 [앵커: region → 지역 표 / 다음·첫 슬롯 → POI_INFO 좌표 / 여행 목적지 → 지역 표] → PLACE 풀(anchor, radius_override=앵커 반경, budget HIGH) → 결정론 정렬(BR-AO-27) | CANDIDATES ≤5 [poiId·name·reason("요즘 인기"/카테고리)·distanceRange(일정 근처일 때만)] | 후보마다 OPEN_PLACE | () — PICK 없음 | OK "가 볼 만한 곳을 찾아봤어요."★ / EMPTY "그 조건에 맞는 곳을 아직 찾지 못했어요."★ / 앵커 없음 → ARGUMENT_CLARIFY(region, "어느 지역에서 찾아 드릴까요? '부산'이나 '제주 애월'처럼 알려 주세요."★ — 요청당 1회, 이미 물은 뒤엔 같은 문장 TEXT) | 여행 불필요. 풀 실패 → UNAVAILABLE 템플릿. 말한 지역이 표에 없으면 EMPTY(다른 곳으로 바꿔 찾지 않는다) |
 | EDIT_SCHEDULE | 인자 해소만(day/target) — 팬아웃 없음 | **FRAME** | — | — | —(전수표 값 "일정은 편집 화면에서 바꿀 수 있어요." 는 AO-P17 검사용, 1단계 경로에선 나가지 않는다) | 1단계: BE `ProposalCards` `/edit` 재호출. 2단계 §12 |
-| GENERATE_SCHEDULE / REGENERATE | 없음 | TEXT 한 줄 | OPEN_ITINERARY_METHOD / OPEN_REGENERATE | () | GENERATE_SCHEDULE "일정 만들기 화면으로 안내할게요." / REGENERATE "일정은 만들기 화면에서 다시 만들 수 있어요."(EMPTY 없음 — 넘기기는 결과가 없다) | 여행 없으면 needTrip + CREATE_TRIP·OPEN_STAY_SEARCH |
-| REPLAN | 없음 | TEXT | IN_TRIP 이면 OPEN_REPLAN, 아니면 OPEN_REGENERATE | () | IN_TRIP "남은 일정은 다시 짜기에서 바꿀 수 있어요." / 그 밖에는 REGENERATE 문구 "일정은 만들기 화면에서 다시 만들 수 있어요." | 재계획은 BE 봉투(/planb/replan)가 유일한 정직한 경로(스냅샷에 창·from_instant 없음) |
-| GENERATE_REFLECTION / TRIP_SUMMARY / STYLE_ANALYSIS | 없음 | TEXT | OPEN_REFLECTION / OPEN_TRIP_SUMMARY / OPEN_STYLE | () | "회고는 기록 화면에서 만들 수 있어요." / "여행 요약은 기록 화면에 있어요." / "여행 스타일은 기록에서 볼 수 있어요." | STYLE_ANALYSIS 는 여행 없이도 된다(공통 규칙 예외) |
+| GENERATE_SCHEDULE / REGENERATE | 없음 | TEXT 한 줄 | OPEN_ITINERARY_METHOD / OPEN_REGENERATE | () | ~~GENERATE_SCHEDULE "일정 만들기 화면으로 안내할게요." / REGENERATE "일정은 만들기 화면에서 다시 만들 수 있어요."~~ **[개정 · 2026-10-19 · 친근한 말투]** GENERATE_SCHEDULE "일정 만들기 화면으로 안내해 드릴게요. 아래 버튼을 누르면 바로 시작해요." / REGENERATE "일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 누르면 바로 시작해요."(EMPTY 없음 — 넘기기는 결과가 없다) | 여행 없으면 needTrip + CREATE_TRIP·OPEN_STAY_SEARCH. **넘기기 3행(6의도) 공통(2026-10-19)**: 사실이 비어 답변 LLM 을 부르지 않고 위 문구로 바로 답한다(BR-AO-25). **[개정 · 2026-10-19 · 친근한 말투]** 그래서 이 문구가 곧 그 턴의 답이다 — 안내 한 문장 + 아래 버튼(next_action 하나) 안내로 다듬었다(사용자 "지금은 너무 answer 만 띄워 주는 느낌", 프롬프트 0.3.0 과 같은 말투). 되묻기("…볼까요?")로 끝내지 않는다 — 분류 0.2.2 가 그 뒤의 "응"을 같은 의도로 읽어 같은 문장이 되풀이된다(2026-10-19 리뷰). BE `IntentDispatcher` 원문도 같은 문장으로 바꿨다(한 벌). 공유 정규식 오탐 표현("두 분이"·"이 시간에는")은 쓰지 않는다 — AO-P17 전수 검사 |
+| REPLAN | 없음 | TEXT | IN_TRIP 이면 OPEN_REPLAN, 아니면 OPEN_REGENERATE | () | ~~IN_TRIP "남은 일정은 다시 짜기에서 바꿀 수 있어요." / 그 밖에는 REGENERATE 문구 "일정은 만들기 화면에서 다시 만들 수 있어요."~~ **[개정 · 2026-10-19 · 친근한 말투]** IN_TRIP "남은 일정은 다시 짜기에서 지금 상황에 맞게 바꿀 수 있어요. 아래 버튼을 누르면 바로 시작해요." / 그 밖에는 REGENERATE 문구 "일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 누르면 바로 시작해요." | 재계획은 BE 봉투(/planb/replan)가 유일한 정직한 경로(스냅샷에 창·from_instant 없음) |
+| GENERATE_REFLECTION / TRIP_SUMMARY / STYLE_ANALYSIS | 없음 | TEXT | OPEN_REFLECTION / OPEN_TRIP_SUMMARY / OPEN_STYLE | () | ~~"회고는 기록 화면에서 만들 수 있어요." / "여행 요약은 기록 화면에 있어요." / "여행 스타일은 기록에서 볼 수 있어요."~~ **[개정 · 2026-10-19 · 친근한 말투]** "회고는 기록 화면에서 만들 수 있어요. 아래 버튼을 누르면 기록이 열려요." / "여행 요약은 기록 화면에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요." / "여행 스타일은 기록에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요." | STYLE_ANALYSIS 는 여행 없이도 된다(공통 규칙 예외) |
 | OUT_OF_SCOPE | — | (outcome OUT_OF_SCOPE, 문장 없음) | BE SCOPE 카드 | — | —(전수표 값 "그건 제가 도와드리기 어려워요." 는 AO-P17 검사용 — BE SCOPE 카드 문구) | LLM 문장 없음 — 거절·스트릭은 BE 그대로(DEC-AO-14) |
 
 **공통**: 여행이 없는데 여행이 필요한 의도(STYLE_ANALYSIS·OUT_OF_SCOPE 외) → `needTrip` "먼저 여행을 만들거나 숙소를 등록하면 일정을 함께 볼 수
@@ -279,7 +281,7 @@ facts = handler.assemble(ctx, results)                    # 순수 — 이름(na
 | 분류(2) | `{"intent": null}` · 게이트 전량 드롭 · LLM 실패·시한 | `TurnOutcome(OUT_OF_SCOPE, reason=거절 표지)` → BE SCOPE 카드 | `FallbackEvent(stage="llm", from="llm_dialogue_intent", to="out_of_scope")` — 게이트웨이가 낸다; 게이트웨이를 **부르지 못한** 잔여 0·워커 예외는 오케스트레이터가 같은 짝을 낸다(`_classify`) · reason 에 `not_classifiable`/`intent_not_routable`/`timeout`/`intent_error` |
 | 팬아웃(4) | Provider UNAVAILABLE·TIMEOUT · PlanB 후보 0 · 좌표 없음(params None) | 있는 것만 `Facts(status=PARTIAL, notes=…)`; 전부 없으면 `UNAVAILABLE` → 템플릿 | `TaskResult.status` → `Facts.notes`(사용자 문장 재료) + OK 아닌 작업마다 `FallbackEvent(stage="fanout", from=작업명, to=TIMEOUT\|UNAVAILABLE\|SKIPPED, reason=예외 타입까지)` 1건 — Provider 장애가 운영자에게 보이는 유일한 자리 |
 | 답변(5) | 게이트 실패(길이·줄·`_TIME_EXPR`·연락처·빈 문장) · LLM 실패 · 잔여 <1.5s | `DialogueAnswer.from_facts(facts, text=None)` = `Facts.template_text` | `FallbackEvent(from="llm_dialogue_answer", to="template_text")` + `GateDropEvent` |
-| 요약(6) | 게이트 실패(빈 결과·상한 초과) · LLM 실패 · 잔여 <2.5s · 잔여 ≤0 | `compress_fallback(recent_turns, previous)` → `put`; 잔여 ≤0 이면 압축·`put` 없이 건너뛴다(due 유지) | `FallbackEvent(stage="memory", from="llm_dialogue_memory", to="deterministic_compress")`(건너뛴 턴도 같은 stage 로 1건) |
+| 요약(6) | 게이트 실패(~~빈 결과~~ 전부 드롭·상한 초과 — LLM 이 비운 배열은 실패가 아니라 이전 요약 유지·원문 조각 줄 삭제·`dialogue_memory_empty` 건수 로그, 2026-10-19) · LLM 실패 · 잔여 <2.5s · 잔여 ≤0 | `compress_fallback(recent_turns, previous)` → `put`; 잔여 ≤0 이면 압축·`put` 없이 건너뛴다(due 유지) | `FallbackEvent(stage="memory", from="llm_dialogue_memory", to="deterministic_compress")`(건너뛴 턴도 같은 stage 로 1건) |
 | 메모리 읽기(2) | 스토어 예외 | 메모리 없이 진행(`$memory="(없음)"`) | WARN 1줄(`account_ref` 미포함) |
 | 메모리 쓰기(6) | 스토어 예외 | 이번 턴 포기, 다음 턴 due 유지(`summarized_turn_index` 불변) | `FallbackEvent(stage="memory")` |
 | 메모리 DSN 부재 | `TRIPPILOT_VECTOR_DB_URL` 없음 | `InMemoryDialogueMemoryStore`(프로세스 로컬 — 워커 2 × 파드라 "기억"은 성립하지 않는다) | **기동 WARN "도우미 메모리 미설정"**(ai-wiring 표식 토큰 `미설정`) |
@@ -288,7 +290,7 @@ facts = handler.assemble(ctx, results)                    # 순수 — 이름(na
 
 침묵 실패가 없는지 보는 방법은 한 가지다: **LLM 을 시도했거나 시도해야 했던(재료는 있는데 잔여 부족 포함) 턴의 `template_text` 응답과
 `compress_fallback` 쓰기·잔여 ≤0 건너뛰기에는 `FallbackEvent` 가 짝으로 있다**(AO-P5 가 시한 소진 경로에서 이것을 함께 단언한다).
-**의도된 결정론은 폴백이 아니다** — 0단계 능력 안내(BR-AO-18)·`needTrip`(BR-AO-23)·`Facts.status = UNAVAILABLE` 템플릿 직행(BR-AO-25)에는
+**의도된 결정론은 폴백이 아니다** — 0단계 능력 안내(BR-AO-18)·`needTrip`(BR-AO-23)·`Facts.status = UNAVAILABLE` 템플릿 직행·사실(rows·places·notes·detail) 없는 `Facts` 직행(BR-AO-25, 2026-10-19)·맞장구·인사 답(BR-AO-26, 2026-10-19 — 분류 단계 이벤트는 분류가 낸 그대로)에는
 답변 단계 `FallbackEvent` 가 없다(팬아웃 실패는 `_fanout` 이 작업별 `FallbackEvent(stage="fanout")` 로 이미 보고했다); `recent_turns` 가
 비어 LLM 을 부르지 않는 압축도 같다. 둘을 가르지 않으면 정상 경로를 폴백으로 오보한다. 문장의 출처를 타입에 두던 `text_source` 와
 `TurnOutcome.notes` 는 와이어·로그 어디에도 안 실리는 테스트 전용 메타라 지웠다(2026-10-18 리뷰) — 관측은 트레이스 이벤트 한 길이다.
@@ -304,7 +306,7 @@ turn 진입 ─▶ get(session_id) + recent_for_account(account_ref, exclude=ses
 turn 말미 ─▶ due(turn_index, current.summarized_turn_index if current else 0)?  ──아니오──▶ 끝
                       │예
                       ▼
-          잔여 ≥2.5s ──예──▶ DIALOGUE_MEMORY($previous_summary, $recent_turns, $trip; ≤2.0s) → DialogueMemoryGate(≤20줄·≤120자·중복·연락처·소요시간·빈 결과=실패)
+          잔여 ≥2.5s ──예──▶ DIALOGUE_MEMORY($previous_summary, $recent_turns, $trip; ≤2.0s) → DialogueMemoryGate(≤20줄·≤120자·중복·연락처·소요시간·~~빈 결과=실패~~ 전부 드롭=실패; 비운 배열 → 이전 요약 유지·원문 조각 줄 삭제)
                       │                    ├ 통과 ─▶ lines
                       │아니오               └ 실패 ─▶ lines = compress_fallback(recent_turns, previous)   + FallbackEvent
                       └──────────────────▶ lines = compress_fallback(...)                                 + FallbackEvent
@@ -451,6 +453,10 @@ env **키**는 둘만 늘고(DEC-AO-13), LLM 배정은 기존 키 `TRIPPILOT_LLM
 ⑤ 실연동 1턴(날씨·다음 장소·대안) 왕복 + `intent_shadow` 1건 확인(§9.4) → DoD
 ⑥ 운영(prd): 시크릿 값은 미결 #1(SHADOW_RATE 0.2). 개발·운영 배포 분리 규칙(develop=dev, main 승격분=prod) 그대로
 ```
+
+**[개정 · 2026-10-19 · 장소 탐색]** 의도 EXPLORE_PLACES(BR-AO-27)는 순서가 **반대**다 — BE 가 먼저(또는 같이) 나가야 한다. 옛 BE 는 응답
+frames 의 `EXPLORE_PLACES` 를 모르는 의도로 읽어(`Intent.valueOf`) 해석 실패 → AI_UNAVAILABLE 폴백으로 답한다(그 사이 탐색 발화만 해당, 다른 의도는 영향 0).
+AI·BE 가 한 PR 이라 develop 머지 뒤 자동 배포가 둘을 함께 올리면 창은 배포 간격뿐이다.
 
 되돌리기는 시크릿 `TRIPPILOT_DIALOGUE_ORCHESTRATOR=off` 한 줄 — off 면 사영이 기존 `DialogueInterpreter` 경로를 그대로 타고 BE 는 종전 `FRAME`
 만 받는다(코드 롤백 불필요). 메모리 테이블은 남지만 쓰는 쪽이 없어 TTL 로 사라진다. feature 배정은 `.env.example` 정본 줄과 DEV 시크릿 **두 곳**이

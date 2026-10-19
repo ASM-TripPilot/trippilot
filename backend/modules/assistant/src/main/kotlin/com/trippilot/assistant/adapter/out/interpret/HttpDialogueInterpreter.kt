@@ -192,7 +192,8 @@ internal data class WireMemoryItem(
 internal data class WireMemoryExport(val memories: List<WireMemoryItem> = emptyList())
 
 internal fun InterpretRequest.toWire(mapper: JsonMapper) = WireRequest(
-    requestMeta = WireMeta(UUID.randomUUID().toString(), requestedAt, deadlineMs),
+    // 상대가 이 값을 trace_id 로 로그에 남긴다 — 호출자가 만든 번호를 그대로 싣는다(같은 값이 그 턴의 도우미 행에 적힌다)
+    requestMeta = WireMeta(traceId, requestedAt, deadlineMs),
     utterance = utterance,
     // 첫 턴의 "{}" 도 그대로 객체로 싣는다 — 상대가 빈 상태로 읽는다.
     dialogueContext = runCatching { mapper.readTree(dialogueContext) }.getOrNull()?.takeIf { it.isObject },
@@ -276,7 +277,9 @@ class HttpDialogueInterpreterConfiguration {
 
     @Bean
     fun dialogueMemory(properties: AssistantProperties): DialogueMemoryPort =
-        if (properties.interpret.mode == "http") HttpDialogueMemoryClient(client(properties)) else NoopDialogueMemory
+        // 해석 모드와 묶지 않는다 — 시크릿을 off 로 돌린 동안에도 이력·여행·계정 파기는 상대 DB 에 닿아야 한다(2026-10-18 리뷰:
+        // off 이면 계정 삭제가 0 을 돌려받고 아웃박스가 완료 처리돼 즉시 파기가 조용히 빠졌다). 상대가 없는 대역 모드만 no-op.
+        if (properties.interpret.mode == "fake") NoopDialogueMemory else HttpDialogueMemoryClient(client(properties))
 
     @Synchronized
     private fun client(properties: AssistantProperties): RestClient = shared ?: build(properties).also { shared = it }

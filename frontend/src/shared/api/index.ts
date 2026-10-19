@@ -107,6 +107,13 @@ export interface ConsentInput {
   action: ConsentAction;
 }
 
+/** `GET /me/consents` 한 행 — 약관 종류별 현재 동의 상태(openapi `ConsentState`). */
+export interface ConsentState {
+  termsType: string;
+  granted: boolean;
+  termsVersion: string;
+}
+
 export type NicknameCheckReason =
   'OK' | 'TOO_SHORT' | 'TOO_LONG' | 'BANNED_WORD' | 'TAKEN';
 
@@ -356,6 +363,11 @@ export const authedClient = createAuthedApiClient({
   refreshTokens,
   onSessionExpired,
 });
+
+export async function fetchConsents(): Promise<ConsentState[]> {
+  const response = await authedClient.get<ConsentState[]>('/me/consents');
+  return response.data;
+}
 
 export async function submitConsents(consents: ConsentInput[]): Promise<void> {
   await authedClient.post('/me/consents', { consents });

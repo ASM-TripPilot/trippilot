@@ -2,6 +2,8 @@
 import json
 import re
 
+from runtime_io import wait_job
+
 NAME = "trippilot-kb-load"
 DEADLINE_SEC = 5400
 
@@ -71,8 +73,7 @@ def run(namespace, shell):
         shell(["kubectl", "apply", "--server-side", "--field-manager=trippilot-runtime", "-f", "-"],
               json.dumps(manifest(namespace, image)))
         try:
-            shell(["kubectl", "wait", "--namespace", namespace, "--for=condition=complete",
-                   f"job/{NAME}", f"--timeout={DEADLINE_SEC}s"])
+            wait_job(shell, namespace, NAME, DEADLINE_SEC)
         except Exception:
             # 공용 헬퍼는 stderr 를 숨긴다. 적재 로그 마지막 줄들이 원인이라 자격만 가리고 보인다.
             logs = shell(["kubectl", "logs", "--namespace", namespace, f"job/{NAME}", "--tail=20"])

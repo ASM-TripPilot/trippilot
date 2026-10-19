@@ -40,7 +40,12 @@ spec:
           # --no-access-log: uvicorn's access line carries the query string, and the memory boundary
           # takes account_ref as a query parameter (DELETE|GET /ai/v1/dialogue/memory?account_ref=...).
           # TraceMiddleware already logs http_request with the path only (SEC-U8-06; same flag as the image CMD).
-          args: ["main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--timeout-graceful-shutdown", "630", "--no-access-log"]
+          # --timeout-worker-healthcheck 30: the multi-worker supervisor kills a worker that misses its ping for
+          # 5s (default). On a CPU-starved node a worker still loading the app misses it, gets killed and respawned,
+          # which burns more CPU — 12 restarts in 2 minutes on the dev rollout of 10-18, and the smoke turn's memory
+          # DELETE timed out into a 500. A genuinely hung worker is still caught, 30s later. Single-process image CMD
+          # has no supervisor, so the flag lives here only.
+          args: ["main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--timeout-graceful-shutdown", "630", "--timeout-worker-healthcheck", "30", "--no-access-log"]
           ports:
             - { name: http, containerPort: 8000 }
           securityContext:
@@ -71,7 +76,7 @@ spec:
               value: /app/config/llm-prices.json
             - name: EVENTS_STORE
               value: /app/data/collected_events.json
-            {{- range list "TRIPPILOT_LLM_PROVIDER" "OPENAI_API_KEY" "OPENAI_BASE_URL" "OPENAI_MODEL" "OPENAI_API" "ANTHROPIC_API_KEY" "ANTHROPIC_MODEL" "TRIPPILOT_LLM_FEATURE_MODELS" "TRIPPILOT_LLM_RETRY_MODELS" "TRIPPILOT_LOCAL_LLM_BASE_URL" "TRIPPILOT_LOCAL_LLM_API_KEY" "TRIPPILOT_BEDROCK_MODEL_ARN" "TRIPPILOT_BEDROCK_REGION" "WEATHER_API" "WEATHER_API_BASE" "KAKAO_REST_API_KEY" "EXISTENCE_MAX_CALLS" "TRIPPILOT_SCORE_MAX_PARALLEL" "TMAP_API_KEY" "ODSAY_API_KEY" "TRIPPILOT_EMBEDDING_MODEL" "TRIPPILOT_EMBEDDING_TIMEOUT_SEC" "TRIPPILOT_DIALOGUE_ORCHESTRATOR" "TRIPPILOT_DIALOGUE_SHADOW_RATE" }}
+            {{- range list "TRIPPILOT_LLM_PROVIDER" "OPENAI_API_KEY" "OPENAI_BASE_URL" "OPENAI_MODEL" "OPENAI_API" "ANTHROPIC_API_KEY" "ANTHROPIC_MODEL" "TRIPPILOT_LLM_FEATURE_MODELS" "TRIPPILOT_LLM_RETRY_MODELS" "TRIPPILOT_LOCAL_LLM_BASE_URL" "TRIPPILOT_LOCAL_LLM_API_KEY" "TRIPPILOT_BEDROCK_MODEL_ARN" "TRIPPILOT_BEDROCK_REGION" "WEATHER_API" "WEATHER_API_BASE" "KAKAO_REST_API_KEY" "EXISTENCE_MAX_CALLS" "TRIPPILOT_SCORE_MAX_PARALLEL" "TMAP_API_KEY" "ODSAY_API_KEY" "TRIPPILOT_EMBEDDING_MODEL" "TRIPPILOT_EMBEDDING_TIMEOUT_SEC" "TRIPPILOT_DIALOGUE_ORCHESTRATOR" "TRIPPILOT_DIALOGUE_SHADOW_RATE" "PUBLIC_DATA_API_KEY" "HOLIDAY_CLOSURE_MODE" }}
             {{- include "trippilot.secretEnv" (dict "env" . "secret" "trippilot-ai" "optional" true) | nindent 12 }}
             {{- end }}
             {{- /* Always wired, not only with embedding: the assistant session memory

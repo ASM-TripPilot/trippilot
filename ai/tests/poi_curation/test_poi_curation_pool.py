@@ -159,14 +159,50 @@ def test_pool_secondary_keys_unchanged_within_group(pois, request) -> None:
         assert keys == sorted(keys)
 
 
-@settings(max_examples=40)
-@given(pois=st.lists(pois_with_attrs(), max_size=15, unique_by=lambda p: p.poi_id),
-       request=pool_requests(), cap=st.integers(min_value=1, max_value=15))
-def test_pool_cap_truncates_ordered_prefix(pois, request, cap) -> None:
-    """상한 절단은 정렬 결과의 앞부분만 남긴다 → 영업시간 보유분이 먼저 생존."""
-    full = _build(pois, request)
-    capped = _build(pois, request, M7Config(max_candidates=cap))
-    assert capped.pois == full.pois[:cap]
+@st.composite
+def _pois_in_radius(draw):
+    """전부 반경 안 — 공용 생성기는 대부분 반경 밖이라 풀이 비어 절단을 거의 안 탄다(300건 중 203건 0곳)."""
+    specs = draw(st.lists(st.tuples(st.sampled_from(list(PoiCategory)), st.booleans(),
+                                    st.integers(0, 3)), min_size=1, max_size=40))
+    return [replace(_poi(f"p{i:03d}", open_hours=_ALL_WEEK if hours else (), saved_count=saved),
+                    category=cat) for i, (cat, hours, saved) in enumerate(specs)]
+
+
+@settings(max_examples=200)
+@given(pois=_pois_in_radius(), cap=st.integers(min_value=1, max_value=40))
+def test_pool_cap_keeps_a_fair_share_per_category(pois, cap) -> None:
+    """상한 절단(2026-10-19) — 카테고리마다 공평한 몫. 작은 카테고리는 통째로, 넘치는 쪽만 자른다.
+
+    종전 계약은 "정렬 결과의 앞부분"이었다. 서울 반경 10km 는 1.4만 곳 중 FOOD 가 89% 라, 영업시간 보유
+    FOOD 가 앞을 다 차지해 자연 132곳 중 11곳만 5,000 안에 들었다(공유본 실측). 카테고리 안에서는 종전
+    정렬 그대로 앞부분이 남는다 — 영업시간 보유분이 먼저 생존(TRIP-326)은 카테고리 안의 규칙이 됐다.
+    """
+    full = _build(pois, _request())
+    capped = _build(pois, _request(), M7Config(max_candidates=cap))
+
+    assert len(capped.pois) == min(cap, len(full.pois))
+    kept = set(capped.pois)
+    assert list(capped.pois) == [p for p in full.pois if p in kept]   # 순서는 종전 정렬 그대로
+    cats = {p.category for p in full.pois}
+    by_cat = {c: [p for p in full.pois if p.category is c] for c in cats}
+    n_kept = {c: sum(p.category is c for p in capped.pois) for c in cats}
+    for c in cats:
+        assert [p for p in capped.pois if p.category is c] == by_cat[c][:n_kept[c]]  # 카테고리 안 앞부분
+        if n_kept[c] < len(by_cat[c]):   # 잘린 카테고리는 어느 카테고리보다 1 넘게 적게 남지 않는다
+            assert n_kept[c] >= max(n_kept.values()) - 1
+
+
+def test_cap_no_longer_lets_one_category_crowd_out_the_rest() -> None:
+    """서울 모양 — 영업시간 있는 FOOD 대량 + 영업시간 없는 자연. 종전엔 자연이 0 곳 남았다."""
+    food = [replace(_poi(f"food-{i:04d}", open_hours=_ALL_WEEK, saved_count=10), category=PoiCategory.FOOD)
+            for i in range(200)]
+    nature = [replace(_poi(f"nature-{i:02d}"), category=PoiCategory.NATURE) for i in range(30)]
+
+    pool = _build(food + nature, _request(), M7Config(max_candidates=100))
+
+    assert len(pool.pois) == 100
+    assert {p.poi_id for p in nature} <= pool.poi_ids   # 30곳 모두 — 몫(50)보다 작아 통째로
+    assert sum(p.category is PoiCategory.FOOD for p in pool.pois) == 70
 
 
 def test_cap_keeps_open_hours_pois_at_default_limit() -> None:

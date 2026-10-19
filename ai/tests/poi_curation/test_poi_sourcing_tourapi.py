@@ -86,7 +86,8 @@ def test_fetch_page_sends_common_params_once_per_call() -> None:
     assert params["serviceKey"] == "test-key"
     assert params["MobileOS"] == "ETC" and params["MobileApp"] == "TripPilot"
     assert params["_type"] == "json"
-    assert params["areaCode"] == "39" and params["contentTypeId"] == "39"
+    # 법정동 코드로 부른다 — areaCode 로 거르면 일부만 온다(10-18 실측, `LDONG_BY_AREA`)
+    assert params["lDongRegnCd"] == "50" and "areaCode" not in params and params["contentTypeId"] == "39"
     assert params["numOfRows"] == "50" and params["pageNo"] == "2"
 
 
@@ -554,3 +555,38 @@ def test_비영업_라벨_앞의_범위는_남긴다(
     hours = parse_open_hours(hours_raw, rest_raw)
     assert {h.day_of_week: (h.open_min, h.close_min) for h in hours} == {
         "월화수목금토일".index(c): w for days, w in want.items() for c in days}
+
+
+# ── 새 분류 체계(lclsSystm) — 옛 cat 이 빈 항목 (2026-10-19 실측 코드) ─────────
+@pytest.mark.parametrize("codes,expected", [
+    (("HS", "HS01", "HS010100"), PoiCategory.SIGHT),      # 경복궁
+    (("NA", "NA02", "NA020900"), PoiCategory.NATURE),     # 해운대·광안리해수욕장
+    (("NA", "NA01", "NA010300"), PoiCategory.NATURE),     # 천지연폭포
+    (("VE", "VE01", "VE010200"), PoiCategory.SIGHT),      # 남산서울타워(랜드마크)
+    (("VE", "VE07", "VE070300"), PoiCategory.CULTURE),    # 전시시설 ≈ 옛 A0206 문화시설
+    (("VE", "VE10"), PoiCategory.ACTIVITY),               # 레저스포츠시설
+    (("EX", "EX06"), PoiCategory.SIGHT),                  # 산업관광 ≈ 옛 A0204 → SIGHT
+    (("EX", "EX01"), PoiCategory.ACTIVITY),               # 체험 ≈ 옛 A0203
+    (("EV", "EV01"), PoiCategory.CULTURE),
+    (("AC", "AC01"), None),                               # 숙박 — 옛 체계처럼 매핑하지 않는다
+])
+def test_옛_분류가_빈_관광지는_새_분류로_카테고리를_정한다(codes, expected) -> None:
+    assert map_category("12", codes) is expected
+
+
+def test_옛_분류가_있으면_옛_판정이_이긴다_그리고_카페는_새_코드로도() -> None:
+    assert map_category("12", ("A01", "A0101", "A01010400", "HS", "HS01")) is PoiCategory.NATURE
+    assert map_category("39", ("FD", "FD05", "FD050100")) is PoiCategory.CAFE
+    assert map_category("39", ("FD", "FD01")) is PoiCategory.FOOD
+
+
+def test_목록_항목의_새_분류_칸이_실리고_태그는_옛_것이_우선이다() -> None:
+    from trippilot.poi_curation.sourcing.mapping import category_tags
+    http = FakeTourApiHttp(pages={("12", 1): envelope([
+        list_item("126508", "경복궁", cat1="", cat2="", cat3="",
+                  lcls1="HS", lcls2="HS01", lcls3="HS010100")], 1)})
+    record, = _adapter(http).fetch_page("1", "12", 1, 10).records
+    assert record.category_codes == ("HS", "HS01", "HS010100")
+    assert map_category(record.kind, record.category_codes) is PoiCategory.SIGHT
+    assert category_tags(record.category_codes) == ("역사유적지",)
+    assert category_tags(("A01", "A0101", "NA", "NA02")) == ("자연관광지",)   # 겹친 태그를 만들지 않는다

@@ -13,9 +13,12 @@ dependencies {
     implementation(project(":modules:trip"))                   // R1: 소유·구간 검증 — trip.api
     implementation(project(":modules:itinerary-generation"))   // R1: 남은 슬롯 판정 — itinerarygeneration.api
     implementation(project(":modules:weather-context"))        // R1: 강수확률 조회 — weathercontext.api(ContextFacade)
+    implementation(project(":modules:place-data"))             // R1: 폐업 판정 — placedata.api(PoiStatusFacade)만. place-data 는 core 에만 의존해 순환 없음
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)
+    implementation(libs.jackson.module.kotlin)   // 아웃박스 payload 트리 읽기(재계획 적용 소비) — notification·archive 와 같은 관례
+    implementation(libs.shedlock.spring)         // 상황 감시 스윕 단일 실행 락(@SchedulerLock) — U10 지연 스캔도 같은 줄이다
     implementation(libs.kotlin.reflect)
 
     testImplementation(project(":common:test-support"))

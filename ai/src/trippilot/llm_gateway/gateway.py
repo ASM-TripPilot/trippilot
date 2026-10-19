@@ -104,6 +104,7 @@ class GatewayFacade:
         retry_timeout_sec: float | None = None,
         images: tuple[LlmImagePart, ...] = (),
         consent_ref: str | None = None,
+        fallback_modes: tuple[str, str] | None = None,
     ) -> TypedResult[tuple[ScoredPoi, ...]]:
         """`retry_timeout_sec` 가 있고 feature 에 `C1Config.retry_models` 가 있으면
         1차 **타임아웃** 시 그 모델로 한 번 더 부른다(TRIP-522 2단 폴백). 두 조건 중
@@ -113,6 +114,10 @@ class GatewayFacade:
         images는 멀티모달 feature 전용 후미 기본값 (TRIP-595, FD §6.1 A안) —
         기존 텍스트 호출은 전부 무영향이고, 강등은 "같은 파이프라인, images만 비움"으로
         표현된다. 이미지도 게이트웨이를 지나야 계측(LlmCallRecord)이 빠지지 않는다.
+
+        `fallback_modes` 는 호출 한 번의 폴백 실체 (from, to) — 같은 feature 를 다른 자리에서 부르면
+        실패 뒤 실제로 일어나는 일이 다르다(다시 짜기 1회 수리는 실패하면 1차 일정을 그대로 둔다 —
+        설정 매핑의 "점수 경로로"를 실으면 지어낸 실체다, TRIP-260 #4). 미지정이면 설정 매핑.
 
         **사진은 동의 증빙과 짝으로만 나간다** (BR-U6R-09): images가 있는데
         consent_ref가 없으면 호출 자체가 버그다 — 폴백이 아니라 ValueError.
@@ -162,7 +167,7 @@ class GatewayFacade:
         if response is None:
             return self._fallback(
                 feature, model_id, prompt_ref, trace_id, now, None, reason,
-                consent_ref=consent_ref, spent_ms=spent_ms,
+                consent_ref=consent_ref, spent_ms=spent_ms, modes=fallback_modes,
             )
         # 5·6 파서 + closed-set 게이트 (INV-1)
         outcome = self._gate.apply(
@@ -183,7 +188,7 @@ class GatewayFacade:
             # `empty_result_error` 가 그대로 유지한다 — 2026-08-25 사고의 산물이다.
             return self._fallback(
                 feature, model_id, prompt_ref, trace_id, now, response, error,
-                consent_ref=consent_ref,
+                consent_ref=consent_ref, modes=fallback_modes,
             )
         # 7 성공 조립 + 계측 (BR-U4-03)
         record = self._record(
@@ -252,6 +257,7 @@ class GatewayFacade:
         reason: str,
         consent_ref: str | None = None,
         spent_ms: int = 0,
+        modes: tuple[str, str] | None = None,
     ) -> TypedResult[tuple[ScoredPoi, ...]]:
         record = self._record(
             feature, model_id, prompt_ref, trace_id, now, response, success=False,
@@ -259,7 +265,7 @@ class GatewayFacade:
         )
         self._trace.emit(record)
         # 폴백 모드는 feature별 실체 — 매핑에 없으면 지어내지 않고 unmapped로 드러낸다
-        from_mode, to_mode = self._cfg.fallback_modes.get(
+        from_mode, to_mode = modes or self._cfg.fallback_modes.get(
             feature, UNMAPPED_FALLBACK_MODES
         )
         self._trace.emit(

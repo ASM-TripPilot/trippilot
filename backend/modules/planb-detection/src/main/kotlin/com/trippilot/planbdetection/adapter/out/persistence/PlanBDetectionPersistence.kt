@@ -2,6 +2,8 @@ package com.trippilot.planbdetection.adapter.out.persistence
 
 import com.trippilot.planbdetection.domain.PlanBTrigger
 import com.trippilot.planbdetection.domain.PlanBTriggerRepository
+import com.trippilot.planbdetection.domain.PlanBWatch
+import com.trippilot.planbdetection.domain.PlanBWatchRepository
 import com.trippilot.planbdetection.domain.Sensitivity
 import com.trippilot.planbdetection.domain.SensitivityRepository
 import com.trippilot.planbdetection.domain.Suppression
@@ -9,24 +11,29 @@ import com.trippilot.planbdetection.domain.SuppressionRepository
 import com.trippilot.planbdetection.domain.SuppressionScope
 import com.trippilot.planbdetection.domain.TriggerKind
 import com.trippilot.planbdetection.domain.TriggerScope
+import com.trippilot.planbdetection.domain.TriggerSeverity
 import com.trippilot.planbdetection.domain.TriggerState
+import com.trippilot.planbdetection.domain.WatchStatus
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
+import jakarta.persistence.IdClass
 import jakarta.persistence.Table
+import jakarta.persistence.Version
 import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.type.SqlTypes
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Component
+import java.io.Serializable
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
 
-/** plan_b_trigger 매핑(V2.18). */
+/** plan_b_trigger 매핑(V2.18 + 상황 감지 확장 — 심각도·알림 이력·낙관적 잠금). */
 @Entity
 @Table(name = "plan_b_trigger")
 class PlanBTriggerEntity(
@@ -42,28 +49,34 @@ class PlanBTriggerEntity(
     @Column(name = "reason") var reason: String,
     @Column(name = "state") var state: String,
     @Column(name = "detected_at") var detectedAt: Instant,
+    @Column(name = "severity") var severity: String,
+    @Column(name = "alerted_severity") var alertedSeverity: String?,
+    @Column(name = "pushed_at") var pushedAt: Instant?,
+    /**
+     * 낙관적 잠금. **래퍼 타입(null 가능)이어야 한다** — Spring Data 가 null 이면 persist(INSERT), 아니면
+     * merge(UPDATE … WHERE version = ?)로 가른다. 원시 long 이면 id 로 가르는데 id 는 늘 채워져 있어 새 행도 merge 로 간다.
+     */
+    @Version @Column(name = "version") var version: Long?,
 ) {
     protected constructor() : this(
         UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "", LocalDate.EPOCH, null,
-        emptyMap(), false, null, "", "", Instant.EPOCH,
+        emptyMap(), false, null, "", "", Instant.EPOCH, TriggerSeverity.RISK.name, null, null, null,
     )
 }
 
 interface PlanBTriggerJpaRepository : JpaRepository<PlanBTriggerEntity, UUID> {
     fun findByTripIdAndStateOrderByDetectedAtDesc(tripId: UUID, state: String): List<PlanBTriggerEntity>
 
-    /**
-     * 그 날 **발화한** 수. `should_replan` 이 참인 것만 센다 — 무발화 판정까지 세면 억제가 상한을 잡아먹어,
-     * 억제될수록 알림이 더 막히는 뒤집힌 동작이 된다.
-     */
+    fun findByTripIdAndAffectedDateIn(tripId: UUID, dates: Collection<LocalDate>): List<PlanBTriggerEntity>
+
+    /** 그 구간에 **푸시 대상이었던** 사건 대표 수 — 조용한 발화·주의는 `pushed_at` 이 없어 세지 않는다. */
     @Query(
         """
         SELECT COUNT(t) FROM PlanBTriggerEntity t
-        WHERE t.tripId = :tripId AND t.shouldReplan = true
-          AND t.detectedAt >= :from AND t.detectedAt < :to
+        WHERE t.tripId = :tripId AND t.pushedAt >= :from AND t.pushedAt < :to
         """,
     )
-    fun countActivatedBetween(
+    fun countPushedBetween(
         @Param("tripId") tripId: UUID,
         @Param("from") from: Instant,
         @Param("to") to: Instant,
@@ -73,12 +86,18 @@ interface PlanBTriggerJpaRepository : JpaRepository<PlanBTriggerEntity, UUID> {
 @Component
 class PlanBTriggerPersistence(private val jpa: PlanBTriggerJpaRepository) : PlanBTriggerRepository {
 
+    /**
+     * **`saveAndFlush`** — 한 판정이 "기존 행 갱신 → 새 행" 순서로 쓰므로 UPDATE 가 그 자리에서 나가야 한다.
+     * `save` 는 UPDATE 를 커밋까지 미뤄 INSERT 가 먼저 나가고 부분 유니크(`ux_plan_b_trigger_active`)에 걸린다.
+     * 낡은 version 이면 Spring 이 `OptimisticLockingFailureException` 으로 올린다 — 호출측이 다음 판정에 맡긴다.
+     */
     override fun save(trigger: PlanBTrigger): PlanBTrigger =
         jpa.saveAndFlush(
             PlanBTriggerEntity(
                 trigger.triggerId, trigger.tripId, trigger.itineraryId, trigger.kind.name,
                 trigger.affectedDate, trigger.slotKey, trigger.payload, trigger.shouldReplan,
                 trigger.scope?.name, trigger.reason, trigger.state.name, trigger.detectedAt,
+                trigger.severity.name, trigger.alertedSeverity?.name, trigger.pushedAt, trigger.version,
             ),
         ).toDomain()
 
@@ -88,15 +107,19 @@ class PlanBTriggerPersistence(private val jpa: PlanBTriggerJpaRepository) : Plan
     override fun findActiveByTrip(tripId: UUID): List<PlanBTrigger> =
         jpa.findByTripIdAndStateOrderByDetectedAtDesc(tripId, TriggerState.ACTIVE.name).map { it.toDomain() }
 
-    override fun countActivatedOn(tripId: UUID, date: LocalDate): Int {
+    override fun findByTripOn(tripId: UUID, dates: Collection<LocalDate>): List<PlanBTrigger> =
+        if (dates.isEmpty()) emptyList() else jpa.findByTripIdAndAffectedDateIn(tripId, dates).map { it.toDomain() }
+
+    override fun countPushedOn(tripId: UUID, date: LocalDate): Int {
         val from = date.atStartOfDay(TRAVEL_ZONE).toInstant()
         val to = date.plusDays(1).atStartOfDay(TRAVEL_ZONE).toInstant()
-        return jpa.countActivatedBetween(tripId, from, to).toInt()
+        return jpa.countPushedBetween(tripId, from, to).toInt()
     }
 
     private fun PlanBTriggerEntity.toDomain() = PlanBTrigger(
         triggerId, tripId, itineraryId, TriggerKind.valueOf(kind), affectedDate, slotKey, payload,
         shouldReplan, scope?.let { TriggerScope.valueOf(it) }, reason, TriggerState.valueOf(state), detectedAt,
+        TriggerSeverity.valueOf(severity), alertedSeverity?.let { TriggerSeverity.valueOf(it) }, pushedAt, version,
     )
 
     private companion object {
@@ -104,7 +127,7 @@ class PlanBTriggerPersistence(private val jpa: PlanBTriggerJpaRepository) : Plan
     }
 }
 
-/** plan_b_suppression 매핑(V2.18). */
+/** plan_b_suppression 매핑(V2.18 + 날짜·심각도 범위). */
 @Entity
 @Table(name = "plan_b_suppression")
 class SuppressionEntity(
@@ -115,8 +138,10 @@ class SuppressionEntity(
     @Column(name = "scope_type") var scopeType: String,
     @Column(name = "suppressed_at") var suppressedAt: Instant,
     @Column(name = "expires_at") var expiresAt: Instant?,
+    @Column(name = "affected_date") var affectedDate: LocalDate?,
+    @Column(name = "max_severity") var maxSeverity: String?,
 ) {
-    protected constructor() : this(UUID.randomUUID(), UUID.randomUUID(), "", null, "", Instant.EPOCH, null)
+    protected constructor() : this(UUID.randomUUID(), UUID.randomUUID(), "", null, "", Instant.EPOCH, null, null, null)
 }
 
 interface SuppressionJpaRepository : JpaRepository<SuppressionEntity, UUID> {
@@ -130,6 +155,7 @@ class SuppressionPersistence(private val jpa: SuppressionJpaRepository) : Suppre
             SuppressionEntity(
                 suppression.suppressionId, suppression.tripId, suppression.kind.name, suppression.slotKey,
                 suppression.scopeType.name, suppression.suppressedAt, suppression.expiresAt,
+                suppression.affectedDate, suppression.maxSeverity?.name,
             ),
         ).toDomain()
 
@@ -138,6 +164,7 @@ class SuppressionPersistence(private val jpa: SuppressionJpaRepository) : Suppre
     private fun SuppressionEntity.toDomain() = Suppression(
         suppressionId, tripId, TriggerKind.valueOf(kind), slotKey,
         SuppressionScope.valueOf(scopeType), suppressedAt, expiresAt,
+        affectedDate, maxSeverity?.let { TriggerSeverity.valueOf(it) },
     )
 }
 
@@ -169,4 +196,38 @@ class SensitivityPersistence(
         jpa.save(SensitivityEntity(accountId, sensitivity.name, clock.instant()))
         return sensitivity
     }
+}
+
+/** plan_b_watch 매핑 — (여행, 출처)당 마지막 관측 1행. */
+@Entity
+@Table(name = "plan_b_watch")
+@IdClass(PlanBWatchKey::class)
+class PlanBWatchEntity(
+    @Id @Column(name = "trip_id") var tripId: UUID,
+    @Id @Column(name = "source") var source: String,
+    @Column(name = "status") var status: String,
+    @Column(name = "checked_at") var checkedAt: Instant,
+) {
+    protected constructor() : this(UUID.randomUUID(), "", "", Instant.EPOCH)
+}
+
+data class PlanBWatchKey(var tripId: UUID? = null, var source: String? = null) : Serializable
+
+interface PlanBWatchJpaRepository : JpaRepository<PlanBWatchEntity, PlanBWatchKey> {
+    fun findByTripId(tripId: UUID): List<PlanBWatchEntity>
+}
+
+@Component
+class PlanBWatchPersistence(private val jpa: PlanBWatchJpaRepository) : PlanBWatchRepository {
+
+    /**
+     * 같은 키면 덮는다 — 키가 늘 채워져 있어 Spring Data 가 merge(조회 후 INSERT·UPDATE)로 보낸다.
+     * 쓰는 쪽(스윕)은 단일 실행(ShedLock)이라 같은 키 동시 INSERT 경합이 없다.
+     */
+    override fun upsert(watch: PlanBWatch) {
+        jpa.save(PlanBWatchEntity(watch.tripId, watch.source, watch.status.name, watch.checkedAt))
+    }
+
+    override fun findByTrip(tripId: UUID): List<PlanBWatch> =
+        jpa.findByTripId(tripId).map { PlanBWatch(it.tripId, it.source, WatchStatus.valueOf(it.status), it.checkedAt) }
 }

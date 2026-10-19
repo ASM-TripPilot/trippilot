@@ -42,13 +42,22 @@ def list_item(
     cat3: str = "A01010400",
     firstimage: str = "",
     modifiedtime: str = "20260801120000",
+    lcls1: str = "",   # 새 분류 체계 — 실물은 둘 다 오고, 수정된 항목은 cat 이 비고 lcls 만 온다
+    lcls2: str = "",
+    lcls3: str = "",
 ) -> dict:
     return {
         "contentid": contentid, "contenttypeid": contenttypeid, "title": title,
         "addr1": addr1, "mapx": mapx, "mapy": mapy,
         "cat1": cat1, "cat2": cat2, "cat3": cat3,
+        "lclsSystm1": lcls1, "lclsSystm2": lcls2, "lclsSystm3": lcls3,
         "firstimage": firstimage, "modifiedtime": modifiedtime,
     }
+
+
+def common_item(content_id: str, overview: str) -> dict:
+    """detailCommon2 항목 — 개요(`overview`)는 `<br>`·HTML 엔티티가 섞인 원문으로 온다."""
+    return {"contentid": content_id, "overview": overview}
 
 
 def intro_item(content_id: str, kind: str, hours: str, rest: str, **extra: str) -> dict:
@@ -66,6 +75,14 @@ def intro_item(content_id: str, kind: str, hours: str, rest: str, **extra: str) 
     }[kind]
     return {"contentid": content_id, fields[0]: hours, fields[1]: rest, **extra}
 
+
+
+def area_of(params: Mapping[str, str]) -> str:
+    """실물은 법정동 코드(lDongRegnCd)로 부른다 — 픽스처는 옛 areaCode 로 적혀 있어 되돌려 읽는다."""
+    from trippilot.poi_curation.sourcing.tourapi import LDONG_BY_AREA
+    if "areaCode" in params:
+        return params["areaCode"]
+    return next(a for a, l in LDONG_BY_AREA.items() if l == params["lDongRegnCd"])
 
 class HttpStatusError(Exception):
     """urllib.error.HTTPError의 최소 대역 — `.code` 로 상태를 노출한다.
@@ -94,9 +111,11 @@ class FakeTourApiHttp:
         pages: Mapping[tuple[str, int] | tuple[str, str, int], dict] | None = None,
         intros: Mapping[str, dict] | None = None,
         dead_keys: Mapping[str, int | str] | None = None,
+        commons: Mapping[str, dict] | None = None,
     ) -> None:
         self._pages = dict(pages or {})
         self._intros = dict(intros or {})
+        self._commons = dict(commons or {})  # content_id → detailCommon2 봉투
         self._dead_keys = dict(dead_keys or {})
         self.calls: list[tuple[str, dict]] = []
 
@@ -108,12 +127,13 @@ class FakeTourApiHttp:
         if isinstance(rejection, str):
             return error_envelope(rejection)
         if url.endswith("/areaBasedList2"):
-            area_key = (params["areaCode"], params["contentTypeId"],
-                        int(params["pageNo"]))
+            area_key = (area_of(params), params["contentTypeId"], int(params["pageNo"]))
             if area_key in self._pages:
                 return self._pages[area_key]
             key = (params["contentTypeId"], int(params["pageNo"]))
             return self._pages.get(key, envelope([], 0))
         if url.endswith("/detailIntro2"):
             return self._intros.get(params["contentId"], envelope([], 0))
+        if url.endswith("/detailCommon2"):
+            return self._commons.get(params["contentId"], envelope([], 0))
         raise AssertionError(f"예상 밖 URL: {url}")

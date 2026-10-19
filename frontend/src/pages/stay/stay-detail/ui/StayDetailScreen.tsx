@@ -172,7 +172,8 @@ export function StayDetailScreen({
         testID={FACE_TEST_ID[state.kind]}
         className="flex-1 items-center justify-center gap-md bg-canvas px-lg"
       >
-        <View className="absolute left-lg top-12">
+        {/* TRIP-1429 — ready 얼굴의 고정 버튼과 같은 높이(d06 top-[52px]). */}
+        <View className="absolute left-lg top-[52px]">
           <HeroCircle
             testID="stay-detail-back"
             accessibilityLabel="뒤로"
@@ -217,49 +218,11 @@ export function StayDetailScreen({
   return (
     <View testID="stay-detail-root" className="flex-1 bg-canvas">
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        {/* hero — 사진 URL 필드가 계약에 없어 회색 자리(INV-1). 뒤로·공유·저장 오버레이. */}
+        {/* hero — 사진 URL 필드가 계약에 없어 회색 자리(INV-1). 버튼 오버레이는 ScrollView 밖(아래). */}
         <View
           testID="stay-detail-hero"
           className="h-[300px] w-full bg-surface-strong"
-        >
-          <View className="absolute left-lg top-12">
-            <HeroCircle
-              testID="stay-detail-back"
-              accessibilityLabel="뒤로"
-              onPress={onPressBack}
-            >
-              <BackChevronGlyph size={24} />
-            </HeroCircle>
-          </View>
-          <View className="absolute right-[68px] top-12">
-            <HeroCircle
-              testID="stay-detail-share"
-              accessibilityLabel="공유"
-              onPress={onPressShare}
-            >
-              <ShareGlyph size={24} />
-            </HeroCircle>
-          </View>
-          <View className="absolute right-lg top-12">
-            <HeroCircle
-              testID="stay-detail-save"
-              // 라벨은 담김과 무관하게 고정, 담김은 selected 로만(TRIP-1281 결정 · TRIP-1302).
-              accessibilityLabel={heartSaveLabel(detail.name)}
-              onPress={onToggleSave}
-              disabled={pending}
-              selected={saved}
-            >
-              {saved ? (
-                <HeartFilledGlyph testID="stay-detail-save-filled" size={24} />
-              ) : (
-                <HeartOutlineGlyph
-                  testID="stay-detail-save-outline"
-                  size={24}
-                />
-              )}
-            </HeroCircle>
-          </View>
-        </View>
+        />
 
         <View className="gap-[18px] px-lg pb-[26px] pt-lg">
           {/* 제목 · 가격줄(좌 2톤 최저가 + 우 지역, justify-between) */}
@@ -410,6 +373,43 @@ export function StayDetailScreen({
           </View>
         </View>
       </ScrollView>
+
+      {/* 뒤로·공유·저장 — ScrollView 밖 고정 오버레이(TRIP-1429 Q-034). hero 안에 두면 본문과 같이 올라가
+        상태바와 겹쳤다. ScrollView 뒤에 그려야 그 위에 얹힌다. 높이는 d06 과 같은 top-[52px](Q-053). */}
+      <View className="absolute left-lg top-[52px]">
+        <HeroCircle
+          testID="stay-detail-back"
+          accessibilityLabel="뒤로"
+          onPress={onPressBack}
+        >
+          <BackChevronGlyph size={24} />
+        </HeroCircle>
+      </View>
+      <View className="absolute right-[68px] top-[52px]">
+        <HeroCircle
+          testID="stay-detail-share"
+          accessibilityLabel="공유"
+          onPress={onPressShare}
+        >
+          <ShareGlyph size={24} />
+        </HeroCircle>
+      </View>
+      <View className="absolute right-lg top-[52px]">
+        <HeroCircle
+          testID="stay-detail-save"
+          // 라벨은 담김과 무관하게 고정, 담김은 selected 로만(TRIP-1281 결정 · TRIP-1302).
+          accessibilityLabel={heartSaveLabel(detail.name)}
+          onPress={onToggleSave}
+          disabled={pending}
+          selected={saved}
+        >
+          {saved ? (
+            <HeartFilledGlyph testID="stay-detail-save-filled" size={24} />
+          ) : (
+            <HeartOutlineGlyph testID="stay-detail-save-outline" size={24} />
+          )}
+        </HeroCircle>
+      </View>
     </View>
   );
 }

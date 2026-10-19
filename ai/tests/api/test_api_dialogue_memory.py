@@ -42,7 +42,7 @@ def _memory(
 
 def _seeded_store() -> InMemoryDialogueMemoryStore:
     """acct-a 세션 2개(옛것·새것, 여행 다름) + acct-b 세션 1개."""
-    store = InMemoryDialogueMemoryStore()
+    store = InMemoryDialogueMemoryStore(now=lambda: _T0)
     store.put(_memory("s-old", at=_T0 - timedelta(days=2)))
     store.put(_memory("s-new", trip_id="trip-2", summary=("부산 1박", "회 선호")))
     store.put(_memory("s-other", account_ref="acct-b", trip_id="trip-9"))

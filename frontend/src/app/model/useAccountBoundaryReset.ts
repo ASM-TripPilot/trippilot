@@ -13,7 +13,8 @@ import { usePreferenceStore } from '@/features/edit-preferences';
  * - dismissAll 먼저, replace 나중 — 반대면 POP_TO_TOP 이 방금 넣은 (auth) 까지 걷는다.
  * - 스플래시 중(스택 미마운트)엔 라우터 액션의 결과를 보장할 수 없다(throw 또는 재마운트, 미실측) —
  *   그래서 "직전 커밋에 스택을 그렸나"를 본다.
- * - canDismiss 는 가드가 화면을 빼기 전 스택을 읽을 수 있다(03b 경고-1, 6-b 확인 대상).
+ * - 걷을지는 canGoBack 으로 본다 — canDismiss 는 가드가 (tabs) 를 빼기 전 스택 사본을 읽어, 걷을 게 없는데
+ *   POP_TO_TOP 을 보내 dev 경고가 났다(TRIP-1431). canGoBack 은 탭 이력도 세므로 가드 밖에 탭이 생기면 다시 본다.
  * - effect(커밋 뒤)에서 부른다 — replace 는 (auth) 가 라우트에 들어온 뒤라야 먹힌다(TRIP-1034).
  */
 export function useAccountBoundaryReset(
@@ -29,7 +30,7 @@ export function useAccountBoundaryReset(
     if (!before.drawn || before.destination === 'LOGIN') return;
     if (destination !== 'LOGIN') return;
 
-    if (router.canDismiss()) router.dismissAll();
+    if (router.canGoBack()) router.dismissAll();
     router.replace('/login');
     queryClient.clear();
     usePreferenceStore.getState().reset();

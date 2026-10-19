@@ -1590,6 +1590,174 @@
         "title": "ItineraryPayload",
         "type": "object"
       },
+      "OpportunitiesRequest": {
+        "additionalProperties": false,
+        "description": "남은 동선 근처의 행사·요즘 인기. 슬롯 자격(날짜·좌표·끝나지 않음·≤ 8)은 백엔드가 정한다.",
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "planned_poi_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 300,
+            "title": "Planned Poi Ids",
+            "type": "array"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/OpportunitySlotSchema"
+            },
+            "maxItems": 30,
+            "minItems": 1,
+            "title": "Slots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "date",
+          "slots",
+          "request_meta"
+        ],
+        "title": "OpportunitiesRequest",
+        "type": "object"
+      },
+      "OpportunitiesResponse": {
+        "additionalProperties": false,
+        "description": "재료 실패는 오류가 아니라 notes 다 — 행사 실패면 요즘 인기만, 장소 실패면 빈 목록(INV-4).",
+        "properties": {
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "opportunities": {
+            "items": {
+              "$ref": "#/components/schemas/OpportunitySchema"
+            },
+            "maxItems": 3,
+            "title": "Opportunities",
+            "type": "array"
+          }
+        },
+        "title": "OpportunitiesResponse",
+        "type": "object"
+      },
+      "OpportunitySchema": {
+        "additionalProperties": false,
+        "description": "기회 1건 — 문구는 앱의 고정 템플릿 한 곳이 만든다(서버는 필드만).",
+        "properties": {
+          "distance_label": {
+            "title": "Distance Label",
+            "type": "string"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "event_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Name"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "EVENT_VENUE",
+              "EVENT_NEARBY",
+              "TRENDING"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "near_slot_key": {
+            "title": "Near Slot Key",
+            "type": "string"
+          },
+          "poi_id": {
+            "title": "Poi Id",
+            "type": "string"
+          },
+          "poi_name": {
+            "title": "Poi Name",
+            "type": "string"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          }
+        },
+        "required": [
+          "key",
+          "kind",
+          "poi_id",
+          "poi_name",
+          "near_slot_key",
+          "distance_label"
+        ],
+        "title": "OpportunitySchema",
+        "type": "object"
+      },
+      "OpportunitySlotSchema": {
+        "additionalProperties": false,
+        "description": "그 날 **남은** 슬롯 1건 — 좌표는 계획된 장소의 좌표다(사용자 위치 아님).",
+        "properties": {
+          "coord": {
+            "$ref": "#/components/schemas/CoordSchema"
+          },
+          "poi_id": {
+            "minLength": 1,
+            "title": "Poi Id",
+            "type": "string"
+          },
+          "slot_key": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Slot Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slot_key",
+          "poi_id",
+          "coord"
+        ],
+        "title": "OpportunitySlotSchema",
+        "type": "object"
+      },
       "PhotoSlotSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2861,7 +3029,7 @@
       },
       "ViolationSchema": {
         "additionalProperties": false,
-        "description": "하드 제약 위반 1건 — AI 도메인 표현(`code`/`slot_ref`) + 위치 인덱스 **수퍼셋**.\n\n백엔드 도메인은 `(type, dayIndex, slotIndex)`로 지시한다. AI 도메인 타입에는 위치\n인덱스가 없지만, **직렬화 시점에 일정(days)을 스캔해 계산**해서 함께 실어 보낸다\n(routes.locate_slot) — 백엔드 어댑터는 code→type 매핑만 하면 된다.\n`slot_ref`가 일정 어디에도 없으면(예: HC3 미배치 위반 — 슬롯이 없어서 위반인 것)\n인덱스는 null이다. 지어내지 않는다.",
+        "description": "하드 제약 위반 1건 — AI 도메인 표현(`code`/`slot_ref`) + 위치 인덱스 **수퍼셋**.\n\n백엔드 도메인은 `(type, dayIndex, slotIndex)`로 지시한다. AI 도메인 타입에는 위치\n인덱스가 없지만, **직렬화 시점에 일정(days)을 스캔해 계산**해서 함께 실어 보낸다\n(routes.locate_slot) — 백엔드 어댑터는 code→type 매핑만 하면 된다.\n`slot_ref`가 일정 어디에도 없으면(예: HC3 미배치 위반 — 슬롯이 없어서 위반인 것)\n인덱스는 null이다. 지어내지 않는다.\n\n`reason_code`(선택, 상황 감지 H1 · BR-SA-17): HC1 하위 코드 — `CLOSED_DAY`(정기 휴무) ·\n`OUT_OF_HOURS`(그 날 열지만 영업창 밖) · `HOLIDAY`(공휴일·명절·날짜 휴무 — `HOLIDAY_CLOSURE_MODE=on`\n일 때만). 다른 HC 는 null 이다. 백엔드 장소 감지가 알림 변형으로 쓴다 — `detail` 은 파싱하지 않는다.",
         "properties": {
           "code": {
             "title": "Code",
@@ -2882,6 +3050,22 @@
             "default": "",
             "title": "Detail",
             "type": "string"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "CLOSED_DAY",
+                  "OUT_OF_HOURS",
+                  "HOLIDAY"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
           },
           "slot_index": {
             "anyOf": [
@@ -3529,6 +3713,48 @@
           }
         },
         "summary": "Planb Alternatives",
+        "tags": [
+          "planb"
+        ]
+      }
+    },
+    "/ai/v1/planb/opportunities": {
+      "post": {
+        "description": "남은 동선 근처의 행사·요즘 인기 ≤ 3 (situation-awareness BR-SA-22 · DEC-SA-6) — LLM 0회.\n\n트리거가 아니다(DEC-U4-4): 상태도 알림도 없는 조회형이다. 카드의 장소는 등록 POI 뿐이고(INV-1),\n시각 필드가 없으며(INV-2 — 행사 원천이 일 단위), 거리는 문자열만 나간다(INV-3).\n재료 실패는 200 + notes 다 — 행사 실패면 요즘 인기만, 장소 조회 실패면 빈 목록(INV-4).\n구형 조립은 503 명시 실패.",
+        "operationId": "planb_opportunities_ai_v1_planb_opportunities_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpportunitiesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpportunitiesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Planb Opportunities",
         "tags": [
           "planb"
         ]

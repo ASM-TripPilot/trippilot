@@ -100,9 +100,9 @@ const SPLASH_ALLOWED = [
 ] as const;
 
 const WHEN_IN_USE_COPY =
-  'TripPilot가 주변 여행지와 동선을 추천하기 위해 위치를 사용합니다.';
+  'TripPilot이 주변 여행지와 동선을 추천하기 위해 위치를 사용합니다.';
 const SAVE_PHOTOS_COPY =
-  'TripPilot가 여행 공유 카드를 사진 앨범에 저장하기 위해 사진 추가 권한을 사용합니다.';
+  'TripPilot이 여행 공유 카드를 사진 앨범에 저장하기 위해 사진 추가 권한을 사용합니다.';
 
 let infoPlist: Record<string, unknown> = {};
 let introspectedExtra: Record<string, unknown> = {};
@@ -365,6 +365,80 @@ describe('🔴 TRIP-1070 AC-14 · 사진 앨범 권한 문구', () => {
     );
     expect(keys).not.toContain('NSCameraUsageDescription');
     expect(keys).not.toContain('NSMicrophoneUsageDescription');
+  });
+});
+
+// TRIP-1431 — QA Q-091(권한 문구 조사 "TripPilot가") · Q-161('선택한 사진만'에서 앱을 켤 때마다 뜨는 iOS 창).
+describe('iOS 권한 문구 조사 · 사진 제한 접근 자동 알림', () => {
+  // 권한 문구를 받는 플러그인 옵션 키. 위치 자동화 ON 설정에 네 문구(사용 중 위치·항상 위치·사진 읽기·사진 추가)가
+  // 전부 들어 있다 — OFF(출시 기본)는 항상 위치 문구를 false 로 지워 Info.plist 에 없다.
+  const PERMISSION_COPY_KEYS: Record<string, readonly string[]> = {
+    'expo-location': [
+      'locationWhenInUsePermission',
+      'locationAlwaysPermission',
+      'locationAlwaysAndWhenInUsePermission',
+    ],
+    'expo-image-picker': ['photosPermission'],
+    'expo-media-library': ['photosPermission', 'savePhotosPermission'],
+  };
+
+  /** 위치 자동화 ON 으로 app.config.ts 를 새로 읽는다(모듈 캐시 우회). env 는 원래 값으로 되돌린다. */
+  function loadPluginsWithAutomation(): PluginEntry[] {
+    const previous = process.env.TRIPPILOT_LOCATION_AUTOMATION;
+    process.env.TRIPPILOT_LOCATION_AUTOMATION = '1';
+    let plugins: PluginEntry[] = [];
+    try {
+      jest.isolateModules(() => {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const loaded = require('../../app.config').default as {
+          plugins?: PluginEntry[];
+        };
+        plugins = loaded.plugins ?? [];
+      });
+    } finally {
+      if (previous === undefined) {
+        delete process.env.TRIPPILOT_LOCATION_AUTOMATION;
+      } else {
+        process.env.TRIPPILOT_LOCATION_AUTOMATION = previous;
+      }
+    }
+    return plugins;
+  }
+
+  it('위치·사진 읽기·사진 추가 권한 문구가 전부 "TripPilot이 "로 시작한다(위치 자동화 ON 설정까지)', () => {
+    const plugins = loadPluginsWithAutomation();
+    const copies: Record<string, string> = {};
+    for (const [plugin, keys] of Object.entries(PERMISSION_COPY_KEYS)) {
+      const options = optionsOf(plugin, plugins) ?? {};
+      for (const key of keys) {
+        const copy = options[key];
+        if (typeof copy === 'string') copies[`${plugin}.${key}`] = copy;
+      }
+    }
+
+    // 도달 앵커 — 여섯 자리 모두에서 문자열 문구를 실제로 읽었다.
+    expect(Object.keys(copies).sort()).toEqual(
+      [
+        'expo-location.locationWhenInUsePermission',
+        'expo-location.locationAlwaysPermission',
+        'expo-location.locationAlwaysAndWhenInUsePermission',
+        'expo-image-picker.photosPermission',
+        'expo-media-library.photosPermission',
+        'expo-media-library.savePhotosPermission',
+      ].sort()
+    );
+    // 본체 — 조사가 틀린 문구가 하나도 없다(틀린 자리가 목록으로 보인다).
+    expect(
+      Object.entries(copies).filter(
+        ([, copy]) => !copy.startsWith('TripPilot이 ')
+      )
+    ).toEqual([]);
+  });
+
+  it("해석된 Info.plist 가 '선택한 사진만' 자동 알림을 끈다(PHPhotoLibraryPreventAutomaticLimitedAccessAlert = true)", () => {
+    expect(infoPlist.PHPhotoLibraryPreventAutomaticLimitedAccessAlert).toBe(
+      true
+    );
   });
 });
 

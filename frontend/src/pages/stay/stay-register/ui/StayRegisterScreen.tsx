@@ -125,21 +125,15 @@ function StayRegisterAppBar({ onBack }: { onBack?: () => void }): ReactElement {
   );
 }
 
-/** 3탭 셸의 세그먼트 옵션(TRIP-730 — RegisterTabs 3버튼을 shared/ui `SegmentedControl` 연결형으로
- * 교체). 지도 검색·핀 지정 둘 다 열려 있고(TRIP-199 AC-1), 링크 붙여넣기만 계약이 없어 잠긴 채다
- * (BR-U1-21·D6). "준비 중" 캡션은 정지 화면을 Figma 와 맞춰 제거했다 — 무음 disabled 셀 자체가
- * 잠긴 신호다(INV-4). testID 는 옛 3버튼 계약을 그대로 물려받는다(R-1·P-7 이 잠근다). */
+/** 세그먼트 옵션(TRIP-730 — shared/ui `SegmentedControl` 연결형). 지도 검색·핀 지정 2탭이다.
+ * 링크 붙여넣기는 파싱 계약(/stays/parse-link)이 없어 동작하지 않는 탭을 그리지 않는다(TRIP-1429
+ * 결정 ④ — BR-U1-21 3경로와 갈라짐, 계약이 생기면 되살린다). 탭 타입(`StayRegisterTab`)의
+ * 'linkpaste'는 그대로 둔다. testID 는 옛 버튼 계약을 물려받는다(R-1·P-7 이 잠근다). */
 const REGISTER_TABS: SegmentedOption[] = [
   {
     key: 'mapsearch',
     label: '지도 검색',
     testID: 'stay-register-tab-mapsearch',
-  },
-  {
-    key: 'linkpaste',
-    label: '링크 붙여넣기',
-    disabled: true,
-    testID: 'stay-register-tab-linkpaste',
   },
   { key: 'pin', label: '핀 지정', testID: 'stay-register-tab-pin' },
 ];
@@ -514,6 +508,12 @@ export function StayRegisterScreen({
   // 띄운다). 이름 게이트는 제출 경로가 canSubmitStayRegister 로 진다. 「다시 시도」는 범위 밖이라
   // 여전히 canSubmit 으로 잠긴다.
   const canPress = canPressStayRegister(flow);
+  // TRIP-1429 — 검색 키·[검색] 버튼 공용 입구. 검색 중이면 무시(중복 지오코드 요청 방지), 공백 검색어면
+  // 버튼을 잠근다(page 조회도 공백이면 꺼져 있어 눌러도 아무 일이 없는 버튼이 된다 — INV-4).
+  const canSearch = flow.query.trim() !== '';
+  const submitSearch = (): void => {
+    if (flow.searchStatus !== 'loading') onSubmitQuery();
+  };
   // AC-3 문구는 coordConfirmed 하나에만 걸린다(후보 유무를 조건에 넣지 않는다) — 재검색으로
   // 이전 후보가 풀려도(§3-2 초기화) 안내는 그대로 남아야 한다(I-5). 핀 탭 좌표 미확정(P-6,
   // selectedCandidate null)에서도 떠야 하므로 selectedCandidate 를 조건에 넣지 않는다.
@@ -613,24 +613,44 @@ export function StayRegisterScreen({
                   </View>
                 ) : null}
 
-                {/* 검색 입력 — 라벨 + 돋보기(Figma). testID·검색 키 계약은 R-2·R-15 가 잠근다. */}
+                {/* 검색 입력 — 라벨 + 돋보기(Figma). testID·검색 키 계약은 R-2·R-15 가 잠근다.
+                  TRIP-1429 — 옆 [검색] 버튼이 검색 키와 같은 가드로 같은 onSubmitQuery 를 부른다(Q-042).
+                  Figma 엔 없는 버튼이다(01b Q1). 타이핑만으로는 여전히 나가지 않는다(R-2). */}
                 <View className="w-full gap-xs px-lg pt-md">
                   <Text className="font-noto-bold text-label font-bold text-muted">
                     숙소 검색
                   </Text>
-                  <View className="h-12 w-full flex-row items-center gap-sm rounded-input border border-hairline-strong px-md">
-                    <SearchGlyph size={20} tone="mutedSoft" />
-                    <TextInput
-                      testID="stay-register-search-input"
-                      value={flow.query}
-                      onChangeText={onChangeQuery}
-                      returnKeyType="search"
-                      placeholder="숙소명 · 주소"
-                      onSubmitEditing={() => {
-                        if (flow.searchStatus !== 'loading') onSubmitQuery();
-                      }}
-                      className="flex-1 font-noto text-body text-ink placeholder:text-muted-soft"
-                    />
+                  <View className="w-full flex-row items-center gap-sm">
+                    <View className="h-12 flex-1 flex-row items-center gap-sm rounded-input border border-hairline-strong px-md">
+                      <SearchGlyph size={20} tone="mutedSoft" />
+                      <TextInput
+                        testID="stay-register-search-input"
+                        value={flow.query}
+                        onChangeText={onChangeQuery}
+                        returnKeyType="search"
+                        placeholder="숙소명 · 주소"
+                        onSubmitEditing={submitSearch}
+                        className="flex-1 font-noto text-body text-ink placeholder:text-muted-soft"
+                      />
+                    </View>
+                    <Pressable
+                      testID="stay-register-search-submit"
+                      accessibilityRole="button"
+                      accessibilityLabel="검색"
+                      disabled={!canSearch}
+                      onPress={submitSearch}
+                      className={`h-12 items-center justify-center rounded-button px-lg ${
+                        canSearch ? 'bg-primary' : 'bg-surface-strong'
+                      }`}
+                    >
+                      <Text
+                        className={`font-noto-bold text-body font-bold ${
+                          canSearch ? 'text-on-primary' : 'text-muted-soft'
+                        }`}
+                      >
+                        검색
+                      </Text>
+                    </Pressable>
                   </View>
                 </View>
 
@@ -673,9 +693,8 @@ export function StayRegisterScreen({
           {/* TRIP-730 확정 콘텐츠(default 얼굴) — 캡션 + 선택 숙소 카드(연회색·분홍 침대·이름/주소). */}
           {showConfirmedContent && flow.selectedCandidate !== null ? (
             <View className="w-full gap-md px-lg pt-md">
-              <Text className="font-noto text-caption text-muted">
-                📍 지도에서 핀 위치를 확인하세요
-              </Text>
+              {/* TRIP-1429 결정 ⑤ — "📍 지도에서 핀 위치를 확인하세요" 캡션은 지웠다. 후보를 고르면 좌표는
+                이미 확정이라 확인이 남은 것처럼 읽혔다(Q-043). 미확정 안내(coordnotice, BR-U1-22)는 그대로다. */}
               <View
                 testID="stay-register-selected-card"
                 className="flex-row items-center gap-md rounded-card bg-surface-soft p-[14px]"

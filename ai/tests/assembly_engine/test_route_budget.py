@@ -21,6 +21,7 @@ import threading
 import time
 from datetime import date, datetime, timedelta, timezone
 
+import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
@@ -236,7 +237,7 @@ def test_two_pass_render_measures_some_and_estimates_rest() -> None:
         port.release.set()
     out = _distance_ranges(sol, anchors, coords, table, P)          # 2차: 렌더
     assert out["2026-10-10#a"] == "약 1.0km · 대중교통"            # 실측 — '추정' 없음
-    assert out["2026-10-10#c"].endswith("대중교통 추정")            # 시한 초과 구간만 추정
+    assert out["2026-10-10#c"] == "약 0.5km · 도보 추정"            # 시한 초과 구간만 추정 — 700m 이하라 걷는다
     assert rep.budget_estimated == 1
     for v in out.values():
         assert not any(tok in v for tok in _DURATION_TOKENS)        # INV-3
@@ -275,3 +276,28 @@ def test_property_counts_partition_and_estimates_are_deterministic(
             assert got == EST.estimate(*leg)
         rendered = _render_distance(got, P)
         assert not any(tok in rendered for tok in _DURATION_TOKENS)   # INV-3
+
+
+def _km_north(km: float) -> GeoPoint:
+    return GeoPoint(lat=37.5 + km / 111.195, lng=127.0)
+
+
+@pytest.mark.parametrize(("km", "label"), [
+    (0.65, "도보 추정"),     # 700m 이하 — 대중교통 여행이어도 걷는다(2026-10-19 사용자 결정, 종전 바닥 0.6)
+    (3.0, "대중교통 추정"),  # 먼 구간은 그대로 대중교통
+])
+def test_transit_trip_labels_each_leg_with_the_mode_it_actually_uses(km: float, label: str) -> None:
+    """대중교통 여행의 구간 이름표는 그 구간에 쓴 수단이다 — 걸어가는 구간이 "대중교통"으로 보이지 않는다."""
+    origin = _km_north(0.0)
+    assert _render_distance(EST.estimate(origin, _km_north(km), P), P).endswith(label)
+
+
+def test_the_walk_floor_is_700m_even_when_transit_would_be_faster() -> None:
+    """바닥은 속도 상수와 무관하다 — 도보를 아주 느리게 둬도 700m 이하는 걷고, 그 밖은 대중교통이다."""
+    import dataclasses
+    cfg = AssemblyConfig()
+    slow_walk = dataclasses.replace(cfg, speeds_kmph={**cfg.speeds_kmph, TransportMode.WALK: 0.5})
+    est = TravelEstimator(slow_walk)
+    origin = _km_north(0.0)
+    assert _render_distance(est.estimate(origin, _km_north(0.69), P), P).endswith("도보 추정")
+    assert _render_distance(est.estimate(origin, _km_north(0.75), P), P).endswith("대중교통 추정")

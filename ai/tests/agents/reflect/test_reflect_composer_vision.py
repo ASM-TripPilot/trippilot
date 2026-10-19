@@ -40,6 +40,7 @@ from hypothesis import strategies as st
 from trippilot.agents.reflect.agent import ReflectAgent, ReflectTask
 from trippilot.agents.reflect.composer import (
     MAX_ATTEMPTS,
+    bind_placeholders,
 )
 from trippilot.agents.reflect.fallback import build_fallback_template
 from trippilot.agents.reflect.highlight_rule import select_highlights
@@ -239,7 +240,7 @@ def test_budget_worst_case_total_failure_caps_template_calls_at_three() -> None:
     assert [bool(i) for i in template_llm.seen_images] == [True, False, False]
     assert highlight_llm.calls == 1
     assert template.is_fallback is True
-    assert template == build_fallback_template(_REQUEST.kind, _TID, _NOW)
+    assert template == bind_placeholders(build_fallback_template(_REQUEST.kind, _TID, _NOW), _REQUEST)
     # Phase 1 전 시도 실패와 같은 봉투 스키마 (VIS-P3 — 폴백까지 드롭인)
     phase1, _ = _run_phase1(FailingLlm())
     assert set(template.to_dict()) == set(phase1.to_dict())
@@ -390,6 +391,20 @@ def test_vision_clean_first_try_short_circuits_at_one_template_call() -> None:
     assert highlight_llm.calls == 1
     assert template.is_fallback is False
     assert len(template.scenes) == 3
+
+
+def test_vision_path_judges_photoless_visit_too() -> None:
+    """vision 판도 사진 0장 방문(poi-2)의 사진 자리를 위반으로 보고 사진 있는 방문으로
+    갈아끼운다 — 텍스트판과 같은 게이트 컨텍스트(PHOTO_SLOT_EMPTY)."""
+    body = {**_CLEAN_BODY, "scenes": [
+        {"layout": "PHOTO_FULL",
+         "photo_slot": {"visit_ref": {"date": "2026-08-02", "poi_id": "poi-2"}},
+         "caption": "둘째 날 바다"},
+        *_CLEAN_BODY["scenes"][1:],
+    ]}
+    template, _ = _run_vision(ScriptedVisionLlm(_raw(body)), ScriptedVisionLlm(_HL_RAW))
+    assert template.is_fallback is False
+    assert template.scenes[0].photo_slot.visit_ref == _REF1
 
 
 # ── 결정론 — 성공·강등·전실패 세 경로 전부 재실행 동일 ─────────────────

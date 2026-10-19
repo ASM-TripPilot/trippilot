@@ -177,6 +177,18 @@ jobs:
           tags: ${{ steps.infra.outputs.backend_repository }}:${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=aws-backend
           cache-to: type=gha,mode=min,scope=aws-backend
+      # 운영 AI 는 이미지 안 data/collected_events.json 을 읽는다(chart ai.yaml EVENTS_STORE). 매일 행사 수집은
+      # collect-state 브랜치에만 쌓아서 동봉본이 8-22 이후 멈춰 있었다(10-18 발견) — 빌드 직전에 정본으로 갈아 끼운다.
+      # 정본을 못 읽으면 동봉본을 그대로 굽고 경고만 낸다(배포를 막지 않는다).
+      - name: Refresh the bundled events store from collect-state
+        if: steps.config.outputs.deploy_application == 'true'
+        run: |
+          if git fetch --depth=1 origin collect-state \
+            && git show FETCH_HEAD:collected_events.json > "$RUNNER_TEMP/collect-state-events.json"; then
+            python3 deploy/eks/refresh_events.py "$RUNNER_TEMP/collect-state-events.json" ai/data/collected_events.json
+          else
+            echo "::warning::collect-state 의 collected_events.json 을 못 받았다 — 동봉본을 그대로 굽는다"
+          fi
       - name: Build and publish AI
         if: steps.config.outputs.deploy_application == 'true'
         uses: docker/build-push-action@v6
@@ -234,6 +246,9 @@ jobs:
         if: steps.config.outputs.deploy_application == 'true'
         env:
           EMBEDDING_IMAGE_TAG: ${{ steps.embedding-tag.outputs.tag }}
+          # 공공데이터포털 키(기상특보·에어코리아·특일정보) — 입력이 아니라 저장소 시크릿이다(입력은 실행 화면에 보인다).
+          # 이 스텝에만 싣는다. sync-secrets 가 backend·ai 시크릿에 쓰고, 비어 있으면 저장값을 그대로 둔다.
+          PUBLIC_DATA_API_KEY: ${{ secrets.PUBLIC_DATA_API_KEY }}
         run: |
           embedding_args=()
           if [ "$EFFECTIVE_EMBEDDING" = true ]; then embedding_args+=(--embedding-enabled); fi

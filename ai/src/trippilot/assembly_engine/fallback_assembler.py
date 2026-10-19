@@ -15,8 +15,9 @@ OR 의 재정렬(B 단계, TRIP-1178)에 해당하는 '집합 고정 최근접 �
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import replace
 from datetime import datetime, timedelta
-from typing import Mapping, Sequence
+from typing import Iterable, Mapping, Sequence
 
 from trippilot.assembly_engine.config import (
     END_NEAR_WEIGHT,
@@ -29,6 +30,7 @@ from trippilot.assembly_engine.constraints import (
     anchor_minutes,
     free_visit_cap,
     not_before_floor,
+    open_hours_ok,
 )
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
@@ -40,7 +42,7 @@ from trippilot.domain.itinerary import (
     TimeWindow,
     VisitSlot,
 )
-from trippilot.domain.poi import Poi, PoiCategory, counts_as_food
+from trippilot.domain.poi import OpenHour, Poi, PoiCategory, counts_as_food, open_windows_on
 
 
 def _at(day, template: datetime) -> datetime:
@@ -86,16 +88,63 @@ def placed_fixed_blocks(
     return pinned + tuple(required)
 
 
-def _open_ok(poi: Poi, start: datetime, end: datetime) -> bool:
-    if not poi.open_hours:
-        return True  # 정보 없음 → 막지 않음 (constraints.py와 동일 규칙)
-    dow = start.weekday()
-    todays = [oh for oh in poi.open_hours if oh.day_of_week == dow]
-    if not todays:
-        return False  # 휴무
-    s = start.hour * 60 + start.minute
-    e = s + int((end - start).total_seconds() // 60)
-    return any(oh.open_min <= s and e <= oh.close_min for oh in todays)
+def explain_unplaced(
+    problem: ItineraryProblem,
+    solution: ItinerarySolution,
+    index: Mapping[PoiId, Poi],
+    estimator,
+    cfg: AssemblyConfig,
+    probe: Iterable[PoiId] = (),
+) -> tuple[dict[PoiId, str], dict[PoiId, datetime]]:
+    """solve 뒤 — 못 놓인 필수 방문의 까닭과, 지금 해의 빈 틈에 그대로 들어가는 후보 (다시 짜기 1회 수리).
+
+    까닭(`why`): ``closed``(그날 휴무) · ``hours``(빈 하루에도 하한·영업시간·창 안에 체류가 안 들어감) ·
+    ``far``(앵커 이동만 빼면 들어감 — 지금 위치에서 멀다) · ``full``(빈 하루엔 되는데 지금 해의 틈엔 안 됨) ·
+    ``fits``(지금 해의 틈에 그대로 들어간다 — 솔버가 탐색 한도에서 멈춘 것이라 LLM 에 되물을 일이 아니다).
+    판정은 ①′ 의 `_required_start` **하나**다(`open_hours_ok` 독스트링과 같은 이유 — 규칙이 둘이면 서로
+    거짓말한다). OR 의 모델 전 제외(그날 휴무·영업창 ∩ 하한+앵커 이동 ∩ 창)와 같은 식이라 두 어셈블러에
+    다 맞다: OR 은 첫 방문에 `ws + 앵커` 를 걸고 하한이 있으면 그것이 `ws` 보다 크므로 max 가 같다.
+    하루·카테고리 상한은 까닭이 아니다 — 필수 방문에는 소프트 항(2000)이라 지배 항(1M)을 못 이긴다.
+
+    `fits`: `probe` 의 후보 → 지금 해 슬롯 사이 틈에서 가장 이른 시작(내부 전용 — 시각은 LLM 에 안 준다).
+    probe 는 하루(재계획)를 전제한다 — 여러 날이면 뒤 날이 덮는다.
+    """
+    rule = RuleFallbackAssembler(index, estimator, cfg)
+    bare = replace(problem, anchor=None)  # anchor_minutes → 0
+    nb = not_before_floor(problem)
+    win = (cfg.lunch_window_min, cfg.dinner_window_min)
+    why: dict[PoiId, str] = {}
+    fits: dict[PoiId, datetime] = {}
+    probe = tuple(probe)
+    for d in solution.days:
+        slots = sorted(d.slots, key=lambda s: s.start_at)
+        placed = {s.poi_id for s in slots}
+        for rv in problem.required_visits:
+            if rv.day != d.date or rv.poi_id in placed:
+                continue
+            poi = index.get(rv.poi_id)
+            if poi is None:
+                continue  # 좌표 미상 — 판정할 수 없다(⓪ 가 이미 강등으로 남겼다)
+            stay = rv.dwell_min if rv.dwell_min is not None else stay_for(poi.category, problem.pace)
+
+            def fit(p: ItineraryProblem, around: list[VisitSlot]) -> datetime | None:
+                return rule._required_start(p, d.date, poi, stay, around, nb, win)
+
+            if open_windows_on(poi, d.date, problem.holidays) == ():  # 정기·공휴일 휴무(상황 감지 H1)
+                why[rv.poi_id] = "closed"
+            elif fit(problem, []) is None:
+                why[rv.poi_id] = "far" if fit(bare, []) is not None else "hours"
+            else:
+                why[rv.poi_id] = "full" if fit(problem, slots) is None else "fits"
+        for pid in probe:
+            poi = index.get(pid)
+            if poi is None or pid in placed:
+                continue
+            t = rule._required_start(problem, d.date, poi, stay_for(poi.category, problem.pace),
+                                     slots, nb, win)
+            if t is not None:
+                fits[pid] = t
+    return why, fits
 
 
 class RuleFallbackAssembler:
@@ -222,11 +271,12 @@ class RuleFallbackAssembler:
             #    FOOD가 아니면 FOOD를 우선 시도(창당 1개·연속 금지의 그리디판),
             #    그 외에는 FOOD 후순위. 배제가 아니라 시도 순서만 바꾼다 —
             #    FOOD만 남으면 창 밖이어도 배치된다("정보 없음 ≠ 배제"와 같은 정신).
-            #    틈 채우기(TRIP-1249)는 **필수 방문이 있는 날만** — ①′ 가 점심창에 놓은 식당
-            #    앞의 오전이 비지 않게 첫 슬롯 앞·슬롯 사이 틈에도 넣는다. 없는 날은 종전과
-            #    바이트 동일(말단 삽입만)이라 기존 요청의 웜스타트 힌트가 변하지 않는다.
+            #    틈 채우기(TRIP-1249)는 **필수 방문이나 고정 블록이 있는 날** — ①·①′ 가 놓은 슬롯
+            #    앞의 오전이 비지 않게 첫 슬롯 앞·슬롯 사이 틈에도 넣는다. 종전엔 필수 방문 날만이라
+            #    12시 고정 식당 앞 오전이 비었고, 이 해를 힌트로 받은 OR 도 그대로 냈다(TRIP-1397
+            #    서울 실측). 둘 다 없는 날은 종전 그대로 말단 삽입이다.
             remaining = self._day_ranked(problem, day, ranked, used)
-            gap_fill = bool(required_by_day.get(day))
+            gap_fill = bool(required_by_day.get(day) or fixed_by_day.get(day))
             k = -1  # 커서: slots[k] 뒤 틈에 넣는다 (−1 = 첫 슬롯 앞). 틈 채우기가 아니면 늘 말단
             # 일별 카테고리 허용치 (TRIP-531) — OR-Tools 항과 동일 공식:
             # max(설정값, ⌈남은 후보 수 ÷ 남은 일수⌉) = 공정 몫 바닥.
@@ -290,7 +340,9 @@ class RuleFallbackAssembler:
                 # (말단 슬롯, 없으면 앵커)에서의 도로 km × travel_weight 를 점수에서 빼 다시 줄
                 # 세운다. 0 이면 ranked 순서 그대로(종전과 바이트 동일 — OR 웜스타트도 불변).
                 base = remaining
-                here = last_poi.coord if last_poi is not None else problem.anchor
+                # 앵커=숙소(생성)면 첫 곳은 숙소 거리로 줄 세우지 않는다 — OR 이 숙소 아크를 빼는 것과 같다.
+                here = (last_poi.coord if last_poi is not None
+                        else None if problem.ignore_anchor_distance else problem.anchor)
                 route_on = problem.travel_weight > 0 and here is not None
                 end = problem.end_near
                 # 숙소 근처에서 끝내기 — OR 의 끝 아크 감점의 그리디판. 그리디는 어느 삽입이 마지막인지
@@ -333,8 +385,8 @@ class RuleFallbackAssembler:
                     end = start + timedelta(minutes=stay)
                     if end > day_end:
                         continue  # day window 초과 (HC4)
-                    if not _open_ok(poi, start, end):
-                        continue  # 영업시간 (HC1)
+                    if not open_hours_ok(poi, start, end, problem.holidays):
+                        continue  # 영업시간 (HC1 — 검증과 같은 함수, 공휴일 포함)
                     # 고정 블록과의 충돌: 말단 삽입이라 뒤에 오는 고정 블록만 위험
                     conflict = any(not (end <= s.start_at or start >= s.end_at)
                                    for s in slots)
@@ -422,33 +474,37 @@ class RuleFallbackAssembler:
             prev_poi = self._pois.get(prev.poi_id) if prev is not None else None
             nxt_poi = self._pois.get(nxt.poi_id) if nxt is not None else None
             if (prev is None or prev_poi is not None) and (nxt is None or nxt_poi is not None):
-                lb = (ws + anchor_minutes(problem, poi, self._est) if prev_poi is None
-                      else mins(prev.end_at) + travel(prev_poi, poi))
-                ub = we if nxt_poi is None else mins(nxt.start_at) - travel(poi, nxt_poi)
+                # 틈은 하루 창 안으로 자른다 — 고정이 창 밖이면("6시까지" + 19시 잠금) 틈이 창을 넘고,
+                # 식당은 식사창 범위가 창으로 안 잘려 창 밖에 놓였다(HC4 위반 → 체인 전 단계 실패).
+                # OR 은 필수 방문 정의역을 창으로 자르므로 이제 두 어셈블러가 같다(PBT P1 이 찾았다).
+                lb = max(ws, ws + anchor_minutes(problem, poi, self._est) if prev_poi is None
+                         else mins(prev.end_at) + travel(prev_poi, poi))
+                ub = min(we, we if nxt_poi is None else mins(nxt.start_at) - travel(poi, nxt_poi))
                 gaps.append((max(lb, floor) if floor is not None else lb, ub))
             prev = nxt
 
         ranges = (*windows, (ws, we)) if counts_as_food(poi) else ((ws, we),)
+        todays = open_windows_on(poi, day, problem.holidays)  # 그 날 창 — 검증과 같은 함수(공휴일 포함)
         for lo_r, hi_r in ranges:
             for lb, ub in gaps:
-                t = self._earliest_open(poi, max(lb, lo_r), min(ub, hi_r) - stay, stay,
-                                        day.weekday())
+                t = self._earliest_open(max(lb, lo_r), min(ub, hi_r) - stay, stay, todays)
                 if t is not None:
                     return base + timedelta(minutes=t)
         return None
 
     @staticmethod
-    def _earliest_open(poi: Poi, a: int, b: int, stay: int, dow: int) -> int | None:
-        """[a, b] 안에서 체류가 영업창에 들어가는 가장 이른 시작(분). 정보 없음 = a (HC1 미적용).
+    def _earliest_open(a: int, b: int, stay: int,
+                       todays: tuple[OpenHour, ...] | None) -> int | None:
+        """[a, b] 안에서 체류가 그 날 영업창(`open_windows_on`)에 들어가는 가장 이른 시작(분). 정보 없음(None) = a
+        (HC1 미적용), 휴무(()) = None.
 
         후보 시각은 a 와 그 뒤의 영업 시작들뿐이다 — 가능 구간은 영업창들의 합집합과 [a, b] 의
-        교집합이라 가장 이른 점은 둘 중 하나다. 판정은 `_open_ok` 와 같은 식(한 창 안에 완전 포함).
+        교집합이라 가장 이른 점은 둘 중 하나다. 판정은 `open_hours_ok` 와 같은 식(한 창 안에 완전 포함).
         """
         if a > b:
             return None
-        if not poi.open_hours:
+        if todays is None:
             return a
-        todays = [oh for oh in poi.open_hours if oh.day_of_week == dow]
         for t in sorted({a, *(oh.open_min for oh in todays if a < oh.open_min <= b)}):
             if any(oh.open_min <= t and t + stay <= oh.close_min for oh in todays):
                 return t

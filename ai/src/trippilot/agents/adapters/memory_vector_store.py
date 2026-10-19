@@ -53,3 +53,18 @@ class InMemoryVectorStore:
 
     def delete(self, collection: str, item_id: str) -> None:
         self._collections.get(collection, {}).pop(item_id, None)
+
+    # 오프라인 적재 전용 — `PgVectorStore` 와 같은 의미(테스트가 적재 스크립트의 일괄 경로를 그대로 돈다).
+    def upsert_many(self, collection: str, rows) -> None:
+        for item_id, vector, payload in rows:
+            self.upsert(collection, item_id, vector, payload)
+
+    def delete_many(self, collection: str, item_ids) -> int:
+        items = self._collections.get(collection, {})
+        return sum(items.pop(i, None) is not None for i in list(item_ids))
+
+    def item_ids_like(self, collection: str, pattern: str) -> frozenset[str]:
+        import re
+        rx = re.compile("^" + "".join(".*" if c == "%" else "." if c == "_" else re.escape(c)
+                                      for c in pattern) + "$")
+        return frozenset(i for i in self._collections.get(collection, {}) if rx.match(i))

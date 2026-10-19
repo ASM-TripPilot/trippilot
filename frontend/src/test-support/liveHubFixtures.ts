@@ -2,6 +2,8 @@ import { http, HttpResponse } from 'msw';
 
 import type { Itinerary, Trip, VisitCheck } from '@/shared/api/index.schemas';
 
+import { recordsHandler, tripRecord } from './tripRecordsFixtures';
+
 /**
  * i01 허브(`LiveItineraryPage`) 응답 픽스처 — `LiveItineraryPage.integration` 의 관점(describe)마다 복사돼 있던
  * 일정 봉투·슬롯·여행·방문 빌더를 한 곳에. 모양은 스키마 필수 최소값이고, 관점마다 다른 값은 `over` 로 덮는다.
@@ -90,17 +92,20 @@ const BASE = 'http://localhost:8080/api/v1';
 /**
  * 허브가 마운트에 쏘는 GET 4종(여행·일정·그날 방문·트리거) — `onUnhandledRequest: 'error'` 라 하나라도 빠지면 크래시한다.
  * `visits` 는 함수로 주면 요청 시점에 평가된다(테스트 도중 서버 상태가 바뀌는 관점용).
+ * TRIP-1415 — 메모 대상 방문이 있으면 records(서버 메모)도 조회한다. 기본은 실적 0건.
  */
 export function liveHubHandlers({
   itinerary,
   trip = liveTrip(),
   visits = [],
   triggers = { triggers: [] },
+  records = () => HttpResponse.json(tripRecord([], LIVE_TRIP_ID)),
 }: {
   itinerary: Itinerary;
   trip?: Trip;
   visits?: VisitCheck[] | (() => VisitCheck[]);
   triggers?: Record<string, unknown>;
+  records?: () => Response | Promise<Response>;
 }) {
   return [
     http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip)),
@@ -115,5 +120,6 @@ export function liveHubHandlers({
     http.get(`${BASE}/trips/:tripId/triggers`, () =>
       HttpResponse.json(triggers)
     ),
+    recordsHandler(records),
   ];
 }

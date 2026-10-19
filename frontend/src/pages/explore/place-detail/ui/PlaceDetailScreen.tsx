@@ -129,7 +129,7 @@ export function PlaceDetailScreen({
     <View testID="explore-place-detail" className="flex-1 bg-canvas">
       <ScrollView className="flex-1" contentContainerClassName="pb-[48px]">
         {/* 갤러리 hero(풀블리드) — imageUrl NULL 이면 기본 이미지를 지어내지 않고 회색 자리
-            (BR-U1-06). 원형 버튼 3개는 안전영역 위로 띄운다(full-bleed 이미지 immersive). */}
+            (BR-U1-06). 원형 버튼 3개는 ScrollView 밖에 고정해 띄운다(full-bleed 이미지 immersive). */}
         <View
           testID="explore-place-hero"
           className="h-[430px] w-full overflow-hidden bg-surface-strong"
@@ -147,55 +147,6 @@ export function PlaceDetailScreen({
             locations={SCRIM_LOCATIONS}
             style={StyleSheet.absoluteFillObject}
           />
-
-          {/* 원형 버튼 3개 — full-bleed hero 위에 띄운다. top-[52px]는 Figma 값(상태바 + 여백
-              근사) — 기기별 안전영역 정합은 6-b 실기 캘리브레이션 몫(repo-trap: 안전영역 실겹침은
-              렌더 트리에 없다). */}
-          <View className="absolute left-lg right-lg top-[52px] flex-row items-center">
-            <Pressable
-              testID="explore-place-back"
-              accessibilityRole="button"
-              accessibilityLabel="뒤로"
-              onPress={onPressBack}
-              className="h-[38px] w-[38px] items-center justify-center rounded-pill bg-on-primary"
-            >
-              <BackChevronGlyph size={20} />
-            </Pressable>
-            <View className="flex-1" />
-            <Pressable
-              testID="explore-place-share"
-              accessibilityRole="button"
-              accessibilityLabel="공유"
-              onPress={onPressShare}
-              className="h-[38px] w-[38px] items-center justify-center rounded-pill bg-on-primary"
-            >
-              <ShareGlyph size={19} />
-            </Pressable>
-            <Pressable
-              testID="explore-place-save"
-              accessibilityRole="button"
-              // 라벨은 담김과 무관하게 고정, 담김은 selected 로만(TRIP-1281 결정 · TRIP-1302).
-              accessibilityLabel={heartSaveLabel(place.nameKo)}
-              // 담김=선택됨. 빈/찬은 색이 아니라 이 상태 + 글리프 컴포넌트 정체성으로 잰다
-              // (repo-trap 글리프 함정, d04·d02 하트와 같은 신호).
-              accessibilityState={{ selected: saved }}
-              disabled={saving}
-              onPress={onToggleSave}
-              className="ml-[10px] h-[38px] w-[38px] items-center justify-center rounded-pill bg-on-primary"
-            >
-              {saved ? (
-                <HeartFilledGlyph
-                  testID="explore-place-save-filled"
-                  size={20}
-                />
-              ) : (
-                <HeartOutlineGlyph
-                  testID="explore-place-save-outline"
-                  size={20}
-                />
-              )}
-            </Pressable>
-          </View>
 
           <View className="absolute bottom-[42px] left-lg right-lg gap-xs">
             <Text
@@ -310,6 +261,53 @@ export function PlaceDetailScreen({
           </View>
         </View>
       </ScrollView>
+
+      {/* 원형 버튼 3개 — ScrollView 밖 고정 오버레이(TRIP-1429 결정 1=B — hero 안에선 본문과 같이 올라가
+        상태바와 겹쳤다). ScrollView 뒤에 그려야 그 위에 얹힌다. top-[52px]는 Figma 값(상태바 + 여백
+        근사) — 기기별 안전영역 정합은 6-b 실기 캘리브레이션 몫(repo-trap: 안전영역 실겹침은
+        렌더 트리에 없다). e03 숙소 상세도 같은 값이다. */}
+      <View
+        pointerEvents="box-none"
+        className="absolute left-lg right-lg top-[52px] flex-row items-center"
+      >
+        <Pressable
+          testID="explore-place-back"
+          accessibilityRole="button"
+          accessibilityLabel="뒤로"
+          onPress={onPressBack}
+          className="h-[38px] w-[38px] items-center justify-center rounded-pill bg-on-primary"
+        >
+          <BackChevronGlyph size={20} />
+        </Pressable>
+        <View pointerEvents="none" className="flex-1" />
+        <Pressable
+          testID="explore-place-share"
+          accessibilityRole="button"
+          accessibilityLabel="공유"
+          onPress={onPressShare}
+          className="h-[38px] w-[38px] items-center justify-center rounded-pill bg-on-primary"
+        >
+          <ShareGlyph size={19} />
+        </Pressable>
+        <Pressable
+          testID="explore-place-save"
+          accessibilityRole="button"
+          // 라벨은 담김과 무관하게 고정, 담김은 selected 로만(TRIP-1281 결정 · TRIP-1302).
+          accessibilityLabel={heartSaveLabel(place.nameKo)}
+          // 담김=선택됨. 빈/찬은 색이 아니라 이 상태 + 글리프 컴포넌트 정체성으로 잰다
+          // (repo-trap 글리프 함정, d04·d02 하트와 같은 신호).
+          accessibilityState={{ selected: saved }}
+          disabled={saving}
+          onPress={onToggleSave}
+          className="ml-[10px] h-[38px] w-[38px] items-center justify-center rounded-pill bg-on-primary"
+        >
+          {saved ? (
+            <HeartFilledGlyph testID="explore-place-save-filled" size={20} />
+          ) : (
+            <HeartOutlineGlyph testID="explore-place-save-outline" size={20} />
+          )}
+        </Pressable>
+      </View>
 
       {openNaverError ? (
         <NoticeBanner

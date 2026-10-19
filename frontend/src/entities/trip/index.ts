@@ -20,10 +20,16 @@ export { tripDayNumber } from './lib/tripDayNumber';
 export { classifyTripPhase, isTripOngoing } from './lib/tripPhase';
 export type { TripPhase } from './lib/tripPhase';
 export type { MyTripBadge, MyTripCardVM, PastTripCardVM } from './model';
+export {
+  markDoneBarSeen,
+  readDoneBarSeen,
+  writeDoneBarSeen,
+} from './model/doneBarSeen';
 export { COVER_GRADIENTS } from './config/coverGradients';
 export type { CoverTone } from './config/coverGradients';
 export { pickCoverCity } from './lib/coverCity';
 export { pickRegionCover } from './lib/regionCover';
+export { SERVICE_REGIONS } from './config/serviceRegions';
 export { PastTripRow } from './ui/PastTripRow';
 export { TripCard } from './ui/TripCard';
 export { ChevronRightGlyph } from './ui/TripGlyphs';

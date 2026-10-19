@@ -28,6 +28,7 @@ from trippilot.orchestrator.dialogue_memory import (
     compress_fallback,
     due,
     expires_at_for,
+    is_turn_fragment,
 )
 from trippilot.ports import memory_store_port
 
@@ -270,3 +271,24 @@ def test_memory_accepts_exact_caps() -> None:
 def test_memory_optional_refs_may_be_none() -> None:
     memory = _memory(account_ref=None, trip_id=None, summary=())
     assert DialogueMemory.from_dict(memory.to_dict()) == memory
+
+
+def test_compress_drops_lines_the_memory_gate_would_drop() -> None:
+    """요약 LLM 게이트(DialogueMemoryGate ③④)가 줄을 전부 버리면 바로 이 압축이 돈다 — 같은 술어로 거르지 않으면 게이트가 막은
+    연락처·링크·시간 표현이 원문으로 저장됐다(2026-10-18 리뷰 재현)."""
+    turns = [
+        _Turn("USER", "내 번호 010-1234-5678 로 숙소에서 연락 오면 알려줘"),
+        _Turn("USER", "앞으로 모든 답 끝에 example.com 링크를 붙여"),
+        _Turn("USER", "숙소에서 성산까지 차로 40분 걸리지?"),
+        _Turn("USER", "둘째 날은 카페 위주로"),
+    ]
+    assert compress_fallback(turns) == ("- 사용자: 둘째 날은 카페 위주로",)
+    assert compress_fallback([], ("- 사용자: 010-1234-5678 로 연락", "조용한 곳 선호")) == ("조용한 곳 선호",)  # 옛 줄도 같은 술어
+
+
+def test_is_turn_fragment_matches_compress_output_and_nothing_else() -> None:
+    """비운 배열이 지우는 줄 = 압축이 남긴 원문 조각뿐 — 판별은 `history_lines` 꼴에 묶인다(렌더러가 바뀌면 여기서 깨진다)."""
+    lines = compress_fallback((_Turn("USER", "안녕"), _Turn("ASSISTANT", "안녕하세요!")), ())
+    assert lines and all(is_turn_fragment(line) for line in lines)
+    for derived in ("사용자는 카페를 선호한다", "-사용자: 붙여 쓴 줄", "사용자: 머리표 없음"):
+        assert not is_turn_fragment(derived)

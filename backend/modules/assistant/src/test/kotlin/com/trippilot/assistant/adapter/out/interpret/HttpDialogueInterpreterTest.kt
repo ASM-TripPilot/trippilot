@@ -83,6 +83,7 @@ class HttpDialogueInterpreterTest : StringSpec({
         sessionId = sessionId,
         accountRef = "acc-1",
         recentTurns = listOf(RecentTurn(MessageRole.USER, "오늘 날씨"), RecentTurn(MessageRole.ASSISTANT, "맑아요.")),
+        traceId = "7c9e6679-7425-40de-944b-e07fc1f90ae7",
     )
 
     fun ok(body: String) = withSuccess(body.trimIndent(), MediaType.APPLICATION_JSON)
@@ -95,6 +96,8 @@ class HttpDialogueInterpreterTest : StringSpec({
             .andExpect(jsonPath("$.context.surface").value("ITINERARY"))
             .andExpect(jsonPath("$.context.itinerary.days[0].slots[0].slot_key").value("2026-11-02#p1"))
             .andExpect(jsonPath("$.request_meta.deadline_ms").value(5000))
+            // 추적 번호는 호출자가 만든 값 그대로 — 상대가 이것을 trace_id 로 로그에 남기고, 우리는 같은 값을 도우미 행에 적는다(BR-U8-64)
+            .andExpect(jsonPath("$.request_meta.request_id").value("7c9e6679-7425-40de-944b-e07fc1f90ae7"))
             .andExpect(jsonPath("$.session_id").value(sessionId.toString()))
             .andExpect(jsonPath("$.account_ref").value("acc-1"))
             .andExpect(jsonPath("$.recent_turns[0].role").value("USER"))
@@ -254,19 +257,19 @@ class HttpDialogueInterpreterTest : StringSpec({
         items[1].tripId shouldBe null
     }
 
-    // ── 배선 — http 모드에서만 실 클라이언트, 그 밖은 no-op ──
+    // ── 배선 — 메모리 클라이언트는 해석 모드와 따로 간다: 상대가 없는 fake 만 no-op ──
 
-    "http 모드는 해석기와 메모리 클라이언트가 함께 뜨고, fake·off 는 메모리가 no-op 이다" {
+    "메모리 클라이언트는 http·off 에서 실 클라이언트이고 fake 만 no-op 이다 — off 동안에도 파기가 상대 DB 에 닿는다" {
         val runner = ApplicationContextRunner().withUserConfiguration(AssistantConfiguration::class.java, HttpDialogueInterpreterConfiguration::class.java)
-        runner.withPropertyValues("trippilot.assistant.interpret.mode=http").run { context ->
-            context.startupFailure shouldBe null
-            (context.getBean(DialogueMemoryPort::class.java) is HttpDialogueMemoryClient) shouldBe true
-        }
-        listOf("fake", "off").forEach { mode ->
+        listOf("http", "off").forEach { mode ->
             runner.withPropertyValues("trippilot.assistant.interpret.mode=$mode").run { context ->
                 context.startupFailure shouldBe null
-                context.getBean(DialogueMemoryPort::class.java) shouldBe NoopDialogueMemory
+                (context.getBean(DialogueMemoryPort::class.java) is HttpDialogueMemoryClient) shouldBe true
             }
+        }
+        runner.withPropertyValues("trippilot.assistant.interpret.mode=fake").run { context ->
+            context.startupFailure shouldBe null
+            context.getBean(DialogueMemoryPort::class.java) shouldBe NoopDialogueMemory
         }
         NoopDialogueMemory.deleteBySession(sessionId) shouldBe 0
         NoopDialogueMemory.export("acc-1") shouldBe emptyList()

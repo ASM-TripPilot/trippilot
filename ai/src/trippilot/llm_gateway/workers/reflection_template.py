@@ -1,7 +1,7 @@
 """ReflectionTemplateWorker — 회고 연출 템플릿 1회 호출 조립, 상위 티어 (TRIP-429).
 
 N회 생성 루프(≤3)·결정론 랭킹·장면/필드 교체·봉투 조립·고정 폴백 템플릿은
-agents/reflect(composer·fallback, 후속) 소유 (FD business-logic §3 ③~⑥) —
+agents/reflect(agent.py 루프 · composer.py 랭킹·교체·바인딩 · fallback.py) 소유 (FD business-logic §3 ③~⑥) —
 워커는 vars 조립 → gateway.call 1회까지만 (reflection_nudge 워커와 같은 형).
 
 입력(방문 기록·이벤트·페르소나 요약)은 백엔드가 조립해 전달한다 (계약 §5,
@@ -44,12 +44,12 @@ def build_reflection_template_vars(request: ReflectionRequest) -> dict[str, str]
     )
     return {
         "kind": request.kind.value,
-        "region": request.region.strip() or "미지정",
+        "region": inline(request.region) or "미지정",
         "period": f"{request.start_date.isoformat()} ~ {request.end_date.isoformat()}",
         "visits": visits,  # post-init이 visits ≥ 1 보장 (BR-U6R-15) — 빈 목록 없음
         "events": events or "(이벤트 없음)",
-        "persona_summary": request.persona_summary.strip() or "(요약 없음)",
-        "weather_summary": request.weather_summary.strip() or "(요약 없음)",
+        "persona_summary": inline(request.persona_summary) or "(요약 없음)",
+        "weather_summary": inline(request.weather_summary) or "(요약 없음)",
     }
 
 
@@ -72,6 +72,7 @@ class ReflectionTemplateWorker:
             # 해시태그 허용 판정 소스 (TRIP-558)
             region=request.region,
             poi_names=tuple(v.poi_name for v in request.visits),
+            photoless_refs=request.photoless_refs(),
         )
         return self._gateway.call(
             LlmFeature.REFLECTION_TEMPLATE,
@@ -108,6 +109,7 @@ class ReflectionTemplateWorker:
             event_kinds=frozenset(e.kind for e in request.events),
             region=request.region,
             poi_names=tuple(v.poi_name for v in request.visits),
+            photoless_refs=request.photoless_refs(),
         )
         # images 키 = vision.photos id 집합 — photo_highlight 워커와 같은 계약.
         # 조용한 필터링은 두 가지를 숨긴다: 동의 밖 바이트 유입(BR-U6R-09)과

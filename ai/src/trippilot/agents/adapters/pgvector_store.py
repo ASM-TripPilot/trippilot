@@ -61,6 +61,39 @@ class PgVectorStore:
                 (collection, item_id, _vector_literal(vector), json.dumps(payload)),
             )
 
+    # ── 오프라인 적재 전용(포트 밖) — `scripts/load_kb.py` 만 쓴다 ─────────────────────
+    # KB-5 조각은 수만 행이라 행마다 커넥션을 여는 `upsert`·`delete` 로는 배포 적재가 분 단위로 늘어난다.
+    # 요청 경로는 이 메서드를 모른다(포트에 없다) — 적재 스크립트가 `hasattr` 로 고르고 없으면 행 단위로 간다.
+
+    def upsert_many(self, collection: str, rows) -> None:
+        """`rows` = (item_id, vector, payload) 들. 커넥션 하나·executemany."""
+        rows = list(rows)
+        if not rows:
+            return
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.executemany(
+                f"INSERT INTO {_TABLE} (collection, item_id, embedding, payload) "
+                "VALUES (%s, %s, %s::vector, %s::jsonb) "
+                "ON CONFLICT (collection, item_id) "
+                "DO UPDATE SET embedding = EXCLUDED.embedding, payload = EXCLUDED.payload",
+                [(collection, i, _vector_literal(v), json.dumps(p)) for i, v, p in rows],
+            )
+
+    def delete_many(self, collection: str, item_ids) -> int:
+        ids = list(item_ids)
+        if not ids:
+            return 0
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(f"DELETE FROM {_TABLE} WHERE collection = %s AND item_id = ANY(%s)", (collection, ids))
+            return cur.rowcount
+
+    def item_ids_like(self, collection: str, pattern: str) -> frozenset[str]:
+        """`LIKE` 패턴에 맞는 저장 id — 코퍼스에서 빠진 장소의 낡은 조각을 찾을 때 쓴다."""
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(f"SELECT item_id FROM {_TABLE} WHERE collection = %s AND item_id LIKE %s",
+                        (collection, pattern))
+            return frozenset(r[0] for r in cur.fetchall())
+
     def search(
         self,
         collection: str,

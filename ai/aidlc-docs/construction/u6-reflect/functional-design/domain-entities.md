@@ -4,6 +4,11 @@
 > 근거 정본: `reflection-template-design.md`(#334 머지 — **출력 계약, 본 FD는 이 계약을 변경하지 않는다**),
 > `reflect-agent-design.md` §4·5(트리거·상태 머신 — 무변), `agent-structure-v2.md` §3·4(Reflect 전속 도구·어셈블리 관문 스킵),
 > 프롬프트 정본 §2.7(REFLECTION_NUDGE)·§2.8(REFLECTION_TEMPLATE — §2.3 REFLECTION은 2026-08-25 흡수·폐지), AI-D06, agent-foundation FD(BR-AF-07 절차).
+> **개정 2026-10-19**: `ai-prompt-design.md` §2.8 은 AlternativeExplanation 이다 — REFLECTION_TEMPLATE·VISION·PHOTO_HIGHLIGHT 전용 절은 없고
+> 프롬프트 정본은 `ai/prompts/reflection_template{,_vision}.yaml` 머리 주석과 계약(reflection-template-design.md)이다.
+> 아래 §2 `ReflectionRequest.vision` 은 구현에서 `agents/reflect/agent.py` 의 `ReflectTask.vision` 으로 갔고(요청 와이어 무변),
+> §4 `PhotoRef.image_ref` 는 없다 — 이미지는 `ReflectTask.images`(불투명 payload)로 따로 간다. 사진 회고 방향은 2026-10-18 에
+> "사진은 기기를 떠나지 않는다 — AI 는 사진 자리만, FE 가 기기 사진으로 채운다"로 정해져 vision 경로는 미개통이다.
 > 규칙은 U1과 동일: `frozen=True, slots=True` · tz-aware · `from_dict(to_dict(x)) == x`(U5-P10) · 컬렉션은 tuple/frozenset만.
 
 ---
@@ -35,7 +40,7 @@ POI 정본(백엔드 C7 단일 소유 — 정합성 점검 P1 합의)에 대한 
 | `SceneLayout` | `PHOTO_FULL / PHOTO_CAPTION / STATS / MAP / EVENT` | **닫힌 enum** (계약 §3.2) — 밖 layout = 하드 위반. 픽셀 배치는 FE 렌더러 소유 |
 | `SourceEventKind` | `PLAN_B / SKIPPED` | EVENT 장면은 입력 이벤트에 **실재할 때만** 유효 (계약 §3.2) |
 | `ViolationGrade` | `HARD / SOFT` | 계약 §4.1 등급 |
-| `ViolationCode` | `TIME_EXPR / PLACEHOLDER_OUT / VISIT_REF_OUT / EVENT_NOT_FOUND`(이상 HARD) · `HASHTAG_OUT / CAPTION_LEN / SCENE_COUNT / DUP_VISIT_REF`(이상 SOFT — HASHTAG_OUT은 2026-08-25 강등, 미결 #5) | 위반 코드도 closed-set — 게이트가 이 코드만 산출 |
+| `ViolationCode` | `TIME_EXPR / PLACEHOLDER_OUT / VISIT_REF_OUT / EVENT_NOT_FOUND / PHOTO_SLOT_EMPTY`(이상 HARD — PHOTO_SLOT_EMPTY는 2026-10-18 추가, 사진 0장 방문의 사진 자리) · `HASHTAG_OUT / CAPTION_LEN / SCENE_COUNT / DUP_VISIT_REF`(이상 SOFT — HASHTAG_OUT은 2026-08-25 강등, 미결 #5) | 위반 코드도 closed-set — 게이트가 이 코드만 산출 |
 
 ## 2. 입력 — 경계 요청 (domain/reflection.py)
 
@@ -55,9 +60,9 @@ POI 정본(백엔드 C7 단일 소유 — 정합성 점검 P1 합의)에 대한 
 |---|---|---|
 | `PhotoSlot` | `visit_ref: VisitRef` | 자리와 참조뿐 — 실제 사진 결합은 서비스 렌더 시 (business-logic-model §5) |
 | `Scene` | `layout: SceneLayout, photo_slot: PhotoSlot \| None, caption: str, source_event: SourceEventKind \| None` | `layout ∈ {PHOTO_FULL, PHOTO_CAPTION}` ⇒ `photo_slot` 필수 · `layout = EVENT` ⇒ `source_event` 필수 (post-init) |
-| `Cover` | `title: str, subtitle: str, photo_slot: PhotoSlot \| None` | subtitle 기본형 `{region} · {start_date}~{end_date}` — 자리표시자 |
+| `Cover` | `title: str, subtitle: str, photo_slot: PhotoSlot \| None` | subtitle 은 회고 한 문장(BR-U6R-18). 자리표시자 기본형 `{region} · {start_date}~{end_date}` 은 고정 폴백 전용 |
 | `ReflectionTemplate` | `template_id: str, kind, format, generated_at: datetime, is_fallback: bool, cover: Cover, scenes: tuple[Scene,...], hashtags: tuple[str,...]` | 계약 §3.1 봉투 + §3.2 본문. tz-aware. **시각·순서·duration 필드 자체가 없다** (INV-2 비적용의 구조화 + INV-3). `template_id` 생성 규칙은 미결 #3 |
-| `PLACEHOLDER_VOCAB` (상수) | `{visit_count} {distance_km} {photo_count} {region} {start_date} {end_date} {poi:i.name}` | **자리표시자 어휘도 closed-set** — 어휘 밖 참조·poi 인덱스 범위 밖 = 하드 위반. 어휘 확장 = 계약 개정 |
+| `PLACEHOLDER_VOCAB` (상수) | `{visit_count} {distance_km} {photo_count} {region} {start_date} {end_date} {poi:i.name}` | **자리표시자 어휘도 closed-set** — 어휘 밖 참조·poi 인덱스 범위 밖 = 하드 위반. 어휘 확장 = 계약 개정. 값은 응답 전에 AI 가 채운다(BR-U6R-17) — `{distance_km}` 는 값이 없어 프롬프트가 쓰지 말라고 한다 |
 | `TemplateViolation` | `grade: ViolationGrade, code: ViolationCode, scene_index: int \| None, detail: str` | 게이트 산출물 — 빈 튜플 = 위반 0 (조기 종료 조건) |
 | `TemplateCandidate` | `template: ReflectionTemplate, violations: tuple[TemplateViolation,...], attempt: int(1~3)` | 랭킹 입력 1건. **하드 위반이 있어도 후보는 유지** — 드롭이 아니라 N회 생성→최선 채택 (계약 §4) |
 

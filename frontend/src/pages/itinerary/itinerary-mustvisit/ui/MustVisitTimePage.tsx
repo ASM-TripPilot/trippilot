@@ -11,6 +11,7 @@ import {
   buildFixedMustVisitRequest,
   mustVisitTimeBlockReason,
   startTimeOptions,
+  startWheelAnchor,
   tripDayChips,
   type MustVisitTimeForm,
 } from '@/features/add-must-visit';
@@ -228,6 +229,13 @@ export function MustVisitTimePage({
       dayChips={dayChips}
       startOptions={startTimeOptions()}
       form={form}
+      // 값이 비었을 때 휠을 세울 자리 — 그 여행 일과 시작(첫날이면 첫날 시작). 값은 아니다(BR-U1-49).
+      startAnchor={startWheelAnchor({
+        fixedDate: form.fixedDate,
+        startDate: trip.data?.startDate,
+        dayStartAt: trip.data?.dayStartAt,
+        firstDayStartAt: trip.data?.firstDayStartAt,
+      })}
       // 사용자가 손대기 전에는 사유를 내지 않는다 — `edited` 가 곧 touched 다
       // (`TripNewStep1Page` 의 touched 와 같은 형태). 들어오자마자 잘못했다고 말하지 않는다.
       blockReason={

@@ -9,13 +9,14 @@ import java.util.UUID
 enum class AssistantSurface { HOME, STAY_SEARCH, ITINERARY, LIVE, STAY_DETAIL }
 
 /**
- * 해석된 의도(closed-set, PBT-U8-9). 상대(ai) 라우터의 어휘 13종 + 범위 밖 —
+ * 해석된 의도(closed-set, PBT-U8-9). 상대(ai) 라우터의 어휘 13종 + 장소 탐색(도우미 직접 분류 전용, 2026-10-19) + 범위 밖 —
  * 표 밖 값은 만들 수 없다(역직렬화가 거부한다). 의도마다 처리기는 정확히 하나다.
  */
 enum class Intent {
     EDIT_SCHEDULE, SUGGEST_ALTERNATIVE, REPLAN, REGENERATE, GENERATE_SCHEDULE,
     SHOW_SCHEDULE, GET_NEXT_SLOT, GET_DISTANCE, GET_POI_INFO, GET_WEATHER,
     GENERATE_REFLECTION, TRIP_SUMMARY, STYLE_ANALYSIS,
+    EXPLORE_PLACES,
     OUT_OF_SCOPE,
 }
 
@@ -107,6 +108,11 @@ data class InterpretRequest(
     val accountRef: String,
     /** 이번 발화 앞의 대화, 오래된 것부터 ≤20건(BR-U8-22 화이트리스트 확장). 이번 발화는 [utterance] 로 가므로 여기 없다. */
     val recentTurns: List<RecentTurn>,
+    /**
+     * 이 호출의 추적 번호 — 와이어 `request_meta.request_id` 로 가고, 상대가 같은 값을 `trace_id` 로 로그에 남긴다.
+     * **호출자가 만든다** — 그래야 호출이 실패해도 그 턴의 도우미 행에 같은 값을 적을 수 있다(BR-U8-64).
+     */
+    val traceId: String,
 )
 
 /**
@@ -125,8 +131,8 @@ class DialogueInterpretFailed(message: String, cause: Throwable? = null) : Runti
  * 상대 세션 메모리의 파기·내보내기(`/ai/v1/dialogue/memory`, DE §3.3·§4.1 · BR-AO-10). 백엔드 대화가 사라지는 길마다
  * 상대 요약도 같이 가야 한다 — 안 가면 "지웠는데 기억한다"가 상대 TTL(90일)만큼 남는다.
  *
- * 파기는 **멱등**이고 지울 것이 없으면 0 이다(오류 아님). 실패는 예외로 올린다(종류 불문) — 호출측이 정한다:
- * 이력 지우기·여행 삭제는 WARN 으로 접고(TTL 백스톱), 계정 삭제는 올려서 아웃박스가 재시도한다.
+ * 파기는 **멱등**이고 지울 것이 없으면 0 이다(오류 아님). 실패는 예외로 올린다(종류 불문) — 세 파기 경로(이력 지우기·여행 삭제·
+ * 계정 삭제)가 모두 아웃박스 구독에서 불러 실패하면 릴레이가 재시도한다(미결 #13). 답하는 사이 지워진 대화의 재파기만 최선 노력이다.
  * `http` 모드가 아니면(fake·off) no-op 이다 — 상대 메모리가 생기지 않으니 지울 것도 없다.
  */
 interface DialogueMemoryPort {

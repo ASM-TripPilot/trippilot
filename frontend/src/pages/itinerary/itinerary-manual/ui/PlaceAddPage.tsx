@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Text, View } from 'react-native';
 
 import { addSlot, insertSlotAt } from '@/features/edit-itinerary';
@@ -20,6 +20,10 @@ import {
   usePutTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
 import type { Place, PoiCategory } from '@/shared/api/index.schemas';
+import { showToast } from '@/shared/ui/Toast';
+
+import { comparePlaceAdd, placeAddToastMessage } from '../model/placeAddNotice';
+import type { PlaceAddSlotLike } from '../model/placeAddNotice';
 
 // 핀이 없을 때 지도 중심 — 서울 시청(LiveHubView 선례). {0,0} 은 기니만 바다(null-island)라 무의미하다.
 const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };
@@ -65,6 +69,18 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
   const [searchText, setSearchText] = useState('');
   const [pendingPlace, setPendingPlace] = useState<Place | null>(null);
   const [addedPoiIds, setAddedPoiIds] = useState<string[]>([]);
+  // TRIP-1424 — 마지막 추가 저장이 실패했나. 다음 저장이 시작되면 지운다(01b Q7).
+  const [addFailed, setAddFailed] = useState(false);
+  // 저장 중인 추가(null = 없음) — 응답과 견줄 그날 요청 슬롯·추가한 자리를 들고 있다. 값이 있는 동안은 다른 추가를
+  // 받지 않는다(01b Q3 — 첫 응답이 캐시에 오기 전 days 로 둘째 PUT 을 만들면 서버에서 첫 추가가 지워진다).
+  // 상태가 아니라 ref 인 이유: 「+ 추가」(시트 열기)의 같은 틱 누름도 막아야 하고, 화면을 떠난 뒤 도는 훅 콜백도
+  // 읽어야 한다. 실제로 PUT 을 내는 [적용]의 같은 틱 두 누름은 이 가드 밖이다.
+  const inFlightRef = useRef<{
+    poiId: string;
+    date: string;
+    requestSlots: PlaceAddSlotLike[];
+    addedIndex: number;
+  } | null>(null);
 
   // 검색은 서버가 한다(q) + 커서 무한 스크롤(TRIP-502) — 클라 이름 필터·전량 수신을 없앤다.
   // 입력창은 즉시 반영하되 서버 조회 키만 300ms 멈춘 값으로 민다 — 글자마다 요청이 나가던 것을 줄인다(TRIP-1348).
@@ -82,7 +98,41 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
   // 재시도 없음 — 기본 3회(1+2+4초)를 다 기다리면 실패 시 목록이 ~7초 빈다.
   const trip = useGetTripsTripId(tripId, { query: { retry: false } });
   const itinerary = useGetTripsTripIdItinerary(tripId);
-  const save = usePutTripsTripIdItinerary();
+  // 콜백은 호출별(`mutate(vars, { onSuccess })`)이 아니라 훅 옵션에 둔다 — 호출별 콜백은 응답 전에 화면을 떠나면
+  // 안 불려, 편집기 캐시에 추가가 안 보이고 안내도 사라진다(TRIP-1424 Q2). 훅 옵션은 언마운트 뒤에도 돈다.
+  const save = usePutTripsTripIdItinerary({
+    mutation: {
+      // 저장 성공 → PUT 응답(추가한 슬롯·서버 재검증 결과 hasViolation)으로 일정 GET 캐시를 교체한다
+      // (재조회 0, TRIP-1348). h19 가 그 캐시를 읽는다 — 없으면 추가가 화면에 영영 안 보인다.
+      onSuccess: (data) => {
+        queryClient.setQueryData(
+          getGetTripsTripIdItineraryQueryKey(tripId),
+          data
+        );
+        const added = inFlightRef.current;
+        if (added === null) return;
+        setAddedPoiIds((ids) => [...ids, added.poiId]);
+        // 서버가 이동을 반영해 시각을 밀었으면 응답 시각 그대로 말한다(INV-2). 응답엔 "밀었다" 필드가 없어
+        // 요청과 같은 자리의 슬롯을 견준다(BR-U3-13·14 §3 개정 — 장소·순서는 요청 그대로일 때만 repair 를 쓴다).
+        showToast({
+          testID: 'itinerary-place-added-toast',
+          message: placeAddToastMessage(
+            comparePlaceAdd({
+              requestSlots: added.requestSlots,
+              responseSlots: data.days.find((day) => day.date === added.date)
+                ?.slots,
+              addedIndex: added.addedIndex,
+            })
+          ),
+        });
+      },
+      // 실패한 추가를 "추가됨"으로 두지 않고 말한다(INV-4). 화면을 떠난 뒤의 실패는 보일 자리가 없다(맹점 ③-c).
+      onError: () => setAddFailed(true),
+      onSettled: () => {
+        inFlightRef.current = null;
+      },
+    },
+  });
 
   // 담을 대상 일자 — 라우트 `date`(편집기의 활성 일자 — 카드 사이 "+" TRIP-1115·말미 「장소 추가」
   // TRIP-1233)가 일정에 있으면 그 날, 없거나 미전달(같이 짜기·후보 시트의 장소 검색)이면 첫 날.
@@ -165,20 +215,20 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
         : day
     );
 
-    save.mutate(
-      { tripId, data: buildEditItineraryRequest(nextDays) },
-      {
-        // 저장 성공 → PUT 응답(추가한 슬롯·서버 재검증 결과 hasViolation)으로 일정 GET 캐시를 교체한다
-        // (재조회 0, TRIP-1348). h19 가 그 캐시를 읽는다 — 없으면 추가가 화면에 영영 안 보인다.
-        onSuccess: (data) => {
-          queryClient.setQueryData(
-            getGetTripsTripIdItineraryQueryKey(tripId),
-            data
-          );
-        },
-      }
-    );
-    setAddedPoiIds((ids) => [...ids, place.poiId]);
+    const request = buildEditItineraryRequest(nextDays);
+    inFlightRef.current = {
+      poiId: place.poiId,
+      date: targetDate,
+      requestSlots:
+        request.days.find((day) => day.date === targetDate)?.slots ?? [],
+      // 서버 슬롯은 시작이 늘 있어 요청이 거르는 슬롯이 없다 — 그날 배열의 자리가 곧 요청의 자리다.
+      addedIndex:
+        nextDays
+          .find((day) => day.date === targetDate)
+          ?.slots.indexOf(newSlot) ?? -1,
+    };
+    setAddFailed(false);
+    save.mutate({ tripId, data: request });
   }
 
   return (
@@ -190,9 +240,22 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
         // TRIP-1204 — 시트가 열린 채로도 손가락 확대·이동(셸 기본은 열림=잠금). 6-b 실기 전용.
         mapViewOnly={false}
         header={
-          <Text className="px-lg pb-xs pt-sm font-noto-bold text-[18px] font-bold text-ink">
-            {`장소 추가 · ${dayNumber}일차`}
-          </Text>
+          <View>
+            <Text className="px-lg pb-xs pt-sm font-noto-bold text-[18px] font-bold text-ink">
+              {`장소 추가 · ${dayNumber}일차`}
+            </Text>
+            {/* TRIP-1424 — 저장 실패 안내(Figma 공백 — 편집기 저장 실패 배너 꼴). 토스트는 성공 아이콘 고정이라 못 쓴다. */}
+            {addFailed ? (
+              <View
+                testID="itinerary-place-add-error"
+                className="mx-lg mb-xs rounded-card bg-primary-pale px-md py-sm"
+              >
+                <Text className="font-noto text-caption text-primary-text">
+                  장소를 담지 못했어요. 잠시 후 다시 시도해 주세요
+                </Text>
+              </View>
+            ) : null}
+          </View>
         }
         list={{
           data: items,
@@ -203,6 +266,8 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
               onPressAdd={() => {
                 // 담을 일자가 없으면 시트를 안 연다(조용한 소실 차단, W-2 — 배너는 제거됐다).
                 if (notReady) return;
+                // 저장 중엔 다른 추가를 받지 않는다(TRIP-1424 Q3 — 진행 표시는 6-b 결정).
+                if (inFlightRef.current !== null) return;
                 // 검색 키보드를 내린다 — 목록은 탭을 행에 넘기되(handled) 키보드는 그대로 두므로,
                 // 안 내리면 새 시각 시트가 키보드 밑에 깔린다(TRIP-981 #057).
                 Keyboard.dismiss();

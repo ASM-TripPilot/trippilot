@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { Text } from 'react-native';
 import {
   fireEvent,
   render,
@@ -87,6 +88,13 @@ function renderScreen(over: Partial<DailyReflectionScreenProps> = {}) {
   render(<DailyReflectionScreen {...props} />);
   return props;
 }
+
+describe('TRIP-1445 · AI 장면 블록은 방문이 적은 날(data-insufficient)에도 그린다', () => {
+  it.each(['default', 'data-insufficient'] as const)('%s 얼굴', (face) => {
+    renderScreen({ face, scenesBlock: <Text>장면 블록</Text> });
+    expect(screen.getByText('장면 블록')).toBeOnTheScreen();
+  });
+});
 
 describe('렌더 스모크 · default 얼굴이 빈 화면이 아니다(긍정 앵커)', () => {
   it('표시본·통계·사진 그리드를 그린다', () => {

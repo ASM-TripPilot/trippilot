@@ -355,10 +355,44 @@ def test_payload_round_trips_into_validate_request() -> None:
         "violations": [{
             "code": "HC2", "slot_ref": FREE_POI, "detail": "이동시간 부족",
             "day_index": 0, "slot_index": 1,
+            "reason_code": None,  # HC1 하위 코드만 있다(상황 감지 H1) — 다른 HC 는 null
         }],
         # TRIP-537 — 전부 등록된 일정이면 빈 목록(= 모든 슬롯이 판정을 받았다)
         "unverified_slots": [],
     }
+
+
+def test_validate_carries_hc1_reason_code() -> None:
+    """HC1 하위 코드(상황 감지 H1 · BR-SA-17) — 백엔드 장소 감지가 이 값으로 알림 변형을 고른다(detail 은 파싱하지 않는다)."""
+    orchestrator = FakeOrchestrator(
+        make_outcome(),
+        violations=[Violation(code="HC1", slot_ref=FIXED_POI, detail="공휴일 휴무", reason_code="HOLIDAY"),
+                    Violation(code="HC1", slot_ref=FREE_POI, detail="영업시간 밖: 60~120",
+                              reason_code="OUT_OF_HOURS")],
+    )
+    with client(orchestrator) as c:
+        generated = c.post("/ai/v1/itinerary/generate", json=BACKEND_REQUEST).json()
+        body = c.post(
+            "/ai/v1/itinerary/validate",
+            json={"itinerary": generated, "request_meta": BACKEND_REQUEST["request_meta"]},
+        ).json()
+    assert [v["reason_code"] for v in body["violations"]] == ["HOLIDAY", "OUT_OF_HOURS"]
+
+
+def test_repair_request_accepts_reason_code_and_rejects_unknown() -> None:
+    """백엔드는 받은 위반을 repair 요청에 되돌려 보낸다 — 닫힌 집합 밖 값은 422(드리프트를 침묵시키지 않는다)."""
+    with client(FakeOrchestrator(make_outcome())) as c:
+        generated = c.post("/ai/v1/itinerary/generate", json=BACKEND_REQUEST).json()
+
+        def repair(code):
+            return c.post("/ai/v1/itinerary/repair", json={
+                "itinerary": generated, "request_meta": BACKEND_REQUEST["request_meta"],
+                "violations": [{"code": "HC1", "slot_ref": FREE_POI, "detail": "x", "reason_code": code}],
+            }).status_code
+
+        assert repair("CLOSED_DAY") == 200
+        assert repair(None) == 200
+        assert repair("HOURS_MISMATCH") == 422  # 백엔드 쪽 변형 이름 — AI 하위 코드가 아니다
 
 
 def test_violation_indices_computed_by_scanning_itinerary() -> None:

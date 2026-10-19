@@ -51,9 +51,27 @@ _OK_CODE = "0000"
 
 # 이 키로는 앞으로도 안 된다는 신호 — 만나면 키를 퇴출하고 다음 키로 넘어간다.
 # data.go.kr 공통 에러코드: 20 접근거부 · 22 한도초과 · 30 미등록 · 31 기한만료.
-# (재시도로 풀리는 일시 장애 — 타임아웃·429·5xx — 는 여기 없다. 그건 키 문제가 아니다.)
+# (재시도로 풀리는 일시 장애 — 타임아웃·5xx — 는 여기 없다. 그건 키 문제가 아니다.)
 _KEY_DEAD_CODES = frozenset({"20", "22", "30", "31"})
-_KEY_DEAD_HTTP = 403
+# HTTP 403 = 키 자체 문제(KEY2 가 매 실행 403 — 2026-10-19), HTTP 429 = **그 키의 그 오퍼레이션 하루 한도
+# 소진**(한도는 오퍼레이션별 — 같은 키로 목록·detailCommon2 는 통과, 10-19 실측). 429 를 일시 장애로 두면
+# 한도 끝난 키로 계속 부른다 — 10-19 정기 수집은 KEY2 몫이 KEY3 로 몰려 detailIntro2 960건이 429 였다.
+# 퇴출은 이 실행 안에서만이다(다음 날 다시 쓴다).
+_KEY_DEAD_HTTP = frozenset({403, 429})
+
+# 목록 조회 키 — 옛 areaCode → 법정동 시도 코드(lDongRegnCd). KorService2 가 지역을 법정동 코드로
+# 옮기면서 **수정된 항목의 areacode 칸이 비어** areaCode 로 거르면 일부만 온다. 실측(2026-10-18,
+# 관광지 totalCount areaCode vs lDongRegnCd): 서울 315 vs 765 · 부산 122 vs 351 · 제주 247 vs 557,
+# 음식점도 55~58%. 경복궁·해운대해수욕장·광안리해수욕장·감천문화마을·천지연폭포가 공유본에 없던 이유다
+# (전부 areacode '' · lDongRegnCd 만 채워짐). 강원·전북은 특별자치도 코드(51·52)만 살아 있고(42·45 는 0),
+# 세종은 다섯 자리 36110, 광주·전남은 통합(전남광주통합특별시 12)이다 — 5(광주)와 38(전남)이 같은 12 를
+# 가리키므로 기본 순회에서 5 를 뺀다(`pipeline.DEFAULT_AREA_CODES`). 어댑터는 그대로 부른다 — 메서드
+# 1회 = HTTP 1건이 호출 예산 계약이라 여기서 조용히 건너뛰지 않는다.
+LDONG_BY_AREA: Mapping[str, str] = {
+    "1": "11", "2": "28", "3": "30", "4": "27", "5": "12", "6": "26", "7": "31", "8": "36110",
+    "31": "41", "32": "51", "33": "43", "34": "44", "35": "47", "36": "48", "37": "52",
+    "38": "12", "39": "50",
+}
 
 # detailIntro2의 영업시간·휴무일 필드명은 contentTypeId마다 다르다 (TourAPI 4.0).
 _INTRO_FIELDS: Mapping[str, tuple[str, str]] = {
@@ -193,11 +211,14 @@ class TourApiAdapter:
     def fetch_page(
         self, area_code: str, kind: str, page_no: int, rows: int
     ) -> SourcedPage:
+        # 조회는 법정동 코드로 — 사유는 `LDONG_BY_AREA`. 표에 없는 코드는 옛 areaCode 로(하위호환).
+        ldong = LDONG_BY_AREA.get(area_code, "")
+        region = {"lDongRegnCd": ldong} if ldong else {"areaCode": area_code}
         body = self._call(
             "areaBasedList2",
             {
                 **self._common_params(),
-                "areaCode": area_code,
+                **region,
                 "contentTypeId": kind,
                 "numOfRows": str(rows),
                 "pageNo": str(page_no),
@@ -213,6 +234,27 @@ class TourApiAdapter:
             records=records,
             total_count=total if isinstance(total, int) else len(records),
         )
+
+    def search_festivals(
+        self, open_from: str, page_no: int, rows: int
+    ) -> tuple[list[dict], int]:
+        """`searchFestival2` — `open_from`(YYYYMMDD) 이후에도 열려 있는 공식 축제·행사 원문과 총 건수(전국).
+
+        **지역 필터를 걸지 않는다** — KorService2 가 지역을 법정동 코드(`lDongRegnCd`)로 옮기면서
+        `areaCode` 로 거르면 0건이 온다(실측 2026-10-18: 17개 지역 전부 0). 지역은 응답 항목의
+        `lDongRegnCd` 로 읽는다(`collect_tourapi_festivals.py`).
+
+        장소가 아니라 행사라서 `SourcedPlaceRecord` 로 바꾸지 않는다 — 원문 그대로 넘긴다.
+        """
+        body = self._call("searchFestival2", {
+            **self._common_params(),
+            "eventStartDate": open_from,
+            "numOfRows": str(rows),
+            "pageNo": str(page_no),
+        })
+        items = [i for i in self._items(body) if isinstance(i, dict)]
+        total = body.get("totalCount")
+        return items, total if isinstance(total, int) else len(items)
 
     def fetch_detail(self, source_ref: str, kind: str) -> SourcedDetail:
         fields = _INTRO_FIELDS.get(kind)
@@ -251,6 +293,16 @@ class TourApiAdapter:
             detail_raw=detail_raw,
         )
 
+    def fetch_overview(self, content_id: str) -> str | None:
+        """`detailCommon2` 의 개요(`overview`) 원문 — KB-5 장소 지식 2단계 코퍼스(`collect_place_overviews.py`).
+
+        HTTP 1건. 없으면 None. 원문 그대로 준다(`<br>`·엔티티 정리는 수집 스크립트 몫 — 어댑터는 해석하지 않는다).
+        """
+        body = self._call("detailCommon2", {**self._common_params(), "contentId": content_id})
+        items = self._items(body)
+        first = items[0] if items and isinstance(items[0], dict) else {}
+        return self._opt_str(first.get("overview"))
+
     # ── 내부 ─────────────────────────────────────────
     def _call(self, endpoint: str, params: Mapping[str, str]) -> dict:
         """HTTP 1건 + 봉투 해체 — 키가 죽으면 다음 살아있는 키로 같은 요청을 재시도.
@@ -273,8 +325,8 @@ class TourApiAdapter:
         try:
             payload = self._http.get_json(f"{_BASE}/{endpoint}", request_params)
         except Exception as e:  # urllib·JSON 파싱 등 — 원인 보존해 상위 로그로
-            if getattr(e, "code", None) == _KEY_DEAD_HTTP:
-                raise _KeyRejected(f"HTTP {_KEY_DEAD_HTTP}") from e
+            if (code := getattr(e, "code", None)) in _KEY_DEAD_HTTP:
+                raise _KeyRejected(f"HTTP {code}") from e
             raise SourcingError(f"{endpoint} 호출 실패: {type(e).__name__}: {e}") from e
         if not isinstance(payload, dict):
             raise SourcingError(f"{endpoint} 응답이 JSON 객체가 아님")
@@ -318,11 +370,11 @@ class TourApiAdapter:
             address=cls._opt_str(item.get("addr1")),
             lat=cls._opt_coord(item.get("mapy")),   # mapy = 위도
             lng=cls._opt_coord(item.get("mapx")),   # mapx = 경도
+            # 옛 cat1~3 + 새 lclsSystm1~3 — 수정된 항목은 cat 이 비고 lcls 만 온다(`mapping._LCLS1`)
             category_codes=tuple(
                 c for c in (
-                    cls._opt_str(item.get("cat1")),
-                    cls._opt_str(item.get("cat2")),
-                    cls._opt_str(item.get("cat3")),
+                    cls._opt_str(item.get(k))
+                    for k in ("cat1", "cat2", "cat3", "lclsSystm1", "lclsSystm2", "lclsSystm3")
                 ) if c
             ),
             image_url=cls._https(cls._opt_str(item.get("firstimage"))),

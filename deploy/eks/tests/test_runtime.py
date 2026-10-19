@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 import unittest
@@ -104,6 +105,56 @@ class SecretTests(unittest.TestCase):
             runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
                 "KAKAO_APP_ID": app_id}})
 
+    def test_situation_sweep_switches_are_allowlisted_and_validated(self):
+        """Plan-B 상황 감시 스위치 4종(situation-awareness 설계서 §7)은 backend 시크릿으로만 켠다. allowlist 에 없으면 시크릿에
+        넣는 순간 배포 전체가 거부되고, 값이 틀리면 백엔드가 기동에서 죽는다(모르는 모드·지평·UUID 오타 = 바인딩 실패) —
+        파드가 뜨다 죽기 전에 여기서 막는다. 운영 카나리 계정 목록은 생성 상한 예외 계정과 같은 규칙에 더해 공백만 든 값도 막는다."""
+        base = {name: {} for name in runtime_secrets.GROUP_KEYS}
+        oks = [{"PLANB_SITUATION_SWEEP": mode} for mode in ("off", "dry-run", "on")]
+        oks += [{"PLANB_SITUATION_HORIZON": horizon} for horizon in ("today", "tomorrow", "pre-trip")]
+        oks += [{"PLANB_PREPARED_REPLAN": mode} for mode in ("off", "on")]
+        oks += [{"PLANB_SITUATION_SWEEP_ACCOUNT_IDS": ids}
+                for ids in ("", "0D7F17AB-5c4b-4d6d-a7f7-484ba11dda46, 11111111-2222-4333-8444-555555555555")]
+        for ok in oks:
+            with self.subTest(ok=ok):
+                runtime_secrets.validate_groups({**base, "backend": ok})
+        bads = [{"PLANB_SITUATION_SWEEP": mode} for mode in ("dry_run", "ON", "true", "")]
+        bads += [{"PLANB_SITUATION_HORIZON": horizon} for horizon in ("d-1", "pretrip", "TOMORROW", "")]
+        bads += [{"PLANB_PREPARED_REPLAN": mode} for mode in ("dry-run", "true", "")]
+        # 파이썬 uuid 는 받지만 백엔드는 못 읽는 모양까지 — DB 도구에서 대시 없이 복사해 오는 것이 흔하다.
+        # 공백만 든 값은 '빈 값'이 아니다 — 백엔드 바인딩이 [null] 로 읽어 아무 계정도 안 맞는 목록이 된다(백엔드가 기동에서 거부).
+        bads += [{"PLANB_SITUATION_SWEEP_ACCOUNT_IDS": ids}
+                 for ids in ("not-a-uuid", "0d7f17ab5c4b4d6da7f7484ba11dda46", "{0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46}",
+                             "0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46,", " ", "\t")]
+        for bad in bads:
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                runtime_secrets.validate_groups({**base, "backend": bad})
+
+    def test_situation_keys_reach_both_the_allowlist_and_the_chart(self):
+        """정본 키 표(situation-awareness tech-stack 델타 6 — 백엔드 런타임 키 4종) ⊆ 허용목록 ∧ 차트가 파드에 싣는 목록.
+        허용목록에서 빠지면 시크릿에 넣는 순간 배포가 거부되고, 차트에서 빠지면 시크릿 값이 파드에 **조용히** 안 닿는다
+        (앱은 기본 off 로 뜬다). 차트가 싣는 backend 시크릿 키는 모두 허용목록 안이어야 한다 — 반대면 넣을 길이 없는 키다."""
+        chart = (Path(__file__).resolve().parents[1] / "chart" / "templates" / "backend.yaml").read_text()
+        line = next(text for text in chart.splitlines() if "range list" in text and '"GOOGLE_CLIENT_ID"' in text)
+        listed = set(re.findall(r'"([A-Z0-9_]+)"', line))
+        for key in ("PLANB_SITUATION_SWEEP", "PLANB_SITUATION_HORIZON", "PLANB_SITUATION_SWEEP_ACCOUNT_IDS",
+                    "PLANB_PREPARED_REPLAN"):
+            with self.subTest(key=key):
+                self.assertIn(key, runtime_secrets.BACKEND_KEYS)
+                self.assertIn(key, listed)
+        self.assertLessEqual(listed, runtime_secrets.BACKEND_KEYS)
+
+    def test_sweep_without_real_weather_is_called_out_on_every_deploy(self):
+        """스윕을 켰는데(dry-run·on) 날씨 모드가 kma 가 아니면 단기예보·특보·대기질 감지기가 꺼진 채 돈다(휴무만 본다).
+        배포는 막지 않는다 — 장소 감지만으로 켜는 것도 정상 선택이라서다. 대신 배포마다 크게 말한다."""
+        def gaps(backend):
+            return list(runtime_secrets.open_gaps({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": backend}))
+        self.assertEqual(len(gaps({"PLANB_SITUATION_SWEEP": "on"})), 1)  # 날씨 모드가 없으면 기본 fake 다
+        self.assertIn("WEATHER_MODE", gaps({"PLANB_SITUATION_SWEEP": "dry-run", "WEATHER_MODE": "fake"})[0])
+        self.assertEqual(gaps({"PLANB_SITUATION_SWEEP": "on", "WEATHER_MODE": "kma", "WEATHER_API": "key"}), [])
+        self.assertEqual(gaps({"PLANB_SITUATION_SWEEP": "off", "WEATHER_MODE": "fake"}), [])
+        self.assertEqual(gaps({"WEATHER_MODE": "fake"}), [])  # 스윕 키가 없으면 꺼짐이다
+
     def test_missing_kakao_app_id_is_called_out_on_every_deploy(self):
         """값이 빠져도 배포는 막지 않는다 — 대신 조용히 넘어가지 않는다(TRIP-1317). 로그인에 카카오를 쓰는데
         앱 ID 가 없으면 남의 앱 토큰으로 가입이 열린 채 돈다."""
@@ -148,6 +199,14 @@ class SecretTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "ai": bad})
 
+    def test_public_data_key_is_allowlisted_in_backend_and_ai(self):
+        """공공데이터포털 키(기상특보·에어코리아·특일정보)는 백엔드·AI 둘 다 읽는다 — 한쪽 목록에서 빠지면 그 그룹에 넣는 순간
+        배포 전체가 거부된다."""
+        for group in ("backend", "ai"):
+            with self.subTest(group=group):
+                runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS},
+                                                 group: {"PUBLIC_DATA_API_KEY": "key"}})
+
     def test_runtime_secret_does_not_expose_master_or_cross_service_keys(self):
         groups = runtime_secrets.seed_groups({name: {} for name in runtime_secrets.GROUP_KEYS}, lambda: "pass/@'word", lambda: "rsa")
         manifests = runtime_secrets.runtime_manifests(groups, outputs(), "trippilot")
@@ -190,6 +249,18 @@ class SecretTests(unittest.TestCase):
                     {"TRIPPILOT_DIALOGUE_SHADOW_RATE": "inf"}):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 runtime_secrets.validate_groups({**base, "ai": bad})
+
+    def test_holiday_closure_mode_is_allowlisted_and_validated(self):
+        """공휴일 휴무 스위치(상황 감지 H1)는 ai 시크릿으로만 켠다. allowlist 에 없으면 시크릿에 넣는 순간 배포
+        전체가 거부되고, 값이 틀리면 AI 가 기동에서 죽는다(main.py: on|off 외 = 기동 실패) — 여기서 먼저 막는다."""
+        self.assertIn("HOLIDAY_CLOSURE_MODE", runtime_secrets.AI_KEYS)
+        base = {name: {} for name in runtime_secrets.GROUP_KEYS}
+        for ok in ("on", "off", ""):
+            with self.subTest(ok=ok):
+                runtime_secrets.validate_groups({**base, "ai": {"HOLIDAY_CLOSURE_MODE": ok}})
+        for bad in ("true", "ON", "yes", "1"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                runtime_secrets.validate_groups({**base, "ai": {"HOLIDAY_CLOSURE_MODE": bad}})
 
     def test_dialogue_memory_ddl_is_identical_in_both_canons(self):
         """`dialogue_memory` DDL 정본은 둘이다(FD DE §4) — EKS 는 bootstrap.sql(마스터 Job, 매 배포 멱등),
@@ -573,6 +644,43 @@ class RuntimeIntegrationTests(unittest.TestCase):
             runtime_secrets.sync(outputs(), "trippilot-dev", False, execute, target="dev")
             self.assertEqual(saved[ai_arn], {})
 
+    def test_sync_writes_the_public_data_key_to_backend_and_ai_without_printing_it(self):
+        """공공데이터포털 키는 GitHub 시크릿 → 배포 역할이 backend·ai 두 그룹에 쓴다 — 로컬 AWS 자격 없이. 한쪽만 들어가면
+        그쪽 기능만 조용히 빈다(날씨 키가 EKS 에서 겪는 두 그룹 함정). 값은 출력 어디에도 없다 — 쓴 그룹 이름만."""
+        arns = outputs()["app_secret_arns"]
+        saved, execute = self._saved_secrets({"OPENAI_API_KEY": "sk-x"})
+        printed = io.StringIO()
+        with patch("runtime_secrets.rsa_key", return_value="k"), patch("runtime_secrets.validate_rsa_key"):
+            with contextlib.redirect_stdout(io.StringIO()):
+                runtime_secrets.sync(outputs(), "trippilot", False, execute)  # 첫 배포 시드 — 아래 쓰기만 센다
+            self.writes.clear()
+            with contextlib.redirect_stdout(printed):
+                runtime_secrets.sync(outputs(), "trippilot", False, execute, public_data_api_key=" pd-secret-value\n")
+        for group in ("backend", "ai"):
+            self.assertEqual(saved[arns[group]]["PUBLIC_DATA_API_KEY"], "pd-secret-value")
+        self.assertEqual(sorted(write for write in self.writes if write != "apply"), sorted((arns["backend"], arns["ai"])))
+        self.assertEqual(saved[arns["ai"]]["OPENAI_API_KEY"], "sk-x")  # 다른 키는 그대로
+        self.assertIn("public data key written: backend, ai", printed.getvalue())
+        self.assertNotIn("pd-secret-value", printed.getvalue())
+
+    def test_sync_keeps_the_stored_public_data_key_when_absent_or_unchanged(self):
+        """시크릿이 없거나 빈 런은 저장값을 지우지 않고, 같은 값이면 쓰지 않는다 — 다른 변경이 없으면 put 0회."""
+        arns = outputs()["app_secret_arns"]
+        saved, execute = self._saved_secrets({"PUBLIC_DATA_API_KEY": "stored"})
+        with patch("runtime_secrets.rsa_key", return_value="k"), patch("runtime_secrets.validate_rsa_key"), \
+                patch("builtins.print") as printed:
+            runtime_secrets.sync(outputs(), "trippilot", False, execute)  # 첫 배포 시드
+            saved[arns["backend"]]["PUBLIC_DATA_API_KEY"] = "stored"
+            for given in (None, "", "  \n", "stored"):
+                with self.subTest(given=given):
+                    self.writes.clear()
+                    printed.reset_mock()
+                    runtime_secrets.sync(outputs(), "trippilot", False, execute, public_data_api_key=given)
+                    self.assertEqual([write for write in self.writes if write != "apply"], [])
+                    for group in ("backend", "ai"):
+                        self.assertEqual(saved[arns[group]]["PUBLIC_DATA_API_KEY"], "stored")
+                    self.assertNotIn("public data key written", " ".join(str(call.args[0]) for call in printed.call_args_list))
+
     def test_feature_model_overrides_reject_unknown_features_and_malformed_pairs_before_writing(self):
         """모르는 기능 이름이 배정에 들어가면 AI 가 기동에서 죽는다(`feature_models_from_env`) — 쓰기 전에 거절한다."""
         known = runtime_secrets.known_llm_features()
@@ -645,6 +753,20 @@ class RuntimeIntegrationTests(unittest.TestCase):
             with self.assertRaises(SystemExit), patch("sys.stderr"):
                 runtime.main(["sync-secrets", "--outputs", str(source), "--push-mode", "fcm"])
 
+    def test_sync_secrets_cli_reads_the_public_data_key_from_env_not_argv(self):
+        """비밀값은 argv 에 올리지 않는다(프로세스 목록·로그에 남는다) — 워크플로가 그 스텝 env 로만 싣는다."""
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "outputs.json"
+            source.write_text(json.dumps({key: {"value": value} for key, value in outputs().items()}))
+            with patch("runtime.runtime_secrets.sync") as sync, patch("builtins.print"):
+                with patch.dict(os.environ, {"PUBLIC_DATA_API_KEY": "pd-key"}):
+                    runtime.main(["sync-secrets", "--outputs", str(source)])
+                self.assertEqual(sync.call_args.kwargs["public_data_api_key"], "pd-key")
+                with patch.dict(os.environ):
+                    os.environ.pop("PUBLIC_DATA_API_KEY", None)
+                    runtime.main(["sync-secrets", "--outputs", str(source)])
+                self.assertIsNone(sync.call_args.kwargs["public_data_api_key"])
+
     def test_ensure_namespace_and_cli_commands_dispatch_with_validated_arguments(self):
         import tempfile
         with tempfile.TemporaryDirectory() as folder:
@@ -652,7 +774,8 @@ class RuntimeIntegrationTests(unittest.TestCase):
             target = Path(folder) / "values.json"
             source.write_text(json.dumps({key: {"value": value} for key, value in outputs().items()}))
             common = ["--outputs", str(source)]
-            with patch("runtime.command", return_value="{}") as shell, patch("builtins.print"):
+            with patch("runtime.command", return_value="{}") as shell, patch("builtins.print"), \
+                    patch("runtime_smoke.wait_job"):
                 runtime.main(["ensure-namespace"])
                 manifest = json.loads(shell.call_args.args[1])
                 self.assertEqual(manifest["metadata"]["labels"]["pod-security.kubernetes.io/enforce"], "restricted")
@@ -693,7 +816,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
                          "trippilot-kb-load")
 
     def test_load_kb_reads_the_serving_image_prints_logs_and_cleans_up(self):
-        shell = Mock(side_effect=["", "123.dkr.ecr/ai:sha-1", "", "", "0", "trippilot-kb-load-ok", "총 1470건", ""])
+        shell = Mock(side_effect=["", "123.dkr.ecr/ai:sha-1", "", "Complete", "0", "trippilot-kb-load-ok", "총 1470건", ""])
         with patch("runtime.command", shell), patch("builtins.print") as out:
             runtime.main(["load-kb"])
         calls = [c.args[0] for c in shell.call_args_list]
@@ -709,7 +832,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
     def test_load_kb_after_retries_shows_the_succeeded_attempt_not_the_failed_one(self):
         """재시도로 완료된 Job 에서 `logs job/…` 이 실패한 첫 시도의 EmbeddingUnreachable 트레이스를 찍고
         바로 'complete' 가 나왔다(10-15 개발 첫 적재) — 적재가 됐는지 로그로 판정할 수 없었다."""
-        shell = Mock(side_effect=["", "img", "", "", "1", "trippilot-kb-load-2nd", "place_docs.json: 1470건 적재", ""])
+        shell = Mock(side_effect=["", "img", "", "SuccessCriteriaMet Complete", "1", "trippilot-kb-load-2nd", "place_docs.json: 1470건 적재", ""])
         with patch("runtime.command", shell), patch("builtins.print") as out:
             runtime.main(["load-kb"])
         calls = [c.args[0] for c in shell.call_args_list]
@@ -784,7 +907,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
     def test_load_pois_runs_waits_prints_the_summary_and_cleans_up(self):
         summary = "합계 — 접수=19084 신규=689 갱신=18395 지역코드미상=0\n탈락 없음"
         # 재시도가 있었던 Job: 성공한 파드 이름·실패 횟수 1 → 그 파드의 로그를 읽고 요약에 재시도를 남긴다
-        shell = Mock(side_effect=["", "123.dkr.ecr/ai:sha-1", "", "", "trippilot-poi-load-k7x2q", "1", summary, ""])
+        shell = Mock(side_effect=["", "123.dkr.ecr/ai:sha-1", "", "Complete", "trippilot-poi-load-k7x2q", "1", summary, ""])
         with patch("runtime.command", shell), patch("builtins.print") as out:
             runtime.main(["load-pois"])
         calls = [c.args[0] for c in shell.call_args_list]
@@ -822,7 +945,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
             " · 합계 — 접수=19084 신규=0 갱신=19080 지역코드미상=3 · 탈락(사유별): · gate.category_unmapped: 4")
         with tempfile.TemporaryDirectory() as folder:
             output = os.path.join(folder, "out")
-            shell = Mock(side_effect=["", "img", "", "", "trippilot-poi-load-abc12", "0", logs, ""])
+            shell = Mock(side_effect=["", "img", "", "Complete", "trippilot-poi-load-abc12", "0", logs, ""])
             with patch("runtime.command", shell), patch("builtins.print"), \
                     patch.dict(os.environ, {"GITHUB_OUTPUT": output}):
                 runtime.main(["load-pois", "--close-missing-dry-run"])
@@ -835,7 +958,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
 
     def test_load_pois_with_no_effect_is_a_failure(self):
         """적재가 '성공'인데 신규·갱신이 0 이면 아무것도 안 들어간 것이다 — 조용히 지나가면 "효과 없음"이 또 온다."""
-        shell = Mock(side_effect=["", "img", "", "", "", "0", "합계 — 접수=0 신규=0 갱신=0 지역코드미상=0", ""])
+        shell = Mock(side_effect=["", "img", "", "Complete", "", "0", "합계 — 접수=0 신규=0 갱신=0 지역코드미상=0", ""])
         with patch("runtime.command", shell), patch("builtins.print"), self.assertRaises(RuntimeError):
             runtime.main(["load-pois"])
         self.assertIn("delete", shell.call_args_list[-1].args[0])
@@ -882,7 +1005,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
         """
         import runtime_smoke
         table = "NAME   TARGETS   CURRENT   MIN   MAX   REPLICAS\nai     70        <none>    1     3     1\n"
-        shell = Mock(side_effect=["", "", "", "", table, "", ""])
+        shell = Mock(side_effect=["", "", "Complete", "", table, "", ""])
         with patch("builtins.print") as output:
             runtime_smoke.run("trippilot", shell)
         printed = " ".join(str(call.args[0]) for call in output.call_args_list)
@@ -894,7 +1017,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
 
     def test_smoke_says_nothing_when_no_autoscaler_is_enabled(self):
         import runtime_smoke
-        shell = Mock(side_effect=["", "", "", "", "", "", ""])
+        shell = Mock(side_effect=["", "", "Complete", "", "", "", ""])
         with patch("builtins.print") as output:
             runtime_smoke.run("trippilot", shell)
         output.assert_not_called()
@@ -911,14 +1034,21 @@ class RuntimeIntegrationTests(unittest.TestCase):
         logs = ("INFO trippilot.poi_curation.adapters.kma_weather 기상청 단기예보 = "
                 "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0 (키 파라미터 serviceKey)\n"
                 "INFO trippilot.api.middleware GET /health 200\n"
-                "WARNING trippilot.main 임베딩 미배선(TRIPPILOT_VECTOR_DB_URL 미설정) — 규칙 랭킹으로 강등된다\n")
-        shell = Mock(side_effect=["", "", "", "", "", "", logs])
+                "WARNING trippilot.main 임베딩 미배선(TRIPPILOT_VECTOR_DB_URL 미설정) — 규칙 랭킹으로 강등된다\n"
+                "INFO trippilot.main 공휴일 휴무 = on · 특일 달력 = 공공데이터포털 특일정보(getRestDeInfo) · "
+                "키 = PUBLIC_DATA_API_KEY\n"
+                "WARNING trippilot.poi_curation.adapters.kasi_holiday_calendar 공휴일 휴무 — 특일정보(공휴일 달력) "
+                "조회 실패 JSON 아님(returnReasonCode=30 SERVICE_KEY_IS_NOT_REGISTERED_ERROR)\n")
+        shell = Mock(side_effect=["", "", "Complete", "", "", "", logs])
         with patch("builtins.print") as output:
             runtime_smoke.run("trippilot", shell)
         printed = " ".join(str(call.args[0]) for call in output.call_args_list)
         self.assertIn("apis.data.go.kr", printed)  # 날씨가 붙은 증거
         self.assertIn("serviceKey", printed)  # 주소와 키 파라미터의 짝까지
         self.assertIn("임베딩 미배선", printed)
+        # 공휴일 휴무(상황 감지 H1) — 모드·키 출처 줄과 특일 키 미등록(30) 실패 줄이 같이 올라온다
+        self.assertIn("키 = PUBLIC_DATA_API_KEY", printed)
+        self.assertIn("returnReasonCode=30", printed)
         self.assertNotIn("/health 200", printed)  # 요청 로그는 끌어오지 않는다
         logs_call = shell.call_args.args[0]
         self.assertEqual(logs_call[:2], ["kubectl", "logs"])
@@ -929,7 +1059,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
         배선 줄은 "켜졌다"까지만 말한다: 실 LLM 배정·ai_kb 권한·섀도는 실제 턴으로만 드러난다."""
         import runtime_smoke
         probe = 'ai-dialogue-probe {"http": 200, "outcome": "ANSWER", "kind": "INFO", "llm_calls": 3, "memory_deleted": 1}\n'
-        shell = Mock(side_effect=["", "", "", "", "", probe, ""])
+        shell = Mock(side_effect=["", "", "Complete", "", "", probe, ""])
         with patch("builtins.print") as output:
             runtime_smoke.run("trippilot", shell)
         printed = " ".join(str(call.args[0]) for call in output.call_args_list)
@@ -944,7 +1074,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
         self.assertEqual([method for method, _, _ in sent], ["POST", "DELETE"])  # 쓴 기억은 지운다
         self.assertTrue(sent[1][1].endswith(sent[0][2]["session_id"]))
         self._assert_matches_contract(sent[0][2], "DialogueInterpretRequest")
-        failing = Mock(side_effect=["", "", "", "", "", runtime.CommandError("kubectl", "exec denied"), ""])
+        failing = Mock(side_effect=["", "", "Complete", "", "", runtime.CommandError("kubectl", "exec denied"), ""])
         with patch("builtins.print") as output:
             runtime_smoke.run("trippilot", failing)
         self.assertIn("ai-dialogue: 확인 못 함", " ".join(str(call.args[0]) for call in output.call_args_list))
@@ -1018,7 +1148,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
     def test_smoke_survives_unreadable_ai_logs(self):
         """로그를 못 읽어도 배포는 성공한다 — 기록 수단이 게이트가 되면 안 된다."""
         import runtime_smoke
-        shell = Mock(side_effect=["", "", "", "", "", "", runtime.CommandError("kubectl", "failed")])
+        shell = Mock(side_effect=["", "", "Complete", "", "", "", runtime.CommandError("kubectl", "failed")])
         with patch("builtins.print") as output:
             runtime_smoke.run("trippilot", shell)
         printed = " ".join(str(call.args[0]) for call in output.call_args_list)
@@ -1045,6 +1175,91 @@ class RuntimeIntegrationTests(unittest.TestCase):
             runtime.parse_outputs({})
         with self.assertRaises(ValueError):
             runtime.helm_values(outputs(), "tag", "arn:aws:acm:us-east-1:123456789012:certificate/12345678-1234-1234-1234-123456789abc", "api.example.com", False)
+
+
+class JobWaitTests(unittest.TestCase):
+    """실패한 Job 을 시한까지 기다리지 않는다 — `--for=condition=complete` 는 Failed 를 못 봐서 KB 적재가 90분을 태웠다(10-18)."""
+
+    def test_waits_for_any_true_condition_and_reads_it_in_the_same_call(self):
+        from runtime_io import wait_job
+        shell = Mock(return_value="SuccessCriteriaMet Complete")
+        wait_job(shell, "trippilot", "trippilot-kb-load", 5400)
+        argv = shell.call_args.args[0]
+        self.assertEqual(argv[:2], ["kubectl", "wait"])
+        self.assertIn('--for=jsonpath={.status.conditions[?(@.status=="True")].type}', argv)
+        self.assertIn("-o", argv)
+        self.assertIn("job/trippilot-kb-load", argv)
+        self.assertIn("--timeout=5400s", argv)
+        self.assertNotIn("--for=condition=complete", argv)
+
+    def test_failed_or_unknown_end_raises_right_away(self):
+        from runtime_io import wait_job
+        for states in ("FailureTarget Failed", "Failed", "", "Suspended"):
+            with self.subTest(states=states), self.assertRaises(runtime.CommandError) as raised:
+                wait_job(Mock(return_value=states), "trippilot", "trippilot-smoke", 330)
+            self.assertIn("did not succeed", raised.exception.detail)
+
+    def test_failed_kb_load_shows_its_logs_instead_of_burning_the_deadline(self):
+        logs = "Traceback (most recent call last):\nEmbeddingUnreachable: Connection refused\n"
+        shell = Mock(side_effect=["", "img", "", "FailureTarget Failed", logs, ""])
+        with patch("runtime.command", shell), patch("builtins.print") as out, \
+                self.assertRaises(runtime.CommandError):
+            runtime.main(["load-kb"])
+        shown = "\n".join(str(c.args[0]) for c in out.call_args_list)
+        self.assertIn("EmbeddingUnreachable", shown)
+        self.assertIn("delete", shell.call_args_list[-1].args[0])
+
+
+class RefreshEventsTests(unittest.TestCase):
+    """동봉 행사 저장소를 collect-state 정본으로 갈아 끼운다 — 동봉본이 8-22 이후 멈춰 있었다(10-18)."""
+
+    @staticmethod
+    def event(event_id, end):
+        return {"event_id": event_id, "name": event_id, "start": "2026-10-01", "end": end}
+
+    def run_refresh(self, state, bundled, today):
+        import datetime
+        import refresh_events
+        with tempfile.TemporaryDirectory() as folder:
+            state_path, bundled_path = Path(folder) / "state.json", Path(folder) / "bundled.json"
+            state_path.write_text(state if isinstance(state, str) else json.dumps(state), encoding="utf-8")
+            bundled_path.write_text(json.dumps(bundled), encoding="utf-8")
+            with patch("builtins.print") as out:
+                self.assertEqual(refresh_events.main([str(state_path), str(bundled_path)],
+                                                     today=datetime.date.fromisoformat(today)), 0)
+            return json.loads(bundled_path.read_text(encoding="utf-8")), "\n".join(str(c.args[0]) for c in out.call_args_list)
+
+    def test_state_replaces_bundled_and_keeps_only_unexpired_manual_events(self):
+        state = {"events": [self.event("a", "2026-10-20"), self.event("b", "2026-12-01")], "coverage": {"서울": "x"}}
+        bundled = {"events": [self.event("a", "2026-01-01"),            # 정본에도 있다 — 정본이 이긴다
+                              self.event("manual", "2026-10-25"),       # 동봉본에만, 미만료 — 남긴다
+                              self.event("old", "2026-10-10")],         # 동봉본에만, 종료+7일 지남 — 버린다
+                   "coverage": {}}
+        merged, shown = self.run_refresh(state, bundled, "2026-10-18")
+        self.assertEqual([e["event_id"] for e in merged["events"]], ["a", "b", "manual"])
+        self.assertEqual(merged["events"][0]["end"], "2026-10-20")
+        self.assertEqual(merged["coverage"], {"서울": "x"})
+        self.assertIn("= 3건", shown)
+
+    def test_grace_boundary_matches_the_collector(self):
+        # 종료 + 7일 당일까지는 남는다(JsonEventStore.purge_expired 와 같은 경계)
+        merged, _ = self.run_refresh({"events": [self.event("a", "2026-12-01")]},
+                                     {"events": [self.event("edge", "2026-10-11")]}, "2026-10-18")
+        self.assertEqual([e["event_id"] for e in merged["events"]], ["a", "edge"])
+
+    def test_unreadable_or_empty_state_leaves_the_bundled_copy_with_a_warning(self):
+        bundled = {"events": [self.event("keep", "2026-10-25")]}
+        for state in ("{not json", {"events": []}, {"items": []}):
+            with self.subTest(state=state):
+                merged, shown = self.run_refresh(state, bundled, "2026-10-18")
+                self.assertEqual(merged, bundled)
+                self.assertIn("::warning::", shown)
+
+    def test_expiry_grace_matches_the_event_store_constant(self):
+        import refresh_events
+        source = (Path(__file__).resolve().parents[3] / "ai" / "src" / "trippilot" / "background"
+                  / "event_store.py").read_text(encoding="utf-8")
+        self.assertIn(f"EXPIRE_GRACE_DAYS = {refresh_events.EXPIRE_GRACE_DAYS}", source)
 
 
 if __name__ == "__main__":

@@ -280,3 +280,23 @@ def test_unknown_or_empty_category_renders_name_only() -> None:
     )
     rendered = build_reminder_copy_vars(item, "제주 여행")["slot_list"]
     assert rendered == "우도 / 협재"
+
+
+def test_prompt_carries_only_first_three_places_but_gate_allows_whole_day() -> None:
+    """하루 장소가 많으면 앞 3곳만 프롬프트에 싣는다 — 학생 모델은 받은 만큼 늘어놓아 60자를 넘긴다
+    (10-19 실측 6곳 0/4 → 앞 3곳 4/4). 게이트 allowed 는 그날 전체라 뒤쪽 장소도 '다른 날'로 막지 않는다."""
+    names = ("동문재래시장", "제주목 관아", "카페 델문도", "함덕해수욕장", "월정리해변")
+    item = ReminderCopyItem(
+        schedule_key="d1", kind="TRIP_DAY", date_label="11월 10일",
+        slot_names=names, slot_categories=("FOOD", "SIGHT", "CAFE", "NATURE", "NATURE"),
+    )
+    other = ReminderCopyItem(
+        schedule_key="d2", kind="TRIP_DAY", date_label="11월 11일", slot_names=("성산일출봉",),
+    )
+
+    rendered = build_reminder_copy_vars(item, "제주 여행")["slot_list"]
+
+    assert rendered == "동문재래시장 · 맛집 / 제주목 관아 · 명소 / 카페 델문도 · 카페"
+    ctx = ReminderCopyWorker._context((item, other), 0)
+    assert ctx.allowed == names
+    assert ctx.forbidden == ("성산일출봉",)

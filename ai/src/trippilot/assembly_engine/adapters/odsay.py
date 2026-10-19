@@ -16,18 +16,37 @@ TravelTimeError 로 승격하되 원인(`OdsayApiError.code`)을 `__cause__` 에
 6 서비스 지역 아님, -8/-9 파라미터, 500 서버). 700m 이내 짧은 구간은 ODsay 가 거부하므로
 하버사인 추정이 정상 경로다 — 그 코드의 경고 한 줄은 고장이 아니다.
 
-메서드 1회 = HTTP 호출 정확히 1건, 재시도 없음(일일 한도 아끼기). 키는 **쿼리 파라미터**라
+메서드 1회 = HTTP 호출 **최대** 1건, 재시도 없음. 키는 **쿼리 파라미터**라
 TMAP(헤더)과 달리 URL 에 실린다 — 예외 메시지에 URL·원문을 싣지 않는다(종류만).
+
+일 한도 아끼기(2026-10-19 — 개발 서버가 오전에 한도를 다 써 오후 내내 하버사인이었다):
+- 700m 미만 구간은 부르지 않는다. ODsay 가 어차피 -98 로 거절하는 구간이라 같은 오류를 바로 낸다.
+- 429(한도 소진)를 받으면 그날 자정(KST, 한도가 풀리는 시각)까지 부르지 않는다.
+- 성공한 구간은 프로세스 메모리에 두고 다시 쓴다(방향별 — 대중교통은 오가는 노선이 다르다).
+  실패는 두지 않는다. 결과가 출발 시각을 받지 않는 API 라 같은 구간은 같은 답이다.
 """
 
 from __future__ import annotations
 
+import threading
+from collections import OrderedDict
+from collections.abc import Callable
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint, TransportMode
 from trippilot.poi_curation.sourcing.tourapi import HttpGetJson
 from trippilot.ports.travel_time_port import MeasuredTravel, TravelTimeError
 
 _BASE = "https://api.odsay.com/v1/api/searchPubTransPathT"
 _SOURCE = "odsay_transit"
+_KST = ZoneInfo("Asia/Seoul")
+_MIN_KM = 0.7  # ODsay 가 -98(출발·도착 700m 이내)로 거절하는 거리
+# ponytail: 프로세스 메모리 LRU — 재기동마다 비워지고 파드끼리 나누지 않는다. 운영정책 4.5.10 이
+# 사전 동의 없는 결과 "저장"을 금지하는 것을 알고 둔 캐시다(2026-10-19 사용자 결정). DB·파일로 옮기거나
+# 넓히려면 ODsay 사전 동의가 먼저다.
+_CACHE_MAX = 20_000
 
 
 class OdsayApiError(Exception):
@@ -45,15 +64,46 @@ def _number(value: object) -> bool:
 class OdsayTransitAdapter:
     """TravelTimePort 구현 — 대중교통 좌표쌍 1건 → 실이동 소요분·거리 (조회 전용)."""
 
-    def __init__(self, http: HttpGetJson, api_key: str) -> None:
+    def __init__(self, http: HttpGetJson, api_key: str,
+                 now: Callable[[], datetime] = lambda: datetime.now(_KST)) -> None:
         self._http = http
         self._api_key = api_key
+        self._now = now
+        self._lock = threading.Lock()  # 조립 뒤 거리는 스레드풀에서 부른다
+        self._legs: OrderedDict[tuple, MeasuredTravel] = OrderedDict()
+        self._paused_until: datetime | None = None
 
     def measure(
         self, from_: GeoPoint, to: GeoPoint, mode: TransportMode
     ) -> MeasuredTravel:
         if mode is not TransportMode.PUBLIC:
             raise TravelTimeError(f"ODsay 는 대중교통 전용 — {mode.name} 미지원")
+        if haversine_km(from_, to) < _MIN_KM:
+            raise TravelTimeError("searchPubTransPathT 오류 -98") from OdsayApiError("-98", "700m 이내 — 호출 생략")
+        key = (round(from_.lat, 5), round(from_.lng, 5), round(to.lat, 5), round(to.lng, 5))
+        with self._lock:
+            hit = self._legs.get(key)
+            if hit is not None:
+                self._legs.move_to_end(key)
+                return hit
+            paused = self._paused_until is not None and self._now() < self._paused_until
+        if paused:
+            raise TravelTimeError("searchPubTransPathT 오류 429") from OdsayApiError("429", "일 한도 소진 — 자정까지 호출 멈춤")
+        try:
+            measured = self._call(from_, to)
+        except TravelTimeError as e:
+            if str(getattr(e.__cause__, "code", "")) == "429":
+                tomorrow = self._now().astimezone(_KST) + timedelta(days=1)
+                with self._lock:
+                    self._paused_until = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
+            raise
+        with self._lock:
+            self._legs[key] = measured
+            if len(self._legs) > _CACHE_MAX:
+                self._legs.popitem(last=False)
+        return measured
+
+    def _call(self, from_: GeoPoint, to: GeoPoint) -> MeasuredTravel:
         # ODsay 좌표는 X=경도, Y=위도.
         params = {
             "SX": str(from_.lng), "SY": str(from_.lat),

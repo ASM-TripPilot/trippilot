@@ -24,6 +24,17 @@
 
 > **[개정 · 2026-10-12 · U10 FD] BR-U4-03·04.** BR-U4-04("앱이 꺼져 있을 때의 감지는 지오펜스 wake 1회 · 서버 스케줄러 없음")는 **폐기**한다 — 기기는 wake에서 Plan-B 평가를 요청하지 않고 방문 결과만 보낸다. `DELAY`는 서버가 `VisitChecked` 구독 + **서버 스케줄러**로 파생한다(U10 DEC-U10-9 · BR-U10-23~28). BR-U4-03("클라는 임계를 모르고 판정은 서버")은 `DELAY`에 대해 **더 강하게** 성립한다 — 클라는 신호조차 만들지 않는다. 단 도착·완료 **판정**은 기기가 한다(U10 DEC-U10-8 — Plan-B 판정과 다른 층).
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** BR-U4-01~09 · DEC-U4-4 — 서버 감시 스윕과 트리거 수명
+> 규칙 본문은 situation-awareness FD 에 있다. 위 U10 블록(`DELAY`)과 함께 읽는다.
+> - **BR-U4-01 · DEC-U4-4**: 종류 4종은 그대로다. 원인은 `payload.variant` 닫힌 12종과 심각도(위험 `RISK`·주의 `CAUTION`)로 가르고, 기상특보는 새 변형 없이 기존 변형으로 사상한다. 근처 행사·요즘 인기는 트리거가 아니다(앱 안 기회 카드). → [DEC-SA-3·6](../../situation-awareness/functional-design/business-logic-model.md)
+> - **BR-U4-02**: 발화할 수 있는 날짜는 {오늘, 내일} ∩ 여행 구간이고, 내일과 여행 전날의 첫날 점검(D-1)은 지평 스위치가 허락할 때만 본다. 밖이면 행도 만들지 않는다. → [BR-SA-11](../../situation-awareness/functional-design/business-rules.md) · [DEC-SA-7](../../situation-awareness/functional-design/business-logic-model.md)
+> - **BR-U4-03·04**: 날씨·장소는 클라 신호 없이 서버 감시 스윕(KST 매시 + 저녁 보충, 밤 없음, 단일 실행)이 직접 조회·판정한다. 대상은 현재 일정이 확정(`CONFIRMED`)인 여행이다. → [DEC-SA-1](../../situation-awareness/functional-design/business-logic-model.md) · [BR-SA-01·02](../../situation-awareness/functional-design/business-rules.md) · [INV-SA-5](../../situation-awareness/functional-design/domain-entities.md)
+> - **BR-U4-05**: 모름(키 미등록·인증 오류, validate 보류, 영업시간 원문 없음, 상태 조회 실패 등 — 출처별)은 무발화이자 무해제다. 행 없이 감시 상태 '확인 불가'로만 드러나고, 한 출처의 모름이 다른 출처의 발화·해제를 막지 않는다. INV-U4-09 는 `domain-entities.md` §4.1 개정 블록이 다룬다. → [INV-SA-2](../../situation-awareness/functional-design/domain-entities.md) · [BR-SA-04·06·13](../../situation-awareness/functional-design/business-rules.md)
+> - **BR-U4-06**: 지난 대상의 만료(원인 4종 — `WEATHER`·`CLOSURE` 만)와 해제(그 트리거를 띄운 감지기가 해제 임계 아래로 확인 — 이력 현상)가 생긴다. → [BR-SA-06·07](../../situation-awareness/functional-design/business-rules.md)
+> - **BR-U4-07**: 1회의 단위가 대상 (kind, affectedDate, slotKey)당 `ACTIVE` 1개로 바뀐다. 변화는 제자리 갱신(triggerId 유지)이고, 다시 알리는 것은 알린 최고 심각도를 넘을 때뿐이며, 같은 위험이 연일 반복되면 둘째 날부터 배너만 띄운다. → [BR-SA-05·08 · O-SA-11](../../situation-awareness/functional-design/business-rules.md) · [INV-SA-4](../../situation-awareness/functional-design/domain-entities.md)
+> - **BR-U4-08**: 상한은 여행·KST 하루의 푸시 사건 수만 센다 — 넘어도 알림함·배너는 남고, 알림 사건은 여행·회차당 1건(대표 + 외 N건)이다. 값은 코드(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/domain/PlanBTrigger.kt:112-113` — LOW 2·NORMAL 5·HIGH 10)와 P-DET-U4-3(1·3·6)이 다르고, 코드값을 유지한다. → [BR-SA-10 · O-SA-9](../../situation-awareness/functional-design/business-rules.md) · [INV-SA-3](../../situation-awareness/functional-design/domain-entities.md)
+> - **BR-U4-09**: 트리거는 여전히 일정을 바꾸지 않는다. 위험이면 서버가 초안을 미리 산출하고(스위치) 알림 탭이 그 대안으로 바로 간다 — 적용은 사용자 [적용]뿐이다(사용자 결정 2026-10-18 Q1 답 "미리 짜 둔 대안 (Recommended)"). → [DEC-SA-4](../../situation-awareness/functional-design/business-logic-model.md) · [BR-SA-18·23](../../situation-awareness/functional-design/business-rules.md) · [INV-SA-1](../../situation-awareness/functional-design/domain-entities.md)
+
 ## 2. 재계획 진입·지시 입력 (US-PLANB-01·12 · `i10`)
 
 | ID | 규칙 |
@@ -37,6 +48,11 @@
 | **BR-U4-16** | `[직접 고르기]`(수동 편집)는 **API 오류가 아니어도** 항상 선택 가능하다(US-PLANB-12) |
 
 > **[개정 · 2026-10-12] BR-U4-11 — 범위 2종·하루 단위는 그대로, 대상 일자는 오늘이 아니어도 된다.** `오늘 전체`(`FULL_DAY`)는 "고른 날 전체"로 읽는다. 오늘이 아닌 날짜에는 `지금 이후`(`PARTIAL_SLOTS`)가 없다(서버 400 · 앱은 칩을 `{N}일차 전체`(일차를 모르면 `이 날 전체`) 하나로 줄인다). 다일 재계획은 여전히 없다. 근거·경계는 `business-logic-model.md` 의 DEC-U4-3 개정 블록(TRIP-1182·TRIP-1195).
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** BR-U4-10 · 13 · 15
+> - **BR-U4-10**: 트리거로 들어온 재계획은 서버가 대상 일자를 그 트리거 날짜로 강제한다. 여행 시작 전날에는 트리거로 들어온 첫날 `FULL_DAY` 재계획만 연다(지평 `pre-trip`). 트리거 없는 진입은 여행 구간 안에서만이다. → [BR-SA-20](../../situation-awareness/functional-design/business-rules.md) · [DEC-SA-7](../../situation-awareness/functional-design/business-logic-model.md)
+> - **BR-U4-13**: "텍스트에서 뽑은 장소를 후보로 승격하지 않는다"는 AI 재계획 실장과 어긋난다 — 뽑은 장소명은 등록 POI 이름 대조·지도 실재·그날 영업을 모두 통과한 것만 필수 방문이 되고 풀에 합류한다(`ai/src/trippilot/agents/planb/request_verification.py` · `ai/src/trippilot/api/wiring.py:2316-2329`). 후보는 여전히 등록 POI 뿐이다(INV-1). 기회 카드의 [넣어서 다시 짜기]가 이 경로를 쓴다. → [BR-SA-22](../../situation-awareness/functional-design/business-rules.md)
+> - **BR-U4-15**: [끄기] 억제는 끈 트리거의 날짜·심각도까지 적는다 — 주의를 끈 것이 같은 날 위험 격상을, 오늘을 끈 것이 내일 대상을 막지 않는다. 허브 알약의 ×는 서버 억제가 아니라 기기 로컬 숨김(TRIP-748 D3)이다. → [BR-SA-09](../../situation-awareness/functional-design/business-rules.md)
 
 ## 3. 재계획 산출·검증 (US-PLANB-03·04·05·07)
 
@@ -78,6 +94,7 @@
 >   예산 유지 `KEEP_BUDGET` 은 **미배선**이다 — 집행할 가격 데이터가 없다(`Poi.avg_cost` 영구 None, 입장료 파생 지식은 명소·문화·자연 일부만·배포 이미지 미포함). FE 칩은 숨겼고, 말로 오면 `directives_unwired` 로 밝힌다.
 > - **[추가 · 2026-10-14] 다시 짜기가 바꿀 정도는 요청 종류가 정한다.** 한 곳 추가(맛집·카페 칩, "카페 가고 싶다")면 남은 일정은 그대로 두고 그 한 곳을 더한다 · 장소 사유(휴무·만석·취소)뿐이면 그 곳만 바꾼다 · 하루 방향 지시·사유(실내로·피로·날씨·자유 입력)면 맞지 않는 곳만 바꾼다 · 사유도 요청도 없으면 절반 이상 새 곳으로. 종류는 코드가 정해 구성 프롬프트에 한 줄로 싣는다(AI `agents/planb/composition.change_rule`). **진행 중인 방문**(시작은 지났고 끝은 안 지남)은 제외 대상이 아니면 그 시각 그대로 남긴다 — BE 는 바꿀 수 있게 잠그지 않고 보내지만 AI 는 지금 이후만 채워 그 곳이 사라졌다. 장소 사유인데 제외 대상을 안 보냈으면 잠그지 않는다. 남긴 곳은 고정 표시 없이 나간다(노트 `in_progress_kept: <n>`).
 > - **[추가 · 2026-10-14] 못 지키는 잠금 하나가 하루를 죽이지 않는다.** 서로 겹치는 잠금·미등록 장소의 잠금·영업시간 밖 잠금은 종전엔 하루 전체를 NO_FEASIBLE_SLOT 으로 만들었다(겹침은 모든 조립 단계 실패, 미등록은 TRIP-1177 의 "잠금 빠진 일정은 내지 않는다"). 이제 그 잠금을 **원 시각 그대로 되싣고**(`is_fixed`) 나머지 하루를 낸다 — 잠금이 응답에 남으므로 BE 가 잠금 사라진 하루로 읽을 걱정은 그대로 막힌다. 겹치는 잠금은 사용자 잠금을 먼저·시각 순으로 하나만 솔버에 넣는다(AI 가 건 진행 중·저녁 잠금은 양보). 되실은 잠금과 겹치는 새 방문은 빼고, 그 잠금 앞뒤 이동은 검증 밖이라 노트로 밝힌다(`locked_overlap` · `locked_block_echoed`).
+> - **[추가 · 2026-10-19] 솔버가 뺀 곳은 까닭과 함께 구성 LLM 에 한 번만 되묻는다**(2026-10-18 사용자 승인 — 반복이 아니라 1회 수리). 다시 짜기에서 구성 LLM 이 고른 곳을 조립이 못 놓으면, 그 까닭(그날 휴무·영업시간 밖·너무 멂·시간 부족)과 지금 해의 빈 시간을 붙여 **그 빈 틈에 그대로 드는 후보만** 주고 대신할 곳을 다시 고르게 한 뒤 한 번 더 푼다. 2차 해는 **1차에 놓인 곳을 하나도 잃지 않고 더 많이 놓으며 조립 단계를 낮추지 않을 때만** 채택한다 — 아니면 1차 그대로. 이름으로 집은 곳·밤 일정 지시로 넣은 곳만 빠졌으면 되묻지 않고(다른 곳을 골라도 그 요청은 안 채워진다), 솔버 밖에서 원 시각 그대로 되실릴 잠금이 있는 날도 되묻지 않으며(되싣기가 겹치는 새 방문을 빼서 채택 판정이 사용자가 보는 일정과 어긋난다), 재계획 시한(25s)에 구성 바닥 5s + 조립 바닥이 남지 않으면 건너뛴다. 못 하면 노트(`llm_repair_skipped`·`llm_repair_fallback`)와 폴백 이벤트로 밝힌다(INV-4). 시각·순서는 여전히 조립값(INV-2), 후보는 같은 closed-set(INV-1). 정본 AI `api/wiring.py` `_repair_day`.
 > - **다중 사유는 합집합**이다. PlanB 에 주는 대표 사유 하나는 우선순위 `weather > closed > fully_booked > canceled > delay > fatigue` 로 고른다(못 가는 사유가 사용자 사정보다 앞).
 > - **사용자 지시 우선**: 사용자가 같은 축(`enforced_by` — 카테고리·거리·속도)을 **효과 있는 지시로** 이미 정했으면 그 축의 암시 지시는 얹지 않는다("한 곳 추가"·미배선·무효 지시는 축을 잡지 않는다). 사용자 "한 곳 추가" 카테고리는 암시 지시가 건드리지 않는다. 자유 입력이 부정문인데 지시로 못 풀었으면 카테고리 축 암시는 보류한다(원문은 PlanB 가 읽는다).
 > - 암시분은 응답 `resolved_directives`(사용자 지시)에 섞지 않고 노트로 밝힌다 — `planb_reason_implied` · `planb_reason_implied_skipped`(침묵 금지, INV-4).
@@ -115,6 +132,10 @@
 > - **BR-U4-36**: 자동 도착 감지는 여전히 지오펜스 진입으로만 하되 임계가 정해졌다 — 반경 150m · 정확도 100m 초과 표본은 근거로 쓰지 않음 · 진입 후 3분 체류로 확정(도착 시각 = 진입 시각). "권한이 없거나 정확도가 낮으면 수동 대체"는 그대로다(U10 BR-U10-12~15). when-in-use 사용자는 수동 체크인 사용자다(포그라운드 자동 없음 — Q1=B).
 > - **BR-U4-37**: "방문 완료는 실제 체류를 산출해 `DELAY` 입력으로 넘긴다"를 **개정**한다. ① 완료는 수동만이 아니다 — 이탈 자동 완료(`AUTO_GEOFENCE_EXIT`)·다음 도착 시 직전 완료(`AUTO_NEXT_ARRIVAL`)가 생기고 `visit_check.completion_source`가 출처를 남긴다(Q2=A·Q6=A). ② **`AUTO_NEXT_ARRIVAL` 완료의 체류는 이동 시간을 포함하므로 `DELAY` 체류 초과 입력에서 제외**한다. ③ 체류 초과는 완료 시점(`VisitChecked` 구독)과 진행 중(서버 스케줄러, 무장 여행만) 두 갈래로 판정한다. "체류를 화면에 표시하지 않는다"는 그대로(U10 BR-U10-24·25·26).
 > - **BR-U4-41**: "실제 경로는 앱을 켜 둔 구간만"은 **개정** — 무장(always + 정확 + 동의 + 여행 구간 + 플래그) 동안 백그라운드 저전력 연속 기록, 하루치 다운샘플만 서버 저장(U10 BR-U10-33~41). **"걸음 수는 기록·표시하지 않는다"는 유효**하다.
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** BR-U4-35 — 상황 문구 규칙
+> 문구로만 알리고 슬롯 시각을 흔들지 않는다는 원칙은 그대로다. 상황 문구는 공용 가드를 지난다: 200자 이하, 상대 날짜어·소요시간·좌표 금지(장소명 자리는 비우고 검사), 단정하지 않는 표현. 기상청·에어코리아 자료는 출처를 함께 보인다(공공누리 1·3유형).
+> → [BR-SA-12·24](../../situation-awareness/functional-design/business-rules.md)
 
 ## 6. 폴백 (US-PLANB-10·11 · INV-4)
 

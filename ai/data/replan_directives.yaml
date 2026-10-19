@@ -148,7 +148,7 @@ directives:
   - key: NIGHTLIFE
     label: 밤에 놀기 — 클럽·바
     enforced_by: RANKING
-    aliases: [클럽 가고 싶어, 클럽, 나이트클럽, 클럽에서 놀고 싶어, 술 한잔, 바에 가고 싶어, 칵테일 바, 와인바, 펍, 밤에 놀 곳]
+    aliases: [클럽 가고 싶어, 클럽, 나이트클럽, 클럽에서 놀고 싶어, 술 한잔, 바에 가고 싶어, 칵테일 바, 와인바, 펍, 밤에 놀 곳, 혼술, 혼술바, 혼자 한잔]
 
   - key: END_NEAR_STAY
     label: 숙소 근처에서 끝내기
@@ -157,7 +157,7 @@ directives:
     # 거리 랭킹(NEARBY)과 달리 후보가 아니라 **끝 순서**를 민다. 숙소가 없으면 무효 노트.
     aliases: [숙소 가까이 마무리, 돌아가기 편하게, 마지막은 숙소 근처]
 
-  # ── SOLVER — 어셈블리 파라미터 (SHORTER_DAY·KEEP_BUDGET 은 미배선) ──────────────────────
+  # ── SOLVER — 어셈블리 파라미터 (KEEP_BUDGET 은 미배선) ──────────────────────
   - key: RELAX
     label: 여유 있게
     enforced_by: SOLVER
@@ -181,8 +181,16 @@ directives:
   - key: SHORTER_DAY
     label: 일찍 마무리
     enforced_by: SOLVER
-    unwired: true
-    aliases: [빨리 끝내고 싶어, 일찍 들어가려고, 저녁 전에 마무리]
+    # 배선됨(2026-10-19) — 진행 중·잠금은 그대로 두고 새 방문은 한 곳만, 숙소가 있으면 그 쪽에서 끝낸다
+    # (`_LAYOUT_KEYS`). "집에 가고 싶어"도 여기다(사용자 결정 — 하루를 바로 끝내는 것은 END_DAY).
+    aliases: [빨리 끝내고 싶어, 일찍 들어가려고, 저녁 전에 마무리, 집에 가고 싶어, 숙소로 일찍 돌아갈래]
+
+  - key: END_DAY
+    label: 오늘은 여기까지
+    enforced_by: SOLVER
+    # 배선됨(2026-10-19) — 새 방문 없이 하루를 끝낸다. 다녀온 곳·진행 중·사용자 잠금만 든 하루를 낸다
+    # (솔버·LLM 을 안 부른다, `_replan_end_day`). "근처 한 곳 더"는 SHORTER_DAY 다.
+    aliases: [전부 취소, 다 취소해줘, 남은 일정 취소, 오늘 일정 끝, 오늘은 여기까지 할래]
 
   - key: KEEP_DINNER
     label: 저녁은 그대로

@@ -110,47 +110,125 @@ function region(
   };
 }
 
-// 시도·시군구 혼재 카탈로그(법정동 앞자리 현실값). 인천 28(시도) / 미추홀 28177 / 연수 28185 /
-// 강원 51(시도) / 춘천 51110. 1단이 인천·강원 두 시/도로 접혀야 한다.
+// 서버 모양 카탈로그(법정동 앞자리 현실값, 서버 순서 = 시도 코드 → 층 → 이름). TRIP-1443 — 서비스
+// 지역(서울 11·부산 26·제주 50)과 그 밖(전남광주 12·대구 27·인천 28·경기 41·강원 51)을 섞었다. 밖 지역은
+// 피커가 숨겨야 하므로 **누르는 대상은 전부 서비스 지역 코드**이고, 밖 지역은 "안 보인다"로만 잰다.
 //
-// ⚠️ 크기·순서 계약(TRIP-597 심판 무결성): 이 티켓의 헤드라인은 페이지가 빈 검색어 6개 상한
-// (`limitRegionsWhenEmpty`, 기본 limit=6)을 **걷고 전체 카탈로그를 내리는 것**이다. 그 상한이
-// 실수로 되살아나면 `slice(0, 6)`가 앞 6개만 남긴다 — 이를 심판이 잡으려면 **테스트가 실제로
-// 누르는 시군구가 flat 인덱스 6 이상**에 있어야 한다(5개짜리 카탈로그에선 `slice(0, 6)`가 항등이라
-// 상한 회귀를 구분조차 못 한다 — 옛 `SEVEN_REGIONS`가 7개였던 이유, code-critic 03b 차단-1).
-// 그래서 시/도 행 5개로 앞자리를 채우고 인천의 시군구(미추홀 28177·연수 28185)를 **꼬리(인덱스
-// 6·7)**로 밀었다. 상한이 되살면 두 시군구가 잘려 AC-3 드릴다운-stay(미추홀구 press)가 red 가 된다.
-const INCHEON = region({
-  regionCode: '28',
-  name: '인천광역시',
-  level: RegionLevel.SIDO,
-  sidoName: '인천광역시',
-  selectable: true,
-  poiCount: 50,
-});
+// 함정 표본(02a ★2·★3):
+//  · 대구광역시는 이름에 '구'가 들어 있다 — 검색 '구'에서 밖 시도가 걸러지는지 본다.
+//  · 중구는 서울 11140·부산 26110·대구 27110 셋 — 이름이 같아도 코드 앞자리로 갈린다.
+//  · '광주'는 전남광주통합특별시(12)와 경기 광주시(41610) 둘 다에 걸린다 — 둘 다 밖이라 0건이어야 한다.
+//  · 서귀포시는 poiCount 0(추천 장소 없음 카드) — 서비스 지역 안 빈 후보풀도 '준비 중'을 그리지 않는다.
+//
+// ⚠️ 크기·순서 계약(TRIP-597 심판 무결성): 페이지가 빈 검색어 6개 상한(`limitRegionsWhenEmpty`, 기본
+// limit=6)을 걷고 전체 카탈로그를 내리는 것을 지키려면 **테스트가 실제로 누르는 시군구가 화면에 내려가는
+// 목록의 인덱스 6 이상**에 있어야 한다(작은 목록에선 `slice(0, 6)`가 항등이라 상한 회귀를 구분 못 한다 —
+// code-critic 03b 차단-1). 서비스 지역 필터 뒤 목록은 11 · 11110 · 11140 · 11680 · 26 · 26110 · 26350 ·
+// 50 · 50110 · 50130 이고, stay 드릴다운이 누르는 제주시(50110)가 인덱스 8 이다 — 상한이 되살면 잘려 red.
 const SEOUL = region({
   regionCode: '11',
   name: '서울특별시',
   level: RegionLevel.SIDO,
   sidoName: '서울특별시',
-  selectable: true,
   poiCount: 120,
+});
+const JONGNO = region({
+  regionCode: '11110',
+  name: '종로구',
+  sidoName: '서울특별시',
+});
+const SEOUL_JUNG = region({
+  regionCode: '11140',
+  name: '중구',
+  sidoName: '서울특별시',
+});
+const GANGNAM = region({
+  regionCode: '11680',
+  name: '강남구',
+  sidoName: '서울특별시',
+  poiCount: 30,
+});
+const JEONNAM_GWANGJU = region({
+  regionCode: '12',
+  name: '전남광주통합특별시',
+  level: RegionLevel.SIDO,
+  sidoName: '전남광주통합특별시',
+  poiCount: 60,
 });
 const BUSAN = region({
   regionCode: '26',
   name: '부산광역시',
   level: RegionLevel.SIDO,
   sidoName: '부산광역시',
-  selectable: true,
   poiCount: 80,
+});
+const BUSAN_JUNG = region({
+  regionCode: '26110',
+  name: '중구',
+  sidoName: '부산광역시',
+});
+const HAEUNDAE = region({
+  regionCode: '26350',
+  name: '해운대구',
+  sidoName: '부산광역시',
+  poiCount: 25,
 });
 const DAEGU = region({
   regionCode: '27',
   name: '대구광역시',
   level: RegionLevel.SIDO,
   sidoName: '대구광역시',
-  selectable: true,
   poiCount: 40,
+});
+const DAEGU_JUNG = region({
+  regionCode: '27110',
+  name: '중구',
+  sidoName: '대구광역시',
+});
+const INCHEON = region({
+  regionCode: '28',
+  name: '인천광역시',
+  level: RegionLevel.SIDO,
+  sidoName: '인천광역시',
+  poiCount: 50,
+});
+const MICHUHOL = region({
+  regionCode: '28177',
+  name: '미추홀구',
+  sidoName: '인천광역시',
+  poiCount: 8,
+});
+const GYEONGGI = region({
+  regionCode: '41',
+  name: '경기도',
+  level: RegionLevel.SIDO,
+  sidoName: '경기도',
+  selectable: false,
+  poiCount: 70,
+});
+const GYEONGGI_GWANGJU = region({
+  regionCode: '41610',
+  name: '광주시',
+  sidoName: '경기도',
+});
+const JEJU = region({
+  regionCode: '50',
+  name: '제주특별자치도',
+  level: RegionLevel.SIDO,
+  sidoName: '제주특별자치도',
+  poiCount: 90,
+});
+const JEJU_CITY = region({
+  regionCode: '50110',
+  name: '제주시',
+  sidoName: '제주특별자치도',
+  poiCount: 40,
+});
+const SEOGWIPO = region({
+  regionCode: '50130',
+  name: '서귀포시',
+  sidoName: '제주특별자치도',
+  poiCount: 0,
 });
 const GANGWON = region({
   regionCode: '51',
@@ -163,36 +241,39 @@ const GANGWON = region({
 const CHUNCHEON = region({
   regionCode: '51110',
   name: '춘천시',
-  level: RegionLevel.SIGUNGU,
   sidoName: '강원특별자치도',
   poiCount: 12,
 });
-const MICHUHOL = region({
-  regionCode: '28177',
-  name: '미추홀구',
-  level: RegionLevel.SIGUNGU,
-  sidoName: '인천광역시',
-  poiCount: 8,
-});
-const YEONSU = region({
-  regionCode: '28185',
-  name: '연수구',
-  level: RegionLevel.SIGUNGU,
-  sidoName: '인천광역시',
-  poiCount: 5,
-});
 
-// 인덱스: 0 인천 · 1 서울 · 2 부산 · 3 대구 · 4 강원 · 5 춘천 · 6 미추홀구 · 7 연수구.
-// 인천 시군구(미추홀·연수)가 인덱스 6·7 — 상한(6) 되살면 이 둘이 잘려 인천 드릴다운이 빈다.
 const CATALOG: Region[] = [
-  INCHEON,
   SEOUL,
+  JONGNO,
+  SEOUL_JUNG,
+  GANGNAM,
+  JEONNAM_GWANGJU,
   BUSAN,
+  BUSAN_JUNG,
+  HAEUNDAE,
   DAEGU,
+  DAEGU_JUNG,
+  INCHEON,
+  MICHUHOL,
+  GYEONGGI,
+  GYEONGGI_GWANGJU,
+  JEJU,
+  JEJU_CITY,
+  SEOGWIPO,
   GANGWON,
   CHUNCHEON,
-  MICHUHOL,
-  YEONSU,
+];
+
+/** 서비스 지역 밖 시도 이름 — 어느 화면 상태에서도 글자로 남으면 안 된다(TRIP-1443). */
+const OUTSIDE_SIDO_NAMES = [
+  '전남광주통합특별시',
+  '대구광역시',
+  '인천광역시',
+  '경기도',
+  '강원특별자치도',
 ];
 
 beforeEach(() => {
@@ -216,14 +297,15 @@ afterEach(() => {
 });
 
 describe('AC-1 · 페이지가 전체 카탈로그를 내리고 화면이 시/도로 접는다 (6-cap 아님)', () => {
-  it('빈 검색어 초기 뷰는 시/도 행이고, 구/군(미추홀구)은 접혀 부재다', () => {
+  it('빈 검색어 초기 뷰는 시/도 행이고, 구/군(강남구)은 접혀 부재다', () => {
     render(<RegionPickerPage />);
 
     // 시/도 행이 보인다 — 페이지가 6개로 자르지 않고 전량을 내려 화면이 접었다.
-    expect(screen.getByTestId('explore-region-sido-28')).toBeTruthy();
-    expect(screen.getByTestId('explore-region-sido-51')).toBeTruthy();
+    // (TRIP-1443 — 픽스처를 서비스 지역 코드로 옮겼다. 밖 지역 부재는 아래 1443 describe 가 잰다.)
+    expect(screen.getByTestId('explore-region-sido-11')).toBeTruthy();
+    expect(screen.getByTestId('explore-region-sido-50')).toBeTruthy();
     // 구/군은 시/도 안으로 접힘 — 1단에 없다(그룹 접기가 6-cap 을 대체).
-    expect(screen.queryByTestId('explore-region-28177')).toBeNull();
+    expect(screen.queryByTestId('explore-region-11680')).toBeNull();
   });
 });
 
@@ -232,9 +314,9 @@ describe('AC-6 · 검색 경로 → 원본 카탈로그 이름으로 라우팅 (
     // 준비: purpose 없이 진입 — URL 신뢰 경계가 stay 로 떨어뜨리는 폴백 경로도 dismissTo 로 가야 한다(02a ★9).
     render(<RegionPickerPage />);
 
-    // 검색 — '춘천'으로 좁히면 평면 카드(드릴다운 우회).
-    fireEvent.changeText(screen.getByTestId('explore-region-search'), '춘천');
-    fireEvent.press(screen.getByTestId('explore-region-51110'));
+    // 검색 — '강남'으로 좁히면 평면 카드(드릴다운 우회).
+    fireEvent.changeText(screen.getByTestId('explore-region-search'), '강남');
+    fireEvent.press(screen.getByTestId('explore-region-11680'));
 
     // 서버 `region`은 자유 문자열 계약이라 원본 카탈로그의 한글 이름을 그대로 보낸다(코드 아님).
     // TRIP-989 F(D16) — push 가 아니라 dismissTo: 스택 아래 결과 화면으로 되감아 지역만 바꾼다(화면이 안 쌓인다).
@@ -243,28 +325,28 @@ describe('AC-6 · 검색 경로 → 원본 카탈로그 이름으로 라우팅 (
     expect(mockDismissTo).toHaveBeenCalledTimes(1);
     expect(targetOf(mockDismissTo.mock.calls[0][0])).toEqual({
       path: '/stays',
-      params: { region: '춘천시', regionCode: '51110', sido: '강원특별자치도' },
+      params: { region: '강남구', regionCode: '11680', sido: '서울특별시' },
     });
     expect(mockPush).not.toHaveBeenCalled();
     // 좁혀졌는지도 함께 본다 — 필터가 안 걸리면 이 단언이 무의미해진다.
-    expect(screen.queryByTestId('explore-region-28177')).toBeNull();
+    expect(screen.queryByTestId('explore-region-11110')).toBeNull();
   });
 });
 
 describe('AC-1 · 여행지 담기 재배선 (trip 분기 — TRIP-683)', () => {
   it("purpose='trip' 에서 지역을 고르면 addDestination(name,1)+router.back, /explore/destination push 0회", () => {
-    // 준비: trip 목적으로 진입해 인천을 드릴인(기존 파일의 검증된 경로).
+    // 준비: trip 목적으로 진입해 제주를 드릴인(기존 파일의 검증된 경로 — TRIP-1443 으로 인천→제주).
     mockParams = { purpose: 'trip' };
     render(<RegionPickerPage />);
-    fireEvent.press(screen.getByTestId('explore-region-sido-28')); // 인천 드릴인
+    fireEvent.press(screen.getByTestId('explore-region-sido-50')); // 제주 드릴인
 
-    // 실행: '인천 전체' 행 press = trip 목적 지역 선택.
-    fireEvent.press(screen.getByTestId('explore-region-28'));
+    // 실행: '제주특별자치도 전체' 행 press = trip 목적 지역 선택.
+    fireEvent.press(screen.getByTestId('explore-region-50'));
 
     // 단언: 지역 '이름'으로 1박 담고(★5 — 화면은 이름을 그린다), 코드도 함께 넘기며(TRIP-1042 AC-12 —
     // 꼭 갈 곳 지역 판정·생성 요청이 코드를 쓴다), 위저드로 복귀하고, d03(탐색)로 이탈하지 않는다.
     expect(mockAddDestination).toHaveBeenCalledTimes(1);
-    expect(mockAddDestination).toHaveBeenCalledWith('인천광역시', 1, '28');
+    expect(mockAddDestination).toHaveBeenCalledWith('제주특별자치도', 1, '50');
     expect(mockBack).toHaveBeenCalledTimes(1);
     expect(mockPush).not.toHaveBeenCalledWith(
       expect.stringContaining('/explore/destination')
@@ -278,14 +360,14 @@ describe('AC-4 · stay 분기 (드릴다운 → /stays 되감기, TRIP-989 F-1 �
     mockParams = { purpose: purposeParamOf(regionPickerHref('stay')) };
     render(<RegionPickerPage />);
 
-    fireEvent.press(screen.getByTestId('explore-region-sido-28')); // 인천 드릴인
-    fireEvent.press(screen.getByTestId('explore-region-28177')); // 미추홀구
+    fireEvent.press(screen.getByTestId('explore-region-sido-50')); // 제주 드릴인
+    fireEvent.press(screen.getByTestId('explore-region-50110')); // 제주시(필터 뒤 인덱스 8 — 상한 심판)
 
     // TRIP-1273(AC-F2) — 이름 + 코드 + 시도(옛 정확 문자열 단언을 사양 변경으로 재작성).
     expect(mockDismissTo).toHaveBeenCalledTimes(1);
     expect(targetOf(mockDismissTo.mock.calls[0][0])).toEqual({
       path: '/stays',
-      params: { region: '미추홀구', regionCode: '28177', sido: '인천광역시' },
+      params: { region: '제주시', regionCode: '50110', sido: '제주특별자치도' },
     });
     expect(mockPush).not.toHaveBeenCalled();
     expect(mockBack).not.toHaveBeenCalled();
@@ -308,6 +390,21 @@ describe('INV-4 · 조회 실패 (이월 유지)', () => {
 
     fireEvent.press(screen.getByTestId('explore-region-error-retry'));
     expect(mockRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  // TRIP-1443 — 서비스 지역 필터가 "아직 안 옴(data 없음)"을 빈 목록으로 바꿔 0건 얼굴로 뭉개면 안 된다.
+  it('isPending 이면 로딩 얼굴을 그리고 "검색 결과가 없어요"·시/도 행을 그리지 않는다', () => {
+    mockRegionsResult = {
+      data: undefined,
+      isPending: true,
+      isError: false,
+      refetch: mockRefetch,
+    };
+    render(<RegionPickerPage />);
+
+    expect(screen.getByTestId('explore-region-loading')).toBeTruthy();
+    expect(screen.queryByText('검색 결과가 없어요')).toBeNull();
+    expect(screen.queryAllByTestId(/^explore-region-sido-/)).toHaveLength(0);
   });
 });
 
@@ -353,17 +450,17 @@ describe('985 · 1105 · explore → 탐색 탭 d01 을 **코드**로 부른다 
     expect(mockBack).not.toHaveBeenCalled();
   });
 
-  it('드릴다운으로 구/군(미추홀구)을 골라도 이름이 아니라 코드 28177 로 부른다', () => {
+  it('드릴다운으로 구/군(해운대구)을 골라도 이름이 아니라 코드 26350 으로 부른다', () => {
     mockParams = { purpose: purposeParamOf(regionPickerHref('explore')) };
     render(<RegionPickerPage />);
-    fireEvent.press(screen.getByTestId('explore-region-sido-28')); // 인천 드릴인
+    fireEvent.press(screen.getByTestId('explore-region-sido-26')); // 부산 드릴인
 
-    fireEvent.press(screen.getByTestId('explore-region-28177'));
+    fireEvent.press(screen.getByTestId('explore-region-26350'));
 
     expect(mockDismissTo).toHaveBeenCalledTimes(1);
     expect(targetOf(mockDismissTo.mock.calls[0][0])).toEqual({
       path: '/explore',
-      params: { region: '28177' },
+      params: { region: '26350' },
     });
     expect(mockAddDestination).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
@@ -661,5 +758,154 @@ describe('stay 분기 · 동명 구도 어느 시도인지 실어 보낸다 (F3 
       path: '/stays',
       params: { region: '부산광역시', regionCode: '26', sido: '부산광역시' },
     });
+  });
+});
+
+// ── TRIP-1443 · 서비스 지역(서울 11 · 부산 26 · 제주 50) 밖은 숨긴다 ─────────────────────────────
+// 서버 /regions 는 계속 전국을 주고(필터 파라미터 없음) 피커 페이지가 화면에 내리기 직전에 거른다.
+// 숨김 규칙은 목적과 무관해야 한다(BR-U1-07 — 목적은 카피·다음 목적지만 가른다) → 네 목적을 같은 단언으로 돈다.
+// 코드는 화면 순서대로 testID 접두를 떼어 뽑는다 — "있다"가 아니라 **정확히 이 목록**이라야 밖 지역이 끼어도 잡힌다.
+const PURPOSES = ['trip', 'explore', 'stay', 'places'] as const;
+
+function codesOf(pattern: RegExp, prefix: string): string[] {
+  return screen
+    .queryAllByTestId(pattern)
+    .map((el) => String(el.props.testID).slice(prefix.length));
+}
+const sidoRowCodes = () =>
+  codesOf(/^explore-region-sido-\d+$/, 'explore-region-sido-');
+const popularCodes = () =>
+  codesOf(/^explore-region-popular-\d+$/, 'explore-region-popular-');
+const regionCardCodes = () =>
+  codesOf(/^explore-region-\d+$/, 'explore-region-');
+
+function renderPickerFor(purpose: (typeof PURPOSES)[number]): void {
+  mockParams = { purpose: purposeParamOf(regionPickerHref(purpose)) };
+  render(<RegionPickerPage />);
+}
+
+describe('서비스 지역 — 지역 피커는 서울·부산·제주만 보인다 (전 목적 · BR-U1-07)', () => {
+  describe.each(PURPOSES)('purpose=%s', (purpose) => {
+    it('1단 시/도 행은 11·26·50 셋뿐이고 밖 시도 이름은 화면에 없다', () => {
+      renderPickerFor(purpose);
+
+      expect(sidoRowCodes()).toEqual(['11', '26', '50']);
+      for (const name of OUTSIDE_SIDO_NAMES) {
+        expect(screen.queryByText(name)).toBeNull();
+      }
+    });
+
+    it('인기 여행지 스트립도 서울·부산·제주 3장뿐이다 (전남광주 카드 없음)', () => {
+      renderPickerFor(purpose);
+
+      expect(popularCodes()).toEqual(['11', '26', '50']);
+      expect(screen.queryByTestId('explore-region-popular-12')).toBeNull();
+    });
+
+    it("검색 '구'의 카드는 서비스 지역 코드뿐이다 (대구광역시·대구 중구·미추홀구 없음)", () => {
+      renderPickerFor(purpose);
+
+      fireEvent.changeText(screen.getByTestId('explore-region-search'), '구');
+
+      // 서버 순서 그대로 — 대구광역시(27, 이름에 '구')·대구 중구(27110)·미추홀구(28177)가 빠진다.
+      expect(regionCardCodes()).toEqual([
+        '11110',
+        '11140',
+        '11680',
+        '26110',
+        '26350',
+      ]);
+    });
+
+    it("서비스 밖 도시 검색 '광주'는 카드 0장과 '검색 결과가 없어요'다", () => {
+      renderPickerFor(purpose);
+      // 앵커 — 카탈로그는 비어 있지 않다(0건이 빈 데이터 탓이 아님).
+      expect(sidoRowCodes().length).toBeGreaterThan(0);
+
+      // 전남광주통합특별시(12)·경기 광주시(41610) 둘 다 밖이다.
+      fireEvent.changeText(screen.getByTestId('explore-region-search'), '광주');
+
+      expect(regionCardCodes()).toEqual([]);
+      expect(screen.getByText('검색 결과가 없어요')).toBeTruthy();
+    });
+
+    it("검색 '대구'는 대구광역시·대구 구/군을 숨기고 이름에 '대구'가 든 부산 해운대구만 남긴다", () => {
+      renderPickerFor(purpose);
+
+      fireEvent.changeText(screen.getByTestId('explore-region-search'), '대구');
+
+      // 티켓 DoD 의 "대구 → 결과 없음"은 실제 카탈로그에선 성립하지 않는다 — 검색은 이름 부분일치라
+      // 해운대구(26350)가 걸린다(02a ★4). 숨김의 대상은 '대구' 글자가 아니라 시도 코드 27 이다.
+      expect(regionCardCodes()).toEqual(['26350']);
+      expect(screen.queryByText('대구광역시')).toBeNull();
+    });
+  });
+
+  it('서버가 부산을 서울보다 먼저 주면 1단도 부산 → 서울 → 제주다 (재정렬 금지)', () => {
+    // 준비 — 계약상 서버 순서는 시도 코드 순이지만, 피커가 그 순서를 **따르는지** 보려고 일부러 뒤집는다.
+    mockRegionsResult = {
+      ...mockRegionsResult,
+      data: [
+        BUSAN,
+        HAEUNDAE,
+        DAEGU,
+        SEOUL,
+        GANGNAM,
+        INCHEON,
+        JEJU,
+        JEJU_CITY,
+        GANGWON,
+      ],
+    };
+    render(<RegionPickerPage />);
+
+    expect(sidoRowCodes()).toEqual(['26', '11', '50']);
+  });
+
+  it("검색 '강남'이면 서울 강남구 카드가 보인다", () => {
+    render(<RegionPickerPage />);
+
+    fireEvent.changeText(screen.getByTestId('explore-region-search'), '강남');
+
+    expect(regionCardCodes()).toEqual(['11680']);
+    expect(screen.getByText('강남구')).toBeTruthy();
+  });
+
+  it("서울 드릴다운은 '서울특별시 전체' 행과 서울 구/군을 지금처럼 보인다", () => {
+    render(<RegionPickerPage />);
+
+    fireEvent.press(screen.getByTestId('explore-region-sido-11'));
+
+    expect(screen.getByText('서울특별시 전체')).toBeTruthy();
+    expect(regionCardCodes()).toEqual(['11', '11110', '11140', '11680']);
+  });
+
+  it('제주 드릴다운은 추천 장소 없는 서귀포시도 지운 채 숨기지 않고 보인다', () => {
+    render(<RegionPickerPage />);
+
+    fireEvent.press(screen.getByTestId('explore-region-sido-50'));
+
+    expect(regionCardCodes()).toEqual(['50', '50110', '50130']);
+  });
+
+  it.each([
+    ['1단', () => undefined],
+    [
+      '제주 드릴다운(추천 장소 없는 서귀포시 포함)',
+      () => fireEvent.press(screen.getByTestId('explore-region-sido-50')),
+    ],
+    [
+      "검색 '시'",
+      () =>
+        fireEvent.changeText(screen.getByTestId('explore-region-search'), '시'),
+    ],
+  ])("%s 화면에 '준비 중' 글자가 없다 (TRIP-939 · 심사 2.1)", (_view, act) => {
+    render(<RegionPickerPage />);
+
+    act();
+
+    // 앵커 — 무언가 그려진 화면이다(빈 화면이라 '준비 중'이 없는 게 아님).
+    expect(sidoRowCodes().length + regionCardCodes().length).toBeGreaterThan(0);
+    expect(screen.queryByText(/준비 중/)).toBeNull();
   });
 });

@@ -130,13 +130,96 @@ def is_disambiguation(text: str) -> bool:
 
 
 def mentions_region(text: str, region: str, address: str) -> bool:
-    """문서가 그 장소의 소재지를 언급하나. 검증 못 하면 **버린다**(빈 것이 낫다)."""
+    """문서가 그 장소의 소재지를 언급하나. 검증 못 하면 **버린다**(빈 것이 낫다).
+
+    광역 토큰('서울특별시')도 본다. 시군구만 보게 좁혀 봤더니(2026-10-18) 옛 문서 1,470건 중 92건의 **진짜 장소**가
+    떨어졌다 — 뚝섬·망원 한강공원, 대전선사박물관처럼 백과 도입부는 광역만 적는 일이 흔하다. 광역만 맞는 회사·
+    브랜드 문서('주식회사 현대백화점은 … 설립된 회사이다')는 `is_company_intro` 가 따로 거른다.
+    """
     tokens = [t for t in f"{region} {address}".split() if len(t) >= 2][:3]
     for token in tokens:
         stem = token.rstrip("시군구")  # '제주시' → '제주' — 본문 표기가 달라도 걸린다
         if len(stem) >= 2 and stem in text:
             return True
     return False
+
+
+# 정의문이 회사·브랜드인 문서 — 지점 POI 에 붙으면 **회사 연혁·다른 지점 목록**이 그 장소 설명으로 실린다.
+# 본문 전문을 실으면서 피해가 커졌다(한 문서 40조각 — 다른 지점 절이 최고 점수로 붙을 수 있다).
+# **정의 서술어**로만 본다("…설립된 회사이다"·"…라이프스타일 브랜드이다"). 낱말만 보면 "재단법인 ○○재단이 운영하는
+# 미술관이다"·"주식회사가 운영하는 테마파크"까지 걸렸다(2026-10-18 실측: 환기미술관·서울랜드·문화원 16건 오기각).
+_COMPANY_DEFINITION = re.compile(r"(회사|기업|브랜드|프랜차이즈|체인점?|기업집단)(이다|이었다|였다|이며|이자|로서|으로서)")
+
+
+def is_company_intro(text: str) -> bool:
+    """첫 문장이 회사·브랜드를 **정의**하나 — 그러면 그 이름의 지점 POI 를 설명하는 문서가 아니다."""
+    m = _FIRST_SENTENCE.match(text.strip())
+    first = m.group(0) if m else text[:120]
+    return bool(_COMPANY_DEFINITION.search(first))
+
+
+# 이름에 흔한 일반어 조각 — 이것만 겹치면 같은 대상이라는 근거가 못 된다('난지천공원'과 '월드컵공원'은 '공원'만 겹친다).
+_GENERIC_BIGRAMS = frozenset(
+    "공원 마을 해변 해수 수욕 욕장 포구 선착 착장 오름 고택 서원 사지 성지 유적 박물 물관 미술 술관 전망 망대 시장 "
+    "거리 기념 념관 문화 화관 센터 관광 광지 체험 험장 휴양 양림 자연 생태 수목 목원 계곡 폭포 해안 국립 도립 시립 "
+    "군립 대교 터널 산성 읍성 향교 사찰 성당 교회 고가 가옥 정자 마애 여래 좌상 입상 석불 불좌 래좌 래입 석조 조여 "
+    "고인 인돌 지석 석묘 항구 등대".split())
+
+
+def _bigrams(text: str) -> set[str]:
+    text = re.sub(r"\([^)]*\)", "", text)  # '고내항 (제주시)' — 괄호는 동음이의 구분이라 대상 이름이 아니다
+    return {tok[i:i + 2] for tok in re.findall(r"[가-힣A-Za-z0-9]+", text) for i in range(len(tok) - 1)}
+
+
+def same_subject(name: str, title: str, address: str) -> bool:
+    """문서가 그 장소 **자체**를 다루나 — 리다이렉트·검색이 상위·이웃 대상으로 데려간다.
+
+    실측(2026-10-19, 위키 코퍼스 1,991건 중 이름과 제목이 다른 99건): 가마오름 → 한라산 · 빨래골 → 수유동 ·
+    대장도 → 장자도 · 숙모전 → 동학사 처럼 **다른 대상** 28건이 붙어 있었다 — 후보 줄에 "한라산은 …" 이 실린다.
+    같은 대상의 다른 이름(고내포구 → 고내항 · 지석묘 → 고인돌 · 성읍민속마을 → 제주 성읍마을)은 남겨야 한다.
+    판정: 한쪽이 다른 쪽을 품으면 같은 대상. 아니면 일반어(`_GENERIC_BIGRAMS`)·시도·시군구가 아닌 두 글자 조각을
+    하나 이상 공유해야 한다 — 읍면동은 지역으로 빼지 않는다('망제동석불입상' 의 '망제' 가 그 근거다). 목록 문서는 대상이 아니다.
+    """
+    if title.rstrip().endswith("목록"):
+        return False
+    a, b = (re.sub(r"[\s()·,.\-_/]", "", re.sub(r"\([^)]*\)", "", x)) for x in (name, title))
+    if a and b and (a in b or b in a):
+        return True
+    region = {g for tok in address.split()[:2] for g in _bigrams(tok)}
+    return bool((_bigrams(name) & _bigrams(title)) - _GENERIC_BIGRAMS - region)
+
+
+# 본문이 아닌 꼬리 절 — 링크 목록·각주라 상황 판단 근거가 없다. 접두로 본다("각주와 참고 문헌"·"참고 자료").
+_SKIP_SECTION_PREFIXES = ("각주", "주석", "참고", "같이 보기", "함께 보기", "외부 링크", "외부 고리",
+                          "출처", "갤러리", "사진", "관련 항목", "읽을거리", "더 읽어보기")
+_HEADING = re.compile(r"^(={2,6})\s*(.+?)\s*\1\s*$")
+
+
+def wiki_sections(text: str) -> list[dict]:
+    """위키 plaintext(`exsectionformat=wiki`) → 절 목록 `[{heading, text}]`. 도입부는 제목 "개요".
+
+    꼬리 절은 **그 하위 절까지** 버린다 — `== 참고 문헌 ==` 아래 `=== 단행본 ===` 은 제목만 보면 꼬리가
+    아니지만 인용 목록이다(리뷰 실측: 수집본에 서지 목록 조각이 들어갔다). 같거나 높은 단계 제목이 나오면 풀린다.
+    """
+    out: list[dict] = []
+    heading, buf = "개요", []
+    skip_level = 0  # 0 = 안 버림. 아니면 버리기 시작한 절의 단계(= 개수)
+    for line in text.splitlines():
+        m = _HEADING.match(line.strip())
+        if m:
+            if buf and not skip_level:
+                out.append({"heading": heading, "text": " ".join(" ".join(buf).split())})
+            level, heading, buf = len(m.group(1)), m.group(2), []
+            if skip_level and level <= skip_level:
+                skip_level = 0
+            if not skip_level and heading.startswith(_SKIP_SECTION_PREFIXES):
+                skip_level = level
+            continue
+        if line.strip():
+            buf.append(line.strip())
+    if buf and not skip_level:
+        out.append({"heading": heading, "text": " ".join(" ".join(buf).split())})
+    return [s for s in out if len(s["text"]) >= MIN_DOC_CHARS]
 
 
 # ── ② detailIntro2 잔여 필드 → 문장 ────────────────────────────────

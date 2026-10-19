@@ -8,10 +8,12 @@
   판정은 게이트(gates/reflection_template.py) 몫, 타입은 대조 집합과 자리만 제공한다.
 - INV-2 비적용의 구조화 + INV-3: ReflectionTemplate에 시각·순서·duration 필드 자체가 없다.
 - 숫자 통계(방문 N·이동 km·사진 N)는 요청에 없다 — 캡션 속 숫자는 PLACEHOLDER_VOCAB
-  자리표시자로만 실리고, 실측값 바인딩은 렌더 시 서버가 한다 (숫자 환각 구조 차단, 계약 §2).
+  자리표시자로만 실리고, 값은 응답 전에 composer 가 요청에서 꺼내 채운다 (숫자 환각 구조 차단,
+  계약 §2 개정 2026-10-19 — 렌더러가 채운다는 종전 전제는 틀렸다).
 
-Phase 2(VisionInput·PhotoRef 등, FD §4)는 이 파일 범위 밖 — ReflectionRequest 후미
-기본값 필드로 후속 추가한다 (기존 호출 무영향 조건, FD business-logic §6.1).
+Phase 2 타입(PhotoRef·VisionInput 등, FD §4)은 이 파일 후미에 있다. vision 재료는
+`ReflectionRequest` 가 아니라 `agents/reflect/agent.py` 의 `ReflectTask.vision` 이 나른다 —
+요청 와이어는 Phase 1 그대로다 (사진은 서버로 오지 않는다, 2026-10-18 방향).
 규칙은 U1과 동일: frozen+slots · tz-aware · from_dict(to_dict(x)) == x (RFL-P6).
 """
 
@@ -74,6 +76,8 @@ class ViolationCode(Enum):
     PLACEHOLDER_OUT = "PLACEHOLDER_OUT"  # 어휘 밖·poi 인덱스 범위 밖 자리표시자
     VISIT_REF_OUT = "VISIT_REF_OUT"  # 방문 기록 밖 참조 (INV-1 사영)
     EVENT_NOT_FOUND = "EVENT_NOT_FOUND"  # source_event 미실재
+    # 사진 0장 방문에 사진 자리 — FE 가 기기 사진으로 채우면 빈 칸이 된다
+    PHOTO_SLOT_EMPTY = "PHOTO_SLOT_EMPTY"
     # SOFT
     HASHTAG_OUT = "HASHTAG_OUT"  # 허용 집합 밖 (지역·방문지·브랜드 파생 아님, TRIP-558)
     CAPTION_LEN = "CAPTION_LEN"
@@ -87,6 +91,7 @@ _GRADE_BY_CODE: dict[ViolationCode, ViolationGrade] = {
     ViolationCode.PLACEHOLDER_OUT: ViolationGrade.HARD,
     ViolationCode.VISIT_REF_OUT: ViolationGrade.HARD,
     ViolationCode.EVENT_NOT_FOUND: ViolationGrade.HARD,
+    ViolationCode.PHOTO_SLOT_EMPTY: ViolationGrade.HARD,
     # 소프트 — 하드로 두면 '#제주여행' 같은 정당한 합성어까지 지운다 (TRIP-558).
     # 랭킹 감점만: 더 나은 후보가 있으면 그쪽이 뽑히고, 없으면 그대로 나간다.
     ViolationCode.HASHTAG_OUT: ViolationGrade.SOFT,
@@ -207,6 +212,12 @@ class ReflectionRequest:
             raise ValueError("visits ≥ 1 — 방문 0건은 생성 진입 불가 (BR-U6R-15)")
         if self.end_date < self.start_date:
             raise ValueError(f"기간 역전: {self.start_date} > {self.end_date}")
+
+    def photoless_refs(self) -> frozenset[VisitRef]:
+        """사진 0장인 방문 참조 — 여기에 사진 자리를 두면 빈 칸이 된다 (PHOTO_SLOT_EMPTY).
+        같은 참조의 방문이 여럿이면 하나라도 사진이 있으면 사진 있음으로 본다."""
+        with_photos = {v.ref for v in self.visits if v.photo_count > 0}
+        return frozenset(v.ref for v in self.visits) - with_photos
 
     def to_dict(self) -> dict:
         return {
@@ -399,7 +410,7 @@ class TemplateCandidate:
     """랭킹 입력 1건 — **하드 위반이 있어도 후보는 유지** (계약 §4 "드롭이 아니라 최선 채택").
 
     attempt는 생성 차수(1~3). 게이트는 차수를 모르므로 기본 1로 승격하고,
-    N회 루프 소유자(agents/reflect composer, 후속)가 dataclasses.replace로 부여한다.
+    N회 루프 소유자(agents/reflect/agent.py `ReflectAgent`)가 dataclasses.replace로 부여한다.
     """
 
     template: ReflectionTemplate
@@ -438,7 +449,8 @@ class ShareCardCopy:
     (`{여행제목} 여행의 기록` · `#{지역}여행`)만 LLM 카피로 대체한다.
 
     숫자는 여기에도 직접 실리지 않는다 — 필요하면 `PLACEHOLDER_VOCAB` 자리표시자로만
-    담고 실측값 바인딩은 렌더 시 서버가 한다 (ReflectionTemplate과 같은 규약, 계약 §2).
+    담는다. 이 카피의 바인딩 주체는 아직 없다 — 회고 카드(ReflectionTemplate)는 2026-10-19 부터
+    AI 가 응답 전에 채우지만, 이 경계는 호출처가 0건이라 같이 옮기지 않았다.
     시각·소요시간 필드는 자리 자체가 없다 (INV-3).
     """
 

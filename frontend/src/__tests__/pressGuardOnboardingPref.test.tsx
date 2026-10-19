@@ -1,6 +1,15 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 
 import { usePreferenceStore } from '@/features/edit-preferences';
+import {
+  publishGateDestination,
+  resetGateDestination,
+} from '@/features/auth/model/gateDestination';
 import { notifyBootstrapReeval } from '@/shared/lib/bootstrapReeval';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { PrefStep1Page } from '@/pages/onboarding/onboarding-pref1';
@@ -16,6 +25,9 @@ import { PrefStep2Page } from '@/pages/onboarding/onboarding-pref2';
  *
  * "창 밖"은 `resetPressGuard()`로 만든다(=400ms 이상 흐른 것과 같다 — 400ms 경계 자체는
  * `shared/lib/pressGuard.test.ts` 가 가짜 타이머로 잠근다).
+ *
+ * TRIP-1421: '완료'는 이제 온보딩 완료 요청을 보내고 그 성공 + 게이트 HOME 공개 뒤에 홈으로 간다 →
+ * 창 안의 탭은 완료 요청도 0회, 창 밖 재탭의 홈 이동은 비동기로 센다(재평가 신호 목이 HOME 을 공개한다).
  */
 
 jest.mock('expo-router', () => {
@@ -49,14 +61,34 @@ jest.mock('@/shared/api/generated/preferences/preferences', () => ({
   usePutMePreferences: () => ({ mutate: mockPutMutate }),
 }));
 
+// TRIP-1421 — 온보딩 완료 호출만 바꾸고 나머지는 실물.
+const mockCompleteOnboarding = jest.fn<Promise<void>, []>();
+jest.mock('@/shared/api', () => ({
+  __esModule: true,
+  ...jest.requireActual('@/shared/api'),
+  completeOnboarding: () => mockCompleteOnboarding(),
+}));
+
+// 모듈 싱글턴(연타 창·스토어·게이트 목적지)은 파일 최상위에서 리셋한다.
 beforeEach(() => {
   resetPressGuard();
   usePreferenceStore.getState().reset();
   routerMock.replace.mockClear();
   routerMock.push.mockClear();
   routerMock.back.mockClear();
-  mockNotifyReeval.mockClear();
   mockPutMutate.mockClear();
+  mockCompleteOnboarding.mockReset();
+  mockCompleteOnboarding.mockResolvedValue(undefined);
+  resetGateDestination();
+  publishGateDestination('ONBOARDING');
+  mockNotifyReeval.mockReset();
+  mockNotifyReeval.mockImplementation(() => {
+    publishGateDestination('HOME');
+  });
+});
+
+afterEach(() => {
+  resetGateDestination();
 });
 
 /** 1/2 를 그리고 '다음'을 누른 뒤 1/2 를 치운다(=2/2 로 넘어간 순간). */
@@ -78,7 +110,7 @@ describe('AC-004 · 1/2 다음 → 창 안의 2/2 완료는 무시된다', () =>
   });
   afterEach(() => clock.mockRestore());
 
-  it('창 안의 완료는 저장·홈 이동·재평가 신호가 모두 0회이고, 창이 지난 뒤 한 번 누르면 정확히 1회다', () => {
+  it('창 안의 완료는 저장·완료 요청·홈 이동·재평가 신호가 모두 0회이고, 창이 지난 뒤 한 번 누르면 정확히 1회다', async () => {
     // 준비·실행 ① — 1/2 '다음'(첫 탭).
     pressNextOnStep1();
     // 앵커 — 첫 탭은 제 할 일을 했다(2/2 로 push).
@@ -90,6 +122,7 @@ describe('AC-004 · 1/2 다음 → 창 안의 2/2 완료는 무시된다', () =>
 
     // 단언 — 사용자가 누르지 않은 완료는 아무것도 하지 않는다.
     expect(mockPutMutate).toHaveBeenCalledTimes(0);
+    expect(mockCompleteOnboarding).toHaveBeenCalledTimes(0);
     expect(routerMock.replace).toHaveBeenCalledTimes(0);
     expect(mockNotifyReeval).toHaveBeenCalledTimes(0);
 
@@ -97,8 +130,8 @@ describe('AC-004 · 1/2 다음 → 창 안의 2/2 완료는 무시된다', () =>
     resetPressGuard();
     fireEvent.press(screen.getByTestId('onboarding-pref2-done'));
 
+    await waitFor(() => expect(routerMock.replace.mock.calls).toEqual([['/']]));
     expect(mockPutMutate).toHaveBeenCalledTimes(1);
-    expect(routerMock.replace).toHaveBeenCalledTimes(1);
-    expect(routerMock.replace).toHaveBeenCalledWith('/');
+    expect(mockCompleteOnboarding).toHaveBeenCalledTimes(1);
   });
 });

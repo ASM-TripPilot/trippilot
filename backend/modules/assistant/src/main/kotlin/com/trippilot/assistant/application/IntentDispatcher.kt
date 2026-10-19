@@ -35,7 +35,8 @@ data class DispatchContext(
  * 의도가 늘면 컴파일이 빈칸을 잡는다.
  *
  * 대화 안에서 끝내는 것은 조회와 제안뿐이고, 나머지는 기존 화면으로 **넘긴다**. 넘기기는 실행이 아니다 —
- * 앱이 그 화면으로 옮기고, 거기 있는 확인·확정 절차가 그대로 돈다.
+ * 앱이 그 화면으로 옮기고, 거기 있는 확인·확정 절차가 그대로 돈다. 넘기기 문장은 안내 한 문장 + 아래 버튼으로 이끄는 제안이고,
+ * AI 결정론 템플릿(`ai/src/trippilot/llm_gateway/workers/dialogue_answer.py` `_ANSWER_TEXT`)과 **같은 문장**이다(한 벌 — 2026-10-19).
  *
  * 조회형(진행 검토·다음 장소·거리·장소·날씨)은 [QueryCards] 가 저장된 값으로 답한다. 변경형(일정 바꾸기·대체 후보)은
  * [ProposalCards] 가 **제안**으로 답한다 — 저장은 사용자가 [적용]을 누를 때뿐이다(BR-U8-30). 어느 쪽도 막다른 응답은 없다.
@@ -52,32 +53,36 @@ class IntentDispatcher(private val cards: QueryCards, private val proposals: Pro
             Intent.REPLAN ->
                 // 재계획은 여행 중에만 있다(FD §4). 그 밖(여행 전·후)에는 다시 만들기로 보낸다.
                 if (context.inTrip) {
-                    AssistantTemplates.handoff("남은 일정은 다시 짜기에서 바꿀 수 있어요.", NextAction("OPEN_REPLAN", "다시 짜기"))
+                    AssistantTemplates.handoff("남은 일정은 다시 짜기에서 지금 상황에 맞게 바꿀 수 있어요. 아래 버튼을 누르면 바로 시작해요.", NextAction("OPEN_REPLAN", "다시 짜기"))
                 } else {
-                    AssistantTemplates.handoff("일정은 만들기 화면에서 다시 만들 수 있어요.", NextAction("OPEN_REGENERATE", "일정 다시 만들기"))
+                    AssistantTemplates.handoff("일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 누르면 바로 시작해요.", NextAction("OPEN_REGENERATE", "일정 다시 만들기"))
                 }
             Intent.REGENERATE ->
-                AssistantTemplates.handoff("일정은 만들기 화면에서 다시 만들 수 있어요.", NextAction("OPEN_REGENERATE", "일정 다시 만들기"))
+                AssistantTemplates.handoff("일정은 만들기 화면에서 다시 만들 수 있어요. 아래 버튼을 누르면 바로 시작해요.", NextAction("OPEN_REGENERATE", "일정 다시 만들기"))
             Intent.GENERATE_SCHEDULE ->
-                AssistantTemplates.handoff("일정 만들기 화면으로 안내할게요.", NextAction("OPEN_ITINERARY_METHOD", "일정 만들기"))
+                AssistantTemplates.handoff("일정 만들기 화면으로 안내해 드릴게요. 아래 버튼을 누르면 바로 시작해요.", NextAction("OPEN_ITINERARY_METHOD", "일정 만들기"))
             Intent.SHOW_SCHEDULE -> cards.review(context)
             Intent.GET_NEXT_SLOT -> cards.nextSlot(context)
             Intent.GET_DISTANCE -> cards.distance(context)
             Intent.GET_POI_INFO -> cards.place(context)
             Intent.GET_WEATHER -> cards.weather(context)
             Intent.GENERATE_REFLECTION ->
-                AssistantTemplates.handoff("회고는 기록 화면에서 만들 수 있어요.", NextAction("OPEN_REFLECTION", "기록 열기"))
+                AssistantTemplates.handoff("회고는 기록 화면에서 만들 수 있어요. 아래 버튼을 누르면 기록이 열려요.", NextAction("OPEN_REFLECTION", "기록 열기"))
             Intent.TRIP_SUMMARY ->
-                AssistantTemplates.handoff("여행 요약은 기록 화면에 있어요.", NextAction("OPEN_TRIP_SUMMARY", "여행 요약 보기"))
+                AssistantTemplates.handoff("여행 요약은 기록 화면에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요.", NextAction("OPEN_TRIP_SUMMARY", "여행 요약 보기"))
             Intent.STYLE_ANALYSIS ->
-                AssistantTemplates.handoff("여행 스타일은 기록에서 볼 수 있어요.", NextAction("OPEN_STYLE", "내 여행 스타일"))
+                AssistantTemplates.handoff("여행 스타일은 기록에서 볼 수 있어요. 아래 버튼을 누르면 바로 열려요.", NextAction("OPEN_STYLE", "내 여행 스타일"))
+            // 장소 탐색은 상대 오케스트레이터가 등록 장소 풀에서 답까지 만든다(ANSWER — 여기로 오지 않는다). 여기는 상대가 꺼진 대역 모드뿐이라
+            // 찾지 못한다고 정직하게 말하고 할 수 있는 것으로 잇는다.
+            Intent.EXPLORE_PLACES ->
+                AssistantTemplates.handoff("가 볼 만한 곳 찾기는 지금 도와드리기 어려워요. 아래 버튼에서 제가 할 수 있는 걸 확인해 보세요.", AssistantTemplates.CAPABILITIES_ACTION)
             Intent.OUT_OF_SCOPE ->
                 AssistantTemplates.outOfScope(nearStay = context.surface == AssistantSurface.STAY_SEARCH || context.surface == AssistantSurface.STAY_DETAIL)
         }
     }
 
     private companion object {
-        /** 여행이 있어야 넘길 화면이 있는 의도. 스타일 분석과 범위 밖은 여행 없이도 답한다. */
-        val NEEDS_TRIP = Intent.entries.toSet() - setOf(Intent.STYLE_ANALYSIS, Intent.OUT_OF_SCOPE)
+        /** 여행이 있어야 넘길 화면이 있는 의도. 스타일 분석·장소 탐색·범위 밖은 여행 없이도 답한다. */
+        val NEEDS_TRIP = Intent.entries.toSet() - setOf(Intent.STYLE_ANALYSIS, Intent.EXPLORE_PLACES, Intent.OUT_OF_SCOPE)
     }
 }

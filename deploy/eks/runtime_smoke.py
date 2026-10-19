@@ -1,7 +1,7 @@
 """In-cluster smoke checks, including the public gateway's route deny boundary."""
 import json
 
-from runtime_io import CommandError
+from runtime_io import CommandError, wait_job
 
 SMOKE_SCRIPT = """set -eu
 for url in http://gateway:443/healthz http://backend:8080/actuator/health/readiness http://ai:8000/health; do
@@ -64,9 +64,9 @@ def report_autoscalers(namespace, shell):
 
 # AI 가 기동 때 스스로 적는 한 줄들. 외부 배선은 **있으면 INFO 로 주소를, 없으면 WARN
 # 으로 미설정을** 남기므로, 이 표식들만 뽑으면 양쪽이 다 보인다(`ai/main._warn_unwired`,
-# `kma_weather.KmaWeatherAdapter.__init__`).
+# `kma_weather.KmaWeatherAdapter.__init__`). `공휴일 휴무` 는 HOLIDAY_CLOSURE_MODE 줄(`ai/main._holiday_source`).
 _WIRING_MARKERS = ("미설정", "미배선", "비어 있음", "기상청 단기예보", "실경로 배선",
-                   "기능별 모델 배정")
+                   "기능별 모델 배정", "공휴일 휴무")
 
 
 def report_ai_wiring(namespace, shell):
@@ -163,7 +163,7 @@ def run(namespace, shell):
     shell(delete)
     try:
         shell(["kubectl", "apply", "--server-side", "--field-manager=trippilot-runtime", "-f", "-"], json.dumps(manifest(namespace)))
-        shell(["kubectl", "wait", "--namespace", namespace, "--for=condition=complete", "job/trippilot-smoke", "--timeout=330s"])
+        wait_job(shell, namespace, "trippilot-smoke", 330)
     finally:
         shell(delete)
     report_autoscalers(namespace, shell)

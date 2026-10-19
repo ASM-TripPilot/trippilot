@@ -11,6 +11,7 @@ import com.trippilot.assistant.domain.AssistantSessionRepository
 import com.trippilot.assistant.domain.AssistantSurface
 import com.trippilot.assistant.domain.AssistantUsageRepository
 import com.trippilot.assistant.domain.DialogueInterpretPort
+import com.trippilot.assistant.domain.DialogueMemoryPort
 import com.trippilot.assistant.domain.Intent
 import com.trippilot.assistant.domain.IntentFrame
 import com.trippilot.assistant.domain.InterpretOutcome
@@ -96,6 +97,8 @@ class AssistantTurnService(
     /** 상대가 완성한 답의 2차 검증 재료 — 고르기 버튼의 슬롯 실재([plans])와 후보 장소의 실존·정본 이름([poiSurfaces], INV-1). */
     private val plans: ItineraryPlanFacade,
     private val poiSurfaces: PoiSurfaceFacade,
+    /** 답하는 사이 지워진 대화의 상대 기억을 한 번 더 지우는 데만 쓴다 — 아래 `send` 의 "대화가 없다" 갈래. */
+    private val memory: DialogueMemoryPort,
     private val properties: AssistantProperties,
     private val mapper: ObjectMapper,
     private val clock: Clock,
@@ -131,6 +134,12 @@ class AssistantTurnService(
             // 답하는 사이 대화가 지워졌다(이력 지우기·여행 삭제) — 남길 곳이 없다. 500 이 아니라 "그 대화는 없다"다.
             // 그래도 **쓴 LLM 은 센다**: 안 세면 "보내고 지우기"를 되풀이해 하루 상한을 비켜 간다(사용량은 계정에 묶여 남는다).
             if (reply.llm) tx.execute { usage.record(accountId, today(startedAt), llm = true, turn = false) }
+            // 상대 기억도 한 번 더 지운다 — 상대는 답하기 **전에** 요약을 써서, 이력 지우기·여행 삭제·계정 삭제의 파기가 이 턴보다
+            // 먼저 끝났어도 진행 중이던 이 턴이 그 세션의 요약을 되살린다(2026-10-18 리뷰 재현: 같은 계정의 다른 대화가 "지난 여행
+            // 기억"으로 읽었다). 세 파기 경로가 전부 여기로 온다. 실패는 WARN — 90일 TTL 이 마지막 그물이다.
+            runCatching { memory.deleteBySession(sessionId) }.onFailure { e ->
+                log.warn("지워진 대화의 상대 기억을 다시 지우지 못했습니다. sessionId={} type={}", sessionId, e.javaClass.simpleName)
+            }
             throw ResourceNotFound()
         }
         return TurnResult(listOf(accepted.user) + replies, replies.last().quickReplies ?: StartQuickReplies.of(accepted.session.tripId != null))
@@ -368,6 +377,10 @@ class AssistantTurnService(
         val remaining = properties.turnBudgetMs - Duration.between(startedAt, clock.instant()).toMillis()
         val deadlineMs = minOf(properties.interpretStageMaxMs, remaining - properties.readMarginMs)
         if (deadlineMs <= 0) return Reply(AssistantTemplates.fallback(FallbackCause.AI_UNAVAILABLE), streak = Streak.KEEP)
+        // 이 해석 호출의 추적 번호(BR-U8-64) — 상대가 trace_id 로 로그(llm_cost·FallbackEvent·LlmCallRecord)에 남기는 값을 그 턴의
+        // 도우미 행에도 적어, 평가를 상대 로그(프롬프트 판본·모델·폴백)와 잇는다. 해석이 실패해도 적는다 — 상대가 요청을 받았다면
+        // 그 호출의 기록(오류·시한 초과·폴백)이 이 번호로 남아 있다. 해석을 부르지 않는 갈래(위의 반환들)는 번호가 없다.
+        val traceId = UUID.randomUUID().toString()
         val interpretation = runCatching {
             port.interpret(
                 InterpretRequest(
@@ -377,13 +390,14 @@ class AssistantTurnService(
                     requestedAt = startedAt, deadlineMs = deadlineMs,
                     sessionId = session.sessionId, accountRef = session.accountId.toString(),
                     recentTurns = recentTurns(session, beforeSeq = turn.user.seq),
+                    traceId = traceId,
                 ),
             )
         }.getOrElse { e ->
             log.warn("도우미 해석 실패 — 폴백으로 답합니다. sessionId={} type={}", session.sessionId, e.javaClass.simpleName)
-            return Reply(AssistantTemplates.fallback(FallbackCause.AI_UNAVAILABLE), streak = Streak.KEEP)
+            return Reply(AssistantTemplates.fallback(FallbackCause.AI_UNAVAILABLE).copy(traceId = traceId), streak = Streak.KEEP)
         }
-        return answer(interpretation, session, surface, utterance, startedAt)
+        return answer(interpretation, session, surface, utterance, startedAt).let { it.copy(message = it.message.copy(traceId = traceId)) }
     }
 
     private fun answer(result: Interpretation, session: AssistantSession, surface: AssistantSurface, utterance: String, startedAt: Instant): Reply {
@@ -440,6 +454,7 @@ class AssistantTurnService(
     private fun answered(answer: InterpretedAnswer, frame: IntentFrame?, session: AssistantSession): NewMessage? {
         var payload = answer.payload
         var shownPoiIds = emptySet<String>()
+        var canonicalNames = emptyMap<String, String>()
         if (answer.kind == AnswerKind.CANDIDATES) {
             // 상대가 준 후보는 장소 정본과 대조한다 — 없는 장소는 빼고, 이름은 정본값으로 덮는다(상대 문장은 못 고쳐도 카드 값은 고친다).
             val given = (payload?.get("candidates") as? List<*>).orEmpty().filterIsInstance<Map<*, *>>()
@@ -451,6 +466,16 @@ class AssistantTurnService(
             if (grounded.isEmpty()) return null
             payload = payload.orEmpty() + ("candidates" to grounded)
             shownPoiIds = grounded.map { it["poiId"] as String }.toSet()
+            canonicalNames = names
+        }
+        // 후보 카드의 장소 보기 버튼(장소 탐색)도 남은 후보에만, 이름은 정본값으로 — 카드에서 빠진 후보의 버튼이 남지 않게(INV-1 두 번째 방어선)
+        val nextActions = if (answer.kind != AnswerKind.CANDIDATES) answer.nextActions else answer.nextActions.mapNotNull { a ->
+            val poiId = a.params[ProposalCards.ARG_POI_ID]
+            when {
+                a.type != "OPEN_PLACE" -> a
+                poiId !in shownPoiIds -> null
+                else -> a.copy(label = canonicalNames[poiId]?.take(NEXT_ACTION_LABEL_MAX) ?: a.label)
+            }
         }
         // 고르기 버튼은 **지금 일정에 있는 슬롯**과 **남은 후보**의 짝에만 발급한다 — 지어낸 슬롯·장소로 교체를 시키지 못하게(SEC-U8-03).
         val picks = answer.quickReplies.orEmpty().filter { it.action == QuickReplyAction.PICK_CANDIDATE }
@@ -469,16 +494,16 @@ class AssistantTurnService(
                 AnswerKind.CANDIDATES -> MessageKind.CANDIDATES
             },
             text = answer.text, payload = payload,
-            nextActions = answer.nextActions.ifEmpty { listOf(AssistantTemplates.CAPABILITIES_ACTION) }, // 막다른 답은 없다(INV-U8-03)
+            nextActions = nextActions.ifEmpty { listOf(AssistantTemplates.CAPABILITIES_ACTION) }, // 막다른 답은 없다(INV-U8-03)
             quickReplies = quickReplies, footnote = answer.footnote,
             intent = frame?.intent?.name, matchRoute = frame?.matchRoute ?: "NONE", outcome = "ANSWER",
         )
     }
 
-    /** 단기 기억(BR-AO-11) — 이번 발화 앞의 메시지 중 원문이 있는 것만(가려진 입력은 원문이 없다), 오래된 것부터, 300자까지. 상대는 저장하지 않는다. */
+    /** 단기 기억(BR-AO-11) — 이번 발화 앞의 메시지 중 원문이 있는 것만(가려진 입력은 원문이 없다), 오래된 것부터, 300자까지([clip]). 상대는 저장하지 않는다. */
     private fun recentTurns(session: AssistantSession, beforeSeq: Long): List<RecentTurn> =
         messages.findPage(session.sessionId, beforeSeq, RECENT_TURNS).mapNotNull { m ->
-            m.text?.takeIf { it.isNotBlank() }?.let { RecentTurn(m.role, it.take(RECENT_TURN_CHARS)) }
+            m.text?.takeIf { it.isNotBlank() }?.let { RecentTurn(m.role, clip(it)) }
         }
 
     private fun dispatched(
@@ -560,8 +585,25 @@ class AssistantTurnService(
         /** 상대 계약 `recent_turns` 의 상한(건·자) — 넘기면 422 다. */
         private const val RECENT_TURNS = 20
         private const val RECENT_TURN_CHARS = 300
+        private const val RECENT_TURN_HEAD = 200
+
+        /**
+         * 최근 턴 한 줄을 300자 안으로 — 넘치면 앞 200자와 끝을 남기고 가운데를 "…"로 줄인다. 앞에는 지시어가 가리키는 이름이,
+         * 끝에는 답의 제안·되묻기가 있다(AI 답변 0.3.0 은 제안을 맨 끝에 두고, 분류는 그 제안 뒤의 "응"을 수락으로 읽는다) —
+         * 앞만 남기면 긴 답 뒤의 "응"이 무엇을 받는지 사라진다. 자르는 자리에서 서로게이트 쌍을 가르지 않는다(깨진 문자 금지).
+         */
+        internal fun clip(text: String): String {
+            if (text.length <= RECENT_TURN_CHARS) return text
+            val head = if (text[RECENT_TURN_HEAD - 1].isHighSurrogate()) RECENT_TURN_HEAD - 1 else RECENT_TURN_HEAD
+            var tail = text.length - (RECENT_TURN_CHARS - RECENT_TURN_HEAD - 1)
+            if (text[tail].isLowSurrogate()) tail++
+            return text.substring(0, head) + "…" + text.substring(tail)
+        }
         private val WINDOW: Duration = Duration.ofSeconds(60)
         private const val REFUSALS_BEFORE_GUIDE = 2
+
+        /** 버튼 라벨 상한 — 상대(AI) `NextAction.label` 과 같은 값(30자). 정본 이름으로 덮을 때 넘기지 않게 자른다. */
+        private const val NEXT_ACTION_LABEL_MAX = 30
         private val SERVER_ISSUED_ARGUMENTS = setOf(ProposalCards.ARG_SLOT_KEY, ProposalCards.ARG_POI_ID)
         private const val POLL_MS = 200L
         internal const val MAX_WAITERS_PER_TURN = 2

@@ -5,11 +5,14 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { Place, StayItem } from '@/shared/api/index.schemas';
 import { guardPress } from '@/shared/lib/pressGuard';
 import { formatPrice } from '@/entities/stay';
+import { orderLanePlaces } from '@/entities/place';
+import { SERVICE_REGIONS } from '@/entities/trip';
+import { addressInRegion } from '@/features/trip/index.view';
 import { stayKey } from '@/features/save-stay';
 import { useSavedStays } from '@/features/save-stay';
 import { useStaySearch } from '@/features/stay';
 import { usePlaceSaveToggle } from '@/features/save-place';
-import { useRegions } from '@/features/explore';
+import { useMultiRegionPlaces, useRegions } from '@/features/explore';
 import { useSavedPlaces } from '@/features/save-place';
 import { regionPickerHref } from '@/features/explore';
 import { useGetPlaces } from '@/shared/api/index.hooks';
@@ -65,8 +68,21 @@ type LandingBase = Pick<
   >;
 };
 
-// 가볼 곳 가로 레인에 그릴 카드 수 = 서버에 요청할 limit(TRIP-500). 레인 개수와 요청 개수의 단일 출처.
+// 가볼 곳 가로 레인에 그릴 카드 수 = 지역 필터 갈래가 서버에 요청할 limit(TRIP-500). 레인 개수와 요청 개수의
+// 단일 출처. 전국 갈래는 서비스 지역 3곳을 지역당 200곳 받아(홈과 같은 쿼리 키) 이만큼 골라 그린다(TRIP-1432).
 const PLACE_LANE_LIMIT = 8;
+
+// 홈 장소 레인과 같은 배열·순서 — 같은 쿼리 키라 홈에서 받은 응답을 그대로 쓴다(TRIP-1432).
+const SERVICE_REGION_NAMES = SERVICE_REGIONS.map((r) => r.name);
+
+/** 주소가 서비스 지역(서울·부산·제주) 안인가 — 주소를 모르면 밖으로 본다(fail-closed, 지역 필터의 fail-open 과 반대). */
+function inServiceRegion(item: StayItem): boolean {
+  const address = item.address;
+  return (
+    address != null &&
+    SERVICE_REGION_NAMES.some((name) => addressInRegion(address, name))
+  );
+}
 
 /** 레인 한 칸의 조회 결과 — 전국·지역 필터 두 조회 모양을 한 모양으로 편다. */
 interface LaneQuery<T> {
@@ -96,22 +112,24 @@ export function ExploreLandingPage(): ReactElement {
   );
 }
 
-/** 필터 없는 d01 — 전국 조회(지금 그대로). 장소 조회는 인자 하나로 부른다. */
+/**
+ * 필터 없는 d01 — 서비스 지역(서울·부산·제주)만 보인다(TRIP-1432). 전국 이름순 앞쪽은 지역 밖(밀양·대구…)이었다.
+ * 장소: 3지역 병렬 조회(한 곳 실패는 받은 곳으로 채움) → 사진 먼저·지역 번갈아 8장.
+ * 숙소: 요청은 전국 1회 그대로, 응답을 주소로 3지역만 남긴다(지역별 3회는 약 17배라 안 함 — 브리프 Q6).
+ */
 function NationwideExplore(): ReactElement {
   const stay = useStaySearch();
-  // 가로 레인은 개수 제한으로 통일(TRIP-500) — 전량(약 2MB)을 받아 8장만 쓰던 것을, 서버에
-  // limit 을 실어 필요한 개수만 받는다(계약 TRIP-503). '모두 보기'(세로 목록)만 무한 스크롤이다.
-  const places = useGetPlaces({ limit: PLACE_LANE_LIMIT });
+  const places = useMultiRegionPlaces(SERVICE_REGION_NAMES);
   return (
     <ExploreLanding
       stay={{
-        items: stay.data?.items ?? [],
+        items: (stay.data?.items ?? []).filter(inServiceRegion),
         isPending: stay.isPending,
         isError: stay.isError,
         refetch: () => void stay.refetch(),
       }}
       places={{
-        items: places.data?.items ?? [],
+        items: orderLanePlaces(places.items).slice(0, PLACE_LANE_LIMIT),
         isPending: places.isPending,
         isError: places.isError,
         refetch: () => void places.refetch(),

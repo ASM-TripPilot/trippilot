@@ -51,13 +51,16 @@ from trippilot.agents.schedule.outcome import (
     Degradation,
     GenerationOutcome,
     GenerationStatus,
+    RepairHints,
     ScoringMode,
     SlotAlternative,
     _wanted_categories,
     failed_outcome,
 )
+from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.constraints import open_hours_ok
 from trippilot.assembly_engine.facade import AssemblyConflictError
+from trippilot.assembly_engine.fallback_assembler import explain_unplaced
 from trippilot.assembly_engine.scorer import (
     DIRECTIVE_STEP,
     build_rule_score,
@@ -65,7 +68,7 @@ from trippilot.assembly_engine.scorer import (
     near_fit,
 )
 from trippilot.poi_curation.place_fees import EMPTY as FEES_EMPTY, FeeTable
-from trippilot.assembly_engine.travel import haversine_km
+from trippilot.assembly_engine.travel import TravelEstimator, haversine_km
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
@@ -88,7 +91,7 @@ from trippilot.domain.itinerary import (
 from trippilot.domain.llm import CandidatePool, PoiExplanation, ScoredPoi
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.persona import PersonaSummary
-from trippilot.domain.poi import NIGHTLIFE_TAG, OpenHour, Poi, PoiCategory
+from trippilot.domain.poi import NIGHTLIFE_TAG, HolidayCalendar, OpenHour, Poi, PoiCategory, open_windows_on
 from trippilot.llm_gateway.workers.alternative_explanation import (
     AlternativeExplanationWorker,
 )
@@ -194,6 +197,8 @@ class GenerateItineraryRequest:
     day_windows: Mapping[date, TimeWindow] | None = None
     # 필수 방문을 준 순서대로(재계획 "시간만 당기기") — 의미는 `ItineraryProblem.required_in_order`.
     required_in_order: bool = False
+    # 앵커=숙소(생성) — 의미는 `ItineraryProblem.ignore_anchor_distance`. 규칙 점수의 숙소 거리 감점도 끈다.
+    ignore_anchor_distance: bool = False
     # 거절 이력 (TRIP-964) — 백엔드가 여행 단위로 누적해 싣는다. `pace`·지시와 같은 길이다
     # (Provider 수집물이 아니라 요청에 실려 오는 값). generate·replan 양쪽에 실린다 —
     # 다시 짜는 경로가 replan 이고, 처음부터 다시 만드는 경로가 generate 이기 때문이다.
@@ -213,6 +218,10 @@ class GenerateItineraryRequest:
     # PlanB 경로의 점수는 종전과 바이트 동일하다 — 재계획은 시드를 하한 결정론에 쓰고(TRIP-1182),
     # PlanB 가산 서열을 흔들 이유가 없다.
     diversity_jitter: float = 0.0
+    # 특일 달력 (상황 감지 H1) — 배선이 요청 진입점에서 1회 조회해 싣는다(조립 루프는 I/O 를 타지 않는다).
+    # 의미는 `ItineraryProblem.holidays` — None = `HOLIDAY_CLOSURE_MODE=off`(공휴일 규칙 없음), 빈 매핑 = 달력
+    # 실패(날짜 명시형만). 에이전트의 사전 판정(⓪′ 핀·한 곳 추가·차선책)도 같은 값으로 조립과 같은 그 날 창을 본다.
+    holidays: Mapping[date, frozenset[str]] | None = None
 
     def __post_init__(self) -> None:
         if not self.days:
@@ -263,6 +272,10 @@ class ScheduleTask:
     # 그러면 점수는 무엇을 넣을지를 정하지 않으므로 점수 LLM 을 부르지 않는다. 같은 재계획 시한
     # (25s)에 PlanB·구성·점수 LLM 셋이 들어가면 넘친다(2026-10-13 504, #1102).
     llm_composed: bool = False
+    # 다시 짜기 1회 수리의 2차 풀이(배선 `_repair_day`) — 1차가 남긴 재료. 있으면 ⓪ 풀 밖 조회와
+    # ②⁗ 영업시간 보강을 다시 하지 않고(1차 값 그대로 — 2차는 잔여 ≈0 에서 시작해 다시 물으면 시한
+    # 강등으로 빠지고, 영업시간은 건마다 돈이 든다) 수리 재료도 다시 만들지 않는다(수리는 한 번).
+    reuse: RepairHints | None = None
 
 
 
@@ -273,6 +286,10 @@ class ScheduleTask:
 PRESUMED_OPEN_MIN, PRESUMED_CLOSE_MIN = 7 * 60, 23 * 60
 PRESUMED_NIGHT = (16 * 60, 26 * 60)  # 야경 16:00~익일 02:00
 PRESUMED_NIGHTLIFE = (20 * 60, 28 * 60)  # 클럽·바 20:00~익일 04:00 (tags 에 NIGHTLIFE_TAG)
+
+# 1회 수리의 틈 검사 후보 상한(점수 순) — 순수 계산(하버사인·I/O 0)이라 싸지만 풀 전체를 돌 이유가 없다.
+# 배선은 이 중 빈 틈에 드는 곳에서 20곳만 2차 후보로 싣는다(`_repair_day`).
+_FIT_PROBE_MAX = 120
 
 
 def presume_hours(pool: CandidatePool, keep: Collection[PoiId] = ()) -> CandidatePool:
@@ -309,6 +326,7 @@ class ScheduleAgent:
         hours: PlaceHoursPort | None = None,
         place_ids: Mapping[str, str] | None = None,
         poi_db: PoiDbPort | None = None,
+        assembly_config: AssemblyConfig | None = None,
     ) -> None:
         self._scoring = scoring_worker
         self._assembly_provider = assembly_provider
@@ -330,6 +348,9 @@ class ScheduleAgent:
         # 풀 밖 고정 블록 POI 조회 (TRIP-1177). 미주입이면 ⓪ 을 건너뛰고, 풀 밖 블록은
         # 인덱스에 없어 체인이 그 인접 이동을 위반으로 본다(0분 배치가 나가지 않는다).
         self._poi_db = poi_db
+        # 수리 재료(`RepairHints`)의 틈 판정 — 어셈블리 체인과 **같은 설정**이어야 판정이 솔버와 맞는다.
+        # 미주입이면 재료를 만들지 않는다(기능 부재 — 배선이 1회 수리를 건너뛰고 노트로 남긴다).
+        self._acfg = assembly_config
 
     # ── 공개 API ────────────────────────────────────────────────────
 
@@ -354,11 +375,14 @@ class ScheduleAgent:
         request, pool, persona, budget = task.request, task.pool, task.persona, task.budget
         t0, trace_id, now = task.started_ms, task.trace_id, task.now
         steps: list[Degradation] = list(task.prior_degradations)
+        base = len(steps)
+        if task.reuse is not None:  # 1회 수리의 2차 — 1차가 풀이 전에 남긴 강등을 잇는다(그 단계를 다시 안 산다)
+            steps.extend(task.reuse.pre_steps)
 
         # ⓪ 풀 밖 고정 블록·필수 방문 POI — 점수 **앞**에서 묻는다. 어셈블리 직전이면 점수
         #    단계가 상한을 다 쓴 날 시한이 바닥나 필수방문이 시한 탓에 빠진다. 합류는 ④ 의 인덱스.
         fixed_blocks, required_visits, fixed_pois = self._resolve_fixed_pois(
-            request, pool, budget, t0, steps, trace_id, now)
+            request, pool, budget, t0, steps, trace_id, now, task.reuse)
 
         # ② 게이트웨이 선호 점수 (전 일자 공용 1회) — 실패·스킵이면 규칙 점수 (INV-4)
         #    잔여는 어셈블리 바닥(`c2_reserved_ms`)을 **뺀** 값이다 — 다른 단계(⓪·②′·②⁗)와 같은
@@ -446,14 +470,13 @@ class ScheduleAgent:
         #    INFEASIBLE 이 없고(TRIP-1249), 못 넣으면 아래 ④ 뒤에서 노트로 보고한다(INV-4).
         #    그날 휴무가 **증명된** 곳도 고르지 않는다 — 1위 카페가 일요일 휴무면 필수 방문이
         #    못 놓여 "카페 0곳 + 미배치 노트"가 된다(열린 2위가 있는데도). 판정은 HC1 과 같다:
-        #    영업정보 없음은 막지 않고, 항목이 있는데 그 요일이 없으면 휴무.
+        #    영업정보 없음은 막지 않고, 그 날 창이 없으면(정기·공휴일 휴무 — `open_windows_on`) 휴무.
         add_one_required: tuple[PoiId, ...] = ()
         if request.add_one_categories:
             index = {p.poi_id: p for p in pool.pois}
             # 재계획은 하루다 — add_one 은 재계획에서만 실린다(generate 는 빈 집합).
             day = request.days[0]
-            closed = {p.poi_id for p in pool.pois if p.open_hours
-                      and all(oh.day_of_week != day.weekday() for oh in p.open_hours)}
+            closed = {p.poi_id for p in pool.pois if open_windows_on(p, day, request.holidays) == ()}
             candidates, add_one_required = boost_add_one(
                 candidates, index, request.add_one_categories,
                 skip=request.excluded_poi_ids | {b.poi_id for b in fixed_blocks} | closed,
@@ -485,15 +508,27 @@ class ScheduleAgent:
         # ②′ 지도 실재 검증 (TRIP-904) — **점수가 나온 뒤**라야 배치될 후보를 검증할 수
         #    있고, 결과가 **점수**에 실려야 어셈블리에 닿는다. 풀 단계에서 순서만 바꾸던
         #    종전(TRIP-898) 방식은 이후 누구도 풀 순서를 읽지 않아 일정에 효과가 0이었다.
-        candidates = self._verify_on_map(
-            request, pool, candidates, budget, t0, steps, trace_id, now
-        )
+        if task.reuse is None:
+            candidates, verdicts = self._verify_on_map(
+                request, pool, candidates, budget, t0, steps, trace_id, now
+            )
+        else:  # 1회 수리의 2차 — 1차 판정으로 강등만 다시 건다(같은 질의를 잔여 ≈0 에서 다시 하지 않는다)
+            verdicts = task.reuse.verdicts
+            if verdicts:
+                candidates = demote_missing_on_map(
+                    candidates, verdicts,
+                    self._cfg.existence_demote_factor, self._cfg.existence_demote_penalty)
 
         # ②⁗ 영업시간 런타임 보강 — **후보가 아니라 풀을 간다.** `ScoredPoi` 에는
         #    `Poi` 본체가 없어(poi_id·score·is_llm_score) 영업시간을 담을 자리가 없고,
         #    HC1 이 읽는 것은 바로 아래 `for_pool(pool.pois)` 이다. 이 교체가 그보다
         #    아래면 조립은 옛 POI 를 본다 — 이 리포가 같은 모양으로 네 번 당했다.
-        pool = self._enrich_hours(pool, candidates, budget, t0, steps, trace_id, now)
+        if task.reuse is None:
+            pool = self._enrich_hours(pool, candidates, budget, t0, steps, trace_id, now)
+        else:  # 1회 수리의 2차 — 풀이 이미 1차 보강본이다(`RepairHints.pool`). 강등이 아니다.
+            self._observe(trace_id, now, "hours", "enrich", "enrich", "hours_reused")
+        enriched = pool  # 추정 전 — 수리 재료가 이 풀을 2차로 넘긴다
+        pre_steps = tuple(steps[base:])  # ⓪·②′·②⁗ 강등 — 2차가 잇는다(⓪′ 는 2차도 다시 판정한다)
         # 그래도 없는 곳은 새벽에 놓지 않는다 (TRIP-1397) — 사용자가 고정·필수로 고른 곳은 빼고.
         pool = presume_hours(pool, keep={fb.poi_id for fb in request.fixed_blocks}
                              | {rv.poi_id for rv in request.required_visits
@@ -508,7 +543,7 @@ class ScheduleAgent:
         index = {**fixed_pois, **{p.poi_id: p for p in pool.pois}}
         excluded = request.excluded_poi_ids  # 2단계 생성 그대로 통과
         closed = [fb for fb in fixed_blocks if fb.poi_id in index
-                  and not open_hours_ok(index[fb.poi_id], fb.window.start, fb.window.end)]
+                  and not open_hours_ok(index[fb.poi_id], fb.window.start, fb.window.end, request.holidays)]
         if closed:
             fixed_blocks = tuple(fb for fb in fixed_blocks if fb not in closed)
             # 핀이던 POI 는 자유 후보로도 안 놓는다(핀 POI 는 원래 어느 날에도 자유 후보가 아니다 —
@@ -548,6 +583,8 @@ class ScheduleAgent:
             end_near=request.end_near,
             day_windows=request.day_windows,
             required_in_order=request.required_in_order,
+            ignore_anchor_distance=request.ignore_anchor_distance,
+            holidays=request.holidays,
         )
 
         # ④ 어셈블리 solve — 잔여 **전부**를 받는다 (고정 슬라이스 아님, TRIP-376).
@@ -582,6 +619,15 @@ class ScheduleAgent:
         if missed:
             self._degrade(steps, trace_id, now, "directives", "add_one", "(unplaced)",
                           "add_one_unplaced: " + ",".join(str(p) for p in missed))
+        # 다시 짜기 1회 수리 재료 — 구성 LLM 이 고른 곳이 빠졌을 때만(배선 `_repair_day` 가 읽는다).
+        hints = None
+        if (task.llm_composed and task.reuse is None and self._acfg is not None
+                and any(rv.reason == "llm_compose" and rv.poi_id not in placed_ids
+                        for rv in required_visits)):
+            hints = self._repair_hints(problem, solution, index, enriched, fixed_pois, candidates,
+                                       placed_ids, trace_id, now)
+            if hints is not None:
+                hints = replace(hints, pre_steps=pre_steps, verdicts=verdicts)
 
         # ⑤ (선택) 설명 부착 — 실패해도 일정은 그대로 나간다
         explanations = self._explain(
@@ -611,6 +657,7 @@ class ScheduleAgent:
             solved_at=solved_at,
             slot_alternatives=alternatives,
             rule_backfill_count=backfilled,
+            repair_hints=hints,
         )
 
     # ── ② 선호 점수 + 규칙 점수 폴백 ────────────────────────────────
@@ -748,7 +795,8 @@ class ScheduleAgent:
             ScoredPoi(
                 poi_id=poi.poi_id,
                 score=build_rule_score(
-                    poi, request.budget, request.anchor, request.seed,
+                    poi, request.budget,
+                    None if request.ignore_anchor_distance else request.anchor, request.seed,
                     prefer=prefer,
                     avoid=avoid,
                     taste=taste,
@@ -849,7 +897,7 @@ class ScheduleAgent:
         try:
             return pick_slot_alternatives(
                 solution, candidates, pool, excluded=request.excluded_poi_ids,
-                family_anchors=family_anchors,
+                family_anchors=family_anchors, holidays=request.holidays,
             )
         except Exception as e:
             # 순수 계산이라 도달하지 않아야 하지만, 부가 정보가 생성을 깨면 안 된다(INV-4).
@@ -969,7 +1017,7 @@ class ScheduleAgent:
         steps: list[Degradation],
         trace_id: TraceId,
         now: datetime,
-    ) -> tuple[ScoredPoi, ...]:
+    ) -> tuple[tuple[ScoredPoi, ...], tuple[ExistenceVerdict, ...]]:
         """점수 상위 N 을 지도에서 확인하고 **못 찾은 것만** 점수를 깎는다 — 배제가 아니다.
 
         실측(`ai-existence-probe`, 반경 300m, 무리별 200건)이 배제를 기각했다: 영업 중의
@@ -985,7 +1033,7 @@ class ScheduleAgent:
         HttpGetJson 포트 확장이 필요해 두었다.
         """
         if self._existence is None or not candidates:
-            return candidates  # 미주입 = 기능 부재 (강등 아님)
+            return candidates, ()  # 미주입 = 기능 부재 (강등 아님)
         index = {p.poi_id: p for p in pool.pois}
         # 사용자가 지정한 곳(고정·필수 방문)은 실재를 묻지 않는다 — 깎아도 어차피 간다
         skip = (request.excluded_poi_ids | {b.poi_id for b in request.fixed_blocks}
@@ -995,14 +1043,14 @@ class ScheduleAgent:
             if c.poi_id not in skip and c.poi_id in index
         )[: self._cfg.existence_verify_top_n]
         if not targets:
-            return candidates
+            return candidates, ()
         available = (budget.total_ms - (self._clock.monotonic_ms() - t0)
                      - budget.c2_reserved_ms)
         deadline = min(self._cfg.existence_deadline_ms, available)
         if deadline <= 0:
             self._degrade(steps, trace_id, now, "existence", "map_verify", "(none)",
                           f"deadline:available={available}ms")
-            return candidates
+            return candidates, ()
         asked = set(targets)
         try:
             # 반환값 순회까지 try 안이다 — None·잘못된 원소·지연 예외를 내는 포트가
@@ -1018,20 +1066,20 @@ class ScheduleAgent:
         except Exception as e:
             self._degrade(steps, trace_id, now, "existence", "map_verify", "(none)",
                           f"existence_error: {type(e).__name__}: {e}")
-            return candidates
+            return candidates, ()
         if not answered:
             # 물었는데 판정이 한 건도 안 왔다 — 개수 보존 계약 위반. 강등 없이, 조용히는 아니게.
             self._degrade(steps, trace_id, now, "existence", "map_verify", "(none)",
                           "existence_empty_response")
-            return candidates
+            return candidates, ()
         if all(v.status is ExistenceStatus.UNVERIFIED for v in answered):
             # 한 건도 확인 못 함 = 검증 자체가 실패했다 (벤더 장애·키 오류 등)
             self._degrade(steps, trace_id, now, "existence", "map_verify", "(none)",
                           f"existence_unverified: {answered[0].reason}")
-            return candidates
+            return candidates, ()
         return demote_missing_on_map(
             candidates, answered,
-            self._cfg.existence_demote_factor, self._cfg.existence_demote_penalty)
+            self._cfg.existence_demote_factor, self._cfg.existence_demote_penalty), tuple(answered)
 
     def _enrich_hours(
         self,
@@ -1119,6 +1167,7 @@ class ScheduleAgent:
         steps: list[Degradation],
         trace_id: TraceId,
         now: datetime,
+        reuse: RepairHints | None = None,
     ) -> tuple[tuple[FixedBlock, ...], tuple[RequiredVisit, ...], dict[PoiId, Poi]]:
         """(남길 고정 블록, 남길 필수 방문, 인덱스에 합류할 POI). 못 찾은 것은 **빼고 강등을 남긴다.**
 
@@ -1131,6 +1180,9 @@ class ScheduleAgent:
         포트는 시한을 받지 않는다 — 진입 전에 어셈블리 바닥을 침범하지 않는지 보고, 호출이
         남은 시한을 넘겼으면 `overrun` 으로 남긴다(찾은 값은 정본이라 쓴다 — 버리면
         필수방문이 빠진다). 호출 자체의 상한은 어댑터의 HTTP 타임아웃이다.
+
+        `reuse`(1회 수리의 2차)면 묻지 않고 1차가 찾은 것을 쓴다 — 2차는 잔여 ≈0 에서 시작해 물으면
+        시한 강등으로 1차엔 있던 풀 밖 잠금이 빠진다. 1차도 못 찾은 것은 같은 강등으로 뺀다.
         """
         want = (frozenset(b.poi_id for b in request.fixed_blocks)
                 | frozenset(r.poi_id for r in request.required_visits)) - pool.poi_ids
@@ -1142,7 +1194,10 @@ class ScheduleAgent:
         found: dict[PoiId, Poi] = {}
         available = (budget.total_ms - (self._clock.monotonic_ms() - t0)
                      - budget.c2_reserved_ms)
-        if available <= 0:
+        if reuse is not None:
+            # 못 찾은 것은 1차가 진짜 사유로 이미 남겼고 `pre_steps` 로 이어진다 — 여기서 다시 쓰면 사유가 둘이다
+            found = {k: v for k, v in reuse.fixed_pois.items() if k in want}
+        elif available <= 0:
             self._degrade(steps, trace_id, now, "fixed_poi", "lookup", "(dropped)",
                           f"deadline:available={available}ms")
         else:
@@ -1171,6 +1226,45 @@ class ScheduleAgent:
         kept_required = tuple(r for r in request.required_visits
                               if r.poi_id not in want or r.poi_id in found)
         return kept, kept_required, found
+
+    # ── 다시 짜기 1회 수리 재료 ─────────────────────────────────────
+
+    def _repair_hints(
+        self,
+        problem: ItineraryProblem,
+        solution: ItinerarySolution,
+        index: Mapping[PoiId, Poi],
+        enriched: CandidatePool,
+        fixed_pois: Mapping[PoiId, Poi],
+        candidates: tuple[ScoredPoi, ...],
+        placed: Collection[PoiId],
+        trace_id: TraceId,
+        now: datetime,
+    ) -> RepairHints | None:
+        """못 놓인 필수 방문의 까닭 + 지금 해의 빈 틈에 드는 후보. 실패하면 None(해·status 는 그대로).
+
+        판정 인덱스는 ④ 가 푼 것과 같다(보강·추정 뒤 + 풀 밖 고정 POI) — 솔버가 본 영업시간으로 말한다.
+        """
+        reserved = ({fb.poi_id for fb in problem.fixed_blocks}
+                    | {rv.poi_id for rv in problem.required_visits})
+        probe = tuple(
+            c.poi_id for c in sorted(candidates, key=lambda c: (-c.score, str(c.poi_id)))
+            if c.poi_id not in placed and c.poi_id not in reserved
+            and c.poi_id not in problem.excluded_poi_ids and c.poi_id not in fixed_pois
+            and (p := index.get(c.poi_id)) is not None and p.category is not PoiCategory.STAY
+        )[:_FIT_PROBE_MAX]
+        try:
+            why, fits = explain_unplaced(problem, solution, index, TravelEstimator(self._acfg),
+                                         self._acfg, probe)
+        except Exception as e:  # noqa: BLE001 — 부가 단계가 생성을 깨면 안 된다(⑥ 와 같은 규약)
+            self._observe(trace_id, now, "repair", "repair_hints", "(none)",
+                          f"repair_hints_error: {type(e).__name__}: {e}")
+            return None
+        self._observe(trace_id, now, "repair", "repair_hints", "repair_hints",
+                      f"repair_hints: unplaced={len(why)} fits={len(fits)} "
+                      f"probed={len(probe)}/{len(candidates)}")
+        return RepairHints(why=why, fits=fits, pool=enriched, fixed_pois=dict(fixed_pois),
+                           probed=len(probe))
 
     # ── ⑥′ 차선책 LLM 문장 (TRIP-887) ──────────────────────────────
 
@@ -1316,13 +1410,15 @@ def pick_slot_alternatives(
     excluded: frozenset[PoiId] = frozenset(),
     limit: int = MAX_SLOT_ALTERNATIVES,
     family_anchors: Sequence[Poi] | None = None,
+    holidays: HolidayCalendar | None = None,
 ) -> dict[str, tuple[SlotAlternative, ...]]:
     """슬롯마다 "이 자리에 대신 넣을 만한" 후보 ≤ limit 건 — 키 `"{date}#{poi_id}"`(BR-U2-04).
 
     출처는 ②가 점수 매긴 `candidates` — 어셈블리가 뽑지 않은 차순위가 곧 차선책이다.
     풀 밖·이미 배치·제외 목록·고정 블록은 후보가 아니다(INV-1, 자기 자신도 자연히 제외).
     순위: 같은 카테고리 → 점수 내림 → 슬롯 POI 와 직선거리 오름 → poi_id (전순서 = 결정론).
-    그 요일 휴무는 뺀다(영업정보 없음 = 통과, HC1 과 같은 규칙) — 시각 단위 검증은 하지
+    그 날 휴무는 뺀다(영업정보 없음 = 통과, HC1 과 같은 `open_windows_on` — 공휴일 휴무 포함, 상황 감지 H1)
+    — 시각 단위 검증은 하지
     않으며 그래서 시각도 싣지 않는다(INV-2). 고정 블록 슬롯은 사용자 must-visit 이라
     제안 대상이 아니다. LLM 호출 0회. 차선책이 없는 슬롯은 키를 만들지 않는다.
 
@@ -1346,8 +1442,7 @@ def pick_slot_alternatives(
 
     out: dict[str, tuple[SlotAlternative, ...]] = {}
     for day in solution.days:
-        dow = day.date.weekday()
-        open_today = [p for p in spare if _open_on(p, dow)]
+        open_today = [p for p in spare if open_windows_on(p, day.date, holidays) != ()]
         for slot in day.slots:
             here = index.get(slot.poi_id)
             if here is None or slot.poi_id in fixed:
@@ -1637,11 +1732,6 @@ def alternative_pairs(
         for day in solution.days for slot in day.slots
         for a in picks.get(f"{day.date.isoformat()}#{slot.poi_id}", ())
     )
-
-
-def _open_on(poi: Poi, day_of_week: int) -> bool:
-    """영업정보 없음 = 통과 (HC1 과 같은 "정보 없음은 막지 않는다" 규칙)."""
-    return not poi.open_hours or any(oh.day_of_week == day_of_week for oh in poi.open_hours)
 
 
 def _rationale(alt: Poi, here: Poi) -> str:

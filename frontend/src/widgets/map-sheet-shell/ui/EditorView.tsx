@@ -348,6 +348,17 @@ export function EditorView({
                   {inTrip ? GUIDE_IN_TRIP : GUIDE_H12}
                 </Text>
               </View>
+
+              {/* TRIP-1424 — 장소 추가는 [저장]과 따로 곧장 서버에 저장된다(PlaceAddPage PUT). Figma 공백이라 안내줄 꼴을 따른다. */}
+              <View
+                testID="itinerary-edit-add-saved-hint"
+                className="flex-row items-center gap-[6px]"
+              >
+                <InfoCircleGlyph size={16} />
+                <Text className="font-noto text-caption text-muted">
+                  장소를 추가하면 바로 저장돼요
+                </Text>
+              </View>
             </View>
           </View>
         </NestableScrollContainer>

@@ -30,6 +30,13 @@ from trippilot.llm_gateway.gates.reminder_copy import ReminderCopyContext, Remin
 # 이보다 적은 예산으로는 호출하지 않는다 — 확정 타임아웃을 지불할 이유가 없다.
 MIN_CALL_SEC = 0.5
 
+# 프롬프트에 싣는 그날 장소 상한 — 방문 순서상 앞에서 이만큼만.
+# 학생 모델(local-reminder-qwen3-4b-v1)은 하루 2~4곳 예시로만 학습했고, 장소를 받은 만큼 본문에 늘어놓아
+# 많을수록 60자를 넘겨 게이트에 버려졌다(2026-10-19 로컬 실측, 같은 일정 4회씩: 4곳 3/4 · 5곳 2/4 · 6곳 0/4 ·
+# 8곳 2/4 통과 → 앞 3곳만 넘기면 5·6·8곳 모두 4/4). 알림 한 줄에 하루를 다 담을 수도 없다 — 시작 몇 곳이면 된다.
+# 게이트 allowed 는 그날 전체 그대로다(_context) — 다른 날 이름을 막는 forbidden 이 오늘 뒤쪽 장소를 막지 않게.
+PROMPT_SLOT_CAP = 3
+
 _KIND_LABELS = {
     "TRIP_DAY": "여행 당일 아침 알림",
     "TRIP_PRE": "여행 하루 전 알림",
@@ -99,7 +106,8 @@ def build_reminder_copy_vars(item: ReminderCopyItem, trip_title: str) -> dict[st
     """
     categories = item.slot_categories or ("",) * len(item.slot_names)
     slot_list = " / ".join(
-        _slot_line(name, category) for name, category in zip(item.slot_names, categories)
+        _slot_line(name, category)
+        for name, category in zip(item.slot_names[:PROMPT_SLOT_CAP], categories[:PROMPT_SLOT_CAP])
     )
     return {
         "kind_label": _KIND_LABELS.get(item.kind, "여행 알림"),

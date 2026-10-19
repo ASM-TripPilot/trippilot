@@ -109,6 +109,28 @@ class AssistantTurnIT : AbstractPostgresIntegrationTest() {
     }
 
     /**
+     * 추적 번호(US-ASSIST-09) — 해석 호출에 실어 보낸 `request_meta.request_id` 를 그 턴의 도우미 행에 적는다. 평가를 상대 로그
+     * (프롬프트 판본·모델·폴백)와 잇는 열쇠다. 해석을 부르지 않은 턴(버튼)은 비어 있다 — 이을 상대 로그가 없다.
+     */
+    @Test
+    fun `해석을 부른 턴만 도우미 행에 추적 번호를 남긴다 — 턴마다 다르고 버튼 턴은 비어 있다`() {
+        val (_, token) = newAccount()
+        val session = open(token)
+        say(token, session, "오늘 날씨")
+        say(token, session, "스타일 분석해줘")
+        press(token, session, "qr-capabilities")
+
+        val traces = jdbc.queryForList(
+            "SELECT trace_id FROM assistant_message WHERE session_id = ?::uuid AND role = 'ASSISTANT' ORDER BY seq", String::class.java, session,
+        )
+
+        traces.size shouldBe 3
+        traces.take(2).forEach { UUID.fromString(it) } // 해석 요청의 request_id 그대로 — UUID 문자열
+        (traces[0] != traces[1]) shouldBe true
+        traces[2] shouldBe null
+    }
+
+    /**
      * 상대가 답까지 완성한 턴(`ANSWER`, assistant-orchestrator 1단계) — 대역의 인사말이 그 모양이다. jsonb 로 쓴 카드와
      * 서버가 발급한 빠른 답(`qr-ai-*`)이 실 DB 제약(다음 행동 ≥1·kind CHECK)을 지나 그대로 돌아오고, 누르면 다음 턴이 되는지.
      */

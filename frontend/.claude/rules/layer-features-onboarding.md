@@ -9,6 +9,6 @@ paths:
 
 | 파일 | 역할 |
 |---|---|
-| `src/features/onboarding/model/useOnboardingProgress.ts` | 온보딩 진행 상태 훅 seam. ⚠️ **`{false,false}` 하드코딩**. 취향 스텝은 이 모델을 확장하지 않음(1회성 통과 흐름) |
-| `src/features/onboarding/model/resolveOnboardingStep.ts` | **순수 함수** — 진행 상태 → 잔여 단계(`terms`/`nickname`/`done`) |
+| `src/features/onboarding/model/resolveOnboardingStep.ts` | **순수 함수** — 진행 상태 `{termsCompleted,nicknameCompleted,preferencesSaved}` → 잔여 단계 4개(`terms`/`nickname`/`location`/`pref2`). **결과에 홈(`'/'`)이 없다** — `(onboarding)` 그룹과 홈 탭 그룹이 둘 다 URL `'/'`라, 이 그룹이 열려 있다는 것 자체가 서버 기준 미완이다. 다 됐으면 완료를 다시 시도하는 `pref2`로 보낸다(TRIP-1421) |
+| `src/features/onboarding/model/onboardingTermsTypes.ts` | `ONBOARDING_TERMS_TYPES` 필수 약관 3종 상수(terms 페이지 노출·제출 + onboarding-entry 판정이 공유, TRIP-1421이 terms 페이지 안 비공개 const에서 이사). 진행 상태 훅은 소비처가 페이지 1곳이라 `pages/onboarding/onboarding-entry/model/`로 갔고 이 폴더엔 없다 |
 | `src/features/onboarding/ui/OnboardingGlyphs.tsx` | 인라인 SVG — 약관·닉네임·취향 화면 글리프(raw hex 직박). 활동 칩용 `LandmarkGlyph`·`FerrisWheelGlyph`·`CoffeeCupGlyph` 포함(g01 시트 소비). |

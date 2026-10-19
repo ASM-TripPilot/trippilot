@@ -574,6 +574,67 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
 
+  /stays/curated:
+    get:
+      tags: [stays]
+      summary: 도시별 큐레이션 숙소(트립닷컴 Promotion Center 인기 목록)
+      description: >
+        트립닷컴 제휴 Promotion Center 의 도시별 인기 목록(Hot Sellers)을 순위대로 돌려준다. 행은 반복 시드가
+        채운다(시범: 서울 15곳). 각 항목의 `stayId`(`"TRIPCOM:{트립닷컴 hotelId}"`)를 그대로
+        `/stays/{stayId}/outbound` 에 넘기면 트립닷컴 호텔 상세로 간다. 상세(`/stays/{stayId}`)는 이 출처를
+        모른다(404) — 목록 항목이 곧 카드다.
+
+
+        **평점·가격이 없는 것은 의도다** — 평점은 앱 안에 두지 않고(BR-U1-18), Promotion Center 가격은 실시간
+        값이 아니다(INV-U1-05). 모르는 도시는 빈 목록 200 이다.
+
+
+        ⚠ 출시 조건: 트립닷컴 제휴 계약 3.2.2·3.2.4 — 트립닷컴 이미지·홍보 콘텐츠를 자체 콘텐츠와 함께
+        노출하려면 **사전 서면 승인**이 필요하다. 승인 전에는 화면이 이 목록을 띄우지 않는다.
+      parameters:
+        - { name: city, in: query, required: true, schema: { type: string }, example: '서울', description: 표시용 도시명 }
+      responses:
+        '200':
+          description: 큐레이션 목록(순위 오름차순)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CuratedStayList' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /stays/browse/outbound:
+    get:
+      tags: [stays]
+      summary: 지역 숙소 전체 보기 302(OTA 지역 목록으로 이동)
+      description: >
+        앱은 숙소 목록을 갖지 않고 OTA 의 지역 숙소 목록으로 보낸다 — 사진·가격·평점은 OTA 가 보여준다.
+        `region`·`regionCode` 는 지역 카탈로그에 있어야 한다(코드는 선택 가능 지역이거나 `region` 이름이 가리키는 코드, 코드가 없으면 이름 일치) — 아니면 400.
+        숙소 아웃바운드와 같은 규약이다: 클릭을 남기고(stay_id 자리에 `REGION:{regionCode 또는 region}`) 302,
+        본문 없음, Bearer 선택.
+
+
+        트립닷컴 모드에서 `regionCode` 가 도시 매핑(주요 여행지 — 정본은 `TripcomDeeplinkAdapter.CITY_IDS`, 가장 긴 접두사 일치)에 걸리면
+        날짜·인원이 채워진 트립닷컴 도시 목록으로, 아니면 `region` 이름 키워드 검색으로 간다.
+        날짜는 checkin·checkout 이 둘 다 있고 순서가 맞을 때만, 인원은 양수일 때만 싣는다.
+        폴백 모드는 웹검색(`"{region} 숙소 예약"`)이다.
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - { name: region, in: query, required: true, schema: { type: string, maxLength: 40 }, example: '포항', description: 표시·키워드용 지역 이름 }
+        - { name: regionCode, in: query, required: false, schema: { type: string, pattern: '^[0-9]{2,10}$' }, example: '47110', description: 지역 카탈로그 코드(시도 2자리·시군구 5자리) }
+        - { name: checkin, in: query, required: false, schema: { type: string, format: date } }
+        - { name: checkout, in: query, required: false, schema: { type: string, format: date } }
+        - { name: adults, in: query, required: false, schema: { type: integer } }
+      responses:
+        '302':
+          description: 지역 숙소 목록으로 이동. 본문 없음.
+          headers:
+            Location:
+              schema: { type: string }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
   /stays/{stayId}/outbound:
     get:
       tags: [stays]
@@ -585,6 +646,10 @@ paths:
 
         OTA 계약 전에는 웹검색 폴백(`"{숙소명} 예약"`, BR-U1-31 이 명시 허용하는 우회)으로 보낸다.
         날짜·인원은 지금 목적지에 실리지 않지만 클릭에 남는다 — 계약 협상 근거 데이터다.
+
+
+        예외: 큐레이션 숙소(`TRIPCOM:{hotelId}`, `/stays/curated`)는 트립닷컴 모드에서 **호텔 상세로 직행**하고,
+        checkin·checkout 이 둘 다 있고 순서가 맞으면 날짜를, adults 가 양수면 인원을 싣는다.
 
 
         응답 본문은 없다. 클릭·전환 지표는 내부 전용이라 사용자 대면 응답에 싣지 않는다(BR-U1-32).
@@ -1371,8 +1436,10 @@ paths:
 
 
         도우미 대화(`assistantMessages`)는 **메시지 한 건이 한 줄**이다 — 사용자가 한 말과 도우미의 답(`sessionId`·`tripId`·
-        `role`·`kind`·`text`·`redacted`·`createdAt`). 정책 위반으로 가려진 입력은 원문이 서버에 없어 `redacted: true` 표지만
-        나간다. 보존 기간이 지난 대화는 싣지 않는다.
+        `role`·`kind`·`text`·`redacted`·`createdAt`·`feedback`·`feedbackReason`·`feedbackComment`). 정책 위반으로 가려진 입력은
+        원문이 서버에 없어 `redacted: true` 표지만 나간다. `feedback` 은 그 답에 남긴 평가(`UP`|`DOWN`, 없으면 null)이고,
+        `feedbackReason`·`feedbackComment` 는 싫어요에 함께 남긴 이유 칩(`WRONG`|`NOT_HELPFUL`|`NOT_WHAT_I_WANTED`)과
+        자유 의견이다(없으면 null). 보존 기간이 지난 대화는 싣지 않는다.
 
 
         ⚠ **사진 바이너리는 없다**(INV-U5-03) — 서버가 갖고 있지 않으므로 메타(기기 자산 식별자·
@@ -1573,11 +1640,15 @@ paths:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
     get:
       tags: [trips]
-      summary: 감지된 변화 — 발화 중인 것만(i08·i09)
+      summary: 감지된 변화 — 발화 중이고 지금 유효한 것만 + 감시 상태(i08·i09)
       description: >
         **발화 중인 트리거만 나간다**(INV-U4-01). 억제·무영향으로 남긴 판정은 "왜 알림이 안 왔나"를
         답하기 위한 관측 기록이며 사용자에게 어떤 형태로도 노출되지 않는다.
         트리거는 **제안까지만** 한다 — 어떤 트리거도 일정을 자동으로 바꾸지 않는다(BR-U4-09).
+
+        지난 날 · 지금 일정에서 빠진 슬롯 · 꺼진 감시 출처(스윕을 끄거나 그 출처를 빼면 즉시 숨는다)의 트리거는 내지 않는다.
+        정렬은 서버가 정한다 — 위험 → 영향 날짜 오름차순 → 감지 시각 내림차순. 화면은 받은 순서 그대로 쓴다.
+        `watch` 는 출처 묶음별 감시 상태다 — 꺼짐·확인 불가를 정상으로 말하지 않는다(INV-U4-09).
       responses:
         '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/TriggerList' } } } }
         '404': { description: 여행 없음/타 계정 }
@@ -1604,6 +1675,19 @@ paths:
           content: { application/json: { schema: { $ref: '#/components/schemas/Trigger' } } }
         '204': { description: 발화 없음(비 안 옴 · 확인 불가 · 억제 — 화면은 동일하게 배너 없음) }
         '404': { description: 여행 없음/타 계정 }
+  /trips/{tripId}/triggers/{triggerId}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: triggerId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [trips]
+      summary: 트리거 하나 — 지금 상태와 같은 대상의 현재 트리거
+      description: >
+        알림·푸시를 늦게 탭해도 앱이 이 트리거가 아직 유효한지, 해제 뒤 같은 대상에 새 트리거가 섰는지
+        (`currentTriggerId`) 안다. 목록에서 숨는 ACTIVE(지난 날 · 빠진 슬롯 · 꺼진 출처)는 `state` 가 EXPIRED 다.
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/TriggerDetail' } } } }
+        '404': { description: 여행 없음/타 계정/트리거 없음(다른 여행 소속 포함) }
   /trips/{tripId}/triggers/{triggerId}/dismiss:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1648,7 +1732,8 @@ paths:
       tags: [trips]
       summary: 재계획 진입 — 세션을 연다(i10)
       description: >
-        여행 **기간 안**에서만, **다시 짤 일정이 있을 때만** 연다.
+        여행 **기간 안**에서만(예외: 지평 pre-trip 의 여행 전날 — 알림으로 받은 첫날 하루 전체, BR-SA-20),
+        **다시 짤 일정이 있을 때만** 연다.
         이미 열린 세션이 있으면 **그것을 CANCELED 로 닫고 새로 시작**한다(INV-U4-06) — 막지 않는다.
         사용자가 앱을 닫았다 다시 들어오는 것이 정상 흐름이라, 거부하면 영영 못 들어간다.
         확정(APPLIED) 전에는 원 일정에 **어떤 쓰기도 발생하지 않는다**(INV-U4-05).
@@ -1659,7 +1744,30 @@ paths:
         '201': { description: 세션 생성됨, content: { application/json: { schema: { $ref: '#/components/schemas/ReplanSession' } } } }
         '400': { description: 범위 누락 · GPS/MANUAL 인데 좌표 없음 · 자유 입력 초과 }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
-        '409': { description: 여행 기간 밖 }
+        '409':
+          description: >
+            여행 기간 밖 · 지난 날·기간 밖·일정 없는 날 · triggerId 의 트리거가 없거나 다른 여행 것 ·
+            여행 전날 창(지평 pre-trip)에서 알림으로 받은 첫날 하루 전체가 아닌 진입
+            (`여행 전날에는 알림으로 받은 첫날 일정만 다시 짤 수 있어요.`) ·
+            같은 순간 다른 진입이 먼저 열림(`다른 재계획이 막 시작됐어요. 다시 시도해 주세요.`)
+  /trips/{tripId}/replan-sessions/prepared:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [trips]
+      summary: 그 날짜의 준비된 대안 — 서버가 위험 알림으로 미리 짠 재계획(situation-awareness BR-SA-18·23)
+      description: >
+        일정을 막는 위험이 감지되면 서버가 재계획 초안을 미리 짠다(SYSTEM 세션). 이것은 그 날짜의 **가장 최근** 선계산 세션이다 —
+        대체돼 닫힌 것(`CANCELED`)·대안 없음·실패도 그대로 준다. 갈 곳은 앱 진입 게이트가 상태·`stale`·트리거 상태로 정한다 —
+        판정표의 정본은 situation-awareness BR-SA-23 이다(여기에 옮겨 적지 않는다).
+        트리거에 세션을 매달지 않고 **날짜**로 묻는다 — 해제 뒤 다시 선 트리거도 같은 대안으로 이어진다.
+        일정은 여전히 사용자의 apply 로만 바뀐다(INV-SA-1).
+      parameters:
+        - { name: date, in: query, required: true, schema: { type: string, format: date }, description: '알림의 날짜(yyyy-MM-dd)' }
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/ReplanSession' } } } }
+        '400': { description: date 누락·형식 오류 }
+        '404': { description: 준비된 대안 없음 · 여행 없음/타 계정(존재 은닉) }
   /trips/{tripId}/replan-sessions/{sessionId}:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1685,7 +1793,12 @@ paths:
       responses:
         '200': { description: 반영됨, content: { application/json: { schema: { $ref: '#/components/schemas/ReplanSession' } } } }
         '404': { description: 여행 없음/타 계정/세션 없음 }
-        '409': { description: '초안 없음(산출 중·대안 없음·이미 끝남) · 그 사이 일정이 교체됨 — 확정 일정은 막지 않는다(여행 중 반영 허용, TRIP-999)' }
+        '409':
+          description: >
+            초안 없음(산출 중·대안 없음·이미 끝남) · 그 사이 일정이 교체됨 — 확정 일정은 막지 않는다(여행 중 반영 허용, TRIP-999).
+            미리 짠 대안(SYSTEM)이 낡았으면 오류 코드 `EXPIRED`(대상 날이 지남 · 초안이 바꾸는 첫 슬롯의 계획 시작이 지남) 또는
+            `STALE`(그 날 다녀온 곳이 초안에 없음 · 새 선계산·사용자 진입에 대체돼 닫힘)이다 — 시각을 다시 추정해 옮기지 않는다
+            (BR-SA-19). 같은 입력으로 새로 계산한다. 여행 시작 전에는 전날 창의 진입(알림으로 받은 첫날 하루 전체)만 반영한다.
   /trips/{tripId}/replan-sessions/{sessionId}/diff:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1842,7 +1955,8 @@ paths:
       summary: 알림 수신 설정 목록(l02)
       description: >
         **항상 7종이 다 온다** — 설정한 적 없는 종류는 기본값으로 채워진다(행이 없다 ≠ 꺼짐).
-        기본값은 `SLOT_PRE`·`PLAN_B` 가 **푸시 OFF · 인앱 ON**, 나머지 5종은 둘 다 ON이다.
+        기본값은 `SLOT_PRE` 만 **푸시 OFF · 인앱 ON**이고, 나머지 6종은 둘 다 ON이다 — `PLAN_B` 는
+        위험만 푸시하므로 기본 ON 이다(BR-SA-21). 저장된 설정은 기본값보다 우선한다.
 
 
         **`SYSTEM` 은 나타나지 않는다**(INV-U6-03·04) — 보안·계정 알림은 끌 수 있는 것이 아니라서
@@ -1927,6 +2041,41 @@ paths:
         '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/AssistantMessagesPage' } } } }
         '400': { $ref: '#/components/responses/ValidationError' }
         '404': { description: 없는 대화이거나 타 계정 대화 }
+  /assistant/sessions/{sessionId}/messages/{messageId}/feedback:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: messageId, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [assistant]
+      summary: 도우미 답 평가 남기기·바꾸기
+      description: >
+        도우미의 답 하나에 좋아요(`UP`)·싫어요(`DOWN`)를 남긴다(US-ASSIST-09). 답마다 평가는 하나다 — 이미 있으면 바꾼다
+        (같은 값을 다시 보내도 200). 취소는 같은 경로의 DELETE 다 — "같은 버튼을 다시 누르면 취소"는 앱이 고른다.
+        싫어요에는 이유 칩 하나(`reason`)와 자유 의견(`comment`, 300자 이하)을 함께 남길 수 있다 — 좋아요에 실리면 400 이다.
+        **본문이 통째로 덮어쓴다** — 다시 보내면 이유·의견도 보낸 값으로 바뀌고(빠진 것은 null), 좋아요로 바꾸면 둘 다 지워진다.
+        이유·의견은 이 응답과 내보내기에만 나온다 — 메시지 읽기의 `feedback` 은 평가(`UP`|`DOWN`)만 싣는다.
+        **턴이 아니다** — 분당 20턴 상한에 세지 않고, AI 를 부르지 않으며, 메시지를 새로 만들지 않는다.
+        평가는 대화와 함께 지워지고(이력 지우기·여행 삭제·계정 삭제·보존 만료) 내보내기의 메시지 줄에 함께 나간다.
+        평가·지표 용도로만 쓰며(이유·의견도 같다) 모델 학습에 쓰지 않는다. 의견은 사용자가 쓴 글이라 대화 원문과 같이
+        다룬다 — 로그에 싣지 않고 AI 로 보내지 않는다.
+        평가할 수 있는 것은 도우미의 답뿐이다 — 사용자 메시지와 적용 기록(`kind: ACTION_LOG`)은 400 이다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AssistantFeedbackRequest' } } }
+      responses:
+        '200': { description: 남김(바꿈 포함), content: { application/json: { schema: { $ref: '#/components/schemas/AssistantFeedbackResponse' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { description: 없는 대화·타 계정 대화·보존 기간이 지난 대화이거나 그 대화에 없는 메시지 }
+    delete:
+      tags: [assistant]
+      summary: 도우미 답 평가 취소
+      description: >
+        남긴 평가를 지운다. **멱등하다** — 남긴 평가가 없어도 204 다. 대상 검사는 PUT 과 같다
+        (평가할 수 없는 메시지는 400, 없는·남의·보존 기간이 지난 대화는 404).
+      responses:
+        '204': { description: 지워짐(평가가 없던 경우 포함) }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { description: 없는 대화·타 계정 대화·보존 기간이 지난 대화이거나 그 대화에 없는 메시지 }
   /assistant/sessions/{sessionId}/turns:
     parameters:
       - { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -2184,6 +2333,24 @@ components:
         degraded: { type: boolean, description: 일부 공급자 실패 시 true(부분 결과·재시도 안내) }
         filterZeroReasons: { type: array, items: { type: string }, description: '필터로 0건일 때 완화 후보(예: stayType, amenity:오션뷰)' }
 
+    CuratedStayList:
+      type: object
+      required: [city, items]
+      properties:
+        city: { type: string }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CuratedStay' }
+    CuratedStay:
+      type: object
+      required: [rank, stayId, name, imageUrl]
+      description: 큐레이션 숙소 한 칸. 평점·가격 필드는 의도적으로 없다(BR-U1-18 · INV-U1-05).
+      properties:
+        rank: { type: integer, minimum: 1 }
+        stayId: { type: string, example: 'TRIPCOM:4645968', description: '"TRIPCOM:{트립닷컴 hotelId}" — 아웃바운드에 그대로 쓴다' }
+        name: { type: string, example: 호텔 베뉴지 }
+        address: { type: string, nullable: true, description: null = 모름 }
+        imageUrl: { type: string, description: 트립닷컴 CDN https URL(앱은 저장하지 않는다) }
     StayDetail:
       type: object
       required: [stayId, externalSource, externalId, name, lat, lng, region, amenities, stayType]
@@ -2802,6 +2969,7 @@ components:
       required: [triggers]
       properties:
         triggers: { type: array, items: { $ref: '#/components/schemas/Trigger' } }
+        watch: { $ref: '#/components/schemas/TriggerWatch' }
     Trigger:
       type: object
       required: [triggerId, kind, affectedDate, reason, detectedAt]
@@ -2825,6 +2993,66 @@ components:
           enum: [FULL_DAY, PARTIAL_SLOTS, NONE]
           description: 발화 시 재계획 범위 — [대안 보기] 가 이 값으로 세션을 연다
         detectedAt: { type: string, format: date-time }
+        severity:
+          type: string
+          enum: [RISK, CAUTION]
+          description: >
+            위험(RISK)은 일정을 막는다 — 푸시 대상. 주의(CAUTION)는 앱 안에만 보인다.
+            required 밖이다(옛 픽스처 · 프리뷰 보호) — 없으면 위험으로 읽는다.
+        variant:
+          type: string
+          nullable: true
+          enum: [RAIN, SNOW, WIND, HEAT, COLD, CLOUD, DUST, CLOSED_DAY, OUT_OF_HOURS, HOURS_MISMATCH, HOLIDAY, PERMANENTLY_CLOSED]
+          description: >
+            변형(닫힌 12종). 저장된 값을 모르면 null 이다 — 화면은 kind 라벨을 쓴다.
+            특보는 기존 변형으로 사상한다(호우 RAIN · 대설 SNOW · 강풍·태풍 WIND · 한파 COLD · 폭염 HEAT · 황사 DUST).
+        attribution:
+          type: string
+          nullable: true
+          description: >
+            출처 표기(공공누리) — 기상청 단기예보 · 기상청 기상특보 · 에어코리아. 표시 의무가 없는 원천이면 null.
+    TriggerWatch:
+      type: object
+      description: >
+        감시 상태 — 출처 묶음별(weather = 단기예보 · closure = 장소 · delay = 이동 지연).
+        스윕이 꺼져 있거나 그 출처를 감시하지 않으면 OFF 다 — 화면은 그 행을 숨긴다.
+      required: [weather, closure, delay]
+      properties:
+        weather: { $ref: '#/components/schemas/WatchState' }
+        closure: { $ref: '#/components/schemas/WatchState' }
+        delay: { $ref: '#/components/schemas/WatchState' }
+    WatchState:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [CHECKED, UNKNOWN, OFF]
+          description: >
+            CHECKED = 마지막 확인이 창 안(날씨 2시간 · 장소 14시간). UNKNOWN = 확인 불가(모름 · 오래됨 · 아직 안 봄).
+            OFF = 감시하지 않음. delay 는 감지기가 아직 없어 늘 OFF 다.
+        checkedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: 마지막으로 확인한 시각 — 확인한 적 없거나 마지막 관측이 모름이면 null
+    TriggerDetail:
+      description: >
+        트리거 하나 — Trigger 와 같은 필드에 지금 상태와 같은 대상의 현재 트리거를 더한다.
+      allOf:
+        - $ref: '#/components/schemas/Trigger'
+        - type: object
+          required: [state]
+          properties:
+            state:
+              type: string
+              enum: [ACTIVE, SUPPRESSED, CONSUMED, EXPIRED]
+              description: 지금 상태 — 목록에서 숨는 ACTIVE 는 EXPIRED 로 말한다
+            currentTriggerId:
+              type: string
+              format: uuid
+              nullable: true
+              description: 같은 대상(종류·날짜·슬롯)의 지금 보이는 ACTIVE — 자기 자신일 수 있다
     StayRecommendationRequest:
       type: object
       properties:
@@ -2899,7 +3127,13 @@ components:
           type: array
           items: { type: string, format: uuid }
           description: "'건너뛰기'가 채운다 — 재계획 시 후보에서 뺀다"
-        triggerId: { type: string, format: uuid, nullable: true, description: 자동 진입이면 근거 트리거. 수동이면 null }
+        triggerId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            자동 진입이면 근거 트리거. 수동이면 null. 있으면 대상 날짜는 **그 트리거의 날짜로 강제**되고(targetDate 무시)
+            미래일이면 scope 는 FULL_DAY 다(BR-SA-20) — 내일 알림으로 오늘을 다시 짜지 않게. 트리거가 없거나 다른 여행 것이면 409
     ReplanDiff:
       type: object
       required: [ready, status, before, after, entries]
@@ -3018,6 +3252,17 @@ components:
             사용자가 할 일이 다르다(재시도 vs 조건 완화)
         createdAt: { type: string, format: date-time }
         closedAt: { type: string, format: date-time, nullable: true }
+        initiatedBy:
+          type: string
+          enum: [USER, SYSTEM]
+          description: >
+            USER = 사용자 진입 · SYSTEM = 일정을 막는 위험 알림으로 서버가 미리 짠 대안(화면이 `미리 준비한 대안` 표식을 단다).
+            적용은 어느 쪽이든 사용자만 한다(INV-SA-1)
+        stale:
+          type: boolean
+          description: >
+            미리 짠 대안이 낡았는가(BR-SA-19) — 적용하면 409 EXPIRED·STALE 인 초안 · 대체돼 닫힌 선계산 · 2분 넘게 산출 중인
+            선계산. 사용자 세션은 늘 false. APPLIED 가 아니면 상태와 무관하게 '준비된 대안 없음'으로 읽는다 — 갈 곳은 BR-SA-23
     SlotCandidatesRequest:
       type: object
       required: [slotKey]
@@ -4184,6 +4429,14 @@ components:
         proposal: { $ref: '#/components/schemas/AssistantProposalOrNull' }
         footnote: { type: string, nullable: true }
         createdAt: { type: string, format: date-time }
+        feedback:
+          type: string
+          nullable: true
+          enum: [UP, DOWN, null]
+          description: >
+            사용자가 이 답에 남긴 평가(US-ASSIST-09). 없으면 null — 사용자 메시지와 적용 기록(`ACTION_LOG`)은 늘 null 이다.
+            싫어요에 함께 남긴 이유·의견은 여기 싣지 않는다(평가 PUT 응답과 내보내기에만 있다).
+            서버는 늘 싣지만 required 에는 넣지 않았다 — 이 칸이 생기기 전의 앱 빌드·목이 그대로 계약을 만족한다.
     AssistantLabeledValue:
       type: object
       required: [label, value]
@@ -4318,6 +4571,35 @@ components:
       required: [proposal]
       properties:
         proposal: { $ref: '#/components/schemas/AssistantProposalStatus' }
+    AssistantFeedbackRequest:
+      type: object
+      required: [rating]
+      properties:
+        rating: { type: string, enum: [UP, DOWN] }
+        reason:
+          type: string
+          nullable: true
+          enum: [WRONG, NOT_HELPFUL, NOT_WHAT_I_WANTED, null]
+          description: >
+            싫어요 이유 칩 — 앱 문구는 `WRONG` "틀렸어요" · `NOT_HELPFUL` "도움이 안 돼요" · `NOT_WHAT_I_WANTED` "원한 답이 아니에요".
+            `DOWN` 에만 실을 수 있다(`UP` 에 실리면 400). 없어도 된다 — 이유 없는 싫어요, "직접 적기"로 의견만 쓴 싫어요.
+        comment:
+          type: string
+          nullable: true
+          maxLength: 300
+          description: >
+            자유 의견("직접 적기"). `DOWN` 에만 실을 수 있다(`UP` 에 실리면 400). 서버가 앞뒤 공백을 지워 저장하고 비면 null 로
+            둔다 — 공백뿐인 값은 없는 것과 같다. 지운 뒤 300자(유니코드 코드 포인트 — 이모지 하나가 1자)를 넘거나 NUL 문자가
+            있으면 400. 사용자가 쓴 글이라 대화 원문과 같이 다룬다 — 로그에 싣지 않고 AI 로 보내지 않으며, 대화와 함께 지워지고
+            내보내기에 실린다.
+    AssistantFeedbackResponse:
+      type: object
+      required: [messageId, rating, reason, comment]
+      properties:
+        messageId: { type: string, format: uuid }
+        rating: { type: string, enum: [UP, DOWN] }
+        reason: { type: string, nullable: true, enum: [WRONG, NOT_HELPFUL, NOT_WHAT_I_WANTED, null] }
+        comment: { type: string, nullable: true, description: '저장된 의견 — 앞뒤 공백을 지운 값이다. 없으면 null' }
 
     NotificationList:
       type: object
@@ -4385,11 +4667,14 @@ components:
       additionalProperties: false
       description: >
         `PLANB_REPLAN`. `triggerId` 를 실어야 화면이 "왜 다시 짜라는지"를 다시 묻지 않는다.
-        `replanSessionId` 는 대개 없다 — 세션은 사용자가 진입할 때 열린다.
+        `replanSessionId` 는 오지 않는다(아래).
       properties:
         tripId: { type: string, format: uuid }
         triggerId: { type: string, format: uuid }
-        replanSessionId: { type: string, format: uuid }
+        replanSessionId:
+          type: string
+          format: uuid
+          description: 알림 경로에서는 싣지 않는다 — 앱은 탭 시점에 트리거 상세와 준비된 대안을 조회한다(BR-SA-21).
 
     NotificationReflectionAction:
       type: object

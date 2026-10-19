@@ -24,14 +24,14 @@ from trippilot.domain.dialogue import (
     tool_specs_json,
 )
 from trippilot.domain.edit import EditOp
-from trippilot.domain.intent import ROUTABLE_INTENTS, Intent
+from trippilot.domain.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent
 from trippilot.domain.persona import CompanionType
 from trippilot.domain.trigger import ReplanScope
 
 
 def test_table_covers_every_routable_intent_and_nothing_else() -> None:
-    """13종 전부 · 그 밖은 없음. `OUT_OF_SCOPE` 는 위임 대상이 아니라 인자가 없다."""
-    assert set(ARGUMENT_TABLE) == ROUTABLE_INTENTS
+    """도우미 의도(13종 + 장소 탐색) 전부 · 그 밖은 없음. `OUT_OF_SCOPE` 는 위임 대상이 아니라 인자가 없다."""
+    assert set(ARGUMENT_TABLE) == DIALOGUE_INTENTS
     assert Intent.OUT_OF_SCOPE not in ARGUMENT_TABLE
 
 

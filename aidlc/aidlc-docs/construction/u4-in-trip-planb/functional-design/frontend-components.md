@@ -62,6 +62,10 @@
 > - **i 코드는 옛 체계다** — 라이브 Figma i 밴드는 **i01~i10**으로 재번호됐다(`frontend/.claude/skills/spec-perception/reference/figma-structure.md`; 매핑은 볼트 `사이클/20260908-figma-hnew/figma-build.md`).
 > - **[이연 · 2026-10-12 → U10]** "i07 푸시 = 지오펜스가 깨웠을 때의 로컬 알림"은 U10 소관이다.
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** §1 라우트
+> 새 라우트는 없다. `planb/index` 는 `triggerId` 가 있으면 진입 게이트를, 없으면 요청 시트를 그린다. 푸시 탭은 `shared/push` 탭 핸들러와 app 층 라우팅 훅이 알림 액션으로 옮긴다(홈이 그려진 뒤, 로그인 전 탭은 보류 후 1회).
+> → [BR-SA-23](../../situation-awareness/functional-design/business-rules.md) · [DEC-SA-5](../../situation-awareness/functional-design/business-logic-model.md) · [SA frontend-components](../../situation-awareness/functional-design/frontend-components.md)
+
 ## 2. `src/pages/` 슬라이스 (10)
 
 | 슬라이스 | `ui/<Name>Page.tsx` | 배선 책임 |
@@ -85,6 +89,11 @@
 > **[개정 · 2026-10-12 · U10 FD] TRIP-396 [방문 완료] — 수동은 폴백으로 유지.** U10이 이탈 자동 완료를 더한다(Q2=A). i01 카드의 `[방문 완료]`(`execution-arrive-complete`)는 지우지 않는다 — 자동이 꺼진 사용자(권한 거부·플래그 OFF·대략 위치)와 최소 체류 미달 이탈의 바닥이다. 자동으로 기록된 도착/완료에는 "자동 기록" 표식과 [자동 기록 되돌리기]가 붙는다(Q17=A). "i07 = 지오펜스가 깨웠을 때의 로컬 알림"은 만들지 않는다 — 지연 알림은 서버 `PlanBTriggered` → U6 푸시 하나다. 상세 `construction/u10-gps-location-automation/functional-design/frontend-components.md` §3·§9.
 
 > **[개정 · 2026-10-12] §2 슬라이스 표 갱신.** 실재 슬라이스는 `src/pages/live/` 아래 6개(`live-itinerary`·`live-place`·`live-location`·`planb-request`·`planb-draft`·`planb-diff`)다. `planb-triggers`·`planb-manual`·`planb-rest`는 없다(§1 개정). `live-itinerary/ui/`의 실제 구성은 `LiveItineraryPage`·`LiveHubView`·`TriggerChip`·`RiskDetailSheet`·`ReplanAppliedSheet`·`MemoSheet`이다. `planb-diff`는 "확정의 유일한 호출 지점"이 아니다 — TRIP-751로 `planb-draft`의 [적용하기]도 `useApplyReplan`(`features/apply-replan`)으로 바로 확정한다(`src/pages/live/planb-draft/ui/PlanbDraftPage.tsx`).
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** §2 슬라이스
+> - `live-itinerary`: 알약은 트리거 자기 날짜의 슬롯에서 장소를 찾고 변형·날짜 라벨을 붙인다. 위험 시트에 심각도·출처를, 감시 행에 서버 감시 상태 3종을, 허브에 기회 카드 1장을 더한다(정렬은 서버 순서 그대로). → [BR-SA-13·22](../../situation-awareness/functional-design/business-rules.md) · [DEC-SA-6](../../situation-awareness/functional-design/business-logic-model.md)
+> - `planb-request`: 진입 게이트가 앞에 서고 요청 시트가 시드(사유·지시·제외·미리 채운 문장)를 받는다 — 기존 i04 통합 테스트(TRIP-750 Q9 포함)는 고치지 않고 통과해야 한다. → [BR-SA-23](../../situation-awareness/functional-design/business-rules.md)
+> - `planb-draft`: 낡은 대안 409 얼굴과 [넣어서 다시 짜기] 미포함 안내. → [BR-SA-19·22](../../situation-awareness/functional-design/business-rules.md) · [SA frontend-components](../../situation-awareness/functional-design/frontend-components.md)
 
 ## 3. `src/features/execution/`
 
@@ -162,6 +171,10 @@
 
 > **[개정 · 2026-10-12] §4 `features/planb` — 실재와 다름.** 화면은 page 슬라이스로 갔다: i10 `ReplanRequestSheet`(`src/pages/live/planb-request/ui/`) · i12·i13·i16 `ReplanSolvingView`·`ReplanDraftView`·`ReplanNoticeFace`(`src/pages/live/planb-draft/ui/`) · i18 `PlanbDiffPage`(`src/pages/live/planb-diff/ui/`) · i19 `ReplanAppliedSheet`(`src/pages/live/live-itinerary/ui/`) · i15 수동 편집은 U3 `ItineraryEditPage`(`inTrip`). **없는 것**: `TriggerWatchlistScreen.tsx`(i09 — `RiskDetailSheet`로 흡수), `RestModeScreen.tsx`(i17 휴식 모드 미구현), `ManualEditScreen.tsx`(U3 편집 재사용). 모델은 `features/request-replan`·`features/apply-replan`·`features/planb`로 갈렸다(§0.1 개정).
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** §4 `features/planb` — 변형·날짜 라벨
+> `triggerLabel.ts` 는 kind 4종 라벨을 지키고 변형 12종 라벨을 더한다(모르는 값·null 은 kind 라벨). 알약 문구는 변형·날짜 라벨을 받는다 — 서버 문구엔 상대 날짜어가 없고 앱이 표시 시점에 날짜 라벨을 붙인다. 판정·임계는 여전히 모르고 주기 폴링도 두지 않는다.
+> → [DEC-SA-3](../../situation-awareness/functional-design/business-logic-model.md) · [BR-SA-12·13](../../situation-awareness/functional-design/business-rules.md) · [SA frontend-components](../../situation-awareness/functional-design/frontend-components.md)
+
 ## 5. `src/shared/` 변경 (승격)
 
 | 대상 | 변경 | 이유 |
@@ -191,6 +204,10 @@
 | `pagesLayerStructure.test.ts` ✅ | 새 `live-*`·`planb-*` 슬라이스를 재귀 스캔이 자동 편입 |
 
 > **[개정 · 2026-10-12] §6 구조 가드 — 현재 없음.** 위 7개 `*Structure.test.ts`는 `frontend/src/` 어디에도 없다. TRIP-1145 스캔 정리 원칙("기능·QA가 끝나면 회귀 감시 소스 스캔은 두지 않는다 — 층 방향은 eslint, 회귀는 QA")에 따라 만들지 않거나 지웠다. 남은 라우트 단위 테스트는 `src/__tests__/{liveHubRoute,liveLocationRoute,planbRequestRoute,planbManualRoute,planbDiffRoute}.test.tsx`.
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** §6 구조 가드
+> 소스 스캔 구조 가드를 더하지 않는다(위 §6 개정 블록의 원칙). 변형 전수는 `Record<TriggerVariant, …>` 타입이, 진입 판정·라벨은 PBT-SA-21·22 가, 화면 동작은 통합 테스트가 잠근다.
+> → [PBT-SA-21·22](../../situation-awareness/functional-design/business-rules.md)
 
 ## 7. 폼 검증 (UX 사본 — 권위는 서버)
 
@@ -224,6 +241,10 @@ live-location-manual · -permission-denied · -use-last-visit
 
 > **[소급 기록 — TRIP-442 (기록) 반영, 2026-08-26]** `live-location-use-last-visit`는 이 절이 이름을 제안한 시점엔 "마지막 방문지 사용"이라는 **별도 버튼**을 뜻하는 것처럼 읽혔으나, 라이브 Figma에는 그런 독립 UI가 없다(1790:3495·1790:3549 확인 — 확인된 노드는 지도·"이 위치로 계속"·"위치 입력 건너뛰기"뿐). TRIP-442 구현은 이 testID를 **"건너뛰기" 어포던스 하나**에 매핑했다 — 사용자가 이 버튼을 누르면 클라가 3순위(마지막 방문지)·4순위(등록 숙소) 중 어느 것도 스스로 정하지 않고 `originKind:null`로 서버에 위임하며, 그 사다리 3·4순위가 이 버튼 하나로 **폴드**된다(중립 문구 "마지막 방문지나 등록 숙소 기준으로 이어져요"가 이 폴드를 사용자에게 알림). 즉 testID 이름은 유지하되 그 의미를 "버튼 하나 = 사다리 두 순위 위임"으로 재정의한다. 근거: `src/pages/live-location/ui/LiveLocationPage.tsx`(TRIP-442 03_implementer_notes §1-3) · 위 §5(business-logic-model.md) 사다리 표.
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** §8 testID
+> 새 표면(진입 게이트 대기 얼굴·감시 행·기회 카드·낡은 대안 얼굴)의 testID 는 같은 규약을 따르고, 구현이 확정한 값을 이 절에 소급 기록한다.
+> → [SA frontend-components](../../situation-awareness/functional-design/frontend-components.md)
+
 ## 9. PBT (`model/` 순수 함수 · fast-check)
 
 | ID | 대상 파일 | 성질 |
@@ -233,3 +254,7 @@ live-location-manual · -permission-denied · -use-last-visit
 | **PBT-U4-F3** | `liveState.ts` · `actualDistance.ts` | 위치 동의 false인 임의 상태에서 실제 경로 레이어는 항상 비활성 + 사유 동반, 누적 거리 산출 0 |
 
 추가로 `business-rules.md` §7의 **PBT-U4-1~5**(서버측)와 짝을 이룬다 — 클라는 위 3종만 진다.
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** §9 PBT
+> 클라 PBT 둘이 더해진다: **PBT-SA-21**(진입 판정표 전수) · **PBT-SA-22**(변형 라벨·알약·날짜 라벨). PBT-U4-F1~F3 는 그대로이고 서버측 짝은 PBT-SA-01~20 이다.
+> → [PBT-SA-01~22](../../situation-awareness/functional-design/business-rules.md)

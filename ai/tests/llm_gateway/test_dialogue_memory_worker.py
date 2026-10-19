@@ -4,7 +4,8 @@
   ① 게이트 통과 줄은 항상 ≤20줄 ∧ 각 줄 ≤120자 ∧ 빈 줄·중복 없음 ∧ 소요시간·연락처 꼴 없음 —
      위반은 **그 줄만** 격리(GateDropEvent 계측)하고 나머지는 산다 (paraphrase 선례)
   ② 파싱 실패·형태 위반은 조용히 넘기지 않고 error 로 수렴 → 게이트웨이가 폴백 전환 (INV-4).
-     빈 결과 = 실패 — 라벨 2종(gate_dropped_all / llm_empty_result) 구분 보존 (TRIP-260 #5)
+     전부 드롭 = 실패(gate_dropped_all). LLM 이 비운 배열은 **정상**("새로 기억할 것 없음" — 2026-10-19,
+     TRIP-260 #5 의 추출 계열 쪽: 실패로 보면 결정론 압축이 대화 원문 조각을 저장한다)
   ③ 프롬프트 렌더 결정론 + 규칙 문구(선호·결정·거절·미해결만 · 원문 인용 금지 · 연락처·주소 금지 ·
      한 줄 한 사실 · 최대 20줄·120자 · 이전 요약 갱신 · 시간 금지) + 변수 3종 전부 str·inline()·(없음)
   ④ 워커는 폴백 TypedResult 를 그대로 반환 (BR-U4-09) — 결정론 압축(compress_fallback)의 실행은
@@ -180,11 +181,12 @@ def test_gate_all_dropped_is_dropped_not_parse_error() -> None:
     assert out.drop_event.dropped_count == 3
 
 
-def test_gate_empty_list_is_llm_empty_result() -> None:
-    """드롭 0건인데 결과가 비면 프롬프트·입력을 보라는 신호다 (2026-08-25 회귀)."""
+def test_gate_empty_list_means_nothing_new_to_remember() -> None:
+    """LLM 이 비운 배열은 "새로 기억할 것 없음"이라는 정상 결과다 — 프롬프트 규칙("새로 기억할 것이 없으면 이전 요약을
+    그대로 두세요")의 답이다. 실패로 보면 결정론 압축이 대화 원문 조각을 저장한다(2026-10-19 배포 스모크 3/3 이
+    `llm_empty_result` → 압축, BR-AO-09 "원문 목록을 저장하지 않는다"와 어긋남). 행사 추출처럼 성공·0건이다."""
     out = _apply(_raw([]))
-    assert out.value == () and out.error == "llm_empty_result"
-    assert out.drop_event is None
+    assert out.value == () and out.error is None and out.drop_event is None
 
 
 # ── PBT (①②⑤) ──────────────────────────────────────────────
@@ -196,7 +198,9 @@ def test_pbt_gate_never_raises_and_survivors_inside_constraints(raw: str) -> Non
     if out.error is not None:
         assert not out.value  # error 있으면 value 비움 (base 불변식)
         return
-    assert isinstance(out.value, tuple) and 0 < len(out.value) <= _MAX_LINES
+    assert isinstance(out.value, tuple) and len(out.value) <= _MAX_LINES
+    if not out.value:  # 비운 성공은 LLM 이 비운 배열뿐 — 게이트가 다 버려서 빈 것은 실패(gate_dropped_all)
+        assert out.drop_event is None
     assert len(set(out.value)) == len(out.value)  # 중복 없음
     for line in out.value:
         assert isinstance(line, str) and line == line.strip()
@@ -332,6 +336,6 @@ def test_pbt_worker_converges_for_any_llm_text(raw: str) -> None:
     if result.is_fallback:
         assert result.value is None and result.error
     else:
-        assert isinstance(result.value, tuple) and 0 < len(result.value) <= _MAX_LINES
+        assert isinstance(result.value, tuple) and len(result.value) <= _MAX_LINES  # 빈 묶음 = 새로 기억할 것 없음
         for line in result.value:
             assert 0 < len(line) <= _MAX_LINE_CHARS and _TIME_EXPR.search(line) is None

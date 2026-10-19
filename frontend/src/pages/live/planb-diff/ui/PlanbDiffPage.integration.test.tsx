@@ -9,7 +9,8 @@ import { PlanbDiffPage } from './PlanbDiffPage';
  *  - 🔴 [확정] press → useApplyReplan 이 `{tripId,sessionId}` 로 mutate 1회(AC-1 · BR-U4-28). 누른 직후엔
  *    아무 데도 가지 않는다.
  *  - 🔴 TRIP-754 AC-10: 성공 얼굴(i19)은 없다. apply 가 성공하면(`mutate` 두 번째 인자 `onSuccess`) 허브로
- *    `replace({pathname:'/trips/[tripId]/live', params:{tripId, applied: sessionId}})` — i06 [적용하기](751 E1)와
+ *    `dismissTo({pathname:'/trips/[tripId]/live', params:{tripId, applied: sessionId}})`(TRIP-1418 — 옛 replace 는
+ *    스택 밑 허브 위에 허브를 한 장 더 쌓았다) — i06 [적용하기](751 E1)와
  *    같은 신호로 i08 시트가 허브 위에 뜬다. apply 실패 [다시 시도]도 같은 onSuccess 를 넘긴다.
  *  - 🔴 [취소] → useCancelReplan `{tripId,sessionId}` mutate + 성공 시 live 복귀(AC-4 · BR-U4-28).
  *  - 🔴 apply/cancel 실패 → 단일 StateNotice error(`원래 일정은 그대로`) + i19 안 넘어감(AC-4 · BR-U4-32 · INV-4).
@@ -44,6 +45,8 @@ const mockPush = jest.fn();
 const mockReplace = jest.fn();
 const mockNavigate = jest.fn();
 const mockBack = jest.fn();
+// TRIP-1418 — 확정 성공의 허브 복귀(replace → dismissTo, 스택의 원래 허브로).
+const mockDismissTo = jest.fn();
 
 jest.mock('@/features/apply-replan/model/useApplyReplan', () => ({
   useApplyReplan: () => ({
@@ -69,12 +72,14 @@ jest.mock('expo-router', () => ({
     replace: mockReplace,
     navigate: mockNavigate,
     back: mockBack,
+    dismissTo: mockDismissTo,
   }),
   router: {
     push: mockPush,
     replace: mockReplace,
     navigate: mockNavigate,
     back: mockBack,
+    dismissTo: mockDismissTo,
   },
 }));
 
@@ -90,11 +95,13 @@ beforeEach(() => {
   mockReplace.mockClear();
   mockNavigate.mockClear();
   mockBack.mockClear();
+  mockDismissTo.mockClear();
 });
 
-/** forward nav 의 목적지를 직렬화해 모은다 — 형태(문자열/객체)를 강요하지 않고 "어디로 갔나"만 본다. */
+/** forward nav 의 목적지를 직렬화해 모은다 — 형태(문자열/객체)를 강요하지 않고 "어디로 갔나"만 본다.
+ * TRIP-1418 — dismissTo 도 이동 수단이라 함께 센다(빠지면 "이동 0" 단언이 공허해진다). */
 function forwardDestinations(): string[] {
-  return [mockPush, mockReplace, mockNavigate]
+  return [mockPush, mockReplace, mockNavigate, mockDismissTo]
     .flatMap((fn) => fn.mock.calls)
     .map((call) =>
       typeof call[0] === 'string' ? call[0] : JSON.stringify(call[0])
@@ -155,8 +162,9 @@ describe('🔴 I2 · TRIP-754 AC-10 — 성공 얼굴(i19)은 없다', () => {
   });
 });
 
-describe('🔴 I3 · TRIP-754 AC-10 — 확정 성공 → 허브로 replace + applied=sessionId', () => {
-  it('onSuccess 가 불리면 replace 1회, 모양은 i06 [적용하기]와 같다', () => {
+// TRIP-1418 — replace → dismissTo(스택의 원래 허브로 돌아간다, QA Q-106).
+describe('🔴 I3 · TRIP-754 AC-10 — 확정 성공 → 허브로 dismissTo + applied=sessionId', () => {
+  it('onSuccess 가 불리면 dismissTo 1회, 모양은 i06 [적용하기]와 같다 — replace 0', () => {
     renderPage();
     fireEvent.press(screen.getByTestId('planb-diff-confirm'));
     const onSuccess = applyOnSuccess();
@@ -164,8 +172,9 @@ describe('🔴 I3 · TRIP-754 AC-10 — 확정 성공 → 허브로 replace + ap
 
     act(() => onSuccess?.());
 
-    expect(mockReplace).toHaveBeenCalledTimes(1);
-    expect(mockReplace.mock.calls[0][0]).toStrictEqual(APPLIED_HUB);
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockDismissTo.mock.calls[0][0]).toStrictEqual(APPLIED_HUB);
+    expect(mockReplace).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
     expect(mockNavigate).not.toHaveBeenCalled();
     expect(mockBack).not.toHaveBeenCalled();
@@ -209,15 +218,16 @@ describe('🔴 I5 · AC-4 — apply 실패는 StateNotice error + 원 일정 유
       sessionId: SESSION_ID,
     });
     // TRIP-754 — 재시도도 같은 성공 콜백을 넘긴다(없으면 재시도가 성공해도 화면이 멈춘다).
-    // 누른 직후 이동 0 → 성공 뒤에만 허브로 replace.
+    // 누른 직후 이동 0 → 성공 뒤에만 허브로 dismissTo(TRIP-1418).
     expectNoNavigation();
     const onSuccess = applyOnSuccess();
     expect(onSuccess).toBeDefined();
 
     act(() => onSuccess?.());
 
-    expect(mockReplace).toHaveBeenCalledTimes(1);
-    expect(mockReplace.mock.calls[0][0]).toStrictEqual(APPLIED_HUB);
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockDismissTo.mock.calls[0][0]).toStrictEqual(APPLIED_HUB);
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });
 

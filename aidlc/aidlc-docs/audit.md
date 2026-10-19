@@ -1616,3 +1616,42 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U8 NFR 국소 개정, 승인 대기(같은 PR 머지 = 승인). `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
+## Functional Design·NFR Requirements 신설 — situation-awareness (여행 중 변수 상황 선제 감지, U4 확장)
+**Timestamp**: 2026-10-18T13:00:00Z (작업 시점, 초 단위 미측정)
+**User Input**: 최초 요청(2026-10-18) —
+```
+그리고 planB관련해서 다른 세션에서 작업중인데, 코드꼬이거나 겹치지
+  않게 해.  중간평가 피드백중에서 자체적으로 변수상황을 판단해서
+  사용자에게 알리고 재계획을 하게 하라는게 있었거든. 그거 만들자. 그런
+  변수상황 자가 인지를 할 수 있게 만들어!!!! 그런 방법들을 다 생각을
+  해봐. 예를들면 날씨가 안좋아졌으면 실내 위주로 다시 일정만들게
+  하거나 알람 보내거나 하고, 가려던 곳이 문을 닫은것을 미리 파악하거나
+  아니면 해당 지역에 요즘 뜨는 핫이슈가 있다거나 등등이 있을거 같아.
+  여기에 더해서 더 너가 어떤 경우들이 있을지 생각해서 추가해!!!!!
+```
+선택지 질문 4개의 답(2026-10-18): Q1 재계획 방식 = "미리 짜 둔 대안 (Recommended)" · Q2 1차 범위 = "날씨 확장 (Recommended), 휴무·영업시간·폐업 (Recommended), 지역 행사·인기 장소, 여행 전날(D-1) 점검" · Q3 공공데이터 활용신청 = "신청할게. 너가 사이트도 띄어주라 지" → 이후 "다 신청했어" / "승인도 받았어" · Q4 푸시 기본값 = "위험 알림만 기본 ON (Recommended)". 2026-10-19: "하던거 마저해"(미결 O-SA-2~15 추천안 채택의 근거).
+**AI Response**: 현황 조사(운영 자동 감지 0 — 날씨 확인 호출처 0, 활성 트리거 만료·소비 호출처 0)·구성요소 설계 8종·반박 검토 3관점을 거쳐 번호 없는 확장 폴더 `construction/situation-awareness/` 를 신설했다 — functional-design 4종(DEC-SA-1~8·BR-SA-01~24·INV-SA-1~7·PBT-SA-01~22·G-SA-1~14·O-SA-1~15), nfr-requirements 2종, 계획 2종(`plans/situation-awareness-{functional-design,nfr-requirements}-plan.md`, Q1~Q4 = 위 원문). 원 문서 U3·U4·U6·U10 에는 `[개정 · 2026-10-19 · situation-awareness FD]` 블록만 원문 보존으로 덧붙였고(삭제·수정 0줄), `shared-infrastructure.md` 에 증분 절. 유지: TriggerKind 4종(DEC-U4-4 — 새 상황은 `payload.variant`), INV-U4-05(일정 쓰기는 사용자 [적용]만), 새 NotificationKind 없음. 승인 요청 상태(PR #1371).
+**Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 신설, 승인 대기.
+
+---
+## Functional Design·NFR Requirements 승인 — situation-awareness
+**Timestamp**: 2026-10-19T07:00:26Z
+**User Input**: "사이트 띄어주고 정본 문서는 뭐 어떻게 할까? 승인할게"
+**AI Response**: 표준 2-option 완료 메시지에 대한 '승인'으로 기록 — Functional Design 4종·NFR Requirements 2종 승인, O-SA-2~15 추천안 확정(O-SA-1 은 공공데이터포털 활용신청 계정 = `WEATHER_API` 키 계정 여부를 사용자가 확인 중이며, 그동안 특보·대기질·특일 감지기는 관찰 전용으로 출발). NFR Design 은 SKIP(신규 인프라 0 — 패턴이 nfr-requirements·tech-stack-decisions 에 적용 위치까지 기술, U3·U5·U6·U8 선례), Infrastructure Design 은 `shared-infrastructure.md` 증분으로 승인. 같은 지시의 앞부분("사이트 띄어주고")에 따라 포털 활용신청 현황 페이지를 열었다. PR #1371 을 머지한다.
+**Context**: CONSTRUCTION — situation-awareness 설계 단계 종료. 다음 = 팀 개발(트리거 생명주기 PR #1372 는 머지·운영 반영 완료, 서버 감시 스윕 진행 중).
+
+---
+## Functional Design 사후 개정 — U8 답변 평가 (US-ASSIST-09 · BR-U8-60~65 · INV-U8-10)
+**Timestamp**: 2026-10-19T06:25:00Z (작업 시점, 초 단위 미측정)
+**User Input**: "도우미 챗봇의 답변마다 사용자가 좋아요/싫어요로 평가한다. 지금 단계는 백엔드 저장·API·분석용 추적 번호와 설계 문서다(앱 화면은 별도)." (메인 세션이 전달한 사용자 요청 원문)
+**AI Response**: 인셉션 `inception/user-stories/stories.md` 에픽 J 에 `[개정 · 2026-10-19 — 사용자 요청 · US-ASSIST-09 신설]` 블록 + **US-ASSIST-09 도우미 답변 평가**(답마다 좋아요/싫어요 · 다시 누르면 취소·바꾸기 · 대화와 함께 지워지고 내보내기에 포함 · 평가·지표 용도로만, 모델 학습 금지)를 더하고, 커버리지 표 뒤에 수 개정 블록(J 8→9 · 합계 125 · 유효 107, 원 표 보존)을 붙였다 — FD 가 근거로 쓰려면 스토리 코드가 인셉션에 있어야 한다(2026-10-12 US-ASSIST-01~08 전개 선례). U8 FD 에 원문 보존(삭제 0)으로 덧붙였다: `construction/u8-conversational-assistant/functional-design/business-rules.md` — §8 답변 평가 신설(BR-U8-60 대상·동작 · 61 턴 아님 · 62 대화의 부속(CASCADE·내보내기 칸) · 63 학습 금지 · 64 추적 번호 = 해석 요청 `request_meta.request_id` = AI 로그 `trace_id` · 65 평가 로그 한 줄, SEC-U8-06) · `domain-entities.md` — §1 경계표 한 줄 · §3.2 관측 칸 `trace_id` · §3.7 `assistant_message_feedback` 신설(INV-U8-10) · §5 관계 한 줄. 구현은 같은 브랜치에 실린다(`V2.74__assistant_message_feedback.sql` · `AssistantFeedbackService` · `PUT`·`DELETE /api/v1/assistant/sessions/{sessionId}/messages/{messageId}/feedback` · 메시지 `feedback` 선택 칸 · 내보내기 `feedback` 칸 · 삭제 고지 `ASSISTANT_MESSAGE_FEEDBACK`). 정하지 않은 것: 앱 화면(Figma 없음 — `frontend-components.md` 는 화면 작업에서 개정)·평가 집계(OBS-U8-02 확장)·싫어요 사유 입력. `business-logic-model.md` 의 스토리 대응표·NFR 문서는 이번에 건드리지 않았다.
+**Context**: CONSTRUCTION — U8 Functional Design 국소 개정 + 인셉션 스토리 1건 신설, 승인 대기(같은 PR 머지 = 승인, #1071 선례). `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+## Functional Design 사후 개정 — U8 답변 평가에 싫어요 이유·자유 의견 (US-ASSIST-09 · BR-U8-60·62·63·65 · §3.7 · INV-U8-10)
+**Timestamp**: 2026-10-19T07:10:00Z (작업 시점, 초 단위 미측정)
+**User Input**: (워크플로 스크립트가 전달한 작업 지시 — 사용자 원문이 아니다) "평가 계약: PUT /api/v1/assistant/sessions/{sessionId}/messages/{messageId}/feedback 본문 {rating, reason(WRONG|NOT_HELPFUL|NOT_WHAT_I_WANTED|null), comment(string|null)} → 200 {messageId, rating, reason, comment}. 덮어쓰기(upsert). reason·comment 는 rating=DOWN 일 때만(UP 에 실리면 400). comment 는 앞뒤 공백 제거, 빈 문자열이면 null, 300자 초과면 400. 메시지 읽기의 feedback 은 UP|DOWN|null(이유·의견은 싣지 않는다). 칩 문구: 틀렸어요 · 도움이 안 돼요 · 원한 답이 아니에요 · 직접 적기. comment 는 대화 원문과 같은 취급 — 로그 금지(assistant_feedback 에는 reason 과 has_comment 만), CASCADE 파기, 내보내기 포함, AI 로 보내지 않음, 모델 학습 금지."
+**AI Response**: 인셉션 `inception/user-stories/stories.md` US-ASSIST-09 뒤에 `[개정 · 2026-10-19 — 싫어요 이유·자유 의견]` 블록(수용 기준 넷: 이유 칩 3종 · 자유 의견 ≤300자 · 좋아요에 실리거나 300자를 넘으면 400 · 의견 = 내가 쓴 글이라 로그 금지·AI 미전송·대화와 함께 파기·내보내기 포함·학습 금지, 다시 열면 평가만 보인다)을 더했다(원 수용 기준 그대로). U8 FD 는 원문 보존으로 덧붙였다: `construction/u8-conversational-assistant/functional-design/business-rules.md` — §8 머리 블록의 "싫어요 사유 입력"(정하지 않은 것)에 취소선 + 개정 블록, BR-U8-60(본문 규칙 · 통째로 덮어쓰기 · 메시지 응답엔 평가만)·63(이유·의견도 학습 금지 · AI 미전송) 개정 문장, BR-U8-62(내보내기 칸 `feedback` → `feedback`·`feedbackReason`·`feedbackComment`)·65(로그 모양 → `reason`·`has_comment` 추가, 의견 본문 금지)는 원문 취소선 + 개정 · `domain-entities.md` §3.7 — 개정 블록으로 `reason`·`comment` 칸과 `ck_assistant_message_feedback_down_only`, 읽기 항목의 두 구절 취소선 + 개정, INV-U8-10 개정 블록(이유·의견은 싫어요에만). 구현은 같은 브랜치에 실린다(머지 전인 `V2.74__assistant_message_feedback.sql` 을 고침 — develop 최신 V2.73 재확인 · `AssistantFeedbackService`·`AssistantPersistence`·`AssistantController`·`AssistantExportContributor` · `openapi.yaml` 요청·응답 스키마). 정하지 않은 것: 평가 집계(OBS-U8-02 확장)·앱 화면(`frontend-components.md` 는 화면 작업에서 개정)·의견의 금칙어 검사(발화와 달리 화면에 다시 보이지 않고 AI 로 가지 않아 이번에는 걸지 않았다).
+**Context**: CONSTRUCTION — U8 Functional Design 국소 개정 + 인셉션 스토리 수용 기준 개정 블록, 승인 대기(같은 PR 머지 = 승인, #1071 선례). `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---

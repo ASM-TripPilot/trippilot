@@ -7,6 +7,9 @@
  *
  * 모양은 스키마 필수 최소값이다 — `as const`/단언 없이 msw `HttpResponse.json` 에 그대로 실린다.
  */
+import { http, HttpResponse } from 'msw';
+
+import type { ActualVisit, TripRecord } from '@/shared/api/index.schemas';
 
 export interface DaySlotFixture {
   poiId: string;
@@ -77,4 +80,59 @@ export function completedVisitOn(
     spontaneous: false,
     updatedAt: `${day}T15:20:00`,
   };
+}
+
+/**
+ * `GET /trips/{id}/records` 의 실적 한 줄(TRIP-1415) — 메모 시드가 읽는 것은 `visitCheckId`·`memo` 뿐이다.
+ * `hasMemo` 는 memo 와 맞춰 두되 `over` 로 어긋나게 만들 수 있다("있다고는 하는데 본문이 없는" 방문).
+ */
+export function actualVisit(
+  visitCheckId: string,
+  memo: string | null,
+  over: Partial<ActualVisit> = {}
+): ActualVisit {
+  return {
+    visitCheckId,
+    slotKey: null,
+    poiId: `poi-${visitCheckId}`,
+    arrivedAt: null,
+    completedAt: null,
+    skippedAt: null,
+    spontaneous: false,
+    photoCount: 0,
+    memo,
+    hasMemo: memo !== null,
+    updatedAt: '2026-08-20T05:00:00Z',
+    ...over,
+  };
+}
+
+/** `TripRecord` 봉투 — 날짜 묶음의 실적만 관점이 정한다(계획·미방문·변경 이력은 비운다). */
+export function tripRecord(
+  days: { date: string; actual: ActualVisit[] }[],
+  tripId = 't1'
+): TripRecord {
+  return {
+    tripId,
+    days: days.map(({ date, actual }) => ({
+      date,
+      planned: [],
+      actual,
+      unvisitedSlotKeys: [],
+    })),
+    changes: [],
+  };
+}
+
+const BASE = 'http://localhost:8080/api/v1';
+
+/**
+ * records GET 핸들러 — 기본은 실적 0건(서버 메모 없음). 메모를 보는 화면(j01 카드·허브 박스·시트)은 이 응답이 와야
+ * 입력이 열린다(TRIP-1415 잠금). 응답을 늦추거나 실패시키려면 `reply` 를 준다.
+ */
+export function recordsHandler(
+  reply: () => Response | Promise<Response> = () =>
+    HttpResponse.json(tripRecord([]))
+) {
+  return http.get(`${BASE}/trips/:tripId/records`, () => reply());
 }

@@ -9,15 +9,15 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
-import { WheelPicker } from '@/shared/ui/WheelPicker';
+import { HourMinuteWheel } from '@/shared/ui/HourMinuteWheel';
 
 import { MUST_VISIT_NAME_PLACEHOLDER } from '@/features/itinerary/index.view';
 import {
   DWELL_OPTIONS,
-  startTimeLabel,
   canSubmitMustVisitTime,
   type DwellKey,
   type MustVisitTimeForm,
+  type startTimeOptions,
 } from '@/features/add-must-visit';
 import {
   AlertCircleGlyph,
@@ -74,9 +74,11 @@ export interface MustVisitTimeScreenProps {
   region?: string | null;
   imageUrl?: string | null;
   dayChips: { date: string; label: string }[];
-  /** 30분 간격 하루치. 화면은 받은 목록을 그대로 그린다. */
-  startOptions: string[];
+  /** 시·분 두 열 값(`startTimeOptions()`). 화면은 받은 목록을 그대로 그린다. */
+  startOptions: ReturnType<typeof startTimeOptions>;
   form: MustVisitTimeForm;
+  /** 시작 시각이 비었을 때 휠을 세울 'HH:mm'(그 여행 일과 시작, TRIP-1437). 값은 아니다. */
+  startAnchor?: string;
   blockReason?: 'DATE_MISSING' | 'START_MISSING' | null;
   /** 저장 실패 안내. 사유(`blockReason`)보다 우선한다 — 서버가 대답한 쪽이 더 새 사실이다. */
   errorText?: string;
@@ -153,6 +155,7 @@ export function MustVisitTimeScreen({
   dayChips,
   startOptions,
   form,
+  startAnchor,
   blockReason,
   errorText,
   duplicateText,
@@ -165,7 +168,7 @@ export function MustVisitTimeScreen({
   onSubmit,
   onRetry,
 }: MustVisitTimeScreenProps): ReactElement {
-  // 시트를 상시 마운트하면 닫힌 상태에서도 48개 옵션이 트리에 남는다 — 열렸을 때만 만든다
+  // 시트를 상시 마운트하면 닫힌 상태에서도 시·분 셀 84개가 트리에 남는다 — 열렸을 때만 만든다
   // (`TripWizardStep2Screen` 의 `fixSheet === undefined ? null : …` 과 같은 형태).
   const [startSheetOpen, setStartSheetOpen] = useState(false);
 
@@ -212,11 +215,17 @@ export function MustVisitTimeScreen({
               )}
             </View>
             <View className="flex-1 items-start gap-xs">
-              <View className="rounded-pill bg-primary-pale px-sm py-[3px]">
-                <Text className="font-noto-bold text-micro font-bold text-primary-text">
-                  {PLACE_CHIP}
-                </Text>
-              </View>
+              {/* '고정' 은 토글이 켜졌을 때만 사실이다 — 꺼짐은 ANYTIME(BR-U1-48). */}
+              {form.fixed ? (
+                <View
+                  testID="itinerary-mustvisit-time-fixed-badge"
+                  className="rounded-pill bg-primary-pale px-sm py-[3px]"
+                >
+                  <Text className="font-noto-bold text-micro font-bold text-primary-text">
+                    {PLACE_CHIP}
+                  </Text>
+                </View>
+              ) : null}
               <Text
                 numberOfLines={1}
                 className="font-noto-bold text-card-title font-bold text-ink"
@@ -233,7 +242,14 @@ export function MustVisitTimeScreen({
             </View>
           </View>
 
-          <View
+          {/* 행 전체가 스위치다 — 제목·안내를 눌러도 바뀐다(Q-066). 안쪽 트랙은 누름·role 없는 그림이라
+              스위치는 화면에 이 하나뿐이다. */}
+          <Pressable
+            testID="itinerary-mustvisit-time-toggle"
+            accessibilityRole="switch"
+            accessibilityLabel={TOGGLE_TITLE}
+            accessibilityState={{ checked: form.fixed }}
+            onPress={() => onToggleFixed?.(!form.fixed)}
             style={softShadow}
             className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas px-lg py-[14px]"
           >
@@ -245,12 +261,7 @@ export function MustVisitTimeScreen({
                 {TOGGLE_NOTE}
               </Text>
             </View>
-            <Pressable
-              testID="itinerary-mustvisit-time-toggle"
-              accessibilityRole="switch"
-              accessibilityLabel={TOGGLE_TITLE}
-              accessibilityState={{ checked: form.fixed }}
-              onPress={() => onToggleFixed?.(!form.fixed)}
+            <View
               className={`h-[28px] w-[46px] rounded-[14px] ${
                 form.fixed ? 'bg-primary' : 'bg-hairline-strong'
               }`}
@@ -261,8 +272,8 @@ export function MustVisitTimeScreen({
                   form.fixed ? 'left-[22px]' : 'left-[3px]'
                 }`}
               />
-            </Pressable>
-          </View>
+            </View>
+          </Pressable>
 
           <View className={`w-full gap-sm ${locked ? 'opacity-40' : ''}`}>
             <SectionLabel text={DATE_SECTION} />
@@ -295,9 +306,7 @@ export function MustVisitTimeScreen({
                   form.fixedStart === null ? 'text-muted-soft' : 'text-ink'
                 }`}
               >
-                {form.fixedStart === null
-                  ? START_PLACEHOLDER
-                  : startTimeLabel(form.fixedStart)}
+                {form.fixedStart ?? START_PLACEHOLDER}
               </Text>
               <ChevronDownGlyph />
             </Pressable>
@@ -426,15 +435,21 @@ export function MustVisitTimeScreen({
                 </Pressable>
               </View>
               {/* 탭·스크롤 정지 모두 값만 확정한다 — 정지에 시트를 닫으면 굴리다 멈추는 순간 닫힌다
-                  (TRIP-990 Q6). 시트는 "닫기"·딤 탭·핸들 끌기로 닫힌다. */}
-              <WheelPicker
-                testID="itinerary-mustvisit-time-start-wheel"
-                values={startOptions}
-                selected={form.fixedStart}
-                onSelect={(value) => onPickStart?.(value)}
-                renderLabel={startTimeLabel}
-                testIDForValue={(value) =>
-                  `itinerary-mustvisit-time-start-option-${value}`
+                  (TRIP-990 Q6). 시트는 "닫기"·딤 탭·핸들 끌기로 닫힌다. 값이 비면 일과 시작(startAnchor)에
+                  서기만 하고 값은 비워 둔다(TRIP-1437 · BR-U1-49). */}
+              <HourMinuteWheel
+                value={form.fixedStart}
+                anchor={startAnchor}
+                onChange={(value) => onPickStart?.(value)}
+                hours={startOptions.hours}
+                minutes={startOptions.minutes}
+                hourWheelTestID="itinerary-mustvisit-time-start-wheel-h"
+                minuteWheelTestID="itinerary-mustvisit-time-start-wheel-m"
+                hourCellTestID={(hour) =>
+                  `itinerary-mustvisit-time-start-option-h-${hour}`
+                }
+                minuteCellTestID={(minute) =>
+                  `itinerary-mustvisit-time-start-option-m-${minute}`
                 }
               />
             </BottomSheetView>

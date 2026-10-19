@@ -55,6 +55,7 @@ from trippilot.poi_curation.sourcing.overture_address import (  # noqa: E402
 )
 
 from collect_localdata import _MIGRATION, load_regions, region_check  # noqa: E402
+from merge_pois_docs import dumps_doc  # noqa: E402
 
 # 보이지 않는 방향 제어 문자 — `경기도‎` 처럼 붙어 와서 토큰 비교를 깬다
 _INVISIBLE = re.compile(r"[​-‏‪-‮﻿]")
@@ -148,7 +149,7 @@ def main(argv: list[str]) -> int:
     if not args.write:
         print("[주소보정] --write 없음 — 아무것도 안 바꿨다", file=sys.stderr)
         return 0
-    args.pois.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+    args.pois.write_text(dumps_doc(doc), encoding="utf-8")  # 공유본 형식은 한 곳에서(`merge_pois_docs.dumps_doc`)
     print(f"[주소보정] {len(rows)}곳 고쳤다 → {args.pois}", file=sys.stderr)
     return 0
 
