@@ -34,7 +34,7 @@ import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 
 /**
- * weather_grid_forecast 실 DB 검증(설계서 T-IT-6 · V2.74) — 인메모리 대역이 원리적으로 못 보는 셋을 본다.
+ * weather_grid_forecast 실 DB 검증(설계서 T-IT-6 · V2.75) — 인메모리 대역이 원리적으로 못 보는 셋을 본다.
  *
  * - **jsonb 왕복** — JSON 을 실제로 한 번 통과시킨다(맵 왕복은 역직렬화 관용을 재지 않는다 — anti-patterns TRIP-854).
  * - **수 타입** — jsonb 를 되읽으면 정수·실수가 바뀐다. 손으로 적은 정수 기온·실수 강수확률도 같은 값으로 읽혀야 한다.

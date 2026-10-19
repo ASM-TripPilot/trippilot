@@ -1,5 +1,5 @@
 -- 격자 시간별 예보 캐시(situation-awareness · C11 · domain-entities §8.1 · tech-stack 델타 3).
--- 번호: 작성 시점 origin/develop 최댓값 V2.73(plan_b_situation) + 1 — 머지 직전에 다시 본다(설계서 CD13).
+-- 번호: 머지 직전 origin/develop 최댓값 V2.74(assistant_message_feedback) + 1(설계서 CD13 — 작성 땐 V2.74 였다).
 --
 -- 상황 감시 스윕의 단기예보 감지기가 **슬롯 좌표의 격자**를 시간별로 본다. 이름 키 캐시(weather_snapshot · V2.19)는
 -- 하루 강수확률 최댓값 하나라 시간별·변형별 판정을 못 하고 키(목적지 이름)도 달라 섞지 않는다 — 그쪽은 날씨 확인·도우미 카드가 그대로 쓴다.
