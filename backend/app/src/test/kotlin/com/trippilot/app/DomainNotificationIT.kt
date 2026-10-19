@@ -230,6 +230,69 @@ class DomainNotificationIT : AbstractPostgresIntegrationTest() {
         rows.single { it.title == "가려던 곳의 영업을 확인해 주세요" }.pushSentAt shouldBe null
     }
 
+    /**
+     * 그 계정의 알림을 도메인으로 읽지 못하게 하는 행을 심고 [block] 을 돈다 — 어휘 밖 kind(`NotificationKind.of` 는
+     * fail-loud)·평면이 아닌 `action_payload`(Map<String, String> 역직렬화 실패) 두 모양이다. 공유 컨테이너라
+     * 단언이 깨져도 지우도록 finally 에서 지운다.
+     */
+    private fun withUnreadableRow(accountId: UUID, kind: String, actionPayload: String?, block: () -> Unit) {
+        val id = UUID.randomUUID()
+        jdbc.update(
+            "INSERT INTO notification (notification_id, account_id, kind, title, body, action_payload, occurred_at) " +
+                "VALUES (?, ?, ?, 't', 'b', ?::jsonb, now())",
+            id, accountId, kind, actionPayload,
+        )
+        try {
+            block()
+        } finally {
+            jdbc.update("DELETE FROM notification WHERE notification_id = ?", id)
+        }
+    }
+
+    /** 이 사건으로 적재되고 실제로 푸시된 PLAN_B 행 수 — 이 계정의 목록 조회(JPA)는 심은 행에서 터지므로 JDBC 로 센다. */
+    private fun pushedPlanB(accountId: UUID, tripId: UUID): Int = jdbc.queryForObject(
+        "SELECT count(*) FROM notification WHERE account_id = ? AND dedup_key LIKE ? AND push_sent_at IS NOT NULL",
+        Int::class.java, accountId, "PLAN_B#$tripId#%",
+    )!!
+
+    /**
+     * 묶음 판정은 그 계정의 최근 알림을 도메인으로 읽는다. 읽다 터진 예외가 적재 트랜잭션을 롤백하면, 릴레이가 재시도
+     * 상한에서 포기할 때 알림함·푸시가 둘 다 사라진다 — 막는 것은 푸시뿐이어야 한다(BR-SA-21 ② · INV-U6-02).
+     * 판정을 못 하면 푸시한다(그 계정은 목록 API 도 같은 매핑에서 죽어 있어 푸시가 유일한 길이다).
+     */
+    @Test
+    fun `최근 알림에 모르는 kind 행이 섞여 있어도 위험 사건은 적재되고 푸시된다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        registerDevice(accountId)
+
+        withUnreadableRow(accountId, kind = "LEGACY_X", actionPayload = null) {
+            events.publish(risk(accountId, tripId, kind = "WEATHER", reason = "오후에 비 소식이 있어요.", push = true))
+            deliver()
+
+            pushedPlanB(accountId, tripId) shouldBe 1
+        }
+    }
+
+    /**
+     * 이 모양은 Hibernate 가 행을 읽는 **도중**(저장소 프록시 안)에 터진다 — 그 자리에 트랜잭션 속성이 생기면
+     * (예: 저장소에 `@Transactional(readOnly = true)`) 예외가 바깥 트랜잭션을 rollback-only 로 표시해, 푸시는 나가고
+     * 행은 롤백되며 재시도마다 다시 울린다. 그 회귀를 여기서 잡는다.
+     */
+    @Test
+    fun `최근 알림에 평면이 아닌 payload 행이 섞여 있어도 위험 사건은 적재되고 푸시된다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        registerDevice(accountId)
+
+        withUnreadableRow(accountId, kind = "PLAN_B", actionPayload = """{"x": {"y": 1}}""") {
+            events.publish(risk(accountId, tripId, kind = "WEATHER", reason = "오후에 비 소식이 있어요.", push = true))
+            deliver()
+
+            pushedPlanB(accountId, tripId) shouldBe 1
+        }
+    }
+
     @Test
     fun `회고에 쓸 데이터가 없으면 액션이 없다 — 빈 화면으로 보내지 않는다(BR-U6-12)`() {
         val accountId = newAccount()

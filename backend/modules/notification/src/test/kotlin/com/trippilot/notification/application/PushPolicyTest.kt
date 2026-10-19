@@ -1,7 +1,9 @@
 package com.trippilot.notification.application
 
 import com.trippilot.notification.domain.DevicePlatform
+import com.trippilot.notification.domain.Notification
 import com.trippilot.notification.domain.NotificationKind
+import com.trippilot.notification.domain.NotificationRepository
 import com.trippilot.notification.domain.NotificationToggle
 import com.trippilot.notification.domain.OsPermission
 import com.trippilot.notification.domain.PushMessage
@@ -65,10 +67,22 @@ class PushPolicyTest : StringSpec({
     class CountingSender : PushPort {
         override val deliversExternally = true
         var calls = 0
+
+        /** 기기마다 돌려줄 결말 — 실패한 발송이 묶음의 근거가 되는지 잴 때 바꾼다. */
+        var status = PushStatus.SENT
         override fun send(tokens: List<String>, message: PushMessage): List<PushReceipt> {
             calls++
-            return tokens.map { PushReceipt(it, PushStatus.SENT) }
+            return tokens.map { PushReceipt(it, status) }
         }
+    }
+
+    /**
+     * 최근 알림을 읽다 터지는 저장소 — 어휘 밖 kind 행이 하나라도 섞인 계정이다(`NotificationKind.of` 는
+     * fail-loud). 나머지는 대역 그대로라 적재·발송 기록은 [inner] 에 남는다.
+     */
+    class UnreadableRecent(private val inner: FakeNotifications) : NotificationRepository by inner {
+        override fun findByAccount(accountId: UUID, unreadOnly: Boolean, limit: Int): List<Notification> =
+            error("알 수 없는 알림 종류입니다: LEGACY_X")
     }
 
     class Fixture(
@@ -84,7 +98,14 @@ class PushPolicyTest : StringSpec({
         fun dispatched() = registry.find(NotificationMetrics.PUSH_DISPATCH).counters().sumOf { it.count() }
     }
 
-    fun fixture(): Fixture {
+    /**
+     * 계정 발송량 상한은 기본으로 넉넉히 둔다 — 정책 대신 상한이 푸시를 막지 않게(여기서 재는 것은 정책이다).
+     * 둘의 상호작용을 잴 때만 [limits] 를 좁힌다.
+     */
+    fun fixture(
+        limits: PushRateLimits = PushRateLimits(hourly = 1_000, daily = 1_000),
+        recent: (FakeNotifications) -> NotificationRepository = { it },
+    ): Fixture {
         val clock = MovingClock(start)
         val notifications = FakeNotifications()
         // 기본값과 무관하게 정책만 잰다 — 토글이 막으면 무엇이 푸시를 막았는지 갈리지 않는다.
@@ -95,11 +116,8 @@ class PushPolicyTest : StringSpec({
         val registry = SimpleMeterRegistry()
         val metrics = NotificationMetrics(registry, notifications)
         val sender = CountingSender()
-        // 계정 발송량 상한이 정책 대신 푸시를 막지 않게 넉넉히 둔다 — 여기서 재는 것은 정책뿐이다.
-        val dispatch = PushDispatchService(
-            OneDevice(), notifications, toggleService, sender, metrics, PushRateLimits(hourly = 1_000, daily = 1_000), clock,
-        )
-        val service = NotificationRaiseService(notifications, toggleService, dispatch, FakeTripOwner(), metrics, clock)
+        val dispatch = PushDispatchService(OneDevice(), notifications, toggleService, sender, metrics, limits, clock)
+        val service = NotificationRaiseService(recent(notifications), toggleService, dispatch, FakeTripOwner(), metrics, clock)
         return Fixture(clock, notifications, sender, registry, service)
     }
 
@@ -179,6 +197,59 @@ class PushPolicyTest : StringSpec({
 
         f.sender.calls shouldBe 1
         f.notifications.stored[1].pushSentAt shouldNotBe null
+    }
+
+    "전 기기에 실패한 발송은 묶음의 근거가 아니다 — 10분 안의 다음 위험은 다시 발송을 시도한다" {
+        val f = fixture()
+        val trip = UUID.randomUUID()
+
+        f.sender.status = PushStatus.FAILED
+        f.raise(trip, oncePer(trip))
+        f.sender.status = PushStatus.SENT
+        f.clock.now = start.plusSeconds(60)
+        f.raise(trip, oncePer(trip))
+
+        // 실패는 사유만 남고 발송 시각은 없다 — 그 행을 근거로 묶으면 위험이 한 번도 안 울린다.
+        f.notifications.stored[0].pushSentAt shouldBe null
+        f.notifications.stored[0].pushFailedReason shouldNotBe null
+        f.sender.calls shouldBe 2
+        f.notifications.stored[1].pushSentAt shouldBe start.plusSeconds(60)
+        f.suppressed("COALESCED") shouldBe 0.0
+    }
+
+    "계정 상한과 10분 묶음은 서로의 근거가 아니다 — 묶인 건은 상한 자리를 쓰지 않고, 상한에 막힌 건은 묶음을 만들지 않는다" {
+        val f = fixture(limits = PushRateLimits(hourly = 2, daily = 50))
+        val trip = UUID.randomUUID()
+        val other = UUID.randomUUID()
+        val late = UUID.randomUUID()
+
+        f.raise(trip, oncePer(trip)) // 나간다(시간 창 1/2)
+        f.clock.now = start.plusSeconds(60)
+        f.raise(trip, oncePer(trip)) // 묶인다 — 발송 시각이 없어 상한 자리를 쓰지 않는다
+        f.clock.now = start.plusSeconds(120)
+        f.raise(other, oncePer(other)) // 그래서 다른 여행이 나간다(2/2)
+        f.clock.now = start.plusSeconds(180)
+        f.raise(late, oncePer(late)) // 상한에 막힌다 — 발송 시각이 없다
+        f.clock.now = start.plusSeconds(240)
+        f.raise(late, oncePer(late)) // 묶음이 아니라 다시 발송을 시도해 상한에 막힌다
+
+        f.sender.calls shouldBe 2
+        f.suppressed("COALESCED") shouldBe 1.0
+        f.suppressed("RATE_LIMITED") shouldBe 2.0
+        f.notifications.stored.size shouldBe 5
+    }
+
+    "묶음 판정이 최근 알림을 읽다 터져도 알림함 행은 남고 푸시를 시도한다 — 위험 알림은 닿는 쪽으로" {
+        val f = fixture(recent = ::UnreadableRecent)
+        val trip = UUID.randomUUID()
+
+        // 예외가 raise 밖으로 나가면 방금 적재한 행까지 롤백된다(실 DB 는 DomainNotificationIT 가 본다).
+        f.raise(trip, oncePer(trip))
+
+        f.notifications.stored.size shouldBe 1
+        f.sender.calls shouldBe 1
+        f.notifications.stored.single().pushSentAt shouldBe start
+        f.suppressed("COALESCED") shouldBe 0.0
     }
 
     "재배달은 정책 판정 전에 끝난다 — 묶음·알림함만 지표를 두 번 세지 않는다" {

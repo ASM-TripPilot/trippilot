@@ -81,7 +81,7 @@ class NotificationRaiseService(
                 log.debug("푸시 대상이 아닌 사건이라 알림함에만 둡니다. eventId={}", sourceEventId)
                 metrics.suppressed(SuppressReason.IN_APP_ONLY)
             }
-            is PushPolicy.OncePer -> if (pushedWithin(notification, push)) {
+            is PushPolicy.OncePer -> if (coalesced(notification, push)) {
                 log.info("같은 묶음의 푸시가 {} 안에 나가 이번 푸시를 생략합니다. eventId={}", push.window, sourceEventId)
                 metrics.suppressed(SuppressReason.COALESCED)
             } else {
@@ -89,6 +89,25 @@ class NotificationRaiseService(
             }
         }
     }
+
+    /**
+     * 묶음 판정 — **판정을 못 하면 묶지 않는다**(위험 알림은 닿는 쪽으로).
+     *
+     * 최근 알림을 도메인으로 읽으므로 그 안에 어휘 밖 kind·평면이 아닌 `action_payload` 행이 하나라도 있으면 매핑이
+     * fail-loud 로 터진다. 그 예외를 올리면 방금 적재한 행까지 롤백되고, 릴레이가 재시도 상한에서 포기하면 알림함·푸시가
+     * 둘 다 사라진다 — 막는 것은 푸시뿐이어야 한다(BR-SA-21 ② · INV-U6-02). 그 계정은 알림 목록도 같은 매핑에서 죽어
+     * 있어 푸시가 유일한 길이다. 안 묶여 한 번 더 울리는 비용은 계정 발송량 상한이 묶는다.
+     *
+     * 삼켜도 트랜잭션이 산다: 매핑 실패는 SQL 이 성공한 뒤 행을 객체로 바꾸는 자리라 DB 트랜잭션이 깨지지 않고,
+     * 파생 쿼리 메서드에는 트랜잭션 속성이 없어 rollback-only 도 걸리지 않는다(`DomainNotificationIT` 가 두 모양을
+     * 실 DB 로 고정한다). DB 오류는 트랜잭션이 이미 깨져 발송 판정의 다음 조회에서 다시 터지므로 종전대로 릴레이
+     * 재시도로 간다 — 푸시는 그 조회들 뒤에 나간다.
+     */
+    private fun coalesced(notification: Notification, policy: PushPolicy.OncePer): Boolean =
+        runCatching { pushedWithin(notification, policy) }.getOrElse { e ->
+            log.warn("같은 묶음 판정에 실패해 묶지 않고 푸시를 시도합니다. eventId={}", notification.sourceEventId, e)
+            false
+        }
 
     /**
      * [policy] 접두의 알림 중 [PushPolicy.OncePer.window] 안에 **실제로 푸시된**(`push_sent_at`) 것이 있는가.
