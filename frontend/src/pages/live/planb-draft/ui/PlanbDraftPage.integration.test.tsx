@@ -1925,7 +1925,27 @@ describe('🔴 상황 감지 FE-B · i06 미리 준비한 대안 표식 · 낡�
     mockSession.data = session('DRAFT', { initiatedBy: 'USER' });
     rerender(<PlanbDraftPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
     expect(screen.queryByTestId('planb-draft-prepared')).toBeNull();
+
+    // 옛 서버(필드 없음)는 기존 화면 그대로다(§0) — "USER 가 아니면 SYSTEM" 으로 읽지 않는다.
+    mockSession.data = session('DRAFT');
+    rerender(<PlanbDraftPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
+    expect(screen.queryByTestId('planb-draft-prepared')).toBeNull();
+    // 짝 앵커 — 초안 얼굴은 그려졌다.
+    expect(screen.getByTestId('sheet-cta-button-1')).toBeTruthy();
   });
+
+  it.each(['NO_SOLUTION', 'FAILED'])(
+    'F1b SYSTEM 세션이어도 %s 얼굴엔 표식이 없다 — 대안이 없는데 "미리 준비한 대안"이라 말하지 않는다(BR-SA-23 표는 DRAFT 행에만 단다)',
+    (status) => {
+      mockItinerary = DRAFT_ITINERARY;
+      mockSession.data = session(status, { initiatedBy: 'SYSTEM' });
+      renderPage();
+
+      expect(screen.queryByTestId('planb-draft-prepared')).toBeNull();
+      // 짝 앵커 — 대안 없음·실패 얼굴은 그려졌다.
+      expect(screen.getByTestId('planb-draft-notice-title')).toBeTruthy();
+    }
+  );
 
   it.each(['EXPIRED', 'STALE'])(
     'F2 적용이 409 %s 면 낡음 얼굴 — 일반 실패 문구 없음 · [적용하기] 잠금',

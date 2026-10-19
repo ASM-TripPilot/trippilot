@@ -75,7 +75,7 @@ import { ReplanNoticeFace } from './ReplanNoticeFace';
  *    ref 라서 같은 틱 연타도 한 번만 나간다(state 는 다음 렌더 전까지 옛 값이다).
  *
  * 상황 감지 FE-B(frontend-components §3.6) — 판정은 `model/draftNotice`, 여기는 배선만:
- *  - 세션 `initiatedBy = SYSTEM` 이면 머리에 `미리 준비한 대안` 표식.
+ *  - 세션 `initiatedBy = SYSTEM` 이고 초안 얼굴이면 머리에 `미리 준비한 대안` 표식(대안 없음·실패 얼굴엔 달지 않는다).
  *  - 적용 409 `EXPIRED`·`STALE` → 낡음 얼굴(일반 실패로 접지 않는다) + [새 대안 보기] = 같은 입력으로 새 세션 → i05 replace.
  *    재누름 잠금은 `staleRetryRef`(실패에서만 푼다 — 새 POST 는 방금 연 세션을 닫는다, INV-U4-06).
  *  - `includePoiId`(기회 카드에서 넣으려던 장소)가 초안 after 에 없으면 그 이름(`useIncludedPlaceName`)으로 미포함 안내.
@@ -343,7 +343,8 @@ export function PlanbDraftPage({
         applyPending={apply.isPending}
         // 낡음(409 EXPIRED·STALE)은 일반 실패로 접지 않는다 — 낡음 얼굴이 대신한다.
         applyFailed={apply.isError && !stale}
-        prepared={data.initiatedBy === 'SYSTEM'}
+        // 초안 얼굴에만 — 대안 없음·실패 얼굴에 '미리 준비한 대안'을 달면 없는 대안을 말한다(BR-SA-23 은 DRAFT 행에만 단다).
+        prepared={data.initiatedBy === 'SYSTEM' && state.kind === 'draft'}
         stale={stale}
         onRetryStale={retryStale}
         staleRetryPending={startReplan.isPending}
