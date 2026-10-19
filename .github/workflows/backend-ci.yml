@@ -49,7 +49,8 @@ jobs:
       - name: gradle build (test 포함) + 커버리지
         working-directory: backend
         env:
-          COVERAGE_ADVISORY: ${{ (github.event_name == 'push' || github.base_ref == 'main') && '1' || '' }}
+          # 막지 않는 경우: develop push · main 으로 가는 PR · develop/main 자체를 수동 실행(이미 머지된 코드다)
+          COVERAGE_ADVISORY: ${{ (github.event_name == 'push' || github.base_ref == 'main' || (github.event_name == 'workflow_dispatch' && (github.ref_name == 'develop' || github.ref_name == 'main'))) && '1' || '' }}
         run: ./gradlew build :app:coverageGate --no-daemon
       - name: 커버리지 리포트 보관
         if: ${{ !cancelled() && github.event_name != 'push' }}   # 검토용(PR·수동) — 실패해도 남기되, 취소된 실행은 건너뛴다

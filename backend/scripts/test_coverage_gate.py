@@ -70,7 +70,15 @@ class CoverageGateTest(unittest.TestCase):
         for key in ("GITHUB_STEP_SUMMARY", "GITHUB_ACTIONS", "COVERAGE_ADVISORY"):
             os.environ.pop(key, None)
 
-    def run_main(self, argv):
+    def run_main(self, argv, backend=None):
+        """main() 은 settings·빌드 트리를 읽는다 — 실제 리포 대신 임시 트리를 보게 한다(실행 환경에 따라 달라지지 않게)."""
+        if backend is None:
+            backend = pathlib.Path(tempfile.mkdtemp())
+            self.addCleanup(lambda: __import__("shutil").rmtree(backend, ignore_errors=True))
+            (backend / "settings.gradle.kts").write_text("")
+        patcher = mock.patch.object(gate, "BACKEND", backend)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         out = io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
             code = gate.main(argv)
@@ -137,7 +145,28 @@ class CoverageGateTest(unittest.TestCase):
     def test_settings_에_있는데_합산_리포트에_없는_모듈은_실패한다(self):
         classes = {"com/trippilot/trip/A": SAFE}
         failures = gate.evaluate(report(classes), by_segment(*classes), expected={"trip", "newmod"})[2]
-        self.assertIn("newmod: 합산 리포트에 없다(app 이 implementation(project) 로 잇는지 본다)", failures)
+        self.assertTrue(any(f.startswith("newmod: 합산 리포트에 없다") for f in failures), failures)
+
+    def test_표시는_버림이라_하한_바로_아래가_하한값으로_보이지_않는다(self):
+        self.assertEqual(gate.fmt(93.96, 94.0), "93.9% ❌")
+        self.assertEqual(gate.down(93.996, 2), "93.99")
+
+    def test_settings_는_여러_인자_include_와_주석을_다룬다(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            (root / "settings.gradle.kts").write_text('include(":app")   // 앱\ninclude( ":modules:a", ":modules:b" )\n// include(":modules:old")\n')
+            self.assertEqual(gate.settings_modules(root), {"app", "modules/a", "modules/b"})
+
+    def test_main_은_settings_모듈이_전부_합산되고_하한_위면_통과한다(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            (root / "settings.gradle.kts").write_text('include(":modules:trip")\ninclude(":common:test-support")\n')
+            f = root / "modules/trip/build/classes/kotlin/main/com/trippilot/trip/A.class"
+            f.parent.mkdir(parents=True)
+            f.write_bytes(b"")
+            xml = root / "r.xml"
+            ET.ElementTree(report({"com/trippilot/trip/A": SAFE})).write(xml)
+            self.assertEqual(self.run_main([str(xml)], backend=root)[0], 0)   # test-support 는 합산 안 돼도 된다
 
     def test_class_owners_는_settings_모듈의_빌드_산출물로만_소유를_정한다(self):
         with tempfile.TemporaryDirectory() as d:
@@ -163,15 +192,6 @@ class CoverageGateTest(unittest.TestCase):
         classes = {"com/trippilot/trip/domain/A": (10, 0, 10, 0), "com/trippilot/trip/adapter/in/web/B": (0, 10, 0, 10)}
         _, modules, _ = gate.evaluate(report(classes), by_segment(*classes))
         self.assertEqual(modules["trip"]["LINE"], 50.0)
-
-    def test_실제_빌드_산출물에서_클래스_소유를_찾는다(self):
-        # 특정 클래스·모듈 이름을 박지 않는다 — 무관한 이름 변경 리팩터가 이 테스트를 깨면 안 된다.
-        # 빌드 전(클래스 파일 없음)이면 건너뛴다 — CI 는 이 검사를 build 앞에서 돌린다.
-        owners = gate.class_owners()
-        if not owners:
-            self.skipTest("컴파일된 클래스가 없다(빌드 전)")
-        modules = {m for v in owners.values() for m in v}
-        self.assertTrue(all((gate.BACKEND / m / "build.gradle.kts").exists() for m in modules), modules)
 
     # ── 표 ────────────────────────────────────────────────────────────────
 

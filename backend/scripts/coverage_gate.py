@@ -27,6 +27,7 @@ Gradle 내장 `JacocoCoverageVerification` 을 쓰지 않은 이유: 모듈마�
 검사: `python3 -m unittest scripts/test_coverage_gate.py`
 """
 
+import math
 import os
 import pathlib
 import re
@@ -70,16 +71,24 @@ def pct(covered, missed):
     return 100.0 * covered / total if total else None
 
 
+def down(value, digits):
+    """표시는 반올림이 아니라 **버림** — 판정은 원값이라, 반올림하면 93.96% 가 "94.0% ❌ (하한 94%)" 로 보인다."""
+    scale = 10 ** digits
+    return f"{math.floor(value * scale) / scale:.{digits}f}"
+
+
 def fmt(value, floor):
     if value is None:
         return "n/a"
-    return f"{value:.1f}%" + (" ❌" if value < floor else "")
+    return f"{down(value, 1)}%" + (" ❌" if value < floor else "")
 
 
 def settings_modules(backend=BACKEND):
     """settings.gradle.kts 가 include 한 모듈 디렉터리(`modules/trip` 등) — 빌드가 실제로 아는 모듈."""
     text = (backend / "settings.gradle.kts").read_text(encoding="utf-8")
-    return {m.lstrip(":").replace(":", "/") for m in re.findall(r'^\s*include\("([^"]+)"\)', text, re.M)}
+    # include(":a") 와 include(":a", ":b") 모두. 주석 처리된 줄은 뺀다.
+    calls = re.findall(r'^\s*include\s*\(([^)]*)\)', text, re.M)
+    return {m.lstrip(":").replace(":", "/") for call in calls for m in re.findall(r'"([^"]+)"', call)}
 
 
 def class_owners(backend=BACKEND, modules=None):
@@ -118,7 +127,7 @@ def evaluate(root, owners, expected=None):
     # 측정 대상이 없는 것을 0% 로 바꾸면 "커버리지 하락"으로 보고된다 — 원인(합산 대상·계측 범위)이 따로 있다.
     # 실패 사유의 수치는 소수 둘째 자리까지 — 판정은 원값이라 .1f 면 "94.0% < 하한 94%" 처럼 자기모순으로 보인다.
     failures = [f"전체 {k} 측정 대상이 없다(합산 대상·계측 범위 설정을 본다)" for k in KINDS if totals[k] is None]
-    failures += [f"전체 {k} {totals[k]:.2f}% < 하한 {TOTAL_FLOORS[k]:g}%" for k in KINDS
+    failures += [f"전체 {k} {down(totals[k], 2)}% < 하한 {TOTAL_FLOORS[k]:g}%" for k in KINDS
                  if totals[k] is not None and totals[k] < TOTAL_FLOORS[k]]
     unowned = sorted(m[1:] for m in modules if m.startswith("?"))
     if unowned:
@@ -127,9 +136,10 @@ def evaluate(root, owners, expected=None):
                         f"(settings 모듈의 build/classes 에 없거나 두 모듈에 있다): {shown}")
     if expected is not None:
         missing = sorted(set(expected) - set(modules))
-        failures += [f"{m}: 합산 리포트에 없다(app 이 implementation(project) 로 잇는지 본다)" for m in missing]
+        failures += [f"{m}: 합산 리포트에 없다(app 이 implementation(project) 로 잇는지, 실행 코드가 있는지 본다 — "
+                     "JaCoCo 는 실행 코드 없는 클래스(인터페이스만 등)를 리포트에 넣지 않는다)" for m in missing]
     failures += [
-        f"{m} {k} {p[k]:.2f}% < 모듈 바닥 {MODULE_FLOORS[k]:g}%"
+        f"{m} {k} {down(p[k], 2)}% < 모듈 바닥 {MODULE_FLOORS[k]:g}%"
         for m, p in sorted(modules.items()) for k in KINDS
         if not m.startswith("?") and p[k] is not None and p[k] < MODULE_FLOORS[k]
     ]
@@ -199,8 +209,9 @@ def main(argv=None):
     except ET.ParseError as e:
         return undecidable(f"리포트를 읽지 못했다: {path} — {e}", advisory)
 
-    expected = settings_modules() - NOT_AGGREGATED
-    totals, modules, failures = evaluate(root, class_owners(modules=expected), expected)
+    # BACKEND 를 호출 시점에 넘긴다 — 기본 인자는 정의 시점에 묶여 테스트가 임시 트리로 바꿔도 실제 리포를 읽었다.
+    expected = settings_modules(BACKEND) - NOT_AGGREGATED
+    totals, modules, failures = evaluate(root, class_owners(BACKEND, modules=expected), expected)
     report = render(totals, modules, failures)
     print(report)
     write_summary(report)
