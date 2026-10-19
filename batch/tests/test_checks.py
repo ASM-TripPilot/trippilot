@@ -63,6 +63,22 @@ class CheckPoisTest(unittest.TestCase):
         self.assertTrue(any("이름 없는 제안 1건" in f for f in checks.check_pois(doc, SIDOS, 10)))
 
 
+class CheckNotShrunkTest(unittest.TestCase):
+    """운영 ai-poi-collect 의 축소 가드와 같다 — 의도한 소급 제거 몫은 빼고 비교한다."""
+
+    def doc(self, n, non_travel=0, closed=0):
+        return {"proposals": [{}] * n, "stats": {"non_travel_dropped": non_travel, "closed_dropped": closed}}
+
+    def test_늘거나_같으면_통과(self):
+        self.assertEqual(checks.check_not_shrunk(100, self.doc(100)), [])
+
+    def test_의도한_제거_몫을_빼면_같으면_통과(self):
+        self.assertEqual(checks.check_not_shrunk(100, self.doc(90, non_travel=6, closed=4)), [])
+
+    def test_그보다_줄면_막는다(self):
+        self.assertTrue(checks.check_not_shrunk(100, self.doc(90, non_travel=6)))
+
+
 class CheckEventsTest(unittest.TestCase):
     DAY = date(2026, 10, 10)
 

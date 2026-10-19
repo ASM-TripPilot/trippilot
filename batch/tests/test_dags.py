@@ -91,8 +91,9 @@ class DryRunTest(unittest.TestCase):
     def test_POI_드라이런은_검증을_거쳐_게시한다(self):
         mod = self.load("poi_collect")
         mod.poi_collect().test()
-        published = self.out / "published/collected_pois.json"
+        published = self.out / "dry-run/collected_pois.json"
         self.assertTrue(published.exists())
+        self.assertFalse((self.out / "published/collected_pois.json").exists())   # 드라이런은 실제 게시본을 안 만든다
         self.assertGreater(len(json.loads(published.read_text(encoding="utf-8"))["proposals"]), 500)
 
     def test_행사_드라이런은_그날_기준으로_검증한다(self):
@@ -100,16 +101,23 @@ class DryRunTest(unittest.TestCase):
         # 사본에서 유효 행사가 가장 많은 날(시작일 뒤)을 고른다.
         mod = self.load("event_collect")
         mod.event_collect().test(logical_date=datetime.combine(busiest_day(), time(4, 40), tzinfo=ZoneInfo("Asia/Seoul")))
-        self.assertTrue((self.out / "published/collected_events.json").exists())
+        self.assertTrue((self.out / "dry-run/collected_events.json").exists())
 
-    def test_드라이런은_옛_게시본이_있어도_리포_사본을_쓴다(self):
-        # 옛 게시본에서 시작하면 리포 사본이 갱신돼도 로컬 게시본이 첫 사본에 머문다(cce8c508 과 같은 모양).
-        stale = self.out / "published/collected_events.json"
-        stale.parent.mkdir(parents=True)
-        stale.write_text(json.dumps({"events": [], "coverage": {}, "marker": "old"}), encoding="utf-8")
+    def test_드라이런은_실제_게시본을_건드리지_않고_매번_리포_사본을_쓴다(self):
+        # 같은 곳에 게시하면 스케줄 드라이런이 실제 수집 게시본을 리포 사본으로 되돌린다(커서는 그대로라 유실).
+        real = self.out / "published/collected_events.json"
+        real.parent.mkdir(parents=True)
+        real.write_text(json.dumps({"events": [], "coverage": {}, "marker": "real"}), encoding="utf-8")
         mod = self.load("event_collect")
         mod.event_collect().test(logical_date=datetime.combine(busiest_day(), time(4, 40), tzinfo=ZoneInfo("Asia/Seoul")))
-        self.assertEqual(len(json.loads(stale.read_text(encoding="utf-8"))["events"]), len(fixture_events()))
+        self.assertEqual(json.loads(real.read_text(encoding="utf-8"))["marker"], "real")
+        dry = json.loads((self.out / "dry-run/collected_events.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(dry["events"]), len(fixture_events()))
+
+    def test_신선도는_실제_게시본이_없으면_건너뛴다(self):
+        mod = self.load("event_collect")
+        run = mod.event_freshness().test()
+        self.assertEqual({ti.task_id: ti.state for ti in run.get_task_instances()}["check"], "skipped")
 
     def test_행사가_낡았으면_게시하지_않는다(self):
         # 리포 사본의 마지막 종료일 다음 날로 돌리면 그날 유효한 행사가 0건 — 사본이 그날에 비해 낡은 것이다
@@ -121,7 +129,7 @@ class DryRunTest(unittest.TestCase):
         states = {ti.task_id: ti.state for ti in run.get_task_instances()}
         self.assertEqual(states["collect"], "success")    # 수집은 됐다
         self.assertEqual(states["validate"], "failed")    # 검증이 막았다
-        self.assertFalse((self.out / "published/collected_events.json").exists())
+        self.assertFalse((self.out / "dry-run/collected_events.json").exists())
 
 
 if __name__ == "__main__":

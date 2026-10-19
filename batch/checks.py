@@ -15,7 +15,8 @@ import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[1]
+from pipeline import REPO  # noqa: E402  (경로 정본은 pipeline 하나 — Airflow 에 의존하지 않는다)
+
 REGION_SEED = REPO / "backend/app/src/main/resources/db/migration/R__seed_region_catalog.sql"
 
 
@@ -52,6 +53,17 @@ def check_pois(doc: dict, sidos: set[str], min_count: int) -> list[str]:
     if nameless:
         failures.append(f"이름 없는 제안 {nameless}건")
     return failures
+
+
+def check_not_shrunk(before: int, doc: dict) -> list[str]:
+    """병합 결과가 기준 문서보다 작아졌는가 — 운영 ai-poi-collect 의 축소 가드와 같다(의도한 소급 제거 몫은 뺀다).
+    건수 하한만으로는 6만 건이 수천 건 줄어도 통과한다."""
+    stats = doc.get("stats") or {}
+    after = len(doc.get("proposals") or [])
+    dropped = stats.get("non_travel_dropped", 0) + stats.get("closed_dropped", 0)
+    if after + dropped < before:
+        return [f"병합본({after:,}건 + 의도 제거 {dropped:,}건)이 기준({before:,}건)보다 작다 — 축소 덮어쓰기"]
+    return []
 
 
 def valid_on(event: dict, day: date) -> bool:

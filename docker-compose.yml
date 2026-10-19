@@ -415,6 +415,9 @@ services:
     profiles: ["batch"]
     image: apache/airflow:3.3.2-python3.12
     container_name: trippilot-airflow
+    # 이미지는 uid 50000 으로 돈다 — Linux 에서는 bind mount 한 리포(batch/.out)에 쓰려면 호스트 uid 로 맞춘다
+    # (`AIRFLOW_UID=$(id -u)`, Airflow 공식 compose 와 같은 방식). macOS(OrbStack·Docker Desktop)는 그대로 된다.
+    user: "${AIRFLOW_UID:-50000}:0"
     command: standalone
     restart: "no"
     environment:

@@ -24,14 +24,14 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from airflow.sdk import Param, dag, get_current_context, task
-from airflow.sdk.exceptions import AirflowFailException
+from airflow.sdk.exceptions import AirflowFailException, AirflowSkipException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import checks  # noqa: E402
 import pipeline  # noqa: E402
 
 FIXTURE = pipeline.REPO / "ai/data/collected_events.json"
-PUBLISHED = pipeline.OUT / "published/collected_events.json"
+PUBLISHED = pipeline.published("collected_events.json", dry_run=False)   # 실제 수집 게시본 — 드라이런은 건드리지 않는다
 SEOUL = ZoneInfo("Asia/Seoul")
 log = logging.getLogger(__name__)
 
@@ -58,11 +58,13 @@ def event_collect():
             return str(candidate)
         shutil.copyfile(PUBLISHED if PUBLISHED.exists() else FIXTURE, candidate)
         ai, env = pipeline.REPO / "ai", {**os.environ, "EVENTS_STORE": str(candidate)}
-        subprocess.run(["uv", "run", "python", "scripts/collect/collect_events.py"], cwd=ai, check=True, env=env)
-        for optional in (["scripts/collect/collect_curated_popups.py", "--store", str(candidate)],
-                         ["scripts/collect/collect_tourapi_festivals.py", "--store", str(candidate)]):
-            if subprocess.run(["uv", "run", "python", *optional], cwd=ai, env=env).returncode != 0:
-                log.warning("%s 실패 — 앞 수집분은 살린다(운영 워크플로의 continue-on-error 와 같다)", optional[0])
+        # 운영 워크플로와 같게: 검색·LLM 추출과 팝업 큐레이션은 한 스텝(실패하면 실패), TourAPI 축제만 실패해도 앞 수집분을 살린다.
+        for script in (["scripts/collect/collect_events.py"],
+                       ["scripts/collect/collect_curated_popups.py", "--store", str(candidate)]):
+            subprocess.run(["uv", "run", "python", *script], cwd=ai, check=True, env=env)
+        festivals = ["scripts/collect/collect_tourapi_festivals.py", "--store", str(candidate)]
+        if subprocess.run(["uv", "run", "python", *festivals], cwd=ai, env=env).returncode != 0:
+            log.warning("TourAPI 축제 수집 실패 — 앞 수집분은 살린다(운영 워크플로의 continue-on-error 와 같다)")
         return str(candidate)
 
     @task
@@ -77,7 +79,8 @@ def event_collect():
 
     @task
     def publish(candidate: str) -> str:
-        return str(pipeline.publish(Path(candidate), PUBLISHED))
+        dry_run = get_current_context()["params"]["dry_run"]
+        return str(pipeline.publish(Path(candidate), pipeline.published("collected_events.json", dry_run)))
 
     publish(validate(collect()))
 
@@ -93,8 +96,9 @@ def event_collect():
 def event_freshness():
     @task
     def check() -> None:
+        # 실제 수집 게시본만 본다 — 드라이런 사본의 나이는 "수집이 멈췄는가"와 무관하다(재면 매시 오탐이 쌓인다).
         if not PUBLISHED.exists():
-            raise AirflowFailException(f"게시된 행사 저장소가 없다: {PUBLISHED}")
+            raise AirflowSkipException(f"실제 수집 게시본이 아직 없다({PUBLISHED}) — 실제 모드로 한 번 돌린 뒤부터 감시한다")
         doc = json.loads(PUBLISHED.read_text(encoding="utf-8"))
         failures = checks.check_freshness(
             checks.last_collected(doc), datetime.now(SEOUL),

@@ -12,6 +12,12 @@ REPO = BATCH.parent
 OUT = Path(os.environ.get("BATCH_OUTPUT", BATCH / ".out"))
 
 
+def published(name: str, dry_run: bool) -> Path:
+    """게시 위치 — 드라이런은 따로 둔다. 같은 곳에 두면 스케줄 드라이런이 실제 수집 게시본을 리포 사본으로 되돌리고
+    (커서는 그대로라 그 사이 실제 수집분이 영영 다시 안 들어온다), 신선도 감시가 리포 사본의 나이를 재게 된다."""
+    return OUT / ("dry-run" if dry_run else "published") / name
+
+
 def run_dir(dag_id: str, run_id: str) -> Path:
     path = OUT / "runs" / dag_id / run_id.replace(":", "_")
     path.mkdir(parents=True, exist_ok=True)

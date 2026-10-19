@@ -29,7 +29,7 @@ import checks  # noqa: E402
 import pipeline  # noqa: E402
 
 FIXTURE = pipeline.REPO / "ai/data/collected_pois.json"
-PUBLISHED = pipeline.OUT / "published/collected_pois.json"
+PUBLISHED = pipeline.published("collected_pois.json", dry_run=False)   # 실제 수집 게시본 — 드라이런은 건드리지 않는다
 STATE = pipeline.OUT / "collect_state.json"
 
 
@@ -61,14 +61,20 @@ def poi_collect():
         subprocess.run(["uv", "run", "python", "scripts/collect/collect_pois.py"], cwd=ai, check=True,
                        env={**os.environ, "COLLECT_OUTPUT": str(delta), "COLLECT_STATE": str(state)})
         base = PUBLISHED if PUBLISHED.exists() else FIXTURE
-        subprocess.run(["uv", "run", "python", "scripts/collect/merge_pois_docs.py", "-o", str(candidate),
+        # `--allow-mixed`: 공유본은 출처가 섞인 문서다(TOURAPI·LOCALDATA·…) — 없으면 병합이 거부한다(운영과 같은 플래그).
+        subprocess.run(["uv", "run", "python", "scripts/collect/merge_pois_docs.py", "--allow-mixed", "-o", str(candidate),
                         str(base), str(delta)], cwd=ai, check=True)
+        before = len(json.loads(base.read_text(encoding="utf-8"))["proposals"])
+        (work / "base_count").write_text(str(before), encoding="utf-8")
         return str(candidate)
 
     @task
     def validate(candidate: str) -> str:
         doc = json.loads(Path(candidate).read_text(encoding="utf-8"))
         failures = checks.check_pois(doc, checks.sido_names(), get_current_context()["params"]["min_count"])
+        base_count = Path(candidate).with_name("base_count")
+        if base_count.exists():   # 실제 모드 — 병합본이 기준보다 줄었는가
+            failures += checks.check_not_shrunk(int(base_count.read_text(encoding="utf-8")), doc)
         if failures:
             # 재시도해도 같은 문서는 같은 결과다 — 실패로 끝내고 게시를 막는다.
             raise AirflowFailException("게시 중단 — " + " / ".join(failures))
@@ -76,7 +82,8 @@ def poi_collect():
 
     @task
     def publish(candidate: str) -> str:
-        target = pipeline.publish(Path(candidate), PUBLISHED)
+        dry_run = get_current_context()["params"]["dry_run"]
+        target = pipeline.publish(Path(candidate), pipeline.published("collected_pois.json", dry_run))
         state = Path(candidate).with_name("collect_state.json")
         if state.exists():
             pipeline.publish(state, STATE)   # 게시가 끝난 뒤에만 커서를 옮긴다
