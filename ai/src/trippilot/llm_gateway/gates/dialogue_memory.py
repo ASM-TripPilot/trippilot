@@ -15,8 +15,10 @@
   ④ 링크·연락처 꼴(`has_contact_like`) — 최근 턴에 실린 제3자 문자열이 요약으로 굳는 것을 막는다
   ⑤ 중복(첫 등장 유지)
   ⑥ 개수 상한 `_MAX_LINES` — 초과분도 드롭으로 계측
-**빈 결과 = 실패** (TRIP-260 #5): 남은 줄이 없으면 오케스트레이터가 결정론 압축(compress_fallback)으로
-전진한다(INV-4). 성공·0건으로 두면 "기억 없음"이 조용히 저장된다.
+**전부 드롭 = 실패, 비운 배열 = 성공·0건** (TRIP-260 #5 의 추출 계열 쪽, 2026-10-19 개정): 게이트가 줄을 다 버렸으면
+오케스트레이터가 결정론 압축(compress_fallback)으로 전진한다(INV-4). LLM 이 비운 배열은 "새로 기억할 것 없음"이라는
+프롬프트 규칙의 답이라 실패가 아니다 — 처음엔 실패로 봐 압축이 대화 원문 조각을 저장했다(배포 스모크 3/3). 0줄 성공은
+오케스트레이터가 `dialogue_memory_empty` 건수 로그로 센다.
 
 "error 있으면 value 비움" 불변식은 base.GateOutcome 이 강제한다.
 """
@@ -91,8 +93,10 @@ class DialogueMemoryGate:
             if dropped_count
             else None
         )
+        # LLM 이 비운 배열은 "새로 기억할 것 없음"이라는 정상 결과다(프롬프트 규칙의 답) — 행사 추출처럼 성공·0건.
+        # 실패로 보면 결정론 압축이 대화 원문 조각을 저장한다(2026-10-19 배포 스모크 3/3). 다 버려서 빈 것은 실패다.
         return GateOutcome(
             value=tuple(survivors),
             drop_event=drop_event,
-            error=empty_result_error(survivors, drop_event),
+            error=empty_result_error(survivors, drop_event) if items else None,
         )
