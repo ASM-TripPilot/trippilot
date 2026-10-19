@@ -87,7 +87,9 @@ def _coord(north_m: float) -> dict:
     return {"lat": c.lat, "lng": c.lng}
 
 
-def _meta(deadline_ms: int | None = 3000) -> dict:
+def _meta(deadline_ms: int | None = None) -> dict:
+    """기본은 시한 없음 — HTTP 경로는 실제 단조시계로 예산을 재므로, 시한을 실으면 느린 러너에서 둘째 슬롯 조회가
+    빠져 깨진다(안티패턴 #1376). 시한 동작은 가짜 시계를 주입하는 `_find` 테스트(⑥)만 본다."""
     meta = {"request_id": "opp-1", "requested_at": "2026-10-20T10:00:00+09:00"}
     if deadline_ms is not None:
         meta["deadline_ms"] = deadline_ms
