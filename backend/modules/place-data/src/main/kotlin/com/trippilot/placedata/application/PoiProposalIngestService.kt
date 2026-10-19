@@ -6,7 +6,9 @@ import com.trippilot.placedata.domain.PoiCategory
 import com.trippilot.placedata.domain.PoiCollectionGate
 import com.trippilot.placedata.domain.PoiRepository
 import com.trippilot.placedata.domain.PoiSource
+import com.trippilot.placedata.domain.Region
 import com.trippilot.placedata.domain.RegionCatalogPort
+import com.trippilot.placedata.domain.RegionLevel
 import com.trippilot.placedata.domain.RegionResolver
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -76,6 +78,12 @@ class PoiProposalIngestService(
         val now = clock.instant()
         // 문서 한 건당 한 번만 읽는다 — 제안마다 조회하면 1,100여 번 같은 300행을 다시 읽는다.
         val regions = catalog.find(null, null)
+        // 시도 별칭은 주소 첫 토큰마다 한 번만 묻는다 — 첫 토큰 종류는 수십 개라 제안마다 조회할 이유가 없다.
+        val aliasCache = HashMap<String, Region?>()
+        val sidoByAlias = { token: String ->
+            if (token in aliasCache) aliasCache[token]
+            else catalog.findExact(token).singleOrNull { it.level == RegionLevel.SIDO }.also { aliasCache[token] = it }
+        }
         val dropped = mutableMapOf<String, Int>()
         fun drop(reason: String) = dropped.merge(reason, 1, Int::plus)
 
@@ -101,7 +109,7 @@ class PoiProposalIngestService(
                 lng = proposal.lng,
                 category = proposal.category,
                 region = proposal.region,
-                regionCode = RegionResolver.resolve(proposal.address, regions),
+                regionCode = RegionResolver.resolve(proposal.address, regions, sidoByAlias),
                 address = proposal.address,
                 openingHours = proposal.openingHours,
                 source = source,
@@ -132,7 +140,8 @@ class PoiProposalIngestService(
 
         repo.saveAll(toSave)
 
-        // 지금 수집원(TourAPI)은 전 건이 해결된다 — 0이 아니면 **입력 형태가 바뀐 것**이다.
+        // 0이 아니면 판정 규칙(정식 이름 → 별칭 → 유일 접두)으로도 못 읽는 주소가 들어온 것이다 — 원본 표기가
+        // 바뀌었거나 새 변형이 생겼다. 원본 표기 오류는 수집 때마다 들어올 수 있다(#1427 의 잘린 시도명, TRIP-1471).
         val unresolved = toSave.count { it.regionCode == null }
         if (unresolved > 0) {
             log.warn("지역 코드를 정하지 못한 POI {}건 — 주소 형태가 바뀌었는지 확인 필요(커버리지 집계에서 빠진다)", unresolved)
