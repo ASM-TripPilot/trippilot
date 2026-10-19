@@ -2,7 +2,7 @@
 
 import sys
 import unittest
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -63,22 +63,6 @@ class CheckPoisTest(unittest.TestCase):
         self.assertTrue(any("이름 없는 제안 1건" in f for f in checks.check_pois(doc, SIDOS, 10)))
 
 
-class CheckNotShrunkTest(unittest.TestCase):
-    """운영 ai-poi-collect 의 축소 가드와 같다 — 의도한 소급 제거 몫은 빼고 비교한다."""
-
-    def doc(self, n, non_travel=0, closed=0):
-        return {"proposals": [{}] * n, "stats": {"non_travel_dropped": non_travel, "closed_dropped": closed}}
-
-    def test_늘거나_같으면_통과(self):
-        self.assertEqual(checks.check_not_shrunk(100, self.doc(100)), [])
-
-    def test_의도한_제거_몫을_빼면_같으면_통과(self):
-        self.assertEqual(checks.check_not_shrunk(100, self.doc(90, non_travel=6, closed=4)), [])
-
-    def test_그보다_줄면_막는다(self):
-        self.assertTrue(checks.check_not_shrunk(100, self.doc(90, non_travel=6)))
-
-
 class CheckEventsTest(unittest.TestCase):
     DAY = date(2026, 10, 10)
 
@@ -100,29 +84,6 @@ class CheckEventsTest(unittest.TestCase):
 
     def test_문서_모양이_바뀌면_막는다(self):
         self.assertEqual(checks.check_events({}, self.DAY, 0), ["events 목록이 없다 — 문서 모양이 바뀌었다"])
-
-
-class LastCollectedTest(unittest.TestCase):
-    def test_지역별_마지막_수집의_최댓값을_시각으로_비교한다(self):
-        doc = {"coverage": {"서울": "2026-10-19T06:46:38+09:00", "부산": "2026-10-18T23:00:00+00:00"}}
-        # 문자열로는 "2026-10-19…" 가 크지만 시각으로는 부산(KST 10-19 08:00)이 늦다.
-        self.assertEqual(checks.last_collected(doc), "2026-10-18T23:00:00+00:00")
-
-    def test_coverage_가_없으면_None(self):
-        self.assertIsNone(checks.last_collected({}))
-
-
-class CheckFreshnessTest(unittest.TestCase):
-    NOW = datetime(2026, 10, 20, 9, 0, tzinfo=timezone(timedelta(hours=9)))
-
-    def test_한도_안이면_통과(self):
-        self.assertEqual(checks.check_freshness("2026-10-20T04:40:00+09:00", self.NOW, timedelta(hours=36)), [])
-
-    def test_한도를_넘으면_알린다(self):
-        self.assertTrue(checks.check_freshness("2026-10-18T04:40:00+09:00", self.NOW, timedelta(hours=36)))
-
-    def test_수집_시각이_없으면_알린다(self):
-        self.assertTrue(checks.check_freshness(None, self.NOW, timedelta(hours=36)))
 
 
 if __name__ == "__main__":

@@ -1,10 +1,10 @@
-"""DAG 구조와 드라이런 — Airflow 가 설치된 환경에서만 돈다(없으면 건너뛴다).
+"""DAG 구조와 실행 — Airflow 가 설치된 환경에서만 돈다(없으면 건너뛴다).
 
     pip install "apache-airflow==3.3.2" --constraint <constraints-3.3.2/constraints-3.12.txt>
-    AIRFLOW_HOME=$(mktemp -d) airflow db migrate          # 드라이런 테스트가 메타 DB 를 쓴다
+    AIRFLOW_HOME=$(mktemp -d) airflow db migrate          # 실행 테스트가 메타 DB 를 쓴다
     python3 -m unittest discover -s batch/tests
 
-드라이런은 실제 API 를 부르지 않는다(리포의 수집본을 수집 결과로 쓴다) — CI 실 호출 0건 규칙 안에서 돈다.
+DAG 는 실제 API 를 부르지 않는다(POI 는 합성 문서, 행사는 리포 사본) — CI 실 호출 0건 규칙 안에서 돈다.
 """
 
 import json
@@ -59,14 +59,6 @@ class DagStructureTest(unittest.TestCase):
             self.assertEqual(dag.get_task("validate").upstream_task_ids, {"collect"}, dag_id)
             self.assertEqual(dag.get_task("publish").upstream_task_ids, {"validate"}, dag_id)
 
-    def test_기본은_드라이런이다(self):
-        for dag_id in ("poi_collect", "event_collect"):
-            self.assertIs(self.bag.get_dag(dag_id).params["dry_run"], True, dag_id)
-
-    def test_신선도_DAG_가_있다(self):
-        self.assertIn("event_freshness", self.bag.dag_ids)
-
-
 @unittest.skipIf(airflow is None, "Airflow 가 설치돼 있지 않다")
 class DryRunTest(unittest.TestCase):
     """dag.test() 로 실제 태스크를 돌린다 — 수집(사본) → 검증 → 게시."""
@@ -88,36 +80,34 @@ class DryRunTest(unittest.TestCase):
         spec.loader.exec_module(mod)
         return mod
 
-    def test_POI_드라이런은_검증을_거쳐_게시한다(self):
-        mod = self.load("poi_collect")
-        mod.poi_collect().test()
-        published = self.out / "dry-run/collected_pois.json"
-        self.assertTrue(published.exists())
-        self.assertFalse((self.out / "published/collected_pois.json").exists())   # 드라이런은 실제 게시본을 안 만든다
-        self.assertGreater(len(json.loads(published.read_text(encoding="utf-8"))["proposals"]), 500)
+    def poi_source(self, *addresses, ok=600):
+        """합성 POI 공유본 — 리포 데이터 상태와 무관하게 게이트를 검사한다."""
+        rows = [{"poi": {"name": f"p{i}"}, "provenance": {"address": "서울특별시 양천구 신정동 1"}} for i in range(ok)]
+        rows += [{"poi": {"name": f"x{i}"}, "provenance": {"address": a}} for i, a in enumerate(addresses)]
+        path = self.out / "source.json"
+        path.write_text(json.dumps({"proposals": rows}, ensure_ascii=False), encoding="utf-8")
+        return path
 
-    def test_행사_드라이런은_그날_기준으로_검증한다(self):
+    def test_POI_검증을_거쳐_게시한다(self):
+        mod = self.load("poi_collect")
+        mod.SOURCE = self.poi_source()
+        mod.poi_collect().test()
+        self.assertEqual(len(json.loads((self.out / "published/collected_pois.json").read_text(encoding="utf-8"))["proposals"]), 600)
+
+    def test_POI_백엔드가_못_읽는_주소가_섞이면_게시하지_않는다_1427(self):
+        mod = self.load("poi_collect")
+        mod.SOURCE = self.poi_source("부산광역 사하구 하단동 1195", "제주특별자치 서귀포시 색달동 3039-41")
+        run = mod.poi_collect().test()
+        states = {ti.task_id: ti.state for ti in run.get_task_instances()}
+        self.assertEqual((states["collect"], states["validate"]), ("success", "failed"))
+        self.assertFalse((self.out / "published/collected_pois.json").exists())
+
+    def test_행사는_그날_기준으로_검증한다(self):
         # 날짜를 박지 않는다 — 수집기가 지난 행사를 지워 리포 사본이 바뀌면 고정 날짜는 언젠가 하한 아래로 떨어진다.
         # 사본에서 유효 행사가 가장 많은 날(시작일 뒤)을 고른다.
         mod = self.load("event_collect")
         mod.event_collect().test(logical_date=datetime.combine(busiest_day(), time(4, 40), tzinfo=ZoneInfo("Asia/Seoul")))
-        self.assertTrue((self.out / "dry-run/collected_events.json").exists())
-
-    def test_드라이런은_실제_게시본을_건드리지_않고_매번_리포_사본을_쓴다(self):
-        # 같은 곳에 게시하면 스케줄 드라이런이 실제 수집 게시본을 리포 사본으로 되돌린다(커서는 그대로라 유실).
-        real = self.out / "published/collected_events.json"
-        real.parent.mkdir(parents=True)
-        real.write_text(json.dumps({"events": [], "coverage": {}, "marker": "real"}), encoding="utf-8")
-        mod = self.load("event_collect")
-        mod.event_collect().test(logical_date=datetime.combine(busiest_day(), time(4, 40), tzinfo=ZoneInfo("Asia/Seoul")))
-        self.assertEqual(json.loads(real.read_text(encoding="utf-8"))["marker"], "real")
-        dry = json.loads((self.out / "dry-run/collected_events.json").read_text(encoding="utf-8"))
-        self.assertEqual(len(dry["events"]), len(fixture_events()))
-
-    def test_신선도는_실제_게시본이_없으면_건너뛴다(self):
-        mod = self.load("event_collect")
-        run = mod.event_freshness().test()
-        self.assertEqual({ti.task_id: ti.state for ti in run.get_task_instances()}["check"], "skipped")
+        self.assertTrue((self.out / "published/collected_events.json").exists())
 
     def test_행사가_낡았으면_게시하지_않는다(self):
         # 리포 사본의 마지막 종료일 다음 날로 돌리면 그날 유효한 행사가 0건 — 사본이 그날에 비해 낡은 것이다
@@ -129,7 +119,7 @@ class DryRunTest(unittest.TestCase):
         states = {ti.task_id: ti.state for ti in run.get_task_instances()}
         self.assertEqual(states["collect"], "success")    # 수집은 됐다
         self.assertEqual(states["validate"], "failed")    # 검증이 막았다
-        self.assertFalse((self.out / "dry-run/collected_events.json").exists())
+        self.assertFalse((self.out / "published/collected_events.json").exists())
 
 
 if __name__ == "__main__":

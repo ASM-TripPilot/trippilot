@@ -408,9 +408,9 @@ services:
       start_period: 10s
 
   # ── 수집 파이프라인 (Airflow, 로컬 전용) ──────────
-  # 수집 파이프라인(로컬 전용, TRIP-1468) — 수집 → 검증 → 게시 → 신선도. 운영 배치는 GitHub Actions(ai-*-collect.yml).
+  # 수집 파이프라인(로컬 전용, TRIP-1468) — 수집 → 검증 → 게시. 운영 배치는 GitHub Actions(ai-*-collect.yml).
   # `docker compose --profile batch up -d airflow` → http://localhost:8090 (계정·비밀번호는 컨테이너 로그에 찍힌다).
-  # DAG 는 기본이 드라이런(리포 수집본 사용, 실 API 0) — 설명은 batch/README.md.
+  # DAG 는 리포 수집본을 검증해 게시만 한다(실 API 0) — 설명은 batch/README.md.
   airflow:
     profiles: ["batch"]
     image: apache/airflow:3.3.2-python3.12

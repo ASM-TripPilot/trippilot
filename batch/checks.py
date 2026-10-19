@@ -6,13 +6,13 @@ Airflow 에 의존하지 않는다(DAG 는 이 함수들을 부르기만 한다)
 - 2026-10-20 #1427: 수집 공유본 병합에 시도명이 잘린 주소 2건(`부산광역 …`, `제주특별자치 …`)이 섞여 백엔드
   적재 테스트(지역 미판정 0건)가 develop 에서 깨졌다 → check_pois 의 지역 판정.
 - 2026-10-10 cce8c508: 배포가 8월에 커밋된 행사 사본을 구워, 그날 유효한 행사가 346건이 아니라 10건이었다
-  → check_events 의 "그날 유효 건수"와 check_freshness.
+  → check_events 의 "그날 유효 건수".
 """
 
 from __future__ import annotations
 
 import re
-from datetime import date, datetime, timedelta
+from datetime import date
 from pathlib import Path
 
 from pipeline import REPO  # noqa: E402  (경로 정본은 pipeline 하나 — Airflow 에 의존하지 않는다)
@@ -55,17 +55,6 @@ def check_pois(doc: dict, sidos: set[str], min_count: int) -> list[str]:
     return failures
 
 
-def check_not_shrunk(before: int, doc: dict) -> list[str]:
-    """병합 결과가 기준 문서보다 작아졌는가 — 운영 ai-poi-collect 의 축소 가드와 같다(의도한 소급 제거 몫은 뺀다).
-    건수 하한만으로는 6만 건이 수천 건 줄어도 통과한다."""
-    stats = doc.get("stats") or {}
-    after = len(doc.get("proposals") or [])
-    dropped = stats.get("non_travel_dropped", 0) + stats.get("closed_dropped", 0)
-    if after + dropped < before:
-        return [f"병합본({after:,}건 + 의도 제거 {dropped:,}건)이 기준({before:,}건)보다 작다 — 축소 덮어쓰기"]
-    return []
-
-
 def valid_on(event: dict, day: date) -> bool:
     try:
         return date.fromisoformat(event["start"]) <= day <= date.fromisoformat(event["end"])
@@ -81,22 +70,4 @@ def check_events(doc: dict, day: date, min_valid: int) -> list[str]:
     valid = sum(1 for e in events if valid_on(e, day))
     if valid < min_valid:
         return [f"{day} 에 유효한 행사 {valid}건 < 하한 {min_valid}건 (전체 {len(events)}건) — 낡은 사본일 수 있다"]
-    return []
-
-
-def last_collected(events_doc: dict) -> str | None:
-    """행사 저장소의 마지막 수집 시각 — 지역별 마지막 수집(`coverage`)의 최댓값.
-    행사별 `collected_at` 은 **새 행사가 들어올 때만** 찍혀, 매일 돌아도 신규가 없는 날이면 늙어 보인다(실측 간격 2일).
-    문자열 최댓값이 아니라 시각으로 비교한다 — 오프셋이 섞이면 문자열 순서가 틀린다."""
-    stamps = [v for v in (events_doc.get("coverage") or {}).values() if isinstance(v, str)]
-    return max(stamps, key=datetime.fromisoformat, default=None)
-
-
-def check_freshness(collected_at: str | None, now: datetime, max_age: timedelta) -> list[str]:
-    """마지막으로 게시된 수집이 너무 오래됐는가 — 수집이 조용히 멈춘 것을 잡는다."""
-    if not collected_at:
-        return ["collected_at 이 없다 — 언제 수집했는지 알 수 없다"]
-    age = now - datetime.fromisoformat(collected_at)
-    if age > max_age:
-        return [f"마지막 수집이 {age} 전({collected_at}) — 한도 {max_age} 를 넘었다"]
     return []
