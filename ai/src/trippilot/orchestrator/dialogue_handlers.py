@@ -824,7 +824,7 @@ def _plan_distance(ctx: TurnContext) -> tuple[HandlerTask, ...]:
                                 "purpose": TransitPurpose.INFO_DISPLAY.value})
         # 거리만 — 패킷의 internal_minutes 는 여기서 떨어진다 (INV-3, TransitInfo.to_public_dict 와 같은 자름)
         return {"status": packet.status.value, "distance_m": packet.data.get("distance_m"),
-                "distance_range": packet.data.get("distance_range"), "mode": mode}
+                "distance_range": packet.data.get("distance_range"), "confidence": packet.data.get("confidence"), "mode": mode}
 
     return (HandlerTask("transit", fn),)
 
@@ -842,6 +842,11 @@ def _assemble_distance(ctx: TurnContext, results: Mapping[str, TaskResult]) -> F
     distance = value.get("distance_range") if value is not None and value.get("status") == "OK" else None
     if not isinstance(distance, str) or not distance:
         return _text_facts(intent, FactStatus.UNAVAILABLE, (_action("OPEN_ITINERARY"),), notes=notes + ("거리 미확인",), detail=detail)
+    # 경로 API(ODsay·TMAP)가 빠지면 Provider 는 하버사인×우회계수(confidence LOW)로도 상태 OK 를 낸다 — 경로 거리처럼 보이면
+    # "약 3.1km"(실제 경로 5.8km)가 된다(2026-10-19 E2E, 경로 키 일일 한도 초과). LOW 는 추정으로 밝힌다.
+    if value.get("confidence") == "LOW":
+        distance = f"{distance}(추정)"
+        notes = notes + ("거리는 실제 경로가 아니라 직선 거리로 어림한 값",)
     rows = (FactRow("직전 구간", distance),)
     return Facts(
         intent, FactStatus.OK, AnswerKind.INFO, rows=rows,

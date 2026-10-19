@@ -154,9 +154,9 @@ class _Weather:
 
 
 class _Transit:
-    def __init__(self, *, fail: bool = False) -> None:
+    def __init__(self, *, fail: bool = False, confidence: str = "LOW") -> None:
         self.calls: list[dict] = []
-        self._fail = fail
+        self._fail, self._confidence = fail, confidence
 
     def fetch(self, params: dict) -> InfoPacket:
         self.calls.append(params)
@@ -165,7 +165,8 @@ class _Transit:
         # TransitProvider 는 내부용 internal_minutes 까지 싣는다 — 핸들러가 떨어뜨려야 한다(INV-3)
         return InfoPacket(ProviderKind.TRANSIT, ProviderStatus.OK,
                           {"distance_m": 1200, "distance_range": "약 1.2km", "internal_minutes": 17,
-                           "confidence": "LOW", "source": "haversine_x_detour", "delay_trigger": None,
+                           "confidence": self._confidence,
+                           "source": "haversine_x_detour" if self._confidence == "LOW" else "odsay_transit", "delay_trigger": None,
                            "freshness": _fresh(params["now"]).to_dict()}, _fresh(params["now"]))
 
 
@@ -564,17 +565,30 @@ def test_distance_uses_previous_slot_as_origin_and_keeps_only_distance_strings()
     assert call["mode"] == "PUBLIC" and call["purpose"] == "info_display" and call["now"] == _NOW
     assert "internal_minutes" not in value and value["distance_range"] == "약 1.2km"  # INV-3
     facts = HANDLERS[Intent.GET_DISTANCE].assemble(ctx, {"transit": TaskResult.ok("transit", value)})
-    assert facts.payload == {"infoKind": "DISTANCE", "title": "해녀의집", "rows": [{"label": "직전 구간", "value": "약 1.2km"}]}
+    # 대역 기본은 실 경로 API 가 안 될 때의 하버사인×우회계수(LOW) — 경로 거리가 아니라서 추정으로 밝힌다
+    assert facts.payload == {"infoKind": "DISTANCE", "title": "해녀의집", "rows": [{"label": "직전 구간", "value": "약 1.2km(추정)"}]}
     assert facts.template_text == "일정에 적힌 거리예요." and _types(facts) == ["OPEN_ITINERARY"]
     assert facts.detail == {"origin": "우도", "destination": "해녀의집", "mode": "PUBLIC"}
     assert any("PUBLIC" in n for n in facts.notes)  # 가정한 수단을 남긴다
+    assert any("직선" in n for n in facts.notes)  # 답변 LLM 이 경로 거리처럼 말하지 않게
 
 
 def test_distance_mode_argument_is_passed_through() -> None:
-    transit = _Transit()
+    transit = _Transit(confidence="HIGH")
     ctx = _ctx(arguments={"destination": "해녀의집", "mode": "WALK"}, ports=HandlerPorts(poi_info=_PoiInfo(), transit=transit))
     facts = _run(HANDLERS[Intent.GET_DISTANCE], ctx)
     assert transit.calls[0]["mode"] == "WALK" and facts.detail["mode"] == "WALK" and not facts.notes
+
+
+def test_route_distance_is_shown_as_is_and_straight_line_estimate_is_marked() -> None:
+    """경로 API(ODsay·TMAP)가 한도 초과로 빠지면 Provider 는 하버사인×우회계수(confidence LOW)로 상태 OK 를 낸다 — 그 값을
+    경로 거리처럼 보이면 "약 3.1km"(실제 5.8km)가 된다(2026-10-19 E2E). LOW 만 "(추정)"을 붙이고 메모를 남긴다."""
+    ctx = lambda transit: _ctx(arguments={"destination": "해녀의집", "mode": "WALK"}, ports=HandlerPorts(poi_info=_PoiInfo(), transit=transit))
+    route = _run(HANDLERS[Intent.GET_DISTANCE], ctx(_Transit(confidence="HIGH")))
+    assert route.payload["rows"] == [{"label": "직전 구간", "value": "약 1.2km"}] and not route.notes
+    guess = _run(HANDLERS[Intent.GET_DISTANCE], ctx(_Transit(confidence="LOW")))
+    assert guess.payload["rows"] == [{"label": "직전 구간", "value": "약 1.2km(추정)"}]
+    assert guess.places[-1].distance_range == "약 1.2km(추정)" and any("직선" in n for n in guess.notes)
 
 
 @pytest.mark.parametrize("arguments", [
