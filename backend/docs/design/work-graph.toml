@@ -4429,3 +4429,78 @@ to = "U10-SOURCE-CHECK"
 kind = "배포선행"
 verified = false
 reason = "M-U10-a 2단계 CHECK 는 1단계가 운영에 배포되고 옛 파드가 사라진 뒤에만 안전하다."
+
+# ── 기술 강화 루프(2026-10-20 승인 계획안) ─────────────────────────────────────────────
+# 새 기능 없이 기존 기능에 붙인다. 순서는 의존보다 공유 파일이 정한다(openapi.yaml · docker-compose.yml).
+
+[[nodes]]
+id = "COV-GATE"
+ticket = "TRIP-1465"
+title = "[Infra] JaCoCo 커버리지 합산 + 전체 하한·모듈 바닥 게이트"
+status = "todo"
+touches = ["backend/build.gradle.kts", "backend/app/build.gradle.kts", "backend/scripts", ".github/workflows/backend-ci.yml"]
+note = """
+PR #1428 — 리뷰 대기. 기준선 라인 95.4 · 분기 84.8, 하한 94/83, 모듈 바닥 70/40.
+"""
+
+[[nodes]]
+id = "FIELD-GATE"
+ticket = "TRIP-1466"
+title = "[Infra] OpenAPI 필드 계약 게이트 + 계약 불일치 정정 · deviceId 로그인 500"
+status = "todo"
+touches = ["backend/docs/design/openapi.yaml", "backend/app/src/test/kotlin/com/trippilot/app/web", "backend/modules/auth"]
+note = """
+PR #1429 — 리뷰 대기.
+"""
+
+[[nodes]]
+id = "POI-REGION-PREFIX"
+ticket = "TRIP-1471"
+title = "[Bug] 잘린 시도명 판정 — #1427 수집본으로 develop CI 가 깨진 것"
+status = "todo"
+touches = ["backend/modules/place-data"]
+note = """
+develop 이 이것 때문에 빨갛다 — 열린 PR 전부의 CI 가 이 노드에 막힌다. 머지 1순위.
+"""
+
+[[nodes]]
+id = "LOOP-BFF"
+ticket = "TRIP-1467"
+title = "[BE] 라이브 일정 화면 BFF — 호출 5→1, 섹션 단위 부분 실패"
+status = "todo"
+touches = ["backend/docs/design/openapi.yaml", "backend/app", "backend/modules/trip/src/main/kotlin/com/trippilot/trip/api", "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/api", "backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/api", "backend/modules/archive/src/main/kotlin/com/trippilot/archive/api", "backend/modules/auth/src/main/kotlin/com/trippilot/auth/api"]
+
+[[nodes]]
+id = "LOOP-AIRFLOW"
+ticket = "TRIP-1468"
+title = "[Infra] Airflow 수집 파이프라인(로컬) — 수집→검증→게시→신선도"
+status = "todo"
+touches = ["batch", "docker-compose.yml"]
+
+[[nodes]]
+id = "LOOP-KAFKA"
+ticket = "TRIP-1469"
+title = "[BE] 아웃박스 배달 경로 Kafka 선택지(로컬) — 폴링 대비 지연 측정"
+status = "todo"
+touches = ["docker-compose.yml", "backend/app/src/main/kotlin/com/trippilot/app/event", "backend/gradle/libs.versions.toml", "backend/app/build.gradle.kts"]
+
+[[nodes]]
+id = "LOOP-COVERAGE"
+ticket = "TRIP-1470"
+title = "[BE] 분기 커버리지 보강(change-log·reflection·notification) + PIT"
+status = "todo"
+touches = ["backend/modules/change-log/src/test", "backend/modules/reflection/src/test", "backend/modules/notification/src/test", "backend/scripts/coverage_gate.py"]
+
+[[edges]]
+from = "FIELD-GATE"
+to = "LOOP-BFF"
+kind = "판정선행"
+verified = false
+reason = "BFF 의 새 경로·응답 스키마를 필드 계약 게이트가 지켜야 한다 — 게이트가 먼저 들어가야 BFF PR 이 그 검사를 받는다."
+
+[[edges]]
+from = "COV-GATE"
+to = "LOOP-COVERAGE"
+kind = "판정선행"
+verified = false
+reason = "보강의 before 수치와 래칫 상향 대상(TOTAL_FLOORS)이 COV-GATE 에서 생긴다."
