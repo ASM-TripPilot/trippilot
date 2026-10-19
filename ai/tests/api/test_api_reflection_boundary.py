@@ -15,14 +15,27 @@ TestClient + build_dev_app 실조립(경계→wiring→ReflectAgent→게이트�
 from __future__ import annotations
 
 import json
+from datetime import timezone
 
 from fastapi.testclient import TestClient
 
+from trippilot.api import schemas
 from trippilot.api.app import create_app
-from trippilot.api.wiring import build_dev_app
+from trippilot.api.wiring import (
+    StaticPersonaStore,
+    StaticPoiDb,
+    build_dev_app,
+    build_orchestrator,
+    demo_poi_seed,
+)
+from trippilot.domain.common import BudgetLevel
+from trippilot.domain.llm import ModelTier
+from trippilot.domain.persona import CompanionType, PersonaSummary
+from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.workers.reflection_nudge import FALLBACK_NUDGE_MESSAGE
 
-from tests.fakes.fake_llm import FakeLlm
+from tests.fakes.fake_llm import FakeLlm, TimeoutForModelsLlm
+from tests.fakes.in_memory_trace import InMemoryTrace
 
 _GEN_URL = "/ai/v1/reflection/generate"
 _NUDGE_URL = "/ai/v1/reflection/nudge"
@@ -170,3 +183,24 @@ def test_generate_rejects_zero_visits_at_boundary() -> None:
     request["visits"] = []  # BR-U6R-15 — 방문 0건은 진입 불가
     with TestClient(build_dev_app(), raise_server_exceptions=False) as client:
         assert client.post(_GEN_URL, json=request).status_code == 422
+
+
+def test_generate_passes_the_request_deadline_to_the_first_llm_call() -> None:
+    """BE 는 j03 진입 POST 안에서 동기로 부르고 마감 15초를 보낸다 — `deadline_ms` 가 에이전트
+    시한까지 안 가면 첫 호출이 C1Config 기본 타임아웃으로 돌아 BE 마감을 넘긴다(공유 카드 경계와 대칭)."""
+    llm = TimeoutForModelsLlm(json.dumps({"template": _CANNED_BODY}, ensure_ascii=False))
+    orchestrator = build_orchestrator(
+        llm=llm,
+        poi_db=StaticPoiDb(demo_poi_seed()),
+        context_store=StaticPersonaStore(
+            PersonaSummary(taste_tags=(), companion=CompanionType.SOLO, budget=BudgetLevel.MID)),
+        c1_config=C1Config(model_ids={ModelTier.LIGHT: "m-l", ModelTier.HEAVY: "m-h"}),
+        trace=InMemoryTrace(),
+        tz=timezone.utc,
+    )
+    request = _gen_request()
+    request["request_meta"]["deadline_ms"] = 4000
+
+    orchestrator.reflection_generate(schemas.ReflectionGenerateRequest(**request))
+
+    assert llm.requests[0].timeout_sec == 4.0  # 4000ms 관통 (기본값 아님)

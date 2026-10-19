@@ -195,8 +195,8 @@ def _tag_sources(ctx: ShareCardCopyContext) -> tuple[str, ...]:
     해시태그는 공백을 담을 수 없다. 그래서 "해운대 해수욕장" 같은 다어절 상호명은
     원문만으로는 `_tag_allowed`(소스가 태그 본문의 부분문자열)를 **구조적으로 만족할 수
     없고**, 정당한 `#해운대해수욕장`까지 전부 HASHTAG_OUT이 된다(실측). 공백 제거형을
-    함께 넘겨 그 구멍만 메운다 — `_tag_allowed` 자체는 손대지 않는다
-    (reflection_template 동작 무변).
+    함께 넘겨 그 구멍을 메웠다. 이후 `_tag_allowed` 가 양쪽 공백을 직접 지우게 되어
+    (회고 카드에도 같은 구멍이 있었다) 이 공백 제거형은 중복이지만 무해하다.
     """
     out: list[str] = []
     for raw in (ctx.region, *ctx.poi_names):

@@ -28,9 +28,12 @@
 | BR-U6R-11 | [P2] 시각 환각 불신 — 게이트는 검증 가능한 것만 강제(photo_id 멤버십·스키마·길이·금칙어). 시각 서술의 사실성 게이트는 두지 않고 캡션을 저위험(사용자 수정 가능 초안)으로 분류. 근거 실측(2026-08-25): responses 표면 `input_image` 라우팅 200 확인, 1×1 투명 PNG에 "64×17 연초록" 환각 | 검증 가능성 원칙 |
 | BR-U6R-12 | 신규 LlmFeature(`REFLECTION_TEMPLATE` 등)는 BR-AF-07 5종 세트(FD 개정+tier_map+yaml+ROUTE-P1+audit) — 코드 단독 enum 확장 금지 | BR-AF-07 |
 | BR-U6R-13 | 모델·티어 실체는 C1Config 설정값(하드코딩 금지) — 멀티모달 지원 프로바이더·모델 선정은 **TRIP-515 런북 소관**, 본 FD는 확정하지 않는다 | BR-U4-08, AI-D06 |
-| BR-U6R-14 | 시간 예산 수치 미확정 — deadline 미지정(TRIP-473). 시간제약 재도입(2026-10 예정) 시 deadline·단계 스킵 조건은 후속 결정. N회 생성은 백그라운드 전제로만 허용 | AI-D07 정합 |
+| BR-U6R-14 | 시간 예산 수치 미확정 — deadline 미지정(TRIP-473). 시간제약 재도입(2026-10 예정) 시 deadline·단계 스킵 조건은 후속 결정. N회 생성은 백그라운드 전제로만 허용. **개정 2026-10-19**: 실제는 BE 동기 호출·마감 15초, 남은 시간 분배(최소 5초·여유 0.5초) — business-logic-model §2 개정 블록 | AI-D07 정합 |
 | BR-U6R-15 | 방문 0건 요청은 생성 진입 불가(post-init) — 트리거 단(백엔드 "방문 1건+")과 이중 방어. 스킵은 침묵이 아니라 명시 거부로 표현 | reflect-agent-design §2 |
 | BR-U6R-16 | 사진 0장 방문(`photo_count == 0`)에는 `photo_slot` 을 두지 않는다(장면·표지) — 위반은 하드 `PHOTO_SLOT_EMPTY`, 교체는 사진 있는 방문으로·없으면 슬롯 제거(교체 맵 = business-logic-model §4). FE 가 기기 사진으로 슬롯을 채우므로 0장이면 빈 칸이 된다 (2026-10-18) | 계약 §3.2 `photo_slot` |
+| BR-U6R-17 | 와이어에 나가는 문구에는 자리표시자가 없다 — 단 자리표시자뿐인 부제(FE "서술 없음" 신호)는 예외. 바인딩 규칙 = business-logic-model §3 ⑤′ (2026-10-19) | 계약 §2 개정 2026-10-19 |
+| BR-U6R-18 | `cover.subtitle` 은 그날(여행)을 돌아보는 한 문장(60자 이내)이다 — j03 본문이자 BE 목록 문구. 자리표시자 기본형은 고정 폴백 전용 (2026-10-19) | 계약 §3.2 개정 2026-10-19 |
+| BR-U6R-19 | 소프트 판정은 **화면에 나갈 모양**으로 한다 — 캡션 길이는 바인딩 뒤 길이(수 2자·날짜 10자로 어림), 해시태그 허용은 양쪽 공백을 지우고 비교하며 `{region}`·`{poi:i.name}` 태그는 파생으로 본다. 원문으로 재면 정상 카드가 위반이 되어 위반 0 조기 종료가 깨진다 (2026-10-19 실측) | 계약 §4.1 |
 
 ## 3. PBT 게이트 (hypothesis — 전부 통과해야 유닛 종료)
 
@@ -50,11 +53,15 @@
 
 ## 4. DoD
 
-- [ ] 위 PBT 전부 green + 기존 전체 스위트 회귀 green (**LlmRequest 확장 후 기존 텍스트 호출 무영향의 증빙**)
-- [ ] 신규 LlmFeature 5종 세트 완료 (BR-AF-07): 본 FD 개정 반영 · tier_map · prompts yaml v0.1.0 · ROUTE-P1 통과 · audit 기록
-- [ ] 아키텍처 테스트: agents/reflect에 L-1~L-3 활성 · yaml→prompts 한정 · SDK→adapters 한정 · ports 순수성(stdlib만) 유지
-- [ ] `POST /ai/v1/reflection/generate`를 `ai/docs/openapi.json` 와이어 정본에 반영 (AI CI "실행 앱 스키마 == 커밋 계약" 게이트)
-- [ ] 실 API·실 이미지 호출 CI 0건 (D37) — vision 스모크는 수동 스크립트로 별도
+- [x] 위 PBT 전부 green + 기존 전체 스위트 회귀 green (**LlmRequest 확장 후 기존 텍스트 호출 무영향의 증빙**)
+- [x] 신규 LlmFeature 5종 세트 완료 (BR-AF-07): 본 FD 개정 반영 · tier_map · prompts yaml v0.1.0 · ROUTE-P1 통과 · audit 기록
+- [x] 아키텍처 테스트: agents/reflect에 L-1~L-3 활성 · yaml→prompts 한정 · SDK→adapters 한정 · ports 순수성(stdlib만) 유지
+- [x] `POST /ai/v1/reflection/generate`를 `ai/docs/openapi.json` 와이어 정본에 반영 (AI CI "실행 앱 스키마 == 커밋 계약" 게이트)
+- [x] 실 API·실 이미지 호출 CI 0건 (D37) — vision 스모크는 수동 스크립트로 별도
+
+> 위 5칸 근거 확인 2026-10-19(체크만 늦었다): 전체 5197 passed · `config.py` tier_map·폴백 대장에 `REFLECTION_TEMPLATE`(_VISION) ·
+> `test_llm_gateway_gateway.py` ROUTE-P1 · `tests/test_architecture.py` L-1~L-3 은 `agents/` 전체에 걸린다 + yaml·anthropic·openai·ports 한정 테스트 ·
+> openapi 에 경로 실재 · AI CI 는 `uv run pytest` 뿐이고 LLM 은 전부 페이크.
 - [x] ~~Phase 2 코드 착수 조건: 백엔드 사진 업로드 API·동의 법무 로그 연동 확인~~ →
       **재정의 (2026-08-28)**: 백엔드(TRIP-478)를 실제로 기다려야 하는 건 **실사용자 사진
       전달 한 조각뿐**이다. 포트 seam·어댑터·동의 타입·하이라이트 선별·프롬프트·강등 계단은

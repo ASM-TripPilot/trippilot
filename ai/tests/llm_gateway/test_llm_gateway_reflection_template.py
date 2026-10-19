@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -572,12 +573,43 @@ def test_domain_invariants() -> None:
 # ── 프롬프트 (BR-AF-07 yaml 등록·정본 규칙 문구) ─────────────
 
 
+# ── 소프트 오탐 회귀 — 정상 카드가 위반으로 잡히면 위반 0 조기 종료가 깨지고 가망 없는 재시도가 난다 ──
+# (실 LLM 평가 2026-10-19: 10회 중 위반은 전부 이 두 오탐이었다)
+
+_SPACED_CTX = ReflectionTemplateContext(
+    kind=ReflectionKind.DAILY,
+    visit_refs=(_REF1, _REF2),
+    event_kinds=frozenset(),
+    region="제주 서귀포",
+    poi_names=("모모스커피 영도점", "해운대 해수욕장"),
+)
+
+
+def test_hashtags_from_spaced_names_and_bound_tokens_are_not_out() -> None:
+    """태그는 공백을 못 담는다 — 다어절 이름(수집 POI 25.8%)에서 만든 태그도, composer 가
+    지역·장소 이름으로 채울 토큰 태그도 정당하다. 무관한 태그는 여전히 위반이다."""
+    tags = ["#모모스커피영도점", "#제주서귀포여행", "#{poi:1.name}", "#{region}맛집", "#먹방"]
+    outcome = _apply(_raw(_body(hashtags=tags)), _SPACED_CTX)
+    out = [v.detail for v in outcome.value.violations if v.code is ViolationCode.HASHTAG_OUT]
+    assert out == ["hashtags[4]: 지역·방문지·브랜드 파생 아님 (#먹방)"]
+
+
+def test_caption_length_is_measured_after_binding() -> None:
+    """원문 길이로 재면 계약 예시 STATS 캡션(52자)이 위반이고, 긴 장소명은 토큰(12자)에 숨는다."""
+    long_name = replace(_SPACED_CTX, poi_names=("가" * 35, "해운대"))
+    stats = {"layout": "STATS", "caption": "{visit_count}곳 · {distance_km}km · 사진 {photo_count}장"}
+    hidden = {"layout": "MAP", "caption": "{poi:0.name}에서 바다까지"}
+    assert ViolationCode.CAPTION_LEN not in _codes(_apply(_raw(_body(scenes=[stats] * 3)), long_name))
+    hidden_codes = _codes(_apply(_raw(_body(scenes=[hidden] * 3)), long_name))
+    assert hidden_codes.count(ViolationCode.CAPTION_LEN) == 3
+
+
 def test_prompt_renders_deterministically() -> None:
     reg = PromptRegistry(_PROMPTS)
     p1, ref = reg.render(_FEAT, build_reflection_template_vars(_request()))
     p2, _ = reg.render(_FEAT, build_reflection_template_vars(_request()))
     assert p1 == p2
-    assert ref.prompt_id == "prompts/reflection_template.yaml" and ref.version == "0.2.0"
+    assert ref.prompt_id == "prompts/reflection_template.yaml" and ref.version == "0.3.0"
     assert ref.feature == "REFLECTION_TEMPLATE"
     assert "부산" in p1 and "감천문화마을" in p1 and "poi:0" in p1 and "PLAN_B" in p1
 
@@ -610,7 +642,7 @@ def test_vision_prompt_states_photoless_rule() -> None:
     variables = {**build_reflection_template_vars(_request()), "highlights": "(대표 사진 없음)"}
     prompt, ref = PromptRegistry(_PROMPTS).render(
         LlmFeature.REFLECTION_TEMPLATE_VISION, variables)
-    assert _PHOTOLESS_RULE in prompt and ref.version == "0.2.0"
+    assert _PHOTOLESS_RULE in prompt and ref.version == "0.3.0"
 
 
 def test_build_vars_stringifies_with_defaults_and_no_time_fields() -> None:

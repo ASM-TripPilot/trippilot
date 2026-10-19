@@ -107,7 +107,7 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             LlmFeature.REPLAN_COMPOSITION: ("llm_compose_day", "scored_assembly"),
             # api/wiring.py `_verified_request` — 실패면 추출 없이 진행(칩·지시·구성은 원문을 그대로 읽는다)
             LlmFeature.REPLAN_REQUEST_EXTRACTION: ("llm_request_extract", "no_extraction"),
-            # agents/reflect/composer.py `compose` — 전 시도 실패면 고정 폴백 템플릿
+            # agents/reflect/composer.py `finalize` — 전 시도 실패면 고정 폴백 템플릿
             # (그쪽이 직접 내는 FallbackEvent와 같은 모드 쌍).
             LlmFeature.REFLECTION_TEMPLATE: ("llm_template", "fixed_template"),
             # api/wiring.py `reflection_nudge` — 결정론 기본 문구(FALLBACK_NUDGE_MESSAGE).
