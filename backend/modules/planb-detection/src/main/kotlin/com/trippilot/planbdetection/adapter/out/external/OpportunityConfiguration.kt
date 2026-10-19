@@ -23,7 +23,9 @@ import java.time.Duration
  * 모르는 값은 기동 실패다 — 켰다고 믿는데 꺼진 채 도는 것보다 낫다(상황 감시 스윕 스위치와 같은 판단).
  *
  * 시한은 PERF-SA-08: 상대는 `deadline_ms` 의 70% 안에서 장소 조회를 끊고 부분 결과를 낸다. 읽기 상한은 그 위에
- * 상대 백스톱(마감 + 5s)까지 기다린다 — 그보다 짧으면 상대가 마감을 넘겨 정리해 보내는 응답을 우리가 먼저 끊는다.
+ * 상대 백스톱(마감 + 5s)보다 1s 더 기다린다(리마인드 14s·회고 21s 와 같은 꼴) — 같거나 짧으면 상대가 마감을 넘겨 정리해
+ * 보내는 응답(백스톱 504 포함)을 우리 소켓이 먼저 끊는다 — 우리 소켓 시계는 요청을 다 보낸 순간 출발해 상대 시계(요청을
+ * 받은 뒤)보다 앞서고, 상대 응답은 돌아오는 길도 걸린다.
  */
 @ConfigurationProperties(prefix = "trippilot.ai.opportunity")
 data class OpportunityProperties(
@@ -32,7 +34,7 @@ data class OpportunityProperties(
     val connectTimeoutMs: Long = 1_000,
     /** `request_meta.deadline_ms` 로 상대에 실린다. 허브 카드라 짧게 잡는다 — 넘기면 상대가 부분 결과 + note 로 답한다. */
     val deadlineMs: Long = 3_000,
-    val readTimeoutMs: Long = 8_000,
+    val readTimeoutMs: Long = 9_000,
     /** 발신 서비스 자격증명(TRIP-856 선례). 비면 헤더를 안 싣고 호출은 그대로 나간다. */
     val serviceToken: String = "",
 ) {

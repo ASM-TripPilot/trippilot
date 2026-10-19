@@ -148,7 +148,7 @@ class HttpOpportunityAdapterTest : StringSpec({
      * 읽기 상한이 운영 기본값으로 걸려 있어야 한다 — 없으면 상대가 멈췄을 때 허브 요청이 그 스레드를 붙잡고 매달린다.
      * 기본값 그대로 태우므로 상한만큼 걸린다 — 느린 이유가 곧 재는 내용이다(anti-patterns `@Bean` 운영 경로).
      */
-    "읽기 상한(운영 기본 8s)에서 끊긴다 — 붙여 놓고 답하지 않는 상대에 매달리지 않는다" {
+    "읽기 상한(운영 기본 9s)에서 끊긴다 — 붙여 놓고 답하지 않는 상대에 매달리지 않는다" {
         val release = CountDownLatch(1)
         withServer(reply(), hold = release) { url, _ ->
             val began = System.nanoTime()
@@ -161,8 +161,8 @@ class HttpOpportunityAdapterTest : StringSpec({
             val elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - began)
 
             thrown.cause.shouldBeInstanceOf<SocketTimeoutException>()
-            elapsed shouldBeGreaterThanOrEqual 8_000L
-            elapsed shouldBeLessThan 9_500L
+            elapsed shouldBeGreaterThanOrEqual 9_000L
+            elapsed shouldBeLessThan 10_500L
         }
     }
 
@@ -205,10 +205,14 @@ class HttpOpportunityAdapterTest : StringSpec({
         OpportunityProperties(mode = "HTTP").mode shouldBe "HTTP" // 조건부 빈의 비교처럼 대소문자는 가리지 않는다
     }
 
-    /** 값이 조용히 늘면 '상한이 있다'는 사실만 남고 실효가 사라진다 — 바꿀 때는 근거와 함께 이 줄을 고친다. */
-    "운영 기본값은 꺼짐 · 연결 1s · 시한 3s · 읽기 상한 8s 다" {
+    /**
+     * 값이 조용히 늘면 '상한이 있다'는 사실만 남고 실효가 사라진다 — 바꿀 때는 근거와 함께 이 줄을 고친다.
+     * 읽기 상한 9s = 시한 3s + 상대 백스톱 5s + 1s(리마인드 14s·회고 21s 와 같은 꼴) — 백스톱과 같으면 상대의 504 보다
+     * 우리 소켓이 먼저 끊긴다(우리 시계가 상대보다 먼저 출발한다).
+     */
+    "운영 기본값은 꺼짐 · 연결 1s · 시한 3s · 읽기 상한 9s 다" {
         OpportunityProperties().let { listOf(it.mode, it.connectTimeoutMs, it.deadlineMs, it.readTimeoutMs) } shouldBe
-            listOf("off", 1_000L, 3_000L, 8_000L)
+            listOf("off", 1_000L, 3_000L, 9_000L)
     }
 })
 
