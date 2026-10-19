@@ -1,5 +1,8 @@
 package com.trippilot.weathercontext.adapter.out.external
 
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.sun.net.httpserver.HttpServer
 import com.trippilot.weathercontext.api.AirGrade
 import com.trippilot.weathercontext.api.AirRegion
@@ -11,6 +14,7 @@ import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import org.slf4j.LoggerFactory
 import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.web.client.RestClient
 import java.net.InetSocketAddress
@@ -143,6 +147,32 @@ class AirKoreaAdapterTest : StringSpec({
         }
     }
 
+    /**
+     * 게이트웨이·서버가 받은 질의(서비스 키)를 본문에 되돌려 줘도 예외·로그에 싣지 않는다(SEC-SA-03). 거절(XML 30) · 5xx · 깨진 JSON ·
+     * 등급 없는 본문(권역 칸에 질의가 든다) 네 갈래 모두 원인 이름만 남는다.
+     */
+    "응답 본문이 질의(키)를 되돌려 줘도 예외·로그에 키가 실리지 않는다" {
+        listOf<(String) -> AirReply>(
+            { q -> AirReply(200, "text/xml", GATEWAY_XML_30.replace("</cmmMsgHeader>", "<echo>${q.replace("&", "&amp;")}</echo></cmmMsgHeader>")) },
+            { q -> AirReply(503, "text/plain", "busy $q") },
+            { q -> AirReply(200, "application/json", "{$q") },
+            { q -> airOk(airBody(airItem("PM10", "2026-10-19", "2026-10-19 11시 발표", q), airItem("PM25", "2026-10-19", "2026-10-19 11시 발표", q))) },
+        ).forEach { reply ->
+            withAirEchoServer(reply) { url ->
+                val logs = airLogsOf {
+                    val e = shouldThrow<RuntimeException> { airAdapter(url, key = "SECRET+KEY==").fetchAirForecast(TODAY) }
+                    e.message.orEmpty() shouldNotContain "SECRET"
+                    e.message.orEmpty() shouldNotContain "serviceKey"
+                }
+                logs.isEmpty() shouldBe false // 실패 WARN 은 남았다 — 그 줄에도 키가 없다
+                logs.forEach {
+                    it shouldNotContain "SECRET"
+                    it shouldNotContain "serviceKey"
+                }
+            }
+        }
+    }
+
     "연결 실패 예외에 요청 주소·키가 실리지 않는다" {
         val dead = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).also { it.start() }
         val url = "http://127.0.0.1:${dead.address.port}"
@@ -186,6 +216,37 @@ private fun airAdapter(baseUrl: String, key: String = "테스트키") = AirKorea
         ).build(),
     baseUrl, key,
 )
+
+/** 받은 질의(원문 그대로 — 키가 든다)를 [reply] 로 본문에 되돌려 주는 서버. */
+private fun withAirEchoServer(reply: (query: String) -> AirReply, block: (baseUrl: String) -> Unit) {
+    val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    server.createContext("/getMinuDustFrcstDspth") { ex ->
+        val r = reply(ex.requestURI.rawQuery ?: "")
+        val bytes = r.body.toByteArray()
+        ex.responseHeaders.add("Content-Type", r.contentType)
+        ex.sendResponseHeaders(r.status, bytes.size.toLong().takeIf { it > 0 } ?: -1)
+        ex.responseBody.use { if (bytes.isNotEmpty()) it.write(bytes) }
+    }
+    server.start()
+    try {
+        block("http://127.0.0.1:${server.address.port}")
+    } finally {
+        server.stop(0)
+    }
+}
+
+/** 어댑터 로거의 기록(문장). */
+private fun airLogsOf(block: () -> Unit): List<String> {
+    val logger = LoggerFactory.getLogger(AirKoreaAdapter::class.java) as Logger
+    val appender = ListAppender<ILoggingEvent>().apply { start() }
+    logger.addAppender(appender)
+    try {
+        block()
+    } finally {
+        logger.detachAppender(appender)
+    }
+    return appender.list.map { it.formattedMessage }
+}
 
 /** 요청한 통보 코드(`InformCode`)마다 준비한 응답을 차례로 낸다(마지막 것은 계속 낸다). 받은 질의를 순서대로 모은다. */
 private fun withAirServer(replies: Map<String, List<AirReply>>, block: (baseUrl: String, queries: List<String>) -> Unit) {

@@ -9,7 +9,10 @@ import com.trippilot.weathercontext.api.WeatherAlertFacade
 import com.trippilot.weathercontext.application.WeatherAlertService
 import com.trippilot.weathercontext.domain.AirForecastPort
 import com.trippilot.weathercontext.domain.WarningStatusPort
+import com.trippilot.weathercontext.domain.WeatherLookupFailed
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.longs.shouldBeLessThan
 import io.kotest.matchers.maps.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -17,7 +20,10 @@ import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import org.slf4j.LoggerFactory
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
+import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.ServerSocket
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * 특보·대기질 어댑터 배선 — **모드를 켜면 구현이 붙는가 · 어느 키로 묻는가**(설정 스위치는 '값이 붙는가'와 '구현이 바뀌는가'를
@@ -68,16 +74,54 @@ class WeatherAlertWiringTest : StringSpec({
         }
     }
 
-    /** compose 가 미설정 env 를 빈 값으로 넘긴 경우 — 공백뿐인 값도 비었다. */
-    "공공데이터포털 키가 비면(빈 문자열·공백) 기상청 키로 묻는다" {
-        listOf("", "  ").forEach { blank ->
-            withQueryServer { url, queries ->
-                runner().withPropertyValues(
-                    "trippilot.weather.mode=kma", "trippilot.weather.service-key=weather-key",
-                    "trippilot.weather.public-data-key=$blank", "trippilot.weather.air-base-url=$url",
-                ).run { ctx -> runCatching { ctx.getBean(AirForecastPort::class.java).fetchAirForecast(java.time.LocalDate.parse("2026-10-19")) } }
+    /** compose 가 미설정 env 를 빈 값으로 넘긴 경우. */
+    "공공데이터포털 키가 빈 문자열이면 기상청 키로 묻는다" {
+        withQueryServer { url, queries ->
+            runner().withPropertyValues(
+                "trippilot.weather.mode=kma", "trippilot.weather.service-key=weather-key",
+                "trippilot.weather.public-data-key=", "trippilot.weather.air-base-url=$url",
+            ).run { ctx -> runCatching { ctx.getBean(AirForecastPort::class.java).fetchAirForecast(java.time.LocalDate.parse("2026-10-19")) } }
 
-                queries.first() shouldContain "serviceKey=weather-key&"
+            queries.first() shouldContain "serviceKey=weather-key&"
+        }
+    }
+
+    /**
+     * 공백뿐인 값도 비었다. `withPropertyValues` 는 값을 trim 해(`TestPropertyValues.Pair.parse`) 공백 값을 만들 수 없으므로 — 그 경로로는
+     * 빈 문자열 케이스와 같아진다 — 설정 객체를 직접 만들어 잰다.
+     */
+    "공공데이터포털 키가 공백뿐이면 기상청 키로 묻는다" {
+        withQueryServer { url, queries ->
+            val configuration = WeatherAlertConfiguration(
+                KmaWeatherProperties(mode = "kma", serviceKey = "weather-key", publicDataKey = "  ", warningBaseUrl = url, airBaseUrl = url),
+            )
+            runCatching { configuration.kmaWarningAdapter().fetchWarnings() }
+            runCatching { configuration.airKoreaAdapter().fetchAirForecast(java.time.LocalDate.parse("2026-10-19")) }
+
+            queries.size shouldBe 2
+            queries.forEach { it shouldContain "serviceKey=weather-key&" }
+        }
+    }
+
+    /**
+     * 서비스가 잠금 안에서 원천을 부른다 — 시한이 빠지면 매달린 호출 하나가 그 회차의 특보·대기질 판정을 전부 묶는다(PERF-SA-04 ·
+     * RESILIENCY-10). 어댑터 테스트는 제 클라이언트를 따로 만들므로, **설정이 만든** 클라이언트로 연결은 받되 응답하지 않는 서버를 부른다.
+     */
+    "설정이 만든 클라이언트는 read 시한으로 끝난다 — 응답 없는 서버에 매달리지 않는다".config(timeout = 20.seconds) {
+        ServerSocket(0, 50, InetAddress.getLoopbackAddress()).use { silent -> // accept 하지 않는다 — 연결은 대기열에 들고 응답은 오지 않는다
+            val url = "http://127.0.0.1:${silent.localPort}"
+            runner().withPropertyValues(
+                "trippilot.weather.mode=kma", "trippilot.weather.service-key=weather-key", "trippilot.weather.read-timeout-ms=300",
+                "trippilot.weather.warning-base-url=$url", "trippilot.weather.air-base-url=$url",
+            ).run { ctx ->
+                listOf(
+                    { ctx.getBean(WarningStatusPort::class.java).fetchWarnings() },
+                    { ctx.getBean(AirForecastPort::class.java).fetchAirForecast(java.time.LocalDate.parse("2026-10-19")) },
+                ).forEach { call ->
+                    val started = System.nanoTime()
+                    shouldThrow<WeatherLookupFailed> { call() }
+                    (System.nanoTime() - started) shouldBeLessThan 3_000_000_000L
+                }
             }
         }
     }

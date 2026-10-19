@@ -135,6 +135,32 @@ class KmaWarningAdapterTest : StringSpec({
         e.message!! shouldNotContain "127.0.0.1"
     }
 
+    /**
+     * 게이트웨이·서버가 받은 질의(서비스 키)를 본문에 되돌려 줘도 예외·로그에 싣지 않는다(SEC-SA-03 — `PublicDataGatewayError` 가 경고하는
+     * 위험). 거절(XML 30) · 5xx · 깨진 JSON · 못 읽는 t6 네 갈래 모두 원인 이름만 남는다 — 본문을 메시지에 붙이는 순간 키가 샌다.
+     */
+    "응답 본문이 질의(키)를 되돌려 줘도 예외·로그에 키가 실리지 않는다" {
+        listOf<(String) -> WarningReply>(
+            { q -> WarningReply(200, "text/xml", GATEWAY_XML_30.replace("</cmmMsgHeader>", "<echo>${q.replace("&", "&amp;")}</echo></cmmMsgHeader>")) },
+            { q -> WarningReply(503, "text/plain", "busy $q") },
+            { q -> WarningReply(200, "application/json", "{$q") },
+            { q -> warningOk(warningBulletin("o 강풍특보 : $q")) },
+        ).forEach { reply ->
+            withWarningEchoServer(reply) { url ->
+                val logs = logsOf {
+                    val e = shouldThrow<RuntimeException> { warningAdapter(url, key = "SECRET+KEY==").fetchWarnings() }
+                    e.message.orEmpty() shouldNotContain "SECRET"
+                    e.message.orEmpty() shouldNotContain "serviceKey"
+                }
+                logs.isEmpty() shouldBe false // 실패 WARN 은 남았다 — 그 줄에도 키가 없다
+                logs.forEach {
+                    it.formattedMessage shouldNotContain "SECRET"
+                    it.formattedMessage shouldNotContain "serviceKey"
+                }
+            }
+        }
+    }
+
     /** 상태 변화 WARN(OBS-SA-03) — 같은 원인이 이어지면 한 번, 풀리면 INFO, 다시 막히면 또 한 번. 원인 코드만 싣는다. */
     "같은 거절이 이어지면 WARN 한 번 · 풀렸다가 다시 막히면 또 한 번 · 장애로 바뀌어도 한 번" {
         withWarningServer(
@@ -205,6 +231,24 @@ private fun withWarningServer(replies: List<WarningReply>, block: (baseUrl: Stri
     server.start()
     try {
         block("http://127.0.0.1:${server.address.port}", queries)
+    } finally {
+        server.stop(0)
+    }
+}
+
+/** 받은 질의(원문 그대로 — 키가 든다)를 [reply] 로 본문에 되돌려 주는 서버. */
+private fun withWarningEchoServer(reply: (query: String) -> WarningReply, block: (baseUrl: String) -> Unit) {
+    val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    server.createContext("/getPwnStatus") { ex ->
+        val r = reply(ex.requestURI.rawQuery ?: "")
+        val bytes = r.body.toByteArray()
+        ex.responseHeaders.add("Content-Type", r.contentType)
+        ex.sendResponseHeaders(r.status, bytes.size.toLong().takeIf { it > 0 } ?: -1)
+        ex.responseBody.use { if (bytes.isNotEmpty()) it.write(bytes) }
+    }
+    server.start()
+    try {
+        block("http://127.0.0.1:${server.address.port}")
     } finally {
         server.stop(0)
     }
