@@ -3942,7 +3942,7 @@ class WiredItineraryOrchestrator:
 
     def planb_opportunities(self, request: schemas.OpportunitiesRequest) -> schemas.OpportunitiesResponse:
         """동선 근처 기회(행사·요즘 인기, LLM 0회 · 트리거 아님) — 재료 수집·판정·사영은 `api/opportunities.py`."""
-        return opportunity_projection.find(self._info, self._poi_db, request, self._tz)
+        return opportunity_projection.find(self._info, self._poi_db, request, self._tz, holidays=self._holidays)
 
 # ── 조립 함수 (composition root) ─────────────────────────────────────
 
