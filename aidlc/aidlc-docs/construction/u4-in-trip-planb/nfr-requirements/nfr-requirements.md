@@ -49,6 +49,10 @@ U0~U3에 없던 것은 **모바일 기기 자원**(배터리·권한·네이티�
 > - **PERF-U4-03**(O-U4-4) **종결** — 재계획 예산은 **25,000ms**로 정해졌다(`backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/ReplanFacadeService.kt` `REPLAN_DEADLINE_MS = 25_000L`). 인용한 생성 예산도 day1 15s·전체 60s로 바뀌어(U3 COST-U3-01 개정) "생성보다 짧게"는 전체 예산 기준으로만 성립한다.
 > - **PERF-U4-04**(실제 경로 다운샘플링) — **[이연 · 2026-10-12 → U10]**.
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** PERF-U4-01 — 서버 주기 실행
+> 클라에는 그대로다(주기 폴링 없음 — 포그라운드 복귀·푸시 수신 때 무효화). 서버에는 주기 실행이 생긴다: 매시 회차, 여행 단위 병렬, 회차 예산, 시작 위치 회전, 20:58 이후 쓰기 없음, 장소 감지는 아침·저녁만. 스케줄러 풀 1 → 4 는 스위치와 무관하게 배포 즉시 반영된다.
+> → [BR-SA-01·03](../../situation-awareness/functional-design/business-rules.md) · [INV-SA-5](../../situation-awareness/functional-design/domain-entities.md) · [SA nfr-requirements](../../situation-awareness/nfr-requirements/nfr-requirements.md)
+
 ## 3. 비용·외부 호출 (NFR-U4-COST)
 
 | ID | 요구 | 실장 / 근거 |
@@ -61,6 +65,10 @@ U0~U3에 없던 것은 **모바일 기기 자원**(배터리·권한·네이티�
 | **COST-U4-06** | LLM 상한은 **C1 실장값 승계**(`max_tokens`·`temperature`·`timeout_sec`). U4가 별도 상한을 만들지 않는다 | COST-U3-04 승계 |
 
 > **[개정 · 2026-10-12] COST-U4-06 — C1 실장값 갱신.** `temperature` 설정은 없고 `timeout_sec` 기본 10.0, 출력 상한은 공용 1024 + 기능별 `feature_max_tokens`, 전 기능 `claude-fable-5-1`(#1038)이다(`ai/src/trippilot/llm_gateway/config.py`, U3 COST-U3-04 개정). 재계획 경로는 방향 지시어 번역(`REPLAN_DIRECTIVE_TRANSLATION`)·대안 선택(`ALTERNATIVE_SELECTION`) LLM 호출을 쓴다.
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** COST-U4-03 — 호출 범위와 선계산 비용
+> 날씨 조회 대상이 "여행 중 사용자의 당일 격자"에서 진행 중 여행의 오늘·내일 격자로 넓어지고 특보·대기질 호출이 더해진다. 기상청 키·한도를 AI 와 나누므로 격자 경로만 세는 파드당 하루 상한을 둔다. 미리 짜 둔 대안의 LLM 비용은 여행·전체 하루 상한과 단일 실행기로 묶는다. 값과 호출량 추정은 SA NFR 에 있다.
+> → [BR-SA-03·18 · O-SA-10](../../situation-awareness/functional-design/business-rules.md) · [SA nfr-requirements](../../situation-awareness/nfr-requirements/nfr-requirements.md)
 
 ## 4. 데이터·법적 처리 (NFR-U4-DATA / LEGAL) ★
 
@@ -95,6 +103,10 @@ U0~U3에 없던 것은 **모바일 기기 자원**(배터리·권한·네이티�
 | **OBS-U4-04** | 외부 포트별 실패율을 **벤더 단위로 분리**해 기록한다(날씨·거리·POI) | 서킷 분리(U0·U1 상속)와 같은 축 |
 | **OBS-U4-05** | 지오펜스 wake 횟수와 그중 발화 수를 기록한다. **wake는 배터리 비용**이므로 효율(발화/wake)이 낮으면 리전 정책을 재평가한다 | MOBILE-U4-04 재평가 입력 |
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** OBS-U4-01~05 — 요약 로그
+> 상황 감시의 관측 1차 수단은 회차마다 1줄 요약 로그다(운영은 OTLP 지표가 꺼져 있어 새 Micrometer 지표를 두지 않는다). OBS-U4-01(무발화)·03(세션 종료 분포 — 선계산 결과 포함)·04(출처별 실패)는 이 줄과 감시 상태로 답하고, OBS-U4-02(허위 알림)는 운영 켜기의 확인 지표다. OBS-U4-05 는 U10 소관이고, 알림 억제 사유는 U6 OBS-U6-03 개정 블록이 다룬다.
+> → [BR-SA-03·04·13](../../situation-awareness/functional-design/business-rules.md) · [SA nfr-requirements](../../situation-awareness/nfr-requirements/nfr-requirements.md)
+
 ## 6. 오프라인 (NFR-U4-OFFLINE)
 
 **정책 원본**: `frontend/README.md` — "일정 조회 오프라인 캐시는 제공하지 않는다. 기록 입력(방문 체크·사진·메모)만 로컬 큐."
@@ -121,6 +133,10 @@ U0~U3에 없던 것은 **모바일 기기 자원**(배터리·권한·네이티�
 ## 8. PBT (blocking 게이트)
 
 `business-rules.md` §7의 **PBT-U4-1~5**(서버)와 `frontend-components.md` §9의 **PBT-U4-F1~F3**(클라)를 그대로 승계한다. NFR 관점에서 추가하는 것은 없다.
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** §8 PBT — 상황 인지 게이트 추가
+> 상황 인지 확장의 PBT-SA-01~22(전부 blocking)가 더해진다. NFR 성질이 큰 것은 푸시 상한·회차당 사건 ≤ 1(PBT-SA-04) · 밤 창 경계(07) · 선계산 구독자 멱등·상한(17) · 같은 여행 10분 1회(18)다. PBT-U4-1~5·F1~F3 는 그대로다.
+> → [PBT-SA-01~22](../../situation-awareness/functional-design/business-rules.md) · [SA nfr-requirements](../../situation-awareness/nfr-requirements/nfr-requirements.md)
 
 ## 9. 재평가 트리거
 

@@ -43,6 +43,10 @@
 
 **INV-U4-01**: `shouldReplan=false`인 판정은 사용자에게 **어떤 형태로도 노출되지 않는다**(배너·칩·알림 전부).
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** §2.1 `plan_b_trigger` · INV-U4-01
+> 심각도·알린 최고 심각도·푸시 시각·버전 열이 붙고, `ACTIVE` 유니크에 `affected_date` 가 들어간다(V2.18 `ux_plan_b_trigger_active` 는 날짜가 없다). `payload` 는 한 키 한 뜻(`variant`·`detector`·`dataSource`)이고 상태값은 늘리지 않는다(해제·만료 모두 `EXPIRED`). 감시 상태 `plan_b_watch`(여행 × 출처)가 신설된다. 무발화 기록은 유지하되 같은 무발화가 매시 쌓이지 않게 날짜·변형당 1번만 남긴다. INV-U4-01 은 그대로다 — 알림 없이 배너만 띄우는 조용한 발화도 `should_replan=true` 인 `ACTIVE` 다.
+> → [INV-SA-4](../../situation-awareness/functional-design/domain-entities.md) · [BR-SA-05·08·13](../../situation-awareness/functional-design/business-rules.md) · [DEC-SA-3](../../situation-awareness/functional-design/business-logic-model.md)
+
 ### 2.2 `plan_b_suppression` — 억제 상태
 
 "그대로 둘게요" / `i10`의 `[끄기]`.
@@ -59,6 +63,10 @@
 > 민감도는 계정 단위 설정이라 물리적으로는 `profile` 쪽에 붙는 게 자연스럽다. 소유 결정은 U6(설정) 설계와 함께 — **G-U4-6**.
 
 > **[개정 · 2026-10-12] 민감도 물리 소유 — 별도 테이블로 실재.** `plan_b_sensitivity(account_id PK, sensitivity LOW|NORMAL|HIGH, updated_at)`가 **V2.18**(`V2.18__plan_b_detection.sql`)에 있고 행이 없으면 `NORMAL`로 본다. API는 `backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/adapter/in/web/SensitivityController.kt`. `profile`·U6 `account_setting`(V2.42)으로 옮기지 않았다.
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** §2.2 `plan_b_suppression` · INV-U4-02
+> 억제에 날짜(`affected_date`)와 최대 심각도(`max_severity`, null = 전부 — 옛 행 동작)가 붙어 덮는 범위를 좁힌다. 감지 단계 집행은 그대로이고, 민감도 상한은 푸시만 묶는다.
+> → [BR-SA-09·10](../../situation-awareness/functional-design/business-rules.md)
 
 ---
 
@@ -116,6 +124,12 @@
 
 **INV-U4-06**: 한 여행에 `COLLECTING`/`SOLVING`/`DRAFT` 세션은 **최대 1개**. 새 재계획 진입은 기존 열린 세션을 `CANCELED`로 닫고 시작한다.
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** §3.2 `replan_session` · INV-U4-05·06
+> - `initiated_by`(`USER`|`SYSTEM`) 열이 붙는다 — `SYSTEM` 은 트리거가 필수이고 트리거당 1개다(재배달 멱등의 마지막 방어선). → [DEC-SA-4](../../situation-awareness/functional-design/business-logic-model.md)
+> - **INV-U4-05** 는 그대로 성립한다 — SYSTEM 세션은 초안까지만 가고 적용은 사용자 [적용]뿐이며, 원탭 '바로 적용'(2026-10-14 개정 주)을 트리거 경로에 쓰지 않는다. → [INV-SA-1](../../situation-awareness/functional-design/domain-entities.md) · [BR-SA-20](../../situation-awareness/functional-design/business-rules.md)
+> - **INV-U4-06 개정(공존)**: 여행당 열린 세션 1개는 그대로다. 선계산은 30분 안에 열린 USER 세션을 닫지 않고 건너뛴다. → [INV-SA-6](../../situation-awareness/functional-design/domain-entities.md) · [BR-SA-18](../../situation-awareness/functional-design/business-rules.md)
+> - 낡은 SYSTEM 초안의 적용 거절은 U4 에 새 INV 번호를 두지 않고 INV-SA-7 로 둔다(낡음은 시간 창이 아니라 사실로 판정, 409). → [INV-SA-7](../../situation-awareness/functional-design/domain-entities.md) · [BR-SA-19](../../situation-awareness/functional-design/business-rules.md)
+
 ### 3.3 `actual_route_point` — 실제 경로 (US-PLANB-13)
 
 | 필드 | 비고 |
@@ -150,6 +164,10 @@
 
 **INV-U4-09**: 조회 실패 시 **행을 만들지 않는다**. 만료된 스냅숏으로 트리거를 발화하지 않는다(허위 알림 금지 — 만료분은 `i09`에 "확인 불가"로만 쓰인다).
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** §4.1 · INV-U4-09
+> 격자 시간별 예보 캐시 `weather_grid_forecast`(격자당 1행, weather-context 소유)가 신설되고, `weather_snapshot` 은 기존 강수확률 경로에 남는다. 특보·대기질은 새 테이블 없이 감지기가 읽는다. INV-U4-09 는 두 캐시 모두에 성립하고(실패·`NO_DATA`·게이트웨이 오류는 저장하지 않음, 받은 값도 신선해야 씀), 모름은 발화도 해제도 아니다.
+> → [INV-SA-2](../../situation-awareness/functional-design/domain-entities.md) · [BR-SA-15·16](../../situation-awareness/functional-design/business-rules.md)
+
 ---
 
 ## 5. 이벤트
@@ -159,6 +177,10 @@
 | `PlanBTriggered` | C9 (`shouldReplan=true`) | 클라 배너·칩 / 로컬 알림 / (후속) U6 알림 | 자동 변경 금지 — **제안까지만** |
 | `VisitChecked` | **U4 C10**(DEC-U4-10) | C9(`DELAY` 체류 초과 입력) · **U5 C12**(기록 적재) | 인셉션은 C12 발행으로 적었으나 U4가 먼저 필요 → 발행자를 U4로 두고 U5가 구독·승계 |
 | `ItineraryRecalculated` | C10 (`APPLIED`) | change-log · U5 기록 · (후속) 알림 | `before`/`after` 스냅숏 동반 |
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** §5 이벤트
+> - `planb.PlanBTriggered` 끝에 기본값 null 선택 필드(`affectedDate`·`scope`·`severity`·`variant`·`push`·`others`·`dateRisks`)가 붙고, 의미가 트리거마다 1건에서 여행·회차당 1건(대표)으로 바뀐다. 구독자에 itinerary-recalculation(선계산)이 더해진다. → [DEC-SA-4](../../situation-awareness/functional-design/business-logic-model.md) · [BR-SA-10](../../situation-awareness/functional-design/business-rules.md) · [INV-SA-3](../../situation-awareness/functional-design/domain-entities.md)
+> - `recalculation.ItineraryRecalculated` 에 `triggerId`·`targetDate` 가 붙고, planb-detection 이 구독해 트리거 날짜와 같을 때만 `CONSUMED` 로 닫는다. → [BR-SA-14](../../situation-awareness/functional-design/business-rules.md)
 
 ---
 
@@ -178,3 +200,7 @@
 | POI 영업시간·휴무 정본 | **U1 C7** | 조회만 |
 
 > **[개정 · 2026-10-12] 소유 표 갱신.** "재계획 산출(warm-start) = ai `regenerate`" 행 — 실제 산출은 AI `POST /ai/v1/planb/replan`(RAG(KB-3)+지시어 번역+`ScheduleAgent`, `ai/src/trippilot/api/wiring.py` `replan`)이다. "방문 실적·실제 경로" 행 — 방문 실적은 U5 `archive`로 이관 완료, 실제 경로는 **[이연 · 2026-10-12 → U10]**. "변경 이력 열람·되돌리기 화면 = U3 h36" — h36은 FE 미구현이다(U3 `frontend-components.md` §1 개정).
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** §6 소유 경계 — 상황 인지 추가분
+> 상황 감시 스윕·감지기 계약·판정·`TriggerVariant` = C9 · 격자 예보·특보·대기질 조회 = C11 · 영업시간 판정·공휴일 달력 = AI(하루 재검증 퍼사드는 itinerary-generation) · 폐업 상태 = C7 · 진행 중 여행 목록(계정 포함) = trip · 선계산·낡음·준비된 대안 조회 = C10. 모듈 의존이 둘 는다(C9 → C7 `api`, C10 → C9 `api` 의 트리거 조회만 — 순환 없음). 종류 4종의 정본이 ai `TriggerKind` 인 행은 그대로다.
+> → [DEC-SA-2·3·4](../../situation-awareness/functional-design/business-logic-model.md)

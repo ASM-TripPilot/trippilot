@@ -24,6 +24,11 @@
 
 > **[개정 · 2026-10-12 · U10 FD] BR-U6-11 — 끌 알림이 생긴다.** 이 규칙을 쓸 때 "이동 지연 알림"은 **존재하지 않았다**(`DELAY` 신호원 0 — U10 D-U10-5). U10이 서버 파생 `DELAY`(`payload.variant = TRANSIT`)를 만들고 기존 `PlanBTriggeredSubscriber`로 푸시된다. 이동 지연은 **자동 기록이 무장된 여행에서만** 판정되고 무장은 위치 동의를 전제하므로, 철회 시 이동 지연 알림 중단은 **판정 단계에서 구조적으로** 성립한다(알림 단계 필터 불필요 — U10 BR-U10-26). 날씨·휴무 트리거가 계속 동작한다는 부분은 그대로다. 체류 초과(완료 시점, 수동 시각 포함)는 위치 동의와 무관하게 동작할 수 있다 — 좌표를 쓰지 않는 신호다.
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** BR-U6-08·09 · Plan-B 푸시 여부
+> - **BR-U6-08**: 제목은 kind 3종(날씨·영업·그 밖), 본문은 트리거 사유이고 같이 알린 대상이 있으면 `(외 N건)` 을 붙인다. 액션은 `PLANB_REPLAN {tripId, triggerId}` 그대로이고 앱이 탭 시점에 준비된 대안을 조회한다. → [BR-SA-12·21](../../situation-awareness/functional-design/business-rules.md)
+> - **BR-U6-09**: 같은 여행 Plan-B 푸시를 10분에 1번으로 집행한다 — 막는 것은 푸시뿐이고 알림함 적재는 막지 않는다. → [BR-SA-21](../../situation-awareness/functional-design/business-rules.md) · [INV-SA-3](../../situation-awareness/functional-design/domain-entities.md)
+> - **푸시 여부**는 알림 사건이 정한다: 위험만 푸시, 주의는 알림함만, 기회는 알림 경로 밖. U6 에 새 BR 을 두지 않는다. → [BR-SA-21](../../situation-awareness/functional-design/business-rules.md) · [DEC-SA-5](../../situation-awareness/functional-design/business-logic-model.md)
+
 ## 2. 채널·토글 (US-NOTIF-05)
 
 | ID | 규칙 |
@@ -37,6 +42,10 @@
 | **BR-U6-19** | `COMMUNITY` 토글은 **레코드는 만들되 U7 개통까지 UI에서 숨긴다**(INV-U6-05). 켤 수 없는 것을 켜게 두지 않는다 |
 
 > **[개정 · 2026-10-12] BR-U6-19 — U7 폐기.** U7 커뮤니티가 사용자 결정(2026-10-12)으로 폐기돼 "U7 개통까지 숨김"은 **영구 숨김**과 같다. `COMMUNITY` 레코드를 계속 만들지는 사용자 결정 항목이다.
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** BR-U6-18 — `PLAN_B` 푸시 기본 ON
+> `PLAN_B` 의 푸시 기본값을 ON 으로 바꾼다(사용자 결정 2026-10-18 Q4 답 "위험 알림만 기본 ON (Recommended)"). 토글 행이 없는 계정에만 적용되고 저장된 행은 존중한다. `SLOT_PRE` 는 푸시 OFF 그대로다. 기본값의 자리는 `backend/modules/notification/src/main/kotlin/com/trippilot/notification/domain/NotificationToggle.kt:40-42` 다.
+> → [DEC-SA-5](../../situation-awareness/functional-design/business-logic-model.md) · [BR-SA-21 · O-SA-14](../../situation-awareness/functional-design/business-rules.md)
 
 ## 3. 전달·억제
 
@@ -108,3 +117,7 @@
 | **O-U6-4** ★ | **야간 조용시간** — 푸시를 여는 이상 필요하다. 스토리에 없다 | 국내 야간 발송 관행·`/me/marketing-consent`(실재)와의 경계 판단이 필요. **정보성 알림도 심야에 울리면 이탈 요인** |
 | **O-U6-5** | 제휴 "다시 보기" 값의 저장 위치 — `/me/preferences` 확장 vs `account_setting` 신설 | `/me/preferences`가 "여행 취향" 의미로 좁게 정의됐는지 U0 계약 확인 필요 |
 | **O-U6-6** | `SLOT_PRE` 간격(0/15/30/60) 선택 UI 부재 | 디자인 확인(G-U6-5). 기본 30분으로 동작은 가능 |
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** O-U6-4 **종결** — 야간
+> 조용시간은 알림 단계에 두지 않는다(LEGAL-U6-01 유지). Plan-B 상황 감시가 21:00~06:59(KST)에 돌지 않고 20:58 이후 쓰기·발행을 하지 않아 위험 푸시가 밤에 나갈 길이 없다. U10 `DELAY` 는 이 창에 묶이지 않는다.
+> → [INV-SA-5](../../situation-awareness/functional-design/domain-entities.md) · [BR-SA-21](../../situation-awareness/functional-design/business-rules.md)

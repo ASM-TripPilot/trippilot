@@ -75,6 +75,10 @@
 | **BR-U3-29** | ~~**확정 후 재편집**: [일정 수정] 선택 시 `CONFIRMED → PLANNED`로 되돌리고 그 사실을 리비전에 남긴다~~ **채택 안 함**(TRIP-999 결정 (a), 2026-09-27) — 역전 대신 `CONFIRMED` 를 유지한 채 여행 중 편집을 허용한다. 역전은 FE 목적지 판정(CONFIRMED 만 여행 중 허브로)이 반영 직후 끊기는 부작용이 있었다. 갭 G-U3-6 은 BR-U3-28 개정으로 해소 |
 | **BR-U3-30** | 확정 화면은 D-day·출발 맥락과 확정의 의미(최종본 잠금)를 **한 줄로** 설명한다 |
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** BR-U3-28 — 여행 전날 첫날 반영은 확정 잠금의 예외
+> 여행 전날 첫날 `FULL_DAY` 반영(트리거 진입·사용자 [적용])은 확정 잠금의 예외다. 그 밖의 여행 전 확정 일정 변경 거부는 그대로다. 지평 `pre-trip` 은 이 개정이 승인된 뒤에만 켠다. 확정 일정은 복원이 409 라(`backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/ItineraryRevisionService.kt:130-131`) 이 반영은 되돌릴 수 없다.
+> → [BR-SA-20 · O-SA-6](../../situation-awareness/functional-design/business-rules.md) · [DEC-SA-7](../../situation-awareness/functional-design/business-logic-model.md)
+
 ## 7. 편집 이력 (DEC-U3-1)
 
 | ID | 규칙 |

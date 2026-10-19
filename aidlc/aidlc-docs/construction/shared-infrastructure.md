@@ -546,3 +546,130 @@ NFR Req Q11=A는 원천을 둘로 갈랐다 — ① DB 질의(OBS-U10-01~05) ②
 | I-U10-1 | OBS-U10-01~05 **DB 질의를 운영에서 어디서 돌리나** — RDS는 격리 서브넷이고 bastion이 없다 | 후보: `runtime.py` 꼴의 일회성 읽기 Job · 읽기 전용 롤. 출시 체크리스트 전에 팀 결정 |
 | I-U10-2 | M-U10-a 2단계 사이에 옛 코드 경로가 남지 않는지(수동 완료 쓰기가 전부 `completion_source`를 채우는 코드가 먼저 배포됐는지) | 구현 PR 리뷰 — CHECK 마이그레이션은 그 확인 뒤 |
 | I-U10-3 | ON 빌드 마케팅 버전 분리 방식(STORE-U10-06) | 출시 티켓 |
+
+---
+
+## situation-awareness 증분 (2026-10-19)
+
+> **성격**: 위 as-built 본문과 달리 **설계 증분**이다 — Plan-B 변수 상황 선제 감지(U4 확장 · 여행 중 상황 자가 인지)가 인프라에 요구하는 것을 적는다. 구현은 팀이 각 디렉토리에서 한다(SCOPE). 근거 설계: `situation-awareness/nfr-requirements/nfr-requirements.md`(PERF-SA · COST-SA · RES-SA · OBS-SA · SEC-SA · LEGAL-SA · 켜는 순서) · `situation-awareness/nfr-requirements/tech-stack-decisions.md`(델타 1~7) · `situation-awareness/functional-design/`(DEC-SA · BR-SA) · 계획서 `plans/situation-awareness-nfr-requirements-plan.md`(계획 Q10=A — NFR Design 은 두지 않고 인프라는 이 절에 쓴다).
+> **결론 먼저**: **신규 AWS 자원 0.** 늘어나는 것은 런타임 키 5개(백엔드 4 · AI 1) + 차트 고정 env 1개 · 파드 안 스케줄러 1개(cron 2식) · 마이그레이션 3건 · 외부 호출 증가(기상청 단기예보 격자 경로 · 기상특보 · 에어코리아 · 특일)다.
+> **대상 구분**: 이 절의 '개발'은 개발 대상(네임스페이스 `trippilot-dev` · 시크릿 `trippilot/<env>/dev-target/*` · backend 복제본 1), '운영'은 출시 앱이 보는 운영 대상(네임스페이스 `trippilot` · 시크릿 `trippilot/<env>/*` · backend 복제본 2)이다(`deploy/eks/runtime.py:25-27` · `infra/terraform/stack/registry-secrets.tf:58-66` · `deploy/eks/chart/values-dev-target.yaml:1-2,10-11` · `deploy/eks/chart/values-dev.yaml:22-23`). 두 대상은 같은 클러스터에 있고 DB 가 따로다(`infra/terraform/stack/data.tf` `aws_db_instance.dev_target`). 본문 §4.1 은 이 분리(2026-10-15) 전 기록이다.
+
+### SA.1 신규 AWS 자원이 없는 이유 (검증)
+
+| 범주 | 이 확장이 쓰는 것 | 기존 자원 | 판정 |
+|---|---|---|---|
+| Compute | 감시 스윕(파드 안 스케줄러) · 선계산 전용 실행기 1스레드 · 신규 공개 조회 3종 · AI 기회 경로 1(`POST /ai/v1/planb/opportunities`, LLM 0회) | Deployment `backend`·`ai`(같은 이미지 · 같은 파드) | 신규 0. 스윕은 ShedLock 으로 한 파드에서만 돌아 backend HPA 부재(G-08)와 무관하다 |
+| Storage | `plan_b_trigger` 열 4 · 활성 유일 키 재생성 · `plan_b_suppression` 열 2 · `plan_b_watch`(여행당 ≤ 4행) · `weather_grid_forecast`(격자당 1행) · `replan_session.initiated_by` | RDS PostgreSQL 16(`aws_db_instance.postgres` · 개발 대상 `aws_db_instance.dev_target`) | 신규 0 |
+| Messaging | `planb.PlanBTriggered`·`recalculation.ItineraryRecalculated` 선택 필드 · 구독자 2(선계산 · 소비) | 아웃박스 + `OutboxRelay`(§4.4) | 신규 0 |
+| Networking | 공개 REST 3종(`/api` 아래) · 내부 backend → ai 1경로(`X-Service-Token`) · 이그레스 = `apis.data.go.kr`(기존 단기예보와 같은 호스트) | NLB → gateway `/api` · NAT | 신규 0 |
+| Secrets | 런타임 키 5(SA.2 — 비밀 아님) | `trippilot/<env>/{backend,ai}` · `trippilot/<env>/dev-target/{backend,ai}` | 신규 그릇 0 |
+| IAM | 없음 | — | 신규 0 |
+| Monitoring | 회차 요약 INFO 1줄 · 선계산 요약 · 상태 변화 WARN · 관찰 전용 발화 표본(SA.6) | CloudWatch 컨테이너 로그 | 신규 0 — 새 알람 · 새 Micrometer 지표 없음 |
+
+`infra/terraform/stack/*.tf` 에 이 확장 때문에 더할 리소스 주소가 없고, 차트에도 새 워크로드·Job·Service 가 없다. 바뀌는 인프라 파일은 런타임 도구 · 차트 env 배선 · compose · `.env.example` 뿐이다(SA.2).
+
+### SA.2 런타임 키 (백엔드 4 · AI 1 · 차트 고정 1)
+
+```text
+Secrets Manager trippilot/<env>/backend         (개발 대상: trippilot/<env>/dev-target/backend)
+  PLANB_SITUATION_SWEEP               off | dry-run | on            (없으면 앱 기본 off)
+  PLANB_SITUATION_HORIZON             today | tomorrow | pre-trip   (없으면 today)
+  PLANB_SITUATION_SWEEP_ACCOUNT_IDS   UUID,UUID,...                 (빈값 = 전원)
+  PLANB_PREPARED_REPLAN               off | on                      (없으면 off)
+    |  runtime.py sync-secrets : BACKEND_KEYS 허용목록, 모드 값 집합, UUID 목록 검증, open_gaps 경고
+    v
+K8s Secret trippilot-backend  -->  backend.yaml:102 range 목록 (trippilot.secretEnv, optional)
+    v
+application.yml  trippilot.planb.situation-sweep.*  /  trippilot.replan.horizon  /  trippilot.replan.prepared.mode
+
+Secrets Manager trippilot/<env>/ai              (개발 대상: trippilot/<env>/dev-target/ai)
+  HOLIDAY_CLOSURE_MODE                off | on                      (없으면 off)
+    |  AI_KEYS 허용목록, 값 검증  -->  ai.yaml:79 range 목록  -->  ai/main.py 기동 검증, ai-wiring: 표식
+    v
+AI 공휴일 휴무 규칙 (생성 / 재계획 / 검증 공통)
+
+차트 고정 env (시크릿 아님 - TRIPPILOT_AI_SCHEDULE_MODE 선례 backend.yaml:67-68)
+  AI_OPPORTUNITY_MODE=http  -->  application.yml trippilot.ai.opportunity.mode  (yml 기본 off, compose ${AI_OPPORTUNITY_MODE:-off})
+```
+
+| 변경 지점 | 내용 | 계약 테스트 |
+|---|---|---|
+| `deploy/eks/runtime_secrets.py` | `BACKEND_KEYS` 4 · `AI_KEYS` 1 · 모드 값 집합(스윕 3값 · 지평 3값 · 선계산 2값 · 공휴일 2값) · UUID 목록 검증(`:236-244` 꼴) · `open_gaps` 경고(스윕 on ∧ `WEATHER_MODE ≠ kma` — `:293`) | `deploy/eks/tests/test_runtime.py`(정본 키 표 ⊆ 허용목록 ∧ 차트 목록 대조 포함) |
+| `deploy/eks/chart/templates/backend.yaml` | `:102` range 목록에 4키 · 고정 env `AI_OPPORTUNITY_MODE=http`(`:67-68` 꼴) | `deploy/eks/chart/tests/test_chart.py` |
+| `deploy/eks/chart/templates/ai.yaml` | `:79` range 목록에 `HOLIDAY_CLOSURE_MODE` | 〃 |
+| `backend/app/src/main/resources/application.yml` | 스위치 · 감지기 목록 · 관찰 전용 목록 · 병렬도 · 예산 · cron 2식 · `spring.task.scheduling.pool.size: 4` | 백엔드 테스트 · `EmptyEnvBindingTest` · `RuntimeModeSummaryTest` |
+| `docker-compose.yml` · `.env.example` | `${X:-off}` 꼴(빈 값 금지) · 주석은 줄 위 | `EmptyEnvBindingTest` |
+
+- **두 번 배포 규칙**: 키를 아는 허용목록 코드가 그 대상(개발 = develop, 운영 = 승격 뒤 main)에 먼저 배포된 다음에만 시크릿에 키를 쓴다. 먼저 쓰면 `validate_groups` 가 배포 전체를 거부한다(`deploy/eks/runtime_secrets.py:204-207`). 대상마다 그릇이 따로라 규칙도 대상마다 적용된다. 시크릿 쓰기는 자격 있는 세션·사용자, 디스패치는 배포 담당 세션이 한다.
+- **키 배선은 한 변경에 모두** — 읽는 코드가 뒤 변경에서 들어오는 키도 함께 넣어 차트 한 줄 range 목록의 경합을 한 번으로 줄인다(tech-stack 델타 6).
+- **반영 지연 = 배포 1회** — 배포마다 파드가 재시작돼 새 env 를 읽는다(U10.2 와 같다).
+- **값은 비밀이 아니다** — 시크릿에 두는 이유는 '커밋 없이 바꾼다' 하나다(U10.2 와 같은 이유). 감지기 목록 · 관찰 전용 목록 · 병렬도 · 예산 · cron 은 커밋으로 바꾸는 `application.yml` 값이다.
+- **개발 대상은 푸시가 강제 off 다**(`infra/scripts/workflow_config.py:66-69`) — 실기기 푸시 확인은 운영 대상 카나리(`PLANB_SITUATION_SWEEP_ACCOUNT_IDS`)뿐이다.
+
+### SA.3 스케줄러 1개 (파드 안 · 신규 인프라 0)
+
+| 스케줄러 | 주기 | 다중 복제본 처리 | 선례 | 설정 |
+|---|---|---|---|---|
+| 감시 스윕(DEC-SA-1) | cron `0 15 7-20 * * *` + `0 40 20 * * *`, zone `Asia/Seoul` — 백엔드의 첫 cron 잡(기존 `@Scheduled` 10개는 전부 `fixedDelay`) | `@SchedulerLock(name = "planb-situation-scan")` · `lockAtMostFor` PT25M · `lockAtLeastFor` PT5M — 기존 `shedlock` 테이블(V1.0) · `ShedLockConfig`(DB 시각 — `backend/app/src/main/kotlin/com/trippilot/app/config/ShedLockConfig.kt:27`) | `OutboxRelay`(`backend/app/src/main/kotlin/com/trippilot/app/event/OutboxRelay.kt:95`) | `trippilot.planb.situation-sweep.*` · 테스트 설정 cron `-` |
+
+- **스케줄러 풀 1 → 4**(`spring.task.scheduling.pool.size`) — Boot 기본 1스레드를 기존 10개 잡이 나눠 쓰므로, 최대 20분 회차가 아웃박스 릴레이(2초)를 막지 않게 한다. 플래그와 무관하게 머지 즉시 운영에 반영된다 — 리마인드 문구 세션에 알린다.
+- **부하는 대상 수에만 비례한다** — 진행 중(저녁 회차는 내일 시작 포함) CONFIRMED 여행. 한 회차는 한 파드에서만 돈다.
+- **롤링·종료**: 종료 유예 660s · graceful 630s(§4.2)가 회차 예산 20분보다 짧다 → 스윕은 종료 신호를 받으면 여행 사이에서 멈추고 락을 푼다. 배포로 끊긴 20:15 회차는 20:40 보충이 잇는다. 파드가 비정상 종료하면 락은 PT25M 뒤 풀리는데, 이 값이 20:15→20:40 간격과 같아 보충의 락 획득이 밀리초 경합이 된다(tech-stack 델타 1 — 정본 승인 때 확인).
+- U10 `DELAY` 스캐너(U10.3 `planb-delay-scan`)와 락 이름 · 설정 키 · 파일이 다르다. planb-detection 의 `shedlock-spring` 의존 한 줄은 먼저 들어간 쪽을 따른다.
+- 개발·운영 대상은 DB 가 따로라 `shedlock` 테이블도 따로다 — 두 대상의 스윕은 각자 돈다(외부 호출은 SA.5).
+- **선계산 전용 실행기**(1스레드 · 실행 자리 = 실행 1 + 대기 10)는 스케줄러가 아니라 파드 안 스레드다. `@PreDestroy` 대기가 graceful 630s 안에 끝난다(진행 중 1건의 시한 25s).
+
+### SA.4 마이그레이션 3건
+
+| 이름 | 내용 | 롤링 창(옛 파드) |
+|---|---|---|
+| `V2.NN__plan_b_situation.sql` | `plan_b_trigger` + `severity`(NOT NULL DEFAULT 'RISK' · CHECK RISK·CAUTION) · `alerted_severity` · `pushed_at` · `version`(NOT NULL DEFAULT 0) · 활성 유일 키 재생성 `(trip_id, kind, affected_date, COALESCE(slot_key,'')) WHERE state='ACTIVE'` · 기존 발화 행 채움 / `plan_b_suppression` + `affected_date` · `max_severity` / `plan_b_watch` 신설(PK `trip_id`·`source`, trip CASCADE) | **무해** — 옛 파드는 새 열을 쓰지 않고 상수 기본값이 채운다. 새 유일 키는 옛 것(`backend/app/src/main/resources/db/migration/V2.18__plan_b_detection.sql:34-36`)보다 느슨해(날짜가 다르면 허용) 옛 쓰기를 거절하지 않는다. 옛 파드의 갱신은 `version` 을 올리지 않아 롤링 창 안의 경합은 감지되지 않는다 — 스윕은 새 파드에서만 돈다 |
+| `V2.NN__weather_grid_forecast.sql` | 신설 | 옛 파드 무관 |
+| `V2.NN__replan_session_initiated_by.sql` | `initiated_by varchar(6)` NOT NULL DEFAULT 'USER' · CHECK(`initiated_by <> 'SYSTEM' OR trigger_id IS NOT NULL`) · 부분 유일 `(trigger_id) WHERE initiated_by = 'SYSTEM'` | **무해** — 옛 파드의 쓰기는 기본값 USER 라 새 CHECK · 부분 유일에 걸리지 않는다. `ux_replan_session_open` 은 건드리지 않는다 |
+
+- U10.4 의 교훈(새 CHECK 가 옛 파드의 쓰기를 거절)은 여기 해당하지 않는다 — 새 CHECK 는 새 열에만 걸리고 그 열은 상수 기본값을 갖는다.
+- 활성 유일 키 재생성은 Flyway 트랜잭션 안의 일반 인덱스 생성이라(`CONCURRENTLY` 불가) 그동안 `plan_b_trigger` 쓰기가 잠긴다 — 새 파드 기동 때 한 번의 짧은 잠금이다.
+- **번호**: 머지 직전 `origin/develop` 최댓값 + 1(실측 최신 `V2.72__curated_stay.sql`) — 다른 작업도 계속 마이그레이션을 낸다. 중복은 Flyway 검증이 CI 에서 막는다(별도 CI 스텝 없음).
+- **권한 마이그레이션 불필요** — `backend/app/src/main/resources/db/migration/V1.7__grants.sql:16` 의 기본 권한이 새 테이블을 덮는다.
+- **용량**: `plan_b_watch` 여행당 ≤ 4행 · `weather_grid_forecast` 격자당 1행 · `plan_b_trigger` 증가는 대상당 ACTIVE 1 + 무발화 날짜·변형당 1(BR-SA-08). 정리 잡은 이 확장 밖이다(후속).
+
+### SA.5 외부 호출 증가 (§7 보강)
+
+| 의존 | 호출자 | 자격 증명 | 켜는 조건 | 하루 호출(추정) | 근거 |
+|---|---|---|---|---|---|
+| 기상청 단기예보 `getVilageFcst` — **격자 경로**(새 호출 경로) | backend | `WEATHER_API`(기존) | `WEATHER_MODE=kma` ∧ 스윕 `dry-run`·`on` | ≈ 15·o·N(N = 진행 중 여행, o = 격자 공유 계수 — N 200 → ≈ 1,800) · 파드당 상한 3,000 | COST-SA-01·02 |
+| 기상청 기상특보 `getPwnStatus` | backend | `WEATHER_API`(O-SA-1) | 〃 | ≤ 16(회차당 1) | COST-SA-03 |
+| 에어코리아 `getMinuDustFrcstDspth` | backend | 〃 | 〃 | ≤ 8 | COST-SA-04 |
+| 한국천문연구원 특일 `getRestDeInfo` | ai | ai 그룹 `WEATHER_API` | `HOLIDAY_CLOSURE_MODE=on` | (연, 월)당 1 · 성공한 달만 캐시 | COST-SA-06 · RES-SA-10 |
+
+- 관찰 전용(`observe-only`)은 쓰기만 막는다 — 특보·대기질은 스윕이 `dry-run`·`on` 이면 호출한다(실응답을 재야 켤 수 있다).
+- 게이트웨이 오류 상태(키 미등록 30 등)에서는 캐시하지 않고 회차마다 다시 묻는다 — 출처별 회차당 1~2콜, 하루 ≤ 30(COST-SA-05).
+- 세 API 모두 `apis.data.go.kr` — 새 이그레스 호스트가 없고 NAT 경유 그대로다.
+- AI 기회 경로(`POST /ai/v1/planb/opportunities`)는 클러스터 내부 호출이다 — 이그레스 0 · LLM 0회.
+- 개발 대상과 운영 대상이 같은 `WEATHER_API` 값을 쓰면 일일 한도도 함께 쓴다 — 시크릿 값이라 리포로 알 수 없다 **[라이브 미확인]**.
+- 운영계정 증설 시점: 진행 중 약 500여행(격자 경로가 파드 상한 3,000 에 닿는 규모) — 활용사례 등록·심의.
+
+### SA.6 관측 — §12 Q3 결정과의 관계
+
+- **운영 원천 = 컨테이너 로그.** dev 스택은 `container_logs_enabled = true` · 보존 90일이다(`infra/terraform/environments/dev.tfvars:11-12`) — §4.6 표와 G-04 는 Q3 결정 전 기록이다. CloudWatch Logs Insights 로 센다.
+- **줄 규약**(OBS-SA-01~03): 회차마다 INFO 1줄 `planb.situation_sweep …` · 선계산 `replan.prepared outcome=…` · 상태 변화 WARN · 관찰 전용 발화 표본 줄. 좌표 · 계정 id 없음 — 보존 90일 로그 그룹이 위치정보를 담지 않는다.
+- **새 알람은 두지 않는다** — 요약 줄은 주기 검토 재료이지 호출(page) 대상이 아니다. 스윕이 멈추면 사용자 표면의 감시 상태가 '확인 불가'로 바뀐다(BR-SA-13).
+- **새 Micrometer 지표 없음**(EKS OTLP 꺼짐 — §4.6, G-05). 기존 알림 억제 사유에 2종(`IN_APP_ONLY`·`COALESCED`)이 늘 뿐이고 운영에선 보이지 않는다.
+- **기동 확인**: `[모드]` 줄(스윕 · 지평 · 선계산) · 안내자 줄 `상황 감시 = 꺼짐` · AI `ai-wiring:` 줄(`HOLIDAY_CLOSURE_MODE`). 운영 `PUSH_MODE`·`WEATHER_MODE` 실값도 이 줄로 확인한다(배포 담당 세션).
+- DB 원천(OBS-SA-06)을 운영에서 질의할 경로는 U10.8 I-U10-1 과 같은 미결이다.
+
+### SA.7 확장 기준선 · 간극 표에 미치는 영향
+
+- §9 판정은 바꾸지 않는다 — 새 자원이 없다.
+- 의존하는 간극: **G-05**(카운터 없음 → 로그가 원천) · **G-11**(푸시 기본 off — 위험 푸시의 기기 도달은 운영 `PUSH_MODE` 실값과 iOS entitlement(`frontend/app.config.ts:223-245`)에 묶인다, FD G-SA-7) · **G-07**(되돌리기 = 스위치 값 + 재배포 1회). G-08(backend HPA 없음)은 무관하다 — 회차는 한 파드에서만 돈다.
+- 새 간극은 없다.
+
+### SA.8 미결
+
+| 미결 | 처리 |
+|---|---|
+| O-SA-1 — 특보·대기질·특일 활용신청 계정이 `WEATHER_API` 키 계정과 같은가(2026-10-19 10:12 세 API 30) | 다르면 키 env 1개를 SA.2 에 더한다(배선 1세트). 사용자 확인 중 — 관찰 전용 출발이라 진행을 막지 않는다 |
+| 운영 DB 질의 경로(OBS-SA-06) | U10.8 I-U10-1 과 같은 결정에 묶는다 |
+| **[라이브 미확인]** 운영 대상 `PUSH_MODE` 실값 · 두 대상의 `WEATHER_API` 값이 같은가 | `[모드]` 줄 · 시크릿 확인(배포 담당 세션) |
+| 락 상한 PT25M 과 20:40 보충의 경계(SA.3) | 정본 승인 때 PT25M 유지 여부를 확인한다 |

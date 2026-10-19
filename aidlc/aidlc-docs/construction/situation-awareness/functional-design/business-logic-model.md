@@ -1,0 +1,565 @@
+# 상황 자가 인지(situation-awareness) — Business Logic Model
+
+> **확장 대상**: U4 In-trip & Plan-B(C9 Plan-B Detection · C10 Itinerary Recalculation · C11 Weather & Context) + U6 알림(C14 Notification). **새 컴포넌트·새 유닛 번호 없음** — 번호 없는 확장 폴더다(O-SA-15). C6 Trip · C7 Place Data · C8 Itinerary Generation 은 api 만 소비한다.
+> **스토리**: 신규 없음 — US-PLANB-02 (a)(b) 확장 · US-NOTIF-03(심각도별 푸시). 기회 카드는 스토리 후보로 상신만 한다(G-SA-8 · O-SA-15).
+> **요청·답변**: 2026-10-18 사용자 요청과 선택지 질문 4개의 답(원문 §0). O-SA-2~15 는 설계 초안 기본값 채택(2026-10-19 사용자 지시 "하던거 마저해") — 정본 승인 때 확인. O-SA-1 은 사용자 확인 중. 계획서 `construction/plans/situation-awareness-functional-design-plan.md`.
+> **실장 우선**(U5·U10 선례): 리포 실물 > 패키지 계약 정본 > 라이브 Figma > 기존 aidlc 산출물 > 인셉션. 리포 실측은 2026-10-19 `origin/develop` `f52f58cf7` 기준(마이그레이션 최신 V2.72).
+> **범위**: 설계 문서만(SCOPE). 코드는 팀이 `backend/`·`frontend/`·`ai/`에서 직접 개발한다. 마이그레이션 번호는 머지 직전에 정한다(제안 번호를 적지 않는다 — 여러 변경이 같은 번호를 주장한다).
+> **ID**: 접두 `-SA-`. 원 문서(U4·U6·U3·U10)에는 새 규칙 본문을 쓰지 않고 `[개정 · 2026-10-19 · situation-awareness FD]` 블록으로 이 문서와 `business-rules.md` 의 ID 를 가리킨다(§8).
+
+---
+
+## 0. 사용자 결정 원문
+
+요약하지 않는다. §2 결정 표는 이 원문을 근거로 든다.
+
+### 0.1 최초 요청 (2026-10-18)
+
+```text
+그리고 planB관련해서 다른 세션에서 작업중인데, 코드꼬이거나 겹치지
+  않게 해.  중간평가 피드백중에서 자체적으로 변수상황을 판단해서
+  사용자에게 알리고 재계획을 하게 하라는게 있었거든. 그거 만들자. 그런
+  변수상황 자가 인지를 할 수 있게 만들어!!!! 그런 방법들을 다 생각을
+  해봐. 예를들면 날씨가 안좋아졌으면 실내 위주로 다시 일정만들게
+  하거나 알람 보내거나 하고, 가려던 곳이 문을 닫은것을 미리 파악하거나
+  아니면 해당 지역에 요즘 뜨는 핫이슈가 있다거나 등등이 있을거 같아.
+  여기에 더해서 더 너가 어떤 경우들이 있을지 생각해서 추가해!!!!!
+```
+
+### 0.2 선택지 질문과 답 (2026-10-18)
+
+| # | 질문(원문) | 선택지(원문) | 답(원문) | 반영 |
+|---|---|---|---|---|
+| Q1 | "변수를 감지한 뒤 '재계획'은 어떻게 할까요?" | 미리 짜 둔 대안 (Recommended) / 한 번 탭 재계획 / 자동 적용 | "미리 짜 둔 대안 (Recommended)" | DEC-SA-4 · INV-SA-1 |
+| Q2 | "이번에 바로 만들 범위를 골라 주세요. (체류 초과·이동 지연은 백엔드 팀원 티켓이라 제외)" | (복수 선택) 날씨 확장 (Recommended) / 휴무·영업시간·폐업 (Recommended) / 지역 행사·인기 장소 / 여행 전날(D-1) 점검 | "날씨 확장 (Recommended), 휴무·영업시간·폐업 (Recommended), 지역 행사·인기 장소, 여행 전날(D-1) 점검" | DEC-SA-1 · DEC-SA-6 · DEC-SA-7 |
+| Q3 | "기상특보·미세먼지·공휴일은 공공데이터포털에서 날씨 키 계정으로 '활용신청'을 해야 합니다(대부분 자동승인). 제가 대신 할 수 없는데 어떻게 할까요?" | 신청할게 (Recommended) / 나중에 | "신청할게. 너가 사이트도 띄어주라 지" — 이후 사용자 메시지 "다 신청했어" / "승인도 받았어" | 특보·대기질·공휴일을 1차 범위에 둔다 · BR-SA-04 · O-SA-1 |
+| Q4 | "Plan-B 알림의 푸시 기본값은 지금 OFF(사용자가 설정에서 켜야 옴)입니다. 어떻게 할까요? (운영 서버의 푸시 발송 자체가 켜져 있는지는 코드로 확인 불가)" | 위험 알림만 기본 ON (Recommended) / 지금처럼 OFF | "위험 알림만 기본 ON (Recommended)" | DEC-SA-5 · BR-SA-21 |
+
+Q3 의 승인 회신 뒤 2026-10-19 10:12 실측: `WEATHER_API` 키로 특보·대기질·특일 세 API 를 부르면 `SERVICE_KEY_IS_NOT_REGISTERED`(returnReasonCode 30)이고, 같은 키의 단기예보(`getVilageFcst`)는 정상이다. 그래서 세 출처의 감지기는 1차에 두되 **관찰 전용으로 출발**하고, 키가 통하기 전까지 그 감지기만 '모름'이다(BR-SA-04 · O-SA-1).
+
+### 0.3 이후 (2026-10-19)
+
+"하던거 마저해" — 미결 O-SA-2~15 는 설계 초안 기본값으로 진행한다(§10). 정본 승인 때 함께 확인받는다.
+
+---
+
+## 1. 개요
+
+### 1.1 목적과 세 층
+
+여행 중(과 여행 전날) 일정을 막거나 흔드는 상황을 **서버가 먼저 찾는다**. 찾은 것은 세 층으로 가른다.
+
+| 층 | 뜻 | 사용자에게 보이는 것 | 대안 |
+|---|---|---|---|
+| **위험** `RISK` | 일정을 막는다 — 비·눈·강풍·폭염(35℃)·한파·특보·미세먼지 매우나쁨·휴무·영업시간 밖·폐업 | 푸시(하루 상한 안) + 알림함 + 허브 알약 | 서버가 미리 짜 둔다(스위치, DEC-SA-4) |
+| **주의** `CAUTION` | 일정이 흔들린다 — 폭염(33℃)·흐림(야경·노을 가림)·미세먼지 나쁨 | 알림함 + 허브 알약 | 짜 두지 않는다 |
+| **기회** | 트리거가 아니다 — 근처 행사·요즘 인기 | 허브 안 카드 1장 | 사용자가 [넣어서 다시 짜기]로 요청 |
+
+일정은 어느 층에서도 **사용자의 [적용]으로만** 바뀐다(INV-SA-1).
+
+### 1.2 변수 상황 목록
+
+| 상황 | variant | 감지 근거 | 시점(KST) | 심각도 | 재계획 재료(C10) | 알림 |
+|---|---|---|---|---|---|---|
+| 비 | `RAIN` | 단기예보 — 남은 **실외** 슬롯 시각에 PTY 비·소나기 또는 POP ≥ 60 | 매시 :15(07~20), 내일분 20:15·20:40 | 위험 | 사유 WEATHER(AI 암시 INDOOR·LESS_MOVE), 일부 슬롯만이면 그 POI 제외 | 푸시 |
+| 눈 | `SNOW` | PTY 눈·비/눈 | 〃 | 위험 | 〃 | 푸시 |
+| 강풍 | `WIND` | WSD ≥ 14 m/s | 〃 | 위험 | WEATHER + AVOID_OUTDOOR | 푸시 |
+| 폭염 | `HEAT` | 12~17시 TMP·TMX ≥ 33 / ≥ 35 | 〃 | 주의 / 위험(O-SA-2) | WEATHER + AVOID_OUTDOOR | 위험만 푸시 |
+| 한파 | `COLD` | TMN 또는 TMP ≤ −12 | 〃 | 위험 | WEATHER + AVOID_OUTDOOR | 푸시 |
+| 흐림(야경·노을 가림) | `CLOUD` | 야경 슬롯 시각 과반이 SKY 흐림, 강수 없음 | 〃 | 주의(O-SA-4) | 선계산 없음 | 알림함 |
+| 기상특보 | 종류별 `RAIN`·`SNOW`·`WIND`·`COLD`·`HEAT`·`DUST` | 특보현황 × 여행 목적지 | 매시, 오늘만 | 위험 | 그 변형의 재료 | 푸시 — 관찰 전용으로 출발 |
+| 미세먼지 | `DUST` | 에어코리아 예보 PM10·PM25 권역 등급 | 매시(예보 캐시), 오늘·내일 | 나쁨 주의 / 매우나쁨 위험(O-SA-3) | WEATHER + AVOID_OUTDOOR | 위험만 푸시 — 관찰 전용으로 출발 |
+| 정기 휴무 | `CLOSED_DAY` | AI 검증 HC1 하위 코드 | 07:15 오늘분, 20:15·20:40 내일분 | 위험 | 사유 TEMP_CLOSED + 그 POI 제외 | 푸시 |
+| 영업시간 밖 | `OUT_OF_HOURS` | 〃 | 〃 | 위험 | 〃 | 푸시 |
+| 영업시간 불일치 | `HOURS_MISMATCH` | HC1, 하위 코드 없음 | 〃 | 위험 | 〃 | 푸시 |
+| 공휴일 휴무 | `HOLIDAY` | AI 특일 달력 × 휴무 원문의 휴일 규칙 → HC1 하위 코드 | 〃 | 위험 | 〃 | 푸시 — `HOLIDAY_CLOSURE_MODE` |
+| 폐업 | `PERMANENTLY_CLOSED` | place-data `data_status=CLOSED`(LOST 는 폐업 아님) | 〃 | 위험 | 〃 | 푸시 |
+| 근처 행사 | 트리거 아님(`EVENT_VENUE`·`EVENT_NEARBY`) | 기간 겹치는 행사 × 남은 슬롯 1km 안 등록 POI | 허브에서 그 날짜를 볼 때 | 기회 | [넣어서 다시 짜기] → i04 자유입력 | 앱 안 카드 |
+| 요즘 인기 | 트리거 아님(`TRENDING`) | POI 태그 '요즘 인기' × 1km | 〃 | 기회 | 〃 | 앱 안 카드 |
+| 여행 전날(D-1) | 위 위험·주의 전부 | 내일 시작하는 여행의 첫날 | 20:15·20:40 | 변형별 | 첫날 FULL_DAY | 변형별 — 지평 `pre-trip`(DEC-SA-7) |
+| 이동 지연·체류 초과 | `DELAY`(OVERSTAY·TRANSIT) | U10 | — | — | — | 범위 밖(TRIP-1407) |
+
+- `CLOSED_DAY`·`OUT_OF_HOURS`·`HOLIDAY` 는 AI 검증 위반의 하위 코드(`reason_code`)가 있어야 갈린다. 하위 코드가 없으면 영업시간 신호는 `HOURS_MISMATCH` 하나다(BR-SA-17).
+- '위험' = 푸시 대상(하루 상한 안), '주의' = 알림함·배너만, '기회' = 알림 경로 밖. 재료 매핑은 C10 이 소유한다(BR-SA-18).
+
+### 1.3 범위 밖 · 후속 · 선행 조건
+
+- **범위 밖**: `DELAY`(U10 — 이 확장은 `DELAY` 를 만들지도 닫지도 않는다) · 새 `TriggerKind`(DEC-U4-4) · 새 `NotificationKind` · 기회의 알림함·푸시(LEGAL-U6-02) · 카카오 실재 확인을 근거로 쓰기(2026-09-12 '배제 대신 강등' 결정) · 네이버 블로그 언급 인기 신호(약관 — 2026-09-01 접음) · 안드로이드 알림 채널(TRIP-860 — 리마인드 푸시까지 바꾼다).
+- **후속**(이 확장의 변경에 싣지 않는다): 결정론 `include_poi_ids` · USER 세션 낡음 판정 · 홈 경보 줄(Figma 프레임 뒤) · `plan_b_trigger`·`plan_b_watch` 보존·정리 · 넓혀 읽은 휴무 강등(O-SA-13) · 계정 삭제 대기 계정의 푸시 토큰 비활성화 · 재계획 산출의 AI 호출을 트랜잭션 밖으로(선계산 동시성 확대의 선행) · iOS 푸시 개통(외부 선행 — G-SA-7).
+- **선행 조건(소비만)**: 행사 데이터 — 저장소 신선도 갱신과 TourAPI 공식 축제(`event_id = tourapi-<contentid>`, `FESTIVAL`, 전부 좌표, 같은 이름·기간의 네이버 추출 행사와 저장소 병합). 행사 코드는 소비만 하고 모르는 유형(예: `POPUP`)은 이름 대조만 한다. 병합 행의 `event_id` 규칙은 구현 때 develop 으로 확인한다.
+
+### 1.4 U4·U10 과 다른 점
+
+- **서버가 먼저 본다.** U4 는 클라이언트가 신호를 모으고 서버가 판정했다(DEC-U4-6). U10 은 `DELAY` 만 서버 스케줄러로 파생했다. 이 확장은 날씨·장소·D-1 신호를 **서버가 직접 조회한다** — 앱을 열지 않은 사용자에게도 위험을 먼저 알린다.
+- **쓰는 곳은 하나다.** 감지기는 판정만 돌려주고, 트리거를 쓰고 지우고 알리는 곳은 판정(reconcile) 하나다(DEC-SA-2).
+- **아무것도 막지 않는다.** 스위치를 모두 끄면 U4 의 수동 재계획·날씨 확인 경로만 남는다(INV-4). 앱은 새 필드가 없으면 kind 기준 표시로 떨어진다.
+
+---
+
+## 2. 결정 (DEC-SA-\*)
+
+| ID | 결정 | 근거 |
+|---|---|---|
+| **DEC-SA-1** ★ | **서버 감시 스윕.** 서버가 KST 07:15~20:15 매시 :15 와 20:40(보충)에 진행 중 여행(저녁 회차는 내일 시작 여행 포함)의 확정 일정을 감시한다. 보는 것은 날씨(단기예보·특보·대기질)·장소(휴무·영업시간·폐업·공휴일)·D-1 이다. 21:00~06:59 에는 돌지 않는다. **DEC-U4-6 의 확장**이다 — `DELAY` 는 U10 소관으로 남고, 스윕은 `DELAY` 를 만들지도 닫지도 않는다 | 0.1 원문 "자체적으로 변수상황을 판단해서 사용자에게 알리고" + Q2 답(네 범위 전부). 앱이 꺼져 있으면 클라이언트 신호(PERF-U4-01 이벤트 기반)는 아무것도 못 본다. cron 은 KST 정렬·밤 제외를 보장하고, 비싼 감지기(장소 — AI 검증 실측 20.1s)는 아침·저녁만 부른다. 20:40 보충은 20:15 회차가 배포·장애로 끊겨도 내일 점검을 한 번 더 준다. 밤 제외는 알림 단계 조용시간 없음(LEGAL-U6-01)을 유지한 채 위험 푸시가 밤에 나갈 길을 없앤다(O-U6-4 종결, INV-SA-5) |
+| **DEC-SA-2** ★ | **감지기 계약 하나 · 쓰기 경로 하나.** 단기예보·특보·대기질·장소 감지기는 모두 같은 계약 — 대상(여행·날짜·단계·남은 슬롯·그 출처가 띄운 ACTIVE)을 받아 `Checked(확인한 대상, 신호)` 또는 `Unknown` 을 돌려주고 저장·이벤트를 하지 않는다. 트리거 쓰기·해제·사건 발행은 판정 `reconcile`(여행 1개 = 트랜잭션 1개) 한 곳뿐이다. 트리거 payload 의 키는 한 키 한 뜻이다 — `detector`(해제 자격) · `dataSource`(원천) · API `attribution`(표시 문구) | 쓰기·해제 경로가 둘이면 위험 우선·상한·해제 규칙이 한쪽에서 빠진다. 감지기를 출처별로 두면 한 출처의 모름이 다른 출처의 해제를 막지 않는다 — 특보·대기질이 키 미등록(30)으로 하루 종일 모름이어도 단기예보의 발화·해제는 돈다. 한 키에 해제 자격·원천·표시 문구를 섞으면 자동 해제가 영영 성립하지 않는다 |
+| **DEC-SA-3** | **`TriggerKind` 4종 유지 + `payload.variant` 닫힌 12종 + 심각도.** 원인은 `TriggerVariant` 로 말한다 — WEATHER: `RAIN` `SNOW` `WIND` `HEAT` `COLD` `CLOUD` `DUST` / CLOSURE: `CLOSED_DAY` `OUT_OF_HOURS` `HOURS_MISMATCH` `HOLIDAY` `PERMANENTLY_CLOSED`. `DELAY` 의 `OVERSTAY`·`TRANSIT` 은 U10 이 같은 집합에 더한다. 특보는 기존 변형으로 사상한다(호우 `RAIN` · 대설 `SNOW` · 강풍·태풍 `WIND` · 한파 `COLD` · 폭염 `HEAT` · 황사 `DUST` — 특보 전용 변형을 두지 않는다). 심각도는 `RISK`(일정을 막는다 — 푸시 대상) · `CAUTION`(앱 안에만) 두 값이고 트리거 열 하나에만 둔다. 기회는 심각도가 아니라 트리거 밖이다. 집합의 주인은 C9 → openapi enum → FE codegen. 저장값이 집합에 없으면 응답은 null 이고 FE 는 kind 라벨을 쓴다 | DEC-U4-4(kind 를 늘리지 않는다). kind 는 DB CHECK(`backend/app/src/main/resources/db/migration/V2.18__plan_b_detection.sql:13`)·ai `TriggerKind`·FE 라벨 `Record<TriggerKind>`(`frontend/src/features/planb/model/triggerLabel.ts:25-30`)에 박혀 있어 늘리면 세 곳이 같이 흔들린다. 설계 단계에서 다섯 벌로 갈렸던 변형 어휘를 하나로 닫는다 |
+| **DEC-SA-4** ★ | **미리 짜 둔 대안.** 위험 대표 사건마다 C10 이 `planb.PlanBTriggered` 를 구독해 **SYSTEM 재계획 세션**을 열고 산출(DRAFT)까지만 한다. 이벤트는 재료(`dateRisks` — kind·변형·POI)만 싣고 사유·지시·제외 매핑은 C10 이 소유한다. 앱은 트리거 날짜로 `GET /trips/{tripId}/replan-sessions/prepared?date=` 를 조회한다 — 트리거에 세션 필드를 두지 않는다. 적용은 사용자 [적용]뿐이다 | Q1 답 "미리 짜 둔 대안 (Recommended)"(한 번 탭 재계획·자동 적용 대신). C9 은 C10 상태를 몰라야 하고(의존은 C10 → C9 단방향, §4.0), 날짜 키라 해제 뒤 재성립으로 트리거 id 가 바뀌어도 초안이 이어진다. AI 지시 키는 재계획 어휘라 C9 이 알 이유가 없다. 구독은 알림 선례대로 이벤트 타입 문자열로 한다(컴파일 의존 없음) |
+| **DEC-SA-5** | **알림: 새 `NotificationKind` 없음 · 위험만 푸시 · 주의는 알림함만 · 기회는 알림 경로 밖 · `PLAN_B` 푸시 기본 ON.** 사건이 `push` 를 싣고 알림은 그것만 본다. 저장된 토글 행은 존중하고 `SLOT_PRE` 는 OFF 그대로다 | Q4 답 "위험 알림만 기본 ON (Recommended)" — U6 BR-U6-18 의 기본값은 `SLOT_PRE`·`PLAN_B` 푸시 OFF 다(`backend/modules/notification/src/main/kotlin/com/trippilot/notification/domain/NotificationToggle.kt:35-42`). 새 kind 는 구 앱 알림함을 죽인다 — `NotificationInboxPage.tsx:35` 가 `notificationKind(item.kind)` 결과를 구조분해하는데 모르는 kind 면 `undefined` 다(`frontend/src/pages/settings/notification-inbox/model/notificationKind.ts:27-29`), 앱은 OTA 가 없다. 기회를 알림으로 보내면 광고성 판단이 걸린다(LEGAL-U6-02 — 정보통신망법 제50조 ①③, KISA 안내서: 영리 사업자의 고객 대상 정보는 원칙적으로 광고성이고 부수적으로 섞여도 전체가 광고성) |
+| **DEC-SA-6** | **기회 카드는 조회형.** 근처 행사·요즘 인기는 트리거도 알림도 아니다. 허브가 날짜를 볼 때 BE → AI 조회(LLM 0회)로 최대 3개를 받아 카드 1장으로 보이고, 실행은 [넣어서 다시 짜기] → 기존 자연어 재계획 → 사용자 [적용]이다. 상태가 없어 스케줄러·마이그레이션·야간 규칙이 필요 없다 | Q2 답 "지역 행사·인기 장소" + 0.1 원문 "해당 지역에 요즘 뜨는 핫이슈". DEC-U4-4(kind 추가 금지)·LEGAL-U6-02(광고성은 알림 경로 밖)·DEC-SA-5. INV-1 — 행사는 후보가 아니고 남은 동선 1km 안 **등록 POI** 만 카드에 오른다 |
+| **DEC-SA-7** | **지평 스위치 하나.** `today` \| `tomorrow` \| `pre-trip`(기본 `today`)를 C9 스윕(어느 날짜를 보나)과 C10 진입(전날 창)이 **함께** 읽는다. `tomorrow` = 저녁 회차가 내일을 본다. `pre-trip` = 저녁 회차가 내일 시작 여행의 첫날을 보고 C10 이 전날 창을 연다. `pre-trip` 은 BR-U3-28·INV-U3-04 개정 승인 뒤에만 켠다(O-SA-6) | Q2 답 "여행 전날(D-1) 점검". 점검과 진입이 따로 켜지면 D-1 알림 탭이 409 막다른 길이 된다 — 재계획 시작은 여행 기간 밖이면 409 다(`backend/modules/itinerary-recalculation/src/main/kotlin/com/trippilot/recalculation/application/ReplanSessionService.kt:81-84`). 반대로 감지 스위치만으로 여행 전 확정 일정 쓰기까지 열리면 INV-U3-04 를 깬다(G-SA-6) |
+| **DEC-SA-8** | **플래그 체계.** 백엔드 env 4(`PLANB_SITUATION_SWEEP` · `PLANB_SITUATION_HORIZON` · `PLANB_SITUATION_SWEEP_ACCOUNT_IDS` · `PLANB_PREPARED_REPLAN`) + AI 1(`HOLIDAY_CLOSURE_MODE`). 감지기 목록·관찰 전용 목록은 설정 파일, 기회는 배포 차트 고정 env(`AI_OPPORTUNITY_MODE`), 외부 API 감지기의 live 조건은 기존 `WEATHER_MODE=kma`. 코드는 전부 꺼진 채 들어가고 켜는 순서가 있다(§7) | 3중 게이트와 이름 불일치는 배포 거부·조용한 꺼짐을 만든다 — 허용목록에 없는 키를 시크릿에 먼저 쓰면 배포 전체가 거부된다(`deploy/eks/runtime_secrets.py:203-207`). develop 머지는 개발 배포로, 승격 뒤 운영 배포로 이어지므로 코드는 전부 꺼진 채 들어간다. 회수는 값 되돌리기 + 재배포이고, 스윕을 끄면 트리거 목록이 스윕 출처 트리거를 즉시 숨긴다(BR-SA-13) — 일괄 만료 명령을 두지 않는다 |
+
+### 2.1 기각·보류한 대안
+
+| 대안 | 처리 | 이유 |
+|---|---|---|
+| 20:15 회차가 실패하면 17시 발표분으로 내일을 판정 | 기각 | 20:40 보충 회차가 20시 발표분을 다시 볼 기회를 준다 — 만료 스냅숏 금지(INV-U4-09)의 예외를 새로 만들지 않는다 |
+| 변형별 켜기 스위치(허용목록) | 기각 | 서버가 내는 알림 제목·사유는 정확하고 오표기는 구 앱 알약 라벨뿐이다 — 켜는 순서(운영 켜기 전 `minSupportedVersion` 상향, O-SA-7)로 막는 쪽이 설정·코드를 늘리지 않는다 |
+| DB 커넥션 풀 상한 상향 | 보류 | DB 연결 여유를 확인하지 못했다 — 선계산 실행기를 1스레드로 묶는다(BR-SA-18) |
+| AI 확실성 하위 코드(넓혀 읽은 휴무 표시) | 보류 → O-SA-13 | 휴무 어휘 파일이 장소 데이터 작업의 고경합 파일이다 — 관찰 전용 실측 뒤 정한다 |
+| 소비 뒤 조용한 되살림에 새 알림함 행 | 기각 | 같은 위험이 이미 알림함에 있다 |
+| 억제 날짜를 만료 시각으로 읽기(마이그레이션 없이) | 기각 | 같은 변경에 마이그레이션이 이미 있고, 명시 열이 덜 헷갈린다 |
+| 선계산 제출 디바운스 | 기각 | 여행·회차당 사건 1건(INV-SA-3)이 같은 회차 다건을 원천에서 없앤다 |
+| 하위 코드(`reason_code`)를 1차에서 제외 | 기각 | 공휴일 휴무(1차)가 하위 코드를 요구한다 — 하위 코드가 들어오기 전까지는 `HOURS_MISMATCH` 하나로 간다 |
+| 변형별 알림 제목 12종 | 기각 | 사유를 되풀이하고 '~로 나와요'를 단정으로 뒤집으며 '폭염·한파'가 특보처럼 읽힌다 — kind 제목 3종(BR-SA-21) |
+| 앱 주기 폴링 · 클라이언트 재정렬 | 기각 | 판정이 매시 :15 라 5분 폴링 12번 중 11번이 같은 값이다 — 포그라운드 복귀·푸시 수신 때 캐시 무효화로 충분하다. 정렬은 서버 한 곳(BR-SA-13) |
+| 새 운영 지표(Micrometer) | 기각 | 운영은 지표 내보내기가 꺼져 있다 — 회차 요약 로그 1줄이 1차 수단(§4.1) |
+| 계정 삭제 대기 계정의 푸시 필터 | 범위 밖 | 리마인드를 포함한 푸시 전반의 공백이라 토큰 비활성화가 근본 처리다 — 별도 |
+
+---
+
+## 3. 전체 흐름
+
+```text
+[1] 스윕(C9)   cron 07:15~20:15 매시 :15 + 20:40 보충 (KST), 단일 실행 락
+               모드 off|dry-run|on, 지평 today|tomorrow|pre-trip, 계정 허용목록
+     |
+     v
+[2] 대상       진행 중 여행(+20시대: 내일 시작 여행), 현재 일정 CONFIRMED 만
+               시작 위치 회전, 여행 단위 병렬 2, 회차 예산 20분, 20:58 이후 쓰기 없음
+     |
+     |  여행 x 날짜(오늘 / 20시대 내일) x 감지기 -- 트랜잭션 밖, 출처별 격리, 회로 차단
+     v
+[3] 감지기     kma-forecast / kma-warning(오늘만) / airkorea / place(아침=오늘, 저녁=내일)
+               --> Checked(확인한 대상, 신호) | Unknown(모름)    * 관찰 전용 출처는 로그만
+     |
+     v
+[4] 판정(C9)   reconcile -- 여행 1개 = 트랜잭션 1개
+               (1) 만료  (2) 출처별 관측 접기  (3) 결정표: 발화/제자리 갱신/해제/조용한 되살림
+               (4) 감시 상태 기록  (5) 알림 사건 <= 1건(여행, 회차)
+     |
+     |  아웃박스(같은 트랜잭션): planb.PlanBTriggered(대표 + 외 N건 + 그 날 위험 재료, push)
+     +--> [5] 알림(C14)       알림함 적재 --> push=true 면 푸시(토글/기기/상한/같은 여행 10분 1회)
+     |
+     +--> [6] 대안 준비(C10)  대표가 위험이면 SYSTEM 세션 --> 전용 실행기(1) --> AI replan --> DRAFT
+
+[7] 앱   푸시 탭 / 알림함 / 허브 알약 --> /trips/{id}/planb?triggerId= --> 진입 게이트
+         트리거 상세 + 그 날짜의 준비된 대안 --> i06 비교 | i05 계산 중 | i04(시드) | 허브 안내
+         [적용](사용자) --> recalculation.ItineraryRecalculated(triggerId, targetDate) --> 트리거 CONSUMED
+
+[8] 앱   허브에서 날짜를 보면 GET opportunities (BE --> AI, LLM 0회) --> 기회 카드 1장
+         --> [넣어서 다시 짜기] --> i04
+```
+
+텍스트 표현(같은 내용):
+
+1. **스윕**(C9)이 KST 07:15~20:15 매시 :15 와 20:40 에 클러스터 전체에서 한 번씩 돈다 — BR-SA-01.
+2. **대상**을 고른다 — 진행 중 여행(저녁엔 내일 시작 여행 포함)의 확정 일정만, 시작 위치를 돌려 가며 병렬 2로 — BR-SA-02·03.
+3. **감지기**가 (여행, 날짜)마다 `Checked` 또는 `Unknown` 을 돌려준다. 저장하지 않는다 — DEC-SA-2.
+4. **판정**(`reconcile`)이 여행 1개를 트랜잭션 1개로 처리하고, 알림 사건을 많아야 1건 아웃박스에 남긴다 — BR-SA-05~12 · INV-SA-3.
+5. **알림**(C14)이 알림함에 쌓고 `push=true` 면 푸시한다 — BR-SA-21.
+6. **대안 준비**(C10)가 위험 대표 사건이면 SYSTEM 세션으로 초안을 만든다 — BR-SA-18~20.
+7. **앱**이 진입 게이트로 비교·계산 중·요청 화면을 고르고, 사용자 [적용]이 일정을 바꾸며 트리거를 소비한다 — BR-SA-23 · BR-SA-14 · INV-SA-1.
+8. **기회 카드**는 조회형이다 — BR-SA-22.
+
+- 쓰기 경로는 [4] 하나다. 감지기는 저장·이벤트를 하지 않는다.
+- 해제는 출처별이다 — 특보·대기질이 키 미등록(30)으로 모름이어도 단기예보의 발화·해제는 그대로 돈다.
+- 상한은 푸시만 묶는다. 배너·알림함은 숨기지 않는다.
+
+---
+
+## 4. 구성요소별 흐름
+
+### 4.0 모듈 의존
+
+다른 모듈은 상대 모듈의 `api` 만 본다. 새 의존은 둘이고 순환이 없다.
+
+| 의존 | 구분 | 용도 | 순환 확인 |
+|---|---|---|---|
+| C9 planb-detection → C6 trip `api` | 기존 + **감시 퍼사드 신설** | 진행 중·내일 시작 여행 + 계정(스케줄러 경로에는 사용자 요청이 없다) | — |
+| C9 → C8 itinerary-generation `api` | 기존 + **하루 검증 퍼사드 신설** | 그 날 계획 슬롯 · 그 날 하루 AI 검증(외부 호출 — 트랜잭션 밖) | — |
+| C9 → C11 weather-context `api` | 기존 + **시간별 예보·특보·대기질 퍼사드 신설** | 날씨 감지기 3종. 기존 `ContextFacade` 와 분리(대역 보호) | — |
+| C9 → C7 place-data `api` | **신설** | 장소 상태(폐업) | place-data 는 core 에만 의존(`backend/modules/place-data/build.gradle.kts:12`) |
+| C10 itinerary-recalculation → C9 `api` | **신설** | 트리거 조회 — 진입 날짜 강제(BR-SA-20) | C9 은 trip·itinerary-generation·weather-context 에만 의존(`backend/modules/planb-detection/build.gradle.kts:12-15`) — 단방향 |
+| C9 ↔ C10 이벤트 | **구독 2건 신설** | C10 이 `planb.PlanBTriggered`(선계산), C9 이 `recalculation.ItineraryRecalculated`(소비) | 이벤트 타입 문자열 구독 — 컴파일 의존 없음 |
+
+C10 의 "C9 에 의존하지 않는다 — 트리거 상세가 필요해지면 그때 경계를 연다"(`ReplanSessionService.kt:221-223`)를 여기서 연다 — 진입 날짜 강제가 트리거 날짜를 읽어야 한다. 감시 퍼사드를 `TripFacade` 에 얹지 않는 것은 `TripOwnerFacade` 선례와 같다(`backend/modules/trip/src/main/kotlin/com/trippilot/trip/api/TripOwnerFacade.kt:9-14` — 많은 테스트 대역이 `TripFacade` 를 구현한다).
+
+### 4.1 스윕 — 회차를 돌린다 (C9)
+
+- **회차**: (시각, 단계). MORNING 07:15 · DAYTIME 08:15~19:15 · EVENING 20:15·20:40. 클러스터 단일 실행 락 `planb-situation-scan`(U10 `DELAY` 락과 분리) — cron 은 두 파드가 같은 순간 깨므로 최소 보유 5분이 재실행을 막고, 최대 보유 25분은 죽은 파드의 락이 20:40 보충을 막지 않게 한다. 규칙 BR-SA-01.
+- **대상**: trip 의 감시 퍼사드가 (여행, 계정, 시작, 종료)를 키셋으로 넘긴다 — 진행 중 여행, 저녁 회차는 내일 시작 여행 포함, 종료 기록·삭제 제외(술어가 부분 인덱스 `ix_trip_pending_end` 와 같다 — `V2.37__trip_ended_at.sql:19`). 여행마다 현재 일정이 확정(CONFIRMED)인지, 그 날 끝나지 않은 계획 슬롯이 있는지 본다. 규칙 BR-SA-02.
+- **순서**: 시작 위치 무작위 → 여행 단위 병렬 2 → 여행마다 (예산 확인 → 일정 조회 → 감지기 호출(트랜잭션 밖, 단계·날짜로 거름) → 판정(트랜잭션 1)). 출처별 격리·회로 차단·종료 신호 처리는 BR-SA-03, 관찰 전용은 BR-SA-04.
+- **관측**: 회차마다 요약 로그 1줄 — 모드·단계·여행 수·건너뜀·실패·출처별 live/off/observe/unknown·알림·푸시·조용한 발화·만료·소요·감지기별 지연(p50/p95). 예산으로 못 본 여행 수도 여기 남는다.
+- **스케줄러 풀**: 스윕이 아웃박스 릴레이·리마인드 폴러를 밀지 않게 풀을 4로 둔다(Boot 기본 1 — 기존 `@Scheduled` 잡 전부가 한 스레드를 나눈다). 이 값은 스위치와 무관하게 배포 즉시 반영된다(§6.3).
+
+### 4.2 감지기 — 확인하거나 모른다고 말한다
+
+```text
+SituationDetector (모든 감지기 공통 계약)
+  source  : kma-forecast | kma-warning | airkorea | place        (닫힌 집합)
+  kind    : WEATHER | CLOSURE
+  wants(phase, dayOffset)  -> 이 회차·날짜에 부를지
+  isLive()                 -> false = 부르지 않음 = 모름(감시 상태 OFF)
+  detect(target)           -> Checked(checked, signals) | Unknown(why)
+                              저장·이벤트 금지(캐시 외 부작용 없음)
+  target  = 여행 · 계정 · 날짜 · 단계 · 지금 · 그 날 끝나지 않은 계획 슬롯 · 이 출처가 그 날 띄운 ACTIVE
+  checked = 해제 임계 아래로 확인한 대상(slotKey, 날짜 전체 = null)
+  signal  = kind · 날짜 · slotKey? · 심각도 · 변형 · dataSource · poiIds · payload · 사유 · 범위
+```
+
+| 감지기 | kind | 회차·날짜 | 신호 단위 | `checked`(해제 근거) | 규칙 |
+|---|---|---|---|---|---|
+| `kma-forecast` 단기예보 | WEATHER | 모든 회차 오늘, 저녁 회차 내일 | (여행, 날짜) 1건 · slotKey 없음 | 남은 실외 슬롯의 판정 시각 값이 다 있고 전부 해제 임계 아래, 또는 남은 실외 슬롯 0 | BR-SA-15 |
+| `kma-warning` 특보 | WEATHER | 오늘만(특보현황에 종료 시각이 없다) | (여행, 오늘) 1건 | 목적지에 해당 특보 없음 | BR-SA-16 |
+| `airkorea` 대기질 | WEATHER | 오늘, 저녁 회차 내일 | (여행, 날짜) 1건 | 보통 이하 | BR-SA-16 |
+| `place` 장소 | CLOSURE | MORNING 오늘, EVENING 내일 | 슬롯마다 | 상태 ACTIVE ∧ 영업시간 판정 OK ∧ 그 슬롯 ACTIVE 가 `HOLIDAY` 아님 | BR-SA-17 |
+
+- 날씨 감지기의 슬롯은 스윕이 준 `target.slots` 를 쓴다(다시 조회하지 않는다). 계획 슬롯 표면은 이름·카테고리·좌표·고정·위반 표시를 이미 싣는다(`itinerary-generation/api/ItineraryPlanFacade.kt:59-90` `PlannedSlotView`).
+- 장소 감지기의 영업시간 판정은 C8 의 **하루 검증**이다 — 읽기 트랜잭션으로 일정·그 날 슬롯·확정분 동결 이름을 읽고 닫은 뒤 기존 재검증 경로로 **그 날 하루만** AI 검증을 부른다(같은 장소의 다른 날 위반이 섞이지 않게). 결과는 슬롯마다 `VIOLATED`·`OK`·`UNKNOWN` + 하위 코드 + "편집 때 이미 본 영업시간 경고인가". 백엔드는 영업시간 원문도 위반 상세도 파싱하지 않는다 — 해석은 AI 한 곳이다.
+- 공휴일 휴무는 AI 가 소유한다 — 특일 달력 포트 + 휴일 규칙 파서 + 단일 헬퍼(그 날 영업 창)를 검증과 조립 전 경로에 함께 적용해 생성·재계획·검증이 같은 규칙을 본다(`HOLIDAY_CLOSURE_MODE`, 기본 off = 공휴일 규칙 없음). 착수 게이트: 같은 조립 파일을 고치는 PlanB 장소지식 작업의 '다시 짜기 1회 수리' 머지 뒤, 헬퍼 시그니처를 그 작업과 합의하고 시작한다. 그 전의 변경은 그 파일들(`agents/schedule/agent.py`·`assembly_engine/fallback_assembler.py`·`agents/planb/composition.py`)을 건드리지 않는다.
+
+### 4.3 판정 — `reconcile` (여행 1개 = 트랜잭션 1개)
+
+1. **만료** — 지난 날·오늘 시작이 지난 슬롯·일정에서 빠진 슬롯·날짜·남은 슬롯 없는 날짜 전체 신호(WEATHER·CLOSURE 만). BR-SA-07.
+2. **출처별 관측 접기** — 대상(kind × 날짜 × slotKey)마다 이번 회차 관측을 모은다: 어느 출처든 신호가 있으면 **신호**(심각도가 높은 쪽을 대표로), 신호가 없고 그 트리거를 띄운 감지기가 확인했으면 **해소**, 그 밖은 **모름**. 관찰 전용·꺼진 출처의 관측은 접지 않는다. BR-SA-04·06.
+3. **결정표** — 발화·제자리 갱신·격상·해제·조용한 발화(되살림 포함)를 정한다(BR-SA-08). 범위·허용 날짜 교정(BR-SA-11), 억제(BR-SA-09)·무영향 판정, 문구 가드(BR-SA-12)를 같이 통과한다.
+4. **감시 상태 기록** — 출처별 `CHECKED`·`UNKNOWN` 과 확인 시각. 목록 응답의 `watch` 재료다(BR-SA-13).
+5. **알림 사건** — 여행·회차당 많아야 1건. 대표 + `others` + `dateRisks` + `push`. 푸시 대상이면 대표 행에 푸시 시각을, 사건에 실린 행에 알린 심각도를 남긴다. BR-SA-10 · INV-SA-3.
+
+- **모름은 행을 만들지 않는다** — 감시 상태 `UNKNOWN` 과 요약 로그로만 남는다(INV-SA-2 · INV-U4-09).
+- **동시성** — 제자리 갱신·해제·소비는 행 버전으로 경합한다. 충돌은 다음 회차가 다시 판정한다. 대상 유니크 위반은 새 트랜잭션으로 1회 재시도한다.
+- **기존 경로도 같은 판정을 탄다** — 사용자 날씨 확인(`POST …/triggers/weather-check`)과 U10 `DELAY` 의 `evaluate` 는 시그니처를 유지한 채 같은 생명주기 판정을 쓰고, 대표 1건짜리 사건을 낸다.
+
+### 4.4 알림 사건 → 알림 (C14)
+
+```text
+planb.PlanBTriggered --> PLAN_B 구독자(기존) : kind · push · others 를 읽는다
+   --> 제목(kind 3종) · 본문(사유 + " (외 N건)")
+   --> 알림함 적재 (재배달은 source_event_id UNIQUE 로 여기서 끝)
+   --> 정책: push=false            --> 알림함만
+             push=true 또는 없음    --> 같은 여행 10분 1회 --> 토글 · 기기 · 계정 소프트 상한 --> 푸시
+```
+
+- 적재가 푸시보다 먼저이고 푸시 성공과 무관하다(INV-U6-02 승계). 정책 판정은 적재가 성공한 **뒤**다 — 재배달이 지표를 두 번 세지 않게.
+- 액션은 `PLANB_REPLAN {tripId, triggerId}` 그대로다. 날짜·세션 id 를 싣지 않는다 — 앱은 탭 시점에 트리거 상세와 준비된 대안을 조회한다.
+- 억제 사유에 `IN_APP_ONLY`(사건이 푸시 대상이 아님)·`COALESCED`(같은 여행 10분 1회에 묶임)가 더해진다 — 억제 총량 식은 그대로다.
+- 기회는 이 경로를 부르지 않는다(DEC-SA-6). 규칙 BR-SA-21.
+- 기기 도달은 앱 수신·탭 처리·iOS entitlement·운영 실발송이 갖춰져야 생긴다(G-SA-7). 그 전에는 알림함·허브 알약이 유일한 표면이다.
+
+### 4.5 알림 사건 → 미리 짜 둔 대안 (C10)
+
+```text
+planb.PlanBTriggered --> 선계산 구독자(신설)
+   거름: 심각도 RISK, 새 필드 있음, 사건 나이 <= 30분, 스위치 on -- 모두 참일 때만
+   --> 진입 검증(사용자 진입과 공유: 트리거 날짜 강제 · 전날 창)            BR-SA-20
+   --> 열린 세션 정책 · 상한(여행 3 · 전체 100 / 일)                      BR-SA-18
+   --> 실행 자리(실행 1 + 대기 10) 획득 --> 못 얻으면 세션 없이 BUSY
+   --> SYSTEM 세션 열기(트리거당 1개) --> 전용 실행기 1스레드
+   --> AI replan(SOLVING 이 아니면 부르지 않는다) --> DRAFT | NO_SOLUTION | FAILED
+앱: GET /trips/{tripId}/replan-sessions/prepared?date=  --> 세션(+시작 주체 · stale) | 404
+```
+
+- 결과는 `Opened` 또는 `Skipped(DUPLICATE · TRIP_CAP · GLOBAL_CAP · INVALID · OPEN_SESSION · EARLIER_OPEN · BUSY)` 다. 요약 로그 `replan.prepared outcome=` 로 본다.
+- **예외 처리** — 계약 위반·파싱 실패는 WARN 후 삼키고, 일시 오류는 던져 재시도받는다. 아웃박스 릴레이는 같은 이벤트의 구독자를 서로 독립으로 돌리고 하나라도 실패하면 이벤트째 재시도하므로(#1348), 알림 구독자는 `source_event_id` UNIQUE 로, 선계산은 트리거당 SYSTEM 세션 1개(부분 유니크)로 멱등이다.
+- **실행기 1스레드** — 재계획 산출이 읽기 전용 트랜잭션 안에서 AI 를 최대 25초 부른다(`backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/ReplanFacadeService.kt:71-85`). 공용 비동기 풀은 포화 시 호출자 실행이라 릴레이 스레드를 막는다.
+- AI 와이어는 바꾸지 않는다 — 선계산도 재계획 요청의 `trigger` 필드를 보내지 않는다(재계획 동작 불변).
+- 재료 매핑의 '영향 범위가 일부(SOME)면 영향 POI 제외'는 트리거 payload 의 coverage 를 쓰는데, 사건 `dateRisks` 항목에는 coverage 가 없다 — G-SA-11.
+- 규칙 BR-SA-18 · BR-SA-19 · BR-SA-20 · INV-SA-1 · INV-SA-6 · INV-SA-7.
+
+### 4.6 앱 — 진입과 표시
+
+- **진입**: 푸시 탭 · 알림함 · 허브 알약 → `/trips/{tripId}/planb?triggerId=` → 진입 게이트(BR-SA-23). `triggerId` 가 없으면 i04 로 간다(U4 경로).
+- **푸시 수신·탭**: 포그라운드에서도 배너·목록에 보이고, 탭은 홈이 그려진 뒤 액션 라우팅으로 간다. 로그인 전 탭은 보류했다가 1회, 같은 알림은 1회, 모르는 액션은 이동하지 않는다. 수신·탭 때 알림함·트리거 캐시를 무효화한다. 이 처리는 리마인드를 포함한 모든 푸시에 적용된다.
+- **표시 어휘**:
+
+  | variant | 라벨 | variant | 라벨 |
+  |---|---|---|---|
+  | `RAIN` | 비 예보 | `CLOSED_DAY` | 휴무 |
+  | `SNOW` | 눈 예보 | `OUT_OF_HOURS` | 영업시간 밖 |
+  | `WIND` | 강풍 | `HOURS_MISMATCH` | 영업시간 확인 |
+  | `HEAT` | 폭염 | `HOLIDAY` | 공휴일 휴무 |
+  | `COLD` | 한파 | `PERMANENTLY_CLOSED` | 폐업 |
+  | `CLOUD` | 흐림 | 모르는 값·null | kind 라벨(`TRIGGER_LABELS`) |
+  | `DUST` | 미세먼지 | | |
+
+- 알약은 `{날짜어 }{변형 라벨}{ · 장소}{ 시}` 다(예: `내일 휴무 · 국립중앙박물관`). 날짜어는 FE 가 표시 시점에 붙인다 — 같은 날이면 없음, 다음 날 `내일`, 그 밖 `M월 D일`. 날씨 트리거는 slotKey 가 없어 장소가 없다 — 영향 장소는 사유 문장이 말한다. '시'는 계획 시작을 자를 뿐 산술이 없다.
+- 위험 시트는 eyebrow `위험 요소 · {카테고리}` / `주의 · {카테고리}` + 날짜어, 제목 아래 `출처: {attribution}`(BR-SA-24). 감시 행은 `watch` 3상태를 읽는다 — OFF 는 숨김, UNKNOWN 은 `확인 불가`, CHECKED 이고 발화 없음은 `정상`(BR-SA-13).
+- i06 은 적용 409 `EXPIRED`·`STALE` 에 `시간이 지나 이 대안은 지금 일정과 맞지 않아요` + [새 대안 보기](같은 입력으로 다시 요청)를, 넣으려던 장소가 초안에 없으면 미포함 안내를 보인다(BR-SA-19 · BR-SA-22).
+- **구 앱**(OTA 없음): 변형은 kind 라벨로 보이고(폭염도 `비 예보`) 게이트가 없다. 날짜는 서버 진입 강제(BR-SA-20)가 지키고, 라벨 오표기는 켜는 순서(운영 켜기 전 `minSupportedVersion` 상향 — O-SA-7)로 막는다. FE 플래그는 두지 않는다 — 새 필드가 없으면 kind 기준 표시로 떨어진다.
+
+### 4.7 기회 카드 (조회형)
+
+```text
+허브가 날짜 D 를 본다 --> GET /trips/{tripId}/opportunities?date=D (BE)
+   BE: 여행 중이고 D in [오늘, 종료] 일 때만, 자격 있는 슬롯(날짜 · 좌표 · 끝나지 않음, <= 8)만 보낸다
+   --> AI POST /ai/v1/planb/opportunities (LLM 0회)
+       행사: 기간 겹침 · 공식/큐레이션만 / POI: 슬롯 1km 안 등록 POI / 태그 '요즘 인기'
+   --> 결정론 순위 · 최대 3 --> BE OpportunityList --> FE 고정 템플릿 카드 1장(날짜당, x 로컬 숨김)
+   --> [넣어서 다시 짜기] --> i04(prefill "{장소명} 꼭 넣어서 다시 짜 줘" + 그 POI)
+   --> 기존 자연어 재계획(추출 --> 등록 이름 대조 --> 지도 실재 --> 그날 영업 --> 필수 방문) --> 초안 --> 사용자 [적용]
+```
+
+- 꺼짐·모름·없음·범위 밖은 200 빈 목록이고 FE 는 아무것도 그리지 않는다. 404 는 소유 아님뿐이다.
+- 같은 날짜에 날씨 위험 트리거가 ACTIVE 면 행사 카드는 숨긴다. 규칙 BR-SA-22.
+
+### 4.8 소비 — 적용이 트리거를 닫는다
+
+사용자 [적용] → `recalculation.ItineraryRecalculated(triggerId, targetDate)` → C9 소비 구독자 → 날짜가 맞을 때만 `CONSUMED`(BR-SA-14). 소비된 대상도 다음 회차의 결정표를 탄다 — 적용 뒤에도 위험이 남아 있으면 배너가 조용히 되살아난다(BR-SA-08).
+
+### 4.9 계약 접점 요약
+
+모두 추가형이다 — 새 필드는 선택(필수 목록을 늘리지 않는다)이고 이벤트 필드는 기본값 null 이라 옛 행·옛 구독자·구 앱이 그대로 읽는다.
+
+| 접점 | 방향 | 내용 | 규칙 |
+|---|---|---|---|
+| `GET /trips/{tripId}/triggers` | FE ← BE | 필터·서버 정렬된 ACTIVE 목록 + `watch`. `Trigger` 에 `severity`·`variant`(12종, nullable)·`attribution` | BR-SA-13 |
+| `GET /trips/{tripId}/triggers/{triggerId}` | FE ← BE | 트리거 + 상태 + `currentTriggerId`. 404 = 없음·타 계정 | BR-SA-13 |
+| `GET /trips/{tripId}/replan-sessions/prepared?date=` | FE ← BE | 세션(+`initiatedBy`·`stale`) 또는 404. 세션 조회에도 `stale` | BR-SA-18 · 19 |
+| 재계획 시작·적용 409 | FE ← BE | 트리거 진입 날짜 강제 · 전날 규칙 · `EXPIRED`·`STALE` | BR-SA-19 · 20 |
+| `GET /trips/{tripId}/opportunities?date=` | FE ← BE | `OpportunityList{items ≤ 3}` | BR-SA-22 |
+| `POST /ai/v1/planb/opportunities` | BE → AI | LLM 0회. 시각 필드 없음(행사 원천이 일 단위) | BR-SA-22 |
+| AI 검증 위반 `reason_code`(선택) | AI → BE | `CLOSED_DAY`·`OUT_OF_HOURS`·`HOLIDAY` — AI 계약과 BE 와이어·계약 테스트 샘플을 같은 변경에서 | BR-SA-17 |
+| `planb.PlanBTriggered` | C9 → C14 · C10 | + `affectedDate`(yyyy-MM-dd KST)·`scope`·`severity`·`variant`·`push`·`others`·`dateRisks[{kind, variant, poiIds}]`. 의미: 여행·회차당 1건(대표) | BR-SA-10 |
+| `recalculation.ItineraryRecalculated` | C10 → C14 · C9 | + `triggerId`·`targetDate` | BR-SA-14 |
+
+경계는 넓히지 않는다 — 알림 액션 어휘·`Notification.kind`·날씨 확인 경로·AI 재계획 요청의 `trigger` 는 그대로이고, 새 상태값·새 kind 는 없다.
+
+---
+
+## 5. 신호원 표
+
+| 신호원 | 감지기 · 원천(`dataSource`) | 읽는 것 | 낼 수 있는 변형 | 근거 자격 | 모름이 되는 경우 |
+|---|---|---|---|---|---|
+| 기상청 단기예보 `getVilageFcst`(격자 시간별) | `kma-forecast` · `KMA_VILAGE` | 오늘·내일 POP·PTY·SKY·TMP·WSD + TMN·TMX | RAIN·SNOW·WIND·HEAT·COLD·CLOUD | **근거** | `WEATHER_MODE=fake`(호출 0) · 게이트웨이 오류 · 03 NO_DATA 재요청 실패 · 타임아웃·5xx·형식 깨짐 · 격자 상한 초과 · 판정 시각 값 결측 |
+| 기상청 특보현황 `getPwnStatus`(t6) | `kma-warning` | 오늘 발효 특보 × 여행 목적지 | RAIN·SNOW·WIND·COLD·HEAT·DUST | **근거** — 관찰 전용으로 출발 | 키 미등록(30)·인증 오류 · 형식 깨짐 |
+| 에어코리아 대기질 예보통보 `getMinuDustFrcstDspth` | `airkorea` | 오늘·내일 PM10·PM25 권역 등급 | DUST | **근거** — 관찰 전용으로 출발 | 〃 |
+| AI 검증(validate) HC1 + 하위 코드 | `place` · `AI_VALIDATE` | 그 날 하루 일정의 영업시간 위반 | CLOSED_DAY·OUT_OF_HOURS·HOLIDAY·HOURS_MISMATCH | **근거** | AI 모드 ≠ http · 보류(불통·5xx·시한) · 영업시간 원문 없음 |
+| place-data 장소 상태 `data_status` | `place` · `PLACE_STATUS` | `CLOSED` | PERMANENTLY_CLOSED | **`CLOSED` 만 근거** | 상태 조회 예외(발견 0, `checked` 비움) |
+| 특일정보 `getRestDeInfo` → AI 공휴일 달력 | (HC1 `HOLIDAY` 의 재료) | 공휴일·국경일 × 휴무 원문의 휴일 규칙 | HOLIDAY | **근거** — `HOLIDAY_CLOSURE_MODE` | 달력 실패·키 미등록 → 날짜 명시형 규칙만, 정기 규칙 판정은 그대로 |
+| 행사 저장소(TourAPI 공식 축제 `tourapi-`·수동 큐레이션) | 기회 전용 | 기간 겹치는 행사 × 남은 슬롯 1km | EVENT_VENUE·EVENT_NEARBY(트리거 아님) | **기회 카드만** | 미배선·실패 → TRENDING 만 + note |
+| POI 태그 `요즘 인기` | 기회 전용 | 남은 슬롯 1km 안 등록 POI | TRENDING(트리거 아님) | **기회 카드만** | POI 조회 실패 → 빈 목록 + note |
+| place-data `LOST`·`UNVERIFIED` | — | 목록 부재·미검증 | — | **근거 아님** — 폐업 증거가 아니다(모름) | — |
+| 카카오 장소 실재 확인 `NOT_FOUND` | — | — | — | **근거 아님** — 2026-09-12 '배제 대신 강등' 결정 | — |
+| 네이버 블로그 언급 수 | — | — | — | **근거 아님** — 약관(2026-09-01 접음) | — |
+| 네이버 검색 → LLM 추출 행사(`evx-`) | — | — | — | **카드에 보이지 않는다**(O-SA-12) | — |
+
+- 날씨 임계(발화·해제)는 C9 소유 상수이고 원천 조회는 weather-context 소유다(G-U4-2 승계). 강수 발화 60 은 백엔드 발화 정본이다(`WeatherTriggerService.kt:93`) — AI 생성 파이프라인의 80 은 다른 층이라 맞추지 않는다.
+- 단기예보 임계(강풍 14 · 폭염 33/35 · 한파 −12)는 기상청 특보 기준의 근사다 — **특보 판정이 아니다**(BR-SA-12 문구).
+- 실외 집합(자연·야경·액티비티)은 재계획 INDOOR·AVOID_OUTDOOR 가 빼는 집합과 같다(`ai/src/trippilot/assembly_engine/config.py:100-102` `RAIN_OUTDOOR` · `ai/data/replan_directives.yaml` INDOOR·AVOID_OUTDOOR) — 경보 대상 = 재계획이 바꾸는 대상. 백엔드 상수는 주석으로 이 두 곳을 가리키기만 하고, 거울 테스트·CI 경로 연결은 두지 않는다(그 사전은 재계획 작업의 고경합 파일이다). 회피 목록을 바꾸는 변경은 백엔드 실외 집합도 함께 맞춘다 — CI 로 묶지 않으므로 사람이 맞춘다. 액티비티에 실내 나이트라이프가 섞이는 점은 G-SA-10.
+
+---
+
+## 6. 외부 의존과 실패 처리
+
+### 6.1 외부 의존
+
+| 외부 | 쓰는 곳 | 키·한도 | 호출량 |
+|---|---|---|---|
+| 기상청 단기예보 | `kma-forecast` | `WEATHER_API`(개발계정 10,000/일, AI 와 공유). 격자 경로만 세는 파드당 하루 상한 3,000(이름 경로·도우미 날씨 카드는 세지 않는다). 캐시 만료 = 발표 + 3h + 10분 | ≈ 15 × 진행 중 여행 × 격자 공유 계수(여행 200 → 하루 약 1,800). 약 500 여행부터 운영계정 증설 |
+| 기상청 특보 | `kma-warning` | 같은 키(O-SA-1). 회차당 1콜, 파드 메모리 20분(발표 시각·순번이 같으면 재파싱 생략) | 하루 ≤ 16 |
+| 에어코리아 | `airkorea` | 같은 키(O-SA-1). 예보 발표 단위 캐시 | 하루 ≤ 8(개발 500/일) |
+| 특일정보 | AI 공휴일 달력 | `WEATHER_API`. **성공한 달만** 캐시 | 달마다 |
+| AI 검증(validate) | `place` | LLM 0회. 실측 20.1s(2026-08-21, 시한 미집행), 소켓 상한 62s | 여행당 아침 1 + 저녁 1~2(20:40 보충) |
+| AI 재계획(replan) | 선계산 | 시한 25s. 상한 여행 3·전체 100/일(O-SA-10) | 위험 대표 사건마다 최대 1 |
+| AI 기회(opportunities) | 기회 카드 | LLM 0회. POI 반경 조회 ≤ 8회 · 예산 70% | 허브가 날짜를 볼 때 |
+| Expo 푸시 | 알림 | `PUSH_MODE`(개발 대상은 강제 off) · iOS entitlement · 앱 탭 처리(G-SA-7) | 여행·하루 상한(BR-SA-10) + 계정 시간 10·일 50 소프트 상한(COST-U6-01) |
+
+### 6.2 실패·모름 처리
+
+어느 실패도 "정상"으로 읽지 않는다. 모름은 발화도 해제도 아니다(INV-SA-2).
+
+| 구성요소 | 상황 | 처리 | 결과 |
+|---|---|---|---|
+| 스윕 | 감지기 예외 · 회로 차단(같은 출처 연속 3회) | 그 출처·여행·날짜 Unknown | 무발화·무해제, 감시 상태는 시간이 지나 UNKNOWN |
+| 스윕 | 일정 조회 예외 | 그 여행 실패(WARN), 상태 불변, 다음 여행 계속 | — |
+| 스윕 | 예산 초과 · 종료 신호 | 여행 사이에서 멈추고 정상 반환(락 해제) | 못 본 여행 수 요약 로그, 다음 회차(20:15 끊김은 20:40)가 잇는다 |
+| 판정 | 대상 유니크 위반 · 행 버전 충돌 | 새 트랜잭션 1회 재시도 · 다음 회차가 다시 판정 | — |
+| 날씨 3종 | `WEATHER_MODE=fake` | 실 포트 없음 → live 아님 | 세 감지기 호출 0, 감시 상태 OFF |
+| 날씨 3종 | 게이트웨이 오류(HTTP 401/403, `returnReasonCode` 20·22·30·31·32 — JSON 을 요청해도 XML 본문으로 올 수 있다) | 캐시하지 않음, 원인 코드와 WARN(파드에서 상태가 바뀔 때 1번), 다음 회차 재시도 | 그 출처만 Unknown |
+| 단기예보 | 03 NO_DATA | 즉시 ≤ 2회 재요청, 그래도면 실패 | 그 격자 Unknown |
+| 단기예보 | 타임아웃(connect 3s·read 5s)·5xx·형식 깨짐 | 회차 안 실패 격자 메모(같은 격자 재호출 안 함), 회로 차단 대상 | Unknown |
+| 단기예보 | 격자 경로 하루 상한 초과 | 호출 안 함, WARN 하루 1번 | Unknown |
+| 단기예보 | 판정 시각 값 결측 | 그 슬롯 모름 | 다른 슬롯에 신호가 있으면 발화, 없으면 Unknown |
+| 장소 | 일정·날짜 없음 · 타 계정 | 하루 검증 결과 없음 | Unknown |
+| 장소 | AI 모드 ≠ http · 보류(불통·5xx·시한) · 영업시간 원문 없음 | 영업시간 UNKNOWN(WARN) | 폐업 판정은 동작 |
+| 장소 | 상태 조회 예외 | 폐업 발견 0, `checked` 비움 | 영업시간 판정은 영향 없음 |
+| 장소 | 공휴일 달력 실패(키 30 포함) | 날짜 명시형 규칙만 | `HOLIDAY` 는 감지기가 해제하지 않는다(BR-SA-17) |
+| 알림 | `accountId` 없음 | 예외 → 릴레이 재시도 | — |
+| 알림 | `kind`·`push` 를 모름 | 옛 제목 · 알림함만 + WARN | 잘못 들어온 값이 푸시되지 않는다 |
+| 알림 | 사유 없음 | `일정에 영향을 주는 상황이 감지됐어요` | — |
+| 알림 | 푸시 실패 · 상한 · 기기 없음 | U6 그대로 | 알림함 행은 남는다(INV-U6-02) |
+| 선계산 | 새 필드 결측 · 위험 아님 | 무동작 | 옛 사건 호환 |
+| 선계산 | 진입 검증 실패 · 사용자와 저장 경합 | `Skipped(INVALID)` · `Skipped(OPEN_SESSION)`(사용자 쪽은 409 `다른 재계획이 막 시작됐어요. 다시 시도해 주세요.`) | — |
+| 선계산 | 실행 자리 없음 · 실행기 거절(드묾) | 세션 없이 BUSY · 세션 FAILED | BUSY 는 상한을 쓰지 않는다. 앱은 i04 실시간 계산으로 |
+| 선계산 | AI 실패 · 해 없음 · 파드 재시작으로 SOLVING 고착 | FAILED · NO_SOLUTION · 2분 뒤 stale | 앱은 BR-U4-26 대칭 3옵션 · 같은 입력으로 재요청 |
+| 기회 | 행사 미배선·실패 · POI 조회 실패 · 예산 초과 · AI 무응답·계약 위반 | note + TRENDING 만 · 빈 목록 + note · 부분 결과 + note · BE 빈 목록 + WARN | 빈 목록이면 FE 는 그리지 않는다 |
+| 앱 | 조회 실패·3초 초과 · 푸시 data 이상 · 로그인 전 탭 · 다른 계정 | i04(U4 경로) · 이동 없음·무효화만 · 홈에서 1회 · 서버 404 얼굴 | 막다른 길 없음(INV-4) |
+
+### 6.3 위험과 대응
+
+| 위험 | 대응 |
+|---|---|
+| 푸시가 기기에 닿지 않는다(G-SA-7) — 위험 푸시의 효과 0 | 앱 수신·탭 처리 · iOS entitlement · 운영 실푸시 1회 왕복을 운영 켜기의 선행으로(§7). 그 전엔 알림함·허브 알약 |
+| 휴무 파서가 '매월 둘째·넷째'를 매주로 넓혀 읽어 열린 날 위험 푸시. 첫 켜기에 기존 확정 일정의 미경고 위반이 몰린다(파서 개선이 런타임 재파싱으로 즉시 반영된다) | dry-run 실측(§7), `~로 나와요` 문구(BR-SA-12), 강등은 O-SA-13 |
+| AI 검증 지연·AI 서버 CPU 경합으로 스윕이 길어진다 | 병렬 2 · 회로 차단 · 예산 · 시작 위치 회전, dry-run p95 로 병렬도 조정, 장소는 아침·저녁만 |
+| 구 앱: 폭염도 '비 예보', 게이트 없음 | 서버 진입 강제(BR-SA-20), `minSupportedVersion` 상향 뒤 운영 켜기(O-SA-7) |
+| 기상청 키·한도를 AI 와 공유 | 격자 경로 파드 상한, 약 500 여행부터 운영계정 증설 |
+| 스케줄러 풀 1 → 4 가 스위치와 무관하게 즉시 반영 | 기존 잡은 다중 파드 동시 실행에 견딘다. 리마인드 쪽에 폴러 타이밍 변화를 알린다 |
+| 선계산이 읽기 트랜잭션 안에서 AI 를 25초 부른다 — 커넥션 점유 | 실행기 1. 'AI 호출을 트랜잭션 밖으로'가 확대의 선행 |
+| 지역 날씨 하나에 다수 여행이 위험 → 선계산 BUSY | 세션 없이 건너뜀(상한 미소모), 앱은 i04 실시간 계산 |
+| 특보의 광역 목적지 매칭이 과잉 경보, 2026 특보구역 개편 | 관찰 전용 출발, 실응답 표본 테스트 |
+| 공휴일 달력을 못 읽은 회차가 휴무를 정상으로 본다 | `HOLIDAY` 는 감지기가 해제하지 않는다, 성공한 달만 캐시 |
+| `plan_b_trigger`·감시 상태 행 증가, 끝난 여행 마지막 날 ACTIVE 잔존 | 무발화 행은 날짜·변형당 1번(BR-SA-08), 목록 날짜 필터(BR-SA-13), 정리는 후속 |
+| 네이버 추출 행사를 카드에 표시하면 약관 노출 확대 | 공식·큐레이션만(O-SA-12) |
+| 법적 판단(위험·주의 = 정보성, 앱 안 카드 ≠ '전송')은 추정이고 KISA 안내서는 2017.11 판 | 법무 확인 묶음에 올린다(§10 끝) |
+| 해제 임계·감시 상태 신선도 창·병렬도는 초기값 | dry-run·운영 관측으로 조정(값 조정은 규칙 개정이 아니다) |
+
+---
+
+## 7. 플래그와 켜는 순서 (DEC-SA-8)
+
+| 키 | 위치 | 값(기본) | 뜻 |
+|---|---|---|---|
+| `PLANB_SITUATION_SWEEP` | backend 시크릿 | `off`·`dry-run`·`on` (`off`) | 스윕. `dry-run` = 판정·요약 로그만, 쓰기 0 |
+| `PLANB_SITUATION_HORIZON` | backend 시크릿 — C9 스윕·C10 진입이 함께 읽는다 | `today`·`tomorrow`·`pre-trip` (`today`) | 저녁 내일 점검·D-1 점검과 C10 전날 창(DEC-SA-7) |
+| `PLANB_SITUATION_SWEEP_ACCOUNT_IDS` | backend 시크릿 | UUID 목록 (빈값 = 전원) | 운영 카나리 — 개발은 푸시가 강제 off 라 실푸시 검증은 운영뿐 |
+| `PLANB_PREPARED_REPLAN` | backend 시크릿 | `off`·`on` (`off`) | 선계산(LLM 비용) |
+| `HOLIDAY_CLOSURE_MODE` | ai 시크릿 | `off`·`on` (`off`) | 공휴일 휴무 규칙 — 생성·재계획·검증 공통 |
+| `AI_OPPORTUNITY_MODE` | 배포 차트 고정 env | 설정 `off` · 차트 `http` | 기회 카드 AI 호출(구 앱은 이 BE 경로를 부르지 않는다) |
+| 감지기 목록 `sources` | 설정 파일 | `kma-forecast, kma-warning, airkorea, place` | 감지기 목록 |
+| 관찰 전용 `observe-only` | 설정 파일 | `kma-warning, airkorea` | 키 등록·실측 확인 뒤 빼는 커밋이 켜기 |
+| 병렬도 · 예산 · cron | 설정 파일 | 2 · 20분 · `0 15 7-20 * * *` + `0 40 20 * * *` | 테스트 설정은 cron 끔(배경 실행 없음) |
+| 스케줄러 풀 | 설정 파일 | 4(Boot 기본 1) | 플래그와 무관 — 배포 즉시 반영 |
+| (기존) `WEATHER_MODE` | | `kma` | 날씨 3 감지기의 live 조건 — `fake` 면 호출 0 |
+| (기존) `PUSH_MODE` | | | 실발송(개발 대상은 강제 off) |
+
+| 켜는 것 | 먼저 성립해야 하는 것 | 이유 |
+|---|---|---|
+| 개발 `SWEEP=on` | 개발 `dry-run` 1~2일 — 여행 수·출처별 Unknown·감지기 지연 p95·발화 표본(휴무 오탐 포함) | 오탐·부하 실측(BR-SA-04) |
+| 운영 `SWEEP=on` | 운영 `dry-run`(첫 켜기 몰림 규모) → 앱 푸시 수신·탭·진입 게이트·라벨의 스토어 반영 + `minSupportedVersion` 상향(O-SA-7) → 내부 계정 카나리 + 실기기 푸시 1회 왕복(iOS 는 entitlement 뒤) → 허용목록 비움 | 구 앱 오표기·막다른 탭·푸시 미도달(G-SA-7). 허위 알림 비율(OBS-U4-02)을 본다 |
+| `HORIZON=tomorrow` | `SWEEP=on` | 20:15·20:40 요약 줄 확인 |
+| `PREPARED_REPLAN=on` | 앱 진입 게이트 보급 | 먼저 켜면 계산만 하고 아무도 안 본다 |
+| `HORIZON=pre-trip` | BR-U3-28·INV-U3-04 개정 승인(O-SA-6) | 여행 전 확정 일정 쓰기(G-SA-6) |
+| 관찰 전용에서 특보·대기질 제거 | 키 등록 확인(요약 줄의 그 출처 Unknown 소멸, O-SA-1) + 실응답 표본 | 미등록 30 · 광역 과잉 경보 |
+| `HOLIDAY_CLOSURE_MODE=on` | 하위 코드·공휴일 변경 머지 + 특일 키 확인 | 생성 샘플 비교 |
+| 기회 카드 | AI 경로 → BE 조회(차트 `http`) → 앱 카드 스토어 반영 | 순서대로 |
+
+- **두 번 배포 규칙**: 키를 아는 허용목록 코드가 그 대상(개발 = develop, 운영 = 승격 뒤 main)에 배포된 뒤에만 시크릿에 키를 쓴다 — 먼저 쓰면 배포 전체가 거부된다(`deploy/eks/runtime_secrets.py:203-207`).
+- **되돌리기** = 값을 `off`/`today` 로 바꾸고 재배포(파드 재시작). 스윕을 끄면 트리거 목록이 스윕 출처 트리거를 즉시 숨긴다.
+
+---
+
+## 8. U4·U6·U3·U10 와의 관계 — 개정 블록 목록
+
+원 문서에는 새 규칙 본문을 쓰지 않는다. 해당 표·절 뒤에 `[개정 · 2026-10-19 · situation-awareness FD]` 블록을 덧붙여 SA ID 를 가리키기만 한다(원문 보존 · append-only). 같은 날 단 블록은 아래와 같다. '승인 시점'은 그 블록이 승인돼야 켤 수 있는 것이다 — 비어 있으면 이 FD 승인과 함께다.
+
+**U4 FD** (`construction/u4-in-trip-planb/functional-design/`)
+
+| 문서 | 블록 위치 | 다루는 원 규칙 | 가리키는 ID | 승인 시점 |
+|---|---|---|---|---|
+| `business-logic-model.md` | §1 끝 | DEC-U4-6 — 서버 감시 스윕을 날씨·장소·D-1 로 넓힌다(`DELAY` 는 U10) | DEC-SA-1·7 · BR-SA-01 | |
+| 〃 | §2 본문 끝(§2.1 앞) | 스윕 경로 · 무발화를 무해제까지 · i09 감시 항목 = 감시 상태 | DEC-SA-2 · BR-SA-05~08·13 · INV-SA-2·3 | |
+| 〃 | §2.1 끝 | 신호원(WEATHER 출처 셋 · CLOSURE = HC1 + 폐업 상태 · 실패 시) · G-U4-2(발화·해제 두 단, 강수 60 유지) | BR-SA-04·15·16·17 · INV-SA-2 · DEC-SA-2 | |
+| 〃 | §3 흐름도 뒤 | 자동 진입의 준비된 대안 분기 | DEC-SA-4 · BR-SA-18·19·23 · INV-SA-1·7 | `PLANB_PREPARED_REPLAN` 켜기 전 |
+| 〃 | §8 끝 | G-U4-2 — 임계 소유·설정화 | BR-SA-15 · G-SA-14 | |
+| `business-rules.md` | §1 끝 | BR-U4-01~09 · DEC-U4-4 — 종류 4종 유지·변형·심각도 · 허용 날짜 · 서버 스윕 · 출처별 모름 · 만료·해제 · 대상 식별·결정표 · 푸시 사건 상한 · 미리 짜 둔 대안 | DEC-SA-1·3·4·6·7 · BR-SA-01·02·04~08·10·11·13·18·23 · INV-SA-1~5 · O-SA-9·11 | BR-U4-02 의 내일·D-1 은 `tomorrow`·`pre-trip` 켜기 전 |
+| 〃 | §2 끝 | BR-U4-10(진입 날짜 강제·전날 창) · BR-U4-13(자유입력 장소의 필수 방문은 검증 통과분만) · BR-U4-15(억제의 날짜·심각도) | BR-SA-20 · BR-SA-22 · BR-SA-09 · DEC-SA-7 | BR-U4-10 은 `pre-trip` 켜기 전 · BR-U4-13 은 BE 기회 조회 전 |
+| 〃 | §5 끝 | BR-U4-35 — 상황 문구 규칙 · 출처 표기 | BR-SA-12·24 | |
+| `domain-entities.md` | §2.1 끝 | `plan_b_trigger` 열 · 날짜 포함 활성 유일 키 · payload 한 키 한 뜻 · INV-U4-01(조용한 발화도 ACTIVE) | INV-SA-4 · BR-SA-05·08·13 · DEC-SA-3 | |
+| 〃 | §2.2 끝 | `plan_b_suppression` 날짜·최대 심각도 · INV-U4-02 | BR-SA-09·10 | |
+| 〃 | §3.2 끝 | `replan_session` 시작 주체 · INV-U4-05(그대로) · INV-U4-06(공존) · 낡은 초안 거절 — 새 INV-U4 번호 대신 INV-SA-7 | DEC-SA-4 · INV-SA-1·6·7 · BR-SA-18·19·20 | |
+| 〃 | §4.1 끝 | 격자 예보 캐시 · INV-U4-09(두 캐시 모두) | INV-SA-2 · BR-SA-15·16 | |
+| 〃 | §5 끝 | 이벤트 선택 필드 · 구독 2건 · 사건 의미 변화(여행·회차당 1건) | DEC-SA-4 · BR-SA-10·14 · INV-SA-3 | |
+| 〃 | §6 끝 | 소유 경계 추가분 · 새 의존 둘(C9 → C7, C10 → C9) | DEC-SA-2·3·4 | |
+| `frontend-components.md` | §1 · §2 · §4 · §6 · §8 · §9 끝 | 라우트(진입 게이트) · 슬라이스(허브·i04·i06) · 변형·날짜 라벨 · 구조 가드 · testID · PBT | BR-SA-12·13·19·22·23 · DEC-SA-3·5·6 · PBT-SA-21·22 | 앱 스토어 반영이 운영 켜기의 선행(§7) |
+
+**U4 NFR** (`construction/u4-in-trip-planb/nfr-requirements/` · `nfr-design/`) — 값과 호출량 추정은 situation-awareness NFR Requirements(`construction/situation-awareness/nfr-requirements/`)가 맡는다.
+
+| 문서 | 블록 | 가리키는 ID |
+|---|---|---|
+| `nfr-requirements.md` | PERF-U4-01(서버 주기 실행) · COST-U4-03(호출 범위·선계산 비용) · OBS-U4-01~05(요약 로그) · §8 PBT(SA 게이트 추가) | BR-SA-01·03·04·13·18 · INV-SA-5 · O-SA-10 · PBT-SA-01~22 |
+| `tech-stack-decisions.md` | 델타 5(평가용 스케줄 잡) | DEC-SA-1·8 |
+| `nfr-design-patterns.md` | P-RES-U4-1(회차 단위 회로 차단) · P-PERF-U4-1·2(격자 캐시·스윕 상한) · §8(서버 스케줄러 선제 평가 도입 · 커넥션 풀 상향 보류) | BR-SA-01·03·18 · INV-SA-2 · DEC-SA-1 |
+| `logical-components.md` | LC-U4-1(수명 규칙·쓰기 경로 하나) · LC-U4-3(weather-context 퍼사드 둘) · LC-U4-9(날씨·장소 클라 신호 없음) | DEC-SA-1·2 · BR-SA-05~10·13·15·16·23 |
+
+**U3 · U6 · U10**
+
+| 문서 | 블록 | 가리키는 ID | 승인 시점 |
+|---|---|---|---|
+| U3 `functional-design/business-rules.md` | BR-U3-28 — 여행 전날 첫날 `FULL_DAY` 반영(트리거 진입·사용자 [적용])은 확정 잠금의 예외. 확정 일정은 복원이 409 라 되돌릴 수 없다 | BR-SA-20 · DEC-SA-7 · O-SA-6 | **`pre-trip` 켜기 전 필수** |
+| U3 `functional-design/domain-entities.md` | INV-U3-04 — 같은 예외 | BR-SA-20 · DEC-SA-7 | 〃 |
+| U6 `functional-design/business-rules.md` | BR-U6-08·09 · Plan-B 푸시 여부 — kind 제목 3종 + 사유 + 외 N건, 같은 여행 10분 1회, 위험만 푸시(새 BR-U6 번호 없음) | BR-SA-12·21 · DEC-SA-5 · INV-SA-3 | |
+| 〃 | BR-U6-18 — `PLAN_B` 푸시 기본 ON(저장 행 존중) | DEC-SA-5 · BR-SA-21 · O-SA-14 | |
+| 〃 | O-U6-4 **종결** — 야간 | INV-SA-5 · BR-SA-21 | |
+| U6 `functional-design/domain-entities.md` | §2.5 — 종류를 늘리지 않는다 | DEC-SA-5·6 | |
+| U6 `functional-design/frontend-components.md` | §5 `shared/push` — 수신·탭 핸들러(리마인드 포함 모든 푸시) | BR-SA-21·23 · DEC-SA-5 | 앱 스토어 반영이 운영 켜기의 선행 |
+| U6 `nfr-requirements/nfr-requirements.md` | LEGAL-U6-02·03(기회는 알림 경로 밖) · OBS-U6-03(억제 사유 2종) · §10(재평가 트리거 '기회 알림 요구') | DEC-SA-5·6 · BR-SA-21·22 | |
+| U10 `functional-design/business-logic-model.md` | G-U10-3 — 스케줄러 경로의 계정(trip 감시 퍼사드) | DEC-SA-1 · BR-SA-02 | |
+| U10 `functional-design/domain-entities.md` | §7 `planb.PlanBTriggered` — 선택 필드·사건 의미(판정 1회당 대표 1건)·선계산 구독자. "변경 없음"은 `DELAY` 가 같은 이벤트를 탄다는 뜻으로만 남는다 | BR-SA-10 · DEC-SA-4 · INV-SA-3 | |
+| U10 `functional-design/business-rules.md` | BR-U10-27 메모 — 같은 `TriggerService` 의 의미 변화: 날짜 포함 식별 · 대표 1건 사건 · 심각도 없는 `DELAY` = 위험 · 스윕은 `DELAY` 를 닫지 않는다 · 밤 창은 `DELAY` 에 묶이지 않는다 | BR-SA-05·07·09·10 · DEC-SA-3 · INV-SA-4·5 | |
+
+**같은 정본 변경에 싣는 문서**: `aidlc-docs/construction/shared-infrastructure.md` 「situation-awareness 증분 (2026-10-19)」 절(신규 AWS 자원 0 · 런타임 키 · 스케줄러 1 · 마이그레이션 3 · 외부 호출 증가).
+
+**그 밖의 문서**(해당 구현 변경과 함께 고친다): U2 FD·AI construction FD(기회 경로 계약 · 위반 `reason_code` · 날짜 단위 휴무와 단일 헬퍼 — TRIP-1230 휴무 파서 결정과 함께 읽는다) · `backend/docs/design/ai-backend-경계-계약-확정.md`(검증 `reason_code` · 기회 경로) · 루트 `CLAUDE.md`·`backend/docs/design/실사용-모드-스위치.md`·AI 경로표 3종(경로 정본 서술 G-SA-9 · 스위치 표 · 새 경로) · 인셉션(상신만 — G-SA-8).
+
+---
+
+## 9. 갭 (G-SA-\*)
+
+G-SA 는 이 확장 전체에서 한 줄로 번호를 쓴다. 이 표가 본체이고, G-SA-10·11 은 `domain-entities.md` §17, G-SA-12 는 `frontend-components.md` §14 가 상세를 갖는다.
+
+| ID | 갭 | 처리 |
+|---|---|---|
+| **G-SA-1** ★ | **감시 상태 표면이 없다.** U4 정본은 i09 에 감시 항목별 최신 평가 상태와 실패 시 "확인 불가"를 요구한다(`u4-in-trip-planb/functional-design/business-logic-model.md:62·72·239` — §2 · §2.1 · §6). 서버는 ACTIVE 목록만 낸다(`TriggerService.kt:137-142`) — 날씨 확인 엔드포인트 주석이 "그 조회 경로는 없다"고 적는다(`TriggerController.kt:48`). 모름이 '정상'으로 보이는 거짓 음성이다 | 출처별 감시 상태 + 목록 `watch` 3상태(BR-SA-13). `DELAY` 는 늘 OFF |
+| **G-SA-2** | **BR-U6-09 의 10분 창이 코드에 없다.** 정본 BR-U6-09·OBS-U6-03 의 '중복 억제 10분'에 대응하는 억제가 없다 — 억제 사유는 `DUPLICATE`·`IN_APP_OFF`·`RATE_LIMITED` 셋뿐이고(`notification/application/NotificationMetrics.kt:128-141`) `dedup_key` 는 저장만 된다 | `PLAN_B` 에 첫 구현 — 같은 여행 10분 1회(BR-SA-21). 다른 kind 는 이 확장 밖 |
+| **G-SA-3** | **하루 상한 값이 세 벌이다.** 코드 `Sensitivity` LOW 2·NORMAL 5·HIGH 10(`planbdetection/domain/PlanBTrigger.kt:111-114`) · U4 `nfr-design/nfr-design-patterns.md:38`(P-DET-U4-3) LOW 1·NORMAL 3·HIGH 6 · ai-architecture §6.2 "시간당 2회/하루 8회". 세는 대상도 '그 날 발화 수'다(`PlanBDetectionPersistence.kt:55-70`) | 세는 대상을 '여행·KST 하루 푸시 사건 수'로 바꾸고 상한은 푸시만 묶는다(BR-SA-10). 값은 코드값 유지(O-SA-9) |
+| **G-SA-4** | **감지 방식 서술이 충돌한다.** U4 DEC-U4-6 은 "서버 스케줄러 없음"(U10 개정으로 `DELAY` 만 예외), `ai/aidlc-docs/inception/design-artifacts/ai-architecture.md` §6.2 는 날씨 서버 폴링 1시간·휴무 당일 아침 배치·이동 지연 30분·빈도 상한 시간당 2회/하루 8회, 코드는 날씨를 사용자 요청에서만 본다(`WeatherTriggerService.kt:42-84`) | DEC-SA-1 이 서버 스윕(매시 :15 + 20:40, 장소는 아침·저녁)으로 정한다. §6.2 의 주기·30분·빈도 값은 근거로 쓰지 않는다 |
+| **G-SA-5** | **BR-U4-13 과 자유입력 재계획 코드가 어긋난다.** 정본은 "텍스트에서 뽑은 장소를 후보로 승격하지 않는다"인데, 코드는 등록 이름 대조·지도 실재·그날 영업을 통과한 **등록 POI** 를 필수 방문으로 후보 풀에 합류시킨다(`ai/src/trippilot/agents/planb/request_verification.py` · `ai/src/trippilot/api/wiring.py:2316-2329`) | [넣어서 다시 짜기]가 이 경로에 기댄다(BR-SA-22) → BR-U4-13 개정 블록(검증 통과한 등록 POI 만 — INV-1 유지). 결정론 `include_poi_ids` 는 후속 |
+| **G-SA-6** ★ | **여행 전 반영 가드가 적용 경로에 없다.** BR-U3-28·INV-U3-04 는 여행 시작 전 CONFIRMED 슬롯 변경을 거부하라는데, C8 적용에는 그 가드가 없고(`ReplanFacadeService.kt:239-242`) 여행 기간 검사는 C10 시작에만 있다(`ReplanSessionService.kt:81-84`). 확정 일정은 복원이 409 라 되돌릴 수도 없다(`ItineraryRevisionService.requireRestorable`) | 전날 창이 시작 검사를 넓히므로 적용 쪽에 여행 전 반영 가드를 둔다(BR-SA-20 ③). BR-U3-28·INV-U3-04 개정 승인 전에는 `pre-trip` 을 켜지 않는다(O-SA-6) |
+| **G-SA-7** ★ | **푸시가 기기에 닿는 경로가 갖춰져 있지 않다.** iOS 빌드가 `aps-environment` 를 지운다(`frontend/app.config.ts:223-245`) · 앱에 푸시 수신·탭 처리(포그라운드 핸들러·응답 리스너)가 없다(`frontend/src` 검색 0건) · 운영 `PUSH_MODE` 실값은 코드로 알 수 없다(기동 로그 `[모드] push=` 로 확인) | Q4 결정의 효과는 앱 수신·탭 처리 · iOS entitlement(번들 ID Push 권한 · APNs 키 — 외부 선행) · 운영 실푸시 1회 왕복 뒤에 생긴다. 운영 켜기 순서에 묶는다(§7). 그 전엔 알림함·허브 알약이 유일한 표면이다. iOS 개통 전에는 Android 만 푸시로 출발(O-SA-8) |
+| **G-SA-8** | **인셉션이 이 확장을 모른다.** US-PLANB-02 정상 절('대안 보기를 눌러야 재계획 시작')·(a)(b), US-NOTIF-03(심각도별 푸시), 기회 카드 스토리, C9·C14 책임, 이벤트 카탈로그(`aidlc/aidlc-docs/inception/application-design/component-dependency.md:66-67` — `PlanBTriggered`·`ItineraryRecalculated` 의 구독자를 notification 하나로 적는다) | 인셉션은 고치지 않고 상신만 한다 — 이벤트 구독 2건(`PlanBTriggered` → C10, `ItineraryRecalculated` → C9) 포함. 사후 개정은 사용자 명시 승인 시에만(O-SA-15) |
+| **G-SA-9** | **"백엔드가 부르는 AI 경로의 정본" 서술이 모듈 하나를 가리킨다.** 루트 `CLAUDE.md` 는 `HttpScheduleAgentAdapter.CALLED_PATHS` 를 정본으로 적는데, 도우미 해석(`HttpDialogueInterpreter.kt:66-70`)·리마인드 문구(`HttpReminderCopyAdapter.kt:91`)·회고(`ReflectionAgentWire.kt:81`) 어댑터도 AI 경로를 부른다 | BE 기회 조회가 목록을 하나 더한다 — 같은 변경이 루트 서술을 모듈별 목록으로 고친다 |
+| **G-SA-10** | **실외 판정 재료에 태그가 없다.** 계획 슬롯 표면은 카테고리만 싣는데 `액티비티` 에는 실내 나이트라이프(클럽·바)가 태그로 섞인다. 재계획 회피 집합도 같은 집합이라 "경보 대상 = 재계획이 바꾸는 대상"은 지켜진다(상세 `domain-entities.md` §17) | 실외 집합을 유지한다. 바꿀 때는 재계획 회피 집합과 한 번에, 태그를 슬롯 표면에 싣는 것은 C8 계약 변경이다(O-SA-5 와 같은 줄) |
+| **G-SA-11** | **사건 `dateRisks` 항목에 영향 범위가 없다.** 선계산 재료 매핑은 날씨 위험의 제외 POI 를 coverage `SOME` 일 때만 쓰는데 그 값은 트리거 payload 에만 있다(상세 `domain-entities.md` §17) | 항목에 선택 필드 coverage(날씨만)를 더하는 쪽을 권한다 — 사실은 C9 이 싣고 매핑은 C10 이 갖는 분업이 유지되고, 선택 필드라 옛 구독자에 무해하다 |
+| **G-SA-12** | **이 확장이 처음 정하는 화면 표면의 Figma 프레임이 없다.** 게이트 대기 얼굴 · 주의(CAUTION) 톤 · 출처 캡션 · 감시 `확인 불가` 행 · i06 `미리 준비한 대안` 표식·낡음 얼굴·미포함 안내 · 허브 안내 2종 · 기회 카드(상세 `frontend-components.md` §14) | 작도는 FE 팀원 몫이다. 프레임이 생기기 전에는 FD 의 문구·자리가 작도 스펙이고, 프레임이 생기면 프레임이 정본이다(Figma = 화면 단일 정본). 홈 경보 줄은 후속 |
+| **G-SA-13** ★ | **트리거를 닫는 경로가 없다.** 정본은 CONSUMED(재계획 확정에 쓰임)·EXPIRED(대상 슬롯이 지남)를 정의하는데(U4 `domain-entities.md` §2.1), `PlanBTrigger.consumed()`·`expired()` 를 부르는 곳이 없고(`backend/modules` 검색 0건) ACTIVE 는 [끄기]로만 닫힌다 — 앱은 [끄기] API 를 부르지 않는다(생성 클라이언트에만 있다). 반영 이벤트에는 트리거·날짜가 없다(`recalculation/api/event/RecalculationEvents.kt:10-16`) | 만료 4원인(BR-SA-07) · 날짜가 같을 때만 소비(BR-SA-14) · 목록 날짜 필터(BR-SA-13). 끝난 여행 마지막 날 ACTIVE 의 정리는 후속 |
+| **G-SA-14** | **임계 상수가 U2 BR-U2-15 와 어긋난다.** BR-U2-15 는 "판정 임계 숫자를 코드나 설계 문서에 하드코딩하지 않는다 — 필요해지면 설정값"이다(`u2-itinerary-intelligence/functional-design/business-rules.md:185-187`). 기존 강수 발화 임계도 C9 상수이고(`WeatherTriggerService.kt:89-93` — "요청되지 않은 설정화를 미리 만들지 않는다") BR-SA-15 의 임계도 C9 상수다 | 정본 승인 때 정한다 — 상수 유지(값 조정은 규칙 개정이 아니다)를 권하고, 설정화는 NFR 단계에서 다시 본다(U4 G-U4-2 개정 블록과 같은 줄) |
+
+---
+
+## 10. 미결 (O-SA-\*)
+
+O-SA-2~15 는 **초안 기본값 채택(2026-10-19 사용자 지시 "하던거 마저해") — 정본 승인 때 확인**이다. O-SA-1 은 사용자 확인 중이다. 각 미결이 걸린 규칙은 `business-rules.md` §11 이 짚는다 — 채택값이 바뀌면 그 규칙의 수치·표만 바뀐다.
+
+| ID | 질문 | 채택(초안 기본값) | 상태 |
+|---|---|---|---|
+| **O-SA-1** ★ | 특보·미세먼지·특일 활용신청 계정이 `WEATHER_API` 키 계정과 같은가(2026-10-19 10:12 세 API 가 30 응답) | 같다고 보고 같은 키. 다르면 키 env 하나를 더한다(배선 1세트) | **사용자 확인 중** — 그동안 세 출처는 관찰 전용으로 출발하므로 진행을 막지 않는다 |
+| **O-SA-2** | 폭염: 33℃ 주의·35℃ 위험 2단계 / 33℃부터 위험(푸시) | 2단계 | 초안 기본값 채택 — 정본 승인 때 확인 |
+| **O-SA-3** | 미세먼지 '매우나쁨'을 위험(푸시)으로 | 위험 | 〃 |
+| **O-SA-4** | 흐림(야경·노을 가림)을 1차에 넣을지(정밀도 낮음 — 도시 야경은 흐려도 보인다) | 주의로 넣는다 | 〃 |
+| **O-SA-5** | 실외 명소(궁궐·해변 명소)도 날씨 대상에 넣을지(재계획 INDOOR 가 그 칸을 바꾸지 않아 '알림은 왔는데 그대로'가 된다) | 제외 | 〃 |
+| **O-SA-6** | D-1 반영 허용(BR-U3-28·INV-U3-04 예외, 확정 일정은 되돌릴 수 없음) — 불허면 D-1 은 알림·초안 보기까지 | 허용(정본 승인 뒤 `pre-trip`) | 〃 |
+| **O-SA-7** | 운영 켜기 전 `minSupportedVersion` 상향 | 상향 | 〃 |
+| **O-SA-8** | iOS 푸시 개통 전 'Android 만 푸시, iOS 는 알림함'으로 출발 | 출발 | 〃 |
+| **O-SA-9** | 하루 푸시 상한 값 — 코드 2·5·10 / NFR 1·3·6 | 코드값 유지 | 〃 |
+| **O-SA-10** | 선계산 상한(여행 3·전체 100/일) 승인 | 그 값 그대로 | 〃 |
+| **O-SA-11** | 같은 위험이 연일 반복되면 둘째 날부터 조용히(푸시·알림함 없이 배너만) | 조용히 | 〃 |
+| **O-SA-12** | 네이버 추출 행사(`evx-`)를 기회 카드에 표시 | 표시 안 함 | 〃 |
+| **O-SA-13** | 넓혀 읽은 휴무(월 n회 → 매주)를 주의로 강등 | dry-run 실측 뒤 결정 | 〃 |
+| **O-SA-14** | 인앱만 만진 `PLAN_B` 토글 행에 굳은 푸시 OFF 를 그대로 둘지 | 그대로(측정 후 재논의) | 〃 |
+| **O-SA-15** | 정본 위치: 번호 없는 확장 폴더 / 새 번호 유닛 승격(`SCOPE.md`·unit-of-work 개정), 인셉션 사후 개정 여부 | 확장 폴더, 인셉션은 상신만 | 〃 |
+
+**번호 없이 설계 안에서 닫는 것**: 해제 임계 수치(관측 후 조정) · 특보 t6 형식과 에어코리아 권역 표(실응답 표본으로 고정 — 추정 → 실측) · 병렬도·예산(dry-run p95) · 감시 상태 신선도 창(날씨 2시간·장소 14시간).
+
+**법무 확인 묶음에 올릴 것**: 위험·주의 알림이 정보성 예외에 드는가, 앱 안 카드가 정보통신망법상 '전송'이 아닌가, KISA 안내서(2017.11 판)의 현행 판본.

@@ -68,6 +68,10 @@
 | **LEGAL-U6-03** | LEGAL-U6-02가 **LEGAL-U6-01의 성립 조건**이다. 광고성이 이 경로에 섞이는 순간 야간 발송의 근거가 사라지므로, 종류 추가 시 **재평가 트리거**가 걸린다(§10) |
 | **LEGAL-U6-04** | 위치 관련 법정 로그(`location_legal_log`)는 **U0 소유**다. U6는 기록하지도 읽지도 않는다 |
 
+> **[개정 · 2026-10-19 · situation-awareness FD]** LEGAL-U6-02·03 — 기회는 알림 경로 밖
+> 기회(근처 행사·요즘 인기)는 이 경로로 보내지 않는다(앱 안 조회형 카드만). 정보통신망법 제50조 ①③과 KISA 안내서(2017.11 판 — 판본 재확인 필요)상 영리 사업자가 고객에게 보내는 정보는 원칙적으로 광고성이기 때문이다. 위험·주의 문구에도 일정 밖 권유를 섞지 않아 LEGAL-U6-01 의 성립 조건이 유지된다. 이 법적 판단은 추정이라 법무 확인 묶음에 올린다.
+> → [DEC-SA-5·6](../../situation-awareness/functional-design/business-logic-model.md) · [BR-SA-22](../../situation-awareness/functional-design/business-rules.md)
+
 ## 6. 관측 (OBS-U6-\*)
 
 `spring-boot-starter-actuator`·`micrometer-registry-otlp`가 **이미 있다**(실측). 파이프라인 신규 구축 없이 **카운터 4종만** 얹는다.
@@ -80,6 +84,10 @@
 | **OBS-U6-04** | **미읽음 누적** — catch-up 건강도. 계속 쌓이면 전달이 아니라 **소비**가 깨진 것이다 |
 
 > 열람률·전환은 **제품 분석 영역**이라 넣지 않는다(U3의 "행동 지표 2종만" 선례).
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** OBS-U6-03 — 억제 사유 2종 추가
+> 억제 사유에 `IN_APP_ONLY`(사건이 푸시 대상이 아님)와 `COALESCED`(같은 여행 10분 1회에 묶임)가 더해진다. 억제 총량 식은 그대로이고, 판정이 적재 성공 뒤라 재배달이 두 번 세지 않는다.
+> → [BR-SA-21](../../situation-awareness/functional-design/business-rules.md)
 
 ## 7. 보안 (SEC-U6-\*)
 
@@ -113,3 +121,7 @@ FD에서 정의한 **PBT-U6-1~5**를 그대로 게이트로 쓴다. NFR 단계�
 | U7 커뮤니티 개통 | `COMMUNITY` 종류 노출 + 발송량 급증 → COST-U6-01 재산정 |
 
 > **[개정 · 2026-10-12] §10 재평가 트리거 갱신.** ① "다중 인스턴스 운영 시작"은 **도래했다** — AWS EKS dev·prd backend replicas 2(REL-U6-04 개정). 인프라는 `aidlc/aidlc-docs/construction/shared-infrastructure.md`를 본다. ② "U7 커뮤니티 개통"은 **오지 않는다** — U7은 사용자 결정(2026-10-12)으로 폐기됐다. ③ 서버 푸시 발송은 EKS 런타임 기본값이 **`PUSH_MODE=off`**다(`deploy/eks/runtime_secrets.py`, 허용값 `off|expo`) — iOS 빌드가 `aps-environment`를 빼고 있어서다(tech-stack-decisions §3 개정).
+
+> **[개정 · 2026-10-19 · situation-awareness FD]** §10 — 재평가 트리거 추가
+> **기회(근처 행사·요즘 인기)를 알림함·푸시로 보내자는 요구** → LEGAL-U6-01·02 전면 재검토(기회는 광고성으로 읽힌다).
+> → [DEC-SA-6](../../situation-awareness/functional-design/business-logic-model.md)
