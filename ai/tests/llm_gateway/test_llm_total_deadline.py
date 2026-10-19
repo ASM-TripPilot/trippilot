@@ -139,8 +139,10 @@ def test_trickling_server_is_cut_at_total_deadline(trickle, make) -> None:
     with pytest.raises(LlmTimeoutError):
         adapter.invoke(_req(0.5))
     elapsed = time.monotonic() - started
-    assert 0.45 <= elapsed < 1.5, elapsed  # 종전: 바이트가 오는 한 무한
-    assert trickle.closed.wait(2.0), "취소 뒤 커넥션이 닫혀야 한다"
+    # 상한은 서버 흘림(최대 10s)의 절반 — 느린 CI 러너에서 벽시계가 밀려도(1.67s 관측) 깜빡이지 않게.
+    # 종전 결함이면 흘림이 끝날 때까지(≈10s) 걸리므로 5s 로도 회귀는 잡힌다.
+    assert 0.45 <= elapsed < 5.0, elapsed  # 종전: 바이트가 오는 한 무한
+    assert trickle.closed.wait(5.0), "취소 뒤 커넥션이 닫혀야 한다"
     assert _wait_until(lambda: trickle.open == 0)
 
 
@@ -149,7 +151,7 @@ def test_preference_worker_leaves_no_inflight_calls_after_deadline(trickle) -> N
     baseline = threading.active_count()
     started = time.monotonic()
     result = worker.score(_pool(40), _PERSONA, _TRACE_ID, _NOW, timeout_sec=0.5)
-    assert time.monotonic() - started < 1.5
+    assert time.monotonic() - started < 5.0  # 위와 같은 이유로 흘림 길이의 절반
     assert result.is_fallback  # 전 청크 시한 초과 → 기존 폴백 신호 (INV-4)
     assert _wait_until(lambda: trickle.open == 0), "포기한 청크의 호출이 서버에 남았다"
     # 청크 스레드도 시한에 풀려 끝난다(백그라운드 루프 스레드 1개만 남을 수 있다)
