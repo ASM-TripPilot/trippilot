@@ -29,8 +29,8 @@ import java.util.UUID
  * [Revalidation.attempt] 로 그 날 하루만 검증한다 — AI 를 기다리는 동안 DB 커넥션을 물지 않는다.
  *
  * 영업시간 원문 해석은 AI 한 곳이다 — 여기는 원문도 위반 detail 도 파싱하지 않고 위반의 **타입과 위치**만 읽는다.
- * 모름은 OK 로 채우지 않는다(INV-SA-2): AI 모드가 http 가 아님(가짜 검증의 빈 목록은 판정이 아니다) · 보류 ·
- * 영업시간 원문 없음은 전부 [HoursVerdict.UNKNOWN] 이다. 위치 없는 위반·HC2~HC4 는 슬롯에 붙이지 않는다.
+ * 모름은 OK 로 채우지 않는다(INV-SA-2): AI 모드가 http 가 아님(가짜 검증의 빈 목록은 판정이 아니다) · 영업시간을 빼라고
+ * 함 · 보류 · 영업시간 원문 없음은 전부 [HoursVerdict.UNKNOWN] 이다. 위치 없는 위반·HC2~HC4 는 슬롯에 붙이지 않는다.
  *
  * AI 모드는 설정값으로 읽는다 — 그 설정 클래스(`ScheduleAgentProperties`)는 http 조건부라 주입받으면 fake 모드 기동이
  * 깨진다(안티패턴 로그). 어댑터를 켜는 조건(`@ConditionalOnProperty` — 대소문자 무시)과 같은 규칙으로 비교한다.
@@ -48,19 +48,19 @@ class ItineraryDayCheckService(
 
     private val readTx = TransactionTemplate(transactionManager).apply { isReadOnly = true }
 
-    override fun checkDay(accountId: UUID, tripId: UUID, date: LocalDate): DayCheck? {
+    override fun checkDay(accountId: UUID, tripId: UUID, date: LocalDate, judgeHours: Boolean): DayCheck? {
         val read = readTx.execute { read(accountId, tripId, date) } ?: return null
         val (itinerary, day, surface) = read
         if (day.slots.isEmpty()) return DayCheck(judged = true, slots = emptyList()) // 볼 슬롯이 없다 — AI 0회
-        val verdict = if (aiMode.equals(HTTP, ignoreCase = true)) Revalidation.attempt(scheduleAgent, outputOf(itinerary, day), tripId) else null
-        val judged = verdict is Revalidation.Judged
+        val ask = judgeHours && aiMode.equals(HTTP, ignoreCase = true)
+        val verdict = if (ask) Revalidation.attempt(scheduleAgent, outputOf(itinerary, day), tripId) else null
         // 하루만 보냈으니 그 날은 0번 날이다. 위치가 없거나 영업시간이 아닌 위반은 여기서 빠진다.
         val violated = verdict?.violations().orEmpty()
             .filter { it.dayIndex == 0 && ViolationText.isOpeningHours(it.type) }
             .mapNotNull { it.slotIndex }
             .toSet()
         return DayCheck(
-            judged = judged,
+            judged = verdict != Revalidation.Withheld, // 부르지 않은 날은 보류가 아니다 — 영업시간은 아래에서 UNKNOWN 이다
             slots = day.slots.mapIndexed { i, s ->
                 val known = surface[s.sourcePoiId]
                 CheckedSlot(
@@ -69,7 +69,7 @@ class ItineraryDayCheckService(
                     nameKo = known?.nameKo,
                     startAt = s.startAt,
                     hours = when {
-                        !judged || known?.openingHoursKnown != true -> HoursVerdict.UNKNOWN
+                        verdict !is Revalidation.Judged || known?.openingHoursKnown != true -> HoursVerdict.UNKNOWN
                         i in violated -> HoursVerdict.VIOLATED
                         else -> HoursVerdict.OK
                     },

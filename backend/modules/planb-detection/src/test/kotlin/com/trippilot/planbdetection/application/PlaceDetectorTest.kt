@@ -1,5 +1,6 @@
 package com.trippilot.planbdetection.application
 
+import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
@@ -37,9 +38,24 @@ private val TOMORROW: LocalDate = TODAY.plusDays(1)
 /** 하루 점검 대역 — 정해 둔 답을 내고 받은 질의를 적는다. */
 private class FakeDays(private val answer: DayCheck?) : ItineraryDayCheckFacade {
     val asked = mutableListOf<Triple<UUID, UUID, LocalDate>>()
-    override fun checkDay(accountId: UUID, tripId: UUID, date: LocalDate): DayCheck? {
+    override fun checkDay(accountId: UUID, tripId: UUID, date: LocalDate, judgeHours: Boolean): DayCheck? {
         asked += Triple(accountId, tripId, date)
         return answer
+    }
+}
+
+/**
+ * 영업시간을 물을 때마다 대본의 답을 하나씩 내는 하루 점검 — true = AI 가 답했다(OK) · false = 보류 · null = AI 를 부르지
+ * 않은 날(보류 아님 · 영업시간 모름 — 모드가 http 아님·영업시간을 아는 슬롯 없음). 빼라고 하면(judgeHours=false) AI 없는
+ * 점검을 낸다. [hoursAsked] = 호출마다 영업시간을 물었는가.
+ */
+private class ScriptedDays(private val slot: CheckedSlot, vararg script: Boolean?) : ItineraryDayCheckFacade {
+    private val script = ArrayDeque(script.toList())
+    val hoursAsked = mutableListOf<Boolean>()
+    override fun checkDay(accountId: UUID, tripId: UUID, date: LocalDate, judgeHours: Boolean): DayCheck {
+        hoursAsked += judgeHours
+        val answer = if (judgeHours) script.removeFirst() else null
+        return DayCheck(answer != false, listOf(slot.copy(hours = if (answer == true) HoursVerdict.OK else HoursVerdict.UNKNOWN)))
     }
 }
 
@@ -230,5 +246,52 @@ class PlaceDetectorTest : StringSpec({
 
         d.shouldBeInstanceOf<Detection.Checked>().signals.shouldBeEmpty()
         d.checked.shouldBeEmpty()
+    }
+
+    "AI 영업시간 판정이 한 회차에서 연속 3번 보류되면 남은 여행은 AI 를 부르지 않는다 — 폐업은 계속 알리고, WARN 은 열 때 1번 (RES-SA-04)" {
+        val days = ScriptedDays(checked(TOMORROW, poiA, "10:00", name = "[폐업] 사라진 카페"), false, false, false)
+        val d = detector(days, FakeStatus(mapOf(poiA to PoiLifeStatus.CLOSED)))
+        val round = at(TODAY, "20:15")
+        val appender = ListAppender<ILoggingEvent>().apply { start() }
+        val logger = LoggerFactory.getLogger(PlaceDetector::class.java) as Logger
+        logger.addAppender(appender)
+        val seen = try {
+            List(5) { d.detect(target(TOMORROW, round, SweepPhase.EVENING)) }
+        } finally {
+            logger.detachAppender(appender)
+        }
+
+        days.hoursAsked shouldContainExactly listOf(true, true, true, false, false)
+        seen.forEach { it.shouldBeInstanceOf<Detection.Checked>().signals.map { s -> s.variant } shouldContainExactly listOf(TriggerVariant.PERMANENTLY_CLOSED) }
+        appender.list.count { it.level == Level.WARN } shouldBe 1
+    }
+
+    "회차가 바뀌면 다시 묻는다 — 회로는 그 회차 안에서만 열린다" {
+        val days = ScriptedDays(checked(TOMORROW, poiA, "10:00"), false, false, false, true)
+        val d = detector(days, FakeStatus(mapOf(poiA to PoiLifeStatus.ACTIVE)))
+
+        repeat(4) { d.detect(target(TOMORROW, at(TODAY, "20:15"), SweepPhase.EVENING)) }
+        val next = d.detect(target(TOMORROW, at(TODAY, "20:40"), SweepPhase.EVENING))
+
+        days.hoursAsked shouldContainExactly listOf(true, true, true, false, true)
+        next.shouldBeInstanceOf<Detection.Checked>().checked shouldBe setOf("$TOMORROW#$poiA")
+    }
+
+    "AI 가 한 번 답하면 연속 보류를 0 으로 되돌린다 — 띄엄띄엄 보류는 회로를 열지 않는다" {
+        val days = ScriptedDays(checked(TOMORROW, poiA, "10:00"), false, false, true, false, false, false)
+        val d = detector(days, FakeStatus(mapOf(poiA to PoiLifeStatus.ACTIVE)))
+
+        repeat(7) { d.detect(target(TOMORROW, at(TODAY, "20:15"), SweepPhase.EVENING)) }
+
+        days.hoursAsked shouldContainExactly listOf(true, true, true, true, true, true, false)
+    }
+
+    "AI 를 부르지 않은 날(보류 아님 · 영업시간 모름)은 보류로 세지도, 0 으로 되돌리지도 않는다" {
+        val days = ScriptedDays(checked(TOMORROW, poiA, "10:00"), false, false, null, false)
+        val d = detector(days, FakeStatus(mapOf(poiA to PoiLifeStatus.ACTIVE)))
+
+        repeat(5) { d.detect(target(TOMORROW, at(TODAY, "20:15"), SweepPhase.EVENING)) }
+
+        days.hoursAsked shouldContainExactly listOf(true, true, true, true, false)
     }
 })

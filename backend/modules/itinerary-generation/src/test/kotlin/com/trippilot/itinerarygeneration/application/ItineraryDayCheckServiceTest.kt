@@ -198,14 +198,27 @@ class ItineraryDayCheckServiceTest : StringSpec({
         svc.checkDay(acc, tripId, d1).shouldNotBeNull().slots.first().hours shouldBe HoursVerdict.VIOLATED
     }
 
-    "AI 모드가 http 가 아니면 부르지 않고 UNKNOWN 이다 — 가짜 검증의 빈 목록은 '깨끗함'이 아니다" {
+    "AI 모드가 http 가 아니면 부르지 않고 UNKNOWN 이다 — 가짜 검증의 빈 목록은 '깨끗함'이 아니고, 부르지 않았으니 보류도 아니다" {
         val (svc, ai) = service(mode = "fake")
 
         val day = svc.checkDay(acc, tripId, d1).shouldNotBeNull()
 
         ai.received.shouldBeEmpty()
-        day.judged shouldBe false
+        day.judged shouldBe true // judged=false 는 보류(불통·5xx·시한)만이다(domain-entities §7.1) — 장소 감지의 회로가 이것만 센다
         day.slots.map { it.hours } shouldContainExactly listOf(HoursVerdict.UNKNOWN, HoursVerdict.UNKNOWN)
+    }
+
+    "영업시간을 빼라고 하면(장소 감지의 회로가 열린 회차) AI 를 부르지 않는다 — 영업시간만 UNKNOWN, 이름·이미 본 경고는 그대로" {
+        val day1 = ItineraryDay.of(d1, 0, listOf(slot(poiA, 0, "10:00", flagged = true, reason = ViolationText.OPENING_HOURS_PHRASE), slot(poiB, 1, "12:00")))
+        val (svc, ai) = service(stored = itinerary(day1))
+
+        val day = svc.checkDay(acc, tripId, d1, judgeHours = false).shouldNotBeNull()
+
+        ai.received.shouldBeEmpty()
+        day.judged shouldBe true
+        day.slots.map { it.hours } shouldContainExactly listOf(HoursVerdict.UNKNOWN, HoursVerdict.UNKNOWN)
+        day.slots.map { it.nameKo } shouldContainExactly listOf("성산일출봉", "흑돼지거리")
+        day.slots.map { it.hoursWarnedBefore } shouldContainExactly listOf(true, false)
     }
 
     "모드 값은 대소문자를 가리지 않는다 — 어댑터를 켜는 조건과 같다" {
