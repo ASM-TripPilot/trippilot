@@ -566,3 +566,34 @@ def test_자유입력_끝_시각이_구성_창에도_실린다() -> None:
 
     assert spy.tasks[0].request.day_window.end.strftime("%H:%M") == "18:00"
     assert "09:00~18:00" in llm.compose_prompt()
+
+
+# ── 말로 온 "밤에 놀기"는 밤 낱말이 있어야 한다 ──────────────────────────────
+# alias "클럽 가고 싶어"·"바에 가고 싶어"가 "가고 싶어" 꼴 문장 전반에 임계(0.74)를 넘었다 — 로컬 KURE 실측
+# (2026-10-19): 카페 0.814·호텔 0.800·맛집 0.769·숙소 0.757·바다 0.752·공원 0.741. 걸리면 클럽이 강제로
+# 들어가고 그날 창이 23:59 로 늘어난다.
+
+@pytest.mark.parametrize("said, kept", [
+    ("카페 가고 싶어", False), ("호텔 가고 싶어", False), ("맛집 가고 싶어", False), ("바다 가고 싶어", False),
+    ("미술관 가고 싶어", False), ("바로 숙소 갈래", False), ("비어 있는 시간 채워줘", False),
+    ("클럽 가고 싶어", True), ("바에 가고 싶어", True), ("술 한잔 하고 싶어", True), ("와인바 가자", True),
+    ("칵테일 마시고 싶어", True), ("혼술하고 싶어", True), ("밤에 놀고 싶어", True), ("펍 가자", True),
+])
+def test_말로_온_밤에_놀기는_밤_낱말이_있을_때만_남는다(said: str, kept: bool) -> None:
+    from types import SimpleNamespace
+    from trippilot.api.wiring import _spoken_nightlife
+
+    notes: list[str] = []
+    out = _spoken_nightlife(SimpleNamespace(directives=[], free_text=said), ["ADD_CAFE", "NIGHTLIFE"], notes)
+    assert ("NIGHTLIFE" in out) is kept, notes
+    assert "ADD_CAFE" in out
+    assert ("nightlife_dropped: no_night_word" in notes) is (not kept)
+
+
+def test_칩으로_고른_밤에_놀기는_말과_상관없이_남는다() -> None:
+    from types import SimpleNamespace
+    from trippilot.api.wiring import _spoken_nightlife
+
+    out = _spoken_nightlife(SimpleNamespace(directives=["NIGHTLIFE"], free_text="카페 가고 싶어"),
+                            ["NIGHTLIFE"], [])
+    assert out == ["NIGHTLIFE"]
