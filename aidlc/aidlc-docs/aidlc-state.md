@@ -8,6 +8,7 @@
 - **Current Stage**: **U6 설계 종료 (2026-08-24) — 1차 핵심 여정 유닛 U0~U6 설계 문서 전량 완료.** 남은 유닛은 후속 게이트 U7~U9(1차 범위 밖)뿐이라 **AI-DLC 문서 트랙은 사실상 종료**다. 다음 = 팀 개발(최우선 = 아웃박스 릴레이 배선) 또는 사용자 지시. 유닛별 종료: U0 07-17 · U1 07-23 · U2·U3 08-07 · U4 08-09 · U5 08-22 · U6 08-24
 - **Execution Scope**: 유닛별 설계 문서(Functional/NFR Requirements/NFR Design/Infrastructure Design)까지만. **Code Generation·Build and Test 제외** — 코드는 팀이 각 패키지 디렉토리(`backend/`·`frontend/`·`ai/`)에서 직접 개발. 기획 참조는 `aidlc-docs/inception/` (planning/은 2026-07-17 제거).
 - **[개정 · 2026-10-12] Current Stage**: **범위 개정 + 사후 정합 진행 중** — U8 Assistant 개발 범위 편입·**U10 GPS·위치 자동화 신설**·U7/U9 **폐기**·인프라 **구축 완료(as-built 소급)** (`docs/SCOPE.md` 2026-10-12, audit 2026-10-11T16:20Z). 전수 조사(ai·backend·frontend 대조)로 낡은 서술 약 100곳 → U0~U6·인셉션 문서를 원문 보존 + 개정 블록으로 정정. 다음 = U8·U10 Functional Design 질문 게이트, shared-infrastructure 승인.
+- **[개정 · 2026-10-19] Current Stage**: **situation-awareness(U4 확장 — 여행 중 변수 상황 선제 감지) 설계 단계 종료** — FD 4 + NFR Requirements 2 승인(2026-10-19), NFR Design SKIP, Infra 증분. 다음 = 팀 개발(구현 PR 순서는 situation-awareness BLM §8·설계서 §8).
 
 ## Workspace State (2026-07-17 동기화 — 인셉션 종료 후 팀 개발 현황 반영)
 - **Existing Code**: Yes — 인셉션 종료 후 AI-DLC 워크플로 밖에서 팀 개발 진행 중 (하단 Post-Inception Progress)
@@ -155,6 +156,13 @@
     - [x] NFR Design — **승인 완료 (2026-10-12 "승인 ㄱㄱ")** · 산출물 2종 `u10-gps-location-automation/nfr-design/`(백그라운드 전용 전송·A/B 교대 쓰기 큐·RDP+정지점 150m 은닉, O-U10-8 해소)
     - [x] Infrastructure Design — **승인 완료 (같은 지시)** · `shared-infrastructure.md` `## U10 증분` (신규 AWS 자원 0)
     - ✅ **U10 설계 단계 종료 (2026-10-12)** — 산출물 = functional-design 4 + nfr-requirements 2 + nfr-design 2 = **8종** + Infra 증분. 다음 = 팀 개발(선행: Figma 4표면·법무 확인 O-U10-1·EAS 재빌드·G-U10-1 발생 시각 수용). 최대 미결 = O-U10-ND-1(토큰 1시간·백그라운드 미갱신)
+    - [~] Code Generation — 범위 제외
+  - **[개정 · 2026-10-19] situation-awareness — 여행 중 변수 상황 선제 감지 (U4 확장, 번호 없는 확장 폴더)** — 서버 감시 스윕(날씨·장소·여행 전날)·미리 짜 둔 대안·위험만 푸시 기본 ON·기회 카드. 출발점 = 날씨 확인 호출처 0(운영 자동 감지 0)
+    - [x] Functional Design — **승인 완료 (2026-10-19 "사이트 띄어주고 정본 문서는 뭐 어떻게 할까? 승인할게")** · 계획 Q1~Q4 = 2026-10-18 사용자 결정 원문, O-SA-2~15 추천안 채택(O-SA-1 키 계정 확인 중 — 관찰 전용 출발) · 산출물 4종 `situation-awareness/functional-design/`(DEC-SA-1~8·BR-SA-01~24·INV-SA-1~7·PBT-SA-01~22·G-SA-1~14·O-SA-1~15) + U3·U4·U6·U10 개정 블록
+    - [x] NFR Requirements — **승인 완료 (같은 지시)** · 산출물 2종 `situation-awareness/nfr-requirements/`(PERF·COST·RES·OBS·SEC·LEGAL-SA)
+    - [~] NFR Design — **SKIPPED** (같은 지시) · 사유 = 신규 인프라 0, 패턴(ShedLock 스윕·선계산 전용 실행기·격자 예보 캐시)이 nfr-requirements·tech-stack-decisions 에 적용 위치까지 기술(U3·U5·U6·U8 선례)
+    - [x] Infrastructure Design — **승인 완료 (같은 지시)** · `shared-infrastructure.md` `## situation-awareness 증분 (2026-10-19)` (신규 AWS 자원 0)
+    - ✅ **situation-awareness 설계 단계 종료 (2026-10-19)** — 산출물 = functional-design 4 + nfr-requirements 2 = **6종** + Infra 증분. 다음 = 팀 개발(트리거 생명주기 PR #1372 머지·운영 반영 완료, 이어서 서버 감시 스윕)
     - [~] Code Generation — 범위 제외
 - **[개정 · 2026-10-12] 공통 Infrastructure Design (as-built 소급)**
   - [x] `construction/shared-infrastructure.md` — **권고안 확정 (2026-10-12 "그럼 권고로 ㄱㄱ")** · Q1=A·Q2=A(가용성 99.5%)·Q3=A·Q4=A(RTO 4h/RPO 15m)·Q5=A(Redis 제거)·Q6=B(버전 핀 롤백) · 후속 인프라 작업 5건은 팀 핸드오프(§12)

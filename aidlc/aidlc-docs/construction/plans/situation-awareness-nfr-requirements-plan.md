@@ -43,7 +43,7 @@
 - [x] 5. `tech-stack-decisions.md` — 상속 / **SA 델타**(ShedLock 을 쓰는 모듈 확장 · 스케줄러 풀 · 격자 예보 테이블 · 공공데이터 어댑터 2종(특보·대기질)과 AI 특일 포트 · 선계산 전용 실행기 · 마이그레이션 3 · 스위치) / 미도입 결정(새 Micrometer 지표 · Redis · 서킷 라이브러리 · 새 `NotificationKind` · 원격 설정 · Hikari 상향) / 개발 중 처리(키 등록 확인 · 실응답 표본 · dry-run 실측)
 - [x] 6. 정합 검증 — U4 NFR · U6 NFR · U10 NFR · `shared-infrastructure.md` 와 충돌 없는지(아래 「정합 검증」)
 - [x] 7. NFR Design 진행 여부 권고 작성(아래 「NFR Design 권고」)
-- [ ] 8. 완료 메시지(표준 2-option) → **사용자 승인 게이트**(FD 다음) → `audit.md`·`aidlc-state.md` 기록
+- [x] 8. 완료 메시지(표준 2-option) → **사용자 승인 게이트**(FD 다음) → `audit.md`·`aidlc-state.md` 기록 — 승인 2026-10-19(FD 와 같은 지시), NFR Design SKIP·Infra 증분 함께 기록
 
 ---
 

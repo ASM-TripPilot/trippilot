@@ -1616,3 +1616,28 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U8 NFR 국소 개정, 승인 대기(같은 PR 머지 = 승인). `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
+## Functional Design·NFR Requirements 신설 — situation-awareness (여행 중 변수 상황 선제 감지, U4 확장)
+**Timestamp**: 2026-10-18T13:00:00Z (작업 시점, 초 단위 미측정)
+**User Input**: 최초 요청(2026-10-18) —
+```
+그리고 planB관련해서 다른 세션에서 작업중인데, 코드꼬이거나 겹치지
+  않게 해.  중간평가 피드백중에서 자체적으로 변수상황을 판단해서
+  사용자에게 알리고 재계획을 하게 하라는게 있었거든. 그거 만들자. 그런
+  변수상황 자가 인지를 할 수 있게 만들어!!!! 그런 방법들을 다 생각을
+  해봐. 예를들면 날씨가 안좋아졌으면 실내 위주로 다시 일정만들게
+  하거나 알람 보내거나 하고, 가려던 곳이 문을 닫은것을 미리 파악하거나
+  아니면 해당 지역에 요즘 뜨는 핫이슈가 있다거나 등등이 있을거 같아.
+  여기에 더해서 더 너가 어떤 경우들이 있을지 생각해서 추가해!!!!!
+```
+선택지 질문 4개의 답(2026-10-18): Q1 재계획 방식 = "미리 짜 둔 대안 (Recommended)" · Q2 1차 범위 = "날씨 확장 (Recommended), 휴무·영업시간·폐업 (Recommended), 지역 행사·인기 장소, 여행 전날(D-1) 점검" · Q3 공공데이터 활용신청 = "신청할게. 너가 사이트도 띄어주라 지" → 이후 "다 신청했어" / "승인도 받았어" · Q4 푸시 기본값 = "위험 알림만 기본 ON (Recommended)". 2026-10-19: "하던거 마저해"(미결 O-SA-2~15 추천안 채택의 근거).
+**AI Response**: 현황 조사(운영 자동 감지 0 — 날씨 확인 호출처 0, 활성 트리거 만료·소비 호출처 0)·구성요소 설계 8종·반박 검토 3관점을 거쳐 번호 없는 확장 폴더 `construction/situation-awareness/` 를 신설했다 — functional-design 4종(DEC-SA-1~8·BR-SA-01~24·INV-SA-1~7·PBT-SA-01~22·G-SA-1~14·O-SA-1~15), nfr-requirements 2종, 계획 2종(`plans/situation-awareness-{functional-design,nfr-requirements}-plan.md`, Q1~Q4 = 위 원문). 원 문서 U3·U4·U6·U10 에는 `[개정 · 2026-10-19 · situation-awareness FD]` 블록만 원문 보존으로 덧붙였고(삭제·수정 0줄), `shared-infrastructure.md` 에 증분 절. 유지: TriggerKind 4종(DEC-U4-4 — 새 상황은 `payload.variant`), INV-U4-05(일정 쓰기는 사용자 [적용]만), 새 NotificationKind 없음. 승인 요청 상태(PR #1371).
+**Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 신설, 승인 대기.
+
+---
+## Functional Design·NFR Requirements 승인 — situation-awareness
+**Timestamp**: 2026-10-19T07:00:26Z
+**User Input**: "사이트 띄어주고 정본 문서는 뭐 어떻게 할까? 승인할게"
+**AI Response**: 표준 2-option 완료 메시지에 대한 '승인'으로 기록 — Functional Design 4종·NFR Requirements 2종 승인, O-SA-2~15 추천안 확정(O-SA-1 은 공공데이터포털 활용신청 계정 = `WEATHER_API` 키 계정 여부를 사용자가 확인 중이며, 그동안 특보·대기질·특일 감지기는 관찰 전용으로 출발). NFR Design 은 SKIP(신규 인프라 0 — 패턴이 nfr-requirements·tech-stack-decisions 에 적용 위치까지 기술, U3·U5·U6·U8 선례), Infrastructure Design 은 `shared-infrastructure.md` 증분으로 승인. 같은 지시의 앞부분("사이트 띄어주고")에 따라 포털 활용신청 현황 페이지를 열었다. PR #1371 을 머지한다.
+**Context**: CONSTRUCTION — situation-awareness 설계 단계 종료. 다음 = 팀 개발(트리거 생명주기 PR #1372 는 머지·운영 반영 완료, 서버 감시 스윕 진행 중).
+
+---

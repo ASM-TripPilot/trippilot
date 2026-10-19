@@ -182,8 +182,8 @@
 - [x] 6. `business-rules.md` — **BR-SA-01~24** · **PBT-SA-01~22**(설계 초안 테스트 표의 PBT 행 순서 그대로) · 미결 **O-SA-1~15**
 - [x] 7. `frontend-components.md` — 푸시 수신·탭 라우팅 · 진입 게이트 판정표(BR-SA-23) · 변형 라벨·날짜 표기·출처(BR-SA-12·24) · 감시 3상태(BR-SA-13) · i06 낡음·미포함 안내 · 기회 카드(BR-SA-22) · 6-b 실기 전용 항목(푸시 탭·포그라운드 배너는 jest 의 사각)
 - [x] 8. **정합 검증** — U4·U6·U3·U10 정본(FD·NFR)에 `[개정 · 2026-10-19 · situation-awareness FD]` 블록 추가(append-only — SA ID 를 가리키기만 한다) · 인셉션은 상신 목록만(G-SA-8 — US-PLANB-02 정상 절·(a)(b) · US-NOTIF-03 · 기회 카드 스토리 후보 · C9·C14 · 이벤트 카탈로그 구독 2건)
-- [ ] 9. 완료 메시지(표준 2-option) → **사용자 승인 게이트** → `audit.md`(사용자 원문 그대로)·`aidlc-state.md` 기록
-- [ ] 10. (다음 단계) NFR Requirements — `situation-awareness-nfr-requirements-plan.md`
+- [x] 9. 완료 메시지(표준 2-option) → **사용자 승인 게이트** → `audit.md`(사용자 원문 그대로)·`aidlc-state.md` 기록 — 승인 2026-10-19 "사이트 띄어주고 정본 문서는 뭐 어떻게 할까? 승인할게"
+- [x] 10. (다음 단계) NFR Requirements — `situation-awareness-nfr-requirements-plan.md` (같은 지시로 승인)
 
 **전제(질문 아님)** — 이견 있으면 알려 주세요:
 - 산출물 **4종 풀세트**(business-logic-model · domain-entities · business-rules · frontend-components) — 백엔드 7모듈·AI·FE 에 걸친다
