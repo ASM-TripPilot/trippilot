@@ -40,6 +40,16 @@ spring:
     consumer:
       # 소비 그룹이 처음 뜰 때 이미 토픽에 있던 이벤트를 건너뛰지 않게(기본 latest 면 그 사이 것은 유실이다).
       auto-offset-reset: earliest
+      # 한 번에 받는 양을 작게(기본 500) — 구독자(AI 호출 포함)를 소비 스레드에서 차례로 돌리므로, 적체 500건이면
+      # max.poll.interval 을 넘겨 그룹에서 빠지고 같은 묶음을 다시 받는 재배치가 반복된다.
+      max-poll-records: 10
+      properties:
+        # 한 묶음 + 한 레코드의 재시도 창(약 3분)을 덮도록 기본 5분에서 늘린다.
+        max.poll.interval.ms: 600000
+    admin:
+      # Kafka 모드인데 기동 시 브로커가 없으면 기동을 실패시킨다 — 그냥 뜨면 토픽이 안 만들어져(자동 생성 끔) 재시작 전까지
+      # 모든 송신이 조용히 멈춘다. 브로커를 먼저 띄운다. none 모드에서는 KafkaAdmin 이 토픽을 만들 일이 없어 무관하다.
+      fail-fast: true
 
 # 소셜 로그인 제공자(SECURITY-12: 평문 시크릿 0). client-id/secret 은 env 로만 주입 —
 # dev=application-local.yml(gitignore), prod=Secrets Manager→env. token/user-info-uri 는 비밀 아님(제공자 고정값).
@@ -47,6 +57,8 @@ spring:
 trippilot:
   # 아웃박스 배달 경로(TRIP-1469). none = 폴링이 구독자에게 직접 배달(종전·운영 기본). kafka = 폴링은 브로커로 넘기고
   # 소비자가 배달한다(로컬 `docker compose --profile kafka` 전용 — 배포에는 브로커가 없다).
+  # ⚠ kafka → none 으로 되돌리면 토픽에 남은 미소비 이벤트는 배달되지 않는다(행은 송신 때 발행 표시). 되돌리기 전에
+  # 소비 지연(lag)이 0 인지 본다: `kafka-consumer-groups.sh --describe --group trippilot-outbox`.
   outbox:
     broker: ${EVENT_BROKER:none}
   social:

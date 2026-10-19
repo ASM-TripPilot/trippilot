@@ -60,8 +60,11 @@ class KafkaOutboxConfig {
         { record, e ->
             // 봉투 전체를 못 읽어도 eventId 만 읽히면 그 행을 포기로 남긴다 — 행은 송신 때 이미 발행 표시라 버리면 흔적이 없다.
             val value = record.value() as? String
-            val eventId = value?.let(broker::eventIdOf)
-            if (eventId != null) relay.abandon(eventId, value.let(broker::eventTypeOf), e)
+            val (eventId, eventType) = value?.let(broker::idAndTypeOf) ?: (null to null)
+            // 포기 기록이 실패해도(DB 끊김) 던지지 않는다 — 던지면 같은 레코드가 재시도 주기를 처음부터 다시 돌며 파티션을 막는다.
+            // 그때 흔적은 이 로그 한 줄(eventId 포함)이다.
+            if (eventId != null) runCatching { relay.abandon(eventId, eventType, e) }
+                .onFailure { log.error("포기 기록에 실패했습니다 — 이 이벤트는 로그로만 남습니다. eventId={} type={}", eventId, eventType, it) }
             else log.error("eventId 도 못 읽은 Kafka 메시지를 버립니다 — key={} offset={} value={}",
                 record.key(), record.offset(), value?.take(500), e)
         },
@@ -93,9 +96,11 @@ class KafkaOutboxBroker(
 
     fun read(value: String): EventEnvelope = reader.readValue(value)
 
-    fun eventIdOf(value: String): UUID? = runCatching { UUID.fromString(mapper.readTree(value).get("eventId").asText()) }.getOrNull()
-
-    fun eventTypeOf(value: String): String? = runCatching { mapper.readTree(value).get("eventType")?.asText() }.getOrNull()
+    /** 봉투 전체를 못 읽을 때 eventId·eventType 만이라도 — eventId 가 없으면 null. */
+    fun idAndTypeOf(value: String): Pair<UUID, String?>? = runCatching {
+        val node = mapper.readTree(value)
+        UUID.fromString(node.get("eventId").asText()) to node.get("eventType")?.asText()
+    }.getOrNull()
 
     /** 브로커가 받았다고 답할 때까지 기다린다 — 답이 없으면 던지고, 릴레이가 배치를 멈추거나 그 행을 백오프시킨다. */
     fun send(envelope: EventEnvelope) {
@@ -116,7 +121,7 @@ class KafkaOutboxBroker(
          * 빠진 예외 계열 하나가 멀쩡한 이벤트 전부를 13분 만에 포기로 떨어뜨린다.
          */
         fun recordOnly(e: Throwable): Boolean = generateSequence(e) { it.cause }
-            .any { it is RecordTooLargeException || it is SerializationException || it is com.fasterxml.jackson.core.JsonProcessingException }
+            .any { it is RecordTooLargeException || it is SerializationException || it is JsonProcessingException }
     }
 }
 

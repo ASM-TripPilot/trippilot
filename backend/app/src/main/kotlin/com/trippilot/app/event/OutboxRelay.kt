@@ -292,8 +292,10 @@ class OutboxRelay(
         /** 한 번에 집는 양. 크게 잡으면 락을 오래 쥐고, 작으면 밀린 이벤트가 안 빠진다. */
         private const val BATCH_SIZE = 100
 
-        /** 이 횟수를 넘기면 포기한다. 조회로 찾는다 — `WHERE published_at IS NULL AND attempts >= 10`. */
-        /** Kafka 소비 재시도 횟수도 이 값을 쓴다 — 포기 조회(`attempts >= 10`)와 어긋나지 않게 한 곳에 둔다. */
+        /**
+         * 이 횟수를 넘기면 포기한다. 조회로 찾는다 — `WHERE published_at IS NULL AND attempts >= 10`.
+         * Kafka 소비 재시도 횟수도 이 값을 쓴다 — 포기 조회와 어긋나지 않게 한 곳에 둔다.
+         */
         const val MAX_ATTEMPTS = 10
 
         /** Kafka 모드 한 배치의 송신 시간 예산 — 락 시한(lockAtMostFor 5분)보다 짧게. */

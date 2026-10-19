@@ -56,6 +56,10 @@ services:
     profiles: ["kafka"]
     image: apache/kafka:4.1.1
     container_name: trippilot-kafka
+    # 토픽 로그를 남긴다 — Kafka 모드는 송신 때 아웃박스 행을 발행 표시하므로, 미소비 이벤트의 유일한 사본이 여기다.
+    # 컨테이너를 다시 만들 때 지워지면 흔적 없이 사라진다. 초기화는 `down -v`.
+    volumes:
+      - trippilot-kafkadata:/var/lib/kafka/data
     ports:
       - "${KAFKA_HOST_PORT:-9092}:9092"
     environment:
@@ -74,6 +78,7 @@ services:
       # 토픽은 앱(KafkaAdmin)이 3파티션으로 만든다. 자동 생성을 열어 두면 앱이 브로커보다 먼저 떠 첫 송신이 1파티션 토픽을
       # 만들고, 다음 기동에 3으로 늘리는 순간 같은 aggregateId 가 다른 파티션으로 가 순서가 깨진다.
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
     healthcheck:
       # DOCKER 리스너로 본다 — HOST 리스너가 광고하는 localhost:${KAFKA_HOST_PORT} 는 컨테이너 안에 없을 수 있다.
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka:19092 > /dev/null"]
@@ -472,4 +477,5 @@ services:
 
 volumes:
   trippilot-pgdata:
+  trippilot-kafkadata:
   trippilot-ai-vectordata:
