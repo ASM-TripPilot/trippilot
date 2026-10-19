@@ -153,7 +153,7 @@ class HttpScheduleAgentAdapter(
             AiRepairRequest(
                 solution.toWire(),
                 // slotRef 를 되돌려 보낸다 — 인덱스만 보내면 검증 시점과 수리 대상이 어긋났을 때 상대가 복구할 수단이 없다.
-                violations.map { AiViolation(it.type, it.slotRef, it.detail.orEmpty(), it.dayIndex, it.slotIndex) },
+                violations.map { AiViolation(it.type, it.slotRef, it.detail.orEmpty(), it.dayIndex, it.slotIndex, it.reasonCode) },
                 requestMeta(REPAIR_DEADLINE_MS),
                 anchors = context.anchors,
                 timeWindows = context.anchors.map { TimeWindow(it.date, DAY_START, DAY_END) },

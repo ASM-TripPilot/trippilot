@@ -231,8 +231,19 @@ class AiBoundaryOpenApiTest : StringSpec({
         wireKeys(requireNotNull(samplePayload.freshness)) shouldContainExactly props("FreshnessMetaSchema")
     }
 
-    "위반 키가 계약과 정확히 일치한다 — day_index·slot_index 수퍼셋 포함(PR #138)" {
+    "위반 키가 계약과 정확히 일치한다 — day_index·slot_index 수퍼셋 포함(PR #138)·reason_code 하위 코드(상황 감지 H1)" {
         wireKeys(sampleViolation) shouldContainExactly props("ViolationSchema")
+        mismatches(sampleViolation, "ViolationSchema") shouldContainExactly emptyList()
+    }
+
+    /**
+     * HC1 하위 코드 어휘가 계약 enum 과 같다 — 장소 감지(BR-SA-17)가 이 값으로 알림 변형을 고른다.
+     * 상대가 하나를 더하거나 이름을 바꾸면 여기서 깨진다(모르는 값은 조용히 `HOURS_MISMATCH` 로 떨어진다).
+     */
+    "위반 하위 코드 어휘가 계약 enum 과 같다" {
+        val spec = requireNotNull(schemas["ViolationSchema"]?.get("properties")?.get("reason_code")) { "reason_code 없음" }
+        val values = spec["anyOf"]?.flatMap { it["enum"]?.map { v -> v.asString() }.orEmpty() }.orEmpty()
+        values.sorted() shouldContainExactly listOf("CLOSED_DAY", "HOLIDAY", "OUT_OF_HOURS")
     }
 
     /**
@@ -437,11 +448,12 @@ private val sampleEditResponse = AiEditResponse(
     command = sampleEditCommand,
     applyMode = "AUTO_APPLY",
     itinerary = samplePayload,
-    violations = listOf(AiViolation("HC1", slotRef = UUID.randomUUID().toString(), detail = "영업시간 밖", dayIndex = 0, slotIndex = 1)),
+    violations = listOf(AiViolation("HC1", slotRef = UUID.randomUUID().toString(), detail = "영업시간 밖", dayIndex = 0, slotIndex = 1, reasonCode = "OUT_OF_HOURS")),
     reason = "편집 결과가 하드 제약을 위반",
 )
 
-private val sampleViolation = AiViolation("HC1", slotRef = "2026-08-01#poi", detail = "영업시간 밖", dayIndex = 0, slotIndex = 1)
+// reason_code — HC1 하위 코드(상황 감지 H1). 표본은 값을 채운다(ContractShape 는 null 을 건너뛴다)
+private val sampleViolation = AiViolation("HC1", slotRef = "2026-08-01#poi", detail = "공휴일 휴무", dayIndex = 0, slotIndex = 1, reasonCode = "HOLIDAY")
 
 private val sampleReplanRequest = AiReplanRequest(
     tripId = UUID.randomUUID().toString(),

@@ -30,6 +30,7 @@ from trippilot.assembly_engine.constraints import (
     anchor_minutes,
     free_visit_cap,
     not_before_floor,
+    open_hours_ok,
 )
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
@@ -41,7 +42,7 @@ from trippilot.domain.itinerary import (
     TimeWindow,
     VisitSlot,
 )
-from trippilot.domain.poi import Poi, PoiCategory, counts_as_food
+from trippilot.domain.poi import OpenHour, Poi, PoiCategory, counts_as_food, open_windows_on
 
 
 def _at(day, template: datetime) -> datetime:
@@ -129,7 +130,7 @@ def explain_unplaced(
             def fit(p: ItineraryProblem, around: list[VisitSlot]) -> datetime | None:
                 return rule._required_start(p, d.date, poi, stay, around, nb, win)
 
-            if poi.open_hours and all(h.day_of_week != d.date.weekday() for h in poi.open_hours):
+            if open_windows_on(poi, d.date, problem.holidays) == ():  # 정기·공휴일 휴무(상황 감지 H1)
                 why[rv.poi_id] = "closed"
             elif fit(problem, []) is None:
                 why[rv.poi_id] = "far" if fit(bare, []) is not None else "hours"
@@ -144,18 +145,6 @@ def explain_unplaced(
             if t is not None:
                 fits[pid] = t
     return why, fits
-
-
-def _open_ok(poi: Poi, start: datetime, end: datetime) -> bool:
-    if not poi.open_hours:
-        return True  # 정보 없음 → 막지 않음 (constraints.py와 동일 규칙)
-    dow = start.weekday()
-    todays = [oh for oh in poi.open_hours if oh.day_of_week == dow]
-    if not todays:
-        return False  # 휴무
-    s = start.hour * 60 + start.minute
-    e = s + int((end - start).total_seconds() // 60)
-    return any(oh.open_min <= s and e <= oh.close_min for oh in todays)
 
 
 class RuleFallbackAssembler:
@@ -396,8 +385,8 @@ class RuleFallbackAssembler:
                     end = start + timedelta(minutes=stay)
                     if end > day_end:
                         continue  # day window 초과 (HC4)
-                    if not _open_ok(poi, start, end):
-                        continue  # 영업시간 (HC1)
+                    if not open_hours_ok(poi, start, end, problem.holidays):
+                        continue  # 영업시간 (HC1 — 검증과 같은 함수, 공휴일 포함)
                     # 고정 블록과의 충돌: 말단 삽입이라 뒤에 오는 고정 블록만 위험
                     conflict = any(not (end <= s.start_at or start >= s.end_at)
                                    for s in slots)
@@ -495,26 +484,27 @@ class RuleFallbackAssembler:
             prev = nxt
 
         ranges = (*windows, (ws, we)) if counts_as_food(poi) else ((ws, we),)
+        todays = open_windows_on(poi, day, problem.holidays)  # 그 날 창 — 검증과 같은 함수(공휴일 포함)
         for lo_r, hi_r in ranges:
             for lb, ub in gaps:
-                t = self._earliest_open(poi, max(lb, lo_r), min(ub, hi_r) - stay, stay,
-                                        day.weekday())
+                t = self._earliest_open(max(lb, lo_r), min(ub, hi_r) - stay, stay, todays)
                 if t is not None:
                     return base + timedelta(minutes=t)
         return None
 
     @staticmethod
-    def _earliest_open(poi: Poi, a: int, b: int, stay: int, dow: int) -> int | None:
-        """[a, b] 안에서 체류가 영업창에 들어가는 가장 이른 시작(분). 정보 없음 = a (HC1 미적용).
+    def _earliest_open(a: int, b: int, stay: int,
+                       todays: tuple[OpenHour, ...] | None) -> int | None:
+        """[a, b] 안에서 체류가 그 날 영업창(`open_windows_on`)에 들어가는 가장 이른 시작(분). 정보 없음(None) = a
+        (HC1 미적용), 휴무(()) = None.
 
         후보 시각은 a 와 그 뒤의 영업 시작들뿐이다 — 가능 구간은 영업창들의 합집합과 [a, b] 의
-        교집합이라 가장 이른 점은 둘 중 하나다. 판정은 `_open_ok` 와 같은 식(한 창 안에 완전 포함).
+        교집합이라 가장 이른 점은 둘 중 하나다. 판정은 `open_hours_ok` 와 같은 식(한 창 안에 완전 포함).
         """
         if a > b:
             return None
-        if not poi.open_hours:
+        if todays is None:
             return a
-        todays = [oh for oh in poi.open_hours if oh.day_of_week == dow]
         for t in sorted({a, *(oh.open_min for oh in todays if a < oh.open_min <= b)}):
             if any(oh.open_min <= t and t + stay <= oh.close_min for oh in todays):
                 return t

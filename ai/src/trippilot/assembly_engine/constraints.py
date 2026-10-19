@@ -3,9 +3,10 @@
 I/O 없음 — (solution, problem, poi_index, estimator)만으로 판정. oracle 전수 대조 가능(U5-P1).
 빈 리스트 = 유효. 예산은 검사하지 않음(소프트, INV-SOLVE3).
 
-영업시간 판정 규칙:
+영업시간 판정 규칙 — 그 날 창은 `poi.open_windows_on` 하나로만 읽는다(조립 전 경로와 같은 함수):
 - poi.open_hours 비어 있음 = 영업정보 없음 → HC1 미적용 (알 수 없는 것은 막지 않는다)
 - 항목이 있는데 해당 요일이 없음 = 휴무 → HC1 위반
+- 휴일 규칙이 그 날을 닫음(상황 감지 H1, `problem.holidays` 가 있을 때만) → HC1 위반 — 영업정보가 없어도
 - close_min > 1440(자정 초과)은 시작일 귀속 규칙으로 그대로 비교
 """
 
@@ -15,44 +16,59 @@ from datetime import datetime, timedelta
 from typing import Mapping
 
 from trippilot.domain.common import PoiId
-from trippilot.domain.itinerary import ItineraryProblem, ItinerarySolution, Violation
-from trippilot.domain.poi import Poi
+from trippilot.domain.itinerary import (
+    CLOSED_DAY,
+    HOLIDAY,
+    OUT_OF_HOURS,
+    ItineraryProblem,
+    ItinerarySolution,
+    Violation,
+)
+from trippilot.domain.poi import HolidayCalendar, Poi, closed_by_holiday, open_windows_on
 
 
 def _min_of_day(dt) -> int:
     return dt.hour * 60 + dt.minute
 
 
-def open_hours_ok(poi: Poi, start_at: datetime, end_at: datetime) -> bool:
-    """HC1 판정 1건 — 정보 없음은 통과, 있으면 그 요일 영업창 **하나에 완전 포함**이어야 한다.
+def open_hours_ok(poi: Poi, start_at: datetime, end_at: datetime,
+                  holidays: HolidayCalendar | None = None) -> bool:
+    """HC1 판정 1건 — 정보 없음은 통과, 있으면 그 날 영업창 **하나에 완전 포함**이어야 한다.
 
     `check_hc1` 의 규칙 그 자체다. 조립 밖에서 "이 핀이 영업시간에 걸리나"를 미리 물을 때도
     (ScheduleAgent — 걸리면 409 대신 빼고 보고, TRIP-1249) 이 함수를 쓴다 — 규칙이 둘이 되면
-    에이전트가 둔 핀을 검증기가 거부하는 모순이 생긴다.
+    에이전트가 둔 핀을 검증기가 거부하는 모순이 생긴다. 그 날 창은 `open_windows_on`(휴일 규칙 포함,
+    `holidays` None = 모드 off)이다.
     """
-    if not poi.open_hours:
+    windows = open_windows_on(poi, start_at.date(), holidays)
+    if windows is None:
         return True  # 정보 없음 → 미적용
-    todays = [oh for oh in poi.open_hours if oh.day_of_week == start_at.weekday()]
     start_m = _min_of_day(start_at)
     end_m = start_m + int((end_at - start_at).total_seconds() // 60)
-    return any(oh.open_min <= start_m and end_m <= oh.close_min for oh in todays)
+    return any(oh.open_min <= start_m and end_m <= oh.close_min for oh in windows)
 
 
-def check_hc1(solution: ItinerarySolution, poi_index: Mapping[PoiId, Poi]) -> list[Violation]:
-    """영업시간: start ≥ open ∧ end ≤ close."""
+def check_hc1(solution: ItinerarySolution, poi_index: Mapping[PoiId, Poi],
+              holidays: HolidayCalendar | None = None) -> list[Violation]:
+    """영업시간: start ≥ open ∧ end ≤ close. 하위 코드(상황 감지 H1 · BR-SA-17)는 정기 휴무 CLOSED_DAY
+    (공휴일과 겹쳐도 이것이 먼저 — 그 요일은 원래 닫는다), 휴일 규칙 휴무 HOLIDAY, 그 날 열지만 창 밖 OUT_OF_HOURS.
+    detail 문자열은 종전 그대로다(휴일은 "공휴일 휴무")."""
     out: list[Violation] = []
     for day in solution.days:
         for slot in day.slots:
             poi = poi_index.get(slot.poi_id)
-            if poi is None or open_hours_ok(poi, slot.start_at, slot.end_at):
+            if poi is None or open_hours_ok(poi, slot.start_at, slot.end_at, holidays):
                 continue
             dow = slot.start_at.weekday()
-            if not any(oh.day_of_week == dow for oh in poi.open_hours):
-                out.append(Violation("HC1", slot.poi_id, f"{dow}요일 휴무"))
+            if poi.open_hours and not any(oh.day_of_week == dow for oh in poi.open_hours):
+                out.append(Violation("HC1", slot.poi_id, f"{dow}요일 휴무", CLOSED_DAY))
+                continue
+            if closed_by_holiday(poi, slot.start_at.date(), holidays):
+                out.append(Violation("HC1", slot.poi_id, "공휴일 휴무", HOLIDAY))
                 continue
             start_m = _min_of_day(slot.start_at)
             end_m = start_m + int((slot.end_at - slot.start_at).total_seconds() // 60)
-            out.append(Violation("HC1", slot.poi_id, f"영업시간 밖: {start_m}~{end_m}"))
+            out.append(Violation("HC1", slot.poi_id, f"영업시간 밖: {start_m}~{end_m}", OUT_OF_HOURS))
     return out
 
 
@@ -210,7 +226,7 @@ def check_hc4(solution: ItinerarySolution, problem: ItineraryProblem) -> list[Vi
 
 def check_all(solution: ItinerarySolution, problem: ItineraryProblem,
               poi_index: Mapping[PoiId, Poi], estimator) -> list[Violation]:
-    return (check_hc1(solution, poi_index)
+    return (check_hc1(solution, poi_index, problem.holidays)
             + check_hc2(solution, poi_index, estimator, problem)
             + check_hc3(solution, problem)
             + check_hc4(solution, problem))

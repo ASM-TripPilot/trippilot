@@ -36,7 +36,7 @@
 | `ItineraryProblem` | `schedule_id, days: tuple[date,...], candidates: tuple[ScoredPoi,...], fixed_blocks, budget: BudgetLevel, transport: TransportMode, day_window: TimeWindow, seed: int` | `candidates ⊆ CandidatePool` (INV-1). `seed` 고정 → 결정론(INV-4) |
 | `ItinerarySolution` | `schedule_id, days: tuple[DaySolution,...], is_fallback: bool, solve_mode: SolveMode, assembly_run: AssemblyRunRecord \| None` | 반환 전 HC1~HC4 통과 필수 (INV-2) |
 | `SolveMode` | Enum: `OR_TOOLS / LLM / RULE_FALLBACK / MINIMAL` (정본 `ai/src/trippilot/domain/itinerary.py`) | LLM 이라도 HC 검증 후에만 반환(코드 docstring 과 같은 표현). **정정**: 구 `BEDROCK` → `LLM` 개명 완료 (TRIP-256 #71, 2026-08-04 — 벤더 중립 AI-D06) |
-| `Violation` | `code: str(HC1~HC4), slot_ref: PoiId \| None, detail: str` | 빈 리스트 = 유효 |
+| `Violation` | `code: str(HC1~HC4), slot_ref: PoiId \| None, detail: str, reason_code: str \| None` | 빈 리스트 = 유효. `reason_code` = HC1 하위 코드 `CLOSED_DAY`·`OUT_OF_HOURS`·`HOLIDAY`(상황 감지 H1, 그 밖 None) |
 
 ## 3. Travel (domain/travel.py)
 

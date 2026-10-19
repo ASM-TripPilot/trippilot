@@ -29,6 +29,7 @@ from trippilot.domain.intent import Intent
 from trippilot.domain.poi import Poi
 from trippilot.orchestrator.info_collector import InfoCollector
 from trippilot.orchestrator.opportunity import NEAR_KM, Opportunity, find_opportunities
+from trippilot.ports.holiday_calendar_port import HolidaySource
 from trippilot.providers.transit import _format_distance_range
 
 MAX_LOOKUPS = 8      # 반경 조회(백엔드 왕복) 상한 — 백엔드도 남은 슬롯을 8개까지만 보낸다
@@ -43,9 +44,12 @@ def find(
     request: schemas.OpportunitiesRequest,
     tz: tzinfo,
     *,
+    holidays: HolidaySource | None = None,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> schemas.OpportunitiesResponse:
     started = monotonic()
+    # 공휴일 휴무(상황 감지 H1) — 달력은 시계 원점 뒤에 물어 조회 시간도 예산 안에 든다. 모드 off 면 None(조회 0회).
+    calendar = None if holidays is None else holidays.between(request.date, request.date)
     meta = request.request_meta
     now = meta.requested_at if meta.requested_at.tzinfo is not None else meta.requested_at.replace(tzinfo=tz)
     slots = tuple((s.slot_key, GeoPoint(s.coord.lat, s.coord.lng)) for s in request.slots)
@@ -55,7 +59,7 @@ def find(
     budget_s = None if meta.deadline_ms is None else meta.deadline_ms * BUDGET_SHARE / 1000
     pois = _pois(poi_db, slots, lambda: budget_s is not None and monotonic() - started >= budget_s, notes)
     planned = {PoiId(p) for p in request.planned_poi_ids} | {PoiId(s.poi_id) for s in request.slots}
-    found = () if pois is None else find_opportunities(request.date, slots, events, pois, planned)
+    found = () if pois is None else find_opportunities(request.date, slots, events, pois, planned, calendar)
 
     if notes:
         _log.warning("planb_opportunities request_id=%s notes=%s", meta.request_id, notes)

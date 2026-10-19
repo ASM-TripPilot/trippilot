@@ -28,7 +28,7 @@ from trippilot.agents.planb.request_verification import normalize
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.event import EventInfo, EventType
-from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory
+from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, HolidayCalendar, Poi, PoiCategory
 from trippilot.llm_gateway.gates.base import has_contact_like
 from trippilot.orchestrator.event_affinity import ATTACH_RADIUS_KM
 
@@ -73,12 +73,13 @@ def find_opportunities(
     events: Iterable[EventInfo],
     pois: Iterable[Poi],
     planned: Collection[PoiId],
+    holidays: HolidayCalendar | None = None,
 ) -> tuple[Opportunity, ...]:
     """남은 슬롯 `(slot_key, 좌표)` 근처의 기회 ≤ 3. 입력 순서와 무관한 결정론이다."""
     skip = frozenset(planned)
     places: dict[PoiId, tuple[Poi, str, float]] = {}
     for poi in pois:
-        if poi.poi_id in skip or poi.poi_id in places or not _eligible(poi, day):
+        if poi.poi_id in skip or poi.poi_id in places or not _eligible(poi, day, holidays):
             continue
         near = min(((haversine_km(c, poi.coord), key) for key, c in slots), default=None)
         if near is not None and near[0] <= NEAR_KM:
@@ -103,10 +104,11 @@ def find_opportunities(
     return tuple(picked)
 
 
-def _eligible(poi: Poi, day: date) -> bool:
-    """나이트라이프·숙소·그 요일 휴무가 증명된 곳은 권하지 않는다(정보 없음은 막지 않는다 — HC1 과 같은 판정)."""
+def _eligible(poi: Poi, day: date, holidays: HolidayCalendar | None) -> bool:
+    """나이트라이프·숙소·그날 휴무가 증명된 곳은 권하지 않는다(정보 없음은 막지 않는다 — HC1 과 같은 판정,
+    공휴일 휴무도 같은 헬퍼 — 상황 감지 H1)."""
     return (poi.category is not PoiCategory.STAY and NIGHTLIFE_TAG not in poi.tags
-            and hours_label(poi, day.weekday()) is not None and _displayable(poi.name))
+            and hours_label(poi, day, holidays) is not None and _displayable(poi.name))
 
 
 def _shown(event: EventInfo, day: date) -> bool:

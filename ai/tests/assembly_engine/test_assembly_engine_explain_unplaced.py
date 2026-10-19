@@ -37,7 +37,7 @@ from trippilot.domain.itinerary import (
     TimeWindow,
     VisitSlot,
 )
-from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource, open_windows_on
 
 _KST = timezone(timedelta(hours=9))
 _DAY = date(2026, 10, 14)  # 수요일
@@ -52,10 +52,10 @@ def _at(h: int, m: int = 0) -> datetime:
 
 
 def _poi(pid: str, cat: PoiCategory = PoiCategory.SIGHT, hours: tuple[OpenHour, ...] = (),
-         coord: GeoPoint = _ANCHOR) -> Poi:
+         coord: GeoPoint = _ANCHOR, rules: frozenset[str] = frozenset()) -> Poi:
     return Poi(poi_id=PoiId(pid), name=pid, category=cat, coord=coord, open_hours=hours,
                avg_cost=None, rating=None, quality=DataQuality.FULL, source=PoiSource.SEED,
-               confidence=None)
+               confidence=None, holiday_rules=rules)
 
 
 def _rv(pid: str, dwell: int | None = None) -> RequiredVisit:
@@ -63,12 +63,12 @@ def _rv(pid: str, dwell: int | None = None) -> RequiredVisit:
 
 
 def _problem(*, required=(), pins=(), window=((9, 0), (21, 0)), not_before=None,
-             anchor: GeoPoint | None = _ANCHOR, pace=None) -> ItineraryProblem:
+             anchor: GeoPoint | None = _ANCHOR, pace=None, holidays=None) -> ItineraryProblem:
     return ItineraryProblem(
         schedule_id=ScheduleId("explain"), days=(_DAY,), candidates=(), fixed_blocks=tuple(pins),
         budget=BudgetLevel.MID, transport=TransportMode.PUBLIC,
         day_window=TimeWindow(_at(*window[0]), _at(*window[1])), seed=1, anchor=anchor,
-        pace=pace, not_before=not_before, required_visits=tuple(required))
+        pace=pace, not_before=not_before, required_visits=tuple(required), holidays=holidays)
 
 
 def _pin(pid: str, start: datetime, end: datetime) -> FixedBlock:
@@ -242,7 +242,12 @@ def _setting(draw):
     return dict(window=window,
                 not_before=None if nb is None else _at(nb // 60, nb % 60),
                 # 가깝거나(이동 무시 가능) 30~40km 밖 — far 가 드물지 않게 섞는다
-                anchor=draw(st.one_of(_coord(0.02), _coord(0.4))), pace=draw(st.sampled_from(_PACES)))
+                anchor=draw(st.one_of(_coord(0.02), _coord(0.4))), pace=draw(st.sampled_from(_PACES)),
+                # 공휴일 달력(상황 감지 H1) — off·달력 실패(빈 매핑)·그날 공휴일
+                holidays=draw(st.sampled_from((None, {}, {_DAY: frozenset({"PUBLIC"})}))))
+
+
+_RULES = st.sampled_from((frozenset(), frozenset(), frozenset({"PUBLIC"}), frozenset({"10-14"})))
 
 
 @st.composite
@@ -262,12 +267,14 @@ def _day_case(draw):
     required = []
     for i in range(draw(st.integers(1, 4))):
         pid = f"rv{i}"
-        index[PoiId(pid)] = _poi(pid, draw(st.sampled_from(_CATS)), draw(_hours()), draw(_coord(0.05)))
+        index[PoiId(pid)] = _poi(pid, draw(st.sampled_from(_CATS)), draw(_hours()), draw(_coord(0.05)),
+                                 draw(_RULES))
         required.append(_rv(pid, draw(st.one_of(st.none(), st.integers(20, 150)))))
     probe = []
     for i in range(draw(st.integers(0, 4))):
         pid = f"x{i}"
-        index[PoiId(pid)] = _poi(pid, draw(st.sampled_from(_CATS)), draw(_hours()), draw(_coord(0.05)))
+        index[PoiId(pid)] = _poi(pid, draw(st.sampled_from(_CATS)), draw(_hours()), draw(_coord(0.05)),
+                                 draw(_RULES))
         probe.append(PoiId(pid))
     return _problem(required=required, pins=pins, **s), index, tuple(probe)
 
@@ -300,7 +307,7 @@ def test_P1_틈에_든다는_시각에_끼워도_검증이_깨지지_않는다(c
 @st.composite
 def _lone_case(draw):
     s = draw(_setting())
-    poi = _poi("v", draw(st.sampled_from(_CATS)), draw(_hours()), draw(_coord(0.05)))
+    poi = _poi("v", draw(st.sampled_from(_CATS)), draw(_hours()), draw(_coord(0.05)), draw(_RULES))
     rv = _rv("v", draw(st.one_of(st.none(), st.integers(20, 150))))
     return _problem(required=(rv,), **s), {poi.poi_id: poi}
 
@@ -333,7 +340,8 @@ def test_P2_혼자인_필수_방문은_두_어셈블러가_까닭대로_놓는�
             assert by_or == expected, code
 
     check(problem, code == "fits")
-    # 라벨이 실제 판정과 맞는다 — 앵커만 빼면 놓인다 ⇔ far·fits, 휴무 ⇔ 그날 영업 구간 0
+    # 라벨이 실제 판정과 맞는다 — 앵커만 빼면 놓인다 ⇔ far·fits, 휴무 ⇔ 그날 영업 창 0(정기·공휴일 휴무 —
+    # 조립과 같은 헬퍼, 상황 감지 H1)
     check(replace(problem, anchor=None), code in {"far", "fits"})
     poi = index[PoiId("v")]
-    assert (code == "closed") == bool(poi.open_hours and all(h.day_of_week != _WD for h in poi.open_hours))
+    assert (code == "closed") == (open_windows_on(poi, _DAY, problem.holidays) == ())

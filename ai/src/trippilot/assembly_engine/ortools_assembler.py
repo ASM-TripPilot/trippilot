@@ -50,7 +50,7 @@ from trippilot.domain.itinerary import (
     VisitSlot,
 )
 from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.poi import Poi, PoiCategory, counts_as_food
+from trippilot.domain.poi import Poi, PoiCategory, counts_as_food, open_windows_on
 
 _log = logging.getLogger(__name__)
 
@@ -331,7 +331,8 @@ class OrToolsAssembler:
             food_stay = stay_for(PoiCategory.FOOD, problem.pace)
             hint_ids = {pid for pid, _ in hint}
             kept = self._prefilter(cands, fixed_ids | required_ids | hint_ids, day,
-                                   self._meal_slots(ws, we, floor, food_stay), food_stay)
+                                   self._meal_slots(ws, we, floor, food_stay), food_stay,
+                                   problem.holidays)
             if log_cut:
                 _log_prefilter_cut(day, cands, kept, self._pois)
             cands = kept
@@ -346,9 +347,9 @@ class OrToolsAssembler:
         for c in cands:
             poi = self._pois[c.poi_id]
             stay = stay_for(poi.category, problem.pace)
-            win = self._day_open_window(poi, day)
+            win = self._day_open_window(poi, day, problem.holidays)
             if win is None:
-                continue  # 휴무 — 모델에서 제외
+                continue  # 휴무(정기·공휴일) — 모델에서 제외
             lo = max(win[0], ws)
             if floor is not None and c.poi_id not in fixed_ids:
                 # 하한 시각에 지금 위치(앵커)에서 출발 — 정의역만 좁힌다(용량 컷 유효)
@@ -388,11 +389,9 @@ class OrToolsAssembler:
             existing = next((n for n in nodes if n["poi"].poi_id == rv.poi_id), None)
             if poi is None or (existing is not None and existing["pin"] is not None):
                 continue  # 좌표 미상은 놓을 수 없고, 같은 날 핀이면 이미 간다 → 미배치 판정 몫
-            if poi.open_hours:
-                todays = [(oh.open_min, oh.close_min) for oh in poi.open_hours
-                          if oh.day_of_week == day.weekday()]
-            else:
-                todays = [(0, 1440 * 2)]
+            windows = open_windows_on(poi, day, problem.holidays)  # 검증과 같은 함수(공휴일 포함)
+            todays = ([(0, 1440 * 2)] if windows is None
+                      else [(oh.open_min, oh.close_min) for oh in windows])
             if not todays:
                 continue  # 휴무 — 그날은 못 간다. 해는 그대로 나가고 배선이 미배치로 보고한다
             # 핀과 달리 하한·앵커 출발을 면제받지 않는다 — 시각이 자유라 면제할 이유가 없다.
@@ -954,7 +953,8 @@ class OrToolsAssembler:
         return [(lo, hi) for lo, hi in slots if hi - lo >= food_stay]
 
     def _prefilter(self, cands: list[ScoredPoi], fixed_ids, day,
-                   meal_slots: list[tuple[int, int]], food_stay: int) -> list[ScoredPoi]:
+                   meal_slots: list[tuple[int, int]], food_stay: int,
+                   holidays=None) -> list[ScoredPoi]:
         """후보 > 60 일 때 노드로 남길 60 — 고정 블록 → 식사창 FOOD 예약석 → 점수순 (TRIP-1183).
 
         `fixed_ids` 는 무조건 남길 POI — 고정 블록·필수 방문·그리디 힌트(`_solve_day`).
@@ -976,7 +976,7 @@ class OrToolsAssembler:
             poi = self._pois[c.poi_id]
             if c.poi_id in fixed_ids or poi.category is not PoiCategory.FOOD:
                 return False
-            win = self._day_open_window(poi, day)
+            win = self._day_open_window(poi, day, holidays)
             return win is not None and any(
                 max(lo, win[0]) + food_stay <= min(hi, win[1]) for lo, hi in meal_slots)
 
@@ -1004,12 +1004,13 @@ class OrToolsAssembler:
         kept += spill[:_PREFILTER_TOP_K - len(kept)]
         return sorted(kept, key=rank)
 
-    def _day_open_window(self, poi: Poi, day) -> tuple[int, int] | None:
-        """해당 요일 영업창 (없음=종일, 요일 미포함=휴무). 다중 창은 최장 창 채택
-        (보수적 부분집합 — checker의 any-window 판정과 안전하게 정합)."""
-        if not poi.open_hours:
+    def _day_open_window(self, poi: Poi, day, holidays) -> tuple[int, int] | None:
+        """그 날 영업창 (없음=종일, 요일 미포함·휴일 규칙 휴무=휴무). 다중 창은 최장 창 채택
+        (보수적 부분집합 — checker의 any-window 판정과 안전하게 정합). 그 날 창은 검증과 같은
+        `open_windows_on` 이다(상황 감지 H1 — `holidays` None 이면 공휴일을 보지 않는다)."""
+        todays = open_windows_on(poi, day, holidays)
+        if todays is None:
             return (0, 1440 * 2)
-        todays = [oh for oh in poi.open_hours if oh.day_of_week == day.weekday()]
         if not todays:
             return None
         best = max(todays, key=lambda oh: oh.close_min - oh.open_min)

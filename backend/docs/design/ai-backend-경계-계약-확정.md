@@ -19,6 +19,7 @@
 | **에러 바디** | `{ error_code, message, retryable }`. 파싱 실패해도 상태코드로 판정한다(바디 상한 8KB) |
 | **재시도** | **하지 않는다.** 실패 즉시 결정론 폴백(INV-4). `retryable` 은 진단용 정보로만 남긴다 |
 | **시한** | `request_meta.deadline_ms` 는 **AI 내부 계산 예산**이자 **목표치(SLO)** — 하드 제약이 아니다(아래 "시한 재정의" 절). **2026-08-21 현재 값을 싣지 않는다**(TRIP-474 — 미지정=무제한). SLO: generate 20s · validate 3s · repair 5s |
+| **위반 하위 코드** | `violations[].reason_code`(선택, 2026-10-19 상황 감지 H1) — HC1 의 `CLOSED_DAY`·`OUT_OF_HOURS`·`HOLIDAY`. 없으면 null 이고 장소 감지는 `HOURS_MISMATCH` 로 읽는다(BR-SA-17). `HOLIDAY` 는 AI `HOLIDAY_CLOSURE_MODE=on` 일 때만 나온다. 백엔드는 repair 요청에 받은 그대로 되돌려 보낸다 |
 | **day1 조기 노출** | 단일 호출 유지. 백엔드가 **2단계로 나눠 호출**한다(1차 day1 5s → 2차 나머지 20s). `excluded_poi_ids` 로 중복을 막는다(TRIP-293) |
 
 **구현**: `HttpScheduleAgentAdapter` · `ScheduleAgentConfiguration`(전용 RestClient·타임아웃) · `GenerateItineraryService`(2단계) · `SecondPhaseGenerator`.

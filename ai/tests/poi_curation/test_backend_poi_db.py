@@ -215,6 +215,22 @@ def test_해석할_수_없는_휴무면_수집_때처럼_포기한다(rest: str)
     assert poi.open_hours == ()
 
 
+def test_원문_칸의_휴일_규칙도_런타임에_읽는다() -> None:
+    """공휴일 휴무(상황 감지 H1) — 같은 원문 칸에서 휴일 규칙을 읽는다. 모드와 무관하게 늘 읽고,
+    판정(`open_windows_on`)은 달력이 있을 때만 한다. 주간 휴무 판정은 그대로다."""
+    db, _ = _db([_row(opening_hours="09:00~18:00\n휴무: 매주 월요일, 1월 1일, 설날 및 추석 당일")])
+    (poi,) = db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
+    assert poi.holiday_rules == frozenset({"01-01", "SEOLLAL_DAY", "CHUSEOK_DAY"})
+    assert [oh.day_of_week for oh in poi.open_hours] == [1, 2, 3, 4, 5, 6]
+
+
+@pytest.mark.parametrize("raw", [None, "", "09:00~18:00", "09:00~18:00\n휴무: 매주 월요일 (단, 월요일이 공휴일인 경우 정상 영업)"])
+def test_휴일_규칙이_없는_원문은_빈_규칙(raw) -> None:
+    db, _ = _db([_row(opening_hours=raw)])
+    (poi,) = db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
+    assert poi.holiday_rules == frozenset()
+
+
 def test_구분자_없는_옛_원문은_종전대로_읽는다() -> None:
     """백필 전 적재분·다른 출처 원문 — 휴무 칸이 없으면 종전과 같은 7일이다(하위호환)."""
     db, _ = _db([_row(opening_hours="10:00~22:00<br>※ 휴무일 및 운영시간은 업체 사정에 따라 변동")])
