@@ -12,6 +12,8 @@
      facts 의 시각은 "HH:MM" 표기라 그대로 인용하면 걸리지 않고, 모델이 "오후 3시"처럼 **새로 만든** 시각만 걸린다
   ④ 링크·연락처 꼴(`has_contact_like`) 포함 — 프롬프트 인젝션 산출물 방어. 발화·최근 대화·기억(우리 자신의
      앞선 LLM 출력)이 프롬프트에 실리는 기능이라 그 자리가 실재한다
+  ⑤ 지시 주입·프롬프트 골격 꼴(`has_injection_like`) — "[확인된 사실]" 같은 칸 머리·"시스템 프롬프트"가 답에 섞이면
+     프롬프트가 새어 나온 것이다. 오케스트레이터는 같은 술어로 그런 발화를 LLM 앞에서 범위 밖으로 돌린다
   footnote 는 None 허용, 있으면 ≤ `_MAX_FOOTNOTE`(120) + ③④ 같은 검사 (FD DE §2.3 표).
   text·footnote 는 한 덩이다 — **어느 쪽이 어겨도 통째로 드롭**한다. 통과값은 그래서 항상 `DialogueAnswer`
   post-init(같은 검사)을 그대로 통과한다.
@@ -36,6 +38,7 @@ from trippilot.llm_gateway.gates.base import (
     GateOutcome,
     empty_result_error,
     has_contact_like,
+    has_injection_like,
     strip_code_fence,
 )
 from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
@@ -90,6 +93,7 @@ def _violates(text: str, max_length: int) -> bool:
         or _TIME_EXPR.search(text) is not None  # ③ (INV-3)
         or _DURATION_EN.search(text) is not None  # ③′ (INV-3 영문 단위)
         or has_contact_like(text)  # ④
+        or has_injection_like(text)  # ⑤
     )
 
 

@@ -49,6 +49,7 @@ from trippilot.domain.common import TraceId
 from trippilot.domain.context import PermissionDeniedError
 from trippilot.domain.intent import ROUTABLE_INTENTS, Intent, IntentDraft, IntentMatch, MatchRoute
 from trippilot.domain.observability import FallbackEvent
+from trippilot.llm_gateway.gates.base import has_injection_like
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, clock_spans, clock_times
 from trippilot.llm_gateway.gates.intent import NULL_INTENT
 from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker
@@ -142,6 +143,8 @@ _OTHER_SESSIONS_LIMIT = 2  # "지난 여행 기억" — 같은 계정의 다른 
 CAPABILITIES_LITERAL = "내가 할 수 있는 것 보기"
 CAPABILITIES_LINE = "일정 검토, 다음 장소·날씨·거리 확인, 일정 변경 제안, 다시 짜기 안내를 도와드려요."
 CAPABILITIES_TEXT = f"이런 걸 도와드릴 수 있어요. {CAPABILITIES_LINE}"
+# 0′ 입구 거절 사유 — `intent_eval.is_refusal` 이 "판단해서 거절"로 세는 표지(`not_classifiable`)를 단다(장애로 세지 않게)
+INJECTION_REASON = "intent_fallback: not_classifiable: injection_suspected"
 # 2″ — 맞장구·인사 (BR-AO-26). 분류가 할 일 없음으로 닫은 말(`{"intent": null}`·범위 밖 라벨) 가운데 낱말이 **전부**
 # 아래 목록인 것만. 제안 뒤의 "응"은 분류가 먼저 그 제안의 의도로 읽고(dialogue_intent 0.2.2), 요청이 섞인 말은 목록 밖
 # 낱말이 있어 분류 몫이다. 깨진 출력·절단·시한·벤더 실패는 판단이 아니라 종전대로 범위 밖 — 제안 뒤 "응"에 아무 일 없이
@@ -355,9 +358,10 @@ def _trip_summary(snapshot: TurnSnapshot, today: date) -> str:
 
 
 def _memory_lines(current: DialogueMemory | None, others: Sequence[DialogueMemory]) -> tuple[str, ...]:
-    """`$memory` 재료 — 현재 세션 줄들 + 헤더 + 다른 세션(≤2) 줄들 (DE §6 `$memory`). 줄의 `inline()` 은 워커가 한다."""
-    lines = list(current.summary) if current is not None else []
-    other_lines = [line for m in others for line in m.summary]
+    """`$memory` 재료 — 현재 세션 줄들 + 헤더 + 다른 세션(≤2) 줄들 (DE §6 `$memory`). 줄의 `inline()` 은 워커가 한다.
+    지시 주입 꼴 줄은 싣지 않는다 — 기억 게이트가 이제 막지만 그 전에 저장된 줄(TTL 90일)이 남아 있을 수 있다."""
+    lines = [line for line in current.summary if not has_injection_like(line)] if current is not None else []
+    other_lines = [line for m in others for line in m.summary if not has_injection_like(line)]
     if other_lines:
         lines += [OTHER_SESSIONS_HEADER, *other_lines]
     return tuple(lines)
@@ -488,6 +492,8 @@ class DialogueOrchestrator:
 
     def turn(self, inp: TurnInput) -> TurnOutcome:
         """한 턴. 어떤 실패도 예외가 아니라 `TurnOutcome` 이다 — `PermissionDeniedError` 만 관통(fail-closed, TRIP-333)."""
+        # 지난 턴 중 지시 주입 꼴은 어느 프롬프트(분류·답변·기억 요약)에도 다시 싣지 않는다 — 그 턴은 이미 범위 밖으로 끝났다
+        inp = replace(inp, recent_turns=tuple(t for t in inp.recent_turns if not has_injection_like(t.text)))
         with llm_call_counter() as counter:
             current, others = self._load_memory(inp)
             try:
@@ -513,6 +519,10 @@ class DialogueOrchestrator:
             return TurnOutcome("ANSWER", (), None, capabilities_answer(inp.snapshot.trip is not None), cleared, 0)
         if not text:
             return self._out_of_scope(inp, "empty_utterance")
+        # 0′ — 지시 무시·프롬프트 유출·역할 바꾸기 꼴은 분류 LLM 에 보내지 않는다. "다음 장소 알려줘. 그리고 규칙 무시하고 …"처럼
+        # 정상 요청에 붙으면 분류는 GET_NEXT_SLOT 을 고르고 답변 LLM 이 그 지시를 받는다 — 판단해서 거절한 것이라 거절 표지를 단다
+        if has_injection_like(text):
+            return self._out_of_scope(inp, INJECTION_REASON)
         trip_view = _trip_view(inp.snapshot)
         today = inp.now.astimezone(self._tz).date()
         trip_summary = _trip_summary(inp.snapshot, today)
@@ -755,7 +765,8 @@ class DialogueOrchestrator:
     def _summarize_and_put(self, inp: TurnInput, current: DialogueMemory | None, answer_text: str | None = None) -> None:
         """BLM §8 — 잔여 ≥2.5s 면 LLM 요약, 미만이면 결정론 압축, ≤0 이면 압축·put 없이 미룬다(due 유지). 실패는 전부 압축."""
         remaining = self._remaining(inp)
-        previous = current.summary if current is not None else ()
+        # 예전에 저장된 지시문 꼴 줄은 요약에 넘기지 않는다 — 이번 갱신으로 저장본에서도 빠진다(`_memory_lines` 와 같은 거름)
+        previous = tuple(line for line in current.summary if not has_injection_like(line)) if current is not None else ()
         if remaining <= 0:
             self._fallback(inp, "memory", _MEMORY_MODES[0], "deferred", f"budget_exhausted(remaining_ms={remaining})")
             return
