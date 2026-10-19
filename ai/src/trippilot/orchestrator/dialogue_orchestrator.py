@@ -342,7 +342,8 @@ def closer_answer(text: str, has_trip: bool) -> DialogueAnswer | None:
 
 
 def _judged_nothing(reason: str) -> bool:
-    """분류가 판단해서 할 일 없음으로 닫았다 — `{"intent": null}` 또는 범위 밖 라벨. 깨진 출력·절단·시한·벤더 실패는 아니다."""
+    """분류가 판단해서 할 일 없음으로 닫았다 — `{"intent": null}` 또는 범위 밖 라벨. 깨진 출력(절단으로 깨진 것 포함)·시한·벤더
+    실패는 아니다 — 절단됐지만 null 로 읽힌 응답(`truncated: not_classifiable: …`)은 판단이다."""
     return NULL_INTENT in reason or reason == f"intent_not_routable({Intent.OUT_OF_SCOPE.value})"
 
 

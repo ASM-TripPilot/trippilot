@@ -220,7 +220,7 @@ from tests.fakes.fake_clock import FakeClock  # noqa: E402
 from tests.orchestrator import test_dialogue_orchestrator as to  # noqa: E402
 from trippilot.domain.context import PermissionDeniedError  # noqa: E402
 from trippilot.domain.llm import LlmFeature  # noqa: E402
-from trippilot.domain.observability import FallbackEvent, LlmCallRecord  # noqa: E402
+from trippilot.domain.observability import FallbackEvent, GateDropEvent, LlmCallRecord  # noqa: E402
 from trippilot.llm_gateway.gates.intent import NULL_INTENT  # noqa: E402
 from trippilot.orchestrator import dialogue_orchestrator as orch_mod  # noqa: E402
 from trippilot.orchestrator.dialogue_interpreter import DialogueContext  # noqa: E402
@@ -334,8 +334,6 @@ def CandidatePool_empty():  # noqa: N802 — 빈 풀(조회는 됐는데 등록 
     ((("GET_POI_INFO", {"place": "해녀의집"}), ("EXPLORE_PLACES", {"region": "부산"})),
      "해녀의집은 18:00까지 열어요. 근처 카페로 흰여울 카페가 있어요.", True),
     ((("GET_POI_INFO", {"place": "해녀의집"}), ("EXPLORE_PLACES", {"region": "부산"})), "흰여울 카페는 09:00부터 열어요.", False),
-    # [다음 일정 + 영업시간, 같은 장소] — 영업시간 짝이 일정 시각 짝과 부딪치지 않는다
-    ((("GET_NEXT_SLOT", {}), ("GET_POI_INFO", {"place": "해녀의집"})), "해녀의집 일정은 12:00이고 18:00까지 열어요", True),
 ])
 def test_merged_answer_times_must_belong_to_their_own_part(calls, text: str, passes: bool) -> None:
     out, b = _plan_turn(_plan_json(*calls), answer=_answer_json(text))
@@ -343,6 +341,19 @@ def test_merged_answer_times_must_belong_to_their_own_part(calls, text: str, pas
     assert (out.answer.text == text) is passes, [e.reason for e in to._fallbacks(b.trace)]
     if not passes:
         assert any(e.reason == "time_not_in_facts" for e in to._fallbacks(b.trace))
+
+
+def test_next_slot_and_hours_are_not_merged_because_the_gate_keeps_only_the_first_time_tool() -> None:
+    """[다음 일정 + 영업시간] 은 병합되지 않는다(게이트가 뒤를 버린다) — 병합하면 (해녀의집, 12:00)·(해녀의집, 18:00) 짝이 섞여
+    영업 시각을 방문 시각으로 쓴 "다음 일정은 18:00 해녀의집이에요"가 통과했다. 남은 다음 일정 단독 답에선 18:00 이 사실 밖이다."""
+    text = "다음 일정은 18:00 해녀의집이에요."
+    out, b = _plan_turn(_plan_json(("GET_NEXT_SLOT", {}), ("GET_POI_INFO", {"place": "해녀의집"})), answer=_answer_json(text))
+    assert out.outcome == "ANSWER" and out.reason.endswith("plan:GET_NEXT_SLOT")
+    (answer_req,) = [r for r in b.llm.requests if r.prompt_ref.feature == "DIALOGUE_ANSWER"]
+    assert '"also"' not in answer_req.prompt
+    (drop,) = [e for e in b.trace.of_type(GateDropEvent) if e.feature == "DIALOGUE_PLAN"]
+    assert drop.dropped_count == 1
+    assert out.answer.text != text and any(e.reason == "time_not_in_facts" for e in to._fallbacks(b.trace))
 
 
 def test_floating_times_and_candidate_times_stay_allowed_outside_plan_answers() -> None:

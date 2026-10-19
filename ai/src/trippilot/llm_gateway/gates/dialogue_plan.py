@@ -18,8 +18,10 @@
        `clock_times`(HH:MM·대조 불가 한글 시각) — 인자의 시각이 문장의 허용 시각이 되지 않게(INV-2)
      - 인자가 있었는데 전부 버려진 호출은 버린다 — 남은 것은 다른 질문이다("15:00 이후 야경" → "근처 아무 곳")
      - 필수 인자가 비면 버린다 — 계획 경로는 되묻지 않는다
-     - (도구, 인자) 가 완전히 같은 중복은 뒤를 버린다. 일정 슬롯 시각을 내는 도구(SHOW_SCHEDULE·GET_NEXT_SLOT)는 합쳐서 하나만 —
-       둘이면 병합 순서가 스냅샷 순서와 달라져 답변의 순서 검사(INV-2)가 뒤집힌다(일정표가 다음 일정을 이미 담는다)
+     - (도구, 인자) 가 완전히 같은 중복은 뒤를 버린다. 시각을 내는 도구(일정 슬롯 시각 SHOW_SCHEDULE·GET_NEXT_SLOT, 영업 시각
+       GET_POI_INFO)는 합쳐서 하나만(INV-2) — 일정 둘이면 병합 순서가 스냅샷 순서와 달라져 답변의 순서 검사가 뒤집히고(일정표가
+       다음 일정을 이미 담는다), 일정 + 영업시간이면 짝 집합이 (이름, 슬롯 시각)과 (이름, 영업 시각)을 가르지 못해 영업 시각을
+       방문 시각으로 쓴 문장("다음 일정은 18:00 해녀의집")이 통과한다
      - 살아남은 것 중 앞의 MAX_PLAN_CALLS 개만 둔다
   ⑤ 하나라도 버리면 GateDropEvent(dropped_ids=() — 풀 id 가 아니다): total = 입력 호출 수 + 살아남은 호출의 입력 키 수,
      dropped = 버린 호출 수 + 살아남은 호출에서 버린 칸 수(그래서 늘 dropped ≤ total). 늘면 프롬프트와 표가 갈라졌다는 신호다
@@ -66,8 +68,8 @@ class DialoguePlanDraft:
             raise ValueError("도구 인자 값은 전부 문자열")
 
 
-# 일정 슬롯 시각(start_at) 짝을 내는 도구 — 계획당 합쳐서 하나
-_SLOT_TIMED = frozenset({Intent.SHOW_SCHEDULE, Intent.GET_NEXT_SLOT})
+# 시각 짝을 내는 도구 — 일정 슬롯 시각(start_at)·영업 시각. 계획당 합쳐서 하나(모듈 머리 ④)
+_TIMED = frozenset({Intent.SHOW_SCHEDULE, Intent.GET_NEXT_SLOT, Intent.GET_POI_INFO})
 
 
 class DialoguePlanGate:
@@ -103,7 +105,7 @@ class DialoguePlanGate:
             call, keys_in, keys_dropped = self._call(item)
             key = (call.intent, tuple(sorted(call.slots.items()))) if call is not None else None
             if (call is None or key in seen or len(kept) >= MAX_PLAN_CALLS
-                    or (call.intent in _SLOT_TIMED and any(k.intent in _SLOT_TIMED for k in kept))):
+                    or (call.intent in _TIMED and any(k.intent in _TIMED for k in kept))):
                 dropped += 1
                 continue
             seen.add(key)

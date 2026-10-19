@@ -219,10 +219,14 @@ def test_only_the_first_two_surviving_calls_are_kept() -> None:
     (_call("SHOW_SCHEDULE", scope="REMAINING"), _call("GET_NEXT_SLOT")),
     (_call("GET_NEXT_SLOT"), _call("SHOW_SCHEDULE")),
     (_call("SHOW_SCHEDULE", day="1일차"), _call("SHOW_SCHEDULE", day="2일차")),
+    (_call("GET_NEXT_SLOT"), _call("GET_POI_INFO", place="해녀의집")),
+    (_call("GET_POI_INFO", place="해녀의집"), _call("SHOW_SCHEDULE")),
+    (_call("GET_POI_INFO", place="우도"), _call("GET_POI_INFO", place="성산일출봉")),
 ])
-def test_schedule_and_next_slot_together_keep_only_the_first(first: dict, second: dict) -> None:
-    """일정 슬롯 시각(start_at)을 내는 도구는 계획당 하나 — 둘이면 병합 순서가 스냅샷 순서와 달라져 순서 검사(INV-2)가 뒤집힌다.
-    일정표가 다음 일정을 이미 담는다."""
+def test_time_tools_together_keep_only_the_first(first: dict, second: dict) -> None:
+    """시각을 내는 도구(일정 슬롯 시각·영업 시각)는 계획당 하나(INV-2) — 일정 둘이면 병합 순서가 스냅샷 순서와 달라져 순서 검사가
+    뒤집히고, [다음 일정 해녀의집 12:00 + 영업시간 해녀의집 09:00~18:00]이면 짝 집합이 슬롯 시각과 영업 시각을 가르지 못해
+    "다음 일정은 18:00 해녀의집이에요"가 통과한다. 뒤의 것은 드롭으로 센다."""
     out = _apply(_plan(first, second))
     assert _calls(out.value) == [(first["tool"], first["args"])]
     assert out.drop_event.dropped_count == 1
@@ -309,7 +313,8 @@ def test_any_output_is_an_error_or_a_closed_valid_plan(raw: str, allowed: frozen
     assert not (draft.refused and draft.calls)
     keys = [(c.intent, tuple(sorted(c.slots.items()))) for c in draft.calls]
     assert len(set(keys)) == len(keys)  # 중복 없음
-    assert sum(c.intent in (Intent.SHOW_SCHEDULE, Intent.GET_NEXT_SLOT) for c in draft.calls) <= 1  # 일정 시각 짝을 내는 도구는 하나
+    timed = (Intent.SHOW_SCHEDULE, Intent.GET_NEXT_SLOT, Intent.GET_POI_INFO)
+    assert sum(c.intent in timed for c in draft.calls) <= 1  # 시각 짝(슬롯 시각·영업 시각)을 내는 도구는 하나
     for call in draft.calls:
         assert call.intent in allowed
         assert set(call.slots) <= plan_argument_names(call.intent)  # 숨긴 인자(PlanTool.hide)는 없다
