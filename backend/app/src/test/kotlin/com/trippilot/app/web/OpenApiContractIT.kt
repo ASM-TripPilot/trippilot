@@ -1,5 +1,8 @@
 package com.trippilot.app.web
 
+import com.fasterxml.jackson.databind.JavaType
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -8,6 +11,8 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.core.io.ClassPathResource
+import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping
 import org.yaml.snakeyaml.LoaderOptions
 import org.yaml.snakeyaml.Yaml
@@ -23,6 +28,10 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
     @Autowired
     @Qualifier("requestMappingHandlerMapping") // 여러 매핑 빈 중 MVC 컨트롤러 매핑(actuator 매핑 아님)
     private lateinit var handlerMapping: RequestMappingHandlerMapping
+
+    /** MVC JSON 컨버터가 쓰는 매퍼(WebConfig) — 필드 대조는 이 매퍼가 보는 속성 이름으로 한다. */
+    @Autowired
+    private lateinit var mapper: ObjectMapper
 
     private val basePath = "/api/v1"
     private val httpMethods = setOf("get", "post", "put", "patch", "delete")
@@ -117,4 +126,222 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
             val methods = info.methodsCondition.methods.map { it.name }
             patterns.flatMap { p -> methods.map { m -> "$m $p" } }
         }.filter { it.substringAfter(" ").startsWith("$basePath/") }.toSet()
+
+    // ── 필드 계약 ──────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * 알고 남겨 둔 불일치 — **사유가 없으면 넣지 않는다.** 고쳐져서 더 안 나오면 아래 게이트가 실패해
+     * 항목을 지우게 한다(목록이 썩지 않게).
+     */
+    private val knownFieldMismatches = mapOf(
+        "GET /api/v1/me/location-consent 응답 LocationConsentResponse.capabilities Capabilities: 문서에만 `localLocationUse`" to
+            "모노레포 통합 때부터 문서에만 있고 서버는 한 번도 내지 않았다. 의미(OS 권한만으로 되는 기기 내 사용?)가 " +
+            "설계 문서에 없고, 지우면 프론트 테스트 목업이 codegen 뒤 타입 오류가 난다 — 팀 결정 대기(2026-10-19)",
+        "PUT /api/v1/me/location-consent 응답 LocationConsentResponse.capabilities Capabilities: 문서에만 `localLocationUse`" to
+            "위와 같음",
+    )
+
+    /**
+     * 필드 계약 — 본문의 **유무·모양·속성 이름**이 openapi 스키마와 같아야 통과.
+     *
+     * 왜 필요한가: 위의 경로 대조는 응답에 필드를 더하거나 이름을 바꾸고 문서를 안 고쳐도 초록이다.
+     * 프론트는 orval 이 **문서로** 만든 타입을 쓰므로 새 필드를 못 보거나 없는 필드를 읽는다(undefined).
+     * 실측: 이 게이트를 처음 돌렸을 때 코드에만 있는 필드 4개와, 응답 본문이 통째로 문서에 없는 경로가 나왔다.
+     *
+     * 무엇과 맞대는가: DTO 의 Kotlin 필드가 아니라 **MVC 컨버터의 매퍼가 보는 속성** — `@JsonProperty`·
+     * `@JsonIgnore` 까지 반영된 와이어 이름이다. 응답은 직렬화, 요청 본문은 역직렬화 쪽으로 따로 본다.
+     * `$ref`·`allOf`·`oneOf`·`anyOf`·`items`·`additionalProperties` 를 따라 중첩까지 내려간다.
+     *
+     * 보지 않는 것: 타입·nullable·required, 그리고 이름을 알 수 없는 본문(`JsonNode` 로 손 파싱·`Map` 의 키).
+     */
+    @Test
+    fun `응답·요청 본문의 유무와 필드 이름이 openapi 스키마와 일치한다`() {
+        val mismatches = mutableListOf<String>()
+        handlerMapping.handlerMethods.forEach { (info, handler) ->
+            val patterns = info.pathPatternsCondition?.patternValues.orEmpty().filter { it.startsWith("$basePath/") }
+            val methods = info.methodsCondition.methods.map { it.name }
+            val responseType = unwrap(mapper.typeFactory.constructType(handler.returnType.genericParameterType))
+            val bodyParameter = handler.methodParameters.firstOrNull { it.hasParameterAnnotation(RequestBody::class.java) }
+            for (pattern in patterns) for (method in methods) {
+                val operation = operation(pattern.removePrefix(basePath), method) ?: continue
+                val label = "$method $pattern"
+
+                // 유무는 content 종류와 무관하게 본다(JSON 아닌 본문도 본문이다). 이름 대조는 JSON 만.
+                val hasDocumentedBody = successResponses(operation).any { it["content"] != null }
+                val documented = successResponses(operation).mapNotNull(::jsonSchema)
+                when {
+                    responseType == null -> Unit // ResponseEntity<*> 등 — 코드가 본문 타입을 말하지 않는다
+                    isNoBody(responseType) && hasDocumentedBody -> mismatches += "$label 응답: 문서는 본문이 있는데 코드는 본문이 없다"
+                    !isNoBody(responseType) && !hasDocumentedBody ->
+                        mismatches += "$label 응답: 코드는 본문(${responseType.rawClass.simpleName})을 내는데 문서 2xx 에 본문이 없다"
+                    else -> documented.forEach { compare(responseType, it, "$label 응답", true, mismatches, mutableSetOf()) }
+                }
+
+                val hasDocumentedRequest = operation["requestBody"] != null
+                val request = requestSchema(operation)
+                when {
+                    bodyParameter == null && hasDocumentedRequest -> mismatches += "$label 요청: 문서는 본문이 있는데 코드는 @RequestBody 가 없다"
+                    bodyParameter != null && !hasDocumentedRequest -> mismatches += "$label 요청: 코드는 @RequestBody 를 받는데 문서에 requestBody 가 없다"
+                    bodyParameter != null && request != null -> compare(
+                        mapper.typeFactory.constructType(bodyParameter.genericParameterType), request, "$label 요청", false,
+                        mismatches, mutableSetOf(),
+                    )
+                }
+            }
+        }
+
+        val unexpected = (mismatches - knownFieldMismatches.keys).sorted()
+        val stale = (knownFieldMismatches.keys - mismatches.toSet()).sorted()
+        assertAll(
+            {
+                assertTrue(unexpected.isEmpty()) {
+                    "openapi.yaml 과 와이어 본문이 다르다 — 코드가 맞으면 문서를, 문서가 맞으면 DTO 를 고친다:\n  " +
+                        unexpected.joinToString("\n  ")
+                }
+            },
+            { assertTrue(stale.isEmpty()) { "더 이상 안 나는 예외 — knownFieldMismatches 에서 지운다:\n  " + stale.joinToString("\n  ") } },
+        )
+    }
+
+    private fun compare(
+        type: JavaType,
+        schema: Map<String, Any>,
+        where: String,
+        serialize: Boolean,
+        out: MutableList<String>,
+        visited: MutableSet<String>,
+    ) {
+        val resolved = resolve(schema)
+        val documented = properties(resolved)
+        @Suppress("UNCHECKED_CAST")
+        val items = resolved["items"] as? Map<String, Any>
+        val shape = shapeOf(resolved)
+
+        if (type.isCollectionLikeType || type.isArrayType) {
+            if (items == null) out += "$where: 코드는 배열인데 문서는 $shape"
+            else compare(type.contentType, items, where, serialize, out, visited)
+            return
+        }
+        if (items != null) {
+            out += "$where: 문서는 배열인데 코드는 ${type.rawClass.simpleName}"
+            return
+        }
+        if (type.isMapLikeType) {
+            // 키는 런타임 값이라 이름을 대조할 수 없다. 값 타입은 대조할 수 있다.
+            @Suppress("UNCHECKED_CAST")
+            val values = resolved["additionalProperties"] as? Map<String, Any>
+            if (values != null) compare(type.contentType, values, "$where{값}", serialize, out, visited)
+            return
+        }
+        if (isLeaf(type)) {
+            if (documented != null && !JsonNode::class.java.isAssignableFrom(type.rawClass)) {
+                out += "$where: 문서는 객체(${documented.keys.sorted()})인데 코드는 ${type.rawClass.simpleName}"
+            }
+            return
+        }
+        if (documented == null) {
+            out += "$where: 코드는 객체(${type.rawClass.simpleName})인데 문서는 $shape"
+            return
+        }
+        // 재귀 방지 키는 스키마 **이름**으로 — allOf 를 합치면 매번 새 Map 이 생겨 객체 동일성으로는 못 막는다.
+        if (!visited.add("$type|${refName(schema) ?: where}|$serialize")) return
+
+        val description = if (serialize) mapper.serializationConfig.introspect(type) else mapper.deserializationConfig.introspect(type)
+        val actual = description.findProperties()
+            .filter { if (serialize) it.couldSerialize() else it.couldDeserialize() }
+            .associateBy { it.name }
+
+        val owner = "$where ${type.rawClass.simpleName}"
+        (actual.keys - documented.keys).sorted().forEach { out += "$owner: 코드에만 `$it`" }
+        (documented.keys - actual.keys).sorted().forEach { out += "$owner: 문서에만 `$it`" }
+        (actual.keys intersect documented.keys).forEach { name ->
+            @Suppress("UNCHECKED_CAST")
+            val child = documented[name] as? Map<String, Any> ?: return@forEach
+            compare(actual.getValue(name).primaryType, child, "$owner.$name", serialize, out, visited)
+        }
+    }
+
+    /**
+     * `$ref` 를 풀고, `allOf`·`oneOf`·`anyOf` 는 구성원과 **같은 층의 `properties`** 를 합친다.
+     * oneOf 를 합집합으로 보는 이유: 코드는 한 DTO 로 모든 갈래를 받으므로(예: TurnInputRequest)
+     * 그 DTO 의 속성 = 갈래들 속성의 합이다.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun resolve(schema: Map<String, Any>): Map<String, Any> {
+        val ref = schema["\$ref"] as? String
+        if (ref != null) return resolve(componentSchemas().getValue(ref.substringAfterLast('/')) as Map<String, Any>)
+        val members = listOf("allOf", "oneOf", "anyOf").flatMap { schema[it] as? List<Map<String, Any>> ?: emptyList() }
+        if (members.isEmpty()) return schema
+        val resolvedMembers = members.map(::resolve)
+        // 설명을 달려고 한 칸만 감싼 `allOf: [{ $ref: X }]` 는 X 그대로다(X 가 열거형·배열이어도).
+        if (resolvedMembers.size == 1 && properties(schema) == null) return resolvedMembers.single()
+        val merged = (resolvedMembers.mapNotNull(::properties) + listOfNotNull(properties(schema)))
+            .fold(emptyMap<String, Any>()) { a, b -> a + b }
+        return mapOf("type" to "object", "properties" to merged)
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun refName(schema: Map<String, Any>): String? =
+        (schema["\$ref"] as? String ?: (schema["allOf"] as? List<Map<String, Any>>)?.singleOrNull()?.get("\$ref") as? String)
+            ?.substringAfterLast('/')
+
+    @Suppress("UNCHECKED_CAST")
+    private fun properties(schema: Map<String, Any>): Map<String, Any>? = schema["properties"] as? Map<String, Any>
+
+    private fun shapeOf(schema: Map<String, Any>): String = when {
+        schema["additionalProperties"] != null -> "자유형 객체(additionalProperties)"
+        schema["type"] == "object" -> "속성 없는 객체"
+        schema["type"] != null -> "스칼라(${schema["type"]})"
+        else -> "형태 미지정"
+    }
+
+    private fun isLeaf(type: JavaType): Boolean {
+        val name = type.rawClass.name
+        return type.isPrimitive || type.isEnumType || name.startsWith("java.") || name.startsWith("kotlin.") ||
+            JsonNode::class.java.isAssignableFrom(type.rawClass)
+    }
+
+    private fun isNoBody(type: JavaType): Boolean =
+        type.rawClass == Void.TYPE || type.rawClass == Void::class.java || type.rawClass == Unit::class.java
+
+    /** `ResponseEntity<T>` 는 T 로. 타입 인자가 없거나 `*`·`Any` 면 null(코드가 본문 타입을 말하지 않는다). */
+    private fun unwrap(type: JavaType): JavaType? {
+        val body = if (ResponseEntity::class.java.isAssignableFrom(type.rawClass)) type.containedType(0) else type
+        return body?.takeUnless { it.rawClass == Any::class.java }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private val spec: Map<String, Any> by lazy {
+        Yaml().load<Map<String, Any>>(ClassPathResource("static/openapi.yaml").inputStream)
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun components(kind: String): Map<String, Any> =
+        ((spec["components"] as Map<String, Any>)[kind] as? Map<String, Any>).orEmpty()
+
+    private fun componentSchemas() = components("schemas")
+
+    @Suppress("UNCHECKED_CAST")
+    private fun operation(path: String, method: String): Map<String, Any>? =
+        ((spec["paths"] as Map<String, Any>)[path] as? Map<String, Any>)?.get(method.lowercase()) as? Map<String, Any>
+
+    /** 2xx 응답 **전부**(`$ref` 는 풀어서) — 첫 2xx 만 보면 순서에 따라 나머지가 대조에서 빠진다. */
+    @Suppress("UNCHECKED_CAST")
+    private fun successResponses(operation: Map<String, Any>): List<Map<String, Any>> =
+        (operation["responses"] as? Map<Any, Any>).orEmpty().entries
+            .filter { it.key.toString().startsWith("2") }
+            .map { (_, value) ->
+                val response = value as Map<String, Any>
+                (response["\$ref"] as? String)
+                    ?.let { components("responses")[it.substringAfterLast('/')] as Map<String, Any> } ?: response
+            }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun requestSchema(operation: Map<String, Any>): Map<String, Any>? =
+        (operation["requestBody"] as? Map<String, Any>)?.let(::jsonSchema)
+
+    @Suppress("UNCHECKED_CAST")
+    private fun jsonSchema(holder: Map<String, Any>): Map<String, Any>? =
+        ((holder["content"] as? Map<String, Any>)?.get("application/json") as? Map<String, Any>)
+            ?.get("schema") as? Map<String, Any>
 }

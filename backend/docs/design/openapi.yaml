@@ -153,6 +153,15 @@ paths:
     post:
       tags: [auth]
       summary: 현재 기기 체인 revoke
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string, description: 끊을 기기 체인의 리프레시 토큰 }
       responses:
         '204': { description: 로그아웃 완료 }
 
@@ -430,7 +439,11 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/PreferenceInput' }
       responses:
-        '200': { description: 저장 완료 }
+        '200':
+          description: 저장 완료 — 반영된 취향 7축(GET 과 같은 모양)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PreferenceView' }
         '400': { $ref: '#/components/responses/ValidationError' }
 
   /me/settings:
@@ -3591,7 +3604,7 @@ components:
         ageConfirmation:
           allOf: [{ $ref: '#/components/schemas/AgeConfirmation' }]
           description: 신규 가입 시 필수, 기존 로그인 시 무시
-        deviceId: { type: string, nullable: true, description: 미제공 시 서버가 임의 부여(기기별 세션) }
+        deviceId: { type: string, nullable: true, maxLength: 128, description: 미제공 시 서버가 임의 부여(기기별 세션) }
 
     SocialTokenLoginRequest:
       type: object
@@ -3605,7 +3618,7 @@ components:
         ageConfirmation:
           allOf: [{ $ref: '#/components/schemas/AgeConfirmation' }]
           description: 신규 가입 시 필수, 기존 로그인 시 무시
-        deviceId: { type: string, nullable: true, description: 미제공 시 서버가 임의 부여(기기별 세션) }
+        deviceId: { type: string, nullable: true, maxLength: 128, description: 미제공 시 서버가 임의 부여(기기별 세션) }
         authorizationCode:
           type: string
           nullable: true
@@ -3770,7 +3783,10 @@ components:
         purgeAt: { type: string, format: date-time }
         cascadeSummary:
           type: object
-          additionalProperties: true
+          required: [purgeScheduled, legallyRetained]
+          properties:
+            purgeScheduled: { type: array, items: { type: string }, description: 유예 후 파기될 데이터 범주 }
+            legallyRetained: { type: array, items: { type: string }, description: 법정 보존으로 남는 범주 }
 
     ErrorResponse:
       type: object
