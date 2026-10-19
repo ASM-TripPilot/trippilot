@@ -81,16 +81,18 @@ class ReflectionRowReadTest : StringSpec({
         ReflectionRepositoryAdapter(jpa, mapper).find(trip, day) shouldBe null
     }
 
-    "기존 행이 있으면 그 행을 고친다 — id·처음 만든 시각은 그대로, 카드·수치·메모는 새 값" {
-        val existing = entity()
+    "기존 행이 있으면 그 행을 고친다 — id·처음 만든 시각은 그대로, 카드·형식·수정본·수치·메모는 새 값" {
+        val existing = entity(edited = mapOf("template_id" to "user.edit.v1", "format" to "CARD", "cover" to mapOf("title" to "옛 수정본")))
+            .apply { cardFormat = "LEGACY" }
         val jpa = mockk<ReflectionJpaRepository>()
         val saved = slot<ReflectionEntity>()
         every { jpa.findByTripIdAndDayDate(trip, day) } returns existing
         every { jpa.save(capture(saved)) } answers { saved.captured }
 
-        val card = ReflectionCard("ai.daily.v2", "CARD", "새 초안", "", """{"template_id":"ai.daily.v2","format":"CARD","cover":{"title":"새 초안"}}""")
+        val card = ReflectionCard("ai.daily.v2", "STORY", "새 초안", "", """{"template_id":"ai.daily.v2","format":"STORY","cover":{"title":"새 초안"}}""")
+        val edited = ReflectionCard("user.edit.v1", "CARD", "새 수정본", "", """{"template_id":"user.edit.v1","format":"CARD","cover":{"title":"새 수정본"}}""")
         val incoming = Reflection.of(trip, day, card, ReflectionSource.AI, ReflectionStats(1, 0.5, DistanceSource.VISIT_LINE, 0), t0.plusSeconds(3600))
-            .copy(mood = "happy", shortMemo = "좋았다")
+            .copy(mood = "happy", shortMemo = "좋았다", editedCard = edited)
         val out = ReflectionRepositoryAdapter(jpa, mapper).upsert(incoming)
 
         saved.captured shouldBe existing
@@ -99,6 +101,8 @@ class ReflectionRowReadTest : StringSpec({
         out.updatedAt shouldBe t0.plusSeconds(3600)
         out.draftCard.templateId shouldBe "ai.daily.v2"
         existing.templateId shouldBe "ai.daily.v2"
+        existing.cardFormat shouldBe "STORY"
+        out.editedCard!!.title shouldBe "새 수정본"
         out.source shouldBe ReflectionSource.AI
         out.stats shouldBe ReflectionStats(1, 0.5, DistanceSource.VISIT_LINE, 0)
         out.mood shouldBe "happy"

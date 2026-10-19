@@ -11,6 +11,7 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import tools.jackson.databind.json.JsonMapper
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -42,20 +43,33 @@ class ChangeLogSnapshotReadTest : StringSpec({
         "poiId" to poi.toString(), "startAt" to "10:00", "endAt" to "11:00", "isFixed" to true, "endsNextDay" to true,
     )
 
-    "저장한 스냅숏은 그대로 다시 읽힌다 (저장 형식 왕복)" {
+    "저장한 이력은 jsonb 를 거쳐도 그대로 다시 읽힌다 (저장 형식 왕복)" {
         val jpa = mockk<ChangeLogJpaRepository>()
         val saved = slot<ChangeLogEntryEntity>()
         every { jpa.save(capture(saved)) } answers { saved.captured.also { it.changeLogEntryId = 7L } }
-        val snap = ItinerarySnapshot(
-            listOf(DaySnapshot(LocalDate.parse("2026-08-01"), listOf(SlotSnapshot(poi, LocalTime.parse("23:00"), LocalTime.parse("01:00"), isFixed = true, endsNextDay = true)))),
+        val before = ItinerarySnapshot(
+            listOf(DaySnapshot(LocalDate.parse("2026-08-01"), listOf(SlotSnapshot(poi, LocalTime.parse("10:00"), LocalTime.parse("11:30"), isFixed = false, endsNextDay = false)))),
+        )
+        val after = ItinerarySnapshot(
+            listOf(
+                DaySnapshot(LocalDate.parse("2026-08-01"), listOf(SlotSnapshot(poi, LocalTime.parse("23:00"), LocalTime.parse("01:00"), isFixed = true, endsNextDay = true))),
+                DaySnapshot(LocalDate.parse("2026-08-02"), emptyList()),
+            ),
         )
         val adapter = ChangeLogRepositoryAdapter(jpa)
-        adapter.append(ChangeLogEntry(null, tripId, "u", ChangeSource.PLAN_B, "비", ItinerarySnapshot(emptyList()), snap, at)).entryId shouldBe 7L
+        adapter.append(ChangeLogEntry(null, tripId, "planb", ChangeSource.PLAN_B, "비", before, after, at)).entryId shouldBe 7L
 
-        every { jpa.findByTripIdOrderByAtDescChangeLogEntryIdDesc(tripId, any()) } returns listOf(saved.captured)
-        val back = adapter.findByTrip(tripId, 10).single()
-        back.after shouldBe snap
-        back.source shouldBe ChangeSource.PLAN_B
+        // jsonb 왕복을 흉내 낸다 — 메모리 Map 을 그대로 돌려주면 직렬화로 바뀌는 것(타입·키)이 안 보인다.
+        val json = JsonMapper()
+        @Suppress("UNCHECKED_CAST")
+        fun viaJson(m: Map<String, Any>) = json.readValue(json.writeValueAsString(m), Map::class.java) as Map<String, Any>
+        val row = saved.captured
+        row.beforeSnapshot = viaJson(row.beforeSnapshot)
+        row.afterSnapshot = viaJson(row.afterSnapshot)
+        every { jpa.findByTripIdOrderByAtDescChangeLogEntryIdDesc(tripId, any()) } returns listOf(row)
+
+        adapter.findByTrip(tripId, 10).single() shouldBe
+            ChangeLogEntry(7L, tripId, "planb", ChangeSource.PLAN_B, "비", before, after, at)
     }
 
     "days 가 없거나 리스트가 아니면 빈 스냅숏 — 예외 없음" {

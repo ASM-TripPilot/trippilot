@@ -103,12 +103,13 @@ class TripSummaryRowReadTest : StringSpec({
     }
 
     "기존 요약이 있으면 그 행을 덮어쓴다 — 여행당 하나" {
-        val existing = entity(emptyList())
+        val existing = entity(listOf(mapOf("date" to "2026-08-01", "dayOrder" to 1, "visitCount" to 9, "places" to listOf("옛 장소"))))
         val jpa = mockk<TripSummaryJpaRepository>()
         val saved = slot<TripSummaryEntity>()
         every { jpa.findById(trip) } returns Optional.of(existing)
         every { jpa.save(capture(saved)) } answers { saved.captured }
-        val again = TripSummary(trip, "다시 쓴 요약", emptyList(), TripSummaryStats(0, 0.0, DistanceSource.VISIT_LINE, 0, false), ReflectionSource.BASIC, t0.plusSeconds(60))
+        val again = TripSummary(
+            trip, "다시 쓴 요약", listOf(DayHighlight(LocalDate.parse("2026-08-02"), 2, 1, listOf("새 장소"), 0.8, DistanceSource.ROUTE)), TripSummaryStats(0, 0.0, DistanceSource.VISIT_LINE, 0, false), ReflectionSource.BASIC, t0.plusSeconds(60))
 
         TripSummaryRepositoryAdapter(jpa).upsert(again) shouldBe again
         saved.captured shouldBe existing

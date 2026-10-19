@@ -23,7 +23,8 @@ class NotificationInvariantsTest : StringSpec({
 
     "제목은 비어 있거나 120자를 넘을 수 없다 — 경계값 120자는 들어간다" {
         shouldThrow<IllegalArgumentException> { raise(" ", "본문") }
-        // 리터럴로 고정한다 — 상수와 컬럼(varchar(120))이 같이 움직여야 하므로 상수만 보면 둘이 갈려도 통과한다.
+        // 상수를 리터럴 120·400 에 고정한다 — 컬럼 폭 자체를 보는 것은 아니다. 상수를 바꾸면 여기서 깨져
+        // 컬럼(마이그레이션)도 같이 봐야 한다는 신호가 된다.
         shouldThrow<IllegalArgumentException> { raise("가".repeat(121), "본문") }
         raise("가".repeat(120), "본문").title.length shouldBe 120
     }

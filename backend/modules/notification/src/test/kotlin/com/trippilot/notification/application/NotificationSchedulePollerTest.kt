@@ -71,8 +71,10 @@ class NotificationSchedulePollerTest : StringSpec({
 
         verify(exactly = 1) { firing.fire(first) }
         verify(exactly = 1) { firing.fire(last) }
-        val warns = events.filter { it.level == Level.WARN }.map { it.formattedMessage }
-        warns.single() shouldContain broken.scheduleId.toString()
+        val warn = events.single { it.level == Level.WARN }
+        warn.formattedMessage shouldContain broken.scheduleId.toString()
+        // 예외도 같이 남아야 원인을 찾는다 — id 만 남기면 "왜"가 사라진다.
+        warn.throwableProxy?.message shouldBe "db down"
         events.filter { it.level == Level.INFO }.map { it.formattedMessage } shouldContainExactly
             listOf("리마인드 2건을 알림함에 적재했습니다.")
     }

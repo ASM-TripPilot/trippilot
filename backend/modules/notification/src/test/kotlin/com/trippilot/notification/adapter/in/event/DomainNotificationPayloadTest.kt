@@ -78,11 +78,13 @@ class DomainNotificationPayloadTest : StringSpec({
         (n.title to n.body) shouldBe ("숙소가 등록됐어요" to "숙소")
     }
 
-    "Plan-B 사건에 accountId 가 없으면 예외다" {
+    "Plan-B 사건에 accountId 가 없거나 null 이거나 UUID 가 아니면 예외다" {
         val f = fixture()
-        shouldThrow<IllegalStateException> {
-            PlanBTriggeredSubscriber(f.raise, mapper).handle(envelope(json("tripId" to UUID.randomUUID().toString()), "planb.PlanBTriggered"))
-        }.message shouldContain "accountId"
+        val trip = UUID.randomUUID().toString()
+        listOf(json("tripId" to trip), json("tripId" to trip, "accountId" to null), json("tripId" to trip, "accountId" to "nope")).forEach { p ->
+            shouldThrow<IllegalStateException> { PlanBTriggeredSubscriber(f.raise, mapper).handle(envelope(p, "planb.PlanBTriggered")) }
+                .message shouldContain "accountId"
+        }
         f.stored.stored.shouldBeEmpty()
     }
 
