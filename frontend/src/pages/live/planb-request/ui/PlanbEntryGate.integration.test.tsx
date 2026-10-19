@@ -370,6 +370,38 @@ describe('🔴 PlanbEntryGate · i04 를 그린다 (행 4·2)', () => {
     });
   });
 
+  it('G6b 오늘 트리거 + 대안 없음 → 날짜 없이 트리거 범위(PARTIAL_SLOTS)로, kind 사유를 켜고 연다', async () => {
+    const todayTrigger = {
+      affectedDate: TODAY,
+      scope: 'PARTIAL_SLOTS',
+    } as const;
+    server.use(
+      ...baseHandlers({
+        triggerDetail: () => HttpResponse.json(detail(todayTrigger)),
+        list: activeList(todayTrigger),
+      })
+    );
+
+    renderGate();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('planb-request-trigger-chip')).toBeSelected()
+    );
+    expect(preparedQueries).toEqual([`?date=${TODAY}`]);
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+
+    await waitFor(() => expect(postedBodies).toHaveLength(1));
+    expect(postedBodies[0]).toEqual({
+      scope: 'PARTIAL_SLOTS',
+      originKind: null,
+      reasons: ['WEATHER'],
+      directives: [],
+      freeText: null,
+      excludedPoiIds: [],
+      triggerId: 'trg-1',
+    });
+  });
+
   it('G7 주의(흐림) + 대안 없음 → i04 는 시드 없이 열린다(감지 칩 꺼짐)', async () => {
     const caution = { severity: 'CAUTION', variant: 'CLOUD' } as const;
     server.use(
@@ -410,6 +442,29 @@ describe('🔴 PlanbEntryGate · i04 를 그린다 (행 4·2)', () => {
     expect(preparedQueries).toEqual([]);
     expect(mockReplace).not.toHaveBeenCalled();
     expect(mockDismissTo).not.toHaveBeenCalled();
+  });
+
+  it('G8b 준비된 대안 조회가 실패(500)해도 i04 를 URL 그대로 연다', async () => {
+    server.use(
+      ...baseHandlers({
+        preparedSession: () => new HttpResponse(null, { status: 500 }),
+      })
+    );
+
+    renderGate();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('planb-request-sheet')).toBeTruthy()
+    );
+    expect(preparedQueries).toEqual([`?date=${TOMORROW}`]);
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockDismissTo).not.toHaveBeenCalled();
+
+    // URL 그대로(기존 동작)라 트리거 날짜·시드를 싣지 않는다 — '없음'(행 4)으로 읽었다면 내일 날짜가 실렸다.
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    await waitFor(() => expect(postedBodies).toHaveLength(1));
+    expect(postedBodies[0]).not.toHaveProperty('targetDate');
+    expect(postedBodies[0]).toMatchObject({ excludedPoiIds: [] });
   });
 
   it('G9 3초가 지나도 답이 없으면 i04 로 — 상한은 3000ms 다', async () => {
