@@ -243,6 +243,10 @@ fun replan(input: ReplanInput): ScheduleAgentOutput   // 어댑터가 ai regener
 > **이로써 `ScheduleAgentPort`는 5메서드**가 된다: `generate` · `validate` · `repair` · `proposeSlotCandidates` · `replan`.
 > **이름 드리프트 기록(G-U4-4)**: 인셉션 `component-methods.md` §2는 여전히 `recalculate(cmd: RecalculateCommand)`로 적혀 있다. **실장 이름(`regenerate`)과 경계 이름(`replan`)을 정본으로** 삼고 인셉션 표기 정정을 상신한다.
 
+### 7.3 기회 카드 조회 — `POST /ai/v1/planb/opportunities` (situation-awareness 증분)
+
+> **[개정 · 2026-10-19]** 포워드 경로가 하나 늘었다 — **`ScheduleAgentPort` 메서드가 아니다.** 일정을 만들지도 고치지도 않는 조회형이라 백엔드 planb-detection 의 별도 포트 `OpportunityPort` 가 부른다(situation-awareness DEC-SA-6). 규칙 정본은 `construction/situation-awareness/functional-design/business-rules.md` BR-SA-22, 값 객체는 같은 폴더 `domain-entities.md` §11, 와이어 정본은 `ai/docs/openapi.json` 이다(중복 서술 금지). 경계가 지키는 것만 적는다: LLM 0회 · 상태·알림 없음(트리거 아님, DEC-U4-4) · 카드의 장소는 남은 슬롯 1km 안의 등록 POI 뿐(INV-1 — 행사는 후보가 아니다) · 시각 필드 없음(INV-2 — 행사 원천이 일 단위) · 거리는 직선거리 문자열 하나(INV-3) · 재료 실패는 200 + `notes`(INV-4 — 행사 실패면 요즘 인기만, 장소 조회 실패면 빈 목록). AI 구현은 `ai/src/trippilot/api/opportunities.py`(재료 수집·사영)·`ai/src/trippilot/orchestrator/opportunity.py`(판정).
+
 ---
 
 ## 8. 정본 대조표 & 갭

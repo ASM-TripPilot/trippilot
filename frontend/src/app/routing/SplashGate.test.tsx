@@ -46,6 +46,10 @@ jest.mock('@/features/auth/model/useBootstrapGate', () => ({
 jest.mock('@/app/model/useAccountBoundaryReset', () => ({
   useAccountBoundaryReset: jest.fn(),
 }));
+// 푸시 탭 라우팅(상황 감지 FE-A)은 usePushRouting.test·SplashGate.integration.test 가 본다 — 같은 이유로 끈다.
+jest.mock('@/app/model/usePushRouting', () => ({
+  usePushRouting: jest.fn(),
+}));
 
 // expo-router Stack 계열을 관찰 가능한 마커로 대체(마커 목 본체는 별도 모듈 — 상단 주해 참조).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -60,7 +64,9 @@ jest.mock('./bootClock', () => ({
   },
 }));
 
+// 배럴을 통째로 갈지 않는다 — 실물을 먼저 펼쳐야 재수출이 늘어도(수신 입구 등) 형제 export 가 undefined 가 안 된다.
 jest.mock('@/shared/push', () => ({
+  ...jest.requireActual('@/shared/push'),
   promptAndRegisterPush: jest.fn(() => Promise.resolve()),
   registerPushIfGranted: jest.fn(() => Promise.resolve()),
   requestPushPermission: jest.fn(() => Promise.resolve('UNDETERMINED')),

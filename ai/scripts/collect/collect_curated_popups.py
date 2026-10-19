@@ -74,7 +74,8 @@ def main(argv: list[str]) -> int:
     store = JsonEventStore(args.store)
     added = backfilled = 0
     for region in sorted({region_of(e) for e in events}):
-        a, b = store.upsert(region, [e for e in events if region_of(e) == region], now, covered=False)
+        a, b = store.upsert(region, [e for e in events if region_of(e) == region], now,
+                            covered=False, authoritative=True)
         added, backfilled = added + a, backfilled + b
     store.save()
     print(f"[popups] 진행 중 {len(events)}건 · 좌표 {sum(e.coord is not None for e in events)} · "

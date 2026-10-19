@@ -379,6 +379,9 @@ git show origin/collect-state:collected_events.json > ai/data/collected_events.j
 - **좌표 없는 행사가 다수다**(2026-08-22 기준 76건 중 54건이 `coord: null`). 좌표가 없으면
   근접 POI 부착 보너스에서 제외된다(`event_affinity.py`) — 목록에는 남지만 점수에는 안 붙는다.
 - 끄려면 `.env` 에 `AI_EVENTS_STORE=` (빈 값). 미배선 = 행사 보너스 없이 기존 경로 그대로.
+- **기회 카드도 이 저장소를 읽는다**(`POST /ai/v1/planb/opportunities`, situation-awareness BR-SA-22) — 생성과 같은
+  `EventProvider` 다. 카드에는 공식(`tourapi-`)·수동 큐레이션(`popup-`) 행사만 오르고, 네이버 추출(`evx-`)·좌표 없는
+  행사·`OTHER` 는 오르지 않는다. 미배선이면 카드는 요즘 인기만 내고 노트 `events_unwired` 를 남긴다.
 
 ---
 
