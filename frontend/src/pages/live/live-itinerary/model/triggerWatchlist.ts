@@ -24,6 +24,7 @@ import {
  *  - 행 순서는 고정(WEATHER·DELAY·CLOSURE). 그 kind 가 발화 목록에 있으면 `active` + 그 발화 사유(`reason`).
  *  - 상황 감지 FE-B(frontend-components §3.5) — 발화가 없으면 응답 `watch`(출처 묶음별 감시 상태)를 읽는다:
  *    필드 없음(옛 서버) → 기존 `normal` · OFF → **행을 숨긴다** · UNKNOWN → `unknown`(확인 불가) · CHECKED → `normal`.
+ *    `watch` 는 왔는데 그 묶음이 빠졌거나 모르는 값이면 `unknown` — '정상'은 옛 서버(필드 자체 없음)에만 준다.
  *    발화한 사실은 감시 상태가 가리지 않는다(delay 는 늘 OFF 지만 DELAY 가 발화하면 활성 행이다). 거짓 '정상' 금지(INV-SA-2).
  *
  * node-safe: RN 런타임을 import 하지 않는다(`import type` 만) — 구조가드가 node 환경에서 스캔.
@@ -52,9 +53,17 @@ const WATCH_GROUP: Record<TriggerWatchlistRow['kind'], keyof TriggerWatch> = {
   CLOSURE: 'closure',
 };
 
-/** 발화가 없는 행의 상태 — OFF 는 null(행 없음). 모르는 상태값은 확인 불가로 읽는다(거짓 '정상' 금지). */
-function idleStatus(status: WatchStateStatus | undefined): WatchStatus | null {
-  if (status === undefined || status === 'CHECKED') return 'normal';
+/**
+ * 발화가 없는 행의 상태 — `watch` 자체가 없으면(옛 서버) 기존 `normal`. OFF 는 null(행 없음). 그 밖 — UNKNOWN · 모르는
+ * 상태값 · 그 묶음이 빠진 응답(계약 위반) — 은 확인 불가로 읽는다(거짓 '정상' 금지).
+ */
+function idleStatus(
+  watch: TriggerWatch | undefined,
+  group: keyof TriggerWatch
+): WatchStatus | null {
+  if (watch === undefined) return 'normal';
+  const status: WatchStateStatus | undefined = watch[group]?.status;
+  if (status === 'CHECKED') return 'normal';
   if (status === 'OFF') return null;
   return 'unknown';
 }
@@ -75,7 +84,7 @@ export function triggerWatchlist(
     const label = WATCH_CATEGORY_LABEL[kind];
     const fired = displayTriggers.find((trigger) => trigger.kind === kind);
     if (fired) return [{ kind, label, status: 'active', reason: fired.reason }];
-    const status = idleStatus(watch?.[WATCH_GROUP[kind]]?.status);
+    const status = idleStatus(watch, WATCH_GROUP[kind]);
     return status === null ? [] : [{ kind, label, status, reason: null }];
   });
 

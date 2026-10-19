@@ -177,6 +177,17 @@ describe('🔴 triggerWatchlist · 감시 3상태 (상황 감지 FE-B §3.5)', (
     expect(triggerWatchlist([], undefined).rows).toEqual(NORMAL_ROWS);
   });
 
+  it('W5b watch 는 왔는데 그 묶음이 빠졌으면 확인 불가다 — 정상은 옛 서버(watch 자체 없음)뿐이다(거짓 정상 금지)', () => {
+    const partial = {
+      closure: { status: 'OFF' },
+      delay: { status: 'OFF' },
+    } as unknown as TriggerWatch;
+
+    expect(triggerWatchlist([], partial).rows).toEqual([
+      { kind: 'WEATHER', label: '날씨', status: 'unknown', reason: null },
+    ]);
+  });
+
   it('W6 MANUAL 은 감시 상태와 무관하게 행을 못 만든다(CHECKED 날씨는 정상 그대로)', () => {
     const { rows } = triggerWatchlist(
       [mk({ kind: 'MANUAL' })],
