@@ -81,5 +81,6 @@ class ExpoPushReceiptTest : StringSpec({
     "액세스 토큰이 있으면 Bearer 로 싣고, 비어 있으면 Authorization 헤더 자체를 보내지 않는다" {
         send(listOf("t1"), """{"data":[{"status":"ok"}]}""", accessToken = "secret").single().status shouldBe PushStatus.SENT
         send(listOf("t1"), """{"data":[{"status":"ok"}]}""", accessToken = "").single().status shouldBe PushStatus.SENT
+        send(listOf("t1"), """{"data":[{"status":"ok"}]}""", accessToken = "  ").single().status shouldBe PushStatus.SENT // 공백만 — 빈 Bearer 로 401
     }
 })
