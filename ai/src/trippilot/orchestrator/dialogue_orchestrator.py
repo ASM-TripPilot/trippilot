@@ -84,6 +84,7 @@ from trippilot.orchestrator.dialogue_memory import (
     compress_fallback,
     due,
     expires_at_for,
+    is_turn_fragment,
 )
 from trippilot.orchestrator.intent_router import normalize
 from trippilot.orchestrator.shadow_probe import ShadowIntentProbe
@@ -756,9 +757,18 @@ class DialogueOrchestrator:
         except Exception as e:  # noqa: BLE001
             self._fallback(inp, "memory", *_MEMORY_MODES, f"memory_error: {type(e).__name__}: {e}")
             return compress_fallback(turns, previous)
-        if result.is_fallback or not result.value:  # FallbackEvent 는 게이트웨이가 냈다 (빈 결과 = 실패)
+        if result.is_fallback:  # FallbackEvent 는 게이트웨이가 냈다 (파싱 실패·전부 드롭 = 실패)
             return compress_fallback(turns, previous)
-        return tuple(result.value)
+        if result.value:
+            return tuple(result.value)
+        # 비운 배열 = 새로 기억할 것 없음 → 이전 요약은 두되 앞선 압축이 남긴 원문 조각 줄은 지운다(BR-AO-09). 이전 줄도
+        # 압축과 같은 술어로 다시 거른다 — #1314 이전 압축이 남긴 연락처·소요시간 줄이 술어 없이 되살지 않게(2026-10-19 리뷰).
+        # 폴백이 아니라서 이벤트가 없다 — 모델이 늘 비우는 고장이 보이도록 건수만 한 줄 남긴다(내용·account_ref 없음).
+        kept = tuple(line for line in compress_fallback((), previous) if not is_turn_fragment(line))
+        log.info("dialogue_memory_empty %s", json.dumps({
+            "event": "dialogue_memory_empty", "trace_id": inp.trace_id, "kept_lines": len(kept),
+            "dropped_lines": len(previous) - len(kept)}))
+        return kept
 
     # ── 공통 ─────────────────────────────────────────────────────────────
 
