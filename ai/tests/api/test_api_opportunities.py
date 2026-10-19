@@ -58,7 +58,7 @@ def _poi(pid: str, name: str, north_m: float, *, category: PoiCategory = PoiCate
                DataQuality.FULL, PoiSource.SEED, None, tags=tags)
 
 
-# 슬롯 둘(시청 0m · 북쪽 3km). 거리는 .5m 에 둬서 표시 문자열의 m 절삭이 부동소수 오차에 흔들리지 않게 했다.
+# 슬롯 둘(시청 0m · 북쪽 3km). 표시 거리는 100m 단위 반올림이라 아래 .5m 는 결과에 영향이 없다.
 _POIS = (
     _poi("p-slot1", "덕수궁", 0, tags=(TRENDING_TAG,)),                          # 슬롯 장소 자신
     _poi("p-slot2", "북촌한옥마을", 3000),
@@ -181,6 +181,18 @@ def test_행사장과_요즘_인기_카드를_와이어로_사영하고_슬롯_�
 
     assert response.status_code == 200, response.text
     assert response.json() == {"opportunities": [_VENUE_CARD, _TRENDING_CARD], "notes": []}
+
+
+def test_거리는_1km_미만이면_100m_단위로_반올림하고_100m_보다_짧게_말하지_않는다() -> None:
+    """D6 — '약 437m'·'약 0m'(슬롯과 같은 좌표라 '동선에서 약 0m') 대신 100m 단위. 1km 가까이는 km 로 넘어간다."""
+    pois = tuple(_poi(f"p-{m}", f"골목 카페 {m}", m, category=PoiCategory.CAFE, tags=(TRENDING_TAG,))
+                 for m in (0, 437, 960))
+    body = _body(slots=[{"slot_key": "k", "poi_id": "p-slot", "coord": _coord(0)}], planned_poi_ids=[])
+
+    response = _find(_TickingPoiDb(pois, step_s=0.0), body)
+
+    assert [(o.poi_id, o.distance_label) for o in response.opportunities] == [
+        ("p-0", "약 100m"), ("p-437", "약 400m"), ("p-960", "약 1.0km")]
 
 
 def test_LLM_을_부르지_않는다() -> None:

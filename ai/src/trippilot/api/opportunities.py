@@ -104,7 +104,12 @@ def _pois(poi_db: object, slots: Sequence[tuple[str, GeoPoint]], over_budget: Ca
 
 
 def _wire(o: Opportunity) -> schemas.OpportunitySchema:
-    """기간은 일 단위만(INV-2), 거리는 기존 표시 문자열 하나로(INV-3 — 직선거리, 소요시간 없음)."""
+    """기간은 일 단위만(INV-2), 거리는 기존 표시 문자열 하나로(INV-3 — 직선거리, 소요시간 없음).
+
+    1km 미만은 100m 단위로 반올림해 넘긴다(D6) — '약 437m' 같은 가짜 정밀도와, 슬롯과 같은 좌표의
+    '동선에서 약 0m' 을 막는다(최소 100m). 1km 가까이는 기존 함수가 '약 1.0km' 로 쓴다.
+    """
+    km = max(round(o.distance_km, 1), 0.1)
     return schemas.OpportunitySchema(
         key=o.key,
         kind=o.kind.value,
@@ -114,5 +119,5 @@ def _wire(o: Opportunity) -> schemas.OpportunitySchema:
         poi_id=str(o.poi.poi_id),
         poi_name=o.poi.name,
         near_slot_key=o.near_slot_key,
-        distance_label=_format_distance_range((o.distance_km, o.distance_km)),
+        distance_label=_format_distance_range((km, km)),
     )
