@@ -45,13 +45,10 @@ ai:
     minReplicas: 1
     maxReplicas: 4
     targetCPUUtilizationPercentage: 70
-  # 실측(위와 같은 창): CPU 평균 7m·정점 1.8코어, 메모리 정점 481Mi.
-  # **요청은 1코어** — 일정 조립(CP-SAT)은 한 번에 1~2코어를 몰아 쓰는데, 요청이 200m 이면 붐비는 노드에서 보장 몫이
-  # 0.2코어라 풀이가 멈춘다. 2026-10-18 개발 서버(복제본 1): "결정론 한도 전에 벽시계 백스톱으로 끊김 det 0.00/2.00" —
-  # 계산 진척 0 인 채 조립 76초, 생성 4건 전부 504(서울 1일·후보 1888). 평균이 낮아도 생성 순간의 몫을 보장해야 한다.
-  # Auto Mode 라 요청을 올리면 노드가 따라 늘어난다(스케줄 실패 없음, 비용 증가). HPA 목표(요청의 70%)는 평균 700m 에서 반응한다.
+  # 실측(위와 같은 창): CPU 평균 7m·정점 1.8코어, 메모리 정점 481Mi. HPA 목표치(요청의 70%)는 요청이 작아진 만큼
+  # 일찍 반응한다 — 평균이 140m 를 넘을 때다(실측 평균의 20배).
   resources:
-    requests: { cpu: "1", memory: 640Mi }
+    requests: { cpu: 200m, memory: 640Mi }
     limits: { cpu: "2", memory: 2Gi }
 embedding:
   # Optional CPU KURE service. Requires the vector database bootstrap and vector data ingestion.
