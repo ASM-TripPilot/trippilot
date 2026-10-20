@@ -538,9 +538,22 @@ def test_공유본의_모든_주소는_백엔드가_시도를_정한다() -> Non
     doc = json.loads((_DATA / "collected_pois.json").read_text(encoding="utf-8"))
     bad = [(p["source"], p["provenance"]["content_id"], p["provenance"].get("address"))
            for p in doc["proposals"]
-           if ((p.get("provenance") or {}).get("address") or "").split()[:1] != []
-           and p["provenance"]["address"].split()[0] not in sido]
+           if _backend_first_token((p.get("provenance") or {}).get("address")) not in sido]
     assert bad == [], f"백엔드가 시도를 못 정하는 주소 {len(bad)}건: {bad[:5]}"
+
+
+def _backend_first_token(address: str | None) -> str | None:
+    """`RegionResolver.resolve` 의 첫 토큰을 그대로 흉내 낸다. 주소가 없으면 백엔드는 미판정으로 세니 None 이다.
+    Kotlin `Regex("\\s+")` 는 ASCII 공백만 나누므로 `str.split()`(NBSP·U+3000 도 나눔)을 쓰면 거울이 느슨해진다."""
+    tokens = [t for t in re.split(r"[ \t\n\x0b\f\r]+", (address or "").strip()) if t.strip()]
+    return tokens[0] if tokens else None
+
+
+def test_거울의_첫_토큰은_백엔드와_같이_자른다() -> None:
+    assert _backend_first_token(None) is None
+    assert _backend_first_token("  ") is None                                  # 백엔드: 미판정
+    assert _backend_first_token("부산광역시\u3000사하구") == "부산광역시\u3000사하구"  # 백엔드: 한 토큰
+    assert _backend_first_token(" 부산광역시  사하구") == "부산광역시"
 
 
 # ── 공유본 직렬화 — 한 행에 한 줄 (2026-10-18) ─────────────────────────
