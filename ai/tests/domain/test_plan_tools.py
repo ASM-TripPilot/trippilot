@@ -29,11 +29,11 @@ from trippilot.orchestrator.dialogue_handlers import HandlerPorts
 
 _INFO_HANDLERS = frozenset({
     Intent.SHOW_SCHEDULE, Intent.GET_NEXT_SLOT, Intent.GET_WEATHER, Intent.GET_DISTANCE, Intent.GET_POI_INFO,
-    Intent.SUGGEST_ALTERNATIVE, Intent.EXPLORE_PLACES,
+    Intent.SUGGEST_ALTERNATIVE, Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES,
 })
 
 
-def test_registry_is_the_seven_information_handlers_and_nothing_that_writes_or_hands_off() -> None:
+def test_registry_is_the_information_handlers_and_nothing_that_writes_or_hands_off() -> None:
     assert set(PLAN_TOOLS) == _INFO_HANDLERS
     assert not set(PLAN_TOOLS) & NEVER_TOOLS
     assert set(PLAN_TOOLS) <= DIALOGUE_INTENTS
@@ -116,11 +116,11 @@ def test_tools_json_carries_only_the_exposed_tools() -> None:
 
 def test_classification_schemas_stay_byte_identical() -> None:
     """도구 표는 분류 `$intents` 를 건드리지 않는다 — intent.yaml(3단 라우터·재생 픽스처)은 기본값 13종,
-    도우미 분류는 14종. 이 두 바이트가 바뀌면 재생 기록 전건 미스·분류 판본 실측 무효다(BR-AO-14)."""
+    도우미 분류는 15종(+탐색·추천 — RECOMMEND_PLACES 로 2026-10-20 의도적으로 바뀌었다). 이 두 바이트가 바뀌면 재생 기록 전건 미스·분류 판본 실측 무효다(BR-AO-14)."""
     golden = {
         "intent.yaml($intents)": ("fffa98ade2f9f39654922dd98f25477f6f32e7917d5668f8ea41db1ea478e820", tool_specs_json()),
-        # 2026-10-20 갱신: GET_WEATHER.region(dialogue_only) 추가 — 도우미 렌더만 바뀌고 intent.yaml 쪽은 그대로다
-        "dialogue_intent.yaml($intents)": ("2e74c510a37e1ef1c5fc4caeafeb95eb7d2b05252a5d63f6e37be1517c8f5b86",
+        # 2026-10-20 갱신: GET_WEATHER.region(dialogue_only, #1475) · RECOMMEND_PLACES 추가 — intent.yaml 쪽은 그대로다
+        "dialogue_intent.yaml($intents)": ("36081baaf72356ccaa416a834d41dc32af5d1f50b0958627655a19e7b638428c",
                                            tool_specs_json(DIALOGUE_INTENTS, dialogue=True)),
     }
     for name, (sha, text) in golden.items():

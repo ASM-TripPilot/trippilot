@@ -909,7 +909,7 @@ class DialogueOrchestrator:
             return DialogueAnswer.from_facts(facts)
         # INV-1 — 후보 답(대안·탐색)과 탐색의 빈 결과 답이 목록 밖 장소를 권했다. 탐색 EMPTY 는 장소가 없어 "대신 ○○해변은
         # 어떠세요?"를 지어낼 자리가 가장 큰 답이다
-        closed = closed or facts.kind is AnswerKind.CANDIDATES or intent is Intent.EXPLORE_PLACES
+        closed = closed or facts.kind is AnswerKind.CANDIDATES or intent in (Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES)
         if closed and any(_foreign_place(part, known) for part in parts):
             self._fallback(inp, "llm", *_ANSWER_MODES, "place_not_in_facts")
             return DialogueAnswer.from_facts(facts)
