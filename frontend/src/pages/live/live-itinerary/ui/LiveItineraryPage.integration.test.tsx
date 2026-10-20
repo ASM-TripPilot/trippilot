@@ -2910,7 +2910,6 @@ describe('관람 중 카드 [사진]·[메모]', () => {
     legalConsent,
     gpsRecordingOptIn,
     capabilities: {
-      localLocationUse: legalConsent,
       serverLocationService: legalConsent,
       gpsTrackRetention: gpsRecordingOptIn,
     },
@@ -3349,7 +3348,6 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
           legalConsent: true,
           gpsRecordingOptIn: false,
           capabilities: {
-            localLocationUse: true,
             serverLocationService: true,
             gpsTrackRetention: false,
           },

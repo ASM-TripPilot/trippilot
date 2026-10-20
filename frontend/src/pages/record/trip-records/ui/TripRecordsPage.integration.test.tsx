@@ -3006,7 +3006,6 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
     legalConsent: !gpsRecordingOptIn,
     gpsRecordingOptIn,
     capabilities: {
-      localLocationUse: !gpsRecordingOptIn,
       serverLocationService: !gpsRecordingOptIn,
       gpsTrackRetention: gpsRecordingOptIn,
     },
