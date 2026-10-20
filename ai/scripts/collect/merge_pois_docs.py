@@ -224,8 +224,9 @@ def expand_sido_abbrev(proposals: list[dict], abbrev: dict[str, str] | None = No
 # (둘 다 JDK 25 jshell 로 BMP 전수 대조, TRIP-1475).
 _KT_WHITESPACE = "".join(c for c in map(chr, range(0x10000)) if c.isspace() and c != "\x85")
 _JAVA_WS = re.compile(r"[ \t\n\x0b\f\r]+")
-# 격리 상한 — 관측한 나쁜 행은 한 번에 2~3건이었다(#1352 약칭 3 · #1427 잘림 2). 20건을 넘으면 행 몇 개의 결함이
-# 아니라 카탈로그·주소 형식이 통째로 바뀐 사고로 본다 — 그때는 조용히 빼지 않고 병합을 멈춘다.
+# 격리 상한(격리 + 앞 판본 복원 합) — 관측한 나쁜 행은 한 번에 2~3건이었다(#1352 약칭 3 · #1427 잘림 2). 20건을 넘으면 행 몇 개의 결함이
+# 아니라 카탈로그·주소 형식이 통째로 바뀐 사고로 본다 — 그때는 조용히 빼지 않고 병합을 멈춘다. 복원도 세는 이유:
+# 형식이 통째로 바뀌면 행은 앞 판본으로 살아남아도 그만큼 기제안 색인이 한꺼번에 지워진다(조용히 재수집 폭증).
 MAX_QUARANTINED = 20
 
 
@@ -257,8 +258,9 @@ def unresolved_sido(proposals: list[dict], sido: set[str] | None = None,
 
 def quarantine_unresolved_sido(proposals: list[dict], sido: set[str] | None = None,
                                history: dict[tuple[str, str], list[dict]] | None = None,
-                               ) -> tuple[list[dict], list[dict]]:
-    """백엔드가 시도를 못 정할 제안을 뺀다. `(격리, 직전 판본 복원)` 을 각각 `{source, content_id, address}` 로 돌려준다.
+                               before_ids: frozenset[int] = frozenset(),
+                               ) -> tuple[list[dict], list[dict], list[dict]]:
+    """백엔드가 시도를 못 정할 제안을 가른다. `(격리, 직전 판본 복원, 남겨 둠)` 을 각각 `{source, content_id, address}` 로.
 
     공유본 봇 PR 은 체크 0 으로 즉시 머지돼(#1427: 6초) 백엔드 실문서 IT(`regionUnresolved == 0`)가 머지 **뒤**에야
     돈다 — #1352·#1427 이 그렇게 develop backend-ci 를 깼다. 그래서 병합이 같은 판정을 먼저 한다. 약칭 펴기
@@ -269,6 +271,10 @@ def quarantine_unresolved_sido(proposals: list[dict], sido: set[str] | None = No
     깨진 주소로 다시 보내면 `merge` 가 좋은 판본을 덮는다 — 그 키를 통째로 빼면 공유본에서 POI 가 사라지고,
     `--close-missing` 이 그 부재를 퇴출로 읽어 **살아 있는 POI 를 닫는다**(백엔드는 시도 없는 행도 받아 둔다 —
     `PoiProposalIngestService`). `history`(`versions_by_ref`) 의 앞 판본은 호출자가 약칭을 펴 둔 것이어야 한다.
+
+    **최종 판본이 공유본(`before_ids`) 것이면 빼지 않는다(남겨 둠).** 오늘 다시 온 행이 아니라 이미 공유본에 있던
+    행이다 — 경고만 하던 기간·수동 병합으로 들어왔을 수 있고, LOCALDATA·OVERTURE·KAKAO_LOCAL 은 다시 수집되지
+    않으므로 빼면 `--close-missing` 으로 닫힌 채 영영 안 돌아온다. 상한에도 세지 않는다(매일 같은 행으로 막히지 않게).
     출처는 `merge` 와 같은 규칙(항목 source → 문서 source)으로 `history` 에서 읽는다 — 없으면 항목 source 만.
     """
     sido = sido if sido is not None else _load_sido()
@@ -277,17 +283,22 @@ def quarantine_unresolved_sido(proposals: list[dict], sido: set[str] | None = No
     kept: list[dict] = []
     out: list[dict] = []
     restored: list[dict] = []
+    left: list[dict] = []
     for p in proposals:
         if _resolves(p, sido):
             kept.append(p)
             continue
         ref = ref_of.get(id(p)) or _ref(p, {})
+        if id(p) in before_ids:
+            left.append(_ref_dict(ref, p))
+            kept.append(p)
+            continue
         prev = next((v for v in reversed(history.get(ref, [])[:-1]) if _resolves(v, sido)), None)
         (restored if prev is not None else out).append(_ref_dict(ref, p))
         if prev is not None:
             kept.append(prev)
     proposals[:] = kept
-    return out, restored
+    return out, restored, left
 
 
 def forget_quarantined(state_path: Path, refs: list[dict]) -> int:
@@ -430,6 +441,39 @@ def _self_check() -> None:
     print("[merge] self-check 통과")
 
 
+def retro_drops(out: dict) -> None:
+    """영업시간 재파싱 + 소급 제거들. 두 번 불러도 된다 — stats 는 더하고, 이미 거른 행에는 멱등이다
+    (시도 게이트가 앞 판본으로 되돌린 행만 둘째 호출에서 새로 걸린다)."""
+    recovered = reparse_open_hours(out["proposals"])
+    if recovered:
+        print(f"[merge] 영업시간 재파싱 — {recovered}건 살림 (원문은 있었는데 파싱이 비어 있던 것)",
+              file=sys.stderr)
+    # 관광 무관 소급 제거 — 규칙이 수집 뒤에 들어왔거나 고쳐졌으면 여기서 걸린다.
+    if (dropped := drop_non_travel(out["proposals"])):
+        detail = " · ".join(f"{k} {v}" for k, v in sorted(dropped.items()))
+        print(f"[merge] 관광 무관 제거 — {sum(dropped.values())}건 ({detail})", file=sys.stderr)
+        out["stats"]["unique_proposals"] = len(out["proposals"])
+        # **축소 가드가 이걸 사고로 오인하지 않게 stats 에 남긴다.** 배치는
+        # "합본 < 공유본이면 실패"로 조용한 유실을 막는데, 의도한 제거도 수를
+        # 줄이므로 그 값을 빼고 비교해야 한다. 안 남기면 내일 배치가 빨개진다.
+        out["stats"]["non_travel_dropped"] = out["stats"].get("non_travel_dropped", 0) + sum(dropped.values())
+    # 나이트라이프 규칙 소급 — 위 `drop_non_travel` 과 같은 규약(축소를 stats 에 남긴다).
+    if (bad_night := drop_bad_nightlife(out["proposals"])):
+        print(f"[merge] 나이트라이프 규칙 제거 — {bad_night}건", file=sys.stderr)
+        out["stats"]["unique_proposals"] = len(out["proposals"])
+        out["stats"]["bad_nightlife_dropped"] = out["stats"].get("bad_nightlife_dropped", 0) + bad_night
+    # LLM 판정 소급 — 기준을 조이면(프롬프트 판본 상승) 적재된 행에도 소급된다.
+    if (rejected := drop_rejected_verdicts(out["proposals"])):
+        print(f"[merge] 판정 reject 제거 — {rejected}건", file=sys.stderr)
+        out["stats"]["unique_proposals"] = len(out["proposals"])
+        out["stats"]["rejected_dropped"] = out["stats"].get("rejected_dropped", 0) + rejected
+    # 폐업 소급 제거 — 근거 파일이 없으면 빈 집합(= 판정 없음), 위와 같은 축소 가드 규약.
+    if (closed := drop_closed(out["proposals"], load_closed_refs())):
+        print(f"[merge] 폐업 제거 — {closed}건", file=sys.stderr)
+        out["stats"]["unique_proposals"] = len(out["proposals"])
+        out["stats"]["closed_dropped"] = out["stats"].get("closed_dropped", 0) + closed
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("files", nargs="*", help="collected_pois.json 경로들")
@@ -461,24 +505,40 @@ def main(argv: list[str]) -> int:
         print("[merge] 읽은 문서가 없습니다", file=sys.stderr)
         return 1
 
+    # `--state` 는 **아무것도 쓰기 전에** 읽어 둔다 — 공유본을 쓴 뒤에 상태가 없다는 걸 알면 격리한 행이 색인에 남은
+    # 채 공유본에서만 빠진다(반쪽 쓰기). 게이트를 켜 달라고 했는데 상태가 없으면 수집 파이프라인이 깨진 것이라 멈춘다.
+    if args.state:
+        try:
+            json.loads(Path(args.state).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as e:
+            print(f"[merge] FAIL --state 를 읽지 못했다: {args.state} — {e} (아무것도 쓰지 않았다)", file=sys.stderr)
+            return 1
+
     out = merge(docs, allow_mixed=args.allow_mixed)
     history = versions_by_ref(docs)
     if (expanded := expand_sido_abbrev(out["proposals"])):
         print(f"[merge] 주소 시도 약칭 → 정식 이름 — {expanded}건", file=sys.stderr)
-    # 머지 전 시도 게이트 — 아래 소급 제거들보다 **먼저** 둔다. 직전 판본으로 되돌린 행도 그 제거를 똑같이 거친다.
+    retro_drops(out)
+    # 시도 게이트는 소급 제거 **뒤** — 어차피 빠질 행(폐업·관광 무관 …)을 격리 건수·상한·경고에 세지 않는다.
     quarantined: list[dict] = []
     restored: list[dict] = []
+    left: list[dict] = []
     if args.state:
         expand_sido_abbrev([v for vs in history.values() for v in vs[:-1]])   # 되돌릴 후보도 펴 둔다
-        quarantined, restored = quarantine_unresolved_sido(out["proposals"], history=history)
+        before_ids = frozenset(id(p) for p in (before or {}).get("proposals", []))
+        quarantined, restored, left = quarantine_unresolved_sido(
+            out["proposals"], history=history, before_ids=before_ids)
         for q in quarantined[:5]:
             print(f"[merge] 시도 미판정 격리 — {q}", file=sys.stderr)
         for q in restored[:5]:
             print(f"[merge] 시도 미판정 — 앞 판본으로 되돌림 — {q}", file=sys.stderr)
-        if len(quarantined) > args.max_quarantined:
-            print(f"[merge] FAIL 시도 미판정 {len(quarantined)}건 > 상한 {args.max_quarantined} — "
-                  "카탈로그나 주소 형식이 바뀌었는지 확인할 것 (아무것도 쓰지 않았다)", file=sys.stderr)
+        if len(quarantined) + len(restored) > args.max_quarantined:
+            print(f"[merge] FAIL 시도 미판정 격리 {len(quarantined)}건 + 복원 {len(restored)}건 > 상한 "
+                  f"{args.max_quarantined} — 카탈로그나 주소 형식이 바뀌었는지 확인할 것 (아무것도 쓰지 않았다)",
+                  file=sys.stderr)
             return 1
+        if restored:
+            retro_drops(out)   # 되돌린 앞 판본도 같은 소급 제거를 거친다(나머지 행에는 멱등)
         if quarantined or restored:
             out["stats"]["unique_proposals"] = len(out["proposals"])
             # 축소 가드가 이걸 사고로 오인하지 않게 남긴다(`non_travel_dropped` 와 같은 규약). 가드는 공유본(BEFORE)과
@@ -489,44 +549,18 @@ def main(argv: list[str]) -> int:
                 (q["source"], q["content_id"]) in before_refs for q in quarantined)
             out["stats"]["sido_quarantined_refs"] = quarantined
             out["stats"]["sido_restored_previous_refs"] = restored
-    recovered = reparse_open_hours(out["proposals"])
-    if recovered:
-        print(f"[merge] 영업시간 재파싱 — {recovered}건 살림 (원문은 있었는데 파싱이 비어 있던 것)",
-              file=sys.stderr)
-    # 관광 무관 소급 제거 — 규칙이 수집 뒤에 들어왔거나 고쳐졌으면 여기서 걸린다.
-    if (dropped := drop_non_travel(out["proposals"])):
-        detail = " · ".join(f"{k} {v}" for k, v in sorted(dropped.items()))
-        print(f"[merge] 관광 무관 제거 — {sum(dropped.values())}건 ({detail})", file=sys.stderr)
-        out["stats"]["unique_proposals"] = len(out["proposals"])
-        # **축소 가드가 이걸 사고로 오인하지 않게 stats 에 남긴다.** 배치는
-        # "합본 < 공유본이면 실패"로 조용한 유실을 막는데, 의도한 제거도 수를
-        # 줄이므로 그 값을 빼고 비교해야 한다. 안 남기면 내일 배치가 빨개진다.
-        out["stats"]["non_travel_dropped"] = sum(dropped.values())
-    # 나이트라이프 규칙 소급 — 위 `drop_non_travel` 과 같은 규약(축소를 stats 에 남긴다).
-    if (bad_night := drop_bad_nightlife(out["proposals"])):
-        print(f"[merge] 나이트라이프 규칙 제거 — {bad_night}건", file=sys.stderr)
-        out["stats"]["unique_proposals"] = len(out["proposals"])
-        out["stats"]["bad_nightlife_dropped"] = bad_night
-    # LLM 판정 소급 — 기준을 조이면(프롬프트 판본 상승) 적재된 행에도 소급된다.
-    if (rejected := drop_rejected_verdicts(out["proposals"])):
-        print(f"[merge] 판정 reject 제거 — {rejected}건", file=sys.stderr)
-        out["stats"]["unique_proposals"] = len(out["proposals"])
-        out["stats"]["rejected_dropped"] = rejected
-    # 폐업 소급 제거 — 근거 파일이 없으면 빈 집합(= 판정 없음), 위와 같은 축소 가드 규약.
-    if (closed := drop_closed(out["proposals"], load_closed_refs())):
-        print(f"[merge] 폐업 제거 — {closed}건", file=sys.stderr)
-        out["stats"]["unique_proposals"] = len(out["proposals"])
-        out["stats"]["closed_dropped"] = closed
-    if not args.state and (unresolved := unresolved_sido(out["proposals"], history=history)):
-        # 시도 게이트 꺼짐(`--state` 없음) — 소급 제거 **뒤**에 세어 어차피 빠질 행은 경고에서 뺀다.
-        # `--state` 없는 병합(main 의 구 워크플로 사본 포함)은 상태를 **병합 전에** 영속한다 — 여기서 빼면 그 행은
-        # 기제안 색인에 찍힌 채 공유본에도 없어 영구 유실이다. 그래서 종전대로 합치고, 크게 알리기만 한다.
-        for q in unresolved[:20]:
-            print(f"::warning::[merge] 시도 미판정(격리 안 함 — --state 없음) {q}", file=sys.stderr)
-        print(f"::warning::[merge] 백엔드가 시도를 못 정하는 행 {len(unresolved)}건을 그대로 합쳤다 — "
+    else:
+        left = unresolved_sido(out["proposals"], history=history)
+    if left:
+        # 빼지 않고 남긴 미판정 행 — `--state` 없음(상태를 병합 **전에** 영속하는 main 의 구 사본·수동 병합: 빼면 기제안
+        # 색인에 찍힌 채 공유본에도 없어 영구 유실) 또는 공유본에 이미 있던 행(위 함수 docstring). 크게 알리기만 한다.
+        why = "공유본에 이미 있던 행" if args.state else "--state 없음"
+        for q in left[:20]:
+            print(f"::warning::[merge] 시도 미판정(격리 안 함 — {why}) {q}", file=sys.stderr)
+        print(f"::warning::[merge] 백엔드가 시도를 못 정하는 행 {len(left)}건을 그대로 합쳤다 — "
               "backend-ci 실문서 IT(regionUnresolved == 0)가 깨질 수 있다", file=sys.stderr)
-        out["stats"]["sido_unresolved"] = len(unresolved)
-        out["stats"]["sido_unresolved_refs"] = unresolved
+        out["stats"]["sido_unresolved"] = len(left)
+        out["stats"]["sido_unresolved_refs"] = left
     if (trending := mark_trending(out["proposals"])):
         print(f"[merge] 요즘 인기 표지 — 기존 행 {trending}건", file=sys.stderr)
     text = dumps_doc(out)
