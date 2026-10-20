@@ -168,8 +168,9 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
             it.contains("highlights") shouldBe true
         }
 
-        // 경로 갱신(이벤트)이 같은 읽기를 지난다 — 던지면 릴레이가 재시도하다 포기한다.
-        routeStored.handle(routeStoredEvent(tripId, day1))
+        // 경로 갱신(이벤트)이 같은 읽기를 지난다 — 던지면 릴레이가 재시도하다 포기한다. 경고는 잠근 뒤 읽기 한 번이다.
+        logsOf(TripSummaryRepositoryAdapter::class.java) { routeStored.handle(routeStoredEvent(tripId, day1)) }
+            .second.count { it.level == Level.WARN } shouldBe 1
         jdbc.queryForObject("SELECT jsonb_typeof(stats) FROM trip_summary WHERE trip_id = ?", String::class.java, tripId) shouldBe "object"
 
         corrupt("trip_summary", """highlights = '{"a":1}'::jsonb""", "trip_id = ?", tripId)
@@ -230,13 +231,16 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
             got.first shouldBe 200
             got.second["ready"].asBoolean() shouldBe true
             healed() shouldBe true
+            // 조회는 잠그지 않고 읽은 뒤 잠그고 다시 본다 — 못 읽은 채라 두 줄이다. 고친 뒤 다시 읽기는 새 값이라 더 없다.
             logs.filter { it.level == Level.ERROR }.map { it.formattedMessage }.let { errors ->
-                errors.isNotEmpty() shouldBe true
+                errors.size shouldBe 2
                 errors.all { it.contains(tripId.toString()) } shouldBe true
             }
 
+            // 경로 갱신은 이미 잠그고 읽었으므로 다시 읽지 않고 만든다 — 한 줄이다.
             corrupt("trip_summary", broken, "trip_id = ?", tripId)
-            routeStored.handle(routeStoredEvent(tripId, day1))
+            val (_, routeLogs) = logsOf(TripSummaryRepositoryAdapter::class.java) { routeStored.handle(routeStoredEvent(tripId, day1)) }
+            routeLogs.count { it.level == Level.ERROR } shouldBe 1
             healed() shouldBe true
             announced() shouldBe 1
         }
@@ -275,7 +279,17 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
             stats["distanceKm"].asDouble() shouldBe 0.0
             stats["distanceSource"].asText() shouldBe "ROUTE"
         }
-        routeStored.handle(routeStoredEvent(tripId, day1))
+        // 경로 갱신은 잠근 뒤 한 번 읽는다 — 경고 한 줄.
+        logsOf(ReflectionRepositoryAdapter::class.java) { routeStored.handle(routeStoredEvent(tripId, day1)) }
+            .second.count { it.level == Level.WARN } shouldBe 1
+
+        // 생성은 AI 전 판정 읽기와 잠근 뒤 읽기가 둘 다 근거 수치를 읽는다 — 경고 두 줄(수정은 위처럼 한 줄).
+        corrupt("reflection", "stats = '[]'::jsonb", "trip_id = ? AND day_date = ?", tripId, day1)
+        val (generated, genLogs) = logsOf(ReflectionRepositoryAdapter::class.java) {
+            call(HttpMethod.POST, "/api/v1/trips/$tripId/reflections/$day1", token)
+        }
+        generated.first shouldBe 200
+        genLogs.count { it.level == Level.WARN } shouldBe 2
     }
 
     private fun writeMine(tripId: UUID, token: String) {

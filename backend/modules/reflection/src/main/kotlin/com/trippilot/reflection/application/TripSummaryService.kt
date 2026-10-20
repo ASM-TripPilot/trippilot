@@ -72,7 +72,8 @@ class TripSummaryService(
      */
     private fun rebuildUnreadable(tripId: UUID): TripSummary? {
         if (!summaries.exists(tripId)) return null
-        // 잠근 뒤 다시 본다 — 겹친 요청이 먼저 고쳤으면 그것을 쓴다.
+        // 조회는 잠그지 않고 읽었다 — 잠근 뒤 다시 본다. 겹친 요청이 먼저 고쳤으면 그것을 쓴다. 못 읽은 채면 ERROR 가 한 줄 더 남는다
+        // (조회가 고치는 요청은 잠그기 전·후 두 줄).
         return summaries.findForUpdate(tripId) ?: summaries.upsert(build(tripId))
     }
 
@@ -138,7 +139,9 @@ class TripSummaryService(
         // 생성과 같은 잠금 — 생성이 커밋 전이면 여기서 기다렸다가 그 결과를 본다(안 기다리면 "요약 없음"으로 지나가고, 생성은 경로 전
         // 값으로 커밋돼 굳는다). 하이라이트는 지금 실적·경로로 다시 짠다 — 경로만 있는 날이 새로 한 칸이 될 수 있다. 서사·출처는 그대로다.
         val current = summaries.findForUpdate(tripId) ?: run {
-            rebuildUnreadable(tripId)
+            // 이미 잠그고 DB 에서 읽었다 — 다시 읽지 않고 바로 만든다(다시 읽으면 같은 ERROR 가 한 줄 더 남고 잠금·조회가 한 번 더 돈다).
+            // 요약이 없는 여행이면 exists 한 번으로 끝난다.
+            if (summaries.exists(tripId)) summaries.upsert(build(tripId))
             return
         }
         val days = archive.findDailyVisits(tripId)

@@ -67,6 +67,7 @@ class ReflectionService(
         requireWithinTrip(period, dayDate)
         // 수정본을 못 읽는 하루(TRIP-1476)는 **AI 를 부르기 전에** 409 로 끝낸다 — 어차피 쓰지 못하고, 앱은 화면을 열 때마다
         // 이 요청을 보낸다. 초안·출처만 못 읽는 하루는 아래에서 초안을 다시 만들어 고치므로 그대로 간다.
+        // 이 읽기와 아래 잠근 뒤 읽기(findForRedraft)가 둘 다 근거 수치를 읽으므로, 수치가 깨진 하루의 생성은 WARN 을 두 줄 남긴다(수정은 한 줄).
         try {
             reflections.find(tripId, dayDate)
         } catch (_: UnreadableDraft) {
