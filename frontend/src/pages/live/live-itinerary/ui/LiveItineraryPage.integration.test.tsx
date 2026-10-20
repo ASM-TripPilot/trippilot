@@ -137,11 +137,14 @@ type MockAutomation = {
   state: 'ARMED' | 'MANUAL' | 'EXPLAINER';
   notice: { kind: 'degraded' | 'route-expired'; reason: string } | null;
   droppedCount: number;
+  /** TRIP-1486 · 이 여행의 자동 기록 일시 중지 여부(생략 = false). */
+  paused?: boolean;
 };
 let mockAutomation: MockAutomation | null = null;
 const mockAutomationLater = jest.fn(async () => undefined);
 const mockAutomationEnable = jest.fn(async () => undefined);
 const mockAutomationDismiss = jest.fn(async () => undefined);
+const mockAutomationSetPaused = jest.fn(async (_next: boolean) => undefined);
 // 내부 소비처(useTripRoutes 등)가 같은 판독을 보게 플래그 모듈도 같은 값으로 묶는다.
 jest.mock('@/shared/location/automation/flag', () => ({
   isLocationAutomationEnabled: () => mockAutomation !== null,
@@ -155,12 +158,14 @@ jest.mock('@/shared/location', () => {
     useLocationAutomation: (input: unknown) =>
       mockAutomation
         ? {
+            paused: false,
             ...mockAutomation,
             reason: 'explainer',
             enabled: true,
             enable: mockAutomationEnable,
             later: mockAutomationLater,
             dismissNotice: mockAutomationDismiss,
+            setPaused: mockAutomationSetPaused,
           }
         : actual.useLocationAutomation(input),
   };
@@ -359,6 +364,7 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       mockAutomationLater.mockClear();
       mockAutomationEnable.mockClear();
       mockAutomationDismiss.mockClear();
+      mockAutomationSetPaused.mockClear();
     });
 
     it('U1 플래그 OFF(기본) → 설명·안내 없음, 위치 동의 조회 0회(BR-U10-07)', async () => {
@@ -557,6 +563,97 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       expect(
         screen.queryByTestId('execution-live-automation-notice-settings')
       ).toBeNull();
+    });
+
+    // TRIP-1486 · 여행별 자동 기록 일시 중지 스위치 줄(u10f) — 서는 조건과 탭 배선은 페이지 몫이다.
+    describe('일시 중지 스위치 줄 (TRIP-1486)', () => {
+      const ROW = 'execution-live-automation-switch-row';
+      const SWITCH = 'execution-live-automation-switch';
+      const mount = async () => {
+        server.use(itineraryOk(), tripHandler(), visitsHandler(), consentOk());
+        await renderActive();
+      };
+
+      it('PS1 무장 중(ARMED) → 스위치 줄이 켜짐으로 선다', async () => {
+        mockAutomation = { state: 'ARMED', notice: null, droppedCount: 0 };
+        await mount();
+        expect(
+          screen.getByTestId('execution-live-automation-switch-detail')
+        ).toHaveTextContent('여행 날짜 동안 방문과 다닌 길을 기록해요');
+        expect(screen.getByTestId(SWITCH)).toBeChecked();
+      });
+
+      it('PS2 일시 중지(paused) → 같은 줄이 일시 중지로 서고, 강등 안내 띠는 없다(강등이 아니다)', async () => {
+        mockAutomation = {
+          state: 'MANUAL',
+          paused: true,
+          notice: null,
+          droppedCount: 0,
+        };
+        await mount();
+        expect(
+          screen.getByTestId('execution-live-automation-switch-detail')
+        ).toHaveTextContent('일시 중지했어요 · [도착]으로 직접 남겨요');
+        expect(screen.getByTestId(SWITCH)).not.toBeChecked();
+        expect(
+          screen.queryByTestId('execution-live-automation-notice')
+        ).toBeNull();
+      });
+
+      it.each([
+        [
+          '설명 대기(EXPLAINER)',
+          { state: 'EXPLAINER' as const, notice: null, droppedCount: 0 },
+        ],
+        [
+          '권한 부족(MANUAL)',
+          { state: 'MANUAL' as const, notice: null, droppedCount: 0 },
+        ],
+        [
+          '강등 안내 중(MANUAL + degraded)',
+          {
+            state: 'MANUAL' as const,
+            notice: { kind: 'degraded' as const, reason: 'when-in-use' },
+            droppedCount: 0,
+          },
+        ],
+        ['플래그 OFF', null],
+      ])('PS3 %s 이면 스위치 줄이 없다', async (_label, automation) => {
+        mockAutomation = automation;
+        await mount();
+        await settle();
+        expect(screen.queryByTestId(ROW)).toBeNull();
+      });
+
+      it('PS4 안내 띠(보내지 못한 N건)와 스위치 줄이 함께 선다(Q6)', async () => {
+        mockAutomation = { state: 'ARMED', notice: null, droppedCount: 2 };
+        await mount();
+        expect(
+          screen.getByTestId('execution-live-automation-notice')
+        ).toHaveTextContent(/보내지 못한 자동 기록 2건/);
+        expect(screen.getByTestId(ROW)).toBeOnTheScreen();
+      });
+
+      it('PS5 스위치를 누르면 훅의 setPaused 를 지금 상태의 반대로 1회 부른다', async () => {
+        mockAutomation = { state: 'ARMED', notice: null, droppedCount: 0 };
+        await mount();
+        fireEvent.press(screen.getByTestId(SWITCH));
+        expect(mockAutomationSetPaused).toHaveBeenCalledTimes(1);
+        expect(mockAutomationSetPaused).toHaveBeenLastCalledWith(true);
+      });
+
+      it('PS6 일시 중지 상태에서 누르면 setPaused(false) — 재개', async () => {
+        mockAutomation = {
+          state: 'MANUAL',
+          paused: true,
+          notice: null,
+          droppedCount: 0,
+        };
+        await mount();
+        fireEvent.press(screen.getByTestId(SWITCH));
+        expect(mockAutomationSetPaused).toHaveBeenCalledTimes(1);
+        expect(mockAutomationSetPaused).toHaveBeenLastCalledWith(false);
+      });
     });
   });
 

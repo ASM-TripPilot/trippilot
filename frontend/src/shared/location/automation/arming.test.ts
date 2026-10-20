@@ -24,7 +24,30 @@ const arbInput: fc.Arbitrary<ArmingInput> = fc.record({
   inTripWindow: fc.boolean(),
   onHub: fc.boolean(),
   explainerAsked: fc.boolean(),
+  tripPaused: fc.boolean(),
 });
+
+// 무작위 입력은 여섯 조건이 우연히 다 참일 확률이 1/500 쯤이라 ARMED 쪽 가지가 거의 안 걸린다 —
+// "거의 무장 상태"(조건 대부분 참)에서 출발한 입력을 섞어 ARMED 였을 결과를 충분히 만든다.
+const mostly = <T>(good: T, bad: T[]) =>
+  fc.constantFrom(good, good, good, good, ...bad);
+const arbNearArmed: fc.Arbitrary<ArmingInput> = fc.record({
+  flagOn: mostly(true, [false]),
+  serverEnabled: mostly(true, [false]),
+  foreground: mostly('granted' as const, ['denied' as const]),
+  background: mostly('granted' as const, [
+    'denied' as const,
+    'undetermined' as const,
+  ]),
+  backgroundCanAskAgain: fc.boolean(),
+  precise: mostly(true, [false]),
+  consentOn: mostly(true, [false]),
+  inTripWindow: mostly(true, [false]),
+  onHub: fc.boolean(),
+  explainerAsked: fc.boolean(),
+  tripPaused: fc.boolean(),
+});
+const arbMixed = fc.oneof(arbInput, arbNearArmed);
 
 const armedAll: ArmingInput = {
   flagOn: true,
@@ -37,6 +60,7 @@ const armedAll: ArmingInput = {
   inTripWindow: true,
   onHub: true,
   explainerAsked: false,
+  tripPaused: false,
 };
 
 const explainerReady: ArmingInput = {
@@ -82,9 +106,10 @@ describe('resolveArming (PBT-U10-F1)', () => {
     });
   });
 
-  it('AR7 (PBT) ARMED ⇔ 여섯 조건 모두 참', () => {
+  // TRIP-1486 · 일시 중지가 여섯째 조건으로 들어왔다 — "ARMED ⇔ 조건 모두 참 그리고 일시 중지 아님".
+  it('AR7 (PBT) ARMED ⇔ 여섯 조건 모두 참 그리고 일시 중지 아님', () => {
     fc.assert(
-      fc.property(arbInput, (input) => {
+      fc.property(arbMixed, (input) => {
         const all =
           input.flagOn &&
           input.serverEnabled &&
@@ -92,7 +117,8 @@ describe('resolveArming (PBT-U10-F1)', () => {
           input.background === 'granted' &&
           input.precise &&
           input.consentOn &&
-          input.inTripWindow;
+          input.inTripWindow &&
+          !input.tripPaused;
         expect(resolveArming(input).state === 'ARMED').toBe(all);
       }),
       { numRuns: 500 }
@@ -155,6 +181,73 @@ describe('resolveArming (PBT-U10-F1)', () => {
           expect(input.onHub).toBe(true);
           expect(input.explainerAsked).toBe(false);
           expect(input.backgroundCanAskAgain).toBe(true);
+        }
+      }),
+      { numRuns: 500 }
+    );
+  });
+});
+
+/**
+ * TRIP-1486 · 여행별 일시 중지(BR-U10-49) — 사용자 의도라 저장되는 유일한 입력.
+ * 핵심 성질(메타모픽): 일시 중지는 "원래 ARMED 였을 결과"만 MANUAL('paused')로 바꾼다 — 다른 사유는 가리지 않는다.
+ * 그래야 reason 'paused' 가 "되돌릴 수 있는 상태"를 뜻하고, 스위치 노출 조건(ARMED 또는 paused)이 곧 그 상태가 된다.
+ */
+describe('resolveArming — 여행별 일시 중지 (TRIP-1486)', () => {
+  it('AP1 나머지 조건이 모두 참이어도 일시 중지면 MANUAL·paused', () => {
+    expect(resolveArming({ ...armedAll, tripPaused: true })).toEqual({
+      state: 'MANUAL',
+      reason: 'paused',
+    });
+  });
+
+  it.each([
+    ['플래그 OFF', { flagOn: false }, 'flag-off'],
+    ['서버 스위치 OFF', { serverEnabled: false }, 'server-disabled'],
+    ['동의 OFF', { consentOn: false }, 'consent-off'],
+    ['여행 구간 밖', { inTripWindow: false }, 'outside-trip'],
+    ['앱 권한 없음', { foreground: 'denied' }, 'no-permission'],
+    ['대략 위치', { precise: false }, 'approximate'],
+    [
+      'when-in-use(재질문 불가)',
+      { background: 'denied', backgroundCanAskAgain: false },
+      'background-blocked',
+    ],
+  ] as [string, Partial<ArmingInput>, string][])(
+    'AP2 일시 중지여도 다른 사유가 있으면 그 사유가 이긴다 — %s → %s',
+    (_label, patch, reason) => {
+      expect(
+        resolveArming({ ...armedAll, ...patch, tripPaused: true })
+      ).toEqual({ state: 'MANUAL', reason });
+    }
+  );
+
+  it('AP2b 설명(EXPLAINER) 대기 중인 여행도 일시 중지가 가리지 않는다', () => {
+    expect(resolveArming({ ...explainerReady, tripPaused: true }).state).toBe(
+      'EXPLAINER'
+    );
+  });
+
+  it('AP3 (PBT, 메타모픽) 일시 중지는 ARMED 였을 결과만 paused 로 바꾸고 나머지는 그대로 둔다', () => {
+    fc.assert(
+      fc.property(arbMixed, (input) => {
+        const base = resolveArming({ ...input, tripPaused: false });
+        const paused = resolveArming({ ...input, tripPaused: true });
+        expect(paused).toEqual(
+          base.state === 'ARMED' ? { state: 'MANUAL', reason: 'paused' } : base
+        );
+      }),
+      { numRuns: 500 }
+    );
+  });
+
+  it('AP4 (PBT) reason paused 는 일시 중지 입력이 있을 때만 나오고, 일시 중지 입력으로 ARMED 는 나오지 않는다', () => {
+    fc.assert(
+      fc.property(arbMixed, (input) => {
+        if (!input.tripPaused) {
+          expect(resolveArming(input).reason).not.toBe('paused');
+        } else {
+          expect(resolveArming(input).state).not.toBe('ARMED');
         }
       }),
       { numRuns: 500 }

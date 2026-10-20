@@ -59,6 +59,19 @@ export function automationNoticeCopy(
   return null;
 }
 
+/** TRIP-1486 · i01 스위치 줄 카피(Figma u10f) — 제목은 고정, 부제만 켜짐/일시 중지로 갈린다. */
+export function automationSwitchCopy(paused: boolean): {
+  title: string;
+  detail: string;
+} {
+  return {
+    title: '자동 기록',
+    detail: paused
+      ? '일시 중지했어요 · [도착]으로 직접 남겨요'
+      : '여행 날짜 동안 방문과 다닌 길을 기록해요',
+  };
+}
+
 /** 'YYYY-MM-DD' 두 개 → `10월 14일~16일` / `10월 30일~11월 2일` / 하루면 `10월 14일`. */
 export function tripDateRangeLabel(start: string, end: string): string {
   const [, sm, sd] = start.split('-').map(Number);

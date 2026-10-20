@@ -38,9 +38,11 @@ import {
 } from '@/entities/itinerary-slot';
 import { SlotProgressCard } from '@/entities/itinerary-slot';
 import {
+  automationSwitchCopy,
   LOCATION_ICON_COLORS,
   LocationPinGlyph,
 } from '@/shared/location/index.view';
+import { Toggle } from '@/shared/ui/Toggle';
 
 /**
  * TRIP-746 · i01 여행중 허브 **순수 뷰**(pages · api import 0 — preview 가 직접 import, TRIP-610).
@@ -192,6 +194,8 @@ export interface LiveHubViewProps {
     detail: string;
     onPressSettings?: () => void;
   } | null;
+  /** TRIP-1486 · 자동 기록 일시 중지 스위치 줄(Figma u10f). 미전달이면 줄 없음. */
+  automationSwitch?: { paused: boolean; onToggle: () => void } | null;
 }
 
 // 레일 점의 행 상단 여백 — 점 크기(18·16·12)가 달라 Figma 에서 상태마다 다르다(rail 인스턴스 y 실측).
@@ -265,6 +269,7 @@ export function LiveHubView({
   onPressDirections,
   directionsNotice,
   automationNotice,
+  automationSwitch,
   autoRecordedPoiIds,
   onPressRevertAuto,
   routeToggle,
@@ -283,6 +288,9 @@ export function LiveHubView({
     [safeBottom, expandedSnap]
   );
   const expandedSnapIndex = snapPoints.length - 1;
+  const switchCopy = automationSwitch
+    ? automationSwitchCopy(automationSwitch.paused)
+    : null;
   const [editMenuOpen, setEditMenuOpen] = useState(initialEditMenuOpen);
   // 시트 윗변 y — 셸이 gorhom 에 넘기면 gorhom 이 매 프레임(끄는 중에도) 써 넣는다. gorhom 이 이미
   // topInset 을 더해 LiveHubView 루트 기준 y 를 주므로 safeTop 을 다시 더하지 않는다. 첫 값이 들어오기
@@ -463,6 +471,42 @@ export function LiveHubView({
                   </Text>
                 </View>
               </View>
+            ) : null}
+            {automationSwitch ? (
+              // 줄 전체가 눌린다(토글 46×28 만으론 작다). 줄은 접근성 요소가 아니다 — VoiceOver 는 안쪽 스위치를 읽는다.
+              <Pressable
+                testID="execution-live-automation-switch-row"
+                accessible={false}
+                onPress={automationSwitch.onToggle}
+                className="mb-md flex-row items-center gap-sm rounded-[12px] bg-surface-soft px-md py-sm"
+              >
+                <View className="items-center justify-center">
+                  <LocationPinGlyph
+                    size={16}
+                    color={LOCATION_ICON_COLORS.muted}
+                  />
+                </View>
+                <View className="flex-1 gap-[2px]">
+                  <Text
+                    testID="execution-live-automation-switch-title"
+                    className="font-noto-bold text-[13px] font-bold text-ink"
+                  >
+                    {switchCopy?.title}
+                  </Text>
+                  <Text
+                    testID="execution-live-automation-switch-detail"
+                    className="font-noto text-[12px] text-body"
+                  >
+                    {switchCopy?.detail}
+                  </Text>
+                </View>
+                <Toggle
+                  testID="execution-live-automation-switch"
+                  accessibilityLabel={switchCopy?.title ?? ''}
+                  checked={!automationSwitch.paused}
+                  onPress={automationSwitch.onToggle}
+                />
+              </Pressable>
             ) : null}
             {opportunityCard}
             <Text

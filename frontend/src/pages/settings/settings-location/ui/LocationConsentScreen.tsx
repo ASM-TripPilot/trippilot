@@ -81,6 +81,12 @@ const AUTOMATION_USAGE = {
   desc: '여행 날짜 동안 앱을 닫아도 방문과 다닌 길을 기록해요',
 } as const;
 
+const AUTOMATION_PILL = {
+  on: '켜짐',
+  off: '꺼짐',
+  paused: '일시 중지',
+} as const;
+
 /** 토글 카드 제목 — 스위치 이름(accessibilityLabel)도 이 값을 쓴다(카피 수정 시 둘이 어긋나지 않게). */
 const TOGGLE_TITLE = '위치정보 수집';
 
@@ -301,7 +307,7 @@ export function LocationConsentScreen({
                   automation.status === 'on' ? 'text-success' : 'text-muted'
                 }`}
               >
-                {automation.status === 'on' ? '켜짐' : '꺼짐'}
+                {AUTOMATION_PILL[automation.status]}
               </Text>
             </View>
           </View>

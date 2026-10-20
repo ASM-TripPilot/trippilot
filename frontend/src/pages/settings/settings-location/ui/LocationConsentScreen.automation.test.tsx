@@ -119,4 +119,33 @@ describe('LocationConsentScreen automation', () => {
     fireEvent.press(screen.getByTestId('settings-location-toggle'));
     expect(screen.queryByText(/자동 방문 기록/)).toBeNull();
   });
+
+  // TRIP-1486 · 일시 중지한 여행은 "꺼짐"으로 접지 않고 「일시 중지」 알약으로 보인다(사용자 결정 Q4 · Figma u10d 일시 중지 변형).
+  // 알약의 색은 생김새라 단언하지 않는다(실화면 QA 몫) — 문구와 행동 버튼 부재만 본다.
+  it('LA5 일시 중지 → 알약 「일시 중지」 · 사유 줄 · [켜기]/설정 열기 없음(l06 에서 재개하지 않는다)', () => {
+    render(
+      <LocationConsentScreen
+        {...base}
+        impact={revokeImpact({ automation: true })}
+        onRevokeConfirmed={jest.fn()}
+        automation={{
+          status: 'paused',
+          reason: '이 여행은 일시 중지했어요',
+          action: null,
+        }}
+      />
+    );
+    expect(
+      screen.getByTestId('settings-location-automation-status')
+    ).toHaveTextContent('일시 중지');
+    expect(
+      screen.getByTestId('settings-location-automation-row')
+    ).toHaveTextContent(/이 여행은 일시 중지했어요/);
+    expect(
+      screen.queryByTestId('settings-location-automation-enable')
+    ).toBeNull();
+    expect(
+      screen.queryByTestId('settings-location-automation-open-settings')
+    ).toBeNull();
+  });
 });

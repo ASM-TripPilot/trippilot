@@ -9,6 +9,7 @@ import {
   flushQueue,
   markExplainerAsked,
   setContext,
+  setTripPaused,
   uploadPendingRoutes,
   type EngineStatus,
 } from './engine';
@@ -42,6 +43,10 @@ export interface LocationAutomationResult extends EngineStatus {
   /** [나중에] — 이 여행에서 다시 묻지 않는다. */
   later: () => Promise<void>;
   dismissNotice: () => Promise<void>;
+  /** TRIP-1486 · 이 여행의 자동 기록이 일시 중지 상태인가(= reason 'paused'). */
+  paused: boolean;
+  /** TRIP-1486 · 일시 중지(true)/재개(false). 처리 중 들어온 호출은 무시한다(연타 잠금). */
+  setPaused: (next: boolean) => Promise<void>;
 }
 
 const OFF: EngineStatus = {
@@ -60,6 +65,7 @@ export function useLocationAutomation(
     flagOn ? { ...OFF, reason: 'no-context' } : OFF
   );
   const alive = useRef(true);
+  const pausing = useRef(false);
 
   const ctxKey = JSON.stringify([
     input.tripId,
@@ -147,11 +153,35 @@ export function useLocationAutomation(
       setStatus((s) => ({ ...s, notice: null, droppedCount: 0 }));
   }, [flagOn]);
 
+  const setPaused = useCallback(
+    async (next: boolean) => {
+      if (!flagOn || !ctx.tripId || pausing.current) return;
+      // 첫 await 전에 동기로 세운다 — 같은 틱의 두 번째 호출을 막으려면 ref 여야 한다.
+      pausing.current = true;
+      try {
+        await setTripPaused(getEngineDeps(), ctx.tripId, next);
+        // 서버 응답(END/START)을 기다리지 않고 스위치부터 바꾼다 — 아래 refresh 의 진짜 결과가 곧 덮는다.
+        if (alive.current)
+          setStatus((s) =>
+            next
+              ? { ...s, state: 'MANUAL', reason: 'paused', notice: null }
+              : { ...s, state: 'ARMED', reason: 'armed' }
+          );
+        await refresh(false);
+      } finally {
+        pausing.current = false;
+      }
+    },
+    [flagOn, ctx.tripId, refresh]
+  );
+
   return {
     ...(flagOn ? status : OFF),
     enabled: flagOn,
     enable,
     later,
     dismissNotice,
+    paused: flagOn && status.reason === 'paused',
+    setPaused,
   };
 }

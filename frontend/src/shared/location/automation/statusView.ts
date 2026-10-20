@@ -5,7 +5,7 @@ import type { PermissionSnapshot } from './permission';
  * 무장은 저장하지 않는 판정이라 "켜짐"은 지금 열린 지오펜스 구간이 있을 때만이다.
  */
 export interface AutomationStatusView {
-  status: 'on' | 'off';
+  status: 'on' | 'off' | 'paused';
   reason: string;
   action: 'enable' | 'settings' | null;
 }
@@ -14,6 +14,8 @@ export function automationStatusView(input: {
   armed: boolean;
   consentOn: boolean;
   snapshot: PermissionSnapshot;
+  /** TRIP-1486 · 이 여행(기간 안)을 일시 중지했는가. */
+  paused: boolean;
 }): AutomationStatusView {
   const { armed, consentOn, snapshot } = input;
   if (armed)
@@ -45,6 +47,12 @@ export function automationStatusView(input: {
       status: 'off',
       reason: '정확한 위치가 꺼져 있어요',
       action: 'settings',
+    };
+  if (input.paused)
+    return {
+      status: 'paused',
+      reason: '이 여행은 일시 중지했어요',
+      action: null,
     };
   return { status: 'off', reason: '여행 날짜에만 켜져요', action: null };
 }

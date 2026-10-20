@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 
+import { seoulDate } from '@/shared/lib/seoulDate';
+
 import { getEngineDeps } from './deps';
 import { wipeAutomation } from './engine';
 import { isLocationAutomationEnabled } from './flag';
@@ -22,12 +24,22 @@ export function useAutomationStatus(consentOn: boolean): {
   const refresh = useCallback(async () => {
     if (!flagOn) return;
     const snapshot = await readPermissionSnapshot();
-    const { state } = getEngineDeps().store.load();
+    const deps = getEngineDeps();
+    const { state } = deps.store.load();
+    // l06 은 여행 id 를 몰라 마지막 문맥을 쓴다 — 끝난 여행에 남은 옛 플래그가 「일시 중지」로 보이면 거짓이라 기간 안일 때만.
+    const day = seoulDate(new Date(deps.now()));
+    const c = state.ctx;
+    const paused =
+      !!c &&
+      state.pausedTrips.includes(c.tripId) &&
+      c.startDate <= day &&
+      day <= c.endDate;
     setView(
       automationStatusView({
         armed: state.intervals.some((i) => i.kind === 'GEOFENCE_ARMED'),
         consentOn,
         snapshot,
+        paused,
       })
     );
   }, [flagOn, consentOn]);

@@ -798,6 +798,14 @@ export function LiveItineraryPage({
           const target = autoRecords.get(poiId);
           if (target) setRevertTarget({ poiId, ...target, error: null });
         }}
+        automationSwitch={
+          automation.state === 'ARMED' || automation.paused
+            ? {
+                paused: automation.paused,
+                onToggle: () => void automation.setPaused(!automation.paused),
+              }
+            : null
+        }
         automationNotice={
           automationCopy
             ? {

@@ -19,6 +19,7 @@ export type { RouteDay } from './automation/sink';
 export { LocationAlwaysExplainer } from './LocationAlwaysExplainer';
 export {
   automationNoticeCopy,
+  automationSwitchCopy,
   tripDateRangeLabel,
 } from './automation/noticeCopy';
 export type { AutomationNoticeCopy } from './automation/noticeCopy';
