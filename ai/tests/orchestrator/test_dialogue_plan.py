@@ -180,13 +180,9 @@ _SAMPLES: tuple[Facts, ...] = (
 )
 
 
-def _has_facts(f: Facts) -> bool:
-    return bool(f.rows or f.places or f.notes or f.detail)
-
-
 def _path(f: Facts) -> str:
     """`_compose` 가 어느 길로 가는가 — 의도된 결정론 직행(needTrip·UNAVAILABLE·사실 없음)이냐 LLM 이냐."""
-    return "direct" if f.needs_trip or f.status is FactStatus.UNAVAILABLE or not _has_facts(f) else "llm"
+    return "direct" if f.needs_trip or f.status is FactStatus.UNAVAILABLE or not dp.has_facts(f) else "llm"
 
 
 def _class(f: Facts) -> tuple:
@@ -397,6 +393,14 @@ def test_next_slot_and_hours_are_not_merged_because_the_gate_keeps_only_the_firs
     (drop,) = [e for e in b.trace.of_type(GateDropEvent) if e.feature == "DIALOGUE_PLAN"]
     assert drop.dropped_count == 1
     assert out.answer.text != text and any(e.reason == "time_not_in_facts" for e in to._fallbacks(b.trace))
+
+
+def test_hours_are_not_in_the_order_check() -> None:
+    """영업시간 짝은 장소-시각 짝 검사에만 들어간다 — 순서 검사(`_out_of_order`)는 일정 슬롯 시각만 본다(BR-AO-28). 영업시간이 순서에
+    들어가면 이름 없이 "18:00까지, 09:00부터"라고 쓴 맞는 영업시간 답이 '역순'으로 템플릿이 된다."""
+    text = "18:00까지 하고, 문은 09:00에 열어요."
+    out, b = _plan_turn(_plan_json(_HOURS), answer=_answer_json(text), ports=_MIX_PORTS)
+    assert out.answer.text == text, [e.reason for e in to._fallbacks(b.trace)]
 
 
 def test_floating_times_and_candidate_times_stay_allowed_outside_plan_answers() -> None:

@@ -95,7 +95,7 @@ from trippilot.orchestrator.dialogue_memory import (
     expires_at_for,
     is_turn_fragment,
 )
-from trippilot.orchestrator.dialogue_plan import merge_facts, step_results, step_tasks
+from trippilot.orchestrator.dialogue_plan import has_facts, merge_facts, step_results, step_tasks
 from trippilot.orchestrator.intent_router import normalize
 from trippilot.orchestrator.shadow_probe import ShadowIntentProbe
 from trippilot.ports.trace_port import TracePort
@@ -827,7 +827,7 @@ class DialogueOrchestrator:
         `_fanout` 이 작업별로 이미 냈다); 시도했거나 해야 했던 턴의 템플릿에는 FallbackEvent 짝(게이트웨이가 냈거나 여기서 낸다)."""
         if facts.needs_trip or facts.status is FactStatus.UNAVAILABLE:
             return DialogueAnswer.from_facts(facts)
-        if not (facts.rows or facts.places or facts.notes or facts.detail):
+        if not has_facts(facts):
             # 넘기기 의도(다시 짜기·만들기·회고 등)·남은 일정 없음은 사실 없이 다음 행동 버튼뿐이다 — 빈 재료로 LLM 을 부르면 "확인된 정보가 없어
             # … 할 수 없어요"처럼 실패로 들린다(2026-10-19 E2E 18 중 12~14). BR-AO-25 의 의도된 결정론 — 안내 문구로 바로 답한다
             return DialogueAnswer.from_facts(facts)

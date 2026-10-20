@@ -222,7 +222,7 @@ def build_dialogue_orchestrator(
                          transit=providers[ProviderKind.TRANSIT], pool_builder=pool_builder, planb=rag)
     tools = plan_tools(ports)  # 배선된 도구 → 설명(여행 필요 꼬리표 포함) — 게이트 closed-set 과 `$tools` 가 같은 사전에서 나온다
     planner = None
-    if LlmFeature.DIALOGUE_PLAN in c1_config.feature_models and tools:  # DEC-AO-18 — 배정이 곧 켜기(env 무증가)
+    if LlmFeature.DIALOGUE_PLAN in c1_config.feature_models:  # DEC-AO-18 — 배정이 곧 켜기(env 무증가)
         planner = DialoguePlanWorker(
             GatewayFacade(counted, renderer, DialoguePlanGate(frozenset(tools)), c1_config, trace),  # counted 공유 → llm_calls
             plan_tool_specs_json(tools))

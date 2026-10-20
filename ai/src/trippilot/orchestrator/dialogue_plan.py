@@ -32,7 +32,7 @@ from trippilot.orchestrator.dialogue_handlers import (
     needs_trip,
 )
 
-__all__ = ["merge_facts", "plan_tools", "step_results", "step_tasks", "validate_tools_against_handlers"]
+__all__ = ["has_facts", "merge_facts", "plan_tools", "step_results", "step_tasks", "validate_tools_against_handlers"]
 
 _KIND_RANK: Mapping[AnswerKind, int] = {AnswerKind.CANDIDATES: 0, AnswerKind.INFO: 1, AnswerKind.TEXT: 2}
 _USABLE = frozenset({FactStatus.OK, FactStatus.PARTIAL})
@@ -83,7 +83,8 @@ def step_results(results: Mapping[str, TaskResult], i: int, n: int) -> Mapping[s
     return {name[len(prefix):]: result for name, result in results.items() if name.startswith(prefix)}
 
 
-def _has_facts(f: Facts) -> bool:
+def has_facts(f: Facts) -> bool:
+    """답변 LLM 에 줄 사실이 있는가 — 없으면 BR-AO-25 직행(템플릿). `also` 에 넣는 기준과 `_compose` 의 직행 판정이 이 하나를 쓴다."""
     return bool(f.rows or f.places or f.notes or f.detail)
 
 
@@ -97,7 +98,7 @@ def merge_facts(parts: Sequence[Facts]) -> Facts:
         key=lambda ip: (ip[1].status not in _USABLE, ip[1].status is FactStatus.UNAVAILABLE, _KIND_RANK[ip[1].kind],
                         ip[1].status is FactStatus.PARTIAL, ip[0]),
     )[1]
-    rest = [p for p in usable if p is not primary and _has_facts(p)]
+    rest = [p for p in usable if p is not primary and has_facts(p)]
     if not rest:
         return primary
     return replace(primary, detail={**primary.detail, "also": [p.to_prompt_dict() for p in rest]})
