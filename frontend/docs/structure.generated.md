@@ -880,6 +880,7 @@
 - `src/pages/live/live-itinerary/ui/LiveHubView.tsx`  →  LiveHubSlot · LiveHubViewProps · LiveHubView
 - `src/pages/live/live-itinerary/ui/LiveItineraryPage.tsx`  →  LiveItineraryPageProps · LiveItineraryPage
 - `src/pages/live/live-itinerary/ui/MemoSheet.tsx`  →  MemoSheetProps · MemoSheet
+- `src/pages/live/live-itinerary/ui/OpportunityCard.tsx`  →  OpportunityCardProps · OpportunityCard
 - `src/pages/live/live-itinerary/ui/ReplanAppliedSheet.tsx`  →  AppliedDiffKind · AppliedDiffRow · ReplanAppliedSheetProps · ReplanAppliedSheet
 - `src/pages/live/live-itinerary/ui/RiskDetailSheet.tsx`  →  RiskDetailSheetProps · RiskDetailSheet
 - `src/pages/live/live-itinerary/ui/TriggerChip.tsx`  →  TriggerChipProps · TriggerChip
@@ -1794,4 +1795,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1146개 파일
+합계 1147개 파일
