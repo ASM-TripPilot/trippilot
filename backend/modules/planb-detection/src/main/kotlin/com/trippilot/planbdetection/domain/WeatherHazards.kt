@@ -29,7 +29,7 @@ object WeatherThresholds {
     const val WIND_MS_CLEAR = 12.0
 
     /**
-     * HEAT — 12~17시와 겹친 슬롯의 TMP·TMX 최고 ≥ 33 주의 · ≥ 35 위험(O-SA-2), < 31 해제.
+     * HEAT — 12~17시와 겹친 슬롯의 한낮 칸 TMP 최고 ≥ 33 주의 · ≥ 35 위험(O-SA-2), < 31 해제.
      * 겹침은 슬롯의 **실제 끝**으로 잰다 — 정오 전에 끝나는 슬롯은 끝을 올린 판정 시각이 12시여도 한낮과 겹치지 않는다.
      */
     const val HEAT_CAUTION_C = 33.0
@@ -37,7 +37,7 @@ object WeatherThresholds {
     const val HEAT_CLEAR_C = 31.0
     val HEAT_HOURS: IntRange = 12..17
 
-    /** COLD — TMN 또는 TMP 최저 ≤ −12 발화, > −10 해제. */
+    /** COLD — 판정 시각 TMP 최저 ≤ −12 발화, > −10 해제. */
     const val COLD_C = -12.0
     const val COLD_CLEAR_C = -10.0
 }
@@ -190,13 +190,15 @@ object WeatherHazards {
         val wind = firing { w -> (w.wsd ?: 0.0) >= WeatherThresholds.WIND_MS }
         val windClear = at.all { w -> (w?.wsd ?: Double.MAX_VALUE) < WeatherThresholds.WIND_MS_CLEAR }
 
-        // 기온 — 그 날 최고·최저(TMX·TMN)는 있으면 쓰는 보조값이다. 시간별 TMP 만으로도 판정된다.
+        // 기온 — 판정 시각의 시간별 TMP 만 본다. 그 날 최저·최고(TMN·TMX)는 쓰지 않는다(G-SA-15 결정 2026-10-20): 그 날 값은 TMN 이
+        // 02시 발표분에만, TMX 가 11시 발표분까지만 실리고 내일 값은 모든 발표분에 실려(실측) 발표분에 따라 발화·해제가 깜빡이고,
+        // 새벽 최저·오후 최고가 그 시각을 겪지 않는 슬롯까지 경보한다.
         // 한낮 = 12~17시 칸 가운데 슬롯이 실제로 끝나기 전 — 끝을 올린 판정 시각은 한낮과의 겹침을 만들지 않는다.
         val end = endOf(e)
         val noon = hours.indices.filter { hours[it].hour in WeatherThresholds.HEAT_HOURS && hours[it] < end }
-        val heat = (noon.mapNotNull { at[it]?.tmp } + noon.map { hours[it].toLocalDate() }.distinct().mapNotNull { f.daily[it]?.tmx }).maxOrNull()
+        val heat = noon.mapNotNull { at[it]?.tmp }.maxOrNull()
         val heatClear = noon.all { at[it]?.tmp != null } && (heat == null || heat < WeatherThresholds.HEAT_CLEAR_C)
-        val cold = (at.mapNotNull { it?.tmp } + hours.map { it.toLocalDate() }.distinct().mapNotNull { f.daily[it]?.tmn }).minOrNull()
+        val cold = at.mapNotNull { it?.tmp }.minOrNull()
         val coldClear = at.all { it?.tmp != null } && (cold == null || cold > WeatherThresholds.COLD_CLEAR_C)
 
         // 흐림 — 야경 슬롯 시각의 과반이 흐림 ∧ 강수 없음이면 발화, 흐린 시각이 1/3 이하면 해제.

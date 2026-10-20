@@ -125,8 +125,8 @@ class WeatherHazardsTest : StringSpec({
      * 겹침은 **슬롯의 실제 끝**으로 잰다. 판정 시각은 끝을 다음 정시로 올려 잡지만(그 시각 칸이 끝 무렵을 덮는다), 올린 시각이
      * 12시라고 정오 전에 끝나는 슬롯이 한낮과 겹친 것은 아니다 — 더위를 피해 오전에만 야외를 잡은 날에 폭염을 내지 않는다.
      */
-    "HEAT — 12~17시와의 겹침은 슬롯의 실제 끝으로 잰다 — 정오 전에 끝나는 슬롯은 한낮 최고(TMX)를 걸지 않는다" {
-        val hot = forecastOf(day { it.copy(tmp = 28.0) }, daily = mapOf(DAY to DailyWeather(tmn = 20.0, tmx = 35.0)))
+    "HEAT — 12~17시와의 겹침은 슬롯의 실제 끝으로 잰다 — 정오 전에 끝나는 슬롯은 12시 칸이 뜨거워도 폭염이 아니다" {
+        val hot = forecastOf(calmDay { h, w -> w.copy(tmp = if (h.hour in 12..17) 35.0 else 28.0) })
 
         judge(exposure("자연", "10:00", "11:30", hot)) shouldBe Verdict.Clear
         judge(exposure("자연", "09:00", "12:00", hot)) shouldBe Verdict.Clear
@@ -137,26 +137,42 @@ class WeatherHazardsTest : StringSpec({
         }
     }
 
-    "HEAT — 한낮 슬롯이면 그 날 최고(TMX)도 본다" {
-        val f = forecastOf(calmDay(), daily = mapOf(DAY to DailyWeather(tmn = 15.0, tmx = 35.0)))
-        judge(exposure("자연", "13:00", "14:00", f)).hazard().let {
-            it.variant shouldBe TriggerVariant.HEAT
-            it.severity shouldBe TriggerSeverity.RISK
-        }
+    /**
+     * 기온은 판정 시각의 시간별 TMP 만 본다(G-SA-15 결정 2026-10-20). 그 날 최고(TMX · 15시)는 11시 발표분까지만 실리고 내일 최고는
+     * 모든 발표분에 실려서(실측), 쓰면 발표분에 따라 폭염이 떴다 사라지고 슬롯이 겪지 않는 한낮 최고로 경보한다.
+     */
+    "HEAT — 그 날 최고(15시 36 · TMX)가 35 이상이어도 슬롯의 한낮 칸 TMP 가 33 아래면 폭염이 아니다" {
+        val lateHeat = forecastOf(
+            calmDay { h, w -> w.copy(tmp = if (h.hour == 15) 36.0 else 32.9) },
+            daily = mapOf(DAY to DailyWeather(tmn = 24.0, tmx = 36.0)),
+        )
+
+        judge(exposure("자연", "12:00", "13:00", lateHeat)) shouldBe Verdict.Unsettled // 32.9 — 신호도 확인도 아니다
     }
 
-    "COLD — -11.9 사이 · -12.0 발화 · -9.9 해제, 최저(TMN)가 -12 면 그 날 실외 전부" {
+    "COLD — -11.9 사이 · -12.0 발화 · -9.9 해제" {
         judgeCalmWith { it.copy(tmp = -11.9) } shouldBe Verdict.Unsettled
         judgeCalmWith { it.copy(tmp = -12.0) }.hazard().let {
             it.variant shouldBe TriggerVariant.COLD
             it.evidence.tempMin shouldBe -12.0
         }
         judgeCalmWith { it.copy(tmp = -9.9) } shouldBe Verdict.Clear
+    }
 
-        val frost = forecastOf(calmDay(), daily = mapOf(DAY to DailyWeather(tmn = -12.0, tmx = 2.0)))
-        val cold = judge(exposure("자연", "10:00", "11:00", frost), exposure("액티비티", "15:00", "16:00", frost)).hazard()
-        cold.variant shouldBe TriggerVariant.COLD
-        cold.affected.size shouldBe 2
+    /**
+     * 그 날 최저(TMN · 06시)는 02시 발표분에만 실리고 내일 최저는 모든 발표분에 실린다(2026-10-20 실측) — 쓰면 저녁 회차가 내일 최저로
+     * 발화하고 아침 회차가 해제하는 깜빡임이 나고, 새벽 최저로 오후 일정까지 한파로 경보한다(G-SA-15).
+     */
+    "COLD — 그 날 최저(06시 −13 · TMN)가 −12 이하여도 판정 시각 TMP 가 모두 −10 위면 한파가 아니다" {
+        val dawn = calmDay { h, w -> w.copy(tmp = if (h.hour <= 7) -13.0 else -9.9) }
+        val dawnFrost = forecastOf(dawn, daily = mapOf(DAY to DailyWeather(tmn = -13.0, tmx = 2.0)))
+
+        judge(exposure("자연", "14:00", "16:00", dawnFrost)) shouldBe Verdict.Clear
+        // 슬롯이 그 새벽 시각을 지나면 한파다 — 05시 발표분 · 06:20 회차의 07~09시 슬롯
+        judge(exposure("자연", "07:00", "09:00", forecastOf(dawn, base = kst("2026-10-20T05:00"))), now = kst("2026-10-20T06:20")).hazard().let {
+            it.variant shouldBe TriggerVariant.COLD
+            it.evidence.tempMin shouldBe -13.0
+        }
     }
 
     "CLOUD — 야경 슬롯 시각 과반이 흐림 ∧ 강수 없음이면 주의, 1/3 이하면 해제, 그 사이는 사이" {

@@ -107,22 +107,23 @@ class WeatherHazardsPropertyTest : StringSpec({
 
     /**
      * HEAT 의 '12~17시와 겹침'은 슬롯 구간 [시작, 끝) 과 [12:00, 18:00) 이 겹치는가다 — 판정 시각(끝을 올린 정시)으로 재지 않는다.
-     * 한낮 최고(TMX)만 뜨겁고 시간별 기온은 평온한 날이라, 겹치면 HEAT 이고 겹치지 않으면 아니다.
+     * 12~17시 칸의 기온만 뜨겁고 나머지 시각은 평온한 날이라, 겹치면 HEAT 이고 겹치지 않으면 아니다.
      */
-    "HEAT 겹침 — 12~17시와 실제로 겹친 슬롯에만, 정오 전에 끝나거나 18시부터인 슬롯은 TMX 가 높아도 아니다" {
-        checkAll(Arb.int(12, 43), Arb.int(1, 8), Arb.double(33.0, 40.0)) { startHalf, halves, tmx ->
+    "HEAT 겹침 — 12~17시와 실제로 겹친 슬롯에만, 정오 전에 끝나거나 18시부터인 슬롯은 12·17시 칸이 뜨거워도 아니다" {
+        checkAll(Arb.int(12, 43), Arb.int(1, 8), Arb.double(33.0, 40.0)) { startHalf, halves, hot ->
             val now = DAY.atTime(6, 20).atZone(ZONE).toInstant()
             val start = LocalTime.of(startHalf / 2, startHalf % 2 * 30)
             val end = start.plusMinutes(30L * halves)
             val calm = HourlyWeather(20, Precipitation.NONE, Sky.CLEAR, 20.0, 3.0)
-            val hourly = (0L..47L).map { DAY.atStartOfDay().plusHours(it) }.filter { it.atZone(ZONE).toInstant() > baseAt(now) }.associateWith { calm }
-            val f = PointForecast("53,38", baseAt(now), hourly, mapOf(DAY to DailyWeather(tmn = 15.0, tmx = tmx)))
+            val hourly = (0L..47L).map { DAY.atStartOfDay().plusHours(it) }.filter { it.atZone(ZONE).toInstant() > baseAt(now) }
+                .associateWith { if (it.hour in 12..17) calm.copy(tmp = hot) else calm }
+            val f = PointForecast("53,38", baseAt(now), hourly, emptyMap())
             val e = UUID.randomUUID().let { Exposure("$DAY#$it", it, "우도", "자연", DAY, start, end, endsNextDay = end < start, forecast = f) }
             val overlaps = DAY.atTime(start) < DAY.atTime(18, 0) && e.slotEnd() > DAY.atTime(12, 0)
 
             val heat = (WeatherHazards.judge(listOf(e), now) as? Verdict.Hazard)?.variants.orEmpty().contains(TriggerVariant.HEAT)
 
-            withClue("$start~$end TMX $tmx") { heat shouldBe overlaps }
+            withClue("$start~$end 한낮 $hot") { heat shouldBe overlaps }
         }
     }
 
@@ -279,10 +280,6 @@ private fun releasedAt(e: Exposure, h: LocalDateTime): Boolean {
     // 한낮 = 12~17시 칸 가운데 슬롯이 실제로 끝나기 전 — 끝을 올린 판정 시각은 한낮과의 겹침을 만들지 않는다.
     val noon = h.hour in 12..17 && h < e.slotEnd()
     if (noon && tmp >= 31.0) return false
-    val tmn = e.forecast.daily[h.toLocalDate()]?.tmn
-    val tmx = e.forecast.daily[h.toLocalDate()]?.tmx
-    if (tmn != null && tmn <= -10.0) return false
-    if (noon && tmx != null && tmx >= 31.0) return false
     if (e.category == WeatherHazards.NIGHT_VIEW && w.sky == null) return false
     return true
 }
