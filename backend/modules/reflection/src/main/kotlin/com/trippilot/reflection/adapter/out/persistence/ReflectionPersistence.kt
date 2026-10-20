@@ -12,8 +12,11 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
+import org.hibernate.annotations.ColumnTransformer
+import org.hibernate.annotations.Formula
 import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.type.SqlTypes
+import org.slf4j.LoggerFactory
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
@@ -35,6 +38,10 @@ import java.util.UUID
  *
  * 원문이 **바이트 단위로 보존되지는 않는다** — jsonb 가 공백·키 순서를 정규화한다. 카드는 우리가
  * 해석하지 않는 값이라 순서가 의미를 갖지 않는다.
+ *
+ * **jsonb 모양이 틀린 행도 실린다**(TRIP-1476) — 객체가 아닌 칸은 SQL 이 빈 객체로 읽고(`@ColumnTransformer`), 원래 모양은
+ * `*Shape` 가 따로 읽는다. 그러지 않으면 Hibernate 가 싣는 순간 던져, 한 하루 때문에 그 여행의 회고 목록 전체가 500 이었다.
+ * 무엇을 할지는 어댑터가 정한다 — 카드는 못 읽는 하루로, 수치는 0 으로(아래 [ReflectionRepositoryAdapter]).
  */
 @Entity
 @Table(name = "reflection")
@@ -43,8 +50,12 @@ class ReflectionEntity(
     @Column(name = "trip_id") var tripId: UUID,
     @Column(name = "day_date") var dayDate: LocalDate,
     @JdbcTypeCode(SqlTypes.JSON)
+    @ColumnTransformer(read = "CASE WHEN jsonb_typeof(draft_card) = 'object' THEN draft_card ELSE jsonb_build_object() END")
     @Column(name = "draft_card") var draftCard: Map<String, Any?>,
     @JdbcTypeCode(SqlTypes.JSON)
+    @ColumnTransformer(
+        read = "CASE WHEN edited_card IS NULL OR jsonb_typeof(edited_card) = 'object' THEN edited_card ELSE jsonb_build_object() END",
+    )
     @Column(name = "edited_card") var editedCard: Map<String, Any?>?,
     /**
      * **초안 카드의** 템플릿·형식이다(수정본 것이 아니다). jsonb 를 파싱하지 않고 "규칙 카드가 몇 %인가"를
@@ -54,12 +65,20 @@ class ReflectionEntity(
     @Column(name = "card_format") var cardFormat: String,
     @Column(name = "source") var source: String,
     @JdbcTypeCode(SqlTypes.JSON)
+    @ColumnTransformer(read = "CASE WHEN jsonb_typeof(stats) = 'object' THEN stats ELSE jsonb_build_object() END")
     @Column(name = "stats") var stats: Map<String, Any?>,
     @Column(name = "generated_at") var generatedAt: Instant,
     @Column(name = "updated_at") var updatedAt: Instant,
     @Column(name = "mood") var mood: String? = null,
     @Column(name = "short_memo") var shortMemo: String? = null,
-)
+) {
+    /** 저장된 jsonb 의 원래 최상위 모양(`object`·`array`…). 읽기 전용 — 대역으로 만든 엔티티에서는 null(모름)이다. */
+    @Formula("jsonb_typeof(draft_card)") var draftCardShape: String? = null
+
+    @Formula("jsonb_typeof(edited_card)") var editedCardShape: String? = null
+
+    @Formula("jsonb_typeof(stats)") var statsShape: String? = null
+}
 
 interface ReflectionJpaRepository : JpaRepository<ReflectionEntity, UUID> {
     fun findByTripIdAndDayDate(tripId: UUID, dayDate: LocalDate): ReflectionEntity?
@@ -97,6 +116,10 @@ class ReflectionRepositoryAdapter(
             updatedAt = reflection.updatedAt
             mood = reflection.mood
             shortMemo = reflection.shortMemo
+            // 실을 때 읽은 옛 모양이다 — 방금 덮었으니 아래 다시 읽기가 새 값을 "못 읽었다"고 다루지 않게 지운다.
+            draftCardShape = null
+            editedCardShape = null
+            statsShape = null
         } ?: reflection.toEntity()
         return jpa.save(entity).toDomain()
     }
@@ -115,8 +138,20 @@ class ReflectionRepositoryAdapter(
         return jpa.lockByTripIdAndDayDate(tripId, dayDate)?.toDomain()
     }
 
+    /**
+     * **못 읽는 하루는 목록에서 빼고 남긴다**(TRIP-1476) — 한 장 때문에 그 여행의 회고 전체가 500 이 되지 않게.
+     * 그 하루를 읽는 단건 경로([find]·[findForUpdate])는 그대로 던진다: 그 행에는 사용자 수정본이 있을 수 있고,
+     * 못 읽은 행 위에 쓰면 그것을 지운다. 그래서 그 하루의 생성·수정은 실패로 끝나고 행은 손대지 않은 채 남는다.
+     */
     override fun findByTrip(tripId: UUID): List<Reflection> =
-        jpa.findByTripIdOrderByDayDate(tripId).map { it.toDomain() }
+        jpa.findByTripIdOrderByDayDate(tripId).mapNotNull { row ->
+            try {
+                row.toDomain()
+            } catch (e: IllegalArgumentException) {
+                log.error("회고를 읽을 수 없어 목록에서 뺍니다 — 행은 그대로 둡니다. tripId={} date={} 사유={}", tripId, row.dayDate, e.message)
+                null
+            }
+        }
 
     private fun Reflection.toEntity() = ReflectionEntity(
         reflectionId, tripId, dayDate, draftCard.toMap(), editedCard?.toMap(),
@@ -137,7 +172,9 @@ class ReflectionRepositoryAdapter(
      * 제목이 비면 카드 생성이 실패한다(PBT-U5-F1). 그건 옳다 — 빈 제목을 통과시키면 목록에
      * 빈 줄이 그려지고, 어디서 비었는지 추적할 근거가 사라진다.
      */
-    private fun Map<String, Any?>.toCard(): ReflectionCard {
+    private fun Map<String, Any?>.toCard(shape: String?): ReflectionCard {
+        // 객체가 아니던 카드는 SQL 이 빈 객체로 읽어 온다 — 제목 검사로도 막히지만, 사유를 그것대로 남긴다.
+        require(shape == null || shape == "object") { "회고 카드가 객체가 아닙니다(jsonb $shape)." }
         val cover = this["cover"] as? Map<*, *>
         return ReflectionCard(
             // **카드 자신의 payload 에서 읽는다.** 컬럼(`template_id`)을 쓰면 그것은 초안 값이라,
@@ -158,14 +195,18 @@ class ReflectionRepositoryAdapter(
         "photoCount" to photoCount,
     )
 
+    /**
+     * 카드·출처를 못 읽으면 **던진다**(IllegalArgumentException) — 위 [findByTrip] 의 이유로 행 단위다. 출처를 아는 단으로
+     * 바꿔 읽지 않는다: 수정·경로 갱신이 그 값을 그대로 다시 써 품질 관측(DEC-U5-5a)의 원래 값이 사라진다.
+     */
     private fun ReflectionEntity.toDomain() = Reflection(
         reflectionId = reflectionId,
         tripId = tripId,
         dayDate = dayDate,
-        draftCard = draftCard.toCard(),
-        editedCard = editedCard?.toCard(),
+        draftCard = draftCard.toCard(draftCardShape),
+        editedCard = editedCard?.toCard(editedCardShape),
         source = ReflectionSource.valueOf(source),
-        stats = stats.toStats(),
+        stats = statsOf(this),
         generatedAt = generatedAt,
         updatedAt = updatedAt,
         mood = mood,
@@ -176,16 +217,30 @@ class ReflectionRepositoryAdapter(
      * jsonb → 근거 수치. **읽기는 방어적으로** 한다 — 옛 행에 없는 필드를 단정 캐스팅하면
      * 그 여행의 회고가 영구히 500 이 된다(change_log_entry 에서 같은 판단을 했다).
      * 다만 `stats` 는 비어 있을 수 없다는 것이 불변식이라(INV-U5-07) 못 읽으면 0으로 채운다.
+     * 객체가 아닌 `stats`·음수도 못 읽는 값이다(TRIP-1476) — 0 으로 채우고 남긴다. 다음 생성·경로 갱신이 다시 센다.
      */
-    private fun Map<String, Any?>.toStats() = ReflectionStats(
-        visitCount = (this["visitCount"] as? Number)?.toInt() ?: 0,
-        distanceKm = (this["distanceKm"] as? Number)?.toDouble() ?: 0.0,
-        distanceSource = (this["distanceSource"] as? String)
-            ?.let { runCatching { DistanceSource.valueOf(it) }.getOrNull() } ?: DistanceSource.VISIT_LINE,
-        photoCount = (this["photoCount"] as? Number)?.toInt() ?: 0,
-    )
+    private fun statsOf(row: ReflectionEntity): ReflectionStats {
+        val dropped = mutableListOf<String>()
+        if (row.statsShape != null && row.statsShape != "object") dropped += "stats"
+        val m = row.stats
+        fun nonNegative(key: String): Number? {
+            val n = m[key] as? Number ?: return null
+            return if (n.toDouble() >= 0.0) n else 0.also { dropped += "stats.$key" }
+        }
+        val stats = ReflectionStats(
+            visitCount = nonNegative("visitCount")?.toInt() ?: 0,
+            distanceKm = nonNegative("distanceKm")?.toDouble() ?: 0.0,
+            distanceSource = (m["distanceSource"] as? String)
+                ?.let { runCatching { DistanceSource.valueOf(it) }.getOrNull() } ?: DistanceSource.VISIT_LINE,
+            photoCount = nonNegative("photoCount")?.toInt() ?: 0,
+        )
+        if (dropped.isNotEmpty()) log.warn("회고 근거 수치 일부를 읽지 못해 0 으로 채웁니다. tripId={} date={} 칸={}", row.tripId, row.dayDate, dropped)
+        return stats
+    }
 
     companion object {
+        private val log = LoggerFactory.getLogger(ReflectionRepositoryAdapter::class.java)
+
         /** 다른 용도의 권고 잠금(생성 세션 403)과 안 겹치게 하는 이름공간. */
         private const val LOCK_NAMESPACE = 828
     }

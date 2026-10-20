@@ -259,7 +259,14 @@ class ReflectionService(
      */
     @Transactional
     fun refreshRouteStats(tripId: UUID, dayDate: LocalDate) {
-        val current = reflections.findForUpdate(tripId, dayDate) ?: return
+        // 그 하루를 못 읽으면(TRIP-1476) 건너뛴다 — 행 위에 쓰지 않으므로 수정본이 남고, 던지지 않으므로 같은 이벤트의
+        // 요약 갱신이 마저 돈다(던지면 릴레이가 재시도하다 포기해 요약까지 근사값에 남는다). 사유는 남긴다(INV-4).
+        val current = try {
+            reflections.findForUpdate(tripId, dayDate)
+        } catch (e: IllegalArgumentException) {
+            log.error("회고를 읽을 수 없어 경로 통계 갱신을 건너뜁니다 — 행은 그대로 둡니다. tripId={} date={} 사유={}", tripId, dayDate, e.message)
+            null
+        } ?: return
         val visits = archive.findDailyVisits(tripId).firstOrNull { it.date == dayDate }?.visits.orEmpty()
         val stats = statsOf(visits, poiSurfaces.findSurfaces(visits.map { it.poiId }), archive.findRouteDistances(tripId)[dayDate])
         reflections.upsert(current.copy(stats = stats))
