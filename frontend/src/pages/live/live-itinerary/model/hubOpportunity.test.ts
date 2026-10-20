@@ -23,8 +23,9 @@ import {
  * 무엇을 보장하나:
  *  - 고르기(§4.1): ① 같은 날짜에 발화 중인 날씨 위험(WEATHER ∧ 위험 — severity 없음도 위험)이 있으면 행사 카드를 뺀다
  *    ② 남은 첫 항목 1장(서버 순위 그대로) ③ 그 항목을 이 날 기기에서 숨겼으면 아무것도 그리지 않는다 — 숨긴 자리를
- *    다음 항목으로 채우지 않는다(날짜당 1장). 트리거를 아직 모르면(조회 중·실패) 행사 카드를 그리지 않는다 — 비 오는
- *    날 야외 축제를 권하지 않는 쪽으로 닫는다. 행사 카드인데 이름·마지막 날이 없으면 문장을 못 만들어 그리지 않는다.
+ *    다음 항목으로 채우지 않는다(날짜당 1장). 트리거를 아직 모르면(조회 중·실패) 아무것도 고르지 않는다 — 행사를 뺀
+ *    요즘 인기를 먼저 그렸다가 트리거가 오면 행사로 바뀌어, 누르려던 카드가 손끝에서 바뀌지 않게. 행사 카드인데
+ *    이름·마지막 날이 없거나 모르는 kind(새 서버의 새 값 — 앱은 OTA 가 없다)면 템플릿이 없어 건너뛴다.
  *  - 문구(§4.2): kind 별 고정 템플릿 한 곳. 시각·`오늘 열려요`·`N분` 이 없고 거리는 서버 `distanceLabel` 그대로,
  *    마지막 날은 `end` 에서 `M월 d일`(앞자리 0 없음). 행사 카드만 각주가 붙는다.
  *  - [넣어서 다시 짜기](§4.3): i04 를 `prefill = {장소명} 꼭 넣어서 다시 짜 줘` · `includePoiId` 로, 오늘이 아니면
@@ -137,18 +138,17 @@ describe('pickOpportunity — 날짜당 1장 고르기 (§4.1)', () => {
     ).toBe(items[0]);
   });
 
-  it('K5 트리거를 아직 모르면(조회 중·실패) 행사 카드는 그리지 않는다 — 요즘 인기는 그린다', () => {
-    const items = [event(), trending()];
-
+  it('K5 트리거를 아직 모르면(조회 중·실패) 아무것도 고르지 않는다 — 요즘 인기만 있어도', () => {
+    // 요즘 인기를 먼저 그리면 트리거가 온 순간 행사 카드로 바뀌어, 누르려던 [넣어서 다시 짜기]가 다른 장소가 된다.
     expect(
-      pickOpportunity(items, {
+      pickOpportunity([event(), trending()], {
         date: DATE,
         triggers: undefined,
         hiddenKey: null,
       })
-    ).toBe(items[1]);
+    ).toBeNull();
     expect(
-      pickOpportunity([event()], {
+      pickOpportunity([trending()], {
         date: DATE,
         triggers: undefined,
         hiddenKey: null,
@@ -221,6 +221,19 @@ describe('pickOpportunity — 날짜당 1장 고르기 (§4.1)', () => {
       ).toBe(items[1]);
     }
   );
+
+  it('K11 모르는 kind(새 서버의 새 값)는 템플릿이 없어 건너뛰고 다음 항목 — 이름·기간이 있어도', () => {
+    const unknown = event({ kind: 'POPUP' as unknown as OpportunityKind });
+    const items = [unknown, trending()];
+
+    expect(
+      pickOpportunity(items, {
+        date: DATE,
+        triggers: NO_TRIGGERS,
+        hiddenKey: null,
+      })
+    ).toBe(items[1]);
+  });
 });
 
 describe('opportunityCopy — kind 별 고정 템플릿 (§4.2)', () => {
@@ -312,17 +325,27 @@ const SEVERITIES: (TriggerSeverity | undefined)[] = [
 const blocksEvents = (t: Trigger): boolean =>
   t.kind === 'WEATHER' && t.severity !== 'CAUTION' && t.affectedDate === DATE;
 
-/** 명세에서 바로 옮긴 "그릴 수 있는 항목" — 요즘 인기는 늘, 행사는 막히지 않았고 이름·마지막 날이 있을 때만. */
-const drawable = (item: Opportunity, eventsBlocked: boolean): boolean =>
-  item.kind === 'TRENDING' ||
-  (!eventsBlocked &&
+/**
+ * 명세에서 바로 옮긴 "그릴 수 있는 항목" — 요즘 인기는 늘, 행사(행사장·행사장 가까이)는 막히지 않았고 이름·마지막 날이
+ * 있을 때만, 그 밖의 kind 는 절대(템플릿이 없다).
+ */
+const drawable = (item: Opportunity, eventsBlocked: boolean): boolean => {
+  if (item.kind === 'TRENDING') return true;
+  if (item.kind !== 'EVENT_VENUE' && item.kind !== 'EVENT_NEARBY') return false;
+  return (
+    !eventsBlocked &&
     (item.eventName ?? '').trim() !== '' &&
-    /^\d{4}-\d{2}-\d{2}$/.test(item.end ?? ''));
+    /^\d{4}-\d{2}-\d{2}$/.test(item.end ?? '')
+  );
+};
+
+/** 모르는 kind — 새 서버가 값을 늘려도 옛 앱(OTA 없음)이 받는다. */
+const UNKNOWN_KIND = 'POPUP' as unknown as OpportunityKind;
 
 const itemArb: fc.Arbitrary<Opportunity> = fc
   .record({
     key: fc.string({ minLength: 1, maxLength: 6 }),
-    kind: fc.constantFrom(...KINDS),
+    kind: fc.constantFrom(...KINDS, UNKNOWN_KIND),
     eventName: fc.constantFrom<string | null | undefined>(
       '부산 불꽃축제',
       '',
@@ -369,17 +392,18 @@ const resolveHidden = (
   typeof hidden === 'number' ? (items[hidden]?.key ?? null) : hidden;
 
 describe('pickOpportunity 성질 (§4.1)', () => {
-  it('P1 결과는 없음이거나 목록의 첫 "그릴 수 있는" 항목이고, 숨긴 첫 장은 다음으로 채우지 않는다', () => {
+  it('P1 트리거를 알면 결과는 없음이거나 목록의 첫 "그릴 수 있는" 항목이고, 숨긴 첫 장은 다음으로 채우지 않는다', () => {
     fc.assert(
       fc.property(itemsArb, triggersArb, hiddenArb, (items, triggers, h) => {
+        fc.pre(triggers !== undefined);
         const hiddenKey = resolveHidden(items, h);
         const result = pickOpportunity(items, {
           date: DATE,
           triggers,
           hiddenKey,
         });
-        const eventsBlocked =
-          triggers === undefined || triggers.some(blocksEvents);
+        // fc.pre 는 타입을 좁히지 않는다 — 위에서 undefined 를 걸렀으므로 `?? []` 는 닿지 않는다.
+        const eventsBlocked = (triggers ?? []).some(blocksEvents);
         const first = items.find((item) => drawable(item, eventsBlocked));
 
         if (first === undefined || first.key === hiddenKey) {
@@ -394,8 +418,8 @@ describe('pickOpportunity 성질 (§4.1)', () => {
           [[event(), trending()], [trigger()], null],
           // 첫 장 숨김 → 없음(다음 장으로 안 채움).
           [[event(), trending()], [], 0],
-          // 트리거 모름 + 행사만 → 없음.
-          [[event()], undefined, null],
+          // 모르는 kind 첫 장 → 다음 항목.
+          [[event({ kind: UNKNOWN_KIND }), trending()], [], null],
           // 주의 날씨 + 행사 → 행사 그대로.
           [[event(), trending()], [trigger({ severity: 'CAUTION' })], null],
         ],
@@ -403,7 +427,7 @@ describe('pickOpportunity 성질 (§4.1)', () => {
     );
   });
 
-  it('P2 같은 날 날씨 위험이 있거나 트리거를 모르면 결과는 없음 또는 요즘 인기', () => {
+  it('P2 트리거를 모르면 늘 없음, 같은 날 날씨 위험이면 없음 또는 요즘 인기', () => {
     fc.assert(
       fc.property(itemsArb, triggersArb, hiddenArb, (items, triggers, h) => {
         fc.pre(triggers === undefined || triggers.some(blocksEvents));
@@ -413,9 +437,18 @@ describe('pickOpportunity 성질 (§4.1)', () => {
           hiddenKey: resolveHidden(items, h),
         });
 
-        expect(result === null || result.kind === 'TRENDING').toBe(true);
+        if (triggers === undefined) {
+          expect(result).toBeNull();
+        } else {
+          expect(result === null || result.kind === 'TRENDING').toBe(true);
+        }
       }),
-      { examples: [[[event(), trending()], [trigger()], null]] }
+      {
+        examples: [
+          [[event(), trending()], [trigger()], null],
+          [[trending()], undefined, null],
+        ],
+      }
     );
   });
 

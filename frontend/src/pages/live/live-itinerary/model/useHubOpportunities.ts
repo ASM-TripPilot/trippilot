@@ -48,7 +48,7 @@ export function useHubOpportunities({
   today: string;
   /** 허브 active 얼굴일 때만. */
   enabled: boolean;
-  /** 발화 중 트리거 — 아직 모르면 undefined(행사 카드를 그리지 않는다). */
+  /** 발화 중 트리거 — 아직 모르면 undefined(카드를 고르지 않는다 — 고른 뒤 바뀌지 않게). */
   triggers: readonly Trigger[] | undefined;
 }): HubOpportunity | null {
   const query = useGetTripsTripIdOpportunities(

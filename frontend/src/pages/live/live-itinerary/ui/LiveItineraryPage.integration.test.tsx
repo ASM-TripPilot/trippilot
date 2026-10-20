@@ -6375,6 +6375,37 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     );
   });
 
+  it('O11 트리거 목록이 오기 전엔 기회가 와도 카드를 그리지 않는다 — 오면 그때 1장(요즘 인기를 먼저 그렸다 바꾸지 않는다)', async () => {
+    // 준비 — 기회는 바로 오고 트리거 목록은 테스트가 열 때까지 붙잡는다. 한 번의 server.use 안에서는 **앞에 건**
+    // 핸들러가 이긴다(목록 앞에 끼워 넣고 앞에서부터 맞춘다) — 붙잡는 핸들러를 liveHubHandlers 보다 먼저 둔다.
+    const triggersGate = createGate();
+    server.use(
+      http.get(`${BASE}/trips/:tripId/triggers`, async () => {
+        await triggersGate.opened;
+        return HttpResponse.json({ triggers: [] });
+      }),
+      ...liveHubHandlers({ itinerary: itinerary() }),
+      opportunitiesHandler({ [TODAY]: [VENUE, TRENDING] })
+    );
+    render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+    await waitFor(() => expect(askedDates).toEqual([TODAY]));
+    await settle();
+
+    // 단언 1 — 기회는 왔지만 트리거를 몰라 아무 카드도 없다(요즘 인기도).
+    expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
+    expect(screen.queryByTestId(CARD)).toBeNull();
+
+    // 실행 — 트리거 목록(위험 없음)이 온다.
+    triggersGate.release();
+
+    // 단언 2 — 서버 순위 첫 장(행사)이 그때 선다.
+    await waitFor(() =>
+      expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
+        exact: true,
+      })
+    );
+  });
+
   it('O10 여행 중 허브가 아니면(일정 404) 묻지 않는다', async () => {
     server.use(
       http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(liveTrip())),
