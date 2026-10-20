@@ -156,6 +156,7 @@
 - `src/__tests__/eslintReleaseRules.test.ts`  →  (export 없음)
 - `src/__tests__/generatingEntryStack.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/generatingRouteModePassthrough.test.tsx`  →  (export 없음)
+- `src/__tests__/itineraryEditAddPlaceFlow.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/itineraryEditRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/liveHubRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/locationAutomationBuildConfig.test.ts`  →  (export 없음)

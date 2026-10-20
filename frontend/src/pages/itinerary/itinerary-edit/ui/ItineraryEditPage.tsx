@@ -141,6 +141,7 @@ export function ItineraryEditPage({
 
   const {
     seed,
+    seedUnlessDirty,
     deleteSlot,
     reorderSlots,
     adjustSlotTime,
@@ -151,8 +152,8 @@ export function ItineraryEditPage({
 
   useEffect(() => {
     const loaded = itinerary.data?.days;
-    if (loaded !== undefined) seed(loaded);
-  }, [itinerary.data, seed]);
+    if (loaded !== undefined) seedUnlessDirty(loaded);
+  }, [itinerary.data, seedUnlessDirty]);
 
   // 진입 칸은 매 렌더 스토어 days 에서 다시 찾는다 — 초기값에 굳히면 로딩(days=[])·옛 드래프트 순간의
   // 칸으로 고정된다(LiveItineraryPage 선례). 못 찾으면 -1 → 0(1일차). 칩 선택이 이긴다.
@@ -203,6 +204,8 @@ export function ItineraryEditPage({
         onSuccess: (data) => {
           // 최신 Itinerary(서버 재검증 결과)를 조회 캐시에 직접 써넣는다 — 재조회 0회. 시드 useEffect 가
           // itinerary.data 참조 변화로 다시 돌아 스토어를 재-시드하고, 새 hasViolation 배지가 지속된다.
+          // 시드 effect 는 dirty 초안을 건너뛰므로(TRIP-1498) 자기 저장 응답은 여기서 먼저 시드한다(dirty 도 내려간다).
+          seed(data.days);
           queryClient.setQueryData(
             getGetTripsTripIdItineraryQueryKey(tripId),
             data
