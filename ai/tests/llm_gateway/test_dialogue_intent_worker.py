@@ -212,7 +212,12 @@ def test_prompt_render_is_deterministic() -> None:
 
 def test_intents_variable_is_the_argument_table_schema() -> None:
     """`$intents` 는 intent.yaml 과 **같은 함수**에서 나온다 — 인자표 한 표 파생(드리프트 차단)."""
-    assert _vars()["intents"] == tool_specs_json(DIALOGUE_INTENTS)
+    assert _vars()["intents"] == tool_specs_json(DIALOGUE_INTENTS, dialogue=True)
+    # 도우미만 묻는 인자(GET_WEATHER.region) — 도우미 렌더엔 있고 라우터 렌더(intent.yaml)엔 없다. ("region" 자체는
+    # TRIP_SUMMARY 등 다른 의도에도 있어 문자열 전체로 재지 않는다.)
+    weather = {t["name"]: t for t in json.loads(_vars()["intents"])}["GET_WEATHER"]
+    router_weather = {t["name"]: t for t in json.loads(tool_specs_json())}["GET_WEATHER"]
+    assert "region" in weather["parameters"]["properties"] and "region" not in router_weather["parameters"]["properties"]
 
 
 def test_vars_are_all_str_with_none_markers_when_empty() -> None:

@@ -85,6 +85,10 @@ class ArgumentSpec:
     # `False` 다 — `lands_in is None`(칸이 없다)과 이유가 다르므로 따로 적는다.
     # 지금 해당하는 것은 `EDIT_SCHEDULE.op` 하나다(그 행의 근거 참조).
     asked_by_router: bool = True
+    # **도우미 분류·계획 도구에서만** 묻는 인자. 3단 라우터 프롬프트(intent.yaml)의 `$intents` 는 바이트 무변경이어야
+    # 해서(BR-AO-14 — 재생 기록 61건의 키) 거기엔 싣지 않는다. 게이트 허용 키(`asked_argument_names`)에는 들어간다 —
+    # 묻지 않은 프롬프트에서 모델이 그 키를 낼 일이 없고, 내더라도 핸들러가 읽을 뿐 해가 없다.
+    dialogue_only: bool = False
 
     def asked(self) -> bool:
         """3차 프롬프트·도구 스키마에 실을 인자인가.
@@ -269,8 +273,9 @@ ARGUMENT_TABLE: dict[Intent, tuple[ArgumentSpec, ...]] = {
     Intent.GET_WEATHER: (
         _spec("date", (_D,), False, "어느 날 날씨인지", lands_in="WeatherProvider params.days"),
         _spec("region", (_RG,), False,
-              "어디 날씨인지. 처리자 인자는 좌표라 지역명→좌표 변환이 필요한데 그 경로가 없다",
-              lands_in=None),
+              "어디 날씨인지. 지역 중심표(`region_centers.region_center`)로 좌표를 삼는다 — 표에 없는 지역은 "
+              "모른다고 답한다. 도우미 분류·계획 도구에서만 묻는다(`dialogue_only`) — 3단 라우터 `$intents` 무변경",
+              lands_in="region_centers.region_center → WeatherProvider params.anchor", dialogue_only=True),
         _spec("aspect", (_FT,), False,
               "비·기온·바람·미세먼지 중 무엇을 묻는지. 처리자가 줄 수 있는 값은 강수확률 하나라 "
               "이게 없으면 '답할 수 없는 질문'과 '답한 질문'이 구분되지 않는다",
@@ -415,8 +420,11 @@ def _schema_for(spec: ArgumentSpec) -> dict:
     return base
 
 
-def tool_specs(intents: frozenset[Intent] = ROUTABLE_INTENTS) -> tuple[dict, ...]:
+def tool_specs(intents: frozenset[Intent] = ROUTABLE_INTENTS, *, dialogue: bool = False) -> tuple[dict, ...]:
     """인자표 → 도구 13종의 JSON Schema. **3차 프롬프트가 싣는 것도 이것이다.**
+
+    `dialogue=True`(도우미 분류 `$intents`·계획 `$tools`)일 때만 `dialogue_only` 인자를 싣는다 — 기본(3단 라우터
+    intent.yaml)은 그 인자를 빼서 바이트가 그대로다(BR-AO-14).
 
     **손으로 적은 스키마 파일을 두지 않는다** — 표가 정본이고 이건 순수 변환이다.
     `OUT_OF_SCOPE` 는 싣지 않는다: 3차는 "이 중 하나를 골라라" 이고, 고를 수 없는 라벨을
@@ -431,7 +439,7 @@ def tool_specs(intents: frozenset[Intent] = ROUTABLE_INTENTS) -> tuple[dict, ...
     """
     out = []
     for intent in sorted(intents, key=lambda i: i.value):
-        specs = asked_specs_of(intent)
+        specs = tuple(s for s in asked_specs_of(intent) if dialogue or not s.dialogue_only)
         out.append({
             "name": intent.value,
             "description": f"{intent.value} 의도로 처리한다",
@@ -446,5 +454,5 @@ def tool_specs(intents: frozenset[Intent] = ROUTABLE_INTENTS) -> tuple[dict, ...
     return tuple(out)
 
 
-def tool_specs_json(intents: frozenset[Intent] = ROUTABLE_INTENTS) -> str:
-    return json.dumps(list(tool_specs(intents)), ensure_ascii=False, sort_keys=True)
+def tool_specs_json(intents: frozenset[Intent] = ROUTABLE_INTENTS, *, dialogue: bool = False) -> str:
+    return json.dumps(list(tool_specs(intents, dialogue=dialogue)), ensure_ascii=False, sort_keys=True)

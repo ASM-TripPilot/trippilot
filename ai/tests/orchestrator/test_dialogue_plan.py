@@ -283,7 +283,7 @@ def test_two_tools_fan_out_once_with_prefixed_task_names_and_merge_into_the_cand
     fanout = [(e.from_mode, e.to_mode) for e in to._fallbacks(b.trace) if e.stage == "fanout"]
     assert fanout == [("0.weather", "UNAVAILABLE")]  # 분류 단계의 null 이벤트는 계획이 답한 턴에도 남는다(2″ 선례)
     (answer_req,) = [r for r in b.llm.requests if r.prompt_ref.feature == "DIALOGUE_ANSWER"]
-    assert '"also"' in answer_req.prompt and "날씨 미확인" in answer_req.prompt  # 다른 부분의 사실(여기선 미확인 노트)이 also 로
+    assert '"also"' in answer_req.prompt.rsplit("[확인된 사실]", 1)[1] and "날씨 미확인" in answer_req.prompt  # 다른 부분의 사실(여기선 미확인 노트)이 also 로
 
 
 def test_the_card_part_wins_whatever_the_plan_order_and_also_carries_the_other_facts() -> None:
@@ -291,7 +291,7 @@ def test_the_card_part_wins_whatever_the_plan_order_and_also_carries_the_other_f
                         answer=_answer_json("오늘은 비 올 확률이 80%예요. 감천문화마을은 어떠세요?"))
     assert out.answer.kind is AnswerKind.CANDIDATES and out.answer.text.startswith("오늘은")
     (answer_req,) = [r for r in b.llm.requests if r.prompt_ref.feature == "DIALOGUE_ANSWER"]
-    assert "오늘 최대 강수확률" in answer_req.prompt and "80%" in answer_req.prompt
+    assert "오늘 최대 강수확률" in answer_req.prompt.rsplit("[확인된 사실]", 1)[1] and "80%" in answer_req.prompt  # 예시에도 같은 라벨
 
 
 # 3 — 계획 답은 목록 밖 장소 검사를 강제한다
@@ -389,7 +389,7 @@ def test_next_slot_and_hours_are_not_merged_because_the_gate_keeps_only_the_firs
     out, b = _plan_turn(_plan_json(("GET_NEXT_SLOT", {}), ("GET_POI_INFO", {"place": "해녀의집"})), answer=_answer_json(text))
     assert out.outcome == "ANSWER" and out.reason.endswith("plan:GET_NEXT_SLOT")
     (answer_req,) = [r for r in b.llm.requests if r.prompt_ref.feature == "DIALOGUE_ANSWER"]
-    assert '"also"' not in answer_req.prompt
+    assert '"also"' not in answer_req.prompt.rsplit("[확인된 사실]", 1)[1]  # 사실 칸만 — 답변 예시(정적 부분)에도 also 가 있다
     (drop,) = [e for e in b.trace.of_type(GateDropEvent) if e.feature == "DIALOGUE_PLAN"]
     assert drop.dropped_count == 1
     assert out.answer.text != text and any(e.reason == "time_not_in_facts" for e in to._fallbacks(b.trace))

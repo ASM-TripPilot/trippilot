@@ -576,6 +576,17 @@ def test_weather_today_asked_on_a_day_without_slots_uses_the_region_center() -> 
     assert facts.payload["rows"] == [{"label": "오늘 최대 강수확률", "value": "20%"}]
 
 
+def test_weather_region_argument_wins_over_the_itinerary_anchor() -> None:
+    """"부산 날씨 어때" — 일정이 제주여도 말한 지역 중심으로 묻고 제목도 그 지역. 표에 없는 지역은 일정 지역으로 바꿔 답하지
+    않는다(EMPTY) — "화성시 날씨" 에 제주 값을 내면 틀린 답이다."""
+    poi_info, weather = _PoiInfo(), _Weather(pop=70)
+    facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(arguments={"region": "부산"}, ports=HandlerPorts(poi_info=poi_info, weather=weather)))
+    assert poi_info.calls == [] and weather.calls[0]["anchor"] == region_center("부산")[1] and weather.calls[0]["days"] == (_D2,)
+    assert facts.payload["title"] == "부산 날씨" and facts.detail["anchor"] == "부산"
+    unknown = _run(HANDLERS[Intent.GET_WEATHER], _ctx(arguments={"region": "화성시"}, ports=HandlerPorts(poi_info=_PoiInfo(), weather=_Weather())))
+    assert unknown.status is FactStatus.EMPTY
+
+
 def test_weather_before_the_trip_without_slots_asks_about_the_first_day() -> None:
     """날짜를 안 말했고 슬롯도 없는 여행 전 — 슬롯 규칙("앞으로 올 첫 슬롯")과 같은 날인 여행 첫날."""
     before = datetime(2026, 10, 10, 9, 0, tzinfo=_KST)
@@ -705,6 +716,7 @@ def test_poi_info_card_rows_and_open_place_action() -> None:
         {"label": "분류", "value": _FOOD_KO}, {"label": "영업시간", "value": "09:00~18:00"}, {"label": "입장료", "value": "5,000원"}]}
     assert [(a.type, a.label, a.params) for a in facts.next_actions] == [("OPEN_PLACE", "장소 보기", {"poiId": _U["해녀의집"]})]
     assert facts.status is FactStatus.OK and facts.template_text == "장소 정보를 찾아봤어요."
+    assert facts.to_prompt_dict()["rows"] == facts.payload["rows"]  # 아는 입장료는 프롬프트에도 간다
     (place,) = facts.places
     assert (place.poi_id, place.hours_label, place.fee) == (_U["해녀의집"], "09:00~18:00", 5000)
 
@@ -735,6 +747,8 @@ def test_poi_info_lookup_failure_still_shows_the_snapshot_card_as_partial(ports:
     assert facts.status is FactStatus.PARTIAL and facts.kind is AnswerKind.INFO
     assert facts.payload["rows"] == [{"label": "분류", "value": _FOOD_KO}, {"label": "영업시간", "value": "미확인"}, {"label": "입장료", "value": "미확인"}]
     assert facts.notes and facts.template_text == "장소 정보를 찾아봤어요."
+    # 모르는 입장료는 카드에만 — 답변 프롬프트에 실으면 카페 답마다 "입장료도 미확인이에요"가 붙는다(답변 0.3.2)
+    assert facts.to_prompt_dict()["rows"] == [{"label": "분류", "value": _FOOD_KO}, {"label": "영업시간", "value": "미확인"}]
 
 
 @pytest.mark.parametrize("arguments", [{"place": "경복궁"}, {"place": "카페"}, {}])
