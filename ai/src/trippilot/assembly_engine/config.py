@@ -110,6 +110,12 @@ RAIN_INDOOR: frozenset[PoiCategory] = frozenset(
 END_NEAR_WEIGHT = 0.05
 
 
+# 대중교통 여행에서 걸어가는 구간의 절대 상한(도로 km) — 이 이상은 어떤 설정으로도 걷지 않는다(2026-10-19 사용자).
+WALK_HARD_MAX_KM = 1.1
+# 액티비티 취향 사용자의 도보 상한(도로 km) — 기본 700m 보다 조금 더 걷게 한다(2026-10-19 사용자). 1.1 미만.
+ACTIVE_WALK_MAX_KM = 1.0
+
+
 @dataclass(frozen=True, slots=True)
 class AssemblyConfig:
     # 일자당 **벽시계 백스톱**(TRIP-1176). 탐색을 멈추는 것은 아래 결정론 한도이고, 이것이
@@ -137,11 +143,12 @@ class AssemblyConfig:
     local_search_min_remaining_ms: int = 3000
     buffer_min: int = 15                # G106 어셈블리 내부 버퍼
     detour_factor: float = 1.3          # 직선거리 우회계수
-    # 대중교통 요청이라도 이 거리(직선, km) 이하는 걷는다 — 계산상 대중교통이 빨라도.
-    # 정류장까지 걸어가 기다리고 갈아타는 수고는 buffer_min 하나로 다 담기지 않고,
-    # 사람은 600m 를 버스로 가지 않는다. 속도 상수가 바뀌어도 이 바닥은 유지된다.
-    # 2026-10-19 사용자 결정 0.6 → 0.7: "700m 이하면 그냥 걸어가게, 대중교통이랑 도보랑 섞는 거지".
-    # ODsay 가 -98 로 거절하는 거리(adapters/odsay `_MIN_KM`)와 같아서, 실측을 못 받는 구간은 전부 걷는다.
+    # 대중교통 요청이라도 이 거리(**도로**, km — 화면에 "약 N km" 로 보이는 값) 이하는 걷고, 넘으면 대중교통이다.
+    # 계산상 대중교통이 빨라도 걷고(사람은 600m 를 버스로 가지 않는다), 계산상 도보가 빨라도 넘으면 타고 간다.
+    # 2026-10-19 사용자 결정: "700 이하만 도보, 나머지는 다 대중교통. 1km 이상이 도보인 건 말이 안 된다" —
+    # 종전 기준은 직선 700m(#1414)라 도로 0.9km 가 "도보"로 보였고, "도보가 빠르면 도보" 규칙도 있었다.
+    # 활동형 사용자는 올려도 되지만 **1.1km 이상은 도보 금지**(`WALK_HARD_MAX_KM`, 아래 검증).
+    # ODsay 는 직선 700m 이내를 -98 로 거절한다 — 그 사이(도로 0.7~0.91km)는 추정기의 대중교통 추정이 맡는다.
     public_walk_max_km: float = 0.7
     speeds_kmph: dict[TransportMode, float] = field(default_factory=_default_speeds)
     # 긴 구간은 앞 `long_leg_km` 만 도시 속도, 나머지는 `long_speeds_kmph` 로 잰다(구간별 합 — 경계에서
@@ -240,8 +247,8 @@ class AssemblyConfig:
             raise ValueError("or_tools_det_limit 양수 필요")
         if self.detour_factor <= 0:
             raise ValueError("detour_factor 양수 필요")
-        if self.public_walk_max_km < 0:
-            raise ValueError("public_walk_max_km 음수 불가")
+        if not 0 <= self.public_walk_max_km < WALK_HARD_MAX_KM:
+            raise ValueError(f"public_walk_max_km 는 0 이상 {WALK_HARD_MAX_KM}km 미만: {self.public_walk_max_km}")
         if self.long_leg_km < 0:
             raise ValueError("long_leg_km 음수 불가")
         if any(self.long_speeds_kmph.get(m, 0) <= 0 for m in TransportMode):

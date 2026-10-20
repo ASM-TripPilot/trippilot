@@ -121,7 +121,7 @@ from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
 from trippilot.assembly_engine.repair import RepairChange
 from trippilot.assembly_engine.scorer import build_rule_score
-from trippilot.assembly_engine.travel import WALKED_SOURCE, TravelEstimator, haversine_km
+from trippilot.assembly_engine.travel import WALKED_SOURCE, TravelEstimator, WalkFirst, haversine_km
 from trippilot.domain.common import (
     BUDGET_TOKENS,
     PACE_TOKENS,
@@ -499,6 +499,8 @@ def _domain_generate_request(
         travel_weight=_GENERATE_ROUTE_WEIGHT,
         # 앵커는 숙소 — 하루를 오가는 곳이지 붙어 있어야 할 곳이 아니다(2026-10-19 사용자). 재계획은 끈다.
         ignore_anchor_distance=True,
+        # 저녁 8시 반 넘어 만든 오늘은 취향으로만(야경·나이트라이프, 없으면 비움 — 2026-10-19 사용자). 재계획은 끈다.
+        late_night_by_taste=True,
         persona_ref=ResourceRef(kind="persona", ref_id=request.trip_id, owner_id=owner),
         principal=Principal(user_id=owner),
         seed=_seed_from(request.trip_id),
@@ -1039,12 +1041,20 @@ class ChainAssemblyProvider:
         self._trace = trace
         self._cfg = config
 
-    def for_pool(self, poi_index: Mapping[PoiId, Poi]) -> HybridAssemblyFacade:
+    def walker(self, walk_max_km: float | None) -> TravelEstimator:
+        """요청별 도보 상한의 추정기 — None 이면 공용 추정기(설정 기본 700m). 조립·화면 거리가 같이 쓴다."""
+        if walk_max_km is None:
+            return self._est
+        return TravelEstimator(replace(self._cfg, public_walk_max_km=walk_max_km))
+
+    def for_pool(self, poi_index: Mapping[PoiId, Poi],
+                 walk_max_km: float | None = None) -> HybridAssemblyFacade:
+        est = self.walker(walk_max_km)
         stages = (
-            OrToolsAssembler(poi_index, self._est, self._cfg),
-            RuleFallbackAssembler(poi_index, self._est, self._cfg),
+            OrToolsAssembler(poi_index, est, self._cfg),
+            RuleFallbackAssembler(poi_index, est, self._cfg),
         )
-        return HybridAssemblyFacade(stages, poi_index, self._est, self._clock, self._trace)
+        return HybridAssemblyFacade(stages, poi_index, est, self._clock, self._trace)
 
 
 # ── 경계 어댑터 (api/protocols.ItineraryOrchestrator 충족) ───────────
@@ -1950,11 +1960,12 @@ class WiredItineraryOrchestrator:
         solution = outcome.solution
         coords = self._coords_for(solution, outcome.slot_alternatives)
         scoring_mode, degradations = _scoring_signal(outcome)
+        walk = self._walk_first(outcome.walk_max_km)
         (distance_ranges, slot_alternatives), _ = self._render_distances(
             lambda port: (
-                self._distances_for(request, solution, coords, port),
+                self._distances_for(request, solution, coords, walk(port)),
                 self._alternatives_for(
-                    request, solution, outcome.slot_alternatives, coords, port),
+                    request, solution, outcome.slot_alternatives, coords, walk(port)),
             ),
             meta, entered_ms,
         )
@@ -1997,6 +2008,13 @@ class WiredItineraryOrchestrator:
         return _distance_ranges(
             solution, anchors, coords, port, _transport_from(request)
         )
+
+    def _walk_first(self, walk_max_km: float | None) -> Callable[[TravelPort], TravelPort]:
+        """조립과 같은 도보 상한으로 화면 거리를 재는 감싸개 — 상한이 기본이면 그대로."""
+        if walk_max_km is None:
+            return lambda port: port
+        walker = self._assembly_provider.walker(walk_max_km)
+        return lambda port: WalkFirst(port, walker)
 
     def _render_distances(
         self, render: Callable[[TravelPort], tuple], meta: schemas.RequestMetaSchema,
@@ -3494,10 +3512,11 @@ class WiredItineraryOrchestrator:
         # 두 순회 모두 1차 패스로 받아 적는다 — 좌표 미상 전파 규칙이 달라 구간 집합이
         # 다르다(`_total_distance_km` 은 직전 유효점을 잇는다). 한 표를 같이 쓰면 같은
         # 구간을 두 번 실측하지 않는다 (TRIP-1179).
+        walk = self._walk_first(outcome.walk_max_km)
         (distance_ranges, total_km), report = self._render_distances(
             lambda port: (
-                _distance_ranges(solution, anchors, coords, port, transport),
-                self._total_distance_km(solution, anchors, coords, transport, port),
+                _distance_ranges(solution, anchors, coords, walk(port), transport),
+                self._total_distance_km(solution, anchors, coords, transport, walk(port)),
             ),
             request.request_meta, started_ms,
         )

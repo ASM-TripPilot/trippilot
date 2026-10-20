@@ -48,12 +48,10 @@ class TravelEstimator:
         source = "haversine_x_detour"
 
         if mode is TransportMode.PUBLIC:
-            # 걸어갈 땐 정류장 대기·환승이 없으므로 buffer 를 빼고 잰다.
-            on_foot = self._minutes(road, TransportMode.WALK)
-            # ① 700m 이하는 계산상 대중교통이 빨라도 걷는다 (config 주석 참조)
-            # ② 그보다 멀어도 도보가 빠르면 도보 — 사람이 하는 선택
-            if straight <= self._cfg.public_walk_max_km or on_foot < minutes:
-                minutes, source = on_foot, WALKED_SOURCE
+            # 도로 `public_walk_max_km` 이하만 걷는다 — 계산상 대중교통이 빨라도 걷고, 그 밖은 계산상 도보가
+            # 빨라도 대중교통이다(config 주석). 걸어갈 땐 정류장 대기·환승이 없으므로 buffer 를 빼고 잰다.
+            if road <= self._cfg.public_walk_max_km:
+                minutes, source = self._minutes(road, TransportMode.WALK), WALKED_SOURCE
 
         return TravelEstimate(
             distance_km_range=(round(straight, 3), round(road, 3)),
@@ -67,3 +65,23 @@ class TravelEstimator:
         hours = (near / self._cfg.speeds_kmph[mode]
                  + (road_km - near) / self._cfg.long_speeds_kmph[mode])
         return int(round(hours * 60 * self._cfg.safety[mode]))
+
+
+class WalkFirst:
+    """TravelPort — 도보 상한 안의 대중교통 구간은 걷기로 잰다(액티비티 취향 상향, 2026-10-19).
+
+    조립은 요청별 추정기(`ChainAssemblyProvider.walker`)로 그 구간을 걸었다고 계산한다 — 화면 거리도 같은
+    판정이어야 시각과 "도보·대중교통" 이름표가 어긋나지 않는다. 걷는 구간은 실경로(ODsay)를 부르지 않는다.
+    """
+
+    def __init__(self, port, walker: TravelEstimator) -> None:
+        self._port = port
+        self._walker = walker
+
+    def estimate(self, from_: GeoPoint, to: GeoPoint, mode: TransportMode) -> TravelEstimate:
+        if mode is TransportMode.PUBLIC:
+            walked = self._walker.estimate(from_, to, mode)
+            if walked.source == WALKED_SOURCE:
+                return walked
+        return self._port.estimate(from_, to, mode)
+

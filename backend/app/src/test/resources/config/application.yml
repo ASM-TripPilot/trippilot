@@ -73,3 +73,9 @@ trippilot:
     situation-sweep:
       cron: "-"
       evening-cron: "-"
+  # 기회 카드 AI 경계(DEC-SA-6)는 기본 컨텍스트에서 끈다 — 셸에 AI_OPPORTUNITY_MODE=http 를 내보낸 채 돌려도 IT 가 AI 를 부르지
+  # 않게(CI 외부 호출 0). 켠 모드는 `OpportunityHttpModeIT` 가 로컬 대역 상대로 띄운다(@DynamicPropertySource 가 이 값을 이긴다).
+  # 따옴표 필수 — 맨 off 는 YAML 1.1 에서 불리언 false 가 되어 모드 검사에 걸린다.
+  ai:
+    opportunity:
+      mode: "off"

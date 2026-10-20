@@ -85,7 +85,7 @@ def test_600m_이하는_계산상_대중교통이_빨라도_걷는다() -> None:
     cfg = AssemblyConfig()
     # 도보를 일부러 느리게 만들어 min() 만으로는 대중교통이 이기게 한다
     slow = AssemblyConfig(speeds_kmph={**cfg.speeds_kmph, TransportMode.WALK: 0.5})
-    km = cfg.public_walk_max_km - 0.05
+    km = (cfg.public_walk_max_km - 0.05) / cfg.detour_factor   # 기준은 도로 km (2026-10-19)
     e = TravelEstimator(slow).estimate(
         GeoPoint(35.0, 129.0), GeoPoint(35.0 + km / 111.19, 129.0), TransportMode.PUBLIC)
     assert e.source == "haversine_x_detour(walk)"
@@ -94,7 +94,7 @@ def test_600m_이하는_계산상_대중교통이_빨라도_걷는다() -> None:
 def test_600m_바로_위는_빠른_쪽을_따른다() -> None:
     cfg = AssemblyConfig()
     slow = AssemblyConfig(speeds_kmph={**cfg.speeds_kmph, TransportMode.WALK: 0.5})
-    km = cfg.public_walk_max_km + 0.05
+    km = (cfg.public_walk_max_km + 0.05) / cfg.detour_factor
     e = TravelEstimator(slow).estimate(
         GeoPoint(35.0, 129.0), GeoPoint(35.0 + km / 111.19, 129.0), TransportMode.PUBLIC)
     assert e.source == "haversine_x_detour"   # 도보가 느리므로 대중교통

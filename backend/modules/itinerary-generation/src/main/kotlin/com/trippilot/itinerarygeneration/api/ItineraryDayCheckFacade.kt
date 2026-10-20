@@ -34,8 +34,8 @@ data class DayCheck(val judged: Boolean, val slots: List<CheckedSlot>)
  *
  * @property slotKey 경계 키 `"{date}#{poiId}"`(BR-U2-04).
  * @property nameKo 화면이 쓰는 이름 — 확정 슬롯은 동결값이다(INV-U1-03). 정본·동결본 모두 없으면 null.
- * @property reasonCode HC1 하위 코드(`CLOSED_DAY`·`OUT_OF_HOURS`·`HOLIDAY`). AI 가 싣지 않으면 null —
- *   지금 경계에는 이 필드가 없어 늘 null 이다(하위 코드는 PR-H1 이 와이어와 함께 연다).
+ * @property reasonCode HC1 하위 코드(`CLOSED_DAY`·`OUT_OF_HOURS`·`HOLIDAY`) — 그 날 AI 검증 위반의 `reason_code` 다.
+ *   AI 가 싣지 않으면 null 이고, `HOLIDAY` 는 AI 가 `HOLIDAY_CLOSURE_MODE=on` 일 때만 낸다.
  * @property hoursWarnedBefore 그 슬롯이 이미 영업시간 위반 표시를 달고 있었다 — 편집 때 사용자가 본 경고다.
  */
 data class CheckedSlot(
