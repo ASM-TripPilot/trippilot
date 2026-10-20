@@ -39,6 +39,7 @@ LLM 경로는 게이트 통과분을 **한 번 더** `pool.contains`로 교차�
 from __future__ import annotations
 
 import hashlib
+import statistics
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from typing import Collection, Iterable, Mapping, Protocol, Sequence
@@ -59,6 +60,7 @@ from trippilot.agents.schedule.outcome import (
 )
 from trippilot.assembly_engine.config import ACTIVE_WALK_MAX_KM, AssemblyConfig
 from trippilot.assembly_engine.constraints import open_hours_ok
+from trippilot.assembly_engine.day_focus import pick_day_focus
 from trippilot.assembly_engine.facade import AssemblyConflictError
 from trippilot.assembly_engine.fallback_assembler import explain_unplaced
 from trippilot.assembly_engine.scorer import (
@@ -202,6 +204,8 @@ class GenerateItineraryRequest:
     ignore_anchor_distance: bool = False
     # 늦은 시각의 하루는 취향으로 고른다(생성 — `late_night_candidates`). 재계획은 지시가 정하므로 끈다.
     late_night_by_taste: bool = False
+    # 여러 날을 날마다 다른 동네로(생성 — `day_focus`). 재계획은 하루라 의미가 없다.
+    spread_days: bool = False
     # 거절 이력 (TRIP-964) — 백엔드가 여행 단위로 누적해 싣는다. `pace`·지시와 같은 길이다
     # (Provider 수집물이 아니라 요청에 실려 오는 값). generate·replan 양쪽에 실린다 —
     # 다시 짜는 경로가 replan 이고, 처음부터 다시 만드는 경로가 generate 이기 때문이다.
@@ -589,6 +593,12 @@ class ScheduleAgent:
             self._observe(trace_id, now, "taste", "late_night", "late_night",
                           f"late_night_by_taste:{len(candidates)}")
 
+        # ③″ 날마다 다른 동네(생성) — 점수가 다 정해진 뒤라야 취향이 실린 서열로 고른다. 지터 전 원점수다.
+        day_focus = pick_day_focus(candidates, index, request.days) if request.spread_days else {}
+        if day_focus:
+            self._observe(trace_id, now, "area", "day_focus", "day_focus", "day_focus:" + ",".join(
+                f"{d:%m-%d}={c.lat:.4f}/{c.lng:.4f}" for d, c in day_focus.items()))
+
         # ③ ItineraryProblem 조립 — 후보는 풀에서 나온 것만 (INV-1).
         #    날씨(TRIP-383)·행사 보너스(TRIP-421)는 오케스트레이터가 패킷을 소화해
         #    넘긴 값 — 어셈블리 소프트 항으로만 들어간다 (None = 무보정).
@@ -621,6 +631,7 @@ class ScheduleAgent:
             required_in_order=request.required_in_order,
             ignore_anchor_distance=request.ignore_anchor_distance,
             holidays=request.holidays,
+            day_focus=day_focus or None,
         )
 
         # ④ 어셈블리 solve — 잔여 **전부**를 받는다 (고정 슬라이스 아님, TRIP-376).
@@ -803,10 +814,11 @@ class ScheduleAgent:
             # 스스로의 결정이라 여기서 관측한다 (침묵 금지).
             self._observe(trace_id, now, "llm", "llm_score", "llm_score",
                           f"rule_backfill:{len(missing)}")
+            rule = self._rule_scores(request, pool, persona)
+            unsent = pool.poi_ids - llm_pool.poi_ids  # 상한 밖이라 LLM 에 안 보낸 곳 — 척도를 옮긴다
             scored = scored + tuple(
-                sp for sp in self._rule_scores(request, pool, persona)
-                if sp.poi_id in missing
-            )
+                sp for sp in rule if sp.poi_id in missing - unsent  # 청크 실패분 — 경계 위 동료라 그대로
+            ) + backfill_on_llm_scale(scored, rule, missing & unsent, sent=llm_pool.poi_ids)
         return scored, ScoringMode.LLM
 
     def _rule_scores(
@@ -1563,6 +1575,27 @@ def apply_directives(
     return tuple(adjusted(c) for c in candidates)
 
 
+def backfill_on_llm_scale(
+    llm: Sequence[ScoredPoi], rule: Sequence[ScoredPoi], unsent: Collection[PoiId],
+    *, sent: Collection[PoiId],
+) -> tuple[ScoredPoi, ...]:
+    """풀 상한 밖이라 LLM 에 **안 보낸** 후보의 규칙 점수를 LLM 척도로 옮긴다 (rule_backfill, TRIP-378).
+
+    규칙 점수는 0~1 이 아니다(명소 1.0 + 인기·입장료·취향 가산, 1.3 까지). LLM 점수(0~1)와 그대로 섞으면 LLM 이
+    보지도 않은 곳이 LLM 이 취향에 맞다고 본 곳을 이긴다 — 서울 2박3일(풀 1,319 · LLM 250)에서 카페 취향인데 상위
+    150 에 카페가 0곳이었다(LLM 카페 0.93 < 규칙 명소 1.1, 2026-10-20 로컬). 보낸 것 중 규칙 점수가 가장 낮은 곳
+    (= 상한 경계)이 LLM 점수 중앙값에 오도록 **평행이동**한다 — 차이(취향 가산 등)는 그대로고, 안 보낸 곳은 경계
+    아래라 중앙값을 넘지 않는다. 청크 실패로 빠진 곳(보냈는데 점수 없음)은 호출측이 종전대로 규칙 점수를 쓴다.
+    """
+    fill = [sp for sp in rule if sp.poi_id in unsent]
+    rule_of = {sp.poi_id: sp.score for sp in rule}
+    edge = [rule_of[p] for p in sent if p in rule_of]
+    if not fill or not llm or not edge:
+        return tuple(fill)
+    shift = statistics.median(sp.score for sp in llm) - min(edge)
+    return tuple(replace(sp, score=round(max(0.0, sp.score + shift), 4)) for sp in fill)
+
+
 def boost_add_one(
     candidates: tuple[ScoredPoi, ...],
     pois: Mapping[PoiId, Poi],
@@ -1576,9 +1609,8 @@ def boost_add_one(
     돌아 실행마다 같다(INV-4 결정론). 어느 자리에 끼울지는 어셈블리가 정한다(INV-2).
     규칙·LLM 점수 **양쪽** 1회 — 규칙 점수(`build_rule_score`)는 add_one 을 모르므로 두
     배가 아니다. `skip`(제외·고정 POI)은 고르지 않는다. 풀 밖 후보는 카테고리를 모르니
-    고르지 않는다. LLM 모드에 규칙 점수가 섞인 판(rule_backfill)에서는 척도가 다른 둘을
-    그대로 비교한다 — `lift_planb_ranked` 와 같은 받아들임이고, 어느 쪽이든 그 카테고리
-    1곳만 오른다는 성질은 변하지 않는다.
+    고르지 않는다. LLM 모드에 규칙 점수가 섞인 판(rule_backfill)은 보충분이 LLM 척도로 옮겨져
+    있다(`backfill_on_llm_scale`) — 어느 쪽이든 그 카테고리 1곳만 오른다는 성질은 변하지 않는다.
 
     왜 전원이 아니라 1곳인가 — 2026-10-10 멘토 실측: "카페 가고 싶다"가 풀의 카페 전원
     가산으로 돌아 남은 하루가 카페로 덮였다. 추가형 지시가 하루 전환과 같은 기구였다.

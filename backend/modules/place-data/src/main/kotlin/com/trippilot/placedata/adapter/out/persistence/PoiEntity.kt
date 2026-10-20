@@ -220,22 +220,20 @@ class PoiRepositoryAdapter(
     override fun findByIds(poiIds: List<UUID>): List<Poi> =
         if (poiIds.isEmpty()) emptyList() else jpa.findByPoiIdIn(poiIds).map { it.toDomain() }
 
+    // 공유본 한 문서가 6만 9천 건을 넘어 한 문장의 바인드 한도(65,535)를 넘겼다 — closeActive 처럼 나눠 읽는다.
     override fun findBySourceRefs(source: PoiSource, sourceRefs: Collection<String>): Map<String, Poi> =
-        if (sourceRefs.isEmpty()) {
-            emptyMap()
-        } else {
-            jpa.findBySourceAndSourceRefIn(source.name, sourceRefs)
-                // sourceRef 가 null 인 행은 애초에 조회되지 않지만, 키가 null 이면 맵이 깨지므로 명시적으로 거른다.
-                .mapNotNull { e -> e.sourceRef?.let { it to e.toDomain() } }
-                .toMap()
-        }
+        sourceRefs.chunked(IN_CHUNK)
+            .flatMap { jpa.findBySourceAndSourceRefIn(source.name, it) }
+            // sourceRef 가 null 인 행은 애초에 조회되지 않지만, 키가 null 이면 맵이 깨지므로 명시적으로 거른다.
+            .mapNotNull { e -> e.sourceRef?.let { it to e.toDomain() } }
+            .toMap()
 
     override fun findActiveSourceRefs(source: PoiSource): Map<String, UUID> =
         jpa.findActiveRefsBySource(source.name).associate { (ref, id) -> ref as String to id as UUID }
 
     // PostgreSQL JDBC 는 한 문장에 바인드 변수를 32,767개까지만 싣는다 — 출처 전량 정리도 그 아래로 나눠 보낸다.
     override fun closeActive(poiIds: Collection<UUID>, now: Instant): Int =
-        poiIds.chunked(CLOSE_CHUNK).sumOf { jpa.closeActive(it, now) }
+        poiIds.chunked(IN_CHUNK).sumOf { jpa.closeActive(it, now) }
 
     private fun Poi.toEntity() = PoiEntity(
         poiId = poiId, nameKo = nameKo, lat = lat, lng = lng, category = category.name, region = region,
@@ -259,7 +257,7 @@ class PoiRepositoryAdapter(
         /** 모든 UUID 보다 앞 — 커서 없음을 값으로 표현한다(분기 대신). */
         private val FIRST_ID: UUID = UUID(0L, 0L)
 
-        private const val CLOSE_CHUNK = 1_000
+        private const val IN_CHUNK = 1_000
     }
 
 }

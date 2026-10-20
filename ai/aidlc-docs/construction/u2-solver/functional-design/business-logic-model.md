@@ -78,6 +78,11 @@ solve(problem, deadline_ms):
 - `solve(problem, remaining_ms)`: OR-Tools `max_time_in_seconds = min(config.or_tools_limit_ms, remaining_ms)`.
 - 목적함수: Σ(선택 슬롯 score) + 예산 소프트 가중치(U5-P6 단조 대상). `random_seed = problem.seed` 고정.
 - 반환 None 조건: infeasible / 타임아웃 / 품질 미달.
+- 2026-10-20 개정 — **날마다 다른 동네(생성, `problem.day_focus`)**: 여러 날 생성은 ScheduleAgent 가 점수가 다 정해진 뒤
+  `pick_day_focus` 로 날마다 동네 중심을 하나씩 준다(상위 150 후보에서 1.5km 안 점수 합이 큰 곳부터, 서로 4km 이상).
+  그날 자유 후보는 그 중심 3km 안으로 좁힌다(안쪽이 25곳 미만이면 좁히지 않는다). 고정 블록·필수 방문은 좁히지 않는다.
+  그리디(§2.5 `_day_ranked`)도 같은 규칙이다. 재계획(하루)·하루짜리 생성은 끈다. 근거: 서울 2박3일이 사흘 모두 시청 1km
+  안이었다 — 같은 앵커·같은 점수로 날마다 고르면 가장 몰린 곳이 매일 이긴다(사용자 "강남도 연희동도 성수동도").
 - **미결 #3 해소 절차**: 첫 절편 = 후보 50·500·5,000 벤치마크 → day1 예산 내 통과 시 확정.
 
 ### 2.4 LlmAssembler (2차)

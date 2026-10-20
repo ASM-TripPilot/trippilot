@@ -8,12 +8,14 @@ INV-1 화이트리스트의 정본은 backend C7 후보풀 — 본 빌더는 AI�
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime
 
-from trippilot.domain.common import TransportMode
+from trippilot.domain.common import PoiId, TransportMode
 from trippilot.domain.llm import CandidatePool
 from trippilot.domain.poi_curation import CandidatePoolRequest
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory
+from trippilot.domain.poi import DataQuality, Poi, PoiCategory, counts_as_food
 from trippilot.poi_curation.config import M7Config
 
 _ALLOWED_QUALITY = frozenset({DataQuality.FULL, DataQuality.PARTIAL})
@@ -143,3 +145,33 @@ def _fair_cut(ranked: list[Poi], cap: int) -> list[Poi]:
         keep.update(p.poi_id for p in group[:take])
         left -= take
     return [p for p in ranked if p.poi_id in keep]
+
+
+# 같은 분류만으로 채우려면 이만큼은 남아야 한다 — PlanB 가 화면에 내는 대안 수(`PlanBConfig.max_alternatives`).
+SAME_CATEGORY_MIN = 3
+
+
+def restrict_pool_to_target_role(
+    pool: CandidatePool, target_id: str | None, excluded: frozenset[PoiId], *, wants_food: bool = False,
+) -> tuple[CandidatePool, list[str]]:
+    """슬롯 '대신 갈 곳' 풀을 대상 칸의 역할로 좁힌다 — 앱 슬롯 대안(`wiring`)과 도우미(`dialogue_handlers`)가 같이 쓴다.
+
+    - 식사 칸(또는 `wants_food` — 사용자가 먹을 곳을 달라고 했다)은 식사 후보만 (2026-10-14 부산 실측: 칼국수 칸에 기찻길).
+    - 그 밖의 칸은 식당을 빼고, 같은 분류가 `SAME_CATEGORY_MIN` 곳 이상 남으면 같은 분류만, 모자라면 식당 아닌 전부
+      (2026-10-19 결정 3: 명소·문화 칸의 대안에 식당이 섞였다 — 같은 분류 먼저, 모자라면 다른 분류로 채움).
+    좁혀서 남는 후보(제외분 뺀)가 0 이면 넓힌다(대안 0 보다 낫다, INV-4) — 그 사실은 노트로 남긴다. 좁히기만 한다(INV-1).
+    대상이 풀에 없으면(반경·품질 밖) 역할을 모른다 — 종전 동작이지만 흔적은 남긴다.
+    """
+    target = next((p for p in pool.pois if str(p.poi_id) == target_id), None)
+    if wants_food or (target is not None and counts_as_food(target)):
+        tiers: tuple[tuple[Callable[[Poi], bool], int], ...] = ((counts_as_food, 1),)
+    elif target is None:
+        return pool, ["alternatives_role_unknown"] if target_id else []
+    else:
+        tiers = ((lambda p: p.category is target.category and not counts_as_food(p), SAME_CATEGORY_MIN),
+                 (lambda p: not counts_as_food(p), 1))
+    for keep, need in tiers:
+        kept = tuple(p for p in pool.pois if keep(p))
+        if sum(p.poi_id not in excluded for p in kept) >= need:
+            return replace(pool, poi_ids=frozenset(p.poi_id for p in kept), pois=kept), []
+    return pool, ["alternatives_role_relaxed"]

@@ -482,6 +482,52 @@ python3 backend/scripts/ingest_pois.py --close-missing ai/data/collected_localda
 - 서버는 목록에 있는 것이 LOCALDATA ACTIVE 의 **절반 미만이면 409** 로 거부한다. 선별 기준을 크게 바꿔 다시 만든
   경우처럼 정말 절반 넘게 빠질 때만 `--allow-mass-close` 를 붙인다.
 
+## `collected_localcafe.json` — LOCALDATA 휴게음식점 카페 (사용자 결정 2026-10-19)
+
+일정에 카페가 거의 안 나오는 것은 데이터에 카페가 없어서다 — 서울시청 10km 안 공유본 CAFE 126곳(FOOD 12,728곳).
+인허가 대장의 **휴게음식점** 중 카페·찻집을 숙소·지역 중심 둘레에 넣는 등록 제안 문서다. 출처 값은 식당 보강과 같은
+`LOCALDATA` 이고, 잠정 ID 는 `localdata-cafe-<관리번호>` 다(관리번호 둘째 칸이 업종이라 식당 `-101-` 과 카페 `-104-` 는
+수신 멱등 키에서도 안 겹친다).
+
+- **출처**: 공공데이터포털 「행정안전부_식품_휴게음식점」 https://www.data.go.kr/data/15006730/fileData.do —
+  **이용허락범위 제한 없음**. 위 `poi_business_status.json` 이 읽는 그 파일이다. **원본은 커밋하지 않는다**
+  (cp949 · 약 210MB · 폐업 포함 65만 행). 로컬 예: `~/dev/trippilot/restaurant_data/식품_휴게음식점.csv`
+- **고르는 법** — 근거는 `src/trippilot/poi_curation/sourcing/localcafe.py` 주석. 식당 경로를 그대로 타고 셋만 다르다:
+  1. 영업 중 · 업태 **커피숍·전통찻집·떡카페**만 · 식당과 같은 이름·주소·좌표 규칙 · **전국 카페 체인 제외**
+     (`mapping._FRANCHISE` — 식당 체인과 한 곳)
+  2. 앵커 = 숙소 시드 + 선택 가능 지역 중심 **전부**(공백 앵커만이 아니다 — 카페는 어디나 얇다)
+  3. 앵커마다 2km 안 **시설총규모 큰 8곳**(가까운 순이 아니다 — 넓은 매장을 찾아갈 만한 카페의 대리 지표로) — 합집합
+  4. 수집 게이트를 그대로 태워 공유본(전 카테고리)과 같은 곳은 병합으로 뺀다
+- **건수는 파일 `stats` 가 정본이다** — 서울시청 10km 안 건수(`seoul_city_hall_10km`)도 거기 있다.
+- **남은 잡음** — 크기 순이라 기관 안 카페가 앞에 온다(2026-10-20 산출 9,105곳 어휘 검사, 겹침·오탐 포함 대략):
+  교회·선교회 25 · 학교·캠퍼스 35 · 병원 16 · 복지관·시니어클럽·구립 33 · 스터디카페 9 · 만화·보드게임카페 12 ·
+  화장품 매장 4(이니스프리·올리브영), 목록에 없는 디저트 체인(던킨·뚜레쥬르·배스킨라빈스) 약 20. 합쳐 2% 안팎이다.
+  상호 규칙은 식당 쪽처럼 오탐 0 을 실데이터로 확인한 것만 넣는다는 원칙이라(`성당` 은 `삼성당` 에 걸린다) 이번에는
+  넣지 않았다.
+- 영업시간·사진은 원본에 없어 비어 있다(`quality=PARTIAL`). `tags` 는 업태 원문 하나다.
+
+### 생성
+
+```bash
+cd ai
+uv run --with pyproj python scripts/collect/collect_localcafe.py <받은 경로>/식품_휴게음식점.csv   # 약 11분 — 대부분 게이트(서울 공유본 2만 건)
+```
+
+### 적재 — ⚠️ 이 문서는 배포가 붓지 않고, `--close-missing` 으로 따로 부으면 안 된다
+
+- 배포의 POI 적재 Job(`deploy/eks/runtime_pois.py`)은 **공유본 `collected_pois.json` 하나만** 붓는다.
+- `ingest_pois.py --close-missing ai/data/collected_localcafe.json` 은 **금지** — 미포함 정리는 출처(`LOCALDATA`) 단위라
+  공유본에 병합된 LOCALDATA 식당 수만 곳을 전부 "목록 부재"로 읽는다. 서버가 409 로 막고, `--allow-mass-close` 를
+  붙이면 식당이 전부 LOST 가 된다.
+- 넣는 길은 식당 문서와 같다 — **공유본에 병합**(공유본 LOCALDATA 가 식당 문서 전량을 이미 품고 있다) → 그 PR 머지 →
+  다음 배포의 적재 Job 이 upsert 한다. 병합하면 이후 공유본 `--close-missing` 에서도 카페가 "목록에 있음"으로 남는다.
+
+```bash
+cd ai
+uv run python scripts/collect/merge_pois_docs.py --allow-mixed -o data/collected_pois.json \
+  data/collected_pois.json data/collected_localcafe.json
+```
+
 ## `overture/` — Overture Maps 수집 제안 (지역별)
 
 TourAPI 단일 출처의 구조적 한계를 메우는 **두 번째 POI 출처**다 (TRIP-684).
