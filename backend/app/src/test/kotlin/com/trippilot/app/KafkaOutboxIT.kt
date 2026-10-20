@@ -196,7 +196,7 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
         tx.execute { publisher.publish(Probe("재시도")) }
 
         relayUntilPublished("재시도")
-        awaitReceived("재시도") // 첫 재시도는 2초 뒤
+        awaitReceived("재시도") // 첫 재시도는 1초 뒤(이 IT 의 retry-initial-ms)
 
         subscriber.failNext shouldBe false // 실패가 실제로 한 번 일어났다
     }
@@ -398,7 +398,7 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
         tx.execute { publisher.publish(Probe("독")) } // 같은 키 = 같은 파티션, 깨진 메시지 뒤
         relayUntilPublished("독")
 
-        awaitReceived("독", Duration.ofSeconds(8)) // 재시도했다면 첫 백오프(2초)부터 쌓여 수십 초 걸린다
+        awaitReceived("독", Duration.ofSeconds(8)) // 재시도했다면 1·2·2…초 백오프로 소진까지 약 17초 걸린다
     }
 
     /**
