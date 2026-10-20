@@ -26,6 +26,7 @@
 4. **장단기 메모리**: 세션 id 당 10턴을 20줄로 요약해 DB 에 저장, 같은 사용자가 다시 쓰면 로드.
 5. 오케스트레이터에 agent·provider·DB 를 전부 연결. 새 agent/provider 추가 가능. EditAgent 를 살리는 방향도 좋다.
 6. 질문뱅크 3단 경로는 **서비스에서 빼되 병렬로 돌려 성능만 측정**한다(섀도).
+7. **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** (2026-10-19) "다룰 수 있는 카테고리를 늘려라. 그리고 정해진 의도에 맞춰 수행하는 것만이 아니라, 현재 구조에서 agent·provider 를 어떻게 활용하면 좋을지 생각하는 LLM orchestrator 를 둬라. 지금은 POI DB 를 제공하는 쪽으로 가면 되는데, 정해진 의도에서 벗어난다고 아무 일도 안 하면 안 된다." — 첫째 문장은 #1413(EXPLORE_PLACES, BR-AO-27), 둘째 문장이 2‴ 도구 계획(BR-AO-28·DEC-AO-17).
 
 ### 0.1 확인 질문(AskUserQuestion) 4건과 답
 
@@ -69,6 +70,8 @@
 | **DEC-AO-14** | **OUT_OF_SCOPE 는 문장 없음** — AI 는 `outcome=OUT_OF_SCOPE` + 내부 사유만, 문구·거절 스트릭은 BE SCOPE 카드 그대로 | 거절은 BE 가 세고(스트릭) 문안도 고정(DEC-U8-6 개정 블록의 "여전히 고정 문안"). LLM 거절 문장은 주입에 가장 취약한 자리다 |
 | **DEC-AO-15** | **단기 기억 `recent_turns` 는 BE 가 요청에 싣고 AI 는 저장하지 않는다**; 장기 기억은 요약 20줄(파생물) | SEC-U8-06 "원문은 두 곳에만"을 유지하는 유일한 모양 — 요청 본문은 "LLM 벤더 호출 본문" 범주, 요약은 원문이 아니다. BE 는 `messages.findPage(sessionId, null, 20)` 에서 `text != null`(가려진 입력 제외)만 300자 절단해 싣는다 |
 | **DEC-AO-16** | **리터럴 "내가 할 수 있는 것 보기"는 파이프라인 0단계에서 결정론 처리**(LLM 0회) | FE 상시 칩이 서버 발급 SHOW_CAPABILITIES quick reply 가 없을 때 이 문자열을 TEXT 턴으로 보낸다(fe-assistant). LLM 에 묻는 것은 비용·오분류 위험만 있다. TurnOutcome 불변식과의 정합은 미결 #19 |
+| **DEC-AO-17** | **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** **2‴ 도구 계획** — 분류가 판단해서 닫은 말에 `DIALOGUE_PLAN` 1회로 읽기 전용 조회 도구(정보 핸들러 7종) ≤2 와 인자를 고르고, 팬아웃 1회 → `merge_facts` → 기존 답변 단계로 **프레임 없는 ANSWER**. 도구 없음·거절·실패·시한 부족은 종전 OUT_OF_SCOPE(BR-AO-28) | 사용자 결정 ⑦("정해진 의도에서 벗어난다고 아무 일도 안 하면 안 된다"). 기각: (a) 분류 프롬프트에 합침 — 범위 안 정확도·지연에 직접 닿아 측정이 섞인다(재평가 조건 미결 #24) (b) 벤더 tool-use·ReAct — 호출 수·시한이 열리고 9s 산술이 안 닫힌다 (c) Provider 직접 도구 — LLM 이 좌표·POI id 를 만들어야 해 INV-1 이 깨진다 (d) 규칙 플래너 — 조건부·복합 말을 못 푼다 (e) 도구 없음에 AI 고정 안내 — 화면 문장 한 벌(DEC-AO-14·BR-AO-06)을 어기고 숙소 화면의 STAY_SEARCH 를 잃는다 |
+| **DEC-AO-18** | **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** **켜기 = 배정** — `DIALOGUE_PLAN` 이 기능별 모델(`TRIPPILOT_LLM_FEATURE_MODELS`)에 있으면 계획 워커를 조립하고, 없으면 조립하지 않는다(env 키 무증가) | 미배정 첫 런에 OPENAI_MODEL(terra)로 3s 시한 헛호출이 나지 않는다 · 기능 부재 ≠ 강등(이벤트 없이 종전대로) · 끄기는 배정 항목 손편집(미결 #25) |
 
 ---
 
@@ -128,6 +131,8 @@ ai/docker/vector-init/02-dialogue-memory.sql   (신규) compose initdb — DE §
 backend/modules/assistant/                     §10
 ```
 
+**[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 새 파일 4 + yaml: `domain/plan_tools.py`(도구 표 `PLAN_TOOLS`·`NEVER_TOOLS`·`PLAN_GAPS`·`plan_tool_specs_json` — 도메인이라 c1 이 import 한다) · `llm_gateway/gates/dialogue_plan.py`(`DialoguePlanGate`·`DialoguePlanDraft`) · `llm_gateway/workers/dialogue_plan.py`(`DialoguePlanWorker`) · `orchestrator/dialogue_plan.py`(`plan_tools`·`step_tasks`·`step_results`·`merge_facts` — 순수) · `prompts/dialogue_plan.yaml`. 기존 파일은 앵커 주변만: `dialogue_orchestrator.py`(진입 2줄·`_plan_turn`·`_compose(closed=)`·요약 미룸) · `api/dialogue.py`(포트 선계산·배정 시 워커 조립·기동 줄) · `gates/base.py`(칸 머리 `[도구]`). `dialogue_handlers.py`·`domain/dialogue.py`·`wiring.py` 무변경.
+
 **계층 규칙과의 관계**(agent-foundation L-1~L-6, `tests/test_architecture.py`): `orchestrator/` 가 `agents.planb`·`providers`·`poi_curation`·
 `agents.adapters` 를 import 하는 것은 선례(`schedule_coordinator.py`)대로 허용이고, **반대 방향은 전부 금지**다 — 그래서 PlanBAgent 는 봉투
 (`PlanBRagRequest`)로만 재료를 받고 Provider 는 `params` dict 로만 받는다. `providers/poi_info.py` 가 `agents/planb/composition.hours_label`
@@ -149,6 +154,7 @@ BE AssistantTurnService ──POST /ai/v1/dialogue/interpret──▶ api/dialog
  2  메모리 로드(get + recent_for_account ≤2, 실패는 "없이 진행") → DIALOGUE_INTENT(LLM 1, timeout §4) → IntentGate
       ├ {"intent": null}·게이트 실패·시한 소진 ─▶ OUT_OF_SCOPE(reason: 거절 표지)                                            → 6
       │   └ 2″ null·범위 밖 라벨 ∧ 발화가 맞장구·인사 낱말뿐(BR-AO-26, 2026-10-19) ─▶ 받아 주는 한마디 ANSWER(TEXT, 프레임 없음)  → 6
+      │   └ 2‴ 판단해서 닫은 말(null·범위 밖·목록 밖 라벨) ∧ 계획 워커 ∧ 잔여 ≥4.6s ─▶ DIALOGUE_PLAN(LLM 1) → 도구 ≤2 → 팬아웃 1회 → merge_facts → 5(closed) → 프레임 없는 ANSWER · 도구 없음·거절·실패 → OUT_OF_SCOPE  → 6
       └ IntentMatch(LLM_DIRECT) ─▶ ShadowIntentProbe.submit(utterance, trace_id, now, service=match, ms, llm_calls, turn_index)  ※ 기다리지 않는다
  3  from_match(기존) — 필수 인자 비면 ARGUMENT_CLARIFY(CLARIFY_QUESTIONS 고정 문안, clarify_count ≤1)                           → 6
       └ EDIT_SCHEDULE 이면 FRAME(executable) — 1단계                                                                           → 6
@@ -170,6 +176,7 @@ BE answer(): ANSWER → 검증(text ≤2000 · TYPES · kind · quick reply 서�
 | 1 | 보류 프레임이 있으면 **그 인자 종류의 추출기 하나만** 돌려 채운다(assistant-dialogue BR-DLG-22 그대로) | 0 | 못 채우면 보류를 버리고 2 로 — 같은 질문을 다시 하지 않는다(BR-DLG-23) | §1 재사용 |
 | 2 | `$utterance`·`$intents`(=`tool_specs_json()`)·`$history`·`$memory`·`$trip` 로 분류 1회. 산출을 `IntentMatch(match_route=LLM_DIRECT, confidence=draft.confidence or 0.5)` 로 조립 | 1 | 게이트가 산출을 받아들이지 못한 전부(`{"intent": null}` — 불확실·주입·역할변경·유해 —, closed-set 밖 라벨, 깨진 JSON, 슬롯 모양, 절단) → **OUT_OF_SCOPE + `not_classifiable` 표지**(intent_eval 이 거절로 센다); 시한·벤더 예외·비지원은 인프라 실패라 **표지 없이** OUT_OF_SCOPE(장애를 거절로 세면 정확도가 부풀려진다 — `_refusal_reason`). **[개정 · 2026-10-19]** 분류가 null·범위 밖 라벨로 닫았고(깨진 출력·절단은 아니다) 발화가 맞장구·인사 낱말뿐이면 범위 밖 카드 대신 결정론 ANSWER(BR-AO-26) | §2.2 |
 | 2′ | 분류 결과를 알게 된 직후 `ShadowIntentProbe.submit` — 샘플링(rng) 통과 ∧ in-flight <4 일 때만 스레드에 넘기고 **응답 경로는 계속 간다** | 0(서비스) | 포화·샘플 밖은 `intent_shadow_skipped` 1줄. 섀도 실패는 응답에 영향 0 | §2.7 |
+| 2‴ | **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 분류가 판단해서 닫은 말(BR-AO-28 진입 조건)에 `$tools`(노출 도구 — 배포마다 고정)·`$history`(최근 4건)·`$trip`·`$utterance` 로 계획 1회 → `DialoguePlanGate` → `HANDLERS[도구].plan` 을 팬아웃 1회(호출 2건이면 작업 이름 `{i}.` 접두) → 핸들러별 `assemble` → `merge_facts` → 5단계(목록 밖 장소 검사 강제·병합 답은 시각을 문장마다 그 문장의 이름에 귀속). `$memory` 는 싣지 않는다 | 1 | 잔여 <4.6s·워커 예외 → OUT_OF_SCOPE + 오케스트레이터 이벤트 · 시한·벤더·깨진 출력·전량 드롭 → OUT_OF_SCOPE + 게이트웨이 이벤트 · 도구 없음·거절 → OUT_OF_SCOPE(이벤트 없음) | §2.11 |
 | 3 | 기존 `from_match` — `missing` 계산, 비면 `ArgumentClarify`(고정 문안). EDIT_SCHEDULE 은 인자 해소(day/target)만 하고 `FRAME` | 0 | `clarify_count ≥1` 이면 되묻지 않고 결정론 폴백(BR-DLG-33) | §2.2 |
 | 4 | `plan` → 팬아웃 → `assemble`. 여행이 없는데 여행이 필요한 의도면 플랜 없이 `needTrip` Facts | 0 | Provider/PlanB 실패·TIMEOUT 은 `TaskResult.status` 로 들어오고 `assemble` 이 `notes`·`FactStatus.PARTIAL` 로 적는다 — 있는 것만 조립 | §2.4·§2.5 |
 | 5 | `$facts`(JSON inline)·`$style` 로 문장 1회 → 게이트(≤400자·줄 ≤6·`_TIME_EXPR`·연락처) | ≤1 | 실패·잔여 <1.5s → `Facts.template_text`(BE 템플릿 이식). **kind·payload·next_actions·quick_replies 는 LLM 결과와 무관하게 Facts 값** | §2.3·§2.5 |
@@ -189,6 +196,7 @@ wall-clock 직접 호출 금지(기존 규칙), 시계는 주입(`FakeClock` 으
 | 단계 | 상한 | 비고 |
 |---|---|---|
 | 분류 LLM(2) | `min(4.0s, 잔여×0.45)` (초판 2.5s·0.35 — 2026-10-18 실측으로 개정, 아래 註) | effort low · max_tokens 1024(초판 256 — DEV 실측 출력 239) · `GatewayFacade.call(timeout_sec=…)` 로 관통(종전 경로는 안 넘겨 10s 기본이었다) |
+| 계획 LLM(2‴) | **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** `min(3.0s, 잔여×0.45)` — **잔여 ≥4.6s 일 때만** 부른다 | effort none(사고 끔 — 2026-10-20 실측 p50 1.36s·p90 2.28s) · max_tokens 1024 · 재시도 없음. 팬아웃은 호출이 2건이어도 1회(`min(3.0s, 잔여×0.4)`) |
 | 팬아웃(4) | `min(3.0s, 잔여×0.4)` | **submit 전에** 마감을 고정하고 `wait(timeout)`, pending `cancel` → `TIMEOUT` 상태값 → PARTIAL. 파가 둘이면 같은 예산을 나눠 쓴다(1파 끝난 잔여가 2파 상한) |
 | 답변 LLM(5) | `min(3.5s, 잔여−0.4s)` (초판 2.5s); **잔여 <1.5s 면 호출하지 않고 템플릿** | effort low · max_tokens 512. 0.4s 는 게이트·사영·직렬화 몫 |
 | 메모리 LLM(6) | **잔여 ≥2.5s 일 때만**, 상한 2.0s | 아니면 `compress_fallback`(결정론). 요약은 응답 품질과 무관하므로 가장 뒤·가장 먼저 양보 |
@@ -215,6 +223,8 @@ wall-clock 직접 호출 금지(기존 규칙), 시계는 주입(`FakeClock` 으
 
 BE 쪽: `interpret-stage-max-ms` 5000→9000 · 해석 read timeout = interpret + 5,000 = 14s(`require` 로 고정 — 다른 두 AI 경계와 동일) · 턴 예산
 13s 유지(앱 15s 안) · 해석 `deadline = min(9000, remaining − 1000)` 는 산식 그대로 · `daily-llm-turn-limit` 30→100.
+
+**[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 9s 보장은 상한의 합이 아니라 **비율 사슬**이 지킨다 — 분류 ≤0.45R, 계획 ≤0.45R, 팬아웃 ≤0.40R, 답변 ≤R−0.4s 라 어느 경우에도 0.4s 가 남는다(상한 합 13.5s 가 9s 를 넘어도 상관없다). 진입 하한 **4,600ms**: 계획이 0.45R 을 다 쓰고 팬아웃이 남은 것의 0.40 을 다 써도 답변 앞 잔여가 답변 시도선 1.5s 이상이려면 R ≥ 4,542ms(정수 내림: 4,542 → 계획 2,043 → 2,499 → 팬아웃 999 → 1,500). 4,500 이면 1,485 라 늘 템플릿이다(정정본 C1). 계획 턴의 팬아웃 몫은 분류 경로보다 작다(중앙값 ≈2.3s 대 3.0s) — SUGGEST_ALTERNATIVE 사슬(POI→풀→기상청→임베딩+벡터 3회)이 TIMEOUT 날 확률이 높아 상수는 그대로 두고 도구별 TIMEOUT 률을 관측한다(BR-AO-29 `task_status`). 계산(추정 — 실측 전): 중앙값 분류 1.6 → 계획 ~1.6 → 팬아웃 0.3~1.0 → 답변 ~1.6 ≈ 5.0~5.7s, p90 ≈8.4s. 요약 행 註 — 턴 서비스 LLM 이 3회면 요약을 한 번 미룬다(BR-AO-09). 실측 개정 규칙: DEV 에서 계획 p90 >2.6s 이거나 계획 시한 폴백 >5% 면 20턴 이상 실측해 상수를 고친다.
 
 ---
 
@@ -244,6 +254,18 @@ BE 쪽: `interpret-stage-max-ms` 5000→9000 · 해석 read timeout = interpret 
 있어요." + CREATE_TRIP·OPEN_STAY_SEARCH(BE 문구 그대로). 출처 불통(`FactStatus.UNAVAILABLE` — Provider·풀·PlanB 실패, 시한 소진)은 의도 공통
 **"지금 일부 정보를 확인할 수 없어요."**(BE `FallbackCause.SOURCE_UNAVAILABLE` 이식, `_UNAVAILABLE_TEXT`). `Facts.places` 는 배치 조회·풀에서 온 것만(닫힌 목록). INFO `rows` 는 빈 배열이어도
 **반드시 list**(FE 크래시 조건). `quick_replies=()` 는 "상시 칩만", `None` 은 "시작 칩 복귀" — 1단계 핸들러는 둘 중 `()` 를 기본으로 쓴다.
+
+**[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** OUT_OF_SCOPE 행 — 분류가 판단해서 닫은 말은 2‴ 계획을 거친다(도구 없음·거절·실패면 종전 SCOPE 카드). 계획이 고르는 도구 7종(`PLAN_TOOLS`):
+
+| 도구 | 돌려주는 것 | 뒤에서 쓰는 provider·agent (핸들러 안, LLM 0) | 인자 (필수) | 여행 필요 |
+|---|---|---|---|---|
+| SHOW_SCHEDULE | 날짜별 장소·계획 시각 | 요청 스냅샷 | day·date·scope | ○ |
+| GET_NEXT_SLOT | 다음 한 곳·계획 시각 | 스냅샷 | aspect | ○ |
+| GET_WEATHER | 날짜 하루의 최대 강수확률 | PoiInfoProvider(좌표) → WeatherProvider | date(`period` 는 숨긴다 — 핸들러가 안 읽는다) | ○ |
+| GET_DISTANCE | 직전 구간 거리 | PoiInfo → TransitProvider | **destination**·origin·mode | ○ |
+| GET_POI_INFO | 분류·영업시간·입장료 | PoiInfoProvider | **place**·date | ○ |
+| SUGGEST_ALTERNATIVE | 대신 갈 곳 ≤5 + PICK | PoiInfo → CandidatePoolBuilder → Weather → PlanBAgent(use_llm=False) | **target**·reason | ○ |
+| EXPLORE_PLACES | 등록 장소 ≤5 + OPEN_PLACE | 지역 표 / 일정 앵커(PoiInfo) → CandidatePoolBuilder | region·category·theme | × |
 
 ---
 
@@ -286,6 +308,11 @@ facts = handler.assemble(ctx, results)                    # 순수 — 이름(na
 | 메모리 쓰기(6) | 스토어 예외 | 이번 턴 포기, 다음 턴 due 유지(`summarized_turn_index` 불변) | `FallbackEvent(stage="memory")` |
 | 메모리 DSN 부재 | `TRIPPILOT_VECTOR_DB_URL` 없음 | `InMemoryDialogueMemoryStore`(프로세스 로컬 — 워커 2 × 파드라 "기억"은 성립하지 않는다) | **기동 WARN "도우미 메모리 미설정"**(ai-wiring 표식 토큰 `미설정`) |
 | 섀도(2′) | 포화 · 샘플 밖 · 라우터 예외 | 응답 영향 0 | `intent_shadow_skipped {"trace_id","why"}` 1줄 — 세는 쪽이 분모를 안다 |
+| 계획(2‴) | **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 잔여 <4.6s · 워커 예외(프롬프트 미등록 포함) | 종전 `OUT_OF_SCOPE`(reason `…; plan:skipped`·`plan:fallback`) | 오케스트레이터 `FallbackEvent(llm, llm_dialogue_plan→out_of_scope, budget_exhausted·plan_error)` |
+| 계획(2‴) | 시한·벤더·비지원·비JSON·스키마 위반·절단·입력 호출 전량 드롭 | 종전 `OUT_OF_SCOPE`(`plan:fallback`) | 게이트웨이 FallbackEvent + `LlmCallRecord(success=False)` (전량 드롭은 GateDropEvent 도) |
+| 계획(2‴) | 도구 없음(`calls=[]`)·거절(`refused`) — **의도된 결정론** | 종전 `OUT_OF_SCOPE`(`plan:no_tool`·`plan:refused`) | 이벤트 없음 · `LlmCallRecord(success)` · `dialogue_plan` 로그(NO_TOOL+gap / REFUSED) |
+| 계획(2‴) | 일부 호출·칸 드롭 / 도구 작업 실패 | 남은 호출로 답 / 그 부분은 PARTIAL·UNAVAILABLE 로 병합 | GateDropEvent / 작업별 `FallbackEvent(stage=fanout, from=[i.]작업명)` |
+| 요약(6) — 계획 턴 | 턴 서비스 LLM 3회 · 첫 차례 / 연속 차례 | 미룸(put 없음) / 결정론 압축 | `FallbackEvent(memory, …deferred 또는 deterministic_compress, turn_llm_cap(3))` |
 | 경계(7) | 오케스트레이터 자체 예외(버그) | 미결 #14 — 두 안 병기(BR §5) | — |
 
 침묵 실패가 없는지 보는 방법은 한 가지다: **LLM 을 시도했거나 시도해야 했던(재료는 있는데 잔여 부족 포함) 턴의 `template_text` 응답과
@@ -457,6 +484,8 @@ env **키**는 둘만 늘고(DEC-AO-13), LLM 배정은 기존 키 `TRIPPILOT_LLM
 **[개정 · 2026-10-19 · 장소 탐색]** 의도 EXPLORE_PLACES(BR-AO-27)는 순서가 **반대**다 — BE 가 먼저(또는 같이) 나가야 한다. 옛 BE 는 응답
 frames 의 `EXPLORE_PLACES` 를 모르는 의도로 읽어(`Intent.valueOf`) 해석 실패 → AI_UNAVAILABLE 폴백으로 답한다(그 사이 탐색 발화만 해당, 다른 의도는 영향 0).
 AI·BE 가 한 PR 이라 develop 머지 뒤 자동 배포가 둘을 함께 올리면 창은 배포 간격뿐이다.
+
+**[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** **2런 배포** — 배포는 리포 자동화가 아니라 배포 담당 세션이 develop 머지를 감시해 디스패치한다. ① 1런(코드)은 그 세션이 알아서 올린다 — **배정 입력 없이**: `ai-wiring:` 에 "도우미 계획 단계 off … 미배선" 이 보이고 동작은 종전과 같다(`[도구]` 칸 머리 주입 거름만 첫 런부터 켜진다). ② 2런은 **명시 요청**한다 — 배포 입력 `llm_feature_models=DIALOGUE_PLAN=<모델>`: `runtime_secrets.merge_feature_models` 는 떠 있는 이미지가 그 이름을 알아야만 받는다. `ai-wiring:` 에 "on — 도구 7종 · 미배선 도구 0종(-)". ③ DEV 수동 3턴(앱 로그인 — 사용자 토큰 없이 부를 길이 없다) 또는 로그(`aws-dev-logs` `source=cloudwatch, namespace=trippilot-dev`)로 관찰 3~7일(BR-AO-29 지표) → 문턱을 넘으면 main 승격. 운영도 코드가 off 로 먼저 가고 실제 문턱은 **운영 2런(배정 입력)** 이다. **되돌리기 순서**: 대상마다 시크릿 `TRIPPILOT_LLM_FEATURE_MODELS` 에서 DIALOGUE_PLAN 을 손으로 지운다(AWS 자격 필요) → 입력 없이 재배포(Secret 은 sync-secrets 가 쓰고 롤아웃은 nonce 가 바뀔 때만) → 그 뒤에만 revert. 이름을 모르는 이미지는 `feature_model_env.py` 에서 '미지 feature' 로 기동이 죽는다 — `TRIPPILOT_DIALOGUE_ORCHESTRATOR=off` 는 도우미 전체 끄개라 이 문제와 무관하다. 로컬 `.env` 도 같다 — 이 이름을 아는 이미지를 빌드하기 전에 넣으면 로컬 AI 가 죽는다(머지 + 재빌드 뒤). "AI 만" PR 이어도 backend-ci(`.env.example` 경로 필터)·infra-validate(`domain/llm.py`)를 탄다 — 코드 변경 없이 초록이어야 정상이다.
 
 되돌리기는 시크릿 `TRIPPILOT_DIALOGUE_ORCHESTRATOR=off` 한 줄 — off 면 사영이 기존 `DialogueInterpreter` 경로를 그대로 타고 BE 는 종전 `FRAME`
 만 받는다(코드 롤백 불필요). 메모리 테이블은 남지만 쓰는 쪽이 없어 TTL 로 사라진다. feature 배정은 `.env.example` 정본 줄과 DEV 시크릿 **두 곳**이
