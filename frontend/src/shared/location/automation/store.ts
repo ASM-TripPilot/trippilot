@@ -60,8 +60,6 @@ export interface AutomationState {
   /** 아직 서버가 받지 못한 구간 보고(START·END) — 순서대로 영속·재시도(TRIP-1409). */
   pendingReports: PendingReport[];
   explainerAskedTrips: string[];
-  /** TRIP-1486 · 자동 기록을 일시 중지한 여행 id. 사용자 의도라 재계산 못 하므로 저장한다. */
-  pausedTrips: string[];
   intervals: OpenInterval[];
   notice: AutomationNotice | null;
   droppedCount: number;
@@ -77,7 +75,6 @@ export const EMPTY_STATE: AutomationState = {
   queue: [],
   pendingReports: [],
   explainerAskedTrips: [],
-  pausedTrips: [],
   intervals: [],
   notice: null,
   droppedCount: 0,

@@ -217,25 +217,4 @@ describe('store (A/B 세대 슬롯)', () => {
     expect(pickLatest('{', 'x')).toBe('RESET');
     expect(pickLatest(null, null)).toBe('EMPTY');
   });
-
-  // TRIP-1486 · 일시 중지 플래그(pausedTrips)는 사용자 의도라 저장한다 — 필드가 없던 옛 파일도 그대로 열려야 한다.
-  it('ST5 pausedTrips: 새 상태는 빈 목록이고, 필드 없는 옛 파일도 빈 목록으로 열리며, 저장 왕복에서 보존된다', () => {
-    expect(EMPTY_STATE.pausedTrips).toEqual([]);
-
-    const { pausedTrips: _dropped, ...legacy } = EMPTY_STATE;
-    const fs = createMemoryFs();
-    fs.write(
-      'state-a.json',
-      JSON.stringify({ gen: 1, state: { ...legacy, droppedCount: 4 } })
-    );
-    const store = createAutomationStore(fs);
-    const loaded = store.load().state;
-    expect(loaded.droppedCount).toBe(4);
-    expect(loaded.pausedTrips).toEqual([]);
-
-    store.save({ ...loaded, pausedTrips: ['trip-1'] });
-    expect(createAutomationStore(fs).load().state.pausedTrips).toEqual([
-      'trip-1',
-    ]);
-  });
 });

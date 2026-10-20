@@ -139,8 +139,7 @@ export interface IntervalReport {
     | 'PERMISSION_DOWNGRADE'
     | 'ACCURACY_REDUCED'
     | 'CONSENT_REVOKED'
-    | 'TRIP_ENDED'
-    | 'USER_PAUSE';
+    | 'TRIP_ENDED';
   pointCount?: number;
   regionCount?: number;
 }

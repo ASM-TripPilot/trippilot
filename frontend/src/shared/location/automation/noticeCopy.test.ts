@@ -1,8 +1,4 @@
-import {
-  automationNoticeCopy,
-  automationSwitchCopy,
-  tripDateRangeLabel,
-} from './noticeCopy';
+import { automationNoticeCopy, tripDateRangeLabel } from './noticeCopy';
 
 /**
  * TRIP-1339 · 강등·폐기 안내 1줄 카피(BR-U10-22·46 · FD §11 · Figma u10c 4857:3012). 오류 화면·푸시 아님.
@@ -62,33 +58,5 @@ describe('tripDateRangeLabel', () => {
       '10월 30일~11월 2일'
     );
     expect(tripDateRangeLabel('2026-10-14', '2026-10-14')).toBe('10월 14일');
-  });
-});
-
-/**
- * TRIP-1486 · i01 자동 기록 스위치 줄 카피(Figma u10f 켜짐 4985:3306 · 일시 중지 4987:3327 — 제목 v3).
- * 제목은 상태와 무관하게 고정이다(스위치가 상태를 말하므로 제목에 켜짐/중지를 넣지 않는다).
- */
-describe('automationSwitchCopy', () => {
-  it('SW1 켜짐 → 제목 「자동 기록」 · 기록 중이라는 부제', () => {
-    expect(automationSwitchCopy(false)).toEqual({
-      title: '자동 기록',
-      detail: '여행 날짜 동안 방문과 다닌 길을 기록해요',
-    });
-  });
-
-  it('SW2 일시 중지 → 같은 제목 · 수동 [도착] 으로 남기라는 부제', () => {
-    expect(automationSwitchCopy(true)).toEqual({
-      title: '자동 기록',
-      detail: '일시 중지했어요 · [도착]으로 직접 남겨요',
-    });
-  });
-
-  it('SW3 INV-3 — 어느 쪽에도 시간·분 숫자가 없다', () => {
-    for (const paused of [false, true]) {
-      const { title, detail } = automationSwitchCopy(paused);
-      expect(detail).not.toBe('');
-      expect(`${title}${detail}`).not.toMatch(/\d|분|시간/);
-    }
   });
 });

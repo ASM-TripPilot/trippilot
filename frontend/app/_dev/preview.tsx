@@ -7202,26 +7202,6 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
-    key: 'u10-switch-on',
-    band: 'i',
-    label: 'U10 · i01 자동 기록 스위치 줄 켜짐(u10f)',
-    login: null,
-    render: () =>
-      renderLiveHubPreview(1, {
-        automationSwitch: { paused: false, onToggle: noop },
-      }),
-  },
-  {
-    key: 'u10-switch-paused',
-    band: 'i',
-    label: 'U10 · i01 자동 기록 스위치 줄 일시 중지(u10f)',
-    login: null,
-    render: () =>
-      renderLiveHubPreview(1, {
-        automationSwitch: { paused: true, onToggle: noop },
-      }),
-  },
-  {
     key: 'u10-degrade-notice',
     band: 'i',
     label: 'U10 · i01 강등 안내 1줄(u10c)',
@@ -7987,28 +7967,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         automation={{
           status: 'on',
           reason: '여행 날짜 동안 기록 중이에요',
-          action: null,
-        }}
-      />
-    ),
-  },
-  {
-    key: 'u10-l06-paused',
-    band: 'l',
-    label: 'U10 · l06 자동 기록 일시 중지(u10d)',
-    login: null,
-    render: () => (
-      <LocationConsentScreen
-        consentOn
-        disabled={false}
-        impact={revokeImpact({ automation: true })}
-        onGrant={noop}
-        onRevokeConfirmed={noop}
-        onOpenSettings={noop}
-        onPressBack={noop}
-        automation={{
-          status: 'paused',
-          reason: '이 여행은 일시 중지했어요',
           action: null,
         }}
       />

@@ -30,8 +30,6 @@ export interface ArmingInput {
   onHub: boolean;
   /** 이 여행에서 설명을 이미 보였는가([나중에] 포함). */
   explainerAsked: boolean;
-  /** TRIP-1486 · 사용자가 이 여행의 자동 기록을 일시 중지했는가(기기에 저장되는 유일한 입력). */
-  tripPaused: boolean;
 }
 
 export type ArmingState = 'ARMED' | 'MANUAL' | 'EXPLAINER';
@@ -46,8 +44,7 @@ export type ArmingReason =
   | 'no-permission'
   | 'when-in-use'
   | 'background-blocked'
-  | 'approximate'
-  | 'paused';
+  | 'approximate';
 
 export interface ArmingResult {
   state: ArmingState;
@@ -69,11 +66,9 @@ export function resolveArming(input: ArmingInput): ArmingResult {
   if (input.foreground !== 'granted') return manual('no-permission');
 
   if (input.background === 'granted') {
-    if (!input.precise) return manual('approximate');
-    // 일시 중지는 "원래 무장됐을 여행"만 막는다 — 다른 사유(권한·동의·구간)를 가리지 않는다.
-    return input.tripPaused
-      ? manual('paused')
-      : { state: 'ARMED', reason: 'armed' };
+    return input.precise
+      ? { state: 'ARMED', reason: 'armed' }
+      : manual('approximate');
   }
 
   // when-in-use 사용자 = 수동 체크인 사용자(BR-U10-03). 설명은 허브 첫 진입 1회(BR-U10-05).

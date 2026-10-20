@@ -94,7 +94,6 @@ function endReasonOf(reason: string): NonNullable<IntervalReport['endReason']> {
     reason === 'client-stop'
   )
     return 'CLIENT_STOP';
-  if (reason === 'paused') return 'USER_PAUSE';
   return 'PERMISSION_DOWNGRADE';
 }
 
@@ -286,11 +285,7 @@ async function degrade(
   return {
     ...state,
     intervals: [],
-    // 일시 중지는 강등이 아니라 사용자의 선택 — 안내 띠를 남기지 않는다.
-    notice:
-      (wasArmed || force) && reason !== 'paused'
-        ? { kind: 'degraded', reason }
-        : state.notice,
+    notice: wasArmed || force ? { kind: 'degraded', reason } : state.notice,
   };
 }
 
@@ -422,7 +417,6 @@ export function evaluate(
       inTripWindow: ctx.startDate <= day && day <= ctx.endDate,
       onHub: input.onHub,
       explainerAsked: loaded.explainerAskedTrips.includes(ctx.tripId),
-      tripPaused: loaded.pausedTrips.includes(ctx.tripId),
     });
 
     let state = loaded;
@@ -597,40 +591,6 @@ export function markExplainerAsked(
       ...state,
       explainerAskedTrips: [...state.explainerAskedTrips, tripId],
     });
-  });
-}
-
-/**
- * TRIP-1486 · 이 여행의 자동 기록 일시 중지/재개 — 플래그만 저장한다. 해제·END 보고·재무장은 이어지는 `evaluate` 몫.
- * 끌 때는 판정 중이던 슬롯(ENTERED·HELD)을 IDLE 로 되돌린다 — 끈 동안의 진입이 도착으로 소급되지 않게.
- */
-export function setTripPaused(
-  deps: EngineDeps,
-  tripId: string,
-  paused: boolean
-): Promise<void> {
-  return withStore(async () => {
-    const { state } = deps.store.load();
-    const others = state.pausedTrips.filter((id) => id !== tripId);
-    let next: AutomationState = {
-      ...state,
-      pausedTrips: paused ? [...others, tripId] : others,
-    };
-    if (paused && state.ctx?.tripId === tripId && state.judge) {
-      const slots = Object.fromEntries(
-        Object.entries(state.judge.state.slots).map(([key, s]) => [
-          key,
-          s.phase === 'ENTERED' || s.phase === 'HELD'
-            ? { phase: 'IDLE' as const, goodSample: false }
-            : s,
-        ])
-      );
-      next = {
-        ...next,
-        judge: { ...state.judge, state: { ...state.judge.state, slots } },
-      };
-    }
-    deps.store.save(next);
   });
 }
 
