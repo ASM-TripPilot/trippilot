@@ -207,45 +207,43 @@ class ChangeLogApiIT : AbstractPostgresIntegrationTest() {
 
     /**
      * 저장 계약과 모양이 다른 옛 행(TRIP-1476 B·H). 이력은 append-only 라 고칠 수 없으므로, 한 행이 그 여행의
-     * 타임라인 전체를 영구히 500 으로 만들면 안 된다. 못 읽는 조각만 버리고 나머지는 돌려준다.
+     * 타임라인 전체를 영구히 500 으로 만들면 안 된다. 그렇다고 **반쯤 읽어 돌려주면** 소비자가 없던 변경을 본다 —
+     * 재계획(`ReplanFacadeService.changesOn`)은 `before − after` 로 "그날 뺀 곳"을 계산해 AI 에 싣는다. 그래서 그런
+     * 행은 통째로 빠지고, 성한 행과 슬롯 없는 생성 이력(`{"days":[]}`)만 나온다.
      *
      * 실 DB 로만 본다 — 최상위가 객체가 아닌 jsonb 는 어댑터에 닿기 전 **Hibernate 가 엔티티를 적재하는 순간** 터졌다(H).
      * JPA 대역은 그 층을 거치지 않는다. 앱 롤은 INSERT 만 가지므로 깨진 행은 INSERT 로 만든다.
      */
     @Test
-    fun `모양이 깨진 옛 스냅숏이 있어도 타임라인은 200 이고 읽히는 조각만 돌려준다`() {
+    fun `모양이 깨진 옛 스냅숏 행은 통째로 빠지고 타임라인은 200 으로 나머지를 돌려준다`() {
         val (accountId, token) = newAccount()
         val trip = tripWithItinerary(token)
         val poi = poiId(token)
         changeLog.append(AppendChangeLog(UUID.fromString(trip), "system", ChangeSourceType.PLAN_B, "성한 행", snapshot(poi, "10:00"), snapshot(poi, "14:00")))
+        changeLog.append(AppendChangeLog(UUID.fromString(trip), "system", ChangeSourceType.MANUAL, "생성", ItinerarySnapshotView(emptyList()), snapshot(poi, "10:00")))
         val good = """{"poiId":"$poi","startAt":"10:00","endAt":"11:00","isFixed":false,"endsNextDay":false}"""
+        val goodDay = """{"days":[{"date":"2026-08-01","slots":[$good]}]}"""
         fun insertRaw(reason: String, before: String, after: String, at: String) = jdbc.update(
             "INSERT INTO change_log_entry (trip_id, actor, source_type, reason, before_snapshot, after_snapshot, at) " +
                 "VALUES (?::uuid, 'system', 'MANUAL', ?, ?::jsonb, ?::jsonb, ?)",
             trip, reason, before, after, Timestamp.from(Instant.parse(at)),
         )
-        insertRaw("최상위가 객체 아님", "[]", "\"x\"", "2000-01-03T00:00:00Z")
-        insertRaw("날이 객체 아님", """{"days":["x"]}""", "null", "2000-01-02T00:00:00Z")
-        insertRaw(
-            "슬롯이 객체 아님",
-            """{"days":[{"date":"2026-08-11","slots":[1,$good]}]}""",
-            """{"days":[3,{"date":"2026-08-12","slots":[]}]}""",
-            "2000-01-01T00:00:00Z",
-        )
+        insertRaw("최상위가 객체 아님", "[]", "\"x\"", "2000-01-04T00:00:00Z")
+        insertRaw("jsonb null", goodDay, "null", "2000-01-03T00:00:00Z")
+        insertRaw("날이 객체 아님", """{"days":["x"]}""", goodDay, "2000-01-02T00:00:00Z")
+        // 한쪽 슬롯만 못 읽는 행 — 반쯤 읽으면 "그날 뺀 곳 = poi" 라는 없던 변경이 된다.
+        insertRaw("슬롯이 객체 아님", goodDay, """{"days":[{"date":"2026-08-01","slots":[1]}]}""", "2000-01-01T00:00:00Z")
 
         val (rc, body) = call(HttpMethod.GET, "/api/v1/trips/$trip/change-log", token)
         rc shouldBe 200
-        body["entries"].map { it["reason"].asText() } shouldBe listOf("성한 행", "최상위가 객체 아님", "날이 객체 아님", "슬롯이 객체 아님")
-        body["entries"][0]["after"]["days"][0]["slots"][0]["startAt"].asText() shouldBe "14:00:00"
+        body["entries"].map { it["reason"].asText() } shouldBe listOf("생성", "성한 행")
+        body["entries"][1]["after"]["days"][0]["slots"][0]["startAt"].asText() shouldBe "14:00:00"
+        body["entries"][0]["before"]["days"].size() shouldBe 0
 
-        // 아카이브(U5 TripRecordService)가 읽는 모듈 경계 조회도 같은 읽기를 지난다.
-        val entries = changeLog.findTimeline(accountId, UUID.fromString(trip), 100).associateBy { it.reason }
-        entries.getValue("최상위가 객체 아님").before.days shouldBe emptyList()
-        entries.getValue("최상위가 객체 아님").after.days shouldBe emptyList()
-        entries.getValue("날이 객체 아님").before.days shouldBe emptyList()
-        entries.getValue("날이 객체 아님").after.days shouldBe emptyList()
-        val sliced = entries.getValue("슬롯이 객체 아님")
-        sliced.before.days.single().slots.map { it.poiId } shouldBe listOf(UUID.fromString(poi))
-        sliced.after.days.map { it.date } shouldBe listOf(LocalDate.parse("2026-08-12"))
+        // 아카이브(U5 TripRecordService)·재계획(ReplanFacadeService.changesOn)이 읽는 모듈 경계 조회도 같은 읽기를 지난다.
+        val entries = changeLog.findTimeline(accountId, UUID.fromString(trip), 100)
+        entries.map { it.reason } shouldBe listOf("생성", "성한 행")
+        entries[0].before.days shouldBe emptyList()
+        entries[0].after.days.single().slots.single().poiId shouldBe UUID.fromString(poi)
     }
 }

@@ -13,7 +13,6 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.string.shouldContain
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -53,13 +52,23 @@ class DomainNotificationPoisonPayloadTest : StringSpec({
         }
     }
 
+    // 메시지를 둘로 가른 것을 지킨다 — "tripId 가 없음"과 "있는데 UUID 가 아님"은 운영에서 원인이 다르다.
+    // `""` 는 있는데 빈 값(있는 쪽), 키가 아예 없으면 없는 쪽이다.
     "회고 사건의 tripId 가 UUID 가 아니면 eventId 를 담아 예외다 — 적재하지 않는다" {
         listOf("nope", "", "123").forEach { tripId ->
             val stored = FakeNotifications()
             val e = envelope(mapper.writeValueAsString(mapOf("tripId" to tripId, "kind" to "SUMMARY")), "reflection.ReflectionReady")
             shouldThrow<IllegalStateException> { ReflectionReadySubscriber(raiseService(stored), mapper).handle(e) }
-                .message.let { it shouldContain "tripId"; it shouldContain e.eventId.toString() }
+                .message shouldBe "ReflectionReady 의 tripId 가 UUID 가 아닙니다. tripId=$tripId eventId=${e.eventId}"
             stored.stored.shouldBeEmpty()
         }
+    }
+
+    "회고 사건에 tripId 가 아예 없으면 '읽지 못했습니다' 쪽 예외다" {
+        val stored = FakeNotifications()
+        val e = envelope(mapper.writeValueAsString(mapOf("kind" to "SUMMARY")), "reflection.ReflectionReady")
+        shouldThrow<IllegalStateException> { ReflectionReadySubscriber(raiseService(stored), mapper).handle(e) }
+            .message shouldBe "ReflectionReady payload 에서 tripId 를 읽지 못했습니다. eventId=${e.eventId}"
+        stored.stored.shouldBeEmpty()
     }
 })

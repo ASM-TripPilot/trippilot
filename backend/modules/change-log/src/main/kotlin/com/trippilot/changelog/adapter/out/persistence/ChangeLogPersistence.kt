@@ -32,7 +32,7 @@ import java.util.UUID
  *
  * 스냅숏 컬럼은 **최상위가 객체일 때만** 그대로 읽고, 아니면(`[]`·스칼라·jsonb `null`) 빈 객체로 읽는다 — 필드가 `Map` 이라
  * 그런 행은 Hibernate 가 엔티티를 적재하는 순간 역직렬화에 실패하고, 어댑터의 방어적 읽기에 닿기도 전에 그 여행의
- * 타임라인이 500 이 된다(TRIP-1476 H). 빈 객체는 아래 [ChangeLogRepositoryAdapter] 가 빈 스냅숏으로 읽는다.
+ * 타임라인이 500 이 된다(TRIP-1476 H). 빈 객체에는 `days` 가 없으므로 아래 [ChangeLogRepositoryAdapter] 가 그 행을 건너뛴다.
  */
 @Entity
 @Table(name = "change_log_entry")
@@ -80,13 +80,26 @@ class ChangeLogRepositoryAdapter(private val jpa: ChangeLogJpaRepository) : Chan
         jpa.findByTripIdOrderByAtDescChangeLogEntryIdDesc(tripId, PageRequest.of(0, limit)).mapNotNull { it.toDomain() }
 
     /**
-     * 모르는 출처의 행은 **그 행만** 버린다(TRIP-1476 E) — V2.11 CHECK 가 막으므로 enum 값을 지우거나 바꾼 뒤 남은
-     * 옛 행에서만 생긴다. `valueOf` 로 던지면 그 한 행이 여행 타임라인 전체를 영구히 500 으로 만든다.
-     * 출처를 지어내 읽지 않는 이유: 모르는 값을 아는 값으로 바꾸면 "누가 바꿨나"를 틀리게 보여 준다.
+     * 이력 행은 **전부 읽히거나, 통째로 건너뛴다**(TRIP-1476 B·E·H) — 반쯤 읽어 돌려주지 않는다.
+     * - 모르는 출처: V2.11 CHECK 가 막으므로 enum 값을 지우거나 바꾼 뒤 남은 옛 행에서만 생긴다. `valueOf` 로 던지면
+     *   그 한 행이 여행 타임라인 전체를 영구히 500 으로 만들고, 아는 값으로 지어내면 "누가 바꿨나"를 틀리게 보여 준다.
+     * - 스냅숏 일부를 못 읽음: 한쪽 스냅숏의 날·슬롯만 버리고 돌려주면 소비자가 **없던 변경을 본다** — 재계획
+     *   (`ReplanFacadeService.changesOn`)은 `before − after` 로 "그날 뺀 곳"을 계산해 AI 에 싣고, 화면·아카이브는
+     *   "전부 뺐다"로 보인다. 그래서 한 조각이라도 못 읽으면 그 행은 없는 것으로 친다.
+     * 건너뛴 행은 WARN 으로 남긴다 — 조용히 빠지면 "이력이 왜 비나"를 못 찾는다(INV-4).
      */
     private fun ChangeLogEntryEntity.toDomain(): ChangeLogEntry? {
         val source = ChangeSource.entries.find { it.name == sourceType } ?: run {
             log.warn("모르는 변경 출처라 이력 행을 건너뜁니다. changeLogEntryId={} sourceType={}", changeLogEntryId, sourceType)
+            return null
+        }
+        val before = beforeSnapshot.toSnapshot()
+        val after = afterSnapshot.toSnapshot()
+        if (before == null || after == null) {
+            log.warn(
+                "스냅숏을 읽지 못해 이력 행을 건너뜁니다. changeLogEntryId={} beforeReadable={} afterReadable={}",
+                changeLogEntryId, before != null, after != null,
+            )
             return null
         }
         return ChangeLogEntry(
@@ -95,8 +108,8 @@ class ChangeLogRepositoryAdapter(private val jpa: ChangeLogJpaRepository) : Chan
             actor = actor,
             source = source,
             reason = reason,
-            before = beforeSnapshot.toSnapshot(),
-            after = afterSnapshot.toSnapshot(),
+            before = before,
+            after = after,
             at = at,
         )
     }
@@ -120,28 +133,32 @@ class ChangeLogRepositoryAdapter(private val jpa: ChangeLogJpaRepository) : Chan
     )
 
     /**
-     * jsonb → 스냅숏. **읽기는 전부 방어적으로** 한다 — 이력은 append-only 라 한 번 저장된 행은 고칠 수 없고,
-     * 스냅숏 형태가 나중에 바뀌면(슬롯에 endsNextDay 가 V2.8 에서 늘었듯) 옛 행에 없는 필드를 단정 캐스팅하는 순간
-     * 그 여행의 타임라인이 **영구히 500** 이 된다. 못 읽는 조각은 버리고 읽히는 만큼 돌려준다.
-     * 리스트 원소도 하나씩 거른다 — `as? List<Map<..>>` 는 타입 소거로 "리스트인가"만 보고, 원소가 객체가 아니면
+     * jsonb → 스냅숏. 못 읽는 조각이 하나라도 있으면 **null**(그 행을 건너뛴다 — [toDomain]).
+     * 저장([toMap])은 V2.11 첫 판부터 모든 키(`days`·`date`·`slots`·`poiId`·`startAt`·`endAt`·`isFixed`·`endsNextDay`)를
+     * 늘 썼다 — 슬롯이 없는 생성 이력도 `{"days":[]}` 이고, 그것은 정상으로 읽힌다. 그러니 키가 없거나 모양이 다르면
+     * 저장 계약 밖에서 들어온 행이고, 기본값으로 메워 읽을 근거가 없다.
+     * 리스트 원소도 하나씩 본다 — `as? List<Map<..>>` 는 타입 소거로 "리스트인가"만 보고, 원소가 객체가 아니면
      * 그 원소를 Map 으로 쓰는 순간 ClassCastException 이 난다(TRIP-1476 B).
+     * 스냅숏에 키가 늘면 옛 행에는 그 키가 없다 — 그때는 이 자리에서 그 키만 기본값을 정한다(지금은 없다).
      */
-    private fun Map<String, Any>.toSnapshot(): ItinerarySnapshot {
-        val days = (this["days"] as? List<*>).orEmpty().filterIsInstance<Map<*, *>>().mapNotNull { d ->
-            val date = (d["date"] as? String)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return@mapNotNull null
-            DaySnapshot(
-                date = date,
-                slots = (d["slots"] as? List<*>).orEmpty().filterIsInstance<Map<*, *>>().mapNotNull { s -> s.toSlot() },
-            )
-        }
-        return ItinerarySnapshot(days)
+    private fun Map<String, Any>.toSnapshot(): ItinerarySnapshot? {
+        val days = this["days"] as? List<*> ?: return null
+        return ItinerarySnapshot(days.map { d -> (d as? Map<*, *>)?.toDay() ?: return null })
+    }
+
+    private fun Map<*, *>.toDay(): DaySnapshot? {
+        val date = (this["date"] as? String)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return null
+        val slots = this["slots"] as? List<*> ?: return null
+        return DaySnapshot(date, slots.map { s -> (s as? Map<*, *>)?.toSlot() ?: return null })
     }
 
     private fun Map<*, *>.toSlot(): SlotSnapshot? {
         val poiId = (this["poiId"] as? String)?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: return null
         val startAt = (this["startAt"] as? String)?.let { runCatching { LocalTime.parse(it) }.getOrNull() } ?: return null
         val endAt = (this["endAt"] as? String)?.let { runCatching { LocalTime.parse(it) }.getOrNull() } ?: return null
-        return SlotSnapshot(poiId, startAt, endAt, this["isFixed"] as? Boolean ?: false, this["endsNextDay"] as? Boolean ?: false)
+        val isFixed = this["isFixed"] as? Boolean ?: return null
+        val endsNextDay = this["endsNextDay"] as? Boolean ?: return null
+        return SlotSnapshot(poiId, startAt, endAt, isFixed, endsNextDay)
     }
 
     private companion object {
