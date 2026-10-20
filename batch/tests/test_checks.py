@@ -92,7 +92,7 @@ class CheckEventsTest(unittest.TestCase):
         return {"events": [{"start": s, "end": e} for s, e in spans],
                 "coverage": self.coverage() if coverage is None else coverage}
 
-    def check(self, doc, min_valid=1, max_age=3):   # event_collect 의 max_age_days 기본값
+    def check(self, doc, min_valid=1, max_age=4):   # event_collect 의 max_age_days 기본값
         return checks.check_events(doc, self.DAY, min_valid, max_age, REGIONS)
 
     def test_운영_지역은_수집기의_DEFAULT_REGIONS_17곳(self):
@@ -117,28 +117,29 @@ class CheckEventsTest(unittest.TestCase):
         self.assertEqual(checks.check_events({}, self.DAY, 0, 3, REGIONS), ["events 목록이 없다 — 문서 모양이 바뀌었다"])
 
     def test_유효_건수가_넉넉해도_수집이_멈췄으면_막는다(self):
-        # 미래 행사가 남아 유효 건수는 멀쩡하다 — 수집 시각만이 멈춘 것을 안다. 17곳 모두 나흘 전에서 멈췄다.
-        failures = self.check(self.events(("2026-10-01", "2026-12-31"), coverage=self.coverage("2026-10-06")))
+        # 미래 행사가 남아 유효 건수는 멀쩡하다 — 수집 시각만이 멈춘 것을 안다. 17곳 모두 닷새 전에서 멈췄다.
+        failures = self.check(self.events(("2026-10-01", "2026-12-31"), coverage=self.coverage("2026-10-05")))
         self.assertEqual(len(failures), 1)
-        self.assertIn("가장 오래된 지역의 마지막 수집 2026-10-06 — 2026-10-10 기준 4일 전 > 허용 3일", failures[0])
+        self.assertIn("가장 오래된 지역의 마지막 수집 2026-10-05 — 2026-10-10 기준 5일 전 > 허용 4일", failures[0])
         self.assertIn("수집이 멈췄거나(사본이 낡았거나) 그 지역이 수집 때마다 폴백해", failures[0])
 
     def test_가장_늦은_지역이_신선해도_가장_오래된_지역이_낡았으면_막는다(self):
-        # 16곳은 어제 찍혔는데 제주만 닷새째 그대로다 — 그 지역이 매번 폴백한다. 가장 늦은 것만 보면 통과한다.
-        failures = self.check(self.events(("2026-10-01", "2026-12-31"), coverage=self.coverage(제주="2026-10-05")))
+        # 16곳은 어제 찍혔는데 제주만 엿새째 그대로다 — 그 지역이 매번 폴백한다. 가장 늦은 것만 보면 통과한다.
+        failures = self.check(self.events(("2026-10-01", "2026-12-31"), coverage=self.coverage(제주="2026-10-04")))
         self.assertEqual(len(failures), 1)
-        self.assertIn("가장 오래된 지역의 마지막 수집 2026-10-05 — 2026-10-10 기준 5일 전", failures[0])
+        self.assertIn("가장 오래된 지역의 마지막 수집 2026-10-04 — 2026-10-10 기준 6일 전", failures[0])
 
     def test_폴백_한_번으로_하루_밀린_지역은_통과(self):
-        # LLM 폴백한 지역은 coverage 가 안 찍히고 다음 날 다시 찍힌다 — 실행 시점에 이틀 묵는다(실측 10-16 두 곳).
+        # 04:40 의 validate 는 정상인 날도 전날 시각을 본다(어제 = 10-09). LLM 폴백한 지역은 coverage 가 안 찍히고 다음 날
+        # 다시 찍힌다 — 실행 시점에 이틀 묵는다(실측 10-16 두 곳).
         self.assertEqual(self.check(self.events(("2026-10-01", "2026-12-31"),
                                                 coverage=self.coverage(서울="2026-10-08", 부산="2026-10-08"))), [])
 
     def test_허용_날수_경계(self):
-        exactly = self.events(("2026-10-01", "2026-12-31"), coverage=self.coverage(서울="2026-10-07"))
-        self.assertEqual(self.check(exactly), [])   # 3일 전은 통과, 4일 전부터 막는다
-        over = self.events(("2026-10-01", "2026-12-31"), coverage=self.coverage(서울="2026-10-06"))
-        self.assertIn("4일 전 > 허용 3일", self.check(over)[0])
+        exactly = self.events(("2026-10-01", "2026-12-31"), coverage=self.coverage(서울="2026-10-06"))
+        self.assertEqual(self.check(exactly), [])   # 4일 전(시차+폴백+하드캡+여유)은 통과, 5일 전부터 막는다
+        over = self.events(("2026-10-01", "2026-12-31"), coverage=self.coverage(서울="2026-10-05"))
+        self.assertIn("5일 전 > 허용 4일", self.check(over)[0])
 
     def test_운영_지역이_아닌_키는_낡아도_보지_않는다(self):
         # 수동 실행의 지역 입력은 자유 텍스트이고 저장소는 키를 지우지 않는다 — 다시 찍히지 않는 키가 영영 막으면 안 된다.

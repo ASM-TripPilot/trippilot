@@ -21,7 +21,7 @@ from zoneinfo import ZoneInfo
 DAGS = Path(__file__).resolve().parents[1] / "dags"
 EVENTS = Path(__file__).resolve().parents[2] / "ai/data/collected_events.json"
 DAG_START = date(2026, 10, 1)
-MAX_AGE_DAYS = 3   # event_collect 의 max_age_days 기본값
+MAX_AGE_DAYS = 4   # event_collect 의 max_age_days 기본값
 sys.path.insert(0, str(DAGS.parent))
 import checks  # noqa: E402
 
@@ -175,16 +175,26 @@ class DryRunTest(unittest.TestCase):
         self.assertFalse((self.out / "published/collected_events.json").exists())
 
     def test_행사_수집이_멈췄으면_유효_건수가_넉넉해도_게시하지_않는다(self):
-        # 합성 저장소 — 그날 유효한 행사 40건(하한 30 위)인데 가장 오래된 지역(제주)의 마지막 수집이 나흘 전이다.
+        # 합성 저장소 — 그날 유효한 행사 40건(하한 30 위)인데 가장 오래된 지역(제주)의 마지막 수집이 닷새 전이다.
         # 다른 지역은 어제 수집했다(가장 늦은 것만 보면 통과한다) — 수집 시각 규칙 하나만 막는다.
         mod = self.load("event_collect")
         mod.SOURCE = self.event_source([{"start": "2026-10-01", "end": "2026-12-31"}] * 40,
-                                       coverage("2026-10-19T04:40:00+09:00", 제주="2026-10-16T04:40:00+09:00"))
+                                       coverage("2026-10-19T04:40:00+09:00", 제주="2026-10-15T07:38:00+09:00"))
         states, reasons = self.run_events(mod, date(2026, 10, 20))
         self.assertEqual((states["collect"], states["validate"]), ("success", "failed"))
         self.assertEqual(len(reasons), 1, reasons)
-        self.assertIn("가장 오래된 지역의 마지막 수집 2026-10-16 — 2026-10-20 기준 4일 전 > 허용 3일", reasons[0])
+        self.assertIn("가장 오래된 지역의 마지막 수집 2026-10-15 — 2026-10-20 기준 5일 전 > 허용 4일", reasons[0])
         self.assertFalse((self.out / "published/collected_events.json").exists())
+
+    def test_행사_시차_폴백_하드캡이_겹쳐_나흘_묵은_지역은_게시한다(self):
+        # 04:40 validate 는 정상인 날도 전날 시각을 본다(시차 1) — 폴백 1·하드캡 이월 1·여유 1 까지 겹친 나흘은 통과해야 한다.
+        # DAG 기본값(max_age_days)을 지킨다 — 기본값을 3 으로 내리면 여기서 빨개진다.
+        mod = self.load("event_collect")
+        mod.SOURCE = self.event_source([{"start": "2026-10-01", "end": "2026-12-31"}] * 40,
+                                       coverage("2026-10-19T06:46:38+09:00", 제주="2026-10-16T07:38:00+09:00"))
+        states, reasons = self.run_events(mod, date(2026, 10, 20))
+        self.assertEqual(reasons, [])
+        self.assertEqual(states["publish"], "success")
 
 if __name__ == "__main__":
     unittest.main()
