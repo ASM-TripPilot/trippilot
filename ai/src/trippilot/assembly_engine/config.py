@@ -153,6 +153,9 @@ class AssemblyConfig:
     # 활동형 사용자는 올려도 되지만 **1.1km 이상은 도보 금지**(`WALK_HARD_MAX_KM`, 아래 검증).
     # ODsay 는 직선 700m 이내를 -98 로 거절한다 — 그 사이(도로 0.7~0.91km)는 추정기의 대중교통 추정이 맡는다.
     public_walk_max_km: float = 0.7
+    # 도보 여행이라도 이 거리(도로 km) 이상은 대중교통으로 가고, 시각도 대중교통 추정으로 잡는다(2026-10-20 사용자:
+    # "아무리 도보를 선택했어도 1.5km 이상이면 대중교통 태우게 해"). 3km 를 70분 걸어 하루에 두세 곳만 들어갔다.
+    walk_transit_from_km: float = 1.5
     speeds_kmph: dict[TransportMode, float] = field(default_factory=_default_speeds)
     # 긴 구간은 앞 `long_leg_km` 만 도시 속도, 나머지는 `long_speeds_kmph` 로 잰다(구간별 합 — 경계에서
     # 시간이 튀지 않는다). 도시 속도로만 재면 제주시 → 성산 38km 가 240분(실제 약 1.5~2시간)이라 이동

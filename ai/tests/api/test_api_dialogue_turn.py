@@ -116,12 +116,15 @@ def _body(utterance: str, *, deadline_ms: int | None = 9_000, recent_turns: list
     }
 
 
-def _client(by_feature: dict, *, enabled: bool = True, shadow_rate: float = 1.0, weather: _Weather | None = None) -> TestClient:
-    """실조립 + fake 어댑터 — 테스트 공용 진입점. `shadow_rng` 고정으로 표본 추출이 결정론(AO-P16)."""
+def _client(by_feature: dict, *, enabled: bool = True, shadow_rate: float = 1.0, weather: _Weather | None = None,
+            feature_models: dict | None = None) -> TestClient:
+    """실조립 + fake 어댑터 — 테스트 공용 진입점. `shadow_rng` 고정으로 표본 추출이 결정론(AO-P16).
+    `feature_models` 에 DIALOGUE_PLAN 을 배정하면 2‴ 계획 단계가 조립된다(배정이 곧 켜기, DEC-AO-18)."""
     app = build_dev_app(
         llm=FeatureRoutingLlm(by_feature), model_id="m-fake", poi_db=InMemoryPoi(_SCHEDULED + _ALTS),
         weather=weather if weather is not None else _Weather(),
         dialogue_orchestrator_enabled=enabled, shadow_rate=shadow_rate, shadow_rng=random.Random(1),
+        feature_models=feature_models,
     )
     return TestClient(app, raise_server_exceptions=False)
 
@@ -209,6 +212,45 @@ def test_null_intent_is_out_of_scope_with_the_legacy_shape() -> None:
     body = res.json()
     assert body["outcome"] == "OUT_OF_SCOPE" and body["answer"] is None and body["frames"] == []
     assert body["llm_calls"] == 1 and body["dialogue_context"]["pending"] is None
+
+
+_PLAN_ON = {LlmFeature.DIALOGUE_PLAN: "m-fake"}
+_KEYS = {"outcome", "frames", "clarify", "dialogue_context", "llm_calls", "answer"}
+
+
+def _plan_json(*calls: tuple[str, dict], gap: str | None = None) -> str:
+    return json.dumps({"calls": [{"tool": t, "args": a} for t, a in calls], "refused": False, "gap": gap}, ensure_ascii=False)
+
+
+def test_assigned_plan_answers_an_unclassified_turn_with_registered_places_frameless(caplog) -> None:
+    """배정되면 2‴ 가 조립된다 — null 분류 턴이 계획 → 탐색 → 후보 카드(등록 풀 안)로 답한다. 와이어 키 집합은 그대로."""
+    caplog.set_level(logging.INFO, logger="trippilot.api.dialogue")
+    client = _client({_INTENT: '{"intent": null}', LlmFeature.DIALOGUE_PLAN: _plan_json(("EXPLORE_PLACES", {"region": "제주"})),
+                      _ANSWER: _answer_json("제주에서 가 볼 만한 곳을 찾아봤어요.")}, feature_models=_PLAN_ON)
+    assert any("도우미 계획 단계 on — 도구 7종" in r.getMessage() and "미배선 도구 0종" in r.getMessage() for r in caplog.records)
+    res = client.post(URL, json=_body("비 오면 근처 어디 가?"))
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert set(body) == _KEYS and body["outcome"] == "ANSWER" and body["frames"] == [] and body["llm_calls"] == 3
+    answer = body["answer"]
+    assert answer["kind"] == "CANDIDATES" and answer["quick_replies"] == []
+    assert {c["poiId"] for c in answer["payload"]["candidates"]} <= {p.poi_id for p in _SCHEDULED + _ALTS}  # INV-1
+    assert not any(tok in json.dumps(body, ensure_ascii=False) for tok in _FORBIDDEN_TOKENS)  # INV-3
+
+
+def test_assigned_plan_with_no_tool_keeps_the_legacy_scope_card() -> None:
+    client = _client({_INTENT: '{"intent": null}', LlmFeature.DIALOGUE_PLAN: _plan_json(gap="KNOWLEDGE")},
+                     feature_models=_PLAN_ON)
+    body = client.post(URL, json=_body("오늘 주식 시장 어때")).json()
+    assert body["outcome"] == "OUT_OF_SCOPE" and body["answer"] is None and body["frames"] == [] and body["llm_calls"] == 2
+
+
+def test_unassigned_plan_is_not_wired_and_says_so_at_startup(caplog) -> None:
+    caplog.set_level(logging.INFO, logger="trippilot.api.dialogue")
+    client = _client({_INTENT: '{"intent": null}'})
+    assert any("도우미 계획 단계 off" in r.getMessage() and "미배선" in r.getMessage() for r in caplog.records)
+    body = client.post(URL, json=_body("오늘 주식 시장 어때")).json()
+    assert body["outcome"] == "OUT_OF_SCOPE" and body["llm_calls"] == 1  # 종전 그대로(위 null 의도 테스트와 같은 값)
 
 
 def test_capabilities_literal_answers_without_any_llm_call() -> None:

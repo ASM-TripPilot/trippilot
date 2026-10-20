@@ -121,7 +121,9 @@ from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
 from trippilot.assembly_engine.repair import RepairChange
 from trippilot.assembly_engine.scorer import build_rule_score
-from trippilot.assembly_engine.travel import WALKED_SOURCE, TravelEstimator, WalkFirst, haversine_km
+from trippilot.assembly_engine.travel import (
+    TRANSIT_SOURCE, WALKED_SOURCE, TravelEstimator, WalkFirst, haversine_km,
+)
 from trippilot.domain.common import (
     BUDGET_TOKENS,
     PACE_TOKENS,
@@ -196,6 +198,7 @@ from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelecti
 from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.place_fees import load_fee_table
+from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql
 from trippilot.poi_curation.pool_builder import (
     CandidatePoolBuilder, base_radius_km, restrict_pool_to_target_role, widened_radius_km)
 from trippilot.orchestrator import schedule_coordinator as core
@@ -872,7 +875,7 @@ def _render_distance(estimate: TravelEstimate, mode: TransportMode) -> str:
     """
     _, road_km = estimate.distance_km_range
     suffix = " 추정" if estimate.is_estimated else ""
-    shown = TransportMode.WALK if estimate.source == WALKED_SOURCE else mode
+    shown = {WALKED_SOURCE: TransportMode.WALK, TRANSIT_SOURCE: TransportMode.PUBLIC}.get(estimate.source, mode)
     return f"약 {road_km:.1f}km · {_TRANSPORT_LABELS[shown]}{suffix}"
 
 
@@ -1995,9 +1998,7 @@ class WiredItineraryOrchestrator:
         )
 
     def _walk_first(self, walk_max_km: float | None) -> Callable[[TravelPort], TravelPort]:
-        """조립과 같은 도보 상한으로 화면 거리를 재는 감싸개 — 상한이 기본이면 그대로."""
-        if walk_max_km is None:
-            return lambda port: port
+        """조립과 같은 추정기로 구간 수단을 정해 화면 거리를 재는 감싸개(도보 여행의 먼 구간 때문에 늘 감싼다)."""
         walker = self._assembly_provider.walker(walk_max_km)
         return lambda port: WalkFirst(port, walker)
 
@@ -2134,8 +2135,9 @@ class WiredItineraryOrchestrator:
             # 편집(장소 교체) 뒤 바뀐 구간의 거리 — generate 와 같은 렌더·시한 회계다. 앵커가
             # 없는 날의 첫 슬롯은 null, 수단은 수리가 시각 계산에 쓴 것(problem.transport).
             coords = {pid: poi.coord for pid, poi in poi_index.items()}
+            walk = self._walk_first(None)
             (distance_ranges,), _ = self._render_distances(
-                lambda port: (_distance_ranges(repaired, anchors, coords, port, problem.transport),),
+                lambda port: (_distance_ranges(repaired, anchors, coords, walk(port), problem.transport),),
                 request.request_meta, entered_ms,
             )
         return WiredRepairOutcome(
@@ -4078,6 +4080,7 @@ def build_orchestrator(
     bank_embedding: EmbeddingPort | None = None,
     bank_vectors: BankVectors | None = None,
     memory_store: MemoryStorePort | None = None,
+    place_sql: PgPlaceSql | None = None,  # 도우미 장소 조회(NL2SQL) 실행기 — DSN 은 main.py, 켜기는 DIALOGUE_SQL 배정
     dialogue_orchestrator_enabled: bool = False,  # 도우미 턴을 AI 안에서 끝낸다(ANSWER) — env 해석은 main.py
     shadow_rate: float = 1.0,  # 3단 라우터 섀도 표본율 (DEV 1.0 · 운영 0.2)
     shadow_rng: random.Random | None = None,  # 테스트 결정론용, None 이면 SystemRandom
@@ -4261,7 +4264,8 @@ def build_orchestrator(
         embedding=embedding if embedding is not None else UnwiredEmbedding(), bank_store=bank_store,
         bank_ready=lambda: bank_index.indexed, bank=bank, confident_intent=router.confident_intent,
         providers=providers, pool_builder=pool_builder, rag=rag, memory_store=memory_store, clock=clock, tz=tz,
-        shadow_rate=shadow_rate, shadow_rng=shadow_rng,
+        shadow_rate=shadow_rate, shadow_rng=shadow_rng, place_sql=place_sql,
+        kb_store=vector_store if vector_store is not None else None,
     ) if dialogue_orchestrator_enabled else None
     return WiredItineraryOrchestrator(
         orchestrator, provider, poi_db, travel, tz=tz,
@@ -4459,6 +4463,7 @@ def build_dev_app(
     bank_embedding: EmbeddingPort | None = None,
     bank_vectors: BankVectors | None = None,
     memory_store: MemoryStorePort | None = None,  # 도우미 장기 기억 스토어 — None 이면 InMemory
+    place_sql: PgPlaceSql | None = None,  # 도우미 장소 조회(NL2SQL) 실행기 — None 이면 장소 탐색은 반경 풀만
     dialogue_orchestrator_enabled: bool = False,  # 도우미 턴을 AI 안에서 끝낸다 — env 해석은 main.py, 기본 off(종전 해석 경로)
     shadow_rate: float = 1.0,
     shadow_rng: random.Random | None = None,
@@ -4519,6 +4524,7 @@ def build_dev_app(
         bank_embedding=bank_embedding,
         bank_vectors=bank_vectors,
         memory_store=memory_store,
+        place_sql=place_sql,
         dialogue_orchestrator_enabled=dialogue_orchestrator_enabled,
         shadow_rate=shadow_rate,
         shadow_rng=shadow_rng,

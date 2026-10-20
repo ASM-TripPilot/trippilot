@@ -48,6 +48,37 @@ nohup uv run python scripts/chatbot/chat_lab.py > /tmp/chat_lab.log 2>&1 &
   분홍 연한 막대는 3단 라우터 섀도(배경)라 사용자 응답 시간 밖이다.
 - **상황 설정** — 백엔드가 보내는 `context`(여행·일정)를 JSON 으로 고친다. 기본값은 제주 오늘·내일 일정(제주문학관은 월요일 휴관).
 
+## 도구 계획 단계
+
+분류가 "정해진 의도 없음"으로 닫은 말("내일 비 오면 실내 갈 데 있어?")은 계획 LLM(`DIALOGUE_PLAN`)이 조회 도구 ≤2 를 골라 답한다(#1420). 테스트 화면은 기본으로 켜 둔다 — 끄려면 `LAB_PLAN=0`.
+
+## 장소 조회(NL2SQL)
+
+일정에 없는 장소의 영업시간·입장료("경복궁 몇 시까지 해?")와 일정 밖 두 곳 사이 거리("강남에서 홍대 어떻게 가?")는 같은 DB 에서 **정확한 이름**으로 찾는다(LLM 없음, 별칭·체인점은 찾지 않는다). "서울 요즘 핫한 곳"·"망원동 산책할 곳"처럼 **지역을 말한 장소 탐색**은 LLM 이 쓴 SELECT 로 백엔드 장소 DB 를 읽는다(`DIALOGUE_SQL`). 테스트 화면은 기본으로 켜 둔다 — `DIALOGUE_SQL` 을 분류와 같은 모델에 배정하고 `ai_user`(읽기 전용)로 로컬 백엔드 DB 에 붙는다. 끄려면 `LAB_PLACE_SQL=0`.
+
+방어는 세 겹이다: DB 롤은 `poi_public` 뷰(보여 줘도 되는 칸·영업 중 행)만 읽기 전용·문장 시한 2s 로 읽고, 출구 게이트가 허용 목록 밖 낱말·기호(다른 표·함수·주석·세미콜론·형변환 등)를 통째로 버리며, 실행기가 READ ONLY·1.5s·20행으로 감싸고 화면에 나갈 칸(이름·종류·구군·표지)만 고른다. SQL 이 실패·0건이면 종전 반경 탐색으로 간다.
+
+로컬 DB 준비(처음 한 번 — 새로 만든 DB 는 `backend/docker/init/00-roles.sql` 이 롤을 만든다. 뷰는 백엔드가 Flyway V2.77 을 돌리면 `app.poi_public` 으로 생기고, 그 전까지는 같은 정의를 `lab` 스키마에 둔다):
+
+```bash
+docker exec -i trippilot-db sh -c 'psql -U "$POSTGRES_USER" -d trippilot' <<'SQL'
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='ai_user') THEN CREATE ROLE ai_user LOGIN PASSWORD 'ai_user'; END IF; END $$;
+GRANT CONNECT ON DATABASE trippilot TO ai_user;
+GRANT USAGE ON SCHEMA app TO ai_user;
+ALTER ROLE ai_user IN DATABASE trippilot SET default_transaction_read_only = on;
+ALTER ROLE ai_user IN DATABASE trippilot SET statement_timeout = '2s';
+CREATE SCHEMA IF NOT EXISTS lab;
+CREATE OR REPLACE VIEW lab.poi_public WITH (security_barrier) AS
+SELECT poi_id, name_ko AS name, category, split_part(address, ' ', 1) AS sido, region AS sigungu, address, tags, saved_count
+FROM app.poi WHERE data_status = 'ACTIVE';
+GRANT USAGE ON SCHEMA lab TO ai_user;
+GRANT SELECT ON lab.poi_public TO ai_user;
+ALTER ROLE ai_user IN DATABASE trippilot SET search_path = lab, app;
+SQL
+```
+
+치우기: `DROP SCHEMA lab CASCADE;` 뒤 `ALTER ROLE ai_user IN DATABASE trippilot SET search_path = app;`. 로컬 DB 에는 `요즘 인기` 표지가 없어서 인기순 정렬은 개발 서버 데이터에서만 보인다.
+
 ## 알아 둘 것
 
 - **실 LLM·실 API 를 부른다** — 비용과 일일 한도(ODsay 등, 운영과 같은 키)를 쓴다. 자동 실행 반복 횟수에 주의한다.

@@ -13,6 +13,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import json
 import uuid
 from collections.abc import Mapping
@@ -28,9 +30,11 @@ from trippilot.domain.freshness import FreshnessMeta, InfoPacket, ProviderKind, 
 from trippilot.domain.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent
 from trippilot.domain.llm import CandidatePool
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.region_centers import region_center
 from trippilot.domain.trigger import TriggerKind
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_LENGTH, _violates
 from trippilot.llm_gateway.workers.dialogue_answer import NEED_TRIP_TEXT, fallback_answer_text
+from trippilot.poi_curation.adapters.pg_place_sql import PlaceRow
 from trippilot.orchestrator import dialogue_handlers as dh
 from trippilot.agents.planb.rag import _REASON_KO
 from trippilot.orchestrator.dialogue_handlers import (
@@ -548,8 +552,42 @@ def test_weather_failures_converge_to_a_text_template(ports: HandlerPorts, fail,
     assert _types(facts) == ["OPEN_ITINERARY"] and facts.notes
 
 
-def test_weather_without_any_slot_cannot_find_an_anchor() -> None:
-    facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(_snapshot((), status=None), ports=HandlerPorts(poi_info=_PoiInfo(), weather=_Weather())))
+def test_weather_without_any_slot_falls_back_to_the_trip_region_center() -> None:
+    """일정 슬롯이 없으면(일정 없음) 여행 지역 중심 좌표로 바로 묻는다 — 종전엔 앵커를 못 잡아 "지금 날씨를 확인할 수 없어요"
+    (사용자 실측 "오늘 날씨도 못 보여준다"). 좌표 조회(POI_INFO) 없이, 날짜는 여행 중이니 오늘."""
+    poi_info, weather = _PoiInfo(), _Weather(pop=40)
+    facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(_snapshot((), status=None), ports=HandlerPorts(poi_info=poi_info, weather=weather)))
+    assert poi_info.calls == []
+    assert weather.calls == [{"anchor": region_center("제주")[1], "days": (_D2,), "now": _NOW}]
+    assert facts.status is FactStatus.OK and facts.payload == {
+        "infoKind": "WEATHER", "title": "제주 날씨", "rows": [{"label": "오늘 최대 강수확률", "value": "40%"}]}
+    assert _types(facts) == ["OPEN_ITINERARY_METHOD"]  # 일정이 없으니 보기가 아니라 만들기로
+    assert facts.detail == {"date": _D2.isoformat(), "anchor": "제주"}
+
+
+def test_weather_today_asked_on_a_day_without_slots_uses_the_region_center() -> None:
+    """"오늘 날씨" 인데 오늘이 여행일이 아니다(여행 전) — 그 날 슬롯이 없으니 지역 중심, 날짜는 말한 대로 오늘."""
+    before = datetime(2026, 10, 10, 9, 0, tzinfo=_KST)
+    poi_info, weather = _PoiInfo(), _Weather(pop=20)
+    facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(arguments={"date": "오늘"}, now=before,
+                                                   ports=HandlerPorts(poi_info=poi_info, weather=weather)))
+    assert poi_info.calls == []
+    assert weather.calls[0]["anchor"] == region_center("제주")[1] and weather.calls[0]["days"] == (date(2026, 10, 10),)
+    assert facts.payload["rows"] == [{"label": "오늘 최대 강수확률", "value": "20%"}]
+
+
+def test_weather_before_the_trip_without_slots_asks_about_the_first_day() -> None:
+    """날짜를 안 말했고 슬롯도 없는 여행 전 — 슬롯 규칙("앞으로 올 첫 슬롯")과 같은 날인 여행 첫날."""
+    before = datetime(2026, 10, 10, 9, 0, tzinfo=_KST)
+    weather = _Weather(pop=10)
+    _run(HANDLERS[Intent.GET_WEATHER], _ctx(_snapshot((), status=None), now=before, ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)))
+    assert weather.calls[0]["days"] == (_D1,)
+
+
+def test_weather_unknown_region_and_no_slot_stays_empty() -> None:
+    """표에 없는 여행 지역(도 단위)·슬롯 없음 — 종전처럼 EMPTY, 만들기로 잇는다."""
+    trip = TripInfo("trip-2", ("전라남도",), _D1, _D3, "IN_TRIP")
+    facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(_snapshot((), trip=trip, status=None), ports=HandlerPorts(poi_info=_PoiInfo(), weather=_Weather())))
     assert facts.status is FactStatus.EMPTY and _types(facts) == ["OPEN_ITINERARY_METHOD"]
 
 
@@ -567,7 +605,7 @@ def test_distance_uses_previous_slot_as_origin_and_keeps_only_distance_strings()
     facts = HANDLERS[Intent.GET_DISTANCE].assemble(ctx, {"transit": TaskResult.ok("transit", value)})
     # 대역 기본은 실 경로 API 가 안 될 때의 하버사인×우회계수(LOW) — 경로 거리가 아니라서 추정으로 밝힌다
     assert facts.payload == {"infoKind": "DISTANCE", "title": "해녀의집", "rows": [{"label": "직전 구간", "value": "약 1.2km(추정)"}]}
-    assert facts.template_text == "일정에 적힌 거리예요." and _types(facts) == ["OPEN_ITINERARY"]
+    assert facts.template_text == "두 곳 사이 거리를 찾아봤어요." and _types(facts) == ["OPEN_ITINERARY"]
     assert facts.detail == {"origin": "우도", "destination": "해녀의집", "mode": "PUBLIC"}
     assert any("PUBLIC" in n for n in facts.notes)  # 가정한 수단을 남긴다
     assert any("직선" in n for n in facts.notes)  # 답변 LLM 이 경로 거리처럼 말하지 않게
@@ -595,7 +633,7 @@ def test_route_distance_is_shown_as_is_and_straight_line_estimate_is_marked() ->
     {"destination": "우도"},  # 그 날 첫 슬롯 — 직전 구간이 없다
     {"destination": "카페"},  # 여럿 — None
     {"destination": "경복궁"},  # 일정 밖
-    {"destination": "해녀의집", "origin": "성산일출봉"},  # 출발지가 직전 슬롯이 아니다 — 묻는 구간이 아니다
+    {"destination": "경복궁", "origin": "우도"},  # 일정 밖 목적지 — 장소 DB 가 없으면 못 찾는다
     {},
 ])
 def test_distance_unresolvable_leg_is_an_empty_handoff(arguments: dict) -> None:
@@ -603,8 +641,45 @@ def test_distance_unresolvable_leg_is_an_empty_handoff(arguments: dict) -> None:
     assert HANDLERS[Intent.GET_DISTANCE].plan(ctx) == ()
     facts = _run(HANDLERS[Intent.GET_DISTANCE], ctx)
     assert facts.status is FactStatus.EMPTY and facts.kind is AnswerKind.TEXT
-    assert facts.template_text == "구간 거리는 일정에서 확인할 수 있어요."
+    assert facts.template_text == "그 구간 거리는 아직 확인하지 못했어요."
     assert any("미해소" in n for n in facts.notes)  # '없다'가 아니라 '못 풀었다' — LLM 재료·관측에 남긴다
+
+
+def _free_distance(arguments: dict, found=None) -> tuple[Facts, _Transit, _PlaceSql | None]:
+    transit, finder = _Transit(confidence="HIGH"), (_PlaceSql(found) if found is not None else None)
+    ctx = _ctx(arguments=arguments, ports=HandlerPorts(poi_info=_PoiInfo(), transit=transit, place_sql=finder))
+    return _run(HANDLERS[Intent.GET_DISTANCE], ctx), transit, finder
+
+
+def test_distance_between_two_named_areas_uses_region_centers_and_says_so() -> None:
+    from trippilot.domain.region_centers import region_center
+
+    facts, transit, _ = _free_distance({"origin": "강남역", "destination": "홍대 쪽"})
+    (call,) = transit.calls
+    assert call["origin"] == region_center("강남")[1] and call["destination"] == region_center("홍대")[1]
+    assert "internal_minutes" not in json.dumps(facts.payload)  # 거리만(INV-3)
+    assert facts.status is FactStatus.OK and facts.payload["rows"] == [{"label": "구간", "value": "약 1.2km(지역 중심 기준)"}]
+    assert facts.detail == {"origin": "강남", "destination": "홍대", "mode": "PUBLIC"}  # 표 이름 — 발화 원문 아님
+    assert facts.places == () and _types(facts) == ["OPEN_ITINERARY"] and facts.template_text == "두 곳 사이 거리를 찾아봤어요."
+
+
+def test_distance_between_two_non_adjacent_itinerary_places_is_now_answered() -> None:
+    facts, transit, _ = _free_distance({"origin": "성산일출봉", "destination": "해녀의집"})
+    assert transit.calls[0]["origin"] == _COORD["성산일출봉"] and transit.calls[0]["destination"] == _COORD["해녀의집"]
+    assert [p.name for p in facts.places] == ["성산일출봉", "해녀의집"] and facts.places[-1].distance_range == "약 1.2km"
+    assert _types(facts) == ["OPEN_PLACE"]
+
+
+def test_distance_to_a_registered_place_outside_the_itinerary_finds_it_by_exact_name() -> None:
+    found = [PlaceRow(_U["천지연폭포"], "천지연폭포", "자연", "제주특별자치도", "서귀포시", False, False)]
+    facts, transit, finder = _free_distance({"origin": "우도", "destination": "천지연 폭포"}, found)
+    assert finder.calls == [("find", "천지연 폭포", "제주")]
+    assert transit.calls[0]["destination"] == _COORD["천지연폭포"] and facts.detail["destination"] == "천지연폭포"
+
+
+def test_distance_with_an_unknown_end_stays_empty_and_never_calls_transit() -> None:
+    facts, transit, _ = _free_distance({"origin": "우도", "destination": "롯데월드"}, [])
+    assert transit.calls == [] and facts.status is FactStatus.EMPTY
 
 
 def test_distance_origin_matching_the_previous_slot_is_accepted() -> None:
@@ -629,7 +704,7 @@ def test_poi_info_card_rows_and_open_place_action() -> None:
     assert facts.payload == {"infoKind": "PLACE", "title": "해녀의집", "rows": [
         {"label": "분류", "value": _FOOD_KO}, {"label": "영업시간", "value": "09:00~18:00"}, {"label": "입장료", "value": "5,000원"}]}
     assert [(a.type, a.label, a.params) for a in facts.next_actions] == [("OPEN_PLACE", "장소 보기", {"poiId": _U["해녀의집"]})]
-    assert facts.status is FactStatus.OK and facts.template_text == "일정에 있는 장소예요."
+    assert facts.status is FactStatus.OK and facts.template_text == "장소 정보를 찾아봤어요."
     (place,) = facts.places
     assert (place.poi_id, place.hours_label, place.fee) == (_U["해녀의집"], "09:00~18:00", 5000)
 
@@ -659,7 +734,7 @@ def test_poi_info_lookup_failure_still_shows_the_snapshot_card_as_partial(ports:
     facts = _run(HANDLERS[Intent.GET_POI_INFO], _ctx(arguments={"place": "해녀의집"}, ports=ports), fail=fail)
     assert facts.status is FactStatus.PARTIAL and facts.kind is AnswerKind.INFO
     assert facts.payload["rows"] == [{"label": "분류", "value": _FOOD_KO}, {"label": "영업시간", "value": "미확인"}, {"label": "입장료", "value": "미확인"}]
-    assert facts.notes and facts.template_text == "일정에 있는 장소예요."
+    assert facts.notes and facts.template_text == "장소 정보를 찾아봤어요."
 
 
 @pytest.mark.parametrize("arguments", [{"place": "경복궁"}, {"place": "카페"}, {}])
@@ -667,7 +742,7 @@ def test_poi_info_unresolved_place_is_an_empty_handoff(arguments: dict) -> None:
     ctx = _ctx(arguments=arguments, ports=HandlerPorts(poi_info=_PoiInfo()))
     assert HANDLERS[Intent.GET_POI_INFO].plan(ctx) == ()
     facts = _run(HANDLERS[Intent.GET_POI_INFO], ctx)
-    assert facts.status is FactStatus.EMPTY and facts.template_text == "장소 정보는 일정에서 장소를 눌러 볼 수 있어요."
+    assert facts.status is FactStatus.EMPTY and facts.template_text == "그 장소는 아직 찾지 못했어요."
     assert _types(facts) == ["OPEN_ITINERARY"] and any("미해소" in n for n in facts.notes)
 
 
@@ -1084,6 +1159,83 @@ def test_explore_night_theme_puts_night_view_and_nightlife_first() -> None:
     assert set(_names_of(facts)[:2]) == {"황령산 야경", "루프탑 바"}
 
 
+@pytest.mark.parametrize("theme", ["가볼 만한", "실내 데이트", "놀거리"])
+def test_explore_sightseeing_theme_without_a_category_leaves_out_restaurants(theme: str) -> None:
+    names = _names_of(_explore({"region": "부산", "theme": theme})[0])
+    assert names and not any("식당" in n for n in names) and "인기 카페" in names
+
+
+def test_explore_food_category_keeps_restaurants_even_with_a_sightseeing_word() -> None:
+    assert any("식당" in n for n in _names_of(_explore({"region": "부산", "category": "FOOD", "theme": "데이트"})[0]))
+
+
+def _outside(arguments: dict, found) -> tuple[Facts, _PlaceSql, _PoiInfo]:
+    finder, poi_info = _PlaceSql(found), _PoiInfo()
+    ctx = _ctx(arguments=arguments, ports=HandlerPorts(poi_info=poi_info, place_sql=finder))
+    return _run(HANDLERS[Intent.GET_POI_INFO], ctx), finder, poi_info
+
+
+def test_poi_info_outside_the_itinerary_finds_the_registered_place_by_name() -> None:
+    found = [PlaceRow(_U["천지연폭포"], "천지연폭포", "자연", "제주특별자치도", "서귀포시", False, False)]
+    facts, finder, poi_info = _outside({"place": "천지연 폭포"}, found)
+    assert finder.calls == [("find", "천지연 폭포", "제주")]  # 여행 지역(시·도)으로 좁힌다
+    assert poi_info.calls[0]["poi_ids"] == frozenset({PoiId(_U["천지연폭포"])}) and poi_info.calls[0]["on"] == _ctx().today
+    assert facts.status is FactStatus.OK and facts.kind is AnswerKind.INFO
+    assert facts.payload["title"] == "천지연폭포"  # 이름은 DB 값 — 발화 원문("천지연 폭포")이 아니다
+    assert facts.payload["rows"] == [{"label": "분류", "value": "자연"}, {"label": "영업시간", "value": "09:00~18:00"},
+                                     {"label": "입장료", "value": "5,000원"}]
+    assert [(a.type, a.params) for a in facts.next_actions] == [("OPEN_PLACE", {"poiId": _U["천지연폭포"]})]
+    assert any("일정 밖" in n for n in facts.notes) and facts.template_text == "장소 정보를 찾아봤어요."
+
+
+def test_poi_info_outside_the_itinerary_not_found_or_ambiguous_stays_empty() -> None:
+    facts, finder, poi_info = _outside({"place": "롯데월드"}, [])  # 없음·여럿(체인점) 모두 찾기가 None
+    assert finder.calls and poi_info.calls == []
+    assert facts.status is FactStatus.EMPTY and facts.template_text == "그 장소는 아직 찾지 못했어요."
+
+
+def test_poi_info_in_the_itinerary_never_asks_the_place_db() -> None:
+    _, finder, _ = _outside({"place": "우도"}, [PlaceRow("x", "다른 우도", "자연", None, None, False, False)])
+    assert finder.calls == []
+
+
+class _RefPoiInfo(_PoiInfo):
+    """source_ref 를 싣는 POI_INFO 대역 — 소개(KB-5) 조인 키."""
+
+    def fetch(self, params: dict) -> InfoPacket:
+        packet = super().fetch(params)
+        for row in packet.data.get("pois", ()):
+            row["source_ref"] = "ref-" + row["name"]
+        return packet
+
+
+class _Intro:
+    def __init__(self, text: str = "우도는 제주 동쪽의 섬이다.") -> None:
+        self.text, self.calls = text, []
+
+    def intro(self, source_ref: str, query: str) -> str:
+        self.calls.append((source_ref, query))
+        return self.text
+
+
+def _intro_run(arguments: dict, utterance: str = "") -> tuple[Facts, _Intro]:
+    intro = _Intro()
+    ctx = replace(_ctx(arguments=arguments, ports=HandlerPorts(poi_info=_RefPoiInfo(), place_intro=intro)), utterance=utterance)
+    return _run(HANDLERS[Intent.GET_POI_INFO], ctx), intro
+
+
+def test_poi_info_about_a_place_carries_a_kb5_intro_for_the_answer_only() -> None:
+    facts, intro = _intro_run({"place": "우도", "aspect": "어떤 곳"}, "우도 어떤 곳이야?")
+    assert intro.calls == [("ref-우도", "어떤 곳")]
+    assert facts.detail == {"target": "우도", "intro": "우도는 제주 동쪽의 섬이다."}
+    assert "섬" not in str(facts.payload)  # 카드(payload)에는 싣지 않는다 — 위키 원문 출처 표기
+
+
+def test_poi_info_hours_or_fee_question_does_not_fetch_an_intro() -> None:
+    facts, intro = _intro_run({"place": "우도"}, "우도 몇 시까지 해?")
+    assert intro.calls == [] and "intro" not in facts.detail
+
+
 def test_explore_category_filters_the_pool() -> None:
     facts, _ = _explore({"region": "부산", "category": "CAFE"})
     assert _names_of(facts) == ["인기 카페", "바다 전망 카페"]
@@ -1134,6 +1286,97 @@ def test_alternative_candidates_need_a_pick_each_but_explore_candidates_have_non
     with pytest.raises(ValueError):
         _text_facts(intent=Intent.SUGGEST_ALTERNATIVE, kind=AnswerKind.CANDIDATES, payload=cand)
     assert _text_facts(intent=Intent.EXPLORE_PLACES, kind=AnswerKind.CANDIDATES, payload=cand).quick_replies == ()
+
+
+class _PlaceSql:
+    """PlaceSqlLookup 대역 — 부른 인자를 남기고 정해 둔 행(None = 폴백)을 돌려준다."""
+
+    writes_sql = True
+
+    def __init__(self, rows) -> None:
+        self.rows, self.calls = rows, []
+
+    def lookup(self, utterance, arguments, trace_id, now, *, timeout_sec):
+        self.calls.append((utterance, dict(arguments), timeout_sec))
+        return self.rows
+
+    def find_place(self, name, sido_prefix, trace_id):
+        self.calls.append(("find", name, sido_prefix))
+        return self.rows[0] if self.rows else None
+
+
+def _row(name: str, category: str = "명소", sigungu: str | None = "종로구", *, sido: str = "서울특별시",
+         trending: bool = False, nightlife: bool = False) -> PlaceRow:
+    return PlaceRow(poi_id="s-" + name, name=name, category=category, sido=sido, sigungu=sigungu, trending=trending,
+                    nightlife=nightlife)
+
+
+def _explore_sql(arguments: dict, rows, *, utterance: str = "서울 요즘 핫한 곳", remaining_ms: int = 7000,
+                 pool: CandidatePool = _X_POOL) -> tuple[Facts, _PlaceSql, _PoolBuilder]:
+    port, builder = _PlaceSql(rows), _PoolBuilder(pool)
+    ctx = replace(_ctx(_EMPTY_SNAP, arguments, ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=builder, place_sql=port),
+                       remaining_ms=remaining_ms), utterance=utterance)
+    return _run(_EXPLORE, ctx), port, builder
+
+
+def test_explore_sql_runs_beside_the_radius_pool_and_wins_when_it_has_rows() -> None:
+    rows = [_row("경복궁", trending=True), _row("클럽 엑스", "야경", "마포구", nightlife=True), _row("북촌", "문화")]
+    facts, port, builder = _explore_sql({"region": "서울", "theme": "요즘 핫한", "category": "SIGHT"}, rows)
+    (said, args, timeout), = port.calls
+    assert said == "서울 요즘 핫한 곳" and args == {"region": "서울", "theme": "요즘 핫한", "category": "명소"}  # 종류는 한글로
+    assert timeout == pytest.approx(2.8) and builder.requests  # 반경 풀도 나란히 돈다(실패 대비)
+    assert _names_of(facts) == ["경복궁", "북촌"]  # 나이트라이프는 밤 주제일 때만
+    assert [c["reason"] for c in facts.payload["candidates"]] == ["요즘 인기", "문화"]
+    assert all(c["distanceRange"] is None for c in facts.payload["candidates"]) and _types(facts) == ["OPEN_PLACE"] * 2
+    assert facts.detail == {"anchor": "서울", "anchor_kind": "region"}  # 지역 표 이름 — 발화 원문 아님(INV-2)
+
+
+def test_explore_sql_keeps_only_rows_in_the_said_city() -> None:
+    rows = [_row("해운대해수욕장", sido="부산광역시", sigungu="해운대구"), _row("경복궁"), _row("광안리", sido="부산광역시", sigungu="수영구")]
+    facts, _, _ = _explore_sql({"region": "부산"}, rows, utterance="부산 가볼 만한 곳")
+    assert _names_of(facts) == ["해운대해수욕장", "광안리"]
+
+
+def test_explore_sql_argument_region_wins_over_another_region_in_the_utterance() -> None:
+    # 계획 경로: "부산 카페랑 서울 맛집" 이 도구 둘로 나뉘고 이 몫은 region=부산 — SQL 이 발화의 서울을 읽어도 서울 행은 버린다
+    rows = [_row("서울 카페 A", "카페"), _row("서울 카페 B", "카페")]
+    facts, port, _ = _explore_sql({"region": "부산", "category": "CAFE"}, rows, utterance="부산 카페랑 서울 맛집")
+    assert port.calls[0][1]["region"] == "부산"
+    assert facts.detail == {"anchor": "부산", "anchor_kind": "region"}
+    assert _names_of(facts) == ["인기 카페", "바다 전망 카페"]  # 반경 탐색 결과(부산 중심)
+
+
+def test_explore_sql_runs_from_arguments_alone_on_the_plan_path() -> None:
+    facts, port, _ = _explore_sql({"region": "서울", "theme": "요즘 핫한"}, [_row("경복궁", trending=True)], utterance="")
+    assert port.calls and port.calls[0][0] == "" and _names_of(facts) == ["경복궁"]
+
+
+@pytest.mark.parametrize("rows", [None, []])
+def test_explore_sql_failure_or_zero_rows_falls_back_to_the_radius_pool(rows) -> None:
+    facts, port, _ = _explore_sql({"region": "부산", "theme": "요즘 핫한"}, rows)
+    assert port.calls and set(_names_of(facts)[:2]) == {"인기 식당", "인기 카페"}  # 반경 탐색 결과(INV-4)
+
+
+def test_explore_sql_finds_a_district_the_region_table_does_not_know() -> None:
+    rows = [_row("망원한강공원", sigungu="마포구"), _row("경의선숲길", sigungu="마포구"), _row("여의도공원", sigungu="영등포구")]
+    facts, _, builder = _explore_sql({"region": "망원동"}, rows, utterance="망원동 산책할 곳")
+    assert builder.requests == [] and facts.status is FactStatus.OK  # 표에 없는 지역 — 반경은 못 돈다
+    assert facts.detail == {"anchor": "마포구", "anchor_kind": "region"}  # 행의 구군(DB 값)이 앵커
+
+
+def test_explore_sql_with_nothing_found_for_an_unknown_district_stays_empty() -> None:
+    facts, _, _ = _explore_sql({"region": "망원동"}, [])
+    assert facts.status is FactStatus.EMPTY and facts.detail == {}
+
+
+def test_explore_sql_is_not_planned_without_a_said_region() -> None:
+    _, port, _ = _explore_sql({"theme": "요즘 핫한"}, [_row("경복궁")], utterance="요즘 핫한 곳")  # 일정 근처는 거리가 핵심 — 반경만
+    assert port.calls == []
+
+
+def test_explore_sql_skips_the_llm_when_the_turn_has_too_little_time_left() -> None:
+    facts, port, _ = _explore_sql({"region": "부산"}, [_row("경복궁")], remaining_ms=1500)  # 1.5s × 0.4 = 0.6s < 하한
+    assert port.calls == [] and "인기 카페" in _names_of(facts)
 
 
 def test_explore_asks_for_a_region_only_when_no_anchor_can_be_found() -> None:

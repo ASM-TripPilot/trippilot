@@ -185,7 +185,8 @@ def test_vendor_403_is_counted_apart_from_budget() -> None:
     response, _, trace = _generate(_chain(port), _request(window=_NARROW))
     assert response.status_code == 200, response.text
     assert _alternative_distances(response.json())
-    n = len(_distances(response.json()))
+    # 걷는 구간(700m 이하)은 업체를 부르지 않는다 — `WalkFirst` 가 조립과 같은 판정으로 먼저 거른다(2026-10-20)
+    n = len([s for s in _distances(response.json()) if "도보" not in s])
     assert sum(port.legs.values()) == n   # 차선책 구간도 표를 거쳐 한 번씩만 불렸다
     (event,) = _distance_events(trace)
     assert f"vendor={n}/{n}" in event.reason and f"budget=0/{n}" in event.reason, event.reason

@@ -19,7 +19,7 @@ from enum import Enum
 
 
 class Intent(Enum):
-    """라우팅 closed-set 13종 + 폴백 라벨 1종."""
+    """라우팅 closed-set 13종 + 도우미 전용 장소 탐색 1종(`EXPLORE_PLACES` — 아래 `DIALOGUE_INTENTS`) + 폴백 라벨 1종."""
 
     GENERATE_SCHEDULE = "GENERATE_SCHEDULE"
     REGENERATE = "REGENERATE"
@@ -80,7 +80,7 @@ class RoutingEntry:
 # 실제로 다른 세션이 이 표를 읽고 "에이전트 7종"으로 계획을 세웠다가 되돌렸다 —
 # 문서가 아니라 **계획을 오염시킨** 드리프트라 이름을 지운다.
 # 어느 Provider 를 쓰는지는 이 표의 일이 아니다: `INFO_REQUIREMENTS`(의도 → Provider
-# 목록)가 그 자리이고, 위 세 의도는 아직 그 표에 행이 없다(무행 9종 중 셋).
+# 목록)가 그 자리다 — 위 세 의도도 이제 그 표에 행이 있다(GET_WEATHER·GET_DISTANCE #711, GET_POI_INFO #1308).
 ROUTING_TABLE: dict[Intent, RoutingEntry] = {
     Intent.GENERATE_SCHEDULE: RoutingEntry("ScheduleAgent", RoutingMode.DELEGATE),
     Intent.REGENERATE: RoutingEntry("ScheduleAgent", RoutingMode.DELEGATE),
@@ -141,7 +141,8 @@ class IntentMatch:
     불변식:
     - `match_route=FALLBACK` ⇔ `intent=OUT_OF_SCOPE` (폴백 라벨은 폴백 경로에서만 나온다)
     - 폴백이면 `reason` 필수 — **침묵 실패 금지(INV-4)**. 왜 폴백했는지가 결과에 남는다.
-    - 폴백이 아니면 라벨은 항상 위임 가능한 closed-set 13종 안 (INV-1과 동형)
+    - 폴백이 아니면 라벨은 항상 도우미 의도(`DIALOGUE_INTENTS` — 13종 + 장소 탐색) 안 (INV-1과 동형). 3단 라우터가 내는
+      라벨이 13종(`ROUTABLE_INTENTS`) 안이라는 보장은 타입이 아니라 라우터가 진다
     """
 
     intent: Intent
