@@ -825,6 +825,30 @@ function renderRegenerateConfirm(description: string): ReactElement {
   );
 }
 
+/** TRIP-1498 (c) — 갈 길 없는 확정 일정의 [다시 짜기] 이유 안내. DraftPage 와 같은 글자, [확인]만 있다. */
+function renderRegenerateStop(): ReactElement {
+  return (
+    <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+      <View className="flex-1 justify-center bg-canvas px-lg">
+        <StateNotice
+          testID="itinerary-regenerate-stop"
+          icon={<AlertCircleGlyph />}
+          title="일정을 다시 짤 수 없어요"
+          description="확정한 일정은 지금 다시 짤 수 없어요"
+          actions={[
+            {
+              testID: 'itinerary-regenerate-stop-ok',
+              label: '확인',
+              variant: 'filled',
+              onPress: noop,
+            },
+          ]}
+        />
+      </View>
+    </SafeAreaView>
+  );
+}
+
 // TRIP-1039 h08 셸 폴백·일부 실패 얼굴 — Figma 전용 프레임이 없어 `4221:2448` 셸 + NoticeBar `4466:1794`
 // 자리로 합성한다. 안내는 시트 맨 위(헤더 뒤·첫 카드 앞), peek 에서 보이는지는 6-b 실기 몫(바텀시트 목 사각).
 function renderH08DraftNoticeShell(options: {
@@ -5826,6 +5850,13 @@ export const PREVIEW_STATES: PreviewState[] = [
       renderRegenerateConfirm(
         '다시 짜면 직접 바꾼 내용은 사라질 수 있어요 · 새로 짠 일정이 바로 반영돼요'
       ),
+  },
+  {
+    key: 'h08-regenerate-stop',
+    band: 'h',
+    label: 'h08 · 다시 짜기 불가(확정 이유 안내)',
+    login: null,
+    render: renderRegenerateStop,
   },
   {
     key: 'h08-draft-unplaced',
