@@ -8,11 +8,14 @@ import java.time.LocalTime
 class TodayWindowTest : StringSpec({
     fun t(s: String) = LocalTime.parse(s)
 
-    "지금부터 2시간이 23:59 안이면 종전대로, 넘으면 익일 01:00" {
-        TodayWindow.generationEnd(t("21:00"), t("21:00")) shouldBe t("23:00")
-        TodayWindow.generationEnd(t("21:30"), t("21:00")) shouldBe t("23:30")
+    "지금부터 4시간을 열되 하루 끝 23:59 까지 — 2시간도 못 채우면 익일 01:00 (2026-10-20 사용자)" {
+        TodayWindow.generationEnd(t("18:30"), t("21:00")) shouldBe t("22:30")
+        TodayWindow.generationEnd(t("19:30"), t("21:00")) shouldBe t("23:30")
+        TodayWindow.generationEnd(t("21:00"), t("21:00")) shouldBe t("23:59")
+        TodayWindow.generationEnd(t("21:30"), t("21:00")) shouldBe t("23:59")
         TodayWindow.generationEnd(t("22:00"), t("21:00")) shouldBe t("01:00")
         TodayWindow.generationEnd(t("23:30"), t("21:00")) shouldBe t("01:00")
+        TodayWindow.generationEnd(t("10:00"), t("21:00")) shouldBe t("21:00") // 낮에는 하루 끝 그대로
     }
 
     "새벽 끝만 다음 날로 읽는다 — 낮의 거꾸로 된 창은 열린 창이 아니다" {
