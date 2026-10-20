@@ -1679,3 +1679,12 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U8 Functional Design 사후 개정(마감 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
+
+---
+## Functional Design 정정 — TRIP-1513 변경 이력 화면(h36) 철회 (frontend-components R13 · business-rules O-U8-7)
+**Timestamp**: 2026-10-21T14:00:00+09:00 (작업 시점, 초 단위 미측정)
+**User Input**: (사용자 원문) "저거 화면 없는데" — 변경 이력 화면(h36)은 Figma 에 없다는 지적. 이어서 "피그마 h36은 일단 내가 지움".
+**AI Response**: 직전 2026-10-21 개정 블록(`2a3a32dbd`)이 전제한 변경 이력 화면이 라이브 Figma 정본에 없었다. 구현 커밋 `8723d2ac9` 를 revert(`19ed66df6`)하고, `frontend-components.md` 끝과 `business-rules.md` 끝에 `[정정 · 2026-10-21]` 블록을 원문 삭제·수정 0줄로 덧붙였다 — R13 은 철회 전 상태(RESTORE_REVISION → 능력 목록)로 복귀, O-U8-7 은 보류 유지·선행 조건을 "리비전 화면을 제품에 둘지 결정"으로 변경, 6-b 행은 실기 QA 완료(TRIP-1515)로 정정. 제품 결정은 새로 만들지 않았다.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 정정, 승인 대기(같은 PR 머지 = 승인, #1071 선례). `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
