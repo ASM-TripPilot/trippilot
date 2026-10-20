@@ -42,15 +42,23 @@ jobs:
         with:
           enable-cache: true
 
-      # 누적본 복원 — 브랜치가 없으면 빈 상태로 시작한다(첫 실행).
+      # 누적본 복원 — 브랜치가 **없을 때만** 빈 상태로 시작한다(첫 실행). 조회·받기가 실패하면 잡을 멈춘다 —
+      # 빈 상태로 수집하면 아래 갱신이 누적본을 그날 분량으로 덮어쓴다(Codex 리뷰 10-20). `ls-remote --exit-code`
+      # 는 브랜치가 없으면 2, 조회 자체가 실패하면 그 밖의 값이다.
       - name: 누적본 복원
+        id: restore
         run: |
           set -o pipefail
-          if git fetch origin overview-state --depth=1 2>/dev/null; then
-            git show FETCH_HEAD:place_corpus_overview.jsonl.gz > ai/data/place_corpus_overview.jsonl.gz
-            echo "복원: $(python3 -c 'import gzip; print(sum(1 for l in gzip.open("ai/data/place_corpus_overview.jsonl.gz", "rt") if l.strip()))') 곳"
-          else
+          rc=0; git ls-remote --exit-code --heads origin overview-state >/dev/null || rc=$?
+          if [ "$rc" -eq 2 ]; then
             echo "overview-state 브랜치 없음 — 처음부터 시작"
+          elif [ "$rc" -ne 0 ]; then
+            echo "::error::누적본 브랜치 조회 실패(rc=$rc) — 빈 상태로 덮어쓰지 않게 멈춘다"; exit 1
+          else
+            git fetch origin overview-state --depth=1
+            git show FETCH_HEAD:place_corpus_overview.jsonl.gz > /tmp/overview.jsonl.gz
+            mv /tmp/overview.jsonl.gz ai/data/place_corpus_overview.jsonl.gz
+            echo "복원: $(python3 -c 'import gzip; print(sum(1 for l in gzip.open("ai/data/place_corpus_overview.jsonl.gz", "rt") if l.strip()))') 곳"
           fi
 
       - name: 개요 수집
@@ -66,9 +74,9 @@ jobs:
             --max-calls "${{ inputs.max_calls || '2850' }}" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
 
       # 누적본 갱신 — orphan 커밋 하나로 브랜치를 덮는다(히스토리 불필요). 실패율로 끝난 날도 받은 데까지는
-      # 스크립트가 저장했으니 올린다(한도 소진이면 다음 실행이 이어받는다).
+      # 스크립트가 저장했으니 올린다. 단 **복원이 성공했을 때만** — 복원이 실패한 날 올리면 빈(또는 반쪽) 파일로 덮는다.
       - name: 누적본 갱신
-        if: always()
+        if: always() && steps.restore.outcome == 'success'
         run: |
           set -o pipefail
           [ -f ai/data/place_corpus_overview.jsonl.gz ] || { echo "누적본 없음 — 건너뜀"; exit 0; }

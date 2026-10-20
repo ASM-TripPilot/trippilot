@@ -43,13 +43,19 @@ def test_clean_overview_strips_markup_and_contact_sentences() -> None:
 
 
 class _Adapter:
-    def __init__(self, table: dict[str, str | None], fail: set[str] = frozenset()) -> None:
-        self.table, self.fail, self.calls = table, set(fail), []
+    """`fail` = 5xx·타임아웃(키는 산다) · `kill` = 그 호출에서 키가 퇴출된다(403·429 — 어댑터가 `alive` 를 내린다)."""
+
+    def __init__(self, table: dict[str, str | None], fail: set[str] = frozenset(),
+                 kill: set[str] = frozenset()) -> None:
+        self.table, self.fail, self.kill, self.calls, self.alive = table, set(fail), set(kill), [], True
 
     def fetch_overview(self, cid: str) -> str | None:
         self.calls.append(cid)
-        if cid in self.fail:
+        if cid in self.kill:
+            self.alive = False
             raise RuntimeError("HTTP 429")
+        if cid in self.fail:
+            raise RuntimeError("HTTP 503")
         return self.table.get(cid)
 
 
@@ -64,14 +70,26 @@ def test_collect_resumes_skips_known_places_and_stops_at_the_budget() -> None:
     assert "overview:e" not in have
 
 
-def test_collect_stops_after_consecutive_failures_and_keeps_failed_places_for_next_run() -> None:
+def test_collect_stops_after_consecutive_server_errors_and_counts_them_as_failures() -> None:
+    """5xx·타임아웃은 키 문제가 아니다 — 연달아 나면 이 키는 멈추되 **실패로 센다**(실패율로 드러난다). 실패한 곳은
+    남기지 않아 다음 실행이 다시 부른다."""
     m = _mod()
     todo = [(str(i), f"곳{i}") for i in range(20)]
     adapter = _Adapter({}, fail={str(i) for i in range(20)})
     have: dict[str, dict] = {}
     calls, failed = m.collect(adapter, todo, have, 100)
-    assert calls == failed == m._STOP_AFTER_FAILS  # 한도가 끝난 날 호출을 낭비하지 않는다
+    assert calls == failed == m._STOP_AFTER_FAILS
     assert have == {}
+
+
+def test_collect_stops_at_once_when_the_key_is_retired_and_does_not_count_it_as_failure() -> None:
+    """403·429 는 어댑터가 키를 퇴출한다(그날 한도·거부) — 실패가 아니라 그 키의 끝이라 곧바로 멈춘다(Codex 리뷰 10-20)."""
+    m = _mod()
+    adapter = _Adapter({"0": "가 개요다."}, kill={"1"})
+    have: dict[str, dict] = {}
+    calls, failed = m.collect(adapter, [("0", "가"), ("1", "나"), ("2", "다")], have, 100)
+    assert (calls, failed) == (2, 0) and adapter.calls == ["0", "1"]
+    assert set(have) == {"overview:0"}
 
 
 def test_targets_are_tourapi_places_deduped_in_a_stable_hash_order() -> None:
@@ -101,7 +119,7 @@ def test_targets_put_sights_before_food_so_a_partial_corpus_covers_attractions_f
 
 
 def test_main_moves_to_the_next_key_when_one_key_hits_its_daily_quota(tmp_path, monkeypatch) -> None:
-    """같은 날 앞선 실행이 1번 키를 다 썼어도 2번 키로 끝까지 받는다(429 는 키 퇴출이 아니라 연속 실패로 보인다)."""
+    """같은 날 앞선 실행이 1번 키를 다 썼어도 2번 키로 끝까지 받는다 — 429 면 어댑터가 1번 키를 퇴출한다(#1418)."""
     import json
     import trippilot.poi_curation.sourcing.tourapi as tourapi
     m = _mod()
@@ -114,11 +132,12 @@ def test_main_moves_to_the_next_key_when_one_key_hits_its_daily_quota(tmp_path, 
 
     class _KeyAdapter:
         def __init__(self, http, key, **_):
-            self.key = key
+            self.key, self.alive = key, True
 
         def fetch_overview(self, cid):
             used[self.key] = used.get(self.key, 0) + 1
             if self.key == "K1":
+                self.alive = False
                 raise RuntimeError("HTTP 429")
             return f"{cid} 개요다."
 
@@ -128,6 +147,31 @@ def test_main_moves_to_the_next_key_when_one_key_hits_its_daily_quota(tmp_path, 
     monkeypatch.setenv("TOUR_API_KEY2", "K2")
     monkeypatch.delenv("TOUR_API_KEY3", raising=False)
     out = tmp_path / "corpus.jsonl.gz"
-    assert m.main(["--max-calls", "100", "--out", str(out)]) == 0  # 한도 소진 연속 실패는 실패율에 안 센다
-    assert used == {"K1": m._STOP_AFTER_FAILS, "K2": 30}
+    assert m.main(["--max-calls", "100", "--out", str(out)]) == 0  # 키 퇴출은 실패율에 안 센다
+    assert used == {"K1": 1, "K2": 30}  # 퇴출된 키에 헛호출을 더 하지 않는다
     assert len(m._load(out)) == 30
+
+
+def test_main_fails_when_every_key_only_gets_server_errors(tmp_path, monkeypatch) -> None:
+    """키가 다 살아 있는데 5xx·타임아웃만 나는 날 — 진척 0 이 초록으로 숨지 않게 종료 코드 1(Codex 리뷰 10-20)."""
+    import json
+    import trippilot.poi_curation.sourcing.tourapi as tourapi
+    m = _mod()
+    pois = tmp_path / "pois.json"
+    pois.write_text(json.dumps({"proposals": [
+        {"source": "TOURAPI", "poi": {"name": f"곳{i}", "category": "SIGHT"}, "provenance": {"content_id": str(i)}}
+        for i in range(30)]}), encoding="utf-8")
+    monkeypatch.setattr(m, "_POIS", pois)
+
+    class _Down:
+        def __init__(self, http, key, **_):
+            self.alive = True
+
+        def fetch_overview(self, cid):
+            raise RuntimeError("HTTP 503")
+
+    monkeypatch.setattr(tourapi, "TourApiAdapter", _Down)
+    monkeypatch.setattr(tourapi, "UrllibHttpClient", lambda: None)
+    for k, v in (("TOUR_API_KEY", "K1"), ("TOUR_API_KEY2", "K2"), ("TOUR_API_KEY3", "K3")):
+        monkeypatch.setenv(k, v)
+    assert m.main(["--max-calls", "100", "--out", str(tmp_path / "c.jsonl.gz")]) == 1
