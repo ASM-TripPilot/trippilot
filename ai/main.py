@@ -781,7 +781,7 @@ def _bank_vectors():
 
         return load_bank_vectors(_BANK_VECTORS_PATH)
     except Exception as e:  # noqa: BLE001 — 기동을 막지 않는다
-        log.warning("미리 계산한 질문뱅크 벡터 로드 실패 %s: %s — 원격 색인으로", type(e).__name__, e)
+        logging.getLogger("trippilot.main").warning("미리 계산한 질문뱅크 벡터 로드 실패 %s: %s — 원격 색인으로", type(e).__name__, e)
         return None
 
 
@@ -808,7 +808,7 @@ def _intent_bank() -> tuple:
 
         return load_bank_file(_BANK_PATH, yaml.safe_load)
     except Exception as e:  # noqa: BLE001 — 기동을 막지 않는다
-        log.warning("질문뱅크 로드 실패 %s: %s — 도우미 해석이 1차 매칭 없이 기동", type(e).__name__, e)
+        logging.getLogger("trippilot.main").warning("질문뱅크 로드 실패 %s: %s — 도우미 해석이 1차 매칭 없이 기동", type(e).__name__, e)
         return ()
 
 
