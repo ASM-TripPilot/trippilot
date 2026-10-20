@@ -3,22 +3,24 @@ package com.trippilot.app.web
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.auth.domain.Provider
+import com.trippilot.auth.domain.RefreshSession
 import com.trippilot.auth.domain.SocialProfile
 import com.trippilot.auth.domain.port.SocialAuthPort
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
+import io.kotest.assertions.withClue
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotBeBlank
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Primary
-import org.springframework.core.io.ClassPathResource
 import org.springframework.http.MediaType
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.web.client.RestClient
-import org.yaml.snakeyaml.Yaml
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
@@ -32,6 +34,8 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
 
     @Value("\${local.server.port}")
     private var port: Int = 0
+
+    @Autowired private lateinit var jdbc: JdbcTemplate
 
     private val json = ObjectMapper()
 
@@ -111,13 +115,6 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
         body["account"]["socialProviders"].map { it.asText() } shouldBe listOf("APPLE")
     }
 
-    /** 요청 스키마도 계약과 맞는다 — 코드에 필드를 넣고 openapi 에 안 넣으면 프론트 orval 이 모른다. */
-    @Test
-    fun `SocialTokenLoginRequest 계약이 authorizationCode 를 선언한다`() {
-        schemaProperties("SocialTokenLoginRequest") shouldBe
-            setOf("accessToken", "ageConfirmation", "deviceId", "authorizationCode")
-    }
-
     @Test
     fun `신규 가입인데 연령확인 누락이면 400 VALIDATION_ERROR`() {
         val (status, body) = post(
@@ -127,6 +124,63 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
 
         status shouldBe 400
         body["error"]["code"].asText() shouldBe "VALIDATION_ERROR"
+    }
+
+    /**
+     * 기기 식별자는 세션 컬럼(`refresh_session.device_id varchar(128)`)에 그대로 들어간다. 요청에서 막지 않으면
+     * 저장에서 22001 이 나 로그인 트랜잭션 전체가 롤백되고 **500** 이 나간다 — 클라이언트 탓인데 서버 장애로 보인다.
+     * 두 로그인 경로가 각자 DTO 를 가지므로 둘 다 본다.
+     */
+    private val loginBodies = mapOf(
+        "/api/v1/auth/social/kakao" to { deviceId: String ->
+            """{"authorizationCode":"code","codeVerifier":"verifier","redirectUri":"trippilot://auth","ageConfirmation":{"method":"SELF_DECLARED"},"deviceId":"$deviceId"}"""
+        },
+        "/api/v1/auth/social/kakao/token" to { deviceId: String ->
+            """{"accessToken":"sdk-access-token","ageConfirmation":{"method":"SELF_DECLARED"},"deviceId":"$deviceId"}"""
+        },
+    )
+
+    @Test
+    fun `deviceId 가 상한을 넘으면 두 로그인 경로 모두 400 — deviceId 검증 실패로, 500 이 아니다`() {
+        loginBodies.forEach { (path, body) ->
+            val (status, response) = post(path, body("d".repeat(RefreshSession.DEVICE_ID_MAX + 1)))
+
+            withClue(path) {
+                status shouldBe 400
+                response["error"]["code"].asText() shouldBe "VALIDATION_ERROR"
+                response["error"]["fields"].map { it["field"].asText() } shouldBe listOf("deviceId")
+            }
+        }
+    }
+
+    @Test
+    fun `deviceId 상한이 세션 컬럼 폭과 같다 — 둘이 갈라지면 22001 → 500 이 돌아온다`() {
+        val width = jdbc.queryForObject(
+            "SELECT character_maximum_length FROM information_schema.columns " +
+                "WHERE table_schema = current_schema() AND table_name = 'refresh_session' AND column_name = 'device_id'",
+            Int::class.java,
+        )
+
+        width shouldBe RefreshSession.DEVICE_ID_MAX
+    }
+
+    @Test
+    fun `deviceId 상한이 계약의 maxLength 와 같다 — 다르면 생성 클라이언트 검증과 서버가 갈린다`() {
+        listOf("SocialLoginRequest", "SocialTokenLoginRequest").forEach { name ->
+            @Suppress("UNCHECKED_CAST")
+            val deviceId = schemaPropertySpecs(name)["deviceId"] as Map<String, Any>
+
+            withClue(name) { deviceId["maxLength"] shouldBe RefreshSession.DEVICE_ID_MAX }
+        }
+    }
+
+    @Test
+    fun `deviceId 상한 길이는 두 로그인 경로 모두 받는다 — 상한 경계`() {
+        loginBodies.forEach { (path, body) ->
+            val (status, _) = post(path, body("d".repeat(RefreshSession.DEVICE_ID_MAX)))
+
+            withClue(path) { status shouldBe 200 }
+        }
     }
 
     /**
@@ -195,9 +249,9 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     }
 
     // ── 응답 모양 게이트(TRIP-249 5번) ────────────────────────────────────────────
-    // OpenApiContractIT 는 **경로**가 맞는지만 본다. 응답 **본문 필드**는 아무도 안 봤고,
-    // 그래서 TokenPair 가 7필드를 선언하는 동안 서버는 3필드만 내보내도 전부 초록이었다.
-    // 아래 둘이 그 구멍을 막는다 — 계약이 선언한 키 집합과 실제 응답 키 집합을 정확히 대조한다.
+    // 당시 OpenApiContractIT 는 **경로**만 봤고, TokenPair 가 7필드를 선언하는 동안 서버가 3필드만 내도 초록이었다.
+    // 지금은 그 클래스의 필드 게이트가 DTO 와 스키마의 **이름**을 정적으로 대조한다(요청 본문 포함). 아래 둘은
+    // 그와 별개로 **실제 응답**의 키 집합을 본다 — 정적 대조가 못 보는 런타임 생략(NON_NULL 등)까지 잡는다.
 
     /**
      * 501 설명이 **통째로** 계약에 실린다(TRIP-1317). `{ description: … }` 흐름 매핑 안의 평문에 쉼표가 들면
@@ -208,8 +262,7 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     fun `두 로그인 경로의 501 설명이 잘리지 않는다 — 닫아 둔 제공자를 계약이 말한다`() {
         @Suppress("UNCHECKED_CAST")
         fun response501(path: String): Map<String, Any?> {
-            val spec = Yaml().load<Map<String, Any>>(ClassPathResource("static/openapi.yaml").inputStream)
-            val post = ((spec["paths"] as Map<String, Any>)[path] as Map<String, Any>)["post"] as Map<String, Any>
+            val post = ((OpenApiSpec.document["paths"] as Map<String, Any>)[path] as Map<String, Any>)["post"] as Map<String, Any>
             return (post["responses"] as Map<Any, Any>).entries.single { it.key.toString() == "501" }.value as Map<String, Any?>
         }
 
@@ -223,15 +276,10 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     }
 
     /** openapi 정본에서 스키마 하나의 property 이름 집합을 읽는다. */
-    private fun schemaProperties(name: String): Set<String> {
-        @Suppress("UNCHECKED_CAST")
-        val spec = Yaml().load<Map<String, Any>>(ClassPathResource("static/openapi.yaml").inputStream)
-        @Suppress("UNCHECKED_CAST")
-        val schemas = (spec["components"] as Map<String, Any>)["schemas"] as Map<String, Map<String, Any>>
-        val schema = requireNotNull(schemas[name]) { "openapi.yaml 에 $name 스키마가 없다" }
-        @Suppress("UNCHECKED_CAST")
-        return (schema["properties"] as Map<String, Any>).keys.toSet()
-    }
+    private fun schemaProperties(name: String): Set<String> = schemaPropertySpecs(name).keys
+
+    @Suppress("UNCHECKED_CAST")
+    private fun schemaPropertySpecs(name: String): Map<String, Any> = OpenApiSpec.schema(name)["properties"] as Map<String, Any>
 
     private fun JsonNode.keys(): Set<String> = fieldNames().asSequence().toSet()
 

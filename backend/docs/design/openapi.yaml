@@ -132,17 +132,14 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [refreshToken]
-              properties:
-                refreshToken: { type: string }
+            schema: { $ref: '#/components/schemas/RefreshTokenBody' }
       responses:
         '200':
           description: 회전된 토큰 쌍(isNewUser·account 없음 — 계정 요약은 GET /me 소관)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RefreshedTokenPair' }
+        '400': { $ref: '#/components/responses/ValidationError' }
         '401':
           description: 무효·만료 또는 회전 토큰 재사용(체인 무효화)
           content:
@@ -153,8 +150,16 @@ paths:
     post:
       tags: [auth]
       summary: 현재 기기 체인 revoke
+      description: 공개 경로다(서버 permitAll) — Authorization 을 **싣지 않는다**. 만료된 액세스 토큰을 실으면 리소스 서버가 401 을 내 세션이 끊기지 않는다.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshTokenBody' }
       responses:
         '204': { description: 로그아웃 완료 }
+        '400': { $ref: '#/components/responses/ValidationError' }
 
   /terms:
     get:
@@ -430,7 +435,11 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/PreferenceInput' }
       responses:
-        '200': { description: 저장 완료 }
+        '200':
+          description: 저장 완료 — 반영된 취향 7축(GET 과 같은 모양)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PreferenceView' }
         '400': { $ref: '#/components/responses/ValidationError' }
 
   /me/settings:
@@ -2348,11 +2357,13 @@ components:
 
     StaySearchResponse:
       type: object
-      required: [items, degraded, filterZeroReasons]
+      required: [items, degraded, filterZeroReasons, amenitiesKnown, truncated]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/StayItem' } }
         degraded: { type: boolean, description: 일부 공급자 실패 시 true(부분 결과·재시도 안내) }
         filterZeroReasons: { type: array, items: { type: string }, description: '필터로 0건일 때 완화 후보(예: stayType, amenity:오션뷰)' }
+        amenitiesKnown: { type: boolean, description: 'false = 편의시설 정보를 **아직 모른다**(없는 것이 아니다). 편의시설 필터 비활성화 또는 "정보 준비 중" 안내 — 안 그러면 0건이 "그런 숙소가 없다"로 읽힌다' }
+        truncated: { type: boolean, description: 'true = 지역 미선택이라 전국 중 **일부만** 본 결과. "조건에 맞는 숙소가 없다"고 단정하지 말고 지역 선택을 권한다' }
 
     CuratedStayList:
       type: object
@@ -2800,6 +2811,7 @@ components:
       required: [days]
       description: 편집(전체 교체) — 수정된 일자·슬롯 배열. 슬롯 순서 = 배열 순서
       properties:
+        reason: { type: string, nullable: true, maxLength: 500, description: 선택 — 변경 이력에 남는다 }
         days:
           type: array
           items:
@@ -3641,6 +3653,7 @@ components:
         ageConfirmation:
           allOf: [{ $ref: '#/components/schemas/AgeConfirmation' }]
           description: 신규 가입 시 필수, 기존 로그인 시 무시
+        deviceId: { type: string, nullable: true, maxLength: 128, description: '미제공 시 서버가 임의 부여(기기별 세션). 길이는 UTF-16 단위(서버 @Size) — maxLength(코드 포인트)와 BMP 밖 문자에서 다르다' }
 
     SocialTokenLoginRequest:
       type: object
@@ -3654,7 +3667,7 @@ components:
         ageConfirmation:
           allOf: [{ $ref: '#/components/schemas/AgeConfirmation' }]
           description: 신규 가입 시 필수, 기존 로그인 시 무시
-        deviceId: { type: string, nullable: true, description: 미제공 시 서버가 임의 부여(기기별 세션) }
+        deviceId: { type: string, nullable: true, maxLength: 128, description: '미제공 시 서버가 임의 부여(기기별 세션). 길이는 UTF-16 단위(서버 @Size) — maxLength(코드 포인트)와 BMP 밖 문자에서 다르다' }
         authorizationCode:
           type: string
           nullable: true
@@ -3663,6 +3676,13 @@ components:
             `authorizationCode`. 로그인은 `accessToken`(identityToken)으로 끝나고, 이 값은 계정 파기 때
             Apple 토큰을 revoke 하기 위한 refresh_token 교환에만 쓴다(App Store 5.1.1(v)).
             교환이 실패해도 로그인은 성공한다(응답 무변화). 다른 제공자는 무시한다.
+
+    RefreshTokenBody:
+      type: object
+      description: 리프레시 토큰 하나를 실어 보내는 본문 — 회전(/auth/token/refresh)·로그아웃(/auth/logout) 공용
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string, pattern: '\S', description: '비거나 공백뿐이면 400(VALIDATION_ERROR) — 서버 @NotBlank. 공백 판정은 서버(Java isBlank) 기준이며 pattern 의 \S 와 공백 문자 집합이 다를 수 있다' }
 
     RefreshedTokenPair:
       type: object
@@ -3733,7 +3753,7 @@ components:
         capabilities:
           type: object
           properties:
-            localLocationUse: { type: boolean }
+            localLocationUse: { type: boolean, description: '서버가 아직 내지 않는다 — 의미 미정, 팀 결정 대기(TRIP-1474). 클라이언트는 읽지 말 것' }
             serverLocationService: { type: boolean }
             gpsTrackRetention: { type: boolean }
 
@@ -3819,7 +3839,10 @@ components:
         purgeAt: { type: string, format: date-time }
         cascadeSummary:
           type: object
-          additionalProperties: true
+          required: [purgeScheduled, legallyRetained]
+          properties:
+            purgeScheduled: { type: array, items: { type: string }, description: 유예 후 파기될 데이터 범주 }
+            legallyRetained: { type: array, items: { type: string }, description: 법정 보존으로 남는 범주 }
 
     ErrorResponse:
       type: object
