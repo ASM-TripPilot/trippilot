@@ -190,3 +190,80 @@ describe('🔴 RiskDetailSheet · 콜백 (AC-4)', () => {
     expect(onPressAlternative).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * 상황 감지 FE-B · frontend-components §3.4·§3.5 — 심각도 eyebrow · 날짜어 · 출처 줄 · 감시 3상태.
+ *
+ * 무엇을 보장하나:
+ *  - eyebrow 는 RISK(또는 모름) `위험 요소 · {카테고리}`, CAUTION `주의 · {카테고리}`.
+ *  - 날짜어(`내일`·`M월 D일`)가 오면 eyebrow 옆 `planb-risk-day-label` 에 그대로, 없으면 그 요소가 없다.
+ *  - 출처(`attribution`)가 오면 제목 아래 `출처: {attribution}` 한 줄(BR-SA-24 공공누리), 없으면(null·빈 값) 줄이 없다.
+ *  - 감시 배지는 주입한 행만 그린다(OFF 로 숨은 묶음은 배지가 없다) · `unknown` 은 `{카테고리} · 확인 불가`.
+ */
+describe('🔴 RiskDetailSheet · 심각도·날짜어·출처·감시 3상태 (상황 감지 FE-B)', () => {
+  it('F1 CAUTION 이면 eyebrow 는 "주의 · 날씨"(미지정은 위 S1 — 위험 요소)', () => {
+    renderSheet({ severity: 'CAUTION' });
+    expect(screen.getByTestId('planb-risk-eyebrow')).toHaveTextContent(
+      '주의 · 날씨'
+    );
+  });
+
+  it('F2 severity=RISK 는 기존 eyebrow 그대로다', () => {
+    renderSheet({ severity: 'RISK' });
+    expect(screen.getByTestId('planb-risk-eyebrow')).toHaveTextContent(
+      '위험 요소 · 날씨'
+    );
+  });
+
+  it('F3 날짜어가 오면 eyebrow 옆에 그 글자 그대로, 없으면 요소가 없다', () => {
+    renderSheet({ dayLabel: '내일' });
+    expect(screen.getByTestId('planb-risk-day-label')).toHaveTextContent(
+      '내일'
+    );
+    // eyebrow 글자는 바뀌지 않는다(날짜어는 따로 놓인 요소).
+    expect(screen.getByTestId('planb-risk-eyebrow')).toHaveTextContent(
+      '위험 요소 · 날씨'
+    );
+  });
+
+  it('F4 날짜어가 null 이면 날짜어 요소가 없다', () => {
+    renderSheet({ dayLabel: null });
+    expect(screen.queryByTestId('planb-risk-day-label')).toBeNull();
+    // 짝 앵커 — 시트는 그려졌다.
+    expect(screen.getByTestId('planb-risk-eyebrow')).toBeTruthy();
+  });
+
+  it('F5 출처가 오면 제목 아래 "출처: 기상청 단기예보" 한 줄이다', () => {
+    renderSheet({ attribution: '기상청 단기예보' });
+    expect(screen.getByTestId('planb-risk-attribution')).toHaveTextContent(
+      '출처: 기상청 단기예보'
+    );
+  });
+
+  it.each([
+    ['null', null],
+    ['빈 문자열', ''],
+    ['미지정', undefined],
+  ])('F6 출처가 %s 이면 출처 줄이 없다', (_name, attribution) => {
+    renderSheet({ attribution });
+    expect(screen.queryByTestId('planb-risk-attribution')).toBeNull();
+    expect(screen.getByTestId('planb-risk-title')).toBeTruthy();
+  });
+
+  it('F7 감시 행은 주입한 것만 — 날씨 확인 불가 · 영업 정상, 이동(OFF) 배지는 없다', () => {
+    renderSheet({
+      watchRows: [
+        { kind: 'WEATHER', label: '날씨', status: 'unknown', reason: null },
+        { kind: 'CLOSURE', label: '영업', status: 'normal', reason: null },
+      ],
+    });
+
+    expect(screen.getByTestId('planb-risk-watch-weather')).toHaveTextContent(
+      '날씨 · 확인 불가'
+    );
+    expect(screen.getByTestId('planb-risk-watch-closure')).toHaveTextContent(
+      '영업 · 정상'
+    );
+    expect(screen.queryByTestId('planb-risk-watch-delay')).toBeNull();
+  });
+});

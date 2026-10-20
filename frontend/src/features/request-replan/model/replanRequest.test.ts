@@ -184,3 +184,44 @@ describe('🔴 TRIP-1195 · targetDate — 바라보는 일차로 다시 짠다 
     );
   });
 });
+
+/**
+ * 상황 감지 FE-B · frontend-components §3.3 — 진입 게이트가 준 제외 POI 시드(`excludedPoiIds?`).
+ *
+ * 무엇을 보장하나:
+ *  - 주면 그 목록을 그대로 싣는다(준비 세션의 제외 — 휴무 장소 등). 키는 종전 7개 그대로다.
+ *  - 주지 않으면 종전과 **바이트까지** 같다(`excludedPoiIds: []`) — 정본 §3.3.
+ */
+describe('🔴 상황 감지 FE-B · excludedPoiIds 시드 (§3.3)', () => {
+  const base = {
+    scope: 'FULL_DAY' as const,
+    reasons: ['TEMP_CLOSED'],
+    directives: [],
+    freeText: '',
+    triggerId: 'trg-1',
+  };
+
+  it('X1 제외 POI 를 주면 그 목록이 실리고 키는 7개 그대로다', () => {
+    const body = buildStartReplanRequest({
+      ...base,
+      excludedPoiIds: ['poi-closed-1', 'poi-closed-2'],
+    });
+
+    expect(body.excludedPoiIds).toEqual(['poi-closed-1', 'poi-closed-2']);
+    expect(Object.keys(body).sort()).toEqual(EXPECTED_KEYS);
+  });
+
+  it('X2 주지 않으면 종전 봉투와 바이트까지 같다(excludedPoiIds: [])', () => {
+    expect(JSON.stringify(buildStartReplanRequest(base))).toBe(
+      JSON.stringify({
+        scope: 'FULL_DAY',
+        originKind: null,
+        reasons: ['TEMP_CLOSED'],
+        directives: [],
+        freeText: null,
+        excludedPoiIds: [],
+        triggerId: 'trg-1',
+      })
+    );
+  });
+});

@@ -9,7 +9,9 @@
  * OpenAPI spec version: 0.1.0-draft
  */
 import type { Trigger } from './trigger';
+import type { TriggerWatch } from './triggerWatch';
 
 export interface TriggerList {
   triggers: Trigger[];
+  watch?: TriggerWatch;
 }

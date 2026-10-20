@@ -323,7 +323,7 @@ export const useDeleteMeDeletion = <
 /**
  * 계정이 소유한 것 전부 — 프로필·취향·여행·저장 숙소·방문 기록·동의 이력·도우미 대화. **내보내기만**이고 계정 삭제는 별개다(U0 유예 삭제).
  *
- * 도우미 대화(`assistantMessages`)는 **메시지 한 건이 한 줄**이다 — 사용자가 한 말과 도우미의 답(`sessionId`·`tripId`· `role`·`kind`·`text`·`redacted`·`createdAt`). 정책 위반으로 가려진 입력은 원문이 서버에 없어 `redacted: true` 표지만 나간다. 보존 기간이 지난 대화는 싣지 않는다.
+ * 도우미 대화(`assistantMessages`)는 **메시지 한 건이 한 줄**이다 — 사용자가 한 말과 도우미의 답(`sessionId`·`tripId`· `role`·`kind`·`text`·`redacted`·`createdAt`·`feedback`·`feedbackReason`·`feedbackComment`). 정책 위반으로 가려진 입력은 원문이 서버에 없어 `redacted: true` 표지만 나간다. `feedback` 은 그 답에 남긴 평가(`UP`|`DOWN`, 없으면 null)이고, `feedbackReason`·`feedbackComment` 는 싫어요에 함께 남긴 이유 칩(`WRONG`|`NOT_HELPFUL`|`NOT_WHAT_I_WANTED`)과 자유 의견이다(없으면 null). 보존 기간이 지난 대화는 싣지 않는다.
  *
  * ⚠ **사진 바이너리는 없다**(INV-U5-03) — 서버가 갖고 있지 않으므로 메타(기기 자산 식별자· 촬영 시각)만 나간다. append-only 로그(`consent_record`)는 **읽기만** 한다.
  *
