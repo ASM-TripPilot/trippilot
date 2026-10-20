@@ -84,6 +84,20 @@ def test_ledger_row_round_trips_verdict():
     assert sj.read_previous_verdicts(LEDGER + row + "\n") == PRIOR + [v.verdict]
 
 
+def test_same_day_rerun_counts_as_one_week():
+    import datetime as dt
+
+    m = measured()
+    v = sj.judge(m, OPEN, "bedrock", [])
+    assert v.verdict == sj.SWITCH_TO_LOCAL
+    d = dt.date(2099, 1, 4)  # 커밋된 원장의 어느 행보다 뒤 — before 필터가 그 행들을 건드리지 않게
+    two_rows_same_day = LEDGER + sj.ledger_row(d, m, "bedrock", v) + "\n" + sj.ledger_row(d, m, "bedrock", v) + "\n"
+    # 같은 날 두 행 → 한 주. 다음 주 판정이 2연속이 되지, 같은 날 재실행만으로 2연속이 되지 않는다.
+    assert sj.read_previous_verdicts(two_rows_same_day) == PRIOR + [v.verdict]
+    assert sj.read_previous_verdicts(two_rows_same_day, before=d) == PRIOR
+    assert sj.judge(m, OPEN, "bedrock", sj.read_previous_verdicts(two_rows_same_day, before=d)).action == "none"
+
+
 VALUES = """ai:
   replicas: 1
 embedding:
@@ -159,5 +173,9 @@ def test_dry_run_appends_hold_row_and_never_flips(tmp_path):
     ledger = tmp_path / "ledger.md"; ledger.write_text(LEDGER)
     values = tmp_path / "values.yaml"; values.write_text(VALUES)
     assert sj.main(["--ledger", str(ledger), "--values", str(values), "--dry-run"]) == 0
-    assert sj.read_previous_verdicts(ledger.read_text()) == PRIOR + [sj.HOLD]
+    # 행은 하나 늘고 마지막 판정은 HOLD. 판정 목록 길이로 세지 않는다 — 커밋된 원장에 오늘 행이
+    # 이미 있으면(판정기가 그날 돌았으면) 같은 날짜로 접혀 길이가 안 는다.
+    rows = lambda t: [l for l in t.splitlines() if l.startswith("| 20")]  # noqa: E731
+    assert len(rows(ledger.read_text())) == len(rows(LEDGER)) + 1
+    assert sj.read_previous_verdicts(ledger.read_text())[-1] == sj.HOLD
     assert sj.read_transport(values) == "bedrock"
