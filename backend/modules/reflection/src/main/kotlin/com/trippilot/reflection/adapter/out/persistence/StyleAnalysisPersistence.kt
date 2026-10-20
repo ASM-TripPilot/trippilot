@@ -103,7 +103,12 @@ class StyleAnalysisRepositoryAdapter(private val jpa: StyleAnalysisJpaRepository
     private fun StyleAnalysisEntity.toDomain(): StyleAnalysis {
         val dropped = mutableListOf<String>()
         if (descriptorsShape != null && descriptorsShape != "array") dropped += "descriptors"
-        if (traitGaugesShape != null && traitGaugesShape != "object") dropped += "trait_gauges"
+        val gaugesObject = traitGaugesShape == null || traitGaugesShape == "object"
+        if (!gaugesObject) dropped += "trait_gauges"
+        // 속도(개인화)가 읽는 축은 여유로움 하나다 — 그 축이 숫자가 아니면(`{}`·`"x"`) 0 은 자리값이지 저장된 값이 아니다.
+        // 다른 축과 달리 남긴다: 이 때문에 개인화가 속도를 빼므로, 말없이 빼면 "왜 속도가 안 들어갔나"를 답할 수 없다(INV-4).
+        val easygoingRead = gaugesObject && traitGauges["easygoing"] is Number
+        if (gaugesObject && !easygoingRead) dropped += "trait_gauges.easygoing"
         if (categoryBreakdownShape != null && categoryBreakdownShape != "array") dropped += "category_breakdown"
         if (descriptors.any { it !is String }) dropped += "descriptors[]"
         val analysis = StyleAnalysis(
@@ -121,8 +126,7 @@ class StyleAnalysisRepositoryAdapter(private val jpa: StyleAnalysisJpaRepository
             sampleTripCount = sampleTripCount,
             sampleVisitCount = sampleVisitCount,
             updatedAt = updatedAt,
-            // 속도(개인화)가 읽는 축은 여유로움 하나다 — 그 축이 숫자가 아니면(`{}`·`"x"`) 0 은 자리값이지 저장된 값이 아니다.
-            traitGaugesRead = (traitGaugesShape == null || traitGaugesShape == "object") && traitGauges["easygoing"] is Number,
+            traitGaugesRead = easygoingRead,
         )
         if (dropped.isNotEmpty()) log.warn("스타일 분석 행 일부를 읽지 못해 읽히는 만큼 씁니다. accountId={} 칸={}", accountId, dropped.distinct())
         return analysis

@@ -122,16 +122,26 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
         jdbc.update("UPDATE $table SET $set WHERE $where", *args) shouldBe 1
     }
 
-    private fun <T> logsOf(type: Class<*>, block: () -> T): Pair<T, List<ILoggingEvent>> {
-        val logger = LoggerFactory.getLogger(type) as Logger
+    /**
+     * 이 PR 이 로그를 남기는 자리 전부(저장소 셋 + 회고 서비스)를 함께 받는다 — 줄 수를 **한 로거만** 세면 다른 자리의 줄이 새도 모른다.
+     * 단정은 [levels] 로 WARN·ERROR 수를 함께 본다.
+     */
+    private fun <T> logsOf(block: () -> T): Pair<T, List<ILoggingEvent>> {
         val appender = ListAppender<ILoggingEvent>().apply { start() }
-        logger.addAppender(appender)
+        val loggers = listOf(
+            ReflectionRepositoryAdapter::class.java, ReflectionService::class.java,
+            TripSummaryRepositoryAdapter::class.java, StyleAnalysisRepositoryAdapter::class.java,
+        ).map { LoggerFactory.getLogger(it) as Logger }
+        loggers.forEach { it.addAppender(appender) }
         try {
             return block() to synchronized(appender) { appender.list.toList() }
         } finally {
-            logger.detachAppender(appender)
+            loggers.forEach { it.detachAppender(appender) }
         }
     }
+
+    /** (WARN 수, ERROR 수). */
+    private val List<ILoggingEvent>.levels get() = count { it.level == Level.WARN } to count { it.level == Level.ERROR }
 
     private fun routeStoredEvent(tripId: UUID, day: LocalDate) = EventEnvelope(
         UUID.randomUUID(), "archive.ActualRouteStored", 1, "trip", tripId.toString(), null, now,
@@ -152,7 +162,7 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
             "trip_id = ?", tripId,
         )
 
-        val (warned, logs) = logsOf(TripSummaryRepositoryAdapter::class.java) {
+        val (warned, logs) = logsOf {
             call(HttpMethod.GET, "/api/v1/trips/$tripId/summary", token)
         }
         val (status, body) = warned
@@ -162,6 +172,7 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
         body["summary"]["highlights"].map { it["places"].map(JsonNode::asText) } shouldBe listOf(listOf("성산"))
         body["summary"]["stats"]["totalVisits"].asInt() shouldBe 0
         // 조용히 고치지 않는다(INV-4) — 무엇을 버렸는지 남는다.
+        logs.levels shouldBe (1 to 0)
         logs.filter { it.level == Level.WARN }.map { it.formattedMessage }.single().let {
             it.contains(tripId.toString()) shouldBe true
             it.contains("stats") shouldBe true
@@ -169,18 +180,18 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
         }
 
         // 경로 갱신(이벤트)이 같은 읽기를 지난다 — 던지면 릴레이가 재시도하다 포기한다. 경고는 잠근 뒤 읽기 한 번이다.
-        logsOf(TripSummaryRepositoryAdapter::class.java) { routeStored.handle(routeStoredEvent(tripId, day1)) }
-            .second.count { it.level == Level.WARN } shouldBe 1
+        logsOf { routeStored.handle(routeStoredEvent(tripId, day1)) }.second.levels shouldBe (1 to 0)
         jdbc.queryForObject("SELECT jsonb_typeof(stats) FROM trip_summary WHERE trip_id = ?", String::class.java, tripId) shouldBe "object"
 
         corrupt("trip_summary", """highlights = '{"a":1}'::jsonb""", "trip_id = ?", tripId)
-        call(HttpMethod.GET, "/api/v1/trips/$tripId/summary", token).let { (s, b) ->
-            s shouldBe 200
-            b["summary"]["highlights"].size() shouldBe 0
+        logsOf { call(HttpMethod.GET, "/api/v1/trips/$tripId/summary", token) }.let { (got, logs) ->
+            got.first shouldBe 200
+            got.second["summary"]["highlights"].size() shouldBe 0
+            logs.levels shouldBe (1 to 0)
         }
         // 덮어쓴 뒤의 다시 읽기는 새 값이다 — 경고는 덮기 전 읽기의 한 번뿐이다(옛 모양을 새 값에 붙여 남기지 않는다).
-        val (_, healLogs) = logsOf(TripSummaryRepositoryAdapter::class.java) { summaries.generate(tripId) }
-        healLogs.count { it.level == Level.WARN } shouldBe 1
+        val (_, healLogs) = logsOf { summaries.generate(tripId) }
+        healLogs.levels shouldBe (1 to 0)
         jdbc.queryForObject("SELECT jsonb_typeof(highlights) FROM trip_summary WHERE trip_id = ?", String::class.java, tripId) shouldBe "array"
     }
 
@@ -195,9 +206,11 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
             "trip_id = ?", tripId,
         )
 
-        val (status, body) = call(HttpMethod.GET, "/api/v1/trips/$tripId/summary", token)
+        val (got, logs) = logsOf { call(HttpMethod.GET, "/api/v1/trips/$tripId/summary", token) }
+        val (status, body) = got
 
         status shouldBe 200
+        logs.levels shouldBe (1 to 0)
         val stats = body["summary"]["stats"]
         listOf(stats["totalVisits"].asInt(), stats["totalPhotos"].asInt()) shouldBe listOf(0, 0)
         stats["totalDistanceKm"].asDouble() shouldBe 0.0
@@ -225,22 +238,20 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
             announced() shouldBe 1
 
             corrupt("trip_summary", broken, "trip_id = ?", tripId)
-            val (got, logs) = logsOf(TripSummaryRepositoryAdapter::class.java) {
+            val (got, logs) = logsOf {
                 call(HttpMethod.GET, "/api/v1/trips/$tripId/summary", token)
             }
             got.first shouldBe 200
             got.second["ready"].asBoolean() shouldBe true
             healed() shouldBe true
             // 조회는 잠그지 않고 읽은 뒤 잠그고 다시 본다 — 못 읽은 채라 두 줄이다. 고친 뒤 다시 읽기는 새 값이라 더 없다.
-            logs.filter { it.level == Level.ERROR }.map { it.formattedMessage }.let { errors ->
-                errors.size shouldBe 2
-                errors.all { it.contains(tripId.toString()) } shouldBe true
-            }
+            logs.levels shouldBe (0 to 2)
+            logs.all { it.formattedMessage.contains(tripId.toString()) } shouldBe true
 
             // 경로 갱신은 이미 잠그고 읽었으므로 다시 읽지 않고 만든다 — 한 줄이다.
             corrupt("trip_summary", broken, "trip_id = ?", tripId)
-            val (_, routeLogs) = logsOf(TripSummaryRepositoryAdapter::class.java) { routeStored.handle(routeStoredEvent(tripId, day1)) }
-            routeLogs.count { it.level == Level.ERROR } shouldBe 1
+            val (_, routeLogs) = logsOf { routeStored.handle(routeStoredEvent(tripId, day1)) }
+            routeLogs.levels shouldBe (0 to 1)
             healed() shouldBe true
             announced() shouldBe 1
         }
@@ -255,15 +266,16 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
         call(HttpMethod.POST, "/api/v1/trips/$tripId/reflections/$day1", token).first shouldBe 200
         corrupt("reflection", "stats = '[]'::jsonb", "trip_id = ? AND day_date = ?", tripId, day1)
 
-        call(HttpMethod.GET, "/api/v1/trips/$tripId/reflections", token).let { (s, b) ->
-            s shouldBe 200
-            b["items"].single()["stats"]["visitCount"].asInt() shouldBe 0
+        logsOf { call(HttpMethod.GET, "/api/v1/trips/$tripId/reflections", token) }.let { (got, logs) ->
+            got.first shouldBe 200
+            got.second["items"].single()["stats"]["visitCount"].asInt() shouldBe 0
+            logs.levels shouldBe (1 to 0)
         }
-        val (edited, editLogs) = logsOf(ReflectionRepositoryAdapter::class.java) {
+        val (edited, editLogs) = logsOf {
             call(HttpMethod.PUT, "/api/v1/trips/$tripId/reflections/$day1", token, """{"mood":"GOOD"}""")
         }
         edited.first shouldBe 200
-        editLogs.count { it.level == Level.WARN } shouldBe 1 // 고치기 전 읽기 한 번 — 저장 뒤 다시 읽기는 새 값이다
+        editLogs.levels shouldBe (1 to 0) // 고치기 전 읽기 한 번 — 저장 뒤 다시 읽기는 새 값이다
         jdbc.queryForObject(
             "SELECT jsonb_typeof(stats) FROM reflection WHERE trip_id = ? AND day_date = ?", String::class.java, tripId, day1,
         ) shouldBe "object"
@@ -272,24 +284,24 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
             "reflection", """stats = '{"visitCount":-1,"distanceKm":-1.5,"distanceSource":"ROUTE","photoCount":-2}'::jsonb""",
             "trip_id = ? AND day_date = ?", tripId, day1,
         )
-        call(HttpMethod.GET, "/api/v1/trips/$tripId/reflections", token).let { (s, b) ->
-            s shouldBe 200
-            val stats = b["items"].single()["stats"]
+        logsOf { call(HttpMethod.GET, "/api/v1/trips/$tripId/reflections", token) }.let { (got, logs) ->
+            got.first shouldBe 200
+            logs.levels shouldBe (1 to 0)
+            val stats = got.second["items"].single()["stats"]
             listOf(stats["visitCount"].asInt(), stats["photoCount"].asInt()) shouldBe listOf(0, 0)
             stats["distanceKm"].asDouble() shouldBe 0.0
             stats["distanceSource"].asText() shouldBe "ROUTE"
         }
         // 경로 갱신은 잠근 뒤 한 번 읽는다 — 경고 한 줄.
-        logsOf(ReflectionRepositoryAdapter::class.java) { routeStored.handle(routeStoredEvent(tripId, day1)) }
-            .second.count { it.level == Level.WARN } shouldBe 1
+        logsOf { routeStored.handle(routeStoredEvent(tripId, day1)) }.second.levels shouldBe (1 to 0)
 
         // 생성은 AI 전 판정 읽기와 잠근 뒤 읽기가 둘 다 근거 수치를 읽는다 — 경고 두 줄(수정은 위처럼 한 줄).
         corrupt("reflection", "stats = '[]'::jsonb", "trip_id = ? AND day_date = ?", tripId, day1)
-        val (generated, genLogs) = logsOf(ReflectionRepositoryAdapter::class.java) {
+        val (generated, genLogs) = logsOf {
             call(HttpMethod.POST, "/api/v1/trips/$tripId/reflections/$day1", token)
         }
         generated.first shouldBe 200
-        genLogs.count { it.level == Level.WARN } shouldBe 2
+        genLogs.levels shouldBe (2 to 0)
     }
 
     private fun writeMine(tripId: UUID, token: String) {
@@ -308,11 +320,12 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
 
     /** 목록에서 그 하루만 빠지고, 경로 갱신은 그 하루를 건너뛰되(던지지 않는다) 같은 이벤트의 요약 갱신까지 간다. */
     private fun listSkipsAndRouteSkips(tripId: UUID, token: String, reason: String) {
-        val (listed, logs) = logsOf(ReflectionRepositoryAdapter::class.java) {
+        val (listed, logs) = logsOf {
             call(HttpMethod.GET, "/api/v1/trips/$tripId/reflections", token)
         }
         listed.first shouldBe 200
         listed.second["items"].map { it["dayDate"].asText() } shouldContainExactly listOf(day2.toString())
+        logs.levels shouldBe (0 to 1)
         logs.filter { it.level == Level.ERROR }.single().formattedMessage.let {
             it.contains(tripId.toString()) shouldBe true
             it.contains(day1.toString()) shouldBe true
@@ -321,7 +334,8 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
         }
         val before = stored(tripId)
         jdbc.update("UPDATE trip_summary SET stats = '{}'::jsonb WHERE trip_id = ?", tripId)
-        routeStored.handle(routeStoredEvent(tripId, day1))
+        // 저장소가 못 읽은 사유(ERROR)와 서비스가 그 하루를 건너뛴 사실(WARN)이 한 줄씩이다.
+        logsOf { routeStored.handle(routeStoredEvent(tripId, day1)) }.second.levels shouldBe (1 to 1)
         jdbc.queryForObject("SELECT jsonb_exists(stats, 'totalVisits') FROM trip_summary WHERE trip_id = ?", Boolean::class.java, tripId) shouldBe true
         stored(tripId) shouldBe before
     }
@@ -342,9 +356,11 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
             listSkipsAndRouteSkips(tripId, token, reason)
 
             // 수정 — 기분만 고치는 요청이 망가진 초안을 다시 만들고, 수정본·메모는 남는다.
-            call(HttpMethod.PUT, "/api/v1/trips/$tripId/reflections/$day1", token, """{"mood":"GOOD"}""").let { (s, b) ->
-                s shouldBe 200
-                b["card"]["title"].asText() shouldBe "내가 쓴 제목"
+            // 못 읽은 초안은 잠근 뒤 읽기에서 한 번 남고, 초안을 다시 만드는 읽기는 저장된 초안을 읽지 않는다.
+            logsOf { call(HttpMethod.PUT, "/api/v1/trips/$tripId/reflections/$day1", token, """{"mood":"GOOD"}""") }.let { (got, logs) ->
+                got.first shouldBe 200
+                got.second["card"]["title"].asText() shouldBe "내가 쓴 제목"
+                logs.levels shouldBe (0 to 1)
             }
             stored(tripId).let {
                 it["e"] shouldBe original["e"]
@@ -357,7 +373,11 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
 
             // 재생성 — 같은 망가짐을 다시 만들고 POST 로 고친다.
             corrupt("reflection", broken, "trip_id = ? AND day_date = ?", tripId, day1)
-            call(HttpMethod.POST, "/api/v1/trips/$tripId/reflections/$day1", token).first shouldBe 200
+            // AI 전 판정 읽기에서 한 번 — 잠근 뒤 읽기(findForRedraft)는 저장된 초안을 읽지 않는다.
+            logsOf { call(HttpMethod.POST, "/api/v1/trips/$tripId/reflections/$day1", token) }.let { (got, logs) ->
+                got.first shouldBe 200
+                logs.levels shouldBe (0 to 1)
+            }
             stored(tripId).let {
                 it["e"] shouldBe original["e"]
                 it["short_memo"] shouldBe "좋았다"
@@ -366,7 +386,10 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
                 it["d"] shouldBe original["d"]
                 it["source"] shouldBe original["source"]
             }
-            call(HttpMethod.GET, "/api/v1/trips/$tripId/reflections", token).second["items"].size() shouldBe 2
+            logsOf { call(HttpMethod.GET, "/api/v1/trips/$tripId/reflections", token) }.let { (got, logs) ->
+                got.second["items"].size() shouldBe 2
+                logs.levels shouldBe (0 to 0)
+            }
         }
     }
 
@@ -382,11 +405,12 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
         listSkipsAndRouteSkips(tripId, token, "객체가 아닙니다(jsonb array)")
 
         listOf(HttpMethod.PUT to """{"mood":"GOOD"}""", HttpMethod.POST to null).forEach { (method, body) ->
-            val (got, logs) = logsOf(ReflectionRepositoryAdapter::class.java) {
+            val (got, logs) = logsOf {
                 call(method, "/api/v1/trips/$tripId/reflections/$day1", token, body)
             }
             got.first shouldBe 409
             got.second["error"]["code"].asText() shouldBe "REFLECTION_UNREADABLE"
+            logs.levels shouldBe (0 to 1)
             logs.filter { it.level == Level.ERROR }.single().formattedMessage.let {
                 it.contains(tripId.toString()) shouldBe true
                 it.contains(day1.toString()) shouldBe true
@@ -425,16 +449,21 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
 
         // 일정 생성은 개인화 힌트를 묻는다(PersonalizationPort.hintsFor) — 저장된 스타일 행 하나로 생성 전체가 막히면 안 된다.
         val tripId = newTrip(token, endDate = day1)
-        call(HttpMethod.POST, "/api/v1/trips/$tripId/itinerary", token).first shouldBe 201
+        logsOf { call(HttpMethod.POST, "/api/v1/trips/$tripId/itinerary", token) }.let { (got, logs) ->
+            got.first shouldBe 201
+            // 하루짜리 여행이라 생성은 응답 전에 끝난다 — 개인화 힌트를 한 번 묻고, 그 읽기가 한 줄 남긴다.
+            logs.levels shouldBe (1 to 0)
+        }
 
-        val (got, logs) = logsOf(StyleAnalysisRepositoryAdapter::class.java) {
+        val (got, logs) = logsOf {
             call(HttpMethod.GET, "/api/v1/me/personalization", token)
         }
         got.first shouldBe 200
         got.second["applied"].asBoolean() shouldBe true
         // 범위 밖 게이지는 끝값으로 붙는다 — 9 는 5(여유롭다)라서 속도는 "느긋하게"다.
         personalization.deriveFor(accountId).pace shouldBe "느긋하게"
-        logs.filter { it.level == Level.WARN }.single().formattedMessage.contains(accountId.toString()) shouldBe true
+        logs.levels shouldBe (1 to 0)
+        logs.single().formattedMessage.contains(accountId.toString()) shouldBe true
         analyses.find(accountId)!!.let {
             it.descriptors shouldBe emptyList()
             it.traitGauges shouldBe TraitGauges(easygoing = 5, foodAffinity = 0, activeness = 2)
@@ -447,11 +476,12 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
             "style_analysis", """descriptors = '["#카페", 1]'::jsonb, trait_gauges = '[]'::jsonb, category_breakdown = '{}'::jsonb""",
             "account_id = ?", accountId,
         )
-        val (_, shapeLogs) = logsOf(StyleAnalysisRepositoryAdapter::class.java) {
+        val (_, shapeLogs) = logsOf {
             call(HttpMethod.GET, "/api/v1/me/personalization", token).first shouldBe 200
         }
         // 모양이 틀린 칸은 SQL 이 비워서 읽어 온다 — 어댑터가 따로 읽은 원래 모양으로 그 사실을 남긴다.
-        shapeLogs.filter { it.level == Level.WARN }.single().formattedMessage.let { m ->
+        shapeLogs.levels shouldBe (1 to 0)
+        shapeLogs.single().formattedMessage.let { m ->
             listOf("descriptors[]", "trait_gauges", "category_breakdown").forEach { m.contains(it) shouldBe true }
         }
         analyses.find(accountId)!!.let {
@@ -481,7 +511,11 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
             corrupt("style_analysis", "trait_gauges = $gauges::jsonb", "account_id = ?", accountId)
 
             analyses.find(accountId)!!.traitGauges.easygoing shouldBe 0
-            personalization.deriveFor(accountId).let {
+            // 속도를 빼는 이유가 남는다(INV-4) — 모양이 틀리면 칸 이름, 객체면 그 축 이름.
+            val (view, logs) = logsOf { personalization.deriveFor(accountId) }
+            logs.levels shouldBe (1 to 0)
+            logs.single().formattedMessage.contains(if (gauges == "'[]'") "trait_gauges" else "trait_gauges.easygoing") shouldBe true
+            view.let {
                 it.applied shouldBe true
                 it.pace shouldBe null
                 it.activities shouldContainExactly listOf("카페", "맛집투어")
@@ -509,7 +543,7 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
         corrupt("style_analysis", "trait_gauges = '[]'::jsonb, category_breakdown = '{}'::jsonb, descriptors = '{}'::jsonb", "account_id = ?", accountId)
 
         // 화면(`GET /me/style`)은 저장된 행을 그리지 않는다 — 조회가 다시 분석해 덮은 값을 낸다. 깨진 행의 자리값 0 이 그려지지 않는다(BR-U5-31).
-        val (shown, logs) = logsOf(StyleAnalysisRepositoryAdapter::class.java) {
+        val (shown, logs) = logsOf {
             call(HttpMethod.GET, "/api/v1/me/style", token)
         }
         shown.first shouldBe 200
@@ -521,7 +555,7 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
         shown.second["analysis"]["categoryBreakdown"].map { it["category"].asText() } shouldBe first.categoryBreakdown.map { it.category }
 
         // 재분석은 옛 행을 도메인으로 읽지 않고 덮는다 — 방금 만든 분석을 "못 읽었다"고 남기면 경보가 거짓이 된다.
-        logs.filter { it.level == Level.WARN } shouldBe emptyList()
+        logs.levels shouldBe (0 to 0)
         jdbc.queryForMap(
             "SELECT jsonb_typeof(trait_gauges) g, jsonb_typeof(category_breakdown) c, jsonb_typeof(descriptors) d FROM style_analysis WHERE account_id = ?",
             accountId,
@@ -536,16 +570,17 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
         val tripId = newTrip(token)
         summaries.generate(tripId)
 
-        val (summary, summaryLogs) = logsOf(TripSummaryRepositoryAdapter::class.java) {
+        val (summary, summaryLogs) = logsOf {
             call(HttpMethod.GET, "/api/v1/trips/$tripId/summary", token)
         }
-        val (_, styleLogs) = logsOf(StyleAnalysisRepositoryAdapter::class.java) {
+        val (_, styleLogs) = logsOf {
             call(HttpMethod.GET, "/api/v1/me/personalization", token).first shouldBe 200
         }
 
         summary.second["ready"].asBoolean() shouldBe true
         analyses.find(accountId)!!.traitGauges shouldBe TraitGauges(easygoing = 5, foodAffinity = 3, activeness = 1)
-        (summaryLogs + styleLogs).filter { it.level.isGreaterOrEqual(Level.WARN) } shouldBe emptyList()
+        summaryLogs.levels shouldBe (0 to 0)
+        styleLogs.levels shouldBe (0 to 0)
     }
 
     // ── 잠근 뒤 읽기 ────────────────────────────────────────────────
@@ -573,11 +608,13 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
         call(HttpMethod.POST, "/api/v1/trips/$tripId/reflections/$day1", token).first shouldBe 200
         corrupt("trip_summary", "narrative = ' '", "trip_id = ?", tripId)
 
-        TransactionTemplate(txManager).executeWithoutResult {
-            summaryRepo.find(tripId) shouldBe null
-            commitElsewhere("UPDATE trip_summary SET narrative = '겹친 요청이 고친 요약' WHERE trip_id = ?", tripId)
-            summaryRepo.findForUpdate(tripId)!!.narrative shouldBe "겹친 요청이 고친 요약"
-        }
+        logsOf {
+            TransactionTemplate(txManager).executeWithoutResult {
+                summaryRepo.find(tripId) shouldBe null
+                commitElsewhere("UPDATE trip_summary SET narrative = '겹친 요청이 고친 요약' WHERE trip_id = ?", tripId)
+                summaryRepo.findForUpdate(tripId)!!.narrative shouldBe "겹친 요청이 고친 요약"
+            }
+        }.second.levels shouldBe (0 to 1) // 잠그기 전의 못 읽은 읽기 한 줄 — 잠근 뒤에는 고친 값을 읽는다
         TransactionTemplate(txManager).executeWithoutResult {
             reflectionRepo.find(tripId, day1)!!.mood shouldBe null
             commitElsewhere("UPDATE reflection SET mood = 'GOOD' WHERE trip_id = ? AND day_date = ?", tripId, day1)
