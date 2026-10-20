@@ -14,6 +14,7 @@ import com.trippilot.reflection.domain.ReflectionSource
 import com.trippilot.reflection.domain.TripSummary
 import com.trippilot.reflection.domain.TripSummaryRepository
 import com.trippilot.reflection.domain.TripSummaryStats
+import com.trippilot.testsupport.declaredFieldNames
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripPeriod
 import io.kotest.core.spec.style.StringSpec
@@ -247,7 +248,7 @@ class TripSummaryPropertyTest : StringSpec({
     "PBT-U5-5 요약 수치에 소요시간 필드가 없다(INV-3)" {
         val forbidden = listOf("duration", "minutes", "eta", "travelTime", "dwell")
 
-        val fields = TripSummaryStats::class.java.declaredFields.map { it.name }
+        val fields = TripSummaryStats::class.java.declaredFieldNames()
 
         fields.filter { f -> forbidden.any { f.contains(it, ignoreCase = true) } }.shouldBeEmpty()
     }

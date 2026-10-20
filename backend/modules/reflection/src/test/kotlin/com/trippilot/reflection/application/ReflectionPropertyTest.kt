@@ -14,6 +14,7 @@ import com.trippilot.reflection.adapter.`in`.web.ReflectionResponse
 import com.trippilot.reflection.domain.Reflection
 import com.trippilot.reflection.domain.ReflectionRepository
 import com.trippilot.reflection.domain.ReflectionSource
+import com.trippilot.testsupport.declaredFieldNames
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripPeriod
 import io.kotest.assertions.throwables.shouldThrow
@@ -275,8 +276,8 @@ class ReflectionPropertyTest : StringSpec({
     // ── PBT-U5-5 ──────────────────────────────────────────────────────
     // INV-3 — 소요시간은 어디에도 없다. 필드 이름으로 잰다: 값이 0/null 인 것과 "칸이 없는 것"은 다르다.
     "PBT-U5-5 응답에 이동 소요시간 필드가 없다 — 거리만" {
-        val names = ReflectionResponse::class.java.declaredFields.map { it.name } +
-            com.trippilot.reflection.adapter.`in`.web.ReflectionStatsResponse::class.java.declaredFields.map { it.name }
+        val names = ReflectionResponse::class.java.declaredFieldNames() +
+            com.trippilot.reflection.adapter.`in`.web.ReflectionStatsResponse::class.java.declaredFieldNames()
 
         names.none { it.contains("duration", true) || it.contains("eta", true) || it.contains("travelTime", true) } shouldBe true
         // 거리는 있어야 한다 — 없으면 이 성질이 "아무 필드도 없다"로 공허해진다.
@@ -284,7 +285,7 @@ class ReflectionPropertyTest : StringSpec({
     }
 
     "PBT-U5-5 개별 방문의 체류도 응답에 없다(BR-U5-08)" {
-        val names = com.trippilot.reflection.adapter.`in`.web.ReflectionStatsResponse::class.java.declaredFields.map { it.name }
+        val names = com.trippilot.reflection.adapter.`in`.web.ReflectionStatsResponse::class.java.declaredFieldNames()
         names.none { it.contains("dwell", true) } shouldBe true
     }
 

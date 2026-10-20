@@ -3,6 +3,9 @@ plugins {
     alias(libs.plugins.kotlin.spring)
     alias(libs.plugins.spring.boot)
     alias(libs.plugins.spring.dependencyManagement)
+    // 전 모듈 커버리지 합산 — `implementation(project(...))` 로 조립한 모듈의 test 실행 데이터를 모아
+    // `:app:testCodeCoverageReport` 하나로 낸다. 하한선 검사는 scripts/coverage_gate.py(CI).
+    `jacoco-report-aggregation`
 }
 
 dependencies {
@@ -91,4 +94,31 @@ tasks.named<Test>("test") {
         rootProject.file("../deploy/eks/runtime_secrets.py"),
         rootProject.file("scripts/ingest_pois.py"),
     ).withPropertyName("배선통로파일").withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
+// 합산 리포트는 기본이 HTML 뿐이다 — 하한선 스크립트(scripts/coverage_gate.py)가 읽을 XML 을 켠다.
+tasks.withType<JacocoReport>().configureEach { reports.xml.required = true }
+
+// 커버리지 하한선 — 판정은 scripts/coverage_gate.py(전체·모듈별 바닥과 요약 표·실패 사유를 한 곳에서 낸다).
+// 리포트 XML 위치를 **여기서 정해** 리포트 태스크와 판정이 같은 provider 를 본다 — 위치를 두 곳에 적으면 갈린다.
+// (리포트 태스크의 outputLocation 에서 파생하면 구성 시점에 그 태스크를 실현해야 한다 — layout 에서 정하면 안 그렇다.)
+val coverageReport = tasks.named<JacocoReport>("testCodeCoverageReport")
+val coverageXml = layout.buildDirectory.file("reports/jacoco/coverage.xml")
+val coverageHtml = layout.buildDirectory.dir("reports/jacoco/testCodeCoverageReport/html")   // 플러그인 기본 위치 그대로 — 옮기면 옛 위치의 HTML 이 남는다
+// 옛 산출물을 먼저 지운다 — 실행 데이터가 없으면 리포트 태스크가 SKIPPED 되고 옛 XML·HTML 이 남아
+// 그것으로 판정되거나 현재 수치로 읽힌다.
+val clearCoverageReport = tasks.register<Delete>("clearCoverageReport") {
+    delete(coverageXml, coverageHtml)
+}
+coverageReport.configure {
+    reports.xml.outputLocation.set(coverageXml)
+    reports.html.outputLocation.set(coverageHtml)
+    mustRunAfter(clearCoverageReport)
+}
+tasks.register<Exec>("coverageGate") {
+    dependsOn(clearCoverageReport, coverageReport)
+    workingDir = rootDir
+    // layout provider 라 지금 풀어도 리포트 태스크를 실현하지 않는다. 람다(argumentProviders)는 구성 캐시가
+    // 스크립트 참조를 직렬화하지 못해 실패했다(실측).
+    commandLine("python3", "scripts/coverage_gate.py", coverageXml.get().asFile.absolutePath)
 }

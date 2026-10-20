@@ -14,6 +14,8 @@ konsist = "0.17.3"
 logstashLogbackEncoder = "8.0"
 opentelemetryInstrumentation = "2.14.0"
 swaggerUi = "5.17.14"
+# 커버리지 측정. Gradle 내장 기본값은 JDK 25 런타임(툴체인)보다 늦을 수 있어 명시 핀한다.
+jacoco = "0.8.15"
 
 [libraries]
 # Spring (버전은 Spring Boot BOM이 관리 — 명시 금지)
