@@ -195,4 +195,30 @@ describe('useLocationAutomation', () => {
     });
     expect(result.current.notice).toBeNull();
   });
+
+  // TRIP-1511 · 네이티브 어댑터는 같은 리전이면 재등록을 건너뛴다(태스크 무한 루프 차단). OS 가 등록을 잃었을
+  // 수 있는 포그라운드 복귀에서만 그 기억을 비워 한 번 다시 등록하게 한다 — 백그라운드 태스크 경로는 비우지 않는다.
+  it('H5 포그라운드 복귀마다 무장 전에 등록 기억을 비운다', async () => {
+    mockSnapshot = { ...WIU, background: 'granted' };
+    const t = makeDeps();
+    const forget = jest.fn(() => {
+      t.nativeCalls.push('forget');
+    });
+    t.deps.native.forgetArmedRegions = forget;
+    overrideEngineDeps(t.deps);
+    const { result } = renderHook(() => useLocationAutomation(input), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.state).toBe('ARMED'));
+    expect(t.nativeCalls.slice(0, 2)).toEqual(['forget', 'arm']);
+
+    t.nativeCalls.length = 0;
+    await act(async () => {
+      appStateListener?.('active');
+    });
+    await waitFor(() => expect(t.nativeCalls).toContain('arm'));
+    expect(t.nativeCalls.indexOf('forget')).toBeLessThan(
+      t.nativeCalls.indexOf('arm')
+    );
+  });
 });

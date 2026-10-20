@@ -21,7 +21,22 @@ export interface NativeAdapters {
   disarmGeofences(): Promise<void>;
   startRouteRecording(): Promise<{ recording: boolean; reason?: string }>;
   stopRouteRecording(): Promise<void>;
+  /** TRIP-1511 · 등록 기억만 비운다(OS 호출 없음) — 포그라운드 복귀에서 OS 가 잃은 등록을 한 번 되살리게. */
+  forgetArmedRegions?(): void;
 }
+
+/**
+ * TRIP-1511 · 마지막으로 OS 에 등록한 리전 집합. iOS 는 재등록 직후 리전 상태를 통지하고 expo 가 그것을
+ * 같은 지오펜스 태스크로 보내는데, 그 태스크가 다시 무장하면 무한 루프가 된다 — 같은 집합이면 OS 를 부르지 않는다.
+ * 모듈 기억이라 콜드 wake 엔 비어 있어 한 번은 다시 등록한다(그 뒤 통지로 온 태스크는 생략된다).
+ */
+let armedKey: string | null = null;
+
+const regionsKey = (regions: readonly GeofenceRegion[]) =>
+  regions
+    .map((r) => `${r.slotKey}|${r.lat}|${r.lng}|${r.radiusM}`)
+    .sort()
+    .join(';');
 
 export const nativeAdapters: NativeAdapters = {
   async armGeofences(regions) {
@@ -30,6 +45,8 @@ export const nativeAdapters: NativeAdapters = {
         await this.disarmGeofences();
         return { armed: true, reason: 'no-regions' };
       }
+      const key = regionsKey(regions);
+      if (key === armedKey) return { armed: true };
       await Location.startGeofencingAsync(
         GEOFENCE_TASK,
         regions.map((r) => ({
@@ -41,12 +58,17 @@ export const nativeAdapters: NativeAdapters = {
           notifyOnExit: true,
         }))
       );
+      armedKey = key;
       return { armed: true };
     } catch {
       return { armed: false, reason: 'native-register-failed' };
     }
   },
+  forgetArmedRegions() {
+    armedKey = null;
+  },
   async disarmGeofences() {
+    armedKey = null;
     try {
       await Location.stopGeofencingAsync(GEOFENCE_TASK);
     } catch {

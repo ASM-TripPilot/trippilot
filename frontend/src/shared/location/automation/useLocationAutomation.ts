@@ -88,6 +88,8 @@ export function useLocationAutomation(
         slots: ctx.slots,
         visits: ctx.visits,
       });
+      // TRIP-1511 · 포그라운드에서만 등록 기억을 비운다 — OS 가 잃은 지오펜스를 한 번 되살리고, 태스크 경로는 그대로 생략.
+      if (foreground) deps.native.forgetArmedRegions?.();
       let next = await evaluate(deps, {
         flagOn,
         snapshot: await readPermissionSnapshot(),

@@ -42,9 +42,9 @@ scripts/u10-sim-location.sh clear
 
 2026-10-20 실측(dev-api, 부산 여행 1일차 옥미아구찜): `complete` 1회 재생 → 서버 자동 완료 반영 · i01 카드 「자동 기록」 표식 · 지도 핀 완료 ✓.
 단 이 슬롯은 **수동 도착이 먼저 있던** 곳이라 '수동 도착 + 자동 완료' 경로만 본 것이다 — 자동 도착(`arrive`)·지나가기(`pass`)·공백(`gap`)은 아직 재생하지 않았다.
-⚠️ 같은 재생에서 `trippilot-u10-geofence` 태스크가 분당 5천~1만 회 돌았다 — 태스크의 재무장(`arm` → `startGeofencingAsync`)이
-OS 의 리전 상태 재조회를 부르고 그 결과가 다시 같은 태스크로 오는 루프(새 티켓). 위치 재생과 무관하게 **무장돼 있는 동안** 돈다고 봐야 한다 —
-멈추는 확실한 길은 앱 종료(`xcrun simctl terminate <udid> com.trippilot.travel`)다(`clear` 만으로 멈추는지는 미확인).
+같은 재생에서 `trippilot-u10-geofence` 태스크가 분당 5천~1만 회 돌았다(재무장 → `startGeofencingAsync` 재등록 → iOS 상태 통지 → 같은 태스크) —
+**TRIP-1511 로 해결**: 같은 리전 집합이면 재등록을 건너뛰고, 포그라운드 복귀에서만 기억을 비운다. 수정 뒤 분당 4~5회, 복귀 뒤 60초 0회.
+재발 확인: `log stream` 에서 `Executing task 'trippilot-u10-geofence'` 가 사건(진입·이탈) 수준인지 센다.
 `downgrade` 는 실행 중 앱(같은 PID)에서 포그라운드 복귀로만 봤다 — 콜드 재시작으로는 아직 안 봤으니 "시뮬레이터 한계"로 단정하지 말 것.
 
 ## 3. 시뮬레이터로 못 보는 것 (6-b — TestFlight 실기기)
