@@ -50,10 +50,6 @@ class RepairResult:
     changes: tuple[RepairChange, ...]
 
 
-def _mod(dt: datetime) -> int:
-    return dt.hour * 60 + dt.minute
-
-
 def repair(solution: ItinerarySolution, problem: ItineraryProblem,
            poi_index: Mapping[PoiId, Poi], estimator,
            policy: MinimalChangePolicy = MinimalChangePolicy.TIME_SHIFT_ONLY,
@@ -72,7 +68,7 @@ def repair(solution: ItinerarySolution, problem: ItineraryProblem,
     new_days: list[DaySolution] = []
 
     for day in solution.days:
-        we_min = _mod(problem.window_on(day.date).end)  # 일자별 창 (TRIP-1389)
+        win_end = problem.window_on(day.date).end  # 일자별 창 (TRIP-1389) — 자정을 넘을 수 있다
         prev: VisitSlot | None = None
         new_slots: list[VisitSlot] = []
         for slot in day.slots:
@@ -106,7 +102,7 @@ def repair(solution: ItinerarySolution, problem: ItineraryProblem,
             # 이동 결과가 다른 제약을 깨면 수리 불가
             if prev is not None and start < prev.end_at:
                 return RepairResult(repaired=None, changes=())
-            if _mod(start) + stay > we_min:  # HC4 (day window 초과)
+            if end > win_end:  # HC4 (day window 초과)
                 return RepairResult(repaired=None, changes=())
             poi = poi_index.get(slot.poi_id)
             if poi is not None and not open_hours_ok(poi, start, end, problem.holidays):

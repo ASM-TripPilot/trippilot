@@ -130,7 +130,7 @@ class GenerateItineraryService(
         // 열림은 **고정 블록으로 넓힌 창**으로 잰다 — 닫힌 오늘에 늦은 고정이 있으면 오늘이 열리는데, 그걸 놓치면
         // 1차에 오늘·내일 두 창이 실리고 AI 는 요청당 창 하나(첫 날짜의 시각)를 전 일자에 쓴다(wiring).
         val pinned = ctx.fixedVisits.filter { it.date != null && it.start != null }.map { FixedBlock(it.poiId, it.date, it.start, it.dwellMin) }
-        val firstOpen = planDates.indexOfFirst { d -> expandedWindow(d, pinned, ctx, cutDay).let { it.start < it.end } }
+        val firstOpen = planDates.indexOfFirst { d -> expandedWindow(d, pinned, ctx, cutDay).let { TodayWindow.isOpen(it.start, it.end) } }
         val firstDates = planDates.take(firstOpen + 1).ifEmpty { planDates }
         val remainingDates = planDates.drop(firstDates.size)
         // 2차가 고정 블록으로 배치할 must_visit 은 1차 후보에서 빼둔다 —
@@ -296,6 +296,8 @@ class GenerateItineraryService(
         val (base, baseEnd) = dayWindowOf(date, ctx, cutDay)
         val onDay = blocks.filter { it.date == date && it.start != null }
         val start = (onDay.map { it.start!! } + base).min()
+        // 자정을 넘는 오늘(익일 01:00)은 끝을 그대로 둔다 — 시각 max 로 고르면 01:00 이 어느 블록 끝보다도 작아 밀린다.
+        if (TodayWindow.isOvernight(base, baseEnd)) return TimeWindow(date, start, baseEnd)
         val end = (
             onDay.map { b ->
                 val e = b.start!!.plusMinutes((b.dwellMin ?: 60).toLong())
@@ -342,9 +344,11 @@ class GenerateItineraryService(
         // [TodayWindow]). 종전엔 20시에 만들면 지금+30분이 21:00 이라 오늘이 닫혀 당일치기가 빈 일정으로 나갔다
         // (DEV 10-14 팀원 실측). 사용자가 적은 끝(마지막 날 귀가)은 사실이라 늘리지 않는다.
         val userEnd = date == ctx.endDate && ctx.lastDayEndAt != null
-        val until = if (userEnd) end else TodayWindow.eveningEnd(from, end)
+        // 밤 10시 넘어 만들면(지금부터 2시간이 23:59 를 넘으면) 익일 01:00 까지 연다(2026-10-20 사용자) —
+        // 그 시간대 무엇을 넣을지는 AI 가 취향으로 고른다(야경·나이트라이프, 맞는 취향이 없으면 비움).
+        val until = if (userEnd) end else TodayWindow.generationEnd(from, end)
         // 한 곳도 못 넣는 짧은 창은 보내지 않는다 — 조립이 빈 해를 내 폴백 표시가 붙는다.
-        val minutes = (until.toSecondOfDay() - from.toSecondOfDay()) / 60
+        val minutes = TodayWindow.spanMinutes(from, until)
         return if (minutes >= TodayWindow.MIN_WINDOW_MIN) from to until else end to end
     }
 
@@ -403,7 +407,7 @@ class GenerateItineraryService(
             // "해 없음" → 409 → 2차 통째 최소 폴백이 된다(QA #045 실측). 물질화된 ANYTIME 은
             // 시각이 없어(start=null, TRIP-1249) 이 계산에 들어가지 않는다.
             // 닫힌 오늘(길이 0 창 — dayWindowOf)은 보내지 않는다. 그 날에 사용자 고정 블록이 있으면 창이 넓어져 열린다.
-            timeWindows = dates.map { d -> expandedWindow(d, materialized.fixedBlocks, ctx, cutDay) }.filter { it.start < it.end },
+            timeWindows = dates.map { d -> expandedWindow(d, materialized.fixedBlocks, ctx, cutDay) }.filter { TodayWindow.isOpen(it.start, it.end) },
             // must_visit → 고정 블록(HC3). 이 호출이 맡은 일자분만.
             // 날짜 미지정(ANYTIME)·여행 기간 밖 날짜는 **일자가 많은 쪽**(2차; 2차가 없으면 1차)에 싣는다 —
             // 하루짜리 1차에 전부 몰면 배치 공간이 없어 HC3 가 깨질 수 있고, 양쪽에 실으면 중복 배치된다.

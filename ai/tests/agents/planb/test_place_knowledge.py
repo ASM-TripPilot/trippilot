@@ -260,3 +260,22 @@ def test_도입부_조각이_맞으면_그대로다() -> None:
     got, _ = fetch_place_knowledge([_poi("p1", "수원화성", "ref-in")], docs[0].text, embedding, store)
 
     assert got["ref-in"] == docs[0].text
+
+
+def test_위키와_개요가_둘_다_있으면_더_맞는_조각을_고르고_첫_문장은_같은_출처에서_온다() -> None:
+    """한 장소에 두 출처 — 더 맞는 조각 하나만 붙고, 앞에 붙이는 도입부 첫 문장도 그 조각의 출처에서 온다
+    (위키 첫 문장 + 개요 조각처럼 다른 글을 잇지 않는다)."""
+    from trippilot.poi_curation.chunking import chunk_document
+
+    wiki = chunk_document({"doc_id": "wiki:ref-in", "poi_ref": "ref-in", "sections": [
+        {"heading": "개요", "text": "수원 화성은 경기도 수원시에 있는 조선 후기의 성곽이다."}]})
+    over = chunk_document({"doc_id": "overview:ref-in", "poi_ref": "ref-in", "sections": [
+        {"heading": "개요", "text": "화성은 정조가 쌓은 성이다. " + "성곽을 따라 걷는 길이 잘 나 있다. " * 30
+                                     + "행궁 안 전시관은 비 오는 날에도 둘러볼 수 있다."}]})
+    assert len(over) >= 2
+    embedding, store = _wired(*wiki, *over)
+
+    got, _ = fetch_place_knowledge([_poi("p1", "수원화성", "ref-in")], over[-1].text, embedding, store)
+
+    assert got["ref-in"].startswith("화성은 정조가 쌓은 성이다. … "), got  # 개요의 첫 문장 — 위키 첫 문장이 아니다
+    assert "행궁 안 전시관" in got["ref-in"]

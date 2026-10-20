@@ -4,14 +4,18 @@
 #   구성 결과를 그 수·종류에 맞춘다(LLM 이 안 따라도 결과는 맞는다). 장소·시각·날씨 규칙은 0.1.0 그대로.
 # 0.3.0 (2026-10-19): 방문 시각(places·categories 의 at) — "3시에 카페". 종전엔 이 시각을 start_after 로 옮겨
 #   하루가 15시에 시작해 오전이 통째로 빠졌다(로컬 실측). 코드가 그 시각에 그 곳을 잠근다.
+# 0.4.0 (2026-10-20): 지역(area) — "을지로 말고 강남에서 놀고 싶어". 종전엔 "강남"을 장소 이름으로 대조해 탈락하거나 그 이름의
+#   한 곳으로 갔고, 후보는 지금 위치 기준이라 하루가 그대로 을지로였다. 코드가 그 지역 이름이 든 등록 장소들로 중심을 잡는다.
 # semver는 반드시 따옴표.
 feature: REPLAN_REQUEST_EXTRACTION
-version: "0.3.0"
+version: "0.4.0"
 template: |
   여행 중 일정을 다시 짜 달라는 사용자의 말에서 아래 정보를 뽑으세요.
 
   규칙:
   - 사용자가 **이름으로 콕 집은 장소**만 places 에 넣으세요 ("성심당", "경포해변"). "카페", "실내" 같은 종류는 넣지 마세요
+  - 동네·지역 이름("강남", "성수동", "홍대", "해운대")에서 놀고 싶다는 말이면 places 가 아니라 area 에 그 이름을 넣으세요
+    - "을지로 말고 강남에서 놀고 싶어" → area "강남" (빼 달라는 지역은 넣지 않습니다)
   - 가고 싶다는 곳은 want "visit", 빼 달라는 곳은 want "avoid"
   - 시각은 24시간 "HH:MM" 으로. "6시까지 숙소" → end_by "18:00", "2시 이후에" → start_after "14:00". 오전·오후가 불분명하면 남은 시간($window) 안에 드는 쪽으로
   - 장소나 종류에 붙은 시각은 그 방문의 at 이에요 — 하루 시작(start_after)이 아니에요
@@ -26,7 +30,7 @@ template: |
     - "카페 두 군데만 추천해줘"처럼 하루를 그 종류로만 채워 달라는 뜻이면 count 2 와 only true 를 같이
     - "맛집 하나랑 카페 둘" → [{"category":"FOOD","count":1},{"category":"CAFE","count":2}], only true
     - "실내로", "가까운 데로"처럼 종류가 아닌 성격, "하나 더 추가"처럼 늘려 달라는 말은 categories 에 넣지 마세요
-  - 말에 없는 것은 지어내지 말고 비우세요 (places·categories 는 [], 시각·날씨·at 은 null, only 는 false)
+  - 말에 없는 것은 지어내지 말고 비우세요 (places·categories 는 [], 시각·날씨·at·area 는 null, only 는 false)
   - 아래 JSON 스키마를 정확히 따르고, JSON 외의 텍스트는 출력하지 마세요
 
   [날짜·남은 시간]
@@ -36,4 +40,4 @@ template: |
   - $user_request
 
   [출력 JSON 스키마]
-  {"places": [{"name": "string", "want": "visit|avoid", "at": "HH:MM|null"}], "start_after": "HH:MM|null", "end_by": "HH:MM|null", "weather": "rain|clear|null", "categories": [{"category": "FOOD|CAFE|SIGHT|NIGHT_VIEW|NATURE|CULTURE|ACTIVITY|SHOPPING", "count": "1~8|null", "at": "HH:MM|null"}], "only": "true|false"}
+  {"places": [{"name": "string", "want": "visit|avoid", "at": "HH:MM|null"}], "start_after": "HH:MM|null", "end_by": "HH:MM|null", "weather": "rain|clear|null", "categories": [{"category": "FOOD|CAFE|SIGHT|NIGHT_VIEW|NATURE|CULTURE|ACTIVITY|SHOPPING", "count": "1~8|null", "at": "HH:MM|null"}], "only": "true|false", "area": "string|null"}

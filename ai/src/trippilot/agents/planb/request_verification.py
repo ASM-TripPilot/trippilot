@@ -14,6 +14,7 @@
 | 시각 제약 | 그날 남은 시간창 | 창 안이고 지금 이후다 — 창을 **좁히기만** 한다(넓히면 백엔드 창을 어긴다) |
 | 방문 시각("3시에 카페") | 〃 | 창 안이고 지금 이후다 — 하루 시작이 아니라 그 곳·종류의 방문 시각이다 |
 | 날씨 주장 | 기상청 강수확률(수집 패킷) | 비 주장이면 임계 이상일 때만 실내 쪽으로 기운다 |
+| 지역("강남에서") | 등록 POI 이름 | 그 이름이 든 곳이 `AREA_MIN_MATCHES` 이상 — 중심은 그 좌표들의 중앙값(후보가 아니라 기준점) |
 
 웹 검색 결과를 후보로 쓰지 않는다 — 지도 포트는 **확인용**이고, 후보는 등록 POI 에서만 온다.
 """
@@ -21,6 +22,7 @@
 from __future__ import annotations
 
 import re
+import statistics
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time, timedelta, tzinfo
@@ -58,6 +60,39 @@ _NORMALIZE = re.compile(r"[\s\-·.,'\"()\[\]]+")
 NEARBY_RADIUS_KM = 5.0
 NEARBY_MAX = 8
 NEARBY_PER_CATEGORY = 2
+# 지역 중심 — 이름에 그 지역 말("강남"·"성수")이 든 등록 POI 가 이만큼은 있어야 한다. 중앙값이라 다른 동네의 같은 말
+# ("강남면옥")이 몇 곳 섞여도 중심이 끌려가지 않는다. 행정동 경계 데이터가 생기면 그걸로 바꾼다.
+AREA_MIN_MATCHES = 3
+# 잘 알려진 여행 동네의 중심 — 상호에 동네 이름을 잘 안 쓰는 곳이 있다(연희동: 로컬 이름 대조 3곳 미만 → 하루가 명동으로
+# 갔다, 2026-10-20). 표가 먼저고, 없으면 이름 중앙값. 키는 `_area_key` 모양("동" 뗀 것), 대조는 "가장 긴 키가 말 안에 든다".
+# ponytail: 손으로 고른 표다 — 행정동 경계·상권 데이터가 들어오면 그걸로 바꾼다.
+KNOWN_AREAS: dict[str, GeoPoint] = {
+    # 서울
+    "강남": GeoPoint(37.4979, 127.0276), "역삼": GeoPoint(37.5006, 127.0364), "신사": GeoPoint(37.5205, 127.0228),
+    "가로수길": GeoPoint(37.5205, 127.0228), "압구정": GeoPoint(37.5271, 127.0285), "청담": GeoPoint(37.5247, 127.0473),
+    "코엑스": GeoPoint(37.5117, 127.0592), "잠실": GeoPoint(37.5133, 127.1001), "성수": GeoPoint(37.5446, 127.0557),
+    "서울숲": GeoPoint(37.5444, 127.0374), "건대": GeoPoint(37.5404, 127.0692), "왕십리": GeoPoint(37.5612, 127.0371),
+    "홍대": GeoPoint(37.5563, 126.9236), "연남": GeoPoint(37.5617, 126.9230), "연희": GeoPoint(37.5689, 126.9305),
+    "합정": GeoPoint(37.5495, 126.9139), "망원": GeoPoint(37.5560, 126.9100), "상수": GeoPoint(37.5477, 126.9227),
+    "신촌": GeoPoint(37.5552, 126.9369), "이태원": GeoPoint(37.5345, 126.9946), "한남": GeoPoint(37.5364, 127.0040),
+    "해방촌": GeoPoint(37.5430, 126.9860), "용산": GeoPoint(37.5298, 126.9648), "여의도": GeoPoint(37.5219, 126.9245),
+    "을지로": GeoPoint(37.5660, 126.9910), "명동": GeoPoint(37.5636, 126.9826), "종로": GeoPoint(37.5703, 126.9910),
+    "익선": GeoPoint(37.5743, 126.9898), "인사": GeoPoint(37.5743, 126.9853), "북촌": GeoPoint(37.5826, 126.9830),
+    "삼청": GeoPoint(37.5850, 126.9810), "서촌": GeoPoint(37.5790, 126.9700), "광화문": GeoPoint(37.5759, 126.9768),
+    "대학로": GeoPoint(37.5822, 127.0019), "혜화": GeoPoint(37.5822, 127.0019), "동대문": GeoPoint(37.5710, 127.0095),
+    "성북": GeoPoint(37.5930, 126.9990), "문래": GeoPoint(37.5175, 126.8950),
+    # 부산
+    "해운대": GeoPoint(35.1587, 129.1604), "광안리": GeoPoint(35.1532, 129.1187), "서면": GeoPoint(35.1578, 129.0600),
+    "전포": GeoPoint(35.1570, 129.0640), "남포": GeoPoint(35.0979, 129.0306), "송정": GeoPoint(35.1789, 129.1999),
+    "영도": GeoPoint(35.0911, 129.0681), "감천": GeoPoint(35.0975, 129.0106), "기장": GeoPoint(35.2444, 129.2222),
+    # 제주
+    "애월": GeoPoint(33.4636, 126.3317), "협재": GeoPoint(33.3940, 126.2397), "함덕": GeoPoint(33.5431, 126.6692),
+    "월정리": GeoPoint(33.5560, 126.7960), "성산": GeoPoint(33.4586, 126.9426), "중문": GeoPoint(33.2490, 126.4120),
+    "서귀포": GeoPoint(33.2490, 126.5600), "표선": GeoPoint(33.3260, 126.8340),
+    # 강릉·경주
+    "경포": GeoPoint(37.7957, 128.9087), "안목": GeoPoint(37.7720, 128.9470), "주문진": GeoPoint(37.8960, 128.8290),
+    "황리단길": GeoPoint(35.8381, 129.2096),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +110,7 @@ class VerifiedRequest:
     # 방문 시각 — "성심당은 5시에"(visit 의 곳)·"3시에 카페"(종류). 배선이 그 시각에 잠근다.
     visit_at: tuple[tuple[PoiId, datetime], ...] = ()
     category_at: tuple[tuple[PoiCategory, datetime], ...] = ()
+    area_center: GeoPoint | None = None  # "강남에서 놀고 싶어" — 그 지역 중심(기준점일 뿐, 후보 자격 없음)
     notes: tuple[str, ...] = field(default=())
 
 
@@ -96,6 +132,26 @@ def match_place(name: str, registered: Sequence[Poi], anchor: GeoPoint) -> tuple
         return None, "not_registered"
     best = min(pick, key=lambda p: (haversine_km(anchor, p.coord), str(p.poi_id)))
     return best, ("exact" if exact else f"partial/{len(pick)}")
+
+
+def _area_key(area: str) -> str:
+    key = normalize(area)
+    return key[:-1] if len(key) > 2 and key.endswith("동") else key
+
+
+def area_center(area: str, registered: Sequence[Poi], anchor: GeoPoint) -> tuple[GeoPoint | None, str]:
+    """지역 이름 → (중심, 노트 꼬리). 표(`KNOWN_AREAS`)가 먼저 — 여행지에서 `NAME_SEARCH_RADIUS_KM` 안일 때만
+    (서울 마포 "성산동" ↔ 제주 "성산"). 없거나 멀면 이름에 그 말이 든 등록 POI 좌표의 중앙값(`AREA_MIN_MATCHES` 이상)."""
+    key = _area_key(area)
+    known = max((k for k in KNOWN_AREAS if k in key), key=len, default=None)
+    if known is not None and haversine_km(anchor, KNOWN_AREAS[known]) <= NAME_SEARCH_RADIUS_KM:
+        return KNOWN_AREAS[known], "table"
+    if len(key) >= _MIN_NAME_CHARS:
+        hits = [p.coord for p in registered if key in normalize(p.name)]
+        if len(hits) >= AREA_MIN_MATCHES:
+            return GeoPoint(statistics.median(c.lat for c in hits),
+                            statistics.median(c.lng for c in hits)), f"n={len(hits)}"
+    return None, "far" if known is not None else "unknown"
 
 
 def nearby(place: Poi, registered: Sequence[Poi], weekday: int) -> tuple[Poi, ...]:
@@ -306,15 +362,24 @@ def verify(
     visit: tuple[Poi, ...] = ()
     avoid: frozenset[PoiId] = frozenset()
     pool: Sequence[Poi] = ()
-    if extracted.places:
+    # 가까운 표 이름이면 등록 POI 를 안 불러도 된다(반경 50km 조회는 서울에서 수만 건이다)
+    table_near = extracted.area is not None and any(
+        k in _area_key(extracted.area) and haversine_km(anchor, c) <= NAME_SEARCH_RADIUS_KM
+        for k, c in KNOWN_AREAS.items())
+    if extracted.places or (extracted.area and not table_near):
         try:
             pool = registered()
-        except Exception as e:  # 등록 POI 조회 장애 — 장소 주장은 하나도 쓸 수 없다
+        except Exception as e:  # 등록 POI 조회 장애 — 장소·지역 주장은 하나도 쓸 수 없다
             notes.append(f"nl_place_lookup_error: {type(e).__name__}")
-        else:
-            visit, avoid, n = verify_places(
-                extracted.places, pool, anchor, on.weekday(), existence, existence_deadline_ms)
-            notes += n
+    if extracted.places and pool:
+        visit, avoid, n = verify_places(
+            extracted.places, pool, anchor, on.weekday(), existence, existence_deadline_ms)
+        notes += n
+    center = None
+    if extracted.area:
+        center, how = area_center(extracted.area, pool, anchor)
+        # 지역 이름은 사용자 문자열이라 노트에 싣지 않는다(장소 노트와 같은 규칙)
+        notes.append(f"nl_area_accepted: {how}" if center else f"nl_area_rejected: {how}")
     # "3시에 카페"를 모델이 start_after 로도 옮기면 하루가 15시에 시작해 오전이 통째로 빠졌다(로컬 실측
     # 2026-10-19). 방문 시각과 같은 시작 시각은 그 오독으로 보고 버린다.
     times = {p.at for p in extracted.places if p.at} | {c.at for c in extracted.categories if c.at}
@@ -349,4 +414,5 @@ def verify(
             category_at.append((PoiCategory(c.category), at))
     return VerifiedRequest(visit=visit, avoid=avoid, window_start=start, window_end=end,
                            rain_confirmed=rain, only=only, counts=counts,
-                           visit_at=tuple(visit_at), category_at=tuple(category_at), notes=tuple(notes))
+                           visit_at=tuple(visit_at), category_at=tuple(category_at), area_center=center,
+                           notes=tuple(notes))

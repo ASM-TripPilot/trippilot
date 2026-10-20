@@ -46,7 +46,7 @@ from trippilot.domain.common import (
 from trippilot.domain.dialogue import ArgumentKind
 from trippilot.domain.intent import DIALOGUE_INTENTS, Intent
 from trippilot.domain.llm import CandidatePool
-from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory, counts_as_food
+from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.region_centers import region_center
 from trippilot.domain.transit import TransitPurpose
@@ -56,7 +56,7 @@ from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEX
 from trippilot.orchestrator.arguments import extract_kind
 from trippilot.orchestrator.intent_router import normalize
 from trippilot.orchestrator.opportunity import _displayable
-from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
+from trippilot.poi_curation.pool_builder import CandidatePoolBuilder, restrict_pool_to_target_role
 from trippilot.providers.base import Provider
 from trippilot.providers.transit import _format_distance_range
 
@@ -931,19 +931,14 @@ def _alt_target(ctx: TurnContext) -> SlotView | None:
     return resolve_slot(ctx.snapshot, day=None, target=said, now=ctx.now, tz=ctx.tz)
 
 
-def _same_role(pool: CandidatePool, target_id: str, excluded: frozenset[PoiId]) -> CandidatePool:
-    """식사 칸의 대안은 식사 후보만 (2026-10-14 결정). 남는 식사 후보가 없으면 넓힌다 — 대안 0 보다 낫다(INV-4).
+# '먹을 곳을 달라'(2026-10-19 결정 3) — 식사 칸이 아니어도 식사 후보로. **오탐보다 미탐**(미탐은 식당 아닌 대안 — 종전과 같다):
+# "밥 먹고 갈 만한 데"는 식후에 갈 곳이라 '먹고'·'식사하고'는 잡지 않고, "맛집 말고"는 부정이다(#1366 날씨 사유 오탐과 같은 꼴).
+_WANTS_FOOD = re.compile(r"먹을\s?(데|곳|거|만한)|식당|맛집|밥집|음식점|식사\s?할|끼니|배고프|배고파")
+_NOT_FOOD = re.compile(r"(식당|맛집|밥집|음식점)\s?(은|는|이|가)?\s?(말고|빼고|제외|아니|싫)")
 
-    ponytail: `api/wiring.restrict_pool_to_target_role` 과 같은 규칙의 사본이다 — wiring 이 orchestrator 를 import 하므로
-    반대 방향 import 는 순환이다. 함수의 집을 poi_curation 으로 옮기는 일은 후속.
-    """
-    target = next((p for p in pool.pois if str(p.poi_id) == target_id), None)
-    if target is None or not counts_as_food(target):
-        return pool
-    kept = tuple(p for p in pool.pois if counts_as_food(p))
-    if not any(p.poi_id not in excluded for p in kept):
-        return pool
-    return replace(pool, poi_ids=frozenset(p.poi_id for p in kept), pois=kept)
+
+def _wants_food(*said: object) -> bool:
+    return any(isinstance(s, str) and _WANTS_FOOD.search(s) and not _NOT_FOOD.search(s) for s in said)
 
 
 # SUGGEST_ALTERNATIVE 의 reason 슬롯은 한글 자유문("오늘 휴관")이라 `_REASON_KO` 키와 같을 때만 넘기면 늘 none 이었다(2026-10-19
@@ -981,6 +976,7 @@ def _plan_alternatives(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     # LLM 슬롯 `reason` 은 스펙이 `choices=()` 라 IntentGate 가 값을 거르지 않는다 — PlanB 가 아는 어휘(`_REASON_KO` 키)로 사상해 넘긴다.
     # ponytail: 인자표에 choices 를 채우는 것이 바른 자리지만 `$intents` 가 바뀌어 intent.yaml 재생 픽스처가 전건 미스다(BR-AO-14).
     reason = _planb_reason(ctx.arguments.get("reason"))
+    wants_food = _wants_food(ctx.arguments.get("constraint"), ctx.arguments.get("reason"))
     weather = ctx.ports.weather
 
     def fn() -> dict:
@@ -992,7 +988,8 @@ def _plan_alternatives(ctx: TurnContext) -> tuple[HandlerTask, ...]:
                                                       transport=TransportMode.PUBLIC), ctx.now)
         except Exception as e:  # 풀 조립은 Provider 가 아니라 상태값 계약이 없다 — 여기서 수렴 (DL-5)
             return {"status": "UNAVAILABLE", "reason": f"pool_error:{type(e).__name__}"}  # 메시지는 싣지 않는다(키 든 URL)
-        pool = _same_role(pool, target.poi_id, excluded)
+        pool, _ = restrict_pool_to_target_role(pool, target.poi_id, excluded, wants_food=wants_food)
+        same = next((p.category for p in pool.pois if str(p.poi_id) == target.poi_id), None)
         rain: dict[date, int] = {}
         if weather is not None:
             packet = weather.fetch({"anchor": anchor, "days": (on,), "now": ctx.now})
@@ -1015,6 +1012,7 @@ def _plan_alternatives(ctx: TurnContext) -> tuple[HandlerTask, ...]:
                     continue
                 candidates.append({"poi_id": str(pid), "name": poi.name, "category": _CATEGORY_KO.get(poi.category.value),
                                    "distance_range": _km_label(haversine_km(anchor, poi.coord)), "reason": CANDIDATE_REASON})
+        candidates.sort(key=lambda c: by_id[c["poi_id"]].category is not same)  # 같은 분류 먼저(결정 3) — 안정 정렬, 그 안은 PlanB 순서
         return {"status": "OK", "candidates": candidates[:MAX_CANDIDATES], "notes": list(result.notes),
                 "empty_reason": result.empty_reason}
 

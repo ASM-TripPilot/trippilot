@@ -196,7 +196,8 @@ from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelecti
 from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.place_fees import load_fee_table
-from trippilot.poi_curation.pool_builder import CandidatePoolBuilder, base_radius_km, widened_radius_km
+from trippilot.poi_curation.pool_builder import (
+    CandidatePoolBuilder, base_radius_km, restrict_pool_to_target_role, widened_radius_km)
 from trippilot.orchestrator import schedule_coordinator as core
 from trippilot.agents.adapters.memory_vector_store import InMemoryVectorStore
 from trippilot.agents.adapters.memory_memory_store import InMemoryDialogueMemoryStore
@@ -480,7 +481,7 @@ def _domain_generate_request(
     # `day_window`(공용)는 첫 일자의 창 — 일자별 창이 없는 날·시간대 기준으로만 쓰인다.
     day_windows = {
         w.date: TimeWindow(start=datetime.combine(w.date, w.start, tzinfo=tz),
-                           end=datetime.combine(w.date, w.end, tzinfo=tz))
+                           end=datetime.combine(w.date + timedelta(days=w.overnight), w.end, tzinfo=tz))
         for w in request.time_windows
     }
     day_window = day_windows[days[0]]
@@ -501,6 +502,8 @@ def _domain_generate_request(
         ignore_anchor_distance=True,
         # 저녁 8시 반 넘어 만든 오늘은 취향으로만(야경·나이트라이프, 없으면 비움 — 2026-10-19 사용자). 재계획은 끈다.
         late_night_by_taste=True,
+        # 여러 날을 날마다 다른 동네로(2026-10-20 사용자 — "강남도 연희동도 성수동도"). 재계획은 하루라 끈다.
+        spread_days=True,
         persona_ref=ResourceRef(kind="persona", ref_id=request.trip_id, owner_id=owner),
         principal=Principal(user_id=owner),
         seed=_seed_from(request.trip_id),
@@ -1100,26 +1103,6 @@ def restrict_pool_to_categories(
     ), ignored
 
 
-def restrict_pool_to_target_role(
-    pool: CandidatePool, target_id: "str | None", excluded: "frozenset[PoiId]"
-) -> tuple[CandidatePool, list[str]]:
-    """식사 칸의 '다른 후보'는 식사 후보만 (2026-10-14 부산 실측: 칼국수 칸에 기찻길·해파랑길).
-
-    `categories` 가 비었을 때만 부른다(사용자가 고른 종류가 우선). 대상이 풀에 없거나
-    식사가 아니면 그대로 — 비식사 칸은 종전 동작. 거른 뒤 남는 식사 후보가 0 이면 넓힌다
-    (대안 0 보다 낫다, INV-4) — 그 사실은 노트로 남긴다. 좁히기만 한다(INV-1).
-    """
-    target = next((p for p in pool.pois if str(p.poi_id) == target_id), None)
-    if target is None:  # 대상이 반경·품질 밖 — 역할을 모른다(종전 동작이지만 흔적은 남긴다)
-        return pool, ["alternatives_role_unknown"] if target_id else []
-    if not counts_as_food(target):
-        return pool, []
-    kept = tuple(p for p in pool.pois if counts_as_food(p))
-    if not any(p.poi_id not in excluded for p in kept):
-        return pool, ["alternatives_role_relaxed"]
-    return replace(pool, poi_ids=frozenset(p.poi_id for p in kept), pois=kept), []
-
-
 # 재계획 사유(AI 어휘) → 트리거 종류. 백엔드가 `trigger` 를 안 보내는 동안 이 표가
 # 대신 유도한다 — `/alternatives` 가 `kind="MANUAL"` 을 **지어내는** 것과 다르다:
 # 여기 입력(`reasons`)은 FE 칩에서 온 실값이다. 표에 없는 사유는 MANUAL 이고,
@@ -1384,6 +1367,8 @@ def _exact_alias(text: str, specs: Sequence[DirectiveSpec]) -> tuple[DirectiveSp
 _NEAR_KEYS = frozenset({"NEARBY", "LESS_MOVE"})
 # "밤에 놀기 — 클럽·바"(2026-10-15) — 경계 8종에 칸이 없어 replan 이 직접 집행한다(`_nightlife_candidates`).
 _NIGHT_KEYS = frozenset({"NIGHTLIFE"})
+# "강남에서 놀고 싶어" — 그 지역 중심 둘레 후보 반경. 동네 하나(걸어서 이어지는 거리)다.
+_AREA_POOL_KM = 3.0
 _NIGHTLIFE_KEEP = 6  # 구성 후보에 올리는 나이트라이프 수(가까운 순)
 # 나이트라이프 세부 태그(수집 계약 — tags=["나이트라이프", 세부]). 말에 있는데 근처에 없으면 노트로 밝힌다.
 _NIGHTLIFE_SUBTYPES = ("클럽", "칵테일바", "와인바", "라운지바", "비어가든", "스피크이지", "혼술바")
@@ -2437,6 +2422,12 @@ class WiredItineraryOrchestrator:
         # ── 자연어 요청 — 뽑고, **검증한 것만** 쓴다 ─────────────────────
         nl = self._verified_request(request, anchor, not_before, daily_rain, notes, nl_pending,
                                     available=frozenset(p.category for p in pool.pois))
+        # "을지로 말고 강남에서 놀고 싶어" — 그 지역 둘레로 후보 풀을 다시 받는다. 종전엔 풀이 지금 위치 기준이라 하루가
+        # 그대로 을지로였다(사용자 2026-10-20). 원 일정 중 그 지역 밖(잠금·지난 곳·진행 중 제외)은 아래 제외에 더한다.
+        # 시간만 당기기는 장소를 안 바꾼다는 요청이라 옮기지 않는다.
+        area_out: frozenset[PoiId] = frozenset()
+        if nl.area_center is not None and earlier is None:
+            pool, area_out = self._area_pool(nl.area_center, params, request, now, pool, notes)
         # 통과한 곳은 풀에 합류시킨다 — **구성 LLM 의 숏리스트가 풀에서만 나오기 때문이다.** 반경 밖이면
         # 구성 LLM 이 그곳을 고를 수 없어 다른 곳으로 하루를 꽉 채우고, 이 곳은 9번째 필수 방문으로 붙었다가
         # 솔버가 떨어뜨렸다(DEV 실호출 2026-10-14: 제주시 → 성산일출봉 38km, 보고도 없이 빠짐).
@@ -2495,6 +2486,7 @@ class WiredItineraryOrchestrator:
             else:
                 notes.append(f"avoid_excluded: {len(avoided)} {cats}")
         avoided = avoided | (nl.avoid - held)  # 사용자가 이름으로 뺀 곳(등록 POI 로 확인된 것만)
+        avoided = avoided | (area_out - held)  # 옮겨 간 지역 밖의 원 일정
         if nl.only:
             # "카페로만" — 다른 종류는 후보에서 뺀다. 잠금·이름으로 집은 곳은 둔다(말이 어긋나면 이름이 이긴다).
             avoided = avoided | frozenset(
@@ -3577,6 +3569,31 @@ class WiredItineraryOrchestrator:
                 seen_any = True
                 previous = here
         return round(total, 1) if seen_any else None
+
+    def _area_pool(
+        self, center: GeoPoint, params: Mapping, request: schemas.ReplanRequest, now: datetime,
+        pool: CandidatePool, notes: list[str],
+    ) -> tuple[CandidatePool, frozenset[PoiId]]:
+        """지역 중심 둘레 `_AREA_POOL_KM` 의 후보 풀(+원 일정 합류)과, 원 일정 중 그 밖인 곳. 못 받으면 종전 풀 그대로.
+
+        빈 풀 1회 확대와 같은 공급자 경로라 예산·품질·영업일 필터와 공평 절단이 그대로 걸린다(INV-1 — 등록 POI 만).
+        """
+        second = self._info.collect(
+            Intent.REPLAN,
+            {**params, "pool_request": replace(params["pool_request"], anchor=center,
+                                               radius_override_km=_AREA_POOL_KM)},
+            only=frozenset({ProviderKind.PLACE}),
+        )
+        area = self._pool_from(dict(second), now)
+        if not area.pois:
+            notes.append("nl_area_pool_empty")
+            return pool, frozenset()
+        merged = self._with_current_slots(area, request, now, notes)
+        current = {PoiId(s.poi_id) for s in request.current_slots}
+        out = frozenset(p.poi_id for p in merged.pois
+                        if p.poi_id in current and haversine_km(p.coord, center) > _AREA_POOL_KM)
+        notes.append(f"nl_area_pool: {len(pool.pois)}->{len(merged.pois)} out={len(out)}")
+        return merged, out
 
     def _pool_from(
         self, packets: dict[ProviderKind, InfoPacket], now: datetime
