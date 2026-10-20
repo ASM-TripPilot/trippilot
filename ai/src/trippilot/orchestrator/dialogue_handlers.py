@@ -46,6 +46,7 @@ from trippilot.domain.common import (
     TransportMode,
 )
 from trippilot.domain.dialogue import ArgumentKind
+from trippilot.domain.event import EventInfo, EventType
 from trippilot.domain.intent import DIALOGUE_INTENTS, Intent
 from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory, counts_as_food, reputation_bonus
 from trippilot.domain.theme_tags import themes_in
@@ -53,11 +54,11 @@ from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.region_centers import bare_region, region_center, region_mentions, region_pair
 from trippilot.domain.transit import TransitPurpose
 from trippilot.domain.trigger import TriggerKind, TriggerParams
-from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, _MAX_LENGTH, _violates
+from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, _MAX_LENGTH, _violates, clock_times
 from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEXT, fallback_answer_text
 from trippilot.orchestrator.arguments import extract_kind
 from trippilot.orchestrator.intent_router import normalize
-from trippilot.orchestrator.opportunity import _displayable
+from trippilot.orchestrator.opportunity import _displayable, shown_event
 from trippilot.orchestrator.place_intro import PlaceIntro
 from trippilot.orchestrator.place_sql import PlaceSqlLookup, asks_for_places
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder, restrict_pool_to_target_role
@@ -206,6 +207,7 @@ class HandlerPorts:
     planb: PlanBAgent | None = None
     place_sql: PlaceSqlLookup | None = None  # 장소 탐색 NL2SQL — DIALOGUE_SQL 배정 + 장소 DB DSN 이 있을 때만
     place_intro: PlaceIntro | None = None  # 장소 소개 한 조각(KB-5) — 벡터 스토어가 배선됐을 때만
+    events: Provider | None = None  # EventProvider.fetch({anchor, days, now}) — 행사 저장소가 배선됐을 때만(장소 탐색의 행사 주제)
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,7 +221,7 @@ class TurnContext:
     trace_id: TraceId
     remaining_ms: Callable[[], int]
     ports: HandlerPorts = field(default_factory=HandlerPorts)
-    utterance: str = ""  # 사용자 발화 원문 — 장소 탐색 NL2SQL 의 재료로만 쓴다(Facts 에는 싣지 않는다, INV-2)
+    utterance: str = ""  # 사용자 발화 원문 — 장소 탐색 NL2SQL·행사 기간 낱말의 재료로만 쓴다(Facts 에는 싣지 않는다, INV-2)
     # 이번 발화 앞의 대화 (role, text) — 장소 탐색의 이어 묻기("더 알려줘")가 앞 요청의 지역을 잇고 이미 보인 곳을 빼는 데만 쓴다
     earlier: tuple[tuple[str, str], ...] = ()
     # 이번 발화 원문 — 이어 묻기 판정에만 쓴다. 계획 경로는 utterance 를 비우지만(NL2SQL 이 다른 도구 몫을 읽지 않게) 이건 싣는다 —
@@ -1326,7 +1328,7 @@ _FAR_NOTE = "두 곳이 멀어 그 사이는 아직 찾아 줄 수 없다"
 # 다른·딴 + 곳·거·장소…, 그 밖에, 추가로. 비교의 더("더 조용한 카페")·더워·더욱·또래는 아니다
 _MORE = re.compile(
     r"(?:(?<![가-힣])|(?<=좀))(?:더|또)(?=\s?(?:알려|보여|있|없|추천|찾|줘|볼|가르쳐|말해|요|가\s?볼|갈|뭐|어디|구경|둘러)|\s*[?!.~]*$)"
-    r"|(?:다른|딴)\s?(?:곳|데|거|걸|장소|카페|맛집|식당|명소)|그\s?(?:밖|외)|추가로")
+    r"|(?:다른|딴)\s?(?:곳|데|거|걸|장소|카페|맛집|식당|명소|축제|행사|공연|전시|팝업|콘서트|페스티벌)|그\s?(?:밖|외)|추가로")
 # 위치를 바꿔 말한 말 — 앞 요청의 지역을 잇지 않는다(보인 곳만 뺀다). "그 근처·거기"는 앞 요청을 가리키니 아니다
 _DEIXIS = re.compile(r"(?<!그 )(?<!그)(?<!거기 )(?<!거기)(?:근처|주변)|여기|이\s?근방|지금|일정|숙소|호텔")
 
@@ -1368,10 +1370,11 @@ def _on_the_way(anchor: _Anchor) -> Callable[[GeoPoint], bool]:
     return near
 
 
-def _follow_up(ctx: TurnContext) -> tuple[str, str, str] | None:
-    """이어 묻기("더 알려줘"·"다른 데는?")면 (지역을 가진 턴 원문, 사슬 첫 요청 뒤 도우미가 한 말, 사슬 대화 전체). 사슬 = 장소 찾기
-    말로 시작해 이어 묻기만 이어진 턴들이다(앞 턴이 날씨·거리 질문이면 이어 묻기가 아니다). 지역을 가진 턴은 그중 지역을 가장 최근에
-    말한 턴 — 지역을 새로 말한 이어 묻기("강남에도 더 있어?")면 그것, 아니면 첫 요청. 아니면 None."""
+def _follow_up(ctx: TurnContext) -> tuple[str, str, str, tuple[str, ...]] | None:
+    """이어 묻기("더 알려줘"·"다른 데는?")면 (지역을 가진 턴 원문, 사슬 첫 요청 뒤 도우미가 한 말, 사슬 대화 전체, 사슬의 요청 원문들
+    (오래된 것부터)). 사슬 = 장소·행사 찾기 말로 시작해 이어 묻기만 이어진 턴들이다(앞 턴이 날씨·거리 질문이면 — "서울 불꽃축제 날
+    날씨 어때?"도 — 이어 묻기가 아니다). 지역을 가진 턴은 그중 지역을 가장 최근에 말한 턴 — 지역을 새로 말한 이어 묻기("강남에도 더
+    있어?")면 그것, 아니면 첫 요청. 아니면 None."""
     if _MORE.search(ctx.heard or ctx.utterance) is None:
         return None
     turns, holder = ctx.earlier, None
@@ -1383,10 +1386,10 @@ def _follow_up(ctx: TurnContext) -> tuple[str, str, str] | None:
             if holder is None and region_mentions(normalize(text)):
                 holder = text
             continue
-        if not asks_for_places(text):
+        if not asks_for_places(text) and _event_noun(text, None) is None:  # 행사를 묻는 꼴이어야 사슬을 연다
             return None
         shown = " ".join(t for r, t in turns[i + 1:] if r == "ASSISTANT")  # 사슬 전체에서 보인 곳
-        return holder or text, shown, " ".join(t for _, t in turns[i:])
+        return holder or text, shown, " ".join(t for _, t in turns[i:]), tuple(t for r, t in turns[i:] if r == "USER")
     return None
 
 
@@ -1418,7 +1421,7 @@ def _carry(ctx: TurnContext) -> _Anchor | None:
     follow = _follow_up(ctx)
     if follow is None or _says_place(ctx, follow[1]):
         return None
-    holder, _, context = follow
+    holder, _, context, _ = follow
     said = ctx.arguments.get("region")
     grounded = said if said and _grounded(said, context) else None
     pair = _between(holder)
@@ -1546,6 +1549,251 @@ def _explore_by_sql(ctx: TurnContext, anchor: _Anchor | None, category: str | No
     return HandlerTask("explore_sql", fn)
 
 
+def _anchor_center(ctx: TurnContext, anchor: _Anchor) -> GeoPoint | None:
+    """앵커 좌표 — 지역은 중심 표의 값, 일정 근처는 그 슬롯 날짜 기준 POI_INFO 좌표(없으면 None)."""
+    if anchor.center is not None:
+        return anchor.center
+    on = ctx.snapshot.day_of(anchor.slot) or ctx.today
+    return _coord(_lookup(ctx, (anchor.slot.poi_id,), on).get(anchor.slot.poi_id))
+
+
+# 행사(축제·공연·전시) — 탐색 **주제(theme)** 가 행사를 물을 때만 행사 저장소를 같이 본다(LLM 0회). 행사는 POI 가 아니라 후보 카드에
+# 싣지 않고 문장 재료(detail.events)로만 둔다(INV-1). 기간은 날짜 단위라 시각 허용 집합(INV-2)과 무관하다. 행사 답(카드 없는 TEXT)은
+# 물은 것을 실제로 채울 때만 낸다 — 아니면 장소 답 그대로에 "못 찾음"을 남긴다(#1486 리뷰 실측: 장소 질문이 행사 목록이 되고, 물은
+# 공연·전시 대신 엉뚱한 축제가 나열되며 박물관 카드까지 버려졌다)
+_GENERIC_EVENT = r"축제|행사|공연|전시|팝업|페스티벌|페스타|콘서트|박람회|뮤지컬|연극|문화제|예술제|영화제|비엔날레|야행|드론쇼"
+# 여행사·시행사·대행사의 '행사', 충전시설·안전시설·운전시의 '전시'는 아니다
+_EVENT_WORD = re.compile(r"(?<![여시대])행사|(?<![충안발운완])전시|축제|공연|팝업|페스티벌|페스타|콘서트|박람회|뮤지컬|연극|문화제"
+                         r"|예술제|영화제|비엔날레|야행|드론쇼|불꽃|퍼레이드")
+# 행사 낱말 뒤에 와도 되는 말 — 행사를 묻는 꼬리(조사·언제·어디·하는·있어·정보·보러·가고 싶어·스토어·놀이·관람). 그 밖의 말이 붙으면
+# (구경하고 갈·보고 나서·끝나면·근처·명당·말고·홀·장·관) 행사를 꾸밈으로 쓴 장소 질문이다. 막을 꼴을 늘어놓으면 늘 샜다(2026-10-22 리뷰:
+# "팝업 구경하고 갈 카페"가 팝업 목록이 됐다) — 허용 목록이 모자라면 예전 장소 답으로 간다(안전한 쪽)
+_EVENT_TAIL = re.compile(
+    r"(?:은|는|이|가|을|를|도|들|만|에서|에|의|이나|나|이랑|랑|하고)?"
+    r"(?:\s?(?:언제|어디|뭐|무슨|몇|하는|하나|해|했|할까|열리|열려|있어|있나|있는|있니|있을|있대|없어|없나|없을|정보|일정|기간|소식|시간"
+    r"|추천|알려|찾아|보고\s?싶|가고\s?싶|보러|가\s?볼|구경|관람|스토어|놀이|같은|거|것|곳|데|중|쯤|정도|예정|라인업|티켓|예매|가능|줘|좀|요)\S*)*"
+    r"[\s?!.~]*")
+# 이름을 물었다 — 행사 낱말 바로 앞말("불꽃축제"·"벚꽃 축제"→벚꽃·"재즈페스티벌"→재즈)과 홀로 이름인 낱말(불꽃·퍼레이드)
+# 홀로 이름인 낱말 — 불꽃·퍼레이드와 하위 종류(영화제·드론쇼·야행·문화제·예술제). 종류로만 거르면 보이는 tourapi 는 전부 FESTIVAL 이라
+# "영화제 언제 해"에 아무 축제나 나열됐다(2026-10-22 리뷰)
+_SPECIFIC = r"불꽃|퍼레이드|영화제|드론쇼|야행|문화제|예술제"
+_EVENT_NAME = re.compile(rf"([가-힣A-Za-z]+)(?=\s?(?:{_GENERIC_EVENT}))|{_SPECIFIC}")
+_SPECIFIC_EVENT = re.compile(_SPECIFIC)
+# 조사가 붙은 말은 이름이 아니다 — 이름은 행사 낱말에 바로 붙는다(벚꽃 축제). "아이랑 축제"·"서울에서 축제"·"음악과 축제"
+_JOSA_END = re.compile(r"(?<=.)(?:에서|이랑|하고|에|의|랑|과|와|은|는|을|를|만)$")
+_MODIFIER_END = re.compile(r"(?:한|는|은|할|볼|갈|던|운|쁜|른)$")  # 관형형 — 유명한·재밌는·작은·가볼·새로운·예쁜·다른
+_REGION_SUFFIX = re.compile(r"(?:특별시|광역시|특별자치도|특별자치시|시|도|군|구|동|읍|면|역|입구|입구역|섬|해변|해수욕장|항)?")
+_NOT_A_NAME = frozenset({
+    *_GENERIC_EVENT.split("|"),
+    # 때·기간 — 붙여 쓴 꼴도. 기간은 _period_days 가 읽는다
+    "봄", "여름", "가을", "겨울", "연말", "연초", "새해", "크리스마스", "주말", "평일", "연휴", "요즘", "최근", "올해", "내년", "작년",
+    "매년", "이번", "다음", "이번주", "다음주", "이번달", "다음달", "오늘", "내일", "모레", "내일모레", "오늘밤", "내일밤", "밤", "낮",
+    "저녁", "아침", "야간", "시즌", "계절", "주", "달", "월", "일", "말", "쪽", "사이", "월요일", "화요일", "수요일", "목요일",
+    "금요일", "토요일", "일요일", "평일", "초", "중순", "말일",
+    # 곳·대상·규모·꾸밈 — 이름이 아니다
+    "근처", "주변", "근교", "여기", "거기", "어디", "어느", "지역", "동네", "마을", "대표", "유명", "인기", "핫", "핫플", "가족", "아이",
+    "아이들", "어린이", "커플", "연인", "친구", "혼자", "데이트", "무료", "유료", "전통", "실내", "야외", "대형", "대규모", "소규모",
+    "무슨", "어떤", "이", "그", "저", "큰", "새", "온", "각", "한", "두", "세", "네", "몇", "첫"})
+# 물은 종류 — 저장소 유형이 늘 맞지는 않아(보이는 원천 tourapi 는 전부 FESTIVAL, popup 은 전부 POPUP 으로 적힌다) 이름 낱말로도 맞춘다.
+# 전시의 '…전'은 대전·축전·석조전·판매전이 아니고, 부제가 달린 '…거장전 - 부제'는 전시다
+_EVENT_KINDS = (
+    (re.compile(r"축제|페스티벌|페스타|불꽃|퍼레이드|문화제|예술제|영화제|야행|드론쇼"), EventType.FESTIVAL,
+     re.compile(r"축제|페스티벌|페스타|불꽃|퍼레이드|문화제|예술제|영화제|야행|드론쇼|제$")),
+    (re.compile(r"공연|콘서트|뮤지컬|연극"), EventType.PERFORMANCE, re.compile(r"공연|콘서트|뮤지컬|연극|음악회|오페라|국악")),
+    (re.compile(r"전시|박람회|비엔날레"), EventType.EXHIBITION,
+     re.compile(r"전시|박람회|展|(?<![대축조매])전(?:$|\s?[-–:])|아트|비엔날레|미술")),
+    (re.compile(r"팝업"), EventType.POPUP, re.compile(r"팝업")),
+)
+_EVENT_KO = {EventType.FESTIVAL: "축제", EventType.PERFORMANCE: "공연", EventType.EXHIBITION: "전시",
+             EventType.POPUP: "팝업", EventType.OTHER: "행사"}
+_EVENT_NEAR_KM = 15.0  # 동네 앵커 반경의 상한 · 주소에 시·도가 없는 행사를 시·도 앵커에 넣는 반경
+_ADDRESS_SIDO = re.compile(r"서울|부산|대구|인천|광주|대전|울산|세종|제주|경기|강원|충청|충북|충남|전라|전북|전남|경상|경북|경남")
+_EVENT_DEFAULT_DAYS = 30  # 기간을 말하지 않았을 때 오늘부터 볼 날 수 — "불꽃축제 언제 해?"는 여행 날 밖을 묻는다
+MAX_EVENTS = 5
+# 계절 — (첫 달, 끝 달). 겨울은 해를 넘긴다
+_SEASONS = {"봄": (3, 5), "여름": (6, 8), "가을": (9, 11), "겨울": (12, 2)}
+
+
+def _span(first: date, last: date) -> tuple[date, ...]:
+    return tuple(first + timedelta(days=n) for n in range((last - first).days + 1))
+
+
+def _month_end(d: date) -> date:
+    return (d.replace(day=1) + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+
+
+def _ahead_of(today: date, month: int, day: int = 1) -> date | None:
+    """그 달·날의 다가오는 날짜 — 올해에 지났으면 내년. 없는 날(2월 30일)은 None."""
+    for year in (today.year, today.year + 1):
+        try:
+            d = date(year, month, day)
+        except ValueError:
+            return None
+        if d >= today or (day == 1 and _month_end(d) >= today):
+            return d
+    return None
+
+
+def _period_days(text: str, today: date) -> tuple[date, ...] | None:
+    """기간 낱말 → 날짜들, 없으면 None(낱말 몇 개만 — 달력 파서는 두지 않는다). 띄어쓰기는 이번·다음 + 주·주말·달 에만 너그럽다 —
+    공백을 다 지우면 "내 일정"이 내일, "제주 말고"가 주말이 됐다."""
+    wd = today.weekday()
+    sat = today + timedelta(days=(5 - wd) % 7)  # 다가오는 토요일(오늘이 토요일이면 오늘, 일요일이면 다음 주)
+    if re.search(r"다음\s?주\s?주말|다음\s?주말", text):
+        return (sat, sat + timedelta(days=1)) if wd == 6 else (sat + timedelta(days=7), sat + timedelta(days=8))
+    if re.search(r"(?:이번\s?(?:주\s?)?|(?<![가-힣]))주말", text):
+        return (today,) if wd == 6 else (sat, sat + timedelta(days=1))
+    m = re.search(r"(?<!\d)(\d{1,2})\s?월\s?(\d{1,2})\s?일", text)
+    if m:
+        d = _ahead_of(today, int(m[1]), int(m[2])) if 1 <= int(m[1]) <= 12 else None
+        return (d,) if d else None
+    said = re.sub(r"(?<![가-힣])내일\s?모레", " 모레", text)  # 내일모레 = 모레
+    ahead = [n for word, n in (("오늘", 0), ("내일", 1), ("모레", 2)) if re.search(rf"(?<![가-힣]){word}", said)]
+    if ahead:  # "오늘이나 내일" — 말한 날 모두
+        return _span(today + timedelta(days=min(ahead)), today + timedelta(days=max(ahead)))
+    if re.search(r"다음\s?주(?!\s?말)", text):
+        monday = today + timedelta(days=7 - wd)
+        return _span(monday, monday + timedelta(days=6))
+    if re.search(r"이번\s?주(?!\s?말)", text):
+        return _span(today, today + timedelta(days=6 - wd))
+    if re.search(r"다음\s?달", text):
+        first = _month_end(today) + timedelta(days=1)
+        return _span(first, _month_end(first))
+    if re.search(r"이번\s?달", text):
+        return _span(today, _month_end(today))
+    m = re.search(r"(?<!\d)(\d{1,2})\s?월(?!\s?\d)", text)
+    if m and 1 <= int(m[1]) <= 12:
+        first = _ahead_of(today, int(m[1]))
+        return _span(max(first, today), _month_end(first)) if first else None
+    if "크리스마스" in text:
+        d = _ahead_of(today, 12, 24)
+        return (d, d + timedelta(days=1)) if d else None
+    if "연말" in text:
+        first = _ahead_of(today, 12)
+        return _span(max(first, today), _month_end(first))
+    if re.search(r"연초|새해", text):
+        first = _ahead_of(today, 1)
+        return _span(max(first, today), _month_end(first))
+    for word, (a, b) in _SEASONS.items():
+        if re.search(rf"(?<![가-힣]){word}", text):  # 지금 그 계절이면 오늘부터, 지났으면 다음 해
+            for year in (today.year - 1, today.year, today.year + 1):
+                first, last = date(year, a, 1), _month_end(date(year + (b < a), b, 1))
+                if last >= today:
+                    return _span(max(first, today), last)
+    return None
+
+
+def _event_days(theme: str, utterance: str, today: date, earlier_asks: tuple[str, ...] = ()) -> tuple[date, ...]:
+    """주제의 기간이 먼저, 없으면 발화("오늘 서울 도착했는데 이번 주에 하는 축제"는 주제의 이번 주), 이어 묻기면 사슬의 요청("이번 주말
+    서울 축제 있어?" 뒤의 "또 없어?"는 그 주말) — 모두 없으면 오늘부터 30일."""
+    return (_period_days(theme, today) or _period_days(utterance, today)
+            or next((d for ask in reversed(earlier_asks) if (d := _period_days(ask, today))), None)
+            or _span(today, today + timedelta(days=_EVENT_DEFAULT_DAYS - 1)))
+
+
+def _event_text_ok(text: str) -> bool:
+    """행사 이름·주소 — 웹에서 모은 글이 사실 칸으로 간다: 표시 가능·게이트 규칙(시간 표현·연락처·주입 꼴)·시계 시각 없음
+    (사실 칸의 시각은 답변 시각의 허용 집합이 된다, INV-2)."""
+    times, unverifiable = clock_times(text)
+    return _displayable(text) and not _violates(text, _MAX_FOOTNOTE) and not times and not unverifiable
+
+
+def _period(first: date, last: date, today: date) -> str:
+    """"10월 24일"·"10월 20일~11월 8일" — 올해 밖에 걸치면 연도를 붙인다(2022년에 시작한 상설 프로그램이 올해 일처럼 읽히지 않게)."""
+    def label(d: date) -> str:
+        return _date_label(d) if first.year == last.year == today.year else f"{d.year}년 {_date_label(d)}"
+    return label(first) if first == last else f"{label(first)}~{label(last)}"
+
+
+def _event_noun(theme: str | None, category: str | None) -> str | None:
+    """주제가 행사를 묻는가 — 묻는다면 마지막 행사 낱말. 장소 종류를 정했으면 장소 질문이다(공연 카페·문화 시설 전시). 마지막 행사 낱말
+    뒤는 행사를 묻는 꼬리뿐이어야 한다(_EVENT_TAIL)."""
+    if not theme or category:
+        return None
+    last = None
+    for last in _EVENT_WORD.finditer(theme):
+        pass
+    return last.group(0) if last is not None and _EVENT_TAIL.fullmatch(theme[last.end():]) else None
+
+
+def _event_names(theme: str, anchor_label: str) -> tuple[frozenset[str], tuple[tuple[GeoPoint, float], ...]]:
+    """물은 이름 — (글자 이름, 동네(중심, 반경)). 행사 낱말 바로 앞말 중 때·꾸밈·관형형(유명한·재밌는)·조사 붙은 말은 버리고,
+    불꽃·퍼레이드가 든 말은 그 낱말로(서울불꽃·한강불꽃 → 불꽃). 지역 표 이름(+시·도·동·역…, 조사가 붙어도)은 주소 글자 대신 그 동네
+    반경으로 맞춘다 — 실데이터 주소는 도로명이라 동 이름이 없다("성수 팝업"이 5곳 중 1곳만 나왔다). 한 글자 이름(꽃·빛)은 글자로
+    맞출 수 없어(불꽃축제의 꽃) 맞지 않는 이름으로 남긴다 — 행사 답 대신 장소 답 + "못 찾음"."""
+    texts: set[str] = set()
+    places: list[tuple[GeoPoint, float]] = []
+    for m in _EVENT_NAME.finditer(theme):
+        word = m.group(1) or m.group(0)
+        if m.start() and theme[m.start() - 1].isdigit():  # "11월 축제"·"7일 축제"의 월·일 — 기간이다
+            continue
+        specific = _SPECIFIC_EVENT.search(word)
+        if specific:
+            texts.add(specific.group(0))
+            continue
+        bare = _JOSA_END.sub("", word)
+        hit = region_center(bare)
+        if hit is not None and bare.startswith(hit[0]) and _REGION_SUFFIX.fullmatch(bare[len(hit[0]):]):
+            if hit[0] != anchor_label:
+                places.append((hit[1], min(_EVENT_NEAR_KM, max(2 * hit[2], 3.0))))
+            continue
+        if bare == word and word not in _NOT_A_NAME and not _MODIFIER_END.search(word):
+            texts.add(word.casefold() if len(word) > 1 else "\0")  # "\0" 은 어떤 이름에도 들지 않는다
+    return frozenset(texts), tuple(places)
+
+
+def _explore_events(ctx: TurnContext, anchor: _Anchor, theme: str | None) -> HandlerTask | None:
+    """주제가 행사를 물을 때만 — 보여도 되는 행사(`shown_event`, 기회 카드와 같은 규칙) 중 기간이 겹치고 앵커 안인 것(시·도 앵커는
+    주소의 시·도 — 제주시 중심 15km 로는 서귀포가 빠졌다, 동네 앵커는 반경의 두 배 3~15km)에서 물은 이름(글자는 이름·주소에, 동네는
+    그 반경)·종류(글자 이름이 없을 때)를 채우는 것만 남겨 짧은 기간(상설 프로그램이 다섯 칸을 채우지 않게) → 가까운 곳 → 시작일 →
+    이름 순 ≤5. 채우는 것이 없으면 빈 목록 — 조립이 장소 답에 "못 찾음"을 남긴다."""
+    port = ctx.ports.events
+    noun = _event_noun(theme, ctx.arguments.get("category"))
+    if port is None or noun is None:
+        return None
+    follow = _follow_up(ctx)
+    days = _event_days(theme, ctx.utterance, ctx.today, follow[3] if follow else ())  # 계획 경로는 발화가 없다 — 주제·사슬만
+    texts, places = _event_names(theme, anchor.label)
+    kind = next(((typ, rx) for ask, typ, rx in _EVENT_KINDS if ask.search(noun)), None)
+    sido = anchor.label if anchor.kind == "region" and anchor.label in _SIDO_LEVEL else None
+    near_km = min(_EVENT_NEAR_KM, max(2 * anchor.radius_km, 3.0))
+
+    def fn() -> dict:
+        center = _anchor_center(ctx, anchor)
+        if center is None:
+            return {"status": "UNAVAILABLE", "reason": "anchor_coord_unknown"}
+        packet = port.fetch({"anchor": center, "days": days, "now": ctx.now})
+        if packet.status.value not in ("OK", "LOW"):
+            return {"status": "UNAVAILABLE", "reason": "events"}
+
+        def inside(e: EventInfo) -> bool:
+            if sido is not None:  # 주소가 시·도를 말하면 그것으로, 아니면(주소 없음·"여의도 집결") 15km
+                said = _ADDRESS_SIDO.match(e.address or "")
+                return said.group(0) == sido if said else haversine_km(center, e.coord) <= _EVENT_NEAR_KM
+            return haversine_km(center, e.coord) <= near_km
+
+        # 두 곳 사이면 두 곳을 잇는 선 가까이만, 이어 묻기면 앞에서 보인 행사는 뺀다(장소와 같다, BR-AO-27)
+        on_the_way, said_before = _on_the_way(anchor), _shown_before(ctx)
+        near = [e for e in map(EventInfo.from_dict, packet.data.get("events", ()))
+                if shown_event(e) and _event_text_ok(e.name) and inside(e) and on_the_way(e.coord)]
+        def fits(e: EventInfo) -> bool:  # 물은 것을 채우는가 — 동네·글자 이름, 글자 이름이 없으면 종류
+            hay = f"{e.name}{e.address or ''}".replace(" ", "").casefold()
+            return ((not places or any(haversine_km(at, e.coord) <= km for at, km in places))
+                    and (any(n in hay for n in texts) if texts
+                         else kind is None or e.event_type is kind[0] or kind[1].search(e.name) is not None))
+
+        matched = [e for e in near if fits(e)]
+        found = sorted((e for e in matched if not said_before(e.name)),
+                       key=lambda e: ((e.end - e.start).days, haversine_km(center, e.coord), e.start, e.name))
+        return {"status": "OK", "period": _period(days[0], days[-1], ctx.today), "exhausted": bool(matched) and not found,
+                "events": [{
+                    "name": e.name, "type": _EVENT_KO[e.event_type], "period": _period(e.start, e.end, ctx.today),
+                    **({"place": e.address} if e.address and _event_text_ok(e.address) else {}),
+                } for e in found[:MAX_EVENTS]]}
+
+    return HandlerTask("events", fn)
+
+
 def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     anchor, builder = _explore_anchor(ctx), ctx.ports.pool_builder
     category, theme = ctx.arguments.get("category"), ctx.arguments.get("theme")
@@ -1558,16 +1806,15 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     sql = (_explore_by_sql(ctx, anchor, category, theme),) if (
         ctx.ports.place_sql is not None and ctx.ports.place_sql.writes_sql and ctx.arguments.get("region")
         and (anchor is None or (anchor.kind == "region" and _carry(ctx) is None))) else ()
+    events = _explore_events(ctx, anchor, theme) if anchor is not None else None
+    sql += (events,) if events is not None else ()
     if anchor is None or builder is None:
         return sql
 
     def fn() -> dict:
-        center = anchor.center
-        if center is None:  # 일정 근처 — 그 슬롯 날짜 기준으로 좌표만 읽는다
-            on = ctx.snapshot.day_of(anchor.slot) or ctx.today
-            center = _coord(_lookup(ctx, (anchor.slot.poi_id,), on).get(anchor.slot.poi_id))
-            if center is None:
-                return {"status": "UNAVAILABLE", "reason": "anchor_coord_unknown"}
+        center = _anchor_center(ctx, anchor)
+        if center is None:
+            return {"status": "UNAVAILABLE", "reason": "anchor_coord_unknown"}
         try:
             pool = builder.build(CandidatePoolRequest(anchor=center, dates=(ctx.today,), budget=BudgetLevel.HIGH,
                                                       transport=TransportMode.PUBLIC, radius_override_km=anchor.radius_km),
@@ -1612,21 +1859,31 @@ def _assemble_explore(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Fa
                      next_actions=home, quick_replies=(), template_text=EXPLORE_ASK_REGION_TEXT)
     # theme(발화 자유문)은 싣지 않는다 — "22:00 이후 야경"의 시각이 Facts 시각으로 허용된다(INV-2). 답변 프롬프트는 발화를 따로 받는다
     detail = {"anchor": anchor.label, "anchor_kind": anchor.kind}
+    events = _value(results, "events")
+    events = events if events is not None and events.get("status") == "OK" else None  # 작업이 낸 UNAVAILABLE 도 못 본 것이다
+    if events is not None and events.get("events"):  # 행사를 물었고 찾았다 — 카드 없이 문장으로(행사는 POI 가 아니다, INV-1)
+        detail = {**detail, "period": events["period"], "events": list(events["events"])}
+        return Facts(intent, FactStatus.OK, AnswerKind.TEXT, rows=(), places=(), notes=(), payload=None, next_actions=home,
+                     quick_replies=(), template_text=fallback_answer_text(intent, detail), detail=detail)
+    # 행사를 물었는데 없거나(등록 행사 기준) 못 봤다 — 장소로 답하되 그 사실을 남긴다(없는 행사를 지어내지 않게)
+    # 이어 묻기에서 앞에서 다 보여 줬으면 '찾지 못함'이 아니다(바로 앞 턴과 어긋난다)
+    told = "앞에서 보여 준 행사 말고는 더 찾지 못함" if events is not None and events.get("exhausted") else "그 기간·지역에서 물은 행사를 찾지 못함"
+    asked = ((told,) if events is not None else ("행사 정보 미확인",)) if "events" in results else ()
     value = by_sql or _value(results, "explore")
     if value is None or value.get("status") != "OK":
-        return _text_facts(intent, FactStatus.UNAVAILABLE, home, notes=("장소 탐색 미확인",), detail=detail)
+        return _text_facts(intent, FactStatus.UNAVAILABLE, home, notes=("장소 탐색 미확인", *asked), detail=detail)
     shown = _shown_before(ctx)
     candidates = [c for c in value.get("candidates", ()) if isinstance(c, Mapping) and not shown(c["name"])][:MAX_CANDIDATES]
     if not candidates:
         notes = (more,) if _follow_up(ctx) is not None else ("조건에 맞는 등록 장소 없음",)
-        return _text_facts(intent, FactStatus.EMPTY, home, notes=notes, detail=detail)
+        return _text_facts(intent, FactStatus.EMPTY, home, notes=(*notes, *asked), detail=detail)
     payload = {"candidates": [{"poiId": c["poi_id"], "name": c["name"], "distanceRange": c.get("distance_range"),
                                "reason": c["reason"]} for c in candidates]}
     places = tuple(FactPlace(c["poi_id"], c["name"], c.get("category"), distance_range=c.get("distance_range"),
                              reason=c["reason"]) for c in candidates)
     # 고르기(PICK_CANDIDATE)는 바꿀 슬롯이 있어야 한다 — 탐색엔 없으니 후보마다 장소 보기 버튼으로 연다
     actions = tuple(NextAction("OPEN_PLACE", _clip(c["name"]), {"poiId": c["poi_id"]}) for c in candidates)
-    return Facts(intent, FactStatus.OK, AnswerKind.CANDIDATES, rows=(), places=places, notes=(), payload=payload,
+    return Facts(intent, FactStatus.OK, AnswerKind.CANDIDATES, rows=(), places=places, notes=asked, payload=payload,
                  next_actions=actions, quick_replies=(), template_text=_template(intent, FactStatus.OK), detail=detail)
 
 

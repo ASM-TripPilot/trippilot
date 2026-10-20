@@ -1401,3 +1401,13 @@ def test_names_in_a_kb5_intro_count_as_known_so_the_answer_may_say_them() -> Non
 
     names = _prompt_names({"places": [{"name": "경복궁"}], "target": "경복궁", "intro": "경복궁에는 근정전과 경회루가 있고 광화문이 정문이다. 창덕궁과 함께 꼽힌다."})
     assert "창덕궁" in names and "경복궁" in names
+
+
+def test_event_names_and_places_in_the_facts_are_known_names() -> None:
+    """행사 주제 탐색 답(TEXT) — 행사 이름·장소 주소도 사실 칸에 글자 그대로 있는 이름이다(닫힌 답의 장소 검사가 막지 않게)."""
+    from trippilot.orchestrator.dialogue_orchestrator import _foreign_place, _prompt_names, _squash
+
+    facts = {"anchor": "서울", "events": [{"name": "서울세계불꽃축제", "period": "10월 24일", "place": "여의도한강공원"}]}
+    assert _prompt_names(facts) == ["서울", "서울세계불꽃축제", "여의도한강공원"]
+    assert not _foreign_place("이번 주말 여의도한강공원에서 서울세계불꽃축제가 열려요.", tuple(map(_squash, _prompt_names(facts))))
+    assert _foreign_place("근처 한강시민공원도 좋아요.", tuple(map(_squash, _prompt_names(facts))))  # 사실 밖 이름은 그대로 걸린다
