@@ -47,7 +47,7 @@
 # 체크가 하나도 안 달린다. 위 바퀴들처럼 PR 을 쌓으면 대부분이 여기 해당한다. 수동으로 태운다:
 # `gh workflow run backend-ci.yml --ref <branch>`. 이걸 모르면 "체크 없음"을 통과로 읽는다.
 #
-# 갱신: 2026-10-21 · 기술 강화 루프 8노드 머지 → done(#1428~#1481), COV-RATCHET 에 TRIP-1532·#1493
+# 갱신: 2026-10-21 · 기술 강화 루프 8노드 머지 → done(#1428~#1481), COV-RATCHET 에 TRIP-1532·#1493, LOOP-BFF 접음(사용자 결정, #1494 닫음)
 # 갱신: 2026-10-20 · 기술 강화 루프 노드 추가(파일 말미 §기술 강화 루프 · TRIP-1480) — 새 간선 둘은 모두 COV-RATCHET 으로 들어간다
 # 갱신: 2026-10-13 · 출시·4차 승격(#1082) 반영, 끝난 노드 셋 닫음, `AI-NL-EDIT` 접음, **U8·U10 노드 추가**(설계는 10-12 에 끝났는데 노드가 없었다)
 # 갱신: 2026-10-12 · 루프 다섯 노드 머지 완료(#1040~#1044) → done
@@ -4554,9 +4554,10 @@ main 사본 동기화는 TRIP-1533(`ci(main):` 사본 PR #1495)이 잇는다 —
 [[nodes]]
 id = "LOOP-BFF"
 ticket = "TRIP-1467"
-title = "[BE] 라이브 일정 화면 BFF — 호출 5→1, 섹션 단위 부분 실패"
-status = "todo"
+title = "[BE] 라이브 일정 화면 BFF — 만들지 않는다(2026-10-21 사용자 결정: 앱 진입이 이미 왕복 한 번)"
+status = "dropped"
 touches = [
+  # 착수 전 티켓 원문에서 뽑은 예상이다 — 접어서 develop 에 들어간 diff 는 없다(닫힌 #1494 의 실제 변경은 app views·openapi·IT 였다).
   "backend/docs/design/openapi.yaml",
   "backend/app/src/main/kotlin/com/trippilot/app/web",
   "backend/app/src/test/kotlin/com/trippilot/app/web",
@@ -4576,11 +4577,11 @@ touches = [
   "backend/modules/auth",
 ]
 note = """
-착수 전 — touches 는 티켓 원문(TRIP-1467)에서 뽑은 예상이다: 새 컨트롤러(app web)와 IT, "BFF 는 api 만
-부름(ArchUnit 강제)" 의 규칙 테스트, 쿼리 수 측정용 datasource-proxy(테스트 전용 의존 → 버전 카탈로그 ·
-app/build.gradle.kts), 모듈 다섯 곳 화면용 읽기 퍼사드(여행·일정·트리거·그날 방문·위치 동의 — 위치 동의는 auth 소유).
-**FIELD-GATE 를 선행으로 두지 않는다** — 티켓 원문에 선행 근거가 없다. 다만 FIELD-GATE 가 먼저 머지되면
-BFF 의 새 응답 스키마도 필드 계약 검사를 받으므로 그 순서가 낫다. openapi.yaml 을 같이 만지는 것은 자원 배타다.
+**접음(2026-10-21, 사용자 결정) — 만들지 않는다.** 구현 PR #1494 는 닫았다(브랜치 `feat/TRIP-1467-live-view-bff` 는 남김).
+프론트를 대조해 보니 진입 화면(홈·여행 목록·기록 달력·여행 카드)이 라이브로 보낼지 정하려고 같은 일정 키를 이미
+받아 두어, 라이브 첫 로딩은 지금도 왕복 한 번이다. 두 번 왕복은 드문 진입 셋(이미 반영된 Plan-B 알림 → 허브,
+도우미 이력의 다른 여행 OPEN_LIVE, 외부 딥링크)뿐이고, 그것도 프론트만으로 같은 효과를 낸다 — 트리거 조회의
+active 게이트를 풀고 그날 방문을 미리 받기. 잇는 곳: 그 프론트 제안은 TRIP-1467 댓글(프론트 몫, 백엔드 노드 없음).
 """
 
 [[nodes]]
