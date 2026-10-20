@@ -85,8 +85,8 @@ class ChangeLogRepositoryAdapter(private val jpa: ChangeLogJpaRepository) : Chan
      * - 모르는 출처: V2.11 CHECK 가 막으므로 enum 값을 지우거나 바꾼 뒤 남은 옛 행, 또는 CHECK 에 새 값을 더한 뒤 앱을 이전 판으로 되돌렸을 때 생긴다. `valueOf` 로 던지면
      *   그 한 행이 여행 타임라인 전체를 영구히 500 으로 만들고, 아는 값으로 지어내면 "누가 바꿨나"를 틀리게 보여 준다.
      * - 스냅숏 일부를 못 읽음: 한쪽 스냅숏의 날·슬롯만 버리고 돌려주면 소비자가 **없던 변경을 본다** — 재계획
-     *   (`ReplanFacadeService.changesOn`)은 `before − after` 로 "그날 뺀 곳"을 계산해 AI 에 싣고, 화면·아카이브는
-     *   "전부 뺐다"로 보인다. 그래서 한 조각이라도 못 읽으면 그 행은 없는 것으로 친다.
+     *   (`ReplanFacadeService.changesOn`)은 `before − after` 로 못 읽은 슬롯·날을 "그날 뺀 곳"으로 계산해 AI 에 싣고,
+     *   REST 응답·아카이브 합본에도 그 반쪽 스냅숏이 그대로 실린다. 그래서 한 조각이라도 못 읽으면 그 행은 없는 것으로 친다.
      * 건너뛴 행은 WARN 으로 남긴다 — 조용히 빠지면 "이력이 왜 비나"를 못 찾는다(INV-4).
      */
     private fun ChangeLogEntryEntity.toDomain(): ChangeLogEntry? {

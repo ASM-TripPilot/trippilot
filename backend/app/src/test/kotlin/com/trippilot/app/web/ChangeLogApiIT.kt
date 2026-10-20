@@ -212,7 +212,7 @@ class ChangeLogApiIT : AbstractPostgresIntegrationTest() {
      * 행은 통째로 빠지고, 성한 행과 슬롯 없는 생성 이력(`{"days":[]}`)만 나온다.
      *
      * 실 DB 로만 본다 — 최상위가 `[]`·스칼라인 jsonb 는 어댑터에 닿기 전 **Hibernate 가 엔티티를 적재하는 순간** 터졌고, jsonb `null` 은 적재를 지나 어댑터에서 NPE 가 났다(H).
-     * JPA 대역은 그 층을 거치지 않는다. 앱 롤은 INSERT 만 가지므로 깨진 행은 INSERT 로 만든다.
+     * JPA 대역은 그 층을 거치지 않는다. 앱 롤은 UPDATE·DELETE 가 회수돼(V2.11) 쓰기는 INSERT 뿐이므로 깨진 행은 INSERT 로 만든다.
      */
     @Test
     fun `모양이 깨진 옛 스냅숏 행은 통째로 빠지고 타임라인은 200 으로 나머지를 돌려준다`() {
