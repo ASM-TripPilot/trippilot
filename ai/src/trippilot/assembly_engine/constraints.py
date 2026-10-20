@@ -45,7 +45,13 @@ def open_hours_ok(poi: Poi, start_at: datetime, end_at: datetime,
         return True  # 정보 없음 → 미적용
     start_m = _min_of_day(start_at)
     end_m = start_m + int((end_at - start_at).total_seconds() // 60)
-    return any(oh.open_min <= start_m and end_m <= oh.close_min for oh in windows)
+    if any(oh.open_min <= start_m and end_m <= oh.close_min for oh in windows):
+        return True
+    # 자정 넘어 시작한 방문(00:30)은 전날 창이 자정을 넘어 이어지는지도 본다 — 야경 16:00~익일 02:00 은
+    # 전날 요일의 창(close 26:00)이다. 밤 늦게 만든 오늘이 01:00 까지 열린다(2026-10-19 사용자).
+    before = open_windows_on(poi, start_at.date() - timedelta(days=1), holidays)
+    return bool(before) and any(
+        oh.open_min <= start_m + 1440 and end_m + 1440 <= oh.close_min for oh in before)
 
 
 def check_hc1(solution: ItinerarySolution, poi_index: Mapping[PoiId, Poi],
@@ -216,9 +222,10 @@ def check_hc4(solution: ItinerarySolution, problem: ItineraryProblem) -> list[Vi
         for slot in day.slots:
             if (slot.poi_id, slot.start_at, slot.end_at) in pinned:
                 continue
-            start_m = _min_of_day(slot.start_at)
+            start_m = _min_of_day(slot.start_at) + 1440 * (slot.start_at.date() - day.date).days
             end_m = start_m + int((slot.end_at - slot.start_at).total_seconds() // 60)
-            if start_m < ws or end_m > we:
+            # 시작은 그날 안(자정 넘는 창에서도 끝만 넘는다 — 슬롯은 시작 시각 + ends_next_day 로 나간다)
+            if start_m < ws or end_m > we or start_m > 24 * 60 - 1:
                 out.append(Violation("HC4", slot.poi_id,
                                      f"day window({ws}~{we}) 밖: {start_m}~{end_m}"))
     return out

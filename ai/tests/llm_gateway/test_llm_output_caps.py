@@ -114,6 +114,8 @@ def test_max_tokens_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         LlmFeature.DIALOGUE_INTENT: 1024,  # DEV 실측 출력 239/256 — 사고 토큰이 상한에 붙었다
         LlmFeature.DIALOGUE_ANSWER: 512,
         LlmFeature.DIALOGUE_MEMORY: 2048,
+        LlmFeature.DIALOGUE_PLAN: 1024,  # 분류와 같은 근거 — JSON 한 줄 + 사고 토큰(출력 239/256 실측)
+        LlmFeature.DIALOGUE_SQL: 512,  # SELECT 한 문장 JSON, 사고 끔
     }.get(feature, 1024)
     assert [r.max_tokens for r in llm.requests] == [expected]
 
@@ -149,6 +151,8 @@ def test_effort_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         LlmFeature.DIALOGUE_INTENT: "low",
         LlmFeature.DIALOGUE_ANSWER: "low",
         LlmFeature.DIALOGUE_MEMORY: "low",
+        LlmFeature.DIALOGUE_PLAN: "none",  # 같은 9s 안의 2‴ 계획(≤3.0s) — 사고 없이 더 빠르고 품질이 같거나 낫다(2026-10-20 실측)
+        LlmFeature.DIALOGUE_SQL: "none",  # 팬아웃 안(≤3s)의 짧은 변환
     }.get(feature)
     assert [r.effort for r in llm.requests] == [expected]
 
@@ -332,3 +336,35 @@ def test_untruncated_broken_json_keeps_parse_error_path() -> None:
     cut = json.dumps({"scores": [{"poiId": "c0000", "score": 0.5}]})[:20]
     reason = _fallback_reason(_RecordingLlm(cut))
     assert not reason.startswith("truncated:")
+
+
+def test_llm_이_못_본_후보는_llm_이_본_보통보다_높게_서지_않는다() -> None:
+    """규칙 점수(명소 1.0 + 인기·입장료·취향, 1.3 까지)를 LLM 점수(0~1)와 그대로 섞으면 LLM 이 안 본 곳이 이긴다.
+
+    서울 2박3일(풀 1,319 · LLM 250)에서 카페 취향인데 상위 150 에 카페가 0곳이었다 — LLM 이 카페에 준 0.93 을
+    LLM 이 보지도 않은 명소의 규칙 점수 1.1 이 눌렀다(2026-10-20 로컬). 못 본 곳은 규칙 서열은 그대로 두되
+    LLM 이 본 것의 중앙값을 넘지 않는다.
+    """
+    from statistics import median
+
+    from tests.agents.schedule.test_schedule_agent import _pool as _agent_pool
+
+    class _Liked(_CappedScoring):
+        def score(self, pool, persona, trace_id, now, *, timeout_sec=None):
+            self.pools.append(pool)
+            ids = sorted(str(p.poi_id) for p in pool.pois)
+            return TypedResult(value=(ScoredPoi(PoiId(ids[0]), 0.95, True), ScoredPoi(PoiId(ids[1]), 0.30, True)),
+                               is_fallback=False, error=None, call_record=None)
+
+    trace = InMemoryTrace()
+    agent = ScheduleAgent(_Liked(), _AssemblyProvider(trace, _Sink(), primary=True), FakeClock(), trace)
+    scored, _ = agent._score(_request(), _agent_pool(), _PERSONA,
+                             allocate(20_000, OrchestratorConfig()), 20_000, [], _TRACE, _COORD_NOW)
+
+    llm = [sp for sp in scored if sp.is_llm_score]
+    unseen = [sp for sp in scored if not sp.is_llm_score]
+    assert unseen and all(sp.score <= median(sp.score for sp in llm) for sp in unseen), scored
+    assert max(llm, key=lambda sp: sp.score).score > max(sp.score for sp in unseen)  # LLM 이 좋다고 본 곳이 1등
+    rule = {sp.poi_id: sp.score for sp in agent._rule_scores(_request(), _agent_pool(), _PERSONA)}
+    order = sorted(unseen, key=lambda sp: -sp.score)
+    assert [rule[sp.poi_id] for sp in order] == sorted((rule[sp.poi_id] for sp in unseen), reverse=True)  # 서열 유지

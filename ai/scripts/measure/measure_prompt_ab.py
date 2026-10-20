@@ -14,7 +14,7 @@ CI 밖 수동 실행 전용(실 API 를 부른다). few-shot·판단 순서(CoT)
   정답은 거절({"intent": null})이다. 평가셋 문장을 프롬프트 예시로 옮기면 이 숫자가 무의미해진다(leak).
 - `directive`  REPLAN_DIRECTIVE_TRANSLATION(sol) — 라벨은 `measure_directive_match.POSITIVES/NEGATIVES` + 부정·혼합
   6건. 완전 일치(겹쳐 고른 지시도 오답)와 허용(정답 포함·금지 지시 없음)을 같이 낸다. 시한 3.75s(DEV 실측 시한).
-- `answer`  DIALOGUE_ANSWER — Facts 9종 × 반복. 게이트 통과율·시각-장소 짝 위반(오케스트레이터 INV-2 검사와
+- `answer`  DIALOGUE_ANSWER — Facts 11종 + 계획 병합 3종 + 장소 탐색 5종(서울·일정 없음 4 · 일정 근처 1) × 반복. 게이트 통과율·시각-장소 짝 위반(오케스트레이터 INV-2 검사와
   같은 함수)·지연. 문장은 끝에 전부 찍는다 — 지어낸 사실은 사람이 읽어서 본다.
 - `scoring` PREFERENCE_SCORING — `data/collected_pois.json` 해운대구 실데이터 53곳 × 페르소나 3종. 세 번째 인자는
   반복이 아니라 **청크 구성 수**다: 구성마다 poiId(uuid5)의 소금만 바꿔 워커의 `plan_chunks`(poi_id 정렬 균등 분할)가
@@ -28,6 +28,10 @@ CI 밖 수동 실행 전용(실 API 를 부른다). few-shot·판단 순서(CoT)
   먼 곳·꽉 찬 하루에 카페·휴무 교체·피로+저녁·저녁 영업시간). 입력은 배선과 같은 함수로 만들고(`_compose_case`), 품질은
   상황별 코드 판정 + 공통(상한 이하·영업시간이 남은 시간과 60분 이상 겹침). `EVAL_CASES=a,b` 로 상황을 고른다.
   2026-10-18 실측: 0.5.0 이 33/33(천장) — 판단 순서(CoT)·예시(few-shot) 두 판은 품질이 같고 입력 +7~23%·p90 +1.3s 라 버렸다.
+- `plan`  DIALOGUE_PLAN(2‴ 도구 계획) — `data/dialogue_plan_eval_set.yaml` 38문장(도구 1·2 · 도구 없음 · 주입). 도구 집합 완전·허용
+  일치 · 인자 키 정밀도 · 도구 없음 비움률(gap 일치는 기록만) · 주입 도구 0 률 · 게이트 뒤 위험 인자 · 게이트 드롭률 · 지연·토큰.
+  노출 도구는 운영 배선(포트 전부)과 같다. 시한 3.0s(`EVAL_PLAN_TIMEOUT` — 계획 상한). 두 판본·두 모델을 같은 시각에 나란히.
+      uv run --env-file ../.env python scripts/measure/measure_prompt_ab.py plan prompts 2
 - `selection`  ALTERNATIVE_SELECTION(`/alternatives`) — reason 이 문제 상황·요청을 되풀이한 꼴(0.4.1 규칙)과 게이트가 비운 이유.
   2026-10-18 실측: 0.5.0 되풀이 0/36 — few-shot 이 고칠 것이 없어 프롬프트를 안 건드렸다.
 
@@ -55,7 +59,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 import itertools  # noqa: E402
 import uuid  # noqa: E402
-from collections import defaultdict  # noqa: E402
+from collections import Counter, defaultdict  # noqa: E402
 
 import openai  # noqa: E402
 import yaml  # noqa: E402
@@ -72,6 +76,7 @@ from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter  # noqa:
 from trippilot.llm_gateway.config import C1Config  # noqa: E402
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate  # noqa: E402
 from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerGate  # noqa: E402
+from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanGate  # noqa: E402
 from trippilot.llm_gateway.gates.intent import IntentGate  # noqa: E402
 from trippilot.llm_gateway.gates.scoring import ClosedSetGate  # noqa: E402
 from trippilot.llm_gateway.gateway import GatewayFacade  # noqa: E402
@@ -79,16 +84,24 @@ from trippilot.llm_gateway.prompts import PromptRegistry  # noqa: E402
 from trippilot.llm_gateway.workers.alternative_selection import AlternativeSelectionInput, AlternativeSelectionWorker  # noqa: E402,E501
 from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker  # noqa: E402
 from trippilot.llm_gateway.workers.dialogue_intent import DialogueIntentWorker  # noqa: E402
+from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker  # noqa: E402
 from trippilot.llm_gateway.workers.preference import (  # noqa: E402
     adaptive_chunk_size, build_prompt_vars, plan_chunks, score_chunk_cap,
 )
 from trippilot.llm_gateway.workers.replan_composition import (  # noqa: E402
     ComposeDayInput, ReplanCompositionWorker, ScheduleLine)
 from trippilot.orchestrator import dialogue_orchestrator as orch  # noqa: E402
+from trippilot.orchestrator import dialogue_plan as dplan  # noqa: E402
+from trippilot.domain.observability import GateDropEvent  # noqa: E402
+from trippilot.domain.plan_tools import plan_tool_specs_json  # noqa: E402
+from trippilot.llm_gateway.gates.base import has_contact_like  # noqa: E402
+from trippilot.llm_gateway.gates.dialogue_answer import clock_times  # noqa: E402
+from trippilot.orchestrator.dialogue_handlers import HandlerPorts  # noqa: E402
 
 MODEL = os.environ.get("EVAL_MODEL", "gpt-5.6-luna")
 INTENT_TIMEOUT = float(os.environ.get("EVAL_INTENT_TIMEOUT", "4.0"))
 ANSWER_TIMEOUT = float(os.environ.get("EVAL_ANSWER_TIMEOUT", "3.5"))
+PLAN_TIMEOUT = float(os.environ.get("EVAL_PLAN_TIMEOUT", "3.0"))
 TRIP = "경주 2박 3일 · 2일차 진행 중"
 _AI_ROOT = Path(__file__).resolve().parents[2]
 
@@ -249,19 +262,70 @@ ANSWER_CASES = [
     ("GET_POI_INFO", "거기 월요일에 열어?", _facts(
         "GET_POI_INFO", rows=[("분류", "박물관"), ("영업시간", "10:00~18:00 · 1월 1일 휴무"), ("입장료", "무료")],
         places=[_place("국립경주박물관", "박물관", hours="10:00~18:00 · 1월 1일 휴무", fee=0)])),
-    ("GET_POI_INFO", "그 카페 몇 시까지 해?", _facts(
-        "GET_POI_INFO", rows=[("분류", "카페"), ("영업시간", "미확인"), ("입장료", "미확인")],
+    ("GET_POI_INFO", "그 카페 몇 시까지 해?", _facts(  # 모르는 입장료는 프롬프트에 안 실린다(Facts.to_prompt_dict)
+        "GET_POI_INFO", rows=[("분류", "카페"), ("영업시간", "미확인")],
         places=[_place("카페 오늘", "카페")])),
+    ("GET_POI_INFO", "거기 식당이야?", _facts(  # 분류 행이 곧 답 — "분류를 그대로 읽지 마세요"가 이 답을 막지 않는가
+        "GET_POI_INFO", rows=[("분류", "맛집"), ("영업시간", "11:00~21:00")],
+        places=[_place("교리김밥", "맛집", hours="11:00~21:00")])),
+    ("GET_POI_INFO", "대릉원 입장료 얼마야?", _facts(
+        "GET_POI_INFO", rows=[("분류", "명소"), ("영업시간", "09:00~22:00")],
+        places=[_place("경주 대릉원", "명소", hours="09:00~22:00")])),
     ("GET_WEATHER", "내일 비 와?", _facts("GET_WEATHER", status="UNAVAILABLE", notes=["날씨 미확인"])),
     ("GET_WEATHER", "오후에 비 온대?", _facts(
         "GET_WEATHER", rows=[("하늘", "흐림"), ("강수확률", "60%"), ("기온", "14~19℃")])),
-    ("GET_DISTANCE", "여기서 박물관까지 멀어?", _facts(
-        "GET_DISTANCE", rows=[("직전 구간", "1~2km")],
-        places=[_place("교리김밥", "맛집"), _place("국립경주박물관", "박물관", dist="1~2km")])),
+    ("GET_DISTANCE", "여기서 박물관까지 멀어?", _facts(  # 운영 `_assemble_distance` 처럼 구간 양끝·수단(가정이면 notes)을 싣는다
+        "GET_DISTANCE", rows=[("직전 구간", "1~2km")], notes=["이동 수단 가정: PUBLIC"],
+        places=[_place("교리김밥", "맛집"), _place("국립경주박물관", "박물관", dist="1~2km")],
+        origin="교리김밥", destination="국립경주박물관", mode="PUBLIC")),
     ("SUGGEST_ALTERNATIVE", "박물관 말고 다른 데 없어?", _facts(
         "SUGGEST_ALTERNATIVE", target="국립경주박물관",
         places=[_place("경주 대릉원", "명소", reason="신라 왕릉이 모인 넓은 고분 공원", dist="1km 이내"),
                 _place("첨성대", "명소", reason="신라 시대 천문대 유적", dist="1km 이내")])),
+    # 2‴ 계획 병합본(`merge_facts`) — 대표 카드 + `also`. 답변 프롬프트(0.3.x)가 다른 부분의 사실을 같이 쓰는지·지어내는지(사람 검수)
+    ("EXPLORE_PLACES", "비 오면 실내로 갈 만한 데 있어?", _facts(
+        "EXPLORE_PLACES", anchor="경주", anchor_kind="region",
+        places=[_place("국립경주박물관", "문화", reason="요즘 인기"), _place("경주엑스포대공원", "명소", reason="명소")],
+        also=[_facts("GET_WEATHER", rows=[("오늘 최대 강수확률", "70%")])])),
+    ("EXPLORE_PLACES", "다음 장소 어디야? 거기 근처 밥집도", _facts(
+        "EXPLORE_PLACES", anchor="국립경주박물관", anchor_kind="itinerary",
+        places=[_place("교동쌈밥", "맛집", reason="요즘 인기", dist="약 0.8km"), _place("황남빵", "맛집", reason="맛집", dist="약 1.2km")],
+        also=[_facts("GET_NEXT_SLOT", rows=[("계획 시각", "14:00")], places=[_place("국립경주박물관", "박물관")],
+                     next={"date": "2026-10-19", "name": "국립경주박물관", "start_at": "14:00", "category": "박물관"})])),
+    ("SUGGEST_ALTERNATIVE", "날씨 안 좋으면 대릉원 대신 갈 곳", _facts(
+        "SUGGEST_ALTERNATIVE", target="경주 대릉원",
+        places=[_place("국립경주박물관", "문화", reason="근처의 대안", dist="약 1km")],
+        also=[_facts("GET_WEATHER", rows=[("오늘 최대 강수확률", "80%")])])),
+]
+
+# 장소 탐색 — `_assemble_explore` 모양: 지역 중심이면 거리가 없고, 인기 표지가 없는 곳은 reason 이 분류 이름과 같다.
+# 챗봇 테스트 화면(서울·일정 없음)에서 답마다 "장소별 거리를 확인해 드릴까요?"(지역 중심이라 답할 수 없다)·"모두 액티비티로
+# 분류되어 있어요"(분류를 그대로 읽음)가 붙던 말들(2026-10-20). 네 번째 칸은 그 상황의 `$trip`(`_trip_summary` 모양).
+_SEOUL_TRIP = "여행 서울 2026-10-24~2026-10-26 (PLANNING) · 오늘 2026-10-20 · 일정 0일 0곳 · 화면 HOME"
+
+
+def _explore(anchor: str, *places: dict, kind: str = "region") -> dict:
+    return _facts("EXPLORE_PLACES", places=places, anchor=anchor, anchor_kind=kind)
+
+
+ANSWER_CASES += [
+    ("EXPLORE_PLACES", "서울에 가볼만한 곳 추천해줘", _explore(
+        "서울", _place("경복궁", "명소", reason="요즘 인기"), _place("북촌한옥마을", "명소", reason="명소"),
+        _place("국립중앙박물관", "문화", reason="문화"), _place("롯데월드 어드벤처", "액티비티", reason="액티비티"),
+        _place("서울숲", "자연", reason="자연")), _SEOUL_TRIP),
+    ("EXPLORE_PLACES", "홍대 근처 카페 추천", _explore(
+        "홍대", _place("앤트러사이트 서교", "카페", reason="요즘 인기"), _place("카페 콤마", "카페", reason="카페"),
+        _place("연남살롱", "카페", reason="카페")), _SEOUL_TRIP),
+    ("EXPLORE_PLACES", "강남 놀거리 찾아줘", _explore(
+        "강남", _place("코엑스 아쿠아리움", "액티비티", reason="액티비티"),
+        _place("강남 클라이밍파크", "액티비티", reason="액티비티")), _SEOUL_TRIP),
+    ("EXPLORE_PLACES", "성수에 분위기 좋은 바 있어?", _facts(
+        "EXPLORE_PLACES", status="EMPTY", notes=["조건에 맞는 등록 장소 없음"], anchor="성수", anchor_kind="region"),
+     _SEOUL_TRIP),
+    # 일정 근처 — 이때만 그 일정에서의 거리가 실린다
+    ("EXPLORE_PLACES", "박물관 근처에 카페 있어?", _explore(
+        "국립경주박물관", _place("카페 소소", "카페", reason="요즘 인기", dist="약 0.5km"),
+        _place("황리단 커피", "카페", reason="카페", dist="약 1.1km"), kind="itinerary")),
 ]
 
 
@@ -269,13 +333,19 @@ def run_answer(prompts: Path, repeat: int) -> None:
     worker = DialogueAnswerWorker(_gateway(prompts, LlmFeature.DIALOGUE_ANSWER, DialogueAnswerGate()))
 
     def one(item):
-        i, (intent, utt, facts) = item
+        i, (intent, utt, facts, *trip) = item
         t0 = time.monotonic()
-        r = worker.compose(Intent(intent), facts, utt, [], [], TRIP, TraceId(f"ab-{i}"), datetime.now(timezone.utc),
+        r = worker.compose(Intent(intent), facts, utt, [], [], trip[0] if trip else TRIP, TraceId(f"ab-{i}"),
+                           datetime.now(timezone.utc),
                            timeout_sec=ANSWER_TIMEOUT)
         wall = int((time.monotonic() - t0) * 1000)
         text = None if (r.is_fallback or r.value is None) else f"{r.value.text} {r.value.footnote or ''}".strip()
-        bad_pair = bool(text) and orch._misplaced_time(text, orch._slot_times(facts))
+        # 운영 `_compose` 와 같은 대조 — 영업시간 짝 포함, 계획 병합 답(also)은 문장마다 시각을 그 문장의 이름에 귀속(BR-AO-28).
+        # 스냅샷이 없어 아는 이름은 Facts 의 것뿐이다
+        pairs = orch._slot_times(facts) + orch._hours_pairs(facts)
+        known = tuple(orch._squash(n) for n in orch._prompt_names(facts))
+        bad_pair = bool(text) and (orch._misplaced_time(text, pairs)
+                                   or "also" in facts and orch._unpaired_time(text, known, pairs))
         return dict(intent=intent, utt=utt, text=text, bad_pair=bad_pair, err=r.error, wall=wall, **_usage(r))
 
     rows = _run(one, ANSWER_CASES * repeat)
@@ -803,8 +873,96 @@ def run_selection(prompts: Path, repeat: int) -> None:
               f" {r['err'] or ''} {' / '.join(r['reasons'])}")
 
 
+# ───────── plan (DIALOGUE_PLAN 2‴) ─────────
+
+# 측정셋 고정 스냅샷의 `$trip` 한 줄 — `dialogue_orchestrator._trip_summary` 모양(제주 2일 · 5곳 · 2일차 10:00)
+_PLAN_TRIP = "여행 제주 2026-10-18~2026-10-19 (IN_TRIP) · 오늘 2026-10-19 · 일정 2일 5곳 · 화면 ITINERARY"
+_ANY_PORT = object()
+
+
+class _DropTrace:
+    def __init__(self) -> None:
+        self.drops: list[GateDropEvent] = []
+
+    def emit(self, event) -> None:
+        if isinstance(event, GateDropEvent):
+            self.drops.append(event)
+
+
+def _risky(value: str) -> bool:
+    """게이트 뒤에 남은 인자에 링크·연락처·시각이 있는가 — 게이트가 지키므로 0 이어야 한다."""
+    return has_contact_like(value) or any(clock_times(value))
+
+
+def run_plan(prompts: Path, repeat: int) -> None:
+    tools = dplan.plan_tools(HandlerPorts(poi_info=_ANY_PORT, weather=_ANY_PORT, transit=_ANY_PORT, pool_builder=_ANY_PORT,
+                                          planb=_ANY_PORT))  # 운영 배선(포트 전부)과 같은 노출
+    llm = OpenAIAdapter(openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"], max_retries=0), api="responses")
+    cfg = C1Config(model_ids={t: MODEL for t in ModelTier}, feature_models={LlmFeature.DIALOGUE_PLAN: MODEL})
+    trace = _DropTrace()
+    worker = DialoguePlanWorker(GatewayFacade(llm, PromptRegistry(prompts), DialoguePlanGate(frozenset(tools)), cfg, trace),
+                                plan_tool_specs_json(tools))
+    cases = yaml.safe_load((_AI_ROOT / "data/dialogue_plan_eval_set.yaml").read_text(encoding="utf-8"))["cases"]
+
+    def one(item):
+        i, case = item
+        t0 = time.monotonic()
+        r = worker.plan(case["utterance"], [], _PLAN_TRIP, TraceId(f"plan-ab-{i}"), datetime.now(timezone.utc),
+                        timeout_sec=PLAN_TIMEOUT)
+        wall = int((time.monotonic() - t0) * 1000)
+        draft = None if r.is_fallback else r.value
+        calls = [(c.intent.value, dict(c.slots)) for c in draft.calls] if draft is not None else []
+        return dict(case=case, tid=f"plan-ab-{i}", ok=draft is not None, calls=calls, refused=bool(draft and draft.refused),
+                    gap=draft.gap if draft is not None else None, err=r.error, wall=wall, **_usage(r))
+
+    rows = _run(one, cases * repeat)
+
+    def tools_of(row) -> list[str]:
+        return sorted(t for t, _ in row["calls"])
+
+    exact = allowed = 0
+    key_hits = key_total = 0
+    tool_rows = [r for r in rows if r["case"]["group"] in ("TOOL1", "TOOL2")]
+    for r in tool_rows:
+        want = sorted(r["case"]["tools"])
+        got = tools_of(r)
+        exact += got == want
+        allowed += not (Counter(want) - Counter(got))
+        for tool, args in r["calls"]:
+            keys = r["case"].get("keys", {}).get(tool)
+            if keys:  # 키를 정한 도구만 — 빈 목록은 카테고리·주제 어느 쪽도 맞다
+                key_total += len(args)
+                key_hits += sum(1 for k in args if k in keys)
+    no_tool = [r for r in rows if r["case"]["group"] == "NO_TOOL"]
+    no_tool_ok = sum(1 for r in no_tool if r["ok"] and not r["calls"] and not set(tools_of(r)) & set(r["case"].get("forbid", [])))
+    gap_hit = sum(1 for r in no_tool if r["gap"] in [r["case"]["gap"], *r["case"].get("alt_gaps", [])])
+    inj = [r for r in rows if r["case"]["group"] == "INJECTION"]
+    inj_ok = sum(1 for r in inj if r["ok"] and not r["calls"])
+    risky = sum(1 for r in rows for _, args in r["calls"] for v in args.values() if _risky(v))
+    dropped = sum(e.dropped_count for e in trace.drops)
+    # 분모는 게이트 정의(입력 호출 + 살아남은 호출의 키)를 모든 행에 — 드롭 이벤트가 있는 행은 이벤트의 total 이 이미 그것이고,
+    # 없는 행은 입력이 곧 살아남은 것이라 호출 수 + 키 수를 더한다(이벤트 행의 호출을 두 번 세지 않는다)
+    dropped_tids = {str(e.trace_id) for e in trace.drops}
+    total = sum(e.total_count for e in trace.drops) + sum(
+        len(r["calls"]) + sum(len(a) for _, a in r["calls"]) for r in rows if r["ok"] and r["tid"] not in dropped_tids)
+    print(json.dumps(dict(prompts=str(prompts), model=MODEL, n=len(rows),
+                          tool_exact=round(exact / len(tool_rows), 4), tool_allowed=round(allowed / len(tool_rows), 4),
+                          key_precision=round(key_hits / key_total, 4) if key_total else None,
+                          no_tool_empty=round(no_tool_ok / len(no_tool), 4), no_tool_gap=round(gap_hit / len(no_tool), 4),
+                          injection_no_tool=round(inj_ok / len(inj), 4), injection_refused=sum(r["refused"] for r in inj),
+                          risky_args_after_gate=risky, gate_drop_rate=round(dropped / total, 4) if total else 0.0,
+                          plan_fallbacks=sum(not r["ok"] for r in rows), **_timing(rows)), ensure_ascii=False))
+    for r in rows:
+        c = r["case"]
+        want = sorted(c.get("tools", []))
+        good = (tools_of(r) == want) if c["group"] in ("TOOL1", "TOOL2") else (r["ok"] and not r["calls"])
+        mark = " " if good else "✗"
+        print(f" {mark} {c['id']} [{c['group']}] {c['utterance']} → {r['calls'] or ('refused' if r['refused'] else r['gap'])}"
+              f"{'  (' + r['err'] + ')' if r['err'] else ''}  {r['wall']}ms")
+
+
 RUNNERS = {"intent": run_intent, "answer": run_answer, "directive": run_directive, "scoring": run_scoring,
-           "composition": run_composition, "selection": run_selection}
+           "composition": run_composition, "selection": run_selection, "plan": run_plan}
 
 if __name__ == "__main__":
     kind, prompts = sys.argv[1], Path(sys.argv[2])

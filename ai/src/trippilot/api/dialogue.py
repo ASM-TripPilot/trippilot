@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import logging
 import random
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone, tzinfo
@@ -23,9 +24,12 @@ from trippilot.domain.common import TraceId
 from trippilot.domain.freshness import ProviderKind
 from trippilot.domain.intent import Intent
 from trippilot.domain.llm import LlmFeature
+from trippilot.domain.plan_tools import PLAN_TOOLS, plan_tool_specs_json
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerGate
 from trippilot.llm_gateway.gates.dialogue_memory import DialogueMemoryGate
+from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanGate
+from trippilot.llm_gateway.gates.dialogue_sql import DialogueSqlGate
 from trippilot.llm_gateway.gates.intent import IntentGate
 from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
 from trippilot.llm_gateway.gateway import GatewayFacade
@@ -33,6 +37,8 @@ from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker
 from trippilot.llm_gateway.workers.dialogue_intent import DialogueIntentWorker
 from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
+from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
+from trippilot.llm_gateway.workers.dialogue_sql import DialogueSqlWorker
 from trippilot.orchestrator.dialogue_handlers import DayView, HandlerPorts, SlotView, TripInfo, TurnSnapshot
 from trippilot.orchestrator.dialogue_interpreter import (
     Clarify,
@@ -48,8 +54,12 @@ from trippilot.orchestrator.dialogue_orchestrator import (
     RecentTurn,
     TurnInput,
 )
+from trippilot.orchestrator.dialogue_plan import plan_tools
 from trippilot.orchestrator.intent_router import IntentRouter, IntentRouterConfig
+from trippilot.orchestrator.place_intro import PlaceIntro
+from trippilot.orchestrator.place_sql import PlaceSqlLookup
 from trippilot.orchestrator.question_bank import BankEntry, bank_fingerprint
+from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql
 from trippilot.orchestrator.shadow_probe import ShadowCountingLlm, ShadowIntentProbe, TaggedTrace
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.ports.embedding_port import EmbeddingPort
@@ -62,6 +72,8 @@ from trippilot.providers.base import Provider
 # 백엔드가 `deadline_ms` 를 안 보냈을 때 쓰는 `DEFAULT_DEADLINE_MS` — 종전 경로의 "시간제약 없음(600_000)" 을 그대로 쓰면
 # 분류·답변 시한 배분표(BLM §4)가 상한에 걸리지 않아 10s 기본으로 나간다. 값의 정본은 오케스트레이터 모듈 상수 한 곳
 # (BR-AO-01 · 미결 #5) — 여기서는 import 해 쓴다.
+
+log = logging.getLogger(__name__)
 
 
 def _trip_view(snapshot: schemas.DialogueContextSnapshot) -> TripView:
@@ -196,12 +208,15 @@ def build_dialogue_orchestrator(
     tz: tzinfo,
     shadow_rate: float,
     shadow_rng: random.Random | None,
+    place_sql: PgPlaceSql | None = None,
+    kb_store: VectorStorePort | None = None,
 ) -> DialogueOrchestrator:
     """서비스 워커 3종(`counted` 공유 — 백엔드 사용량 상한의 원천) + 섀도 전용 3단 라우터 + 핸들러 포트를 묶는다.
 
     섀도 라우터는 같은 `IntentRouter` 클래스·같은 뱅크 스토어(읽기 전용)를 LLM 카운터(인스턴스, contextvar 아님)·트레이스
     표지(`c1.gateway.shadow`)만 바꿔 한 번 더 조립한다 — 서비스 `llm_calls` 에 섀도 호출이 섞이지 않는다(BR-AO-07).
     `providers`·`pool_builder`·`rag` 는 wiring 이 이미 만든 **그 인스턴스**다(새로 만들면 배선이 갈라진다).
+    계획 워커(2‴, BR-AO-28)는 `DIALOGUE_PLAN` 이 기능별 모델에 배정됐을 때만 조립한다 — 배정이 곧 켜기다(DEC-AO-18).
     """
     shadow_llm, shadow_trace, shadow_cfg = ShadowCountingLlm(llm), TaggedTrace(trace), IntentRouterConfig()
     shadow_router = IntentRouter(
@@ -210,14 +225,43 @@ def build_dialogue_orchestrator(
         paraphrase_gateway=GatewayFacade(shadow_llm, renderer, ParaphraseGate(), c1_config, shadow_trace),
         bank_ready=bank_ready,
     )
+    # 장소 DB(poi_public 뷰 읽기 전용) — DSN 이 있으면 이름 찾기(일정 밖 장소 정보·거리, LLM 없음)는 늘 켜고, 장소 탐색 NL2SQL 은
+    # DIALOGUE_SQL 배정이 있을 때만(배정이 곧 켜기). NL2SQL 은 서비스 카운터(`counted`)를 같이 쓴다 — 사용량 상한·llm_calls 에 든다.
+    place_lookup = None
+    if place_sql is not None:
+        sql_on = LlmFeature.DIALOGUE_SQL in c1_config.feature_models
+        place_lookup = PlaceSqlLookup(
+            DialogueSqlWorker(GatewayFacade(counted, renderer, DialogueSqlGate(), c1_config, trace)) if sql_on else None, place_sql)
+        log.info("도우미 장소 DB on — 이름 찾기(일정 밖 장소·거리) · NL2SQL %s",
+                 "on" if sql_on else "off(DIALOGUE_SQL 미배정이라 미배선 — 장소 탐색은 반경 풀)")
+    else:
+        log.info("도우미 장소 DB off — TRIPPILOT_PLACE_DB_URL 미설정이라 미배선(장소 탐색은 반경 풀, 일정 밖 장소는 못 찾는다)")
+    # 장소 소개(KB-5) — PlanB 와 같은 임베딩·벡터 스토어. 스토어가 미배선(Unwired)이면 조회가 빈 결과로 강등될 뿐이라 늘 붙인다
+    place_intro = PlaceIntro(embedding, kb_store) if kb_store is not None else None
+    ports = HandlerPorts(poi_info=providers[ProviderKind.POI_INFO], weather=providers.get(ProviderKind.WEATHER),
+                         transit=providers[ProviderKind.TRANSIT], pool_builder=pool_builder, planb=rag,
+                         place_sql=place_lookup, place_intro=place_intro)
+    tools = plan_tools(ports)  # 배선된 도구 → 설명(여행 필요 꼬리표 포함) — 게이트 closed-set 과 `$tools` 가 같은 사전에서 나온다
+    planner = None
+    if LlmFeature.DIALOGUE_PLAN in c1_config.feature_models:  # DEC-AO-18 — 배정이 곧 켜기(env 무증가)
+        planner = DialoguePlanWorker(
+            GatewayFacade(counted, renderer, DialoguePlanGate(frozenset(tools)), c1_config, trace),  # counted 공유 → llm_calls
+            plan_tool_specs_json(tools))
+    unwired = sorted(i.value for i in PLAN_TOOLS if i not in tools)
+    # 두 줄 모두 표식 `미배선` 을 담는다 — 배포 smoke 의 `ai-wiring:` 이 끌어올린다(deploy/eks/runtime_smoke.py _WIRING_MARKERS)
+    if planner is not None:
+        log.info("도우미 계획 단계 on — 도구 %d종(%s) · 미배선 도구 %d종(%s)", len(tools),
+                 ",".join(sorted(i.value for i in tools)), len(unwired), ",".join(unwired) or "-")
+    else:
+        log.info("도우미 계획 단계 off — DIALOGUE_PLAN 미배정이라 미배선(범위 밖 질문은 종전 SCOPE 카드)")
     return DialogueOrchestrator(
         # 분류는 기존 IntentGate(closed-set) 재사용 — 프롬프트만 다르다(dialogue_intent.yaml, BR-AO-14)
         intent_worker=DialogueIntentWorker(GatewayFacade(counted, renderer, IntentGate(), c1_config, trace)),
         answer_worker=DialogueAnswerWorker(GatewayFacade(counted, renderer, DialogueAnswerGate(), c1_config, trace)),
         memory_worker=DialogueMemoryWorker(GatewayFacade(counted, renderer, DialogueMemoryGate(), c1_config, trace)),
         memory_store=memory_store,
-        ports=HandlerPorts(poi_info=providers[ProviderKind.POI_INFO], weather=providers.get(ProviderKind.WEATHER),
-                           transit=providers[ProviderKind.TRANSIT], pool_builder=pool_builder, planb=rag),
+        ports=ports,
+        planner=planner,
         clock=clock, trace=trace, tz=tz,
         shadow=ShadowIntentProbe(shadow_router, rate=shadow_rate, rng=shadow_rng, counting=shadow_llm),
         shadow_meta=shadow_meta(renderer, bank, shadow_cfg),

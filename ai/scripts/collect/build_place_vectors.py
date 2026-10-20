@@ -37,7 +37,8 @@ from build_bank_vectors import _hf_revision  # noqa: E402 — 리비전 기록 �
 from embedding_ab_gate import COSINE_FLOOR, TOP_K  # noqa: E402 — 게이트 상수 한 벌
 from trippilot.poi_curation.chunking import chunk_corpus, dump_chunk_vectors, vectors_path  # noqa: E402
 
-_CORPUS = _AI_ROOT / "data" / "place_corpus_wiki.jsonl.gz"
+# 코퍼스는 인자로 고른다(기본 위키) — 관광공사 개요: `build_place_vectors.py data/place_corpus_overview.jsonl.gz`
+_CORPUS = _AI_ROOT / (sys.argv[1] if len(sys.argv) > 1 else "data/place_corpus_wiki.jsonl.gz")
 _MODEL = "nlpai-lab/KURE-v1"
 _GATE_SAMPLE = 400  # 게이트는 표본으로 — 원본 fp32 경로로 전량을 두 번 돌릴 이유가 없다
 _GATE_QUERIES = ("WEATHER 날씨 악화 상황", "WEATHER 날씨 악화 상황 비 와서 실내로", "CLOSURE 휴무·폐점 상황",

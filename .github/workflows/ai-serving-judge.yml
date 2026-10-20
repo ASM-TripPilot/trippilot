@@ -2,9 +2,10 @@
 #
 # 주 1회 `ai/scripts/mlops/serving_judge.py` 를 돌려 실측(CloudWatch·Cost Explorer)을
 # `ai/docs/mlops/serving-ledger.md` 에 한 행 붙이고 PR 로 올린다. **전환 PR 은 머지가 승인이다** —
-# auto-merge 를 걸지 않는다(실서비스 경로). 원장 행만 든 주간 PR 은 auto-merge 한다 — 안 하면
+# 머지를 걸지 않는다(실서비스 경로). 원장 행만 든 주간 PR 은 바로 머지한다 — 안 하면
 # 다음 주 실행이 develop 에서 다시 분기해 force-push 하므로 안 머지된 행이 사라지고(10-06 행이
-# 실제로 그렇게 없어졌다), 2주 연속 판정도 develop 의 원장을 읽어 센다.
+# 실제로 그렇게 없어졌다), 2주 연속 판정도 develop 의 원장을 읽어 센다. `--auto` 는 못 쓴다 —
+# develop 에 보호 규칙이 없어 GraphQL 이 거절한다(그래서 #1008 이 13일, #1436 이 반나절 열린 채 남았다).
 #
 # **2026-10-01**: 인클러스터 서빙 매니페스트를 철회했으므로(`서빙-의사결정-기록.md` §10)
 # `reminderLlm.transport` 한 줄이 들어가는 PR 은 더 이상 나오지 않는다. EKS 쪽 측정값이
@@ -115,6 +116,6 @@ jobs:
             gh pr edit chore/serving-judge --title "$TITLE"
           fi
           if [ "$ACTION" != "open_pr" ]; then
-            gh pr merge chore/serving-judge --squash --auto \
-              || echo "::warning::원장 행 auto-merge 실패 — 다음 주 실행 전에 손으로 머지할 것(안 하면 이 행이 사라진다)"
+            gh pr merge chore/serving-judge --squash \
+              || echo "::warning::원장 행 머지 실패 — 다음 주 실행 전에 손으로 머지할 것(안 하면 이 행이 사라진다)"
           fi

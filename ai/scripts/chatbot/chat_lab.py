@@ -57,6 +57,17 @@ keep.update({
     "TRIPPILOT_DIALOGUE_ORCHESTRATOR": "on",
     "TRIPPILOT_DIALOGUE_SHADOW_RATE": os.environ.get("LAB_SHADOW_RATE", "1.0"),
 })
+# 장소 탐색 NL2SQL — 로컬 백엔드 DB 를 ai_user(poi_public 뷰 읽기 전용)로 읽고, DIALOGUE_SQL 을 분류와 같은 모델에 배정해 켠다.
+# LAB_PLACE_SQL=0 이면 끈다(반경 탐색만). 롤·뷰 준비는 README "장소 조회(NL2SQL)".
+# 도구 계획 단계(DIALOGUE_PLAN — 분류가 "정해진 의도 없음"으로 닫은 말을 조회 도구로)도 같은 모델로 켠다. LAB_PLAN=0 이면 끈다.
+_models = keep.get("TRIPPILOT_LLM_FEATURE_MODELS", "")
+_intent_model = dict(kv.split("=", 1) for kv in _models.split(",") if "=" in kv).get("DIALOGUE_INTENT")
+for feature, flag in (("DIALOGUE_SQL", "LAB_PLACE_SQL"), ("DIALOGUE_PLAN", "LAB_PLAN")):
+    if _intent_model and os.environ.get(flag, "1") != "0" and f"{feature}=" not in _models:
+        _models = f"{_models},{feature}={_intent_model}"
+keep["TRIPPILOT_LLM_FEATURE_MODELS"] = _models
+if os.environ.get("LAB_PLACE_SQL", "1") != "0":
+    keep["TRIPPILOT_PLACE_DB_URL"] = os.environ.get("LAB_PLACE_DB_URL", "postgresql://ai_user:ai_user@localhost:5432/trippilot")
 os.environ.update(keep)
 TOKEN = keep.get("TRIPPILOT_SERVICE_AUTH_TOKEN", "")
 

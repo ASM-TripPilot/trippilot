@@ -21,7 +21,7 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 
 from trippilot.domain.kb import KbDocument, KbKind
-from trippilot.poi_curation.place_docs import MIN_DOC_CHARS
+from trippilot.poi_curation.place_docs import MIN_DOC_CHARS, SOURCE_OVERVIEW
 
 # 조각 길이. 표시 상한(`place_knowledge.MAX_DOC_CHARS`) 안에 조각 하나가 통째로 들어가게
 # 잡는다 — 맞은 조각을 다시 자르면 청킹한 의미가 없다. 임베딩 서비스의 최장 문서 문제
@@ -30,6 +30,10 @@ TARGET_CHARS = 200
 MAX_CHARS = 280
 OVERLAP_SENTENCES = 1
 MAX_CHUNKS_PER_DOC = 40
+# 출처별 조각 길이 (목표, 상한) — 없는 출처는 위 기본(위키). 관광공사 개요는 짧은 글(중앙 ≈340자)이라 200자로
+# 자르면 곳당 3.5조각·벡터 ≈150MB 로 GitHub 파일 상한(100MB)을 넘는다. 300자면 ≈69MB 이고, 후보 줄 표시
+# 상한(`place_knowledge.MAX_DOC_CHARS` 300)과 같아 맞은 조각이 대개 통째로 보인다(2026-10-19 표본 1,949곳).
+SIZES = {SOURCE_OVERVIEW: (300, 400)}
 
 # 문장 끝: 마침표·물음표·느낌표 뒤(닫는 따옴표·괄호가 붙으면 그 뒤) 공백. 닫는 부호는 **문장에 남긴다** —
 # 분리자에 넣으면 `"…했다."` 의 `"` 가 지워졌다(리뷰 실측). "3.5km" 처럼 공백 없는 점은 안 끊는다.
@@ -53,13 +57,14 @@ def split_sentences(text: str) -> list[str]:
     return out
 
 
-def _hard_split(sentence: str) -> list[str]:
-    """`MAX_CHARS` 를 넘는 한 문장 — 공백에서 자른다(목록·표가 문장 부호 없이 이어진 경우). 공백 없이 쉼표로만
+def _hard_split(sentence: str, max_chars: int | None = None) -> list[str]:
+    """상한을 넘는 한 문장 — 공백에서 자른다(목록·표가 문장 부호 없이 이어진 경우). 공백 없이 쉼표로만
     이어진 목록("불곰,퓨마,붉은여우,…" 400자)은 한 낱말이라 글자 수로 자른다 — 상한을 넘는 조각이 없게."""
+    max_chars = max_chars or MAX_CHARS
     out, cur = [], ""
-    words = [w[i:i + MAX_CHARS] for w in sentence.split(" ") for i in range(0, max(len(w), 1), MAX_CHARS)]
+    words = [w[i:i + max_chars] for w in sentence.split(" ") for i in range(0, max(len(w), 1), max_chars)]
     for word in words:
-        if cur and len(cur) + 1 + len(word) > MAX_CHARS:
+        if cur and len(cur) + 1 + len(word) > max_chars:
             out.append(cur)
             cur = word
         else:
@@ -69,16 +74,19 @@ def _hard_split(sentence: str) -> list[str]:
     return out
 
 
-def chunk_section(text: str) -> list[str]:
-    """절 본문 → 조각 본문들(제목 없이). 문장 경계로 채우고 마지막 문장을 겹친다."""
-    sentences = [p for s in split_sentences(text) for p in (_hard_split(s) if len(s) > MAX_CHARS else [s])]
+def chunk_section(text: str, target: int | None = None, max_chars: int | None = None) -> list[str]:
+    """절 본문 → 조각 본문들(제목 없이). 문장 경계로 채우고 마지막 문장을 겹친다. 길이는 기본(위키) 또는 출처별
+    (`SIZES`) — 호출 시점에 읽는다(측정 스크립트가 모듈 상수를 바꿔 끼워 잰다)."""
+    target, max_chars = target or TARGET_CHARS, max_chars or MAX_CHARS
+    sentences = [p for s in split_sentences(text)
+                 for p in (_hard_split(s, max_chars) if len(s) > max_chars else [s])]
     chunks: list[str] = []
     cur: list[str] = []
     for s in sentences:
-        if cur and len(" ".join([*cur, s])) > TARGET_CHARS:
+        if cur and len(" ".join([*cur, s])) > target:
             chunks.append(" ".join(cur))
             cur = cur[-OVERLAP_SENTENCES:] if OVERLAP_SENTENCES else []
-            if len(" ".join([*cur, s])) > MAX_CHARS:
+            if len(" ".join([*cur, s])) > max_chars:
                 cur = []  # 겹친 문장 + 새 문장이 상한을 넘으면 겹침을 포기한다
         cur.append(s)
     if cur and (not chunks or " ".join(cur) != chunks[-1]):
@@ -102,11 +110,12 @@ def chunk_document(row: Mapping) -> tuple[KbDocument, ...]:
     """원천 한 건(`{doc_id, poi_ref, sections:[{heading,text}], ...}`) → 조각 문서들."""
     base = row["doc_id"]
     source = base.split(":", 1)[0]
+    target, max_chars = SIZES.get(source, (None, None))
     meta = {k: row[k] for k in ("title", "url", "license") if row.get(k)}
     docs: list[KbDocument] = []
     for section in row.get("sections") or ():
         heading = (section.get("heading") or "").strip()
-        for body in chunk_section(section.get("text") or ""):
+        for body in chunk_section(section.get("text") or "", target, max_chars):
             if len(docs) >= MAX_CHUNKS_PER_DOC:
                 return tuple(docs)
             docs.append(KbDocument(
@@ -142,8 +151,10 @@ def text_hash(text: str) -> str:
 
 
 def dump_chunk_vectors(path, docs: Sequence[KbDocument], model: str, vectors, *, provenance=None) -> None:
-    """fp16 로 저장(질문뱅크와 같은 형식) — 조각 id·본문 지문·벡터를 같은 순서로."""
-    import base64
+    """fp16 로 저장 — 머리(`path`: 모델·조각 id·본문 지문, JSON)와 벡터 본체(`blob_path(path)`: fp16 원본 바이트)를
+    **두 파일로**. 한 JSON 에 base64 로 넣으면 읽을 때 압축본·풀린 JSON·base64 문자열·바이트를 한꺼번에 들고 있어
+    파일 크기의 6배 넘게 쓴다 — 관광공사 개요(약 3.4만 조각, 70MB)에서 454MB 로 적재 Job(512Mi)을 넘볼 실측
+    (2026-10-20). 본체를 따로 두면 그대로 스트리밍해 읽는다."""
     import gzip
     import json
     import struct
@@ -153,11 +164,19 @@ def dump_chunk_vectors(path, docs: Sequence[KbDocument], model: str, vectors, *,
     dim = len(vectors[0]) if vectors else 0
     if any(len(v) != dim for v in vectors):
         raise ValueError("벡터 차원이 섞였다")
-    flat = [x for v in vectors for x in v]
-    doc = {"model": model, "dim": dim, "count": len(docs), "provenance": dict(provenance or {}),
-           "ids": [d.doc_id for d in docs], "hashes": [text_hash(d.text) for d in docs],
-           "f16_b64": base64.b64encode(struct.pack(f"<{len(flat)}e", *flat)).decode()}
-    path.write_bytes(gzip.compress(json.dumps(doc).encode(), mtime=0))
+    blob = bytearray()
+    for v in vectors:  # 조각 하나씩 — 3.4만 × 1024 를 파이썬 실수 목록으로 한꺼번에 펼치지 않는다
+        blob += struct.pack(f"<{dim}e", *v)
+    head = {"model": model, "dim": dim, "count": len(docs), "provenance": dict(provenance or {}),
+            "ids": [d.doc_id for d in docs], "hashes": [text_hash(d.text) for d in docs],
+            "f16": blob_path(path).name}
+    blob_path(path).write_bytes(gzip.compress(bytes(blob), mtime=0))
+    path.write_bytes(gzip.compress(json.dumps(head).encode(), mtime=0))
+
+
+def blob_path(vectors_file):
+    """벡터 본체 파일 — `x.vectors.json.gz` 옆 `x.vectors.f16.gz`."""
+    return vectors_file.with_name(vectors_file.name.replace(".vectors.json.gz", ".vectors.f16.gz"))
 
 
 class ChunkVectors:
@@ -192,7 +211,11 @@ def load_chunk_vectors(path) -> ChunkVectors | None:
     if not path.exists():
         return None
     doc = json.loads(gzip.decompress(path.read_bytes()))
-    raw = base64.b64decode(doc.pop("f16_b64"))
+    if "f16_b64" in doc:  # 옛 한 파일 형식(머리에 base64 본체) — 읽기만 지원한다
+        raw = base64.b64decode(doc.pop("f16_b64"))
+    else:
+        with gzip.open(path.with_name(doc["f16"]), "rb") as f:
+            raw = f.read()
     count, dim = int(doc["count"]), int(doc["dim"])
     if len(raw) != count * dim * 2 or len(doc["ids"]) != count or len(doc["hashes"]) != count:
         raise ValueError(f"{path.name}: 벡터 파일 크기·개수가 머리와 다르다")

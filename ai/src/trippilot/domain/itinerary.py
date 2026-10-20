@@ -330,6 +330,8 @@ class ItineraryProblem:
     required_in_order: bool = False  # 필수 방문을 준 순서대로 — "시간만 당기기" (BR-U4-47)
     ignore_anchor_distance: bool = False  # 앵커=숙소(생성) — 숙소 오가는 구간은 경로 감점 밖
     holidays: Mapping[date, frozenset[str]] | None = None  # 특일 달력 — None = 모드 off (상황 감지 H1)
+    # 날마다의 동네 중심(생성, `assembly_engine.day_focus`) — 그날 자유 후보를 그 근처로. 없는 날은 종전대로.
+    day_focus: Mapping[date, GeoPoint] | None = None
 
     def window_on(self, day: date) -> TimeWindow:
         """그 날의 창 — 일자별 창이 있으면 그것, 없으면 공용 창의 시각을 그 날짜에 얹는다."""
@@ -380,6 +382,10 @@ class ItineraryProblem:
             ),
             "required_in_order": self.required_in_order,
             "ignore_anchor_distance": self.ignore_anchor_distance,
+            "day_focus": (
+                {d.isoformat(): self.day_focus[d].to_dict() for d in sorted(self.day_focus)}
+                if self.day_focus is not None else None
+            ),
             # date 키는 JSON 원시 타입이 아니다 → 정렬된 ISO 키 (결정론적 직렬화)
             "daily_rain_prob": (
                 {d.isoformat(): self.daily_rain_prob[d]
@@ -446,6 +452,10 @@ class ItineraryProblem:
             ),
             required_in_order=d.get("required_in_order", False),
             ignore_anchor_distance=d.get("ignore_anchor_distance", False),
+            day_focus=(
+                {date.fromisoformat(k): GeoPoint.from_dict(v) for k, v in d["day_focus"].items()}
+                if d.get("day_focus") is not None else None
+            ),
             holidays=(
                 {date.fromisoformat(k): frozenset(v) for k, v in d["holidays"].items()}
                 if d.get("holidays") is not None else None

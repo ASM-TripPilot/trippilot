@@ -19,7 +19,9 @@ src/trippilot/m7/
 ```
 build(request: CandidatePoolRequest, now: datetime) -> CandidatePool
   ① 반경: PoiDbPort.find_by_radius(anchor, r)
-         r = override 또는 RADIUS[transport] × (len(dates)>1 ? 0.7 : 1.0)
+         r = override 또는 RADIUS[transport] × multi_day_factor(다일만)
+         2026-10-20 개정: multi_day_factor 0.7 → 1.0. 서울 2박3일(앵커 = 시청)에서 7km 는 강남역 8.8km·성수 7.3km 를
+         풀에서 뺐다 — 날마다 다른 동네로 가려면(U2 `day_focus`) 풀이 도시를 덮어야 한다(사용자 "강남도 성수동도").
   ② 예산: avg_cost ≤ limit[budget] (None=통과, HIGH=무제한)
   ③ 영업일: open_hours 비면 통과 / 여행일 중 하루라도 해당 요일 창 있으면 통과
            (is_closed_today 당일 배치는 Plan-B 소유 — batch_check_closed는 후속 연결)

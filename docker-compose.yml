@@ -307,6 +307,9 @@ services:
       TRIPPILOT_DIALOGUE_ORCHESTRATOR: ${AI_DIALOGUE_ORCHESTRATOR:-}
       # 섀도 분류 측정(기존 IntentRouter 를 그늘에서 같이 돌려 일치율을 `intent_shadow` 로 남김) 샘플링 0~1 — 비우면 1.0.
       TRIPPILOT_DIALOGUE_SHADOW_RATE: ${AI_DIALOGUE_SHADOW_RATE:-}
+      # 도우미 장소 조회(NL2SQL) — 백엔드 DB 의 poi_public 뷰를 ai_user(읽기 전용)로 읽는다. 켜기는 AI_LLM_FEATURE_MODELS 에
+      # DIALOGUE_SQL=<모델> 을 더하는 것이다(배정이 없으면 이 DSN 은 쓰이지 않는다). 비우면 장소 탐색은 반경 풀만.
+      TRIPPILOT_PLACE_DB_URL: ${AI_PLACE_DB_URL:-}
       # 공휴일 휴무(상황 감지 H1) — on|off. 특일 달력 키는 PUBLIC_DATA_API_KEY(특일 활용신청 계정), 비면
       # WEATHER_API — 그 계정에 특일 활용신청이 없으면 30(키 미등록)이라 날짜 명시형 규칙만 돈다.
       HOLIDAY_CLOSURE_MODE: ${HOLIDAY_CLOSURE_MODE:-off}

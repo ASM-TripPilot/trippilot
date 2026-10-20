@@ -46,6 +46,12 @@ def _apply(payload: dict, ctx: ReminderCopyContext = CTX):
     )
 
 
+def test_forbidden_place_in_title_is_dropped() -> None:
+    # Codex 리뷰(10-20): 다른 날 장소 대조가 본문만 봐서 제목으로 새던 구멍
+    out = _apply({"title": "한라산 가는 날", "body": "성산일출봉에서 시작하는 하루예요", "places": ["성산일출봉"]})
+    assert out.value is None and out.drop_event is not None
+
+
 def test_valid_copy_passes() -> None:
     out = _apply({"title": "오늘의 제주", "body": "성산일출봉에서 시작하는 하루예요", "places": ["성산일출봉"]})
     assert out.error is None

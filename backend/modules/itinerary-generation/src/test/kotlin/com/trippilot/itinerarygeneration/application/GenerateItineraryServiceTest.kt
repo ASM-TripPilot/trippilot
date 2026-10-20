@@ -37,6 +37,7 @@ import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.TimeWindow
+import com.trippilot.itinerarygeneration.domain.TodayWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
@@ -591,12 +592,22 @@ class GenerateItineraryServiceTest : StringSpec({
         agent.captures[0].timeWindows shouldContainExactly listOf(TimeWindow(start, LocalTime.parse("21:00"), LocalTime.parse("23:00")))
     }
 
-    "밤 9시 반에 만들어도 오늘은 22:00~23:59 로 연다 — 야경·늦게 여는 곳 한두 곳" {
+    // 밤 10시 무렵부터는 지금부터 2시간이 23:59 를 넘는다 — 익일 01:00 까지 연다(2026-10-20 사용자). 끝 < 시작인
+    // 새벽 끝은 다음 날이다(AI 경계 규칙). 그 시간대 무엇을 넣을지는 AI 가 취향으로 고른다.
+    "밤 9시 반에 만들면 오늘은 22:00~익일 01:00 으로 연다 — 야경·늦게 여는 곳 한두 곳" {
         val agent = CapturingAgent(now)
         service(agent, fullPrefs, emptyList(), end = start, fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-01T12:30:00Z"), ZoneOffset.UTC))
             .generate(acc, tripId, GenerationMode.FULLY_AI)
 
-        agent.captures.single().timeWindows shouldContainExactly listOf(TimeWindow(start, LocalTime.parse("22:00"), LocalTime.parse("23:59")))
+        agent.captures.single().timeWindows shouldContainExactly listOf(TimeWindow(start, LocalTime.parse("22:00"), LocalTime.parse("01:00")))
+    }
+
+    "밤 10시 반에 만들어도 오늘은 23:00~익일 01:00 으로 연다 — 종전엔 59분이라 닫혀 1일차가 비었다" {
+        val agent = CapturingAgent(now)
+        service(agent, fullPrefs, emptyList(), end = start, fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-01T13:30:00Z"), ZoneOffset.UTC))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures.single().timeWindows shouldContainExactly listOf(TimeWindow(start, LocalTime.parse("23:00"), LocalTime.parse("01:00")))
     }
 
     "당일치기를 저녁 8시에 만들면 AI 를 불러 오늘을 채운다 — 빈 일정을 내지 않는다" {
@@ -629,8 +640,8 @@ class GenerateItineraryServiceTest : StringSpec({
     "오늘 남은 시간이 없으면 오늘은 빈 날로 두고 1차가 내일을 맡는다 — 보낼 창이 없는 1차를 만들지 않는다" {
         val agent = CapturingAgent(now)
         val repo = FakeItineraries()
-        // 22:30 → 23:00 — 하루 끝(23:59)까지 59분, 한 곳도 못 넣는 창이라 닫는다.
-        service(agent, fullPrefs, emptyList(), repo = repo, fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-01T13:30:00Z"), ZoneOffset.UTC))
+        // 23:20 → 23:50 을 올리면 자정 — 오늘 열 시각이 없어 닫는다(22:30 은 이제 23:00~익일 01:00 으로 열린다).
+        service(agent, fullPrefs, emptyList(), repo = repo, fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-01T14:20:00Z"), ZoneOffset.UTC))
             .generate(acc, tripId, GenerationMode.FULLY_AI)
 
         agent.captures.flatMap { it.timeWindows }.none { it.date == start } shouldBe true
@@ -647,7 +658,7 @@ class GenerateItineraryServiceTest : StringSpec({
         val agent = CapturingAgent(now)
         service(
             agent, fullPrefs, emptyList(), fixedVisits = listOf(FixedVisit(late, start, LocalTime.parse("22:00"), 60)),
-            clock = Clock.fixed(Instant.parse("2026-08-01T13:30:00Z"), ZoneOffset.UTC), // 22:30 KST — 오늘은 닫힌다
+            clock = Clock.fixed(Instant.parse("2026-08-01T14:20:00Z"), ZoneOffset.UTC), // 23:20 KST — 오늘은 닫힌다(22:30 은 이제 익일 01:00 까지 열린다)
         ).generate(acc, tripId, GenerationMode.FULLY_AI)
 
         // 오늘·내일이 한 요청에 실리면 내일까지 21:00~23:00 으로 짜인다.
@@ -657,7 +668,7 @@ class GenerateItineraryServiceTest : StringSpec({
     "하루 여행을 그날 밤에 만들면 AI 를 부르지 않고 빈 하루로 둔다 — 실패가 아니므로 폴백 표시도 없다" {
         val agent = CapturingAgent(now)
         val repo = FakeItineraries()
-        service(agent, fullPrefs, emptyList(), repo = repo, end = start, fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-01T13:30:00Z"), ZoneOffset.UTC)) // 22:30 KST
+        service(agent, fullPrefs, emptyList(), repo = repo, end = start, fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-01T14:20:00Z"), ZoneOffset.UTC)) // 23:20 KST — 열 시각이 자정을 넘는다
             .generate(acc, tripId, GenerationMode.FULLY_AI)
 
         agent.captures.size shouldBe 0
@@ -688,10 +699,10 @@ class GenerateItineraryServiceTest : StringSpec({
                 .generate(acc, tripId, GenerationMode.FULLY_AI)
 
             withClue("now=$nowKst") {
-                agent.captures.flatMap { it.timeWindows }.forEach { it.start.isBefore(it.end) shouldBe true } // AI 는 빈 창을 422 로 거절한다
+                agent.captures.flatMap { it.timeWindows }.forEach { TodayWindow.isOpen(it.start, it.end) shouldBe true } // AI 는 빈 창을 422 로 거절한다(새벽 끝은 다음 날)
                 agent.captures.flatMap { it.timeWindows }.filter { it.date == start }.forEach {
                     it.start.isAfter(nowKst) shouldBe true
-                    (java.time.Duration.between(it.start, it.end).toMinutes() >= 60) shouldBe true // 한 곳도 못 넣는 창은 보내지 않는다
+                    (TodayWindow.spanMinutes(it.start, it.end) >= 60) shouldBe true // 한 곳도 못 넣는 창은 보내지 않는다
                 }
                 repo.byTrip.getValue(tripId).days.map { it.date } shouldContainExactly listOf(start, start.plusDays(1), end)
             }
@@ -1000,10 +1011,10 @@ class GenerateItineraryServiceTest : StringSpec({
     "여행 중에 다시 만들 때 오늘 남은 시간이 없으면 오늘은 빈 날로 자리를 지킨다 — 2차가 그 날을 빼지 않는다" {
         val agent = CapturingAgent(now)
         val repo = repoWithExisting()
-        service(agent, fullPrefs, emptyList(), repo = repo, fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-02T13:30:00Z"), ZoneOffset.UTC))
+        service(agent, fullPrefs, emptyList(), repo = repo, fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-02T14:20:00Z"), ZoneOffset.UTC))
             .generate(acc, tripId, GenerationMode.FULLY_AI)
 
-        agent.captures.flatMap { it.timeWindows }.none { it.date == start.plusDays(1) } shouldBe true // 22:30 KST — 닫힌 오늘은 경계로 안 나간다
+        agent.captures.flatMap { it.timeWindows }.none { it.date == start.plusDays(1) } shouldBe true // 23:20 KST — 닫힌 오늘은 경계로 안 나간다
         val days = repo.byTrip.getValue(tripId).days
         days.map { it.date } shouldContainExactly listOf(start, start.plusDays(1), end)
         days[1].slots shouldBe emptyList()
@@ -1012,7 +1023,7 @@ class GenerateItineraryServiceTest : StringSpec({
     "마지막 날 밤에 다시 만들면 남은 날이 모두 닫혀 2차는 AI 를 부르지 않는다 — 실패가 아니므로 폴백 표시도 없다" {
         val agent = CapturingAgent(now)
         val repo = repoWithExisting()
-        service(agent, fullPrefs, emptyList(), repo = repo, end = start.plusDays(1), fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-02T13:30:00Z"), ZoneOffset.UTC)) // 22:30 KST
+        service(agent, fullPrefs, emptyList(), repo = repo, end = start.plusDays(1), fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-02T14:20:00Z"), ZoneOffset.UTC)) // 23:20 KST
             .generate(acc, tripId, GenerationMode.FULLY_AI)
 
         agent.captures.map { c -> c.timeWindows.map { it.date } } shouldContainExactly listOf(listOf(start)) // 1차(어제)만
@@ -1032,7 +1043,7 @@ class GenerateItineraryServiceTest : StringSpec({
                 .generate(acc, tripId, GenerationMode.FULLY_AI)
 
             withClue("now=$nowKst") {
-                agent.captures.flatMap { it.timeWindows }.forEach { it.start.isBefore(it.end) shouldBe true } // AI 는 빈 창을 422 로 거절한다
+                agent.captures.flatMap { it.timeWindows }.forEach { TodayWindow.isOpen(it.start, it.end) shouldBe true } // AI 는 빈 창을 422 로 거절한다(새벽 끝은 다음 날)
                 agent.captures.flatMap { it.timeWindows }.filter { it.date == today }.forEach { it.start.isAfter(nowKst) shouldBe true }
                 repo.byTrip.getValue(tripId).days.map { it.date } shouldContainExactly listOf(start, today, end)
             }

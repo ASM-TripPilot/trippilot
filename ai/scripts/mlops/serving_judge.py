@@ -162,14 +162,19 @@ def read_gates(text: str) -> Gates:
     )
 
 
-def read_previous_verdicts(text: str) -> list[str]:
+def read_previous_verdicts(text: str, before: dt.date | None = None) -> list[str]:
+    """주(끝) 날짜당 판정 하나 — 같은 날 수동 재실행이 두 행을 남겨도 연속 1주로만 센다.
+    `before` 를 주면 그 날짜 이후(같은 날 포함) 행은 뺀다: 오늘 다시 돌릴 때 오늘 행이
+    '지난주' 로 끼어 2주 연속이 되는 것을 막는다."""
     section = text.split("## 주간 기록", 1)[1]
-    verdicts = []
+    by_date: dict[str, str] = {}
     for line in section.splitlines():
         if line.startswith("|") and not line.startswith("|---") and "주(끝)" not in line:
             cells = _cells(line)
-            verdicts.append(cells[10])
-    return verdicts
+            if before is not None and cells[0] >= before.isoformat():
+                continue
+            by_date[cells[0]] = cells[10]  # 같은 날은 마지막 행이 이긴다
+    return list(by_date.values())
 
 
 def ledger_row(week_end: dt.date, m: Measured, transport: str, v: Verdict) -> str:
@@ -223,7 +228,9 @@ def measure(days: int, bedrock_region: str, cost_region: str) -> Measured:
 
     cw = boto3.client("cloudwatch", region_name=bedrock_region)
     model_ids = sorted(
-        {d["Value"] for m in cw.list_metrics(Namespace="AWS/Bedrock", MetricName="Invocations")["Metrics"]
+        {d["Value"]
+         for page in cw.get_paginator("list_metrics").paginate(Namespace="AWS/Bedrock", MetricName="Invocations")
+         for m in page["Metrics"]
          for d in m["Dimensions"] if d["Name"] == "ModelId" and "imported-model" in d["Value"]}
     )
     calls = windows = 0.0
@@ -294,7 +301,7 @@ def main(argv: list[str] | None = None) -> int:
 
     text = args.ledger.read_text()
     gates = read_gates(text)
-    previous = read_previous_verdicts(text)
+    previous = read_previous_verdicts(text, before=dt.date.today())
     transport = read_transport(args.values)
     m = (
         Measured(args.days, 0.0, 0.0, None, 0.0, 0.0, ("dry-run",))
