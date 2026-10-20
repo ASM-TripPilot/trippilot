@@ -36,9 +36,42 @@ class PlaceRow:
     nightlife: bool  # 나이트라이프 표지 — 밤 주제가 아니면 핸들러가 뺀다
 
 
+_ROW_COLUMNS = "poi_id::text, name, category, sido, sigungu, tags"
+
+
+def _row(r: tuple) -> PlaceRow:
+    return PlaceRow(poi_id=r[0], name=r[1], category=r[2], sido=r[3], sigungu=r[4],
+                    trending=TRENDING_TAG in (r[5] or ()), nightlife=NIGHTLIFE_TAG in (r[5] or ()))
+
+
 class PgPlaceSql:
     def __init__(self, connect: Callable[[], Any]) -> None:
         self._connect = connect
+
+    def find_by_name(self, name: str, sido_prefix: str | None = None) -> PlaceRow | None:
+        """일정 밖 장소를 이름으로 한 곳 찾는다 — **우리가 쓴** 매개변수 SQL(LLM 없음). 공백만 뗀 **완전 일치**만 본다.
+        여러 곳이면(체인점) 여행 시·도(`sido_prefix`)로 좁히고, 그래도 둘 이상이면 None — 하나를 골라 다른 곳의 영업시간을 말하면
+        "못 찾았어요"보다 나쁘다. 별칭·부분 일치("남산타워"↔"N서울타워")는 같은 이유로 하지 않는다. 2자 미만은 찾지 않는다."""
+        key = "".join(name.split())
+        if len(key) < 2:
+            return None
+        with self._connect() as conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SET TRANSACTION READ ONLY")
+                    cur.execute(f"SET LOCAL statement_timeout = {STATEMENT_TIMEOUT_MS}")
+                    cur.execute(
+                        f"SELECT {_ROW_COLUMNS} FROM poi_public WHERE replace(name, ' ', '') = %(key)s "
+                        "ORDER BY (sido LIKE %(sido)s) DESC, poi_id LIMIT 3",
+                        {"key": key, "sido": f"{sido_prefix}%" if sido_prefix else "%"},
+                    )
+                    hits = [_row(r) for r in cur.fetchall()]
+            finally:
+                conn.rollback()
+        if len(hits) == 1:
+            return hits[0]
+        local = [h for h in hits if sido_prefix and (h.sido or "").startswith(sido_prefix)]
+        return local[0] if len(local) == 1 else None
 
     def run(self, sql: str) -> list[PlaceRow]:
         """검사를 통과한 SELECT → 그 순서의 `PlaceRow` (≤ `ROW_CAP`). DB 오류·시한은 예외로 올라간다."""
@@ -51,13 +84,8 @@ class PgPlaceSql:
                     ids = list(dict.fromkeys(str(r[0]) for r in cur.fetchall()))
                     if not ids:
                         return []
-                    cur.execute(
-                        "SELECT poi_id::text, name, category, sido, sigungu, tags FROM poi_public WHERE poi_id::text = ANY(%s)",
-                        (ids,),
-                    )
+                    cur.execute(f"SELECT {_ROW_COLUMNS} FROM poi_public WHERE poi_id::text = ANY(%s)", (ids,))
                     by_id = {r[0]: r for r in cur.fetchall()}
             finally:
                 conn.rollback()
-        return [PlaceRow(poi_id=i, name=r[1], category=r[2], sido=r[3], sigungu=r[4],
-                         trending=TRENDING_TAG in (r[5] or ()), nightlife=NIGHTLIFE_TAG in (r[5] or ()))
-                for i in ids if (r := by_id.get(i)) is not None]
+        return [_row(by_id[i]) for i in ids if i in by_id]

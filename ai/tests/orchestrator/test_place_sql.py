@@ -79,3 +79,8 @@ def test_llm_fallback_or_not_a_place_query_is_none_and_not_cached() -> None:
 
 def test_db_error_is_none_so_the_handler_falls_back_to_the_radius_pool() -> None:
     assert _look(PlaceSqlLookup(_Worker(_ok()), _Executor(fail=True))) is None
+
+
+def test_without_a_worker_nl2sql_is_off_but_the_lookup_object_still_exists() -> None:
+    lookup = PlaceSqlLookup(None, _Executor())
+    assert not lookup.writes_sql and _look(lookup) is None

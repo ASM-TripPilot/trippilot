@@ -25,10 +25,15 @@ CACHE_TTL_S, CACHE_MAX = 3600, 512
 
 
 class PlaceSqlLookup:
-    def __init__(self, worker: DialogueSqlWorker, executor: PgPlaceSql, *, clock=time.monotonic) -> None:
+    def __init__(self, worker: DialogueSqlWorker | None, executor: PgPlaceSql, *, clock=time.monotonic) -> None:
+        # worker 없음 = DIALOGUE_SQL 미배정 — NL2SQL 탐색은 끄고 이름 찾기(`find_place`, LLM 없음)만 쓴다
         self._worker, self._executor, self._clock = worker, executor, clock
         self._cache: dict[tuple, tuple[float, str]] = {}
         self._lock = threading.Lock()
+
+    @property
+    def writes_sql(self) -> bool:
+        return self._worker is not None
 
     def _cached(self, key: tuple) -> str | None:
         with self._lock:
@@ -51,6 +56,8 @@ class PlaceSqlLookup:
         key = tuple(sorted((k, v) for k, v in arguments.items() if v))
         sql = self._cached(key) if key else None
         if sql is None:
+            if self._worker is None:
+                return None
             result = self._worker.write(utterance, arguments, trace_id, now, timeout_sec=timeout_sec)
             if result.is_fallback or not result.value:
                 log.info("place_sql skip trace=%s reason=%s", trace_id, result.error or "not_a_place_query")
@@ -65,3 +72,11 @@ class PlaceSqlLookup:
             return None
         log.info("place_sql ok trace=%s rows=%d ms=%d", trace_id, len(rows), int((time.monotonic() - started) * 1000))
         return rows
+
+    def find_place(self, name: str, sido_prefix: str | None, trace_id: TraceId) -> PlaceRow | None:
+        """일정 밖 장소를 이름으로 — LLM 없이 매개변수 SQL 한 번. DB 오류는 None(일정 안내로 수렴, INV-4) + 한 줄."""
+        try:
+            return self._executor.find_by_name(name, sido_prefix)
+        except Exception as e:  # noqa: BLE001 — 사유는 예외 타입까지(이름 원문 비노출)
+            log.warning("place_find db_error trace=%s error=%s", trace_id, type(e).__name__)
+            return None

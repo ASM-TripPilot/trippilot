@@ -384,8 +384,8 @@ def test_fallback_text_mirrors_backend_templates() -> None:
     """BE AssistantTemplates·QueryCards·ProposalCards·IntentDispatcher 문구 이식 (DEC-U8-6 개정 전 화면 문장)."""
     assert fallback_answer_text(Intent.GET_NEXT_SLOT, {}) == "다음 장소예요."
     assert fallback_answer_text(Intent.GET_WEATHER, {}) == "오늘 예보예요."
-    assert fallback_answer_text(Intent.GET_DISTANCE, {}) == "일정에 적힌 거리예요."
-    assert fallback_answer_text(Intent.GET_POI_INFO, {}) == "일정에 있는 장소예요."
+    assert fallback_answer_text(Intent.GET_DISTANCE, {}) == "두 곳 사이 거리를 찾아봤어요."
+    assert fallback_answer_text(Intent.GET_POI_INFO, {}) == "장소 정보를 찾아봤어요."
     assert fallback_answer_text(Intent.SUGGEST_ALTERNATIVE, {"target": "성산일출봉"}) == "성산일출봉 대신 갈 만한 곳이에요."
     assert fallback_answer_text(Intent.SUGGEST_ALTERNATIVE, {}) == "그 장소 대신 갈 만한 곳이에요."
     # 넘기기 6의도 — 안내 한 문장 + 아래 버튼 안내 (2026-10-19 친근한 말투, BE IntentDispatcher 도 같은 문장). 되묻기로 끝내지

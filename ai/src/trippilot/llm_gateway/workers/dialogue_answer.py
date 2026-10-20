@@ -48,8 +48,9 @@ NEED_TRIP_TEXT = "먼저 여행을 만들거나 숙소를 등록하면 일정을
 _ANSWER_TEXT: dict[Intent, str] = {
     Intent.GET_NEXT_SLOT: "다음 장소예요.",
     Intent.GET_WEATHER: "오늘 예보예요.",
-    Intent.GET_DISTANCE: "일정에 적힌 거리예요.",
-    Intent.GET_POI_INFO: "일정에 있는 장소예요.",
+    # 일정 밖 장소·구간도 답한다(2026-10-20 — 등록 장소를 이름으로 찾는다) — "일정에 있는"·"일정에 적힌"은 그때 틀린 말이라 뺐다
+    Intent.GET_DISTANCE: "두 곳 사이 거리를 찾아봤어요.",
+    Intent.GET_POI_INFO: "장소 정보를 찾아봤어요.",
     # TEXT 종류라 카드가 없다 — 요약 문장 없이 "정리했어요"라 할 수 없어 일정 화면 넘기기로 (QueryCards 넘기기 꼴)
     Intent.SHOW_SCHEDULE: "일정은 일정 화면에서 확인할 수 있어요.",
     Intent.EDIT_SCHEDULE: "일정은 편집 화면에서 바꿀 수 있어요.",
@@ -69,8 +70,8 @@ _EMPTY_TEXT: dict[Intent, str] = {
     Intent.GET_NEXT_SLOT: "남은 일정이 없어요.",
     Intent.SHOW_SCHEDULE: "아직 일정에 장소가 없어요.",
     Intent.GET_WEATHER: "지금 날씨를 확인할 수 없어요.",
-    Intent.GET_DISTANCE: "구간 거리는 일정에서 확인할 수 있어요.",
-    Intent.GET_POI_INFO: "장소 정보는 일정에서 장소를 눌러 볼 수 있어요.",
+    Intent.GET_DISTANCE: "그 구간 거리는 아직 확인하지 못했어요.",
+    Intent.GET_POI_INFO: "그 장소는 아직 찾지 못했어요.",
     Intent.SUGGEST_ALTERNATIVE: "근처에서 대신할 곳을 찾지 못했어요.",
     Intent.EXPLORE_PLACES: "그 조건에 맞는 곳을 아직 찾지 못했어요.",
 }
