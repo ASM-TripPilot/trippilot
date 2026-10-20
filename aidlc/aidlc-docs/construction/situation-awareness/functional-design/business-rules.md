@@ -241,6 +241,13 @@
 
 **관련.** G-U4-2(개정) · BR-U4-05·06 · O-SA-5(실외 명소 제외) · PBT-SA-09·10·11.
 
+> **[개정 · 2026-10-20 — 구현 반영]** BR-SA-15 — 단기예보 감지기 세부(#1402). 발화·해제 임계와 판정 규칙은 그대로다.
+> - **폭염의 한낮 칸** = 판정 시각 가운데 12~17시 ∧ 슬롯이 **실제로 끝나기 전**인 칸이다. 판정 시각은 끝을 다음 정시로 올려 잡지만 그 올린 칸은 한낮과의 겹침을 만들지 않는다 — 정오 전에 끝나는 슬롯은 12시 판정 칸이 있어도 폭염 판정 밖이다. 그 칸들의 TMP 와 그 날 TMX 중 최고값을 본다(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/domain/WeatherHazards.kt:196-197`).
+> - **'값이 빠진' 판정 시각** = POP·PTY·TMP·WSD(야경 슬롯이면 SKY 도) 가운데 하나라도 없는 시각이다 — 그 시각은 확인될 수 없다(`WeatherHazards.kt:218`). 그런 슬롯과 카테고리를 모르는 슬롯의 처리(본문 첫 문단과 표 아래 '판정 시각 값이 빠진 슬롯은 모름이다' 줄)는 #1402 가 본문에 이미 고쳐 적었다.
+> - **비현실 값은 모름** — 원천 값의 기온(TMP·TMN·TMX)이 −60~60℃ 밖, 풍속(WSD)이 0~80 m/s 밖이면 그 칸을 비운다 — 결측 표식(−999·900 류)이 한파·폭염 오탐이 되지 않게(`backend/modules/weather-context/src/main/kotlin/com/trippilot/weathercontext/adapter/out/external/KmaWeatherAdapter.kt:224-225,330-331`). POP 0~100 · PTY 0~4(5~7 은 초단기 전용) · SKY 1·3·4(2 는 폐지) 밖과 숫자가 아닌 값도 그 칸을 비운다(`:210-214`). 시각별 칸(POP·PTY·TMP·WSD, 야경 슬롯의 SKY)이 비면 위의 '값이 빠진' 시각이 되고, 하루 값(TMN·TMX)이 비면 최고·최저 계산에서만 빠진다(`WeatherHazards.kt:197,199,218`).
+> - 자정을 넘기는 내일 슬롯 몫의 모레 시각 칸 저장(`domain-entities.md` §8.1)과 격자 하루 상한의 프로세스 수명 범위(`nfr-requirements.md` COST-SA-02)도 #1402 가 그 자리에 고쳐 적었다.
+> - **열린 질문** — 한파 `TMN` 이 발표분에 따라 실렸다 빠졌다 하면 같은 날 발화 → 해제가 갈마들 수 있다 → G-SA-15(`business-logic-model.md` §9 개정 블록).
+
 ### BR-SA-16 · 특보 목적지 매칭 · 대기질 등급
 
 **규칙.**
@@ -253,6 +260,16 @@
 **위반 시.** 바다 특보로 육지 일정 경보, 광역 과잉 경보, 원천 등급 변형(이용 조건 위반).
 
 **관련.** BR-U4-05(개정) · O-SA-1 · O-SA-3 · BR-SA-24.
+
+> **[개정 · 2026-10-20 — 구현 반영]** BR-SA-16 — 특보 목적지 매칭·대기질 판정 세부(#1421). 관찰 전용 출발(BR-SA-04)은 그대로다 — `observe-only: kma-warning,airkorea`(`backend/app/src/main/resources/application.yml:189`)에서 빼는 커밋이 켜기다.
+> - **매칭은 세 값** — 걸림 · 안 걸림 · 모름(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/domain/WeatherAlerts.kt:56`). 모름은 '특보 없음'으로 확인하지 않는다(INV-SA-2).
+> - **시군 목적지** — 하위 구역 이름이 시군 어간으로 **시작하면** 걸린다. 본문의 '들어가면'을 좁혀 읽는다 — `남양주` 에 `양주` 가 들어 있어 양주 여행이 남양주 특보에 걸리지 않게(`WeatherAlerts.kt:21-22,147`).
+> - **특별·광역·특별자치시와 제주의 시·구**(해운대구·서귀포시 …)는 광역 목적지처럼 그 광역 줄 전체로 맞춘다 — 그 광역의 구역 이름(`부산동부`·`제주도남부`)에는 시·구 이름이 나오지 않는다. **광역시의 군**(강화·옹진·기장 …)은 어간으로 맞추되, 그 줄에 광역 이름으로 시작하는 권역(`부산동부`)이 있으면 줄 전체로 맞춘다(`:23-26,150-152`). 군 여부는 행정구역 코드로 가린다(`:199`).
+> - **섬 구역**(`울릉도.독도` · `서해5도` · `흑산도.홍도` · `거문도.초도` · `추자도`)은 닫힌 표로 그 섬의 시군과 그 광역 목적지에만 건다 — 이름 앞붙음으로 맞추지 않는다(`:47-53`).
+> - **그 날의 목적지** — 목적지를 박수로 펼친 그 날 몫이다. 옮기는 날은 전날 목적지도, 0박 목적지는 지나가는 날(앞 목적지 박수 합 + 1일째)에 넣는다(`:161-175`). 다목적지 여행에서 다른 날 목적지의 특보로 그 날을 경보하지 않는다. 대기질도 같은 목적지를 쓴다.
+> - **모름** — 모르는 최상위 구역 이름(광역·섬 구역·바다가 아님 — 구역 개편·형식 변화) · 도의 시군인데 어간이 걸리지 않고 그 줄에 광역 하위 권역(`강원중부산지`·`경북북동산지`)이 하나라도 있어 덮는지 가릴 수 없음(다른 시군 이름이 함께 있어도 — `WeatherAlerts.kt:147-152`) · 모르는 특보 종류가 걸림 · 행정구역 코드가 없는 목적지(동명이지역)가 섞임 — 신호가 없으면 모름이다(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/application/KmaWarningDetector.kt:78-94`). 매칭에서 나는 WARN 은 모르는 최상위 구역 이름뿐이고 그 이름 목록이 바뀔 때 1번이다(`:97-114`) — 나머지 모름은 요약 줄의 출처별 모름 수로 드러난다.
+> - **대기질** — PM10·PM25 중 나쁜 쪽으로 판정하고, PM2.5 쪽이 더 나쁘면 문구가 `초미세먼지` 다(같으면 `미세먼지` — `AirQualityDetector.kt:84-86`). 한쪽 등급을 모르면(없음·모르는 문자열) 확인하지 않는다 — 아는 쪽이 나쁨 이상이면 신호는 낸다(`:72-79,118-123`). 응답에 모르는 예보 권역 이름이 있으면 바뀔 때 WARN 1번이다(`backend/modules/weather-context/src/main/kotlin/com/trippilot/weathercontext/adapter/out/external/AirKoreaAdapter.kt:88`).
+> - **열린 질문** — 산지 권역 특보를 시군 표로 묶어 경보할지 → G-SA-16(`business-logic-model.md` §9 개정 블록).
 
 ### BR-SA-17 · 장소 감지
 
@@ -270,6 +287,15 @@
 **위반 시.** 폐업 미알림, 이미 본 경고의 반복 푸시, 공휴일 휴무가 모르는 회차에 지워짐, `LOST` 오탐 폐업 알림.
 
 **관련.** BR-U4-06 · INV-1 · U4 BLM §2.1(개정) · O-SA-13 · PBT-SA-12·13.
+
+> **[개정 · 2026-10-20 — 구현 반영]** BR-SA-17 — 장소 감지 세부(#1401·#1410). 규칙 1~7 은 그대로다.
+> - **① 보강** — 그 슬롯에 `PERMANENTLY_CLOSED` 가 ACTIVE 인데 이번 회차에 폐업 여부를 모르면(상태 조회 실패 · 행 없음 · `OTHER`) 그 슬롯의 발견을 내지 않는다 — 내면 판정이 폐업을 제자리에서 영업시간 위반으로 갈아 끼운다(INV-SA-2 · `backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/domain/ClosureRules.kt:76`). 상태가 ACTIVE 가 아니라 확인도 아니다(해제되지 않는다).
+> - **② 보강** — '편집 때 이미 본 경고'의 영업시간 문구에는 지금 문구(`영업시간과 맞지 않아요`)와 함께 2026-09-28(TRIP-1030) 이전 저장분의 HC1 꼴 `영업시간 밖`·`요일 휴무` 가 든다 — 사용자는 그 꼴로 경고를 봤다(`backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/ViolationText.kt:41-50`). 영업시간을 해석하는 것이 아니라 그때 화면에 나간 문구의 표지를 알아본다(⑥ 그대로).
+> - **② 하위 코드 연결(#1410)** — 하루 점검이 AI 검증 위반의 `reason_code` 를 그 슬롯에 싣고(`ItineraryDayCheckService.kt:64-67,82`) 감지기가 변형을 가른다. 같은 장소를 하루에 두 번 넣어 하위 코드가 갈리면 정기 휴무(`CLOSED_DAY`) > 공휴일(`HOLIDAY`) > 영업시간 밖(`OUT_OF_HOURS`) — AI `check_hc1` 의 우선순위와 같다. 하위 코드가 없거나 모르는 값이면 `HOURS_MISMATCH`(`ClosureRules.kt:96-101`). 문구 3종이 BR-SA-12 의 예 그대로 연결됐다 — `‘{이름}’은(는) 정기 휴무일로 나와요` · `계획한 시간엔 ‘{이름}’ 문을 열지 않는 것으로 나와요` · `공휴일이라 ‘{이름}’ 쉬는 날로 나와요`(`:84-90`).
+> - **하루 점검의 선택 인자** `checkDay(…, judgeHours)` — 거짓이면 AI 를 부르지 않고 영업시간은 전부 `UNKNOWN` 이다(이름·이미 본 경고는 그대로). 폐업 판정은 이 값과 무관하다(`ItineraryDayCheckFacade.kt:15-22`).
+> - **`DayCheck.judged=false` 는 보류뿐** — AI 를 불렀는데 답을 못 받은 경우(불통·5xx·시한 — `Revalidation.kt:38-46`)다. AI 를 부르지 않은 날(AI 모드 ≠ http · `judgeHours=false` · 영업시간을 아는 슬롯 없음)은 `judged=true` 이고 그 슬롯들이 `UNKNOWN` 이다(`ItineraryDayCheckService.kt:59-61,69,78`).
+> - **AI 보류의 회차 회로** — 보류는 감지기 예외가 아니라 스윕의 회로(BR-SA-03 ⑤)에 잡히지 않는다. 감지기가 회차 범위로 연속 보류를 세어 3번에 닿으면 그 회차의 남은 여행은 `judgeHours=false` 로 묻는다 — 영업시간은 모름, 폐업 판정은 그대로, WARN 은 1번이다. AI 가 답하면 0 으로 돌아가고 AI 를 부르지 않은 날은 세지 않는다. 회차 키가 바뀌면 처음부터다(저장 없음 — `PlaceDetector.kt:51-53,97-140`).
+> - **아무것도 알아내지 못했으면 모름** — 본 슬롯이 있는데 발견도 확정 판정(상태 ACTIVE ∧ 영업시간 판정 있음)도 없으면 빈 확인이 아니라 `Unknown` 이다 — 빈 확인은 감시 상태를 '확인'으로 만든다(RES-SA-01 · `ClosureRules.kt:65-66` · `PlaceDetector.kt:59-67`).
 
 ---
 
@@ -307,6 +333,12 @@
 
 **관련.** BR-U4-09(개정) · BR-U4-47 · INV-U4-06(개정) · INV-SA-6 · PBT-SA-14·17.
 
+> **[개정 · 2026-10-20 — 구현 반영]** BR-SA-18 — 선계산 실행·경합 세부(#1405).
+> - **③ 실행 자리와 실행기** — 자리(실행 1 + 대기 10)는 세마포어 11 이고, 전용 실행기의 대기열 용량도 **자리 수(11)** 다. 자리는 산출 작업의 끝에서 돌아오고 일꾼이 다음 것을 꺼내는 것은 그 뒤라, 대기열을 10 으로 두면 자리를 얻고도 실행기에 거절돼 FAILED 세션이 하루 상한·트리거당 1회를 먹는다. 상한은 자리가 진다 — 실행기 거절은 종료 때뿐이다(`backend/modules/itinerary-recalculation/src/main/kotlin/com/trippilot/recalculation/application/PreparedReplanService.kt:72,161-164,177-189`).
+> - **종료 중에 도착한 사건** — 실행기가 닫히기 시작한 뒤 온 위험 사건은 세션을 열지 않고 예외로 던진다 — 릴레이가 이벤트째 다시 배달해 다음 파드가 받는다(`:88-90`). 열고 나서 실행기가 닫히는 좁은 틈은 종전대로 FAILED 다(`business-logic-model.md` §6.2 '실행기 거절').
+> - **② 닫기와 확정·취소는 행 잠금으로 처음 읽는다** — 열린 세션을 닫는 쪽(사용자 시작·선계산)은 열린 세션을, 상태를 바꾸는 쪽(확정·취소)은 그 세션을 처음 읽는 자리에서 행 잠금으로 읽는다(`ReplanSessionService.kt:139,207,418,493`). 잠금 없이 읽어 두면 그 사이 적용된 세션이 `CANCELED` 로 덮이거나, 닫힌 세션이 `APPLIED` 로 되살아나 일정이 반영된다.
+> - **④ 재료의 영향 범위** — 사건 `dateRisks` 항목에 `coverage`(`MOST`·`SOME` — 날씨만, 기본값 null)가 실린다(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/api/event/PlanBEvents.kt:45` · `TriggerService.kt:388`). 원천은 감지기 payload 의 `coverage` 다 — 단기예보는 영향 슬롯 수로 가르고(`KmaForecastDetector.kt:138` · `WeatherHazards.kt:117`), 특보·대기질은 실외 슬롯 전부가 영향이라 늘 `MOST` 다(`KmaWarningDetector.kt:131` · `AirQualityDetector.kt:100`). C10 은 `SOME` 일 때만 영향 POI 를 뺀다(`ReplanMaterial.kt:60`). G-SA-11 해소.
+
 ### BR-SA-19 · 낡은 초안
 
 **규칙.** SYSTEM 초안의 낡음은 시간 창이 아니라 사실로 판정한다.
@@ -328,6 +360,12 @@
 **위반 시.** 지난 슬롯을 바꾸는 초안의 적용, 다녀온 곳이 사라짐(INV-U4-04 위반).
 
 **관련.** INV-U4-04·05 · DEC-U4-9 · INV-SA-7 · PBT-SA-16.
+
+> **[개정 · 2026-10-20 — 구현 반영]** BR-SA-19 — 낡음 판정 세부(#1405). 사실 ①~④ 와 409 거절은 그대로다.
+> - **② 의 '초안이 바꾸는 슬롯의 계획 시작'** = 지금 일정과 초안을 견줘 추가·삭제·이동인 슬롯의, 지금 일정 쪽 시각과 초안 쪽 시각 가운데 가장 이른 것이다(전후 비교 화면과 같은 판정 — `backend/modules/itinerary-recalculation/src/main/kotlin/com/trippilot/recalculation/domain/ReplanSession.kt:176-201`). 지난 시각의 슬롯을 지우는 초안도, 지난 시각에 새 방문을 넣는 초안도 지난 하루를 다시 쓴다. 바꾸는 슬롯이 없으면 ② 로는 낡지 않는다.
+> - **상태별** — `CANCELED` 인 SYSTEM 세션은 닫힌 까닭(새 선계산 대체 · 사용자 진입이 닫음 · 사용자 취소)과 무관하게 `STALE` 이다 — ④ 보다 넓다. `APPLIED` 는 낡음이 없다. `NO_SOLUTION`·`FAILED` 는 초안이 없어 날짜만 본다 — 지난 날이면 `EXPIRED`, 아니면 낡지 않음(`ReplanSession.kt:102-121`).
+> - **수집·산출 2분의 기준은 세션 생성 시각**(`createdAt`)이다(`:111-112`). 선계산은 실행 자리 대기열에서 기다린 시간도 여기에 든다 — 고착이 아니어도 대기가 길면 2분을 넘겨 `stale` 로 보인다. 산출이 끝나 `DRAFT` 가 되면 초안의 사실로 다시 판정한다.
+> - **'시간에 단조'는 같은 상태 안의 말이다** — PBT-SA-16 은 상태를 고정하고 잰다(그 안에서는 2분 판정도 단조다). 수집·산출 2분 `stale` 은 고착을 짐작해 보이는 표시라, 산출이 끝나 `DRAFT` 가 되면 초안의 사실로 다시 판정돼 풀릴 수 있다 — '한 번 낡으면 계속 낡다'를 기대할 것은 표의 사실(①~④)로 낸 판정이다. 다만 같은 판정을 응답 `stale`·앱 진입 게이트(BR-SA-23)와 선계산의 열린 세션 정책(BR-SA-18 ② '더 이른 날짜의 SYSTEM 세션(낡지 않음)')이 함께 쓴다(`ReplanSessionService.kt:251,269`) — 2분 넘게 대기 중인 더 이른 날짜의 선계산은 하루 상한 안이면 늦은 날짜의 선계산이 닫고 연다.
 
 ### BR-SA-20 · 트리거 진입 날짜 강제 · 전날 창 · 여행 전 반영 가드
 
@@ -363,6 +401,10 @@
 
 **관련.** BR-U6-08·09·18(개정) · O-U6-4(종결) · OBS-U6-03(개정) · INV-U6-02 · LEGAL-U6-01 · PBT-SA-18.
 
+> **[개정 · 2026-10-20 — 구현 반영]** BR-SA-21 — 알림 세부(#1385). ② 의 '필드 없음' 괄호는 #1385 가 본문을 고쳐 적었다(다시 쓰지 않는다).
+> - **② 보강 — 묶음 판정이 실패하면 묶지 않고 푸시를 시도한다.** 같은 여행 10분 1회 판정은 그 계정의 최근 알림을 읽는데, 그 읽기가 실패해도(어휘 밖 kind·평면이 아닌 액션 payload 행이 섞여 매핑이 터지는 경우 등) 예외를 올리지 않는다 — 올리면 방금 적재한 알림함 행까지 롤백된다. WARN(스택 포함)을 남기고 발송한다(`backend/modules/notification/src/main/kotlin/com/trippilot/notification/application/NotificationRaiseService.kt:94-110`). 막는 것은 푸시뿐이라는 ② 와 INV-U6-02 를 실패 경로에서도 지킨다. 한 번 더 울리는 비용은 계정 발송량 상한이 묶는다.
+> - **① 보강 — 본문 200자** — 사유에 ` (외 N건)` 꼬리를 붙여 200자(BR-SA-12 ①)를 넘으면 꼬리를 뺀다 — 사유를 자르면 날짜·장소 이름이 잘려 다른 말이 된다(`backend/modules/notification/src/main/kotlin/com/trippilot/notification/adapter/in/event/PlanBNotificationCopy.kt:32-43`).
+
 ---
 
 ## 7. 기회 카드 (DEC-SA-6)
@@ -387,6 +429,15 @@
 **위반 시.** 미등록 장소 추천(INV-1 위반), 시각 표시(INV-2·3 위반), 광고성 알림(LEGAL-U6-02 위반), 여행 전 409 CTA.
 
 **관련.** BR-U4-13(개정) · DEC-U4-4 · LEGAL-U6-02·03(개정) · PBT-SA-19·20.
+
+> **[개정 · 2026-10-20 — 구현 반영]** BR-SA-22 — 기회 카드 서버 세부(#1387 AI 경계 · #1422 BE 조회). 앱 카드(FE-C)는 구현 중이다 — 표시 규칙 ④·⑤ 는 `frontend-components.md` §4 그대로다.
+> - **앱 API** `GET /api/v1/trips/{tripId}/opportunities?date=` → `{items[≤3]{key, kind, eventName?, start?, end?, poiId, poiName, nearSlotKey, distanceLabel}}` — 시각 필드 없음(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/adapter/in/web/OpportunityController.kt:24-49`). 404 는 소유 아님뿐이고 꺼짐·범위 밖·재료 없음·AI 실패·계약 위반은 200 빈 목록이다(⑥ 그대로 — `OpportunityService.kt:40-61`).
+> - **재료는 서버가 채운다** — 그 날 끝나지 않은(스윕과 같은 정의) 좌표 있는 슬롯을 방문 순서로 최대 8, 계획 POI 는 일정 전체의 장소(끝난 칸 포함 — 다녀온 곳이 카드로 돌아오지 않게)를 그 날에 가까운 날부터 최대 300(`OpportunityService.kt:63-93`).
+> - **시한** — `deadline_ms` 3s · 읽기 상한 9s · 연결 1s(`OpportunityConfiguration.kt:34-37`). 읽기 상한은 상대 백스톱(시한 + 5s)보다 1s 길다 → `nfr-requirements.md` PERF-SA-08 개정 블록.
+> - **켜기** — 배포 차트가 `AI_OPPORTUNITY_MODE=http` 를 고정 env 로 싣는다(`deploy/eks/chart/templates/backend.yaml:82-83` — 시크릿·허용목록이 아니다). yml 기본은 `off` 다.
+> - **② `EVENT_NEARBY` 의 '카테고리 적합'** — 축제 → 명소·자연·야경·액티비티·문화, 공연·전시 → 문화·명소. 그 밖 유형(팝업 `POPUP`)은 행사장 이름 대조(`EVENT_VENUE`)만 한다(`ai/src/trippilot/orchestrator/opportunity.py:41-48`). 수동 큐레이션 행사의 식별자 접두는 `popup-` 이다(`:38`).
+> - **② '휴무 증명'은 공휴일 헬퍼를 지난다** — 생성·재계획·검증과 같은 그날 영업 창 판정(`hours_label(poi, 날짜, 공휴일 달력)`)이라 공휴일 휴무도 증명이 된다(#1403 · `opportunity.py:107-111` · `ai/src/trippilot/api/opportunities.py:52,62`). `HOLIDAY_CLOSURE_MODE=off` 면 요일 판정과 같다.
+> - **열린 질문** — 3장 상한 · 한 장소 한 장 · 비 오는 날 행사 카드 숨김(④)이 겹쳐 생기는 간극 → G-SA-17(`business-logic-model.md` §9 개정 블록).
 
 ---
 
@@ -499,3 +550,5 @@ PBT-U4-1~5 는 그대로다. PBT-U4-2(무발화 보존)는 PBT-SA-02·09 가 해
 | **O-SA-13** | 넓혀 읽은 휴무(월 n회 → 매주) 강등 | dry-run 실측 뒤 결정 | BR-SA-17 · BR-SA-04 |
 | **O-SA-14** | 인앱만 만진 `PLAN_B` 토글 행의 굳은 푸시 OFF | 그대로(측정 후 재논의) | BR-SA-21 |
 | **O-SA-15** | 정본 위치 · 인셉션 사후 개정 | 번호 없는 확장 폴더, 인셉션은 상신만 | —(`business-logic-model.md` §8 · G-SA-8) |
+
+> **[개정 · 2026-10-20 — 구현 반영]** O-SA-1 **종결** — 특보·대기질·특일 활용신청 계정은 `WEATHER_API` 키 계정과 **다르다**. 키 env `PUBLIC_DATA_API_KEY` 를 더했고(#1379 — 배포 시크릿·파드 env 배선), 기능 코드는 그 키가 비면 `WEATHER_API` 로 대신한다. 상세는 `business-logic-model.md` §10 개정 블록. 걸린 규칙(BR-SA-04·16·17)의 수치·표는 바뀌지 않는다 — 특보·대기질은 여전히 관찰 전용으로 출발한다.
