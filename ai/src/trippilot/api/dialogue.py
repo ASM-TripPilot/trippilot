@@ -29,6 +29,7 @@ from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerGate
 from trippilot.llm_gateway.gates.dialogue_memory import DialogueMemoryGate
 from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanGate
+from trippilot.llm_gateway.gates.dialogue_sql import DialogueSqlGate
 from trippilot.llm_gateway.gates.intent import IntentGate
 from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
 from trippilot.llm_gateway.gateway import GatewayFacade
@@ -37,6 +38,7 @@ from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker
 from trippilot.llm_gateway.workers.dialogue_intent import DialogueIntentWorker
 from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
 from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
+from trippilot.llm_gateway.workers.dialogue_sql import DialogueSqlWorker
 from trippilot.orchestrator.dialogue_handlers import DayView, HandlerPorts, SlotView, TripInfo, TurnSnapshot
 from trippilot.orchestrator.dialogue_interpreter import (
     Clarify,
@@ -54,7 +56,9 @@ from trippilot.orchestrator.dialogue_orchestrator import (
 )
 from trippilot.orchestrator.dialogue_plan import plan_tools
 from trippilot.orchestrator.intent_router import IntentRouter, IntentRouterConfig
+from trippilot.orchestrator.place_sql import PlaceSqlLookup
 from trippilot.orchestrator.question_bank import BankEntry, bank_fingerprint
+from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql
 from trippilot.orchestrator.shadow_probe import ShadowCountingLlm, ShadowIntentProbe, TaggedTrace
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.ports.embedding_port import EmbeddingPort
@@ -64,11 +68,11 @@ from trippilot.ports.trace_port import TracePort
 from trippilot.ports.vector_store_port import VectorStorePort
 from trippilot.providers.base import Provider
 
-log = logging.getLogger(__name__)
-
 # 백엔드가 `deadline_ms` 를 안 보냈을 때 쓰는 `DEFAULT_DEADLINE_MS` — 종전 경로의 "시간제약 없음(600_000)" 을 그대로 쓰면
 # 분류·답변 시한 배분표(BLM §4)가 상한에 걸리지 않아 10s 기본으로 나간다. 값의 정본은 오케스트레이터 모듈 상수 한 곳
 # (BR-AO-01 · 미결 #5) — 여기서는 import 해 쓴다.
+
+log = logging.getLogger(__name__)
 
 
 def _trip_view(snapshot: schemas.DialogueContextSnapshot) -> TripView:
@@ -203,6 +207,7 @@ def build_dialogue_orchestrator(
     tz: tzinfo,
     shadow_rate: float,
     shadow_rng: random.Random | None,
+    place_sql: PgPlaceSql | None = None,
 ) -> DialogueOrchestrator:
     """서비스 워커 3종(`counted` 공유 — 백엔드 사용량 상한의 원천) + 섀도 전용 3단 라우터 + 핸들러 포트를 묶는다.
 
@@ -218,8 +223,19 @@ def build_dialogue_orchestrator(
         paraphrase_gateway=GatewayFacade(shadow_llm, renderer, ParaphraseGate(), c1_config, shadow_trace),
         bank_ready=bank_ready,
     )
+    # 장소 탐색 NL2SQL — DIALOGUE_SQL 배정 + 장소 DB DSN 둘 다 있을 때만(배정이 곧 켜기). 서비스 카운터(`counted`)를 같이 쓴다 —
+    # 백엔드 사용량 상한·턴의 llm_calls 에 이 호출도 든다. 꺼져 있으면 장소 탐색은 반경 풀만(종전).
+    place_lookup = None
+    if LlmFeature.DIALOGUE_SQL in c1_config.feature_models and place_sql is not None:
+        place_lookup = PlaceSqlLookup(DialogueSqlWorker(GatewayFacade(counted, renderer, DialogueSqlGate(), c1_config, trace)),
+                                      place_sql)
+        log.info("도우미 장소 조회(NL2SQL) on — poi_public 뷰 읽기 전용")
+    else:
+        log.info("도우미 장소 조회(NL2SQL) off — %s라 미배선(장소 탐색은 반경 풀)",
+                 "DIALOGUE_SQL 미배정" if place_sql is not None else "TRIPPILOT_PLACE_DB_URL 미설정")
     ports = HandlerPorts(poi_info=providers[ProviderKind.POI_INFO], weather=providers.get(ProviderKind.WEATHER),
-                         transit=providers[ProviderKind.TRANSIT], pool_builder=pool_builder, planb=rag)
+                         transit=providers[ProviderKind.TRANSIT], pool_builder=pool_builder, planb=rag,
+                         place_sql=place_lookup)
     tools = plan_tools(ports)  # 배선된 도구 → 설명(여행 필요 꼬리표 포함) — 게이트 closed-set 과 `$tools` 가 같은 사전에서 나온다
     planner = None
     if LlmFeature.DIALOGUE_PLAN in c1_config.feature_models:  # DEC-AO-18 — 배정이 곧 켜기(env 무증가)

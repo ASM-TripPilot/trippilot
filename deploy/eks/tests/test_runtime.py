@@ -230,6 +230,14 @@ class SecretTests(unittest.TestCase):
         self.assertEqual(ai["TRIPPILOT_VECTOR_DB_URL"],
                          "postgresql://ai_user:pw@db.example.rds.amazonaws.com:5432/ai_kb?sslmode=require")
 
+    def test_place_connection_reads_the_backend_db_as_ai_user(self):
+        """도우미 장소 조회(NL2SQL)는 같은 ai_user 로 trippilot DB 를 읽는다 — 권한은 bootstrap.sql 이 poi_public 뷰 SELECT 로만 준다."""
+        groups = runtime_secrets.seed_groups({name: {} for name in runtime_secrets.GROUP_KEYS}, lambda: "pw", lambda: "rsa")
+        manifests = runtime_secrets.runtime_manifests(groups, outputs(), "trippilot")
+        ai = next(item["stringData"] for item in manifests if item["metadata"]["name"] == "trippilot-ai")
+        self.assertEqual(ai["TRIPPILOT_PLACE_DB_URL"],
+                         "postgresql://ai_user:pw@db.example.rds.amazonaws.com:5432/trippilot?sslmode=require")
+
     def test_dialogue_orchestrator_switches_are_allowlisted_and_validated(self):
         """도우미 오케스트레이터 스위치 2종(assistant-orchestrator 1단계)은 ai 시크릿으로만 켠다.
         allowlist 에 없으면 시크릿에 넣는 순간 배포 전체가 거부되고, 값이 틀리면 AI 가 기동에서 죽는다

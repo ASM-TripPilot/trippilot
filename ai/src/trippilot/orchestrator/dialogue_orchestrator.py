@@ -672,7 +672,7 @@ class DialogueOrchestrator:
         handler = HANDLERS[frame.intent]
         ctx = TurnContext(
             snapshot=inp.snapshot, arguments=frame.arguments, now=inp.now, tz=self._tz, trace_id=inp.trace_id,
-            remaining_ms=lambda: self._remaining(inp), ports=self._ports,
+            remaining_ms=lambda: self._remaining(inp), ports=self._ports, utterance=inp.utterance,
         )
         if handler.handoff_frame:  # EDIT_SCHEDULE — 1단계 FRAME (BR-AO-17): 인자만 정리하고 BE 제안 경로로
             tidy = replace(frame, arguments=edit_arguments(ctx))

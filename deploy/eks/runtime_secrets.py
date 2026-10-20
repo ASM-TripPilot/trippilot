@@ -325,10 +325,13 @@ def validate_groups(groups):
 def runtime_manifests(groups, outputs, namespace):
     # ai_kb DSN 은 임베딩과 무관하게 항상 — 도우미 세션 메모리(dialogue_memory, assistant-orchestrator FD DE §4)가
     # 그 DB 에 산다. 차트(ai.yaml)도 같은 조건(무조건)으로 꽂는다; 둘이 어긋나면 optional 아닌 secretKeyRef 라 파드가 멈춘다.
-    vector = {"TRIPPILOT_VECTOR_DB_URL": (
-        f"postgresql://ai_user:{quote(groups['database']['AI_DB_PASSWORD'], safe='')}"
-        f"@{outputs['database_host']}:5432/ai_kb?sslmode=require"
-    )}
+    # 장소 조회(도우미 NL2SQL)는 같은 ai_user 로 trippilot DB 의 poi_public 뷰만 읽는다(bootstrap.sql 이 권한·읽기 전용·시한을 건다).
+    # 켜기는 DIALOGUE_SQL 모델 배정이다 — DSN 은 늘 꽂아 두고, 배정이 없으면 AI 가 조립하지 않는다.
+    ai_password = quote(groups['database']['AI_DB_PASSWORD'], safe='')
+    vector = {
+        "TRIPPILOT_VECTOR_DB_URL": f"postgresql://ai_user:{ai_password}@{outputs['database_host']}:5432/ai_kb?sslmode=require",
+        "TRIPPILOT_PLACE_DB_URL": f"postgresql://ai_user:{ai_password}@{outputs['database_host']}:5432/trippilot?sslmode=require",
+    }
     values = {**groups, "ai": {**groups["ai"], **vector}}
     return [{"apiVersion": "v1", "kind": "Secret", "type": "Opaque",
              "metadata": {"name": f"trippilot-{name}", "namespace": namespace},
