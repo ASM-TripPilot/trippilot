@@ -103,8 +103,8 @@ def test_max_tokens_per_feature_reaches_vendor(feature: LlmFeature) -> None:
     expected = {
         LlmFeature.EXPLANATION: 4096,
         LlmFeature.ALTERNATIVE_EXPLANATION: 4096,
-        # 실측 출력 950~1016 토큰 — 1024 에 붙어 잘림 1회가 재시도 → 504 로 번졌다
-        LlmFeature.REFLECTION_TEMPLATE: 2048,
+        # 여행 요약 실측 출력 1639~1935 토큰 — 2048 에서 10회 중 4회 잘림(2026-10-20)
+        LlmFeature.REFLECTION_TEMPLATE: 4096,
         # fable(사고 토큰도 상한 안) 실측 출력 1000~1024 — 1024 에서 잘림
         LlmFeature.SHARE_CARD_COPY: 2048,
         # 다시 짜기 하루 구성 — 고른 곳 ≤ 8건 × 이유 + fable 사고 토큰

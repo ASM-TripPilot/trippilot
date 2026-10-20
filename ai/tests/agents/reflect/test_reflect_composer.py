@@ -879,6 +879,18 @@ def test_same_day_range_folds_to_one_date() -> None:
     assert out.cover.subtitle == "2026-08-01, 부산의 골목을 걸었다"
 
 
+def test_particle_after_a_token_fits_the_bound_name() -> None:
+    """LLM 은 값을 못 본 채 토큰 뒤에 조사를 붙인다 — 채운 이름의 받침에 맞춘다(실측 "아쿠아플라넷 제주과")."""
+    trip = replace(_REQUEST, visits=(
+        _visit(_REF1, "아쿠아플라넷 제주", photos=1), _visit(_REF2, "성산일출봉", photos=1),
+        _visit(_REF2, "올레길", photos=0), _visit(_REF2, "CGV", photos=0)))
+    out = _bound(trip, subtitle="{poi:0.name}과 {poi:1.name}를 지나 {poi:2.name}으로, {region}는 맑았다")
+    assert out.cover.subtitle == "아쿠아플라넷 제주와 성산일출봉을 지나 올레길로, 부산은 맑았다"
+    # 뒤에 한글이 이어지면 조사가 아닐 수 있다("이었다") · 끝이 한글이 아니면 쓴 그대로
+    out = _bound(trip, subtitle="{poi:0.name}이었다, {poi:3.name}는 닫혀 있었다")
+    assert out.cover.subtitle == "아쿠아플라넷 제주이었다, CGV는 닫혀 있었다"
+
+
 @given(case=polluted_reflection_cases(), parsed=st.booleans())
 @settings(max_examples=120, deadline=None)
 def test_finalize_output_never_carries_a_placeholder(case, parsed: bool) -> None:

@@ -575,21 +575,22 @@ class GenerateItineraryServiceTest : StringSpec({
         service(agent, fullPrefs, emptyList(), fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-01T09:10:00Z"), ZoneOffset.UTC))
             .generate(acc, tripId, GenerationMode.FULLY_AI)
 
-        // 18:10 + 이동 여유 30분 = 18:40 → 30분 단위로 올려 19:00. 남은 두 시간에 들어가는 만큼만 들어간다.
-        agent.captures[0].timeWindows shouldContainExactly listOf(TimeWindow(start, LocalTime.parse("19:00"), LocalTime.parse("21:00")))
+        // 18:10 + 이동 여유 30분 = 18:40 → 30분 단위로 올려 19:00. 끝은 지금부터 4시간(23:00) — 하루 끝 21:00 보다 늦다.
+        agent.captures[0].timeWindows shouldContainExactly listOf(TimeWindow(start, LocalTime.parse("19:00"), LocalTime.parse("23:00")))
         agent.captures[1].timeWindows.forEach { it.start shouldBe LocalTime.parse("09:00") } // 내일부터는 종전 그대로
     }
 
     // 기본 하루 끝(21:00)이 저녁 생성을 막았다 — 20:04 에 만들면 지금+30분이 21:00 이라 오늘이 닫혀,
     // 당일치기는 AI 를 한 번도 안 부르고 빈 일정이 나갔다(DEV 10-14 팀원 실측, 생성 0.05초 · 연타).
-    // 오늘은 지금부터 **2시간**을 보장하되 하루 끝(23:59)을 넘기지 않는다 — 밤에도 야경 한두 곳. 사용자가 적은 끝은 늘리지 않는다.
+    // 오늘은 지금부터 **4시간**을 보장하되 하루 끝(23:59)을 넘기지 않는다(2026-10-20 사용자, 종전 2시간) — 저녁·카페·야경.
+    // 사용자가 적은 끝은 늘리지 않는다.
 
-    "출발일 저녁 8시에 만들어도 오늘은 21:00~23:00 으로 연다 — 저녁에도 한두 곳은 넣는다" {
+    "출발일 저녁 8시에 만들어도 오늘은 21:00~23:59 로 연다 — 저녁에도 들어갈 만큼 넣는다" {
         val agent = CapturingAgent(now)
         service(agent, fullPrefs, emptyList(), fixedVisits = emptyList(), clock = Clock.fixed(Instant.parse("2026-08-01T11:04:00Z"), ZoneOffset.UTC))
             .generate(acc, tripId, GenerationMode.FULLY_AI)
 
-        agent.captures[0].timeWindows shouldContainExactly listOf(TimeWindow(start, LocalTime.parse("21:00"), LocalTime.parse("23:00")))
+        agent.captures[0].timeWindows shouldContainExactly listOf(TimeWindow(start, LocalTime.parse("21:00"), LocalTime.parse("23:59")))
     }
 
     // 밤 10시 무렵부터는 지금부터 2시간이 23:59 를 넘는다 — 익일 01:00 까지 연다(2026-10-20 사용자). 끝 < 시작인
@@ -616,7 +617,7 @@ class GenerateItineraryServiceTest : StringSpec({
             .generate(acc, tripId, GenerationMode.FULLY_AI)
 
         agent.captures.size shouldBe 1
-        agent.captures[0].timeWindows shouldContainExactly listOf(TimeWindow(start, LocalTime.parse("21:00"), LocalTime.parse("23:00")))
+        agent.captures[0].timeWindows shouldContainExactly listOf(TimeWindow(start, LocalTime.parse("21:00"), LocalTime.parse("23:59")))
     }
 
     "사용자가 정한 귀가 시각은 늘리지 않는다 — 남은 시간이 없으면 오늘은 닫힌다" {
@@ -1004,7 +1005,7 @@ class GenerateItineraryServiceTest : StringSpec({
             .generate(acc, tripId, GenerationMode.FULLY_AI)
 
         val windows = agent.captures.flatMap { it.timeWindows }
-        windows.single { it.date == start.plusDays(1) } shouldBe TimeWindow(start.plusDays(1), LocalTime.parse("19:00"), LocalTime.parse("21:00")) // 18:10 KST
+        windows.single { it.date == start.plusDays(1) } shouldBe TimeWindow(start.plusDays(1), LocalTime.parse("19:00"), LocalTime.parse("23:00")) // 18:10 KST, 끝은 지금부터 4시간
         windows.filter { it.date != start.plusDays(1) }.forEach { it.start shouldBe LocalTime.parse("09:00") } // 다른 날은 그대로
     }
 
