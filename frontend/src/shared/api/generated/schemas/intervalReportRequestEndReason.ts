@@ -10,7 +10,7 @@
  */
 
 /**
- * END 에서만, 필수. SERVER_TIMEOUT 은 서버만 쓴다
+ * END 에서만, 필수. SERVER_TIMEOUT 은 서버만 쓴다. USER_PAUSE = 여행 중 사용자가 이 여행의 자동 기록을 잠깐 끔(동의 철회 아님 · TRIP-1486)
  */
 export type IntervalReportRequestEndReason =
   | (typeof IntervalReportRequestEndReason)[keyof typeof IntervalReportRequestEndReason]
@@ -22,4 +22,5 @@ export const IntervalReportRequestEndReason = {
   ACCURACY_REDUCED: 'ACCURACY_REDUCED',
   CONSENT_REVOKED: 'CONSENT_REVOKED',
   TRIP_ENDED: 'TRIP_ENDED',
+  USER_PAUSE: 'USER_PAUSE',
 } as const;

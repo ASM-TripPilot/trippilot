@@ -33,8 +33,8 @@ data class LocationAutomationInterval(
 /** 구간 종류. 무장은 위치 **이용**(USE), 경로 기록은 기기 안 **수집**(COLLECTION)이다. */
 enum class IntervalKind { GEOFENCE_ARMED, ROUTE_RECORDING }
 
-/** 닫힌 이유. 앞의 다섯은 기기가 보내고, [SERVER_TIMEOUT] 은 END 가 오지 않은 구간을 서버가 닫을 때만 쓴다(G-U10-11). */
-enum class IntervalEndReason { CLIENT_STOP, PERMISSION_DOWNGRADE, ACCURACY_REDUCED, CONSENT_REVOKED, TRIP_ENDED, SERVER_TIMEOUT }
+/** 닫힌 이유. 기기가 보내는 것들과, [SERVER_TIMEOUT] 은 END 가 오지 않은 구간을 서버가 닫을 때만 쓴다(G-U10-11). [USER_PAUSE] 는 여행 중 사용자가 이 여행의 자동 기록을 잠깐 끈 것(동의 철회 아님 · TRIP-1486). */
+enum class IntervalEndReason { CLIENT_STOP, PERMISSION_DOWNGRADE, ACCURACY_REDUCED, CONSENT_REVOKED, TRIP_ENDED, USER_PAUSE, SERVER_TIMEOUT }
 
 interface LocationAutomationIntervalRepository {
     fun find(intervalId: UUID): LocationAutomationInterval?

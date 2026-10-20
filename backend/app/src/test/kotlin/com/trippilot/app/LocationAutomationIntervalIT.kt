@@ -100,6 +100,27 @@ class LocationAutomationIntervalIT : AbstractPostgresIntegrationTest() {
         intervals.find(id)!!.let { (it.endReason to it.regionCount) shouldBe (IntervalEndReason.TRIP_ENDED to 5) }
     }
 
+    /**
+     * TRIP-1486 · 여행 중 사용자가 이 여행의 자동 기록을 잠깐 끈다(동의 철회 아님). 기기는 END(USER_PAUSE)로 닫고,
+     * 다시 켜면 새 구간을 START 한다. DB CHECK 가 이 사유를 모르면 END 가 500 이 되어 구간이 SERVER_TIMEOUT 까지 열린다.
+     */
+    @Test
+    fun `일시 중지는 USER_PAUSE 로 닫히고 다시 켜면 새 구간이 열린다`() {
+        val (accountId, tripId) = newTrip()
+        val first = UUID.randomUUID()
+        val second = UUID.randomUUID()
+        automation.report(accountId, tripId, IntervalReport(first, IntervalKind.GEOFENCE_ARMED, LocationIntervalPhase.START, past))
+        automation.report(
+            accountId, tripId,
+            IntervalReport(first, IntervalKind.GEOFENCE_ARMED, LocationIntervalPhase.END, past.plusSeconds(600), IntervalEndReason.USER_PAUSE, regionCount = 2),
+        )
+        automation.report(accountId, tripId, IntervalReport(second, IntervalKind.GEOFENCE_ARMED, LocationIntervalPhase.START, past.plusSeconds(1200)))
+
+        intervals.find(first)!!.endReason shouldBe IntervalEndReason.USER_PAUSE
+        intervals.find(second)!!.endReason shouldBe null
+        mapper.readTree(intervalLogs(first)[1]["detail"] as String)["endReason"].asText() shouldBe "USER_PAUSE"
+    }
+
     @Test
     fun `경로 기록 구간은 기기 안 수집 COLLECTION 으로 남는다`() {
         val (accountId, tripId) = newTrip()
