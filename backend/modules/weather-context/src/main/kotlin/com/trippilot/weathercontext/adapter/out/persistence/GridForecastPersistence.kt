@@ -19,7 +19,8 @@ import java.time.LocalDateTime
  *
  * `hourly` = `{"2026-10-20T14:00": {"pop":60,"pty":1,"sky":4,"tmp":18.0,"wsd":3.2}}`.
  * 모르는 칸은 키를 두지 않는다(null 을 쓰지 않는다).
- * `daily`(날짜별 TMN·TMX) 칸은 매핑하지 않는다 — 읽는 곳이 없어졌다(G-SA-15 결정 2026-10-20). 새 행은 기본값 `{}` 로 찬다(V2.78).
+ * `daily`(날짜별 TMN·TMX) 칸은 매핑하지 않는다 — 읽는 곳이 없어졌다(G-SA-15 결정 2026-10-20). 새 행은 그 칸의 DB 기본값 `{}` 로
+ * 차고, 이미 있는 행을 덮을 때(UPDATE)는 그 칸을 싣지 않아 옛 값이 그대로 남는다(롤링 창의 옛 파드가 쓴 행).
  */
 @Entity
 @Table(name = "weather_grid_forecast")

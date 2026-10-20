@@ -106,12 +106,32 @@ class GridForecastPersistenceIT : AbstractPostgresIntegrationTest() {
         read.hourly[LocalDateTime.parse("2026-10-20T14:00")] shouldBe GridHour(pop = 60, pty = 1, sky = 4, tmp = 18.0, wsd = 3.0)
     }
 
-    /** 날짜별(daily) 칸은 매핑하지 않는다 — 새 행은 기본값 `{}` 로 찬다(V2.78). null 이면 롤링 창의 옛 파드가 그 행을 읽다 죽는다. */
+    /** 날짜별(`daily`) 칸은 매핑하지 않는다 — 새 행은 그 칸의 기본값 `{}` 로 찬다. null 이면 롤링 창의 옛 파드가 그 행을 읽다 죽는다. */
     @Test
     fun `매핑하지 않는 날짜별 칸은 빈 객체로 찬다 — 옛 파드가 읽어도 죽지 않는다`() {
         grids.save(forecast("900,900", pop = 10, tmp = 12.0))
 
         jdbc.queryForObject("SELECT daily::text FROM weather_grid_forecast WHERE grid_key = '900,900'", String::class.java) shouldBe "{}"
+    }
+
+    /** 옛 파드가 날짜별을 채워 쓴 행을 덮으면(merge → UPDATE) 그 칸은 옛 값 그대로다 — 매핑하지 않은 칸은 UPDATE 에 들지 않는다. */
+    @Test
+    fun `옛 파드가 쓴 행을 덮어도 날짜별 칸은 옛 값 그대로 남는다`() {
+        jdbc.update(
+            """
+            INSERT INTO weather_grid_forecast(grid_key, base_at, hourly, daily, fetched_at, expires_at)
+            VALUES ('910,910', ?, '{}'::jsonb, '{"2026-10-20":{"tmn":-13.0}}'::jsonb, ?, ?)
+            """.trimIndent(),
+            Timestamp.from(base), Timestamp.from(base), Timestamp.from(expires),
+        )
+
+        val next = forecast("910,910", pop = 10, tmp = 12.0)
+
+        grids.save(next)
+
+        grids.find("910,910") shouldBe next // 시간별은 새 발표분으로 덮였다
+        jdbc.queryForObject("SELECT daily::text FROM weather_grid_forecast WHERE grid_key = '910,910'", String::class.java) shouldBe
+            """{"2026-10-20": {"tmn": -13.0}}"""
     }
 
     @Test
