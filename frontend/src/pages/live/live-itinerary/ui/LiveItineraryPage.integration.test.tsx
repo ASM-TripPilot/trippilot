@@ -16,6 +16,7 @@ import { WeatherCloudGlyph } from '@/features/execution/ui/ExecutionGlyphs';
 import { server } from '@/mocks/server';
 import type {
   Itinerary,
+  Opportunity,
   ReplanDiff,
   Trigger,
   TriggerList,
@@ -32,6 +33,7 @@ import {
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 import {
+  liveHubHandlers,
   liveItinerary,
   liveSlot,
   liveTrip,
@@ -54,8 +56,9 @@ import { encodePolyline } from '@/shared/location/automation/polyline';
 import { LiveItineraryPage } from './LiveItineraryPage';
 
 /**
- * i01 허브(LiveItineraryPage) 통합 테스트 — 실 페이지 + 실제 HTTP(MSW). 관점 8개를 바깥 describe 8개로 나눈다
- * (허브 · i08 반영 시트 · 메모 시트 · [사진]·[메모] · 완료 카드 [사진]·[메모] · i03 위험 시트 · i02 트리거 · 방문 체크).
+ * i01 허브(LiveItineraryPage) 통합 테스트 — 실 페이지 + 실제 HTTP(MSW). 관점 9개를 바깥 describe 9개로 나눈다
+ * (허브 · i08 반영 시트 · 메모 시트 · [사진]·[메모] · 완료 카드 [사진]·[메모] · i03 위험 시트 · i02 트리거 · 방문 체크 ·
+ * 기회 카드).
  *
  * 공용 장치(파일 맨 위 한 벌):
  *  - `jest.mock` 은 파일 전체에 걸린다 — 목은 하나만 두고 관점마다 다른 값은 가변 목(`mockCanGoBack` 등)으로 바꾼다.
@@ -74,13 +77,21 @@ import { LiveItineraryPage } from './LiveItineraryPage';
  */
 
 // authedClient(생성 클라이언트 인증 계층)가 @/shared/storage 를 정적으로 문다.
+// 상황 감지 FE-C — 기회 카드의 기기 숨김 기억(readIdSet·writeIdSet)도 이 배럴로 나간다. 구현은 기회 카드
+// 관점(describe)이 심는다(그 밖의 관점은 기회 목록이 비어 읽지 않는다).
+// 배럴을 통째로 갈아끼우므로 실물을 먼저 펼친 뒤 덮는다(README 테스트 규칙 — 재수출이 늘어도 형제 export 가 undefined 가 되지 않게).
+const mockReadIdSet = jest.fn();
+const mockWriteIdSet = jest.fn();
 jest.mock('@/shared/storage', () => ({
+  ...jest.requireActual('@/shared/storage'),
   saveTokens: jest.fn().mockResolvedValue(undefined),
   getTokens: jest
     .fn()
     .mockResolvedValue({ accessToken: 'a', refreshToken: 'r' }),
   clearTokens: jest.fn().mockResolvedValue(undefined),
   hasStoredToken: jest.fn().mockResolvedValue(true),
+  readIdSet: (key: string) => mockReadIdSet(key),
+  writeIdSet: (key: string, ids: readonly string[]) => mockWriteIdSet(key, ids),
 }));
 
 // 정적 싱글턴 router 목 — 렌더 중엔 부르지 않는다.
@@ -6048,5 +6059,583 @@ describe('방문 체크', () => {
         ).toBe(0);
       }
     );
+  });
+});
+
+/**
+ * 상황 감지 FE-C · frontend-components §4 · §6 · §9 · §11 · BR-SA-22 — 허브 기회 카드 배선(실 페이지 + MSW).
+ *
+ * 무엇을 보장하나:
+ *  - 허브가 **보고 있는 날짜**로 `GET /trips/{id}/opportunities?date=` 를 부르고(일차 칩을 바꾸면 그 날로), 고른 1장을
+ *    시트 머리에 그린다. 여행 중 허브(active)가 아니면 부르지 않는다.
+ *  - 같은 날 날씨 위험 트리거가 발화 중이면 행사 카드 대신 다음 항목(요즘 인기)을 그린다 — 트리거 목록이 온 뒤에.
+ *  - [넣어서 다시 짜기] → i04 를 `prefill`·`includePoiId`(오늘이 아니면 `targetDate`)로 연다. 이동만 하고 쓰기 요청 0
+ *    (INV-SA-1 — 일정은 i06 [적용]으로만).
+ *  - × → 그 자리에서 사라지고 다음 항목으로 채우지 않는다. 숨김은 그 날 기기에 남아 다시 열어도 없다 — 다른 날은 그대로.
+ *    숨김 읽기 실패면 숨김 없이 그리고, 쓰기 실패여도 이번 화면에선 숨긴다.
+ *  - 빈 목록·조회 실패·응답 대기는 카드만 없고 허브의 나머지(슬롯·알약)는 그대로다 — 허브의 다른 조회를 막지 않는다.
+ *
+ * 3동작: 준비(일정·트리거·날짜별 기회 응답·기기 숨김 칸) → 실행(렌더·일차 칩·CTA·×) → 단언(카드 글자·요청 날짜·push 인자·숨김 기억).
+ * 기기 숨김 칸은 파일 맨 위 `@/shared/storage` 목의 readIdSet·writeIdSet 에 이 관점이 Map 을 심는다.
+ */
+describe('기회 카드 (상황 감지 FE-C)', () => {
+  const VENUE: Opportunity = {
+    key: 'event:부산 불꽃축제',
+    kind: 'EVENT_VENUE',
+    eventName: '부산 불꽃축제',
+    start: '2026-08-18',
+    end: '2026-08-24',
+    poiId: 'poi-venue',
+    poiName: '광안리 해변',
+    nearSlotKey: `${TODAY}#p1`,
+    distanceLabel: '약 400m',
+  };
+  const TRENDING: Opportunity = {
+    key: 'trending:해동용궁사',
+    kind: 'TRENDING',
+    eventName: null,
+    start: null,
+    end: null,
+    poiId: 'poi-trend',
+    poiName: '해동용궁사',
+    nearSlotKey: `${TODAY}#p1`,
+    distanceLabel: '약 1.2km',
+  };
+  const VENUE_TITLE = '‘부산 불꽃축제’ 기간이에요';
+  const TRENDING_TITLE = '요즘 많이 찾는 곳이 동선 근처에 있어요';
+
+  /** 같은 날 발화 중인 날씨 위험 — 날짜 단위 신호라 slotKey 가 없다. */
+  const rain = {
+    triggerId: 'trg-rain',
+    kind: 'WEATHER',
+    affectedDate: TODAY,
+    slotKey: null,
+    reason: '오후에 비 소식이 있어요',
+    scope: 'FULL_DAY',
+    detectedAt: '2026-08-20T00:15:00Z',
+    severity: 'RISK',
+  } as Trigger;
+
+  /** 오늘 1곳 + 내일 1곳 — 일차 칩으로 다른 날을 볼 수 있게. */
+  const itinerary = (): Itinerary =>
+    liveItinerary([
+      {
+        date: TODAY,
+        slots: [
+          liveSlot('p1', '감천문화마을', '10:00:00', { endAt: '11:00:00' }),
+        ],
+      },
+      {
+        date: TOMORROW,
+        slots: [
+          liveSlot('p2', '해운대 해변', '10:00:00', { endAt: '11:00:00' }),
+        ],
+      },
+    ]);
+
+  /** 요청된 date 쿼리(순서대로) — "보고 있는 날짜로 묻는다"의 증거. */
+  let askedDates: string[] = [];
+  /** 날짜별 기회 응답. status 를 주면 그 상태로 실패하고, gate 를 주면 열릴 때까지 응답을 붙잡는다. */
+  const opportunitiesHandler = (
+    byDate: Record<string, Opportunity[]>,
+    { status, gate }: { status?: number; gate?: Promise<void> } = {}
+  ) =>
+    http.get(`${BASE}/trips/:tripId/opportunities`, async ({ request }) => {
+      const date = new URL(request.url).searchParams.get('date') ?? '';
+      askedDates.push(date);
+      if (gate) await gate;
+      if (status) return new HttpResponse(null, { status });
+      return HttpResponse.json({ items: byDate[date] ?? [] });
+    });
+
+  /** 기기 숨김 칸(SecureStore 대역) — 키 → 숨긴 key 집합. 다시 렌더해도 남는다(앱을 다시 연 것과 같다). */
+  let deviceStore = new Map<string, readonly string[]>();
+  beforeEach(() => {
+    askedDates = [];
+    deviceStore = new Map();
+    mockReadIdSet.mockImplementation(
+      async (key: string) => deviceStore.get(key) ?? []
+    );
+    mockWriteIdSet.mockImplementation(
+      async (key: string, ids: readonly string[]) => {
+        deviceStore.set(key, ids);
+      }
+    );
+  });
+  afterEach(() => {
+    mockReadIdSet.mockReset();
+    mockWriteIdSet.mockReset();
+  });
+
+  function wrapper({ children }: { children: ReactNode }) {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: 0 },
+        mutations: { gcTime: 0 },
+      },
+    });
+    return (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+  }
+
+  /** 준비 공통 — 허브 GET 4종 + 기회 응답으로 띄우고 허브가 그려질 때까지 기다린다. */
+  async function renderHub(
+    byDate: Record<string, Opportunity[]>,
+    {
+      triggers = [],
+      status,
+      gate,
+    }: { triggers?: Trigger[]; status?: number; gate?: Promise<void> } = {}
+  ) {
+    server.use(
+      ...liveHubHandlers({ itinerary: itinerary(), triggers: { triggers } }),
+      opportunitiesHandler(byDate, { status, gate })
+    );
+    const view = render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+      wrapper,
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
+    );
+    return view;
+  }
+
+  const CARD = 'execution-live-opportunity-card';
+  const TITLE = 'execution-live-opportunity-title';
+  const CTA = 'execution-live-opportunity-cta';
+  const DISMISS = 'execution-live-opportunity-dismiss';
+  const TODAY_SLOT = `execution-live-slot-${TODAY}#p1`;
+  const OPPORTUNITIES = `GET /api/v1/trips/${TRIP_ID}/opportunities`;
+  const writeHits = () => observedHits.filter((hit) => !hit.startsWith('GET '));
+
+  it('O1 보고 있는 날짜(오늘)로 묻고, 서버 순위 첫 장 1장을 그린다 — 제목·본문·각주', async () => {
+    await renderHub({ [TODAY]: [VENUE, TRENDING] });
+
+    await waitFor(() =>
+      expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
+        exact: true,
+      })
+    );
+    expect(
+      screen.getByTestId('execution-live-opportunity-body')
+    ).toHaveTextContent(
+      '광안리 해변에서 열려요 · 동선에서 약 400m · 8월 24일까지',
+      { exact: true }
+    );
+    expect(
+      screen.getByText('열리는 날·시간은 행사 안내를 확인해 주세요')
+    ).toBeTruthy();
+    expect(screen.getAllByTestId(CARD)).toHaveLength(1);
+    expect(askedDates).toEqual([TODAY]);
+  });
+
+  it('O2 [넣어서 다시 짜기] → i04 를 prefill·includePoiId 로 연다(오늘이라 날짜 없음) — 이동만, 쓰기 요청 0', async () => {
+    await renderHub({ [TODAY]: [VENUE] });
+
+    fireEvent.press(await screen.findByTestId(CTA));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/planb',
+      params: {
+        tripId: TRIP_ID,
+        prefill: '광안리 해변 꼭 넣어서 다시 짜 줘',
+        includePoiId: 'poi-venue',
+      },
+    });
+    await settle();
+    expect(writeHits()).toEqual([]);
+  });
+
+  it('O3 다른 날(내일)을 보면 그 날로 묻고, CTA 는 targetDate 까지 싣는다', async () => {
+    await renderHub({ [TOMORROW]: [TRENDING] });
+    await waitFor(() => expect(askedDates).toContain(TODAY));
+
+    fireEvent.press(screen.getByTestId('execution-live-daychip-1'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId(TITLE)).toHaveTextContent(TRENDING_TITLE, {
+        exact: true,
+      })
+    );
+    expect(askedDates).toEqual([TODAY, TOMORROW]);
+    fireEvent.press(screen.getByTestId(CTA));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/planb',
+      params: {
+        tripId: TRIP_ID,
+        prefill: '해동용궁사 꼭 넣어서 다시 짜 줘',
+        includePoiId: 'poi-trend',
+        targetDate: TOMORROW,
+      },
+    });
+  });
+
+  it('O4 같은 날 날씨 위험이 발화 중이면 행사 카드 대신 요즘 인기를 그린다', async () => {
+    await renderHub({ [TODAY]: [VENUE, TRENDING] }, { triggers: [rain] });
+
+    // 트리거 목록이 도착한 뒤에 판정한다(알약 = 목록 도착의 증거) — '아직 모름'이라 행사를 뺀 것과 가른다.
+    await screen.findByTestId('execution-live-trigger-chip');
+    await waitFor(() =>
+      expect(screen.getByTestId(TITLE)).toHaveTextContent(TRENDING_TITLE, {
+        exact: true,
+      })
+    );
+    expect(screen.queryByText(VENUE_TITLE)).toBeNull();
+  });
+
+  it('O5 × → 그 자리에서 사라지고 다음 항목으로 채우지 않는다 · 그 날 기기에 남아 다시 열어도 없다 · 다른 날은 그대로', async () => {
+    const first = await renderHub({
+      [TODAY]: [VENUE, TRENDING],
+      [TOMORROW]: [VENUE],
+    });
+
+    fireEvent.press(await screen.findByTestId(DISMISS));
+
+    await waitFor(() => expect(screen.queryByTestId(CARD)).toBeNull());
+    expect(screen.queryByText(TRENDING_TITLE)).toBeNull();
+    expect(mockWriteIdSet).toHaveBeenCalledTimes(1);
+    expect(mockWriteIdSet.mock.calls[0][1]).toEqual([VENUE.key]);
+
+    // 다시 연다 — 새 쿼리 캐시, 기기 칸은 그대로.
+    first.unmount();
+    render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+    // 짝 앵커 — 다시 물었고(응답 도착), 숨김도 다시 읽었다. 그 뒤에도 카드가 없어야 한다.
+    await waitFor(() => expect(askedDates).toEqual([TODAY, TODAY]));
+    await waitFor(() =>
+      expect(mockReadIdSet.mock.calls.length).toBeGreaterThanOrEqual(2)
+    );
+    await settle();
+    expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
+    expect(screen.queryByTestId(CARD)).toBeNull();
+
+    // 숨김은 그 날 것이다 — 같은 행사라도 내일 카드는 보인다.
+    fireEvent.press(screen.getByTestId('execution-live-daychip-1'));
+    await waitFor(() =>
+      expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
+        exact: true,
+      })
+    );
+  });
+
+  it('O6 숨김 읽기가 실패하면 숨김 없이 그린다', async () => {
+    mockReadIdSet.mockImplementation(async () => {
+      throw new Error('keychain');
+    });
+    await renderHub({ [TODAY]: [VENUE] });
+
+    await waitFor(() =>
+      expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
+        exact: true,
+      })
+    );
+  });
+
+  it('O7 숨김 쓰기가 실패해도 이번 화면에선 숨긴다(실패는 조용히 삼킨다)', async () => {
+    mockWriteIdSet.mockImplementation(async () => {
+      throw new Error('keychain');
+    });
+    await renderHub({ [TODAY]: [VENUE] });
+
+    fireEvent.press(await screen.findByTestId(DISMISS));
+
+    await waitFor(() => expect(screen.queryByTestId(CARD)).toBeNull());
+    expect(mockWriteIdSet).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['빈 목록', {}],
+    ['조회 실패(500)', { status: 500 }],
+  ] as const)(
+    'O8 %s → 카드만 없고 허브의 나머지(슬롯·알약)는 그대로',
+    async (_label, failure) => {
+      await renderHub({ [TODAY]: [] }, { triggers: [rain], ...failure });
+
+      await waitFor(() => expect(askedDates).toEqual([TODAY]));
+      await screen.findByTestId('execution-live-trigger-chip');
+      await settle();
+      expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
+      expect(screen.queryByTestId(CARD)).toBeNull();
+    }
+  );
+
+  it('O9 기회 응답을 기다리는 동안에도 허브는 그려진다(막지 않는다) — 도착하면 그때 카드가 선다', async () => {
+    const gate = createGate();
+    await renderHub({ [TODAY]: [VENUE] }, { gate: gate.opened });
+
+    await waitFor(() => expect(askedDates).toEqual([TODAY]));
+    expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
+    expect(screen.queryByTestId(CARD)).toBeNull();
+
+    gate.release();
+    await waitFor(() =>
+      expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
+        exact: true,
+      })
+    );
+  });
+
+  it('O11 트리거 목록이 오기 전엔 기회가 와도 카드를 그리지 않는다 — 오면 그때 1장(요즘 인기를 먼저 그렸다 바꾸지 않는다)', async () => {
+    // 준비 — 기회는 바로 오고 트리거 목록은 테스트가 열 때까지 붙잡는다. 한 번의 server.use 안에서는 **앞에 건**
+    // 핸들러가 이긴다(목록 앞에 끼워 넣고 앞에서부터 맞춘다) — 붙잡는 핸들러를 liveHubHandlers 보다 먼저 둔다.
+    const triggersGate = createGate();
+    server.use(
+      http.get(`${BASE}/trips/:tripId/triggers`, async () => {
+        await triggersGate.opened;
+        return HttpResponse.json({ triggers: [] });
+      }),
+      ...liveHubHandlers({ itinerary: itinerary() }),
+      opportunitiesHandler({ [TODAY]: [VENUE, TRENDING] })
+    );
+    render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+    await waitFor(() => expect(askedDates).toEqual([TODAY]));
+    await settle();
+
+    // 단언 1 — 기회는 왔지만 트리거를 몰라 아무 카드도 없다(요즘 인기도).
+    expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
+    expect(screen.queryByTestId(CARD)).toBeNull();
+
+    // 실행 — 트리거 목록(위험 없음)이 온다.
+    triggersGate.release();
+
+    // 단언 2 — 서버 순위 첫 장(행사)이 그때 선다.
+    await waitFor(() =>
+      expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
+        exact: true,
+      })
+    );
+  });
+
+  it('O10 여행 중 허브가 아니면(일정 404) 묻지 않는다', async () => {
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(liveTrip())),
+      http.get(
+        `${BASE}/trips/:tripId/itinerary`,
+        () => new HttpResponse(null, { status: 404 })
+      ),
+      opportunitiesHandler({ [TODAY]: [VENUE] })
+    );
+    render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+
+    await screen.findByTestId('execution-live-notfound');
+    await settle();
+    expect(hitCount(OPPORTUNITIES)).toBe(0);
+  });
+
+  it('O13 숨김을 읽기 전엔 기회가 와도 카드를 그리지 않는다 — 숨긴 카드가 허브를 열 때마다 잠깐 비치지 않게', async () => {
+    // 준비 — 이 날 행사 카드를 이미 숨겼고, 기기 칸 읽기는 테스트가 풀 때까지 붙잡는다. 트리거는 주의(CAUTION) 날씨 하나 —
+    // 행사를 막지 않고 알약만 세운다(알약 = 트리거 목록 도착의 증거 — '트리거를 몰라서 없음'과 가른다).
+    const readGate = createGate();
+    mockReadIdSet.mockImplementation(async () => {
+      await readGate.opened;
+      return [VENUE.key];
+    });
+    await renderHub(
+      { [TODAY]: [VENUE] },
+      { triggers: [{ ...rain, severity: 'CAUTION' }] }
+    );
+
+    // 실행 — 트리거 목록·기회 응답이 왔고 기기 칸을 읽기 시작했다(짝 앵커 — 읽기는 기회 항목이 있어야 시작한다).
+    await screen.findByTestId('execution-live-trigger-chip');
+    await waitFor(() => expect(mockReadIdSet).toHaveBeenCalled());
+    await settle();
+
+    // 단언 1 — 읽는 동안엔 카드가 없다(숨겼는지 아직 모른다).
+    expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
+    expect(screen.queryByTestId(CARD)).toBeNull();
+
+    // 단언 2 — 읽고 나서도 없다(숨긴 카드다).
+    readGate.release();
+    await settle();
+    expect(screen.queryByTestId(CARD)).toBeNull();
+  });
+
+  it('O12 같은 날 두 번째 ×가 첫 숨김을 지우지 않는다 — 비 위험으로 바뀐 카드를 또 닫고 위험이 풀려도, 처음 닫은 카드는 그 날 다시 없다', async () => {
+    // 준비 — 트리거 목록은 테스트가 바꾼다. 한 번의 server.use 안에서는 앞에 건 핸들러가 이기므로 liveHubHandlers 보다 먼저 둔다.
+    let serverTriggers: Trigger[] = [];
+    server.use(
+      http.get(`${BASE}/trips/:tripId/triggers`, () =>
+        HttpResponse.json({ triggers: serverTriggers })
+      ),
+      ...liveHubHandlers({ itinerary: itinerary() }),
+      opportunitiesHandler({ [TODAY]: [VENUE, TRENDING] })
+    );
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: 0 },
+        mutations: { gcTime: 0 },
+      },
+    });
+    /** 트리거 목록을 다시 받는다(포그라운드 복귀·푸시 수신 무효화와 같다). */
+    const refetchTriggers = (next: Trigger[]) => {
+      serverTriggers = next;
+      return act(() =>
+        client.invalidateQueries({
+          queryKey: getGetTripsTripIdTriggersQueryKey(TRIP_ID),
+        })
+      );
+    };
+    const first = render(
+      <QueryClientProvider client={client}>
+        <LiveItineraryPage tripId={TRIP_ID} today={TODAY} />
+      </QueryClientProvider>
+    );
+
+    // 실행 ① — 행사 카드를 닫는다.
+    fireEvent.press(await screen.findByTestId(DISMISS));
+    await waitFor(() => expect(screen.queryByTestId(CARD)).toBeNull());
+
+    // 실행 ② — 같은 날 비 위험이 뜨면 행사가 빠져 요즘 인기가 선다 → 그것도 닫는다.
+    await refetchTriggers([rain]);
+    await waitFor(() =>
+      expect(screen.getByTestId(TITLE)).toHaveTextContent(TRENDING_TITLE, {
+        exact: true,
+      })
+    );
+    fireEvent.press(screen.getByTestId(DISMISS));
+    await waitFor(() => expect(screen.queryByTestId(CARD)).toBeNull());
+    // 기기에는 그 날 숨긴 key 가 둘 다 남는다(두 번째가 첫째를 덮어쓰지 않는다).
+    expect(mockWriteIdSet.mock.calls.at(-1)?.[1]).toEqual([
+      VENUE.key,
+      TRENDING.key,
+    ]);
+
+    // 실행 ③ — 위험이 풀린다(i06 [적용]이 소비) → 행사가 다시 첫 장이다. 알약이 사라진 것 = 새 목록 도착의 증거.
+    await refetchTriggers([]);
+    await waitFor(() =>
+      expect(screen.queryByTestId('execution-live-trigger-chip')).toBeNull()
+    );
+    await settle();
+
+    // 단언 — 처음 닫은 행사 카드는 그 날 다시 그리지 않는다(계약 Opportunity.key).
+    expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
+    expect(screen.queryByTestId(CARD)).toBeNull();
+
+    // 다시 열어도 같다 — 기기 칸에 두 숨김이 다 남았다. 짝 앵커: 다시 물었고(응답 도착) 숨김도 다시 읽었다.
+    const readsBefore = mockReadIdSet.mock.calls.length;
+    first.unmount();
+    render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+    await waitFor(() => expect(askedDates).toEqual([TODAY, TODAY]));
+    await waitFor(() =>
+      expect(mockReadIdSet.mock.calls.length).toBeGreaterThan(readsBefore)
+    );
+    await settle();
+    expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
+    expect(screen.queryByTestId(CARD)).toBeNull();
+  });
+
+  /**
+   * 일정이 바뀌는 길은 여럿이다(재계획 확정 = 일정 무효화 · 직접 수정 저장 = 응답을 캐시에 직접 쓰기 · 도우미 편집). 어느
+   * 길이든 허브는 `dismissTo`·`router.back` 으로 돌아와 다시 마운트되지 않는다 — 허브가 보는 일정 캐시가 바뀐 것 하나로
+   * 기회를 다시 받아야, 서버가 '이미 일정에 있음'으로 빼는 장소의 카드가 남지 않는다(BR-SA-22).
+   */
+  const ITINERARY_GET = `GET /api/v1/trips/${TRIP_ID}/itinerary`;
+  const VENUE_SLOT = `execution-live-slot-${TODAY}#poi-venue`;
+  /** 다시 받기 대기 상한 — 기본 상한(5초)이 테스트 상한과 같아, 끝내 안 물으면 원인 대신 'Exceeded timeout' 이 뜬다(TOAST_WAIT 와 같은 이유). */
+  const REFETCH_WAIT = { timeout: 2000 };
+  /** 오늘 일정에 기회 카드의 장소(광안리 해변)를 넣은 일정. */
+  const withVenue = (): Itinerary =>
+    liveItinerary([
+      {
+        date: TODAY,
+        slots: [
+          liveSlot('p1', '감천문화마을', '10:00:00', { endAt: '11:00:00' }),
+          liveSlot('poi-venue', '광안리 해변', '12:00:00', {
+            endAt: '13:00:00',
+          }),
+        ],
+      },
+      {
+        date: TOMORROW,
+        slots: [
+          liveSlot('p2', '해운대 해변', '10:00:00', { endAt: '11:00:00' }),
+        ],
+      },
+    ]);
+
+  /** 준비 공통 — 일정·기회는 테스트가 바꾸는 서버 값, 쿼리 클라이언트는 테스트가 쥔다(캐시를 바꾸려고). */
+  async function renderHubWithClient(byDate: Record<string, Opportunity[]>) {
+    const fake = { itinerary: itinerary() };
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json(fake.itinerary)
+      ),
+      ...liveHubHandlers({ itinerary: itinerary() }),
+      opportunitiesHandler(byDate)
+    );
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: 0 },
+        mutations: { gcTime: 0 },
+      },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <LiveItineraryPage tripId={TRIP_ID} today={TODAY} />
+      </QueryClientProvider>
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
+        exact: true,
+      })
+    );
+    return { client, fake };
+  }
+
+  it.each([
+    ['직접 수정 저장 — 응답을 캐시에 직접 쓴다', 'write'],
+    ['재계획 확정 — 일정을 무효화해 다시 받는다', 'refetch'],
+  ] as const)(
+    'O14 일정이 바뀌면(%s) 같은 허브가 기회를 다시 받아, 방금 넣은 장소의 카드가 남지 않는다',
+    async (_label, how) => {
+      // 준비 — 광안리 해변 카드가 떠 있다.
+      const byDate: Record<string, Opportunity[]> = { [TODAY]: [VENUE] };
+      const { client, fake } = await renderHubWithClient(byDate);
+
+      // 실행 — 그 장소를 일정에 넣었다. 서버는 이제 그 장소를 기회에서 뺀다.
+      byDate[TODAY] = [];
+      const next = withVenue();
+      const key = getGetTripsTripIdItineraryQueryKey(TRIP_ID);
+      if (how === 'write') {
+        act(() => {
+          client.setQueryData(key, next);
+        });
+      } else {
+        fake.itinerary = next;
+        await act(() => client.invalidateQueries({ queryKey: key }));
+      }
+
+      // 단언 — 허브가 바뀐 일정을 그렸고(짝 앵커), 기회를 한 번 더 물어 카드가 사라졌다.
+      await waitFor(() => expect(screen.getByTestId(VENUE_SLOT)).toBeTruthy());
+      await waitFor(
+        () => expect(askedDates).toEqual([TODAY, TODAY]),
+        REFETCH_WAIT
+      );
+      await waitFor(
+        () => expect(screen.queryByTestId(CARD)).toBeNull(),
+        REFETCH_WAIT
+      );
+    }
+  );
+
+  it('O15 일정을 다시 받아도 내용이 같으면 기회를 다시 묻지 않는다 — 기회 조회는 서버가 AI 를 부르는 길이다', async () => {
+    // 준비
+    const { client } = await renderHubWithClient({ [TODAY]: [VENUE] });
+
+    // 실행 — 같은 일정으로 다시 받는다(포그라운드 복귀 재조회와 같다).
+    await act(() =>
+      client.invalidateQueries({
+        queryKey: getGetTripsTripIdItineraryQueryKey(TRIP_ID),
+      })
+    );
+
+    // 단언 — 일정은 두 번 받았지만(짝 앵커) 기회는 한 번이고, 카드는 그대로다.
+    await waitFor(() => expect(hitCount(ITINERARY_GET)).toBe(2));
+    await settle();
+    expect(askedDates).toEqual([TODAY]);
+    expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
+      exact: true,
+    });
   });
 });

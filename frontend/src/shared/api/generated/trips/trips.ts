@@ -44,11 +44,13 @@ import type {
   GetMeRecordsParams,
   GetTripsTripIdChangeLogParams,
   GetTripsTripIdItineraryRevisionsParams,
+  GetTripsTripIdOpportunitiesParams,
   GetTripsTripIdRecordsParams,
   GetTripsTripIdReplanSessionsPreparedParams,
   IntervalReportRequest,
   Itinerary,
   MustVisit,
+  OpportunityList,
   PostTripsTripIdVisitsVisitCheckIdRevertAutoParams,
   PutMemoRequest,
   ReorderPhotosRequest,
@@ -4599,6 +4601,187 @@ export const usePostTripsTripIdTriggersTriggerIdDismiss = <
     queryClient
   );
 };
+/**
+ * 허브가 보는 날짜의 **남은 동선 1km 안 등록 장소**를 AI 가 고른다(LLM 0회) — 기간이 겹치는 행사의 행사장 · 행사장 가까이 · 태그 '요즘 인기'. 서버가 그 날 끝나지 않은 슬롯과 일정의 장소를 채워 묻는다(앱은 날짜만 보낸다). **트리거도 알림도 아니다**(DEC-U4-4 · LEGAL-SA-01) — 상태가 없고 푸시·알림함에 오지 않는다. 카드의 장소는 등록 POI 뿐이고(INV-1) 시각 필드가 없으며(INV-2 — 행사 원천이 일 단위) 거리는 표시 문자열뿐이다(INV-3). 문장은 앱의 고정 템플릿이 만든다 — 서버는 재료만 준다.
+ * 여행 중(오늘 ≥ 시작)이고 날짜가 [오늘, 종료]일 때만 묻는다. 꺼짐 · 여행 전 · 범위 밖 · 남은 슬롯 없음 · AI 실패 · 계약 위반은 전부 200 빈 목록이다 — 앱은 빈 목록이면 아무것도 그리지 않는다. 404 는 소유 아님뿐이다.
+ * @summary 그 날짜의 기회 — 남은 동선 근처의 행사·요즘 인기 최대 3개(situation-awareness BR-SA-22)
+ */
+export const getTripsTripIdOpportunities = (
+  tripId: string,
+  params: GetTripsTripIdOpportunitiesParams,
+  signal?: AbortSignal
+) => {
+  return customInstance<OpportunityList>({
+    url: `/trips/${tripId}/opportunities`,
+    method: 'GET',
+    params,
+    signal,
+  });
+};
+
+export const getGetTripsTripIdOpportunitiesQueryKey = (
+  tripId: string,
+  params?: GetTripsTripIdOpportunitiesParams
+) => {
+  return [
+    `/trips/${tripId}/opportunities`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetTripsTripIdOpportunitiesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+  TError = void,
+>(
+  tripId: string,
+  params: GetTripsTripIdOpportunitiesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+        TError,
+        TData
+      >
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetTripsTripIdOpportunitiesQueryKey(tripId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTripsTripIdOpportunities>>
+  > = ({ signal }) => getTripsTripIdOpportunities(tripId, params, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: tripId !== null && tripId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetTripsTripIdOpportunitiesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTripsTripIdOpportunities>>
+>;
+export type GetTripsTripIdOpportunitiesQueryError = void;
+
+export function useGetTripsTripIdOpportunities<
+  TData = Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+  TError = void,
+>(
+  tripId: string,
+  params: GetTripsTripIdOpportunitiesParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdOpportunities>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdOpportunities<
+  TData = Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+  TError = void,
+>(
+  tripId: string,
+  params: GetTripsTripIdOpportunitiesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdOpportunities>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdOpportunities<
+  TData = Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+  TError = void,
+>(
+  tripId: string,
+  params: GetTripsTripIdOpportunitiesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 그 날짜의 기회 — 남은 동선 근처의 행사·요즘 인기 최대 3개(situation-awareness BR-SA-22)
+ */
+
+export function useGetTripsTripIdOpportunities<
+  TData = Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+  TError = void,
+>(
+  tripId: string,
+  params: GetTripsTripIdOpportunitiesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetTripsTripIdOpportunitiesQueryOptions(
+    tripId,
+    params,
+    options
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
 /**
  * 숙소 없이 만든 일정의 **방문지 무게중심**으로 권역을 추천하고, 넘겨받은 후보를 **평균 이동 거리 순**으로 매긴다(before/after 함께). 거리는 전부 **추정(직선)** 이며 소요시간은 없다(INV-3).
  * 후보 목록은 클라이언트가 `GET /stays/search` 로 얻어 넘긴다 — 숙소 검색은 C3 소유라 여기서 중개하지 않는다. 비워 보내면 권역만 돌려준다.

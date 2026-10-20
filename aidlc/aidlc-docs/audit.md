@@ -1662,3 +1662,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
+
+## Functional Design 사후 개정 — situation-awareness FE-C 구현 반영 (frontend-components §4)
+**Timestamp**: 2026-10-20T12:31:17+09:00 (작업 시점)
+**User Input**: (메인 세션 작업 — 사용자 원문이 아니다) 사용자 지시 "싹다 진행해~"(2026-10-19)에 따라 상황 감지 FE-C(허브 기회 카드) 구현 PR 에 정본 소급을 함께 싣는다.
+**AI Response**: `construction/situation-awareness/functional-design/frontend-components.md` §4 끝에 `[개정 · 2026-10-20 — 구현 반영]` 블록 1개(원문 삭제·수정 0줄) — 숨김은 날짜별 key 집합(§4.1 '`stringValue.ts`'를 이것으로 읽는다) · 트리거 목록을 모르면 고르지 않음 · 그릴 수 없는 항목 건너뜀 · 주격 조사 받침 · 허브 일정이 바뀌면 기회를 다시 받음 · 임시 자리(G-SA-12)와 × 낭독 이름 · 관찰(소비된 날씨 트리거 뒤 행사 카드 재허용 — G-SA-17 과 함께 정한다). 제품 결정 변경 없음.
+**Context**: CONSTRUCTION — situation-awareness Functional Design 사후 개정(구현 반영), 같은 PR 머지 = 승인(#1071 선례). `aidlc-state.md` 무변경.
+
+---
