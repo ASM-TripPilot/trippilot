@@ -84,6 +84,20 @@ def test_ledger_row_round_trips_verdict():
     assert sj.read_previous_verdicts(LEDGER + row + "\n") == PRIOR + [v.verdict]
 
 
+def test_same_day_rerun_counts_as_one_week():
+    import datetime as dt
+
+    m = measured()
+    v = sj.judge(m, OPEN, "bedrock", [])
+    assert v.verdict == sj.SWITCH_TO_LOCAL
+    d = dt.date(2099, 1, 4)  # 커밋된 원장의 어느 행보다 뒤 — before 필터가 그 행들을 건드리지 않게
+    two_rows_same_day = LEDGER + sj.ledger_row(d, m, "bedrock", v) + "\n" + sj.ledger_row(d, m, "bedrock", v) + "\n"
+    # 같은 날 두 행 → 한 주. 다음 주 판정이 2연속이 되지, 같은 날 재실행만으로 2연속이 되지 않는다.
+    assert sj.read_previous_verdicts(two_rows_same_day) == PRIOR + [v.verdict]
+    assert sj.read_previous_verdicts(two_rows_same_day, before=d) == PRIOR
+    assert sj.judge(m, OPEN, "bedrock", sj.read_previous_verdicts(two_rows_same_day, before=d)).action == "none"
+
+
 VALUES = """ai:
   replicas: 1
 embedding:
