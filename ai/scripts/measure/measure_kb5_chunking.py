@@ -30,7 +30,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "src"))
 from trippilot.poi_curation.chunking import chunk_document, split_sentences  # noqa: E402
 
 _ROOT = pathlib.Path(__file__).resolve().parents[2]
-_CORPUS = _ROOT / "data" / "place_corpus_wiki.jsonl.gz"
+_CORPUS = _ROOT / (os.environ.get("KB5_CORPUS") or "data/place_corpus_wiki.jsonl.gz")  # 개요: KB5_CORPUS=data/place_corpus_overview.jsonl.gz
 _BASELINE_CHARS = 160  # 종전 place_knowledge.MAX_DOC_CHARS
 
 # (트리거, 사유 한국어, 사용자 말) — rag._situation_query 와 같은 꼴: "{kind} {reason} 상황 {말}"

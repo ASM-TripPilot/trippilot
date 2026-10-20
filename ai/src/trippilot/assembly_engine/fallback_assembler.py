@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 from typing import Iterable, Mapping, Sequence
 
 from trippilot.assembly_engine.config import (
+    LAST_START_MIN,
     END_NEAR_WEIGHT,
     RAIN_INDOOR,
     RAIN_OUTDOOR,
@@ -43,12 +44,6 @@ from trippilot.domain.itinerary import (
     VisitSlot,
 )
 from trippilot.domain.poi import OpenHour, Poi, PoiCategory, counts_as_food, open_windows_on
-
-
-def _at(day, template: datetime) -> datetime:
-    """day 날짜에 template의 시각(time-of-day)·tz를 적용."""
-    return datetime(day.year, day.month, day.day,
-                    template.hour, template.minute, tzinfo=template.tzinfo)
 
 
 def placed_fixed_blocks(
@@ -212,7 +207,8 @@ class RuleFallbackAssembler:
                 if fb_poi is not None:
                     cat_count[fb_poi.category] += 1
                     cap_count.update(k for k, _ in self._cfg.daily_caps(fb_poi))
-            day_end = _at(day, problem.window_on(day).end)
+            day_end = problem.window_on(day).end
+            next_midnight = problem.window_on(day).start.replace(hour=0, minute=0) + timedelta(days=1)
             windows = (self._cfg.lunch_window_min, self._cfg.dinner_window_min)
             meal_done = [False] * len(windows)
             # ①′ 시각 없는 필수 방문 (TRIP-1249) — 고정 블록 사이 틈에서 가장 이른 가능 시각.
@@ -301,7 +297,7 @@ class RuleFallbackAssembler:
                 last = slots[k] if k >= 0 else None
                 nxt = slots[k + 1] if k + 1 < len(slots) else None
                 ref = last.end_at if last is not None \
-                    else _at(day, problem.window_on(day).start)
+                    else problem.window_on(day).start
                 if not_before is not None and ref < not_before:
                     ref = not_before  # 식사 창 판정도 실제로 놓일 수 있는 시각 기준
                 ref_mod = ref.hour * 60 + ref.minute
@@ -366,7 +362,7 @@ class RuleFallbackAssembler:
                         continue
                     stay = stay_for(poi.category, problem.pace)
                     if last is None:
-                        depart = _at(day, problem.window_on(day).start)
+                        depart = problem.window_on(day).start
                         travel_min = 0
                         if problem.anchor is not None:
                             travel_min = self._est.estimate(
@@ -383,8 +379,8 @@ class RuleFallbackAssembler:
                         start = max(start, not_before + timedelta(
                             minutes=anchor_minutes(problem, poi, self._est)))
                     end = start + timedelta(minutes=stay)
-                    if end > day_end:
-                        continue  # day window 초과 (HC4)
+                    if end > day_end or start >= next_midnight:
+                        continue  # day window 초과 (HC4) — 자정 넘는 창에서도 시작은 그날 안
                     if not open_hours_ok(poi, start, end, problem.holidays):
                         continue  # 영업시간 (HC1 — 검증과 같은 함수, 공휴일 포함)
                     # 고정 블록과의 충돌: 말단 삽입이라 뒤에 오는 고정 블록만 위험
@@ -453,13 +449,13 @@ class RuleFallbackAssembler:
         건너뛴다(0분 이동 금지, TRIP-1177). `after` 는 순서 하한(앞 필수 방문 끝) — 이동은 틈의 하한이
         이미 더하므로 시각 그대로 건다(하한처럼 앵커 이동을 붙이지 않는다).
         """
-        base = _at(day, problem.window_on(day).start).replace(hour=0, minute=0)
+        base = problem.window_on(day).start.replace(hour=0, minute=0)
 
         def mins(dt: datetime) -> int:
             return int((dt - base).total_seconds() // 60)
 
-        ws = mins(_at(day, problem.window_on(day).start))
-        we = mins(_at(day, problem.window_on(day).end))
+        ws = mins(problem.window_on(day).start)
+        we = mins(problem.window_on(day).end)
         floor = (mins(not_before) + anchor_minutes(problem, poi, self._est)
                  if not_before is not None else None)
         if after is not None:
@@ -487,7 +483,7 @@ class RuleFallbackAssembler:
         todays = open_windows_on(poi, day, problem.holidays)  # 그 날 창 — 검증과 같은 함수(공휴일 포함)
         for lo_r, hi_r in ranges:
             for lb, ub in gaps:
-                t = self._earliest_open(max(lb, lo_r), min(ub, hi_r) - stay, stay, todays)
+                t = self._earliest_open(max(lb, lo_r), min(min(ub, hi_r) - stay, LAST_START_MIN), stay, todays)
                 if t is not None:
                     return base + timedelta(minutes=t)
         return None
