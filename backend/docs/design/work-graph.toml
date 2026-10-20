@@ -4557,7 +4557,7 @@ ticket = "TRIP-1467"
 title = "[BE] 라이브 일정 화면 BFF — 만들지 않는다(2026-10-21 사용자 결정: 앱 진입이 이미 왕복 한 번)"
 status = "dropped"
 touches = [
-  # 착수 전 티켓 원문에서 뽑은 예상이다 — 접어서 develop 에 들어간 diff 는 없다(닫힌 #1494 의 실제 변경은 app views·openapi·IT 였다).
+  # 착수 전 티켓 원문에서 뽑은 예상이다 — 접어서 develop 에 들어간 diff 는 없다(닫힌 #1494 의 실제 변경은 app views 의 컨트롤러·단위 테스트, ArchitectureRulesTest, openapi, IT 둘이었다).
   "backend/docs/design/openapi.yaml",
   "backend/app/src/main/kotlin/com/trippilot/app/web",
   "backend/app/src/test/kotlin/com/trippilot/app/web",
@@ -4582,6 +4582,8 @@ note = """
 받아 두어, 라이브 첫 로딩은 지금도 왕복 한 번이다. 두 번 왕복은 드문 진입 셋(이미 반영된 Plan-B 알림 → 허브,
 도우미 이력의 다른 여행 OPEN_LIVE, 외부 딥링크)뿐이고, 그것도 프론트만으로 같은 효과를 낸다 — 트리거 조회의
 active 게이트를 풀고 그날 방문을 미리 받기. 잇는 곳: 그 프론트 제안은 TRIP-1467 댓글(프론트 몫, 백엔드 노드 없음).
+되살릴 조건: 프론트 안을 넣은 뒤에도 캐시 없는 진입에서 '진입 → 트리거 칩' 시간이 문제로 측정되거나, 진입 화면 캐시
+경로에서도 라이브 첫 화면의 두 번째 왕복이 생기면 다시 연다 — 브랜치 `feat/TRIP-1467-live-view-bff` 에서 집는다.
 """
 
 [[nodes]]
