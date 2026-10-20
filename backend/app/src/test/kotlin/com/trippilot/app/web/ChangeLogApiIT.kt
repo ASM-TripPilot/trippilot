@@ -24,7 +24,9 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.web.client.RestClient
+import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 
@@ -44,6 +46,7 @@ class ChangeLogApiIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var accessTokenIssuer: AccessTokenIssuer
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var changeLog: ChangeLogFacade
+    @Autowired private lateinit var jdbc: JdbcTemplate
 
     private val json = ObjectMapper()
     private val now = Instant.parse("2026-08-01T00:00:00Z")
@@ -200,5 +203,49 @@ class ChangeLogApiIT : AbstractPostgresIntegrationTest() {
         shouldThrow<ResourceNotFound> {
             changeLog.findTimeline(newAccount().first, UUID.fromString(trip), 100)
         }
+    }
+
+    /**
+     * 저장 계약과 모양이 다른 옛 행(TRIP-1476 B·H). 이력은 append-only 라 고칠 수 없으므로, 한 행이 그 여행의
+     * 타임라인 전체를 영구히 500 으로 만들면 안 된다. 못 읽는 조각만 버리고 나머지는 돌려준다.
+     *
+     * 실 DB 로만 본다 — 최상위가 객체가 아닌 jsonb 는 어댑터에 닿기 전 **Hibernate 가 엔티티를 적재하는 순간** 터졌다(H).
+     * JPA 대역은 그 층을 거치지 않는다. 앱 롤은 INSERT 만 가지므로 깨진 행은 INSERT 로 만든다.
+     */
+    @Test
+    fun `모양이 깨진 옛 스냅숏이 있어도 타임라인은 200 이고 읽히는 조각만 돌려준다`() {
+        val (accountId, token) = newAccount()
+        val trip = tripWithItinerary(token)
+        val poi = poiId(token)
+        changeLog.append(AppendChangeLog(UUID.fromString(trip), "system", ChangeSourceType.PLAN_B, "성한 행", snapshot(poi, "10:00"), snapshot(poi, "14:00")))
+        val good = """{"poiId":"$poi","startAt":"10:00","endAt":"11:00","isFixed":false,"endsNextDay":false}"""
+        fun insertRaw(reason: String, before: String, after: String, at: String) = jdbc.update(
+            "INSERT INTO change_log_entry (trip_id, actor, source_type, reason, before_snapshot, after_snapshot, at) " +
+                "VALUES (?::uuid, 'system', 'MANUAL', ?, ?::jsonb, ?::jsonb, ?)",
+            trip, reason, before, after, Timestamp.from(Instant.parse(at)),
+        )
+        insertRaw("최상위가 객체 아님", "[]", "\"x\"", "2000-01-03T00:00:00Z")
+        insertRaw("날이 객체 아님", """{"days":["x"]}""", "null", "2000-01-02T00:00:00Z")
+        insertRaw(
+            "슬롯이 객체 아님",
+            """{"days":[{"date":"2026-08-11","slots":[1,$good]}]}""",
+            """{"days":[3,{"date":"2026-08-12","slots":[]}]}""",
+            "2000-01-01T00:00:00Z",
+        )
+
+        val (rc, body) = call(HttpMethod.GET, "/api/v1/trips/$trip/change-log", token)
+        rc shouldBe 200
+        body["entries"].map { it["reason"].asText() } shouldBe listOf("성한 행", "최상위가 객체 아님", "날이 객체 아님", "슬롯이 객체 아님")
+        body["entries"][0]["after"]["days"][0]["slots"][0]["startAt"].asText() shouldBe "14:00:00"
+
+        // 아카이브(U5 TripRecordService)가 읽는 모듈 경계 조회도 같은 읽기를 지난다.
+        val entries = changeLog.findTimeline(accountId, UUID.fromString(trip), 100).associateBy { it.reason }
+        entries.getValue("최상위가 객체 아님").before.days shouldBe emptyList()
+        entries.getValue("최상위가 객체 아님").after.days shouldBe emptyList()
+        entries.getValue("날이 객체 아님").before.days shouldBe emptyList()
+        entries.getValue("날이 객체 아님").after.days shouldBe emptyList()
+        val sliced = entries.getValue("슬롯이 객체 아님")
+        sliced.before.days.single().slots.map { it.poiId } shouldBe listOf(UUID.fromString(poi))
+        sliced.after.days.map { it.date } shouldBe listOf(LocalDate.parse("2026-08-12"))
     }
 }
