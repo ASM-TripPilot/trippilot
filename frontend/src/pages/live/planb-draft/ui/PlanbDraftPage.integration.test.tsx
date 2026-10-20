@@ -123,13 +123,19 @@ jest.mock('../model/useIncludedPlaceName', () => ({
 
 // 대안 없음 → [내일 일정 다시 짜기] — 세션 시작 seam(`useStartReplan`, 허브·i04 와 같은 래퍼).
 // 페이지가 `{ tripId, data }` + onSuccess 로 부른다. 기본은 대기·실패 없음.
+// 실패의 오류 객체(`error`)까지 싣는다 — 지난 날 세션의 재요청 409 를 상태 코드로 가른다.
 const mockStartMutate = jest.fn();
-const mockStart = { isPending: false, isError: false };
+const mockStart: { isPending: boolean; isError: boolean; error: unknown } = {
+  isPending: false,
+  isError: false,
+  error: null,
+};
 jest.mock('@/features/request-replan/model/useStartReplan', () => ({
   useStartReplan: () => ({
     mutate: mockStartMutate,
     isPending: mockStart.isPending,
     isError: mockStart.isError,
+    error: mockStart.error,
   }),
 }));
 
@@ -408,6 +414,7 @@ beforeEach(() => {
   mockStartMutate.mockClear();
   mockStart.isPending = false;
   mockStart.isError = false;
+  mockStart.error = null;
   mockSession.data = undefined;
   mockItinerary = undefined;
   mockDiff.state = 'ok';
@@ -1463,6 +1470,98 @@ describe('🔴 실패 [다시 시도] — 같은 입력·같은 알림으로 바
       params: { tripId: TRIP_ID, sessionId: 's10', includePoiId: 'poi-sky' },
     });
   });
+});
+
+/**
+ * 지난 날 세션(날짜 < 오늘 KST)의 실패 [다시 시도]는 같은 날짜로 다시 열어 서버가 늘 409(지난 날짜는 다시 짤 수 없다)다.
+ * 그때 "잠시 후 다시 시도해 주세요"는 사실과 다르다 — 종전 i04 경로가 같은 409 에 보이던 날짜 안내로 가른다.
+ * 버튼·얼굴 구성은 그대로다. 오늘 세션의 409(경합)·지난 날의 5xx 는 종전 시작 실패 문장이다.
+ * 닿는 길: 실패 얼굴을 자정 넘겨 열어 둔 채 [다시 시도].
+ */
+describe('🔴 지난 날 세션의 실패 [다시 시도] — 409 면 i04 와 같은 날짜 안내 (다시 눌러도 같은 거절)', () => {
+  // KST 2026-06-12 10:00 — 세션 날짜 06-11 은 어제다.
+  const NEXT_MORNING = new Date('2026-06-12T01:00:00Z');
+  // 서버가 실제로 내는 모양(ErrorResponse 봉투 · ReplanSessionService) — 둘 다 일반 CONFLICT 다(코드로는 못 가른다).
+  const conflict409 = (message: string) => ({
+    isAxiosError: true,
+    response: { status: 409, data: { error: { code: 'CONFLICT', message } } },
+  });
+  const PAST_DAY_409 = conflict409('지난 날짜는 다시 짤 수 없습니다.');
+  const RACE_409 = conflict409(
+    '다른 재계획이 막 시작됐어요. 다시 시도해 주세요.'
+  );
+  const page = () => <PlanbDraftPage tripId={TRIP_ID} sessionId={SESSION_ID} />;
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  /** 실패 세션에서 [다시 시도] → 서버가 `error` 로 거절 → 다시 그린다. */
+  function retryRejectedWith(targetDate: string, error: unknown): void {
+    jest.useFakeTimers({ now: NEXT_MORNING });
+    mockSession.data = session('FAILED', { targetDate, scope: 'FULL_DAY' });
+    const { rerender } = render(page());
+    fireEvent.press(screen.getByText('다시 시도'));
+    const [, options] = mockStartMutate.mock.calls[0] as [
+      unknown,
+      { onError: (error: unknown) => void },
+    ];
+    mockStart.isError = true;
+    mockStart.error = error;
+    act(() => options.onError(error));
+    rerender(page());
+  }
+
+  it('K6 어제 세션이 409 면 부제가 i04 날짜 안내다 — "잠시 후 다시 시도" 없음 · 버튼 둘은 그대로', () => {
+    retryRejectedWith('2026-06-11', PAST_DAY_409);
+
+    // 앵커 — 그 날짜 그대로 다시 열었다(오늘로 바꿔 보내지 않는다, INV-4). 서버가 지난 날로 거절하는 요청이다.
+    const [variables] = mockStartMutate.mock.calls[0] as [
+      { data: { targetDate?: string } },
+    ];
+    expect(variables.data.targetDate).toBe('2026-06-11');
+    expect(screen.getByTestId('planb-draft-notice-title')).toHaveTextContent(
+      '다시 짜지 못했어요'
+    );
+    expect(
+      screen.getByTestId('planb-draft-notice-description')
+    ).toHaveTextContent(
+      '아직 일정이 없는 날이거나 여행 기간이 아니라서 AI가 다시 짤 수 없어요'
+    );
+    expect(screen.queryByText(/잠시 후 다시 시도/)).toBeNull();
+    // 얼굴 구성은 그대로 — [직접 수정]·[다시 시도] 두 버튼, 새 버튼·이동 없음.
+    expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
+      '직접 수정'
+    );
+    expect(screen.getByTestId('sheet-cta-button-1')).toHaveTextContent(
+      '다시 시도'
+    );
+    expect(screen.getByTestId('sheet-cta-button-1')).toBeEnabled();
+    expect(screen.queryByTestId('sheet-cta-button-2')).toBeNull();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['오늘 세션의 409(경합)', '2026-06-12', RACE_409],
+    [
+      '어제 세션의 500',
+      '2026-06-11',
+      { isAxiosError: true, response: { status: 500, data: {} } },
+    ],
+  ])(
+    'K7 %s → 종전 시작 실패 문장이다 — 날짜 탓으로 돌리지 않는다',
+    (_name, targetDate, error) => {
+      retryRejectedWith(targetDate, error);
+
+      expect(
+        screen.getByTestId('planb-draft-notice-description')
+      ).toHaveTextContent(
+        '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요'
+      );
+      expect(screen.queryByText(/아직 일정이 없는 날/)).toBeNull();
+    }
+  );
 });
 
 // TRIP-1289 — 옛 P8 은 APPLIED·CANCELED 도 "렌더 없음"으로 굳혀 두었다(실기 빈 화면의 원인, 01b). 두 행을 빼고

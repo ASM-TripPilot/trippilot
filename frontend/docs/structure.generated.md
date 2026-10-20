@@ -918,7 +918,7 @@
 - `src/pages/live/planb-draft/index.ts`  →  PlanbSolvingPage · PlanbDraftPage
 
 ## src/pages/live/planb-draft/model/
-- `src/pages/live/planb-draft/model/draftNotice.ts`  →  isStaleApplyError · staleRetryRequest · reopenRequestParams · isIncludeMissing · includeMissingText
+- `src/pages/live/planb-draft/model/draftNotice.ts`  →  isStaleApplyError · staleRetryRequest · isPastDayRetryConflict · reopenRequestParams · isIncludeMissing · includeMissingText
 - `src/pages/live/planb-draft/model/replanFromInstant.ts`  →  readFromInstant
 - `src/pages/live/planb-draft/model/replanPollCap.ts`  →  REPLAN_POLL_CAP_MS · replanCapDeadlineMs · isReplanPollCapped
 - `src/pages/live/planb-draft/model/replanState.ts`  →  ReplanState · resolveReplanState

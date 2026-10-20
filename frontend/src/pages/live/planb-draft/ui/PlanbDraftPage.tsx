@@ -18,6 +18,7 @@ import { useApplyReplan } from '@/features/apply-replan';
 import {
   includeMissingText,
   isIncludeMissing,
+  isPastDayRetryConflict,
   isStaleApplyError,
   reopenRequestParams,
   staleRetryRequest,
@@ -51,7 +52,8 @@ import { ReplanNoticeFace } from './ReplanNoticeFace';
  *                    자유 입력·범위·날짜)을 시드로, 같은 트리거에 이어 i04 를 연다(`reopenRequestParams` — 라우트가 시드를
  *                    보면 게이트를 지나지 않는다).
  *  - 'failed'     → variant 'failed'(E3 — 다른 화면으로 튕기지 않고 같은 자리에 안내, INV-4). [다시 시도]는 같은 입력·
- *                    같은 트리거로 바로 다시 짠다(아래 [새 대안 보기]와 같은 `retrySameInput` — 실패면 부제를 시작 실패 문장으로).
+ *                    같은 트리거로 바로 다시 짠다(아래 [새 대안 보기]와 같은 `retrySameInput` — 실패면 부제를 시작 실패 문장으로,
+ *                    지난 날 세션이 409 로 막히면 i04 와 같은 날짜 안내로 — 다시 눌러도 같은 거절이다).
  *                    빈 i04 를 열면 알림과 끊겨 사유를 다시 골라야 하고, 적용해도 알약이 남는다(사용자 결정 2026-10-20).
  *  - 'solving'·미도착 → null. data 없는 조회 실패만 오류 얼굴([다시 시도]=재조회, [나가기]) — TRIP-1277 AC12.
  *    재조회 중에도 오류 얼굴을 지키고 [다시 시도]만 잠근다(TRIP-1293 — 판정은 실패 이력 `errorUpdateCount`).
@@ -361,6 +363,8 @@ export function PlanbDraftPage({
         staleRetryPending={startReplan.isPending}
         staleRetryFailed={startReplan.isError}
         retryFailed={startReplan.isError}
+        // 지난 날 세션은 같은 날짜로 다시 열어 서버가 늘 409 다 — '잠시 후 다시 시도' 대신 i04 와 같은 날짜 안내.
+        retryPastDay={isPastDayRetryConflict(startReplan.error, data, today)}
         includeMissingText={
           missingPoiId !== null && includedName !== undefined
             ? includeMissingText(includedName)

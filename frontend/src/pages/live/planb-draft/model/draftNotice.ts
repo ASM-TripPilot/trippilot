@@ -15,6 +15,7 @@ import type {
  *    코드로 가른다(코드 없는 409·5xx·네트워크는 기존 "변경을 반영하지 못했어요").
  *  - [새 대안 보기]: 같은 입력(사유·지시·제외·범위·날짜·트리거)으로 새 세션 봉투. 시각을 다시 추정하지 않고 서버가 다시 짠다.
  *    i06 실패 얼굴·i05 8분 상한 얼굴의 [다시 시도]도 같은 봉투다(사용자 결정 2026-10-20 — 알림과 끊긴 빈 요청 화면 대신).
+ *    그 재요청이 지난 날이라 막힌 409 면 부제를 '잠시 후 다시 시도' 대신 날짜 안내로 가른다(다시 눌러도 같은 거절이다).
  *  - [조건 바꿔 다시 짜기](대안 없음): 같은 입력을 시드로, 같은 트리거에 이어 요청 화면(i04)을 여는 라우트 쿼리.
  *  - 미포함 안내: 넣으려던 POI(`includePoiId`)가 초안 `after` 에 없으면 `‘{장소}’은 이번 안에 넣지 못했어요.`(INV-4).
  */
@@ -48,6 +49,24 @@ export function staleRetryRequest(
     triggerId: session.triggerId ?? null,
     excludedPoiIds: session.excludedPoiIds ?? [],
   });
+}
+
+/**
+ * 같은 입력 재요청의 409 가 지난 날이라서인가 — 지난 날 세션(날짜 < 오늘 KST)은 같은 날짜로 다시 열어 서버가 늘 409(지난
+ * 날짜는 다시 짤 수 없다)다. 오류 코드는 일반 `CONFLICT` 라 상태 코드와 세션 날짜로 가른다(i04 도 409 를 상태 코드로만 본다).
+ * 오늘·앞날·날짜 없음의 409 는 날짜 탓으로 돌리지 않는다 — 경합 409(다른 재계획이 막 시작됨)는 다시 누르면 된다.
+ */
+export function isPastDayRetryConflict(
+  error: unknown,
+  session: ReplanSession,
+  today: string
+): boolean {
+  return (
+    isAxiosError(error) &&
+    error.response?.status === 409 &&
+    !!session.targetDate &&
+    session.targetDate < today
+  );
 }
 
 /**

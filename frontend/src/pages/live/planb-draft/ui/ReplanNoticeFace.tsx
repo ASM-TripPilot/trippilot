@@ -12,12 +12,16 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  *    두 오류 얼굴 모두 `retrying` 이면 [다시 시도]만 잠근다(TRIP-1293 — 재조회 중 연타 피드백).
  *  - `solving-capped` — TRIP-1363 · 진행 화면이 8분 상한(`replanPollCap`)에 닿았다. 폴링은 이미 멈췄다.
  *    [다시 시도]=같은 입력으로 새 세션(페이지 몫 — 요청 중 `retrying` 이면 잠그고, 실패 `retryFailed` 면 부제를 시작 실패
- *    문장으로 바꾼다 — 새 버튼·새 얼굴 없이 INV-4) · [홈으로]. 디자인 미확정 — 기존 오류 얼굴(StateNotice)을 재사용한다.
+ *    문장으로, 지난 날이라 막힌 409(`retryPastDay`)면 i04 와 같은 날짜 안내로 바꾼다 — 새 버튼·새 얼굴 없이 INV-4) · [홈으로].
+ *    디자인 미확정 — 기존 오류 얼굴(StateNotice)을 재사용한다.
  *  - `draft-closed` — TRIP-1289 · 재계획안 화면인데 세션이 이미 끝났다. `solving-closed` 와 문구·버튼이 같고
  *    testID 만 다르다(어느 화면의 얼굴인지 실기·테스트에서 갈라 읽는다).
  *
  * Figma 프레임이 없어 문구는 이 사이클이 정한 값이다(h07 error 의 문구·버튼 위계만 참고). 모양은
  * `LiveItineraryPage` 의 StateNotice 얼굴과 같다. 부제엔 "다시 시도"를 넣지 않는다 — 버튼과 겹쳐 읽힌다.
+ * 예외는 `solving-capped` 의 재요청 실패 부제(`RETRY_FAILED`) 하나다 — 이 얼굴이 지은 문장이 아니라 i04 시작 실패 문장을
+ * 그대로 옮겨 쓴다(i06 [새 대안 보기]·실패 [다시 시도]와 같은 문장). 같은 실패를 화면마다 다른 말로 하지 않고, 프레임이
+ * 없는 표면이라(G-SA-12) 새 문장을 짓지 않는다.
  * 소요시간·경과 숫자는 어디에도 없다(INV-3).
  */
 
@@ -39,6 +43,10 @@ const LOAD_FAILED = {
 // 새 세션 요청 실패 — i04 시작 실패·i06 [새 대안 보기] 실패와 같은 문장이다.
 const RETRY_FAILED =
   '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요';
+// 지난 날이라 막힌 새 세션 요청(409) — 다시 눌러도 같은 거절이라 '잠시 후 다시 시도'라고 하지 않는다. i04 가 같은 409 에
+// 보이는 날짜 안내(`NO_ITINERARY_DAY_TEXT`)와 같은 문장이다.
+const RETRY_PAST_DAY =
+  '아직 일정이 없는 날이거나 여행 기간이 아니라서 AI가 다시 짤 수 없어요';
 
 export interface ReplanNoticeFaceProps {
   kind: ReplanNoticeKind;
@@ -48,6 +56,8 @@ export interface ReplanNoticeFaceProps {
   retrying?: boolean;
   /** `solving-capped` — 새 세션 요청이 실패했다. 부제를 시작 실패 문장으로 바꾼다(INV-4). */
   retryFailed?: boolean;
+  /** `solving-capped` — 그 실패가 지난 날이라 막힌 409 다(다시 눌러도 같다). 부제를 i04 와 같은 날짜 안내로 바꾼다. */
+  retryPastDay?: boolean;
   /** 서버 호출 없이 나가기(`solving-capped` 에선 [홈으로]). */
   onLeave: () => void;
 }
@@ -57,6 +67,7 @@ export function ReplanNoticeFace({
   onRetry,
   retrying = false,
   retryFailed = false,
+  retryPastDay = false,
   onLeave,
 }: ReplanNoticeFaceProps): ReactElement {
   const notice =
@@ -64,7 +75,11 @@ export function ReplanNoticeFace({
       ? {
           testID: 'planb-solving-capped',
           title: '생성이 늦어지고 있어요',
-          description: retryFailed ? RETRY_FAILED : '원래 일정은 그대로예요',
+          description: retryFailed
+            ? retryPastDay
+              ? RETRY_PAST_DAY
+              : RETRY_FAILED
+            : '원래 일정은 그대로예요',
           actions: [
             {
               testID: 'planb-solving-capped-retry',

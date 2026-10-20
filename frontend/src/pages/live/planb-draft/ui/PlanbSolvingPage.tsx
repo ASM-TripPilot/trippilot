@@ -13,7 +13,10 @@ import { useLiveItinerary } from '@/features/execution';
 import { deriveVisitProgress } from '@/entities/itinerary-slot';
 import { visitedLabelByPoiId } from '@/entities/itinerary-slot';
 import { formatCoPickDayHeader } from '@/features/itinerary';
-import { staleRetryRequest } from '../model/draftNotice';
+import {
+  isPastDayRetryConflict,
+  staleRetryRequest,
+} from '../model/draftNotice';
 import { readFromInstant } from '../model/replanFromInstant';
 import { replanCapDeadlineMs } from '../model/replanPollCap';
 import {
@@ -75,6 +78,7 @@ import { ReplanSolvingView } from './ReplanSolvingView';
  *    제외·범위·날짜·트리거 그대로) → 성공하면 새 세션의 이 화면으로 replace(열린 세션은 새 요청이 닫는다, INV-U4-06).
  *    알림과 끊긴 빈 요청 화면을 열면 사유를 다시 골라야 하고, 적용해도 알약이 남고, 전날 창에선 막다른 길이다(사용자 결정
  *    2026-10-20). 재누름은 ref 로 1회(실패에서만 푼다), 요청 중엔 버튼 잠금, 실패면 부제가 시작 실패 문장이 된다(INV-4).
+ *    지난 날 세션(자정을 넘겨 상한에 닿았다)이 409 로 막히면 부제는 i04 와 같은 날짜 안내다 — 다시 눌러도 같은 거절이다.
  *    응답을 한 번도 못 받아 입력을 모르면 종전대로 요청 화면(오늘)을 연다.
  *  - 오류·종료 얼굴과 ‹ 확인의 나가기 연타는 ref 로 막는다(같은 틱 두 번째 누름은 옛 state 를 본다).
  *    그 ref 가 "나가는 중" 신호라, 선 뒤의 뒤로는 확인 없이 통과한다.
@@ -136,6 +140,14 @@ export function PlanbSolvingPage({
         onRetry={retry}
         retrying={startReplan.isPending}
         retryFailed={startReplan.isError}
+        retryPastDay={
+          capped !== null &&
+          isPastDayRetryConflict(
+            startReplan.error,
+            capped,
+            seoulDate(new Date())
+          )
+        }
         onLeave={() => router.replace('/(tabs)' as Href)}
       />
     );

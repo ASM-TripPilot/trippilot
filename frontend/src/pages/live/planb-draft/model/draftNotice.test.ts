@@ -6,6 +6,7 @@ import type { ReplanDiffSlot, ReplanSession } from '@/shared/api/index.schemas';
 import {
   includeMissingText,
   isIncludeMissing,
+  isPastDayRetryConflict,
   isStaleApplyError,
   reopenRequestParams,
   staleRetryRequest,
@@ -19,6 +20,8 @@ import {
  *    — 409 를 일반 실패로 접지도, 일반 실패를 낡음으로 부풀리지도 않는다.
  *  - [새 대안 보기] = 같은 입력(사유·지시·제외·범위·날짜·트리거·자유 입력)으로 새 세션 봉투. 날짜는 오늘이면 싣지 않고
  *    (생략 = 오늘), 오늘이 아니면 그 날 + FULL_DAY. 출발 좌표는 싣지 않는다 — 서버 사다리가 그때 다시 정한다.
+ *  - 그 재요청이 지난 날이라 막혔다 = 지난 날 세션(날짜 < 오늘) **이고** 409 일 때만. 오늘·앞날·날짜 없음의 409(경합 등)와
+ *    지난 날의 5xx·네트워크는 아니다 — 다시 눌러 볼 일을 날짜 탓으로 돌리지 않는다.
  *  - 미포함 = 넣으려던 POI 가 초안 `after` 의 어느 slotKey 에도 없을 때. 안내 조사는 장소명 끝 글자 받침에 맞춘다(은/는),
  *    한글이 아니면 `은(는)` 병기, 이름을 모르면 이름 없는 문장.
  *  - [조건 바꿔 다시 짜기](대안 없음) = 같은 입력을 시드로, 같은 트리거에 이어 여는 i04 라우트 쿼리. 시드 세 키는 비어도
@@ -130,6 +133,50 @@ describe('🔴 staleRetryRequest — 같은 입력으로 새 세션', () => {
       freeText: '바다 보이는 곳',
       triggerId: null,
     });
+  });
+});
+
+describe('🔴 isPastDayRetryConflict — 지난 날 세션의 재요청 409 만 날짜 탓', () => {
+  // 서버의 지난 날 거절(ReplanSessionService.resolveTargetDate)은 일반 CONFLICT 다 — 경합 409 와 코드가 같다.
+  const conflict = axios409('CONFLICT');
+  const TODAY = '2026-10-19';
+
+  it('D1 어제 세션 + 409 → 지난 날이라 막혔다', () => {
+    expect(
+      isPastDayRetryConflict(
+        conflict,
+        session({ targetDate: '2026-10-18' }),
+        TODAY
+      )
+    ).toBe(true);
+  });
+
+  it.each([
+    ['오늘', '2026-10-19'],
+    ['내일', '2026-10-20'],
+    ['날짜 없음(옛 서버)', ''],
+  ])(
+    'D2 %s 세션의 409 는 날짜 탓이 아니다(경합 409 는 다시 누르면 된다)',
+    (_name, targetDate) => {
+      expect(
+        isPastDayRetryConflict(conflict, session({ targetDate }), TODAY)
+      ).toBe(false);
+    }
+  );
+
+  it.each([
+    ['500', { isAxiosError: true, response: { status: 500, data: {} } }],
+    ['네트워크(응답 없음)', { isAxiosError: true, message: 'Network Error' }],
+    ['axios 아님', new Error('409')],
+    ['없음', null],
+  ])('D3 어제 세션 + %s → 날짜 탓 아님', (_name, error) => {
+    expect(
+      isPastDayRetryConflict(
+        error,
+        session({ targetDate: '2026-10-18' }),
+        TODAY
+      )
+    ).toBe(false);
   });
 });
 

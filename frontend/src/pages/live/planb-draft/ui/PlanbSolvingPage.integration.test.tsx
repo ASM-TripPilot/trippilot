@@ -205,13 +205,19 @@ jest.mock('@/features/execution/model/useLiveItinerary', () => ({
 
 // 8분 상한 [다시 시도] — 같은 입력으로 새 세션(seam `useStartReplan`, i04·i06 과 같은 래퍼). 페이지가 `{ tripId, data }` +
 // onSuccess·onError 로 부른다. 기본은 대기·실패 없음. (목하지 않으면 실물이 위 trips 목 팩토리에 없는 POST 훅을 불러 터진다.)
+// 실패의 오류 객체(`error`)까지 싣는다 — 지난 날 세션의 재요청 409 를 상태 코드로 가른다.
 const mockStartMutate = jest.fn();
-const mockStart = { isPending: false, isError: false };
+const mockStart: { isPending: boolean; isError: boolean; error: unknown } = {
+  isPending: false,
+  isError: false,
+  error: null,
+};
 jest.mock('@/features/request-replan/model/useStartReplan', () => ({
   useStartReplan: () => ({
     mutate: mockStartMutate,
     isPending: mockStart.isPending,
     isError: mockStart.isError,
+    error: mockStart.error,
   }),
 }));
 
@@ -379,6 +385,7 @@ beforeEach(() => {
   mockStartMutate.mockClear();
   mockStart.isPending = false;
   mockStart.isError = false;
+  mockStart.error = null;
   mockSessionRefetch.mockClear();
   mockVisitsState = 'ok';
   mockStatus = 'SOLVING';
@@ -1864,6 +1871,92 @@ describe('🔴 TRIP-1363 · 재계획 세션 8분 상한 — 늦어지고 있어
       pathname: '/trips/[tripId]/planb/solving',
       params: { tripId: TRIP_ID, sessionId: 's10', includePoiId: 'poi-sky' },
     });
+  });
+
+  // 지난 날 세션(날짜 < 오늘 KST)의 [다시 시도]는 같은 날짜로 다시 열어 서버가 늘 409(지난 날짜는 다시 짤 수 없다)다 —
+  // "잠시 후 다시 시도"는 사실과 다르니 종전 i04 경로가 같은 409 에 보이던 날짜 안내로 가른다. 버튼·얼굴 구성은 그대로다.
+  // 닿는 길: 자정 앞에 시작한 세션이 자정을 넘겨 8분 상한에 닿는다. 세션 날짜는 fromInstant 의 KST 날짜다.
+  // KST 2026-06-11 23:55 시작 — 상한에 닿은 00:05 엔 세션 날짜 06-11 이 어제다.
+  const BEFORE_MIDNIGHT = '2026-06-11T14:55:00Z';
+  // KST 2026-06-12 09:50 시작 — 상한에 닿은 10:00 에도 세션 날짜 06-12 가 오늘이다.
+  const THIS_MORNING = '2026-06-12T00:50:00Z';
+  // 서버가 실제로 내는 모양(ErrorResponse 봉투 · ReplanSessionService) — 둘 다 일반 CONFLICT 다(코드로는 못 가른다).
+  const conflict409 = (message: string) => ({
+    isAxiosError: true,
+    response: { status: 409, data: { error: { code: 'CONFLICT', message } } },
+  });
+  const PAST_DAY_409 = conflict409('지난 날짜는 다시 짤 수 없습니다.');
+  const RACE_409 = conflict409(
+    '다른 재계획이 막 시작됐어요. 다시 시도해 주세요.'
+  );
+
+  /** `startedAt` 에 시작한 세션이 10분 뒤 상한 얼굴 → [다시 시도] → 서버가 `error` 로 거절 → 다시 그린다. */
+  function cappedRetryRejectedWith(startedAt: string, error: unknown): void {
+    mockFromInstant = startedAt;
+    mockCreatedAt = startedAt;
+    jest.useFakeTimers({ now: Date.parse(startedAt) + 10 * 60 * 1000 });
+    mockSessionInputs = CAPPED_INPUTS;
+    const { rerender } = renderPage();
+    advance(0);
+    fireEvent.press(screen.getByTestId('planb-solving-capped-retry'));
+    const [, options] = mockStartMutate.mock.calls[0] as [
+      unknown,
+      { onError: (error: unknown) => void },
+    ];
+    mockStart.isError = true;
+    mockStart.error = error;
+    act(() => options.onError(error));
+    rerender(<PlanbSolvingPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
+  }
+
+  it('U12 어제 세션이 409 면 부제가 i04 날짜 안내다 — "잠시 후 다시 시도" 없음 · [다시 시도]·[홈으로]는 그대로', () => {
+    cappedRetryRejectedWith(BEFORE_MIDNIGHT, PAST_DAY_409);
+
+    // 앵커 — 그 날짜 그대로 다시 열었다(서버가 지난 날로 거절하는 요청이다).
+    const [variables] = mockStartMutate.mock.calls[0] as [
+      { data: { targetDate?: string } },
+    ];
+    expect(variables.data.targetDate).toBe('2026-06-11');
+    const face = screen.getByTestId(CAP);
+    expect(within(face).getByText('생성이 늦어지고 있어요')).toBeOnTheScreen();
+    expect(
+      within(face).getByText(
+        '아직 일정이 없는 날이거나 여행 기간이 아니라서 AI가 다시 짤 수 없어요'
+      )
+    ).toBeOnTheScreen();
+    expect(within(face).queryByText(/잠시 후 다시 시도/)).toBeNull();
+    expect(within(face).queryByText('원래 일정은 그대로예요')).toBeNull();
+    // 얼굴 구성은 그대로 — 두 버튼, 이동 없음.
+    expect(screen.getByTestId('planb-solving-capped-retry')).toBeEnabled();
+    expect(screen.getByTestId('planb-solving-capped-home')).toBeEnabled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('U13 어제 세션이어도 500 이면 종전 시작 실패 문장이다 — 날짜 탓으로 돌리지 않는다', () => {
+    cappedRetryRejectedWith(BEFORE_MIDNIGHT, {
+      isAxiosError: true,
+      response: { status: 500, data: {} },
+    });
+
+    const face = screen.getByTestId(CAP);
+    expect(
+      within(face).getByText(
+        '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요'
+      )
+    ).toBeOnTheScreen();
+    expect(within(face).queryByText(/아직 일정이 없는 날/)).toBeNull();
+  });
+
+  it('U14 오늘 세션의 409(경합)는 종전 시작 실패 문장이다 — 다시 누르면 된다', () => {
+    cappedRetryRejectedWith(THIS_MORNING, RACE_409);
+
+    const face = screen.getByTestId(CAP);
+    expect(
+      within(face).getByText(
+        '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요'
+      )
+    ).toBeOnTheScreen();
+    expect(within(face).queryByText(/아직 일정이 없는 날/)).toBeNull();
   });
 });
 
