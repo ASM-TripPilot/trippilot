@@ -20,6 +20,9 @@ import { SheetHeader } from '@/widgets/map-sheet-shell';
  * 한 화면 세 얼굴(variant): draft(펼침) / noSolution(대안 없음) / failed(E3). 뒤 둘과 확정 실패(Q6)는
  * 헤더 아래 같은 안내 자리를 쓴다. 대안 없음이면 곳 수를 지우고 예정 행을 전부 흐린다(Seed Q3).
  * 시트는 항상 펼침(index 2 — 셸 기본 배열 [닫힘·peek·펼침])으로 연다 — 실제 88% 스냅은 6-b 몫.
+ *
+ * 상황 감지 FE-B(frontend-components §3.6) — 머리에 `미리 준비한 대안` 표식(`prepared`), 낡음 얼굴(`stale` — 같은 안내 자리에
+ * 문구 + [새 대안 보기], [적용하기] 잠금), 미포함 안내 한 줄(`includeMissingText`). 문구·자리는 정본 작도 스펙이다(G-SA-12).
  */
 
 // 확정 실패 안내 — PlanbDiffPage ERROR 와 같은 카피(BR-U4-32 "원 일정 유지"를 말로 알림, Q6).
@@ -33,6 +36,12 @@ const FAILED_NOTICE = {
 };
 const NO_SOLUTION_TITLE = '대안을 찾지 못했어요';
 const TITLE = 'AI 재계획안';
+// 상황 감지 FE-B(frontend-components §3.6) — 문구는 정본 그대로. 재요청 실패는 i04 시작 실패와 같은 문장이다.
+const PREPARED_MARK = '미리 준비한 대안';
+const STALE_TITLE = '시간이 지나 이 대안은 지금 일정과 맞지 않아요';
+const STALE_RETRY_LABEL = '새 대안 보기';
+const STALE_RETRY_FAILED =
+  '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요';
 // TRIP-1214 — 셸 기본 배열의 닫힘 칸(28)은 CTA 바를 뺀다. 초안은 시트를 내리고 지도를 보다 바로 [적용하기]를
 // 눌러야 하므로, 가장 낮은 칸을 CTA 바 위(손잡이 28 + 바 높이 + 하단 안전 영역)로 직접 준다 — 직접 준 배열은
 // 닫힘 규칙이 안 걸려 버튼이 항상 남고, 손잡이는 바 위에 보인다. 셸 기본값은 안 건드린다(다른 소비처 영향).
@@ -81,6 +90,18 @@ export interface ReplanDraftViewProps {
   onReplanNextDay?: () => void;
   /** 내일 재계획 시작 요청 중 — 보조 버튼 잠금(이중 POST 차단). */
   replanNextDayPending?: boolean;
+  /** 상황 감지 FE-B — 서버가 미리 짠 대안(SYSTEM 세션)이면 머리에 `미리 준비한 대안` 표식. */
+  prepared?: boolean;
+  /** 적용이 409 EXPIRED·STALE 로 거절됐다 — 낡음 얼굴(안내 + [새 대안 보기]) · [적용하기] 잠금. */
+  stale?: boolean;
+  /** [새 대안 보기] — 같은 입력으로 새 세션(페이지 몫). 없으면 버튼이 없다(다시 짤 수 없는 지난 날 초안). */
+  onRetryStale?: () => void;
+  /** 새 세션 요청 중 — [새 대안 보기] 잠금. */
+  staleRetryPending?: boolean;
+  /** 새 세션 요청 실패 — 낡음 안내 아래 한 줄(INV-4). */
+  staleRetryFailed?: boolean;
+  /** 넣으려던 장소가 초안에 없다는 문장(페이지가 만든다) — 없으면 안 그린다. */
+  includeMissingText?: string | null;
   onBack: () => void;
   onManualEdit: () => void;
   onApply: () => void;
@@ -107,6 +128,12 @@ export function ReplanDraftView({
   applyFailed,
   onReplanNextDay,
   replanNextDayPending,
+  prepared = false,
+  stale = false,
+  onRetryStale,
+  staleRetryPending,
+  staleRetryFailed,
+  includeMissingText = null,
   onBack,
   onManualEdit,
   onApply,
@@ -137,7 +164,8 @@ export function ReplanDraftView({
         label: '적용하기',
         variant: 'primary',
         onPress: onApply,
-        disabled: applyPending || applyDisabled,
+        // 낡은 초안은 다시 눌러도 같은 409 다 — [새 대안 보기]로만 나아간다(INV-SA-7).
+        disabled: applyPending || applyDisabled || stale,
       }
     : {
         label: variant === 'noSolution' ? '조건 바꿔 다시 짜기' : '다시 시도',
@@ -165,7 +193,45 @@ export function ReplanDraftView({
             dateLabel={dateLabel}
             meta={isDraft ? meta : ''}
           />
-          {notice !== null ? (
+          {prepared ? (
+            <Text
+              testID="planb-draft-prepared"
+              className="px-lg pb-sm font-noto-bold text-caption font-bold text-primary-text"
+            >
+              {PREPARED_MARK}
+            </Text>
+          ) : null}
+          {stale ? (
+            <View testID="planb-draft-stale" className="gap-xs px-lg pb-md">
+              <Text className="font-noto-bold text-[20px] font-bold text-ink">
+                {STALE_TITLE}
+              </Text>
+              {staleRetryFailed ? (
+                <Text
+                  testID="planb-draft-stale-failed"
+                  className="font-noto text-label text-muted"
+                >
+                  {STALE_RETRY_FAILED}
+                </Text>
+              ) : null}
+              {/* 보조 버튼 자리·모양은 [내일 일정 다시 짜기]와 같다 — CTA 바는 1~2버튼이라 안내 아래에 둔다.
+                  다시 짤 수 없는 초안(지난 날)이면 페이지가 onRetryStale 을 주지 않는다 — 늘 실패할 버튼을 두지 않는다. */}
+              {onRetryStale ? (
+                <Pressable
+                  testID="planb-draft-stale-retry"
+                  accessibilityRole="button"
+                  onPress={onRetryStale}
+                  disabled={staleRetryPending}
+                  accessibilityState={{ disabled: staleRetryPending === true }}
+                  className="mt-xs self-start rounded-pill border border-hairline-strong bg-canvas px-lg py-sm"
+                >
+                  <Text className="font-noto-bold text-label font-bold text-ink">
+                    {STALE_RETRY_LABEL}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : notice !== null ? (
             <View testID="planb-draft-notice" className="gap-xs px-lg pb-md">
               <Text
                 testID="planb-draft-notice-title"
@@ -196,6 +262,14 @@ export function ReplanDraftView({
                 </Pressable>
               ) : null}
             </View>
+          ) : null}
+          {includeMissingText ? (
+            <Text
+              testID="planb-draft-include-missing"
+              className="px-lg pb-md font-noto text-label text-muted"
+            >
+              {includeMissingText}
+            </Text>
           ) : null}
         </>
       }

@@ -169,6 +169,37 @@ describe('🔴 S5 · 감지 트리거 CLOSURE — 매핑 key 칩도 숨긴다 (A
   });
 });
 
+describe('🔴 S5b · keepWeatherChip — 진입 시드의 날씨는 감지 칩이 있어도 남는다 (상황 감지 FE-B §3.3)', () => {
+  it('감지 칩이 휴무여도 정적 날씨가 남고(선택 상태 그대로), 감지 칩이 날씨면 그 칩이 대신한다', () => {
+    const props = { ...baseProps(), selectedReasons: ['WEATHER'] };
+    const { rerender } = render(
+      <ReplanRequestSheet
+        {...props}
+        detected={CLOSURE_DETECTED}
+        keepWeatherChip
+      />
+    );
+
+    expect(staticReasonKeys()).toEqual([
+      'SLOW_MOVE',
+      'LOW_ENERGY',
+      'FULLY_BOOKED',
+      'WEATHER',
+      'JUST_CHANGE',
+    ]);
+    expect(screen.getByTestId('planb-request-reason-WEATHER')).toBeSelected();
+
+    rerender(
+      <ReplanRequestSheet
+        {...props}
+        detected={WEATHER_DETECTED}
+        keepWeatherChip
+      />
+    );
+    expect(screen.queryByTestId('planb-request-reason-WEATHER')).toBeNull();
+  });
+});
+
 describe('🔴 S6 · 방향 10칩 (AC-3 · D5 · Q1)', () => {
   it('10종이 key·라벨·순서 그대로이고 야경 코스·예산 유지는 없으며, 야외 피하기를 누르면 AVOID_OUTDOOR 로 토글된다', () => {
     const props = baseProps();

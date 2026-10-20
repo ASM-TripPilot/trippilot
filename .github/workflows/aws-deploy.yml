@@ -44,6 +44,11 @@ on:
         description: 기능별 모델 배정(TRIPPILOT_LLM_FEATURE_MODELS)에 덧씌울 항목 FEATURE=model,… — 같은 기능은 바꾸고 나머지는 그대로 시크릿에 쓴다. 이 커밋과 지금 떠 있는 AI 이미지가 둘 다 아는 이름만 받는다(새 기능은 입력 없이 한 번 배포한 다음 런에서). 비우면 유지
         type: string
         default: ''
+      runtime_switches:
+        description: 상황 감지 스위치를 시크릿에 쓴다 — KEY=VALUE;KEY=VALUE (쌍 구분은 세미콜론). 허용 키는 PLANB_SITUATION_SWEEP(off|dry-run|on) · PLANB_SITUATION_HORIZON(today|tomorrow|pre-trip) · PLANB_SITUATION_SWEEP_ACCOUNT_IDS(UUID 쉼표 목록) · PLANB_PREPARED_REPLAN(off|on) · HOLIDAY_CLOSURE_MODE(off|on)뿐, KEY= 는 그 키를 지워 앱 기본값으로 되돌린다. 그 밖의 키·형식·값 오류는 배포 실패. 비우면 유지
+        type: string
+        required: false
+        default: ''
       poi_close_missing:
         description: POI 공유본 적재 때 그 출처의 ACTIVE 중 공유본에 없는 것을 LOST 로 내린다 (기본 off — upsert 만). 비율 가드(409)에 걸리면 스텝이 실패하고 아무것도 닫지 않는다
         type: boolean
@@ -249,6 +254,8 @@ jobs:
           # 공공데이터포털 키(기상특보·에어코리아·특일정보) — 입력이 아니라 저장소 시크릿이다(입력은 실행 화면에 보인다).
           # 이 스텝에만 싣는다. sync-secrets 가 backend·ai 시크릿에 쓰고, 비어 있으면 저장값을 그대로 둔다.
           PUBLIC_DATA_API_KEY: ${{ secrets.PUBLIC_DATA_API_KEY }}
+          # 상황 감지 스위치 입력 — 셸에 직접 끼우지 않고 이 스텝 env 로만 받는다. 형식·허용 키·값 검증은 sync-secrets 가 한다.
+          RUNTIME_SWITCHES_INPUT: ${{ inputs.runtime_switches }}
         run: |
           embedding_args=()
           if [ "$EFFECTIVE_EMBEDDING" = true ]; then embedding_args+=(--embedding-enabled); fi
@@ -259,9 +266,11 @@ jobs:
           dialogue_args=()
           if [ "$EFFECTIVE_DIALOGUE_ORCHESTRATOR" != keep ]; then dialogue_args+=(--dialogue-orchestrator "$EFFECTIVE_DIALOGUE_ORCHESTRATOR"); fi
           if [ -n "$EFFECTIVE_LLM_FEATURE_MODELS" ]; then dialogue_args+=(--llm-feature-models "$EFFECTIVE_LLM_FEATURE_MODELS"); fi
+          switch_args=()
+          if [ -n "$RUNTIME_SWITCHES_INPUT" ]; then switch_args+=(--runtime-switches "$RUNTIME_SWITCHES_INPUT"); fi
           python3 deploy/eks/runtime.py sync-secrets \
             --outputs "$RUNNER_TEMP/trippilot-outputs.json" --target "$DEPLOY_TARGET" "${embedding_args[@]}" "${push_args[@]}" \
-            "${dialogue_args[@]}"
+            "${dialogue_args[@]}" "${switch_args[@]}"
           python3 deploy/eks/runtime.py render-values --target "$DEPLOY_TARGET" \
             --outputs "$RUNNER_TEMP/trippilot-outputs.json" --image-tag "$IMAGE_TAG" \
             --certificate-arn "$ACM_CERTIFICATE_ARN" --hostname "$API_HOSTNAME" \

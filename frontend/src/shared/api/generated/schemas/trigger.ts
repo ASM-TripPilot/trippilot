@@ -10,6 +10,8 @@
  */
 import type { TriggerKind } from './triggerKind';
 import type { TriggerScope } from './triggerScope';
+import type { TriggerSeverity } from './triggerSeverity';
+import type { TriggerVariant } from './triggerVariant';
 
 export interface Trigger {
   triggerId: string;
@@ -23,4 +25,10 @@ export interface Trigger {
   /** 발화 시 재계획 범위 — [대안 보기] 가 이 값으로 세션을 연다 */
   scope?: TriggerScope;
   detectedAt: string;
+  /** 위험(RISK)은 일정을 막는다 — 푸시 대상. 주의(CAUTION)는 앱 안에만 보인다. required 밖이다(옛 픽스처 · 프리뷰 보호) — 없으면 위험으로 읽는다. */
+  severity?: TriggerSeverity;
+  /** 변형(닫힌 12종). 저장된 값을 모르면 null 이다 — 화면은 kind 라벨을 쓴다. 특보는 기존 변형으로 사상한다(호우 RAIN · 대설 SNOW · 강풍·태풍 WIND · 한파 COLD · 폭염 HEAT · 황사 DUST). */
+  variant?: TriggerVariant;
+  /** 출처 표기(공공누리) — 기상청 단기예보 · 기상청 기상특보 · 에어코리아. 표시 의무가 없는 원천이면 null. */
+  attribution?: string | null;
 }

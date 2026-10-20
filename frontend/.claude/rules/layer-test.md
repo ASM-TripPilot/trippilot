@@ -91,6 +91,8 @@ paths:
 | `src/entities/itinerary-slot/lib/categoryPlaceholder.test.ts` | `resolveCategoryPlaceholder` 매핑 — 7종 `tintClass` 완전일치·폴백·iconKey distinct. 프로토타입 키 입력은 다루지 않는다 |
 | `src/entities/trip/ui/TripCard.test.tsx` | h37 카드 렌더(TRIP-1357 — 옛 MyTripCard.test 이관, ⋯ 메뉴 블록 포함) — 제목·메타·부가정보 완전일치 + 배지/resume 유무 짝. `metaLine` 조립 로직은 컨테이너 소관이라 여기서 안 돈다 |
 | `src/__tests__/planbManualRoute.test.tsx` | i07 라우트가 `ItineraryEditPage`를 `tripId`+`inTrip=true`로 부르고 `variant`가 새지 않는지 |
+| `src/__tests__/planbRequestRoute.test.tsx` | 상황 감지 FE-B — planb 라우트가 `triggerId` 있으면 `PlanbEntryGate`(URL 원문 scope·targetDate 포함), 없거나 빈 값이면 `PlanbRequestPage` 를 그리는지(슬라이스 공개 API 를 스파이로 바꿔 위임만 본다) |
+| `src/__tests__/planbSessionRoutes.test.tsx` | 상황 감지 FE-B — i05·i06 라우트가 `includePoiId` 를 읽어 `PlanbSolvingPage`·`PlanbDraftPage` 에 내리는지(없으면 undefined — 종전 위임) |
 | `src/pages/itinerary/itinerary-edit/model/reorderKeepingLocked.test.ts` | 잠긴 칸 고정 재정렬 예시 + fast-check PBT(고정 index 불변·순열·상대 순서 보존). 이 규칙을 부르는 프로덕션 드래그 표면은 아직 없다 |
 | `src/pages/itinerary/itinerary-edit/ui/ItineraryEditPage.integration.test.tsx` | 「여행 중 직접 수정(i07)」 describe: h12·i07 페이지 계약 — 완료 알약 press는 시트 안 엶 · 드래그가 `reorderKeepingLocked` 경유 · CONFIRMED 409는 정직 안내(라우터 4메서드 0회) |
 | `src/pages/itinerary/itinerary-edit/ui/ItineraryEditPage.integration.test.tsx` | 「저장 성공 뒤 토스트·복귀」 describe: 저장 성공 뒤 복귀 계약 — 위반 없음→back/replace 폴백 · 위반(h12·i07·다른 날만)→머묾+배지 · 연타 PUT 1회 · 토스트 완전일치. 편집 통합 파일의 expo-router 목은 `canGoBack`이 있어야 한다(없으면 onSuccess TypeError가 삼켜짐) |

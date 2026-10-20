@@ -57,7 +57,7 @@ from trippilot.agents.schedule.outcome import (
     _wanted_categories,
     failed_outcome,
 )
-from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.config import ACTIVE_WALK_MAX_KM, AssemblyConfig
 from trippilot.assembly_engine.constraints import open_hours_ok
 from trippilot.assembly_engine.facade import AssemblyConflictError
 from trippilot.assembly_engine.fallback_assembler import explain_unplaced
@@ -138,7 +138,8 @@ class AssemblyProvider(Protocol):
     인덱스에 없으면 이동을 검증할 수 없어 체인이 그 인접 쌍을 위반으로 본다.
     """
 
-    def for_pool(self, poi_index: Mapping[PoiId, Poi]) -> AssemblyFacade: ...
+    def for_pool(self, poi_index: Mapping[PoiId, Poi],
+                 walk_max_km: float | None = None) -> AssemblyFacade: ...
 
 
 # ── 입출력 타입 (도메인 타입 조합 — HTTP 스키마는 경계 어댑터 소관) ──
@@ -631,7 +632,9 @@ class ScheduleAgent:
         c2_ms = max(
             budget.c2_reserved_ms, budget.total_ms - (self._clock.monotonic_ms() - t0)
         )
-        assembly = self._assembly_provider.for_pool(index)
+        # 액티비티 취향이면 조금 더 걷는다(도로 1.0km, 2026-10-19 사용자) — 조립과 화면 거리가 같은 상한을 쓴다.
+        walk_max = ACTIVE_WALK_MAX_KM if PoiCategory.ACTIVITY in _wanted_categories(persona) else None
+        assembly = self._assembly_provider.for_pool(index, walk_max_km=walk_max)
         try:
             solution = assembly.solve(problem, c2_ms, trace_id)
         except AssemblyConflictError as e:
@@ -693,6 +696,7 @@ class ScheduleAgent:
             slot_alternatives=alternatives,
             rule_backfill_count=backfilled,
             repair_hints=hints,
+            walk_max_km=walk_max,
         )
 
     # ── ② 선호 점수 + 규칙 점수 폴백 ────────────────────────────────

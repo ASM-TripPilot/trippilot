@@ -36,6 +36,6 @@ export interface StartReplanRequest {
   freeText?: string | null;
   /** '건너뛰기'가 채운다 — 재계획 시 후보에서 뺀다 */
   excludedPoiIds?: string[];
-  /** 자동 진입이면 근거 트리거. 수동이면 null */
+  /** 자동 진입이면 근거 트리거. 수동이면 null. 있으면 대상 날짜는 **그 트리거의 날짜로 강제**되고(targetDate 무시) 미래일이면 scope 는 FULL_DAY 다(BR-SA-20) — 내일 알림으로 오늘을 다시 짜지 않게. 트리거가 없거나 다른 여행 것이면 409 */
   triggerId?: string | null;
 }

@@ -47,6 +47,10 @@ BACKEND_DEFAULTS = {
     # http 로 바꾼다 — 새로 까는 환경의 기본은 여전히 off 다(켜는 것은 환경마다의 결정).
     "ASSISTANT_INTERPRET_MODE": "off",
 }
+# 배포 입력 `runtime_switches` 로 쓸 수 있는 키 → 그룹(상황 감지 스위치). 값 검증은 validate_groups 가 이미 한다.
+RUNTIME_SWITCHES = {"PLANB_SITUATION_SWEEP": "backend", "PLANB_SITUATION_HORIZON": "backend",
+                    "PLANB_SITUATION_SWEEP_ACCOUNT_IDS": "backend", "PLANB_PREPARED_REPLAN": "backend",
+                    "HOLIDAY_CLOSURE_MODE": "ai"}
 
 
 def get_secret(shell, region, arn, *, strings_only=True):
@@ -183,6 +187,25 @@ def merge_feature_models(stored, overrides, known, running=None):
             raise ValueError(f"The running AI image does not know {', '.join(not_running)} — deploy this commit once with "
                              "llm_feature_models empty, then rerun with it")
     return ",".join(f"{name}={model}" for name, model in pairs.items())
+
+
+def parse_runtime_switches(text):
+    """`KEY=VALUE;KEY=VALUE` → {키: 값}. 쌍 구분이 `;` 인 것은 카나리 계정 목록 값에 쉼표가 들어 있어서다. 앞뒤 공백은 버리고,
+    빈 입력은 {} 다. `KEY=`(빈 값)은 그 키를 지운다는 뜻이다. 허용 밖 키·`=` 없음·빈 키·같은 키 두 번은 배포 실패 —
+    조용히 버리면 켠 줄 알고 넘어간다. 오류에 값(계정 id)은 싣지 않는다."""
+    switches = {}
+    for pair in (text or "").split(";"):
+        if not pair.strip():
+            continue
+        key, sep, value = (part.strip() for part in pair.partition("="))
+        if not sep or not key:
+            raise ValueError("runtime switches must be KEY=VALUE pairs separated by ';'")
+        if key not in RUNTIME_SWITCHES:
+            raise ValueError(f"Unsupported runtime switch {key}; use one of {', '.join(RUNTIME_SWITCHES)}")
+        if key in switches:
+            raise ValueError(f"Runtime switch {key} is given twice")
+        switches[key] = value
+    return switches
 
 
 def seed_groups(groups, password_factory=None, key_factory=None):
@@ -330,11 +353,12 @@ def open_gaps(groups):
 
 
 def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None, dialogue_orchestrator=None,
-         llm_feature_models=None, target=None, public_data_api_key=None):
+         llm_feature_models=None, target=None, public_data_api_key=None, runtime_switches=None):
     # embedding_enabled 는 runtime.py CLI 계약으로 남는다 — DSN 합성은 더 이상 이 값을 보지 않는다(runtime_manifests).
     region = outputs["aws_region"]
+    switches = parse_runtime_switches(runtime_switches)  # 형식 오류는 시크릿을 읽기도 전에 멈춘다
     groups = {name: get_secret(shell, region, arn) for name, arn in outputs["app_secret_arns"].items()}
-    # AI 그룹은 입력·대상 기본값을 먼저 얹고 검증한다 — 저장값이 틀려도 입력으로 고칠 수 있게. 나머지 그룹은 저장값 그대로 검증
+    # AI 그룹은 입력·대상 기본값을 먼저 얹고 검증한다 — 저장값이 틀려도 입력으로 고칠 수 있게. database·shared 는 저장값 그대로 검증
     # (seed_groups 가 database·shared 의 낯선 키를 조용히 버리고 다시 쓰는 것을 이 검증이 막는다).
     ai = dict(groups["ai"])
     for key, value in AI_TARGET_DEFAULTS.get(target, {}).items():
@@ -346,10 +370,19 @@ def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None, dialog
         ai["TRIPPILOT_LLM_FEATURE_MODELS"] = merge_feature_models(
             ai.get("TRIPPILOT_LLM_FEATURE_MODELS", ""), llm_feature_models, known_llm_features(),
             running_llm_features(namespace, shell))
-    validate_groups({**groups, "ai": ai})
-    for gap in open_gaps(groups):
+    # 상황 감지 스위치도 사본에 먼저 얹고 검증한다(위 ai 입력과 같은 이유). 빈 값은 키를 지워 앱 기본값으로 되돌린다.
+    backend = dict(groups["backend"])
+    for key, value in switches.items():
+        values = backend if RUNTIME_SWITCHES[key] == "backend" else ai
+        if value:
+            values[key] = value
+        else:
+            values.pop(key, None)
+    candidate = {**groups, "backend": backend, "ai": ai}
+    validate_groups(candidate)
+    for gap in open_gaps(candidate):
         print(f"::warning title=Open security gap::{gap}")  # 실행 요약 맨 위에 주석으로 뜬다
-    seeded = seed_groups({**groups, "ai": ai})
+    seeded = seed_groups(candidate)
     if push_mode is not None:
         # 배포 입력이 고른 값으로 덮는다 — 시크릿 손편집만이 켜는 길이면 로컬 자격이 만료된 날엔 못 켠다.
         # None(유지)이면 저장된 값을 건드리지 않는다(보존 규칙 그대로).
@@ -373,7 +406,22 @@ def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None, dialog
         print(f"ai secret keys written by this deploy: {', '.join(written)}")  # 이름만 — 값은 찍지 않는다
     if public_data_written:
         print(f"public data key written: {', '.join(public_data_written)}")  # 그룹 이름만 — 값은 찍지 않는다
+    stored = {key: groups[group].get(key) for key, group in RUNTIME_SWITCHES.items()}
+    switched = sorted(key for key, value in switches.items() if value and stored[key] != value)
+    removed = sorted(key for key, value in switches.items() if not value and stored[key] is not None)
+    if switched:
+        print(f"runtime switches written: {', '.join(switched)}")  # 이름만 — 값(카나리 계정 id 포함)은 찍지 않는다
+    if removed:
+        print(f"runtime switches removed (app default): {', '.join(removed)}")
     # 도우미 경로의 백엔드 스위치(off|fake|http — 비밀 아님). AI 를 켜도 이것이 http 가 아니면 사용자는 버튼 모드다.
     print(f"backend ASSISTANT_INTERPRET_MODE={seeded['backend'].get('ASSISTANT_INTERPRET_MODE')}")
     for manifest in runtime_manifests(seeded, outputs, namespace):
         shell(["kubectl", "apply", "--server-side", "--field-manager=trippilot-runtime", "-f", "-"], json.dumps(manifest))
+    # stringData 로 넣은 키는 매니페스트에서 빠져도 k8s Secret data 에 남는다(server-side apply 는 stringData 소유만 기록한다 —
+    # k3s v1.35 실측). 그대로 두면 지운 스위치가 파드에서 계속 켜져 있다 → 키 이름만 실은 merge patch(null)로 지운다. 없는 키는
+    # 아무 일도 없으므로 저장값에 없던 키도 보낸다 — 앞 런이 Secrets Manager 만 지우고 죽었어도 같은 입력의 재실행이 마저 지운다.
+    for name in ("backend", "ai"):
+        cleared = [key for key, value in switches.items() if not value and RUNTIME_SWITCHES[key] == name]
+        if cleared:
+            shell(["kubectl", "patch", "secret", f"trippilot-{name}", "--namespace", namespace, "--type", "merge",
+                   "--patch", json.dumps({"data": dict.fromkeys(cleared)})])
