@@ -57,12 +57,18 @@ class DomainNotificationPayloadTest : StringSpec({
 
     fun json(vararg pairs: Pair<String, Any?>) = mapper.writeValueAsString(mapOf(*pairs))
 
-    "JSON 이 아닌 payload 는 eventId 를 담아 예외로 올린다 — 적재하지 않는다" {
+    "JSON 이 아닌 payload 는 세 사건 모두 eventId 를 담아 예외로 올린다 — 적재하지 않는다" {
         val f = fixture()
-        val e = envelope("{not json", "stay.StayRegistered")
-        val message = shouldThrow<IllegalStateException> { StayRegisteredSubscriber(f.raise, mapper).handle(e) }.message
-        message shouldContain e.eventId.toString()
-        message shouldContain "payload 를 읽지 못했습니다" // 파싱 실패로 보고된다 — 빈 트리로 삼켜 "accountId 없음"이 되면 안 된다
+        listOf(
+            "stay.StayRegistered" to StayRegisteredSubscriber(f.raise, mapper),
+            "planb.PlanBTriggered" to PlanBTriggeredSubscriber(f.raise, mapper),
+            "reflection.ReflectionReady" to ReflectionReadySubscriber(f.raise, mapper),
+        ).forEach { (type, subscriber) ->
+            val e = envelope("{not json", type)
+            val message = shouldThrow<IllegalStateException> { subscriber.handle(e) }.message
+            message shouldContain e.eventId.toString()
+            message shouldContain "payload 를 읽지 못했습니다" // 파싱 실패로 보고된다 — 빈 트리로 삼켜 "accountId 없음"이 되면 안 된다
+        }
         f.stored.stored.shouldBeEmpty()
     }
 

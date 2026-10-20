@@ -71,6 +71,9 @@ class ExpoPushReceiptTest : StringSpec({
             PushReceipt("t1", PushStatus.FAILED, "TICKET_COUNT_MISMATCH"),
             PushReceipt("t2", PushStatus.FAILED, "TICKET_COUNT_MISMATCH"),
         )
+        // 티켓이 더 많아도 — zip 이 잘린 채 대응하면 밀린 DeviceNotRegistered 가 살아 있는 토큰을 무효화한다.
+        send(listOf("t1"), """{"data":[{"status":"ok"},{"status":"error","details":{"error":"DeviceNotRegistered"}}]}""") shouldBe
+            listOf(PushReceipt("t1", PushStatus.FAILED, "TICKET_COUNT_MISMATCH"))
     }
 
     "응답 본문이 비면 티켓 0개로 보고 전부 FAILED 다" {

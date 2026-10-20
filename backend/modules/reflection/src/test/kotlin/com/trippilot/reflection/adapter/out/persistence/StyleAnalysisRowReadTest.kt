@@ -38,6 +38,7 @@ class StyleAnalysisRowReadTest : StringSpec({
     }
 
     "모르는 축 이름·타입이 틀린 축은 0 으로 읽는다 — 예외 없음" {
+        read(entity(emptyMap(), emptyList())).traitGauges shouldBe TraitGauges(0, 0, 0)
         read(entity(mapOf("relaxed" to 4, "foodAffinity" to "3", "activeness" to null), emptyList())).traitGauges shouldBe TraitGauges(0, 0, 0)
         read(entity(mapOf("easygoing" to "4", "foodAffinity" to 3, "activeness" to true), emptyList())).traitGauges shouldBe TraitGauges(0, 3, 0)
         read(entity(mapOf("easygoing" to 4, "foodAffinity" to 3, "activeness" to 5), emptyList())).traitGauges shouldBe TraitGauges(4, 3, 5)
