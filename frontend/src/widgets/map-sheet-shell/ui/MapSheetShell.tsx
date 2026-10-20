@@ -105,6 +105,9 @@ export interface MapSheetShellProps<T = unknown> {
    *  스냅하므로, 사용자가 내려 둔 시트를 같은 진입 칸으로 다시 펼치려면 이 신호가 필요하다. 첫 마운트엔 아무것도 안 한다.
    *  실 스냅은 6-b 실기 몫(통과형 목). */
   expandSignal?: number;
+  /** TRIP-1496 — 핀 맞춤의 위쪽 가림 예약(pt)에 더하는 값. 셸 기본 오버레이 줄(뒤로·일차 칩) 말고 소비처가 `mapCard` 로 더 얹는
+   *  **항상 보이는** 줄(허브 경로 토글)의 높이. 숨었다 나타나는 줄(허브 알약)은 넣지 않는다(카메라가 튄다 — 1416 AC-10). 기본 0. */
+  fitTopReserve?: number;
   /** 지도 자리 교체 슬롯(TRIP-799 D5·AC-6). 주면 지도 스트립 자리에 `<MapView>` 대신 이 노드를
    *  렌더한다(day-chip·시트·CTA 는 유지 — 화면을 안 비운다, INV-4). 셸 자체 실패 감지보다 우선한다.
    *  미전달이면 MapView 를 그리고, 그 MapView 가 로드 실패를 알리면 셸 기본 `MapFallbackBar` 로
@@ -176,6 +179,7 @@ export function MapSheetShell<T = unknown>({
   cta,
   initialIndex,
   expandSignal,
+  fitTopReserve = 0,
   mapFallback,
   mapCard,
   list,
@@ -241,11 +245,11 @@ export function MapSheetShell<T = unknown>({
     firstPercent === undefined ? 0 : parseFloat(firstPercent) / 100;
   const fitBand = useMemo(
     () => ({
-      top: (topInset + OVERLAY_ROW_RESERVE) / windowHeight,
+      top: (topInset + OVERLAY_ROW_RESERVE + fitTopReserve) / windowHeight,
       bottom: coveredBottom,
       aspect: windowHeight / windowWidth,
     }),
-    [topInset, coveredBottom, windowHeight, windowWidth]
+    [topInset, fitTopReserve, coveredBottom, windowHeight, windowWidth]
   );
 
   return (

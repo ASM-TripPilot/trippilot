@@ -1289,6 +1289,23 @@ describe('MapSheetShell · 보이는 띠 맞춤 (AC-3·AC-4·AC-5·AC-8·AC-10)'
     });
   });
 
+  it('FB2b TRIP-1496 · fitTopReserve 를 주면 그만큼 위 띠가 더 내려간다(허브 경로 토글 줄) — 안 주면 지금과 같다', () => {
+    // 준비 — FB2 와 같은 과장 인셋 + 소비처가 150pt 줄을 더 얹었다. 예약을 무시하면 위 핀이 (200+52) 선에 놓여 red.
+    render(
+      <SafeAreaInsetsContext.Provider
+        value={{ top: 200, bottom: 34, left: 0, right: 0 }}
+      >
+        {shellWithPins(OTHER_DAY_PINS, { fitTopReserve: 150 })}
+      </SafeAreaInsetsContext.Provider>
+    );
+
+    expectPinsInBand(bandRegion(), OTHER_DAY_PINS, {
+      bottom: 0.45,
+      topPx: 200 + SHELL_OVERLAY_ROW_BOTTOM + 150,
+      screenHeight: WINDOW.height,
+    });
+  });
+
   it("FB3 스냅이 [닫힘, '55%', 펼침] 이면 55% 기준이고, 펼침(2)으로 진입해도 중간(1) 진입과 같은 맞춤이다", () => {
     // 남북으로 긴 동선 — 동서 동선은 세로 맞춤으로 띠 가운데에 떠서 45% 를 그대로 써도 55% 를 우연히 넘는다.
     const hubSnaps = [28, '55%', 700];
