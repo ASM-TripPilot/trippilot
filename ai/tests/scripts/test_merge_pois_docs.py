@@ -191,7 +191,9 @@ _CLOSED = frozenset({("tourapi", "1")})
 
 
 def _src(cid: str, source: str, name: str = "곳") -> dict:
-    return {**_prop(cid, None, name=name), "source": source}
+    p = {**_prop(cid, None, name=name), "source": source}
+    p["provenance"]["address"] = "서울특별시 중구 1"   # 주소가 없으면 시도 게이트가 격리한다(TRIP-1475)
+    return p
 
 
 def test_폐업은_같은_출처의_같은_번호만_뺀다() -> None:
@@ -550,3 +552,75 @@ def test_공유본은_한_행에_한_줄이고_되읽으면_같다() -> None:
     assert json.loads(text) == doc
     assert sum(ln.lstrip().startswith('{"provisional_id"') for ln in text.splitlines()) == 2
     assert json.loads(M.dumps_doc({**doc, "proposals": []}))["proposals"] == []
+
+
+# ── 머지 전 게이트 — 백엔드가 시도를 못 정하는 행은 격리 (TRIP-1475) ──────
+def test_시도_토큰은_백엔드_RegionResolver_와_같이_자른다() -> None:
+    assert M.backend_sido_token(None) is None
+    assert M.backend_sido_token("") is None                                    # 백엔드: 미판정
+    assert M.backend_sido_token(" 　 ") is None                            # 전각 공백만 — Kotlin trim 이 다 자른다
+    assert M.backend_sido_token(" 부산광역시  사하구") == "부산광역시"
+    assert M.backend_sido_token("부산광역시　사하구") == "부산광역시　사하구"  # `\s` 는 ASCII 만 나눈다 — 한 토큰
+    assert M.backend_sido_token("부산광역시 사하구") == "부산광역시 사하구"
+    assert M.backend_sido_token("\x85부산광역시 사하구") == "\x85부산광역시"        # Kotlin trim 은 NEL 을 안 자른다
+
+
+def _gate_run(tmp_path: Path, addresses: dict[str, str | None], *extra: str,
+              state: dict | None = None) -> tuple[int, Path, Path]:
+    doc = _keyed_doc("TOURAPI", *addresses)
+    for p in doc["proposals"]:
+        p["provenance"]["address"] = addresses[p["provenance"]["content_id"]]
+    src, out, st_path = tmp_path / "in.json", tmp_path / "out.json", tmp_path / "state.json"
+    src.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    args = ["-o", str(out), *extra, str(src)]
+    if state is not None:
+        st_path.write_text(json.dumps(state), encoding="utf-8")
+        args = ["--state", str(st_path), *args]
+    return M.main(args), out, st_path
+
+
+_GATE_ADDRESSES = {
+    "ok": "서울특별시 중구 1",
+    "abbr": "강원 속초시 장사동",          # 약칭은 펴서 살린다 — 격리가 아니다
+    "cut": "제주특별 서귀포시 색달동",      # 두 글자 잘림 — 약칭 표로 못 편다
+    "empty": "",
+    "none": None,
+    "nbsp": "부산광역시 사하구",        # 백엔드는 한 토큰으로 본다
+}
+
+
+def test_시도를_못_정하는_행은_격리하고_나머지는_병합한다(tmp_path: Path) -> None:
+    rc, out, _ = _gate_run(tmp_path, _GATE_ADDRESSES)
+    assert rc == 0
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    assert [p["provenance"]["content_id"] for p in doc["proposals"]] == ["ok", "abbr"]
+    assert doc["stats"]["unique_proposals"] == 2
+    assert doc["stats"]["sido_quarantined"] == 4
+    assert [q["content_id"] for q in doc["stats"]["sido_quarantined_refs"]] == ["cut", "empty", "none", "nbsp"]
+    assert doc["stats"]["sido_quarantined_refs"][0] == {
+        "source": "TOURAPI", "content_id": "cut", "address": "제주특별 서귀포시 색달동"}
+
+
+def test_격리가_임계를_넘으면_실패하고_공유본도_상태도_건드리지_않는다(tmp_path: Path) -> None:
+    state = {"proposed": {"cut": "20261001", "ok": "20261001"}}
+    rc, out, st_path = _gate_run(tmp_path, _GATE_ADDRESSES, "--max-quarantined", "3", state=state)
+    assert rc == 1
+    assert not out.exists()
+    assert json.loads(st_path.read_text(encoding="utf-8")) == state
+
+
+def test_격리한_TourAPI_행은_기제안_색인에서_빠져_다음_수집이_다시_가져온다(tmp_path: Path) -> None:
+    state = {"cursors": {}, "proposed": {"cut": "20261001", "ok": "20261001", "none": "20261002"}}
+    rc, _, st_path = _gate_run(tmp_path, _GATE_ADDRESSES, state=state)
+    assert rc == 0
+    after = json.loads(st_path.read_text(encoding="utf-8"))
+    assert after == {"cursors": {}, "proposed": {"ok": "20261001"}}
+
+
+def test_색인에서는_TourAPI_격리분만_지운다(tmp_path: Path) -> None:
+    """색인 키는 TourAPI 번호다 — 다른 출처 행이 같은 번호여도 그 도장은 TourAPI 행의 것이라 지우지 않는다."""
+    st_path = tmp_path / "state.json"
+    st_path.write_text(json.dumps({"proposed": {"7": "a", "8": "b"}}), encoding="utf-8")
+    assert M.forget_quarantined(st_path, [{"source": "LOCALDATA", "content_id": "7"},
+                                          {"source": "TOURAPI", "content_id": "8"}]) == 1
+    assert json.loads(st_path.read_text(encoding="utf-8"))["proposed"] == {"7": "a"}

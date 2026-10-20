@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -204,6 +205,63 @@ def expand_sido_abbrev(proposals: list[dict], abbrev: dict[str, str] | None = No
     return n
 
 
+# 백엔드 `RegionResolver.resolve`(backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/domain/RegionResolver.kt:21-24)
+# 의 첫 토큰을 그대로 흉내 낸다 — `address?.trim()?.split(Regex("\\s+"))?.filter { it.isNotBlank() }` 의 첫째가
+# 카탈로그 시도 이름과 같아야 지역 코드가 붙는다. Python `str.split()` 은 NBSP·U+3000 도 나눠 백엔드보다 느슨하다.
+# Kotlin `trim()`·`isNotBlank()` 의 공백(`Char.isWhitespace` = JVM `isWhitespace || isSpaceChar`)은 Python `isspace` 에서
+# U+0085(NEL) 하나만 뺀 집합이고, `Regex("\\s+")` 는 플래그 없는 Java `\s` 라 ASCII 공백 6자만 나눈다
+# (둘 다 JDK 25 jshell 로 BMP 전수 대조, TRIP-1475).
+_KT_WHITESPACE = "".join(c for c in map(chr, range(0x10000)) if c.isspace() and c != "\x85")
+_JAVA_WS = re.compile(r"[ \t\n\x0b\f\r]+")
+# 격리 상한 — 관측한 나쁜 행은 한 번에 2~3건이었다(#1352 약칭 3 · #1427 잘림 2). 20건을 넘으면 행 몇 개의 결함이
+# 아니라 카탈로그·주소 형식이 통째로 바뀐 사고로 본다 — 그때는 조용히 빼지 않고 병합을 멈춘다.
+MAX_QUARANTINED = 20
+
+
+def backend_sido_token(address: str | None) -> str | None:
+    """백엔드가 시도 이름으로 대조하는 주소 첫 토큰. 백엔드가 미판정(null)으로 끝내는 주소(없음·공백뿐)는 None."""
+    tokens = [t for t in _JAVA_WS.split((address or "").strip(_KT_WHITESPACE)) if t.strip(_KT_WHITESPACE)]
+    return tokens[0] if tokens else None
+
+
+def quarantine_unresolved_sido(proposals: list[dict], sido: set[str] | None = None) -> list[dict]:
+    """백엔드가 시도를 못 정할 제안을 뺀다. 뺀 것의 `{source, content_id, address}` 를 돌려준다.
+
+    공유본 봇 PR 은 체크 0 으로 즉시 머지돼(#1427: 6초) 백엔드 실문서 IT(`regionUnresolved == 0`)가 머지 **뒤**에야
+    돈다 — #1352·#1427 이 그렇게 develop backend-ci 를 깼다. 그래서 병합이 같은 판정을 먼저 한다. 약칭 펴기
+    (`expand_sido_abbrev`) **뒤**에 둬야 펼 수 있는 행을 살린다. 전부-아니면-전무로 막지 않는다 — 한두 행 때문에 그날
+    수집분 전체를 버리지 않게 그 행만 빼고, 건수가 `MAX_QUARANTINED` 를 넘을 때만 `main` 이 실패시킨다.
+    """
+    sido = sido if sido is not None else {
+        n for _, n, _, lvl, _ in load_regions(_MIGRATION / "R__seed_region_catalog.sql") if lvl == "SIDO"}
+    kept: list[dict] = []
+    out: list[dict] = []
+    for p in proposals:
+        addr = (p.get("provenance") or {}).get("address")
+        if backend_sido_token(addr) in sido:
+            kept.append(p)
+        else:
+            out.append({"source": p.get("source"), "content_id": p["provenance"]["content_id"], "address": addr})
+    proposals[:] = kept
+    return out
+
+
+def forget_quarantined(state_path: Path, quarantined: list[dict]) -> int:
+    """격리한 TourAPI 제안을 수집 상태의 기제안 색인(`proposed`)에서 지운다. 지운 건수를 돌려준다.
+
+    색인에 남으면 다음 수집이 "변경 없음"으로 건너뛰어 그 행은 벤더가 고칠 때까지 다시 오지 않는다(영구 유실).
+    지우면 다음 실행이 다시 받아 오고, 그사이 펴는 규칙이 고쳐졌으면 그때 들어간다. 색인은 TourAPI 수집만 쓴다.
+    """
+    ids = {q["content_id"] for q in quarantined if str(q.get("source") or "").upper() == "TOURAPI"}
+    doc = json.loads(state_path.read_text(encoding="utf-8"))
+    proposed = doc.get("proposed") or {}
+    gone = ids & proposed.keys()
+    if gone:
+        doc["proposed"] = {k: v for k, v in proposed.items() if k not in gone}
+        state_path.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+    return len(gone)
+
+
 def mark_trending(proposals: list[dict], path: Path = _TRENDING) -> int:
     """웹 큐레이션이 "이미 있음"으로 맞춘 **기존 행**에 `요즘 인기` 태그를 붙인다. 붙인 건수를 돌려준다.
 
@@ -333,6 +391,9 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--self-check", action="store_true", help="병합 규칙 자체 검증만")
     parser.add_argument("--allow-mixed", action="store_true",
                         help="출처가 다른 문서도 합친다. 소비자가 **항목별 source 로 갈라** 보내야 한다 — 문서 레벨 source 는 하나뿐이다")
+    parser.add_argument("--max-quarantined", type=int, default=MAX_QUARANTINED,
+                        help=f"시도 미판정 격리 상한 — 넘으면 아무것도 쓰지 않고 실패 (기본 {MAX_QUARANTINED})")
+    parser.add_argument("--state", help="수집 상태(collect_state.json) — 격리한 TourAPI 행을 기제안 색인에서 지운다")
     args = parser.parse_args(argv)
 
     if args.self_check:
@@ -380,6 +441,18 @@ def main(argv: list[str]) -> int:
         out["stats"]["closed_dropped"] = closed
     if (expanded := expand_sido_abbrev(out["proposals"])):
         print(f"[merge] 주소 시도 약칭 → 정식 이름 — {expanded}건", file=sys.stderr)
+    # 머지 전 게이트 — 백엔드가 시도를 못 정하는 행은 격리. 상한을 넘으면 공유본·상태 둘 다 손대지 않는다.
+    if (quarantined := quarantine_unresolved_sido(out["proposals"])):
+        for q in quarantined[:5]:
+            print(f"[merge] 시도 미판정 격리 — {q}", file=sys.stderr)
+        if len(quarantined) > args.max_quarantined:
+            print(f"[merge] FAIL 시도 미판정 {len(quarantined)}건 > 상한 {args.max_quarantined} — "
+                  "카탈로그나 주소 형식이 바뀌었는지 확인할 것 (아무것도 쓰지 않았다)", file=sys.stderr)
+            return 1
+        out["stats"]["unique_proposals"] = len(out["proposals"])
+        # 축소 가드가 이걸 사고로 오인하지 않게 남긴다(`non_travel_dropped` 와 같은 규약) — 무엇을 뺐는지도 함께.
+        out["stats"]["sido_quarantined"] = len(quarantined)
+        out["stats"]["sido_quarantined_refs"] = quarantined
     if (trending := mark_trending(out["proposals"])):
         print(f"[merge] 요즘 인기 표지 — 기존 행 {trending}건", file=sys.stderr)
     text = dumps_doc(out)
@@ -387,6 +460,9 @@ def main(argv: list[str]) -> int:
         Path(args.output).write_text(text, encoding="utf-8")
     else:
         print(text)
+    if quarantined and args.state:
+        forgot = forget_quarantined(Path(args.state), quarantined)
+        print(f"[merge] 격리분 기제안 색인에서 지움 — {forgot}건 (다음 수집이 다시 받는다)", file=sys.stderr)
     print(f"[merge] 실행 {len(docs)}개 → 제안 {sum(len(d['proposals']) for d in docs)}건(중복포함)"
           f" → 유니크 {out['stats']['unique_proposals']}건"
           + (f" → {args.output}" if args.output else ""), file=sys.stderr)

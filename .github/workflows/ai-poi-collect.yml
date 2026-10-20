@@ -150,37 +150,6 @@ jobs:
       - name: 잡 서머리 (수집·게이트 통과·드롭 통계)
         if: steps.collect.outputs.skipped != 'true'
         run: uv run python scripts/collect/collect_pois.py --summary collected_pois.json >> "$GITHUB_STEP_SUMMARY"
-      - name: 수집 상태 영속 (collect-state 전용 브랜치 커밋·푸시)
-        if: steps.collect.outputs.skipped != 'true'
-        # plumbing(hash-object→mktree→commit-tree)으로 워킹트리를 건드리지 않고 커밋한다.
-        # 브랜치 부재 시 부모 없는 커밋(= orphan)으로 생성. push 실패는 수집 성공을
-        # 뒤집지 않는다 (::warning::만 — 다음날 중복은 색인 없이도 게이트가 막는다).
-        #
-        # 브랜치는 ai-llm-smoke의 rehearsal_log.jsonl과 **공유**한다 — 기존 트리를 보존한
-        # 채 자기 파일만 교체해야 서로를 지우지 않는다. `git ls-tree`는 현재 디렉토리
-        # 프리픽스 기준이라 working-directory가 ai/ 인 여기서는 루트 파일이 **한 줄도 안
-        # 나온다** — `--full-tree` 필수 (이게 빠져서 두 워크플로가 서로를 덮어썼다).
-        run: |
-          if [ ! -f collect_state.json ]; then
-            echo "::warning::상태 파일 없음 — 영속 생략"
-            exit 0
-          fi
-          (
-            set -e
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            PARENT=""
-            BASE_TREE=""
-            if git fetch origin collect-state 2>/dev/null; then
-              PARENT="-p FETCH_HEAD"
-              BASE_TREE=$(git ls-tree --full-tree FETCH_HEAD | grep -v $'\tcollect_state.json$' || true)
-            fi
-            BLOB=$(git hash-object -w collect_state.json)
-            TREE=$({ [ -n "$BASE_TREE" ] && printf '%s\n' "$BASE_TREE"; \
-                     printf '100644 blob %s\tcollect_state.json\n' "$BLOB"; } | git mktree)
-            COMMIT=$(git commit-tree $TREE $PARENT -m "chore(ai): 수집 상태 갱신 — run ${{ github.run_id }} (TRIP-348)")
-            git push origin "$COMMIT:refs/heads/collect-state"
-          ) || echo "::warning::수집 상태 push 실패 — 다음 실행은 이어가기 없이 처음부터 (수집 자체는 성공)"
       - name: 등록 제안 artifact 보존 (30일 — 상태 파일 동봉, 디버깅용)
         if: steps.collect.outputs.skipped != 'true'
         uses: actions/upload-artifact@v5
@@ -208,6 +177,7 @@ jobs:
             --prev-state collect_state.prev.json \
             --fail-if-stalled >> "$GITHUB_STEP_SUMMARY"
       - name: 팀 공유본 자동 갱신 PR (TRIP-392 — 병합·축소 가드·롤링 브랜치)
+        id: sync
         if: steps.collect.outputs.skipped != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -229,7 +199,8 @@ jobs:
         # 따라서 auto-merge 는 "CI 통과 후"가 아니라 **사실상 즉시 머지**다.
         # 그렇다고 검증할 것이 없지는 않다 — backend-ci 의 실문서 계약 IT(PoiProposalRealDocumentIT:
         # 지역코드미상 0·신규 >500·재적재 멱등)가 이 파일을 읽고(TRIP-535 가 backend-ci paths 에 넣은
-        # 이유), 위 두 가드는 "백엔드가 받아 주는가"를 보지 않는다. 봇의 머지 push 도 `GITHUB_TOKEN` 이라
+        # 이유), 위 두 가드는 "백엔드가 받아 주는가"를 보지 않는다(그중 지역 코드 하나는 병합의 시도 게이트가 먼저 본다 —
+        # `merge_pois_docs.quarantine_unresolved_sido`, TRIP-1475). 봇의 머지 push 도 `GITHUB_TOKEN` 이라
         # push 런을 기대할 수 없다(GitHub 문서상 안 생긴다 — 무한루프 방지. 봇 머지 전례가 없어 실측은 아니다).
         # 그래서 **머지 뒤에 backend-ci 를 workflow_dispatch 로 직접 띄운다**(dispatch 는 그 예외라 런이
         # 생긴다 — 아래 retry 잡이 같은 방식으로 실제 런을 띄워 왔다). push 런이 따로 생겨도 같은 검사가 한 번 더 돌 뿐이다.
@@ -247,12 +218,14 @@ jobs:
           # 거부한다(일부러 그렇게 막아 뒀다 — 문서 레벨 source 하나만 읽는 수신에 섞인 문서를
           # 부으면 전량이 한 출처로 중복 적재된다). 여기서 섞이는 것은 **의도된 것**이고,
           # 소비자(`ingest_pois.py`)가 항목별 source 로 갈라 보낸다.
-          uv run python scripts/collect/merge_pois_docs.py --allow-mixed -o data/collected_pois.json \
-            data/collected_pois.json collected_pois.json
+          # `--state`: 시도 게이트(백엔드가 시도를 못 정하는 행 격리, TRIP-1475)가 뺀 TourAPI 행을 기제안 색인에서
+          # 지운다 — 다음 수집이 다시 받는다. 격리가 상한을 넘으면 병합이 실패해 이 스텝이 멈추고, 상태도 영속하지 않는다.
+          uv run python scripts/collect/merge_pois_docs.py --allow-mixed --state collect_state.json \
+            -o data/collected_pois.json data/collected_pois.json collected_pois.json
           AFTER=$(uv run python -c "import json;print(len(json.load(open('data/collected_pois.json'))['proposals']))")
-          # 관광 무관·폐업 소급 제거(병합 단)는 **의도한 감소**다 — 그 몫을 빼고 비교하지
+          # 관광 무관·폐업 소급 제거·시도 미판정 격리(병합 단)는 **의도한 감소**다 — 그 몫을 빼고 비교하지
           # 않으면 정상 동작이 축소 사고로 오인돼 배치가 빨개진다.
-          DROPPED=$(uv run python -c "import json;s=json.load(open('data/collected_pois.json'))['stats'];print(s.get('non_travel_dropped',0)+s.get('closed_dropped',0))")
+          DROPPED=$(uv run python -c "import json;s=json.load(open('data/collected_pois.json'))['stats'];print(s.get('non_travel_dropped',0)+s.get('closed_dropped',0)+s.get('sido_quarantined',0))")
           if [ "$((AFTER + DROPPED))" -lt "$BEFORE" ]; then
             echo "::error::합본(${AFTER}건 + 의도 제거 ${DROPPED}건)이 공유본(${BEFORE}건)보다 작다 — 축소 덮어쓰기 차단"
             exit 1
@@ -295,6 +268,41 @@ jobs:
           else
             echo "::warning::공유본 PR 머지 실패 — 다음 실행이 다시 시도한다 (수집 자체는 성공)"
           fi
+      - name: 수집 상태 영속 (collect-state 전용 브랜치 커밋·푸시)
+        # **공유본 병합(시도 게이트) 뒤에 둔다**(TRIP-1475). 앞에 두면 게이트가 막은 날에도 그날 수집분이
+        # 기제안 색인에 찍혀, 다음 실행이 "변경 없음"으로 건너뛰어 그 행들이 영구히 안 들어온다.
+        # 막힌 날(병합 스텝 실패)만 영속을 거른다 — 신규율 진단이 실패해 병합이 건너뛴 날은 종전처럼 영속한다
+        # (커서가 안 나가면 같은 지역을 매일 다시 긁는다). 그래서 기본 success() 대신 조건을 직접 쓴다.
+        if: ${{ !cancelled() && steps.collect.outcome == 'success' && steps.collect.outputs.skipped != 'true' && steps.sync.outcome != 'failure' }}
+        # plumbing(hash-object→mktree→commit-tree)으로 워킹트리를 건드리지 않고 커밋한다.
+        # 브랜치 부재 시 부모 없는 커밋(= orphan)으로 생성. push 실패는 수집 성공을
+        # 뒤집지 않는다 (::warning::만 — 다음날 중복은 색인 없이도 게이트가 막는다).
+        #
+        # 브랜치는 ai-llm-smoke의 rehearsal_log.jsonl과 **공유**한다 — 기존 트리를 보존한
+        # 채 자기 파일만 교체해야 서로를 지우지 않는다. `git ls-tree`는 현재 디렉토리
+        # 프리픽스 기준이라 working-directory가 ai/ 인 여기서는 루트 파일이 **한 줄도 안
+        # 나온다** — `--full-tree` 필수 (이게 빠져서 두 워크플로가 서로를 덮어썼다).
+        run: |
+          if [ ! -f collect_state.json ]; then
+            echo "::warning::상태 파일 없음 — 영속 생략"
+            exit 0
+          fi
+          (
+            set -e
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            PARENT=""
+            BASE_TREE=""
+            if git fetch origin collect-state 2>/dev/null; then
+              PARENT="-p FETCH_HEAD"
+              BASE_TREE=$(git ls-tree --full-tree FETCH_HEAD | grep -v $'\tcollect_state.json$' || true)
+            fi
+            BLOB=$(git hash-object -w collect_state.json)
+            TREE=$({ [ -n "$BASE_TREE" ] && printf '%s\n' "$BASE_TREE"; \
+                     printf '100644 blob %s\tcollect_state.json\n' "$BLOB"; } | git mktree)
+            COMMIT=$(git commit-tree $TREE $PARENT -m "chore(ai): 수집 상태 갱신 — run ${{ github.run_id }} (TRIP-348)")
+            git push origin "$COMMIT:refs/heads/collect-state"
+          ) || echo "::warning::수집 상태 push 실패 — 다음 실행은 이어가기 없이 처음부터 (수집 자체는 성공)"
       - name: 이어가기 검증 (상태 왕복 — 다음 실행이 커서부터 재개할 수 있는가)
         if: steps.collect.outputs.skipped != 'true'
         # 이 워크플로의 실패 모드는 "빨간불"이 아니라 **초록불인 채 같은 데이터만
