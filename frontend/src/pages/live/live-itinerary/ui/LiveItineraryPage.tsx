@@ -223,6 +223,7 @@ export function LiveItineraryPage({
     today,
     enabled: state.kind === 'active',
     triggers: triggers.data?.triggers,
+    itinerary: query.data,
   });
 
   // 방문 기록 → 진행 상태 도출(★도달성 — 빈 인자면 전 슬롯 upcoming 이라 active 카드가 프로덕션에 안 뜬다).

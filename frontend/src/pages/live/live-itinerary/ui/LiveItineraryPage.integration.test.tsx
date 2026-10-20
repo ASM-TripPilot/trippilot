@@ -6524,4 +6524,118 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
     expect(screen.queryByTestId(CARD)).toBeNull();
   });
+
+  /**
+   * 일정이 바뀌는 길은 여럿이다(재계획 확정 = 일정 무효화 · 직접 수정 저장 = 응답을 캐시에 직접 쓰기 · 도우미 편집). 어느
+   * 길이든 허브는 `dismissTo`·`router.back` 으로 돌아와 다시 마운트되지 않는다 — 허브가 보는 일정 캐시가 바뀐 것 하나로
+   * 기회를 다시 받아야, 서버가 '이미 일정에 있음'으로 빼는 장소의 카드가 남지 않는다(BR-SA-22).
+   */
+  const ITINERARY_GET = `GET /api/v1/trips/${TRIP_ID}/itinerary`;
+  const VENUE_SLOT = `execution-live-slot-${TODAY}#poi-venue`;
+  /** 다시 받기 대기 상한 — 기본 상한(5초)이 테스트 상한과 같아, 끝내 안 물으면 원인 대신 'Exceeded timeout' 이 뜬다(TOAST_WAIT 와 같은 이유). */
+  const REFETCH_WAIT = { timeout: 2000 };
+  /** 오늘 일정에 기회 카드의 장소(광안리 해변)를 넣은 일정. */
+  const withVenue = (): Itinerary =>
+    liveItinerary([
+      {
+        date: TODAY,
+        slots: [
+          liveSlot('p1', '감천문화마을', '10:00:00', { endAt: '11:00:00' }),
+          liveSlot('poi-venue', '광안리 해변', '12:00:00', {
+            endAt: '13:00:00',
+          }),
+        ],
+      },
+      {
+        date: TOMORROW,
+        slots: [
+          liveSlot('p2', '해운대 해변', '10:00:00', { endAt: '11:00:00' }),
+        ],
+      },
+    ]);
+
+  /** 준비 공통 — 일정·기회는 테스트가 바꾸는 서버 값, 쿼리 클라이언트는 테스트가 쥔다(캐시를 바꾸려고). */
+  async function renderHubWithClient(byDate: Record<string, Opportunity[]>) {
+    const fake = { itinerary: itinerary() };
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json(fake.itinerary)
+      ),
+      ...liveHubHandlers({ itinerary: itinerary() }),
+      opportunitiesHandler(byDate)
+    );
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: 0 },
+        mutations: { gcTime: 0 },
+      },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <LiveItineraryPage tripId={TRIP_ID} today={TODAY} />
+      </QueryClientProvider>
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
+        exact: true,
+      })
+    );
+    return { client, fake };
+  }
+
+  it.each([
+    ['직접 수정 저장 — 응답을 캐시에 직접 쓴다', 'write'],
+    ['재계획 확정 — 일정을 무효화해 다시 받는다', 'refetch'],
+  ] as const)(
+    'O14 일정이 바뀌면(%s) 같은 허브가 기회를 다시 받아, 방금 넣은 장소의 카드가 남지 않는다',
+    async (_label, how) => {
+      // 준비 — 광안리 해변 카드가 떠 있다.
+      const byDate: Record<string, Opportunity[]> = { [TODAY]: [VENUE] };
+      const { client, fake } = await renderHubWithClient(byDate);
+
+      // 실행 — 그 장소를 일정에 넣었다. 서버는 이제 그 장소를 기회에서 뺀다.
+      byDate[TODAY] = [];
+      const next = withVenue();
+      const key = getGetTripsTripIdItineraryQueryKey(TRIP_ID);
+      if (how === 'write') {
+        act(() => {
+          client.setQueryData(key, next);
+        });
+      } else {
+        fake.itinerary = next;
+        await act(() => client.invalidateQueries({ queryKey: key }));
+      }
+
+      // 단언 — 허브가 바뀐 일정을 그렸고(짝 앵커), 기회를 한 번 더 물어 카드가 사라졌다.
+      await waitFor(() => expect(screen.getByTestId(VENUE_SLOT)).toBeTruthy());
+      await waitFor(
+        () => expect(askedDates).toEqual([TODAY, TODAY]),
+        REFETCH_WAIT
+      );
+      await waitFor(
+        () => expect(screen.queryByTestId(CARD)).toBeNull(),
+        REFETCH_WAIT
+      );
+    }
+  );
+
+  it('O15 일정을 다시 받아도 내용이 같으면 기회를 다시 묻지 않는다 — 기회 조회는 서버가 AI 를 부르는 길이다', async () => {
+    // 준비
+    const { client } = await renderHubWithClient({ [TODAY]: [VENUE] });
+
+    // 실행 — 같은 일정으로 다시 받는다(포그라운드 복귀 재조회와 같다).
+    await act(() =>
+      client.invalidateQueries({
+        queryKey: getGetTripsTripIdItineraryQueryKey(TRIP_ID),
+      })
+    );
+
+    // 단언 — 일정은 두 번 받았지만(짝 앵커) 기회는 한 번이고, 카드는 그대로다.
+    await waitFor(() => expect(hitCount(ITINERARY_GET)).toBe(2));
+    await settle();
+    expect(askedDates).toEqual([TODAY]);
+    expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
+      exact: true,
+    });
+  });
 });

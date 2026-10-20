@@ -1,7 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
-import type { Opportunity, Trigger } from '@/shared/api/index.schemas';
-import { useGetTripsTripIdOpportunities } from '@/shared/api/index.hooks';
+import type {
+  Itinerary,
+  Opportunity,
+  Trigger,
+} from '@/shared/api/index.schemas';
+import {
+  getGetTripsTripIdOpportunitiesQueryKey,
+  useGetTripsTripIdOpportunities,
+} from '@/shared/api/index.hooks';
 import { readIdSet, writeIdSet } from '@/shared/storage';
 
 import {
@@ -16,6 +24,11 @@ import {
  * `GET /trips/{tripId}/opportunities?date=` 를 허브 active 얼굴에서만 부른다. 자격(여행 중·남은 날·범위)은 서버가 정하고
  * 밖이면 빈 목록이다 — 빈 목록·실패·대기 중이면 카드가 없을 뿐 허브의 다른 조회와 얼굴을 막지 않는다. 고르기는
  * `pickOpportunity`(순수).
+ *
+ * 허브가 그리는 일정이 바뀌면(재계획 확정·직접 수정 저장·도우미 편집 — 길과 무관하게 허브가 보는 일정 캐시 하나로) 그
+ * 여행의 기회(모든 날짜)를 낡게 한다 — 서버는 이제 일정에 든 장소를 빼고 거리도 새 동선에서 잰다. 허브는 `dismissTo`·
+ * `router.back` 으로 돌아와 다시 마운트되지 않아 스스로 다시 받지 않는다. 같은 내용으로 다시 받은 일정은 구조 공유로
+ * 참조가 같아 다시 묻지 않는다(기회 조회는 서버가 AI 를 부르는 길이다).
  *
  * × 숨김은 기기 로컬 편의값이다(`idSet` — 여행·날짜마다 한 칸, 값 = 그 날 숨긴 기회 key **집합**). key 하나만 두면 같은
  * 날 두 번째 ×가 첫 숨김을 지워, 날씨 위험이 풀리는 순간 닫았던 행사 카드가 되살아난다(계약 `Opportunity.key` — 숨긴
@@ -42,6 +55,7 @@ export function useHubOpportunities({
   today,
   enabled,
   triggers,
+  itinerary,
 }: {
   tripId: string;
   /** 허브가 보고 있는 날짜 — active 가 아니면 ''. */
@@ -52,7 +66,22 @@ export function useHubOpportunities({
   enabled: boolean;
   /** 발화 중 트리거 — 아직 모르면 undefined(카드를 고르지 않는다 — 고른 뒤 바뀌지 않게). */
   triggers: readonly Trigger[] | undefined;
+  /** 허브가 그리는 일정(조회 캐시의 data 그대로) — 참조가 바뀌면 기회를 다시 받는다. */
+  itinerary: Itinerary | undefined;
 }): HubOpportunity | null {
+  const queryClient = useQueryClient();
+  // 마지막으로 본 일정 — 처음 받은 것은 기회 조회의 출발점이라 넘기고, 그 뒤 다른 일정이 올 때만 낡게 한다.
+  const seenItinerary = useRef(itinerary);
+  useEffect(() => {
+    if (itinerary === undefined) return;
+    const before = seenItinerary.current;
+    seenItinerary.current = itinerary;
+    if (before === undefined || before === itinerary) return;
+    queryClient.invalidateQueries({
+      queryKey: getGetTripsTripIdOpportunitiesQueryKey(tripId),
+    });
+  }, [itinerary, queryClient, tripId]);
+
   const query = useGetTripsTripIdOpportunities(
     tripId,
     { date },

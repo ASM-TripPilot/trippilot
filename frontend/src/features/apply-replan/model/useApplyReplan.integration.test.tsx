@@ -5,16 +5,10 @@ import { QueryClient } from '@tanstack/react-query';
 import { server } from '@/mocks/server';
 import {
   getGetTripsTripIdItineraryQueryKey,
-  getGetTripsTripIdOpportunitiesQueryKey,
   getGetTripsTripIdTriggersQueryKey,
-  useGetTripsTripIdOpportunities,
   useGetTripsTripIdTriggers,
 } from '@/shared/api/index.hooks';
-import type {
-  Opportunity,
-  Trigger,
-  TriggerList,
-} from '@/shared/api/index.schemas';
+import type { Trigger, TriggerList } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { BASE } from '@/test-support/apiBase';
 import { createGate } from '@/test-support/mswHookHarness';
@@ -314,116 +308,5 @@ describe('확정(apply) 뒤 트리거 목록 — 서버의 소비는 적용 응�
       'trg-other',
     ]);
     expect(triggerGets).toBe(1);
-  });
-});
-
-/**
- * 상황 감지 FE-C · BR-SA-22 — 기회 카드 [넣어서 다시 짜기] → i04 → i06 [적용] 뒤 `dismissTo` 로 **같은 허브**에 돌아온다.
- * 허브는 다시 마운트되지 않아 기회 목록을 스스로 다시 받지 않는다 — 확정이 그 여행의 기회 캐시(모든 날짜)를 낡게 해야
- * 방금 넣은 장소(서버가 이제 '이미 일정에 있음'으로 빼는 곳)의 카드가 허브에 남지 않는다.
- */
-describe('확정(apply) 뒤 기회 캐시 (상황 감지 FE-C)', () => {
-  const DAY = '2026-10-20';
-  const OPPORTUNITIES_URL = `${BASE}/trips/${TRIP}/opportunities`;
-  const VENUE: Opportunity = {
-    key: 'event:부산 불꽃축제',
-    kind: 'EVENT_VENUE',
-    eventName: '부산 불꽃축제',
-    start: '2026-10-18',
-    end: '2026-10-24',
-    poiId: 'poi-venue',
-    poiName: '광안리 해변',
-    nearSlotKey: `${DAY}#p1`,
-    distanceLabel: '약 400m',
-  };
-  /** 가짜 서버의 기회 목록 — 적용 뒤엔 넣은 장소가 일정에 있어 빠진다. */
-  let serverOpportunities: Opportunity[];
-  let opportunityGets: number;
-
-  beforeEach(() => {
-    serverOpportunities = [VENUE];
-    opportunityGets = 0;
-    server.use(
-      http.get(OPPORTUNITIES_URL, () => {
-        opportunityGets += 1;
-        return HttpResponse.json({ items: serverOpportunities });
-      })
-    );
-  });
-
-  it('C1 확정이 성공하면 그 여행의 기회 캐시를 날짜와 무관하게 낡게 하고, 다른 여행 것은 건드리지 않는다', async () => {
-    // 준비
-    const day1 = getGetTripsTripIdOpportunitiesQueryKey(TRIP, { date: DAY });
-    const day2 = getGetTripsTripIdOpportunitiesQueryKey(TRIP, {
-      date: '2026-10-21',
-    });
-    const otherTrip = getGetTripsTripIdOpportunitiesQueryKey('trip-2', {
-      date: DAY,
-    });
-    client.setQueryData(day1, { items: [VENUE] });
-    client.setQueryData(day2, { items: [] });
-    client.setQueryData(otherTrip, { items: [VENUE] });
-    serveApply(USED.affectedDate);
-    const { result } = mountApply();
-
-    // 실행
-    act(() => {
-      result.current.mutate({ tripId: TRIP, sessionId: 's9' });
-    });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    // 단언
-    expect(isInvalidated(day1)).toBe(true);
-    expect(isInvalidated(day2)).toBe(true);
-    expect(isInvalidated(otherTrip)).toBe(false);
-  });
-
-  it('C2 허브가 보고 있으면 확정 뒤 기회를 다시 받아, 넣은 장소의 카드 재료가 사라진다', async () => {
-    // 준비 — 허브가 그 날 기회(광안리 해변)를 받아 두고 스택에 남아 있다.
-    const view = renderHook(
-      () => ({
-        hub: useGetTripsTripIdOpportunities(TRIP, { date: DAY }),
-        apply: useApplyReplan(),
-      }),
-      { wrapper: createWrapper(client) }
-    );
-    await waitFor(() =>
-      expect(view.result.current.hub.data?.items).toEqual([VENUE])
-    );
-    serverOpportunities = [];
-    serveApply(USED.affectedDate);
-
-    // 실행
-    act(() => {
-      view.result.current.apply.mutate({ tripId: TRIP, sessionId: 's9' });
-    });
-    await waitFor(() => expect(view.result.current.apply.isSuccess).toBe(true));
-
-    // 단언
-    await waitFor(() => expect(opportunityGets).toBe(2));
-    await waitFor(() =>
-      expect(view.result.current.hub.data?.items).toEqual([])
-    );
-  });
-
-  it('C3 확정이 실패하면(409) 기회 캐시는 그대로다', async () => {
-    // 준비
-    const day1 = getGetTripsTripIdOpportunitiesQueryKey(TRIP, { date: DAY });
-    client.setQueryData(day1, { items: [VENUE] });
-    server.use(
-      http.post(APPLY_URL, () =>
-        HttpResponse.json({ code: 'STALE' }, { status: 409 })
-      )
-    );
-    const { result } = mountApply();
-
-    // 실행
-    act(() => {
-      result.current.mutate({ tripId: TRIP, sessionId: 's9' });
-    });
-    await waitFor(() => expect(result.current.isError).toBe(true));
-
-    // 단언
-    expect(isInvalidated(day1)).toBe(false);
   });
 });
