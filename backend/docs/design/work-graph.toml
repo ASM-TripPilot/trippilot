@@ -4439,7 +4439,7 @@ reason = "M-U10-a 2단계 CHECK 는 1단계가 운영에 배포되고 옛 파드
 id = "COV-GATE"
 ticket = "TRIP-1465"
 title = "[Infra] JaCoCo 커버리지 합산 + 전체 하한·모듈 바닥 게이트"
-status = "todo"
+status = "done"
 touches = [
   "backend/build.gradle.kts",
   "backend/app/build.gradle.kts",
@@ -4459,7 +4459,7 @@ touches = [
   "backend/modules/reflection",
 ]
 note = """
-PR #1428 — 리뷰 대기. 하한 94/83, 모듈 바닥 70/40.
+PR #1428 — 2026-10-21 머지. 처음 하한 94/83, 모듈 바닥 70/40(현재 값은 COV-RATCHET).
 기준선은 **#1428 브랜치에서** 쟀다 — develop 에는 JaCoCo 가 없다. 2026-10-19 라인 95.4 · 분기 84.8,
 develop(#1431 포함) 병합 뒤 2026-10-20 로컬 재측정 라인 95.5 · 분기 85.3. 분기 분모는 8,084.
 모듈 test 디렉토리 셋은 JaCoCo 합성 필드(`$jacocoData`)를 INV-3 필드 검사에서 빼려고
@@ -4471,7 +4471,7 @@ develop(#1431 포함) 병합 뒤 2026-10-20 로컬 재측정 라인 95.5 · 분�
 id = "FIELD-GATE"
 ticket = "TRIP-1466"
 title = "[Infra] OpenAPI 필드 계약 게이트 + 계약 불일치 정정 · deviceId 로그인 500"
-status = "todo"
+status = "done"
 touches = [
   "backend/docs/design/openapi.yaml",
   "backend/app/src/test/kotlin/com/trippilot/app/web/OpenApiContractIT.kt",
@@ -4485,7 +4485,7 @@ touches = [
   "backend/modules/auth",
 ]
 note = """
-PR #1429 — 리뷰 대기.
+PR #1429 — 2026-10-21 머지.
 """
 
 [[nodes]]
@@ -4508,17 +4508,17 @@ PR #1431 머지(2026-10-20). 백엔드 판정은 그대로 두고 AI 병합 단�
 id = "POI-MIRROR-STRICT"
 ticket = "TRIP-1471"
 title = "[Test] 공유본 거울 테스트를 백엔드 시도 판정과 같이 자른다(빈 주소·비ASCII 공백)"
-status = "todo"
+status = "done"
 touches = ["ai/tests/scripts/test_merge_pois_docs.py"]
 note = """
-PR #1446 — 리뷰 대기. #1431 재검수 잔여. 테스트만 바꾼다(공유본에 해당 행 0건이라 결과는 그대로 초록).
+PR #1446 — 2026-10-21 머지. #1431 재검수 잔여. 테스트만 바꾼다(공유본에 해당 행 0건이라 결과는 그대로 초록).
 """
 
 [[nodes]]
 id = "POI-COLLECT-GATE"
 ticket = "TRIP-1475"
 title = "[AI] 수집 공유본 병합 게이트 — 백엔드가 시도를 못 정하는 행은 격리하고 나머지를 병합, 격리가 임계를 넘으면 실패"
-status = "todo"
+status = "done"
 touches = [
   "ai/scripts/collect/merge_pois_docs.py",
   "ai/tests/scripts/test_merge_pois_docs.py",
@@ -4529,6 +4529,7 @@ touches = [
   ".github/workflows/",
 ]
 note = """
+PR #1473 — 2026-10-21 develop 머지. 스케줄은 main 의 워크플로 사본으로 돌아 (b) 는 main 릴리스 뒤에 켜진다.
 #1431 4차 검수 잔여. 설계 요건의 정본은 TRIP-1475 본문이다 — 여기는 착수 판단용 요약(넷):
 (a) 검사는 merge_pois_docs.main() 안(약칭 펴기 직후)에 둔다 — 스크립트는 develop 판이 돌아 모든 병합 경로에 적용된다.
 (b) 수집 상태 영속(collect-state push)을 게이트 **뒤로** 옮긴다 — 지금은 merge_pois_docs 실행 자체가 영속 뒤라
@@ -4575,17 +4576,17 @@ BFF 의 새 응답 스키마도 필드 계약 검사를 받으므로 그 순서�
 id = "LOOP-AIRFLOW"
 ticket = "TRIP-1468"
 title = "[Infra] Airflow 수집 파이프라인(로컬) — 사본→검증→게시"
-status = "todo"
+status = "done"
 touches = ["batch", "docker-compose.yml", ".github/workflows/batch-ci.yml", ".github/workflows/", ".gitignore", "docs/conventions/anti-patterns.md"]
 note = """
-PR #1432. 실 수집 모드는 넣지 않았다(키 없이 시험 못 함). 신선도는 DAG 를 따로 두지 않고 event_collect.validate 안에서 본다 — 그날 유효 건수 ≥30 과 가장 오래된 지역의 마지막 수집이 허용 날수 이내(coverage — 값과 근거는 #1432). 리뷰 대기.
+PR #1432. 실 수집 모드는 넣지 않았다(키 없이 시험 못 함). 신선도는 DAG 를 따로 두지 않고 event_collect.validate 안에서 본다 — 그날 유효 건수 ≥30 과 가장 오래된 지역의 마지막 수집이 허용 날수 이내(coverage — 값과 근거는 #1432). 2026-10-21 머지.
 """
 
 [[nodes]]
 id = "LOOP-KAFKA"
 ticket = "TRIP-1469"
 title = "[BE] 아웃박스 배달 경로 Kafka 선택지(로컬) — 폴링 대비 지연 측정"
-status = "todo"
+status = "done"
 touches = [
   "docker-compose.yml",
   ".env.example",
@@ -4606,7 +4607,7 @@ touches = [
   "backend/modules/notification",
 ]
 note = """
-PR #1434 — 리뷰 대기. 파티션 병렬 소비(3)로 같은 여행의 Plan-B 사건이 동시에 와 묶음 푸시가 두 번 나가던 것을
+PR #1434 — 2026-10-21 머지. 파티션 병렬 소비(3)로 같은 여행의 Plan-B 사건이 동시에 와 묶음 푸시가 두 번 나가던 것을
 알림 모듈의 그룹 잠금으로 닫았다 — 그래서 notification 모듈도 만진다.
 """
 
@@ -4614,10 +4615,10 @@ PR #1434 — 리뷰 대기. 파티션 병렬 소비(3)로 같은 여행의 Plan-
 id = "LOOP-COVERAGE"
 ticket = "TRIP-1470"
 title = "[BE] 분기 커버리지 보강(change-log·reflection·notification)"
-status = "todo"
+status = "done"
 touches = ["backend/modules/change-log/src/test", "backend/modules/reflection/src/test", "backend/modules/notification/src/test", "backend/modules/change-log", "backend/modules/reflection", "backend/modules/notification"]
 note = """
-PR #1433 — 테스트 파일만. 보탠 분기 24+88+58 = 170(분모 8,084 의 약 2.1%p).
+PR #1433 — 2026-10-21 머지. 테스트 파일만. 보탠 분기 24+88+58 = 170(분모 8,084 의 약 2.1%p).
 PIT 는 리포에 넣지 않고 **로컬에서만** 쟀다(2026-10-20, 변이 점수 전→후): change-log 19→70% ·
 reflection 48→59% · notification 54→55%. CI 가 재현하는 수치가 아니다.
 테스트를 쓰다 찾은 운영 결함(A~)은 TRIP-1476 이 잇는다(건수는 그 노드).
@@ -4627,7 +4628,7 @@ reflection 48→59% · notification 54→55%. CI 가 재현하는 수치가 아�
 id = "TRIP-1476"
 ticket = "TRIP-1476"
 title = "[BE] 방어적 읽기·이벤트 payload 구멍 — 옛/깨진 행 영구 500 · 빈 숙소 이름 알림 독"
-status = "todo"
+status = "done"
 touches = [
   "backend/modules/notification/src/main/kotlin/com/trippilot/notification/adapter/in/event/DomainNotificationSubscribers.kt",
   "backend/modules/change-log/src/main/kotlin/com/trippilot/changelog/adapter/out/persistence/ChangeLogPersistence.kt",
@@ -4643,6 +4644,7 @@ touches = [
   "backend/modules/notification",
 ]
 note = """
+PR #1474·#1481 — 2026-10-21 머지.
 LOOP-COVERAGE(#1433)에서 뗀 운영 코드 결함. 처음 A~E 에 #1433 검수에서 항목이 더해졌다 — 목록의 정본은 Jira(본문+댓글),
 여기 건수를 적지 않는다(드리프트한다). 티켓이 "각각 재현 테스트를 먼저 쓴다"고 적어 세 모듈 test 디렉토리도 만진다.
 C(범위 밖 저장값)·E(모르는 source_type)·G(모르는 reflection source)는 읽기 정책 설계 판단이 먼저다(나머지는 바로 고칠 수 있다). #1433 과 선행 관계는 티켓에 없다 — 자원 배타뿐.
@@ -4650,12 +4652,14 @@ C(범위 밖 저장값)·E(모르는 source_type)·G(모르는 reflection source
 
 [[nodes]]
 id = "COV-RATCHET"
-title = "[Infra] 커버리지 래칫 — 전체 분기 83 → 86 · 모듈 바닥 70/40 상향"
+ticket = "TRIP-1532"
+title = "[Infra] 커버리지 래칫 — 전체 94/83 → 95/86 · 모듈 분기 바닥 40 → 50"
 status = "todo"
-touches = ["backend/scripts/coverage_gate.py"]
+touches = ["backend/scripts/coverage_gate.py", "backend/docs/design/work-graph.toml"]
 note = """
-티켓 없음(아직 발행 전). 전체 하한과 모듈 바닥 상수가 둘 다 coverage_gate.py 에 있어 한 PR 로 올린다.
-모듈 바닥은 #1433 본문이 "#1428 머지 뒤 래칫으로 올린다"고 적은 것을 받는다 — 올릴 값은 그때 모듈별 실측에서 정한다.
+PR #1493. 2026-10-21 develop 실측 라인 96.4 · 분기 87.6 에서 버림 후 1p 여유.
+모듈 라인 바닥 70 은 유지 — 최저(moderation 82.9%)가 10/19 과 같다. 분기 바닥 50 은 최저 moderation(분기 24개, 75.0%)이
+안 덮인 분기 13개 이상 더 생겨야 걸리는 값이다.
 """
 
 [[edges]]
