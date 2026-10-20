@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import copy
 import io
 import json
 import re
@@ -452,8 +453,9 @@ def _self_check() -> None:
 
 
 def _survives_retro_drops(p: dict) -> bool:
-    """이 판본 하나가 소급 제거를 통과하는가 — 되돌릴 후보 판정용. 판정 로그는 삼킨다(실제로 뺀 게 아니다)."""
-    probe = {"proposals": [p], "stats": {}}
+    """이 판본 하나가 소급 제거를 통과하는가 — 되돌릴 후보 판정용. **순수 판정이다**: 사본으로 보고(재파싱이 원본을
+    고치지 않게), 판정 로그는 삼킨다(실제로 뺀 게 아니다). 되돌린 판본의 재파싱은 `main` 이 따로 한다."""
+    probe = {"proposals": [copy.deepcopy(p)], "stats": {}}
     with contextlib.redirect_stderr(io.StringIO()):
         retro_drops(probe)
     return bool(probe["proposals"])
@@ -569,6 +571,9 @@ def main(argv: list[str]) -> int:
         expand_sido_abbrev([v for vs in history.values() for v in vs[:-1]])   # 되돌릴 후보도 펴 둔다
         quarantined, restored, left = quarantine_unresolved_sido(
             out["proposals"], history=history, before_refs=before_refs, survives=_survives_retro_drops)
+        # 되돌린 앞 판본은 소급 제거 뒤에 들어왔으므로 영업시간 재파싱도 여기서 받는다(나머지 행에는 멱등 — 이미 거쳤다).
+        if restored and (recovered := reparse_open_hours(out["proposals"])):
+            print(f"[merge] 영업시간 재파싱(되돌린 앞 판본) — {recovered}건 살림", file=sys.stderr)
         for q in quarantined[:5]:
             print(f"[merge] 시도 미판정 격리 — {q}", file=sys.stderr)
         for q in restored[:5]:

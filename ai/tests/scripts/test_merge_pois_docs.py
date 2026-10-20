@@ -690,6 +690,25 @@ def test_살아_있는_행이_깨진_주소로_다시_오면_앞_판본을_지�
     assert json.loads(st_path.read_text(encoding="utf-8"))["proposed"] == {"gone": "20261015"}
 
 
+def test_되돌린_앞_판본도_영업시간을_다시_읽는다(tmp_path: Path) -> None:
+    """되돌린 판본은 첫 소급 제거(재파싱 포함) 뒤에 들어온다 — 따로 재파싱하지 않으면 원문만 있고 시간은 빈 채로 남는다."""
+    earlier = _keyed_doc("TOURAPI", "cut", at="2026-10-01T00:00:00+00:00")
+    earlier["proposals"][0]["opening_hours_raw"] = "상시 개방"
+    rc, out, _ = _gate_run(tmp_path, {"cut": "제주특별 서귀포시"}, state=_state({}), earlier=earlier)
+    assert rc == 0
+    [p] = json.loads(out.read_text(encoding="utf-8"))["proposals"]
+    assert p["opening_hours_raw"] == "상시 개방"
+    assert len(p["poi"]["open_hours"]) == 7
+
+
+def test_되돌릴_후보_판정은_후보를_고치지_않는다() -> None:
+    """판정은 순수해야 한다 — 고르지 않은 후보까지 재파싱되면 안 되고, 재파싱 건수는 `main` 이 센다."""
+    p = _prop("1", "상시 개방")
+    before = json.dumps(p, sort_keys=True)
+    assert M._survives_retro_drops(p) is True
+    assert json.dumps(p, sort_keys=True) == before
+
+
 def test_소급_제거될_앞_판본으로는_되돌리지_않고_오늘_판본을_남긴다(tmp_path: Path) -> None:
     """옛 판본만 걸리는 규칙(옛 이름이 관광 무관)이 있으면, 되돌린 뒤 그 키가 통째로 빠져 지키려던 POI 가 닫힌다.
     그래서 되돌리지 않는다 — 공유본 키이므로 벤더가 지금 내보내는 오늘 판본을 경고와 함께 둔다."""
