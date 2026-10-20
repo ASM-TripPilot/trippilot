@@ -311,7 +311,7 @@ export function SavedStayListScreen({
   const screenFace: ScreenFace = isGuest ? 'guest' : face;
   const subtitle =
     screenFace === 'results'
-      ? `저장한 숙소 ${savedStays.length}곳 · ♥로 담아둔 곳`
+      ? `저장한 숙소 ${savedStays.length}곳 · ♥로 저장한 곳`
       : null;
 
   return (

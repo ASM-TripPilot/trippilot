@@ -415,7 +415,7 @@ export function ItineraryPlanPage({
             ]
           : [
               {
-                label: '일정 저장하기',
+                label: '일정 확정하기',
                 variant: 'primary',
                 // TRIP-1013 #057 — '일정 저장하기'가 창을 열고, 창 안의 '일정 수정'(위 두 갈래)은 무시된다.
                 onPress: guardPress(handleConfirm),

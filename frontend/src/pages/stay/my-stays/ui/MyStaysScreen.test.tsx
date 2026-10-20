@@ -21,14 +21,14 @@ import type { ReactTestInstance } from 'react-test-renderer';
  */
 
 // 옛 MyStaysScreen.test — BR-U6-20·TRIP-1076·INV-U1-08·US-NOTIF-06
-describe('행·출발점 변경·empty (옛 본 파일)', () => {
+describe('행·거점 변경·empty (옛 본 파일)', () => {
   /**
-   * TRIP-605 · l04 등록 숙소·예약 기록 — 순수 프레젠테이션 화면(VM 주입). 조회·조합은 페이지 몫이라
+   * TRIP-605 · l04 등록 숙소 — 순수 프레젠테이션 화면(VM 주입). 조회·조합은 페이지 몫이라
    * 여기선 완성 VM 을 props 로 넣고 렌더 계약만 잠근다.
    *
    * 무엇을 보장하나(승인 계약):
    *  - 🔴 AC-1(BR-U6-20) 행에 숙소명·위치·체크인/아웃·등록 출처·연결 여행이 보이고, 미연결은 정확히 '연결된 여행 없음'.
-   *  - 🔴 AC-2(TRIP-1076 결정 2(A) · 반전) 등록 행의 「출발점 변경」 press → 다이얼로그 없이 `onPressChangeBase(row)`
+   *  - 🔴 AC-2(TRIP-1076 결정 2(A) · 반전) 등록 행의 「거점 변경」 press → 다이얼로그 없이 `onPressChangeBase(row)`
    *    1회. 이 화면은 거점을 바꾸지 않는다 — 바꾸기는 그 여행의 거점 화면(페이지가 push)이 한다.
    *  - 🔴 AC-3(INV-U1-08) coordConfirmed=false → 토글 real disabled + press 무반응 + 콜백 0.
    *  - 🔴 TRIP-989 C(D13) 미등록 행에는 출발점 버튼이 없다 — 토글은 등록 행에만 있다.
@@ -130,14 +130,14 @@ describe('행·출발점 변경·empty (옛 본 파일)', () => {
     });
   });
 
-  describe('🔴 AC-2 · 「출발점 변경」은 다이얼로그 없이 콜백으로 (TRIP-1076 결정 2(A) · 반전)', () => {
+  describe('🔴 AC-2 · 「거점 변경」은 다이얼로그 없이 콜백으로 (TRIP-1076 결정 2(A) · 반전)', () => {
     it('등록 행 토글 press → 다이얼로그 없이 onPressChangeBase 를 그 행으로 1회 부른다', () => {
       const { onPressChangeBase } = renderScreen({ rows: [assignedRow()] });
 
       // 준비 확인: 누르기 전 콜백 0.
       expect(onPressChangeBase).not.toHaveBeenCalled();
 
-      // 실행: 출발점 변경 press.
+      // 실행: 거점 변경 press.
       fireEvent.press(screen.getByTestId('my-stays-base-toggle-s1'));
 
       // 단언: 그 행으로 1회, 다이얼로그는 없다(옛 해제 게이트 소멸).
@@ -147,7 +147,7 @@ describe('행·출발점 변경·empty (옛 본 파일)', () => {
       expect(screen.queryByTestId('my-stays-base-dialog')).toBeNull();
     });
 
-    it('미등록 행에는 "출발점 지정" 버튼이 없어 그 행에서 다이얼로그를 열 길이 없다 (TRIP-989 C-1·C-3 · D13)', () => {
+    it('미등록 행에는 "거점 지정" 버튼이 없어 그 행에서 다이얼로그를 열 길이 없다 (TRIP-989 C-1·C-3 · D13)', () => {
       // 미등록 지정(POST)은 어느 여행에 붙일지 모르는 채로는 할 수 없다(TRIP-621 로 분리). 묻고 나서
       // 아무것도 안 하면 침묵 실패(INV-4)라, 물을 수 없는 행에서는 묻지도 않는다.
       renderScreen({ rows: [assignedRow(), unassignedRow()] });
@@ -158,7 +158,8 @@ describe('행·출발점 변경·empty (옛 본 파일)', () => {
       expect(within(row).getByText('연결된 여행 없음')).toBeOnTheScreen();
 
       // 지정 버튼·문구가 없고, 행 안에 누를 수 있는 버튼이 하나도 없다(다른 testID 로 남기는 우회 차단).
-      expect(within(row).queryByText('출발점 지정')).toBeNull();
+      expect(within(row).queryByText('거점 지정')).toBeNull();
+      expect(within(row).queryByText('출발점 지정')).toBeNull(); // 옛 문구(TRIP-989 D13 에서 지운 점선 배지)
       expect(screen.queryByTestId('my-stays-base-toggle-s2')).toBeNull();
       expect(within(row).queryAllByRole('button')).toHaveLength(0);
 
@@ -172,19 +173,19 @@ describe('행·출발점 변경·empty (옛 본 파일)', () => {
   });
 
   /**
-   * TRIP-1076 결정 2(A) — 버튼은 Figma l04(1604:2440)대로 「출발점 변경」이다(TRIP-1017 의 「출발점 해제」 반전).
+   * TRIP-1076 결정 2(A) — 버튼은 Figma l04(1604:2440)대로 「거점 변경」이다(TRIP-1017 의 「출발점 해제」 반전).
    * 누르면 거점 화면으로 가며, 이 화면에서 재생성을 약속하는 문구는 어디에도 없다(01b Q1 — 거점 화면은
    * 재생성하지 않는다).
    */
-  describe('🔴 TRIP-1076 AC-6 · 「출발점 변경」 문구 (결정 2(A) · 반전)', () => {
-    it('행 버튼은 "출발점 변경" 버튼으로 읽히고 "출발점 해제"라는 글자는 없다', () => {
+  describe('🔴 TRIP-1076 AC-6 · 「거점 변경」 문구 (결정 2(A) · 반전)', () => {
+    it('행 버튼은 "거점 변경" 버튼으로 읽히고 "거점 해제"라는 글자는 없다', () => {
       renderScreen({ rows: [assignedRow()] });
 
       // 역할·이름으로 먼저 찾고 testID 를 확인한다 — 글자와 testID 가 따로 드러난다.
-      const toggle = screen.getByRole('button', { name: '출발점 변경' });
+      const toggle = screen.getByRole('button', { name: '거점 변경' });
       expect(toggle).toHaveProp('testID', 'my-stays-base-toggle-s1');
-      expect(within(toggle).getByText('출발점 변경')).toBeOnTheScreen();
-      expect(screen.queryByText('출발점 해제')).toBeNull();
+      expect(within(toggle).getByText('거점 변경')).toBeOnTheScreen();
+      expect(screen.queryByText('거점 해제')).toBeNull();
     });
 
     it('누른 뒤에도 다이얼로그·재생성 약속 문구가 화면 어디에도 없다', () => {
@@ -331,25 +332,27 @@ describe('Figma l04 정합 (옛 .l04parity)', () => {
       renderRows([assignedRow()]);
 
       const row = screen.getByTestId('my-stays-row-s1');
-      expect(within(row).getByText('출발점')).toBeOnTheScreen();
+      expect(within(row).getByText('거점')).toBeOnTheScreen();
     });
 
-    it('미등록 행에는 점선 "출발점 지정" 배지도 "출발점" 배지도 없다 (TRIP-989 D13 — Figma 1604 와 다름)', () => {
+    it('미등록 행에는 점선 "거점 지정" 배지도 "출발점" 배지도 없다 (TRIP-989 D13 — Figma 1604 와 다름)', () => {
       renderRows([unassignedRow()]);
 
       // 행 자체는 그려진다 — 아래 "없음" 단언이 빈 화면으로 통과하지 않게.
       const row = screen.getByTestId('my-stays-row-s2');
       expect(within(row).getByText('○○ 게스트하우스')).toBeOnTheScreen();
 
-      expect(within(row).queryByText('출발점 지정')).toBeNull();
+      expect(within(row).queryByText('거점 지정')).toBeNull();
+      expect(within(row).queryByText('출발점 지정')).toBeNull(); // 옛 문구(TRIP-989 D13 에서 지운 점선 배지)
+      expect(within(row).queryByText('거점')).toBeNull();
       expect(within(row).queryByText('출발점')).toBeNull();
     });
 
-    it('"출발점 변경" 글자는 정확히 "출발점 변경"(› 문자 없음)이다', () => {
+    it('"거점 변경" 글자는 정확히 "거점 변경"(› 문자 없음)이다', () => {
       renderRows([assignedRow()]);
 
       const toggle = screen.getByTestId('my-stays-base-toggle-s1');
-      expect(within(toggle).getByText('출발점 변경')).toBeOnTheScreen();
+      expect(within(toggle).getByText('거점 변경')).toBeOnTheScreen();
       // "›" 를 별도 <Text> 조각으로 남기는 우회도 잡는다.
       expect(screen.queryAllByText(/›/)).toHaveLength(0);
     });

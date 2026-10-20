@@ -740,7 +740,7 @@ export function DraftPage({
                   },
                 },
             {
-              label: '확정하기',
+              label: '완성 일정 보기',
               variant: 'primary',
               onPress: () =>
                 router.push({

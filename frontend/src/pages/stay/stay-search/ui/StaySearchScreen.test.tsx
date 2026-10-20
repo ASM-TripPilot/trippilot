@@ -643,7 +643,7 @@ describe('원형 FAB 2개 (옛 .fab)', () => {
    *
    * 무엇을 보장하나:
    *  - 흰 하트 FAB press → onPressSaved 1회 · + FAB press → onPressRegister 1회.
-   *  - 스크린리더 이름이 "담은 숙소"/"숙소 등록"으로 갈린다(글리프가 이름에 안 샌다).
+   *  - 스크린리더 이름이 "저장한 숙소"/"숙소 등록"으로 갈린다(글리프가 이름에 안 샌다).
    *  - 옛 알약 FAB(`stay-search-fab`·"여행 만들기")이 완전히 소멸한다(개명 아닌 교체).
    *  - 목록 끝 여백(footer)이 2단 FAB 최상단(흰 FAB bottom152+size56=208)을 덮어 마지막 카드를
    *    가리지 않는다 — 픽셀 겹침·두 원 좌표·간격·색은 6-b 실기 몫이고, 여기선 footer 값만 잠근다.
@@ -678,11 +678,11 @@ describe('원형 FAB 2개 (옛 .fab)', () => {
       expect(onPressRegister).toHaveBeenCalledTimes(1);
     });
 
-    it('스크린리더가 두 FAB 이름을 "담은 숙소"/"숙소 등록"으로 읽는다', () => {
+    it('스크린리더가 두 FAB 이름을 "저장한 숙소"/"숙소 등록"으로 읽는다', () => {
       render(<StaySearchScreen region="부산" items={[]} />);
 
       // accessibilityLabel 이 붙어 분홍하트·흰＋ 글리프가 이름에 안 샌다.
-      expect(screen.getByLabelText('담은 숙소')).toBe(
+      expect(screen.getByLabelText('저장한 숙소')).toBe(
         screen.getByTestId('stay-search-fab-saved')
       );
       expect(screen.getByLabelText('숙소 등록')).toBe(

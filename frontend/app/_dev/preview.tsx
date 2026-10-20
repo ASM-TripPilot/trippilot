@@ -863,7 +863,7 @@ function renderH08DraftNoticeShell(options: {
       }
       cta={[
         { label: '다시 짜기', variant: 'outline', onPress: noop },
-        { label: '확정하기', variant: 'primary', onPress: noop },
+        { label: '완성 일정 보기', variant: 'primary', onPress: noop },
       ]}
     >
       <View className="gap-md px-lg pb-2xl pt-xs">
@@ -1275,7 +1275,7 @@ function renderH14PlanSheet(options: {
           meta={meta}
         />
       }
-      cta={[{ label: '일정 저장하기', variant: 'primary', onPress: noop }]}
+      cta={[{ label: '일정 확정하기', variant: 'primary', onPress: noop }]}
     >
       <View className="gap-md px-lg pb-2xl pt-xs">
         <UnplacedMustVisitNotice rows={unplaced ?? []} />
@@ -2874,7 +2874,7 @@ export const PREVIEW_STATES: PreviewState[] = [
             meta="4곳"
           />
         }
-        cta={[{ label: '일정 저장하기', variant: 'primary', onPress: noop }]}
+        cta={[{ label: '일정 확정하기', variant: 'primary', onPress: noop }]}
       >
         <View />
       </MapSheetShell>
@@ -5244,7 +5244,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // g02 거점 편집 얼굴(TRIP-1082, Figma `4700:2688`) — l04 '출발점 변경' 입구. `onDone` 이 있으면 진행바·
+  // g02 거점 편집 얼굴(TRIP-1082, Figma `4700:2688`) — l04 '거점 변경' 입구. `onDone` 이 있으면 진행바·
   // 위저드 문구·생성 CTA 없이 하단 [완료] 하나. 제목만 코드가 '거점 숙소 바꾸기'로 앞서 있다(01b Q1).
   {
     key: 'trip-new-step2-edit',
@@ -5629,7 +5629,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         }
         cta={[
           { label: '다시 짜기', variant: 'outline', onPress: noop },
-          { label: '확정하기', variant: 'primary', onPress: noop },
+          { label: '완성 일정 보기', variant: 'primary', onPress: noop },
         ]}
       >
         <View className="gap-md px-lg pb-2xl pt-xs">
@@ -5693,7 +5693,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         }
         cta={[
           { label: '다시 짜기', variant: 'outline', onPress: noop },
-          { label: '확정하기', variant: 'primary', onPress: noop },
+          { label: '완성 일정 보기', variant: 'primary', onPress: noop },
         ]}
       >
         <View className="gap-md px-lg pb-2xl pt-xs">
@@ -5900,7 +5900,7 @@ export const PREVIEW_STATES: PreviewState[] = [
             meta="4곳"
           />
         }
-        cta={[{ label: '확정하기', variant: 'primary', onPress: noop }]}
+        cta={[{ label: '완성 일정 보기', variant: 'primary', onPress: noop }]}
       >
         <View className="gap-md px-lg pb-2xl pt-xs">
           {H11_COPICK_PREVIEW_SLOTS.flatMap((slot, index) => {
@@ -6396,13 +6396,13 @@ export const PREVIEW_STATES: PreviewState[] = [
       </SafeAreaView>
     ),
   },
-  // l04 등록 숙소·예약 기록(TRIP-605·777) — 등록됨(채움 배지 + "출발점 변경" chevron)·미등록 두 행을
-  // Figma l04 default(1604:2440)와 대조한다. 미등록 행의 점선 "출발점 지정"은 TRIP-989(D13)로 숨겨
+  // l04 등록 숙소(TRIP-605·777) — 등록됨(채움 배지 + "거점 변경" chevron)·미등록 두 행을
+  // Figma l04 default(1604:2440)와 대조한다. 미등록 행의 점선 "거점 지정"은 TRIP-989(D13)로 숨겨
   // Figma 와 다르다.
   {
     key: 'my-stays-default',
     band: 'l',
-    label: 'l04 · 등록 숙소·예약 기록 default',
+    label: 'l04 · 등록 숙소 default',
     login: null,
     render: () => (
       <MyStaysScreen
@@ -6418,7 +6418,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'my-stays-empty',
     band: 'l',
-    label: 'l04 · 등록 숙소·예약 기록 empty',
+    label: 'l04 · 등록 숙소 empty',
     login: null,
     render: () => (
       <MyStaysScreen

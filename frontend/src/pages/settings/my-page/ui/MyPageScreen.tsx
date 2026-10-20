@@ -51,7 +51,7 @@ const SETTINGS_ROWS: {
 }[] = [
   {
     key: 'bases',
-    label: '등록 숙소·예약 기록',
+    label: '등록 숙소',
     icon: <MenuBedGlyph />,
     testID: 'my-stays-row',
     ready: true,
@@ -108,7 +108,7 @@ export interface MyPageScreenProps {
   onPressEdit?: () => void;
   /** 헤더 톱니·하단 '설정' 행 진입(페이지가 /settings 로 주입). 미주입이면 둘 다 누를 곳이 없다. */
   onPressSettings?: () => void;
-  /** '등록 숙소·예약 기록' 행 진입(페이지가 /my/stays 로 주입). */
+  /** '등록 숙소' 행 진입(페이지가 /my/stays 로 주입). */
   onPressStays?: () => void;
   /** '여행 스타일 분석' 행 진입(페이지가 /records/style 로 주입). */
   onPressStyleAnalysis?: () => void;

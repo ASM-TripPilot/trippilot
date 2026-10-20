@@ -701,7 +701,7 @@ export function StaySearchScreen({
         <Pressable
           testID="stay-search-fab-saved"
           accessibilityRole="button"
-          accessibilityLabel="담은 숙소"
+          accessibilityLabel="저장한 숙소"
           onPress={onPressSaved}
           style={fabShadow}
           className="absolute bottom-[152px] right-lg h-[56px] w-[56px] items-center justify-center rounded-pill border border-hairline bg-canvas"

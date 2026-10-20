@@ -87,7 +87,7 @@ export interface TripWizardStep2ScreenProps {
   onRetryAll: () => void;
   /** notrip 얼굴 "처음부터". */
   onRestart: () => void;
-  /** TRIP-1082 — 있으면 **거점 편집 얼굴**(Figma `4700:2688`, l04 '출발점 변경' 입구): 진행바·위저드
+  /** TRIP-1082 — 있으면 **거점 편집 얼굴**(Figma `4700:2688`, l04 '거점 변경' 입구): 진행바·위저드
    *  문구·생성/숙소 없이 CTA 를 숨기고 하단 [완료] 하나. 누르면 일정이 안 만들어지는 라벨이라(INV-4). */
   onDone?: () => void;
 }

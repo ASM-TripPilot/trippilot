@@ -38,7 +38,7 @@ import {
  * 함께 바뀌어 "빨간데 안 눌리는"·"회색인데 눌리는" 상태를 남기지 않는다(문제로그 2026-08-08).
  */
 
-const SCREEN_TITLE = '필수 방문지';
+const SCREEN_TITLE = '꼭 갈 곳';
 const SKIP_LABEL = '건너뛰기';
 const INTRO_TITLE = '꼭 가고 싶은 곳을 먼저 담아요';
 const INTRO_NOTE = 'AI가 시간·동선을 맞춰 배치해요';
@@ -57,7 +57,7 @@ const TIMEMODE_FIXED = '시간 정해두기';
 
 const PROCEED_LABEL = '이 구성으로 일정 짜기';
 
-const EMPTY_TITLE = '아직 담은 필수 방문지가 없어요';
+const EMPTY_TITLE = '아직 담은 꼭 갈 곳이 없어요';
 const EMPTY_NOTE = '꼭 가고 싶은 곳을 담으면 AI가 알아서 배치해요';
 const ADD_LABEL = '꼭 갈 곳 추가';
 /** 조회 실패 부제는 0곳 얼굴과 반드시 구분한다(정본 `frontend-components` L132). */
@@ -287,7 +287,7 @@ function MustVisitCard({
         <Pressable
           testID={`itinerary-mustvisit-remove-${item.sourcePoiId}`}
           accessibilityRole="button"
-          accessibilityLabel="필수 방문지에서 빼기"
+          accessibilityLabel="꼭 갈 곳에서 빼기"
           onPress={() =>
             onRemove?.({
               mustVisitId: item.mustVisitId,

@@ -936,7 +936,7 @@ describe('Figma 배선 결과 (옛 .l03parity)', () => {
    *    미달 얼굴(안내 한 줄, 칩·게이지 없음)로 말한다.
    *  - AC-4 페이지는 스타일 헤드라인을 주입하지 않는다(서버 필드 없음, 계약 공백).
    *  - (AC-6 "지난 여행" 노출 규칙은 TRIP-1123 에서 확정 && 종료 기준으로 바뀌어 `MyPage.counts.test.tsx` AC-8 로 옮겼다.)
-   *  - AC-7 메뉴는 정확히 3행(등록 숙소·예약 기록 / 여행 스타일 분석 / 설정)이고, 첫 행 아이콘은
+   *  - AC-7 메뉴는 정확히 3행(등록 숙소 / 여행 스타일 분석 / 설정)이고, 첫 행 아이콘은
    *    북마크가 아니다(침대). 행 배선은 `MyPage.integration.test.tsx` B-1 이 진다.
    *
    * 왜 이렇게 테스트하나: 조회 훅(계정·프로필·스타일·여행 목록·카드별 숙소/일정)만 목으로 응답을 넣고
@@ -1106,7 +1106,7 @@ describe('Figma 배선 결과 (옛 .l03parity)', () => {
   });
 
   describe('AC-7 · 메뉴 3행(Seed Q1=A)', () => {
-    it('메뉴 카드의 글자는 정확히 [등록 숙소·예약 기록, 여행 스타일 분석, 설정] 이다', () => {
+    it('메뉴 카드의 글자는 정확히 [등록 숙소, 여행 스타일 분석, 설정] 이다', () => {
       renderWithQueryClient(<MyPage />);
 
       const menu = screen.getByTestId('my-menu-card');
@@ -1115,11 +1115,7 @@ describe('Figma 배선 결과 (옛 .l03parity)', () => {
         .findAll((node) => (node.type as string) === 'Text')
         .map((node) => String(node.props.children));
 
-      expect(labels).toEqual([
-        '등록 숙소·예약 기록',
-        '여행 스타일 분석',
-        '설정',
-      ]);
+      expect(labels).toEqual(['등록 숙소', '여행 스타일 분석', '설정']);
     });
 
     it('첫 행 아이콘은 북마크가 아니다(Figma 침대)', () => {
@@ -1273,7 +1269,7 @@ describe('조회 → 모델 → 배치 (옛 .integration)', () => {
       // 단언(존재 + 배선): 보이는 행은 전부 눌러서 이동한다 — 행마다 정확히 1회, 경로 완전일치.
       (
         [
-          ['my-stays-row', '등록 숙소·예약 기록', '/my/stays'],
+          ['my-stays-row', '등록 숙소', '/my/stays'],
           ['my-style-analysis-row', '여행 스타일 분석', '/records/style'],
           ['my-settings-row', '설정', '/settings'],
         ] as const

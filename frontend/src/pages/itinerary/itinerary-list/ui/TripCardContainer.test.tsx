@@ -19,7 +19,7 @@ import { TripCardContainer } from './TripCardContainer';
  *  - 🔴 **AC-1** PARTIAL → 상태문 'AI가 일정을 짜는 중' · 배지 '작성중' · **resume 부재**(★ seam
  *    누출 트립와이어 — 배지가 '작성중'인데 resume 가 뜨면 red. 배지로 resume 를 가르는 현행이 여기서 샌다).
  *  - 🔴 **AC-2** COMPLETE/FAILED + PLANNED → 상태문 '추천안 준비 중' · resume 존재('일정 이어서 짜기').
- *  - 🔴 **AC-3** CONFIRMED → 상태문 '일정 확정' · 배지 '완성' · resume 부재(TRIP-986 Seed D2 — 구 '추천안이 준비됐어요' 교체).
+ *  - 🔴 **AC-3** CONFIRMED → 상태문 '일정 확정' · 배지 '확정' · resume 부재(TRIP-986 Seed D2 — 구 '추천안이 준비됐어요' 교체).
  *  - 🔴 **AC-4** isPending → 배지·상태문·resume 전부 부재, 카드·(짝)는 뜬다(공짜 통과 차단).
  *
  * 왜 이렇게 테스트하나: 컨테이너는 `useGetTripsTripIdItinerary` 하나를 물어 VM 을 조립해 순수
@@ -146,7 +146,7 @@ describe('🔴 AC-2 · 초안 — resume 존재', () => {
 });
 
 describe('🔴 AC-3 · 완성(CONFIRMED) — TRIP-986 AC-B2(#037)', () => {
-  it('상태문 "일정 확정"(구 "추천안이 준비됐어요" 교체, Seed D2) · 배지 "완성" · resume 부재', () => {
+  it('상태문 "일정 확정"(구 "추천안이 준비됐어요" 교체, Seed D2) · 배지 "확정" · resume 부재', () => {
     mockUseItinerary.mockReturnValue(itinOk(itin('COMPLETE', 'CONFIRMED')));
 
     render(<TripCardContainer trip={trip()} />);
@@ -155,7 +155,7 @@ describe('🔴 AC-3 · 완성(CONFIRMED) — TRIP-986 AC-B2(#037)', () => {
       '일정 확정'
     );
     expect(screen.queryByText('추천안이 준비됐어요')).toBeNull();
-    expect(screen.getByTestId('my-trip-badge-t1')).toHaveTextContent('완성');
+    expect(screen.getByTestId('my-trip-badge-t1')).toHaveTextContent('확정');
     expect(screen.queryByTestId('my-trip-resume-t1')).toBeNull();
   });
 });
@@ -256,12 +256,12 @@ describe('🔴 986-B4 · 404 가 아닌 조회 실패(500) — "일정 없음"�
 });
 
 describe('986-C3 · 끝난 여행(ENDED)도 카드 얼굴은 일정 상태만 본다 (Seed D4 — 제외는 완료 바에만)', () => {
-  it('Trip.status ENDED + 확정 일정 → 배지 "완성" · 상태문 "일정 확정"', () => {
+  it('Trip.status ENDED + 확정 일정 → 배지 "확정" · 상태문 "일정 확정"', () => {
     mockUseItinerary.mockReturnValue(itinOk(itin('COMPLETE', 'CONFIRMED')));
 
     render(<TripCardContainer trip={trip({ status: 'ENDED' })} />);
 
-    expect(screen.getByTestId('my-trip-badge-t1')).toHaveTextContent('완성');
+    expect(screen.getByTestId('my-trip-badge-t1')).toHaveTextContent('확정');
     expect(screen.getByTestId('my-trip-extra-t1')).toHaveTextContent(
       '일정 확정'
     );
@@ -423,8 +423,8 @@ describe('여행 중 배지 — 오늘이 기간 안인가', () => {
    * 무엇을 보장하나:
    *  - 🔴 K1 확정 + 기간 안 → '여행 중' · 상태문 '일정 확정' · ⋯·resume 없음(삭제 콜백을 줘도).
    *  - 🟢 K2 같은 기간 초안 → '작성중' · ⋯ 있음(US-TRIP-10 — 작성중만 삭제).
-   *  - 🟢 K3 확정이어도 기간 밖이면 '완성'(지난 여행 배지는 범위 밖, D8).
-   *  - 🟢 K4 today 를 안 주면 기간 안 확정이어도 '완성' — 컨테이너가 몰래 시계를 읽으면 red(02a ★4).
+   *  - 🟢 K3 확정이어도 기간 밖이면 '확정'(지난 여행 배지는 범위 밖, D8).
+   *  - 🟢 K4 today 를 안 주면 기간 안 확정이어도 '확정' — 컨테이너가 몰래 시계를 읽으면 red(02a ★4).
    *  - 🟢 K5 일정 미도착·500 이면 today 가 있어도 배지 없음(INV-4 degrade).
    *
    * 시계를 흉내 내지 않는다 — today 를 문자열로 준다(K1~K3·K5). K4 만 일부러 항상 참인 기간(2020~2099)을 쓴다.
@@ -546,26 +546,26 @@ describe('여행 중 배지 — 오늘이 기간 안인가', () => {
     });
   });
 
-  describe('🟢 K3 · 확정이어도 기간 밖이면 "완성" (D8)', () => {
+  describe('🟢 K3 · 확정이어도 기간 밖이면 "확정" (D8)', () => {
     it.each([
       ['끝난 뒤', '2026-10-05'],
       ['시작 전', '2026-09-20'],
-    ])('오늘이 %s(%s) → 배지 "완성"', (_label, today) => {
+    ])('오늘이 %s(%s) → 배지 "확정"', (_label, today) => {
       mockUseItinerary.mockReturnValue(itinOk(itin('COMPLETE', 'CONFIRMED')));
 
       render(<TripCardContainer trip={trip()} today={today} />);
 
-      expect(screen.getByTestId('my-trip-badge-t1')).toHaveTextContent('완성');
+      expect(screen.getByTestId('my-trip-badge-t1')).toHaveTextContent('확정');
     });
   });
 
   describe('🟢 K4 · today 가 없으면 여행 중 판정을 안 한다 — 시계를 읽지 않는다 (D4)', () => {
-    it('항상 참인 기간(2020~2099) 확정 여행이어도 today 없으면 "완성"', () => {
+    it('항상 참인 기간(2020~2099) 확정 여행이어도 today 없으면 "확정"', () => {
       mockUseItinerary.mockReturnValue(itinOk(itin('COMPLETE', 'CONFIRMED')));
 
       render(<TripCardContainer trip={trip(DURING)} />);
 
-      expect(screen.getByTestId('my-trip-badge-t1')).toHaveTextContent('완성');
+      expect(screen.getByTestId('my-trip-badge-t1')).toHaveTextContent('확정');
     });
   });
 
@@ -743,8 +743,8 @@ describe('⋯ 삭제 진입점', () => {
           onPressDelete={onPressDelete}
         />
       );
-      // 앵커 — 카드 얼굴은 확정 그대로('완성'). 배지를 '작성중'으로 바꿔 여는 우회가 아니다(02a ★3).
-      expect(screen.getByTestId('my-trip-badge-t1')).toHaveTextContent('완성');
+      // 앵커 — 카드 얼굴은 확정 그대로('확정'). 배지를 '작성중'으로 바꿔 여는 우회가 아니다(02a ★3).
+      expect(screen.getByTestId('my-trip-badge-t1')).toHaveTextContent('확정');
 
       // 실행 — ⋯ → '삭제'.
       fireEvent.press(screen.getByTestId('my-trip-menu-t1'));

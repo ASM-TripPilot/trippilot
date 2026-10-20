@@ -458,12 +458,12 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
    * 정확히 가는지 잰다.
    * ─────────────────────────────────────────────────────────────────────────── */
   describe('🔴 I9 · TRIP-454 AC-5 / TRIP-792 AC-2 — 확정 CTA 를 누르면 h25 로 정확히 배선된다', () => {
-    it('h08 셸에서 확정하기(cta[1])를 누르면 /trips/[tripId]/itinerary 로 tripId 를 실어 한 번 이동한다', async () => {
+    it('h08 셸에서 완성 일정 보기(cta[1])를 누르면 /trips/[tripId]/itinerary 로 tripId 를 실어 한 번 이동한다', async () => {
       renderPage();
 
-      // TRIP-792 플립 — 깨끗한 COMPLETE → h08 셸. 완성 CTA 는 셸의 '확정하기'(cta[1]).
+      // TRIP-792 플립 — 깨끗한 COMPLETE → h08 셸. 완성 CTA 는 셸의 '완성 일정 보기'(cta[1]).
       const confirm = await screen.findByTestId('sheet-cta-button-1');
-      expect(confirm).toHaveTextContent('확정하기');
+      expect(confirm).toHaveTextContent('완성 일정 보기');
       fireEvent.press(confirm);
 
       await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
@@ -491,7 +491,7 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       /**
        * ⚠️ 확정 일정에서 재생성 POST 가 나가면 확정이 풀리고 동결된 poi_snapshot 참조가 사라진다
        * (되돌릴 API 없음, 브리프 (a)). TRIP-792 플립: CONFIRMED·깨끗한 COMPLETE 도 narrow 조건상
-       * h08 셸로 간다(확정하기는 h14 조회로의 무해한 이동일 뿐). **진짜 위험은 재생성**이고 그 방어는
+       * h08 셸로 간다(완성 일정 보기는 h14 조회로의 무해한 이동일 뿐). **진짜 위험은 재생성**이고 그 방어는
        * handleRetry 의 CONFIRMED early-return 이다 — '다시 짜기'(cta[0]) press → **POST 0건**으로 잰다.
        */
       itineraryScript = () =>
@@ -1429,7 +1429,7 @@ describe('h08 셸 기본 얼굴', () => {
    *  - 🔴 **INV-4 는 셸 안에서 지킨다** — staleFailed 응답도 셸로 가고 셸 시트 안에 staleFailed 안내가 붙는다
    *    (TRIP-1039 로 narrow 를 풀었다 — 옛 계약 "staleFailed → DraftScreen" 을 뒤집음). fallback 응답은 여전히
    *    전용 인터스티셜이 먼저 잡는다(AC-1b · TRIP-791).
-   *  - 🔴 확정하기 → h14(index 라우트) push 완전일치 / 다시 짜기 → 생성 화면 replace 1회 · 초안 화면 POST 0
+   *  - 🔴 완성 일정 보기 → h14(index 라우트) push 완전일치 / 다시 짜기 → 생성 화면 replace 1회 · 초안 화면 POST 0
    *    (AC-2 · TRIP-1037 플립 — POST 는 생성 화면이 마운트될 때 보낸다).
    *  - 🔴 전 슬롯 시각 칩(isFixed 무관, en-dash) · 제거요소 부재 · 헤더 "N곳 · X.Xkm" · INV-3 0 ·
    *    다른 후보 ›는 비고정만(AC-3~7).
@@ -2352,7 +2352,7 @@ describe('폴백 셸', () => {
   });
 
   describe('🔴 S7 · AC-10 — 폴백 안내의 「처음부터 직접 짜기」는 비우기 확인을 먼저 띄우고 CTA 두 개는 그대로다 (D2 · TRIP-1038 C)', () => {
-    it('링크 1개(안내 안) → 누르면 초기화 확인이 뜨고 push 0 · CTA 다시 짜기/확정하기', async () => {
+    it('링크 1개(안내 안) → 누르면 초기화 확인이 뜨고 push 0 · CTA 다시 짜기/완성 일정 보기', async () => {
       itineraryScript = () =>
         itinerary({ solveMode: 'DETERMINISTIC', isFallback: true });
 
@@ -2366,7 +2366,7 @@ describe('폴백 셸', () => {
         '다시 짜기'
       );
       expect(screen.getByTestId('sheet-cta-button-1')).toHaveTextContent(
-        '확정하기'
+        '완성 일정 보기'
       );
 
       fireEvent.press(link);
@@ -3016,7 +3016,7 @@ describe('직접 짠(MANUAL) 초안', () => {
    * TRIP-1038 — 직접 짠 일정(MANUAL)의 초안 얼굴과 「처음부터 직접 짜기」 비우기 확인을 실 HTTP 로 태운다.
    *
    * 무엇을 보장하나:
-   *  - (A) MANUAL 초안은 「내 일정」이고 CTA 가 「편집하기」·「확정하기」다. 어떤 버튼으로도 AI 생성 POST 가
+   *  - (A) MANUAL 초안은 「내 일정」이고 CTA 가 「편집하기」·「완성 일정 보기」다. 어떤 버튼으로도 AI 생성 POST 가
    *    나가지 않는다(QA #040 · BR-U3-18). MANUAL 인데 장소가 0곳이면 AI 빈 얼굴 대신 편집기로 보낸다.
    *    FULLY_AI·CO_PLAN 은 지금 그대로(무회귀).
    *  - (C) 셸 폴백 안내의 「처음부터 직접 짜기」는 곧장 가지 않고 비우기 확인을 먼저 띄운다(QA #036).
@@ -3112,8 +3112,8 @@ describe('직접 짠(MANUAL) 초안', () => {
 
   // ─── (A) MANUAL 초안 얼굴 ────────────────────────────────────────────────
 
-  describe('🔴 A1 · #040 — MANUAL 초안은 「내 일정」이고 CTA 가 「편집하기」·「확정하기」다 (US-SCHED-10 · BR-U3-11)', () => {
-    it('제목 내 일정 · CTA 편집하기/확정하기 · AI 추천안·다시 짜기·기본 일정 글자 0 · 폴백 안내 0', async () => {
+  describe('🔴 A1 · #040 — MANUAL 초안은 「내 일정」이고 CTA 가 「편집하기」·「완성 일정 보기」다 (US-SCHED-10 · BR-U3-11)', () => {
+    it('제목 내 일정 · CTA 편집하기/완성 일정 보기 · AI 추천안·다시 짜기·기본 일정 글자 0 · 폴백 안내 0', async () => {
       itineraryScript = () => manual();
 
       renderPage();
@@ -3124,7 +3124,7 @@ describe('직접 짠(MANUAL) 초안', () => {
       ).toBeOnTheScreen();
       expect(screen.getByTestId(TITLE)).toHaveTextContent('내 일정');
       expect(screen.getByTestId(CTA0)).toHaveTextContent('편집하기');
-      expect(screen.getByTestId(CTA1)).toHaveTextContent('확정하기');
+      expect(screen.getByTestId(CTA1)).toHaveTextContent('완성 일정 보기');
       expect(screen.queryByText('AI 추천안')).toBeNull();
       expect(screen.queryByText('다시 짜기')).toBeNull();
       expect(screen.queryByText('기본 일정')).toBeNull();
@@ -3181,7 +3181,7 @@ describe('직접 짠(MANUAL) 초안', () => {
 
   describe('A4 · 무회귀 — FULLY_AI·CO_PLAN 깨끗한 초안은 지금 그대로다 (선제 green)', () => {
     it.each<ItineraryGenerationMode>(['FULLY_AI', 'CO_PLAN'])(
-      '%s — 제목 AI 추천안 · CTA 다시 짜기/확정하기',
+      '%s — 제목 AI 추천안 · CTA 다시 짜기/완성 일정 보기',
       async (generationMode) => {
         itineraryScript = () => itinerary({ generationMode });
 
@@ -3192,12 +3192,12 @@ describe('직접 짠(MANUAL) 초안', () => {
         ).toBeOnTheScreen();
         expect(screen.getByTestId(TITLE)).toHaveTextContent('AI 추천안');
         expect(screen.getByTestId(CTA0)).toHaveTextContent('다시 짜기');
-        expect(screen.getByTestId(CTA1)).toHaveTextContent('확정하기');
+        expect(screen.getByTestId(CTA1)).toHaveTextContent('완성 일정 보기');
       }
     );
   });
 
-  describe('A5 · MANUAL 「확정하기」는 지금처럼 완성 일정(h14)으로 간다 (선제 green)', () => {
+  describe('A5 · MANUAL 「완성 일정 보기」는 지금처럼 완성 일정(h14)으로 간다 (선제 green)', () => {
     it('push 1회 · 경로 /trips/[tripId]/itinerary · POST 0', async () => {
       itineraryScript = () => manual();
       renderPage();
