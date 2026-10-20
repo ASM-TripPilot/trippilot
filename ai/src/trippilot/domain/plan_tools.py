@@ -54,7 +54,7 @@ class PlanTool:
 PLAN_TOOLS: Mapping[Intent, PlanTool] = {
     Intent.SHOW_SCHEDULE: PlanTool("여행 일정표 — 날짜별 장소와 계획 시각(전체·남은 것·하루)"),
     Intent.GET_NEXT_SLOT: PlanTool("지금 이후 다음 일정 한 곳과 그 계획 시각"),
-    Intent.GET_WEATHER: PlanTool("일정 장소 기준 날짜 하루만의 최대 강수확률 — 주말·기간은 못 본다, 기온·바람·다른 지역 날씨도 없다",
+    Intent.GET_WEATHER: PlanTool("일정 장소 또는 여행 지역 기준 하루 최대 강수확률 — 주말·기간은 못 본다, 기온·바람·다른 지역 날씨도 없다",
                                  ("poi_info", "weather"), hide=("period",)),
     Intent.GET_DISTANCE: PlanTool("일정 안 한 장소까지 바로 앞 일정에서의 거리 — 소요시간은 없다", ("poi_info", "transit")),
     Intent.GET_POI_INFO: PlanTool("일정 안 장소의 분류·영업시간·입장료 — 일정 밖 장소는 못 찾는다", ("poi_info",)),

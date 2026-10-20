@@ -726,27 +726,61 @@ def _assemble_next_slot(ctx: TurnContext, results: Mapping[str, TaskResult]) -> 
 # GET_WEATHER — 1파 POI_INFO(앵커 좌표) → 2파 WEATHER, 한 콜러블 안에서
 
 
-def _weather_anchor(ctx: TurnContext) -> tuple[date, SlotView] | None:
-    """날짜 인자의 그 날 첫 슬롯, 없으면 오늘 또는 앞으로 올 첫 슬롯 — 좌표를 얻을 poi_id 가 있는 것만."""
+@dataclass(frozen=True, slots=True)
+class _WeatherAnchor:
+    """어느 날·어느 좌표의 날씨인가. `slot` 이면 좌표를 POI_INFO 로 얻고, `coord` 면 지역 중심이라 조회 없이 바로 묻는다."""
+
+    on: date
+    label: str  # 제목·detail 에 쓰는 이름 — 슬롯명 또는 표의 지역명
+    slot: SlotView | None = None
+    coord: GeoPoint | None = None
+
+
+def _weather_default_day(snap: TurnSnapshot, today: date) -> date:
+    """날짜를 안 말했고 슬롯도 없을 때 — 여행 전이면 첫날(슬롯 규칙 "앞으로 올 첫 슬롯"과 같은 날), 아니면 오늘."""
+    trip = snap.trip
+    return trip.start_date if trip is not None and trip.start_date > today else today
+
+
+def _weather_anchor(ctx: TurnContext) -> _WeatherAnchor | None:
+    """① 그 날(또는 오늘 이후 첫) 슬롯 → ② 여행 지역 중심. 둘 다 없으면 None(EMPTY).
+
+    ② 가 없던 동안 일정이 없거나 오늘이 여행일이 아니면 "지금 날씨를 확인할 수 없어요" 만 나갔다 — 좌표는 지역 중심표
+    (`region_centers`)로 충분하다. 표에 없는 지역은 지어내지 않는다. 말한 지역("부산 날씨")은 아직 안 본다 — 인자표의
+    `region` 이 분류 `$intents` 에 실리지 않아(lands_in=None) 핸들러까지 오지 않는다; 싣는 것은 분류 판본·재생 픽스처를
+    바꾸는 일이라 따로 간다(plan_tools PLAN_GAPS REGION_WEATHER 가 그 공백을 센다).
+    """
     snap, today = ctx.snapshot, ctx.today
-    said = ctx.arguments.get("date")
-    if said:
-        on = resolve_day(said, snap, today)
-        if on is None:
-            return None
-        return next(((on, s) for s in snap.on(on) if s.poi_id), None)
-    return next(((d, s) for d, s in snap.slots() if d >= today and s.poi_id), None)
+    said_day = ctx.arguments.get("date")
+    on = resolve_day(said_day, snap, today) if said_day else None
+    if said_day and on is None:
+        return None
+    if on is not None:
+        slot = next((s for s in snap.on(on) if s.poi_id), None)
+        if slot is not None:
+            return _WeatherAnchor(on, slot.name or "여행지", slot=slot)
+    else:
+        found = next(((d, s) for d, s in snap.slots() if d >= today and s.poi_id), None)
+        if found is not None:
+            return _WeatherAnchor(found[0], found[1].name or "여행지", slot=found[1])
+    trip = snap.trip
+    for region in (trip.regions if trip is not None else ()):
+        hit = region_center(normalize(region))
+        if hit is not None:
+            name, coord, _ = hit
+            return _WeatherAnchor(on if on is not None else _weather_default_day(snap, today), name, coord=coord)
+    return None
 
 
 def _plan_weather(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     anchor = _weather_anchor(ctx)
     weather = ctx.ports.weather
-    if anchor is None or weather is None or ctx.ports.poi_info is None:
+    if anchor is None or weather is None or (anchor.slot is not None and ctx.ports.poi_info is None):
         return ()
-    on, slot = anchor
+    on, slot = anchor.on, anchor.slot
 
     def fn() -> dict:
-        coord = _coord(_lookup(ctx, (slot.poi_id,), on).get(slot.poi_id))
+        coord = anchor.coord if slot is None else _coord(_lookup(ctx, (slot.poi_id,), on).get(slot.poi_id))
         if coord is None:
             return {"status": "UNAVAILABLE", "reason": "anchor_coord_unknown", "date": on.isoformat()}
         packet = weather.fetch({"anchor": coord, "days": (on,), "now": ctx.now})
@@ -759,24 +793,26 @@ def _assemble_weather(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Fa
     intent = Intent.GET_WEATHER
     anchor = _weather_anchor(ctx)
     if anchor is None:
-        return _text_facts(intent, FactStatus.EMPTY, (_itinerary_action(ctx.snapshot),), notes=("날씨 앵커 없음 — 일정에 좌표를 얻을 장소가 없다",))
-    on, slot = anchor
+        return _text_facts(intent, FactStatus.EMPTY, (_itinerary_action(ctx.snapshot),),
+                           notes=("날씨 앵커 없음 — 그 날 좌표를 얻을 슬롯이 없고 여행·말한 지역도 중심표에 없다",))
+    on = anchor.on
     value = _value(results, "weather")
     if value is None or value.get("status") == "UNAVAILABLE":
-        return _text_facts(intent, FactStatus.UNAVAILABLE, (_action("OPEN_ITINERARY"),), notes=("날씨 미확인",),
+        return _text_facts(intent, FactStatus.UNAVAILABLE, (_itinerary_action(ctx.snapshot),), notes=("날씨 미확인",),
                            detail={"date": on.isoformat()})
     pop = value.get("data", {}).get("daily", {}).get(on.isoformat()) if _fresh(value) else None
     if pop is None:
-        return _text_facts(intent, FactStatus.EMPTY, (_action("OPEN_ITINERARY"),), notes=("날씨 미확인",),
+        return _text_facts(intent, FactStatus.EMPTY, (_itinerary_action(ctx.snapshot),), notes=("날씨 미확인",),
                            detail={"date": on.isoformat()})
     trip = ctx.snapshot.trip
-    region = trip.regions[0] if trip is not None and trip.regions else (slot.name or "여행지")
+    # 슬롯 앵커면 여행 지역(없으면 슬롯명), 지역 중심 앵커면 그 지역 — "부산 날씨" 에 일정 지역 이름을 달지 않는다
+    region = anchor.label if anchor.coord is not None else (trip.regions[0] if trip is not None and trip.regions else anchor.label)
     label = "오늘 최대 강수확률" if on == ctx.today else f"{_date_label(on)} 최대 강수확률"  # BE 행 라벨 — 그 날의 최댓값
     rows = (FactRow(label, f"{pop}%"),)
     return Facts(
         intent, FactStatus.OK, AnswerKind.INFO, rows=rows, places=(), notes=(),
-        payload=_info("WEATHER", f"{region} 날씨", rows), next_actions=(_action("OPEN_ITINERARY"),), quick_replies=(),
-        template_text=_template(intent, FactStatus.OK), detail={"date": on.isoformat(), "anchor": slot.name},
+        payload=_info("WEATHER", f"{region} 날씨", rows), next_actions=(_itinerary_action(ctx.snapshot),), quick_replies=(),
+        template_text=_template(intent, FactStatus.OK), detail={"date": on.isoformat(), "anchor": anchor.label},
     )
 
 

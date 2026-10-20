@@ -28,6 +28,7 @@ from trippilot.domain.freshness import FreshnessMeta, InfoPacket, ProviderKind, 
 from trippilot.domain.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent
 from trippilot.domain.llm import CandidatePool
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.region_centers import region_center
 from trippilot.domain.trigger import TriggerKind
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_LENGTH, _violates
 from trippilot.llm_gateway.workers.dialogue_answer import NEED_TRIP_TEXT, fallback_answer_text
@@ -548,8 +549,42 @@ def test_weather_failures_converge_to_a_text_template(ports: HandlerPorts, fail,
     assert _types(facts) == ["OPEN_ITINERARY"] and facts.notes
 
 
-def test_weather_without_any_slot_cannot_find_an_anchor() -> None:
-    facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(_snapshot((), status=None), ports=HandlerPorts(poi_info=_PoiInfo(), weather=_Weather())))
+def test_weather_without_any_slot_falls_back_to_the_trip_region_center() -> None:
+    """일정 슬롯이 없으면(일정 없음) 여행 지역 중심 좌표로 바로 묻는다 — 종전엔 앵커를 못 잡아 "지금 날씨를 확인할 수 없어요"
+    (사용자 실측 "오늘 날씨도 못 보여준다"). 좌표 조회(POI_INFO) 없이, 날짜는 여행 중이니 오늘."""
+    poi_info, weather = _PoiInfo(), _Weather(pop=40)
+    facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(_snapshot((), status=None), ports=HandlerPorts(poi_info=poi_info, weather=weather)))
+    assert poi_info.calls == []
+    assert weather.calls == [{"anchor": region_center("제주")[1], "days": (_D2,), "now": _NOW}]
+    assert facts.status is FactStatus.OK and facts.payload == {
+        "infoKind": "WEATHER", "title": "제주 날씨", "rows": [{"label": "오늘 최대 강수확률", "value": "40%"}]}
+    assert _types(facts) == ["OPEN_ITINERARY_METHOD"]  # 일정이 없으니 보기가 아니라 만들기로
+    assert facts.detail == {"date": _D2.isoformat(), "anchor": "제주"}
+
+
+def test_weather_today_asked_on_a_day_without_slots_uses_the_region_center() -> None:
+    """"오늘 날씨" 인데 오늘이 여행일이 아니다(여행 전) — 그 날 슬롯이 없으니 지역 중심, 날짜는 말한 대로 오늘."""
+    before = datetime(2026, 10, 10, 9, 0, tzinfo=_KST)
+    poi_info, weather = _PoiInfo(), _Weather(pop=20)
+    facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(arguments={"date": "오늘"}, now=before,
+                                                   ports=HandlerPorts(poi_info=poi_info, weather=weather)))
+    assert poi_info.calls == []
+    assert weather.calls[0]["anchor"] == region_center("제주")[1] and weather.calls[0]["days"] == (date(2026, 10, 10),)
+    assert facts.payload["rows"] == [{"label": "오늘 최대 강수확률", "value": "20%"}]
+
+
+def test_weather_before_the_trip_without_slots_asks_about_the_first_day() -> None:
+    """날짜를 안 말했고 슬롯도 없는 여행 전 — 슬롯 규칙("앞으로 올 첫 슬롯")과 같은 날인 여행 첫날."""
+    before = datetime(2026, 10, 10, 9, 0, tzinfo=_KST)
+    weather = _Weather(pop=10)
+    _run(HANDLERS[Intent.GET_WEATHER], _ctx(_snapshot((), status=None), now=before, ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)))
+    assert weather.calls[0]["days"] == (_D1,)
+
+
+def test_weather_unknown_region_and_no_slot_stays_empty() -> None:
+    """표에 없는 여행 지역(도 단위)·슬롯 없음 — 종전처럼 EMPTY, 만들기로 잇는다."""
+    trip = TripInfo("trip-2", ("전라남도",), _D1, _D3, "IN_TRIP")
+    facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(_snapshot((), trip=trip, status=None), ports=HandlerPorts(poi_info=_PoiInfo(), weather=_Weather())))
     assert facts.status is FactStatus.EMPTY and _types(facts) == ["OPEN_ITINERARY_METHOD"]
 
 
