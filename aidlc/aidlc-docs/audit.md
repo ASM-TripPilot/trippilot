@@ -1688,3 +1688,12 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U8 Functional Design 사후 정정, 승인 대기(같은 PR 머지 = 승인, #1071 선례). `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
+
+---
+## Functional Design 사후 개정 — U8 도우미 시트 재디자인 (frontend-components §개정 · business-rules BR-U8-03 정정)
+**Timestamp**: 2026-10-21T05:55:00+09:00 (작업 시점, 초 단위 미측정)
+**User Input**: (사용자 원문) "그럼 지금 만든 화면이랑 저거에 맞춰서 다시 화면 수정 ㄱㄱ 티켓 만들고 거기에 맞게 수행하고 다 완료 하면 티켓 완료 처리 이때 나중에 시뮬레이터 테스트 까지 ㄱㄱ" — 직전에 사용자가 "b 전체를 저런식으로 교체 밝은 모드", "응답 대기는 그냥 빼고 이런식으로 8장 그려봐"라고 정한 Figma v3 안을 코드에 반영하라는 지시. 사이클 중 결정은 자율 세션이라 권고대로 정했고 사용자 확인 대상으로 표기했다(새 대화·＋ 버튼 제외, 서버 contextChip 문구의 가시 표기 제거 = BR-U8-03 약화, HOME 칩 라벨, NO_CONTEXT 칩 우선, 솔버 불가 출구 유지, 이력 입력 카드 없음).
+**AI Response**: `construction/u8-conversational-assistant/functional-design/frontend-components.md` 끝에 `[개정 · 2026-10-21 · U8 도우미 시트 재디자인]` 블록 1개(① R9 유지 ② 바뀐 모양 ③ 화면에 넣지 않은 기능 ④ Figma 갱신 후보 ⑤ BR-U8-03 약화 ⑥ 컴포넌트·testID 소급 ⑦ 6-b = TRIP-1531), `business-rules.md` 끝에 BR-U8-03 정정 블록 1개를 원문 삭제·수정 0줄로 덧붙였다. 제품 결정은 새로 만들지 않았고 사용자 지시와 자율 결정(표기)을 기록으로 옮겼다. 근거는 커밋 a6d7a833f(셸·입력)·a9a013e03(메시지·카드)와 사이클 C 구현이다.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 개정, 승인 대기(같은 PR 머지 = 승인, #1071 선례). `aidlc-state.md`·`docs/SCOPE.md` 는 단계 변화가 없어 건드리지 않았다.
+
+---
