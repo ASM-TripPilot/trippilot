@@ -121,6 +121,8 @@ export function SheetShell({
 
   return (
     <BottomSheet
+      // gorhom 기본 accessible=true 는 본문을 접근성 요소 하나로 묶어 안쪽 텍스트를 숨긴다 — MapSheetShell 과 같은 이유(TRIP-1430).
+      accessible={false}
       index={0}
       enablePanDownToClose
       onClose={onClose}

@@ -95,18 +95,22 @@ export function TermsScreen({
 
           <View className="pt-xl">
             {items.map((item, index) => (
-              <Pressable
+              // 행 = View, 안에 체크박스 Pressable 과 "보기" Pressable 이 형제다 — "보기"를 체크박스 안에 두면
+              // 접근성 요소 하나로 합쳐져("필수, 서비스 이용약관, 보기") 따로 열 수 없다(TRIP-1430 Q-012).
+              <View
                 key={item.termsType}
-                testID={`onboarding-terms-${item.termsType}`}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: item.checked }}
-                onPress={() => onToggle(item.termsType)}
-                className="flex-row items-center justify-between py-[15px]"
+                className="flex-row items-center justify-between"
               >
                 {index > 0 ? (
                   <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
                 ) : null}
-                <View className="flex-row items-center gap-[10px]">
+                <Pressable
+                  testID={`onboarding-terms-${item.termsType}`}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: item.checked }}
+                  onPress={() => onToggle(item.termsType)}
+                  className="flex-1 flex-row items-center gap-[10px] py-[15px]"
+                >
                   <View
                     className={`h-[22px] w-[22px] items-center justify-center rounded-[6px] ${
                       item.checked
@@ -128,18 +132,20 @@ export function TermsScreen({
                   <Text className="font-noto text-body text-ink">
                     {item.label}
                   </Text>
-                </View>
+                </Pressable>
                 <Pressable
                   testID={`onboarding-terms-view-${item.termsType}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.label} 보기`}
                   onPress={() => onViewTerms?.(item.termsType)}
-                  className="flex-row items-center gap-[2px]"
+                  className="flex-row items-center gap-[2px] py-[15px] pl-md"
                 >
                   <Text className="font-noto text-label text-muted-soft">
                     보기
                   </Text>
                   <ViewChevronGlyph />
                 </Pressable>
-              </Pressable>
+              </View>
             ))}
           </View>
 
