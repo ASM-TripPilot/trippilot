@@ -1626,6 +1626,7 @@
 - `src/shared/location/automation/engine.ts`  →  EngineDeps · EngineReason · EngineStatus · ArmingCallInput · setContext · evaluate · handleGeofence · handleLocations · flushQueue · uploadPendingRoutes · markExplainerAsked · clearNotice · wipeAutomation
 - `src/shared/location/automation/expoFs.ts`  →  createExpoFs
 - `src/shared/location/automation/flag.ts`  →  isLocationAutomationEnabled
+- `src/shared/location/automation/httpSink.ts`  →  createHttpAutomationSink
 - `src/shared/location/automation/native.ts`  →  GEOFENCE_TASK · ROUTE_TASK · NativeAdapters · nativeAdapters
 - `src/shared/location/automation/noticeCopy.ts`  →  AutomationNoticeCopy · automationNoticeCopy · tripDateRangeLabel
 - `src/shared/location/automation/permission.ts`  →  PermissionSnapshot · readPermissionSnapshot · AlwaysRequestResult · requestAlwaysPermission
@@ -1645,7 +1646,7 @@
 ## src/shared/location/
 - `src/shared/location/consentPutBody.ts`  →  consentPutBody
 - `src/shared/location/geofence.ts`  →  GeofenceRegion · buildGeofenceRegions · selectRegions · geofenceArriveRequest · registerGeofences · clearGeofences
-- `src/shared/location/index.automation.ts`  →  loadBackgroundTasks · isLocationAutomationEnabled
+- `src/shared/location/index.automation.ts`  →  loadBackgroundTasks · installHttpAutomationSink · isLocationAutomationEnabled
 - `src/shared/location/index.ts`  →  readDevicePosition · useLocationConsent · useLocationAutomation · useTripRoutes · isLocationAutomationEnabled · createFakeAutomationSink · getAutomationSink · setAutomationSink · useAutomationStatus · distanceSourceByDate
 - `src/shared/location/index.view.ts`  →  LocationBackChevronGlyph · LocationClockGlyph · LocationInfoGlyph · LocationPinGlyph · LocationSwapGlyph · LocationWarningGlyph · LocationPreprompt · LOCATION_ICON_COLORS · revokeImpact · routeDayForDate · routeDayToSegments · LocationAlwaysExplainer · automationNoticeCopy · tripDateRangeLabel
 - `src/shared/location/locationColors.ts`  →  LOCATION_ICON_COLORS
@@ -1796,4 +1797,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1148개 파일
+합계 1149개 파일

@@ -29,7 +29,8 @@
     "production-automation": {
       "extends": "production",
       "env": {
-        "TRIPPILOT_LOCATION_AUTOMATION": "1"
+        "TRIPPILOT_LOCATION_AUTOMATION": "1",
+        "EXPO_PUBLIC_TEST_REGIONS": "41190:부천"
       }
     }
   },
