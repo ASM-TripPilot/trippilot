@@ -1015,6 +1015,9 @@ def test_recent_turn_rejects_bad_role_and_length(role: str, text: str) -> None:
     ("다음은 해녀의집이에요. 12:00 에 가요.", True),  # Facts 의 계획 시각 복사 — 통과
     ("다음은 해녀의집이에요. 15:45에 방문하세요.", False),  # Facts 밖 시각 — 카드(12:00)와 엇갈린다 (INV-2)
     ("다음은 해녀의집이에요. 3:45pm 에 가요.", False),
+    ("다음은 해녀의집이에요. 3pm 에 가요.", False),  # 분 없는 am/pm(#1420 리뷰 C4)
+    ("다음은 해녀의집이에요. １２：００ 에 가요.", True),  # 전각이어도 Facts 의 12:00 이다
+    ("다음은 해녀의집이에요. １５：４５ 에 가요.", False),
     ("다음은 해녀의집이에요. 오후 세 시에 가요.", False),  # 대조할 수 없는 한글 시각
 ])
 def test_answer_clock_times_must_come_from_facts(text: str, kept: bool) -> None:

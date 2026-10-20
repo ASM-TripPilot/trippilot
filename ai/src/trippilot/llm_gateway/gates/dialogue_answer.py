@@ -63,18 +63,30 @@ _DURATION_EN = re.compile(r"\d+\s*(?:min(?:ute)?s?|hrs?|hours?|h)\b|\b(?:half an
 # 시계 시각(INV-2) — 문장 속 시각은 Facts 에 실린 값이어야 한다. `_TIME_EXPR` 는 `HH:MM` 을 일부러 통과시키므로("10:00" 복사),
 # 오케스트레이터가 `clock_times` 로 꺼내 Facts 와 대조한다. 숫자 꼴은 정규화해 대조하고, 대조할 수 없는 한글 시각
 # ("오후 세 시"·"정오"·"자정"·"세 시 반")은 있는 것만으로 템플릿 사유다.
-_CLOCK = re.compile(r"(?<!\d)([01]?\d|2[0-3])\s*(?::|h)\s*([0-5]\d)(?!\d)(\s*[AaPp]\.?\s?[Mm]\.?)?")
+# 분 없는 am/pm("3pm"·"12 AM")도 숫자 꼴이라 `HH:00` 으로 대조한다. 전각 숫자·콜론("１５：００")은 같은 길이의 반각으로 바꿔 읽는다
+# — NFKC 는 "㎞"→"km" 처럼 길이를 바꿔 호출측이 쓰는 위치(`clock_spans`)가 어긋난다(#1420 리뷰 C4).
+_CLOCK = re.compile(
+    r"(?<!\d)(?P<h>[01]?\d|2[0-3])\s*(?::|h)\s*(?P<m>[0-5]\d)(?!\d)(?P<ap>\s*[AaPp]\.?\s?[Mm]\.?)?"
+    r"|(?<![\d:.])(?P<h12>1[0-2]|0?[1-9])\s*(?P<ap12>[AaPp]\.?\s?[Mm]\.?)(?![A-Za-z\d])"
+)
+_HALF_WIDTH = str.maketrans("０１２３４５６７８９：", "0123456789:")
 _KO_HOUR = r"(?:열한|열두|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)"
+# 한글 수사 + "시": 뒤가 한글이 아니거나(문장 끝·문장부호·띄어 쓴 "반"·"정도") 붙은 조사면 시각이다. "시간"·"시작"·"시장"·"시대"처럼
+# 낱말이 이어지면 아니다 — 조사를 "에"까지만 열거해 "열두 시엔"·"세 시면"이 지나갔다(#1420 리뷰 C4).
 _UNVERIFIABLE_CLOCK = re.compile(
-    rf"정오|자정|(?:오전|오후|새벽|아침|저녁|밤|낮)\s*{_KO_HOUR}\s*시|{_KO_HOUR}\s*시\s*(?:반|정각|쯤|에|부터|까지|경)"
+    rf"정오|자정|(?:오전|오후|새벽|아침|저녁|밤|낮)\s*{_KO_HOUR}\s*시"
+    rf"|{_KO_HOUR}\s*시(?:(?![가-힣])|에|엔|면|이면|부터|까지|께|쯤|경|즈음|정각|는|도|나|예요|이에요|요|야)"
 )
 
 
 def clock_spans(text: str) -> list[tuple[int, int, str]]:
     """문장 속 숫자 꼴 시계 시각의 (시작, 끝, 정규화 `HH:MM`) — am/pm 은 24시로 접는다."""
     spans = []
-    for m in _CLOCK.finditer(text):
-        hour, minute, meridiem = m.group(1), m.group(2), (m.group(3) or "").strip()
+    for m in _CLOCK.finditer(text.translate(_HALF_WIDTH)):
+        if m.group("h12"):
+            hour, minute, meridiem = m.group("h12"), "00", m.group("ap12")
+        else:
+            hour, minute, meridiem = m.group("h"), m.group("m"), (m.group("ap") or "").strip()
         h = int(hour) % 12 + (12 if meridiem.lower().startswith("p") else 0) if meridiem else int(hour)
         spans.append((m.start(), m.end(), f"{h:02d}:{minute}"))
     return spans

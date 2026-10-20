@@ -501,7 +501,15 @@ def test_clock_times_normalises_numeric_forms_and_flags_korean_clock_words() -> 
     assert clock_times("3:45pm 에 와요") == (frozenset({"15:45"}), False)
     assert clock_times("12:30 AM") == (frozenset({"00:30"}), False)
     assert clock_times("15h45 출발")[0] == frozenset({"15:45"})
-    for words in ("오후 세 시에 가요", "정오에 점심", "자정까지 열어요", "세 시 반쯤", "열두 시 반에"):
+    # 분 없는 am/pm·전각 숫자와 콜론도 숫자 꼴이다 — 놓치면 Facts 밖 시각이 대조 없이 나간다(INV-2, #1420 리뷰 C4)
+    assert clock_times("3pm 에 만나요") == (frozenset({"15:00"}), False)
+    assert clock_times("12 AM 까지") == (frozenset({"00:00"}), False)
+    assert clock_times("오전 9a.m. 출발")[0] == frozenset({"09:00"})
+    assert clock_times("１５：００ 출발") == (frozenset({"15:00"}), False)
+    assert clock_times("3:45pm·3pm") == (frozenset({"15:45", "15:00"}), False)
+    for words in ("오후 세 시에 가요", "정오에 점심", "자정까지 열어요", "세 시 반쯤", "열두 시 반에",
+                  "열두 시엔 닫아요", "세 시면 돼요", "다섯 시까지", "네 시쯤", "아홉 시.", "두 시 정도"):
         assert clock_times(words)[1], words  # 대조할 수 없는 시각 — 있는 것만으로 템플릿 사유
-    for plain in ("네 시작할게요", "한 시간 걸려요", "거리 1.8km", "11월 1일", "2026-11-01"):
+    for plain in ("네 시작할게요", "한 시간 걸려요", "거리 1.8km", "11월 1일", "2026-11-01", "약 3㎞ 예요", "1.5pm2.5",
+                  "세 시장 골목", "한 시간 반", "세 시대에 걸친", "한 시인의 집"):
         assert clock_times(plain) == (frozenset(), False), plain
