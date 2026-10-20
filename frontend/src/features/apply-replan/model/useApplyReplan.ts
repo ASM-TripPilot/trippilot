@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import {
   getGetTripsTripIdItineraryQueryKey,
+  getGetTripsTripIdOpportunitiesQueryKey,
   getGetTripsTripIdTriggersQueryKey,
   usePostTripsTripIdReplanSessionsSessionIdApply,
 } from '@/shared/api/index.hooks';
@@ -51,6 +52,11 @@ export function useApplyReplan(): ReturnType<
       onSuccess: (session, variables) => {
         queryClient.invalidateQueries({
           queryKey: getGetTripsTripIdItineraryQueryKey(variables.tripId),
+        });
+        // 상황 감지 FE-C — 기회 카드로 넣은 장소는 이제 일정에 있어 서버가 뺀다. 허브는 dismissTo 로 다시 마운트되지 않아
+        // 스스로 다시 받지 않으므로, 그 여행의 기회(모든 날짜 — 키 앞부분 일치)를 낡게 한다. 보고 있는 허브는 곧바로 다시 받는다.
+        queryClient.invalidateQueries({
+          queryKey: getGetTripsTripIdOpportunitiesQueryKey(variables.tripId),
         });
         // 적용이 트리거를 소비한다(BR-SA-14, 상황 감지 FE-A) — 다만 서버는 적용 응답 **뒤에** 아웃박스 릴레이(2초 주기)로
         // 닫아서, 지금 다시 받은 목록엔 그 트리거가 아직 있다. 그래서 다시 받되(바뀐 일정에 맞춘 나머지는 서버 그대로),
