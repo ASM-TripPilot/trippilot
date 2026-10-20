@@ -4452,6 +4452,7 @@ touches = [
   "backend/modules/itinerary-recalculation/src/test",
   "backend/modules/reflection/src/test",
   ".github/workflows/backend-ci.yml",
+  ".github/workflows/",
   # 모듈 디렉토리 문자열은 모듈 단위로 적힌 기존 노드와 겹침을 잡으려는 보수적 표기다(스크립트는 문자열 일치만 본다).
   "backend/modules/archive",
   "backend/modules/itinerary-recalculation",
@@ -4461,7 +4462,8 @@ note = """
 PR #1428 — 리뷰 대기. 하한 94/83, 모듈 바닥 70/40.
 기준선은 **#1428 브랜치에서** 쟀다 — develop 에는 JaCoCo 가 없다. 2026-10-19 라인 95.4 · 분기 84.8,
 develop(#1431 포함) 병합 뒤 2026-10-20 로컬 재측정 라인 95.5 · 분기 85.3. 분기 분모는 8,084.
-모듈 test 디렉토리 셋은 하한을 넘기려고 손댄 기존 테스트다 — reflection/src/test 는 LOOP-COVERAGE 와
+모듈 test 디렉토리 셋은 JaCoCo 합성 필드(`$jacocoData`)를 INV-3 필드 검사에서 빼려고
+`declaredFieldNames()` 로 바꾼 기존 테스트다(하한과는 무관 — 지우면 JaCoCo 가 켜진 빌드에서 INV-3 검사가 깨진다) — reflection/src/test 는 LOOP-COVERAGE 와
 디렉토리만 같고 파일은 다르다(디렉토리 단위로 적어 충돌을 보수적으로 잡는다).
 """
 
@@ -4517,10 +4519,19 @@ id = "POI-COLLECT-GATE"
 ticket = "TRIP-1475"
 title = "[AI] 수집 공유본 PR 앞 게이트 — 백엔드가 시도를 못 정하는 주소면 병합 단계에서 실패"
 status = "todo"
-touches = ["ai/scripts/collect/merge_pois_docs.py", "ai/tests/scripts/test_merge_pois_docs.py", ".github/workflows/ai-poi-collect.yml"]
+touches = [
+  "ai/scripts/collect/merge_pois_docs.py",
+  "ai/tests/scripts/test_merge_pois_docs.py",
+  ".github/workflows/ai-poi-collect.yml",
+  # 디렉토리 문자열은 디렉토리 단위로 적힌 기존 노드(RELEASE-MAIN)와 겹침을 잡으려는 보수적 표기다.
+  ".github/workflows/",
+]
 note = """
-#1431 4차 검수 잔여. 워크플로 줄에 두면 상태 영속(collect-state push) 뒤라 막힌 날 수집분이 영구히 빠진다 —
-검사는 merge_pois_docs.main() 안(약칭 펴기 직후)에 둔다. 스케줄은 main 의 워크플로 사본으로 돌고 스크립트는 develop 판이다.
+#1431 4차 검수 잔여. 요건이 둘이다(TRIP-1475 원문):
+(a) 검사는 merge_pois_docs.main() 안(약칭 펴기 직후)에 둔다 — 스크립트는 develop 판이 돌아 모든 병합 경로에 적용된다.
+(b) 수집 상태 영속(collect-state push)을 게이트 **뒤로** 옮긴다 — 지금은 merge_pois_docs 실행 자체가 영속 뒤라
+    (a)만으로는 막힌 날 수집분이 '기제안'으로 영구히 빠진다. 스케줄은 main 의 워크플로 사본으로 도니,
+    (b)는 develop 판과 함께 main 사본도 `ci(main):` 단일 파일 PR 로 맞춰야 적용된다(RELEASE-MAIN 의 사본 동기화 경로).
 """
 
 [[nodes]]
@@ -4560,9 +4571,9 @@ id = "LOOP-AIRFLOW"
 ticket = "TRIP-1468"
 title = "[Infra] Airflow 수집 파이프라인(로컬) — 사본→검증→게시"
 status = "todo"
-touches = ["batch", "docker-compose.yml", ".github/workflows/batch-ci.yml", ".gitignore", "docs/conventions/anti-patterns.md"]
+touches = ["batch", "docker-compose.yml", ".github/workflows/batch-ci.yml", ".github/workflows/", ".gitignore", "docs/conventions/anti-patterns.md"]
 note = """
-PR #1432. 실 수집 모드는 넣지 않았다(키 없이 시험 못 함). 신선도는 DAG 를 따로 두지 않고 event_collect.validate 안에서 본다 — 그날 유효 건수 ≥30 과 지역별 마지막 수집 7일 이내(coverage). 리뷰 대기.
+PR #1432. 실 수집 모드는 넣지 않았다(키 없이 시험 못 함). 신선도는 DAG 를 따로 두지 않고 event_collect.validate 안에서 본다 — 그날 유효 건수 ≥30 과 가장 오래된 지역의 마지막 수집이 허용 날수 이내(coverage — 값과 근거는 #1432). 리뷰 대기.
 """
 
 [[nodes]]
@@ -4604,13 +4615,13 @@ note = """
 PR #1433 — 테스트 파일만. 보탠 분기 24+88+58 = 170(분모 8,084 의 약 2.1%p).
 PIT 는 리포에 넣지 않고 **로컬에서만** 쟀다(2026-10-20, 변이 점수 전→후): change-log 19→70% ·
 reflection 48→59% · notification 54→55%. CI 가 재현하는 수치가 아니다.
-테스트를 쓰다 찾은 운영 결함 5건은 TRIP-1476 이 잇는다.
+테스트를 쓰다 찾은 운영 결함(A~)은 TRIP-1476 이 잇는다(건수는 그 노드).
 """
 
 [[nodes]]
 id = "TRIP-1476"
 ticket = "TRIP-1476"
-title = "[BE] 방어적 읽기·이벤트 payload 구멍 6건 — 옛/깨진 행 영구 500 · 빈 숙소 이름 알림 독"
+title = "[BE] 방어적 읽기·이벤트 payload 구멍 — 옛/깨진 행 영구 500 · 빈 숙소 이름 알림 독"
 status = "todo"
 touches = [
   "backend/modules/notification/src/main/kotlin/com/trippilot/notification/adapter/in/event/DomainNotificationSubscribers.kt",
@@ -4626,8 +4637,8 @@ touches = [
   "backend/modules/notification",
 ]
 note = """
-LOOP-COVERAGE(#1433)에서 뗀 운영 코드 결함. #1433 9차 검수에서 F(`places` 원소 타입 미검사 — 숫자가 응답에 그대로 나감)가
-더해져 6건이다(Jira 댓글). 티켓이 "각각 재현 테스트를 먼저 쓴다"고 적어 세 모듈 test 디렉토리도 만진다.
+LOOP-COVERAGE(#1433)에서 뗀 운영 코드 결함. 처음 A~E 에 #1433 검수에서 항목이 더해졌다 — 목록의 정본은 Jira(본문+댓글),
+여기 건수를 적지 않는다(드리프트한다). 티켓이 "각각 재현 테스트를 먼저 쓴다"고 적어 세 모듈 test 디렉토리도 만진다.
 C(범위 밖 저장값)·E(모르는 source_type)는 읽기 정책 설계 판단이 먼저다. #1433 과 선행 관계는 티켓에 없다 — 자원 배타뿐.
 """
 
