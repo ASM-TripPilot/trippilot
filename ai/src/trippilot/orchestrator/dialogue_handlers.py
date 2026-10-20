@@ -764,12 +764,24 @@ def _weather_anchor(ctx: TurnContext) -> _WeatherAnchor | None:
         if found is not None:
             return _WeatherAnchor(found[0], found[1].name or "여행지", slot=found[1])
     trip = snap.trip
+    fallback_day = on if on is not None else _weather_default_day(snap, today)
     for region in (trip.regions if trip is not None else ()):
-        hit = region_center(normalize(region))
-        if hit is not None:
-            name, coord, _ = hit
-            return _WeatherAnchor(on if on is not None else _weather_default_day(snap, today), name, coord=coord)
+        anchor = region_weather_anchor(region, fallback_day)
+        if anchor is not None:
+            return anchor
     return None
+
+
+def region_weather_anchor(region: str, on: date) -> _WeatherAnchor | None:
+    """지역 표현 → 그 지역 중심 좌표의 날씨 앵커. 표(`region_centers`)에 없으면 None — 지어내지 않는다.
+
+    여행 지역 폴백이 쓰고, 말한 지역(`region` 인자)이 분류에 실리면 그것도 이 함수로 푼다(탐색·거리 핸들러와 같은 표·같은 정규화).
+    """
+    hit = region_center(normalize(region))
+    if hit is None:
+        return None
+    name, coord, _ = hit
+    return _WeatherAnchor(on, name, coord=coord)
 
 
 def _plan_weather(ctx: TurnContext) -> tuple[HandlerTask, ...]:
