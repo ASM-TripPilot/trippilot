@@ -44,7 +44,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * 폴링 모드의 배달 규칙(`OutboxRelayIT`)은 그대로이고, 여기서는 **Kafka 모드에서만 달라지는 것**을 본다:
  * 브로커 확인 뒤에만 발행 표시 · 소비자가 같은 구독자에게 배달 · 키 = aggregateId · 소비 실패 재시도 · 브로커 장애 시 배치 중단.
  */
-// 재시도 간격만 줄인다(소진 경로를 끝까지 돌리려고 — 기본 2초·30초면 3분이다). 10회·두 배는 운영과 같다:
+// 재시도 간격만 줄인다(소진 경로를 끝까지 돌리려고 — 기본 2초·5분이면 약 13분이다). 10회·두 배는 운영과 같다:
 // 소진까지 약 17초, 재시도했다면 독 메시지 테스트가 그만큼 막힌다.
 @SpringBootTest(properties = [
     "trippilot.outbox.broker=kafka",
@@ -80,6 +80,13 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
             received += envelope
             latencies[envelope.aggregateId] = Duration.between(envelope.occurredAt, Instant.now())
         }
+    }
+
+    /** 손으로 미는 시계. 익명 객체로 두면 클래스 이름에 테스트 이름(괄호)이 들어가 스프링 클래스패스 스캔이 깨진다. */
+    class MovableClock(@Volatile var now: Instant) : Clock() {
+        override fun getZone(): java.time.ZoneId = java.time.ZoneOffset.UTC
+        override fun withZone(zone: java.time.ZoneId?): Clock = this
+        override fun instant(): Instant = now
     }
 
     @TestConfiguration
@@ -173,7 +180,8 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
-    fun `토픽은 보존 무기한이다 — 미소비 이벤트의 유일한 사본이 시간이 지나 지워지지 않는다`() {
+    fun `토픽은 보존 무기한이다 — 기동 전에 기본 보존으로 만들어진 토픽도 맞춘다`() {
+        // 토픽은 컨텍스트가 뜨기 전에 기본 보존(7일)으로 미리 만들어 둔다(아래 kafka) — 설정 전에 만들어진 로컬 토픽과 같다.
         org.apache.kafka.clients.admin.AdminClient.create(mapOf("bootstrap.servers" to kafka.bootstrapServers)).use { admin ->
             val resource = org.apache.kafka.common.config.ConfigResource(
                 org.apache.kafka.common.config.ConfigResource.Type.TOPIC, KafkaOutboxConfig.TOPIC,
@@ -227,6 +235,32 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
         OutboxRelay(jdbc, SimpleMeterRegistry(), allSubscribers, Clock.systemUTC(), tooLarge).relay()
 
         verify(exactly = 2) { tooLarge.send(match { it.aggregateId.startsWith("영구-") }) } // 첫 실패에서 멈추지 않았다
+        // 그 행만 백오프 — 시도 1회를 쓰고 미발행으로 남는다(시도를 안 쓰면 매 폴링 맨 앞에서 영영 다시 보낸다).
+        listOf("영구-1", "영구-2").forEach { note ->
+            jdbc.queryForObject(
+                "SELECT attempts FROM outbox_event WHERE aggregate_id = ? AND published_at IS NULL", Int::class.java, note,
+            ) shouldBe 1
+        }
+    }
+
+    @Test
+    fun `느린 브로커도 한 배치의 송신 예산(4분)을 넘기면 나머지는 다음 폴링으로 미룬다`() {
+        repeat(20) { relay.relay() }
+        tx.execute {
+            publisher.publish(Probe("예산-1"))
+            publisher.publish(Probe("예산-2"))
+        }
+        // 송신은 성공하지만 한 건마다 5분이 흐른다 — 첫 건 뒤에 예산을 넘긴다.
+        val clock = MovableClock(Instant.parse("2026-10-20T00:00:00Z"))
+        val slow = mockk<KafkaOutboxBroker>()
+        every { slow.send(any()) } answers { clock.now = clock.now.plus(Duration.ofMinutes(5)) }
+        OutboxRelay(jdbc, SimpleMeterRegistry(), allSubscribers, clock, slow).relay()
+
+        verify(exactly = 1) { slow.send(any()) }
+        jdbc.queryForObject(
+            "SELECT count(*) FROM outbox_event WHERE aggregate_id IN ('예산-1', '예산-2') AND published_at IS NULL AND attempts = 0",
+            Int::class.java,
+        ) shouldBe 1 // 못 보낸 건은 브로커·이벤트 탓이 아니다 — 시도 횟수를 쓰지 않는다
     }
 
     @Test
@@ -410,7 +444,18 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
         private const val PROBE = "test.KafkaProbe"
         private const val LATENCY = "trippilot.outbox.relay.latency"
 
-        private val kafka: KafkaContainer by lazy { KafkaContainer("apache/kafka:4.1.1").also { it.start() } }
+        /**
+         * 토픽을 **기본 보존으로 미리 만든다** — KafkaAdmin 은 기본으로 토픽을 만들 때만 설정을 쓰므로(modify-topic-configs),
+         * 이 설정 전에 만들어진 로컬 토픽은 7일 보존으로 남는다. 기동 뒤 무기한으로 바뀌었는지를 보존 테스트가 본다.
+         */
+        private val kafka: KafkaContainer by lazy {
+            KafkaContainer("apache/kafka:4.1.1").also { container ->
+                container.start()
+                org.apache.kafka.clients.admin.AdminClient.create(mapOf("bootstrap.servers" to container.bootstrapServers)).use {
+                    it.createTopics(listOf(org.apache.kafka.clients.admin.NewTopic(KafkaOutboxConfig.TOPIC, KafkaOutboxConfig.CONSUMERS.toInt(), 1.toShort()))).all().get()
+                }
+            }
+        }
 
         @JvmStatic
         @DynamicPropertySource

@@ -44,12 +44,16 @@ spring:
       # max.poll.interval 을 넘겨 그룹에서 빠지고 같은 묶음을 다시 받는 재배치가 반복된다.
       max-poll-records: 10
       properties:
-        # 한 묶음 + 한 레코드의 재시도 창(약 3분)을 덮도록 기본 5분에서 늘린다.
-        max.poll.interval.ms: 600000
+        # poll 사이 최대 공백 = 재시도 간격 하나(상한 5분 — 오류 처리기는 실패마다 간격 하나만 재우고 다시 poll 한다)
+        # + 한 묶음(10건) 처리. 기본 5분이면 간격 상한과 같아 넘친다 — 15분으로 둔다(KafkaOutboxConfig 참고).
+        max.poll.interval.ms: 900000
     admin:
       # Kafka 모드인데 기동 시 브로커가 없으면 기동을 실패시킨다 — 그냥 뜨면 토픽이 안 만들어져(자동 생성 끔) 재시작 전까지
       # 모든 송신이 조용히 멈춘다. 브로커를 먼저 띄운다. none 모드에서는 KafkaAdmin 이 토픽을 만들 일이 없어 무관하다.
       fail-fast: true
+      # 이미 있는 토픽에도 설정(보존 무기한)을 맞춘다 — 기본(false)은 토픽을 **만들 때만** 설정을 쓰므로, 이 설정 전에
+      # 만들어진 로컬 토픽은 기본 보존 7일로 남아 미소비 이벤트가 지워진다. KafkaOutboxIT 가 미리 만든 토픽으로 지킨다.
+      modify-topic-configs: true
 
 # 소셜 로그인 제공자(SECURITY-12: 평문 시크릿 0). client-id/secret 은 env 로만 주입 —
 # dev=application-local.yml(gitignore), prod=Secrets Manager→env. token/user-info-uri 는 비밀 아님(제공자 고정값).

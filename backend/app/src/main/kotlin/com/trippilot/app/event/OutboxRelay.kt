@@ -118,11 +118,13 @@ class OutboxRelay(
 
         var dropped = 0
         var brokerDown = false
-        val startedAt = System.nanoTime()
+        // 주입된 시계로 잰다 — 예산 초과 분기를 테스트가 시계로 재현한다(KafkaOutboxIT). 벽시계라 NTP 보정에 튈 수 있지만
+        // 그 결과는 남은 행을 다음 폴링으로 미루거나(앞으로) 조금 더 보내는 것(뒤로 — 락 시한까지 1분 여유)뿐이다.
+        val startedAt = clock.instant()
         batch.forEach { envelope ->
             // 느리지만 답은 하는 브로커도 막는다 — 성공만 이어져도 건당 수 초면 배치가 락 시한(5분)을 넘겨 다른 인스턴스가
             // 아직 표시 안 된 같은 행을 다시 보낸다. 남은 행은 다음 폴링이 집는다.
-            if (broker != null && System.nanoTime() - startedAt > BROKER_BATCH_BUDGET.toNanos()) brokerDown = true
+            if (broker != null && Duration.between(startedAt, clock.instant()) > BROKER_BATCH_BUDGET) brokerDown = true
             // 브로커가 한 번 실패하면 이 배치의 나머지는 다음 폴링으로 미룬다 — 행마다 송신 시한을 기다리면
             // 배치 하나가 락 시한(5분)을 넘겨 다른 인스턴스가 같은 행을 집는다.
             if (brokerDown) return@forEach

@@ -134,6 +134,11 @@ class NotificationRepositoryAdapter(
      * 기록만 하는 UPDATE 라 조건이 없다 — 재시도가 같은 값을 다시 써도 사실이 바뀌지 않는다.
      * 알림 자체는 이미 존재하므로 대상이 없으면(0행) 그냥 아무 일도 없다.
      */
+    // 트랜잭션 범위 권고 잠금 — 커밋·롤백에 풀린다. hashCode 충돌은 다른 묶음을 잠깐 줄 세울 뿐이다(정합성 영향 없음).
+    override fun lockPushGroup(accountId: UUID, dedupPrefix: String) {
+        jdbc.queryForList("SELECT pg_advisory_xact_lock(?, ?)", LOCK_CLASS_PUSH_GROUP, java.util.Objects.hash(accountId, dedupPrefix))
+    }
+
     override fun markPushResult(notificationId: UUID, sentAt: Instant?, failedReason: String?) {
         jdbc.update(
             "UPDATE notification SET push_sent_at = ?, push_failed_reason = ? WHERE notification_id = ?",
@@ -177,3 +182,6 @@ class NotificationRepositoryAdapter(
         pushFailedReason = pushFailedReason,
     )
 }
+
+/** 권고 잠금 분류 — 리마인드 재적재(0x4E53)와 다른 칸. */
+private const val LOCK_CLASS_PUSH_GROUP = 0x4E50

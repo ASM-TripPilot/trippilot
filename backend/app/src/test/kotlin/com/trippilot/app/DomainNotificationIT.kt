@@ -8,6 +8,8 @@ import com.trippilot.core.event.DomainEvent
 import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.notification.domain.DevicePlatform
 import com.trippilot.notification.domain.NotificationKind
+import com.trippilot.notification.application.NotificationRaiseService
+import com.trippilot.notification.application.PushPolicy
 import com.trippilot.notification.domain.NotificationRepository
 import com.trippilot.notification.domain.OsPermission
 import com.trippilot.notification.domain.PushToken
@@ -26,6 +28,9 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -71,6 +76,8 @@ class DomainNotificationIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var trips: TripRepository
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var jdbc: JdbcTemplate
+    @Autowired private lateinit var raiser: NotificationRaiseService
+    @Autowired private lateinit var txManager: PlatformTransactionManager
 
     private val now = Instant.parse("2026-08-11T01:00:00Z")
 
@@ -229,6 +236,33 @@ class DomainNotificationIT : AbstractPostgresIntegrationTest() {
         rows.size shouldBe 2
         rows.single { it.title == "날씨가 일정에 영향을 줄 수 있어요" }.pushSentAt shouldNotBe null
         rows.single { it.title == "가려던 곳의 영업을 확인해 주세요" }.pushSentAt shouldBe null
+    }
+
+    /**
+     * 같은 묶음의 두 사건이 **동시에** 와도 푸시는 한 번이다 — Kafka 모드(TRIP-1469)는 키(triggerId)가 다른 같은 여행의
+     * 사건을 소비 스레드 여럿이 함께 배달한다. 앞 사건의 트랜잭션을 커밋 전에 붙잡아 두고 뒤 사건을 돌린다: 잠금이 없으면
+     * 뒤 사건은 미커밋 발송을 못 봐 바로 또 쏜다.
+     */
+    @Test
+    fun `같은 묶음의 두 사건이 동시에 와도 앞 사건의 발송을 기다려 한 번만 푸시한다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        registerDevice(accountId)
+        fun raise(note: String) = raiser.raise(
+            accountId = accountId, kind = NotificationKind.PLAN_B, title = note, body = note,
+            sourceEventId = UUID.randomUUID(), dedupKey = "PLAN_B#$tripId#$note",
+            push = PushPolicy.OncePer("PLAN_B#$tripId#", Duration.ofMinutes(10)),
+        )
+
+        var second: Thread? = null
+        TransactionTemplate(txManager).execute {
+            raise("앞")
+            second = Thread { raise("뒤") }.apply { start() }
+            second!!.join(1_000) // 잠금이 있으면 여기서 끝나지 않는다(앞 커밋을 기다린다)
+        }
+        second!!.join(10_000)
+
+        pushedPlanB(accountId, tripId) shouldBe 1
     }
 
     /**

@@ -65,6 +65,7 @@ internal class FakeNotifications : NotificationRepository {
         stored.any { it.notificationId == notificationId && it.accountId == accountId }
 
     /** 푸시 결과는 **기록만** 한다(INV-U6-02) — 알림의 존재를 좌우하지 않는다. */
+    override fun lockPushGroup(accountId: UUID, dedupPrefix: String) = Unit // 대역은 단일 스레드
     override fun markPushResult(notificationId: UUID, sentAt: Instant?, failedReason: String?) {
         val i = stored.indexOfFirst { it.notificationId == notificationId }
         if (i >= 0) stored[i] = stored[i].copy(pushSentAt = sentAt, pushFailedReason = failedReason)

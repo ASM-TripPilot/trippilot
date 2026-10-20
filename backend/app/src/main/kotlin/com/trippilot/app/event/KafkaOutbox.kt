@@ -47,13 +47,16 @@ class KafkaOutboxConfig {
         .config(TopicConfig.RETENTION_MS_CONFIG, "-1").build()
 
     /**
-     * 소비 실패 재시도 — 횟수는 폴링 모드와 같은 **10회**, 2초부터 두 배씩. **재시도 창은 폴링보다 짧다**(약 3분 vs 13분).
+     * 소비 실패 재시도 — 폴링 모드와 **같은 창**이다: 10회, 2초부터 두 배씩, 간격 상한 5분([OutboxRelay] 의 BACKOFF_*).
+     * 대기는 2·4·8·16·32·64·128·256·300초 = 810초(약 13분)로 폴링 모드의 백오프와 한 칸씩 같다.
      *
-     * 상한을 폴링 모드의 5분이 아니라 30초로 둔다: 재시도는 소비 스레드에서 기다리므로 총 대기가
-     * `max.poll.interval.ms`(기본 5분)를 넘으면 브로커가 소비자를 그룹에서 빼고 재배치가 반복된다. 대가로 3~13분짜리
-     * 장애는 폴링 모드라면 넘기지만 여기서는 포기된다 — 포기는 [OutboxRelay.abandon] 이 폴링 모드와 같은 조회로 찾게 남긴다.
+     * 상한이 5분이어도 `max.poll.interval.ms` 를 넘지 않는다: spring-kafka 4.0.1 의 DefaultErrorHandler 는 실패 **한 번에
+     * 간격 하나만** 재우고(FailedRecordTracker.recovered → BackOffHandler.onNextBackOff 1회) 되감은 뒤 다시 poll 한다 —
+     * 시도 횟수는 FailedRecordTracker 가 메모리에 센다(jar 의 바이트코드로 확인). 그래서 poll 사이 최대 공백은 간격 상한(5분)
+     * + 한 묶음(10건) 처리이고, application.yml 의 `max.poll.interval.ms`(15분)가 그것을 덮는다.
      * 재시도 중에는 같은 파티션의 뒤 이벤트가 기다린다(KafkaOutboxConfig 문서 참고). 재시도 횟수는 메모리에만 있어 앱을
-     * 재시작하면 그 레코드는 처음부터 다시 센다(오프셋을 커밋하지 않았으므로 다시 받는다 — 유실은 아니다).
+     * 재시작하면 그 레코드는 처음부터 다시 센다(오프셋을 커밋하지 않았으므로 다시 받는다 — 유실은 아니다). 다 쓰면 포기는
+     * [OutboxRelay.abandon] 이 폴링 모드와 같은 조회로 찾게 남긴다.
      * 봉투를 못 읽는 메시지는 재시도해도 같으므로 바로 포기한다(파티션을 막지 않게).
      */
     @Bean
@@ -61,7 +64,7 @@ class KafkaOutboxConfig {
         relay: OutboxRelay,
         broker: KafkaOutboxBroker,
         @Value("\${trippilot.outbox.kafka.retry-initial-ms:2000}") initialMs: Long,
-        @Value("\${trippilot.outbox.kafka.retry-max-ms:30000}") maxMs: Long,
+        @Value("\${trippilot.outbox.kafka.retry-max-ms:300000}") maxMs: Long,
     ): DefaultErrorHandler = DefaultErrorHandler(
         { record, e ->
             // 봉투 전체를 못 읽어도 eventId 만 읽히면 그 행을 포기로 남긴다 — 행은 송신 때 이미 발행 표시라 버리면 흔적이 없다.
@@ -155,8 +158,19 @@ class KafkaOutboxBroker(
 class KafkaOutboxListener(private val relay: OutboxRelay, private val broker: KafkaOutboxBroker) {
     // 파티션 수만큼 소비 스레드를 둔다 — 하나면 백오프가 그 스레드를 재워 실패한 이벤트 하나가 세 파티션 전부를 멈춘다.
     // ⚠ 폴링 모드에 없던 동시성이다 — 폴링은 ShedLock 으로 한 번에 한 릴레이만 차례로 배달한다. 여기서는 키(aggregateId)가
-    // 다른 이벤트가 동시에 구독자를 탄다(같은 여행의 ItineraryGenerated·TripDeleted 등). 지금 구독자는 행 잠금·상태 확인·
-    // 재시도로 견디지만(예: NotificationScheduleService.reload 의 lockTrip), 새 구독자는 동시 호출을 전제로 써야 한다.
+    // 다른 이벤트가 동시에 구독자를 탄다. (순서 뒤바뀜은 새것이 아니다 — 폴링도 행마다 백오프해 순서가 바뀐다.)
+    // TRIP-1469 에서 구독자 전부(OutboxSubscriber 구현 16개)를 동시 호출 기준으로 확인했다:
+    //  - 리마인드 재적재(ItineraryGenerated 키=itineraryId · ItineraryRecalculated·TripDeleted 키=tripId → reload):
+    //    여행 권고 잠금(lockTrip) 뒤 현재 상태로 다시 계산 — 누가 먼저 오든 마지막 커밋이 최신 상태다.
+    //  - 알림 적재(StayRegistered·PlanBTriggered·ReflectionReady → raise): source_event_id UNIQUE(ON CONFLICT). Plan-B 묶음
+    //    푸시(같은 여행, 키=triggerId 라 갈린다)만 단일 실행에 기대고 있었다 → lockPushGroup 으로 고쳤다(DomainNotificationIT).
+    //  - 회고(TripEnded 키=tripId → 요약 생성 · ActualRouteStored 키=routeDayId → 통계 갱신): 같은 여행·같은 날 권고 잠금
+    //    (TripSummaryPersistence·ReflectionPersistence.findForUpdate) — 요약이 아직 없어도 잠금이 줄 세운다.
+    //  - Plan-B 선계산(PlanBTriggered → onRisk): 부분 유니크 + 자리 세마포어 — 사용자 요청과의 동시성을 이미 견딘다.
+    //  - 트리거 소비(ItineraryRecalculated → TriggerService.consume): 트리거를 쓰는 구독자는 이것 하나라 구독자끼리 겹치지 않는다.
+    //  - 파기(도우미 대화 TripDeleted·AccountDeletionRequested·DialogueForgetRequested · EXIF·경로·기준점 좌표·위치 구간 닫기):
+    //    멱등 DELETE·조건부 UPDATE. GpsRecordingOptOut·LocationLegalConsentRevoked 는 키가 같은 accountId 라 한 파티션이다.
+    // 새 구독자는 동시 호출을 전제로 쓴다 — 선검사 후 쓰기에는 잠금·유니크를 둔다.
     @KafkaListener(topics = [KafkaOutboxConfig.TOPIC], groupId = "trippilot-outbox", concurrency = KafkaOutboxConfig.CONSUMERS)
     // 값 없는 레코드(tombstone)는 여기까지 오지 않는다 — 스프링이 인자 변환에서 비재시도 실패로 분류해 회수기로 바로 보낸다
     // (실측: "eventId 도 못 읽은 … value=null" 한 줄, 재시도 0). KafkaOutboxIT 가 그 동작을 지킨다.
