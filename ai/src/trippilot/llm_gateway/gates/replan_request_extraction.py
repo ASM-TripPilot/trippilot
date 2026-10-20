@@ -43,11 +43,13 @@ class ExtractedRequest:
     # 종류 조건 — "카페는 두 군데만"·"카페로만". `only` 는 categories 가 있을 때만 참이다.
     categories: tuple[ExtractedCategory, ...] = ()
     only: bool = False
+    # 가고 싶은 동네·지역 — "강남에서 놀고 싶어" → "강남". 장소 이름이 아니라 그 일대다
+    area: str | None = None
 
     @property
     def empty(self) -> bool:
         return not (self.places or self.start_after or self.end_by or self.weather
-                    or self.categories)
+                    or self.categories or self.area)
 
 
 
@@ -58,6 +60,7 @@ _MAX_NAME = 40
 _CATEGORIES = frozenset({"FOOD", "CAFE", "SIGHT", "NIGHT_VIEW", "NATURE", "CULTURE", "ACTIVITY", "SHOPPING"})
 _MAX_CATEGORIES = 4
 _MAX_COUNT = 8  # 재계획 하루 방문 상한과 같은 급
+_MAX_AREA = 20
 
 
 def _hhmm(value: object) -> time | None:
@@ -67,9 +70,15 @@ def _hhmm(value: object) -> time | None:
     return time(int(m.group(1)), int(m.group(2))) if m else None
 
 
+def _area(value: object) -> str | None:
+    if not isinstance(value, str) or not value.strip() or len(value.strip()) > _MAX_AREA:
+        return None
+    return value.strip()
+
+
 class ReplanRequestExtractionGate:
     """`{"places": [{"name", "want", "at"}], "start_after", "end_by", "weather",
-    "categories": [{"category", "count", "at"}], "only"}` 강제."""
+    "categories": [{"category", "count", "at"}], "only", "area"}` 강제."""
 
     def apply(
         self,
@@ -116,6 +125,7 @@ class ReplanRequestExtractionGate:
                 weather=weather,
                 categories=tuple(cats.values()),
                 only=bool(cats) and data.get("only") is True,
+                area=_area(data.get("area")),
             ),
             drop_event=None,
             error=None,

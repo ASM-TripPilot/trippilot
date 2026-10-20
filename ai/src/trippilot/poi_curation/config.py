@@ -21,7 +21,9 @@ def _default_budget_limit() -> dict[BudgetLevel, int | None]:
 @dataclass(frozen=True, slots=True)
 class M7Config:
     radius_km: dict[TransportMode, float] = field(default_factory=_default_radius)
-    multi_day_factor: float = 0.7            # 다일 여행 반경 축소
+    # 다일 여행 반경 배율 — 0.7(축소)이던 것을 1.0 으로(2026-10-20). 서울 2박3일(앵커 = 시청)에서 7km 는 강남역 8.8km·
+    # 성수 7.3km 를 풀에서 뺐다. 날마다 다른 동네로 가려면(`day_focus`) 풀이 도시를 덮어야 한다.
+    multi_day_factor: float = 1.0
     budget_limit: dict[BudgetLevel, int | None] = field(
         default_factory=_default_budget_limit)
     max_candidates: int = 5_000              # G142

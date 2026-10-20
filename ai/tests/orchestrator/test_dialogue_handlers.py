@@ -698,7 +698,7 @@ def test_alternatives_chain_anchor_pool_weather_and_planb_request() -> None:
     assert req.excluded_poi_ids == frozenset(PoiId(_U[n]) for n in (
         "성산일출봉", "섭지코지", "올레국수", "우도", "해녀의집", "카페 모카", "스타벅스 카페", "한라산", "제주민속촌"))
     assert req.rain_prob_by_date == {_D2: 90} and req.trace_id == _TRACE and req.now == _NOW
-    # 식사 칸이라 풀은 식사 후보로 좁혀진다 (wiring.restrict_pool_to_target_role 과 같은 규칙)
+    # 식사 칸이라 풀은 식사 후보로 좁혀진다 (pool_builder.restrict_pool_to_target_role — 앱 슬롯 대안과 같은 함수)
     assert req.pool.poi_ids == frozenset({PoiId(_U["해녀의집"]), PoiId(_U["흑돼지거리"])})
     assert value["status"] == "OK" and [c["name"] for c in value["candidates"]] == ["흑돼지거리"]  # 동문시장은 좁힌 풀 밖
 
@@ -716,7 +716,36 @@ def test_alternatives_default_reason_none_and_no_weather_port() -> None:
     _run(HANDLERS[Intent.SUGGEST_ALTERNATIVE], _ctx(arguments={"target": "성산"}, ports=ports))
     (req,) = planb.requests
     assert req.reason == "none" and req.rain_prob_by_date == {}
-    assert req.pool.poi_ids == frozenset(PoiId(_U[n]) for n in ("해녀의집", "흑돼지거리", "성산일출봉", "동문시장", "용두암"))  # 비식사 칸은 그대로
+    # 비식사 칸은 식당을 빼고, 같은 분류(명소)가 일정 밖에 둘뿐이라 모자라 식당 아닌 전부로 채운다(결정 3)
+    assert req.pool.poi_ids == frozenset(PoiId(_U[n]) for n in ("성산일출봉", "동문시장", "용두암"))
+
+
+_SIGHT_POOL = (_poi("제주민속촌"), _poi("흑돼지거리", PoiCategory.FOOD), _poi("동문시장"), _poi("천지연폭포", PoiCategory.NATURE))
+
+
+def test_alternatives_sight_slot_keeps_only_same_category_when_three_are_left() -> None:
+    pool = _pool(*_SIGHT_POOL, _poi("용두암"), _poi("협재해수욕장"))
+    ports, _, planb = _alt_ports(pool=pool, result=_planb_result(("동문시장",)))
+    _run(HANDLERS[Intent.SUGGEST_ALTERNATIVE], _ctx(arguments={"target": "제주민속촌"}, ports=ports))
+    assert planb.requests[0].pool.poi_ids == frozenset(PoiId(_U[n]) for n in ("제주민속촌", "동문시장", "용두암", "협재해수욕장"))
+
+
+def test_alternatives_sight_slot_fills_with_other_non_food_and_lists_same_category_first() -> None:
+    ports, _, planb = _alt_ports(pool=_pool(*_SIGHT_POOL), result=_planb_result(("천지연폭포",), ("동문시장",)))
+    facts = _run(HANDLERS[Intent.SUGGEST_ALTERNATIVE], _ctx(arguments={"target": "제주민속촌"}, ports=ports))
+    assert planb.requests[0].pool.poi_ids == frozenset(PoiId(_U[n]) for n in ("제주민속촌", "동문시장", "천지연폭포"))
+    assert [c["name"] for c in facts.payload["candidates"]] == ["동문시장", "천지연폭포"]
+
+
+@pytest.mark.parametrize("constraint,food", [
+    ("밥 먹을 데", True), ("근처 맛집으로", True), ("배고파", True), ("식사할 곳", True),
+    ("밥 먹고 갈 만한 데", False),  # 식후에 갈 곳
+    ("맛집 말고 구경할 곳", False), ("식당은 빼고", False), ("실내로", False),
+])
+def test_alternatives_food_only_when_the_user_asks_for_somewhere_to_eat(constraint: str, food: bool) -> None:
+    ports, _, planb = _alt_ports(pool=_pool(*_SIGHT_POOL), result=_planb_result(("동문시장",)))
+    _run(HANDLERS[Intent.SUGGEST_ALTERNATIVE], _ctx(arguments={"target": "제주민속촌", "constraint": constraint}, ports=ports))
+    assert (planb.requests[0].pool.poi_ids == frozenset({PoiId(_U["흑돼지거리"])})) is food
 
 
 @pytest.mark.parametrize("said,expected", [

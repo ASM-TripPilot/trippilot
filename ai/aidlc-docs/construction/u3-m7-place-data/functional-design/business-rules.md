@@ -12,7 +12,7 @@
 
 | 단계 | 규칙 | 값 |
 |---|---|---|
-| 반경 | 수단별 + 다일 ×0.7 | WALK 2 / PUBLIC 10 / CAR 20 km |
+| 반경 | 수단별 + 다일 ×`multi_day_factor`(2026-10-20 0.7 → 1.0) | WALK 2 / PUBLIC 10 / CAR 20 km |
 | 예산 | avg_cost ≤ 상한, **None=통과** (미확인=배제 안 함) | LOW 15,000 / MID 40,000 / HIGH ∞ |
 | 영업일 | 여행일 중 하루라도 영업. **open_hours 비면 통과** (U2 checker와 동일 철학) | — |
 | 품질 | MINIMAL 제외 | FULL·PARTIAL만 |

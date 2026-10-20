@@ -688,3 +688,70 @@ def test_a_kind_locked_at_a_time_is_not_added_again() -> None:
             free_text="12시에 밥", directives=["ADD_FOOD"], reasons=[])).json()
     assert f"nl_at_locked: {_HEUKDWAEJI} 12:00" in body["notes"], body["notes"]
     assert seen and all(PoiCategory.FOOD not in s for s in seen), seen
+
+
+# ── ⑧ 지역으로 옮기기 — "을지로 말고 강남에서 놀고 싶어" ──────────────────────────
+# 종전엔 "강남"을 장소 이름으로만 대조했고(맞는 이름 없으면 탈락, 있으면 그 한 곳), 후보 풀은 지금 위치 기준이라
+# 하루가 그대로 을지로였다(사용자 2026-10-20). 지역 이름은 그 이름이 든 등록 장소들의 중앙 좌표로 중심을 잡는다.
+
+
+def test_gate_reads_an_area() -> None:
+    out = _gate('{"places": [], "area": " 강남 "}')
+    assert out.value.area == "강남" and not out.value.empty
+    assert _gate('{"places": [], "area": ""}').value.area is None
+
+
+def test_area_center_is_the_median_of_places_named_after_it() -> None:
+    reg = (_poi("g1", "강남역 카페", 37.498, 127.027), _poi("g2", "강남 미술관", 37.500, 127.030),
+           _poi("g3", "강남구청", 37.517, 127.047), _poi("g4", "강남면옥", 37.570, 126.990),  # 다른 동네의 같은 말
+           _poi("g5", "강남 떡볶이", 37.499, 127.028), _poi("x", "을지로 노가리", 37.566, 126.990))
+    r = _verify(ExtractedRequest(area="강남"), registered=lambda: reg)
+    assert r.area_center is not None
+    assert abs(r.area_center.lat - 37.500) < 0.002 and abs(r.area_center.lng - 127.030) < 0.002, r.area_center
+    assert any(n.startswith("nl_area_accepted") for n in r.notes)
+
+
+def test_unknown_area_is_said_not_guessed() -> None:
+    r = _verify(ExtractedRequest(area="없는동네"))
+    assert r.area_center is None and "nl_area_rejected: unknown" in r.notes
+
+
+def test_well_known_area_without_named_places_comes_from_the_table() -> None:
+    """연희동은 상호에 "연희"를 잘 안 쓴다 — 로컬 실측에서 이름 대조가 3곳 미만이라 하루가 명동으로 갔다."""
+    seoul = GeoPoint(37.5665, 126.9780)
+    r = _verify(ExtractedRequest(area="연희동"), anchor=seoul, registered=lambda: ())
+    assert r.area_center is not None and abs(r.area_center.lat - 37.569) < 0.005, r.notes
+    assert "nl_area_accepted: table" in r.notes
+
+
+def test_area_far_from_the_trip_is_rejected() -> None:
+    """서울 여행에서 "해운대" — 표에 있어도 여행지에서 50km 넘게 떨어진 이름은 받지 않는다."""
+    r = _verify(ExtractedRequest(area="해운대"), anchor=GeoPoint(37.5665, 126.9780), registered=lambda: ())
+    assert r.area_center is None and "nl_area_rejected: far" in r.notes
+
+
+_EULJI = GeoPoint(37.566, 126.985)
+_GANG = GeoPoint(37.4979, 127.0276)
+_AREA_POIS = tuple(
+    _poi(f"{tag}{i}", f"{name} {i}", at.lat + 0.0004 * (i % 5), at.lng + 0.0004 * (i // 5),
+         cat=PoiCategory.SIGHT if i % 3 else PoiCategory.FOOD)
+    for tag, name, at in (("e", "을지로", _EULJI), ("g", "강남", _GANG)) for i in range(15))
+
+
+def test_area_request_moves_the_day_there_and_drops_the_old_area() -> None:
+    from trippilot.api.wiring import StaticPoiDb
+
+    app = build_dev_app(directives=_DIRECTIVES, poi_db=StaticPoiDb(_AREA_POIS))
+    orch = app.state.orchestrator
+    orch._request_extractor = _StubExtractor(ExtractedRequest(area="강남"))
+    current = [{"poi_id": f"e{i}", "start_at": f"{10 + 2 * i}:00", "end_at": f"{11 + 2 * i}:00", "is_fixed": False}
+               for i in range(3)]
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.post("/ai/v1/planb/replan", json=_body(
+            free_text="을지로 말고 강남에서 놀고 싶어", reasons=[], current_slots=current,
+            anchor={"lat": _EULJI.lat, "lng": _EULJI.lng}))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    placed = _placed(body)
+    assert placed and all(p.startswith("g") for p in placed), (placed, body["notes"])
+    assert any(n.startswith("nl_area_pool") for n in body["notes"]), body["notes"]
