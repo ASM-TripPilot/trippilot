@@ -956,6 +956,24 @@ function firstSheetSnapPoints(): unknown[] {
   return node.props.snapPoints as unknown[];
 }
 
+// TRIP-1507 — 지도가 풀블리드라 상태바 영역에 비치던 것을 흰 막으로 가린다(높이 = 상단 안전 영역).
+describe('MapSheetShell · 상태바 영역 흰 막 (TRIP-1507)', () => {
+  beforeEach(withMapKey);
+  afterEach(restoreMapKey);
+
+  it('상단 안전 영역 47 → 높이 47 의 막이 있고 터치를 통과시킨다', () => {
+    renderWithBottomInset(34);
+    const cover = screen.getByTestId('map-sheet-shell-statusbar-cover');
+    expect(cover.props.style).toEqual(expect.objectContaining({ height: 47 }));
+    expect(cover.props.pointerEvents).toBe('none');
+  });
+
+  it('Provider 없음(안전 영역 0) → 막을 그리지 않는다', () => {
+    renderWithBottomInset(null);
+    expect(screen.queryByTestId('map-sheet-shell-statusbar-cover')).toBeNull();
+  });
+});
+
 describe('MapSheetShell · 닫힘 스냅이 홈 인디케이터 위에 온다', () => {
   beforeEach(withMapKey);
   afterEach(restoreMapKey);

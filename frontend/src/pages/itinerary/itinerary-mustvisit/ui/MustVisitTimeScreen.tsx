@@ -179,283 +179,285 @@ export function MustVisitTimeScreen({
   const errorLine = errorText ?? reasonText;
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
-      <View
-        testID={`itinerary-mustvisit-time-${sourcePoiId}`}
-        className="flex-1 bg-canvas"
-      >
-        <View className="w-full flex-row items-center gap-[6px] bg-canvas py-[14px] pl-md pr-lg">
-          <Pressable
-            testID="itinerary-mustvisit-time-back"
-            accessibilityRole="button"
-            accessibilityLabel="뒤로"
-            onPress={onBack}
-            hitSlop={8}
-          >
-            <BackChevronGlyph />
-          </Pressable>
-          <Text className="font-noto-bold text-[18px] font-bold text-ink">
-            {SCREEN_TITLE}
-          </Text>
-        </View>
-
-        <ScrollView contentContainerClassName="gap-[18px] px-lg pb-2xl pt-sm">
-          <View
-            style={softShadow}
-            className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas py-md pl-md pr-[14px]"
-          >
-            <View className="h-[64px] w-[64px] overflow-hidden rounded-thumb bg-surface-strong">
-              {imageUrl == null ? null : (
-                <Image
-                  source={{ uri: imageUrl }}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
-                  className="h-full w-full"
-                />
-              )}
-            </View>
-            <View className="flex-1 items-start gap-xs">
-              {/* '고정' 은 토글이 켜졌을 때만 사실이다 — 꺼짐은 ANYTIME(BR-U1-48). */}
-              {form.fixed ? (
-                <View
-                  testID="itinerary-mustvisit-time-fixed-badge"
-                  className="rounded-pill bg-primary-pale px-sm py-[3px]"
-                >
-                  <Text className="font-noto-bold text-micro font-bold text-primary-text">
-                    {PLACE_CHIP}
-                  </Text>
-                </View>
-              ) : null}
-              <Text
-                numberOfLines={1}
-                className="font-noto-bold text-card-title font-bold text-ink"
-              >
-                {placeName ?? MUST_VISIT_NAME_PLACEHOLDER}
-              </Text>
-              <Text
-                testID="itinerary-mustvisit-time-subtitle"
-                numberOfLines={1}
-                className="font-noto text-caption text-muted"
-              >
-                {region ? `${region} · ${PLACE_SUFFIX}` : PLACE_SUFFIX}
-              </Text>
-            </View>
+    // TRIP-1507 · 시트는 안전 영역 밖(화면 루트의 형제)에 둔다 — 안에 두면 딤이 상태바 영역을 못 덮어 위에 흰 띠가 남는다.
+    <View className="flex-1 bg-canvas">
+      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+        <View
+          testID={`itinerary-mustvisit-time-${sourcePoiId}`}
+          className="flex-1 bg-canvas"
+        >
+          <View className="w-full flex-row items-center gap-[6px] bg-canvas py-[14px] pl-md pr-lg">
+            <Pressable
+              testID="itinerary-mustvisit-time-back"
+              accessibilityRole="button"
+              accessibilityLabel="뒤로"
+              onPress={onBack}
+              hitSlop={8}
+            >
+              <BackChevronGlyph />
+            </Pressable>
+            <Text className="font-noto-bold text-[18px] font-bold text-ink">
+              {SCREEN_TITLE}
+            </Text>
           </View>
 
-          {/* 행 전체가 스위치다 — 제목·안내를 눌러도 바뀐다(Q-066). 안쪽 트랙은 누름·role 없는 그림이라
+          <ScrollView contentContainerClassName="gap-[18px] px-lg pb-2xl pt-sm">
+            <View
+              style={softShadow}
+              className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas py-md pl-md pr-[14px]"
+            >
+              <View className="h-[64px] w-[64px] overflow-hidden rounded-thumb bg-surface-strong">
+                {imageUrl == null ? null : (
+                  <Image
+                    source={{ uri: imageUrl }}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    className="h-full w-full"
+                  />
+                )}
+              </View>
+              <View className="flex-1 items-start gap-xs">
+                {/* '고정' 은 토글이 켜졌을 때만 사실이다 — 꺼짐은 ANYTIME(BR-U1-48). */}
+                {form.fixed ? (
+                  <View
+                    testID="itinerary-mustvisit-time-fixed-badge"
+                    className="rounded-pill bg-primary-pale px-sm py-[3px]"
+                  >
+                    <Text className="font-noto-bold text-micro font-bold text-primary-text">
+                      {PLACE_CHIP}
+                    </Text>
+                  </View>
+                ) : null}
+                <Text
+                  numberOfLines={1}
+                  className="font-noto-bold text-card-title font-bold text-ink"
+                >
+                  {placeName ?? MUST_VISIT_NAME_PLACEHOLDER}
+                </Text>
+                <Text
+                  testID="itinerary-mustvisit-time-subtitle"
+                  numberOfLines={1}
+                  className="font-noto text-caption text-muted"
+                >
+                  {region ? `${region} · ${PLACE_SUFFIX}` : PLACE_SUFFIX}
+                </Text>
+              </View>
+            </View>
+
+            {/* 행 전체가 스위치다 — 제목·안내를 눌러도 바뀐다(Q-066). 안쪽 트랙은 누름·role 없는 그림이라
               스위치는 화면에 이 하나뿐이다. */}
-          <Pressable
-            testID="itinerary-mustvisit-time-toggle"
-            accessibilityRole="switch"
-            accessibilityLabel={TOGGLE_TITLE}
-            accessibilityState={{ checked: form.fixed }}
-            onPress={() => onToggleFixed?.(!form.fixed)}
-            style={softShadow}
-            className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas px-lg py-[14px]"
-          >
-            <View className="flex-1 gap-[3px]">
-              <Text className="font-noto-bold text-card-title font-bold text-ink">
-                {TOGGLE_TITLE}
-              </Text>
-              <Text className="font-noto text-caption text-muted">
-                {TOGGLE_NOTE}
+            <Pressable
+              testID="itinerary-mustvisit-time-toggle"
+              accessibilityRole="switch"
+              accessibilityLabel={TOGGLE_TITLE}
+              accessibilityState={{ checked: form.fixed }}
+              onPress={() => onToggleFixed?.(!form.fixed)}
+              style={softShadow}
+              className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas px-lg py-[14px]"
+            >
+              <View className="flex-1 gap-[3px]">
+                <Text className="font-noto-bold text-card-title font-bold text-ink">
+                  {TOGGLE_TITLE}
+                </Text>
+                <Text className="font-noto text-caption text-muted">
+                  {TOGGLE_NOTE}
+                </Text>
+              </View>
+              <View
+                className={`h-[28px] w-[46px] rounded-[14px] ${
+                  form.fixed ? 'bg-primary' : 'bg-hairline-strong'
+                }`}
+              >
+                <View
+                  style={softShadow}
+                  className={`absolute top-[3px] h-[22px] w-[22px] rounded-pill bg-canvas ${
+                    form.fixed ? 'left-[22px]' : 'left-[3px]'
+                  }`}
+                />
+              </View>
+            </Pressable>
+
+            <View className={`w-full gap-sm ${locked ? 'opacity-40' : ''}`}>
+              <SectionLabel text={DATE_SECTION} />
+              <View className="w-full flex-row items-center rounded-button bg-hairline p-[3px]">
+                {dayChips.map((chip) => (
+                  <SegmentItem
+                    key={chip.date}
+                    testID={`itinerary-mustvisit-time-date-${chip.date}`}
+                    label={chip.label}
+                    selected={form.fixedDate === chip.date}
+                    disabled={locked}
+                    onPress={() => onPickDate?.(chip.date)}
+                  />
+                ))}
+              </View>
+            </View>
+
+            <View className={`w-full gap-sm ${locked ? 'opacity-40' : ''}`}>
+              <SectionLabel text={START_SECTION} />
+              <Pressable
+                testID="itinerary-mustvisit-time-start-field"
+                accessibilityRole="button"
+                disabled={locked}
+                onPress={() => setStartSheetOpen(true)}
+                className="w-full flex-row items-center gap-[10px] rounded-button border border-hairline-strong bg-canvas px-[14px] py-[13px]"
+              >
+                <ClockGlyph />
+                <Text
+                  className={`flex-1 font-noto-bold text-card-title font-bold ${
+                    form.fixedStart === null ? 'text-muted-soft' : 'text-ink'
+                  }`}
+                >
+                  {form.fixedStart ?? START_PLACEHOLDER}
+                </Text>
+                <ChevronDownGlyph />
+              </Pressable>
+            </View>
+
+            <View className={`w-full gap-sm ${locked ? 'opacity-40' : ''}`}>
+              <SectionLabel text={DWELL_SECTION} />
+              <View className="w-full flex-row items-center rounded-button bg-hairline p-[3px]">
+                {DWELL_OPTIONS.map((option) => (
+                  <SegmentItem
+                    key={option.key}
+                    testID={`itinerary-mustvisit-time-dwell-${option.key}`}
+                    label={option.label}
+                    selected={form.dwellKey === option.key}
+                    disabled={locked}
+                    onPress={() => onPickDwell?.(option.key)}
+                  />
+                ))}
+              </View>
+            </View>
+
+            {duplicateText === undefined ? null : (
+              <View className="w-full flex-row items-center gap-[10px] rounded-button border border-hairline bg-primary-pale px-[14px] py-md">
+                <InfoCircleGlyph tone="primaryText" />
+                <Text
+                  testID="itinerary-mustvisit-time-duplicate"
+                  className="flex-1 font-noto text-label text-primary-text"
+                >
+                  {duplicateText}
+                </Text>
+              </View>
+            )}
+
+            {leaveWarningText === undefined ? null : (
+              <View className="w-full flex-row items-center gap-[10px] rounded-button border border-hairline bg-primary-pale px-[14px] py-md">
+                <InfoCircleGlyph tone="primaryText" />
+                <Text
+                  testID="itinerary-mustvisit-time-leave-warning"
+                  className="flex-1 font-noto text-label text-primary-text"
+                >
+                  {leaveWarningText}
+                </Text>
+              </View>
+            )}
+
+            <View className="w-full flex-row items-center gap-[10px] rounded-button border border-hairline bg-surface-soft px-[14px] py-md">
+              <InfoCircleGlyph />
+              <Text
+                testID="itinerary-mustvisit-time-notice"
+                className="flex-1 font-noto text-label text-body"
+              >
+                {NOTICE}
               </Text>
             </View>
-            <View
-              className={`h-[28px] w-[46px] rounded-[14px] ${
-                form.fixed ? 'bg-primary' : 'bg-hairline-strong'
+
+            {errorLine === undefined ? null : (
+              <View
+                testID="itinerary-mustvisit-time-error-row"
+                className="min-h-[52px] w-full flex-row items-center gap-md rounded-button border border-hairline bg-canvas px-lg py-md"
+              >
+                <AlertCircleGlyph />
+                <Text
+                  testID="itinerary-mustvisit-time-error"
+                  className="flex-1 font-noto text-card-title text-ink"
+                >
+                  {errorLine}
+                </Text>
+                {onRetry === undefined ? null : (
+                  <Pressable
+                    testID="itinerary-mustvisit-time-retry"
+                    accessibilityRole="button"
+                    onPress={onRetry}
+                    hitSlop={6}
+                  >
+                    <Text className="font-noto-bold text-card-title font-bold text-primary">
+                      {RETRY_LABEL}
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+
+            <Pressable
+              testID="itinerary-mustvisit-time-submit"
+              accessibilityRole="button"
+              disabled={!canSubmit}
+              onPress={onSubmit}
+              className={`w-full items-center justify-center rounded-button py-lg ${
+                canSubmit ? 'bg-primary' : 'bg-hairline-strong'
               }`}
             >
-              <View
-                style={softShadow}
-                className={`absolute top-[3px] h-[22px] w-[22px] rounded-pill bg-canvas ${
-                  form.fixed ? 'left-[22px]' : 'left-[3px]'
-                }`}
-              />
-            </View>
-          </Pressable>
-
-          <View className={`w-full gap-sm ${locked ? 'opacity-40' : ''}`}>
-            <SectionLabel text={DATE_SECTION} />
-            <View className="w-full flex-row items-center rounded-button bg-hairline p-[3px]">
-              {dayChips.map((chip) => (
-                <SegmentItem
-                  key={chip.date}
-                  testID={`itinerary-mustvisit-time-date-${chip.date}`}
-                  label={chip.label}
-                  selected={form.fixedDate === chip.date}
-                  disabled={locked}
-                  onPress={() => onPickDate?.(chip.date)}
-                />
-              ))}
-            </View>
-          </View>
-
-          <View className={`w-full gap-sm ${locked ? 'opacity-40' : ''}`}>
-            <SectionLabel text={START_SECTION} />
-            <Pressable
-              testID="itinerary-mustvisit-time-start-field"
-              accessibilityRole="button"
-              disabled={locked}
-              onPress={() => setStartSheetOpen(true)}
-              className="w-full flex-row items-center gap-[10px] rounded-button border border-hairline-strong bg-canvas px-[14px] py-[13px]"
-            >
-              <ClockGlyph />
-              <Text
-                className={`flex-1 font-noto-bold text-card-title font-bold ${
-                  form.fixedStart === null ? 'text-muted-soft' : 'text-ink'
-                }`}
-              >
-                {form.fixedStart ?? START_PLACEHOLDER}
+              <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
+                {form.fixed ? SUBMIT_LABEL_FIXED : SUBMIT_LABEL_ANYTIME}
               </Text>
-              <ChevronDownGlyph />
             </Pressable>
-          </View>
-
-          <View className={`w-full gap-sm ${locked ? 'opacity-40' : ''}`}>
-            <SectionLabel text={DWELL_SECTION} />
-            <View className="w-full flex-row items-center rounded-button bg-hairline p-[3px]">
-              {DWELL_OPTIONS.map((option) => (
-                <SegmentItem
-                  key={option.key}
-                  testID={`itinerary-mustvisit-time-dwell-${option.key}`}
-                  label={option.label}
-                  selected={form.dwellKey === option.key}
-                  disabled={locked}
-                  onPress={() => onPickDwell?.(option.key)}
-                />
-              ))}
-            </View>
-          </View>
-
-          {duplicateText === undefined ? null : (
-            <View className="w-full flex-row items-center gap-[10px] rounded-button border border-hairline bg-primary-pale px-[14px] py-md">
-              <InfoCircleGlyph tone="primaryText" />
-              <Text
-                testID="itinerary-mustvisit-time-duplicate"
-                className="flex-1 font-noto text-label text-primary-text"
-              >
-                {duplicateText}
-              </Text>
-            </View>
-          )}
-
-          {leaveWarningText === undefined ? null : (
-            <View className="w-full flex-row items-center gap-[10px] rounded-button border border-hairline bg-primary-pale px-[14px] py-md">
-              <InfoCircleGlyph tone="primaryText" />
-              <Text
-                testID="itinerary-mustvisit-time-leave-warning"
-                className="flex-1 font-noto text-label text-primary-text"
-              >
-                {leaveWarningText}
-              </Text>
-            </View>
-          )}
-
-          <View className="w-full flex-row items-center gap-[10px] rounded-button border border-hairline bg-surface-soft px-[14px] py-md">
-            <InfoCircleGlyph />
-            <Text
-              testID="itinerary-mustvisit-time-notice"
-              className="flex-1 font-noto text-label text-body"
-            >
-              {NOTICE}
-            </Text>
-          </View>
-
-          {errorLine === undefined ? null : (
-            <View
-              testID="itinerary-mustvisit-time-error-row"
-              className="min-h-[52px] w-full flex-row items-center gap-md rounded-button border border-hairline bg-canvas px-lg py-md"
-            >
-              <AlertCircleGlyph />
-              <Text
-                testID="itinerary-mustvisit-time-error"
-                className="flex-1 font-noto text-card-title text-ink"
-              >
-                {errorLine}
-              </Text>
-              {onRetry === undefined ? null : (
-                <Pressable
-                  testID="itinerary-mustvisit-time-retry"
-                  accessibilityRole="button"
-                  onPress={onRetry}
-                  hitSlop={6}
-                >
-                  <Text className="font-noto-bold text-card-title font-bold text-primary">
-                    {RETRY_LABEL}
-                  </Text>
-                </Pressable>
-              )}
-            </View>
-          )}
-
-          <Pressable
-            testID="itinerary-mustvisit-time-submit"
-            accessibilityRole="button"
-            disabled={!canSubmit}
-            onPress={onSubmit}
-            className={`w-full items-center justify-center rounded-button py-lg ${
-              canSubmit ? 'bg-primary' : 'bg-hairline-strong'
-            }`}
+          </ScrollView>
+        </View>
+      </SafeAreaView>
+      {startSheetOpen ? (
+        // 휠이 자기 스크롤을 쥐므로 시트 본문은 스크롤하지 않는다(BottomSheetView).
+        // `enableContentPanningGesture={false}` 는 시트의 콘텐츠 pan 이 휠의 세로 스크롤을
+        // 삼키는 것을 막는다(`TripBaseFixSheet` TRIP-455 함정과 동형 — jest 사각·6-b 실기).
+        // 딤 탭·핸들 끌기로 라이브러리가 닫아도 열림 상태를 풀어야 칸 재탭에 다시 뜬다(TRIP-1014 #041).
+        <BottomSheet
+          backdropComponent={renderSheetBackdrop}
+          enableContentPanningGesture={false}
+          enablePanDownToClose
+          onClose={() => setStartSheetOpen(false)}
+        >
+          <BottomSheetView
+            testID="itinerary-mustvisit-time-start-sheet"
+            className="w-full pb-lg"
           >
-            <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-              {form.fixed ? SUBMIT_LABEL_FIXED : SUBMIT_LABEL_ANYTIME}
-            </Text>
-          </Pressable>
-        </ScrollView>
-
-        {startSheetOpen ? (
-          // 휠이 자기 스크롤을 쥐므로 시트 본문은 스크롤하지 않는다(BottomSheetView).
-          // `enableContentPanningGesture={false}` 는 시트의 콘텐츠 pan 이 휠의 세로 스크롤을
-          // 삼키는 것을 막는다(`TripBaseFixSheet` TRIP-455 함정과 동형 — jest 사각·6-b 실기).
-          // 딤 탭·핸들 끌기로 라이브러리가 닫아도 열림 상태를 풀어야 칸 재탭에 다시 뜬다(TRIP-1014 #041).
-          <BottomSheet
-            backdropComponent={renderSheetBackdrop}
-            enableContentPanningGesture={false}
-            enablePanDownToClose
-            onClose={() => setStartSheetOpen(false)}
-          >
-            <BottomSheetView
-              testID="itinerary-mustvisit-time-start-sheet"
-              className="w-full pb-lg"
-            >
-              <View className="w-full flex-row items-center gap-sm px-lg pb-sm pt-xs">
-                <Text className="flex-1 font-noto-bold text-section font-bold text-ink">
-                  {START_SECTION}
+            <View className="w-full flex-row items-center gap-sm px-lg pb-sm pt-xs">
+              <Text className="flex-1 font-noto-bold text-section font-bold text-ink">
+                {START_SECTION}
+              </Text>
+              <Pressable
+                testID="itinerary-mustvisit-time-start-close"
+                accessibilityRole="button"
+                onPress={() => setStartSheetOpen(false)}
+                hitSlop={8}
+              >
+                <Text className="font-noto text-label text-muted">
+                  {SHEET_CLOSE}
                 </Text>
-                <Pressable
-                  testID="itinerary-mustvisit-time-start-close"
-                  accessibilityRole="button"
-                  onPress={() => setStartSheetOpen(false)}
-                  hitSlop={8}
-                >
-                  <Text className="font-noto text-label text-muted">
-                    {SHEET_CLOSE}
-                  </Text>
-                </Pressable>
-              </View>
-              {/* 탭·스크롤 정지 모두 값만 확정한다 — 정지에 시트를 닫으면 굴리다 멈추는 순간 닫힌다
+              </Pressable>
+            </View>
+            {/* 탭·스크롤 정지 모두 값만 확정한다 — 정지에 시트를 닫으면 굴리다 멈추는 순간 닫힌다
                   (TRIP-990 Q6). 시트는 "닫기"·딤 탭·핸들 끌기로 닫힌다. 값이 비면 일과 시작(startAnchor)에
                   서기만 하고 값은 비워 둔다(TRIP-1437 · BR-U1-49). */}
-              <HourMinuteWheel
-                value={form.fixedStart}
-                anchor={startAnchor}
-                onChange={(value) => onPickStart?.(value)}
-                hours={startOptions.hours}
-                minutes={startOptions.minutes}
-                hourWheelTestID="itinerary-mustvisit-time-start-wheel-h"
-                minuteWheelTestID="itinerary-mustvisit-time-start-wheel-m"
-                hourCellTestID={(hour) =>
-                  `itinerary-mustvisit-time-start-option-h-${hour}`
-                }
-                minuteCellTestID={(minute) =>
-                  `itinerary-mustvisit-time-start-option-m-${minute}`
-                }
-              />
-            </BottomSheetView>
-          </BottomSheet>
-        ) : null}
-      </View>
-    </SafeAreaView>
+            <HourMinuteWheel
+              value={form.fixedStart}
+              anchor={startAnchor}
+              onChange={(value) => onPickStart?.(value)}
+              hours={startOptions.hours}
+              minutes={startOptions.minutes}
+              hourWheelTestID="itinerary-mustvisit-time-start-wheel-h"
+              minuteWheelTestID="itinerary-mustvisit-time-start-wheel-m"
+              hourCellTestID={(hour) =>
+                `itinerary-mustvisit-time-start-option-h-${hour}`
+              }
+              minuteCellTestID={(minute) =>
+                `itinerary-mustvisit-time-start-option-m-${minute}`
+              }
+            />
+          </BottomSheetView>
+        </BottomSheet>
+      ) : null}
+    </View>
   );
 }
