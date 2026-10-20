@@ -413,6 +413,29 @@ services:
       retries: 10
       start_period: 10s
 
+  # ── 수집 파이프라인 (Airflow, 로컬 전용) ──────────
+  # 수집 파이프라인(로컬 전용, TRIP-1468) — 수집 → 검증 → 게시. 운영 배치는 GitHub Actions(ai-*-collect.yml).
+  # `docker compose --profile batch up -d airflow` → http://localhost:8090 (계정·비밀번호는 컨테이너 로그에 찍힌다).
+  # DAG 는 리포 수집본을 검증해 게시만 한다(실 API 0) — 설명은 batch/README.md.
+  airflow:
+    profiles: ["batch"]
+    image: apache/airflow:3.3.2-python3.12
+    container_name: trippilot-airflow
+    # 이미지는 uid 50000 으로 돈다 — Linux 에서는 bind mount 한 리포(batch/.out)에 쓰려면 호스트 uid 로 맞춘다
+    # (`AIRFLOW_UID=$(id -u)`, Airflow 공식 compose 와 같은 방식). macOS(OrbStack·Docker Desktop)는 그대로 된다.
+    user: "${AIRFLOW_UID:-50000}:0"
+    command: standalone
+    restart: "no"
+    environment:
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/trippilot/batch/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      BATCH_OUTPUT: /opt/trippilot/batch/.out
+    volumes:
+      # 리포 통째로 — DAG 가 batch/checks.py · 백엔드 지역 시드 · ai/data 수집본을 읽고, 게시본은 batch/.out 에 쓴다.
+      - ./:/opt/trippilot
+    ports:
+      - "8090:8080"
+
   # ── Frontend (Expo Web 자리 · nginx 정적+프록시 스텁) ──────────
   frontend:
     profiles: ["full"]
