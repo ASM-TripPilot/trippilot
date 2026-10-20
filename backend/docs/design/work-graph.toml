@@ -4501,7 +4501,7 @@ touches = [
 ]
 note = """
 PR #1431 머지(2026-10-20). 백엔드 판정은 그대로 두고 AI 병합 단계의 약칭 표에서 편다 — backend diff 0.
-잔여 둘: 거울 테스트를 백엔드 판정만큼 조이는 것은 POI-MIRROR-STRICT(#1446)가, 수집 PR 앞 게이트는 TRIP-1475 가 잇는다.
+잔여 둘: 거울 테스트를 백엔드 판정만큼 조이는 것은 POI-MIRROR-STRICT(#1446)가, 수집 PR 앞 게이트는 POI-COLLECT-GATE(TRIP-1475)가 잇는다.
 """
 
 [[nodes]]
@@ -4517,21 +4517,26 @@ PR #1446 — 리뷰 대기. #1431 재검수 잔여. 테스트만 바꾼다(공�
 [[nodes]]
 id = "POI-COLLECT-GATE"
 ticket = "TRIP-1475"
-title = "[AI] 수집 공유본 PR 앞 게이트 — 백엔드가 시도를 못 정하는 주소면 병합 단계에서 실패"
+title = "[AI] 수집 공유본 병합 게이트 — 백엔드가 시도를 못 정하는 행은 격리하고 나머지를 병합, 격리가 임계를 넘으면 실패"
 status = "todo"
 touches = [
   "ai/scripts/collect/merge_pois_docs.py",
   "ai/tests/scripts/test_merge_pois_docs.py",
+  "ai/src/trippilot/poi_curation/sourcing/localdata.py",
+  "ai/src/trippilot/poi_curation/sourcing/overture_address.py",
   ".github/workflows/ai-poi-collect.yml",
   # 디렉토리 문자열은 디렉토리 단위로 적힌 기존 노드(RELEASE-MAIN)와 겹침을 잡으려는 보수적 표기다.
   ".github/workflows/",
 ]
 note = """
-#1431 4차 검수 잔여. 요건이 둘이다(TRIP-1475 원문):
+#1431 4차 검수 잔여. 설계 요건의 정본은 TRIP-1475 본문이다 — 여기는 착수 판단용 요약(넷):
 (a) 검사는 merge_pois_docs.main() 안(약칭 펴기 직후)에 둔다 — 스크립트는 develop 판이 돌아 모든 병합 경로에 적용된다.
 (b) 수집 상태 영속(collect-state push)을 게이트 **뒤로** 옮긴다 — 지금은 merge_pois_docs 실행 자체가 영속 뒤라
-    (a)만으로는 막힌 날 수집분이 '기제안'으로 영구히 빠진다. 스케줄은 main 의 워크플로 사본으로 도니,
-    (b)는 develop 판과 함께 main 사본도 `ci(main):` 단일 파일 PR 로 맞춰야 적용된다(RELEASE-MAIN 의 사본 동기화 경로).
+    (a)만으로는 막힌 날 수집분이 '기제안'으로 영구히 빠진다. 스케줄은 main 의 워크플로 사본으로 도니
+    main 사본도 `ci(main):` 단일 파일 PR 로 맞춰야 적용된다(RELEASE-MAIN 의 사본 동기화 경로).
+(c) 전부-아니면-전무로 막지 않는다 — 판정 못 하는 행은 격리(stats 기록)하고 나머지를 병합, 격리 건수가 임계를 넘을 때만 실패.
+(d) 판정을 백엔드와 맞춘다 — 거울 테스트 부분은 POI-MIRROR-STRICT(#1446)가 맡았다. 남은 것: `_SIDO_RENAMES`(localdata.py)와
+    약칭 표(overture_address.py)를 합칠지 검토, 두 글자 이상 잘린 시도명(`제주특별`)을 펼지.
 """
 
 [[nodes]]
@@ -4626,6 +4631,7 @@ status = "todo"
 touches = [
   "backend/modules/notification/src/main/kotlin/com/trippilot/notification/adapter/in/event/DomainNotificationSubscribers.kt",
   "backend/modules/change-log/src/main/kotlin/com/trippilot/changelog/adapter/out/persistence/ChangeLogPersistence.kt",
+  "backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/adapter/out/persistence/ReflectionPersistence.kt",
   "backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/adapter/out/persistence/TripSummaryPersistence.kt",
   "backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/adapter/out/persistence/StyleAnalysisPersistence.kt",
   "backend/modules/change-log/src/test",
@@ -4639,7 +4645,7 @@ touches = [
 note = """
 LOOP-COVERAGE(#1433)에서 뗀 운영 코드 결함. 처음 A~E 에 #1433 검수에서 항목이 더해졌다 — 목록의 정본은 Jira(본문+댓글),
 여기 건수를 적지 않는다(드리프트한다). 티켓이 "각각 재현 테스트를 먼저 쓴다"고 적어 세 모듈 test 디렉토리도 만진다.
-C(범위 밖 저장값)·E(모르는 source_type)는 읽기 정책 설계 판단이 먼저다. #1433 과 선행 관계는 티켓에 없다 — 자원 배타뿐.
+C(범위 밖 저장값)·E(모르는 source_type)·G(모르는 reflection source)는 읽기 정책 설계 판단이 먼저다(나머지는 바로 고칠 수 있다). #1433 과 선행 관계는 티켓에 없다 — 자원 배타뿐.
 """
 
 [[nodes]]
