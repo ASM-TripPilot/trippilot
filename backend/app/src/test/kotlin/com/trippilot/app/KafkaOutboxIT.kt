@@ -402,7 +402,7 @@ class KafkaOutboxIT : AbstractPostgresIntegrationTest() {
     }
 
     /**
-     * 폴링 배달 vs Kafka 배달의 적재 → 배달 지연(OBS-U6-01) — **측정 전용**, `MEASURE_OUTBOX=1` 일 때만 돈다(약 1분 40초).
+     * 폴링 배달 vs Kafka 배달의 적재 → 배달 지연(OBS-U6-01) — **측정 전용**, `MEASURE_OUTBOX=1` 일 때만 돈다(모드당 100건 × 평균 0.4초 간격 — 두 모드 합쳐 1분 남짓).
      *
      * 두 모드 모두 운영과 같은 2초 주기로 릴레이를 돌리고, 이벤트를 무작위 간격으로 적재해 구독자가 받은 시각으로 잰다.
      * 판정은 하지 않는다 — 수치를 출력만 한다(PR·회고에 옮긴다).
