@@ -133,7 +133,7 @@ class ReminderCopyContext:
     """게이트 검증 컨텍스트 — `GatewayFacade.call` 의 pool 자리로 관통.
 
     allowed: 그날 일정의 장소명. 문구가 말해도 되는 전부.
-    forbidden: 같은 여행의 **다른 날** 장소명. 본문에 나오면 드롭한다.
+    forbidden: 같은 여행의 **다른 날** 장소명. 제목·본문 어디에 나와도 드롭한다.
     """
 
     allowed: tuple[str, ...]
@@ -202,7 +202,7 @@ class ReminderCopyGate:
             or any(
                 not any(v in body for v in _name_variants(name)) for name in declared
             )  # 선언 정직성 — 표시형·토큰 축약도 인정
-            or any(name and name in body for name in ctx.forbidden)  # 선언 회피 차단
+            or any(name and name in title + " " + body for name in ctx.forbidden)  # 선언 회피 차단 — 제목도 화면에 뜬다
             # 링크·연락처 꼴 — 넛지 게이트와 같은 이유(잠금화면 · 수집 장소명이
             # 프롬프트에 실린다). 여기는 대조 집합이 있어도 못 막는다: `allowed` 는
             # 장소를 **말해도 되는가**만 보고, 문구에 낯선 도메인이 붙는 것은
