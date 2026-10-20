@@ -254,6 +254,17 @@ export function MapSheetShell<T = unknown>({
           ))}
       </View>
 
+      {/* TRIP-1507 — 지도가 전면(풀블리드)이라 상태바 영역(시계·배터리)까지 비쳐 가독이 떨어졌다. 일반 화면처럼 상태바
+          영역만 흰색으로 가린다(결정 B 의 겉모양 — 지도 좌표·핀 맞춤 계산은 그대로라 지도 자체는 안 건드린다). */}
+      {topInset > 0 ? (
+        <View
+          testID="map-sheet-shell-statusbar-cover"
+          pointerEvents="none"
+          className="absolute left-0 right-0 top-0 bg-canvas"
+          style={{ height: topInset }}
+        />
+      ) : null}
+
       {/* 좌상단 오버레이 — `overlay` 를 주면 그것을, 아니면 기본 일차 칩 오버레이를 그린다(D3). */}
       <SafeAreaView
         edges={['top']}

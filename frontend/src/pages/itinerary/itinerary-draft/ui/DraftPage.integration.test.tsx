@@ -452,6 +452,46 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
     });
   });
 
+  describe('TRIP-1506 — 생성 중(진행 중 세션)인데 안이 비었으면 빈 안내 대신 로딩 얼굴', () => {
+    it('PARTIAL + 일자 없음 + 진행 중 세션 있음 → 로딩 얼굴', async () => {
+      itineraryScript = () =>
+        itinerary({
+          generationState: 'PARTIAL',
+          days: [],
+          generationSessionId: 'session-1',
+        });
+
+      renderPage();
+
+      await screen.findByTestId('itinerary-draft-loading');
+      expect(screen.queryByTestId('itinerary-draft-empty')).toBeNull();
+    });
+
+    it('COMPLETE 인데 세션 id 가 남아 있어도(폴링이 안 도는 조합) 로딩이 고착되지 않고 빈 안내다', async () => {
+      itineraryScript = () =>
+        itinerary({
+          generationState: 'COMPLETE',
+          days: [],
+          generationSessionId: 'session-1',
+        });
+
+      renderPage();
+
+      await screen.findByTestId('itinerary-draft-empty');
+      expect(screen.queryByTestId('itinerary-draft-loading')).toBeNull();
+    });
+
+    it('COMPLETE + 일자 없음 + 세션 없음(진짜 0곳) → 빈 안내 그대로', async () => {
+      itineraryScript = () =>
+        itinerary({ generationState: 'COMPLETE', days: [] });
+
+      renderPage();
+
+      await screen.findByTestId('itinerary-draft-empty');
+      expect(screen.queryByTestId('itinerary-draft-loading')).toBeNull();
+    });
+  });
+
   /* ───────────────────────── TRIP-454 · h11→h25 완성 CTA 배선 ─────────────────────────
    * 화면(DraftScreen)은 완성 버튼을 그리고 `onComplete` 만 부른다 — **어디로 가는지**는 이 배선의
    * 책임이자 심판이다. 기본 시나리오(COMPLETE·PLANNED·3일 = listed 얼굴)에서 CTA 를 눌러 h25 로
@@ -2894,7 +2934,13 @@ describe('이 여행 생성 중 확인', () => {
 
   /** 빈 얼굴(DraftScreen)이 뜬 뒤 앱바 [다시 시도]를 누른다. */
   async function pressDraftRetry(): Promise<void> {
-    await screen.findByTestId('itinerary-draft-empty');
+    // 생성 중(세션 있음)이면 빈 안내 대신 로딩 얼굴(TRIP-1506) — 어느 쪽이든 안 얼굴이 뜬 뒤에 누른다.
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId('itinerary-draft-empty') ??
+          screen.queryByTestId('itinerary-draft-loading')
+      ).toBeTruthy()
+    );
     fireEvent.press(screen.getByTestId('itinerary-draft-retry'));
   }
 
@@ -4030,11 +4076,11 @@ describe('다시 만들기 연타 잠금', () => {
     it('retry → 확인 → 취소 → retry → 확인 다시 · 이동 0 · POST 0', async () => {
       itineraryScript = ownGenerating;
       renderPage();
-      await screen.findByTestId('itinerary-draft-empty', {}, WAIT);
+      await screen.findByTestId('itinerary-draft-loading', {}, WAIT);
 
       fireEvent.press(screen.getByTestId(HEADER_RETRY));
       fireEvent.press(await screen.findByTestId(`${CONFIRM}-cancel`, {}, WAIT));
-      await screen.findByTestId('itinerary-draft-empty', {}, WAIT);
+      await screen.findByTestId('itinerary-draft-loading', {}, WAIT);
       expect(screen.queryByTestId(CONFIRM)).toBeNull();
 
       fireEvent.press(screen.getByTestId(HEADER_RETRY));
@@ -4050,7 +4096,7 @@ describe('다시 만들기 연타 잠금', () => {
     it('retry → 확인 → 바깥 act 안 「계속」 두 번 → replace 1(mode=FULLY_AI) · POST 0', async () => {
       itineraryScript = ownGenerating;
       renderPage();
-      await screen.findByTestId('itinerary-draft-empty', {}, WAIT);
+      await screen.findByTestId('itinerary-draft-loading', {}, WAIT);
 
       fireEvent.press(screen.getByTestId(HEADER_RETRY));
       const cont = await screen.findByTestId(`${CONFIRM}-continue`, {}, WAIT);

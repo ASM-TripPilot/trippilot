@@ -454,6 +454,27 @@ describe('🔴 EditorView · V5 — 위반 배지는 카테고리 아래 연분�
     ).toHaveTextContent('일정 확인이 필요해요');
   });
 
+  // TRIP-1505 — 서버 문구가 고정 라벨로 떨어지는 카드가 앞 카드와 시각이 겹치면 어느 곳과 겹쳤는지 말한다(배선 잠금).
+  it('고정 라벨로 떨어지는 카드가 앞 카드와 겹치면 앞 카드 이름을 가리킨다', () => {
+    renderI07({
+      slots: I07_SLOTS.map((s) =>
+        s.poiId === 'p2'
+          ? {
+              ...s,
+              startAt: '10:00:00',
+              endAt: '11:30:00',
+              hasViolation: true,
+              violationReason: null,
+            }
+          : s
+      ),
+    });
+
+    expect(
+      screen.getByTestId(`slot-stopcard-violation-${k('p2')}`)
+    ).toHaveTextContent('‘감천문화마을’ 시각과 겹쳐요');
+  });
+
   it('hasViolation 이 false 면 사유 문자열이 있어도 배지가 없다', () => {
     renderI07({
       slots: I07_SLOTS.map((s) =>

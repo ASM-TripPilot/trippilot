@@ -383,6 +383,21 @@ describe('🔴 TRIP-1055 AC-2·3 · 확인 전에는 아무것도 지우지 않�
   });
 });
 
+describe('TRIP-1508 · 삭제 확인창이 떠 있는 동안 탭바를 숨긴다', () => {
+  // ⚠️ 탭바가 실제로 사라지는지·딤이 덮는지는 jest 사각(6-b 실기) — 옵션 호출만 잰다.
+  it('확인창이 열리면 숨기고, 취소로 닫히면 되돌린다', async () => {
+    renderPage();
+    await openDialogForA();
+    expect(mockSetOptions).toHaveBeenLastCalledWith({
+      tabBarStyle: { display: 'none' },
+    });
+
+    fireEvent.press(screen.getByTestId('my-trip-delete-cancel'));
+    await settle();
+    expect(mockSetOptions).toHaveBeenLastCalledWith({ tabBarStyle: undefined });
+  });
+});
+
 describe('🔴 TRIP-1055 AC-4 · 취소', () => {
   it('취소하면 다이얼로그가 닫히고 DELETE 0번, 카드는 남는다', async () => {
     // 준비

@@ -43,6 +43,8 @@ export interface DayWindowEditSheetProps {
   value: DayWindow;
   /** 여행이 하루(0박)면 탭 대신 `시작`/`끝` 두 칸. */
   sameDay: boolean;
+  /** TRIP-1509 — 기간을 아직 안 골랐다(박수 0 은 기본값일 뿐 당일치기를 고른 게 아니다). true 면 "당일치기라" 부제를 내지 않는다. 기본 false. */
+  periodUnset?: boolean;
   onApply: (next: DayWindow) => void;
   onClose: () => void;
 }
@@ -110,6 +112,7 @@ function finalizeSameDay(draft: DayWindow): DayWindow {
 export function DayWindowEditSheet({
   value,
   sameDay,
+  periodUnset = false,
   onApply,
   onClose,
 }: DayWindowEditSheetProps): ReactElement {
@@ -184,7 +187,9 @@ export function DayWindowEditSheet({
           </Text>
           <Text className="font-noto text-label text-muted">
             {sameDay
-              ? '당일치기라 시작과 종료를 함께 정해요'
+              ? periodUnset
+                ? '시작과 종료 시각을 정해요'
+                : '당일치기라 시작과 종료를 함께 정해요'
               : '하루는 21시까지예요 · 시작 시각을 정해요'}
           </Text>
         </View>

@@ -844,6 +844,7 @@ export function TripNewStep1Page({
         <DayWindowEditSheet
           value={dayWindow}
           sameDay={sameDay}
+          periodUnset={!periodFilled}
           onApply={(next) => {
             setDayWindow(next);
             setDayWindowSheetOpen(false);
