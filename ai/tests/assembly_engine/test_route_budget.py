@@ -34,7 +34,7 @@ from trippilot.api.route_budget import (
 )
 from trippilot.api.wiring import MonotonicClock, _distance_ranges, _render_distance
 from trippilot.assembly_engine.config import AssemblyConfig
-from trippilot.assembly_engine.travel import TravelEstimator
+from trippilot.assembly_engine.travel import WALKED_SOURCE, TravelEstimator
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TransportMode
 from trippilot.domain.itinerary import DaySolution, ItinerarySolution, SolveMode, VisitSlot
 from trippilot.domain.travel import TravelEstimate
@@ -282,22 +282,41 @@ def _km_north(km: float) -> GeoPoint:
     return GeoPoint(lat=37.5 + km / 111.195, lng=127.0)
 
 
-@pytest.mark.parametrize(("km", "label"), [
-    (0.65, "도보 추정"),     # 700m 이하 — 대중교통 여행이어도 걷는다(2026-10-19 사용자 결정, 종전 바닥 0.6)
+def _road_north(road_km: float) -> GeoPoint:
+    """도로 km(화면에 "약 N km" 로 보이는 값)가 `road_km` 인 지점 — 직선 = 도로 ÷ 우회계수."""
+    return _km_north(road_km / AssemblyConfig().detour_factor)
+
+
+@pytest.mark.parametrize(("road_km", "label"), [
+    (0.65, "도보 추정"),     # 도로 700m 이하만 걷는다(2026-10-19 사용자 — 화면에 보이는 거리가 기준)
+    (1.0, "대중교통 추정"),  # 걸어서 15분이 대중교통 18분보다 빨라도 1km 는 걷지 않는다(종전엔 도보였다)
     (3.0, "대중교통 추정"),  # 먼 구간은 그대로 대중교통
 ])
-def test_transit_trip_labels_each_leg_with_the_mode_it_actually_uses(km: float, label: str) -> None:
+def test_transit_trip_labels_each_leg_with_the_mode_it_actually_uses(road_km: float, label: str) -> None:
     """대중교통 여행의 구간 이름표는 그 구간에 쓴 수단이다 — 걸어가는 구간이 "대중교통"으로 보이지 않는다."""
     origin = _km_north(0.0)
-    assert _render_distance(EST.estimate(origin, _km_north(km), P), P).endswith(label)
+    assert _render_distance(EST.estimate(origin, _road_north(road_km), P), P).endswith(label)
 
 
-def test_the_walk_floor_is_700m_even_when_transit_would_be_faster() -> None:
-    """바닥은 속도 상수와 무관하다 — 도보를 아주 느리게 둬도 700m 이하는 걷고, 그 밖은 대중교통이다."""
+def test_the_walk_floor_is_700m_of_road_even_when_transit_would_be_faster() -> None:
+    """바닥은 속도 상수와 무관하다 — 도보를 아주 느리게 둬도 도로 700m 이하는 걷고, 그 밖은 대중교통이다."""
     import dataclasses
     cfg = AssemblyConfig()
     slow_walk = dataclasses.replace(cfg, speeds_kmph={**cfg.speeds_kmph, TransportMode.WALK: 0.5})
     est = TravelEstimator(slow_walk)
     origin = _km_north(0.0)
-    assert _render_distance(est.estimate(origin, _km_north(0.69), P), P).endswith("도보 추정")
-    assert _render_distance(est.estimate(origin, _km_north(0.75), P), P).endswith("대중교통 추정")
+    assert _render_distance(est.estimate(origin, _road_north(0.69), P), P).endswith("도보 추정")
+    assert _render_distance(est.estimate(origin, _road_north(0.75), P), P).endswith("대중교통 추정")
+
+
+def test_no_leg_of_1_1km_or_more_is_ever_walked_on_a_transit_trip() -> None:
+    """1.1km 이상은 도보 금지(2026-10-19 사용자) — 걷기를 빠르게 둬도, 상한을 1.1 로 올리려 해도 안 된다."""
+    import dataclasses
+    cfg = AssemblyConfig()
+    fast_walk = TravelEstimator(dataclasses.replace(cfg, speeds_kmph={**cfg.speeds_kmph, TransportMode.WALK: 30.0}))
+    origin = _km_north(0.0)
+    for road_km in (1.1, 1.5, 3.0):
+        assert fast_walk.estimate(origin, _road_north(road_km), P).source != WALKED_SOURCE, road_km
+    with pytest.raises(ValueError):
+        AssemblyConfig(public_walk_max_km=1.1)
+    AssemblyConfig(public_walk_max_km=1.0)  # 활동형 상향은 1.1 미만까지만 열려 있다

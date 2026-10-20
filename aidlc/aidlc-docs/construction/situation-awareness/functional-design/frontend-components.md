@@ -92,6 +92,9 @@
 - **이동 방식**: i05·i06 은 `router.replace`(게이트를 스택에 남기지 않는다). 허브 안내는 전역 토스트(`src/shared/ui/Toast.tsx:52` `showToast` — 호스트가 Stack 밖이라 replace 뒤에도 남는다, `AppProviders.tsx:66-67`)를 띄우고 허브로 간다. i04 는 같은 라우트 안에서 게이트가 `PlanbRequestPage` 를 시드 props 와 함께 그린다.
 - i04 로 갈 때 싣는 triggerId 는 원 트리거가 ACTIVE 면 그 id, 아니면 `currentTriggerId` 다. 게이트가 날짜를 놓쳐도 서버가 트리거 날짜로 다시 짠다 — 다른 날을 바꾸는 길이 없다.
 
+> **[개정 · 2026-10-20 — 구현 반영]** §3.2 — 계약 밖 세션 상태(앱보다 새 서버가 늘린 값)는 `CANCELED` 처럼 **'없음'** 으로 읽는다 — 행 4·5(i04 시드 또는 허브)로 간다. i06 은 모르는 상태에 그릴 얼굴이 없어 빈 화면이 되기 때문이다(INV-4). 준비된 대안으로 갈 수 있는 상태는 `DRAFT`·`COLLECTING`·`SOLVING`·`NO_SOLUTION`·`FAILED` 다(#1423 · `frontend/src/pages/live/planb-request/model/entryRoute.ts:71-78,137-146`).
+> **열린 질문** — i05 에서 기다리는 SYSTEM 세션이 `stale`(수집·산출 2분 — `business-rules.md` BR-SA-19 개정 블록)이 되면 게이트로 되돌려 다시 판정할지. 지금 i05 는 `stale` 을 읽지 않고 8분 상한(TRIP-1363)까지 기다린다(`frontend/src/pages/live/planb-draft/ui/PlanbSolvingPage.tsx:67-68`). **정본 결정 대기**.
+
 ### 3.3 i04 시드 — `PlanbRequestPage` 선택 props
 
 | prop | 뜻 | 주지 않으면 |
@@ -103,6 +106,9 @@
 - 시드 props 가 오면(빈 배열 포함) kind 자동 시드 대신 그것을 쓴다 — 흐림(주의)에 날씨 사유를 넣으면 AI 가 실내·이동 짧게를 얹어 일정을 과하게 바꾼다.
 - 날짜·범위: `targetDate` = 트리거 `affectedDate`(오늘이면 싣지 않는다), 미래일이면 `FULL_DAY` 한 칩(기존 `targetDate` 처리 그대로), 오늘이면 트리거 `scope`.
 - `features/request-replan/model/replanRequest.ts` 에 `excludedPoiIds?` — 지정하지 않으면 요청 본문은 기존과 바이트까지 같다(`excludedPoiIds: []`).
+
+> **[개정 · 2026-10-20 — 구현 반영]** §3.3 — 시드의 날씨 사유는 **정적 날씨 칩으로 남긴다.** 준비 세션 입력은 같은 날 위험의 합집합이라(BR-SA-18 ④) 휴무 알림으로 들어와도 시드가 `[WEATHER, TEMP_CLOSED]` 일 수 있다. 감지 칩(휴무)이 서면 정적 날씨 칩을 숨기고 제출에서 거르는 기존 동작대로면 처음 켜 둔 날씨 사유가 화면에도 요청 본문에도 없어진다 — 시드에 `WEATHER` 가 있으면 정적 날씨 칩을 보이고 제출 필터도 통과시킨다. 사용자가 그 칩을 끄면 빠진다. 시드 없는 진입은 종전 그대로다(#1423 · `frontend/src/pages/live/planb-request/ui/PlanbRequestPage.tsx:139-142,228-234` · `ReplanRequestSheet.tsx:191-198`).
+> **열린 질문** — '주의(CAUTION)는 빈 시드'의 기준을 원 트리거(URL `triggerId` 의 상세)로 볼지 지금 트리거(`currentTriggerId`)로 볼지. 지금은 원 트리거의 `severity` 로 정하고, i04 에 싣는 id 는 원 트리거가 ACTIVE 가 아니면 `currentTriggerId` 다(`frontend/src/pages/live/planb-request/model/entryRoute.ts:85,103-106`) — 해제 뒤 다른 심각도로 다시 선 경우 둘이 갈린다. **정본 결정 대기**.
 
 ### 3.4 변형 라벨 · 날짜 표기 · 출처
 
@@ -138,6 +144,8 @@
 - `delay` 는 늘 `OFF` 라 발화한 DELAY 가 없으면 이동 행은 숨는다. U10 이 DELAY 를 발화하면 `OFF` 여도 `활성` 행으로 보인다(발화한 사실을 감시 상태가 가리지 않는다).
 - 상태 문구는 `features/planb/config/watchLabels.ts` 에 `확인 불가` 를 더한다. 거짓 '정상'을 그리지 않는 것이 이 표의 목적이다(INV-SA-2 · G-SA-1).
 
+> **[개정 · 2026-10-20 — 구현 반영]** §3.5 — 표에 없는 경우: 응답에 `watch` 는 왔는데 **그 묶음이 빠졌거나 모르는 상태값**이면 `확인 불가` 다(계약 위반 · 앱보다 새 서버). '정상'은 `watch` 필드 자체가 없는 옛 서버에만 준다 — 거짓 '정상' 금지(#1423 · `frontend/src/pages/live/live-itinerary/model/triggerWatchlist.ts:60-68`).
+
 ### 3.6 i06 최소 변경 — `pages/live/planb-draft`(새 model 파일 + 배선)
 
 | 상황 | 화면 |
@@ -149,6 +157,8 @@
 
 - 409 를 일반 실패로 접지 않는다 — 오류 코드로 가른다(`EXPIRED`·`STALE` 만 낡음 얼굴).
 - i05·i06 라우트(`planb/solving.tsx`·`planb/draft.tsx`)는 `includePoiId` 를 한 줄씩 더 읽어 내린다.
+
+> **[개정 · 2026-10-20 — 구현 반영]** §3.6 — `미리 준비한 대안` 표식은 SYSTEM 세션의 **초안 얼굴에만** 단다 — 대안 없음·실패 얼굴에는 달지 않는다(없는 대안을 준비했다고 말하지 않는다 — BR-SA-23 표의 DRAFT 행). 낡음 얼굴은 초안 얼굴 위의 안내라 표식이 남는다. 적용 409 가 **지난 날의 초안**(세션 날짜 < 오늘 KST — BR-SA-19 ①)이면 [새 대안 보기]를 두지 않는다 — 같은 날짜로 다시 열면 서버가 늘 409(지난 날짜는 다시 짤 수 없다)라 누를 때마다 실패하는 버튼이 된다. 낡음 문구는 그대로이고, 오늘·앞날·날짜 없음은 종전대로다(#1423 · `frontend/src/pages/live/planb-draft/ui/PlanbDraftPage.tsx:254-257,351`).
 
 ### 3.7 하지 않는 것
 
@@ -189,6 +199,15 @@
 - `LiveHubView.tsx` 슬롯 prop 1개 — `opportunityCard?: ReactNode`(알약 `triggerChip` 과 같은 꼴). 자리는 프레임을 따른다(G-SA-12).
 - `src/mocks/handlers.ts` 기본 빈 응답 1줄.
 - 실패·빈 목록이면 아무것도 그리지 않는다. 여행 전(D-1 포함)에는 카드가 없다 — 트리거 없는 재계획은 전날 창에서도 409 다(BR-SA-20).
+
+> **[개정 · 2026-10-20 — 구현 반영]** §4 — FE-C 구현 세부. 고르기 ①~③ 과 §4.2 템플릿 표는 그대로다(코드 `frontend/src/pages/live/live-itinerary/model/hubOpportunity.ts` · `useHubOpportunities.ts` · `ui/OpportunityCard.tsx`).
+> - **§4.1 숨김은 날짜별 key 집합이다** — `@/shared/storage` 의 `readIdSet`·`writeIdSet`, 키 `live.opportunity.hidden.{tripId}.{date}`(위 '`stringValue.ts`'는 이것으로 읽는다). key 하나만 두면 같은 날 두 번째 ×가 첫 숨김을 덮어써, 날씨 위험이 풀려 행사가 다시 첫 장이 될 때 닫은 카드가 되살아난다(계약 `Opportunity.key` — 숨긴 key 는 그 날 다시 그리지 않는다). 숨김을 읽기 전엔 카드를 그리지 않는다. 읽기 실패는 빈 집합(숨김 없이 그린다), 쓰기 실패는 이번 화면에서만 숨김이다 — 다음에 열면 다시 보인다(×가 무반응으로 보이지 않게).
+> - **트리거 목록을 아직 모르면(조회 중·실패) 고르지 않는다** — 요즘 인기를 먼저 그렸다가 트리거가 오면 행사 카드로 바뀌어, 누르려던 CTA 가 다른 장소가 되지 않게. 대가로 트리거 조회가 실패하면 기회 카드도 없다. ① 의 날씨 위험은 `severity` 가 없으면(옛 서버) 위험으로 읽는다.
+> - **그릴 수 없는 항목은 건너뛴다** — 모르는 kind(앱보다 새 서버의 값)와 이름·마지막 날이 없는 행사. ② 의 '남은 첫 항목'은 그릴 수 있는 첫 항목이다.
+> - **§4.2 주격 조사는 장소명 받침에 맞춘다** — `{장소}이`/`{장소}가`, 끝 글자가 한글 음절이 아니면 `이(가)`(§3.6 '조사는 받침에 맞춘다'와 같다).
+> - **허브가 그리는 일정이 바뀌면 그 여행의 기회를 다시 받는다** — 재계획 확정·직접 수정 저장·도우미 편집 어느 길이든 허브는 다시 마운트되지 않는데, 서버는 일정에 든 장소를 빼고 거리도 새 동선에서 잰다. 같은 내용의 재조회(참조가 같다)는 다시 묻지 않는다 — 기회 조회는 서버가 AI 를 부르는 길이다.
+> - **§4.4 자리** — 프레임 전(G-SA-12) 임시로 시트 머리, 위치 자동화 안내 띠 아래·헤더 줄 위. 카드가 늦게 서며 이미 그린 타임라인을 아래로 민다 — 실기 확인 항목이고, 프레임이 정해지면 높이 예약·다른 자리를 본다. × 의 낭독 이름은 `이 추천 닫기`.
+> - **관찰** — 날씨 트리거가 [적용]으로 소비되면 다음 판정 전까지는 같은 날에도 행사 카드가 다시 허용된다(① 은 발화 중 트리거만 본다). 보강 여부는 G-SA-17 과 함께 정한다.
 
 ---
 
@@ -273,6 +292,8 @@ execution-live-opportunity-card · -opportunity-title · -opportunity-body · -o
 ```
 
 > **[공백]** 제안값이다. `planb-risk-watch-{kind}` 는 기존 testID 이고 상태 글자에 `확인 불가` 가 더해진다. 구현이 다른 값을 확정하면 이 절에 소급 기록한다.
+
+> **[개정 · 2026-10-20 — 구현 반영]** 소급 기록(#1423) — 구현이 더한 testID 5개: `planb-entry-gate-notfound` · `planb-entry-gate-notfound-home`(게이트 404 얼굴과 그 [홈으로]) · `planb-entry-gate-applied-toast` · `planb-entry-gate-inactive-toast`(허브 토스트 2종) · `planb-draft-stale-failed`(낡음 얼굴에서 [새 대안 보기]가 실패했을 때의 안내). 위치 — `frontend/src/pages/live/planb-request/ui/PlanbEntryGate.tsx:75,78,120,126` · `frontend/src/pages/live/planb-draft/ui/ReplanDraftView.tsx:211`. 위 제안값 가운데 FE-B 몫은 그대로 쓰였고, `execution-live-opportunity-*` 는 FE-C(구현 중) 몫이다.
 
 ---
 

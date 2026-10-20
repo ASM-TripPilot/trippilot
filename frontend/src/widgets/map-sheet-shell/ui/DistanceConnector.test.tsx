@@ -2,7 +2,7 @@ import fc from 'fast-check';
 import { render, screen } from '@testing-library/react-native';
 
 import { DistanceConnector, isZeroDistance } from './DistanceConnector';
-import { CarGlyph, WalkGlyph } from './MapSheetGlyphs';
+import { CarGlyph, TransitGlyph, WalkGlyph } from './MapSheetGlyphs';
 
 /**
  * TRIP-783 · AC-3·AC-4·E3 — 카드 사이 거리 커넥터(widgets). 서버 `distanceRange` 문자열을
@@ -11,7 +11,8 @@ import { CarGlyph, WalkGlyph } from './MapSheetGlyphs';
  * 2026-10-08). TRIP-1054 결정 1b("글리프만, 대체 문구 금지")를 뒤집었다 — 그때 근거("편집 일정은 값이
  * 영원히 없다")가 서버 repair 도입으로 "바뀐 구간인데 수리 못 한 때"로 좁혀졌다.
  * `약 0.0km` 로 시작하는 문자열은 `바로 옆`으로 바꾼다(QA #035, 결정 2b).
- * 이동수단 아이콘은 `자가용` 포함 여부로 고른다(TRIP-1076, 옛 키 `차량` 폐기) — 어느 글리프 컴포넌트인지까지만 보고, 색·모양은
+ * 이동수단 아이콘은 `자가용` → 차, `대중교통` → 대중교통, 그 밖은 도보로 고른다(TRIP-1076, 옛 키 `차량` 폐기 ·
+ * 대중교통 글리프는 사용자 결정 2026-10-19) — 어느 글리프 컴포넌트인지까지만 보고, 색·모양은
  * SVG 라 jest 원리적 사각(6-b 육안). 점선·[길찾기]는 신 설계에서 제거 — 그 부재를 잠근다.
  *
  * 3동작 뼈대: 준비=거리 문자열/null 로 렌더 → 실행=렌더만 → 단언=문구 칸 완전일치·부재·소요시간 0.
@@ -40,9 +41,10 @@ function renderedTexts(): string[] {
 }
 
 /** 이동수단 글리프 개수 — 컴포넌트 타입까지만 본다(02a ★7). */
-function glyphCount(): { car: number; walk: number } {
+function glyphCount(): { car: number; transit: number; walk: number } {
   return {
     car: screen.UNSAFE_queryAllByType(CarGlyph).length,
+    transit: screen.UNSAFE_queryAllByType(TransitGlyph).length,
     walk: screen.UNSAFE_queryAllByType(WalkGlyph).length,
   };
 }
@@ -91,7 +93,7 @@ describe('🔴 DistanceConnector · C2 — 거리 없음 → 글리프 옆에 "�
       expect(renderedTexts()).toEqual(['거리 정보 없음']);
       expect(screen.queryByText(/이동 거리 계산 중/)).toBeNull();
       // 수단을 몰라도 도보 글리프 1개 그대로(Seed Q5).
-      expect(glyphCount()).toEqual({ car: 0, walk: 1 });
+      expect(glyphCount()).toEqual({ car: 0, transit: 0, walk: 1 });
     }
   );
 });
@@ -190,16 +192,18 @@ describe('🔴 DistanceConnector · C6 — 그 밖의 문자열은 원문 그대
   });
 });
 
-describe('🔴 DistanceConnector · C7 — 글리프 규칙: `자가용` 포함 → 차, 아니면 도보 (TRIP-1076 AC-4 · Seed Q2)', () => {
+describe('🔴 DistanceConnector · C7 — 글리프 규칙: `자가용` → 차, `대중교통` → 대중교통, 그 밖 → 도보 (TRIP-1076 AC-4 · Seed Q2)', () => {
   // 수단 어휘는 AI 가 만든다(`_TRANSPORT_LABELS` = 도보·대중교통·자가용). 옛 키 `차량`은 그 어휘에 없어
   // 차 글리프가 실데이터로 한 번도 안 떴다 — 키를 `자가용`으로 바꾸고 `차량`은 폐기한다.
-  // `대중교통` 전용 글리프는 Figma 에 없어 보류 — 그동안 도보 글리프 그대로다.
+  // `대중교통` 은 전용 글리프(사용자 결정 2026-10-19) — 도보 발자국으로 그리면 버스·지하철 구간이 걷기로 읽힌다.
   it.each([
-    ['약 3.4km · 자가용 추정', { car: 1, walk: 0 }],
-    ['약 10.0km · 자가용', { car: 1, walk: 0 }],
-    ['차량 · 2.1km', { car: 0, walk: 1 }],
-    ['약 1.2km · 도보 추정', { car: 0, walk: 1 }],
-    ['약 2.0km · 대중교통 추정', { car: 0, walk: 1 }],
+    ['약 3.4km · 자가용 추정', { car: 1, transit: 0, walk: 0 }],
+    ['약 10.0km · 자가용', { car: 1, transit: 0, walk: 0 }],
+    ['차량 · 2.1km', { car: 0, transit: 0, walk: 1 }],
+    ['약 1.2km · 도보 추정', { car: 0, transit: 0, walk: 1 }],
+    ['약 0.5km · 도보', { car: 0, transit: 0, walk: 1 }],
+    ['약 2.0km · 대중교통 추정', { car: 0, transit: 1, walk: 0 }],
+    ['약 1.3km · 대중교통', { car: 0, transit: 1, walk: 0 }],
   ])('distanceRange=%p → 글리프 %p', (distanceRange, expected) => {
     render(
       <DistanceConnector slotKey={SLOT_KEY} distanceRange={distanceRange} />
@@ -216,11 +220,23 @@ describe('🔴 DistanceConnector · C7 — 글리프 규칙: `자가용` 포함 
       />
     );
 
-    expect(glyphCount()).toEqual({ car: 1, walk: 0 });
+    expect(glyphCount()).toEqual({ car: 1, transit: 0, walk: 0 });
     expect(renderedTexts()).toEqual(['약 3.4km · 자가용 추정']);
   });
 
-  it('"약 0.0km · 대중교통 추정" 은 문구만 바뀌고 글리프는 도보 그대로다', () => {
+  it('"약 1.3km · 대중교통" 은 대중교통 글리프를 쓰면서 문구는 한 글자도 바꾸지 않는다', () => {
+    render(
+      <DistanceConnector
+        slotKey={SLOT_KEY}
+        distanceRange="약 1.3km · 대중교통"
+      />
+    );
+
+    expect(glyphCount()).toEqual({ car: 0, transit: 1, walk: 0 });
+    expect(renderedTexts()).toEqual(['약 1.3km · 대중교통']);
+  });
+
+  it('"약 0.0km · 대중교통 추정" 은 문구가 "바로 옆"으로 바뀌어도 글리프는 원문 수단(대중교통)을 따른다', () => {
     render(
       <DistanceConnector
         slotKey={SLOT_KEY}
@@ -228,7 +244,7 @@ describe('🔴 DistanceConnector · C7 — 글리프 규칙: `자가용` 포함 
       />
     );
 
-    expect(glyphCount()).toEqual({ car: 0, walk: 1 });
+    expect(glyphCount()).toEqual({ car: 0, transit: 1, walk: 0 });
   });
 });
 

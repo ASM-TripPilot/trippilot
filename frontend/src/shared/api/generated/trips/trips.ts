@@ -44,10 +44,13 @@ import type {
   GetMeRecordsParams,
   GetTripsTripIdChangeLogParams,
   GetTripsTripIdItineraryRevisionsParams,
+  GetTripsTripIdOpportunitiesParams,
   GetTripsTripIdRecordsParams,
+  GetTripsTripIdReplanSessionsPreparedParams,
   IntervalReportRequest,
   Itinerary,
   MustVisit,
+  OpportunityList,
   PostTripsTripIdVisitsVisitCheckIdRevertAutoParams,
   PutMemoRequest,
   ReorderPhotosRequest,
@@ -63,6 +66,7 @@ import type {
   StayRecommendation,
   StayRecommendationRequest,
   Trigger,
+  TriggerDetail,
   TriggerList,
   Trip,
   TripRecord,
@@ -4091,7 +4095,8 @@ export const usePutTripsTripIdVisitsVisitCheckIdMemo = <
 };
 /**
  * **발화 중인 트리거만 나간다**(INV-U4-01). 억제·무영향으로 남긴 판정은 "왜 알림이 안 왔나"를 답하기 위한 관측 기록이며 사용자에게 어떤 형태로도 노출되지 않는다. 트리거는 **제안까지만** 한다 — 어떤 트리거도 일정을 자동으로 바꾸지 않는다(BR-U4-09).
- * @summary 감지된 변화 — 발화 중인 것만(i08·i09)
+ * 지난 날 · 지금 일정에서 빠진 슬롯 · 꺼진 감시 출처(스윕을 끄거나 그 출처를 빼면 즉시 숨는다)의 트리거는 내지 않는다. 정렬은 서버가 정한다 — 위험 → 영향 날짜 오름차순 → 감지 시각 내림차순. 화면은 받은 순서 그대로 쓴다. `watch` 는 출처 묶음별 감시 상태다 — 꺼짐·확인 불가를 정상으로 말하지 않는다(INV-U4-09).
+ * @summary 감지된 변화 — 발화 중이고 지금 유효한 것만 + 감시 상태(i08·i09)
  */
 export const getTripsTripIdTriggers = (
   tripId: string,
@@ -4220,7 +4225,7 @@ export function useGetTripsTripIdTriggers<
   queryKey: DataTag<QueryKey, TData, TError>;
 };
 /**
- * @summary 감지된 변화 — 발화 중인 것만(i08·i09)
+ * @summary 감지된 변화 — 발화 중이고 지금 유효한 것만 + 감시 상태(i08·i09)
  */
 
 export function useGetTripsTripIdTriggers<
@@ -4330,6 +4335,187 @@ export const useWeatherCheck = <TError = void, TContext = unknown>(
   return useMutation(getWeatherCheckMutationOptions(options), queryClient);
 };
 /**
+ * 알림·푸시를 늦게 탭해도 앱이 이 트리거가 아직 유효한지, 해제 뒤 같은 대상에 새 트리거가 섰는지 (`currentTriggerId`) 안다. 목록에서 숨는 ACTIVE(지난 날 · 빠진 슬롯 · 꺼진 출처)는 `state` 가 EXPIRED 다.
+ * @summary 트리거 하나 — 지금 상태와 같은 대상의 현재 트리거
+ */
+export const getTripsTripIdTriggersTriggerId = (
+  tripId: string,
+  triggerId: string,
+  signal?: AbortSignal
+) => {
+  return customInstance<TriggerDetail>({
+    url: `/trips/${tripId}/triggers/${triggerId}`,
+    method: 'GET',
+    signal,
+  });
+};
+
+export const getGetTripsTripIdTriggersTriggerIdQueryKey = (
+  tripId: string,
+  triggerId: string
+) => {
+  return [`/trips/${tripId}/triggers/${triggerId}`] as const;
+};
+
+export const getGetTripsTripIdTriggersTriggerIdQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTripsTripIdTriggersTriggerId>>,
+  TError = void,
+>(
+  tripId: string,
+  triggerId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdTriggersTriggerId>>,
+        TError,
+        TData
+      >
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetTripsTripIdTriggersTriggerIdQueryKey(tripId, triggerId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTripsTripIdTriggersTriggerId>>
+  > = ({ signal }) =>
+    getTripsTripIdTriggersTriggerId(tripId, triggerId, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled:
+      tripId !== null &&
+      tripId !== undefined &&
+      triggerId !== null &&
+      triggerId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTripsTripIdTriggersTriggerId>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetTripsTripIdTriggersTriggerIdQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTripsTripIdTriggersTriggerId>>
+>;
+export type GetTripsTripIdTriggersTriggerIdQueryError = void;
+
+export function useGetTripsTripIdTriggersTriggerId<
+  TData = Awaited<ReturnType<typeof getTripsTripIdTriggersTriggerId>>,
+  TError = void,
+>(
+  tripId: string,
+  triggerId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdTriggersTriggerId>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdTriggersTriggerId>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdTriggersTriggerId>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdTriggersTriggerId<
+  TData = Awaited<ReturnType<typeof getTripsTripIdTriggersTriggerId>>,
+  TError = void,
+>(
+  tripId: string,
+  triggerId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdTriggersTriggerId>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdTriggersTriggerId>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdTriggersTriggerId>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdTriggersTriggerId<
+  TData = Awaited<ReturnType<typeof getTripsTripIdTriggersTriggerId>>,
+  TError = void,
+>(
+  tripId: string,
+  triggerId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdTriggersTriggerId>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 트리거 하나 — 지금 상태와 같은 대상의 현재 트리거
+ */
+
+export function useGetTripsTripIdTriggersTriggerId<
+  TData = Awaited<ReturnType<typeof getTripsTripIdTriggersTriggerId>>,
+  TError = void,
+>(
+  tripId: string,
+  triggerId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdTriggersTriggerId>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetTripsTripIdTriggersTriggerIdQueryOptions(
+    tripId,
+    triggerId,
+    options
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
  * 화면에서 배너만 감추는 동작이 아니다. 억제 레코드가 생겨 **다음 감지 때 같은 조합이 발화하지 않는다**. 슬롯을 특정한 신호면 그 슬롯만, 날짜 전체 신호면 그 날 전체를 끈다.
  * @summary 알림 끄기 — 억제 레코드를 만든다(BR-U4-15)
  */
@@ -4415,6 +4601,187 @@ export const usePostTripsTripIdTriggersTriggerIdDismiss = <
     queryClient
   );
 };
+/**
+ * 허브가 보는 날짜의 **남은 동선 1km 안 등록 장소**를 AI 가 고른다(LLM 0회) — 기간이 겹치는 행사의 행사장 · 행사장 가까이 · 태그 '요즘 인기'. 서버가 그 날 끝나지 않은 슬롯과 일정의 장소를 채워 묻는다(앱은 날짜만 보낸다). **트리거도 알림도 아니다**(DEC-U4-4 · LEGAL-SA-01) — 상태가 없고 푸시·알림함에 오지 않는다. 카드의 장소는 등록 POI 뿐이고(INV-1) 시각 필드가 없으며(INV-2 — 행사 원천이 일 단위) 거리는 표시 문자열뿐이다(INV-3). 문장은 앱의 고정 템플릿이 만든다 — 서버는 재료만 준다.
+ * 여행 중(오늘 ≥ 시작)이고 날짜가 [오늘, 종료]일 때만 묻는다. 꺼짐 · 여행 전 · 범위 밖 · 남은 슬롯 없음 · AI 실패 · 계약 위반은 전부 200 빈 목록이다 — 앱은 빈 목록이면 아무것도 그리지 않는다. 404 는 소유 아님뿐이다.
+ * @summary 그 날짜의 기회 — 남은 동선 근처의 행사·요즘 인기 최대 3개(situation-awareness BR-SA-22)
+ */
+export const getTripsTripIdOpportunities = (
+  tripId: string,
+  params: GetTripsTripIdOpportunitiesParams,
+  signal?: AbortSignal
+) => {
+  return customInstance<OpportunityList>({
+    url: `/trips/${tripId}/opportunities`,
+    method: 'GET',
+    params,
+    signal,
+  });
+};
+
+export const getGetTripsTripIdOpportunitiesQueryKey = (
+  tripId: string,
+  params?: GetTripsTripIdOpportunitiesParams
+) => {
+  return [
+    `/trips/${tripId}/opportunities`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetTripsTripIdOpportunitiesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+  TError = void,
+>(
+  tripId: string,
+  params: GetTripsTripIdOpportunitiesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+        TError,
+        TData
+      >
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetTripsTripIdOpportunitiesQueryKey(tripId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTripsTripIdOpportunities>>
+  > = ({ signal }) => getTripsTripIdOpportunities(tripId, params, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: tripId !== null && tripId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetTripsTripIdOpportunitiesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTripsTripIdOpportunities>>
+>;
+export type GetTripsTripIdOpportunitiesQueryError = void;
+
+export function useGetTripsTripIdOpportunities<
+  TData = Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+  TError = void,
+>(
+  tripId: string,
+  params: GetTripsTripIdOpportunitiesParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdOpportunities>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdOpportunities<
+  TData = Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+  TError = void,
+>(
+  tripId: string,
+  params: GetTripsTripIdOpportunitiesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdOpportunities>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdOpportunities<
+  TData = Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+  TError = void,
+>(
+  tripId: string,
+  params: GetTripsTripIdOpportunitiesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 그 날짜의 기회 — 남은 동선 근처의 행사·요즘 인기 최대 3개(situation-awareness BR-SA-22)
+ */
+
+export function useGetTripsTripIdOpportunities<
+  TData = Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+  TError = void,
+>(
+  tripId: string,
+  params: GetTripsTripIdOpportunitiesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdOpportunities>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetTripsTripIdOpportunitiesQueryOptions(
+    tripId,
+    params,
+    options
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
 /**
  * 숙소 없이 만든 일정의 **방문지 무게중심**으로 권역을 추천하고, 넘겨받은 후보를 **평균 이동 거리 순**으로 매긴다(before/after 함께). 거리는 전부 **추정(직선)** 이며 소요시간은 없다(INV-3).
  * 후보 목록은 클라이언트가 `GET /stays/search` 로 얻어 넘긴다 — 숙소 검색은 C3 소유라 여기서 중개하지 않는다. 비워 보내면 권역만 돌려준다.
@@ -4507,7 +4874,7 @@ export const usePostTripsTripIdStayRecommendations = <
   );
 };
 /**
- * 여행 **기간 안**에서만, **다시 짤 일정이 있을 때만** 연다. 이미 열린 세션이 있으면 **그것을 CANCELED 로 닫고 새로 시작**한다(INV-U4-06) — 막지 않는다. 사용자가 앱을 닫았다 다시 들어오는 것이 정상 흐름이라, 거부하면 영영 못 들어간다. 확정(APPLIED) 전에는 원 일정에 **어떤 쓰기도 발생하지 않는다**(INV-U4-05).
+ * 여행 **기간 안**에서만(예외: 지평 pre-trip 의 여행 전날 — 알림으로 받은 첫날 하루 전체, BR-SA-20), **다시 짤 일정이 있을 때만** 연다. 이미 열린 세션이 있으면 **그것을 CANCELED 로 닫고 새로 시작**한다(INV-U4-06) — 막지 않는다. 사용자가 앱을 닫았다 다시 들어오는 것이 정상 흐름이라, 거부하면 영영 못 들어간다. 확정(APPLIED) 전에는 원 일정에 **어떤 쓰기도 발생하지 않는다**(INV-U4-05).
  * @summary 재계획 진입 — 세션을 연다(i10)
  */
 export const postTripsTripIdReplanSessions = (
@@ -4594,6 +4961,187 @@ export const usePostTripsTripIdReplanSessions = <
     queryClient
   );
 };
+/**
+ * 일정을 막는 위험이 감지되면 서버가 재계획 초안을 미리 짠다(SYSTEM 세션). 이것은 그 날짜의 **가장 최근** 선계산 세션이다 — 대체돼 닫힌 것(`CANCELED`)·대안 없음·실패도 그대로 준다. 갈 곳은 앱 진입 게이트가 상태·`stale`·트리거 상태로 정한다 — 판정표의 정본은 situation-awareness BR-SA-23 이다(여기에 옮겨 적지 않는다). 트리거에 세션을 매달지 않고 **날짜**로 묻는다 — 해제 뒤 다시 선 트리거도 같은 대안으로 이어진다. 일정은 여전히 사용자의 apply 로만 바뀐다(INV-SA-1).
+ * @summary 그 날짜의 준비된 대안 — 서버가 위험 알림으로 미리 짠 재계획(situation-awareness BR-SA-18·23)
+ */
+export const getTripsTripIdReplanSessionsPrepared = (
+  tripId: string,
+  params: GetTripsTripIdReplanSessionsPreparedParams,
+  signal?: AbortSignal
+) => {
+  return customInstance<ReplanSession>({
+    url: `/trips/${tripId}/replan-sessions/prepared`,
+    method: 'GET',
+    params,
+    signal,
+  });
+};
+
+export const getGetTripsTripIdReplanSessionsPreparedQueryKey = (
+  tripId: string,
+  params?: GetTripsTripIdReplanSessionsPreparedParams
+) => {
+  return [
+    `/trips/${tripId}/replan-sessions/prepared`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetTripsTripIdReplanSessionsPreparedQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTripsTripIdReplanSessionsPrepared>>,
+  TError = void,
+>(
+  tripId: string,
+  params: GetTripsTripIdReplanSessionsPreparedParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdReplanSessionsPrepared>>,
+        TError,
+        TData
+      >
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetTripsTripIdReplanSessionsPreparedQueryKey(tripId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTripsTripIdReplanSessionsPrepared>>
+  > = ({ signal }) =>
+    getTripsTripIdReplanSessionsPrepared(tripId, params, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: tripId !== null && tripId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTripsTripIdReplanSessionsPrepared>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetTripsTripIdReplanSessionsPreparedQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTripsTripIdReplanSessionsPrepared>>
+>;
+export type GetTripsTripIdReplanSessionsPreparedQueryError = void;
+
+export function useGetTripsTripIdReplanSessionsPrepared<
+  TData = Awaited<ReturnType<typeof getTripsTripIdReplanSessionsPrepared>>,
+  TError = void,
+>(
+  tripId: string,
+  params: GetTripsTripIdReplanSessionsPreparedParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdReplanSessionsPrepared>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdReplanSessionsPrepared>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdReplanSessionsPrepared>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdReplanSessionsPrepared<
+  TData = Awaited<ReturnType<typeof getTripsTripIdReplanSessionsPrepared>>,
+  TError = void,
+>(
+  tripId: string,
+  params: GetTripsTripIdReplanSessionsPreparedParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdReplanSessionsPrepared>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdReplanSessionsPrepared>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdReplanSessionsPrepared>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdReplanSessionsPrepared<
+  TData = Awaited<ReturnType<typeof getTripsTripIdReplanSessionsPrepared>>,
+  TError = void,
+>(
+  tripId: string,
+  params: GetTripsTripIdReplanSessionsPreparedParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdReplanSessionsPrepared>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 그 날짜의 준비된 대안 — 서버가 위험 알림으로 미리 짠 재계획(situation-awareness BR-SA-18·23)
+ */
+
+export function useGetTripsTripIdReplanSessionsPrepared<
+  TData = Awaited<ReturnType<typeof getTripsTripIdReplanSessionsPrepared>>,
+  TError = void,
+>(
+  tripId: string,
+  params: GetTripsTripIdReplanSessionsPreparedParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdReplanSessionsPrepared>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetTripsTripIdReplanSessionsPreparedQueryOptions(
+    tripId,
+    params,
+    options
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
 /**
  * @summary 재계획 세션 조회 — 진행 상태와 재계획안
  */

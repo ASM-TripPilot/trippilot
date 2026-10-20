@@ -1127,3 +1127,172 @@ describe('🔴 P-W · POST 응답을 기다리는 동안 다시 눌러도 재계
     expect(mockReplace).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * 상황 감지 FE-B · frontend-components §3.3 — i04 선택 props(진입 게이트·기회 카드가 준다).
+ *
+ * 무엇을 보장하나:
+ *  - 시드 props(`seedReasons`·`seedDirectives`·`seedExcludedPoiIds`)가 오면 **빈 배열이어도** kind 자동 시드 대신 그것을 쓴다 —
+ *    처음 켜 둘 사유·지시가 칩에 켜지고, 제외 POI 는 화면에 없지만 body 에 실린다. 주의(CAUTION)의 빈 시드는 감지 칩을 꺼 둔다.
+ *  - 시드는 진입 때 한 번이다 — 트리거가 늦게 도착해도 kind 시드가 덮지 않는다(같은 키 중복은 한 번만 켠다).
+ *  - `prefill` 은 자유 입력 초기값이다. `includePoiId` 는 **서버에 보내지 않고** solving 라우트 파라미터로만 잇는다(§3.6).
+ *  - 감지 칩 문구도 변형 라벨을 쓴다(폭염이 '비 예보'로 보이지 않게 — 알약과 같은 `triggerPillCopy`).
+ *  - 셋 다 주지 않으면 위 기존 단언 그대로다(무회귀는 I1~I16·D·P 묶음이 본다).
+ */
+describe('🔴 상황 감지 FE-B · 시드 props·prefill·includePoiId (§3.3)', () => {
+  it('F1 시드가 오면 그 사유·지시가 켜진 채 시작하고 제외 POI 와 함께 body 로 나간다', async () => {
+    mockTriggerData = triggerList(mkTrigger());
+    mockPhase = 'success';
+    render(
+      <PlanbRequestPage
+        tripId={TRIP_ID}
+        triggerId="trg-1"
+        seedReasons={['WEATHER', 'WEATHER']}
+        seedDirectives={['AVOID_OUTDOOR']}
+        seedExcludedPoiIds={['p1']}
+      />
+    );
+
+    expect(screen.getByTestId(TRIGGER_CHIP)).toBeSelected();
+    expect(
+      screen.getByTestId('planb-request-directive-AVOID_OUTDOOR')
+    ).toBeSelected();
+
+    await submit();
+    expect(postedBody()).toEqual(
+      body({
+        reasons: ['WEATHER'],
+        directives: ['AVOID_OUTDOOR'],
+        excludedPoiIds: ['p1'],
+        triggerId: 'trg-1',
+      })
+    );
+  });
+
+  it('F2 빈 시드(주의)면 감지 칩은 보이되 꺼져 있고 kind 사유를 켜지 않는다', async () => {
+    mockTriggerData = triggerList(mkTrigger());
+    render(
+      <PlanbRequestPage
+        tripId={TRIP_ID}
+        triggerId="trg-1"
+        seedReasons={[]}
+        seedDirectives={[]}
+        seedExcludedPoiIds={[]}
+      />
+    );
+
+    expect(screen.getByTestId(TRIGGER_CHIP)).not.toBeSelected();
+
+    await submit();
+    expect(postedBody()).toEqual(body({ triggerId: 'trg-1' }));
+  });
+
+  it('F3 시드는 진입 때 한 번 — 트리거가 늦게 와도 kind 시드가 덮지 않는다', async () => {
+    mockTriggerData = undefined;
+    const props = {
+      tripId: TRIP_ID,
+      triggerId: 'trg-1',
+      seedReasons: [],
+      seedDirectives: ['INDOOR'],
+      seedExcludedPoiIds: [],
+    };
+    const { rerender } = render(<PlanbRequestPage {...props} />);
+
+    mockTriggerData = triggerList(mkTrigger());
+    rerender(<PlanbRequestPage {...props} />);
+
+    expect(screen.getByTestId(TRIGGER_CHIP)).not.toBeSelected();
+    expect(screen.getByTestId('planb-request-directive-INDOOR')).toBeSelected();
+  });
+
+  it('F4 prefill 은 자유 입력 초기값이고 그대로 body 의 freeText 로 나간다', async () => {
+    render(
+      <PlanbRequestPage
+        tripId={TRIP_ID}
+        prefill="하늘공원 꼭 넣어서 다시 짜 줘"
+      />
+    );
+
+    expect(screen.getByTestId('planb-request-freetext').props.value).toBe(
+      '하늘공원 꼭 넣어서 다시 짜 줘'
+    );
+
+    await submit();
+    expect(postedBody()).toEqual(
+      body({ freeText: '하늘공원 꼭 넣어서 다시 짜 줘' })
+    );
+  });
+
+  it('F5 includePoiId 는 body 에 싣지 않고 solving 라우트 파라미터로만 잇는다', async () => {
+    mockPhase = 'success';
+    render(<PlanbRequestPage tripId={TRIP_ID} includePoiId="poi-sky" />);
+
+    await submit();
+
+    expect(JSON.stringify(postedBody())).not.toContain('poi-sky');
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/planb/solving',
+      params: { tripId: TRIP_ID, sessionId: 's9', includePoiId: 'poi-sky' },
+    });
+  });
+
+  it('F6 감지 칩 문구는 변형 라벨이다 — 폭염 트리거가 "비 예보"로 보이지 않는다', () => {
+    mockTriggerData = triggerList(mkTrigger({ variant: 'HEAT' }));
+    render(<PlanbRequestPage tripId={TRIP_ID} triggerId="trg-1" />);
+
+    expect(screen.getByTestId(TRIGGER_CHIP)).toHaveTextContent(
+      '폭염 · 해운대 해변 17시'
+    );
+  });
+
+  // 리뷰 반영 — 준비 세션은 같은 날 위험의 합집합이라(BR-SA-18) 휴무 알림으로 들어와도 시드에 날씨가 있을 수 있다.
+  // 감지 칩(휴무)이 정적 날씨를 숨기면 처음 켜 둔 사유가 화면에도 body 에도 없게 된다.
+  const closureTomorrow = () =>
+    triggerList(
+      mkTrigger({
+        kind: 'CLOSURE',
+        variant: 'CLOSED_DAY',
+        affectedDate: TOMORROW,
+        slotKey: `${TOMORROW}#p9`,
+      })
+    );
+  const unionSeed = {
+    tripId: TRIP_ID,
+    triggerId: 'trg-1',
+    targetDate: TOMORROW,
+    seedReasons: ['WEATHER', 'TEMP_CLOSED'],
+    seedDirectives: [],
+    seedExcludedPoiIds: ['p9', 'poi-rain'],
+  };
+
+  it('F7 시드에 날씨가 있는데 감지 칩이 날씨가 아니면 정적 날씨 칩이 켜진 채 보이고 body 로 나간다', async () => {
+    mockTriggerData = closureTomorrow();
+    render(<PlanbRequestPage {...unionSeed} />);
+
+    expect(screen.getByTestId(TRIGGER_CHIP)).toBeSelected();
+    expect(screen.getByTestId('planb-request-reason-WEATHER')).toBeSelected();
+    // 감지 칩이 대신하는 임시 휴무 정적 칩은 종전대로 숨는다.
+    expect(screen.queryByTestId('planb-request-reason-TEMP_CLOSED')).toBeNull();
+
+    await submit();
+    expect(postedBody()).toEqual(
+      body({
+        scope: 'FULL_DAY',
+        reasons: ['WEATHER', 'TEMP_CLOSED'],
+        excludedPoiIds: ['p9', 'poi-rain'],
+        triggerId: 'trg-1',
+        targetDate: TOMORROW,
+      })
+    );
+  });
+
+  it('F7b 보이는 날씨 칩을 끄면 body 에서 빠진다 — 사용자가 고칠 수 있다', async () => {
+    mockTriggerData = closureTomorrow();
+    render(<PlanbRequestPage {...unionSeed} />);
+
+    fireEvent.press(screen.getByTestId('planb-request-reason-WEATHER'));
+
+    await submit();
+    expect(postedBody()).toMatchObject({ reasons: ['TEMP_CLOSED'] });
+  });
+});

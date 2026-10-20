@@ -22,8 +22,11 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  CuratedStayList,
   ErrorResponse,
   GeocodeCandidate,
+  GetStaysBrowseOutboundParams,
+  GetStaysCuratedParams,
   GetStaysGeocodeParams,
   GetStaysReverseGeocodeParams,
   GetStaysSearchParams,
@@ -335,9 +338,334 @@ export function useGetStaysStayId<
 }
 
 /**
+ * 트립닷컴 제휴 Promotion Center 의 도시별 인기 목록(Hot Sellers)을 순위대로 돌려준다. 행은 반복 시드가 채운다(시범: 서울 15곳). 각 항목의 `stayId`(`"TRIPCOM:{트립닷컴 hotelId}"`)를 그대로 `/stays/{stayId}/outbound` 에 넘기면 트립닷컴 호텔 상세로 간다. 상세(`/stays/{stayId}`)는 이 출처를 모른다(404) — 목록 항목이 곧 카드다.
+ *
+ * **평점·가격이 없는 것은 의도다** — 평점은 앱 안에 두지 않고(BR-U1-18), Promotion Center 가격은 실시간 값이 아니다(INV-U1-05). 모르는 도시는 빈 목록 200 이다.
+ *
+ * ⚠ 출시 조건: 트립닷컴 제휴 계약 3.2.2·3.2.4 — 트립닷컴 이미지·홍보 콘텐츠를 자체 콘텐츠와 함께 노출하려면 **사전 서면 승인**이 필요하다. 승인 전에는 화면이 이 목록을 띄우지 않는다.
+ * @summary 도시별 큐레이션 숙소(트립닷컴 Promotion Center 인기 목록)
+ */
+export const getStaysCurated = (
+  params: GetStaysCuratedParams,
+  signal?: AbortSignal
+) => {
+  return customInstance<CuratedStayList>({
+    url: `/stays/curated`,
+    method: 'GET',
+    params,
+    signal,
+  });
+};
+
+export const getGetStaysCuratedQueryKey = (params?: GetStaysCuratedParams) => {
+  return [`/stays/curated`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetStaysCuratedQueryOptions = <
+  TData = Awaited<ReturnType<typeof getStaysCurated>>,
+  TError = ValidationErrorResponse,
+>(
+  params: GetStaysCuratedParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysCurated>>,
+        TError,
+        TData
+      >
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetStaysCuratedQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getStaysCurated>>> = ({
+    signal,
+  }) => getStaysCurated(params, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getStaysCurated>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetStaysCuratedQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getStaysCurated>>
+>;
+export type GetStaysCuratedQueryError = ValidationErrorResponse;
+
+export function useGetStaysCurated<
+  TData = Awaited<ReturnType<typeof getStaysCurated>>,
+  TError = ValidationErrorResponse,
+>(
+  params: GetStaysCuratedParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysCurated>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStaysCurated>>,
+          TError,
+          Awaited<ReturnType<typeof getStaysCurated>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetStaysCurated<
+  TData = Awaited<ReturnType<typeof getStaysCurated>>,
+  TError = ValidationErrorResponse,
+>(
+  params: GetStaysCuratedParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysCurated>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStaysCurated>>,
+          TError,
+          Awaited<ReturnType<typeof getStaysCurated>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetStaysCurated<
+  TData = Awaited<ReturnType<typeof getStaysCurated>>,
+  TError = ValidationErrorResponse,
+>(
+  params: GetStaysCuratedParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysCurated>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 도시별 큐레이션 숙소(트립닷컴 Promotion Center 인기 목록)
+ */
+
+export function useGetStaysCurated<
+  TData = Awaited<ReturnType<typeof getStaysCurated>>,
+  TError = ValidationErrorResponse,
+>(
+  params: GetStaysCuratedParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysCurated>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetStaysCuratedQueryOptions(params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * 앱은 숙소 목록을 갖지 않고 OTA 의 지역 숙소 목록으로 보낸다 — 사진·가격·평점은 OTA 가 보여준다. `region`·`regionCode` 는 지역 카탈로그에 있어야 한다(코드는 선택 가능 지역이거나 `region` 이름이 가리키는 코드, 코드가 없으면 이름 일치) — 아니면 400. 숙소 아웃바운드와 같은 규약이다: 클릭을 남기고(stay_id 자리에 `REGION:{regionCode 또는 region}`) 302, 본문 없음, Bearer 선택.
+ *
+ * 트립닷컴 모드에서 `regionCode` 가 도시 매핑(주요 여행지 — 정본은 `TripcomDeeplinkAdapter.CITY_IDS`, 가장 긴 접두사 일치)에 걸리면 날짜·인원이 채워진 트립닷컴 도시 목록으로, 아니면 `region` 이름 키워드 검색으로 간다. 날짜는 checkin·checkout 이 둘 다 있고 순서가 맞을 때만, 인원은 양수일 때만 싣는다. 폴백 모드는 웹검색(`"{region} 숙소 예약"`)이다.
+ * @summary 지역 숙소 전체 보기 302(OTA 지역 목록으로 이동)
+ */
+export const getStaysBrowseOutbound = (
+  params: GetStaysBrowseOutboundParams,
+  signal?: AbortSignal
+) => {
+  return customInstance<unknown>({
+    url: `/stays/browse/outbound`,
+    method: 'GET',
+    params,
+    signal,
+  });
+};
+
+export const getGetStaysBrowseOutboundQueryKey = (
+  params?: GetStaysBrowseOutboundParams
+) => {
+  return [`/stays/browse/outbound`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetStaysBrowseOutboundQueryOptions = <
+  TData = Awaited<ReturnType<typeof getStaysBrowseOutbound>>,
+  TError = void | ValidationErrorResponse,
+>(
+  params: GetStaysBrowseOutboundParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysBrowseOutbound>>,
+        TError,
+        TData
+      >
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetStaysBrowseOutboundQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getStaysBrowseOutbound>>
+  > = ({ signal }) => getStaysBrowseOutbound(params, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getStaysBrowseOutbound>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetStaysBrowseOutboundQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getStaysBrowseOutbound>>
+>;
+export type GetStaysBrowseOutboundQueryError = void | ValidationErrorResponse;
+
+export function useGetStaysBrowseOutbound<
+  TData = Awaited<ReturnType<typeof getStaysBrowseOutbound>>,
+  TError = void | ValidationErrorResponse,
+>(
+  params: GetStaysBrowseOutboundParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysBrowseOutbound>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStaysBrowseOutbound>>,
+          TError,
+          Awaited<ReturnType<typeof getStaysBrowseOutbound>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetStaysBrowseOutbound<
+  TData = Awaited<ReturnType<typeof getStaysBrowseOutbound>>,
+  TError = void | ValidationErrorResponse,
+>(
+  params: GetStaysBrowseOutboundParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysBrowseOutbound>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStaysBrowseOutbound>>,
+          TError,
+          Awaited<ReturnType<typeof getStaysBrowseOutbound>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetStaysBrowseOutbound<
+  TData = Awaited<ReturnType<typeof getStaysBrowseOutbound>>,
+  TError = void | ValidationErrorResponse,
+>(
+  params: GetStaysBrowseOutboundParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysBrowseOutbound>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 지역 숙소 전체 보기 302(OTA 지역 목록으로 이동)
+ */
+
+export function useGetStaysBrowseOutbound<
+  TData = Awaited<ReturnType<typeof getStaysBrowseOutbound>>,
+  TError = void | ValidationErrorResponse,
+>(
+  params: GetStaysBrowseOutboundParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysBrowseOutbound>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetStaysBrowseOutboundQueryOptions(params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
  * 클릭을 기록하고 예약 목적지로 302 리다이렉트한다. 클라이언트가 OTA URL 을 직접 조립하지 않는다 — 목적지 교체(웹검색 폴백 → OTA 딥링크)가 앱 배포 없이 서버 변경만으로 된다.
  *
  * OTA 계약 전에는 웹검색 폴백(`"{숙소명} 예약"`, BR-U1-31 이 명시 허용하는 우회)으로 보낸다. 날짜·인원은 지금 목적지에 실리지 않지만 클릭에 남는다 — 계약 협상 근거 데이터다.
+ *
+ * 예외: 큐레이션 숙소(`TRIPCOM:{hotelId}`, `/stays/curated`)는 트립닷컴 모드에서 **호텔 상세로 직행**하고, checkin·checkout 이 둘 다 있고 순서가 맞으면 날짜를, adults 가 양수면 인원을 싣는다.
  *
  * 응답 본문은 없다. 클릭·전환 지표는 내부 전용이라 사용자 대면 응답에 싣지 않는다(BR-U1-32).
  *
