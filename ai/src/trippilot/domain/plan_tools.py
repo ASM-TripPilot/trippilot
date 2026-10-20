@@ -56,8 +56,10 @@ PLAN_TOOLS: Mapping[Intent, PlanTool] = {
     Intent.GET_NEXT_SLOT: PlanTool("지금 이후 다음 일정 한 곳과 그 계획 시각"),
     Intent.GET_WEATHER: PlanTool("일정 장소 기준 날짜 하루만의 최대 강수확률 — 주말·기간은 못 본다, 기온·바람·다른 지역 날씨도 없다",
                                  ("poi_info", "weather"), hide=("period",)),
-    Intent.GET_DISTANCE: PlanTool("일정 안 한 장소까지 바로 앞 일정에서의 거리 — 소요시간은 없다", ("poi_info", "transit")),
-    Intent.GET_POI_INFO: PlanTool("일정 안 장소의 분류·영업시간·입장료 — 일정 밖 장소는 못 찾는다", ("poi_info",)),
+    Intent.GET_DISTANCE: PlanTool("두 곳 사이 거리(일정 장소·지역 이름·정확한 이름의 등록 장소) — 소요시간·길 안내는 없다",
+                                  ("poi_info", "transit")),
+    Intent.GET_POI_INFO: PlanTool("장소의 분류·영업시간·입장료 — 일정 장소, 또는 정확한 이름의 등록 장소(별칭은 못 찾는다)",
+                                  ("poi_info",)),
     Intent.SUGGEST_ALTERNATIVE: PlanTool("일정의 한 곳 대신 갈 근처 등록 장소 최대 5곳", ("poi_info", "pool_builder", "planb")),
     Intent.EXPLORE_PLACES: PlanTool("지역 또는 일정 근처의 등록 장소 최대 5곳(명소·맛집·카페·야경·자연·쇼핑·문화·액티비티, "
                                     "요즘 인기 우선) — 예약·가격·생활 시설은 없다", ("pool_builder",)),

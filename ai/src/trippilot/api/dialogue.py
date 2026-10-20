@@ -223,16 +223,17 @@ def build_dialogue_orchestrator(
         paraphrase_gateway=GatewayFacade(shadow_llm, renderer, ParaphraseGate(), c1_config, shadow_trace),
         bank_ready=bank_ready,
     )
-    # 장소 탐색 NL2SQL — DIALOGUE_SQL 배정 + 장소 DB DSN 둘 다 있을 때만(배정이 곧 켜기). 서비스 카운터(`counted`)를 같이 쓴다 —
-    # 백엔드 사용량 상한·턴의 llm_calls 에 이 호출도 든다. 꺼져 있으면 장소 탐색은 반경 풀만(종전).
+    # 장소 DB(poi_public 뷰 읽기 전용) — DSN 이 있으면 이름 찾기(일정 밖 장소 정보·거리, LLM 없음)는 늘 켜고, 장소 탐색 NL2SQL 은
+    # DIALOGUE_SQL 배정이 있을 때만(배정이 곧 켜기). NL2SQL 은 서비스 카운터(`counted`)를 같이 쓴다 — 사용량 상한·llm_calls 에 든다.
     place_lookup = None
-    if LlmFeature.DIALOGUE_SQL in c1_config.feature_models and place_sql is not None:
-        place_lookup = PlaceSqlLookup(DialogueSqlWorker(GatewayFacade(counted, renderer, DialogueSqlGate(), c1_config, trace)),
-                                      place_sql)
-        log.info("도우미 장소 조회(NL2SQL) on — poi_public 뷰 읽기 전용")
+    if place_sql is not None:
+        sql_on = LlmFeature.DIALOGUE_SQL in c1_config.feature_models
+        place_lookup = PlaceSqlLookup(
+            DialogueSqlWorker(GatewayFacade(counted, renderer, DialogueSqlGate(), c1_config, trace)) if sql_on else None, place_sql)
+        log.info("도우미 장소 DB on — 이름 찾기(일정 밖 장소·거리) · NL2SQL %s",
+                 "on" if sql_on else "off(DIALOGUE_SQL 미배정이라 미배선 — 장소 탐색은 반경 풀)")
     else:
-        log.info("도우미 장소 조회(NL2SQL) off — %s라 미배선(장소 탐색은 반경 풀)",
-                 "DIALOGUE_SQL 미배정" if place_sql is not None else "TRIPPILOT_PLACE_DB_URL 미설정")
+        log.info("도우미 장소 DB off — TRIPPILOT_PLACE_DB_URL 미설정이라 미배선(장소 탐색은 반경 풀, 일정 밖 장소는 못 찾는다)")
     ports = HandlerPorts(poi_info=providers[ProviderKind.POI_INFO], weather=providers.get(ProviderKind.WEATHER),
                          transit=providers[ProviderKind.TRANSIT], pool_builder=pool_builder, planb=rag,
                          place_sql=place_lookup)

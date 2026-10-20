@@ -198,3 +198,31 @@ def test_executor_wraps_read_only_with_timeout_and_cap_and_returns_only_display_
 def test_executor_with_no_ids_skips_the_second_query_and_still_rolls_back() -> None:
     conn = _Conn([[]])
     assert PgPlaceSql(lambda: conn).run(_OK[1]) == [] and len(conn.log) == 3 and conn.rolled_back
+
+
+class _OneQueryConn(_Conn):
+    """find_by_name 용 — fetchall 한 번."""
+
+
+def _hit(pid: str, sido: str) -> tuple:
+    return (pid, "광장시장", "쇼핑", sido, "종로구", [])
+
+
+@pytest.mark.parametrize("hits,sido,expected", [
+    ([_hit("a", "서울특별시")], "서울", "a"),  # 한 곳
+    ([_hit("a", "서울특별시"), _hit("b", "부산광역시")], "서울", "a"),  # 여럿이면 여행 시·도로 좁힌다
+    ([_hit("a", "서울특별시"), _hit("b", "서울특별시")], "서울", None),  # 그래도 여럿(체인점) — 고르지 않는다
+    ([_hit("a", "서울특별시"), _hit("b", "부산광역시")], None, None),  # 좁힐 지역이 없으면 고르지 않는다
+    ([], "서울", None),
+])
+def test_find_by_name_is_exact_and_never_guesses_among_many(hits, sido, expected) -> None:
+    conn = _OneQueryConn([hits])
+    found = PgPlaceSql(lambda: conn).find_by_name("광장 시장", sido)
+    assert (found.poi_id if found else None) == expected and conn.rolled_back
+    sql, params = conn.log[2]
+    assert "replace(name, ' ', '') = %(key)s" in sql and "ILIKE" not in sql and params["key"] == "광장시장"  # 완전 일치만
+
+
+def test_find_by_name_skips_one_letter_names_without_a_query() -> None:
+    conn = _OneQueryConn([])
+    assert PgPlaceSql(lambda: conn).find_by_name(" 가 ", "서울") is None and conn.log == []
