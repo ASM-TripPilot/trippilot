@@ -13,9 +13,13 @@ import { useLiveItinerary } from '@/features/execution';
 import { deriveVisitProgress } from '@/entities/itinerary-slot';
 import { visitedLabelByPoiId } from '@/entities/itinerary-slot';
 import { formatCoPickDayHeader } from '@/features/itinerary';
+import { staleRetryRequest } from '../model/draftNotice';
 import { readFromInstant } from '../model/replanFromInstant';
 import { replanCapDeadlineMs } from '../model/replanPollCap';
-import { deriveReplanMapAnchor } from '@/features/request-replan';
+import {
+  deriveReplanMapAnchor,
+  useStartReplan,
+} from '@/features/request-replan';
 import { resolveReplanState } from '../model/replanState';
 import { useReplanSession } from '../model/useReplanSession';
 import { seoulDate } from '@/shared/lib/seoulDate';
@@ -65,9 +69,13 @@ import { ReplanSolvingView } from './ReplanSolvingView';
  *      끊지 않고 마운트부터 잰다(TRIP-1293) — 폴링 응답마다 리셋하지 않는다(restartKey 없음).
  *    · [취소] 요청이 실패하면(`cancel.isError`) 한 줄로 알린다.
  *  - TRIP-1363 — **8분 상한**(`replanPollCap`). 세션 `createdAt`(없으면 마운트 시각)부터 8분이 지나도 진행 얼굴이면
- *    본문(`PlanbSolvingBody`)을 내려 폴링을 끊고 `solving-capped` 얼굴을 보인다 — [홈으로] · [다시 시도](= 재계획
- *    요청 화면으로 교체 이동, 새 POST 는 거기서 기존 경로로 — 열린 세션은 새 요청이 닫는다, INV-U4-06). 조용히 계속
+ *    본문(`PlanbSolvingBody`)을 내려 폴링을 끊고 `solving-capped` 얼굴을 보인다 — [홈으로] · [다시 시도]. 조용히 계속
  *    돌거나 이전 일정으로 말없이 되돌리지 않는다(INV-4). 폴링 훅(`useReplanSession`)은 건드리지 않고 이 껍데기가 조합한다.
+ *    [다시 시도]는 **같은 입력·같은 알림으로 바로 다시 짠다**(i06 [새 대안 보기]와 같은 봉투 `staleRetryRequest` — 사유·지시·
+ *    제외·범위·날짜·트리거 그대로) → 성공하면 새 세션의 이 화면으로 replace(열린 세션은 새 요청이 닫는다, INV-U4-06).
+ *    알림과 끊긴 빈 요청 화면을 열면 사유를 다시 골라야 하고, 적용해도 알약이 남고, 전날 창에선 막다른 길이다(사용자 결정
+ *    2026-10-20). 재누름은 ref 로 1회(실패에서만 푼다), 요청 중엔 버튼 잠금, 실패면 부제가 시작 실패 문장이 된다(INV-4).
+ *    응답을 한 번도 못 받아 입력을 모르면 종전대로 요청 화면(오늘)을 연다.
  *  - 오류·종료 얼굴과 ‹ 확인의 나가기 연타는 ref 로 막는다(같은 틱 두 번째 누름은 옛 state 를 본다).
  *    그 ref 가 "나가는 중" 신호라, 선 뒤의 뒤로는 확인 없이 통과한다.
  */
@@ -90,21 +98,44 @@ export function PlanbSolvingPage({
   includePoiId,
 }: PlanbSolvingPageProps): ReactElement | null {
   const router = useRouter();
+  const startReplan = useStartReplan();
+  // [다시 시도] 재누름 잠금 — 같은 틱 두 번째 누름은 옛 state 를 본다(ref). 실패에서만 푼다(새 POST 는 방금 연 세션을 닫는다).
+  const retryRef = useRef(false);
   const [capped, setCapped] = useState<CappedSession | undefined>(undefined);
   if (capped !== undefined) {
-    // 본문이 내려가 세션 폴링도 끝났다. [다시 시도]는 같은 날로 요청 화면을 다시 연다(PlanbDraftPage 의
-    // onReopenRequest 와 같은 규칙 — 날짜를 빠뜨리면 오늘로 조용히 바뀐다).
-    const targetDate = capped?.targetDate;
+    // 본문이 내려가 세션 폴링도 끝났다. [다시 시도]는 상한에 닿은 세션의 입력·트리거로 바로 다시 짠다. 응답을 한 번도
+    // 못 받았으면(null) 입력도 날짜도 몰라 종전대로 요청 화면을 연다.
+    const retry =
+      capped === null
+        ? () => router.replace(`/trips/${tripId}/planb`)
+        : () => {
+            if (retryRef.current) return;
+            retryRef.current = true;
+            startReplan.mutate(
+              {
+                tripId,
+                data: staleRetryRequest(capped, seoulDate(new Date())),
+              },
+              {
+                onSuccess: (next) =>
+                  router.replace({
+                    pathname: '/trips/[tripId]/planb/solving',
+                    params: includePoiId
+                      ? { tripId, sessionId: next.sessionId, includePoiId }
+                      : { tripId, sessionId: next.sessionId },
+                  }),
+                onError: () => {
+                  retryRef.current = false;
+                },
+              }
+            );
+          };
     return (
       <ReplanNoticeFace
         kind="solving-capped"
-        onRetry={() =>
-          router.replace(
-            targetDate && targetDate !== seoulDate(new Date())
-              ? `/trips/${tripId}/planb?targetDate=${targetDate}`
-              : `/trips/${tripId}/planb`
-          )
-        }
+        onRetry={retry}
+        retrying={startReplan.isPending}
+        retryFailed={startReplan.isError}
         onLeave={() => router.replace('/(tabs)' as Href)}
       />
     );

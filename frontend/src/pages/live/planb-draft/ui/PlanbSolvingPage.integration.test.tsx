@@ -68,6 +68,8 @@ let mockTargetDate: string | null = null;
 let mockCreatedAt: string | null = null;
 // TRIP-1363 — 세션 폴링 훅이 지금 마운트돼 있는가(상한에 닿으면 본문이 내려가 폴링이 끝난다).
 let mockSessionMounted = 0;
+// 사용자 결정(2026-10-20) — 세션의 입력(사유·지시·제외·자유 입력·트리거). 상한 [다시 시도]가 이 값 그대로 다시 짠다.
+let mockSessionInputs: Record<string, unknown> = {};
 const mockSessionCache = new Map<string, unknown>();
 // TRIP-1277 — 세션 조회가 data 없이 실패(mockStatus=null 과 함께 true)·[다시 시도]가 부를 재조회 seam.
 let mockSessionError = false;
@@ -123,7 +125,7 @@ jest.mock('../model/useReplanSession', () => ({
           };
     }
     // 5-b 경고-1 — data 가 있어도 재조회가 실패하면 isError=true(TanStack v5 는 data 를 남긴다).
-    const key = `${mockStatus}|${mockScope}|${mockFromInstant}|${mockOrigin.lat}|${mockOrigin.lng}|${mockTargetDate}|${mockSessionError}|${mockSessionFailures}|${mockCreatedAt}`;
+    const key = `${mockStatus}|${mockScope}|${mockFromInstant}|${mockOrigin.lat}|${mockOrigin.lng}|${mockTargetDate}|${mockSessionError}|${mockSessionFailures}|${mockCreatedAt}|${JSON.stringify(mockSessionInputs)}`;
     if (!mockSessionCache.has(key)) {
       mockSessionCache.set(key, {
         data: {
@@ -143,6 +145,7 @@ jest.mock('../model/useReplanSession', () => ({
           originEstimated: mockOrigin.lat === null,
           status: mockStatus,
           createdAt: mockCreatedAt ?? new Date().toISOString(),
+          ...mockSessionInputs,
         },
         status: mockSessionError ? 'error' : 'success',
         fetchStatus: 'idle',
@@ -198,6 +201,18 @@ let mockItinerary: { data: Itinerary | undefined; isPending: boolean };
 
 jest.mock('@/features/execution/model/useLiveItinerary', () => ({
   useLiveItinerary: () => mockItinerary,
+}));
+
+// 8분 상한 [다시 시도] — 같은 입력으로 새 세션(seam `useStartReplan`, i04·i06 과 같은 래퍼). 페이지가 `{ tripId, data }` +
+// onSuccess·onError 로 부른다. 기본은 대기·실패 없음. (목하지 않으면 실물이 위 trips 목 팩토리에 없는 POST 훅을 불러 터진다.)
+const mockStartMutate = jest.fn();
+const mockStart = { isPending: false, isError: false };
+jest.mock('@/features/request-replan/model/useStartReplan', () => ({
+  useStartReplan: () => ({
+    mutate: mockStartMutate,
+    isPending: mockStart.isPending,
+    isError: mockStart.isError,
+  }),
 }));
 
 const mockBack = jest.fn();
@@ -360,6 +375,10 @@ beforeEach(() => {
   mockSessionFailures = 0;
   mockCreatedAt = null;
   mockSessionMounted = 0;
+  mockSessionInputs = {};
+  mockStartMutate.mockClear();
+  mockStart.isPending = false;
+  mockStart.isError = false;
   mockSessionRefetch.mockClear();
   mockVisitsState = 'ok';
   mockStatus = 'SOLVING';
@@ -1631,6 +1650,14 @@ describe('🔴 TRIP-1293 AC4·AC5 · 결정 A — 느림 안내 시계는 화면
 describe('🔴 TRIP-1363 · 재계획 세션 8분 상한 — 늦어지고 있어요 얼굴 + [홈으로]·[다시 시도], 폴링 중단', () => {
   const CAP = 'planb-solving-capped';
   const CAP_MS = 8 * 60 * 1000;
+  /** 알림으로 들어온 세션의 입력 — [다시 시도]가 이것 그대로(트리거 포함) 다시 짠다. */
+  const CAPPED_INPUTS = {
+    triggerId: 'trg-1',
+    reasons: ['WEATHER'],
+    directives: ['AVOID_OUTDOOR'],
+    excludedPoiIds: ['p5'],
+    freeText: '실내로 바꿔 줘',
+  };
 
   /** 가짜 시계 기준 `agoMs` 전에 만든 세션. */
   function sessionCreatedAgo(agoMs: number): void {
@@ -1688,9 +1715,10 @@ describe('🔴 TRIP-1363 · 재계획 세션 8분 상한 — 늦어지고 있어
     expect(screen.getByTestId(CAP)).toBeOnTheScreen();
   });
 
-  it('U5 [홈으로]는 홈 탭으로 replace 1회(cancel 0), [다시 시도]는 같은 날로 요청 화면을 replace 1회(cancel·POST 0)', () => {
+  it('U5 [홈으로]는 홈 탭으로 replace 1회(cancel 0), [다시 시도]는 같은 입력·같은 알림으로 바로 다시 짠다 — 빈 요청 화면으로 가지 않는다', () => {
     jest.useFakeTimers();
     sessionCreatedAgo(CAP_MS + 1000);
+    mockSessionInputs = CAPPED_INPUTS;
     renderPage();
     advance(0);
 
@@ -1699,12 +1727,37 @@ describe('🔴 TRIP-1363 · 재계획 세션 8분 상한 — 늦어지고 있어
 
     mockReplace.mockClear();
     fireEvent.press(screen.getByTestId('planb-solving-capped-retry'));
-    // 세션 targetDate(6/11)는 오늘이 아니라 날짜를 싣는다 — 빠뜨리면 오늘로 조용히 바뀐다.
-    expect(mockReplace).toHaveBeenCalledTimes(1);
-    expect(mockReplace).toHaveBeenCalledWith(
-      `/trips/${TRIP_ID}/planb?targetDate=2026-06-11`
-    );
+
+    expect(mockStartMutate).toHaveBeenCalledTimes(1);
+    const [variables, options] = mockStartMutate.mock.calls[0] as [
+      { tripId: string; data: unknown },
+      { onSuccess: (next: { sessionId: string }) => void },
+    ];
+    // 세션 targetDate(6/11)는 오늘이 아니라 그 날 + FULL_DAY 다 — 빠뜨리면 오늘로 조용히 바뀐다. 트리거도 그대로 싣는다.
+    expect(variables).toEqual({
+      tripId: TRIP_ID,
+      data: {
+        scope: 'FULL_DAY',
+        targetDate: '2026-06-11',
+        originKind: null,
+        reasons: ['WEATHER'],
+        directives: ['AVOID_OUTDOOR'],
+        freeText: '실내로 바꿔 줘',
+        excludedPoiIds: ['p5'],
+        triggerId: 'trg-1',
+      },
+    });
+    // 응답 전엔 아무 데도 가지 않는다 — 알림과 끊긴 요청 화면(`/planb`)으로도.
+    expect(mockReplace).not.toHaveBeenCalled();
     expect(mockCancel).not.toHaveBeenCalled();
+
+    act(() => options.onSuccess({ sessionId: 's10' }));
+
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/planb/solving',
+      params: { tripId: TRIP_ID, sessionId: 's10' },
+    });
   });
 
   it('U6 결과가 나온 세션(DRAFT)은 오래됐어도 상한 얼굴이 아니라 i06 로 간다 — 상한은 진행 얼굴에서만 잰다', () => {
@@ -1723,6 +1776,94 @@ describe('🔴 TRIP-1363 · 재계획 세션 8분 상한 — 늦어지고 있어
     advance(CAP_MS * 2);
     expect(screen.queryByTestId(CAP)).toBeNull();
     expect(screen.getByTestId('planb-solving-error')).toBeOnTheScreen();
+  });
+
+  it('U8 응답을 한 번도 못 받은 채 상한이면 입력을 몰라 종전대로 요청 화면(오늘)을 연다 — 세션 시작 0', () => {
+    jest.useFakeTimers();
+    mockStatus = null;
+    renderPage();
+    advance(CAP_MS);
+
+    fireEvent.press(screen.getByTestId('planb-solving-capped-retry'));
+
+    expect(mockStartMutate).not.toHaveBeenCalled();
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith(`/trips/${TRIP_ID}/planb`);
+  });
+
+  it('U9 [다시 시도]를 같은 틱에 두 번 눌러도 세션 시작은 1회다(새 POST 는 방금 연 세션을 닫는다)', () => {
+    jest.useFakeTimers();
+    sessionCreatedAgo(CAP_MS + 1000);
+    mockSessionInputs = CAPPED_INPUTS;
+    renderPage();
+    advance(0);
+    const retry = screen.getByTestId('planb-solving-capped-retry');
+
+    fireEvent.press(retry);
+    fireEvent.press(retry);
+
+    expect(mockStartMutate).toHaveBeenCalledTimes(1);
+  });
+
+  it('U10 요청 중엔 [다시 시도]가 잠기고([홈으로]는 그대로), 실패하면 부제가 시작 실패 문장이 되고 다시 누를 수 있다', () => {
+    jest.useFakeTimers();
+    sessionCreatedAgo(CAP_MS + 1000);
+    mockSessionInputs = CAPPED_INPUTS;
+    const { rerender } = renderPage();
+    advance(0);
+    fireEvent.press(screen.getByTestId('planb-solving-capped-retry'));
+    const [, options] = mockStartMutate.mock.calls[0] as [
+      unknown,
+      { onError: (error: unknown) => void },
+    ];
+
+    mockStart.isPending = true;
+    rerender(<PlanbSolvingPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
+    expect(screen.getByTestId('planb-solving-capped-retry')).toBeDisabled();
+    expect(screen.getByTestId('planb-solving-capped-home')).toBeEnabled();
+
+    mockStart.isPending = false;
+    mockStart.isError = true;
+    act(() => options.onError(new Error('500')));
+    rerender(<PlanbSolvingPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
+
+    const face = screen.getByTestId(CAP);
+    expect(
+      within(face).getByText(
+        '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요'
+      )
+    ).toBeOnTheScreen();
+    expect(within(face).queryByText('원래 일정은 그대로예요')).toBeNull();
+    fireEvent.press(screen.getByTestId('planb-solving-capped-retry'));
+    expect(mockStartMutate).toHaveBeenCalledTimes(2);
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('U11 넣으려던 POI 는 새 세션의 진행 화면까지 잇는다(서버엔 안 보낸다)', () => {
+    jest.useFakeTimers();
+    sessionCreatedAgo(CAP_MS + 1000);
+    mockSessionInputs = CAPPED_INPUTS;
+    render(
+      <PlanbSolvingPage
+        tripId={TRIP_ID}
+        sessionId={SESSION_ID}
+        includePoiId="poi-sky"
+      />
+    );
+    advance(0);
+
+    fireEvent.press(screen.getByTestId('planb-solving-capped-retry'));
+    const [variables, options] = mockStartMutate.mock.calls[0] as [
+      { data: unknown },
+      { onSuccess: (next: { sessionId: string }) => void },
+    ];
+    expect(JSON.stringify(variables.data)).not.toContain('poi-sky');
+    act(() => options.onSuccess({ sessionId: 's10' }));
+
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/planb/solving',
+      params: { tripId: TRIP_ID, sessionId: 's10', includePoiId: 'poi-sky' },
+    });
   });
 });
 

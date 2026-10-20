@@ -36,11 +36,12 @@ const FAILED_NOTICE = {
 };
 const NO_SOLUTION_TITLE = '대안을 찾지 못했어요';
 const TITLE = 'AI 재계획안';
-// 상황 감지 FE-B(frontend-components §3.6) — 문구는 정본 그대로. 재요청 실패는 i04 시작 실패와 같은 문장이다.
+// 상황 감지 FE-B(frontend-components §3.6) — 문구는 정본 그대로. 재요청 실패는 i04 시작 실패와 같은 문장이다
+// (낡음 얼굴 [새 대안 보기] · 실패 얼굴 [다시 시도] 공용).
 const PREPARED_MARK = '미리 준비한 대안';
 const STALE_TITLE = '시간이 지나 이 대안은 지금 일정과 맞지 않아요';
 const STALE_RETRY_LABEL = '새 대안 보기';
-const STALE_RETRY_FAILED =
+const RETRY_FAILED =
   '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요';
 // TRIP-1214 — 셸 기본 배열의 닫힘 칸(28)은 CTA 바를 뺀다. 초안은 시트를 내리고 지도를 보다 바로 [적용하기]를
 // 눌러야 하므로, 가장 낮은 칸을 CTA 바 위(손잡이 28 + 바 높이 + 하단 안전 영역)로 직접 준다 — 직접 준 배열은
@@ -100,11 +101,14 @@ export interface ReplanDraftViewProps {
   staleRetryPending?: boolean;
   /** 새 세션 요청 실패 — 낡음 안내 아래 한 줄(INV-4). */
   staleRetryFailed?: boolean;
+  /** 실패 얼굴 [다시 시도](같은 입력으로 새 세션)가 실패했다 — 부제를 시작 실패 문장으로 바꾼다(INV-4). */
+  retryFailed?: boolean;
   /** 넣으려던 장소가 초안에 없다는 문장(페이지가 만든다) — 없으면 안 그린다. */
   includeMissingText?: string | null;
   onBack: () => void;
   onManualEdit: () => void;
   onApply: () => void;
+  /** 대안 없음 [조건 바꿔 다시 짜기]·실패 [다시 시도] — 무엇을 하는지(시드 i04 · 같은 입력 새 세션)는 페이지 몫. */
   onReopenRequest: () => void;
   onPressCandidates?: (slotKey: string) => void;
 }
@@ -133,6 +137,7 @@ export function ReplanDraftView({
   onRetryStale,
   staleRetryPending,
   staleRetryFailed,
+  retryFailed = false,
   includeMissingText = null,
   onBack,
   onManualEdit,
@@ -146,7 +151,9 @@ export function ReplanDraftView({
     variant === 'noSolution'
       ? { title: NO_SOLUTION_TITLE, description: noSolutionDescription ?? '' }
       : variant === 'failed'
-        ? FAILED_NOTICE
+        ? retryFailed
+          ? { ...FAILED_NOTICE, description: RETRY_FAILED }
+          : FAILED_NOTICE
         : applyFailed
           ? APPLY_FAILED_NOTICE
           : draftNotice;
@@ -211,7 +218,7 @@ export function ReplanDraftView({
                   testID="planb-draft-stale-failed"
                   className="font-noto text-label text-muted"
                 >
-                  {STALE_RETRY_FAILED}
+                  {RETRY_FAILED}
                 </Text>
               ) : null}
               {/* 보조 버튼 자리·모양은 [내일 일정 다시 짜기]와 같다 — CTA 바는 1~2버튼이라 안내 아래에 둔다.
