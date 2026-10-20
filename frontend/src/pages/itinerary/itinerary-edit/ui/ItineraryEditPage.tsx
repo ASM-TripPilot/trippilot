@@ -24,6 +24,7 @@ import {
   getGetTripsTripIdItineraryQueryKey,
   getGetTripsTripIdItineraryQueryOptions,
   useGetTripsTripIdItinerary,
+  getPutTripsTripIdItineraryMutationOptions,
   useGetTripsTripIdVisitsDaysDay,
   usePutTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
@@ -71,6 +72,9 @@ const SAVE_GENERATING_NOTE =
   '일정을 만드는 중이에요. 잠시 후 다시 시도해 주세요';
 const SAVE_ERROR_NOTE = '일정을 저장하지 못했어요. 잠시 후 다시 시도해 주세요';
 const SAVED_TOAST = '일정을 저장했어요';
+// 일정 PUT 진행 중 판정 키 — 장소 추가 화면(스택 위, 편집기는 언마운트 안 됨)의 PUT 도 같은 키다.
+const PUT_MUTATION_KEY =
+  getPutTripsTripIdItineraryMutationOptions().mutationKey;
 
 // 핀이 없을 때 지도 중심 — 서울 시청(LiveHubView 선례). {0,0} 은 기니만 바다(null-island)라 무의미하다.
 const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };
@@ -187,6 +191,9 @@ export function ItineraryEditPage({
 
   function handleSave(): void {
     if (inFlightRef.current) return;
+    // 장소 추가 PUT 이 응답 전이면 무반응 — 지금 초안엔 그 장소가 없어 전체 교체 PUT 이 추가분을 지운다(TRIP-1519).
+    // 응답이 오면 편집기 초안이 갱신돼(시드/삽입) 이어 누른 저장은 추가분을 싣는다. 진행 표시는 Figma 공백.
+    if (queryClient.isMutating({ mutationKey: PUT_MUTATION_KEY }) > 0) return;
     inFlightRef.current = true;
     setSaveError(null);
     // 미지정(startAt null) 슬롯은 buildEditItineraryRequest 가 요청에서 뺀다 — 몇 곳이 빠지는지 미리
