@@ -110,6 +110,9 @@ class LlmFeature(Enum):
     # ≤2)와 인자를 고른다. 출력은 닫힌 도구 이름·문자열 인자뿐이라 장소를 만들 수 없다(INV-1) — 사용자에게 보일 문장은
     # DIALOGUE_ANSWER 가 도구 결과(Facts)로 짓는다. 배정(feature_models)이 곧 켜기다 — 미배정이면 계획 단계를 조립하지 않는다.
     DIALOGUE_PLAN = "DIALOGUE_PLAN"
+    # 장소 탐색의 말 → 장소 뷰 `poi_public` SELECT 한 문장(NL2SQL, 2026-10-20 사용자 결정). 출구 게이트가 허용 목록으로 거르고,
+    # DB 롤은 그 뷰만 읽기 전용으로 읽는다(V2.77). 결과 행은 등록 POI 라 INV-1 그대로. 배정이 곧 켜기 — 미배정이면 반경 탐색만.
+    DIALOGUE_SQL = "DIALOGUE_SQL"
 
 
 class ModelTier(Enum):

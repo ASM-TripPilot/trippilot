@@ -13,6 +13,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import json
 import uuid
 from collections.abc import Mapping
@@ -31,6 +33,7 @@ from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.trigger import TriggerKind
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_LENGTH, _violates
 from trippilot.llm_gateway.workers.dialogue_answer import NEED_TRIP_TEXT, fallback_answer_text
+from trippilot.poi_curation.adapters.pg_place_sql import PlaceRow
 from trippilot.orchestrator import dialogue_handlers as dh
 from trippilot.agents.planb.rag import _REASON_KO
 from trippilot.orchestrator.dialogue_handlers import (
@@ -1084,6 +1087,16 @@ def test_explore_night_theme_puts_night_view_and_nightlife_first() -> None:
     assert set(_names_of(facts)[:2]) == {"황령산 야경", "루프탑 바"}
 
 
+@pytest.mark.parametrize("theme", ["가볼 만한", "실내 데이트", "놀거리"])
+def test_explore_sightseeing_theme_without_a_category_leaves_out_restaurants(theme: str) -> None:
+    names = _names_of(_explore({"region": "부산", "theme": theme})[0])
+    assert names and not any("식당" in n for n in names) and "인기 카페" in names
+
+
+def test_explore_food_category_keeps_restaurants_even_with_a_sightseeing_word() -> None:
+    assert any("식당" in n for n in _names_of(_explore({"region": "부산", "category": "FOOD", "theme": "데이트"})[0]))
+
+
 def test_explore_category_filters_the_pool() -> None:
     facts, _ = _explore({"region": "부산", "category": "CAFE"})
     assert _names_of(facts) == ["인기 카페", "바다 전망 카페"]
@@ -1134,6 +1147,91 @@ def test_alternative_candidates_need_a_pick_each_but_explore_candidates_have_non
     with pytest.raises(ValueError):
         _text_facts(intent=Intent.SUGGEST_ALTERNATIVE, kind=AnswerKind.CANDIDATES, payload=cand)
     assert _text_facts(intent=Intent.EXPLORE_PLACES, kind=AnswerKind.CANDIDATES, payload=cand).quick_replies == ()
+
+
+class _PlaceSql:
+    """PlaceSqlLookup 대역 — 부른 인자를 남기고 정해 둔 행(None = 폴백)을 돌려준다."""
+
+    def __init__(self, rows) -> None:
+        self.rows, self.calls = rows, []
+
+    def lookup(self, utterance, arguments, trace_id, now, *, timeout_sec):
+        self.calls.append((utterance, dict(arguments), timeout_sec))
+        return self.rows
+
+
+def _row(name: str, category: str = "명소", sigungu: str | None = "종로구", *, sido: str = "서울특별시",
+         trending: bool = False, nightlife: bool = False) -> PlaceRow:
+    return PlaceRow(poi_id="s-" + name, name=name, category=category, sido=sido, sigungu=sigungu, trending=trending,
+                    nightlife=nightlife)
+
+
+def _explore_sql(arguments: dict, rows, *, utterance: str = "서울 요즘 핫한 곳", remaining_ms: int = 7000,
+                 pool: CandidatePool = _X_POOL) -> tuple[Facts, _PlaceSql, _PoolBuilder]:
+    port, builder = _PlaceSql(rows), _PoolBuilder(pool)
+    ctx = replace(_ctx(_EMPTY_SNAP, arguments, ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=builder, place_sql=port),
+                       remaining_ms=remaining_ms), utterance=utterance)
+    return _run(_EXPLORE, ctx), port, builder
+
+
+def test_explore_sql_runs_beside_the_radius_pool_and_wins_when_it_has_rows() -> None:
+    rows = [_row("경복궁", trending=True), _row("클럽 엑스", "야경", "마포구", nightlife=True), _row("북촌", "문화")]
+    facts, port, builder = _explore_sql({"region": "서울", "theme": "요즘 핫한", "category": "SIGHT"}, rows)
+    (said, args, timeout), = port.calls
+    assert said == "서울 요즘 핫한 곳" and args == {"region": "서울", "theme": "요즘 핫한", "category": "명소"}  # 종류는 한글로
+    assert timeout == pytest.approx(2.8) and builder.requests  # 반경 풀도 나란히 돈다(실패 대비)
+    assert _names_of(facts) == ["경복궁", "북촌"]  # 나이트라이프는 밤 주제일 때만
+    assert [c["reason"] for c in facts.payload["candidates"]] == ["요즘 인기", "문화"]
+    assert all(c["distanceRange"] is None for c in facts.payload["candidates"]) and _types(facts) == ["OPEN_PLACE"] * 2
+    assert facts.detail == {"anchor": "서울", "anchor_kind": "region"}  # 지역 표 이름 — 발화 원문 아님(INV-2)
+
+
+def test_explore_sql_keeps_only_rows_in_the_said_city() -> None:
+    rows = [_row("해운대해수욕장", sido="부산광역시", sigungu="해운대구"), _row("경복궁"), _row("광안리", sido="부산광역시", sigungu="수영구")]
+    facts, _, _ = _explore_sql({"region": "부산"}, rows, utterance="부산 가볼 만한 곳")
+    assert _names_of(facts) == ["해운대해수욕장", "광안리"]
+
+
+def test_explore_sql_argument_region_wins_over_another_region_in_the_utterance() -> None:
+    # 계획 경로: "부산 카페랑 서울 맛집" 이 도구 둘로 나뉘고 이 몫은 region=부산 — SQL 이 발화의 서울을 읽어도 서울 행은 버린다
+    rows = [_row("서울 카페 A", "카페"), _row("서울 카페 B", "카페")]
+    facts, port, _ = _explore_sql({"region": "부산", "category": "CAFE"}, rows, utterance="부산 카페랑 서울 맛집")
+    assert port.calls[0][1]["region"] == "부산"
+    assert facts.detail == {"anchor": "부산", "anchor_kind": "region"}
+    assert _names_of(facts) == ["인기 카페", "바다 전망 카페"]  # 반경 탐색 결과(부산 중심)
+
+
+def test_explore_sql_runs_from_arguments_alone_on_the_plan_path() -> None:
+    facts, port, _ = _explore_sql({"region": "서울", "theme": "요즘 핫한"}, [_row("경복궁", trending=True)], utterance="")
+    assert port.calls and port.calls[0][0] == "" and _names_of(facts) == ["경복궁"]
+
+
+@pytest.mark.parametrize("rows", [None, []])
+def test_explore_sql_failure_or_zero_rows_falls_back_to_the_radius_pool(rows) -> None:
+    facts, port, _ = _explore_sql({"region": "부산", "theme": "요즘 핫한"}, rows)
+    assert port.calls and set(_names_of(facts)[:2]) == {"인기 식당", "인기 카페"}  # 반경 탐색 결과(INV-4)
+
+
+def test_explore_sql_finds_a_district_the_region_table_does_not_know() -> None:
+    rows = [_row("망원한강공원", sigungu="마포구"), _row("경의선숲길", sigungu="마포구"), _row("여의도공원", sigungu="영등포구")]
+    facts, _, builder = _explore_sql({"region": "망원동"}, rows, utterance="망원동 산책할 곳")
+    assert builder.requests == [] and facts.status is FactStatus.OK  # 표에 없는 지역 — 반경은 못 돈다
+    assert facts.detail == {"anchor": "마포구", "anchor_kind": "region"}  # 행의 구군(DB 값)이 앵커
+
+
+def test_explore_sql_with_nothing_found_for_an_unknown_district_stays_empty() -> None:
+    facts, _, _ = _explore_sql({"region": "망원동"}, [])
+    assert facts.status is FactStatus.EMPTY and facts.detail == {}
+
+
+def test_explore_sql_is_not_planned_without_a_said_region() -> None:
+    _, port, _ = _explore_sql({"theme": "요즘 핫한"}, [_row("경복궁")], utterance="요즘 핫한 곳")  # 일정 근처는 거리가 핵심 — 반경만
+    assert port.calls == []
+
+
+def test_explore_sql_skips_the_llm_when_the_turn_has_too_little_time_left() -> None:
+    facts, port, _ = _explore_sql({"region": "부산"}, [_row("경복궁")], remaining_ms=1500)  # 1.5s × 0.4 = 0.6s < 하한
+    assert port.calls == [] and "인기 카페" in _names_of(facts)
 
 
 def test_explore_asks_for_a_region_only_when_no_anchor_can_be_found() -> None:

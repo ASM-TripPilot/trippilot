@@ -196,6 +196,7 @@ from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelecti
 from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.place_fees import load_fee_table
+from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql
 from trippilot.poi_curation.pool_builder import (
     CandidatePoolBuilder, base_radius_km, restrict_pool_to_target_role, widened_radius_km)
 from trippilot.orchestrator import schedule_coordinator as core
@@ -4078,6 +4079,7 @@ def build_orchestrator(
     bank_embedding: EmbeddingPort | None = None,
     bank_vectors: BankVectors | None = None,
     memory_store: MemoryStorePort | None = None,
+    place_sql: PgPlaceSql | None = None,  # 도우미 장소 조회(NL2SQL) 실행기 — DSN 은 main.py, 켜기는 DIALOGUE_SQL 배정
     dialogue_orchestrator_enabled: bool = False,  # 도우미 턴을 AI 안에서 끝낸다(ANSWER) — env 해석은 main.py
     shadow_rate: float = 1.0,  # 3단 라우터 섀도 표본율 (DEV 1.0 · 운영 0.2)
     shadow_rng: random.Random | None = None,  # 테스트 결정론용, None 이면 SystemRandom
@@ -4261,7 +4263,7 @@ def build_orchestrator(
         embedding=embedding if embedding is not None else UnwiredEmbedding(), bank_store=bank_store,
         bank_ready=lambda: bank_index.indexed, bank=bank, confident_intent=router.confident_intent,
         providers=providers, pool_builder=pool_builder, rag=rag, memory_store=memory_store, clock=clock, tz=tz,
-        shadow_rate=shadow_rate, shadow_rng=shadow_rng,
+        shadow_rate=shadow_rate, shadow_rng=shadow_rng, place_sql=place_sql,
     ) if dialogue_orchestrator_enabled else None
     return WiredItineraryOrchestrator(
         orchestrator, provider, poi_db, travel, tz=tz,
@@ -4459,6 +4461,7 @@ def build_dev_app(
     bank_embedding: EmbeddingPort | None = None,
     bank_vectors: BankVectors | None = None,
     memory_store: MemoryStorePort | None = None,  # 도우미 장기 기억 스토어 — None 이면 InMemory
+    place_sql: PgPlaceSql | None = None,  # 도우미 장소 조회(NL2SQL) 실행기 — None 이면 장소 탐색은 반경 풀만
     dialogue_orchestrator_enabled: bool = False,  # 도우미 턴을 AI 안에서 끝낸다 — env 해석은 main.py, 기본 off(종전 해석 경로)
     shadow_rate: float = 1.0,
     shadow_rng: random.Random | None = None,
@@ -4519,6 +4522,7 @@ def build_dev_app(
         bank_embedding=bank_embedding,
         bank_vectors=bank_vectors,
         memory_store=memory_store,
+        place_sql=place_sql,
         dialogue_orchestrator_enabled=dialogue_orchestrator_enabled,
         shadow_rate=shadow_rate,
         shadow_rng=shadow_rng,

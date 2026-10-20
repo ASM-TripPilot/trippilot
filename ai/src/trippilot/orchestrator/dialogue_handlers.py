@@ -28,8 +28,9 @@ from __future__ import annotations
 
 import re
 import uuid
+from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, tzinfo
 from enum import Enum
 
@@ -45,8 +46,7 @@ from trippilot.domain.common import (
 )
 from trippilot.domain.dialogue import ArgumentKind
 from trippilot.domain.intent import DIALOGUE_INTENTS, Intent
-from trippilot.domain.llm import CandidatePool
-from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory
+from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory, counts_as_food
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.region_centers import region_center
 from trippilot.domain.transit import TransitPurpose
@@ -56,6 +56,7 @@ from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEX
 from trippilot.orchestrator.arguments import extract_kind
 from trippilot.orchestrator.intent_router import normalize
 from trippilot.orchestrator.opportunity import _displayable
+from trippilot.orchestrator.place_sql import PlaceSqlLookup
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder, restrict_pool_to_target_role
 from trippilot.providers.base import Provider
 from trippilot.providers.transit import _format_distance_range
@@ -200,6 +201,7 @@ class HandlerPorts:
     transit: Provider | None = None  # TransitProvider.fetch({origin, destination, mode, now, purpose})
     pool_builder: CandidatePoolBuilder | None = None
     planb: PlanBAgent | None = None
+    place_sql: PlaceSqlLookup | None = None  # 장소 탐색 NL2SQL — DIALOGUE_SQL 배정 + 장소 DB DSN 이 있을 때만
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,6 +215,7 @@ class TurnContext:
     trace_id: TraceId
     remaining_ms: Callable[[], int]
     ports: HandlerPorts = field(default_factory=HandlerPorts)
+    utterance: str = ""  # 사용자 발화 원문 — 장소 탐색 NL2SQL 의 재료로만 쓴다(Facts 에는 싣지 않는다, INV-2)
 
     def __post_init__(self) -> None:
         if self.now.tzinfo is None:
@@ -1059,10 +1062,17 @@ def _assemble_alternatives(ctx: TurnContext, results: Mapping[str, TaskResult]) 
 # 셋 다 없으면 지역을 묻는 고정 문장. region 을 말했는데 표에 없으면 EMPTY — 다른 곳(여행 목적지)으로 바꿔 찾지 않는다.
 
 _NEAR_SLOT_KM = 3.0  # 일정 근처 탐색 반경
+_FANOUT_SQL_CAP_S, _SQL_MIN_S = 2.8, 0.8  # NL2SQL LLM 시한 상한·하한 — 하한보다 적게 남으면 반경 탐색만
+# 시·도 급 지역 표 이름 — NL2SQL 결과를 이 시·도로 다시 거른다(분류 인자가 이긴다: 계획 경로에서 한 발화가 도구 둘로 나뉘면 발화의
+# 다른 지역을 SQL 이 읽을 수 있다 — "부산 실내 갈 데랑 서울 맛집"의 부산 몫이 서울을 찾지 않게). 구·동 급은 행의 시도로 못 가른다.
+_SIDO_LEVEL = frozenset({"서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "제주"})
 _PER_CATEGORY = 2  # 종류를 안 정했을 때 한 종류가 후보를 다 차지하지 않게(서울 반경 풀의 89% 가 FOOD — pool_builder._fair_cut 註)
 # 밤·야경 주제 — 이때만 나이트라이프 태그 장소를 권한다(평소엔 기회 카드와 같이 뺀다, opportunity._eligible)
 _NIGHT = re.compile(r"야경|야간|밤|나이트|(?<![가-힣])바(?![가-힣])|술집|펍|클럽|칵테일|와인|이자카야")
 _THEME_WORD = re.compile(r"[가-힣A-Za-z]{2,}")
+# 구경·관광·놀거리 주제 — 종류를 안 정했으면 식당을 뺀다("가볼 만한 곳"에 기사식당이 섞였다 · 계획 경로 "실내 데이트할 곳"에
+# 몸국·반점이 섞였다, 2026-10-20 테스트 화면·실 스택 E2E). 먹을 곳을 말하면 분류가 category=FOOD 를 채우므로 여기 안 온다.
+_SIGHTSEEING = re.compile(r"가\s?볼|구경|볼거리|관광|명소|놀러|둘러|놀\s?거리|할\s?거리|실내|데이트")
 
 
 @dataclass(frozen=True, slots=True)
@@ -1102,10 +1112,11 @@ def _explore_rank(pois: Iterable[Poi], category: str | None, theme: str | None) 
     저장 수 → 별점 → 영업시간 보유 → poi_id. 숙소·표시 불가 이름은 뺀다."""
     night = bool(theme and _NIGHT.search(theme)) or category == PoiCategory.NIGHT_VIEW.value
     words = tuple(_THEME_WORD.findall(theme or ""))
+    no_food = category is None and bool(theme and _SIGHTSEEING.search(theme))
 
     def fits(p: Poi) -> bool:
         return (p.category is not PoiCategory.STAY and (category is None or p.category.value == category)
-                and (night or NIGHTLIFE_TAG not in p.tags) and _displayable(p.name))
+                and (night or NIGHTLIFE_TAG not in p.tags) and _displayable(p.name) and not (no_food and counts_as_food(p)))
 
     def key(p: Poi) -> tuple:
         is_night = p.category is PoiCategory.NIGHT_VIEW or NIGHTLIFE_TAG in p.tags
@@ -1125,11 +1136,44 @@ def _explore_rank(pois: Iterable[Poi], category: str | None, theme: str | None) 
     return picked
 
 
+def _explore_by_sql(ctx: TurnContext, anchor: _Anchor | None, category: str | None, theme: str | None) -> HandlerTask:
+    """NL2SQL 탐색 작업 — 반경 탐색과 나란히 돈다(팬아웃). 행은 등록 POI 의 보여 줄 칸뿐(`PlaceRow`, INV-1).
+    거리는 싣지 않는다(지역 탐색은 지역 중심에서의 거리가 뜻이 없다 — 반경 경로와 같다). 앵커가 없으면(지역 표에 없는 동네·구)
+    행의 구군 이름(DB 값)을 앵커로 쓴다 — 발화 원문은 사실 칸에 싣지 않는다(INV-2)."""
+    port = ctx.ports.place_sql
+    args = {k: v for k, v in (("region", ctx.arguments.get("region")), ("theme", theme),
+                              ("category", _CATEGORY_KO.get(category or "", category))) if v}
+    night = bool(theme and _NIGHT.search(theme)) or category == PoiCategory.NIGHT_VIEW.value
+    sido = anchor.label if anchor is not None and anchor.kind == "region" and anchor.label in _SIDO_LEVEL else None
+
+    def fn() -> dict:
+        budget = min(_FANOUT_SQL_CAP_S, ctx.remaining_ms() * 0.4 / 1000)  # 팬아웃 예산(오케스트레이터 min(3s, 잔여×0.4)) 안
+        if budget < _SQL_MIN_S:
+            return {"status": "UNAVAILABLE", "reason": "budget"}
+        rows = port.lookup(ctx.utterance, args, ctx.trace_id, ctx.now, timeout_sec=budget)
+        if rows is None:
+            return {"status": "UNAVAILABLE", "reason": "place_sql"}
+        picked = [r for r in rows if _displayable(r.name) and (night or not r.nightlife)
+                  and (sido is None or (r.sido or "").startswith(sido))][:MAX_CANDIDATES]
+        areas = Counter(r.sigungu for r in picked if r.sigungu).most_common(1)
+        label = anchor.label if anchor is not None else (areas[0][0] if areas else None)
+        return {"status": "OK", "anchor": label, "candidates": [{
+            "poi_id": r.poi_id, "name": r.name, "category": r.category, "distance_range": None,
+            "reason": "요즘 인기" if r.trending else r.category,
+        } for r in picked]}
+
+    return HandlerTask("explore_sql", fn)
+
+
 def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     anchor, builder = _explore_anchor(ctx), ctx.ports.pool_builder
-    if anchor is None or builder is None:
-        return ()
     category, theme = ctx.arguments.get("category"), ctx.arguments.get("theme")
+    # NL2SQL 은 사용자가 지역을 말했을 때만 — 일정 근처 탐색은 거리가 핵심이라 반경 풀이 맞다(뷰에 좌표가 없다)
+    # 발화가 없어도(계획 경로 — 인자만 넘어온다) 인자로 SQL 을 쓴다. 발화는 보조 재료이고 지역·종류·주제는 인자가 이긴다
+    sql = (_explore_by_sql(ctx, anchor, category, theme),) if (
+        ctx.ports.place_sql is not None and ctx.arguments.get("region")) else ()
+    if anchor is None or builder is None:
+        return sql
 
     def fn() -> dict:
         center = anchor.center
@@ -1152,7 +1196,7 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
         } for p in _explore_rank(pool.pois, category, theme)]
         return {"status": "OK", "candidates": candidates}
 
-    return (HandlerTask("explore", fn),)
+    return (HandlerTask("explore", fn), *sql)
 
 
 def _assemble_explore(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts:
@@ -1160,6 +1204,12 @@ def _assemble_explore(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Fa
     home = (_itinerary_action(ctx.snapshot),) if ctx.snapshot.trip is not None else (_action("CREATE_TRIP"),)
     said = ctx.arguments.get("region")
     anchor = _explore_anchor(ctx)
+    # NL2SQL 결과가 있으면 그것을 쓴다(지역 표에 없는 동네·구도 찾는다) — 실패·0건이면 반경 탐색 결과(INV-4)
+    by_sql = _value(results, "explore_sql")
+    if not (by_sql and by_sql.get("status") == "OK" and by_sql.get("candidates")):
+        by_sql = None
+    if anchor is None and by_sql is not None and by_sql.get("anchor"):
+        anchor = _Anchor(by_sql["anchor"], "region", None, 0.0)
     if anchor is None and said:  # 말한 지역이 표에 없다 — 없는 곳이 아니라 "아직 못 찾는 지역"이다
         # 발화 원문은 사실 칸에 싣지 않는다 — 시각 허용 집합(INV-2)이 Facts 를 보고, 답변 프롬프트는 발화를 따로 받는다
         return _text_facts(intent, FactStatus.EMPTY, home, notes=("지역 미확인 — 그 지역은 아직 찾아 줄 수 없다(없다는 뜻이 아니다)",))
@@ -1168,7 +1218,7 @@ def _assemble_explore(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Fa
                      next_actions=home, quick_replies=(), template_text=EXPLORE_ASK_REGION_TEXT)
     # theme(발화 자유문)은 싣지 않는다 — "22:00 이후 야경"의 시각이 Facts 시각으로 허용된다(INV-2). 답변 프롬프트는 발화를 따로 받는다
     detail = {"anchor": anchor.label, "anchor_kind": anchor.kind}
-    value = _value(results, "explore")
+    value = by_sql or _value(results, "explore")
     if value is None or value.get("status") != "OK":
         return _text_facts(intent, FactStatus.UNAVAILABLE, home, notes=("장소 탐색 미확인",), detail=detail)
     candidates = [c for c in value.get("candidates", ()) if isinstance(c, Mapping)][:MAX_CANDIDATES]
