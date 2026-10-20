@@ -30,7 +30,7 @@ import re
 import uuid
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time, timedelta, tzinfo
 from enum import Enum
 
@@ -621,7 +621,7 @@ _NEED_TRIP_ACTIONS = ("CREATE_TRIP", "OPEN_STAY_SEARCH")
 
 def needs_trip(intent: Intent) -> bool:
     """여행이 있어야 넘길 화면이 있는 의도 — BE IntentDispatcher.NEEDS_TRIP 과 같은 집합."""
-    return intent not in (Intent.STYLE_ANALYSIS, Intent.EXPLORE_PLACES, Intent.OUT_OF_SCOPE)
+    return intent not in (Intent.STYLE_ANALYSIS, Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES, Intent.OUT_OF_SCOPE)
 
 
 def need_trip_facts(intent: Intent) -> Facts:
@@ -1462,6 +1462,38 @@ def edit_arguments(ctx: TurnContext) -> dict[str, str]:
     return out
 
 
+# RECOMMEND_PLACES — "골라 줘". 탐색과 같은 앵커·풀·되묻기(탐색 플랜·조립을 그대로 부른다 — 탐색 코드는 손대지 않는다)에서
+# 몇 곳만 고른다. 탐색과 다른 것은 둘뿐이다:
+# 1) 반경 결과가 있으면 그것을 쓴다. 반경 풀은 `_explore_rank` 로 요즘 인기 → 저장 수 → 별점 순이지만 NL2SQL 행의 인기 신호는
+#    '요즘 인기' 태그 하나라 고르기 순서로 약하다(2026-10-20 테스트 화면: "서울 카페 추천"이 가나다순·법인명 카페로 나왔다).
+#    반경 결과가 없을 때(지역 표에 없는 동네)만 SQL 결과를 '요즘 인기' 먼저로 다시 세워 쓴다.
+# 2) 말한 개수(없으면 3)로 자른다. 후보 카드가 아닌 답(되묻기·빈 결과·행사 문장)은 의도만 바꿔 그대로 낸다.
+_RECOMMEND_DEFAULT = 3
+
+
+def _recommend_count(ctx: TurnContext) -> int:
+    said = ctx.arguments.get("count")
+    return int(said) if said in {"1", "2", "3", "4", "5"} else _RECOMMEND_DEFAULT
+
+
+def _assemble_recommend(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts:
+    intent = Intent.RECOMMEND_PLACES
+    radius, by_sql = _value(results, "explore"), _value(results, "explore_sql")
+    if radius and radius.get("status") == "OK" and radius.get("candidates"):
+        results = {k: v for k, v in results.items() if k != "explore_sql"}
+    elif by_sql and by_sql.get("status") == "OK" and by_sql.get("candidates"):
+        ranked = sorted(by_sql["candidates"], key=lambda c: c.get("reason") != "요즘 인기")  # 안정 정렬 — 나머지는 SQL 순서
+        results = {**results, "explore_sql": TaskResult.ok("explore_sql", {**by_sql, "candidates": ranked})}
+    facts = _assemble_explore(ctx, results)
+    if facts.kind is not AnswerKind.CANDIDATES:
+        asked = facts.template_text == EXPLORE_ASK_REGION_TEXT
+        return replace(facts, intent=intent, template_text=facts.template_text if asked else _template(intent, facts.status))
+    n = _recommend_count(ctx)
+    return replace(facts, intent=intent, places=facts.places[:n], payload={"candidates": facts.payload["candidates"][:n]},
+                   next_actions=facts.next_actions[:n], template_text=_template(intent, facts.status),
+                   detail={**facts.detail, "pick_count": n})
+
+
 # ── 표 ───────────────────────────────────────────────────────────────────────
 
 
@@ -1517,6 +1549,8 @@ HANDLERS: Mapping[Intent, Handler] = {
     Intent.STYLE_ANALYSIS: _handler(Intent.STYLE_ANALYSIS, _handoff_to(Intent.STYLE_ANALYSIS, "OPEN_STYLE")),
     Intent.EXPLORE_PLACES: _handler(Intent.EXPLORE_PLACES, _assemble_explore, _plan_explore,
                                     ask=lambda ctx: ("region", EXPLORE_ASK_REGION_TEXT) if explore_needs_region(ctx) else None),
+    Intent.RECOMMEND_PLACES: _handler(Intent.RECOMMEND_PLACES, _assemble_recommend, _plan_explore,
+                                      ask=lambda ctx: ("region", EXPLORE_ASK_REGION_TEXT) if explore_needs_region(ctx) else None),
 }
 
 if set(HANDLERS) != DIALOGUE_INTENTS:  # 의도가 늘면 기동이 멈춘다 — 조용한 빈칸 금지 (DE §2.4)

@@ -326,6 +326,22 @@ ARGUMENT_TABLE: dict[Intent, tuple[ArgumentSpec, ...]] = {
               "'요즘 핫한'·'야경'·'분위기 좋은 바' 같은 분위기·조건",
               lands_in="dialogue_handlers._explore_rank (태그 정렬)"),
     ),
+    Intent.RECOMMEND_PLACES: (
+        # 탐색과 같은 인자 + 몇 곳. 앵커·되묻기도 탐색과 같다(`dialogue_handlers._plan_recommend` 가 탐색 플랜을 그대로 쓴다).
+        # count 는 문자열 enum 이다 — 계획 도구 인자는 문자열 스칼라만 받는다(plan_tools.validate_plan_tools).
+        _spec("region", (_RG,), False,
+              "어느 지역에서 고를지. 없으면 여행 일정 근처에서 고른다",
+              lands_in="dialogue_handlers._explore_anchor (지역 중심 좌표 표)"),
+        _spec("category", (_EN,), False, "장소 종류",
+              choices=tuple(c.value for c in PoiCategory if c is not PoiCategory.STAY),
+              lands_in="dialogue_handlers._plan_explore (풀 필터)"),
+        _spec("theme", (_FT,), False,
+              "'조용한'·'야경'·'데이트' 같은 분위기·조건",
+              lands_in="dialogue_handlers._explore_rank (태그 정렬)"),
+        _spec("count", (_EN,), False,
+              "몇 곳을 골라 달라는지('하나'면 1). 말하지 않았으면 비운다",
+              choices=("1", "2", "3", "4", "5"), lands_in="dialogue_handlers._assemble_recommend (자르기)"),
+    ),
 }
 
 

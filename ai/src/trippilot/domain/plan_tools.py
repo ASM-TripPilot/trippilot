@@ -63,6 +63,8 @@ PLAN_TOOLS: Mapping[Intent, PlanTool] = {
     Intent.SUGGEST_ALTERNATIVE: PlanTool("일정의 한 곳 대신 갈 근처 등록 장소 최대 5곳", ("poi_info", "pool_builder", "planb")),
     Intent.EXPLORE_PLACES: PlanTool("지역 또는 일정 근처의 등록 장소 최대 5곳(명소·맛집·카페·야경·자연·쇼핑·문화·액티비티, "
                                     "요즘 인기 우선) — 예약·가격·생활 시설은 없다", ("pool_builder",)),
+    Intent.RECOMMEND_PLACES: PlanTool("'추천·골라 줘'에 — 지역 또는 일정 근처 등록 장소 중 요즘 인기·저장 많은 순으로 고른 1~5곳",
+                                      ("pool_builder",)),
 }
 
 

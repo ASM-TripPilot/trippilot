@@ -63,7 +63,7 @@ def test_every_tool_is_exposed_when_every_port_is_wired_with_a_trip_tag_on_trip_
 
 @pytest.mark.parametrize(("missing", "hidden"), [
     ("weather", {Intent.GET_WEATHER}),  # 운영에서 유일하게 빠질 수 있는 포트(providers.get)
-    ("pool_builder", {Intent.EXPLORE_PLACES, Intent.SUGGEST_ALTERNATIVE}),
+    ("pool_builder", {Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES, Intent.SUGGEST_ALTERNATIVE}),
     ("poi_info", {Intent.GET_WEATHER, Intent.GET_DISTANCE, Intent.GET_POI_INFO, Intent.SUGGEST_ALTERNATIVE}),
 ])
 def test_a_tool_whose_port_is_unwired_is_not_offered(missing: str, hidden: set[Intent]) -> None:
