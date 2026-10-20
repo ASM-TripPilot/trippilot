@@ -3081,7 +3081,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       // c08 이 온보딩 체인에서 실제로 주입하는 Figma 목적 문구(TRIP-459) — 프리뷰도 정본과 맞춘다.
-      // TRIP-717: Figma 1296:1208 2줄 고정 개행(\n) 반영.
+      // TRIP-717: Figma 4975:3306 2줄 고정 개행(\n) 반영.
       <LocationPreprompt
         purposeContext={
           '내 주변을 알면 더 잘 맞는 곳을 추천하고\n길 안내도 막힘없이 이어져요'
@@ -3098,7 +3098,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'c08 · 권한 거부',
     login: null,
     render: () => (
-      // TRIP-717: 거부 안내는 Figma 1297:1208 카드형(hairline 테두리 + 청록 아이콘 + 15 ink),
+      // TRIP-717: 거부 안내는 Figma 4973:3306 카드형(hairline 테두리 + 청록 아이콘 + 15 ink),
       // 닫기 × 없음(onDismissNotice/noticeDismissed 폐기). -denied-dismissed 키는 함께 삭제됨.
       <LocationPreprompt
         purposeContext="내 주변 숙소 탐색"
@@ -3109,7 +3109,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
-    // TRIP-1108 — 위치 카드 다음 온보딩 단계(Figma 4774:2960). 상태 프레임은 default 하나뿐이다.
+    // TRIP-1108 — 위치 카드 다음 온보딩 단계(Figma 4976:3306). 상태 프레임은 default 하나뿐이다.
     key: 'onboarding-push-default',
     band: 'c',
     label: 'c08-push · 기본',
@@ -3804,7 +3804,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         }
         onPressComplete={noop}
         onPressSkip={noop}
-        // TRIP-1072 — Figma default(1557:1738)처럼 [방문 추가] 버튼을 세운다.
+        // TRIP-1072 — Figma default(5000:3227)처럼 [방문 추가] 버튼을 세운다.
         onPressSpontaneous={noop}
         onPressBack={noop}
         onPressReflection={noop}
@@ -4036,7 +4036,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // j01 방문 시각 수정 시트(TRIP-1069 · Figma 4524:2383) — 부산시립미술관 완료 카드에서 연 모습. 시트는
+  // j01 방문 시각 수정 시트(TRIP-1069 · Figma 4964:3257) — 부산시립미술관 완료 카드에서 연 모습. 시트는
   // 서버 순간(Z)을 받아 서울 시계로 시드한다(06:40Z→15:40 · 07:30Z→16:30). 시트 실제 열림·딤·셀 스크롤·
   // 제스처 충돌은 jest 사각(바텀시트 목 통과형) — 여기가 6-b 육안 자리(AC-11).
   {
@@ -5869,7 +5869,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => renderH07PartialShell(foldedPreviewCells(7, 4)),
   },
-  // h11 같이 결과(CoPick 완료, TRIP-796) — Figma `4257:2148` 대조용. 공용 지도+시트 셸에 CoPick 5슬롯
+  // h11 같이 결과(CoPick 완료, TRIP-796) — Figma `4971:3292` 대조용. 공용 지도+시트 셸에 CoPick 5슬롯
   // (비고정 4 + 고정 숙소 1)을 얹는다. 고정 숙소는 단일 시각 `21:00`+부제+고정 배지, 비고정은 시각
   // 범위 칩만(다른 후보 링크 없음 · h08 과 차이). meta 는 고정 숙소만 뺀 4 → `4곳`(TRIP-1428). 배열에서 fallback
   // 3키 **직전**(h11 그룹 첫 자리)에 둬 안정 정렬이 copick→fallback 순서를 내게 한다
@@ -7384,7 +7384,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressPhotoSettings: noop,
       }),
   },
-  // i01 메모 시트(TRIP-1117, Figma 4741:2833) — 중간 허브 위에 페이지처럼 형제 시트를 얹고 FAB 를 숨긴다.
+  // i01 메모 시트(TRIP-1117, Figma 4952:3098) — 중간 허브 위에 페이지처럼 형제 시트를 얹고 FAB 를 숨긴다.
   // 저장본을 시드로 넣어 "작성 중" 모습을 낸다(입력칸은 첫 마운트에만 시드를 읽는다).
   {
     key: 'live-hub-memo-sheet',
@@ -7440,7 +7440,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       </>
     ),
   },
-  // i01 메모 저장됨(TRIP-1117, Figma 4741:4650) — 시트 없이 관람 중 카드 버튼 줄 아래 메모 박스.
+  // i01 메모 저장됨(TRIP-1117, Figma 4954:3123) — 시트 없이 관람 중 카드 버튼 줄 아래 메모 박스.
   {
     key: 'live-hub-memo-saved',
     band: 'i',
