@@ -2755,7 +2755,7 @@
       },
       "TimeWindowSchema": {
         "additionalProperties": false,
-        "description": "날짜별 이용 시각(기본 09–21시). 도메인 TimeWindow와 같은 불변식(start < end).",
+        "description": "날짜별 이용 시각(기본 09–21시). 끝이 시작 이하이고 04:00 이하면 **다음 날** 끝(자정을 넘는 창 — 밤 늦게\n만든 오늘, 예 23:00~01:00). 그 밖은 도메인 TimeWindow와 같은 불변식(start < end).",
         "properties": {
           "date": {
             "format": "date",

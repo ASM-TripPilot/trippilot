@@ -168,6 +168,11 @@ def _mod(dt: datetime) -> int:
     return dt.hour * 60 + dt.minute
 
 
+def _since(day, dt: datetime) -> int:
+    """`day` 0시부터의 분 — 자정을 넘는 하루 창(밤 늦게 만든 오늘, 01:00 까지)은 1440 을 넘는다."""
+    return _mod(dt) + 1440 * (dt.date() - day).days
+
+
 def _not_before_min(problem: ItineraryProblem, day) -> int | None:
     """그 일자 비고정 노드의 시작 하한(분) — 그리디(`not_before_floor` 절대 시각)와 같은 규칙.
 
@@ -306,7 +311,7 @@ class OrToolsAssembler:
         day_started = time.monotonic()
         tz = problem.day_window.start.tzinfo
         win = problem.window_on(day)  # 일자별 창 (TRIP-1389)
-        ws, we = _mod(win.start), _mod(win.end)
+        ws, we = _since(day, win.start), _since(day, win.end)
         fixed = [fb for fb in problem.fixed_blocks if fb.window.start.date() == day]
         fixed_ids = {fb.poi_id for fb in fixed}
         # 시각 없는 필수 방문 (TRIP-1249) — 시각은 자유, 방문은 목적함수의 지배 항(`_required_terms`)
@@ -1029,4 +1034,4 @@ class OrToolsAssembler:
                                if fb.window.start.date() == day),
         )
         greedy = RuleFallbackAssembler(self._pois, self._est, self._cfg).solve(sub)
-        return [(s.poi_id, _mod(s.start_at)) for d in greedy.days for s in d.slots]
+        return [(s.poi_id, _since(day, s.start_at)) for d in greedy.days for s in d.slots]
