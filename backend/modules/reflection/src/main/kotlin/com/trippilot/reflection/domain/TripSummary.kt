@@ -68,4 +68,10 @@ interface TripSummaryRepository {
      * 잠근 **뒤에** 실적·경로를 읽어야 한다. 행이 없어도 잠근다(첫 생성과 갱신이 겹치는 경우).
      */
     fun findForUpdate(tripId: UUID): TripSummary?
+
+    /**
+     * 행이 있는가 — **읽히는지와 별개다**. [find] 가 null 인데 이것이 참이면 못 읽는 요약이다(TRIP-1476) — 조회·경로 갱신이 다시 만든다.
+     * 기본 구현은 [find] 와 같다(못 읽는 행이 없는 저장소 — 대역).
+     */
+    fun exists(tripId: UUID): Boolean = find(tripId) != null
 }

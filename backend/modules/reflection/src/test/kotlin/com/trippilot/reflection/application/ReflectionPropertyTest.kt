@@ -12,6 +12,7 @@ import com.trippilot.placedata.api.PoiSurfaceFacade
 import com.trippilot.placedata.api.PoiSurfaceView
 import com.trippilot.reflection.adapter.`in`.web.ReflectionResponse
 import com.trippilot.reflection.domain.Reflection
+import com.trippilot.reflection.domain.ReflectionCard
 import com.trippilot.reflection.domain.ReflectionRepository
 import com.trippilot.reflection.domain.ReflectionSource
 import com.trippilot.trip.api.TripFacade
@@ -62,6 +63,8 @@ class ReflectionPropertyTest : StringSpec({
         override fun find(tripId: UUID, dayDate: LocalDate) = stored[tripId to dayDate]
         override fun exists(tripId: UUID, dayDate: LocalDate) = (tripId to dayDate) in stored
         override fun findForUpdate(tripId: UUID, dayDate: LocalDate) = find(tripId, dayDate).also { locks++ }
+        override fun findForRedraft(tripId: UUID, dayDate: LocalDate, draft: ReflectionCard, source: ReflectionSource) =
+            find(tripId, dayDate)?.copy(draftCard = draft, source = source).also { locks++ }
         override fun findByTrip(tripId: UUID) = stored.values.filter { it.tripId == tripId }.sortedBy { it.dayDate }
     }
 

@@ -22,6 +22,7 @@ import com.trippilot.reflection.adapter.`in`.event.ActualRouteStoredSubscriber
 import com.trippilot.reflection.adapter.out.persistence.ReflectionRepositoryAdapter
 import com.trippilot.reflection.adapter.out.persistence.StyleAnalysisRepositoryAdapter
 import com.trippilot.reflection.adapter.out.persistence.TripSummaryRepositoryAdapter
+import com.trippilot.reflection.api.PersonalizationFacade
 import com.trippilot.reflection.application.ReflectionService
 import com.trippilot.reflection.application.StyleAnalysisService
 import com.trippilot.reflection.application.TripSummaryService
@@ -58,8 +59,9 @@ import java.util.UUID
  * 규칙은 둘이다.
  * - **고칠 수 있는 칸은 칸 단위로 읽히는 만큼 돌려준다** — 모양이 틀린 jsonb 는 비었다고 보고, 범위 밖 수치는
  *   범위 끝으로 붙인다. 이 칸들은 다음 생성·갱신이 다시 계산해 덮는다.
- * - **카드·본문·출처를 못 읽는 행은 행 단위다.** 요약은 사용자가 쓴 것이 없어 "없음"으로 읽고 다시 만들면 낫는다.
- *   회고는 사용자 수정본이 들어 있을 수 있어 **목록에서만 빼고, 그 하루에는 쓰지 않는다** — 덮어쓰면 수정본이 사라진다.
+ * - **카드·본문·출처를 못 읽는 행은 행 단위다.** 요약은 사용자가 쓴 것이 없어 조회·경로 갱신이 통째로 다시 만든다.
+ *   회고는 목록에서 빼고, 초안·출처만 못 읽으면 생성·수정이 초안을 다시 만들어 고친다(수정본·기분·메모는 그대로).
+ *   **수정본을 못 읽으면 그 하루에는 쓰지 않는다**(409) — 덮어쓰면 사용자가 쓴 것이 사라진다.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
@@ -76,6 +78,7 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var analyses: StyleAnalysisRepository
     @Autowired private lateinit var visits: VisitCheckService
     @Autowired private lateinit var routeStored: ActualRouteStoredSubscriber
+    @Autowired private lateinit var personalization: PersonalizationFacade
     @Autowired private lateinit var jdbc: JdbcTemplate
 
     private val json = ObjectMapper()
@@ -193,26 +196,40 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
         stats["hasLocationData"].asBoolean() shouldBe true
     }
 
+    /**
+     * 생성(`TripEnded`)은 여행당 한 번이라 다시 오지 않는다 — **실제로 다시 도는 경로**(조회·경로 갱신 이벤트)가 고쳐야 낫는다.
+     * 고칠 때 알림 이벤트는 내지 않는다(이미 한 번 알렸다).
+     */
     @Test
-    fun `요약 본문이 비었거나 모르는 출처면 그 요약은 없는 것으로 읽고 — 다시 만들면 낫는다`() {
+    fun `요약 본문이 비었거나 모르는 출처면 — 조회와 경로 갱신이 다시 만들어 낫는다`() {
         listOf("narrative = ' '", "source = 'ROBOT'").forEach { broken ->
             val (_, token) = newAccount()
             val tripId = newTrip(token)
-            summaries.generate(tripId)
-            corrupt("trip_summary", broken, "trip_id = ?", tripId)
+            summaries.generate(tripId) // 여행 종료 때의 한 번(준비) — 아래의 고침은 이것을 다시 부르지 않는다
+            val announced = { jdbc.queryForObject("SELECT count(*) FROM outbox_event WHERE event_type = 'reflection.ReflectionReady' AND aggregate_id = ?", Int::class.java, tripId.toString()) }
+            val healed = {
+                jdbc.queryForMap("SELECT narrative, source FROM trip_summary WHERE trip_id = ?", tripId).let {
+                    (it["narrative"] as String).isNotBlank() && it["source"] in setOf("RULE", "BASIC")
+                }
+            }
+            announced() shouldBe 1
 
+            corrupt("trip_summary", broken, "trip_id = ?", tripId)
             val (got, logs) = logsOf(TripSummaryRepositoryAdapter::class.java) {
                 call(HttpMethod.GET, "/api/v1/trips/$tripId/summary", token)
             }
             got.first shouldBe 200
-            got.second["ready"].asBoolean() shouldBe false
-            logs.filter { it.level == Level.ERROR }.single().formattedMessage.contains(tripId.toString()) shouldBe true
+            got.second["ready"].asBoolean() shouldBe true
+            healed() shouldBe true
+            logs.filter { it.level == Level.ERROR }.map { it.formattedMessage }.let { errors ->
+                errors.isNotEmpty() shouldBe true
+                errors.all { it.contains(tripId.toString()) } shouldBe true
+            }
 
-            // 경로 갱신은 "요약 없음"과 같이 지나간다(통계만 다시 세는 경로라 본문을 만들지 않는다).
+            corrupt("trip_summary", broken, "trip_id = ?", tripId)
             routeStored.handle(routeStoredEvent(tripId, day1))
-            // 생성은 행을 통째로 다시 쓴다 — 요약에는 사용자가 쓴 것이 없다.
-            summaries.generate(tripId)
-            call(HttpMethod.GET, "/api/v1/trips/$tripId/summary", token).second["ready"].asBoolean() shouldBe true
+            healed() shouldBe true
+            announced() shouldBe 1
         }
     }
 
@@ -252,52 +269,107 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
         routeStored.handle(routeStoredEvent(tripId, day1))
     }
 
+    private fun writeMine(tripId: UUID, token: String) {
+        call(HttpMethod.POST, "/api/v1/trips/$tripId/reflections/$day1", token).first shouldBe 200
+        call(HttpMethod.POST, "/api/v1/trips/$tripId/reflections/$day2", token).first shouldBe 200
+        val mine = """{"template_id":"user.edit.v1","format":"CARD","cover":{"title":"내가 쓴 제목"}}"""
+        val body = json.writeValueAsString(mapOf("card" to mine, "mood" to "HAPPY", "shortMemo" to "좋았다"))
+        call(HttpMethod.PUT, "/api/v1/trips/$tripId/reflections/$day1", token, body).first shouldBe 200
+        summaries.generate(tripId)
+    }
+
+    private fun stored(tripId: UUID) = jdbc.queryForMap(
+        "SELECT draft_card::text d, edited_card::text e, source, stats::text s, mood, short_memo, generated_at FROM reflection WHERE trip_id = ? AND day_date = ?",
+        tripId, day1,
+    )
+
+    /** 목록에서 그 하루만 빠지고, 경로 갱신은 그 하루를 건너뛰되(던지지 않는다) 같은 이벤트의 요약 갱신까지 간다. */
+    private fun listSkipsAndRouteSkips(tripId: UUID, token: String, reason: String) {
+        val (listed, logs) = logsOf(ReflectionRepositoryAdapter::class.java) {
+            call(HttpMethod.GET, "/api/v1/trips/$tripId/reflections", token)
+        }
+        listed.first shouldBe 200
+        listed.second["items"].map { it["dayDate"].asText() } shouldContainExactly listOf(day2.toString())
+        logs.filter { it.level == Level.ERROR }.single().formattedMessage.let {
+            it.contains(tripId.toString()) shouldBe true
+            it.contains(day1.toString()) shouldBe true
+            // 사유가 실제 원인을 말한다 — 배열 카드를 "제목이 비었다"로 남기면 운영자가 엉뚱한 곳을 본다.
+            it.contains(reason) shouldBe true
+        }
+        val before = stored(tripId)
+        jdbc.update("UPDATE trip_summary SET stats = '{}'::jsonb WHERE trip_id = ?", tripId)
+        routeStored.handle(routeStoredEvent(tripId, day1))
+        jdbc.queryForObject("SELECT jsonb_exists(stats, 'totalVisits') FROM trip_summary WHERE trip_id = ?", Boolean::class.java, tripId) shouldBe true
+        stored(tripId) shouldBe before
+    }
+
     /**
-     * 카드·출처를 못 읽는 하루. 그날 행에는 사용자가 고친 카드가 있다 — **어떤 쓰기도 그것을 지우지 않는다.**
-     * 생성·수정은 실패로 끝나고(500, 행은 그대로), 경로 갱신은 그 하루를 건너뛰되 같은 이벤트의 요약 갱신은 마저 한다.
+     * 초안·출처만 못 읽는 하루 — 초안은 다시 만들 수 있다. 생성(POST)·수정(PUT) 모두 **초안·출처만 갈아끼워** 고치고,
+     * 사용자가 쓴 수정본·기분·메모와 최초 생성 시각은 그대로다(TRIP-553 · BR-U5-36).
      */
     @Test
-    fun `카드·출처를 못 읽는 하루는 목록에서만 빠지고 — 그 하루의 수정본은 어떤 쓰기에도 지워지지 않는다`() {
-        val brokenShapes = listOf("draft_card = '[]'::jsonb", "edited_card = '[]'::jsonb", "source = 'ROBOT'")
-        brokenShapes.forEach { broken ->
+    fun `초안·출처를 못 읽는 하루는 목록에서 빠지고 — 생성·수정이 수정본을 지키며 초안을 다시 만들어 고친다`() {
+        mapOf("draft_card = '[]'::jsonb" to "객체가 아닙니다(jsonb array)", "source = 'ROBOT'" to "ROBOT").forEach { (broken, reason) ->
             val (_, token) = newAccount()
             val tripId = newTrip(token)
-            call(HttpMethod.POST, "/api/v1/trips/$tripId/reflections/$day1", token).first shouldBe 200
-            call(HttpMethod.POST, "/api/v1/trips/$tripId/reflections/$day2", token).first shouldBe 200
-            val mine = """{"template_id":"user.edit.v1","format":"CARD","cover":{"title":"내가 쓴 제목"}}"""
-            call(HttpMethod.PUT, "/api/v1/trips/$tripId/reflections/$day1", token, json.writeValueAsString(mapOf("card" to mine)))
-                .first shouldBe 200
-            summaries.generate(tripId)
-            corrupt("reflection", broken, "trip_id = ? AND day_date = ?", tripId, day1)
-            val stored = { jdbc.queryForMap("SELECT draft_card::text, edited_card::text, source, stats::text FROM reflection WHERE trip_id = ? AND day_date = ?", tripId, day1) }
-            val before = stored()
+            writeMine(tripId, token)
+            val original = stored(tripId)
 
-            val (listed, logs) = logsOf(ReflectionRepositoryAdapter::class.java) {
-                call(HttpMethod.GET, "/api/v1/trips/$tripId/reflections", token)
+            corrupt("reflection", broken, "trip_id = ? AND day_date = ?", tripId, day1)
+            listSkipsAndRouteSkips(tripId, token, reason)
+
+            // 수정 — 기분만 고치는 요청이 망가진 초안을 다시 만들고, 수정본·메모는 남는다.
+            call(HttpMethod.PUT, "/api/v1/trips/$tripId/reflections/$day1", token, """{"mood":"GOOD"}""").let { (s, b) ->
+                s shouldBe 200
+                b["card"]["title"].asText() shouldBe "내가 쓴 제목"
             }
-            listed.first shouldBe 200
-            listed.second["items"].map { it["dayDate"].asText() } shouldContainExactly listOf(day2.toString())
+            stored(tripId).let {
+                it["e"] shouldBe original["e"]
+                it["short_memo"] shouldBe "좋았다"
+                it["mood"] shouldBe "GOOD"
+                it["generated_at"] shouldBe original["generated_at"]
+                it["d"] shouldBe original["d"]
+                it["source"] shouldBe original["source"]
+            }
+
+            // 재생성 — 같은 망가짐을 다시 만들고 POST 로 고친다.
+            corrupt("reflection", broken, "trip_id = ? AND day_date = ?", tripId, day1)
+            call(HttpMethod.POST, "/api/v1/trips/$tripId/reflections/$day1", token).first shouldBe 200
+            stored(tripId).let {
+                it["e"] shouldBe original["e"]
+                it["short_memo"] shouldBe "좋았다"
+                it["mood"] shouldBe "GOOD"
+                it["generated_at"] shouldBe original["generated_at"]
+                it["d"] shouldBe original["d"]
+                it["source"] shouldBe original["source"]
+            }
+            call(HttpMethod.GET, "/api/v1/trips/$tripId/reflections", token).second["items"].size() shouldBe 2
+        }
+    }
+
+    /** 수정본을 못 읽는 하루 — 사용자가 쓴 것이다. **어떤 쓰기도 그 행을 바꾸지 않고**, 생성·수정은 409 로 거절한다(500 이 아니다). */
+    @Test
+    fun `수정본을 못 읽는 하루는 목록에서 빠지고 — 생성·수정은 409 로 거절하며 행을 바꾸지 않는다`() {
+        val (_, token) = newAccount()
+        val tripId = newTrip(token)
+        writeMine(tripId, token)
+        corrupt("reflection", "edited_card = '[]'::jsonb", "trip_id = ? AND day_date = ?", tripId, day1)
+        val before = stored(tripId)
+
+        listSkipsAndRouteSkips(tripId, token, "객체가 아닙니다(jsonb array)")
+
+        listOf(HttpMethod.PUT to """{"mood":"GOOD"}""", HttpMethod.POST to null).forEach { (method, body) ->
+            val (got, logs) = logsOf(ReflectionRepositoryAdapter::class.java) {
+                call(method, "/api/v1/trips/$tripId/reflections/$day1", token, body)
+            }
+            got.first shouldBe 409
+            got.second["error"]["code"].asText() shouldBe "REFLECTION_UNREADABLE"
             logs.filter { it.level == Level.ERROR }.single().formattedMessage.let {
                 it.contains(tripId.toString()) shouldBe true
                 it.contains(day1.toString()) shouldBe true
-                // 사유가 실제 원인을 말한다 — 배열 카드를 "제목이 비었다"로 남기면 운영자가 엉뚱한 곳을 본다.
-                it.contains(if (broken.startsWith("source")) "ROBOT" else "객체가 아닙니다(jsonb array)") shouldBe true
-            }
-
-            call(HttpMethod.PUT, "/api/v1/trips/$tripId/reflections/$day1", token, """{"mood":"GOOD"}""").first shouldBe 500
-            call(HttpMethod.POST, "/api/v1/trips/$tripId/reflections/$day1", token).first shouldBe 500
-            // 경로 갱신 — 그 하루는 건너뛰고(던지지 않는다), 요약 갱신까지 간다.
-            jdbc.update("UPDATE trip_summary SET stats = '{}'::jsonb WHERE trip_id = ?", tripId)
-            routeStored.handle(routeStoredEvent(tripId, day1))
-            jdbc.queryForObject("SELECT jsonb_exists(stats, 'totalVisits') FROM trip_summary WHERE trip_id = ?", Boolean::class.java, tripId) shouldBe true
-
-            stored() shouldBe before
-            if (broken != "edited_card = '[]'::jsonb") {
-                jdbc.queryForObject(
-                    "SELECT edited_card->'cover'->>'title' FROM reflection WHERE trip_id = ? AND day_date = ?", String::class.java, tripId, day1,
-                ) shouldBe "내가 쓴 제목"
             }
         }
+        stored(tripId) shouldBe before
     }
 
     // ── style_analysis ──────────────────────────────────────────────
@@ -337,6 +409,8 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
         }
         got.first shouldBe 200
         got.second["applied"].asBoolean() shouldBe true
+        // 범위 밖 게이지는 끝값으로 붙는다 — 9 는 5(여유롭다)라서 속도는 "느긋하게"다.
+        personalization.deriveFor(accountId).pace shouldBe "느긋하게"
         logs.filter { it.level == Level.WARN }.single().formattedMessage.contains(accountId.toString()) shouldBe true
         analyses.find(accountId)!!.let {
             it.descriptors shouldBe emptyList()
@@ -360,9 +434,34 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
         analyses.find(accountId)!!.let {
             it.descriptors shouldBe listOf("#카페")
             it.traitGauges shouldBe TraitGauges(0, 0, 0)
+            it.traitGaugesRead shouldBe false
             it.categoryBreakdown shouldBe emptyList()
         }
-        call(HttpMethod.POST, "/api/v1/trips/$tripId/itinerary", token).first shouldBe 201
+        // 게이지 자리값 0 은 속도의 근거가 아니고(아래), 활동도 비었다 — 넘길 것이 없으니 개인화는 적용되지 않는다.
+        personalization.deriveFor(accountId).let {
+            it.applied shouldBe false
+            it.pace shouldBe null
+        }
+    }
+
+    /**
+     * 게이지 칸의 모양이 틀리면 0 으로 채워 읽는데, 그 0 을 속도로 옮기면 "알차게"다 — 사용자가 고른 적 없는 속도가 일정 생성에
+     * 들어간다(`PersonalizationService` 주석). 그래서 그 분석으로는 **속도만 내지 않는다**. 읽히는 활동은 그대로 넘긴다.
+     */
+    @Test
+    fun `게이지를 못 읽은 스타일 분석은 개인화 속도를 내지 않는다 — 읽히는 활동만 넘긴다`() {
+        val (accountId, token) = newAccount()
+        grantPersonalization(accountId)
+        seedAnalysis(accountId)
+        corrupt("style_analysis", "trait_gauges = '[]'::jsonb", "account_id = ?", accountId)
+
+        personalization.deriveFor(accountId).let {
+            it.applied shouldBe true
+            it.pace shouldBe null
+            it.activities shouldContainExactly listOf("카페", "맛집투어")
+        }
+        call(HttpMethod.GET, "/api/v1/me/personalization", token).second["sharedItems"].map { it["item"].asText() } shouldBe
+            listOf("자주 방문한 장소 유형")
     }
 
     @Test

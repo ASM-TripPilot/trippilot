@@ -2,11 +2,14 @@ package com.trippilot.reflection.adapter.out.persistence
 
 import com.trippilot.reflection.domain.DistanceSource
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.ErrorCode
 import com.trippilot.reflection.domain.Reflection
 import com.trippilot.reflection.domain.ReflectionCard
 import com.trippilot.reflection.domain.ReflectionRepository
 import com.trippilot.reflection.domain.ReflectionSource
 import com.trippilot.reflection.domain.ReflectionStats
+import com.trippilot.reflection.domain.UnreadableDraft
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
@@ -41,7 +44,7 @@ import java.util.UUID
  *
  * **jsonb 모양이 틀린 행도 실린다**(TRIP-1476) — 객체가 아닌 칸은 SQL 이 빈 객체로 읽고(`@ColumnTransformer`), 원래 모양은
  * `*Shape` 가 따로 읽는다. 그러지 않으면 Hibernate 가 싣는 순간 던져, 한 하루 때문에 그 여행의 회고 목록 전체가 500 이었다.
- * 무엇을 할지는 어댑터가 정한다 — 카드는 못 읽는 하루로, 수치는 0 으로(아래 [ReflectionRepositoryAdapter]).
+ * 무엇을 할지는 어댑터가 정한다 — 초안·출처는 다시 만들면 낫는 하루로, 수정본은 쓰지 않는 하루로, 수치는 0 으로(아래 [ReflectionRepositoryAdapter]).
  */
 @Entity
 @Table(name = "reflection")
@@ -138,17 +141,22 @@ class ReflectionRepositoryAdapter(
         return jpa.lockByTripIdAndDayDate(tripId, dayDate)?.toDomain()
     }
 
+    override fun findForRedraft(tripId: UUID, dayDate: LocalDate, draft: ReflectionCard, source: ReflectionSource): Reflection? {
+        jpa.advisoryXactLock(LOCK_NAMESPACE, Objects.hash(tripId, dayDate))
+        return jpa.lockByTripIdAndDayDate(tripId, dayDate)?.toDomain(redraft = draft to source)
+    }
+
     /**
-     * **못 읽는 하루는 목록에서 빼고 남긴다**(TRIP-1476) — 한 장 때문에 그 여행의 회고 전체가 500 이 되지 않게.
-     * 그 하루를 읽는 단건 경로([find]·[findForUpdate])는 그대로 던진다: 그 행에는 사용자 수정본이 있을 수 있고,
-     * 못 읽은 행 위에 쓰면 그것을 지운다. 그래서 그 하루의 생성·수정은 실패로 끝나고 행은 손대지 않은 채 남는다.
+     * **못 읽는 하루는 목록에서 빼고 남긴다**(TRIP-1476) — 한 장 때문에 그 여행의 회고 전체가 500 이 되지 않게. 사유는 [toDomain] 이 남겼다.
+     * 그 하루의 쓰기는 무엇을 못 읽었는가로 갈린다([toDomain]).
      */
     override fun findByTrip(tripId: UUID): List<Reflection> =
         jpa.findByTripIdOrderByDayDate(tripId).mapNotNull { row ->
             try {
                 row.toDomain()
-            } catch (e: IllegalArgumentException) {
-                log.error("회고를 읽을 수 없어 목록에서 뺍니다 — 행은 그대로 둡니다. tripId={} date={} 사유={}", tripId, row.dayDate, e.message)
+            } catch (_: UnreadableDraft) {
+                null
+            } catch (_: ConflictDetected) {
                 null
             }
         }
@@ -196,22 +204,44 @@ class ReflectionRepositoryAdapter(
     )
 
     /**
-     * 카드·출처를 못 읽으면 **던진다**(IllegalArgumentException) — 위 [findByTrip] 의 이유로 행 단위다. 출처를 아는 단으로
-     * 바꿔 읽지 않는다: 수정·경로 갱신이 그 값을 그대로 다시 써 품질 관측(DEC-U5-5a)의 원래 값이 사라진다.
+     * 카드·출처를 못 읽으면 **행 단위로 던진다**(TRIP-1476). 칸 하나를 대체값으로 읽으면 다음 쓰기가 그 대체값을 저장한다 — 출처를
+     * 아는 단으로 바꿔 읽으면 품질 관측(DEC-U5-5a)의 원래 값이 사라지고, 수정본을 비우면 사용자가 쓴 글이 사라진다. 무엇을 못 읽었나로 갈린다.
+     * - **수정본**: 사용자가 쓴 것이라 이 하루에는 아무것도 쓰지 않는다 — 409 `REFLECTION_UNREADABLE`.
+     * - **초안·출처**: [UnreadableDraft] — 초안은 다시 만들 수 있다. 생성·수정이 [findForRedraft] 로 초안·출처만 갈아끼워 고친다([redraft]).
      */
-    private fun ReflectionEntity.toDomain() = Reflection(
-        reflectionId = reflectionId,
-        tripId = tripId,
-        dayDate = dayDate,
-        draftCard = draftCard.toCard(draftCardShape),
-        editedCard = editedCard?.toCard(editedCardShape),
-        source = ReflectionSource.valueOf(source),
-        stats = statsOf(this),
-        generatedAt = generatedAt,
-        updatedAt = updatedAt,
-        mood = mood,
-        shortMemo = shortMemo,
-    )
+    private fun ReflectionEntity.toDomain(redraft: Pair<ReflectionCard, ReflectionSource>? = null): Reflection {
+        val edited = try {
+            editedCard?.toCard(editedCardShape)
+        } catch (e: IllegalArgumentException) {
+            log.error(
+                "회고 수정본을 읽을 수 없어 이 하루는 목록에서 빼고 쓰기는 거절합니다 — 행은 그대로 둡니다. tripId={} date={} 사유={}",
+                tripId, dayDate, e.message,
+            )
+            throw ConflictDetected(message = "이 날의 회고를 읽을 수 없어 저장할 수 없어요.", errorCode = ErrorCode.REFLECTION_UNREADABLE)
+        }
+        val (draft, readSource) = redraft ?: try {
+            draftCard.toCard(draftCardShape) to ReflectionSource.valueOf(source)
+        } catch (e: IllegalArgumentException) {
+            log.error(
+                "회고 초안·출처를 읽을 수 없어 이 하루는 목록에서 뺍니다 — 다음 생성·수정이 초안을 다시 만들어 고칩니다. tripId={} date={} 사유={}",
+                tripId, dayDate, e.message,
+            )
+            throw UnreadableDraft(e.message.orEmpty())
+        }
+        return Reflection(
+            reflectionId = reflectionId,
+            tripId = tripId,
+            dayDate = dayDate,
+            draftCard = draft,
+            editedCard = edited,
+            source = readSource,
+            stats = statsOf(this),
+            generatedAt = generatedAt,
+            updatedAt = updatedAt,
+            mood = mood,
+            shortMemo = shortMemo,
+        )
+    }
 
     /**
      * jsonb → 근거 수치. **읽기는 방어적으로** 한다 — 옛 행에 없는 필드를 단정 캐스팅하면

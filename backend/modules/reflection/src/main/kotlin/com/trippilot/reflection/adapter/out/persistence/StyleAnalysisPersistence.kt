@@ -113,7 +113,7 @@ class StyleAnalysisRepositoryAdapter(private val jpa: StyleAnalysisJpaRepository
             categoryBreakdown = categoryBreakdown.mapNotNull { row ->
                 if (row is Map<*, *>) row.toShare(dropped) else null.also { dropped += "category_breakdown[]" }
             },
-            // numeric 는 NaN 도 담는다 — `>= 0` 이 그것까지 거른다.
+            // double precision(V2.41)은 NaN 도 담는다 — `>= 0` 이 그것까지 거른다.
             avgPlacesPerDay = avgPlacesPerDay.takeIf { it >= 0.0 } ?: 0.0.also { dropped += "avg_places_per_day" },
             avgRadiusKm = avgRadiusKm.takeIf { it >= 0.0 } ?: 0.0.also { dropped += "avg_radius_km" },
             // 잴 수 없는 체류는 null 이다 — 0 으로 채우면 "0분 머물렀다"는 거짓말이 된다.
@@ -121,6 +121,7 @@ class StyleAnalysisRepositoryAdapter(private val jpa: StyleAnalysisJpaRepository
             sampleTripCount = sampleTripCount,
             sampleVisitCount = sampleVisitCount,
             updatedAt = updatedAt,
+            traitGaugesRead = traitGaugesShape == null || traitGaugesShape == "object",
         )
         if (dropped.isNotEmpty()) log.warn("스타일 분석 행 일부를 읽지 못해 읽히는 만큼 씁니다. accountId={} 칸={}", accountId, dropped.distinct())
         return analysis
