@@ -106,6 +106,22 @@ function mockItems(items: Notification[]): void {
   });
 }
 
+/** 조회 훅이 돌려줄 실패·로딩 모양을 직접 주입한다 — `refetch` 는 다시 시도 배선 확인용. */
+function mockQueryState(state: {
+  data: { items: Notification[] } | undefined;
+  isError: boolean;
+  isLoading?: boolean;
+  isFetching?: boolean;
+  refetch?: jest.Mock;
+}): void {
+  mockUseGetMeNotifications.mockReturnValue({
+    isLoading: false,
+    isFetching: false,
+    refetch: jest.fn().mockResolvedValue({}),
+    ...state,
+  });
+}
+
 beforeEach(() => {
   mockPush.mockClear();
   mockUseGetMeNotifications.mockReset();
@@ -288,5 +304,54 @@ describe('empty · 알림 0건', () => {
     renderPage();
     expect(screen.getByTestId('notification-inbox-empty')).toBeOnTheScreen();
     expect(screen.queryAllByTestId('notification-inbox-row')).toHaveLength(0);
+  });
+});
+
+// TRIP-1501 · 조회 실패 판정 — 훅 상태 4갈래가 어느 얼굴이 되는지(페이지 판정 = `isError && data === undefined`).
+describe('조회 실패 판정 · isError 와 data 가 함께 살 수 있다', () => {
+  const ERROR = 'notification-inbox-error';
+  const RETRY = 'notification-inbox-retry';
+
+  it('조회 실패(isError, data 없음) → 오류 얼굴 + 다시 시도, empty·"모두 읽음"·행은 없고, 다시 시도 press → refetch 1회', () => {
+    // 준비
+    const refetch = jest.fn().mockResolvedValue({});
+    mockQueryState({ isError: true, data: undefined, refetch });
+    renderPage();
+
+    // 단언 — 실패를 "알림 없음"으로 접지 않는다.
+    expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+    expect(screen.queryByTestId('notification-inbox-empty')).toBeNull();
+    expect(screen.queryByTestId('notification-inbox-mark-all')).toBeNull();
+    expect(screen.queryAllByTestId('notification-inbox-row')).toHaveLength(0);
+
+    // 실행 + 단언 — 다시 시도 = 조회 훅의 refetch.
+    expect(refetch).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByTestId(RETRY));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('재조회만 실패(isError 인데 옛 data 가 남음) → 목록 유지, 오류 얼굴 없음', () => {
+    mockQueryState({ isError: true, data: { items: [PLAN_B] } });
+    renderPage();
+
+    expect(screen.queryAllByTestId('notification-inbox-row')).toHaveLength(1);
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+  });
+
+  it('서버가 준 빈 목록 뒤 재조회 실패(isError, data={items:[]}) → empty 그대로, 오류 얼굴 없음', () => {
+    mockQueryState({ isError: true, data: { items: [] } });
+    renderPage();
+
+    expect(screen.getByTestId('notification-inbox-empty')).toBeOnTheScreen();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+  });
+
+  it('첫 조회 중(isLoading, data 없음, isError 아님) → 오류 얼굴이 뜨지 않는다', () => {
+    mockQueryState({ isError: false, isLoading: true, data: undefined });
+    renderPage();
+
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+    expect(screen.queryByTestId(RETRY)).toBeNull();
   });
 });

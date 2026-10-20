@@ -8242,6 +8242,24 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // l01 알림함 — 엣지: 조회 실패 오류 얼굴(StateNotice + 다시 시도, TRIP-1501). 서버를 끊어야 실화면에서 보이는 길이라 이 키가 육안 그물.
+  {
+    key: 'notification-inbox-error',
+    band: 'l',
+    label: 'l01 · 알림 조회 실패',
+    login: null,
+    render: () => (
+      <NotificationInboxScreen
+        sections={[]}
+        isEmpty
+        loadFailed
+        onNavigate={noop}
+        onPressBack={noop}
+        onMarkAllRead={noop}
+        onRetry={noop}
+      />
+    ),
+  },
   // j07 기록 탭 허브 default 키(TRIP-575·767) — 순수 뷰(`RecordsCalendarScreen`)를 격리 렌더한다
   // (`@/shared/api`·`@/features/*` 값 import 0 이라 프리뷰 지뢰 목 통과). 커스텀 월 그리드·코랄 pill 마킹
   // (부산 여행 6.10–6.12 한 구간)·legend(연도 생략 `6.10–6.12`)·지난 여행 카드(72×72 placeholder 자리 +
