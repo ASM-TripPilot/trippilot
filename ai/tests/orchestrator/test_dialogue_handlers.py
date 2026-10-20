@@ -1199,6 +1199,43 @@ def test_poi_info_in_the_itinerary_never_asks_the_place_db() -> None:
     assert finder.calls == []
 
 
+class _RefPoiInfo(_PoiInfo):
+    """source_ref 를 싣는 POI_INFO 대역 — 소개(KB-5) 조인 키."""
+
+    def fetch(self, params: dict) -> InfoPacket:
+        packet = super().fetch(params)
+        for row in packet.data.get("pois", ()):
+            row["source_ref"] = "ref-" + row["name"]
+        return packet
+
+
+class _Intro:
+    def __init__(self, text: str = "우도는 제주 동쪽의 섬이다.") -> None:
+        self.text, self.calls = text, []
+
+    def intro(self, source_ref: str, query: str) -> str:
+        self.calls.append((source_ref, query))
+        return self.text
+
+
+def _intro_run(arguments: dict, utterance: str = "") -> tuple[Facts, _Intro]:
+    intro = _Intro()
+    ctx = replace(_ctx(arguments=arguments, ports=HandlerPorts(poi_info=_RefPoiInfo(), place_intro=intro)), utterance=utterance)
+    return _run(HANDLERS[Intent.GET_POI_INFO], ctx), intro
+
+
+def test_poi_info_about_a_place_carries_a_kb5_intro_for_the_answer_only() -> None:
+    facts, intro = _intro_run({"place": "우도", "aspect": "어떤 곳"}, "우도 어떤 곳이야?")
+    assert intro.calls == [("ref-우도", "어떤 곳")]
+    assert facts.detail == {"target": "우도", "intro": "우도는 제주 동쪽의 섬이다."}
+    assert "섬" not in str(facts.payload)  # 카드(payload)에는 싣지 않는다 — 위키 원문 출처 표기
+
+
+def test_poi_info_hours_or_fee_question_does_not_fetch_an_intro() -> None:
+    facts, intro = _intro_run({"place": "우도"}, "우도 몇 시까지 해?")
+    assert intro.calls == [] and "intro" not in facts.detail
+
+
 def test_explore_category_filters_the_pool() -> None:
     facts, _ = _explore({"region": "부산", "category": "CAFE"})
     assert _names_of(facts) == ["인기 카페", "바다 전망 카페"]

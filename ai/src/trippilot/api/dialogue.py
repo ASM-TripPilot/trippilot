@@ -56,6 +56,7 @@ from trippilot.orchestrator.dialogue_orchestrator import (
 )
 from trippilot.orchestrator.dialogue_plan import plan_tools
 from trippilot.orchestrator.intent_router import IntentRouter, IntentRouterConfig
+from trippilot.orchestrator.place_intro import PlaceIntro
 from trippilot.orchestrator.place_sql import PlaceSqlLookup
 from trippilot.orchestrator.question_bank import BankEntry, bank_fingerprint
 from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql
@@ -208,6 +209,7 @@ def build_dialogue_orchestrator(
     shadow_rate: float,
     shadow_rng: random.Random | None,
     place_sql: PgPlaceSql | None = None,
+    kb_store: VectorStorePort | None = None,
 ) -> DialogueOrchestrator:
     """서비스 워커 3종(`counted` 공유 — 백엔드 사용량 상한의 원천) + 섀도 전용 3단 라우터 + 핸들러 포트를 묶는다.
 
@@ -234,9 +236,11 @@ def build_dialogue_orchestrator(
                  "on" if sql_on else "off(DIALOGUE_SQL 미배정이라 미배선 — 장소 탐색은 반경 풀)")
     else:
         log.info("도우미 장소 DB off — TRIPPILOT_PLACE_DB_URL 미설정이라 미배선(장소 탐색은 반경 풀, 일정 밖 장소는 못 찾는다)")
+    # 장소 소개(KB-5) — PlanB 와 같은 임베딩·벡터 스토어. 스토어가 미배선(Unwired)이면 조회가 빈 결과로 강등될 뿐이라 늘 붙인다
+    place_intro = PlaceIntro(embedding, kb_store) if kb_store is not None else None
     ports = HandlerPorts(poi_info=providers[ProviderKind.POI_INFO], weather=providers.get(ProviderKind.WEATHER),
                          transit=providers[ProviderKind.TRANSIT], pool_builder=pool_builder, planb=rag,
-                         place_sql=place_lookup)
+                         place_sql=place_lookup, place_intro=place_intro)
     tools = plan_tools(ports)  # 배선된 도구 → 설명(여행 필요 꼬리표 포함) — 게이트 closed-set 과 `$tools` 가 같은 사전에서 나온다
     planner = None
     if LlmFeature.DIALOGUE_PLAN in c1_config.feature_models:  # DEC-AO-18 — 배정이 곧 켜기(env 무증가)

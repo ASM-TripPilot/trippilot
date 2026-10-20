@@ -1278,3 +1278,11 @@ def test_foreign_place_flags_unknown_place_shaped_words_and_never_known_names(wo
     name = word + suffix
     assert not _foreign_place(f"{name}{josa} 좋아요", (name,))
     assert _foreign_place(f"{name}{josa} 좋아요", ("흰여울카페",)) is (name not in "흰여울카페")
+
+
+
+def test_names_in_a_kb5_intro_count_as_known_so_the_answer_may_say_them() -> None:
+    from trippilot.orchestrator.dialogue_orchestrator import _prompt_names
+
+    names = _prompt_names({"places": [{"name": "경복궁"}], "target": "경복궁", "intro": "경복궁에는 근정전과 경회루가 있고 광화문이 정문이다. 창덕궁과 함께 꼽힌다."})
+    assert "창덕궁" in names and "경복궁" in names
