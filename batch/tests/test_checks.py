@@ -15,6 +15,7 @@ import checks  # noqa: E402
 import pipeline  # noqa: E402
 
 SIDOS = checks.sido_names()   # 실제 백엔드 시드에서 — 목록을 여기 따로 적지 않는다
+REGIONS = checks.event_regions()   # 실제 수집기의 DEFAULT_REGIONS 에서 — 마찬가지
 
 
 def proposal(name, address):
@@ -79,14 +80,24 @@ class CheckPoisTest(unittest.TestCase):
 
 
 class CheckEventsTest(unittest.TestCase):
+    """운영 수집은 17개 지역을 매일 전부 돈다(vars.EVENT_REGIONS_PER_RUN=17) — 합성 coverage 도 그 모양이다."""
     DAY = date(2026, 10, 10)
-    FRESH = {"서울": "2026-10-09T06:46:38+09:00", "부산": "2026-10-04T06:46:38+09:00"}   # 가장 이른 것 = 10-04(6일 전)
 
-    def events(self, *spans, coverage=FRESH):
-        return {"events": [{"start": s, "end": e} for s, e in spans], "coverage": coverage}
+    @staticmethod
+    def coverage(stamp="2026-10-09", **late):
+        """17곳 모두 `stamp`(기본 어제)에 찍히고, `late` 로 준 지역만 그 날짜."""
+        return {r: f"{late.get(r, stamp)}T04:40:00+09:00" for r in REGIONS}
 
-    def check(self, doc, min_valid=1, max_age=13):   # event_collect 의 max_age_days 기본값
-        return checks.check_events(doc, self.DAY, min_valid, max_age)
+    def events(self, *spans, coverage=None):
+        return {"events": [{"start": s, "end": e} for s, e in spans],
+                "coverage": self.coverage() if coverage is None else coverage}
+
+    def check(self, doc, min_valid=1, max_age=3):   # event_collect 의 max_age_days 기본값
+        return checks.check_events(doc, self.DAY, min_valid, max_age, REGIONS)
+
+    def test_운영_지역은_수집기의_DEFAULT_REGIONS_17곳(self):
+        self.assertEqual(len(REGIONS), 17)
+        self.assertEqual((REGIONS[0], REGIONS[-1]), ("서울", "제주"))
 
     def test_그날_유효한_행사가_하한_이상이면_통과(self):
         self.assertEqual(self.check(self.events(("2026-10-01", "2026-10-31"))), [])
@@ -98,53 +109,61 @@ class CheckEventsTest(unittest.TestCase):
         self.assertIn("유효한 행사 1건 < 하한 30건 (전체 401건)", failures[0])
 
     def test_날짜가_깨진_행사는_유효로_세지_않는다(self):
-        broken = {"events": [{"start": "2026-10-01"}, {"start": "어제", "end": "내일"}], "coverage": self.FRESH}
+        broken = self.events()
+        broken["events"] = [{"start": "2026-10-01"}, {"start": "어제", "end": "내일"}]
         self.assertTrue(self.check(broken))
 
     def test_문서_모양이_바뀌면_막는다(self):
-        self.assertEqual(checks.check_events({}, self.DAY, 0, 7), ["events 목록이 없다 — 문서 모양이 바뀌었다"])
+        self.assertEqual(checks.check_events({}, self.DAY, 0, 3, REGIONS), ["events 목록이 없다 — 문서 모양이 바뀌었다"])
 
     def test_유효_건수가_넉넉해도_수집이_멈췄으면_막는다(self):
-        # 미래 행사가 남아 유효 건수는 멀쩡하다 — 수집 시각만이 멈춘 것을 안다.
-        old = self.events(("2026-10-01", "2026-12-31"), coverage={"서울": "2026-09-26T23:59:00+09:00"})
-        failures = self.check(old)
+        # 미래 행사가 남아 유효 건수는 멀쩡하다 — 수집 시각만이 멈춘 것을 안다. 17곳 모두 나흘 전에서 멈췄다.
+        failures = self.check(self.events(("2026-10-01", "2026-12-31"), coverage=self.coverage("2026-10-06")))
         self.assertEqual(len(failures), 1)
-        self.assertIn("가장 오래된 지역의 마지막 수집 2026-09-26 — 2026-10-10 기준 14일 전 > 허용 13일", failures[0])
+        self.assertIn("가장 오래된 지역의 마지막 수집 2026-10-06 — 2026-10-10 기준 4일 전 > 허용 3일", failures[0])
         self.assertIn("수집이 멈췄거나(사본이 낡았거나) 그 지역이 수집 때마다 폴백해", failures[0])
 
-    def rotation(self, oldest):
-        """17개 지역을 하루 3곳씩 도는 로테이션 모양 — 하루 전부터 거꾸로 3곳씩, 마지막 두 곳만 `oldest`."""
-        regions = ["서울", "인천", "대전", "대구", "광주", "부산", "울산", "세종", "경기", "강원", "충북", "충남",
-                   "경북", "경남", "전북", "전남", "제주"]
-        coverage = {r: f"2026-10-{9 - i // 3:02d}T04:40:00+09:00" for i, r in enumerate(regions[:15])}   # 10-09 … 10-05
-        coverage.update({r: f"{oldest}T04:40:00+09:00" for r in regions[15:]})
-        return self.events(("2026-10-01", "2026-12-31"), coverage=coverage)
-
-    def test_가장_늦은_지역이_신선해도_가장_오래된_지역이_낡았으면_막는다_로테이션이_건너뜀(self):
-        # 어제 수집한 지역이 있어도(최신 10-09) 두 지역이 15일째 그대로다 — 두 바퀴 넘게 폴백했거나 포인터가 그 지역을 건너뛴다.
-        failures = self.check(self.rotation("2026-09-25"))
+    def test_가장_늦은_지역이_신선해도_가장_오래된_지역이_낡았으면_막는다(self):
+        # 16곳은 어제 찍혔는데 제주만 닷새째 그대로다 — 그 지역이 매번 폴백한다. 가장 늦은 것만 보면 통과한다.
+        failures = self.check(self.events(("2026-10-01", "2026-12-31"), coverage=self.coverage(제주="2026-10-05")))
         self.assertEqual(len(failures), 1)
-        self.assertIn("가장 오래된 지역의 마지막 수집 2026-09-25 — 2026-10-10 기준 15일 전", failures[0])
+        self.assertIn("가장 오래된 지역의 마지막 수집 2026-10-05 — 2026-10-10 기준 5일 전", failures[0])
 
-    def test_로테이션_한_바퀴_안이면_통과(self):
-        self.assertEqual(self.check(self.rotation("2026-10-04")), [])   # 가장 오래된 지역 6일 전
-
-    def test_폴백_한_번으로_한_바퀴_밀린_지역은_통과(self):
-        # collect_events.py 는 LLM 폴백한 지역의 coverage 를 찍지 않고 포인터만 넘긴다 — 그 지역은 다음 바퀴(6일 뒤)에야
-        # 다시 찍혀 최대 12일 묵는다. 이것으로 행사 게시 전체를 막으면 안 된다.
-        self.assertEqual(self.check(self.rotation("2026-09-28")), [])   # 가장 오래된 지역 12일 전
+    def test_폴백_한_번으로_하루_밀린_지역은_통과(self):
+        # LLM 폴백한 지역은 coverage 가 안 찍히고 다음 날 다시 찍힌다 — 실행 시점에 이틀 묵는다(실측 10-16 두 곳).
+        self.assertEqual(self.check(self.events(("2026-10-01", "2026-12-31"),
+                                                coverage=self.coverage(서울="2026-10-08", 부산="2026-10-08"))), [])
 
     def test_허용_날수_경계(self):
-        exactly = self.events(("2026-10-01", "2026-12-31"), coverage={"서울": "2026-09-27T00:00:00+09:00"})
-        self.assertEqual(self.check(exactly), [])   # 13일 전은 통과, 14일 전부터 막는다
-        over = self.events(("2026-10-01", "2026-12-31"), coverage={"서울": "2026-09-26T23:59:00+09:00"})
-        self.assertIn("14일 전 > 허용 13일", self.check(over)[0])
+        exactly = self.events(("2026-10-01", "2026-12-31"), coverage=self.coverage(서울="2026-10-07"))
+        self.assertEqual(self.check(exactly), [])   # 3일 전은 통과, 4일 전부터 막는다
+        over = self.events(("2026-10-01", "2026-12-31"), coverage=self.coverage(서울="2026-10-06"))
+        self.assertIn("4일 전 > 허용 3일", self.check(over)[0])
+
+    def test_운영_지역이_아닌_키는_낡아도_보지_않는다(self):
+        # 수동 실행의 지역 입력은 자유 텍스트이고 저장소는 키를 지우지 않는다 — 다시 찍히지 않는 키가 영영 막으면 안 된다.
+        coverage = self.coverage()
+        coverage["서울특별시"] = "2026-08-01T04:40:00+09:00"
+        with self.assertLogs("checks", "WARNING") as logs:
+            self.assertEqual(self.check(self.events(("2026-10-01", "2026-12-31"), coverage=coverage)), [])
+        self.assertIn("서울특별시", logs.output[0])
+
+    def test_운영_지역이_coverage_에_없으면_막는다(self):
+        coverage = self.coverage()
+        del coverage["제주"]
+        failures = self.check(self.events(("2026-10-01", "2026-12-31"), coverage=coverage))
+        self.assertEqual(failures, ["coverage 에 운영 수집 지역 1곳이 없다(제주) — 그 지역은 수집된 적이 없다"])
 
     def test_수집_시각이_없거나_깨졌으면_막는다(self):
         # 한 지역이라도 시각이 깨졌으면 그 지역의 신선도를 모른다 — 나머지가 신선해도 막는다.
-        for coverage in ({}, None, {"서울": "어제"}, ["2026-10-09"], {"서울": "2026-10-09T04:40:00+09:00", "부산": None}):
+        for coverage in ({}, None, ["2026-10-09"]):
+            failures = self.check({"events": [{"start": "2026-10-01", "end": "2026-10-31"}], "coverage": coverage})
+            self.assertTrue(any("운영 수집 지역 17곳이 없다" in f for f in failures), coverage)
+        for broken in ("어제", None):
+            coverage = self.coverage()
+            coverage["부산"] = broken
             failures = self.check(self.events(("2026-10-01", "2026-10-31"), coverage=coverage))
-            self.assertTrue(any("마지막 수집 시각이 없거나 읽을 수 없다" in f for f in failures), coverage)
+            self.assertTrue(any("마지막 수집 시각을 읽을 수 없다" in f for f in failures), coverage)
 
 
 class PipelineTest(unittest.TestCase):

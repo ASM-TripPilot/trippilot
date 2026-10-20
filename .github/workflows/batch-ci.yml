@@ -2,15 +2,15 @@ name: batch-ci
 
 # 로컬 수집 파이프라인(batch/, TRIP-1468)의 검증 로직과 DAG 구조·실행.
 # 실 API 호출 0건 — POI 는 합성 문서, 행사는 리포 사본(ai/data/collected_events.json)으로 DAG 를 돌린다.
-# 경로: 검증 규칙이 백엔드 지역 시드와 판정 규칙(RegionResolver — 거울로 따른다), 행사 사본을 읽으므로 그것들이 바뀌어도 돈다.
+# 경로: 검증 규칙이 백엔드 지역 시드와 판정 규칙(RegionResolver — 거울로 따른다), 행사 사본·수집기의 운영 지역 목록(collect_events.py DEFAULT_REGIONS)을 읽으므로 그것들이 바뀌어도 돈다.
 # 리포 POI 수집본은 이 CI 가 검증하지 않는다 — 수집 배치의 봇 PR 앞 게이트는 TRIP-1475 가 다룬다.
 on:
   push:
     branches: [develop]
-    paths: ['batch/**', 'backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/domain/RegionResolver.kt', '.github/workflows/batch-ci.yml', 'backend/app/src/main/resources/db/migration/R__seed_region_catalog.sql', 'ai/data/collected_events.json']
+    paths: ['batch/**', 'backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/domain/RegionResolver.kt', '.github/workflows/batch-ci.yml', 'backend/app/src/main/resources/db/migration/R__seed_region_catalog.sql', 'ai/data/collected_events.json', 'ai/scripts/collect/collect_events.py']
   pull_request:
     branches: [develop, main]
-    paths: ['batch/**', 'backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/domain/RegionResolver.kt', '.github/workflows/batch-ci.yml', 'backend/app/src/main/resources/db/migration/R__seed_region_catalog.sql', 'ai/data/collected_events.json']
+    paths: ['batch/**', 'backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/domain/RegionResolver.kt', '.github/workflows/batch-ci.yml', 'backend/app/src/main/resources/db/migration/R__seed_region_catalog.sql', 'ai/data/collected_events.json', 'ai/scripts/collect/collect_events.py']
   workflow_dispatch:
 
 jobs:
