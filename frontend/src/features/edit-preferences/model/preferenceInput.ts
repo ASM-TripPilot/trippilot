@@ -26,6 +26,18 @@ export interface PreferenceDraftValues {
   activities: string[] | null;
 }
 
+/** 6축이 전부 null 이면 true — 재시작 뒤 재진입처럼 취향을 하나도 안 고른 스토어다(PUT 으로 보내면 서버 저장분을 지운다). */
+export function isPreferenceDraftEmpty(draft: PreferenceDraftValues): boolean {
+  return (
+    draft.styles === null &&
+    draft.pace === null &&
+    draft.companions === null &&
+    draft.foods === null &&
+    draft.transports === null &&
+    draft.activities === null
+  );
+}
+
 /** slug→한국어 스타일 라벨 카탈로그. `toPreferenceInput`이 쓰고, TRIP-484 여행 단위 취향
  * override 시트(`pages/trip/trip-new-step1`)가 option 목록(`{slug, label}`)을 이 한 벌에서 만든다 —
  * slug→한국어 매핑을 두 벌로 복제하지 않으려고 export 한다. */

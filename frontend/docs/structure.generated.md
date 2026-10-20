@@ -397,11 +397,11 @@
 - `src/features/edit-itinerary/ui/SaveConflictDialog.tsx`  →  SaveConflictDialog
 
 ## src/features/edit-preferences/
-- `src/features/edit-preferences/index.ts`  →  buildPreferenceInput · initialSelection · ACTIVITY · STYLE · toPreferenceInput · usePreferenceStore · toggleMulti · toggleSingle
+- `src/features/edit-preferences/index.ts`  →  buildPreferenceInput · initialSelection · ACTIVITY · STYLE · isPreferenceDraftEmpty · toPreferenceInput · usePreferenceStore · toggleMulti · toggleSingle
 
 ## src/features/edit-preferences/model/
 - `src/features/edit-preferences/model/preferenceDraft.ts`  →  PreferenceSelection · initialSelection · buildPreferenceInput
-- `src/features/edit-preferences/model/preferenceInput.ts`  →  PreferenceDraftValues · STYLE · ACTIVITY · toPreferenceInput
+- `src/features/edit-preferences/model/preferenceInput.ts`  →  PreferenceDraftValues · isPreferenceDraftEmpty · STYLE · ACTIVITY · toPreferenceInput
 - `src/features/edit-preferences/model/preferenceSelection.ts`  →  toggleMulti · toggleSingle
 - `src/features/edit-preferences/model/preferenceStore.ts`  →  PreferenceDraft · usePreferenceStore
 

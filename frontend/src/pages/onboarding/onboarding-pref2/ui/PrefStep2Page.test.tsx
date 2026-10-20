@@ -171,15 +171,95 @@ describe('PrefStep2Page — 완료 시 서버에 취향 PUT (TRIP-471)', () => {
     expect(body.companionTypes).toEqual([]);
     await waitFor(() => expect(routerMock.replace).toHaveBeenCalledWith('/'));
   });
+});
 
-  it('아무 것도 안 고르고 완료해도 PUT 은 나가고(미선택=null) 이동한다', async () => {
+// TRIP-1500 — 재진입(앱 재시작 뒤 2/2)에선 스토어가 비어 있다. 그 상태로 PUT 하면 7키가 전부 null 이라 서버에
+// 저장된 취향이 지워진다. 비어 있으면 PUT 을 건너뛰고 완료만 보낸다(부분 선택 보존은 범위 밖 — 02a ★12).
+describe('PrefStep2Page — 빈 스토어 [완료]는 취향 PUT 을 보내지 않는다 (TRIP-1500 AC1)', () => {
+  it('아무것도 안 고르고 [완료]하면 취향 PUT 은 0회이고, 완료·재평가·홈 이동은 그대로 한다', async () => {
+    // 준비 — 스토어 6축이 전부 null(재진입 직후). 앵커로 한 번 확인한다(리셋이 깨지면 이 케이스가 거짓으로 돈다).
+    const draft = usePreferenceStore.getState();
+    expect(
+      [
+        draft.styles,
+        draft.pace,
+        draft.companions,
+        draft.foods,
+        draft.transports,
+        draft.activities,
+      ].every((axis) => axis === null)
+    ).toBe(true);
     render(<PrefStep2Page />);
+
+    // 실행 — [완료] 탭.
     fireEvent.press(screen.getByTestId('onboarding-pref2-done'));
 
-    expect(mockPutMutate).toHaveBeenCalledTimes(1);
-    expect(mockPutMutate.mock.calls[0][0].data.styles).toBeNull();
-    await waitFor(() => expect(routerMock.replace).toHaveBeenCalledWith('/'));
+    // 단언 — 홈 이동까지 끝난 뒤에 본다(흐름이 다 지난 시점의 0회). 취향 PUT 0 · 완료 1 · 재평가 1.
+    await waitFor(() => expect(routerMock.replace.mock.calls).toEqual([['/']]));
+    expect(mockPutMutate).not.toHaveBeenCalled();
+    expect(mockCompleteOnboarding).toHaveBeenCalledTimes(1);
+    expect(mockNotifyReeval).toHaveBeenCalledTimes(1);
   });
+});
+
+describe('PrefStep2Page — 한 축이라도 골랐으면 [완료]는 취향을 PUT 한다 (TRIP-1500 AC2)', () => {
+  // 1/2 에서 고른 styles·pace 는 이 화면이 직접 안 그리는 축이다 — 2/2 의 4축만 보는 구현이면
+  // 첫 가입 사용자의 1/2 선택이 조용히 저장되지 않는다(그래서 6축 전부 단독으로 시험한다).
+  it.each([
+    [
+      'styles',
+      () => usePreferenceStore.getState().toggleStyle('rest'),
+      'styles',
+      ['휴양'],
+    ],
+    [
+      'pace',
+      () => usePreferenceStore.getState().togglePace('relaxed'),
+      'pace',
+      '느긋하게',
+    ],
+    [
+      'companions',
+      () => usePreferenceStore.getState().toggleCompanion('solo'),
+      'companionTypes',
+      ['혼자'],
+    ],
+    [
+      'foods',
+      () => usePreferenceStore.getState().toggleFood('korean'),
+      'foodTastes',
+      ['한식'],
+    ],
+    [
+      'transports',
+      () => usePreferenceStore.getState().toggleTransport('walk'),
+      'transportModes',
+      ['도보'],
+    ],
+    [
+      'activities',
+      () => usePreferenceStore.getState().toggleActivity('nature'),
+      'activities',
+      ['자연'],
+    ],
+  ])(
+    '%s 만 골라도 PUT 은 1회 나가고 고른 값이 실린다',
+    async (_axis, pick, bodyKey, expected) => {
+      // 준비 — 한 축만 고른다.
+      pick();
+      render(<PrefStep2Page />);
+
+      // 실행 — [완료] 탭.
+      fireEvent.press(screen.getByTestId('onboarding-pref2-done'));
+
+      // 단언 — PUT 1회 + 그 축의 서버값(번역 결과) + 홈 이동.
+      expect(mockPutMutate).toHaveBeenCalledTimes(1);
+      expect(mockPutMutate.mock.calls[0][0].data[bodyKey]).toEqual(expected);
+      await waitFor(() =>
+        expect(routerMock.replace.mock.calls).toEqual([['/']])
+      );
+    }
+  );
 });
 
 describe('PrefStep2Page — 일괄 탈출 (AC4 · 5-6)', () => {
@@ -304,7 +384,8 @@ describe('PrefStep2Page — 온보딩 완료 재평가 신호 발화 (AC-A2 · T
 // TRIP-1421 — 온보딩 완료를 닉네임 단계에서 이 화면의 두 출구로 옮겼다.
 describe('PrefStep2Page — 온보딩 완료 호출 (TRIP-1421 AC2 · AC3)', () => {
   it('[완료]는 취향 PUT 과 완료를 함께 보내고, 완료가 성공한 뒤에만 재평가·홈 이동을 한다', async () => {
-    // 준비 — 완료 응답을 붙잡아 둔다(대기 중).
+    // 준비 — 취향을 하나 골라 두고(TRIP-1500: 빈 스토어면 PUT 을 안 보낸다) 완료 응답을 붙잡아 둔다(대기 중).
+    usePreferenceStore.getState().toggleStyle('rest');
     const pending = deferred();
     mockCompleteOnboarding.mockReturnValue(pending.promise);
     render(<PrefStep2Page />);
