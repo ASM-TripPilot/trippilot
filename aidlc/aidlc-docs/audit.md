@@ -1670,3 +1670,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — situation-awareness Functional Design 사후 개정(구현 반영), 같은 PR 머지 = 승인(#1071 선례). `aidlc-state.md` 무변경.
 
 ---
+
+## Functional Design 사후 개정 — U10 여행별 자동 기록 일시 중지 구현 반영 (BR-U10-49~52 · frontend-components 스위치 줄·l06 paused)
+**Timestamp**: 2026-10-20T23:40:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 이 세션 2026-10-20, 그대로 인용) 인터뷰 답 — "새 티켓 만들고 지금 먼저 고침" / "BE 도 내가 직접 고침" / "「자동 기록」 고정, 부제만 바뀜" / "치지 않음 — 판정 초기화" / "「일시 중지」 알약 신설" / "같이 지움" / "둘 다 보임 — 안내 위·스위치 아래" / 그리고 AskUserQuestion 답 "진행 — audit append + [개정] 블록 2개".
+**AI Response**: `construction/u10-gps-location-automation/functional-design/business-rules.md` 끝에 `[개정 · 2026-10-20 · TRIP-1486]` 블록 1개(BR-U10-49~52 — 무장 사다리의 여행별 일시 중지 단 · 동의 변경 아님 · 구간 END 사유 `USER_PAUSE` · 판정 중 슬롯 ENTERED/HELD→IDLE · wipe 시 삭제 · 재개는 새 START · 강등 아님), `…/frontend-components.md` 끝(기존 2026-10-12 [개정] 블록 뒤)에 `[개정 · 2026-10-20 · TRIP-1486 — 여행별 일시 중지 스위치 구현]` 블록 1개(i01 스위치 줄 · testID · l06 「일시 중지」 알약 · 프리뷰 키 · Figma u10f 4985:3306·4987:3327 / u10d 4990:3348 · §8 6-b 추가 행 요청). 두 파일 모두 원문 삭제·수정 0줄(append 만). 출처 병기: 코드 근거는 `근거: TRIP-1486 구현 결정` — 요구사항 근거로 인용 금지.
+**Context**: CONSTRUCTION — U10 Functional Design 사후 개정(구현 반영), 커밋 `90c545781`(BE)·`6524f3983`(FE). 사용자 명시 승인(위 원문)에 따라 audit 원문 append 후 반영. `aidlc-state.md`·`docs/SCOPE.md` 무변경.
+
+---

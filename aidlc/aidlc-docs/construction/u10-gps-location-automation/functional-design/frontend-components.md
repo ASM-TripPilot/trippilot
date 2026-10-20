@@ -196,3 +196,14 @@ settings-location-usage-row-automation
 > 12. **요약(§3 j 요약)** — `summaryView.ts`는 `features/reflection/model/summaryView.ts`로 이사해 있다. 날짜별 출처는 서버 `DayHighlight.distanceSource`(§12.5) 미개통이라 `GET routes` 목록으로 FE 파생(`distanceSourceByDate`) — 플래그 ON 에서만. 요약 지도 히어로 경로는 G-U10-7 그대로 미구현.
 > 13. **경로 조회 훅** — `useTripRoutes`는 Query 캐시 대신 effect(플래그 OFF 화면·QueryClient 없는 기존 목 테스트에 새 의존을 만들지 않으려고). BE 개통 때 orval 훅으로 교체.
 > 14. **Figma** — DEC-U10-19 ①~⑤를 캔버스 1228:1045 **U10 검토 밴드**(라벨 4854:2795, y=19950)에 9프레임으로 작도(정본 in-place 수정 없음, figma-qa 9/9 PASS). 정본 이식은 사람 검토 뒤.
+
+> **[개정 · 2026-10-20 · TRIP-1486 — 여행별 일시 중지 스위치 구현]** (커밋 `90c545781` BE `USER_PAUSE` · `6524f3983` FE) 원문은 그대로 두고, 이 기능이 더한 표면만 적는다. 근거: TRIP-1486 구현 결정(사용자 인터뷰 2026-10-20) — **요구사항 근거로 인용하지 않는다.** 규칙은 `business-rules.md` 의 같은 날짜 개정 블록(BR-U10-49~52).
+>
+> 1. **i01 스위치 줄(§3 i01 허브)** — 안내 띠 아래에 *자동 기록 상태 줄 + 스위치* 한 줄을 더한다. **노출 = 플래그 ON ∧ (ARMED ∨ paused)**; 다른 MANUAL 사유·EXPLAINER 에서는 줄이 없다. **안내 띠(강등 안내)와 둘 다 보일 수 있고 안내 위·스위치 아래**다. 카피: 제목 「자동 기록」 **고정**(상태가 바뀌어도 제목은 안 바뀐다), 부제만 바뀐다 — 켜짐 「여행 날짜 동안 방문과 다닌 길을 기록해요」 / 일시 중지 「일시 중지했어요 · [도착]으로 직접 남겨요」. **줄 전체가 하나의 스위치로 눌린다**(터치 영역 보강). 스위치는 공용 `shared/ui/Toggle`. 일시 중지는 강등이 아니므로 안내 띠를 만들지 않는다.
+> 2. **testID(§5 추가)** — `execution-live-automation-switch-row` · `-switch-title` · `-switch-detail` · `execution-live-automation-switch`(공용 `Toggle` 의 testID, 손잡이는 `-thumb`).
+> 3. **l06 'paused' 얼굴(§3 l06)** — 상태 알약 문구 「일시 중지」(꺼짐과 같은 회색 `bg-surface-strong text-muted`, 글자만 다름), 사유 줄 「이 여행은 일시 중지했어요」. `statusView` 의 `status:'paused'` 는 꺼짐으로 접히지 않는다.
+> 4. **프리뷰 키** — `u10-switch-on` · `u10-switch-paused` · `u10-l06-paused`(`app/_dev/preview.tsx`). 통과형 시트 목 위의 스위치 줄은 jest 에서 항상 렌더되므로 실제 터치·덮임은 6-b 전용.
+> 5. **Figma** — U10 검토 밴드: u10f 스위치 줄 켜짐 `4985:3306` · 일시 중지 `4987:3327`, u10d l06 일시 중지 변형 `4990:3348`(figma-qa 3회 PASS, 정본 무변경 단언 PASS). 비주얼 픽셀 대조는 구현 단계에서 못 했고 시뮬 스모크에서 육안으로 확인했다.
+> 6. **코드 위치** — `shared/location/automation/arming.ts`(`tripPaused`) · `store.ts`(`pausedTrips`) · `engine.ts`(`setTripPaused`, `endReasonOf` 의 `'paused'→'USER_PAUSE'`) · `noticeCopy.ts`(`automationSwitchCopy`) · `statusView.ts` · `useLocationAutomation.ts`(`setPaused`: 동기 잠금 + 낙관적 표시) · `pages/live/live-itinerary/ui/LiveHubView.tsx`.
+> 7. **§8 6-b 표에 더하는 행(표 원문은 수정하지 않는다)** — 12. **일시 중지 끄기** → 지오펜스·경로 해제, 열린 구간마다 END(`USER_PAUSE`) 보고(지오펜스+경로 두 구간이면 **2건**), 상태바 위치 화살표 사라짐, 부제 변경 · 13. **일시 중지 켜기** → 설명·권한 요청 없이 새 구간 START(**2건**) · 재무장 · 14. 스위치 줄을 누르든 안쪽 토글을 누르든 `setPaused` 가 **1회**만 불린다(중첩 Pressable 이중 호출은 jest 사각) · 15. 앱을 닫은 채 백그라운드 wake 가 와도 일시 중지가 되살아나지 않는다. 방법은 기존 표와 같다(실기/시뮬 + 서버 조회).
+> 8. **알려진 한계(관측)** — 켜기 직후 OS 권한이 풀려 있으면 스위치가 잠깐 켜졌다 되돌아간다(낙관적 표시). 일시 중지 이전에 모은 원시 표본은 지우지 않아 다음 날 포그라운드 업로드에 실려 갈 수 있다.
