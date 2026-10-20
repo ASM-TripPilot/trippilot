@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -19,11 +20,24 @@ def run_dir(dag_id: str, run_id: str) -> Path:
 
 
 def publish(candidate: Path, target: Path) -> Path:
-    """원자적 교체 — 읽는 쪽이 반쯤 쓴 파일을 보지 않게."""
+    """원자적 교체 — 읽는 쪽이 반쯤 쓴 파일을 보지 않게. 게시가 끝나면 그 실행의 후보 폴더(run_dir)를 지운다.
+
+    - 임시 파일은 실행마다 고유한 이름이다 — 이름이 고정이면 동시에 두 게시가 서로의 임시 파일을 덮는다
+      (`airflow dags test` 는 max_active_runs 를 따지지 않는다). 같은 폴더에 둬야 replace 가 원자적이다.
+    - 후보 폴더는 실행마다 수십 MB(POI 사본 48.6MB)라 남기면 한 달에 1.5GB 가 쌓인다. 검증이 실패하면 게시가
+      돌지 않으므로 실패한 실행의 후보는 그대로 남아 원인을 볼 수 있다."""
     target.parent.mkdir(parents=True, exist_ok=True)
-    staging = target.with_suffix(target.suffix + ".tmp")
-    shutil.copyfile(candidate, staging)
-    staging.replace(target)
+    fd, name = tempfile.mkstemp(dir=target.parent, prefix=f".{target.name}.", suffix=".tmp")
+    os.close(fd)
+    staging = Path(name)
+    try:
+        shutil.copyfile(candidate, staging)
+        staging.replace(target)
+    except BaseException:
+        staging.unlink(missing_ok=True)
+        raise
+    if OUT / "runs" in candidate.parent.parents:   # run_dir 이 만든 폴더만 — 다른 경로의 후보는 지우지 않는다
+        shutil.rmtree(candidate.parent)
     return target
 
 

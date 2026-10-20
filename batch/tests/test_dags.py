@@ -19,17 +19,24 @@ from zoneinfo import ZoneInfo
 DAGS = Path(__file__).resolve().parents[1] / "dags"
 EVENTS = Path(__file__).resolve().parents[2] / "ai/data/collected_events.json"
 DAG_START = date(2026, 10, 1)
+MAX_AGE_DAYS = 7   # event_collect 의 max_age_days 기본값
 
 
 def fixture_events() -> list[dict]:
     return json.loads(EVENTS.read_text(encoding="utf-8"))["events"]
 
 
+def last_collected() -> date:
+    doc = json.loads(EVENTS.read_text(encoding="utf-8"))
+    return max(datetime.fromisoformat(t).date() for t in doc["coverage"].values())
+
+
 def busiest_day() -> date:
-    """리포 행사 사본에서 유효한 행사가 가장 많은 날 — DAG 시작일 이후로."""
+    """리포 행사 사본에서 유효한 행사가 가장 많은 날 — DAG 시작일 이후이고, 마지막 수집에서 허용 날수(7일) 안."""
     spans = [(date.fromisoformat(e["start"]), date.fromisoformat(e["end"])) for e in fixture_events()
              if e.get("start") and e.get("end")]
-    days = {max(s, DAG_START) for s, _ in spans}
+    first = max(DAG_START, last_collected())
+    days = [first + timedelta(days=i) for i in range(MAX_AGE_DAYS + 1)]
     return max(days, key=lambda d: sum(s <= d <= e for s, e in spans))
 
 # Airflow 를 불러오기 **전에** 정한다 — dag.test() 는 설정된 DAG 폴더를 메타 DB 에 동기화해서 돌고,
@@ -93,6 +100,7 @@ class DryRunTest(unittest.TestCase):
         mod.SOURCE = self.poi_source()
         mod.poi_collect().test()
         self.assertEqual(len(json.loads((self.out / "published/collected_pois.json").read_text(encoding="utf-8"))["proposals"]), 600)
+        self.assertEqual(list((self.out / "runs/poi_collect").iterdir()), [])   # 게시한 실행의 후보 사본은 지웠다
 
     def test_POI_백엔드가_못_읽는_주소가_섞이면_게시하지_않는다_1427(self):
         mod = self.load("poi_collect")
@@ -101,10 +109,12 @@ class DryRunTest(unittest.TestCase):
         states = {ti.task_id: ti.state for ti in run.get_task_instances()}
         self.assertEqual((states["collect"], states["validate"]), ("success", "failed"))
         self.assertFalse((self.out / "published/collected_pois.json").exists())
+        kept = list((self.out / "runs/poi_collect").glob("*/collected_pois.json"))
+        self.assertEqual(len(kept), 1)   # 검증에 실패한 후보는 원인을 보라고 남긴다
 
     def test_행사는_그날_기준으로_검증한다(self):
         # 날짜를 박지 않는다 — 수집기가 지난 행사를 지워 리포 사본이 바뀌면 고정 날짜는 언젠가 하한 아래로 떨어진다.
-        # 사본에서 유효 행사가 가장 많은 날(시작일 뒤)을 고른다.
+        # 사본에서 유효 행사가 가장 많은 날(시작일 뒤, 마지막 수집에서 7일 안 — 신선도 검사도 통과하는 날)을 고른다.
         mod = self.load("event_collect")
         mod.event_collect().test(logical_date=datetime.combine(busiest_day(), time(4, 40), tzinfo=ZoneInfo("Asia/Seoul")))
         self.assertTrue((self.out / "published/collected_events.json").exists())
@@ -121,6 +131,18 @@ class DryRunTest(unittest.TestCase):
         self.assertEqual(states["validate"], "failed")    # 검증이 막았다
         self.assertFalse((self.out / "published/collected_events.json").exists())
 
+    def test_행사_수집이_멈췄으면_유효_건수가_넉넉해도_게시하지_않는다(self):
+        # 합성 저장소 — 그날 유효한 행사 40건(하한 30 위)인데 마지막 수집이 8일 전이다. 수집 시각만이 막는다.
+        mod = self.load("event_collect")
+        day = date(2026, 10, 20)
+        source = self.out / "events.json"
+        source.write_text(json.dumps({"events": [{"start": "2026-10-01", "end": "2026-12-31"}] * 40,
+                                      "coverage": {"서울": "2026-10-12T04:40:00+09:00"}}), encoding="utf-8")
+        mod.SOURCE = source
+        run = mod.event_collect().test(logical_date=datetime.combine(day, time(4, 40), tzinfo=ZoneInfo("Asia/Seoul")))
+        states = {ti.task_id: ti.state for ti in run.get_task_instances()}
+        self.assertEqual((states["collect"], states["validate"]), ("success", "failed"))
+        self.assertFalse((self.out / "published/collected_events.json").exists())
 
 if __name__ == "__main__":
     unittest.main()
