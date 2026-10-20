@@ -2,7 +2,6 @@ package com.trippilot.planbdetection.domain
 
 import com.trippilot.planbdetection.domain.WeatherHazards.Exposure
 import com.trippilot.planbdetection.domain.WeatherHazards.Verdict
-import com.trippilot.weathercontext.api.DailyWeather
 import com.trippilot.weathercontext.api.HourlyWeather
 import com.trippilot.weathercontext.api.PointForecast
 import com.trippilot.weathercontext.api.Precipitation
@@ -117,7 +116,7 @@ class WeatherHazardsPropertyTest : StringSpec({
             val calm = HourlyWeather(20, Precipitation.NONE, Sky.CLEAR, 20.0, 3.0)
             val hourly = (0L..47L).map { DAY.atStartOfDay().plusHours(it) }.filter { it.atZone(ZONE).toInstant() > baseAt(now) }
                 .associateWith { if (it.hour in 12..17) calm.copy(tmp = hot) else calm }
-            val f = PointForecast("53,38", baseAt(now), hourly, emptyMap())
+            val f = PointForecast("53,38", baseAt(now), hourly)
             val e = UUID.randomUUID().let { Exposure("$DAY#$it", it, "우도", "자연", DAY, start, end, endsNextDay = end < start, forecast = f) }
             val overlaps = DAY.atTime(start) < DAY.atTime(18, 0) && e.slotEnd() > DAY.atTime(12, 0)
 
@@ -208,10 +207,7 @@ private fun forecastArb(base: Instant, wild: Boolean): Arb<PointForecast> = arbi
         }
         hourly[h] = w
     }
-    val daily = listOf(DAY, DAY.plusDays(1)).associateWith {
-        if (wild) DailyWeather(Arb.double(-20.0, 10.0).bind(), Arb.double(15.0, 40.0).bind()) else DailyWeather(-4.0, 27.0)
-    }.filter { Arb.int(0, 2).bind() != 0 }
-    PointForecast("53,38", base, hourly, daily)
+    PointForecast("53,38", base, hourly)
 }
 
 private fun exposureArb(forecasts: List<PointForecast?>): Arb<Exposure> = arbitrary {
@@ -251,12 +247,7 @@ private val bands: Arb<Situation> = arbitrary {
             else -> if (h.hour in 18..19) calm.copy(sky = Sky.OVERCAST) else calm
         }
     }
-    val daily = when (band) {
-        "HEAT" -> mapOf(DAY to DailyWeather(tmn = 25.0, tmx = Arb.double(31.0, 32.99).bind()))
-        "COLD" -> mapOf(DAY to DailyWeather(tmn = Arb.double(-11.99, -10.0).bind(), tmx = -10.0))
-        else -> emptyMap()
-    }
-    val f = PointForecast("53,38", base, hourly, daily)
+    val f = PointForecast("53,38", base, hourly)
     fun slot(category: String, start: Int, end: Int) = UUID.randomUUID().let {
         Exposure("$DAY#$it", it, "우도", category, DAY, LocalTime.of(start, 0), LocalTime.of(end, 0), false, f)
     }
@@ -303,10 +294,9 @@ private fun PointForecast.erase(h: LocalDateTime, field: String): PointForecast 
 
 private fun Exposure.mapForecast(edit: (PointForecast) -> PointForecast) = copy(forecast = forecast?.let(edit))
 
-/** POP·WSD 를 올리고 기온(TMP·TMN·TMX)을 [dTemp] 만큼 옮긴다. */
+/** POP·WSD 를 올리고 기온(TMP)을 [dTemp] 만큼 옮긴다. */
 private fun PointForecast.shift(dPop: Int, dWind: Double, dTemp: Double) = copy(
     hourly = hourly.mapValues { (_, w) ->
         w.copy(pop = w.pop?.let { minOf(100, it + dPop) }, wsd = w.wsd?.plus(dWind), tmp = w.tmp?.plus(dTemp))
     },
-    daily = daily.mapValues { (_, d) -> DailyWeather(d.tmn?.plus(dTemp), d.tmx?.plus(dTemp)) },
 )

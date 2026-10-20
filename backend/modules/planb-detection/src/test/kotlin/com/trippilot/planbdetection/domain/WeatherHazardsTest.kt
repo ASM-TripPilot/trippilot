@@ -1,7 +1,6 @@
 package com.trippilot.planbdetection.domain
 
 import com.trippilot.planbdetection.domain.WeatherHazards.Verdict
-import com.trippilot.weathercontext.api.DailyWeather
 import com.trippilot.weathercontext.api.HourlyWeather
 import com.trippilot.weathercontext.api.PointForecast
 import com.trippilot.weathercontext.api.Precipitation
@@ -138,14 +137,11 @@ class WeatherHazardsTest : StringSpec({
     }
 
     /**
-     * 기온은 판정 시각의 시간별 TMP 만 본다(G-SA-15 결정 2026-10-20). 그 날 최고(TMX · 15시)는 11시 발표분까지만 실리고 내일 최고는
-     * 모든 발표분에 실려서(실측), 쓰면 발표분에 따라 폭염이 떴다 사라지고 슬롯이 겪지 않는 한낮 최고로 경보한다.
+     * 기온은 판정 시각의 시간별 TMP 만 본다(G-SA-15 결정 2026-10-20) — 그 날 최고(TMX · 15시)는 받지도 않는다. 11시 발표분까지만
+     * 실리고 내일 최고는 모든 발표분에 실려서(실측), 쓰면 발표분에 따라 폭염이 떴다 사라지고 슬롯이 겪지 않는 한낮 최고로 경보했다.
      */
-    "HEAT — 그 날 최고(15시 36 · TMX)가 35 이상이어도 슬롯의 한낮 칸 TMP 가 33 아래면 폭염이 아니다" {
-        val lateHeat = forecastOf(
-            calmDay { h, w -> w.copy(tmp = if (h.hour == 15) 36.0 else 32.9) },
-            daily = mapOf(DAY to DailyWeather(tmn = 24.0, tmx = 36.0)),
-        )
+    "HEAT — 그 날 최고(15시 36 · TMX 자리)가 35 이상이어도 슬롯의 한낮 칸 TMP 가 33 아래면 폭염이 아니다" {
+        val lateHeat = forecastOf(calmDay { h, w -> w.copy(tmp = if (h.hour == 15) 36.0 else 32.9) })
 
         judge(exposure("자연", "12:00", "13:00", lateHeat)) shouldBe Verdict.Unsettled // 32.9 — 신호도 확인도 아니다
     }
@@ -160,14 +156,13 @@ class WeatherHazardsTest : StringSpec({
     }
 
     /**
-     * 그 날 최저(TMN · 06시)는 02시 발표분에만 실리고 내일 최저는 모든 발표분에 실린다(2026-10-20 실측) — 쓰면 저녁 회차가 내일 최저로
-     * 발화하고 아침 회차가 해제하는 깜빡임이 나고, 새벽 최저로 오후 일정까지 한파로 경보한다(G-SA-15).
+     * 그 날 최저(TMN · 06시)는 받지도 않는다 — 02시 발표분에만 실리고 내일 최저는 모든 발표분에 실려서(2026-10-20 실측), 쓰면 저녁
+     * 회차가 내일 최저로 발화하고 아침 회차가 해제하는 깜빡임이 나고, 새벽 최저로 오후 일정까지 한파로 경보했다(G-SA-15).
      */
-    "COLD — 그 날 최저(06시 −13 · TMN)가 −12 이하여도 판정 시각 TMP 가 모두 −10 위면 한파가 아니다" {
+    "COLD — 그 날 최저(06시 −13 · TMN 자리)가 −12 이하여도 판정 시각 TMP 가 모두 −10 위면 한파가 아니다" {
         val dawn = calmDay { h, w -> w.copy(tmp = if (h.hour <= 7) -13.0 else -9.9) }
-        val dawnFrost = forecastOf(dawn, daily = mapOf(DAY to DailyWeather(tmn = -13.0, tmx = 2.0)))
 
-        judge(exposure("자연", "14:00", "16:00", dawnFrost)) shouldBe Verdict.Clear
+        judge(exposure("자연", "14:00", "16:00", forecastOf(dawn))) shouldBe Verdict.Clear
         // 슬롯이 그 새벽 시각을 지나면 한파다 — 05시 발표분 · 06:20 회차의 07~09시 슬롯
         judge(exposure("자연", "07:00", "09:00", forecastOf(dawn, base = kst("2026-10-20T05:00"))), now = kst("2026-10-20T06:20")).hazard().let {
             it.variant shouldBe TriggerVariant.COLD
@@ -221,7 +216,7 @@ class WeatherHazardsTest : StringSpec({
         val holey = forecastOf(calmDay { h, w -> if (h.hour == 15) w.copy(wsd = null) else w })
         judge(exposure("자연", "14:00", "16:00", holey)) shouldBe Verdict.Unknown
         judge(exposure("자연", "14:00", "16:00", null)) shouldBe Verdict.Unknown
-        val missingHour = PointForecast("53,38", BASE, calmDay().filterKeys { it.hour != 15 }, emptyMap())
+        val missingHour = PointForecast("53,38", BASE, calmDay().filterKeys { it.hour != 15 })
         judge(exposure("자연", "14:00", "16:00", missingHour)) shouldBe Verdict.Unknown
 
         val rainy = forecastOf(day { it.copy(precipitation = Precipitation.RAIN) })
@@ -274,7 +269,7 @@ class WeatherHazardsTest : StringSpec({
 
     "발표 시각 이전 칸은 판정하지 않는다 — 지난 시각이 없다고 모름으로 읽지 않는다" {
         // 11시 발표분에는 11시 이전 칸이 없다. 10~12시 슬롯은 12시만 본다.
-        val f = PointForecast("53,38", kst("2026-10-20T11:00"), mapOf(at("12:00") to CALM), emptyMap())
+        val f = PointForecast("53,38", kst("2026-10-20T11:00"), mapOf(at("12:00") to CALM))
         judge(exposure("자연", "10:00", "12:00", f), now = kst("2026-10-20T11:20")) shouldBe Verdict.Clear
     }
 }) {
@@ -296,11 +291,8 @@ class WeatherHazardsTest : StringSpec({
 
         fun day(edit: (HourlyWeather) -> HourlyWeather) = calmDay { _, w -> edit(w) }
 
-        fun forecastOf(
-            hourly: Map<LocalDateTime, HourlyWeather>,
-            base: Instant = BASE,
-            daily: Map<LocalDate, DailyWeather> = emptyMap(),
-        ) = PointForecast("53,38", base, hourly.filterKeys { it.atZone(ZONE).toInstant() > base }, daily)
+        fun forecastOf(hourly: Map<LocalDateTime, HourlyWeather>, base: Instant = BASE) =
+            PointForecast("53,38", base, hourly.filterKeys { it.atZone(ZONE).toInstant() > base })
 
         fun exposure(
             category: String?, start: String, end: String, forecast: PointForecast?,
