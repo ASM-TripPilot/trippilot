@@ -7,8 +7,7 @@ import type { AssistantSurface, NextAction } from '../api/assistantContract';
  *
  * - `OPEN_OTA` 는 외부 URL 을 직접 열지 않고 숙소 상세로 보낸다 — 제휴 고지 시트(BR-U1-30)를 건너뛰지 않게.
  * - `OPEN_PLACE` 의 "여행 중" 판정은 도우미를 연 화면이 여행 중 허브(`LIVE`)인가로 한다.
- * - `RESTORE_REVISION` 은 변경 이력 화면(h36)으로 보낸다 — params 키 계약이 없어 revisionId 는 쓰지 않는다
- *   (되돌릴 버전은 그 화면에서 사용자가 고른다).
+ * - `RESTORE_REVISION` 은 FE 에 리비전 화면(h36)이 없어 null(→ 능력 목록) — FD 개정 블록에 갭으로 남긴다.
  */
 
 export type InternalAction =
@@ -85,8 +84,6 @@ export function nextActionRoute(
       );
     case 'OPEN_TRIP_SUMMARY':
       return route(`${trip}/records/summary`);
-    case 'RESTORE_REVISION':
-      return route(`${trip}/itinerary/history`);
     default:
       return null;
   }

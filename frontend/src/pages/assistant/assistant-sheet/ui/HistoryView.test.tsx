@@ -78,19 +78,4 @@ describe('HistoryView (TRIP-1325)', () => {
       expect.objectContaining({ tripId: 'trip-x' })
     );
   });
-
-  // TRIP-1513 · AC-6 — b06 이력 보기의 「일정 변경 이력 전체 보기」 행(h36 진입). 여행이 있을 때만 prop 이 온다.
-  it('일정 변경 이력 행 — prop 이 있으면 그려지고 누르면 1회 알린다', () => {
-    const onOpenChangeHistory = jest.fn();
-    renderView({ onOpenChangeHistory });
-    expect(screen.getByText('일정 변경 이력 전체 보기')).toBeOnTheScreen();
-    fireEvent.press(screen.getByTestId('assistant-history-open-changes'));
-    expect(onOpenChangeHistory).toHaveBeenCalledTimes(1);
-  });
-
-  it('일정 변경 이력 행 — prop 이 없으면(여행 없는 b07) 그리지 않는다', () => {
-    renderView();
-    expect(screen.queryByTestId('assistant-history-open-changes')).toBeNull();
-    expect(screen.queryByText('일정 변경 이력 전체 보기')).toBeNull();
-  });
 });

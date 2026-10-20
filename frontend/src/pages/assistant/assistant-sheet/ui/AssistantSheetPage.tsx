@@ -321,14 +321,6 @@ export function AssistantSheetPage({
             onOpenSession={(item) =>
               router.replace(assistantHref(surface, item.tripId) as Href)
             }
-            onOpenChangeHistory={
-              tripId
-                ? () =>
-                    router.replace(
-                      `/trips/${encodeURIComponent(tripId)}/itinerary/history` as Href
-                    )
-                : undefined
-            }
           />
         ) : undefined
       }

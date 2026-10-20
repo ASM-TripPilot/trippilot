@@ -63,22 +63,6 @@ describe('displayActions (TRIP-1322)', () => {
       { examples: [[[]], [[{ type: 'OPEN_OTA', label: 'x', params: {} }]]] }
     );
   });
-
-  // TRIP-1513 · RESTORE_REVISION 은 h36 이 생겨 이제 갈 수 있는 행동이다(옛 기대: 능력 목록으로 대체)
-  it('RESTORE_REVISION 은 여행 문맥이 있으면 대체되지 않고 그대로 그린다', () => {
-    expect(displayActions([act('RESTORE_REVISION')], ctx)).toEqual([
-      act('RESTORE_REVISION'),
-    ]);
-  });
-
-  it('RESTORE_REVISION 도 여행 문맥이 없으면 갈 수 없어 "내가 할 수 있는 것"으로 바뀐다', () => {
-    expect(
-      displayActions([act('RESTORE_REVISION')], {
-        tripId: null,
-        surface: 'HOME',
-      })
-    ).toEqual([CAPABILITIES_ACTION]);
-  });
 });
 
 describe('displayMessage (TRIP-1323)', () => {
@@ -93,7 +77,7 @@ describe('displayMessage (TRIP-1323)', () => {
           summary: [],
           problems: [
             { reason: 'a', fixAction: act('OPEN_ITINERARY') },
-            { reason: 'b', fixAction: act('OPEN_OTA') },
+            { reason: 'b', fixAction: act('RESTORE_REVISION') },
           ],
         },
         nextActions: [act('OPEN_ITINERARY')],

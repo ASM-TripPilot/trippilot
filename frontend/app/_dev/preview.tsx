@@ -88,7 +88,6 @@ import { type PlanDayTab } from '@/features/itinerary/model/planState';
 import type { MustVisitListItem } from '@/features/itinerary/index.view';
 import { startTimeOptions, tripDayChips } from '@/features/add-must-visit';
 import { ConceptPickerScreen } from '@/pages/itinerary/itinerary-copick/ui/ConceptPickerScreen';
-import { ItineraryHistoryView } from '@/pages/itinerary/itinerary-history/ui/ItineraryHistoryView';
 import { GenerationFallbackScreen } from '@/pages/itinerary/itinerary-draft/ui/GenerationFallbackScreen';
 import { GeneratingScreen } from '@/pages/itinerary/itinerary-generating/ui/GeneratingScreen';
 import { MustVisitPickerScreen } from '@/pages/itinerary/itinerary-mustvisit/ui/MustVisitPickerScreen';
@@ -4631,45 +4630,6 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // TRIP-1513 · h36 일정 변경 이력 4얼굴(Figma 4997:3177·4876·4951·4966). props-only 직접 렌더 — 다이얼로그 딤·
-  // 점선 상자·배너는 jest 사각이라 이 4키가 6-b 육안 자리.
-  {
-    key: 'itinerary-history-default',
-    band: 'h',
-    label: 'h36 · 변경 이력 default',
-    login: null,
-    render: () => <ItineraryHistoryPreview />,
-  },
-  {
-    key: 'itinerary-history-confirm',
-    band: 'h',
-    label: 'h36 · 변경 이력 confirm',
-    login: null,
-    render: () => <ItineraryHistoryPreview confirming />,
-  },
-  {
-    key: 'itinerary-history-empty',
-    band: 'h',
-    label: 'h36 · 변경 이력 empty',
-    login: null,
-    render: () => <ItineraryHistoryPreview face="empty" />,
-  },
-  {
-    key: 'itinerary-history-error',
-    band: 'h',
-    label: 'h36 · 변경 이력 error',
-    login: null,
-    render: () => <ItineraryHistoryPreview face="error" />,
-  },
-  {
-    key: 'itinerary-history-restore-error',
-    band: 'h',
-    label: 'h36 · 변경 이력 되돌리기 409',
-    login: null,
-    render: () => (
-      <ItineraryHistoryPreview restoreNotice="지금은 되돌릴 수 없어요. 확정된 일정이거나 일정을 만드는 중이에요." />
-    ),
-  },
   // TRIP-706 — d02 select 모드 4얼굴(Figma 2437:1500·1666·1616·1639). props-only 직접 렌더.
   // 체크 채움/빈 글리프·92px 에러 원·콜라주 벡터·순번 배지 원은 jest 사각이라 이 4키가 6-b 육안 자리.
   {
@@ -8432,61 +8392,6 @@ function bandOfKey(key: string): Band {
 
 // 밴드 그룹 안 정렬 키 — 라벨의 ' · ' 앞 코드 토큰(예 'h11'). 166코드가 전부 2자리 zero-pad라
 // 사전순 문자열 비교가 곧 번호순이다(숫자 파싱 불필요). 파일 국소 헬퍼(export 안 함).
-const PREVIEW_HISTORY_NOW = new Date('2026-10-20T12:00:00.000Z');
-const PREVIEW_HISTORY_REVISIONS = [
-  [
-    'n1',
-    3,
-    'USER',
-    'EDIT',
-    '2일차 순서를 바꿨어요',
-    '해운대 해수욕장 ↔ 광안리 해수욕장',
-    18,
-  ],
-  ['n2', 2, 'USER', 'EDIT', '3일차에서 감천문화마을을 뺐어요', null, 60],
-  ['n3', 1, 'AI', 'GENERATE', '일정을 다시 짰어요', '부산 2박 3일', 24 * 60],
-  ['n4', 0, 'USER', 'RESTORE', '이전 버전으로 되돌렸어요', null, 2 * 24 * 60],
-  ['n5', -1, 'AI', 'BASELINE', '기준 버전', null, 3 * 24 * 60],
-] as const;
-
-function ItineraryHistoryPreview({
-  face = 'list',
-  confirming = false,
-  restoreNotice = null,
-}: {
-  face?: 'list' | 'empty' | 'error';
-  confirming?: boolean;
-  restoreNotice?: string | null;
-}) {
-  return (
-    <ItineraryHistoryView
-      face={face}
-      revisions={PREVIEW_HISTORY_REVISIONS.map(
-        ([id, seq, actor, kind, summary, detail, minutesAgo]) => ({
-          revisionId: id,
-          seq,
-          actor,
-          kind,
-          summary,
-          detail,
-          createdAt: new Date(
-            PREVIEW_HISTORY_NOW.getTime() - minutesAgo * 60_000
-          ).toISOString(),
-        })
-      )}
-      now={PREVIEW_HISTORY_NOW}
-      confirming={confirming}
-      restoring={false}
-      restoreNotice={restoreNotice}
-      onBack={noop}
-      onRetry={noop}
-      onRestore={noop}
-      onCancelConfirm={noop}
-      onConfirm={noop}
-    />
-  );
-}
-
 const codeOf = (state: PreviewState): string => state.label.split(' · ')[0];
 
 // 코드 토큰만 1차 키로 비교한다 — 같은 코드의 여러 얼굴은 sort 가 안정(ES2019+/Hermes)이라
