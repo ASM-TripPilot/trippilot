@@ -39,6 +39,8 @@ from tests.orchestrator.test_dialogue_handlers import (
     _Weather,
     _ctx,
     _planb_result,
+    _poi,
+    _pool,
     _run,
     _snapshot,
 )
@@ -321,26 +323,67 @@ def CandidatePool_empty():  # noqa: N802 — 빈 풀(조회는 됐는데 등록 
     return CandidatePool(poi_ids=frozenset(), pois=(), generated_at=to._NOW)
 
 
-# C5 — 병합 답의 시각 대조(INV-2): 후보 옆 시각 · 떠 있는 시각 · 영업시간 짝
+# 병합 답의 시각 귀속(INV-2, BR-AO-28) — 시각이 든 문장마다: 아는 이름이 있어야 하고, 시각마다 그 문장의 어떤 이름과 짝이고,
+# 이름마다 그 문장의 어떤 시각과 짝이다. 한 부분의 검증된 시각이 다른 부분의 장소·후보에 붙는 꼴을 막는다(#1420 리뷰 C1·C2·C3·C12)
+
+_MIX_PORTS = HandlerPorts(poi_info=to._PoiInfo(), weather=to._Weather(), transit=_Transit(confidence="HIGH"),
+                          pool_builder=to._ExplorePool(), planb=_PlanB(_planb_result(("흑돼지거리",), ("동문시장",))))
+_ALT_PORTS = _replace(_MIX_PORTS, pool_builder=_PoolBuilder(_pool(_poi("흑돼지거리"), _poi("동문시장"))))  # 대안 후보 = 일정 밖 두 곳
+_NEXT, _NEAR = ("GET_NEXT_SLOT", {}), ("EXPLORE_PLACES", {})
+_HOURS, _MOCA_HOURS = ("GET_POI_INFO", {"place": "해녀의집"}), ("GET_POI_INFO", {"place": "카페 모카"})
+_TODAY = ("GET_WEATHER", {"date": "오늘"})
 
 
-@pytest.mark.parametrize(("calls", "text", "passes"), [
-    # [다음 일정 + 탐색]
-    ((("GET_NEXT_SLOT", {}), ("EXPLORE_PLACES", {"region": "부산"})),
-     "다음 일정은 12:00 해녀의집이에요. 근처에 흰여울 카페가 있어요.", True),
-    ((("GET_NEXT_SLOT", {}), ("EXPLORE_PLACES", {"region": "부산"})), "12:00에는 흰여울 카페에 가 보세요.", False),
-    ((("GET_NEXT_SLOT", {}), ("EXPLORE_PLACES", {"region": "부산"})), "12:00 감천문화마을 어때요", False),
-    # [영업시간 + 탐색]
-    ((("GET_POI_INFO", {"place": "해녀의집"}), ("EXPLORE_PLACES", {"region": "부산"})),
-     "해녀의집은 18:00까지 열어요. 근처 카페로 흰여울 카페가 있어요.", True),
-    ((("GET_POI_INFO", {"place": "해녀의집"}), ("EXPLORE_PLACES", {"region": "부산"})), "흰여울 카페는 09:00부터 열어요.", False),
+@pytest.mark.parametrize(("calls", "ports", "text", "passes"), [
+    # 막혀야 함 — 다른 부분의 시각을 후보·장소에 붙였다 / 떠 있는 시각
+    ((_NEXT, _NEAR), _MIX_PORTS, "12:00에 해녀의집 근처 흰여울 카페에 들러 보세요.", False),
+    ((_HOURS, _NEAR), _MIX_PORTS, "18:00에 해녀의집 근처 감천문화마을에 가 보세요.", False),
+    ((_NEXT, _NEAR), _MIX_PORTS, "해녀의집 끝나고 12:00에 흰여울카페 어때요?", False),
+    ((_NEXT, _NEAR), _MIX_PORTS, "12:00에 해녀의집 말고 감천문화마을에 가 보세요.", False),
+    ((_NEXT, _NEAR), _MIX_PORTS, "12:00에는 흰여울 카페에 가 보세요.", False),
+    ((_NEXT, _NEAR), _MIX_PORTS, "12:00 감천문화마을 어때요", False),
+    ((_HOURS, _NEAR), _MIX_PORTS, "흰여울 카페는 09:00부터 열어요.", False),
+    ((_NEXT, _TODAY), _MIX_PORTS, "우도는 12:00에 비 올 확률이 80%예요.", False),
+    ((_HOURS, _TODAY), _MIX_PORTS, "비는 18:00까지 올 것 같아요.", False),
+    ((_HOURS, ("GET_DISTANCE", {"destination": "카페 모카"})), _MIX_PORTS, "카페 모카는 09:00부터 18:00까지 열어요.", False),
+    ((_MOCA_HOURS, ("GET_DISTANCE", {"destination": "해녀의집"})), _MIX_PORTS, "해녀의집은 09:00부터 영업해요.", False),
+    ((("SHOW_SCHEDULE", {"scope": "REMAINING"}), _NEAR), _MIX_PORTS, "해녀의집은 12:00, 15:00에 들러요.", False),  # 15:00 은 카페 모카 것
+    # 감수하는 대가 — 한 문장에 시각과 짝 없는 후보가 같이 있으면 맞는 답도 템플릿이다
+    ((_NEXT, _NEAR), _MIX_PORTS, "다음 일정은 12:00 해녀의집이고 근처에 흰여울 카페가 있어요.", False),
+    # 통과해야 함 — 시각은 그 문장의 이름과 짝이다
+    ((_NEXT, _NEAR), _MIX_PORTS, "다음 일정은 12:00 해녀의집이에요. 근처에 흰여울 카페가 있어요.", True),
+    ((_NEXT, _NEAR), _MIX_PORTS, "다음 일정인 해녀의집은 오늘 12:00이에요. 감천문화마을도 가까워요.", True),
+    ((_HOURS, _NEAR), _MIX_PORTS, "해녀의집은 18:00까지 열어요. 근처 카페로 흰여울 카페가 있어요.", True),
+    ((_HOURS, _NEAR), _MIX_PORTS, "해녀의집의 영업시간은 09:00~18:00이에요. 근처에 흰여울 카페도 있으니 들러 보세요.", True),
+    ((_HOURS, ("SUGGEST_ALTERNATIVE", {"target": "해녀의집"})), _ALT_PORTS,
+     "해녀의집의 영업시간은 09:00~18:00이에요. 대신 흑돼지거리나 동문시장도 괜찮아요.", True),
+    ((_MOCA_HOURS, ("GET_DISTANCE", {"destination": "해녀의집"})), _MIX_PORTS,
+     "카페 모카는 09:00부터 18:00까지 열어요. 해녀의집까지는 약 1.2km예요.", True),
+    # 병합이 아니면(도구 하나) 문장 규칙을 걸지 않는다 — 떠 있는 시각은 종전대로 Facts 대조만
+    ((_NEXT,), _MIX_PORTS, "다음 일정은 12:00이에요.", True),
 ])
-def test_merged_answer_times_must_belong_to_their_own_part(calls, text: str, passes: bool) -> None:
-    out, b = _plan_turn(_plan_json(*calls), answer=_answer_json(text))
-    assert out.outcome == "ANSWER"
+def test_merged_answer_times_must_belong_to_their_own_part(calls, ports: HandlerPorts, text: str, passes: bool) -> None:
+    out, b = _plan_turn(_plan_json(*calls), answer=_answer_json(text), ports=ports)
+    assert out.outcome == "ANSWER" and out.reason.endswith("plan:" + "+".join(t for t, _ in calls))  # 게이트가 호출을 다 살렸다
     assert (out.answer.text == text) is passes, [e.reason for e in to._fallbacks(b.trace)]
     if not passes:
         assert any(e.reason == "time_not_in_facts" for e in to._fallbacks(b.trace))
+
+
+@pytest.mark.parametrize(("text", "facts"), [
+    ("다음 장소는 14:00 국립경주박물관이에요. 근처 밥집으로는 약 0.8km 거리의 교동쌈밥과 약 1.2km 거리의 황남빵이 있어요.",
+     {"places": [{"name": "교동쌈밥"}, {"name": "황남빵"}], "anchor": "국립경주박물관",
+      "also": [{"places": [{"name": "국립경주박물관"}], "next": {"name": "국립경주박물관", "start_at": "14:00"}}]}),
+    ("오늘 남은 일정은 14:00 국립경주박물관, 16:30 황리단길이에요. 비 올 확률은 80%예요.",
+     {"places": [{"name": "국립경주박물관"}, {"name": "황리단길"}],
+      "days": [{"slots": [{"name": "국립경주박물관", "start_at": "14:00"}, {"name": "황리단길", "start_at": "16:30"}]}],
+      "also": [{"places": [], "rows": [{"label": "오늘 최대 강수확률", "value": "80%"}]}]}),
+])
+def test_measured_merged_answers_pass_the_sentence_rule(text: str, facts: dict) -> None:
+    """측정 원문(`measure_prompt_ab.py answer` 병합 사례와 같은 입력 — Facts dict, 스냅샷 없음)이 같은 함수를 통과한다."""
+    pairs = orch_mod._slot_times(facts) + orch_mod._hours_pairs(facts)
+    known = tuple(orch_mod._squash(n) for n in orch_mod._prompt_names(facts))
+    assert not orch_mod._misplaced_time(text, pairs) and not orch_mod._unpaired_time(text, known, pairs)
 
 
 def test_next_slot_and_hours_are_not_merged_because_the_gate_keeps_only_the_first_time_tool() -> None:
@@ -357,7 +400,7 @@ def test_next_slot_and_hours_are_not_merged_because_the_gate_keeps_only_the_firs
 
 
 def test_floating_times_and_candidate_times_stay_allowed_outside_plan_answers() -> None:
-    """엄격 모드는 계획 병합 답(후보 카드 + also)만 — 분류 경로의 단독 탐색은 종전 그대로(떠 있는 시각은 Facts 대조만)."""
+    """문장 귀속 규칙은 계획 병합 답(also)만 — 분류 경로의 단독 탐색은 종전 그대로(떠 있는 시각은 Facts 대조만)."""
     b = to._build(to._canned(Intent.EXPLORE_PLACES, region="부산", answer=_answer_json("감천문화마을은 어떠세요?")),
                   ports=_PLAN_PORTS)
     out = b.orch.turn(to._input("부산 가볼 만한 곳", snapshot=to._NO_TRIP))
@@ -683,7 +726,7 @@ def test_argument_values_never_reach_a_port_verbatim(marker: str, pick: list[int
     ports = HandlerPorts(poi_info=poi, weather=weather, transit=transit, pool_builder=pool, planb=planb)
     tagged = f"해녀의집 {marker}"
     menu = [
-        ("GET_POI_INFO", {"place": tagged, "date": f"내일 {marker}"}),
+        ("GET_POI_INFO", {"place": tagged, "date": f"오늘 {marker}"}),  # '내일'은 해녀의집으로 안 풀려 포트를 안 부른다(공허 통과)
         ("GET_DISTANCE", {"destination": tagged, "origin": f"우도 {marker}"}),
         ("SUGGEST_ALTERNATIVE", {"target": tagged, "reason": f"비 와서 {marker}"}),
         ("EXPLORE_PLACES", {"region": f"부산 {marker}", "theme": marker}),
@@ -694,6 +737,8 @@ def test_argument_values_never_reach_a_port_verbatim(marker: str, pick: list[int
     canned = {to._INTENT: '{"intent": null}', to._ANSWER: _answer_json("확인해 봤어요."), to._MEMORY: to._MEMORY_JSON,
               to._PLAN: _plan_json(*[menu[i] for i in pick])}
     b = to._build(canned, ports=ports, with_planner=True)
-    b.orch.turn(to._input("이것저것 알려줘", snapshot=_SNAP))
+    out = b.orch.turn(to._input("이것저것 알려줘", snapshot=_SNAP))
     sent = repr((poi.calls, weather.calls, transit.calls, pool.requests, planb.requests))
     assert marker not in sent
+    if "GET_POI_INFO" in out.reason.rsplit("plan:", 1)[-1]:  # 게이트가 살린 장소 정보는 포트를 실제로 불렀다(pick 으로 걸면 시각 도구 드롭에 거짓 빨강)
+        assert poi.calls

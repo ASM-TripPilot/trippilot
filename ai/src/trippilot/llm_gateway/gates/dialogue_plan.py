@@ -166,11 +166,13 @@ def _parse(raw_text: str) -> tuple[list, bool, object]:
         data = json.loads(strip_code_fence(raw_text))
     except json.JSONDecodeError as e:
         raise ValueError(f"JSON 아님: {e.msg}") from e
+    except RecursionError as e:  # 깊은 중첩 — C 스캐너가 JSONDecodeError 대신 낸다(3.11 ≈1k·3.12 ≈10k)
+        raise ValueError("JSON 아님: 중첩 과다") from e
     if not isinstance(data, dict):
         raise ValueError("최상위가 객체가 아님")
     refused = data.get("refused")
-    if refused is not None and not isinstance(refused, bool):
-        raise ValueError(f"refused 가 bool·null 이 아님: {refused!r}")
+    if refused is not None and not isinstance(refused, bool):  # 원값은 싣지 않는다 — 사유가 운영 로그에 간다(SEC-U8-06)
+        raise ValueError(f"refused 가 bool·null 이 아님: {type(refused).__name__}")
     if refused:  # 거절은 calls 모양보다 먼저 — 거절하는 출력은 calls 를 빼먹기도 한다
         return [], True, None
     calls = data.get("calls")

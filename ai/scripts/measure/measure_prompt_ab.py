@@ -302,11 +302,12 @@ def run_answer(prompts: Path, repeat: int) -> None:
                            timeout_sec=ANSWER_TIMEOUT)
         wall = int((time.monotonic() - t0) * 1000)
         text = None if (r.is_fallback or r.value is None) else f"{r.value.text} {r.value.footnote or ''}".strip()
-        # 운영 `_compose` 와 같은 대조 — 영업시간 짝 포함, 계획 병합 후보 답은 엄격(후보 옆 시각·떠 있는 시각 금지, BR-AO-28 C5)
-        strict = "also" in facts and intent in ("EXPLORE_PLACES", "SUGGEST_ALTERNATIVE")
-        bare = [p["name"] for p in facts["places"]] if strict else []
-        bad_pair = bool(text) and orch._misplaced_time(
-            text, orch._slot_times(facts) + orch._hours_pairs(facts), bare=bare, strict=strict)
+        # 운영 `_compose` 와 같은 대조 — 영업시간 짝 포함, 계획 병합 답(also)은 문장마다 시각을 그 문장의 이름에 귀속(BR-AO-28).
+        # 스냅샷이 없어 아는 이름은 Facts 의 것뿐이다
+        pairs = orch._slot_times(facts) + orch._hours_pairs(facts)
+        known = tuple(orch._squash(n) for n in orch._prompt_names(facts))
+        bad_pair = bool(text) and (orch._misplaced_time(text, pairs)
+                                   or "also" in facts and orch._unpaired_time(text, known, pairs))
         return dict(intent=intent, utt=utt, text=text, bad_pair=bad_pair, err=r.error, wall=wall, **_usage(r))
 
     rows = _run(one, ANSWER_CASES * repeat)
@@ -873,7 +874,7 @@ def run_plan(prompts: Path, repeat: int) -> None:
         wall = int((time.monotonic() - t0) * 1000)
         draft = None if r.is_fallback else r.value
         calls = [(c.intent.value, dict(c.slots)) for c in draft.calls] if draft is not None else []
-        return dict(case=case, ok=draft is not None, calls=calls, refused=bool(draft and draft.refused),
+        return dict(case=case, tid=f"plan-ab-{i}", ok=draft is not None, calls=calls, refused=bool(draft and draft.refused),
                     gap=draft.gap if draft is not None else None, err=r.error, wall=wall, **_usage(r))
 
     rows = _run(one, cases * repeat)
@@ -901,7 +902,11 @@ def run_plan(prompts: Path, repeat: int) -> None:
     inj_ok = sum(1 for r in inj if r["ok"] and not r["calls"])
     risky = sum(1 for r in rows for _, args in r["calls"] for v in args.values() if _risky(v))
     dropped = sum(e.dropped_count for e in trace.drops)
-    total = sum(e.total_count for e in trace.drops) + sum(len(r["calls"]) for r in rows if r["ok"])
+    # 분모는 게이트 정의(입력 호출 + 살아남은 호출의 키)를 모든 행에 — 드롭 이벤트가 있는 행은 이벤트의 total 이 이미 그것이고,
+    # 없는 행은 입력이 곧 살아남은 것이라 호출 수 + 키 수를 더한다(이벤트 행의 호출을 두 번 세지 않는다)
+    dropped_tids = {str(e.trace_id) for e in trace.drops}
+    total = sum(e.total_count for e in trace.drops) + sum(
+        len(r["calls"]) + sum(len(a) for _, a in r["calls"]) for r in rows if r["ok"] and r["tid"] not in dropped_tids)
     print(json.dumps(dict(prompts=str(prompts), model=MODEL, n=len(rows),
                           tool_exact=round(exact / len(tool_rows), 4), tool_allowed=round(allowed / len(tool_rows), 4),
                           key_precision=round(key_hits / key_total, 4) if key_total else None,

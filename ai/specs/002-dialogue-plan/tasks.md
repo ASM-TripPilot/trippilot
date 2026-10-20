@@ -32,3 +32,6 @@ description: "범위 밖 질문의 도구 계획(DIALOGUE_PLAN · 2‴) 태스�
 - [x] T012 `scripts/measure/measure_prompt_ab.py plan` + answer 병합 사례 3 (러너만 — 실 GPT 측정(luna·terra·sol)·yaml 머리 수치는 머지 전 메인 세션)
 - [x] T013 FD 개정(BLM·BR·DE) · 상위 문서 2종 한 줄 · `ai/aidlc-docs/audit.md`.
 - [ ] T014 셀프 리뷰(invariant-reviewer) → PR.
+- [x] T015 #1420 적대적 리뷰 반영 — 병합 답 시각을 문장마다 그 문장의 이름에 귀속(`_unpaired_time`, 엄격 모드 삭제 — C1·C2·C3·C12) ·
+  문법 기반 AO-P18 PBT·드롭 단언 위치(C5) · 깊은 중첩 parse_error(C7) · 측정셋 keys(C8) · 러너 드롭률 분모(C9) · refused 사유는 타입만(C10) ·
+  AO-P21 GET_POI_INFO 공허 통과(C11). C4(한글 수사 시각)·C6(GET_POI_INFO date 요일)은 FD 미결 #28·#29 — 별도 PR.

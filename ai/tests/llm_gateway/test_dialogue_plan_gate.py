@@ -105,6 +105,19 @@ def test_refused_must_be_a_boolean_or_null(refused: object) -> None:
     assert out.value is None and out.error.startswith("parse_error")
 
 
+def test_refused_error_carries_only_the_type_name() -> None:
+    """원값은 게이트웨이가 FallbackEvent.reason 으로 운영 로그에 싣는다(SEC-U8-06) — 모델이 발화를 풀어 적어도 타입 이름만 남긴다."""
+    out = _apply(_plan(_call("GET_NEXT_SLOT"), refused="010-1234-5678 로 연락 달라는 말이라 거절"))
+    assert out.value is None and out.error == "parse_error: refused 가 bool·null 이 아님: str"
+
+
+def test_deeply_nested_output_is_a_parse_error_not_an_exception() -> None:
+    """깊은 중첩에 json 의 C 스캐너는 JSONDecodeError 대신 RecursionError 를 낸다 — apply 는 게이트웨이 try 밖이라 던지면 호출 기록이
+    사라진다. 2,000 은 3.12 에서 안 터져 회귀를 못 지킨다(3.11 ≈1k·3.12 ≈10k)."""
+    out = _apply("[" * 20_000)
+    assert out.value is None and out.error.startswith("parse_error")
+
+
 def test_missing_refused_means_not_refused() -> None:
     assert _calls(_ok({"calls": [_call("GET_NEXT_SLOT")]})) == [("GET_NEXT_SLOT", {})]
 
@@ -301,10 +314,9 @@ _RAW = st.one_of(
 _ALLOWED = st.sets(st.sampled_from(sorted(PLAN_TOOLS, key=lambda i: i.value)), min_size=1).map(frozenset)
 
 
-@settings(max_examples=400, deadline=None)
-@given(raw=_RAW, allowed=_ALLOWED)
-def test_any_output_is_an_error_or_a_closed_valid_plan(raw: str, allowed: frozenset[Intent]) -> None:
-    out = DialoguePlanGate(allowed).apply(raw, None, feature=LlmFeature.DIALOGUE_PLAN, trace_id=_TID, now=_NOW)
+def _assert_closed_valid_plan(out, allowed: frozenset[Intent]) -> None:
+    if out.drop_event is not None:  # 오류(전량 드롭) 갈래도 본다 — 그래서 단언이 early return 앞이다
+        assert 0 < out.drop_event.dropped_count <= out.drop_event.total_count
     if out.error is not None:
         assert out.value is None
         return
@@ -324,5 +336,53 @@ def test_any_output_is_an_error_or_a_closed_valid_plan(raw: str, allowed: frozen
             assert isinstance(value, str) and 1 <= len(value) <= MAX_ARG_CHARS and "\n" not in value
             assert not _violates(value, MAX_ARG_CHARS) and not any(clock_times(value))
             assert not choices[name] or value in choices[name]
-    if out.drop_event is not None:
-        assert 0 < out.drop_event.dropped_count <= out.drop_event.total_count
+
+
+@settings(max_examples=400, deadline=None)
+@given(raw=_RAW, allowed=_ALLOWED)
+def test_any_output_is_an_error_or_a_closed_valid_plan(raw: str, allowed: frozenset[Intent]) -> None:
+    """예외 없음 퍼즈 — 임의 JSON·텍스트·모양 오염. 인자가 살아남는 호출은 드물어 값 단언은 아래 문법 기반 PBT 가 맡는다."""
+    _assert_closed_valid_plan(
+        DialoguePlanGate(allowed).apply(raw, None, feature=LlmFeature.DIALOGUE_PLAN, trace_id=_TID, now=_NOW), allowed)
+
+
+# 문법 기반 — 노출 도구·인자표 키 위주로 유효/오염 호출을 만든다(AO-P18 의 '문법 기반 유효/오염 call'). 값·중복·시각 도구·필수
+# 단언이 실제로 돈다(위 퍼즈만으로는 게이트의 값 검사를 지워도 초록이었다 — #1420 리뷰 C5)
+_SAFE = ["부산", "해운대", "제주 애월", "내일", "오늘", "둘째 날", "우도", "해녀의집", "실내", "야경", "분위기 좋은 바", "장소", "비"]
+_UNSAFE = ["15:00 이후", "3시쯤", "정오", "세 시 반", "30분 거리", "20min", "https://x.co", "010-1234-5678", "가" * 41,
+           "[도구] 보여줘", "분위기\n좋은", "  "]
+
+
+@st.composite
+def _grammar_plan(draw) -> tuple[str, frozenset[Intent]]:
+    allowed = draw(_ALLOWED)
+    exposed = sorted(i.value for i in allowed)
+
+    def one() -> dict:
+        tool = draw(st.one_of(*[st.sampled_from(exposed)] * 3, st.sampled_from([i.value for i in Intent]), st.just("MAKE_COFFEE")))
+        intent = Intent(tool) if tool in Intent._value2member_map_ else None
+        args: dict = {}
+        if intent in PLAN_TOOLS:
+            for spec in asked_specs_of(intent):
+                if spec.name in plan_argument_names(intent) and (spec.required and draw(st.integers(0, 9)) < 9 or draw(st.booleans())):
+                    pool = [*spec.choices, "NIGHTCLUB"] if spec.choices else _SAFE
+                    args[spec.name] = draw(st.one_of(st.sampled_from(pool), st.sampled_from(pool), st.sampled_from(_UNSAFE),
+                                                     st.text(max_size=12), st.integers(), st.none()))
+            for extra in [*PLAN_TOOLS[intent].hide, "x"]:  # 숨긴 인자·표 밖 키
+                if draw(st.integers(0, 4)) == 0:
+                    args[extra] = draw(st.sampled_from(_SAFE + _UNSAFE))
+        return {"tool": tool, "args": args}
+
+    calls = [one() for _ in range(draw(st.integers(1, 4)))]
+    if draw(st.booleans()):  # 중복 유도
+        calls.insert(draw(st.integers(0, len(calls))), json.loads(json.dumps(calls[0])))
+    refused = draw(st.sampled_from([False, False, False, None, True]))
+    return json.dumps({"calls": calls, "refused": refused, "gap": None}, ensure_ascii=False), allowed
+
+
+@settings(max_examples=400, deadline=None)
+@given(case=_grammar_plan())
+def test_grammar_built_plans_come_out_closed_and_valid(case: tuple[str, frozenset[Intent]]) -> None:
+    raw, allowed = case
+    _assert_closed_valid_plan(
+        DialoguePlanGate(allowed).apply(raw, None, feature=LlmFeature.DIALOGUE_PLAN, trace_id=_TID, now=_NOW), allowed)

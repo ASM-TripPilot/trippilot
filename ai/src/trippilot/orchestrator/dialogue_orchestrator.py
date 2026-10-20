@@ -429,8 +429,8 @@ _SEGMENT = re.compile(r"[,，·/;→\n]|\s그리고\s")
 
 def _hours_pairs(value: object) -> tuple[tuple[str | None, str], ...]:
     """Facts 안의 (장소 이름, 영업시간 시각) 짝 — `{"name", "hours_label"}` 를 가진 dict 전부(장소 정보의 places). "해녀의집은 18:00까지
-    열어요"처럼 이름 붙은 영업시간을 그 장소의 시각으로 받는다(C5 ⓒ). `_misplaced_time` 에만 쓴다 — 순서 검사(`_out_of_order`)는
-    일정 슬롯 시각만 본다."""
+    열어요"처럼 이름 붙은 영업시간을 그 장소의 시각으로 받는다(C5 ⓒ). 짝 검사(`_misplaced_time`·`_unpaired_time`)에만 쓴다 — 순서
+    검사(`_out_of_order`)는 일정 슬롯 시각만 본다."""
     found: list[tuple[str | None, str]] = []
     if isinstance(value, Mapping):
         name, label = value.get("name"), value.get("hours_label")
@@ -444,15 +444,9 @@ def _hours_pairs(value: object) -> tuple[tuple[str | None, str], ...]:
     return tuple(dict.fromkeys(found))
 
 
-def _misplaced_time(
-    text: str, pairs: tuple[tuple[str | None, str], ...], *, bare: Sequence[str] = (), strict: bool = False,
-) -> bool:
-    """구획(쉼표·줄 등) 안에서 시각에 가장 가까운 장소 이름이 Facts 에서 그 시각과 짝이 아니면 참. 이름이 없으면 판정하지 않는다.
-
-    엄격(계획 병합 답 + 후보 카드, 정정본 C5): `bare`(후보 이름)를 짝 없이 이름 집합에 넣어 후보 옆 시각을 전부 위반으로 보고 — 다른
-    부분의 검증된 시각("12:00")이 후보 옆에 붙어도 시각 집합 대조는 통과하기 때문이다 — 아는 이름이 하나도 없는 구획의 떠 있는
-    시각도 위반이다."""
-    names = sorted({name for name, _ in pairs if name} | {n for n in bare if n}, key=len, reverse=True)
+def _misplaced_time(text: str, pairs: tuple[tuple[str | None, str], ...]) -> bool:
+    """구획(쉼표·줄 등) 안에서 시각에 가장 가까운 장소 이름이 Facts 에서 그 시각과 짝이 아니면 참. 이름이 없으면 판정하지 않는다."""
+    names = sorted({name for name, _ in pairs if name}, key=len, reverse=True)
     for segment in _SEGMENT.split(text):
         times = clock_spans(segment)
         if not times:
@@ -467,12 +461,33 @@ def _misplaced_time(
                 start = segment.find(name, end)
         for t_start, t_end, hm in times:
             near = [(t_start - e if e <= t_start else s - t_end, n) for s, e, n in spots if e <= t_start or s >= t_end]
-            if not near:
-                if strict:
-                    return True
-                continue
-            if (min(near)[1], hm) not in pairs:
+            if near and (min(near)[1], hm) not in pairs:
                 return True
+    return False
+
+
+# 계획 병합 답의 시각 귀속은 문장 단위로 본다 — "1.2km" 의 점은 뒤가 공백이 아니라 가르지 않는다
+_SENTENCE = re.compile(r"(?<=[.!?])\s+|\n")
+
+
+def _unpaired_time(text: str, known: Sequence[str], pairs: tuple[tuple[str | None, str], ...]) -> bool:
+    """계획 병합 답(BR-AO-28) — 시각이 든 문장마다: 아는 이름(`known`, `_known_names`)이 없거나(떠 있는 시각), 그 문장의 어떤 이름과도
+    짝이 아닌 시각이 있거나, 그 문장의 어떤 시각과도 짝이 아닌 이름이 있으면 참. 이름은 공백을 지워 대고, 더 긴 이름 안의 짧은 이름은
+    뺀다. 한 부분의 검증된 시각이 다른 부분의 장소·후보에 붙는 꼴("12:00에 해녀의집 근처 흰여울 카페에")은 '시각에 가장 가까운 이름'
+    하나로는 못 가린다(#1420 리뷰). `_misplaced_time`·`_out_of_order` 와 함께 돈다.
+    ponytail: 한 문장에 시각과 짝 없는 이름이 같이 있으면 맞는 답도 템플릿이다("다음 일정은 12:00 해녀의집이고 근처에 흰여울 카페가
+    있어요") — 문장 안 귀속을 가리려면 구문 분석이 필요하다."""
+    paired = {(_squash(name), hm) for name, hm in pairs if name}
+    for sentence in _SENTENCE.split(text):
+        hms = {hm for _, _, hm in clock_spans(sentence)}
+        if not hms:
+            continue
+        flat = _squash(sentence)
+        hit = {k for k in known if k in flat}
+        names = {k for k in hit if not any(k != o and k in o for o in hit)}
+        if (any(all((n, hm) not in paired for n in names) for hm in hms)  # 짝 없는 시각 — 이름이 없으면 전부(떠 있는 시각)
+                or any(all((n, hm) not in paired for hm in hms) for n in names)):  # 짝 없는 이름
+            return True
     return False
 
 
@@ -505,14 +520,19 @@ def _out_of_order(text: str, pairs: tuple[tuple[str | None, str], ...]) -> bool:
 _PLACE_LIKE = re.compile(r"[가-힣]{1,20}?(?:시장|공원|타워|해수욕장|박물관|미술관|전망대|폭포|오름|성당|궁|해변|마을|카페|호텔|랜드|파크|브루어리)")
 
 
-def _known_names(facts: Facts, snapshot: TurnSnapshot) -> tuple[str, ...]:
-    names = [p.name for p in facts.places] + [s.name for _, s in snapshot.slots() if s.name]
-    names += [v for v in (facts.detail.get("target"), facts.detail.get("anchor")) if isinstance(v, str)]
-    for part in facts.detail.get("also", ()):  # 계획 병합본 — 나머지 부분의 장소·대상·앵커도 아는 이름이다(정정본 C4, `to_prompt_dict` 모양)
+def _prompt_names(prompt: Mapping) -> list[str]:
+    """`to_prompt_dict` 모양 사실의 장소·대상·앵커 이름 — 계획 병합본은 also 부분까지(정정본 C4). 측정 러너도 이것으로 아는 이름을 만든다."""
+    names = [p["name"] for p in prompt.get("places", ()) if isinstance(p, Mapping) and isinstance(p.get("name"), str)]
+    names += [v for v in (prompt.get("target"), prompt.get("anchor")) if isinstance(v, str)]
+    for part in prompt.get("also", ()):
         if isinstance(part, Mapping):
-            names += [p["name"] for p in part.get("places", ()) if isinstance(p, Mapping) and isinstance(p.get("name"), str)]
-            names += [v for v in (part.get("target"), part.get("anchor")) if isinstance(v, str)]
-    known = (normalize(n).replace(" ", "") for n in names if n)
+            names += _prompt_names(part)
+    return names
+
+
+def _known_names(facts: Facts, snapshot: TurnSnapshot) -> tuple[str, ...]:
+    names = _prompt_names(facts.to_prompt_dict()) + [s.name for _, s in snapshot.slots() if s.name]
+    known = (_squash(n) for n in names if n)
     return tuple(k for k in known if k)  # 빈 이름은 뺀다 — "" 는 모든 낱말의 접두라 검사가 꺼진다
 
 
@@ -801,7 +821,7 @@ class DialogueOrchestrator:
         *,
         closed: bool = False,
     ) -> DialogueAnswer:
-        """`closed` — 계획 경로(2‴)는 목록 밖 장소 검사를 늘 켜고, 병합본에 후보 카드가 있으면 시각 대조를 엄격 모드로 한다(BR-AO-28 C5).
+        """`closed` — 계획 경로(2‴)는 목록 밖 장소 검사를 늘 켜고, 병합본(also)이면 시각을 문장마다 그 문장의 이름에 귀속시킨다(BR-AO-28).
 
         LLM 문장 ≤1회. 의도된 결정론(needTrip·UNAVAILABLE·사실 없음)은 LLM 미시도·FallbackEvent 없음(BR-AO-23·25 — 팬아웃 실패는
         `_fanout` 이 작업별로 이미 냈다); 시도했거나 해야 했던 턴의 템플릿에는 FallbackEvent 짝(게이트웨이가 냈거나 여기서 낸다)."""
@@ -836,21 +856,22 @@ class DialogueOrchestrator:
         pairs = _slot_times(prompt_facts)
         # 장소 정보의 영업시간도 그 장소의 짝이다 — 순서 검사에는 넣지 않는다(일정 슬롯 시각만 순서가 있다, 정정본 C5 ⓒ)
         named = pairs + _hours_pairs(prompt_facts)
-        # 엄격 — 계획 병합 답에 후보 카드가 있으면: 후보 옆 시각·떠 있는 시각 금지(다른 부분의 검증된 시각이 후보에 붙는 구멍, C5 E1)
-        strict = closed and "also" in facts.detail and facts.kind is AnswerKind.CANDIDATES
-        bare = tuple(p.name for p in facts.places) if strict else ()
+        known = _known_names(facts, inp.snapshot)
+        # 계획 병합 답은 시각을 문장마다 그 문장의 이름에 귀속시킨다 — 한 부분의 검증된 시각이 다른 부분의 장소·후보에 붙는 구멍(BR-AO-28)
+        merged = closed and "also" in facts.detail
         parts = (draft.text, draft.footnote or "")
         bad = _out_of_order("\n".join(parts), pairs)
         for part in parts:
             times, unverifiable = clock_times(part)
-            bad = bad or unverifiable or not times <= allowed or _misplaced_time(part, named, bare=bare, strict=strict)
+            bad = (bad or unverifiable or not times <= allowed or _misplaced_time(part, named)
+                   or merged and _unpaired_time(part, known, named))
         if bad:
             self._fallback(inp, "llm", *_ANSWER_MODES, "time_not_in_facts")
             return DialogueAnswer.from_facts(facts)
         # INV-1 — 후보 답(대안·탐색)과 탐색의 빈 결과 답이 목록 밖 장소를 권했다. 탐색 EMPTY 는 장소가 없어 "대신 ○○해변은
         # 어떠세요?"를 지어낼 자리가 가장 큰 답이다
         closed = closed or facts.kind is AnswerKind.CANDIDATES or intent is Intent.EXPLORE_PLACES
-        if closed and any(_foreign_place(part, _known_names(facts, inp.snapshot)) for part in parts):
+        if closed and any(_foreign_place(part, known) for part in parts):
             self._fallback(inp, "llm", *_ANSWER_MODES, "place_not_in_facts")
             return DialogueAnswer.from_facts(facts)
         try:
