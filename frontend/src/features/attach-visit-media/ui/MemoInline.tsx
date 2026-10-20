@@ -24,7 +24,8 @@ import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 
 export interface MemoInlineProps {
   text?: string | null;
-  onSubmit?: (text: string) => void;
+  /** TRIP-1492 — 두 번째 인자 = 마운트 때 심은 글("손대지 않았다" 판정 기준 — 재조회가 바뀌어도 입력은 심은 값 그대로). */
+  onSubmit?: (text: string, seed: string) => void;
   /** TRIP-1117 — 초안이 바뀔 때마다(글자 수 표시용, i01 허브 메모 시트). */
   onChangeDraft?: (draft: string) => void;
   /** TRIP-1117 — 입력 모양 덮어쓰기(허브 시트는 Figma 14px·상자 안). 미지정이면 j01 모양 그대로. */
@@ -47,11 +48,12 @@ export function MemoInline({
   inputRef,
 }: MemoInlineProps): ReactElement {
   const [draft, setDraft] = useState(text ?? '');
+  const [seed] = useState(text ?? '');
 
   const handleSubmit = (): void => {
     const trimmed = draft.trim();
     if (trimmed === '') return;
-    onSubmit?.(trimmed);
+    onSubmit?.(trimmed, seed);
   };
 
   return (

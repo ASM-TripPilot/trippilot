@@ -124,6 +124,9 @@ describe('useSavedVisitMemos (TRIP-1203)', () => {
     );
     // 앵커 — 저장 전엔 둘 다 null.
     expect(result.current.saved).toEqual({ v1: null, v2: null });
+    // TRIP-1492 — 서버 메모를 본 뒤에만 저장한다(첫 조회 전 저장은 실패로 끝난다).
+    await waitFor(() => expect(recordsGetCount()).toBe(1));
+    await flushNotifications();
 
     // 실행 — 앞뒤 공백 있는 본문을 저장한다.
     await act(async () => {
@@ -146,6 +149,8 @@ describe('useSavedVisitMemos (TRIP-1203)', () => {
       }),
       { wrapper, initialProps: { ids: ['v1', 'v2'] } }
     );
+    await waitFor(() => expect(recordsGetCount()).toBe(1));
+    await flushNotifications();
     await act(async () => {
       await result.current.single.saveMemo('바다');
     });
@@ -539,5 +544,98 @@ describe('🔴 TRIP-1426 · saveMemo 는 PUT 이 나가 성공했을 때만 true
         'boom'
       );
     });
+  });
+});
+
+// TRIP-1492 — 입력칸에 심은 값(seed)을 기준으로 "손대지 않았다"를 가르고, 서버 메모를 본 적 없으면 쓰지 않는다.
+// (개념) seed = 입력칸이 마운트될 때 심은 글. 재조회가 새 글을 가져와도 입력칸은 처음 심은 값 그대로다(seed-once).
+describe('🔴 TRIP-1492 · 보지 못한 서버 메모를 덮지 않는다', () => {
+  it('D1 입력을 안 고친 채(저장 값 == 심은 값) 재조회가 다른 글을 가져온 뒤 저장해도 PUT 0회, 고친 글은 1회', async () => {
+    // 준비 — 서버 '서버 글' 을 심고, 다른 기기가 '다른 기기 글' 로 바꾼 뒤 재조회가 그것을 가져온다.
+    mockGetRecords.mockResolvedValue(
+      record([{ date: '2026-08-20', actual: [visit('v1', '서버 글')] }])
+    );
+    const { result } = renderHook(
+      () => useVisitMemo({ tripId: 't1', visitCheckId: 'v1' }),
+      { wrapper }
+    );
+    await waitFor(() => expect(result.current.savedMemo).toBe('서버 글'));
+    mockGetRecords.mockResolvedValue(
+      record([{ date: '2026-08-20', actual: [visit('v1', '다른 기기 글')] }])
+    );
+    await act(async () => {
+      await client.invalidateQueries();
+    });
+    await waitFor(() => expect(result.current.savedMemo).toBe('다른 기기 글'));
+
+    // 실행·단언 — 심은 값('서버 글') 그대로면 건너뛴다.
+    await act(async () => {
+      const save = result.current.saveMemo;
+      await expect(save('서버 글', '서버 글')).resolves.toBe(false);
+      await expect(save('  서버 글 ', '서버 글')).resolves.toBe(false);
+      await expect(save('고친 글', '서버 글')).resolves.toBe(true);
+    });
+    expect(mockPut.mock.calls).toEqual([[MEMO_URL, { text: '고친 글' }]]);
+  });
+
+  it('D2 내 저장이 있은 뒤에는 심은 값으로 되돌리는 것도 바뀐 값이다(비교 기준은 세션)', async () => {
+    // 준비 — 세션 '새 글', 입력은 '옛 글' 로 심겨 있었다.
+    client.setQueryData(['visit-memo', 't1', 'v1'], '새 글');
+    const { result } = renderHook(
+      () => useVisitMemo({ tripId: 't1', visitCheckId: 'v1' }),
+      { wrapper }
+    );
+    await waitFor(() => expect(recordsGetCount()).toBe(1));
+    await flushNotifications();
+
+    // 실행
+    await act(async () => {
+      await result.current.saveMemo('옛 글', '옛 글');
+    });
+
+    // 단언
+    expect(mockPut.mock.calls).toEqual([[MEMO_URL, { text: '옛 글' }]]);
+  });
+
+  it('D3 첫 조회가 끝내 실패(500)한 뒤에는 AC-12 대로 막지 않는다 — 빈칸 입력이 저장된다(무회귀)', async () => {
+    // 준비
+    mockGetRecords.mockImplementation(() =>
+      Promise.reject(
+        Object.assign(new Error('boom'), {
+          isAxiosError: true,
+          response: { status: 500 },
+        })
+      )
+    );
+    const { result } = renderHook(
+      () => useVisitMemo({ tripId: 't1', visitCheckId: 'v1' }),
+      { wrapper }
+    );
+    await waitFor(() => expect(result.current.memoReady).toBe(true), {
+      timeout: 3000,
+    });
+
+    // 실행·단언
+    await act(async () => {
+      await expect(result.current.saveMemo('빈칸에 쓴 글')).resolves.toBe(true);
+    });
+    expect(mockPut).toHaveBeenCalledTimes(1);
+  });
+
+  it('D4 오프라인 보류(첫 조회 미완)로 열린 입력에서 저장하면 PUT 0회·reject 이다(INV-4)', async () => {
+    // 준비
+    onlineManager.setOnline(false);
+    mockGetRecords.mockImplementation(async () => record([]));
+    const { result } = renderHook(
+      () => useVisitMemo({ tripId: 't1', visitCheckId: 'v1' }),
+      { wrapper }
+    );
+    expect(result.current.memoReady).toBe(true);
+
+    // 실행·단언
+    await act(async () => {
+      await expect(result.current.saveMemo('오프라인 글')).rejects.toThrow();
+    });
+    expect(mockPut).not.toHaveBeenCalled();
   });
 });

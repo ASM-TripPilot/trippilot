@@ -1407,4 +1407,51 @@ describe('LiveHubView · 지도 핀 맞춤 (AC-4·AC-10 · Q-088)', () => {
     // 단언 ②
     expect(hubRegion()).toBe(first);
   });
+
+  it('HB4 TRIP-1496 · 경로 토글이 있는 허브는 맨 위 핀이 화면에서 더 아래에 놓인다(토글 줄 몫만큼 위 예약 +42pt) — 없으면 그대로', () => {
+    // 준비 — 짧은 창(iPhone SE 375x667). 같은 허브를 토글 없이·토글과 함께 그려 맨 위 핀의 화면 위치(위에서 몇 비율)를 잰다.
+    const dims = jest.spyOn(Dimensions, 'get').mockReturnValue({
+      width: 375,
+      height: 667,
+      scale: 2,
+      fontScale: 1,
+    });
+    const topPinFraction = (withToggle: boolean): number => {
+      render(
+        <SafeAreaInsetsContext.Provider
+          value={{ top: 20, bottom: 0, left: 0, right: 0 }}
+        >
+          <LiveHubView
+            tripTitle="부산 여행"
+            days={DAYS}
+            activeDayIndex={1}
+            slots={SLOTS}
+            initialSnapIndex={1}
+            onBack={jest.fn()}
+            onSelectDay={jest.fn()}
+            onPressAiReplan={jest.fn()}
+            onPressManualEdit={jest.fn()}
+            onPressComplete={jest.fn()}
+            routeToggle={
+              withToggle
+                ? { mode: 'plan', actualAvailable: true, onChange: jest.fn() }
+                : undefined
+            }
+          />
+        </SafeAreaInsetsContext.Provider>
+      );
+      const region = hubRegion() as NativeRegion;
+      const north = region.latitude + region.latitudeDelta;
+      const topPin = Math.max(...HUB_PINS.map((p) => p.lat));
+      screen.unmount();
+      return (north - topPin) / region.latitudeDelta;
+    };
+
+    const without = topPinFraction(false);
+    const withToggle = topPinFraction(true);
+    dims.mockRestore();
+
+    // 단언 — 토글이 있으면 맨 위 핀이 상자 위에서 더 멀다(= 화면에서 더 아래).
+    expect(withToggle).toBeGreaterThan(without);
+  });
 });

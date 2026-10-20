@@ -155,6 +155,9 @@ export function LiveItineraryPage({
   // TRIP-1418 — 적용 성공은 `dismissTo` 로 스택의 이 인스턴스에 돌아온다(새로 마운트되지 않는다). 그래서 새 applied 가
   // 도착한 렌더에서 상태를 다시 맞춘다(렌더 중 조정 — 옛 일차로 한 번 그렸다가 바뀌지 않게): 고른 일차를 비워 `day`(없으면
   // 오늘)가 이기게 하고 시트를 펼친다. applied 가 지워질 때(i08 [확인])는 아무것도 바꾸지 않는다.
+  // TRIP-1494 — 시트를 이미 2 로 올려 둔 뒤 사용자가 내리고 재적용하면 `initialSnapIndex` 는 같은 2 라 prop 이 안 바뀐다.
+  // 새 applied 마다 1 씩 올리는 신호로 셸이 다시 펼치게 한다.
+  const [expandSignal, setExpandSignal] = useState(0);
   const [seenAppliedSessionId, setSeenAppliedSessionId] =
     useState(appliedSessionId);
   if (appliedSessionId !== seenAppliedSessionId) {
@@ -162,6 +165,7 @@ export function LiveItineraryPage({
     if (appliedSessionId) {
       setSelectedDay(null);
       setInitialSnapIndex(2);
+      setExpandSignal((n) => n + 1);
     }
   }
   // [사진] 안내 한 줄(TRIP-1070) — 누른 그 카드(poiId, TRIP-1203)에만. 어느 카드든 다음 [사진] 누름에 지운다.
@@ -272,12 +276,16 @@ export function LiveItineraryPage({
     tripId,
     visitCheckIds: Object.values(mediaVisitIdByPoiId),
   });
-  // 늦게 온 옛 실패가 최신 시도를 덮지 않게 시도 번호를 센다(j01 onSubmitMemo 선례).
-  const memoAttempt = useRef(0);
+  // 늦게 온 옛 실패가 최신 시도를 덮지 않게 시도 번호를 센다(j01 onSubmitMemo 선례). TRIP-1493 — 방문별로 센다
+  // (다른 방문의 저장이 이 방문의 응답을 "옛 것"으로 만들지 않는다).
+  const memoAttempt = useRef<Record<string, number>>({});
   // TRIP-1426 [저장] 잠금 — ref 는 같은 틱 두 번째 누름을 막고(렌더 전이라 disabled 가 아직 안 섰다), state 는
-  // 응답을 기다리는 동안 [저장]을 비활성으로 그린다(directionsBusy 선례).
-  const memoSaving = useRef(false);
-  const [memoSavingShown, setMemoSavingShown] = useState(false);
+  // 응답을 기다리는 동안 [저장]을 비활성으로 그린다(directionsBusy 선례). TRIP-1493 — 방문(visitCheckId)별이다:
+  // 한 방문의 PUT 보류가 다른 방문의 메모를 막지 않는다(BR-U5-14). 같은 방문의 재누름만 막는다.
+  const memoSaving = useRef(new Set<string>());
+  const [memoSavingShown, setMemoSavingShown] = useState<ReadonlySet<string>>(
+    new Set()
+  );
 
   // TRIP-1339 · U10 위치 자동화 — 오늘(KST) 일정·실적으로 문맥을 만들고 판정은 훅이 한다(페이지 1회).
   // 플래그 OFF 면 동의 조회도 하지 않고 훅은 효과가 없다(BR-U10-07). 훅 규칙상 조기 반환 위에 둔다.
@@ -590,20 +598,21 @@ export function LiveItineraryPage({
   // TRIP-1117 [메모] — 허브 위 메모 시트에서 저장한다(TRIP-1070 결정 1(c) 번복). 닫힘은 저장 성공 뒤(Q1).
   const memoSheetPoiId = poiOfVisit(memoSheetFor);
   const memoSheetOpen = memoSheetPoiId !== undefined;
-  const submitMemo = (visitCheckId: string, text: string) => {
-    if (memoSaving.current) return;
-    memoSaving.current = true;
-    setMemoSavingShown(true);
-    const attempt = ++memoAttempt.current;
+  const submitMemo = (visitCheckId: string, text: string, seed: string) => {
+    if (memoSaving.current.has(visitCheckId)) return;
+    memoSaving.current.add(visitCheckId);
+    setMemoSavingShown(new Set(memoSaving.current));
+    const attempt = (memoAttempt.current[visitCheckId] ?? 0) + 1;
+    memoAttempt.current[visitCheckId] = attempt;
     setMemoFailedFor(null);
     const unlock = () => {
-      memoSaving.current = false;
-      setMemoSavingShown(false);
+      memoSaving.current.delete(visitCheckId);
+      setMemoSavingShown(new Set(memoSaving.current));
     };
-    visitMemo.saveMemo(text).then(
+    visitMemo.saveMemo(text, seed).then(
       (saved) => {
         unlock();
-        if (attempt !== memoAttempt.current) return;
+        if (attempt !== memoAttempt.current[visitCheckId]) return;
         setMemoSheetFor((open) => (open === visitCheckId ? null : open));
         // 같은 글(요청 0)은 닫기만 한다(Q2).
         if (saved)
@@ -614,7 +623,8 @@ export function LiveItineraryPage({
       },
       () => {
         unlock();
-        if (attempt === memoAttempt.current) setMemoFailedFor(visitCheckId);
+        if (attempt === memoAttempt.current[visitCheckId])
+          setMemoFailedFor(visitCheckId);
       }
     );
   };
@@ -629,8 +639,8 @@ export function LiveItineraryPage({
         text={visitMemo.savedMemo}
         editable={visitMemo.memoReady}
         notice={memoFailedFor === memoSheetFor ? MEMO_SAVE_FAILED : null}
-        saving={memoSavingShown}
-        onSubmit={(text) => submitMemo(memoSheetFor, text)}
+        saving={memoSavingShown.has(memoSheetFor)}
+        onSubmit={(text, seed) => submitMemo(memoSheetFor, text, seed)}
         onClose={() => setMemoSheetFor(null)}
       />
     ) : null;
@@ -794,6 +804,7 @@ export function LiveItineraryPage({
         onPressDirections={(poiId) => void pressDirections(poiId)}
         directionsNotice={directionsNotice}
         initialSnapIndex={initialSnapIndex}
+        expandSignal={expandSignal}
         autoRecordedPoiIds={new Set(autoRecords.keys())}
         routeToggle={routeToggle}
         actualRoute={

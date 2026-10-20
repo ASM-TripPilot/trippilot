@@ -80,9 +80,29 @@ export function useVisitMemo({
   if (openNow && latchedFor !== visitCheckId) setLatchedFor(visitCheckId);
 
   // TRIP-1426 — true = PUT 이 나가 성공, false = 건너뜀(공백·같은 값). 실패는 reject 그대로(호출자가 안내).
-  async function saveMemo(text: string): Promise<boolean> {
+  // TRIP-1492 — `seed` = 입력칸에 심은 글. 내 저장이 없는 동안 심은 값 그대로면 "손대지 않음"이라 건너뛴다(재조회로
+  // 바뀐 다른 기기 글을 옛 글로 덮지 않는다). 서버 메모를 한 번도 못 봤고 조회가 아직 끝나지 않았으면(오프라인 보류·진행 중) 빈칸 upsert 로
+  // 덮을 수 있어 PUT 없이 실패로 끝낸다(조회가 실패로 끝났다면 AC-12 대로 막지 않는다)(호출자가 실패 안내 — INV-4) — 다음 시도를 위해 다시 조회를 건다.
+  async function saveMemo(
+    text: string,
+    seed?: string | null
+  ): Promise<boolean> {
     const trimmed = text.trim();
     if (trimmed === '') return false;
+    const own = queryClient.getQueryData<string | null>(memoKey) ?? null;
+    if (own === null && seed !== undefined && trimmed === (seed ?? '').trim())
+      return false;
+    const recordsState = queryClient.getQueryState(
+      getGetTripsTripIdRecordsQueryKey(tripId, RECORDS_PARAMS)
+    );
+    if (
+      own === null &&
+      recordsState?.data === undefined &&
+      recordsState?.status !== 'error'
+    ) {
+      void records.refetch();
+      throw new Error('서버 메모를 아직 확인하지 못했어요');
+    }
     // 렌더 값이 아니라 캐시에서 읽는다 — 한 act 안 연속 호출도 직전 저장을 본다.
     const current =
       queryClient.getQueryData<string | null>(memoKey) ??

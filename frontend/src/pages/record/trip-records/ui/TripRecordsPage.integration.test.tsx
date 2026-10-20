@@ -2891,6 +2891,36 @@ describe('메모 저장 실패 안내·세션 캐시 시드', () => {
       expect(memoBodies).toEqual([{ text: '다른 글' }]);
     });
 
+    it('J9 심은 글을 안 고친 채 재조회가 다른 기기 글을 가져온 뒤 blur 해도 PUT 0회다 (TRIP-1492)', async () => {
+      // 준비 — 1차 '서버 글', 재조회부터 '다른 기기 글'.
+      recordsReply = (call) =>
+        recordsOf([
+          actualVisit('v-in', call === 1 ? '서버 글' : '다른 기기 글'),
+        ]);
+      const client = newClient();
+      renderPage(client);
+      await waitFor(() => expect(valueOf()).toBe('서버 글'));
+      await memoInput();
+      await act(async () => {
+        void client.invalidateQueries();
+      });
+      await waitFor(() =>
+        expect(hitCount(RECORDS_GET)).toBeGreaterThanOrEqual(2)
+      );
+      await flushNotifications();
+
+      // 실행 — 손대지 않고 blur → 고쳐서 blur(센티널).
+      fireEvent(field(), 'blur');
+      fireEvent.changeText(field(), '고친 글');
+      fireEvent(field(), 'blur');
+
+      // 단언 — 센티널만 나갔다.
+      await waitFor(() =>
+        expect(memoBodies).toContainEqual({ text: '고친 글' })
+      );
+      expect(memoBodies).toEqual([{ text: '고친 글' }]);
+    });
+
     it.each<[string, number]>([
       ['500', 500],
       ['404', 404],

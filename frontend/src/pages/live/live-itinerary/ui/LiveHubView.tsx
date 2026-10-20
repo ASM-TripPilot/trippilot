@@ -67,6 +67,8 @@ const HALF_SNAP = '55%';
 // 오버레이 줄 윗변은 셸이 정한다: 세이프에어리어 top + 셸 `pt-sm`(8). 비율(%)로 두면 상태바가 큰
 // 기기에서 시트가 뒤로가기·일자 칩·트리거 알약을 덮는다(TRIP-748 03b 경고-2).
 const OVERLAY_ROW_TOP_PAD = 8;
+// TRIP-1496 · 경로 토글 줄 높이 + 칩 줄과의 간격(pt) — RouteToggle 알약(p-[3px]·py-[5px]·13pt 글자 ≈ 34) + gap 8. className 기준 추정이라 6-b 실기에서 조정한다.
+const ROUTE_TOGGLE_ROW_RESERVE = 42;
 const EXPANDED_GAP_BELOW_OVERLAY_ROW = 104;
 // 수정 FAB 앵커(TRIP-1083, Figma 4702:2688·2833·2982·3131) — FAB 윗변 y =
 // max(오버레이 줄 하단 + 간격, 시트 윗변 − 간격 − FAB). 앵커는 reanimated 컴포넌트라 className(NativeWind)
@@ -129,6 +131,8 @@ export interface LiveHubViewProps {
   slots: LiveHubSlot[];
   /** 0 닫힘 / 1 중간 / 2 펼침. 미전달이면 중간. */
   initialSnapIndex?: number;
+  /** TRIP-1494 — 바뀔 때마다 시트를 `initialSnapIndex` 로 다시 올린다(재계획 재적용). */
+  expandSignal?: number;
   currentLocation?: MapCenter;
   onBack: () => void;
   onSelectDay: (index: number) => void;
@@ -241,6 +245,7 @@ export function LiveHubView({
   activeDayIndex,
   slots,
   initialSnapIndex = 1,
+  expandSignal,
   currentLocation,
   onBack,
   onSelectDay,
@@ -402,6 +407,9 @@ export function LiveHubView({
         overlay={overlay}
         snapPoints={snapPoints}
         initialIndex={initialSnapIndex}
+        expandSignal={expandSignal}
+        // TRIP-1496 · 경로 토글 줄(칩 줄 아래, 항상 보임)이 맨 위 핀을 가리지 않게 그 높이만큼 위 예약을 더한다(알약은 숨으므로 제외).
+        fitTopReserve={routeToggle ? ROUTE_TOGGLE_ROW_RESERVE : 0}
         // TRIP-1416 · 그날 핀 전부를 시트 중간(55%) 칸 위 띠에 맞춘다(Q-088 — 첫 핀 중심 고정 줌이면 나머지가 시트 뒤).
         fitPins
         mapCard={

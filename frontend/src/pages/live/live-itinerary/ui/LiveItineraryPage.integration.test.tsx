@@ -2046,6 +2046,26 @@ describe('i08 변경 반영 시트', () => {
       expect(chip(2)).not.toBeSelected();
     });
 
+    it('R6 적용 → 확인(applied 지워짐) → 다시 적용하면 시트를 진입 칸(2)으로 다시 올리라는 신호가 간다 — 같은 2 라 index 가 안 바뀌어도 (TRIP-1494)', async () => {
+      const snap = (globalThis as Record<string, unknown>)
+        .__bottomSheetSnapToIndexSpy as jest.Mock;
+      await renderReusedHub();
+      snap.mockClear();
+
+      hubReceives(SESSION_ID);
+      expect(snap).toHaveBeenCalledTimes(1);
+      expect(snap).toHaveBeenLastCalledWith(2);
+
+      // i08 [확인] — applied 가 지워질 땐 건드리지 않는다.
+      hubReceives(undefined);
+      expect(snap).toHaveBeenCalledTimes(1);
+
+      // 사용자가 시트를 내렸다고 치고, 새 재계획 적용 → 다시 올린다.
+      hubReceives('session-2');
+      expect(snap).toHaveBeenCalledTimes(2);
+      expect(snap).toHaveBeenLastCalledWith(2);
+    });
+
     it('R4 적용한 날로 맞춘 뒤 사용자가 칩을 고르면 그 선택이 남는다 — 같은 params 로 다시 그려도 리셋하지 않는다', async () => {
       await renderReusedHub();
       fireEvent.press(chip(2));
@@ -3685,6 +3705,54 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
   });
 
   describe('🔴 AC-5 · 완료 메모 저장 실패 (INV-4)', () => {
+    it('D13 방문 v2 의 PUT 이 보류 중이어도 시트를 닫고 연 완료 방문 v1 의 [저장]은 활성이고 누르면 v1 PUT 이 나간다 (TRIP-1493 · BR-U5-14)', async () => {
+      // 준비 — 관람 중 v2 에서 저장(PUT 보류) → 시트 닫음.
+      holdMemo();
+      await renderHub();
+      fireEvent.press(await screen.findByTestId('execution-arrive-memo'));
+      typeAndSave(await openedMemoInput(), 'v2 글');
+      await waitFor(() => expect(hitCount(MEMO_PUT_V2)).toBe(1));
+      fireEvent.press(screen.getByTestId('live-memo-close'));
+
+      // 실행 — 완료 카드 v1 [메모] → 글 → [저장].
+      fireEvent.press(screen.getByTestId(done('memo')));
+      const input = await openedMemoInput();
+      fireEvent.changeText(input, 'v1 글');
+
+      // 단언 — 활성이고, 누르면 v1 PUT.
+      expect(screen.getByTestId(SAVE)).toBeEnabled();
+      fireEvent.press(screen.getByTestId(SAVE));
+      await waitFor(() => expect(hitCount(MEMO_PUT_V1)).toBe(1));
+      await release();
+    });
+
+    it('D14 같은 방문의 PUT 이 보류 중이면 [저장]을 다시 눌러도 PUT 은 늘지 않는다 (방문별 잠금 유지)', async () => {
+      holdMemo();
+      await renderHub();
+      fireEvent.press(screen.getByTestId(done('memo')));
+      typeAndSave(await openedMemoInput(), '한 번만');
+      await waitFor(() => expect(hitCount(MEMO_PUT_V1)).toBe(1));
+
+      expect(screen.getByTestId(SAVE)).toBeDisabled();
+      fireEvent.press(screen.getByTestId(SAVE));
+      await settle();
+
+      expect(hitCount(MEMO_PUT_V1)).toBe(1);
+      await release();
+    });
+
+    it('D15 허브 시트에서 글을 쓰고 키보드 완료(blur)만 해도 PUT 은 0회다 — 저장은 [저장] 하나 (TRIP-1426)', async () => {
+      await renderHub();
+      fireEvent.press(screen.getByTestId(done('memo')));
+      const input = await openedMemoInput();
+      fireEvent.changeText(input, 'blur 만');
+      fireEvent(input, 'blur');
+      await settle();
+
+      expect(hitCount(MEMO_PUT_V1)).toBe(0);
+      expect(memoBodies).toEqual([]);
+    });
+
     it('D11 시트가 열린 채 500 → 시트 안에 안내, 카드 아래 안내(완료·관람 중)는 없다', async () => {
       memoStatus = 500;
       await renderHub();
@@ -3994,6 +4062,73 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
       await settle();
       expect(hitCount(MEMO_PUT_V1)).toBe(0);
       expect(screen.queryByTestId('live-memo-saved-toast')).toBeNull();
+    });
+
+    it('H10 첫 조회 중 연 시트가 서버 글로 심긴 뒤 재조회가 다른 글을 가져와도 손대지 않은 [저장]은 PUT 0회다 — 잠금 해제 때 seed 를 다시 심는다 (TRIP-1492)', async () => {
+      // 준비 — 1차는 문 뒤 '서버 글', 2차부터 '다른 기기 글'.
+      const gate = createGate();
+      recordsReply = async (call) => {
+        if (call === 1) {
+          await gate.opened;
+          return recordsOf([actualVisit('v1', '서버 글')]);
+        }
+        return recordsOf([actualVisit('v1', '다른 기기 글')]);
+      };
+      await renderHub();
+      await waitFor(() => expect(hitCount(RECORDS_GET)).toBe(1));
+      fireEvent.press(screen.getByTestId(done('memo')));
+      await screen.findByTestId(INPUT);
+      await act(async () => {
+        gate.release();
+      });
+      await waitFor(() => expect(field().props.value).toBe('서버 글'));
+      await act(async () => {
+        void client.invalidateQueries();
+      });
+      await waitFor(() =>
+        expect(hitCount(RECORDS_GET)).toBeGreaterThanOrEqual(2)
+      );
+      await settle();
+
+      // 실행 — 손대지 않고 [저장].
+      fireEvent.press(screen.getByTestId(SAVE));
+
+      // 단언
+      await waitFor(() =>
+        expect(screen.queryByTestId(SHEET)).not.toBeOnTheScreen()
+      );
+      await settle();
+      expect(hitCount(MEMO_PUT_V1)).toBe(0);
+    });
+
+    it('H9 심은 글을 안 고친 채 재조회가 다른 기기 글을 가져온 뒤 [저장]해도 시트만 닫히고 PUT 0회다 (TRIP-1492)', async () => {
+      // 준비 — 1차 '서버 글', 재조회부터 '다른 기기 글'.
+      recordsReply = (call) =>
+        recordsOf([actualVisit('v1', call === 1 ? '서버 글' : '다른 기기 글')]);
+      await renderHub();
+      await waitFor(() =>
+        expect(screen.getByTestId(DONE_BOX)).toHaveTextContent('서버 글')
+      );
+      fireEvent.press(screen.getByTestId(done('memo')));
+      const input = await openedMemoInput();
+      expect(input.props.value).toBe('서버 글');
+      await act(async () => {
+        void client.invalidateQueries();
+      });
+      await waitFor(() =>
+        expect(hitCount(RECORDS_GET)).toBeGreaterThanOrEqual(2)
+      );
+      await settle();
+
+      // 실행 — 손대지 않고 [저장].
+      fireEvent.press(screen.getByTestId(SAVE));
+
+      // 단언 — 닫히고 PUT 0회.
+      await waitFor(() =>
+        expect(screen.queryByTestId(SHEET)).not.toBeOnTheScreen()
+      );
+      await settle();
+      expect(hitCount(MEMO_PUT_V1)).toBe(0);
     });
 
     it('H7 메모 대상 방문이 없으면 records 를 부르지 않는다 (AC-9)', async () => {
