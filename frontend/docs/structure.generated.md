@@ -869,6 +869,7 @@
 ## src/pages/live/live-itinerary/model/
 - `src/pages/live/live-itinerary/model/automationInput.ts`  →  automationVisitRefs
 - `src/pages/live/live-itinerary/model/foldScope.ts`  →  foldScope
+- `src/pages/live/live-itinerary/model/hubOpportunity.ts`  →  OpportunityContext · pickOpportunity · OpportunityCopy · opportunityCopy · OpportunityReplanHref · opportunityReplanHref
 - `src/pages/live/live-itinerary/model/hubPillCopy.ts`  →  hubPillCopy
 - `src/pages/live/live-itinerary/model/liveState.ts`  →  LiveState · ResolveLiveStateInput · resolveLiveState
 - `src/pages/live/live-itinerary/model/riskAffectedRow.ts`  →  RiskAffectedRow · riskAffectedRow
@@ -1793,4 +1794,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1145개 파일
+합계 1146개 파일
