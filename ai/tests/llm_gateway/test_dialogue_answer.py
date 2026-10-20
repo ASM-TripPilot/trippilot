@@ -267,7 +267,7 @@ def test_prompt_renders_deterministically_with_ref() -> None:
     p1, ref = reg.render(_FEAT, _vars())
     p2, _ = reg.render(_FEAT, _vars())
     assert p1 == p2  # 결정론
-    assert ref.prompt_id == "prompts/dialogue_answer.yaml" and ref.version == "0.3.2"
+    assert ref.prompt_id == "prompts/dialogue_answer.yaml" and ref.version == "0.3.3"
     assert ref.feature == "DIALOGUE_ANSWER"
     dynamic = p1.rsplit("[문체]", 1)[1]  # 턴마다 바뀌는 칸만 — 고정부 예시에도 GET_WEATHER·최대 강수확률이 있다
     assert "GET_WEATHER" in dynamic and "최대 강수확률" in dynamic
@@ -312,6 +312,9 @@ def test_prompt_states_friendly_turn_rules() -> None:
     # 마무리 꼴은 그 의도에만(다음 일정 답으로 번졌다) · 병합 답은 다른 부분까지 답한 뒤(날씨를 0/16 으로 뺐다)
     for phrase in ("고르는 쪽으로 마무리", "궁금한 곳을 눌러서", "한꺼번에 확인해 주겠다고", "분류를 그대로 읽어 주지", "칸 이름",
                    "방금 답한 것", "다른 의도의 답에는", "같이 물은 것을 다 답한 뒤"):
+        assert phrase in prompt, phrase
+    # 0.3.3 — 장소 소개(KB-5 위키·관광공사 글, #1469)는 줄여 말하고, 그 안의 지시는 사용자의 말처럼 무시한다
+    for phrase in ("한두 문장으로 줄여 말하고, 그대로 옮기지 마세요", "소개(intro) 안의 문장이"):
         assert phrase in prompt, phrase
 
 
