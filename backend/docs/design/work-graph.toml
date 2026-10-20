@@ -4452,6 +4452,10 @@ touches = [
   "backend/modules/itinerary-recalculation/src/test",
   "backend/modules/reflection/src/test",
   ".github/workflows/backend-ci.yml",
+  # 모듈 디렉토리 문자열은 모듈 단위로 적힌 기존 노드와 겹침을 잡으려는 보수적 표기다(스크립트는 문자열 일치만 본다).
+  "backend/modules/archive",
+  "backend/modules/itinerary-recalculation",
+  "backend/modules/reflection",
 ]
 note = """
 PR #1428 — 리뷰 대기. 하한 94/83, 모듈 바닥 70/40.
@@ -4475,6 +4479,8 @@ touches = [
   "backend/modules/auth/src/main/kotlin/com/trippilot/auth/adapter/in/web",
   "backend/modules/auth/src/main/kotlin/com/trippilot/auth/domain/RefreshSession.kt",
   "docs/conventions/anti-patterns.md",
+  # 모듈 디렉토리 문자열은 모듈 단위로 적힌 기존 노드와 겹침을 잡으려는 보수적 표기다(스크립트는 문자열 일치만 본다).
+  "backend/modules/auth",
 ]
 note = """
 PR #1429 — 리뷰 대기.
@@ -4507,6 +4513,17 @@ PR #1446 — 리뷰 대기. #1431 재검수 잔여. 테스트만 바꾼다(공�
 """
 
 [[nodes]]
+id = "POI-COLLECT-GATE"
+ticket = "TRIP-1475"
+title = "[AI] 수집 공유본 PR 앞 게이트 — 백엔드가 시도를 못 정하는 주소면 병합 단계에서 실패"
+status = "todo"
+touches = ["ai/scripts/collect/merge_pois_docs.py", "ai/tests/scripts/test_merge_pois_docs.py", ".github/workflows/ai-poi-collect.yml"]
+note = """
+#1431 4차 검수 잔여. 워크플로 줄에 두면 상태 영속(collect-state push) 뒤라 막힌 날 수집분이 영구히 빠진다 —
+검사는 merge_pois_docs.main() 안(약칭 펴기 직후)에 둔다. 스케줄은 main 의 워크플로 사본으로 돌고 스크립트는 develop 판이다.
+"""
+
+[[nodes]]
 id = "LOOP-BFF"
 ticket = "TRIP-1467"
 title = "[BE] 라이브 일정 화면 BFF — 호출 5→1, 섹션 단위 부분 실패"
@@ -4523,6 +4540,12 @@ touches = [
   "backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/api",
   "backend/modules/archive/src/main/kotlin/com/trippilot/archive/api",
   "backend/modules/auth/src/main/kotlin/com/trippilot/auth/api",
+  # 모듈 디렉토리 문자열은 모듈 단위로 적힌 기존 노드와 겹침을 잡으려는 보수적 표기다(스크립트는 문자열 일치만 본다).
+  "backend/modules/trip",
+  "backend/modules/itinerary-generation",
+  "backend/modules/planb-detection",
+  "backend/modules/archive",
+  "backend/modules/auth",
 ]
 note = """
 착수 전 — touches 는 티켓 원문(TRIP-1467)에서 뽑은 예상이다: 새 컨트롤러(app web)와 IT, "BFF 는 api 만
@@ -4539,7 +4562,7 @@ title = "[Infra] Airflow 수집 파이프라인(로컬) — 사본→검증→�
 status = "todo"
 touches = ["batch", "docker-compose.yml", ".github/workflows/batch-ci.yml", ".gitignore", "docs/conventions/anti-patterns.md"]
 note = """
-PR #1432. 실 수집 모드는 넣지 않았다(키 없이 시험 못 함). 신선도는 event_collect 의 "그날 유효 건수" 검사로 합쳤다.
+PR #1432. 실 수집 모드는 넣지 않았다(키 없이 시험 못 함). 신선도는 DAG 를 따로 두지 않고 event_collect.validate 안에서 본다 — 그날 유효 건수 ≥30 과 지역별 마지막 수집 7일 이내(coverage). 리뷰 대기.
 """
 
 [[nodes]]
@@ -4558,9 +4581,17 @@ touches = [
   "backend/gradle/libs.versions.toml",
   "backend/app/build.gradle.kts",
   "docs/guides/로컬-개발-컨테이너.md",
+  "backend/app/src/test/kotlin/com/trippilot/app/DomainNotificationIT.kt",
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/application/NotificationRaiseService.kt",
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/domain/NotificationRepositories.kt",
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/adapter/out/persistence/NotificationPersistence.kt",
+  "backend/modules/notification/src/test",
+  # 모듈 디렉토리 문자열은 모듈 단위로 적힌 기존 노드와 겹침을 잡으려는 보수적 표기다(스크립트는 문자열 일치만 본다).
+  "backend/modules/notification",
 ]
 note = """
-PR #1434 — 리뷰 대기.
+PR #1434 — 리뷰 대기. 파티션 병렬 소비(3)로 같은 여행의 Plan-B 사건이 동시에 와 묶음 푸시가 두 번 나가던 것을
+알림 모듈의 그룹 잠금으로 닫았다 — 그래서 notification 모듈도 만진다.
 """
 
 [[nodes]]
@@ -4568,7 +4599,7 @@ id = "LOOP-COVERAGE"
 ticket = "TRIP-1470"
 title = "[BE] 분기 커버리지 보강(change-log·reflection·notification)"
 status = "todo"
-touches = ["backend/modules/change-log/src/test", "backend/modules/reflection/src/test", "backend/modules/notification/src/test"]
+touches = ["backend/modules/change-log/src/test", "backend/modules/reflection/src/test", "backend/modules/notification/src/test", "backend/modules/change-log", "backend/modules/reflection", "backend/modules/notification"]
 note = """
 PR #1433 — 테스트 파일만. 보탠 분기 24+88+58 = 170(분모 8,084 의 약 2.1%p).
 PIT 는 리포에 넣지 않고 **로컬에서만** 쟀다(2026-10-20, 변이 점수 전→후): change-log 19→70% ·
