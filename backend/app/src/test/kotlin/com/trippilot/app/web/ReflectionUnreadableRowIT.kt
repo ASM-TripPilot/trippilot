@@ -19,6 +19,7 @@ import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.auth.domain.port.ConsentRecordRepository
 import com.trippilot.core.event.EventEnvelope
 import com.trippilot.reflection.adapter.`in`.event.ActualRouteStoredSubscriber
+import com.trippilot.reflection.adapter.`in`.event.TripEndedSubscriber
 import com.trippilot.reflection.adapter.out.persistence.ReflectionRepositoryAdapter
 import com.trippilot.reflection.adapter.out.persistence.StyleAnalysisRepositoryAdapter
 import com.trippilot.reflection.adapter.out.persistence.TripSummaryRepositoryAdapter
@@ -83,6 +84,7 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var analyses: StyleAnalysisRepository
     @Autowired private lateinit var visits: VisitCheckService
     @Autowired private lateinit var routeStored: ActualRouteStoredSubscriber
+    @Autowired private lateinit var tripEnded: TripEndedSubscriber
     @Autowired private lateinit var personalization: PersonalizationFacade
     @Autowired private lateinit var summaryRepo: TripSummaryRepository
     @Autowired private lateinit var reflectionRepo: ReflectionRepository
@@ -142,6 +144,10 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
 
     /** (WARN 수, ERROR 수). */
     private val List<ILoggingEvent>.levels get() = count { it.level == Level.WARN } to count { it.level == Level.ERROR }
+
+    private fun tripEndedEvent(tripId: UUID) = EventEnvelope(
+        UUID.randomUUID(), "trip.TripEnded", 1, "trip", tripId.toString(), null, now, """{"tripId":"$tripId"}""",
+    )
 
     private fun routeStoredEvent(tripId: UUID, day: LocalDate) = EventEnvelope(
         UUID.randomUUID(), "archive.ActualRouteStored", 1, "trip", tripId.toString(), null, now,
@@ -264,12 +270,16 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
             healed() shouldBe true
             announced() shouldBe 1
 
-            // 생성(`TripEnded`)도 못 읽는 행을 덮어 고친다 — 여행 종료의 정상 경로라 알림을 낸다(조회·경로 갱신과 다르다).
+            // 생성(`TripEnded` 재배달)도 못 읽는 행을 덮어 고친다. 알림은 다시 내지 않는다 — 행이 있으면 이미 알렸다.
             corrupt("trip_summary", broken, "trip_id = ?", tripId)
-            val (_, genLogs) = logsOf { summaries.generate(tripId) }
+            val (_, genLogs) = logsOf { tripEnded.handle(tripEndedEvent(tripId)) }
             genLogs.levels shouldBe (0 to 1)
             healed() shouldBe true
-            announced() shouldBe 2
+            announced() shouldBe 1
+
+            // 멀쩡한 행에 다시 배달돼도 마찬가지다 — 발행마다 이벤트 id 가 새로 나서, 다시 내면 알림이 한 번 더 간다.
+            logsOf { tripEnded.handle(tripEndedEvent(tripId)) }.second.levels shouldBe (0 to 0)
+            announced() shouldBe 1
         }
     }
 

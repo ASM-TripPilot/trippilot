@@ -160,7 +160,7 @@ class TripSummaryRepositoryAdapter(private val jpa: TripSummaryJpaRepository) : 
 
     /**
      * 0~max 로 붙이고 남긴다. **Double 에서 붙인 뒤** 정수로 바꾼다 — Int 를 넘는 값(3000000000, Jackson 은 Long)을 바로
-     * toInt() 하면 음수로 감겨 도메인 require 가 다시 500 을 낸다(검수 실측). NaN 도 0 이다.
+     * toInt() 하면 음수로 감겨 도메인 require 가 다시 500 을 낸다(검수 실측). jsonb 는 NaN 을 담지 못하고, 아주 큰 수는 Infinity 로 읽혀 상한으로 붙는다.
      */
     private fun Map<*, *>.inRange(key: String, dropped: MutableList<String>, max: Double = Int.MAX_VALUE.toDouble()): Double? {
         val n = (this[key] as? Number)?.toDouble() ?: return null
