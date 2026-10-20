@@ -346,6 +346,29 @@ describe('AssistantSheetPage · 이력 (TRIP-1325)', () => {
     expect(await screen.findByTestId('assistant-input')).toBeOnTheScreen();
     await waitFor(() => expect(fake.calls.openSession).toBe(2));
   });
+
+  // TRIP-1513 · AC-6 — b06 「일정 변경 이력 전체 보기」 → h36. 여행 문맥(tripId)이 있을 때만 행이 있다.
+  it('여행 문맥이면 일정 변경 이력 행을 눌러 h36 으로 이동한다(replace 1회)', async () => {
+    renderPage();
+    await screen.findByTestId('assistant-context-chip');
+    fireEvent.press(screen.getByTestId('assistant-history-toggle'));
+    expect(mockReplace).not.toHaveBeenCalled();
+
+    fireEvent.press(
+      await screen.findByTestId('assistant-history-open-changes')
+    );
+
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith('/trips/t1/itinerary/history');
+  });
+
+  it('여행 없이 열면(b07) 이력 보기에 일정 변경 이력 행이 없다', async () => {
+    renderPage({}, { surface: 'HOME' });
+    await screen.findByTestId('assistant-next-action-CREATE_TRIP');
+    fireEvent.press(screen.getByTestId('assistant-history-toggle'));
+    expect(await screen.findByTestId('assistant-history')).toBeOnTheScreen();
+    expect(screen.queryByTestId('assistant-history-open-changes')).toBeNull();
+  });
 });
 
 async function openAndApplyProposal(): Promise<void> {

@@ -100,6 +100,7 @@
 - `app/trips/[tripId]/itinerary/draft.tsx`  →  (export 없음)
 - `app/trips/[tripId]/itinerary/edit.tsx`  →  (export 없음)
 - `app/trips/[tripId]/itinerary/generating.tsx`  →  (export 없음)
+- `app/trips/[tripId]/itinerary/history.tsx`  →  (export 없음)
 - `app/trips/[tripId]/itinerary/index.tsx`  →  (export 없음)
 
 ## app/trips/[tripId]/itinerary/manual/
@@ -797,6 +798,14 @@
 - `src/pages/itinerary/itinerary-generating/ui/GeneratingIllustration.tsx`  →  GeneratingIllustration
 - `src/pages/itinerary/itinerary-generating/ui/GeneratingPage.tsx`  →  GeneratingPage
 - `src/pages/itinerary/itinerary-generating/ui/GeneratingScreen.tsx`  →  AiLimitRetryAt · GeneratingScreenProps · GeneratingScreen
+
+## src/pages/itinerary/itinerary-history/
+- `src/pages/itinerary/itinerary-history/index.ts`  →  ItineraryHistoryPage
+
+## src/pages/itinerary/itinerary-history/ui/
+- `src/pages/itinerary/itinerary-history/ui/ItineraryHistoryPage.tsx`  →  ItineraryHistoryPage
+- `src/pages/itinerary/itinerary-history/ui/ItineraryHistoryView.tsx`  →  HistoryFace · ItineraryHistoryViewProps · ItineraryHistoryView
+- `src/pages/itinerary/itinerary-history/ui/RevisionList.tsx`  →  RevisionListProps · RevisionList
 
 ## src/pages/itinerary/itinerary-list/
 - `src/pages/itinerary/itinerary-list/index.ts`  →  MyTripsListPage
@@ -1798,4 +1807,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1150개 파일
+합계 1155개 파일

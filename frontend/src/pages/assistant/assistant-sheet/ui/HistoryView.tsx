@@ -29,6 +29,8 @@ export interface HistoryViewProps {
   onConfirmClear: () => void;
   onCancelClear: () => void;
   onOpenSession: (session: AssistantSessionSummary) => void;
+  /** 있을 때만 「일정 변경 이력 전체 보기」 행을 그린다(여행 문맥이 있을 때 — h36 진입, TRIP-1513). */
+  onOpenChangeHistory?: () => void;
 }
 
 function ActionButton({
@@ -66,6 +68,7 @@ export function HistoryView({
   onConfirmClear,
   onCancelClear,
   onOpenSession,
+  onOpenChangeHistory,
 }: HistoryViewProps): ReactElement {
   return (
     <View testID="assistant-history" className="flex-1">
@@ -87,6 +90,18 @@ export function HistoryView({
             />
           ))
         )}
+        {onOpenChangeHistory ? (
+          <Pressable
+            testID="assistant-history-open-changes"
+            accessibilityRole="button"
+            onPress={onOpenChangeHistory}
+            className="rounded-card border border-hairline bg-canvas px-lg py-md"
+          >
+            <Text className="font-noto text-label text-ink">
+              일정 변경 이력 전체 보기
+            </Text>
+          </Pressable>
+        ) : null}
         <Text className="font-noto text-micro text-muted">
           * 대화는 보조 기록 · 일정 확정값은 솔버 검증 결과
         </Text>

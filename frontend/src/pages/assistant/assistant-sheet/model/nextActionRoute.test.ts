@@ -30,6 +30,8 @@ describe('nextActionRoute (TRIP-1320)', () => {
     ['OPEN_STAY_SEARCH', '/stays'],
     ['OPEN_TRIP_SUMMARY', `/trips/${T}/records/summary`],
     ['OPEN_STYLE', '/records/style'],
+    // TRIP-1513 · RESTORE_REVISION → h36 변경 이력(리비전 화면)
+    ['RESTORE_REVISION', `/trips/${T}/itinerary/history`],
     ['CREATE_TRIP', '/trips/new/step1'],
   ])('%s → %s', (type, href) => {
     expect(route(type)).toEqual({ kind: 'route', href });
@@ -78,6 +80,10 @@ describe('nextActionRoute (TRIP-1320)', () => {
       route('OPEN_ITINERARY', {}, { tripId: null, surface: 'HOME' })
     ).toBeNull();
     expect(route('OPEN_OTA')).toBeNull();
+    // TRIP-1513 · RESTORE_REVISION 도 여행이 필요하다
+    expect(
+      route('RESTORE_REVISION', {}, { tripId: null, surface: 'HOME' })
+    ).toBeNull();
     expect(route('OPEN_PLACE')).toBeNull();
   });
 
@@ -106,5 +112,16 @@ describe('nextActionRoute (TRIP-1320)', () => {
       kind: 'route',
       href: '/stays/..%2Fadmin%3Fx%3D1',
     });
+  });
+
+  // TRIP-1513 · params 키 계약이 없어(01b Q2) revisionId 를 실어도 목적지는 같다 — 서버 문자열이 경로를 못 바꾼다
+  it('RESTORE_REVISION 은 params 와 무관하게 h36 이고, tripId 는 경로 조각으로 인코딩된다', () => {
+    expect(route('RESTORE_REVISION', { revisionId: '../x?y=1' })).toEqual({
+      kind: 'route',
+      href: `/trips/${T}/itinerary/history`,
+    });
+    expect(
+      route('RESTORE_REVISION', {}, { tripId: 'a/b?c', surface: 'ITINERARY' })
+    ).toEqual({ kind: 'route', href: '/trips/a%2Fb%3Fc/itinerary/history' });
   });
 });
