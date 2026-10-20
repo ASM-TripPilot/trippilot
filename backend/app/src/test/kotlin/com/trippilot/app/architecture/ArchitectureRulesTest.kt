@@ -119,7 +119,8 @@ class ArchitectureRulesTest {
         classes().that().resideInAPackage("com.trippilot.app.views..")
             .should().onlyDependOnClassesThat().resideInAnyPackage(
                 "com.trippilot.app.views..", "com.trippilot..adapter.in.web..", "com.trippilot..api..", "com.trippilot.core..",
-                "java..", "kotlin..", "org.jetbrains.annotations..", "org.springframework..", "org.slf4j..",
+                // Spring 은 MVC 애노테이션만 — `org.springframework..` 를 열면 JdbcTemplate·TransactionTemplate 으로 저장소를 직접 읽는 길이 열린다.
+                "java..", "kotlin..", "org.jetbrains.annotations..", "org.springframework.web.bind.annotation..", "org.slf4j..",
             )
             .because("views 는 공개 표면만 조합한다 — 내부 직접 호출은 소유 검증·응답 조립을 건너뛴다")
             .check(importedClasses)

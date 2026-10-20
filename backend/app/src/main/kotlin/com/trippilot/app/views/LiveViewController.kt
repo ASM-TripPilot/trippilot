@@ -35,7 +35,8 @@ import java.util.UUID
  * 소유 검증·404 도 핸들러의 것이 그대로 적용된다.
  *
  * 실패 규칙:
- * - 여행이 없거나 남의 것이면 전체 404(개별 GET /trips/{id} 와 같다).
+ * - 여행이 없거나 남의 것이면 전체 404(개별 GET /trips/{id} 와 같다). 여행 조회의 그 밖의 실패도 전체 오류다 —
+ *   앱은 묶음이 실패하면 개별 경로로 돌아가므로 거기서 지금처럼 부드럽게 넘긴다(TRIP-1467 프론트 전환안).
  * - 일정이 없으면 [LiveViewResponse.itinerary] 가 null 이고 날짜에 매인 섹션(triggers·visits)도 null 이다 —
  *   화면은 "아직 일정이 없어요"로 가고 그 둘을 부르지 않는다. 일정의 그 밖의 실패는 전체 오류다(화면이 그릴 것이 없다).
  * - triggers·visits·locationConsent 는 실패해도 나머지를 준다. 그 섹션은 null 이고 [LiveViewResponse.unavailable] 에

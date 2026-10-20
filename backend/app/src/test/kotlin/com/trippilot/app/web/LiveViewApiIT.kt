@@ -118,22 +118,24 @@ class LiveViewApiIT : AbstractPostgresIntegrationTest() {
     fun `각 섹션은 개별 엔드포인트 응답과 JSON 으로 같다`() {
         val token = newToken()
         val tripId = tripWithItinerary(token)
+        val seeded = today
         seedToday(token, tripId)
 
-        val before = today
         val live = get("/api/v1/trips/$tripId/live?withLocationConsent=true", token)
 
         // 서울 자정을 넘기며 돌면 서버의 오늘이 호출 전후로 다르다 — 둘 중 하나면 맞다.
-        live["day"].asText() shouldBeIn listOf(before.toString(), today.toString())
+        live["day"].asText() shouldBeIn listOf(seeded.toString(), today.toString())
         live["trip"] shouldBe get("/api/v1/trips/$tripId", token)
         live["itinerary"] shouldBe get("/api/v1/trips/$tripId/itinerary", token)
         live["triggers"] shouldBe get("/api/v1/trips/$tripId/triggers", token)
         live["visits"] shouldBe get("/api/v1/trips/$tripId/visits/days/${live["day"].asText()}", token)
         live["locationConsent"] shouldBe get("/api/v1/me/location-consent", token)
         live["unavailable"].toList().shouldBeEmpty()
-        // 빈 목록끼리 같은 것이 아니다
-        live["triggers"]["triggers"].toList().shouldNotBeEmpty()
-        live["visits"]["visits"].toList().shouldNotBeEmpty()
+        // 빈 목록끼리 같은 것이 아니다 — 심은 날과 응답의 날이 같을 때만(자정을 넘기면 심은 것은 어제 것이다)
+        if (live["day"].asText() == seeded.toString()) {
+            live["triggers"]["triggers"].toList().shouldNotBeEmpty()
+            live["visits"]["visits"].toList().shouldNotBeEmpty()
+        }
     }
 
     @Test
@@ -195,8 +197,12 @@ class LiveViewApiIT : AbstractPostgresIntegrationTest() {
         try {
             repeat(3) { paths.forEach { get(it, token) }; get("/api/v1/trips/$tripId/live?withLocationConsent=true", token) } // 데우기
             // 통계는 SessionFactory 전역이라 배경 스케줄(분 단위)이 측정 창에 끼면 그 회차만 는다 — 교대로 다섯 번 재서 최솟값끼리 본다.
-            val separate = List(5) { statements { paths.forEach { get(it, token) } } }.min()
-            val bundled = List(5) { statements { get("/api/v1/trips/$tripId/live?withLocationConsent=true", token) } }.min()
+            val rounds = List(5) {
+                statements { paths.forEach { p -> get(p, token) } } to
+                    statements { get("/api/v1/trips/$tripId/live?withLocationConsent=true", token) }
+            }
+            val separate = rounds.minOf { it.first }
+            val bundled = rounds.minOf { it.second }
             // 시간은 로컬 왕복이라 네트워크 지연이 빠진 서버 처리 시간에 가깝다 — 20회 중앙값(ms).
             fun medianMs(block: () -> Unit) = List(20) { val t = System.nanoTime(); block(); (System.nanoTime() - t) / 1e6 }.sorted()[10]
             val separateMs = medianMs { paths.forEach { get(it, token) } }
