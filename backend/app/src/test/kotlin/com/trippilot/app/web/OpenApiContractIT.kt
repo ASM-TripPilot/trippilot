@@ -146,6 +146,8 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
             "의미 미정 — 팀 결정 대기(TRIP-1474)",
         "PUT /api/v1/me/location-consent 응답 LocationConsentResponse.capabilities Capabilities: 문서에만 `localLocationUse`" to
             "위와 같음",
+        "GET /api/v1/trips/{tripId}/live 응답 LiveViewResponse.locationConsent LocationConsentResponse.capabilities Capabilities: 문서에만 `localLocationUse`" to
+            "위와 같음 — 같은 LocationConsent 스키마를 섹션으로 싣는다",
     )
 
     /**

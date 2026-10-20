@@ -107,4 +107,17 @@ class ArchitectureRulesTest {
             .allowEmptyShould(true)
             .check(importedClasses)
     }
+
+    /**
+     * 화면 묶음(`app.views`, TRIP-1467)은 모듈의 **공개 표면만** 부른다 — HTTP 핸들러(`adapter.in.web`)와 api.
+     * 핸들러를 그대로 부르는 이유는 섹션이 개별 엔드포인트와 같은 모양이어야 해서다(LiveViewController 주석).
+     * 서비스·도메인·저장소를 직접 부르면 소유 검증과 응답 조립을 건너뛴 두 번째 길이 생긴다.
+     */
+    @Test
+    fun `views 는 모듈의 web 핸들러와 api 만 부른다`() {
+        noClasses().that().resideInAPackage("com.trippilot.app.views..")
+            .should().dependOnClassesThat().resideInAnyPackage("..application..", "..domain..", "..adapter.out..", "..infra..")
+            .because("views 는 공개 표면만 조합한다 — 내부 직접 호출은 소유 검증·응답 조립을 건너뛴다")
+            .check(importedClasses)
+    }
 }

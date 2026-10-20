@@ -4546,29 +4546,18 @@ title = "[BE] 라이브 일정 화면 BFF — 호출 5→1, 섹션 단위 부분
 status = "todo"
 touches = [
   "backend/docs/design/openapi.yaml",
-  "backend/app/src/main/kotlin/com/trippilot/app/web",
+  "backend/docs/design/work-graph.toml",
+  "backend/app/src/main/kotlin/com/trippilot/app/views",
+  "backend/app/src/test/kotlin/com/trippilot/app/views",
   "backend/app/src/test/kotlin/com/trippilot/app/web",
   "backend/app/src/test/kotlin/com/trippilot/app/architecture/ArchitectureRulesTest.kt",
-  "backend/app/build.gradle.kts",
-  "backend/gradle/libs.versions.toml",
-  "backend/modules/trip/src/main/kotlin/com/trippilot/trip/api",
-  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/api",
-  "backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/api",
-  "backend/modules/archive/src/main/kotlin/com/trippilot/archive/api",
-  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/api",
-  # 모듈 디렉토리 문자열은 모듈 단위로 적힌 기존 노드와 겹침을 잡으려는 보수적 표기다(스크립트는 문자열 일치만 본다).
-  "backend/modules/trip",
-  "backend/modules/itinerary-generation",
-  "backend/modules/planb-detection",
-  "backend/modules/archive",
-  "backend/modules/auth",
 ]
 note = """
-착수 전 — touches 는 티켓 원문(TRIP-1467)에서 뽑은 예상이다: 새 컨트롤러(app web)와 IT, "BFF 는 api 만
-부름(ArchUnit 강제)" 의 규칙 테스트, 쿼리 수 측정용 datasource-proxy(테스트 전용 의존 → 버전 카탈로그 ·
-app/build.gradle.kts), 모듈 다섯 곳 화면용 읽기 퍼사드(여행·일정·트리거·그날 방문·위치 동의 — 위치 동의는 auth 소유).
-**FIELD-GATE 를 선행으로 두지 않는다** — 티켓 원문에 선행 근거가 없다. 다만 FIELD-GATE 가 먼저 머지되면
-BFF 의 새 응답 스키마도 필드 계약 검사를 받으므로 그 순서가 낫다. openapi.yaml 을 같이 만지는 것은 자원 배타다.
+PR 진행 중 — `GET /trips/{tripId}/live`. 티켓 원문의 "모듈 다섯 곳 화면용 읽기 퍼사드"는 하지 않았다: 각 섹션은 그
+엔드포인트의 핸들러를 그대로 불러 만든다 — 섹션이 개별 응답과 같은 모양이어야 앱이 기존 캐시에 그대로 채울 수 있고,
+퍼사드로 다시 조립하면 한쪽에 필드가 늘 때 갈라진다. 규칙 테스트는 "views 는 web 핸들러와 api 만"으로 바꿨다.
+쿼리 수 측정은 datasource-proxy 대신 Hibernate 통계(이미 있는 것)로 했다 — 모듈·의존성 변경 없음.
+앱 쪽 전환(첫 로딩을 이 응답으로 캐시 채우기)은 프론트 몫이다.
 """
 
 [[nodes]]
