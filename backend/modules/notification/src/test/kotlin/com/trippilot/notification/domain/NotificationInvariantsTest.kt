@@ -50,8 +50,8 @@ class NotificationInvariantsTest : StringSpec({
     "slotKey 는 SLOT_PRE 만 가진다 — 여행 단위 리마인드에 붙으면 거부한다" {
         NotificationSchedule.pending(acc, trip, NotificationKind.SLOT_PRE, at, slotKey = "2026-08-10#p").slotKey shouldBe "2026-08-10#p"
         NotificationSchedule.pending(acc, trip, NotificationKind.SLOT_PRE, at).slotKey shouldBe null
-        shouldThrow<IllegalArgumentException> {
-            NotificationSchedule.pending(acc, trip, NotificationKind.TRIP_DAY, at, slotKey = "2026-08-10#p")
+        (NotificationKind.REMINDERS - NotificationKind.SLOT_PRE).forEach { kind ->
+            shouldThrow<IllegalArgumentException> { NotificationSchedule.pending(acc, trip, kind, at, slotKey = "2026-08-10#p") }
         }
     }
 
