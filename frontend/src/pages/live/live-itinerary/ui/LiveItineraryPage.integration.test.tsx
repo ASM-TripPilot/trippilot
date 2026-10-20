@@ -6423,6 +6423,34 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     expect(hitCount(OPPORTUNITIES)).toBe(0);
   });
 
+  it('O13 숨김을 읽기 전엔 기회가 와도 카드를 그리지 않는다 — 숨긴 카드가 허브를 열 때마다 잠깐 비치지 않게', async () => {
+    // 준비 — 이 날 행사 카드를 이미 숨겼고, 기기 칸 읽기는 테스트가 풀 때까지 붙잡는다. 트리거는 주의(CAUTION) 날씨 하나 —
+    // 행사를 막지 않고 알약만 세운다(알약 = 트리거 목록 도착의 증거 — '트리거를 몰라서 없음'과 가른다).
+    const readGate = createGate();
+    mockReadIdSet.mockImplementation(async () => {
+      await readGate.opened;
+      return [VENUE.key];
+    });
+    await renderHub(
+      { [TODAY]: [VENUE] },
+      { triggers: [{ ...rain, severity: 'CAUTION' }] }
+    );
+
+    // 실행 — 트리거 목록·기회 응답이 왔고 기기 칸을 읽기 시작했다(짝 앵커 — 읽기는 기회 항목이 있어야 시작한다).
+    await screen.findByTestId('execution-live-trigger-chip');
+    await waitFor(() => expect(mockReadIdSet).toHaveBeenCalled());
+    await settle();
+
+    // 단언 1 — 읽는 동안엔 카드가 없다(숨겼는지 아직 모른다).
+    expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
+    expect(screen.queryByTestId(CARD)).toBeNull();
+
+    // 단언 2 — 읽고 나서도 없다(숨긴 카드다).
+    readGate.release();
+    await settle();
+    expect(screen.queryByTestId(CARD)).toBeNull();
+  });
+
   it('O12 같은 날 두 번째 ×가 첫 숨김을 지우지 않는다 — 비 위험으로 바뀐 카드를 또 닫고 위험이 풀려도, 처음 닫은 카드는 그 날 다시 없다', async () => {
     // 준비 — 트리거 목록은 테스트가 바꾼다. 한 번의 server.use 안에서는 앞에 건 핸들러가 이기므로 liveHubHandlers 보다 먼저 둔다.
     let serverTriggers: Trigger[] = [];
