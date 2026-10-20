@@ -18,7 +18,9 @@ from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql, PlaceRow
 
 log = logging.getLogger(__name__)
 
-# 같은 조건(분류 인자 region·category·theme)의 SQL 은 다시 쓰지 않는다 — "서울 요즘 핫한 곳"처럼 사용자마다 같은 말이 잦고,
+# 같은 말·같은 조건(발화 + 분류 인자 region·category·theme)의 SQL 은 다시 쓰지 않는다 — "서울 요즘 핫한 곳"처럼 사용자마다 같은 말이 잦고,
+# 키에 발화를 넣는 이유: 인자만으로는 넓은 지역 아래의 동네("망원 카페" ↔ "서울 카페", 둘 다 {서울, 카페})·"~말고" 제외·개수가 갈리지
+# 않는다 — 앞 사용자의 SQL 이 1시간 동안 다른 사용자 말에 실렸다(2026-10-20 Codex 리뷰 확정, 재현).
 # NL2SQL LLM 은 실측 1.2~1.5s 에 꼬리가 2.8s 를 넘는다(2026-10-20 테스트 화면 6회 중 2회). 행은 캐시하지 않는다(DB 는 30ms 미만·늘 최신).
 # ponytail: 프로세스 메모리 캐시 — 파드·워커마다 따로 데워진다. 공유가 필요하면 Redis.
 CACHE_TTL_S, CACHE_MAX = 3600, 512
@@ -53,7 +55,8 @@ class PlaceSqlLookup:
                *, timeout_sec: float) -> list[PlaceRow] | None:
         """None = 쓸 결과 없음(LLM 폴백·장소 조회 아님·DB 오류) — 호출측은 반경 탐색 결과로 간다. 빈 목록 = 조회는 됐고 0건."""
         started = time.monotonic()
-        key = tuple(sorted((k, v) for k, v in arguments.items() if v))
+        args = tuple(sorted((k, v) for k, v in arguments.items() if v))
+        key = (" ".join(utterance.split()), *args) if args else ()  # 계획 경로(발화 "")는 인자만 — 발화 키와 따로 산다
         sql = self._cached(key) if key else None
         if sql is None:
             if self._worker is None:

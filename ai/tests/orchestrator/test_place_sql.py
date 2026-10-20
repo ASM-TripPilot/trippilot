@@ -84,3 +84,16 @@ def test_db_error_is_none_so_the_handler_falls_back_to_the_radius_pool() -> None
 def test_without_a_worker_nl2sql_is_off_but_the_lookup_object_still_exists() -> None:
     lookup = PlaceSqlLookup(None, _Executor())
     assert not lookup.writes_sql and _look(lookup) is None
+
+
+def test_cache_key_includes_the_utterance_so_a_district_under_the_same_region_is_not_reused() -> None:
+    worker = _Worker(_ok("SELECT poi_id FROM poi_public WHERE address LIKE '%망원%'"), _ok("SELECT poi_id FROM poi_public"),
+                     _ok("SELECT poi_id FROM poi_public WHERE category = '카페'"))
+    executor = _Executor()
+    lookup = PlaceSqlLookup(worker, executor)
+    args = {"region": "서울", "category": "카페"}
+    for said in ("망원 카페", "서울 카페", ""):  # 같은 인자 · 다른 말(계획 경로는 발화 없음)
+        lookup.lookup(said, args, TraceId("t"), _NOW, timeout_sec=2.0)
+    assert worker.calls == 3 and "%망원%" not in executor.runs[1] and "%망원%" not in executor.runs[2]
+    lookup.lookup("  서울   카페 ", args, TraceId("t"), _NOW, timeout_sec=2.0)  # 공백만 다른 같은 말은 캐시
+    assert worker.calls == 3
