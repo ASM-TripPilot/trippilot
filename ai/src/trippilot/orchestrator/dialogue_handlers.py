@@ -28,8 +28,9 @@ from __future__ import annotations
 
 import re
 import uuid
+from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, tzinfo
 from enum import Enum
 
@@ -45,8 +46,7 @@ from trippilot.domain.common import (
 )
 from trippilot.domain.dialogue import ArgumentKind
 from trippilot.domain.intent import DIALOGUE_INTENTS, Intent
-from trippilot.domain.llm import CandidatePool
-from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory
+from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory, counts_as_food
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.region_centers import region_center
 from trippilot.domain.transit import TransitPurpose
@@ -56,6 +56,8 @@ from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEX
 from trippilot.orchestrator.arguments import extract_kind
 from trippilot.orchestrator.intent_router import normalize
 from trippilot.orchestrator.opportunity import _displayable
+from trippilot.orchestrator.place_intro import PlaceIntro
+from trippilot.orchestrator.place_sql import PlaceSqlLookup
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder, restrict_pool_to_target_role
 from trippilot.providers.base import Provider
 from trippilot.providers.transit import _format_distance_range
@@ -200,6 +202,8 @@ class HandlerPorts:
     transit: Provider | None = None  # TransitProvider.fetch({origin, destination, mode, now, purpose})
     pool_builder: CandidatePoolBuilder | None = None
     planb: PlanBAgent | None = None
+    place_sql: PlaceSqlLookup | None = None  # 장소 탐색 NL2SQL — DIALOGUE_SQL 배정 + 장소 DB DSN 이 있을 때만
+    place_intro: PlaceIntro | None = None  # 장소 소개 한 조각(KB-5) — 벡터 스토어가 배선됐을 때만
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,6 +217,7 @@ class TurnContext:
     trace_id: TraceId
     remaining_ms: Callable[[], int]
     ports: HandlerPorts = field(default_factory=HandlerPorts)
+    utterance: str = ""  # 사용자 발화 원문 — 장소 탐색 NL2SQL 의 재료로만 쓴다(Facts 에는 싣지 않는다, INV-2)
 
     def __post_init__(self) -> None:
         if self.now.tzinfo is None:
@@ -726,27 +731,73 @@ def _assemble_next_slot(ctx: TurnContext, results: Mapping[str, TaskResult]) -> 
 # GET_WEATHER — 1파 POI_INFO(앵커 좌표) → 2파 WEATHER, 한 콜러블 안에서
 
 
-def _weather_anchor(ctx: TurnContext) -> tuple[date, SlotView] | None:
-    """날짜 인자의 그 날 첫 슬롯, 없으면 오늘 또는 앞으로 올 첫 슬롯 — 좌표를 얻을 poi_id 가 있는 것만."""
+@dataclass(frozen=True, slots=True)
+class _WeatherAnchor:
+    """어느 날·어느 좌표의 날씨인가. `slot` 이면 좌표를 POI_INFO 로 얻고, `coord` 면 지역 중심이라 조회 없이 바로 묻는다."""
+
+    on: date
+    label: str  # 제목·detail 에 쓰는 이름 — 슬롯명 또는 표의 지역명
+    slot: SlotView | None = None
+    coord: GeoPoint | None = None
+
+
+def _weather_default_day(snap: TurnSnapshot, today: date) -> date:
+    """날짜를 안 말했고 슬롯도 없을 때 — 여행 전이면 첫날(슬롯 규칙 "앞으로 올 첫 슬롯"과 같은 날), 아니면 오늘."""
+    trip = snap.trip
+    return trip.start_date if trip is not None and trip.start_date > today else today
+
+
+def _weather_anchor(ctx: TurnContext) -> _WeatherAnchor | None:
+    """① 그 날(또는 오늘 이후 첫) 슬롯 → ② 여행 지역 중심. 둘 다 없으면 None(EMPTY).
+
+    ② 가 없던 동안 일정이 없거나 오늘이 여행일이 아니면 "지금 날씨를 확인할 수 없어요" 만 나갔다 — 좌표는 지역 중심표
+    (`region_centers`)로 충분하다. 표에 없는 지역은 지어내지 않는다. 말한 지역("부산 날씨")은 아직 안 본다 — 인자표의
+    `region` 이 분류 `$intents` 에 실리지 않아(lands_in=None) 핸들러까지 오지 않는다; 싣는 것은 분류 판본·재생 픽스처를
+    바꾸는 일이라 따로 간다(plan_tools PLAN_GAPS REGION_WEATHER 가 그 공백을 센다).
+    """
     snap, today = ctx.snapshot, ctx.today
-    said = ctx.arguments.get("date")
-    if said:
-        on = resolve_day(said, snap, today)
-        if on is None:
-            return None
-        return next(((on, s) for s in snap.on(on) if s.poi_id), None)
-    return next(((d, s) for d, s in snap.slots() if d >= today and s.poi_id), None)
+    said_day = ctx.arguments.get("date")
+    on = resolve_day(said_day, snap, today) if said_day else None
+    if said_day and on is None:
+        return None
+    if on is not None:
+        slot = next((s for s in snap.on(on) if s.poi_id), None)
+        if slot is not None:
+            return _WeatherAnchor(on, slot.name or "여행지", slot=slot)
+    else:
+        found = next(((d, s) for d, s in snap.slots() if d >= today and s.poi_id), None)
+        if found is not None:
+            return _WeatherAnchor(found[0], found[1].name or "여행지", slot=found[1])
+    trip = snap.trip
+    fallback_day = on if on is not None else _weather_default_day(snap, today)
+    for region in (trip.regions if trip is not None else ()):
+        anchor = region_weather_anchor(region, fallback_day)
+        if anchor is not None:
+            return anchor
+    return None
+
+
+def region_weather_anchor(region: str, on: date) -> _WeatherAnchor | None:
+    """지역 표현 → 그 지역 중심 좌표의 날씨 앵커. 표(`region_centers`)에 없으면 None — 지어내지 않는다.
+
+    여행 지역 폴백이 쓰고, 말한 지역(`region` 인자)이 분류에 실리면 그것도 이 함수로 푼다(탐색·거리 핸들러와 같은 표·같은 정규화).
+    """
+    hit = region_center(normalize(region))
+    if hit is None:
+        return None
+    name, coord, _ = hit
+    return _WeatherAnchor(on, name, coord=coord)
 
 
 def _plan_weather(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     anchor = _weather_anchor(ctx)
     weather = ctx.ports.weather
-    if anchor is None or weather is None or ctx.ports.poi_info is None:
+    if anchor is None or weather is None or (anchor.slot is not None and ctx.ports.poi_info is None):
         return ()
-    on, slot = anchor
+    on, slot = anchor.on, anchor.slot
 
     def fn() -> dict:
-        coord = _coord(_lookup(ctx, (slot.poi_id,), on).get(slot.poi_id))
+        coord = anchor.coord if slot is None else _coord(_lookup(ctx, (slot.poi_id,), on).get(slot.poi_id))
         if coord is None:
             return {"status": "UNAVAILABLE", "reason": "anchor_coord_unknown", "date": on.isoformat()}
         packet = weather.fetch({"anchor": coord, "days": (on,), "now": ctx.now})
@@ -759,24 +810,26 @@ def _assemble_weather(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Fa
     intent = Intent.GET_WEATHER
     anchor = _weather_anchor(ctx)
     if anchor is None:
-        return _text_facts(intent, FactStatus.EMPTY, (_itinerary_action(ctx.snapshot),), notes=("날씨 앵커 없음 — 일정에 좌표를 얻을 장소가 없다",))
-    on, slot = anchor
+        return _text_facts(intent, FactStatus.EMPTY, (_itinerary_action(ctx.snapshot),),
+                           notes=("날씨 앵커 없음 — 그 날 좌표를 얻을 슬롯이 없고 여행·말한 지역도 중심표에 없다",))
+    on = anchor.on
     value = _value(results, "weather")
     if value is None or value.get("status") == "UNAVAILABLE":
-        return _text_facts(intent, FactStatus.UNAVAILABLE, (_action("OPEN_ITINERARY"),), notes=("날씨 미확인",),
+        return _text_facts(intent, FactStatus.UNAVAILABLE, (_itinerary_action(ctx.snapshot),), notes=("날씨 미확인",),
                            detail={"date": on.isoformat()})
     pop = value.get("data", {}).get("daily", {}).get(on.isoformat()) if _fresh(value) else None
     if pop is None:
-        return _text_facts(intent, FactStatus.EMPTY, (_action("OPEN_ITINERARY"),), notes=("날씨 미확인",),
+        return _text_facts(intent, FactStatus.EMPTY, (_itinerary_action(ctx.snapshot),), notes=("날씨 미확인",),
                            detail={"date": on.isoformat()})
     trip = ctx.snapshot.trip
-    region = trip.regions[0] if trip is not None and trip.regions else (slot.name or "여행지")
+    # 슬롯 앵커면 여행 지역(없으면 슬롯명), 지역 중심 앵커면 그 지역 — "부산 날씨" 에 일정 지역 이름을 달지 않는다
+    region = anchor.label if anchor.coord is not None else (trip.regions[0] if trip is not None and trip.regions else anchor.label)
     label = "오늘 최대 강수확률" if on == ctx.today else f"{_date_label(on)} 최대 강수확률"  # BE 행 라벨 — 그 날의 최댓값
     rows = (FactRow(label, f"{pop}%"),)
     return Facts(
         intent, FactStatus.OK, AnswerKind.INFO, rows=rows, places=(), notes=(),
-        payload=_info("WEATHER", f"{region} 날씨", rows), next_actions=(_action("OPEN_ITINERARY"),), quick_replies=(),
-        template_text=_template(intent, FactStatus.OK), detail={"date": on.isoformat(), "anchor": slot.name},
+        payload=_info("WEATHER", f"{region} 날씨", rows), next_actions=(_itinerary_action(ctx.snapshot),), quick_replies=(),
+        template_text=_template(intent, FactStatus.OK), detail={"date": on.isoformat(), "anchor": anchor.label},
     )
 
 
@@ -812,10 +865,66 @@ def _transport_mode(ctx: TurnContext) -> tuple[str, bool]:
     return (said, False) if said in {m.value for m in TransportMode} else (TransportMode.PUBLIC.value, True)
 
 
+@dataclass(frozen=True, slots=True)
+class _End:
+    """일정 밖 구간의 한 끝 — 일정 슬롯·지역 중심(표)·등록 장소(이름 완전 일치) 중 하나. label 은 일정·표·DB 값(발화 원문 아님)."""
+
+    label: str
+    poi_id: str | None = None
+    center: GeoPoint | None = None  # 지역 중심 — 근사(그 지역의 한 점)
+
+
+def _known_end(ctx: TurnContext, said: str) -> _End | None:
+    """I/O 없이 풀리는 끝 — 일정 슬롯이 먼저, 그다음 지역 표("강남"·"홍대"). 등록 장소 찾기는 콜러블 안에서."""
+    slot = resolve_slot(ctx.snapshot, day=None, target=said, now=ctx.now, tz=ctx.tz)
+    if slot is not None and slot.poi_id:
+        return _End(slot.name or _UNNAMED, slot.poi_id)
+    hit = region_center(normalize(said))
+    return _End(hit[0], None, hit[1]) if hit else None
+
+
+def _plan_free_distance(ctx: TurnContext) -> tuple[HandlerTask, ...]:
+    """일정 밖 구간("강남에서 홍대 어떻게 가?", 일정의 떨어진 두 곳) — 출발지·목적지를 둘 다 말했을 때만. 거리만(INV-3)."""
+    said = ctx.arguments.get("origin"), ctx.arguments.get("destination")
+    transit, finder = ctx.ports.transit, ctx.ports.place_sql
+    if not all(said) or transit is None:
+        return ()
+    known = tuple(_known_end(ctx, s) for s in said)
+    if None in known and finder is None:
+        return ()
+    mode, _ = _transport_mode(ctx)
+    sido = _trip_sido(ctx)
+
+    def fn() -> dict:
+        ends: list[_End] = []
+        for text, end in zip(said, known):
+            if end is None:
+                found = finder.find_place(text, sido, ctx.trace_id)
+                if found is None:  # 없거나 여럿 — 고르지 않는다
+                    return {"status": "EMPTY", "reason": "place_not_found"}
+                end = _End(found.name, found.poi_id)
+            ends.append(end)
+        ids = tuple(e.poi_id for e in ends if e.center is None and e.poi_id)
+        rows = _lookup(ctx, ids, ctx.today) if ids else {}
+        coords = [e.center or _coord(rows.get(e.poi_id)) for e in ends]
+        if None in coords:
+            return {"status": "UNAVAILABLE", "reason": "coord_unknown"}
+        packet = transit.fetch({"origin": coords[0], "destination": coords[1], "mode": mode, "now": ctx.now,
+                                "purpose": TransitPurpose.INFO_DISPLAY.value})
+        # 거리만 — internal_minutes 는 여기서 떨어진다 (INV-3)
+        return {"status": packet.status.value, "distance_range": packet.data.get("distance_range"),
+                "confidence": packet.data.get("confidence"), "mode": mode,
+                "ends": [{"label": e.label, "poi_id": e.poi_id, "area": e.center is not None} for e in ends]}
+
+    return (HandlerTask("transit", fn),)
+
+
 def _plan_distance(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     leg = _distance_leg(ctx)
     transit = ctx.ports.transit
-    if leg is None or transit is None or ctx.ports.poi_info is None:
+    if leg is None:
+        return _plan_free_distance(ctx)
+    if transit is None or ctx.ports.poi_info is None:
         return ()
     on, prev, dest = leg
     if not (prev.poi_id and dest.poi_id):
@@ -836,11 +945,41 @@ def _plan_distance(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     return (HandlerTask("transit", fn),)
 
 
+def _assemble_free_distance(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts:
+    intent = Intent.GET_DISTANCE
+    value = _value(results, "transit")
+    ends = value.get("ends") if isinstance(value, Mapping) else None
+    if not (isinstance(ends, list) and len(ends) == 2):
+        return _text_facts(intent, FactStatus.EMPTY, (_action("OPEN_ITINERARY"),), notes=(_UNRESOLVED_LEG,))
+    origin, dest = ends
+    mode, assumed = _transport_mode(ctx)
+    notes = (f"이동 수단 가정: {mode}",) if assumed else ()
+    detail = {"origin": origin["label"], "destination": dest["label"], "mode": mode}
+    distance = value.get("distance_range") if value.get("status") == "OK" else None
+    if not isinstance(distance, str) or not distance:
+        return _text_facts(intent, FactStatus.UNAVAILABLE, (_action("OPEN_ITINERARY"),), notes=notes + ("거리 미확인",), detail=detail)
+    if value.get("confidence") == "LOW":
+        distance = f"{distance}(추정)"
+        notes = notes + ("거리는 실제 경로가 아니라 직선 거리로 어림한 값",)
+    if origin.get("area") or dest.get("area"):
+        distance = f"{distance}(지역 중심 기준)"
+        notes = notes + ("지역 이름은 그 지역 중심 한 점으로 잰 어림값",)
+    rows = (FactRow("구간", distance),)
+    places = tuple(FactPlace(e["poi_id"], e["label"], None, distance_range=distance if e is dest else None)
+                   for e in ends if e.get("poi_id"))
+    actions = (_action("OPEN_PLACE", poiId=dest["poi_id"]),) if dest.get("poi_id") else (_action("OPEN_ITINERARY"),)
+    return Facts(
+        intent, FactStatus.OK, AnswerKind.INFO, rows=rows, places=places, notes=notes,
+        payload=_info("DISTANCE", dest["label"], rows), next_actions=actions, quick_replies=(),
+        template_text=_template(intent, FactStatus.OK), detail=detail,
+    )
+
+
 def _assemble_distance(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts:
     intent = Intent.GET_DISTANCE
     leg = _distance_leg(ctx)
     if leg is None:
-        return _text_facts(intent, FactStatus.EMPTY, (_action("OPEN_ITINERARY"),), notes=(_UNRESOLVED_LEG,))
+        return _assemble_free_distance(ctx, results)
     on, prev, dest = leg
     mode, assumed = _transport_mode(ctx)
     notes = (f"이동 수단 가정: {mode}",) if assumed else ()
@@ -864,7 +1003,8 @@ def _assemble_distance(ctx: TurnContext, results: Mapping[str, TaskResult]) -> F
     )
 
 
-# GET_POI_INFO — 일정 안의 슬롯만 가리킨다; 이름·분류는 일정 값, 영업시간·입장료는 장소 정본 (BE QueryCards.place)
+# GET_POI_INFO — 일정 안의 슬롯이 먼저(이름·분류는 일정 값), 못 풀면 등록 장소를 이름으로(완전 일치, `place_sql.find_place`).
+# 영업시간·입장료는 어느 쪽이든 장소 정본(PoiInfoProvider, BE QueryCards.place).
 
 
 def _place_slot(ctx: TurnContext) -> SlotView | None:
@@ -874,17 +1014,67 @@ def _place_slot(ctx: TurnContext) -> SlotView | None:
     return resolve_slot(ctx.snapshot, day=ctx.arguments.get("date"), target=said, now=ctx.now, tz=ctx.tz)
 
 
+def _trip_sido(ctx: TurnContext) -> str | None:
+    """여행 지역 중 시·도 급 이름 — 이름 찾기에서 같은 이름이 여럿일 때 좁히는 데만 쓴다."""
+    trip = ctx.snapshot.trip
+    hits = (region_center(normalize(name)) for name in (trip.regions if trip is not None else ()))
+    return next((h[0] for h in hits if h is not None and h[0] in _SIDO_LEVEL), None)
+
+
+def _outside_day(ctx: TurnContext) -> date:
+    said = ctx.arguments.get("date")
+    return (resolve_day(said, ctx.snapshot, ctx.today) if said else None) or ctx.today
+
+
+# 영업시간·요금을 묻는 말 — 이때는 소개를 붙이지 않는다(답에 소개가 섞이면 묻지 않은 말이 늘어난다)
+_HOURS_FEE = re.compile(r"영업|시간|몇\s?시|열어|열려|여는|닫|입장료|요금|가격|얼마|휴무|쉬는|쉬어|주차")
+
+
+def _intro_for(ctx: TurnContext, packet: Mapping[str, object], poi_id: str) -> str:
+    """장소 소개 한 조각(KB-5) — 소개를 물을 때만(영업시간·요금 질문이면 빈 문자열). 조인 키는 POI_INFO 행의 source_ref."""
+    port, aspect = ctx.ports.place_intro, ctx.arguments.get("aspect") or ""
+    if port is None or _HOURS_FEE.search(aspect) or _HOURS_FEE.search(ctx.utterance):
+        return ""
+    data = packet.get("data") if isinstance(packet, Mapping) else None
+    pois = data.get("pois", ()) if isinstance(data, Mapping) else ()
+    ref = next((p.get("source_ref") for p in pois if isinstance(p, Mapping) and p.get("poi_id") == poi_id), None)
+    if not ref:
+        return ""
+    try:
+        return port.intro(str(ref), aspect or "소개")
+    except Exception:  # noqa: BLE001 — 부가 정보라 없이 간다(INV-4), 사유는 PlaceIntro 가 남긴다
+        return ""
+
+
 def _plan_poi_info(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     slot = _place_slot(ctx)
     port = ctx.ports.poi_info
-    if slot is None or slot.poi_id is None or port is None:
+    if port is None:
         return ()
-    on = ctx.snapshot.day_of(slot) or ctx.today
+    if slot is not None:
+        if slot.poi_id is None:
+            return ()
+        on = ctx.snapshot.day_of(slot) or ctx.today
 
-    def fn() -> dict:
-        return port.fetch({"poi_ids": frozenset({PoiId(slot.poi_id)}), "on": on, "now": ctx.now}).to_dict()
+        def fn() -> dict:
+            packet = port.fetch({"poi_ids": frozenset({PoiId(slot.poi_id)}), "on": on, "now": ctx.now}).to_dict()
+            return {**packet, "intro": _intro_for(ctx, packet, slot.poi_id)}
 
-    return (HandlerTask("poi_info", fn),)
+        return (HandlerTask("poi_info", fn),)
+    said, finder = ctx.arguments.get("place"), ctx.ports.place_sql
+    if not said or finder is None:
+        return ()
+    on, sido = _outside_day(ctx), _trip_sido(ctx)
+
+    def find() -> dict:
+        found = finder.find_place(said, sido, ctx.trace_id)
+        if found is None:  # 없거나 여럿(체인점) — 하나를 골라 다른 곳의 영업시간을 말하지 않는다
+            return {"status": "EMPTY", "reason": "place_not_found"}
+        packet = port.fetch({"poi_ids": frozenset({PoiId(found.poi_id)}), "on": on, "now": ctx.now}).to_dict()
+        return {**packet, "lookup": {"poi_id": found.poi_id, "name": found.name, "category": found.category},
+                "intro": _intro_for(ctx, packet, found.poi_id)}
+
+    return (HandlerTask("poi_info", find),)
 
 
 def _fee_label(fee: object) -> str:
@@ -896,28 +1086,38 @@ def _fee_label(fee: object) -> str:
 def _assemble_poi_info(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts:
     intent = Intent.GET_POI_INFO
     slot = _place_slot(ctx)
-    if slot is None:
-        return _text_facts(intent, FactStatus.EMPTY, (_action("OPEN_ITINERARY"),), notes=(_UNRESOLVED,))
     value = _value(results, "poi_info")
+    lookup = value.get("lookup") if slot is None and isinstance(value, Mapping) else None
+    if slot is None and not isinstance(lookup, Mapping):
+        return _text_facts(intent, FactStatus.EMPTY, (_action("OPEN_ITINERARY"),), notes=(_UNRESOLVED,))
+    # 일정 밖이면 이름·분류·poi_id 는 등록 장소(DB) 값 — 발화 원문이 아니다(INV-1·INV-2)
+    poi_id = slot.poi_id if slot is not None else str(lookup["poi_id"])
     row = None
     if _fresh(value):
-        row = next((p for p in value.get("data", {}).get("pois", ()) if p.get("poi_id") == slot.poi_id), None)
-    category = slot.category or (_CATEGORY_KO.get(str(row["category"]), str(row["category"])) if row else None)
+        row = next((p for p in value.get("data", {}).get("pois", ()) if p.get("poi_id") == poi_id), None)
+    known = slot.category if slot is not None else lookup.get("category")
+    category = known or (_CATEGORY_KO.get(str(row["category"]), str(row["category"])) if row else None)
     hours = row.get("hours_label") if row else None
     if row is not None and "hours_label" in row and hours is None:
         hours = _CLOSED  # "미확인"으로 뭉개면 "오늘 영업 여부는 확인할 수 없어요"가 된다(2026-10-19 E2E: 제주문학관 월요일)
     fee = row.get("fee") if row else None
-    on = ctx.snapshot.day_of(slot) or ctx.today  # 영업시간은 이 날 기준(_plan_poi_info 와 같은 날) — 오늘이 아니면 날짜를 밝힌다
+    # 영업시간은 이 날 기준(_plan_poi_info 와 같은 날) — 오늘이 아니면 날짜를 밝힌다
+    on = (ctx.snapshot.day_of(slot) if slot is not None else _outside_day(ctx)) or ctx.today
     rows = ((FactRow("날짜", _date_label(on)),) if on != ctx.today else ()) + (
         FactRow("분류", category or _UNKNOWN), FactRow("영업시간", hours or _UNKNOWN), FactRow("입장료", _fee_label(fee)))
-    name = slot.name or (str(row["name"]) if row else _UNNAMED)
+    name = (slot.name if slot is not None else str(lookup.get("name") or "")) or (str(row["name"]) if row else _UNNAMED)
     status, notes = (FactStatus.OK, ()) if row else (FactStatus.PARTIAL, ("장소 정보 미확인 — 일정 값만 보인다",))
-    actions = (_action("OPEN_PLACE", poiId=slot.poi_id),) if slot.poi_id else (_action("OPEN_ITINERARY"),)
+    if slot is None:
+        notes = notes + ("일정 밖 장소 — 등록 장소에서 이름으로 찾았다",)
+    actions = (_action("OPEN_PLACE", poiId=poi_id),) if poi_id else (_action("OPEN_ITINERARY"),)
+    # 소개(KB-5)는 카드(payload)에 싣지 않고 답변 재료로만 — 위키 원문을 그대로 보이면 출처 표기가 걸린다(place_intro 註)
+    intro = value.get("intro") if isinstance(value, Mapping) else None
+    detail = {"target": name, **({"intro": intro} if isinstance(intro, str) and intro else {})}
     return Facts(
         intent, status, AnswerKind.INFO, rows=rows,
-        places=(FactPlace(slot.poi_id, name, category, hours_label=hours, fee=fee if isinstance(fee, int) else None),),
+        places=(FactPlace(poi_id, name, category, hours_label=hours, fee=fee if isinstance(fee, int) else None),),
         notes=notes, payload=_info("PLACE", name, rows), next_actions=actions, quick_replies=(),
-        template_text=_template(intent, status), detail={"target": name},
+        template_text=_template(intent, status), detail=detail,
     )
 
 
@@ -1059,10 +1259,17 @@ def _assemble_alternatives(ctx: TurnContext, results: Mapping[str, TaskResult]) 
 # 셋 다 없으면 지역을 묻는 고정 문장. region 을 말했는데 표에 없으면 EMPTY — 다른 곳(여행 목적지)으로 바꿔 찾지 않는다.
 
 _NEAR_SLOT_KM = 3.0  # 일정 근처 탐색 반경
+_FANOUT_SQL_CAP_S, _SQL_MIN_S = 2.8, 0.8  # NL2SQL LLM 시한 상한·하한 — 하한보다 적게 남으면 반경 탐색만
+# 시·도 급 지역 표 이름 — NL2SQL 결과를 이 시·도로 다시 거른다(분류 인자가 이긴다: 계획 경로에서 한 발화가 도구 둘로 나뉘면 발화의
+# 다른 지역을 SQL 이 읽을 수 있다 — "부산 실내 갈 데랑 서울 맛집"의 부산 몫이 서울을 찾지 않게). 구·동 급은 행의 시도로 못 가른다.
+_SIDO_LEVEL = frozenset({"서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "제주"})
 _PER_CATEGORY = 2  # 종류를 안 정했을 때 한 종류가 후보를 다 차지하지 않게(서울 반경 풀의 89% 가 FOOD — pool_builder._fair_cut 註)
 # 밤·야경 주제 — 이때만 나이트라이프 태그 장소를 권한다(평소엔 기회 카드와 같이 뺀다, opportunity._eligible)
 _NIGHT = re.compile(r"야경|야간|밤|나이트|(?<![가-힣])바(?![가-힣])|술집|펍|클럽|칵테일|와인|이자카야")
 _THEME_WORD = re.compile(r"[가-힣A-Za-z]{2,}")
+# 구경·관광·놀거리 주제 — 종류를 안 정했으면 식당을 뺀다("가볼 만한 곳"에 기사식당이 섞였다 · 계획 경로 "실내 데이트할 곳"에
+# 몸국·반점이 섞였다, 2026-10-20 테스트 화면·실 스택 E2E). 먹을 곳을 말하면 분류가 category=FOOD 를 채우므로 여기 안 온다.
+_SIGHTSEEING = re.compile(r"가\s?볼|구경|볼거리|관광|명소|놀러|둘러|놀\s?거리|할\s?거리|실내|데이트")
 
 
 @dataclass(frozen=True, slots=True)
@@ -1102,10 +1309,11 @@ def _explore_rank(pois: Iterable[Poi], category: str | None, theme: str | None) 
     저장 수 → 별점 → 영업시간 보유 → poi_id. 숙소·표시 불가 이름은 뺀다."""
     night = bool(theme and _NIGHT.search(theme)) or category == PoiCategory.NIGHT_VIEW.value
     words = tuple(_THEME_WORD.findall(theme or ""))
+    no_food = category is None and bool(theme and _SIGHTSEEING.search(theme))
 
     def fits(p: Poi) -> bool:
         return (p.category is not PoiCategory.STAY and (category is None or p.category.value == category)
-                and (night or NIGHTLIFE_TAG not in p.tags) and _displayable(p.name))
+                and (night or NIGHTLIFE_TAG not in p.tags) and _displayable(p.name) and not (no_food and counts_as_food(p)))
 
     def key(p: Poi) -> tuple:
         is_night = p.category is PoiCategory.NIGHT_VIEW or NIGHTLIFE_TAG in p.tags
@@ -1125,11 +1333,44 @@ def _explore_rank(pois: Iterable[Poi], category: str | None, theme: str | None) 
     return picked
 
 
+def _explore_by_sql(ctx: TurnContext, anchor: _Anchor | None, category: str | None, theme: str | None) -> HandlerTask:
+    """NL2SQL 탐색 작업 — 반경 탐색과 나란히 돈다(팬아웃). 행은 등록 POI 의 보여 줄 칸뿐(`PlaceRow`, INV-1).
+    거리는 싣지 않는다(지역 탐색은 지역 중심에서의 거리가 뜻이 없다 — 반경 경로와 같다). 앵커가 없으면(지역 표에 없는 동네·구)
+    행의 구군 이름(DB 값)을 앵커로 쓴다 — 발화 원문은 사실 칸에 싣지 않는다(INV-2)."""
+    port = ctx.ports.place_sql
+    args = {k: v for k, v in (("region", ctx.arguments.get("region")), ("theme", theme),
+                              ("category", _CATEGORY_KO.get(category or "", category))) if v}
+    night = bool(theme and _NIGHT.search(theme)) or category == PoiCategory.NIGHT_VIEW.value
+    sido = anchor.label if anchor is not None and anchor.kind == "region" and anchor.label in _SIDO_LEVEL else None
+
+    def fn() -> dict:
+        budget = min(_FANOUT_SQL_CAP_S, ctx.remaining_ms() * 0.4 / 1000)  # 팬아웃 예산(오케스트레이터 min(3s, 잔여×0.4)) 안
+        if budget < _SQL_MIN_S:
+            return {"status": "UNAVAILABLE", "reason": "budget"}
+        rows = port.lookup(ctx.utterance, args, ctx.trace_id, ctx.now, timeout_sec=budget)
+        if rows is None:
+            return {"status": "UNAVAILABLE", "reason": "place_sql"}
+        picked = [r for r in rows if _displayable(r.name) and (night or not r.nightlife)
+                  and (sido is None or (r.sido or "").startswith(sido))][:MAX_CANDIDATES]
+        areas = Counter(r.sigungu for r in picked if r.sigungu).most_common(1)
+        label = anchor.label if anchor is not None else (areas[0][0] if areas else None)
+        return {"status": "OK", "anchor": label, "candidates": [{
+            "poi_id": r.poi_id, "name": r.name, "category": r.category, "distance_range": None,
+            "reason": "요즘 인기" if r.trending else r.category,
+        } for r in picked]}
+
+    return HandlerTask("explore_sql", fn)
+
+
 def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     anchor, builder = _explore_anchor(ctx), ctx.ports.pool_builder
-    if anchor is None or builder is None:
-        return ()
     category, theme = ctx.arguments.get("category"), ctx.arguments.get("theme")
+    # NL2SQL 은 사용자가 지역을 말했을 때만 — 일정 근처 탐색은 거리가 핵심이라 반경 풀이 맞다(뷰에 좌표가 없다)
+    # 발화가 없어도(계획 경로 — 인자만 넘어온다) 인자로 SQL 을 쓴다. 발화는 보조 재료이고 지역·종류·주제는 인자가 이긴다
+    sql = (_explore_by_sql(ctx, anchor, category, theme),) if (
+        ctx.ports.place_sql is not None and ctx.ports.place_sql.writes_sql and ctx.arguments.get("region")) else ()
+    if anchor is None or builder is None:
+        return sql
 
     def fn() -> dict:
         center = anchor.center
@@ -1152,7 +1393,7 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
         } for p in _explore_rank(pool.pois, category, theme)]
         return {"status": "OK", "candidates": candidates}
 
-    return (HandlerTask("explore", fn),)
+    return (HandlerTask("explore", fn), *sql)
 
 
 def _assemble_explore(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts:
@@ -1160,6 +1401,12 @@ def _assemble_explore(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Fa
     home = (_itinerary_action(ctx.snapshot),) if ctx.snapshot.trip is not None else (_action("CREATE_TRIP"),)
     said = ctx.arguments.get("region")
     anchor = _explore_anchor(ctx)
+    # NL2SQL 결과가 있으면 그것을 쓴다(지역 표에 없는 동네·구도 찾는다) — 실패·0건이면 반경 탐색 결과(INV-4)
+    by_sql = _value(results, "explore_sql")
+    if not (by_sql and by_sql.get("status") == "OK" and by_sql.get("candidates")):
+        by_sql = None
+    if anchor is None and by_sql is not None and by_sql.get("anchor"):
+        anchor = _Anchor(by_sql["anchor"], "region", None, 0.0)
     if anchor is None and said:  # 말한 지역이 표에 없다 — 없는 곳이 아니라 "아직 못 찾는 지역"이다
         # 발화 원문은 사실 칸에 싣지 않는다 — 시각 허용 집합(INV-2)이 Facts 를 보고, 답변 프롬프트는 발화를 따로 받는다
         return _text_facts(intent, FactStatus.EMPTY, home, notes=("지역 미확인 — 그 지역은 아직 찾아 줄 수 없다(없다는 뜻이 아니다)",))
@@ -1168,7 +1415,7 @@ def _assemble_explore(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Fa
                      next_actions=home, quick_replies=(), template_text=EXPLORE_ASK_REGION_TEXT)
     # theme(발화 자유문)은 싣지 않는다 — "22:00 이후 야경"의 시각이 Facts 시각으로 허용된다(INV-2). 답변 프롬프트는 발화를 따로 받는다
     detail = {"anchor": anchor.label, "anchor_kind": anchor.kind}
-    value = _value(results, "explore")
+    value = by_sql or _value(results, "explore")
     if value is None or value.get("status") != "OK":
         return _text_facts(intent, FactStatus.UNAVAILABLE, home, notes=("장소 탐색 미확인",), detail=detail)
     candidates = [c for c in value.get("candidates", ()) if isinstance(c, Mapping)][:MAX_CANDIDATES]

@@ -18,6 +18,8 @@
 > v1의 "정보 에이전트"는 **Provider로 개명** — 수집 전담으로 역할이 정리되어 agent라 부를 이유가 없어짐 (LLM 미사용).
 
 > **[개정 · 2026-10-17 · assistant-orchestrator FD] Orchestrator "판단 최소".** 도우미 대화 경로에서는 **LLM 분류(`DIALOGUE_INTENT`) · 답변 조합(`DIALOGUE_ANSWER`) · 메모리 요약(`DIALOGUE_MEMORY`)이 오케스트레이터(`orchestrator/dialogue_orchestrator.py`) 몫**이다 — Orchestrator 도 LLM 을 부른다. 용어는 바꾸지 않는다: 오케스트레이터의 LLM 은 분류·문장화·요약이고, 후보 선택·점수·해(解)는 여전히 3단 Agent·4단 Assembly 가 낸다(INV-1·2). 왜: 사용자 결정(2026-10-17) — 3단 뱅크 대신 LLM 직접 분류, 병렬 수집 결과를 한 턴에 조합한 답변. 상세 `ai/aidlc-docs/construction/assistant-orchestrator/functional-design/`.
+>
+> **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 오케스트레이터 LLM 역할에 **범위 밖 질문의 조회 계획**(`DIALOGUE_PLAN`, assistant-orchestrator BR-AO-28)이 더해진다 — 분류가 판단해서 닫은 말에 정보 핸들러 ≤2 를 고른다. 고르는 것은 **닫힌 도구(핸들러)이지 후보가 아니다**(INV-1).
 
 ## 2. 구조 — 4상자
 
@@ -61,6 +63,8 @@
 - InfoCollector는 Orchestrator **내부 하위 컴포넌트** (역할 분리, 소유자는 하나 — 겹침 아님).
 
 > **[개정 · 2026-10-17 · assistant-orchestrator FD] "안 한다: 판단"의 대화 경로 예외.** 오케스트레이터가 ① LLM 직접 분류(IntentGate closed-set — 불확실·주입·역할변경이면 `{"intent": null}` → OUT_OF_SCOPE) ② Provider(Weather·Transit·PoiInfo[신규])·PlanBAgent(인프로세스)·스냅샷 계산을 **공유 풀에 병렬 submit**(submit 전 마감 고정, 미완 cancel → PARTIAL) ③ 결과를 LLM 문장으로 조합(출구 게이트·결정론 템플릿 폴백) ④ 10턴마다 20줄 요약을 자체 DB 에 저장한다. 점수·선택·해는 여전히 안 한다. Fast Path 의 "DB 조회"는 **요청 스냅샷 계산 + `POST /internal/pois/batch-get`**(AI 는 BE DB 에 직접 SQL 이 없다)이다. 왜: 저장이 없는 조회·대안 의도는 AI 안에서 끝낼 수 있고, 병렬이 아니면 9,000ms 해석 상한에 들지 않는다.
+>
+> **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 예외가 하나 더 — ③′ 분류가 판단해서 닫은 말의 **도구 계획**(어느 정보 핸들러를 어떤 문자열 인자로 부를지, ≤2·턴당 1회). 판단 결과는 Provider 수집 지시까지이고 장소·시각은 만들지 않는다.
 
 ### 2단 Provider — "수집만"
 - 출력 패킷 = 데이터 + `FreshnessMeta`(출처·수집시각·캐시·TTL·stale) + 상태값.

@@ -89,6 +89,10 @@ from trippilot.orchestrator.dialogue_orchestrator import (
     TurnInput,
     TurnOutcome,
 )
+from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanGate
+from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
+from trippilot.domain.plan_tools import plan_tool_specs_json
+from trippilot.orchestrator.dialogue_plan import plan_tools
 from trippilot.orchestrator.intent_eval import is_refusal
 from trippilot.orchestrator.shadow_probe import ShadowCountingLlm, ShadowIntentProbe
 from trippilot.ports.llm_port import LlmRequest
@@ -106,6 +110,7 @@ _ACCOUNT = "acct-77"
 _U = {n: str(uuid.uuid5(uuid.NAMESPACE_DNS, n)) for n in ("성산일출봉", "올레국수", "우도", "해녀의집", "카페 모카")}
 _COORD = {n: GeoPoint(33.4 + i * 0.01, 126.5 + i * 0.01) for i, n in enumerate(_U)}
 _INTENT, _ANSWER, _MEMORY = LlmFeature.DIALOGUE_INTENT, LlmFeature.DIALOGUE_ANSWER, LlmFeature.DIALOGUE_MEMORY
+_PLAN = LlmFeature.DIALOGUE_PLAN
 
 
 def _slot(name: str, hhmm: str, category: str, on: date) -> SlotView:
@@ -135,9 +140,12 @@ _MEMORY_JSON = json.dumps({"lines": [_MEMORY_LINE]}, ensure_ascii=False)
 
 
 def _canned(intent: Intent | None = Intent.GET_WEATHER, *, answer: str | Exception = _ANSWER_JSON,
-            memory: str | Exception = _MEMORY_JSON, **slots: str) -> dict:
+            memory: str | Exception = _MEMORY_JSON, plan: str | Exception | None = None, **slots: str) -> dict:
     step: str = '{"intent": null}' if intent is None else _intent_json(intent, **slots)
-    return {_INTENT: step, _ANSWER: answer, _MEMORY: memory}
+    canned = {_INTENT: step, _ANSWER: answer, _MEMORY: memory}
+    if plan is not None:
+        canned[_PLAN] = plan
+    return canned
 
 
 class _AdvancingLlm:
@@ -196,23 +204,29 @@ _PORTS = HandlerPorts(poi_info=_PoiInfo(), weather=_Weather())
 def _build(by_feature: dict, *, clock: FakeClock | None = None, store=None, ports: HandlerPorts = _PORTS,
            shadow: ShadowIntentProbe | None = None, shadow_meta: dict | None = None, confident_intent=None,
            advance: dict[LlmFeature, int] | None = None, intent_worker=None,
-           pool: Executor | None = None) -> SimpleNamespace:
+           pool: Executor | None = None, with_planner: bool = False, planner=None, wrap=None) -> SimpleNamespace:
+    """`with_planner` — 2‴ 계획 워커를 운영과 같은 길(노출 도구 = 배선된 포트, 같은 counted LLM)로 붙인다. `planner` 는 대역을 직접 넣을 때,
+    `wrap` 은 LLM 응답을 손볼 때(절단 등) — 셋 다 없으면 종전 조립과 바이트 단위로 같다."""
     llm = FeatureRoutingLlm(by_feature)
     clock = clock if clock is not None else FakeClock()
     advancing = _AdvancingLlm(llm, clock, advance) if advance is not None else None
-    counted = CountingLlm(advancing if advancing is not None else llm)
+    base = advancing if advancing is not None else llm
+    counted = CountingLlm(wrap(base) if wrap is not None else base)
     trace = InMemoryTrace()
     store = store if store is not None else InMemoryDialogueMemoryStore(now=lambda: _NOW)
 
     def gw(gate) -> GatewayFacade:
         return GatewayFacade(counted, _REGISTRY, gate, _CFG, trace)
 
+    if with_planner:
+        tools = plan_tools(ports)
+        planner = DialoguePlanWorker(gw(DialoguePlanGate(frozenset(tools))), plan_tool_specs_json(tools))
     orch = DialogueOrchestrator(
         intent_worker=intent_worker if intent_worker is not None else DialogueIntentWorker(gw(IntentGate())),
         answer_worker=DialogueAnswerWorker(gw(DialogueAnswerGate())),
         memory_worker=DialogueMemoryWorker(gw(DialogueMemoryGate())),
         memory_store=store, ports=ports, clock=clock, trace=trace, tz=_KST,
-        shadow=shadow, shadow_meta=shadow_meta, confident_intent=confident_intent, pool=pool,
+        shadow=shadow, shadow_meta=shadow_meta, confident_intent=confident_intent, pool=pool, planner=planner,
     )
     return SimpleNamespace(orch=orch, llm=llm, trace=trace, store=store, clock=clock, advancing=advancing)
 
@@ -692,7 +706,7 @@ def test_exhausted_budget_defers_memory_without_writing_but_still_answers() -> N
     assert ("memory", "llm_dialogue_memory", "deferred") in _modes(b.trace)
 
 
-_CAPS_SEC = {"DIALOGUE_INTENT": 4.0, "DIALOGUE_ANSWER": 3.5, "DIALOGUE_MEMORY": 2.0}
+_CAPS_SEC = {"DIALOGUE_INTENT": 4.0, "DIALOGUE_ANSWER": 3.5, "DIALOGUE_MEMORY": 2.0, "DIALOGUE_PLAN": 3.0}
 
 
 @settings(max_examples=60, deadline=None)
@@ -1264,3 +1278,11 @@ def test_foreign_place_flags_unknown_place_shaped_words_and_never_known_names(wo
     name = word + suffix
     assert not _foreign_place(f"{name}{josa} 좋아요", (name,))
     assert _foreign_place(f"{name}{josa} 좋아요", ("흰여울카페",)) is (name not in "흰여울카페")
+
+
+
+def test_names_in_a_kb5_intro_count_as_known_so_the_answer_may_say_them() -> None:
+    from trippilot.orchestrator.dialogue_orchestrator import _prompt_names
+
+    names = _prompt_names({"places": [{"name": "경복궁"}], "target": "경복궁", "intro": "경복궁에는 근정전과 경회루가 있고 광화문이 정문이다. 창덕궁과 함께 꼽힌다."})
+    assert "창덕궁" in names and "경복궁" in names

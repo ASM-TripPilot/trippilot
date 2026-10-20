@@ -18,3 +18,11 @@ GRANT USAGE ON SCHEMA app TO app_user;
 -- 기본 search_path 를 app 으로 고정
 ALTER ROLE app_migrate IN DATABASE trippilot SET search_path = app;
 ALTER ROLE app_user    IN DATABASE trippilot SET search_path = app;
+
+-- ai_user: AI 서비스의 장소 조회(도우미 NL2SQL) — poi_public 뷰 SELECT 만(GRANT 는 Flyway V2.77). 운영 정본은 deploy/eks/bootstrap.sql.
+-- 읽기 전용·문장 시한을 롤에 박는다 — AI 쪽 SQL 검사가 뚫려도 쓰기·장시간 조회가 DB 에서 막힌다.
+CREATE ROLE ai_user LOGIN PASSWORD 'ai_user';
+GRANT USAGE ON SCHEMA app TO ai_user;
+ALTER ROLE ai_user IN DATABASE trippilot SET search_path = app;
+ALTER ROLE ai_user IN DATABASE trippilot SET default_transaction_read_only = on;
+ALTER ROLE ai_user IN DATABASE trippilot SET statement_timeout = '2s';
