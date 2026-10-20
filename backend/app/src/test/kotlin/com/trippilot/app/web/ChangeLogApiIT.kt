@@ -211,7 +211,7 @@ class ChangeLogApiIT : AbstractPostgresIntegrationTest() {
      * 재계획(`ReplanFacadeService.changesOn`)은 `before − after` 로 "그날 뺀 곳"을 계산해 AI 에 싣는다. 그래서 그런
      * 행은 통째로 빠지고, 성한 행과 슬롯 없는 생성 이력(`{"days":[]}`)만 나온다.
      *
-     * 실 DB 로만 본다 — 최상위가 객체가 아닌 jsonb 는 어댑터에 닿기 전 **Hibernate 가 엔티티를 적재하는 순간** 터졌다(H).
+     * 실 DB 로만 본다 — 최상위가 `[]`·스칼라인 jsonb 는 어댑터에 닿기 전 **Hibernate 가 엔티티를 적재하는 순간** 터졌고, jsonb `null` 은 적재를 지나 어댑터에서 NPE 가 났다(H).
      * JPA 대역은 그 층을 거치지 않는다. 앱 롤은 INSERT 만 가지므로 깨진 행은 INSERT 로 만든다.
      */
     @Test
