@@ -196,7 +196,8 @@ from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelecti
 from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.place_fees import load_fee_table
-from trippilot.poi_curation.pool_builder import CandidatePoolBuilder, base_radius_km, widened_radius_km
+from trippilot.poi_curation.pool_builder import (
+    CandidatePoolBuilder, base_radius_km, restrict_pool_to_target_role, widened_radius_km)
 from trippilot.orchestrator import schedule_coordinator as core
 from trippilot.agents.adapters.memory_vector_store import InMemoryVectorStore
 from trippilot.agents.adapters.memory_memory_store import InMemoryDialogueMemoryStore
@@ -1100,26 +1101,6 @@ def restrict_pool_to_categories(
         anchor=pool.anchor,
         radius_km=pool.radius_km,
     ), ignored
-
-
-def restrict_pool_to_target_role(
-    pool: CandidatePool, target_id: "str | None", excluded: "frozenset[PoiId]"
-) -> tuple[CandidatePool, list[str]]:
-    """식사 칸의 '다른 후보'는 식사 후보만 (2026-10-14 부산 실측: 칼국수 칸에 기찻길·해파랑길).
-
-    `categories` 가 비었을 때만 부른다(사용자가 고른 종류가 우선). 대상이 풀에 없거나
-    식사가 아니면 그대로 — 비식사 칸은 종전 동작. 거른 뒤 남는 식사 후보가 0 이면 넓힌다
-    (대안 0 보다 낫다, INV-4) — 그 사실은 노트로 남긴다. 좁히기만 한다(INV-1).
-    """
-    target = next((p for p in pool.pois if str(p.poi_id) == target_id), None)
-    if target is None:  # 대상이 반경·품질 밖 — 역할을 모른다(종전 동작이지만 흔적은 남긴다)
-        return pool, ["alternatives_role_unknown"] if target_id else []
-    if not counts_as_food(target):
-        return pool, []
-    kept = tuple(p for p in pool.pois if counts_as_food(p))
-    if not any(p.poi_id not in excluded for p in kept):
-        return pool, ["alternatives_role_relaxed"]
-    return replace(pool, poi_ids=frozenset(p.poi_id for p in kept), pois=kept), []
 
 
 # 재계획 사유(AI 어휘) → 트리거 종류. 백엔드가 `trigger` 를 안 보내는 동안 이 표가
