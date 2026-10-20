@@ -154,7 +154,7 @@ export function MyPage(): ReactElement {
         ) : undefined
       }
       onPressSettings={() => router.push('/settings')}
-      onPressEdit={() => router.push('/settings')}
+      // [편집] 은 넘기지 않는다 — 닉네임만 고치는 화면이 없어 설정 진입 세 번째 중복이었다(TRIP-1436 Q-118 · TRIP-939 B-3).
       onPressStays={guardPress(() => router.push('/my/stays'))}
       onPressStyleAnalysis={guardPress(() => router.push('/records/style'))}
       tags={tags}

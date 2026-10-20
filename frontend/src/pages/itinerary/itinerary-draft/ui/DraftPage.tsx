@@ -555,16 +555,18 @@ export function DraftPage({
         fitPins
         overlay={<GenerationProgressCard cells={cells} onBack={handleBack} />}
         header={
-          // 제목에 날짜를 **합쳐** 한 leaf 로 넣는다(dayLabel/dateLabel 빈 값). 진행 카드 게이지의
-          // done 셀 라벨과 이 제목이 둘 다 "N일차 완성" 이면 `getByText` 가 둘을 잡아 실패하므로
-          // (A8-1b 는 게이지 라벨을 exact 로, A8-1e 는 헤더 제목을 regex 로 잡는다 — 헤더가 더 긴
-          // 문자열이어야 한다), 헤더 제목은 "N일차 완성 · 날짜" 로 게이지 라벨과 겹치지 않게 한다.
+          // 다른 결과 화면과 같은 "제목 · N일차 · 날짜" 칸(TRIP-1436 Q-074). 옛 "N일차 완성 · 날짜" 한 leaf 는 진행 카드
+          // 게이지 라벨 "N일차 완성" 과 getByText 가 겹치지 않게 만든 문구였다 — 테스트는 이제 testID 로 잡는다.
           <SheetHeader
-            title={`${selectedDayNumber}일차 완성 · ${formatDraftDayHeader(
-              selectedDate
-            )}`}
-            dayLabel=""
-            dateLabel=""
+            title={
+              isManual
+                ? '내 일정'
+                : fallbackNotice !== null
+                  ? '기본 일정'
+                  : 'AI 추천안'
+            }
+            dayLabel={`${selectedDayNumber}일차`}
+            dateLabel={formatDraftDayHeader(selectedDate)}
             meta={meta}
           />
         }
@@ -738,7 +740,7 @@ export function DraftPage({
                   },
                 },
             {
-              label: '확정하기',
+              label: '완성 일정 보기',
               variant: 'primary',
               onPress: () =>
                 router.push({

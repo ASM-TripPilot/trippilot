@@ -128,13 +128,13 @@ describe('행·헤더·빈 화면 (옛 .test)', () => {
       renderScreen({
         sections: [
           section('today', '오늘', [
-            row({ title: '비 예보 — 일정 영향', meta: 'Plan-B · 10분 전' }),
+            row({ title: '비 예보 — 일정 영향', meta: '재계획 · 10분 전' }),
           ]),
         ],
       });
 
       expect(screen.getByText('비 예보 — 일정 영향')).toBeOnTheScreen();
-      expect(screen.getByText('Plan-B · 10분 전')).toBeOnTheScreen();
+      expect(screen.getByText('재계획 · 10분 전')).toBeOnTheScreen();
     });
   });
 
@@ -471,7 +471,7 @@ describe('본문 줄 (옛 .body)', () => {
       const planB = row({
         title: '비 예보 — 일정 영향',
         body: '14:00 한강공원 일정이 비 예보로 영향을 받아요',
-        meta: 'Plan-B · 10일 전',
+        meta: '재계획 · 10일 전',
         inlineActionLabel: PLAN_B_LABEL,
         route: '/trips/t1/planb',
       });
@@ -491,7 +491,7 @@ describe('본문 줄 (옛 .body)', () => {
         [
           '비 예보 — 일정 영향',
           '14:00 한강공원 일정이 비 예보로 영향을 받아요',
-          'Plan-B · 10일 전',
+          '재계획 · 10일 전',
           PLAN_B_LABEL,
         ].sort()
       );

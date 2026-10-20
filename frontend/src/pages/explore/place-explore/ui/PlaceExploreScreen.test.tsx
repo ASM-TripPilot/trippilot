@@ -246,6 +246,10 @@ describe('🔴 TRIP-1019 #025 · 정렬 줄은 그리지 않는다 (결정 7 · 
     // 필터 버튼(카테고리 시트)은 정렬과 다른 기능이라 그대로다.
     expect(screen.getByTestId('explore-places-root')).toBeOnTheScreen();
     expect(screen.getByTestId('explore-places-filter')).toBeOnTheScreen();
+    // 카테고리 시트를 여는 버튼이라 접근성 이름도 '카테고리'다(TRIP-1440 Q-047).
+    expect(screen.getByLabelText('카테고리')).toBe(
+      screen.getByTestId('explore-places-filter')
+    );
     expect(screen.getByTestId('explore-places-category-all')).toBeOnTheScreen();
 
     // 없애는 것 — 선택지가 하나뿐인 칩은 고를 게 없어 "누를 수 있어 보이는 가짜"가 된다(결정 7).

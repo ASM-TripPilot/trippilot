@@ -290,6 +290,7 @@ export function ManualPlanPage({
   return (
     <View className="flex-1">
       <EditorView
+        title="일정 만들기"
         center={center}
         pins={pins}
         days={buildPlanDayTabs(loadedDays)}

@@ -32,7 +32,7 @@ import { CoPickCompletePage } from './CoPickCompletePage';
  *    비고정=`HH:mm–HH:mm`(en-dash), 고정 숙소=단일 `21:00`+부제+고정 배지(AC-3).
  *  - 🔴 "다른 후보 ›" 링크가 **전 슬롯 0개**(h08과 다름 · AC-5) · INV-3 소요시간 0(AC-4).
  *  - 🔴 헤더 "부산 여행 · 1일차 · 6월 10일…" + meta "4곳"(N=고정 숙소만 뺀 수 · AC-6 · TRIP-1428 "골랐어요" 폐기).
- *  - 🔴 단일 CTA "확정하기" → h14 push 완전일치 1회 · "다시 짜기" 부재(AC-7).
+ *  - 🔴 단일 CTA "완성 일정 보기" → h14 push 완전일치 1회 · "다시 짜기" 부재(AC-7).
  *  - 🔴 GET 500 → error 얼굴·셸 부재 / 로딩 → 셸 부재(AC-8 · INV-4).
  *
  * ⚠️ 함정(02a §4):
@@ -462,7 +462,7 @@ describe('🔴 A6 · AC-6 — 시트 헤더 3세그 + meta "{N}곳"(고정 숙�
   });
 });
 
-describe('🔴 A7 · AC-7 — 단일 CTA "확정하기" → 확정 일정으로 1회 push (다시 짜기 없음)', () => {
+describe('🔴 A7 · AC-7 — 단일 CTA "완성 일정 보기" → 확정 일정으로 1회 push (다시 짜기 없음)', () => {
   it('CTA 는 하나뿐이고 press 시 /trips/[tripId]/itinerary 로 tripId 를 실어 한 번 push 한다', async () => {
     renderPage();
     await screen.findByTestId('sheet-cta-root');
@@ -470,7 +470,7 @@ describe('🔴 A7 · AC-7 — 단일 CTA "확정하기" → 확정 일정으로 
     // 단일 CTA — h08 은 2버튼(다시 짜기·확정). h11 은 하나뿐.
     expect(screen.queryAllByTestId(/^sheet-cta-button-/)).toHaveLength(1);
     const confirm = screen.getByTestId('sheet-cta-button-0');
-    expect(confirm).toHaveTextContent('확정하기');
+    expect(confirm).toHaveTextContent('완성 일정 보기');
     expect(screen.queryByText('다시 짜기')).toBeNull();
 
     fireEvent.press(confirm);
@@ -526,7 +526,7 @@ describe('🔴 A9 · AC-1 보강 — 슬롯 사이 거리 커넥터가 셸에 �
 });
 
 describe('🟢 TRIP-1073 F6 · 폴백으로 완성된 같이 짜기(isFallback=true)도 같은 셸 얼굴이다 (선제 green)', () => {
-  it('재진입 목적지가 여기로 바뀌어도 h17 은 무변경 — 셸이 뜨고 CTA 는 "확정하기" 하나뿐이다', async () => {
+  it('재진입 목적지가 여기로 바뀌어도 h17 은 무변경 — 셸이 뜨고 CTA 는 "완성 일정 보기" 하나뿐이다', async () => {
     // 준비 — #051 실측 경로(폴백 완성). 이 페이지는 isFallback 을 보지 않는다(결정 3·01b 열린 질문 2 (a)).
     itineraryHandler = () =>
       HttpResponse.json({ ...itinerary(), isFallback: true });
@@ -538,7 +538,7 @@ describe('🟢 TRIP-1073 F6 · 폴백으로 완성된 같이 짜기(isFallback=t
     expect(await screen.findByTestId('map-sheet-shell-root')).toBeOnTheScreen();
     expect(screen.queryAllByTestId(/^sheet-cta-button-/)).toHaveLength(1);
     expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
-      '확정하기'
+      '완성 일정 보기'
     );
     expect(screen.queryByTestId('itinerary-copick-complete-error')).toBeNull();
   });

@@ -200,7 +200,8 @@ export function PreferencesEditView({
                     <PrefChip
                       key={value}
                       testID={`settings-pref-${axis.seg}-${value}`}
-                      label={value}
+                      // 표시 라벨만 맞춤법대로 — 서버 enum '균형있게' 는 요청 바디에 그대로 간다(TRIP-1438 Q-122 결정 3).
+                      label={value === '균형있게' ? '균형 있게' : value}
                       selected={selection[axis.key] === value}
                       onPress={() => onToggle(axis.key, value)}
                     />

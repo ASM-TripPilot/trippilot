@@ -276,7 +276,7 @@ describe('TRIP-1105 · regionFilter', () => {
     render(<ExploreLandingScreen {...baseProps(withStay)} />);
 
     expect(screen.queryByTestId('explore-region-chip') === null).toBe(true);
-    expect(screen.getByText('도시 · 장소 · 숙소 검색')).toBeOnTheScreen();
+    expect(screen.getByText('도시 검색')).toBeOnTheScreen();
     expect(
       within(screen.getByTestId('explore-lane-stay')).getByText('숙소')
     ).toBeOnTheScreen();
@@ -302,7 +302,7 @@ describe('TRIP-1105 · regionFilter', () => {
       within(chip).getByTestId('explore-region-chip-clear')
     ).toBeOnTheScreen();
     expect(within(search).getByText('›')).toBeOnTheScreen();
-    expect(screen.queryByText('도시 · 장소 · 숙소 검색') === null).toBe(true);
+    expect(screen.queryByText('도시 검색') === null).toBe(true);
 
     expect(screen.getByText('부산광역시 숙소')).toBeOnTheScreen();
     expect(screen.getByText('부산광역시 장소')).toBeOnTheScreen();

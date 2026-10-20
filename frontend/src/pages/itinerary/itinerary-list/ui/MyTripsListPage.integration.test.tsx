@@ -341,13 +341,13 @@ function openDialogForA(): Promise<ReactTestInstance> {
 }
 
 /**
- * TRIP-1441 · 확정 B 의 ⋯ → '삭제' 까지 눌러 다이얼로그를 연다. B 의 일정이 도착해 배지 '완성'이 선 뒤에 ⋯ 를
+ * TRIP-1441 · 확정 B 의 ⋯ → '삭제' 까지 눌러 다이얼로그를 연다. B 의 일정이 도착해 배지 '확정'이 선 뒤에 ⋯ 를
  * 바로(get) 찾는다 — ⋯ 판정은 일정이 와야 의미가 있고, ⋯ 가 없으면 기다림 시간 초과가 아니라 "못 찾음"으로 바로
  * 실패한다(02a ★11).
  */
 async function openDialogForB(): Promise<ReactTestInstance> {
   expect(await screen.findByTestId(`my-trip-badge-${B}`)).toHaveTextContent(
-    '완성'
+    '확정'
   );
   fireEvent.press(screen.getByTestId(`my-trip-menu-${B}`));
   fireEvent.press(screen.getByTestId(`my-trip-menu-delete-${B}`));
@@ -1667,7 +1667,7 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
 
       // 판정 재료(A 의 일정)가 없으면 고정하지 않는다 — 최신순 B·C·A, A 배지 없음.
       expect(await screen.findByTestId('my-trip-badge-B')).toHaveTextContent(
-        '완성'
+        '확정'
       );
       expect(cardOrder()).toEqual([
         'my-trip-card-B',
@@ -1687,7 +1687,7 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
       ]);
       expect(screen.queryByTestId('my-trip-menu-A')).toBeNull();
       expect(screen.queryByTestId('my-trip-resume-A')).toBeNull();
-      expect(screen.getByTestId('my-trip-badge-C')).toHaveTextContent('완성');
+      expect(screen.getByTestId('my-trip-badge-C')).toHaveTextContent('확정');
     });
 
     it('기간 안 A 의 일정 조회가 500 이면 고정·배지 없음 (INV-4), 기간 안 초안·일정 없음은 "작성중"이고 고정 안 함', async () => {
@@ -1709,7 +1709,7 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
       renderPage();
 
       expect(await screen.findByTestId('my-trip-badge-B')).toHaveTextContent(
-        '완성'
+        '확정'
       );
       expect(await screen.findByTestId('my-trip-badge-A3')).toHaveTextContent(
         '작성중'

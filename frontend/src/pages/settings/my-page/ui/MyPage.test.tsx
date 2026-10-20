@@ -256,7 +256,7 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
   });
 
   describe('🔴 AC-2 · 여행 0건이어도 CTA·빈 문구가 없고 지난 여행 안내는 남는다', () => {
-    it('여행 0건 → CTA·"예정된 여행이 없어요" 없음, "지난 여행" + "아직 종료된 여행이 없습니다"는 있다', async () => {
+    it('여행 0건 → CTA·"예정된 여행이 없어요" 없음, "지난 여행" + "아직 종료된 여행이 없어요"는 있다', async () => {
       script([], {});
 
       renderPage();
@@ -265,7 +265,7 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
       expect(screen.queryByTestId('my-create-trip')).toBeNull();
       expect(screen.queryAllByText(/예정된 여행이 없어요/)).toHaveLength(0);
       expect(screen.getByText('지난 여행')).toBeOnTheScreen();
-      expect(screen.getByText('아직 종료된 여행이 없습니다')).toBeOnTheScreen();
+      expect(screen.getByText('아직 종료된 여행이 없어요')).toBeOnTheScreen();
       expect(values()).toEqual(['0', '0', '0']);
     });
   });
@@ -936,7 +936,7 @@ describe('Figma 배선 결과 (옛 .l03parity)', () => {
    *    미달 얼굴(안내 한 줄, 칩·게이지 없음)로 말한다.
    *  - AC-4 페이지는 스타일 헤드라인을 주입하지 않는다(서버 필드 없음, 계약 공백).
    *  - (AC-6 "지난 여행" 노출 규칙은 TRIP-1123 에서 확정 && 종료 기준으로 바뀌어 `MyPage.counts.test.tsx` AC-8 로 옮겼다.)
-   *  - AC-7 메뉴는 정확히 3행(등록 숙소·예약 기록 / 여행 스타일 분석 / 설정)이고, 첫 행 아이콘은
+   *  - AC-7 메뉴는 정확히 3행(등록 숙소 / 여행 스타일 분석 / 설정)이고, 첫 행 아이콘은
    *    북마크가 아니다(침대). 행 배선은 `MyPage.integration.test.tsx` B-1 이 진다.
    *
    * 왜 이렇게 테스트하나: 조회 훅(계정·프로필·스타일·여행 목록·카드별 숙소/일정)만 목으로 응답을 넣고
@@ -1042,7 +1042,7 @@ describe('Figma 배선 결과 (옛 .l03parity)', () => {
       // 단언 ②(금지 — BR-U5-40): 스타일 카드는 '정식 아님' 얼굴 그대로 — 안내 한 줄, 칩·게이지 없음.
       const card = screen.getByTestId('my-style-card');
       expect(
-        within(card).getByText('10곳 이상 쌓이면 분석을 제공합니다(현재 5곳)')
+        within(card).getByText('10곳 이상 쌓이면 분석을 제공해요 (현재 5곳)')
       ).toBeOnTheScreen();
       expect(within(card).queryAllByTestId('my-style-chip')).toHaveLength(0);
       expect(within(card).queryAllByTestId('my-style-gauge')).toHaveLength(0);
@@ -1106,7 +1106,7 @@ describe('Figma 배선 결과 (옛 .l03parity)', () => {
   });
 
   describe('AC-7 · 메뉴 3행(Seed Q1=A)', () => {
-    it('메뉴 카드의 글자는 정확히 [등록 숙소·예약 기록, 여행 스타일 분석, 설정] 이다', () => {
+    it('메뉴 카드의 글자는 정확히 [등록 숙소, 여행 스타일 분석, 설정] 이다', () => {
       renderWithQueryClient(<MyPage />);
 
       const menu = screen.getByTestId('my-menu-card');
@@ -1115,11 +1115,7 @@ describe('Figma 배선 결과 (옛 .l03parity)', () => {
         .findAll((node) => (node.type as string) === 'Text')
         .map((node) => String(node.props.children));
 
-      expect(labels).toEqual([
-        '등록 숙소·예약 기록',
-        '여행 스타일 분석',
-        '설정',
-      ]);
+      expect(labels).toEqual(['등록 숙소', '여행 스타일 분석', '설정']);
     });
 
     it('첫 행 아이콘은 북마크가 아니다(Figma 침대)', () => {
@@ -1273,7 +1269,7 @@ describe('조회 → 모델 → 배치 (옛 .integration)', () => {
       // 단언(존재 + 배선): 보이는 행은 전부 눌러서 이동한다 — 행마다 정확히 1회, 경로 완전일치.
       (
         [
-          ['my-stays-row', '등록 숙소·예약 기록', '/my/stays'],
+          ['my-stays-row', '등록 숙소', '/my/stays'],
           ['my-style-analysis-row', '여행 스타일 분석', '/records/style'],
           ['my-settings-row', '설정', '/settings'],
         ] as const
@@ -1290,13 +1286,11 @@ describe('조회 → 모델 → 배치 (옛 .integration)', () => {
       });
     });
 
-    it('B-3(TRIP-775 Q2=a): 프로필 [편집]이 있고 누르면 router.push("/settings") 정확히 1회', () => {
+    it('B-3(TRIP-1436 Q-118 결정 1=B): 프로필 카드에 [편집]이 없다 — 설정 진입은 헤더 톱니·메뉴 행 둘뿐', () => {
       renderPage();
 
-      fireEvent.press(screen.getByTestId('my-profile-edit'));
-
-      expect(mockPush).toHaveBeenCalledTimes(1);
-      expect(mockPush).toHaveBeenCalledWith('/settings');
+      expect(screen.getByTestId('my-profile-card')).toBeOnTheScreen();
+      expect(screen.queryByTestId('my-profile-edit')).toBeNull();
     });
 
     it('B-4(TRIP-776 Q1=A): 지난 여행의 "캘린더 ›"를 누르면 router.push("/records") 정확히 1회 — 회고 하트 floating 은 여전히 없다', () => {

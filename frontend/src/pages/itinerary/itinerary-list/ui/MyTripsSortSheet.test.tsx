@@ -11,7 +11,7 @@ import { MyTripsSortSheet } from './MyTripsSortSheet';
  * TRIP-1122 · AC-3~AC-6 — h06 정렬 시트(Figma 4750:2946)의 렌더·배선 계약.
  *
  * 무엇을 보장하나:
- *  - 제목 `정렬`, 옵션 3개(최신순·출발일순·이름순), 보조 문구는 앞 둘에만.
+ *  - 제목 `정렬`, 옵션 3개(최신순·출발일순·이름순), 보조 문구는 셋 모두(TRIP-1436).
  *  - 지금 기준만 선택(`accessibilityState.selected`)이고 체크도 그 행 안에만 있다.
  *  - 옵션을 누르면 그 기준으로 `onSelect` 1회 — 적용 버튼 없음. 스크림 탭·끌어내리기는 `onClose`.
  *
@@ -28,7 +28,7 @@ const OPTION_ID = /^my-trips-sort-option-(recent|start|title)$/;
 const KEYS = ['recent', 'start', 'title'] as const;
 
 describe('🔴 T1 · 구조 — 제목 · 옵션 3개 · 보조 문구 (AC-3)', () => {
-  it('정렬 제목과 최신순·출발일순·이름순, 보조 문구는 앞 둘에만', () => {
+  it('정렬 제목과 최신순·출발일순·이름순, 보조 문구는 셋 모두', () => {
     // 준비·실행
     render(
       <MyTripsSortSheet selected="recent" onSelect={noop} onClose={noop} />
@@ -49,8 +49,9 @@ describe('🔴 T1 · 구조 — 제목 · 옵션 3개 · 보조 문구 (AC-3)', 
     expect(within(recent).getByText('최근에 고친 여행부터')).toBeOnTheScreen();
     expect(within(start).getByText('출발일순')).toBeOnTheScreen();
     expect(within(start).getByText('가까운 출발일부터')).toBeOnTheScreen();
-    // 이름순은 보조 문구 없음 — 옵션 글자 전체가 라벨과 완전 일치(02a ★11)
-    expect(title).toHaveTextContent('이름순');
+    // 이름순도 보조 문구가 있다(TRIP-1436 Q-131 — 셋 모두 설명 줄).
+    expect(within(title).getByText('이름순')).toBeOnTheScreen();
+    expect(within(title).getByText('가나다순으로')).toBeOnTheScreen();
   });
 });
 

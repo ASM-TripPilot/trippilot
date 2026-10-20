@@ -30,7 +30,7 @@ import { NotificationInboxPage } from './NotificationInboxPage';
  *    TRIP_ITINERARY)에 붙이면 일정 화면으로 가는 거짓 라벨이 된다.
  *  - 진입 표시 없음(AC-11, INV-4): 액션 없음·STAY_DETAIL·결측·모르는 값 행은 인라인 링크가 없고, 행이 버튼이
  *    아니고, 눌러도 이동 0회.
- *  - 배선·조립·empty(TRIP-576 유지): 행 개수, 메타 "Plan-B · 10분 전", 0건이면 empty.
+ *  - 배선·조립·empty(TRIP-576 유지): 행 개수, 메타 "재계획 · 10분 전", 0건이면 empty.
  *
  * `router.push` 목은 "불렸다·이 인자로·N회"까지 — 실제 화면 이동과 planb 모달 모양은 6-b 실기 몫.
  */
@@ -251,10 +251,10 @@ describe('AC-11 · 진입 표시 없음 — 인라인 링크 없음 · 버튼 �
 });
 
 describe('조립 · 메타 = 라벨 · 상대시각', () => {
-  it('PLAN_B occurredAt 10분30초 전 → "Plan-B · 10분 전"', () => {
+  it('PLAN_B occurredAt 10분30초 전 → "재계획 · 10분 전"', () => {
     mockItems([PLAN_B]);
     renderPage();
-    expect(screen.getByText('Plan-B · 10분 전')).toBeOnTheScreen();
+    expect(screen.getByText('재계획 · 10분 전')).toBeOnTheScreen();
   });
 });
 

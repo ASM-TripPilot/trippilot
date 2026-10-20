@@ -87,7 +87,7 @@ export interface TripWizardStep2ScreenProps {
   onRetryAll: () => void;
   /** notrip 얼굴 "처음부터". */
   onRestart: () => void;
-  /** TRIP-1082 — 있으면 **거점 편집 얼굴**(Figma `4700:2688`, l04 '출발점 변경' 입구): 진행바·위저드
+  /** TRIP-1082 — 있으면 **거점 편집 얼굴**(Figma `4700:2688`, l04 '거점 변경' 입구): 진행바·위저드
    *  문구·생성/숙소 없이 CTA 를 숨기고 하단 [완료] 하나. 누르면 일정이 안 만들어지는 라벨이라(INV-4). */
   onDone?: () => void;
 }
@@ -113,7 +113,7 @@ function NightCard({
       className="w-full gap-sm bg-canvas px-lg py-[14px]"
     >
       <Text className="font-noto text-caption text-muted">
-        {`${card.nightNumber}박 · ${card.dateLabel} · ${card.region}`}
+        {`${card.nightNumber}번째 밤 · ${card.dateLabel} · ${card.region}`}
       </Text>
       <View className="w-full flex-row items-center gap-md">
         {assigned && card.imageUrl ? (
@@ -162,7 +162,7 @@ function EmptyNightRow({
       className="w-full flex-row items-center bg-canvas px-lg py-[14px]"
     >
       <Text className="flex-1 font-noto text-caption text-muted">
-        {`${card.nightNumber}박 · ${card.dateLabel} · ${card.region}`}
+        {`${card.nightNumber}번째 밤 · ${card.dateLabel} · ${card.region}`}
       </Text>
       <ChevronRightGlyph size={20} tone="muted" />
     </Pressable>
@@ -353,7 +353,8 @@ export function TripWizardStep2Screen({
                 많아도 진행하는 문이 카드 아래 파묻히지 않는다. 게이트가 없어 둘 다 항상 활성이다.
                 empty 는 주 CTA 가 "숙소 없이 계속"(generate 자리를 대신, testID 는 nostay-start 로
                 default 링크와 공유·같은 동작) + 보조 "숙소 둘러보기"(trip-base-browse)라 generate 가 없다. */}
-            <View className="border-t border-hairline bg-canvas px-lg pb-[18px] pt-md gap-md">
+            <View className="bg-canvas px-lg pb-[18px] pt-md gap-md">
+              <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
               {onDone !== undefined ? (
                 <Pressable
                   testID="trip-base-edit-done"
@@ -397,7 +398,9 @@ export function TripWizardStep2Screen({
                     className="w-full items-center justify-center rounded-button bg-primary p-lg"
                   >
                     <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                      이 거점으로 일정 만들기
+                      {cards.some((card) => card.stayName)
+                        ? '이 거점으로 일정 만들기'
+                        : '일정 만들기'}
                     </Text>
                   </Pressable>
                   <Pressable

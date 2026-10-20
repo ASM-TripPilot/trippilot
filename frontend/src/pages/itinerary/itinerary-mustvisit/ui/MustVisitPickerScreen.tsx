@@ -38,7 +38,7 @@ import {
  * 함께 바뀌어 "빨간데 안 눌리는"·"회색인데 눌리는" 상태를 남기지 않는다(문제로그 2026-08-08).
  */
 
-const SCREEN_TITLE = '필수 방문지';
+const SCREEN_TITLE = '꼭 갈 곳';
 const SKIP_LABEL = '건너뛰기';
 const INTRO_TITLE = '꼭 가고 싶은 곳을 먼저 담아요';
 const INTRO_NOTE = 'AI가 시간·동선을 맞춰 배치해요';
@@ -57,8 +57,11 @@ const TIMEMODE_FIXED = '시간 정해두기';
 
 const PROCEED_LABEL = '이 구성으로 일정 짜기';
 
-const EMPTY_TITLE = '아직 담은 필수 방문지가 없어요';
+const EMPTY_TITLE = '아직 담은 꼭 갈 곳이 없어요';
 const EMPTY_NOTE = '꼭 가고 싶은 곳을 담으면 AI가 알아서 배치해요';
+// 같이 짜기(CO_PLAN) 경로는 AI 가 알아서 배치하지 않는다 — 완전 AI 문구를 그대로 쓰면 거짓 안내다(TRIP-1439 Q-146).
+const INTRO_NOTE_CO_PLAN = '일정은 이어서 함께 골라요';
+const EMPTY_NOTE_CO_PLAN = '꼭 가고 싶은 곳을 담으면 일정에 함께 넣어요';
 const ADD_LABEL = '꼭 갈 곳 추가';
 /** 조회 실패 부제는 0곳 얼굴과 반드시 구분한다(정본 `frontend-components` L132). */
 const FAILED_TITLE = '담은 곳을 불러오지 못했어요';
@@ -93,6 +96,8 @@ export interface MustVisitPickerScreenProps {
   onSkip?(): void;
   /** `꼭 갈 곳 추가` 버튼(TRIP-1093 결정 3) — 0곳·목록 두 얼굴에 하나씩. 안 주면 안 그린다. */
   onPressAdd?(): void;
+  /** 같이 짜기(CO_PLAN)면 안내·빈 얼굴 문구를 같이 짜기 말로 바꾼다. 미지정=완전 AI 문구 그대로. */
+  mode?: string;
 }
 
 function Chip({
@@ -287,7 +292,7 @@ function MustVisitCard({
         <Pressable
           testID={`itinerary-mustvisit-remove-${item.sourcePoiId}`}
           accessibilityRole="button"
-          accessibilityLabel="필수 방문지에서 빼기"
+          accessibilityLabel="꼭 갈 곳에서 빼기"
           onPress={() =>
             onRemove?.({
               mustVisitId: item.mustVisitId,
@@ -416,6 +421,7 @@ export function MustVisitPickerScreen({
   onProceed,
   onSkip,
   onPressAdd,
+  mode,
 }: MustVisitPickerScreenProps): ReactElement {
   const pinNumbers = new Set((pins ?? []).map((pin) => pin.number));
   // 얼굴이 핀보다 세다 — 빈 목록·조회 실패 프레임에는 핀을 받아도 지도가 없다(Figma
@@ -469,7 +475,7 @@ export function MustVisitPickerScreen({
               </Text>
             )}
             <Text className="font-noto text-caption text-muted">
-              {INTRO_NOTE}
+              {mode === 'CO_PLAN' ? INTRO_NOTE_CO_PLAN : INTRO_NOTE}
             </Text>
           </View>
 
@@ -499,7 +505,7 @@ export function MustVisitPickerScreen({
               dashed
               icon={<InfoCircleGlyph size={32} tone="primaryText" />}
               title={EMPTY_TITLE}
-              description={EMPTY_NOTE}
+              description={mode === 'CO_PLAN' ? EMPTY_NOTE_CO_PLAN : EMPTY_NOTE}
               actions={[]}
             />
           ) : null}

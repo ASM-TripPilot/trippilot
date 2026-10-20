@@ -378,6 +378,8 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       await renderActive();
       expect(screen.getByTestId('location-explainer-root')).toBeTruthy();
       expect(screen.getByText(/여행 날짜\(8월 20일\) 동안만/)).toBeTruthy();
+      // TRIP-1435 · BR-U8-53 — 안내가 떠 있는 동안 ✦·✎ 앵커는 없다.
+      expect(screen.queryByTestId('execution-live-fab-anchor')).toBeNull();
       fireEvent.press(screen.getByTestId('location-explainer-later'));
       expect(mockAutomationLater).toHaveBeenCalledTimes(1);
       expect(screen.queryByTestId('location-explainer-root')).toBeNull();
@@ -1560,6 +1562,20 @@ describe('i08 변경 반영 시트', () => {
     expect(mockBack).not.toHaveBeenCalled();
   }
 
+  describe('TRIP-1435 · BR-U8-53 — 변경 반영 시트가 떠 있는 동안 ✦·✎ FAB 앵커를 그리지 않는다', () => {
+    it('applied 가 없는 허브에는 FAB 앵커가 있다(대조군)', async () => {
+      await renderHub();
+      expect(screen.getByTestId('execution-live-fab-anchor')).toBeTruthy();
+    });
+
+    it('applied 시트가 뜬 허브에는 FAB 앵커가 없다', async () => {
+      await renderHub(SESSION_ID);
+
+      expect(screen.getByTestId(SHEET)).toBeTruthy();
+      expect(screen.queryByTestId('execution-live-fab-anchor')).toBeNull();
+    });
+  });
+
   describe('🔴 A1·A2 · AC-6 — applied 신호가 있으면 허브 밖 형제로 시트가 뜬다', () => {
     it('A1 라벨·제목·두 버튼만 있고, 캐시에 diff 가 없으면 부제·배지·내역은 없다 (E4)', async () => {
       await renderHub(SESSION_ID);
@@ -1608,7 +1624,7 @@ describe('i08 변경 반영 시트', () => {
     afterStart: null,
   });
   /**
-   * 바뀐 곳 3(추가·빠짐·이동) + 안 바뀐 곳(FIXED·UNCHANGED 는 세지 않는다). 곳 수 4→5, 총거리 −6.9km.
+   * 바뀐 곳 3곳(추가·빠짐·이동) + 안 바뀐 곳(FIXED·UNCHANGED 는 세지 않는다). 곳 수 4→5, 총거리 −6.9km.
    * ⚠️ 서버는 지금 `impact.totalDistanceDeltaM` 을 항상 null 로 준다(openapi·BE ReplanDiffService) — 그래서 실앱 배지는
    * 거리 배지 없이 2개다. 이 픽스처의 −6.9km 는 서버가 델타를 내기 시작했을 때의 계약 모양을 잠근다(TRIP-1188 5-b 참고-1).
    */
@@ -1673,14 +1689,14 @@ describe('i08 변경 반영 시트', () => {
   }
 
   describe('🔴 A5 · TRIP-1188 — 반영 시트 배지는 diff 캐시에서 온다', () => {
-    it('A5a 캐시에 ready diff 가 있으면 [바뀐 곳 3 · 방문지 4→5 · 이동 −6.9km] 가 뜬다', async () => {
+    it('A5a 캐시에 ready diff 가 있으면 [바뀐 곳 3곳 · 방문지 4→5곳 · 이동 −6.9km] 가 뜬다', async () => {
       await renderHubSeeded({ sessionId: SESSION_ID, diff: SEEDED_DIFF });
 
       const badges = screen.getAllByTestId('planb-applied-badge');
       // 배지 하나씩 완전 일치(문자열 toHaveTextContent 는 전체 일치다).
       expect(badges).toHaveLength(3);
-      expect(badges[0]).toHaveTextContent('바뀐 곳 3');
-      expect(badges[1]).toHaveTextContent('방문지 4→5');
+      expect(badges[0]).toHaveTextContent('바뀐 곳 3곳');
+      expect(badges[1]).toHaveTextContent('방문지 4→5곳');
       expect(badges[2]).toHaveTextContent('이동 −6.9km');
     });
 
@@ -2567,7 +2583,7 @@ describe('메모 시트', () => {
       // 상태줄 시각은 계획 15:00 이 아니라 v2 의 실제 도착 13:00 이다(TRIP-1419).
       expect(
         screen.getByTestId(`execution-live-slot-time-${TODAY}#p2`)
-      ).toHaveTextContent('13:00 도착 · 지금 관람 중');
+      ).toHaveTextContent('13:00 도착 · 지금 방문 중');
       // 단언 — 시트는 그 방문(감천문화마을)에 남는다.
       expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
       expect(screen.getByTestId('live-memo-title')).toHaveTextContent(
@@ -4187,6 +4203,8 @@ describe('i03 위험 상세 시트', () => {
       );
       expectBadges(['날씨 · 활성', '이동 · 정상', '영업 · 정상']);
 
+      // TRIP-1435 · BR-U8-53 — 위험 상세 시트가 떠 있는 동안 ✦·✎ 앵커는 없다.
+      expect(screen.queryByTestId('execution-live-fab-anchor')).toBeNull();
       // 알약은 그대로(D3 숨김 경로 아님), 아직 아무 데도 안 갔다.
       expect(screen.getByTestId(CHIP)).toBeTruthy();
       expect(mockPush).not.toHaveBeenCalled();
@@ -4760,7 +4778,7 @@ describe('i02 트리거 표면', () => {
  *  - **W20 (TRIP-1079 5-c 경고-1)** 계획 도착 후보가 둘이면 페이지가 planOrder 를 **순서대로**
  *    넘겨야 앞 슬롯이 관람 중이 된다(AC-6) — W16~W19 는 후보가 하나라 순서 배선을 못 본다.
  *  - **W21~W23 (TRIP-1419)** 관람 중 상태줄 시각은 서버 실제 도착(arrivedAt → KST)이고 완료 카드와 같은 값이다.
- *    응답 전 낙관 구간엔 시각 없이 "지금 관람 중" 만, 같은 슬롯 도착 레코드가 둘이면 [방문 완료]가 닫을 그 레코드의 시각.
+ *    응답 전 낙관 구간엔 시각 없이 "지금 방문 중" 만, 같은 슬롯 도착 레코드가 둘이면 [방문 완료]가 닫을 그 레코드의 시각.
  *
  * 왜 통합 버킷인가: 심판 대상이 "조회 상태 → 사영 → 카드"의 배선과 "실제로 나간 경로·바디"다 —
  * 훅을 목킹하면 그 사영이 테스트의 가정이 되어 버린다(위 「허브」 선례).
@@ -4959,7 +4977,7 @@ describe('방문 체크', () => {
       );
       expect(screen.queryByTestId(arriveId(TODAY, 'p1'))).toBeNull();
       // 단언 ③ — 상태줄 시각은 서버 실제 도착 12:52(TRIP-1419 Q-086 — 옛 TRIP-1021 AC-4 "계획 startAt 그대로"를 뒤집었다).
-      // 응답 전 낙관 구간엔 시각이 없으므로("지금 관람 중", W22) 서버 레코드가 캐시에 든 뒤 한 틱 흘려 읽는다(02a ★6).
+      // 응답 전 낙관 구간엔 시각이 없으므로("지금 방문 중", W22) 서버 레코드가 캐시에 든 뒤 한 틱 흘려 읽는다(02a ★6).
       await waitFor(() =>
         expect(
           client.getQueryData<VisitCheckList>(
@@ -4970,7 +4988,7 @@ describe('방문 체크', () => {
       await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
       expect(
         screen.getByTestId(`execution-live-slot-time-${TODAY}#p1`)
-      ).toHaveTextContent('12:52 도착 · 지금 관람 중');
+      ).toHaveTextContent('12:52 도착 · 지금 방문 중');
     });
 
     it('W4 도착 → 재조회 → [방문 완료] 사슬: 완료 요청은 서버 id(v9)로 나가고 카드가 done 이 된다 (AC-2)', async () => {
@@ -5600,7 +5618,7 @@ describe('방문 체크', () => {
       );
       expect(
         screen.getByTestId(`execution-live-slot-time-${TODAY}#p1`)
-      ).toHaveTextContent('13:00 도착 · 지금 관람 중');
+      ).toHaveTextContent('13:00 도착 · 지금 방문 중');
       expect(
         screen.getByTestId(`execution-live-slot-status-${TODAY}#p2`)
       ).toHaveTextContent('예정');
@@ -5891,7 +5909,7 @@ describe('방문 체크', () => {
     const timeOf = (poiId: string) =>
       screen.getByTestId(`execution-live-slot-time-${TODAY}#${poiId}`);
 
-    it('W21 관람 중 카드는 "14:07 도착 · 지금 관람 중"(계획 14:44 아님)이고, [방문 완료] 뒤 완료 카드도 "14:07"+"방문"이다 (AC-1·2·6·7 · Q-086·Q-093)', async () => {
+    it('W21 관람 중 카드는 "14:07 도착 · 지금 방문 중"(계획 14:44 아님)이고, [방문 완료] 뒤 완료 카드도 "14:07"+"방문"이다 (AC-1·2·6·7 · Q-086·Q-093)', async () => {
       let completed = false;
       server.use(
         ...baseHandlers(plan()),
@@ -5928,7 +5946,7 @@ describe('방문 체크', () => {
           screen.getByTestId('execution-arrive-complete')
         ).toBeOnTheScreen()
       );
-      expect(timeOf('p1')).toHaveTextContent('14:07 도착 · 지금 관람 중');
+      expect(timeOf('p1')).toHaveTextContent('14:07 도착 · 지금 방문 중');
       // 단언 ② — 예정 카드는 계획 시각 그대로(BR-U4-34 · AC-7).
       expect(timeOf('p2')).toHaveTextContent('16:00 도착 예정');
       // 단언 ③ — 관람 중 카드 어디에도 체류·경과 시간이 없다(INV-3 · BR-U4-37). 짝 앵커: 14:07 은 있다.
@@ -5951,7 +5969,7 @@ describe('방문 체크', () => {
       ).toHaveTextContent('방문');
     }, 20_000);
 
-    it('W22 [도착] 직후 응답 전(낙관 구간)엔 "지금 관람 중" 만 — 계획 14:44 를 "도착"이라 쓰지 않고, 응답이 오면 "14:07 도착 · 지금 관람 중" (AC-3 · Q1)', async () => {
+    it('W22 [도착] 직후 응답 전(낙관 구간)엔 "지금 방문 중" 만 — 계획 14:44 를 "도착"이라 쓰지 않고, 응답이 오면 "14:07 도착 · 지금 방문 중" (AC-3 · Q1)', async () => {
       // 응답을 gate 로 붙잡아 낙관 레코드(optimistic:p1 — 시각은 자리표시자)만 캐시에 있는 창을 연다(02a ★5).
       const gate = createGate();
       server.use(
@@ -5981,7 +5999,7 @@ describe('방문 체크', () => {
             screen.getByTestId('execution-arrive-complete')
           ).toBeOnTheScreen()
         );
-        expect(timeOf('p1')).toHaveTextContent('지금 관람 중');
+        expect(timeOf('p1')).toHaveTextContent('지금 방문 중');
 
         // 실행 — 서버 응답을 풀어 준다(낙관 레코드가 서버 레코드로 교체된다).
         gate.release();
@@ -5995,7 +6013,7 @@ describe('방문 체크', () => {
           ).toBe('v9')
         );
         await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
-        expect(timeOf('p1')).toHaveTextContent('14:07 도착 · 지금 관람 중');
+        expect(timeOf('p1')).toHaveTextContent('14:07 도착 · 지금 방문 중');
       } finally {
         // 단언이 먼저 실패해도 붙잡힌 핸들러를 푼다.
         gate.release();
@@ -6045,7 +6063,7 @@ describe('방문 체크', () => {
             screen.getByTestId('execution-arrive-complete')
           ).toBeOnTheScreen()
         );
-        expect(timeOf('p1')).toHaveTextContent('14:07 도착 · 지금 관람 중');
+        expect(timeOf('p1')).toHaveTextContent('14:07 도착 · 지금 방문 중');
 
         // 실행 · 단언 ② — [방문 완료]도 같은 레코드 v1a 를 닫는다(보이는 시각의 주인 = 닫는 방문).
         fireEvent.press(screen.getByTestId('execution-arrive-complete'));

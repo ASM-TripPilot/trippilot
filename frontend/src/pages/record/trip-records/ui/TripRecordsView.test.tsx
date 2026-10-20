@@ -87,7 +87,7 @@ afterEach(() => {
 
 const CENTER: MapCenter = { lat: 35.1532, lng: 129.1187 };
 const MANUAL_NOTICE =
-  '수동 체크인 · 방문한 곳을 직접 선택해 기록하세요 (좌표 자동기록 비활성)';
+  '수동 체크인 · 방문한 곳을 직접 선택해 기록해요 (좌표 자동기록 비활성)';
 
 const PINS: MapPin[] = [
   { number: 1, lat: 35.1532, lng: 129.1187 },
@@ -494,10 +494,10 @@ describe('수동 체크인 얼굴 — GPS 미동의 배너·지도 ⊘ 배지', 
    */
 
   // 사용자 가시 카피 = 계약(Figma 1562:1816 → 4705:3557 동일). — = EM DASH(U+2014), · = U+00B7.
-  const BANNER_TITLE = 'GPS 미동의 — 수동 체크인으로 기록해요';
+  const BANNER_TITLE = '위치 권한 없음 — 수동 체크인으로 기록해요';
 
   const BANNER_BODY =
-    '위치 권한이 없어 좌표·이동 경로는 자동 기록되지 않아요. 방문한 장소를 직접 선택해 기록하세요.';
+    '위치 권한이 없어 좌표·이동 경로는 자동 기록되지 않아요. 방문한 장소를 직접 선택해 기록해요.';
 
   const BADGE_TEXT = 'GPS 자동기록 꺼짐';
 
