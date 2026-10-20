@@ -323,6 +323,9 @@ export function DraftPage({
         return;
       case 'stop':
         leavingRef.current = false;
+        // 확정이면 눌렀는데 아무 일 없는 침묵 대신 이유를 보인다(TRIP-1498 c). MANUAL 은 셸이 곧 응답이라 얼굴이 없다.
+        if (settled.data.status === 'CONFIRMED')
+          setRegenerateConfirmRoute('stop');
         return;
       case 'inProgress':
         // 확인 뒤엔 cancel 을 따로 부르지 않는다 — 같은 여행 POST 가 서버에서 이전 세션을 닫는다(01b Q4).
@@ -468,6 +471,30 @@ export function DraftPage({
   // TRIP-1424 — 셸 [다시 짜기] 확인(같은 얼굴 교체형). 문구는 실제로 갈 길을 따른다 — 생성 POST 면 하루 AI 생성
   // 횟수를 쓴다고 말하고, 여행 중 재계획이면 바로 반영된다고 말한다(남은 횟수 숫자는 계약에 없다). 생성 중(드문
   // 서버 상태)은 결국 생성 POST 길이라 생성 문구다. [다시 짜기]는 연 순간의 판정값을 들고 `handleRetry` 로 간다.
+  // TRIP-1498 (c) — 갈 길이 없는(`'stop'`) 확정 일정이면 확인 대신 이유만 보이고 [확인]은 닫을 뿐이다(확정을 풀지 않는다).
+  if (regenerateConfirmRoute === 'stop') {
+    return (
+      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+        <View className="flex-1 justify-center bg-canvas px-lg">
+          <StateNotice
+            testID="itinerary-regenerate-stop"
+            icon={<AlertCircleGlyph />}
+            title="일정을 다시 짤 수 없어요"
+            description="확정한 일정은 지금 다시 짤 수 없어요"
+            actions={[
+              {
+                testID: 'itinerary-regenerate-stop-ok',
+                label: '확인',
+                variant: 'filled',
+                onPress: () => setRegenerateConfirmRoute(null),
+              },
+            ]}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (regenerateConfirmRoute !== null) {
     const replan = regenerateConfirmRoute === 'replan';
     return (
@@ -737,12 +764,11 @@ export function DraftPage({
                   label: '다시 짜기',
                   variant: 'outline',
                   onPress: () => {
-                    // 확정 + 여행 기간 밖은 갈 길이 없다 — 눌러도 아무 일 없는 확인을 얹지 않는다(TRIP-1424 Q1=A).
+                    // 확정 + 여행 기간 밖은 갈 길이 없다 — 확인 대신 이유 안내 얼굴을 연다(TRIP-1424 Q1=A → TRIP-1498 c).
                     // 셸(listed)은 일정이 있어야 그려진다 — 없으면 갈 길을 판정할 수 없으니 아무것도 열지 않는다.
                     if (itinerary.data === undefined) return;
                     const route = regenerateRouteOf(itinerary.data);
-                    if (route === 'stop') return;
-                    // 확인 얼굴이 셸을 내렸다 올리므로 [취소] 뒤 경로 그려지기·카드 등장을 다시 재생하지 않게 끈다.
+                    // 확인·안내 얼굴이 셸을 내렸다 올리므로 [취소] 뒤 경로 그려지기·카드 등장을 다시 재생하지 않게 끈다.
                     setRevealing(false);
                     setRegenerateConfirmRoute(route);
                   },

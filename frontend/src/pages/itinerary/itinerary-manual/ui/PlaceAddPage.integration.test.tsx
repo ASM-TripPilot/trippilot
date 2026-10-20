@@ -13,6 +13,7 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
+import { useItineraryEditStore } from '@/features/edit-itinerary';
 import { setAccessToken, clearAccessToken } from '@/shared/api/tokenManager';
 import {
   getGetTripsTripIdItineraryQueryKey,
@@ -251,6 +252,8 @@ afterEach(() => {
   // TRIP-1424 — 토스트 스토어는 모듈 싱글턴이다. 기존 테스트의 추가 성공도 토스트를 띄우므로 describe 안이 아니라
   // 여기서 비운다 — 안 그러면 앞 테스트의 토스트가 뒤 "토스트가 뜬다" 단언을 거짓 green 으로 만든다(02a ★8).
   resetToast();
+  // TRIP-1498 — 편집 스토어도 모듈 싱글턴이다. 낡은 초안을 심는 케이스(A8)가 뒤 케이스로 새지 않게 최상위에서 비운다.
+  useItineraryEditStore.getState().reset();
 });
 
 afterAll(() => server.close());
@@ -1701,7 +1704,12 @@ describe('TRIP-1424 · 장소 추가 결과 안내 — 토스트 · 실패 안�
       );
     }
     const view = render(<Tree show />);
-    return { client, leave: () => view.rerender(<Tree show={false} />) };
+    return {
+      client,
+      leave: () => view.rerender(<Tree show={false} />),
+      // 떠났던 페이지를 **새로** 마운트한다 — useRef·useState 가 모두 새것인 새 인스턴스(TRIP-1498 b).
+      reenter: () => view.rerender(<Tree show />),
+    };
   }
 
   /** 일정 도착 전 「+ 추가」는 조용히 무시된다(W-2) — 캐시 성공 + 한 틱 뒤에 누른다(1009 선례). */
@@ -2032,6 +2040,79 @@ describe('TRIP-1424 · 장소 추가 결과 안내 — 토스트 · 실패 안�
     // 둘째 PUT 은 첫 응답으로 바뀐 캐시에서 만든다 — p1 을 잃지 않았다(02a ★15).
     expect(sent(1, D1).map(([poiId]) => poiId)).toEqual(['p1', 'p2']);
   });
+
+  /**
+   * TRIP-1498 (b) — 저장 잠금은 화면 인스턴스가 아니라 **진행 중인 저장**에 걸린다.
+   * N10 은 한 인스턴스 안만 재므로, 응답 전에 화면을 떠났다 새 인스턴스로 다시 들어온 경우(= 앞 저장의 응답을
+   * 모르는 새 화면)를 따로 잰다. 잠금이 인스턴스 소유면 새 화면은 앞 저장이 캐시에 안 들어온 일정으로 둘째 PUT 을
+   * 만들어 서버가 둘째를 마지막에 받는 순서에서 첫 장소가 지워진다(갱신 소실) — 그런데 첫 장소의 토스트는 이미
+   * "추가했어요" 라고 말했다(INV-4).
+   * 3동작: 준비 = 첫 PUT 응답을 붙잡는 문 → 실행 = p1 [적용] → PUT 도착 → 떠남 → 새 인스턴스에서 p2 [+ 추가] →
+   * 문 열기 → p2 [추가]·[적용] → 단언 = 붙잡힌 동안 시트·둘째 PUT 없음 · 둘째 PUT 이 p1 을 싣는다.
+   */
+  it(
+    '🔴 B1 · AC-b1 — 앞 저장의 응답 전에 떠났다 새 화면으로 들어와도 다른 장소 추가를 받지 않고, 끝난 뒤 둘째 PUT 은 첫 장소를 싣는다',
+    async () => {
+      holdPut();
+      const { client, leave, reenter } = renderTree();
+      await ready(client);
+      await add('p1');
+      // 앵커 — 첫 PUT 이 서버에 도착했다(응답만 붙잡힘).
+      await waitFor(() => expect(putBodies).toHaveLength(1));
+
+      // 실행 — 떠났다가 새 인스턴스로 다시 들어와 다른 행을 누른다.
+      leave();
+      expect(screen.queryByTestId('itinerary-place-list')).toBeNull();
+      reenter();
+      fireEvent.press(await screen.findByTestId('itinerary-place-add-p2'));
+
+      // 단언 1 — 앞 저장이 안 끝났으니 시트가 안 열리고 둘째 PUT 도 없다.
+      expect(screen.queryByTestId(SHEET)).toBeNull();
+      expect(putBodies).toHaveLength(1);
+
+      // 실행 2 — 앞 저장이 끝난다(편집기 대역이 캐시의 p1 을 본다) → 이제 p2 를 담는다.
+      await act(async () => {
+        openPutGate?.();
+      });
+      await waitFor(() =>
+        expect(screen.getByTestId(EDITOR)).toHaveTextContent('p1')
+      );
+      await add('p2');
+
+      // 단언 2 — 둘째 PUT 은 첫 응답이 들어간 캐시에서 만든다: p1 이 지워지지 않는다.
+      await waitFor(() => expect(putBodies).toHaveLength(2));
+      expect(sent(1, D1).map(([poiId]) => poiId)).toEqual(['p1', 'p2']);
+    },
+    SLOW
+  );
+
+  /**
+   * TRIP-1498 (a) · AC-a8 — 편집기 없이 장소 추가만 단독으로 열리는 진입(후보 시트·같이 짜기)에서도 저장은
+   * 서버 캐시 기준이다. 편집 스토어는 앱 수명 싱글턴이라 이전 세션의 초안이 낡은 채 남아 있을 수 있다 —
+   * 그 낡은 초안(서버에 없는 ghost)을 신뢰해 PUT 을 만들면 없는 장소가 저장된다.
+   */
+  it(
+    'A8 · AC-a8 — 낡은 편집 초안이 스토어에 남아 있어도 PUT 은 서버 캐시 기준이고 토스트는 기존 문구 그대로다 (선제 green)',
+    async () => {
+      serveDays([{ date: D1, slots: [slotAt('sA', '16:00:00', '17:00:00')] }]);
+      useItineraryEditStore
+        .getState()
+        .seed([{ date: D1, slots: [slotAt('ghost', '08:00:00', '09:00:00')] }]);
+      const { client } = renderTree();
+      await ready(client);
+      // 앵커 — 추가 전엔 토스트가 없다.
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+
+      await add('p1');
+
+      await waitFor(() => expect(putBodies).toHaveLength(1));
+      expect(sent(0, D1).map(([poiId]) => poiId)).toEqual(['sA', 'p1']);
+      expect(await screen.findByTestId(TOAST)).toHaveTextContent(
+        '추가했어요 · 일정에 바로 저장됐어요'
+      );
+    },
+    SLOW
+  );
 });
 
 /**

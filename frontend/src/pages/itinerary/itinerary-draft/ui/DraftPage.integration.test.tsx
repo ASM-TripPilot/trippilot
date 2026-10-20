@@ -56,6 +56,7 @@ import {
 import { savedPlace } from '@/test-support/mustVisitFixtures';
 import { resetToast } from '@/test-support/toastHarness';
 import { seoulDate } from '@/shared/lib/seoulDate';
+import { freezeDate } from '@/test-support/freezeDate';
 import {
   createWrapper,
   newTestQueryClient,
@@ -159,6 +160,11 @@ const REGEN_DESC_GENERATE =
   '다시 짜면 직접 바꾼 내용은 사라질 수 있어요 · 오늘 AI 생성 횟수를 1회 써요';
 const REGEN_DESC_REPLAN =
   '다시 짜면 직접 바꾼 내용은 사라질 수 있어요 · 새로 짠 일정이 바로 반영돼요';
+/** TRIP-1498 (c) · 갈 길이 없을 때(`'stop'`) 확인 대신 뜨는 안내 얼굴. 계약 testID 는 루트 하나, 버튼은 글자로 누른다(02a §2). */
+const REGEN_STOP = 'itinerary-regenerate-stop';
+const REGEN_STOP_TITLE = '일정을 다시 짤 수 없어요';
+const REGEN_STOP_DESC = '확정한 일정은 지금 다시 짤 수 없어요';
+const REGEN_STOP_OK = '확인';
 
 /** 초안 페이지를 `retry:false`·`gcTime:0` 클라이언트 아래에 그린다 — 폴링 타이머가 종료 뒤에도 프로세스를 붙잡지 않게. */
 function renderPage(tripId: string = TRIP_ID) {
@@ -177,6 +183,11 @@ beforeEach(() => {
 });
 
 afterAll(() => server.close());
+
+// TRIP-1498 (c) RG10 이 `Date` 를 고정한다 — 앞 테스트의 고정 시계가 뒤 테스트의 `seoulDate(new Date())` 로 새지 않게 파일 최상위에서 푼다.
+afterEach(() => {
+  jest.useRealTimers();
+});
 
 // TRIP-466 · 옛 DraftPage.integration.test.tsx(본 파일)
 describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 CTA · 뒤로가기', () => {
@@ -235,7 +246,7 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
   /** GET /itinerary 가 n 번째(0-based)로 불릴 때 무엇을 돌려줄지 — 시나리오를 테스트가 정한다. */
   let itineraryScript: (call: number) => Itinerary;
   /** GET /trips/{id} 가 무엇을 돌려줄지 — 여행 기간을 케이스가 정한다(위 `itineraryScript` 와 동형). */
-  let tripScript: () => Trip;
+  let tripScript: () => Trip | Response;
 
   /** 생성 화면(`/trips/[tripId]/itinerary/generating`)으로 간 라우터 호출 수 — replace·push 모두 센다(TRIP-1037). */
   function generatingMoves(): number {
@@ -526,13 +537,17 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
    * (a) 완성 CTA 확정 가드 + (c) onBack canGoBack 가드. 배선을 실 HTTP·목 라우터로 태운다.
    * ─────────────────────────────────────────────────────────────────────────── */
 
-  describe('🔴 I10 · TRIP-466 AC-a1 / TRIP-792 — CONFIRMED 도 h08 셸로 가되 확정을 푸는 재생성은 막힌다', () => {
-    it('status=CONFIRMED 면 h08 셸이 뜨고, 다시 짜기를 눌러도 재생성 POST 가 0 건이다', async () => {
+  describe('🔴 I10 · TRIP-466 AC-a1 / TRIP-792 / TRIP-1498 c AC-c2 — CONFIRMED 도 h08 셸로 가되 확정을 푸는 재생성은 막히고, 막혔다는 이유가 보인다', () => {
+    it('status=CONFIRMED 면 h08 셸이 뜨고, 다시 짜기를 눌러도 재생성 POST 가 0 건이며 이유 안내가 뜬다', async () => {
       /**
        * ⚠️ 확정 일정에서 재생성 POST 가 나가면 확정이 풀리고 동결된 poi_snapshot 참조가 사라진다
        * (되돌릴 API 없음, 브리프 (a)). TRIP-792 플립: CONFIRMED·깨끗한 COMPLETE 도 narrow 조건상
        * h08 셸로 간다(완성 일정 보기는 h14 조회로의 무해한 이동일 뿐). **진짜 위험은 재생성**이고 그 방어는
        * handleRetry 의 CONFIRMED early-return 이다 — '다시 짜기'(cta[0]) press → **POST 0건**으로 잰다.
+       *
+       * ⚠️ TRIP-1498 (c) AC-c2 — **의도적 플립**. 옛 마지막 단언은 "확인 얼굴이 안 뜬다"(TRIP-1424 Q1=A)였다 —
+       * 눌러도 아무 일 없는 침묵(INV-4 위반)을 굳혔다. 결정 2=A 로 뒤집는다: 이제 **이유 안내가 뜬다**
+       * (이동·POST 는 계속 0). "기존 테스트가 깨졌다"며 옛 단언으로 되돌리지 마라.
        */
       itineraryScript = () =>
         itinerary({
@@ -555,8 +570,9 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       // TRIP-1037 — 초안 화면은 이제 어떤 경우에도 POST 를 안 보내 위 단언만으론 공허하다. 확정 가드의
       // 실체는 "생성 화면으로 보내지 않는다" 다(생성 화면이 마운트되면 POST 가 나가 확정이 풀린다).
       expect(generatingMoves()).toBe(0);
-      // TRIP-1424 01b Q1=A — 확정 + 여행 기간 밖은 갈 길이 없다. 눌러도 아무 일 없는 확인 화면을 얹지 않는다.
-      expect(screen.queryByTestId('itinerary-regenerate-confirm')).toBeNull();
+      // TRIP-1498 (c) — 갈 길이 없어도 침묵하지 않는다. 확인(다시 짜기/취소) 얼굴이 아니라 이유 안내가 뜬다.
+      expect(screen.getByTestId(REGEN_STOP)).toBeOnTheScreen();
+      expect(screen.queryByTestId(REGEN_CONFIRM)).toBeNull();
     });
   });
 
@@ -820,6 +836,20 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
         params: { tripId: TRIP_ID, replan: '1' },
       },
       {
+        // TRIP-1498 (c) AC-c5 — 확정이어도 여행 중이면 재계획 길(문구도 재계획). 선제 green: 구현이 이미 맞고,
+        // 이 행이 있어야 "확인 문구 계산에만 확정이면 생성 문구"로 갈리는 회귀가 잡힌다(기존 3행은 PLANNED 뿐).
+        name: '확정이어도 여행 중 → 재계획 길',
+        period: () => trip({ startDate: today, endDate: tomorrow }),
+        plan: () =>
+          itinerary({
+            days: inTripDays,
+            generationState: 'COMPLETE',
+            status: 'CONFIRMED',
+          }),
+        description: REGEN_DESC_REPLAN,
+        params: { tripId: TRIP_ID, replan: '1' },
+      },
+      {
         name: '여행 중이어도 생성 실패(FAILED) → 생성 길',
         period: () => trip({ startDate: today, endDate: tomorrow }),
         plan: () => itinerary({ days: inTripDays, generationState: 'FAILED' }),
@@ -859,6 +889,194 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
         expect(generatingMoves()).toBe(1);
         expect(mockPush).not.toHaveBeenCalled();
         expect(log.hitsFor('POST', '/itinerary')).toBe(0);
+      }
+    );
+  });
+
+  /**
+   * TRIP-1498 (c) · 갈 길이 없는 셸 [다시 짜기](`'stop'` — 확정 + 기간 밖 / 여행 조회 없음 / 생성 FAILED)는 침묵하지
+   * 않고 **이유를 말한다**(결정 2=A · INV-4). 확인 얼굴과 같은 얼굴 교체형 안내 + 단일 [확인] — 이동·생성 POST 는 0(확정을
+   * 풀지 않는다). 안내의 실제 덮임·정렬은 jest 사각이고(6-b), 여기서는 "트리에 이유가 서 있다"까지만 잰다.
+   *
+   * 무엇을 보장하나:
+   *  - 🔴 RG7 `'stop'` 세 조건 모두에서 같은 안내(글자 세 줄 정확 일치)가 셸을 갈아 끼우고, 이동·POST 는 0이다.
+   *  - 🔴 RG8 [확인]은 닫을 뿐이고 셸로 돌아오며, 다시 누르면 안내가 또 뜬다(잠금이 남지 않는다).
+   *  - 🟢 RG9 확인을 연 뒤 자정을 넘겨도 문구와 이동이 **연 순간의 같은 판정**을 쓴다(선제 green — TRIP-1424 가 이미 고친 것의
+   *    심판 확보. `handleRetry(regenerateConfirmRoute)`→`handleRetry()` 뮤테이션으로 red 확인).
+   *
+   * 3동작 뼈대: 준비 = 확정 일정 + 여행 기간(또는 고정 시계) → 실행 = 셸 [다시 짜기](→ 안내의 [확인]) → 단언 = 보이는 얼굴·글자·이동·POST.
+   */
+  describe('🔴 RG7~RG9 · TRIP-1498 c — 갈 길이 없는 [다시 짜기]는 이유를 말하고, 자정을 넘겨도 판정은 연 순간 그대로다', () => {
+    const today = seoulDate(new Date());
+    const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const inTripDays = daysOf([today, tomorrow], (date) => [
+      slot(`poi-${date}`, { nameKo: `${date} 첫 장소` }),
+    ]);
+
+    /** 안내 얼굴의 [확인] — 계약 testID 는 루트 하나라 버튼은 글자로 누른다(02a ★9). */
+    function pressStopOk(): void {
+      fireEvent.press(
+        within(screen.getByTestId(REGEN_STOP)).getByText(REGEN_STOP_OK)
+      );
+    }
+
+    /** 누른 뒤 50ms 를 흘려도 아무 데도 안 갔다 — 침묵 구현도 이동 0 이라 "안내가 보인다"와 짝으로만 뜻이 있다(02a ★10). */
+    async function expectNowhereToGo(): Promise<void> {
+      await sleep(50);
+      expect(generatingMoves()).toBe(0);
+      expect(mockReplace).not.toHaveBeenCalled();
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(log.hitsFor('POST', '/itinerary')).toBe(0);
+    }
+
+    it.each<{
+      name: string;
+      period: () => Trip | Response;
+      plan: () => Itinerary;
+    }>([
+      {
+        name: '확정 + 여행 기간 밖',
+        period: () => trip(),
+        plan: () =>
+          itinerary({
+            days: daysUpTo(3),
+            generationState: 'COMPLETE',
+            status: 'CONFIRMED',
+          }),
+      },
+      {
+        name: '확정 + 여행 조회 실패(500)',
+        period: () =>
+          new Response(JSON.stringify({ error: { code: 'INTERNAL' } }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        plan: () =>
+          itinerary({
+            days: daysUpTo(3),
+            generationState: 'COMPLETE',
+            status: 'CONFIRMED',
+          }),
+      },
+      {
+        name: '확정 + 기간 안이지만 생성 실패(FAILED)',
+        period: () => trip({ startDate: today, endDate: tomorrow }),
+        plan: () =>
+          itinerary({
+            days: inTripDays,
+            generationState: 'FAILED',
+            status: 'CONFIRMED',
+          }),
+      },
+    ])(
+      'RG7 $name — 이유 안내가 셸을 갈아 끼우고, 글자는 제목·설명·[확인] 세 줄뿐이며, 이동·POST 는 0',
+      async ({ period, plan }) => {
+        tripScript = period;
+        itineraryScript = plan;
+        renderPage();
+        await screen.findByTestId('map-sheet-shell-root');
+
+        fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+        expect(screen.getByTestId(REGEN_STOP)).toBeOnTheScreen();
+        // 안내 얼굴의 글자 전부 — 소요시간·남은 횟수가 끼면 여기서 red(INV-3).
+        expect(textsIn(screen.getByTestId(REGEN_STOP))).toEqual([
+          REGEN_STOP_TITLE,
+          REGEN_STOP_DESC,
+          REGEN_STOP_OK,
+        ]);
+        // 얼굴 교체형 — 셸이 내려갔고, 확인(다시 짜기/취소) 얼굴이 아니다: 눌러서 갈 길이 없다.
+        expect(screen.queryByTestId('map-sheet-shell-root')).toBeNull();
+        expect(screen.queryByTestId(REGEN_CONFIRM)).toBeNull();
+        expect(screen.queryByTestId(REGEN_PROCEED)).toBeNull();
+        expect(screen.queryByTestId(REGEN_CANCEL)).toBeNull();
+        await expectNowhereToGo();
+      }
+    );
+
+    it('RG8 [확인] → 셸로 돌아오고 이동 0 · 다시 [다시 짜기]를 누르면 안내가 또 뜬다', async () => {
+      itineraryScript = () =>
+        itinerary({
+          days: daysUpTo(3),
+          generationState: 'COMPLETE',
+          status: 'CONFIRMED',
+        });
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+      expect(screen.getByTestId(REGEN_STOP)).toBeOnTheScreen();
+
+      pressStopOk();
+
+      expect(
+        await screen.findByTestId('map-sheet-shell-root')
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId(REGEN_STOP)).toBeNull();
+
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+      expect(screen.getByTestId(REGEN_STOP)).toBeOnTheScreen();
+      await expectNowhereToGo();
+    });
+
+    // 선제 green — 구현이 이미 맞다(TRIP-1424). `Date` 만 고정하고(`freezeDate`) `setSystemTime` 으로 자정을 넘긴다.
+    // KST = UTC+9: 10-21 23:59 = 14:59Z, 10-22 00:01 = 15:01Z. 두 행은 판정이 **반대 방향**으로 뒤집히는 경우다 —
+    // 한 방향만 재면 "연 순간 판정을 쓴다"가 아니라 그 방향 분기만 잡는다(02a ★4).
+    it.each<{
+      name: string;
+      openedAt: string;
+      pressedAt: string;
+      description: string;
+      params: Record<string, string>;
+    }>([
+      {
+        name: '여행 마지막 날 23:59 에 열고 00:01 에 누른다 → 재계획 그대로',
+        openedAt: '2026-10-21T14:59:00Z',
+        pressedAt: '2026-10-21T15:01:00Z',
+        description: REGEN_DESC_REPLAN,
+        params: { tripId: TRIP_ID, replan: '1' },
+      },
+      {
+        name: '여행 시작 전날 23:59 에 열고 00:01 에 누른다 → 생성 그대로',
+        openedAt: '2026-10-19T14:59:00Z',
+        pressedAt: '2026-10-19T15:01:00Z',
+        description: REGEN_DESC_GENERATE,
+        params: { tripId: TRIP_ID, mode: 'FULLY_AI' },
+      },
+    ])(
+      'RG9 $name — 문구와 이동이 연 순간의 같은 판정이다',
+      async ({ openedAt, pressedAt, description, params }) => {
+        freezeDate(openedAt);
+        tripScript = () =>
+          trip({ startDate: '2026-10-20', endDate: '2026-10-21' });
+        itineraryScript = () =>
+          itinerary({
+            days: daysOf(['2026-10-20', '2026-10-21'], (date) => [
+              slot(`poi-${date}`, { nameKo: `${date} 첫 장소` }),
+            ]),
+            generationState: 'COMPLETE',
+          });
+        renderPage();
+        await screen.findByTestId('map-sheet-shell-root');
+
+        fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+        // 연 순간 — 이 시각의 판정이 문구다.
+        expect(textsIn(screen.getByTestId(REGEN_CONFIRM))[1]).toBe(description);
+
+        // 확인을 열어 둔 채 자정을 넘긴다.
+        act(() => {
+          jest.setSystemTime(new Date(pressedAt));
+        });
+        fireEvent.press(screen.getByTestId(REGEN_PROCEED));
+
+        await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+        expect(mockReplace).toHaveBeenCalledWith({
+          pathname: '/trips/[tripId]/itinerary/generating',
+          params,
+        });
+        expect(mockPush).not.toHaveBeenCalled();
       }
     );
   });
@@ -4052,8 +4270,10 @@ describe('다시 만들기 연타 잠금', () => {
     });
   });
 
-  describe('🟢 L8 · AC-4 — 조회 전 누른 뒤 도착한 일정이 확정(CONFIRMED)이면 이동 0 (선제 green · 무회귀)', () => {
-    it('로딩 중 press → CONFIRMED 도착 → 셸이 떠도 이동 0 · POST 0', async () => {
+  describe('🔴 L8 · AC-4 / TRIP-1498 c AC-c3 — 조회 전 누른 뒤 도착한 일정이 확정(CONFIRMED)이면 이동 0 · POST 0 이고, 침묵하지 않고 이유 안내가 뜬다', () => {
+    // TRIP-1498 (c) — 의도적 개정. 옛 앵커는 "도착해 셸이 떴다(CTA0)"였다(선제 green). 확정 + 갈 길 없음(`handleRetry` 의
+    // `'stop'`)에도 같은 안내 얼굴을 쓰기로 해 도착 직후 안내가 셸을 가린다 — 앵커를 안내로 옮긴다. 이동 0 · POST 0 은 그대로.
+    it('로딩 중 press → CONFIRMED 도착 → 이유 안내가 뜨고 이동 0 · POST 0', async () => {
       holdItineraryGet();
       itineraryScript = () => planned({ status: 'CONFIRMED' });
       renderPage();
@@ -4063,10 +4283,31 @@ describe('다시 만들기 연타 잠금', () => {
       await act(async () => {
         releaseGate?.();
       });
-      // 앵커 — 조회가 도착해 화면이 셸로 바뀌었다(판정 재료가 손에 들어왔다).
-      await screen.findByTestId(CTA0, {}, WAIT);
+      // 앵커 — 조회가 도착해 판정 재료가 손에 들어왔고, 갈 길이 없다는 이유가 보인다.
+      expect(await screen.findByTestId(REGEN_STOP, {}, WAIT)).toBeOnTheScreen();
       await settle();
 
+      expect(toGenerating()).toBe(0);
+      expect(postCount).toBe(0);
+    });
+
+    // 같은 길의 다른 입구 — 조회 실패 얼굴의 [다시 시도] 뒤 확정이 도착. 위와 같은 안내, [확인] 뒤엔 셸이 그대로 있다.
+    it('조회 실패 얼굴에서 retry → 재조회가 CONFIRMED 면 이유 안내 · [확인] 뒤 셸 · 이동 0 · POST 0', async () => {
+      itineraryScript = () => 500;
+      renderPage();
+      await screen.findByTestId('itinerary-draft-failed', {}, WAIT);
+
+      itineraryScript = () => planned({ status: 'CONFIRMED' });
+      fireEvent.press(screen.getByTestId(HEADER_RETRY));
+
+      expect(await screen.findByTestId(REGEN_STOP, {}, WAIT)).toBeOnTheScreen();
+      fireEvent.press(
+        within(screen.getByTestId(REGEN_STOP)).getByText(REGEN_STOP_OK)
+      );
+      expect(await screen.findByTestId(CTA0, {}, WAIT)).toBeOnTheScreen();
+      await settle();
+
+      expect(screen.queryByTestId(REGEN_STOP)).toBeNull();
       expect(toGenerating()).toBe(0);
       expect(postCount).toBe(0);
     });
@@ -4170,6 +4411,8 @@ describe('다시 만들기 연타 잠금', () => {
 
       expect(toGenerating()).toBe(0);
       expect(postCount).toBe(0);
+      // TRIP-1498 (c) 트립와이어 — MANUAL 의 `'stop'` 은 "확정한 일정은…" 안내를 띄우지 않는다(문구가 거짓, MANUAL 셸이 곧 응답).
+      expect(screen.queryByTestId(REGEN_STOP)).toBeNull();
     });
   });
 

@@ -156,6 +156,7 @@
 - `src/__tests__/eslintReleaseRules.test.ts`  →  (export 없음)
 - `src/__tests__/generatingEntryStack.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/generatingRouteModePassthrough.test.tsx`  →  (export 없음)
+- `src/__tests__/itineraryEditAddPlaceFlow.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/itineraryEditRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/liveHubRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/locationAutomationBuildConfig.test.ts`  →  (export 없음)
@@ -396,11 +397,11 @@
 - `src/features/edit-itinerary/ui/SaveConflictDialog.tsx`  →  SaveConflictDialog
 
 ## src/features/edit-preferences/
-- `src/features/edit-preferences/index.ts`  →  buildPreferenceInput · initialSelection · ACTIVITY · STYLE · toPreferenceInput · usePreferenceStore · toggleMulti · toggleSingle
+- `src/features/edit-preferences/index.ts`  →  buildPreferenceInput · initialSelection · ACTIVITY · STYLE · isPreferenceDraftEmpty · toPreferenceInput · usePreferenceStore · toggleMulti · toggleSingle
 
 ## src/features/edit-preferences/model/
 - `src/features/edit-preferences/model/preferenceDraft.ts`  →  PreferenceSelection · initialSelection · buildPreferenceInput
-- `src/features/edit-preferences/model/preferenceInput.ts`  →  PreferenceDraftValues · STYLE · ACTIVITY · toPreferenceInput
+- `src/features/edit-preferences/model/preferenceInput.ts`  →  PreferenceDraftValues · isPreferenceDraftEmpty · STYLE · ACTIVITY · toPreferenceInput
 - `src/features/edit-preferences/model/preferenceSelection.ts`  →  toggleMulti · toggleSingle
 - `src/features/edit-preferences/model/preferenceStore.ts`  →  PreferenceDraft · usePreferenceStore
 
@@ -1798,4 +1799,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1150개 파일
+합계 1151개 파일
