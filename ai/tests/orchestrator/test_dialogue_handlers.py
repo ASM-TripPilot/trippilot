@@ -705,6 +705,7 @@ def test_poi_info_card_rows_and_open_place_action() -> None:
         {"label": "분류", "value": _FOOD_KO}, {"label": "영업시간", "value": "09:00~18:00"}, {"label": "입장료", "value": "5,000원"}]}
     assert [(a.type, a.label, a.params) for a in facts.next_actions] == [("OPEN_PLACE", "장소 보기", {"poiId": _U["해녀의집"]})]
     assert facts.status is FactStatus.OK and facts.template_text == "장소 정보를 찾아봤어요."
+    assert facts.to_prompt_dict()["rows"] == facts.payload["rows"]  # 아는 입장료는 프롬프트에도 간다
     (place,) = facts.places
     assert (place.poi_id, place.hours_label, place.fee) == (_U["해녀의집"], "09:00~18:00", 5000)
 
@@ -735,6 +736,8 @@ def test_poi_info_lookup_failure_still_shows_the_snapshot_card_as_partial(ports:
     assert facts.status is FactStatus.PARTIAL and facts.kind is AnswerKind.INFO
     assert facts.payload["rows"] == [{"label": "분류", "value": _FOOD_KO}, {"label": "영업시간", "value": "미확인"}, {"label": "입장료", "value": "미확인"}]
     assert facts.notes and facts.template_text == "장소 정보를 찾아봤어요."
+    # 모르는 입장료는 카드에만 — 답변 프롬프트에 실으면 카페 답마다 "입장료도 미확인이에요"가 붙는다(답변 0.3.2)
+    assert facts.to_prompt_dict()["rows"] == [{"label": "분류", "value": _FOOD_KO}, {"label": "영업시간", "value": "미확인"}]
 
 
 @pytest.mark.parametrize("arguments", [{"place": "경복궁"}, {"place": "카페"}, {}])

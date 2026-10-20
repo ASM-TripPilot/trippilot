@@ -328,7 +328,7 @@ post-init: `template_text` 가 §2.3 의 `text` 검사를 전부 통과 ∧ `kin
 즉 **`Facts` 만으로 유효한 `DialogueAnswer` 가 항상 만들어진다**(`DialogueAnswer.from_facts(facts, text=None)`). 이것이 INV-4 의
 구조적 보장이다: LLM 이 아무것도 못 해도 응답은 있다.
 
-`$facts` 프롬프트 변수 = `Facts` 의 `rows·places(좌표 없음)·notes·status` 를 JSON 으로 직렬화해 `inline()` 한 문자열. 좌표·poi_id 내부
+`$facts` 프롬프트 변수 = `Facts` 의 `rows·places(좌표 없음)·notes·status` 를 JSON 으로 직렬화해 `inline()` 한 문자열 **[개정 · 2026-10-20 · 답변 0.3.2]** rows 에서 ("입장료", "미확인") 줄은 뺀다(카드 payload 는 그대로 — 프롬프트 rows ≠ 카드 rows). 모르는 입장료는 물었든 안 물었든 답이 "확인할 수 없다"로 같고, 실어 두면 카페 답마다 "입장료도 미확인이에요"가 붙었다. 좌표·poi_id 내부
 값은 넣지 않는다(워커 규칙 "좌표 미포함"). `places[].name` 은 `inline()` 으로 눌러 골격 위조를 막는다.
 
 ### 2.6 `DialogueMemory` · `MemoryStorePort` — 장기 기억
@@ -459,7 +459,7 @@ LLM 0회(L-5). `hours_label` 은 `on` 의 요일(없으면 `now` 의 요일)로 
 | 값 | 티어 | effort | max_tokens | fallback_modes | 게이트 | 프롬프트 |
 |---|---|---|---|---|---|---|
 | `DIALOGUE_INTENT` | LIGHT | low | 1024(초판 256 — DEV 배포 smoke 실측 출력 239/256, 사고 포함, 2026-10-18) | `("llm_dialogue_intent", "out_of_scope")` | `IntentGate`(재사용) | `prompts/dialogue_intent.yaml` ~~v"0.2.1"(의도 정의·판단 순서·예시, 고정부 앞)~~ **[개정 · 2026-10-19 · 짧은 수락]** v"0.2.2"(의도 정의·판단 순서·예시 + 짧은 수락을 마지막 도우미 제안으로 푸는 규칙 한 줄·예시 2건, 고정부 앞) **[개정 · 2026-10-19 · 장소 탐색]** v"0.2.3"(+ EXPLORE_PLACES 정의 한 줄·SUGGEST_ALTERNATIVE 와의 갈림·판단 순서 4 한 갈래·예시 2건; `$intents` 는 `tool_specs_json(DIALOGUE_INTENTS)` — 14종, intent.yaml 은 13종 그대로 — BR-AO-27) — `$utterance $intents $history $memory $trip` |
-| `DIALOGUE_ANSWER` | LIGHT | low | 512 | `("llm_dialogue_answer", "template_text")` | `DialogueAnswerGate`(신규 파일) | `prompts/dialogue_answer.yaml` ~~v"0.2.0"(답변 순서·예시, 고정부 앞)~~ **[개정 · 2026-10-19 · 친근한 말투]** ~~v"0.3.0"(친근한 해요체 대화 — 맞장구 → 답 → 다음 한 걸음 제안·되묻기, 예시 2건 재작성·숫자 말 규칙, 고정부 앞)~~ **[개정 · 2026-10-19 · 여는 말]** v"0.3.1"(0.3.0 + 어디에나 붙는 여는 말 금지·질문과 이어지는 마무리 규칙, 예시 여는 말 제거 + 날씨 예시, 고정부 앞) — `$intent $facts $utterance $history $memory $trip $style` |
+| `DIALOGUE_ANSWER` | LIGHT | low | 512 | `("llm_dialogue_answer", "template_text")` | `DialogueAnswerGate`(신규 파일) | `prompts/dialogue_answer.yaml` ~~v"0.2.0"(답변 순서·예시, 고정부 앞)~~ **[개정 · 2026-10-19 · 친근한 말투]** ~~v"0.3.0"(친근한 해요체 대화 — 맞장구 → 답 → 다음 한 걸음 제안·되묻기, 예시 2건 재작성·숫자 말 규칙, 고정부 앞)~~ **[개정 · 2026-10-19 · 여는 말]** v"0.3.1"(0.3.0 + 어디에나 붙는 여는 말 금지·질문과 이어지는 마무리 규칙, 예시 여는 말 제거 + 날씨 예시, 고정부 앞) **[개정 · 2026-10-20 · 후보 마무리]** v"0.3.2"(후보 답은 같이 물은 것을 다 답한 뒤 마지막 문장만 [의도]에 맞는 고르기 — 탐색 OPEN_PLACE·대신 갈 곳 PICK_CANDIDATE, 여러 곳 영업시간·거리 제안·분류 읽기·칸 이름 금지, 병합 예시) — `$intent $facts $utterance $history $memory $trip $style` |
 | `DIALOGUE_MEMORY` | LIGHT | low | 2048(20줄×120자 ≈ 1,000~1,500 토큰 + JSON — 1024 는 잘림 위험; 상한은 잘림 방지용, 과금은 실 출력만) | `("llm_dialogue_memory", "deterministic_compress")` | `DialogueMemoryGate`(신규 파일) | `prompts/dialogue_memory.yaml` v"0.1.0" — `$previous_summary $recent_turns $trip` |
 | `DIALOGUE_PLAN` **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** | LIGHT | **none**(2026-10-20 실측 — low 대비 p50 1.61→1.36s·출력 60→32 토큰·도구 일치 90.0→95.0%; luna 는 minimal 거부·none 수용) | 1024(분류와 같은 근거 — JSON 한 줄 + 사고 토큰) | `("llm_dialogue_plan", "out_of_scope")` | `DialoguePlanGate`(신규 파일 — 노출 도구 closed-set) | `prompts/dialogue_plan.yaml` v"0.1.1"(값 출처에서 [여행 상황] 제외·region 은 말한 지역만·"둘 다"·지역 둘 예시) — `$tools $history(최근 4건) $trip $utterance`(`$memory` 없음) · 출력 `{"calls", "refused", "gap"}` · 재시도 미배정(턴당 1회) |
 
