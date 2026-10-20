@@ -1,8 +1,11 @@
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Image } from '@/shared/ui/Image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaInsetsContext,
+  SafeAreaView,
+} from 'react-native-safe-area-context';
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetView,
@@ -171,6 +174,8 @@ export function MustVisitTimeScreen({
   // 시트를 상시 마운트하면 닫힌 상태에서도 시·분 셀 84개가 트리에 남는다 — 열렸을 때만 만든다
   // (`TripWizardStep2Screen` 의 `fixSheet === undefined ? null : …` 과 같은 형태).
   const [startSheetOpen, setStartSheetOpen] = useState(false);
+  // TRIP-1507 · 시트가 안전 영역 밖에 있어 홈 인디케이터 여백을 직접 더한다(Provider 없으면 0 — MapSheetShell 과 같은 읽기).
+  const bottomInset = useContext(SafeAreaInsetsContext)?.bottom ?? 0;
 
   const locked = !form.fixed;
   const canSubmit = canSubmitMustVisitTime(form);
@@ -420,7 +425,8 @@ export function MustVisitTimeScreen({
         >
           <BottomSheetView
             testID="itinerary-mustvisit-time-start-sheet"
-            className="w-full pb-lg"
+            className="w-full"
+            style={{ paddingBottom: 16 + bottomInset }}
           >
             <View className="w-full flex-row items-center gap-sm px-lg pb-sm pt-xs">
               <Text className="flex-1 font-noto-bold text-section font-bold text-ink">

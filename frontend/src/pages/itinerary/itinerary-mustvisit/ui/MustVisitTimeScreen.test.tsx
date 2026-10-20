@@ -1,6 +1,8 @@
 import type { ComponentProps } from 'react';
+import { StyleSheet } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
 import { closestScrollView, stubScrollTo } from '@/test-support/sheetTree';
@@ -834,5 +836,45 @@ describe('🔴 TRIP-1437 · 방문 시각 지정 — 24시간 표기·휠 위치
     expect(
       screen.getByTestId('itinerary-mustvisit-time-toggle')
     ).not.toBeChecked();
+  });
+});
+
+// TRIP-1507 — 시트를 안전 영역 밖(루트 형제)으로 옮겼으니 홈 인디케이터 여백을 시트가 직접 가진다(16 + 하단 안전 영역).
+describe('TRIP-1507 · 시각 시트 하단 여백 = 16 + 하단 안전 영역', () => {
+  function paddingBottomWith(bottom: number | null): number {
+    const screenEl = (
+      <MustVisitTimeScreen
+        sourcePoiId="poi-a"
+        placeName="부산시립미술관"
+        region="부산진구"
+        imageUrl={null}
+        dayChips={DAY_CHIPS}
+        startOptions={START_OPTIONS}
+        startAnchor={START_ANCHOR}
+        form={FORM}
+      />
+    );
+    render(
+      bottom === null ? (
+        screenEl
+      ) : (
+        <SafeAreaInsetsContext.Provider
+          value={{ top: 47, bottom, left: 0, right: 0 }}
+        >
+          {screenEl}
+        </SafeAreaInsetsContext.Provider>
+      )
+    );
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-field'));
+    const style = screen.getByTestId('itinerary-mustvisit-time-start-sheet')
+      .props.style;
+    return StyleSheet.flatten(style).paddingBottom as number;
+  }
+
+  it('하단 안전 영역 34 → 50', () => {
+    expect(paddingBottomWith(34)).toBe(50);
+  });
+  it('Provider 없음(jest 기본) → 16 그대로', () => {
+    expect(paddingBottomWith(null)).toBe(16);
   });
 });
