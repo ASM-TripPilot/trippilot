@@ -1087,9 +1087,14 @@ def test_explore_night_theme_puts_night_view_and_nightlife_first() -> None:
     assert set(_names_of(facts)[:2]) == {"황령산 야경", "루프탑 바"}
 
 
-def test_explore_sightseeing_theme_without_a_category_leaves_out_restaurants() -> None:
-    names = _names_of(_explore({"region": "부산", "theme": "가볼 만한"})[0])
+@pytest.mark.parametrize("theme", ["가볼 만한", "실내 데이트", "놀거리"])
+def test_explore_sightseeing_theme_without_a_category_leaves_out_restaurants(theme: str) -> None:
+    names = _names_of(_explore({"region": "부산", "theme": theme})[0])
     assert names and not any("식당" in n for n in names) and "인기 카페" in names
+
+
+def test_explore_food_category_keeps_restaurants_even_with_a_sightseeing_word() -> None:
+    assert any("식당" in n for n in _names_of(_explore({"region": "부산", "category": "FOOD", "theme": "데이트"})[0]))
 
 
 def test_explore_category_filters_the_pool() -> None:
