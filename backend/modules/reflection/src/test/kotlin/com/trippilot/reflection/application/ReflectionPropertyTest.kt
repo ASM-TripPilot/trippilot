@@ -12,6 +12,7 @@ import com.trippilot.placedata.api.PoiSurfaceFacade
 import com.trippilot.placedata.api.PoiSurfaceView
 import com.trippilot.reflection.adapter.`in`.web.ReflectionResponse
 import com.trippilot.reflection.domain.Reflection
+import com.trippilot.reflection.domain.ReflectionCard
 import com.trippilot.reflection.domain.ReflectionRepository
 import com.trippilot.reflection.domain.ReflectionSource
 import com.trippilot.testsupport.declaredFieldNames
@@ -63,6 +64,8 @@ class ReflectionPropertyTest : StringSpec({
         override fun find(tripId: UUID, dayDate: LocalDate) = stored[tripId to dayDate]
         override fun exists(tripId: UUID, dayDate: LocalDate) = (tripId to dayDate) in stored
         override fun findForUpdate(tripId: UUID, dayDate: LocalDate) = find(tripId, dayDate).also { locks++ }
+        override fun findForRedraft(tripId: UUID, dayDate: LocalDate, draft: ReflectionCard, source: ReflectionSource) =
+            find(tripId, dayDate)?.copy(draftCard = draft, source = source).also { locks++ }
         override fun findByTrip(tripId: UUID) = stored.values.filter { it.tripId == tripId }.sortedBy { it.dayDate }
     }
 
@@ -610,5 +613,33 @@ class ReflectionPropertyTest : StringSpec({
 
         locksSeenByAgent shouldBe 0
         repo.locks shouldBe 1
+    }
+
+    /**
+     * 수정본을 못 읽는 하루(TRIP-1476)는 어차피 쓰지 못한다(409). 앱은 화면을 열 때마다 생성을 보내므로, 그 판정이 AI 호출 **뒤에** 나면
+     * 열 때마다 AI 호출 한 번을 버린다 — 판정이 먼저다. 초안만 못 읽는 하루는 고칠 수 있어 AI 를 부른다.
+     */
+    "수정본을 못 읽는 하루의 생성은 AI 를 부르지 않고 409 로 끝난다 — 초안만 못 읽으면 부른다" {
+        var calls = 0
+        val agent = object : com.trippilot.reflection.domain.port.ReflectionAgentPort {
+            override val enabled = true
+            override fun generate(input: com.trippilot.reflection.domain.port.ReflectionAgentInput) = null.also { calls++ }
+        }
+        fun serviceOver(repo: ReflectionRepository) = ReflectionService(
+            trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), agent, Sink(), testMetrics(), clock,
+        )
+        val editUnreadable = object : ReflectionRepository by Reflections() {
+            override fun find(tripId: UUID, dayDate: LocalDate): Reflection? =
+                throw com.trippilot.core.error.ConflictDetected(errorCode = com.trippilot.core.error.ErrorCode.REFLECTION_UNREADABLE)
+        }
+        shouldThrow<com.trippilot.core.error.ConflictDetected> { serviceOver(editUnreadable).generateDaily(acc, tripId, day) }
+        calls shouldBe 0
+
+        val draftUnreadable = object : ReflectionRepository by Reflections() {
+            override fun find(tripId: UUID, dayDate: LocalDate): Reflection? = throw com.trippilot.reflection.domain.UnreadableDraft("초안")
+        }
+        serviceOver(draftUnreadable).generateDaily(acc, tripId, day)
+        calls shouldBe 1
     }
 })

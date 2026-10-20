@@ -242,7 +242,8 @@ class TripSummaryPropertyTest : StringSpec({
 
         second shouldBe first
         repo.stored.size shouldBe 1
-        sink.published.size shouldBe 2 // 발행은 두 번 — 구독자 멱등이 담당한다(TRIP-539)
+        // 발행은 한 번 — 알림 구독자는 원천 이벤트 id 로만 거르는데 발행마다 id 가 새로 나서, 두 번 내면 알림도 두 번 간다(TRIP-1476 검수).
+        sink.published.size shouldBe 1
     }
 
     "PBT-U5-5 요약 수치에 소요시간 필드가 없다(INV-3)" {

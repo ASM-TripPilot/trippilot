@@ -10,7 +10,7 @@ import com.trippilot.core.event.DomainEvent
  * 어디에도 없었다.** 그래서 이 티켓이 `trip.ended_at` 을 함께 만들었다: 사건에는 순간이 필요하다.
  *
  * 소비자는 아웃박스 릴레이 경유로 받는다(at-least-once) — 여행 요약(U5)이 첫 소비자다.
- * 중복 배달은 `trip_summary` PK 가 걸러 낸다.
+ * 중복 배달은 소비자가 거른다 — 요약은 `trip_summary` PK 로 한 행만 남고, 그 알림(`ReflectionReady`)은 행을 처음 만들 때만 나간다.
  */
 data class TripEnded(
     override val aggregateId: String, // tripId

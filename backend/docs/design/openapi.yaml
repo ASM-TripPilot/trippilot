@@ -1578,6 +1578,7 @@ paths:
         '200': { description: 생성됨, content: { application/json: { schema: { $ref: '#/components/schemas/Reflection' } } } }
         '400': { description: 여행 기간 밖 날짜 }
         '404': { description: 여행 없음/타 계정 }
+        '409': { description: '`REFLECTION_UNREADABLE` — 그 하루에 저장된 수정본(`editedCard`)을 서버가 읽지 못해 덮지 않았다(행은 그대로다). 재시도로는 풀리지 않는다' }
     put:
       tags: [reflection]
       summary: 회고 카드 수정 — 초안은 남는다
@@ -1602,6 +1603,7 @@ paths:
         '200': { description: 수정됨, content: { application/json: { schema: { $ref: '#/components/schemas/Reflection' } } } }
         '400': { description: 입력 검증 실패 · 여행 기간 밖 날짜 }
         '404': { description: 여행 없음/타 계정 }
+        '409': { description: '`REFLECTION_UNREADABLE` — 위 POST 와 같다' }
   /trips/{tripId}/records:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
