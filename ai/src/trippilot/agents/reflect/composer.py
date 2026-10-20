@@ -62,6 +62,25 @@ _PLACEHOLDER = re.compile(r"\{([^{}]*)\}")  # 게이트 `_PLACEHOLDER` 와 같�
 _POI_TOKEN = re.compile(POI_PLACEHOLDER_PATTERN)  # 게이트와 같은 상수 — fullmatch(공백 불허)
 _DATE_RANGE = re.compile(r"\{start_date\}\s*~\s*\{end_date\}")
 _LAST_RESORT_TITLE = "여행의 기록"  # 지역까지 비어 폴백 제목도 못 채울 때 — BE 는 빈 제목 카드를 버린다
+# 토큰 바로 뒤 조사 — LLM 은 값을 못 본 채 조사를 붙인다("{poi:3.name}과" → "아쿠아플라넷 제주과",
+# 2026-10-20 실측). 뒤에 한글이 이어지면 조사가 아닐 수 있어("이었다") 건드리지 않는다.
+_TOKEN_JOSA = re.compile(r"(\{([^{}]*)\})(으로|은|는|이|가|을|를|과|와|로)(?![가-힣])")
+_JOSA_PAIRS = {  # 조사 → (받침 있을 때, 없을 때)
+    p: pair for pair in (("은", "는"), ("이", "가"), ("을", "를"), ("과", "와"), ("으로", "로"))
+    for p in pair
+}
+
+
+def fit_josa(word: str, particle: str) -> str:
+    """받침에 맞는 조사. 끝 글자가 한글 음절이 아니면(숫자·로마자) 쓴 그대로 둔다."""
+    last = word.rstrip(")]」』 ")[-1:]
+    if not "가" <= last <= "힣":
+        return particle
+    jong = (ord(last) - ord("가")) % 28
+    with_final, without_final = _JOSA_PAIRS[particle]
+    if with_final == "으로" and jong == 8:  # ㄹ 받침은 '로'
+        return without_final
+    return with_final if jong else without_final
 
 
 def rank_key(candidate: TemplateCandidate) -> tuple[int, int, int, int]:
@@ -288,6 +307,7 @@ def bind_placeholders(
     - **부제가 자리표시자뿐이면 그대로 둔다** — FE 가 그 꼴을 "서술 없음"으로 읽고 통계 문장을
       그린다(TRIP-1425). 서술이 있는 부제는 채우고, 못 채우면 그 꼴(폴백 부제)로 되돌린다
     - 시작=끝이면 `{start_date}~{end_date}` 를 날짜 하나로 접는다(FE 와 같은 규칙)
+    - 토큰 바로 뒤 조사를 채운 값의 받침에 맞춘다(`{poi:3.name}과` → "아쿠아플라넷 제주와")
     - 해시태그는 공백을 담을 수 없어 값의 공백을 지운다(`#해운대 해수욕장` → `#해운대해수욕장`)
     - 빈 제목·빈 캡션도 같은 길로 간다 — BE 는 빈 제목 카드를 통째로 버리고, FE 는 빈 캡션 장면을 버린다
     """
@@ -296,20 +316,24 @@ def bind_placeholders(
     same_day = request.start_date == request.end_date
     valid_refs = tuple(v.ref for v in request.visits)
 
+    def value_of(token: str) -> str:
+        poi_m = _POI_TOKEN.fullmatch(token)
+        if poi_m is not None:
+            i = int(poi_m.group(1))
+            return names[i] if i < len(names) else ""
+        return values.get(token, "")
+
     def bind(text: str, *, tag: bool = False) -> str | None:
         """다 채운 문구, 못 채운 토큰이 남거나 비면 None."""
         if same_day:
             text = _DATE_RANGE.sub("{start_date}", text)
+        text = _TOKEN_JOSA.sub(
+            lambda m: m.group(1) + fit_josa(value_of(m.group(2)), m.group(3)), text)
         missing = False
 
         def sub(m: re.Match) -> str:
             nonlocal missing
-            poi_m = _POI_TOKEN.fullmatch(m.group(1))
-            if poi_m is not None:
-                i = int(poi_m.group(1))
-                value = names[i] if i < len(names) else ""
-            else:
-                value = values.get(m.group(1), "")
+            value = value_of(m.group(1))
             if not value:
                 missing = True
                 return m.group(0)
