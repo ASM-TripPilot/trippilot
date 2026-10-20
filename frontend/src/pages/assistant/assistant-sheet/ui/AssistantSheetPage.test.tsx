@@ -91,9 +91,13 @@ afterEach(() => {
 describe('AssistantSheetPage (TRIP-1322)', () => {
   it('여행 문맥으로 열면 칩·인사·시작 quick reply 가 뜬다(BR-U8-03·04)', async () => {
     renderPage();
-    expect(
-      await screen.findByTestId('assistant-context-chip')
-    ).toHaveTextContent('부산 2박 3일 · 등록 숙소 서면');
+    // TRIP-1526 — 보이는 문구는 surface 별 고정 라벨, 서버 문구(BR-U8-03)는 접근성 라벨에 실린다.
+    const chip = await screen.findByTestId('assistant-context-chip');
+    expect(chip).toHaveTextContent('이 일정에 관해 질문하기');
+    expect(screen.queryByText('부산 2박 3일 · 등록 숙소 서면')).toBeNull();
+    expect(chip.props.accessibilityLabel).toContain(
+      '부산 2박 3일 · 등록 숙소 서면'
+    );
     expect(
       screen.getByTestId('assistant-quick-reply-qr-review')
     ).toBeOnTheScreen();
@@ -108,6 +112,10 @@ describe('AssistantSheetPage (TRIP-1322)', () => {
     expect(
       screen.getByTestId('assistant-next-action-OPEN_STAY_SEARCH')
     ).toBeOnTheScreen();
+    // TRIP-1526 — 여행 문맥이 없으면 칩이 능력 보기다(surface 보다 우선).
+    expect(screen.getByTestId('assistant-context-chip')).toHaveTextContent(
+      '내가 할 수 있는 것 보기'
+    );
   });
 
   it('열기 실패면 오류 + [다시 시도] — 누르면 다시 연다(BR-U8-07)', async () => {
@@ -319,6 +327,24 @@ describe('AssistantSheetPage · 제안 적용 (TRIP-1324)', () => {
 });
 
 describe('AssistantSheetPage · 이력 (TRIP-1325)', () => {
+  it('TRIP-1525 · 더보기(⋮) 토글은 접근성 라벨 "더보기" 이고 이력일 때 selected, 틀에는 제목이 없다', async () => {
+    renderPage();
+    await screen.findByTestId('assistant-context-chip');
+    const toggle = () => screen.getByTestId('assistant-history-toggle');
+    expect(toggle().props.accessibilityLabel).toBe('더보기');
+    expect(toggle().props.accessibilityState).toEqual(
+      expect.objectContaining({ selected: false })
+    );
+    expect(screen.queryByText('AI 도우미')).toBeNull();
+
+    fireEvent.press(toggle());
+
+    expect(await screen.findByTestId('assistant-history')).toBeOnTheScreen();
+    expect(toggle().props.accessibilityState).toEqual(
+      expect.objectContaining({ selected: true })
+    );
+  });
+
   it('이력 보기로 전환하면 적용 기록 행이 보이고, [대화 이어서]로 돌아온다', async () => {
     renderPage();
     await openAndApplyProposal();

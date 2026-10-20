@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
-import { useEffect, useState } from 'react';
-import { Keyboard, Pressable } from 'react-native';
+import { Pressable } from 'react-native';
 
+import { useKeyboardVisible } from '@/shared/lib/useKeyboardVisible';
 import { useRaisedToastBottom } from '@/shared/ui/Toast';
 import { SparkleGlyph } from './AssistantGlyphs';
 
@@ -41,19 +41,7 @@ export function AssistantFab({
   bottom,
   toastBottom,
 }: AssistantFabProps): ReactElement | null {
-  // TripRecordsView(TRIP-1280)와 같은 감지 — Android 는 Will* 이벤트가 오지 않아 Did* 도 함께 받는다.
-  const [keyboardShown, setKeyboardShown] = useState(false);
-  useEffect(() => {
-    const show = (): void => setKeyboardShown(true);
-    const hide = (): void => setKeyboardShown(false);
-    const subs = [
-      Keyboard.addListener('keyboardWillShow', show),
-      Keyboard.addListener('keyboardDidShow', show),
-      Keyboard.addListener('keyboardWillHide', hide),
-      Keyboard.addListener('keyboardDidHide', hide),
-    ];
-    return () => subs.forEach((sub) => sub.remove());
-  }, []);
+  const keyboardShown = useKeyboardVisible();
   // 빠진 동안은 토스트도 내린다 — 없는 FAB 위로 뜨지 않게.
   useRaisedToastBottom(keyboardShown ? undefined : toastBottom);
   if (keyboardShown) return null;

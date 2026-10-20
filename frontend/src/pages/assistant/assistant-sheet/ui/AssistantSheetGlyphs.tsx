@@ -19,12 +19,18 @@ export function CloseGlyph({ size = 22 }: { size?: number }): ReactElement {
   );
 }
 
-export function SendArrowGlyph({ size = 20 }: { size?: number }): ReactElement {
+export function SendArrowGlyph({
+  size = 20,
+  color = '#FFFFFF',
+}: {
+  size?: number;
+  color?: string;
+}): ReactElement {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
         d="M12 19V5M5.5 11.5L12 5l6.5 6.5"
-        stroke="#FFFFFF"
+        stroke={color}
         strokeWidth={2.2}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -151,6 +157,47 @@ export function ThumbGlyph({
         strokeWidth={1.7}
         strokeLinejoin="round"
         fill={fill}
+      />
+    </Svg>
+  );
+}
+
+/** 헤더 더보기(세로 ⋮) — Figma icon more-v. */
+export function MoreVGlyph({ size = 24 }: { size?: number }): ReactElement {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="#222222">
+      <Circle cx={12} cy={5} r={1.6} />
+      <Circle cx={12} cy={12} r={1.6} />
+      <Circle cx={12} cy={19} r={1.6} />
+    </Svg>
+  );
+}
+
+/** 컨텍스트 칩 아이콘(목록) — Figma icon list. */
+export function ListGlyph({ size = 16 }: { size?: number }): ReactElement {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <Path
+        d="M6 4H13.3333M6 8H13.3333M6 12H13.3333M2.66667 4H2.93333M2.66667 8H2.93333M2.66667 12H2.93333"
+        stroke="#222222"
+        strokeWidth={1.33333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** 세로 제안 칩 아이콘(답장) — Figma icon-reply. */
+export function ReplyGlyph({ size = 16 }: { size?: number }): ReactElement {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <Path
+        d="M2 12V9.33333C2 8.44928 2.35119 7.60143 2.97631 6.97631C3.60143 6.35119 4.44928 6 5.33333 6H13.3333M10.6667 3.33333L13.3333 6L10.6667 8.66667"
+        stroke="#6A6A6A"
+        strokeWidth={1.33333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );

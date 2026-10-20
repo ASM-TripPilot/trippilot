@@ -202,9 +202,12 @@ describe('도우미 시트 · 열기와 턴 (TRIP-1514 AC-2)', () => {
 
     renderPage();
 
-    expect(
-      await screen.findByTestId('assistant-context-chip')
-    ).toHaveTextContent('부산 2박 3일 · 등록 숙소 서면');
+    // TRIP-1526 — 서버가 준 contextChip 문구는 칩 접근성 라벨로 도달하고, 보이는 문구는 surface 라벨이다.
+    const chip = await screen.findByTestId('assistant-context-chip');
+    expect(chip).toHaveTextContent('이 일정에 관해 질문하기');
+    expect(chip.props.accessibilityLabel).toContain(
+      '부산 2박 3일 · 등록 숙소 서면'
+    );
     expect(
       screen.getByTestId('assistant-quick-reply-qr-review')
     ).toBeOnTheScreen();

@@ -2610,6 +2610,7 @@ function renderAssistantPreview(
   return (
     <AssistantSheetView
       state={options.state ?? (tripId === null ? 'NO_CONTEXT' : 'READY')}
+      surface={ASSISTANT_PREVIEW_CTX.surface}
       contextChip={transcript.session.contextChip}
       messages={raw.map((message) => displayMessage(message, ctx))}
       quickReplies={replies}
