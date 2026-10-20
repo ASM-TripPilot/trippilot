@@ -10,6 +10,7 @@ import {
 import type { RiskAffectedRow } from '../model/riskAffectedRow';
 import type { TriggerWatchlistRow } from '../model/triggerWatchlist';
 import { RiskWarningGlyph } from '@/features/planb/index.view';
+import type { TriggerSeverity } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-749 · i03 위험 상세 시트(Figma 4052:2427) — 순수 바텀시트(props + 콜백만).
@@ -19,10 +20,20 @@ import { RiskWarningGlyph } from '@/features/planb/index.view';
  * 사영 행 순서 그대로다. [대안 보기] → onPressAlternative, 스크림 탭·아래로 끌기 → onClose.
  *
  * ★ 바텀시트 목 통과형(repo-traps): 실제 딤 전면 커버·끌어 닫기는 jest 사각(6-b 실기).
+ *
+ * 상황 감지 FE-B(frontend-components §3.4) — eyebrow 는 심각도로 `위험 요소`(RISK·모름)/`주의`(CAUTION), 그 옆에 날짜어
+ * (`내일`·`M월 D일`, 만드는 것은 페이지), 제목 아래 `출처: {attribution}`(공공누리 1·3유형 — BR-SA-24, 없으면 줄이 없다).
+ * 배지는 받은 행만 그린다 — OFF 묶음은 사영이 이미 뺐다(§3.5). 주의 톤(색)은 프레임이 없어(G-SA-12) 위험과 같다.
  */
 
 export interface RiskDetailSheetProps {
   kind: WatchKind;
+  /** 없으면 위험으로 읽는다(옛 행·U10 DELAY — domain-entities §2). */
+  severity?: TriggerSeverity;
+  /** 표시 시점 날짜어 — 같은 날이면 null(요소 없음). */
+  dayLabel?: string | null;
+  /** 공공데이터 출처 표기 — 없으면 줄이 없다. */
+  attribution?: string | null;
   title: string;
   affected: RiskAffectedRow | null;
   watchRows: TriggerWatchlistRow[];
@@ -48,6 +59,9 @@ const SHEET_BACKGROUND = {
 
 export function RiskDetailSheet({
   kind,
+  severity,
+  dayLabel,
+  attribution,
   title,
   affected,
   watchRows,
@@ -88,8 +102,16 @@ export function RiskDetailSheet({
               testID="planb-risk-eyebrow"
               className="font-noto-bold text-caption font-bold text-primary-text"
             >
-              {`위험 요소 · ${WATCH_CATEGORY_LABEL[kind]}`}
+              {`${severity === 'CAUTION' ? '주의' : '위험 요소'} · ${WATCH_CATEGORY_LABEL[kind]}`}
             </Text>
+            {dayLabel ? (
+              <Text
+                testID="planb-risk-day-label"
+                className="font-noto-bold text-caption font-bold text-muted"
+              >
+                {dayLabel}
+              </Text>
+            ) : null}
           </View>
           <Text
             testID="planb-risk-title"
@@ -97,6 +119,14 @@ export function RiskDetailSheet({
           >
             {title}
           </Text>
+          {attribution ? (
+            <Text
+              testID="planb-risk-attribution"
+              className="font-noto text-caption text-muted"
+            >
+              {`출처: ${attribution}`}
+            </Text>
+          ) : null}
         </View>
 
         {affected === null ? null : (

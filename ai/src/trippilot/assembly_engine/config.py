@@ -112,6 +112,8 @@ END_NEAR_WEIGHT = 0.05
 
 # 대중교통 여행에서 걸어가는 구간의 절대 상한(도로 km) — 이 이상은 어떤 설정으로도 걷지 않는다(2026-10-19 사용자).
 WALK_HARD_MAX_KM = 1.1
+# 액티비티 취향 사용자의 도보 상한(도로 km) — 기본 700m 보다 조금 더 걷게 한다(2026-10-19 사용자). 1.1 미만.
+ACTIVE_WALK_MAX_KM = 1.0
 
 
 @dataclass(frozen=True, slots=True)

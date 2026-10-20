@@ -78,6 +78,9 @@ spec:
               value: http
             - name: TRIPPILOT_AI_REFLECTION_BASE_URL
               value: http://ai:8000
+            {{- /* 기회 카드(situation-awareness DEC-SA-8) — 고정 env 다(시크릿 아님). 주소는 위 AI_URL 을 읽는다. */}}
+            - name: AI_OPPORTUNITY_MODE
+              value: http
             - name: STAY_CONTENT_MODE
               value: db
             - name: SERVER_SHUTDOWN

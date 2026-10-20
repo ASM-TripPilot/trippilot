@@ -511,6 +511,24 @@ def test_시도_약칭만_정식_이름으로_편다() -> None:
     assert M.expand_sido_abbrev(props, abbrev) == 0                         # 멱등
 
 
+def test_실제_카탈로그의_약칭_표는_한_키가_한_시도만_가리키고_정식_이름과_겹치지_않는다() -> None:
+    """표는 setdefault 로 만들어 키 충돌이 조용히 "먼저 온 쪽"으로 처리되고, 정식 이름과 같은 키는 조용히 빠진다
+    (`pop`). 카탈로그가 바뀌어(통합시 신설 등) 한 시도의 약칭이 다른 시도의 키·정식 이름과 같아지면 엉뚱한 시도로
+    펴지거나 펴지지 않는다 — 실제 카탈로그에서 막는다. 특정 시도 이름을 박지 않는다(카탈로그 변경에도 견디게)."""
+    from collect_localdata import _MIGRATION, load_regions
+    from trippilot.poi_curation.sourcing.overture_address import sido_abbreviations
+    regions = load_regions(_MIGRATION / "R__seed_region_catalog.sql")
+    sido = {n for _, n, _, lvl, _ in regions if lvl == "SIDO"}
+    claims: dict[str, set[str]] = {}
+    for name in sido:   # 각 시도가 만들 수 있는 키를 따로 만들어 겹치는지 본다
+        for key in sido_abbreviations([r for r in regions if r[1] == name]):
+            claims.setdefault(key, set()).add(name)
+    assert {k: v for k, v in claims.items() if len(v) > 1} == {}
+    assert set(claims) & sido == set()
+    abbrev = sido_abbreviations(regions)
+    assert all(abbrev[n[:-1]] == n for n in sido if n[:-1] not in sido)   # 끝 글자 떼기는 모든 시도에서 제자리로 편다
+
+
 def test_공유본의_모든_주소는_백엔드가_시도를_정한다() -> None:
     """**백엔드 실문서 IT(`regionUnresolved == 0`)의 거울.** 주소 첫 낱말이 카탈로그 시도 이름이 아니면
     백엔드가 지역 코드를 못 붙여 커버리지 집계에서 빠진다 — #1352 가 약칭 3건으로 백엔드 CI 를 깼다.

@@ -201,6 +201,9 @@ class GenerationOutcome:
     # 기본값 없음(위 필드들과 같은 이유).
     repair_hints: RepairHints | None
     error: str | None = None
+    # 이 요청의 도보 상한(도로 km) — 액티비티 취향이면 `ACTIVE_WALK_MAX_KM`, 아니면 None(설정 기본).
+    # 조립 뒤 화면 거리가 같은 상한으로 이름표를 붙인다(`travel.WalkFirst`).
+    walk_max_km: float | None = None
 
     def __post_init__(self) -> None:
         failed = self.status is GenerationStatus.FAILED

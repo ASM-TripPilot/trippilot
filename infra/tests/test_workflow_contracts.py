@@ -113,6 +113,25 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertNotIn('LLM_FEATURE_MODELS_INPUT', sync['run'])
         self.assertNotIn('inputs.', sync['run'])  # 입력을 셸에 직접 끼우지 않는다(주입 방지)
 
+    def test_runtime_switches_reach_only_the_secret_sync_step(self):
+        """상황 감지 스위치(KEY=VALUE;…)는 비어 있으면 아무것도 안 한다 — 기본값 배포가 켜고 끄지 않는다. 입력은 그 스텝 env 로만 받고
+        (잡 env·GITHUB_ENV 를 거치지 않는다) 비어 있지 않을 때만 플래그로 넘긴다. 형식·허용 키·값 검증은 sync-secrets 한 곳이다."""
+        value = workflow('aws-deploy.yml')
+        switches = value['on']['workflow_dispatch']['inputs']['runtime_switches']
+        self.assertEqual((switches['type'], switches['required'], switches['default']), ('string', 'false', ''))
+        for word in ('KEY=VALUE;', 'PLANB_SITUATION_SWEEP_ACCOUNT_IDS', 'HOLIDAY_CLOSURE_MODE', 'KEY='):
+            self.assertIn(word, switches['description'])
+        job = value['jobs']['deploy']
+        sync = next(s for s in job['steps'] if s.get('name') == 'Synchronize runtime secrets and render nonsecret Helm values')
+        self.assertEqual(sync['env']['RUNTIME_SWITCHES_INPUT'], '${{ inputs.runtime_switches }}')
+        self.assertNotIn('RUNTIME_SWITCHES_INPUT', job['env'])
+        self.assertIn('if [ -n "$RUNTIME_SWITCHES_INPUT" ]; then switch_args+=(--runtime-switches "$RUNTIME_SWITCHES_INPUT"); fi',
+                      sync['run'])
+        self.assertIn('"${switch_args[@]}"', sync['run'].split('runtime.py render-values')[0])  # sync-secrets 호출에 실린다
+        self.assertNotIn('inputs.', sync['run'])
+        others = [s for s in job['steps'] if s is not sync]
+        self.assertFalse(any('runtime_switches' in str(s) or 'RUNTIME_SWITCHES' in str(s) for s in others))
+
     def test_deploy_target_drives_namespace_and_never_hardcodes_production(self):
         """개발 대상 런이 운영 네임스페이스를 건드리면 운영 파드 시크릿이 개발 값으로 덮인다(#1258 검수)."""
         value = workflow('aws-deploy.yml')

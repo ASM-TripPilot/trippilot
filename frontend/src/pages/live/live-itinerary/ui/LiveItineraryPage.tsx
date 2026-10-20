@@ -22,11 +22,13 @@ import {
 import { MemoSheet } from './MemoSheet';
 import { deriveVisitProgress } from '@/entities/itinerary-slot';
 import { TriggerChip } from './TriggerChip';
+import { OpportunityCard } from './OpportunityCard';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { foldScope } from '../model/foldScope';
+import { hubPillCopy } from '../model/hubPillCopy';
+import { useHubOpportunities } from '../model/useHubOpportunities';
 import { riskAffectedRow } from '../model/riskAffectedRow';
-import { triggerLabel } from '@/features/planb';
-import { triggerPillCopy } from '@/features/planb';
+import { triggerDayLabel, triggerLabel } from '@/features/planb';
 import { triggerWatchlist } from '../model/triggerWatchlist';
 import { doneVisitCheckIdByPoiId } from '../model/visitedLabels';
 import { arrivedLabel, visitedLabelByPoiId } from '@/entities/itinerary-slot';
@@ -214,6 +216,15 @@ export function LiveItineraryPage({
     query: { enabled: state.kind === 'active' && liveDate !== '' },
   });
   const visitCheck = useVisitCheck({ tripId, day: liveDate });
+  // 상황 감지 FE-C — 보는 날짜의 기회 1장(판정은 model). 빈 목록·실패·대기면 카드만 없다.
+  const opportunity = useHubOpportunities({
+    tripId,
+    date: liveDate,
+    today,
+    enabled: state.kind === 'active',
+    triggers: triggers.data?.triggers,
+    itinerary: query.data,
+  });
 
   // 방문 기록 → 진행 상태 도출(★도달성 — 빈 인자면 전 슬롯 upcoming 이라 active 카드가 프로덕션에 안 뜬다).
   // 도출·판정은 여기 1회. TRIP-1117 — 메모 세션 캐시를 관람 중 방문 id 로 읽어야 해서(훅은 조기 반환 위에서만)
@@ -639,15 +650,10 @@ export function LiveItineraryPage({
     );
   };
 
-  // 알약 카피의 대상 = 이 날 슬롯 중 트리거 slotKey 와 같은 것(없으면 라벨만, D2 폴백).
-  const pillSlot = chipTrigger
-    ? activeSlots.find(
-        (slot) => buildSlotKey(activeDate, slot.poiId) === chipTrigger.slotKey
-      )
-    : undefined;
+  // 알약 카피 = 트리거 자기 날짜 슬롯 + 변형 라벨 + 날짜어(상황 감지 FE-B — 판정은 hubPillCopy).
   const triggerChip = chipTrigger ? (
     <TriggerChip
-      label={triggerPillCopy(chipTrigger.kind, pillSlot)}
+      label={hubPillCopy(chipTrigger, itinerary.days, today)}
       onPressAlternative={() => setRiskTriggerId(chipTrigger.triggerId)}
     />
   ) : undefined;
@@ -657,7 +663,7 @@ export function LiveItineraryPage({
     const match = displayTriggers.find(
       (trigger) => trigger.slotKey === slotKey
     );
-    return match ? triggerLabel(match.kind).label : null;
+    return match ? triggerLabel(match.kind, match.variant).label : null;
   };
 
   // 시트는 허브의 형제로 조건부 마운트한다 — 딤이 FAB·알약까지 전면을 덮고, 닫힘 = 트리에서 사라짐.
@@ -668,9 +674,12 @@ export function LiveItineraryPage({
     riskTrigger && riskTrigger.kind !== 'MANUAL' ? (
       <RiskDetailSheet
         kind={riskTrigger.kind}
+        severity={riskTrigger.severity}
+        dayLabel={triggerDayLabel(riskTrigger.affectedDate, today)}
+        attribution={riskTrigger.attribution}
         title={riskTrigger.reason}
         affected={riskAffectedRow(itinerary.days, riskTrigger.slotKey)}
-        watchRows={triggerWatchlist(displayTriggers).rows}
+        watchRows={triggerWatchlist(displayTriggers, triggers.data?.watch).rows}
         onPressAlternative={() => {
           // i04 는 허브 위에 겹쳐 뜬다(D1) — 시트를 닫고 가야 뒤에 비치지 않는다.
           setRiskTriggerId(null);
@@ -743,6 +752,15 @@ export function LiveItineraryPage({
           />
         }
         triggerChip={triggerChip}
+        opportunityCard={
+          opportunity ? (
+            <OpportunityCard
+              item={opportunity.item}
+              onPressReplan={() => router.push(opportunity.replanHref)}
+              onDismiss={opportunity.dismiss}
+            />
+          ) : undefined
+        }
         triggerPillKey={chipTrigger?.triggerId}
         slotBadgeLabel={slotBadgeLabel}
         onPressSlotName={(poiId) =>

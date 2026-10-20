@@ -2,6 +2,7 @@ package com.trippilot.app.observability
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.shouldBe
 import java.io.File
 
@@ -89,6 +90,19 @@ class RuntimeModeSummaryTest : StringSpec({
             .map { (path, mine) -> "$path: 요약=$mine 선언=${declaredDefault(path)}" }
 
         mismatched shouldContainExactly emptyList()
+    }
+
+    /**
+     * **스위치가 빠짐없이 있는가** — 위 두 검사는 이 줄이 이미 든 항목만 본다. 그래서 항목을 지우거나 새 스위치를
+     * 더하지 않으면 그 스위치가 줄에서 조용히 사라지고 전부 초록이다(기회 카드 리뷰 실측 — 도우미 해석 스위치는
+     * 그렇게 빠져 있었다). yml 의 `trippilot.**.mode` 는 전부 이 줄에 있어야 한다.
+     */
+    "yml 의 모드 스위치(trippilot.**.mode)는 전부 요약 줄에 있다" {
+        val yml = flattenYml(repoFile("backend/app/src/main/resources/application.yml").readText())
+        val modes = yml.keys.filter { it.startsWith("trippilot.") && it.endsWith(".mode") }
+
+        modes.shouldNotBeEmpty() // yml 을 못 읽어 빈 목록이 되면 아래가 저절로 초록이다
+        modes.filterNot { it in RuntimeModeSummary.switchPaths() } shouldContainExactly emptyList()
     }
 
     /**

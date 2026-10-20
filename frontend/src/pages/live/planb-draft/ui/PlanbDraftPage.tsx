@@ -15,6 +15,13 @@ import { buildStartReplanRequest } from '@/features/request-replan';
 import { useStartReplan } from '@/features/request-replan';
 import { resolveReplanState } from '../model/replanState';
 import { useApplyReplan } from '@/features/apply-replan';
+import {
+  includeMissingText,
+  isIncludeMissing,
+  isStaleApplyError,
+  staleRetryRequest,
+} from '../model/draftNotice';
+import { useIncludedPlaceName } from '../model/useIncludedPlaceName';
 import { useReplanDiff } from '../model/useReplanDiff';
 import { useReplanSession } from '../model/useReplanSession';
 import type { ReplanDiff } from '@/shared/api/index.schemas';
@@ -66,6 +73,12 @@ import { ReplanNoticeFace } from './ReplanNoticeFace';
  *  - [나가기](오류 얼굴·이탈 확인 공통 `leave()`)는 `leavingRef` 를 세운 뒤 뒤가 있으면 `router.back()`, 없으면
  *    (딥링크 착지) 허브로 replace — 그 back 이 다시 콜백으로 오면 ref 를 보고 통과시킨다.
  *    ref 라서 같은 틱 연타도 한 번만 나간다(state 는 다음 렌더 전까지 옛 값이다).
+ *
+ * 상황 감지 FE-B(frontend-components §3.6) — 판정은 `model/draftNotice`, 여기는 배선만:
+ *  - 세션 `initiatedBy = SYSTEM` 이고 초안 얼굴이면 머리에 `미리 준비한 대안` 표식(대안 없음·실패 얼굴엔 달지 않는다).
+ *  - 적용 409 `EXPIRED`·`STALE` → 낡음 얼굴(일반 실패로 접지 않는다) + [새 대안 보기] = 같은 입력으로 새 세션 → i05 replace.
+ *    재누름 잠금은 `staleRetryRef`(실패에서만 푼다 — 새 POST 는 방금 연 세션을 닫는다, INV-U4-06).
+ *  - `includePoiId`(기회 카드에서 넣으려던 장소)가 초안 after 에 없으면 그 이름(`useIncludedPlaceName`)으로 미포함 안내.
  */
 
 // 라이브 대안 없음 부제 — Figma 앞 절("17시 이후 …")은 데이터별 사유라 서버가 주기 전엔 쓰지 않는다.
@@ -141,11 +154,14 @@ function draftCenter(pins: MapPin[] | undefined): MapCenter | undefined {
 export interface PlanbDraftPageProps {
   tripId: string;
   sessionId: string;
+  /** 상황 감지 FE-B — 넣으려던 POI(기회 카드 → i04 → i05 가 라우트로 잇는다). 초안에 없으면 미포함 안내. */
+  includePoiId?: string;
 }
 
 export function PlanbDraftPage({
   tripId,
   sessionId,
+  includePoiId,
 }: PlanbDraftPageProps): ReactElement | null {
   const router = useRouter();
   const session = useReplanSession(tripId, sessionId);
@@ -164,6 +180,15 @@ export function PlanbDraftPage({
   const diff = useReplanDiff(tripId, sessionId, {
     enabled: state?.kind === 'draft',
   });
+  // 미포함 안내의 장소 이름 — 훅이라 조기 반환 위에서, 초안에 그 POI 가 없을 때만 묻는다.
+  const readyAfter = diff.data?.ready === true ? diff.data.after : undefined;
+  const missingPoiId =
+    readyAfter !== undefined && isIncludeMissing(includePoiId, readyAfter)
+      ? (includePoiId ?? null)
+      : null;
+  const includedName = useIncludedPlaceName(missingPoiId);
+  // [새 대안 보기] 재누름 잠금 — 같은 틱 두 번째 누름은 옛 state 를 본다(ref).
+  const staleRetryRef = useRef(false);
 
   const isDraft = state?.kind === 'draft';
   const busy = apply.isPending || startReplan.isPending;
@@ -225,6 +250,30 @@ export function PlanbDraftPage({
   const sessionDate = data.targetDate ?? readFromInstant(data.fromInstant).date;
   const draft = diff.data?.ready === true ? diff.data : undefined;
   const sheet = draft ? buildDraftSheet(draft) : undefined;
+  const stale = isStaleApplyError(apply.error);
+  const today = seoulDate(now);
+  // 지난 날의 낡은 초안(BR-SA-19 ①)은 같은 날로 다시 짤 수 없다 — 서버가 늘 409(지난 날짜는 다시 짤 수 없다)라
+  // [새 대안 보기]를 두지 않는다(누를 때마다 "잠시 후 다시 시도"로 실패하는 버튼). 낡음 문구는 그대로다.
+  const canRetryStale = !data.targetDate || data.targetDate >= today;
+  const retryStale = () => {
+    if (staleRetryRef.current) return;
+    staleRetryRef.current = true;
+    startReplan.mutate(
+      { tripId, data: staleRetryRequest(data, seoulDate(new Date())) },
+      {
+        onSuccess: (next) =>
+          router.replace({
+            pathname: '/trips/[tripId]/planb/solving',
+            params: includePoiId
+              ? { tripId, sessionId: next.sessionId, includePoiId }
+              : { tripId, sessionId: next.sessionId },
+          }),
+        onError: () => {
+          staleRetryRef.current = false;
+        },
+      }
+    );
+  };
   const draftDate = draft?.date ?? undefined;
   const dayIndex =
     draftDate === undefined
@@ -296,7 +345,19 @@ export function PlanbDraftPage({
             : undefined
         }
         applyPending={apply.isPending}
-        applyFailed={apply.isError}
+        // 낡음(409 EXPIRED·STALE)은 일반 실패로 접지 않는다 — 낡음 얼굴이 대신한다.
+        applyFailed={apply.isError && !stale}
+        // 초안 얼굴에만 — 대안 없음·실패 얼굴에 '미리 준비한 대안'을 달면 없는 대안을 말한다(BR-SA-23 은 DRAFT 행에만 단다).
+        prepared={data.initiatedBy === 'SYSTEM' && state.kind === 'draft'}
+        stale={stale}
+        onRetryStale={canRetryStale ? retryStale : undefined}
+        staleRetryPending={startReplan.isPending}
+        staleRetryFailed={startReplan.isError}
+        includeMissingText={
+          missingPoiId !== null && includedName !== undefined
+            ? includeMissingText(includedName)
+            : null
+        }
         onBack={() => {
           if (busy) return;
           if (isDraft) setLeaveOpen(true);

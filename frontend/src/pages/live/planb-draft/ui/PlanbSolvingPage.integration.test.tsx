@@ -1784,3 +1784,31 @@ describe('🔴 TRIP-1419 · AC-2·AC-4 — 완료 행 시각은 서버 실제 �
     );
   });
 });
+
+/**
+ * 상황 감지 FE-B · frontend-components §3.6 — 넣으려던 POI(`includePoiId`)는 서버가 아니라 라우트로 잇는다.
+ * i05 는 결과가 나오면 i06 으로 갈아 끼울 때 그 값을 그대로 싣는다(없으면 종전 params — 위 P9·P10 이 본다).
+ */
+describe('🔴 상황 감지 FE-B · includePoiId 를 i06 으로 잇는다 (§3.6)', () => {
+  it('F1 includePoiId 가 있으면 i06 replace params 에 그대로 실린다', () => {
+    mockStatus = 'DRAFT';
+
+    render(
+      <PlanbSolvingPage
+        tripId={TRIP_ID}
+        sessionId={SESSION_ID}
+        includePoiId="poi-sky"
+      />
+    );
+
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/planb/draft',
+      params: {
+        tripId: TRIP_ID,
+        sessionId: SESSION_ID,
+        includePoiId: 'poi-sky',
+      },
+    });
+  });
+});
