@@ -151,7 +151,7 @@ def test_effort_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         LlmFeature.DIALOGUE_INTENT: "none",
         LlmFeature.DIALOGUE_ANSWER: "none",
         LlmFeature.DIALOGUE_MEMORY: "low",
-        LlmFeature.DIALOGUE_PLAN: "none",  # 같은 9s 안의 2‴ 계획(≤3.0s) — 사고 없이 더 빠르고 품질이 같거나 낫다(2026-10-20 실측)
+        LlmFeature.DIALOGUE_PLAN: "none",  # 같은 9s 안의 2‴ 계획(≤3.5s) — 사고 없이 더 빠르고 품질이 같거나 낫다(2026-10-20 실측)
         LlmFeature.DIALOGUE_SQL: "none",  # 팬아웃 안(≤3s)의 짧은 변환
     }.get(feature)
     assert [r.effort for r in llm.requests] == [expected]

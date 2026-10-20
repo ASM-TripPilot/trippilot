@@ -94,7 +94,7 @@ def test_empty_inputs_get_the_shared_none_markers() -> None:
 def test_prompt_has_no_memory_section_and_renders_deterministically() -> None:
     registry = PromptRegistry(_PROMPTS)
     prompt, ref = registry.render(_FEAT, _vars())
-    assert (ref.prompt_id, ref.version, ref.feature) == ("prompts/dialogue_plan.yaml", "0.1.1", "DIALOGUE_PLAN")
+    assert (ref.prompt_id, ref.version, ref.feature) == ("prompts/dialogue_plan.yaml", "0.1.2", "DIALOGUE_PLAN")
     assert "[기억]" not in prompt and "$" not in prompt
     assert prompt == registry.render(_FEAT, _vars())[0]
     assert set(re.findall(r"\$(\w+)", _template())) == {"tools", "history", "trip", "utterance"}
@@ -125,7 +125,7 @@ _EXAMPLE = re.compile(r'^- (?:최근 대화 "(?P<history>[^"]*)" · )?발화 "(?
 def _examples() -> list[re.Match]:
     prompt, _ = PromptRegistry(_PROMPTS).render(_FEAT, _vars())
     found = list(_EXAMPLE.finditer(prompt))
-    assert len(found) == 6
+    assert len(found) == 7  # 0.1.2 — 일정 밖 장소 입장료 예시 1건
     return found
 
 
@@ -137,7 +137,7 @@ def test_every_example_answer_passes_the_gate_without_a_drop() -> None:
         assert out.error is None and out.drop_event is None, m["utterance"]
         draft = out.value
         kinds.append("refused" if draft.refused else ("tools" if draft.calls else "no_tool"))
-    assert kinds.count("tools") == 4 and "refused" in kinds and "no_tool" in kinds  # 세 갈래를 다 보여 준다
+    assert kinds.count("tools") == 5 and "refused" in kinds and "no_tool" in kinds  # 세 갈래를 다 보여 준다
 
 
 def _strings(node: object):
