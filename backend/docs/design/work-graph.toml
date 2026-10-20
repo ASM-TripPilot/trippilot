@@ -47,6 +47,7 @@
 # 체크가 하나도 안 달린다. 위 바퀴들처럼 PR 을 쌓으면 대부분이 여기 해당한다. 수동으로 태운다:
 # `gh workflow run backend-ci.yml --ref <branch>`. 이걸 모르면 "체크 없음"을 통과로 읽는다.
 #
+# 갱신: 2026-10-20 · 기술 강화 루프 노드 추가(파일 말미 §기술 강화 루프 · TRIP-1480) — 새 간선 둘은 모두 COV-RATCHET 으로 들어간다
 # 갱신: 2026-10-13 · 출시·4차 승격(#1082) 반영, 끝난 노드 셋 닫음, `AI-NL-EDIT` 접음, **U8·U10 노드 추가**(설계는 10-12 에 끝났는데 노드가 없었다)
 # 갱신: 2026-10-12 · 루프 다섯 노드 머지 완료(#1040~#1044) → done
 # 갱신: 2026-10-12 · `SOCIAL-TOKEN-APP`(TRIP-1317) 추가 — TRIP-1316 잔여(이메일 선점)를 노드로 뗌
@@ -4431,16 +4432,33 @@ verified = false
 reason = "M-U10-a 2단계 CHECK 는 1단계가 운영에 배포되고 옛 파드가 사라진 뒤에만 안전하다."
 
 # ── 기술 강화 루프(2026-10-20 승인 계획안) ─────────────────────────────────────────────
-# 새 기능 없이 기존 기능에 붙인다. 순서는 의존보다 공유 파일이 정한다(openapi.yaml · docker-compose.yml).
+# 새 기능 없이 기존 기능에 붙인다. 순서는 의존보다 공유 파일이 정한다(openapi.yaml · docker-compose.yml ·
+# app/build.gradle.kts · libs.versions.toml). PR 이 이미 있는 노드의 touches 는 **실제 diff**(2026-10-20 origin 기준)다.
 
 [[nodes]]
 id = "COV-GATE"
 ticket = "TRIP-1465"
 title = "[Infra] JaCoCo 커버리지 합산 + 전체 하한·모듈 바닥 게이트"
 status = "todo"
-touches = ["backend/build.gradle.kts", "backend/app/build.gradle.kts", "backend/gradle/libs.versions.toml", "backend/scripts/coverage_gate.py", ".github/workflows/backend-ci.yml"]
+touches = [
+  "backend/build.gradle.kts",
+  "backend/app/build.gradle.kts",
+  "backend/gradle/libs.versions.toml",
+  "backend/scripts/coverage_gate.py",
+  "backend/scripts/test_coverage_gate.py",
+  "backend/common/test-support",
+  "backend/.claude/skills/backend-verify-gates/SKILL.md",
+  "backend/modules/archive/src/test",
+  "backend/modules/itinerary-recalculation/src/test",
+  "backend/modules/reflection/src/test",
+  ".github/workflows/backend-ci.yml",
+]
 note = """
-PR #1428 — 리뷰 대기. 기준선 라인 95.4 · 분기 84.8, 하한 94/83, 모듈 바닥 70/40.
+PR #1428 — 리뷰 대기. 하한 94/83, 모듈 바닥 70/40.
+기준선은 **#1428 브랜치에서** 쟀다 — develop 에는 JaCoCo 가 없다. 2026-10-19 라인 95.4 · 분기 84.8,
+develop(#1431 포함) 병합 뒤 2026-10-20 로컬 재측정 라인 95.5 · 분기 85.3. 분기 분모는 8,084.
+모듈 test 디렉토리 셋은 하한을 넘기려고 손댄 기존 테스트다 — reflection/src/test 는 LOOP-COVERAGE 와
+디렉토리만 같고 파일은 다르다(디렉토리 단위로 적어 충돌을 보수적으로 잡는다).
 """
 
 [[nodes]]
@@ -4448,7 +4466,16 @@ id = "FIELD-GATE"
 ticket = "TRIP-1466"
 title = "[Infra] OpenAPI 필드 계약 게이트 + 계약 불일치 정정 · deviceId 로그인 500"
 status = "todo"
-touches = ["backend/docs/design/openapi.yaml", "backend/app/src/test/kotlin/com/trippilot/app/web", "backend/modules/auth", "docs/conventions/anti-patterns.md"]
+touches = [
+  "backend/docs/design/openapi.yaml",
+  "backend/app/src/test/kotlin/com/trippilot/app/web/OpenApiContractIT.kt",
+  "backend/app/src/test/kotlin/com/trippilot/app/web/OpenApiSpec.kt",
+  "backend/app/src/test/kotlin/com/trippilot/app/web/SocialLoginControllerIT.kt",
+  "backend/app/src/test/kotlin/com/trippilot/app/web/TokenRefreshControllerIT.kt",
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/adapter/in/web",
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/domain/RefreshSession.kt",
+  "docs/conventions/anti-patterns.md",
+]
 note = """
 PR #1429 — 리뷰 대기.
 """
@@ -4458,10 +4485,25 @@ id = "POI-REGION-PREFIX"
 ticket = "TRIP-1471"
 title = "[Bug] 잘린 시도명 판정 — #1427 수집본으로 develop CI 가 깨진 것"
 status = "done"
-touches = ["ai/src/trippilot/poi_curation/sourcing/overture_address.py", "ai/tests/scripts/test_merge_pois_docs.py", "ai/data/collected_pois.json"]
+touches = [
+  "ai/src/trippilot/poi_curation/sourcing/overture_address.py",
+  "ai/tests/poi_curation/test_overture_address.py",
+  "ai/tests/scripts/test_merge_pois_docs.py",
+  "ai/data/collected_pois.json",
+]
 note = """
 PR #1431 머지(2026-10-20). 백엔드 판정은 그대로 두고 AI 병합 단계의 약칭 표에서 편다 — backend diff 0.
-수집 PR 앞 게이트는 TRIP-1475 로 뺐다.
+잔여 둘: 거울 테스트를 백엔드 판정만큼 조이는 것은 POI-MIRROR-STRICT(#1446)가, 수집 PR 앞 게이트는 TRIP-1475 가 잇는다.
+"""
+
+[[nodes]]
+id = "POI-MIRROR-STRICT"
+ticket = "TRIP-1471"
+title = "[Test] 공유본 거울 테스트를 백엔드 시도 판정과 같이 자른다(빈 주소·비ASCII 공백)"
+status = "todo"
+touches = ["ai/tests/scripts/test_merge_pois_docs.py"]
+note = """
+PR #1446 — 리뷰 대기. #1431 재검수 잔여. 테스트만 바꾼다(공유본에 해당 행 0건이라 결과는 그대로 초록).
 """
 
 [[nodes]]
@@ -4469,14 +4511,33 @@ id = "LOOP-BFF"
 ticket = "TRIP-1467"
 title = "[BE] 라이브 일정 화면 BFF — 호출 5→1, 섹션 단위 부분 실패"
 status = "todo"
-touches = ["backend/docs/design/openapi.yaml", "backend/app", "backend/modules/trip/src/main/kotlin/com/trippilot/trip/api", "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/api", "backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/api", "backend/modules/archive/src/main/kotlin/com/trippilot/archive/api", "backend/modules/auth/src/main/kotlin/com/trippilot/auth/api"]
+touches = [
+  "backend/docs/design/openapi.yaml",
+  "backend/app/src/main/kotlin/com/trippilot/app/web",
+  "backend/app/src/test/kotlin/com/trippilot/app/web",
+  "backend/app/src/test/kotlin/com/trippilot/app/architecture/ArchitectureRulesTest.kt",
+  "backend/app/build.gradle.kts",
+  "backend/gradle/libs.versions.toml",
+  "backend/modules/trip/src/main/kotlin/com/trippilot/trip/api",
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/api",
+  "backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/api",
+  "backend/modules/archive/src/main/kotlin/com/trippilot/archive/api",
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/api",
+]
+note = """
+착수 전 — touches 는 티켓 원문(TRIP-1467)에서 뽑은 예상이다: 새 컨트롤러(app web)와 IT, "BFF 는 api 만
+부름(ArchUnit 강제)" 의 규칙 테스트, 쿼리 수 측정용 datasource-proxy(테스트 전용 의존 → 버전 카탈로그 ·
+app/build.gradle.kts), 모듈 다섯 곳 화면용 읽기 퍼사드(여행·일정·트리거·그날 방문·위치 동의 — 위치 동의는 auth 소유).
+**FIELD-GATE 를 선행으로 두지 않는다** — 티켓 원문에 선행 근거가 없다. 다만 FIELD-GATE 가 먼저 머지되면
+BFF 의 새 응답 스키마도 필드 계약 검사를 받으므로 그 순서가 낫다. openapi.yaml 을 같이 만지는 것은 자원 배타다.
+"""
 
 [[nodes]]
 id = "LOOP-AIRFLOW"
 ticket = "TRIP-1468"
 title = "[Infra] Airflow 수집 파이프라인(로컬) — 사본→검증→게시"
 status = "todo"
-touches = ["batch", "docker-compose.yml", ".github/workflows/batch-ci.yml", "docs/conventions/anti-patterns.md"]
+touches = ["batch", "docker-compose.yml", ".github/workflows/batch-ci.yml", ".gitignore", "docs/conventions/anti-patterns.md"]
 note = """
 PR #1432. 실 수집 모드는 넣지 않았다(키 없이 시험 못 함). 신선도는 event_collect 의 "그날 유효 건수" 검사로 합쳤다.
 """
@@ -4486,7 +4547,21 @@ id = "LOOP-KAFKA"
 ticket = "TRIP-1469"
 title = "[BE] 아웃박스 배달 경로 Kafka 선택지(로컬) — 폴링 대비 지연 측정"
 status = "todo"
-touches = ["docker-compose.yml", ".env.example", "backend/app/src/main/kotlin/com/trippilot/app/event", "backend/app/src/main/resources/application.yml", "backend/gradle/libs.versions.toml", "backend/app/build.gradle.kts"]
+touches = [
+  "docker-compose.yml",
+  ".env.example",
+  "backend/app/src/main/kotlin/com/trippilot/app/event/KafkaOutbox.kt",
+  "backend/app/src/main/kotlin/com/trippilot/app/event/OutboxRelay.kt",
+  "backend/app/src/main/resources/application.yml",
+  "backend/app/src/test/kotlin/com/trippilot/app/KafkaOutboxIT.kt",
+  "backend/app/src/test/resources/config/application.yml",
+  "backend/gradle/libs.versions.toml",
+  "backend/app/build.gradle.kts",
+  "docs/guides/로컬-개발-컨테이너.md",
+]
+note = """
+PR #1434 — 리뷰 대기.
+"""
 
 [[nodes]]
 id = "LOOP-COVERAGE"
@@ -4495,32 +4570,51 @@ title = "[BE] 분기 커버리지 보강(change-log·reflection·notification)"
 status = "todo"
 touches = ["backend/modules/change-log/src/test", "backend/modules/reflection/src/test", "backend/modules/notification/src/test"]
 note = """
-PR #1433 — 테스트 파일만. PIT 는 리포에 넣지 않고 로컬에서만 쟀다(전후 수치는 회고).
+PR #1433 — 테스트 파일만. 보탠 분기 24+88+58 = 170(분모 8,084 의 약 2.1%p).
+PIT 는 리포에 넣지 않고 **로컬에서만** 쟀다(2026-10-20, 변이 점수 전→후): change-log 19→70% ·
+reflection 48→59% · notification 54→55%. CI 가 재현하는 수치가 아니다.
+테스트를 쓰다 찾은 운영 결함 5건은 TRIP-1476 이 잇는다.
+"""
+
+[[nodes]]
+id = "TRIP-1476"
+ticket = "TRIP-1476"
+title = "[BE] 방어적 읽기·이벤트 payload 구멍 5건 — 옛/깨진 행 영구 500 · 빈 숙소 이름 알림 독"
+status = "todo"
+touches = [
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/adapter/in/event/DomainNotificationSubscribers.kt",
+  "backend/modules/change-log/src/main/kotlin/com/trippilot/changelog/adapter/out/persistence/ChangeLogPersistence.kt",
+  "backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/adapter/out/persistence/TripSummaryPersistence.kt",
+  "backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/adapter/out/persistence/StyleAnalysisPersistence.kt",
+  "backend/modules/change-log/src/test",
+  "backend/modules/reflection/src/test",
+  "backend/modules/notification/src/test",
+]
+note = """
+LOOP-COVERAGE(#1433)에서 뗀 운영 코드 결함. 티켓이 "각각 재현 테스트를 먼저 쓴다"고 적어 세 모듈 test 디렉토리도 만진다.
+C(범위 밖 저장값)·E(모르는 source_type)는 읽기 정책 설계 판단이 먼저다. #1433 과 선행 관계는 티켓에 없다 — 자원 배타뿐.
 """
 
 [[nodes]]
 id = "COV-RATCHET"
-title = "[Infra] 커버리지 하한 래칫 — 분기 83 → 86"
+title = "[Infra] 커버리지 래칫 — 전체 분기 83 → 86 · 모듈 바닥 70/40 상향"
 status = "todo"
 touches = ["backend/scripts/coverage_gate.py"]
-
-[[edges]]
-from = "FIELD-GATE"
-to = "LOOP-BFF"
-kind = "판정선행"
-verified = false
-reason = "BFF 의 새 경로·응답 스키마를 필드 계약 게이트가 지켜야 한다 — 게이트가 먼저 들어가야 BFF PR 이 그 검사를 받는다."
+note = """
+티켓 없음(아직 발행 전). 전체 하한과 모듈 바닥 상수가 둘 다 coverage_gate.py 에 있어 한 PR 로 올린다.
+모듈 바닥은 #1433 본문이 "#1428 머지 뒤 래칫으로 올린다"고 적은 것을 받는다 — 올릴 값은 그때 모듈별 실측에서 정한다.
+"""
 
 [[edges]]
 from = "COV-GATE"
 to = "COV-RATCHET"
 kind = "판정선행"
 verified = true
-reason = "올릴 하한(TOTAL_FLOORS)이 coverage_gate.py 에 있다 — #1428 없이는 고칠 파일이 없다."
+reason = "올릴 하한(TOTAL_FLOORS)·모듈 바닥이 coverage_gate.py 에 있다 — #1428 없이는 고칠 파일이 없다."
 
 [[edges]]
 from = "LOOP-COVERAGE"
 to = "COV-RATCHET"
 kind = "판정선행"
 verified = true
-reason = "분기 86 은 보강 테스트가 있어야 넘는다 — 7개 PR 을 합친 트리 87.0, 보강 없는 develop 84.8(실측)."
+reason = "간선을 끊으면 깨진다: #1433 없는 트리(#1428 단독, develop 병합 뒤) 분기 85.3(로컬 실측 2026-10-20) < 86. #1433 이 보태는 분기는 170/8,084 ≈ 2.1%p."
