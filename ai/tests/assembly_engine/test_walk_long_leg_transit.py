@@ -49,13 +49,14 @@ def test_1_5km_아래는_걷는다() -> None:
 class _Port:
     """실경로 자리 — 받은 수단을 적고 실측값을 돌려준다."""
 
-    def __init__(self) -> None:
+    def __init__(self, measured_km: float = 2.3) -> None:
+        self.measured_km = measured_km
         self.modes: list[TransportMode] = []
 
     def estimate(self, from_, to, mode):  # noqa: ANN001
         self.modes.append(mode)
-        return TravelEstimate(distance_km_range=(2.3, 2.3), internal_minutes=21, is_estimated=False,
-                              source="odsay")
+        return TravelEstimate(distance_km_range=(self.measured_km, self.measured_km), internal_minutes=21,
+                              is_estimated=False, source="odsay")
 
 
 def test_화면_거리는_대중교통_실경로로_재고_이름표는_대중교통() -> None:
@@ -70,9 +71,9 @@ def test_화면_거리는_대중교통_실경로로_재고_이름표는_대중�
 
 
 def test_화면_거리의_가까운_구간은_도보_그대로() -> None:
-    port = _Port()
+    port = _Port(measured_km=1.2)  # 실측도 기준(1.5) 아래 — 넘으면 실측 가드가 대중교통으로 바꾼다(test_walk_measured_guard)
 
     near = WalkFirst(port, TravelEstimator(_CFG)).estimate(_ORIGIN, _road_north(1.0), W)
 
     assert port.modes == [W]
-    assert _render_distance(near, W) == "약 2.3km · 도보"
+    assert _render_distance(near, W) == "약 1.2km · 도보"
