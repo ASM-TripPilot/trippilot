@@ -217,6 +217,15 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
         // 범위만 고친다 — 읽히는 다른 칸은 그대로다.
         stats["distanceSource"].asText() shouldBe "ROUTE"
         stats["hasLocationData"].asBoolean() shouldBe true
+
+        // Int 를 넘는 값(Jackson 은 Long) — 바로 toInt() 하면 음수로 감겨 다시 500 이다. Int 상한으로 붙이고 남긴다.
+        corrupt("trip_summary", """stats = '{"totalVisits":3000000000,"totalDistanceKm":1.5,"totalPhotos":4294967301}'::jsonb""", "trip_id = ?", tripId)
+        logsOf { call(HttpMethod.GET, "/api/v1/trips/$tripId/summary", token) }.let { (big, bigLogs) ->
+            big.first shouldBe 200
+            big.second["summary"]["stats"].let { listOf(it["totalVisits"].asInt(), it["totalPhotos"].asInt()) } shouldBe listOf(Int.MAX_VALUE, Int.MAX_VALUE)
+            bigLogs.levels shouldBe (1 to 0)
+        }
+        logsOf { summaries.generate(tripId) }.second.levels shouldBe (1 to 0)
     }
 
     /**
@@ -254,6 +263,13 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
             routeLogs.levels shouldBe (0 to 1)
             healed() shouldBe true
             announced() shouldBe 1
+
+            // 생성(`TripEnded`)도 못 읽는 행을 덮어 고친다 — 여행 종료의 정상 경로라 알림을 낸다(조회·경로 갱신과 다르다).
+            corrupt("trip_summary", broken, "trip_id = ?", tripId)
+            val (_, genLogs) = logsOf { summaries.generate(tripId) }
+            genLogs.levels shouldBe (0 to 1)
+            healed() shouldBe true
+            announced() shouldBe 2
         }
     }
 
@@ -302,6 +318,18 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
         }
         generated.first shouldBe 200
         genLogs.levels shouldBe (2 to 0)
+
+        // Int 를 넘는 값(Jackson 은 Long) — 바로 toInt() 하면 음수로 감겨 목록·수정이 다시 500 이다. Int 상한으로 붙이고 남긴다.
+        corrupt("reflection", """stats = '{"visitCount":3000000000,"distanceKm":1.0,"photoCount":4294967301}'::jsonb""", "trip_id = ? AND day_date = ?", tripId, day1)
+        logsOf { call(HttpMethod.GET, "/api/v1/trips/$tripId/reflections", token) }.let { (got, logs) ->
+            got.first shouldBe 200
+            got.second["items"].single()["stats"].let { listOf(it["visitCount"].asInt(), it["photoCount"].asInt()) } shouldBe listOf(Int.MAX_VALUE, Int.MAX_VALUE)
+            logs.levels shouldBe (1 to 0)
+        }
+        logsOf { call(HttpMethod.PUT, "/api/v1/trips/$tripId/reflections/$day1", token, """{"mood":"OK"}""") }.let { (got, logs) ->
+            got.first shouldBe 200
+            logs.levels shouldBe (1 to 0)
+        }
     }
 
     private fun writeMine(tripId: UUID, token: String) {
@@ -451,7 +479,7 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
         val tripId = newTrip(token, endDate = day1)
         logsOf { call(HttpMethod.POST, "/api/v1/trips/$tripId/itinerary", token) }.let { (got, logs) ->
             got.first shouldBe 201
-            // 하루짜리 여행이라 생성은 응답 전에 끝난다 — 개인화 힌트를 한 번 묻고, 그 읽기가 한 줄 남긴다.
+            // 개인화 힌트는 응답 전에 한 번만 묻는다(`GenerateItineraryService` — 2단계 비동기 생성은 그 값을 넘겨받는다). 그 읽기가 한 줄이다.
             logs.levels shouldBe (1 to 0)
         }
 
@@ -471,6 +499,15 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
             listOf(it.avgPlacesPerDay, it.avgRadiusKm) shouldBe listOf(0.0, 0.0)
             it.avgDwellMinutes shouldBe null
         }
+
+        // Int 를 넘는 게이지 — 먼저 toInt() 하면 감겨서 3000000000 은 0("알차게"), 2^32+5 는 5 로 말없이 읽힌다. 끝값 5 로 붙이고 남긴다.
+        corrupt("style_analysis", """trait_gauges = '{"easygoing":3000000000,"foodAffinity":4294967301,"activeness":2}'::jsonb""", "account_id = ?", accountId)
+        logsOf { personalization.deriveFor(accountId) }.let { (view, logs) ->
+            view.pace shouldBe "느긋하게"
+            logs.levels shouldBe (1 to 0)
+            listOf("trait_gauges.easygoing", "trait_gauges.foodAffinity").forEach { logs.single().formattedMessage.contains(it) shouldBe true }
+        }
+        analyses.find(accountId)!!.traitGauges shouldBe TraitGauges(easygoing = 5, foodAffinity = 5, activeness = 2)
 
         corrupt(
             "style_analysis", """descriptors = '["#카페", 1]'::jsonb, trait_gauges = '[]'::jsonb, category_breakdown = '{}'::jsonb""",
@@ -615,15 +652,17 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
                 summaryRepo.findForUpdate(tripId)!!.narrative shouldBe "겹친 요청이 고친 요약"
             }
         }.second.levels shouldBe (0 to 1) // 잠그기 전의 못 읽은 읽기 한 줄 — 잠근 뒤에는 고친 값을 읽는다
-        TransactionTemplate(txManager).executeWithoutResult {
-            reflectionRepo.find(tripId, day1)!!.mood shouldBe null
-            commitElsewhere("UPDATE reflection SET mood = 'GOOD' WHERE trip_id = ? AND day_date = ?", tripId, day1)
-            reflectionRepo.findForUpdate(tripId, day1)!!.mood shouldBe "GOOD"
-        }
-        TransactionTemplate(txManager).executeWithoutResult {
-            val before = reflectionRepo.find(tripId, day1)!!
-            commitElsewhere("UPDATE reflection SET short_memo = '겹친 메모' WHERE trip_id = ? AND day_date = ?", tripId, day1)
-            reflectionRepo.findForRedraft(tripId, day1, before.draftCard, before.source)!!.shortMemo shouldBe "겹친 메모"
-        }
+        logsOf {
+            TransactionTemplate(txManager).executeWithoutResult {
+                reflectionRepo.find(tripId, day1)!!.mood shouldBe null
+                commitElsewhere("UPDATE reflection SET mood = 'GOOD' WHERE trip_id = ? AND day_date = ?", tripId, day1)
+                reflectionRepo.findForUpdate(tripId, day1)!!.mood shouldBe "GOOD"
+            }
+            TransactionTemplate(txManager).executeWithoutResult {
+                val before = reflectionRepo.find(tripId, day1)!!
+                commitElsewhere("UPDATE reflection SET short_memo = '겹친 메모' WHERE trip_id = ? AND day_date = ?", tripId, day1)
+                reflectionRepo.findForRedraft(tripId, day1, before.draftCard, before.source)!!.shortMemo shouldBe "겹친 메모"
+            }
+        }.second.levels shouldBe (0 to 0) // 깨지지 않은 행이다
     }
 }

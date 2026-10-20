@@ -43,6 +43,8 @@ class TripSummaryService(
     @Transactional
     fun generate(tripId: UUID): TripSummary {
         // 잠근 **뒤에** 읽는다 — 경로 갱신(refreshRouteStats)과 겹치면 커밋 전 상태를 보고 덮는다. 같은 잠금을 그쪽도 잡는다.
+        // 못 읽는 요약이어도 그대로 덮는다(TRIP-1476). 알림도 낸다 — 여행 종료(`TripEnded`, 여행당 한 번)의 정상 경로라서다.
+        // 같은 이벤트의 재배달은 알림 쪽이 원천 이벤트 id 로 막는다. 알리지 않는 것은 조회·경로 갱신이 고칠 때뿐이다([rebuildUnreadable]).
         summaries.findForUpdate(tripId)
         val saved = summaries.upsert(build(tripId))
         events.publish(
@@ -70,6 +72,8 @@ class TripSummaryService(
      * 생성(`TripEnded`)은 여행당 한 번이라 기다려서는 낫지 않는다. 요약에는 사용자가 쓴 것이 없어 통째로 다시 만들어도 잃는 것이 없다.
      * 알림 이벤트는 내지 않는다 — 행이 있다는 것은 이미 한 번 만들어 알렸다는 뜻이고, 다시 알리면 같은 "요약이 준비됐어요"가 또 간다.
      */
+    // 행이 exists 와 upsert 사이에 사라지는 경우(여행 행 물리 삭제 → CASCADE)는 막지 않는다 — 여행 삭제는 소프트 삭제이고
+    // (`TripService.delete`), 지금 코드에 trip·account 행을 지우는 경로가 없다. 생기면 generate 도 같은 모양이라 함께 본다.
     private fun rebuildUnreadable(tripId: UUID): TripSummary? {
         if (!summaries.exists(tripId)) return null
         // 조회는 잠그지 않고 읽었다 — 잠근 뒤 다시 본다. 겹친 요청이 먼저 고쳤으면 그것을 쓴다. 못 읽은 채면 ERROR 가 한 줄 더 남는다

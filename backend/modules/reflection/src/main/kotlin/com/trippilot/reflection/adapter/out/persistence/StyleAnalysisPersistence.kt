@@ -135,8 +135,11 @@ class StyleAnalysisRepositoryAdapter(private val jpa: StyleAnalysisJpaRepository
     /** 읽기는 방어적으로 — 잠정 식(O-U5-9)이 바뀌면 축 이름도 바뀔 수 있다. 못 읽는 축은 0 이다. */
     private fun Map<*, *>.toGauges(dropped: MutableList<String>): TraitGauges {
         fun axis(key: String): Int {
-            val n = (this[key] as? Number)?.toInt() ?: return 0
-            return n.coerceIn(0, TraitGauges.MAX).also { if (it != n) dropped += "trait_gauges.$key" }
+            // Double 에서 붙인다 — Int 를 넘는 값을 먼저 toInt() 하면 감겨서 3000000000 은 0, 2^32+5 는 5 로 말없이 읽힌다(검수 실측).
+            val n = (this[key] as? Number)?.toDouble() ?: return 0
+            val c = if (n >= 0.0) minOf(n, TraitGauges.MAX.toDouble()) else 0.0
+            if (c != n) dropped += "trait_gauges.$key"
+            return c.toInt()
         }
         return TraitGauges(easygoing = axis("easygoing"), foodAffinity = axis("foodAffinity"), activeness = axis("activeness"))
     }

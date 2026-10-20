@@ -264,16 +264,20 @@ class ReflectionRepositoryAdapter(
         val dropped = mutableListOf<String>()
         if (row.statsShape != null && row.statsShape != "object") dropped += "stats"
         val m = row.stats
-        fun nonNegative(key: String): Number? {
-            val n = m[key] as? Number ?: return null
-            return if (n.toDouble() >= 0.0) n else 0.also { dropped += "stats.$key" }
+        // 0~max 로 붙이고 남긴다. **Double 에서 붙인 뒤** 정수로 바꾼다 — Int 를 넘는 값(3000000000, Jackson 은 Long)을 바로
+        // toInt() 하면 음수로 감겨 도메인 require 가 다시 500 을 낸다(검수 실측). NaN 도 0 이다.
+        fun inRange(key: String, max: Double = Int.MAX_VALUE.toDouble()): Double? {
+            val n = (m[key] as? Number)?.toDouble() ?: return null
+            val c = if (n >= 0.0) minOf(n, max) else 0.0
+            if (c != n) dropped += "stats.$key"
+            return c
         }
         val stats = ReflectionStats(
-            visitCount = nonNegative("visitCount")?.toInt() ?: 0,
-            distanceKm = nonNegative("distanceKm")?.toDouble() ?: 0.0,
+            visitCount = inRange("visitCount")?.toInt() ?: 0,
+            distanceKm = inRange("distanceKm", Double.MAX_VALUE) ?: 0.0,
             distanceSource = (m["distanceSource"] as? String)
                 ?.let { runCatching { DistanceSource.valueOf(it) }.getOrNull() } ?: DistanceSource.VISIT_LINE,
-            photoCount = nonNegative("photoCount")?.toInt() ?: 0,
+            photoCount = inRange("photoCount")?.toInt() ?: 0,
         )
         if (dropped.isNotEmpty()) log.warn("회고 근거 수치 일부를 읽지 못해 0 으로 채웁니다. tripId={} date={} 칸={}", row.tripId, row.dayDate, dropped)
         return stats

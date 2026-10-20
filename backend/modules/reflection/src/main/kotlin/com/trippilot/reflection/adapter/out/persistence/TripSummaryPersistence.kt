@@ -150,19 +150,23 @@ class TripSummaryRepositoryAdapter(private val jpa: TripSummaryJpaRepository) : 
 
     /** 음수는 0 으로 붙인다 — 도메인이 막는 값이라 그대로 넘기면 그 요약 전체가 500 이다. 다음 갱신이 다시 센다. */
     private fun Map<*, *>.toStats(dropped: MutableList<String>) = TripSummaryStats(
-        totalVisits = nonNegative("totalVisits", dropped)?.toInt() ?: 0,
-        totalDistanceKm = nonNegative("totalDistanceKm", dropped)?.toDouble() ?: 0.0,
+        totalVisits = inRange("totalVisits", dropped)?.toInt() ?: 0,
+        totalDistanceKm = inRange("totalDistanceKm", dropped, Double.MAX_VALUE) ?: 0.0,
         distanceSource = (this["distanceSource"] as? String)
             ?.let { runCatching { DistanceSource.valueOf(it) }.getOrNull() } ?: DistanceSource.VISIT_LINE,
-        totalPhotos = nonNegative("totalPhotos", dropped)?.toInt() ?: 0,
+        totalPhotos = inRange("totalPhotos", dropped)?.toInt() ?: 0,
         hasLocationData = this["hasLocationData"] as? Boolean ?: false,
     )
 
-    private fun Map<*, *>.nonNegative(key: String, dropped: MutableList<String>): Number? {
-        val n = this[key] as? Number ?: return null
-        if (n.toDouble() >= 0.0) return n
-        dropped += "stats.$key"
-        return 0
+    /**
+     * 0~max 로 붙이고 남긴다. **Double 에서 붙인 뒤** 정수로 바꾼다 — Int 를 넘는 값(3000000000, Jackson 은 Long)을 바로
+     * toInt() 하면 음수로 감겨 도메인 require 가 다시 500 을 낸다(검수 실측). NaN 도 0 이다.
+     */
+    private fun Map<*, *>.inRange(key: String, dropped: MutableList<String>, max: Double = Int.MAX_VALUE.toDouble()): Double? {
+        val n = (this[key] as? Number)?.toDouble() ?: return null
+        val c = if (n >= 0.0) minOf(n, max) else 0.0
+        if (c != n) dropped += "stats.$key"
+        return c
     }
 
     private companion object {
