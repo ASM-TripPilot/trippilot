@@ -269,7 +269,8 @@ def test_prompt_renders_deterministically_with_ref() -> None:
     assert p1 == p2  # 결정론
     assert ref.prompt_id == "prompts/dialogue_answer.yaml" and ref.version == "0.3.2"
     assert ref.feature == "DIALOGUE_ANSWER"
-    assert "GET_WEATHER" in p1 and "최대 강수확률" in p1
+    dynamic = p1.rsplit("[문체]", 1)[1]  # 턴마다 바뀌는 칸만 — 고정부 예시에도 GET_WEATHER·최대 강수확률이 있다
+    assert "GET_WEATHER" in dynamic and "최대 강수확률" in dynamic
     assert "- 사용자: 내일 비 와?" in p1 and "- 도우미: 내일 제주 예보예요." in p1
     assert "- 사용자는 카페를 선호한다" in p1 and _TRIP in p1 and ANSWER_STYLE in p1
 

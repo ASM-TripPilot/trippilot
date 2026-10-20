@@ -291,7 +291,7 @@ def test_the_card_part_wins_whatever_the_plan_order_and_also_carries_the_other_f
                         answer=_answer_json("오늘은 비 올 확률이 80%예요. 감천문화마을은 어떠세요?"))
     assert out.answer.kind is AnswerKind.CANDIDATES and out.answer.text.startswith("오늘은")
     (answer_req,) = [r for r in b.llm.requests if r.prompt_ref.feature == "DIALOGUE_ANSWER"]
-    assert "오늘 최대 강수확률" in answer_req.prompt and "80%" in answer_req.prompt
+    assert "오늘 최대 강수확률" in answer_req.prompt.rsplit("[확인된 사실]", 1)[1] and "80%" in answer_req.prompt  # 예시에도 같은 라벨
 
 
 # 3 — 계획 답은 목록 밖 장소 검사를 강제한다

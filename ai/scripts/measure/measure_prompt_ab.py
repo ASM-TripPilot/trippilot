@@ -14,7 +14,7 @@ CI 밖 수동 실행 전용(실 API 를 부른다). few-shot·판단 순서(CoT)
   정답은 거절({"intent": null})이다. 평가셋 문장을 프롬프트 예시로 옮기면 이 숫자가 무의미해진다(leak).
 - `directive`  REPLAN_DIRECTIVE_TRANSLATION(sol) — 라벨은 `measure_directive_match.POSITIVES/NEGATIVES` + 부정·혼합
   6건. 완전 일치(겹쳐 고른 지시도 오답)와 허용(정답 포함·금지 지시 없음)을 같이 낸다. 시한 3.75s(DEV 실측 시한).
-- `answer`  DIALOGUE_ANSWER — Facts 10종 + 계획 병합 3종 + 장소 탐색 5종(서울·일정 없음 4 · 일정 근처 1) × 반복. 게이트 통과율·시각-장소 짝 위반(오케스트레이터 INV-2 검사와
+- `answer`  DIALOGUE_ANSWER — Facts 11종 + 계획 병합 3종 + 장소 탐색 5종(서울·일정 없음 4 · 일정 근처 1) × 반복. 게이트 통과율·시각-장소 짝 위반(오케스트레이터 INV-2 검사와
   같은 함수)·지연. 문장은 끝에 전부 찍는다 — 지어낸 사실은 사람이 읽어서 본다.
 - `scoring` PREFERENCE_SCORING — `data/collected_pois.json` 해운대구 실데이터 53곳 × 페르소나 3종. 세 번째 인자는
   반복이 아니라 **청크 구성 수**다: 구성마다 poiId(uuid5)의 소금만 바꿔 워커의 `plan_chunks`(poi_id 정렬 균등 분할)가
@@ -265,6 +265,9 @@ ANSWER_CASES = [
     ("GET_POI_INFO", "그 카페 몇 시까지 해?", _facts(  # 모르는 입장료는 프롬프트에 안 실린다(Facts.to_prompt_dict)
         "GET_POI_INFO", rows=[("분류", "카페"), ("영업시간", "미확인")],
         places=[_place("카페 오늘", "카페")])),
+    ("GET_POI_INFO", "거기 식당이야?", _facts(  # 분류 행이 곧 답 — "분류를 그대로 읽지 마세요"가 이 답을 막지 않는가
+        "GET_POI_INFO", rows=[("분류", "맛집"), ("영업시간", "11:00~21:00")],
+        places=[_place("교리김밥", "맛집", hours="11:00~21:00")])),
     ("GET_POI_INFO", "대릉원 입장료 얼마야?", _facts(
         "GET_POI_INFO", rows=[("분류", "명소"), ("영업시간", "09:00~22:00")],
         places=[_place("경주 대릉원", "명소", hours="09:00~22:00")])),
