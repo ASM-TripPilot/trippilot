@@ -105,6 +105,8 @@ function Spans({ spans }: { spans: Span[] }): ReactElement {
   );
 }
 
+// 블록 간격은 위쪽으로만 준다(TRIP-1436 Q-010) — 아래·위를 따로 주면 앞 블록 종류에 따라 합이 들쭉날쭉해진다
+// (문단→조 제목 12+20 · 목록→조 제목 4+20 · 목록→문단 4+0). 앞 블록과 무관하게 같은 간격이 나온다.
 /** 약관 본문 마크다운 한 블록 — 서버 시드가 쓰는 문법만 그린다(`parseTermsMarkdown`). */
 function BlockView({ block }: { block: Block }): ReactElement {
   switch (block.kind) {
@@ -114,10 +116,10 @@ function BlockView({ block }: { block: Block }): ReactElement {
           lineBreakStrategyIOS="hangul-word"
           className={`font-noto-bold text-ink ${
             block.level === 1
-              ? 'pb-md text-[20px]'
+              ? 'text-[20px]'
               : block.level === 2
-                ? 'pb-sm pt-xl text-[16px]'
-                : 'pb-xs pt-lg text-body'
+                ? 'pt-xl text-[16px]'
+                : 'pt-lg text-body'
           }`}
         >
           <Spans spans={block.spans} />
@@ -126,7 +128,7 @@ function BlockView({ block }: { block: Block }): ReactElement {
     case 'quote':
       return (
         <Text
-          className="pb-md font-noto text-body text-muted"
+          className="pt-md font-noto text-body text-muted"
           lineBreakStrategyIOS="hangul-word"
         >
           <Spans spans={block.spans} />
@@ -134,7 +136,7 @@ function BlockView({ block }: { block: Block }): ReactElement {
       );
     case 'item':
       return (
-        <View className="flex-row gap-sm pb-xs pl-sm">
+        <View className="flex-row gap-sm pl-sm pt-xs">
           <Text className="font-noto text-body text-ink">{block.marker}</Text>
           <Text
             className="flex-1 font-noto text-body text-ink"
@@ -149,7 +151,7 @@ function BlockView({ block }: { block: Block }): ReactElement {
     case 'table':
       // 폰 폭에서 4열 표는 못 읽는다 — 행마다 카드로 쌓고 첫 칸을 제목으로, 나머지는 '머리: 값'.
       return (
-        <View className="gap-sm pb-md">
+        <View className="gap-sm pt-md">
           {block.rows.map((row, r) => (
             <View
               key={r}
@@ -179,7 +181,7 @@ function BlockView({ block }: { block: Block }): ReactElement {
     default:
       return (
         <Text
-          className="pb-md font-noto text-body text-ink"
+          className="pt-md font-noto text-body text-ink"
           lineBreakStrategyIOS="hangul-word"
         >
           <Spans spans={block.spans} />

@@ -1290,13 +1290,11 @@ describe('조회 → 모델 → 배치 (옛 .integration)', () => {
       });
     });
 
-    it('B-3(TRIP-775 Q2=a): 프로필 [편집]이 있고 누르면 router.push("/settings") 정확히 1회', () => {
+    it('B-3(TRIP-1436 Q-118 결정 1=B): 프로필 카드에 [편집]이 없다 — 설정 진입은 헤더 톱니·메뉴 행 둘뿐', () => {
       renderPage();
 
-      fireEvent.press(screen.getByTestId('my-profile-edit'));
-
-      expect(mockPush).toHaveBeenCalledTimes(1);
-      expect(mockPush).toHaveBeenCalledWith('/settings');
+      expect(screen.getByTestId('my-profile-card')).toBeOnTheScreen();
+      expect(screen.queryByTestId('my-profile-edit')).toBeNull();
     });
 
     it('B-4(TRIP-776 Q1=A): 지난 여행의 "캘린더 ›"를 누르면 router.push("/records") 정확히 1회 — 회고 하트 floating 은 여전히 없다', () => {

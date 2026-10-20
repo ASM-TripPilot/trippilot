@@ -369,6 +369,10 @@ function PopularStrip({
           <Pressable
             key={group.sidoCode}
             testID={`explore-region-popular-${group.sidoCode}`}
+            accessibilityRole="button"
+            accessibilityLabel={
+              tagline ? `${group.sidoName}, ${tagline}` : group.sidoName
+            }
             onPress={() => onOpenSido(group.sidoCode)}
             className="w-[150px] overflow-hidden rounded-card bg-canvas"
           >
@@ -446,7 +450,8 @@ export function RegionPickerScreen({
           testID="explore-region-back"
           accessibilityRole="button"
           accessibilityLabel="뒤로"
-          onPress={onBack}
+          // 드릴다운이 열려 있으면 한 단계(시·도 목록)만 돌아가고, 1단에서만 피커를 나간다(TRIP-1436 Q-138).
+          onPress={detail ? () => setOpenSidoCode(null) : onBack}
           hitSlop={8}
         >
           <BackChevronGlyph />

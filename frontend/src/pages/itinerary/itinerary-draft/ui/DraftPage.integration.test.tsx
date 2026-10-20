@@ -3503,12 +3503,13 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
       renderPage();
       await screen.findByTestId('generation-progress-card');
 
-      expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
-        /1일차 완성/
+      // TRIP-1436 Q-074 — 다른 결과 화면처럼 "제목 · N일차 · 날짜" 칸이고, "완성"이 날짜 앞에 붙지 않는다.
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('1일차');
+      expect(screen.getByTestId('sheet-header-title')).not.toHaveTextContent(
+        /완성/
       );
-      // 제목은 게이지 라벨과 겹치지 않게 날짜를 결합한다(DraftPage §3) — 날짜 값이 실제로
-      // 붙는지 잠근다(5-b 경고-1: 이 단언이 없으면 formatDraftDayHeader 산출이 무심판).
-      expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      // 날짜 값이 실제로 붙는지 잠근다(5-b 경고-1: 이 단언이 없으면 formatDraftDayHeader 산출이 무심판).
+      expect(screen.getByTestId('sheet-header-date')).toHaveTextContent(
         /6월 10일/
       );
       const meta = screen.getByTestId('sheet-header-meta');
@@ -3517,6 +3518,24 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
       expect(meta).toHaveTextContent(/3\.5km/);
       // INV-3 + Figma 형식 — legDistance 의 `이동 ` 접두를 그대로 쓰면 red, 소요 어휘도 금지.
       expect(meta).not.toHaveTextContent(/이동|분|시간|소요/);
+    });
+
+    it('A8-1e2 · 폴백이 생성 중이면(PARTIAL + isFallback) 시트 제목이 "AI 추천안"이 아니라 "기본 일정"이다 (INV-4 · TRIP-1436)', async () => {
+      itineraryHandler = () =>
+        HttpResponse.json(
+          itinerary({
+            days: threeStopDays(1),
+            generationState: 'PARTIAL',
+            solveMode: 'DETERMINISTIC',
+            isFallback: true,
+          })
+        );
+      renderPage();
+      await screen.findByTestId('generation-progress-card');
+
+      expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+        '기본 일정'
+      );
     });
 
     it('A8-1f · 퍼센트·소요·CTA 가 0건이다 (AC-5 · D9 · INV-3)', async () => {

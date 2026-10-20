@@ -150,7 +150,7 @@ export function TermsScreen({
           </View>
 
           {triedNext && missingRequiredLabels.length > 0 ? (
-            <View className="px-lg pt-md">
+            <View className="pt-md">
               <Text className="font-noto text-label text-muted">
                 아직 동의하지 않은 필수 항목이에요
               </Text>
@@ -165,7 +165,7 @@ export function TermsScreen({
           ) : null}
 
           {errorMessage ? (
-            <View className="gap-sm px-lg pt-md">
+            <View className="gap-sm pt-md">
               <Text
                 testID="onboarding-terms-error"
                 className="font-noto text-label text-primary-text"

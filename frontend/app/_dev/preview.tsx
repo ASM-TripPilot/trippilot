@@ -1673,20 +1673,27 @@ const legendCard = (
   dateRangeLabel: string,
   nightsLabel: string
 ): PastTripCardVM => ({ tripId, title, dateRangeLabel, nightsLabel });
+// buildMonthLegends 결과 모양 — 시작일 오름차순 · 줄마다 colorIndex(칸 색·점 색) · dayColors(마킹 날→색). TRIP-1436.
 const RECORDS_CALENDAR_LEGEND_MORE: MonthLegends = {
   rows: [
     {
-      kind: 'group',
-      key: '2026-09-28_2026-09-30',
-      representativeTitle: '서울특별시 여행',
-      dateRangeLabel: '9.28–9.30',
-      nightsLabel: '2박 3일',
-      members: ['s1', 's2', 's3', 's4', 's5', 's6'].map((id) =>
-        legendCard(id, '서울특별시 여행', '9.28–9.30', '2박 3일')
-      ),
+      kind: 'trip',
+      colorIndex: 0,
+      ...legendCard('gn', '강릉 여행', '9.1–9.2', '1박 2일'),
+    },
+    {
+      kind: 'trip',
+      colorIndex: 1,
+      ...legendCard('jj', '제주 여행', '9.3–9.5', '2박 3일'),
+    },
+    {
+      kind: 'trip',
+      colorIndex: 2,
+      ...legendCard('bs', '부산 여행', '9.12–9.14', '2박 3일'),
     },
     {
       kind: 'group',
+      colorIndex: 0,
       key: '2026-09-28_2026-09-29',
       representativeTitle: '서울특별시 여행',
       dateRangeLabel: '9.28–9.29',
@@ -1698,11 +1705,32 @@ const RECORDS_CALENDAR_LEGEND_MORE: MonthLegends = {
         ['k4', '서울특별시 여행'],
       ].map(([id, title]) => legendCard(id, title, '9.28–9.29', '1박 2일')),
     },
-    { kind: 'trip', ...legendCard('bs', '부산 여행', '9.12–9.14', '2박 3일') },
-    { kind: 'trip', ...legendCard('jj', '제주 여행', '9.3–9.5', '2박 3일') },
-    { kind: 'trip', ...legendCard('gn', '강릉 여행', '9.1–9.2', '1박 2일') },
+    {
+      kind: 'group',
+      colorIndex: 1,
+      key: '2026-09-28_2026-09-30',
+      representativeTitle: '서울특별시 여행',
+      dateRangeLabel: '9.28–9.30',
+      nightsLabel: '2박 3일',
+      members: ['s1', 's2', 's3', 's4', 's5', 's6'].map((id) =>
+        legendCard(id, '서울특별시 여행', '9.28–9.30', '2박 3일')
+      ),
+    },
   ],
   hiddenCount: 2,
+  dayColors: {
+    '2026-09-01': 0,
+    '2026-09-02': 0,
+    '2026-09-03': 1,
+    '2026-09-04': 1,
+    '2026-09-05': 1,
+    '2026-09-12': 2,
+    '2026-09-13': 2,
+    '2026-09-14': 2,
+    '2026-09-28': 1,
+    '2026-09-29': 1,
+    '2026-09-30': 1,
+  },
 };
 
 // l04 등록 숙소 2행 — Figma 1604:2440 카드 그대로(등록됨 1 · 미등록 1). default·dialog 두 키가 이 한 벌을
@@ -6310,7 +6338,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           showPast={false}
           pastCards={null}
           pastEmpty={false}
-          onPressEdit={noop}
           onPressSettings={noop}
           onPressStays={noop}
           onPressStyleAnalysis={noop}
@@ -6347,7 +6374,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           ))}
           pastEmpty={false}
           onPressCalendar={noop}
-          onPressEdit={noop}
           onPressSettings={noop}
           onPressStays={noop}
           onPressStyleAnalysis={noop}

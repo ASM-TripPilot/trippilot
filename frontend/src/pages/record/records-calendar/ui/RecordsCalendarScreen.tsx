@@ -9,6 +9,7 @@ import {
   LegendChevronGlyph,
 } from '@/features/record';
 import { TripCalendarMonth } from './TripCalendarMonth';
+import { TRIP_COLORS } from '../model/recordsCalendar';
 import type {
   LegendRow,
   MonthLegends,
@@ -153,11 +154,14 @@ function OngoingTripCard({
 function LegendLine({
   testID,
   chevronTestID,
+  colorIndex = 0,
   onPress,
   children,
 }: {
   testID: string;
   chevronTestID?: string;
+  /** 달력 마킹 색과 같은 인덱스(TRIP-1436 Q-159). */
+  colorIndex?: number;
   onPress?: () => void;
   children: ReactNode;
 }): ReactElement {
@@ -167,7 +171,9 @@ function LegendLine({
       className="w-full flex-row items-center gap-sm px-lg pb-[6px] pt-[10px]"
       onPress={onPress}
     >
-      <View className="h-[9px] w-[9px] rounded-pill bg-primary" />
+      <View
+        className={`h-[9px] w-[9px] rounded-pill ${TRIP_COLORS[colorIndex % TRIP_COLORS.length].dot}`}
+      />
       <Text className="flex-1 font-noto text-label text-body">{children}</Text>
       {chevronTestID !== undefined && (
         <View testID={chevronTestID}>
@@ -184,15 +190,18 @@ function joinLabel(parts: (string | null)[]): string {
 
 function TripLegendLine({
   trip,
+  colorIndex,
   openable,
   onPressLegend,
 }: {
   trip: PastTripCardVM;
+  colorIndex?: number;
   openable?: ReadonlySet<string>;
   onPressLegend?: (tripId: string) => void;
 }): ReactElement {
   return (
     <LegendLine
+      colorIndex={colorIndex}
       testID={`record-calendar-legend-${trip.tripId}`}
       chevronTestID={
         openable?.has(trip.tripId)
@@ -239,6 +248,7 @@ function MonthLegendBlock({
         <TripLegendLine
           key={row.tripId}
           trip={row}
+          colorIndex={row.colorIndex}
           openable={openable}
           onPressLegend={onPressLegend}
         />
@@ -248,6 +258,7 @@ function MonthLegendBlock({
     return (
       <Fragment key={row.key}>
         <LegendLine
+          colorIndex={row.colorIndex}
           testID={`record-calendar-legend-group-${row.key}`}
           // 묶음 줄 `›` = 구성원 중 하나라도 열림(누르면 펼침이라 동작은 늘 있다).
           chevronTestID={
@@ -268,6 +279,7 @@ function MonthLegendBlock({
             <TripLegendLine
               key={member.tripId}
               trip={member}
+              colorIndex={row.colorIndex}
               openable={openable}
               onPressLegend={onPressLegend}
             />
@@ -364,6 +376,7 @@ export function RecordsCalendarScreen({
             monthLabel={monthLabel}
             grid={grid}
             markedDays={markedDays}
+            dayColors={monthLegends?.dayColors}
             onPressPrev={onPressPrevMonth}
             onPressNext={onPressNextMonth}
             onPressDay={onPressDay}
