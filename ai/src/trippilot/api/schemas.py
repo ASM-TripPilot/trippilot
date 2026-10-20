@@ -1069,6 +1069,8 @@ class OpportunitySchema(BoundaryModel):
     key: str  # "event:{event_id}" | "trending:{poi_id}" — 기기 숨김의 키
     kind: Literal["EVENT_VENUE", "EVENT_NEARBY", "TRENDING"]
     event_name: str | None = None  # EVENT_* 만
+    # EVENT_* 만 — EventType 값 그대로(OTHER 는 카드가 되지 않는다). 날씨 위험 날 축제만 빼는 재료(G-SA-17)
+    event_type: Literal["FESTIVAL", "PERFORMANCE", "EXHIBITION", "POPUP"] | None = None
     start: dt.date | None = None   # EVENT_* 만 — 행사 기간(일 단위)
     end: dt.date | None = None
     poi_id: str                    # [넣어서 다시 짜기] 대상 — 등록 POI
