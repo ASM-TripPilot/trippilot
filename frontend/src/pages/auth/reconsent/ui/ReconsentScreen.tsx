@@ -46,7 +46,8 @@ export function ReconsentScreen({
 }: ReconsentScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-canvas">
-      <View className="border-b border-hairline px-lg pb-md pt-sm">
+      <View className="px-lg pb-md pt-sm">
+        <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
         <Text className="text-[18px] font-noto-bold text-ink">약관 재동의</Text>
       </View>
 
@@ -64,10 +65,11 @@ export function ReconsentScreen({
             accessibilityRole="checkbox"
             accessibilityState={{ checked: item.checked }}
             onPress={() => onToggle(item.termsType)}
-            className={`flex-row items-center justify-between py-[15px] ${
-              index > 0 ? 'border-t border-hairline' : ''
-            }`}
+            className="flex-row items-center justify-between py-[15px]"
           >
+            {index > 0 ? (
+              <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
+            ) : null}
             <View className="flex-row items-center gap-[10px]">
               <View
                 className={`h-[22px] w-[22px] items-center justify-center rounded-[6px] ${
@@ -113,7 +115,8 @@ export function ReconsentScreen({
         ) : null}
       </ScrollView>
 
-      <View className="border-t border-hairline px-2xl pb-[30px] pt-md">
+      <View className="px-2xl pb-[30px] pt-md">
+        <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
         <Pressable
           testID="reconsent-agree"
           disabled={!canAgree}

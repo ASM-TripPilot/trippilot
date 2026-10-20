@@ -125,9 +125,12 @@ const PickRow = memo(function PickRow({
       testID={`mustvisit-pick-row-${place.poiId}`}
       accessibilityState={{ disabled: outside }}
       className={`w-full flex-row items-center gap-md py-md ${
-        isLast ? '' : 'border-b border-hairline'
-      } ${outside ? 'opacity-40' : ''}`}
+        outside ? 'opacity-40' : ''
+      }`}
     >
+      {isLast ? null : (
+        <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
+      )}
       {rank === null ? null : (
         <View
           testID={`mustvisit-pick-rank-${place.poiId}`}
@@ -208,7 +211,8 @@ function CompleteBar({
   // 0곳이면 진짜 `disabled` prop 을 건다 — accessibilityState.disabled 만으론 press 가 안 막힌다
   // (02a §5-4). 회색 비활성으로 자리를 지키되 눌러도 onComplete 가 안 나간다.
   return (
-    <View className="w-full gap-sm border-t border-hairline bg-canvas px-lg pb-lg pt-md">
+    <View className="w-full gap-sm bg-canvas px-lg pb-lg pt-md">
+      <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
       {/* 실패 배너 — Figma 없음(01b Q3). 같은 feature `RemoveErrorBanner` 모양을 따른다. */}
       {error ? (
         <View

@@ -40,7 +40,8 @@ export function TermsViewerScreen({
 }: TermsViewerScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-canvas">
-      <View className="flex-row items-center gap-sm border-b border-hairline px-lg pb-md pt-sm">
+      <View className="flex-row items-center gap-sm px-lg pb-md pt-sm">
+        <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
         <Pressable
           testID="terms-viewer-back"
           accessibilityRole="button"
@@ -110,6 +111,7 @@ function BlockView({ block }: { block: Block }): ReactElement {
     case 'heading':
       return (
         <Text
+          lineBreakStrategyIOS="hangul-word"
           className={`font-noto-bold text-ink ${
             block.level === 1
               ? 'pb-md text-[20px]'
@@ -123,7 +125,10 @@ function BlockView({ block }: { block: Block }): ReactElement {
       );
     case 'quote':
       return (
-        <Text className="pb-md font-noto text-body text-muted">
+        <Text
+          className="pb-md font-noto text-body text-muted"
+          lineBreakStrategyIOS="hangul-word"
+        >
           <Spans spans={block.spans} />
         </Text>
       );
@@ -131,7 +136,10 @@ function BlockView({ block }: { block: Block }): ReactElement {
       return (
         <View className="flex-row gap-sm pb-xs pl-sm">
           <Text className="font-noto text-body text-ink">{block.marker}</Text>
-          <Text className="flex-1 font-noto text-body text-ink">
+          <Text
+            className="flex-1 font-noto text-body text-ink"
+            lineBreakStrategyIOS="hangul-word"
+          >
             <Spans spans={block.spans} />
           </Text>
         </View>
@@ -147,11 +155,18 @@ function BlockView({ block }: { block: Block }): ReactElement {
               key={r}
               className="gap-xs rounded-button border border-hairline px-md py-sm"
             >
-              <Text className="font-noto-bold text-body text-ink">
+              <Text
+                className="font-noto-bold text-body text-ink"
+                lineBreakStrategyIOS="hangul-word"
+              >
                 <Spans spans={row[0] ?? []} />
               </Text>
               {row.slice(1).map((cell, c) => (
-                <Text key={c} className="font-noto text-body text-ink">
+                <Text
+                  key={c}
+                  className="font-noto text-body text-ink"
+                  lineBreakStrategyIOS="hangul-word"
+                >
                   {block.header[c + 1]}
                   {': '}
                   <Spans spans={cell} />
@@ -163,7 +178,10 @@ function BlockView({ block }: { block: Block }): ReactElement {
       );
     default:
       return (
-        <Text className="pb-md font-noto text-body text-ink">
+        <Text
+          className="pb-md font-noto text-body text-ink"
+          lineBreakStrategyIOS="hangul-word"
+        >
           <Spans spans={block.spans} />
         </Text>
       );

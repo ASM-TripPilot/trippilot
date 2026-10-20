@@ -353,7 +353,8 @@ export function TripWizardStep2Screen({
                 많아도 진행하는 문이 카드 아래 파묻히지 않는다. 게이트가 없어 둘 다 항상 활성이다.
                 empty 는 주 CTA 가 "숙소 없이 계속"(generate 자리를 대신, testID 는 nostay-start 로
                 default 링크와 공유·같은 동작) + 보조 "숙소 둘러보기"(trip-base-browse)라 generate 가 없다. */}
-            <View className="border-t border-hairline bg-canvas px-lg pb-[18px] pt-md gap-md">
+            <View className="bg-canvas px-lg pb-[18px] pt-md gap-md">
+              <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
               {onDone !== undefined ? (
                 <Pressable
                   testID="trip-base-edit-done"

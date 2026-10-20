@@ -158,7 +158,8 @@ export function MyStaysScreen({
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="my-stays-root" className="flex-1 bg-canvas">
         {/* 앱바 — 뒤로 + 타이틀 + 하단 hairline */}
-        <View className="flex-row items-center gap-md border-b border-hairline px-lg pb-[14px] pt-sm">
+        <View className="flex-row items-center gap-md px-lg pb-[14px] pt-sm">
+          <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
           <Pressable
             testID="my-stays-back"
             accessibilityRole="button"

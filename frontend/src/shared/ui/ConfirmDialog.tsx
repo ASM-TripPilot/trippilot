@@ -25,7 +25,7 @@ export type ConfirmDialogProps = {
   description?: string;
   /** tight = `mt-sm`, loose = `mt-[10px] leading-[21px]` */
   descriptionSpacing?: 'tight' | 'loose';
-  /** iOS 어절 단위 줄바꿈('요.' 한 글자 고아 줄 방지) — 켠 다이얼로그만 켠다. */
+  /** iOS 어절 단위 줄바꿈('요.' 한 글자 고아 줄 방지) — 기본으로 켠다(TRIP-1434 — 끄려면 false). */
   hangulBreak?: boolean;
   /** 제목·본문 아래, 실패 문구 위(목록 ScrollView 등). */
   children?: ReactNode;
@@ -131,7 +131,7 @@ export function ConfirmDialog({
   title,
   description,
   descriptionSpacing = 'tight',
-  hangulBreak = false,
+  hangulBreak = true,
   children,
   errorText,
   errorTestID,

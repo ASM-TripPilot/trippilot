@@ -369,8 +369,9 @@ export function EditorView({
             testID="itinerary-edit-dropzone-bar"
             pointerEvents="none"
             style={{ height: DELETE_ZONE_BAR_HEIGHT + bottomInset }}
-            className="absolute bottom-0 left-0 right-0 border-t border-hairline bg-canvas px-lg pt-md"
+            className="absolute bottom-0 left-0 right-0 bg-canvas px-lg pt-md"
           >
+            <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
             <SlotDropZone isActive />
           </View>
         ) : null}

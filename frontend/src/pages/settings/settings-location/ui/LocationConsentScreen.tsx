@@ -144,7 +144,8 @@ export function LocationConsentScreen({
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
-      <View className="flex-row items-center gap-[6px] border-b border-hairline bg-canvas px-lg pb-md pt-sm">
+      <View className="flex-row items-center gap-[6px] bg-canvas px-lg pb-md pt-sm">
+        <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
         <Pressable
           testID="settings-location-back"
           accessibilityRole="button"

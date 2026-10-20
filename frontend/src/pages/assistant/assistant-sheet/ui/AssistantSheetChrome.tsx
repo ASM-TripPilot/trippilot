@@ -154,7 +154,8 @@ export function Composer({
   sendTestID?: string;
 }): ReactElement {
   return (
-    <View className="flex-row items-center gap-sm border-t border-hairline px-lg pb-sm pt-[10px]">
+    <View className="flex-row items-center gap-sm px-lg pb-sm pt-[10px]">
+      <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
       <TextInput
         testID="assistant-input"
         value={value}

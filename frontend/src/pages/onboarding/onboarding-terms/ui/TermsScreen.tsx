@@ -60,7 +60,8 @@ export function TermsScreen({
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View testID="onboarding-terms-root" className="flex-1 bg-canvas">
-        <View className="h-[56px] flex-row items-center gap-sm border-b border-hairline px-lg">
+        <View className="h-[56px] flex-row items-center gap-sm px-lg">
+          <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
           <Text className="font-noto-bold text-[16px] font-bold text-ink">
             약관 동의
           </Text>
@@ -100,10 +101,11 @@ export function TermsScreen({
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: item.checked }}
                 onPress={() => onToggle(item.termsType)}
-                className={`flex-row items-center justify-between py-[15px] ${
-                  index > 0 ? 'border-t border-hairline' : ''
-                }`}
+                className="flex-row items-center justify-between py-[15px]"
               >
+                {index > 0 ? (
+                  <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
+                ) : null}
                 <View className="flex-row items-center gap-[10px]">
                   <View
                     className={`h-[22px] w-[22px] items-center justify-center rounded-[6px] ${
@@ -177,7 +179,8 @@ export function TermsScreen({
           ) : null}
         </ScrollView>
 
-        <View className="border-t border-hairline px-2xl pb-[30px] pt-md">
+        <View className="px-2xl pb-[30px] pt-md">
+          <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
           <Pressable
             testID="onboarding-terms-next"
             // disabled prop 은 탭을 삼킨다 — 비활성 탭이 안내를 켜야 하므로 접근성 상태로만 알린다.

@@ -502,7 +502,8 @@ export function TripWizardStep1Screen({
         </ScrollView>
 
         {/* 하단바 — 실패 배너(있을 때만) + [다음] */}
-        <View className="border-t border-hairline bg-canvas px-lg pb-[20px] pt-md">
+        <View className="bg-canvas px-lg pb-[20px] pt-md">
+          <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
           {submitError ? (
             <View
               testID="trip-wizard-submit-banner"
