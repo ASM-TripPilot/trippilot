@@ -77,6 +77,8 @@ const SLOW_MS = 90_000;
 export interface PlanbSolvingPageProps {
   tripId: string;
   sessionId: string;
+  /** 상황 감지 FE-B — 넣으려던 POI. 서버에 보내지 않고 i06 replace params 로만 잇는다(§3.6 미포함 안내). */
+  includePoiId?: string;
 }
 
 /** 상한에 닿았을 때 본문이 넘기는 세션 스냅샷(`null` = 응답을 한 번도 못 받았다). */
@@ -85,6 +87,7 @@ type CappedSession = ReplanSession | null;
 export function PlanbSolvingPage({
   tripId,
   sessionId,
+  includePoiId,
 }: PlanbSolvingPageProps): ReactElement | null {
   const router = useRouter();
   const [capped, setCapped] = useState<CappedSession | undefined>(undefined);
@@ -110,6 +113,7 @@ export function PlanbSolvingPage({
     <PlanbSolvingBody
       tripId={tripId}
       sessionId={sessionId}
+      includePoiId={includePoiId}
       onCapped={(session) => setCapped(session ?? null)}
     />
   );
@@ -122,6 +126,7 @@ interface PlanbSolvingBodyProps extends PlanbSolvingPageProps {
 function PlanbSolvingBody({
   tripId,
   sessionId,
+  includePoiId,
   onCapped,
 }: PlanbSolvingBodyProps): ReactElement | null {
   const router = useRouter();
@@ -196,10 +201,12 @@ function PlanbSolvingBody({
     if (kind === 'draft' || kind === 'noSolution' || kind === 'failed') {
       router.replace({
         pathname: '/trips/[tripId]/planb/draft',
-        params: { tripId, sessionId },
+        params: includePoiId
+          ? { tripId, sessionId, includePoiId }
+          : { tripId, sessionId },
       });
     }
-  }, [kind, tripId, sessionId, router]);
+  }, [kind, tripId, sessionId, includePoiId, router]);
 
   // 서버 호출 없이 나간다 — 뒤로 갈 곳이 없으면(딥링크 착지) 허브로.
   const leaveWithoutServer = () => {

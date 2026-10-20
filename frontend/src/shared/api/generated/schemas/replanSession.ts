@@ -8,6 +8,7 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { ReplanSessionInitiatedBy } from './replanSessionInitiatedBy';
 import type { ReplanSessionOriginKind } from './replanSessionOriginKind';
 import type { ReplanSessionScope } from './replanSessionScope';
 import type { ReplanSessionStatus } from './replanSessionStatus';
@@ -36,4 +37,8 @@ export interface ReplanSession {
   status: ReplanSessionStatus;
   createdAt: string;
   closedAt?: string | null;
+  /** USER = 사용자 진입 · SYSTEM = 일정을 막는 위험 알림으로 서버가 미리 짠 대안(화면이 `미리 준비한 대안` 표식을 단다). 적용은 어느 쪽이든 사용자만 한다(INV-SA-1) */
+  initiatedBy?: ReplanSessionInitiatedBy;
+  /** 미리 짠 대안이 낡았는가(BR-SA-19) — 적용하면 409 EXPIRED·STALE 인 초안 · 대체돼 닫힌 선계산 · 2분 넘게 산출 중인 선계산. 사용자 세션은 늘 false. APPLIED 가 아니면 상태와 무관하게 '준비된 대안 없음'으로 읽는다 — 갈 곳은 BR-SA-23 */
+  stale?: boolean;
 }

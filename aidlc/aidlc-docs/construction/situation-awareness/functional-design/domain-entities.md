@@ -195,6 +195,13 @@ PK `(trip_id, source)`.
 - 백엔드는 영업시간 원문도 위반 `detail` 도 파싱하지 않는다 — 해석은 AI 한 곳(BR-SA-17).
 - 변형 사상: `reasonCode` 가 있으면 그 변형, 없거나 모르면 `HOURS_MISMATCH`. 이미 본 경고(`hoursWarnedBefore`)는 다시 알리지 않는다 — 폐업은 예외(편집 때 볼 수 없었다).
 
+> **[개정 · 2026-10-20 — 구현 반영]** §7.1 — 하루 점검 계약의 구현 세부(#1401·#1410 · 규칙은 `business-rules.md` BR-SA-17 개정 블록).
+> - 시그니처에 선택 인자가 더해졌다 — `checkDay(accountId, tripId, date, judgeHours = true): DayCheck?`(`backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/api/ItineraryDayCheckFacade.kt:22`). `judgeHours=false` 면 AI 를 부르지 않는다 — 영업시간은 전부 `UNKNOWN`, 이름·`hoursWarnedBefore` 는 그대로. 장소 감지의 회차 회로가 쓴다.
+> - **`judged=false` 는 보류뿐**(AI 를 불렀는데 예외 — 불통·5xx·시한). AI 를 부르지 않은 날(AI 모드 ≠ http · `judgeHours=false` · 영업시간을 아는 슬롯 없음)은 `judged=true` 이고 그 슬롯들이 `UNKNOWN` 이다 — 회로가 보류만 세려고 둘을 가른다(`ItineraryDayCheckFacade.kt:25-30` · `ItineraryDayCheckService.kt:57-61,69`). 볼 슬롯이 없는 날은 AI 0회로 `judged=true` · 빈 슬롯이다.
+> - `hours = UNKNOWN` 의 원인에 '`judgeHours=false`'가 더해진다(`ItineraryDayCheckFacade.kt:51-52`).
+> - `reasonCode` 는 #1410 부터 실제로 실린다 — 그 날 HC1 위반 가운데 위치가 있는 것의 `reason_code`(`ItineraryDayCheckService.kt:64-67,82`).
+> - `hoursWarnedBefore` 의 'HC1 문구'에는 2026-09-28(TRIP-1030) 이전 저장분의 꼴(`영업시간 밖`·`요일 휴무`)도 든다(`ViolationText.kt:41-50`).
+
 ### 7.2 `PoiLifeStatus` (place-data api `PoiStatusFacade.statusOf(poiIds): Map<UUID, PoiLifeStatus>`)
 
 `ACTIVE` · `CLOSED` · `OTHER`. place-data `DataStatus` 4종(`Poi.kt:47`)을 접는다 — `LOST`·`UNVERIFIED` 는 `OTHER` = **폐업 아님·모름**. 없는 id 는 결과에서 빠진다. 상태 무관 조회(`Ports.kt:70-71` `findByIds`)를 쓴다 — ACTIVE 만 주는 조회로는 폐업을 볼 수 없다(PBT-SA-13). `PoiSurfaceFacade` 에 얹지 않는다(§6.2 와 같은 이유).
@@ -250,6 +257,8 @@ PK `(trip_id, source)`.
 - 조회 `GET /trips/{tripId}/replan-sessions/prepared?date=` = 그 날짜의 가장 최근 SYSTEM 세션(`CANCELED` 포함, `stale` 계산 포함) | 404(없음·타 계정 은닉). 트리거에는 세션 필드를 두지 않는다 — C9 는 C10 상태를 모르고, 날짜 키라 트리거 id 가 바뀌어도 이어진다.
 - 선계산 결과 `Prepared = Opened | Skipped(DUPLICATE·TRIP_CAP·GLOBAL_CAP·INVALID·OPEN_SESSION·EARLIER_OPEN·BUSY)` 는 저장하지 않는다(요약 로그). 상한은 실제로 연 세션만 센다 — `BUSY` 는 세션이 없다(O-SA-10).
 
+> **[개정 · 2026-10-20 — 구현 반영]** §9 — 위 '낡음' 줄과 `stale=true` 줄은 `business-rules.md` BR-SA-19 개정 블록대로 읽는다: `CANCELED` 는 닫힌 까닭과 무관하게 `STALE` · `APPLIED` 는 낡음 없음 · `NO_SOLUTION`·`FAILED` 는 날짜만 · 2분은 생성 시각(선계산은 실행 자리 대기 포함) 기준 · '시간에 단조'는 같은 상태 안의 말이다 — 2분 `stale` 은 산출이 끝나 상태가 바뀌면 다시 판정돼 풀릴 수 있다(`backend/modules/itinerary-recalculation/src/main/kotlin/com/trippilot/recalculation/domain/ReplanSession.kt:102-121`). 열린 세션 조회(`findOpenByTripForUpdate`)와 확정·취소의 세션 조회(`findByIdForUpdate`)는 행 잠금이다(BR-SA-18 개정 블록).
+
 ---
 
 ## 10. 이벤트
@@ -266,6 +275,8 @@ PK `(trip_id, source)`.
 - 멱등: 알림 `source_event_id` UNIQUE(`V2.31__notification.sql:22`) · SYSTEM 세션 부분 유일(§9) · 소비는 같은 전이를 두 번 해도 결과가 같다.
 - **이벤트 고리가 없다**: `PlanBTriggered` → 선계산은 초안까지만이고(INV-SA-1), `ItineraryRecalculated` 는 사용자 [적용]에서만 나오며, 그 구독(소비)은 이벤트를 내지 않는다.
 - 인셉션 이벤트 표(`component-dependency.md:66-67`)는 두 이벤트의 구독자를 notification 하나로 적는다 — 고치지 않고 상신 목록에 올린다(G-SA-8 · O-SA-15). U10 FD domain-entities §7 의 `PlanBTriggered` "변경 없음"은 개정 블록이 이 절을 가리킨다.
+
+> **[개정 · 2026-10-20 — 구현 반영]** §10 — `planb.PlanBTriggered` 의 `dateRisks` 항목에 `coverage`(`MOST`·`SOME` — 날씨만, 기본값 null)가 더해졌다 — `dateRisks[{kind, variant, poiIds, coverage}]`(#1405 · `backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/api/event/PlanBEvents.kt:45`). 판정이 그 트리거 payload 의 `coverage`(§3.4)를 옮기고(`TriggerService.kt:388`) 선계산 구독자가 읽는다(`PlanBTriggeredPrepareSubscriber.kt:73`). 선택 필드라 옛 구독자(알림)에 무해하다. G-SA-11 해소(§17 개정 블록).
 
 ---
 
@@ -367,3 +378,5 @@ PK `(trip_id, source)`.
 |---|---|---|
 | **G-SA-10** | **실외 판정 재료에 태그가 없다.** `SweepTarget.slots`(`PlannedSlotView`)는 카테고리만 싣는데, `액티비티` 에는 실내 나이트라이프(클럽·바)가 태그로 함께 담긴다(AI `domain/poi.py:16-18`). 실외 집합 {자연·야경·액티비티}는 그 슬롯에도 날씨 신호를 낸다. 재계획 회피 집합(`ai/data/replan_directives.yaml:61,131` INDOOR·AVOID_OUTDOOR)도 같은 집합이라 "경보 대상 = 재계획이 바꾸는 대상"은 지켜진다 | 설계의 실외 집합을 유지한다. 바꿀 때는 재계획 회피 집합과 한 번에, 태그를 슬롯 사영에 싣는 것은 C8 계약 변경이다(O-SA-5 와 같은 줄) |
 | **G-SA-11** | **`dateRisks` 항목에 영향 범위가 없다.** 선계산 매핑은 날씨 위험의 제외 POI 를 `coverage = SOME` 일 때만 쓰는데(DEC-SA-4), 이벤트 항목은 `{kind, variant, poiIds}` 뿐이라 C10 이 SOME·MOST 를 가를 재료가 없다(`coverage` 는 트리거 payload 에만 있다, §3.4) | 항목에 선택 필드 `coverage`(날씨만)를 더하는 쪽을 권한다 — 사실은 C9 가 싣고 매핑은 C10 이 갖는 분업이 유지된다. 이벤트 선택 필드라 옛 구독자에 무해 |
+
+> **[개정 · 2026-10-20 — 구현 반영]** **G-SA-11 해소** — 권고대로 항목에 선택 필드 `coverage`(날씨만)를 더했다(#1405 · §10 개정 블록). 단기예보는 영향 슬롯 수로 `MOST`·`SOME` 을 가르고 특보·대기질은 늘 `MOST` 다. 사실은 C9 가 싣고 매핑(`SOME` 일 때만 영향 POI 제외)은 C10 이 갖는 분업 그대로다(`backend/modules/itinerary-recalculation/src/main/kotlin/com/trippilot/recalculation/application/ReplanMaterial.kt:60`).
