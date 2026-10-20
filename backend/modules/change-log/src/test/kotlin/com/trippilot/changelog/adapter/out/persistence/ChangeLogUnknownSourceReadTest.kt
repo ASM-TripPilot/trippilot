@@ -87,4 +87,35 @@ class ChangeLogUnknownSourceReadTest : StringSpec({
         )
         logs.map { it.first }.toSet() shouldBe setOf(Level.WARN)
     }
+
+    /**
+     * 날·슬롯의 필수 키 7개(`date`·`slots`·`poiId`·`startAt`·`endAt`·`isFixed`·`endsNextDay`) 하나하나 — 없음·못 읽는 값·
+     * 다른 타입 — 가 각각 행째 건너뛰기여야 한다. 한 키라도 `?: 기본값`(EPOCH·UUID(0,0)·MIDNIGHT·false)으로 메우면
+     * 그 키의 케이스만 읽혀 나와 이 단정이 깨진다.
+     */
+    "날·슬롯의 필수 키가 하나라도 없거나 못 읽거나 타입이 다르면 그 행을 건너뛴다" {
+        val good = mapOf<String, Any>(
+            "poiId" to UUID.randomUUID().toString(), "startAt" to "10:00", "endAt" to "11:00",
+            "isFixed" to false, "endsNextDay" to false,
+        )
+        val goodDay = mapOf<String, Any>("date" to "2026-08-11", "slots" to listOf(good))
+        fun slot(key: String, value: Any?) = goodDay + ("slots" to listOf(if (value == null) good - key else good + (key to value)))
+        fun day(key: String, value: Any?) = if (value == null) goodDay - key else goodDay + (key to value)
+        val broken = listOf(
+            day("date", null), day("date", "2026-13-40"), day("date", 20260811),
+            day("slots", null), day("slots", "x"),
+            slot("poiId", null), slot("poiId", "x"), slot("poiId", 1),
+            slot("startAt", null), slot("startAt", "25:00"), slot("startAt", 10),
+            slot("endAt", null), slot("endAt", "x"), slot("endAt", 11),
+            slot("isFixed", null), slot("isFixed", "yes"),
+            slot("endsNextDay", null), slot("endsNextDay", "no"),
+        )
+        val rows = broken.mapIndexed { i, d -> row(i + 2L, "MANUAL", after = mapOf("days" to listOf(d))) }
+        val (read, logs) = readWithLogs(row(1, "MANUAL", after = mapOf("days" to listOf(goodDay))), *rows.toTypedArray())
+
+        read.map { it.entryId } shouldBe listOf(1L)
+        logs shouldBe rows.map {
+            Level.WARN to "스냅숏을 읽지 못해 이력 행을 건너뜁니다. changeLogEntryId=${it.changeLogEntryId} beforeReadable=true afterReadable=false"
+        }
+    }
 })
