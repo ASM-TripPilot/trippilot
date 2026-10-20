@@ -31,6 +31,12 @@ import type { ItineraryDaysItem } from '@/shared/api/index.schemas';
  *   그 날 거점에서 출발한다(수집만 하고 쓰지 않는 좌표를 만들지 않는다). 날짜 형식이 아니면 오늘로 바꿔 보내지
  *   않고 막는다(INV-4). 409 는 "아직 일정이 없는 날" 쉬운 안내 + [닫기]다(다시 눌러도 같은 결과).
  * - 스크림·끌어 닫기 → 뒤로. 뒤로 갈 곳이 없으면(딥링크·푸시 직행) 허브로 replace.
+ * - 상황 감지 FE-B(frontend-components §3.3) 선택 props — 진입 게이트(`PlanbEntryGate`)·기회 카드가 준다.
+ *   시드 props 가 오면(빈 배열 포함) kind 자동 시드 대신 그것을 진입 때 한 번 켠다(흐림 같은 주의에 날씨 사유를 넣으면
+ *   AI 가 일정을 과하게 바꾼다 — 게이트가 빈 시드를 준다). 시드가 왔으면 body `triggerId` 는 게이트가 상세로 확인한 그 id 다
+ *   (활성 목록 도착·포함과 무관 — §3.2). 시드의 날씨는 감지 칩이 날씨가 아니어도 정적 칩으로 보이고 나간다(준비 세션은
+ *   같은 날 위험의 합집합 — BR-SA-18). 제외 POI 는 화면에 없고 body 에만 실린다. `prefill` 은 자유 입력
+ *   초기값, `includePoiId` 는 서버에 보내지 않고 solving 라우트 파라미터로만 잇는다(i06 미포함 안내 재료).
  */
 
 export interface PlanbRequestPageProps {
@@ -41,6 +47,16 @@ export interface PlanbRequestPageProps {
   triggerId?: string;
   /** URL 원문 — 오늘이 아닌 날을 다시 짤 때 허브가 싣는 'YYYY-MM-DD'(신뢰 경계 — 형식을 검사한다). */
   targetDate?: string;
+  /** 처음 켜 둘 사유(진입 게이트 — 준비 세션 입력 또는 kind 사유, 주의면 빈 배열). 시드 셋 중 하나라도 오면 kind 자동 시드를 끈다. */
+  seedReasons?: string[];
+  /** 처음 켜 둘 지시. */
+  seedDirectives?: string[];
+  /** 제외 POI — 칩이 없어 화면엔 안 보이고 body 에만 실린다. */
+  seedExcludedPoiIds?: string[];
+  /** 자유 입력 초기값(기회 카드 `{장소명} 꼭 넣어서 다시 짜 줘`). */
+  prefill?: string;
+  /** 넣으려던 POI — 서버에 보내지 않고 solving → draft 라우트로 잇는다(i06 미포함 안내). */
+  includePoiId?: string;
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -59,12 +75,41 @@ function slotOfKey(days: ItineraryDaysItem[], slotKey?: string | null) {
     ?.slots.find((slot) => slot.poiId === parsed.poiId);
 }
 
-export function PlanbRequestPage({
-  tripId,
-  scope: scopeParam,
-  triggerId,
-  targetDate,
-}: PlanbRequestPageProps): ReactElement {
+/** 진입 시드 — 처음 받은 값을 굳힌다(재렌더마다 새 배열이 와도 초기화 effect 가 다시 돌지 않게, 같은 키는 한 번). */
+interface EntrySeed {
+  reasons: string[];
+  directives: string[];
+  excludedPoiIds: string[];
+}
+
+function entrySeedOf({
+  seedReasons,
+  seedDirectives,
+  seedExcludedPoiIds,
+}: PlanbRequestPageProps): EntrySeed | null {
+  if (
+    seedReasons === undefined &&
+    seedDirectives === undefined &&
+    seedExcludedPoiIds === undefined
+  ) {
+    return null;
+  }
+  return {
+    reasons: [...new Set(seedReasons ?? [])],
+    directives: [...new Set(seedDirectives ?? [])],
+    excludedPoiIds: [...new Set(seedExcludedPoiIds ?? [])],
+  };
+}
+
+export function PlanbRequestPage(props: PlanbRequestPageProps): ReactElement {
+  const {
+    tripId,
+    scope: scopeParam,
+    triggerId,
+    targetDate,
+    prefill,
+    includePoiId,
+  } = props;
   const router = useRouter();
   const startReplan = useStartReplan();
   // 시작 실패 안내(INV-4). 여행 기간 밖이면 서버가 409 — 확정 일정은 날짜 무관 허브로 열리므로
@@ -91,6 +136,10 @@ export function PlanbRequestPage({
   const toggleDirective = useReplanFormStore((s) => s.toggleDirective);
   const setFreeText = useReplanFormStore((s) => s.setFreeText);
   const resetForm = useReplanFormStore((s) => s.reset);
+  const [entrySeed] = useState(() => entrySeedOf(props));
+  // 진입 시드에 날씨가 있으면(준비 세션은 같은 날 위험의 합집합 — BR-SA-18) 감지 칩이 날씨가 아니어도 정적 날씨 칩을
+  // 남긴다. 숨기면 처음 켜 둔 사유가 화면에도 body 에도 없고, 목록 도착 전후로 요청이 갈린다.
+  const keepWeatherChip = entrySeed?.reasons.includes('WEATHER') === true;
 
   const trigger = triggerId
     ? triggers.data?.triggers.find((item) => item.triggerId === triggerId)
@@ -102,7 +151,8 @@ export function PlanbRequestPage({
       ? {
           label: triggerPillCopy(
             detectedKind,
-            slotOfKey(itinerary.data?.days ?? [], trigger.slotKey)
+            slotOfKey(itinerary.data?.days ?? [], trigger.slotKey),
+            { variant: trigger.variant }
           ),
           reasonKey: TRIGGER_REASON_KEY[detectedKind],
         }
@@ -110,7 +160,7 @@ export function PlanbRequestPage({
   const detectedReasonKey = detected?.reasonKey;
 
   // 진입 초기화 — reset 뒤 알려진 scope 만 반영한다. 아래 시드 effect 보다 먼저 선언해야 한다
-  // (같은 컴포넌트의 effect 는 선언 순서대로 돈다).
+  // (같은 컴포넌트의 effect 는 선언 순서대로 돈다). 진입 시드·prefill 도 reset 뒤 여기서 한 번 켠다(값이 굳어 있어 다시 돌지 않는다).
   useEffect(() => {
     resetForm();
     if (hasTargetDate) {
@@ -119,17 +169,30 @@ export function PlanbRequestPage({
     } else if (scopeParam === 'FULL_DAY' || scopeParam === 'PARTIAL_SLOTS') {
       setScope(scopeParam);
     }
-  }, [scopeParam, hasTargetDate, resetForm, setScope]);
+    entrySeed?.reasons.forEach(toggleReason);
+    entrySeed?.directives.forEach(toggleDirective);
+    if (prefill) setFreeText(prefill);
+  }, [
+    scopeParam,
+    hasTargetDate,
+    resetForm,
+    setScope,
+    entrySeed,
+    toggleReason,
+    toggleDirective,
+    prefill,
+    setFreeText,
+  ]);
 
-  // 감지 트리거 시드 — 데이터가 도착한 첫 순간 한 번만(set 의미).
+  // 감지 트리거 시드 — 데이터가 도착한 첫 순간 한 번만(set 의미). 진입 시드가 왔으면 그것이 대신한다(§3.3).
   const seededRef = useRef(false);
   useEffect(() => {
-    if (seededRef.current || !detectedReasonKey) return;
+    if (seededRef.current || entrySeed !== null || !detectedReasonKey) return;
     seededRef.current = true;
     if (!useReplanFormStore.getState().reasons.includes(detectedReasonKey)) {
       toggleReason(detectedReasonKey);
     }
-  }, [detectedReasonKey, toggleReason]);
+  }, [entrySeed, detectedReasonKey, toggleReason]);
 
   // GPS 를 기다리는 동안과 POST 응답을 기다리는 동안 재누름은 무시한다 — 읽기·POST 각 1회(AC-A5).
   // TRIP-1294: 서버는 새 POST 가 열린 세션을 CANCELED 로 닫는다(INV-U4-06) — 그래서 성공이면 화면을 떠날 때까지,
@@ -162,14 +225,26 @@ export function PlanbRequestPage({
         // 오늘이 아닌 날은 FULL_DAY 만(서버 400) — 스토어 값이 무엇이든 여기서 못 박는다.
         scope: validTargetDate ? 'FULL_DAY' : form.scope,
         targetDate: validTargetDate,
-        // 감지 칩이 숨긴 정적 "날씨"는 화면에 없으니 보내지 않는다(감지 칩 자신의 key 면 남긴다).
+        // 감지 칩이 숨긴 정적 "날씨"는 화면에 없으니 보내지 않는다(감지 칩 자신의 key 면 남긴다). 시드의 날씨는 보인다.
         reasons: form.reasons.filter(
-          (key) => !detected || key !== 'WEATHER' || key === detected.reasonKey
+          (key) =>
+            !detected ||
+            key !== 'WEATHER' ||
+            key === detected.reasonKey ||
+            keepWeatherChip
         ),
         directives: form.directives,
         freeText: form.freeText,
-        // 칩을 껐는지와 무관하게 "트리거로 들어왔다"는 사실을 싣는다(BR-U4-31).
-        triggerId: detected && trigger ? trigger.triggerId : null,
+        // 칩을 껐는지와 무관하게 "트리거로 들어왔다"는 사실을 싣는다(BR-U4-31). 진입 게이트가 상세로 확인한 트리거
+        // (시드가 왔다)는 활성 목록 도착과 무관하게 그 id 다(§3.2) — 목록 전에 누르면 빠져 소비·전날 창이 깨진다.
+        triggerId:
+          entrySeed !== null
+            ? (triggerId ?? null)
+            : detected && trigger
+              ? trigger.triggerId
+              : null,
+        // 진입 시드의 제외 POI — 없으면 종전과 같은 빈 배열(§3.3).
+        excludedPoiIds: entrySeed?.excludedPoiIds,
       },
       origin
     );
@@ -183,7 +258,10 @@ export function PlanbRequestPage({
         onSuccess: (session) =>
           router.replace({
             pathname: '/trips/[tripId]/planb/solving',
-            params: { tripId, sessionId: session.sessionId },
+            // includePoiId 는 서버가 아니라 i06 미포함 안내의 재료라 라우트로만 잇는다(§3.6).
+            params: includePoiId
+              ? { tripId, sessionId: session.sessionId, includePoiId }
+              : { tripId, sessionId: session.sessionId },
           }),
         onError: (error) => {
           // 잠금은 실패에서만 푼다 — 성공 뒤엔 진행 화면으로 넘어가는 동안에도 잠가 둔다(5-b 경고-1: 전환 중
@@ -226,6 +304,7 @@ export function PlanbRequestPage({
       selectedDirectives={directives}
       freeText={freeText}
       detected={detected}
+      keepWeatherChip={keepWeatherChip}
       onSelectScope={setScope}
       onToggleReason={toggleReason}
       onToggleDirective={toggleDirective}

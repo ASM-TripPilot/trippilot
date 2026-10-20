@@ -415,3 +415,88 @@ describe('🔴 TRIP-1214 c · 시트를 맨 아래로 내려도 [직접 수정]�
     expect(screen.getByTestId('sheet-cta-button-1')).toBeTruthy();
   });
 });
+
+/**
+ * 상황 감지 FE-B · frontend-components §3.6 — i06 의 새 표면 세 개(순수 뷰 몫: 무엇이 언제 보이고 무엇을 부르나).
+ *
+ *  - `prepared` 면 머리에 `미리 준비한 대안` 표식(`planb-draft-prepared`).
+ *  - `stale` 이면 안내 자리에 `시간이 지나 이 대안은 지금 일정과 맞지 않아요` + [새 대안 보기](`planb-draft-stale-retry`) —
+ *    [적용하기]는 잠긴다(다시 눌러도 같은 409). 재요청 중엔 [새 대안 보기]도 잠기고, 재요청 실패면 한 줄로 알린다.
+ *  - `includeMissingText` 가 오면 그 문장 한 줄(`planb-draft-include-missing`), 없으면 없다.
+ *  - 셋 다 없으면 종전 화면 그대로(위 V·N 묶음).
+ */
+describe('🔴 상황 감지 FE-B · 미리 준비한 대안 표식 · 낡음 얼굴 · 미포함 안내 (§3.6)', () => {
+  it('F1 prepared 면 "미리 준비한 대안" 표식이 있다', () => {
+    renderView({ prepared: true });
+    expect(screen.getByTestId('planb-draft-prepared')).toHaveTextContent(
+      '미리 준비한 대안'
+    );
+  });
+
+  it('F2 prepared 가 없으면 표식이 없다', () => {
+    renderView();
+    expect(screen.queryByTestId('planb-draft-prepared')).toBeNull();
+    // 짝 앵커 — 화면은 그려졌다.
+    expect(screen.getByTestId('sheet-cta-button-1')).toBeTruthy();
+  });
+
+  it('F3 stale 이면 낡음 문구 + [새 대안 보기] → onRetryStale, [적용하기]는 잠긴다', () => {
+    const onRetryStale = jest.fn();
+    const handlers = renderView({ stale: true, onRetryStale });
+
+    expect(screen.getByTestId('planb-draft-stale')).toHaveTextContent(
+      '시간이 지나 이 대안은 지금 일정과 맞지 않아요새 대안 보기'
+    );
+    // 일반 확정 실패 문구로 접지 않는다.
+    expect(screen.queryByText('변경을 반영하지 못했어요')).toBeNull();
+    expect(screen.getByTestId('sheet-cta-button-1')).toBeDisabled();
+
+    fireEvent.press(screen.getByTestId('planb-draft-stale-retry'));
+    expect(onRetryStale).toHaveBeenCalledTimes(1);
+    expect(handlers.onApply).not.toHaveBeenCalled();
+  });
+
+  it('F3b stale 인데 onRetryStale 이 없으면(다시 짤 수 없는 지난 날 초안) 낡음 문구만 있고 [새 대안 보기]는 없다', () => {
+    renderView({ stale: true });
+
+    expect(screen.getByTestId('planb-draft-stale')).toHaveTextContent(
+      '시간이 지나 이 대안은 지금 일정과 맞지 않아요'
+    );
+    expect(screen.queryByTestId('planb-draft-stale-retry')).toBeNull();
+    expect(screen.getByTestId('sheet-cta-button-1')).toBeDisabled();
+  });
+
+  it('F4 재요청 중엔 [새 대안 보기]가 잠기고, 재요청 실패면 실패 한 줄이 붙는다', () => {
+    const onRetryStale = jest.fn();
+    renderView({
+      stale: true,
+      onRetryStale,
+      staleRetryPending: true,
+      staleRetryFailed: true,
+    });
+
+    const retry = screen.getByTestId('planb-draft-stale-retry');
+    expect(retry).toBeDisabled();
+    fireEvent.press(retry);
+    expect(onRetryStale).not.toHaveBeenCalled();
+    // i04 시작 실패와 같은 문장(새 문구를 짓지 않는다).
+    expect(screen.getByTestId('planb-draft-stale-failed')).toHaveTextContent(
+      '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요'
+    );
+  });
+
+  it('F5 미포함 문장이 오면 그 한 줄이다', () => {
+    renderView({
+      includeMissingText: '‘하늘공원’은 이번 안에 넣지 못했어요.',
+    });
+    expect(screen.getByTestId('planb-draft-include-missing')).toHaveTextContent(
+      '‘하늘공원’은 이번 안에 넣지 못했어요.'
+    );
+  });
+
+  it('F6 미포함 문장이 null 이면 그 줄이 없다', () => {
+    renderView({ includeMissingText: null });
+    expect(screen.queryByTestId('planb-draft-include-missing')).toBeNull();
+    expect(screen.getByTestId('sheet-cta-button-1')).toBeEnabled();
+  });
+});
