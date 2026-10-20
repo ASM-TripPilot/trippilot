@@ -45,7 +45,9 @@ jobs:
       # 운영 승격이 커버리지 부채 때문에 멈춘다. 릴리스 PR 은 두 꼴이다: docs/conventions/branch.md 의 `develop` → `main`,
       # 그리고 실제 관행인 `release/main-*`(main 에서 따서 develop 커밋을 머지한 브랜치 — 머지된 릴리스 PR 이 전부 이 이름).
       # main 으로 가는 그 밖의 PR(branch.md 의 hotfix/* 는 main 에서 분기, 관행상 ci/* 등도)은 develop 을 거치지 않은
-      # 코드라 **막는다**. 판정이 브랜치 이름이라, 릴리스가 아닌 수정을 `release/main-*` 로 올리면 경고로만 지나간다.
+      # 코드라 **막는다**. 판정이 브랜치 이름이라(fork 에서 온 PR 은 이름이 같아도 릴리스로 보지 않는다), 이 저장소 안에서
+      # 릴리스가 아닌 수정을 `release/main-*` 로 올리면 경고로만 지나간다. main 이 이미 하한 미달이면(advisory 로 나간
+      # 릴리스의 부채) hotfix 도 자기 변경과 무관하게 빨개진다 — 그때는 요약의 모듈 표로 자기 변경분을 판단한다.
       # 대신 막지 않는 경우의 실패를
       # `::warning::` 주석으로 커밋 체크에 남긴다(COVERAGE_ADVISORY). 각자 통과한 PR 둘이 합쳐 하한을 넘은 시점이
       # 그 머지 커밋에 보이게 — 안 남기면 무관한 다음 PR 이 처음 빨개져 원인을 거꾸로 추적해야 한다.
@@ -54,7 +56,7 @@ jobs:
         working-directory: backend
         env:
           # 막지 않는 경우: develop push · 릴리스 PR(develop 또는 release/main-* → main) · develop/main 자체를 수동 실행(이미 머지된 코드다)
-          COVERAGE_ADVISORY: ${{ (github.event_name == 'push' || (github.base_ref == 'main' && (github.head_ref == 'develop' || startsWith(github.head_ref, 'release/main-'))) || (github.event_name == 'workflow_dispatch' && (github.ref_name == 'develop' || github.ref_name == 'main'))) && '1' || '' }}
+          COVERAGE_ADVISORY: ${{ (github.event_name == 'push' || (github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository && (github.head_ref == 'develop' || startsWith(github.head_ref, 'release/main-'))) || (github.event_name == 'workflow_dispatch' && (github.ref_name == 'develop' || github.ref_name == 'main'))) && '1' || '' }}
         run: ./gradlew build :app:coverageGate --no-daemon
       - name: 커버리지 리포트 보관
         if: ${{ !cancelled() && github.event_name != 'push' }}   # 검토용(PR·수동) — 실패해도 남기되, 취소된 실행은 건너뛴다
