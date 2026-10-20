@@ -5,6 +5,7 @@ import {
   flushQueue,
   handleGeofence,
   handleLocations,
+  handleWake,
   markExplainerAsked,
   setContext,
   setTripPaused,
@@ -801,5 +802,135 @@ describe('engine — 여행별 일시 중지 (TRIP-1486)', () => {
 
     expect(t.fs.files.size).toBe(0);
     expect(createAutomationStore(t.fs).load().state.pausedTrips).toEqual([]);
+  });
+});
+
+/**
+ * TRIP-1517 · 진입 직후 정지하면 자동 도착이 남지 않던 결함 — 라우트 태스크의 표본이 지오펜스 진입보다 먼저 처리돼
+ * 근거가 버려지고(정지라 새 표본 없음), 판정 wake 는 표본 도착(handleLocations)에서만 들어갔다.
+ * 고침: 진입 직전 60초 안의 정확 표본을 근거로 인정 + 표본 없이도 부를 수 있는 판정 wake(handleWake).
+ * 3동작 뼈대: 준비=ARMED 엔진 → 실행=표본·진입을 결함 순서로 넣고 시계만 밀기(정지) → 단언=싱크로 나간 ARRIVE.
+ */
+describe('engine — 진입 직후 정지 (TRIP-1517)', () => {
+  const A = `${TODAY}#a`;
+  const sends = (t: ReturnType<typeof setup>) =>
+    t.sink.calls.flatMap((c) => (c.op === 'sendAutoEvents' ? [c.batch] : []));
+  const phaseOfA = (t: ReturnType<typeof setup>) =>
+    t.store.load().state.judge?.state.slots[A]?.phase;
+  const goodAt = (t: number) => ({ t, lat: 37.5, lng: 127, acc: 15 });
+
+  async function armed() {
+    const t = setup();
+    await setContext(t.deps, ctx());
+    await run(t.deps);
+    return t;
+  }
+
+  it('EW1 재현: 표본이 진입보다 먼저 → 진입 → 정지 4분 → wake 한 번에 도착 확정(재전송 없음)', async () => {
+    const t = await armed();
+    await handleLocations(t.deps, [goodAt(T0 - 3_000)]);
+    await handleGeofence(t.deps, { slotKey: A, type: 'enter' });
+    t.advance(4 * MIN);
+
+    await handleWake(t.deps);
+    await handleWake(t.deps);
+
+    expect(sends(t)).toHaveLength(1);
+    expect(sends(t)[0].events).toEqual([
+      expect.objectContaining({
+        kind: 'ARRIVE',
+        slotKey: A,
+        poiId: 'a',
+        occurredAt: new Date(T0).toISOString(),
+      }),
+    ]);
+    expect(t.store.load().state.queue).toEqual([]);
+  });
+
+  it('EW2 창 밖 표본뿐이면 wake 가 와도 보류(기록 없음)', async () => {
+    const t = await armed();
+    await handleLocations(t.deps, [goodAt(T0 - 2 * MIN)]);
+    await handleGeofence(t.deps, { slotKey: A, type: 'enter' });
+    t.advance(4 * MIN);
+
+    await handleWake(t.deps);
+
+    expect(sends(t)).toHaveLength(0);
+    expect(phaseOfA(t)).toBe('HELD');
+  });
+
+  it('EW3 3분이 안 됐으면 wake 는 아무것도 안 하고, 3분이 지난 wake 에서만 도착한다', async () => {
+    const t = await armed();
+    await handleLocations(t.deps, [goodAt(T0 - 3_000)]);
+    await handleGeofence(t.deps, { slotKey: A, type: 'enter' });
+
+    t.advance(2 * MIN);
+    await handleWake(t.deps);
+    expect(sends(t)).toHaveLength(0);
+    expect(phaseOfA(t)).toBe('ENTERED');
+
+    t.advance(2 * MIN);
+    await handleWake(t.deps);
+    expect(sends(t)).toHaveLength(1);
+  });
+
+  it('EW4 무장 안 된 상태의 wake 는 아무것도 하지 않는다(E10 과 같은 계약)', async () => {
+    const t = setup();
+    await handleWake(t.deps);
+    expect(t.sink.calls).toEqual([]);
+  });
+
+  it('EW7 강등으로 해제된 뒤의 wake 는 ENTERED 슬롯이 있어도 도착을 내지 않는다(해제됐는데 기록하면 INV-4 위반)', async () => {
+    const t = await armed();
+    await handleLocations(t.deps, [goodAt(T0 - 3_000)]);
+    await handleGeofence(t.deps, { slotKey: A, type: 'enter' });
+    await run(t.deps, { ...ARMED_SNAPSHOT, background: 'denied' });
+    t.advance(4 * MIN);
+
+    await handleWake(t.deps);
+
+    expect(sends(t)).toHaveLength(0);
+    expect(phaseOfA(t)).toBe('ENTERED');
+  });
+
+  it('EW5 옛 저장본(새 필드 없는 판정 상태)도 제자리에서 새 규칙으로 올라간다', async () => {
+    const t = await armed();
+    const before = t.store.load().state;
+    const legacySlots = Object.fromEntries(
+      ctx().slots.map((s) => [
+        s.slotKey,
+        { phase: 'IDLE' as const, goodSample: false },
+      ])
+    );
+    t.store.save({
+      ...before,
+      judge: {
+        date: TODAY,
+        state: { order: Object.keys(legacySlots), slots: legacySlots },
+      },
+    });
+
+    await handleLocations(t.deps, [goodAt(T0 - 3_000)]);
+    await handleGeofence(t.deps, { slotKey: A, type: 'enter' });
+    t.advance(4 * MIN);
+    await handleWake(t.deps);
+
+    expect(sends(t)).toHaveLength(1);
+  });
+
+  it('EW6 진입이 먼저 처리되고 옛 시각 표본이 늦게 배달돼도 같은 호출의 wake 로 도착한다(순서 무관)', async () => {
+    const t = await armed();
+    await handleGeofence(t.deps, { slotKey: A, type: 'enter' });
+    t.advance(4 * MIN);
+
+    await handleLocations(t.deps, [goodAt(T0 - 30_000)]);
+
+    expect(sends(t)).toHaveLength(1);
+    expect(sends(t)[0].events).toEqual([
+      expect.objectContaining({
+        kind: 'ARRIVE',
+        occurredAt: new Date(T0).toISOString(),
+      }),
+    ]);
   });
 });

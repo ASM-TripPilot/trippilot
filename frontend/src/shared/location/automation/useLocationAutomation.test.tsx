@@ -6,7 +6,14 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { seoulDate } from '@/shared/lib/seoulDate';
 
 import { overrideEngineDeps } from './deps';
-import { setContext, setTripPaused, type EngineDeps } from './engine';
+import {
+  evaluate,
+  handleGeofence,
+  handleLocations,
+  setContext,
+  setTripPaused,
+  type EngineDeps,
+} from './engine';
 import type { NativeAdapters } from './native';
 import type { PermissionSnapshot } from './permission';
 import { createFakeAutomationSink } from './sink';
@@ -485,5 +492,113 @@ describe('useAutomationStatus — l06 일시 중지 얼굴 (TRIP-1486)', () => {
       status: 'off',
       reason: '여행 날짜에만 켜져요',
     });
+  });
+});
+
+/**
+ * TRIP-1517 · 포그라운드 복귀 wake — 정지해 있어도 앱을 열면 3분 지난 진입이 도착으로 확정된다.
+ * 3동작 뼈대: 준비=엔진으로 무장+진입(슬롯 ENTERED)을 먼저 만들어 둠 → 실행=훅 마운트·AppState active → 단언=싱크로 나간 ARRIVE.
+ * 훅이 엔진의 어떤 함수를 부르는지는 보지 않는다 — "ARRIVE 가 나갔나/안 나갔나"라는 효과만 본다.
+ */
+describe('useLocationAutomation — 포그라운드 복귀 wake (TRIP-1517)', () => {
+  const MIN = 60_000;
+  const A = `${TODAY}#a`;
+  const ARMED_SNAP: PermissionSnapshot = { ...WIU, background: 'granted' };
+  const sendsOf = (t: ReturnType<typeof makeDeps>) =>
+    t.sink.calls.flatMap((c) => (c.op === 'sendAutoEvents' ? [c.batch] : []));
+  const phaseOfA = (t: ReturnType<typeof makeDeps>) =>
+    t.deps.store.load().state.judge?.state.slots[A]?.phase;
+
+  // 슬롯 a 가 T0 에 진입해 ENTERED(근거 표본은 진입 3초 전)인 채 앱이 닫힌 상태. 시계는 가변.
+  async function armedWithEntered() {
+    const t = makeDeps();
+    let clock = T0;
+    t.deps.now = () => clock;
+    overrideEngineDeps(t.deps);
+    await setContext(t.deps, { ...input, tripId: 'trip-1' });
+    await evaluate(t.deps, { flagOn: true, snapshot: ARMED_SNAP, onHub: true });
+    // 결함 순서 그대로: 라우트 표본이 먼저 처리되고(슬롯 IDLE), 그다음 진입.
+    await handleLocations(t.deps, [
+      { t: T0 - 3_000, lat: 37.5, lng: 127, acc: 15 },
+    ]);
+    await handleGeofence(t.deps, { slotKey: A, type: 'enter' });
+    return {
+      t,
+      setClock: (ms: number) => {
+        clock = ms;
+      },
+    };
+  }
+
+  it('HW1 active 가 오면 3분 지난 ENTERED 슬롯이 도착으로 한 번 나간다(마운트 땐 3분 전이라 안 나간다)', async () => {
+    mockSnapshot = ARMED_SNAP;
+    const { t, setClock } = await armedWithEntered();
+    setClock(T0 + MIN);
+    const { result } = renderHook(() => useLocationAutomation(input), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.state).toBe('ARMED'));
+    expect(sendsOf(t)).toHaveLength(0);
+
+    setClock(T0 + 4 * MIN);
+    await act(async () => {
+      appStateListener?.('active');
+    });
+
+    await waitFor(() => expect(sendsOf(t)).toHaveLength(1));
+    expect(sendsOf(t)[0].events).toEqual([
+      expect.objectContaining({
+        kind: 'ARRIVE',
+        slotKey: A,
+        occurredAt: new Date(T0).toISOString(),
+      }),
+    ]);
+  });
+
+  it('HW2 무장이 아니면(권한 강등) active 가 와도 도착을 내지 않는다', async () => {
+    mockSnapshot = {
+      ...WIU,
+      background: 'denied',
+      backgroundCanAskAgain: false,
+    };
+    const { t, setClock } = await armedWithEntered();
+    setClock(T0 + 4 * MIN);
+    const { result } = renderHook(() => useLocationAutomation(input), {
+      wrapper,
+    });
+    // 처음 MANUAL('no-context')과 구분: 강등 판정이 끝나야 이 사유가 된다.
+    await waitFor(() =>
+      expect(result.current.reason).toBe('background-blocked')
+    );
+
+    await act(async () => {
+      appStateListener?.('active');
+    });
+    await act(async () => {});
+
+    expect(sendsOf(t)).toHaveLength(0);
+    expect(phaseOfA(t)).toBe('ENTERED');
+  });
+
+  it('HW3 포그라운드가 아닌 refresh([켜기] 등)는 wake 를 넣지 않고, 다음 active 에서만 도착한다', async () => {
+    mockSnapshot = WIU; // when-in-use(이미 설명을 본 여행) — 마운트 때 강등으로 해제된다
+    const { t, setClock } = await armedWithEntered();
+    setClock(T0 + 4 * MIN);
+    const { result } = renderHook(() => useLocationAutomation(input), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.reason).toBe('when-in-use'));
+
+    mockSnapshot = ARMED_SNAP;
+    await act(async () => {
+      await result.current.enable();
+    });
+    expect(result.current.state).toBe('ARMED');
+    expect(sendsOf(t)).toHaveLength(0);
+
+    await act(async () => {
+      appStateListener?.('active');
+    });
+    await waitFor(() => expect(sendsOf(t)).toHaveLength(1));
   });
 });

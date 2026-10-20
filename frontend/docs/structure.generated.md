@@ -1623,7 +1623,7 @@
 - `src/shared/location/automation/config.ts`  →  AUTOMATION_CONFIG · AutomationConfig
 - `src/shared/location/automation/deps.ts`  →  getEngineDeps · overrideEngineDeps
 - `src/shared/location/automation/distanceSource.ts`  →  DistanceSource · distanceSourceByDate
-- `src/shared/location/automation/engine.ts`  →  EngineDeps · EngineReason · EngineStatus · ArmingCallInput · setContext · evaluate · handleGeofence · handleLocations · flushQueue · uploadPendingRoutes · markExplainerAsked · setTripPaused · clearNotice · wipeAutomation
+- `src/shared/location/automation/engine.ts`  →  EngineDeps · EngineReason · EngineStatus · ArmingCallInput · setContext · evaluate · handleGeofence · handleLocations · handleWake · flushQueue · uploadPendingRoutes · markExplainerAsked · setTripPaused · clearNotice · wipeAutomation
 - `src/shared/location/automation/expoFs.ts`  →  createExpoFs
 - `src/shared/location/automation/flag.ts`  →  isLocationAutomationEnabled
 - `src/shared/location/automation/httpSink.ts`  →  createHttpAutomationSink

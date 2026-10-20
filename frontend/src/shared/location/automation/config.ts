@@ -11,6 +11,8 @@ export const AUTOMATION_CONFIG = {
   maxAccuracyM: 100,
   /** 진입 후 이탈 없이 지나야 도착을 확정하는 창(BR-U10-14·15). */
   arriveDwellMs: 3 * 60_000,
+  /** 진입 시각 직전 이 창 안의 정확 표본도 그 진입의 근거로 인정한다(TRIP-1517 — 표본·진입 처리 순서 경합 제거). */
+  preEnterSampleMs: 60_000,
   /** 자동 완료에 필요한 도착~이탈 최소 간격(BR-U10-17·18). */
   minStayForCompleteMs: 10 * 60_000,
   /** 이탈 확정 창 — 이 안에 재진입하면 이탈 취소(BR-U10-16). */

@@ -7,6 +7,7 @@ import {
   clearNotice,
   evaluate,
   flushQueue,
+  handleWake,
   markExplainerAsked,
   setContext,
   setTripPaused,
@@ -102,6 +103,8 @@ export function useLocationAutomation(
         onHub,
       });
       if (foreground) {
+        // TRIP-1517 · 정지한 사용자는 새 표본이 안 와 3분 경과분이 안 확정된다 — 판정을 한 번 깨운다(무장 게이트는 엔진).
+        await handleWake(deps);
         await flushQueue(deps);
         await uploadPendingRoutes(deps);
         const prefix = `/trips/${ctx.tripId}/visits`;
