@@ -10,8 +10,9 @@ CI 밖 수동 실행 전용(실 API 를 부른다). few-shot·판단 순서(CoT)
     uv run --env-file ../.env python scripts/measure/measure_prompt_ab.py intent prompts 2
 
 종류:
-- `intent`  DIALOGUE_INTENT — `data/intent_eval_set.yaml`(사람 검수 87문장) + 지시어 사례 6건 + 짧은 수락 사례 8건 + 장소 탐색 6건 + 두 질문 5건(정답 null — 계획 단계로) + 하나로 남을 음성 5건 + 행사 2건. OUT_OF_SCOPE 의
-  정답은 거절({"intent": null})이다. 평가셋 문장을 프롬프트 예시로 옮기면 이 숫자가 무의미해진다(leak).
+- `intent`  DIALOGUE_INTENT — `data/intent_eval_set.yaml`(사람 검수 87문장) + 지시어 사례 6건 + 짧은 수락 사례 8건 + 장소 탐색 6건 + 두 질문 5건(정답 null — 계획 단계로) + 하나로 남을 음성 5건 + 행사 2건(정답 null). OUT_OF_SCOPE 의
+  정답은 판단해서 닫은 거절({"intent": null} 등 — 오케스트레이터가 계획 단계로 넘기는 `_plannable` 과 같은 기준)이다. 시한·벤더
+  실패는 계획 단계로도 못 가니 오답으로 센다. 평가셋 문장을 프롬프트 예시로 옮기면 이 숫자가 무의미해진다(leak).
 - `directive`  REPLAN_DIRECTIVE_TRANSLATION(sol) — 라벨은 `measure_directive_match.POSITIVES/NEGATIVES` + 부정·혼합
   6건. 완전 일치(겹쳐 고른 지시도 오답)와 허용(정답 포함·금지 지시 없음)을 같이 낸다. 시한 3.75s(DEV 실측 시한).
 - `answer`  DIALOGUE_ANSWER — Facts 9종 × 반복. 게이트 통과율·시각-장소 짝 위반(오케스트레이터 INV-2 검사와
@@ -119,7 +120,8 @@ def _gateway(prompts: Path, feature: LlmFeature, gate, model: str = MODEL) -> Ga
 
 
 def _run(fn, cases):
-    with ThreadPoolExecutor(8) as ex:
+    # 동시 호출 수 — 기본 8. A/B 를 같은 시각에 나란히 돌릴 땐 2 로 낮춘다(32 동시면 게이트웨이 대기로 시한 초과가 30% 섞였다, 2026-10-20)
+    with ThreadPoolExecutor(int(os.environ.get("EVAL_WORKERS", "8"))) as ex:
         return list(ex.map(fn, enumerate(cases)))
 
 
@@ -216,10 +218,11 @@ SINGLE_CASES = [
     ("SUGGEST_ALTERNATIVE", "박물관 말고 다른 데 없어?"),
     ("REPLAN", "비 와서 오늘 남은 일정 다시 짜줘"),
 ]
-# 행사·축제(dialogue_intent 0.2.4 — 탐색 정의에 행사) — 0.2.3 은 축제 일정을 묻는 말을 날씨로 잡았다(같은 E2E — 그 문장은 계획 측정셋 몫이라 여기엔 다른 문장).
+# 행사·축제 — 다룰 도구가 아직 없어 정답은 null(계획 단계가 gap EVENTS 로 정직하게 거절, BR-AO-29). 탐색으로 보내면 행사가 아니라
+# 장소 카드가 나간다(후보 풀에 행사가 없다). 행사 포트가 붙는 판에서 라벨이 바뀐다. 계획 측정셋과 다른 문장이다.
 EVENT_CASES = [
-    ("EXPLORE_PLACES", "다음 달 부산 불꽃축제 열려?"),
-    ("EXPLORE_PLACES", "부산에 이번 달 공연 있어?"),
+    ("OUT_OF_SCOPE", "다음 달 부산 불꽃축제 열려?"),
+    ("OUT_OF_SCOPE", "부산에 이번 달 공연 있어?"),
 ]
 
 
@@ -241,7 +244,10 @@ def run_intent(prompts: Path, repeat: int) -> None:
                             timeout_sec=INTENT_TIMEOUT)
         wall = int((time.monotonic() - t0) * 1000)
         got = None if (r.is_fallback or r.value is None) else r.value.intent.value
-        ok = got in (None, "OUT_OF_SCOPE") if label == "OUT_OF_SCOPE" else got == label
+        if label == "OUT_OF_SCOPE":  # 계획 단계(2‴)로 가는 닫힘만 정답 — 오케스트레이터와 같은 술어. 시한·벤더 실패를 정답으로 세면 부푼다
+            ok = got == "OUT_OF_SCOPE" or (got is None and orch._plannable(orch._refusal_reason(r.error or "intent_bad_shape")))
+        else:
+            ok = got == label
         slots = dict(r.value.slots) if got else {}
         return dict(label=label, utt=utt, kind=kind, got=got, ok=ok, slots=slots, err=r.error, wall=wall, **_usage(r))
 
