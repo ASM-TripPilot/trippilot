@@ -10,7 +10,7 @@ CI 밖 수동 실행 전용(실 API 를 부른다). few-shot·판단 순서(CoT)
     uv run --env-file ../.env python scripts/measure/measure_prompt_ab.py intent prompts 2
 
 종류:
-- `intent`  DIALOGUE_INTENT — `data/intent_eval_set.yaml`(사람 검수 87문장) + 지시어 사례 6건 + 짧은 수락 사례 8건 + 장소 탐색 6건. OUT_OF_SCOPE 의
+- `intent`  DIALOGUE_INTENT — `data/intent_eval_set.yaml`(사람 검수 87문장) + 지시어 사례 6건 + 짧은 수락 사례 8건 + 장소 탐색 6건 + 두 질문 5건(정답 null — 계획 단계로) + 하나로 남을 음성 5건 + 행사 2건. OUT_OF_SCOPE 의
   정답은 거절({"intent": null})이다. 평가셋 문장을 프롬프트 예시로 옮기면 이 숫자가 무의미해진다(leak).
 - `directive`  REPLAN_DIRECTIVE_TRANSLATION(sol) — 라벨은 `measure_directive_match.POSITIVES/NEGATIVES` + 부정·혼합
   6건. 완전 일치(겹쳐 고른 지시도 오답)와 허용(정답 포함·금지 지시 없음)을 같이 낸다. 시한 3.75s(DEV 실측 시한).
@@ -199,6 +199,30 @@ EXPLORE_CASES = [
 ]
 
 
+# 두 가지를 같이 묻는 말(dialogue_intent 0.2.4) — 의도 하나로 잡으면 나머지 절반을 버린다(2026-10-20 실 스택 E2E: "다음 일정
+# 어디고 그 근처 맛집도"가 다음 일정만, "오늘 남은 일정이랑 비 올 확률"이 날씨만). null 로 넘기면 계획 단계(DIALOGUE_PLAN)가 도구
+# 둘로 받는다. 정답은 null(OUT_OF_SCOPE 라벨). 뒤의 음성 사례는 하나로 남아야 한다 — 한 곳의 두 속성·바꾸는 요청·대신 갈 곳.
+COMPOUND_CASES = [  # 계획 측정셋(dialogue_plan_eval_set.yaml)과 겹치지 않는 문장 — 두 측정셋은 서로 독립이다
+    ("OUT_OF_SCOPE", "내일 마지막 일정이랑 거기 근처 카페도 알려줘"),
+    ("OUT_OF_SCOPE", "모레 일정 순서랑 그날 강수확률"),
+    ("OUT_OF_SCOPE", "여수랑 순천에 산책하기 좋은 데 둘 다"),
+    ("OUT_OF_SCOPE", "동문재래시장 몇 시에 닫는지랑 숙소까지 거리"),
+    ("OUT_OF_SCOPE", "라토커피제주 대신 갈 데랑 내일 비 소식"),
+]
+SINGLE_CASES = [
+    ("GET_NEXT_SLOT", "다음 일정 어디고 몇 시야"),
+    ("GET_POI_INFO", "해녀의집 몇 시에 열고 입장료 얼마야"),
+    ("EDIT_SCHEDULE", "카페 빼고 식당 넣어줘"),
+    ("SUGGEST_ALTERNATIVE", "박물관 말고 다른 데 없어?"),
+    ("REPLAN", "비 와서 오늘 남은 일정 다시 짜줘"),
+]
+# 행사·축제(dialogue_intent 0.2.4 — 탐색 정의에 행사) — 0.2.3 은 축제 일정을 묻는 말을 날씨로 잡았다(같은 E2E — 그 문장은 계획 측정셋 몫이라 여기엔 다른 문장).
+EVENT_CASES = [
+    ("EXPLORE_PLACES", "다음 달 부산 불꽃축제 열려?"),
+    ("EXPLORE_PLACES", "부산에 이번 달 공연 있어?"),
+]
+
+
 def run_intent(prompts: Path, repeat: int) -> None:
     worker = DialogueIntentWorker(_gateway(prompts, LlmFeature.DIALOGUE_INTENT, IntentGate()))
     data = yaml.safe_load((_AI_ROOT / "data/intent_eval_set.yaml").read_text(encoding="utf-8"))
@@ -206,6 +230,9 @@ def run_intent(prompts: Path, repeat: int) -> None:
     cases += [(label, u, _HISTORY, "context") for label, u in CONTEXT_CASES]
     cases += [(label, u, h, "accept") for label, u, h in ACCEPT_CASES]
     cases += [(label, u, _HISTORY if label == "SUGGEST_ALTERNATIVE" else [], "explore") for label, u in EXPLORE_CASES]
+    cases += [(label, u, [], "compound") for label, u in COMPOUND_CASES]
+    cases += [(label, u, [], "single") for label, u in SINGLE_CASES]
+    cases += [(label, u, [], "event") for label, u in EVENT_CASES]
 
     def one(item):
         i, (label, utt, history, kind) = item
@@ -225,13 +252,14 @@ def run_intent(prompts: Path, repeat: int) -> None:
         return round(sum(r["ok"] for r in sel) / len(sel), 4)
 
     print(json.dumps(dict(prompts=str(prompts), model=MODEL, n=len(rows), eval_acc=acc("eval"),
-                          context_acc=acc("context"), accept_acc=acc("accept"), explore_acc=acc("explore"), **_timing(rows)),
+                          context_acc=acc("context"), accept_acc=acc("accept"), explore_acc=acc("explore"),
+                          compound_acc=acc("compound"), single_acc=acc("single"), event_acc=acc("event"), **_timing(rows)),
                      ensure_ascii=False))
     for r in rows:
         if not r["ok"]:
             print(f"  ✗ {r['label']:<20} got={r['got']!s:<20} {r['utt']}  ({r['err'] or ''})")
     for r in rows[: len(cases)]:
-        if r["kind"] in ("context", "accept", "explore"):
+        if r["kind"] in ("context", "accept", "explore", "compound", "single", "event"):
             print(f"  · {r['utt']} → {r['got']} {r['slots']}")
 
 

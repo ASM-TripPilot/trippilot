@@ -99,7 +99,7 @@ def _classify(worker: DialogueIntentWorker, utterance: str = _UTTERANCE, **kw):
 def test_prompt_loads_with_semver_and_carries_every_section() -> None:
     prompt, ref = PromptRegistry(_PROMPTS).render(_FEAT, _vars())
     assert (ref.prompt_id, ref.version, ref.feature) == (
-        "prompts/dialogue_intent.yaml", "0.2.3", "DIALOGUE_INTENT")
+        "prompts/dialogue_intent.yaml", "0.2.4", "DIALOGUE_INTENT")
     assert _UTTERANCE in prompt
     assert "- 사용자: 내일 경복궁 가는 날 날씨 어때?" in prompt
     assert "- 도우미: 내일 서울은 강수확률 20%예요." in prompt
@@ -319,7 +319,7 @@ def test_worker_sends_timeout_cap_and_effort_to_the_vendor() -> None:
     worker, _ = _worker(llm)
     assert _classify(worker, timeout_sec=2.5).is_fallback is False
     (request,) = llm.requests
-    assert (request.timeout_sec, request.max_tokens, request.effort) == (2.5, 1024, "low")
+    assert (request.timeout_sec, request.max_tokens, request.effort) == (2.5, 1024, "none")
     assert llm.features() == ["DIALOGUE_INTENT"]
 
 
@@ -330,7 +330,7 @@ def test_feature_is_registered_in_every_config_table() -> None:
     """둘 중 하나를 빠뜨리면 라우팅이 ValueError 거나 관측이 unmapped_feature 로 샌다."""
     assert default_tier_map()[_FEAT] is ModelTier.LIGHT
     assert default_fallback_modes()[_FEAT] == ("llm_dialogue_intent", "out_of_scope")
-    assert default_feature_effort()[_FEAT] == "low"
+    assert default_feature_effort()[_FEAT] == "none"
     assert default_feature_max_tokens()[_FEAT] == 1024  # DEV 실측 출력 239/256 — 상향
 
 

@@ -148,8 +148,8 @@ def test_effort_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         LlmFeature.REPLAN_REQUEST_EXTRACTION: "low",  # 같은 replan 시한, 구성보다 먼저
         LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: "low",  # 기본 추론에서 DEV 3.75s 시한 2/2 초과
         # 도우미 턴 — 해석 시한 9s 안에서 분류 ≤2.5s·답변 ≤2.5s·요약 ≤2.0s (assistant-orchestrator FD §2.10)
-        LlmFeature.DIALOGUE_INTENT: "low",
-        LlmFeature.DIALOGUE_ANSWER: "low",
+        LlmFeature.DIALOGUE_INTENT: "none",
+        LlmFeature.DIALOGUE_ANSWER: "none",
         LlmFeature.DIALOGUE_MEMORY: "low",
         LlmFeature.DIALOGUE_PLAN: "none",  # 같은 9s 안의 2‴ 계획(≤3.0s) — 사고 없이 더 빠르고 품질이 같거나 낫다(2026-10-20 실측)
         LlmFeature.DIALOGUE_SQL: "none",  # 팬아웃 안(≤3s)의 짧은 변환
