@@ -129,6 +129,9 @@ services:
       PLANB_SITUATION_SWEEP_ACCOUNT_IDS: ${PLANB_SITUATION_SWEEP_ACCOUNT_IDS:-}
       # 위험 감지 시 재계획 초안 미리 짜기 — off | on(LLM 비용). 읽는 코드는 선계산 변경이 더한다.
       PLANB_PREPARED_REPLAN: ${PLANB_PREPARED_REPLAN:-off}
+      # 기회 카드(근처 행사·요즘 인기) — off | http. 허브가 날짜를 볼 때 AI 에 묻는다(LLM 0회). 주소는 위 AI_URL 을 쓴다.
+      # 배포(EKS)는 차트가 http 로 고정한다. 값을 보장하는 꼴이다(빈 값은 off) — 모르는 값은 기동 실패다.
+      AI_OPPORTUNITY_MODE: ${AI_OPPORTUNITY_MODE:-off}
       # Apple 은 시크릿이 없다 — id_token 서명을 JWKS 로 검증할 뿐이라 iOS 번들 ID 하나뿐이다(TRIP-858).
       # 이 값이 없으면 애플 로그인은 401 이 아니라 501(미지원)로 나간다.
       APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}

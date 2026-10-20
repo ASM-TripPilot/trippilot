@@ -51,9 +51,13 @@ _OK_CODE = "0000"
 
 # 이 키로는 앞으로도 안 된다는 신호 — 만나면 키를 퇴출하고 다음 키로 넘어간다.
 # data.go.kr 공통 에러코드: 20 접근거부 · 22 한도초과 · 30 미등록 · 31 기한만료.
-# (재시도로 풀리는 일시 장애 — 타임아웃·429·5xx — 는 여기 없다. 그건 키 문제가 아니다.)
+# (재시도로 풀리는 일시 장애 — 타임아웃·5xx — 는 여기 없다. 그건 키 문제가 아니다.)
 _KEY_DEAD_CODES = frozenset({"20", "22", "30", "31"})
-_KEY_DEAD_HTTP = 403
+# HTTP 403 = 키 자체 문제(KEY2 가 매 실행 403 — 2026-10-19), HTTP 429 = **그 키의 그 오퍼레이션 하루 한도
+# 소진**(한도는 오퍼레이션별 — 같은 키로 목록·detailCommon2 는 통과, 10-19 실측). 429 를 일시 장애로 두면
+# 한도 끝난 키로 계속 부른다 — 10-19 정기 수집은 KEY2 몫이 KEY3 로 몰려 detailIntro2 960건이 429 였다.
+# 퇴출은 이 실행 안에서만이다(다음 날 다시 쓴다).
+_KEY_DEAD_HTTP = frozenset({403, 429})
 
 # 목록 조회 키 — 옛 areaCode → 법정동 시도 코드(lDongRegnCd). KorService2 가 지역을 법정동 코드로
 # 옮기면서 **수정된 항목의 areacode 칸이 비어** areaCode 로 거르면 일부만 온다. 실측(2026-10-18,
@@ -321,8 +325,8 @@ class TourApiAdapter:
         try:
             payload = self._http.get_json(f"{_BASE}/{endpoint}", request_params)
         except Exception as e:  # urllib·JSON 파싱 등 — 원인 보존해 상위 로그로
-            if getattr(e, "code", None) == _KEY_DEAD_HTTP:
-                raise _KeyRejected(f"HTTP {_KEY_DEAD_HTTP}") from e
+            if (code := getattr(e, "code", None)) in _KEY_DEAD_HTTP:
+                raise _KeyRejected(f"HTTP {code}") from e
             raise SourcingError(f"{endpoint} 호출 실패: {type(e).__name__}: {e}") from e
         if not isinstance(payload, dict):
             raise SourcingError(f"{endpoint} 응답이 JSON 객체가 아님")
