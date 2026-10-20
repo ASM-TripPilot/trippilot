@@ -230,25 +230,22 @@ jobs:
           # 소비자(`ingest_pois.py`)가 항목별 source 로 갈라 보낸다.
           # `--state`: **시도 게이트를 켠다**(백엔드가 시도를 못 정하는 행 격리, TRIP-1475). 앞 판본이 통과하면 그
           # 판본을 지키고, 아니면 빼고, 둘 다 기제안 색인에서 지운다 — 커서가 이미 그 페이지를 지났으므로 다음 실행이
-          # 아니라 그 (지역, 타입)을 완주한 뒤 처음부터 다시 훑을 때 다시 받는다. 보는 것은 **그날 다시 온 행**뿐이고
-          # 소급 제거 뒤에 센다 — 공유본에만 있던 미판정 행은 빼지 않고 경고만 한다. 격리 + 복원이 상한을 넘으면 병합이
+          # 아니라 그 (지역, 타입)을 완주한 뒤 처음부터 다시 훑을 때 다시 받는다. 소급 제거 뒤에 세고, 빼는 것은
+          # **공유본에 없던 키**(그날 처음 온 행)뿐이다 — 공유본에 있던 미판정 키는 빼지 않고 경고만 한다. 격리 + 복원이 상한을 넘으면 병합이
           # 실패해 이 스텝이 멈추고, 상태도 영속하지 않는다. (`--state` 없이 부르면 게이트는 경고만 한다 — main 의 구 사본용.)
           uv run python scripts/collect/merge_pois_docs.py --allow-mixed --state collect_state.json \
             -o data/collected_pois.json data/collected_pois.json collected_pois.json
           AFTER=$(uv run python -c "import json;print(len(json.load(open('data/collected_pois.json'))['proposals']))")
-          # 소급 제거(관광 무관·폐업·나이트라이프 규칙·판정 reject)·시도 미판정 격리(병합 단)는 **의도한 감소**다 — 그 몫을 빼고 비교하지
-          # 않으면 정상 동작이 축소 사고로 오인돼 배치가 빨개진다. 격리는 **공유본에 있던 키**(`sido_quarantined_existing`)만
-          # 뺀다 — 그날 처음 온 행은 BEFORE 에 없었으므로, 그것까지 더하면 가드가 그만큼 느슨해진다.
-          # 대입으로 받아야 파이썬이 죽으면 스텝도 죽는다(bash -e) — `read <<< "$(…)"` 는 실패를 삼킨다.
-          COUNTS=$(uv run python -c "import json;s=json.load(open('data/collected_pois.json'))['stats'];print(sum(s.get(k,0) for k in ('non_travel_dropped','closed_dropped','bad_nightlife_dropped','rejected_dropped')), s.get('sido_quarantined_existing',0))")
-          read -r RETRO QUAR <<< "$COUNTS"
-          DROPPED=$((RETRO + QUAR))
+          # 소급 제거(관광 무관·폐업·나이트라이프 규칙·판정 reject)는 **의도한 감소**다 — 그 몫을 빼고 비교하지 않으면
+          # 정상 동작이 축소 사고로 오인돼 배치가 빨개진다. 빼 주는 것은 **공유본에 있던 키**의 제거(`retro_dropped_existing`)
+          # 뿐이다 — 그날 처음 온 행은 BEFORE 에 없었으므로, 그것까지 더하면 가드가 그만큼 느슨해진다. 시도 게이트의 격리는
+          # 공유본에 없던 키만 빼므로(공유본에 있던 미판정 행은 남긴다) 더할 몫이 없다.
+          DROPPED=$(uv run python -c "import json;print(json.load(open('data/collected_pois.json'))['stats'].get('retro_dropped_existing',0))")
           if [ "$((AFTER + DROPPED))" -lt "$BEFORE" ]; then
             echo "::error::합본(${AFTER}건 + 의도 제거 ${DROPPED}건)이 공유본(${BEFORE}건)보다 작다 — 축소 덮어쓰기 차단"
             exit 1
           fi
-          [ "$RETRO" -gt 0 ] && echo "소급 제거(관광 무관·폐업·나이트라이프·판정 reject) ${RETRO}건 (축소 가드에서 제외)"
-          [ "$QUAR" -gt 0 ] && echo "시도 미판정 격리 — 공유본에 있던 행 ${QUAR}건 (축소 가드에서 제외)"
+          [ "$DROPPED" -gt 0 ] && echo "소급 제거(관광 무관·폐업·나이트라이프·판정 reject) — 공유본에 있던 행 ${DROPPED}건 (축소 가드에서 제외)"
           if git diff --quiet -- data/collected_pois.json; then
             echo "공유본 변화 없음 — PR 생략"
             exit 0
@@ -303,7 +300,9 @@ jobs:
             gh workflow run backend-ci.yml --ref develop \
               || echo "::warning::backend-ci 디스패치 실패 — 공유본 계약 IT 가 안 돌았다. Actions 에서 backend-ci 를 develop 으로 수동 실행할 것"
           else
-            echo "::error::공유본 PR #${PR} 이 머지되지 않았다(상태 ${STATE:-?}) — 상태를 영속하지 않는다 (다음 실행이 같은 자리부터 다시 받아 합친다)"
+            # 30초 뒤에 auto-merge 가 끝날 수도 있다 — 그러면 데이터는 들어갔지만 backend-ci 디스패치는 이 런에서 안 돈다.
+            # 머지 전에 미리 띄우지 않는 이유: develop 에 아직 없는 공유본을 검사하게 돼 의미가 없다.
+            echo "::error::공유본 PR #${PR} 이 머지되지 않았다(상태 ${STATE:-?}) — 상태를 영속하지 않는다 (다음 실행이 같은 자리부터 다시 받아 합친다). 나중에 머지되면 backend-ci 를 develop 으로 수동 실행할 것"
             exit 1
           fi
       - name: 수집 상태 영속 (collect-state 전용 브랜치 커밋·푸시)
@@ -315,7 +314,8 @@ jobs:
         # 조건표 (sync 가 돌았다 = collect 성공·skipped 아님. 서머리·artifact·신규율 진단의 성패는 sync 를 막지 않는다):
         #   collect 실패·skipped·취소           → sync 안 돎 → 영속 안 함
         #   sync 실패                           → 영속 안 함 (빨간불 — 축소 가드·격리 상한·상태 파일 없음·
-        #                                          push·PR 없음·MERGED 미확인. 다음 실행이 같은 자리부터 다시 받아 합친다)
+        #                                          push·PR 없음·MERGED 미확인. 다음 실행이 같은 자리부터 다시 받아 합친다.
+        #                                          MERGED 미확인 뒤에 auto-merge 가 끝나면 backend-ci 는 수동 실행)
         #   sync 성공                           → 영속 (PR 이 MERGED 로 확인됨, 또는 공유본 변화 없음 = 잃을 것 없음)
         #   서머리·artifact·신규율 진단 실패     → 위 두 줄 그대로 (잡은 빨갛지만 병합·영속은 막지 않는다)
         #   영속 스텝 실패(상태 파일 없음·push 실패) → 빨간불, 이어가기 검증 안 돎

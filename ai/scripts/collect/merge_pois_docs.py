@@ -34,6 +34,7 @@ from trippilot.poi_curation.sourcing.mapping import (  # noqa: E402
     parse_opening_hours_raw,
 )
 from trippilot.poi_curation.sourcing.overture_address import expand_sido, sido_abbreviations  # noqa: E402
+from trippilot.poi_curation.sourcing.state import parse_state  # noqa: E402
 from trippilot.poi_curation.sourcing.overture import (  # noqa: E402
     NIGHTLIFE_DETAIL,
     NIGHTLIFE_TAG,
@@ -258,7 +259,7 @@ def unresolved_sido(proposals: list[dict], sido: set[str] | None = None,
 
 def quarantine_unresolved_sido(proposals: list[dict], sido: set[str] | None = None,
                                history: dict[tuple[str, str], list[dict]] | None = None,
-                               before_ids: frozenset[int] = frozenset(),
+                               before_refs: frozenset[tuple[str, str]] = frozenset(),
                                ) -> tuple[list[dict], list[dict], list[dict]]:
     """백엔드가 시도를 못 정할 제안을 가른다. `(격리, 직전 판본 복원, 남겨 둠)` 을 각각 `{source, content_id, address}` 로.
 
@@ -272,9 +273,10 @@ def quarantine_unresolved_sido(proposals: list[dict], sido: set[str] | None = No
     `--close-missing` 이 그 부재를 퇴출로 읽어 **살아 있는 POI 를 닫는다**(백엔드는 시도 없는 행도 받아 둔다 —
     `PoiProposalIngestService`). `history`(`versions_by_ref`) 의 앞 판본은 호출자가 약칭을 펴 둔 것이어야 한다.
 
-    **최종 판본이 공유본(`before_ids`) 것이면 빼지 않는다(남겨 둠).** 오늘 다시 온 행이 아니라 이미 공유본에 있던
-    행이다 — 경고만 하던 기간·수동 병합으로 들어왔을 수 있고, LOCALDATA·OVERTURE·KAKAO_LOCAL 은 다시 수집되지
-    않으므로 빼면 `--close-missing` 으로 닫힌 채 영영 안 돌아온다. 상한에도 세지 않는다(매일 같은 행으로 막히지 않게).
+    **통과하는 판본이 없어도 공유본(`before_refs`)에 있던 키면 빼지 않는다(남겨 둠 — 최종 판본 그대로).** 경고만 하던
+    기간·수동 병합으로 이미 미판정인 채 들어와 있던 행이다. 빼면 공유본에서 사라져 `--close-missing` 이 살아 있는
+    POI 를 닫고, LOCALDATA·OVERTURE·KAKAO_LOCAL 은 다시 수집되지 않아 영영 안 돌아온다. 상한에도 세지 않는다(매일
+    같은 행으로 막히지 않게). 그래서 격리되는 것은 **공유본에 없던 키**(그날 처음 온 행)뿐이다.
     출처는 `merge` 와 같은 규칙(항목 source → 문서 source)으로 `history` 에서 읽는다 — 없으면 항목 source 만.
     """
     sido = sido if sido is not None else _load_sido()
@@ -289,14 +291,15 @@ def quarantine_unresolved_sido(proposals: list[dict], sido: set[str] | None = No
             kept.append(p)
             continue
         ref = ref_of.get(id(p)) or _ref(p, {})
-        if id(p) in before_ids:
+        prev = next((v for v in reversed(history.get(ref, [])[:-1]) if _resolves(v, sido)), None)
+        if prev is not None:
+            restored.append(_ref_dict(ref, p))
+            kept.append(prev)
+        elif ref in before_refs:
             left.append(_ref_dict(ref, p))
             kept.append(p)
-            continue
-        prev = next((v for v in reversed(history.get(ref, [])[:-1]) if _resolves(v, sido)), None)
-        (restored if prev is not None else out).append(_ref_dict(ref, p))
-        if prev is not None:
-            kept.append(prev)
+        else:
+            out.append(_ref_dict(ref, p))
     proposals[:] = kept
     return out, restored, left
 
@@ -441,9 +444,14 @@ def _self_check() -> None:
     print("[merge] self-check 통과")
 
 
-def retro_drops(out: dict) -> None:
+def retro_drops(out: dict, ref_by_id: dict[int, tuple[str, str]] | None = None,
+                before_refs: frozenset[tuple[str, str]] = frozenset()) -> None:
     """영업시간 재파싱 + 소급 제거들. 두 번 불러도 된다 — stats 는 더하고, 이미 거른 행에는 멱등이다
-    (시도 게이트가 앞 판본으로 되돌린 행만 둘째 호출에서 새로 걸린다)."""
+    (시도 게이트가 앞 판본으로 되돌린 행만 둘째 호출에서 새로 걸린다).
+
+    `retro_dropped_existing` — 뺀 행 중 **공유본(BEFORE)에 있던 키**만 센 수. 축소 가드는 공유본과 비교하므로 이것만
+    빼 준다 — 그날 처음 온 행의 제거까지 더하면 가드가 그만큼 느슨해진다(종류별 `*_dropped` 는 전체 수)."""
+    start = {id(p) for p in out["proposals"]}
     recovered = reparse_open_hours(out["proposals"])
     if recovered:
         print(f"[merge] 영업시간 재파싱 — {recovered}건 살림 (원문은 있었는데 파싱이 비어 있던 것)",
@@ -472,6 +480,9 @@ def retro_drops(out: dict) -> None:
         print(f"[merge] 폐업 제거 — {closed}건", file=sys.stderr)
         out["stats"]["unique_proposals"] = len(out["proposals"])
         out["stats"]["closed_dropped"] = out["stats"].get("closed_dropped", 0) + closed
+    gone = start - {id(p) for p in out["proposals"]}
+    existing = sum((ref_by_id or {}).get(i) in before_refs for i in gone)
+    out["stats"]["retro_dropped_existing"] = out["stats"].get("retro_dropped_existing", 0) + existing
 
 
 def main(argv: list[str]) -> int:
@@ -483,8 +494,9 @@ def main(argv: list[str]) -> int:
                         help="출처가 다른 문서도 합친다. 소비자가 **항목별 source 로 갈라** 보내야 한다 — 문서 레벨 source 는 하나뿐이다")
     parser.add_argument("--max-quarantined", type=int, default=MAX_QUARANTINED,
                         help=f"시도 미판정 격리 상한 — 넘으면 아무것도 쓰지 않고 실패 (기본 {MAX_QUARANTINED})")
-    parser.add_argument("--state", help="수집 상태(collect_state.json). **주면 시도 게이트가 켜진다** — 미판정 행을 격리하고 "
-                        "그 TourAPI 행을 기제안 색인에서 지운다. 안 주면 격리 없이 경고·stats 만 남긴다(구 워크플로 호환)")
+    parser.add_argument("--state", help="수집 상태(collect_state.json). **주면 시도 게이트가 켜진다** — 공유본에 없던 미판정 "
+                        "행을 격리하고 그 TourAPI 행을 기제안 색인에서 지운다. -o 가 입력 중 하나(덮어쓸 공유본)여야 하고, "
+                        "상태가 없거나 형식이 틀리면 아무것도 쓰지 않고 실패한다. 안 주면 격리 없이 경고·stats 만 남긴다(구 워크플로 호환)")
     args = parser.parse_args(argv)
 
     if args.self_check:
@@ -507,27 +519,41 @@ def main(argv: list[str]) -> int:
 
     # `--state` 는 **아무것도 쓰기 전에** 읽어 둔다 — 공유본을 쓴 뒤에 상태가 없다는 걸 알면 격리한 행이 색인에 남은
     # 채 공유본에서만 빠진다(반쪽 쓰기). 게이트를 켜 달라고 했는데 상태가 없으면 수집 파이프라인이 깨진 것이라 멈춘다.
+    # 형식까지 수집기와 같은 규칙(`state.parse_state` — `proposed` 가 str→str 객체인가 …)으로 본다. JSON 이기만 하면
+    # 통과시키면 `forget_quarantined` 가 공유본을 쓴 **뒤에** 터진다.
     if args.state:
         try:
-            json.loads(Path(args.state).read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as e:
+            parse_state(Path(args.state).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
             print(f"[merge] FAIL --state 를 읽지 못했다: {args.state} — {e} (아무것도 쓰지 않았다)", file=sys.stderr)
+            return 1
+        # 게이트는 "공유본에 있던 키인가"로 격리와 남겨 둠을 가른다 — 덮어쓸 공유본(`-o`)이 입력에 없으면 그걸 알 수
+        # 없어, 공유본에만 있던 행(다시 수집되지 않는 출처 포함)을 격리해 영영 잃는다.
+        if before is None:
+            print("[merge] FAIL --state 에는 -o 가 입력 문서 중 하나(덮어쓸 공유본)여야 한다 (아무것도 쓰지 않았다)",
+                  file=sys.stderr)
             return 1
 
     out = merge(docs, allow_mixed=args.allow_mixed)
     history = versions_by_ref(docs)
     if (expanded := expand_sido_abbrev(out["proposals"])):
         print(f"[merge] 주소 시도 약칭 → 정식 이름 — {expanded}건", file=sys.stderr)
-    retro_drops(out)
+    ref_by_id = {id(v): r for r, vs in history.items() for v in vs}
+    before_refs = frozenset(versions_by_ref([before])) if before else frozenset()
+    retro_drops(out, ref_by_id, before_refs)
     # 시도 게이트는 소급 제거 **뒤** — 어차피 빠질 행(폐업·관광 무관 …)을 격리 건수·상한·경고에 세지 않는다.
     quarantined: list[dict] = []
     restored: list[dict] = []
     left: list[dict] = []
     if args.state:
         expand_sido_abbrev([v for vs in history.values() for v in vs[:-1]])   # 되돌릴 후보도 펴 둔다
-        before_ids = frozenset(id(p) for p in (before or {}).get("proposals", []))
         quarantined, restored, left = quarantine_unresolved_sido(
-            out["proposals"], history=history, before_ids=before_ids)
+            out["proposals"], history=history, before_refs=before_refs)
+        if restored:
+            retro_drops(out, ref_by_id, before_refs)   # 되돌린 앞 판본도 같은 소급 제거를 거친다(나머지 행에는 멱등)
+            # 거기서 빠진 키는 복원이 아니라 소급 제거다 — 복원 목록·상한·색인 지우기에서 뺀다.
+            alive = {ref_by_id.get(id(p)) for p in out["proposals"]}
+            restored = [q for q in restored if (q["source"], q["content_id"]) in alive]
         for q in quarantined[:5]:
             print(f"[merge] 시도 미판정 격리 — {q}", file=sys.stderr)
         for q in restored[:5]:
@@ -537,16 +563,10 @@ def main(argv: list[str]) -> int:
                   f"{args.max_quarantined} — 카탈로그나 주소 형식이 바뀌었는지 확인할 것 (아무것도 쓰지 않았다)",
                   file=sys.stderr)
             return 1
-        if restored:
-            retro_drops(out)   # 되돌린 앞 판본도 같은 소급 제거를 거친다(나머지 행에는 멱등)
         if quarantined or restored:
             out["stats"]["unique_proposals"] = len(out["proposals"])
-            # 축소 가드가 이걸 사고로 오인하지 않게 남긴다(`non_travel_dropped` 와 같은 규약). 가드는 공유본(BEFORE)과
-            # 비교하므로 **공유본에 있던 키만** 따로 센다 — 그날 처음 온 행까지 더하면 가드가 그만큼 느슨해진다.
-            before_refs = set(versions_by_ref([before])) if before else set()
+            # 격리는 공유본에 없던 키뿐이라(공유본에 있던 키는 남겨 둔다 — 함수 docstring) 축소 가드에 더할 몫이 없다.
             out["stats"]["sido_quarantined"] = len(quarantined)
-            out["stats"]["sido_quarantined_existing"] = sum(
-                (q["source"], q["content_id"]) in before_refs for q in quarantined)
             out["stats"]["sido_quarantined_refs"] = quarantined
             out["stats"]["sido_restored_previous_refs"] = restored
     else:
