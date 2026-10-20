@@ -20,7 +20,13 @@ import java.util.UUID
 /**
  * jsonb → 스냅숏 읽기는 방어적이어야 한다 — 이력은 append-only 라 옛 형태·깨진 행을 고칠 수 없다.
  * 한 행이라도 단정 캐스팅에 걸리면 그 여행 타임라인이 영구히 500 이 되므로,
- * "못 읽는 조각은 버리고 읽히는 만큼 돌려준다"를 실제 어댑터 경로(findByTrip)로 확인한다.
+ * 객체 안의 필드가 없거나 타입이 틀리거나 파싱되지 않으면 그 조각을 버리고 나머지를 돌려주는 것을
+ * 실제 어댑터 경로(findByTrip)로 확인한다.
+ *
+ * 아직 못 막는 두 경우는 여기서 단정하지 않는다(TRIP-1476):
+ * - B: days·slots 배열의 **원소가 객체가 아니면**(`{"days":["x"]}`) `as? List<Map<..>>` 가 원소를 검사하지 않는
+ *   unchecked 캐스트라 `ClassCastException` 이 난다.
+ * - E: 모르는 `source_type`(예 `ROBOT`)은 `ChangeSource.valueOf` 가 던져 그 여행 타임라인 전체가 500 이다.
  */
 class ChangeLogSnapshotReadTest : StringSpec({
 

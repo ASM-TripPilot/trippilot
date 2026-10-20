@@ -22,7 +22,8 @@ import java.time.ZoneOffset
 import java.util.UUID
 
 /**
- * 도메인 사건 payload 를 못 읽을 때 — **예외로 올린다**(INV-4).
+ * 도메인 사건 payload 를 못 읽을 때 — **eventId 를 담아 예외로 올린다**(INV-4). 실패 케이스마다 eventId 를 단정한다.
+ * 예외: 회고 사건의 tripId 가 UUID 가 아니면 eventId 없이 던진다 — TRIP-1476(D), 단정하지 않는다.
  *
  * 릴레이가 재시도하고 상한에서 error 로 남긴다. 조용히 건너뛰면 "알림이 왜 안 오나"를 영영 못 찾는다.
  * 반대로 선택 필드(숙소 이름)가 빠진 것은 실패가 아니다 — 기본값으로 적재한다.
@@ -67,8 +68,9 @@ class DomainNotificationPayloadTest : StringSpec({
     "숙소 사건에 accountId 가 없거나 null 이거나 UUID 가 아니면 예외다" {
         val f = fixture()
         listOf(json("name" to "호텔"), json("accountId" to null), json("accountId" to "nope")).forEach { p ->
-            shouldThrow<IllegalStateException> { StayRegisteredSubscriber(f.raise, mapper).handle(envelope(p, "stay.StayRegistered")) }
-                .message shouldContain "accountId"
+            val e = envelope(p, "stay.StayRegistered")
+            shouldThrow<IllegalStateException> { StayRegisteredSubscriber(f.raise, mapper).handle(e) }
+                .message.let { it shouldContain "accountId"; it shouldContain e.eventId.toString() }
             f.stored.stored.shouldBeEmpty()
         }
     }
@@ -88,27 +90,28 @@ class DomainNotificationPayloadTest : StringSpec({
         val f = fixture()
         val trip = UUID.randomUUID().toString()
         listOf(json("tripId" to trip), json("tripId" to trip, "accountId" to null), json("tripId" to trip, "accountId" to "nope")).forEach { p ->
-            shouldThrow<IllegalStateException> { PlanBTriggeredSubscriber(f.raise, mapper).handle(envelope(p, "planb.PlanBTriggered")) }
-                .message shouldContain "accountId"
+            val e = envelope(p, "planb.PlanBTriggered")
+            shouldThrow<IllegalStateException> { PlanBTriggeredSubscriber(f.raise, mapper).handle(e) }
+                .message.let { it shouldContain "accountId"; it shouldContain e.eventId.toString() }
             f.stored.stored.shouldBeEmpty()
         }
     }
 
-    "회고 사건에 tripId 가 없으면 예외다" {
+    // tripId 가 **있지만 UUID 가 아닌** 경우는 단정하지 않는다 — `UUID.fromString` 이 eventId 없는
+    // IllegalArgumentException 을 던진다(TRIP-1476 D).
+    "회고 사건에 tripId 가 없으면 eventId 를 담아 예외다" {
         val f = fixture()
-        shouldThrow<IllegalStateException> {
-            ReflectionReadySubscriber(f.raise, mapper).handle(envelope(json("kind" to "SUMMARY"), "reflection.ReflectionReady"))
-        }.message shouldContain "tripId"
+        val e = envelope(json("kind" to "SUMMARY"), "reflection.ReflectionReady")
+        shouldThrow<IllegalStateException> { ReflectionReadySubscriber(f.raise, mapper).handle(e) }
+            .message.let { it shouldContain "tripId"; it shouldContain e.eventId.toString() }
         f.stored.stored.shouldBeEmpty()
     }
 
     "여행 소유자를 못 찾으면 예외다 — 엉뚱한 계정에 적재하지 않는다" {
         val f = fixture()
-        shouldThrow<IllegalStateException> {
-            ReflectionReadySubscriber(f.raise, mapper).handle(
-                envelope(json("tripId" to UUID.randomUUID().toString(), "kind" to "SUMMARY"), "reflection.ReflectionReady"),
-            )
-        }.message shouldContain "소유자"
+        val e = envelope(json("tripId" to UUID.randomUUID().toString(), "kind" to "SUMMARY"), "reflection.ReflectionReady")
+        shouldThrow<IllegalStateException> { ReflectionReadySubscriber(f.raise, mapper).handle(e) }
+            .message.let { it shouldContain "소유자"; it shouldContain e.eventId.toString() }
         f.stored.stored.shouldBeEmpty()
     }
 
@@ -116,9 +119,9 @@ class DomainNotificationPayloadTest : StringSpec({
         val f = fixture()
         val trip = UUID.randomUUID()
         f.trips.put(trip, UUID.randomUUID(), LocalDate.parse("2026-08-10"), LocalDate.parse("2026-08-12"))
-        shouldThrow<IllegalStateException> {
-            ReflectionReadySubscriber(f.raise, mapper).handle(envelope(json("tripId" to trip.toString(), "kind" to "DAILY"), "reflection.ReflectionReady"))
-        }.message shouldContain "dayDate"
+        val e = envelope(json("tripId" to trip.toString(), "kind" to "DAILY"), "reflection.ReflectionReady")
+        shouldThrow<IllegalStateException> { ReflectionReadySubscriber(f.raise, mapper).handle(e) }
+            .message.let { it shouldContain "dayDate"; it shouldContain e.eventId.toString() }
         f.stored.stored.shouldBeEmpty()
     }
 })

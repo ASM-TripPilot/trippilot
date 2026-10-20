@@ -31,6 +31,9 @@ class ReflectionInvariantsTest : StringSpec({
         shouldThrow<IllegalArgumentException> { analysis(perDay = -0.1) }
         shouldThrow<IllegalArgumentException> { analysis(radius = -0.1) }
         shouldThrow<IllegalArgumentException> { analysis(dwell = -1) }
+        // 경계 0 은 허용이다 — `>= 0` 이 `> 0` 으로 바뀌면 여기서 던진다.
+        analysis(perDay = 0.0).avgPlacesPerDay shouldBe 0.0
+        analysis(radius = 0.0).avgRadiusKm shouldBe 0.0
         analysis(dwell = null).avgDwellMinutes shouldBe null
         analysis(dwell = 0).avgDwellMinutes shouldBe 0
     }

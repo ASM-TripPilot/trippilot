@@ -14,8 +14,12 @@ import java.util.Optional
 import java.util.UUID
 
 /**
- * style_analysis 행 → 도메인. 잠정 식(O-U5-9)이 바뀌면 축 이름이 바뀔 수 있어 읽기는 방어적이다 —
+ * style_analysis 행 → 도메인. 잠정 식(O-U5-9)이 바뀌면 축 이름이 바뀔 수 있어 —
  * 못 읽는 축은 0, 이름 없는 카테고리 줄은 버린다(이름 없는 막대는 그릴 수 없다).
+ *
+ * 아직 못 막는 두 경우는 여기서 단정하지 않는다(TRIP-1476):
+ * - B: categoryBreakdown 배열의 **원소가 객체가 아니면**(`[3]`) unchecked 캐스트라 `ClassCastException` 이 난다.
+ * - C: 저장된 값이 도메인 범위를 벗어나면(게이지 9, 비율 1.5) 생성자의 require 가 던져 그 계정의 조회가 계속 500 이다.
  */
 class StyleAnalysisRowReadTest : StringSpec({
 

@@ -96,7 +96,7 @@ class ReflectionRowReadTest : StringSpec({
 
         val card = ReflectionCard("ai.daily.v2", "STORY", "새 초안", "", """{"template_id":"ai.daily.v2","format":"STORY","cover":{"title":"새 초안"}}""")
         val edited = ReflectionCard("user.edit.v1", "CARD", "새 수정본", "", """{"template_id":"user.edit.v1","format":"CARD","cover":{"title":"새 수정본"}}""")
-        val incoming = Reflection.of(trip, day, card, ReflectionSource.AI, ReflectionStats(1, 0.5, DistanceSource.VISIT_LINE, 0), t0.plusSeconds(3600))
+        val incoming = Reflection.of(trip, day, card, ReflectionSource.AI, ReflectionStats(1, 0.5, DistanceSource.VISIT_LINE, 4), t0.plusSeconds(3600))
             .copy(mood = "happy", shortMemo = "좋았다", editedCard = edited)
         val out = ReflectionRepositoryAdapter(jpa, mapper).upsert(incoming)
 
@@ -109,7 +109,9 @@ class ReflectionRowReadTest : StringSpec({
         existing.cardFormat shouldBe "STORY"
         out.editedCard!!.title shouldBe "새 수정본"
         out.source shouldBe ReflectionSource.AI
-        out.stats shouldBe ReflectionStats(1, 0.5, DistanceSource.VISIT_LINE, 0)
+        // 사진 수는 0 도, 기존 행의 2 도 아닌 값이다 — 둘 중 하나면 "사진 수를 안 옮기는" 회귀가 통과한다.
+        out.stats shouldBe ReflectionStats(1, 0.5, DistanceSource.VISIT_LINE, 4)
+        existing.stats["photoCount"] shouldBe 4
         out.mood shouldBe "happy"
         out.shortMemo shouldBe "좋았다"
     }

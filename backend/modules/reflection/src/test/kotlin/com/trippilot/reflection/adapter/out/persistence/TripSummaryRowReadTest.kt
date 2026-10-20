@@ -17,7 +17,8 @@ import java.util.Optional
 import java.util.UUID
 
 /**
- * trip_summary 행 → 도메인. 읽기는 방어적이다 — 옛 행이 필드를 덜 가질 수 있다.
+ * trip_summary 행 → 도메인. 옛 행이 필드를 덜 가질 수 있어, 하이라이트 객체 안의 빠지거나 깨진 필드는 버리거나 기본값으로 읽는다.
+ * 하이라이트 배열의 **원소가 객체가 아니면**(`["x"]`) unchecked 캐스트라 `ClassCastException` 이 난다 — TRIP-1476(B), 여기서 단정하지 않는다.
  *
  * 특히 **U10 이전 행의 그날 거리는 null(모름)이어야 한다.** 0 으로 채우면 화면이 "0km 이동"이라는 거짓말을 한다.
  */
