@@ -23,7 +23,7 @@ import {
  */
 
 /** SecureStore 키 규칙(영숫자·`.`·`-`·`_`)에 맞는다 — 여행 id(UUID)·날짜('YYYY-MM-DD'). */
-const hiddenStorageKey = (tripId: string, date: string): string =>
+const hiddenDeviceKey = (tripId: string, date: string): string =>
   `live.opportunity.hidden.${tripId}.${date}`;
 
 export interface HubOpportunity {
@@ -57,10 +57,10 @@ export function useHubOpportunities({
     { query: { enabled: enabled && date !== '' } }
   );
   const items = query.data?.items ?? [];
-  const storageKey = hiddenStorageKey(tripId, date);
+  const deviceKey = hiddenDeviceKey(tripId, date);
   // 읽은 숨김(어느 칸을 읽었는지와 함께) — 칸이 바뀌면(다른 날) 다시 읽을 때까지 모르는 것으로 본다.
   const [hidden, setHidden] = useState<{
-    storageKey: string;
+    deviceKey: string;
     key: string | null;
   } | null>(null);
   const hasItems = items.length > 0;
@@ -68,20 +68,20 @@ export function useHubOpportunities({
   useEffect(() => {
     if (!hasItems) return;
     let alive = true;
-    readStringValue(storageKey).then(
+    readStringValue(deviceKey).then(
       (key) => {
-        if (alive) setHidden({ storageKey, key });
+        if (alive) setHidden({ deviceKey, key });
       },
       () => {
-        if (alive) setHidden({ storageKey, key: null });
+        if (alive) setHidden({ deviceKey, key: null });
       }
     );
     return () => {
       alive = false;
     };
-  }, [storageKey, hasItems]);
+  }, [deviceKey, hasItems]);
 
-  if (hidden?.storageKey !== storageKey) return null;
+  if (hidden?.deviceKey !== deviceKey) return null;
   const item = pickOpportunity(items, {
     date,
     triggers,
@@ -92,8 +92,8 @@ export function useHubOpportunities({
     item,
     replanHref: opportunityReplanHref(tripId, item, date, today),
     dismiss: () => {
-      setHidden({ storageKey, key: item.key });
-      writeStringValue(storageKey, item.key).catch(() => {
+      setHidden({ deviceKey, key: item.key });
+      writeStringValue(deviceKey, item.key).catch(() => {
         // 기기 기억 실패 — 이번 화면에선 이미 숨겼다. 다음에 열면 다시 보인다(편의값이라 막지 않는다).
       });
     },
