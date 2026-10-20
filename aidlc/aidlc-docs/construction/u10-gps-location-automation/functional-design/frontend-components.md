@@ -214,3 +214,10 @@ settings-location-usage-row-automation
 > 2. **§5 testID 폐기** — `execution-live-route-toggle-plan`·`-route-toggle-actual`·`-route-disabled-reason`·`-route-distance`, `record-map-route-*` 같은 접미. 2026-10-12 개정 11번의 토글 testID 줄은 무효.
 > 3. **2026-10-20 개정 블록(TRIP-1486 일시 중지 스위치) 전체 무효** — 스위치 줄·testID·l06 paused 얼굴·프리뷰 키 `u10-switch-on`·`u10-switch-paused`·`u10-l06-paused`·§8 6-b 추가 행 12~15 모두 없다. FE 커밋 `6524f3983` 은 되돌렸다.
 > 4. **Figma** — U10 검토 밴드에서 u10f 스위치 줄 2장(`4985:3306`·`4987:3327`)·u10d 일시 중지 변형(`4990:3348`)·u10e 「경로 없음」(`4862:3628`) 삭제. u10e `4862:2897`(허브)·`4862:3807`(기록 풀 지도)은 토글 줄을 걷고 「계획 동선 + 실제 경로 함께」로 이름을 바꿨다.
+
+> **[개정 · 2026-10-21 · TRIP-1523 — 자동 기록 표식·되돌리기 제거]** 규칙은 `business-rules.md` 같은 날짜 TRIP-1523 블록. 원문·앞 개정 블록은 그대로 두고 이 블록이 우선한다.
+>
+> 1. **§3 i01 방문 카드·j01 카드** — "자동 기록" 표식과 [자동 기록 되돌리기] 진입이 없다. §4 흐름의 「카드 '자동 기록 되돌리기'」 절은 무효.
+> 2. **§5 testID 폐기** — `execution-live-slot-auto-badge-{slotKey}`·`-auto-revert-{slotKey}`·`-auto-revert-confirm`·`-auto-revert-cancel`·`-auto-revert-media-notice`·`record-visit-auto-badge-{visitCheckId}`·`record-visit-auto-revert-{visitCheckId}`.
+> 3. **코드** — `features/check-visit` 의 `autoRecord.ts`·`useRevertAutoVisit.ts`·`AutoRevertDialog.tsx` 삭제, `AutomationSinkPort.revertAuto` 와 가짜·HTTP 싱크 구현 삭제(2026-10-12 개정 9번의 "되돌리기만 한 곳에" 서술은 무효). BE 엔드포인트·생성 orval 함수는 남는다.
+> 4. **Figma** — U10 검토 밴드 u10b 표식 default(`4860:2849`)·되돌리기 확인 dialog(`4860:3577`) 삭제.

@@ -1686,3 +1686,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U10 Functional Design·NFR 사후 개정(구현 반영), 커밋 `a3b716f14`(TRIP-1521 FE 되돌림) · `bb40a1723`(TRIP-1520). 앞 세션에서 사용자가 승인한 "audit append + [개정] 블록" 절차를 따름. `aidlc-state.md`·`docs/SCOPE.md` 무변경.
 
 ---
+
+## Functional Design·NFR 사후 개정 — U10 자동 기록 표식·되돌리기 제거 (TRIP-1523)
+**Timestamp**: 2026-10-21T11:30:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 이 세션 2026-10-21, 그대로 인용) "자동 기록 ... 디자인은 여전히 그대로인 이유" / AskUserQuestion 답 — "둘 다 완전히 없앰"(장소 카드의 「자동 기록」 칩과 「⋯」(되돌리기) 버튼).
+**AI Response**: `construction/u10-gps-location-automation/functional-design/business-rules.md` 끝에 `[개정 · 2026-10-21 · TRIP-1523]` 블록 1개(표식 없음 · BR-U10-31·32 클라이언트 진입 철회 · BR-U10-10 재선택 계기 소멸 · 지표 파급), `…/frontend-components.md` 끝에 같은 날짜 블록 1개(카드·흐름·testID 폐기·코드 삭제·Figma 삭제 node id), `…/nfr-requirements/nfr-requirements.md` 끝에 STORE-U10-01 ② 시연 순서·OBS-U10-03·07 무효화 블록 1개. 세 파일 모두 원문 삭제·수정 0줄(append 만).
+**Context**: CONSTRUCTION — U10 Functional Design·NFR 사후 개정(구현 반영), 커밋 `366750a3a`(TRIP-1523). 앞 세션 사용자 승인 절차("audit append + [개정] 블록")를 따름. `aidlc-state.md`·`docs/SCOPE.md` 무변경.
+
+---
