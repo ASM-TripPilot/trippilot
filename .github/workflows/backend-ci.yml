@@ -40,8 +40,8 @@ jobs:
         working-directory: backend
         run: python3 -m unittest scripts/test_coverage_gate.py
       # 커버리지를 build 와 **같은 Gradle 호출에** 싣는다 — JVM 기동·구성 단계를 한 번만 거친다.
-      # 하한선(전체·모듈별, 규칙은 scripts/coverage_gate.py)은 develop 으로 가는 PR·수동 실행(스택 PR 검증에 쓴다)에서
-      # **막는다**. develop push 와 릴리스 PR 은 막지 않는다 — 이미 develop 에 머지된 코드라, 막으면 이미지 발행(image 잡)이나
+      # 하한선(전체·모듈별, 규칙은 scripts/coverage_gate.py)은 develop 으로 가는 PR·그 밖의 브랜치 수동 실행(스택 PR 검증에
+      # 쓴다)에서 **막는다**. develop push · 릴리스 PR · develop/main 수동 실행은 막지 않는다 — 이미 develop 에 머지된 코드라, 막으면 이미지 발행(image 잡)이나
       # 운영 승격이 커버리지 부채 때문에 멈춘다. 릴리스 PR 은 두 꼴이다: docs/conventions/branch.md 의 `develop` → `main`,
       # 그리고 실제 관행인 `release/main-*`(main 에서 따서 develop 커밋을 머지한 브랜치 — 머지된 릴리스 PR 이 전부 이 이름).
       # main 으로 가는 그 밖의 PR(branch.md 의 hotfix/* 는 main 에서 분기, 관행상 ci/* 등도)은 develop 을 거치지 않은
