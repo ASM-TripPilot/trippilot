@@ -239,6 +239,14 @@ export function DraftPage({
       pollExhausted,
   });
 
+  // TRIP-1506 — 안이 비었어도 생성이 진행 중이면(PARTIAL 이고 진행 중 세션이 있으면 — 세션 없는 PARTIAL 은 생성 중이
+  // 아니다 TRIP-1037 플립) "추천안이 없어요" 빈 안내가 아니라 로딩 얼굴이다. 폴링(PARTIAL 일 때만 돈다)과 같은 축이라
+  // 로딩 얼굴이 끝없이 남지 않는다. 진행 중인 일을 "없음"으로 보이는 것은 침묵 실패다(INV-4). 진짜 0곳은 그대로 empty.
+  const generatingNow =
+    view.kind === 'empty' &&
+    itinerary.data?.generationState === 'PARTIAL' &&
+    (itinerary.data.generationSessionId ?? null) !== null;
+
   // 2단계 생성 중(PARTIAL)이면 h07 부분 결과 얼굴 — 완성 얼굴(DraftScreen) 대신 공용 지도+시트
   // 셸을 그린다(01b D1 · TRIP-790). features→widgets 상향 참조 금지라 이 조립은 pages(여기)에서만
   // 할 수 있다. 아래 shell 분기가 `view.kind==='listed' && isPartial` 에서 이 값을 쓴다.
@@ -822,7 +830,7 @@ export function DraftPage({
   return (
     <>
       <DraftScreen
-        view={view}
+        view={generatingNow ? { kind: 'loading' } : view}
         tabs={tabs}
         selectedDate={selectedDate}
         canRetry={itinerary.data?.status !== 'CONFIRMED'}

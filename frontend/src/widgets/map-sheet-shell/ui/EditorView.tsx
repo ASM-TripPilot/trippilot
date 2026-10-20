@@ -17,7 +17,7 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import type { MapCenter, MapPin } from '@/shared/map';
 import { buildSlotKey } from '@/entities/itinerary-slot';
-import { violationNotice } from '@/entities/itinerary-slot';
+import { overlapAwareNotice } from '@/entities/itinerary-slot';
 import { SlotStopCard } from '@/entities/itinerary-slot';
 
 import { CTA_BAR_HEIGHT, type CtaButton } from './CtaBar';
@@ -187,7 +187,7 @@ export function EditorView({
             fixed={fixed}
             numberOutside
             dragging={isActive}
-            violation={violationNotice(item)}
+            violation={overlapAwareNotice(item, slots[index - 1])}
             onPressTimeChip={
               canEditTime ? () => onPressTimeChip(slotKey) : undefined
             }

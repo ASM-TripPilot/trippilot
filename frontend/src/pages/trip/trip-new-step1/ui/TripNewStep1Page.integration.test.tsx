@@ -3826,6 +3826,32 @@ describe('일과 시간 (TRIP-1308)', () => {
     expect(tracker.postedBodies).toHaveLength(0);
   });
 
+  // TRIP-1509 — 기간을 안 골랐으면(박수 0 은 기본값) 시트가 "당일치기라" 를 단정하지 않는다. 고른 뒤 당일이면 그대로.
+  it('기간 미선택이면 일과 시간 시트 부제에 "당일치기라" 가 없다', async () => {
+    useTripWizardStore.getState().addDestination('부산', 0);
+    renderPage();
+    await waitForPrefill();
+
+    await openSheet('daywindow');
+    expect(
+      screen.queryByText('당일치기라 시작과 종료를 함께 정해요')
+    ).toBeNull();
+    expect(screen.getByText('시작과 종료 시각을 정해요')).toBeTruthy();
+  });
+
+  it('기간을 하루로 골랐으면 시트 부제는 "당일치기라 …" 그대로다', async () => {
+    const store = useTripWizardStore.getState();
+    store.addDestination('부산', 0);
+    store.setPeriod(undefined, '2026-06-10', '2026-06-10');
+    renderPage();
+    await waitForPrefill();
+
+    await openSheet('daywindow');
+    expect(
+      screen.getByText('당일치기라 시작과 종료를 함께 정해요')
+    ).toBeTruthy();
+  });
+
   it('당일치기에서 끝 ≤ 시작이면 [다음]이 닫히고 행이 확인 안내를 단다', async () => {
     const store = useTripWizardStore.getState();
     store.addDestination('부산', 0);
