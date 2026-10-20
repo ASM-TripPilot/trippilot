@@ -54,9 +54,9 @@ class AutoVisitIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var txManager: org.springframework.transaction.PlatformTransactionManager
 
     private val zone = ZoneId.of("Asia/Seoul")
-    // 사건은 그날(서울) 00:01 부터 최대 20분 뒤까지 — 서버는 지금 + 5분보다 미래를 거절한다(BR-U10-21). 그날을 "오늘"로 두면 자정 직후
-    // (00:00~00:2x)엔 사건이 미래라 OUT_OF_WINDOW 로 깨진다(TRIP-1472). 한 시간 전의 날짜로 두면 01시 이후엔 오늘, 그 전엔 어제라
-    // 사건이 언제나 지금보다 앞선다.
+    // 사건은 그날(서울) 00:01 부터 최대 20분 뒤(00:21)까지 — 서버는 지금 + 5분보다 미래를 거절한다(BR-U10-21). 그날을 "오늘"로 두면
+    // 자정 직후(지금 < 00:16)엔 마지막 사건이 지금 + 5분을 넘어 OUT_OF_WINDOW 로 깨진다(TRIP-1472). 한 시간 전의 날짜로 두면 01시
+    // 이후엔 오늘, 그 전엔 어제라 사건이 언제나 지금보다 앞선다.
     private val day = LocalDate.ofInstant(Instant.now().minusSeconds(3_600), zone)
     private val early = day.atStartOfDay(zone).toInstant().plusSeconds(60)
 
