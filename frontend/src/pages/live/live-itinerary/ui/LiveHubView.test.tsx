@@ -1088,7 +1088,7 @@ describe('LiveHubView · HF 수정 FAB 시트 윗변 앵커 (TRIP-1083)', () => 
 //
 // 뷰는 저장을 모른다 — 페이지가 준 값만 그린다. 관람 중 슬롯의 `memo`(세션 저장본)는 관람 중 카드 메모 박스로,
 // `memoNotice`(시트가 닫힌 뒤 도착한 저장 실패, Q3)는 관람 중 카드에만, `fabHidden`(메모 시트가 열림)은 수정
-// FAB 를 숨긴다(Figma 4741:2833 F5). FAB 를 숨기려고 앵커를 셸 안으로 옮기면 HF8 좌표 원점이 어긋난다.
+// FAB 를 숨긴다(Figma 4952:3098 F5). FAB 를 숨기려고 앵커를 셸 안으로 옮기면 HF8 좌표 원점이 어긋난다.
 
 const MEMO_NOTICE = '메모를 저장하지 못했어요. 다시 시도해 주세요.';
 const ACTIVE_KEY = `${DATE}#museum`;

@@ -7,7 +7,7 @@ import { MemoInline } from '@/features/attach-visit-media/index.view';
 import { CloseGlyph } from '@/features/record';
 
 /**
- * TRIP-1117 · i01 허브 메모 시트(Figma 4741:2833 · 시트 4741:2984) — 순수 바텀시트(props + 콜백만).
+ * TRIP-1117 · i01 허브 메모 시트(Figma 4952:3098 · 시트 4741:2984) — 순수 바텀시트(props + 콜백만).
  *
  * 허브 [메모]를 누르면 페이지가 이 시트를 허브의 **형제로 조건부 마운트**한다(열림 = 트리에 있음, i03 선례).
  * 입력은 `MemoInline`(2000자) — 시트 안이라 `BottomSheetTextInput` 문맥이 선다. TRIP-1426 · 저장 경로는 [저장] 하나다

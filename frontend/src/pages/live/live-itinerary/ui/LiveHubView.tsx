@@ -156,7 +156,7 @@ export interface LiveHubViewProps {
   onPressPhotoSettings?: () => void;
   /** TRIP-1117 — 메모 안내 한 줄(시트가 닫힌 뒤 도착한 저장 실패, Q3) — 그 poiId 카드에만. 상태는 페이지가 가진다. */
   memoNotice?: { poiId: string; text: string } | null;
-  /** TRIP-1117 — 메모 시트가 열린 동안 수정 FAB 를 숨긴다(Figma 4741:2833). 앵커 자리(HF8)는 그대로. */
+  /** TRIP-1117 — 메모 시트가 열린 동안 수정 FAB 를 숨긴다(Figma 4952:3098). 앵커 자리(HF8)는 그대로. */
   fabHidden?: boolean;
   /**
    * ✦ AI 도우미 FAB 슬롯(TRIP-1321 · BR-U8-51) — 수정 FAB 앵커 열의 맨 위(수정 FAB 위 12)에 그린다.
@@ -572,7 +572,7 @@ export function LiveHubView({
           오버레이 줄 아래에서 멈춘다(TRIP-1083). 알약은 FAB 왼쪽 가로 한 줄(Figma 4702:3131). 딤이 없고
           바깥 탭으로 닫지 않는다(× 또는 알약으로만, Seed ③) — 빈 칸은 box-none 이라 아래 시트로 터치가 간다.
           배치 className 은 안쪽 일반 View 에만 둔다(앵커는 reanimated 컴포넌트).
-          메모 시트가 열린 동안(fabHidden)은 앵커째 빠진다(TRIP-1117, Figma 4741:2833) — 자리는 그대로 루트 직속. */}
+          메모 시트가 열린 동안(fabHidden)은 앵커째 빠진다(TRIP-1117, Figma 4952:3098) — 자리는 그대로 루트 직속. */}
       {fabHidden ? null : (
         <Animated.View
           testID="execution-live-fab-anchor"
