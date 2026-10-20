@@ -21,8 +21,9 @@ import org.yaml.snakeyaml.Yaml
 
 /**
  * 설계-우선 계약 게이트 — docs/design/openapi.yaml(정본) 과 실제 Spring 핸들러가 일치해야 통과.
- * 경로·메서드(문서에만 있거나 코드에만 있으면 실패), 스키마 참조·중복 키, 그리고 본문의 유무·모양·필드 이름
- * (필드 계약)을 본다. springdoc 없이 Spring 매핑과 MVC 매퍼를 직접 introspect(SB4 안전).
+ * 경로·메서드(문서에만 있거나 코드에만 있으면 실패), 스키마 참조·중복 키, 그리고 2xx 응답 본문과 `@RequestBody`
+ * 의 유무·모양·필드 이름(필드 계약)을 본다 — 4xx/5xx 오류 본문·쿼리/경로 파라미터는 보지 않는다(필드 계약 KDoc 참고).
+ * springdoc 없이 Spring 매핑과 MVC 매퍼를 직접 introspect(SB4 안전).
  * 서비스 표면(base 하위)만 대상(헬스·문서·정적 제외).
  */
 @SpringBootTest
@@ -142,14 +143,13 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
      */
     private val knownFieldMismatches = mapOf(
         "GET /api/v1/me/location-consent 응답 LocationConsentResponse.capabilities Capabilities: 문서에만 `localLocationUse`" to
-            "모노레포 통합 때부터 문서에만 있고 서버는 한 번도 내지 않았다. 의미(OS 권한만으로 되는 기기 내 사용?)가 " +
-            "설계 문서에 없고, 지우면 프론트 테스트 목업이 codegen 뒤 타입 오류가 난다 — 팀 결정 대기(2026-10-19)",
+            "의미 미정 — 팀 결정 대기(TRIP-1474)",
         "PUT /api/v1/me/location-consent 응답 LocationConsentResponse.capabilities Capabilities: 문서에만 `localLocationUse`" to
             "위와 같음",
     )
 
     /**
-     * 필드 계약 — 본문의 **유무·모양·속성 이름**이 openapi 스키마와 같아야 통과.
+     * 필드 계약 — 2xx 응답 본문과 `@RequestBody` 의 **유무·모양·속성 이름**이 openapi 스키마와 같아야 통과.
      *
      * 왜 필요한가: 위의 경로 대조는 응답에 필드를 더하거나 이름을 바꾸고 문서를 안 고쳐도 초록이다.
      * 프론트는 orval 이 **문서로** 만든 타입을 쓰므로 새 필드를 못 보거나 없는 필드를 읽는다(undefined).
@@ -161,7 +161,9 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
      * `@JsonIgnore` 까지 반영된 와이어 이름이다. 응답은 직렬화, 요청 본문은 역직렬화 쪽으로 따로 본다.
      * `$ref`·`allOf`·`oneOf`·`anyOf`·`items`·`additionalProperties` 를 따라 중첩까지 내려간다.
      *
-     * 보지 않는 것: 타입·nullable·required, 그리고 이름을 알 수 없는 본문(`JsonNode` 로 손 파싱·`Map` 의 키).
+     * 보지 않는 것: 타입·nullable·required, 4xx/5xx 오류 응답 본문(`ErrorResponse` 봉투), 쿼리·경로 파라미터
+     * 이름, 그리고 이름을 알 수 없는 본문 — `JsonNode` 로 받아 손 파싱하는 요청(예: `PUT /me/preferences` 의
+     * `PreferenceController.update(@RequestBody body: JsonNode)` — 유무만 보고 속성은 대조하지 않는다)·`Map` 의 키.
      */
     @Test
     fun `응답·요청 본문의 유무와 필드 이름이 openapi 스키마와 일치한다`() {
