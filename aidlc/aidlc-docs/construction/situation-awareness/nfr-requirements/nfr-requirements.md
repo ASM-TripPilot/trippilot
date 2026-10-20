@@ -14,6 +14,8 @@
 | 10-18 Q4 "Plan-B 알림의 푸시 기본값은 지금 OFF(사용자가 설정에서 켜야 옴)입니다. 어떻게 할까요? (운영 서버의 푸시 발송 자체가 켜져 있는지는 코드로 확인 불가)" (선택지: 위험 알림만 기본 ON (Recommended) / 지금처럼 OFF) | "위험 알림만 기본 ON (Recommended)" | LEGAL-SA-01·06 · §7 4단계 |
 | (2026-10-19) | "하던거 마저해" | 계획 Q1~Q10 · O-SA-2~15 초안 기본값 채택 |
 
+> **[개정 · 2026-10-20 — 구현 반영]** 이 문서가 기대는 사용자 답이 둘 늘었다(2026-10-19 정본 승인 뒤, 결정 수집 문서 「결정 대기 목록 (10-19)」 — 원문 표 전체는 `functional-design/business-logic-model.md` §0.4): #1 "운영에서 실사용자에게 위험 푸시 켜기"(추천 (나) "운영 dry-run·본인 계정 카나리까지만, 전원은 그때 다시 묻기") · #2 "위험·주의 푸시를 광고 동의 없이 보내는 '정보성 알림'으로 볼지"(추천 (가) "정보성으로 보고 진행") — 답은 둘 다 "추천대로 진행". 반영은 §7 · LEGAL-SA-02 개정 블록.
+
 ---
 
 ## 0. 이 확장에서 새로 생기는 축
@@ -42,6 +44,8 @@
 | **PERF-SA-07** | **진입 게이트 대기 ≤ 3초** — 트리거 상세 + `prepared?date=` 를 함께 기다리고 넘으면 i04(BR-SA-23). 신규 조회 3종(트리거 상세 · `prepared?date=` · `opportunities?date=`)은 상속 기반선(U0 PERF)을 따른다 | 막다른 길 없음(INV-4) |
 | **PERF-SA-08** | **기회 조회 = BE→AI 1왕복 · LLM 0회**. AI 쪽 POI 반경 조회 ≤ 8회 · 시한 예산 70% 안에서 끊고 부분 결과 + note. BE 호출은 `request_meta` 시한을 싣고, 소켓 read 상한 = 시한 + 여유(기존 `readTimeoutMarginMs` 2s 관례). 값은 BE 기회 조회 구현이 정한다 | 허브 표시를 막지 않는다 — 실패·초과는 빈 목록(RES-SA-09). RESILIENCY-10 |
 | **PERF-SA-09** | **감시 상태 신선도 창 = 날씨 2시간 · 장소 14시간**(BR-SA-13). 날씨는 매시 회차를 한 번 놓쳐도, 장소는 아침→저녁(07:15→20:15) 간격을 덮는 값이다. 회차가 없는 밤에는 날씨가 20:40 회차 2시간 뒤부터 07:15 회차까지 `UNKNOWN`('확인 불가')으로 보인다 | **근거 없는 초기값**. 밤 표시는 INV-SA-5(밤에 돌지 않는다)의 결과다 |
+
+> **[개정 · 2026-10-20 — 구현 반영]** PERF-SA-08 — 값(#1422): `deadline_ms` 3s · 소켓 읽기 상한 **9s** · 연결 1s(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/adapter/out/external/OpportunityConfiguration.kt:34-37`). 읽기 상한은 위의 '시한 + 여유(`readTimeoutMarginMs` 2s 관례)'가 아니라 **상대 백스톱(시한 + 5s — `TRIPPILOT_TIMEOUT_MARGIN_MS` 기본)보다 1s 길게** 잡았다. 같거나 짧으면 상대가 마감을 넘겨 정리해 보내는 응답(백스톱 504 포함)을 우리 소켓이 먼저 끊는다 — 우리 소켓 시계는 요청을 다 보낸 순간 출발해 상대 시계보다 앞서고, 응답은 돌아오는 길도 걸린다. 리마인드 14s·회고 21s 경계와 같은 꼴이고, 설정이 '읽기 상한 ≥ 시한 + 5s'를 기동에서 강제한다(`:45-48,56`). AI 쪽은 시한의 70% 안에서 반경 조회(≤ 8회)를 끊는다(`ai/src/trippilot/api/opportunities.py:35-36`).
 
 ## 2. 비용·외부 호출 (COST-SA-\*)
 
@@ -118,6 +122,8 @@ planb.situation_sweep mode= phase= trips= skipped= failed= live=[] off=[] observ
 | **SEC-SA-07** | **내부 경계** — BE→AI 기회 호출은 기존 `X-Service-Token`·NetworkPolicy 경계를 그대로 탄다. 새 공개 경로는 gateway `/api` 아래뿐이다 | SECURITY-08 · shared-infra §4.4·§4.5 |
 | **SEC-SA-08** | **fail-safe** — 스위치 오타는 배포 전에 막는다(`runtime_secrets` 모드 값 집합). 오류의 기본값은 '알리지 않음'이다(RES-SA-01) | SECURITY-15 |
 
+> **[개정 · 2026-10-20 — 구현 반영]** SEC-SA-03 — O-SA-1 종결: 특보·대기질·특일 활용신청 계정이 `WEATHER_API` 계정과 달라 키 env `PUBLIC_DATA_API_KEY` 를 더했다(#1379). 같은 시크릿 그릇(backend·ai)에 들고, 읽는 쪽은 비면 `WEATHER_API` 로 대신한다(`backend/modules/weather-context/src/main/kotlin/com/trippilot/weathercontext/adapter/out/external/WeatherAlertConfiguration.kt:28` · `ai/main.py:481-483`). 기동 줄에는 키를 읽은 env **이름만** 남기고(`WeatherAlertConfiguration.kt:31-32`), `%` 가 든 키(인코딩 키 — 한 번 더 인코딩돼 게이트웨이 거절 403·30)는 기동 WARN 이다(`:35-41`). 배선·반영 확인은 `functional-design/business-logic-model.md` §10 개정 블록.
+
 ## 6. 법적 처리 (LEGAL-SA-\*)
 
 | ID | 요구 | 근거 |
@@ -129,6 +135,8 @@ planb.situation_sweep mode= phase= trips= skipped= failed= live=[] off=[] observ
 | **LEGAL-SA-05** | **약관 — 네이버** — 네이버 검색 → LLM 추출 행사(`evx-`)는 기회 카드에 보이지 않는다 — 공식(`tourapi-`)·수동 큐레이션 행사만(O-SA-12). 네이버 블로그 언급 수를 인기 신호로 쓰지 않는다(2026-09-01 약관으로 접음) | 추출 행사를 카드에 보이면 약관 노출이 넓어진다(2026 특약 2차 보도 — 원문 미확인) |
 | **LEGAL-SA-06** | **야간** — 알림 단계에 조용시간을 두지 않는다(LEGAL-U6-01 승계). 스윕이 21:00~06:59 에 돌지 않고 20:58 이후 쓰기·발행이 0 이라(INV-SA-5) 위험 푸시가 밤에 나갈 길이 없다 — O-U6-4 는 이 경로에서 닫힌다. U10 `DELAY` 는 이 창에 묶이지 않는다(담당에게 알린다) | 10-18 Q4 답 · DEC-SA-1 |
 | **LEGAL-SA-07** | **위치정보** — 스윕·선계산은 사용자 기기 위치를 받지 않는다. 판정 재료는 계획 슬롯의 등록 POI 좌표·목적지이고, SYSTEM 세션 기준점은 숙소 거점 → 목적지 중심 사다리다(`ReplanFacadeService.kt:173-187`). 위치 동의·법정 로그(`location_legal_log`) 대상이 늘지 않는다 | LEGAL-U4-05 승계 |
+
+> **[개정 · 2026-10-20 — 구현 반영]** LEGAL-SA-02 ① — 사용자 결정(2026-10-19 — `functional-design/business-logic-model.md` §0.4 #2 "추천대로 진행"): 위험·주의 푸시는 **정보성 알림(광고 동의 불필요)으로 보고 진행**한다. 법무 확인 회신을 운영 전원 켜기의 선행으로 두지 않는다(고르지 않은 안 = "법무 확인 뒤 전원 켜기"). ②~④ 는 법무 확인 묶음에 그대로 남는다. 추천 근거는 LEGAL-SA-01 의 경계 그대로다 — 예약한 일정의 비·휴무·폐업 안내는 서비스 이행 정보이고, 광고성 기회 카드는 푸시 없이 앱 안에만 뜬다.
 
 ---
 
@@ -153,6 +161,13 @@ planb.situation_sweep mode= phase= trips= skipped= failed= live=[] off=[] observ
 - **4단계의 선행**(G-SA-7): 앱 수신·탭 처리(FE-A) · iOS entitlement(FE-D — 번들 ID Push 권한 · APNs 키, 외부 선행) · 운영 `PUSH_MODE` 실값(`[모드] push=`). 그 전에는 알림함·허브 알약이 유일한 표면이다. 개발 대상은 푸시가 강제 off 라(`infra/scripts/workflow_config.py:66-69`) 실푸시 확인은 운영 카나리뿐이다.
 - **`minSupportedVersion`** 은 런타임 키가 아니다 — `trippilot.bootstrap.min-supported-version`(기본 `1.0.0`, `backend/modules/profile/src/main/kotlin/com/trippilot/profile/application/BootstrapProperties.kt:12`)이라 상향은 설정 커밋 1건이다.
 - **되돌리기** = 값을 `off`·`today` 로 바꾸고 재배포(RES-SA-11).
+
+> **[개정 · 2026-10-20 — 구현 반영]** 켜는 순서의 실행 수단과 운영 범위(#1438 · 사용자 결정 2026-10-19 — `functional-design/business-logic-model.md` §0.4 · §7 개정 블록).
+> - 표의 시크릿 스위치는 배포 입력 `runtime_switches`(`KEY=VALUE;…` · 허용 키 5종 · `KEY=` = 그 키 삭제 → 앱 기본값)로 쓴다. 되돌리기도 같은 입력의 `KEY=off`·`KEY=today` 또는 `KEY=` 로 배포 한 번이다(RES-SA-11 — 파드 재시작).
+> - **4단계는 본인 계정 카나리 + 실기기 푸시 1회 왕복까지다.** 마지막 '`ACCOUNT_IDS` 비움'(전원)은 카나리 결과를 보고 사용자에게 다시 묻는다(BLM §0.4 #1). `PLANB_SITUATION_SWEEP_ACCOUNT_IDS=`(삭제)도 목록이 비는 것이라 전원이다.
+> - 4단계의 정보성 판단은 사용자 결정으로 진행한다 — LEGAL-SA-02 개정 블록.
+> - 8단계의 키는 O-SA-1 종결(`PUBLIC_DATA_API_KEY` — SEC-SA-03 개정 블록)로 통한다(2026-10-19 실측). 남은 것은 요약 줄의 그 출처 Unknown 소멸·실응답 표본 확인과 `observe-only` 에서 빼는 커밋이다.
+> - 9단계(`HOLIDAY_CLOSURE_MODE=on`)의 확인 '생성 샘플 비교'는 2026-10-20 에 마쳤다(로컬 측정 — 코드 밖 사실). 실키 특일 응답 12회 p50 83ms·최대 101ms(소켓 2s 초과 0) · 공유본 60,521곳 중 휴일 규칙 1,905곳(매핑 실패 0), 원인 36종 표본 약 150건 원문 대조 오탐 0 · 같은 후보 60곳 조립 on/off(서울·제주·부산 × 설 연휴·추석 연휴·평범한 주말 3일) — 연휴는 off 가 그 날 닫힌 곳을 3~7곳 방문하고 on 은 0, 빈 날 없음, 평범한 주말은 on/off 같은 해. 개발부터 켠다.
 
 ## 8. PBT (blocking · 확장 Partial 모드)
 
