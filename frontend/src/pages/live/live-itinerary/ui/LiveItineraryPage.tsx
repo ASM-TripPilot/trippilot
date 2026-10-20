@@ -590,7 +590,7 @@ export function LiveItineraryPage({
   // TRIP-1117 [메모] — 허브 위 메모 시트에서 저장한다(TRIP-1070 결정 1(c) 번복). 닫힘은 저장 성공 뒤(Q1).
   const memoSheetPoiId = poiOfVisit(memoSheetFor);
   const memoSheetOpen = memoSheetPoiId !== undefined;
-  const submitMemo = (visitCheckId: string, text: string) => {
+  const submitMemo = (visitCheckId: string, text: string, seed: string) => {
     if (memoSaving.current) return;
     memoSaving.current = true;
     setMemoSavingShown(true);
@@ -600,7 +600,7 @@ export function LiveItineraryPage({
       memoSaving.current = false;
       setMemoSavingShown(false);
     };
-    visitMemo.saveMemo(text).then(
+    visitMemo.saveMemo(text, seed).then(
       (saved) => {
         unlock();
         if (attempt !== memoAttempt.current) return;
@@ -630,7 +630,7 @@ export function LiveItineraryPage({
         editable={visitMemo.memoReady}
         notice={memoFailedFor === memoSheetFor ? MEMO_SAVE_FAILED : null}
         saving={memoSavingShown}
-        onSubmit={(text) => submitMemo(memoSheetFor, text)}
+        onSubmit={(text, seed) => submitMemo(memoSheetFor, text, seed)}
         onClose={() => setMemoSheetFor(null)}
       />
     ) : null;

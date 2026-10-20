@@ -110,10 +110,10 @@ export function VisitRecordCardContainer({
 
   // TRIP-1078 · 메모 PUT 실패를 버리지 않는다(INV-4) — 카드 안 안내 한 줄, 다음 시도에 지운다.
   // TRIP-1426 · 성공은 PUT 이 실제로 나갔고(saved) 그 시도가 최신일 때만 공용 토스트로 알린다.
-  const onSubmitMemo = (text: string) => {
+  const onSubmitMemo = (text: string, seed: string) => {
     const attempt = ++memoAttempt.current;
     setMemoFailed(false);
-    saveMemo(text).then(
+    saveMemo(text, seed).then(
       (saved) => {
         if (saved && attempt === memoAttempt.current)
           showToast({

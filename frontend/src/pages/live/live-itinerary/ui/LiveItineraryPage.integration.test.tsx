@@ -3996,6 +3996,73 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
       expect(screen.queryByTestId('live-memo-saved-toast')).toBeNull();
     });
 
+    it('H10 첫 조회 중 연 시트가 서버 글로 심긴 뒤 재조회가 다른 글을 가져와도 손대지 않은 [저장]은 PUT 0회다 — 잠금 해제 때 seed 를 다시 심는다 (TRIP-1492)', async () => {
+      // 준비 — 1차는 문 뒤 '서버 글', 2차부터 '다른 기기 글'.
+      const gate = createGate();
+      recordsReply = async (call) => {
+        if (call === 1) {
+          await gate.opened;
+          return recordsOf([actualVisit('v1', '서버 글')]);
+        }
+        return recordsOf([actualVisit('v1', '다른 기기 글')]);
+      };
+      await renderHub();
+      await waitFor(() => expect(hitCount(RECORDS_GET)).toBe(1));
+      fireEvent.press(screen.getByTestId(done('memo')));
+      await screen.findByTestId(INPUT);
+      await act(async () => {
+        gate.release();
+      });
+      await waitFor(() => expect(field().props.value).toBe('서버 글'));
+      await act(async () => {
+        void client.invalidateQueries();
+      });
+      await waitFor(() =>
+        expect(hitCount(RECORDS_GET)).toBeGreaterThanOrEqual(2)
+      );
+      await settle();
+
+      // 실행 — 손대지 않고 [저장].
+      fireEvent.press(screen.getByTestId(SAVE));
+
+      // 단언
+      await waitFor(() =>
+        expect(screen.queryByTestId(SHEET)).not.toBeOnTheScreen()
+      );
+      await settle();
+      expect(hitCount(MEMO_PUT_V1)).toBe(0);
+    });
+
+    it('H9 심은 글을 안 고친 채 재조회가 다른 기기 글을 가져온 뒤 [저장]해도 시트만 닫히고 PUT 0회다 (TRIP-1492)', async () => {
+      // 준비 — 1차 '서버 글', 재조회부터 '다른 기기 글'.
+      recordsReply = (call) =>
+        recordsOf([actualVisit('v1', call === 1 ? '서버 글' : '다른 기기 글')]);
+      await renderHub();
+      await waitFor(() =>
+        expect(screen.getByTestId(DONE_BOX)).toHaveTextContent('서버 글')
+      );
+      fireEvent.press(screen.getByTestId(done('memo')));
+      const input = await openedMemoInput();
+      expect(input.props.value).toBe('서버 글');
+      await act(async () => {
+        void client.invalidateQueries();
+      });
+      await waitFor(() =>
+        expect(hitCount(RECORDS_GET)).toBeGreaterThanOrEqual(2)
+      );
+      await settle();
+
+      // 실행 — 손대지 않고 [저장].
+      fireEvent.press(screen.getByTestId(SAVE));
+
+      // 단언 — 닫히고 PUT 0회.
+      await waitFor(() =>
+        expect(screen.queryByTestId(SHEET)).not.toBeOnTheScreen()
+      );
+      await settle();
+      expect(hitCount(MEMO_PUT_V1)).toBe(0);
+    });
+
     it('H7 메모 대상 방문이 없으면 records 를 부르지 않는다 (AC-9)', async () => {
       // 준비 — 그날 방문 0건.
       visitsResponse = () => [];
