@@ -546,6 +546,99 @@ describe('quick reply 배치 (TRIP-1526 · 01b Q8)', () => {
   });
 });
 
+describe('상시 능력 칩 중복 제거 (TRIP-1531 결함 3)', () => {
+  const noContext = () => {
+    const transcript = sampleTranscript('no-context', null);
+    return {
+      state: 'NO_CONTEXT' as const,
+      contextChip: null,
+      messages: transcript.messages,
+      quickReplies: transcript.quickReplies,
+      showCapabilitiesChip: true,
+    };
+  };
+
+  it('NO_CONTEXT 면 입력 칩이 이미 능력 보기라 빠른 답 줄의 상시 능력 칩은 그리지 않는다', () => {
+    renderView(noContext());
+
+    expect(screen.getByTestId('assistant-context-chip')).toHaveTextContent(
+      '내가 할 수 있는 것 보기'
+    );
+    expect(
+      screen.queryByTestId('assistant-quick-reply-capabilities')
+    ).toBeNull();
+  });
+
+  it('상시 칩이 사라져도 능력 보기 진입은 입력 칩으로 가능하다', () => {
+    const props = renderView(noContext());
+
+    fireEvent.press(screen.getByTestId('assistant-context-chip'));
+
+    expect(props.onPressCapabilities).toHaveBeenCalledTimes(1);
+  });
+
+  it('NO_CONTEXT 에서도 서버 quick reply 는 그대로 그린다', () => {
+    const base = noContext();
+    renderView(base);
+
+    base.quickReplies.forEach((reply) =>
+      expect(
+        screen.getByTestId(`assistant-quick-reply-${reply.id}`)
+      ).toBeOnTheScreen()
+    );
+  });
+
+  it('NO_CONTEXT 면 서버가 준 SHOW_CAPABILITIES 칩도 줄에서 뺀다 — 다른 서버 칩은 그대로', () => {
+    const base = noContext();
+    const serverCapabilities = {
+      id: 'qr-capabilities',
+      label: '내가 할 수 있는 것 보기',
+      action: 'SHOW_CAPABILITIES' as const,
+      params: {},
+    };
+    renderView({
+      ...base,
+      quickReplies: [serverCapabilities, ...base.quickReplies],
+      showCapabilitiesChip: false,
+    });
+
+    expect(
+      screen.queryByTestId('assistant-quick-reply-qr-capabilities')
+    ).toBeNull();
+    base.quickReplies.forEach((reply) =>
+      expect(
+        screen.getByTestId(`assistant-quick-reply-${reply.id}`)
+      ).toBeOnTheScreen()
+    );
+  });
+
+  it('READY 면 서버 SHOW_CAPABILITIES 칩이 지금처럼 줄에 남는다', () => {
+    renderView({
+      quickReplies: [
+        {
+          id: 'qr-capabilities',
+          label: '내가 할 수 있는 것 보기',
+          action: 'SHOW_CAPABILITIES' as const,
+          params: {},
+        },
+      ],
+      showCapabilitiesChip: false,
+    });
+
+    expect(
+      screen.getByTestId('assistant-quick-reply-qr-capabilities')
+    ).toBeOnTheScreen();
+  });
+
+  it('READY 는 상시 능력 칩이 빠른 답 줄에 남는다(BR-U8-04)', () => {
+    renderView({ state: 'READY', showCapabilitiesChip: true });
+
+    expect(
+      screen.getByTestId('assistant-quick-reply-capabilities')
+    ).toBeOnTheScreen();
+  });
+});
+
 describe('키보드 모드 (TRIP-1526 · 01b Q6)', () => {
   const MODE = /^assistant-sheet-mode-/;
   const modeIds = () =>

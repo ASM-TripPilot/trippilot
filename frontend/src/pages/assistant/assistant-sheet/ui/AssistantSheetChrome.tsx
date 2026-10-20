@@ -73,7 +73,7 @@ function ContextChip({
       onPress={onPress}
       // 시각 높이 37(Figma) — 터치는 위아래 4씩 늘려 45.
       hitSlop={{ top: 4, bottom: 4 }}
-      className="h-[37px] flex-row items-center gap-[6px] self-start rounded-pill border border-hairline-strong bg-canvas px-md"
+      className="min-h-[37px] flex-row items-center gap-[6px] self-start rounded-pill border border-hairline-strong bg-canvas px-md"
     >
       <ListGlyph />
       <Text className="font-noto text-label text-ink">{label}</Text>
@@ -101,9 +101,11 @@ function ReplyChip({
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
+      // 시각 높이 36 전후 — 터치는 위아래 4씩 늘려 44 이상. 글자 크기가 커지면 min-h 로 칩이 함께 커진다.
+      hitSlop={{ top: 4, bottom: 4 }}
       className={
         (stacked
-          ? 'h-[36px] flex-row items-center gap-sm self-start rounded-pill bg-surface-strong pl-[14px] pr-lg'
+          ? 'min-h-[36px] flex-row items-center gap-sm self-start rounded-pill bg-surface-strong pl-[14px] pr-lg'
           : 'rounded-pill border border-hairline-strong bg-canvas px-[14px] py-[9px]') +
         (disabled ? ' opacity-40' : '')
       }

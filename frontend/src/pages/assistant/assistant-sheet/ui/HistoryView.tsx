@@ -50,6 +50,8 @@ function ActionButton({
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
+      // 시각 높이 35 — 터치는 위아래 5씩 늘려 44 이상.
+      hitSlop={{ top: 5, bottom: 5 }}
       className="rounded-button border border-hairline-strong bg-canvas px-[14px] py-sm"
     >
       <Text className="font-noto text-label text-ink">{label}</Text>

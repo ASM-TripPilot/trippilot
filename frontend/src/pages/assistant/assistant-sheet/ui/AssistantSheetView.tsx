@@ -237,8 +237,16 @@ export function AssistantSheetView({
           {showChat ? statusRow : null}
           {showChat ? (
             <QuickReplyBar
-              replies={quickReplies}
-              showCapabilitiesChip={showCapabilitiesChip}
+              // NO_CONTEXT 는 입력 칩이 이미 '능력 보기' — 서버가 준 SHOW_CAPABILITIES 칩도 중복이라 렌더 목록에서만 뺀다.
+              replies={
+                state === 'NO_CONTEXT'
+                  ? quickReplies.filter((r) => r.action !== 'SHOW_CAPABILITIES')
+                  : quickReplies
+              }
+              // NO_CONTEXT 는 입력 칩이 이미 '능력 보기' — 상시 칩은 중복이라 숨긴다.
+              showCapabilitiesChip={
+                showCapabilitiesChip && state !== 'NO_CONTEXT'
+              }
               onPick={onPressQuickReply}
               onPressCapabilities={onPressCapabilities}
               disabled={repliesDisabled}

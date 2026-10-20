@@ -186,6 +186,45 @@ describe('AssistantSheetPage (TRIP-1322)', () => {
   });
 });
 
+describe('AssistantSheetPage · NO_CONTEXT 능력 보기 (TRIP-1531 결함 3)', () => {
+  // 서버가 발급한 SHOW_CAPABILITIES 칩이 실린 "여행 없음" 열기 응답 — 라벨을 입력 칩 문구와 달리 둬서 어느 쪽이 갔는지 가른다.
+  const issued = {
+    id: 'qr-issued-capabilities',
+    label: '도움말',
+    action: 'SHOW_CAPABILITIES' as const,
+    params: {},
+  };
+  const seed = () => [
+    {
+      ...assistantSample('no-context', {
+        id: 'm-seed',
+        tripId: null,
+        createdAt: '2026-10-21T00:00:00.000Z',
+      }),
+      quickReplies: [issued],
+    },
+  ];
+
+  it('서버 SHOW_CAPABILITIES 칩은 줄에 안 그리고, 입력 칩을 누르면 서버 발급 id 의 ACTION 으로 보낸다(TEXT 아님)', async () => {
+    renderPage({ seedMessages: seed() }, { surface: 'HOME' });
+    const chip = await screen.findByTestId('assistant-context-chip');
+    expect(
+      screen.queryByTestId('assistant-quick-reply-qr-issued-capabilities')
+    ).toBeNull();
+    const sendTurn = jest.spyOn(fake, 'sendTurn');
+
+    await act(async () => {
+      fireEvent.press(chip);
+    });
+
+    await waitFor(() => expect(sendTurn).toHaveBeenCalledTimes(1));
+    expect(sendTurn.mock.calls[0][1].input).toEqual({
+      type: 'ACTION',
+      quickReplyId: 'qr-issued-capabilities',
+    });
+  });
+});
+
 describe('AssistantSheetPage · 카드 배선 (TRIP-1323)', () => {
   it('검토 quick reply → 진행 검토 카드 + 문제 행, 해결 행동을 누르면 그 화면으로 간다', async () => {
     renderPage();
