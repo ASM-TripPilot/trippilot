@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import type { Opportunity, Trigger } from '@/shared/api/index.schemas';
 import { useGetTripsTripIdOpportunities } from '@/shared/api/index.hooks';
-import { readStringValue, writeStringValue } from '@/shared/storage';
+import { readIdSet, writeIdSet } from '@/shared/storage';
 
 import {
   opportunityReplanHref,
@@ -17,9 +17,11 @@ import {
  * 밖이면 빈 목록이다 — 빈 목록·실패·대기 중이면 카드가 없을 뿐 허브의 다른 조회와 얼굴을 막지 않는다. 고르기는
  * `pickOpportunity`(순수).
  *
- * × 숨김은 기기 로컬 편의값이다(`stringValue` — 여행·날짜마다 한 칸, 값 = 숨긴 기회 key). 숨김을 읽기 전엔 카드를
- * 그리지 않는다(숨긴 카드가 잠깐 비치지 않게). 읽기 실패는 숨김 없이 그리고, 쓰기 실패는 삼킨다 — 이번 화면에선
- * 숨긴 채로 두고 다음에 열면 다시 보인다. 목록이 비면 기기 칸을 읽지 않는다.
+ * × 숨김은 기기 로컬 편의값이다(`idSet` — 여행·날짜마다 한 칸, 값 = 그 날 숨긴 기회 key **집합**). key 하나만 두면 같은
+ * 날 두 번째 ×가 첫 숨김을 지워, 날씨 위험이 풀리는 순간 닫았던 행사 카드가 되살아난다(계약 `Opportunity.key` — 숨긴
+ * key 는 그 날 다시 그리지 않는다). 숨김을 읽기 전엔 카드를 그리지 않는다(숨긴 카드가 잠깐 비치지 않게). 읽기 실패는
+ * 빈 집합에서 시작해 숨김 없이 그리고, 쓰기 실패는 삼킨다 — 이번 화면에선 숨긴 채로 두고 다음에 열면 다시 보인다.
+ * 목록이 비면 기기 칸을 읽지 않는다.
  */
 
 /** SecureStore 키 규칙(영숫자·`.`·`-`·`_`)에 맞는다 — 여행 id(UUID)·날짜('YYYY-MM-DD'). */
@@ -61,19 +63,19 @@ export function useHubOpportunities({
   // 읽은 숨김(어느 칸을 읽었는지와 함께) — 칸이 바뀌면(다른 날) 다시 읽을 때까지 모르는 것으로 본다.
   const [hidden, setHidden] = useState<{
     deviceKey: string;
-    key: string | null;
+    keys: readonly string[];
   } | null>(null);
   const hasItems = items.length > 0;
 
   useEffect(() => {
     if (!hasItems) return;
     let alive = true;
-    readStringValue(deviceKey).then(
-      (key) => {
-        if (alive) setHidden({ deviceKey, key });
+    readIdSet(deviceKey).then(
+      (keys) => {
+        if (alive) setHidden({ deviceKey, keys });
       },
       () => {
-        if (alive) setHidden({ deviceKey, key: null });
+        if (alive) setHidden({ deviceKey, keys: [] });
       }
     );
     return () => {
@@ -85,15 +87,16 @@ export function useHubOpportunities({
   const item = pickOpportunity(items, {
     date,
     triggers,
-    hiddenKey: hidden.key,
+    hiddenKeys: hidden.keys,
   });
   if (item === null) return null;
   return {
     item,
     replanHref: opportunityReplanHref(tripId, item, date, today),
     dismiss: () => {
-      setHidden({ deviceKey, key: item.key });
-      writeStringValue(deviceKey, item.key).catch(() => {
+      const keys = [...hidden.keys, item.key];
+      setHidden({ deviceKey, keys });
+      writeIdSet(deviceKey, keys).catch(() => {
         // 기기 기억 실패 — 이번 화면에선 이미 숨겼다. 다음에 열면 다시 보인다(편의값이라 막지 않는다).
       });
     },

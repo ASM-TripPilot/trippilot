@@ -87,7 +87,7 @@ describe('pickOpportunity — 날짜당 1장 고르기 (§4.1)', () => {
       pickOpportunity(items, {
         date: DATE,
         triggers: NO_TRIGGERS,
-        hiddenKey: null,
+        hiddenKeys: [],
       })
     ).toBe(items[0]);
   });
@@ -100,7 +100,7 @@ describe('pickOpportunity — 날짜당 1장 고르기 (§4.1)', () => {
       pickOpportunity(withTrending, {
         date: DATE,
         triggers: [trigger()],
-        hiddenKey: null,
+        hiddenKeys: [],
       })
     ).toBe(withTrending[2]);
     // 행사만 있으면 그릴 것이 없다.
@@ -108,7 +108,7 @@ describe('pickOpportunity — 날짜당 1장 고르기 (§4.1)', () => {
       pickOpportunity(items, {
         date: DATE,
         triggers: [trigger()],
-        hiddenKey: null,
+        hiddenKeys: [],
       })
     ).toBeNull();
   });
@@ -120,7 +120,7 @@ describe('pickOpportunity — 날짜당 1장 고르기 (§4.1)', () => {
       pickOpportunity(items, {
         date: DATE,
         triggers: [trigger({ severity: undefined })],
-        hiddenKey: null,
+        hiddenKeys: [],
       })
     ).toBe(items[1]);
   });
@@ -134,7 +134,7 @@ describe('pickOpportunity — 날짜당 1장 고르기 (§4.1)', () => {
     const items = [event(), trending()];
 
     expect(
-      pickOpportunity(items, { date: DATE, triggers: [other], hiddenKey: null })
+      pickOpportunity(items, { date: DATE, triggers: [other], hiddenKeys: [] })
     ).toBe(items[0]);
   });
 
@@ -144,14 +144,14 @@ describe('pickOpportunity — 날짜당 1장 고르기 (§4.1)', () => {
       pickOpportunity([event(), trending()], {
         date: DATE,
         triggers: undefined,
-        hiddenKey: null,
+        hiddenKeys: [],
       })
     ).toBeNull();
     expect(
       pickOpportunity([trending()], {
         date: DATE,
         triggers: undefined,
-        hiddenKey: null,
+        hiddenKeys: [],
       })
     ).toBeNull();
   });
@@ -163,7 +163,7 @@ describe('pickOpportunity — 날짜당 1장 고르기 (§4.1)', () => {
       pickOpportunity(items, {
         date: DATE,
         triggers: NO_TRIGGERS,
-        hiddenKey: items[0].key,
+        hiddenKeys: [items[0].key],
       })
     ).toBeNull();
   });
@@ -175,7 +175,7 @@ describe('pickOpportunity — 날짜당 1장 고르기 (§4.1)', () => {
       pickOpportunity(items, {
         date: DATE,
         triggers: NO_TRIGGERS,
-        hiddenKey: items[1].key,
+        hiddenKeys: [items[1].key],
       })
     ).toBe(items[0]);
   });
@@ -187,7 +187,7 @@ describe('pickOpportunity — 날짜당 1장 고르기 (§4.1)', () => {
       pickOpportunity(items, {
         date: DATE,
         triggers: [trigger()],
-        hiddenKey: items[1].key,
+        hiddenKeys: [items[1].key],
       })
     ).toBeNull();
   });
@@ -197,7 +197,7 @@ describe('pickOpportunity — 날짜당 1장 고르기 (§4.1)', () => {
       pickOpportunity([], {
         date: DATE,
         triggers: NO_TRIGGERS,
-        hiddenKey: null,
+        hiddenKeys: [],
       })
     ).toBeNull();
   });
@@ -216,7 +216,7 @@ describe('pickOpportunity — 날짜당 1장 고르기 (§4.1)', () => {
         pickOpportunity(items, {
           date: DATE,
           triggers: NO_TRIGGERS,
-          hiddenKey: null,
+          hiddenKeys: [],
         })
       ).toBe(items[1]);
     }
@@ -230,9 +230,24 @@ describe('pickOpportunity — 날짜당 1장 고르기 (§4.1)', () => {
       pickOpportunity(items, {
         date: DATE,
         triggers: NO_TRIGGERS,
-        hiddenKey: null,
+        hiddenKeys: [],
       })
     ).toBe(items[1]);
+  });
+
+  it('K12 숨김은 날짜당 여러 개다 — 먼저 숨긴 key 는 뒤에 다른 key 를 숨겨도 그리지 않는다', () => {
+    // 준비 — 행사를 닫고, 비 위험으로 그 자리에 선 요즘 인기도 닫았다.
+    const items = [event(), trending()];
+    const hiddenKeys = [items[0].key, items[1].key];
+
+    // 위험이 풀려 행사가 다시 첫 장이어도 없음.
+    expect(
+      pickOpportunity(items, { date: DATE, triggers: NO_TRIGGERS, hiddenKeys })
+    ).toBeNull();
+    // 위험이 그대로여도(요즘 인기가 첫 장) 없음.
+    expect(
+      pickOpportunity(items, { date: DATE, triggers: [trigger()], hiddenKeys })
+    ).toBeNull();
   });
 });
 
@@ -379,34 +394,35 @@ const triggersArb: fc.Arbitrary<Trigger[] | undefined> = fc.option(
   ),
   { nil: undefined }
 );
-/** 숨김 — 없음 · 목록의 n 번째 key · 목록에 없는 key. */
-const hiddenArb = fc.oneof(
-  fc.constant<null>(null),
-  fc.nat({ max: 3 }),
-  fc.constant('event:목록에 없는 행사')
+/** 숨김 집합 — 목록의 n 번째 key 들과 목록에 없는 key 를 섞는다(빈 집합 포함). */
+const hiddenArb = fc.uniqueArray(
+  fc.oneof(fc.nat({ max: 3 }), fc.constant('event:목록에 없는 행사')),
+  { maxLength: 4 }
 );
 const resolveHidden = (
   items: Opportunity[],
-  hidden: null | number | string
-): string | null =>
-  typeof hidden === 'number' ? (items[hidden]?.key ?? null) : hidden;
+  hidden: readonly (number | string)[]
+): string[] =>
+  hidden.flatMap((h) =>
+    typeof h === 'string' ? [h] : items[h] ? [items[h].key] : []
+  );
 
 describe('pickOpportunity 성질 (§4.1)', () => {
   it('P1 트리거를 알면 결과는 없음이거나 목록의 첫 "그릴 수 있는" 항목이고, 숨긴 첫 장은 다음으로 채우지 않는다', () => {
     fc.assert(
       fc.property(itemsArb, triggersArb, hiddenArb, (items, triggers, h) => {
         fc.pre(triggers !== undefined);
-        const hiddenKey = resolveHidden(items, h);
+        const hiddenKeys = resolveHidden(items, h);
         const result = pickOpportunity(items, {
           date: DATE,
           triggers,
-          hiddenKey,
+          hiddenKeys,
         });
         // fc.pre 는 타입을 좁히지 않는다 — 위에서 undefined 를 걸렀으므로 `?? []` 는 닿지 않는다.
         const eventsBlocked = (triggers ?? []).some(blocksEvents);
         const first = items.find((item) => drawable(item, eventsBlocked));
 
-        if (first === undefined || first.key === hiddenKey) {
+        if (first === undefined || hiddenKeys.includes(first.key)) {
           expect(result).toBeNull();
         } else {
           expect(result).toBe(first);
@@ -415,13 +431,15 @@ describe('pickOpportunity 성질 (§4.1)', () => {
       {
         examples: [
           // 같은 날 날씨 위험 + 행사 첫 장 → 요즘 인기.
-          [[event(), trending()], [trigger()], null],
+          [[event(), trending()], [trigger()], []],
           // 첫 장 숨김 → 없음(다음 장으로 안 채움).
-          [[event(), trending()], [], 0],
+          [[event(), trending()], [], [0]],
+          // 둘째를 숨긴 뒤에도 먼저 숨긴 첫 장은 없음.
+          [[event(), trending()], [], [0, 1]],
           // 모르는 kind 첫 장 → 다음 항목.
-          [[event({ kind: UNKNOWN_KIND }), trending()], [], null],
+          [[event({ kind: UNKNOWN_KIND }), trending()], [], []],
           // 주의 날씨 + 행사 → 행사 그대로.
-          [[event(), trending()], [trigger({ severity: 'CAUTION' })], null],
+          [[event(), trending()], [trigger({ severity: 'CAUTION' })], []],
         ],
       }
     );
@@ -434,7 +452,7 @@ describe('pickOpportunity 성질 (§4.1)', () => {
         const result = pickOpportunity(items, {
           date: DATE,
           triggers,
-          hiddenKey: resolveHidden(items, h),
+          hiddenKeys: resolveHidden(items, h),
         });
 
         if (triggers === undefined) {
@@ -445,8 +463,8 @@ describe('pickOpportunity 성질 (§4.1)', () => {
       }),
       {
         examples: [
-          [[event(), trending()], [trigger()], null],
-          [[trending()], undefined, null],
+          [[event(), trending()], [trigger()], []],
+          [[trending()], undefined, []],
         ],
       }
     );
@@ -456,15 +474,15 @@ describe('pickOpportunity 성질 (§4.1)', () => {
     fc.assert(
       fc.property(itemsArb, triggersArb, hiddenArb, (items, triggers, h) => {
         fc.pre(triggers !== undefined && !triggers.some(blocksEvents));
-        const hiddenKey = resolveHidden(items, h);
+        const hiddenKeys = resolveHidden(items, h);
 
         expect(
-          pickOpportunity(items, { date: DATE, triggers, hiddenKey })
+          pickOpportunity(items, { date: DATE, triggers, hiddenKeys })
         ).toBe(
           pickOpportunity(items, {
             date: DATE,
             triggers: NO_TRIGGERS,
-            hiddenKey,
+            hiddenKeys,
           })
         );
       }),
@@ -477,8 +495,41 @@ describe('pickOpportunity 성질 (§4.1)', () => {
               trigger({ affectedDate: OTHER_DATE }),
               trigger({ kind: 'CLOSURE' }),
             ],
-            null,
+            [],
           ],
+        ],
+      }
+    );
+  });
+
+  it('P5 숨김을 더해도 닫은 카드가 되살아나지 않는다 — 결과는 그대로이거나 없음(먼저 숨긴 key 는 뒤의 숨김과 무관하게 계속 숨는다)', () => {
+    fc.assert(
+      fc.property(
+        itemsArb,
+        triggersArb,
+        hiddenArb,
+        hiddenArb,
+        (items, triggers, h, more) => {
+          const hiddenKeys = resolveHidden(items, h);
+          const before = pickOpportunity(items, {
+            date: DATE,
+            triggers,
+            hiddenKeys,
+          });
+          const after = pickOpportunity(items, {
+            date: DATE,
+            triggers,
+            hiddenKeys: [...hiddenKeys, ...resolveHidden(items, more)],
+          });
+
+          expect(after === null || after === before).toBe(true);
+        }
+      ),
+      {
+        examples: [
+          // 행사를 닫은 뒤 요즘 인기를 또 닫는다 — 위험이 없든(행사 첫 장) 있든(요즘 인기 첫 장) 없음.
+          [[event(), trending()], [], [0], [1]],
+          [[event(), trending()], [trigger()], [0], [1]],
         ],
       }
     );

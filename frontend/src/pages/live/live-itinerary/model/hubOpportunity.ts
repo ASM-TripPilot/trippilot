@@ -15,8 +15,8 @@ export interface OpportunityContext {
   date: string;
   /** 발화 중 트리거(`GET /triggers`). `undefined` = 아직 모른다(조회 중·실패). */
   triggers: readonly Trigger[] | undefined;
-  /** 이 날 기기에서 숨긴 기회 key — 없으면 null. */
-  hiddenKey: string | null;
+  /** 이 날 기기에서 숨긴 기회 key 들 — 하루에 여러 장을 닫을 수 있다(비 위험으로 행사가 빠진 자리의 카드도). */
+  hiddenKeys: readonly string[];
 }
 
 /** 같은 날짜에 발화 중인 날씨 위험 — severity 가 없으면(옛 서버) 위험으로 읽는다(계약 주석). */
@@ -41,18 +41,18 @@ function drawable(item: Opportunity, eventsBlocked: boolean): boolean {
 
 /**
  * 날짜당 1장 — ① 같은 날 날씨 위험이 발화 중이면 행사 카드를 뺀다(비 오는 날 야외 축제를 권하지 않는다) ② 남은 첫
- * 항목(서버 순위) ③ 그 항목을 이 날 숨겼으면 없음 — 숨긴 자리를 다음 항목으로 채우지 않는다.
+ * 항목(서버 순위) ③ 그 항목의 key 를 이 날 숨겼으면(몇 번째로 숨겼든) 없음 — 숨긴 자리를 다음 항목으로 채우지 않는다.
  * 트리거를 아직 모르면(조회 중·실패) 고르지 않는다 — 요즘 인기를 먼저 그렸다가 트리거가 오면 행사 카드로 바뀌어,
  * 누르려던 [넣어서 다시 짜기]가 손끝에서 다른 장소가 되지 않게.
  */
 export function pickOpportunity(
   items: readonly Opportunity[],
-  { date, triggers, hiddenKey }: OpportunityContext
+  { date, triggers, hiddenKeys }: OpportunityContext
 ): Opportunity | null {
   if (triggers === undefined) return null;
   const eventsBlocked = triggers.some((trigger) => blocksEvents(trigger, date));
   const first = items.find((item) => drawable(item, eventsBlocked));
-  if (first === undefined || first.key === hiddenKey) return null;
+  if (first === undefined || hiddenKeys.includes(first.key)) return null;
   return first;
 }
 

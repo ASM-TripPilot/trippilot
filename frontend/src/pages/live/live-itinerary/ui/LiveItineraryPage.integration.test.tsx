@@ -77,11 +77,11 @@ import { LiveItineraryPage } from './LiveItineraryPage';
  */
 
 // authedClient(생성 클라이언트 인증 계층)가 @/shared/storage 를 정적으로 문다.
-// 상황 감지 FE-C — 기회 카드의 기기 숨김 기억(readStringValue·writeStringValue)도 이 배럴로 나간다. 구현은 기회 카드
+// 상황 감지 FE-C — 기회 카드의 기기 숨김 기억(readIdSet·writeIdSet)도 이 배럴로 나간다. 구현은 기회 카드
 // 관점(describe)이 심는다(그 밖의 관점은 기회 목록이 비어 읽지 않는다).
 // 배럴을 통째로 갈아끼우므로 실물을 먼저 펼친 뒤 덮는다(README 테스트 규칙 — 재수출이 늘어도 형제 export 가 undefined 가 되지 않게).
-const mockReadStringValue = jest.fn();
-const mockWriteStringValue = jest.fn();
+const mockReadIdSet = jest.fn();
+const mockWriteIdSet = jest.fn();
 jest.mock('@/shared/storage', () => ({
   ...jest.requireActual('@/shared/storage'),
   saveTokens: jest.fn().mockResolvedValue(undefined),
@@ -90,9 +90,8 @@ jest.mock('@/shared/storage', () => ({
     .mockResolvedValue({ accessToken: 'a', refreshToken: 'r' }),
   clearTokens: jest.fn().mockResolvedValue(undefined),
   hasStoredToken: jest.fn().mockResolvedValue(true),
-  readStringValue: (key: string) => mockReadStringValue(key),
-  writeStringValue: (key: string, value: string) =>
-    mockWriteStringValue(key, value),
+  readIdSet: (key: string) => mockReadIdSet(key),
+  writeIdSet: (key: string, ids: readonly string[]) => mockWriteIdSet(key, ids),
 }));
 
 // 정적 싱글턴 router 목 — 렌더 중엔 부르지 않는다.
@@ -6077,7 +6076,7 @@ describe('방문 체크', () => {
  *  - 빈 목록·조회 실패·응답 대기는 카드만 없고 허브의 나머지(슬롯·알약)는 그대로다 — 허브의 다른 조회를 막지 않는다.
  *
  * 3동작: 준비(일정·트리거·날짜별 기회 응답·기기 숨김 칸) → 실행(렌더·일차 칩·CTA·×) → 단언(카드 글자·요청 날짜·push 인자·숨김 기억).
- * 기기 숨김 칸은 파일 맨 위 `@/shared/storage` 목의 readStringValue·writeStringValue 에 이 관점이 Map 을 심는다.
+ * 기기 숨김 칸은 파일 맨 위 `@/shared/storage` 목의 readIdSet·writeIdSet 에 이 관점이 Map 을 심는다.
  */
 describe('기회 카드 (상황 감지 FE-C)', () => {
   const VENUE: Opportunity = {
@@ -6149,23 +6148,23 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
       return HttpResponse.json({ items: byDate[date] ?? [] });
     });
 
-  /** 기기 숨김 칸(SecureStore 대역) — 키 → 값. 다시 렌더해도 남는다(앱을 다시 연 것과 같다). */
-  let deviceStore = new Map<string, string>();
+  /** 기기 숨김 칸(SecureStore 대역) — 키 → 숨긴 key 집합. 다시 렌더해도 남는다(앱을 다시 연 것과 같다). */
+  let deviceStore = new Map<string, readonly string[]>();
   beforeEach(() => {
     askedDates = [];
     deviceStore = new Map();
-    mockReadStringValue.mockImplementation(
-      async (key: string) => deviceStore.get(key) ?? null
+    mockReadIdSet.mockImplementation(
+      async (key: string) => deviceStore.get(key) ?? []
     );
-    mockWriteStringValue.mockImplementation(
-      async (key: string, value: string) => {
-        deviceStore.set(key, value);
+    mockWriteIdSet.mockImplementation(
+      async (key: string, ids: readonly string[]) => {
+        deviceStore.set(key, ids);
       }
     );
   });
   afterEach(() => {
-    mockReadStringValue.mockReset();
-    mockWriteStringValue.mockReset();
+    mockReadIdSet.mockReset();
+    mockWriteIdSet.mockReset();
   });
 
   function wrapper({ children }: { children: ReactNode }) {
@@ -6296,8 +6295,8 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
 
     await waitFor(() => expect(screen.queryByTestId(CARD)).toBeNull());
     expect(screen.queryByText(TRENDING_TITLE)).toBeNull();
-    expect(mockWriteStringValue).toHaveBeenCalledTimes(1);
-    expect(mockWriteStringValue.mock.calls[0][1]).toBe(VENUE.key);
+    expect(mockWriteIdSet).toHaveBeenCalledTimes(1);
+    expect(mockWriteIdSet.mock.calls[0][1]).toEqual([VENUE.key]);
 
     // 다시 연다 — 새 쿼리 캐시, 기기 칸은 그대로.
     first.unmount();
@@ -6305,7 +6304,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     // 짝 앵커 — 다시 물었고(응답 도착), 숨김도 다시 읽었다. 그 뒤에도 카드가 없어야 한다.
     await waitFor(() => expect(askedDates).toEqual([TODAY, TODAY]));
     await waitFor(() =>
-      expect(mockReadStringValue.mock.calls.length).toBeGreaterThanOrEqual(2)
+      expect(mockReadIdSet.mock.calls.length).toBeGreaterThanOrEqual(2)
     );
     await settle();
     expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
@@ -6321,7 +6320,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
   });
 
   it('O6 숨김 읽기가 실패하면 숨김 없이 그린다', async () => {
-    mockReadStringValue.mockImplementation(async () => {
+    mockReadIdSet.mockImplementation(async () => {
       throw new Error('keychain');
     });
     await renderHub({ [TODAY]: [VENUE] });
@@ -6334,7 +6333,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
   });
 
   it('O7 숨김 쓰기가 실패해도 이번 화면에선 숨긴다(실패는 조용히 삼킨다)', async () => {
-    mockWriteStringValue.mockImplementation(async () => {
+    mockWriteIdSet.mockImplementation(async () => {
       throw new Error('keychain');
     });
     await renderHub({ [TODAY]: [VENUE] });
@@ -6342,7 +6341,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     fireEvent.press(await screen.findByTestId(DISMISS));
 
     await waitFor(() => expect(screen.queryByTestId(CARD)).toBeNull());
-    expect(mockWriteStringValue).toHaveBeenCalledTimes(1);
+    expect(mockWriteIdSet).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -6422,5 +6421,79 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     await screen.findByTestId('execution-live-notfound');
     await settle();
     expect(hitCount(OPPORTUNITIES)).toBe(0);
+  });
+
+  it('O12 같은 날 두 번째 ×가 첫 숨김을 지우지 않는다 — 비 위험으로 바뀐 카드를 또 닫고 위험이 풀려도, 처음 닫은 카드는 그 날 다시 없다', async () => {
+    // 준비 — 트리거 목록은 테스트가 바꾼다. 한 번의 server.use 안에서는 앞에 건 핸들러가 이기므로 liveHubHandlers 보다 먼저 둔다.
+    let serverTriggers: Trigger[] = [];
+    server.use(
+      http.get(`${BASE}/trips/:tripId/triggers`, () =>
+        HttpResponse.json({ triggers: serverTriggers })
+      ),
+      ...liveHubHandlers({ itinerary: itinerary() }),
+      opportunitiesHandler({ [TODAY]: [VENUE, TRENDING] })
+    );
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: 0 },
+        mutations: { gcTime: 0 },
+      },
+    });
+    /** 트리거 목록을 다시 받는다(포그라운드 복귀·푸시 수신 무효화와 같다). */
+    const refetchTriggers = (next: Trigger[]) => {
+      serverTriggers = next;
+      return act(() =>
+        client.invalidateQueries({
+          queryKey: getGetTripsTripIdTriggersQueryKey(TRIP_ID),
+        })
+      );
+    };
+    const first = render(
+      <QueryClientProvider client={client}>
+        <LiveItineraryPage tripId={TRIP_ID} today={TODAY} />
+      </QueryClientProvider>
+    );
+
+    // 실행 ① — 행사 카드를 닫는다.
+    fireEvent.press(await screen.findByTestId(DISMISS));
+    await waitFor(() => expect(screen.queryByTestId(CARD)).toBeNull());
+
+    // 실행 ② — 같은 날 비 위험이 뜨면 행사가 빠져 요즘 인기가 선다 → 그것도 닫는다.
+    await refetchTriggers([rain]);
+    await waitFor(() =>
+      expect(screen.getByTestId(TITLE)).toHaveTextContent(TRENDING_TITLE, {
+        exact: true,
+      })
+    );
+    fireEvent.press(screen.getByTestId(DISMISS));
+    await waitFor(() => expect(screen.queryByTestId(CARD)).toBeNull());
+    // 기기에는 그 날 숨긴 key 가 둘 다 남는다(두 번째가 첫째를 덮어쓰지 않는다).
+    expect(mockWriteIdSet.mock.calls.at(-1)?.[1]).toEqual([
+      VENUE.key,
+      TRENDING.key,
+    ]);
+
+    // 실행 ③ — 위험이 풀린다(i06 [적용]이 소비) → 행사가 다시 첫 장이다. 알약이 사라진 것 = 새 목록 도착의 증거.
+    await refetchTriggers([]);
+    await waitFor(() =>
+      expect(screen.queryByTestId('execution-live-trigger-chip')).toBeNull()
+    );
+    await settle();
+
+    // 단언 — 처음 닫은 행사 카드는 그 날 다시 그리지 않는다(계약 Opportunity.key).
+    expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
+    expect(screen.queryByTestId(CARD)).toBeNull();
+
+    // 다시 열어도 같다 — 기기 칸에 두 숨김이 다 남았다. 짝 앵커: 다시 물었고(응답 도착) 숨김도 다시 읽었다.
+    const readsBefore = mockReadIdSet.mock.calls.length;
+    first.unmount();
+    render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+    await waitFor(() => expect(askedDates).toEqual([TODAY, TODAY]));
+    await waitFor(() =>
+      expect(mockReadIdSet.mock.calls.length).toBeGreaterThan(readsBefore)
+    );
+    await settle();
+    expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
+    expect(screen.queryByTestId(CARD)).toBeNull();
   });
 });
