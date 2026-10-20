@@ -43,7 +43,7 @@ def poi_collect():
 
     @task
     def validate(candidate: str) -> str:
-        doc = json.loads(Path(candidate).read_text(encoding="utf-8"))
+        doc = json.loads(pipeline.require_candidate(Path(candidate)).read_text(encoding="utf-8"))
         failures = checks.check_pois(doc, checks.sido_names(), get_current_context()["params"]["min_count"])
         if failures:
             # 재시도해도 같은 문서는 같은 결과다 — 실패로 끝내고 게시를 막는다.

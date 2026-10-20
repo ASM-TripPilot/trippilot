@@ -14,6 +14,7 @@ import tempfile
 import unittest
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
+from unittest import mock
 from zoneinfo import ZoneInfo
 
 DAGS = Path(__file__).resolve().parents[1] / "dags"
@@ -26,16 +27,17 @@ def fixture_events() -> list[dict]:
     return json.loads(EVENTS.read_text(encoding="utf-8"))["events"]
 
 
-def last_collected() -> date:
+def oldest_collected() -> date:
+    """가장 오래된 지역의 마지막 수집 — event_collect 의 신선도 검사가 보는 값."""
     doc = json.loads(EVENTS.read_text(encoding="utf-8"))
-    return max(datetime.fromisoformat(t).date() for t in doc["coverage"].values())
+    return min(datetime.fromisoformat(t).date() for t in doc["coverage"].values())
 
 
 def busiest_day() -> date:
-    """리포 행사 사본에서 유효한 행사가 가장 많은 날 — DAG 시작일 이후이고, 마지막 수집에서 허용 날수(7일) 안."""
+    """리포 행사 사본에서 유효한 행사가 가장 많은 날 — DAG 시작일 이후이고, 가장 오래된 지역의 마지막 수집에서 허용 날수(7일) 안."""
     spans = [(date.fromisoformat(e["start"]), date.fromisoformat(e["end"])) for e in fixture_events()
              if e.get("start") and e.get("end")]
-    first = max(DAG_START, last_collected())
+    first = max(DAG_START, oldest_collected())
     days = [first + timedelta(days=i) for i in range(MAX_AGE_DAYS + 1)]
     return max(days, key=lambda d: sum(s <= d <= e for s, e in spans))
 
@@ -114,34 +116,64 @@ class DryRunTest(unittest.TestCase):
 
     def test_행사는_그날_기준으로_검증한다(self):
         # 날짜를 박지 않는다 — 수집기가 지난 행사를 지워 리포 사본이 바뀌면 고정 날짜는 언젠가 하한 아래로 떨어진다.
-        # 사본에서 유효 행사가 가장 많은 날(시작일 뒤, 마지막 수집에서 7일 안 — 신선도 검사도 통과하는 날)을 고른다.
+        # 사본에서 유효 행사가 가장 많은 날(시작일 뒤, 가장 오래된 지역의 마지막 수집에서 7일 안 — 신선도 검사도 통과하는 날)을 고른다.
         mod = self.load("event_collect")
         mod.event_collect().test(logical_date=datetime.combine(busiest_day(), time(4, 40), tzinfo=ZoneInfo("Asia/Seoul")))
         self.assertTrue((self.out / "published/collected_events.json").exists())
 
-    def test_행사가_낡았으면_게시하지_않는다(self):
-        # 리포 사본의 마지막 종료일 다음 날로 돌리면 그날 유효한 행사가 0건 — 사본이 그날에 비해 낡은 것이다
-        # (cce8c508 과 같은 모양). 날짜는 DAG 시작일(2026-10-01) 뒤여야 한다 — 앞이면 태스크가 아예 돌지 않아
-        # 검증과 무관하게 게시본이 없다(실측: 처음 2025년으로 썼다가 검증을 지워도 통과했다).
+    def event_source(self, events, coverage):
+        source = self.out / "events.json"
+        source.write_text(json.dumps({"events": events, "coverage": coverage}, ensure_ascii=False), encoding="utf-8")
+        return source
+
+    def run_events(self, mod, day):
+        """event_collect 를 그날로 돌리고 (태스크 상태, validate 가 낸 실패 사유)를 돌려준다 — 사유는 check_events 를
+        감싸 받는다(dag.test 는 태스크를 이 프로세스에서 돌린다). 상태만 보면 어느 규칙이 막았는지 모른다."""
+        reasons = []
+        real = mod.checks.check_events
+
+        def spy(*args):
+            reasons.extend(real(*args))
+            return reasons
+
+        with mock.patch.object(mod.checks, "check_events", spy):
+            run = mod.event_collect().test(logical_date=datetime.combine(day, time(4, 40), tzinfo=ZoneInfo("Asia/Seoul")))
+        return {ti.task_id: ti.state for ti in run.get_task_instances()}, reasons
+
+    def test_행사는_오늘이_아니라_실행의_논리_날짜로_검증한다(self):
+        # 행사도 수집도 논리 날짜(2026-10-02) 근처뿐이다 — validate 가 오늘(date.today()) 로 세면 유효 0건·수집 낡음으로
+        # 막히고, 논리 날짜로 세야 게시된다. 2026-10-10 뒤의 어느 날에 돌려도 오늘과 논리 날짜가 갈린다.
         mod = self.load("event_collect")
-        after_all = max(date.fromisoformat(e["end"]) for e in fixture_events() if e.get("end")) + timedelta(days=1)
-        run = mod.event_collect().test(logical_date=datetime.combine(after_all, time(4, 40), tzinfo=ZoneInfo("Asia/Seoul")))
-        states = {ti.task_id: ti.state for ti in run.get_task_instances()}
-        self.assertEqual(states["collect"], "success")    # 수집은 됐다
-        self.assertEqual(states["validate"], "failed")    # 검증이 막았다
+        mod.SOURCE = self.event_source([{"start": "2026-10-01", "end": "2026-10-03"}] * 40,
+                                       {"서울": "2026-10-02T04:00:00+09:00"})
+        states, reasons = self.run_events(mod, date(2026, 10, 2))
+        self.assertEqual(reasons, [])
+        self.assertEqual(states["publish"], "success")
+        self.assertTrue((self.out / "published/collected_events.json").exists())
+
+    def test_행사가_낡은_사본이면_게시하지_않는다_cce8c508(self):
+        # 합성 저장소 — 수집은 바로 그날 했는데(신선도 통과) 행사가 모두 지났다: 유효 건수 규칙 **하나만** 막는다.
+        # 날짜는 DAG 시작일(2026-10-01) 뒤여야 한다 — 앞이면 태스크가 아예 돌지 않아 검증과 무관하게 게시본이 없다.
+        mod = self.load("event_collect")
+        day = date(2026, 10, 20)
+        mod.SOURCE = self.event_source([{"start": "2026-08-01", "end": "2026-08-31"}] * 400,
+                                       {"서울": "2026-10-20T04:00:00+09:00"})
+        states, reasons = self.run_events(mod, day)
+        self.assertEqual((states["collect"], states["validate"]), ("success", "failed"))
+        self.assertEqual(len(reasons), 1, reasons)
+        self.assertIn("유효한 행사 0건 < 하한 30건 (전체 400건)", reasons[0])
         self.assertFalse((self.out / "published/collected_events.json").exists())
 
     def test_행사_수집이_멈췄으면_유효_건수가_넉넉해도_게시하지_않는다(self):
-        # 합성 저장소 — 그날 유효한 행사 40건(하한 30 위)인데 마지막 수집이 8일 전이다. 수집 시각만이 막는다.
+        # 합성 저장소 — 그날 유효한 행사 40건(하한 30 위)인데 가장 오래된 지역의 마지막 수집이 8일 전이다.
+        # 다른 지역은 어제 수집했다(가장 늦은 것만 보면 통과한다) — 수집 시각 규칙 하나만 막는다.
         mod = self.load("event_collect")
-        day = date(2026, 10, 20)
-        source = self.out / "events.json"
-        source.write_text(json.dumps({"events": [{"start": "2026-10-01", "end": "2026-12-31"}] * 40,
-                                      "coverage": {"서울": "2026-10-12T04:40:00+09:00"}}), encoding="utf-8")
-        mod.SOURCE = source
-        run = mod.event_collect().test(logical_date=datetime.combine(day, time(4, 40), tzinfo=ZoneInfo("Asia/Seoul")))
-        states = {ti.task_id: ti.state for ti in run.get_task_instances()}
+        mod.SOURCE = self.event_source([{"start": "2026-10-01", "end": "2026-12-31"}] * 40,
+                                       {"서울": "2026-10-19T04:40:00+09:00", "제주": "2026-10-12T04:40:00+09:00"})
+        states, reasons = self.run_events(mod, date(2026, 10, 20))
         self.assertEqual((states["collect"], states["validate"]), ("success", "failed"))
+        self.assertEqual(len(reasons), 1, reasons)
+        self.assertIn("가장 오래된 지역의 마지막 수집 2026-10-12 — 2026-10-20 기준 8일 전 > 허용 7일", reasons[0])
         self.assertFalse((self.out / "published/collected_events.json").exists())
 
 if __name__ == "__main__":

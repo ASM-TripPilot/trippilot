@@ -80,7 +80,7 @@ class CheckPoisTest(unittest.TestCase):
 
 class CheckEventsTest(unittest.TestCase):
     DAY = date(2026, 10, 10)
-    FRESH = {"서울": "2026-10-09T06:46:38+09:00", "부산": "2026-09-01T06:46:38+09:00"}   # 가장 늦은 것 = 10-09
+    FRESH = {"서울": "2026-10-09T06:46:38+09:00", "부산": "2026-10-04T06:46:38+09:00"}   # 가장 이른 것 = 10-04(6일 전)
 
     def events(self, *spans, coverage=FRESH):
         return {"events": [{"start": s, "end": e} for s, e in spans], "coverage": coverage}
@@ -109,16 +109,34 @@ class CheckEventsTest(unittest.TestCase):
         old = self.events(("2026-10-01", "2026-12-31"), coverage={"서울": "2026-10-02T23:59:00+09:00"})
         failures = self.check(old)
         self.assertEqual(len(failures), 1)
-        self.assertIn("마지막 수집 2026-10-02 — 2026-10-10 기준 8일 전 > 허용 7일", failures[0])
+        self.assertIn("가장 오래된 지역의 마지막 수집 2026-10-02 — 2026-10-10 기준 8일 전 > 허용 7일", failures[0])
+
+    def rotation(self, oldest):
+        """17개 지역을 하루 3곳씩 도는 로테이션 모양 — 하루 전부터 거꾸로 3곳씩, 마지막 두 곳만 `oldest`."""
+        regions = ["서울", "인천", "대전", "대구", "광주", "부산", "울산", "세종", "경기", "강원", "충북", "충남",
+                   "경북", "경남", "전북", "전남", "제주"]
+        coverage = {r: f"2026-10-{9 - i // 3:02d}T04:40:00+09:00" for i, r in enumerate(regions[:15])}   # 10-09 … 10-05
+        coverage.update({r: f"{oldest}T04:40:00+09:00" for r in regions[15:]})
+        return self.events(("2026-10-01", "2026-12-31"), coverage=coverage)
+
+    def test_가장_늦은_지역이_신선해도_가장_오래된_지역이_낡았으면_막는다_로테이션이_건너뜀(self):
+        # 어제 수집한 지역이 있어도(최신 10-09) 두 지역이 9일째 그대로다 — 로테이션 포인터가 멈춘 모양.
+        failures = self.check(self.rotation("2026-10-01"))
+        self.assertEqual(len(failures), 1)
+        self.assertIn("가장 오래된 지역의 마지막 수집 2026-10-01 — 2026-10-10 기준 9일 전", failures[0])
+
+    def test_로테이션_한_바퀴_안이면_통과(self):
+        self.assertEqual(self.check(self.rotation("2026-10-04")), [])   # 가장 오래된 지역 6일 전
 
     def test_허용_날수_경계(self):
         exactly = self.events(("2026-10-01", "2026-12-31"), coverage={"서울": "2026-10-03T00:00:00+09:00"})
         self.assertEqual(self.check(exactly), [])   # 7일 전은 통과, 8일 전부터 막는다
 
     def test_수집_시각이_없거나_깨졌으면_막는다(self):
-        for coverage in ({}, None, {"서울": "어제"}, ["2026-10-09"]):
+        # 한 지역이라도 시각이 깨졌으면 그 지역의 신선도를 모른다 — 나머지가 신선해도 막는다.
+        for coverage in ({}, None, {"서울": "어제"}, ["2026-10-09"], {"서울": "2026-10-09T04:40:00+09:00", "부산": None}):
             failures = self.check(self.events(("2026-10-01", "2026-10-31"), coverage=coverage))
-            self.assertTrue(any("마지막 수집 시각이 없다" in f for f in failures), coverage)
+            self.assertTrue(any("마지막 수집 시각이 없거나 읽을 수 없다" in f for f in failures), coverage)
 
 
 class PipelineTest(unittest.TestCase):
@@ -152,6 +170,33 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(target.read_text(encoding="utf-8"), '{"ok": 1}')
         self.assertFalse(candidate.parent.exists())
         self.assertEqual(list(target.parent.iterdir()), [target])   # 임시 파일도 남지 않는다
+
+    def test_게시본은_다른_사용자도_읽는다_0644(self):
+        # mkstemp 는 0600 — 권한을 고치지 않으면 게시본을 컨테이너(uid 50000)·호스트 사용자가 못 읽는다.
+        target = pipeline.publish(self.candidate(), self.out / "published/c.json")
+        self.assertEqual(target.stat().st_mode & 0o777, 0o644)
+
+    def test_후보가_없으면_collect_부터_다시_돌리라고_말한다(self):
+        # 성공한 실행은 게시가 후보를 지웠다 — 그 실행의 validate·publish 만 다시 돌리면 이 메시지로 멈춘다.
+        candidate = self.candidate()
+        pipeline.publish(candidate, self.out / "published/c.json")
+        for call in (pipeline.require_candidate, lambda c: pipeline.publish(c, self.out / "published/c.json")):
+            with self.assertRaisesRegex(FileNotFoundError, "후보가 없다 — .*collect 부터 다시 돌린다"):
+                call(candidate)
+
+    def test_후보_정리가_실패해도_게시는_성공이다(self):
+        candidate = self.candidate()
+        real_unlink = pipeline.os.unlink
+
+        def unlink_fails(path, *args, **kwargs):
+            if Path(path).name == "c.json":   # rmtree 는 dir_fd 로 이름만 넘긴다 — 게시 대상(published/c.json)은 replace 라 안 지운다
+                raise PermissionError("지울 수 없다")
+            return real_unlink(path, *args, **kwargs)
+
+        with mock.patch.object(pipeline.os, "unlink", unlink_fails), self.assertLogs(pipeline.log, "WARNING") as logs:
+            target = pipeline.publish(candidate, self.out / "published/c.json")
+        self.assertEqual(target.read_text(encoding="utf-8"), '{"ok": 1}')
+        self.assertIn("후보 정리 실패(게시는 끝났다)", logs.output[0])
 
     def test_run_dir_밖의_후보는_지우지_않는다(self):
         outside = self.out / "elsewhere/c.json"
