@@ -1,5 +1,9 @@
 package com.trippilot.app.views
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.trippilot.archive.adapter.`in`.web.VisitCheckController
 import com.trippilot.archive.adapter.`in`.web.VisitCheckListResponse
 import com.trippilot.auth.adapter.`in`.web.LocationConsentController
@@ -20,6 +24,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.jupiter.api.Test
+import org.slf4j.LoggerFactory
 import java.security.Principal
 import java.time.Clock
 import java.time.LocalDate
@@ -70,7 +75,7 @@ class LiveViewControllerTest {
         every { triggerController.list(principal, tripId) } throws ConflictDetected()
         every { consentController.get(principal) } throws IllegalStateException("db")
 
-        val res = controller().live(principal, tripId, null)
+        val res = controller().live(principal, tripId, null, true)
 
         res.trip shouldBeSameInstanceAs trip
         res.triggers shouldBe null
@@ -83,11 +88,30 @@ class LiveViewControllerTest {
     }
 
     @Test
+    fun `예상 밖 실패는 ERROR, 도메인 예외는 WARN 으로 남는다`() {
+        allOk()
+        every { triggerController.list(principal, tripId) } throws ConflictDetected()
+        every { consentController.get(principal) } throws IllegalStateException("db")
+        val logger = LoggerFactory.getLogger(LiveViewController::class.java) as Logger
+        val appender = ListAppender<ILoggingEvent>().apply { start() }
+        logger.addAppender(appender)
+        try {
+            controller().live(principal, tripId, null, true)
+        } finally {
+            logger.detachAppender(appender)
+        }
+        appender.list.map { it.level to it.argumentArray[0] } shouldBe listOf(
+            Level.WARN to LiveSection.TRIGGERS,
+            Level.ERROR to LiveSection.LOCATION_CONSENT,
+        )
+    }
+
+    @Test
     fun `방문 섹션이 실패해도 사유가 실린다`() {
         allOk()
         every { visitController.listByDay(principal, tripId, any()) } throws ResourceNotFound()
 
-        val res = controller().live(principal, tripId, null)
+        val res = controller().live(principal, tripId, null, true)
 
         res.visits shouldBe null
         res.day shouldBe day2
@@ -99,7 +123,7 @@ class LiveViewControllerTest {
         allOk()
         every { itineraryController.get(principal, tripId) } throws ResourceNotFound()
 
-        val res = controller().live(principal, tripId, null)
+        val res = controller().live(principal, tripId, null, true)
 
         res.itinerary shouldBe null
         res.day shouldBe null
@@ -115,28 +139,45 @@ class LiveViewControllerTest {
     fun `일정의 그 밖의 실패와 여행의 실패는 전체 오류다`() {
         allOk()
         every { itineraryController.get(principal, tripId) } throws IllegalStateException("db")
-        shouldThrow<IllegalStateException> { controller().live(principal, tripId, null) }
+        shouldThrow<IllegalStateException> { controller().live(principal, tripId, null, true) }
 
         every { tripController.get(principal, tripId) } throws ResourceNotFound()
-        shouldThrow<ResourceNotFound> { controller().live(principal, tripId, null) }
+        shouldThrow<ResourceNotFound> { controller().live(principal, tripId, null, true) }
     }
 
     @Test
     fun `날짜 — 요청한 날이 일정에 있으면 그날, 아니면 오늘, 오늘이 밖이면 첫날 또는 마지막 날`() {
         allOk()
-        controller(today = day2).live(principal, tripId, day3).day shouldBe day3
-        controller(today = day2).live(principal, tripId, day3.plusDays(9)).day shouldBe day2
-        controller(today = day2).live(principal, tripId, null).day shouldBe day2
-        controller(today = day1.minusDays(5)).live(principal, tripId, null).day shouldBe day1
-        controller(today = day3.plusDays(5)).live(principal, tripId, null).day shouldBe day3
+        controller(today = day2).live(principal, tripId, day3.toString(), true).day shouldBe day3
+        controller(today = day2).live(principal, tripId, day3.plusDays(9).toString(), true).day shouldBe day2
+        controller(today = day2).live(principal, tripId, null, true).day shouldBe day2
+        controller(today = day1.minusDays(5)).live(principal, tripId, null, true).day shouldBe day1
+        controller(today = day3.plusDays(5)).live(principal, tripId, null, true).day shouldBe day3
         verify { visitController.listByDay(principal, tripId, day3) }
+    }
+
+    @Test
+    fun `형식이 깨진 날은 무시하고 오늘로 간다 — 묶음 전체가 400 이 되지 않는다`() {
+        allOk()
+        controller(today = day2).live(principal, tripId, "2026-1-5", true).day shouldBe day2
+    }
+
+    @Test
+    fun `위치 동의는 요청할 때만 부른다`() {
+        allOk()
+
+        val res = controller().live(principal, tripId, null, false)
+
+        res.locationConsent shouldBe null
+        res.unavailable shouldBe emptyList()
+        verify(exactly = 0) { consentController.get(any()) }
     }
 
     @Test
     fun `일정에 날이 없으면 날짜도 방문도 null 이고 트리거는 준다`() {
         allOk(itinerary())
 
-        val res = controller().live(principal, tripId, null)
+        val res = controller().live(principal, tripId, null, true)
 
         res.day shouldBe null
         res.visits shouldBe null

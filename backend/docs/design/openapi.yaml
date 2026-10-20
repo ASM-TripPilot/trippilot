@@ -1651,19 +1651,22 @@ paths:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
     get:
       tags: [trips]
-      summary: 여행 중 화면 첫 로딩 묶음 — 여행·일정·트리거·그날 방문·위치 동의를 한 번에(TRIP-1467)
+      summary: 여행 중 화면 첫 로딩 묶음 — 여행·일정·트리거·그날 방문(·위치 동의)을 한 번에(TRIP-1467)
       description: >
-        화면이 3단계로 나눠 부르던 5개 조회를 한 응답으로 준다. **각 섹션은 그 엔드포인트의 응답과 같은 모양**이다
+        화면이 두 단계로 나눠 부르던 조회(여행·일정·위치 동의 → 일정이 오면 트리거·그날 방문)를 한 응답으로 준다.
+        위치 동의는 `withLocationConsent=true` 일 때만 싣는다(앱의 위치 자동화 플래그가 꺼지면 동의 조회도 하지 않는다, BR-U10-07).
+        **각 섹션은 그 엔드포인트의 응답과 같은 모양**이다
         (서버가 같은 핸들러를 부른다) — 앱은 섹션을 그 엔드포인트의 캐시에 그대로 채우고, 이후 갱신·무효화는 개별 경로로 한다.
 
         실패 규칙: 여행이 없거나 남의 것이면 404. 일정이 없으면 `itinerary`·`day`·`triggers`·`visits` 가 null(화면은
         "아직 일정이 없어요"). 일정의 그 밖의 실패는 전체 오류. `triggers`·`visits`·`locationConsent` 가 실패하면 그 섹션만
         null 이고 `unavailable` 에 사유가 실린다 — 앱은 그 섹션만 개별 엔드포인트로 다시 부른다.
 
-        `day` 는 방문 기록을 읽을 날이다. 요청한 날이 일정에 있으면 그날, 아니면 오늘(서울), 오늘이 일정 밖이면
+        `day` 는 방문 기록을 읽을 날이다. 요청한 날이 일정에 있으면 그날, 아니면(형식이 틀려도 400 이 아니라) 오늘(서울), 오늘이 일정 밖이면
         여행 전은 첫날·여행 뒤는 마지막 날(앱 라이브 화면의 규칙과 같다). 응답의 `day` 가 실제로 쓴 날이다.
       parameters:
-        - { name: day, in: query, required: false, schema: { type: string, format: date }, description: "보고 싶은 날(앱 경로의 ?day=). 일정에 없으면 무시한다" }
+        - { name: day, in: query, required: false, schema: { type: string }, description: "보고 싶은 날 YYYY-MM-DD(앱 경로의 ?day=). 일정에 없거나 형식이 틀리면 무시한다" }
+        - { name: withLocationConsent, in: query, required: false, schema: { type: boolean, default: false }, description: "true 면 위치 동의 섹션을 싣는다" }
       responses:
         '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/LiveView' } } } }
         '404': { description: 여행 없음/타 계정 }
@@ -3029,7 +3032,7 @@ components:
         day: { type: string, format: date, nullable: true, description: visits 의 날. 일정이 없거나 일정에 날이 없으면 null }
         triggers: { allOf: [{ $ref: '#/components/schemas/TriggerList' }], nullable: true, description: 일정이 없거나 실패하면 null }
         visits: { allOf: [{ $ref: '#/components/schemas/VisitCheckList' }], nullable: true, description: day 가 없거나 실패하면 null }
-        locationConsent: { allOf: [{ $ref: '#/components/schemas/LocationConsent' }], nullable: true, description: 실패하면 null }
+        locationConsent: { allOf: [{ $ref: '#/components/schemas/LocationConsent' }], nullable: true, description: withLocationConsent 가 아니거나 실패하면 null }
         unavailable:
           type: array
           description: 실패한 섹션과 사유. 비어 있으면 null 인 섹션은 "해당 없음"이다

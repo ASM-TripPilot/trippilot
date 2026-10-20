@@ -4543,7 +4543,7 @@ note = """
 id = "LOOP-BFF"
 ticket = "TRIP-1467"
 title = "[BE] 라이브 일정 화면 BFF — 호출 5→1, 섹션 단위 부분 실패"
-status = "todo"
+status = "done"
 touches = [
   "backend/docs/design/openapi.yaml",
   "backend/docs/design/work-graph.toml",
@@ -4553,11 +4553,11 @@ touches = [
   "backend/app/src/test/kotlin/com/trippilot/app/architecture/ArchitectureRulesTest.kt",
 ]
 note = """
-PR 진행 중 — `GET /trips/{tripId}/live`. 티켓 원문의 "모듈 다섯 곳 화면용 읽기 퍼사드"는 하지 않았다: 각 섹션은 그
-엔드포인트의 핸들러를 그대로 불러 만든다 — 섹션이 개별 응답과 같은 모양이어야 앱이 기존 캐시에 그대로 채울 수 있고,
-퍼사드로 다시 조립하면 한쪽에 필드가 늘 때 갈라진다. 규칙 테스트는 "views 는 web 핸들러와 api 만"으로 바꿨다.
-쿼리 수 측정은 datasource-proxy 대신 Hibernate 통계(이미 있는 것)로 했다 — 모듈·의존성 변경 없음.
-앱 쪽 전환(첫 로딩을 이 응답으로 캐시 채우기)은 프론트 몫이다.
+PR #1494 — `GET /trips/{tripId}/live`. 티켓 원문에서 벗어난 것(이유는 PR 판단 절): 경로는 `/views/...` 대신 `/trips/...`(태그 trips 라
+프론트 orval 설정을 안 바꾼다) · 모듈 퍼사드 대신 핸들러를 그대로 부른다(섹션이 개별 응답과 같아야 앱이 기존 캐시에 채운다) ·
+일정 404 는 전체 오류가 아니라 null(화면이 "아직 일정이 없어요"로 간다) · 섹션 시간 제한 없음(잠금 없는 읽기) ·
+측정은 datasource-proxy 대신 Hibernate 통계. 규칙 테스트는 "views 는 web 핸들러·api·core 만"(허용 목록).
+잇는 곳: 앱의 첫 로딩 전환은 프론트 몫이다 — 전환안은 TRIP-1467 댓글, 프론트 티켓 발행은 사용자 결정 뒤.
 """
 
 [[nodes]]

@@ -14,7 +14,6 @@ import com.trippilot.planbdetection.adapter.`in`.web.TriggerListResponse
 import com.trippilot.trip.adapter.`in`.web.TripController
 import com.trippilot.trip.adapter.`in`.web.TripResponse
 import org.slf4j.LoggerFactory
-import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestParam
@@ -26,7 +25,9 @@ import java.time.ZoneId
 import java.util.UUID
 
 /**
- * 여행 중 화면(라이브 일정) 첫 로딩 묶음 — 화면이 3단계로 나눠 부르던 5개 조회를 한 번에 준다(TRIP-1467).
+ * 여행 중 화면(라이브 일정) 첫 로딩 묶음 — 화면이 두 단계로 나눠 부르던 조회(여행·일정·위치 동의 → 일정이 오면
+ * 트리거·그날 방문)를 한 번에 준다(TRIP-1467). 위치 동의는 앱의 위치 자동화 플래그가 켜졌을 때만 부르므로
+ * [withLocationConsent] 로 요청할 때만 싣는다(플래그가 꺼지면 동의 조회도 하지 않는다, BR-U10-07).
  *
  * **각 섹션은 그 엔드포인트의 핸들러를 그대로 불러 만든다.** 섹션이 개별 엔드포인트와 같은 모양이어야
  * 앱이 이 응답을 그 엔드포인트의 캐시에 그대로 채워 넣을 수 있다(이후 갱신·무효화는 지금 경로 그대로).
@@ -39,6 +40,11 @@ import java.util.UUID
  *   화면은 "아직 일정이 없어요"로 가고 그 둘을 부르지 않는다. 일정의 그 밖의 실패는 전체 오류다(화면이 그릴 것이 없다).
  * - triggers·visits·locationConsent 는 실패해도 나머지를 준다. 그 섹션은 null 이고 [LiveViewResponse.unavailable] 에
  *   사유가 실린다(INV-4 — 조용히 비우지 않는다). 화면은 그 섹션만 개별 엔드포인트로 다시 부르면 된다.
+ *
+ * 섹션은 순서대로 부르고 섹션별 시간 제한을 두지 않는다. 다섯 핸들러 모두 잠금 없는 읽기라(`FOR UPDATE`·권고 잠금은
+ * 쓰기 경로에만 있다) Postgres MVCC 에서 다른 쓰기를 기다리지 않는다. 남는 것은 느린 실행 계획인데, 그것은 개별
+ * 엔드포인트에서도 같은 쿼리다 — 다른 점은 트리거·방문이 느리면 일정까지 같이 늦게 보인다는 것이고, 그 상한은
+ * 앱이 이 묶음에 시간 제한을 두고 넘기면 개별 경로로 돌아가는 쪽에서 잡는다(TRIP-1467 프론트 전환안).
  */
 @RestController
 class LiveViewController(
@@ -53,7 +59,9 @@ class LiveViewController(
     fun live(
         principal: Principal,
         @PathVariable tripId: UUID,
-        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) day: LocalDate?,
+        // 문자열로 받는다 — 형식이 깨진 딥링크(`?day=2026-1-5`)에 묶음 전체가 400 이 되면 안 된다. 앱은 그때 오늘로 간다.
+        @RequestParam(required = false) day: String?,
+        @RequestParam(defaultValue = "false") withLocationConsent: Boolean,
     ): LiveViewResponse {
         val trip = trips.get(principal, tripId)
         val itinerary = try {
@@ -66,25 +74,30 @@ class LiveViewController(
             read()
         } catch (e: Exception) {
             val code = (e as? DomainException)?.errorCode ?: ErrorCode.INTERNAL
-            log.warn("라이브 화면 섹션 실패 — 나머지는 준다. section={} tripId={} code={}", name, tripId, code, e)
+            // 예상 밖 예외는 ERROR 다 — 개별 엔드포인트라면 500(ERROR 로그·5xx 알람)이었을 것을 200 안에 묻지 않는다.
+            if (code == ErrorCode.INTERNAL) {
+                log.error("라이브 화면 섹션 실패 — 나머지는 준다. section={} tripId={} code={}", name, tripId, code, e)
+            } else {
+                log.warn("라이브 화면 섹션 실패 — 나머지는 준다. section={} tripId={} code={}", name, tripId, code, e)
+            }
             unavailable += UnavailableSection(name, code.name)
             null
         }
-        val liveDay = itinerary?.let { liveDay(it, day) }
+        val liveDay = itinerary?.let { liveDay(it, day?.let { d -> runCatching { LocalDate.parse(d) }.getOrNull() }) }
         return LiveViewResponse(
             trip = trip,
             itinerary = itinerary,
             day = liveDay,
             triggers = itinerary?.let { section(LiveSection.TRIGGERS) { triggers.list(principal, tripId) } },
             visits = liveDay?.let { d -> section(LiveSection.VISITS) { visits.listByDay(principal, tripId, d) } },
-            locationConsent = section(LiveSection.LOCATION_CONSENT) { locationConsent.get(principal) },
+            locationConsent = if (withLocationConsent) section(LiveSection.LOCATION_CONSENT) { locationConsent.get(principal) } else null,
             unavailable = unavailable,
         )
     }
 
     /**
      * 화면이 방문 기록을 부를 날 — 앱의 규칙과 같다(`LiveItineraryPage` 의 liveDate, `resolveLiveState`):
-     * 요청한 날이 일정에 있으면 그날, 아니면 오늘(서울), 오늘이 일정 밖이면 여행 전은 첫날·여행 뒤는 마지막 날.
+     * 요청한 날이 일정에 있으면 그날, 아니면(형식이 틀려도) 오늘(서울), 오늘이 일정 밖이면 여행 전은 첫날·여행 뒤는 마지막 날.
      * 날짜가 다르게 나와도 틀린 값이 화면에 가지는 않는다 — 앱은 응답의 [LiveViewResponse.day] 키로만 캐시를 채운다.
      */
     private fun liveDay(itinerary: ItineraryResponse, requested: LocalDate?): LocalDate? {
@@ -116,7 +129,7 @@ data class LiveViewResponse(
     val triggers: TriggerListResponse?,
     /** GET /trips/{tripId}/visits/days/{day} 와 같은 모양. [day] 가 없거나 실패하면 null. */
     val visits: VisitCheckListResponse?,
-    /** GET /me/location-consent 와 같은 모양. 실패하면 null. */
+    /** GET /me/location-consent 와 같은 모양. 요청하지 않았거나 실패하면 null. */
     val locationConsent: LocationConsentResponse?,
     /** 실패한 섹션과 사유. 비어 있으면 null 인 섹션은 "해당 없음"이다. */
     val unavailable: List<UnavailableSection>,

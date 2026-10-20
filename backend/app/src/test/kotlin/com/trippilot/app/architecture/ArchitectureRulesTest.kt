@@ -115,8 +115,12 @@ class ArchitectureRulesTest {
      */
     @Test
     fun `views 는 모듈의 web 핸들러와 api 만 부른다`() {
-        noClasses().that().resideInAPackage("com.trippilot.app.views..")
-            .should().dependOnClassesThat().resideInAnyPackage("..application..", "..domain..", "..adapter.out..", "..infra..")
+        // 허용 목록이다 — 금지 목록이면 이벤트 리스너(adapter.in.event)·app 의 다른 어댑터 같은 새 길을 못 막는다.
+        classes().that().resideInAPackage("com.trippilot.app.views..")
+            .should().onlyDependOnClassesThat().resideInAnyPackage(
+                "com.trippilot.app.views..", "com.trippilot..adapter.in.web..", "com.trippilot..api..", "com.trippilot.core..",
+                "java..", "kotlin..", "org.jetbrains.annotations..", "org.springframework..", "org.slf4j..",
+            )
             .because("views 는 공개 표면만 조합한다 — 내부 직접 호출은 소유 검증·응답 조립을 건너뛴다")
             .check(importedClasses)
     }

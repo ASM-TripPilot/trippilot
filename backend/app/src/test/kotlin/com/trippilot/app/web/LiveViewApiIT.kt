@@ -15,6 +15,7 @@ import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.ints.shouldBeLessThanOrEqual
+import io.kotest.matchers.collections.shouldBeIn
 import io.kotest.matchers.shouldBe
 import jakarta.persistence.EntityManagerFactory
 import org.hibernate.SessionFactory
@@ -119,13 +120,15 @@ class LiveViewApiIT : AbstractPostgresIntegrationTest() {
         val tripId = tripWithItinerary(token)
         seedToday(token, tripId)
 
-        val live = get("/api/v1/trips/$tripId/live", token)
+        val before = today
+        val live = get("/api/v1/trips/$tripId/live?withLocationConsent=true", token)
 
-        live["day"].asText() shouldBe today.toString()
+        // 서울 자정을 넘기며 돌면 서버의 오늘이 호출 전후로 다르다 — 둘 중 하나면 맞다.
+        live["day"].asText() shouldBeIn listOf(before.toString(), today.toString())
         live["trip"] shouldBe get("/api/v1/trips/$tripId", token)
         live["itinerary"] shouldBe get("/api/v1/trips/$tripId/itinerary", token)
         live["triggers"] shouldBe get("/api/v1/trips/$tripId/triggers", token)
-        live["visits"] shouldBe get("/api/v1/trips/$tripId/visits/days/$today", token)
+        live["visits"] shouldBe get("/api/v1/trips/$tripId/visits/days/${live["day"].asText()}", token)
         live["locationConsent"] shouldBe get("/api/v1/me/location-consent", token)
         live["unavailable"].toList().shouldBeEmpty()
         // 빈 목록끼리 같은 것이 아니다
@@ -140,7 +143,8 @@ class LiveViewApiIT : AbstractPostgresIntegrationTest() {
         val first = today.minusDays(1)
 
         get("/api/v1/trips/$tripId/live?day=$first", token)["day"].asText() shouldBe first.toString()
-        get("/api/v1/trips/$tripId/live?day=${today.plusYears(1)}", token)["day"].asText() shouldBe today.toString()
+        val before = today
+        get("/api/v1/trips/$tripId/live?day=${today.plusYears(1)}", token)["day"].asText() shouldBeIn listOf(before.toString(), today.toString())
     }
 
     @Test
@@ -148,7 +152,7 @@ class LiveViewApiIT : AbstractPostgresIntegrationTest() {
         val token = newToken()
         val tripId = newTrip(token)
 
-        val live = get("/api/v1/trips/$tripId/live", token)
+        val live = get("/api/v1/trips/$tripId/live?withLocationConsent=true", token)
 
         live["trip"]["tripId"].asText() shouldBe tripId
         live["itinerary"].isNull shouldBe true
@@ -189,13 +193,14 @@ class LiveViewApiIT : AbstractPostgresIntegrationTest() {
             "/api/v1/trips/$tripId/visits/days/$today", "/api/v1/me/location-consent",
         )
         try {
-            repeat(3) { paths.forEach { get(it, token) }; get("/api/v1/trips/$tripId/live", token) } // 데우기
-            val separate = statements { paths.forEach { get(it, token) } }
-            val bundled = statements { get("/api/v1/trips/$tripId/live", token) }
+            repeat(3) { paths.forEach { get(it, token) }; get("/api/v1/trips/$tripId/live?withLocationConsent=true", token) } // 데우기
+            // 통계는 SessionFactory 전역이라 배경 스케줄(분 단위)이 측정 창에 끼면 그 회차만 는다 — 교대로 다섯 번 재서 최솟값끼리 본다.
+            val separate = List(5) { statements { paths.forEach { get(it, token) } } }.min()
+            val bundled = List(5) { statements { get("/api/v1/trips/$tripId/live?withLocationConsent=true", token) } }.min()
             // 시간은 로컬 왕복이라 네트워크 지연이 빠진 서버 처리 시간에 가깝다 — 20회 중앙값(ms).
             fun medianMs(block: () -> Unit) = List(20) { val t = System.nanoTime(); block(); (System.nanoTime() - t) / 1e6 }.sorted()[10]
             val separateMs = medianMs { paths.forEach { get(it, token) } }
-            val bundledMs = medianMs { get("/api/v1/trips/$tripId/live", token) }
+            val bundledMs = medianMs { get("/api/v1/trips/$tripId/live?withLocationConsent=true", token) }
             println("LIVE-VIEW-MEASURE 개별 5회 쿼리=$separate 묶음 1회 쿼리=$bundled 개별 5회 순차 ms=%.1f 묶음 ms=%.1f".format(separateMs, bundledMs))
             bundled.toInt() shouldBeLessThanOrEqual separate.toInt()
         } finally {
