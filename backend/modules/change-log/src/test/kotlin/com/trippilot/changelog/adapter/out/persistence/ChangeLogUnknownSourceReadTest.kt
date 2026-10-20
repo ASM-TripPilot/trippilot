@@ -18,7 +18,8 @@ import java.util.UUID
  * 저장 계약 밖의 옛 행 읽기(TRIP-1476). 모르는 `source_type` 행(E)과, 스냅숏을 한 조각이라도 못 읽는 행(B·H).
  *
  * 모르는 `source_type` 행(E). V2.11 CHECK 가 INSERT 를 막으므로 이런 행은 **enum 값을 지우거나 이름을
- * 바꾼 뒤 옛 행이 남았을 때만** 생긴다 — 실 DB 로는 만들 수 없어 JPA 대역으로 본다.
+ * 바꾼 뒤 옛 행이 남았을 때**, 또는 CHECK 에 새 값을 더한 뒤 앱을 이전 판으로 되돌렸을 때 생긴다. 앱 롤로는 CHECK 에
+ * 막혀 INSERT 할 수 없고, `source_type` 은 그냥 varchar 라 Hibernate 층에서 다를 것이 없어 JPA 대역으로 본다.
  * 그 행만 빠지고 나머지 타임라인은 그대로 나와야 한다(종전: `No enum constant` 로 여행 타임라인 전체가 500).
  * 버린 행은 WARN 으로 남아야 한다 — 조용히 빠지면 "이력이 왜 비나"를 못 찾는다(INV-4).
  */
