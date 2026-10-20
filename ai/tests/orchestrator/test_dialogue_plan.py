@@ -705,7 +705,7 @@ def test_plan_turn_honours_the_budget_wherever_time_goes(intent_ms: int, plan_ms
         remaining_then = deadline - (at - started)
         assert 0 < req.timeout_sec <= to._CAPS_SEC[req.prompt_ref.feature] + 1e-9
         assert req.timeout_sec * 1000 <= remaining_then + 1e-6
-        if req.prompt_ref.feature == "DIALOGUE_PLAN":  # 진입 하한 4.6s · 몫 min(3.0s, 0.45R)
+        if req.prompt_ref.feature == "DIALOGUE_PLAN":  # 진입 하한 4.6s · 몫 min(3.5s, 0.45R)
             assert remaining_then >= 4_600 and req.timeout_sec * 1000 <= 0.45 * remaining_then + 1
         if req.prompt_ref.feature == "DIALOGUE_ANSWER":
             assert req.timeout_sec * 1000 <= remaining_then - 400 + 1e-6
