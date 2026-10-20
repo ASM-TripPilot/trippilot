@@ -364,11 +364,15 @@ def pick_near(
     *,
     radius_km: float = PICK_RADIUS_KM,
     per_anchor: int = PER_ANCHOR,
+    rank: Callable[[float, SourcingCandidate], object] = lambda d, c: (d, c.source_ref),
 ) -> list[SourcingCandidate]:
     """앵커마다 반경 안 후보를 가까운 순(동률은 관리번호 순)으로 최대 `per_anchor` 곳 — 합집합.
 
     관리번호 순으로 낸다 — 재생성 diff 가 앵커 순서에 흔들리지 않게. 게이트 3단의 "먼저 온 것을
     지킨다"도 이 순서를 따르므로 같은 가게가 두 번 등록돼 있으면 번호가 앞선 쪽이 남는다.
+
+    `rank(거리 km, 후보)` 는 앵커 안 순서다 — 카페는 큰 순으로 고른다(`localcafe`, 2026-10-19).
+    안 주면 종전과 완전히 같다.
     """
     grid: _Grid[SourcingCandidate] = _Grid(radius_km)
     for c in candidates:
@@ -376,7 +380,7 @@ def pick_near(
             grid.add(GeoPoint(c.lat, c.lng), c)
     picked: dict[str, SourcingCandidate] = {}
     for a in anchors:
-        near = sorted(grid.within(a, radius_km), key=lambda t: (t[0], t[1].source_ref))
+        near = sorted(grid.within(a, radius_km), key=lambda t: rank(*t))
         for _, c in near[:per_anchor]:
             picked.setdefault(c.source_ref, c)
     return [picked[ref] for ref in sorted(picked)]
