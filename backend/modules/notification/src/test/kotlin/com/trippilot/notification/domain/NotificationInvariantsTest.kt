@@ -37,6 +37,7 @@ class NotificationInvariantsTest : StringSpec({
     }
 
     "시각으로 발화하지 않는 종류는 예약할 수 없고, 리마인드 세 종류만 예약된다" {
+        NotificationKind.REMINDERS shouldBe setOf(NotificationKind.TRIP_PRE, NotificationKind.TRIP_DAY, NotificationKind.SLOT_PRE)
         val eventOnly = NotificationKind.entries - NotificationKind.REMINDERS
         eventOnly.toSet() shouldBe setOf(
             NotificationKind.STAY, NotificationKind.PLAN_B, NotificationKind.REFLECTION, NotificationKind.COMMUNITY, NotificationKind.SYSTEM,
@@ -67,6 +68,8 @@ class NotificationInvariantsTest : StringSpec({
         base.copy(title = "AI 제목", body = "AI 본문").toNotification(at).let { (it.title to it.body) shouldBe ("AI 제목" to "AI 본문") }
         listOf(
             base.copy(title = "AI 제목", body = " "),
+            base.copy(title = "AI 제목", body = ""),
+            base.copy(title = "AI 제목", body = null),
             base.copy(title = "", body = "AI 본문"),
             base.copy(title = "  ", body = "AI 본문"),
             base.copy(title = null, body = "AI 본문"),

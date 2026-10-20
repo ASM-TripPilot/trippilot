@@ -52,6 +52,7 @@ class ReflectionInvariantsTest : StringSpec({
     "카테고리 비율은 0~1 이다" {
         shouldThrow<IllegalArgumentException> { CategoryShare("맛집", -0.01) }
         shouldThrow<IllegalArgumentException> { CategoryShare("맛집", 1.01) }
+        CategoryShare("맛집", 0.0).ratio shouldBe 0.0
         CategoryShare("맛집", 1.0).ratio shouldBe 1.0
     }
 
