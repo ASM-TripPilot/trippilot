@@ -1,6 +1,7 @@
 import type { TriggerKind } from '@/shared/api/index.schemas';
+import { TriggerVariant } from '@/shared/api/index.schemas';
 
-import { TRIGGER_LABELS, triggerLabel } from './triggerLabel';
+import { TRIGGER_LABELS, VARIANT_LABELS, triggerLabel } from './triggerLabel';
 
 /**
  * TRIP-561 · AC-5 · BR-U4-01 — triggerLabel 순수 매핑(정적 라벨 vs 동적 reason 경계).
@@ -56,5 +57,77 @@ describe('triggerLabel — kind→{label, iconKey} 정적 매핑', () => {
     const serialized = JSON.stringify(TRIGGER_LABELS);
     expect(serialized).not.toContain('교통');
     expect(serialized).not.toContain('체류 초과');
+  });
+});
+
+/**
+ * 상황 감지 FE-B · frontend-components §3.4 — 변형(`variant`) 라벨.
+ *
+ * 무엇을 보장하나:
+ *  - 변형 12종의 라벨은 정본 표 그대로다(라벨 문자열 완전 일치 — 정본이 정한 값이라 발명이 아니다).
+ *  - 표의 키는 생성 타입 `TriggerVariant` 12종과 정확히 같다(서버가 변형을 늘리면 tsc·이 단언이 먼저 운다).
+ *  - `triggerLabel(kind, variant)` 는 변형 라벨에 **kind 의 iconKey** 를 붙인다(글리프 축은 kind 그대로).
+ *  - 변형이 없거나(null·undefined) 모르는 값이면 kind 라벨 그대로 — `TRIGGER_LABELS` 는 바뀌지 않는다(옛 서버·되돌린 서버에 무해).
+ *
+ * 3동작: 준비(kind·variant) → 실행(triggerLabel) → 단언(label·iconKey).
+ */
+describe('triggerLabel — 변형 라벨 (상황 감지 FE-B · §3.4)', () => {
+  it.each([
+    ['RAIN', '비 예보'],
+    ['SNOW', '눈 예보'],
+    ['WIND', '강풍'],
+    ['HEAT', '폭염'],
+    ['COLD', '한파'],
+    ['CLOUD', '흐림'],
+    ['DUST', '미세먼지'],
+    ['CLOSED_DAY', '휴무'],
+    ['OUT_OF_HOURS', '영업시간 밖'],
+    ['HOURS_MISMATCH', '영업시간 확인'],
+    ['HOLIDAY', '공휴일 휴무'],
+    ['PERMANENTLY_CLOSED', '폐업'],
+  ] as const)('V1 %s → "%s"', (variant, label) => {
+    expect(VARIANT_LABELS[variant]).toBe(label);
+  });
+
+  it('V2 표의 키는 생성 TriggerVariant 12종과 정확히 같다', () => {
+    expect(Object.keys(VARIANT_LABELS).sort()).toEqual(
+      Object.values(TriggerVariant).sort()
+    );
+    expect(Object.keys(VARIANT_LABELS)).toHaveLength(12);
+  });
+
+  it('V3 변형이 있으면 그 라벨 + kind 의 iconKey 다', () => {
+    expect(triggerLabel('WEATHER', 'HEAT')).toEqual({
+      label: '폭염',
+      iconKey: TRIGGER_LABELS.WEATHER.iconKey,
+    });
+    expect(triggerLabel('CLOSURE', 'PERMANENTLY_CLOSED')).toEqual({
+      label: '폐업',
+      iconKey: TRIGGER_LABELS.CLOSURE.iconKey,
+    });
+  });
+
+  it('V4 변형이 null·undefined·모르는 값이면 kind 라벨 그대로다', () => {
+    for (const kind of KINDS) {
+      expect(triggerLabel(kind, null)).toEqual(TRIGGER_LABELS[kind]);
+      expect(triggerLabel(kind, undefined)).toEqual(TRIGGER_LABELS[kind]);
+      // 서버가 새 변형을 먼저 내보낸 옛 앱 — 생성 타입 밖 문자열이 와도 kind 라벨로 떨어진다.
+      expect(
+        triggerLabel(kind, 'TYPHOON' as unknown as TriggerVariant)
+      ).toEqual(TRIGGER_LABELS[kind]);
+    }
+    // 프로토타입 키가 라벨로 새지 않는다(객체 조회 함정).
+    expect(
+      triggerLabel('WEATHER', 'toString' as unknown as TriggerVariant)
+    ).toEqual(TRIGGER_LABELS.WEATHER);
+  });
+
+  it('V5 TRIGGER_LABELS 는 변형 도입 뒤에도 옛 값 그대로다(무변경)', () => {
+    expect(TRIGGER_LABELS).toEqual({
+      WEATHER: { label: '비 예보', iconKey: 'weather' },
+      CLOSURE: { label: '휴무', iconKey: 'closure' },
+      DELAY: { label: '이동 지연', iconKey: 'delay' },
+      MANUAL: { label: '변경 요청', iconKey: 'manual' },
+    });
   });
 });

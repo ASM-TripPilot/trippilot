@@ -452,4 +452,10 @@ export const handlers = [
    * 각자 덮어쓴다(`TripNewStep1Page.stayImport.integration.test.tsx`).
    */
   http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])),
+
+  // 상황 감지 FE-C — 허브가 active 얼굴마다 묻는 기회 조회의 기본값은 빈 목록(서버의 꺼짐·범위 밖과 같다 = 카드 없음).
+  // 카드가 필요한 테스트는 `server.use(...)` 로 덮는다.
+  http.get(`${BASE}/trips/:tripId/opportunities`, () =>
+    HttpResponse.json({ items: [] })
+  ),
 ];

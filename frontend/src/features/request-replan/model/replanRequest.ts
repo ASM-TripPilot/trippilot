@@ -9,7 +9,7 @@ import type { ReplanOrigin } from './replanOrigin';
  *  - 위치 입력이 없어도 `originKind: null` 을 **생략이 아니라 명시**로 싣는다(codegen
  *    `required:[scope, originKind]`, 값 nullable). "생략(undefined)"이면 tsc·계약 위반이다.
  *  - `triggerId` 는 트리거로 들어왔으면 그 id, 아니면 `null`(수동 진입)을 명시로 싣는다(TRIP-750 · BR-U4-31).
- *    `excludedPoiIds: []`('건너뛰기'가 채우는 필드, i10 아님)는 항상 싣는다.
+ *    `excludedPoiIds` 는 항상 싣는다 — 시드가 없으면 `[]`(상황 감지 FE-B 시드면 그 목록).
  *  - 사유·방향을 하나도 안 골라도 조립된다(빈 배열이 막지 않음, BR-U4-12).
  *  - 빈 자유텍스트 `''` 는 `null` 로 접고, 내용이 있으면 그대로 싣는다(트림 안 함 — 과잉 명세 회피).
  */
@@ -27,6 +27,11 @@ export interface ReplanFormValues {
    * `scope=FULL_DAY` 만 받는다(400) — 그 조합은 화면이 만들지 않는다(`replanScopeOptions`).
    */
   targetDate?: string;
+  /**
+   * 상황 감지 FE-B(frontend-components §3.3) — 진입 게이트가 준비 세션 입력으로 채운 제외 POI(휴무 장소 등).
+   * 주지 않으면 종전과 바이트까지 같다(`excludedPoiIds: []`).
+   */
+  excludedPoiIds?: string[];
 }
 
 export function buildStartReplanRequest(
@@ -43,8 +48,8 @@ export function buildStartReplanRequest(
     reasons: form.reasons,
     directives: form.directives,
     freeText: form.freeText === '' ? null : form.freeText,
-    // '건너뛰기'가 채우는 필드 — i10 은 항상 빈 배열.
-    excludedPoiIds: [],
+    // '건너뛰기'가 채우는 필드 — i10 은 빈 배열, 트리거 진입 게이트는 준비 세션의 제외 POI(상황 감지 FE-B).
+    excludedPoiIds: form.excludedPoiIds ?? [],
     // 트리거로 들어왔으면 그 id(변경 이력 reason 의 재료, BR-U4-31). 생략·수동 진입은 명시 null.
     triggerId: form.triggerId ?? null,
   };

@@ -65,3 +65,23 @@ class TravelEstimator:
         hours = (near / self._cfg.speeds_kmph[mode]
                  + (road_km - near) / self._cfg.long_speeds_kmph[mode])
         return int(round(hours * 60 * self._cfg.safety[mode]))
+
+
+class WalkFirst:
+    """TravelPort — 도보 상한 안의 대중교통 구간은 걷기로 잰다(액티비티 취향 상향, 2026-10-19).
+
+    조립은 요청별 추정기(`ChainAssemblyProvider.walker`)로 그 구간을 걸었다고 계산한다 — 화면 거리도 같은
+    판정이어야 시각과 "도보·대중교통" 이름표가 어긋나지 않는다. 걷는 구간은 실경로(ODsay)를 부르지 않는다.
+    """
+
+    def __init__(self, port, walker: TravelEstimator) -> None:
+        self._port = port
+        self._walker = walker
+
+    def estimate(self, from_: GeoPoint, to: GeoPoint, mode: TransportMode) -> TravelEstimate:
+        if mode is TransportMode.PUBLIC:
+            walked = self._walker.estimate(from_, to, mode)
+            if walked.source == WALKED_SOURCE:
+                return walked
+        return self._port.estimate(from_, to, mode)
+

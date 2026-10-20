@@ -345,6 +345,21 @@ class ChartTests(unittest.TestCase):
                 self.assertTrue(ref["optional"])
 
 
+    def test_backend_calls_the_ai_opportunity_path_by_fixed_env(self):
+        """기회 카드(situation-awareness DEC-SA-8)는 차트 고정 env 다 — 시크릿·허용목록을 거치지 않는다.
+
+        앱 기본은 off 라 이 줄이 빠지면 배포가 조용히 카드 없이 돈다(오류도 로그도 없다). 시크릿으로 두지 않는 이유:
+        켜고 끌 운영 판단이 없는 조회형 경로이고(구 앱은 이 BE 경로를 부르지 않는다), 시크릿 키는 두 번 배포 규칙을 탄다.
+        주소는 일정·회고 경계와 같은 AI_URL 을 읽는다 — 비면 컨테이너가 자기 자신(localhost)을 부른다.
+        """
+        for environment in ("dev", "prd"):
+            documents = render(environment)
+            backend = next(item for item in documents
+                           if item["kind"] == "Deployment" and item["metadata"]["name"] == "backend")
+            env = {item["name"]: item for item in backend["spec"]["template"]["spec"]["containers"][0]["env"]}
+            self.assertEqual(env["AI_OPPORTUNITY_MODE"], {"name": "AI_OPPORTUNITY_MODE", "value": "http"})
+            self.assertEqual(env["AI_URL"]["value"], "http://ai:8000")
+
     def test_ai_receives_dialogue_orchestrator_switches_from_secret(self):
         """도우미 오케스트레이터 스위치 2종(assistant-orchestrator 1단계)은 ai Secret 에서 와야 한다 —
         runtime_secrets allowlist 에 넣어도 차트가 env 로 안 실어 주면 시크릿의 on 이 파드에 닿지 않아

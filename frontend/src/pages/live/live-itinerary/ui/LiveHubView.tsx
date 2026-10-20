@@ -160,6 +160,8 @@ export interface LiveHubViewProps {
   assistantFab?: ReactNode;
   /** 트리거 알약(TRIP-748) — 지도 위 일자 칩 아래(셸 `mapCard`)에 그린다. */
   triggerChip?: ReactNode;
+  /** 상황 감지 FE-C — 기회 카드 1장. 시트 머리, 위치 자동화 안내 띠 아래에 그린다(프레임 전 자리, G-SA-12). */
+  opportunityCard?: ReactNode;
   /** 알약이 가리키는 트리거 id — 이 키를 숨겼으면 알약을 안 그리고, 키가 바뀌면 다시 보인다. */
   triggerPillKey?: string;
   /** 슬롯별 영향 배지 글자(TRIP-748) — 값을 주면 upcoming 카드의 "예정" 자리에 분홍 배지로. */
@@ -254,6 +256,7 @@ export function LiveHubView({
   fabHidden = false,
   assistantFab,
   triggerChip,
+  opportunityCard,
   triggerPillKey,
   slotBadgeLabel,
   onPressSlotName,
@@ -461,6 +464,7 @@ export function LiveHubView({
                 </View>
               </View>
             ) : null}
+            {opportunityCard}
             <Text
               testID="execution-live-sheet-header"
               className="font-noto-bold text-card-title font-bold text-ink"

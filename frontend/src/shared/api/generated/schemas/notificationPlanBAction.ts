@@ -10,10 +10,11 @@
  */
 
 /**
- * `PLANB_REPLAN`. `triggerId` 를 실어야 화면이 "왜 다시 짜라는지"를 다시 묻지 않는다. `replanSessionId` 는 대개 없다 — 세션은 사용자가 진입할 때 열린다.
+ * `PLANB_REPLAN`. `triggerId` 를 실어야 화면이 "왜 다시 짜라는지"를 다시 묻지 않는다. `replanSessionId` 는 오지 않는다(아래).
  */
 export interface NotificationPlanBAction {
   tripId: string;
   triggerId: string;
+  /** 알림 경로에서는 싣지 않는다 — 앱은 탭 시점에 트리거 상세와 준비된 대안을 조회한다(BR-SA-21). */
   replanSessionId?: string;
 }
