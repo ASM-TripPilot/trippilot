@@ -41,7 +41,7 @@ export interface TripCardProps {
 }
 
 const BADGE_LABEL: Record<'done' | 'draft' | 'live', string> = {
-  done: '완성',
+  done: '확정',
   draft: '작성중',
   live: '여행 중',
 };

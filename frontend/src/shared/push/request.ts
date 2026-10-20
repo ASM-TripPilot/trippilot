@@ -27,7 +27,7 @@ export async function ensureAndroidChannels(): Promise<void> {
       importance: DEFAULT,
     }),
     Notifications.setNotificationChannelAsync('time-sensitive', {
-      name: '일정 임박·Plan-B',
+      name: '일정 임박·재계획',
       importance: HIGH,
     }),
   ]);

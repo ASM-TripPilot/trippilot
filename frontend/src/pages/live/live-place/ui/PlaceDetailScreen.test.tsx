@@ -58,7 +58,7 @@ const PHOTOS = [
 ];
 
 describe('PlaceDetailScreen (i10)', () => {
-  it('S1 정상 — 장소명·영업시간·주소·입장료를 각 leaf 로 그리고, "다음 일정까지"는 없다 (AC-2·AC-7)', () => {
+  it('S1 정상 — 장소명·영업시간·주소를 각 leaf 로 그리고(입장료 행은 TRIP-1440 Q-092 로 뺐다), "다음 일정까지"는 없다 (AC-2·AC-7)', () => {
     // 준비·실행
     render(<PlaceDetailScreen view={view()} />);
 
@@ -72,7 +72,8 @@ describe('PlaceDetailScreen (i10)', () => {
     expect(screen.getByTestId('execution-place-address')).toHaveTextContent(
       '부산 수영구 광안해변로 219'
     );
-    expect(screen.getByTestId('execution-place-fee')).toHaveTextContent('무료');
+    // 입장료 행은 없다 — 값이 있어도 그리지 않는다(데이터 출처가 없어 운영은 늘 null).
+    expect(screen.queryByTestId('execution-place-fee')).toBeNull();
     // "다음 일정까지"(여유) 행은 Figma 3행에 맞춰 제거(사용자 결정 2026-09-25).
     expect(screen.queryByTestId('execution-place-slack')).toBeNull();
     expect(screen.queryByText('다음 일정까지')).toBeNull();
@@ -89,7 +90,7 @@ describe('PlaceDetailScreen (i10)', () => {
     expect(screen.getByTestId('execution-place-hero')).toBeTruthy();
   });
 
-  it('S2 결측 — 영업시간·주소·입장료가 없으면 행을 지우지 않고 "미확인"을 다른 testID 로 적는다 (AC-7·BR-U4-40)', () => {
+  it('S2 결측 — 영업시간·주소가 없으면 행을 지우지 않고 "미확인"을 다른 testID 로 적는다 (AC-7·BR-U4-40)', () => {
     // 준비·실행
     render(
       <PlaceDetailScreen
@@ -109,9 +110,8 @@ describe('PlaceDetailScreen (i10)', () => {
     expect(
       screen.getByTestId('execution-place-unknown-address')
     ).toHaveTextContent('미확인');
-    expect(screen.getByTestId('execution-place-unknown-fee')).toHaveTextContent(
-      '미확인'
-    );
+    // 입장료 행은 결측이어도 '미확인'조차 그리지 않는다(행 자체가 없다).
+    expect(screen.queryByTestId('execution-place-unknown-fee')).toBeNull();
     // 값 자리 testID 는 결측일 때 안 뜬다(기계 구분).
     expect(screen.queryByTestId('execution-place-openhours')).toBeNull();
     expect(screen.queryByTestId('execution-place-address')).toBeNull();
@@ -260,7 +260,7 @@ describe('PlaceDetailScreen (i10)', () => {
     ).toBeNull();
   });
 
-  it('S11 정보 카드 — 행은 영업시간 · 주소 · 입장료 3개뿐이다 (AC-7 · Figma 3행)', () => {
+  it('S11 정보 카드 — 행은 영업시간 · 주소 2개뿐이다(입장료 행은 TRIP-1440 Q-092 로 뺐다)', () => {
     // 준비·실행
     render(<PlaceDetailScreen view={view()} />);
 
@@ -269,7 +269,7 @@ describe('PlaceDetailScreen (i10)', () => {
     const labels = within(screen.getByTestId('execution-place-info'))
       .getAllByText(/^(영업시간|주소|입장료|다음 일정까지|위치)$/)
       .map((node) => node.props.children);
-    expect(labels).toEqual(['영업시간', '주소', '입장료']);
+    expect(labels).toEqual(['영업시간', '주소']);
   });
 
   describe('S12 지도 — 현재 장소 1핀 · 잠금 · 스케일바 (AC-9 · Q5)', () => {

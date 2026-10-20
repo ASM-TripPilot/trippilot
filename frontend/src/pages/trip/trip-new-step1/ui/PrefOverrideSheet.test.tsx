@@ -115,9 +115,7 @@ describe('PS-1 · AC-1·AC-4 — 7칩·안내 2문구·단일 적용 렌더', ()
     // 안내 2문구(AC-4) — 부제 + 하단(완전일치).
     expect(screen.getByText('이 여행에만 적용돼요')).toBeOnTheScreen();
     expect(
-      screen.getByText(
-        '온보딩에서 고른 취향을 가져왔어요 · 프로필 취향은 바뀌지 않아요'
-      )
+      screen.getByText('내 취향을 가져왔어요 · 프로필 취향은 바뀌지 않아요')
     ).toBeOnTheScreen();
 
     // 단일 적용 버튼.

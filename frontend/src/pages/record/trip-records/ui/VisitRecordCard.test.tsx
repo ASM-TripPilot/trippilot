@@ -170,6 +170,59 @@ describe('AC-16 · 건너뛰기 = 동작 버튼', () => {
   });
 });
 
+describe('TRIP-1435 Q-115 · 이름 줄과 동작 줄을 나눈다', () => {
+  // 카드 루트의 직계 자식 줄들 — 첫 줄이 이름 줄, 둘째 줄이 동작 줄이다(렌더 트리 구조, 생김새 아님).
+  const rows = (visitCheckId: string) =>
+    screen
+      .getByTestId(`record-trip-visit-card-${visitCheckId}`)
+      .children.filter((child) => typeof child !== 'string');
+
+  it('이름 줄 안에는 동작 버튼(시각 수정·건너뛰기)·도착 시각이 없고, 그 아래 줄에 있다', () => {
+    render(
+      <VisitRecordCard
+        card={baseCard({
+          visitCheckId: 'v1',
+          poiId: 'p1',
+          nameKo: '해운대해수욕장 즉석 방문',
+          arrivedAt: T,
+          arrivedLabel: '14:20 도착',
+        })}
+        onPressSkip={jest.fn()}
+        onPressEditTime={jest.fn()}
+      />
+    );
+
+    const [nameRow, actionRow] = rows('v1');
+    expect(
+      within(nameRow as never).getByText('해운대해수욕장 즉석 방문')
+    ).toBeTruthy();
+    for (const id of [
+      'record-visit-skip-v1',
+      'record-trip-visit-time-edit-v1',
+    ]) {
+      expect(within(nameRow as never).queryByTestId(id)).toBeNull();
+      expect(within(actionRow as never).getByTestId(id)).toBeTruthy();
+    }
+    expect(within(nameRow as never).queryByText('14:20 도착')).toBeNull();
+    expect(within(actionRow as never).getByText('14:20 도착')).toBeTruthy();
+  });
+
+  it('동작이 하나도 없는 카드(완료·도착 시각 없음)는 동작 줄 없이 이름 줄 하나뿐이다', () => {
+    render(
+      <VisitRecordCard
+        card={baseCard({
+          visitCheckId: 'v2',
+          poiId: 'p2',
+          arrivedAt: T,
+          completedAt: T,
+        })}
+      />
+    );
+
+    expect(rows('v2')).toHaveLength(1);
+  });
+});
+
 describe('AC-14 · D4 · 건너뜀 = 상태 라벨', () => {
   it('SKIPPED 카드 → 건너뜀 라벨이 있고, 건너뛰기 버튼은 없다', () => {
     render(

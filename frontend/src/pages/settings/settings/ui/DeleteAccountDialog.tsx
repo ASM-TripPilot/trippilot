@@ -33,7 +33,7 @@ export function DeleteAccountDialog({
     return (
       <ConfirmDialog
         title="계정을 삭제할까요?"
-        description="아래 항목이 계정과 함께 모두 삭제됩니다."
+        description="아래 항목이 계정과 함께 모두 삭제돼요."
         buttons={[
           {
             testID: 'settings-delete-cancel',

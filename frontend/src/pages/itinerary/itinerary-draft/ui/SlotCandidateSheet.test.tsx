@@ -100,7 +100,7 @@ describe('🔴 SlotCandidateSheet — 헤더(AC-1·5·V1)', () => {
     expect(
       screen.getByTestId('itinerary-candidate-sheet-subtitle')
     ).toHaveTextContent(
-      /13:00–14:30 · 전시 슬롯의 다른 후보 · 동선은 자동으로 다시 계산돼요/
+      /13:00–14:30 · 전시의 다른 후보 · 후보 거리는 이 자리의 장소 기준이에요/
     );
   });
 
@@ -110,7 +110,7 @@ describe('🔴 SlotCandidateSheet — 헤더(AC-1·5·V1)', () => {
     const subtitle = screen.getByTestId('itinerary-candidate-sheet-subtitle');
     expect(subtitle).toHaveTextContent(/13:00–14:30/);
     expect(subtitle).toHaveTextContent(/다른 후보/);
-    expect(subtitle).toHaveTextContent(/동선은 자동으로 다시 계산돼요/);
+    expect(subtitle).toHaveTextContent(/후보 거리는 이 자리의 장소 기준이에요/);
     // 컨셉 세그가 빠진다 — 값이 없으므로 지어내지 않는다.
     expect(subtitle).not.toHaveTextContent('전시');
   });
@@ -277,7 +277,7 @@ describe('🔴 SlotCandidateSheet — 링크·오류·0건(AC-6·7·8)', () => {
     ).toBeOnTheScreen();
 
     const empty = screen.getByTestId('itinerary-candidate-empty');
-    expect(empty).toHaveTextContent(/이 슬롯에 맞는 다른 후보가 없어요/);
+    expect(empty).toHaveTextContent(/이 자리에 맞는 다른 후보가 없어요/);
     expect(empty).toHaveTextContent(/다른 곳을 직접 검색해 보세요/);
 
     // 0건엔 "교체하기"가 없고 후보 행도 0.
@@ -308,7 +308,7 @@ describe('🔴 SlotCandidateSheet — scrim·바텀시트 복귀(AC-1·D3)', () 
  * ★ 후보 행 개수는 `-radio-` 로 센다 — 위 CANDIDATE_ROOT 는 새 `loading`·`skeleton-row` 도 후보로
  *   세므로(넓은 그물로 남겨 둔다) 로딩 중 "후보 0행" 단언에는 못 쓴다(02a ★10).
  */
-const EMPTY_TITLE = '이 슬롯에 맞는 다른 후보가 없어요';
+const EMPTY_TITLE = '이 자리에 맞는 다른 후보가 없어요';
 const FETCH_FALLBACK = '지금은 바꿀 수 없어요. 잠시 후 다시 시도해 주세요';
 const RADIO_ROWS = /^itinerary-candidate-radio-/;
 
@@ -501,7 +501,7 @@ describe('🔴 SlotCandidateSheet — 조회 상태 구조·INV-3·기본값(TRI
 describe('🔴 SlotCandidateSheet — 0건 사유 얼굴(TRIP-948)', () => {
   const ALL_IN_TITLE = '근처 후보가 이미 모두 일정에 있어요';
   const ALL_IN_HINT =
-    '반경을 넓혀도 같아요. 다른 슬롯의 장소를 빼면 후보가 생겨요';
+    '반경을 넓혀도 같아요. 다른 자리의 장소를 빼면 후보가 생겨요';
 
   it('R1 · NO_NEARBY — 기존 문구·CTA 그대로 + 접미 노드', () => {
     const onPressPlaceSearch = jest.fn();

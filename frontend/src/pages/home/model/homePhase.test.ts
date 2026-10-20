@@ -575,7 +575,7 @@ describe('resolveHomePhase — 성질(PBT)', () => {
 });
 
 // ── TRIP-697 · 여행 중 N일차(오늘−시작일+1, features/home/model 계산) ──────────────────────
-// 오늘이 여행 기간 안이면(isTraveling) 배지 보조는 D-day 가 아니라 "· N 일차", 인사 타이틀은
+// 오늘이 여행 기간 안이면(isTraveling) 배지 보조는 D-day 가 아니라 "· N일차", 인사 타이틀은
 // "${title} N일차예요", 그리고 2섹션 판별 showSpots=true 가 된다. N 계산은 features/home 경계
 // 안에서 한다(entities/trip/lib 아님, homeStructure D-1). off-by-one 경계: 시작 당일 = 1일차.
 //
@@ -584,7 +584,7 @@ describe('resolveHomePhase — 성질(PBT)', () => {
 // (3) showSpots 가 여행 중일 때만 켜진다(계획 중 부정 짝), (4) 라이브엔 이름 소스가 없어
 // resolveHomePhase 는 greetName 을 채우지 않는다(픽스처 전용 계약 잠금, ★ 정본 공백 가드).
 //
-// ⚠️ 서식 차이 주의: badgeSub 는 "· N 일차"(N 앞·뒤 공백 O), greetTitle 은 "…N일차예요"
+// ⚠️ 서식 차이 주의: badgeSub 는 "· N일차"(N·일차 붙임), greetTitle 은 "…N일차예요"
 //    (N 뒤 공백 X). Figma 실측(브리프 §화면·IO)이라 실검증에서 실제 날짜로 1회 확인함.
 describe('resolveHomePhase — 여행 중 N일차 경계 (TRIP-697)', () => {
   // 지배 여행 '부산 여행' 6/10~6/13(3박 4일). today 를 옮겨 N(일차)을 가른다.
@@ -595,7 +595,7 @@ describe('resolveHomePhase — 여행 중 N일차 경계 (TRIP-697)', () => {
   ];
 
   it.each(CASES)(
-    'today=$today → badgeSub "· $day 일차"·greetTitle "부산 여행 $day일차예요"·showSpots true·badge 여행 중',
+    'today=$today → badgeSub "· $day일차"·greetTitle "부산 여행 $day일차예요"·showSpots true·badge 여행 중',
     ({ today, day }) => {
       // 준비 — 여행 기간 [6/10, 6/13] 안의 today. status 는 무관(badge 는 날짜 기반, TRIP-472).
       const result = resolveHomePhase({
@@ -616,8 +616,8 @@ describe('resolveHomePhase — 여행 중 N일차 경계 (TRIP-697)', () => {
       expect(result?.kind).toBe('planning');
       if (result?.kind === 'planning') {
         expect(result.trip.badge).toBe('여행 중');
-        // badgeSub 는 "· N 일차"(공백 O) — 현 구현은 여행 중에 "· D-DAY"/"· D+n"이라 red.
-        expect(result.trip.badgeSub).toBe(`· ${day} 일차`);
+        // badgeSub 는 "· N일차"(공백 O) — 현 구현은 여행 중에 "· D-DAY"/"· D+n"이라 red.
+        expect(result.trip.badgeSub).toBe(`· ${day}일차`);
         // greetTitle 은 "${title} N일차예요"(공백 X) — 현 구현은 "부산 여행 D-DAY"류라 red.
         expect(result.greetTitle).toBe(`부산 여행 ${day}일차예요`);
         // showSpots 는 여행 중일 때만 true(2섹션 판별) — 현 구현은 미설정(undefined)이라 red.
@@ -658,7 +658,7 @@ describe('resolveHomePhase — 계획 중은 showSpots·greetTitle 무변경(TRI
 });
 
 describe('resolveHomePhase — badgeSub 서식은 여행 상태와 정합(PBT, TRIP-697)', () => {
-  it('여행 중이면 badgeSub 는 "· N 일차" 꼴, 계획 중이면 "· D-n"/"· D-DAY"/"· D+n" 꼴이다', () => {
+  it('여행 중이면 badgeSub 는 "· N일차" 꼴, 계획 중이면 "· D-n"/"· D-DAY"/"· D+n" 꼴이다', () => {
     fc.assert(
       fc.property(
         fc.constantFrom('PLANNED', 'CONFIRMED', 'ACTIVE'),
@@ -677,8 +677,8 @@ describe('resolveHomePhase — badgeSub 서식은 여행 상태와 정합(PBT, T
           });
           if (result?.kind !== 'planning') return;
           if (result.trip.badge === '여행 중') {
-            // 여행 중 → "· N 일차"(N≥1). D 꼴이면 모순 — 현 구현(여행 중에도 "· D-DAY"/"· D+n")은 red.
-            expect(result.trip.badgeSub).toMatch(/^· \d+ 일차$/);
+            // 여행 중 → "· N일차"(N≥1). D 꼴이면 모순 — 현 구현(여행 중에도 "· D-DAY"/"· D+n")은 red.
+            expect(result.trip.badgeSub).toMatch(/^· \d+일차$/);
           } else {
             // 계획 중(시작 전·종료 후) → D 꼴("· D-n"/"· D-DAY"/"· D+n"). 일차 꼴이면 안 된다(선제 green).
             expect(result.trip.badgeSub).toMatch(/^· D[-+]/);

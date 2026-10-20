@@ -51,6 +51,7 @@ export function LocationPreprompt({
             </Text>
             <Text
               testID="onboarding-location-denied-body"
+              lineBreakStrategyIOS="hangul-word"
               className="font-noto text-center text-body text-muted"
             >
               {
@@ -63,7 +64,10 @@ export function LocationPreprompt({
                 '설정에서' 조각만 감싼다 — 동결 테스트 앵커 패턴 유지. */}
             <View className="w-full flex-row items-start gap-sm rounded-input border border-hairline p-lg">
               <LocationInfoGlyph color={LOCATION_ICON_COLORS.info} />
-              <Text className="flex-1 font-noto text-card-title text-ink">
+              <Text
+                className="flex-1 font-noto text-card-title text-ink"
+                lineBreakStrategyIOS="hangul-word"
+              >
                 현재 위치 기능은 언제든{' '}
                 <Text testID="onboarding-location-denied-notice">설정에서</Text>{' '}
                 켤 수 있어요
@@ -78,11 +82,15 @@ export function LocationPreprompt({
             </Text>
             <Text
               testID="onboarding-location-purpose"
+              lineBreakStrategyIOS="hangul-word"
               className="font-noto text-body text-muted"
             >
               {purposeContext}
             </Text>
-            <Text className="font-noto text-label text-muted-soft">
+            <Text
+              className="font-noto text-label text-muted-soft"
+              lineBreakStrategyIOS="hangul-word"
+            >
               {
                 '위치 정보는 추천·길안내에만 사용되며,\n언제든 설정에서 끌 수 있어요'
               }
@@ -92,8 +100,9 @@ export function LocationPreprompt({
 
         <View
           testID="onboarding-location-footer"
-          className="gap-sm border-t border-hairline px-2xl pb-2xl pt-lg"
+          className="gap-sm px-2xl pb-2xl pt-lg"
         >
+          <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
           {denied ? (
             <>
               <Pressable

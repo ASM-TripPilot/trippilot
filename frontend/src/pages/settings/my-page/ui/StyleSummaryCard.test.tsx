@@ -136,7 +136,7 @@ describe('🔴 AC-S3 · 미달 렌더(BR-U6-24)', () => {
     // 카드 루트는 남되(같은 카드의 다른 얼굴), 안내 문안이 뜬다.
     expect(screen.getByTestId('my-style-card')).toBeOnTheScreen();
     expect(
-      screen.getByText(/10곳 이상 쌓이면 분석을 제공합니다/)
+      screen.getByText(/10곳 이상 쌓이면 분석을 제공해요/)
     ).toBeOnTheScreen();
     expect(screen.getByText(/현재 4곳/)).toBeOnTheScreen();
 

@@ -185,13 +185,19 @@ export function VisitRecordCard({
   const canSkip =
     (status === 'UPCOMING' || status === 'IN_PROGRESS') &&
     !isOptimisticVisit(card.visitCheckId);
+  const hasActionRow =
+    (card.arrivedLabel != null && card.arrivedLabel !== '') ||
+    (card.autoRecorded && onPressRevertAuto != null) ||
+    onPressEditTime != null ||
+    canSkip ||
+    status === 'SKIPPED';
 
   return (
     <View
       testID={`record-trip-visit-card-${card.visitCheckId}`}
       className="w-full gap-md rounded-card border border-hairline bg-canvas px-[15px] py-[14px]"
     >
-      <View className="w-full flex-row items-center justify-between gap-sm">
+      <View className="w-full flex-row items-center gap-sm">
         <View className="min-w-0 flex-1 flex-row items-center gap-sm">
           <StatusCircle
             status={status}
@@ -223,7 +229,11 @@ export function VisitRecordCard({
             </View>
           ) : null}
         </View>
-        <View className="flex-row items-center gap-md">
+      </View>
+      {/* TRIP-1435 Q-115(결정 2=A) — 동작 줄(도착 시각·시각 수정·건너뛰기)은 이름 줄 아래 따로 둔다. 한 줄이면 오른쪽 묶음이
+          제 폭을 지키며 이름을 "해운대…"로 깎았다(TRIP-1086 배분을 바꾼다). 동작이 하나도 없으면 줄 자체를 그리지 않는다. */}
+      {hasActionRow ? (
+        <View className="w-full flex-row items-center justify-end gap-md">
           {card.arrivedLabel != null && card.arrivedLabel !== '' ? (
             <Text className="text-label text-muted">{card.arrivedLabel}</Text>
           ) : null}
@@ -271,7 +281,7 @@ export function VisitRecordCard({
             </View>
           ) : null}
         </View>
-      </View>
+      ) : null}
 
       {/* TRIP-761 · "방문 체크" pill — 수동 체크인 모드 & UPCOMING(도착 전)일 때만. press 는 arrive(도착
           생성, `onPressManualCheck`)로만 흐르고 complete(`onPressComplete`)는 절대 안 쏜다 — 완료 게이트를

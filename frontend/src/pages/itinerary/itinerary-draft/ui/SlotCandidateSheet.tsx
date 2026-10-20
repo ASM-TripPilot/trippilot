@@ -43,7 +43,7 @@ import {
  *   것을 이 티켓이 다시 연다(정본 정합 · 디자인 요구).
  */
 
-const EMPTY_TITLE = '이 슬롯에 맞는 다른 후보가 없어요';
+const EMPTY_TITLE = '이 자리에 맞는 다른 후보가 없어요';
 const EMPTY_HINT = '다른 곳을 직접 검색해 보세요';
 const PLACE_SEARCH_LABEL = '장소 검색';
 const CONFIRM_LABEL = '교체하기';
@@ -114,9 +114,9 @@ function buildSubtitle(
       : '';
   const concept =
     category !== undefined && category !== ''
-      ? `${category} 슬롯의 다른 후보`
+      ? `${category}의 다른 후보`
       : '다른 후보';
-  return [timeRange, concept, '동선은 자동으로 다시 계산돼요']
+  return [timeRange, concept, '후보 거리는 이 자리의 장소 기준이에요']
     .filter((part) => part !== '')
     .join(' · ');
 }

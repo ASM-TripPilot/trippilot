@@ -32,6 +32,24 @@ describe('buildStayFilterOptions', () => {
     expect(options.amenities.every((o) => !o.selected)).toBe(true);
   });
 
+  it("'기타'는 그 묶음의 맨 뒤로 가고 나머지 순서는 그대로다 (TRIP-1430 Q-038)", () => {
+    const items = [
+      item([], '기타'),
+      item([], '호텔'),
+      item([], '리조트'),
+      item([], '생활숙박'),
+    ];
+
+    const options = buildStayFilterOptions(items, [], []);
+
+    expect(options.stayTypes.map((o) => o.value)).toEqual([
+      '리조트',
+      '생활숙박',
+      '호텔',
+      '기타',
+    ]);
+  });
+
   it('고른 값은 facet 에 없어도 후보에 남고 selected=true 다(잘못 건 필터도 해제 가능)', () => {
     // 결과엔 ocean 뿐인데, 사용자가 예전에 pool 을 골라 결과가 줄어든 상황.
     const items = [item(['ocean'], 'HOTEL')];

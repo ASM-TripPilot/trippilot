@@ -58,7 +58,7 @@ export interface StaySelectSection {
 export type AssignFailure = 'retryable' | 'permanent';
 
 export interface StaySelectSheetProps {
-  /** 헤더 제목(박 라벨·지역 — 배선이 조립). 예 "2박 · 부산". */
+  /** 헤더 제목(박 라벨·지역 — 배선이 조립). 예 "2번째 밤 · 부산". */
   title: string;
   /** 그 밤 날짜 라벨(nightlyBaseCards 출력). 예 "6/11(목)". */
   dateLabel: string;

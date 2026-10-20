@@ -863,7 +863,7 @@ function renderH08DraftNoticeShell(options: {
       }
       cta={[
         { label: '다시 짜기', variant: 'outline', onPress: noop },
-        { label: '확정하기', variant: 'primary', onPress: noop },
+        { label: '완성 일정 보기', variant: 'primary', onPress: noop },
       ]}
     >
       <View className="gap-md px-lg pb-2xl pt-xs">
@@ -1165,7 +1165,7 @@ const H10_AUTO_WIDE_PINS = [
 ];
 const H10_STEPPER: ReactElement = (
   <CoPickStepper
-    prev={{ title: '황령산 전망대', status: '고름', done: true }}
+    prev={{ title: '황령산 전망대', status: '선택함', done: true }}
     current={{ title: '오후 · 전시', status: '지금 고르는 중' }}
     next={{ title: '오후 · 카페', status: '비어 있음' }}
   />
@@ -1275,7 +1275,7 @@ function renderH14PlanSheet(options: {
           meta={meta}
         />
       }
-      cta={[{ label: '일정 저장하기', variant: 'primary', onPress: noop }]}
+      cta={[{ label: '일정 확정하기', variant: 'primary', onPress: noop }]}
     >
       <View className="gap-md px-lg pb-2xl pt-xs">
         <UnplacedMustVisitNotice rows={unplaced ?? []} />
@@ -1673,20 +1673,27 @@ const legendCard = (
   dateRangeLabel: string,
   nightsLabel: string
 ): PastTripCardVM => ({ tripId, title, dateRangeLabel, nightsLabel });
+// buildMonthLegends 결과 모양 — 시작일 오름차순 · 줄마다 colorIndex(칸 색·점 색) · dayColors(마킹 날→색). TRIP-1436.
 const RECORDS_CALENDAR_LEGEND_MORE: MonthLegends = {
   rows: [
     {
-      kind: 'group',
-      key: '2026-09-28_2026-09-30',
-      representativeTitle: '서울특별시 여행',
-      dateRangeLabel: '9.28–9.30',
-      nightsLabel: '2박 3일',
-      members: ['s1', 's2', 's3', 's4', 's5', 's6'].map((id) =>
-        legendCard(id, '서울특별시 여행', '9.28–9.30', '2박 3일')
-      ),
+      kind: 'trip',
+      colorIndex: 0,
+      ...legendCard('gn', '강릉 여행', '9.1–9.2', '1박 2일'),
+    },
+    {
+      kind: 'trip',
+      colorIndex: 1,
+      ...legendCard('jj', '제주 여행', '9.3–9.5', '2박 3일'),
+    },
+    {
+      kind: 'trip',
+      colorIndex: 2,
+      ...legendCard('bs', '부산 여행', '9.12–9.14', '2박 3일'),
     },
     {
       kind: 'group',
+      colorIndex: 0,
       key: '2026-09-28_2026-09-29',
       representativeTitle: '서울특별시 여행',
       dateRangeLabel: '9.28–9.29',
@@ -1698,11 +1705,32 @@ const RECORDS_CALENDAR_LEGEND_MORE: MonthLegends = {
         ['k4', '서울특별시 여행'],
       ].map(([id, title]) => legendCard(id, title, '9.28–9.29', '1박 2일')),
     },
-    { kind: 'trip', ...legendCard('bs', '부산 여행', '9.12–9.14', '2박 3일') },
-    { kind: 'trip', ...legendCard('jj', '제주 여행', '9.3–9.5', '2박 3일') },
-    { kind: 'trip', ...legendCard('gn', '강릉 여행', '9.1–9.2', '1박 2일') },
+    {
+      kind: 'group',
+      colorIndex: 1,
+      key: '2026-09-28_2026-09-30',
+      representativeTitle: '서울특별시 여행',
+      dateRangeLabel: '9.28–9.30',
+      nightsLabel: '2박 3일',
+      members: ['s1', 's2', 's3', 's4', 's5', 's6'].map((id) =>
+        legendCard(id, '서울특별시 여행', '9.28–9.30', '2박 3일')
+      ),
+    },
   ],
   hiddenCount: 2,
+  dayColors: {
+    '2026-09-01': 0,
+    '2026-09-02': 0,
+    '2026-09-03': 1,
+    '2026-09-04': 1,
+    '2026-09-05': 1,
+    '2026-09-12': 2,
+    '2026-09-13': 2,
+    '2026-09-14': 2,
+    '2026-09-28': 1,
+    '2026-09-29': 1,
+    '2026-09-30': 1,
+  },
 };
 
 // l04 등록 숙소 2행 — Figma 1604:2440 카드 그대로(등록됨 1 · 미등록 1). default·dialog 두 키가 이 한 벌을
@@ -2497,7 +2525,7 @@ const NOTIFICATION_INBOX_PREVIEW_SECTIONS: NotificationSection[] = [
         icon: 'swap',
         title: "비 예보 — '○○공원' 일정이 영향받아요",
         body: "오후 2시부터 비 예보 — '○○공원' 대신 실내 장소를 추천했어요.",
-        meta: 'Plan-B · 10분 전',
+        meta: '재계획 · 10분 전',
         unread: true,
         route: '/trips/t1/planb',
         inlineActionLabel: '대안 일정 보기 ›',
@@ -2846,7 +2874,7 @@ export const PREVIEW_STATES: PreviewState[] = [
             meta="4곳"
           />
         }
-        cta={[{ label: '일정 저장하기', variant: 'primary', onPress: noop }]}
+        cta={[{ label: '일정 확정하기', variant: 'primary', onPress: noop }]}
       >
         <View />
       </MapSheetShell>
@@ -3928,7 +3956,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       <TripRecordsView
         tripTitle="부산 여행"
         manualCheckin
-        noticeCopy="수동 체크인 · 방문한 곳을 직접 선택해 기록하세요 (좌표 자동기록 비활성)"
+        noticeCopy="수동 체크인 · 방문한 곳을 직접 선택해 기록해요 (좌표 자동기록 비활성)"
         dayTabs={[
           { day: '2026-08-20', label: '1일차' },
           { day: '2026-08-21', label: '2일차' },
@@ -5216,7 +5244,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // g02 거점 편집 얼굴(TRIP-1082, Figma `4700:2688`) — l04 '출발점 변경' 입구. `onDone` 이 있으면 진행바·
+  // g02 거점 편집 얼굴(TRIP-1082, Figma `4700:2688`) — l04 '거점 변경' 입구. `onDone` 이 있으면 진행바·
   // 위저드 문구·생성 CTA 없이 하단 [완료] 하나. 제목만 코드가 '거점 숙소 바꾸기'로 앞서 있다(01b Q1).
   {
     key: 'trip-new-step2-edit',
@@ -5251,7 +5279,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <StaySelectSheet
-        title="2박 · 부산"
+        title="2번째 밤 · 부산"
         dateLabel="6/11(목)"
         candidates={[
           {
@@ -5336,7 +5364,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       ];
       return (
         <StaySelectSheet
-          title="1박 · 서울특별시"
+          title="1번째 밤 · 서울특별시"
           dateLabel="9/26(토)"
           candidates={[jw, ...others]}
           sections={[
@@ -5384,7 +5412,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       ];
       return (
         <StaySelectSheet
-          title="2박 · 부산광역시"
+          title="2번째 밤 · 부산광역시"
           dateLabel="9/27(일)"
           candidates={seoul}
           sections={[{ key: 'other', title: '다른 지역', candidates: seoul }]}
@@ -5407,7 +5435,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <StaySelectSheet
-        title="1박 · 서울특별시"
+        title="1번째 밤 · 서울특별시"
         dateLabel="9/26(토)"
         candidates={[
           {
@@ -5601,7 +5629,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         }
         cta={[
           { label: '다시 짜기', variant: 'outline', onPress: noop },
-          { label: '확정하기', variant: 'primary', onPress: noop },
+          { label: '완성 일정 보기', variant: 'primary', onPress: noop },
         ]}
       >
         <View className="gap-md px-lg pb-2xl pt-xs">
@@ -5665,7 +5693,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         }
         cta={[
           { label: '다시 짜기', variant: 'outline', onPress: noop },
-          { label: '확정하기', variant: 'primary', onPress: noop },
+          { label: '완성 일정 보기', variant: 'primary', onPress: noop },
         ]}
       >
         <View className="gap-md px-lg pb-2xl pt-xs">
@@ -5872,7 +5900,7 @@ export const PREVIEW_STATES: PreviewState[] = [
             meta="4곳"
           />
         }
-        cta={[{ label: '확정하기', variant: 'primary', onPress: noop }]}
+        cta={[{ label: '완성 일정 보기', variant: 'primary', onPress: noop }]}
       >
         <View className="gap-md px-lg pb-2xl pt-xs">
           {H11_COPICK_PREVIEW_SLOTS.flatMap((slot, index) => {
@@ -6310,7 +6338,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           showPast={false}
           pastCards={null}
           pastEmpty={false}
-          onPressEdit={noop}
           onPressSettings={noop}
           onPressStays={noop}
           onPressStyleAnalysis={noop}
@@ -6320,7 +6347,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   },
   // l03 마이페이지 empty(TRIP-776·1123) — Figma 4755:3123 과 같은 데이터: 카운트 0/0/3(칸마다 ›) · 프로필 태그(스타일 카드
   // 없음 — Figma 내부 모순 그대로) · 지난 여행 썸네일 카드 3장 + "캘린더 ›" ·
-  // 메뉴 3행 · 탭바(마이). 종료 0건 엣지("아직 종료된 여행이 없습니다")는 jest(`MyPageScreen.test.tsx`)가 잰다.
+  // 메뉴 3행 · 탭바(마이). 종료 0건 엣지("아직 종료된 여행이 없어요")는 jest(`MyPageScreen.test.tsx`)가 잰다.
   {
     key: 'my-page-empty',
     band: 'l',
@@ -6347,7 +6374,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           ))}
           pastEmpty={false}
           onPressCalendar={noop}
-          onPressEdit={noop}
           onPressSettings={noop}
           onPressStays={noop}
           onPressStyleAnalysis={noop}
@@ -6370,13 +6396,13 @@ export const PREVIEW_STATES: PreviewState[] = [
       </SafeAreaView>
     ),
   },
-  // l04 등록 숙소·예약 기록(TRIP-605·777) — 등록됨(채움 배지 + "출발점 변경" chevron)·미등록 두 행을
-  // Figma l04 default(1604:2440)와 대조한다. 미등록 행의 점선 "출발점 지정"은 TRIP-989(D13)로 숨겨
+  // l04 등록 숙소(TRIP-605·777) — 등록됨(채움 배지 + "거점 변경" chevron)·미등록 두 행을
+  // Figma l04 default(1604:2440)와 대조한다. 미등록 행의 점선 "거점 지정"은 TRIP-989(D13)로 숨겨
   // Figma 와 다르다.
   {
     key: 'my-stays-default',
     band: 'l',
-    label: 'l04 · 등록 숙소·예약 기록 default',
+    label: 'l04 · 등록 숙소 default',
     login: null,
     render: () => (
       <MyStaysScreen
@@ -6392,7 +6418,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'my-stays-empty',
     band: 'l',
-    label: 'l04 · 등록 숙소·예약 기록 empty',
+    label: 'l04 · 등록 숙소 empty',
     login: null,
     render: () => (
       <MyStaysScreen
@@ -6781,7 +6807,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         }}
         stepperSlot={
           <CoPickStepper
-            prev={{ title: '황령산 전망대', status: '고름', done: true }}
+            prev={{ title: '황령산 전망대', status: '선택함', done: true }}
             current={{ title: '오후 · 전시', status: '지금 고르는 중' }}
             next={{ title: '오후 · 카페', status: '비어 있음' }}
           />

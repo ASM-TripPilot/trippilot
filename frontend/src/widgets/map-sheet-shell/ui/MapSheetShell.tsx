@@ -279,6 +279,9 @@ export function MapSheetShell<T = unknown>({
           onEndReached)를 VirtualizedList-in-ScrollView 충돌 없이 담는다 — header·children 은 리스트의
           ListHeaderComponent 한 자리에 얹힌다(TRIP-798 묶음 C). 미전달이면 현행 스크롤 경로(6 소비처 무변경). */}
       <BottomSheet
+        // gorhom 기본값 accessible=true + 라벨 'Bottom Sheet' 는 시트 본문을 접근성 요소 하나로 묶는다 — 안쪽 텍스트
+        // 카드(번호·이름·시각)가 VoiceOver·접근성 트리에서 사라진다(TRIP-1430 Q-081). 본문이 제각각 읽히게 끈다.
+        accessible={false}
         index={startIndex}
         snapPoints={sheetSnapPoints}
         // v5 기본 true 는 콘텐츠 높이 칸을 배열에 몰래 끼워 index·onChange 번호가 어긋난다(03b 경고-1).

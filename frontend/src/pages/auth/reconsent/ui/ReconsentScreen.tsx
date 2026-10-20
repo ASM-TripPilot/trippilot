@@ -46,7 +46,8 @@ export function ReconsentScreen({
 }: ReconsentScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-canvas">
-      <View className="border-b border-hairline px-lg pb-md pt-sm">
+      <View className="px-lg pb-md pt-sm">
+        <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
         <Text className="text-[18px] font-noto-bold text-ink">약관 재동의</Text>
       </View>
 
@@ -58,17 +59,21 @@ export function ReconsentScreen({
         {loading ? <ActivityIndicator /> : null}
 
         {items.map((item, index) => (
-          <Pressable
+          // 행 = View, 체크박스 Pressable 과 "보기" Pressable 은 형제 — 중첩하면 접근성 요소 하나로 합쳐져 약관을 못 연다(TRIP-1430).
+          <View
             key={item.termsType}
-            testID={`reconsent-item-${item.termsType}`}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: item.checked }}
-            onPress={() => onToggle(item.termsType)}
-            className={`flex-row items-center justify-between py-[15px] ${
-              index > 0 ? 'border-t border-hairline' : ''
-            }`}
+            className="flex-row items-center justify-between"
           >
-            <View className="flex-row items-center gap-[10px]">
+            {index > 0 ? (
+              <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
+            ) : null}
+            <Pressable
+              testID={`reconsent-item-${item.termsType}`}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: item.checked }}
+              onPress={() => onToggle(item.termsType)}
+              className="flex-1 flex-row items-center gap-[10px] py-[15px]"
+            >
               <View
                 className={`h-[22px] w-[22px] items-center justify-center rounded-[6px] ${
                   item.checked
@@ -79,16 +84,18 @@ export function ReconsentScreen({
                 {item.checked ? <CheckGlyph /> : null}
               </View>
               <Text className="font-noto text-body text-ink">{item.label}</Text>
-            </View>
+            </Pressable>
             <Pressable
               testID={`reconsent-view-${item.termsType}`}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.label} 보기`}
               onPress={() => onViewTerms(item.termsType)}
-              className="flex-row items-center gap-[2px]"
+              className="flex-row items-center gap-[2px] py-[15px] pl-md"
             >
               <Text className="font-noto text-label text-muted-soft">보기</Text>
               <ViewChevronGlyph />
             </Pressable>
-          </Pressable>
+          </View>
         ))}
 
         {errorMessage ? (
@@ -113,7 +120,8 @@ export function ReconsentScreen({
         ) : null}
       </ScrollView>
 
-      <View className="border-t border-hairline px-2xl pb-[30px] pt-md">
+      <View className="px-2xl pb-[30px] pt-md">
+        <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
         <Pressable
           testID="reconsent-agree"
           disabled={!canAgree}

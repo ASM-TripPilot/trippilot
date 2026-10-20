@@ -302,7 +302,7 @@ export function ReplanDraftView({
         {removed.length > 0 ? (
           <View className="mt-md gap-sm">
             <Text className="font-noto-bold text-label text-muted">
-              {`이번 계획에서 빠지는 곳 ${removed.length}`}
+              {`이번 계획에서 빠지는 곳 ${removed.length}곳`}
             </Text>
             {removed.map((row) => (
               <View

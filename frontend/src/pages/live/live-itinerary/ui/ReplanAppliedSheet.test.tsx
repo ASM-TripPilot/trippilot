@@ -31,7 +31,7 @@ const SUBTITLE = [
   '비 예보를 반영했어요',
   '방문한 곳은 그대로 두고 17시 이후만 바뀌었어요',
 ];
-const BADGES = ['바뀐 곳 1', '방문지 5→5', '이동 −6.9km'];
+const BADGES = ['바뀐 곳 1곳', '방문지 5→5곳', '이동 −6.9km'];
 const ADDED: AppliedDiffRow = {
   kind: 'added',
   name: 'F1963 복합문화공간',
@@ -133,13 +133,13 @@ describe('🔴 S3 · AC-1 — 배지·내역은 받은 순서 그대로(정렬�
   it('뒤집은 입력은 뒤집힌 채로 그린다', () => {
     render(
       <ReplanAppliedSheet
-        summaryBadges={['이동 −6.9km', '바뀐 곳 1']}
+        summaryBadges={['이동 −6.9km', '바뀐 곳 1곳']}
         diffRows={[REMOVED, ADDED]}
         {...callbacks()}
       />
     );
 
-    expectTexts('planb-applied-badge', ['이동 −6.9km', '바뀐 곳 1']);
+    expectTexts('planb-applied-badge', ['이동 −6.9km', '바뀐 곳 1곳']);
     const rows = screen.getAllByTestId('planb-applied-diff-row');
     expect(rows).toHaveLength(2);
     expectDiffRow(rows[0], '삭제', 'bg-primary', REMOVED.name, REMOVED.meta);

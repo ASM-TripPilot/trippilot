@@ -303,7 +303,7 @@ describe('LivePlacePage', () => {
     );
   });
 
-  it('I6 운영 조립 — 주소·입장료는 "미확인", 추천 카피·사진 섹션·사진 수 칩은 그리지 않는다 (TRIP-755 AC-7·AC-8 · INV-1)', async () => {
+  it('I6 운영 조립 — 주소는 "미확인"(입장료 행은 없다), 추천 카피·사진 섹션·사진 수 칩은 그리지 않는다 (TRIP-755 AC-7·AC-8 · INV-1)', async () => {
     // 준비·실행 — 실 조회 데이터(슬롯 계약엔 주소·입장료·카피·사진 수가 없다).
     await renderP1();
 
@@ -311,9 +311,7 @@ describe('LivePlacePage', () => {
     expect(
       screen.getByTestId('execution-place-unknown-address')
     ).toHaveTextContent('미확인');
-    expect(screen.getByTestId('execution-place-unknown-fee')).toHaveTextContent(
-      '미확인'
-    );
+    expect(screen.queryByTestId('execution-place-unknown-fee')).toBeNull();
     // 단언 ② — 없는 값은 지어내지 않는다.
     expect(screen.queryByTestId('execution-place-pitch')).toBeNull();
     expect(screen.queryByTestId('execution-place-photos')).toBeNull();

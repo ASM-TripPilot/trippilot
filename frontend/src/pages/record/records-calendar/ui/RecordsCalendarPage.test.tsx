@@ -395,19 +395,22 @@ describe('🔴 TRIP-1084 · 기록 캘린더 legend — 제외·묶음·3줄+더
     );
     expect(screen.queryByTestId('record-calendar-legend-t-b1')).toBeNull();
 
-    // 단언 ③ 정렬·자르기 — 시작일 내림차순 앞 3줄, 속초(6.1)는 숨고 '더 보기 1'.
-    expect(screen.getByTestId('record-calendar-legend-t-a')).toBeOnTheScreen();
+    // 단언 ③ 정렬·자르기 — 시작일 오름차순(TRIP-1436) 앞 3줄: 속초(6.1)·강릉(6.5)·묶음(6.15). 부산(6.20)은 숨고 '더 보기 1'.
+    expect(screen.getByTestId('record-calendar-legend-t-d')).toBeOnTheScreen();
     expect(screen.getByTestId('record-calendar-legend-t-c')).toBeOnTheScreen();
-    expect(screen.queryByTestId('record-calendar-legend-t-d')).toBeNull();
+    expect(screen.queryByTestId('record-calendar-legend-t-a')).toBeNull();
     expect(screen.getByTestId('record-calendar-legend-more')).toHaveTextContent(
       '더 보기 1'
     );
 
-    // 실행 ② 더 보기 → 숨었던 지난 여행 줄을 누른다(결정 3 제자리 펼침).
+    // 실행 ② 더 보기 → 숨었던 줄(부산, 미래 여행)이 나타난다(결정 3 제자리 펼침). 미래 여행이라 눌러도 이동하지 않는다.
     fireEvent.press(screen.getByTestId('record-calendar-legend-more'));
-    fireEvent.press(screen.getByTestId('record-calendar-legend-t-d'));
+    expect(screen.getByTestId('record-calendar-legend-t-a')).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId('record-calendar-legend-t-a'));
+    expect(mockPush).not.toHaveBeenCalled();
 
-    // 단언 ④ 펼친 줄도 같은 누름 배선(열 수 있는 여행 → 방문 기록).
+    // 단언 ④ 보이는 지난 여행 줄은 같은 누름 배선(열 수 있는 여행 → 방문 기록).
+    fireEvent.press(screen.getByTestId('record-calendar-legend-t-d'));
     expect(mockPush.mock.calls).toEqual([['/trips/t-d/records']]);
   });
 
@@ -426,9 +429,9 @@ describe('🔴 TRIP-1084 · 기록 캘린더 legend — 제외·묶음·3줄+더
   // 5-b 경고 1 보강(오케) — 페이지가 legend 를 **보고 있는 달**로 만드는지 잠근다. 오늘 달(6월)로
   // 만들면 7월로 넘겨도 6월 여행 줄이 남는데, 위 두 케이스는 6월에서만 렌더해 그걸 못 본다.
   it('다음 달로 넘기면 6월 여행 legend 줄이 사라진다(legend 는 보고 있는 달 기준)', () => {
-    // 준비 — 6월 앵커: 부산 줄이 보인다.
+    // 준비 — 6월 앵커: 속초 줄이 보인다.
     renderPage();
-    expect(screen.getByTestId('record-calendar-legend-t-a')).toBeOnTheScreen();
+    expect(screen.getByTestId('record-calendar-legend-t-d')).toBeOnTheScreen();
 
     // 실행 — 다음 달.
     fireEvent.press(screen.getByTestId('record-calendar-next'));
@@ -437,7 +440,7 @@ describe('🔴 TRIP-1084 · 기록 캘린더 legend — 제외·묶음·3줄+더
     expect(screen.getByTestId('record-calendar-month-label')).toHaveTextContent(
       '2026년 7월'
     );
-    expect(screen.queryByTestId('record-calendar-legend-t-a')).toBeNull();
+    expect(screen.queryByTestId('record-calendar-legend-t-d')).toBeNull();
     expect(screen.queryByTestId(GROUP)).toBeNull();
     expect(screen.queryByTestId('record-calendar-legend-more')).toBeNull();
   });

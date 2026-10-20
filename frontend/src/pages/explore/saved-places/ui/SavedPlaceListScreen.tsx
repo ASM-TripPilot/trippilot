@@ -145,8 +145,9 @@ function SavedPlaceRow({
         .filter(Boolean)
         .join(', ')}
       onPress={() => onPressRow?.(saved)}
-      className="w-full flex-row items-center gap-md border-b border-hairline py-md"
+      className="w-full flex-row items-center gap-md py-md"
     >
+      <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
       <View
         testID={`explore-saved-rank-${saved.savedPlaceId}`}
         className={`h-[26px] w-[26px] items-center justify-center rounded-pill bg-primary${dim}`}
@@ -307,7 +308,8 @@ function CtaBar({
   // disabled(TRIP-705, Figma loading) — 로딩 중엔 CTA 를 회색·비활성으로 보여 자리를 지키되
   // 누를 수 없게 한다. Pressable `disabled` 는 press 를 원천 차단하고 accessibilityState 로도 알린다.
   return (
-    <View className="w-full border-t border-hairline bg-canvas px-lg pb-lg pt-md">
+    <View className="w-full bg-canvas px-lg pb-lg pt-md">
+      <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
       <Pressable
         testID="explore-saved-createtrip"
         accessibilityRole="button"
@@ -339,8 +341,9 @@ function LoadingBlock(): ReactElement {
         <View
           key={index}
           testID={`explore-saved-skeleton-${index}`}
-          className="border-b border-hairline px-lg py-md"
+          className="px-lg py-md"
         >
+          <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
           {/* 펄스 루프는 행 하나에 하나 — 구분선은 정지, 상자들만 묶어 펄스한다(TRIP-1363). */}
           <Skeleton className="flex-row items-center gap-md">
             <View className="h-[26px] w-[26px] rounded-pill bg-surface-strong" />
@@ -496,7 +499,7 @@ export function SavedPlaceListScreen({
   const subtitle = showLoading
     ? '담은 곳 불러오는 중'
     : activeSavedCount > 0
-      ? `${activeSavedCount}곳 · 마음에 든 순서대로`
+      ? `${activeSavedCount}곳 · 담은 순서대로`
       : null;
 
   return (

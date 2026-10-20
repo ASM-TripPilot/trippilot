@@ -76,8 +76,9 @@ function InboxHeader({
   return (
     <View
       testID="notification-inbox-header"
-      className="flex-row items-center justify-between border-b border-hairline px-lg pb-md pt-sm"
+      className="flex-row items-center justify-between px-lg pb-md pt-sm"
     >
+      <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
       <View className="flex-row items-center gap-sm">
         <Pressable
           testID="notification-inbox-back"
