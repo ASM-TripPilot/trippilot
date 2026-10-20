@@ -160,11 +160,12 @@ class WeatherHazardsTest : StringSpec({
      * 회차가 내일 최저로 발화하고 아침 회차가 해제하는 깜빡임이 나고, 새벽 최저로 오후 일정까지 한파로 경보했다(G-SA-15).
      */
     "COLD — 그 날 최저(06시 −13 · TMN 자리)가 −12 이하여도 판정 시각 TMP 가 모두 −10 위면 한파가 아니다" {
-        val dawn = calmDay { h, w -> w.copy(tmp = if (h.hour <= 7) -13.0 else -9.9) }
+        // 05시 발표분이라 06·07시 −13 칸이 예보에 남는다 — 기본 08시 발표분은 그 칸을 걸러 '그 날 최저'로 판정해도 이 예시가 초록이다
+        val dawn = forecastOf(calmDay { h, w -> w.copy(tmp = if (h.hour <= 7) -13.0 else -9.9) }, base = kst("2026-10-20T05:00"))
 
-        judge(exposure("자연", "14:00", "16:00", forecastOf(dawn))) shouldBe Verdict.Clear
-        // 슬롯이 그 새벽 시각을 지나면 한파다 — 05시 발표분 · 06:20 회차의 07~09시 슬롯
-        judge(exposure("자연", "07:00", "09:00", forecastOf(dawn, base = kst("2026-10-20T05:00"))), now = kst("2026-10-20T06:20")).hazard().let {
+        judge(exposure("자연", "14:00", "16:00", dawn)) shouldBe Verdict.Clear
+        // 슬롯이 그 새벽 시각을 지나면 한파다 — 06:20 회차의 07~09시 슬롯
+        judge(exposure("자연", "07:00", "09:00", dawn), now = kst("2026-10-20T06:20")).hazard().let {
             it.variant shouldBe TriggerVariant.COLD
             it.evidence.tempMin shouldBe -13.0
         }
