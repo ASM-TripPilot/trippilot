@@ -88,4 +88,18 @@ class StyleAnalysisRowReadTest : StringSpec({
         StyleAnalysisRepositoryAdapter(jpa).upsert(analysis) shouldBe analysis
         saved.captured shouldBe existing
     }
+
+    // 잴 수 없게 된 체류는 null 로 덮는다 — 옛 값을 남기면 근거 없는 소요시간이 화면에 남는다. `?: 기존값` 회귀를 막는다.
+    "기존 행의 평균 체류는 새 값이 null 이면 null 로 덮인다" {
+        val existing = entity(emptyMap(), emptyList()).apply { avgDwellMinutes = 60 }
+        val jpa = mockk<StyleAnalysisJpaRepository>()
+        val saved = slot<StyleAnalysisEntity>()
+        every { jpa.findById(acc) } returns Optional.of(existing)
+        every { jpa.save(capture(saved)) } answers { saved.captured }
+        val analysis = StyleAnalysis(acc, listOf("미식가"), TraitGauges(1, 5, 2), emptyList(), 3.5, 4.25, null, 3, 20, t0.plusSeconds(60))
+
+        StyleAnalysisRepositoryAdapter(jpa).upsert(analysis).avgDwellMinutes shouldBe null
+        saved.captured shouldBe existing
+        existing.avgDwellMinutes shouldBe null
+    }
 })

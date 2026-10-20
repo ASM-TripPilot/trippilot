@@ -84,6 +84,10 @@ class ReflectionRowReadTest : StringSpec({
         shouldThrow<IllegalArgumentException> { read(entity(draft = mapOf("cover" to "제목"))) }
     }
 
+    "cover 는 있어도 제목이 없으면 카드 생성이 실패한다 — 부제로 메우지 않는다" {
+        shouldThrow<IllegalArgumentException> { read(entity(draft = mapOf("cover" to mapOf("subtitle" to "부")))) }
+    }
+
     "없는 하루는 null 이다" {
         val jpa = mockk<ReflectionJpaRepository>()
         every { jpa.findByTripIdAndDayDate(trip, day) } returns null
@@ -118,5 +122,27 @@ class ReflectionRowReadTest : StringSpec({
         existing.stats["photoCount"] shouldBe 4
         out.mood shouldBe "happy"
         out.shortMemo shouldBe "좋았다"
+    }
+
+    // 새 값이 null 이어도 덮는다 — 수정본 해제(clearEdit)·기분·메모 지우기가 저장돼야 한다. `?: 기존값` 회귀를 막는다.
+    "기존 행의 수정본·기분·메모는 새 값이 null 이면 null 로 덮인다" {
+        val existing = entity(edited = mapOf("template_id" to "user.edit.v1", "format" to "CARD", "cover" to mapOf("title" to "옛 수정본")))
+            .apply { mood = "happy"; shortMemo = "좋았다" }
+        val jpa = mockk<ReflectionJpaRepository>()
+        val saved = slot<ReflectionEntity>()
+        every { jpa.findByTripIdAndDayDate(trip, day) } returns existing
+        every { jpa.save(capture(saved)) } answers { saved.captured }
+
+        val card = ReflectionCard("backend.rule.daily.v1", "CARD", "초안", "", """{"template_id":"backend.rule.daily.v1","format":"CARD","cover":{"title":"초안"}}""")
+        val incoming = Reflection.of(trip, day, card, ReflectionSource.RULE, ReflectionStats.empty(), t0.plusSeconds(60))
+        val out = ReflectionRepositoryAdapter(jpa, mapper).upsert(incoming)
+
+        saved.captured shouldBe existing
+        out.editedCard shouldBe null
+        out.mood shouldBe null
+        out.shortMemo shouldBe null
+        existing.editedCard shouldBe null
+        existing.mood shouldBe null
+        existing.shortMemo shouldBe null
     }
 })
