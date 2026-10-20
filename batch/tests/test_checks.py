@@ -85,7 +85,7 @@ class CheckEventsTest(unittest.TestCase):
     def events(self, *spans, coverage=FRESH):
         return {"events": [{"start": s, "end": e} for s, e in spans], "coverage": coverage}
 
-    def check(self, doc, min_valid=1, max_age=7):
+    def check(self, doc, min_valid=1, max_age=13):   # event_collect 의 max_age_days 기본값
         return checks.check_events(doc, self.DAY, min_valid, max_age)
 
     def test_그날_유효한_행사가_하한_이상이면_통과(self):
@@ -106,10 +106,11 @@ class CheckEventsTest(unittest.TestCase):
 
     def test_유효_건수가_넉넉해도_수집이_멈췄으면_막는다(self):
         # 미래 행사가 남아 유효 건수는 멀쩡하다 — 수집 시각만이 멈춘 것을 안다.
-        old = self.events(("2026-10-01", "2026-12-31"), coverage={"서울": "2026-10-02T23:59:00+09:00"})
+        old = self.events(("2026-10-01", "2026-12-31"), coverage={"서울": "2026-09-26T23:59:00+09:00"})
         failures = self.check(old)
         self.assertEqual(len(failures), 1)
-        self.assertIn("가장 오래된 지역의 마지막 수집 2026-10-02 — 2026-10-10 기준 8일 전 > 허용 7일", failures[0])
+        self.assertIn("가장 오래된 지역의 마지막 수집 2026-09-26 — 2026-10-10 기준 14일 전 > 허용 13일", failures[0])
+        self.assertIn("수집이 멈췄거나(사본이 낡았거나) 그 지역이 수집 때마다 폴백해", failures[0])
 
     def rotation(self, oldest):
         """17개 지역을 하루 3곳씩 도는 로테이션 모양 — 하루 전부터 거꾸로 3곳씩, 마지막 두 곳만 `oldest`."""
@@ -120,17 +121,24 @@ class CheckEventsTest(unittest.TestCase):
         return self.events(("2026-10-01", "2026-12-31"), coverage=coverage)
 
     def test_가장_늦은_지역이_신선해도_가장_오래된_지역이_낡았으면_막는다_로테이션이_건너뜀(self):
-        # 어제 수집한 지역이 있어도(최신 10-09) 두 지역이 9일째 그대로다 — 로테이션 포인터가 멈춘 모양.
-        failures = self.check(self.rotation("2026-10-01"))
+        # 어제 수집한 지역이 있어도(최신 10-09) 두 지역이 15일째 그대로다 — 두 바퀴 넘게 폴백했거나 포인터가 그 지역을 건너뛴다.
+        failures = self.check(self.rotation("2026-09-25"))
         self.assertEqual(len(failures), 1)
-        self.assertIn("가장 오래된 지역의 마지막 수집 2026-10-01 — 2026-10-10 기준 9일 전", failures[0])
+        self.assertIn("가장 오래된 지역의 마지막 수집 2026-09-25 — 2026-10-10 기준 15일 전", failures[0])
 
     def test_로테이션_한_바퀴_안이면_통과(self):
         self.assertEqual(self.check(self.rotation("2026-10-04")), [])   # 가장 오래된 지역 6일 전
 
+    def test_폴백_한_번으로_한_바퀴_밀린_지역은_통과(self):
+        # collect_events.py 는 LLM 폴백한 지역의 coverage 를 찍지 않고 포인터만 넘긴다 — 그 지역은 다음 바퀴(6일 뒤)에야
+        # 다시 찍혀 최대 12일 묵는다. 이것으로 행사 게시 전체를 막으면 안 된다.
+        self.assertEqual(self.check(self.rotation("2026-09-28")), [])   # 가장 오래된 지역 12일 전
+
     def test_허용_날수_경계(self):
-        exactly = self.events(("2026-10-01", "2026-12-31"), coverage={"서울": "2026-10-03T00:00:00+09:00"})
-        self.assertEqual(self.check(exactly), [])   # 7일 전은 통과, 8일 전부터 막는다
+        exactly = self.events(("2026-10-01", "2026-12-31"), coverage={"서울": "2026-09-27T00:00:00+09:00"})
+        self.assertEqual(self.check(exactly), [])   # 13일 전은 통과, 14일 전부터 막는다
+        over = self.events(("2026-10-01", "2026-12-31"), coverage={"서울": "2026-09-26T23:59:00+09:00"})
+        self.assertIn("14일 전 > 허용 13일", self.check(over)[0])
 
     def test_수집_시각이_없거나_깨졌으면_막는다(self):
         # 한 지역이라도 시각이 깨졌으면 그 지역의 신선도를 모른다 — 나머지가 신선해도 막는다.
@@ -197,6 +205,29 @@ class PipelineTest(unittest.TestCase):
             target = pipeline.publish(candidate, self.out / "published/c.json")
         self.assertEqual(target.read_text(encoding="utf-8"), '{"ok": 1}')
         self.assertIn("후보 정리 실패(게시는 끝났다)", logs.output[0])
+
+    def test_정리_중_어떤_예외든_게시는_성공이다(self):
+        # 옛 인터프리터에서 rmtree(onexc=...) 가 TypeError 를 냈다 — 게시가 끝난 뒤라 실패로 보이면 안 된다.
+        with mock.patch.object(pipeline.shutil, "rmtree", side_effect=TypeError("onexc")), \
+                self.assertLogs(pipeline.log, "WARNING") as logs:
+            target = pipeline.publish(self.candidate(), self.out / "published/c.json")
+        self.assertEqual(target.read_text(encoding="utf-8"), '{"ok": 1}')
+        self.assertIn("후보 정리 실패(게시는 끝났다)", logs.output[0])
+
+    def test_run_id_가_점이면_실행_폴더를_만들지_않는다(self):
+        # Airflow 3.3.2 기본 run_id 패턴은 "."·".." 를 허용한다 — 그대로 이으면 runs/<dag>·runs/ 가 실행 폴더가 된다.
+        for run_id in (".", "..", "a/..", "a/b"):
+            with self.assertRaisesRegex(ValueError, "실행 폴더를 만들 수 없다"):
+                pipeline.run_dir("poi_collect", run_id)
+
+    def test_실행_폴더_깊이가_아닌_후보는_지우지_않는다(self):
+        # runs/<dag>/ 바로 아래 후보(run_id "." 모양)를 게시해도 다른 실행의 후보 폴더는 남는다.
+        other = self.candidate("other")
+        shallow = self.out / "runs/poi_collect/c.json"
+        shallow.write_text("{}", encoding="utf-8")
+        pipeline.publish(shallow, self.out / "published/c.json")
+        self.assertTrue(other.exists())
+        self.assertTrue(shallow.exists())
 
     def test_run_dir_밖의_후보는_지우지_않는다(self):
         outside = self.out / "elsewhere/c.json"

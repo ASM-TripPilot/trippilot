@@ -102,5 +102,5 @@ def check_events(doc: dict, day: date, min_valid: int, max_age_days: int) -> lis
         failures.append("coverage 에 지역별 마지막 수집 시각이 없거나 읽을 수 없다 — 언제 수집했는지 알 수 없다")
     elif (day - oldest).days > max_age_days:
         failures.append(f"가장 오래된 지역의 마지막 수집 {oldest} — {day} 기준 {(day - oldest).days}일 전 > 허용 {max_age_days}일. "
-                        "수집이 멈췄거나 로테이션이 일부 지역을 건너뛰거나 사본이 낡았다")
+                        "수집이 멈췄거나(사본이 낡았거나) 그 지역이 수집 때마다 폴백해 coverage 가 찍히지 않는다")
     return failures

@@ -17,7 +17,12 @@ log = logging.getLogger(__name__)
 
 
 def run_dir(dag_id: str, run_id: str) -> Path:
-    path = OUT / "runs" / dag_id / run_id.replace(":", "_")
+    """실행마다 `OUT/runs/<dag>/<run_id>/` 하나. Airflow 3.3.2 의 기본 run_id 패턴은 "."·".." 도 허용한다 — 그대로 이으면
+    폴더가 runs/<dag> 나 runs/ 가 되고, 게시 뒤 정리가 다른 실행의 후보까지 지운다. 그 깊이가 아니면 거부한다."""
+    root = (OUT / "runs").resolve()
+    path = (root / dag_id / run_id.replace(":", "_")).resolve()
+    if path.parent.parent != root:
+        raise ValueError(f"run_id 로 실행 폴더를 만들 수 없다(runs/<dag>/<run_id> 가 아니다): {run_id!r}")
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -52,9 +57,14 @@ def publish(candidate: Path, target: Path) -> Path:
     except BaseException:
         staging.unlink(missing_ok=True)
         raise
-    if OUT / "runs" in candidate.parent.parents:   # run_dir 이 만든 폴더만 — 다른 경로의 후보는 지우지 않는다
+    run = candidate.parent.resolve()
+    if run.parent.parent == (OUT / "runs").resolve():   # run_dir 이 만든 깊이의 폴더만 — runs/ 나 runs/<dag> 는 지우지 않는다
         # 게시는 이미 끝났다 — 정리 실패가 게시를 실패로 보이게 하면 안 된다(재실행이 성공한 게시를 다시 하게 된다).
-        shutil.rmtree(candidate.parent, onexc=lambda _f, path, exc: log.warning("후보 정리 실패(게시는 끝났다): %s — %s", path, exc))
+        # 어떤 예외든 로그만 남긴다(onexc 는 3.12+ 라 쓰지 않는다 — 옛 인터프리터에서는 TypeError 가 게시 뒤에 났다).
+        try:
+            shutil.rmtree(run)
+        except Exception as exc:
+            log.warning("후보 정리 실패(게시는 끝났다): %s — %s", run, exc)
     return target
 
 
