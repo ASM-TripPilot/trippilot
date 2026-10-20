@@ -40,6 +40,7 @@ from trippilot.assembly_engine.constraints import (
     free_visit_cap,
     not_before_floor,
 )
+from trippilot.assembly_engine.day_focus import focus_candidates
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler, placed_fixed_blocks
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
@@ -321,6 +322,8 @@ class OrToolsAssembler:
         cands = [c for c in problem.candidates
                  if c.poi_id not in used and c.poi_id not in reserved
                  and c.poi_id in self._pois]
+        if problem.day_focus:  # 날마다 다른 동네(생성) — 그날 자유 후보를 그 근처로(그리디 `_day_ranked` 와 같다)
+            cands = list(focus_candidates(cands, self._pois, problem.day_focus.get(day)))
         floor = _not_before_min(problem, day)
         # 웜스타트 = 그리디 해의 방문 **순서**를 완전 힌트로 (TRIP-1176) — 프리필터 전에 구해
         # 그 POI 를 노드에 남긴다. 빠지면 힌트 경로가 끊겨 OR 해가 그리디보다 나빠진다: 카테고리

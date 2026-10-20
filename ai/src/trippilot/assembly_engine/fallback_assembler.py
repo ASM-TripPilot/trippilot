@@ -32,6 +32,7 @@ from trippilot.assembly_engine.constraints import (
     not_before_floor,
     open_hours_ok,
 )
+from trippilot.assembly_engine.day_focus import focus_candidates
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
     DaySolution,
@@ -522,6 +523,8 @@ class RuleFallbackAssembler:
         무보정(None·정보 없음·임계 미만)이면 ranked 순서 그대로 — 종전 동작과 동일.
         """
         remaining = [c for c in ranked if c.poi_id not in used]
+        if problem.day_focus:  # 날마다 다른 동네(생성) — OR `_solve_day` 와 같은 규칙
+            remaining = list(focus_candidates(remaining, self._pois, problem.day_focus.get(day)))
         rain = problem.daily_rain_prob
         pop = rain.get(day) if rain is not None else None
         rainy = pop is not None and pop >= self._cfg.rain_threshold_pct

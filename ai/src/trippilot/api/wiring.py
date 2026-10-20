@@ -501,6 +501,8 @@ def _domain_generate_request(
         ignore_anchor_distance=True,
         # 저녁 8시 반 넘어 만든 오늘은 취향으로만(야경·나이트라이프, 없으면 비움 — 2026-10-19 사용자). 재계획은 끈다.
         late_night_by_taste=True,
+        # 여러 날을 날마다 다른 동네로(2026-10-20 사용자 — "강남도 연희동도 성수동도"). 재계획은 하루라 끈다.
+        spread_days=True,
         persona_ref=ResourceRef(kind="persona", ref_id=request.trip_id, owner_id=owner),
         principal=Principal(user_id=owner),
         seed=_seed_from(request.trip_id),
