@@ -18,9 +18,12 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
 import re
 import sys
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 
@@ -260,6 +263,7 @@ def unresolved_sido(proposals: list[dict], sido: set[str] | None = None,
 def quarantine_unresolved_sido(proposals: list[dict], sido: set[str] | None = None,
                                history: dict[tuple[str, str], list[dict]] | None = None,
                                before_refs: frozenset[tuple[str, str]] = frozenset(),
+                               survives: Callable[[dict], bool] = lambda _: True,
                                ) -> tuple[list[dict], list[dict], list[dict]]:
     """백엔드가 시도를 못 정할 제안을 가른다. `(격리, 직전 판본 복원, 남겨 둠)` 을 각각 `{source, content_id, address}` 로.
 
@@ -272,6 +276,9 @@ def quarantine_unresolved_sido(proposals: list[dict], sido: set[str] | None = No
     깨진 주소로 다시 보내면 `merge` 가 좋은 판본을 덮는다 — 그 키를 통째로 빼면 공유본에서 POI 가 사라지고,
     `--close-missing` 이 그 부재를 퇴출로 읽어 **살아 있는 POI 를 닫는다**(백엔드는 시도 없는 행도 받아 둔다 —
     `PoiProposalIngestService`). `history`(`versions_by_ref`) 의 앞 판본은 호출자가 약칭을 펴 둔 것이어야 한다.
+    되돌릴 판본은 게이트만이 아니라 **소급 제거도 통과**(`survives`)해야 한다 — 옛 판본만 걸리는 규칙(옛 이름이 관광
+    무관 …)이 있으면 되돌린 뒤 그 키가 통째로 빠져, 지키려던 POI 가 결국 닫힌다. 그런 판본밖에 없으면 되돌리지 않고
+    아래 "남겨 둠"으로 간다 — 벤더가 지금 내보내는 오늘 판본을 경고와 함께 둔다.
 
     **통과하는 판본이 없어도 공유본(`before_refs`)에 있던 키면 빼지 않는다(남겨 둠 — 최종 판본 그대로).** 경고만 하던
     기간·수동 병합으로 이미 미판정인 채 들어와 있던 행이다. 빼면 공유본에서 사라져 `--close-missing` 이 살아 있는
@@ -291,7 +298,7 @@ def quarantine_unresolved_sido(proposals: list[dict], sido: set[str] | None = No
             kept.append(p)
             continue
         ref = ref_of.get(id(p)) or _ref(p, {})
-        prev = next((v for v in reversed(history.get(ref, [])[:-1]) if _resolves(v, sido)), None)
+        prev = next((v for v in reversed(history.get(ref, [])[:-1]) if _resolves(v, sido) and survives(v)), None)
         if prev is not None:
             restored.append(_ref_dict(ref, p))
             kept.append(prev)
@@ -444,10 +451,17 @@ def _self_check() -> None:
     print("[merge] self-check 통과")
 
 
+def _survives_retro_drops(p: dict) -> bool:
+    """이 판본 하나가 소급 제거를 통과하는가 — 되돌릴 후보 판정용. 판정 로그는 삼킨다(실제로 뺀 게 아니다)."""
+    probe = {"proposals": [p], "stats": {}}
+    with contextlib.redirect_stderr(io.StringIO()):
+        retro_drops(probe)
+    return bool(probe["proposals"])
+
+
 def retro_drops(out: dict, ref_by_id: dict[int, tuple[str, str]] | None = None,
                 before_refs: frozenset[tuple[str, str]] = frozenset()) -> None:
-    """영업시간 재파싱 + 소급 제거들. 두 번 불러도 된다 — stats 는 더하고, 이미 거른 행에는 멱등이다
-    (시도 게이트가 앞 판본으로 되돌린 행만 둘째 호출에서 새로 걸린다).
+    """영업시간 재파싱 + 소급 제거들. stats 는 더한다(되돌릴 후보 판정 `_survives_retro_drops` 도 이걸 쓴다).
 
     `retro_dropped_existing` — 뺀 행 중 **공유본(BEFORE)에 있던 키**만 센 수. 축소 가드는 공유본과 비교하므로 이것만
     빼 준다 — 그날 처음 온 행의 제거까지 더하면 가드가 그만큼 느슨해진다(종류별 `*_dropped` 는 전체 수)."""
@@ -513,6 +527,12 @@ def main(argv: list[str]) -> int:
             continue
         if args.output and Path(f).resolve() == Path(args.output).resolve():
             before = docs[-1]
+    # 덮어쓸 공유본이 입력에 있는데 못 읽었으면 그것부터 말한다 — 아래 "-o 가 입력이어야 한다"는 틀린 진단이다.
+    if args.state and args.output and before is None and any(
+            Path(f).resolve() == Path(args.output).resolve() for f in args.files):
+        print(f"[merge] FAIL 덮어쓸 공유본(-o {args.output})을 읽지 못했다 — 위 '파일 건너뜀' 참조 (아무것도 쓰지 않았다)",
+              file=sys.stderr)
+        return 1
     if not docs:
         print("[merge] 읽은 문서가 없습니다", file=sys.stderr)
         return 1
@@ -548,12 +568,7 @@ def main(argv: list[str]) -> int:
     if args.state:
         expand_sido_abbrev([v for vs in history.values() for v in vs[:-1]])   # 되돌릴 후보도 펴 둔다
         quarantined, restored, left = quarantine_unresolved_sido(
-            out["proposals"], history=history, before_refs=before_refs)
-        if restored:
-            retro_drops(out, ref_by_id, before_refs)   # 되돌린 앞 판본도 같은 소급 제거를 거친다(나머지 행에는 멱등)
-            # 거기서 빠진 키는 복원이 아니라 소급 제거다 — 복원 목록·상한·색인 지우기에서 뺀다.
-            alive = {ref_by_id.get(id(p)) for p in out["proposals"]}
-            restored = [q for q in restored if (q["source"], q["content_id"]) in alive]
+            out["proposals"], history=history, before_refs=before_refs, survives=_survives_retro_drops)
         for q in quarantined[:5]:
             print(f"[merge] 시도 미판정 격리 — {q}", file=sys.stderr)
         for q in restored[:5]:

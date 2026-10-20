@@ -690,18 +690,20 @@ def test_살아_있는_행이_깨진_주소로_다시_오면_앞_판본을_지�
     assert json.loads(st_path.read_text(encoding="utf-8"))["proposed"] == {"gone": "20261015"}
 
 
-def test_되돌린_앞_판본도_소급_제거를_똑같이_거친다(tmp_path: Path) -> None:
-    """게이트가 소급 제거보다 먼저 도는 이유 — 되돌린 판본이 관광 무관 규칙을 비켜 가면 안 된다."""
+def test_소급_제거될_앞_판본으로는_되돌리지_않고_오늘_판본을_남긴다(tmp_path: Path) -> None:
+    """옛 판본만 걸리는 규칙(옛 이름이 관광 무관)이 있으면, 되돌린 뒤 그 키가 통째로 빠져 지키려던 POI 가 닫힌다.
+    그래서 되돌리지 않는다 — 공유본 키이므로 벤더가 지금 내보내는 오늘 판본을 경고와 함께 둔다."""
     earlier = _keyed_doc("TOURAPI", "store", at="2026-10-01T00:00:00+00:00")
     earlier["proposals"][0]["poi"]["name"] = "이마트24 강릉여고점"
     rc, out, st_path = _gate_run(tmp_path, {"store": "제주특별 서귀포시"}, state=_state({"store": "1"}),
                                  earlier=earlier)
     assert rc == 0
     doc = json.loads(out.read_text(encoding="utf-8"))
-    assert doc["proposals"] == []
-    assert doc["stats"]["non_travel_dropped"] == 1
-    assert doc["stats"]["retro_dropped_existing"] == 1                 # 공유본에 있던 키 — 축소 가드 몫
-    # 소급 제거로 빠진 키는 복원이 아니다 — 복원 목록·상한·색인 지우기에 넣지 않는다
+    assert _ids(out) == ["store"]
+    assert doc["proposals"][0]["poi"]["name"] == "TOURAPI-store"            # 오늘 판본
+    assert [q["content_id"] for q in doc["stats"]["sido_unresolved_refs"]] == ["store"]
+    assert "non_travel_dropped" not in doc["stats"]
+    assert doc["stats"]["retro_dropped_existing"] == 0
     assert "sido_restored_previous_refs" not in doc["stats"]
     assert json.loads(st_path.read_text(encoding="utf-8"))["proposed"] == {"store": "1"}
 
@@ -789,6 +791,18 @@ def test_state_를_주면_o_가_입력_중_하나여야_한다(tmp_path: Path) -
     st.write_text(json.dumps(_state({})), encoding="utf-8")
     assert M.main(["--state", str(st), "--allow-mixed", "-o", str(new), str(old)]) == 1
     assert not new.exists()
+
+
+def test_state_를_주고_o_공유본을_못_읽으면_그것을_말하고_실패한다(tmp_path: Path, capsys) -> None:
+    """입력에 있는데 깨진 것 — "-o 가 입력이어야 한다"는 틀린 진단이다."""
+    rc, out, _ = _gate_run(tmp_path, {"ok": "서울특별시 중구 1"}, state=_state({}))
+    assert rc == 0
+    out.write_text("{깨짐", encoding="utf-8")
+    src, st = tmp_path / "in.json", tmp_path / "state.json"
+    assert M.main(["--state", str(st), "-o", str(out), str(out), str(src)]) == 1
+    assert out.read_text(encoding="utf-8") == "{깨짐"
+    err = capsys.readouterr().err
+    assert "덮어쓸 공유본" in err and "입력 문서 중 하나" not in err
 
 
 def test_항목_source_가_없으면_문서_source_로_색인을_지운다(tmp_path: Path) -> None:
