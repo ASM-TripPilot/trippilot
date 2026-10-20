@@ -207,3 +207,10 @@ settings-location-usage-row-automation
 > 6. **코드 위치** — `shared/location/automation/arming.ts`(`tripPaused`) · `store.ts`(`pausedTrips`) · `engine.ts`(`setTripPaused`, `endReasonOf` 의 `'paused'→'USER_PAUSE'`) · `noticeCopy.ts`(`automationSwitchCopy`) · `statusView.ts` · `useLocationAutomation.ts`(`setPaused`: 동기 잠금 + 낙관적 표시) · `pages/live/live-itinerary/ui/LiveHubView.tsx`.
 > 7. **§8 6-b 표에 더하는 행(표 원문은 수정하지 않는다)** — 12. **일시 중지 끄기** → 지오펜스·경로 해제, 열린 구간마다 END(`USER_PAUSE`) 보고(지오펜스+경로 두 구간이면 **2건**), 상태바 위치 화살표 사라짐, 부제 변경 · 13. **일시 중지 켜기** → 설명·권한 요청 없이 새 구간 START(**2건**) · 재무장 · 14. 스위치 줄을 누르든 안쪽 토글을 누르든 `setPaused` 가 **1회**만 불린다(중첩 Pressable 이중 호출은 jest 사각) · 15. 앱을 닫은 채 백그라운드 wake 가 와도 일시 중지가 되살아나지 않는다. 방법은 기존 표와 같다(실기/시뮬 + 서버 조회).
 > 8. **알려진 한계(관측)** — 켜기 직후 OS 권한이 풀려 있으면 스위치가 잠깐 켜졌다 되돌아간다(낙관적 표시). 일시 중지 이전에 모은 원시 표본은 지우지 않아 다음 날 포그라운드 업로드에 실려 갈 수 있다.
+
+> **[개정 · 2026-10-21 · TRIP-1520·TRIP-1521 — 토글·일시 중지 스위치 제거]** 규칙은 `business-rules.md` 의 같은 날짜 개정 블록. 원문·앞 개정 블록은 그대로 두고 이 블록이 우선한다.
+>
+> 1. **§3 i01 ③·j 풀 지도** — 「계획｜실제 토글」이 없다. 페이지가 동의 ∧ 그날 경로 있음일 때 `actualRoute` 를 `MapSheetShell`/`MapView` 에 늘 넘기고, `MapView` 는 기존대로 계획선을 흐리고 실제 점선을 얹는다. NFR PERF-U10-07 의 "토글 로컬 전환" 문장도 같은 날짜 개정으로 무효. 공용 `shared/map/RouteToggle`·`actualDistanceLabel` 은 삭제.
+> 2. **§5 testID 폐기** — `execution-live-route-toggle-plan`·`-route-toggle-actual`·`-route-disabled-reason`·`-route-distance`, `record-map-route-*` 같은 접미. 2026-10-12 개정 11번의 토글 testID 줄은 무효.
+> 3. **2026-10-20 개정 블록(TRIP-1486 일시 중지 스위치) 전체 무효** — 스위치 줄·testID·l06 paused 얼굴·프리뷰 키 `u10-switch-on`·`u10-switch-paused`·`u10-l06-paused`·§8 6-b 추가 행 12~15 모두 없다. FE 커밋 `6524f3983` 은 되돌렸다.
+> 4. **Figma** — U10 검토 밴드에서 u10f 스위치 줄 2장(`4985:3306`·`4987:3327`)·u10d 일시 중지 변형(`4990:3348`)·u10e 「경로 없음」(`4862:3628`) 삭제. u10e `4862:2897`(허브)·`4862:3807`(기록 풀 지도)은 토글 줄을 걷고 「계획 동선 + 실제 경로 함께」로 이름을 바꿨다.

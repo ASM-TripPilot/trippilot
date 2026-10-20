@@ -1678,3 +1678,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U10 Functional Design 사후 개정(구현 반영), 커밋 `90c545781`(BE)·`6524f3983`(FE). 사용자 명시 승인(위 원문)에 따라 audit 원문 append 후 반영. `aidlc-state.md`·`docs/SCOPE.md` 무변경.
 
 ---
+
+## Functional Design·NFR 사후 개정 — U10 계획｜실제 토글 제거 · 여행별 일시 중지 철회 (TRIP-1520 · TRIP-1521)
+**Timestamp**: 2026-10-21T10:30:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 이 세션 2026-10-21, 그대로 인용) "너가 만든거 보고 평가할게 1. 계획/실제 <- 개 별로임 2. 이 날 기록된 경로가 없어여 <- 개 별로임 3. 자동 기록... <- 개 별로임 자동기록 왜 있는지 모르겠고 계획이랑 실제 같이 보여줘도 되는거 아니야? 저거 버튼이 화면을 좁게만들어 2번도 마찬가지고" / AskUserQuestion 답 — "둘 다 늘 표시" · "기능 자체를 없앰" · "둘 다 바꿈".
+**AI Response**: `construction/u10-gps-location-automation/functional-design/business-rules.md` 끝에 `[개정 · 2026-10-21 · TRIP-1520·TRIP-1521]` 블록 1개(BR-U10-41 개정 — 토글·사유·거리 표기 없이 동의 ∧ 그날 경로면 늘 겹침 / BR-U10-49~52 철회, BE `USER_PAUSE` 값은 forward-only 로 남되 클라이언트 미전송), `…/frontend-components.md` 끝에 같은 날짜 블록 1개(토글 testID 폐기 · 2026-10-20 TRIP-1486 블록 전체 무효 · Figma 삭제·개명 node id), `…/nfr-requirements/nfr-requirements.md` 끝에 PERF-U10-07 마지막 문장 무효 블록 1개. 세 파일 모두 원문 삭제·수정 0줄(append 만).
+**Context**: CONSTRUCTION — U10 Functional Design·NFR 사후 개정(구현 반영), 커밋 `a3b716f14`(TRIP-1521 FE 되돌림) · `bb40a1723`(TRIP-1520). 앞 세션에서 사용자가 승인한 "audit append + [개정] 블록" 절차를 따름. `aidlc-state.md`·`docs/SCOPE.md` 무변경.
+
+---
