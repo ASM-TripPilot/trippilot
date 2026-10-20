@@ -18,8 +18,15 @@ import java.util.UUID
 
 /**
  * trip_summary 행 → 도메인. 옛 행이 필드를 덜 가질 수 있어, 하이라이트 객체 안의 빠지거나 깨진 필드는 버리거나 기본값으로 읽는다.
- * 하이라이트 배열의 **원소가 객체가 아니면**(`["x"]`) unchecked 캐스트라 `ClassCastException` 이 난다 — TRIP-1476(B), 여기서 단정하지 않는다.
- * `places` 의 **원소가 문자열이 아니면**(`[1, 2]`) 걸러지지 않고 그대로 통과해 응답에 숫자가 나간다 — TRIP-1476(F), 여기서 단정하지 않는다.
+ *
+ * 아직 못 막는 네 경우는 여기서 단정하지 않는다(TRIP-1476):
+ * - B: 하이라이트 배열의 **원소가 객체가 아니면**(`["x"]`) unchecked 캐스트라 `ClassCastException` 이 난다.
+ * - C: 저장된 값이 도메인 범위를 벗어나면(totalVisits·totalPhotos 음수, totalDistanceKm 음수, 빈 narrative)
+ *   생성자의 require 가 던져 그 여행의 요약 조회가 계속 500 이다.
+ * - F: `places` 의 **원소가 문자열이 아니면**(`[1, 2]`) 읽기에서는 걸러지지 않고 도메인까지 통과한다.
+ *   응답 직렬화(`DayHighlightResponse.places: List<String>`)에서 Jackson 이 `ClassCastException` 을 감싼
+ *   `DatabindException` 을 던져 그 여행의 요약 조회 전체가 500 이다.
+ * - G: 모르는 `source`(예 `ROBOT`, 컬럼에 CHECK 없음)는 `ReflectionSource.valueOf` 가 던져 요약 조회가 500 이다.
  *
  * 특히 **U10 이전 행의 그날 거리는 null(모름)이어야 한다.** 0 으로 채우면 화면이 "0km 이동"이라는 거짓말을 한다.
  */

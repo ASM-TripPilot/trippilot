@@ -22,6 +22,11 @@ import java.util.UUID
  * - 근거 수치(`stats`)는 방어적으로 읽는다 — 옛 행에 없는 필드를 단정 캐스팅하면 그 여행의 회고가 영구히 500 이다.
  * - 카드의 템플릿은 **카드 자신의 payload** 에서 읽는다 — 컬럼(초안 값)을 쓰면 사용자가 고친 카드가 규칙 카드로 둔갑한다.
  * - 제목 없는 카드는 조용히 통과시키지 않는다(PBT-U5-F1).
+ *
+ * 아직 못 막는 두 경우는 여기서 단정하지 않는다(TRIP-1476):
+ * - C: 저장된 수치가 도메인 범위를 벗어나면(visitCount·photoCount 음수, distanceKm 음수) `ReflectionStats` 의
+ *   require 가 던져 그날 회고 조회가 계속 500 이다. 위의 "방어적으로 읽는다"는 필드가 없거나 타입이 틀린 경우까지다.
+ * - G: 모르는 `source`(예 `ROBOT`)는 `ReflectionSource.valueOf` 가 던져 500 이다. 컬럼에 CHECK 를 일부러 걸지 않았다(V2.36).
  */
 class ReflectionRowReadTest : StringSpec({
 

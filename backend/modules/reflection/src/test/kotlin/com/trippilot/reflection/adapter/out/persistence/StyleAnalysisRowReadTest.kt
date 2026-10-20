@@ -19,7 +19,8 @@ import java.util.UUID
  *
  * 아직 못 막는 두 경우는 여기서 단정하지 않는다(TRIP-1476):
  * - B: categoryBreakdown 배열의 **원소가 객체가 아니면**(`[3]`) unchecked 캐스트라 `ClassCastException` 이 난다.
- * - C: 저장된 값이 도메인 범위를 벗어나면(게이지 9, 비율 1.5) 생성자의 require 가 던져 그 계정의 조회가 계속 500 이다.
+ * - C: 저장된 값이 도메인 범위를 벗어나면(게이지 9, 비율 1.5, 평균 방문 수·반경·체류 음수) 생성자의 require 가 던져
+ *   그 계정의 조회가 계속 500 이다. 방문 수 10 미만은 컬럼 CHECK(V2.39)가 막아 여기 해당하지 않는다.
  */
 class StyleAnalysisRowReadTest : StringSpec({
 
