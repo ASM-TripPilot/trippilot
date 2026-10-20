@@ -64,10 +64,11 @@ class TripSummaryRowReadTest : StringSpec({
                 listOf(
                     mapOf("date" to "2026-08-01"),
                     mapOf("date" to "2026-08-02", "distanceKm" to "far", "distanceSource" to "TELEPORT", "dayOrder" to "1", "visitCount" to null, "places" to "a"),
+                    mapOf("date" to "2026-08-03", "distanceSource" to 1, "visitCount" to "3"),
                 ),
             ),
         ).highlights
-        h.map { it.date } shouldBe listOf(LocalDate.parse("2026-08-01"), LocalDate.parse("2026-08-02"))
+        h.map { it.date } shouldBe listOf(LocalDate.parse("2026-08-01"), LocalDate.parse("2026-08-02"), LocalDate.parse("2026-08-03"))
         h.forEach {
             it.distanceKm shouldBe null
             it.distanceSource shouldBe null
@@ -86,6 +87,7 @@ class TripSummaryRowReadTest : StringSpec({
                 stats = mapOf("totalVisits" to "5", "totalDistanceKm" to null, "distanceSource" to "TELEPORT", "totalPhotos" to false, "hasLocationData" to "yes"),
             ),
         ).stats shouldBe zero
+        read(entity(emptyList(), stats = mapOf("totalDistanceKm" to "far", "distanceSource" to 1))).stats shouldBe zero
     }
 
     "정상 수치는 그대로 읽힌다" {

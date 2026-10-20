@@ -22,7 +22,7 @@ import java.time.ZoneOffset
 import java.util.UUID
 
 /**
- * 도메인 사건 payload 를 못 읽을 때 — **eventId 를 담아 예외로 올린다**(INV-4). 아래 실패 케이스마다 eventId 를 단정한다.
+ * 도메인 사건 payload 를 못 읽는 **아래 실패 케이스에서는** eventId 를 담아 예외로 올린다(INV-4). 케이스마다 eventId 를 단정한다.
  *
  * 릴레이가 재시도하고 상한에서 error 로 남긴다. 조용히 건너뛰면 "알림이 왜 안 오나"를 영영 못 찾는다.
  * 반대로 선택 필드(숙소 이름)가 빠진 것은 실패가 아니다 — 기본값으로 적재한다.

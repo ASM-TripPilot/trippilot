@@ -110,8 +110,10 @@ class ChangeLogSnapshotReadTest : StringSpec({
             goodSlot + ("poiId" to 42),
             goodSlot - "startAt",
             goodSlot + ("startAt" to "25:99"),
+            goodSlot + ("startAt" to 1000),
             goodSlot - "endAt",
             goodSlot + ("endAt" to "noon"),
+            goodSlot + ("endAt" to 1000),
         )
         val slots = read(mapOf("days" to listOf(mapOf("date" to "2026-08-01", "slots" to broken + listOf(goodSlot))))).days.single().slots
         slots shouldBe listOf(SlotSnapshot(poi, LocalTime.parse("10:00"), LocalTime.parse("11:00"), isFixed = true, endsNextDay = true))

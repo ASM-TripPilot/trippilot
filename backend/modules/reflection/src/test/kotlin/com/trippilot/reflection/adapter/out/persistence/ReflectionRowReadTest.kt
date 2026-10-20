@@ -53,6 +53,7 @@ class ReflectionRowReadTest : StringSpec({
         read(entity(stats = mapOf("visitCount" to "3", "distanceKm" to "x", "distanceSource" to "TELEPORT", "photoCount" to null)))!!
             .stats shouldBe ReflectionStats.empty()
         read(entity(stats = mapOf("distanceSource" to 1)))!!.stats.distanceSource shouldBe DistanceSource.VISIT_LINE
+        read(entity(stats = mapOf("photoCount" to "2")))!!.stats shouldBe ReflectionStats.empty()
     }
 
     "정상 수치는 그대로 읽힌다" {
