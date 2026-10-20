@@ -17,18 +17,15 @@ import java.util.Optional
 import java.util.UUID
 
 /**
- * trip_summary 행 → 도메인. 옛 행이 필드를 덜 가질 수 있어, 하이라이트 객체 안의 빠지거나 깨진 필드는 버리거나 기본값으로 읽는다.
- *
- * 아직 못 막는 네 경우는 여기서 단정하지 않는다(TRIP-1476):
- * - B: 하이라이트 배열의 **원소가 객체가 아니면**(`["x"]`) unchecked 캐스트라 `ClassCastException` 이 난다.
- * - C: 저장된 값이 도메인 범위를 벗어나면(totalVisits·totalPhotos 음수, totalDistanceKm 음수, 빈 narrative)
- *   생성자의 require 가 던져 그 여행의 요약 조회가 계속 500 이다.
- * - F: `places` 의 **원소가 문자열이 아니면**(`[1, 2]`) 읽기에서는 걸러지지 않고 도메인까지 통과한다.
- *   응답 직렬화(`DayHighlightResponse.places: List<String>`)에서 Jackson 이 `ClassCastException` 을 감싼
- *   `DatabindException` 을 던져 그 여행의 요약 조회 전체가 500 이다.
- * - G: 모르는 `source`(예 `ROBOT`, 컬럼에 CHECK 없음)는 `ReflectionSource.valueOf` 가 던져 요약 조회가 500 이다.
+ * trip_summary 행 → 도메인. 옛 행이 필드를 덜 가질 수 있다. 이 테스트가 보장하는 것:
+ * - 하이라이트 객체의 날짜가 없거나 깨진 날은 버리고, 나머지 필드가 없거나 필드 값 자체의 타입이 틀리면 기본값이다(거리·출처는 null).
+ * - 여행 수치의 필드가 없거나 타입이 틀리면 0·VISIT_LINE·위치 없음이다.
+ * - 저장한 요약은 JSON 왕복 뒤에도 같고, 기존 행이 있으면 그 행을 덮어쓴다.
  *
  * 특히 **U10 이전 행의 그날 거리는 null(모름)이어야 한다.** 0 으로 채우면 화면이 "0km 이동"이라는 거짓말을 한다.
+ *
+ * JPA 는 대역이라 Hibernate 가 jsonb 를 엔티티 필드 타입으로 읽어 낸 **뒤의** 어댑터 해석만 본다.
+ * 이 테스트가 보장하지 않는 읽기 실패(깨진·범위 밖·모르는 값 → 500)는 TRIP-1476 이 정본으로 모은다 — 여기 목록을 두지 않는다.
  */
 class TripSummaryRowReadTest : StringSpec({
 

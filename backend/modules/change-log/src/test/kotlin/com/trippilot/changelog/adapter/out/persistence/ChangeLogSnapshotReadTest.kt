@@ -18,15 +18,14 @@ import java.time.LocalTime
 import java.util.UUID
 
 /**
- * jsonb → 스냅숏 읽기는 방어적이어야 한다 — 이력은 append-only 라 옛 형태·깨진 행을 고칠 수 없다.
- * 한 행이라도 단정 캐스팅에 걸리면 그 여행 타임라인이 영구히 500 이 되므로,
- * 객체 안의 필드가 없거나 타입이 틀리거나 파싱되지 않으면 그 조각을 버리고 나머지를 돌려주는 것을
- * 실제 어댑터 경로(findByTrip)로 확인한다.
+ * 변경 이력 스냅숏 읽기(`findByTrip`)가 보장하는 것 — 이력은 append-only 라 옛 형태 행을 고칠 수 없다:
+ * - 저장한 스냅숏은 JSON 왕복 뒤에도 같은 값으로 읽힌다.
+ * - `days`·`slots` 가 없거나 리스트가 아니면 빈 스냅숏·빈 날이다.
+ * - 날의 `date`, 슬롯의 `poiId`·`startAt`·`endAt` 가 없거나 타입이 틀리거나 파싱되지 않으면 그 날·슬롯만 버리고 나머지를 돌려준다.
+ * - V2.8 이전 행처럼 `isFixed`·`endsNextDay` 가 없거나 타입이 틀리면 false 다.
  *
- * 아직 못 막는 두 경우는 여기서 단정하지 않는다(TRIP-1476):
- * - B: days·slots 배열의 **원소가 객체가 아니면**(`{"days":["x"]}`) `as? List<Map<..>>` 가 원소를 검사하지 않는
- *   unchecked 캐스트라 `ClassCastException` 이 난다.
- * - E: 모르는 `source_type`(예 `ROBOT`)은 `ChangeSource.valueOf` 가 던져 그 여행 타임라인 전체가 500 이다.
+ * JPA 는 대역이라 Hibernate 가 jsonb 를 엔티티 필드 타입으로 읽어 낸 **뒤의** 어댑터 해석만 본다.
+ * 이 테스트가 보장하지 않는 읽기 실패(깨진·범위 밖·모르는 값 → 500)는 TRIP-1476 이 정본으로 모은다 — 여기 목록을 두지 않는다.
  */
 class ChangeLogSnapshotReadTest : StringSpec({
 

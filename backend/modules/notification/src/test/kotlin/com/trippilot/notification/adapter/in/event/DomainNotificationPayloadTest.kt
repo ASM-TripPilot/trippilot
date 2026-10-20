@@ -22,8 +22,7 @@ import java.time.ZoneOffset
 import java.util.UUID
 
 /**
- * 도메인 사건 payload 를 못 읽을 때 — **eventId 를 담아 예외로 올린다**(INV-4). 실패 케이스마다 eventId 를 단정한다.
- * 예외: 회고 사건의 tripId 가 UUID 가 아니면 eventId 없이 던진다 — TRIP-1476(D), 단정하지 않는다.
+ * 도메인 사건 payload 를 못 읽을 때 — **eventId 를 담아 예외로 올린다**(INV-4). 아래 실패 케이스마다 eventId 를 단정한다.
  *
  * 릴레이가 재시도하고 상한에서 error 로 남긴다. 조용히 건너뛰면 "알림이 왜 안 오나"를 영영 못 찾는다.
  * 반대로 선택 필드(숙소 이름)가 빠진 것은 실패가 아니다 — 기본값으로 적재한다.
@@ -32,6 +31,8 @@ import java.util.UUID
  *
  * 실패 케이스마다 "적재 0건"도 본다. 지금은 구독자가 raise 전에 던지므로 늘 0 이지만, 검사를 raise 뒤로 옮기는
  * 회귀(적재하고 나서 던짐 → 재시도마다 중복 적재, 엉뚱한 계정 적재)는 예외 단정만으로는 안 보인다.
+ *
+ * 이 테스트가 보장하지 않는 payload 실패는 TRIP-1476 이 정본으로 모은다 — 여기 목록을 두지 않는다.
  */
 class DomainNotificationPayloadTest : StringSpec({
 
@@ -75,7 +76,7 @@ class DomainNotificationPayloadTest : StringSpec({
         }
     }
 
-    // 이름 키가 **없는** 경우만이다. 빈 문자열("")은 `?: "숙소"` 를 타지 않아 본문이 비고 적재가 실패한다 — TRIP-1476(A).
+    // 이름 키가 **없는** 경우만 본다 — 빈 이름은 TRIP-1476 몫이다.
     "숙소 이름 키가 없으면 본문은 '숙소' 다 — 빈 본문으로 실패시키지 않는다" {
         val f = fixture()
         val acc = UUID.randomUUID()
@@ -97,8 +98,7 @@ class DomainNotificationPayloadTest : StringSpec({
         }
     }
 
-    // tripId 가 **있지만 UUID 가 아닌** 경우는 단정하지 않는다 — `UUID.fromString` 이 eventId 없는
-    // IllegalArgumentException 을 던진다(TRIP-1476 D).
+    // tripId 가 **없는** 경우만 본다 — UUID 가 아닌 tripId 는 TRIP-1476 몫이다.
     "회고 사건에 tripId 가 없으면 eventId 를 담아 예외다" {
         val f = fixture()
         val e = envelope(json("kind" to "SUMMARY"), "reflection.ReflectionReady")
