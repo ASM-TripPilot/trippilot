@@ -273,6 +273,26 @@ backend `ContextSnapshotBuilder`가 매 턴 만든다. **화이트리스트 방�
 | **G-U8-13** | ai 문서 `agent-io-contracts.md:370` "AI 도우미 채팅 화면 = 와이어프레임에 부재(M16, 타 팀 담당)"가 낡았다(D-U8-3). ai `services.md` §2 `AssistantOrchestrator`는 DEC-U8-1로 채택하지 않는다 | ai 패키지 소유 — 개정 상신 |
 | **G-U8-14** | `frontend/.claude/skills/spec-perception/reference/figma-structure.md`가 밴드 `b`를 "M16 — first-cut 밖"으로 적는다 | frontend 하네스 소유 — `harness-rule-edit` 경로로 개정 상신 |
 
+> **[개정 · 2026-10-21 · U8 최소 마감 (TRIP-1512 / TRIP-1516)] 갭 G-U8-1~14 상태.** 위 원문 행은 착수 시점(2026-10-12) 서술로 보존한다.
+>
+> | ID | 상태 | 근거 |
+> |---|---|---|
+> | G-U8-1 | 해소 | 편집 퍼사드 신설, 변경 출처 `ASSISTANT` 수용(TRIP-1374) |
+> | G-U8-2 | 해소 | `/ai/v1/itinerary/edit` 백엔드 호출 배선(TRIP-1376) |
+> | G-U8-3 | 해소 | 일정 퍼사드에 거리·위반 3필드(TRIP-1375) |
+> | G-U8-4 | 해소 | ai 대화 경계 `POST /ai/v1/dialogue/interpret`(TRIP-1410) + 오케스트레이터(#1308·#1309), 개발·운영 서버 켜짐(#1313) |
+> | G-U8-5 | 해소 | 일정 밖 두 곳 거리 답변(#1466) — O-U8-8 |
+> | G-U8-6 | 소멸 | "검토해줘" 뱅크 문장 보강 대상(질문뱅크 1차)이 10-17 개정으로 분류 경로에서 빠졌다. 옛 3단 라우터는 제거 결정(business-rules O 개정 블록) |
+> | G-U8-7 | **잔존** | 넘긴 화면이 바뀐 조건을 받는 입력(쿼리 프리필)은 아직 없다. 후속 |
+> | G-U8-8 | 해소 | Figma `b01-[1차]` 새 프레임에 "1차 밖" 표기(TRIP-1328, 4865:3615) |
+> | G-U8-9 | 해소 | Figma `b08-[✦] 진입 FAB` 4프레임(frontend-components R20). 정본 이식은 사람 판단 |
+> | G-U8-10 | 해소 | `useRaisedToastBottom`(frontend-components R7) |
+> | G-U8-11 | **잔존** | 거부 앵커의 범위 밖 하위 갈래 라벨(`scope_group`) 코드 검색 0건 — 미구현 |
+> | G-U8-12 | 해소 | 주입 꼴 발화는 LLM 앞에서 거절, 지난 턴·기억으로 다시 싣지 않음(#1399) |
+> | G-U8-13 | 확인 | "AI 도우미 채팅 화면 = 와이어프레임에 부재(M16, 타 팀)" 문장이 `ai/docs` 에서 더는 발견되지 않는다(2026-10-21 검색) |
+> | G-U8-14 | 해소 | `figma-structure.md` 가 밴드 `b` 를 U8 도우미 개발 범위로 적고 있다 |
+
+
 ---
 
 ## 8. 스토리 커버리지

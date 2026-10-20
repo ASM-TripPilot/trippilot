@@ -1670,3 +1670,12 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — situation-awareness Functional Design 사후 개정(구현 반영), 같은 PR 머지 = 승인(#1071 선례). `aidlc-state.md` 무변경.
 
 ---
+
+---
+## Functional Design 사후 개정 — U8 최소 마감 (미결 O-U8-1~9 · 갭 G-U8-1~14 · FE R표 R2·R8·R13·R19)
+**Timestamp**: 2026-10-21T09:00:00+09:00 (작업 시점, 초 단위 미측정)
+**User Input**: (메인 세션이 전달한 작업 지시 — 사용자 원문이 아니다) 사용자가 2026-10-20 에 U8 마감 티켓(부모 TRIP-1512, 서브 TRIP-1513~1516)을 "최소 발행만 ㄱㄱ" 로 정했고 "그럼 저것들 워크트리 만들어서 진행 해줘" 로 진행을 지시했다. 같은 날 인터뷰 결정 원문 3건: 도우미 컨텍스트에 포그라운드 현재 위치를 "넣는다 (Recommended)" · 숙소 재질의 "이번엔 뺀다 (Recommended)" · 쓰지 않는 옛 3단 라우터와 섀도 측정 "바로 제거 (Recommended)".
+**AI Response**: `construction/u8-conversational-assistant/functional-design/` 3종에 `[개정 · 2026-10-21 · U8 최소 마감]` 블록을 원문 삭제·수정 0줄로 덧붙였다. `business-rules.md` — 미결 O-U8-1~9 상태표(잠정 고정 2 · 열림 1 · 구현됨/관측 1 · 결정 2 · 보류 1 · 해소 1 · 닫힘 1)와 3단 라우터 제거 결정 기록. `business-logic-model.md` — 갭 G-U8-1~14 상태표(해소 10 · 소멸 1 · 확인 1 · 잔존 2: G-U8-7 프리필 · G-U8-11 `scope_group` 은 미구현, 나머지는 근거 PR·티켓 병기). `frontend-components.md` — R8 해소(TRIP-1514) · R13 변경(TRIP-1513, 서버가 `RESTORE_REVISION` 을 아직 내지 않는다는 경고 포함) · R19 해소 · R2 유지 · 6-b 미수행. 제품 결정을 새로 만들지 않았고 2026-10-20 사용자 결정을 기록으로만 옮겼다. 근거는 develop 코드와 머지 PR 이다.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 개정(마감 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---

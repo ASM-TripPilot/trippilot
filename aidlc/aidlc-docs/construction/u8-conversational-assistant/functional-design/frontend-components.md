@@ -197,3 +197,15 @@ assistant-history · -history-row-{messageId} · -history-clear · -history-cont
 | R18 | §8 testID 제안값 | 확정값 추가: `assistant-sheet-root`·`-sheet-scrim`·`-sheet-loading`·`-open-failed`·`-open-retry`·`-quick-reply-capabilities`·`-info-card`·`-action-log-{id}`·`-proposal-status`·`-proposal-repropose`·`-proposal-error`·`-user-bubble-pending`·`-resend`·`-progress-slow`·`-history-empty`·`-history-session-{id}`·`-history-clear-dialog`·`-history-clear-confirm`·`-history-clear-cancel`·`-message-list` | §8 [공백] 소급 기록 |
 | R19 | §9 시트 흐름은 MSW 통합 테스트 | `AssistantSheetPage.test.tsx`(node 버킷) — `setAssistantPort` 로 가짜 어댑터 주입 | HTTP 경계가 아직 없다. BE 개통 후 http 어댑터는 MSW 통합 테스트로 덮는다 |
 | R20 | G-U8-8·9 Figma | 새 프레임(정본 무변경): `b01-[1차] 도우미 · 숙소 요청 → 숙소 검색 넘기기`(4865:3615) · `b08-[✦] 진입 FAB · 홈/숙소 검색/여행 중 허브/일정 상세`(4864:2944·3054·3141·3303) — b 행 끝 | 이식(정본 교체)·DS FAB 변형 승격은 사람 판단 |
+
+> **[개정 · 2026-10-21 · U8 최소 마감 (TRIP-1512)] R표 갱신.** 위 원문 행은 보존한다.
+>
+> | R | 갱신 |
+> |---|---|
+> | R8 | **해소** — `AssistantFab` 이 키보드 will/did show·hide 를 듣고 떠 있는 동안 스스로 `null` 을 그리며 토스트 바닥 올림도 푼다(TRIP-1514, `feac21dc5`). 시트 열림 숨김은 여전히 각 페이지가 한다. 실제 겹침은 6-b 실기 |
+> | R13 | **변경** — `RESTORE_REVISION` 은 `/trips/{tripId}/itinerary/history`(h36)로 간다. tripId 가 없으면 null(TRIP-1513, `8723d2ac9`). ⚠️ **서버가 아직 `RESTORE_REVISION` 을 내지 않아** 도우미 카드의 [되돌리기] 는 실서버에서 뜨지 않는다 — BE 후속(편집 퍼사드 revisionId 반환 + 템플릿 탑재, 티켓 미발행). 현재 h36 으로 닿는 길은 이력 보기(b06)의 「일정 변경 이력 전체 보기」 행(tripId 있을 때)이다. `params.revisionId` 강조는 params 키 계약이 없어 적용하지 않았다 |
+> | R19 | **해소** — `AssistantSheetPage.integration.test.tsx`(기본 `HttpAssistantAdapter` + MSW, 8건) |
+> | R2 | **유지** — 계약 타입은 아직 손으로 옮긴 `assistantContract.ts`. openapi 에 assistant 경로가 있어 orval 전환이 가능하다(후속) |
+> | 6-b | **미수행** — 도우미 실서버 대화·제안 적용·따봉·h36 의 실화면 검증은 TRIP-1515. TRIP-1513 의 자동 육안 게이트는 시뮬레이터 시스템 다이얼로그로 실행불가였다 |
+>
+> h36 Figma 는 새 밴드 4프레임(`h36-변경 이력 · default/confirm/empty/error` 4997:3177·4876·4951·4966)이고 사람 검토 전이다(정본 무변경).
