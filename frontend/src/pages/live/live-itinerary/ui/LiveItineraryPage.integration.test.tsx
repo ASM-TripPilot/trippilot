@@ -6533,7 +6533,8 @@ describe('방문 체크', () => {
  *  - 허브가 **보고 있는 날짜**로 `GET /trips/{id}/opportunities?date=` 를 부르고(일차 칩을 바꾸면 그 날로), 고른 1장을
  *    하단 바의 행사 칸에 점으로 알리며 **칸을 누르면** 바 위 작은 카드로 연다(TRIP-1522 — 종전엔 시트 머리에 늘 떠 있었다).
  *    여행 중 허브(active)가 아니면 부르지 않는다.
- *  - 같은 날 날씨 위험 트리거가 발화 중이면 행사 카드 대신 다음 항목(요즘 인기)을 그린다 — 트리거 목록이 온 뒤에.
+ *  - 같은 날 날씨 위험 트리거가 발화 중이면 축제·유형 모름 행사 카드 대신 다음 항목(실내형 행사·요즘 인기)을 그린다 —
+ *    트리거 목록이 온 뒤에(G-SA-17 — 공연·전시·팝업은 남는다).
  *  - [넣어서 다시 짜기] → i04 를 `prefill`·`includePoiId`(오늘이 아니면 `targetDate`)로 연다. 이동만 하고 쓰기 요청 0
  *    (INV-SA-1 — 일정은 i06 [적용]으로만).
  *  - × → 그 자리에서 사라지고 다음 항목으로 채우지 않는다. 숨김은 그 날 기기에 남아 다시 열어도 없다 — 다른 날은 그대로.
@@ -6550,6 +6551,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     key: 'event:부산 불꽃축제',
     kind: 'EVENT_VENUE',
     eventName: '부산 불꽃축제',
+    eventType: 'FESTIVAL',
     start: '2026-08-18',
     end: '2026-08-24',
     poiId: 'poi-venue',
@@ -6830,7 +6832,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     });
   });
 
-  it('O4 같은 날 날씨 위험이 발화 중이면 행사 카드 대신 요즘 인기를 그린다', async () => {
+  it('O4 같은 날 날씨 위험이 발화 중이면 축제 카드 대신 요즘 인기를 그린다', async () => {
     await renderHub({ [TODAY]: [VENUE, TRENDING] }, { triggers: [rain] });
 
     // 트리거 목록이 도착한 뒤에 판정한다(알약 = 목록 도착의 증거) — '아직 모름'이라 행사를 뺀 것과 가른다.
@@ -6840,6 +6842,29 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     expect(screen.getByTestId(TITLE)).toHaveTextContent(TRENDING_TITLE, {
       exact: true,
     });
+    expect(screen.queryByText(VENUE_TITLE)).toBeNull();
+  });
+
+  it('O16 같은 날 날씨 위험이 발화 중이어도 실내형 행사(전시) 카드는 축제를 뺀 자리에 그린다', async () => {
+    const expo: Opportunity = {
+      ...VENUE,
+      key: 'event:부산 비엔날레',
+      eventName: '부산 비엔날레',
+      eventType: 'EXHIBITION',
+      poiId: 'poi-expo',
+      poiName: '부산현대미술관',
+    };
+    await renderHub({ [TODAY]: [VENUE, expo, TRENDING] }, { triggers: [rain] });
+
+    // 트리거 목록이 도착한 뒤에 판정한다(알약 = 목록 도착의 증거).
+    await screen.findByTestId('execution-live-trigger-chip');
+    await eventReady();
+    openCard();
+    expect(screen.getByTestId(TITLE)).toHaveTextContent(
+      '‘부산 비엔날레’ 기간이에요',
+      { exact: true }
+    );
+    expect(screen.getAllByTestId(CARD)).toHaveLength(1);
     expect(screen.queryByText(VENUE_TITLE)).toBeNull();
   });
 
