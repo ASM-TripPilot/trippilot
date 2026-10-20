@@ -4534,12 +4534,12 @@ touches = [
 ]
 note = """
 PR #1473 — 2026-10-21 develop 머지. 스케줄은 main 의 워크플로 사본으로 돌아, 격리·영속 순서는 main 사본을 맞춘 뒤에 켜진다 —
-main 사본 동기화는 RELEASE-MAIN 이 잇는다(그 전까지는 종전처럼 합치고 `stats.sido_unresolved`·`::warning::` 으로 드러난다, #1473 판단).
+main 사본 동기화는 TRIP-1533(`ci(main):` 사본 PR #1495)이 잇는다 — 그 전까지 운영 스케줄은 종전처럼 합치고 `stats.sido_unresolved`·`::warning::` 으로만 드러난다(#1473 판단). 릴리스 승격은 사본을 main 판으로 되돌리는 절차라(RELEASE-MAIN) 이 일을 받지 않는다.
 #1431 4차 검수 잔여. 설계 요건의 정본은 TRIP-1475 본문이다 — 아래는 착수 때 적은 판단 요약(넷, 결과를 덧붙였다):
 (a) 검사는 merge_pois_docs.main() 안(약칭 펴기 직후)에 둔다 — 스크립트는 develop 판이 돌아 모든 병합 경로에 적용된다.
 (b) 수집 상태 영속(collect-state push)을 게이트 **뒤로** 옮겼다 — 착수 당시에는 merge_pois_docs 실행 자체가 영속 뒤라
     (a)만으로는 막힌 날 수집분이 '기제안'으로 영구히 빠졌다. 스케줄은 main 의 워크플로 사본으로 도니
-    main 사본도 `ci(main):` 단일 파일 PR 이나 릴리스로 맞춰야 적용된다 — RELEASE-MAIN(사본 동기화 경로)이 잇는다.
+    main 사본도 `ci(main):` 단일 파일 PR 로 맞춰야 적용된다 — TRIP-1533(#1495)이 잇는다.
 (c) 전부-아니면-전무로 막지 않는다 — 판정 못 하는 행은 격리(stats 기록)하고 나머지를 병합, 격리 건수가 임계를 넘을 때만 실패.
 (d) 판정을 백엔드와 맞춘다 — 거울 테스트 부분은 POI-MIRROR-STRICT(#1446)가 맡았다. 착수 때 남긴 검토 둘은 #1473 이 닫았다:
     `_SIDO_RENAMES`(localdata.py)는 약칭 표와 합치지 않는다(카탈로그에서 유도 못 하는 옛→새 명칭 이력이라 성격이 다르다,
@@ -4588,7 +4588,7 @@ status = "done"
 touches = ["batch", "docker-compose.yml", ".github/workflows/batch-ci.yml", ".github/workflows/", ".gitignore", "docs/conventions/anti-patterns.md"]
 note = """
 PR #1432 — 2026-10-21 머지. 실 수집 모드는 넣지 않았다(키 없이 시험 못 함) — 운영 수집은 GitHub Actions 스케줄이 그대로 맡고,
-#1432 가 그쪽으로 넘긴 "병합 → 검증 → 커서 저장" 순서는 POI-COLLECT-GATE(#1473)가 넣었다. Airflow 실 키 시연은 승인 계획(11번)대로
+#1432 가 그쪽으로 넘긴 "병합 → 검증 → 커서 저장" 순서는 POI-COLLECT-GATE(#1473)가 develop 원본에 넣었다 — 운영 스케줄(main 사본)에는 TRIP-1533(#1495) 머지 전까지 꺼져 있다. Airflow 실 키 시연은 승인 계획(11번)대로
 요청 시라 잇는 노드를 두지 않는다. 신선도는 DAG 를 따로 두지 않고 event_collect.validate 안에서 본다 — 그날 유효 건수 ≥30 과 가장 오래된 지역의 마지막 수집이 허용 날수 이내(coverage — 값과 근거는 #1432).
 """
 
