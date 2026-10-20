@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
@@ -68,6 +68,8 @@ export function MemoSheet({
     setSeededEditable(editable);
     setDraft(text ?? '');
   }
+  // TRIP-1503 — 입력 상자 어디를 눌러도 포커스(입력 자체는 첫 줄 높이만 눌려서 빈 영역 탭이 키보드를 못 띄웠다).
+  const inputRef = useRef<{ focus(): void } | null>(null);
   const saveDisabled = draft.trim() === '' || !editable || saving;
 
   return (
@@ -118,8 +120,14 @@ export function MemoSheet({
         </View>
 
         {/* 입력 상자 — 배경·테두리는 감싸는 View 에(MemoInline 입력 className 에 bg 를 넣지 않는다). */}
-        <View className="h-[140px] justify-between rounded-input border border-hairline-strong bg-surface-soft px-lg py-md">
+        <Pressable
+          testID="live-memo-box"
+          accessible={false}
+          onPress={() => inputRef.current?.focus()}
+          className="h-[140px] justify-between rounded-input border border-hairline-strong bg-surface-soft px-lg py-md"
+        >
           <MemoInline
+            inputRef={inputRef}
             key={editable ? 'open' : 'locked'}
             editable={editable}
             text={text}
@@ -133,7 +141,7 @@ export function MemoSheet({
           >
             {`${draft.length}/${MEMO_MAX}`}
           </Text>
-        </View>
+        </Pressable>
 
         {notice ? (
           <Text
