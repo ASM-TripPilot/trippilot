@@ -874,6 +874,7 @@
 - `src/pages/live/live-itinerary/model/liveState.ts`  →  LiveState · ResolveLiveStateInput · resolveLiveState
 - `src/pages/live/live-itinerary/model/riskAffectedRow.ts`  →  RiskAffectedRow · riskAffectedRow
 - `src/pages/live/live-itinerary/model/triggerWatchlist.ts`  →  TriggerWatchlistRow · triggerWatchlist
+- `src/pages/live/live-itinerary/model/useHubOpportunities.ts`  →  HubOpportunity · useHubOpportunities
 - `src/pages/live/live-itinerary/model/visitedLabels.ts`  →  doneVisitCheckIdByPoiId
 
 ## src/pages/live/live-itinerary/ui/
@@ -1795,4 +1796,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1147개 파일
+합계 1148개 파일

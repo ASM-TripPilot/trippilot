@@ -22,9 +22,11 @@ import {
 import { MemoSheet } from './MemoSheet';
 import { deriveVisitProgress } from '@/entities/itinerary-slot';
 import { TriggerChip } from './TriggerChip';
+import { OpportunityCard } from './OpportunityCard';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { foldScope } from '../model/foldScope';
 import { hubPillCopy } from '../model/hubPillCopy';
+import { useHubOpportunities } from '../model/useHubOpportunities';
 import { riskAffectedRow } from '../model/riskAffectedRow';
 import { triggerDayLabel, triggerLabel } from '@/features/planb';
 import { triggerWatchlist } from '../model/triggerWatchlist';
@@ -214,6 +216,14 @@ export function LiveItineraryPage({
     query: { enabled: state.kind === 'active' && liveDate !== '' },
   });
   const visitCheck = useVisitCheck({ tripId, day: liveDate });
+  // 상황 감지 FE-C — 보는 날짜의 기회 1장(판정은 model). 빈 목록·실패·대기면 카드만 없다.
+  const opportunity = useHubOpportunities({
+    tripId,
+    date: liveDate,
+    today,
+    enabled: state.kind === 'active',
+    triggers: triggers.data?.triggers,
+  });
 
   // 방문 기록 → 진행 상태 도출(★도달성 — 빈 인자면 전 슬롯 upcoming 이라 active 카드가 프로덕션에 안 뜬다).
   // 도출·판정은 여기 1회. TRIP-1117 — 메모 세션 캐시를 관람 중 방문 id 로 읽어야 해서(훅은 조기 반환 위에서만)
@@ -741,6 +751,15 @@ export function LiveItineraryPage({
           />
         }
         triggerChip={triggerChip}
+        opportunityCard={
+          opportunity ? (
+            <OpportunityCard
+              item={opportunity.item}
+              onPressReplan={() => router.push(opportunity.replanHref)}
+              onDismiss={opportunity.dismiss}
+            />
+          ) : undefined
+        }
         triggerPillKey={chipTrigger?.triggerId}
         slotBadgeLabel={slotBadgeLabel}
         onPressSlotName={(poiId) =>
