@@ -1,6 +1,7 @@
 package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.itinerarygeneration.domain.GenerationMode
+import com.trippilot.itinerarygeneration.domain.GenerationSession
 import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
@@ -77,7 +78,25 @@ class ItineraryReadFacadeTest : StringSpec({
     }
 
     fun facade(stored: Itinerary? = itinerary, names: Map<UUID, String> = emptyMap()) =
-        ItineraryReadFacade(trips, repo(stored), SlotSurfaceAssembler(surfaces(names)))
+        ItineraryReadFacade(trips, repo(stored), SlotSurfaceAssembler(surfaces(names)), FakeGenerationSessions())
+
+    /**
+     * 여행 목록 카드가 이 요약으로 일정 상태를 싣는다 — 앱이 여행마다 일정을 따로 부르지 않게(10-14 개발 서버 429).
+     * 다시 만들기 중에는 상태가 옛 일정의 COMPLETE 로 남으므로 진행 여부는 세션에서 따로 본다.
+     */
+    "요약에 생성 방식과 진행 중 세션 여부가 실린다" {
+        val sessions = FakeGenerationSessions()
+        val f = ItineraryReadFacade(trips, repo(itinerary), SlotSurfaceAssembler(surfaces(emptyMap())), sessions)
+
+        val idle = f.findCurrent(acc, tripId)!!
+        idle.generationMode shouldBe "FULLY_AI"
+        idle.generating shouldBe false
+
+        sessions.save(GenerationSession.start(acc, tripId, GenerationMode.FULLY_AI, now))
+        val busy = f.findCurrent(acc, tripId)!!
+        busy.generating shouldBe true
+        busy.generationState shouldBe "COMPLETE"  // 옛 일정 — 진행 여부는 이 값으로 알 수 없다
+    }
 
     /**
      * 계획 슬롯에 표면이 실린다(TRIP-1060 · BR-U3-09) — 재계획 비교(before 열)의 재료다.
@@ -166,7 +185,7 @@ class ItineraryReadFacadeTest : StringSpec({
             listOf(ItineraryDay.of(d1, 0, listOf(slot(poiA, 0, "10:00"), slot(poiC, 1, "14:00")))),
             now, now, null, emptyList(), ScoringSignal.UNKNOWN,
         )
-        ItineraryReadFacade(trips, repo(multi), SlotSurfaceAssembler(surfaces(emptyMap())))
+        ItineraryReadFacade(trips, repo(multi), SlotSurfaceAssembler(surfaces(emptyMap())), FakeGenerationSessions())
             .findCurrent(acc, tripId)!!.slotKeys shouldContainExactly listOf("$d1#$poiA", "$d1#$poiC")
     }
 
@@ -192,7 +211,7 @@ class ItineraryReadFacadeTest : StringSpec({
             now, now, null, emptyList(), ScoringSignal.UNKNOWN,
         )
         val facade = ItineraryReadFacade(
-            trips, repo(multi), SlotSurfaceAssembler(surfaces(mapOf(poiA to "나중", poiC to "먼저"))),
+            trips, repo(multi), SlotSurfaceAssembler(surfaces(mapOf(poiA to "나중", poiC to "먼저"))), FakeGenerationSessions(),
         )
 
         facade.findPlannedPlaces(acc, tripId)[d1]!!.map { it.nameKo } shouldContainExactly listOf("먼저", "나중")

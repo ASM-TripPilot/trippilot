@@ -2661,7 +2661,7 @@ components:
 
     Trip:
       type: object
-      required: [tripId, title, startDate, endDate, party, preferenceSnapshot, destinations, status, createdAt, updatedAt, baseCount, itineraryDayCount]
+      required: [tripId, title, startDate, endDate, party, preferenceSnapshot, destinations, status, createdAt, updatedAt, baseCount, itineraryDayCount, itineraryStatus, itineraryGenerationState, itineraryGenerationMode, itineraryGenerating]
       properties:
         tripId: { type: string, format: uuid }
         title: { type: string }
@@ -2688,6 +2688,30 @@ components:
           description: >
             일정이 **있는 일수**. 0 = 아직 생성되지 않음. ⚠ 개수이지 시간이 아니다 —
             소요시간은 어디에도 싣지 않는다(INV-3).
+        itineraryStatus:
+          type: string
+          enum: [PLANNED, CONFIRMED]
+          nullable: true
+          description: >
+            현재 일정의 확정 상태 — `GET /trips/{tripId}/itinerary` 의 `status` 와 같은 값. 일정이 없으면 null.
+            목록 화면이 이 값을 알려고 여행마다 일정을 따로 부르지 않게 싣는다(10-14 개발 서버 429).
+            아래 세 칸도 같은 이유로 일정 조회 응답과 같은 값이다.
+        itineraryGenerationState:
+          type: string
+          enum: [PARTIAL, COMPLETE, FAILED]
+          nullable: true
+          description: 일정 조회의 `generationState` 와 같은 값. 일정이 없으면 null.
+        itineraryGenerationMode:
+          type: string
+          enum: [FULLY_AI, CO_PLAN, MANUAL]
+          nullable: true
+          description: 일정 조회의 `generationMode` 와 같은 값. 일정이 없으면 null.
+        itineraryGenerating:
+          type: boolean
+          description: >
+            진행 중 생성 세션이 있는가 — 일정 조회의 `generationSessionId != null` 과 같다. 다시 만들기 중에는
+            `itineraryGenerationState` 가 옛 일정의 COMPLETE 로 남아 있으니 폴링 판정은 이 값과 함께 본다.
+            일정이 아직 없는 첫 생성 중에는 false 다(일정 조회도 그때 404 다).
         endedAt:
           type: string
           format: date-time
