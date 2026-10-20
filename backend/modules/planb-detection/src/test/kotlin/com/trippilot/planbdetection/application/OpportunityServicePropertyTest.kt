@@ -2,9 +2,13 @@ package com.trippilot.planbdetection.application
 
 import com.trippilot.itinerarygeneration.api.PlannedSlotView
 import com.trippilot.planbdetection.domain.Opportunity
+import com.trippilot.planbdetection.domain.OpportunityEventType
 import com.trippilot.planbdetection.domain.OpportunityKind
 import com.trippilot.planbdetection.domain.OpportunityQuery
 import com.trippilot.planbdetection.domain.OpportunityReply
+import com.trippilot.planbdetection.domain.TriggerKind
+import com.trippilot.planbdetection.domain.TriggerSeverity
+import com.trippilot.planbdetection.domain.TriggerState
 import com.trippilot.trip.api.TripPeriod
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -28,6 +32,7 @@ import java.util.UUID
  * 1. 보낸 슬롯의 자격: 그 날짜 · 좌표 있음 · 끝나지 않음 · 방문 순서 앞에서부터 ≤ 8 — 자격 있는 칸이 있으면 반드시 묻는다.
  * 2. 여행 전·범위 밖이면 AI 0회.
  * 3. 임의 AI 응답에도 출력이 계약을 지킨다 — 그리고 멀쩡한 답은 **버리지 않는다**(과잉 거부도 실패다).
+ * 4. 그 날 날씨 위험(떠 있음·소비됨)이면 축제·유형 모름 행사만 빠진다 — 나머지 순서는 그대로다(G-SA-17).
  */
 class OpportunityServicePropertyTest : StringSpec({
 
@@ -74,7 +79,7 @@ class OpportunityServicePropertyTest : StringSpec({
             val port = RecordingOpportunityPort()
 
             OpportunityService(
-                OpportunityTrips(owner, tripId, TripPeriod(start, end)), OpportunityPlans(slots),
+                OpportunityTrips(owner, tripId, TripPeriod(start, end)), OpportunityPlans(slots), InMemoryTriggers(),
                 opportunityPorts(port), kstClock(today, time),
             ).list(owner, tripId, date)
 
@@ -115,7 +120,7 @@ class OpportunityServicePropertyTest : StringSpec({
                 OpportunityTrips(owner, tripId, TripPeriod(start, end)), OpportunityPlans(probe + listOf(
                     plannedSlot(start.minusDays(3), 0, LocalTime.of(23, 0), LocalTime.of(23, 30)),
                     plannedSlot(end.plusDays(3), 0, LocalTime.of(23, 0), LocalTime.of(23, 30)),
-                )),
+                )), InMemoryTriggers(),
                 opportunityPorts(port), kstClock(today, LocalTime.of(hour, 0)),
             ).list(owner, tripId, date)
 
@@ -139,7 +144,7 @@ class OpportunityServicePropertyTest : StringSpec({
             }
 
             val out = OpportunityService(
-                OpportunityTrips(owner, tripId, TripPeriod(start, end)), OpportunityPlans(slots),
+                OpportunityTrips(owner, tripId, TripPeriod(start, end)), OpportunityPlans(slots), InMemoryTriggers(),
                 opportunityPorts(port), kstClock(today, LocalTime.of(12, 0)),
             ).list(owner, tripId, today)
 
@@ -149,7 +154,59 @@ class OpportunityServicePropertyTest : StringSpec({
             if (fault.breaks(built)) out.shouldBeEmpty() else out shouldBe built
         }
     }
+
+    /**
+     * G-SA-17(2026-10-20 결정) — 그 날 날씨 위험(떠 있음·소비됨)이 있으면 축제·유형 모름 행사만 빠지고, 나머지는 받은 순서
+     * 그대로다. 위험이 없으면(주의·해제·끈 알림·다른 날·다른 종류뿐이면) 받은 그대로다 — 과잉 거르기도 실패다.
+     */
+    "PBT-SA-20 날씨 위험 날에는 축제·유형 모름 행사만 빠지고 나머지는 받은 순서 그대로다" {
+        val today = days[1]
+        val types = listOf<OpportunityEventType?>(null) + OpportunityEventType.entries
+        val rowArb = arbitrary {
+            Row(
+                Arb.element(today, today.plusDays(1)).bind(), Arb.enum<TriggerKind>().bind(),
+                Arb.enum<TriggerSeverity>().bind(), Arb.enum<TriggerState>().bind(),
+            )
+        }
+        // 셋에 둘은 그 날 위험 행(떠 있음·소비됨)을 하나 싣는다 — 무작위 행만으로는 거르는 날이 6% 남짓이라, 거르기 쪽을
+        // 망가뜨려도(소비됨 빼기·모름 남기기) 이 성질이 초록이었다(역검증).
+        val riskArb = Arb.element(
+            listOf(null, Row(today, TriggerKind.WEATHER, TriggerSeverity.RISK, TriggerState.ACTIVE),
+                Row(today, TriggerKind.WEATHER, TriggerSeverity.RISK, TriggerState.CONSUMED)),
+        )
+        checkAll(
+            Arb.list(rowArb, 0..4), riskArb, Arb.list(Arb.enum<OpportunityKind>(), 0..3), Arb.list(Arb.element(types), 3..3),
+        ) { noise, risk, kinds, eventTypes ->
+            val rows = noise + listOfNotNull(risk)
+            val slots = listOf(plannedSlot(today, 0, LocalTime.of(13, 0), LocalTime.of(14, 0)))
+            // 행마다 슬롯을 달리해 같은 대상의 ACTIVE 가 둘이 되지 않게 한다(실물 부분 유니크) — 거르기는 날짜만 본다.
+            val triggers = InMemoryTriggers().apply {
+                rows.forEachIndexed { i, r -> save(weatherTrigger(tripId, r.date, r.severity, r.state, r.kind, slotKey = "${r.date}#p$i")) }
+            }
+            lateinit var built: List<Opportunity>
+            val port = RecordingOpportunityPort { q ->
+                built = kinds.mapIndexed { i, kind -> card(q, kind, nearIndex = 0, eventType = eventTypes[i]) }
+                OpportunityReply(built, emptyList())
+            }
+
+            val out = OpportunityService(
+                OpportunityTrips(owner, tripId, TripPeriod(start, end)), OpportunityPlans(slots), triggers,
+                opportunityPorts(port), kstClock(today, LocalTime.of(12, 0)),
+            ).list(owner, tripId, today)
+
+            // 명세에서 바로 옮긴 오라클 — 구현의 판정 함수를 부르지 않는다.
+            val risky = rows.any {
+                it.kind == TriggerKind.WEATHER && it.severity == TriggerSeverity.RISK && it.date == today &&
+                    (it.state == TriggerState.ACTIVE || it.state == TriggerState.CONSUMED)
+            }
+            val indoor = setOf(OpportunityEventType.PERFORMANCE, OpportunityEventType.EXHIBITION, OpportunityEventType.POPUP)
+            out shouldBe if (risky) built.filter { it.kind == OpportunityKind.TRENDING || it.eventType in indoor } else built
+        }
+    }
 }) {
+    /** 트리거 행 하나의 모양 — 날짜·종류·심각도·상태. */
+    private data class Row(val date: LocalDate, val kind: TriggerKind, val severity: TriggerSeverity, val state: TriggerState)
+
     /** AI 답에 넣는 결함 한 가지 — 하나하나가 계약·BR-SA-22 위반이다. */
     private enum class Fault {
         NONE, TOO_MANY, UNSENT_SLOT, PLANNED_POI, SLOT_POI, SAME_POI, SAME_KEY, NO_EVENT_NAME, NO_END, PAST_EVENT, BLANK_LABEL;
@@ -184,14 +241,17 @@ class OpportunityServicePropertyTest : StringSpec({
     }
 
     private companion object {
-        /** 질의에 맞는 멀쩡한 카드 한 장 — 장소는 새것(일정 밖), 슬롯은 보낸 것, 행사면 그 날을 덮는 기간. */
-        fun card(q: OpportunityQuery, kind: OpportunityKind, nearIndex: Int): Opportunity {
+        /** 질의에 맞는 멀쩡한 카드 한 장 — 장소는 새것(일정 밖), 슬롯은 보낸 것, 행사면 그 날을 덮는 기간과 [eventType]. */
+        fun card(q: OpportunityQuery, kind: OpportunityKind, nearIndex: Int, eventType: OpportunityEventType? = null): Opportunity {
             val poi = UUID.randomUUID()
             val near = q.slots[nearIndex % q.slots.size].slotKey
             return if (kind == OpportunityKind.TRENDING) {
                 Opportunity("trending:$poi", kind, null, null, null, poi, "요즘 뜨는 카페", near, "약 300m")
             } else {
-                Opportunity("event:tourapi-$poi", kind, "제주 들불축제", q.date.minusDays(1), q.date.plusDays(2), poi, "새별오름", near, "약 1.0km")
+                Opportunity(
+                    "event:tourapi-$poi", kind, "제주 들불축제", q.date.minusDays(1), q.date.plusDays(2), poi, "새별오름", near, "약 1.0km",
+                    eventType,
+                )
             }
         }
 

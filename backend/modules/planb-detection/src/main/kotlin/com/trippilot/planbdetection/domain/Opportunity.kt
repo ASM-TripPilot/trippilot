@@ -16,6 +16,24 @@ enum class OpportunityKind {
 }
 
 /**
+ * 행사 유형 — 상대(AI `EventType`) 값 가운데 카드에 오르는 것(유형 불명 `OTHER` 는 상대가 카드로 만들지 않는다).
+ * 날씨 위험 날 무엇을 뺄지 가른다([OpportunityWeather]) — 앱 문장은 이 값으로 바뀌지 않는다.
+ */
+enum class OpportunityEventType {
+    /** 축제 — 야외일 수 있어 날씨 위험 날 뺀다. */
+    FESTIVAL,
+    PERFORMANCE,
+    EXHIBITION,
+    POPUP,
+    ;
+
+    companion object {
+        /** 와이어 문자열 → 유형. 없거나 모르는 값(옛 AI·새 값)은 null — 지어내지 않는다(모름은 날씨 위험 날 축제처럼 빠진다). */
+        fun of(raw: String?): OpportunityEventType? = entries.firstOrNull { it.name == raw }
+    }
+}
+
+/**
  * 기회 한 건 — 그 날 남은 동선 근처의 행사·'요즘 인기' 등록 장소(BR-SA-22 · DEC-SA-6). **값 객체 · 저장 없음.**
  *
  * 트리거도 알림도 아니다(DEC-U4-4 · LEGAL-SA-01) — 상태·스케줄러·마이그레이션이 없고 알림 경로를 타지 않는다.
@@ -26,6 +44,7 @@ enum class OpportunityKind {
  * @property eventName 행사 카드만 — [start]·[end] 와 함께 행사 이름·기간(일 단위).
  * @property nearSlotKey 가장 가까운 남은 슬롯(`{date}#{poiId}`).
  * @property distanceLabel 동선에서의 거리 표시(예: `약 400m`) — 소요시간은 어떤 이유로도 없다.
+ * @property eventType 행사 카드만 — 행사 유형. null = 요즘 인기이거나 모름(옛 AI·모르는 값).
  */
 data class Opportunity(
     val key: String,
@@ -37,6 +56,7 @@ data class Opportunity(
     val poiName: String,
     val nearSlotKey: String,
     val distanceLabel: String,
+    val eventType: OpportunityEventType? = null,
 )
 
 /**
@@ -97,4 +117,25 @@ object OpportunityGate {
         }
         return null
     }
+}
+
+/**
+ * 날씨 위험 날의 행사 거르기(BR-SA-22 ④ · G-SA-17 — 2026-10-20 결정 '야외 축제만 뺀다, 실내형 행사는 남긴다').
+ *
+ * 그 날짜에 날씨 위험(WEATHER ∧ RISK)이 떠 있거나(ACTIVE) [적용]으로 소비됐으면(CONSUMED) 축제와 **유형을 모르는** 행사를
+ * 뺀다 — 비 오는데 야외 축제를 권하지 않고, 모르는 것을 실내라고 단정하지 않는다(INV-SA-2). 공연·전시·팝업과 요즘 인기는
+ * 남는다. 소비된 것까지 보는 이유: [적용]이 트리거를 닫아도 비는 그대로다 — 발화 중인 것만 보던 앱은 적용 직후부터 다음
+ * 판정 전까지 축제 카드를 되살렸다. 해제·만료(EXPIRED)·끈 알림(SUPPRESSED)·주의(CAUTION)는 보지 않는다.
+ */
+object OpportunityWeather {
+    private val BLOCKING_STATES = setOf(TriggerState.ACTIVE, TriggerState.CONSUMED)
+
+    /** 그 날짜에 행사를 거를 날씨 위험이 있는가. [triggers] 는 그 여행의 행이다(상태 무관). */
+    fun blocksOutdoor(triggers: List<PlanBTrigger>, date: LocalDate): Boolean = triggers.any {
+        it.kind == TriggerKind.WEATHER && it.severity == TriggerSeverity.RISK && it.affectedDate == date && it.state in BLOCKING_STATES
+    }
+
+    /** 날씨 위험 날에도 남는가 — 요즘 인기, 그리고 유형을 아는 축제 아닌 행사. */
+    fun keeps(o: Opportunity): Boolean =
+        o.kind == OpportunityKind.TRENDING || (o.eventType != null && o.eventType != OpportunityEventType.FESTIVAL)
 }

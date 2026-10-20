@@ -6,8 +6,12 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.planbdetection.domain.Opportunity
+import com.trippilot.planbdetection.domain.OpportunityEventType
 import com.trippilot.planbdetection.domain.OpportunityKind
 import com.trippilot.planbdetection.domain.OpportunityReply
+import com.trippilot.planbdetection.domain.TriggerKind
+import com.trippilot.planbdetection.domain.TriggerSeverity
+import com.trippilot.planbdetection.domain.TriggerState
 import com.trippilot.trip.api.TripPeriod
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
@@ -43,10 +47,16 @@ class OpportunityServiceTest : StringSpec({
         plans: OpportunityPlans = OpportunityPlans(listOf(plannedSlot(today, 0, LocalTime.of(14, 0), LocalTime.of(15, 0)))),
         clock: Clock = kstClock(today, noon),
         period: TripPeriod = TripPeriod(start, end),
-    ) = OpportunityService(OpportunityTrips(owner, tripId, period), plans, opportunityPorts(port), clock)
+        triggers: InMemoryTriggers = InMemoryTriggers(),
+    ) = OpportunityService(OpportunityTrips(owner, tripId, period), plans, triggers, opportunityPorts(port), clock)
 
     fun trending(near: String, poi: UUID = UUID.randomUUID()) =
         Opportunity("trending:$poi", OpportunityKind.TRENDING, null, null, null, poi, "월정리 카페거리", near, "약 400m")
+
+    fun event(near: String, type: OpportunityEventType?, poi: UUID = UUID.randomUUID()) = Opportunity(
+        "event:tourapi-$poi", OpportunityKind.EVENT_VENUE, "제주 들불축제", today.minusDays(1), today.plusDays(1), poi, "새별오름",
+        near, "약 1.0km", type,
+    )
 
     "남의 여행·없는 여행은 404 다 — 꺼져 있어도 존재를 숨긴다" {
         val port = RecordingOpportunityPort()
@@ -212,6 +222,58 @@ class OpportunityServiceTest : StringSpec({
         val out = service(port).list(owner, tripId, today)
 
         out shouldBe sent
+    }
+
+    /** G-SA-17(2026-10-20 결정) — 비 오는 날 야외 축제를 권하지 않되, 실내형 행사와 요즘 인기는 남겨 카드가 사라지지 않게. */
+    "그 날 날씨 위험이 떠 있으면 축제·유형 모름 행사만 빼고, 실내형 행사·요즘 인기는 받은 순서대로 낸다" {
+        lateinit var sent: List<Opportunity>
+        val port = RecordingOpportunityPort { q ->
+            val near = q.slots.first().slotKey
+            sent = listOf(event(near, OpportunityEventType.FESTIVAL), event(near, OpportunityEventType.EXHIBITION), trending(near))
+            OpportunityReply(sent, emptyList())
+        }
+        val rain = InMemoryTriggers().apply { save(weatherTrigger(tripId, today)) }
+
+        service(port, triggers = rain).list(owner, tripId, today) shouldContainExactly listOf(sent[1], sent[2])
+
+        // 유형을 모르는 행사(옛 AI)는 실내라고 단정하지 않는다 — 공연·팝업은 남는다.
+        val unknownFirst = RecordingOpportunityPort { q ->
+            val near = q.slots.first().slotKey
+            sent = listOf(event(near, null), event(near, OpportunityEventType.PERFORMANCE), event(near, OpportunityEventType.POPUP))
+            OpportunityReply(sent, emptyList())
+        }
+        service(unknownFirst, triggers = rain).list(owner, tripId, today) shouldContainExactly listOf(sent[1], sent[2])
+    }
+
+    "[적용]으로 소비된 날씨 위험도 거른다 — 적용이 트리거를 닫아도 비는 그대로다" {
+        lateinit var sent: List<Opportunity>
+        val port = RecordingOpportunityPort { q ->
+            val near = q.slots.first().slotKey
+            sent = listOf(event(near, OpportunityEventType.FESTIVAL), trending(near))
+            OpportunityReply(sent, emptyList())
+        }
+        val applied = InMemoryTriggers().apply { save(weatherTrigger(tripId, today, state = TriggerState.CONSUMED)) }
+
+        service(port, triggers = applied).list(owner, tripId, today) shouldContainExactly listOf(sent[1])
+    }
+
+    "주의·해제·끈 알림·다른 날·다른 종류의 트리거는 축제를 거르지 않는다" {
+        lateinit var sent: List<Opportunity>
+        val port = RecordingOpportunityPort { q ->
+            val near = q.slots.first().slotKey
+            sent = listOf(event(near, OpportunityEventType.FESTIVAL), event(near, null), trending(near))
+            OpportunityReply(sent, emptyList())
+        }
+        val others = InMemoryTriggers().apply {
+            save(weatherTrigger(tripId, today, severity = TriggerSeverity.CAUTION))
+            save(weatherTrigger(tripId, today, state = TriggerState.EXPIRED)) // 해제·만료
+            save(weatherTrigger(tripId, today, state = TriggerState.SUPPRESSED))
+            save(weatherTrigger(tripId, today.plusDays(1)))
+            save(weatherTrigger(tripId, today, kind = TriggerKind.CLOSURE))
+            save(weatherTrigger(UUID.randomUUID(), today)) // 다른 여행
+        }
+
+        service(port, triggers = others).list(owner, tripId, today) shouldBe sent
     }
 
     "오늘은 KST 로 정한다 — UTC 15시가 자정이다" {

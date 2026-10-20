@@ -8,6 +8,8 @@ import com.trippilot.planbdetection.domain.OpportunityGate
 import com.trippilot.planbdetection.domain.OpportunityPort
 import com.trippilot.planbdetection.domain.OpportunityQuery
 import com.trippilot.planbdetection.domain.OpportunitySlot
+import com.trippilot.planbdetection.domain.OpportunityWeather
+import com.trippilot.planbdetection.domain.PlanBTriggerRepository
 import com.trippilot.planbdetection.domain.TriggerLifecycle
 import com.trippilot.trip.api.TripFacade
 import org.slf4j.LoggerFactory
@@ -27,11 +29,14 @@ import kotlin.math.abs
  * **조회형이다** — 트리거도 알림도 아니라 상태·쓰기·알림 경로가 없다(LEGAL-SA-01). 재료(남은 슬롯·계획 POI)는 서버가
  * 일정에서 채운다. 소유가 아니면 404(존재 은닉 — SEC-SA-02)이고, 그 밖의 꺼짐·범위 밖·재료 없음·AI 실패·계약 위반은
  * 전부 빈 목록이다(BR-SA-22 규칙 6 · RES-SA-09) — 카드는 선택 사항이라 허브 표시를 막지 않는다.
+ * 그 날 날씨 위험이 떠 있거나 [적용]으로 소비됐으면 축제·유형 모름 행사를 뺀다([OpportunityWeather] · G-SA-17).
  */
 @Service
 class OpportunityService(
     private val trips: TripFacade,
     private val plans: ItineraryPlanFacade,
+    /** 날씨 위험 날의 행사 거르기 재료 — 그 날짜의 트리거 행(읽기만). */
+    private val triggers: PlanBTriggerRepository,
     /** 기회 경계 — `trippilot.ai.opportunity.mode=http` 일 때만 빈이 있다. 없으면 꺼짐이다(AI 0회 · 빈 목록). */
     private val ports: ObjectProvider<OpportunityPort>,
     private val clock: Clock,
@@ -57,7 +62,9 @@ class OpportunityService(
             log.warn("기회 답이 계약에 어긋나 통째로 버립니다(RES-SA-09). tripId={} date={} 사유={}", tripId, date, violation)
             return emptyList()
         }
-        return reply.items
+        // 비 오는 날 야외 축제를 권하지 않는다 — 순서는 상대 순위 그대로 두고 빼기만 한다(앱이 남은 첫 장을 고른다).
+        if (!OpportunityWeather.blocksOutdoor(triggers.findByTripOn(tripId, listOf(date)), date)) return reply.items
+        return reply.items.filter(OpportunityWeather::keeps)
     }
 
     internal companion object {

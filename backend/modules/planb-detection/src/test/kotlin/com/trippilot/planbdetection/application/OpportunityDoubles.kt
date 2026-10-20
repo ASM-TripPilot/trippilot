@@ -5,7 +5,12 @@ import com.trippilot.itinerarygeneration.api.PlannedSlotView
 import com.trippilot.planbdetection.domain.OpportunityPort
 import com.trippilot.planbdetection.domain.OpportunityQuery
 import com.trippilot.planbdetection.domain.OpportunityReply
+import com.trippilot.planbdetection.domain.PlanBTrigger
+import com.trippilot.planbdetection.domain.TriggerKind
 import com.trippilot.planbdetection.domain.TriggerLifecycle
+import com.trippilot.planbdetection.domain.TriggerScope
+import com.trippilot.planbdetection.domain.TriggerSeverity
+import com.trippilot.planbdetection.domain.TriggerState
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripPeriod
 import org.springframework.beans.factory.ObjectProvider
@@ -54,6 +59,19 @@ internal fun opportunityPorts(port: OpportunityPort?): ObjectProvider<Opportunit
         override fun getObject(): OpportunityPort = port ?: error("OpportunityPort 빈이 없습니다.")
         override fun getIfAvailable(): OpportunityPort? = port
     }
+
+/** 그 여행·그 날의 트리거 행 — 기본은 떠 있는 날짜 전체 날씨 위험이다(종류·심각도·상태를 바꿔 대조군을 만든다). */
+internal fun weatherTrigger(
+    tripId: UUID,
+    date: LocalDate,
+    severity: TriggerSeverity = TriggerSeverity.RISK,
+    state: TriggerState = TriggerState.ACTIVE,
+    kind: TriggerKind = TriggerKind.WEATHER,
+    slotKey: String? = null,
+): PlanBTrigger = PlanBTrigger.active(
+    tripId, UUID.randomUUID(), kind, date, slotKey, mapOf("pop" to 70), TriggerScope.FULL_DAY, "비 예보 70%",
+    Instant.parse("2026-10-20T00:15:00Z"), severity,
+).copy(state = state)
 
 /** KST 로 그 날 그 시각인 고정 시계. */
 internal fun kstClock(date: LocalDate, time: LocalTime): Clock =
