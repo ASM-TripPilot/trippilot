@@ -124,3 +124,35 @@ def test_chunk_vectors_round_trip_and_hash_changes_with_text(tmp_path) -> None:
     assert v.hash_of("wiki:404#0") is None
     assert c.text_hash(docs[0].text) != c.text_hash(docs[0].text + " ")
     assert c.vectors_path(tmp_path / "place_corpus_wiki.jsonl.gz").name == "place_corpus_wiki.vectors.json.gz"
+
+
+def test_overview_uses_its_own_longer_chunk_size_and_wiki_keeps_the_default() -> None:
+    """관광공사 개요는 300자 목표·400 상한(벡터 파일이 GitHub 상한 안에 들어가게, 표시 상한 300자와 같게) —
+    같은 본문이라도 위키는 종전 200·280 그대로다(2026-10-19)."""
+    body = " ".join(f"이곳은 {i}번째로 소개하는 볼거리이며 주변 경관이 아름답고 계절마다 다른 모습을 보여 준다." for i in range(12))
+    over = c.chunk_document({"doc_id": "overview:1", "poi_ref": "1", "sections": [{"heading": "개요", "text": body}]})
+    wiki = c.chunk_document({"doc_id": "wiki:1", "poi_ref": "1", "sections": [{"heading": "개요", "text": body}]})
+    assert all(len(d.text) - len("개요: ") <= 400 for d in over)
+    assert all(len(d.text) - len("개요: ") <= c.MAX_CHARS for d in wiki)
+    assert len(over) < len(wiki)
+    assert max(len(d.text) - len("개요: ") for d in over) > c.TARGET_CHARS + 40  # 실제로 더 긴 조각을 만든다
+
+
+def test_vectors_are_written_as_a_small_header_and_a_separate_binary_body(tmp_path) -> None:
+    """본체를 base64 로 머리 JSON 에 넣으면 읽을 때 파일 크기의 6배 넘게 쓴다(70MB → 454MB, 2026-10-20) —
+    머리와 fp16 본체를 따로 쓰고, 옛 한 파일 형식도 계속 읽는다."""
+    import base64
+    import gzip
+    import json
+    import struct
+
+    docs = c.chunk_document({"doc_id": "wiki:1", "poi_ref": "1", "sections": [{"heading": "개요", "text": _S}]})
+    p = tmp_path / "x.vectors.json.gz"
+    c.dump_chunk_vectors(p, docs, "m", [(0.5, -0.25)])
+    head = json.loads(gzip.decompress(p.read_bytes()))
+    assert "f16_b64" not in head and (tmp_path / head["f16"]).exists()
+    assert c.load_chunk_vectors(p).vector(docs[0].doc_id) == (0.5, -0.25)
+    old = tmp_path / "old.vectors.json.gz"
+    old.write_bytes(gzip.compress(json.dumps({**head, "f16": None, "f16_b64": base64.b64encode(
+        struct.pack("<2e", 0.5, -0.25)).decode()}).encode()))
+    assert c.load_chunk_vectors(old).vector(docs[0].doc_id) == (0.5, -0.25)
