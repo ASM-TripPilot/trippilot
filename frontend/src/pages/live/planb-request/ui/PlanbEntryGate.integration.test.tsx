@@ -651,6 +651,117 @@ describe('🔴 PlanbEntryGate · 게이트가 고른 트리거가 i04 본문까�
   });
 });
 
+/**
+ * 사용자 결정(2026-10-20) — i04 시드는 **요청에 실릴 지금 알림**의 심각도로 정한다. 누른 알림이 해제 뒤 다시 섰으면 요청엔
+ * 새 알림이 실리고 그 심각도는 떠 있는 목록에 있다. 위험일 때만 시드를 켜고, 주의·모름은 빈 시드다(옛 위험 선계산의 뺄 장소도
+ * 싣지 않는다). 게이트가 확인을 못 끝낸 길(조회 실패·3초 초과)도 같은 기준이다 — i04 가 목록의 그 알림 심각도를 본다.
+ */
+describe('🔴 PlanbEntryGate · 시드는 지금 알림의 심각도로 (사용자 결정)', () => {
+  /** 해제 전 위험 알림으로 미리 짠 선계산 — 새 선계산에 대체돼 닫혔다(낡음). 뺄 장소를 들고 있다. */
+  const OLD_RISK_SESSION = () =>
+    HttpResponse.json(prepared({ status: 'CANCELED', stale: true }));
+
+  it('G17 다시 선 알림이 주의면 원 알림이 위험이었어도 시드 없이 열고, 옛 선계산의 사유·뺄 장소를 싣지 않는다', async () => {
+    server.use(
+      ...baseHandlers({
+        triggerDetail: () =>
+          HttpResponse.json(
+            detail({ state: 'EXPIRED', currentTriggerId: 'trg-2' })
+          ),
+        preparedSession: OLD_RISK_SESSION,
+        list: activeList({
+          triggerId: 'trg-2',
+          severity: 'CAUTION',
+          variant: 'CLOUD',
+        }),
+      })
+    );
+
+    renderGate();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('planb-request-trigger-chip')).toBeTruthy()
+    );
+    expect(screen.getByTestId('planb-request-trigger-chip')).not.toBeSelected();
+    expect(
+      screen.getByTestId('planb-request-directive-AVOID_OUTDOOR')
+    ).not.toBeSelected();
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+
+    await waitFor(() => expect(postedBodies).toHaveLength(1));
+    expect(postedBodies[0]).toEqual({
+      scope: 'FULL_DAY',
+      originKind: null,
+      reasons: [],
+      directives: [],
+      freeText: null,
+      excludedPoiIds: [],
+      triggerId: 'trg-2',
+      targetDate: TOMORROW,
+    });
+  });
+
+  it('G18 다시 선 알림의 심각도를 모르면(목록 조회 실패) 시드 없이 열되, 본문엔 그 알림이 실린다', async () => {
+    server.use(
+      http.get(
+        `${BASE}/trips/:tripId/triggers`,
+        () => new HttpResponse(null, { status: 500 })
+      ),
+      ...baseHandlers({
+        triggerDetail: () =>
+          HttpResponse.json(
+            detail({ state: 'EXPIRED', currentTriggerId: 'trg-2' })
+          ),
+        preparedSession: OLD_RISK_SESSION,
+      })
+    );
+
+    renderGate();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('planb-request-sheet')).toBeTruthy()
+    );
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+
+    await waitFor(() => expect(postedBodies).toHaveLength(1));
+    expect(postedBodies[0]).toMatchObject({
+      reasons: [],
+      directives: [],
+      excludedPoiIds: [],
+      triggerId: 'trg-2',
+      targetDate: TOMORROW,
+    });
+  });
+
+  it('G19 확인을 못 끝낸 길(상세 실패)에서도 목록의 그 알림이 주의면 사유를 켜지 않는다 — 칩은 보이고 본문엔 그 알림이 실린다', async () => {
+    const caution = {
+      affectedDate: TODAY,
+      severity: 'CAUTION',
+      variant: 'CLOUD',
+    } as const;
+    server.use(
+      ...baseHandlers({
+        triggerDetail: () => new HttpResponse(null, { status: 500 }),
+        list: activeList(caution),
+      })
+    );
+
+    renderGate({ scope: 'PARTIAL_SLOTS' });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('planb-request-trigger-chip')).toBeTruthy()
+    );
+    expect(screen.getByTestId('planb-request-trigger-chip')).not.toBeSelected();
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+
+    await waitFor(() => expect(postedBodies).toHaveLength(1));
+    expect(postedBodies[0]).toMatchObject({
+      reasons: [],
+      triggerId: 'trg-1',
+    });
+  });
+});
+
 describe('🔴 PlanbEntryGate · 다음 진입은 지난 진입의 캐시로 판정하지 않는다 (§3.2 — 리뷰 반영)', () => {
   it('G16 앱 기본 캐시(30초 신선·10분 보관)에서도 — DRAFT 로 i06 에 간 뒤 APPLIED 가 되면 다음 진입은 허브다', async () => {
     // 이 파일의 기본 클라이언트는 전역 gcTime 0 이라 훅의 gcTime 0 을 재지 못한다 — 앱과 같은 기본값으로 바꾼다
