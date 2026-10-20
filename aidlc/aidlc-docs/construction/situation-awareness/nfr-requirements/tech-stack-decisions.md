@@ -93,6 +93,8 @@ itinerary-recalculation  application/PreparedReplanService.kt
 - **1스레드인 이유** — 재계획 산출이 읽기 전용 트랜잭션 안에서 AI 를 최대 25s 부른다(`ReplanFacadeService.kt:71`) — 스레드 수만큼 DB 연결을 쥔다(Hikari 기본 10, 사용자 재계획과 같은 풀). 늘리려면 'AI 호출을 트랜잭션 밖으로' 후속이 먼저다. DB 풀 상향은 보류(연결 여유 미확인).
 - 상한(여행 3 · 전체 100/일)은 실행기가 아니라 세션 수로 센다(COST-SA-07 · BR-SA-18).
 
+> **[개정 · 2026-10-20 — 구현 반영]** 델타 4 — 실행기 대기열 용량은 **자리 수(실행 1 + 대기 10 = 11)** 다(`backend/modules/itinerary-recalculation/src/main/kotlin/com/trippilot/recalculation/application/PreparedReplanService.kt:177-189`). 대기열을 10 으로 두면 앞 작업이 자리를 돌려준 직후(일꾼이 아직 다음 것을 꺼내기 전) 자리를 얻은 사건이 실행기에 거절돼 FAILED 세션이 생긴다 — 상한은 자리(세마포어 — `:72`)가 진다. 종료가 시작된 뒤 도착한 사건은 자리를 잡기 전에 예외로 던진다 — 다음 파드가 재배달을 받는다(`:88-90`). 규칙은 `functional-design/business-rules.md` BR-SA-18 개정 블록.
+
 ### 델타 5 — 공공데이터 출처 3종 + 게이트웨이 오류 판독기
 
 | API | 데이터셋(공공데이터포털) | 소유 · 어댑터 | 키 | 출발 상태 |
@@ -108,6 +110,8 @@ itinerary-recalculation  application/PreparedReplanService.kt
 - **시한**: 백엔드 어댑터는 기존 기상청 값(connect 3s · read 5s)을 쓴다. 특일 조회도 명시 시한과 짧은 실패 기억을 둔다(RES-SA-10).
 - **호스트**: 세 API 모두 `apis.data.go.kr` — 기존 단기예보와 같은 호스트라 이그레스 대상이 늘지 않는다.
 - **형식 고정**: 특보현황(t6) 형식 · 에어코리아 권역 · 특일 응답은 실응답 표본 픽스처로 고정한다(추정 → 실측). CI 외부 호출은 0이고 대역은 실물처럼 예외로 실패한다.
+
+> **[개정 · 2026-10-20 — 구현 반영]** 델타 5 — 키(O-SA-1 종결 · #1379). 세 API 의 키는 `PUBLIC_DATA_API_KEY`(활용신청 계정 — `WEATHER_API` 계정과 다르다)이고, 비면 `WEATHER_API` 로 대신한다 — 백엔드 특보·대기질 `trippilot.weather.public-data-key`(`backend/app/src/main/resources/application.yml:176` · `backend/modules/weather-context/src/main/kotlin/com/trippilot/weathercontext/adapter/out/external/WeatherAlertConfiguration.kt:28`), AI 특일 달력(`ai/main.py:481-483`). 위 표의 '키' 칸과 '키 공유' 첫 문장은 그 전의 가정이고, 그 둘째 문장(다르면 키 env 1개 · 배선 1세트)이 실제 길이다. 배선 — 허용목록 backend·ai(`deploy/eks/runtime_secrets.py:17-35`) · 차트 secretEnv(`deploy/eks/chart/templates/backend.yaml:105` · `deploy/eks/chart/templates/ai.yaml:79`) · 배포가 저장소 시크릿을 두 그룹에 쓴다(`runtime_secrets.py:393-397` · `.github/workflows/aws-deploy.yml:256`). compose 는 설정하지 않은 env 를 빈 문자열로 넘겨 yml 중첩 기본값으로는 대신이 안 되므로, 빈 값 판정은 코드가 한다(`WeatherAlertConfiguration.kt:16-19`). §4 의 '키 계정 확인'도 이것으로 끝났다.
 
 ### 델타 6 — 플래그 체계 · 런타임 키 (DEC-SA-8) ★
 
@@ -130,6 +134,8 @@ itinerary-recalculation  application/PreparedReplanService.kt
 - **검증**: `runtime_secrets` 모드 값 집합(`deploy/eks/runtime_secrets.py:211-217` 꼴) · UUID 목록 검증 재사용(`:236-244`) · `open_gaps` 경고(스윕 on ∧ `WEATHER_MODE ≠ kma` — `:293`). `RuntimeModeSummary` SWITCHES 에 스윕·지평·선계산을 한 줄씩. 정본 키 표 ⊆ 허용목록 ∧ 차트 목록 대조 테스트(`deploy/eks/tests/test_runtime.py`).
 - **두 번 배포 규칙**: 키를 아는 허용목록 코드가 그 대상(개발 = develop, 운영 = 승격 뒤 main)에 배포된 뒤에만 시크릿에 키를 쓴다 — 먼저 쓰면 `validate_groups` 가 배포 전체를 거부한다(`deploy/eks/runtime_secrets.py:204-207`). 대상마다 시크릿 그릇이 따로라(`trippilot/<env>/*` · `trippilot/<env>/dev-target/*` — `infra/terraform/stack/registry-secrets.tf:58-66`) 규칙도 대상마다 적용된다. 시크릿 쓰기는 자격 있는 세션·사용자, 디스패치는 배포 담당 세션이 한다.
 - **키 배선은 한 변경에 모두** — 읽는 코드가 뒤 변경에서 들어오는 키도 함께 넣는다(차트 한 줄 range 목록의 경합을 한 번으로 줄인다). 스위치 하나당: `application.yml` · 테스트 설정(cron `-`) · `docker-compose.yml`(`${X:-off}` 꼴, 빈 값 금지 — `backend/app/src/test/kotlin/com/trippilot/app/EmptyEnvBindingTest.kt`) · `.env.example`(주석은 줄 위) · `RuntimeModeSummary` SWITCHES · 안내자 기동 로그(DB 쓰기 없음) · `deploy/eks/runtime_secrets.py`(허용목록 · 모드 값 · UUID 목록 · `open_gaps`) · `deploy/eks/chart/templates/backend.yaml:102` · `deploy/eks/chart/tests/test_chart.py` · `deploy/eks/tests/test_runtime.py` · `backend/docs/design/실사용-모드-스위치.md`. AI 키 `HOLIDAY_CLOSURE_MODE` 는 하위 코드·공휴일 변경에서 같은 꼴(`AI_KEYS` · `deploy/eks/chart/templates/ai.yaml:79` · `ai/main.py` 기동 검증 · `ai-wiring:` 표식)로 넣는다.
+
+> **[개정 · 2026-10-20 — 구현 반영]** 델타 6 — 런타임 키를 쓰는 길(#1438): 위 표의 시크릿 스위치 5종은 배포 입력 `runtime_switches`(`KEY=VALUE;KEY=VALUE` — 쌍 구분 `;`)로도 쓴다 — 로컬 AWS 자격 없이 배포 역할이 쓴다(`deploy/eks/runtime_secrets.py:50-53,192-208` · `.github/workflows/aws-deploy.yml:47-51`). 허용 밖 키·형식 오류·같은 키 두 번은 배포 실패이고, 값 검증은 새로 두지 않고 스위치를 얹은 사본으로 기존 `validate_groups`·`open_gaps` 를 돌린다(`runtime_secrets.py:373-383`). `KEY=` 는 그 키를 지워 앱 기본값으로 되돌린다 — `stringData` 로 넣은 키는 매니페스트에서 빠져도 클러스터 Secret 에 남아(server-side apply) merge patch(null)로 함께 지운다(`:420-427`). 위 '시크릿 쓰기는 자격 있는 세션·사용자'에 이 길이 더해진다. `PLANB_SITUATION_SWEEP_ACCOUNT_IDS=` 는 목록이 비는 것이라 전원이다(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/application/SituationSweepProperties.kt:23,34`).
 
 ### 델타 7 — 신규 라이브러리 0 · 마이그레이션 3 · 모듈 의존
 
