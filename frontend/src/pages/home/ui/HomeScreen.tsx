@@ -14,7 +14,7 @@
  * softNote·미니맵 카드 등)을 단계 데이터로 파라미터화해 조립한다. INV-3(소요시간 미표시)는
  * 어떤 얼굴에도 소요시간 문자열·필드를 두지 않는다 — 시각(09:30)·거리(950m)만 표시한다.
  */
-import { memo, useState, type ReactElement } from 'react';
+import { memo, useEffect, useRef, useState, type ReactElement } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -1319,6 +1319,9 @@ function PhaseBody({
   }
 }
 
+// 스크롤하는 동안 FAB 3개를 숨기고, 멈춘 뒤 이만큼 지나면 다시 보인다(TRIP-1435 Q-023 결정 1=A — 본문 요소를 덮지 않게).
+const FAB_REAPPEAR_MS = 250;
+
 export function HomeScreen({
   hero,
   sections,
@@ -1342,6 +1345,24 @@ export function HomeScreen({
   assistantFab,
 }: HomeScreenProps): ReactElement {
   const menuOpen = savedMenuOpen ?? false;
+  const [scrolling, setScrolling] = useState(false);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleScroll = () => {
+    setScrolling(true);
+    if (settleTimer.current) clearTimeout(settleTimer.current);
+    settleTimer.current = setTimeout(
+      () => setScrolling(false),
+      FAB_REAPPEAR_MS
+    );
+  };
+  useEffect(
+    () => () => {
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+    },
+    []
+  );
+  // 메뉴가 열려 있으면 딤·미니 FAB 을 그대로 둔다 — 스크롤 숨김은 닫힌 상태의 FAB 만 다룬다.
+  const fabsHidden = scrolling && !menuOpen;
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="home-dashboard-root" className="flex-1 bg-canvas">
@@ -1349,6 +1370,8 @@ export function HomeScreen({
           className="flex-1"
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 220 }}
+          scrollEventThrottle={16}
+          onScroll={handleScroll}
         >
           <PhaseBody
             hero={hero}
@@ -1367,7 +1390,12 @@ export function HomeScreen({
         </ScrollView>
         {/* TRIP-699 — 로딩이면 두 FAB 숨김(Figma 2174:2307). 로딩은 항상 discovery라 phase 없음. */}
         {sections.kind !== 'loading' ? (
-          <>
+          <View
+            testID="home-fab-layer"
+            pointerEvents={fabsHidden ? 'none' : 'box-none'}
+            style={{ opacity: fabsHidden ? 0 : 1 }}
+            className="absolute inset-0"
+          >
             {/* TRIP-695 z-order(AC-3) — 문서순=스택이라(RN 기본, zIndex 없음) 뒤→위로
                 CreateTripFab → 백드롭 → 미니 FAB+토글. 백드롭을 + FAB 뒤에 둬 딤이 + FAB 도
                 덮는다. 실제 딤 커버는 6-b 육안(jest 원리적 사각). */}
@@ -1391,7 +1419,7 @@ export function HomeScreen({
             />
             {/* TRIP-1321 — ✦ 도우미 FAB 는 스택 맨 위(바닥 220). 메뉴가 펼쳐진 동안은 빼서 딤 위로 뜨지 않게(BR-U8-53). */}
             {menuOpen ? null : assistantFab}
-          </>
+          </View>
         ) : null}
       </View>
     </SafeAreaView>

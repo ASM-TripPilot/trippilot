@@ -1,6 +1,7 @@
-import { View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { Image } from '@/shared/ui/Image';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -408,6 +409,37 @@ describe('HomeScreen — saved-menu z-order 회귀 앵커 (TRIP-695 AC-3)', () =
 
     fireEvent.press(screen.getByTestId('home-saved-menu-backdrop'));
     expect(onToggleSavedMenu).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('HomeScreen — 스크롤하는 동안 FAB 숨김 (TRIP-1435 Q-023 결정 1=A)', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  const scroll = () =>
+    fireEvent.scroll(screen.UNSAFE_getByType(ScrollView), {
+      nativeEvent: { contentOffset: { y: 120 } },
+    });
+  const layerHidden = () =>
+    screen.getByTestId('home-fab-layer').props.pointerEvents === 'none';
+
+  it('스크롤 중엔 FAB 층이 숨고 터치를 막으며, 멈추고 잠시 뒤 다시 보인다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
+    expect(layerHidden()).toBe(false);
+
+    scroll();
+    expect(layerHidden()).toBe(true);
+
+    act(() => jest.advanceTimersByTime(300));
+    expect(layerHidden()).toBe(false);
+  });
+
+  it('담은 곳 메뉴가 열려 있으면 스크롤해도 숨기지 않는다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} savedMenuOpen />);
+
+    scroll();
+
+    expect(layerHidden()).toBe(false);
   });
 });
 

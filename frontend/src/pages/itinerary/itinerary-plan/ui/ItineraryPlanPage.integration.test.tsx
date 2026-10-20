@@ -627,6 +627,23 @@ describe('확정 CTA·재조회 배선', () => {
         params: { surface: 'ITINERARY', tripId: TRIP_ID },
       });
     });
+
+    it('시트가 펼침(88%, index 2)으로 가면 ✦ 를 그리지 않고, 내려가면 다시 그린다 (TRIP-1435 Q-082)', async () => {
+      renderPageWithToast();
+      await screen.findByTestId('assistant-fab');
+      const onAnimate = (): ((from: number, to: number) => void) => {
+        const host = screen.root
+          .findAll((node) => Array.isArray(node.props?.snapPoints))
+          .find((node) => typeof node.type === 'string');
+        return host?.props.onAnimate;
+      };
+
+      act(() => onAnimate()(1, 2));
+      expect(screen.queryByTestId('assistant-fab')).toBeNull();
+
+      act(() => onAnimate()(2, 1));
+      expect(screen.getByTestId('assistant-fab')).toBeTruthy();
+    });
   });
 });
 

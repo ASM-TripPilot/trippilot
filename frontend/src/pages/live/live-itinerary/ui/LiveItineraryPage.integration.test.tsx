@@ -378,6 +378,8 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       await renderActive();
       expect(screen.getByTestId('location-explainer-root')).toBeTruthy();
       expect(screen.getByText(/여행 날짜\(8월 20일\) 동안만/)).toBeTruthy();
+      // TRIP-1435 · BR-U8-53 — 안내가 떠 있는 동안 ✦·✎ 앵커는 없다.
+      expect(screen.queryByTestId('execution-live-fab-anchor')).toBeNull();
       fireEvent.press(screen.getByTestId('location-explainer-later'));
       expect(mockAutomationLater).toHaveBeenCalledTimes(1);
       expect(screen.queryByTestId('location-explainer-root')).toBeNull();
@@ -1559,6 +1561,20 @@ describe('i08 변경 반영 시트', () => {
     expect(mockNavigate).not.toHaveBeenCalled();
     expect(mockBack).not.toHaveBeenCalled();
   }
+
+  describe('TRIP-1435 · BR-U8-53 — 변경 반영 시트가 떠 있는 동안 ✦·✎ FAB 앵커를 그리지 않는다', () => {
+    it('applied 가 없는 허브에는 FAB 앵커가 있다(대조군)', async () => {
+      await renderHub();
+      expect(screen.getByTestId('execution-live-fab-anchor')).toBeTruthy();
+    });
+
+    it('applied 시트가 뜬 허브에는 FAB 앵커가 없다', async () => {
+      await renderHub(SESSION_ID);
+
+      expect(screen.getByTestId(SHEET)).toBeTruthy();
+      expect(screen.queryByTestId('execution-live-fab-anchor')).toBeNull();
+    });
+  });
 
   describe('🔴 A1·A2 · AC-6 — applied 신호가 있으면 허브 밖 형제로 시트가 뜬다', () => {
     it('A1 라벨·제목·두 버튼만 있고, 캐시에 diff 가 없으면 부제·배지·내역은 없다 (E4)', async () => {
@@ -4187,6 +4203,8 @@ describe('i03 위험 상세 시트', () => {
       );
       expectBadges(['날씨 · 활성', '이동 · 정상', '영업 · 정상']);
 
+      // TRIP-1435 · BR-U8-53 — 위험 상세 시트가 떠 있는 동안 ✦·✎ 앵커는 없다.
+      expect(screen.queryByTestId('execution-live-fab-anchor')).toBeNull();
       // 알약은 그대로(D3 숨김 경로 아님), 아직 아무 데도 안 갔다.
       expect(screen.getByTestId(CHIP)).toBeTruthy();
       expect(mockPush).not.toHaveBeenCalled();

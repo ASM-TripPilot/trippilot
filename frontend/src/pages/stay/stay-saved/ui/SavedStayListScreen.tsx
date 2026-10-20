@@ -85,13 +85,14 @@ function AppBar({
   onBack?: () => void;
 }): ReactElement {
   return (
-    <View className="w-full gap-xs px-[24px] pb-[8px] pt-[8px]">
+    // 뒤로·제목의 가로 시작점을 담은 장소(d02, pl-[10px])와 맞춘다(TRIP-1435 Q-041). 부제 x(32)는 그대로 둔다.
+    <View className="w-full gap-xs pb-[8px] pl-[10px] pr-[24px] pt-[8px]">
       <View className="flex-row items-center gap-xs">
         <Pressable
           testID="saved-stay-back"
           accessibilityRole="button"
           onPress={onBack}
-          className="-ml-[8px] h-10 w-10 items-center justify-center"
+          className="h-10 w-10 items-center justify-center"
         >
           <BackChevronGlyph size={24} />
         </Pressable>
@@ -100,7 +101,7 @@ function AppBar({
         </Text>
       </View>
       {subtitle ? (
-        <View testID="saved-stay-subtitle" className="pl-[8px]">
+        <View testID="saved-stay-subtitle" className="pl-[22px]">
           <Text className="font-noto text-label text-muted">{subtitle}</Text>
         </View>
       ) : null}

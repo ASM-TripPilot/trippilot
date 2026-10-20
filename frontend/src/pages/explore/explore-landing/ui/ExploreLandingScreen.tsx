@@ -190,7 +190,12 @@ function SkeletonRail({
   // 조회 대기 자리표시 — 회색 라운드 박스를 가로로 나열한다(TRIP-704). 카드 자리 크기를 그대로
   // 잡아 도착 시 레이아웃이 안 튄다. testID 로 개수를 세어 잠근다(스켈레톤은 텍스트가 없다).
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={LANE_BLEED_STYLE}
+      contentContainerStyle={LANE_CONTENT_STYLE}
+    >
       <View className="flex-row gap-md">
         {Array.from({ length: count }).map((_, i) => (
           <Skeleton
@@ -271,6 +276,11 @@ function RegionChip({
     </View>
   );
 }
+
+// 가로 레인은 세로 ScrollView 의 좌우 여백(16) 밖으로 펴고, 안쪽 여백으로 첫 카드를 16 에서 시작시킨다 — 홈 레인과 같은 모양
+// (TRIP-1435 Q-029: 여백 안에서 카드가 잘리던 것).
+const LANE_BLEED_STYLE = { marginHorizontal: -16 } as const;
+const LANE_CONTENT_STYLE = { paddingHorizontal: 16 } as const;
 
 export function ExploreLandingScreen({
   heading,
@@ -371,7 +381,12 @@ export function ExploreLandingScreen({
             ) : stayLane.error ? (
               <StayLaneError onRetry={stayLane.onRetry} />
             ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={LANE_BLEED_STYLE}
+                contentContainerStyle={LANE_CONTENT_STYLE}
+              >
                 <View className="flex-row gap-md">
                   {stayLane.cards.map((card) => (
                     // rail 카드 — 하트는 카드가 소유(save 계약). 담김/미담김은 색이 아니라 서로 다른
@@ -435,7 +450,12 @@ export function ExploreLandingScreen({
                 </Text>
               </Pressable>
             ) : placeLane && placeLane.cards.length > 0 ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={LANE_BLEED_STYLE}
+                contentContainerStyle={LANE_CONTENT_STYLE}
+              >
                 <View className="flex-row gap-md">
                   {placeLane.cards.map((card) => (
                     <PlaceRailCard

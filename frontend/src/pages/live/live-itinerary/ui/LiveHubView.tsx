@@ -103,12 +103,13 @@ const FAB_OPEN_SHADOW = {
   shadowRadius: 8,
   elevation: 6,
 } as const;
+// 딤이 없어 알약이 지도 핀 위에 겹쳐 뜬다 — 그림자를 진하게 해 핀 위에서도 배경과 구분되게 한다(TRIP-1435 Q-094, 결정 3=C).
 const PILL_SHADOW = {
   shadowColor: '#000000',
-  shadowOffset: { width: 0, height: 5 },
-  shadowOpacity: 0.16,
-  shadowRadius: 9,
-  elevation: 5,
+  shadowOffset: { width: 0, height: 6 },
+  shadowOpacity: 0.32,
+  shadowRadius: 12,
+  elevation: 9,
 } as const;
 
 export interface LiveHubSlot {
