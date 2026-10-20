@@ -31,8 +31,9 @@ import java.util.UUID
  * jsonb 에 이스케이프된 스칼라가 저장된다(location_legal_log 에서 겪은 것과 같은 함정).
  *
  * 스냅숏 컬럼은 **최상위가 객체일 때만** 그대로 읽고, 아니면(`[]`·스칼라·jsonb `null`) 빈 객체로 읽는다 — 필드가 `Map` 이라
- * 그런 행은 Hibernate 가 엔티티를 적재하는 순간 역직렬화에 실패하고, 어댑터의 방어적 읽기에 닿기도 전에 그 여행의
- * 타임라인이 500 이 된다(TRIP-1476 H). 빈 객체에는 `days` 가 없으므로 아래 [ChangeLogRepositoryAdapter] 가 그 행을 건너뛴다.
+ * `[]`·스칼라 행은 Hibernate 가 엔티티를 적재하는 순간 역직렬화에 실패하고(어댑터에 닿기 전), jsonb `null` 은 Jackson 이
+ * null 로 읽어 비-null 필드에 null 이 든 채 어댑터에서 NPE 가 난다. 어느 쪽이든 그 여행의 타임라인이 500 이 된다(TRIP-1476 H).
+ * 빈 객체에는 `days` 가 없으므로 아래 [ChangeLogRepositoryAdapter] 가 그 행을 건너뛴다.
  */
 @Entity
 @Table(name = "change_log_entry")
