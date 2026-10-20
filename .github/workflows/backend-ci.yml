@@ -41,16 +41,18 @@ jobs:
         run: python3 -m unittest scripts/test_coverage_gate.py
       # 커버리지를 build 와 **같은 Gradle 호출에** 싣는다 — JVM 기동·구성 단계를 한 번만 거친다.
       # 하한선(전체·모듈별, 규칙은 scripts/coverage_gate.py)은 develop 으로 가는 PR·수동 실행(스택 PR 검증에 쓴다)에서
-      # **막는다**. develop push 와 main 으로 가는 PR(릴리스·핫픽스)은 막지 않는다 — 이미 develop 에 머지된 코드라,
-      # 막으면 이미지 발행(image 잡)이나 운영 승격이 커버리지 부채 때문에 멈춘다. 대신 실패를
+      # **막는다**. develop push 와 릴리스 PR(main 으로 가는 `release/*` — develop 을 자른 브랜치다)은 막지 않는다 —
+      # 이미 develop 에 머지된 코드라, 막으면 이미지 발행(image 잡)이나 운영 승격이 커버리지 부채 때문에 멈춘다.
+      # main 으로 가는 그 밖의 PR(hotfix/*·ci/* 등 main 에서 분기, docs/conventions/branch.md)은 develop 을 거치지
+      # 않은 코드라 **막는다**. 대신 막지 않는 경우의 실패를
       # `::warning::` 주석으로 커밋 체크에 남긴다(COVERAGE_ADVISORY). 각자 통과한 PR 둘이 합쳐 하한을 넘은 시점이
       # 그 머지 커밋에 보이게 — 안 남기면 무관한 다음 PR 이 처음 빨개져 원인을 거꾸로 추적해야 한다.
       # 표와 실패 사유는 잡 요약(Summary 탭)에 남는다.
       - name: gradle build (test 포함) + 커버리지
         working-directory: backend
         env:
-          # 막지 않는 경우: develop push · main 으로 가는 PR · develop/main 자체를 수동 실행(이미 머지된 코드다)
-          COVERAGE_ADVISORY: ${{ (github.event_name == 'push' || github.base_ref == 'main' || (github.event_name == 'workflow_dispatch' && (github.ref_name == 'develop' || github.ref_name == 'main'))) && '1' || '' }}
+          # 막지 않는 경우: develop push · 릴리스 PR(release/* → main) · develop/main 자체를 수동 실행(이미 머지된 코드다)
+          COVERAGE_ADVISORY: ${{ (github.event_name == 'push' || (github.base_ref == 'main' && startsWith(github.head_ref, 'release/')) || (github.event_name == 'workflow_dispatch' && (github.ref_name == 'develop' || github.ref_name == 'main'))) && '1' || '' }}
         run: ./gradlew build :app:coverageGate --no-daemon
       - name: 커버리지 리포트 보관
         if: ${{ !cancelled() && github.event_name != 'push' }}   # 검토용(PR·수동) — 실패해도 남기되, 취소된 실행은 건너뛴다

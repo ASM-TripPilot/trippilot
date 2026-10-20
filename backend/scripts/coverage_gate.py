@@ -16,8 +16,8 @@
 하한선은 **래칫**이다 — 오르면 상수를 올리는 PR 을 내고, 내리지 않는다. 처음부터 목표치(80% 같은)를
 걸면 첫날부터 빨갛거나 아무도 못 지키는 숫자가 되어 결국 게이트를 끄게 된다. 측정한 기준선에서 시작한다.
 
-`COVERAGE_ADVISORY=1` 이면 막지 않는다 — 하한 아래·판정 못 함 모두 exit 0(develop push 용: 막으면 이미
-머지된 코드의 이미지 발행이 멈춘다). GitHub Actions 안에서는 실패 사유를 커밋 체크 주석으로도 낸다 —
+`COVERAGE_ADVISORY=1` 이면 막지 않는다 — 하한 아래·판정 못 함 모두 exit 0(develop push·릴리스 PR 용 — 켜는 조건은
+backend-ci.yml. 막으면 이미 머지된 코드의 이미지 발행·운영 승격이 멈춘다). GitHub Actions 안에서는 실패 사유를 커밋 체크 주석으로도 낸다 —
 막는 모드는 `::error::`, advisory 는 `::warning::`.
 
 Gradle 내장 `JacocoCoverageVerification` 을 쓰지 않은 이유: 모듈마다 검증 태스크를 등록하면 모듈별 바닥도
