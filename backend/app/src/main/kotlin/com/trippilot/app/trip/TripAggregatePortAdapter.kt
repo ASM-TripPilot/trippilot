@@ -23,14 +23,19 @@ class TripAggregatePortAdapter(
 
     override fun countsOf(accountId: UUID, trips: List<TripDateRange>): Map<UUID, TripCounts> =
         trips.associate { trip ->
+            // 소유·존재 검증은 퍼사드가 하고, 일정이 없거나 남의 여행이면 null 이 온다.
+            val itinerary = itineraries.findCurrent(accountId, trip.tripId)
             trip.tripId to TripCounts(
                 // 배정은 날짜별로 오므로 같은 숙소가 여러 번 나온다 — 숙소 **수**는 중복을 뺀 값이다.
                 baseCount = bases.findBaseStays(trip.tripId, trip.startDate, trip.endDate)
                     .map { it.savedStayId }
                     .distinct()
                     .size,
-                // 일정이 없으면 0 이다. 소유·존재 검증은 퍼사드가 하고, 남의 여행이면 null 이 온다.
-                itineraryDayCount = itineraries.findCurrent(accountId, trip.tripId)?.dates?.size ?: 0,
+                itineraryDayCount = itinerary?.dates?.size ?: 0,
+                itineraryStatus = itinerary?.status,
+                itineraryGenerationState = itinerary?.generationState,
+                itineraryGenerationMode = itinerary?.generationMode,
+                itineraryGenerating = itinerary?.generating ?: false,
             )
         }
 }

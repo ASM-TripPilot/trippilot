@@ -30,4 +30,7 @@ data class ItineraryRef(
     val generationState: String, // PARTIAL | COMPLETE | FAILED
     val dates: List<LocalDate>,
     val slotKeys: List<String>,
+    val generationMode: String? = null, // FULLY_AI | CO_PLAN | MANUAL — 여행 카드가 눌렀을 때 갈 화면을 고른다
+    /** 진행 중 생성 세션이 있는가 — 다시 만들기 중에는 [generationState] 가 옛 일정의 COMPLETE 로 남아 있다. */
+    val generating: Boolean = false,
 )

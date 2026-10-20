@@ -159,6 +159,26 @@ class TripListCountsIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
+    fun `일정 상태가 카드에 실린다 — 앱이 여행마다 일정을 따로 부르지 않게`() {
+        val token = newToken()
+        val none = tripCard(token, newTrip(token))
+        none["itineraryStatus"].isNull shouldBe true
+        none["itineraryGenerationState"].isNull shouldBe true
+        none["itineraryGenerationMode"].isNull shouldBe true
+        none["itineraryGenerating"].asBoolean() shouldBe false
+
+        val trip = newTrip(token)
+        giveItinerary(trip, "2026-08-01", "2026-08-02")
+        val card = tripCard(token, trip)
+        // 일정 조회(`GET /trips/{id}/itinerary`)와 같은 값이어야 한다 — 목록과 상세가 다른 상태를 말하면 안 된다
+        val (_, detail) = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
+        card["itineraryStatus"].asText() shouldBe detail["status"].asText()
+        card["itineraryGenerationState"].asText() shouldBe detail["generationState"].asText()
+        card["itineraryGenerationMode"].asText() shouldBe detail["generationMode"].asText()
+        card["itineraryGenerating"].asBoolean() shouldBe !detail["generationSessionId"].isNull
+    }
+
+    @Test
     fun `남의 여행 집계가 섞이지 않는다`() {
         val mine = newToken()
         val other = newToken()
