@@ -12,7 +12,7 @@ import type { PreferenceInputTransportModesItem } from '@/shared/api/index.schem
  * '느긋하게'…)을 받으므로 이 매핑이 없으면 그대로 보낼 수 없다(그래서 "배선만"이 아니었다).
  *
  * 특례: 동행 'pet' slug 는 companionTypes 항목이 아니라 별도 `petFlag: boolean` 으로 간다
- * (서버 companionTypes enum 에 반려동물이 없다). 미선택 축은 null(→ 서버 "미설정으로 초기화"). 예산(`budgetTier`·`budgetRawAmount`)은 입력 기능을 걷어내
+ * (서버 companionTypes enum 에 반려동물이 없다). 미선택 축은 키를 생략한다(서버 "변경 없음" — null 은 "미설정 초기화"라 보내면 저장분이 지워진다, TRIP-1500 후속). 예산(`budgetTier`·`budgetRawAmount`)은 입력 기능을 걷어내
  * 키 자체를 보내지 않는다 — 생략은 서버에서 "변경 없음"이라 이미 저장된 등급은 그대로 남는다.
  */
 
@@ -108,13 +108,23 @@ function mapAxis<T>(
 export function toPreferenceInput(
   draft: PreferenceDraftValues
 ): PreferenceInput {
-  return {
-    styles: mapAxis(draft.styles, STYLE),
-    activities: mapAxis(draft.activities, ACTIVITY),
-    transportModes: mapAxis(draft.transports, TRANSPORT),
-    foodTastes: mapAxis(draft.foods, FOOD),
-    companionTypes: mapAxis(draft.companions, COMPANION),
-    petFlag: draft.companions?.includes('pet') ?? false,
-    pace: draft.pace === null ? null : (PACE[draft.pace] ?? null),
-  };
+  // 안 고른 축(null)은 키 자체를 뺀다 — 서버 PUT 은 생략=변경 없음(Keep)·null=미설정 초기화라,
+  // null 로 실으면 재진입 사용자가 한 축만 골라도 저장돼 있던 나머지 취향이 지워진다(TRIP-1500 후속).
+  const input: PreferenceInput = {};
+  const styles = mapAxis(draft.styles, STYLE);
+  if (styles !== null) input.styles = styles;
+  const activities = mapAxis(draft.activities, ACTIVITY);
+  if (activities !== null) input.activities = activities;
+  const transportModes = mapAxis(draft.transports, TRANSPORT);
+  if (transportModes !== null) input.transportModes = transportModes;
+  const foodTastes = mapAxis(draft.foods, FOOD);
+  if (foodTastes !== null) input.foodTastes = foodTastes;
+  const companionTypes = mapAxis(draft.companions, COMPANION);
+  if (companionTypes !== null) {
+    input.companionTypes = companionTypes;
+    input.petFlag = draft.companions?.includes('pet') ?? false;
+  }
+  const pace = draft.pace === null ? undefined : PACE[draft.pace];
+  if (pace !== undefined) input.pace = pace;
+  return input;
 }

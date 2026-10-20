@@ -262,6 +262,34 @@ describe('PrefStep2Page — 한 축이라도 골랐으면 [완료]는 취향을 
   );
 });
 
+// TRIP-1500 후속(B′) — 재진입 사용자가 한 축만 골라도 안 고른 축이 null 로 실리면 서버(키 생략=Keep · null=초기화)가
+// 저장돼 있던 나머지 취향을 지운다. 안 건드린 축은 키 자체가 본문에 없어야 하고, petFlag 도 pet 을 골랐을 때만 간다.
+describe('PrefStep2Page — 한 축만 골라 [완료]하면 안 고른 축은 PUT 본문에서 생략된다 (TRIP-1500 후속)', () => {
+  it('foods 만 골라도 PUT 본문에 foodTastes 외 취향 키(null 포함)가 없다', () => {
+    usePreferenceStore.getState().toggleFood('korean');
+    render(<PrefStep2Page />);
+
+    fireEvent.press(screen.getByTestId('onboarding-pref2-done'));
+
+    expect(mockPutMutate).toHaveBeenCalledTimes(1);
+    expect(mockPutMutate.mock.calls[0][0].data).toEqual({
+      foodTastes: ['한식'],
+    });
+  });
+
+  it('동행에서 pet 만 골라도 companionTypes 는 [] 로, petFlag 는 true 로 간다', () => {
+    usePreferenceStore.getState().toggleCompanion('pet');
+    render(<PrefStep2Page />);
+
+    fireEvent.press(screen.getByTestId('onboarding-pref2-done'));
+
+    expect(mockPutMutate.mock.calls[0][0].data).toEqual({
+      companionTypes: [],
+      petFlag: true,
+    });
+  });
+});
+
 describe('PrefStep2Page — 일괄 탈출 (AC4 · 5-6)', () => {
   it('skip-top을 탭하면 홈으로 replace하고, 이미 고른 styles는 그대로 남는다', async () => {
     // 준비 — styles만 미리 선택된 상태.

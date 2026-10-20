@@ -58,12 +58,12 @@ describe('toPreferenceInput — 축별 slug→서버값 번역(TRIP-471)', () =>
     expect(result.petFlag).toBe(false);
   });
 
-  it('미선택 축은 null 로 남는다(서버: 미설정으로 초기화)', () => {
-    const result = toPreferenceInput(EMPTY);
-    expect(result.styles).toBeNull();
-    expect(result.pace).toBeNull();
-    expect(result.companionTypes).toBeNull();
-    expect(result.petFlag).toBe(false); // 동행 축 미선택이면 반려동물도 아님
+  it('미선택 축은 키가 없다(서버: 생략=변경 없음 — null 이면 저장분이 초기화된다, TRIP-1500 후속)', () => {
+    expect(toPreferenceInput(EMPTY)).toEqual({});
+    // 한 축만 골랐으면 그 축만 실린다 — petFlag 도 동행 축을 골랐을 때만.
+    expect(toPreferenceInput({ ...EMPTY, styles: ['rest'] })).toEqual({
+      styles: ['휴양'],
+    });
   });
 
   it('알 수 없는 slug 는 조용히 버린다(가비지 전송 방지)', () => {
