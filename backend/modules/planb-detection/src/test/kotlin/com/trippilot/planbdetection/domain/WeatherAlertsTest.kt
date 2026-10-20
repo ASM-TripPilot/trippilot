@@ -9,6 +9,7 @@ import com.trippilot.trip.api.TripDestinationRef
 import com.trippilot.weathercontext.api.WarningArea
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import java.io.File
 import java.time.LocalDate
@@ -38,6 +39,21 @@ class WeatherAlertsTest : StringSpec({
         WeatherAlerts.placeOf("28710", "강화") shouldBe Place("28710", setOf(Province.INCHEON), stem = "강화", wide = false, label = "인천")
         WeatherAlerts.placeOf("26710", "기장군") shouldBe Place("26710", setOf(Province.BUSAN), stem = "기장", wide = false, label = "부산")
         WeatherAlerts.placeOf("28275", "서해구") shouldBe Place("28275", setOf(Province.INCHEON), stem = "서해", wide = true, label = "인천")
+        mapOf("26710" to "기장군", "27710" to "달성군", "27720" to "군위군", "28710" to "강화군", "28720" to "옹진군", "31710" to "울주군")
+            .forEach { (code, name) -> withClue(code) { WeatherAlerts.placeOf(code, name)!!.wide shouldBe false } }
+        // 서울에는 군이 없다 — 송파구·강동구는 코드 셋째 자리가 7 이어도 구다
+        WeatherAlerts.placeOf("11710", "송파구") shouldBe Place("11710", setOf(Province.SEOUL), stem = "송파", wide = true, label = "서울")
+        WeatherAlerts.placeOf("11740", "강동구") shouldBe Place("11740", setOf(Province.SEOUL), stem = "강동", wide = true, label = "서울")
+    }
+
+    /** 군 여부는 코드가 정한다(표시 이름은 접미 없이 올 수 있다) — 시드의 시군구 전부에서 그 판정이 이름 끝 '군'과 같아야 한다. */
+    "특별·광역시·제주에서 줄 전체로 맞추지 않는 것은 군뿐이다 — 시드의 시군구 전부에서 코드 판정이 이름 끝 '군'과 같다" {
+        val rows = seedSigungu()
+        rows.map { it.first } shouldContain "11710" // 시드를 실제로 읽었다
+        rows.forEach { (code, name) ->
+            val place = WeatherAlerts.placeOf(code, name)!!
+            withClue("$code $name") { place.wide shouldBe (place.provinces.single().wide && !name.endsWith("군")) }
+        }
     }
 
     "시도 코드 → 특보 광역 — 17 시도 전부 · 통합특별시(12) 시도 단위는 광주·전남 둘 다 · t6 의 광역 이름(별칭 포함)" {
@@ -81,9 +97,8 @@ class WeatherAlertsTest : StringSpec({
      * 신설·개명·통합) 표를 그대로 두면 새 시군의 구역 이름이 '모르는 이름'이 되어 그 도의 시군 목적지가 모두 모름으로 떨어진다.
      */
     "도의 시군 어간 표는 행정구역 시드와 같다 — 시드가 바뀌면 표도 고친다" {
-        val seed = repoFile("backend/app/src/main/resources/db/migration/R__seed_region_catalog.sql").readText()
-        val fromSeed = Regex("""\('(\d{5})', '([^']+)', '\d{2}', '[^']+', 'SIGUNGU', (?:true|false)\)""").findAll(seed)
-            .mapNotNull { WeatherAlerts.placeOf(it.groupValues[1], it.groupValues[2]) }
+        val fromSeed = seedSigungu()
+            .mapNotNull { (code, name) -> WeatherAlerts.placeOf(code, name) }
             .filterNot { it.provinces.single().wide }
             .groupBy({ it.provinces.single() }, { it.stem!! })
             .mapValues { (_, stems) -> stems.toSet() }
@@ -309,6 +324,13 @@ class WeatherAlertsTest : StringSpec({
 })
 
 private fun withClue(area: WarningArea, place: Place, block: () -> Unit) = withClue("$area × $place") { block() }
+
+/** 행정구역 시드의 시군구 행 — (코드, 이름). */
+private fun seedSigungu(): List<Pair<String, String>> {
+    val seed = repoFile("backend/app/src/main/resources/db/migration/R__seed_region_catalog.sql").readText()
+    return Regex("""\('(\d{5})', '([^']+)', '\d{2}', '[^']+', 'SIGUNGU', (?:true|false)\)""").findAll(seed)
+        .map { it.groupValues[1] to it.groupValues[2] }.toList()
+}
 
 /** 모노레포 루트 기준 파일 — 모듈 위치가 바뀌어도 견디게 위로 올라가며 찾는다(ReplanMaterialTest 와 같은 방식). */
 private fun repoFile(relative: String): File {

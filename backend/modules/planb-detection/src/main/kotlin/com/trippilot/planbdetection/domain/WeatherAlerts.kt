@@ -170,7 +170,7 @@ object WeatherAlerts {
         if (code.length == 2) return Place(code, provinces, stem = null, wide = true, label = provinces.singleOrNull()?.label ?: name.trim())
         val stem = stemOf(name)
         val province = provinces.single()
-        return Place(code, provinces, stem, province.wide && !isGun(code), if (province.wide) province.label else stem ?: province.label)
+        return Place(code, provinces, stem, province.wide && !isGun(province, code), if (province.wide) province.label else stem ?: province.label)
     }
 
     /** 이 특보 구역이 이 목적지에 걸리는가(위 규칙 1~9). */
@@ -260,8 +260,11 @@ object WeatherAlerts {
     /** 섬 구역이 이 목적지에 걸리는가 — 그 섬의 시군이거나 그 광역 목적지(규칙 3·5). */
     private fun islandCovers(code: String, place: Place): Boolean = place.code == code || place.code == code.take(2)
 
-    /** 시군구 코드의 셋째 자리가 7 이상이면 군이다(행정표준코드 — 26710 기장군 · 28710 강화군 · 31710 울주군). */
-    private fun isGun(code: String): Boolean = code[2] >= '7'
+    /**
+     * 시군구 코드의 셋째 자리가 7 이상이면 군이다(행정표준코드 — 26710 기장군 · 28710 강화군 · 31710 울주군). 서울(특별시)에는 군이 없다 —
+     * 구 코드가 그 자리까지 간다(11710 송파구 · 11740 강동구).
+     */
+    private fun isGun(province: Province, code: String): Boolean = province != Province.SEOUL && code[2] >= '7'
 
     /** 시군 어간 — 첫 낱말의 끝 `시`·`군`·`구` 를 뗀다(`포항시` → `포항`, `수원시 장안구` → `수원`). 두 글자가 안 되면 null(`중구`). */
     private fun stemOf(name: String): String? {
