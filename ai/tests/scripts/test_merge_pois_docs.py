@@ -545,8 +545,12 @@ def test_공유본의_모든_주소는_백엔드가_시도를_정한다() -> Non
 def _backend_first_token(address: str | None) -> str | None:
     """`RegionResolver.resolve` 의 첫 토큰을 그대로 흉내 낸다. 주소가 없으면 백엔드는 미판정으로 세니 None 이다.
     Kotlin `Regex("\\s+")` 는 ASCII 공백만 나누므로 `str.split()`(NBSP·U+3000 도 나눔)을 쓰면 거울이 느슨해진다."""
-    tokens = [t for t in re.split(r"[ \t\n\x0b\f\r]+", (address or "").strip()) if t.strip()]
+    tokens = [t for t in re.split(r"[ \t\n\x0b\f\r]+", (address or "").strip(_KT_WHITESPACE)) if t.strip(_KT_WHITESPACE)]
     return tokens[0] if tokens else None
+
+
+# Kotlin `trim()`·`isBlank()` 의 공백(Char.isWhitespace) — Python `isspace` 와 U+0085(NEL) 하나만 다르다(BMP 전수 대조).
+_KT_WHITESPACE = "".join(c for c in map(chr, range(0x10000)) if c.isspace() and c != "\x85")
 
 
 def test_거울의_첫_토큰은_백엔드와_같이_자른다() -> None:
@@ -554,6 +558,7 @@ def test_거울의_첫_토큰은_백엔드와_같이_자른다() -> None:
     assert _backend_first_token("  ") is None                                  # 백엔드: 미판정
     assert _backend_first_token("부산광역시\u3000사하구") == "부산광역시\u3000사하구"  # 백엔드: 한 토큰
     assert _backend_first_token(" 부산광역시  사하구") == "부산광역시"
+    assert _backend_first_token("\x85부산광역시 사하구") == "\x85부산광역시"      # Kotlin trim 은 NEL 을 안 자른다
 
 
 # ── 공유본 직렬화 — 한 행에 한 줄 (2026-10-18) ─────────────────────────
