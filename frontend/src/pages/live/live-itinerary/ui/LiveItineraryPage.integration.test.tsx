@@ -3685,6 +3685,54 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
   });
 
   describe('🔴 AC-5 · 완료 메모 저장 실패 (INV-4)', () => {
+    it('D13 방문 v2 의 PUT 이 보류 중이어도 시트를 닫고 연 완료 방문 v1 의 [저장]은 활성이고 누르면 v1 PUT 이 나간다 (TRIP-1493 · BR-U5-14)', async () => {
+      // 준비 — 관람 중 v2 에서 저장(PUT 보류) → 시트 닫음.
+      holdMemo();
+      await renderHub();
+      fireEvent.press(await screen.findByTestId('execution-arrive-memo'));
+      typeAndSave(await openedMemoInput(), 'v2 글');
+      await waitFor(() => expect(hitCount(MEMO_PUT_V2)).toBe(1));
+      fireEvent.press(screen.getByTestId('live-memo-close'));
+
+      // 실행 — 완료 카드 v1 [메모] → 글 → [저장].
+      fireEvent.press(screen.getByTestId(done('memo')));
+      const input = await openedMemoInput();
+      fireEvent.changeText(input, 'v1 글');
+
+      // 단언 — 활성이고, 누르면 v1 PUT.
+      expect(screen.getByTestId(SAVE)).toBeEnabled();
+      fireEvent.press(screen.getByTestId(SAVE));
+      await waitFor(() => expect(hitCount(MEMO_PUT_V1)).toBe(1));
+      await release();
+    });
+
+    it('D14 같은 방문의 PUT 이 보류 중이면 [저장]을 다시 눌러도 PUT 은 늘지 않는다 (방문별 잠금 유지)', async () => {
+      holdMemo();
+      await renderHub();
+      fireEvent.press(screen.getByTestId(done('memo')));
+      typeAndSave(await openedMemoInput(), '한 번만');
+      await waitFor(() => expect(hitCount(MEMO_PUT_V1)).toBe(1));
+
+      expect(screen.getByTestId(SAVE)).toBeDisabled();
+      fireEvent.press(screen.getByTestId(SAVE));
+      await settle();
+
+      expect(hitCount(MEMO_PUT_V1)).toBe(1);
+      await release();
+    });
+
+    it('D15 허브 시트에서 글을 쓰고 키보드 완료(blur)만 해도 PUT 은 0회다 — 저장은 [저장] 하나 (TRIP-1426)', async () => {
+      await renderHub();
+      fireEvent.press(screen.getByTestId(done('memo')));
+      const input = await openedMemoInput();
+      fireEvent.changeText(input, 'blur 만');
+      fireEvent(input, 'blur');
+      await settle();
+
+      expect(hitCount(MEMO_PUT_V1)).toBe(0);
+      expect(memoBodies).toEqual([]);
+    });
+
     it('D11 시트가 열린 채 500 → 시트 안에 안내, 카드 아래 안내(완료·관람 중)는 없다', async () => {
       memoStatus = 500;
       await renderHub();

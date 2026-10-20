@@ -134,7 +134,6 @@ export function MemoSheet({
             key={editable ? 'open' : 'locked'}
             editable={editable}
             text={text}
-            submitOnBlur={false}
             onChangeDraft={setDraft}
             className="max-h-[96px] p-0 font-noto text-body text-ink"
           />
