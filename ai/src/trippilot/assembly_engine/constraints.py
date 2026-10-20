@@ -224,7 +224,8 @@ def check_hc4(solution: ItinerarySolution, problem: ItineraryProblem) -> list[Vi
                 continue
             start_m = _min_of_day(slot.start_at) + 1440 * (slot.start_at.date() - day.date).days
             end_m = start_m + int((slot.end_at - slot.start_at).total_seconds() // 60)
-            if start_m < ws or end_m > we:
+            # 시작은 그날 안(자정 넘는 창에서도 끝만 넘는다 — 슬롯은 시작 시각 + ends_next_day 로 나간다)
+            if start_m < ws or end_m > we or start_m > 24 * 60 - 1:
                 out.append(Violation("HC4", slot.poi_id,
                                      f"day window({ws}~{we}) 밖: {start_m}~{end_m}"))
     return out

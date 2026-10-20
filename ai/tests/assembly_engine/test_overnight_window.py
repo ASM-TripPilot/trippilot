@@ -97,7 +97,39 @@ def test_a_visit_past_the_overnight_end_breaks_the_day_window() -> None:
     problem, index = _problem(), {_NIGHT.poi_id: _NIGHT}
     base = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
     placed = base.days[0].slots[0]
-    for start, broken in ((_at(_NEXT, 0, 30), True), (_at(_NEXT, 0, 0), False)):
+    for start, broken in ((_at(_NEXT, 0, 30), True), (_at(_DAY, 23, 30), False)):   # 끝만 자정을 넘는 23:30~00:30 은 창 안
         slot = replace(placed, start_at=start, end_at=start + timedelta(minutes=60))
         sol = replace(base, days=(replace(base.days[0], slots=(slot,)),))
         assert bool(check_hc4(sol, problem)) is broken, start
+
+
+# ⑤ 시작은 그날 안 — 백엔드 슬롯은 시작 시각 + ends_next_day 라 자정 뒤 **시작**을 담지 못한다 ─────────
+
+_MIDNIGHT_CLUB = Poi(PoiId("club"), "club", PoiCategory.NIGHT_VIEW, GeoPoint(_ANCHOR.lat + 0.004, _ANCHOR.lng),
+                     tuple(OpenHour(day_of_week=d, open_min=24 * 60, close_min=26 * 60) for d in range(7)),
+                     None, None, DataQuality.FULL, PoiSource.SEED, None)
+
+
+@pytest.mark.parametrize("engine", ["or", "fallback"])
+def test_no_visit_starts_after_midnight_even_in_an_overnight_window(engine) -> None:
+    """자정에 여는 곳(00:00~02:00)은 23:00~01:00 창이어도 놓지 않는다 — 놓으면 00:00 시작이라 백엔드가 못 담는다."""
+    from dataclasses import replace
+
+    problem = replace(_problem(), candidates=(ScoredPoi(_MIDNIGHT_CLUB.poi_id, 0.9, True),))
+    index = {_MIDNIGHT_CLUB.poi_id: _MIDNIGHT_CLUB}
+    if engine == "or":
+        solution = OrToolsAssembler(index, _EST, _CFG).solve(problem, remaining_ms=10_000)
+    else:
+        solution = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
+
+    assert [s for d in solution.days for s in d.slots] == []
+
+
+def test_hc4_rejects_a_start_after_midnight() -> None:
+    from dataclasses import replace
+
+    problem, index = _problem(), {_NIGHT.poi_id: _NIGHT}
+    base = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
+    slot = replace(base.days[0].slots[0], start_at=_at(_NEXT, 0, 0), end_at=_at(_NEXT, 0, 50))
+    sol = replace(base, days=(replace(base.days[0], slots=(slot,)),))
+    assert check_hc4(sol, problem)
