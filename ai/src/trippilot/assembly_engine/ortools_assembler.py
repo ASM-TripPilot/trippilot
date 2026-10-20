@@ -29,6 +29,7 @@ from typing import Mapping
 from ortools.sat.python import cp_model
 
 from trippilot.assembly_engine.config import (
+    LAST_START_MIN,
     END_NEAR_WEIGHT,
     RAIN_INDOOR,
     RAIN_OUTDOOR,
@@ -359,7 +360,7 @@ class OrToolsAssembler:
             if floor is not None and c.poi_id not in fixed_ids:
                 # 하한 시각에 지금 위치(앵커)에서 출발 — 정의역만 좁힌다(용량 컷 유효)
                 lo = max(lo, floor + anchor_minutes(problem, poi, self._est))
-            hi = min(win[1], we) - stay
+            hi = min(min(win[1], we) - stay, LAST_START_MIN)  # 시작은 그날 안(자정 넘는 창에서도)
             if lo > hi:
                 continue  # 시간창 불가 — 제외
             nodes.append({"poi": poi, "stay": stay, "lo": lo, "hi": hi,
@@ -411,7 +412,7 @@ class OrToolsAssembler:
             base_lo = ws
             if floor is not None:
                 base_lo = max(base_lo, floor + anchor_minutes(problem, poi, self._est))
-            dom = sorted((max(o, base_lo), min(c, we) - stay) for o, c in todays)
+            dom = sorted((max(o, base_lo), min(min(c, we) - stay, LAST_START_MIN)) for o, c in todays)
             dom = [(a, b) for a, b in dom if a <= b]
             if not dom:
                 continue  # 체류가 영업창·하루 창에 안 들어간다 → 미배치

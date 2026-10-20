@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 from typing import Iterable, Mapping, Sequence
 
 from trippilot.assembly_engine.config import (
+    LAST_START_MIN,
     END_NEAR_WEIGHT,
     RAIN_INDOOR,
     RAIN_OUTDOOR,
@@ -207,6 +208,7 @@ class RuleFallbackAssembler:
                     cat_count[fb_poi.category] += 1
                     cap_count.update(k for k, _ in self._cfg.daily_caps(fb_poi))
             day_end = problem.window_on(day).end
+            next_midnight = problem.window_on(day).start.replace(hour=0, minute=0) + timedelta(days=1)
             windows = (self._cfg.lunch_window_min, self._cfg.dinner_window_min)
             meal_done = [False] * len(windows)
             # ①′ 시각 없는 필수 방문 (TRIP-1249) — 고정 블록 사이 틈에서 가장 이른 가능 시각.
@@ -377,8 +379,8 @@ class RuleFallbackAssembler:
                         start = max(start, not_before + timedelta(
                             minutes=anchor_minutes(problem, poi, self._est)))
                     end = start + timedelta(minutes=stay)
-                    if end > day_end:
-                        continue  # day window 초과 (HC4)
+                    if end > day_end or start >= next_midnight:
+                        continue  # day window 초과 (HC4) — 자정 넘는 창에서도 시작은 그날 안
                     if not open_hours_ok(poi, start, end, problem.holidays):
                         continue  # 영업시간 (HC1 — 검증과 같은 함수, 공휴일 포함)
                     # 고정 블록과의 충돌: 말단 삽입이라 뒤에 오는 고정 블록만 위험
@@ -481,7 +483,7 @@ class RuleFallbackAssembler:
         todays = open_windows_on(poi, day, problem.holidays)  # 그 날 창 — 검증과 같은 함수(공휴일 포함)
         for lo_r, hi_r in ranges:
             for lb, ub in gaps:
-                t = self._earliest_open(max(lb, lo_r), min(ub, hi_r) - stay, stay, todays)
+                t = self._earliest_open(max(lb, lo_r), min(min(ub, hi_r) - stay, LAST_START_MIN), stay, todays)
                 if t is not None:
                     return base + timedelta(minutes=t)
         return None
