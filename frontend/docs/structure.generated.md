@@ -629,11 +629,12 @@
 - `src/pages/assistant/assistant-sheet/ui/AnswerFeedback.tsx`  →  AnswerFeedbackProps · AnswerFeedback
 - `src/pages/assistant/assistant-sheet/ui/AssistantCards.tsx`  →  MessageCardHandlers · ReviewCard · CandidateCard · InfoCard · ScopeCard · RefusalNotice · FallbackNotice · ActionLogRow · cardConsumes · MessageCard
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetChrome.tsx`  →  AssistantSheetHeader · QuickReplyBar · Composer · TurnStatusRow
-- `src/pages/assistant/assistant-sheet/ui/AssistantSheetGlyphs.tsx`  →  CloseGlyph · SendArrowGlyph · ChevronRightGlyph · WarningGlyph · InfoGlyph · RetryGlyph · CheckGlyph · ThumbGlyph · MoreVGlyph · ListGlyph · ReplyGlyph
+- `src/pages/assistant/assistant-sheet/ui/AssistantSheetGlyphs.tsx`  →  CloseGlyph · SendArrowGlyph · ChevronRightGlyph · WarningGlyph · InfoGlyph · RetryGlyph · CheckGlyph · ThumbGlyph · MoreVGlyph · ListGlyph · ReplyGlyph · ArrowDownGlyph · ExternalLinkGlyph
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetPage.tsx`  →  AssistantSheetPageProps · AssistantSheetPage
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetView.tsx`  →  AssistantSheetViewProps · AssistantSheetView
 - `src/pages/assistant/assistant-sheet/ui/HistoryView.tsx`  →  HistoryViewProps · HistoryView
 - `src/pages/assistant/assistant-sheet/ui/MessageList.tsx`  →  MessageListProps · UserBubble · AssistantBubble · NextActionButton · MessageList
+- `src/pages/assistant/assistant-sheet/ui/OutlineCard.tsx`  →  OutlineCard · ActionRow
 - `src/pages/assistant/assistant-sheet/ui/ProposalCard.tsx`  →  ProposalCardProps · ProposalCard
 
 ## src/pages/auth/login/config/
@@ -1799,4 +1800,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1151개 파일
+합계 1152개 파일

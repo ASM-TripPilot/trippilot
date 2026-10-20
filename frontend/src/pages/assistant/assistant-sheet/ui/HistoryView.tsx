@@ -83,6 +83,7 @@ export function HistoryView({
             <ActionLogRow
               key={log.id}
               testID={`assistant-history-row-${log.id}`}
+              id={log.id}
               payload={log.payload as ActionLogPayload}
             />
           ))

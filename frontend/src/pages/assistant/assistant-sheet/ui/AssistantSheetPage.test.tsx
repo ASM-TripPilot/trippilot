@@ -248,6 +248,10 @@ describe('AssistantSheetPage · 카드 배선 (TRIP-1323)', () => {
     await act(async () => {
       fireEvent.press(await screen.findByTestId('assistant-fallback-continue'));
     });
+    // TRIP-1528 — 응답 실패 문장은 평문과 카드에 겹쳐 두 번 나오지 않는다
+    expect(
+      screen.getAllByText('지금 도우미가 응답하지 못했어요.')
+    ).toHaveLength(1);
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 });

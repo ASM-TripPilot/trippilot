@@ -561,6 +561,23 @@ describe('키보드 모드 (TRIP-1526 · 01b Q6)', () => {
     }
   );
 
+  it('TRIP-1527 · 줄어든(shrunk) 패널에서도 위로 올리면 ↓ 버튼이 나타난다', () => {
+    renderView({ messages: review() });
+    emitKeyboard('keyboardDidShow');
+    expect(modeIds()).toEqual(['assistant-sheet-mode-shrunk']);
+    expect(screen.queryByTestId('assistant-scroll-down')).toBeNull();
+
+    fireEvent.scroll(screen.getByTestId('assistant-message-list'), {
+      nativeEvent: {
+        contentOffset: { x: 0, y: 300 },
+        contentSize: { width: 390, height: 2000 },
+        layoutMeasurement: { width: 390, height: 400 },
+      },
+    });
+
+    expect(screen.getByTestId('assistant-scroll-down')).toBeOnTheScreen();
+  });
+
   it.each<KeyboardEventName>(['keyboardWillHide', 'keyboardDidHide'])(
     '%s · 키보드를 내리면 원래 틀(full)로 돌아온다(대화 없음·있음 모두)',
     (hideEvent) => {

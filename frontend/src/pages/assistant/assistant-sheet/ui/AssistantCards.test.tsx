@@ -148,6 +148,16 @@ describe('RefusalNotice (TRIP-1323 · b04)', () => {
       { exact: false }
     );
   });
+
+  it('TRIP-1528 · 서버 문자열을 잘라 제목/본문으로 나누지 않고 한 줄 그대로 그린다(BR-U8-26)', () => {
+    const message = assistantSample('refusal', { id: 'g2' });
+    renderCard(message);
+    const full = (message.payload as { capabilities: string }).capabilities;
+    // 문자열 인자 toHaveTextContent 는 완전 일치(02a ★5) — 잘라 내면 통과하지 못한다
+    expect(screen.getByTestId('assistant-capabilities')).toHaveTextContent(
+      full
+    );
+  });
 });
 
 describe('FallbackNotice (TRIP-1323 · b05)', () => {
@@ -211,5 +221,55 @@ describe('ActionLogRow (TRIP-1323 · b06 행)', () => {
       exact: false,
     });
     expect(row).toHaveTextContent('반영된 변경', { exact: false });
+    // 심판 W2 — 상세(detail) 문자열이 서버 값 그대로 그려진다
+    expect(row).toHaveTextContent('카페 모카 → 책방카페 (솔버 검증)', {
+      exact: false,
+    });
+  });
+
+  // TRIP-1528 · 01b Q10 — 배지는 `assistant-badge-${행 id}` 로 집는다(행 testID 접두와 겹치지 않는 이름 — 02a §9). 색(success 계열)은 jest 사각(6-b).
+  it.each([
+    ['CHANGE', '반영된 변경'],
+    ['FILTER', '적용된 필터'],
+  ] as const)('태그 %s 는 "%s" 배지를 그린다', (tag, label) => {
+    renderCard({
+      id: 'l2',
+      role: 'ASSISTANT',
+      kind: 'ACTION_LOG',
+      payload: { what: '오늘 14:25 · 변경', tag },
+      nextActions: [],
+      createdAt: '',
+    });
+    expect(screen.getByTestId('assistant-badge-l2')).toHaveTextContent(label);
+  });
+
+  it('진행 검토(태그 REVIEW) 행은 배지가 없고 무엇을 했는지는 그대로 보인다', () => {
+    renderCard({
+      id: 'l3',
+      role: 'ASSISTANT',
+      kind: 'ACTION_LOG',
+      payload: { what: '오늘 14:30 · 진행 검토', tag: 'REVIEW' },
+      nextActions: [],
+      createdAt: '',
+    });
+    expect(screen.getByTestId('assistant-action-log-l3')).toHaveTextContent(
+      '진행 검토',
+      { exact: false }
+    );
+    expect(screen.queryByTestId('assistant-badge-l3')).toBeNull();
+    // 옛 배지 글자 — 문자열 인자 queryByText 는 완전 일치라 `what` 안의 '검토'에는 걸리지 않는다
+    expect(screen.queryByText('검토')).toBeNull();
+  });
+
+  it('태그가 없으면 배지도 없다', () => {
+    renderCard({
+      id: 'l4',
+      role: 'ASSISTANT',
+      kind: 'ACTION_LOG',
+      payload: { what: '오늘 14:40 · 기록' },
+      nextActions: [],
+      createdAt: '',
+    });
+    expect(screen.queryByTestId('assistant-badge-l4')).toBeNull();
   });
 });
