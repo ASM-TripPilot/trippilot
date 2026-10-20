@@ -18,13 +18,6 @@ import { useSpontaneousNames } from '@/features/check-visit';
 import { useVisitCheck } from '@/features/check-visit';
 import { isOptimisticVisit } from '@/features/check-visit';
 import {
-  AutoRevertDialog,
-  autoRecordPart,
-  useRevertAutoVisit,
-  type AutoRevertError,
-  type AutoRevertPart,
-} from '@/features/check-visit';
-import {
   isLocationAutomationEnabled,
   routeDayForDate,
   routeDayToSegments,
@@ -179,27 +172,6 @@ export function TripRecordsPage({
     : DEFAULT_CENTER;
 
   const automationOn = isLocationAutomationEnabled();
-  const revertAuto = useRevertAutoVisit(tripId);
-  const [revertTarget, setRevertTarget] = useState<{
-    visitCheckId: string;
-    nameKo: string;
-    part: AutoRevertPart;
-    error: AutoRevertError;
-  } | null>(null);
-  const handleRevertAuto = (visitCheckId: string): void => {
-    const visit = records.data?.visits.find(
-      (v) => v.visitCheckId === visitCheckId
-    );
-    const part = visit ? autoRecordPart(visit) : null;
-    if (!visit || !part) return;
-    const card = cards.find((c) => c.visitCheckId === visitCheckId);
-    setRevertTarget({
-      visitCheckId,
-      nameKo: card?.nameKo ?? '이 장소',
-      part,
-      error: null,
-    });
-  };
 
   // TRIP-1343 · 풀 지도 실제 경로 — 그날 경로가 있고 위치 동의가 있을 때만(BR-U10-41). 플래그 OFF 면 조회 0.
   const locationConsent = useGetMeLocationConsent({
@@ -231,8 +203,6 @@ export function TripRecordsPage({
       arrivedLabel: visit.arrivedAt
         ? seoulTime(new Date(visit.arrivedAt))
         : null,
-      // TRIP-1340 — 서버 출처에서 파생(플래그 OFF 빌드는 자동 기록 자체가 없다).
-      autoRecorded: automationOn && autoRecordPart(visit) !== null,
     })
   );
 
@@ -351,7 +321,6 @@ export function TripRecordsPage({
               onPressComplete={handleComplete}
               onPressSkip={handleSkip}
               onPressEditTime={handleEditTime}
-              onPressRevertAuto={automationOn ? handleRevertAuto : undefined}
             />
           ) : undefined
         }
@@ -415,33 +384,6 @@ export function TripRecordsPage({
           now={new Date().toISOString()}
           onSave={handleSaveTimes}
           onCancel={() => setEditingId(null)}
-        />
-      ) : null}
-
-      {revertTarget != null ? (
-        <AutoRevertDialog
-          testIDPrefix="record-visit-auto-revert"
-          placeName={revertTarget.nameKo}
-          part={revertTarget.part}
-          pending={revertAuto.pending}
-          error={revertTarget.error}
-          onCancel={() => setRevertTarget(null)}
-          onConfirm={() => {
-            void revertAuto
-              .revert(revertTarget.visitCheckId)
-              .then((outcome) => {
-                if (outcome === 'ok') setRevertTarget(null);
-                else
-                  setRevertTarget((t) =>
-                    t
-                      ? {
-                          ...t,
-                          error: outcome === 'media' ? 'media' : 'failed',
-                        }
-                      : t
-                  );
-              });
-          }}
         />
       ) : null}
 

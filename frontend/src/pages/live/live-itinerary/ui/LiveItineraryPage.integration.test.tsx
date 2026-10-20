@@ -418,9 +418,9 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       openSettings.mockRestore();
     });
 
-    it('U6 자동 출처 방문 → 칩 + ⋯ → 확인 다이얼로그, [취소]면 되돌리기 호출 0회 · [되돌리기]면 1회(TRIP-1340)', async () => {
+    it('U6 자동 출처 방문도 수동 기록 카드와 같다 — 「자동 기록」 칩·⋯ 없음, 되돌리기 요청 0회(TRIP-1523)', async () => {
       mockAutomation = { state: 'ARMED', notice: null, droppedCount: 0 };
-      const revertSpy = jest.spyOn(getAutomationSink(), 'revertAuto');
+      const revertHits = jest.fn();
       server.use(
         itineraryOk(),
         tripHandler(),
@@ -431,56 +431,27 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
             completionSource: 'AUTO_GEOFENCE_EXIT',
           },
         ]),
-        consentOk()
+        consentOk(),
+        http.post(
+          `${BASE}/trips/:tripId/visits/:visitCheckId/revert-auto`,
+          () => {
+            revertHits();
+            return HttpResponse.json({});
+          }
+        )
       );
       await renderActive();
-      await waitFor(() =>
-        expect(
-          screen.getByTestId(`execution-live-slot-auto-badge-${TODAY}#p1`)
-        ).toBeTruthy()
-      );
-      fireEvent.press(
-        screen.getByTestId(`execution-live-slot-auto-revert-${TODAY}#p1`)
-      );
-      fireEvent.press(
-        screen.getByTestId('execution-live-slot-auto-revert-cancel')
-      );
-      expect(revertSpy).not.toHaveBeenCalled();
-      expect(
-        screen.queryByTestId('execution-live-slot-auto-revert-dialog')
-      ).toBeNull();
-
-      fireEvent.press(
-        screen.getByTestId(`execution-live-slot-auto-revert-${TODAY}#p1`)
-      );
-      await act(async () => {
-        fireEvent.press(
-          screen.getByTestId('execution-live-slot-auto-revert-confirm')
-        );
-      });
-      expect(revertSpy).toHaveBeenCalledTimes(1);
-      expect(revertSpy).toHaveBeenCalledWith(TRIP_ID, 'v1');
-      await waitFor(() =>
-        expect(
-          screen.queryByTestId('execution-live-slot-auto-revert-dialog')
-        ).toBeNull()
-      );
-      revertSpy.mockRestore();
-    });
-
-    it('U7 수동 기록 방문 → 칩·되돌리기 없음', async () => {
-      mockAutomation = { state: 'ARMED', notice: null, droppedCount: 0 };
-      server.use(
-        itineraryOk(),
-        tripHandler(),
-        visitsHandler([completedVisit()]),
-        consentOk()
-      );
-      await renderActive();
+      // 앵커: 자동으로 남은 방문이 완료 카드(방문 시각)로 그려졌다.
+      await screen.findByTestId(`execution-live-slot-visit-time-${TODAY}#p1`);
       await settle();
       expect(
         screen.queryByTestId(`execution-live-slot-auto-badge-${TODAY}#p1`)
       ).toBeNull();
+      expect(
+        screen.queryByTestId(`execution-live-slot-auto-revert-${TODAY}#p1`)
+      ).toBeNull();
+      expect(screen.queryByText('자동 기록')).toBeNull();
+      expect(revertHits).not.toHaveBeenCalled();
     });
 
     it('U8 그날 경로 있음 → 토글 없이 계획 동선 위에 실제 경로 점선이 바로 겹친다(TRIP-1520)', async () => {

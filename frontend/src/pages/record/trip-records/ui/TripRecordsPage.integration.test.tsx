@@ -3616,6 +3616,28 @@ describe('실제 경로 — 토글 없이 동의 ∧ 그날 경로일 때만 겹
     expect(routeOnMap()).toBeUndefined();
   });
 
+  it('RG4 자동 출처 방문 카드도 수동 기록과 같다 — 「자동 기록」 칩·⋯ 없음(TRIP-1523)', async () => {
+    server.use(
+      http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
+        HttpResponse.json({
+          visits: [
+            {
+              ...completedVisitOn('va', DAY1, 'p1'),
+              source: 'AUTO_GEOFENCE',
+              completionSource: 'AUTO_GEOFENCE_EXIT',
+            },
+          ],
+        })
+      )
+    );
+    render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
+    // 앵커: 자동 방문 카드가 그려졌다.
+    await screen.findByTestId('record-trip-visit-card-va');
+    expect(screen.queryByTestId('record-visit-auto-badge-va')).toBeNull();
+    expect(screen.queryByTestId('record-visit-auto-revert-va')).toBeNull();
+    expect(screen.queryByText('자동 기록')).toBeNull();
+  });
+
   it('RG3 다른 날(경로 없는 2일차)로 바꾸면 → 1일차 경로가 따라오지 않는다', async () => {
     render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
     await waitFor(() => expect(routeOnMap()).toHaveLength(2));

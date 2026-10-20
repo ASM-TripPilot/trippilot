@@ -178,10 +178,6 @@ export interface LiveHubViewProps {
    * TRIP-1339 — U10 자동 기록 강등·폐기 안내 1줄(Figma u10c 4857:3012). 시트 헤더 바로 위 연회색 띠 —
    * 제목 + 오른쪽 `설정 열기`(settings 일 때만) + 사유 줄. 미전달이면 띠 없음(플래그 OFF 무회귀). 푸시 아님.
    */
-  /** TRIP-1340 — 서버 출처가 자동인 방문의 poiId(칩). 페이지가 VisitCheck 출처에서 고른다. */
-  autoRecordedPoiIds?: ReadonlySet<string>;
-  /** TRIP-1340 — 자동 기록 카드 `⋯` → 되돌리기 확인(arg = poiId). 미주입이면 진입 없음. */
-  onPressRevertAuto?: (poiId: string) => void;
   /** TRIP-1520 — 그날 실제 경로 세그먼트. 주면 계획 동선 위에 늘 겹친다(토글 없음, BR-U10-41 개정). */
   actualRoute?: MapCenter[][];
   automationNotice?: {
@@ -262,8 +258,6 @@ export function LiveHubView({
   onPressDirections,
   directionsNotice,
   automationNotice,
-  autoRecordedPoiIds,
-  onPressRevertAuto,
   actualRoute,
 }: LiveHubViewProps): ReactElement {
   // Provider 없는 렌더(jest)에서는 null — useSafeAreaInsets 는 throw 하므로 컨텍스트를 직접 읽는다.
@@ -529,13 +523,6 @@ export function LiveHubView({
                     directionsNotice={
                       directionsNotice?.poiId === slot.poiId
                         ? directionsNotice.text
-                        : undefined
-                    }
-                    autoRecorded={autoRecordedPoiIds?.has(slot.poiId) === true}
-                    onPressRevertAuto={
-                      onPressRevertAuto &&
-                      autoRecordedPoiIds?.has(slot.poiId) === true
-                        ? () => onPressRevertAuto(slot.poiId)
                         : undefined
                     }
                   />

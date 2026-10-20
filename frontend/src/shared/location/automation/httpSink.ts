@@ -3,10 +3,10 @@ import { isAxiosError } from 'axios';
 import * as api from '@/shared/api/generated/trips/trips';
 
 import type { ReportRejection } from './autoEventQueue';
-import type { AutomationSinkPort, RevertResult, UploadResult } from './sink';
+import type { AutomationSinkPort, UploadResult } from './sink';
 
 /**
- * TRIP-1485 · `AutomationSinkPort` 실 HTTP 구현 — 포트 5메서드를 orval 함수에 잇는다.
+ * TRIP-1485 · `AutomationSinkPort` 실 HTTP 구현 — 포트 4메서드를 orval 함수에 잇는다(되돌리기는 TRIP-1523 에서 뺐다).
  * 규약(sink.ts): 서버가 답한 거절은 값, 네트워크·5xx 는 받은 오류 그대로 throw(엔진이 throw 를 재시도로 읽는다).
  * 본문은 큐/구간 보고를 그대로 싣는다 — 좌표 필드가 없다(INV-U10-2).
  */
@@ -35,25 +35,6 @@ export function createHttpAutomationSink(): AutomationSinkPort {
         })),
         automationEnabled: res.automationEnabled,
       };
-    },
-
-    async revertAuto(tripId, visitCheckId): Promise<RevertResult> {
-      try {
-        await api.postTripsTripIdVisitsVisitCheckIdRevertAuto(
-          tripId,
-          visitCheckId
-        );
-        return { ok: true };
-      } catch (error) {
-        const answer = serverAnswer(error);
-        if (
-          answer?.status === 409 &&
-          (answer.code === 'VISIT_HAS_MEDIA' ||
-            answer.code === 'VISIT_NOT_AUTO')
-        )
-          return { ok: false, code: answer.code };
-        throw error;
-      }
     },
 
     async uploadRoute(tripId, date, body): Promise<UploadResult> {

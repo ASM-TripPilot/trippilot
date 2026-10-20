@@ -15,7 +15,6 @@ import type { RouteDay } from './sink';
  */
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   postTripsTripIdVisitsAutoEvents: jest.fn(),
-  postTripsTripIdVisitsVisitCheckIdRevertAuto: jest.fn(),
   putTripsTripIdRoutesDate: jest.fn(),
   getTripsTripIdRoutes: jest.fn(),
   postTripsTripIdLocationAutomationIntervals: jest.fn(),
@@ -140,52 +139,6 @@ describe('sendAutoEvents — 항목별 결과는 200 안에, 오류는 전부 th
 
     await expect(p).rejects.toBe(error);
     expect(m.postTripsTripIdVisitsAutoEvents).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('revertAuto — 409 두 코드만 값, 나머지는 throw', () => {
-  it('HS3 200 → {ok:true} · (tripId, visitCheckId) 로 부른다', async () => {
-    m.postTripsTripIdVisitsVisitCheckIdRevertAuto.mockResolvedValue({
-      id: 'vc-1',
-    } as never);
-
-    const res = await createHttpAutomationSink().revertAuto('trip-1', 'vc-1');
-
-    expect(res).toEqual({ ok: true });
-    const call = m.postTripsTripIdVisitsVisitCheckIdRevertAuto.mock.calls[0];
-    expect(call[0]).toBe('trip-1');
-    expect(call[1]).toBe('vc-1');
-  });
-
-  it.each(['VISIT_HAS_MEDIA', 'VISIT_NOT_AUTO'] as const)(
-    'HS4 409 %s → {ok:false, code}',
-    async (code) => {
-      m.postTripsTripIdVisitsVisitCheckIdRevertAuto.mockRejectedValue(
-        httpError(409, code)
-      );
-
-      const res = await createHttpAutomationSink().revertAuto('trip-1', 'vc-1');
-
-      expect(res).toEqual({ ok: false, code });
-    }
-  );
-
-  it.each([
-    { label: '404', error: httpError(404) },
-    { label: '409 VISIT_CONFLICT', error: httpError(409, 'VISIT_CONFLICT') },
-    { label: '409 코드 없음', error: httpError(409) },
-    { label: '500', error: httpError(500) },
-    { label: '네트워크(응답 없음)', error: networkError() },
-    { label: '평범한 Error', error: new Error('boom') },
-  ])('HS5 $label → 같은 오류로 throw', async ({ error }) => {
-    m.postTripsTripIdVisitsVisitCheckIdRevertAuto.mockRejectedValue(error);
-
-    const p = createHttpAutomationSink().revertAuto('trip-1', 'vc-1');
-
-    await expect(p).rejects.toBe(error);
-    expect(m.postTripsTripIdVisitsVisitCheckIdRevertAuto).toHaveBeenCalledTimes(
-      1
-    );
   });
 });
 

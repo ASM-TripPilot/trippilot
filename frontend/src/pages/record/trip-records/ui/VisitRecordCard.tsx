@@ -45,8 +45,6 @@ export interface VisitRecordCardVM {
   skippedAt?: string | null;
   /** 이미 포맷된 도착시각(HH:mm) — 없으면 미표시. 소요시간 아님(INV-3). */
   arrivedLabel?: string | null;
-  /** TRIP-1340 — 서버 출처가 자동(AUTO_*)이면 true → `자동 기록` 칩(Figma u10b). */
-  autoRecorded?: boolean;
   /** TRIP-1372 — 몇 번째 방문인가(1-기반). 서버가 도착 순으로 준 배열 순서 그대로다. 없으면 미표시. */
   order?: number;
 }
@@ -77,8 +75,6 @@ export interface VisitRecordCardProps {
   manualCheckin?: boolean;
   /** TRIP-761 · "방문 체크" press 콜백(arg = card.poiId). arrive({source:'MANUAL', poiId}) 진입점. */
   onPressManualCheck?: (poiId: string) => void;
-  /** TRIP-1340 — 자동 기록 카드 `⋯` → 되돌리기 확인(arg = visitCheckId). 미주입이면 진입 없음. */
-  onPressRevertAuto?: (visitCheckId: string) => void;
 }
 
 function StatusCircle({
@@ -179,7 +175,6 @@ export function VisitRecordCard({
   uploadRetry,
   manualCheckin,
   onPressManualCheck,
-  onPressRevertAuto,
 }: VisitRecordCardProps): ReactElement {
   const status = deriveVisitStatus(card);
   const canSkip =
@@ -212,33 +207,10 @@ export function VisitRecordCard({
               {`${card.order}번째 방문`}
             </Text>
           ) : null}
-          {card.autoRecorded ? (
-            <View
-              testID={`record-visit-auto-badge-${card.visitCheckId}`}
-              className="rounded-[12px] bg-primary-pale px-sm py-[3px]"
-            >
-              <Text className="font-noto-bold text-[11px] font-bold text-primary">
-                자동 기록
-              </Text>
-            </View>
-          ) : null}
         </View>
         <View className="flex-row items-center gap-md">
           {card.arrivedLabel != null && card.arrivedLabel !== '' ? (
             <Text className="text-label text-muted">{card.arrivedLabel}</Text>
-          ) : null}
-          {card.autoRecorded && onPressRevertAuto != null ? (
-            <Pressable
-              testID={`record-visit-auto-revert-${card.visitCheckId}`}
-              accessibilityRole="button"
-              accessibilityLabel="자동 기록 되돌리기"
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              onPress={() => onPressRevertAuto(card.visitCheckId)}
-            >
-              <Text className="font-noto-bold text-body font-bold text-muted">
-                ⋯
-              </Text>
-            </Pressable>
           ) : null}
           {onPressEditTime != null ? (
             <Pressable

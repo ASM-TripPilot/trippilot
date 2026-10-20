@@ -232,7 +232,6 @@ import {
   LocationAlwaysExplainer,
   automationNoticeCopy,
 } from '@/shared/location/index.view';
-import { AutoRevertDialog } from '@/features/check-visit/index.view';
 import { MapView, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { StateNotice } from '@/shared/ui/StateNotice';
@@ -3780,11 +3779,11 @@ export const PREVIEW_STATES: PreviewState[] = [
   // j01 방문 기록 error 얼굴(TRIP-760) — 사진 업로드 실패 표면. default 와 안내문만 다르고(상태별 의도
   // →noticeCopy 분기), 광안리 카드에 upload-failed 셀(⚠ "업로드 실패") + 풀폭 [↻ 다시 시도] 버튼 +
   // "메모와 방문 체크는 저장되었어요"를 얹었다. ⚠ 생김새·surface-strong 톤·↻ 코랄은 jest 사각(6-b 육안).
-  // TRIP-1344 · U10 j01 풀 지도 실제 경로(u10e 4862:3807) + 자동 기록 표식 카드.
+  // TRIP-1344 · U10 j01 풀 지도 실제 경로(u10e 4862:3807). 자동 기록 표식은 TRIP-1523 에서 뺐다.
   {
     key: 'u10-records-route',
     band: 'j',
-    label: 'U10 · j01 풀 지도 실제 경로·자동 기록 표식',
+    label: 'U10 · j01 풀 지도 실제 경로',
     login: null,
     render: () => (
       <TripRecordsView
@@ -3821,7 +3820,6 @@ export const PREVIEW_STATES: PreviewState[] = [
             completedAt: '2026-08-21T15:20:00',
             skippedAt: null,
             arrivedLabel: '14:20',
-            autoRecorded: true,
           },
           {
             visitCheckId: 'r2',
@@ -7209,60 +7207,6 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () =>
       renderLiveHubPreview(1, { automationNotice: u10Notice(null, 2) }),
-  },
-  {
-    key: 'u10-auto-badge',
-    band: 'i',
-    label: 'U10 · i01 자동 기록 표식(u10b)',
-    login: null,
-    render: () =>
-      renderLiveHubPreview(2, {
-        autoRecordedPoiIds: new Set(['gamcheon']),
-        onPressRevertAuto: noop,
-      }),
-  },
-  {
-    key: 'u10-auto-revert-dialog',
-    band: 'i',
-    label: 'U10 · i01 자동 기록 되돌리기 확인(u10b dialog)',
-    login: null,
-    render: () => (
-      <View style={StyleSheet.absoluteFill}>
-        {renderLiveHubPreview(2, {
-          autoRecordedPoiIds: new Set(['gamcheon']),
-          onPressRevertAuto: noop,
-        })}
-        <AutoRevertDialog
-          testIDPrefix="execution-live-slot-auto-revert"
-          placeName="감천문화마을"
-          part="COMPLETION"
-          onCancel={noop}
-          onConfirm={noop}
-        />
-      </View>
-    ),
-  },
-  {
-    key: 'u10-auto-revert-media',
-    band: 'i',
-    label: 'U10 · i01 되돌리기 409 사진·메모 안내',
-    login: null,
-    render: () => (
-      <View style={StyleSheet.absoluteFill}>
-        {renderLiveHubPreview(2, {
-          autoRecordedPoiIds: new Set(['gamcheon']),
-          onPressRevertAuto: noop,
-        })}
-        <AutoRevertDialog
-          testIDPrefix="execution-live-slot-auto-revert"
-          placeName="감천문화마을"
-          part="ARRIVAL"
-          error="media"
-          onCancel={noop}
-          onConfirm={noop}
-        />
-      </View>
-    ),
   },
   {
     key: 'u10-route-actual',

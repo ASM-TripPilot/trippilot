@@ -355,18 +355,13 @@
 - `src/features/auth/ui/SplashScreen.tsx`  →  SplashScreen
 
 ## src/features/check-visit/
-- `src/features/check-visit/index.ts`  →  useVisitCheck · useRevertAutoVisit
-- `src/features/check-visit/index.view.ts`  →  rememberSpontaneousName · useSpontaneousNames · deriveVisitStatus · isOptimisticVisit · autoRecordPart · AutoRevertDialog
+- `src/features/check-visit/index.ts`  →  useVisitCheck
+- `src/features/check-visit/index.view.ts`  →  rememberSpontaneousName · useSpontaneousNames · deriveVisitStatus · isOptimisticVisit
 
 ## src/features/check-visit/model/
-- `src/features/check-visit/model/autoRecord.ts`  →  autoRecordPart
 - `src/features/check-visit/model/spontaneousNames.ts`  →  rememberSpontaneousName · useSpontaneousNames
-- `src/features/check-visit/model/useRevertAutoVisit.ts`  →  RevertOutcome · useRevertAutoVisit
 - `src/features/check-visit/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
 - `src/features/check-visit/model/visitStatus.ts`  →  OPTIMISTIC_VISIT_ID_PREFIX · isOptimisticVisit · VisitStatus · deriveVisitStatus
-
-## src/features/check-visit/ui/
-- `src/features/check-visit/ui/AutoRevertDialog.tsx`  →  AutoRevertPart · AutoRevertError · AutoRevertDialog
 
 ## src/features/create-trip/
 - `src/features/create-trip/index.ts`  →  mustVisitFailureNotice · seedMustVisits · MAX_TRIP_NIGHTS · nightsSum · validateTripDraft · formatWizardStep · summaryCompanion · summaryDestinations · summaryPeriod · summaryPreferences · COMPANION_OPTIONS · deriveEndDate · fromEpochDay · minNightsFor · useTripWizardStore · isWizardOrigin · wizardOriginParams · DEFAULT_DAY_END · DEFAULT_DAY_START · DEFAULT_FIRST_DAY_START · DEFAULT_LAST_DAY_END · WHEEL_HOURS · WHEEL_MINUTES · dayWindowFields · isDefaultDayWindow · normalizeDayWindow · summaryDayWindow · validateDayWindow
@@ -1634,7 +1629,7 @@
 - `src/shared/location/automation/routeDistance.ts`  →  RawSample · GeoPoint · haversineM · splitSegments · pathLengthM · routeDistanceM
 - `src/shared/location/automation/routeDownsample.ts`  →  RouteDayBody · RoutePipeline · runRoutePipeline · downsampleRoute · projector · pointToSegmentM
 - `src/shared/location/automation/routeLayer.ts`  →  routeDayToSegments · routeDayForDate
-- `src/shared/location/automation/sink.ts`  →  RouteDay · RevertResult · UploadResult · AutomationSinkPort · FakeSinkOptions · FakeSinkCall · createFakeAutomationSink · getAutomationSink · setAutomationSink
+- `src/shared/location/automation/sink.ts`  →  RouteDay · UploadResult · AutomationSinkPort · FakeSinkOptions · FakeSinkCall · createFakeAutomationSink · getAutomationSink · setAutomationSink
 - `src/shared/location/automation/statusView.ts`  →  AutomationStatusView · automationStatusView
 - `src/shared/location/automation/store.ts`  →  AutomationSlotRef · AutomationVisitRef · AutomationContext · OpenInterval · AutomationNotice · AutomationState · EMPTY_STATE · StoreFs · pickLatest · AutomationStore · createAutomationStore · createMemoryFs · withStore
 - `src/shared/location/automation/tasks.ts`  →  (export 없음)
@@ -1796,4 +1791,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1148개 파일
+합계 1145개 파일

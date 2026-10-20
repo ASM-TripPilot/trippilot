@@ -11,9 +11,8 @@
 |---|---|
 | `u10-explainer` | 승격 설명 시트 (u10a 4857:2795) |
 | `u10-degrade-notice` · `u10-dropped-notice` | i01 강등·폐기 안내 1줄 (u10c 4857:3012) |
-| `u10-auto-badge` · `u10-auto-revert-dialog` · `u10-auto-revert-media` | 자동 기록 표식·되돌리기 확인·409 미디어 (u10b) |
 | `u10-route-actual` | i01 계획 동선 + 실제 경로 함께 (u10e, 토글 없음 — TRIP-1520) |
-| `u10-records-route` | j01 풀 지도 실제 경로 + 표식 (u10e 4862:3807) |
+| `u10-records-route` | j01 풀 지도 실제 경로 (u10e 4862:3807) |
 | `u10-l06-on` · `u10-l06-off` · `u10-l06-blocked` · `u10-l06-revoke-dialog` | l06 상태 행·철회 (u10d) |
 
 ## 2. 위치 시나리오 (플래그 ON 빌드 전용)
@@ -26,7 +25,7 @@ l06 위치정보 동의 켜기 · 오늘이 여행 날짜인 여행의 i01 진�
   `TripPilot.app/EXConstants.bundle/app.config` 에 굽힌다 — prebuild 에만 주면 Info.plist 는 ON, JS 는 OFF 로 갈라진다(l06 에 자동 기록 행이 없으면 이것).
   확인: `grep -o '"locationAutomation":[a-z]*' ios/build/Build/Products/Debug-iphonesimulator/TripPilot.app/EXConstants.bundle/app.config`.
 - 플래그 ON 빌드는 앱 시작 때 **실 http 싱크**를 꽂는다(TRIP-1485) — 결과는 `EXPO_PUBLIC_API_BASE_URL` 서버로 간다(`.env.local` 이면 dev-api).
-  가짜 싱크는 플래그 OFF·테스트·프리뷰뿐이다. 확인은 서버 방문 기록(i01·j01 표식)·법정 로그, 기기 쪽은
+  가짜 싱크는 플래그 OFF·테스트·프리뷰뿐이다. 확인은 서버 방문 기록(i01·j01 카드가 방문 완료로 바뀜 — 「자동 기록」 표식은 TRIP-1523 에서 없앴다)·법정 로그, 기기 쪽은
   `xcrun simctl spawn booted log stream --predicate 'process == "TripPilot"'` 의 `startMonitoringForRegion`·`EXTaskService: Executing task 'trippilot-u10-geofence'`.
 - 좌표는 오늘 슬롯 장소로 준다: `scripts/u10-sim-location.sh complete <lat> <lng>`(기본값 부산시립미술관은 일정에 없으면 아무 일도 없다).
 
