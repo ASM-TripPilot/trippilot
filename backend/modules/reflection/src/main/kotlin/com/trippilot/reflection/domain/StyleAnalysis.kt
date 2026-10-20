@@ -27,8 +27,9 @@ data class StyleAnalysis(
     val sampleVisitCount: Int,
     val updatedAt: Instant,
     /**
-     * [traitGauges] 를 저장된 값에서 읽었는가(TRIP-1476). 저장된 `trait_gauges` 가 객체가 아니면 false 고 [traitGauges] 는 0 으로 채운
-     * 자리값이다 — 화면에는 그대로 그리되, 개인화는 이것으로 속도를 정하지 않는다(0 은 "알차게"로 읽혀 고른 적 없는 속도가 추천에 들어간다).
+     * 속도를 정하는 게이지(여유로움)를 저장된 값에서 읽었는가(TRIP-1476). 저장된 `trait_gauges` 가 객체가 아니거나 `easygoing` 이 숫자가
+     * 아니면 false 고, 그 축은 0 으로 채운 자리값이다 — 개인화는 이것으로 속도를 정하지 않는다(0 은 "알차게"로 읽혀 고른 적 없는 속도가
+     * 추천에 들어간다). 화면(`GET /me/style`)은 저장된 행을 그리지 않는다 — 조회마다 다시 분석해 덮은 값을 낸다(`StyleAnalysisService.analyze`).
      */
     val traitGaugesRead: Boolean = true,
 ) {

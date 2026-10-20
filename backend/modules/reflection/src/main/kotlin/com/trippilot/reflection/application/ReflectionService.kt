@@ -65,6 +65,13 @@ class ReflectionService(
     fun generateDaily(accountId: UUID, tripId: UUID, dayDate: LocalDate): Reflection {
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
         requireWithinTrip(period, dayDate)
+        // 수정본을 못 읽는 하루(TRIP-1476)는 **AI 를 부르기 전에** 409 로 끝낸다 — 어차피 쓰지 못하고, 앱은 화면을 열 때마다
+        // 이 요청을 보낸다. 초안·출처만 못 읽는 하루는 아래에서 초안을 다시 만들어 고치므로 그대로 간다.
+        try {
+            reflections.find(tripId, dayDate)
+        } catch (_: UnreadableDraft) {
+            // 고칠 수 있는 하루다.
+        }
 
         val saved = reflections.upsert(draftFor(accountId, tripId, dayDate))
         events.publish(

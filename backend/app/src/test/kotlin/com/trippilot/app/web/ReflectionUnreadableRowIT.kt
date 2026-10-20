@@ -30,7 +30,9 @@ import com.trippilot.reflection.domain.CategoryShare
 import com.trippilot.reflection.domain.StyleAnalysis
 import com.trippilot.reflection.domain.StyleAnalysisRepository
 import com.trippilot.reflection.domain.StyleOutcome
+import com.trippilot.reflection.domain.ReflectionRepository
 import com.trippilot.reflection.domain.TraitGauges
+import com.trippilot.reflection.domain.TripSummaryRepository
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.collections.shouldContainExactly
@@ -44,10 +46,13 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.client.RestClient
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
+import javax.sql.DataSource
 
 /**
  * 저장된 회고·요약·스타일 행이 깨졌을 때(TRIP-1476 · 정본 Jira 댓글 10910).
@@ -79,6 +84,10 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var visits: VisitCheckService
     @Autowired private lateinit var routeStored: ActualRouteStoredSubscriber
     @Autowired private lateinit var personalization: PersonalizationFacade
+    @Autowired private lateinit var summaryRepo: TripSummaryRepository
+    @Autowired private lateinit var reflectionRepo: ReflectionRepository
+    @Autowired private lateinit var txManager: PlatformTransactionManager
+    @Autowired private lateinit var dataSource: DataSource
     @Autowired private lateinit var jdbc: JdbcTemplate
 
     private val json = ObjectMapper()
@@ -453,15 +462,19 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
         val (accountId, token) = newAccount()
         grantPersonalization(accountId)
         seedAnalysis(accountId)
-        corrupt("style_analysis", "trait_gauges = '[]'::jsonb", "account_id = ?", accountId)
+        // 모양이 틀린 칸, 객체지만 속도 축이 없는 칸, 속도 축이 숫자가 아닌 칸 — 셋 다 여유로움을 0 으로 채워 읽는다.
+        listOf("'[]'", "'{}'", """'{"easygoing":"x","foodAffinity":3,"activeness":2}'""").forEach { gauges ->
+            corrupt("style_analysis", "trait_gauges = $gauges::jsonb", "account_id = ?", accountId)
 
-        personalization.deriveFor(accountId).let {
-            it.applied shouldBe true
-            it.pace shouldBe null
-            it.activities shouldContainExactly listOf("카페", "맛집투어")
+            analyses.find(accountId)!!.traitGauges.easygoing shouldBe 0
+            personalization.deriveFor(accountId).let {
+                it.applied shouldBe true
+                it.pace shouldBe null
+                it.activities shouldContainExactly listOf("카페", "맛집투어")
+            }
+            call(HttpMethod.GET, "/api/v1/me/personalization", token).second["sharedItems"].map { it["item"].asText() } shouldBe
+                listOf("자주 방문한 장소 유형")
         }
-        call(HttpMethod.GET, "/api/v1/me/personalization", token).second["sharedItems"].map { it["item"].asText() } shouldBe
-            listOf("자주 방문한 장소 유형")
     }
 
     @Test
@@ -478,12 +491,20 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
             val arrived = visits.arrive(accountId, tripId, "$day1#$poi", poi, CheckSource.MANUAL)
             visits.complete(accountId, tripId, arrived.visitCheckId)
         }
-        styles.analyze(accountId).shouldBeInstanceOf<StyleOutcome.Official>()
+        val first = styles.analyze(accountId).shouldBeInstanceOf<StyleOutcome.Official>().analysis
         corrupt("style_analysis", "trait_gauges = '[]'::jsonb, category_breakdown = '{}'::jsonb, descriptors = '{}'::jsonb", "account_id = ?", accountId)
 
-        val (_, logs) = logsOf(StyleAnalysisRepositoryAdapter::class.java) {
-            styles.analyze(accountId).shouldBeInstanceOf<StyleOutcome.Official>()
+        // 화면(`GET /me/style`)은 저장된 행을 그리지 않는다 — 조회가 다시 분석해 덮은 값을 낸다. 깨진 행의 자리값 0 이 그려지지 않는다(BR-U5-31).
+        val (shown, logs) = logsOf(StyleAnalysisRepositoryAdapter::class.java) {
+            call(HttpMethod.GET, "/api/v1/me/style", token)
         }
+        shown.first shouldBe 200
+        shown.second["official"].asBoolean() shouldBe true
+        shown.second["analysis"]["traitGauges"].let { g ->
+            listOf(g["easygoing"].asInt(), g["foodAffinity"].asInt(), g["activeness"].asInt()) shouldBe
+                listOf(first.traitGauges.easygoing, first.traitGauges.foodAffinity, first.traitGauges.activeness)
+        }
+        shown.second["analysis"]["categoryBreakdown"].map { it["category"].asText() } shouldBe first.categoryBreakdown.map { it.category }
 
         // 재분석은 옛 행을 도메인으로 읽지 않고 덮는다 — 방금 만든 분석을 "못 읽었다"고 남기면 경보가 거짓이 된다.
         logs.filter { it.level == Level.WARN } shouldBe emptyList()
@@ -511,5 +532,47 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
         summary.second["ready"].asBoolean() shouldBe true
         analyses.find(accountId)!!.traitGauges shouldBe TraitGauges(easygoing = 5, foodAffinity = 3, activeness = 1)
         (summaryLogs + styleLogs).filter { it.level.isGreaterOrEqual(Level.WARN) } shouldBe emptyList()
+    }
+
+    // ── 잠근 뒤 읽기 ────────────────────────────────────────────────
+
+    /** 다른 연결에서 바로 커밋한다 — 겹친 요청이 먼저 끝낸 것과 같다(테스트 트랜잭션의 연결을 쓰지 않는다). */
+    private fun commitElsewhere(sql: String, vararg args: Any) {
+        dataSource.connection.use { c ->
+            c.autoCommit = true
+            c.prepareStatement(sql).use { ps ->
+                args.forEachIndexed { i, a -> ps.setObject(i + 1, a) }
+                ps.executeUpdate() shouldBe 1
+            }
+        }
+    }
+
+    /**
+     * 같은 트랜잭션이 잠그기 전에 행을 실어 뒀어도 잠근 뒤 읽기는 DB 를 본다. 조회가 못 읽는 요약을 고칠 때(먼저 읽고 → 잠그고 다시 본다),
+     * 회고 생성이 AI 전에 그 하루를 먼저 볼 때가 이 모양이다 — 영속성 컨텍스트의 옛 값을 쓰면 겹친 요청의 결과를 못 보고 덮는다.
+     */
+    @Test
+    fun `잠근 뒤 읽기는 잠그기 전에 실어 둔 옛 값이 아니라 DB 를 본다`() {
+        val (_, token) = newAccount()
+        val tripId = newTrip(token)
+        summaries.generate(tripId)
+        call(HttpMethod.POST, "/api/v1/trips/$tripId/reflections/$day1", token).first shouldBe 200
+        corrupt("trip_summary", "narrative = ' '", "trip_id = ?", tripId)
+
+        TransactionTemplate(txManager).executeWithoutResult {
+            summaryRepo.find(tripId) shouldBe null
+            commitElsewhere("UPDATE trip_summary SET narrative = '겹친 요청이 고친 요약' WHERE trip_id = ?", tripId)
+            summaryRepo.findForUpdate(tripId)!!.narrative shouldBe "겹친 요청이 고친 요약"
+        }
+        TransactionTemplate(txManager).executeWithoutResult {
+            reflectionRepo.find(tripId, day1)!!.mood shouldBe null
+            commitElsewhere("UPDATE reflection SET mood = 'GOOD' WHERE trip_id = ? AND day_date = ?", tripId, day1)
+            reflectionRepo.findForUpdate(tripId, day1)!!.mood shouldBe "GOOD"
+        }
+        TransactionTemplate(txManager).executeWithoutResult {
+            val before = reflectionRepo.find(tripId, day1)!!
+            commitElsewhere("UPDATE reflection SET short_memo = '겹친 메모' WHERE trip_id = ? AND day_date = ?", tripId, day1)
+            reflectionRepo.findForRedraft(tripId, day1, before.draftCard, before.source)!!.shortMemo shouldBe "겹친 메모"
+        }
     }
 }

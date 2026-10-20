@@ -12,8 +12,10 @@ import com.trippilot.reflection.domain.ReflectionStats
 import com.trippilot.reflection.domain.UnreadableDraft
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.EntityManager
 import jakarta.persistence.Id
 import jakarta.persistence.LockModeType
+import jakarta.persistence.PersistenceContext
 import jakarta.persistence.Table
 import org.hibernate.annotations.ColumnTransformer
 import org.hibernate.annotations.Formula
@@ -103,6 +105,8 @@ class ReflectionRepositoryAdapter(
     private val mapper: ObjectMapper,
 ) : ReflectionRepository {
 
+    @PersistenceContext private lateinit var em: EntityManager
+
     /**
      * 하루 한 장. 기존 행이 있으면 **그 행을 고친다** — 새 id 로 넣으면 UNIQUE 에 걸리고,
      * 걸리지 않게 지웠다 넣으면 `generated_at`("언제 처음 만들어졌나")이 사라진다.
@@ -138,12 +142,19 @@ class ReflectionRepositoryAdapter(
      */
     override fun findForUpdate(tripId: UUID, dayDate: LocalDate): Reflection? {
         jpa.advisoryXactLock(LOCK_NAMESPACE, Objects.hash(tripId, dayDate))
-        return jpa.lockByTripIdAndDayDate(tripId, dayDate)?.toDomain()
+        return lockedFresh(tripId, dayDate)?.toDomain()
     }
+
+    /**
+     * 잠그고 **DB 에서 다시** 싣는다. 같은 트랜잭션이 잠그기 전에 이 행을 실어 뒀으면(생성이 AI 를 부르기 전에 그 하루를 먼저 본다)
+     * 잠금 질의도 영속성 컨텍스트의 옛 값을 돌려준다 — 그 사이 들어온 기분·수정본을 옛 값으로 덮게 된다.
+     */
+    private fun lockedFresh(tripId: UUID, dayDate: LocalDate): ReflectionEntity? =
+        jpa.lockByTripIdAndDayDate(tripId, dayDate)?.also { em.refresh(it) }
 
     override fun findForRedraft(tripId: UUID, dayDate: LocalDate, draft: ReflectionCard, source: ReflectionSource): Reflection? {
         jpa.advisoryXactLock(LOCK_NAMESPACE, Objects.hash(tripId, dayDate))
-        return jpa.lockByTripIdAndDayDate(tripId, dayDate)?.toDomain(redraft = draft to source)
+        return lockedFresh(tripId, dayDate)?.toDomain(redraft = draft to source)
     }
 
     /**

@@ -8,7 +8,9 @@ import com.trippilot.reflection.domain.TripSummaryRepository
 import com.trippilot.reflection.domain.TripSummaryStats
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.EntityManager
 import jakarta.persistence.Id
+import jakarta.persistence.PersistenceContext
 import jakarta.persistence.Table
 import org.hibernate.annotations.ColumnTransformer
 import org.hibernate.annotations.Formula
@@ -59,6 +61,8 @@ interface TripSummaryJpaRepository : JpaRepository<TripSummaryEntity, UUID> {
 @Component
 class TripSummaryRepositoryAdapter(private val jpa: TripSummaryJpaRepository) : TripSummaryRepository {
 
+    @PersistenceContext private lateinit var em: EntityManager
+
     override fun upsert(summary: TripSummary): TripSummary {
         val existing = jpa.findById(summary.tripId).orElse(null)
         val entity = existing?.apply {
@@ -80,7 +84,9 @@ class TripSummaryRepositoryAdapter(private val jpa: TripSummaryJpaRepository) : 
 
     override fun findForUpdate(tripId: UUID): TripSummary? {
         jpa.advisoryXactLock(LOCK_NAMESPACE, tripId.hashCode())
-        return find(tripId)
+        // 잠근 **뒤에** DB 에서 다시 읽는다 — 같은 트랜잭션이 잠그기 전에 이 행을 실어 뒀으면(조회가 못 읽는 요약을 고칠 때)
+        // 영속성 컨텍스트가 그 옛 값을 돌려줘, 잠금을 기다린 사이 겹친 요청이 고친 결과를 못 보고 다시 만든다(검수 재현).
+        return jpa.findById(tripId).orElse(null)?.also { em.refresh(it) }?.toDomain()
     }
 
     private fun TripSummary.toEntity() = TripSummaryEntity(

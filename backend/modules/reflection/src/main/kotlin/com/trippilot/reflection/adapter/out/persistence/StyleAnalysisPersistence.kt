@@ -121,7 +121,8 @@ class StyleAnalysisRepositoryAdapter(private val jpa: StyleAnalysisJpaRepository
             sampleTripCount = sampleTripCount,
             sampleVisitCount = sampleVisitCount,
             updatedAt = updatedAt,
-            traitGaugesRead = traitGaugesShape == null || traitGaugesShape == "object",
+            // 속도(개인화)가 읽는 축은 여유로움 하나다 — 그 축이 숫자가 아니면(`{}`·`"x"`) 0 은 자리값이지 저장된 값이 아니다.
+            traitGaugesRead = (traitGaugesShape == null || traitGaugesShape == "object") && traitGauges["easygoing"] is Number,
         )
         if (dropped.isNotEmpty()) log.warn("스타일 분석 행 일부를 읽지 못해 읽히는 만큼 씁니다. accountId={} 칸={}", accountId, dropped.distinct())
         return analysis
