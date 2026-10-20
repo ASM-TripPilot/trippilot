@@ -26,27 +26,46 @@ export function OutlineCard({
   );
 }
 
-/** 외곽선 한 줄 행 카드 — 라벨(Bold 14 primary-text) + chevron 20, 행 전체가 터치 영역이다. */
+/**
+ * 외곽선 한 줄 행 카드 — 행 전체가 터치 영역이다.
+ * 기본(링크 행) = 라벨 Bold 14 primary-text + 붉은 chevron. `icon` 을 주면 아이콘 행(여행 없음, TRIP-1529) =
+ * 앞 아이콘 + 라벨 ink 15 Bold + 회색 chevron.
+ */
 export function ActionRow({
   testID,
   label,
   onPress,
+  icon,
+  iconTestID,
 }: {
   testID: string;
   label: string;
   onPress: () => void;
+  icon?: ReactNode;
+  iconTestID?: string;
 }): ReactElement {
+  const withIcon = icon != null;
   return (
     <Pressable
       testID={testID}
       accessibilityRole="button"
       onPress={onPress}
-      className={`${SHELL} flex-row items-center gap-sm py-md pl-lg pr-md`}
+      className={`${SHELL} flex-row items-center py-md pr-md ${
+        // 아이콘 행: 간격 12 · 왼쪽 14 는 토큰에 없는 Figma 값(5027:5814)
+        withIcon ? 'gap-[12px] pl-[14px]' : 'gap-sm pl-lg'
+      }`}
     >
-      <Text className="flex-1 font-noto-bold text-body font-bold text-primary-text">
+      {withIcon ? <View testID={iconTestID}>{icon}</View> : null}
+      <Text
+        className={
+          withIcon
+            ? 'flex-1 font-noto-bold text-[15px] font-bold leading-[20px] text-ink'
+            : 'flex-1 font-noto-bold text-body font-bold text-primary-text'
+        }
+      >
         {label}
       </Text>
-      <ChevronRightGlyph size={20} color="#C13515" />
+      <ChevronRightGlyph size={20} color={withIcon ? '#6A6A6A' : '#C13515'} />
     </Pressable>
   );
 }

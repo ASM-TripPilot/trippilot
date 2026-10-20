@@ -316,6 +316,7 @@ export function AssistantSheetPage({
             confirmingClear={confirmingClear}
             clearing={clearSession.isPending}
             onContinue={() => setView('CHAT')}
+            onClose={handleClose}
             onRequestClear={() => setConfirmingClear(true)}
             onCancelClear={() => setConfirmingClear(false)}
             onConfirmClear={handleConfirmClear}

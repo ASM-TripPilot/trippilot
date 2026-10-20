@@ -230,6 +230,7 @@ export function AssistantSheetView({
                 onPressAction={onPressAction}
                 renderCard={renderCard}
                 renderFeedback={renderFeedback}
+                noContext={state === 'NO_CONTEXT'}
               />
             </View>
           ) : null}

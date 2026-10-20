@@ -3,12 +3,13 @@ import type { ReactElement, ReactNode } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { SparkleGlyph } from '@/features/open-assistant';
+import { PlusGlyph, SearchGlyph } from '@/shared/ui/glyphs';
 import type {
   AssistantMessage,
   FallbackPayload,
   NextAction,
 } from '../api/assistantContract';
+import { noContextActionIcon } from '../model/displayActions';
 import { cardConsumes } from './AssistantCards';
 import { ArrowDownGlyph } from './AssistantSheetGlyphs';
 import { ActionRow } from './OutlineCard';
@@ -26,6 +27,8 @@ export interface MessageListProps {
   renderCard?: (message: AssistantMessage) => ReactNode;
   /** 답 평가 줄 — 도우미의 답에만 붙인다(사용자 말·적용 기록 `ACTION_LOG` 제외, INV-U8-10). */
   renderFeedback?: (message: AssistantMessage) => ReactNode;
+  /** 여행 없음(NO_CONTEXT) — next action 을 앞 아이콘이 있는 아이콘 행으로 그린다. 기본 false(링크 행). */
+  noContext?: boolean;
 }
 
 export function UserBubble({
@@ -48,32 +51,30 @@ export function UserBubble({
   );
 }
 
-/** 이력 화면(HistoryView)이 아직 쓰는 옛 말풍선 — 대화 목록의 도우미 답은 `AssistantMessageBlock` 안 평문 `Text` 로 그린다(이력 평문화는 사이클 C). */
-export function AssistantBubble({ text }: { text: string }): ReactElement {
-  return (
-    <View className="flex-row items-start gap-sm">
-      <View className="h-[26px] w-[26px] items-center justify-center rounded-full bg-primary">
-        <SparkleGlyph size={14} />
-      </View>
-      <View className="max-w-[286px] rounded-[18px] bg-surface-strong px-[14px] py-[11px]">
-        <Text className="font-noto text-body text-ink">{text}</Text>
-      </View>
-    </View>
-  );
-}
-
 export function NextActionButton({
   action,
   onPress,
+  withIcon = false,
 }: {
   action: NextAction;
   onPress: (action: NextAction) => void;
+  withIcon?: boolean;
 }): ReactElement {
   return (
     <ActionRow
       testID={`assistant-next-action-${action.type}`}
       label={action.label}
       onPress={() => onPress(action)}
+      icon={
+        withIcon ? (
+          noContextActionIcon(action.type) === 'search' ? (
+            <SearchGlyph size={20} />
+          ) : (
+            <PlusGlyph size={20} />
+          )
+        ) : undefined
+      }
+      iconTestID={`assistant-next-action-icon-${action.type}`}
     />
   );
 }
@@ -83,11 +84,13 @@ function AssistantMessageBlock({
   onPressAction,
   renderCard,
   renderFeedback,
+  noContext,
 }: {
   message: AssistantMessage;
   onPressAction: (action: NextAction) => void;
   renderCard?: (message: AssistantMessage) => ReactNode;
   renderFeedback?: (message: AssistantMessage) => ReactNode;
+  noContext: boolean;
 }): ReactElement {
   // 카드가 스스로 그린 행동(외부 위임 링크·폴백 다시 시도/계속)은 버튼 줄에서 뺀다.
   const consumed = cardConsumes(message);
@@ -120,6 +123,7 @@ function AssistantMessageBlock({
               key={`${action.type}-${index}`}
               action={action}
               onPress={onPressAction}
+              withIcon={noContext}
             />
           ))}
         </View>
@@ -146,6 +150,7 @@ export function MessageList({
   onPressAction,
   renderCard,
   renderFeedback,
+  noContext = false,
 }: MessageListProps): ReactElement {
   const listRef = useRef<FlatList<AssistantMessage>>(null);
   const [away, setAway] = useState(false);
@@ -172,6 +177,7 @@ export function MessageList({
               onPressAction={onPressAction}
               renderCard={renderCard}
               renderFeedback={renderFeedback}
+              noContext={noContext}
             />
           )
         }

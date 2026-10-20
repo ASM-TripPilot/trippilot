@@ -318,3 +318,41 @@ describe('MessageList · 아래로 가기(↓) 버튼 (TRIP-1527 · 01b Q3)', ()
     expect(screen.getByTestId(DOWN)).toBeOnTheScreen();
   });
 });
+
+describe('MessageList · next action 행 모양 가름 (TRIP-1529 · 01b Q6)', () => {
+  const createTrip = {
+    type: 'CREATE_TRIP',
+    label: '새 여행 만들기',
+    params: {},
+  };
+  const withAction = (): AssistantMessage => ({
+    ...textMessage('n2', '도와드릴게요.'),
+    nextActions: [createTrip],
+  });
+
+  it('noContext 면 행에 앞 아이콘이 있고, 터치는 행 전체로 그 행동을 올린다', () => {
+    const { props } = renderList({ messages: [withAction()], noContext: true });
+
+    expect(
+      screen.getByTestId('assistant-next-action-icon-CREATE_TRIP')
+    ).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId('assistant-next-action-CREATE_TRIP'));
+    expect(props.onPressAction).toHaveBeenCalledWith(createTrip);
+  });
+
+  it.each([
+    ['noContext 미지정', {}],
+    ['noContext=false', { noContext: false }],
+  ])(
+    '%s 면 링크 행이라 아이콘이 없다(같은 행 testID·터치는 그대로)',
+    (_l, extra) => {
+      const { props } = renderList({ messages: [withAction()], ...extra });
+
+      expect(
+        screen.queryByTestId('assistant-next-action-icon-CREATE_TRIP')
+      ).toBeNull();
+      fireEvent.press(screen.getByTestId('assistant-next-action-CREATE_TRIP'));
+      expect(props.onPressAction).toHaveBeenCalledWith(createTrip);
+    }
+  );
+});

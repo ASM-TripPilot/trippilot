@@ -174,6 +174,32 @@ describe('AssistantSheetView (TRIP-1322)', () => {
     ).toHaveLength(1);
   });
 
+  it('TRIP-1529 · NO_CONTEXT 의 행동 행은 아이콘 행, READY 의 행은 링크 행(아이콘 없음)', () => {
+    const transcript = sampleTranscript('no-context', null);
+    renderView({
+      state: 'NO_CONTEXT',
+      contextChip: null,
+      messages: transcript.messages,
+      quickReplies: transcript.quickReplies,
+    });
+    expect(
+      screen.getByTestId('assistant-next-action-icon-CREATE_TRIP')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('assistant-next-action-icon-OPEN_STAY_SEARCH')
+    ).toBeOnTheScreen();
+  });
+
+  it('TRIP-1529 · READY 면 행동 행에 아이콘이 없다', () => {
+    renderView();
+    expect(
+      screen.getByTestId('assistant-next-action-OPEN_ITINERARY')
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryAllByTestId(/^assistant-next-action-icon-/)
+    ).toHaveLength(0);
+  });
+
   it('BR-U8-07 · 열기 실패면 오류 + [다시 시도], 메시지·입력은 없다', () => {
     const props = renderView({ state: 'OPEN_FAILED' });
     expect(screen.getByTestId('assistant-open-failed')).toBeOnTheScreen();

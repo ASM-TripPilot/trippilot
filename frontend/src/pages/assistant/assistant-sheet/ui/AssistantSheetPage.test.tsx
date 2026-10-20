@@ -360,6 +360,17 @@ describe('AssistantSheetPage · 이력 (TRIP-1325)', () => {
     expect(screen.getByTestId('assistant-input')).toBeOnTheScreen();
   });
 
+  it('TRIP-1529 · 이력의 [닫기]는 헤더 X 와 같은 닫기다 — 라우터 back 1회(연타해도 1회)', async () => {
+    renderPage();
+    await screen.findByTestId('assistant-context-chip');
+    fireEvent.press(screen.getByTestId('assistant-history-toggle'));
+
+    fireEvent.press(await screen.findByTestId('assistant-history-close'));
+    fireEvent.press(screen.getByTestId('assistant-history-close'));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
   it('[이력 지우기] → 확인 전 clear 0회, 확인 → 1회 후 일반 시작 상태로', async () => {
     renderPage();
     await screen.findByTestId('assistant-context-chip');
