@@ -54,7 +54,7 @@ describe('행·거점 변경·empty (옛 본 파일)', () => {
       name: '해운대 오션뷰',
       location: '부산 해운대구 우동',
       dateRangeLabel: '6.10 ~ 6.13',
-      sourceLabel: 'OTA 예약',
+      sourceLabel: '예약 사이트',
       memoLabel: null,
       linkedTripLabel: '연결 여행 · 부산 여행',
       baseState: 'assigned',
@@ -105,7 +105,7 @@ describe('행·거점 변경·empty (옛 본 파일)', () => {
       expect(screen.getByText('해운대 오션뷰')).toBeOnTheScreen();
       expect(screen.getByText('부산 해운대구 우동')).toBeOnTheScreen();
       expect(screen.getByText('6.10 ~ 6.13')).toBeOnTheScreen();
-      expect(screen.getByText('OTA 예약')).toBeOnTheScreen();
+      expect(screen.getByText('예약 사이트')).toBeOnTheScreen();
       // 여행명은 부분포함(라벨이 '연결 여행 · 부산 여행' 이므로 leaf 완전일치는 못 씀).
       expect(screen.getByText(/부산 여행/)).toBeOnTheScreen();
 
@@ -273,7 +273,7 @@ describe('Figma l04 정합 (옛 .l04parity)', () => {
       name: '부산 그랜드 호텔',
       location: '부산 해운대구 우동',
       dateRangeLabel: '6.10 ~ 6.13',
-      sourceLabel: 'OTA 예약',
+      sourceLabel: '예약 사이트',
       memoLabel: null,
       linkedTripLabel: '연결 여행 · 부산 여행',
       baseState: 'assigned',

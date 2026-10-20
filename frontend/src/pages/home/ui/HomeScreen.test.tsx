@@ -96,7 +96,7 @@ describe('HomeScreen — 정상 렌더 존재 (AC-1)', () => {
     // 검색바 — 가짜 검색바(Pressable+Text), 플레이스홀더는 Text 리프(02a §4-8).
     const search = screen.getByTestId('home-search-bar');
     expect(
-      within(search).getByText('가고 싶은 도시·장소를 검색해보세요')
+      within(search).getByText('가고 싶은 도시를 검색해보세요')
     ).toBeOnTheScreen();
 
     // 히어로 첫 장은 서울 도시 카드(TRIP-1432). 카드 문구는 Figma 에 없어 도시 이름만 본다.

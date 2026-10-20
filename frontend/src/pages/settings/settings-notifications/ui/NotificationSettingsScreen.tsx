@@ -57,7 +57,7 @@ const VISIBLE_ROWS: { kind: NotificationToggleKind; label: string }[] = [
   { kind: 'TRIP_PRE', label: '여행 시작 전' },
   { kind: 'TRIP_DAY', label: '당일 일정' },
   { kind: 'SLOT_PRE', label: '일정 시작 전' },
-  { kind: 'PLAN_B', label: 'Plan-B 재계획' },
+  { kind: 'PLAN_B', label: '일정 재계획' },
   { kind: 'REFLECTION', label: '회고 완료' },
 ];
 

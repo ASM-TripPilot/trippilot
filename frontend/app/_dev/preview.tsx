@@ -2525,7 +2525,7 @@ const NOTIFICATION_INBOX_PREVIEW_SECTIONS: NotificationSection[] = [
         icon: 'swap',
         title: "비 예보 — '○○공원' 일정이 영향받아요",
         body: "오후 2시부터 비 예보 — '○○공원' 대신 실내 장소를 추천했어요.",
-        meta: 'Plan-B · 10분 전',
+        meta: '재계획 · 10분 전',
         unread: true,
         route: '/trips/t1/planb',
         inlineActionLabel: '대안 일정 보기 ›',
@@ -5279,7 +5279,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <StaySelectSheet
-        title="2박 · 부산"
+        title="2번째 밤 · 부산"
         dateLabel="6/11(목)"
         candidates={[
           {
@@ -5364,7 +5364,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       ];
       return (
         <StaySelectSheet
-          title="1박 · 서울특별시"
+          title="1번째 밤 · 서울특별시"
           dateLabel="9/26(토)"
           candidates={[jw, ...others]}
           sections={[
@@ -5412,7 +5412,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       ];
       return (
         <StaySelectSheet
-          title="2박 · 부산광역시"
+          title="2번째 밤 · 부산광역시"
           dateLabel="9/27(일)"
           candidates={seoul}
           sections={[{ key: 'other', title: '다른 지역', candidates: seoul }]}
@@ -5435,7 +5435,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <StaySelectSheet
-        title="1박 · 서울특별시"
+        title="1번째 밤 · 서울특별시"
         dateLabel="9/26(토)"
         candidates={[
           {

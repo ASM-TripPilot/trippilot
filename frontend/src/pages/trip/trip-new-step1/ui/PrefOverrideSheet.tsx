@@ -205,7 +205,7 @@ export function PrefOverrideSheet({
         {/* 안내문 — "온보딩에서 …" 절은 온보딩 취향이 있을 때만(TRIP-984 D10) */}
         <Text className="font-noto text-caption text-muted">
           {fromOnboarding
-            ? '온보딩에서 고른 취향을 가져왔어요 · 프로필 취향은 바뀌지 않아요'
+            ? '내 취향을 가져왔어요 · 프로필 취향은 바뀌지 않아요'
             : '프로필 취향은 바뀌지 않아요'}
         </Text>
       </View>

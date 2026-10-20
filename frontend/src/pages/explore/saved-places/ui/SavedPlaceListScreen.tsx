@@ -499,7 +499,7 @@ export function SavedPlaceListScreen({
   const subtitle = showLoading
     ? '담은 곳 불러오는 중'
     : activeSavedCount > 0
-      ? `${activeSavedCount}곳 · 마음에 든 순서대로`
+      ? `${activeSavedCount}곳 · 담은 순서대로`
       : null;
 
   return (

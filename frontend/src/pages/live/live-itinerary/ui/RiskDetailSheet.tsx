@@ -172,7 +172,7 @@ export function RiskDetailSheet({
             testID="planb-risk-watch-label"
             className="font-noto-bold text-caption font-bold text-body"
           >
-            Plan-B가 지켜보는 것
+            재계획이 지켜보는 것
           </Text>
           <View className="flex-row flex-wrap gap-[6px]">
             {watchRows.map((row) => {

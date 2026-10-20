@@ -356,7 +356,7 @@ export function ExploreLandingScreen({
               </>
             ) : (
               <Text className="flex-1 font-noto text-body text-muted-soft">
-                도시 · 장소 · 숙소 검색
+                도시 검색
               </Text>
             )}
           </Pressable>

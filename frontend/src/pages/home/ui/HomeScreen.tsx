@@ -165,7 +165,7 @@ function SearchBarBlock({ onPress }: { onPress?: () => void }): ReactElement {
       >
         <SearchGlyph size={19} />
         <Text className="font-noto text-body text-muted-soft">
-          가고 싶은 도시·장소를 검색해보세요
+          가고 싶은 도시를 검색해보세요
         </Text>
       </Pressable>
     </View>

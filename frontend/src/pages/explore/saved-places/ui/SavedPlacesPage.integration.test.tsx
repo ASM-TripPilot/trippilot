@@ -345,7 +345,7 @@ describe('save', () => {
       expectOrder(SORTED);
       expect(
         within(screen.getByTestId('explore-saved-subtitle')).getByText(
-          '4곳 · 마음에 든 순서대로'
+          '4곳 · 담은 순서대로'
         )
       ).toBeOnTheScreen();
     });
@@ -901,7 +901,7 @@ describe('save', () => {
       await waitFor(() => expect(deletedIds()).toEqual(['sp-b']));
       await waitFor(() => expectReleasedText('sp-b'));
       expect(rankDimmed('sp-b')).toBe(true);
-      expect(subtitle('3곳 · 마음에 든 순서대로')).toBeOnTheScreen();
+      expect(subtitle('3곳 · 담은 순서대로')).toBeOnTheScreen();
 
       fireEvent.press(heart('sp-b'));
 
@@ -913,7 +913,7 @@ describe('save', () => {
       expect(rankDimmed('sp-b')).toBe(false);
       await waitFor(() => expectOrder(SORTED));
       await waitFor(() =>
-        expect(subtitle('4곳 · 마음에 든 순서대로')).toBeOnTheScreen()
+        expect(subtitle('4곳 · 담은 순서대로')).toBeOnTheScreen()
       );
     });
 

@@ -64,7 +64,7 @@ const USAGE_ITEMS = [
   },
   {
     Glyph: LocationSwapGlyph,
-    title: '실시간 Plan-B 재계획',
+    title: '실시간 일정 재계획',
     desc: '막히면 즉시 대안 동선을 제안해요',
   },
   {

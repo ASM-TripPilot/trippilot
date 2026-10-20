@@ -42,7 +42,7 @@ function TripBasesProbe({
  * 사전에 있는 OTA 코드만 예약, 그 밖의 원천은 탐색에서 저장, 없으면(null·필드 없음) 직접 등록.
  */
 function sourceLabel(stay: SavedStay): string {
-  if (isOtaSource(stay.externalSource)) return 'OTA 예약';
+  if (isOtaSource(stay.externalSource)) return '예약 사이트';
   return stay.externalSource ? '탐색에서 저장' : '직접 등록';
 }
 

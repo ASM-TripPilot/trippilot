@@ -1468,10 +1468,10 @@ describe('취향 편집 시트 (PI·PA)', () => {
       );
       // TRIP-732: 옛 " + 온보딩" 문자열이 스파클+분홍 "온보딩" 배지로 바뀐다 → `\+`를 뗀 `/온보딩/`로
       // 검사(구·신 렌더 모두 "온보딩"을 담아 선제 green, 반전 후 `\+` 부재로 깨지는 것 예방).
-      expect(summaryPreferenceRow()).toHaveTextContent(/온보딩/);
+      expect(summaryPreferenceRow()).toHaveTextContent(/내 취향/);
     });
 
-    it('스타일 오버라이드가 있으면 요약이 effective(휴양)·activities(야경)를 담고 "온보딩"이 사라진다', async () => {
+    it('스타일 오버라이드가 있으면 요약이 effective(휴양)·activities(야경)를 담고 "내 취향" 배지가 사라진다', async () => {
       useTripWizardStore.getState().setPrefStyleOverride(['휴양']);
       renderPage();
       await waitForPrefill();
@@ -1482,7 +1482,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
       // 활동 오버라이드 undefined → 프리필(야경) 그대로 — 이제 시트 활동 칩으로 끌 수 있는 값이다(TRIP-1092).
       expect(summaryPreferenceRow()).toHaveTextContent(/야경/);
       // 바꿨는데 "온보딩" 표식이 남으면 거짓 — 제거돼야 한다.
-      expect(summaryPreferenceRow()).not.toHaveTextContent(/온보딩/);
+      expect(summaryPreferenceRow()).not.toHaveTextContent(/내 취향/);
     });
   });
 
@@ -1521,7 +1521,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
   });
 
   /**
-   * TRIP-984 D10 · 취향 시트 하단 "온보딩에서 고른 취향을 가져왔어요" 는 온보딩 취향이 있을 때만.
+   * TRIP-984 D10 · 취향 시트 하단 "내 취향을 가져왔어요" 는 온보딩 취향이 있을 때만.
    * TRIP-1092 01b Q2: 시트가 활동 축도 그리므로 조건이 styles **또는** activities 1개 이상으로 넓어진다 —
    * 온보딩 활동 칩이 켜진 채 열리는데 "온보딩에서" 를 빼면 출처를 숨긴다. 둘 다 없으면 뒤쪽 절만 남는다.
    */
@@ -1561,7 +1561,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
       const sheet = screen.getByTestId('trip-wizard-pref-sheet');
       expect(
         within(sheet).getByText(
-          '온보딩에서 고른 취향을 가져왔어요 · 프로필 취향은 바뀌지 않아요'
+          '내 취향을 가져왔어요 · 프로필 취향은 바뀌지 않아요'
         )
       ).toBeOnTheScreen();
     });
@@ -1572,9 +1572,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
       await openSheet('preference');
 
       expect(
-        screen.getByText(
-          '온보딩에서 고른 취향을 가져왔어요 · 프로필 취향은 바뀌지 않아요'
-        )
+        screen.getByText('내 취향을 가져왔어요 · 프로필 취향은 바뀌지 않아요')
       ).toBeOnTheScreen();
     });
   });

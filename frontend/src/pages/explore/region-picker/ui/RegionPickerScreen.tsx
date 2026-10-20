@@ -77,7 +77,7 @@ const COPY: Record<
     appBar: '지역 선택',
     title: '어디서 묵을까요?',
     subtitle: '지역을 고르면 숙소를 모아 보여드려요',
-    placeholder: '지역·숙소 이름 검색',
+    placeholder: '지역 이름 검색',
     popular: '인기 지역',
     section: '지역별 둘러보기',
   },

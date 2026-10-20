@@ -17,7 +17,7 @@ describe('notificationKind · 5 아이콘군·라벨 매핑 (AC-3)', () => {
     ['TRIP_PRE', 'list', '일정'],
     ['TRIP_DAY', 'list', '일정'],
     ['SLOT_PRE', 'list', '일정'],
-    ['PLAN_B', 'swap', 'Plan-B'],
+    ['PLAN_B', 'swap', '재계획'],
     ['REFLECTION', 'document', '회고'],
     ['COMMUNITY', 'sun', '커뮤니티'],
     ['SYSTEM', 'sun', '시스템'],

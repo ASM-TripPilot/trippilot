@@ -113,7 +113,7 @@ function NightCard({
       className="w-full gap-sm bg-canvas px-lg py-[14px]"
     >
       <Text className="font-noto text-caption text-muted">
-        {`${card.nightNumber}박 · ${card.dateLabel} · ${card.region}`}
+        {`${card.nightNumber}번째 밤 · ${card.dateLabel} · ${card.region}`}
       </Text>
       <View className="w-full flex-row items-center gap-md">
         {assigned && card.imageUrl ? (
@@ -162,7 +162,7 @@ function EmptyNightRow({
       className="w-full flex-row items-center bg-canvas px-lg py-[14px]"
     >
       <Text className="flex-1 font-noto text-caption text-muted">
-        {`${card.nightNumber}박 · ${card.dateLabel} · ${card.region}`}
+        {`${card.nightNumber}번째 밤 · ${card.dateLabel} · ${card.region}`}
       </Text>
       <ChevronRightGlyph size={20} tone="muted" />
     </Pressable>
@@ -398,7 +398,9 @@ export function TripWizardStep2Screen({
                     className="w-full items-center justify-center rounded-button bg-primary p-lg"
                   >
                     <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                      이 거점으로 일정 만들기
+                      {cards.some((card) => card.stayName)
+                        ? '이 거점으로 일정 만들기'
+                        : '일정 만들기'}
                     </Text>
                   </Pressable>
                   <Pressable

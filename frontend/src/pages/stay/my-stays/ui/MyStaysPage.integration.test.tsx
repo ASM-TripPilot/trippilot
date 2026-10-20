@@ -227,7 +227,7 @@ describe('화면 캡처 스텁 — 행 VM·콜백 배선 (옛 본 파일)', () =
         name: '해운대 오션뷰',
         location: '부산 해운대구 우동',
         dateRangeLabel: '6.10 ~ 6.13',
-        sourceLabel: 'OTA 예약',
+        sourceLabel: '예약 사이트',
         memoLabel: null,
         linkedTripLabel: '연결 여행 · 부산 여행',
         baseState: 'assigned',
@@ -361,21 +361,21 @@ describe('화면 캡처 스텁 — 행 VM·콜백 배선 (옛 본 파일)', () =
       title: 'NAVER · 메모 null',
       externalSource: 'NAVER',
       memo: null,
-      sourceLabel: 'OTA 예약',
+      sourceLabel: '예약 사이트',
       memoLabel: '예약번호 미입력',
     },
     {
       title: 'AGODA · 메모 빈 문자열',
       externalSource: 'AGODA',
       memo: '',
-      sourceLabel: 'OTA 예약',
+      sourceLabel: '예약 사이트',
       memoLabel: '예약번호 미입력',
     },
     {
       title: 'NAVER · 메모 있음',
       externalSource: 'NAVER',
       memo: 'NV-20260610',
-      sourceLabel: 'OTA 예약',
+      sourceLabel: '예약 사이트',
       memoLabel: null,
     },
     // AC-C4 — 사전에 없는 코드는 예약이라고 지어내지 않는다(Q5: 탐색 원천으로 본다).
@@ -626,7 +626,7 @@ describe('실 화면 + msw — 거점 변경·출처 칩 (옛 .release)', () => 
       await waitAssignedRow();
 
       expect(within(row()).getByText('탐색에서 저장')).toBeOnTheScreen();
-      expect(within(row()).queryByText('OTA 예약')).toBeNull();
+      expect(within(row()).queryByText('예약 사이트')).toBeNull();
       expect(within(row()).queryByText('예약번호 미입력')).toBeNull();
     });
   });

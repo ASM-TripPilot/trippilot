@@ -133,16 +133,16 @@ describe('헤더·카드·목록 프레임 (옛 본 파일)', () => {
       {
         region: '제주',
         items: ITEMS.slice(0, 2),
-        expected: '제주 · 날짜 미정 · 2곳',
+        expected: '제주 · 2곳',
       },
-      { region: '부산', items: ITEMS, expected: '부산 · 날짜 미정 · 3곳' },
+      { region: '부산', items: ITEMS, expected: '부산 · 3곳' },
     ])(
       '$region 헤더가 "$expected"로 조립된다',
       ({ region, items, expected }) => {
         render(<StaySearchScreen region={region} items={items} />);
 
         // 헤더 서브트리 텍스트가 정확히 이 한 줄뿐이므로 완전 일치가 성립한다(F-1·F-13 실측).
-        // region·N을 둘 다 바꾼 두 케이스라야 "부산 · 날짜 미정 · 3곳" 하드코딩을 잡는다.
+        // region·N을 둘 다 바꾼 두 케이스라야 "부산 · 3곳" 하드코딩을 잡는다.
         expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
           expected
         );
@@ -1305,7 +1305,7 @@ describe('5가지 상태 얼굴 (옛 .states)', () => {
       expect(screen.queryAllByTestId(/^stay-search-skeleton-/)).toHaveLength(4);
       // toHaveTextContent(문자열)은 완전 일치다(§5 ★3) — 이 한 줄이 "곳이 없다"까지 겸한다.
       expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
-        '부산 · 날짜 미정'
+        '부산'
       );
       expect(queryCardTestIds()).toEqual([]);
     });
@@ -1334,7 +1334,7 @@ describe('5가지 상태 얼굴 (옛 .states)', () => {
         )
       ).toBeOnTheScreen();
       expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
-        '부산 · 날짜 미정 · 0곳'
+        '부산 · 0곳'
       );
       expect(
         screen.queryAllByTestId('stay-search-partialfailure')
@@ -1352,7 +1352,7 @@ describe('5가지 상태 얼굴 (옛 .states)', () => {
         within(reg).getByText('이미 예약한 숙소가 있나요?')
       ).toBeOnTheScreen();
       expect(
-        within(reg).getByText('OTA에 없어도 위치 · 이름으로 직접 등록')
+        within(reg).getByText('찾는 숙소가 없으면 위치 · 이름으로 직접 등록')
       ).toBeOnTheScreen();
       expect(
         within(screen.getByTestId('stay-search-empty')).queryByTestId(
@@ -1400,7 +1400,7 @@ describe('5가지 상태 얼굴 (옛 .states)', () => {
         // empty와 갈린다는 반대증명 — filter-zero 제목이 뜬 것과 짝이다(위 두 번째 단언).
         expect(screen.queryByText('조건에 맞는 숙소가 없어요')).toBeNull();
         expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
-          '부산 · 날짜 미정 · 0곳'
+          '부산 · 0곳'
         );
       }
     );
@@ -1428,7 +1428,7 @@ describe('5가지 상태 얼굴 (옛 .states)', () => {
         'stay-card-NAVER:s2',
       ]);
       expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
-        '부산 · 날짜 미정 · 3곳'
+        '부산 · 3곳'
       );
     });
   });
@@ -1487,7 +1487,7 @@ describe('5가지 상태 얼굴 (옛 .states)', () => {
         )
       ).toBeOnTheScreen();
       expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
-        '부산 · 날짜 미정'
+        '부산'
       );
       expect(queryCardTestIds()).toEqual([]);
     });
@@ -1534,7 +1534,7 @@ describe('5가지 상태 얼굴 (옛 .states)', () => {
         'stay-card-NAVER:s2',
       ]);
       expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
-        '부산 · 날짜 미정 · 3곳'
+        '부산 · 3곳'
       );
       // TRIP-725 — default 얼굴에도 2단 원형 FAB 2개가 그대로 뜨고, 옛 알약 FAB 은 없다.
       expect(screen.getByTestId('stay-search-fab-saved')).toBeOnTheScreen();

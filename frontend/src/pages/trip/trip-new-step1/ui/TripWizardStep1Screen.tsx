@@ -397,7 +397,7 @@ export function TripWizardStep1Screen({
                   : isEmptyFace
                     ? '여행지와 기간만 정하면 나머지는 채워둘게요 · 행을 누르면 바꿀 수\u00A0있어요'
                     : summaryPreferences?.onboarding === true
-                      ? '온보딩에서 고른 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수\u00A0있어요'
+                      ? '내 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수\u00A0있어요'
                       : '행을 누르면 바꿀 수 있어요'}
               </Text>
             </View>
@@ -480,7 +480,7 @@ export function TripWizardStep1Screen({
                         size={14}
                       />
                       <Text className="font-noto-bold text-caption font-bold text-primary">
-                        온보딩
+                        내 취향
                       </Text>
                     </View>
                   ) : null
