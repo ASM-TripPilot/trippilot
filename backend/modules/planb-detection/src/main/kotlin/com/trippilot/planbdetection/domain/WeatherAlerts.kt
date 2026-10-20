@@ -25,7 +25,9 @@ import java.time.temporal.ChronoUnit
  *    광역시의 **군**(강화·옹진·기장 …)은 6 으로 맞춘다 — 구역 이름에 군 이름이 나온다(`인천(강화)`). 다만 그 줄에 광역 이름으로 시작하는
  *    권역(`부산동부`)이 있으면 그 군이 들었을 수 있어 줄 전체로 맞춘다(7 의 근거와 같다).
  * 8. 도의 시군은 6 으로 안 걸려도 그 줄에 광역 이름으로 시작하는 권역(`강원중부산지` · `경북북동산지`)이 있으면 모름이다 — 그 권역이 시군을
- *    덮는지 이름으로 가릴 수 없다(평창의 평지만 풀리고 대관령 경보가 남은 회차). 권역 → 시군 표로 걸지는 정본 결정이다.
+ *    덮는지 이름으로 가릴 수 없다(평창의 평지만 풀리고 대관령 경보가 남은 회차). 권역은 시군 표로 걸지 않고 모름으로 둔다(G-SA-16 결정
+ *    2026-10-20). 그 도의 시군 어간([CITY_STEMS])으로도 광역 이름으로도 시작하지 않는 이름(섬 구역·바다 아님 — 구역 개편으로 생긴 낯선
+ *    이름)이 있어도 모름이다 — 다른 시군으로 읽어 '안 걸림'으로 접으면 거짓 해제다(같은 결정). 갈래는 [zoneKind] 가 가른다.
  * 9. `(…제외)` 는 나열한 구역을 뺀 그 광역 전체다 — 시군 어간으로 나열됐을 때만 그 시군이 빠진다(섬 하나를 뺀다고 시군 전체가 빠지지 않는다).
  */
 object WeatherAlerts {
@@ -51,6 +53,42 @@ object WeatherAlerts {
     val ISLANDS: Map<String, String> = mapOf(
         "울릉도.독도" to "47940", "서해5도" to "28720", "흑산도.홍도" to "12870", "거문도.초도" to "12130", "추자도" to "50110",
     )
+
+    /**
+     * 도의 시군 어간(닫힌 표 — 규칙 8). 하위 구역 이름이 그 도의 어느 어간으로 시작하면 그 시군의 구역이다(`울진산지` → 울진) — 도마다 따로라
+     * 동명 시군(고성)은 도가 가른다. 행정구역 시드(`R__seed_region_catalog.sql`)의 도 시군에서 [placeOf] 와 같은 어간 규칙으로 뽑았고, 시드와
+     * 어긋나면(시군 신설·개명·통합) `WeatherAlertsTest` 가 실패한다. 특별·광역시·제주는 없다 — 그 줄은 이 표로 매칭하지 않는다(규칙 5·7).
+     */
+    val CITY_STEMS: Map<Province, Set<String>> = mapOf(
+        Province.GYEONGGI to setOf(
+            "수원", "성남", "의정부", "안양", "부천", "광명", "평택", "동두천", "안산", "고양", "과천", "구리", "남양주", "오산", "시흥", "군포",
+            "의왕", "하남", "용인", "파주", "이천", "안성", "김포", "화성", "광주", "양주", "포천", "여주", "연천", "가평", "양평",
+        ),
+        Province.GANGWON to setOf(
+            "춘천", "원주", "강릉", "동해", "태백", "속초", "삼척", "홍천", "횡성", "영월", "평창", "정선", "철원", "화천", "양구", "인제", "고성",
+            "양양",
+        ),
+        Province.CHUNGBUK to setOf("청주", "충주", "제천", "보은", "옥천", "영동", "증평", "진천", "괴산", "음성", "단양"),
+        Province.CHUNGNAM to setOf(
+            "천안", "공주", "보령", "아산", "서산", "논산", "계룡", "당진", "금산", "부여", "서천", "청양", "홍성", "예산", "태안",
+        ),
+        Province.JEONBUK to setOf("전주", "군산", "익산", "정읍", "남원", "김제", "완주", "진안", "무주", "장수", "임실", "순창", "고창", "부안"),
+        Province.JEONNAM to setOf(
+            "목포", "여수", "순천", "나주", "광양", "담양", "곡성", "구례", "고흥", "보성", "화순", "장흥", "강진", "해남", "영암", "무안", "함평",
+            "영광", "장성", "완도", "진도", "신안",
+        ),
+        Province.GYEONGBUK to setOf(
+            "포항", "경주", "김천", "안동", "구미", "영주", "영천", "상주", "문경", "경산", "의성", "청송", "영양", "영덕", "청도", "고령", "성주",
+            "칠곡", "예천", "봉화", "울진", "울릉",
+        ),
+        Province.GYEONGNAM to setOf(
+            "창원", "진주", "통영", "사천", "김해", "밀양", "거제", "양산", "의령", "함안", "창녕", "고성", "남해", "하동", "산청", "함양", "거창",
+            "합천",
+        ),
+    )
+
+    /** 하위 구역 이름의 갈래(규칙 8) — 매칭과 감지기 WARN 이 같은 판정을 쓴다(특보구역 개편 목록 대조에도 쓸 수 있다). */
+    enum class ZoneKind { CITY, REGIONAL, ISLAND, SEA, UNKNOWN }
 
     /** 특보 구역 한 칸 × 목적지 — 걸림 · 안 걸림 · 모름(가릴 수 없다 — '특보 없음'으로 확인하지 않는다, INV-SA-2). */
     enum class Match { HIT, MISS, UNSURE }
@@ -148,14 +186,41 @@ object WeatherAlerts {
         if (area.excluding) return if (named) Match.MISS else Match.HIT
         if (land.isEmpty()) return Match.MISS
         if (named || place.wide || land.any { zone -> ISLANDS[zone]?.let { islandCovers(it, place) } == true }) return Match.HIT
-        if (land.none(province::isRegional)) return Match.MISS
-        return if (province.wide) Match.HIT else Match.UNSURE
+        if (province.wide) return if (land.any(province::isRegional)) Match.HIT else Match.MISS // 규칙 7 — 광역시의 군
+        // 규칙 8 — 도의 시군: 광역 권역이나 표에 없는 이름이 하나라도 있으면 그 구역이 목적지를 덮는지 가릴 수 없다
+        val kinds = land.map { zoneKind(province, it) }
+        return if (ZoneKind.REGIONAL in kinds || ZoneKind.UNKNOWN in kinds) Match.UNSURE else Match.MISS
     }
 
     /** 아는 최상위 구역 이름인가 — 광역 · 섬 구역 · 바다. 아니면 [match] 가 모름이고 감지기가 이름을 드러낸다(규칙 2). */
     fun isKnownArea(area: WarningArea): Boolean {
         val name = area.name.trim()
         return isSea(name) || name in ISLANDS || Province.ofKmaName(name) != null
+    }
+
+    /**
+     * [province] 줄의 하위 구역 이름 하나 → 갈래: 바다 · 섬 구역(표) · 광역 이름으로 시작하는 권역 · 그 도의 시군 어간으로 시작 · 어디에도
+     * 안 듦(모름). 특별·광역시·제주는 시군 어간 표가 없어 앞의 셋이 아니면 모름으로 나온다 — 그 줄은 이 갈래로 매칭하지 않는다(규칙 5·7).
+     */
+    fun zoneKind(province: Province, zone: String): ZoneKind {
+        val name = zone.trim()
+        return when {
+            isSea(name) -> ZoneKind.SEA
+            name in ISLANDS -> ZoneKind.ISLAND
+            province.isRegional(name) -> ZoneKind.REGIONAL
+            CITY_STEMS[province].orEmpty().any { name.startsWith(it) } -> ZoneKind.CITY
+            else -> ZoneKind.UNKNOWN
+        }
+    }
+
+    /**
+     * 표로 가릴 수 없는 구역 이름 — 모르는 최상위 이름(규칙 2)과 도 줄의 모르는 하위 구역(규칙 8). 구역 개편·t6 형식 변화의 신호라 감지기가
+     * 바뀔 때 WARN 으로 드러낸다(고칠 곳은 광역·섬 구역·시군 어간 표다). 특별·광역시·제주 줄의 하위 구역은 보지 않는다(규칙 5·7).
+     */
+    fun unknownNames(area: WarningArea): List<String> {
+        if (!isKnownArea(area)) return listOf(area.name.trim())
+        val province = Province.ofKmaName(area.name)?.takeUnless { it.wide } ?: return emptyList()
+        return area.zones.filter { zoneKind(province, it) == ZoneKind.UNKNOWN }.map { it.trim() }
     }
 
     /**

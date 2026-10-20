@@ -303,6 +303,25 @@ class KmaWarningDetectorTest : StringSpec({
         KmaWarningDetector(snow("강릉시평지"), pyeongchang).detect(day) shouldBe Detection.Checked(setOf(null), emptyList())
     }
 
+    /**
+     * 도의 시군 목적지에 그 도의 시군 어간으로도 광역 이름으로도 시작하지 않는 하위 구역(구역 개편 — `북동산지`)이 걸리면 그 구역이
+     * 목적지를 덮는지 모른다 — 다른 시군으로 읽어 '특보 없음'으로 확인하면 거짓 해제다(INV-SA-2 · G-SA-16 결정 2026-10-20). 모르는 이름이라
+     * 사유는 unknown-area 이고 바뀔 때 WARN 한 번이다. 다른 시군 이름으로 시작하는 구역(`울진산지`)은 그 시군이라 확인이다.
+     */
+    "도의 시군은 표에 없는 하위 구역 이름이 걸리면 확인이 아니라 모름 — 다른 시군 이름 구역은 확인 · 제 이름이 같이 있으면 발화" {
+        val day = target(tripId, slot("호미곶", "자연", "14:00", "15:00"))
+        fun zones(vararg names: String) = warned(gale(WarningArea("경상북도", names.toList())))
+
+        val warns = alertDetectorWarns {
+            KmaWarningDetector(zones("북동산지"), pohangTrip()).detect(day) shouldBe Detection.Unknown("unknown-area")
+        }
+        warns.single() shouldContain "북동산지"
+        KmaWarningDetector(zones("울진산지"), pohangTrip()).detect(day) shouldBe Detection.Checked(setOf(null), emptyList())
+        KmaWarningDetector(zones("경북북동산지"), pohangTrip()).detect(day) shouldBe Detection.Unknown("unattributed-zone")
+        (KmaWarningDetector(zones("포항", "북동산지"), pohangTrip()).detect(day) as Detection.Checked).signals.single().variant shouldBe
+            TriggerVariant.WIND
+    }
+
     /** 광역시의 군(강화·옹진)은 구역 이름에 제 이름이 나온다 — 다른 군만 적힌 줄에 걸지 않는다. 권역 이름(부산동부)만 있으면 줄 전체다. */
     "광역시의 군은 제 이름이 없는 군 구역 줄에 걸리지 않는다 — 권역 줄(부산동부)이면 걸린다" {
         val ganghwa = FakeTripDestinations().put(tripId, DAY, DAY.plusDays(1), TripDestinationRef("강화군", "28710", 1))
