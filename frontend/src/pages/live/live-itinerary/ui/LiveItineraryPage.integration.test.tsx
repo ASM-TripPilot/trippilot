@@ -483,7 +483,7 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       ).toBeNull();
     });
 
-    it('U8 그날 경로 있음 → 계획｜실제 토글, 실제 선택 시 점선 세그먼트·거리만(TRIP-1343)', async () => {
+    it('U8 그날 경로 있음 → 토글 없이 계획 동선 위에 실제 경로 점선이 바로 겹친다(TRIP-1520)', async () => {
       mockAutomation = { state: 'ARMED', notice: null, droppedCount: 0 };
       // 지도 키가 없으면 MapView 가 실패 표면만 그려 오버레이를 관측할 수 없다.
       const originalKey = process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID;
@@ -516,35 +516,78 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       server.use(itineraryOk(), tripHandler(), visitsHandler(), consentOk());
       await renderActive();
       await waitFor(() =>
-        expect(
-          screen.getByTestId('execution-live-route-toggle-actual')
-        ).toBeEnabled()
+        expect(screen.getAllByTestId('map-route-segment')).toHaveLength(2)
       );
-      expect(screen.queryAllByTestId('map-route-segment')).toHaveLength(0);
-      fireEvent.press(screen.getByTestId('execution-live-route-toggle-actual'));
-      expect(screen.getAllByTestId('map-route-segment')).toHaveLength(2);
+      // 토글·거리 알약은 없다 — 누를 것 없이 둘 다 보인다.
       expect(
-        screen.getByTestId('execution-live-route-distance')
-      ).toHaveTextContent('실제 3.2km');
+        screen.queryByTestId('execution-live-route-toggle-actual')
+      ).toBeNull();
+      expect(screen.queryByTestId('execution-live-route-distance')).toBeNull();
+      expect(screen.queryByText(/실제 3\.2km/)).toBeNull();
       setAutomationSink(original);
       if (originalKey === undefined)
         delete process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID;
       else process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID = originalKey;
     });
 
-    it('U9 그날 경로 없음 → 실제 칸 비활성 + 사유, 계획 동선만', async () => {
+    it('U9 그날 경로 없음 → 계획 동선만, 사유 안내 없음(TRIP-1520)', async () => {
       mockAutomation = { state: 'ARMED', notice: null, droppedCount: 0 };
       server.use(itineraryOk(), tripHandler(), visitsHandler(), consentOk());
       await renderActive();
-      await waitFor(() =>
-        expect(
-          screen.getByTestId('execution-live-route-disabled-reason')
-        ).toHaveTextContent('이 날 기록된 경로가 없어요')
-      );
-      expect(
-        screen.getByTestId('execution-live-route-toggle-actual')
-      ).toBeDisabled();
+      // 앵커: 화면이 그려졌다(빈 화면이라 사유가 없는 공허 통과를 막는다).
+      await screen.findByTestId('execution-live-sheet-header');
+      await settle();
       expect(screen.queryAllByTestId('map-route-segment')).toHaveLength(0);
+      expect(
+        screen.queryByTestId('execution-live-route-disabled-reason')
+      ).toBeNull();
+      expect(screen.queryByText('이 날 기록된 경로가 없어요')).toBeNull();
+    });
+
+    it('U9b 경로가 있어도 위치 동의가 없으면 실제 경로를 그리지 않는다 — 안내도 없다(BR-U10-41 개정)', async () => {
+      mockAutomation = { state: 'ARMED', notice: null, droppedCount: 0 };
+      const originalKey = process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID;
+      process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID = 'test-naver-client-id';
+      const original = getAutomationSink();
+      setAutomationSink(
+        createFakeAutomationSink({
+          routes: {
+            [TRIP_ID]: [
+              {
+                date: TODAY,
+                segments: [
+                  encodePolyline([
+                    { lat: 35.1, lng: 129.0 },
+                    { lat: 35.101, lng: 129.001 },
+                  ]),
+                ],
+                distanceM: 1200,
+                distanceClamped: false,
+                updatedAt: '2026-08-20T12:00:00Z',
+              },
+            ],
+          },
+        })
+      );
+      const consentSeen = jest.fn();
+      server.use(
+        itineraryOk(),
+        tripHandler(),
+        visitsHandler(),
+        http.get(`${BASE}/me/location-consent`, () => {
+          consentSeen();
+          return HttpResponse.json({ legalConsent: false });
+        })
+      );
+      await renderActive();
+      await waitFor(() => expect(consentSeen).toHaveBeenCalled());
+      await settle();
+      expect(screen.queryAllByTestId('map-route-segment')).toHaveLength(0);
+      expect(screen.queryByText('위치 동의가 없어요')).toBeNull();
+      setAutomationSink(original);
+      if (originalKey === undefined)
+        delete process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID;
+      else process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID = originalKey;
     });
 
     it('U5 날짜 넘김 폐기 건수 → "보내지 못한 자동 기록 N건" 1줄(설정 링크 없음)', async () => {

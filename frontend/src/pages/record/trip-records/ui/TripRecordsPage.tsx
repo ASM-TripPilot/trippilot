@@ -30,7 +30,6 @@ import {
   routeDayToSegments,
   useTripRoutes,
 } from '@/shared/location';
-import { actualDistanceLabel } from '@/shared/map';
 import { useGetMeLocationConsent } from '@/shared/api/index.hooks';
 import { SkipVisitDialog } from './SkipVisitDialog';
 import type { VisitRecordCardVM } from './VisitRecordCard';
@@ -207,24 +206,13 @@ export function TripRecordsPage({
     query: { enabled: automationOn },
   });
   const routes = useTripRoutes(automationOn ? tripId : null);
-  const [routeMode, setRouteMode] = useState<'plan' | 'actual'>('plan');
   const dayRoute = routeDayForDate(routes.routes, activeDay);
-  const routeSegments = dayRoute ? routeDayToSegments(dayRoute) : [];
   const consentOn = locationConsent.data?.legalConsent === true;
-  const actualAvailable = consentOn && routeSegments.length > 0;
-  const routeToggle = automationOn
-    ? {
-        mode: actualAvailable ? routeMode : ('plan' as const),
-        actualAvailable,
-        disabledReason: !consentOn
-          ? '위치 동의가 없어요'
-          : '이 날 기록된 경로가 없어요',
-        distanceLabel: dayRoute
-          ? actualDistanceLabel(dayRoute.distanceM)
-          : undefined,
-        onChange: setRouteMode,
-      }
-    : undefined;
+  // TRIP-1520 · 토글 없이 늘 겹친다(BR-U10-41 개정).
+  const actualRoute =
+    automationOn && consentOn && dayRoute
+      ? routeDayToSegments(dayRoute)
+      : undefined;
 
   // TRIP-1372 — 순서는 서버가 도착 순으로 준다(TRIP-1315). 앱이 다시 세우지 않고 배열 순서가 곧 방문 순서다.
   const cards: VisitRecordCardVM[] = (records.data?.visits ?? []).map(
@@ -325,12 +313,7 @@ export function TripRecordsPage({
   return (
     <View className="flex-1">
       <TripRecordsView
-        routeToggle={routeToggle}
-        actualRoute={
-          routeToggle?.mode === 'actual' && actualAvailable
-            ? routeSegments
-            : undefined
-        }
+        actualRoute={actualRoute}
         tripTitle={trip.data?.title}
         dayTabs={dayTabs}
         activeDay={activeDay}

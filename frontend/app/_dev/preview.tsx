@@ -2169,12 +2169,6 @@ const u10Notice = (reason: string | null, dropped = 0) => {
       }
     : null;
 };
-const U10_ROUTE_ON = {
-  mode: 'actual' as const,
-  actualAvailable: true,
-  distanceLabel: '실제 3.2km',
-  onChange: noop,
-};
 
 // j04 요약의 일차 회고 칩(TRIP-987) — 여행 기간 3일(6/11~6/13) 전체. 페이지가 `tripDayChips` 로 조립하는 모양.
 const TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS = [1, 2, 3].map((day) => ({
@@ -3806,7 +3800,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           { number: 1, lat: 35.1532, lng: 129.1187, state: 'done' },
           { number: 2, lat: 35.1667, lng: 129.137, state: 'done' },
         ]}
-        routeToggle={{ ...U10_ROUTE_ON, distanceLabel: '실제 2.8km' }}
         actualRoute={[
           [
             { lat: 35.1532, lng: 129.1187 },
@@ -7274,42 +7267,11 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'u10-route-actual',
     band: 'i',
-    label: 'U10 · i01 계획｜실제 — 실제 켜짐·공백 있음(u10e)',
+    label: 'U10 · i01 계획 동선 + 실제 경로 함께 — 공백 있음(u10e)',
     login: null,
     render: () =>
       renderLiveHubPreview(1, {
-        routeToggle: U10_ROUTE_ON,
         actualRoute: U10_ACTUAL_ROUTE,
-      }),
-  },
-  {
-    key: 'u10-route-none',
-    band: 'i',
-    label: 'U10 · i01 계획｜실제 — 경로 없음',
-    login: null,
-    render: () =>
-      renderLiveHubPreview(1, {
-        routeToggle: {
-          mode: 'plan',
-          actualAvailable: false,
-          disabledReason: '이 날 기록된 경로가 없어요',
-          onChange: noop,
-        },
-      }),
-  },
-  {
-    key: 'u10-route-no-consent',
-    band: 'i',
-    label: 'U10 · i01 계획｜실제 — 위치 동의 없음',
-    login: null,
-    render: () =>
-      renderLiveHubPreview(1, {
-        routeToggle: {
-          mode: 'plan',
-          actualAvailable: false,
-          disabledReason: '위치 동의가 없어요',
-          onChange: noop,
-        },
       }),
   },
   // TRIP-1260 — 7일 여행 허브, 오늘=6일차로 연다. 화면 밖 선택 칩이 열자마자 보이는지(AC-3b)·FAB 하한이

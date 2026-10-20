@@ -18,6 +18,12 @@ import { router } from 'expo-router';
 
 import { PlusGlyph } from '@/features/record';
 import { server } from '@/mocks/server';
+import {
+  createFakeAutomationSink,
+  getAutomationSink,
+  setAutomationSink,
+} from '@/shared/location';
+import { encodePolyline } from '@/shared/location/automation/polyline';
 import type { VisitPhoto } from '@/shared/api/index.schemas';
 import { getGetTripsTripIdVisitsVisitCheckIdPhotosQueryKey } from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
@@ -83,6 +89,17 @@ jest.mock('expo-router', () => {
 // 지도 히어로가 네이티브 지도(Kakao/Naver)를 태우므로 관찰 목으로 갈아끼운다(TripRecordsScreen.test 선례).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
+
+// TRIP-1520 — 실제 경로 게이트 묶음만 플래그를 켠다(기본 false = 옛 파일 그대로 플래그 OFF).
+// 내부 소비처(useTripRoutes)가 같은 판독을 보게 플래그 모듈도 같은 값으로 묶는다(허브 통합 선례).
+let mockAutomationOn = false;
+jest.mock('@/shared/location/automation/flag', () => ({
+  isLocationAutomationEnabled: () => mockAutomationOn,
+}));
+jest.mock('@/shared/location', () => ({
+  ...jest.requireActual('@/shared/location'),
+  isLocationAutomationEnabled: () => mockAutomationOn,
+}));
 
 jest.mock('expo-location', () => ({
   getForegroundPermissionsAsync: (...args: unknown[]) =>
@@ -3496,5 +3513,113 @@ describe('「오늘의 회고」 FAB 배선', () => {
         [reflectionPath('2026-08-20')],
       ]);
     });
+  });
+});
+
+describe('실제 경로 — 토글 없이 동의 ∧ 그날 경로일 때만 겹친다 (TRIP-1520)', () => {
+  /**
+   * 토글이 사라져 페이지의 게이트(플래그 ∧ 위치 동의 ∧ 고른 날의 경로)가 실제 경로를 막는 유일한 FE 방어선이 됐다.
+   * 3동작: 준비(1·2일차 일정 + 1일차에만 경로 2조각 + 동의 응답) → 실행(렌더·일차 칩) → 단언(지도에 넘어간 actualRoute).
+   * (개념) `map-root` 는 지도 목이라 받은 prop 을 그대로 보여 준다 — `props.actualRoute` 가 곧 "지도에 그리라고 넘긴 경로".
+   */
+  const DAY1 = '2026-08-20';
+  const DAY2 = '2026-08-21';
+  let consent = true;
+  let consentHits = 0;
+  let originalSink: ReturnType<typeof getAutomationSink>;
+
+  beforeEach(() => {
+    mockAutomationOn = true;
+    consent = true;
+    consentHits = 0;
+    setAccessToken('a');
+    originalSink = getAutomationSink();
+    setAutomationSink(
+      createFakeAutomationSink({
+        routes: {
+          [TRIP_ID]: [
+            {
+              date: DAY1,
+              segments: [
+                encodePolyline([
+                  { lat: 35.1, lng: 129.0 },
+                  { lat: 35.101, lng: 129.001 },
+                ]),
+                encodePolyline([
+                  { lat: 35.11, lng: 129.01 },
+                  { lat: 35.111, lng: 129.011 },
+                ]),
+              ],
+              distanceM: 3249,
+              distanceClamped: false,
+              updatedAt: '2026-08-20T12:00:00Z',
+            },
+          ],
+        },
+      })
+    );
+    server.use(
+      http.get(`${BASE}/me/location-consent`, () => {
+        consentHits += 1;
+        return HttpResponse.json({ legalConsent: consent });
+      }),
+      http.get(`${BASE}/trips/:tripId`, () =>
+        HttpResponse.json(tripRecordsTrip('부산 여행', TRIP_ID))
+      ),
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json(
+          tripItinerary(
+            [
+              {
+                date: DAY1,
+                slots: [
+                  daySlot('p1', '광안리 해변', { lat: 35.1532, lng: 129.1187 }),
+                ],
+              },
+              {
+                date: DAY2,
+                slots: [daySlot('p5', '◇◇ 시장', { lat: 35.1, lng: 129.03 })],
+              },
+            ],
+            TRIP_ID
+          )
+        )
+      ),
+      http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
+        HttpResponse.json({ visits: [] })
+      ),
+      http.get(`${BASE}/trips/:tripId/bases`, () => HttpResponse.json([])),
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([]))
+    );
+  });
+
+  afterEach(() => {
+    mockAutomationOn = false;
+    setAutomationSink(originalSink);
+    server.resetHandlers();
+    clearAccessToken();
+  });
+
+  const routeOnMap = () => screen.getByTestId('map-root').props.actualRoute;
+
+  it('RG1 동의 있음 · 그날 경로 있음 → 누를 것 없이 지도에 경로 2조각이 넘어간다', async () => {
+    render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
+    await waitFor(() => expect(routeOnMap()).toHaveLength(2));
+  });
+
+  it('RG2 경로가 있어도 위치 동의가 없으면 → 지도에 경로를 넘기지 않는다', async () => {
+    consent = false;
+    render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
+    await waitFor(() => expect(consentHits).toBeGreaterThan(0));
+    await screen.findByTestId('record-trip-sheet-header');
+    await flushNotifications();
+    expect(routeOnMap()).toBeUndefined();
+  });
+
+  it('RG3 다른 날(경로 없는 2일차)로 바꾸면 → 1일차 경로가 따라오지 않는다', async () => {
+    render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
+    await waitFor(() => expect(routeOnMap()).toHaveLength(2));
+    fireEvent.press(screen.getByTestId('sheet-daychip-1'));
+    await waitFor(() => expect(routeOnMap()).toBeUndefined());
   });
 });

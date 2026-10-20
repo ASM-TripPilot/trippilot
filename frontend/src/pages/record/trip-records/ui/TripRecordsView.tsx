@@ -21,8 +21,7 @@ import {
 } from '@/features/record';
 import { SpontaneousVisitButton } from './SpontaneousVisitButton';
 import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
-import type { MapCenter, MapPin, RouteToggleProps } from '@/shared/map';
-import { RouteToggle } from '@/shared/map';
+import type { MapCenter, MapPin } from '@/shared/map';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { DayChipOverlay } from '@/widgets/map-sheet-shell';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
@@ -104,9 +103,7 @@ export interface TripRecordsViewProps {
   onPressSpontaneous?: () => void;
   /** TRIP-1088 「오늘의 회고」 FAB — 미주입이면 그리지 않는다(미래·로딩 판정은 페이지 몫). */
   onPressReflection?: () => void;
-  /** TRIP-1343 — 풀 지도 위 `계획｜실제` 토글(Figma u10e 4862:3807). 미전달이면 없음(플래그 OFF 무회귀). */
-  routeToggle?: Omit<RouteToggleProps, 'testIDPrefix'>;
-  /** TRIP-1343 — 그날 실제 경로 세그먼트(토글이 실제일 때만). */
+  /** TRIP-1520 — 그날 실제 경로 세그먼트. 주면 계획 동선 위에 늘 겹친다(토글 없음, BR-U10-41 개정). */
   actualRoute?: MapCenter[][];
 }
 
@@ -153,7 +150,6 @@ export function TripRecordsView({
   onPressSkip,
   onPressSpontaneous,
   onPressReflection,
-  routeToggle,
   actualRoute,
 }: TripRecordsViewProps): ReactElement {
   const activeIndex = dayTabs.findIndex((tab) => tab.day === activeDay);
@@ -259,11 +255,6 @@ export function TripRecordsView({
             >
               <GpsOffGlyph size={15} />
               <Text className="text-micro text-muted">GPS 자동기록 꺼짐</Text>
-            </View>
-          ) : routeToggle ? (
-            // TRIP-1343 — 계획｜실제 토글(Figma u10e 4862:3807). 수동 체크인 모드(⊘ 배지)일 땐 그 배지가 우선.
-            <View className="mt-sm">
-              <RouteToggle testIDPrefix="record-map" {...routeToggle} />
             </View>
           ) : undefined
         }

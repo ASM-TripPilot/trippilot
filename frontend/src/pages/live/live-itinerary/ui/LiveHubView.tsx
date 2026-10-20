@@ -19,8 +19,7 @@ import Animated, {
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
-import type { MapCenter, RouteToggleProps } from '@/shared/map';
-import { RouteToggle } from '@/shared/map';
+import type { MapCenter } from '@/shared/map';
 import { DayChipScroller, MapSheetShell } from '@/widgets/map-sheet-shell';
 import { BackChevronGlyph, FullAiGlyph } from '@/widgets/map-sheet-shell';
 import { formatCoPickDayHeader } from '@/features/itinerary/index.view';
@@ -183,9 +182,7 @@ export interface LiveHubViewProps {
   autoRecordedPoiIds?: ReadonlySet<string>;
   /** TRIP-1340 — 자동 기록 카드 `⋯` → 되돌리기 확인(arg = poiId). 미주입이면 진입 없음. */
   onPressRevertAuto?: (poiId: string) => void;
-  /** TRIP-1343 — 지도 위 `계획｜실제` 토글(Figma u10e). 미전달이면 토글 없음(플래그 OFF 무회귀). */
-  routeToggle?: Omit<RouteToggleProps, 'testIDPrefix'>;
-  /** TRIP-1343 — 실제 경로 세그먼트(토글이 실제일 때만 페이지가 준다). */
+  /** TRIP-1520 — 그날 실제 경로 세그먼트. 주면 계획 동선 위에 늘 겹친다(토글 없음, BR-U10-41 개정). */
   actualRoute?: MapCenter[][];
   automationNotice?: {
     title: string;
@@ -267,7 +264,6 @@ export function LiveHubView({
   automationNotice,
   autoRecordedPoiIds,
   onPressRevertAuto,
-  routeToggle,
   actualRoute,
 }: LiveHubViewProps): ReactElement {
   // Provider 없는 렌더(jest)에서는 null — useSafeAreaInsets 는 throw 하므로 컨텍스트를 직접 읽는다.
@@ -403,16 +399,7 @@ export function LiveHubView({
         initialIndex={initialSnapIndex}
         // TRIP-1416 · 그날 핀 전부를 시트 중간(55%) 칸 위 띠에 맞춘다(Q-088 — 첫 핀 중심 고정 줌이면 나머지가 시트 뒤).
         fitPins
-        mapCard={
-          routeToggle ? (
-            <View className="gap-sm">
-              <RouteToggle testIDPrefix="execution-live" {...routeToggle} />
-              {hiddenPillKey === pillKey ? null : triggerChip}
-            </View>
-          ) : hiddenPillKey === pillKey ? undefined : (
-            triggerChip
-          )
-        }
+        mapCard={hiddenPillKey === pillKey ? undefined : triggerChip}
         actualRoute={actualRoute}
         onMapTap={hidePill}
         onSheetScrollBeginDrag={hidePill}

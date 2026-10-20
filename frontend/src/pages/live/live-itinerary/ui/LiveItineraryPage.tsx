@@ -62,7 +62,6 @@ import {
   useLocationAutomation,
   useTripRoutes,
 } from '@/shared/location';
-import { actualDistanceLabel } from '@/shared/map';
 import { automationVisitRefs } from '../model/automationInput';
 import {
   AutoRevertDialog,
@@ -311,26 +310,14 @@ export function LiveItineraryPage({
     automation.droppedCount
   );
 
-  // TRIP-1343 · 계획｜실제 토글 — 그날 경로가 있고 위치 동의가 있을 때만 실제 칸이 켜진다(BR-U10-41).
+  // TRIP-1520 · 그날 경로가 있고 위치 동의가 있으면 실제 경로를 계획 동선 위에 늘 겹친다(토글·사유 없음, BR-U10-41 개정).
   const routes = useTripRoutes(automationOn ? tripId : null);
-  const [routeMode, setRouteMode] = useState<'plan' | 'actual'>('plan');
   const dayRoute = routeDayForDate(routes.routes, liveDate);
-  const routeSegments = dayRoute ? routeDayToSegments(dayRoute) : [];
   const consentOn = locationConsent.data?.legalConsent === true;
-  const actualAvailable = consentOn && routeSegments.length > 0;
-  const routeToggle = automationOn
-    ? {
-        mode: actualAvailable ? routeMode : ('plan' as const),
-        actualAvailable,
-        disabledReason: !consentOn
-          ? '위치 동의가 없어요'
-          : '이 날 기록된 경로가 없어요',
-        distanceLabel: dayRoute
-          ? actualDistanceLabel(dayRoute.distanceM)
-          : undefined,
-        onChange: setRouteMode,
-      }
-    : undefined;
+  const actualRoute =
+    automationOn && consentOn && dayRoute
+      ? routeDayToSegments(dayRoute)
+      : undefined;
 
   // TRIP-1340 · '자동 기록' 칩·되돌리기 — 서버 출처에서 파생(플래그 ON 일 때만). 확정 전 호출 0회.
   const autoRecords = new Map<
@@ -788,12 +775,7 @@ export function LiveItineraryPage({
         directionsNotice={directionsNotice}
         initialSnapIndex={initialSnapIndex}
         autoRecordedPoiIds={new Set(autoRecords.keys())}
-        routeToggle={routeToggle}
-        actualRoute={
-          routeToggle?.mode === 'actual' && actualAvailable
-            ? routeSegments
-            : undefined
-        }
+        actualRoute={actualRoute}
         onPressRevertAuto={(poiId) => {
           const target = autoRecords.get(poiId);
           if (target) setRevertTarget({ poiId, ...target, error: null });

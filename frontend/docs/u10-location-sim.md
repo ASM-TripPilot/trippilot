@@ -12,7 +12,7 @@
 | `u10-explainer` | 승격 설명 시트 (u10a 4857:2795) |
 | `u10-degrade-notice` · `u10-dropped-notice` | i01 강등·폐기 안내 1줄 (u10c 4857:3012) |
 | `u10-auto-badge` · `u10-auto-revert-dialog` · `u10-auto-revert-media` | 자동 기록 표식·되돌리기 확인·409 미디어 (u10b) |
-| `u10-route-actual` · `u10-route-none` · `u10-route-no-consent` | i01 계획｜실제 (u10e) |
+| `u10-route-actual` | i01 계획 동선 + 실제 경로 함께 (u10e, 토글 없음 — TRIP-1520) |
 | `u10-records-route` | j01 풀 지도 실제 경로 + 표식 (u10e 4862:3807) |
 | `u10-l06-on` · `u10-l06-off` · `u10-l06-blocked` · `u10-l06-revoke-dialog` | l06 상태 행·철회 (u10d) |
 
