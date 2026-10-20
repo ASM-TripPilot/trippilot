@@ -144,6 +144,8 @@
 - `delay` 는 늘 `OFF` 라 발화한 DELAY 가 없으면 이동 행은 숨는다. U10 이 DELAY 를 발화하면 `OFF` 여도 `활성` 행으로 보인다(발화한 사실을 감시 상태가 가리지 않는다).
 - 상태 문구는 `features/planb/config/watchLabels.ts` 에 `확인 불가` 를 더한다. 거짓 '정상'을 그리지 않는 것이 이 표의 목적이다(INV-SA-2 · G-SA-1).
 
+> **[개정 · 2026-10-20 — 구현 반영]** §3.5 — 표에 없는 경우: 응답에 `watch` 는 왔는데 **그 묶음이 빠졌거나 모르는 상태값**이면 `확인 불가` 다(계약 위반 · 앱보다 새 서버). '정상'은 `watch` 필드 자체가 없는 옛 서버에만 준다 — 거짓 '정상' 금지(#1423 · `frontend/src/pages/live/live-itinerary/model/triggerWatchlist.ts:60-68`).
+
 ### 3.6 i06 최소 변경 — `pages/live/planb-draft`(새 model 파일 + 배선)
 
 | 상황 | 화면 |

@@ -167,6 +167,7 @@ planb.situation_sweep mode= phase= trips= skipped= failed= live=[] off=[] observ
 > - **4단계는 본인 계정 카나리 + 실기기 푸시 1회 왕복까지다.** 마지막 '`ACCOUNT_IDS` 비움'(전원)은 카나리 결과를 보고 사용자에게 다시 묻는다(BLM §0.4 #1). `PLANB_SITUATION_SWEEP_ACCOUNT_IDS=`(삭제)도 목록이 비는 것이라 전원이다.
 > - 4단계의 정보성 판단은 사용자 결정으로 진행한다 — LEGAL-SA-02 개정 블록.
 > - 8단계의 키는 O-SA-1 종결(`PUBLIC_DATA_API_KEY` — SEC-SA-03 개정 블록)로 통한다(2026-10-19 실측). 남은 것은 요약 줄의 그 출처 Unknown 소멸·실응답 표본 확인과 `observe-only` 에서 빼는 커밋이다.
+> - 9단계(`HOLIDAY_CLOSURE_MODE=on`)의 확인 '생성 샘플 비교'는 2026-10-20 에 마쳤다(로컬 측정 — 코드 밖 사실). 실키 특일 응답 12회 p50 83ms·최대 101ms(소켓 2s 초과 0) · 공유본 60,521곳 중 휴일 규칙 1,905곳(매핑 실패 0), 원인 36종 표본 약 150건 원문 대조 오탐 0 · 같은 후보 60곳 조립 on/off(서울·제주·부산 × 설 연휴·추석 연휴·평범한 주말 3일) — 연휴는 off 가 그 날 닫힌 곳을 3~7곳 방문하고 on 은 0, 빈 날 없음, 평범한 주말은 on/off 같은 해. 개발부터 켠다.
 
 ## 8. PBT (blocking · 확장 Partial 모드)
 

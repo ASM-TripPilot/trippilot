@@ -93,7 +93,7 @@ itinerary-recalculation  application/PreparedReplanService.kt
 - **1스레드인 이유** — 재계획 산출이 읽기 전용 트랜잭션 안에서 AI 를 최대 25s 부른다(`ReplanFacadeService.kt:71`) — 스레드 수만큼 DB 연결을 쥔다(Hikari 기본 10, 사용자 재계획과 같은 풀). 늘리려면 'AI 호출을 트랜잭션 밖으로' 후속이 먼저다. DB 풀 상향은 보류(연결 여유 미확인).
 - 상한(여행 3 · 전체 100/일)은 실행기가 아니라 세션 수로 센다(COST-SA-07 · BR-SA-18).
 
-> **[개정 · 2026-10-20 — 구현 반영]** 델타 4 — 실행기 대기열 용량은 **자리 수(실행 1 + 대기 10 = 11)** 다(`backend/modules/itinerary-recalculation/src/main/kotlin/com/trippilot/recalculation/application/PreparedReplanService.kt:177-189`). 대기열을 10 으로 두면 앞 작업이 자리를 돌려준 직후(일꾼이 아직 다음 것을 꺼내기 전) 자리를 얻은 사건이 실행기에 거절돼 FAILED 세션이 생긴다 — 상한은 자리(세마포어 — `:72`)가 진다. 종료가 시작된 뒤 도착한 사건은 자리를 잡기 전에 예외로 던진다 — 다음 파드가 재배달을 받는다(`:88-90`). 규칙은 `functional-design/business-rules.md` BR-SA-18 개정 블록.
+> **[개정 · 2026-10-20 — 구현 반영]** 델타 4 — 실행기 대기열 용량은 **자리 수(실행 1 + 대기 10 = 11)** 다(`backend/modules/itinerary-recalculation/src/main/kotlin/com/trippilot/recalculation/application/PreparedReplanService.kt:177-189`). 대기열을 10 으로 두면 앞 작업이 자리를 돌려준 직후(일꾼이 아직 다음 것을 꺼내기 전) 자리를 얻은 사건이 실행기에 거절돼 FAILED 세션이 생긴다 — 상한은 자리(세마포어 — `:72`)가 진다. 종료가 시작된 뒤 도착한 사건은 자리를 잡기 전에 예외로 던진다 — 다음 파드가 재배달을 받는다(`:88-90`). 규칙은 `functional-design/business-rules.md` BR-SA-18 개정 블록. **`@PreDestroy` 대기는 65s** 다 — 위 줄의 '진행 중 1건(시한 25s)'이 아니라 진행 중 산출의 소켓 read 상한(배포 60s + 여유 2s)을 덮는다. 시한 25s 로 잡으면 예산을 넘긴 산출이 잘려(소켓 read 는 인터럽트로 깨지 않는다) 컨텍스트가 닫힌 뒤 기록을 못 하고 `SOLVING` 에 남는다(`PreparedReplanService.kt:168-172`). graceful 630s(`deploy/eks/chart/templates/backend.yaml:88-89`)·파드 종료 유예 660s(`deploy/eks/chart/templates/_helpers.tpl:18`) 안이다.
 
 ### 델타 5 — 공공데이터 출처 3종 + 게이트웨이 오류 판독기
 
