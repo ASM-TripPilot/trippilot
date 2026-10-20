@@ -453,7 +453,21 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
   });
 
   describe('TRIP-1506 — 생성 중(진행 중 세션)인데 안이 비었으면 빈 안내 대신 로딩 얼굴', () => {
-    it('COMPLETE + 일자 없음 + 진행 중 세션 있음 → 로딩 얼굴', async () => {
+    it('PARTIAL + 일자 없음 + 진행 중 세션 있음 → 로딩 얼굴', async () => {
+      itineraryScript = () =>
+        itinerary({
+          generationState: 'PARTIAL',
+          days: [],
+          generationSessionId: 'session-1',
+        });
+
+      renderPage();
+
+      await screen.findByTestId('itinerary-draft-loading');
+      expect(screen.queryByTestId('itinerary-draft-empty')).toBeNull();
+    });
+
+    it('COMPLETE 인데 세션 id 가 남아 있어도(폴링이 안 도는 조합) 로딩이 고착되지 않고 빈 안내다', async () => {
       itineraryScript = () =>
         itinerary({
           generationState: 'COMPLETE',
@@ -463,8 +477,8 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
 
       renderPage();
 
-      await screen.findByTestId('itinerary-draft-loading');
-      expect(screen.queryByTestId('itinerary-draft-empty')).toBeNull();
+      await screen.findByTestId('itinerary-draft-empty');
+      expect(screen.queryByTestId('itinerary-draft-loading')).toBeNull();
     });
 
     it('COMPLETE + 일자 없음 + 세션 없음(진짜 0곳) → 빈 안내 그대로', async () => {
