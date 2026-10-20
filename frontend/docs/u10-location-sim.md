@@ -18,19 +18,36 @@
 
 ## 2. 위치 시나리오 (플래그 ON 빌드 전용)
 
-전제: `TRIPPILOT_LOCATION_AUTOMATION=1 pnpm expo prebuild` → `LANG=en_US.UTF-8 pnpm expo run:ios`(expo-task-manager 네이티브 — 재빌드 필수) ·
-설정에서 TripPilot 위치 '항상' + 정확한 위치 · 오늘이 여행 날짜인 여행의 i01 진입(설명 → [자동 기록 켜기]).
-서버가 없으므로 결과는 가짜 싱크(`shared/location/automation/sink.ts`)로 간다 — 확인은 Metro 로그·i01 안내·디버거.
+전제: `LANG=en_US.UTF-8 TRIPPILOT_LOCATION_AUTOMATION=1 pnpm expo prebuild -p ios --clean`(UTF-8 로케일이 아니면 pod install 에서 죽는다) → 빌드(expo-task-manager 네이티브 — 재빌드 필수) ·
+설정에서 TripPilot 위치 '항상' + 정확한 위치(`xcrun simctl privacy booted grant location-always com.trippilot.travel`) ·
+l06 위치정보 동의 켜기 · 오늘이 여행 날짜인 여행의 i01 진입(설명 → [자동 기록 켜기], '항상'이면 설명 없이 바로 무장).
+
+- ⚠️ **빌드(xcodebuild·`run:ios`)에도 같은 env 를 준다.** JS 플래그(`extra.locationAutomation`)는 prebuild 가 아니라 빌드 시점 env 로
+  `TripPilot.app/EXConstants.bundle/app.config` 에 굽힌다 — prebuild 에만 주면 Info.plist 는 ON, JS 는 OFF 로 갈라진다(l06 에 자동 기록 행이 없으면 이것).
+  확인: `grep -o '"locationAutomation":[a-z]*' ios/build/Build/Products/Debug-iphonesimulator/TripPilot.app/EXConstants.bundle/app.config`.
+- 플래그 ON 빌드는 앱 시작 때 **실 http 싱크**를 꽂는다(TRIP-1485) — 결과는 `EXPO_PUBLIC_API_BASE_URL` 서버로 간다(`.env.local` 이면 dev-api).
+  가짜 싱크는 플래그 OFF·테스트·프리뷰뿐이다. 확인은 서버 방문 기록(i01·j01 표식)·법정 로그, 기기 쪽은
+  `xcrun simctl spawn booted log stream --predicate 'process == "TripPilot"'` 의 `startMonitoringForRegion`·`EXTaskService: Executing task 'trippilot-u10-geofence'`.
+- 좌표는 오늘 슬롯 장소로 준다: `scripts/u10-sim-location.sh complete <lat> <lng>`(기본값 부산시립미술관은 일정에 없으면 아무 일도 없다).
 
 ```
 scripts/u10-sim-location.sh arrive     # 진입 4분 → ARRIVE(진입 시각)
 scripts/u10-sim-location.sh pass       # 2분 내 이탈 → 기록 0
 scripts/u10-sim-location.sh complete   # 11분 체류 후 이탈 → COMPLETE(이탈 시각)
 scripts/u10-sim-location.sh gap        # 공백 12분 → 다음 날 업로드 시 세그먼트 2개
+scripts/u10-sim-location.sh downgrade  # '항상'→'사용하는 동안' → MANUAL·안내 1줄·구간 END 기대(시뮬레이터에선 실행 중 앱에 반영 안 됨 — 6-b)
+scripts/u10-sim-location.sh restore    # '항상' 복구
 scripts/u10-sim-location.sh clear
 ```
 
-## 3. 시뮬레이터로 못 보는 것 (6-b — BE 개통 뒤 TestFlight)
+2026-10-20 실측(dev-api, 부산 여행 1일차 옥미아구찜): `complete` 1회 재생 → 서버 자동 완료 반영 · i01 카드 「자동 기록」 표식 · 지도 핀 완료 ✓.
+단 이 슬롯은 **수동 도착이 먼저 있던** 곳이라 '수동 도착 + 자동 완료' 경로만 본 것이다 — 자동 도착(`arrive`)·지나가기(`pass`)·공백(`gap`)은 아직 재생하지 않았다.
+⚠️ 같은 재생에서 `trippilot-u10-geofence` 태스크가 분당 5천~1만 회 돌았다 — 태스크의 재무장(`arm` → `startGeofencingAsync`)이
+OS 의 리전 상태 재조회를 부르고 그 결과가 다시 같은 태스크로 오는 루프(새 티켓). 위치 재생과 무관하게 **무장돼 있는 동안** 돈다고 봐야 한다 —
+멈추는 확실한 길은 앱 종료(`xcrun simctl terminate <udid> com.trippilot.travel`)다(`clear` 만으로 멈추는지는 미확인).
+`downgrade` 는 실행 중 앱(같은 PID)에서 포그라운드 복귀로만 봤다 — 콜드 재시작으로는 아직 안 봤으니 "시뮬레이터 한계"로 단정하지 말 것.
+
+## 3. 시뮬레이터로 못 보는 것 (6-b — TestFlight 실기기)
 
 앱 종료 상태 wake · 상태바 위치 표시 · 잠금 상태 wake 저장소 · 비행기 모드 재연결 전송 · 배터리 · 재부팅 후 첫 잠금 해제 전 wake ·
 플래그 OFF/ON 실제 Info.plist·AndroidManifest 대조 (FD §8 #1~11, NFR #12~20).
