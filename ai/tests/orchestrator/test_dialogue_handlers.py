@@ -576,6 +576,17 @@ def test_weather_today_asked_on_a_day_without_slots_uses_the_region_center() -> 
     assert facts.payload["rows"] == [{"label": "오늘 최대 강수확률", "value": "20%"}]
 
 
+def test_weather_region_argument_wins_over_the_itinerary_anchor() -> None:
+    """"부산 날씨 어때" — 일정이 제주여도 말한 지역 중심으로 묻고 제목도 그 지역. 표에 없는 지역은 일정 지역으로 바꿔 답하지
+    않는다(EMPTY) — "화성시 날씨" 에 제주 값을 내면 틀린 답이다."""
+    poi_info, weather = _PoiInfo(), _Weather(pop=70)
+    facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(arguments={"region": "부산"}, ports=HandlerPorts(poi_info=poi_info, weather=weather)))
+    assert poi_info.calls == [] and weather.calls[0]["anchor"] == region_center("부산")[1] and weather.calls[0]["days"] == (_D2,)
+    assert facts.payload["title"] == "부산 날씨" and facts.detail["anchor"] == "부산"
+    unknown = _run(HANDLERS[Intent.GET_WEATHER], _ctx(arguments={"region": "화성시"}, ports=HandlerPorts(poi_info=_PoiInfo(), weather=_Weather())))
+    assert unknown.status is FactStatus.EMPTY
+
+
 def test_weather_before_the_trip_without_slots_asks_about_the_first_day() -> None:
     """날짜를 안 말했고 슬롯도 없는 여행 전 — 슬롯 규칙("앞으로 올 첫 슬롯")과 같은 날인 여행 첫날."""
     before = datetime(2026, 10, 10, 9, 0, tzinfo=_KST)

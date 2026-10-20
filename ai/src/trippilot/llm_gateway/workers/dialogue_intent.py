@@ -33,7 +33,7 @@ NO_TRIP = "(여행 없음)"
 # 역할 라벨 — 백엔드 RecentTurn.role 두 값. 밖의 값은 그대로 적는다(입력 검증은 TurnInput 몫 — 여기서 죽지 않는다).
 ROLE_LABELS = {"USER": "사용자", "ASSISTANT": "도우미"}
 # 인자표 파생 의도별 스키마 — intent.yaml·IntentRouter 와 **같은 함수**(한 표, 드리프트 차단). 도우미는 13종 + 장소 탐색
-_INTENTS = tool_specs_json(DIALOGUE_INTENTS)
+_INTENTS = tool_specs_json(DIALOGUE_INTENTS, dialogue=True)  # 도우미만 묻는 인자(dialogue_only) 포함
 
 
 def history_lines(recent_turns: Iterable) -> list[str]:
