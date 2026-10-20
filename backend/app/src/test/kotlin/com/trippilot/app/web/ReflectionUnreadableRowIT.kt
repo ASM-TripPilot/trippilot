@@ -235,11 +235,11 @@ class ReflectionUnreadableRowIT : AbstractPostgresIntegrationTest() {
     }
 
     /**
-     * 생성(`TripEnded`)은 여행당 한 번이라 다시 오지 않는다 — **실제로 다시 도는 경로**(조회·경로 갱신 이벤트)가 고쳐야 낫는다.
-     * 고칠 때 알림 이벤트는 내지 않는다(이미 한 번 알렸다).
+     * 생성(`TripEnded`)은 여행이 끝날 때 한 번 발행된다. 다시 오는 것은 재배달뿐이고 언제 올지 기댈 수 없으니 **조회·경로 갱신**이 고친다.
+     * 고칠 때 알림 이벤트는 내지 않는다(이미 한 번 알렸다). 재배달도 행을 고치되 다시 알리지 않는다.
      */
     @Test
-    fun `요약 본문이 비었거나 모르는 출처면 — 조회와 경로 갱신이 다시 만들어 낫는다`() {
+    fun `요약 본문이 비었거나 모르는 출처면 — 조회와 경로 갱신이 다시 만들어 낫고, 재배달은 다시 알리지 않는다`() {
         listOf("narrative = ' '", "source = 'ROBOT'").forEach { broken ->
             val (_, token) = newAccount()
             val tripId = newTrip(token)

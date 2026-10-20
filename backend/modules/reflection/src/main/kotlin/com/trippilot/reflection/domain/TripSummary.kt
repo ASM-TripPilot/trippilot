@@ -71,6 +71,7 @@ interface TripSummaryRepository {
 
     /**
      * 행이 있는가 — **읽히는지와 별개다**. [find] 가 null 인데 이것이 참이면 못 읽는 요약이다(TRIP-1476) — 조회·경로 갱신이 다시 만든다.
+     * 생성(`generate`)도 이 값으로 처음 만든 행인지 판정해 알림을 낼지 정한다 — 그래서 못 읽는 행에도 참이어야 한다.
      * 기본 구현은 [find] 와 같다(못 읽는 행이 없는 저장소 — 대역).
      */
     fun exists(tripId: UUID): Boolean = find(tripId) != null

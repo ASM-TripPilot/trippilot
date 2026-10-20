@@ -109,7 +109,7 @@ class TripSummaryRepositoryAdapter(private val jpa: TripSummaryJpaRepository) : 
     /**
      * **못 읽는 요약은 없는 것으로 읽는다**(TRIP-1476) — 본문이 비었거나(PBT-U5-1) 출처가 모르는 단이면 그 행은 이 버전이
      * 쓴 것이 아니다(손상·수동 변경·이 버전이 모르는 단). 요약에는 사용자가 쓴 것이 없어 통째로 다시 만들면 낫는다 — 생성은 여행당 한 번
-     * (`TripEnded`)뿐이라, 조회와 경로 갱신이 [exists] 로 이 경우를 알아보고 다시 만든다(`TripSummaryService.find`·`refreshRouteStats`).
+     * (`TripEnded`)뿐이라, 조회와 경로 갱신이 [exists] 로 이 경우를 알아보고 다시 만든다(`TripSummaryService.find`·`refreshRouteStats`; `generate` 는 같은 값으로 알림 여부를 정한다).
      * 던지면 그 경로들까지 같은 읽기에서 막혀 스스로 낫지 못하고, 출처를 아는 단으로 바꿔 읽으면 품질 관측(DEC-U5-5a)이 거짓이 된다.
      *
      * 나머지 칸은 **읽히는 만큼** 돌려주고, 버린 칸을 남긴다(INV-4) — 다음 생성·경로 갱신이 다시 계산해 덮는다.
