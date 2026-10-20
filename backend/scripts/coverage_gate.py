@@ -5,7 +5,7 @@
 경로 인자는 **필수**다 — 기본 경로를 두면 옛 빌드가 남긴 XML 로 조용히 판정할 수 있다(지금 코드가 하한
 아래인데 통과로 보인다). 경로는 Gradle 이 리포트 태스크의 실제 출력 위치에서 넘긴다.
 
-- 전체 라인·분기가 TOTAL_FLOORS 아래거나, 어느 모듈이든 MODULE_FLOORS 아래면 exit 1(PR 체크 실패 — 브랜치 보호가 없어 머지 자체를 막지는 않는다).
+- 전체 라인·분기가 TOTAL_FLOORS 아래거나, 어느 모듈이든 MODULE_FLOORS 아래면 exit 1(Gradle 태스크 실패 → CI 에서는 체크 실패. 브랜치 보호가 없어 머지 자체를 막지는 않는다).
 - Gradle 모듈별 표와 실패 사유를 stdout 에, CI 면 `$GITHUB_STEP_SUMMARY` 에도 쓴다. 모듈은 패키지·소스 파일이
   아니라 **그 클래스 파일을 컴파일한 모듈**(`<모듈>/build/classes/<언어>/main/...class`)로 정한다. 리포트가
   클래스 단위로 수치를 주므로 이것이 정확하다 — 인라인 함수가 만든 클래스, `package` 선언이 폴더와 다른 파일,
@@ -17,7 +17,7 @@
 걸면 첫날부터 빨갛거나 아무도 못 지키는 숫자가 되어 결국 게이트를 끄게 된다. 측정한 기준선에서 시작한다.
 
 `COVERAGE_ADVISORY=1` 이면 막지 않는다 — 하한 아래·판정 못 함 모두 exit 0(이미 머지된 코드용 — 켜는 조건의 정본은
-backend-ci.yml 의 `COVERAGE_ADVISORY` 식. 막으면 이미 머지된 코드의 이미지 발행·운영 승격이 멈춘다). GitHub Actions 안에서는 실패 사유를 커밋 체크 주석으로도 낸다 —
+backend-ci.yml 의 `COVERAGE_ADVISORY` 식. develop push 에서 막으면 이미지 발행이 멈추고, 릴리스 PR 이 부채로 빨개진다). GitHub Actions 안에서는 실패 사유를 커밋 체크 주석으로도 낸다 —
 막는 모드는 `::error::`, advisory 는 `::warning::`.
 
 Gradle 내장 `JacocoCoverageVerification` 을 쓰지 않은 이유: 모듈마다 검증 태스크를 등록하면 모듈별 바닥도
