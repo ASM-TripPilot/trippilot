@@ -94,7 +94,7 @@ def test_empty_inputs_get_the_shared_none_markers() -> None:
 def test_prompt_has_no_memory_section_and_renders_deterministically() -> None:
     registry = PromptRegistry(_PROMPTS)
     prompt, ref = registry.render(_FEAT, _vars())
-    assert (ref.prompt_id, ref.version, ref.feature) == ("prompts/dialogue_plan.yaml", "0.1.0", "DIALOGUE_PLAN")
+    assert (ref.prompt_id, ref.version, ref.feature) == ("prompts/dialogue_plan.yaml", "0.1.1", "DIALOGUE_PLAN")
     assert "[기억]" not in prompt and "$" not in prompt
     assert prompt == registry.render(_FEAT, _vars())[0]
     assert set(re.findall(r"\$(\w+)", _template())) == {"tools", "history", "trip", "utterance"}
@@ -125,7 +125,7 @@ _EXAMPLE = re.compile(r'^- (?:최근 대화 "(?P<history>[^"]*)" · )?발화 "(?
 def _examples() -> list[re.Match]:
     prompt, _ = PromptRegistry(_PROMPTS).render(_FEAT, _vars())
     found = list(_EXAMPLE.finditer(prompt))
-    assert len(found) == 5
+    assert len(found) == 6
     return found
 
 
@@ -137,7 +137,7 @@ def test_every_example_answer_passes_the_gate_without_a_drop() -> None:
         assert out.error is None and out.drop_event is None, m["utterance"]
         draft = out.value
         kinds.append("refused" if draft.refused else ("tools" if draft.calls else "no_tool"))
-    assert kinds.count("tools") == 3 and "refused" in kinds and "no_tool" in kinds  # 세 갈래를 다 보여 준다
+    assert kinds.count("tools") == 4 and "refused" in kinds and "no_tool" in kinds  # 세 갈래를 다 보여 준다
 
 
 def _strings(node: object):
@@ -193,7 +193,7 @@ def test_worker_end_to_end_yields_a_plan_draft() -> None:
     assert result.is_fallback is False and result.error is None
     assert result.value == DialoguePlanDraft((IntentDraft(Intent.EXPLORE_PLACES, {"region": "부산", "theme": "야경"}),))
     (request,) = llm.requests
-    assert (request.timeout_sec, request.max_tokens, request.effort) == (2.5, 1024, "low")
+    assert (request.timeout_sec, request.max_tokens, request.effort) == (2.5, 1024, "none")
     assert llm.features() == ["DIALOGUE_PLAN"] and trace.of_type(FallbackEvent) == []
     assert request.prompt.count(_TOOLS) == 1  # 도구 표는 생성자에서 받은 그대로 한 번
 
@@ -224,6 +224,6 @@ def test_broken_dropped_or_failed_plans_are_loud_fallbacks(llm) -> None:
 def test_feature_is_registered_in_every_config_table_and_has_no_retry_model() -> None:
     assert default_tier_map()[_FEAT] is ModelTier.LIGHT
     assert default_fallback_modes()[_FEAT] == ("llm_dialogue_plan", "out_of_scope")
-    assert default_feature_effort()[_FEAT] == "low"
+    assert default_feature_effort()[_FEAT] == "none"
     assert default_feature_max_tokens()[_FEAT] == 1024
     assert _FEAT not in C1Config(model_ids=_CFG.model_ids).retry_models  # 턴당 1회 — 재시도 없음

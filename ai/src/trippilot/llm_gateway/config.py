@@ -254,8 +254,11 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
             LlmFeature.DIALOGUE_INTENT: "low",
             LlmFeature.DIALOGUE_ANSWER: "low",
             LlmFeature.DIALOGUE_MEMORY: "low",
-            # 계획(2‴) — 같은 9s 안에서 분류 뒤 ≤3.0s(잔여×0.45)라 사고를 낮춘다 (BR-AO-28)
-            LlmFeature.DIALOGUE_PLAN: "low",
+            # 계획(2‴) — 같은 9s 안에서 분류 뒤 ≤3.0s(잔여×0.45). 사고를 끈다(none): 고르는 것은 닫힌 도구 이름·짧은 인자라
+            # 사고가 품질을 올리지 않았다 — 2026-10-20 luna·평가셋 38×2·동시 2: low p50 1.61s·p90 2.39s·출력 60 토큰 → none
+            # 1.36s·2.28s·32 토큰, 도구 일치 90.0 → 95.0%(틀린 2건은 시한 초과)·도구 없음·주입 100%. luna 는 minimal 을 400 으로
+            # 거부하고 none 을 받는다 — 다른 모델을 배정하면 이 값부터 확인 (BR-AO-28)
+            LlmFeature.DIALOGUE_PLAN: "none",
         }
     )
 

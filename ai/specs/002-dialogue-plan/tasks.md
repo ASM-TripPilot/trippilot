@@ -10,14 +10,14 @@ description: "범위 밖 질문의 도구 계획(DIALOGUE_PLAN · 2‴) 태스�
 
 ## Phase 1: 독립 부분 (코드 대조 검증과 무관)
 
-- [x] T001 `LlmFeature.DIALOGUE_PLAN` + config 4표(LIGHT · `("llm_dialogue_plan","out_of_scope")` · 1024 · low, 재시도 미배정 — 분류와 같은 값).
+- [x] T001 `LlmFeature.DIALOGUE_PLAN` + config 4표(LIGHT · `("llm_dialogue_plan","out_of_scope")` · 1024 · 재시도 미배정 — 분류와 같은 값. effort 는 실측 뒤 none 으로 — T-measure).
   테스트 `test_llm_gateway_gateway.py::_EXPECTED_MODES` · `test_llm_output_caps.py`.
 - [x] T002 `domain/plan_tools.py` — `PLAN_TOOLS` 7종 · `NEVER_TOOLS` · `PLAN_GAPS` · `MAX_PLAN_CALLS=2` · `MAX_ARG_CHARS=40` · `plan_tool_specs_json` ·
   기동 검사. 테스트 `tests/domain/test_plan_tools.py`(분류 `$intents` 두 바이트 골든 불변 포함). 정정본 C7: `PlanTool.hide` — GET_WEATHER `period` 숨김.
 - [x] T003 `gates/dialogue_plan.py` — `DialoguePlanGate`·`DialoguePlanDraft`. 테스트 `tests/llm_gateway/test_dialogue_plan_gate.py` + AO-P18 PBT.
   정정본 반영: refused 먼저(C6-1) · 표 밖·숨긴 키와 null·공백을 `_parse_slots` 전에 거름(C6-2) · 시각을 내는 도구(SHOW_SCHEDULE·GET_NEXT_SLOT·GET_POI_INFO) 합쳐 1건(C5-E2 + 답변 담당 검토 — 일정 + 영업시간 병합 금지) · dropped ≤ total(C6-5).
 - [x] T004 `gates/base.py` `_INJECTIONISH` 칸 머리에 `도구`. 테스트 `test_gate_injection_defense.py` 사례.
-- [x] T005 `prompts/dialogue_plan.yaml` v"0.1.0"(정정본 C8 — "키째 빼세요", 머리 주석 0.2.3) · `workers/dialogue_plan.py` — `build_dialogue_plan_vars`·`DialoguePlanWorker`.
+- [x] T005 `prompts/dialogue_plan.yaml` v"0.1.0" → 실측 뒤 v"0.1.1"(정정본 C8 — "키째 빼세요", 머리 주석 0.2.3) · `workers/dialogue_plan.py` — `build_dialogue_plan_vars`·`DialoguePlanWorker`.
   테스트 `tests/llm_gateway/test_dialogue_plan_worker.py`(변수 4종·최근 4건·`$memory` 없음·골격 위조·gap 집합·예시 게이트 통과·누설 없음·설정 표).
 - [x] T006 `ai/data/dialogue_plan_eval_set.yaml` — 측정셋 38문장(도구 1 ·도구 2 · 도구 없음 · 주입), 누설 대조는 T005 테스트가 한다.
 - [x] T007 `.env.example` `AI_LLM_FEATURE_MODELS` 에 `DIALOGUE_PLAN=gpt-5.6-luna`(자리값 — 실측으로 정한다) + 배정이 곧 켜기·2런 배포·볼트 반영 보류 주석.

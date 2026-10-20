@@ -352,6 +352,20 @@ def _judged_nothing(reason: str) -> bool:
 _CLOSED_SET_REASON = "not_classifiable: parse_error: closed_set_violation:"
 
 
+def _squash(text: str) -> str:
+    return normalize(text).replace(" ", "")
+
+
+def _grounded_args(slots: Mapping[str, str], said: str) -> dict[str, str]:
+    """계획 인자의 region 은 사용자가 말한 지역만(BR-AO-28) — 모델이 [여행 상황]의 여행지를 옮겨 적으면 탐색 기준이 '다음 일정 근처'에서
+    '지역 중심'으로 바뀐다(제주는 끝에서 끝이 70km 다). 프롬프트 0.1.1 뒤에도 "저녁 먹을 데랑 그 다음 일정" 이 2/2 로 region "제주" 를
+    냈다(2026-10-20 실측). `said` 는 발화 + 최근 대화를 `_squash` 한 것 — 지시어로 앞 턴의 지역을 이은 것은 남는다."""
+    region = slots.get("region")
+    if region and _squash(region) not in said:
+        return {k: v for k, v in slots.items() if k != "region"}
+    return dict(slots)
+
+
 def _plannable(reason: str) -> bool:
     """2‴ 진입 — 분류가 판단은 했다: null·범위 밖 라벨(`_judged_nothing`) 또는 목록 밖 라벨을 지어냈다(절단 아님).
     2″ 맞장구는 목록 밖 라벨을 판단으로 보지 않는다(실패에 "알겠어요"로 답하면 수락을 삼킨다, BR-AO-26). 계획은 삼킬 것이 없고 같은
@@ -881,14 +895,17 @@ class DialogueOrchestrator:
         if draft.refused or not draft.calls:  # 판단한 거절·도구 없음 — 의도된 결정론, 이벤트 없음
             return self._plan_declined(inp, reason, "REFUSED" if draft.refused else "NO_TOOL", plan_ms=plan_ms, gap=draft.gap)
         handlers = [HANDLERS[call.intent] for call in draft.calls]
-        ctxs = [TurnContext(snapshot=inp.snapshot, arguments=dict(call.slots), now=inp.now, tz=self._tz, trace_id=inp.trace_id,
-                            remaining_ms=lambda: self._remaining(inp), ports=self._ports) for call in draft.calls]
+        said = _squash(" ".join([text, *(turn.text for turn in inp.recent_turns)]))
+        ctxs = [TurnContext(snapshot=inp.snapshot, arguments=_grounded_args(call.slots, said), now=inp.now, tz=self._tz,
+                            trace_id=inp.trace_id, remaining_ms=lambda: self._remaining(inp), ports=self._ports)
+                for call in draft.calls]
         n = len(ctxs)
         results = self._fanout(inp, step_tasks([h.plan(ctx) for h, ctx in zip(handlers, ctxs, strict=True)]))
         facts = merge_facts([h.assemble(ctx, step_results(results, i, n))
                              for i, (h, ctx) in enumerate(zip(handlers, ctxs, strict=True))])
         answer = self._compose(inp, facts.intent, facts, memory_lines, trip_summary, closed=True)
-        self._log_plan(inp, "TOOLS", calls=draft.calls, primary=facts.intent, plan_ms=plan_ms,
+        self._log_plan(inp, "TOOLS", calls=draft.calls, arg_keys=[sorted(ctx.arguments) for ctx in ctxs], primary=facts.intent,
+                       plan_ms=plan_ms,
                        task_status={name: r.status for name, r in results.items()})
         return TurnOutcome("ANSWER", (), None, answer, cleared, 0,
                            f"{reason}; plan:{'+'.join(call.intent.value for call in draft.calls)}")
@@ -899,13 +916,15 @@ class DialogueOrchestrator:
         self._log_plan(inp, decision, plan_ms=plan_ms, gap=gap)
         return self._out_of_scope(inp, f"{reason}; plan:{decision.lower()}")
 
-    def _log_plan(self, inp: TurnInput, decision: str, *, calls=(), primary: Intent | None = None,
+    def _log_plan(self, inp: TurnInput, decision: str, *, calls=(), arg_keys: Sequence[Sequence[str]] | None = None,
+                  primary: Intent | None = None,
                   plan_ms: int | None = None, gap: str | None = None, task_status: Mapping[str, str] | None = None) -> None:
         """`dialogue_plan` 한 줄(BR-AO-29) — 갈래마다. 닫힌 라벨·키·수치만 싣는다: 발화·인자 값·account_ref 는 없다(SEC-U8-06).
         `task_status` 는 작업별 전송 결과(OK·TIMEOUT·UNAVAILABLE·SKIPPED) — 도구별 TIMEOUT 률 지표의 재료다(정정본 C10)."""
         log.info("dialogue_plan %s", json.dumps({
             "event": "dialogue_plan", "trace_id": inp.trace_id, "decision": decision,
-            "tools": [call.intent.value for call in calls], "arg_keys": [sorted(call.slots) for call in calls],
+            "tools": [call.intent.value for call in calls],
+            "arg_keys": [list(keys) for keys in arg_keys] if arg_keys is not None else [sorted(call.slots) for call in calls],
             "gap": gap, "primary": primary.value if primary is not None else None, "plan_ms": plan_ms,
             "task_status": dict(task_status or {}),
         }, ensure_ascii=False))

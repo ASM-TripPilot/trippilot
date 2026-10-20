@@ -302,7 +302,7 @@ def test_the_card_part_wins_whatever_the_plan_order_and_also_carries_the_other_f
 def test_plan_answer_always_checks_places_even_when_the_card_is_weather() -> None:
     """[탐색 EMPTY(표에 없는 지역) + 날씨 OK] → 대표는 날씨 카드라 종전 규칙이면 장소 검사가 꺼진다 — 계획 답은 강제(closed=True)."""
     out, b = _plan_turn(_plan_json(("EXPLORE_PLACES", {"region": "강원도"}), ("GET_WEATHER", {"date": "오늘"})),
-                        answer=_answer_json("오늘은 비 올 확률이 80%예요. 대신 경포해변은 어떠세요?"))
+                        "강원도 쪽 비 오면 어디 가?", answer=_answer_json("오늘은 비 올 확률이 80%예요. 대신 경포해변은 어떠세요?"))
     assert out.answer.kind is AnswerKind.INFO and out.answer.text == "오늘 예보예요."
     assert any(e.reason == "place_not_in_facts" for e in to._fallbacks(b.trace))
 
@@ -310,7 +310,7 @@ def test_plan_answer_always_checks_places_even_when_the_card_is_weather() -> Non
 def test_names_from_the_other_parts_are_known_names() -> None:
     """[탐색 EMPTY(앵커 해운대) + 날씨 OK] — 앵커 이름은 also 에만 있다. 아는 이름이라 "해운대해수욕장 근처"가 템플릿으로 떨어지지 않는다(C4)."""
     out, b = _plan_turn(_plan_json(("EXPLORE_PLACES", {"region": "해운대"}), ("GET_WEATHER", {"date": "오늘"})),
-                        ports=HandlerPorts(poi_info=to._PoiInfo(), weather=to._Weather(),
+                        "해운대 비 오면 어디 가?", ports=HandlerPorts(poi_info=to._PoiInfo(), weather=to._Weather(),
                                            pool_builder=_PoolBuilder(CandidatePool_empty())),
                         answer=_answer_json("해운대해수욕장 근처에서는 아직 찾지 못했어요. 오늘은 비 올 확률이 80%예요."))
     assert out.answer.text.startswith("해운대해수욕장") and not any(e.reason == "place_not_in_facts" for e in to._fallbacks(b.trace))
@@ -490,8 +490,25 @@ def test_trip_tools_without_a_trip_give_need_trip_or_step_aside_for_a_trip_free_
     assert out.answer.text == to.NEED_TRIP_TEXT
     assert [a.type for a in out.answer.next_actions] == ["CREATE_TRIP", "OPEN_STAY_SEARCH"]
     out, _ = _plan_turn(_plan_json(("GET_WEATHER", {"date": "오늘"}), ("EXPLORE_PLACES", {"region": "부산"})),
-                        snapshot=to._NO_TRIP, answer=_answer_json("감천문화마을을 찾아봤어요."))
+                        "부산 비 오면 어디 가?", snapshot=to._NO_TRIP, answer=_answer_json("감천문화마을을 찾아봤어요."))
     assert out.answer.kind is AnswerKind.CANDIDATES and out.answer.text == "감천문화마을을 찾아봤어요."
+
+
+def test_region_the_user_did_not_say_is_dropped_so_explore_stays_near_the_itinerary() -> None:
+    """계획이 [여행 상황]의 여행지를 region 으로 옮겨 적으면(2026-10-20 실측 "저녁 먹을 데랑 그 다음 일정" → region "제주") 탐색 기준이
+    다음 일정 근처에서 지역 중심으로 바뀐다 — 말에 없는 region 은 버린다. 말했거나 최근 대화에 나온 지역은 남는다."""
+    plan = _plan_json(("EXPLORE_PLACES", {"region": "부산", "category": "FOOD"}))
+
+    def anchor_kind(utterance: str) -> str:
+        _, b = _plan_turn(plan, utterance, answer=_answer_json("감천문화마을을 찾아봤어요."))
+        (answer_req,) = [r for r in b.llm.requests if r.prompt_ref.feature == "DIALOGUE_ANSWER"]
+        return "region" if '"anchor_kind": "region"' in answer_req.prompt else "other"
+
+    assert anchor_kind("부산에서 저녁 먹을 데 있어?") == "region"
+    assert anchor_kind("저녁 먹을 데 있어?") == "other"  # region 을 버려 일정 근처·여행지로 찾는다
+    grounded, squash = orch_mod._grounded_args, orch_mod._squash
+    assert grounded({"region": "부산", "category": "FOOD"}, squash("저녁 먹을 데")) == {"category": "FOOD"}
+    assert grounded({"region": "해운대"}, squash("해운대 야경 알려줘 그럼 거기 맛집도")) == {"region": "해운대"}
 
 
 # 13 — 턴당 LLM 3회: 요약은 한 번만 미루고, 연속이면 결정론 압축 (C9)
