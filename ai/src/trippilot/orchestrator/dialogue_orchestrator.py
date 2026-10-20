@@ -142,8 +142,9 @@ _ANSWER_MIN_REMAINING_MS = 1_500  # 미만이면 답변 LLM 을 부르지 않고
 _MEMORY_MIN_REMAINING_MS = 2_500  # 미만이면 결정론 압축
 # 2‴ 계획 LLM(BR-AO-28): min(cap, 잔여×share). 잔여 < 4.6s 면 부르지 않는다 — 계획이 몫(0.45R)을 다 쓰고 팬아웃이 남은 것의
 # 0.40 을 다 써도 답변 앞 잔여 ≥1.5s(답변 시도선)이려면 R ≥ 4,542ms(정수 내림 산술: 4,542 → 계획 2,043 → 2,499 → 팬아웃 999
-# → 1,500). 4,500 이면 1,485 라 늘 템플릿이다(정정본 C1).
-_PLAN_CAP_MS, _PLAN_SHARE, _PLAN_MIN_REMAINING_MS = 3_000, 0.45, 4_600
+# → 1,500). 4,500 이면 1,485 라 늘 템플릿이다(정정본 C1). 상한 3.5s(초판 3.0s) — 2026-10-20 luna·effort none 실측에서 3.0s 는
+# 계획 호출의 6.5%(154회 중 10)가 시한에 잘렸고 3.5s 는 1.9%(624회 중 12)였다. 하한 산술은 몫(0.45R)만 쓰므로 상한과 무관하다.
+_PLAN_CAP_MS, _PLAN_SHARE, _PLAN_MIN_REMAINING_MS = 3_500, 0.45, 4_600
 _TURN_LLM_CAP = 3  # 턴당 서비스 LLM 상한(BR-AO-07·COST-U8-06) — 계획 턴(분류·계획·답변)에서 닿으면 요약을 한 번 미룬다(BR-AO-09)
 _MEMORY_CAP_MS = 2_000
 _HEALTHY_STATUSES = frozenset({"OK", "LOW"})  # 작업 값의 status 중 강등이 아닌 것 (ProviderStatus OK·LOW)
