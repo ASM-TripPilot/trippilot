@@ -165,7 +165,8 @@ class KafkaOutboxListener(private val relay: OutboxRelay, private val broker: Ka
     //  - 알림 적재(StayRegistered·PlanBTriggered·ReflectionReady → raise): source_event_id UNIQUE(ON CONFLICT). Plan-B 묶음
     //    푸시(같은 여행, 키=triggerId 라 갈린다)만 단일 실행에 기대고 있었다 → lockPushGroup 으로 고쳤다(DomainNotificationIT).
     //    발송(PushDispatchService.dispatch)의 계정 발송량 상한은 "세고→보내기"라, 같은 계정의 다른 키 사건(숙소 등록·회고·다른
-    //    여행의 Plan-B)이 함께 지나면 계정당 최대 (CONSUMERS − 1)건 더 나갈 수 있다. 잠그지 않는다 — PushRateLimits KDoc
+    //    여행의 Plan-B)이 함께 지나면 폴링 모드보다 계정당 최대 (CONSUMERS − 1)건 더 나갈 수 있다(dispatch 는 인스턴스마다
+    //    도는 리마인드 발화 폴러도 부르니, 상한 대비 절대 초과는 그 겹침까지 더한 값이다). 잠그지 않는다 — PushRateLimits KDoc
     //    "소폭 초과는 설계상 허용이다"(COST-U6-01·02: 하드 쿼터가 아니라 폭주 차단)의 범위 안이다.
     //  - 회고(TripEnded 키=tripId → 요약 생성 · ActualRouteStored 키=routeDayId → 통계 갱신): 같은 여행·같은 날 권고 잠금
     //    (TripSummaryPersistence·ReflectionPersistence.findForUpdate) — 요약이 아직 없어도 잠금이 줄 세운다.
