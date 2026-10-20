@@ -9,4 +9,4 @@ paths:
 | 파일 | 역할 |
 |---|---|
 | `src/features/open-assistant/model/fabStack.ts` | ✦ 바닥·토스트 바닥 순수 계산(PBT-U8-F1) — 탭 2단 스택 = ✦ 220 · 토스트 288. 실제 겹침은 jest 사각(6-b) |
-| `src/features/open-assistant/ui/AssistantFab.tsx` | 56 원형 ✦ — `bottom` 이 있으면 절대 배치, 없으면 흐름 배치(허브 앵커 열). `toastBottom` 을 주면 붙어 있는 동안 `useRaisedToastBottom`으로 토스트를 올린다 — 마운트 기준이라 탭 화면(항상 마운트)이 있으면 다른 탭에서도 올라간 채다 |
+| `src/features/open-assistant/ui/AssistantFab.tsx` | 56 원형 ✦ — `bottom` 이 있으면 절대 배치, 없으면 흐름 배치(허브 앵커 열). `toastBottom` 을 주면 붙어 있는 동안 `useRaisedToastBottom`으로 토스트를 올린다 — 마운트 기준이라 탭 화면(항상 마운트)이 있으면 다른 탭에서도 올라간 채다. **키보드 will/did show 가 오면 스스로 `null` 을 그리고 토스트 올림도 푼다**(TRIP-1514, 훅은 모두 `return null` 앞에서 호출) — 시트 열림 숨김은 여전히 호출 화면 몫이고 화면마다 방식이 다르다(홈 = `assistantFab` prop, 숙소 검색·일정 상세 = 시트 열림이면 undefined, 허브 = `fabHidden` 이 앵커째 가림) |
