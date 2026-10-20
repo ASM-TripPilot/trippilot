@@ -206,13 +206,14 @@
 - `src/entities/itinerary-slot/config/altLabel.ts`  →  ALT_LABEL
 
 ## src/entities/itinerary-slot/
-- `src/entities/itinerary-slot/index.ts`  →  deriveEndsNextDay · isValidTimeRange · normalizeOpeningHours · formatOpeningHoursLabel · buildSlotKey · parseSlotKey · buildStatePins · projectSlotProgress · suggestNextSlotTime · timeBandLabel · VIOLATION_NOTICE · violationNotice · deriveVisitProgress · arrivedLabel · visitedLabelByPoiId · ReplanSlotRow · CategoryBuildingGlyph · CategoryCupGlyph · CategoryForkKnifeGlyph · CategoryImageGlyph · CategoryShoppingBagGlyph · CategoryTreeGlyph · SlotProgressCard · SlotStopCard
+- `src/entities/itinerary-slot/index.ts`  →  deriveEndsNextDay · isValidTimeRange · normalizeOpeningHours · formatOpeningHoursLabel · buildSlotKey · parseSlotKey · buildStatePins · projectSlotProgress · suggestNextSlotTime · timeBandLabel · overlapAwareNotice · VIOLATION_NOTICE · violationNotice · deriveVisitProgress · arrivedLabel · visitedLabelByPoiId · ReplanSlotRow · CategoryBuildingGlyph · CategoryCupGlyph · CategoryForkKnifeGlyph · CategoryImageGlyph · CategoryShoppingBagGlyph · CategoryTreeGlyph · SlotProgressCard · SlotStopCard
 
 ## src/entities/itinerary-slot/lib/
 - `src/entities/itinerary-slot/lib/categoryPlaceholder.ts`  →  CategoryPlaceholder · resolveCategoryPlaceholder
 - `src/entities/itinerary-slot/lib/endsNextDay.ts`  →  deriveEndsNextDay · isValidTimeRange
 - `src/entities/itinerary-slot/lib/normalizeOpeningHours.ts`  →  normalizeOpeningHours
 - `src/entities/itinerary-slot/lib/openingHoursLabel.ts`  →  formatOpeningHoursLabel
+- `src/entities/itinerary-slot/lib/overlapNotice.ts`  →  overlapAwareNotice
 - `src/entities/itinerary-slot/lib/slotKey.ts`  →  buildSlotKey · ParsedSlotKey · parseSlotKey · SlotKeySet · buildSlotKeys
 - `src/entities/itinerary-slot/lib/slotMapPin.ts`  →  SlotProgressState · StatePinInput · toMapPinState · buildStatePins
 - `src/entities/itinerary-slot/lib/slotProgress.ts`  →  SlotState · ProjectedSlot · SlotProgressInput · projectSlotProgress
@@ -1797,4 +1798,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1149개 파일
+합계 1150개 파일
