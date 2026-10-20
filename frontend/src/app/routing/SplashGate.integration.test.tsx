@@ -24,8 +24,10 @@ import { SPLASH_MIN_VISIBLE_MS, SplashGate } from './SplashGate';
  * 루트 `_layout` 에 실물 SplashGate·실물 정리 훅을 꽂고(훅을 목으로 끄지 않는다), 게이트 목적지만 가짜 저장소로 바꾼다.
  * 설정 화면(runLogout) 없이 게이트만 뒤집으므로 세션 만료 경로이기도 하다.
  *
- * 범위 밖: 가드 밖 화면 위에 중첩 스택이 또 쌓인 다단(예: 여행 화면 위 위저드)은 지금도 루트에 이전 화면이 남는다 —
- * 별도 티켓 후보라 여기서 잠그지 않는다.
+ * TRIP-1502 — 두 가지를 더 잠근다. ① 중첩 스택이 2장 이상 쌓인 다단(장소 탐색 위 위저드 step1·step2 등)에서도 이전 화면이
+ * 루트에 안 남는다(`POP_TO_TOP` 은 포커스된 가장 안쪽 스택부터 받아서 위저드가 안에서 접고 끝나던 결함).
+ * ② 홈이 아닌 탭 이력이 있을 때도 미처리 없이 로그인 하나가 된다 — 지금은 `(tabs)` 가 가드 안이라 안 터지지만,
+ * 탭이 가드 밖으로 나오는 회귀를 이 행들이 잡는다.
  *
  * 상황 감지 FE-A — 푸시 탭 라우팅(`usePushRouting`)도 실물 그대로 꽂혀 있다. 훅 단위 테스트는 라우터 목이라
  * "스택이 그려진 뒤에 보낸 push 가 진짜 라우터에서 먹는가"를 못 봐서, 맨 아래 describe 가 여기서 본다.
@@ -91,7 +93,7 @@ function stub(testID: string) {
   };
 }
 
-// SplashGate 가 선언하는 화면 7개 + 가드 밖 화면(settings·trips). (onboarding) 은 index 를 두지 않는다 —
+// SplashGate 가 선언하는 화면 7개 + 가드 밖 화면(settings·trips·explore/places — 위저드 진입점 중 하나). (onboarding) 은 index 를 두지 않는다 —
 // '/' 가 (tabs)/index 와 겹치면 키 순서로 승부가 갈린다.
 const ROUTES = {
   _layout: RootLayout,
@@ -105,6 +107,7 @@ const ROUTES = {
   '(tabs)/index': stub('home-root'),
   '(tabs)/my': Empty,
   'assistant/index': Empty,
+  'explore/places': Empty,
   'force-update': Empty,
   reconsent: Empty,
   'settings/index': stub('settings-root'),
@@ -121,6 +124,25 @@ type RouterApp = ReturnType<typeof renderRouter>;
 function rootStackNames(app: RouterApp): string[] {
   const stack = app.getRouterState()?.routes[0]?.state;
   return (stack?.routes ?? []).map((route) => route.name);
+}
+
+/** 위저드(`trips/new`) 안쪽 스택의 화면 이름들 — 루트에 위저드가 없으면 빈 배열. 위저드가 2장 이상일 때만 중첩 잔존이 난다. */
+function wizardStepNames(app: RouterApp): string[] {
+  const root = app.getRouterState()?.routes[0]?.state;
+  const wizard = root?.routes.find((route) => route.name === 'trips/new');
+  return (wizard?.state?.routes ?? []).map((route) => route.name);
+}
+
+/** `(tabs)` 안쪽 상태 — 현재 탭 이름과 탭 이력 길이. 탭에 한 번도 안 갔으면 이력이 없다(0). */
+function tabsPosition(app: RouterApp): { current: string; history: number } {
+  const root = app.getRouterState()?.routes[0]?.state;
+  const tabs = root?.routes.find((route) => route.name === '(tabs)')?.state as
+    | { index: number; routes: { name: string }[]; history?: unknown[] }
+    | undefined;
+  return {
+    current: tabs?.routes[tabs.index]?.name ?? '',
+    history: tabs?.history?.length ?? 0,
+  };
 }
 
 /** 로그인 상태(HOME)로 앱을 열고 스플래시 하한을 넘긴 뒤 화면들을 차례로 쌓는다. */
@@ -186,10 +208,23 @@ describe('정리는 걷어야 할 화면은 여전히 걷는다 (무회귀)', ()
       ['(tabs)', 'trips/[tripId]/live/index', 'trips/[tripId]/live/index'],
     ],
     ['홈만 있으면(걷을 것 없음) 로그인으로 바뀐다', [], ['(tabs)']],
+    // 걷기 지킴이 — 위저드 아래에 루트 화면이 있어야 걷기를 지운 뮤테이션이 red 다(위저드만 있으면 replace 혼자 로그인이 된다).
     [
-      '위저드(중첩 스택 하나)가 쌓여 있으면 위저드째 걷힌다',
+      '위저드(중첩 스택 하나)가 가드 밖 여행 화면 위에 있으면 위저드째 걷힌다',
+      ['/trips/1/live', '/trips/new/step1'],
+      ['(tabs)', 'trips/[tripId]/live/index', 'trips/new'],
+    ],
+    // 걷기 지킴이는 아니다 — 수정 뒤 "걷을 루트 화면이 없는데 걷기를 보내 미처리가 나는" 회귀만 본다.
+    [
+      '위저드만 있으면(아래에 루트 화면이 없어 replace 하나로도 로그인 하나가 된다) 로그인으로 바뀐다',
       ['/trips/new/step1', '/trips/new/step2'],
       ['(tabs)', 'trips/new'],
+    ],
+    // 위저드 위에 루트 화면이 다시 올라오면 루트가 POP_TO_TOP 을 직접 받는다 — 위저드만 겨눈 수정이 이 모양을 깨는지 본다.
+    [
+      '위저드 위에 다시 루트 화면(설정)이 올라와 있어도 전부 걷힌다',
+      ['/explore/places', '/trips/new/step1', '/trips/new/step2', '/settings'],
+      ['(tabs)', 'explore/places', 'trips/new', 'settings/index'],
     ],
   ])('%s', (_name, pushes, stackBefore) => {
     // 준비 — 앵커: push 가 실제로 쌓였다(안 쌓이면 걷기 없이도 통과한다).
@@ -204,6 +239,100 @@ describe('정리는 걷어야 할 화면은 여전히 걷는다 (무회귀)', ()
     ).not.toThrow();
 
     // 단언
+    expectOnlyLogin(app);
+  });
+});
+
+// TRIP-1502 AC-1·2 — 홈이 아닌 탭 이력. `(tabs)` 가 가드 안인 지금은 선제 green 이라, 유효성은 뮤테이션으로 본다:
+// `(tabs)` 를 가드 밖으로 옮기면 red(탭 이력 때문에 canGoBack 이 참인데 루트가 POP_TO_TOP 을 못 받는다) · 기존 `홈만` 행은 green.
+describe('홈이 아닌 탭(마이)으로 옮겨 간 뒤에도 로그인 하나만 남는다 (탭 이력)', () => {
+  it.each<[string, string[], string[]]>([
+    ['마이 탭만', ['/my'], ['(tabs)']],
+    [
+      '마이 탭 이력 위에 설정 화면',
+      ['/my', '/settings'],
+      ['(tabs)', 'settings/index'],
+    ],
+    [
+      '마이 탭 이력 위에 여행 화면',
+      ['/my', '/trips/1/live'],
+      ['(tabs)', 'trips/[tripId]/live/index'],
+    ],
+  ])('%s', (_name, pushes, stackBefore) => {
+    // 준비 — 앵커: 루트 스택이 쌓였고, 탭은 홈이 아니라 마이에 있으며 이력이 2개다(canGoBack 이 탭 이력을 세는 조건).
+    const app = openSignedIn(pushes);
+    expect(rootStackNames(app)).toEqual(stackBefore);
+    expect(tabsPosition(app)).toEqual({ current: 'my', history: 2 });
+
+    // 실행
+    expect(() =>
+      act(() => {
+        flipGateTo('LOGIN');
+      })
+    ).not.toThrow();
+
+    // 단언
+    expectOnlyLogin(app);
+  });
+});
+
+// TRIP-1502 AC-5·6 — red: 위저드가 2장 이상이면 POP_TO_TOP 이 포커스된 안쪽(위저드)에서 접히고 끝나, 아래 루트 화면이 로그인 아래에 남았다.
+// 세션 만료(401)는 step2(생성 대기) 중에 오기 쉬워서 위저드가 2장인 순간이 실제로 생긴다.
+describe('위저드가 step2 까지 쌓인 채(세션 만료는 step2 대기 중에 온다) 로그아웃해도 이전 화면이 남지 않는다', () => {
+  const STEP1 = '/trips/new/step1';
+  const STEP2 = '/trips/new/step2';
+
+  it.each<[string, string[], string[], string[]]>([
+    [
+      '장소 탐색에서 시작한 위저드',
+      ['/explore/places', STEP1, STEP2],
+      ['(tabs)', 'explore/places', 'trips/new'],
+      ['step1', 'step2'],
+    ],
+    [
+      'AI 도우미에서 시작한 위저드',
+      ['/assistant', STEP1, STEP2],
+      ['(tabs)', 'assistant/index', 'trips/new'],
+      ['step1', 'step2'],
+    ],
+    [
+      '여행 화면 위의 위저드',
+      ['/trips/1/live', STEP1, STEP2],
+      ['(tabs)', 'trips/[tripId]/live/index', 'trips/new'],
+      ['step1', 'step2'],
+    ],
+    [
+      '설정 위의 위저드',
+      ['/settings', STEP1, STEP2],
+      ['(tabs)', 'settings/index', 'trips/new'],
+      ['step1', 'step2'],
+    ],
+    [
+      '루트 화면 둘(여행 화면 → 장소 탐색) 아래의 위저드',
+      ['/trips/1/live', '/explore/places', STEP1, STEP2],
+      ['(tabs)', 'trips/[tripId]/live/index', 'explore/places', 'trips/new'],
+      ['step1', 'step2'],
+    ],
+    [
+      '위저드가 3장(step1 → step2 → step1)',
+      ['/explore/places', STEP1, STEP2, STEP1],
+      ['(tabs)', 'explore/places', 'trips/new'],
+      ['step1', 'step2', 'step1'],
+    ],
+  ])('%s', (_name, pushes, stackBefore, wizardBefore) => {
+    // 준비 — 앵커 둘: 루트에 쌓인 모양 + 위저드 안쪽이 2장 이상(1장이면 이 결함이 안 나 공허 green).
+    const app = openSignedIn(pushes);
+    expect(rootStackNames(app)).toEqual(stackBefore);
+    expect(wizardStepNames(app)).toEqual(wizardBefore);
+
+    // 실행
+    expect(() =>
+      act(() => {
+        flipGateTo('LOGIN');
+      })
+    ).not.toThrow();
+
+    // 단언 — 루트에 이전 화면(장소 탐색·설정·여행 화면…)이 없고 로그인 하나뿐이다.
     expectOnlyLogin(app);
   });
 });
