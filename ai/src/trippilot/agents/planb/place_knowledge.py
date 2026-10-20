@@ -36,7 +36,7 @@ from trippilot.agents.planb.kb_retrieval import retrieve
 from trippilot.domain.kb import KbKind
 from trippilot.domain.poi import Poi
 from trippilot.poi_curation.chunking import chunk_ids, split_sentences
-from trippilot.poi_curation.place_docs import SOURCE_WIKI, SOURCES
+from trippilot.poi_curation.place_docs import SOURCE_OVERVIEW, SOURCE_WIKI, SOURCES
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.vector_store_port import VectorStorePort
 
@@ -55,8 +55,9 @@ MAX_DOC_CHARS = 300
 #     첫 문장 + 조각     vs 맞은 조각만       66.0% : 24.0% (같음 10.0%)
 #     첫 문장 + 조각     vs 도입부 앞 300자   59.9% : 31.7% (같음 8.5%) ← 같은 글자 예산(길이 편향 통제)
 INTRO_HEAD_CHARS = 100
-# 조각으로 적재되는 출처 — 이 출처는 통문서 id 대신 조각 id 범위로 펼쳐 찾는다.
-CHUNKED_SOURCES = frozenset({SOURCE_WIKI})
+# 조각으로 적재되는 출처 — 이 출처는 통문서 id 대신 조각 id 범위로 펼쳐 찾는다. 한 장소에 위키·개요가 둘 다
+# 있으면 **둘을 합쳐** 가장 맞는 조각 하나를 고른다(아래 장소별 중복 제거).
+CHUNKED_SOURCES = frozenset({SOURCE_WIKI, SOURCE_OVERVIEW})
 
 # 문서를 받는 **장소** 수 상한 — 예산 방어. 40 × 160자 ≈ 6,400자가 프롬프트 증가분이다.
 #
@@ -129,11 +130,13 @@ def fetch_place_knowledge(
 
     # 키는 `poi_ref`(= source_ref)다. `doc_id` 는 출처별 접두사가 붙어 있어 후보와
     # 직접 안 맞는다 — 한 장소에 여러 출처의 문서가 생길 수 있기 때문이다.
-    intro = {h.poi_ref: h for h in hits if h.poi_ref and h.metadata.get("chunk") == 0}
+    # 도입부(#0)는 **같은 출처**의 것 — 위키 첫 문장 + 개요 조각처럼 다른 글을 이어 붙이지 않는다.
+    intro = {(h.poi_ref, h.metadata.get("source")): h for h in hits
+             if h.poi_ref and h.metadata.get("chunk") == 0}
     out: dict[str, str] = {}
     for hit in hits:
         ref = hit.poi_ref
-        text = _clip(_with_intro(hit, intro.get(ref)))
+        text = _clip(_with_intro(hit, intro.get((ref, hit.metadata.get("source")))))
         if not ref or not text or ref in out:
             continue  # 같은 장소에 문서가 여럿이면 점수 높은 쪽만 (스토어가 정렬해 준다)
         if len(out) >= MAX_DOCS:
