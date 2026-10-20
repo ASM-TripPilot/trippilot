@@ -90,7 +90,7 @@ class _ProblemCapturingProvider:
         self._inner = inner
         self.problems = []
 
-    def for_pool(self, poi_index):
+    def for_pool(self, poi_index, walk_max_km=None):
         facade = self._inner.for_pool(poi_index)
         outer = self
 
