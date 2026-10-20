@@ -79,16 +79,26 @@ class DayAnchorSchema(BoundaryModel):
     lng: float = Field(ge=-180.0, le=180.0)
 
 
+# 자정을 넘는 끝의 상한 — 밤 늦게 만든 오늘을 익일 01:00 까지 연다(2026-10-19 사용자). 넉넉히 04:00.
+OVERNIGHT_END_MAX = dt.time(4, 0)
+
+
 class TimeWindowSchema(BoundaryModel):
-    """날짜별 이용 시각(기본 09–21시). 도메인 TimeWindow와 같은 불변식(start < end)."""
+    """날짜별 이용 시각(기본 09–21시). 끝이 시작 이하이고 04:00 이하면 **다음 날** 끝(자정을 넘는 창 — 밤 늦게
+    만든 오늘, 예 23:00~01:00). 그 밖은 도메인 TimeWindow와 같은 불변식(start < end)."""
 
     date: dt.date
     start: dt.time
     end: dt.time
 
+    @property
+    def overnight(self) -> bool:
+        """끝이 다음 날인가 — 시작 이하이면서 새벽(≤ `OVERNIGHT_END_MAX`)일 때만."""
+        return self.end <= self.start and self.end <= OVERNIGHT_END_MAX
+
     @model_validator(mode="after")
     def _check_order(self) -> "TimeWindowSchema":
-        if self.start >= self.end:
+        if self.start >= self.end and not self.overnight:
             raise ValueError(f"start < end 위반: {self.start} !< {self.end}")
         return self
 

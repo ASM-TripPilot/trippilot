@@ -45,12 +45,6 @@ from trippilot.domain.itinerary import (
 from trippilot.domain.poi import OpenHour, Poi, PoiCategory, counts_as_food, open_windows_on
 
 
-def _at(day, template: datetime) -> datetime:
-    """day 날짜에 template의 시각(time-of-day)·tz를 적용."""
-    return datetime(day.year, day.month, day.day,
-                    template.hour, template.minute, tzinfo=template.tzinfo)
-
-
 def placed_fixed_blocks(
     problem: ItineraryProblem, day, slots: Sequence[VisitSlot]
 ) -> tuple[FixedBlock, ...]:
@@ -212,7 +206,7 @@ class RuleFallbackAssembler:
                 if fb_poi is not None:
                     cat_count[fb_poi.category] += 1
                     cap_count.update(k for k, _ in self._cfg.daily_caps(fb_poi))
-            day_end = _at(day, problem.window_on(day).end)
+            day_end = problem.window_on(day).end
             windows = (self._cfg.lunch_window_min, self._cfg.dinner_window_min)
             meal_done = [False] * len(windows)
             # ①′ 시각 없는 필수 방문 (TRIP-1249) — 고정 블록 사이 틈에서 가장 이른 가능 시각.
@@ -301,7 +295,7 @@ class RuleFallbackAssembler:
                 last = slots[k] if k >= 0 else None
                 nxt = slots[k + 1] if k + 1 < len(slots) else None
                 ref = last.end_at if last is not None \
-                    else _at(day, problem.window_on(day).start)
+                    else problem.window_on(day).start
                 if not_before is not None and ref < not_before:
                     ref = not_before  # 식사 창 판정도 실제로 놓일 수 있는 시각 기준
                 ref_mod = ref.hour * 60 + ref.minute
@@ -366,7 +360,7 @@ class RuleFallbackAssembler:
                         continue
                     stay = stay_for(poi.category, problem.pace)
                     if last is None:
-                        depart = _at(day, problem.window_on(day).start)
+                        depart = problem.window_on(day).start
                         travel_min = 0
                         if problem.anchor is not None:
                             travel_min = self._est.estimate(
@@ -453,13 +447,13 @@ class RuleFallbackAssembler:
         건너뛴다(0분 이동 금지, TRIP-1177). `after` 는 순서 하한(앞 필수 방문 끝) — 이동은 틈의 하한이
         이미 더하므로 시각 그대로 건다(하한처럼 앵커 이동을 붙이지 않는다).
         """
-        base = _at(day, problem.window_on(day).start).replace(hour=0, minute=0)
+        base = problem.window_on(day).start.replace(hour=0, minute=0)
 
         def mins(dt: datetime) -> int:
             return int((dt - base).total_seconds() // 60)
 
-        ws = mins(_at(day, problem.window_on(day).start))
-        we = mins(_at(day, problem.window_on(day).end))
+        ws = mins(problem.window_on(day).start)
+        we = mins(problem.window_on(day).end)
         floor = (mins(not_before) + anchor_minutes(problem, poi, self._est)
                  if not_before is not None else None)
         if after is not None:

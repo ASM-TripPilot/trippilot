@@ -480,7 +480,7 @@ def _domain_generate_request(
     # `day_window`(공용)는 첫 일자의 창 — 일자별 창이 없는 날·시간대 기준으로만 쓰인다.
     day_windows = {
         w.date: TimeWindow(start=datetime.combine(w.date, w.start, tzinfo=tz),
-                           end=datetime.combine(w.date, w.end, tzinfo=tz))
+                           end=datetime.combine(w.date + timedelta(days=w.overnight), w.end, tzinfo=tz))
         for w in request.time_windows
     }
     day_window = day_windows[days[0]]
