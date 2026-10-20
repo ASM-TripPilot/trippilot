@@ -262,6 +262,31 @@ class SecretTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 runtime_secrets.validate_groups({**base, "ai": {"HOLIDAY_CLOSURE_MODE": bad}})
 
+    def test_runtime_switches_parse_pairs_and_refuse_anything_else(self):
+        """배포 입력 `runtime_switches`(KEY=VALUE;…) — 쌍 구분이 `;` 인 것은 카나리 계정 목록 값에 쉼표가 들어 있어서다.
+        허용 밖 키·형식 오류·같은 키 두 번은 버리지 않고 배포를 멈춘다 — 조용히 버리면 켠 줄 알고 넘어간다."""
+        parse = runtime_secrets.parse_runtime_switches
+        for blank in (None, "", "  ", " ; "):
+            with self.subTest(blank=blank):
+                self.assertEqual(parse(blank), {})
+        ids = "0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46,11111111-2222-4333-8444-555555555555"
+        self.assertEqual(
+            parse(f" PLANB_SITUATION_SWEEP = dry-run ;PLANB_SITUATION_SWEEP_ACCOUNT_IDS={ids}; HOLIDAY_CLOSURE_MODE=on;"),
+            {"PLANB_SITUATION_SWEEP": "dry-run", "PLANB_SITUATION_SWEEP_ACCOUNT_IDS": ids, "HOLIDAY_CLOSURE_MODE": "on"})
+        self.assertEqual(parse("PLANB_PREPARED_REPLAN= "), {"PLANB_PREPARED_REPLAN": ""})  # 빈 값 = 지운다
+        self.assertEqual(set(runtime_secrets.RUNTIME_SWITCHES), {
+            "PLANB_SITUATION_SWEEP", "PLANB_SITUATION_HORIZON", "PLANB_SITUATION_SWEEP_ACCOUNT_IDS", "PLANB_PREPARED_REPLAN",
+            "HOLIDAY_CLOSURE_MODE"})
+        for key, group in runtime_secrets.RUNTIME_SWITCHES.items():  # 스위치는 제 그룹 허용목록 안이어야 쓸 수 있다
+            self.assertIn(key, runtime_secrets.GROUP_KEYS[group])
+        bads = ("PUSH_MODE=expo", "OPENAI_API_KEY=sk-x", "planb_situation_sweep=on",  # 허용 밖 — 다른 키는 이 길로 못 쓴다
+                "PLANB_SITUATION_SWEEP", "PLANB_SITUATION_SWEEP on", "=on", " = ;",  # `=` 없음·빈 키
+                f"PLANB_SITUATION_SWEEP_ACCOUNT_IDS={ids};PLANB_SITUATION_SWEEP_ACCOUNT_IDS ={ids}")  # 같은 키 두 번
+        for bad in bads:
+            with self.subTest(bad=bad), self.assertRaises(ValueError) as raised:
+                parse(bad)
+            self.assertNotIn("0d7f17ab", str(raised.exception))  # 오류에도 값(계정 id)을 싣지 않는다
+
     def test_dialogue_memory_ddl_is_identical_in_both_canons(self):
         """`dialogue_memory` DDL 정본은 둘이다(FD DE §4) — EKS 는 bootstrap.sql(마스터 Job, 매 배포 멱등),
         로컬 compose 는 ai/docker/vector-init/02-dialogue-memory.sql(initdb 1회). 어댑터는 DML 만 하므로
@@ -681,6 +706,105 @@ class RuntimeIntegrationTests(unittest.TestCase):
                         self.assertEqual(saved[arns[group]]["PUBLIC_DATA_API_KEY"], "stored")
                     self.assertNotIn("public data key written", " ".join(str(call.args[0]) for call in printed.call_args_list))
 
+    def test_sync_writes_runtime_switches_to_their_groups_and_prints_names_only(self):
+        """상황 감지 스위치도 로컬 AWS 자격 없이 배포 입력으로 쓴다(push_mode·도우미 입력과 같은 길) — backend 4종·ai 1종을 제
+        그룹에 쓰고, 출력은 키 이름뿐이다(카나리 계정 id 도 찍지 않는다). 같은 입력이면 쓰지 않고, 입력 없는 배포는 저장값을 둔다."""
+        arns = outputs()["app_secret_arns"]
+        ids = "0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46,11111111-2222-4333-8444-555555555555"
+        switches = f"PLANB_SITUATION_SWEEP=dry-run;PLANB_SITUATION_SWEEP_ACCOUNT_IDS={ids};HOLIDAY_CLOSURE_MODE=on"
+        saved, execute = self._saved_secrets({"OPENAI_API_KEY": "sk-x"})
+        with patch("runtime_secrets.rsa_key", return_value="k"), patch("runtime_secrets.validate_rsa_key"):
+            with contextlib.redirect_stdout(io.StringIO()):
+                runtime_secrets.sync(outputs(), "trippilot", False, execute)  # 첫 배포 시드 — 아래 쓰기만 센다
+            self.writes.clear()
+            printed = io.StringIO()
+            with contextlib.redirect_stdout(printed):
+                runtime_secrets.sync(outputs(), "trippilot", False, execute, runtime_switches=switches)
+            backend, ai = saved[arns["backend"]], saved[arns["ai"]]
+            self.assertEqual(backend["PLANB_SITUATION_SWEEP"], "dry-run")
+            self.assertEqual(backend["PLANB_SITUATION_SWEEP_ACCOUNT_IDS"], ids)
+            self.assertEqual(ai["HOLIDAY_CLOSURE_MODE"], "on")
+            self.assertNotIn("HOLIDAY_CLOSURE_MODE", backend)
+            self.assertEqual(ai["OPENAI_API_KEY"], "sk-x")  # 다른 키는 그대로
+            self.assertEqual(sorted(write for write in self.writes if write != "apply"), sorted((arns["backend"], arns["ai"])))
+            output = printed.getvalue()
+            self.assertIn("runtime switches written: HOLIDAY_CLOSURE_MODE, PLANB_SITUATION_SWEEP, "
+                          "PLANB_SITUATION_SWEEP_ACCOUNT_IDS", output)
+            for value in (*ids.split(","), "dry-run", "=on"):
+                self.assertNotIn(value, output)
+            # open_gaps 도 스위치를 얹은 결과로 돈다 — 켜는 그 배포에서 바로 경고한다(다음 배포가 아니라)
+            self.assertIn("::warning title=Open security gap::PLANB_SITUATION_SWEEP is on but WEATHER_MODE is not kma", output)
+            self.writes.clear()
+            printed = io.StringIO()
+            with contextlib.redirect_stdout(printed):
+                runtime_secrets.sync(outputs(), "trippilot", False, execute, runtime_switches=switches)  # 저장값과 같다
+                runtime_secrets.sync(outputs(), "trippilot", False, execute)  # 입력 없는 평소 배포
+            self.assertEqual([write for write in self.writes if write != "apply"], [])  # put 0회
+            self.assertNotIn("runtime switches", printed.getvalue())
+            self.assertEqual((saved[arns["backend"]], saved[arns["ai"]]), (backend, ai))
+
+    def test_runtime_switch_values_are_checked_by_the_existing_validation_before_writing(self):
+        """값 검증은 새로 두지 않고 validate_groups 를 스위치를 얹은 결과로 돌린다 — 틀린 값은 아무것도 쓰기 전에 멈춘다.
+        먼저 얹으므로 손편집으로 틀어진 저장값도 입력으로 고칠 수 있다(ai 입력과 같은 순서)."""
+        arns = outputs()["app_secret_arns"]
+        bads = ("PLANB_SITUATION_SWEEP=dry_run", "PLANB_SITUATION_HORIZON=d-1", "PLANB_PREPARED_REPLAN=true",
+                "PLANB_SITUATION_SWEEP_ACCOUNT_IDS=0d7f17ab5c4b4d6da7f7484ba11dda46", "HOLIDAY_CLOSURE_MODE=yes",
+                "PLANB_SITUATION_SWEEP=on,PLANB_PREPARED_REPLAN=on")  # 쉼표로 이으면 한 값이 된다 — 조용히 반만 켜지 않는다
+        with patch("runtime_secrets.rsa_key", return_value="k"), patch("runtime_secrets.validate_rsa_key"), patch("builtins.print"):
+            for bad in bads:
+                with self.subTest(bad=bad):
+                    saved, execute = self._saved_secrets()
+                    with self.assertRaises(ValueError):
+                        runtime_secrets.sync(outputs(), "trippilot", False, execute, runtime_switches=bad)
+                    self.assertEqual(self.writes, [])  # 시크릿·k8s Secret 어느 쪽도 쓰지 않았다
+            saved, execute = self._saved_secrets()
+            saved[arns["backend"]] = {"PLANB_SITUATION_SWEEP": "dry_run"}  # 손편집 오타 — 입력 없이는 배포가 멈춘다
+            with self.assertRaisesRegex(ValueError, "PLANB_SITUATION_SWEEP"):
+                runtime_secrets.sync(outputs(), "trippilot", False, execute)
+            runtime_secrets.sync(outputs(), "trippilot", False, execute, runtime_switches="PLANB_SITUATION_SWEEP=dry-run")
+            self.assertEqual(saved[arns["backend"]]["PLANB_SITUATION_SWEEP"], "dry-run")
+
+    def test_runtime_switch_with_an_empty_value_removes_the_key_from_the_secret_and_the_cluster(self):
+        """`KEY=` 는 그 키를 지워 앱 기본값으로 되돌린다. Secrets Manager 에서만 지우면 클러스터에는 남는다 — stringData 로 넣은
+        키는 server-side apply 매니페스트에서 빠져도 k8s Secret data 에서 안 지워진다(k3s v1.35 실측). 그래서 키 이름만 실은
+        merge patch(null)로 클러스터에서도 지운다. 저장값에 없는 키도 보낸다 — 앞 런이 Secrets Manager 만 지우고 죽었어도 재실행이 마저 지운다."""
+        arns = outputs()["app_secret_arns"]
+        saved, execute = self._saved_secrets({"HOLIDAY_CLOSURE_MODE": "on", "OPENAI_API_KEY": "sk-x"})
+        saved[arns["backend"]] = {"PLANB_SITUATION_SWEEP": "on", "PLANB_SITUATION_HORIZON": "tomorrow"}
+        commands = []
+
+        def shell(argv, payload=None):
+            commands.append(argv)
+            return execute(argv, payload)
+        printed = io.StringIO()
+        with patch("runtime_secrets.rsa_key", return_value="k"), patch("runtime_secrets.validate_rsa_key"), \
+                contextlib.redirect_stdout(printed):
+            runtime_secrets.sync(outputs(), "trippilot", False, shell,
+                                 runtime_switches="PLANB_SITUATION_SWEEP=;HOLIDAY_CLOSURE_MODE=;PLANB_PREPARED_REPLAN=")
+        self.assertNotIn("PLANB_SITUATION_SWEEP", saved[arns["backend"]])
+        self.assertEqual(saved[arns["backend"]]["PLANB_SITUATION_HORIZON"], "tomorrow")  # 입력에 없는 스위치는 그대로
+        self.assertNotIn("HOLIDAY_CLOSURE_MODE", saved[arns["ai"]])
+        self.assertEqual(saved[arns["ai"]]["OPENAI_API_KEY"], "sk-x")
+        # 저장값에 없던 PLANB_PREPARED_REPLAN 은 '지운 키'가 아니다 — 이름도 바뀐 것만
+        self.assertIn("runtime switches removed (app default): HOLIDAY_CLOSURE_MODE, PLANB_SITUATION_SWEEP", printed.getvalue())
+        patches = {argv[3]: argv for argv in commands if argv[:2] == ["kubectl", "patch"]}
+        self.assertEqual(set(patches), {"trippilot-backend", "trippilot-ai"})
+        for name, keys in (("trippilot-backend", {"PLANB_SITUATION_SWEEP", "PLANB_PREPARED_REPLAN"}),
+                           ("trippilot-ai", {"HOLIDAY_CLOSURE_MODE"})):
+            argv = patches[name]
+            self.assertEqual(argv[:4], ["kubectl", "patch", "secret", name])
+            self.assertEqual(argv[argv.index("--namespace") + 1], "trippilot")
+            self.assertEqual(argv[argv.index("--type") + 1], "merge")
+            self.assertEqual(json.loads(argv[argv.index("--patch") + 1]), {"data": dict.fromkeys(keys)})
+        # 클러스터 쪽 지우기는 매니페스트 apply 뒤다 — 첫 배포엔 그 Secret 이 apply 로 처음 생긴다
+        last_apply = max(index for index, argv in enumerate(commands) if argv[:2] == ["kubectl", "apply"])
+        self.assertGreater(min(index for index, argv in enumerate(commands) if argv[:2] == ["kubectl", "patch"]), last_apply)
+        # 지울 것이 없는 배포는 patch 를 보내지 않는다
+        commands.clear()
+        with patch("runtime_secrets.rsa_key", return_value="k"), patch("runtime_secrets.validate_rsa_key"), patch("builtins.print"):
+            runtime_secrets.sync(outputs(), "trippilot", False, shell, runtime_switches="PLANB_SITUATION_HORIZON=today")
+        self.assertEqual([argv for argv in commands if argv[:2] == ["kubectl", "patch"]], [])
+
     def test_feature_model_overrides_reject_unknown_features_and_malformed_pairs_before_writing(self):
         """모르는 기능 이름이 배정에 들어가면 AI 가 기동에서 죽는다(`feature_models_from_env`) — 쓰기 전에 거절한다."""
         known = runtime_secrets.known_llm_features()
@@ -752,6 +876,18 @@ class RuntimeIntegrationTests(unittest.TestCase):
                 self.assertIsNone(sync.call_args.kwargs["push_mode"])
             with self.assertRaises(SystemExit), patch("sys.stderr"):
                 runtime.main(["sync-secrets", "--outputs", str(source), "--push-mode", "fcm"])
+
+    def test_sync_secrets_cli_passes_runtime_switches_through(self):
+        """형식·허용 키·값 검증은 sync 한 곳이 한다 — CLI 는 받은 문자열을 그대로 넘기고, 없으면 None(유지)이다."""
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "outputs.json"
+            source.write_text(json.dumps({key: {"value": value} for key, value in outputs().items()}))
+            switches = "PLANB_SITUATION_SWEEP=dry-run;PLANB_SITUATION_SWEEP_ACCOUNT_IDS=0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46"
+            with patch("runtime.runtime_secrets.sync") as sync, patch("builtins.print"):
+                runtime.main(["sync-secrets", "--outputs", str(source), "--runtime-switches", switches])
+                self.assertEqual(sync.call_args.kwargs["runtime_switches"], switches)
+                runtime.main(["sync-secrets", "--outputs", str(source)])
+                self.assertIsNone(sync.call_args.kwargs["runtime_switches"])
 
     def test_sync_secrets_cli_reads_the_public_data_key_from_env_not_argv(self):
         """비밀값은 argv 에 올리지 않는다(프로세스 목록·로그에 남는다) — 워크플로가 그 스텝 env 로만 싣는다."""

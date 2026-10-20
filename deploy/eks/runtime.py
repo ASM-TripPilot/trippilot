@@ -119,6 +119,8 @@ def parser():
             # 미지정 = 저장값 유지. 도우미 오케스트레이터 스위치와 기능별 모델 배정 덧씌우기(2026-10-18) — push-mode 와 같은 이유.
             sub.add_argument("--dialogue-orchestrator", choices=("on", "off"))
             sub.add_argument("--llm-feature-models")
+            # 미지정 = 저장값 유지. 상황 감지 스위치 KEY=VALUE;…(push-mode 와 같은 이유) — 형식·허용 키·값 검증은 sync 한 곳이 한다.
+            sub.add_argument("--runtime-switches")
         if action in ("bootstrap-db", "cleanup-db"):
             sub.add_argument("--run-id", required=True)
         if action == "render-values":
@@ -142,7 +144,8 @@ def main(argv=None):
         runtime_secrets.sync(outputs, args.namespace, args.embedding_enabled, command,
                              push_mode=args.push_mode, dialogue_orchestrator=args.dialogue_orchestrator,
                              llm_feature_models=args.llm_feature_models, target=args.target,
-                             public_data_api_key=os.environ.get("PUBLIC_DATA_API_KEY"))
+                             public_data_api_key=os.environ.get("PUBLIC_DATA_API_KEY"),
+                             runtime_switches=args.runtime_switches)
     elif args.action == "bootstrap-db":
         runtime_db.bootstrap(outputs, args.namespace, args.run_id, command)
     elif args.action == "cleanup-db":
