@@ -79,9 +79,11 @@ import { LiveItineraryPage } from './LiveItineraryPage';
 // authedClient(생성 클라이언트 인증 계층)가 @/shared/storage 를 정적으로 문다.
 // 상황 감지 FE-C — 기회 카드의 기기 숨김 기억(readStringValue·writeStringValue)도 이 배럴로 나간다. 구현은 기회 카드
 // 관점(describe)이 심는다(그 밖의 관점은 기회 목록이 비어 읽지 않는다).
+// 배럴을 통째로 갈아끼우므로 실물을 먼저 펼친 뒤 덮는다(README 테스트 규칙 — 재수출이 늘어도 형제 export 가 undefined 가 되지 않게).
 const mockReadStringValue = jest.fn();
 const mockWriteStringValue = jest.fn();
 jest.mock('@/shared/storage', () => ({
+  ...jest.requireActual('@/shared/storage'),
   saveTokens: jest.fn().mockResolvedValue(undefined),
   getTokens: jest
     .fn()
