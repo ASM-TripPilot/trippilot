@@ -79,6 +79,7 @@ def merge(docs: list[dict], *, allow_mixed: bool = False) -> dict:
             "  전량이 중복 적재됩니다. 일부러 섞으려면 --allow-mixed 를 주세요. 그러면 문서에\n"
             "  `sources` 를 적어 두므로, 소비자가 항목별 source 로 갈라 보내야 합니다."
         )
+    by_ref = versions_by_ref(docs)
     docs = sorted(docs, key=lambda d: d["collected_at"])
     # 키는 **(출처, content_id)** 다 — 백엔드 유일키와 같은 모양이다. `content_id` 만으로
     # 잡으면 다른 출처의 같은 번호가 서로를 덮고, 그 행이 `--close-missing` 에서 "목록 부재"로
@@ -88,7 +89,6 @@ def merge(docs: list[dict], *, allow_mixed: bool = False) -> dict:
     # 지금 세 출처는 번호 꼴이 겹치지 않아(TOURAPI 숫자 `1000981` · LOCALDATA 관리번호
     # `3000000-101-1967-03256` · OVERTURE UUID) 실측 충돌 0·유실 0 이다. 네 번째 출처가
     # 숫자나 UUID 를 쓰면 그때 조용히 깨지므로 미리 막는다 (ai-e3 리뷰, 2026-10-15).
-    proposals: dict[tuple[str, str], dict] = {}
     areas: list[str] = []
     types: list[str] = []
     for d in docs:
@@ -98,10 +98,7 @@ def merge(docs: list[dict], *, allow_mixed: bool = False) -> dict:
         for t in d.get("content_types", []):
             if t not in types:
                 types.append(t)
-        for p in d["proposals"]:
-            # 항목 source 가 정본이고, 없으면 문서 source — 수신도 그 순서로 읽는다
-            src = str(p.get("source") or d.get("source") or "").upper()
-            proposals[(src, p["provenance"]["content_id"])] = p
+    proposals = {ref: vs[-1] for ref, vs in by_ref.items()}
     return {
         "schema_version": docs[-1]["schema_version"],
         # 섞였으면 **항목별 source 가 정본**이다 — 최상위 하나만 읽으면 틀린다는 것을
@@ -182,6 +179,20 @@ def drop_non_travel(proposals: list[dict]) -> dict[str, int]:
 
 
 _VERDICTS = Path(__file__).resolve().parents[2] / "data" / "overture_nonfood_verdicts.json"
+def _ref(p: dict, d: dict) -> tuple[str, str]:
+    # 항목 source 가 정본이고, 없으면 문서 source — 수신도 그 순서로 읽는다
+    return str(p.get("source") or d.get("source") or "").upper(), p["provenance"]["content_id"]
+
+
+def versions_by_ref(docs: list[dict]) -> dict[tuple[str, str], list[dict]]:
+    """같은 행의 판본들을 수집 시각 순으로 모은다 — 마지막 판본이 `merge` 가 고르는 것(같은 객체)이다."""
+    out: dict[tuple[str, str], list[dict]] = {}
+    for d in sorted(docs, key=lambda d: d["collected_at"]):
+        for p in d["proposals"]:
+            out.setdefault(_ref(p, d), []).append(p)
+    return out
+
+
 _TRENDING = Path(__file__).resolve().parents[2] / "data" / "curated_trending_refs.json"
 
 
@@ -224,35 +235,70 @@ def backend_sido_token(address: str | None) -> str | None:
     return tokens[0] if tokens else None
 
 
-def quarantine_unresolved_sido(proposals: list[dict], sido: set[str] | None = None) -> list[dict]:
-    """백엔드가 시도를 못 정할 제안을 뺀다. 뺀 것의 `{source, content_id, address}` 를 돌려준다.
+def _load_sido() -> set[str]:
+    return {n for _, n, _, lvl, _ in load_regions(_MIGRATION / "R__seed_region_catalog.sql") if lvl == "SIDO"}
+
+
+def _resolves(p: dict, sido: set[str]) -> bool:
+    return backend_sido_token((p.get("provenance") or {}).get("address")) in sido
+
+
+def _ref_dict(ref: tuple[str, str], p: dict) -> dict:
+    return {"source": ref[0], "content_id": ref[1], "address": (p.get("provenance") or {}).get("address")}
+
+
+def unresolved_sido(proposals: list[dict], sido: set[str] | None = None,
+                    history: dict[tuple[str, str], list[dict]] | None = None) -> list[dict]:
+    """백엔드가 시도를 못 정할 제안의 `{source, content_id, address}` — 빼지 않고 세기만 한다(`--state` 없는 병합)."""
+    sido = sido if sido is not None else _load_sido()
+    ref_of = {id(vs[-1]): r for r, vs in (history or {}).items()}
+    return [_ref_dict(ref_of.get(id(p)) or _ref(p, {}), p) for p in proposals if not _resolves(p, sido)]
+
+
+def quarantine_unresolved_sido(proposals: list[dict], sido: set[str] | None = None,
+                               history: dict[tuple[str, str], list[dict]] | None = None,
+                               ) -> tuple[list[dict], list[dict]]:
+    """백엔드가 시도를 못 정할 제안을 뺀다. `(격리, 직전 판본 복원)` 을 각각 `{source, content_id, address}` 로 돌려준다.
 
     공유본 봇 PR 은 체크 0 으로 즉시 머지돼(#1427: 6초) 백엔드 실문서 IT(`regionUnresolved == 0`)가 머지 **뒤**에야
     돈다 — #1352·#1427 이 그렇게 develop backend-ci 를 깼다. 그래서 병합이 같은 판정을 먼저 한다. 약칭 펴기
     (`expand_sido_abbrev`) **뒤**에 둬야 펼 수 있는 행을 살린다. 전부-아니면-전무로 막지 않는다 — 한두 행 때문에 그날
     수집분 전체를 버리지 않게 그 행만 빼고, 건수가 `MAX_QUARANTINED` 를 넘을 때만 `main` 이 실패시킨다.
+
+    **앞선 입력 문서에 게이트를 통과하는 판본이 있으면 빼지 않고 그 판본으로 되돌린다.** 벤더가 살아 있는 행을
+    깨진 주소로 다시 보내면 `merge` 가 좋은 판본을 덮는다 — 그 키를 통째로 빼면 공유본에서 POI 가 사라지고,
+    `--close-missing` 이 그 부재를 퇴출로 읽어 **살아 있는 POI 를 닫는다**(백엔드는 시도 없는 행도 받아 둔다 —
+    `PoiProposalIngestService`). `history`(`versions_by_ref`) 의 앞 판본은 호출자가 약칭을 펴 둔 것이어야 한다.
+    출처는 `merge` 와 같은 규칙(항목 source → 문서 source)으로 `history` 에서 읽는다 — 없으면 항목 source 만.
     """
-    sido = sido if sido is not None else {
-        n for _, n, _, lvl, _ in load_regions(_MIGRATION / "R__seed_region_catalog.sql") if lvl == "SIDO"}
+    sido = sido if sido is not None else _load_sido()
+    history = history or {}
+    ref_of = {id(vs[-1]): r for r, vs in history.items()}
     kept: list[dict] = []
     out: list[dict] = []
+    restored: list[dict] = []
     for p in proposals:
-        addr = (p.get("provenance") or {}).get("address")
-        if backend_sido_token(addr) in sido:
+        if _resolves(p, sido):
             kept.append(p)
-        else:
-            out.append({"source": p.get("source"), "content_id": p["provenance"]["content_id"], "address": addr})
+            continue
+        ref = ref_of.get(id(p)) or _ref(p, {})
+        prev = next((v for v in reversed(history.get(ref, [])[:-1]) if _resolves(v, sido)), None)
+        (restored if prev is not None else out).append(_ref_dict(ref, p))
+        if prev is not None:
+            kept.append(prev)
     proposals[:] = kept
-    return out
+    return out, restored
 
 
-def forget_quarantined(state_path: Path, quarantined: list[dict]) -> int:
-    """격리한 TourAPI 제안을 수집 상태의 기제안 색인(`proposed`)에서 지운다. 지운 건수를 돌려준다.
+def forget_quarantined(state_path: Path, refs: list[dict]) -> int:
+    """격리·복원한 TourAPI 제안을 수집 상태의 기제안 색인(`proposed`)에서 지운다. 지운 건수를 돌려준다.
 
-    색인에 남으면 다음 수집이 "변경 없음"으로 건너뛰어 그 행은 벤더가 고칠 때까지 다시 오지 않는다(영구 유실).
-    지우면 다음 실행이 다시 받아 오고, 그사이 펴는 규칙이 고쳐졌으면 그때 들어간다. 색인은 TourAPI 수집만 쓴다.
+    색인에 남으면 그 행은 벤더가 `modifiedtime` 을 바꿀 때까지 "변경 없음"으로 건너뛰어 다시 오지 않는다(영구 유실).
+    지워도 **다음 실행이 바로 다시 받지는 않는다** — 커서가 이미 그 페이지를 지났다(`pipeline.collect` 는
+    완주 전엔 `next_page` 부터 잇는다). 그 (지역, 타입)을 완주한 뒤 처음부터 다시 훑을 때 받고, 그사이 펴는 규칙이
+    고쳐졌으면 그때 들어간다. 색인은 TourAPI 수집만 쓴다.
     """
-    ids = {q["content_id"] for q in quarantined if str(q.get("source") or "").upper() == "TOURAPI"}
+    ids = {q["content_id"] for q in refs if str(q.get("source") or "").upper() == "TOURAPI"}
     doc = json.loads(state_path.read_text(encoding="utf-8"))
     proposed = doc.get("proposed") or {}
     gone = ids & proposed.keys()
@@ -393,7 +439,8 @@ def main(argv: list[str]) -> int:
                         help="출처가 다른 문서도 합친다. 소비자가 **항목별 source 로 갈라** 보내야 한다 — 문서 레벨 source 는 하나뿐이다")
     parser.add_argument("--max-quarantined", type=int, default=MAX_QUARANTINED,
                         help=f"시도 미판정 격리 상한 — 넘으면 아무것도 쓰지 않고 실패 (기본 {MAX_QUARANTINED})")
-    parser.add_argument("--state", help="수집 상태(collect_state.json) — 격리한 TourAPI 행을 기제안 색인에서 지운다")
+    parser.add_argument("--state", help="수집 상태(collect_state.json). **주면 시도 게이트가 켜진다** — 미판정 행을 격리하고 "
+                        "그 TourAPI 행을 기제안 색인에서 지운다. 안 주면 격리 없이 경고·stats 만 남긴다(구 워크플로 호환)")
     args = parser.parse_args(argv)
 
     if args.self_check:
@@ -401,16 +448,47 @@ def main(argv: list[str]) -> int:
         return 0
 
     docs = []
+    before: dict | None = None   # `-o` 가 입력 중 하나면 그게 덮어쓰기 전 공유본이다(축소 가드의 BEFORE)
     for f in args.files:
         try:
             docs.append(json.loads(Path(f).read_text(encoding="utf-8")))
         except (OSError, json.JSONDecodeError) as e:
             print(f"[merge] 파일 건너뜀 (읽기 실패): {f} — {e}", file=sys.stderr)
+            continue
+        if args.output and Path(f).resolve() == Path(args.output).resolve():
+            before = docs[-1]
     if not docs:
         print("[merge] 읽은 문서가 없습니다", file=sys.stderr)
         return 1
 
     out = merge(docs, allow_mixed=args.allow_mixed)
+    history = versions_by_ref(docs)
+    if (expanded := expand_sido_abbrev(out["proposals"])):
+        print(f"[merge] 주소 시도 약칭 → 정식 이름 — {expanded}건", file=sys.stderr)
+    # 머지 전 시도 게이트 — 아래 소급 제거들보다 **먼저** 둔다. 직전 판본으로 되돌린 행도 그 제거를 똑같이 거친다.
+    quarantined: list[dict] = []
+    restored: list[dict] = []
+    if args.state:
+        expand_sido_abbrev([v for vs in history.values() for v in vs[:-1]])   # 되돌릴 후보도 펴 둔다
+        quarantined, restored = quarantine_unresolved_sido(out["proposals"], history=history)
+        for q in quarantined[:5]:
+            print(f"[merge] 시도 미판정 격리 — {q}", file=sys.stderr)
+        for q in restored[:5]:
+            print(f"[merge] 시도 미판정 — 앞 판본으로 되돌림 — {q}", file=sys.stderr)
+        if len(quarantined) > args.max_quarantined:
+            print(f"[merge] FAIL 시도 미판정 {len(quarantined)}건 > 상한 {args.max_quarantined} — "
+                  "카탈로그나 주소 형식이 바뀌었는지 확인할 것 (아무것도 쓰지 않았다)", file=sys.stderr)
+            return 1
+        if quarantined or restored:
+            out["stats"]["unique_proposals"] = len(out["proposals"])
+            # 축소 가드가 이걸 사고로 오인하지 않게 남긴다(`non_travel_dropped` 와 같은 규약). 가드는 공유본(BEFORE)과
+            # 비교하므로 **공유본에 있던 키만** 따로 센다 — 그날 처음 온 행까지 더하면 가드가 그만큼 느슨해진다.
+            before_refs = set(versions_by_ref([before])) if before else set()
+            out["stats"]["sido_quarantined"] = len(quarantined)
+            out["stats"]["sido_quarantined_existing"] = sum(
+                (q["source"], q["content_id"]) in before_refs for q in quarantined)
+            out["stats"]["sido_quarantined_refs"] = quarantined
+            out["stats"]["sido_restored_previous_refs"] = restored
     recovered = reparse_open_hours(out["proposals"])
     if recovered:
         print(f"[merge] 영업시간 재파싱 — {recovered}건 살림 (원문은 있었는데 파싱이 비어 있던 것)",
@@ -439,20 +517,16 @@ def main(argv: list[str]) -> int:
         print(f"[merge] 폐업 제거 — {closed}건", file=sys.stderr)
         out["stats"]["unique_proposals"] = len(out["proposals"])
         out["stats"]["closed_dropped"] = closed
-    if (expanded := expand_sido_abbrev(out["proposals"])):
-        print(f"[merge] 주소 시도 약칭 → 정식 이름 — {expanded}건", file=sys.stderr)
-    # 머지 전 게이트 — 백엔드가 시도를 못 정하는 행은 격리. 상한을 넘으면 공유본·상태 둘 다 손대지 않는다.
-    if (quarantined := quarantine_unresolved_sido(out["proposals"])):
-        for q in quarantined[:5]:
-            print(f"[merge] 시도 미판정 격리 — {q}", file=sys.stderr)
-        if len(quarantined) > args.max_quarantined:
-            print(f"[merge] FAIL 시도 미판정 {len(quarantined)}건 > 상한 {args.max_quarantined} — "
-                  "카탈로그나 주소 형식이 바뀌었는지 확인할 것 (아무것도 쓰지 않았다)", file=sys.stderr)
-            return 1
-        out["stats"]["unique_proposals"] = len(out["proposals"])
-        # 축소 가드가 이걸 사고로 오인하지 않게 남긴다(`non_travel_dropped` 와 같은 규약) — 무엇을 뺐는지도 함께.
-        out["stats"]["sido_quarantined"] = len(quarantined)
-        out["stats"]["sido_quarantined_refs"] = quarantined
+    if not args.state and (unresolved := unresolved_sido(out["proposals"], history=history)):
+        # 시도 게이트 꺼짐(`--state` 없음) — 소급 제거 **뒤**에 세어 어차피 빠질 행은 경고에서 뺀다.
+        # `--state` 없는 병합(main 의 구 워크플로 사본 포함)은 상태를 **병합 전에** 영속한다 — 여기서 빼면 그 행은
+        # 기제안 색인에 찍힌 채 공유본에도 없어 영구 유실이다. 그래서 종전대로 합치고, 크게 알리기만 한다.
+        for q in unresolved[:20]:
+            print(f"::warning::[merge] 시도 미판정(격리 안 함 — --state 없음) {q}", file=sys.stderr)
+        print(f"::warning::[merge] 백엔드가 시도를 못 정하는 행 {len(unresolved)}건을 그대로 합쳤다 — "
+              "backend-ci 실문서 IT(regionUnresolved == 0)가 깨질 수 있다", file=sys.stderr)
+        out["stats"]["sido_unresolved"] = len(unresolved)
+        out["stats"]["sido_unresolved_refs"] = unresolved
     if (trending := mark_trending(out["proposals"])):
         print(f"[merge] 요즘 인기 표지 — 기존 행 {trending}건", file=sys.stderr)
     text = dumps_doc(out)
@@ -460,9 +534,10 @@ def main(argv: list[str]) -> int:
         Path(args.output).write_text(text, encoding="utf-8")
     else:
         print(text)
-    if quarantined and args.state:
-        forgot = forget_quarantined(Path(args.state), quarantined)
-        print(f"[merge] 격리분 기제안 색인에서 지움 — {forgot}건 (다음 수집이 다시 받는다)", file=sys.stderr)
+    if quarantined or restored:
+        forgot = forget_quarantined(Path(args.state), quarantined + restored)
+        print(f"[merge] 격리·복원분 기제안 색인에서 지움 — {forgot}건 "
+              "(그 (지역, 타입)을 완주한 뒤 다시 훑을 때 다시 받는다)", file=sys.stderr)
     print(f"[merge] 실행 {len(docs)}개 → 제안 {sum(len(d['proposals']) for d in docs)}건(중복포함)"
           f" → 유니크 {out['stats']['unique_proposals']}건"
           + (f" → {args.output}" if args.output else ""), file=sys.stderr)

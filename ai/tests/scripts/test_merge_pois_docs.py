@@ -556,23 +556,34 @@ def test_공유본은_한_행에_한_줄이고_되읽으면_같다() -> None:
 
 # ── 머지 전 게이트 — 백엔드가 시도를 못 정하는 행은 격리 (TRIP-1475) ──────
 def test_시도_토큰은_백엔드_RegionResolver_와_같이_자른다() -> None:
+    """운영 규칙(`backend_sido_token`)을 고정한다 — 경계마다 JDK 25 jshell 로 본 Kotlin 결과와 같다."""
     assert M.backend_sido_token(None) is None
     assert M.backend_sido_token("") is None                                    # 백엔드: 미판정
-    assert M.backend_sido_token(" 　 ") is None                            # 전각 공백만 — Kotlin trim 이 다 자른다
+    assert M.backend_sido_token("   ") is None                                 # 공백뿐 — 미판정
+    assert M.backend_sido_token("\t\n") is None
+    assert M.backend_sido_token(" \u3000 ") is None                           # 전각 공백만 — Kotlin trim 이 다 자른다
     assert M.backend_sido_token(" 부산광역시  사하구") == "부산광역시"
-    assert M.backend_sido_token("부산광역시　사하구") == "부산광역시　사하구"  # `\s` 는 ASCII 만 나눈다 — 한 토큰
-    assert M.backend_sido_token("부산광역시 사하구") == "부산광역시 사하구"
+    assert M.backend_sido_token("부산광역시\t사하구") == "부산광역시"              # 탭은 Java `\s` — 나눈다
+    assert M.backend_sido_token("부산광역시\u3000사하구") == "부산광역시\u3000사하구"  # `\s` 는 ASCII 만 나눈다 — 한 토큰
+    assert M.backend_sido_token("부산광역시\xa0사하구") == "부산광역시\xa0사하구"      # NBSP 도 한 토큰
+    assert M.backend_sido_token("\xa0부산광역시 사하구") == "부산광역시"            # 앞 NBSP 는 Kotlin trim 이 자른다
     assert M.backend_sido_token("\x85부산광역시 사하구") == "\x85부산광역시"        # Kotlin trim 은 NEL 을 안 자른다
+    assert M.backend_sido_token("\x85") == "\x85"                                 # NEL 하나 — 백엔드도 빈 값이 아니다
 
 
 def _gate_run(tmp_path: Path, addresses: dict[str, str | None], *extra: str,
-              state: dict | None = None) -> tuple[int, Path, Path]:
+              state: dict | None = None, earlier: dict | None = None) -> tuple[int, Path, Path]:
+    """`state` 를 주면 `--state` 로 게이트를 켠다. `earlier` 는 출력 경로에 미리 둔 공유본(= BEFORE)이다."""
     doc = _keyed_doc("TOURAPI", *addresses)
     for p in doc["proposals"]:
         p["provenance"]["address"] = addresses[p["provenance"]["content_id"]]
     src, out, st_path = tmp_path / "in.json", tmp_path / "out.json", tmp_path / "state.json"
     src.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
-    args = ["-o", str(out), *extra, str(src)]
+    inputs = [str(src)]
+    if earlier is not None:
+        out.write_text(json.dumps(earlier, ensure_ascii=False), encoding="utf-8")
+        inputs = [str(out), str(src)]
+    args = ["-o", str(out), *extra, *inputs]
     if state is not None:
         st_path.write_text(json.dumps(state), encoding="utf-8")
         args = ["--state", str(st_path), *args]
@@ -585,20 +596,51 @@ _GATE_ADDRESSES = {
     "cut": "제주특별 서귀포시 색달동",      # 두 글자 잘림 — 약칭 표로 못 편다
     "empty": "",
     "none": None,
-    "nbsp": "부산광역시 사하구",        # 백엔드는 한 토큰으로 본다
+    "nbsp": "부산광역시\xa0사하구",        # 백엔드는 한 토큰으로 본다
 }
 
 
+def _ids(out: Path) -> list[str]:
+    return [p["provenance"]["content_id"] for p in json.loads(out.read_text(encoding="utf-8"))["proposals"]]
+
+
 def test_시도를_못_정하는_행은_격리하고_나머지는_병합한다(tmp_path: Path) -> None:
-    rc, out, _ = _gate_run(tmp_path, _GATE_ADDRESSES)
+    rc, out, _ = _gate_run(tmp_path, _GATE_ADDRESSES, state={"proposed": {}})
     assert rc == 0
     doc = json.loads(out.read_text(encoding="utf-8"))
-    assert [p["provenance"]["content_id"] for p in doc["proposals"]] == ["ok", "abbr"]
+    assert _ids(out) == ["ok", "abbr"]
     assert doc["stats"]["unique_proposals"] == 2
     assert doc["stats"]["sido_quarantined"] == 4
+    assert doc["stats"]["sido_quarantined_existing"] == 0    # 공유본(BEFORE)에 없던 행 — 축소 가드에 안 더한다
     assert [q["content_id"] for q in doc["stats"]["sido_quarantined_refs"]] == ["cut", "empty", "none", "nbsp"]
     assert doc["stats"]["sido_quarantined_refs"][0] == {
         "source": "TOURAPI", "content_id": "cut", "address": "제주특별 서귀포시 색달동"}
+
+
+def test_state_없이는_격리하지_않고_합친_채_경고와_stats_만_남긴다(tmp_path: Path, capsys) -> None:
+    """main 의 구 워크플로 사본은 `--state` 없이 부르고, 상태를 병합 **전에** 영속한다 — 거기서 빼면 영구 유실이다."""
+    rc, out, _ = _gate_run(tmp_path, _GATE_ADDRESSES)
+    assert rc == 0
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    assert _ids(out) == list(_GATE_ADDRESSES)
+    assert "sido_quarantined" not in doc["stats"]
+    assert doc["stats"]["sido_unresolved"] == 4
+    assert [q["content_id"] for q in doc["stats"]["sido_unresolved_refs"]] == ["cut", "empty", "none", "nbsp"]
+    err = capsys.readouterr().err
+    assert err.count("::warning::") == 5 and "'cut'" in err
+
+
+def test_state_없이는_상한을_넘어도_실패하지_않는다(tmp_path: Path) -> None:
+    rc, out, _ = _gate_run(tmp_path, _GATE_ADDRESSES, "--max-quarantined", "0")
+    assert rc == 0 and len(_ids(out)) == 6
+
+
+def test_격리가_상한과_같으면_통과하고_하나_넘으면_실패한다(tmp_path: Path) -> None:
+    rc, out, _ = _gate_run(tmp_path, _GATE_ADDRESSES, "--max-quarantined", "4", state={"proposed": {}})
+    assert rc == 0 and _ids(out) == ["ok", "abbr"]
+    out.unlink()
+    rc, out, _ = _gate_run(tmp_path, _GATE_ADDRESSES, "--max-quarantined", "3", state={"proposed": {}})
+    assert rc == 1
 
 
 def test_격리가_임계를_넘으면_실패하고_공유본도_상태도_건드리지_않는다(tmp_path: Path) -> None:
@@ -609,12 +651,59 @@ def test_격리가_임계를_넘으면_실패하고_공유본도_상태도_건�
     assert json.loads(st_path.read_text(encoding="utf-8")) == state
 
 
-def test_격리한_TourAPI_행은_기제안_색인에서_빠져_다음_수집이_다시_가져온다(tmp_path: Path) -> None:
+def test_격리한_TourAPI_행은_기제안_색인에서_빠진다(tmp_path: Path) -> None:
     state = {"cursors": {}, "proposed": {"cut": "20261001", "ok": "20261001", "none": "20261002"}}
     rc, _, st_path = _gate_run(tmp_path, _GATE_ADDRESSES, state=state)
     assert rc == 0
     after = json.loads(st_path.read_text(encoding="utf-8"))
     assert after == {"cursors": {}, "proposed": {"ok": "20261001"}}
+
+
+def test_살아_있는_행이_깨진_주소로_다시_오면_앞_판본을_지킨다(tmp_path: Path) -> None:
+    """키를 통째로 빼면 공유본에서 POI 가 사라져 `--close-missing` 이 살아 있는 POI 를 닫는다."""
+    earlier = _keyed_doc("TOURAPI", "cut", "gone", at="2026-10-01T00:00:00+00:00")
+    earlier["proposals"][0]["poi"]["name"] = "옛 판본"
+    earlier["proposals"][0]["provenance"]["address"] = "제주 서귀포시 색달동"    # 앞 판본은 약칭 — 펴서 통과
+    earlier["proposals"][1]["provenance"]["address"] = "제주특별 서귀포시"       # 앞 판본도 깨졌으면 격리
+    state = {"proposed": {"cut": "20261015", "gone": "20261015"}}
+    rc, out, st_path = _gate_run(tmp_path, {"cut": "제주특별 서귀포시 색달동", "gone": "제주특별 서귀포시"},
+                                 state=state, earlier=earlier)
+    assert rc == 0
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    kept = {p["provenance"]["content_id"]: p for p in doc["proposals"]}
+    assert set(kept) == {"cut"}
+    assert kept["cut"]["poi"]["name"] == "옛 판본"
+    assert kept["cut"]["provenance"]["address"] == "제주특별자치도 서귀포시 색달동"
+    assert [q["content_id"] for q in doc["stats"]["sido_restored_previous_refs"]] == ["cut"]
+    assert [q["content_id"] for q in doc["stats"]["sido_quarantined_refs"]] == ["gone"]
+    # 공유본(BEFORE)에 있던 키만 축소 가드 몫이다 — `gone` 은 있었고, 오늘 처음 온 행은 없다
+    assert doc["stats"]["sido_quarantined_existing"] == 1
+    assert json.loads(st_path.read_text(encoding="utf-8"))["proposed"] == {}
+
+
+def test_되돌린_앞_판본도_소급_제거를_똑같이_거친다(tmp_path: Path) -> None:
+    """게이트가 소급 제거보다 먼저 도는 이유 — 되돌린 판본이 관광 무관 규칙을 비켜 가면 안 된다."""
+    earlier = _keyed_doc("TOURAPI", "store", at="2026-10-01T00:00:00+00:00")
+    earlier["proposals"][0]["poi"]["name"] = "이마트24 강릉여고점"
+    rc, out, _ = _gate_run(tmp_path, {"store": "제주특별 서귀포시"}, state={"proposed": {}}, earlier=earlier)
+    assert rc == 0
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    assert doc["proposals"] == []
+    assert doc["stats"]["non_travel_dropped"] == 1
+
+
+def test_항목_source_가_없으면_문서_source_로_색인을_지운다(tmp_path: Path) -> None:
+    """`merge` 는 항목 source 가 없으면 문서 source 를 쓴다 — 게이트·색인 지우기도 같은 규칙이어야 한다."""
+    doc = _keyed_doc("TOURAPI", "cut")
+    del doc["proposals"][0]["source"]
+    doc["proposals"][0]["provenance"]["address"] = "제주특별 서귀포시"
+    src, out, st = tmp_path / "in.json", tmp_path / "out.json", tmp_path / "state.json"
+    src.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    st.write_text(json.dumps({"proposed": {"cut": "1"}}), encoding="utf-8")
+    assert M.main(["--state", str(st), "-o", str(out), str(src)]) == 0
+    stats = json.loads(out.read_text(encoding="utf-8"))["stats"]
+    assert stats["sido_quarantined_refs"][0]["source"] == "TOURAPI"
+    assert json.loads(st.read_text(encoding="utf-8"))["proposed"] == {}
 
 
 def test_색인에서는_TourAPI_격리분만_지운다(tmp_path: Path) -> None:
