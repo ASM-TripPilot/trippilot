@@ -59,6 +59,7 @@ from trippilot.agents.schedule.outcome import (
 )
 from trippilot.assembly_engine.config import ACTIVE_WALK_MAX_KM, AssemblyConfig
 from trippilot.assembly_engine.constraints import open_hours_ok
+from trippilot.assembly_engine.day_focus import pick_day_focus
 from trippilot.assembly_engine.facade import AssemblyConflictError
 from trippilot.assembly_engine.fallback_assembler import explain_unplaced
 from trippilot.assembly_engine.scorer import (
@@ -202,6 +203,8 @@ class GenerateItineraryRequest:
     ignore_anchor_distance: bool = False
     # 늦은 시각의 하루는 취향으로 고른다(생성 — `late_night_candidates`). 재계획은 지시가 정하므로 끈다.
     late_night_by_taste: bool = False
+    # 여러 날을 날마다 다른 동네로(생성 — `day_focus`). 재계획은 하루라 의미가 없다.
+    spread_days: bool = False
     # 거절 이력 (TRIP-964) — 백엔드가 여행 단위로 누적해 싣는다. `pace`·지시와 같은 길이다
     # (Provider 수집물이 아니라 요청에 실려 오는 값). generate·replan 양쪽에 실린다 —
     # 다시 짜는 경로가 replan 이고, 처음부터 다시 만드는 경로가 generate 이기 때문이다.
@@ -589,6 +592,12 @@ class ScheduleAgent:
             self._observe(trace_id, now, "taste", "late_night", "late_night",
                           f"late_night_by_taste:{len(candidates)}")
 
+        # ③″ 날마다 다른 동네(생성) — 점수가 다 정해진 뒤라야 취향이 실린 서열로 고른다. 지터 전 원점수다.
+        day_focus = pick_day_focus(candidates, index, request.days) if request.spread_days else {}
+        if day_focus:
+            self._observe(trace_id, now, "area", "day_focus", "day_focus", "day_focus:" + ",".join(
+                f"{d:%m-%d}={c.lat:.4f}/{c.lng:.4f}" for d, c in day_focus.items()))
+
         # ③ ItineraryProblem 조립 — 후보는 풀에서 나온 것만 (INV-1).
         #    날씨(TRIP-383)·행사 보너스(TRIP-421)는 오케스트레이터가 패킷을 소화해
         #    넘긴 값 — 어셈블리 소프트 항으로만 들어간다 (None = 무보정).
@@ -621,6 +630,7 @@ class ScheduleAgent:
             required_in_order=request.required_in_order,
             ignore_anchor_distance=request.ignore_anchor_distance,
             holidays=request.holidays,
+            day_focus=day_focus or None,
         )
 
         # ④ 어셈블리 solve — 잔여 **전부**를 받는다 (고정 슬라이스 아님, TRIP-376).

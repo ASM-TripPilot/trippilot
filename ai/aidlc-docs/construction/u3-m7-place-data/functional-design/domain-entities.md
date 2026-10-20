@@ -10,7 +10,7 @@
 | 추가 필드 | 타입 | 용도 |
 |---|---|---|
 | `anchor` | `GeoPoint \| None` | 풀 생성 기준점 (재현·디버깅·반경 검증) |
-| `radius_km` | `float \| None` | 적용된 반경 (다일 ×0.7 반영 후 값) |
+| `radius_km` | `float \| None` | 적용된 반경 (다일 배율 반영 후 값) |
 
 기존 post-init(INV-1: poi_ids == pois의 id 집합)은 그대로.
 
@@ -32,7 +32,7 @@
 
 ## 4. M7 설정 (m7 계층 내 — domain 아님)
 
-`M7Config`: `radius_km {WALK:2, PUBLIC:10, CAR:20}` · `multi_day_factor 0.7` · `budget_limit {LOW:15_000, MID:40_000, HIGH:None}` · `max_candidates 5_000(G142)` · `ttl {poi:24h, hours:6h, price:금지}` · `match_auto 0.85 / match_confirm 0.60` — 전부 remote config 초기값, 주입 컨테이너 (AssemblyConfig 패턴).
+`M7Config`: `radius_km {WALK:2, PUBLIC:10, CAR:20}` · `multi_day_factor 1.0`(2026-10-20, 종전 0.7) · `budget_limit {LOW:15_000, MID:40_000, HIGH:None}` · `max_candidates 5_000(G142)` · `ttl {poi:24h, hours:6h, price:금지}` · `match_auto 0.85 / match_confirm 0.60` — 전부 remote config 초기값, 주입 컨테이너 (AssemblyConfig 패턴).
 
 ## 5. U1 타입 활용 확인
 
