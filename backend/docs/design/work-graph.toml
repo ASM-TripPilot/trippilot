@@ -4438,7 +4438,7 @@ id = "COV-GATE"
 ticket = "TRIP-1465"
 title = "[Infra] JaCoCo 커버리지 합산 + 전체 하한·모듈 바닥 게이트"
 status = "todo"
-touches = ["backend/build.gradle.kts", "backend/app/build.gradle.kts", "backend/scripts", ".github/workflows/backend-ci.yml"]
+touches = ["backend/build.gradle.kts", "backend/app/build.gradle.kts", "backend/gradle/libs.versions.toml", "backend/scripts/coverage_gate.py", ".github/workflows/backend-ci.yml"]
 note = """
 PR #1428 — 리뷰 대기. 기준선 라인 95.4 · 분기 84.8, 하한 94/83, 모듈 바닥 70/40.
 """
@@ -4448,7 +4448,7 @@ id = "FIELD-GATE"
 ticket = "TRIP-1466"
 title = "[Infra] OpenAPI 필드 계약 게이트 + 계약 불일치 정정 · deviceId 로그인 500"
 status = "todo"
-touches = ["backend/docs/design/openapi.yaml", "backend/app/src/test/kotlin/com/trippilot/app/web", "backend/modules/auth"]
+touches = ["backend/docs/design/openapi.yaml", "backend/app/src/test/kotlin/com/trippilot/app/web", "backend/modules/auth", "docs/conventions/anti-patterns.md"]
 note = """
 PR #1429 — 리뷰 대기.
 """
@@ -4457,10 +4457,11 @@ PR #1429 — 리뷰 대기.
 id = "POI-REGION-PREFIX"
 ticket = "TRIP-1471"
 title = "[Bug] 잘린 시도명 판정 — #1427 수집본으로 develop CI 가 깨진 것"
-status = "todo"
-touches = ["backend/modules/place-data"]
+status = "done"
+touches = ["ai/src/trippilot/poi_curation/sourcing/overture_address.py", "ai/tests/scripts/test_merge_pois_docs.py", "ai/data/collected_pois.json"]
 note = """
-develop 이 이것 때문에 빨갛다 — 열린 PR 전부의 CI 가 이 노드에 막힌다. 머지 1순위.
+PR #1431 머지(2026-10-20). 백엔드 판정은 그대로 두고 AI 병합 단계의 약칭 표에서 편다 — backend diff 0.
+수집 PR 앞 게이트는 TRIP-1475 로 뺐다.
 """
 
 [[nodes]]
@@ -4473,23 +4474,35 @@ touches = ["backend/docs/design/openapi.yaml", "backend/app", "backend/modules/t
 [[nodes]]
 id = "LOOP-AIRFLOW"
 ticket = "TRIP-1468"
-title = "[Infra] Airflow 수집 파이프라인(로컬) — 수집→검증→게시→신선도"
+title = "[Infra] Airflow 수집 파이프라인(로컬) — 사본→검증→게시"
 status = "todo"
-touches = ["batch", "docker-compose.yml"]
+touches = ["batch", "docker-compose.yml", ".github/workflows/batch-ci.yml", "docs/conventions/anti-patterns.md"]
+note = """
+PR #1432. 실 수집 모드는 넣지 않았다(키 없이 시험 못 함). 신선도는 event_collect 의 "그날 유효 건수" 검사로 합쳤다.
+"""
 
 [[nodes]]
 id = "LOOP-KAFKA"
 ticket = "TRIP-1469"
 title = "[BE] 아웃박스 배달 경로 Kafka 선택지(로컬) — 폴링 대비 지연 측정"
 status = "todo"
-touches = ["docker-compose.yml", "backend/app/src/main/kotlin/com/trippilot/app/event", "backend/gradle/libs.versions.toml", "backend/app/build.gradle.kts"]
+touches = ["docker-compose.yml", ".env.example", "backend/app/src/main/kotlin/com/trippilot/app/event", "backend/app/src/main/resources/application.yml", "backend/gradle/libs.versions.toml", "backend/app/build.gradle.kts"]
 
 [[nodes]]
 id = "LOOP-COVERAGE"
 ticket = "TRIP-1470"
-title = "[BE] 분기 커버리지 보강(change-log·reflection·notification) + PIT"
+title = "[BE] 분기 커버리지 보강(change-log·reflection·notification)"
 status = "todo"
-touches = ["backend/modules/change-log/src/test", "backend/modules/reflection/src/test", "backend/modules/notification/src/test", "backend/scripts/coverage_gate.py"]
+touches = ["backend/modules/change-log/src/test", "backend/modules/reflection/src/test", "backend/modules/notification/src/test"]
+note = """
+PR #1433 — 테스트 파일만. PIT 는 리포에 넣지 않고 로컬에서만 쟀다(전후 수치는 회고).
+"""
+
+[[nodes]]
+id = "COV-RATCHET"
+title = "[Infra] 커버리지 하한 래칫 — 분기 83 → 86"
+status = "todo"
+touches = ["backend/scripts/coverage_gate.py"]
 
 [[edges]]
 from = "FIELD-GATE"
@@ -4500,7 +4513,14 @@ reason = "BFF 의 새 경로·응답 스키마를 필드 계약 게이트가 지
 
 [[edges]]
 from = "COV-GATE"
-to = "LOOP-COVERAGE"
+to = "COV-RATCHET"
 kind = "판정선행"
-verified = false
-reason = "보강의 before 수치와 래칫 상향 대상(TOTAL_FLOORS)이 COV-GATE 에서 생긴다."
+verified = true
+reason = "올릴 하한(TOTAL_FLOORS)이 coverage_gate.py 에 있다 — #1428 없이는 고칠 파일이 없다."
+
+[[edges]]
+from = "LOOP-COVERAGE"
+to = "COV-RATCHET"
+kind = "판정선행"
+verified = true
+reason = "분기 86 은 보강 테스트가 있어야 넘는다 — 7개 PR 을 합친 트리 87.0, 보강 없는 develop 84.8(실측)."
