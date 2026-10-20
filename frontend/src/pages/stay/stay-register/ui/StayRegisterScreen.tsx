@@ -351,7 +351,7 @@ function CandidateList({
       {candidates.length >= 2 ? (
         <View testID="stay-register-candidate-hint">
           <Text className="font-noto text-label text-muted">
-            여러 숙소가 검색됐어요. 정확한 곳을 선택하세요
+            여러 숙소가 검색됐어요. 정확한 곳을 선택해 주세요
           </Text>
         </View>
       ) : null}

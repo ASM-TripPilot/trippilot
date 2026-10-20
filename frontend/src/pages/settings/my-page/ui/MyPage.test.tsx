@@ -256,7 +256,7 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
   });
 
   describe('🔴 AC-2 · 여행 0건이어도 CTA·빈 문구가 없고 지난 여행 안내는 남는다', () => {
-    it('여행 0건 → CTA·"예정된 여행이 없어요" 없음, "지난 여행" + "아직 종료된 여행이 없습니다"는 있다', async () => {
+    it('여행 0건 → CTA·"예정된 여행이 없어요" 없음, "지난 여행" + "아직 종료된 여행이 없어요"는 있다', async () => {
       script([], {});
 
       renderPage();
@@ -265,7 +265,7 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
       expect(screen.queryByTestId('my-create-trip')).toBeNull();
       expect(screen.queryAllByText(/예정된 여행이 없어요/)).toHaveLength(0);
       expect(screen.getByText('지난 여행')).toBeOnTheScreen();
-      expect(screen.getByText('아직 종료된 여행이 없습니다')).toBeOnTheScreen();
+      expect(screen.getByText('아직 종료된 여행이 없어요')).toBeOnTheScreen();
       expect(values()).toEqual(['0', '0', '0']);
     });
   });
@@ -1042,7 +1042,7 @@ describe('Figma 배선 결과 (옛 .l03parity)', () => {
       // 단언 ②(금지 — BR-U5-40): 스타일 카드는 '정식 아님' 얼굴 그대로 — 안내 한 줄, 칩·게이지 없음.
       const card = screen.getByTestId('my-style-card');
       expect(
-        within(card).getByText('10곳 이상 쌓이면 분석을 제공합니다(현재 5곳)')
+        within(card).getByText('10곳 이상 쌓이면 분석을 제공해요 (현재 5곳)')
       ).toBeOnTheScreen();
       expect(within(card).queryAllByTestId('my-style-chip')).toHaveLength(0);
       expect(within(card).queryAllByTestId('my-style-gauge')).toHaveLength(0);

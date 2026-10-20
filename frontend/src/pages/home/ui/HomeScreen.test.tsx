@@ -589,7 +589,7 @@ const POST_TRIP_PHASE: HomePhase = {
 };
 
 // TRIP-697 — '여행 중' 얼굴(통합 히어로의 planning 변형). 계획 중(PLANNING_PHASE)과 kind 는
-// 같은 'planning' 이고 아래만 다르다: 배지 "여행 중"+"· 1 일차", 인사 이름줄 greetName("태현님,")
+// 같은 'planning' 이고 아래만 다르다: 배지 "여행 중"+"· 1일차", 인사 이름줄 greetName("태현님,")
 // + 타이틀("부산 여행 1일차예요")·서브 없음, CTA "오늘 일정 보기 ›", showSpots=true(2섹션),
 // collectionsTitle 없음(→ 기본 "요즘 사람들이 담는 곳"). 픽스처 HOME_TRAVELING_PROPS 를 이 파일에
 // import 하지 않고 로컬 리터럴로 두는 이유: 그 픽스처는 implementer 산출물이라 아직 없고(미존재
@@ -604,7 +604,7 @@ const TRAVELING_PHASE: HomePhase = {
   // greetSubtitle 없음(여행 중 인사는 2줄이지만 이름+타이틀, 서브카피 없음) · collectionsTitle 없음(기본)
   trip: {
     badge: '여행 중',
-    badgeSub: '· 1 일차', // 두 톤 배지 보조 — N일차(공백 O). 여행 첫날 = 1일차
+    badgeSub: '· 1일차', // 두 톤 배지 보조 — N일차(붙임). 여행 첫날 = 1일차
     ctaLabel: '오늘 일정 보기 ›', // 꺾쇠(›) 포함 문자열
     title: '부산 여행',
     meta: '6월 10일 – 6월 13일 · 3박 4일 · 2명',
@@ -970,7 +970,7 @@ describe('🔴 HomeScreen — 검색바 배선 (AC-1a · entry 1 화면측)', ()
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TRIP-697 — '여행 중' 얼굴(TRIP-696 통합 히어로의 planning 변형). 무엇을 보장하나:
-// (1) 배지가 두 톤으로 "여행 중"+"· 1 일차", CTA 가 꺾쇠 포함 "오늘 일정 보기 ›"(AC-697-1),
+// (1) 배지가 두 톤으로 "여행 중"+"· 1일차", CTA 가 꺾쇠 포함 "오늘 일정 보기 ›"(AC-697-1),
 // (2) 인사가 이름줄 "태현님,"(greetName) + 타이틀 "부산 여행 1일차예요" 2줄이고(AC-697-3),
 // (3) 본문이 2섹션(컬렉션 + 지금 뜨는 장소)이며 "여행자 일정"은 없고(AC-697-4), (4) 어디에도
 // 소요시간 문자열이 없다(AC-697-6·INV-3).
@@ -987,14 +987,14 @@ describe('🔴 HomeScreen — 검색바 배선 (AC-1a · entry 1 화면측)', ()
 // 시각(이름 13.5 muted·타이틀 20 bold·배지 테두리·도트 정렬)은 jest 원리적 사각 → 6-b.
 
 describe('🔴 HomeScreen — 여행 중 배지·CTA·인사 2줄 (TRIP-697 AC-697-1·3)', () => {
-  it('배지 "여행 중"+"· 1 일차"·CTA "오늘 일정 보기 ›"·인사 "태현님,"+"부산 여행 1일차예요"를 그린다', () => {
+  it('배지 "여행 중"+"· 1일차"·CTA "오늘 일정 보기 ›"·인사 "태현님,"+"부산 여행 1일차예요"를 그린다', () => {
     render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={TRAVELING_PHASE} />);
 
-    // 두 톤 배지 — 같은 배지 안 "여행 중"(primary)·"· 1 일차"(ink) 두 host <Text> 리프. within
+    // 두 톤 배지 — 같은 배지 안 "여행 중"(primary)·"· 1일차"(ink) 두 host <Text> 리프. within
     // 으로 좁혀 getByText 완전일치(02a §5-c)로 각각 잡히면 "두 톤(분리 Text)" 구조가 잠긴다.
     const badge = screen.getByTestId('home-trip-hero-badge');
     expect(within(badge).getByText('여행 중')).toBeOnTheScreen();
-    expect(within(badge).getByText('· 1 일차')).toBeOnTheScreen();
+    expect(within(badge).getByText('· 1일차')).toBeOnTheScreen();
 
     // 꺾쇠 CTA — toHaveTextContent(문자열)은 요소 전체 텍스트 완전일치(02a §5-c(a))라 꺾쇠(›)를
     // 뺀 뮤턴트를 red 로 잡는다. 픽스처 ctaLabel 이 이미 꺾쇠 포함이라 이 단언은 선제 green.
@@ -1028,7 +1028,7 @@ describe('🔴 HomeScreen — 여행 중 본문 2섹션 + INV-3 (TRIP-697 AC-697
     expect(screen.queryByTestId('home-itineraries-more')).toBeNull();
 
     // INV-3 — 여행 중 얼굴 어디에도 소요시간 문자열 없음(선제 green 회귀 앵커, DURATION_RENDER 0매치
-    // 실검증 완료). '· 1 일차'·'1일차예요'의 '일차'는 duration 키워드 아님(02a §5-c 조합 확인).
+    // 실검증 완료). '· 1일차'·'1일차예요'의 '일차'는 duration 키워드 아님(02a §5-c 조합 확인).
     expect(screen.queryAllByText(DURATION_RENDER)).toHaveLength(0);
   });
 });

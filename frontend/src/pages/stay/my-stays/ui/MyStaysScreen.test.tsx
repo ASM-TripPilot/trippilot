@@ -265,7 +265,7 @@ describe('행·거점 변경·empty (옛 본 파일)', () => {
 // 옛 MyStaysScreen.l04parity — TRIP-777. 생김새 단언(모서리·색·간격·SVG)은 README 판정 4 로 지웠고
 // 문구·조건부 표시 단언만 남겼다(TRIP-1367).
 describe('Figma l04 정합 (옛 .l04parity)', () => {
-  const EMPTY_DESCRIPTION = '숙소를 탐색하고 등록하면\n일정을 만들 수 있습니다';
+  const EMPTY_DESCRIPTION = '숙소를 탐색하고 등록하면\n일정을 만들 수 있어요';
 
   function assignedRow(over: Partial<MyStayRowVM> = {}): MyStayRowVM {
     return {

@@ -342,7 +342,7 @@ export function RecordsCalendarScreen({
           <StateNotice
             testID="record-calendar-empty"
             icon={<CalendarGlyph size={32} />}
-            title="아직 기록된 여행이 없습니다"
+            title="아직 기록된 여행이 없어요"
             description="여행을 만들고 다녀오면 이곳에서 사진과 메모로 돌아볼 수 있어요"
             actions={[
               {
@@ -399,7 +399,7 @@ export function RecordsCalendarScreen({
             지난 여행
           </Text>
           <Text className="font-noto text-label text-muted">
-            {pastTrips.length}개
+            {pastTrips.length}건
           </Text>
         </View>
 

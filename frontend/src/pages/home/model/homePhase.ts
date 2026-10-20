@@ -217,9 +217,9 @@ export function resolveHomePhase(
     trip: {
       // 오늘이 [startDate, endDate] 안이면 '여행 중', 아니면 '계획 중'(TRIP-472, 날짜 기반).
       badge: traveling ? '여행 중' : '계획 중',
-      // TRIP-697 — 여행 중 "· N 일차"(N 앞·뒤 공백 O), 계획 중 "· D-n"(구 우상단 대형 D-day 흡수,
+      // TRIP-697 — 여행 중 "· N 일차"(N·일차 붙임), 계획 중 "· D-n"(구 우상단 대형 D-day 흡수,
       // TRIP-696). badge 와 한 소스(같은 날짜 산술)라 "여행 중"+"· D-n" 모순이 안 나온다.
-      badgeSub: traveling ? `· ${dayNumber} 일차` : `· ${dday}`,
+      badgeSub: traveling ? `· ${dayNumber}일차` : `· ${dday}`,
       ctaLabel: ctaLabelForStatus(dominant.status),
       title: dominant.title,
       meta: formatTripMeta(dominant),

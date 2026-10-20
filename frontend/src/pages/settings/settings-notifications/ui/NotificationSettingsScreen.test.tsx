@@ -68,11 +68,10 @@ describe('행·토글 (옛 .test)', () => {
     return props;
   }
 
-  const TOP_COPY = '변경한 알림 설정은 다음 알림부터 바로 반영됩니다';
-  const BOTTOM_COPY =
-    '모든 알림을 꺼도 보안·계정 관련 알림은 알림함에 표시됩니다';
+  const TOP_COPY = '변경한 알림 설정은 다음 알림부터 바로 반영돼요';
+  const BOTTOM_COPY = '모든 알림을 꺼도 보안·계정 관련 알림은 알림함에 보여요';
   const DENIED_TOP_COPY = '기기 설정에서 알림 권한을 허용하세요';
-  const DENIED_BOTTOM_COPY = '푸시를 꺼도 인앱 알림은 알림함에 계속 누적됩니다';
+  const DENIED_BOTTOM_COPY = '푸시를 꺼도 인앱 알림은 알림함에 계속 쌓여요';
 
   describe('6종 행마다 푸시·인앱 두 스위치 (US-NOTIF-05)', () => {
     it.each([true, false])(

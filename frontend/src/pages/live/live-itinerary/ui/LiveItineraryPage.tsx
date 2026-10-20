@@ -506,7 +506,7 @@ export function LiveItineraryPage({
     activeDate
   );
   // TRIP-1419 — 관람 중 카드 시각은 카드를 관람 중으로 만든 바로 그 기록(activeVisitCheckId)의 실제 도착 시각.
-  // 낙관 구간(응답 전)이면 null → 카드는 시각 없이 "지금 관람 중".
+  // 낙관 구간(응답 전)이면 null → 카드는 시각 없이 "지금 방문 중".
   const activeVisit = visits.data?.visits.find(
     (v) => v.visitCheckId === activeVisitCheckId
   );

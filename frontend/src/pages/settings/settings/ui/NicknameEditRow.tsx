@@ -47,7 +47,7 @@ export function NicknameEditRow({
       >
         <RowBody
           rowKey="nickname"
-          label="닉네임·이메일"
+          label="닉네임"
           right={
             <View className="flex-row items-center gap-sm">
               <Text className="font-noto text-body text-muted">{value}</Text>

@@ -220,6 +220,7 @@ function MustVisitStrip({
           <Text className="font-inter-bold font-bold text-ink">
             {mustVisits.length}
           </Text>
+          곳
         </Text>
         {/* 전체 보기 — 담은 곳이 하나라도 있을 때만(TRIP-732 AC-7). 0곳이면 볼 목록이 없어 안 그린다. */}
         {mustVisits.length > 0 ? (

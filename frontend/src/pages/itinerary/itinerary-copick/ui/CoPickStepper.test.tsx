@@ -8,7 +8,7 @@ import { CoPickStepper, type CoPickStep } from './CoPickStepper';
  * 무엇을 보장하나:
  *  - 🔴 3단(prev·current·next)이 각자 역할 라벨·제목·상태 2줄을 그린다.
  *  - 🔴 **현재 단만 빨강**(`text-primary`), 이전/다음 상태는 muted — 색 대비를 className 토큰으로 잠근다.
- *  - 🔴 상태 문구 위치 계약: '고름' / '지금 고르는 중' / '비어 있음'.
+ *  - 🔴 상태 문구 위치 계약: '선택함' / '지금 고르는 중' / '비어 있음'.
  *  - 🔴 prop `{prev?, current, next?}` **role 고정 3슬롯** — current만 주면 prev/next 열은 부재
  *       (이 shape 가 h10(795) 재사용을 구속한다, seed D2).
  *  - 🔴 INV-3 — 소요시간 문자열 0(진행·상태 어디에도). "오후"는 시간대 라벨이라 허용.
@@ -36,7 +36,7 @@ const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
 
 const PREV: CoPickStep = {
   title: '황령산 전망대',
-  status: '고름',
+  status: '선택함',
   done: true,
 };
 const CURRENT: CoPickStep = { title: '오후 · 전시', status: '지금 고르는 중' };
@@ -111,11 +111,11 @@ describe('🔴 CoPickStepper — 3단·현재 빨강·상태 라벨·role 고정
     );
   });
 
-  it('T3 · 상태 문구: 이전=고름 · 현재=지금 고르는 중 · 다음=비어 있음', () => {
+  it('T3 · 상태 문구: 이전=선택함 · 현재=지금 고르는 중 · 다음=비어 있음', () => {
     render(<CoPickStepper prev={PREV} current={CURRENT} next={NEXT} />);
 
     expect(screen.getByTestId('copick-stepper-prev-status')).toHaveTextContent(
-      '고름'
+      '선택함'
     );
     expect(
       screen.getByTestId('copick-stepper-current-status')

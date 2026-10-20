@@ -182,7 +182,7 @@ export function MyStaysScreen({
                 <BedGlyph size={44} />
               </View>
               <Text className="text-center font-noto text-body leading-[21px] text-muted">
-                {'숙소를 탐색하고 등록하면\n일정을 만들 수 있습니다'}
+                {'숙소를 탐색하고 등록하면\n일정을 만들 수 있어요'}
               </Text>
               <Pressable
                 testID="my-stays-explore"

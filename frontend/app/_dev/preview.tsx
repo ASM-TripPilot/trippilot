@@ -1165,7 +1165,7 @@ const H10_AUTO_WIDE_PINS = [
 ];
 const H10_STEPPER: ReactElement = (
   <CoPickStepper
-    prev={{ title: '황령산 전망대', status: '고름', done: true }}
+    prev={{ title: '황령산 전망대', status: '선택함', done: true }}
     current={{ title: '오후 · 전시', status: '지금 고르는 중' }}
     next={{ title: '오후 · 카페', status: '비어 있음' }}
   />
@@ -3956,7 +3956,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       <TripRecordsView
         tripTitle="부산 여행"
         manualCheckin
-        noticeCopy="수동 체크인 · 방문한 곳을 직접 선택해 기록하세요 (좌표 자동기록 비활성)"
+        noticeCopy="수동 체크인 · 방문한 곳을 직접 선택해 기록해요 (좌표 자동기록 비활성)"
         dayTabs={[
           { day: '2026-08-20', label: '1일차' },
           { day: '2026-08-21', label: '2일차' },
@@ -6347,7 +6347,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   },
   // l03 마이페이지 empty(TRIP-776·1123) — Figma 4755:3123 과 같은 데이터: 카운트 0/0/3(칸마다 ›) · 프로필 태그(스타일 카드
   // 없음 — Figma 내부 모순 그대로) · 지난 여행 썸네일 카드 3장 + "캘린더 ›" ·
-  // 메뉴 3행 · 탭바(마이). 종료 0건 엣지("아직 종료된 여행이 없습니다")는 jest(`MyPageScreen.test.tsx`)가 잰다.
+  // 메뉴 3행 · 탭바(마이). 종료 0건 엣지("아직 종료된 여행이 없어요")는 jest(`MyPageScreen.test.tsx`)가 잰다.
   {
     key: 'my-page-empty',
     band: 'l',
@@ -6807,7 +6807,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         }}
         stepperSlot={
           <CoPickStepper
-            prev={{ title: '황령산 전망대', status: '고름', done: true }}
+            prev={{ title: '황령산 전망대', status: '선택함', done: true }}
             current={{ title: '오후 · 전시', status: '지금 고르는 중' }}
             next={{ title: '오후 · 카페', status: '비어 있음' }}
           />
