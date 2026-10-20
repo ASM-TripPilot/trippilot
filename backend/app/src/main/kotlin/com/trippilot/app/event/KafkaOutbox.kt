@@ -164,6 +164,9 @@ class KafkaOutboxListener(private val relay: OutboxRelay, private val broker: Ka
     //    여행 권고 잠금(lockTrip) 뒤 현재 상태로 다시 계산 — 누가 먼저 오든 마지막 커밋이 최신 상태다.
     //  - 알림 적재(StayRegistered·PlanBTriggered·ReflectionReady → raise): source_event_id UNIQUE(ON CONFLICT). Plan-B 묶음
     //    푸시(같은 여행, 키=triggerId 라 갈린다)만 단일 실행에 기대고 있었다 → lockPushGroup 으로 고쳤다(DomainNotificationIT).
+    //    발송(PushDispatchService.dispatch)의 계정 발송량 상한은 "세고→보내기"라, 같은 계정의 다른 키 사건(숙소 등록·회고·다른
+    //    여행의 Plan-B)이 함께 지나면 계정당 최대 (CONSUMERS − 1)건 더 나갈 수 있다. 잠그지 않는다 — PushRateLimits KDoc
+    //    "소폭 초과는 설계상 허용이다"(COST-U6-01·02: 하드 쿼터가 아니라 폭주 차단)의 범위 안이다.
     //  - 회고(TripEnded 키=tripId → 요약 생성 · ActualRouteStored 키=routeDayId → 통계 갱신): 같은 여행·같은 날 권고 잠금
     //    (TripSummaryPersistence·ReflectionPersistence.findForUpdate) — 요약이 아직 없어도 잠금이 줄 세운다.
     //  - Plan-B 선계산(PlanBTriggered → onRisk): 부분 유니크 + 자리 세마포어 — 사용자 요청과의 동시성을 이미 견딘다.

@@ -21,6 +21,7 @@ import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripRepository
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.junit.jupiter.api.AfterEach
@@ -28,12 +29,15 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.IllegalTransactionStateException
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
+import java.sql.Timestamp
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * 도메인 사건 → 릴레이 → 알림 적재 관통 검증(TRIP-550).
@@ -248,22 +252,45 @@ class DomainNotificationIT : AbstractPostgresIntegrationTest() {
         val accountId = newAccount()
         val tripId = newTrip(accountId)
         registerDevice(accountId)
-        fun raise(note: String) = raiser.raise(
-            accountId = accountId, kind = NotificationKind.PLAN_B, title = note, body = note,
-            sourceEventId = UUID.randomUUID(), dedupKey = "PLAN_B#$tripId#$note",
-            push = PushPolicy.OncePer("PLAN_B#$tripId#", Duration.ofMinutes(10)),
-        )
 
-        var second: Thread? = null
-        TransactionTemplate(txManager).execute {
-            raise("앞")
-            second = Thread { raise("뒤") }.apply { start() }
-            second!!.join(1_000) // 잠금이 있으면 여기서 끝나지 않는다(앞 커밋을 기다린다)
-        }
-        second!!.join(10_000)
+        whileFirstUncommitted(first = { raisePlanB(accountId, tripId, "앞") }, second = { raisePlanB(accountId, tripId, "뒤") })
 
         pushedPlanB(accountId, tripId) shouldBe 1
+        pushSentAtOf("PLAN_B#$tripId#뒤") shouldBe null // 뒤 행은 적재됐고(행이 없으면 여기서 터진다) 푸시만 생략됐다
     }
+
+    /** 권고 잠금은 트랜잭션 밖에서는 문장 끝에 풀려 아무것도 줄 세우지 않는다 — 그런 호출은 조용히 지나가지 않고 터진다. */
+    @Test
+    fun `묶음 잠금은 트랜잭션 밖에서 부르면 터진다`() {
+        shouldThrow<IllegalTransactionStateException> { notifications.lockPushGroup(UUID.randomUUID(), "PLAN_B#x#") }
+    }
+
+    private fun raisePlanB(accountId: UUID, tripId: UUID, note: String) = raiser.raise(
+        accountId = accountId, kind = NotificationKind.PLAN_B, title = note, body = note,
+        sourceEventId = UUID.randomUUID(), dedupKey = "PLAN_B#$tripId#$note",
+        push = PushPolicy.OncePer("PLAN_B#$tripId#", Duration.ofMinutes(10)),
+    )
+
+    /**
+     * [first] 를 트랜잭션 안에서 돌리고 **커밋 전에** 다른 스레드로 [second] 를 돌린다. 뒤 스레드는 잠금에 막혀 1초 안에
+     * 끝나지 않아야 하고, 앞이 커밋한 뒤에는 끝나야 하며, 그 안의 예외는 삼키지 않고 여기서 다시 던진다.
+     */
+    private fun whileFirstUncommitted(first: () -> Unit, second: () -> Unit) {
+        val failure = AtomicReference<Throwable>()
+        var thread: Thread? = null
+        TransactionTemplate(txManager).execute {
+            first()
+            thread = Thread { runCatching(second).onFailure(failure::set) }.apply { start() }
+            thread!!.join(1_000)
+            thread!!.isAlive shouldBe true // 앞 트랜잭션의 잠금을 기다리고 있다
+        }
+        thread!!.join(10_000)
+        thread!!.isAlive shouldBe false
+        failure.get()?.let { throw it }
+    }
+
+    private fun pushSentAtOf(dedupKey: String): Timestamp? =
+        jdbc.queryForObject("SELECT push_sent_at FROM notification WHERE dedup_key = ?", Timestamp::class.java, dedupKey)
 
     /**
      * 그 계정의 알림을 도메인으로 읽지 못하게 하는 행을 심고 [block] 을 돈다 — 어휘 밖 kind(`NotificationKind.of` 는
