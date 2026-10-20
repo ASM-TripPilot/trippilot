@@ -1380,3 +1380,81 @@ describe('MapSheetShell · 보이는 띠 맞춤 (AC-3·AC-4·AC-5·AC-8·AC-10)'
     expect(fitNativeProps().camera).toBeDefined();
   });
 });
+
+/* ──────────────── TRIP-1494 · expandSignal — 사용자가 내려 둔 시트를 같은 진입 칸으로 다시 올린다 ────────────────
+ * gorhom 은 `index` 값이 바뀔 때만 스냅한다 → 같은 index 로 다시 펼치려면 신호가 필요하다.
+ * (개념) 목 시트는 `snapToIndex` 호출만 기록하는 스파이를 준다 — 실제 스냅은 6-b 실기 몫.
+ * 3동작: 준비(initialIndex=2 로 마운트) → 실행(expandSignal 값 변경 / 동일 값 재렌더) → 단언(snapToIndex 호출). */
+const spy = () =>
+  (globalThis as Record<string, unknown>)
+    .__bottomSheetSnapToIndexSpy as jest.Mock;
+
+describe('MapSheetShell · SH1494 — expandSignal 이 바뀌면 진입 칸으로 다시 스냅한다 (TRIP-1494)', () => {
+  beforeEach(() => {
+    withMapKey();
+    spy().mockClear();
+  });
+  afterEach(restoreMapKey);
+
+  function shell(expandSignal: number | undefined) {
+    return (
+      <MapSheetShell
+        center={CENTER}
+        pins={PINS}
+        days={DAYS}
+        selectedDayIndex={0}
+        onSelectDay={jest.fn()}
+        onBack={jest.fn()}
+        header={<Text>헤더</Text>}
+        initialIndex={2}
+        expandSignal={expandSignal}
+      >
+        <Text>본문</Text>
+      </MapSheetShell>
+    );
+  }
+
+  it('🔴 SX1 · 마운트엔 호출이 없고, 신호가 0 → 1 로 바뀌면 initialIndex(2) 로 한 번 스냅한다', () => {
+    const { rerender } = render(shell(0));
+    expect(spy()).not.toHaveBeenCalled();
+
+    rerender(shell(1));
+
+    expect(spy()).toHaveBeenCalledTimes(1);
+    expect(spy()).toHaveBeenCalledWith(2);
+  });
+
+  it('SX2 · 같은 신호로 다시 렌더하거나 신호를 안 주면 스냅하지 않는다', () => {
+    const { rerender } = render(shell(1));
+    rerender(shell(1));
+
+    const { rerender: rerenderNone } = render(shell(undefined));
+    rerenderNone(shell(undefined));
+
+    expect(spy()).not.toHaveBeenCalled();
+  });
+
+  it('SX3 · 신호는 그대로이고 initialIndex 만 바뀌면 스냅하지 않는다(내려 둔 시트를 신호 없이 올리지 않는다)', () => {
+    const { rerender } = render(shell(0));
+    rerender(shell(1));
+    spy().mockClear();
+
+    rerender(
+      <MapSheetShell
+        center={CENTER}
+        pins={PINS}
+        days={DAYS}
+        selectedDayIndex={0}
+        onSelectDay={jest.fn()}
+        onBack={jest.fn()}
+        header={<Text>헤더</Text>}
+        initialIndex={1}
+        expandSignal={1}
+      >
+        <Text>본문</Text>
+      </MapSheetShell>
+    );
+
+    expect(spy()).not.toHaveBeenCalled();
+  });
+});

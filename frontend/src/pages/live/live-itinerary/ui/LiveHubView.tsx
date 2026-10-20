@@ -129,6 +129,8 @@ export interface LiveHubViewProps {
   slots: LiveHubSlot[];
   /** 0 닫힘 / 1 중간 / 2 펼침. 미전달이면 중간. */
   initialSnapIndex?: number;
+  /** TRIP-1494 — 바뀔 때마다 시트를 `initialSnapIndex` 로 다시 올린다(재계획 재적용). */
+  expandSignal?: number;
   currentLocation?: MapCenter;
   onBack: () => void;
   onSelectDay: (index: number) => void;
@@ -241,6 +243,7 @@ export function LiveHubView({
   activeDayIndex,
   slots,
   initialSnapIndex = 1,
+  expandSignal,
   currentLocation,
   onBack,
   onSelectDay,
@@ -402,6 +405,7 @@ export function LiveHubView({
         overlay={overlay}
         snapPoints={snapPoints}
         initialIndex={initialSnapIndex}
+        expandSignal={expandSignal}
         // TRIP-1416 · 그날 핀 전부를 시트 중간(55%) 칸 위 띠에 맞춘다(Q-088 — 첫 핀 중심 고정 줌이면 나머지가 시트 뒤).
         fitPins
         mapCard={

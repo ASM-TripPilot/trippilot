@@ -2046,6 +2046,26 @@ describe('i08 변경 반영 시트', () => {
       expect(chip(2)).not.toBeSelected();
     });
 
+    it('R6 적용 → 확인(applied 지워짐) → 다시 적용하면 시트를 진입 칸(2)으로 다시 올리라는 신호가 간다 — 같은 2 라 index 가 안 바뀌어도 (TRIP-1494)', async () => {
+      const snap = (globalThis as Record<string, unknown>)
+        .__bottomSheetSnapToIndexSpy as jest.Mock;
+      await renderReusedHub();
+      snap.mockClear();
+
+      hubReceives(SESSION_ID);
+      expect(snap).toHaveBeenCalledTimes(1);
+      expect(snap).toHaveBeenLastCalledWith(2);
+
+      // i08 [확인] — applied 가 지워질 땐 건드리지 않는다.
+      hubReceives(undefined);
+      expect(snap).toHaveBeenCalledTimes(1);
+
+      // 사용자가 시트를 내렸다고 치고, 새 재계획 적용 → 다시 올린다.
+      hubReceives('session-2');
+      expect(snap).toHaveBeenCalledTimes(2);
+      expect(snap).toHaveBeenLastCalledWith(2);
+    });
+
     it('R4 적용한 날로 맞춘 뒤 사용자가 칩을 고르면 그 선택이 남는다 — 같은 params 로 다시 그려도 리셋하지 않는다', async () => {
       await renderReusedHub();
       fireEvent.press(chip(2));

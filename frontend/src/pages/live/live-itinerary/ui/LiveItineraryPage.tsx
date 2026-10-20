@@ -155,6 +155,9 @@ export function LiveItineraryPage({
   // TRIP-1418 — 적용 성공은 `dismissTo` 로 스택의 이 인스턴스에 돌아온다(새로 마운트되지 않는다). 그래서 새 applied 가
   // 도착한 렌더에서 상태를 다시 맞춘다(렌더 중 조정 — 옛 일차로 한 번 그렸다가 바뀌지 않게): 고른 일차를 비워 `day`(없으면
   // 오늘)가 이기게 하고 시트를 펼친다. applied 가 지워질 때(i08 [확인])는 아무것도 바꾸지 않는다.
+  // TRIP-1494 — 시트를 이미 2 로 올려 둔 뒤 사용자가 내리고 재적용하면 `initialSnapIndex` 는 같은 2 라 prop 이 안 바뀐다.
+  // 새 applied 마다 1 씩 올리는 신호로 셸이 다시 펼치게 한다.
+  const [expandSignal, setExpandSignal] = useState(0);
   const [seenAppliedSessionId, setSeenAppliedSessionId] =
     useState(appliedSessionId);
   if (appliedSessionId !== seenAppliedSessionId) {
@@ -162,6 +165,7 @@ export function LiveItineraryPage({
     if (appliedSessionId) {
       setSelectedDay(null);
       setInitialSnapIndex(2);
+      setExpandSignal((n) => n + 1);
     }
   }
   // [사진] 안내 한 줄(TRIP-1070) — 누른 그 카드(poiId, TRIP-1203)에만. 어느 카드든 다음 [사진] 누름에 지운다.
@@ -800,6 +804,7 @@ export function LiveItineraryPage({
         onPressDirections={(poiId) => void pressDirections(poiId)}
         directionsNotice={directionsNotice}
         initialSnapIndex={initialSnapIndex}
+        expandSignal={expandSignal}
         autoRecordedPoiIds={new Set(autoRecords.keys())}
         routeToggle={routeToggle}
         actualRoute={
