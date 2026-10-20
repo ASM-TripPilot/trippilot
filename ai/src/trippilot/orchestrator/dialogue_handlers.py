@@ -1063,6 +1063,9 @@ def _assemble_alternatives(ctx: TurnContext, results: Mapping[str, TaskResult]) 
 
 _NEAR_SLOT_KM = 3.0  # 일정 근처 탐색 반경
 _FANOUT_SQL_CAP_S, _SQL_MIN_S = 2.8, 0.8  # NL2SQL LLM 시한 상한·하한 — 하한보다 적게 남으면 반경 탐색만
+# 시·도 급 지역 표 이름 — NL2SQL 결과를 이 시·도로 다시 거른다(분류 인자가 이긴다: 계획 경로에서 한 발화가 도구 둘로 나뉘면 발화의
+# 다른 지역을 SQL 이 읽을 수 있다 — "부산 실내 갈 데랑 서울 맛집"의 부산 몫이 서울을 찾지 않게). 구·동 급은 행의 시도로 못 가른다.
+_SIDO_LEVEL = frozenset({"서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "제주"})
 _PER_CATEGORY = 2  # 종류를 안 정했을 때 한 종류가 후보를 다 차지하지 않게(서울 반경 풀의 89% 가 FOOD — pool_builder._fair_cut 註)
 # 밤·야경 주제 — 이때만 나이트라이프 태그 장소를 권한다(평소엔 기회 카드와 같이 뺀다, opportunity._eligible)
 _NIGHT = re.compile(r"야경|야간|밤|나이트|(?<![가-힣])바(?![가-힣])|술집|펍|클럽|칵테일|와인|이자카야")
@@ -1140,6 +1143,7 @@ def _explore_by_sql(ctx: TurnContext, anchor: _Anchor | None, category: str | No
     args = {k: v for k, v in (("region", ctx.arguments.get("region")), ("theme", theme),
                               ("category", _CATEGORY_KO.get(category or "", category))) if v}
     night = bool(theme and _NIGHT.search(theme)) or category == PoiCategory.NIGHT_VIEW.value
+    sido = anchor.label if anchor is not None and anchor.kind == "region" and anchor.label in _SIDO_LEVEL else None
 
     def fn() -> dict:
         budget = min(_FANOUT_SQL_CAP_S, ctx.remaining_ms() * 0.4 / 1000)  # 팬아웃 예산(오케스트레이터 min(3s, 잔여×0.4)) 안
@@ -1148,7 +1152,8 @@ def _explore_by_sql(ctx: TurnContext, anchor: _Anchor | None, category: str | No
         rows = port.lookup(ctx.utterance, args, ctx.trace_id, ctx.now, timeout_sec=budget)
         if rows is None:
             return {"status": "UNAVAILABLE", "reason": "place_sql"}
-        picked = [r for r in rows if _displayable(r.name) and (night or not r.nightlife)][:MAX_CANDIDATES]
+        picked = [r for r in rows if _displayable(r.name) and (night or not r.nightlife)
+                  and (sido is None or (r.sido or "").startswith(sido))][:MAX_CANDIDATES]
         areas = Counter(r.sigungu for r in picked if r.sigungu).most_common(1)
         label = anchor.label if anchor is not None else (areas[0][0] if areas else None)
         return {"status": "OK", "anchor": label, "candidates": [{
@@ -1163,8 +1168,9 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     anchor, builder = _explore_anchor(ctx), ctx.ports.pool_builder
     category, theme = ctx.arguments.get("category"), ctx.arguments.get("theme")
     # NL2SQL 은 사용자가 지역을 말했을 때만 — 일정 근처 탐색은 거리가 핵심이라 반경 풀이 맞다(뷰에 좌표가 없다)
+    # 발화가 없어도(계획 경로 — 인자만 넘어온다) 인자로 SQL 을 쓴다. 발화는 보조 재료이고 지역·종류·주제는 인자가 이긴다
     sql = (_explore_by_sql(ctx, anchor, category, theme),) if (
-        ctx.ports.place_sql is not None and ctx.utterance and ctx.arguments.get("region")) else ()
+        ctx.ports.place_sql is not None and ctx.arguments.get("region")) else ()
     if anchor is None or builder is None:
         return sql
 

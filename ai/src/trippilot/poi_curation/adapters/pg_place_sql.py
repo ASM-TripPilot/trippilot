@@ -4,7 +4,7 @@
   · 트랜잭션을 READ ONLY 로 열고 문장 시한 `STATEMENT_TIMEOUT_MS` 를 건다 — 롤에도 같은 설정이 있지만(bootstrap.sql) 롤 설정이 빠진
     환경(로컬 수동 롤 등)에서도 같게 돈다. 끝은 늘 ROLLBACK 이다
   · 모델 SQL 은 `SELECT q.poi_id FROM (<sql>) q LIMIT ROW_CAP` 으로 감싸 **순서와 id 만** 받는다. 사용자에게 갈 칸은 두 번째 조회에서
-    코드가 고른다(`PlaceRow`) — 모델이 어떤 열을 골랐든 화면에 나갈 수 있는 것은 이름·종류·구군·두 표지뿐이다
+    코드가 고른다(`PlaceRow`) — 모델이 어떤 열을 골랐든 화면에 나갈 수 있는 것은 이름·종류·시도·구군·두 표지뿐이다
   · 모델 SQL 에는 바인딩 인자를 주지 않는다 — psycopg 는 인자가 없으면 `%` 를 해석하지 않으므로 LIKE '%서울%' 이 그대로 간다
 
 커넥션은 팩토리 주입(psycopg 3 호환, `PgDialogueMemoryStore` 와 같은 패턴 — 호출마다 연결, 풀 없음). 예외는 호출측으로 올린다 —
@@ -30,6 +30,7 @@ class PlaceRow:
     poi_id: str
     name: str
     category: str  # 한글 종류('카페') — 백엔드 정본 어휘
+    sido: str | None  # 시·도 정식 이름 — 핸들러가 분류 인자의 지역과 맞는지 대조한다
     sigungu: str | None
     trending: bool  # '요즘 인기' 표지
     nightlife: bool  # 나이트라이프 표지 — 밤 주제가 아니면 핸들러가 뺀다
@@ -51,12 +52,12 @@ class PgPlaceSql:
                     if not ids:
                         return []
                     cur.execute(
-                        "SELECT poi_id::text, name, category, sigungu, tags FROM poi_public WHERE poi_id::text = ANY(%s)",
+                        "SELECT poi_id::text, name, category, sido, sigungu, tags FROM poi_public WHERE poi_id::text = ANY(%s)",
                         (ids,),
                     )
                     by_id = {r[0]: r for r in cur.fetchall()}
             finally:
                 conn.rollback()
-        return [PlaceRow(poi_id=i, name=by_id[i][1], category=by_id[i][2], sigungu=by_id[i][3],
-                         trending=TRENDING_TAG in (by_id[i][4] or ()), nightlife=NIGHTLIFE_TAG in (by_id[i][4] or ()))
-                for i in ids if i in by_id]
+        return [PlaceRow(poi_id=i, name=r[1], category=r[2], sido=r[3], sigungu=r[4],
+                         trending=TRENDING_TAG in (r[5] or ()), nightlife=NIGHTLIFE_TAG in (r[5] or ()))
+                for i in ids if (r := by_id.get(i)) is not None]

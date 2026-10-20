@@ -183,7 +183,8 @@ class _Conn:
 
 def test_executor_wraps_read_only_with_timeout_and_cap_and_returns_only_display_fields() -> None:
     conn = _Conn([[("b",), ("a",), ("b",)],
-                  [("a", "경복궁", "명소", "종로구", ["요즘 인기", "역사관광지"]), ("b", "클럽 X", "야경", "마포구", ["나이트라이프"])]])
+                  [("a", "경복궁", "명소", "서울특별시", "종로구", ["요즘 인기", "역사관광지"]),
+                   ("b", "클럽 X", "야경", "서울특별시", "마포구", ["나이트라이프"])]])
     rows = PgPlaceSql(lambda: conn).run(_OK[0])
     statements = [s for s, _ in conn.log]
     assert statements[0] == "SET TRANSACTION READ ONLY"
@@ -191,7 +192,7 @@ def test_executor_wraps_read_only_with_timeout_and_cap_and_returns_only_display_
     assert statements[2] == f"SELECT q.poi_id FROM ({_OK[0]}) AS q LIMIT {ROW_CAP}" and conn.log[2][1] is None  # 모델 SQL 엔 인자 없음
     assert conn.log[3][1] == (["b", "a"],) and conn.rolled_back
     assert [(r.poi_id, r.name, r.trending, r.nightlife) for r in rows] == [("b", "클럽 X", False, True), ("a", "경복궁", True, False)]
-    assert set(rows[0].__slots__) == {"poi_id", "name", "category", "sigungu", "trending", "nightlife"}  # 주소·저장 수·태그 원문은 안 나간다
+    assert set(rows[0].__slots__) == {"poi_id", "name", "category", "sido", "sigungu", "trending", "nightlife"}  # 주소·저장 수·태그 원문은 안 나간다
 
 
 def test_executor_with_no_ids_skips_the_second_query_and_still_rolls_back() -> None:

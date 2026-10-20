@@ -11,7 +11,7 @@ from trippilot.orchestrator.place_sql import PlaceSqlLookup
 from trippilot.poi_curation.adapters.pg_place_sql import PlaceRow
 
 _NOW = datetime(2026, 10, 20, 9, 0, tzinfo=timezone.utc)
-_ROW = PlaceRow("p1", "경복궁", "명소", "종로구", True, False)
+_ROW = PlaceRow("p1", "경복궁", "명소", "서울특별시", "종로구", True, False)
 
 
 class _Worker:
