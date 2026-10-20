@@ -530,7 +530,7 @@ describe('꼭 갈 곳 자동 시드 폐지 (로그인)', () => {
  * ⚠️ 바텀시트 통과형 목: 마운트하면 children 을 무조건 렌더한다 — 여기서 관측하는 "시트 오픈"은
  * **조건부 마운트 트리 존재/부재**뿐이다. 실제 슬라이드업·딤·중앙정렬·터치차단은 jest 사각(6-b 실기).
  */
-describe('여행지 편집 시트 (W-1~W-5)', () => {
+describe('여행지 편집 시트 (W-1~W-6)', () => {
   afterEach(expectNoExitWizard);
 
   const { preferenceHandler, renderPage, openSheet } = wizardStep1Harness();
@@ -632,6 +632,36 @@ describe('여행지 편집 시트 (W-1~W-5)', () => {
           { seq: 1, region: '부산', nights: 2 },
         ])
       );
+    });
+  });
+
+  // TRIP-1499 AC-9 — 삭제로 같은 도시가 이웃해지면 스토어가 합친다(단위 R1~). 시트는 합쳐진 목록을 그리기만 한다.
+  describe('W-6 · 삭제× 로 같은 도시가 이웃해지면 시트에도 한 행으로 보인다 (TRIP-1499)', () => {
+    it('부산 2박·제주 1박·부산 1박에서 제주를 지우면 부산 한 줄(3박)만 남고 두·세 번째 줄은 없다', async () => {
+      // 준비 — beforeEach 가 담은 부산·경주를 비우고 왕복 동선을 담는다.
+      useTripWizardStore.getState().reset();
+      useTripWizardStore.getState().addDestination('부산', 2);
+      useTripWizardStore.getState().addDestination('제주시', 1);
+      useTripWizardStore.getState().addDestination('부산', 1);
+      renderPage();
+      await openSheet('destination');
+      // 앵커 — 지우기 전에는 세 줄이다(실행을 지워도 green 이 되는 것을 막는다).
+      expect(
+        screen.getByTestId('trip-wizard-destination-row-3')
+      ).toBeOnTheScreen();
+
+      fireEvent.press(screen.getByTestId('trip-wizard-destination-remove-2'));
+
+      await waitFor(() =>
+        expect(screen.queryByTestId('trip-wizard-destination-row-3')).toBeNull()
+      );
+      expect(screen.queryByTestId('trip-wizard-destination-row-2')).toBeNull();
+      const row1 = screen.getByTestId('trip-wizard-destination-row-1');
+      expect(within(row1).getByText('부산')).toBeOnTheScreen();
+      expect(within(row1).getByText('3박')).toBeOnTheScreen();
+      expect(useTripWizardStore.getState().destinations).toEqual([
+        { seq: 1, region: '부산', nights: 3 },
+      ]);
     });
   });
 
