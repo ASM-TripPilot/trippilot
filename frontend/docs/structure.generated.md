@@ -1049,7 +1049,7 @@
 - `src/pages/record/records-calendar/index.ts`  →  RecordsCalendarPage
 
 ## src/pages/record/records-calendar/model/
-- `src/pages/record/records-calendar/model/recordsCalendar.ts`  →  markedDaysOfMonth · buildPastTripCards · LegendRow · MonthLegends · buildMonthLegends · canOpenTripRecords · recordsTripIdForDate · openableTripIds · OngoingTripEntry · OngoingTripCardVM · pickOngoingTrip · formatTripDateRange · nightsLabel
+- `src/pages/record/records-calendar/model/recordsCalendar.ts`  →  markedDaysOfMonth · buildPastTripCards · TRIP_COLORS · UNLISTED_COLOR · LegendRow · MonthLegends · buildMonthLegends · canOpenTripRecords · recordsTripIdForDate · openableTripIds · OngoingTripEntry · OngoingTripCardVM · pickOngoingTrip · formatTripDateRange · nightsLabel
 - `src/pages/record/records-calendar/model/useRecordsCalendar.ts`  →  useRecordsCalendar
 
 ## src/pages/record/records-calendar/ui/
