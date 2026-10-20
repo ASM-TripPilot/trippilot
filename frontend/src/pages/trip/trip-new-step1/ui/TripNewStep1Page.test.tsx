@@ -288,7 +288,7 @@ describe('스토어 → 요약 행 도출 배선', () => {
       // 취향 — 프리필 라벨 + 온보딩 상속(fromOnboarding=true).
       const pref = screen.getByTestId('trip-wizard-summary-preference');
       expect(pref).toHaveTextContent(/미식 · 전시 · 야경/);
-      expect(pref).toHaveTextContent(/온보딩/);
+      expect(pref).toHaveTextContent(/내 취향/);
       // 예산 행은 걷어냈다 — 프리필 응답에 예산(mockPreference.budget)이 있어도 행이 없다.
       expect(screen.queryByTestId('trip-wizard-summary-budget')).toBeNull();
     });

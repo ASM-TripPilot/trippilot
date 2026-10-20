@@ -306,10 +306,7 @@ export function PlaceDetailScreen({
             <InfoRow label="주소">
               <ValueOrUnknown value={view.address} field="address" />
             </InfoRow>
-            <Divider />
-            <InfoRow label="입장료">
-              <ValueOrUnknown value={view.admissionFee} field="fee" />
-            </InfoRow>
+            {/* 입장료 행은 뺐다(TRIP-1440 Q-092) — 데이터 출처가 없어 모든 장소에서 늘 '미확인'이었다. 값이 수집되면 되살린다. */}
           </View>
 
           {/* Figma 에 없는 추가 버튼 — 우리가 가진 정보가 적어 네이버 지도에서 가게를 보게 한다. */}

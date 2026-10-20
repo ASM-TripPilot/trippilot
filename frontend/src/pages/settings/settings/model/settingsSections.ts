@@ -70,7 +70,7 @@ export function buildSettingsSections(input: SettingsInput): SettingsGroupVM[] {
       rows: [
         {
           key: 'nickname',
-          label: '닉네임·이메일',
+          label: '닉네임',
           value: input.nickname,
           ready: true,
         },

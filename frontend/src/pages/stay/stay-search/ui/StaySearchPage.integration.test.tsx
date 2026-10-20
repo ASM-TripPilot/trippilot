@@ -190,7 +190,7 @@ describe('요청 URL — region 과 부산 폴백 (옛 본 파일)', () => {
 
       // useQuery는 첫 렌더에 data가 undefined다 — 페이지가 data.items로 접근하면 여기서
       // TypeError로 죽는다. `data?.items ?? []` 방어의 유일한 심판이 이 렌더다(Seed §3).
-      // 빈 결과 화면 자체(헤더 '부산 · 날짜 미정 · 0곳')는 TRIP-182 범위라 여기서 보지 않는다.
+      // 빈 결과 화면 자체(헤더 '부산 · 0곳')는 TRIP-182 범위라 여기서 보지 않는다.
       await waitFor(() => expect(observedUrls.length).toBeGreaterThan(0));
 
       const hits = observedUrls.filter(
@@ -1858,7 +1858,7 @@ describe('동명 구 · URL 의 시도로 다른 시도 숙소를 거른다 (F3 
     expect(screen.getByTestId(cardId(NO_ADDR))).toBeOnTheScreen(); // fail-open(AC-F3)
     // 헤더 개수도 거른 뒤 개수다 — 문자열 = 완전 일치(★6), '12곳'·'3곳'이면 red.
     expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
-      '강서구 · 날짜 미정 · 2곳'
+      '강서구 · 2곳'
     );
     // 서버로 가는 region 은 이름 그대로(시도를 붙이면 서버가 0건을 준다 — 브리프 §4-3).
     expect(searchUrls).toHaveLength(1);
@@ -1876,7 +1876,7 @@ describe('동명 구 · URL 의 시도로 다른 시도 숙소를 거른다 (F3 
     expect(screen.getByTestId(cardId(BUSAN))).toBeOnTheScreen();
     expect(screen.getByTestId(cardId(NO_ADDR))).toBeOnTheScreen();
     expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
-      '부산광역시 · 날짜 미정 · 3곳'
+      '부산광역시 · 3곳'
     );
   });
 });

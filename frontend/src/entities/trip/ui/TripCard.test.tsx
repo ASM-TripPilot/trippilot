@@ -11,7 +11,7 @@ import type { MyTripCardVM } from '../model';
  *  - 🔴 제목·메타줄·부가정보 leaf 는 **값 하나만** 담는다(`toHaveTextContent(문자열)` 완전일치, frozen
  *    MyTripCard.test.tsx 계약 계승 — node_modules matches.js 실검증, 02a §5-a).
  *  - 🔴 배지는 `badge!==null` 일 때만, resume CTA 는 `badge==='draft'` 일 때만 뜬다(파생 — 별도 VM 필드
- *    없음). 배지는 **색이 아니라 텍스트**("완성"≠"작성중")로 가른다(fill 색 렌더 스캔 사각 회피).
+ *    없음). 배지는 **색이 아니라 텍스트**("확정"≠"작성중")로 가른다(fill 색 렌더 스캔 사각 회피).
  *  - 🔴 testID 는 소비처가 **`testIDPrefix` 로 명시**한다 — 카드가 `my-trip` 을 하드코딩하지 않는다.
  *    h06 는 `testIDPrefix="my-trip"` 으로 `my-trip-card-{id}` 리터럴을 얻고, l03(범위 밖)이 나중에
  *    같은 카드를 쓰면 다른 prefix 로 D1 충돌(둘 다 `my-trip-card-{id}`)을 피한다(01b 제약 D1).
@@ -57,8 +57,8 @@ describe('🔴 TC1 · 제목·메타줄·부가정보 완전일치 + onPress', (
   });
 });
 
-describe('🔴 TC2 · done 배지 = "완성", resume 없음', () => {
-  it('badge=done 이면 "완성" 배지가 뜨고 resume CTA 는 없다', () => {
+describe('🔴 TC2 · done 배지 = "확정", resume 없음', () => {
+  it('badge=done 이면 "확정" 배지가 뜨고 resume CTA 는 없다', () => {
     render(
       <TripCard
         vm={vm({ badge: 'done' })}
@@ -67,7 +67,7 @@ describe('🔴 TC2 · done 배지 = "완성", resume 없음', () => {
       />
     );
 
-    expect(screen.getByTestId('my-trip-badge-t1')).toHaveTextContent('완성');
+    expect(screen.getByTestId('my-trip-badge-t1')).toHaveTextContent('확정');
     expect(screen.queryByTestId('my-trip-resume-t1')).toBeNull();
   });
 });

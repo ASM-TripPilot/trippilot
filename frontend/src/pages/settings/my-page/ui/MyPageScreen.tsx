@@ -26,7 +26,7 @@ import {
  * 여행 목록 입구는 프로필 카드의 숫자 3칸(`onPressCount` → 탭 이동)이다.
  *
  * "지난 여행"(종료) 섹션은 `showPast` 로 켠다 — 언제 켤지(예정 0건, TRIP-775 §F-3 A안)는 페이지가
- * 판정한다. 종료 여행이 0건이면 "아직 종료된 여행이 없습니다"만 뜨고 회고 진입
+ * 판정한다. 종료 여행이 0건이면 "아직 종료된 여행이 없어요"만 뜨고 회고 진입
  * 어포던스는 하나도 없다(AC-5).
  *
  * TRIP-939(심사 2.1): 목적지가 없어 눌러도 반응 없던 것은 그리지 않는다 — `ready:false` 행은 숨기고
@@ -51,7 +51,7 @@ const SETTINGS_ROWS: {
 }[] = [
   {
     key: 'bases',
-    label: '등록 숙소·예약 기록',
+    label: '등록 숙소',
     icon: <MenuBedGlyph />,
     testID: 'my-stays-row',
     ready: true,
@@ -103,12 +103,12 @@ export interface MyPageScreenProps {
   /** 지난 여행(종료) 섹션 노출 여부 — 판정은 페이지(예정 0건). */
   showPast: boolean;
   pastCards: ReactNode;
-  /** 종료 0건 → "아직 종료된 여행이 없습니다"만. */
+  /** 종료 0건 → "아직 종료된 여행이 없어요"만. */
   pastEmpty: boolean;
   onPressEdit?: () => void;
   /** 헤더 톱니·하단 '설정' 행 진입(페이지가 /settings 로 주입). 미주입이면 둘 다 누를 곳이 없다. */
   onPressSettings?: () => void;
-  /** '등록 숙소·예약 기록' 행 진입(페이지가 /my/stays 로 주입). */
+  /** '등록 숙소' 행 진입(페이지가 /my/stays 로 주입). */
   onPressStays?: () => void;
   /** '여행 스타일 분석' 행 진입(페이지가 /records/style 로 주입). */
   onPressStyleAnalysis?: () => void;
@@ -231,7 +231,7 @@ export function MyPageScreen({
               </View>
               {pastEmpty ? (
                 <Text className="py-md font-noto text-label text-muted">
-                  아직 종료된 여행이 없습니다
+                  아직 종료된 여행이 없어요
                 </Text>
               ) : (
                 <View className="gap-[10px]">{pastCards}</View>

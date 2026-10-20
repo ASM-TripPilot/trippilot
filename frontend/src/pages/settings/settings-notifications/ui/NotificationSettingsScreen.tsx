@@ -57,7 +57,7 @@ const VISIBLE_ROWS: { kind: NotificationToggleKind; label: string }[] = [
   { kind: 'TRIP_PRE', label: '여행 시작 전' },
   { kind: 'TRIP_DAY', label: '당일 일정' },
   { kind: 'SLOT_PRE', label: '일정 시작 전' },
-  { kind: 'PLAN_B', label: 'Plan-B 재계획' },
+  { kind: 'PLAN_B', label: '일정 재계획' },
   { kind: 'REFLECTION', label: '회고 완료' },
 ];
 
@@ -93,7 +93,8 @@ export function NotificationSettingsScreen({
   const showPermissionDenied = !pushColumnAvailable && !permissionChecking;
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
-      <View className="flex-row items-center gap-sm border-b border-hairline px-lg pb-md pt-sm">
+      <View className="flex-row items-center gap-sm px-lg pb-md pt-sm">
+        <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
         <Pressable
           testID="notification-settings-back"
           accessibilityRole="button"
@@ -108,7 +109,7 @@ export function NotificationSettingsScreen({
         {showPermissionDenied ? (
           <PermissionBanner onOpenSettings={onOpenSettings} />
         ) : (
-          <InfoBanner text="변경한 알림 설정은 다음 알림부터 바로 반영됩니다" />
+          <InfoBanner text="변경한 알림 설정은 다음 알림부터 바로 반영돼요" />
         )}
 
         {/* 열 헤더 — ToggleRow 와 같은 px-lg·칸 폭·gap 이라 글자가 토글 위에 선다. 푸시 칸은 min-w 라
@@ -161,8 +162,8 @@ export function NotificationSettingsScreen({
         <InfoBanner
           text={
             showPermissionDenied
-              ? '푸시를 꺼도 인앱 알림은 알림함에 계속 누적됩니다'
-              : '모든 알림을 꺼도 보안·계정 관련 알림은 알림함에 표시됩니다'
+              ? '푸시를 꺼도 인앱 알림은 알림함에 계속 쌓여요'
+              : '모든 알림을 꺼도 보안·계정 관련 알림은 알림함에 보여요'
           }
         />
       </ScrollView>

@@ -18,7 +18,7 @@ const KIND_META: Record<NotificationKind, NotificationKindMeta> = {
   TRIP_PRE: { icon: 'list', label: '일정' },
   TRIP_DAY: { icon: 'list', label: '일정' },
   SLOT_PRE: { icon: 'list', label: '일정' },
-  PLAN_B: { icon: 'swap', label: 'Plan-B' },
+  PLAN_B: { icon: 'swap', label: '재계획' },
   REFLECTION: { icon: 'document', label: '회고' },
   COMMUNITY: { icon: 'sun', label: '커뮤니티' },
   SYSTEM: { icon: 'sun', label: '시스템' },

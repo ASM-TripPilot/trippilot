@@ -219,7 +219,8 @@ export function SlotFillScreen({
         testID="itinerary-copick-slotfill-root"
         className="flex-1 bg-canvas"
       >
-        <View className="w-full flex-row items-center gap-[6px] border-b border-hairline bg-canvas pb-sm pl-md pr-lg pt-lg">
+        <View className="w-full flex-row items-center gap-[6px] bg-canvas pb-sm pl-md pr-lg pt-lg">
+          <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
           <Pressable
             testID="itinerary-copick-slotfill-back"
             accessibilityRole="button"

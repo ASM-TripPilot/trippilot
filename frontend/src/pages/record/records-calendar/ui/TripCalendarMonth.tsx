@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 
 import { BackArrowGlyph } from '@/features/record';
 import type { MonthCell } from '@/shared/lib/monthGrid';
+import { TRIP_COLORS, UNLISTED_COLOR } from '../model/recordsCalendar';
 
 /**
  * TRIP-575 · j07 월 캘린더(무상태 프레젠테이션 — 계산된 그리드·마킹·콜백만 받는다).
@@ -23,6 +24,8 @@ export interface TripCalendarMonthProps {
   monthLabel: string;
   grid: (MonthCell | null)[];
   markedDays: string[];
+  /** 마킹된 날 → 여행 색 인덱스(TRIP-1436 Q-159). 없는 날은 중립색, 미지정이면 첫 색(코랄). */
+  dayColors?: Record<string, number>;
   onPressPrev: () => void;
   onPressNext: () => void;
   /** 날짜 셀 탭(TRIP-1015 C). 어느 여행으로 갈지(또는 무시)는 페이지가 판정한다. */
@@ -33,6 +36,7 @@ export function TripCalendarMonth({
   monthLabel,
   grid,
   markedDays,
+  dayColors,
   onPressPrev,
   onPressNext,
   onPressDay,
@@ -93,6 +97,10 @@ export function TripCalendarMonth({
                   return <View key={di} className="flex-1 py-[9px]" />;
                 }
                 const isMarked = markedSet.has(cell.date);
+                const palette =
+                  TRIP_COLORS[
+                    (dayColors?.[cell.date] ?? 0) % TRIP_COLORS.length
+                  ];
                 const prev = week[di - 1];
                 const next = week[di + 1];
                 const roundLeft =
@@ -107,7 +115,7 @@ export function TripCalendarMonth({
                     accessibilityState={{ selected: isMarked }}
                     onPress={onPressDay && (() => onPressDay(cell.date))}
                     className={`flex-1 items-center justify-center py-[9px] ${
-                      isMarked ? 'bg-primary-pale' : ''
+                      isMarked ? palette.cell : ''
                     } ${roundLeft ? 'rounded-l-[9px]' : ''} ${
                       roundRight ? 'rounded-r-[9px]' : ''
                     }`}
@@ -115,7 +123,7 @@ export function TripCalendarMonth({
                     <Text
                       className={`text-body ${
                         isMarked
-                          ? 'font-noto-bold font-bold text-primary-text'
+                          ? `font-noto-bold font-bold ${palette.text}`
                           : 'font-noto text-ink'
                       }`}
                     >

@@ -44,10 +44,11 @@ export function NotificationRow({
       testID="notification-inbox-row"
       accessibilityRole={pressRow ? 'button' : undefined}
       onPress={pressRow}
-      className={`flex-row items-start gap-md p-[14px] ${
-        showDivider ? 'border-t border-hairline' : ''
-      }`}
+      className="flex-row items-start gap-md p-[14px]"
     >
+      {showDivider ? (
+        <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
+      ) : null}
       {/* 미읽음 dot 컬럼(8px폭·40px높이) — 미읽음일 때만 dot(View) 렌더. */}
       <View className="h-10 w-[8px] items-center justify-center">
         {row.unread ? (

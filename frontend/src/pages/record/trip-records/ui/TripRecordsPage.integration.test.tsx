@@ -138,7 +138,7 @@ const GRANTED = {
 } as const;
 // 사용자 가시 카피 = 계약(brief §화면·IO 실측). MANUAL_NOTICE 는 법 문구 "(좌표 자동기록 비활성)" 을 담는다.
 const MANUAL_NOTICE =
-  '수동 체크인 · 방문한 곳을 직접 선택해 기록하세요 (좌표 자동기록 비활성)';
+  '수동 체크인 · 방문한 곳을 직접 선택해 기록해요 (좌표 자동기록 비활성)';
 const hitCount = (needle: string) =>
   observedHits.filter((hit) => hit === needle).length;
 const mockPick = jest.fn();

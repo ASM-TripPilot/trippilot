@@ -130,7 +130,7 @@ export function TravelStyleScreen({
               testID="reflection-style-progress"
               className="pt-[4px] font-noto-bold text-[16px] font-bold text-ink"
             >
-              분석에 필요한 기록이 부족합니다 (현재 {progress.current}곳 / 필요{' '}
+              분석에 필요한 기록이 부족해요 (현재 {progress.current}곳 / 필요{' '}
               {progress.required}곳)
             </Text>
 

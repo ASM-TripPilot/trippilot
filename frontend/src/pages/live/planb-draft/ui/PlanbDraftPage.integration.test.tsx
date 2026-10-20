@@ -713,10 +713,10 @@ describe('🔴 D2 · TRIP-1007 AC-6 — 헤더는 일차·날짜·{곳 수} · {
 });
 
 describe('🔴 D3 · TRIP-1007 AC-3 · BR-U4-25 — 빠지는 곳은 확정 전에 따로 보인다', () => {
-  it('"이번 계획에서 빠지는 곳 1" 아래 디키디키 · 원래 15:00, 초안 행(번호 원)으로는 그리지 않는다', () => {
+  it('"이번 계획에서 빠지는 곳 1곳" 아래 디키디키 · 원래 15:00, 초안 행(번호 원)으로는 그리지 않는다', () => {
     renderDraft();
 
-    expect(screen.getByText('이번 계획에서 빠지는 곳 1')).toBeOnTheScreen();
+    expect(screen.getByText('이번 계획에서 빠지는 곳 1곳')).toBeOnTheScreen();
     const removed = screen.getByTestId(`planb-draft-removed-${key('p4')}`);
     expect(removed).toHaveTextContent(/디키디키/);
     expect(removed).toHaveTextContent(/원래 15:00/);

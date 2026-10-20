@@ -90,7 +90,8 @@ export function LiveLocationView({
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View testID={face.rootTestID} className="flex-1 bg-canvas">
-        <View className="h-[56px] flex-row items-center border-b border-hairline px-lg">
+        <View className="h-[56px] flex-row items-center px-lg">
+          <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
           <LocationBackChevronGlyph />
         </View>
 

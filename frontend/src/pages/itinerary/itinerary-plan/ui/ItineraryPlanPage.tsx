@@ -149,6 +149,9 @@ export function ItineraryPlanPage({
   // null = 사용자가 아직 날짜를 안 골랐다 — 그동안은 알림 진입이면 오늘, 아니면 1일차(tabs 는 조회 뒤에야 생긴다).
   const [activeDayIndex, setActiveDayIndex] = useState<number | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  // 시트가 펼침(88%, 기본 스냅 배열의 마지막 칸 = index 2)에 가면 지도 우상단 ✦ 가 시트 밑으로 반쯤 들어가 가려진다 — 그
+  // 칸에서는 그리지 않는다(BR-U8-53 취지: 가려진 FAB 가 터치를 가로채지 않게, TRIP-1435 Q-082). 셸이 스냅 이동 시작을 알린다.
+  const [sheetExpanded, setSheetExpanded] = useState(false);
 
   // 4얼굴 공통 뒤로가기. `router.canGoBack()` 은 expo-router 가 주는, 뒤로 갈 히스토리 유무를
   // boolean 으로 답하는 함수다 — 있으면 이전 화면으로, 없으면(딥링크로 직접 진입) 조용히
@@ -374,12 +377,15 @@ export function ItineraryPlanPage({
       hideBack={isConfirmed}
       // TRIP-1321 — ✦ 도우미. 하단은 시트·CTA 바가 차지해(FD "하단 안전영역+24" 는 CTA 바와 겹친다) 지도
       // 우상단, 일차 칩 아래 카드 슬롯에 얹는다. 실제 위치·지도 제스처와의 간섭은 6-b 실기.
+      onSheetAnimate={(_from, to) => setSheetExpanded(to === 2)}
       mapCard={
-        <View pointerEvents="box-none" className="items-end pt-md">
-          <AssistantFab
-            onPress={() => router.push(assistantHref('ITINERARY', tripId))}
-          />
-        </View>
+        sheetExpanded ? undefined : (
+          <View pointerEvents="box-none" className="items-end pt-md">
+            <AssistantFab
+              onPress={() => router.push(assistantHref('ITINERARY', tripId))}
+            />
+          </View>
+        )
       }
       header={
         <SheetHeader
@@ -409,7 +415,7 @@ export function ItineraryPlanPage({
             ]
           : [
               {
-                label: '일정 저장하기',
+                label: '일정 확정하기',
                 variant: 'primary',
                 // TRIP-1013 #057 — '일정 저장하기'가 창을 열고, 창 안의 '일정 수정'(위 두 갈래)은 무시된다.
                 onPress: guardPress(handleConfirm),

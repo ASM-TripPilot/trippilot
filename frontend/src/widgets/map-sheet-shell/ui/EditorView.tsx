@@ -88,6 +88,8 @@ export interface EditorViewProps {
    *  "+" 를 빈 줄로 바꾼다(TRIP-1115 — 완료 카드 앞 삽입은 거짓 순서). 그 밖(완료 잠금·위반 배지)은
    *  모드가 아니라 데이터가 정한다. */
   inTrip?: boolean;
+  /** 시트 머리 제목(TRIP-1440 Q-141 가산) — 미전달이면 '일정 편집'. 직접 짜기 첫 화면은 '편집'이 아니라 만드는 중이다. */
+  title?: string;
 }
 
 const GUIDE_H12 = '길게 눌러 순서를 바꾸거나, 아래로 끌어 삭제해요';
@@ -114,6 +116,7 @@ export function EditorView({
   isDragging,
   completedSlotKeys,
   inTrip,
+  title = '일정 편집',
 }: EditorViewProps): ReactElement {
   // 끌기 진행 중(onDragBegin ~ onDragEnd) — 뷰 국소 일시 상태.
   const [dragging, setDragging] = useState(false);
@@ -256,7 +259,7 @@ export function EditorView({
 
   const header = (
     <SheetHeader
-      title="일정 편집"
+      title={title}
       dayLabel={`${activeDayIndex + 1}일차`}
       dateLabel={dateLabel}
       meta={`${slots.length}곳`}
@@ -339,15 +342,18 @@ export function EditorView({
               </Pressable>
 
               {/* 안내줄(AC-12) — Figma 는 "장소 추가" 아래(h12·i07 공통), 문구만 모드별. */}
-              <View
-                testID="itinerary-edit-guide"
-                className="flex-row items-center gap-[6px]"
-              >
-                <InfoCircleGlyph size={16} />
-                <Text className="font-noto text-caption text-muted">
-                  {inTrip ? GUIDE_IN_TRIP : GUIDE_H12}
-                </Text>
-              </View>
+              {/* 0곳이면 끌어 바꿀 카드가 없어 끌기 안내를 안 보인다(TRIP-1440 Q-141). */}
+              {slots.length > 0 ? (
+                <View
+                  testID="itinerary-edit-guide"
+                  className="flex-row items-center gap-[6px]"
+                >
+                  <InfoCircleGlyph size={16} />
+                  <Text className="font-noto text-caption text-muted">
+                    {inTrip ? GUIDE_IN_TRIP : GUIDE_H12}
+                  </Text>
+                </View>
+              ) : null}
 
               {/* TRIP-1424 — 장소 추가는 [저장]과 따로 곧장 서버에 저장된다(PlaceAddPage PUT). Figma 공백이라 안내줄 꼴을 따른다. */}
               <View
@@ -369,8 +375,9 @@ export function EditorView({
             testID="itinerary-edit-dropzone-bar"
             pointerEvents="none"
             style={{ height: DELETE_ZONE_BAR_HEIGHT + bottomInset }}
-            className="absolute bottom-0 left-0 right-0 border-t border-hairline bg-canvas px-lg pt-md"
+            className="absolute bottom-0 left-0 right-0 bg-canvas px-lg pt-md"
           >
+            <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
             <SlotDropZone isActive />
           </View>
         ) : null}

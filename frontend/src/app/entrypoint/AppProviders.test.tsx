@@ -55,6 +55,12 @@ jest.mock('expo-splash-screen', () => ({
   hideAsync: mockHideAsync,
 }));
 
+// 네비게이션 라이브러리는 ESM 배포라 node 버킷 jest 가 못 읽는다 — 테마 값만 확인하는 대역(TRIP-1434).
+jest.mock('@react-navigation/native', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/navigationThemeMock')
+);
+
 // 실물 SplashGate 는 렌더 즉시 부트스트랩 요청을 발사하므로 QueryClient 관찰 프로브로 대체한다.
 // 배럴(@/app)이 ./routing/SplashGate 를 재수출하므로 깊은 경로를 목으로 갈면 배럴을 타고 내려온다.
 jest.mock('@/app/routing/SplashGate', () =>
@@ -106,6 +112,26 @@ describe('루트 레이아웃 — 부팅 골격', () => {
     render(<RootLayout />);
 
     expect(screen.UNSAFE_getByType(GestureHandlerRootView)).toBeTruthy();
+  });
+});
+
+describe('루트 레이아웃 — 앱 테마 배경 (TRIP-1434 Q-002)', () => {
+  it('내비게이션 테마 배경을 canvas 흰색으로 덮어 안전영역에 회색이 비치지 않게 한다', () => {
+    const { ThemeProvider } = require('@react-navigation/native') as {
+      ThemeProvider: jest.Mock;
+    };
+    ThemeProvider.mockClear();
+
+    render(<RootLayout />);
+
+    const theme = ThemeProvider.mock.calls[0][0].value;
+    expect(theme.colors.background).toBe('#FFFFFF');
+    // 배선 짝 — 테마가 화면 Stack(SplashGate) 을 실제로 감싼다(토스트 호스트만 감싸도 값 단언은 green 이다).
+    expect(
+      within(screen.getByTestId('mock-theme-provider')).getByTestId(
+        'query-client-probe'
+      )
+    ).toBeOnTheScreen();
   });
 });
 

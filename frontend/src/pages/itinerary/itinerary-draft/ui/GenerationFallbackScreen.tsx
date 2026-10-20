@@ -233,7 +233,8 @@ export function GenerationFallbackScreen({
         )}
 
         {/* 하단 고정 바 — 성공: 기본 일정 보기 / 실패: 다시 시도. 직접 짜기 링크는 공통. */}
-        <View className="w-full gap-sm border-t border-hairline bg-canvas px-md pb-xl pt-md">
+        <View className="w-full gap-sm bg-canvas px-md pb-xl pt-md">
+          <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
           {failed ? (
             <Pressable
               testID="itinerary-fallback-retry"

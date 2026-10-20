@@ -423,6 +423,30 @@ describe('C-AC3 · AC-3 — listed CTA 가 활성이고 press 시 onProceed 1회
  * loading (view.kind === 'loading')
  * ──────────────────────────────────────────────────────────────────────────── */
 
+describe('TRIP-1439 Q-146 — 같이 짜기(CO_PLAN)는 완전 AI 문구를 쓰지 않는다', () => {
+  it('mode=CO_PLAN 이면 "AI가 시간·동선을 맞춰 배치해요" 대신 같이 짜기 안내, 미지정이면 지금 문구 그대로', () => {
+    render(<MustVisitPickerScreen view={{ kind: 'loading' }} mode="CO_PLAN" />);
+    expect(screen.queryByText(INTRO_NOTE)).toBeNull();
+    expect(screen.getByText('일정은 이어서 함께 골라요')).toBeOnTheScreen();
+    screen.unmount();
+
+    render(<MustVisitPickerScreen view={{ kind: 'loading' }} />);
+    expect(screen.getByText(INTRO_NOTE)).toBeOnTheScreen();
+  });
+
+  it('0곳 얼굴도 mode=CO_PLAN 이면 "AI가 알아서 배치해요"를 쓰지 않는다', () => {
+    render(<MustVisitPickerScreen view={{ kind: 'empty' }} mode="CO_PLAN" />);
+    expect(screen.queryByText(/AI가 알아서 배치해요/)).toBeNull();
+    expect(
+      screen.getByText('꼭 가고 싶은 곳을 담으면 일정에 함께 넣어요')
+    ).toBeOnTheScreen();
+    screen.unmount();
+
+    render(<MustVisitPickerScreen view={{ kind: 'empty' }} />);
+    expect(screen.getByText(/AI가 알아서 배치해요/)).toBeOnTheScreen();
+  });
+});
+
 describe('C-AC6 · AC-6 — loading 에서 제목+서브카피가 둘 다 보인다', () => {
   it('헤드라인 제목과 서브카피가 함께 뜬다 (default 와 반대)', () => {
     render(<MustVisitPickerScreen view={{ kind: 'loading' }} />);

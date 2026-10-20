@@ -293,14 +293,18 @@ export function BottomTabBar({
       <View className="rounded-pill" style={PILL_SHADOW_STYLE}>
         <BlurView
           // intensity 70(TRIP-1104) — 24 는 사진 카드가 알약 뒤로 지날 때 회색 라벨이 무늬에
-          // 묻혔다(QA 5회차). 사용자 합의 범위 60~80 의 중앙이며 기기 확정 대기다 — iOS 실기에서
-          // 사진 배경 vs 흰 배경을 대조해 값을 확정하고, 부족하면 흰 68% 레이어를 더한다.
+          // 묻혔다(QA 5회차). 사용자 합의 범위 60~80 의 중앙이다. 부족해 흰 68% 레이어를 더했다(TRIP-1436).
           intensity={70}
           tint="light"
           experimentalBlurMethod="dimezisBlurView"
           className="flex-row items-center overflow-hidden rounded-pill px-[10px] py-[2px]"
           style={PILL_BORDER_STYLE}
         >
+          {/* TRIP-1436 Q-025 — 흰 68% 레이어(TRIP-1104 합의): 사진 위에서도 회색 라벨이 흰 배경 위처럼 읽히게. 라벨·아이콘 아래에 깐다. */}
+          <View
+            pointerEvents="none"
+            className="absolute inset-0 bg-canvas/[0.68]"
+          />
           {TAB_CONFIG.map(({ key, label, ActiveIcon, InactiveIcon }) => {
             const selected = key === activeKey;
             return (
