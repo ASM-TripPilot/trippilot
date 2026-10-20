@@ -267,7 +267,7 @@ def test_prompt_renders_deterministically_with_ref() -> None:
     p1, ref = reg.render(_FEAT, _vars())
     p2, _ = reg.render(_FEAT, _vars())
     assert p1 == p2  # 결정론
-    assert ref.prompt_id == "prompts/dialogue_answer.yaml" and ref.version == "0.3.1"
+    assert ref.prompt_id == "prompts/dialogue_answer.yaml" and ref.version == "0.3.2"
     assert ref.feature == "DIALOGUE_ANSWER"
     assert "GET_WEATHER" in p1 and "최대 강수확률" in p1
     assert "- 사용자: 내일 비 와?" in p1 and "- 도우미: 내일 제주 예보예요." in p1
@@ -307,6 +307,11 @@ def test_prompt_states_friendly_turn_rules() -> None:
     # 0.3.1 — 어디에나 붙는 여는 말 금지 · 질문과 이어지는 마무리 (예시가 "바로 알려 드릴게요!"로 시작해 모델이 매번 따라 했다)
     for phrase in ("여는 말을 매번 붙이지 마세요", "알려 드릴게요", "방금 질문과 이어지는"):
         assert phrase in prompt, phrase
+    # 0.3.2 — 후보 답은 고르는 쪽으로(탐색 답마다 지역 중심이라 답할 수 없는 "장소별 거리"를 권했다) · 분류·칸 이름 읽지 않기
+    # 마무리 꼴은 그 의도에만(다음 일정 답으로 번졌다) · 병합 답은 다른 부분까지 답한 뒤(날씨를 0/16 으로 뺐다)
+    for phrase in ("고르는 쪽으로 마무리", "궁금한 곳을 눌러서", "한꺼번에 확인해 주겠다고", "분류를 그대로 읽어 주지", "칸 이름",
+                   "방금 답한 것", "다른 의도의 답에는", "같이 물은 것을 다 답한 뒤"):
+        assert phrase in prompt, phrase
 
 
 # 예시 한 건 = "확인된 사실 {…}" 줄 + 다음 줄 "→ {…}" (yaml 블록이 들여쓰기를 걷어 낸 렌더 결과 기준)
@@ -320,10 +325,11 @@ def test_prompt_examples_pass_gate_and_end_with_next_step() -> None:
     """
     prompt, _ = PromptRegistry(_PROMPTS).render(_FEAT, _vars())
     examples = _EXAMPLE.findall(prompt)
-    assert len(examples) == 3
+    assert len(examples) == 4
     for facts_raw, answer_raw in examples:
         text = json.loads(answer_raw)["text"]
         assert not any(stock in text for stock in ("알려 드릴게요", "확인해 볼게요", "궁금하시")), text  # 0.3.1 — 모델이 여는 말을 베낀다
+        assert "분류" not in text, text  # 0.3.2 — 분류를 읽어 주는 꼴도 베낀다
         assert not _violates(text, _MAX_LENGTH), text
         times, unverifiable = clock_times(text)
         assert not unverifiable and times <= clock_times(facts_raw)[0], text

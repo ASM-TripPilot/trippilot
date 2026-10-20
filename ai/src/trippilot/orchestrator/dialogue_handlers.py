@@ -422,7 +422,9 @@ class Facts:
             "intent": self.intent.value,
             "status": self.status.value,
             "needs_trip": self.needs_trip,
-            "rows": [{"label": r.label, "value": r.value} for r in self.rows],
+            # 모르는 입장료는 물었든 안 물었든 답이 "확인할 수 없다"로 같다 — 카드(payload)에만 두고 여기선 뺀다. 실었더니 카페 답마다
+            # "입장료도 미확인이에요"·"대신 입장료도 미확인이에요"가 붙었다(답변 0.3.2 측정, 2026-10-20)
+            "rows": [{"label": r.label, "value": r.value} for r in self.rows if (r.label, r.value) != ("입장료", _UNKNOWN)],
             "places": [{"name": p.name, "category": p.category, "hours_label": p.hours_label, "fee": p.fee,
                         "distance_range": p.distance_range, "reason": p.reason} for p in self.places],
             "notes": list(self.notes),
