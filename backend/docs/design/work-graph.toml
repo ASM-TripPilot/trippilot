@@ -4557,7 +4557,7 @@ ticket = "TRIP-1467"
 title = "[BE] 라이브 일정 화면 BFF — 만들지 않는다(2026-10-21 사용자 결정: 앱 진입이 이미 왕복 한 번)"
 status = "dropped"
 touches = [
-  # 착수 전 티켓 원문에서 뽑은 예상이다 — 접어서 develop 에 들어간 diff 는 없다(닫힌 #1494 의 실제 변경은 app views 의 컨트롤러·단위 테스트, ArchitectureRulesTest, openapi, IT 둘이었다).
+  # 착수 전 티켓 원문에서 뽑은 예상이다 — 접어서 develop 에 들어간 diff 는 없다(닫힌 #1494 의 실제 변경은 app views 의 컨트롤러·단위 테스트, ArchitectureRulesTest, openapi, IT 둘, 그리고 이 노드를 done 으로 닫던 work-graph.toml 이었다).
   "backend/docs/design/openapi.yaml",
   "backend/app/src/main/kotlin/com/trippilot/app/web",
   "backend/app/src/test/kotlin/com/trippilot/app/web",
