@@ -4265,6 +4265,104 @@ describe('i03 위험 상세 시트', () => {
     // 발화 트리거가 없으면 알약이 없다는 것은 「i02 트리거 표면」 I-T2 가 본다 — 같은 동작이던 R-I7 은 합치며 지웠다
     // (트리거가 0개면 시트는 원리적으로 못 뜬다 — 시트는 목록 안 트리거를 id 로 찾는다, TRIP-1152).
   });
+
+  /**
+   * 상황 감지 FE-B · frontend-components §3.4·§3.5 — 시트가 응답의 `severity`·`affectedDate`·`attribution`·`watch` 를
+   * 실데이터로 그린다(배선 몫 — 문구 규칙은 RiskDetailSheet·triggerWatchlist 단위가 본다).
+   */
+  describe('LiveItineraryPage · i03 위험 시트 — 심각도·날짜어·출처·감시 3상태 (상황 감지 FE-B)', () => {
+    it('R-F1 내일 흐림(주의) 트리거 → eyebrow "주의 · 날씨" + 날짜어 "내일" + "출처: 기상청 단기예보"', async () => {
+      await renderWithTriggers([
+        mkTrigger({
+          severity: 'CAUTION',
+          variant: 'CLOUD',
+          affectedDate: TOMORROW,
+          slotKey: null,
+          attribution: '기상청 단기예보',
+        }),
+      ]);
+
+      fireEvent.press(screen.getByTestId(ALT));
+
+      expect(screen.getByTestId('planb-risk-eyebrow')).toHaveTextContent(
+        '주의 · 날씨'
+      );
+      expect(screen.getByTestId('planb-risk-day-label')).toHaveTextContent(
+        '내일'
+      );
+      expect(screen.getByTestId('planb-risk-attribution')).toHaveTextContent(
+        '출처: 기상청 단기예보'
+      );
+    });
+
+    it('R-F2 오늘 위험 트리거·출처 없음 → 기존 eyebrow 그대로, 날짜어·출처 줄 없음', async () => {
+      await renderWithTriggers([mkTrigger({ severity: 'RISK' })]);
+
+      fireEvent.press(screen.getByTestId(ALT));
+
+      expect(screen.getByTestId('planb-risk-eyebrow')).toHaveTextContent(
+        '위험 요소 · 날씨'
+      );
+      expect(screen.queryByTestId('planb-risk-day-label')).toBeNull();
+      expect(screen.queryByTestId('planb-risk-attribution')).toBeNull();
+    });
+
+    it('R-F3 watch — 날씨 UNKNOWN 은 "확인 불가", 발화한 영업은 "활성", delay(OFF) 배지는 없다', async () => {
+      server.use(
+        ...baseHandlers({
+          triggers: [mkTrigger({ kind: 'CLOSURE', variant: 'CLOSED_DAY' })],
+          watch: {
+            weather: { status: 'UNKNOWN', checkedAt: null },
+            closure: { status: 'CHECKED', checkedAt: '2026-08-20T00:15:00Z' },
+            delay: { status: 'OFF' },
+          },
+        }),
+        dismissHandler()
+      );
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+        wrapper,
+      });
+      await waitFor(() => expect(screen.getByTestId(CHIP)).toBeTruthy());
+
+      fireEvent.press(screen.getByTestId(ALT));
+
+      expect(screen.getByTestId('planb-risk-watch-weather')).toHaveTextContent(
+        '날씨 · 확인 불가'
+      );
+      expect(screen.getByTestId('planb-risk-watch-closure')).toHaveTextContent(
+        '영업 · 활성'
+      );
+      expect(screen.queryByTestId('planb-risk-watch-delay')).toBeNull();
+    });
+
+    it('R-F4 watch 가 CHECKED 면 발화 없는 묶음은 "정상"이다(날씨 활성 · 영업 정상)', async () => {
+      server.use(
+        ...baseHandlers({
+          triggers: [mkTrigger()],
+          watch: {
+            weather: { status: 'CHECKED', checkedAt: '2026-08-20T00:15:00Z' },
+            closure: { status: 'CHECKED', checkedAt: '2026-08-20T00:15:00Z' },
+            delay: { status: 'OFF' },
+          },
+        }),
+        dismissHandler()
+      );
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+        wrapper,
+      });
+      await waitFor(() => expect(screen.getByTestId(CHIP)).toBeTruthy());
+
+      fireEvent.press(screen.getByTestId(ALT));
+
+      expect(screen.getByTestId('planb-risk-watch-weather')).toHaveTextContent(
+        '날씨 · 활성'
+      );
+      expect(screen.getByTestId('planb-risk-watch-closure')).toHaveTextContent(
+        '영업 · 정상'
+      );
+      expect(screen.queryByTestId('planb-risk-watch-delay')).toBeNull();
+    });
+  });
 });
 
 /**
@@ -4540,6 +4638,91 @@ describe('i02 트리거 표면', () => {
         expect(screen.getByTestId(STATUS)).toHaveTextContent('예정');
       }
     );
+  });
+
+  /**
+   * 상황 감지 FE-B · frontend-components §3.4 — 알약은 변형 라벨·날짜어를 쓰고, 장소는 트리거 **자기 날짜** 슬롯에서 찾는다.
+   * 영향 배지도 변형 라벨이다. 문구 규칙은 `hubPillCopy`·`triggerPillCopy` 단위가 보고, 여기는 실 조회 배선만 본다.
+   */
+  describe('LiveItineraryPage · i02 변형 알약 (상황 감지 FE-B)', () => {
+    it('I-F1 변형 WIND 면 알약은 "강풍 · 해운대 해변 10시", 슬롯 배지는 "강풍"이다', async () => {
+      server.use(
+        ...baseHandlers({ triggers: [mkTrigger({ variant: 'WIND' })] })
+      );
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+        wrapper,
+      });
+
+      await waitFor(() => expect(screen.getByTestId(CHIP)).toBeTruthy());
+      expect(screen.getByTestId(LABEL)).toHaveTextContent(
+        '강풍 · 해운대 해변 10시'
+      );
+      expect(screen.getByTestId(STATUS)).toHaveTextContent('강풍');
+    });
+
+    it('I-F2 내일 휴무 트리거는 허브가 오늘을 봐도 내일 그 장소로 — "내일 휴무 · 태종대"', async () => {
+      // MSW 는 한 번에 건 핸들러 중 앞의 것이 이긴다 — 이틀 일정을 기본 일정 핸들러보다 앞에 둔다.
+      server.use(
+        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+          HttpResponse.json(
+            liveItinerary([
+              {
+                date: TODAY,
+                slots: [
+                  liveSlot(POI, '해운대 해변', '10:00:00', {
+                    endAt: '11:00:00',
+                  }),
+                ],
+              },
+              {
+                date: TOMORROW,
+                slots: [
+                  liveSlot('p9', '태종대', '10:00:00', { endAt: '12:00:00' }),
+                ],
+              },
+            ])
+          )
+        ),
+        ...baseHandlers({
+          triggers: [
+            mkTrigger({
+              kind: 'CLOSURE',
+              variant: 'CLOSED_DAY',
+              affectedDate: TOMORROW,
+              slotKey: `${TOMORROW}#p9`,
+            }),
+          ],
+        })
+      );
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+        wrapper,
+      });
+
+      await waitFor(() => expect(screen.getByTestId(CHIP)).toBeTruthy());
+      expect(screen.getByTestId(LABEL)).toHaveTextContent('내일 휴무 · 태종대');
+      // 오늘 슬롯 배지는 그대로 — 트리거는 내일 슬롯을 가리킨다.
+      expect(screen.getByTestId(STATUS)).toHaveTextContent('예정');
+    });
+
+    it('I-F3 오늘 CLOSURE 변형 OUT_OF_HOURS 면 알약은 꼬리 없이, 배지는 "영업시간 밖"', async () => {
+      server.use(
+        ...baseHandlers({
+          triggers: [mkTrigger({ kind: 'CLOSURE', variant: 'OUT_OF_HOURS' })],
+        })
+      );
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+        wrapper,
+      });
+
+      await waitFor(() => expect(screen.getByTestId(CHIP)).toBeTruthy());
+      expect(screen.getByTestId(LABEL)).toHaveTextContent(
+        '영업시간 밖 · 해운대 해변'
+      );
+      expect(screen.getByTestId(STATUS)).toHaveTextContent('영업시간 밖');
+    });
   });
 });
 

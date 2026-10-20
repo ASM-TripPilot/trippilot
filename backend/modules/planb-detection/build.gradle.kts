@@ -18,9 +18,19 @@ dependencies {
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.jackson.module.kotlin)   // 아웃박스 payload 트리 읽기(재계획 적용 소비) — notification·archive 와 같은 관례
+    implementation(libs.jackson3.module.kotlin)  // AI 기회 경계 매퍼(Jackson 3 = SB4 기본) — 없으면 와이어 DTO 가 예외 없이 빈 값이 된다
     implementation(libs.shedlock.spring)         // 상황 감시 스윕 단일 실행 락(@SchedulerLock) — U10 지연 스캔도 같은 줄이다
     implementation(libs.kotlin.reflect)
 
     testImplementation(project(":common:test-support"))
     testImplementation(libs.kotest.property)
+}
+
+// AI 경계 계약 정본(`ai/docs/openapi.json`)은 이 모듈 밖 — 리포 루트에 있다(OpportunityBoundaryOpenApiTest).
+// 입력으로 선언하지 않으면 상대가 계약을 바꿔도 Gradle 이 테스트를 UP-TO-DATE 로 건너뛴다(회고·일정 경계와 같은 이유).
+// 경로 민감도는 RELATIVE(일정 경계와 같은 꼴) — 기본 ABSOLUTE 면 워크트리마다 캐시 키가 갈려 서로의 결과를 받지 못한다.
+tasks.test {
+    inputs.files(rootProject.file("../ai/docs/openapi.json"))
+        .withPropertyName("aiBoundaryContract")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
 }
