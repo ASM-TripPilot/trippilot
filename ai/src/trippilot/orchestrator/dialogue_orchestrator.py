@@ -524,6 +524,10 @@ def _prompt_names(prompt: Mapping) -> list[str]:
     """`to_prompt_dict` 모양 사실의 장소·대상·앵커 이름 — 계획 병합본은 also 부분까지(정정본 C4). 측정 러너도 이것으로 아는 이름을 만든다."""
     names = [p["name"] for p in prompt.get("places", ()) if isinstance(p, Mapping) and isinstance(p.get("name"), str)]
     names += [v for v in (prompt.get("target"), prompt.get("anchor")) if isinstance(v, str)]
+    # 장소 소개(KB-5) 글자 그대로 있는 이름은 말해도 된다 — "근정전·광화문"이 목록 밖 장소로 막히지 않게(사실 칸 원칙, ai-4e 합의)
+    intro = prompt.get("intro")
+    if isinstance(intro, str):
+        names += [m.group(0) for word in re.findall(r"[가-힣]+", intro) if (m := _PLACE_LIKE.match(word))]
     for part in prompt.get("also", ()):
         if isinstance(part, Mapping):
             names += _prompt_names(part)

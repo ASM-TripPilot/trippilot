@@ -56,6 +56,7 @@ from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEX
 from trippilot.orchestrator.arguments import extract_kind
 from trippilot.orchestrator.intent_router import normalize
 from trippilot.orchestrator.opportunity import _displayable
+from trippilot.orchestrator.place_intro import PlaceIntro
 from trippilot.orchestrator.place_sql import PlaceSqlLookup
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder, restrict_pool_to_target_role
 from trippilot.providers.base import Provider
@@ -202,6 +203,7 @@ class HandlerPorts:
     pool_builder: CandidatePoolBuilder | None = None
     planb: PlanBAgent | None = None
     place_sql: PlaceSqlLookup | None = None  # 장소 탐색 NL2SQL — DIALOGUE_SQL 배정 + 장소 DB DSN 이 있을 때만
+    place_intro: PlaceIntro | None = None  # 장소 소개 한 조각(KB-5) — 벡터 스토어가 배선됐을 때만
 
 
 @dataclass(frozen=True, slots=True)
@@ -1024,6 +1026,26 @@ def _outside_day(ctx: TurnContext) -> date:
     return (resolve_day(said, ctx.snapshot, ctx.today) if said else None) or ctx.today
 
 
+# 영업시간·요금을 묻는 말 — 이때는 소개를 붙이지 않는다(답에 소개가 섞이면 묻지 않은 말이 늘어난다)
+_HOURS_FEE = re.compile(r"영업|시간|몇\s?시|열어|열려|여는|닫|입장료|요금|가격|얼마|휴무|쉬는|쉬어|주차")
+
+
+def _intro_for(ctx: TurnContext, packet: Mapping[str, object], poi_id: str) -> str:
+    """장소 소개 한 조각(KB-5) — 소개를 물을 때만(영업시간·요금 질문이면 빈 문자열). 조인 키는 POI_INFO 행의 source_ref."""
+    port, aspect = ctx.ports.place_intro, ctx.arguments.get("aspect") or ""
+    if port is None or _HOURS_FEE.search(aspect) or _HOURS_FEE.search(ctx.utterance):
+        return ""
+    data = packet.get("data") if isinstance(packet, Mapping) else None
+    pois = data.get("pois", ()) if isinstance(data, Mapping) else ()
+    ref = next((p.get("source_ref") for p in pois if isinstance(p, Mapping) and p.get("poi_id") == poi_id), None)
+    if not ref:
+        return ""
+    try:
+        return port.intro(str(ref), aspect or "소개")
+    except Exception:  # noqa: BLE001 — 부가 정보라 없이 간다(INV-4), 사유는 PlaceIntro 가 남긴다
+        return ""
+
+
 def _plan_poi_info(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     slot = _place_slot(ctx)
     port = ctx.ports.poi_info
@@ -1035,7 +1057,8 @@ def _plan_poi_info(ctx: TurnContext) -> tuple[HandlerTask, ...]:
         on = ctx.snapshot.day_of(slot) or ctx.today
 
         def fn() -> dict:
-            return port.fetch({"poi_ids": frozenset({PoiId(slot.poi_id)}), "on": on, "now": ctx.now}).to_dict()
+            packet = port.fetch({"poi_ids": frozenset({PoiId(slot.poi_id)}), "on": on, "now": ctx.now}).to_dict()
+            return {**packet, "intro": _intro_for(ctx, packet, slot.poi_id)}
 
         return (HandlerTask("poi_info", fn),)
     said, finder = ctx.arguments.get("place"), ctx.ports.place_sql
@@ -1048,7 +1071,8 @@ def _plan_poi_info(ctx: TurnContext) -> tuple[HandlerTask, ...]:
         if found is None:  # 없거나 여럿(체인점) — 하나를 골라 다른 곳의 영업시간을 말하지 않는다
             return {"status": "EMPTY", "reason": "place_not_found"}
         packet = port.fetch({"poi_ids": frozenset({PoiId(found.poi_id)}), "on": on, "now": ctx.now}).to_dict()
-        return {**packet, "lookup": {"poi_id": found.poi_id, "name": found.name, "category": found.category}}
+        return {**packet, "lookup": {"poi_id": found.poi_id, "name": found.name, "category": found.category},
+                "intro": _intro_for(ctx, packet, found.poi_id)}
 
     return (HandlerTask("poi_info", find),)
 
@@ -1086,11 +1110,14 @@ def _assemble_poi_info(ctx: TurnContext, results: Mapping[str, TaskResult]) -> F
     if slot is None:
         notes = notes + ("일정 밖 장소 — 등록 장소에서 이름으로 찾았다",)
     actions = (_action("OPEN_PLACE", poiId=poi_id),) if poi_id else (_action("OPEN_ITINERARY"),)
+    # 소개(KB-5)는 카드(payload)에 싣지 않고 답변 재료로만 — 위키 원문을 그대로 보이면 출처 표기가 걸린다(place_intro 註)
+    intro = value.get("intro") if isinstance(value, Mapping) else None
+    detail = {"target": name, **({"intro": intro} if isinstance(intro, str) and intro else {})}
     return Facts(
         intent, status, AnswerKind.INFO, rows=rows,
         places=(FactPlace(poi_id, name, category, hours_label=hours, fee=fee if isinstance(fee, int) else None),),
         notes=notes, payload=_info("PLACE", name, rows), next_actions=actions, quick_replies=(),
-        template_text=_template(intent, status), detail={"target": name},
+        template_text=_template(intent, status), detail=detail,
     )
 
 

@@ -4265,6 +4265,7 @@ def build_orchestrator(
         bank_ready=lambda: bank_index.indexed, bank=bank, confident_intent=router.confident_intent,
         providers=providers, pool_builder=pool_builder, rag=rag, memory_store=memory_store, clock=clock, tz=tz,
         shadow_rate=shadow_rate, shadow_rng=shadow_rng, place_sql=place_sql,
+        kb_store=vector_store if vector_store is not None else None,
     ) if dialogue_orchestrator_enabled else None
     return WiredItineraryOrchestrator(
         orchestrator, provider, poi_db, travel, tz=tz,
