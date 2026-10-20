@@ -121,7 +121,9 @@ from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
 from trippilot.assembly_engine.repair import RepairChange
 from trippilot.assembly_engine.scorer import build_rule_score
-from trippilot.assembly_engine.travel import WALKED_SOURCE, TravelEstimator, WalkFirst, haversine_km
+from trippilot.assembly_engine.travel import (
+    TRANSIT_SOURCE, WALKED_SOURCE, TravelEstimator, WalkFirst, haversine_km,
+)
 from trippilot.domain.common import (
     BUDGET_TOKENS,
     PACE_TOKENS,
@@ -873,7 +875,7 @@ def _render_distance(estimate: TravelEstimate, mode: TransportMode) -> str:
     """
     _, road_km = estimate.distance_km_range
     suffix = " 추정" if estimate.is_estimated else ""
-    shown = TransportMode.WALK if estimate.source == WALKED_SOURCE else mode
+    shown = {WALKED_SOURCE: TransportMode.WALK, TRANSIT_SOURCE: TransportMode.PUBLIC}.get(estimate.source, mode)
     return f"약 {road_km:.1f}km · {_TRANSPORT_LABELS[shown]}{suffix}"
 
 
@@ -1996,9 +1998,7 @@ class WiredItineraryOrchestrator:
         )
 
     def _walk_first(self, walk_max_km: float | None) -> Callable[[TravelPort], TravelPort]:
-        """조립과 같은 도보 상한으로 화면 거리를 재는 감싸개 — 상한이 기본이면 그대로."""
-        if walk_max_km is None:
-            return lambda port: port
+        """조립과 같은 추정기로 구간 수단을 정해 화면 거리를 재는 감싸개(도보 여행의 먼 구간 때문에 늘 감싼다)."""
         walker = self._assembly_provider.walker(walk_max_km)
         return lambda port: WalkFirst(port, walker)
 
@@ -2135,8 +2135,9 @@ class WiredItineraryOrchestrator:
             # 편집(장소 교체) 뒤 바뀐 구간의 거리 — generate 와 같은 렌더·시한 회계다. 앵커가
             # 없는 날의 첫 슬롯은 null, 수단은 수리가 시각 계산에 쓴 것(problem.transport).
             coords = {pid: poi.coord for pid, poi in poi_index.items()}
+            walk = self._walk_first(None)
             (distance_ranges,), _ = self._render_distances(
-                lambda port: (_distance_ranges(repaired, anchors, coords, port, problem.transport),),
+                lambda port: (_distance_ranges(repaired, anchors, coords, walk(port), problem.transport),),
                 request.request_meta, entered_ms,
             )
         return WiredRepairOutcome(
