@@ -47,9 +47,12 @@ class DeadlineTransport(httpx.BaseTransport):
 
     def __init__(self) -> None:
         # SDK 기본 클라이언트와 같은 풀 한도 — transport 를 직접 주면 SDK 한도가 안 먹는다.
+        # 쉬는 연결은 100s 까지 둔다(httpx 기본 5s). 5s 면 띄엄띄엄 오는 도우미 턴마다 첫 LLM 호출이 TCP+TLS 를 새로 맺는다
+        # — 게이트웨이 왕복 ≈180ms·새 연결 ≈0.56s(2026-10-19 실측). 게이트웨이는 쉬는 연결을 120s 쉬어도 받고 240s 에는
+        # 닫았다. 닫힌 연결은 풀이 꺼낼 때 걸러 새로 맺는다(httpcore — 읽을 수 있는 소켓 = 상대가 닫음).
         # ponytail: 프록시 env(HTTPS_PROXY)는 읽지 않는다 — 배포에 egress 프록시가 생기면 여기서 `proxy=`
         self._inner = httpx.AsyncHTTPTransport(
-            limits=httpx.Limits(max_connections=1000, max_keepalive_connections=100)
+            limits=httpx.Limits(max_connections=1000, max_keepalive_connections=100, keepalive_expiry=100.0)
         )
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
