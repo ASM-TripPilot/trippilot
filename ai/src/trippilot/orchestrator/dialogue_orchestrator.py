@@ -813,7 +813,9 @@ class DialogueOrchestrator:
         results: dict[str, TaskResult] = {}
         for task in tasks:
             try:
-                futures[task.name] = self._pool.submit(task.fn)
+                # 문맥을 작업마다 복사해 넘긴다 — 턴 `llm_calls`(백엔드 사용량 상한의 원천)가 contextvar 카운터라, 풀 스레드에서 부른
+                # 서비스 LLM(장소 탐색 NL2SQL)이 빠졌다. 한 사본을 두 스레드가 같이 쓰면 RuntimeError 라 submit 마다 새로 뜬다
+                futures[task.name] = self._pool.submit(contextvars.copy_context().run, task.fn)
             except Exception as e:  # noqa: BLE001 — 풀이 닫혔다 등: 그 작업만 SKIPPED
                 results[task.name] = self._failed_task(inp, task.name, "SKIPPED", f"submit: {type(e).__name__}")
         if futures:
