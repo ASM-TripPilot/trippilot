@@ -109,7 +109,6 @@ export interface LiveHubViewProps {
   initialSnapIndex?: number;
   /** TRIP-1494 — 바뀔 때마다 시트를 `initialSnapIndex` 로 다시 올린다(재계획 재적용). */
   expandSignal?: number;
-  currentLocation?: MapCenter;
   onBack: () => void;
   onSelectDay: (index: number) => void;
   /** 수정 팝업의 "AI에게 맡기기" 항목 — 수동 재계획 진입(BR-U4-10). */
@@ -203,7 +202,6 @@ export function LiveHubView({
   slots,
   initialSnapIndex = 0,
   expandSignal,
-  currentLocation,
   onBack,
   onSelectDay,
   onPressAiReplan,
@@ -381,7 +379,6 @@ export function LiveHubView({
         center={center}
         pins={pins}
         mapViewOnly={false}
-        currentLocation={currentLocation}
         overlay={overlay}
         snapPoints={snapPoints}
         initialIndex={initialSnapIndex}

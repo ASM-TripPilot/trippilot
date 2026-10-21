@@ -128,9 +128,6 @@ export interface MapSheetShellProps<T = unknown> {
   /** 지도 잠금 여부(TRIP-746 가산) — 미전달이면 기본 잠금, 기본 배열의 닫힘 칸에서만 풀림(TRIP-920). i01 허브만
    *  `false` 로 열어 여행 중 자유 탐색을 유지한다(TRIP-397 결정 계승). */
   mapViewOnly?: boolean;
-  /** 현재위치 점(TRIP-746 가산) — `<MapView currentLocation>` 으로 흘린다(TRIP-745 계약). 미전달이면
-   *  점 없음. */
-  currentLocation?: MapCenter;
   /** 시트 스냅 이동 시작(TRIP-748 가산) — `<BottomSheet onAnimate>` 로 그대로 흘린다. 마운트 가드
    *  같은 판단은 소비처(i01 허브) 몫이다. 미전달=미부착. */
   onSheetAnimate?: (fromIndex: number, toIndex: number) => void;
@@ -196,7 +193,6 @@ export function MapSheetShell<T = unknown>({
   list,
   snapPoints,
   mapViewOnly,
-  currentLocation,
   onSheetAnimate,
   onSheetScrollBeginDrag,
   onMapTap,
@@ -292,7 +288,6 @@ export function MapSheetShell<T = unknown>({
               center={center}
               pins={pins}
               viewOnly={mapLocked}
-              currentLocation={currentLocation}
               onTapMap={onMapTap}
               radiusCircle={radiusCircle}
               fitPins={fitPins}

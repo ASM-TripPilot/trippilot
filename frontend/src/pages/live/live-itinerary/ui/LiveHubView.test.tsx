@@ -409,13 +409,12 @@ describe('LiveHubView · HV5 지도 (Seed Q1 · 브리프 골격)', () => {
     else process.env[KEY_NAME] = original;
   });
 
-  it('지도에 5슬롯 핀과 현재위치 점을 그린다', () => {
-    renderHub({ currentLocation: { lat: 35.16, lng: 129.13 } });
+  it('지도에 5슬롯 핀을 그린다', () => {
+    renderHub();
 
     [1, 2, 3, 4, 5].forEach((n) =>
       expect(screen.getByTestId(`map-marker-pin-${n}`)).toBeOnTheScreen()
     );
-    expect(screen.getByTestId('map-current-location')).toBeOnTheScreen();
   });
 
   // 5-b 경고-1 보강 — 핀이 "있다"만이 아니라 슬롯 진행 상태를 옮겨 받았는지 본다. 색은 SVG

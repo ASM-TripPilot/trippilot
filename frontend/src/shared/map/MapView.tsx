@@ -109,10 +109,6 @@ export interface MapViewProps {
    * `{latitude,longitude}`를 리포 순서 `{lat,lng}`로 감싼다. `maxLevel↔minZoom`과 같은 옵트인 —
    * 프롭을 준 때만 NaverMapView 에 콜백을 단다(미전달 시 콜백 부착 0). */
   onCameraIdle?: (center: MapCenter) => void;
-  /** 현재위치 점(TRIP-745). 좌표를 주면 파란 점+반투명 링+"현재 위치" 라벨을 별도 마커로 얹는다.
-   * 미전달이면 그 마커를 렌더하지 않는다(항상-렌더 회귀 방지). 핀 index 를 오염시키지 않도록
-   * `onPinTap` 을 달지 않는 별도 마커다. */
-  currentLocation?: MapCenter;
   /** +/− 줌 컨트롤(우상단)을 켠다(TRIP-768, 기록·회고 지도). **옵트인** — 미전달이면 명시적으로
    * 끈다(네이버 SDK native default 가 `true` 라 안 넘기면 저절로 뜬다). `viewOnly`(제스처)와 **독립**:
    * 제스처를 잠근 지도에도 줌 버튼은 켤 수 있고, 기존 viewOnly 지도(h05·h07)에 저절로 생기지 않는다. */
@@ -156,7 +152,6 @@ const INITIAL_ZOOM = 14;
 const PIN_PRIMARY = '#FF385C'; // primary — current·기본 물방울
 const PIN_SUCCESS = '#0E9384'; // success — done 물방울
 const PIN_MUTED_SOFT = '#9AA1AB'; // muted-soft — upcoming 테두리·번호
-const PIN_LINK = '#1659C9'; // link — 현재위치 점·링·라벨
 const PIN_WHITE = '#FFFFFF'; // on-primary·canvas — 흰 테두리·흰 번호·흰 체크
 
 /** Figma 4125:3958 물방울 벡터 1:1. 큰 것(current·기본)은 35×45.5, 작은 것(upcoming·done)은 28×36. */
@@ -290,8 +285,6 @@ const RECORD_DIMS: Record<
  * 매번 "바뀐 prop"으로 보인다.
  */
 const DROP_ANCHOR = { x: 0.5, y: 1 } as const;
-const CURRENT_LOCATION_ANCHOR = { x: 0.5, y: 0.85 } as const;
-const CURRENT_LOCATION_STYLE = { width: 72, alignItems: 'center' } as const;
 const DROP_WRAP_LARGE_STYLE = { width: 35, height: 46 } as const;
 const DROP_WRAP_SMALL_STYLE = { width: 28, height: 36 } as const;
 const RECORD_WRAP_STYLE: Record<
@@ -509,7 +502,6 @@ function MapViewImpl({
   onLoadFailed,
   maxLevel,
   onCameraIdle,
-  currentLocation,
   showZoomControls,
   showScaleBar,
   radiusCircle,
@@ -769,64 +761,6 @@ function MapViewImpl({
             </NaverMapMarkerOverlay>
           );
         })}
-        {currentLocation ? (
-          // 현재위치는 핀 index 를 흔들지 않는 별도 마커다 — onTap(→onPinTap) 을 달지 않는다.
-          // anchor y 는 하단 점을 좌표에 대략 맞춘다(정확 정렬은 6-b).
-          <NaverMapMarkerOverlay
-            key="current-location"
-            latitude={currentLocation.lat}
-            longitude={currentLocation.lng}
-            anchor={CURRENT_LOCATION_ANCHOR}
-            width={72}
-            height={70}
-          >
-            <View
-              collapsable={false}
-              testID="map-current-location"
-              style={CURRENT_LOCATION_STYLE}
-            >
-              {/* 라벨 pill(흰 배경+파란 텍스트) — 반드시 SVG(Rect+Text). RN <Text> 는 마커 래스터에
-                안 찍힌다(TRIP-876). */}
-              <Svg width={72} height={20} viewBox="0 0 72 20">
-                <Rect
-                  x={0}
-                  y={0}
-                  width={72}
-                  height={20}
-                  rx={8}
-                  fill={PIN_WHITE}
-                />
-                <SvgText
-                  x={36}
-                  y={14}
-                  fill={PIN_LINK}
-                  fontSize={10.5}
-                  textAnchor="middle"
-                >
-                  현재 위치
-                </SvgText>
-              </Svg>
-              {/* 반투명 링(16%) 뒤 · 불투명 점 앞. */}
-              <Svg width={42} height={42} viewBox="0 0 42 42">
-                <Circle
-                  cx={21}
-                  cy={21}
-                  r={21}
-                  fill={PIN_LINK}
-                  fillOpacity={0.16}
-                />
-                <Circle
-                  cx={21}
-                  cy={21}
-                  r={6.75}
-                  fill={PIN_LINK}
-                  stroke={PIN_WHITE}
-                  strokeWidth={2.5}
-                />
-              </Svg>
-            </View>
-          </NaverMapMarkerOverlay>
-        ) : null}
         {showPath ? (
           // 경로선 빨강(primary) + 흰 케이싱(Figma 4125:3958 route/route-casing). width 는 6-b 조정.
           // coords 는 visited(+무-kind) 구간만 — planned·stay 는 선에서 빠진다(위 lineCoords).

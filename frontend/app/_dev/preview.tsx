@@ -2191,7 +2191,7 @@ const LIVE_HUB_PREVIEW_SLOTS: LiveHubSlot[] = [
     },
   },
 ];
-// Figma 의 현재위치 점(부산시립미술관 근처).
+// 프리뷰 지도 중심(부산시립미술관 근처).
 const LIVE_HUB_PREVIEW_LOCATION = { lat: 35.1655, lng: 129.1335 };
 
 // TRIP-1344 · U10 프리뷰 — 실제 경로 2세그먼트(감천→광안리 · 강 건너 공백 · 미술관 쪽). 좌표는 슬롯 사이를 굽게 이은 가짜 값.
@@ -2260,7 +2260,6 @@ function renderLiveHubPreview(
       activeDayIndex={1}
       slots={LIVE_HUB_PREVIEW_SLOTS}
       initialSnapIndex={snap}
-      currentLocation={LIVE_HUB_PREVIEW_LOCATION}
       onBack={noop}
       onSelectDay={noop}
       onPressAiReplan={noop}
@@ -3706,14 +3705,13 @@ export const PREVIEW_STATES: PreviewState[] = [
     band: '기타',
     label: '기타 · 지도(map-default)',
     login: null,
-    // TRIP-745 — 핀 3상태(done 흰 체크·current 분홍 번호·upcoming 회색 번호)·현재위치 점/링/라벨·
+    // TRIP-745 — 핀 3상태(done 흰 체크·current 분홍 번호·upcoming 회색 번호)·
     // 빨강 경로선을 한 지도에서 6-b 육안 대조하는 자리(jest 는 물방울 모양·색·번호를 못 본다).
     // 좌표는 서울 도심 ~1.5km 안(한 화면). 실지도는 env 키가 있는 실기 빌드에서만 뜬다.
     render: () => (
       <MapView
         center={{ lat: 37.5665, lng: 126.978 }}
         pins={MAP_STATE_PREVIEW_PINS}
-        currentLocation={{ lat: 37.5662, lng: 126.9785 }}
       />
     ),
   },
@@ -7582,7 +7580,6 @@ export const PREVIEW_STATES: PreviewState[] = [
             progress: state,
           }))
         )}
-        currentLocation={LIVE_HUB_PREVIEW_LOCATION}
         solvingLabel="17시 이후 다시 짜는 중"
         dayLabel="2일차"
         dateLabel="6월 11일(목)"

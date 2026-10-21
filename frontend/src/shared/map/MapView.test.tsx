@@ -255,10 +255,10 @@ describe('TRIP-748 — onTapMap: 지도 빈 곳 탭을 부모에 알린다(허�
   });
 });
 
-// ── TRIP-745 · 핀 3상태 + 현재위치 점 + 경로선 색 (01b AC-1~4) ──────────────────
+// ── TRIP-745 · 핀 3상태 + 경로선 색 (01b AC-1~3 — 현재위치 점 AC-4 는 TRIP-1536 에서 삭제) ──────────────────
 //
 // 무엇을 보장하나: MapPin.state 로 핀이 done/current/upcoming 세 얼굴로 갈리고(색·번호·체크),
-// currentLocation 으로 파란 점+링+라벨이 옵션으로 얹히며, 연결 경로선이 빨강(#FF385C)으로
+// 연결 경로선이 빨강(#FF385C)으로
 // 그려진다. 인프라 확장만이라 화면 배선은 이번 범위 밖(TRIP-746).
 //
 // ★ 색은 SVG fill/stroke 리터럴로만 실측 가능(className 은 SVG 에 안 붙는 map 트랩) — 각 상태의
@@ -365,41 +365,6 @@ describe('🟢 AC-2 — state 미전달 = 기존 분홍 핀(무회귀 선제 앵
     ).toBeGreaterThan(0);
     // 기본 핀에 done 체크가 붙으면 안 된다(무번호 완료로 오인 금지).
     expect(within(pin).queryByTestId(CHECK_TESTID(1))).toBeNull();
-  });
-});
-
-describe('🔴 AC-4 — 현재위치 오버레이(파란 점·링·라벨)', () => {
-  it('currentLocation 전달 → 파란(#1659C9) 점·링 + "현재 위치" SVG 라벨, collapsable={false}', () => {
-    // Arrange + Act
-    render(
-      <MapView
-        center={CENTER}
-        pins={PINS}
-        currentLocation={{ lat: 33.5, lng: 126.5 }}
-      />
-    );
-
-    // Assert — 현재위치 마커의 커스텀 뷰(map-current-location)가 뜬다.
-    const cur = screen.queryByTestId('map-current-location');
-    expect(cur).not.toBeNull();
-    // 마커 래스터 필수 prop — 없으면 iOS New Arch 에서 기본 마커로 나온다(실제 flatten 방지는 6-b).
-    expect(
-      (cur as { props: { collapsable?: boolean } }).props.collapsable
-    ).toBe(false);
-    // 라벨은 SVG 라 getByText 가 아니라 content prop 으로 본다(다문자·공백 문자열 매치).
-    expect(
-      within(
-        cur as ReturnType<typeof screen.getByTestId>
-      ).UNSAFE_queryAllByProps({ content: '현재 위치' }).length
-    ).toBeGreaterThan(0);
-  });
-
-  it('currentLocation 미전달 → 현재위치 마커 부재(짝 — 항상 렌더 회귀 방지)', () => {
-    // Arrange + Act
-    render(<MapView center={CENTER} pins={PINS} />);
-
-    // Assert
-    expect(screen.queryByTestId('map-current-location')).toBeNull();
   });
 });
 
