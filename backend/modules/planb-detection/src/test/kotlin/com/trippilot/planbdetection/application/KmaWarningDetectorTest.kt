@@ -333,6 +333,23 @@ class KmaWarningDetectorTest : StringSpec({
         (KmaWarningDetector(warned(gale(WarningArea("부산", listOf("부산동부")))), gijang).detect(day) as Detection.Checked).signals.size shouldBe 1
     }
 
+    /**
+     * 특보구역은 기상청 관서 묶음으로 나뉘어 묶음과 행정 광역이 다른 구역이 있다 — 경기 묶음 줄의 `강화` 는 인천 강화군이다. 광역이 다르다고
+     * '안 걸림'으로 접으면 거짓 해제다(INV-SA-2). 그 도의 다른 목적지에는 아는 이름이라 확인이다(모름·WARN 이 아니다).
+     */
+    "관서 묶음 구역은 줄의 광역과 무관하게 그 시군에 걸린다 — 그 도의 다른 목적지는 확인" {
+        val ganghwa = FakeTripDestinations().put(tripId, DAY, DAY.plusDays(1), TripDestinationRef("강화군", "28710", 1))
+        val gimpo = FakeTripDestinations().put(tripId, DAY, DAY.plusDays(1), TripDestinationRef("김포시", "41570", 1))
+        val day = target(tripId, slot("해변", "자연", "14:00", "15:00"))
+        fun line() = warned(gale(WarningArea("경기도", listOf("강화"))))
+
+        val warns = alertDetectorWarns {
+            (KmaWarningDetector(line(), ganghwa).detect(day) as Detection.Checked).signals.single().variant shouldBe TriggerVariant.WIND
+            KmaWarningDetector(line(), gimpo).detect(day) shouldBe Detection.Checked(setOf(null), emptyList())
+        }
+        warns.shouldBeEmpty()
+    }
+
     "이름이 길어 200자를 넘기면 이름 없이 쓴다 — 가드에 걸려 신호를 통째로 잃지 않게" {
         val long = "호미곶".repeat(70)
 

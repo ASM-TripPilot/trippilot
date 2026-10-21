@@ -18,8 +18,9 @@ import java.time.LocalDate
  * 특보 목적지 매칭 · 종류 → 변형 · 그 날의 목적지(BR-SA-16 — 순수). 기대값은 리터럴 표다.
  *
  * 매칭 규칙: 하위 구역 이름이 시군 어간으로 시작하면 그 구역 / 광역 목적지는 그 광역 줄 전체 / 바다·해상 구역은 무시 /
- * 광역 별칭(강원도↔강원특별자치도 · 전라북도↔전북특별자치도) / `(…제외)` 는 나열한 곳을 뺀 광역 전체 / 섬 구역은 닫힌 표 /
- * 표에 없는 최상위 이름과 도의 시군 × 산지 권역·표에 없는 하위 구역 이름은 모름(UNSURE — '특보 없음'으로 확인하지 않는다).
+ * 광역 별칭(강원도↔강원특별자치도 · 전라북도↔전북특별자치도) / `(…제외)` 는 나열한 곳을 뺀 광역 전체 / 섬·관서 묶음 구역은 닫힌 표(줄의
+ * 광역보다 먼저) / 표에 없는 최상위 이름과 도의 시군 × 산지 권역·표에 없는 하위 구역 이름은 모름(UNSURE — '특보 없음'으로 확인하지
+ * 않는다).
  */
 class WeatherAlertsTest : StringSpec({
 
@@ -77,9 +78,17 @@ class WeatherAlertsTest : StringSpec({
         Province.ofKmaName("전남광주통합특별시") shouldBe null
     }
 
-    "섬 구역 표(닫힌 표) — 구역 → 그 섬이 속한 시군 코드" {
+    "섬 구역 표(닫힌 표) — 구역 → 그 섬이 속한 시군 코드(백령도.대청도 · 연평도.우도는 서해5도를 나눈 구역)" {
         WeatherAlerts.ISLANDS shouldBe mapOf(
             "울릉도.독도" to "47940", "서해5도" to "28720", "흑산도.홍도" to "12870", "거문도.초도" to "12130", "추자도" to "50110",
+            "백령도.대청도" to "28720", "연평도.우도" to "28720",
+        )
+    }
+
+    "관서 묶음 구역 표(닫힌 표) — 묶음과 행정 광역이 다른 하위 구역 → 시군 코드(5자리) · 광역 코드(2자리)" {
+        WeatherAlerts.CROSS_ZONES shouldBe mapOf(
+            "강화" to "28710", "옹진" to "28720", "군위" to "27720", "대전" to "30",
+            "부산동부" to "26", "부산중부" to "26", "부산서부" to "26", "울산동부" to "31", "울산서부" to "31",
         )
     }
 
@@ -107,7 +116,7 @@ class WeatherAlertsTest : StringSpec({
         Province.entries.filterNot { it.wide }.toSet() shouldBe WeatherAlerts.CITY_STEMS.keys // 도마다 있다
     }
 
-    "하위 구역 갈래 — 바다 · 섬 구역 · 광역 권역 · 그 도의 시군 어간 · 모름" {
+    "하위 구역 갈래 — 바다 · 섬 구역 · 광역 권역 · 그 도의 시군 어간 · 관서 묶음 구역 · 모름" {
         listOf(
             Triple(Province.GYEONGBUK, "울진산지", WeatherAlerts.ZoneKind.CITY),
             Triple(Province.GYEONGBUK, "경주동부", WeatherAlerts.ZoneKind.CITY),
@@ -123,6 +132,12 @@ class WeatherAlertsTest : StringSpec({
             Triple(Province.JEONNAM, "신안(흑산면제외)", WeatherAlerts.ZoneKind.CITY),
             Triple(Province.JEONNAM, "흑산도.홍도", WeatherAlerts.ZoneKind.ISLAND),
             Triple(Province.BUSAN, "부산동부", WeatherAlerts.ZoneKind.REGIONAL),
+            // 관서 묶음 구역 — 묶음 줄(경기·충남·경북·경남)에서는 표 이름이다
+            Triple(Province.GYEONGGI, "강화", WeatherAlerts.ZoneKind.CROSS),
+            Triple(Province.GYEONGGI, "백령도.대청도", WeatherAlerts.ZoneKind.ISLAND),
+            Triple(Province.CHUNGNAM, "대전", WeatherAlerts.ZoneKind.CROSS),
+            Triple(Province.GYEONGBUK, "군위", WeatherAlerts.ZoneKind.CROSS),
+            Triple(Province.GYEONGNAM, "울산서부", WeatherAlerts.ZoneKind.CROSS),
         ).forEach { (province, zone, kind) -> withClue("$province $zone") { WeatherAlerts.zoneKind(province, zone) shouldBe kind } }
     }
 
@@ -132,6 +147,7 @@ class WeatherAlertsTest : StringSpec({
             listOf("북동산지")
         WeatherAlerts.unknownNames(WarningArea("경상북도", listOf("북동산지"), excluding = true)) shouldBe listOf("북동산지")
         WeatherAlerts.unknownNames(WarningArea("부산", listOf("동해안권"))) shouldBe emptyList()
+        WeatherAlerts.unknownNames(WarningArea("경기도", listOf("강화", "백령도.대청도", "김포"))) shouldBe emptyList() // 관서 묶음 · 섬 구역
         WeatherAlerts.unknownNames(WarningArea("동해중부먼바다")) shouldBe emptyList()
         WeatherAlerts.unknownNames(WarningArea("울릉도.독도")) shouldBe emptyList()
     }
@@ -170,6 +186,12 @@ class WeatherAlertsTest : StringSpec({
         val gijang = WeatherAlerts.placeOf("26710", "기장군")!!
         val dalseong = WeatherAlerts.placeOf("27710", "달성군")!!
         val gunwi = WeatherAlerts.placeOf("27720", "군위군")!!
+        val gimpo = WeatherAlerts.placeOf("41570", "김포시")!!
+        val daejeon = WeatherAlerts.placeOf("30", "대전광역시")!!
+        val yuseong = WeatherAlerts.placeOf("30200", "유성구")!!
+        val cheonan = WeatherAlerts.placeOf("44130", "천안시")!!
+        val changwon = WeatherAlerts.placeOf("48120", "창원시")!!
+        val ulju = WeatherAlerts.placeOf("31710", "울주군")!!
 
         val gyeongbuk = WarningArea("경상북도", listOf("영덕", "포항", "울진평지", "울진산지", "경주동부"))
         val mountains = WarningArea("강원도", listOf("강원중부산지", "강원남부산지"))
@@ -230,6 +252,28 @@ class WeatherAlertsTest : StringSpec({
             Triple(WarningArea("인천", listOf("서해5도")), ganghwa, MISS),
             Triple(WarningArea("인천", listOf("서해5도"), excluding = true), ongjin, HIT), // 섬 하나를 뺀다고 옹진 전체가 빠지지 않는다
             Triple(WarningArea("경상북도", listOf("울릉도.독도"), excluding = true), ulleung, MISS), // 어간으로 나열 — 울릉이 빠진다
+            Triple(WarningArea("백령도.대청도"), ongjin, HIT), // 서해5도를 나눈 구역(2026-06-01 개편)
+            Triple(WarningArea("백령도.대청도"), incheon, HIT),
+            Triple(WarningArea("연평도.우도"), seohae, MISS),
+            Triple(WarningArea("연평도.우도"), jeju, MISS), // 옹진의 우도 — 제주 우도가 아니다
+            // 규칙 3 — 관서 묶음 구역은 줄의 광역보다 먼저 표의 코드로(경기 묶음의 강화는 인천 강화군), 그 도의 다른 목적지에는 아는 이름
+            Triple(WarningArea("경기도", listOf("강화", "김포")), ganghwa, HIT),
+            Triple(WarningArea("경기도", listOf("강화", "김포")), gimpo, HIT),
+            Triple(WarningArea("경기도", listOf("강화")), gimpo, MISS),
+            Triple(WarningArea("경기도", listOf("강화")), incheon, HIT), // 그 시군이 속한 광역 목적지
+            Triple(WarningArea("경기도", listOf("강화")), ongjin, MISS),
+            Triple(WarningArea("경기도", listOf("옹진", "백령도.대청도")), ongjin, HIT),
+            Triple(WarningArea("경상북도", listOf("군위")), gunwi, HIT),
+            Triple(WarningArea("경상북도", listOf("군위")), dalseong, MISS),
+            Triple(WarningArea("경상북도", listOf("군위")), pohang, MISS),
+            Triple(WarningArea("충청남도", listOf("대전")), daejeon, HIT), // 광역 코드 — 그 광역 전부
+            Triple(WarningArea("충청남도", listOf("대전")), yuseong, HIT),
+            Triple(WarningArea("충청남도", listOf("대전")), cheonan, MISS),
+            Triple(WarningArea("경상남도", listOf("부산동부")), haeundae, HIT),
+            Triple(WarningArea("경상남도", listOf("부산서부")), gijang, HIT), // 광역 코드 — 군도 든다(규칙 7 의 권역 줄과 같다)
+            Triple(WarningArea("경상남도", listOf("울산서부")), ulju, HIT),
+            Triple(WarningArea("경상남도", listOf("부산동부", "울산동부")), changwon, MISS),
+            Triple(WarningArea("경기도", listOf("강화"), excluding = true), ganghwa, MISS), // 제외 줄은 규칙 9 로만
             // 규칙 7 — 광역시의 군은 어간으로, 권역 줄(부산동부)이면 줄 전체
             Triple(WarningArea("인천", listOf("옹진")), ganghwa, MISS),
             Triple(WarningArea("인천", listOf("옹진")), yeonsu, HIT),

@@ -14,8 +14,9 @@ import java.time.temporal.ChronoUnit
  * 1. 바다·해상 구역은 무시한다(바다 특보는 육지 일정과 무관하다).
  * 2. 최상위 이름이 광역도 섬 구역도 바다도 아니면 모름이다 — 행정 통합·구역 개편·형식 변화로 생긴 이름을 '안 걸림'으로 접으면 거짓
  *    해제가 된다(anti-patterns — 모르는 어휘는 크게 실패시킨다). 감지기가 그 이름을 WARN 으로 드러낸다.
- * 3. 섬 구역은 닫힌 표([ISLANDS])로 그 섬이 속한 시군과 그 광역 목적지에만 걸린다 — 이름 앞붙음으로 맞추지 않는다(`서해5도` 는 서해구가
- *    아니라 옹진이다). 하위 구역에 섬 구역이 나와도 같은 표로 본다.
+ * 3. 섬 구역([ISLANDS])과 관서 묶음 구역([CROSS_ZONES])은 닫힌 표의 행정구역 코드로 그 시군(광역 코드면 그 광역)과 그 광역 목적지에만
+ *    걸린다 — 이름 앞붙음으로 맞추지 않는다(`서해5도` 는 서해구가 아니라 옹진이다). 하위 구역에 나오면 줄의 광역과 무관하게 4 보다 먼저
+ *    본다 — 특보구역은 기상청 관서 묶음으로 나뉘어 `경기도(강화, 김포)` 의 강화는 인천 강화군이다. `(…제외)` 줄은 9 로만 본다.
  * 4. 광역이 다르면 걸리지 않는다 — 광역 별칭(강원도 ↔ 강원특별자치도 · 전라북도 ↔ 전북특별자치도)은 같은 광역이다.
  * 5. 광역 목적지(서울·부산·제주 등)는 그 광역 줄 전체가 걸린다. 하위 구역 없는 광역 줄은 그 광역 전체다.
  * 6. 시군 목적지는 하위 구역 이름이 **시군 어간으로 시작**하면 걸린다(`강릉` → `강릉시평지`, `경주` → `경주동부`). 정본은 '들어가면'이지만
@@ -26,8 +27,8 @@ import java.time.temporal.ChronoUnit
  *    권역(`부산동부`)이 있으면 그 군이 들었을 수 있어 줄 전체로 맞춘다(7 의 근거와 같다).
  * 8. 도의 시군은 6 으로 안 걸려도 그 줄에 광역 이름으로 시작하는 권역(`강원중부산지` · `경북북동산지`)이 있으면 모름이다 — 그 권역이 시군을
  *    덮는지 이름으로 가릴 수 없다(평창의 평지만 풀리고 대관령 경보가 남은 회차). 권역은 시군 표로 걸지 않고 모름으로 둔다(G-SA-16 결정
- *    2026-10-20). 그 도의 시군 어간([CITY_STEMS])으로도 광역 이름으로도 시작하지 않는 이름(섬 구역·바다 아님 — 구역 개편으로 생긴 낯선
- *    이름)이 있어도 모름이다 — 다른 시군으로 읽어 '안 걸림'으로 접으면 거짓 해제다(같은 결정). 갈래는 [zoneKind] 가 가른다.
+ *    2026-10-20). 그 도의 시군 어간([CITY_STEMS])으로도 광역 이름으로도 시작하지 않는 이름(섬 구역·관서 묶음 구역·바다 아님 — 구역
+ *    개편으로 생긴 낯선 이름)이 있어도 모름이다 — 다른 시군으로 읽어 '안 걸림'으로 접으면 거짓 해제다(같은 결정). 갈래는 [zoneKind] 가 가른다.
  * 9. `(…제외)` 는 나열한 구역을 뺀 그 광역 전체다 — 시군 어간으로 나열됐을 때만 그 시군이 빠진다(섬 하나를 뺀다고 시군 전체가 빠지지 않는다).
  */
 object WeatherAlerts {
@@ -48,10 +49,23 @@ object WeatherAlerts {
 
     /**
      * 섬 구역(광역 줄 밖에 따로 나온다) → 그 섬이 속한 시군 코드. 닫힌 표다 — 여기 없는 최상위 이름은 모름이다(규칙 2).
-     * 울릉도.독도 = 울릉군 · 서해5도 = 옹진군 · 흑산도.홍도 = 신안군 · 거문도.초도 = 여수시 · 추자도 = 제주시.
+     * 울릉도.독도 = 울릉군 · 서해5도 = 옹진군 · 흑산도.홍도 = 신안군 · 거문도.초도 = 여수시 · 추자도 = 제주시 ·
+     * 백령도.대청도 · 연평도.우도 = 옹진군(서해5도를 나눈 구역 — 2026-06-01 특보구역 개편, 연평도.우도의 우도는 제주 우도가 아니다).
      */
     val ISLANDS: Map<String, String> = mapOf(
         "울릉도.독도" to "47940", "서해5도" to "28720", "흑산도.홍도" to "12870", "거문도.초도" to "12130", "추자도" to "50110",
+        "백령도.대청도" to "28720", "연평도.우도" to "28720",
+    )
+
+    /**
+     * 관서 묶음 구역 → 행정구역 코드(시군 5자리 · 광역 2자리). 특보구역은 기상청 관서 묶음으로 나뉘고(공식 목록
+     * `기상청_기상특보구역정보_20260601`) 그 묶음이 행정 광역과 다른 하위 구역이 있다 — 경기 묶음의 인천 강화·옹진, 경북 묶음의 대구 군위,
+     * 충남 묶음의 대전, 경남 묶음의 부산·울산 권역. t6 의 광역 줄이 관서 묶음을 따르면 `경기도(강화, 김포)` · `경상북도(군위)` 로 나온다 —
+     * 섬 구역처럼 줄의 광역과 무관하게 이 코드로 맞춘다(규칙 3). 닫힌 표다 — 특보구역이 개편되면 공식 목록과 다시 대조한다.
+     */
+    val CROSS_ZONES: Map<String, String> = mapOf(
+        "강화" to "28710", "옹진" to "28720", "군위" to "27720", "대전" to "30",
+        "부산동부" to "26", "부산중부" to "26", "부산서부" to "26", "울산동부" to "31", "울산서부" to "31",
     )
 
     /**
@@ -88,7 +102,7 @@ object WeatherAlerts {
     )
 
     /** 하위 구역 이름의 갈래(규칙 8) — 매칭과 감지기 WARN 이 같은 판정을 쓴다(특보구역 개편 목록 대조에도 쓸 수 있다). */
-    enum class ZoneKind { CITY, REGIONAL, ISLAND, SEA, UNKNOWN }
+    enum class ZoneKind { CITY, REGIONAL, ISLAND, CROSS, SEA, UNKNOWN }
 
     /** 특보 구역 한 칸 × 목적지 — 걸림 · 안 걸림 · 모름(가릴 수 없다 — '특보 없음'으로 확인하지 않는다, INV-SA-2). */
     enum class Match { HIT, MISS, UNSURE }
@@ -177,15 +191,17 @@ object WeatherAlerts {
     fun match(area: WarningArea, place: Place): Match {
         val name = area.name.trim()
         if (isSea(name)) return Match.MISS
-        ISLANDS[name]?.let { return if (islandCovers(it, place)) Match.HIT else Match.MISS }
+        ISLANDS[name]?.let { return if (covers(it, place)) Match.HIT else Match.MISS }
         val province = Province.ofKmaName(name) ?: return Match.UNSURE
+        val land = area.zones.map { it.trim() }.filterNot(::isSea)
+        // 규칙 3 — 섬·관서 묶음 구역은 줄의 광역보다 먼저 표의 코드로 본다(`경기도(강화, 김포)` 의 강화는 인천 강화군이다)
+        if (!area.excluding && land.any { zone -> codeOf(zone)?.let { covers(it, place) } == true }) return Match.HIT
         if (province !in place.provinces) return Match.MISS
         if (area.zones.isEmpty()) return Match.HIT
-        val land = area.zones.map { it.trim() }.filterNot(::isSea)
         val named = place.stem != null && land.any { it.startsWith(place.stem) }
         if (area.excluding) return if (named) Match.MISS else Match.HIT
         if (land.isEmpty()) return Match.MISS
-        if (named || place.wide || land.any { zone -> ISLANDS[zone]?.let { islandCovers(it, place) } == true }) return Match.HIT
+        if (named || place.wide) return Match.HIT
         if (province.wide) return if (land.any(province::isRegional)) Match.HIT else Match.MISS // 규칙 7 — 광역시의 군
         // 규칙 8 — 도의 시군: 광역 권역이나 표에 없는 이름이 하나라도 있으면 그 구역이 목적지를 덮는지 가릴 수 없다
         val kinds = land.map { zoneKind(province, it) }
@@ -199,8 +215,9 @@ object WeatherAlerts {
     }
 
     /**
-     * [province] 줄의 하위 구역 이름 하나 → 갈래: 바다 · 섬 구역(표) · 광역 이름으로 시작하는 권역 · 그 도의 시군 어간으로 시작 · 어디에도
-     * 안 듦(모름). 특별·광역시·제주는 시군 어간 표가 없어 앞의 셋이 아니면 모름으로 나온다 — 그 줄은 이 갈래로 매칭하지 않는다(규칙 5·7).
+     * [province] 줄의 하위 구역 이름 하나 → 갈래: 바다 · 섬 구역(표) · 광역 이름으로 시작하는 권역 · 그 도의 시군 어간으로 시작 · 관서 묶음
+     * 구역(표 — 다른 광역의 시군·광역) · 어디에도 안 듦(모름). 특별·광역시·제주는 시군 어간 표가 없어 바다·표·권역이 아니면 모름으로
+     * 나온다 — 그 줄은 이 갈래로 매칭하지 않는다(규칙 5·7).
      */
     fun zoneKind(province: Province, zone: String): ZoneKind {
         val name = zone.trim()
@@ -209,13 +226,14 @@ object WeatherAlerts {
             name in ISLANDS -> ZoneKind.ISLAND
             province.isRegional(name) -> ZoneKind.REGIONAL
             CITY_STEMS[province].orEmpty().any { name.startsWith(it) } -> ZoneKind.CITY
+            name in CROSS_ZONES -> ZoneKind.CROSS
             else -> ZoneKind.UNKNOWN
         }
     }
 
     /**
      * 표로 가릴 수 없는 구역 이름 — 모르는 최상위 이름(규칙 2)과 도 줄의 모르는 하위 구역(규칙 8). 구역 개편·t6 형식 변화의 신호라 감지기가
-     * 바뀔 때 WARN 으로 드러낸다(고칠 곳은 광역·섬 구역·시군 어간 표다). 특별·광역시·제주 줄의 하위 구역은 보지 않는다(규칙 5·7).
+     * 바뀔 때 WARN 으로 드러낸다(고칠 곳은 광역·섬 구역·관서 묶음 구역·시군 어간 표다). 특별·광역시·제주 줄의 하위 구역은 보지 않는다(규칙 5·7).
      */
     fun unknownNames(area: WarningArea): List<String> {
         if (!isKnownArea(area)) return listOf(area.name.trim())
@@ -257,8 +275,11 @@ object WeatherAlerts {
 
     private fun isSea(name: String): Boolean = "바다" in name || "해상" in name
 
-    /** 섬 구역이 이 목적지에 걸리는가 — 그 섬의 시군이거나 그 광역 목적지(규칙 3·5). */
-    private fun islandCovers(code: String, place: Place): Boolean = place.code == code || place.code == code.take(2)
+    /** 하위 구역 이름 → 표의 행정구역 코드(섬 구역 · 관서 묶음 구역 — 규칙 3). 표에 없으면 null. */
+    private fun codeOf(zone: String): String? = ISLANDS[zone] ?: CROSS_ZONES[zone]
+
+    /** 표의 코드가 이 목적지에 걸리는가 — 그 코드 안의 목적지(시군 코드면 그 시군, 광역 코드면 그 광역 전부)이거나 그 광역 목적지(규칙 3·5). */
+    private fun covers(code: String, place: Place): Boolean = place.code.startsWith(code) || place.code == code.take(2)
 
     /**
      * 시군구 코드의 셋째 자리가 7 이상이면 군이다(행정표준코드 — 26710 기장군 · 28710 강화군 · 31710 울주군). 서울(특별시)에는 군이 없다 —
