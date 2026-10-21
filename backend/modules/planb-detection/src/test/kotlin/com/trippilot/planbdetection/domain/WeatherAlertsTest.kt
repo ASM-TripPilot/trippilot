@@ -19,8 +19,8 @@ import java.time.LocalDate
  *
  * 매칭 규칙: 하위 구역 이름이 시군 어간으로 시작하면 그 구역 / 광역 목적지는 그 광역 줄 전체 / 바다·해상 구역은 무시 /
  * 광역 별칭(강원도↔강원특별자치도 · 전라북도↔전북특별자치도) / `(…제외)` 는 나열한 곳을 뺀 광역 전체 / 섬·관서 묶음 구역은 닫힌 표(줄의
- * 광역보다 먼저) / 표에 없는 최상위 이름과 도의 시군 × 산지 권역·표에 없는 하위 구역 이름은 모름(UNSURE — '특보 없음'으로 확인하지
- * 않는다).
+ * 광역보다 먼저) / 표에 없는 최상위 이름과 도의 시군 × 산지 권역 · 도의 시군·광역시의 군 × 표에 없는 하위 구역 이름은 모름(UNSURE —
+ * '특보 없음'으로 확인하지 않는다).
  */
 class WeatherAlertsTest : StringSpec({
 
@@ -102,21 +102,24 @@ class WeatherAlertsTest : StringSpec({
     }
 
     /**
-     * 도의 시군 어간 표는 행정구역 시드의 도 시군에서 [WeatherAlerts.placeOf] 와 같은 어간 규칙으로 뽑은 닫힌 표다. 시드가 바뀌었는데(시군
-     * 신설·개명·통합) 표를 그대로 두면 새 시군의 구역 이름이 '모르는 이름'이 되어 그 도의 시군 목적지가 모두 모름으로 떨어진다.
+     * 시군 어간 표는 행정구역 시드에서 줄 전체로 맞추지 않는 목적지(도의 시군 · 광역시의 군)의 어간을 [WeatherAlerts.placeOf] 와 같은 규칙으로
+     * 뽑은 닫힌 표다. 시드가 바뀌었는데(시군 신설·개명·통합) 표를 그대로 두면 새 시군의 구역 이름이 '모르는 이름'이 되어 그 광역의 시군·군
+     * 목적지가 모두 모름으로 떨어진다.
      */
-    "도의 시군 어간 표는 행정구역 시드와 같다 — 시드가 바뀌면 표도 고친다" {
+    "시군 어간 표는 행정구역 시드와 같다(도의 시군 · 광역시의 군) — 시드가 바뀌면 표도 고친다" {
         val fromSeed = seedSigungu()
             .mapNotNull { (code, name) -> WeatherAlerts.placeOf(code, name) }
-            .filterNot { it.provinces.single().wide }
+            .filterNot { it.wide }
             .groupBy({ it.provinces.single() }, { it.stem!! })
             .mapValues { (_, stems) -> stems.toSet() }
 
         WeatherAlerts.CITY_STEMS shouldBe fromSeed
-        Province.entries.filterNot { it.wide }.toSet() shouldBe WeatherAlerts.CITY_STEMS.keys // 도마다 있다
+        // 도마다 · 군이 있는 광역시마다 있다
+        WeatherAlerts.CITY_STEMS.keys shouldBe
+            Province.entries.filterNot { it.wide }.toSet() + setOf(Province.BUSAN, Province.DAEGU, Province.INCHEON, Province.ULSAN)
     }
 
-    "하위 구역 갈래 — 바다 · 섬 구역 · 광역 권역 · 그 도의 시군 어간 · 관서 묶음 구역 · 모름" {
+    "하위 구역 갈래 — 바다 · 섬 구역 · 광역 권역 · 그 광역의 시군 어간 · 관서 묶음 구역 · 모름" {
         listOf(
             Triple(Province.GYEONGBUK, "울진산지", WeatherAlerts.ZoneKind.CITY),
             Triple(Province.GYEONGBUK, "경주동부", WeatherAlerts.ZoneKind.CITY),
@@ -138,16 +141,23 @@ class WeatherAlertsTest : StringSpec({
             Triple(Province.CHUNGNAM, "대전", WeatherAlerts.ZoneKind.CROSS),
             Triple(Province.GYEONGBUK, "군위", WeatherAlerts.ZoneKind.CROSS),
             Triple(Province.GYEONGNAM, "울산서부", WeatherAlerts.ZoneKind.CROSS),
+            // 광역시의 군 어간 · 그 밖의 이름(시·구만 있는 광역은 어간 표가 없다)
+            Triple(Province.INCHEON, "강화", WeatherAlerts.ZoneKind.CITY),
+            Triple(Province.DAEGU, "달성북부", WeatherAlerts.ZoneKind.CITY),
+            Triple(Province.BUSAN, "동해안권", WeatherAlerts.ZoneKind.UNKNOWN),
+            Triple(Province.JEJU, "서귀포시동부", WeatherAlerts.ZoneKind.UNKNOWN),
         ).forEach { (province, zone, kind) -> withClue("$province $zone") { WeatherAlerts.zoneKind(province, zone) shouldBe kind } }
     }
 
-    "표로 가릴 수 없는 이름 — 모르는 최상위 이름 · 도 줄의 모르는 하위 구역(특별·광역시·제주 줄의 하위 구역은 보지 않는다)" {
+    "표로 가릴 수 없는 이름 — 모르는 최상위 이름 · 도·광역시 줄의 모르는 하위 구역(시·구만 있는 광역 줄의 하위 구역은 보지 않는다)" {
         WeatherAlerts.unknownNames(WarningArea("전남광주통합특별시", listOf("목포"))) shouldBe listOf("전남광주통합특별시")
         WeatherAlerts.unknownNames(WarningArea("경상북도", listOf("포항", " 북동산지", "경북북동산지", "울릉도.독도", "울진산지"))) shouldBe
             listOf("북동산지")
         WeatherAlerts.unknownNames(WarningArea("경상북도", listOf("북동산지"), excluding = true)) shouldBe listOf("북동산지")
-        WeatherAlerts.unknownNames(WarningArea("부산", listOf("동해안권"))) shouldBe emptyList()
+        WeatherAlerts.unknownNames(WarningArea("부산", listOf("동해안권", "부산동부"))) shouldBe listOf("동해안권") // 군(기장)이 있는 광역시
         WeatherAlerts.unknownNames(WarningArea("경기도", listOf("강화", "백령도.대청도", "김포"))) shouldBe emptyList() // 관서 묶음 · 섬 구역
+        WeatherAlerts.unknownNames(WarningArea("서울", listOf("도심권"))) shouldBe emptyList() // 줄 전체로만 맞춘다
+        WeatherAlerts.unknownNames(WarningArea("제주도", listOf("서귀포시동부"))) shouldBe emptyList()
         WeatherAlerts.unknownNames(WarningArea("동해중부먼바다")) shouldBe emptyList()
         WeatherAlerts.unknownNames(WarningArea("울릉도.독도")) shouldBe emptyList()
     }
@@ -296,10 +306,14 @@ class WeatherAlertsTest : StringSpec({
             Triple(WarningArea("경상북도", listOf("울릉도.독도", "영덕")), pohang, MISS), // 섬 구역·다른 시군뿐
             Triple(WarningArea("강원도", listOf("영동북부")), gangneung, UNSURE), // 충북 영동은 강원의 시군이 아니다 — 도마다 표가 따로다
             Triple(WarningArea("경상남도", listOf("고성")), namhae, MISS), // 경남 고성(동명) — 그 시군이다
-            // 특별·광역시·제주 줄은 그대로(규칙 5·7) — 표에 없는 이름도 광역시 구는 줄 전체, 광역시 군은 제 이름·권역으로만.
-            // 광역시 군까지 모름으로 넓힐지는 정본 결정이다(G-SA-16 결정은 도의 시군만) — 넓히면 아래 줄이 UNSURE 가 된다.
+            // 규칙 7 — 광역시의 구는 표에 없는 이름이 있어도 줄 전체, 광역시의 군은 군 어간·광역 이름·표·바다 어디에도 안 드는 이름이 끼면 모름
             Triple(WarningArea("부산", listOf("동해안권")), haeundae, HIT),
-            Triple(WarningArea("부산", listOf("동해안권")), gijang, MISS),
+            Triple(WarningArea("부산", listOf("동해안권")), gijang, UNSURE),
+            Triple(WarningArea("부산", listOf("동해안권"), excluding = true), gijang, HIT), // 제외 줄은 그대로
+            Triple(WarningArea("대구", listOf("달성북부")), dalseong, HIT),
+            Triple(WarningArea("대구", listOf("대구중부")), dalseong, HIT), // 권역 줄 — 줄 전체
+            Triple(WarningArea("대구", listOf("군위", "남부권")), dalseong, UNSURE),
+            Triple(WarningArea("인천", listOf("옹진", "서해5도")), ganghwa, MISS), // 다른 군·섬 구역뿐
         ).forEach { (area, place, expected) ->
             withClue(area, place) { WeatherAlerts.match(area, place) shouldBe expected }
         }

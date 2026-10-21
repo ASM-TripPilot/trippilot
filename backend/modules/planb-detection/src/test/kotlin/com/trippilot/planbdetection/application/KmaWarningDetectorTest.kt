@@ -322,8 +322,11 @@ class KmaWarningDetectorTest : StringSpec({
             TriggerVariant.WIND
     }
 
-    /** 광역시의 군(강화·옹진)은 구역 이름에 제 이름이 나온다 — 다른 군만 적힌 줄에 걸지 않는다. 권역 이름(부산동부)만 있으면 줄 전체다. */
-    "광역시의 군은 제 이름이 없는 군 구역 줄에 걸리지 않는다 — 권역 줄(부산동부)이면 걸린다" {
+    /**
+     * 광역시의 군(강화·옹진)은 구역 이름에 제 이름이 나온다 — 다른 군만 적힌 줄에 걸지 않는다. 권역 이름(부산동부)만 있으면 줄 전체다.
+     * 군 어간·광역 이름·표 어디에도 안 드는 이름(구역 개편 — `동해안권`)이 끼면 그 군을 덮는지 모른다 — 도의 시군과 같다(G-SA-16 결정).
+     */
+    "광역시의 군은 제 이름이 없는 군 구역 줄에 걸리지 않는다 — 권역 줄(부산동부)이면 걸리고, 표에 없는 이름이 끼면 모름" {
         val ganghwa = FakeTripDestinations().put(tripId, DAY, DAY.plusDays(1), TripDestinationRef("강화군", "28710", 1))
         val gijang = FakeTripDestinations().put(tripId, DAY, DAY.plusDays(1), TripDestinationRef("기장군", "26710", 1))
         val day = target(tripId, slot("해변", "자연", "14:00", "15:00"))
@@ -331,6 +334,10 @@ class KmaWarningDetectorTest : StringSpec({
         KmaWarningDetector(warned(gale(WarningArea("인천", listOf("옹진")))), ganghwa).detect(day) shouldBe Detection.Checked(setOf(null), emptyList())
         (KmaWarningDetector(warned(gale(WarningArea("인천", listOf("강화")))), ganghwa).detect(day) as Detection.Checked).signals.size shouldBe 1
         (KmaWarningDetector(warned(gale(WarningArea("부산", listOf("부산동부")))), gijang).detect(day) as Detection.Checked).signals.size shouldBe 1
+        val warns = alertDetectorWarns {
+            KmaWarningDetector(warned(gale(WarningArea("부산", listOf("동해안권")))), gijang).detect(day) shouldBe Detection.Unknown("unknown-area")
+        }
+        warns.single() shouldContain "동해안권"
     }
 
     /**

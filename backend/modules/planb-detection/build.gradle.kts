@@ -33,7 +33,7 @@ tasks.test {
     inputs.files(rootProject.file("../ai/docs/openapi.json"))
         .withPropertyName("aiBoundaryContract")
         .withPathSensitivity(PathSensitivity.RELATIVE)
-    // 특보 매칭의 도 시군 어간 표(WeatherAlerts.CITY_STEMS)의 원본 — 시드가 바뀌면 드리프트 테스트를 다시 돌린다(WeatherAlertsTest).
+    // 특보 매칭의 시군 어간 표(WeatherAlerts.CITY_STEMS — 도의 시군 · 광역시의 군)의 원본 — 시드가 바뀌면 드리프트 테스트를 다시 돌린다(WeatherAlertsTest).
     inputs.files(rootProject.file("app/src/main/resources/db/migration/R__seed_region_catalog.sql"))
         .withPropertyName("regionCatalogSeed")
         .withPathSensitivity(PathSensitivity.RELATIVE)

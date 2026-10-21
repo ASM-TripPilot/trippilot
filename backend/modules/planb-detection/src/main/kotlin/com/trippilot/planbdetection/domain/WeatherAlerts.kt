@@ -24,7 +24,8 @@ import java.time.temporal.ChronoUnit
  * 7. 특별·광역시와 제주의 시·구(해운대구·서귀포시 …)는 광역 목적지처럼 그 광역 줄 전체로 맞춘다 — 그 광역의 구역 이름(`부산동부` ·
  *    `제주도남부`)에 시·구 이름이 없어 6 으로는 영영 걸리지 않는다(광역 목적지 규칙의 근거와 같다). 과잉 경보는 관찰 전용 출발이 잰다(BR-SA-04).
  *    광역시의 **군**(강화·옹진·기장 …)은 6 으로 맞춘다 — 구역 이름에 군 이름이 나온다(`인천(강화)`). 다만 그 줄에 광역 이름으로 시작하는
- *    권역(`부산동부`)이 있으면 그 군이 들었을 수 있어 줄 전체로 맞춘다(7 의 근거와 같다).
+ *    권역(`부산동부`)이 있으면 그 군이 들었을 수 있어 줄 전체로 맞춘다(7 의 근거와 같다). 그 광역의 군 어간([CITY_STEMS])·광역 이름·표
+ *    (규칙 3)·바다 어디에도 안 드는 이름이 있으면 모름이다 — 8 의 낯선 이름과 같다(G-SA-16 결정 2026-10-20).
  * 8. 도의 시군은 6 으로 안 걸려도 그 줄에 광역 이름으로 시작하는 권역(`강원중부산지` · `경북북동산지`)이 있으면 모름이다 — 그 권역이 시군을
  *    덮는지 이름으로 가릴 수 없다(평창의 평지만 풀리고 대관령 경보가 남은 회차). 권역은 시군 표로 걸지 않고 모름으로 둔다(G-SA-16 결정
  *    2026-10-20). 그 도의 시군 어간([CITY_STEMS])으로도 광역 이름으로도 시작하지 않는 이름(섬 구역·관서 묶음 구역·바다 아님 — 구역
@@ -69,9 +70,10 @@ object WeatherAlerts {
     )
 
     /**
-     * 도의 시군 어간(닫힌 표 — 규칙 8). 하위 구역 이름이 그 도의 어느 어간으로 시작하면 그 시군의 구역이다(`울진산지` → 울진) — 도마다 따로라
-     * 동명 시군(고성)은 도가 가른다. 행정구역 시드(`R__seed_region_catalog.sql`)의 도 시군에서 [placeOf] 와 같은 어간 규칙으로 뽑았고, 시드와
-     * 어긋나면(시군 신설·개명·통합) `WeatherAlertsTest` 가 실패한다. 특별·광역시·제주는 없다 — 그 줄은 이 표로 매칭하지 않는다(규칙 5·7).
+     * 도의 시군 · 광역시의 군 어간(닫힌 표 — 규칙 7·8). 하위 구역 이름이 그 광역의 어느 어간으로 시작하면 그 시군의 구역이다(`울진산지` →
+     * 울진 · `달성북부` → 달성) — 광역마다 따로라 동명 시군(고성)은 광역이 가른다. 행정구역 시드(`R__seed_region_catalog.sql`)에서 줄
+     * 전체로 맞추지 않는 목적지([placeOf] 의 `wide` 가 거짓)의 어간을 같은 어간 규칙으로 뽑았고, 시드와 어긋나면(시군 신설·개명·통합)
+     * `WeatherAlertsTest` 가 실패한다. 특별·광역시의 구와 제주의 시는 없다 — 그 목적지는 광역 줄 전체로 맞춘다(규칙 5·7).
      */
     val CITY_STEMS: Map<Province, Set<String>> = mapOf(
         Province.GYEONGGI to setOf(
@@ -99,9 +101,13 @@ object WeatherAlerts {
             "창원", "진주", "통영", "사천", "김해", "밀양", "거제", "양산", "의령", "함안", "창녕", "고성", "남해", "하동", "산청", "함양", "거창",
             "합천",
         ),
+        Province.BUSAN to setOf("기장"),
+        Province.DAEGU to setOf("달성", "군위"),
+        Province.INCHEON to setOf("강화", "옹진"),
+        Province.ULSAN to setOf("울주"),
     )
 
-    /** 하위 구역 이름의 갈래(규칙 8) — 매칭과 감지기 WARN 이 같은 판정을 쓴다(특보구역 개편 목록 대조에도 쓸 수 있다). */
+    /** 하위 구역 이름의 갈래(규칙 7·8) — 매칭과 감지기 WARN 이 같은 판정을 쓴다(특보구역 개편 목록 대조에도 쓸 수 있다). */
     enum class ZoneKind { CITY, REGIONAL, ISLAND, CROSS, SEA, UNKNOWN }
 
     /** 특보 구역 한 칸 × 목적지 — 걸림 · 안 걸림 · 모름(가릴 수 없다 — '특보 없음'으로 확인하지 않는다, INV-SA-2). */
@@ -202,8 +208,8 @@ object WeatherAlerts {
         if (area.excluding) return if (named) Match.MISS else Match.HIT
         if (land.isEmpty()) return Match.MISS
         if (named || place.wide) return Match.HIT
-        if (province.wide) return if (land.any(province::isRegional)) Match.HIT else Match.MISS // 규칙 7 — 광역시의 군
-        // 규칙 8 — 도의 시군: 광역 권역이나 표에 없는 이름이 하나라도 있으면 그 구역이 목적지를 덮는지 가릴 수 없다
+        if (province.wide && land.any(province::isRegional)) return Match.HIT // 규칙 7 — 광역시의 군: 권역 줄이면 줄 전체
+        // 규칙 7·8 — 광역 권역(도의 시군)이나 표에 없는 이름이 하나라도 있으면 그 구역이 목적지를 덮는지 가릴 수 없다
         val kinds = land.map { zoneKind(province, it) }
         return if (ZoneKind.REGIONAL in kinds || ZoneKind.UNKNOWN in kinds) Match.UNSURE else Match.MISS
     }
@@ -215,9 +221,9 @@ object WeatherAlerts {
     }
 
     /**
-     * [province] 줄의 하위 구역 이름 하나 → 갈래: 바다 · 섬 구역(표) · 광역 이름으로 시작하는 권역 · 그 도의 시군 어간으로 시작 · 관서 묶음
-     * 구역(표 — 다른 광역의 시군·광역) · 어디에도 안 듦(모름). 특별·광역시·제주는 시군 어간 표가 없어 바다·표·권역이 아니면 모름으로
-     * 나온다 — 그 줄은 이 갈래로 매칭하지 않는다(규칙 5·7).
+     * [province] 줄의 하위 구역 이름 하나 → 갈래: 바다 · 섬 구역(표) · 광역 이름으로 시작하는 권역 · 그 광역의 시군 어간으로 시작 · 관서 묶음
+     * 구역(표 — 다른 광역의 시군·광역) · 어디에도 안 듦(모름). 줄 전체로만 맞추는 광역(서울·광주·대전·세종·제주)은 시군 어간 표가 없어
+     * 바다·표·권역이 아니면 모름으로 나온다 — 그 줄은 이 갈래로 매칭하지 않는다(규칙 5·7).
      */
     fun zoneKind(province: Province, zone: String): ZoneKind {
         val name = zone.trim()
@@ -232,12 +238,13 @@ object WeatherAlerts {
     }
 
     /**
-     * 표로 가릴 수 없는 구역 이름 — 모르는 최상위 이름(규칙 2)과 도 줄의 모르는 하위 구역(규칙 8). 구역 개편·t6 형식 변화의 신호라 감지기가
-     * 바뀔 때 WARN 으로 드러낸다(고칠 곳은 광역·섬 구역·관서 묶음 구역·시군 어간 표다). 특별·광역시·제주 줄의 하위 구역은 보지 않는다(규칙 5·7).
+     * 표로 가릴 수 없는 구역 이름 — 모르는 최상위 이름(규칙 2)과 이름으로 맞추는 줄(도 · 군이 있는 광역시 — [CITY_STEMS] 의 광역)의 모르는
+     * 하위 구역(규칙 7·8). 구역 개편·t6 형식 변화의 신호라 감지기가 바뀔 때 WARN 으로 드러낸다(고칠 곳은 광역·섬 구역·관서 묶음 구역·시군
+     * 어간 표다). 줄 전체로만 맞추는 광역(서울·광주·대전·세종·제주) 줄의 하위 구역은 보지 않는다(규칙 5·7).
      */
     fun unknownNames(area: WarningArea): List<String> {
         if (!isKnownArea(area)) return listOf(area.name.trim())
-        val province = Province.ofKmaName(area.name)?.takeUnless { it.wide } ?: return emptyList()
+        val province = Province.ofKmaName(area.name)?.takeIf { it in CITY_STEMS } ?: return emptyList()
         return area.zones.filter { zoneKind(province, it) == ZoneKind.UNKNOWN }.map { it.trim() }
     }
 
