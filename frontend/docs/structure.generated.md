@@ -1611,6 +1611,7 @@
 - `src/shared/lib/useElapsedFlag.ts`  →  useElapsedFlag
 - `src/shared/lib/useKeyboardVisible.ts`  →  useKeyboardVisible
 - `src/shared/lib/useQueryDataUpdateCount.ts`  →  useQueryDataUpdateCount
+- `src/shared/lib/useScrollHide.ts`  →  useScrollHide
 - `src/shared/lib/useSeoulToday.ts`  →  useSeoulToday
 
 ## src/shared/location/
@@ -1804,4 +1805,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1156개 파일
+합계 1157개 파일

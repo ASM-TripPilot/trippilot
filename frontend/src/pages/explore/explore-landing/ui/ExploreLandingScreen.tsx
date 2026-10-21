@@ -29,6 +29,7 @@ import type { PlaceCardVM } from '@/entities/place';
 import { PlaceRailCard, type PlaceRailCardSave } from '@/entities/place';
 import type { StayCardVM } from '@/entities/stay';
 import { StaySearchCard } from '@/entities/stay';
+import { useScrollHide } from '@/shared/lib/useScrollHide';
 import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 
 import {
@@ -106,8 +107,8 @@ export interface ExploreLandingScreenProps {
   };
   /** 담은 곳 saved-menu FAB(우하단, Figma a01 3012:1731). 하트 FAB 을 누르면 두 미니 FAB
    * (담은 장소→d02 · 저장한 숙소→e04)으로 펼쳐지고, 열린 상태에선 하트가 X(닫기)로 바뀐다.
-   * 열림 상태·라우팅은 순수 화면이 못 지므로 라우트가 소유해 prop 으로 내린다(구조 가드 —
-   * 화면 useState 0건). 개수는 접근성 라벨로만 알린다. */
+   * 열림 상태·라우팅은 순수 화면이 못 지므로 라우트가 소유해 prop 으로 내린다(스크롤 중 FAB
+   * 숨김만 화면 안 `useScrollHide` 가 쥔다 — 뷰 로컬 표시 상태). 개수는 접근성 라벨로만 알린다. */
   savedMenu: {
     open: boolean;
     savedCount: number;
@@ -296,6 +297,7 @@ export function ExploreLandingScreen({
   savedMenu,
 }: ExploreLandingScreenProps): ReactElement {
   useToastBottom(FAB_STACK_TOP); // 토스트가 FAB 스택 위로 뜬다(TRIP-1559)
+  const { hidden: fabsHidden, onScroll } = useScrollHide(savedMenu.open);
   const {
     savedKeys = [],
     pendingKeys = [],
@@ -321,8 +323,11 @@ export function ExploreLandingScreen({
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="explore-landing" className="flex-1 bg-canvas">
         <ScrollView
+          testID="explore-landing-scroll"
           className="flex-1"
           showsVerticalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onScroll={onScroll}
           contentContainerStyle={{
             paddingTop: 12,
             paddingHorizontal: 16,
@@ -490,7 +495,7 @@ export function ExploreLandingScreen({
         {/* 담은 곳 saved-menu FAB — 우하단 하트 FAB 을 누르면 두 미니 FAB 으로 펼쳐진다(Figma
             a01 3012:1731). 왼→오: 담은 장소(위치핀→d02) · 저장한 숙소(가방→e04) · 하트/닫기.
             열리면 배후 backdrop 이 뜨고, 바깥 탭으로 닫힌다. 풀폭 핑크 CTA 바에서 교체(TRIP-494).
-            열림 상태는 라우트 소유(화면 useState 0건 구조 가드). */}
+            열림 상태는 라우트 소유. 세로 스크롤 중엔 아래 FAB 묶음이 숨는다(메뉴가 열려 있으면 유지). */}
         {!isLoading && savedMenu.open ? (
           <Pressable
             testID="explore-saved-menu-backdrop"
@@ -504,7 +509,12 @@ export function ExploreLandingScreen({
             나온다) · 아래=＋ 여행 만들기. items-end 로 둘 다 오른쪽에 정렬한다. 로딩 중엔 조작
             대상이 없어 통째로 미렌더한다(TRIP-704). */}
         {isLoading ? null : (
-          <View className="absolute bottom-[84px] right-lg items-end gap-md">
+          <View
+            testID="explore-fab-stack"
+            pointerEvents={fabsHidden ? 'none' : 'box-none'}
+            style={{ opacity: fabsHidden ? 0 : 1 }}
+            className="absolute bottom-[84px] right-lg items-end gap-md"
+          >
             <View className="flex-row items-center gap-md">
               {savedMenu.open ? (
                 <>

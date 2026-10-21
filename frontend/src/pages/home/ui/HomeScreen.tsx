@@ -14,7 +14,7 @@
  * softNote·미니맵 카드 등)을 단계 데이터로 파라미터화해 조립한다. INV-3(소요시간 미표시)는
  * 어떤 얼굴에도 소요시간 문자열·필드를 두지 않는다 — 시각(09:30)·거리(950m)만 표시한다.
  */
-import { memo, useEffect, useRef, useState, type ReactElement } from 'react';
+import { memo, useState, type ReactElement } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -44,6 +44,7 @@ import { formatCountBadge } from '../lib/formatCountBadge';
 import { GLYPH_COLORS } from '@/shared/ui/glyphs';
 import { HeartButton } from '@/shared/ui/HeartButton';
 import { FAB_STACK_TOP } from '@/shared/ui/toastBottom';
+import { useScrollHide } from '@/shared/lib/useScrollHide';
 import { useToastBottom } from '@/shared/ui/useToastBottom';
 import { Image } from '@/shared/ui/Image';
 import { Skeleton } from '@/shared/ui/Skeleton';
@@ -1350,9 +1351,6 @@ function PhaseBody({
   }
 }
 
-// 스크롤하는 동안 FAB 2개를 숨기고, 멈춘 뒤 이만큼 지나면 다시 보인다(TRIP-1435 Q-023 결정 1=A — 본문 요소를 덮지 않게).
-const FAB_REAPPEAR_MS = 250;
-
 export function HomeScreen({
   hero,
   sections,
@@ -1377,24 +1375,10 @@ export function HomeScreen({
 }: HomeScreenProps): ReactElement {
   useToastBottom(FAB_STACK_TOP); // 토스트가 FAB 스택 위로 뜬다(TRIP-1559)
   const menuOpen = savedMenuOpen ?? false;
-  const [scrolling, setScrolling] = useState(false);
-  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handleScroll = () => {
-    setScrolling(true);
-    if (settleTimer.current) clearTimeout(settleTimer.current);
-    settleTimer.current = setTimeout(
-      () => setScrolling(false),
-      FAB_REAPPEAR_MS
-    );
-  };
-  useEffect(
-    () => () => {
-      if (settleTimer.current) clearTimeout(settleTimer.current);
-    },
-    []
-  );
-  // 메뉴가 열려 있으면 딤·미니 FAB 을 그대로 둔다 — 스크롤 숨김은 닫힌 상태의 FAB 만 다룬다.
-  const fabsHidden = scrolling && !menuOpen;
+  // 스크롤하는 동안 FAB 을 숨긴다(TRIP-1435 Q-023 결정 1=A — 본문 요소를 덮지 않게). 메뉴가 열려 있으면 딤·미니 FAB 을
+  // 그대로 둔다 — 스크롤 숨김은 닫힌 상태의 FAB 만 다룬다.
+  const { hidden: fabsHidden, onScroll: handleScroll } =
+    useScrollHide(menuOpen);
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="home-dashboard-root" className="flex-1 bg-canvas">
