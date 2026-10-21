@@ -461,7 +461,7 @@ data class ScoringSignal(val mode: ScoringMode?, val degradations: List<String>)
     /**
      * 두 생성 호출(1차 day1 · 2차 나머지)을 합친다. 출처가 갈리면 MIXED(일부만 LLM),
      * **한쪽이라도 모르면 모름** — 2차가 최소 폴백으로 떨어졌는데 1차의 LLM 이 남으면 저하가 감춰진다(INV-4).
-     * 강등 코드는 순서를 지킨 합집합.
+     * 강등 코드는 순서를 지킨 합집합이고, 합쳐도 [MAX_DEGRADATIONS] 를 넘지 않는다(응답 하나의 상한을 다시 건다).
      */
     fun merge(second: ScoringSignal): ScoringSignal = ScoringSignal(
         when {
@@ -469,11 +469,14 @@ data class ScoringSignal(val mode: ScoringMode?, val degradations: List<String>)
             mode == second.mode -> mode
             else -> ScoringMode.MIXED
         },
-        (degradations + second.degradations).distinct(),
+        (degradations + second.degradations).distinct().take(MAX_DEGRADATIONS),
     )
 
     companion object {
         val UNKNOWN = ScoringSignal(null, emptyList())
+
+        /** 일정 하나에 싣는 강등 코드 상한. 실측 응답은 서너 개다 — 넘치면 계약이 바뀐 것이라 어댑터가 로그로 드러낸다. */
+        const val MAX_DEGRADATIONS = 16
     }
 }
 

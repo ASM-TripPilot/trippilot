@@ -1,9 +1,14 @@
 package com.trippilot.itinerarygeneration.adapter.out.external
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.trippilot.itinerarygeneration.domain.ScoringMode
 import com.trippilot.itinerarygeneration.domain.ScoringSignal
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import org.slf4j.LoggerFactory
 import java.time.Instant
 
 /**
@@ -62,5 +67,27 @@ class ScheduleAgentWireScoringTest : StringSpec({
     "강등 코드는 16개까지만 싣는다 — 계약이 바뀌어 쏟아져도 일정 행이 끝없이 커지지 않는다" {
         val many = (1..20).map { "stage:reason_$it" }
         response("RULE", many).toDomain(now).scoring.degradations shouldBe many.take(16)
+    }
+
+    fun warnsWhile(block: () -> Unit): List<String> {
+        val appender = ListAppender<ILoggingEvent>().apply { start() }
+        val logger = LoggerFactory.getLogger("com.trippilot.itinerarygeneration.adapter.out.external.ScheduleAgentWire") as Logger
+        logger.addAppender(appender)
+        try { block() } finally { logger.detachAppender(appender) }
+        return appender.list.filter { it.level == Level.WARN }.map { it.formattedMessage }
+    }
+
+    "상한 로그는 중복을 걷은 뒤 센다 — 고유 15개 + 중복 2개는 버린 것이 없으니 경고도 없다" {
+        val unique = (1..15).map { "stage:reason_$it" }
+        lateinit var out: List<String>
+        val warns = warnsWhile { out = response("RULE", unique + unique.take(2)).toDomain(now).scoring.degradations }
+        out shouldBe unique
+        warns shouldBe emptyList()
+    }
+
+    "상한을 넘으면 실제로 버린 고유 건수만큼 경고한다 — 고유 18개 + 중복 3개면 2건" {
+        val unique = (1..18).map { "stage:reason_$it" }
+        val warns = warnsWhile { response("RULE", unique + unique.take(3)).toDomain(now) }
+        warns shouldBe listOf("강등 코드가 상한(16)을 넘어 2건을 버립니다.")
     }
 })

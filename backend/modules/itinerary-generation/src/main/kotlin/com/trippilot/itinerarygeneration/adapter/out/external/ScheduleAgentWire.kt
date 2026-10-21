@@ -169,22 +169,24 @@ private fun String?.toScoringMode(): ScoringMode? = this?.let { raw ->
 /**
  * 강등 코드 거름. 이 값은 **공개 API 로 그대로 나간다** — 계약은 `"{stage}:{사유 접두}"` 기계 코드만 싣는다고
  * 하지만, AI 는 사유 문자열의 첫 `:` 앞을 자르는 방식이라 사유가 자유 문장이면 문장째 온다. 그래서
- * 코드 모양([DEGRADATION_CODE])이 아닌 것은 버리고(로그로 드러낸다) 개수도 [MAX_DEGRADATIONS] 로 막는다.
+ * 코드 모양([DEGRADATION_CODE])이 아닌 것은 버리고(로그로 드러낸다) 개수도 [ScoringSignal.MAX_DEGRADATIONS] 로 막는다.
  */
 private fun List<String>.toDegradationCodes(): List<String> {
-    val (codes, rejected) = partition { DEGRADATION_CODE.matches(it) }
+    val (matched, rejected) = partition { DEGRADATION_CODE.matches(it) }
     if (rejected.isNotEmpty()) wireLog.warn("코드 모양이 아닌 강등 항목 {}건을 버립니다.", rejected.size)
-    if (codes.size > MAX_DEGRADATIONS) {
-        wireLog.warn("강등 코드가 상한({})을 넘어 {}건을 버립니다.", MAX_DEGRADATIONS, codes.size - MAX_DEGRADATIONS)
+    // 상한은 **중복을 걷은 뒤** 센다 — 먼저 세면 중복 때문에 버린 적 없는 코드를 "버렸다"고 로그에 남긴다.
+    val codes = matched.distinct()
+    if (codes.size > ScoringSignal.MAX_DEGRADATIONS) {
+        wireLog.warn(
+            "강등 코드가 상한({})을 넘어 {}건을 버립니다.",
+            ScoringSignal.MAX_DEGRADATIONS, codes.size - ScoringSignal.MAX_DEGRADATIONS,
+        )
     }
-    return codes.distinct().take(MAX_DEGRADATIONS)
+    return codes.take(ScoringSignal.MAX_DEGRADATIONS)
 }
 
 /** `stage:reason` — 소문자·숫자·밑줄, 콜론 하나, 전체 64자 이내(예 `llm:c1_fallback`, `request:transport_unknown`). */
 private val DEGRADATION_CODE = Regex("(?=.{3,64}$)[a-z0-9_]+:[a-z0-9_]+")
-
-/** 한 응답에 실을 강등 코드 상한. 실측 응답은 서너 개다 — 넘치면 계약이 바뀐 것이라 로그로 드러난다. */
-private const val MAX_DEGRADATIONS = 16
 
 /**
  * 차선책 → 도메인(TRIP-873). **한 건이 틀렸다고 나머지를 잃지 않는다.**
