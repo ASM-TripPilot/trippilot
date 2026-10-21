@@ -45,7 +45,7 @@ import { PlaceExplorePage } from './PlaceExplorePage';
  *    (fan-out) 병합 결과를 한 목록에 함께 그린다 — 단일지역 경로(P-2)의 무한 스크롤은 안 탄다.
  *  - **P-12 (AC-1)** ♥ FAB 는 담은 장소(d02, `/explore/saved-places`)로 push.
  *  - **P-13 (AC-1)** 복제 BottomTabBar 는 push·replace 가 아니라 dismissTo 로 항법한다(TRIP-1262).
- *  - **P-14 (AC-2·AC-6)** 필터 버튼이 카테고리 시트를 마운트한다(실개폐·딤은 6-b).
+ *  - **P-14 (TRIP-1562)** 검색바 ⇅ 버튼·카테고리 시트가 없다 — 어떤 조작으로도 시트가 마운트되지 않는다.
  *  - **S-1~S-12 (상태·예외)** 첫 조회 스켈레톤 · 0건 안내 · 검색어 지목과 해제 · 조회 실패의 실제
  *    재조회(INV-4) · 미로그인 담기 무요청 · 404 롤백 · 409 수렴 · 네트워크 실패 재시도 · 연타 1회 ·
  *    배너는 다음 조작 시 소멸 · 좌표 방어 · 두 조건 모두 해제(아래 `상태·예외 배선` describe).
@@ -470,63 +470,56 @@ describe('P-13 · 복제 BottomTabBar 는 dismissTo 로 항법한다 (AC-1 · TR
 });
 
 describe('P-15 · 페이지가 다시 그려져도 마운트된 카드는 재렌더되지 않는다 (TRIP-1349)', () => {
-  it('카테고리 시트 열기(페이지 state 변경)가 카드를 다시 그리지 않는다 — 콜백 참조가 안정이다', async () => {
+  it('공백만 입력(페이지 state 변경 · 재조회 없음)이 카드를 다시 그리지 않는다 — 콜백 참조가 안정이다', async () => {
+    // TRIP-1562 — 옛 트리거(카테고리 시트 열기)가 사라져, 같은 성질의 트리거로 바꿨다: 검색어 state 는
+    // 바뀌지만(페이지 재렌더) trim 결과가 '' 그대로라 조회 키가 안 바뀐다(목록·카드 데이터 불변).
     setAccessToken('valid-access');
     await renderPage();
     const subtitle = PlaceSubtitle as unknown as jest.Mock;
     const before = subtitle.mock.calls.length;
     expect(before).toBeGreaterThan(0);
+    const fetchesBefore = hitsOf('GET', '/api/v1/places').length;
 
-    fireEvent.press(screen.getByTestId('explore-places-filter'));
+    fireEvent.changeText(screen.getByTestId('explore-places-search'), ' ');
+
+    // 페이지가 실제로 다시 그려졌다 — 입력값이 state 를 거쳐 돌아왔다(무반응이면 이 앵커가 red).
     await waitFor(() =>
-      expect(
-        screen.getByTestId('explore-places-category-sheet')
-      ).toBeOnTheScreen()
+      expect(screen.getByTestId('explore-places-search')).toHaveProp(
+        'value',
+        ' '
+      )
     );
+    // 재조회가 없었다 — 카드가 다시 그려질 "정당한" 이유(새 데이터)가 없는 상황임을 보장한다.
+    expect(hitsOf('GET', '/api/v1/places')).toHaveLength(fetchesBefore);
 
     expect(subtitle.mock.calls.length).toBe(before);
   });
 });
 
-describe('P-14 · 필터 버튼이 카테고리 시트를 연다 (AC-2 · AC-6 · 3-a)', () => {
-  it('필터 press 전에는 시트가 없고, 누르면 카테고리 시트가 마운트된다 (실개폐·딤은 6-b)', async () => {
+describe('🔴 P-14 · TRIP-1562 — 카테고리 시트는 어떤 조작으로도 열리지 않는다', () => {
+  it('검색바 ⇅ 버튼이 없고, 칩·검색을 조작해도 시트가 마운트되지 않으며 칩 선택은 그대로 동작한다', async () => {
     setAccessToken('valid-access');
-
     await renderPage();
 
-    // 닫힘 = 트리에서 없음(조건부 마운트). @gorhom/bottom-sheet 목이 통과형이라 "열림"은
-    // 마운트/언마운트로만 관측된다 — 실제 snap·딤·시트 내부는 jest 원리적 사각(6-b 실기).
+    // 시트를 여는 입구 자체가 없다.
+    expect(screen.queryByTestId('explore-places-filter')).toBeNull();
+
+    // 화면에 있는 조작을 차례로 해 본다 — 가로 칩 선택·해제, 검색어 입력.
+    fireEvent.press(screen.getByTestId('explore-places-category-food'));
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-places-category-food')).toBeSelected()
+    );
+    fireEvent.press(screen.getByTestId('explore-places-category-all'));
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-places-category-all')).toBeSelected()
+    );
+    fireEvent.changeText(screen.getByTestId('explore-places-search'), '해운대');
+
+    // 어떤 시점에도 시트·시트 칩이 트리에 없다.
     expect(screen.queryByTestId('explore-places-category-sheet')).toBeNull();
-
-    fireEvent.press(screen.getByTestId('explore-places-filter'));
-
-    await waitFor(() =>
-      expect(
-        screen.getByTestId('explore-places-category-sheet')
-      ).toBeOnTheScreen()
-    );
-  });
-
-  it('시트 카테고리 칩을 누르면 그 카테고리가 선택되고 시트가 닫힌다 (code-critic 경고-1)', async () => {
-    // 시트 칩 press → onSelect(값)+onClose 배선을 잠근다. P-14 는 마운트까지만 봤다.
-    setAccessToken('valid-access');
-    await renderPage();
-
-    fireEvent.press(screen.getByTestId('explore-places-filter'));
-    await waitFor(() =>
-      expect(
-        screen.getByTestId('explore-places-category-sheet')
-      ).toBeOnTheScreen()
-    );
-
-    // 시트 안 '맛집' 칩(헤더 칩과 -sheet- 접두로 분리)을 누른다.
-    fireEvent.press(screen.getByTestId('explore-places-sheet-category-맛집'));
-
-    // 헤더 카테고리 칩이 그 값으로 선택되고(재조회 트리거), 시트는 닫힌다(조건부 언마운트).
-    await waitFor(() =>
-      expect(screen.queryByTestId('explore-places-category-sheet')).toBeNull()
-    );
-    expect(screen.getByTestId('explore-places-category-food')).toBeSelected();
+    expect(
+      screen.queryAllByTestId(/^explore-places-sheet-category-/)
+    ).toHaveLength(0);
   });
 });
 

@@ -20,16 +20,10 @@
  */
 import type { ReactElement } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import BottomSheet, {
-  BottomSheetBackdrop,
-  BottomSheetView,
-  type BottomSheetBackdropProps,
-} from '@gorhom/bottom-sheet';
 
-import type { Place } from '@/shared/api/index.schemas';
-import { PoiCategory } from '@/shared/api/index.schemas';
+import type { Place, PoiCategory } from '@/shared/api/index.schemas';
 import { getAccessToken } from '@/shared/api';
 import { guardPress } from '@/shared/lib/pressGuard';
 import { BottomTabBar, shellTabHref } from '@/shared/ui/BottomTabBar';
@@ -49,93 +43,6 @@ import { isWizardOrigin } from '@/features/create-trip';
 import { PlaceExploreScreen } from './PlaceExploreScreen';
 import { useTripWizardStore } from '@/features/create-trip';
 
-/** 카테고리 시트(TRIP-708 AC-6) — **페이지가 소유**한다(@gorhom/bottom-sheet). 열림 상태는
- * 페이지 `useState`이고, 닫히면 트리에서 통째로 사라진다(조건부 마운트) — gorhom 목이 통과형
- * (어떤 prop이든 children 렌더)이라 "열림"은 마운트/언마운트로만 관측된다(실개폐·딤·snap은
- * 6-b 실기). 화면(`PlaceExploreScreen`)에 두면 화면 순수성(useState 0)이 깨지므로 여기 둔다.
- * 헤더의 CategoryChips와 testID가 겹치지 않도록 `-sheet-` 접두를 쓴다(항상 닫혀 있어 실제
- * 충돌은 없지만 방어적으로 분리). */
-function renderCategorySheetBackdrop(
-  props: BottomSheetBackdropProps
-): ReactElement {
-  return (
-    <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
-  );
-}
-
-const CATEGORY_SHEET_CHIPS: {
-  key: string;
-  label: string;
-  value: PoiCategory | null;
-}[] = [
-  { key: 'all', label: '전체', value: null },
-  ...Object.values(PoiCategory).map((category) => ({
-    key: category,
-    label: category,
-    value: category,
-  })),
-];
-
-function CategorySheet({
-  selected,
-  onSelect,
-  onClose,
-}: {
-  selected: PoiCategory | null;
-  onSelect: (category: PoiCategory | null) => void;
-  onClose: () => void;
-}): ReactElement {
-  return (
-    <BottomSheet
-      index={0}
-      enablePanDownToClose
-      onClose={onClose}
-      backdropComponent={renderCategorySheetBackdrop}
-    >
-      <BottomSheetView
-        testID="explore-places-category-sheet"
-        className="w-full gap-lg px-lg pb-2xl pt-sm"
-      >
-        <Text className="font-noto-bold text-section font-bold text-ink">
-          카테고리
-        </Text>
-        <View className="w-full flex-row flex-wrap gap-sm">
-          {CATEGORY_SHEET_CHIPS.map((chip) => {
-            const isSelected = chip.value === selected;
-            return (
-              <Pressable
-                key={chip.key}
-                testID={`explore-places-sheet-category-${chip.key}`}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isSelected }}
-                onPress={() => {
-                  onSelect(chip.value);
-                  onClose();
-                }}
-                className={
-                  isSelected
-                    ? 'rounded-pill bg-primary px-md py-sm'
-                    : 'rounded-pill border border-hairline-strong bg-canvas px-md py-sm'
-                }
-              >
-                <Text
-                  className={
-                    isSelected
-                      ? 'font-noto-bold text-label font-bold text-on-primary'
-                      : 'font-noto-bold text-label font-bold text-ink'
-                  }
-                >
-                  {chip.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </BottomSheetView>
-    </BottomSheet>
-  );
-}
-
 export function PlaceExplorePage(): ReactElement {
   const params = useLocalSearchParams<{ region?: string | string[] }>();
   const { region } = params;
@@ -154,8 +61,6 @@ export function PlaceExplorePage(): ReactElement {
   const [pendingPoiIds, setPendingPoiIds] = useState<string[]>([]);
   const [saveError, setSaveError] = useState<PlaceSaveNotice | null>(null);
   const [lastAttempted, setLastAttempted] = useState<Place | null>(null);
-  // 카테고리 시트 열림 — 필터 버튼 press가 연다(AC-6, 조건부 마운트).
-  const [categorySheetOpen, setCategorySheetOpen] = useState(false);
 
   const isAuthed = getAccessToken() !== null;
 
@@ -306,7 +211,6 @@ export function PlaceExplorePage(): ReactElement {
           // 지키는 심판은 없다(생산자 소스 스캔은 TRIP-1145 에서 지웠다).
           fromWizard ? router.back() : router.push('/explore/saved-places')
         }
-        onPressFilter={() => setCategorySheetOpen(true)}
         onBack={() => router.back()}
         state={listState}
         pendingPoiIds={pendingPoiIds}
@@ -330,15 +234,6 @@ export function PlaceExplorePage(): ReactElement {
         activeKey="explore"
         onPressTab={(key) => router.dismissTo(shellTabHref(key))}
       />
-
-      {/* 카테고리 시트 — 필터 버튼이 열고, 닫힘=트리 부재(조건부 마운트). */}
-      {categorySheetOpen ? (
-        <CategorySheet
-          selected={selectedCategory}
-          onSelect={handleSelectCategory}
-          onClose={() => setCategorySheetOpen(false)}
-        />
-      ) : null}
     </View>
   );
 }

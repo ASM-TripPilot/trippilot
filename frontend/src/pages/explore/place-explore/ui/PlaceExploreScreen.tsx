@@ -46,7 +46,8 @@ const FAB_SHADOW = {
 
 /**
  * d04 장소 탐색 default(Figma `1692:1183`) — **프레젠테이션 화면**. props 8개(TRIP-221 확정)
- * + 옵셔널 9개(TRIP-222 7개 + TRIP-708 `onPressSavedPlaces`·`onPressFilter`)만 받는다.
+ * + 옵셔널(TRIP-222 7개 + TRIP-708 `onPressSavedPlaces` …)만 받는다. 검색바 ⇅ 필터 버튼과
+ * `onPressFilter`는 TRIP-1562 로 지웠다 — 카테고리는 가로 칩 줄 하나로만 고른다.
  * 조회·라우팅·로컬 상태는 `pages/explore/place-explore/ui/
  * PlaceExplorePage.tsx` 몫이고, 상태 판정(`resolvePlaceListState`)도 페이지가 끝내 `state`
  * 하나로 내려준다 — 이 화면은 그 판별 유니온을 보고 그리기만 한다(판정의 단일 출처).
@@ -73,9 +74,6 @@ export interface PlaceExploreScreenProps {
   /** ♥ FAB(우하단 위) → 담은 장소 d02. 미지정이면 무동작(옵셔널) — FAB 자체는 상시 렌더한다
    * (Figma 상시 노출, 콜백은 선택). 라우팅은 페이지가 `/explore/saved-places`로 배선. */
   onPressSavedPlaces?: () => void;
-  /** 검색바 우측 필터 버튼 → 카테고리 시트(페이지 소유 @gorhom/bottom-sheet). 미지정이면
-   * 무동작(옵셔널) — 버튼 자체는 상시 렌더한다. */
-  onPressFilter?: () => void;
   /** 미지정이어도 화면은 그대로 동작한다(`StayRegisterScreen.tsx:62`와 같은 선택). */
   onBack?: () => void;
   /** 화면 얼굴. 미지정 = `{ kind: 'results' }` — 동결 렌더 헬퍼가 8개만 넘기므로 이 기본값이
@@ -156,14 +154,12 @@ function PlaceExploreAppBar({ onBack }: { onBack?: () => void }): ReactElement {
 function SearchBar({
   value,
   onChangeText,
-  onPressFilter,
 }: {
   value: string;
   onChangeText: (text: string) => void;
-  onPressFilter?: () => void;
 }): ReactElement {
   return (
-    <View className="h-[58px] w-full flex-row items-center gap-sm rounded-pill border border-hairline-strong bg-canvas pl-lg pr-sm">
+    <View className="h-[58px] w-full flex-row items-center gap-sm rounded-pill border border-hairline-strong bg-canvas pl-lg pr-lg">
       <SearchGlyph size={20} />
       <TextInput
         testID="explore-places-search"
@@ -172,17 +168,6 @@ function SearchBar({
         placeholder="장소 · 명소 · 맛집 검색"
         className="flex-1 font-noto text-card-title text-ink placeholder:text-muted-soft"
       />
-      {/* 우측 필터 버튼 — press 는 콜백만 올린다. 카테고리 시트의 실제 열림·딤은 페이지 소유(6-b). */}
-      <Pressable
-        testID="explore-places-filter"
-        accessibilityRole="button"
-        // 카테고리 시트를 여는 버튼이라 이름도 카테고리다(TRIP-1440 Q-047).
-        accessibilityLabel="카테고리"
-        onPress={onPressFilter}
-        className="h-9 w-9 items-center justify-center rounded-pill"
-      >
-        <FilterSlidersGlyph size={20} tone="ink" />
-      </Pressable>
     </View>
   );
 }
@@ -486,7 +471,6 @@ export function PlaceExploreScreen({
   onPressCreateTrip,
   hideCreateTrip = false,
   onPressSavedPlaces,
-  onPressFilter,
   onBack,
   state = { kind: 'results' },
   pendingPoiIds = [],
@@ -530,11 +514,7 @@ export function PlaceExploreScreen({
           ItemSeparatorComponent={GridRowSeparator}
           ListHeaderComponent={
             <View className="gap-lg pb-lg">
-              <SearchBar
-                value={searchText}
-                onChangeText={onChangeSearchText}
-                onPressFilter={onPressFilter}
-              />
+              <SearchBar value={searchText} onChangeText={onChangeSearchText} />
               <CategoryChips
                 selected={selectedCategory}
                 onSelect={onSelectCategory}

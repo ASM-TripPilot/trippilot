@@ -4600,7 +4600,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           onToggleSave={noop}
           onPressCreateTrip={noop}
           onPressSavedPlaces={noop}
-          onPressFilter={noop}
         />,
         'explore'
       ),
@@ -4624,7 +4623,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           onPressCreateTrip={noop}
           hideCreateTrip
           onPressSavedPlaces={noop}
-          onPressFilter={noop}
         />,
         'explore'
       ),
