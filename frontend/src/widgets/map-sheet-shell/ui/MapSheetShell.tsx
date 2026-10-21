@@ -163,6 +163,15 @@ export interface MapSheetShellProps<T = unknown> {
    *  false 면 시트는 손잡이로만 끌린다. 미전달=라이브러리 기본(true).
    *  ⚠️ 정적 값 — 렌더 중 토글 금지(gorhom 이 본문을 재마운트한다, BottomSheetContent.tsx 236–249). */
   contentPanning?: boolean;
+  /** TRIP-1522 — 가장 낮은 칸에서 더 끌어내리면 시트가 완전히 닫힌다(index −1, 핸들도 사라진다). `<BottomSheet
+   *  enablePanDownToClose>` 로 그대로 흘린다. 미전달=라이브러리 기본(false). 다시 올리는 길(`snapRequest`)은 소비처가 둔다. */
+  enablePanDownToClose?: boolean;
+  /** TRIP-1522 — `id` 가 **바뀔 때마다** 시트를 `index` 칸으로 올리라고 요청한다(`snapToIndex`). `expandSignal` 은 진입 칸으로만
+   *  가서 못 하는 "원하는 칸으로"다. 첫 렌더·같은 `id`·`index` 만 바뀐 렌더는 아무것도 안 한다. 미전달=요청 없음. */
+  snapRequest?: { index: number; id: number };
+  /** TRIP-1522 — 지도 로고 여백을 `<MapView logoMargin>` 으로 그대로 흘린다(시트가 내려가 지도가 드러나도 바에 안 가리게).
+   *  렌더마다 새 객체를 넘기지 않는다(MapView 가 memo). 미전달=SDK 기본. */
+  mapLogoMargin?: MapViewProps['logoMargin'];
 }
 
 export function MapSheetShell<T = unknown>({
@@ -196,6 +205,9 @@ export function MapSheetShell<T = unknown>({
   animatedPosition,
   bodyScroll = true,
   contentPanning,
+  enablePanDownToClose,
+  snapRequest,
+  mapLogoMargin,
 }: MapSheetShellProps<T>): ReactElement {
   // 지도 로드 실패(TRIP-919). 폴백 중엔 MapView 가 트리에서 빠지므로, 재시도로 이 값을 풀면 MapView 가
   // 새 인스턴스로 다시 마운트돼 실패 알림(notifiedRef)도 처음부터 다시 돈다 — 별도 key 가 필요 없다.
@@ -216,6 +228,17 @@ export function MapSheetShell<T = unknown>({
     seenExpandSignal.current = expandSignal;
     sheetRef.current?.snapToIndex(startIndex);
   }, [expandSignal, startIndex]);
+  // TRIP-1522 — 요청 id 가 바뀌면 그 칸으로(첫 렌더는 건너뛴다). 가르는 건 id 뿐이다 — index 만 바뀐 렌더는 요청이 아니다.
+  const seenSnapRequestId = useRef(snapRequest?.id);
+  useEffect(() => {
+    if (
+      snapRequest === undefined ||
+      seenSnapRequestId.current === snapRequest.id
+    )
+      return;
+    seenSnapRequestId.current = snapRequest.id;
+    sheetRef.current?.snapToIndex(snapRequest.index);
+  }, [snapRequest]);
   // "0번 = 닫힘" 은 기본 배열에서만 참 — 직접 준 배열(i05 ['40%','88%'])의 0번은 열린 시트다.
   const sheetClosed = snapPoints === undefined && snapIndex === 0;
   // 태그 밖 상수 — `<MapView>` 태그 안 viewOnly 앞에 `>` 가 들어가면 위 태그 정규식이 잘린다.
@@ -273,6 +296,7 @@ export function MapSheetShell<T = unknown>({
               fitBand={fitBand}
               drawPathOnMount={drawPathOnMount}
               actualRoute={actualRoute}
+              logoMargin={mapLogoMargin}
               onLoadFailed={handleMapLoadFailed}
             />
           ))}
@@ -331,6 +355,7 @@ export function MapSheetShell<T = unknown>({
         onAnimate={onSheetAnimate}
         animatedPosition={animatedPosition}
         enableContentPanningGesture={contentPanning}
+        enablePanDownToClose={enablePanDownToClose}
       >
         {list ? (
           <BottomSheetFlatList

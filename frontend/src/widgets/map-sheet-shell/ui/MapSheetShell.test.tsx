@@ -1475,3 +1475,84 @@ describe('MapSheetShell · SH1494 — expandSignal 이 바뀌면 진입 칸으�
     expect(spy()).not.toHaveBeenCalled();
   });
 });
+
+/* ──────────────── TRIP-1522 v2 · 시트를 끝까지 내리는 옵션 prop 3개 — 전부 "안 주면 지금과 똑같다" ────────────────
+ * `MapSheetShell` 은 소비처 약 15곳이 공유한다 → 새 prop 은 모두 옵션이고, 안 주면 거동이 그대로여야 한다(기본값 회귀 가드).
+ *  - `enablePanDownToClose` — 시트를 가장 낮은 칸에서 더 끌어내리면 완전히 닫히게(index −1) 한다. 허브만 켠다.
+ *  - `snapRequest {index,id}` — `id` 가 **바뀔 때마다** 시트를 `index` 칸으로 올리라고 요청(일정 칸). 첫 렌더·같은 `id` 는 조용.
+ *  - `mapLogoMargin` — 지도 로고 마진을 `MapView` 로 흘린다(시트가 내려가 지도가 드러나도 로고가 바에 안 가리게).
+ * (개념) 목 시트는 `snapToIndex` 호출만 기록하는 스파이를 준다 — 실제로 시트가 사라지고 올라오는 것은 6-b 실기 몫.
+ * README 판정 4: 통과형 목 위 prop 전달 단언은 두지 않는 게 원칙이지만, 브리프 AC-9·17 이 [T] 로 정한 "기본값 회귀 가드"가
+ * 본체라 최소 단언으로 둔다(02a ★4 ③).
+ * 3동작: 준비(옵션을 주거나 안 주고 마운트) → 실행(`snapRequest` 값 변경·재렌더) → 단언(스파이 호출·host prop). */
+describe('MapSheetShell · SR 시트 끝까지 내림 옵션 (TRIP-1522 v2)', () => {
+  beforeEach(() => {
+    withMapKey();
+    spy().mockClear();
+  });
+  afterEach(restoreMapKey);
+
+  function shell(
+    props: Partial<Parameters<typeof MapSheetShell>[0]> = {}
+  ): ReactElement {
+    return (
+      <MapSheetShell
+        center={CENTER}
+        pins={PINS}
+        days={DAYS}
+        selectedDayIndex={0}
+        onSelectDay={jest.fn()}
+        onBack={jest.fn()}
+        header={<Text>헤더</Text>}
+        snapPoints={['55%', 700]}
+        initialIndex={1}
+        {...props}
+      >
+        <Text>본문</Text>
+      </MapSheetShell>
+    );
+  }
+
+  it('snapRequest: 안 주면 마운트·재렌더에도 시트 요청(snapToIndex)이 없고(기본값 회귀), 주면 마운트엔 조용하다가 id 가 바뀔 때만 요청한 index 로 간다 — 같은 id·index 만 바뀜은 조용, 진입 칸(initialIndex)이 아니라 요청한 index 로', () => {
+    const quiet = render(shell());
+    quiet.rerender(shell());
+    quiet.rerender(shell({ initialIndex: 0 }));
+    expect(spy()).not.toHaveBeenCalled();
+    quiet.unmount();
+
+    const { rerender } = render(
+      shell({ initialIndex: 1, snapRequest: { index: 0, id: 1 } })
+    );
+    expect(spy()).not.toHaveBeenCalled(); // 첫 값은 요청이 아니라 출발값
+
+    rerender(shell({ initialIndex: 1, snapRequest: { index: 0, id: 2 } }));
+    expect(spy()).toHaveBeenCalledTimes(1);
+    expect(spy()).toHaveBeenLastCalledWith(0);
+
+    rerender(shell({ initialIndex: 1, snapRequest: { index: 0, id: 2 } })); // 같은 id
+    rerender(shell({ initialIndex: 1, snapRequest: { index: 1, id: 2 } })); // index 만 바뀜
+    expect(spy()).toHaveBeenCalledTimes(1);
+
+    rerender(shell({ initialIndex: 1, snapRequest: { index: 1, id: 3 } }));
+    expect(spy()).toHaveBeenCalledTimes(2);
+    expect(spy()).toHaveBeenLastCalledWith(1);
+  });
+
+  it('enablePanDownToClose·mapLogoMargin 은 안 주면 기본값 그대로(시트는 안 켜지고 지도엔 로고 마진이 없다), 주면 시트·지도로 그대로 간다', () => {
+    render(shell());
+    expect(sheetHost().props.enablePanDownToClose).not.toBe(true);
+    expect(screen.getByTestId('map-native').props.logoMargin).toBeUndefined();
+    screen.unmount();
+
+    const margin = { bottom: 78 };
+    render(shell({ enablePanDownToClose: true, mapLogoMargin: margin }));
+    expect(sheetHost().props.enablePanDownToClose).toBe(true);
+    expect(screen.getByTestId('map-native').props.logoMargin).toEqual(margin);
+  });
+
+  it('IN1 initialIndex=-1 이면 시트는 완전 내림(index -1)으로 마운트한다 — 시트 내림 시작 프리뷰·테스트 입구', () => {
+    render(shell({ initialIndex: -1 }));
+
+    expect(sheetHost().props.index).toBe(-1);
+  });
+});

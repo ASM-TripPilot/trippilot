@@ -32,6 +32,7 @@ const base = {
   onBack: jest.fn(),
   onSelectDay: jest.fn(),
   onPressManualEdit: jest.fn(),
+  onPressChatbot: jest.fn(),
 };
 
 describe('LiveHubView automationNotice', () => {

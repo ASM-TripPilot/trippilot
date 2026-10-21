@@ -433,3 +433,53 @@ describe.each([
     }
   );
 });
+
+/**
+ * 허브(`trips/[tripId]/live/index`)로 들어갈 때만 전환이 `none`(즉시 교체)이다 — 허브 바가 홈 탭 바와 같은 5칸으로 시작해 모프를 혼자 재생하려면
+ * 아래 `(tabs)`(탭 바 포함)가 밀리거나 비치지 않고 허브가 즉시 그 자리를 대체해야 한다(크로스페이드는 탭 바가 비쳐 이중으로 보인다). 허브로 들어가는 모든 길이
+ * 이 한 선언에 걸린다. 선언 위치가 `SplashGate` 인 이유: planb·assistant 선례, 라우트 파일 안에서 하면 `liveHubRoute.test` 의 expo-router 목이 깨진다.
+ * jest 가 잠그는 것은 선언까지다(스택 목은 options 를 그리지 않는다) — 실제 전환·스와이프 뒤로·탭 바와의 겹침은 6-b.
+ */
+describe('SplashGate · 허브 라우트 none 전환 선언', () => {
+  const HUB_ROUTE = 'trips/[tripId]/live/index';
+
+  it.each(['HOME', 'LOGIN'] as const)(
+    '목적지 %s 에서도 가드 밖에 허브 라우트 선언이 하나 있고 animation 이 none 이다',
+    (destination) => {
+      mockUseBootstrapGate.mockReturnValue(gate({ destination }));
+
+      render(<SplashGate />);
+      passFloor();
+
+      const declared = screen
+        .UNSAFE_getAllByType(Stack.Screen)
+        .filter((node) => node.props.name === HUB_ROUTE);
+      expect(declared).toHaveLength(1);
+      expect(declared[0].props.options?.animation).toBe('none');
+      expect(insideProtected(declared[0])).toBe(false);
+    }
+  );
+
+  it('허브 하나만 none 이다 — 다른 선언·루트 screenOptions 에는 animation 이 없고 planb·assistant 는 그대로 transparentModal 이다', () => {
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
+
+    render(<SplashGate />);
+    passFloor();
+
+    const others = screen
+      .UNSAFE_getAllByType(Stack.Screen)
+      .filter((node) => node.props.name !== HUB_ROUTE);
+    expect(others.length).toBeGreaterThanOrEqual(3); // 짝 앵커 — 빈 목록이라 공허하게 통과하지 않게
+    others.forEach((node) =>
+      expect(node.props.options?.animation).toBeUndefined()
+    );
+    for (const routeName of ['trips/[tripId]/planb/index', 'assistant/index'])
+      expect(
+        others.find((node) => node.props.name === routeName)?.props.options
+          ?.presentation
+      ).toBe('transparentModal');
+    expect(
+      screen.UNSAFE_getByType(Stack).props.screenOptions.animation
+    ).toBeUndefined();
+  });
+});

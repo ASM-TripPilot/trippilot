@@ -3,6 +3,7 @@
 
 export {
   BackArrowGlyph,
+  EventGlyph,
   HeroPhotoGlyph,
   HeroPinGlyph,
   RailActiveGlyph,

@@ -1,8 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useMemo, useRef, useState } from 'react';
+import { useContext, useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
+import {
+  NavigationContext,
+  NavigationRouteContext,
+} from '@react-navigation/native';
 
-import { AssistantFab, assistantHref } from '@/features/open-assistant';
+import { assistantHref } from '@/features/open-assistant';
 import { Linking, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -22,7 +26,6 @@ import {
 import { MemoSheet } from './MemoSheet';
 import { deriveVisitProgress } from '@/entities/itinerary-slot';
 import { TriggerChip } from './TriggerChip';
-import { OpportunityCard } from './OpportunityCard';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { foldScope } from '../model/foldScope';
 import { hubPillCopy } from '../model/hubPillCopy';
@@ -48,6 +51,7 @@ import {
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
 import { seoulDate } from '@/shared/lib/seoulDate';
+import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { showToast } from '@/shared/ui/Toast';
 import { ArriveRequestSource } from '@/shared/api/index.schemas';
@@ -118,12 +122,42 @@ const PHOTO_SAVED_TOAST = '사진을 기록했어요';
 /** 뒤로 갈 히스토리가 없을 때(딥링크·푸시 직행)의 폴백 — ItineraryPlanPage 관례(INV-4 침묵 금지). */
 const HOME_FALLBACK = '/(tabs)';
 
+/** `(tabs)` 안 라우트 이름 → 탭 key. 홈만 파일 규약상 `index` 다(`app/(tabs)/_layout.tsx` 의 매핑과 같다). */
+const TAB_ROUTE_TO_KEY: Record<string, ShellTabKey> = {
+  index: 'home',
+  explore: 'explore',
+  itinerary: 'itinerary',
+  records: 'records',
+  my: 'my',
+};
+
+/**
+ * 허브로 오기 직전 홈 탭 바에서 활성이던 탭 — 루트 스택에서 허브 바로 아래 라우트가 `(tabs)` 면 그 안의 현재 탭, 아니면 undefined
+ * (푸시 딥링크·planb 등 탭 바 위가 아닌 진입 → 허브 바는 모션 없이 최종 구조). 진입점이 여러 곳이라 href 에 싣지 않고 내비게이션 상태를 읽는다.
+ * 허브가 마운트될 때 한 번만 읽는다(이후 그 아래 탭은 바뀌지 않는다). 내비게이션 문맥이 없는 렌더(jest)에선 undefined 다.
+ */
+function useDepartureTab(): ShellTabKey | undefined {
+  const navigation = useContext(NavigationContext);
+  const route = useContext(NavigationRouteContext);
+  const [tab] = useState(() => {
+    const routes = navigation?.getState().routes ?? [];
+    const below = routes[routes.findIndex((r) => r.key === route?.key) - 1];
+    if (below?.name !== '(tabs)') return undefined;
+    const tabs = below.state;
+    // 탭을 한 번도 안 바꿨으면(기본 상태) 중첩 상태가 부모 라우트에 저장되지 않는다 — 그때 활성 탭은 첫 화면 `index`(홈)다.
+    const name = tabs ? tabs.routes[tabs.index ?? 0]?.name : 'index';
+    return name === undefined ? undefined : TAB_ROUTE_TO_KEY[name];
+  });
+  return tab;
+}
+
 export function LiveItineraryPage({
   tripId,
   today = seoulDate(new Date()),
   appliedSessionId,
   initialDate,
 }: LiveItineraryPageProps) {
+  const departureTab = useDepartureTab();
   const query = useLiveItinerary(tripId);
   const trip = useGetTripsTripId(tripId);
   const queryClient = useQueryClient();
@@ -147,15 +181,15 @@ export function LiveItineraryPage({
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   // i03 위험 상세 시트 열림 = 그 트리거 id(TRIP-749). 재조회로 트리거가 사라지면 시트도 사라진다.
   const [riskTriggerId, setRiskTriggerId] = useState<string | null>(null);
-  // 허브 시트 스냅. gorhom 은 이 값이 바뀔 때마다 그 칸으로 스냅하므로 한 번 2 로 올리면 내리지 않는다 —
+  // 허브 시트 스냅. gorhom 은 이 값이 바뀔 때마다 그 칸으로 스냅하므로 한 번 1(펼침)로 올리면 내리지 않는다 —
   // 닫으며 applied 가 지워져도 펼친 허브를 도로 접지 않는다(Q5).
   const [initialSnapIndex, setInitialSnapIndex] = useState(
-    appliedSessionId ? 2 : undefined
+    appliedSessionId ? 1 : undefined
   );
   // TRIP-1418 — 적용 성공은 `dismissTo` 로 스택의 이 인스턴스에 돌아온다(새로 마운트되지 않는다). 그래서 새 applied 가
   // 도착한 렌더에서 상태를 다시 맞춘다(렌더 중 조정 — 옛 일차로 한 번 그렸다가 바뀌지 않게): 고른 일차를 비워 `day`(없으면
   // 오늘)가 이기게 하고 시트를 펼친다. applied 가 지워질 때(i08 [확인])는 아무것도 바꾸지 않는다.
-  // TRIP-1494 — 시트를 이미 2 로 올려 둔 뒤 사용자가 내리고 재적용하면 `initialSnapIndex` 는 같은 2 라 prop 이 안 바뀐다.
+  // TRIP-1494 — 시트를 이미 1(펼침)로 올려 둔 뒤 사용자가 내리고 재적용하면 `initialSnapIndex` 는 같은 1 이라 prop 이 안 바뀐다.
   // 새 applied 마다 1 씩 올리는 신호로 셸이 다시 펼치게 한다.
   const [expandSignal, setExpandSignal] = useState(0);
   const [seenAppliedSessionId, setSeenAppliedSessionId] =
@@ -164,7 +198,7 @@ export function LiveItineraryPage({
     setSeenAppliedSessionId(appliedSessionId);
     if (appliedSessionId) {
       setSelectedDay(null);
-      setInitialSnapIndex(2);
+      setInitialSnapIndex(1);
       setExpandSignal((n) => n + 1);
     }
   }
@@ -702,6 +736,7 @@ export function LiveItineraryPage({
   return (
     <>
       <LiveHubView
+        departureTab={departureTab}
         tripTitle={trip.data?.title ?? ''}
         days={itinerary.days}
         activeDayIndex={activeDayIndex}
@@ -754,29 +789,26 @@ export function LiveItineraryPage({
             ? { poiId: memoFailedPoiId, text: MEMO_SAVE_FAILED }
             : null
         }
-        // BR-U8-53 — 허브 위에 겹쳐 뜨는 시트·안내가 하나라도 있으면 ✦·✎ 를 그리지 않는다(딤 위로 비치거나 시트 헤더를
-        // 덮지 않게, TRIP-1435 Q-099). 메모 시트(TRIP-1117)에 위험 상세·변경 반영·위치 '항상' 안내를 더했다.
-        fabHidden={
+        // BR-U8-53 — 허브 위에 겹쳐 뜨는 시트·안내가 하나라도 있으면 하단 바를 통째로 그리지 않는다(딤 위로 비치거나 시트
+        // 헤더를 덮지 않게, TRIP-1435 Q-099). 메모 시트(TRIP-1117)에 위험 상세·변경 반영·위치 '항상' 안내를 더했다.
+        barHidden={
           memoSheetOpen ||
           riskSheet !== null ||
           Boolean(appliedSessionId) ||
           (automation.state === 'EXPLAINER' && !explainerClosed)
         }
-        // TRIP-1321 — ✦ 도우미는 수정 FAB 앵커 열 맨 위(BR-U8-51). 메모 시트가 열리면 앵커째 빠진다.
-        assistantFab={
-          <AssistantFab
-            onPress={() => router.push(assistantHref('LIVE', tripId))}
-          />
-        }
+        // TRIP-1321 → TRIP-1522 — ✦ 도우미는 하단 바의 "챗봇" 칸이다(BR-U8-51). 바째 숨는 조건은 위 barHidden 과 같다.
+        onPressChatbot={() => router.push(assistantHref('LIVE', tripId))}
         triggerChip={triggerChip}
-        opportunityCard={
-          opportunity ? (
-            <OpportunityCard
-              item={opportunity.item}
-              onPressReplan={() => router.push(opportunity.replanHref)}
-              onDismiss={opportunity.dismiss}
-            />
-          ) : undefined
+        // 행사 칸이 연다 — 기회가 없으면 칸이 비활성이다. 카드는 허브가 그린다(고르기·숨김은 훅 몫).
+        opportunity={
+          opportunity
+            ? {
+                item: opportunity.item,
+                onPressReplan: () => router.push(opportunity.replanHref),
+                onDismiss: opportunity.dismiss,
+              }
+            : null
         }
         triggerPillKey={chipTrigger?.triggerId}
         slotBadgeLabel={slotBadgeLabel}

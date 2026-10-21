@@ -132,7 +132,7 @@ function ExploreIconInactive({ size = 27 }: TabIconProps) {
   );
 }
 
-function ItineraryIconActive({ size = 27 }: TabIconProps) {
+export function ItineraryIconActive({ size = 27 }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -143,7 +143,7 @@ function ItineraryIconActive({ size = 27 }: TabIconProps) {
     </Svg>
   );
 }
-function ItineraryIconInactive({ size = 27 }: TabIconProps) {
+export function ItineraryIconInactive({ size = 27 }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -238,7 +238,7 @@ function MyIconInactive({ size = 27 }: TabIconProps) {
 }
 
 // 5탭 구성(키↔라벨↔글리프 쌍) — Figma 고정이라 prop 자유도를 주지 않는다(브리프 §4-D).
-const TAB_CONFIG: {
+export const TAB_CONFIG: {
   key: ShellTabKey;
   label: string;
   ActiveIcon: (props: TabIconProps) => ReactElement;

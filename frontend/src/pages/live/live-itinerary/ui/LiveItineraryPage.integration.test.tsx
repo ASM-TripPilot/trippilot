@@ -1,6 +1,10 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { Linking } from 'react-native';
+import {
+  NavigationContext,
+  NavigationRouteContext,
+} from '@react-navigation/native';
+import { AccessibilityInfo, Linking } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
@@ -39,6 +43,18 @@ import {
   liveTrip,
   liveVisit,
 } from '@/test-support/liveHubFixtures';
+import {
+  deferOsAnswer,
+  FINAL_IDS,
+  SCHEDULE,
+  START5_IDS,
+  START_CELLS,
+  START_EXPLORE,
+  START_HOME,
+  START_MY,
+  START_RECORDS,
+  visibleIds,
+} from '@/test-support/barMotionProbe';
 import { createGate } from '@/test-support/mswHookHarness';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 import {
@@ -112,6 +128,13 @@ jest.mock('expo-router', () => ({
     canGoBack: () => mockCanGoBack(),
     dismissTo: (...args: unknown[]) => mockDismissTo(...args),
   },
+}));
+
+// TRIP-1522 사이클 3 — 허브는 하드웨어·스와이프 뒤로를 가로채지 않는다(Q-B). `usePreventRemove` 호출만 센다(실물 나머지는 그대로).
+const mockUsePreventRemove = jest.fn();
+jest.mock('@react-navigation/native', () => ({
+  ...jest.requireActual('@react-navigation/native'),
+  usePreventRemove: (...args: unknown[]) => mockUsePreventRemove(...args),
 }));
 
 const mockPick = jest.fn();
@@ -205,6 +228,48 @@ function expectNotCalled(...fns: jest.Mock[]): void {
   fns.forEach((fn) => expect(fn).not.toHaveBeenCalled());
 }
 
+// TRIP-1522 — 허브 하단 내비 바(뒤로 + 행사·챗봇·직접 수정·AI 수정). 옛 수정 FAB·알약·✦ FAB·앵커를 대신한다.
+const BAR = 'execution-live-bottom-bar';
+const BAR_EVENT = 'execution-live-bar-event';
+const BAR_DOT = 'execution-live-bar-event-dot';
+const BAR_CHATBOT = 'execution-live-bar-chatbot';
+// v2 — 수정은 칸 하나(BAR_EDIT)이고, 누르면 칸 위에 팝업이 열려 항목(AI에게 맡기기 위 · 직접 수정 아래)이 이동한다.
+const BAR_EDIT = 'execution-live-bar-edit';
+const POPUP = 'execution-live-edit-popup';
+const POPUP_AI = 'execution-live-edit-popup-ai';
+const POPUP_MANUAL = 'execution-live-edit-popup-manual';
+
+/** 수정 칸을 눌러 팝업을 연다 — 수정 칸 자체는 이동하지 않는다(push 0). */
+function openEditPopup(): void {
+  const before = mockPush.mock.calls.length;
+  fireEvent.press(screen.getByTestId(BAR_EDIT));
+  expect(screen.getByTestId(POPUP)).toBeOnTheScreen();
+  expect(mockPush.mock.calls.length).toBe(before);
+}
+
+/** 점은 장식(낭독 제외)이라 기본 쿼리에 안 잡힌다 — 숨은 요소까지 포함해 찾는다. */
+const dotOf = () =>
+  screen.queryByTestId(BAR_DOT, { includeHiddenElements: true });
+
+/**
+ * "기회 없음" 얼굴: 바는 있고 행사 칸만 비활성 + 점 없음. 카드는 기본 닫힘이라 `카드 없음` 만으로는 기회가 있어도
+ * 통과한다 — 없음의 증거는 카드가 아니라 이것이다(02a ★1).
+ */
+function expectEventIdle(): void {
+  expect(screen.getByTestId(BAR)).toBeOnTheScreen();
+  expect(screen.getByTestId(BAR_EVENT)).toBeDisabled();
+  expect(dotOf()).toBeNull();
+}
+
+/**
+ * 점이 뜰 때까지 기다린다 — 기회가 도착했고 숨김·트리거 판정이 끝났다는 신호. 상한을 2초로 둔다: 기본 상한(5초)이 테스트
+ * 상한과 같으면 점이 끝내 안 뜰 때 "Unable to find" 대신 "Exceeded timeout" 으로 죽어 원인이 가려진다(TOAST_WAIT 와 같은 이유).
+ */
+async function eventReady(): Promise<void> {
+  await waitFor(() => expect(dotOf()).not.toBeNull(), { timeout: 2000 });
+  expect(screen.getByTestId(BAR_EVENT)).toBeEnabled();
+}
+
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' });
   server.events.on('request:start', ({ request }) => {
@@ -213,6 +278,9 @@ beforeAll(() => {
 });
 beforeEach(() => {
   observedHits = [];
+  // 사이클 3 — OS "동작 줄이기" 답을 true(켜짐)로 고정한다: 바 변신 모션 타이머가 이 통합 케이스들과 무관하게 결정적으로 돌게.
+  jest.mocked(AccessibilityInfo.isReduceMotionEnabled).mockResolvedValue(true);
+  mockUsePreventRemove.mockClear();
   setAccessToken('a');
   mockCanGoBack.mockReturnValue(true);
   // TRIP-1415 — 메모 대상 방문(관람 중·완료)이 있는 모든 관점에서 서버 메모(records)를 조회한다. 관점 핸들러가 아니라
@@ -250,9 +318,9 @@ afterAll(() => server.close());
  *    구 "오늘은 여행 중이 아니에요" 얼굴 폐지). I3·I4 5xx·404 얼굴.
  *  - I5·I6 뒤로가기는 `canGoBack` 사다리 — 히스토리가 있으면 back, 없으면(딥링크·푸시 직행)
  *    조용히 멈추지 않고 `/(tabs)` 로 replace(INV-4 · ItineraryPlanPage 관례).
- *  - I7·I7b 수동 재계획 진입(BR-U4-10) — TRIP-747 부터 연필 FAB 는 제자리 토글이라 이동하지 않고,
- *    열린 알약이 진입을 맡는다: [AI에게 맡기기] → `/trips/{id}/planb`, [직접 수정] → `/trips/{id}/planb/manual`
- *    (US-PLANB-12 두 방식). 746 의 "FAB → planb" 단언을 지우지 않고 알약 기준으로 교체했다.
+ *  - I7·I7b 수동 재계획 진입(BR-U4-10) — TRIP-1522 v2: 하단 바의 "수정" 칸은 이동하지 않고 칸 위 세로 팝업을 연다.
+ *    팝업 항목이 진입을 맡는다: [AI에게 맡기기] → `/trips/{id}/planb`, [직접 수정] → `/trips/{id}/planb/manual`
+ *    (US-PLANB-12 두 방식). AI 항목은 지난 날·시작 전이면 비활성(눌러도 이동 없음)이다.
  *    TRIP-1233 부터 [직접 수정]은 보고 있는 날을 `?date=` 로 늘 싣는다(I7b·I7h·I7i).
  *  - I8 실앱 done 카드는 사진·후기 칸이 없다 — `GET /visits/days` 계약에 photo/memo 가 없어서
  *    page 가 photos=[]·memo=null 로 넘긴다(맹점③ · G6). 시각은 계획값 "10:00" + "방문".
@@ -336,16 +404,138 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
     );
   }
 
-  // TRIP-1321 · US-ASSIST-01 — 여행 중 허브의 ✦ 도우미(앵커 열 맨 위). 실제 위치·터치는 6-b 실기.
-  describe('✦ 도우미 FAB (TRIP-1321)', () => {
+  // TRIP-1321 · US-ASSIST-01 — 여행 중 허브의 챗봇. TRIP-1522 로 ✦ FAB 가 하단 바의 챗봇 칸이 됐다(이동 인자는 불변).
+  // 실제 위치·터치는 6-b 실기.
+  describe('챗봇 칸 (TRIP-1321 → TRIP-1522)', () => {
     it('누르면 surface=LIVE · 이 여행 id 를 싣고 도우미 시트로 간다', async () => {
       server.use(itineraryOk(), tripHandler(), visitsHandler());
       await renderActive();
-      fireEvent.press(screen.getByTestId('assistant-fab'));
+      expect(
+        within(screen.getByTestId(BAR)).getByTestId(BAR_CHATBOT)
+      ).toBeEnabled();
+      expect(screen.queryByTestId('assistant-fab')).toBeNull();
+      fireEvent.press(screen.getByTestId(BAR_CHATBOT));
       expect(mockPush).toHaveBeenCalledWith({
         pathname: '/assistant',
         params: { surface: 'LIVE', tripId: TRIP_ID },
       });
+    });
+  });
+
+  // ── 허브가 "직전 탭"을 내비게이션 상태에서 읽는 배선 ────────────────────────────────────────────────────────────────────
+  // 실기에서 홈 [여행 일정 보기] → 허브가 모프 없이 최종 구조로 떴다: 탭을 한 번도 안 바꾼 탭 네비게이터는 기본(초기) 상태라 react-navigation 이 중첩
+  // 상태(`state`)를 부모 라우트에 저장하지 않는데 읽는 쪽이 이를 "알 수 없음"으로 처리했다. 기본 상태의 탭은 첫 화면(`index` = 홈)이다.
+  // 훅을 export 하지 않고 계약을 "허브 페이지가 `NavigationContext`(getState().routes)와 `NavigationRouteContext`(자기 route.key)에서 자기 바로 아래
+  // 라우트를 읽는다"로 정해, 페이지를 두 Provider 로 감싸 바에 서는 결과(시작 5칸의 활성 칸 / 모션 없는 최종 구조)로 단언한다 — 읽기 → 허브 → 바 통과까지
+  // 한 번에 묶인다. OS 동작 줄이기 답을 대기로 두면 입장 신호가 있는 바는 시작 5칸에서 멈춰 가짜 타이머 없이 첫 프레임을 읽는다.
+  describe('출발 탭 읽기 (DT)', () => {
+    type StubRoute = {
+      key: string;
+      name: string;
+      state?: { index?: number; routes: { name: string }[] };
+    };
+    const HUB: StubRoute = { key: 'hub-1', name: 'trips/[tripId]/live/index' };
+    const tabsRoute = (state?: StubRoute['state']): StubRoute => ({
+      key: 'tabs-1',
+      name: '(tabs)',
+      state,
+    });
+    const tabsState = (index: number) => ({
+      index,
+      routes: ['index', 'explore', 'itinerary', 'records', 'my'].map(
+        (name) => ({
+          name,
+        })
+      ),
+    });
+    const other = (name: string): StubRoute => ({ key: `${name}-1`, name });
+
+    /** 허브 페이지를 루트 스택 상태 `routes` 와 함께 렌더한다(`HUB` 가 이 허브의 route). */
+    async function renderWithStack(routes: StubRoute[]): Promise<void> {
+      server.use(itineraryOk(), tripHandler(), visitsHandler());
+      deferOsAnswer();
+      render(
+        <NavigationContext.Provider
+          value={{ getState: () => ({ routes }) } as never}
+        >
+          <NavigationRouteContext.Provider value={HUB as never}>
+            <LiveItineraryPage tripId={TRIP_ID} today={TODAY} />
+          </NavigationRouteContext.Provider>
+        </NavigationContext.Provider>,
+        { wrapper }
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
+      );
+    }
+
+    // 시작 5칸에서 분홍인 칸 하나.
+    it.each([
+      [
+        '기본 상태(state 없음)는 홈 — 이번 실기 결함',
+        [tabsRoute(), HUB],
+        START_HOME,
+      ],
+      ['state.index 0 → 홈', [tabsRoute(tabsState(0)), HUB], START_HOME],
+      ['state.index 1 → 탐색', [tabsRoute(tabsState(1)), HUB], START_EXPLORE],
+      ['state.index 2 → 일정', [tabsRoute(tabsState(2)), HUB], SCHEDULE],
+      ['state.index 3 → 기록', [tabsRoute(tabsState(3)), HUB], START_RECORDS],
+      ['state.index 4 → 마이', [tabsRoute(tabsState(4)), HUB], START_MY],
+      [
+        'index 없이 routes 만 있으면 첫 라우트',
+        [tabsRoute({ routes: [{ name: 'records' }, { name: 'my' }] }), HUB],
+        START_RECORDS,
+      ],
+    ] as const)(
+      '탭 바 위의 진입: %s → 그 탭이 활성인 시작 5칸',
+      async (_label, routes, selectedId) => {
+        await renderWithStack([...routes]);
+
+        expect(visibleIds()).toEqual(START5_IDS);
+        expect(
+          START5_IDS.filter(
+            (id) =>
+              screen.getByTestId(id).props.accessibilityState?.selected === true
+          )
+        ).toEqual([selectedId]);
+      }
+    );
+
+    // 탭 바 위의 진입이 아니면 시작 칸이 한 번도 안 서고 모션 없이 최종 구조 — 뒤로는 즉시 이동.
+    it.each([
+      ['허브가 스택 맨 아래(푸시 딥링크 직행)', [HUB]],
+      [
+        '바로 아래가 planb 시트',
+        [tabsRoute(tabsState(3)), other('planb'), HUB],
+      ],
+      [
+        '탭 바 위가 아닌 다른 화면을 거쳐 온 허브',
+        [tabsRoute(tabsState(2)), other('edit'), HUB],
+      ],
+      ['스택에 허브 자신이 없다', [tabsRoute(tabsState(1))]],
+      [
+        '(tabs) 안 라우트 이름을 모른다',
+        [tabsRoute({ index: 0, routes: [{ name: 'settings' }] }), HUB],
+      ],
+    ])(
+      '탭 바 위의 진입이 아님: %s → 모션 없이 최종 구조',
+      async (_label, routes) => {
+        await renderWithStack(routes);
+
+        expect(visibleIds()).toEqual(FINAL_IDS);
+        START_CELLS.forEach((id) =>
+          expect(screen.queryByTestId(id)).toBeNull()
+        );
+      }
+    );
+
+    it('내비게이션 문맥이 없으면(Provider 없음) 모션 없이 최종 구조다', async () => {
+      server.use(itineraryOk(), tripHandler(), visitsHandler());
+      deferOsAnswer();
+
+      await renderActive();
+
+      expect(visibleIds()).toEqual(FINAL_IDS);
     });
   });
 
@@ -378,11 +568,14 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       await renderActive();
       expect(screen.getByTestId('location-explainer-root')).toBeTruthy();
       expect(screen.getByText(/여행 날짜\(8월 20일\) 동안만/)).toBeTruthy();
-      // TRIP-1435 · BR-U8-53 — 안내가 떠 있는 동안 ✦·✎ 앵커는 없다.
-      expect(screen.queryByTestId('execution-live-fab-anchor')).toBeNull();
+      // TRIP-1435 · BR-U8-53 — 안내가 떠 있는 동안 하단 바(뒤로 포함)는 없다.
+      expect(screen.queryByTestId(BAR)).toBeNull();
+      expect(screen.queryByTestId('execution-live-back')).toBeNull();
       fireEvent.press(screen.getByTestId('location-explainer-later'));
       expect(mockAutomationLater).toHaveBeenCalledTimes(1);
       expect(screen.queryByTestId('location-explainer-root')).toBeNull();
+      // 대조군 — 안내가 닫히면 바가 돌아온다(처음부터 바가 없는 구현이 이 부재 단언을 공허하게 통과하지 못하게).
+      expect(screen.getByTestId(BAR)).toBeOnTheScreen();
     });
 
     it('U3 [자동 기록 켜기] → enable 1회(OS 요청은 훅 몫) 후 닫힘', async () => {
@@ -1140,7 +1333,10 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       mockCanGoBack.mockReturnValue(true);
 
       await renderActive();
-      fireEvent.press(screen.getByTestId('execution-live-back'));
+      // TRIP-1522 — 뒤로는 상단이 아니라 하단 바 안에 있다.
+      fireEvent.press(
+        within(screen.getByTestId(BAR)).getByTestId('execution-live-back')
+      );
 
       expect(mockBack).toHaveBeenCalledTimes(1);
       expect(mockReplace).not.toHaveBeenCalled();
@@ -1157,27 +1353,50 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
     });
 
-    it('I7 FAB 는 이동하지 않고, 열린 [AI에게 맡기기] 알약이 수동 재계획 세션(/trips/{id}/planb)을 연다 (BR-U4-10 · TRIP-747)', async () => {
+    it('I5b 뒤로를 연달아 눌러도 router.back() 은 1회다 — 이동 두 번이 스택을 두 칸 되감지 않는다 (사이클 3 AC-9)', async () => {
+      server.use(itineraryOk(), tripHandler(), visitsHandler());
+      mockCanGoBack.mockReturnValue(true);
+
+      await renderActive();
+      fireEvent.press(screen.getByTestId('execution-live-back'));
+      fireEvent.press(screen.getByTestId('execution-live-back'));
+      fireEvent.press(screen.getByTestId('execution-live-back'));
+
+      expect(mockBack).toHaveBeenCalledTimes(1);
+      expect(mockReplace).not.toHaveBeenCalled();
+    });
+
+    it('I5c 허브는 뒤로를 가로채지 않는다 — usePreventRemove 0회(하드웨어·스와이프 뒤로는 화면 전환에 맡긴다, Q-B)', async () => {
       server.use(itineraryOk(), tripHandler(), visitsHandler());
 
       await renderActive();
-      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
-      // FAB 는 메뉴만 연다 — 여기서 push 가 나가면 "FAB 도 이동 + 알약도 이동" 이중 진입이다.
-      expect(mockPush).not.toHaveBeenCalled();
+      // 짝 앵커 — 바(뒤로)는 그려졌다.
+      expect(screen.getByTestId('execution-live-back')).toBeOnTheScreen();
 
-      fireEvent.press(screen.getByTestId('execution-live-edit-pill-ai'));
+      expect(mockUsePreventRemove).not.toHaveBeenCalled();
+    });
+
+    it('I7 수정 칸 → 팝업의 [AI에게 맡기기]가 수동 재계획 세션(/trips/{id}/planb)을 연다 — 수정 칸 자체는 이동 0, 항목 push 1회 (BR-U4-10 · TRIP-747 → TRIP-1522)', async () => {
+      server.use(itineraryOk(), tripHandler(), visitsHandler());
+
+      await renderActive();
+      expect(mockPush).not.toHaveBeenCalled();
+      openEditPopup();
+      fireEvent.press(screen.getByTestId(POPUP_AI));
 
       expect(mockPush).toHaveBeenCalledTimes(1);
       expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/planb`);
+      // 항목을 누르면 팝업은 닫힌다.
+      expect(screen.queryByTestId(POPUP)).toBeNull();
     });
 
-    it('I7c 🔴 TRIP-1195 허브에서 오늘이 아닌 미래일(2일차)을 보는 중이면 [AI에게 맡기기]가 그 날짜를 targetDate 쿼리로 넘긴다', async () => {
+    it('I7c 🔴 TRIP-1195 허브에서 오늘이 아닌 미래일(2일차)을 보는 중이면 팝업의 [AI에게 맡기기]가 그 날짜를 targetDate 쿼리로 넘긴다', async () => {
       server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
 
       await renderActive();
       fireEvent.press(screen.getByTestId('execution-live-daychip-1'));
-      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
-      fireEvent.press(screen.getByTestId('execution-live-edit-pill-ai'));
+      openEditPopup();
+      fireEvent.press(screen.getByTestId(POPUP_AI));
 
       expect(mockPush).toHaveBeenCalledTimes(1);
       expect(mockPush).toHaveBeenCalledWith(
@@ -1191,29 +1410,36 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       await renderActive();
       fireEvent.press(screen.getByTestId('execution-live-daychip-1'));
       fireEvent.press(screen.getByTestId('execution-live-daychip-0'));
-      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
-      fireEvent.press(screen.getByTestId('execution-live-edit-pill-ai'));
+      openEditPopup();
+      fireEvent.press(screen.getByTestId(POPUP_AI));
 
       expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/planb`);
     });
 
-    it('I7e 🔴 이미 지난 날(1일차, 오늘은 2일차)을 보는 중이면 [AI에게 맡기기]가 없고 [직접 수정]은 남는다 (결정 3 — 눌러서 409 받는 막다른 길을 만들지 않는다)', async () => {
+    it('I7e 🔴 이미 지난 날(1일차, 오늘은 2일차)을 보는 중이면 팝업의 [AI에게 맡기기]는 비활성이라 눌러도 이동이 없고 [직접 수정]은 산다 (결정 3 — 눌러서 409 받는 막다른 길을 만들지 않는다)', async () => {
       server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
 
       render(<LiveItineraryPage tripId={TRIP_ID} today={DAY2} />, { wrapper });
       await waitFor(() =>
         expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
       );
+      // 대조군 — 오늘(2일차)을 보는 동안은 팝업의 AI 항목이 활성이다.
+      openEditPopup();
+      expect(screen.getByTestId(POPUP_AI)).toBeEnabled();
       fireEvent.press(screen.getByTestId('execution-live-daychip-0'));
-      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
 
-      expect(screen.queryByTestId('execution-live-edit-pill-ai')).toBeNull();
-      expect(
-        screen.getByTestId('execution-live-edit-pill-manual')
-      ).toBeTruthy();
+      // 일차 칩이 팝업을 닫았다 — 지난 날을 보며 다시 연다.
+      expect(screen.queryByTestId(POPUP)).toBeNull();
+      openEditPopup();
+      expect(screen.getByTestId(POPUP_AI)).toBeDisabled();
+      fireEvent.press(screen.getByTestId(POPUP_AI));
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(screen.getByTestId(POPUP_MANUAL)).toBeEnabled();
+      fireEvent.press(screen.getByTestId(POPUP_MANUAL));
+      expect(mockPush).toHaveBeenCalledTimes(1);
     });
 
-    it('I7g 🔴 TRIP-1214 시작 전 여행(오늘이 1일차 전)이면 [AI에게 맡기기]가 없고 [직접 수정]은 남는다', async () => {
+    it('I7g 🔴 TRIP-1214 시작 전 여행(오늘이 1일차 전)이면 팝업의 [AI에게 맡기기]는 비활성(눌러도 이동 없음)이고 [직접 수정]은 산다', async () => {
       server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
 
       render(<LiveItineraryPage tripId={TRIP_ID} today="2026-08-10" />, {
@@ -1222,23 +1448,24 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       await waitFor(() =>
         expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
       );
-      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
 
-      expect(screen.queryByTestId('execution-live-edit-pill-ai')).toBeNull();
-      expect(
-        screen.getByTestId('execution-live-edit-pill-manual')
-      ).toBeTruthy();
+      expect(screen.getByTestId(BAR)).toBeOnTheScreen();
+      openEditPopup();
+      expect(screen.getByTestId(POPUP_AI)).toBeDisabled();
+      fireEvent.press(screen.getByTestId(POPUP_AI));
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(screen.getByTestId(POPUP_MANUAL)).toBeEnabled();
     });
 
-    it('I7f 오늘이 2일차일 때 2일차(오늘)를 보면 종전 AI 알약·쿼리 없는 경로다', async () => {
+    it('I7f 오늘이 2일차일 때 2일차(오늘)를 보면 종전 [AI에게 맡기기]·쿼리 없는 경로다', async () => {
       server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
 
       render(<LiveItineraryPage tripId={TRIP_ID} today={DAY2} />, { wrapper });
       await waitFor(() =>
         expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
       );
-      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
-      fireEvent.press(screen.getByTestId('execution-live-edit-pill-ai'));
+      openEditPopup();
+      fireEvent.press(screen.getByTestId(POPUP_AI));
 
       expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/planb`);
     });
@@ -1295,12 +1522,12 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       });
     });
 
-    it('I7b 열린 [직접 수정] 알약은 i07 편집(/trips/{id}/planb/manual)으로 간다 (US-PLANB-12 · TRIP-747)', async () => {
+    it('I7b 수정 칸 → 팝업의 [직접 수정]은 i07 편집(/trips/{id}/planb/manual)으로 간다 (US-PLANB-12 · TRIP-747 → TRIP-1522)', async () => {
       server.use(itineraryOk(), tripHandler(), visitsHandler());
 
       await renderActive();
-      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
-      fireEvent.press(screen.getByTestId('execution-live-edit-pill-manual'));
+      openEditPopup();
+      fireEvent.press(screen.getByTestId(POPUP_MANUAL));
 
       expect(mockPush).toHaveBeenCalledTimes(1);
       // TRIP-1233 AC-2d — 보고 있는 날(오늘)을 date 쿼리로 싣는다.
@@ -1316,8 +1543,8 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
 
       await renderActive();
       fireEvent.press(screen.getByTestId('execution-live-daychip-1'));
-      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
-      fireEvent.press(screen.getByTestId('execution-live-edit-pill-manual'));
+      openEditPopup();
+      fireEvent.press(screen.getByTestId(POPUP_MANUAL));
 
       expect(mockPush).toHaveBeenCalledTimes(1);
       expect(mockPush).toHaveBeenCalledWith(
@@ -1332,8 +1559,8 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       await waitFor(() =>
         expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
       );
-      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
-      fireEvent.press(screen.getByTestId('execution-live-edit-pill-manual'));
+      openEditPopup();
+      fireEvent.press(screen.getByTestId(POPUP_MANUAL));
 
       expect(mockPush).toHaveBeenCalledTimes(1);
       expect(mockPush).toHaveBeenCalledWith(
@@ -1562,17 +1789,19 @@ describe('i08 변경 반영 시트', () => {
     expect(mockBack).not.toHaveBeenCalled();
   }
 
-  describe('TRIP-1435 · BR-U8-53 — 변경 반영 시트가 떠 있는 동안 ✦·✎ FAB 앵커를 그리지 않는다', () => {
-    it('applied 가 없는 허브에는 FAB 앵커가 있다(대조군)', async () => {
+  describe('TRIP-1435 · BR-U8-53 — 변경 반영 시트가 떠 있는 동안 하단 내비 바(TRIP-1522 전엔 ✦·✎ FAB 앵커)를 그리지 않는다', () => {
+    it('applied 가 없는 허브에는 바(뒤로 포함)가 있다(대조군)', async () => {
       await renderHub();
-      expect(screen.getByTestId('execution-live-fab-anchor')).toBeTruthy();
+      expect(screen.getByTestId(BAR)).toBeTruthy();
+      expect(screen.getByTestId('execution-live-back')).toBeTruthy();
     });
 
-    it('applied 시트가 뜬 허브에는 FAB 앵커가 없다', async () => {
+    it('applied 시트가 뜬 허브에는 바가 없다', async () => {
       await renderHub(SESSION_ID);
 
       expect(screen.getByTestId(SHEET)).toBeTruthy();
-      expect(screen.queryByTestId('execution-live-fab-anchor')).toBeNull();
+      expect(screen.queryByTestId(BAR)).toBeNull();
+      expect(screen.queryByTestId('execution-live-back')).toBeNull();
     });
   });
 
@@ -1802,7 +2031,8 @@ describe('i08 변경 반영 시트', () => {
       expect(screen.getByTestId('execution-live-daychip-1')).toBeSelected();
       expect(screen.getByTestId(SHEET)).toBeTruthy();
       expect(hubSnapIndices().length).toBeGreaterThan(0);
-      expect(hubSnapIndices().every((index) => index === 2)).toBe(true);
+      // TRIP-1522 v2 — 칸 번호 0 중간·1 펼침: 펼침은 1.
+      expect(hubSnapIndices().every((index) => index === 1)).toBe(true);
       expect(screen.getAllByTestId('planb-applied-badge')).toHaveLength(3);
     });
   });
@@ -1905,15 +2135,15 @@ describe('i08 변경 반영 시트', () => {
   });
 
   describe('🔴 A8 · Q5 — applied 로 들어오면 허브는 펼침으로 시작한다', () => {
-    it('applied 면 허브 스냅 index 가 전부 2', async () => {
+    it('applied 면 허브 스냅 index 가 전부 1(펼침 — TRIP-1522 v2 칸 번호: 0 중간·1 펼침)', async () => {
       await renderHub(SESSION_ID);
 
       const indices = hubSnapIndices();
       expect(indices.length).toBeGreaterThan(0);
-      indices.forEach((index) => expect(index).toBe(2));
+      indices.forEach((index) => expect(index).toBe(1));
     });
 
-    it('A8b 닫혀서 applied 가 사라져도(rerender) 시트는 없어지고 허브는 펼침 2 를 유지한다', async () => {
+    it('A8b 닫혀서 applied 가 사라져도(rerender) 시트는 없어지고 허브는 펼침 1 을 유지한다', async () => {
       await renderHub(SESSION_ID);
       expect(screen.getByTestId(SHEET)).toBeTruthy();
 
@@ -1930,15 +2160,15 @@ describe('i08 변경 반영 시트', () => {
       expect(screen.queryByTestId(SHEET)).toBeNull();
       const indices = hubSnapIndices();
       expect(indices.length).toBeGreaterThan(0);
-      indices.forEach((index) => expect(index).toBe(2));
+      indices.forEach((index) => expect(index).toBe(1));
     });
 
-    it('대조군 — 신호가 없으면 기본 중간 스냅 1', async () => {
+    it('대조군 — 신호가 없으면 기본 중간 스냅 0', async () => {
       await renderHub();
 
       const indices = hubSnapIndices();
       expect(indices.length).toBeGreaterThan(0);
-      indices.forEach((index) => expect(index).toBe(1));
+      indices.forEach((index) => expect(index).toBe(0));
     });
   });
 
@@ -2046,7 +2276,7 @@ describe('i08 변경 반영 시트', () => {
       expect(chip(2)).not.toBeSelected();
     });
 
-    it('R6 적용 → 확인(applied 지워짐) → 다시 적용하면 시트를 진입 칸(2)으로 다시 올리라는 신호가 간다 — 같은 2 라 index 가 안 바뀌어도 (TRIP-1494)', async () => {
+    it('R6 적용 → 확인(applied 지워짐) → 다시 적용하면 시트를 진입 칸(1 = 펼침)으로 다시 올리라는 신호가 간다 — 같은 1 이라 index 가 안 바뀌어도 (TRIP-1494 · TRIP-1522 v2 칸 번호: 0 중간·1 펼침)', async () => {
       const snap = (globalThis as Record<string, unknown>)
         .__bottomSheetSnapToIndexSpy as jest.Mock;
       await renderReusedHub();
@@ -2054,7 +2284,7 @@ describe('i08 변경 반영 시트', () => {
 
       hubReceives(SESSION_ID);
       expect(snap).toHaveBeenCalledTimes(1);
-      expect(snap).toHaveBeenLastCalledWith(2);
+      expect(snap).toHaveBeenLastCalledWith(1);
 
       // i08 [확인] — applied 가 지워질 땐 건드리지 않는다.
       hubReceives(undefined);
@@ -2063,7 +2293,7 @@ describe('i08 변경 반영 시트', () => {
       // 사용자가 시트를 내렸다고 치고, 새 재계획 적용 → 다시 올린다.
       hubReceives('session-2');
       expect(snap).toHaveBeenCalledTimes(2);
-      expect(snap).toHaveBeenLastCalledWith(2);
+      expect(snap).toHaveBeenLastCalledWith(1);
     });
 
     it('R4 적용한 날로 맞춘 뒤 사용자가 칩을 고르면 그 선택이 남는다 — 같은 params 로 다시 그려도 리셋하지 않는다', async () => {
@@ -2080,22 +2310,22 @@ describe('i08 변경 반영 시트', () => {
       expect(chip(1)).not.toBeSelected();
     });
 
-    it('R5 새 적용을 받으면 시트 칸이 펼침(2)으로 오르고, [확인]으로 applied 가 지워져도 2 를 유지한다 (Q5)', async () => {
+    it('R5 새 적용을 받으면 시트 칸이 펼침(1)으로 오르고, [확인]으로 applied 가 지워져도 1 을 유지한다 (Q5 · TRIP-1522 v2 칸 번호)', async () => {
       await renderReusedHub();
-      // 앵커 — 원래 허브는 applied 없이 마운트돼 기본 칸 1 이다.
+      // 앵커 — 원래 허브는 applied 없이 마운트돼 기본 칸 0(중간)이다.
       expect(hubSnapIndices().length).toBeGreaterThan(0);
-      expect(hubSnapIndices().every((index) => index === 1)).toBe(true);
+      expect(hubSnapIndices().every((index) => index === 0)).toBe(true);
 
       hubReceives(SESSION_ID, DAY2);
 
-      expect(hubSnapIndices().every((index) => index === 2)).toBe(true);
+      expect(hubSnapIndices().every((index) => index === 1)).toBe(true);
 
       // i08 [확인] = setParams({ applied: undefined }) — 병합이라 day 는 남는다(02a ★7).
       hubReceives(undefined, DAY2);
 
       expect(screen.queryByTestId(SHEET)).toBeNull();
       expect(hubSnapIndices().length).toBeGreaterThan(0);
-      expect(hubSnapIndices().every((index) => index === 2)).toBe(true);
+      expect(hubSnapIndices().every((index) => index === 1)).toBe(true);
       expect(chip(1)).toBeSelected();
     });
 
@@ -2136,7 +2366,7 @@ describe('i08 변경 반영 시트', () => {
  *                 닫히고 관람 중 카드에 메모 박스가 선다(결정 2). TRIP-1426 부터 시트 안 저장 경로는 [저장] 하나다(blur 저장 끔).
  *  - AC-4 · Q3   실패는 조용히 넘기지 않는다(INV-4) — 시트가 열려 있으면 시트 안, 닫힌 뒤 도착하면 카드 아래 한 줄.
  *  - AC-10       다시 열면 저장본이 입력칸에 심긴다. 같은 값이면 PUT 0회.
- *  - AC-13·14·15 ✕·스크림·끌어 닫기 = 닫힘(초안 버림, Q2). 시트가 열린 동안 수정 FAB 는 숨는다.
+ *  - AC-13·14·15 ✕·스크림·끌어 닫기 = 닫힘(초안 버림, Q2). 시트가 열린 동안 하단 내비 바는 숨는다(TRIP-1522 전엔 수정 FAB).
  *  - AC-6        입력칸은 허브 셸 시트가 아닌 **별도** 바텀시트 안에 있다.
  *  - AC-16       관람 중 방문이 바뀌면 시트가 사라진다(옛 방문에 쓰지 않는다).
  *  - AC-17 · Q4  사진 목록 GET 0회 유지. 메모 세션 캐시는 j01 과 같은 키 한 벌.
@@ -2162,7 +2392,6 @@ describe('메모 시트', () => {
   const TOAST = 'live-memo-saved-toast';
   const CARD_MEMO = `execution-live-slot-memo-${TODAY}#p1`;
   const CARD_NOTICE = 'execution-arrive-memo-notice';
-  const FAB = 'execution-live-replan-fab';
 
   const itinerary = (): Itinerary =>
     liveItinerary([
@@ -2535,16 +2764,17 @@ describe('메모 시트', () => {
     });
   });
 
-  describe('🔴 AC-15 · 시트가 열린 동안 수정 FAB 는 숨는다', () => {
-    it('M16 열기 전 FAB 있음 → 열면 없음 → ✕ 로 닫으면 다시 있음', async () => {
+  describe('🔴 AC-15 · 시트가 열린 동안 하단 내비 바는 숨는다', () => {
+    it('M16 열기 전 바 있음 → 열면 없음(뒤로 포함) → ✕ 로 닫으면 다시 있음', async () => {
       await renderHub();
-      expect(screen.getByTestId(FAB)).toBeOnTheScreen();
+      expect(screen.getByTestId(BAR)).toBeOnTheScreen();
 
       await openSheet();
-      expect(screen.queryByTestId(FAB)).toBeNull();
+      expect(screen.queryByTestId(BAR)).toBeNull();
+      expect(screen.queryByTestId('execution-live-back')).toBeNull();
 
       fireEvent.press(screen.getByTestId('live-memo-close'));
-      expect(screen.getByTestId(FAB)).toBeOnTheScreen();
+      expect(screen.getByTestId(BAR)).toBeOnTheScreen();
     });
   });
 
@@ -4312,9 +4542,10 @@ describe('i03 위험 상세 시트', () => {
     it('R-I1 알약 press → 허브 밖에 시트가 열리고(push 0) 제목·eyebrow·영향 행·배지가 실데이터로 찬다', async () => {
       await renderWithTriggers([mkTrigger()]);
 
-      // press 전 — 시트는 마운트돼 있지 않고, 허브에 reason 은 없다(748 I-T1 과 공존).
+      // press 전 — 시트는 마운트돼 있지 않고, 허브에 reason 은 없다(748 I-T1 과 공존). 바는 있다(대조군).
       expect(screen.queryByTestId(SHEET)).toBeNull();
       expect(screen.queryByText(/70%/)).toBeNull();
+      expect(screen.getByTestId(BAR)).toBeTruthy();
 
       fireEvent.press(screen.getByTestId(ALT));
 
@@ -4338,8 +4569,9 @@ describe('i03 위험 상세 시트', () => {
       );
       expectBadges(['날씨 · 활성', '이동 · 정상', '영업 · 정상']);
 
-      // TRIP-1435 · BR-U8-53 — 위험 상세 시트가 떠 있는 동안 ✦·✎ 앵커는 없다.
-      expect(screen.queryByTestId('execution-live-fab-anchor')).toBeNull();
+      // TRIP-1435 · BR-U8-53 — 위험 상세 시트가 떠 있는 동안 하단 바(뒤로 포함)는 없다.
+      expect(screen.queryByTestId(BAR)).toBeNull();
+      expect(screen.queryByTestId('execution-live-back')).toBeNull();
       // 알약은 그대로(D3 숨김 경로 아님), 아직 아무 데도 안 갔다.
       expect(screen.getByTestId(CHIP)).toBeTruthy();
       expect(mockPush).not.toHaveBeenCalled();
@@ -4541,7 +4773,7 @@ describe('i03 위험 상세 시트', () => {
  *  - (TRIP-749 계약 플립) 알약 press 는 더 이상 바로 planb 로 가지 않고 i03 위험 상세 시트를 연다.
  *    scope 전달(NONE/null→PARTIAL_SLOTS) 검사는 시트 [대안 보기] 경로로
  *    위 「i03 위험 상세 시트」 R-I5a/b 에 옮겼다(옛 I-T4a/b).
- *  - 숨김 경로(일자 칩·FAB·시트 스크롤)를 눌러도 dismiss POST 는 0회다 — 로컬 숨김일 뿐(D3 · AC-7).
+ *  - 숨김 경로(일자 칩·시트 스크롤)를 눌러도 dismiss POST 는 0회다 — 로컬 숨김일 뿐(D3 · AC-7). (TRIP-1522 로 수정 FAB 가 사라져 FAB 경로는 뺐다.)
  *
  * 왜 통합 버킷인가(위 「허브」 철학 계승): 표시 게이트·MANUAL
  * 필터·slotKey 매칭·라우팅이 실 조회 상태와 라우터의 조합에서 갈린다 — 훅을 목킹하면 그 조합이
@@ -4697,7 +4929,7 @@ describe('i02 트리거 표면', () => {
       ).toHaveTextContent('10:00 도착 예정');
     });
 
-    it('I-T5 숨김 경로(일자 칩·FAB·시트 스크롤)는 알약만 숨기고 dismiss POST 는 0회다 (D3 · AC-7)', async () => {
+    it('I-T5 숨김 경로(일자 칩·시트 스크롤)는 알약만 숨기고 dismiss POST 는 0회다 (D3 · AC-7)', async () => {
       server.use(
         ...baseHandlers({ triggers: [mkTrigger({ kind: 'WEATHER' })] }),
         // 등록은 해 둔다 — 만약 나가면 unhandled 오류가 아니라 카운트로 잡히게(02a ★10).
@@ -4713,7 +4945,6 @@ describe('i02 트리거 표면', () => {
 
       fireEvent.press(screen.getByTestId('execution-live-daychip-0'));
       expect(screen.queryByTestId(CHIP)).toBeNull();
-      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
       fireSheetScrollBeginDrag();
       await settle();
 
@@ -6220,15 +6451,18 @@ describe('방문 체크', () => {
  *
  * 무엇을 보장하나:
  *  - 허브가 **보고 있는 날짜**로 `GET /trips/{id}/opportunities?date=` 를 부르고(일차 칩을 바꾸면 그 날로), 고른 1장을
- *    시트 머리에 그린다. 여행 중 허브(active)가 아니면 부르지 않는다.
+ *    하단 바의 행사 칸에 점으로 알리며 **칸을 누르면** 바 위 작은 카드로 연다(TRIP-1522 — 종전엔 시트 머리에 늘 떠 있었다).
+ *    여행 중 허브(active)가 아니면 부르지 않는다.
  *  - 같은 날 날씨 위험 트리거가 발화 중이면 행사 카드 대신 다음 항목(요즘 인기)을 그린다 — 트리거 목록이 온 뒤에.
  *  - [넣어서 다시 짜기] → i04 를 `prefill`·`includePoiId`(오늘이 아니면 `targetDate`)로 연다. 이동만 하고 쓰기 요청 0
  *    (INV-SA-1 — 일정은 i06 [적용]으로만).
  *  - × → 그 자리에서 사라지고 다음 항목으로 채우지 않는다. 숨김은 그 날 기기에 남아 다시 열어도 없다 — 다른 날은 그대로.
  *    숨김 읽기 실패면 숨김 없이 그리고, 쓰기 실패여도 이번 화면에선 숨긴다.
- *  - 빈 목록·조회 실패·응답 대기는 카드만 없고 허브의 나머지(슬롯·알약)는 그대로다 — 허브의 다른 조회를 막지 않는다.
+ *  - 빈 목록·조회 실패·응답 대기는 행사 칸이 비활성(눌러도 아무 일 없음, 점 없음)일 뿐 허브의 나머지(슬롯·알약)는
+ *    그대로다 — 허브의 다른 조회를 막지 않는다. 카드는 기본 닫힘이라 "카드 없음"은 기회가 있어도 참이다 — "없음"의
+ *    증거는 행사 칸 비활성 + 점 없음(`expectEventIdle`)이다(02a ★1).
  *
- * 3동작: 준비(일정·트리거·날짜별 기회 응답·기기 숨김 칸) → 실행(렌더·일차 칩·CTA·×) → 단언(카드 글자·요청 날짜·push 인자·숨김 기억).
+ * 3동작: 준비(일정·트리거·날짜별 기회 응답·기기 숨김 칸) → 실행(렌더·행사 칸·일차 칩·CTA·×) → 단언(카드 글자·요청 날짜·push 인자·숨김 기억).
  * 기기 숨김 칸은 파일 맨 위 `@/shared/storage` 목의 readIdSet·writeIdSet 에 이 관점이 Map 을 심는다.
  */
 describe('기회 카드 (상황 감지 FE-C)', () => {
@@ -6358,18 +6592,26 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
   const TITLE = 'execution-live-opportunity-title';
   const CTA = 'execution-live-opportunity-cta';
   const DISMISS = 'execution-live-opportunity-dismiss';
+  /** 행사 칸을 눌러 카드를 연다 — 점이 뜬(= 기회가 도착해 판정이 끝난) 뒤에 부른다. */
+  const openCard = () => {
+    fireEvent.press(screen.getByTestId(BAR_EVENT));
+    expect(screen.getByTestId(CARD)).toBeOnTheScreen();
+  };
   const TODAY_SLOT = `execution-live-slot-${TODAY}#p1`;
   const OPPORTUNITIES = `GET /api/v1/trips/${TRIP_ID}/opportunities`;
   const writeHits = () => observedHits.filter((hit) => !hit.startsWith('GET '));
 
-  it('O1 보고 있는 날짜(오늘)로 묻고, 서버 순위 첫 장 1장을 그린다 — 제목·본문·각주', async () => {
+  it('O1 보고 있는 날짜(오늘)로 묻고, 서버 순위 첫 장 1장을 행사 칸을 눌러야 그린다 — 제목·본문·각주', async () => {
     await renderHub({ [TODAY]: [VENUE, TRENDING] });
 
-    await waitFor(() =>
-      expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
-        exact: true,
-      })
-    );
+    // 점이 뜨면 기회가 도착한 것 — 그래도 카드는 닫혀 있다(기본 닫힘).
+    await eventReady();
+    expect(screen.queryByTestId(CARD)).toBeNull();
+    fireEvent.press(screen.getByTestId(BAR_EVENT));
+
+    expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
+      exact: true,
+    });
     expect(
       screen.getByTestId('execution-live-opportunity-body')
     ).toHaveTextContent(
@@ -6385,8 +6627,10 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
 
   it('O2 [넣어서 다시 짜기] → i04 를 prefill·includePoiId 로 연다(오늘이라 날짜 없음) — 이동만, 쓰기 요청 0', async () => {
     await renderHub({ [TODAY]: [VENUE] });
+    await eventReady();
+    openCard();
 
-    fireEvent.press(await screen.findByTestId(CTA));
+    fireEvent.press(screen.getByTestId(CTA));
 
     expect(mockPush).toHaveBeenCalledTimes(1);
     expect(mockPush).toHaveBeenCalledWith({
@@ -6401,17 +6645,21 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     expect(writeHits()).toEqual([]);
   });
 
-  it('O3 다른 날(내일)을 보면 그 날로 묻고, CTA 는 targetDate 까지 싣는다', async () => {
+  it('O3 다른 날(내일)을 보면 그 날로 묻고, 칸을 눌러야 카드가 열리며 CTA 는 targetDate 까지 싣는다', async () => {
     await renderHub({ [TOMORROW]: [TRENDING] });
     await waitFor(() => expect(askedDates).toContain(TODAY));
+    // 오늘은 기회가 없다 — 행사 칸 비활성 + 점 없음(카드 부재가 아니라 이것이 증거).
+    await settle();
+    expectEventIdle();
 
     fireEvent.press(screen.getByTestId('execution-live-daychip-1'));
 
-    await waitFor(() =>
-      expect(screen.getByTestId(TITLE)).toHaveTextContent(TRENDING_TITLE, {
-        exact: true,
-      })
-    );
+    await eventReady();
+    expect(screen.queryByTestId(CARD)).toBeNull();
+    openCard();
+    expect(screen.getByTestId(TITLE)).toHaveTextContent(TRENDING_TITLE, {
+      exact: true,
+    });
     expect(askedDates).toEqual([TODAY, TOMORROW]);
     fireEvent.press(screen.getByTestId(CTA));
     expect(mockPush).toHaveBeenCalledWith({
@@ -6425,16 +6673,93 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     });
   });
 
+  it('O3b 같은 행사 key 가 두 날에 걸쳐도 — 열어 둔 채 내일 갔다 오늘로 돌아오면 카드는 닫혀 있다(저절로 다시 열리지 않는다)', async () => {
+    await renderHub({ [TODAY]: [VENUE], [TOMORROW]: [VENUE] });
+    await eventReady();
+    openCard();
+
+    fireEvent.press(screen.getByTestId('execution-live-daychip-1'));
+    await waitFor(() => expect(askedDates).toContain(TOMORROW));
+    await eventReady();
+    expect(screen.queryByTestId(CARD)).toBeNull();
+
+    fireEvent.press(screen.getByTestId('execution-live-daychip-0'));
+    await eventReady();
+    // 점은 있는데(기회는 살아 있음) 카드는 닫혀 있다.
+    expect(screen.queryByTestId(CARD)).toBeNull();
+  });
+
+  // 5-b 후 보강(03b 경고-1) — 같은 날 안에서 기회가 행사 A → (날씨 위험) 요즘 인기 B → (위험 해제) 행사 A 로 돌아와도,
+  // 열어 둔 카드가 사용자가 누르지 않았는데 저절로 다시 열리지 않는다. 실제 경로: 트리거 목록 갱신(O12 와 같은 장치).
+  it('O3c 열어 둔 행사 카드는 날씨 위험으로 요즘 인기가 됐다 위험이 풀려 행사로 돌아와도 저절로 다시 열리지 않는다', async () => {
+    // 준비 — 트리거 목록은 테스트가 바꾼다(앞에 건 핸들러가 이기므로 liveHubHandlers 보다 먼저).
+    let serverTriggers: Trigger[] = [];
+    server.use(
+      http.get(`${BASE}/trips/:tripId/triggers`, () =>
+        HttpResponse.json({ triggers: serverTriggers })
+      ),
+      ...liveHubHandlers({ itinerary: itinerary() }),
+      opportunitiesHandler({ [TODAY]: [VENUE, TRENDING] })
+    );
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: 0 },
+        mutations: { gcTime: 0 },
+      },
+    });
+    const refetchTriggers = (next: Trigger[]) => {
+      serverTriggers = next;
+      return act(() =>
+        client.invalidateQueries({
+          queryKey: getGetTripsTripIdTriggersQueryKey(TRIP_ID),
+        })
+      );
+    };
+    render(
+      <QueryClientProvider client={client}>
+        <LiveItineraryPage tripId={TRIP_ID} today={TODAY} />
+      </QueryClientProvider>
+    );
+    await eventReady();
+    openCard();
+    expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
+      exact: true,
+    });
+
+    // 실행 ① — 같은 날 비 위험이 뜬다(알약 = 새 목록 도착의 증거) → 행사가 빠져 요즘 인기로 바뀐다. 열려 있던 카드는 사라진다.
+    await refetchTriggers([rain]);
+    await screen.findByTestId('execution-live-trigger-chip');
+    await waitFor(() => expect(screen.queryByTestId(CARD)).toBeNull(), {
+      timeout: 2000,
+    });
+    expect(screen.getByTestId(BAR_EVENT)).toBeEnabled();
+
+    // 실행 ② — 위험이 풀린다(알약 사라짐 = 새 목록 도착) → 기회가 다시 행사다.
+    await refetchTriggers([]);
+    await waitFor(() =>
+      expect(screen.queryByTestId('execution-live-trigger-chip')).toBeNull()
+    );
+    await settle();
+
+    // 단언 — 점은 있는데(기회 살아 있음) 카드는 닫혀 있다. 칸을 눌러야 열리고, 열면 처음 그 행사다.
+    expect(dotOf()).not.toBeNull();
+    expect(screen.queryByTestId(CARD)).toBeNull();
+    openCard();
+    expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
+      exact: true,
+    });
+  });
+
   it('O4 같은 날 날씨 위험이 발화 중이면 행사 카드 대신 요즘 인기를 그린다', async () => {
     await renderHub({ [TODAY]: [VENUE, TRENDING] }, { triggers: [rain] });
 
     // 트리거 목록이 도착한 뒤에 판정한다(알약 = 목록 도착의 증거) — '아직 모름'이라 행사를 뺀 것과 가른다.
     await screen.findByTestId('execution-live-trigger-chip');
-    await waitFor(() =>
-      expect(screen.getByTestId(TITLE)).toHaveTextContent(TRENDING_TITLE, {
-        exact: true,
-      })
-    );
+    await eventReady();
+    openCard();
+    expect(screen.getByTestId(TITLE)).toHaveTextContent(TRENDING_TITLE, {
+      exact: true,
+    });
     expect(screen.queryByText(VENUE_TITLE)).toBeNull();
   });
 
@@ -6444,9 +6769,13 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
       [TOMORROW]: [VENUE],
     });
 
-    fireEvent.press(await screen.findByTestId(DISMISS));
+    await eventReady();
+    openCard();
+    fireEvent.press(screen.getByTestId(DISMISS));
 
-    await waitFor(() => expect(screen.queryByTestId(CARD)).toBeNull());
+    // 닫히고 칸이 비활성으로 돌아온다(점 사라짐) — 다음 항목(요즘 인기)으로 채우지 않는다.
+    await waitFor(() => expectEventIdle());
+    expect(screen.queryByTestId(CARD)).toBeNull();
     expect(screen.queryByText(TRENDING_TITLE)).toBeNull();
     expect(mockWriteIdSet).toHaveBeenCalledTimes(1);
     expect(mockWriteIdSet.mock.calls[0][1]).toEqual([VENUE.key]);
@@ -6454,22 +6783,22 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     // 다시 연다 — 새 쿼리 캐시, 기기 칸은 그대로.
     first.unmount();
     render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
-    // 짝 앵커 — 다시 물었고(응답 도착), 숨김도 다시 읽었다. 그 뒤에도 카드가 없어야 한다.
+    // 짝 앵커 — 다시 물었고(응답 도착), 숨김도 다시 읽었다. 그 뒤에도 칸은 비활성이어야 한다.
     await waitFor(() => expect(askedDates).toEqual([TODAY, TODAY]));
     await waitFor(() =>
       expect(mockReadIdSet.mock.calls.length).toBeGreaterThanOrEqual(2)
     );
     await settle();
     expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
-    expect(screen.queryByTestId(CARD)).toBeNull();
+    expectEventIdle();
 
-    // 숨김은 그 날 것이다 — 같은 행사라도 내일 카드는 보인다.
+    // 숨김은 그 날 것이다 — 같은 행사라도 내일 칸은 켜지고 카드가 열린다.
     fireEvent.press(screen.getByTestId('execution-live-daychip-1'));
-    await waitFor(() =>
-      expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
-        exact: true,
-      })
-    );
+    await eventReady();
+    openCard();
+    expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
+      exact: true,
+    });
   });
 
   it('O6 숨김 읽기가 실패하면 숨김 없이 그린다', async () => {
@@ -6478,11 +6807,11 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     });
     await renderHub({ [TODAY]: [VENUE] });
 
-    await waitFor(() =>
-      expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
-        exact: true,
-      })
-    );
+    await eventReady();
+    openCard();
+    expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
+      exact: true,
+    });
   });
 
   it('O7 숨김 쓰기가 실패해도 이번 화면에선 숨긴다(실패는 조용히 삼킨다)', async () => {
@@ -6490,10 +6819,12 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
       throw new Error('keychain');
     });
     await renderHub({ [TODAY]: [VENUE] });
+    await eventReady();
+    openCard();
 
-    fireEvent.press(await screen.findByTestId(DISMISS));
+    fireEvent.press(screen.getByTestId(DISMISS));
 
-    await waitFor(() => expect(screen.queryByTestId(CARD)).toBeNull());
+    await waitFor(() => expectEventIdle());
     expect(mockWriteIdSet).toHaveBeenCalledTimes(1);
   });
 
@@ -6501,7 +6832,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     ['빈 목록', {}],
     ['조회 실패(500)', { status: 500 }],
   ] as const)(
-    'O8 %s → 카드만 없고 허브의 나머지(슬롯·알약)는 그대로',
+    'O8 %s → 행사 칸은 비활성(점 없음)이고 허브의 나머지(슬롯·알약)는 그대로',
     async (_label, failure) => {
       await renderHub({ [TODAY]: [] }, { triggers: [rain], ...failure });
 
@@ -6509,6 +6840,9 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
       await screen.findByTestId('execution-live-trigger-chip');
       await settle();
       expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
+      expectEventIdle();
+      // 비활성 칸은 눌러도 카드가 안 선다.
+      fireEvent.press(screen.getByTestId(BAR_EVENT));
       expect(screen.queryByTestId(CARD)).toBeNull();
     }
   );
@@ -6519,14 +6853,14 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
 
     await waitFor(() => expect(askedDates).toEqual([TODAY]));
     expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
-    expect(screen.queryByTestId(CARD)).toBeNull();
+    expectEventIdle();
 
     gate.release();
-    await waitFor(() =>
-      expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
-        exact: true,
-      })
-    );
+    await eventReady();
+    openCard();
+    expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
+      exact: true,
+    });
   });
 
   it('O11 트리거 목록이 오기 전엔 기회가 와도 카드를 그리지 않는다 — 오면 그때 1장(요즘 인기를 먼저 그렸다 바꾸지 않는다)', async () => {
@@ -6545,19 +6879,19 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     await waitFor(() => expect(askedDates).toEqual([TODAY]));
     await settle();
 
-    // 단언 1 — 기회는 왔지만 트리거를 몰라 아무 카드도 없다(요즘 인기도).
+    // 단언 1 — 기회는 왔지만 트리거를 몰라 행사 칸이 꺼져 있다(요즘 인기도 안 켜진다).
     expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
-    expect(screen.queryByTestId(CARD)).toBeNull();
+    expectEventIdle();
 
     // 실행 — 트리거 목록(위험 없음)이 온다.
     triggersGate.release();
 
     // 단언 2 — 서버 순위 첫 장(행사)이 그때 선다.
-    await waitFor(() =>
-      expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
-        exact: true,
-      })
-    );
+    await eventReady();
+    openCard();
+    expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
+      exact: true,
+    });
   });
 
   it('O10 여행 중 허브가 아니면(일정 404) 묻지 않는다', async () => {
@@ -6594,14 +6928,14 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     await waitFor(() => expect(mockReadIdSet).toHaveBeenCalled());
     await settle();
 
-    // 단언 1 — 읽는 동안엔 카드가 없다(숨겼는지 아직 모른다).
+    // 단언 1 — 읽는 동안엔 행사 칸이 꺼져 있다(숨겼는지 아직 모른다).
     expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
-    expect(screen.queryByTestId(CARD)).toBeNull();
+    expectEventIdle();
 
-    // 단언 2 — 읽고 나서도 없다(숨긴 카드다).
+    // 단언 2 — 읽고 나서도 꺼져 있다(숨긴 카드다).
     readGate.release();
     await settle();
-    expect(screen.queryByTestId(CARD)).toBeNull();
+    expectEventIdle();
   });
 
   it('O12 같은 날 두 번째 ×가 첫 숨김을 지우지 않는다 — 비 위험으로 바뀐 카드를 또 닫고 위험이 풀려도, 처음 닫은 카드는 그 날 다시 없다', async () => {
@@ -6635,19 +6969,21 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
       </QueryClientProvider>
     );
 
-    // 실행 ① — 행사 카드를 닫는다.
-    fireEvent.press(await screen.findByTestId(DISMISS));
-    await waitFor(() => expect(screen.queryByTestId(CARD)).toBeNull());
+    // 실행 ① — 행사 카드를 닫는다(칸을 눌러 연 뒤 ×).
+    await eventReady();
+    openCard();
+    fireEvent.press(screen.getByTestId(DISMISS));
+    await waitFor(() => expectEventIdle());
 
     // 실행 ② — 같은 날 비 위험이 뜨면 행사가 빠져 요즘 인기가 선다 → 그것도 닫는다.
     await refetchTriggers([rain]);
-    await waitFor(() =>
-      expect(screen.getByTestId(TITLE)).toHaveTextContent(TRENDING_TITLE, {
-        exact: true,
-      })
-    );
+    await eventReady();
+    openCard();
+    expect(screen.getByTestId(TITLE)).toHaveTextContent(TRENDING_TITLE, {
+      exact: true,
+    });
     fireEvent.press(screen.getByTestId(DISMISS));
-    await waitFor(() => expect(screen.queryByTestId(CARD)).toBeNull());
+    await waitFor(() => expectEventIdle());
     // 기기에는 그 날 숨긴 key 가 둘 다 남는다(두 번째가 첫째를 덮어쓰지 않는다).
     expect(mockWriteIdSet.mock.calls.at(-1)?.[1]).toEqual([
       VENUE.key,
@@ -6661,9 +6997,9 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     );
     await settle();
 
-    // 단언 — 처음 닫은 행사 카드는 그 날 다시 그리지 않는다(계약 Opportunity.key).
+    // 단언 — 처음 닫은 행사 카드는 그 날 다시 켜지 않는다(계약 Opportunity.key).
     expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
-    expect(screen.queryByTestId(CARD)).toBeNull();
+    expectEventIdle();
 
     // 다시 열어도 같다 — 기기 칸에 두 숨김이 다 남았다. 짝 앵커: 다시 물었고(응답 도착) 숨김도 다시 읽었다.
     const readsBefore = mockReadIdSet.mock.calls.length;
@@ -6675,7 +7011,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     );
     await settle();
     expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
-    expect(screen.queryByTestId(CARD)).toBeNull();
+    expectEventIdle();
   });
 
   /**
@@ -6728,11 +7064,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
         <LiveItineraryPage tripId={TRIP_ID} today={TODAY} />
       </QueryClientProvider>
     );
-    await waitFor(() =>
-      expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
-        exact: true,
-      })
-    );
+    await eventReady();
     return { client, fake };
   }
 
@@ -6742,9 +7074,10 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
   ] as const)(
     'O14 일정이 바뀌면(%s) 같은 허브가 기회를 다시 받아, 방금 넣은 장소의 카드가 남지 않는다',
     async (_label, how) => {
-      // 준비 — 광안리 해변 카드가 떠 있다.
+      // 준비 — 광안리 해변 카드가 열려 있다.
       const byDate: Record<string, Opportunity[]> = { [TODAY]: [VENUE] };
       const { client, fake } = await renderHubWithClient(byDate);
+      openCard();
 
       // 실행 — 그 장소를 일정에 넣었다. 서버는 이제 그 장소를 기회에서 뺀다.
       byDate[TODAY] = [];
@@ -6765,16 +7098,16 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
         () => expect(askedDates).toEqual([TODAY, TODAY]),
         REFETCH_WAIT
       );
-      await waitFor(
-        () => expect(screen.queryByTestId(CARD)).toBeNull(),
-        REFETCH_WAIT
-      );
+      // 열려 있던 카드가 사라지고 행사 칸이 꺼진다(기회 없음 = 칸 비활성 + 점 없음).
+      await waitFor(() => expectEventIdle(), REFETCH_WAIT);
+      expect(screen.queryByTestId(CARD)).toBeNull();
     }
   );
 
   it('O15 일정을 다시 받아도 내용이 같으면 기회를 다시 묻지 않는다 — 기회 조회는 서버가 AI 를 부르는 길이다', async () => {
-    // 준비
+    // 준비 — 카드를 열어 둔다.
     const { client } = await renderHubWithClient({ [TODAY]: [VENUE] });
+    openCard();
 
     // 실행 — 같은 일정으로 다시 받는다(포그라운드 복귀 재조회와 같다).
     await act(() =>
