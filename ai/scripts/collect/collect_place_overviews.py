@@ -90,7 +90,9 @@ def collect(adapter, todo: list[tuple[str, str]], have: dict[str, dict], max_cal
         try:
             overview = adapter.fetch_overview(cid)
         except Exception as e:  # 한 건 실패가 전체를 죽이지 않는다 — 그 건은 다음 실행이 다시 부른다
-            failed += 1
+            if not getattr(adapter, "alive", True):
+                break  # 키가 퇴출됐다(403 거부·429 그날 한도 — 어댑터가 판정) — 실패가 아니라 그 키의 끝이다
+            failed += 1  # 5xx·타임아웃 — 진짜 실패. 연달아 나면 이 키는 멈추고 실패율로 드러난다
             streak += 1
             print(f"  ! {cid} {name} — {type(e).__name__}: {e}", file=sys.stderr)
             continue
@@ -140,9 +142,9 @@ def main(argv: list[str]) -> int:
     if not keys:
         print("TOUR_API_KEY 없음 — 생략")
         return 0
-    # 키를 **하나씩** 돈다 — 429 는 키 퇴출이 아니라 일시 장애로 올라오므로(포트 계약) 한 키의 한도가 차면 연속
-    # 실패로 그 키만 멈추고 다음 키로 넘어간다. 그래서 같은 날 앞선 실행이 1번 키를 다 썼어도 남은 키를 끝까지 쓴다.
-    # 키당 상한은 오퍼레이션별 일 한도 1,000 에 여유를 둔다.
+    # 키를 **하나씩** 돈다 — 어댑터가 403(거부)·429(그 키의 그날 한도)를 키 퇴출로 판정하면(#1418) 그 키만 멈추고
+    # 다음 키로 넘어간다. 그래서 같은 날 앞선 실행이 1번 키를 다 썼어도 남은 키를 끝까지 쓴다. 키당 상한은 오퍼레이션별
+    # 일 한도 1,000 에 여유를 둔다.
     per_key = int(os.environ.get("OVERVIEW_CALLS_PER_KEY") or "950")
     todo = targets(json.loads(_POIS.read_text(encoding="utf-8"))["proposals"])
     have = _load(args.out)
@@ -152,16 +154,17 @@ def main(argv: list[str]) -> int:
         budget = min(per_key, args.max_calls - calls)
         if budget <= 0:
             break
-        c, f = collect(TourApiAdapter(UrllibHttpClient(), key), todo, have, budget)
-        print(f"  키 {n}: 호출 {c}·실패 {f}" + (" — 연속 실패, 그날 한도로 보고 다음 키로" if f >= _STOP_AFTER_FAILS else ""))
+        adapter = TourApiAdapter(UrllibHttpClient(), key)
+        c, f = collect(adapter, todo, have, budget)
+        print(f"  키 {n}: 호출 {c}·실패 {f}" + ("" if adapter.alive else " — 키 거부·그날 한도로 퇴출, 다음 키로"))
         calls, failed = calls + c, failed + f
     _save(args.out, have)  # 받은 데까지는 늘 남긴다(실패율 초과여도) — 다음 실행이 이어받는다
     print(f"개요: 이번 {len(have) - before}곳 받음(호출 {calls}·실패 {failed}) · 누적 {len(have)}/{len(todo)}곳")
     print(stats(list(have.values()), len(todo)))
-    # 한도 소진으로 멈춘 키의 연속 실패는 정상 종료다 — 그것을 뺀 실패만 실패율로 본다.
-    real = max(0, failed - _STOP_AFTER_FAILS * sum(1 for _ in keys))
-    if calls and real / calls > _MAX_FAIL_RATE:
-        print(f"실패율 {real / calls:.1%} — {_MAX_FAIL_RATE:.0%} 초과")
+    # 키 퇴출은 실패로 안 센다(`collect`) — 여기 남은 실패는 5xx·타임아웃뿐이라 그대로 실패율이다. 셋 다 그런 날
+    # 초록으로 끝나면 진척 0 이 안 보인다(Codex 리뷰 10-20).
+    if calls and failed / calls > _MAX_FAIL_RATE:
+        print(f"실패율 {failed / calls:.1%} — {_MAX_FAIL_RATE:.0%} 초과")
         return 1
     return 0
 
