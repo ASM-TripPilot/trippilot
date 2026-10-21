@@ -645,14 +645,15 @@ class ScheduleAgent:
         #    OR-Tools는 anytime — 잔여 시간이 곧 최적성이고 해 자체는 나온다.
         #    체인 폴백(OR-Tools→LLM→규칙→최소)은 어셈블리가 이미 갖고 있다. 여기서
         #    재시도·재조립을 얹으면 이중 폴백이 되어 시한만 두 배로 쓴다 — 하지 않는다.
+        # 액티비티 취향이면 조금 더 걷는다(도로 1.0km, 2026-10-19 사용자) — 조립과 화면 거리가 같은 상한을 쓴다.
+        walk_max = ACTIVE_WALK_MAX_KM if PoiCategory.ACTIVITY in _wanted_categories(persona) else None
+        # 자차면 가까운 장소들은 차를 한 번 세우고 걸어서 돈다(2026-10-21 사용자) — 시간표에 들어가야 솔버가 순서를 고를 때 안다.
+        # 묶기는 잔여 시한을 재기 전에 — 그 시간도 조립 시한 안에서 쓴다
+        parking = (self._assembly_provider.parking_for(index, walk_max)
+                   if problem.transport is TransportMode.CAR else None)
         c2_ms = max(
             budget.c2_reserved_ms, budget.total_ms - (self._clock.monotonic_ms() - t0)
         )
-        # 액티비티 취향이면 조금 더 걷는다(도로 1.0km, 2026-10-19 사용자) — 조립과 화면 거리가 같은 상한을 쓴다.
-        walk_max = ACTIVE_WALK_MAX_KM if PoiCategory.ACTIVITY in _wanted_categories(persona) else None
-        # 자차면 가까운 장소들은 차를 한 번 세우고 걸어서 돈다(2026-10-21 사용자) — 시간표에 들어가야 솔버가 순서를 고를 때 안다
-        parking = (self._assembly_provider.parking_for(index, walk_max)
-                   if problem.transport is TransportMode.CAR else None)
         assembly = self._assembly_provider.for_pool(index, walk_max_km=walk_max, parking=parking)
         try:
             solution = assembly.solve(problem, c2_ms, trace_id)

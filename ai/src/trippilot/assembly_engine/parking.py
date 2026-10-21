@@ -12,7 +12,7 @@
 숙소(앵커)·고정 블록처럼 묶음에 없는 지점은 거점이 없다 — 종전처럼 운전으로 오간다.
 
 묶는 규칙(결정론 — 같은 풀이면 같은 묶음, U5-P4):
-  · 거점은 걷는 거리 안 이웃이 가장 많은 장소(동률은 좌표 순). 그 거점에서 `walk_max_km`(도로) 안의 장소를 붙인다.
+  · 거점은 걷는 거리 안 이웃이 많은 장소부터(동률은 좌표 순). 그 거점에서 `walk_max_km`(도로) 안의 자유 장소를 붙인다.
   · 붙일 때 이미 붙은 다른 장소와 `WALK_HARD_MAX_KM`(1.1km 도로) 넘게 떨어지면 붙이지 않는다 — 거점 양쪽 끝의 두 장소를
     직접 걷게 되는 거리가 "어떤 설정으로도 1.1km 이상은 걷지 않는다"(config)를 넘지 않게.
   · 혼자 남은 장소는 자기 자신이 거점이다(걷는 구간이 생기지 않는다).
@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
@@ -48,23 +49,43 @@ class ParkingPlan:
 
 
 def plan_parking(points: Iterable[GeoPoint], *, walk_max_km: float, detour_factor: float) -> ParkingPlan:
-    """후보 좌표들을 주차 거점으로 묶는다. `walk_max_km`·`WALK_HARD_MAX_KM` 는 도로 km, 좌표 비교는 직선이라 우회계수로 나눈다."""
+    """후보 좌표들을 주차 거점으로 묶는다. `walk_max_km`·`WALK_HARD_MAX_KM` 는 도로 km, 좌표 비교는 직선이라 우회계수로 나눈다.
+
+    자차 풀은 서울 반경 20km 에서 상한 5,000곳까지 온다(리뷰 실측: 전수 비교 n² 는 5,000곳에 13.6초 — 시한 15초를 다 먹는다).
+    그래서 반경 한 칸의 격자에 넣고 둘레 3×3 칸만 비교하고(n·k), 거점은 이웃 수 내림차순으로 **한 번만** 훑어 고른다
+    (고른 뒤 이웃 수를 다시 세지 않는다 — 5,000곳 0.1초대). 결정론: 입력 집합이 같으면 묶음도 같다(정렬·동률 규칙 고정).
+    """
     radius = walk_max_km / detour_factor
     hard = WALK_HARD_MAX_KM / detour_factor
     ordered = sorted(set(points), key=lambda p: (p.lat, p.lng))
-    # 이웃 표를 한 번만 만든다 — 자차 풀(반경 20km)은 수백 곳이라 되풀이 계산하면 수십 초다
-    near: dict[GeoPoint, list[GeoPoint]] = {
-        p: [q for q in ordered if q != p and haversine_km(p, q) <= radius] for p in ordered
-    }
+    if not ordered:
+        return ParkingPlan({})
+    lat_cell = radius / 111.195
+    mean_lat = sum(p.lat for p in ordered) / len(ordered)
+    lng_cell = lat_cell / max(math.cos(math.radians(mean_lat)), 0.2)
+    cells: dict[tuple[int, int], list[GeoPoint]] = {}
+
+    def cell(p: GeoPoint) -> tuple[int, int]:
+        return math.floor(p.lat / lat_cell), math.floor(p.lng / lng_cell)
+
+    for p in ordered:
+        cells.setdefault(cell(p), []).append(p)
+
+    def around(p: GeoPoint) -> Iterable[GeoPoint]:
+        ci, cj = cell(p)
+        for di in (-1, 0, 1):
+            for dj in (-1, 0, 1):
+                yield from cells.get((ci + di, cj + dj), ())
+
+    near = {p: [q for q in around(p) if q != p and haversine_km(p, q) <= radius] for p in ordered}
     hubs: dict[GeoPoint, GeoPoint] = {}
-    free = set(ordered)
-    while free:
-        hub = max(sorted(free, key=lambda p: (p.lat, p.lng)), key=lambda p: sum(1 for q in near[p] if q in free))
+    for hub in sorted(ordered, key=lambda p: (-len(near[p]), p.lat, p.lng)):
+        if hub in hubs:
+            continue
         members = [hub]
-        for q in sorted((q for q in near[hub] if q in free), key=lambda q: haversine_km(hub, q)):
+        for q in sorted((q for q in near[hub] if q not in hubs), key=lambda q: (haversine_km(hub, q), q.lat, q.lng)):
             if all(haversine_km(q, m) <= hard for m in members):
                 members.append(q)
         for m in members:
             hubs[m] = hub
-            free.discard(m)
     return ParkingPlan(hubs)

@@ -77,22 +77,33 @@ class TravelEstimator:
             # 도보 여행의 먼 구간은 대중교통이다(config `walk_transit_from_km`) — 대중교통 추정으로 잰다.
             minutes = self._minutes(road, TransportMode.PUBLIC) + self._cfg.buffer_min
             source = TRANSIT_SOURCE
-        elif mode is TransportMode.CAR and self._parking is not None:
+        elif mode is TransportMode.CAR and self._parking is None:
+            # 계획 없는 자차(검증·수리·편집·힌트 — 생성의 주차 계획은 와이어에 실리지 않는다): 대중교통과 같은 "도로 700m 이하는
+            # 걷기". 생성이 계획으로 잰 어떤 구간보다 **더 요구하지 않는다** — 같은 거점 구간은 같은 값이거나 생성이 더 보수적이고
+            # (아래 max), 거점을 떠난 구간은 꼬리+거점 사이 운전 ≥ 직행 운전이다. 그래서 손 안 댄 구간이 HC2 위반이 되지 않는다.
+            if road <= self._cfg.public_walk_max_km:
+                minutes, source = self._minutes(road, TransportMode.WALK), WALKED_SOURCE
+        elif mode is TransportMode.CAR:
             # 주차 거점(assembly_engine/parking) — 같은 거점이면 차를 세워 두고 걷고, 거점이 다르면 거점에서 거점으로
             # 운전하되 양 끝에 걷는 꼬리(장소↔거점)가 붙는다. 거점이 없는 지점(숙소·고정 블록)과 거점 자신은 꼬리 0.
             hub_from, hub_to = self._parking.hub_of(from_), self._parking.hub_of(to)
             if hub_from is not None and hub_from == hub_to:
-                minutes, source = self._minutes(road, TransportMode.WALK), WALKED_SOURCE
+                # 거점 양쪽의 두 장소는 걷는 상한을 넘을 수 있다(1.1km 까지) — 그때는 계획 없는 재검증(운전+주차 여유)이
+                # 요구하는 만큼은 잡아 둔다. 1km 에 걷기 21분·운전 3분+15분이라 0.83km 아래 걷기가 더 짧다
+                walk = self._minutes(road, TransportMode.WALK)
+                minutes = walk if road <= self._cfg.public_walk_max_km else max(walk, minutes)
+                source = WALKED_SOURCE
             else:
                 start = from_ if hub_from is None else hub_from
                 end = to if hub_to is None else hub_to
                 tail = (haversine_km(from_, start) + haversine_km(end, to)) * self._cfg.detour_factor
-                if tail > 0:
+                if tail >= 0.001:  # 1m 미만 꼬리(같은 자리의 두 좌표)는 꼬리가 아니다 — walk_km 가 0.0 으로 반올림되는 PARKED 를 내지 않는다
                     walk_km = tail
                     drive_km = haversine_km(start, end) * self._cfg.detour_factor
                     road = drive_km + walk_km
-                    minutes = (self._minutes(walk_km, TransportMode.WALK)
-                               + self._minutes(drive_km, mode) + self._cfg.buffer_min)
+                    # 한 번에 반올림한다 — 항별 반올림은 직행 운전(계획 없는 재검증)보다 1분 모자랄 수 있다
+                    minutes = round(self._hours(walk_km, TransportMode.WALK) * 60 * self._cfg.safety[TransportMode.WALK]
+                                    + self._hours(drive_km, mode) * 60 * self._cfg.safety[mode]) + self._cfg.buffer_min
                     source = PARKED_SOURCE
 
         return TravelEstimate(
@@ -104,10 +115,11 @@ class TravelEstimator:
         )
 
     def _minutes(self, road_km: float, mode: TransportMode) -> int:
+        return int(round(self._hours(road_km, mode) * 60 * self._cfg.safety[mode]))
+
+    def _hours(self, road_km: float, mode: TransportMode) -> float:
         near = min(road_km, self._cfg.long_leg_km)
-        hours = (near / self._cfg.speeds_kmph[mode]
-                 + (road_km - near) / self._cfg.long_speeds_kmph[mode])
-        return int(round(hours * 60 * self._cfg.safety[mode]))
+        return near / self._cfg.speeds_kmph[mode] + (road_km - near) / self._cfg.long_speeds_kmph[mode]
 
 
 class WalkFirst:
