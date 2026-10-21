@@ -1890,8 +1890,10 @@ paths:
         '409':
           description: >
             반영 세션이 아님(`되돌릴 재계획이 없습니다.`) · 이미 되돌림 · 되돌리기 지점 없음(이 기능 이전에 반영된 세션) ·
-            지난 날 · 반영 뒤 다녀온 곳(재계획이 새로 넣은 곳의 방문 완료)이 되돌리면 사라짐(INV-U4-04) ·
-            그 사이 그 날이 바뀜(편집·다른 재계획 — 오류 코드 `STALE`, 덮으면 그 변경이 사라진다)
+            지난 날 · 되돌리면 빠지는 곳(재계획이 넣었고 반영 전엔 없던 곳)에 다녀온 기록(도착·완료, 건너뜀 제외)이 있음(INV-U4-04 —
+            반영 전에도 있던 곳·계획에 없던 곳·다른 날의 실적은 막지 않는다) ·
+            그 사이 그 날이 바뀜(편집·다른 재계획 — 오류 코드 `STALE`, 덮으면 그 변경이 사라진다). 같은 여행의 다른 교체와 겹치면
+            일정 행 잠금을 기다렸다가 잠금 뒤의 일정으로 판정한다
   /trips/{tripId}/replan-sessions/{sessionId}/cancel:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -3374,7 +3376,7 @@ components:
           type: boolean
           description: >
             [되돌리기]를 그릴 수 있는가 — 반영됐고, 아직 안 되돌렸고, 되돌리기 지점이 있다(이 기능 이전 반영분은 false).
-            true 여도 누르면 409 일 수 있다 — 지난 날·반영 뒤 다녀온 곳·그 사이 바뀐 일정은 누르는 순간에만 판정한다
+            true 여도 누르면 409 일 수 있다 — 지난 날·되돌리면 빠지는 곳의 방문 기록·그 사이 바뀐 일정은 누르는 순간에만 판정한다
     SlotCandidatesRequest:
       type: object
       required: [slotKey]

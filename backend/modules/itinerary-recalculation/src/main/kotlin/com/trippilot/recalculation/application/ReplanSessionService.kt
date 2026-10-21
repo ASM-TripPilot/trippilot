@@ -459,10 +459,10 @@ class ReplanSessionService(
      * **확정 일정에서도** 된다(범용 복원은 확정 일정을 409 로 막는다). 그 날만, 반영 직전 모습으로 돌린다.
      *
      * 막는 것(모두 409):
-     * - 반영 세션이 아니거나, 이미 되돌렸거나, 되돌리기 지점이 없다(이 기능 이전 반영분)
+     * - 반영 세션이 아니거나, 이미 되돌렸거나, 되돌리기 지점이 없거나 읽지 못한다(이 기능 이전 반영분 · 깨진 행)
      * - 지난 날 — 이미 지나간 하루의 계획을 바꾸지 않는다(진입의 지난 날 가드와 같은 취지)
-     * - **반영 뒤 다녀온 곳이 되돌리면 사라진다**(INV-U4-04) — 재계획이 새로 넣은 곳에 이미 다녀왔으면 그 실적이 계획 없이 남는다.
-     *   잠금 판정과 같은 집합(완료만)을 본다 — 도착만 한 곳은 재계획 반영에서도 풀리는 슬롯이다([ReplanCommand.completedSlotKeys]).
+     * - **되돌리면 빠지는 곳에 다녀온 기록이 있다**(INV-U4-04) — 재계획이 넣었고 반영 전엔 없던 곳에 도착·완료했으면 그 실적이
+     *   계획 없이 남는다. 판정은 C8 이 일정 행을 잠근 뒤 한다([ArchiveFacade.getVisitedSlots] 를 그때 읽는다)
      * - 그 사이 그 날이 바뀌었다(`STALE`) — C8 이 판정한다(일정을 아는 쪽)
      *
      * 세션 행을 **잠가 읽는다** — 두 번 눌러도 한 번만 된다(확정·취소와 같은 관용구).
@@ -483,14 +483,19 @@ class ReplanSessionService(
         if (session.targetDate < LocalDate.ofInstant(now, TRAVEL_ZONE)) {
             throw ConflictDetected(message = "지난 날의 재계획은 되돌릴 수 없어요.")
         }
-        val restore = ReplanProposal.fromMap(session.restorePoint!!)
-        val kept = restore.slots.map { "${restore.date}#${it.poiId}" }.toSet()
-        if (archive.getCompletedSlots(tripId).any { it.substringBefore('#') == restore.date.toString() && it !in kept }) {
-            throw ConflictDetected(message = "이미 다녀온 곳이 있어 되돌릴 수 없어요.")
+        // 깨진 지점으로 되돌리면 그 날이 조용히 비거나 엉뚱해진다 — 못 읽으면 되돌리지 않는다(INV-4).
+        // `slots` 키가 없는 것과 빈 목록은 다르다: 빈 목록은 "반영 전 그 날이 비어 있었다"는 사실이다.
+        val (applied, restore) = runCatching {
+            val raw = session.restorePoint!!
+            require(raw["slots"] is List<*>) { "restore_point 에 slots 가 없습니다." }
+            ReplanProposal.fromMap(session.draft!!) to ReplanProposal.fromMap(raw)
+        }.getOrElse {
+            log.warn("재계획 되돌리기 지점을 읽지 못했습니다 — 되돌리지 않습니다. tripId={} session={}", tripId, sessionId, it)
+            throw ConflictDetected(message = "이 재계획은 되돌릴 수 없어요.")
         }
         // 사유는 "되돌림 · 원래 사유" — 앞에 둬야 길이 상한에 잘려도 되돌렸다는 사실이 남는다.
         val reason = "$REVERT_PREFIX$REASON_SEPARATOR${changeReason(session)}".take(REASON_MAX)
-        replans.revert(accountId, tripId, ReplanProposal.fromMap(session.draft!!), restore, reason)
+        replans.revert(accountId, tripId, applied, restore, reason) { archive.getVisitedSlots(tripId) }
         val reverted = sessions.save(session.reverted(now))
         // 리마인드 예약이 되돌린 일정을 따라오게 같은 사건을 낸다(구독자: 알림 재적재). 트리거는 싣지 않는다 —
         // C9 는 트리거가 있을 때만 소비하므로, 되돌리기가 이미 소비된 트리거를 다시 건드리지 않는다.

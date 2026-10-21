@@ -148,8 +148,18 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
         ReplanOrigin(OriginKind.valueOf(originKind), originLat, originLng),
         reasons.toList(), directives.toList(), freeText, excludedPoiIds.toList(),
         ReplanStatus.valueOf(status), draft, createdAt, closedAt, ReplanInitiator.valueOf(initiatedBy),
-        appliedBefore?.map { it.toSlotView() }, restorePoint, revertedAt,
+        appliedBefore?.let { rows -> decodeAppliedBefore(sessionId, rows) }, restorePoint, revertedAt,
     )
+
+    /**
+     * 비교 기준은 **세션을 읽을 때마다** 풀린다(조회·준비된 대안·확정·취소 전부). 깨진 행 하나가 그 경로를 다 500 으로 막지 않게,
+     * 못 풀면 기준이 없는 것으로 읽고 경고를 남긴다 — 비교는 `ready=false` 가 된다(옛 반영분과 같은 결과, 지어내지 않는다).
+     */
+    private fun decodeAppliedBefore(sessionId: UUID, rows: List<Map<String, Any>>): List<ReplanDiff.SlotView>? =
+        runCatching { rows.map { it.toSlotView() } }.getOrElse {
+            log.warn("재계획 세션의 applied_before 를 읽지 못했습니다 — 반영 뒤 비교 없이 둡니다. session={}", sessionId, it)
+            null
+        }
 
 
     private companion object {
@@ -162,6 +172,8 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
         )
 
         private val SYSTEM = ReplanInitiator.SYSTEM.name
+
+        private val log = org.slf4j.LoggerFactory.getLogger(ReplanSessionPersistence::class.java)
     }
 }
 

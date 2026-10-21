@@ -77,6 +77,9 @@ class ItineraryRepositoryAdapter(
     override fun findByTrip(tripId: UUID): List<Itinerary> =
         itineraries.findByTripId(tripId).map { it.toDomain() }
 
+    override fun lockForTrip(tripId: UUID): Itinerary? =
+        itineraries.findForUpdateByTripId(tripId)?.toDomain()
+
     private fun ItineraryEntity.toDomain(): Itinerary {
         val dayEntities = days.findByItineraryIdOrderByDayOrderAsc(itineraryId)
         val slotsByDay = if (dayEntities.isEmpty()) {

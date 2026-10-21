@@ -41,9 +41,14 @@ interface ReplanFacade {
      * 상태(확정)와 동결은 유지한다 — 반영 직전의 동결 참조를 그대로 다시 단다.
      *
      * 그 사이 그 날이 바뀌었으면(편집·다른 재계획) 409 `STALE` 이다 — 덮으면 그 뒤의 변경이 조용히 사라진다.
-     * 다녀온 곳의 보존(INV-U4-04)은 실적을 아는 C10 이 부르기 전에 본다.
+     *
+     * @param visitedSlotKeys 다녀온 슬롯 키(도착·완료 — 실적은 C10 이 안다). **일정 행을 잠근 뒤에** 부른다 —
+     *   재계획이 넣었다가 되돌리면 빠질 곳에 다녀온 기록이 있으면 409(INV-U4-04 · 실적이 계획 없이 남는다).
      */
-    fun revert(accountId: UUID, tripId: UUID, applied: ReplanProposal, restore: ReplanProposal, reason: String)
+    fun revert(
+        accountId: UUID, tripId: UUID, applied: ReplanProposal, restore: ReplanProposal, reason: String,
+        visitedSlotKeys: () -> Set<String>,
+    )
 }
 
 /**

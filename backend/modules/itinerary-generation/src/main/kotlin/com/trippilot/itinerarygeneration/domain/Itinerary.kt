@@ -311,4 +311,11 @@ interface ItineraryRepository {
 
     /** [Instant] 이전에 마지막으로 갱신된 채 아직 PARTIAL 인 일정 — 중단된 2차 생성을 찾는 용도. */
     fun findStalePartial(updatedBefore: Instant): List<Itinerary>
+
+    /**
+     * 여행의 현행 일정 행을 **잠그고**(`SELECT … FOR UPDATE`) 읽는다 — 호출자의 트랜잭션이 끝날 때까지 다른 교체(`DELETE`)가 기다린다.
+     * 잠금을 얻은 뒤의 읽기라 그 전에 커밋된 쓰기는 다 보인다. 그 사이 교체로 행이 갈렸으면 null 이다(호출자가 "바뀌었다"로 읽는다).
+     * 재계획 반영·되돌리기가 쓴다(TRIP-1412). 기본 구현은 잠금 없는 읽기 — 단위 테스트 대역은 단일 스레드라 잠글 상대가 없다.
+     */
+    fun lockForTrip(tripId: UUID): Itinerary? = findByTrip(tripId).firstOrNull()
 }

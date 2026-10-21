@@ -169,6 +169,11 @@ class VisitCheckService(
     override fun getCompletedSlots(tripId: UUID): Set<String> =
         checks.findByTrip(tripId).filter { it.isCompleted }.mapNotNull { it.slotKey }.toSet()
 
+    /** 다녀온 슬롯 키 — 도착·완료, 건너뜀 제외([ArchiveFacade.getVisitedSlots]). 즉석 방문은 슬롯 키가 없어 빠진다. */
+    @Transactional(readOnly = true)
+    override fun getVisitedSlots(tripId: UUID): Set<String> =
+        checks.findByTrip(tripId).filter { (it.arrivedAt != null || it.isCompleted) && it.skippedAt == null }.mapNotNull { it.slotKey }.toSet()
+
     /** 기준점 사다리의 **마지막 완료 방문지**(BR-U4-19). 좌표는 호출 측이 POI 정본에서 얻는다. */
     @Transactional(readOnly = true)
     override fun findLastCompletedPoi(tripId: UUID): UUID? =

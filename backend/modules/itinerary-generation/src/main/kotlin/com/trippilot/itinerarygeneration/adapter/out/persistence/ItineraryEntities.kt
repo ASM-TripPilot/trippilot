@@ -9,6 +9,8 @@ import org.hibernate.type.SqlTypes
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
+import org.springframework.data.jpa.repository.Lock
+import jakarta.persistence.LockModeType
 import org.springframework.data.repository.query.Param
 import java.time.Instant
 import java.time.LocalDate
@@ -71,6 +73,11 @@ class VisitSlotEntity(
 
 interface ItineraryJpaRepository : JpaRepository<ItineraryEntity, UUID> {
     fun findByTripId(tripId: UUID): List<ItineraryEntity>
+
+    /** 행 잠금 조회(`SELECT … FOR UPDATE`) — 재계획 반영·되돌리기가 다른 교체와 직렬화한다(TRIP-1412). */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select i from ItineraryEntity i where i.tripId = :tripId")
+    fun findForUpdateByTripId(@Param("tripId") tripId: UUID): ItineraryEntity?
 
     // 여행 일정 교체용 — itinerary 삭제 시 day/slot은 DB FK ON DELETE CASCADE로 함께 제거.
     @Modifying(clearAutomatically = true)

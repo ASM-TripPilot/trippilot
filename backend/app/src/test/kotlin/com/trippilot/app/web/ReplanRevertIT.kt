@@ -35,6 +35,8 @@ import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType
 import org.springframework.http.client.JdkClientHttpRequestFactory
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.client.RestClient
 import java.time.Clock
 import java.time.LocalDate
@@ -42,6 +44,9 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * 원탭 [다시 짜기] 적용 뒤 — 빠진 곳 보기와 확정 일정 되돌리기(TRIP-1412) 관통.
@@ -79,6 +84,7 @@ class ReplanRevertIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var tokens: AccessTokenIssuer
     @Autowired private lateinit var jdbc: JdbcTemplate
     @Autowired private lateinit var clock: Clock
+    @Autowired private lateinit var transactions: PlatformTransactionManager
 
     private val json = ObjectMapper()
     private val kst = ZoneId.of("Asia/Seoul")
@@ -107,14 +113,23 @@ class ReplanRevertIT : AbstractPostgresIntegrationTest() {
         )
     }
 
-    private fun snapshotsOn(tripId: UUID, date: LocalDate): List<Pair<UUID, UUID?>> = jdbc.query(
+    private fun snapshotsOn(tripId: UUID, date: LocalDate): List<Pair<UUID, UUID?>> = slotRows(tripId, date).map { it[0] as UUID to it[1] as UUID? }
+
+    /** 그 날 슬롯의 저장값 — (장소, 동결, 위반, 위반 사유, 거리 문구, 추천 이유). 되돌린 날이 반영 전과 칸마다 같은지 본다. */
+    private fun slotRows(tripId: UUID, date: LocalDate): List<List<Any?>> = jdbc.query(
         """
-        SELECT s.source_poi_id, s.poi_snapshot_id FROM visit_slot s
+        SELECT s.source_poi_id, s.poi_snapshot_id, s.has_violation, s.violation_reason, s.distance_range, s.placement_reason
+          FROM visit_slot s
           JOIN itinerary_day d ON d.itinerary_day_id = s.itinerary_day_id
           JOIN itinerary i ON i.itinerary_id = d.itinerary_id
          WHERE i.trip_id = ? AND d.day_date = ? ORDER BY s.order_index
         """.trimIndent(),
-        { rs, _ -> rs.getObject(1, UUID::class.java) to rs.getObject(2, UUID::class.java) },
+        { rs, _ ->
+            listOf(
+                rs.getObject(1, UUID::class.java), rs.getObject(2, UUID::class.java), rs.getBoolean(3),
+                rs.getString(4), rs.getString(5), rs.getString(6),
+            )
+        },
         tripId, date,
     )
 
@@ -129,8 +144,13 @@ class ReplanRevertIT : AbstractPostgresIntegrationTest() {
         error("재계획 산출이 기한 내 끝나지 않았습니다. 마지막 상태=$last")
     }
 
-    @Test
-    fun `확정 일정에 원탭 재계획을 적용하면 빠진 곳을 보여 주고, 되돌리면 그 날이 같은 동결 참조로 돌아온다`() {
+    /** 확정 일정 + 반영된 원탭 재계획(내일 하루 전체 — 실 시계와 무관한 날). 빠지는 곳에는 위반 표시·사유·거리·추천 이유를 단다. */
+    private class Applied(
+        val tripId: UUID, val token: String, val sessionId: String, val tomorrow: LocalDate,
+        val kept: UUID, val dropped: UUID, val added: UUID, val frozenBefore: List<Pair<UUID, UUID?>>, val rowsBefore: List<List<Any?>>,
+    )
+
+    private fun appliedReplan(): Applied {
         val today = LocalDate.now(clock.withZone(kst))
         val tomorrow = today.plusDays(1)
         val kept = activePoi("남는 곳")
@@ -155,7 +175,11 @@ class ReplanRevertIT : AbstractPostgresIntegrationTest() {
                         tomorrow, 1,
                         listOf(
                             VisitSlot.of(kept, null, 0, LocalTime.of(10, 0), LocalTime.of(11, 0)),
-                            VisitSlot.of(dropped, null, 1, LocalTime.of(14, 0), LocalTime.of(15, 0)),
+                            VisitSlot.of(
+                                dropped, null, 1, LocalTime.of(14, 0), LocalTime.of(15, 0),
+                                hasViolation = true, violationReason = "영업시간 밖이에요",
+                                distanceRange = "약 2.3km · 도보 추정", placementReason = "노을이 좋은 곳",
+                            ),
                         ),
                     ),
                 ),
@@ -165,6 +189,8 @@ class ReplanRevertIT : AbstractPostgresIntegrationTest() {
         // 여행 중 일정은 대개 확정이다 — 실 확정 경로로 동결한다.
         call(HttpMethod.POST, "/trips/$tripId/itinerary/confirm", token).first shouldBe 200
         val frozenBefore = snapshotsOn(tripId, tomorrow)
+        val rowsBefore = slotRows(tripId, tomorrow)
+        rowsBefore[1].drop(2) shouldContainExactly listOf(true, "영업시간 밖이에요", "약 2.3km · 도보 추정", "노을이 좋은 곳")
         frozenBefore.map { it.first } shouldContainExactly listOf(kept, dropped)
         frozenBefore.forEach { (_, snapshot) -> (snapshot != null) shouldBe true }
         replans.drafts[tripId] = ReplanProposal(
@@ -183,6 +209,19 @@ class ReplanRevertIT : AbstractPostgresIntegrationTest() {
         applyRc shouldBe 200
         applied["revertible"].asBoolean() shouldBe true
         snapshotsOn(tripId, tomorrow).map { it.first } shouldContainExactly listOf(kept, added)
+        return Applied(tripId, token, sessionId, tomorrow, kept, dropped, added, frozenBefore, rowsBefore)
+    }
+
+    @Test
+    fun `확정 일정에 원탭 재계획을 적용하면 빠진 곳을 보여 주고, 되돌리면 그 날이 같은 동결 참조로 돌아온다`() {
+        val a = appliedReplan()
+        val tripId = a.tripId
+        val token = a.token
+        val sessionId = a.sessionId
+        val tomorrow = a.tomorrow
+        val dropped = a.dropped
+        val frozenBefore = a.frozenBefore
+        val rowsBefore = a.rowsBefore
 
         // AC 1 — 적용 직후 APPLIED 에서도 비교가 나오고, 빠진 곳(장소·시각)이 실린다.
         val diff = call(HttpMethod.GET, "/trips/$tripId/replan-sessions/$sessionId/diff", token).second
@@ -203,6 +242,8 @@ class ReplanRevertIT : AbstractPostgresIntegrationTest() {
         now["status"].asText() shouldBe "CONFIRMED"
         // 동결은 반영 직전의 **같은 스냅숏 행**이다 — 빠졌다 돌아온 곳이 지금 값으로 새로 얼려지지 않았다.
         snapshotsOn(tripId, tomorrow) shouldContainExactly frozenBefore
+        // 위반 배지·사유·거리 문구·추천 이유도 jsonb 를 거쳐 그대로 돌아왔다.
+        slotRows(tripId, tomorrow) shouldContainExactly rowsBefore
 
         // 한 번만 된다. 막힌 되돌리기는 일정을 건드리지 않는다.
         call(HttpMethod.POST, "/trips/$tripId/replan-sessions/$sessionId/revert", token).first shouldBe 409
@@ -213,6 +254,85 @@ class ReplanRevertIT : AbstractPostgresIntegrationTest() {
         entries.map { it["sourceType"].asText() }.toSet() shouldBe setOf("PLAN_B", "MANUAL")
         entries.single { it["sourceType"].asText() == "MANUAL" }["reason"].asText().startsWith("재계획 되돌림") shouldBe true
         call(HttpMethod.GET, "/trips/$tripId/replan-sessions/$sessionId/diff", token).second["ready"].asBoolean() shouldBe true
+    }
+
+    /**
+     * 되돌리기와 다른 교체가 겹치면 — 되돌리기는 일정 행 잠금을 기다렸다가 **잠금 뒤의 일정**으로 판정한다. 먼저 커밋된 교체가
+     * 그 날을 바꿨으면 409 `STALE` 이고, 세션에 되돌린 시각이 찍히지 않으며, 그 교체는 지워지지 않는다(조용히 잃지 않는다).
+     * 상대는 실 저장소의 교체(`replaceForTrip` — 편집·재생성·복원·반영이 모두 쓰는 쓰기)를 잠금을 쥔 채 커밋 직전에 멈춰 둔 것이다.
+     */
+    @Test
+    fun `되돌리기는 다른 교체가 쥔 일정 행 잠금을 기다리고, 그 교체가 날을 바꿨으면 STALE 로 물러난다`() {
+        val a = appliedReplan()
+        val locked = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val writer = pool.submit {
+                TransactionTemplate(transactions).executeWithoutResult {
+                    val current = itineraries.lockForTrip(a.tripId)!!
+                    val edited = Itinerary.reconstitute(
+                        current.itineraryId, current.tripId, current.status, current.solveMode, current.generationMode,
+                        current.isFallback, current.generationState,
+                        current.days.map { d ->
+                            if (d.date != a.tomorrow) d
+                            else ItineraryDay.of(d.date, d.dayOrder, d.slots.map { s -> VisitSlot.of(s.sourcePoiId, s.poiSnapshotId, s.orderIndex, s.startAt.plusMinutes(30), s.endAt.plusMinutes(30)) })
+                        },
+                        current.createdAt, clock.instant(), current.candidatesSummary, current.unplacedMustVisits,
+                    )
+                    itineraries.replaceForTrip(a.tripId, edited)
+                    locked.countDown()
+                    check(release.await(20, TimeUnit.SECONDS)) { "해제되지 않았습니다." }
+                }
+            }
+            check(locked.await(20, TimeUnit.SECONDS)) { "교체가 잠금을 잡지 못했습니다." }
+            val revert = pool.submit<Pair<Int, JsonNode>> {
+                call(HttpMethod.POST, "/trips/${a.tripId}/replan-sessions/${a.sessionId}/revert", a.token)
+            }
+            awaitLockWaiter()
+            release.countDown()
+            writer.get(20, TimeUnit.SECONDS)
+
+            val (rc, body) = revert.get(20, TimeUnit.SECONDS)
+            rc shouldBe 409
+            body["error"]["code"].asText() shouldBe "STALE"
+            call(HttpMethod.GET, "/trips/${a.tripId}/replan-sessions/${a.sessionId}", a.token).second["revertedAt"].isNull shouldBe true
+            // 먼저 커밋된 교체가 그대로다 — 되돌리기가 덮지 않았다.
+            jdbc.queryForObject(
+                "SELECT min(s.start_at)::text FROM visit_slot s JOIN itinerary_day d ON d.itinerary_day_id = s.itinerary_day_id " +
+                    "JOIN itinerary i ON i.itinerary_id = d.itinerary_id WHERE i.trip_id = ? AND d.day_date = ?",
+                String::class.java, a.tripId, a.tomorrow,
+            ) shouldBe "10:30:00"
+        } finally {
+            release.countDown()
+            pool.shutdownNow()
+        }
+    }
+
+    /** 되돌리기 요청이 행 잠금을 **실제로 기다리는 중**인지 — 고정 sleep 대신 DB 가 말하는 대기 상태로 본다. */
+    private fun awaitLockWaiter() {
+        val deadline = System.nanoTime() + java.time.Duration.ofSeconds(20).toNanos()
+        while (System.nanoTime() < deadline) {
+            val waiting = jdbc.queryForObject(
+                "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query ILIKE '%itinerary%for%'",
+                Int::class.java,
+            )!!
+            if (waiting > 0) return
+            Thread.sleep(20)
+        }
+        error("되돌리기가 일정 행 잠금을 기다리지 않았습니다.")
+    }
+
+    /** 비교 기준 칸이 깨진 행도 세션 조회를 500 으로 막지 않는다 — 기준 없이 읽혀 비교만 ready=false 가 된다. */
+    @Test
+    fun `깨진 applied_before 는 세션 조회를 막지 않고 비교만 ready=false 로 둔다`() {
+        val a = appliedReplan()
+        jdbc.update("UPDATE replan_session SET applied_before = '[{\"slotKey\": 1}]'::jsonb WHERE session_id = ?::uuid", a.sessionId)
+
+        val (rc, session) = call(HttpMethod.GET, "/trips/${a.tripId}/replan-sessions/${a.sessionId}", a.token)
+        rc shouldBe 200
+        session["status"].asText() shouldBe "APPLIED"
+        call(HttpMethod.GET, "/trips/${a.tripId}/replan-sessions/${a.sessionId}/diff", a.token).second["ready"].asBoolean() shouldBe false
     }
 
     @Test

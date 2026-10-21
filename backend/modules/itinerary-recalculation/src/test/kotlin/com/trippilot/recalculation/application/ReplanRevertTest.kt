@@ -92,11 +92,11 @@ class ReplanRevertTest : StringSpec({
 
     class Fx(val replans: FakeReplans, val sessions: InMemoryReplanSessions, val events: CapturingReplanEvents, val service: ReplanSessionService)
 
-    fun fixture(completed: Set<String> = emptySet(), clock: Clock = noon): Fx {
+    fun fixture(visited: Set<String> = emptySet(), clock: Clock = noon): Fx {
         val replans = FakeReplans(proposal = draft).also { it.restorePoint = restorePoint }
         val sessions = InMemoryReplanSessions()
         val events = CapturingReplanEvents()
-        val archive: ArchiveFacade = FakeArchive(completedSlots = completed)
+        val archive: ArchiveFacade = FakeArchive(visitedSlots = visited)
         val service = ReplanSessionService(
             trips, itineraries, sessions, OriginResolver(noAnchors), archive, NO_SURFACES,
             ReplanSolver(sessions, archive, replans, NOOP_TX, clock), replans, FakeLocationConsents(), CapturingLegalLogs(), FakeTripPurgeScope(),
@@ -212,23 +212,47 @@ class ReplanRevertTest : StringSpec({
         f.replans.reverted.shouldBeEmpty()
     }
 
-    // INV-U4-04 — 재계획이 새로 넣은 곳에 이미 다녀왔으면, 되돌리는 순간 그 실적이 계획 없이 남는다.
-    "반영 뒤 다녀온 곳이 되돌리면 사라지면 409 — 실적을 계획에서 떼지 않는다" {
-        val f = fixture(completed = setOf("$today#$added"))
-        val sid = f.appliedSession()
-
-        shouldThrow<ConflictDetected> { f.service.revert(acc, trip, sid) }.message shouldBe "이미 다녀온 곳이 있어 되돌릴 수 없어요."
-        f.replans.reverted.shouldBeEmpty()
-        f.sessions.stored.getValue(sid).revertedAt shouldBe null
-    }
-
-    "되돌려도 남는 곳의 실적이나 다른 날 실적은 막지 않는다" {
-        val f = fixture(completed = setOf("$today#$kept", "${today.plusDays(1)}#$added"))
+    // INV-U4-04 판정은 C8 이 일정 행을 잠근 뒤 한다(ReplanFacadeServiceTest). 여기서 볼 것은 **무엇을 넘기는가** —
+    // 완료만 넘기면 도착만 한 기록이 되돌린 뒤 고아가 된다.
+    "다녀온 기록은 도착만 한 것까지 C8 에 넘긴다 — 완료분만이 아니다" {
+        val arrivedOnly = "$today#$added"
+        val f = fixture(visited = setOf(arrivedOnly))
         val sid = f.appliedSession()
 
         f.service.revert(acc, trip, sid)
 
-        f.replans.reverted.size shouldBe 1
+        f.replans.visitedSeen.single() shouldBe setOf(arrivedOnly)
+    }
+
+    "되돌리기 지점에 slots 가 없으면 409 — 그 날을 조용히 비우지 않는다" {
+        val f = fixture()
+        val sid = f.appliedSession()
+        val s = f.sessions.stored.getValue(sid)
+        f.sessions.stored[sid] = s.copy(restorePoint = s.restorePoint!! - "slots")
+
+        shouldThrow<ConflictDetected> { f.service.revert(acc, trip, sid) }.message shouldBe "이 재계획은 되돌릴 수 없어요."
+        f.replans.reverted.shouldBeEmpty()
+        f.sessions.stored.getValue(sid).revertedAt shouldBe null
+    }
+
+    "되돌리기 지점이 깨졌으면 409 — 500 으로 새지 않는다" {
+        val f = fixture()
+        val sid = f.appliedSession()
+        val s = f.sessions.stored.getValue(sid)
+        f.sessions.stored[sid] = s.copy(restorePoint = s.restorePoint!! - "itineraryId")
+
+        shouldThrow<ConflictDetected> { f.service.revert(acc, trip, sid) }.message shouldBe "이 재계획은 되돌릴 수 없어요."
+        f.replans.reverted.shouldBeEmpty()
+    }
+
+    "반영 전 그 날이 비어 있었으면 빈 지점으로 되돌린다 — 빈 목록은 사실이다" {
+        val f = fixture()
+        f.replans.restorePoint = restorePoint.copy(slots = emptyList())
+        val sid = f.appliedSession()
+
+        f.service.revert(acc, trip, sid)
+
+        f.replans.reverted.single().second.slots shouldBe emptyList()
     }
 
     "지난 날의 재계획은 되돌릴 수 없다 — 지나간 하루의 계획을 바꾸지 않는다" {

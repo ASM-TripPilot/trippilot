@@ -232,7 +232,9 @@ class ReplanFacadeService(
      */
     @Transactional
     override fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal, reason: String): ReplanProposal {
-        val current = ownedItinerary(accountId, tripId)
+        // 일정 행을 잠그고 읽는다 — 같은 여행의 되돌리기와 직렬화한다(TRIP-1412). 잠금 뒤의 읽기라 그 전 커밋이 다 보인다.
+        trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
+        val current = itineraries.lockForTrip(tripId) ?: throw ResourceNotFound("일정이 없습니다.")
         if (current.itineraryId != proposal.itineraryId) {
             // 그 사이 재생성으로 일정이 교체됐다 — 낡은 초안을 덮어쓰면 방금 만든 일정이 사라진다.
             throw ConflictDetected(message = "그 사이 일정이 바뀌었습니다. 다시 재계획해 주세요.")
@@ -259,16 +261,31 @@ class ReplanFacadeService(
      *
      * 그 날이 반영 결과([applied]) 그대로일 때만 쓴다 — 그 뒤 편집·다른 재계획이 있었으면 되돌리기는 그 변경까지
      * 지운다. 판정은 (장소, 시각, 고정, 자정 넘김)의 순서열로 한다 — 그 날에 사용자가 보는 값 전부다.
+     *
+     * **일정 행을 잠그고 판정한다.** 잠금 전에 커밋된 교체(편집·재생성·복원·반영)는 잠금 뒤 읽기에 보여 위 판정이 걸러 내고,
+     * 반영([apply])은 같은 잠금을 잡아 직렬화된다. 잠금을 잡지 않는 쓰기가 **잠금 전에 읽고 우리 커밋 뒤에** 쓰면 그 쓰기가
+     * 되돌린 날을 덮는다 — 그건 그 쓰기의 오래된 읽기(편집·재생성·복원끼리도 같은 창)이고 이 경로가 막을 수 없다.
      */
     @Transactional
-    override fun revert(accountId: UUID, tripId: UUID, applied: ReplanProposal, restore: ReplanProposal, reason: String) {
-        val current = ownedItinerary(accountId, tripId)
-        val day = current.days.firstOrNull { it.date == restore.date }
-        if (current.itineraryId != restore.itineraryId || day == null ||
+    override fun revert(
+        accountId: UUID, tripId: UUID, applied: ReplanProposal, restore: ReplanProposal, reason: String,
+        visitedSlotKeys: () -> Set<String>,
+    ) {
+        trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
+        val current = itineraries.lockForTrip(tripId)
+        val day = current?.days?.firstOrNull { it.date == restore.date }
+        if (current == null || current.itineraryId != restore.itineraryId || day == null ||
             day.slots.map { SlotKey(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) } !=
             applied.slots.map { SlotKey(it.poiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }
         ) {
             throw ConflictDetected(message = "그 사이 일정이 바뀌어 되돌릴 수 없어요.", errorCode = ErrorCode.STALE)
+        }
+        // INV-U4-04 — 되돌리면 **빠지는** 슬롯(재계획이 넣었고 반영 전엔 없던 곳)에 다녀온 기록이 있으면 그 실적이 계획 없이 남는다.
+        // 반영 전에도 있던 곳·다른 날은 되돌려도 계획에 남으니 막지 않는다. 실적은 잠근 뒤에 읽는다(그 전 체크인이 다 보이게).
+        // 체크인은 일정 행을 잡지 않아, 이 트랜잭션 **도중** 커밋된 체크인은 못 본다 — 창은 이 읽기부터 커밋까지(밀리초)다.
+        val dropped = applied.slots.map { "${restore.date}#${it.poiId}" }.toSet() - restore.slots.map { "${restore.date}#${it.poiId}" }.toSet()
+        if (visitedSlotKeys().any { it in dropped }) {
+            throw ConflictDetected(message = "이미 다녀온 곳이 있어 되돌릴 수 없어요.")
         }
         // 주체는 사용자다 — 되돌리기를 누른 것은 사람이고, AI 산출이 아니다. 이력 축도 수동(BR-U4-30 MANUAL)이다.
         replaceDay(accountId, current, restore.date, restore.slots, RevisionActor.USER, "여행 중 재계획 되돌림", ChangeSourceType.MANUAL, reason)
