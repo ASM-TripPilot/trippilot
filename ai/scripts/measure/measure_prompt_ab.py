@@ -28,7 +28,7 @@ CI 밖 수동 실행 전용(실 API 를 부른다). few-shot·판단 순서(CoT)
   먼 곳·꽉 찬 하루에 카페·휴무 교체·피로+저녁·저녁 영업시간). 입력은 배선과 같은 함수로 만들고(`_compose_case`), 품질은
   상황별 코드 판정 + 공통(상한 이하·영업시간이 남은 시간과 60분 이상 겹침). `EVAL_CASES=a,b` 로 상황을 고른다.
   2026-10-18 실측: 0.5.0 이 33/33(천장) — 판단 순서(CoT)·예시(few-shot) 두 판은 품질이 같고 입력 +7~23%·p90 +1.3s 라 버렸다.
-- `plan`  DIALOGUE_PLAN(2‴ 도구 계획) — `data/dialogue_plan_eval_set.yaml` 38문장(도구 1·2 · 도구 없음 · 주입). 도구 집합 완전·허용
+- `plan`  DIALOGUE_PLAN(2‴ 도구 계획) — `data/dialogue_plan_eval_set.yaml` 40문장(도구 1·2 · 도구 없음 · 주입). 도구 집합 완전·허용
   일치 · 인자 키 정밀도 · 도구 없음 비움률(gap 일치는 기록만) · 주입 도구 0 률 · 게이트 뒤 위험 인자 · 게이트 드롭률 · 지연·토큰.
   노출 도구는 운영 배선(포트 전부)과 같다. 시한 3.5s(`EVAL_PLAN_TIMEOUT` — 계획 상한). 두 판본·두 모델을 같은 시각에 나란히.
       uv run --env-file ../.env python scripts/measure/measure_prompt_ab.py plan prompts 2
