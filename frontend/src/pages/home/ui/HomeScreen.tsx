@@ -43,6 +43,8 @@ import { WarningTriangleGlyph } from '@/features/explore/index.view';
 import { formatCountBadge } from '../lib/formatCountBadge';
 import { GLYPH_COLORS } from '@/shared/ui/glyphs';
 import { HeartButton } from '@/shared/ui/HeartButton';
+import { FAB_STACK_TOP } from '@/shared/ui/toastBottom';
+import { useToastBottom } from '@/shared/ui/useToastBottom';
 import { Image } from '@/shared/ui/Image';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import type {
@@ -1373,6 +1375,7 @@ export function HomeScreen({
   savedMenuOpen,
   onToggleSavedMenu,
 }: HomeScreenProps): ReactElement {
+  useToastBottom(FAB_STACK_TOP); // 토스트가 FAB 스택 위로 뜬다(TRIP-1559)
   const menuOpen = savedMenuOpen ?? false;
   const [scrolling, setScrolling] = useState(false);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

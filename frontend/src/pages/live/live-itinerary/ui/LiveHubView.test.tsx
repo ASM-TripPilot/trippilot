@@ -53,7 +53,11 @@ import {
   BAR_EXIT_MS,
   barMorphFrame,
 } from '../model/barMorph';
-import { LIVE_BAR_SIDE } from '../model/editPopupLayout';
+import {
+  LIVE_BAR_SIDE,
+  LIVE_BOTTOM_BAR_RESERVE,
+} from '../model/editPopupLayout';
+import { getToastBottoms, resetToastBottoms } from '@/shared/ui/toastBottom';
 import { LiveHubView, type LiveHubSlot } from './LiveHubView';
 
 /**
@@ -2070,5 +2074,20 @@ describe('LiveHubView · 지도 핀 맞춤 (AC-4·AC-10 · Q-088)', () => {
 
     // 단언 ②
     expect(hubRegion()).toBe(first);
+  });
+});
+
+// 토스트 바닥 레지스트리는 모듈 싱글턴이다 — 파일 최상위(describe 밖)에서 리셋해야 앞 테스트의 신고가 안 샌다(TRIP-1559).
+afterEach(() => resetToastBottoms());
+
+describe('LiveHubView · 토스트 바닥 신고: 하단 내비 바 (TRIP-1559 이음새 ④)', () => {
+  it('허브가 그려지는 동안 하단 내비 바가 차지하는 높이(LIVE_BOTTOM_BAR_RESERVE)를 신고하고 unmount 로 해제한다', () => {
+    expect(getToastBottoms()).toEqual([]);
+
+    renderHub();
+    expect(getToastBottoms()).toEqual([LIVE_BOTTOM_BAR_RESERVE]);
+
+    screen.unmount();
+    expect(getToastBottoms()).toEqual([]);
   });
 });

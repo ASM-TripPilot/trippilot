@@ -16,6 +16,11 @@ import type {
 } from '../model/homeTypes';
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/features/home';
 import { HomeScreen } from './HomeScreen';
+import {
+  FAB_STACK_TOP,
+  getToastBottoms,
+  resetToastBottoms,
+} from '@/shared/ui/toastBottom';
 
 /**
  * AC-1~AC-8 — 홈 default 재정합(구 "여행 상태 대시보드" → 신 "발견·영감 피드",
@@ -1397,5 +1402,21 @@ describe('지금 뜨는 장소 — 저장 하트·카드 접근성 라벨', () =
     );
     expect(buttonIds).not.toContain('home-spot-card-0');
     expect(buttonIds).not.toContain('home-spot-card-1');
+  });
+});
+
+// 토스트 바닥 레지스트리는 모듈 싱글턴이다 — 파일 최상위(describe 밖)에서 리셋해야 앞 테스트의 신고가 안 샌다(TRIP-1559).
+afterEach(() => resetToastBottoms());
+
+describe('HomeScreen — 토스트 바닥 신고: FAB 2단 스택 (TRIP-1559 이음새 ③)', () => {
+  it('FAB 스택이 있는 홈은 그 윗변(FAB_STACK_TOP)을 신고하고 unmount 로 해제한다 — 토스트가 FAB 를 가로질러 가리지 않게', () => {
+    expect(getToastBottoms()).toEqual([]);
+
+    const view = render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
+
+    expect(getToastBottoms()).toContain(FAB_STACK_TOP);
+
+    view.unmount();
+    expect(getToastBottoms()).toEqual([]);
   });
 });

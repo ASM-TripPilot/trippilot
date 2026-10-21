@@ -1,6 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
-import { CtaBar } from './CtaBar';
+import { getToastBottoms, resetToastBottoms } from '@/shared/ui/toastBottom';
+
+import { CTA_BAR_HEIGHT, CtaBar } from './CtaBar';
+
+// TRIP-1559 — 토스트 바닥 레지스트리는 모듈 싱글턴이다. 파일 최상위(describe 밖)에서 리셋해야 앞 테스트의 신고가 안 샌다.
+afterEach(() => resetToastBottoms());
 
 /**
  * TRIP-783 · AC-6 — 하단 고정 CTA 바(widgets). 1버튼/2버튼 변형을 `buttons` prop 으로 받는다
@@ -141,5 +147,50 @@ describe('🔴 CtaBar · TRIP-991 — 버튼 역할(AC-1 · AC-5 짝)', () => {
 
     fireEvent.press(cta);
     expect(onSave).not.toHaveBeenCalled();
+  });
+});
+
+describe('CtaBar — 토스트 바닥 신고 (TRIP-1559 T4·T5)', () => {
+  const buttons = [
+    { label: '일정 저장하기', variant: 'primary' as const, onPress: jest.fn() },
+  ];
+
+  it('내비게이션·SafeArea 없이 그려도 throw 하지 않고, 그리는 동안 CTA 바 높이를 신고하며 unmount 로 해제한다', () => {
+    expect(getToastBottoms()).toEqual([]);
+
+    const view = render(<CtaBar buttons={buttons} />);
+
+    // 인셋 컨텍스트가 없으면 0 으로 읽는다 → 바 높이 그대로.
+    expect(getToastBottoms()).toEqual([CTA_BAR_HEIGHT]);
+
+    view.unmount();
+    expect(getToastBottoms()).toEqual([]);
+  });
+
+  it('하단 안전영역 인셋이 있으면 바 높이에 더해 신고한다 (바 아래에 홈 인디케이터 칸이 붙는다)', () => {
+    render(
+      <SafeAreaInsetsContext.Provider
+        value={{ top: 47, bottom: 34, left: 0, right: 0 }}
+      >
+        <CtaBar buttons={buttons} />
+      </SafeAreaInsetsContext.Provider>
+    );
+
+    expect(getToastBottoms()).toEqual([CTA_BAR_HEIGHT + 34]);
+  });
+
+  it('버튼 수가 바뀌어 다시 그려도 신고는 하나다', () => {
+    const view = render(<CtaBar buttons={buttons} />);
+
+    view.rerender(
+      <CtaBar
+        buttons={[
+          { label: '다시 짜기', variant: 'outline', onPress: jest.fn() },
+          ...buttons,
+        ]}
+      />
+    );
+
+    expect(getToastBottoms()).toEqual([CTA_BAR_HEIGHT]);
   });
 });

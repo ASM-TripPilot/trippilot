@@ -42,6 +42,8 @@ import {
 } from '@/features/explore/index.view';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import { DismissNotice } from '@/shared/ui/NoticeBanner';
+import { FAB_STACK_TOP } from '@/shared/ui/toastBottom';
+import { useToastBottom } from '@/shared/ui/useToastBottom';
 
 // 카드 뷰모델은 entities 로 이관됐다(StayCardVM=807 · PlaceCardVM=806) — 여기서 재수출해 기존
 // 소비처(placePhoto 테스트·라우트)의 `./ExploreLandingScreen`·이 파일 경유
@@ -293,6 +295,7 @@ export function ExploreLandingScreen({
   stayLane,
   savedMenu,
 }: ExploreLandingScreenProps): ReactElement {
+  useToastBottom(FAB_STACK_TOP); // 토스트가 FAB 스택 위로 뜬다(TRIP-1559)
   const {
     savedKeys = [],
     pendingKeys = [],

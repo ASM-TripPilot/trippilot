@@ -24,6 +24,8 @@ import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
+import { useToastBottom } from './useToastBottom';
+
 export type ShellTabKey = 'home' | 'explore' | 'itinerary' | 'records' | 'my';
 
 /**
@@ -36,6 +38,12 @@ export function shellTabHref(
 ): '/(tabs)' | `/${Exclude<ShellTabKey, 'home'>}` {
   return key === 'home' ? '/(tabs)' : `/${key}`;
 }
+
+/**
+ * 눈에 보이는 알약 윗변(띠 min-h 96 − pt 26) — 토스트가 피할 높이(TRIP-1559).
+ * 출처: 이 파일 띠 className `min-h-[96px]`·`pt-[26px]`. jest 는 값을 잠그지 않으니 그 className 을 바꾸면 이 값도 맞추고 실화면(6-b)으로 확인.
+ */
+export const TAB_BAR_TOP = 70;
 
 export interface BottomTabBarProps {
   activeKey: ShellTabKey;
@@ -280,6 +288,7 @@ export function BottomTabBar({
   activeKey,
   onPressTab,
 }: BottomTabBarProps): ReactElement {
+  useToastBottom(TAB_BAR_TOP);
   return (
     <View
       testID="shell-tabbar-root"

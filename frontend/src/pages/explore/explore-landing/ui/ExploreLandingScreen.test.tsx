@@ -11,6 +11,11 @@ import {
   type PlaceCardVM,
   type StayCardVM,
 } from './ExploreLandingScreen';
+import {
+  FAB_STACK_TOP,
+  getToastBottoms,
+  resetToastBottoms,
+} from '@/shared/ui/toastBottom';
 
 /**
  * d01 탐색 랜딩(순수 화면) 단위 테스트 — 옛 `.parity`·`.regionFilter`·`.placeSave`·`.loading`·
@@ -720,5 +725,21 @@ describe('TRIP-1048 · 장소 레인 카드 폭', () => {
       expect(tokens).toContain('w-[160px]');
       expect(tokens).not.toContain('w-full');
     }
+  });
+});
+
+// 토스트 바닥 레지스트리는 모듈 싱글턴이다 — 파일 최상위(describe 밖)에서 리셋해야 앞 테스트의 신고가 안 샌다(TRIP-1559).
+afterEach(() => resetToastBottoms());
+
+describe('TRIP-1559 · d01 토스트 바닥 신고: FAB 2단 스택 (이음새 ③)', () => {
+  it('FAB 스택이 있는 탐색 랜딩은 그 윗변(FAB_STACK_TOP)을 신고하고 unmount 로 해제한다', () => {
+    expect(getToastBottoms()).toEqual([]);
+
+    const view = render(<ExploreLandingScreen {...baseProps()} />);
+
+    expect(getToastBottoms()).toContain(FAB_STACK_TOP);
+
+    view.unmount();
+    expect(getToastBottoms()).toEqual([]);
   });
 });

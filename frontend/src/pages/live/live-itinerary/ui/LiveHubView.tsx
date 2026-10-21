@@ -22,6 +22,7 @@ import type {
 } from '@/shared/api/index.schemas';
 import type { MapCenter } from '@/shared/map';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
+import { useToastBottom } from '@/shared/ui/useToastBottom';
 import { DayChipScroller, MapSheetShell } from '@/widgets/map-sheet-shell';
 import { formatCoPickDayHeader } from '@/features/itinerary/index.view';
 import {
@@ -230,6 +231,7 @@ export function LiveHubView({
   actualRoute,
   showMyLocation,
 }: LiveHubViewProps): ReactElement {
+  useToastBottom(LIVE_BOTTOM_BAR_RESERVE); // 토스트가 하단 내비 바 위로 뜬다(TRIP-1559)
   // Provider 없는 렌더(jest)에서는 null — useSafeAreaInsets 는 throw 하므로 컨텍스트를 직접 읽는다.
   const insets = useContext(SafeAreaInsetsContext);
   const safeTop = insets?.top ?? 0;

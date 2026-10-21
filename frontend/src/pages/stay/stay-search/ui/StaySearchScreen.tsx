@@ -47,6 +47,8 @@ import {
   WarningTriangleGlyph,
 } from '@/features/stay/index.view';
 import { AppBar } from '@/shared/ui/AppBar';
+import { FAB_STACK_TOP } from '@/shared/ui/toastBottom';
+import { useToastBottom } from '@/shared/ui/useToastBottom';
 
 export interface StaySearchScreenProps {
   region: string;
@@ -570,6 +572,7 @@ export function StaySearchScreen({
   priceBucket,
   showPriceFilter = true,
 }: StaySearchScreenProps): ReactElement {
+  useToastBottom(FAB_STACK_TOP); // 토스트가 FAB 스택 위로 뜬다(TRIP-1559)
   // loading·error엔 'degraded'가 없다 — `in` 좁히기로 판별 유니온을 안전하게 읽는다.
   const degraded = 'degraded' in state ? state.degraded : false;
   const showCount = state.kind !== 'loading' && state.kind !== 'error';

@@ -1685,7 +1685,7 @@
 
 ## src/shared/ui/
 - `src/shared/ui/AppBar.tsx`  →  AppBarBack · AppBar
-- `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · BottomTabBarProps · ItineraryIconActive · ItineraryIconInactive · TAB_CONFIG · BottomTabBar
+- `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · TAB_BAR_TOP · BottomTabBarProps · ItineraryIconActive · ItineraryIconInactive · TAB_CONFIG · BottomTabBar
 - `src/shared/ui/CollageEmptyState.tsx`  →  CollageEmptyStateProps · CollageEmptyState
 - `src/shared/ui/ConfirmDialog.tsx`  →  ConfirmTone · ConfirmButton · ConfirmDialogProps · ConfirmDialog
 - `src/shared/ui/GlassSurface.tsx`  →  GlassSurfaceProps · GlassSurface
@@ -1723,6 +1723,10 @@
 - `src/shared/ui/pref/PrefStepHeader.tsx`  →  PrefStepHeader
 - `src/shared/ui/pref/PrefTile.tsx`  →  PrefTileIcon · PrefTileProps · PrefTile
 - `src/shared/ui/pref/index.ts`  →  PrefChip · PrefOptionTile · PrefStepHeader · PrefTile
+
+## src/shared/ui/
+- `src/shared/ui/toastBottom.ts`  →  FAB_STACK_TOP · resolveToastBottom · registerToastBottom · getToastBottoms · subscribeToastBottoms · resetToastBottoms
+- `src/shared/ui/useToastBottom.ts`  →  useToastBottom
 
 ## src/test-support/
 - `src/test-support/animatedProbe.ts`  →  AnimatedProbe · useAnimatedProbe · hostNodes
@@ -1800,4 +1804,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1154개 파일
+합계 1156개 파일

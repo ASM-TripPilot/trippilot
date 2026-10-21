@@ -32,6 +32,8 @@ import {
 import { PartialFailureBanner } from './PartialFailureBanner';
 import { NoticeBanner } from '@/shared/ui/NoticeBanner';
 import { AppBar } from '@/shared/ui/AppBar';
+import { FAB_STACK_TOP } from '@/shared/ui/toastBottom';
+import { useToastBottom } from '@/shared/ui/useToastBottom';
 
 // 우하단 FAB 그림자 — `ExploreLandingScreen`의 FAB_SHADOW와 동형
 // (RN에 CSS box-shadow가 없어 style prop으로 옮긴다). `#000000`은 raw-hex 가드
@@ -501,6 +503,7 @@ export function PlaceExploreScreen({
   isFetchingMore = false,
   degraded = false,
 }: PlaceExploreScreenProps): ReactElement {
+  useToastBottom(FAB_STACK_TOP); // 토스트가 FAB 스택 위로 뜬다(TRIP-1559)
   const savedSet = useMemo(() => new Set(savedPoiIds), [savedPoiIds]);
   const pendingSet = useMemo(() => new Set(pendingPoiIds), [pendingPoiIds]);
 
