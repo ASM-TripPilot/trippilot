@@ -12,7 +12,9 @@ import java.util.UUID
  * 각자 표를 들면 한쪽만 고쳐져 조용히 갈라진다. AI 쪽 `PoiCategory` 주석도 이 표를 정본으로 인용하고 있다.
  */
 enum class PoiCategory {
-    명소, 맛집, 카페, 야경, 자연, 쇼핑, 문화, 액티비티 ;
+    명소, 맛집, 카페, 야경, 자연, 쇼핑, 문화, 액티비티,
+    // 2026-10-21 신설(TRIP-1545) — 문화에서 갤러리·미술관을, 맛집·액티비티에서 술집을 갈랐다(V2.79).
+    미술, 술집 ;
 
     /** 한글 정본 → AI 경계 코드. 1:1, 전 값 커버. */
     val boundaryCode: String
@@ -25,6 +27,8 @@ enum class PoiCategory {
             쇼핑 -> "SHOPPING"
             문화 -> "CULTURE"
             액티비티 -> "ACTIVITY"
+            미술 -> "ART"
+            술집 -> "BAR"
         }
 
     companion object {

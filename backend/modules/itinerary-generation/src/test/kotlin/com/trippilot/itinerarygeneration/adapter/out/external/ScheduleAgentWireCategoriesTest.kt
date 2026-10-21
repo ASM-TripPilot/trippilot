@@ -22,12 +22,12 @@ import java.util.UUID
  * '식사'를 골라도 명소가 오고 BE 후처리 필터만 그걸 걸러 후보가 줄어든다.
  */
 class ScheduleAgentWireCategoriesTest : StringSpec({
-    val boundaryCodes = setOf("FOOD", "CAFE", "SIGHT", "NIGHT_VIEW", "NATURE", "CULTURE", "ACTIVITY", "SHOPPING")
+    val boundaryCodes = setOf("FOOD", "CAFE", "SIGHT", "NIGHT_VIEW", "NATURE", "CULTURE", "ACTIVITY", "SHOPPING", "ART", "BAR")
     // 기대값을 따로 적는다 — 구현과 같은 식으로 계산하면 매핑이 틀려도 같이 틀린다.
     val expected = mapOf(
         "식사" to listOf("FOOD"),
         "카페" to listOf("CAFE"),
-        "전시·문화" to listOf("CULTURE"),
+        "전시·문화" to listOf("ART", "CULTURE"),   // 코드 오름차순 — 어댑터가 정렬해 싣는다
         "야외·산책" to listOf("NATURE"),
         "쇼핑" to listOf("SHOPPING"),
     )
@@ -56,7 +56,7 @@ class ScheduleAgentWireCategoriesTest : StringSpec({
         input("아무거나").toAlternativesRequest().categories.shouldBeEmpty()
     }
 
-    "임의 컨셉에서 categories 는 경계 코드 8종 안이고 매핑 컨셉이면 표와 정확히 일치한다" {
+    "임의 컨셉에서 categories 는 경계 코드 10종 안이고 매핑 컨셉이면 표와 정확히 일치한다" {
         checkAll(Arb.element(expected.keys.toList() + listOf("아무거나", "", " 식사 ")).orNull(0.2)) { concept ->
             val categories = input(concept).toAlternativesRequest().categories
             boundaryCodes shouldContainAll categories
