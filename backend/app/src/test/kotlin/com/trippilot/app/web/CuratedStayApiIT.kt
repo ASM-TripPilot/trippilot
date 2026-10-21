@@ -92,6 +92,33 @@ class CuratedStayApiIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
+    fun `지역 코드로 찾는다 — 카탈로그 이름(부산광역시)이 아니라 코드라 도시와 맞는다`() {
+        val token = token()
+        fun cityOf(code: String) = body(get("/api/v1/stays/curated?regionCode=$code", token))
+
+        cityOf("26").let { it["city"].asText() shouldBe "부산"; it["items"].size() shouldBe 15 }
+        cityOf("11110")["city"].asText() shouldBe "서울"   // 자치구 → 그 시
+        cityOf("50130")["city"].asText() shouldBe "제주"   // 서귀포도 제주 목록
+        cityOf("51150")["city"].asText() shouldBe "강릉"
+        cityOf("52111")["city"].asText() shouldBe "전주"   // 일반시의 행정구(여행에 저장된 코드)도 그 시
+    }
+
+    @Test
+    fun `한 도시로 좁혀지지 않는 코드는 빈 목록 — city 는 null`() {
+        val res = body(get("/api/v1/stays/curated?regionCode=51", token()))   // 강원도
+        res["city"].isNull shouldBe true
+        res["items"].size() shouldBe 0
+    }
+
+    @Test
+    fun `regionCode 형식이 틀리거나 city 와 함께 오면 400`() {
+        val token = token()
+        get("/api/v1/stays/curated?regionCode=abc", token).statusCode.value() shouldBe 400
+        get("/api/v1/stays/curated?regionCode=263", token).statusCode.value() shouldBe 400
+        get("/api/v1/stays/curated?regionCode=26&city=부산", token).statusCode.value() shouldBe 400
+    }
+
+    @Test
     fun `목록의 stayId 로 아웃바운드가 열린다 — 큐레이션 이름으로 302`() {
         val res = get("/api/v1/stays/TRIPCOM:4645968/outbound", null)
 
