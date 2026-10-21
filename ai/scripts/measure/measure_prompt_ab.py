@@ -76,6 +76,7 @@ from trippilot.domain.poi import DataQuality, Poi, PoiCategory  # noqa: E402
 from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter  # noqa: E402
 from trippilot.llm_gateway.config import C1Config  # noqa: E402
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate  # noqa: E402
+from trippilot.llm_gateway.gates.numbered_selection import NumberedSelectionGate  # noqa: E402
 from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerGate  # noqa: E402
 from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanGate  # noqa: E402
 from trippilot.llm_gateway.gates.intent import IntentGate  # noqa: E402
@@ -815,7 +816,7 @@ def _compose_case(sc: dict, jeju: list):
 
 
 def run_composition(prompts: Path, repeat: int) -> None:
-    worker = ReplanCompositionWorker(_gateway(prompts, LlmFeature.REPLAN_COMPOSITION, AlternativeSelectionGate(),
+    worker = ReplanCompositionWorker(_gateway(prompts, LlmFeature.REPLAN_COMPOSITION, NumberedSelectionGate(),
                                               COMPOSE_MODEL))
     jeju = _jeju_pois()
     only = set(filter(None, os.environ.get("EVAL_CASES", "").split(",")))
