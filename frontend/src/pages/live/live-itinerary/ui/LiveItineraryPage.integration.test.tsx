@@ -286,6 +286,13 @@ beforeEach(() => {
   // TRIP-1415 — 메모 대상 방문(관람 중·완료)이 있는 모든 관점에서 서버 메모(records)를 조회한다. 관점 핸들러가 아니라
   // 허브 공통 GET 이라 여기 한 벌(기본 실적 0건). 요청 수는 관찰자가 세므로 0회 단언은 가려지지 않는다.
   server.use(recordsHandler(() => HttpResponse.json(tripRecord([], TRIP_ID))));
+  // TRIP-1535 — 허브는 내 위치 표시 때문에 플래그와 무관하게 위치 동의를 조회한다. 기본은 동의 없음(내 위치 꺼짐 = 옛 화면 그대로);
+  // 동의를 다루는 관점은 자기 핸들러로 덮는다(나중에 등록한 핸들러가 이긴다). 요청 수는 관찰자가 세므로 0회 단언은 가려지지 않는다.
+  server.use(
+    http.get(`${BASE}/me/location-consent`, () =>
+      HttpResponse.json({ legalConsent: false })
+    )
+  );
 });
 afterEach(() => {
   server.resetHandlers();
@@ -539,6 +546,66 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
     });
   });
 
+  /**
+   * TRIP-1535 · 허브 지도 내 위치 — 네이버 기본 현위치(NoFollow). 오늘 일차 ∧ 위치정보 이용 동의 ∧ OS 권한 granted 일 때만.
+   * 자동 기록 플래그와 무관(기본 OFF 로 돈다). 추적 모드는 ref 호출이라 지도 목이 기록한 `__trackingModes` 로 본다.
+   * 3동작: 준비(동의 응답·OS 권한) → 실행(허브 렌더·일차 칩) → 단언(추적 모드 기록·권한 요청 0회).
+   */
+  describe('내 위치 (TRIP-1535)', () => {
+    const trackingModes = (): string[] =>
+      (globalThis as { __naverTrackingModes?: string[] })
+        .__naverTrackingModes ?? [];
+    const consent = (legalConsent: boolean) =>
+      http.get(`${BASE}/me/location-consent`, () =>
+        HttpResponse.json({ legalConsent })
+      );
+    const KEY = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
+    let originalKey: string | undefined;
+    beforeEach(() => {
+      originalKey = process.env[KEY];
+      process.env[KEY] = 'test-naver-client-id';
+      trackingModes().length = 0;
+      mockGetForeground.mockResolvedValue({ status: 'granted' });
+    });
+    afterEach(() => {
+      if (originalKey === undefined) delete process.env[KEY];
+      else process.env[KEY] = originalKey;
+      mockGetForeground.mockReset();
+    });
+
+    it('ML1 오늘 · 동의 · 권한 → 지도에 내 위치(NoFollow), 권한 요청 0회', async () => {
+      server.use(itineraryOk(), tripHandler(), visitsHandler(), consent(true));
+      await renderActive();
+      await waitFor(() => expect(trackingModes()).toContain('NoFollow'));
+      expect(mockRequestForeground).not.toHaveBeenCalled();
+    });
+
+    it('ML2 권한이 있어도 위치정보 이용 동의가 없으면 → 내 위치 없음', async () => {
+      server.use(itineraryOk(), tripHandler(), visitsHandler(), consent(false));
+      await renderActive();
+      await waitFor(() =>
+        expect(hitCount('GET /api/v1/me/location-consent')).toBe(1)
+      );
+      await settle();
+      expect(trackingModes()).not.toContain('NoFollow');
+    });
+
+    it('ML3 다른 날 칩으로 바꾸면 → 내 위치를 끈다(None)', async () => {
+      server.use(
+        twoDayItineraryOk(),
+        tripHandler(),
+        visitsHandler(),
+        consent(true)
+      );
+      await renderActive();
+      await waitFor(() => expect(trackingModes()).toEqual(['NoFollow']));
+      fireEvent.press(screen.getByTestId('execution-live-daychip-1'));
+      await waitFor(() =>
+        expect(trackingModes()).toEqual(['NoFollow', 'None'])
+      );
+    });
+  });
+
   describe('U10 자동 기록 (TRIP-1339)', () => {
     const consentOk = () =>
       http.get(`${BASE}/me/location-consent`, () =>
@@ -551,15 +618,15 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       mockAutomationDismiss.mockClear();
     });
 
-    it('U1 플래그 OFF(기본) → 설명·안내 없음, 위치 동의 조회 0회(BR-U10-07)', async () => {
-      server.use(itineraryOk(), tripHandler(), visitsHandler());
+    it('U1 플래그 OFF(기본) → 설명·안내 없음, 자동 기록 훅 효과 0(BR-U10-07) — 동의 조회는 내 위치 표시 몫으로 1회(TRIP-1535)', async () => {
+      server.use(itineraryOk(), tripHandler(), visitsHandler(), consentOk());
       await renderActive();
       await settle();
       expect(screen.queryByTestId('location-explainer-root')).toBeNull();
       expect(
         screen.queryByTestId('execution-live-automation-notice')
       ).toBeNull();
-      expect(hitCount('GET /api/v1/me/location-consent')).toBe(0);
+      expect(hitCount('GET /api/v1/me/location-consent')).toBe(1);
     });
 
     it('U2 EXPLAINER → 설명이 허브 위에 1회 뜨고, [나중에]면 닫히며 later 1회', async () => {
@@ -3329,7 +3396,8 @@ describe('관람 중 카드 [사진]·[메모]', () => {
         ).toHaveTextContent(copy);
         await settle();
         expect(hitCount(PHOTOS_POST)).toBe(0);
-        expect(hitCount(CONSENT_GET)).toBe(0);
+        // 화면을 열 때 내 위치 표시(TRIP-1535) 몫 1회뿐 — 권한 거부라 사진 흐름은 동의를 읽지 않는다.
+        expect(hitCount(CONSENT_GET)).toBe(1);
       }
     );
 
@@ -3458,20 +3526,20 @@ describe('관람 중 카드 [사진]·[메모]', () => {
     );
   });
 
-  describe('🔴 F6 · 허브는 사진 목록을 조회하지 않고, 동의는 누른 뒤에만 읽는다', () => {
-    it('L9 화면을 연 뒤 동의 조회 0회 · 사진을 붙인 뒤에도 사진 목록 조회 0회', async () => {
+  describe('🔴 F6 · 허브는 사진 목록을 조회하지 않고, 사진 흐름의 동의는 누른 뒤에만 읽는다', () => {
+    it('L9 화면을 연 뒤 사진 흐름의 동의 조회 0회(내 위치 몫 1회만) · 사진을 붙인 뒤에도 사진 목록 조회 0회', async () => {
       const photo = await renderHub();
       await settle();
 
-      // 단언 — 누르기 전엔 동의를 조회하지 않는다.
-      expect(hitCount(CONSENT_GET)).toBe(0);
+      // 단언 — 누르기 전엔 사진 흐름이 동의를 조회하지 않는다(화면을 열 때 내 위치 표시 몫 1회만 — TRIP-1535).
+      expect(hitCount(CONSENT_GET)).toBe(1);
 
       fireEvent.press(photo);
       await waitFor(() => expect(hitCount(PHOTOS_POST)).toBe(1));
       await settle();
 
-      // 단언 — 동의는 누른 뒤 1회, 사진 목록 조회는 처음부터 끝까지 0회.
-      expect(hitCount(CONSENT_GET)).toBe(1);
+      // 단언 — 사진 흐름의 동의 조회는 누른 뒤 1회(열 때 1회 + 1), 사진 목록 조회는 처음부터 끝까지 0회.
+      expect(hitCount(CONSENT_GET)).toBe(2);
       expect(hitCount(PHOTOS_GET)).toBe(0);
     });
   });

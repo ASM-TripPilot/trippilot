@@ -1,7 +1,8 @@
 import type { ReactElement } from 'react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { ImageSourcePropType } from 'react-native';
-import { StyleSheet, Text, View } from 'react-native';
+import { AppState, StyleSheet, Text, View } from 'react-native';
+import * as Location from 'expo-location';
 import Svg, {
   Circle,
   ClipPath,
@@ -140,6 +141,9 @@ export interface MapViewProps {
   /** TRIP-1522 · 네이버 로고(출처 표기) 여백(pt) — 화면 아래에 떠 있는 바가 로고를 가리지 않게 올린다. **옵트인** — 미전달이면
    * prop 을 아예 달지 않아 SDK 기본 위치(좌하단)를 그대로 쓴다. 렌더마다 새 객체를 넘기지 않는다(memo). */
   logoMargin?: { top?: number; right?: number; bottom?: number; left?: number };
+  /** TRIP-1535 · 내 위치(네이버 기본 현위치 오버레이, NoFollow — 카메라는 안 따라감). **옵트인**·권한은 조회만(묻지 않는다) —
+   * OS 위치 권한이 granted 일 때만 켜고, 껐다가 다시 false 가 되면 None 으로 되돌린다. 미전달이면 권한 조회도 없다. */
+  showMyLocation?: boolean;
 }
 
 /** 네이버 초기 줌. ponytail: 카카오 기본 level 3 에 대응하는 대략값, 정확 캘리브레이션은 실기(6-b). */
@@ -514,6 +518,7 @@ function MapViewImpl({
   fitBand,
   drawPathOnMount,
   logoMargin,
+  showMyLocation,
 }: MapViewProps): ReactElement {
   // 네이티브 SDK 는 런타임 키를 config plugin 에서 받으므로, 이 env 판정은 "설정 누락 표면"용이다
   // (키가 없으면 회색 빈 지도 대신 안내 화면을 띄운다). 참조는 이 한 곳뿐(A-2 계승).
@@ -562,6 +567,41 @@ function MapViewImpl({
     if (region !== null)
       mapRef.current?.animateRegionTo({ ...region, easing: 'None' });
   };
+
+  // TRIP-1535 — 내 위치. 추적 모드는 prop 이 아니라 ref 호출이다. 맞춤↔카메라 전환으로 지도가 다시 마운트되면
+  // (key 변경) 새 지도에 다시 건다.
+  const regionMode = region !== null;
+  useEffect(() => {
+    if (showMyLocation !== true) return;
+    let alive = true;
+    let applied = false;
+    let armedMap: NaverMapViewRef | null = null; // 켠 그 지도를 기억해 끌 때 같은 지도에 끈다(ref 는 그새 바뀔 수 있다).
+    const tryApply = (): void => {
+      if (applied) return;
+      // Promise.resolve 로 감싸 조회가 동기로 던져도(목·미설치) 렌더를 깨지 않고 '안 보임'으로 접는다.
+      Promise.resolve()
+        .then(() => Location.getForegroundPermissionsAsync())
+        .then((permission) => {
+          if (!alive || applied || permission?.status !== 'granted') return;
+          armedMap = mapRef.current;
+          armedMap?.setLocationTrackingMode('NoFollow');
+          applied = true;
+        })
+        .catch(() => {
+          // 권한 조회 실패 = 안 보인다(안내 없음).
+        });
+    };
+    tryApply();
+    // 설정 앱에서 권한을 켜고 돌아오면 그때 켠다(조회만 — 묻지 않는다).
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'active') tryApply();
+    });
+    return () => {
+      alive = false;
+      subscription?.remove(); // jest RN 목은 구독 객체를 안 돌려준다
+      if (applied) armedMap?.setLocationTrackingMode('None');
+    };
+  }, [showMyLocation, regionMode]);
 
   // TRIP-1385 — 경로가 닿은 핀 수(null=전부). 그려지기가 끝나면 null 이라 이후 좌표가 바뀌어도 핀이 숨지 않는다.
   const [revealCount, setRevealCount] = useState<number | null>(1);

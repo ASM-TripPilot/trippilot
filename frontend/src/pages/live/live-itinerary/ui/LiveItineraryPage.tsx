@@ -314,10 +314,11 @@ export function LiveItineraryPage({
   );
 
   // TRIP-1339 · U10 위치 자동화 — 오늘(KST) 일정·실적으로 문맥을 만들고 판정은 훅이 한다(페이지 1회).
-  // 플래그 OFF 면 동의 조회도 하지 않고 훅은 효과가 없다(BR-U10-07). 훅 규칙상 조기 반환 위에 둔다.
+  // 플래그 OFF 면 훅은 효과가 없다(BR-U10-07). 동의 조회는 내 위치 표시(TRIP-1535)도 쓰므로 플래그와 무관하게 한다.
+  // 훅 규칙상 조기 반환 위에 둔다.
   const automationOn = isLocationAutomationEnabled();
   const locationConsent = useGetMeLocationConsent({
-    query: { enabled: automationOn },
+    query: { enabled: state.kind === 'active' },
   });
   const tripDays = state.kind === 'active' ? state.itinerary.days : [];
   const todaySlots = tripDays.find((day) => day.date === today)?.slots ?? [];
@@ -795,6 +796,10 @@ export function LiveItineraryPage({
         initialSnapIndex={initialSnapIndex}
         expandSignal={expandSignal}
         actualRoute={actualRoute}
+        // TRIP-1535 — 오늘 일차를 볼 때 · 위치정보 이용 동의가 있을 때만. 좌표는 서버로 안 간다(지도 화면 표시뿐).
+        showMyLocation={
+          liveDate === today && locationConsent.data?.legalConsent === true
+        }
         automationNotice={
           automationCopy
             ? {

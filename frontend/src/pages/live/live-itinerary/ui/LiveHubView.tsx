@@ -174,6 +174,8 @@ export interface LiveHubViewProps {
    */
   /** TRIP-1520 — 그날 실제 경로 세그먼트. 주면 계획 동선 위에 늘 겹친다(토글 없음, BR-U10-41 개정). */
   actualRoute?: MapCenter[][];
+  /** TRIP-1535 — 지도에 내 위치(네이버 기본 현위치). 조건(오늘·동의)은 페이지가 판단하고, OS 권한은 지도가 조회만 한다. */
+  showMyLocation?: boolean;
   automationNotice?: {
     title: string;
     detail: string;
@@ -228,6 +230,7 @@ export function LiveHubView({
   directionsNotice,
   automationNotice,
   actualRoute,
+  showMyLocation,
 }: LiveHubViewProps): ReactElement {
   // Provider 없는 렌더(jest)에서는 null — useSafeAreaInsets 는 throw 하므로 컨텍스트를 직접 읽는다.
   const insets = useContext(SafeAreaInsetsContext);
@@ -391,6 +394,7 @@ export function LiveHubView({
         fitPins
         mapCard={hiddenPillKey === pillKey ? undefined : triggerChip}
         actualRoute={actualRoute}
+        showMyLocation={showMyLocation}
         onMapTap={hidePill}
         onSheetScrollBeginDrag={hidePill}
         onSheetAnimate={(from, to) => {

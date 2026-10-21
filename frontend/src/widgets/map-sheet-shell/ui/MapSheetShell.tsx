@@ -172,6 +172,8 @@ export interface MapSheetShellProps<T = unknown> {
   /** TRIP-1522 — 지도 로고 여백을 `<MapView logoMargin>` 으로 그대로 흘린다(시트가 내려가 지도가 드러나도 바에 안 가리게).
    *  렌더마다 새 객체를 넘기지 않는다(MapView 가 memo). 미전달=SDK 기본. */
   mapLogoMargin?: MapViewProps['logoMargin'];
+  /** TRIP-1535 — `<MapView showMyLocation>` 으로 그대로 흘린다. 미전달=현행. */
+  showMyLocation?: boolean;
 }
 
 export function MapSheetShell<T = unknown>({
@@ -208,6 +210,7 @@ export function MapSheetShell<T = unknown>({
   enablePanDownToClose,
   snapRequest,
   mapLogoMargin,
+  showMyLocation,
 }: MapSheetShellProps<T>): ReactElement {
   // 지도 로드 실패(TRIP-919). 폴백 중엔 MapView 가 트리에서 빠지므로, 재시도로 이 값을 풀면 MapView 가
   // 새 인스턴스로 다시 마운트돼 실패 알림(notifiedRef)도 처음부터 다시 돈다 — 별도 key 가 필요 없다.
@@ -297,6 +300,7 @@ export function MapSheetShell<T = unknown>({
               drawPathOnMount={drawPathOnMount}
               actualRoute={actualRoute}
               logoMargin={mapLogoMargin}
+              showMyLocation={showMyLocation}
               onLoadFailed={handleMapLoadFailed}
             />
           ))}

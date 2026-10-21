@@ -1,4 +1,11 @@
-import { render, screen, within } from '@testing-library/react-native';
+import {
+  act,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react-native';
+import { AppState } from 'react-native';
 
 import { MapView } from '@/shared/map';
 import type { MapCenter, MapPin } from '@/shared/map';
@@ -644,5 +651,115 @@ describe('TRIP-1522 v2 — logoMargin: 지도 로고 위치 옵션(옵트인) �
     expect(screen.getByTestId('map-native').props.logoMargin).toEqual({
       bottom: 78,
     });
+  });
+});
+
+// TRIP-1535 · 내 위치(네이버 기본 현위치) — 옵트인. 권한은 조회만 하고 묻지 않는다.
+const mockGetForegroundPermission = jest.fn();
+const mockRequestForegroundPermission = jest.fn();
+jest.mock('expo-location', () => ({
+  getForegroundPermissionsAsync: (...args: unknown[]) =>
+    mockGetForegroundPermission(...args),
+  requestForegroundPermissionsAsync: (...args: unknown[]) =>
+    mockRequestForegroundPermission(...args),
+}));
+const trackingModes = (): string[] =>
+  (globalThis as { __naverTrackingModes?: string[] }).__naverTrackingModes ??
+  [];
+
+describe('TRIP-1535 — showMyLocation: 내 위치 표시(옵트인)', () => {
+  beforeEach(() => {
+    trackingModes().length = 0;
+    mockGetForegroundPermission.mockReset();
+    mockRequestForegroundPermission.mockReset();
+  });
+
+  it('MY1 켜고 OS 권한이 granted 면 → 지도 추적 모드 NoFollow(카메라는 안 따라감), 권한 요청 0회', async () => {
+    // 준비: 권한 granted → 실행: showMyLocation 렌더 → 단언: NoFollow 1회, request 0회
+    mockGetForegroundPermission.mockResolvedValue({ status: 'granted' });
+    render(<MapView center={CENTER} showMyLocation />);
+    await waitFor(() => expect(trackingModes()).toEqual(['NoFollow']));
+    expect(mockRequestForegroundPermission).not.toHaveBeenCalled();
+  });
+
+  it('MY2 켜도 권한이 없으면 → 추적을 켜지 않고 권한도 묻지 않는다', async () => {
+    mockGetForegroundPermission.mockResolvedValue({ status: 'denied' });
+    render(<MapView center={CENTER} showMyLocation />);
+    // 앵커: 권한을 실제로 조회했다(조회 전에 단언해 공허 통과하지 않게).
+    await waitFor(() => expect(mockGetForegroundPermission).toHaveBeenCalled());
+    await Promise.resolve();
+    expect(trackingModes()).not.toContain('NoFollow');
+    expect(mockRequestForegroundPermission).not.toHaveBeenCalled();
+  });
+
+  it('MY3 안 주면 → 권한 조회도 추적 호출도 없다(다른 지도 무회귀)', async () => {
+    render(<MapView center={CENTER} />);
+    expect(screen.getByTestId('map-native')).toBeTruthy();
+    await Promise.resolve();
+    expect(mockGetForegroundPermission).not.toHaveBeenCalled();
+    expect(trackingModes()).toEqual([]);
+  });
+
+  it('MY5 권한 답이 오기 전에 끄면 → 늦게 온 granted 로 켜지 않는다(경합)', async () => {
+    // 준비: 권한 응답을 붙잡아 둔다 → 실행: 켜고 곧바로 끈 뒤 granted 를 돌려준다 → 단언: NoFollow 0회
+    let answer: (value: { status: string }) => void = () => {};
+    mockGetForegroundPermission.mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+    const view = render(<MapView center={CENTER} showMyLocation />);
+    await waitFor(() => expect(mockGetForegroundPermission).toHaveBeenCalled());
+    view.rerender(<MapView center={CENTER} showMyLocation={false} />);
+    await act(async () => {
+      answer({ status: 'granted' });
+    });
+    expect(trackingModes()).not.toContain('NoFollow');
+  });
+
+  it('MY6 맞춤↔카메라 전환으로 지도가 새로 마운트되면 → 새 지도에 다시 켠다', async () => {
+    mockGetForegroundPermission.mockResolvedValue({ status: 'granted' });
+    const view = render(<MapView center={CENTER} showMyLocation />);
+    await waitFor(() => expect(trackingModes()).toEqual(['NoFollow']));
+    // 핀 맞춤을 켜면 지도가 region 모드로 다시 마운트된다(key 변경).
+    view.rerender(
+      <MapView center={CENTER} pins={PINS} fitPins showMyLocation />
+    );
+    await waitFor(() =>
+      expect(trackingModes()).toEqual(['NoFollow', 'None', 'NoFollow'])
+    );
+  });
+
+  it('MY7 처음엔 권한이 없다가 설정에서 허용하고 앱으로 돌아오면 → 그때 켠다', async () => {
+    const listeners: ((state: string) => void)[] = [];
+    const spy = jest
+      .spyOn(AppState, 'addEventListener')
+      .mockImplementation((_type, listener) => {
+        listeners.push(listener as (state: string) => void);
+        return { remove: () => {} } as ReturnType<
+          typeof AppState.addEventListener
+        >;
+      });
+    mockGetForegroundPermission.mockResolvedValue({ status: 'denied' });
+    render(<MapView center={CENTER} showMyLocation />);
+    await waitFor(() =>
+      expect(mockGetForegroundPermission).toHaveBeenCalledTimes(1)
+    );
+    expect(trackingModes()).toEqual([]);
+    mockGetForegroundPermission.mockResolvedValue({ status: 'granted' });
+    await act(async () => {
+      listeners.forEach((listener) => listener('active'));
+    });
+    await waitFor(() => expect(trackingModes()).toEqual(['NoFollow']));
+    expect(mockRequestForegroundPermission).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('MY4 켜져 있다가 끄면 → 추적을 None 으로 되돌린다', async () => {
+    mockGetForegroundPermission.mockResolvedValue({ status: 'granted' });
+    const view = render(<MapView center={CENTER} showMyLocation />);
+    await waitFor(() => expect(trackingModes()).toEqual(['NoFollow']));
+    view.rerender(<MapView center={CENTER} showMyLocation={false} />);
+    expect(trackingModes()).toEqual(['NoFollow', 'None']);
   });
 });
