@@ -1742,3 +1742,13 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U8 Functional Design 사후 개정(구현 반영), 사이클 `20261022-trip1553-assistant-header`(부모 TRIP-1552 레인 A 첫 칸). 이전 세션들의 "audit append + [개정] 블록" 선례 절차를 따름; 승인 게이트는 티켓에 기록된 사용자 결정으로 갈음(자율 세션). `aidlc-state.md`·`docs/SCOPE.md` 무변경.
 
 ---
+
+---
+
+## Functional Design 사후 개정 — U8 일정 보기 목적지 (TRIP-1566)
+**Timestamp**: 2026-10-22T07:30:00+09:00 (작업 시점)
+**User Input**: (이번 세션에서 새 질의 없음 — 자율 세션.) 사용자 지적 2026-10-22 원문(티켓 TRIP-1566 근거 절): "일정 보기 누르면 생성 일정으로 가짐". 정본 반영은 티켓 본문 「문서-구현 드리프트 주의」의 "판정 함수를 따르고 FD 표에 'resolveItineraryDestination 경유' 개정을 남긴다"에 따른 사전 선택. 열린 질문 4건은 오케스트레이터가 권고안으로 채택했다 — 사용자 발화 아님.
+**AI Response**: `construction/u8-conversational-assistant/functional-design/frontend-components.md` 끝에 `[개정 · 2026-10-22 · U8 일정 보기 목적지 (TRIP-1566)]` 블록 1개 — §4.1 `OPEN_ITINERARY` 행을 고정 경로에서 "누른 시점 일정 조회 → `resolveItineraryDestination` 경유"로 정정(조회 결과별 목적지 표, 조회 중·실패 시 이동 없음 + 상태 줄, INV-4). 원문 삭제·수정 0줄(append 만). 같은 문서 §4 흐름 5 본문과 같은 폴더의 다른 파일, `aidlc-state.md`·`docs/SCOPE.md` 는 손대지 않았다.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 개정(구현 반영), 사이클 `20261022-trip1566-open-itinerary`(부모 TRIP-1552 레인 A 일곱 번째 칸). 선례("audit append + [개정] 블록", TRIP-1553)를 따랐고 승인 게이트는 티켓의 사전 선택으로 갈음(자율 세션).
+
+---

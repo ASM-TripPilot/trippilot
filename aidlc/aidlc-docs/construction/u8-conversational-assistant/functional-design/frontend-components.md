@@ -227,3 +227,18 @@ assistant-history · -history-row-{messageId} · -history-clear · -history-cont
 > **⑥ 소급 기록** — §2 컴포넌트: `OutlineCard`·`ActionRow`(외곽선 껍데기·행 카드), 평문 도우미 답, ↓ 버튼, `noContextActionIcon`. §8 testID 추가: `assistant-sheet-mode-full|compact|shrunk` · `assistant-sheet-mark` · `assistant-sheet-handle` · `assistant-quick-replies-stack|row` · `assistant-message-text-{id}` · `assistant-scroll-down` · `assistant-badge-{id}` · `assistant-history-intro` · `assistant-history-close` · `assistant-next-action-icon-{type}` · `assistant-footnote-{id}`. 새 대화·＋ 에 대응하는 testID 는 없다.
 >
 > **⑦ 6-b** — 시뮬레이터 실기 QA 는 TRIP-1531.
+
+> **[개정 · 2026-10-22 · U8 일정 보기 목적지 (TRIP-1566)]** §4.1 표의 `OPEN_ITINERARY` 행(`/trips/[tripId]/itinerary` 고정)을 정정한다(원문 보존). `OPEN_ITINERARY` 는 고정 라우트가 아니라 **누른 시점에 일정을 조회해 앱의 일정 진입 목적지 판정(`resolveItineraryDestination` → `itineraryDestinationHref`, `frontend/src/features/itinerary/model/planState.ts`)을 경유한다** — 홈 카드 CTA·일정 탭·완료 바와 같은 규칙이라, 확정 일정에서 도우미만 h16 으로 가던 어긋남을 없앤다. `nextActionRoute` 는 순수 함수라 이 행에 한해 이동 대신 `{kind:'itinerary', tripId}`(tripId 없으면 기존처럼 `null`)를 돌려주고, 실제 조회·이동은 시트(`AssistantSheetPage.openItinerary`)가 한다. `OPEN_ITINERARY_EDIT`·`OPEN_ITINERARY_METHOD`·`OPEN_REGENERATE` 는 상태로 목적지가 갈리지 않아 §4.1 표대로다.
+>
+> | 일정 조회 결과 | 이동 |
+> |---|---|
+> | 404(일정 없음) | `/trips/[tripId]/itinerary/method` |
+> | 생성 중(PARTIAL) | 같이 짜기면 `…/itinerary/copick/[slotKey]`, 그 밖이면 `…/itinerary/generating` |
+> | 2차 실패(FAILED) | `…/itinerary/draft` |
+> | 확정(CONFIRMED, 날짜 무관) | `/trips/[tripId]/live` |
+> | 같이 짜기 완성·미확정 | `…/itinerary/copick/complete` |
+> | 그 밖(초안) | `…/itinerary/draft` |
+>
+> **조회가 정착하기 전에는 이동하지 않는다(INV-4).** 조회 중에는 이동 없이 시트 상태 줄에 한 줄(`일정을 확인하고 있어요`, testID `assistant-itinerary-checking`)을 보이고 같은 행 재누름은 무시한다. 404 가 아닌 조회 실패(네트워크·5xx)는 draft 로 추측해 가지 않고 이동하지 않으며 상태 줄에 `일정을 불러오지 못했어요. 다시 눌러 주세요`(testID `assistant-itinerary-failed`)를 보인다 — 다시 누르면 재조회한다(자동 재시도 없음: 이 누름 조회는 `retry:false`, 요청 1회). 기다리는 사이 시트가 닫혔으면(✕) 늦은 응답은 이동하지 않는다. 적용 직후엔 일정 캐시가 무효화돼 있어 다시 조회한다. 이동 방식(`router.replace`, R9)은 그대로다.
+>
+> 근거: 목적지 표 — `frontend/src/features/itinerary/model/planState.ts` 판정 실측(01 브리프 §8, 홈·일정 탭이 같은 함수를 쓴다) · 상태 줄 문구·`retry:false`·재시도 정책·재누름 무시 — **TRIP-1566 구현 결정**(우리가 정한 것 — 다음 사이클이 요구사항 근거로 인용하면 안 된다). 같은 문서 §4 흐름 5 본문("`router.dismiss` 후 `push`")과 일정 탭 카드·완료 바(로딩 중 draft 로 이동)는 이번에 손대지 않았다 — 후자는 새 티켓 후보.
