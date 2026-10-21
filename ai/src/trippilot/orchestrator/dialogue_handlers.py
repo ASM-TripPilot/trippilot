@@ -1518,8 +1518,9 @@ def _assemble_recommend(ctx: TurnContext, results: Mapping[str, TaskResult]) -> 
         results = {**results, "explore_sql": TaskResult.ok("explore_sql", {**by_sql, "candidates": ranked})}
     facts = _assemble_explore(ctx, results)
     if facts.kind is not AnswerKind.CANDIDATES:
-        asked = facts.template_text == EXPLORE_ASK_REGION_TEXT
-        return replace(facts, intent=intent, template_text=facts.template_text if asked else _template(intent, facts.status))
+        # 되묻기 문안·행사 문장(`detail.events` — 탐색의 행사 답, 의도와 무관하게 events 를 나열한다)은 탐색 것 그대로
+        keep = facts.template_text == EXPLORE_ASK_REGION_TEXT or "events" in facts.detail
+        return replace(facts, intent=intent, template_text=facts.template_text if keep else _template(intent, facts.status))
     n = _recommend_count(ctx)
     return replace(facts, intent=intent, places=facts.places[:n], payload={"candidates": facts.payload["candidates"][:n]},
                    next_actions=facts.next_actions[:n], template_text=_template(intent, facts.status),
