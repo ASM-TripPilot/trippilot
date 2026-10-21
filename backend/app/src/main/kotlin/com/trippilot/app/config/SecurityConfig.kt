@@ -1,16 +1,22 @@
 package com.trippilot.app.config
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.trippilot.app.web.error.requestRejectedBody
 import com.trippilot.security.ServiceAuthProperties
 import com.trippilot.security.ServiceAuthenticationToken
 import com.trippilot.security.ServiceTokenAuthFilter
+import jakarta.servlet.http.HttpServletResponse
+import org.slf4j.LoggerFactory
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpMethod
+import org.springframework.http.MediaType
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter
 import org.springframework.security.web.SecurityFilterChain
+import org.springframework.security.web.firewall.RequestRejectedHandler
 
 /**
  * 무상태 리소스 서버 — R6 인증 게이트. 공개 화이트리스트 외 모든 요청은 Bearer JWT 필요.
@@ -56,5 +62,28 @@ class SecurityConfig {
             // 뒤의 JWT 판정이 그대로 돈다.
             .addFilterBefore(ServiceTokenAuthFilter(serviceAuth.token), BearerTokenAuthenticationFilter::class.java)
         return http.build()
+    }
+
+    /**
+     * 필터 체인에서 방화벽이 거부한 요청(경로의 `;`·`//`·`%25`·`..` 등)을 **400 봉투**로 낸다(TRIP-1473).
+     *
+     * 이 빈이 없으면 기본 처리가 `sendError(400)` 을 하고, 그 오류 디스패치가 `/error` 로 가면서 인증 필터를 다시 타지
+     * 않아 **401** 로 나갔다(실측: 유효 토큰을 실어도 `GET /api/v1/regions;x=1` → 401, 본문 없음). 클라이언트는 그것을
+     * 토큰 만료로 읽고 재로그인으로 간다. 여기서 직접 응답을 쓰면 오류 디스패치가 생기지 않는다.
+     * 거부 사유(예외 메시지)에는 경로 원문이 실려 있어 싣지 않는다(SECURITY-15).
+     *
+     * 경로의 `%00`·`%2F`·`%5C` 는 이보다 앞에서 Tomcat 이 400(HTML)으로 막는다 — 스프링 밖이라 봉투를 못 씌운다.
+     */
+    @Bean
+    fun requestRejectedHandler(mapper: ObjectMapper): RequestRejectedHandler = RequestRejectedHandler { _, response, _ ->
+        log.warn("방화벽이 요청을 거부했습니다(경로) — 원문은 싣지 않습니다")
+        response.status = HttpServletResponse.SC_BAD_REQUEST
+        response.contentType = MediaType.APPLICATION_JSON_VALUE
+        response.characterEncoding = Charsets.UTF_8.name()
+        mapper.writeValue(response.outputStream, requestRejectedBody())
+    }
+
+    private companion object {
+        private val log = LoggerFactory.getLogger(SecurityConfig::class.java)
     }
 }

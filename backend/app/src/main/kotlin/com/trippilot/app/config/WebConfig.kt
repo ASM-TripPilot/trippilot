@@ -38,15 +38,16 @@ class WebConfig : WebMvcConfigurer {
     }
 
     /**
-     * 질의 파라미터의 NUL(`%00`)도 같은 원칙으로 400 이다(TRIP-1473). 실측: `GET /regions?q=a%00b` 가 조회 SQL 에서
-     * 터져 500 이었다. 경로의 `%00` 은 디스패치 전에 이미 400 이다(봉투 없이, 실측) — 여기까지 오지 않는다.
-     * 인터셉터에서 던지면 `GlobalExceptionHandler` 가 받아 봉투로 낸다. 이름·값은 싣지 않는다(SECURITY-15) —
-     * 파라미터 이름도 클라이언트가 지어 보낼 수 있다.
+     * 질의 파라미터 **값**의 NUL(`%00`)도 같은 원칙으로 400 이다(TRIP-1473). 실측: `GET /regions?q=a%00b` 가 조회 SQL 에서
+     * 터져 500 이었다. 인터셉터에서 던지면 `GlobalExceptionHandler` 가 받아 봉투로 낸다. 값은 싣지 않는다(SECURITY-15).
+     *
+     * **이름**은 여기서 보지 않는다 — 보안 방화벽(`StrictHttpFirewall`)이 이름을 읽는 순간(아래 `parameterMap`) 먼저
+     * 거부해 이 줄에 닿지 않는다(그 400 은 `GlobalExceptionHandler.handleRejected`). 경로의 `%00` 은 Tomcat 이 막는다.
      */
     override fun addInterceptors(registry: InterceptorRegistry) {
         registry.addInterceptor(object : HandlerInterceptor {
             override fun preHandle(request: HttpServletRequest, response: HttpServletResponse, handler: Any): Boolean {
-                val nul = request.parameterMap.any { (name, values) -> NUL in name || values.any { NUL in it } }
+                val nul = request.parameterMap.values.any { values -> values.any { NUL in it } }
                 if (nul) throw ValidationFailed(emptyList(), "요청 파라미터에 쓸 수 없는 문자(NUL)가 있습니다.")
                 return true
             }

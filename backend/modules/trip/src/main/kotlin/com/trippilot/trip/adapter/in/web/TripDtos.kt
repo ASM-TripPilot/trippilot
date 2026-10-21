@@ -10,7 +10,7 @@ import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripStatus
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotNull
-import jakarta.validation.constraints.Size
+import org.hibernate.validator.constraints.CodePointLength
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -31,7 +31,7 @@ data class DestinationDto(
      * 상한은 `trip_destination.region` 폭이다. 생성은 카탈로그 판정이 모르는 이름을 400 으로 막지만 **편집은 그 판정을
      * 거치지 않아**, 넘친 이름이 저장에서 22001 → 500 이었다(TRIP-1473). 두 요청의 `destinations` 에 `@Valid` 가 있어야 걸린다.
      */
-    @field:Size(max = 60, message = "목적지 이름은 60자 이하입니다.") val region: String,
+    @field:CodePointLength(max = 60, message = "목적지 이름은 60자 이하입니다.") val region: String,
     val nights: Int,
     val regionCode: String? = null,
 ) {
@@ -46,7 +46,7 @@ data class DestinationDto(
  * [title] 상한은 `trip.title` 컬럼 폭이다 — 없으면 넘친 제목이 22001 로 500 이 된다(TRIP-1473).
  */
 data class CreateTripRequest(
-    @field:Size(max = TITLE_MAX, message = "제목은 ${TITLE_MAX}자 이하입니다.") val title: String? = null,
+    @field:CodePointLength(max = TITLE_MAX, message = "제목은 ${TITLE_MAX}자 이하입니다.") val title: String? = null,
     @field:NotNull val startDate: LocalDate?,
     @field:NotNull val endDate: LocalDate?,
     val party: Int = 1,
@@ -73,7 +73,7 @@ data class CreateTripRequest(
 
 /** 여행 편집 — 가변 필드 대체. 취향 스냅숏은 불변. */
 data class EditTripRequest(
-    @field:Size(max = TITLE_MAX, message = "제목은 ${TITLE_MAX}자 이하입니다.") val title: String? = null,
+    @field:CodePointLength(max = TITLE_MAX, message = "제목은 ${TITLE_MAX}자 이하입니다.") val title: String? = null,
     @field:NotNull val startDate: LocalDate?,
     @field:NotNull val endDate: LocalDate?,
     val party: Int = 1,

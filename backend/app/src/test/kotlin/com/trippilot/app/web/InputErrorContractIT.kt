@@ -7,6 +7,7 @@ import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
+import io.kotest.assertions.withClue
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotBeBlank
 import org.junit.jupiter.api.Test
@@ -186,6 +187,7 @@ class InputErrorContractIT : AbstractPostgresIntegrationTest() {
         val (status, body) = send(HttpMethod.PUT, "/api/v1/me/preferences", """{"styles":["a\u0000"]}""")
 
         status shouldBe 400
+        body["error"]["code"].asText() shouldBe "VALIDATION_ERROR"
         body.toString().contains("\\u0000") shouldBe false
     }
 
@@ -198,22 +200,89 @@ class InputErrorContractIT : AbstractPostgresIntegrationTest() {
         body["error"]["traceId"].asText().shouldNotBeBlank()
     }
 
-    /** 대조군 — 경로의 `%00` 은 디스패치 전에 이미 400 이다(봉투 없이). 이 변경이 손대지 않는 갈래다. */
+    /**
+     * 파라미터 **이름**의 NUL 은 보안 방화벽이 이름을 읽는 순간 거부한다. 수정 전에는 그 예외가 미처리 갈래로 떨어져
+     * **500** 이었고, 예외 메시지에 실린 이름 원문이 error 로그에 남았다.
+     */
     @Test
-    fun `경로의 NUL 은 디스패치 전에 막힌다 — 대조군`() {
+    fun `질의 파라미터 이름에 NUL 이 있으면 400 이고 이름을 되비추지 않는다`() {
+        val (status, body) = rawGet("/api/v1/regions?probe%00name=a")
+
+        status shouldBe 400
+        body["error"]["code"].asText() shouldBe "VALIDATION_ERROR"
+        body["error"]["traceId"].asText().shouldNotBeBlank()
+        body.toString().contains("probe") shouldBe false
+    }
+
+    /**
+     * 필터 체인에서 방화벽이 거부하는 경로(`;`)도 같은 400 봉투다. 수정 전에는 기본 처리의 오류 디스패치가 인증 필터를
+     * 다시 타지 않아 **유효한 토큰을 실어도 401**(본문 없음)이었다 — 클라이언트가 토큰 만료로 읽는다.
+     */
+    @Test
+    fun `방화벽이 거부한 경로는 401 이 아니라 400 봉투다`() {
+        // 세미콜론·이중 슬래시·인코딩된 퍼센트·상위 경로 — 수정 전에는 넷 다 401 이었다.
+        listOf("/api/v1/regions;probe=1", "/api/v1//probe/regions", "/api/v1/stays/probe%25b", "/api/v1/probe/../regions")
+            .forEach { path ->
+                val (status, body) = rawGet(path)
+
+                withClue(path) {
+                    status shouldBe 400
+                    body["error"]["code"].asText() shouldBe "VALIDATION_ERROR"
+                    body["error"]["traceId"].asText().shouldNotBeBlank()
+                    body.toString().contains("probe") shouldBe false
+                }
+            }
+    }
+
+    /** 대조군 — 경로의 `%00` 은 Tomcat 이 스프링 앞에서 400 으로 막는다(봉투 없이). 이 변경이 닿지 않는 갈래다. */
+    @Test
+    fun `경로의 NUL 은 Tomcat 이 막는다 — 대조군`() {
         rawGet("/api/v1/stays/a%00b").first shouldBe 400
     }
 
     /**
-     * 대조군 — 과잉 거부가 아니다. 다른 이스케이프는 그대로 통과하고, `\\u0000` (역슬래시가 이스케이프된 **글자**
-     * 여섯 개)은 NUL 이 아니다.
+     * 장소 목록 커서는 base64 다 — 풀린 정렬 키가 SQL 인자로 간다. 요청 관문은 base64 속 NUL 을 볼 수 없어
+     * 수정 전에는 500(invalid byte sequence)이었다.
+     */
+    @Test
+    fun `커서를 풀었을 때 NUL 이 있으면 400 이다`() {
+        val raw = "0\u001Fa\u0000b\u001F${UUID.randomUUID()}"
+        val cursor = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(raw.toByteArray())
+
+        val (status, body) = rawGet("/api/v1/places?region=%EC%A0%9C%EC%A3%BC&cursor=$cursor")
+
+        status shouldBe 400
+        body["error"]["fields"].map { it["field"].asText() } shouldBe listOf("cursor")
+    }
+
+    /**
+     * 회고 카드는 **문자열 속 JSON** 이다 — 바깥 본문에는 `\\u0000`(글자 여섯 개)으로 와서 관문을 지나고, 카드를 다시
+     * 읽을 때 진짜 NUL 로 풀린다. 수정 전에는 jsonb 가 거부해 500 이었다.
+     */
+    @Test
+    fun `회고 카드 속 JSON 의 NUL 도 400 이다`() {
+        val token = newToken()
+        val tripId = send(HttpMethod.POST, "/api/v1/trips", trip(""), token).second["tripId"].asText()
+
+        val (status, body) = send(
+            HttpMethod.PUT, "/api/v1/trips/$tripId/reflections/2026-12-01",
+            """{"card":"{\"cover\":{\"title\":\"a\\u0000b\"}}"}""", token,
+        )
+
+        status shouldBe 400
+        body["error"]["fields"].map { it["field"].asText() } shouldBe listOf("card")
+    }
+
+    /**
+     * 대조군 — 과잉 거부가 아니다. 유니코드 이스케이프(`é`)·제어 문자 이스케이프(`\n`·`\t`)는 그대로 통과하고,
+     * `\\u0000`(역슬래시가 이스케이프된 **글자** 여섯 개)은 NUL 이 아니다. 본문은 raw 문자열이라 이스케이프가 JSON 에 그대로 실린다.
      */
     @Test
     fun `NUL 이 아닌 이스케이프와 글자 그대로의 백슬래시 u0000 은 통과한다 — 대조군`() {
-        val (status, body) = send(HttpMethod.POST, "/api/v1/trips", trip(""""title":"café \\u0000","""))
+        val (status, body) = send(HttpMethod.POST, "/api/v1/trips", trip(""""title":"café\n\t\\u0000","""))
 
         status shouldBe 201
-        body["title"].asText() shouldBe "café \\u0000"
+        body["title"].asText() shouldBe "café\n\t\\u0000"
     }
 
     // ── TRIP-1473 · 길이 초과(22001) — 전역 매핑하지 않고 요청 필드마다 컬럼 폭으로 막는다 ─────────────────
@@ -231,6 +300,18 @@ class InputErrorContractIT : AbstractPostgresIntegrationTest() {
         over.first shouldBe 400
         over.second["error"]["fields"].map { it["field"].asText() } shouldBe listOf("title")
         atCap.first shouldBe 201
+    }
+
+    /**
+     * 상한은 **문자(코드 포인트)** 로 센다 — `varchar(120)` 과 openapi `maxLength` 의 단위다. UTF-16 으로 세면 이모지 61개
+     * 제목이 122 로 세어져 400 이었다.
+     */
+    @Test
+    fun `제목 상한은 이모지도 한 글자로 센다`() {
+        val wave = "🌊" // 🌊 — UTF-16 으로는 두 단위
+
+        send(HttpMethod.POST, "/api/v1/trips", trip(""""title":"${wave.repeat(120)}",""")).first shouldBe 201
+        send(HttpMethod.POST, "/api/v1/trips", trip(""""title":"${wave.repeat(121)}",""")).first shouldBe 400
     }
 
     /** 생성은 카탈로그 판정이 모르는 이름을 막지만 편집은 그 판정을 거치지 않는다 — 상한이 유일한 관문이다. */

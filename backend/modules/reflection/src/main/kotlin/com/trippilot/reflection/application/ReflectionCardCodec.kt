@@ -1,5 +1,6 @@
 package com.trippilot.reflection.application
 
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ValidationFailed
@@ -28,6 +29,9 @@ class ReflectionCardCodec(private val mapper: ObjectMapper) {
         val node = runCatching { mapper.readTree(payload) }.getOrNull()
             ?: throw ValidationFailed(listOf(FieldError("card", "카드를 해석할 수 없습니다")))
         if (!node.isObject) throw ValidationFailed(listOf(FieldError("card", "카드는 객체여야 합니다")))
+        // 카드는 **문자열 속 JSON** 이라 바깥 본문의 NUL 관문(앱 NulRejectingJsonFactory)을 지나도 `\\u0000` 이
+        // 여기서 진짜 NUL 로 풀린다. 그대로 두면 jsonb 가 거부해 400 이어야 할 입력이 500 이 된다(TRIP-1473).
+        if (containsNul(node)) throw ValidationFailed(listOf(FieldError("card", "카드에 쓸 수 없는 문자(NUL)가 있습니다")))
 
         val title = node.path("cover").path("title").asText("").trim()
         if (title.isBlank()) throw ValidationFailed(listOf(FieldError("card.cover.title", "카드 제목이 필요합니다")))
@@ -41,7 +45,17 @@ class ReflectionCardCodec(private val mapper: ObjectMapper) {
         )
     }
 
+    /** 값과 필드 이름을 전부 본다 — jsonb 는 어느 쪽의 NUL 도 받지 않는다. */
+    private fun containsNul(node: JsonNode): Boolean = when {
+        node.isTextual -> NUL in node.textValue()
+        node.isObject -> node.properties().any { (name, child) -> NUL in name || containsNul(child) }
+        node.isArray -> node.any(::containsNul)
+        else -> false
+    }
+
     companion object {
+        private const val NUL = '\u0000'
+
         /** 사용자가 손으로 고친 카드에 `template_id` 가 없을 때 붙인다 — 누가 만든 카드인지 남는다. */
         const val USER_TEMPLATE = "user.edit.v1"
     }

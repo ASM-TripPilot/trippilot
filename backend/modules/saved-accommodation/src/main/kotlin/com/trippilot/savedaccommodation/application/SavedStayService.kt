@@ -8,6 +8,7 @@ import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.savedaccommodation.api.event.StayRegistered
 import com.trippilot.savedaccommodation.domain.SavedStay
 import com.trippilot.savedaccommodation.domain.SavedStayRepository
+import org.hibernate.exception.ConstraintViolationException
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -70,9 +71,18 @@ class SavedStayService(
             doRegister(accountId, cmd)
         } catch (e: DataIntegrityViolationException) {
             // 동시 등록 경합 — 선검사를 빠져나간 레이스(ux_saved_stay_external). 500 이 아니라 409 다.
+            // **그 제약일 때만**이다. 다른 위반(길이 22001·CHECK)까지 "이미 저장한 숙소"로 바꾸면 결함이 중복으로
+            // 보인다 — 실측: 상한 없던 이름 201자가 409 로 나갔다(TRIP-1473). 나머지는 그대로 올린다.
+            if (!e.violates(EXTERNAL_UNIQUE)) throw e
             throw ConflictDetected(message = "이미 저장한 숙소입니다.")
         }
     }
+
+    /** JPA 경로의 위반은 Hibernate 가 제약 이름을 뽑아 둔다(PostgreSQL 방언). 이름이 없으면 그 제약이 아니다. */
+    private fun DataIntegrityViolationException.violates(constraint: String): Boolean =
+        generateSequence<Throwable>(this) { it.cause }
+            .filterIsInstance<ConstraintViolationException>()
+            .any { it.constraintName.equals(constraint, ignoreCase = true) }
 
     private fun doRegister(accountId: UUID, cmd: RegisterStayCommand): SavedStay =
         repo.save(
@@ -125,5 +135,10 @@ class SavedStayService(
         val stay = repo.findById(savedStayId) ?: throw ResourceNotFound()
         if (stay.accountId != accountId) throw ResourceNotFound()
         return stay
+    }
+
+    private companion object {
+        /** V2.57 의 유니크 인덱스 — 계정당 같은 외부 숙소 1건(TRIP-1059). */
+        const val EXTERNAL_UNIQUE = "ux_saved_stay_external"
     }
 }

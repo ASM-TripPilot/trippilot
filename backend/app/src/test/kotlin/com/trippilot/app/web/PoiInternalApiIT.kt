@@ -219,6 +219,32 @@ class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
         body["dropped"]["unknown_category"].asInt() shouldBe 1
     }
 
+    /**
+     * 컬럼 폭을 넘는 제안은 **그 항목만** 떨군다(TRIP-1473). 수정 전에는 이름 201자 하나가 저장에서 22001 로 터져
+     * 문서 전체가 롤백되고 500 이었다 — 같은 문서의 멀쩡한 제안까지 잃었다. 폭(문자 수) **까지는** 받는다.
+     */
+    @Test
+    fun `컬럼 폭을 넘는 제안만 too_long 으로 떨구고 나머지는 받는다`() {
+        fun item(ref: String, name: String = "길이테스트", region: String = "서귀포시", hours: String = "09:00~18:00",
+                 address: String = "제주특별자치도 서귀포시") = """
+            {"poi":{"name":"$name","category":"NATURE","coord":{"lat":33.2447,"lng":126.5590}},
+             "region":"$region","opening_hours_raw":"$hours",
+             "provenance":{"content_id":"$ref","address":"$address"}}"""
+        val doc = """{"schema_version":1,"source":"TOURAPI","proposals":[
+            ${item("E2E-LEN-NAME", name = "가".repeat(201))},
+            ${item("E2E-LEN-REGION", region = "가".repeat(61))},
+            ${item("E2E-LEN-HOURS", hours = "가".repeat(201))},
+            ${item("E2E-LEN-ADDR", address = "제주특별자치도 " + "가".repeat(300))},
+            ${item("E2E-" + "r".repeat(61))},
+            ${item("E2E-LEN-OK", name = "가".repeat(200))}]}"""
+
+        val (rc, body) = call(HttpMethod.POST, "/internal/pois/proposals", SERVICE_TOKEN, doc)
+
+        rc shouldBe 200
+        body["registered"].asInt() shouldBe 1
+        body["dropped"]["too_long"].asInt() shouldBe 5
+    }
+
     @Test
     fun `모르는 출처는 400 — 임의로 가정하지 않는다`() {
         val token = SERVICE_TOKEN

@@ -9,6 +9,7 @@ import com.trippilot.core.error.AuthenticationRequired
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
+import org.hibernate.validator.constraints.CodePointLength
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ValidationFailed
 import org.springframework.web.bind.annotation.RequestParam
@@ -62,7 +63,7 @@ data class AutoVisitBatchRequest(
 data class AutoVisitEventRequest(
     @field:NotNull val eventId: UUID?,
     @field:NotNull val kind: AutoVisitKind?,
-    @field:NotNull @field:Size(max = VisitCheck.SLOT_KEY_MAX, message = "슬롯 키가 너무 깁니다.") val slotKey: String?,
+    @field:NotNull @field:CodePointLength(max = VisitCheck.SLOT_KEY_MAX, message = "슬롯 키가 너무 깁니다.") val slotKey: String?,
     @field:NotNull val poiId: UUID?,
     @field:NotNull val occurredAt: Instant?,
     val completionSource: CompletionSource? = null,

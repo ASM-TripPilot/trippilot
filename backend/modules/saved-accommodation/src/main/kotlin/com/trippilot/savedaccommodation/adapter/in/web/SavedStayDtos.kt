@@ -6,7 +6,7 @@ import com.trippilot.savedaccommodation.domain.RegisterRoute
 import com.trippilot.savedaccommodation.domain.SavedStay
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
-import jakarta.validation.constraints.Size
+import org.hibernate.validator.constraints.CodePointLength
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -17,16 +17,16 @@ import java.util.UUID
  * 그것을 "이미 저장한 숙소" 409 로 잘못 알렸다(TRIP-1473).
  */
 data class RegisterSavedStayRequest(
-    @field:NotBlank @field:Size(max = 200, message = "숙소 이름은 200자 이하입니다.") val name: String?,
+    @field:NotBlank @field:CodePointLength(max = 200, message = "숙소 이름은 200자 이하입니다.") val name: String?,
     @field:NotNull val registerRoute: RegisterRoute?,
     val lat: Double? = null,
     val lng: Double? = null,
     val coordConfirmed: Boolean = false,
     val checkIn: LocalDate? = null,
     val checkOut: LocalDate? = null,
-    @field:Size(max = 40, message = "외부 출처는 40자 이하입니다.") val externalSource: String? = null,
-    @field:Size(max = 120, message = "외부 식별자는 120자 이하입니다.") val externalId: String? = null,
-    @field:Size(max = 500, message = "메모는 500자 이하입니다.") val memo: String? = null,
+    @field:CodePointLength(max = 40, message = "외부 출처는 40자 이하입니다.") val externalSource: String? = null,
+    @field:CodePointLength(max = 120, message = "외부 식별자는 120자 이하입니다.") val externalId: String? = null,
+    @field:CodePointLength(max = 500, message = "메모는 500자 이하입니다.") val memo: String? = null,
 ) {
     fun toCommand() = RegisterStayCommand(
         name = name!!, lat = lat, lng = lng, coordConfirmed = coordConfirmed,
@@ -37,13 +37,13 @@ data class RegisterSavedStayRequest(
 
 /** 숙소 편집 — 가변 필드 전체 제공(제공 상태로 대체). 상한은 등록과 같다. */
 data class EditSavedStayRequest(
-    @field:NotBlank @field:Size(max = 200, message = "숙소 이름은 200자 이하입니다.") val name: String?,
+    @field:NotBlank @field:CodePointLength(max = 200, message = "숙소 이름은 200자 이하입니다.") val name: String?,
     val lat: Double? = null,
     val lng: Double? = null,
     val coordConfirmed: Boolean = false,
     val checkIn: LocalDate? = null,
     val checkOut: LocalDate? = null,
-    @field:Size(max = 500, message = "메모는 500자 이하입니다.") val memo: String? = null,
+    @field:CodePointLength(max = 500, message = "메모는 500자 이하입니다.") val memo: String? = null,
 ) {
     fun toCommand() = EditStayCommand(
         name = name!!, lat = lat, lng = lng, coordConfirmed = coordConfirmed,
