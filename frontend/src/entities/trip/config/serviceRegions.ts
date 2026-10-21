@@ -10,10 +10,11 @@ export const SERVICE_REGIONS: readonly { code: string; name: string }[] = [
   { code: '50', name: '제주' },
   // U10 실기 테스트 지역(2026-10-20) — 빌드 환경값 `EXPO_PUBLIC_TEST_REGIONS="41190:부천"` 가 있을 때만 뒤에 붙는다.
   // 스토어(production) 빌드는 값이 없어 제품 결정 3곳 그대로다. 테스트가 끝나면 eas.json 의 값과 함께 지운다.
-  ...(process.env.EXPO_PUBLIC_TEST_REGIONS ?? '')
+  // 타입을 명시한다 — CI 는 로컬과 달리 `process.env` 값이 any 로 잡혀 콜백 인자가 암묵적 any 가 됐다(TRIP-1485 PR CI).
+  ...String(process.env.EXPO_PUBLIC_TEST_REGIONS ?? '')
     .split(',')
     .filter(Boolean)
-    .map((pair) => {
+    .map((pair: string) => {
       const [code, name] = pair.split(':');
       return { code, name };
     }),
