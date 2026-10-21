@@ -501,10 +501,10 @@
 - `src/features/planb/ui/PlanbGlyphs.tsx`  →  AppliedAlertGlyph · RiskWarningGlyph · ChevronRightGlyph · LockGlyph
 
 ## src/features/record/
-- `src/features/record/index.ts`  →  BackArrowGlyph · BookmarkGlyph · CalendarGlyph · ChevronDownGlyph · ChevronRightGlyph · CloseGlyph · GpsOffGlyph · InfoCircleGlyph · LegendChevronGlyph · NoteGlyph · PlusGlyph · RetryGlyph · VisitCheckActiveGlyph · VisitCheckDoneGlyph · VisitCheckSkippedGlyph · VisitCheckUpcomingGlyph · WarningTriangleGlyph
+- `src/features/record/index.ts`  →  BackArrowGlyph · BookmarkGlyph · CalendarGlyph · ChevronDownGlyph · ChevronRightGlyph · CloseGlyph · GpsOffGlyph · InfoCircleGlyph · LegendChevronGlyph · NoteGlyph · PlusGlyph · RetryGlyph · SummaryChartGlyph · VisitCheckActiveGlyph · VisitCheckDoneGlyph · VisitCheckSkippedGlyph · VisitCheckUpcomingGlyph · WarningTriangleGlyph
 
 ## src/features/record/ui/
-- `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · NoteGlyph · WarningTriangleGlyph · RetryGlyph · BackArrowGlyph · ChevronRightGlyph · LegendChevronGlyph · ChevronDownGlyph · InfoCircleGlyph · GpsOffGlyph · CalendarGlyph · BookmarkGlyph · CloseGlyph
+- `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · NoteGlyph · WarningTriangleGlyph · RetryGlyph · BackArrowGlyph · ChevronRightGlyph · LegendChevronGlyph · ChevronDownGlyph · InfoCircleGlyph · GpsOffGlyph · CalendarGlyph · BookmarkGlyph · CloseGlyph · SummaryChartGlyph
 
 ## src/features/reflection/
 - `src/features/reflection/index.ts`  →  useTripSummary
@@ -1687,7 +1687,7 @@
 
 ## src/shared/ui/
 - `src/shared/ui/AppBar.tsx`  →  AppBarBack · AppBar
-- `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · BottomTabBarProps · ItineraryIconActive · ItineraryIconInactive · TAB_CONFIG · BottomTabBar
+- `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · BottomTabBarProps · ItineraryIconActive · ItineraryIconInactive · RecordsIconActive · TAB_CONFIG · BottomTabBar
 - `src/shared/ui/CollageEmptyState.tsx`  →  CollageEmptyStateProps · CollageEmptyState
 - `src/shared/ui/ConfirmDialog.tsx`  →  ConfirmTone · ConfirmButton · ConfirmDialogProps · ConfirmDialog
 - `src/shared/ui/GlassSurface.tsx`  →  GlassSurfaceProps · GlassSurface
@@ -1764,10 +1764,19 @@
 - `src/test-support/sheetTree.ts`  →  closestAncestor · isInsideSheet · sheetScrollOf · treeIndexOf · renderedText · closestScrollView · stubScrollTo · fireChipLayout
 - `src/test-support/storageMock.ts`  →  saveTokens · getTokens · clearTokens · hasStoredToken
 - `src/test-support/toastHarness.tsx`  →  WithToastHost · resetToast
-- `src/test-support/tripRecordsFixtures.ts`  →  DaySlotFixture · daySlot · daySlotAt · tripItinerary · completedVisitOn · actualVisit · tripRecord · recordsHandler
+- `src/test-support/tripRecordsFixtures.ts`  →  DaySlotFixture · daySlot · daySlotAt · tripItinerary · completedVisitOn · actualVisit · tripRecord · recordsHandler · summaryHandler
 - `src/test-support/tripRecordsTrip.ts`  →  tripRecordsTrip
 - `src/test-support/wizardDraftFixture.ts`  →  WizardDraftData · wizardDraftData · freshWizardDraft · withoutSeedFields · leavePreviousTripDraft · captureDraftAtNextCall · resetWizardDraft
 - `src/test-support/wizardStep1Harness.tsx`  →  BASE · PREFERENCE · TRIP_ID · TRIP · makePreference · makeTrip · WizardStep1HarnessOptions · wizardStep1Harness
+
+## src/widgets/bottom-nav-bar/config/
+- `src/widgets/bottom-nav-bar/config/navBarLayout.ts`  →  NAV_BAR_SIDE · NAV_BAR_HEIGHT · NAV_BAR_BOTTOM_GAP · NAV_BAR_GAP · NAV_BAR_CAPSULE_PADDING_X · NAV_BAR_RESERVE · NAV_BAR_CELL_HEIGHT
+
+## src/widgets/bottom-nav-bar/
+- `src/widgets/bottom-nav-bar/index.ts`  →  BottomNavBar · NavBarBackButton · NavBarCapsule · NavBarCell · NAV_BAR_BOTTOM_GAP · NAV_BAR_CAPSULE_PADDING_X · NAV_BAR_CELL_HEIGHT · NAV_BAR_GAP · NAV_BAR_HEIGHT · NAV_BAR_RESERVE · NAV_BAR_SIDE
+
+## src/widgets/bottom-nav-bar/ui/
+- `src/widgets/bottom-nav-bar/ui/BottomNavBar.tsx`  →  NavBarCellSpec · BottomNavBarProps · NavBarBackButton · NavBarCapsule · NavBarCell · BottomNavBar
 
 ## src/widgets/map-sheet-shell/
 - `src/widgets/map-sheet-shell/index.ts`  →  CTA_BAR_HEIGHT · DayChipOverlay · DayChipScroller · DistanceConnector · EditorView · GenerationProgressCard · BackChevronGlyph · FullAiGlyph · MapSheetShell · SheetHeader
@@ -1802,4 +1811,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1156개 파일
+합계 1159개 파일

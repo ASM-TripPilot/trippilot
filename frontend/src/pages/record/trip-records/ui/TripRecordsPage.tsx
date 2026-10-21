@@ -17,6 +17,7 @@ import { useAdjustVisitTimes } from '../model/useAdjustVisitTimes';
 import { useSpontaneousNames } from '@/features/check-visit';
 import { useVisitCheck } from '@/features/check-visit';
 import { isOptimisticVisit } from '@/features/check-visit';
+import { shareEnabled, useTripSummary } from '@/features/reflection';
 import {
   isLocationAutomationEnabled,
   routeDayForDate,
@@ -36,6 +37,8 @@ import { ArriveRequestSource } from '@/shared/api/index.schemas';
 import type { MapCenter } from '@/shared/map';
 import { seoulDate, seoulTime } from '@/shared/lib/seoulDate';
 import { guardPress } from '@/shared/lib/pressGuard';
+import { useKeyboardVisible } from '@/shared/lib/useKeyboardVisible';
+import { NAV_BAR_RESERVE } from '@/widgets/bottom-nav-bar';
 
 import { TripRecordsView, type RecordPlanRowVM } from './TripRecordsView';
 
@@ -107,9 +110,16 @@ export function TripRecordsPage({
   const visitCheck = useVisitCheck({ tripId, day: activeDay });
   const adjustTimes = useAdjustVisitTimes({ tripId, day: activeDay });
   const spontaneousNames = useSpontaneousNames(tripId);
+  // TRIP-1557 하단 바 「요약」 칸 — 서버가 `ready:true` 를 줄 때만 활성(BR-U5-48). 조회 중·실패·`ready:false` 는 전부 false 라
+  // 실패를 "준비됨"으로 접지 않는다(INV-4). 새 조회 코드 없이 j04 가 쓰는 훅을 그대로 재사용한다(같은 캐시 키).
+  const summary = useTripSummary(tripId);
+  const summaryReady =
+    summary.envelope !== undefined && shareEnabled(summary.envelope);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [timeResult, setTimeResult] = useState<string | null>(null);
+  // 하단 바는 키보드가 떠 있는 동안 빠진다(TripRecordsView) — 토스트는 바가 보일 때만 그 위로 올린다.
+  const keyboardShown = useKeyboardVisible();
   // 건너뛰기 확인 대상 — pending(확정 뒤 응답 전) 동안 다이얼로그 두 버튼이 막힌다(연타·취소 경합 차단).
   const [skipTarget, setSkipTarget] = useState<{
     visitCheckId: string;
@@ -352,13 +362,19 @@ export function TripRecordsPage({
               )
             : undefined
         }
-        // TRIP-1088 — 선택된 일차의 j03 으로(오늘 고정 아님). 미래 일차엔 없다(결정 2, ISO 날짜 사전순 =
+        // TRIP-1088(FAB) → TRIP-1557(하단 바 「회고」 칸) — 선택된 일차의 j03 으로(오늘 고정 아님). 미래 일차엔 없다(결정 2, ISO 날짜 사전순 =
         // 시간순), 끝난 여행은 가르지 않는다(결정 3). '' <= today 는 참이라 일정 로딩 전(빈 날짜)을 따로 막는다.
         onPressReflection={
           activeDay !== '' && activeDay <= today
             ? guardPress(() =>
                 router.push(`/trips/${tripId}/records/reflection/${activeDay}`)
               )
+            : undefined
+        }
+        // TRIP-1557 — 요약은 날짜가 아니라 서버 준비 여부로만 가른다(끝난 여행이어도 `ready:false` 면 비활성). 회고 칸과 독립.
+        onPressSummary={
+          summaryReady
+            ? guardPress(() => router.push(`/trips/${tripId}/records/summary`))
             : undefined
         }
         onPressBack={() => {
@@ -369,10 +385,12 @@ export function TripRecordsPage({
       {timeResult != null ? (
         // 탭하면 닫힌다 — 다음 시각 수정을 열 때도 지운다. TRIP-1085 — 탭바가 빠져 화면 맨 아래(홈 인디케이터
         // 위)에 뜬다. 시트보다 뒤 형제라 시트 위에 그려진다(실제 겹침은 6-b).
+        // TRIP-1557 — 하단 바가 보이면 토스트를 바 점유(바닥 기준, 안전영역 무관) 위로 올린다. 키보드로 바가 빠지면 기존 자리.
         <SafeAreaView
-          edges={['bottom']}
+          edges={keyboardShown ? ['bottom'] : []}
           pointerEvents="box-none"
-          className="absolute inset-x-0 bottom-0 px-lg pb-md"
+          style={{ bottom: keyboardShown ? 0 : NAV_BAR_RESERVE }}
+          className="absolute inset-x-0 px-lg pb-md"
         >
           <Pressable
             onPress={() => setTimeResult(null)}

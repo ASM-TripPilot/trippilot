@@ -3862,6 +3862,51 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressSpontaneous={noop}
         onPressBack={noop}
         onPressReflection={noop}
+        // TRIP-1557 하단 바 — 이 얼굴은 요약이 준비된(끝난 여행) 모습: 기록(활성)·회고·요약 모두 눌린다. 요약 준비 전(여행 중)은 아래
+        // `records-bottom-bar-ongoing` — 이 줄이 빠진 다른 j01 얼굴도 요약 칸이 흐리다.
+        onPressSummary={noop}
+      />
+    ),
+  },
+  // TRIP-1557 j01 하단 바 · 여행 중(Figma 5053:3539) — 요약 칸 흐림(`onPressSummary` 없음, 낭독 "요약 준비 중"). 6-b 확인점: 바가 시트 위에
+  // 뜨고, 시트 닫힘 칸에서 핸들이 바 위로 보이는지(snapPoints 첫 값 ≥ 98)·리스트 맨 아래 [방문 추가] 가 바에 안 가리는지·키보드가 뜨면 바가 빠지는지.
+  {
+    key: 'records-bottom-bar-ongoing',
+    band: 'j',
+    label: 'j01 · 방문 기록 하단 바 · 여행 중(요약 전)',
+    login: null,
+    render: () => (
+      <TripRecordsView
+        tripTitle="부산 여행"
+        dayTabs={[
+          { day: '2026-08-20', label: '1일차' },
+          { day: '2026-08-21', label: '2일차' },
+        ]}
+        activeDay="2026-08-21"
+        onSelectDay={noop}
+        mapCenter={{ lat: 35.1532, lng: 129.1187 }}
+        mapPins={[
+          { number: 1, lat: 35.1532, lng: 129.1187, state: 'done' },
+          { number: 2, lat: 35.1555, lng: 129.1216, state: 'upcoming' },
+        ]}
+        cards={[
+          {
+            visitCheckId: 'r1',
+            slotKey: '2026-08-21#p1',
+            planOrder: 1,
+            poiId: 'p1',
+            nameKo: '광안리 해변',
+            arrivedAt: '2026-08-21T14:20:00',
+            completedAt: '2026-08-21T15:20:00',
+            skippedAt: null,
+            arrivedLabel: '14:20',
+          },
+        ]}
+        onPressComplete={noop}
+        onPressSkip={noop}
+        onPressSpontaneous={noop}
+        onPressBack={noop}
+        onPressReflection={noop}
       />
     ),
   },

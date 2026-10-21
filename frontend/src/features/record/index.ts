@@ -11,6 +11,7 @@ export {
   NoteGlyph,
   PlusGlyph,
   RetryGlyph,
+  SummaryChartGlyph,
   VisitCheckActiveGlyph,
   VisitCheckDoneGlyph,
   VisitCheckSkippedGlyph,
