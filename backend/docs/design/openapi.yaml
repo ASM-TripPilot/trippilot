@@ -3757,7 +3757,6 @@ components:
         capabilities:
           type: object
           properties:
-            localLocationUse: { type: boolean, description: '서버가 아직 내지 않는다 — 의미 미정, 팀 결정 대기(TRIP-1474). 클라이언트는 읽지 말 것' }
             serverLocationService: { type: boolean }
             gpsTrackRetention: { type: boolean }
 
