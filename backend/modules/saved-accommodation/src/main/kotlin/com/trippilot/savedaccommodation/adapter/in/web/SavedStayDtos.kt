@@ -6,22 +6,27 @@ import com.trippilot.savedaccommodation.domain.RegisterRoute
 import com.trippilot.savedaccommodation.domain.SavedStay
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
+import jakarta.validation.constraints.Size
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-/** 숙소 등록(3경로). 좌표·날짜는 선택. 교차 검증(날짜·좌표)은 도메인이 수행. */
+/**
+ * 숙소 등록(3경로). 좌표·날짜는 선택. 교차 검증(날짜·좌표)은 도메인이 수행.
+ * 문자열 상한은 `saved_stay` 컬럼 폭이다 — 없으면 넘친 입력이 22001 로 저장에서 터졌고, 서비스의 경합 처리가
+ * 그것을 "이미 저장한 숙소" 409 로 잘못 알렸다(TRIP-1473).
+ */
 data class RegisterSavedStayRequest(
-    @field:NotBlank val name: String?,
+    @field:NotBlank @field:Size(max = 200, message = "숙소 이름은 200자 이하입니다.") val name: String?,
     @field:NotNull val registerRoute: RegisterRoute?,
     val lat: Double? = null,
     val lng: Double? = null,
     val coordConfirmed: Boolean = false,
     val checkIn: LocalDate? = null,
     val checkOut: LocalDate? = null,
-    val externalSource: String? = null,
-    val externalId: String? = null,
-    val memo: String? = null,
+    @field:Size(max = 40, message = "외부 출처는 40자 이하입니다.") val externalSource: String? = null,
+    @field:Size(max = 120, message = "외부 식별자는 120자 이하입니다.") val externalId: String? = null,
+    @field:Size(max = 500, message = "메모는 500자 이하입니다.") val memo: String? = null,
 ) {
     fun toCommand() = RegisterStayCommand(
         name = name!!, lat = lat, lng = lng, coordConfirmed = coordConfirmed,
@@ -30,15 +35,15 @@ data class RegisterSavedStayRequest(
     )
 }
 
-/** 숙소 편집 — 가변 필드 전체 제공(제공 상태로 대체). */
+/** 숙소 편집 — 가변 필드 전체 제공(제공 상태로 대체). 상한은 등록과 같다. */
 data class EditSavedStayRequest(
-    @field:NotBlank val name: String?,
+    @field:NotBlank @field:Size(max = 200, message = "숙소 이름은 200자 이하입니다.") val name: String?,
     val lat: Double? = null,
     val lng: Double? = null,
     val coordConfirmed: Boolean = false,
     val checkIn: LocalDate? = null,
     val checkOut: LocalDate? = null,
-    val memo: String? = null,
+    @field:Size(max = 500, message = "메모는 500자 이하입니다.") val memo: String? = null,
 ) {
     fun toCommand() = EditStayCommand(
         name = name!!, lat = lat, lng = lng, coordConfirmed = coordConfirmed,

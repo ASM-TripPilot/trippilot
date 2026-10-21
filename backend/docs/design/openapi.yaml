@@ -1356,7 +1356,7 @@ paths:
               type: object
               required: [slotKey, poiId]
               properties:
-                slotKey: { type: string, description: "계획 슬롯 키 {date}#{poiId} — 즉석 방문에는 '안 간 계획'이 없어 필수" }
+                slotKey: { type: string, maxLength: 100, description: "계획 슬롯 키 {date}#{poiId} — 즉석 방문에는 '안 간 계획'이 없어 필수" }
                 poiId: { type: string, format: uuid }
       responses:
         '201':
@@ -2503,28 +2503,28 @@ components:
       type: object
       required: [name, registerRoute]
       properties:
-        name: { type: string }
+        name: { type: string, maxLength: 200 }
         registerRoute: { $ref: '#/components/schemas/RegisterRoute' }
         lat: { type: number, format: double, nullable: true }
         lng: { type: number, format: double, nullable: true }
         coordConfirmed: { type: boolean, default: false }
         checkIn: { type: string, format: date, nullable: true }
         checkOut: { type: string, format: date, nullable: true }
-        externalSource: { type: string, nullable: true }
-        externalId: { type: string, nullable: true }
-        memo: { type: string, nullable: true }
+        externalSource: { type: string, nullable: true, maxLength: 40 }
+        externalId: { type: string, nullable: true, maxLength: 120 }
+        memo: { type: string, nullable: true, maxLength: 500 }
 
     EditSavedStayRequest:
       type: object
       required: [name]
       properties:
-        name: { type: string }
+        name: { type: string, maxLength: 200 }
         lat: { type: number, format: double, nullable: true }
         lng: { type: number, format: double, nullable: true }
         coordConfirmed: { type: boolean, default: false }
         checkIn: { type: string, format: date, nullable: true }
         checkOut: { type: string, format: date, nullable: true }
-        memo: { type: string, nullable: true }
+        memo: { type: string, nullable: true, maxLength: 500 }
 
     GeocodeCandidate:
       type: object
@@ -2559,7 +2559,7 @@ components:
       required: [seq, region, nights]
       properties:
         seq: { type: integer }
-        region: { type: string }
+        region: { type: string, maxLength: 60 }
         nights: { type: integer }
         regionCode:
           type: string
@@ -2632,7 +2632,7 @@ components:
       type: object
       required: [startDate, endDate, destinations]
       properties:
-        title: { type: string, nullable: true, description: 미입력 시 목적지 기반 자동생성 }
+        title: { type: string, nullable: true, maxLength: 120, description: 미입력 시 목적지 기반 자동생성 }
         startDate: { type: string, format: date }
         endDate: { type: string, format: date }
         party: { type: integer, default: 1 }
@@ -2685,7 +2685,7 @@ components:
       type: object
       required: [startDate, endDate, destinations]
       properties:
-        title: { type: string, nullable: true }
+        title: { type: string, nullable: true, maxLength: 120 }
         startDate: { type: string, format: date }
         endDate: { type: string, format: date }
         party: { type: integer, default: 1 }
@@ -2882,6 +2882,7 @@ components:
         slotKey:
           type: string
           nullable: true
+          maxLength: 100
           description: '슬롯 경계 키 "{date}#{poiId}". **비우면 즉석 방문**(계획에 없던 곳)'
         poiId: { type: string, format: uuid }
         source:
@@ -2938,7 +2939,7 @@ components:
             properties:
               eventId: { type: string, format: uuid, description: 기기가 짓는다 — 항목 식별용 }
               kind: { type: string, enum: [ARRIVE, COMPLETE] }
-              slotKey: { type: string, description: '필수 — 자동 결과는 즉석 방문을 만들지 않는다(INV-U10-5)' }
+              slotKey: { type: string, maxLength: 100, description: '필수 — 자동 결과는 즉석 방문을 만들지 않는다(INV-U10-5)' }
               poiId: { type: string, format: uuid }
               occurredAt: { type: string, format: date-time, description: 'ARRIVE = 진입 시각 · COMPLETE = 이탈 시각 또는 다음 장소 진입 시각' }
               completionSource: { type: string, nullable: true, enum: [AUTO_GEOFENCE_EXIT, AUTO_NEXT_ARRIVAL], description: COMPLETE 일 때만 }

@@ -13,8 +13,11 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.http.HttpMethod
+import org.springframework.http.MediaType
 import org.springframework.test.context.TestPropertySource
 import org.springframework.web.client.RestClient
+import java.net.URI
 import java.time.Instant
 import java.util.UUID
 
@@ -59,9 +62,30 @@ class InputErrorContractIT : AbstractPostgresIntegrationTest() {
             .get().uri(path).header(header.first, header.second)
             .retrieve().onStatus({ it.is4xxClientError || it.is5xxServerError }, { _, _ -> })
             .toEntity(String::class.java)
-        val parsed = res.body?.takeIf { it.isNotBlank() }?.let { json.readTree(it) } ?: json.createObjectNode()
-        return res.statusCode.value() to parsed
+        return res.statusCode.value() to parse(res.body)
     }
+
+    /** 본문을 싣는 사용자 호출. [body] 는 손으로 쓴 JSON 이다 — `\u0000` 이스케이프를 그대로 보내려고 직렬화를 거치지 않는다. */
+    private fun send(method: HttpMethod, path: String, body: String, token: String = newToken()): Pair<Int, JsonNode> {
+        val res = RestClient.builder().baseUrl("http://localhost:$port").build()
+            .method(method).uri(path).header("Authorization", "Bearer $token")
+            .contentType(MediaType.APPLICATION_JSON).body(body)
+            .retrieve().onStatus({ it.is4xxClientError || it.is5xxServerError }, { _, _ -> })
+            .toEntity(String::class.java)
+        return res.statusCode.value() to parse(res.body)
+    }
+
+    /** 경로·질의에 퍼센트 인코딩을 **그대로** 싣는다 — 문자열 uri 는 `%` 를 다시 인코딩해 `%2500` 이 된다. */
+    private fun rawGet(rawPathAndQuery: String): Pair<Int, JsonNode> {
+        val res = RestClient.builder().build()
+            .get().uri(URI.create("http://localhost:$port$rawPathAndQuery")).header("Authorization", "Bearer ${newToken()}")
+            .retrieve().onStatus({ it.is4xxClientError || it.is5xxServerError }, { _, _ -> })
+            .toEntity(String::class.java)
+        return res.statusCode.value() to parse(res.body)
+    }
+
+    private fun parse(body: String?): JsonNode =
+        body?.takeIf { it.isNotBlank() }?.let { runCatching { json.readTree(it) }.getOrNull() } ?: json.createObjectNode()
 
     @Test
     fun `UUID 경로변수가 형식에 안 맞으면 400 이다`() {
@@ -128,4 +152,184 @@ class InputErrorContractIT : AbstractPostgresIntegrationTest() {
         status shouldBe 404
         body["error"]["code"].asText() shouldBe "RESOURCE_NOT_FOUND"
     }
+
+
+    // ── TRIP-1473 · NUL(U+0000) — 요청을 읽는 자리에서 400 ──────────────────────────────────────
+    //
+    // 실측(수정 전): 값·키·질의의 NUL 이 전부 500 INTERNAL 이었다 — PostgreSQL 이 text 에 NUL 을 못 넣고 jsonb 도
+    // `\u0000` 을 못 받는다. 요청 본문·질의의 NUL 은 언제나 클라이언트가 보낸 값이다.
+
+    @Test
+    fun `본문 문자열 값에 NUL 이 있으면 400 이다`() {
+        val (status, body) = send(HttpMethod.POST, "/api/v1/trips", trip(""""title":"a\u0000b","""))
+
+        status shouldBe 400
+        body["error"]["code"].asText() shouldBe "VALIDATION_ERROR"
+        body["error"]["traceId"].asText().shouldNotBeBlank()
+    }
+
+    /** `Map` 의 키는 String 역직렬화기를 지나지 않는다 — 값만 보는 방식이면 여기서 샌다. */
+    @Test
+    fun `본문 객체의 키에 NUL 이 있어도 400 이다`() {
+        val (status, body) = send(HttpMethod.POST, "/api/v1/trips", trip(""""preferenceSnapshot":{"k\u0000":1},"""))
+
+        status shouldBe 400
+        body["error"]["code"].asText() shouldBe "VALIDATION_ERROR"
+    }
+
+    /**
+     * `JsonNode` 로 받는 본문도 같은 관문을 지난다. 수정 전에도 400 이었지만 어휘 판정이 받은 값을 **NUL 째 되비췄다**
+     * (`허용되지 않은 값: a\u0000`) — 이제는 값을 해석하기 전에 막혀 되비출 것이 없다.
+     */
+    @Test
+    fun `JsonNode 본문의 NUL 도 읽는 자리에서 막혀 응답에 되비치지 않는다`() {
+        val (status, body) = send(HttpMethod.PUT, "/api/v1/me/preferences", """{"styles":["a\u0000"]}""")
+
+        status shouldBe 400
+        body.toString().contains("\\u0000") shouldBe false
+    }
+
+    @Test
+    fun `질의 파라미터에 NUL 이 있으면 400 이다`() {
+        val (status, body) = rawGet("/api/v1/regions?q=a%00b")
+
+        status shouldBe 400
+        body["error"]["code"].asText() shouldBe "VALIDATION_ERROR"
+        body["error"]["traceId"].asText().shouldNotBeBlank()
+    }
+
+    /** 대조군 — 경로의 `%00` 은 디스패치 전에 이미 400 이다(봉투 없이). 이 변경이 손대지 않는 갈래다. */
+    @Test
+    fun `경로의 NUL 은 디스패치 전에 막힌다 — 대조군`() {
+        rawGet("/api/v1/stays/a%00b").first shouldBe 400
+    }
+
+    /**
+     * 대조군 — 과잉 거부가 아니다. 다른 이스케이프는 그대로 통과하고, `\\u0000` (역슬래시가 이스케이프된 **글자**
+     * 여섯 개)은 NUL 이 아니다.
+     */
+    @Test
+    fun `NUL 이 아닌 이스케이프와 글자 그대로의 백슬래시 u0000 은 통과한다 — 대조군`() {
+        val (status, body) = send(HttpMethod.POST, "/api/v1/trips", trip(""""title":"café \\u0000","""))
+
+        status shouldBe 201
+        body["title"].asText() shouldBe "café \\u0000"
+    }
+
+    // ── TRIP-1473 · 길이 초과(22001) — 전역 매핑하지 않고 요청 필드마다 컬럼 폭으로 막는다 ─────────────────
+    //
+    // 실측(수정 전): 저장 숙소 등록만 409("이미 저장한 숙소입니다" — 서비스의 경합 처리가 22001 을 중복으로 읽었다)이고
+    // 나머지는 전부 500 INTERNAL 이었다. 사진·메모·푸시 토큰은 `@Size` 가 달려 있었지만 본문에 `@Valid` 가 없어
+    // 검사되지 않았고, 도메인 require 나 저장에서 터졌다.
+    // 상한이 빠진 필드를 새로 만들면 RequestStringBoundGateTest 가 멈춘다.
+
+    @Test
+    fun `여행 제목이 컬럼 폭을 넘으면 400 이고 폭까지는 받는다`() {
+        val over = send(HttpMethod.POST, "/api/v1/trips", trip(""""title":"${"가".repeat(121)}","""))
+        val atCap = send(HttpMethod.POST, "/api/v1/trips", trip(""""title":"${"가".repeat(120)}","""))
+
+        over.first shouldBe 400
+        over.second["error"]["fields"].map { it["field"].asText() } shouldBe listOf("title")
+        atCap.first shouldBe 201
+    }
+
+    /** 생성은 카탈로그 판정이 모르는 이름을 막지만 편집은 그 판정을 거치지 않는다 — 상한이 유일한 관문이다. */
+    @Test
+    fun `여행 편집의 목적지 이름이 컬럼 폭을 넘으면 400 이다`() {
+        val token = newToken()
+        val tripId = send(HttpMethod.POST, "/api/v1/trips", trip(""), token).second["tripId"].asText()
+
+        val (status, body) = send(
+            HttpMethod.PATCH, "/api/v1/trips/$tripId",
+            """{"startDate":"2026-12-01","endDate":"2026-12-03","party":2,"destinations":[{"seq":0,"region":"${"가".repeat(61)}","nights":2}]}""",
+            token,
+        )
+
+        status shouldBe 400
+        body["error"]["fields"].map { it["field"].asText() } shouldBe listOf("destinations[0].region")
+    }
+
+    @Test
+    fun `저장 숙소의 이름·메모·외부 출처·외부 식별자가 컬럼 폭을 넘으면 400 이고 폭까지는 받는다`() {
+        fun register(name: Int, memo: Int, source: Int, id: Int) = send(
+            HttpMethod.POST, "/api/v1/saved-stays",
+            """{"name":"${"가".repeat(name)}","registerRoute":"PIN","memo":"${"가".repeat(memo)}",
+                "externalSource":"${"s".repeat(source)}","externalId":"${"i".repeat(id)}"}""",
+        )
+
+        val over = register(201, 501, 41, 121)
+        over.first shouldBe 400
+        over.second["error"]["fields"].map { it["field"].asText() }.toSet() shouldBe
+            setOf("name", "memo", "externalSource", "externalId")
+        register(200, 500, 40, 120).first shouldBe 201
+    }
+
+    @Test
+    fun `저장 숙소 편집도 같은 상한이다`() {
+        val token = newToken()
+        val id = send(HttpMethod.POST, "/api/v1/saved-stays", """{"name":"숙소","registerRoute":"PIN"}""", token)
+            .second["savedStayId"].asText()
+
+        val (status, body) = send(
+            HttpMethod.PATCH, "/api/v1/saved-stays/$id",
+            """{"name":"${"가".repeat(201)}","memo":"${"가".repeat(501)}"}""", token,
+        )
+
+        status shouldBe 400
+        body["error"]["fields"].map { it["field"].asText() }.toSet() shouldBe setOf("name", "memo")
+    }
+
+    @Test
+    fun `방문 체크의 슬롯 키가 컬럼 폭을 넘으면 도착·건너뛰기 모두 400 이다`() {
+        val token = newToken()
+        val tripId = send(HttpMethod.POST, "/api/v1/trips", trip(""), token).second["tripId"].asText()
+        val longKey = "2026-12-01#" + "k".repeat(90) // 101자
+
+        val arrive = send(
+            HttpMethod.POST, "/api/v1/trips/$tripId/visits",
+            """{"slotKey":"$longKey","poiId":"${UUID.randomUUID()}","source":"MANUAL"}""", token,
+        )
+        val skip = send(
+            HttpMethod.POST, "/api/v1/trips/$tripId/visits/skip-planned",
+            """{"slotKey":"$longKey","poiId":"${UUID.randomUUID()}"}""", token,
+        )
+
+        arrive.first shouldBe 400
+        arrive.second["error"]["fields"].map { it["field"].asText() } shouldBe listOf("slotKey")
+        skip.first shouldBe 400
+        skip.second["error"]["fields"].map { it["field"].asText() } shouldBe listOf("slotKey")
+    }
+
+    @Test
+    fun `방문 사진의 자산 식별자와 메모가 상한을 넘으면 400 이다`() {
+        val token = newToken()
+        val tripId = send(HttpMethod.POST, "/api/v1/trips", trip(""), token).second["tripId"].asText()
+        val visitId = send(
+            HttpMethod.POST, "/api/v1/trips/$tripId/visits",
+            """{"poiId":"${UUID.randomUUID()}","source":"MANUAL"}""", token,
+        ).second["visitCheckId"].asText()
+        val base = "/api/v1/trips/$tripId/visits/$visitId"
+
+        val photo = send(HttpMethod.POST, "$base/photos", """{"localAssetId":"${"a".repeat(201)}","deviceId":"d"}""", token)
+        val memo = send(HttpMethod.PUT, "$base/memo", """{"text":"${"가".repeat(2001)}"}""", token)
+
+        photo.first shouldBe 400
+        photo.second["error"]["fields"].map { it["field"].asText() } shouldBe listOf("localAssetId")
+        memo.first shouldBe 400
+        memo.second["error"]["fields"].map { it["field"].asText() } shouldBe listOf("text")
+    }
+
+    @Test
+    fun `푸시 토큰과 기기 식별자가 상한을 넘으면 400 이다`() {
+        val (status, body) = send(
+            HttpMethod.POST, "/api/v1/me/push-tokens",
+            """{"token":"${"t".repeat(256)}","deviceId":"${"d".repeat(65)}","platform":"IOS"}""",
+        )
+
+        status shouldBe 400
+        body["error"]["fields"].map { it["field"].asText() }.toSet() shouldBe setOf("token", "deviceId")
+    }
+
+    private fun trip(extra: String) =
+        """{$extra"startDate":"2026-12-01","endDate":"2026-12-03","party":2,"destinations":[{"seq":0,"region":"제주","nights":2}]}"""
 }

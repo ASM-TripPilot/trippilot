@@ -4,6 +4,7 @@ import com.trippilot.archive.application.AutoVisitEvent
 import com.trippilot.archive.application.AutoVisitKind
 import com.trippilot.archive.application.AutoVisitService
 import com.trippilot.archive.domain.CompletionSource
+import com.trippilot.archive.domain.VisitCheck
 import com.trippilot.core.error.AuthenticationRequired
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotNull
@@ -61,7 +62,7 @@ data class AutoVisitBatchRequest(
 data class AutoVisitEventRequest(
     @field:NotNull val eventId: UUID?,
     @field:NotNull val kind: AutoVisitKind?,
-    @field:NotNull val slotKey: String?,
+    @field:NotNull @field:Size(max = VisitCheck.SLOT_KEY_MAX, message = "슬롯 키가 너무 깁니다.") val slotKey: String?,
     @field:NotNull val poiId: UUID?,
     @field:NotNull val occurredAt: Instant?,
     val completionSource: CompletionSource? = null,

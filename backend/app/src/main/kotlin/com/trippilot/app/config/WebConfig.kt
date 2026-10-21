@@ -4,10 +4,15 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.kotlinModule
+import com.trippilot.core.error.ValidationFailed
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.converter.HttpMessageConverter
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter
+import org.springframework.web.servlet.HandlerInterceptor
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 
 /**
@@ -18,16 +23,42 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 @Configuration
 class WebConfig : WebMvcConfigurer {
 
-    private val mapper: ObjectMapper = ObjectMapper()
-        .registerModule(kotlinModule())
-        .registerModule(JavaTimeModule())
-        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+    private val mapper: ObjectMapper = configured(ObjectMapper())
 
     /** 다른 컴포넌트도 주입받을 수 있도록 노출. */
     @Bean
     fun objectMapper(): ObjectMapper = mapper
 
+    /**
+     * 요청 본문을 읽는 매퍼만 NUL 을 거부한다(TRIP-1473, [NulRejectingJsonFactory]). 위 빈은 아웃박스·저장 행처럼
+     * **서버가 쓴 값**을 다시 읽는 데도 쓰여, 거기서 거부하면 입력이 아니라 서버 상태가 400 으로 바뀐다.
+     */
     override fun extendMessageConverters(converters: MutableList<HttpMessageConverter<*>>) {
-        converters.add(0, MappingJackson2HttpMessageConverter(mapper))
+        converters.add(0, MappingJackson2HttpMessageConverter(configured(ObjectMapper(NulRejectingJsonFactory()))))
+    }
+
+    /**
+     * 질의 파라미터의 NUL(`%00`)도 같은 원칙으로 400 이다(TRIP-1473). 실측: `GET /regions?q=a%00b` 가 조회 SQL 에서
+     * 터져 500 이었다. 경로의 `%00` 은 디스패치 전에 이미 400 이다(봉투 없이, 실측) — 여기까지 오지 않는다.
+     * 인터셉터에서 던지면 `GlobalExceptionHandler` 가 받아 봉투로 낸다. 이름·값은 싣지 않는다(SECURITY-15) —
+     * 파라미터 이름도 클라이언트가 지어 보낼 수 있다.
+     */
+    override fun addInterceptors(registry: InterceptorRegistry) {
+        registry.addInterceptor(object : HandlerInterceptor {
+            override fun preHandle(request: HttpServletRequest, response: HttpServletResponse, handler: Any): Boolean {
+                val nul = request.parameterMap.any { (name, values) -> NUL in name || values.any { NUL in it } }
+                if (nul) throw ValidationFailed(emptyList(), "요청 파라미터에 쓸 수 없는 문자(NUL)가 있습니다.")
+                return true
+            }
+        })
+    }
+
+    private fun configured(m: ObjectMapper): ObjectMapper = m
+        .registerModule(kotlinModule())
+        .registerModule(JavaTimeModule())
+        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+
+    private companion object {
+        const val NUL = '\u0000'
     }
 }
