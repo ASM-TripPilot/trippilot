@@ -81,7 +81,7 @@ jest.mock('@/shared/push/request', () => {
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const previewModule = require('@routes/_dev/preview') as {
   default: ComponentType;
-  PREVIEW_STATES: { key: string }[];
+  PREVIEW_STATES: { key: string; label: string }[];
 };
 const DevPreview = previewModule.default;
 
@@ -170,5 +170,78 @@ describe('프리뷰 스모크 — 화면이 뜨고, 키 장부와 딥링크 폴�
     // 단언
     expect(screen.getByTestId('shell-splash-root')).toBeOnTheScreen();
     expect(screen.queryByTestId('auth-login-root')).toBeNull();
+  });
+});
+
+// TRIP-1530 · 도우미 시트 v3 프리뷰 키 — 키 이름(id)은 구현이 짓고, 새 키는 label 로 찾는다.
+// 이 파일에 붙인 이유: 프리뷰 키 렌더 심판은 이 스모크뿐이고 키별 파일을 새로 만들지 않는다.
+const ASSISTANT_SHEET_KEYS = [
+  'assistant-default',
+  'assistant-review',
+  'assistant-candidate',
+  'assistant-proposal',
+  'assistant-proposal-violation',
+  'assistant-stale',
+  'assistant-scope',
+  'assistant-refusal',
+  'assistant-fallback-error',
+  'assistant-fallback-solver',
+  'assistant-history',
+  'assistant-history-clear',
+  'assistant-no-context',
+  'assistant-rate-limited',
+  'assistant-slow',
+  'assistant-open-failed',
+];
+
+function keyByLabel(fragment: string): string | undefined {
+  return previewModule.PREVIEW_STATES.find((state) =>
+    state.label.includes(fragment)
+  )?.key;
+}
+
+describe('프리뷰 · 도우미 시트 키 (TRIP-1530)', () => {
+  it('기존 도우미 키는 모두 그대로 장부에 있다', () => {
+    const keys = previewModule.PREVIEW_STATES.map((state) => state.key);
+    expect(keys).toEqual(expect.arrayContaining(ASSISTANT_SHEET_KEYS));
+  });
+
+  it.each(ASSISTANT_SHEET_KEYS)(
+    '%s 키로 열면 도우미 시트가 그려진다',
+    (key) => {
+      mockSearchParams.state = key;
+      render(<DevPreview />);
+      expect(screen.getByTestId('assistant-sheet-root')).toBeOnTheScreen();
+    }
+  );
+
+  it('이력 키는 [닫기] 칩까지 그린다', () => {
+    mockSearchParams.state = 'assistant-history';
+    render(<DevPreview />);
+    expect(screen.getByTestId('assistant-history-close')).toBeOnTheScreen();
+  });
+
+  it('새 키 "긴 대화(스크롤해서 ↓ 확인)" — 사용자 말이 여러 번 오간 대화 목록이 그려진다', () => {
+    const key = keyByLabel('긴 대화(스크롤해서 ↓ 확인)');
+    expect(key).toBeDefined();
+    mockSearchParams.state = key;
+    render(<DevPreview />);
+    expect(screen.getByTestId('assistant-message-list')).toBeOnTheScreen();
+    // 발명값: '긴' 의 하한 = 사용자 말 2개 이상(기본·검토 키는 0~1개)
+    expect(
+      screen.getAllByTestId(/^assistant-user-bubble-/).length
+    ).toBeGreaterThanOrEqual(2);
+  });
+
+  it('새 키 "제안 칩 스택(대화 전)" — 대화 전이라 사용자 말 없이 칩이 세로 스택으로 그려진다', () => {
+    const key = keyByLabel('제안 칩 스택(대화 전)');
+    expect(key).toBeDefined();
+    mockSearchParams.state = key;
+    render(<DevPreview />);
+    expect(
+      screen.getByTestId('assistant-quick-replies-stack')
+    ).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(/^assistant-user-bubble-/)).toHaveLength(0);
+    expect(screen.queryByTestId('assistant-quick-replies-row')).toBeNull();
   });
 });

@@ -14,6 +14,7 @@ dependencies {
     implementation(libs.spring.boot.starter.data.jpa)  // out/persistence — saved_stay·base_assignment
     implementation(libs.spring.boot.starter.web)        // adapter/in/web
     implementation(libs.spring.boot.starter.validation) // 요청 @Valid
+    compileOnly(libs.postgresql)                       // out/persistence — 제약 이름 판정(PSQLException). 런타임 드라이버는 app 이 싣는다
     implementation(libs.kotlin.reflect)
 
     testImplementation(project(":common:test-support"))

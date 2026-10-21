@@ -1,4 +1,8 @@
-import type { ReplanSession, TriggerDetail } from '@/shared/api/index.schemas';
+import type {
+  ReplanSession,
+  Trigger,
+  TriggerDetail,
+} from '@/shared/api/index.schemas';
 
 import { TRIGGER_REASON_KEY } from '../config/replanChoices';
 
@@ -20,6 +24,11 @@ import { TRIGGER_REASON_KEY } from '../config/replanChoices';
  * `stale` 은 APPLIED 가 아니면 상태와 무관하게 '없음'으로 읽는다(NO_SOLUTION·FAILED 포함). 계약 밖 상태(앱보다 새 서버가
  * 늘린 값)도 '없음'이다 — i06 은 모르는 상태에 그릴 얼굴이 없어 빈 화면이 된다(INV-4). 두 조회 중 하나라도 아직이고
  * 3초 전이면 `wait` — 대안·허브로 가는 결정은 두 조회가 다 준비됐을 때만 나온다(PBT-SA-21).
+ *
+ * i04 시드(행 4)는 **요청에 실릴 지금 알림의 심각도**로 정한다(사용자 결정 2026-10-20) — 위험일 때만 준비 세션 입력 또는
+ * kind 사유를 켜고, 주의·모름은 빈 시드다(옛 위험 선계산의 사유·제외도 싣지 않는다). 사용자가 누른 알림이 해제 뒤 다시 선
+ * 경우 요청에는 새 알림(`currentTriggerId`)이 실리는데 상세엔 그 심각도가 없다 — 떠 있는 목록(허브와 같은 쿼리)에서 읽는다.
+ * 목록은 기다리지 않는다(판정 시점에 없으면 모름 — 결정 시점·3초 상한은 그대로).
  */
 
 /** 한 조회의 결과 — 아직 · 404 · 그 밖의 실패(네트워크·5xx) · 받음. */
@@ -33,6 +42,8 @@ export interface EntryRouteInput {
   trigger: EntryLookup<TriggerDetail>;
   /** 404 = 그 날짜에 준비된 대안 없음. */
   prepared: EntryLookup<ReplanSession>;
+  /** 떠 있는 알림 목록(`GET /triggers`) — 아직·실패면 undefined(심각도를 모른다 → 시드를 켜지 않는다). */
+  activeTriggers: readonly Trigger[] | undefined;
   timedOut: boolean;
   /** 'YYYY-MM-DD' — 오늘이면 i04 에 날짜를 싣지 않는다. */
   today: string;
@@ -77,12 +88,31 @@ const READY_STATUSES: ReadonlySet<string> = new Set([
   'FAILED',
 ]);
 
-/** 준비 세션 입력(있으면 — CANCELED·stale 포함) → 아니면 kind 사유. 주의(CAUTION)는 빈 시드다. */
+/**
+ * 요청에 실릴 지금 알림이 위험인가 — 원 트리거가 지금 떠 있으면(ACTIVE) 그 상세가 곧 지금 알림이고(목록과 같은 행, 더
+ * 새 값), 해제 뒤 다시 선 알림이면 떠 있는 목록에서 그 id 를 찾는다. severity 가 없으면(옛 서버·옛 행) 위험이다 — 계약
+ * (`Trigger.severity` "없으면 위험으로 읽는다")·domain-entities §2(열 기본 RISK)·허브 기회 카드(`hubOpportunity`)와 같다.
+ * 목록을 모르거나 거기 없으면 모른다(false). 계약 밖 값도 위험으로 치지 않는다.
+ */
+function currentIsRisk(
+  trigger: TriggerDetail,
+  currentId: string,
+  activeTriggers: readonly Trigger[] | undefined
+): boolean {
+  const current =
+    trigger.state === 'ACTIVE'
+      ? trigger
+      : activeTriggers?.find((item) => item.triggerId === currentId);
+  return current !== undefined && (current.severity ?? 'RISK') === 'RISK';
+}
+
+/** 지금 알림이 위험일 때만 — 준비 세션 입력(있으면 — CANCELED·stale 포함) → 아니면 kind 사유. 주의·모름은 빈 시드다. */
 function seedOf(
   trigger: TriggerDetail,
-  session: ReplanSession | null
+  session: ReplanSession | null,
+  risk: boolean
 ): EntrySeed {
-  if (trigger.severity === 'CAUTION') return EMPTY_SEED;
+  if (!risk) return EMPTY_SEED;
   if (session !== null) {
     return {
       reasons: session.reasons ?? [],
@@ -98,13 +128,18 @@ function seedOf(
 function requestRoute(
   trigger: TriggerDetail,
   session: ReplanSession | null,
+  activeTriggers: readonly Trigger[] | undefined,
   today: string
 ): EntryRoute {
   const triggerId =
     trigger.state === 'ACTIVE'
       ? trigger.triggerId
       : (trigger.currentTriggerId ?? trigger.triggerId);
-  const seed = seedOf(trigger, session);
+  const seed = seedOf(
+    trigger,
+    session,
+    currentIsRisk(trigger, triggerId, activeTriggers)
+  );
   if (trigger.affectedDate !== today) {
     return {
       kind: 'request',
@@ -121,6 +156,7 @@ function requestRoute(
 export function entryRoute({
   trigger,
   prepared,
+  activeTriggers,
   timedOut,
   today,
 }: EntryRouteInput): EntryRoute {
@@ -141,7 +177,7 @@ export function entryRoute({
   ) {
     const detail = trigger.value;
     return detail.state === 'ACTIVE' || detail.currentTriggerId
-      ? requestRoute(detail, session, today)
+      ? requestRoute(detail, session, activeTriggers, today)
       : { kind: 'hub', notice: 'inactive' };
   }
   if (session.status === 'DRAFT') {

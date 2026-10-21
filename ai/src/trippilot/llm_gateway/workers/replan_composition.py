@@ -3,8 +3,9 @@
 재계획 경계(`api/wiring.replan`)가 PlanB(상황 추천) 다음에 부른다. 기존 일정·사유·요청·상황
 추천·취향을 한 프롬프트에 싣고, 후보 목록(닫힌 집합) 안에서 갈 곳을 순서대로 받는다.
 
-출력·게이트는 ALTERNATIVE_SELECTION 과 같다(`{"selections": [{"poiId", "reason"}]}`,
-`AlternativeSelectionGate`) — poiId ⊆ 후보 교차(INV-1), 이유의 시간 표현은 비운다(INV-3).
+후보는 UUID 대신 **번호**로 싣는다(0.7.0 — 출력 글자의 36%가 UUID 베끼기였다, `ai/docs/서빙-최적화-실적.md` §8).
+출구는 `NumberedSelectionGate` — 번호를 poi_id 로 되돌린 뒤 ALTERNATIVE_SELECTION 과 같은 검사(poiId ⊆ 후보 교차 INV-1,
+이유의 시간 표현 비움 INV-3).
 고른 순서는 제안이다 — 시각·순서는 어셈블리가 정하고 검증한다(INV-2).
 실패·게이트 드롭이면 폴백 `TypedResult` 그대로 — 호출측이 종전 재계획으로 진행한다(INV-4).
 """
@@ -17,6 +18,7 @@ from datetime import datetime
 
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature, TypedResult
+from trippilot.llm_gateway.gates.numbered_selection import numbered
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.workers.alternative_selection import _category_label
@@ -64,11 +66,11 @@ def _bullets(items: tuple[str, ...], empty: str) -> str:
 
 
 def build_compose_vars(pool: CandidatePool, inp: ComposeDayInput) -> dict[str, str]:
-    """값 전부 str·결정론(후보는 poi_id 정렬). 후보 목록 = 게이트 대조 집합(같은 `pool`)."""
+    """값 전부 str·결정론. 후보 번호 = `numbered(pool)` 순서(게이트가 같은 함수로 되돌린다)."""
     candidates = "\n".join(
-        f"- {p.poi_id} | {_category_label(p)} | {inline(p.name)}"
+        f"- {n} | {_category_label(p)} | {inline(p.name)}"
         f" | {_km(inp.distance_km.get(p.poi_id))} | {inline(inp.hours.get(p.poi_id, '정보 없음'))}"
-        for p in sorted(pool.pois, key=lambda p: str(p.poi_id))
+        for n, p in enumerate(numbered(pool), 1)
     )
     schedule = "\n".join(
         f"- {s.time} | {s.category} | {inline(s.name)} | {s.status}" for s in inp.schedule

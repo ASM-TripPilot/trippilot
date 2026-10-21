@@ -34,14 +34,15 @@ class PlaceRow:
     sigungu: str | None
     trending: bool  # '요즘 인기' 표지
     nightlife: bool  # 나이트라이프 표지 — 밤 주제가 아니면 핸들러가 뺀다
+    rich: bool = False  # 사진·영업시간이 다 있는가(BE dataQuality FULL 과 같은 판정, V2.78)
 
 
-_ROW_COLUMNS = "poi_id::text, name, category, sido, sigungu, tags"
+_ROW_COLUMNS = "poi_id::text, name, category, sido, sigungu, tags, rich"
 
 
 def _row(r: tuple) -> PlaceRow:
     return PlaceRow(poi_id=r[0], name=r[1], category=r[2], sido=r[3], sigungu=r[4],
-                    trending=TRENDING_TAG in (r[5] or ()), nightlife=NIGHTLIFE_TAG in (r[5] or ()))
+                    trending=TRENDING_TAG in (r[5] or ()), nightlife=NIGHTLIFE_TAG in (r[5] or ()), rich=bool(r[6]))
 
 
 class PgPlaceSql:
@@ -88,4 +89,6 @@ class PgPlaceSql:
                     by_id = {r[0]: r for r in cur.fetchall()}
             finally:
                 conn.rollback()
-        return [_row(by_id[i]) for i in ids if i in by_id]
+        # 모델이 고른 집합(≤ROW_CAP) 안에서 '요즘 인기' → 정보 충실(rich) 순으로 한 번 더 — 반경 탐색과 같은 신호. 안정 정렬이라 그 안은
+        # 모델 순서다. 모델이 정렬 끝의 rich 를 빠뜨려도(프롬프트 규칙) 화면 앞자리에 사업자 법인명만 남지 않게 코드가 지킨다.
+        return sorted((_row(by_id[i]) for i in ids if i in by_id), key=lambda r: (not r.trending, not r.rich))
