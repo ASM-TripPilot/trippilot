@@ -32,6 +32,14 @@
         "TRIPPILOT_LOCATION_AUTOMATION": "1",
         "EXPO_PUBLIC_TEST_REGIONS": "41190:부천"
       }
+    },
+    "production-automation-dev-server": {
+      "extends": "production",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://dev-api.trippilot.co.kr",
+        "TRIPPILOT_LOCATION_AUTOMATION": "1",
+        "EXPO_PUBLIC_TEST_REGIONS": "41190:부천"
+      }
     }
   },
   "submit": {
