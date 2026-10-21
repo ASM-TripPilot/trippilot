@@ -51,12 +51,12 @@ def reputation_bonus(tags: tuple[str, ...]) -> float:
 
 
 class PoiCategory(Enum):
-    """경계 카테고리 8종 + 내부 전용 STAY (TRIP-281).
+    """경계 카테고리 10종 + 내부 전용 STAY (TRIP-281, 미술·술집 신설 TRIP-1545).
 
-    앞 8종은 백엔드 `/internal/pois` read 포트가 내보내는 경계 코드와 값·집합이 동일하다
+    앞 10종은 백엔드 `/internal/pois` read 포트가 내보내는 경계 코드와 값·집합이 동일하다
     (`backend/.../placedata/domain/Poi.kt` 한글 정본 ↔ `PoiInternalController.boundaryCode()`:
     명소=SIGHT · 맛집=FOOD · 카페=CAFE · 야경=NIGHT_VIEW · 자연=NATURE · 쇼핑=SHOPPING ·
-    문화=CULTURE · 액티비티=ACTIVITY).
+    문화=CULTURE · 액티비티=ACTIVITY · 미술=ART · 술집=BAR).
 
     한↔영 매핑은 **백엔드 리버스 read 포트(BE-5)가 이미 수행**해 영문 코드로 내보내므로
     이 모듈에는 매핑이 필요 없다. 다만 한글 값을 그대로 받는 다른 경계(예: DB 직접 조회·
@@ -71,7 +71,11 @@ class PoiCategory(Enum):
     CULTURE = "CULTURE"
     ACTIVITY = "ACTIVITY"
     SHOPPING = "SHOPPING"
-    # 내부 전용(숙소 앵커·체류시간 계산). 경계 카테고리 8종에 포함되지 않으며
+    # 2026-10-21 신설(TRIP-1545): 문화에서 갤러리·미술관을, 액티비티·맛집에서 술집을 분리했다. 데이터는 그동안
+    # 태그(`갤러리`·`술집`)로 실려 왔고, 승격 뒤에도 `술집` 태그(NIGHTLIFE_TAG)는 그대로 둔다 — 밤 시간대 규칙이 본다.
+    ART = "ART"
+    BAR = "BAR"
+    # 내부 전용(숙소 앵커·체류시간 계산). 경계 카테고리 10종에 포함되지 않으며
     # `/internal/pois` 응답에 등장하지 않는다 (PR #104 회신).
     STAY = "STAY"
 

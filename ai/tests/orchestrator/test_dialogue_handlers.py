@@ -1432,6 +1432,6 @@ def test_explore_rank_stays_inside_the_pool_and_obeys_its_filters(pois, category
     if not night:
         assert all("술집" not in p.tags for p in picked)
     if category is not None:
-        assert all(p.category.value == category for p in picked)
+        assert all(p.category.value in dh._EXPLORE_FAMILY.get(category, (category,)) for p in picked)   # 문화는 미술 포함(TRIP-1545)
     else:
         assert all(sum(1 for q in picked if q.category is p.category) <= 2 for p in picked)

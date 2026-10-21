@@ -325,7 +325,9 @@ ARGUMENT_TABLE: dict[Intent, tuple[ArgumentSpec, ...]] = {
               "어느 지역에서 찾을지. 없으면 여행 일정 근처에서 찾는다",
               lands_in="dialogue_handlers._explore_anchor (지역 중심 좌표 표)"),
         _spec("category", (_EN,), False, "장소 종류",
-              choices=tuple(c.value for c in PoiCategory if c is not PoiCategory.STAY),
+              # ART·BAR 는 분류 선택지에 올리지 않는다 — 도우미 분류 스키마 바이트가 바뀌면 재생 기록·판본 실측이 무효가 된다
+              # (tests/domain/test_plan_tools.py 골든). 문화를 고르면 미술도 함께 나온다(`dialogue_handlers._explore_rank`).
+              choices=tuple(c.value for c in PoiCategory if c not in (PoiCategory.STAY, PoiCategory.ART, PoiCategory.BAR)),
               lands_in="dialogue_handlers._plan_explore (풀 필터)"),
         _spec("theme", (_FT,), False,
               "'요즘 핫한'·'야경'·'분위기 좋은 바' 같은 분위기·조건",

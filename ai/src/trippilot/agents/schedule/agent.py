@@ -1452,6 +1452,8 @@ _CATEGORY_LABELS: Mapping[PoiCategory, str] = {
     PoiCategory.CULTURE: "문화",
     PoiCategory.ACTIVITY: "액티비티",
     PoiCategory.SHOPPING: "쇼핑",
+    PoiCategory.ART: "미술",
+    PoiCategory.BAR: "술집",
     PoiCategory.STAY: "숙소",
 }
 

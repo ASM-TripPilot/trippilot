@@ -117,6 +117,8 @@ def _wanted_categories(persona: PersonaSummary | None) -> set[PoiCategory]:
                if a in _ACTIVITY_CATEGORIES}
     if persona.cuisines:  # 음식 선호(한식·양식…)는 전부 FOOD 안의 구분이다
         wanted.add(PoiCategory.FOOD)
+    if PoiCategory.CULTURE in wanted:  # 미술은 문화에서 갈라진 곳 — 문화·전시 취향이면 미술도 바란다(TRIP-1545)
+        wanted.add(PoiCategory.ART)
     return wanted
 
 

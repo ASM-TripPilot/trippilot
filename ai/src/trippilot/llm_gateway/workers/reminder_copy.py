@@ -88,6 +88,8 @@ _CATEGORY_LABELS = {
     "CULTURE": "문화",
     "ACTIVITY": "액티비티",
     "SHOPPING": "쇼핑",
+    "ART": "미술",
+    "BAR": "술집",
     "STAY": "숙소",
 }
 
