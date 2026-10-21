@@ -101,12 +101,13 @@ def test_schema_omits_arguments_nobody_asks_for() -> None:
     for intent in ROUTABLE_INTENTS:
         props = by_name[intent.value]
         for spec in specs_of(intent):
-            if spec.asked():
+            # 3단 라우터 렌더(intent.yaml)는 `dialogue_only` 도 뺀다 — 그 프롬프트 바이트가 재생 기록의 키다(BR-AO-14)
+            if spec.asked() and not spec.dialogue_only:
                 assert spec.name in props, f"{intent.value}.{spec.name} 가 빠졌다"
             else:
                 omitted += 1
                 assert spec.name not in props, f"{intent.value}.{spec.name} 를 묻고 있다"
-    assert omitted == 10  # 표 40칸 중 10칸 — 줄면 근거를 확인하고 이 수를 고칠 것
+    assert omitted == 10  # 표 40칸 중 10칸(안 묻는 9 + 도우미 전용 1) — 줄면 근거를 확인하고 이 수를 고칠 것
 
 
 def test_paraphrase_prompt_loads_with_semver_and_meaning_preservation_rule() -> None:

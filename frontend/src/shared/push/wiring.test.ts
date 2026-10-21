@@ -260,7 +260,7 @@ describe('AC-7 · 안드로이드 채널 3종 — 권한 요청보다 먼저 끝
     expect(setChannel).toHaveBeenCalledWith(
       'time-sensitive',
       expect.objectContaining({
-        name: '일정 임박·Plan-B',
+        name: '일정 임박·재계획',
         importance: N.AndroidImportance.HIGH,
       })
     );

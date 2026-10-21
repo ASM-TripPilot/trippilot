@@ -21,8 +21,8 @@ import type { Notification } from '@/shared/api/index.schemas';
  * 것은 여기다(★2). 판정(notificationKind·notificationAction·formatRelativeTime·groupByDay)은 전부
  * 여기서 한 번 돌려 VM 으로 접어 내리고, 화면·행은 재판정하지 않는다("조합·판정은 한 곳").
  *
- * 스코프: 조회 결과만 렌더(FE 밖 계약은 서버). 로딩·오류 전용 얼굴은 이번 AC·testID 밖 → 후속(현재
- * 오류는 items 없음으로 접혀 empty 얼굴로 정직히 degrade하지 않는 사각 — 03 참고, 후속 티켓 후보).
+ * 스코프: 조회 결과만 렌더(FE 밖 계약은 서버). 조회 실패는 TRIP-1501 로 오류 얼굴 + 다시 시도가 생겼다
+ * (판정은 훅 `loadFailed`). 로딩 전용 얼굴은 아직 없다 — 첫 조회 중엔 빈 얼굴이 먼저 보이는 사각(후속 티켓 후보).
  */
 
 /** PLAN_B 인라인 링크 문구(Figma l01). 라우팅 가능할 때만 붙인다(데이터없음이면 null). */
@@ -73,7 +73,8 @@ function buildSections(
 }
 
 export function NotificationInboxPage(): ReactElement {
-  const { items, markAllRead, markRead } = useNotificationInbox();
+  const { items, loadFailed, isFetching, refetch, markAllRead, markRead } =
+    useNotificationInbox();
   const [markAllPending, setMarkAllPending] = useState(false);
   const [markAllError, setMarkAllError] = useState<string | null>(null);
   const now = new Date();
@@ -102,6 +103,9 @@ export function NotificationInboxPage(): ReactElement {
       onMarkAllRead={() => void handleMarkAllRead()}
       markAllPending={markAllPending}
       markAllError={markAllError}
+      loadFailed={loadFailed}
+      onRetry={() => void refetch()}
+      retrying={isFetching}
     />
   );
 }

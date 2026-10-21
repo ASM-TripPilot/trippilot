@@ -14,6 +14,8 @@ konsist = "0.17.3"
 logstashLogbackEncoder = "8.0"
 opentelemetryInstrumentation = "2.14.0"
 swaggerUi = "5.17.14"
+# 커버리지 측정. Gradle 내장 기본값은 JDK 25 런타임(툴체인)보다 늦을 수 있어 명시 핀한다.
+jacoco = "0.8.15"
 
 [libraries]
 # Spring (버전은 Spring Boot BOM이 관리 — 명시 금지)
@@ -37,6 +39,8 @@ jackson-datatype-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-dat
 shedlock-spring = { module = "net.javacrumbs.shedlock:shedlock-spring", version.ref = "shedlock" }
 shedlock-jdbc = { module = "net.javacrumbs.shedlock:shedlock-provider-jdbc-template", version.ref = "shedlock" }
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect" }
+# 아웃박스 → Kafka(TRIP-1469) — EVENT_BROKER=kafka 일 때만 쓰인다. 기본(none)은 종전 폴링 배달.
+spring-boot-starter-kafka = { module = "org.springframework.boot:spring-boot-starter-kafka" }
 
 # 테스트 (Kotest + PBT + MockK)
 kotest-runner-junit5 = { module = "io.kotest:kotest-runner-junit5", version.ref = "kotest" }
@@ -45,6 +49,7 @@ kotest-property = { module = "io.kotest:kotest-property", version.ref = "kotest"
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 testcontainers-postgresql = { module = "org.testcontainers:postgresql", version.ref = "testcontainers" }
 testcontainers-junit-jupiter = { module = "org.testcontainers:junit-jupiter", version.ref = "testcontainers" }
+testcontainers-kafka = { module = "org.testcontainers:kafka", version.ref = "testcontainers" }
 
 # 아키텍처 게이트 (TRIP-150에서 사용)
 archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }

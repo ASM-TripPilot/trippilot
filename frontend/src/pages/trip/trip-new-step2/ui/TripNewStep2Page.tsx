@@ -300,7 +300,7 @@ export function BaseNightsFlow({
       />
       {openCard !== undefined ? (
         <StaySelectSheet
-          title={`${openCard.nightNumber}박 · ${openCard.region}`}
+          title={`${openCard.nightNumber}번째 밤 · ${openCard.region}`}
           dateLabel={openCard.dateLabel}
           candidates={candidates}
           sections={

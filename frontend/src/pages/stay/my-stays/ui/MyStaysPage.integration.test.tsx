@@ -149,7 +149,7 @@ describe('화면 캡처 스텁 — 행 VM·콜백 배선 (옛 본 파일)', () =
    *
    * 무엇을 보장하나:
    *  - 🔴 AC-4(US-NOTIF-06) empty 의 탐색 콜백이 `router.push('/stays')` 로 배선된다.
-   *  - 🔴 AC-6(TRIP-1076 결정 2(A) · 반전) 「출발점 변경」 콜백에 등록 행이 오면 그 여행의 거점 화면
+   *  - 🔴 AC-6(TRIP-1076 결정 2(A) · 반전) 「거점 변경」 콜백에 등록 행이 오면 그 여행의 거점 화면
    *    (`/trips/[tripId]/bases`)으로 push 1회. 거점을 쓰지 않는다는 사실은 아래 실 화면 관점이 msw 로 본다
    *    (TRIP-1148 — 이 관점의 쓰기 훅 목은 페이지가 import 하지 않아 단언이 실패할 수 없어 지웠다).
    *  - 🔴 AC-1(BR-U6-20) 여행 0건이면 저장 숙소가 미연결 → 행 VM 이 정확히 '연결된 여행 없음'·unassigned 로 조립된다.
@@ -218,7 +218,7 @@ describe('화면 캡처 스텁 — 행 VM·콜백 배선 (옛 본 파일)', () =
     });
   });
 
-  describe('🔴 AC-6 · 「출발점 변경」 → 거점 화면 push (TRIP-1076 결정 2(A) · 반전)', () => {
+  describe('🔴 AC-6 · 「거점 변경」 → 거점 화면 push (TRIP-1076 결정 2(A) · 반전)', () => {
     it('등록 행으로 onPressChangeBase 가 오면 /trips/[tripId]/bases 로 push 1회', () => {
       renderPage();
 
@@ -227,7 +227,7 @@ describe('화면 캡처 스텁 — 행 VM·콜백 배선 (옛 본 파일)', () =
         name: '해운대 오션뷰',
         location: '부산 해운대구 우동',
         dateRangeLabel: '6.10 ~ 6.13',
-        sourceLabel: 'OTA 예약',
+        sourceLabel: '예약 사이트',
         memoLabel: null,
         linkedTripLabel: '연결 여행 · 부산 여행',
         baseState: 'assigned',
@@ -361,21 +361,21 @@ describe('화면 캡처 스텁 — 행 VM·콜백 배선 (옛 본 파일)', () =
       title: 'NAVER · 메모 null',
       externalSource: 'NAVER',
       memo: null,
-      sourceLabel: 'OTA 예약',
+      sourceLabel: '예약 사이트',
       memoLabel: '예약번호 미입력',
     },
     {
       title: 'AGODA · 메모 빈 문자열',
       externalSource: 'AGODA',
       memo: '',
-      sourceLabel: 'OTA 예약',
+      sourceLabel: '예약 사이트',
       memoLabel: '예약번호 미입력',
     },
     {
       title: 'NAVER · 메모 있음',
       externalSource: 'NAVER',
       memo: 'NV-20260610',
-      sourceLabel: 'OTA 예약',
+      sourceLabel: '예약 사이트',
       memoLabel: null,
     },
     // AC-C4 — 사전에 없는 코드는 예약이라고 지어내지 않는다(Q5: 탐색 원천으로 본다).
@@ -429,7 +429,7 @@ describe('화면 캡처 스텁 — 행 VM·콜백 배선 (옛 본 파일)', () =
 });
 
 // 옛 MyStaysPage.release — TRIP-1076 AC-6·TRIP-1017 C1
-describe('실 화면 + msw — 출발점 변경·출처 칩 (옛 .release)', () => {
+describe('실 화면 + msw — 거점 변경·출처 칩 (옛 .release)', () => {
   beforeEach(() => {
     mockRealWiring = true;
   });
@@ -438,7 +438,7 @@ describe('실 화면 + msw — 출발점 변경·출처 칩 (옛 .release)', () 
    * l04 출발점 버튼을 **실 페이지 + 실 화면 + 실 react-query + MSW** 로 잰다.
    *
    * TRIP-1076 결정 2(A)로 이 파일의 대상이 바뀌었다. TRIP-1017 은 버튼을 「출발점 해제」(다이얼로그 → DELETE)로
-   * 잠갔는데, 사용자 결정으로 Figma l04 대로 「출발점 변경」 → 그 여행의 거점 화면 이동이 됐다. 그래서
+   * 잠갔는데, 사용자 결정으로 Figma l04 대로 「거점 변경」 → 그 여행의 거점 화면 이동이 됐다. 그래서
    *  - 옛 AC-B1(해제 다이얼로그 문구) → **반전**: 누르면 다이얼로그 없이 거점 화면으로 push, 쓰기 요청 0.
    *  - 옛 AC-B2·B3(확정 → DELETE 성공·취소)·AC-B4(DELETE 실패 토스트) → **삭제**: 이 화면에 DELETE 경로 자체가 없다.
    *    "쓰기 0" 은 새 AC-6 케이스가 서버에 나간 요청 목록으로 잰다.
@@ -449,7 +449,7 @@ describe('실 화면 + msw — 출발점 변경·출처 칩 (옛 .release)', () 
    *   "쓰기 목록 불일치"로 읽혀야 원인이 바로 보인다.
    * ★ 토스트는 모듈 싱글턴이다 — 리셋은 파일 최상위 afterEach(케이스를 지워도 장치는 둔다).
    *
-   * 3동작 뼈대: 준비(서버: 저장 숙소 1 · 여행 1 · 거점 1 → 등록 행 도착 대기) → 실행(「출발점 변경」 press) →
+   * 3동작 뼈대: 준비(서버: 저장 숙소 1 · 여행 1 · 거점 1 → 등록 행 도착 대기) → 실행(「거점 변경」 press) →
    *  단언(서버로 나간 쓰기 요청 목록 · push 인자 · 행 글자).
    */
 
@@ -546,7 +546,7 @@ describe('실 화면 + msw — 출발점 변경·출처 칩 (옛 .release)', () 
     );
     await settleNetwork();
     // 앵커 — 등록 행의 두 표지(배지·연결 여행)가 있다(아래 "사라진다"가 공허하지 않게).
-    expect(within(row()).getByText('출발점')).toBeOnTheScreen();
+    expect(within(row()).getByText('거점')).toBeOnTheScreen();
     expect(within(row()).getByText('연결 여행 · 부산 여행')).toBeOnTheScreen();
   }
 
@@ -587,7 +587,7 @@ describe('실 화면 + msw — 출발점 변경·출처 칩 (옛 .release)', () 
     queryClient.clear();
   });
 
-  describe('🔴 TRIP-1076 AC-6 · 「출발점 변경」 → 거점 화면, 이 화면은 거점을 쓰지 않는다 (결정 2(A))', () => {
+  describe('🔴 TRIP-1076 AC-6 · 「거점 변경」 → 거점 화면, 이 화면은 거점을 쓰지 않는다 (결정 2(A))', () => {
     it('누르면 다이얼로그 없이 /trips/[tripId]/bases 로 push 1회, 서버 쓰기 요청 0, 행은 출발점 그대로', async () => {
       // 준비
       installServer();
@@ -595,7 +595,7 @@ describe('실 화면 + msw — 출발점 변경·출처 칩 (옛 .release)', () 
       await waitAssignedRow();
 
       // 실행 — 버튼은 역할·이름으로 찾는다(글자 반전이 함께 잠긴다).
-      fireEvent.press(screen.getByRole('button', { name: '출발점 변경' }));
+      fireEvent.press(screen.getByRole('button', { name: '거점 변경' }));
       await settleNetwork();
 
       // 단언 ① — 그 여행의 거점 화면으로 한 번.
@@ -612,7 +612,7 @@ describe('실 화면 + msw — 출발점 변경·출처 칩 (옛 .release)', () 
       expect(writes).toEqual([]);
       expect(screen.queryByTestId('my-stays-base-dialog')).toBeNull();
       // 단언 ③ — 행은 그대로 등록 상태다.
-      expect(within(row()).getByText('출발점')).toBeOnTheScreen();
+      expect(within(row()).getByText('거점')).toBeOnTheScreen();
       expect(
         within(row()).getByText('연결 여행 · 부산 여행')
       ).toBeOnTheScreen();
@@ -626,7 +626,7 @@ describe('실 화면 + msw — 출발점 변경·출처 칩 (옛 .release)', () 
       await waitAssignedRow();
 
       expect(within(row()).getByText('탐색에서 저장')).toBeOnTheScreen();
-      expect(within(row()).queryByText('OTA 예약')).toBeNull();
+      expect(within(row()).queryByText('예약 사이트')).toBeNull();
       expect(within(row()).queryByText('예약번호 미입력')).toBeNull();
     });
   });

@@ -145,6 +145,25 @@ describe('🔴 SlotStopCard · CS5 — E4 고정 배지 + 부제 조건부', () 
     );
   });
 
+  it('TRIP-1439 Q-096·102 · 방문 완료(locked)한 고정 슬롯은 "고정" 대신 "방문 완료"로 읽힌다', () => {
+    const { slotKey } = renderCard({
+      slot: makeSlot({ isFixed: true }),
+      fixed: true,
+      locked: true,
+    });
+    expect(screen.getByTestId(id(slotKey)('fixed'))).toHaveTextContent(
+      '방문 완료'
+    );
+  });
+
+  it('TRIP-1439 · 방문 완료가 아닌 고정 슬롯(숙소 등)은 그대로 "고정"이다', () => {
+    const { slotKey } = renderCard({
+      slot: makeSlot({ isFixed: true }),
+      fixed: true,
+    });
+    expect(screen.getByTestId(id(slotKey)('fixed'))).toHaveTextContent('고정');
+  });
+
   it('fixed·subtitle 미주입이면 둘 다 부재(짝)', () => {
     const { slotKey } = renderCard();
     const at = id(slotKey);

@@ -111,7 +111,9 @@ describe('AC-004 · 1/2 다음 → 창 안의 2/2 완료는 무시된다', () =>
   afterEach(() => clock.mockRestore());
 
   it('창 안의 완료는 저장·완료 요청·홈 이동·재평가 신호가 모두 0회이고, 창이 지난 뒤 한 번 누르면 정확히 1회다', async () => {
-    // 준비·실행 ① — 1/2 '다음'(첫 탭).
+    // 준비 — 취향을 하나 골라 둔다(TRIP-1500: 빈 스토어면 [완료]가 원래 PUT 을 안 보내 "창 안 0 → 창 밖 1" 대비가 사라진다).
+    usePreferenceStore.getState().toggleStyle('rest');
+    // 실행 ① — 1/2 '다음'(첫 탭).
     pressNextOnStep1();
     // 앵커 — 첫 탭은 제 할 일을 했다(2/2 로 push).
     expect(routerMock.push).toHaveBeenCalledWith('/(onboarding)/pref2');

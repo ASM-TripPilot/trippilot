@@ -17,7 +17,7 @@ import { BaseNightsFlow } from './TripNewStep2Page';
  * 두 CTA 는 3/4 로 돌아간다(push 로 왔으면 back, 딥링크면 replace). tripId 가 늘 있어 notrip 얼굴은
  * 안 나오지만 화면 prop 이 필수라 "처음부터"에도 같은 복귀를 넘긴다(빈 핸들러 금지).
  *
- * TRIP-1082 — `mode="edit"`(l04 '출발점 변경' 입구)면 거점 편집 얼굴이다. [완료]·헤더 ‹ 는 같은 판정을 탄다:
+ * TRIP-1082 — `mode="edit"`(l04 '거점 변경' 입구)면 거점 편집 얼굴이다. [완료]·헤더 ‹ 는 같은 판정을 탄다:
  *  - 들어와서 **처음 받은 서버 배정**(`isFetchedAfterMount` 첫 true 시점)을 스냅샷으로 두고, 지금 배정과
  *    밤 단위로 비교한다(`basesChanged`). 들어오기 전 캐시(l04 가 채운 값)는 기준이 아니다.
  *  - 바뀌었고 다시 만들 일정이 있는 여행(PLANNED/CONFIRMED · 일정 > 0)이면 묻는다(BR-U6-21). 그 밖엔

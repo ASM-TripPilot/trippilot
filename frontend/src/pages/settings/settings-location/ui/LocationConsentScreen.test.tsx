@@ -18,7 +18,7 @@ describe('토글·철회 게이트 (옛 .test)', () => {
    * TRIP-609 · l06 위치정보 동의 화면(프레젠테이션 + 철회 게이트 UI 로직).
    *
    * 무엇을 보장하나:
-   *  - AC-6: default 에 용도 3항목(이동 지연 감지·실시간 Plan-B 재계획·주변 숙소·일정 추천)이 뜬다.
+   *  - AC-6: default 에 용도 3항목(이동 지연 감지·실시간 일정 재계획·주변 숙소·일정 추천)이 뜬다.
    *  - AC-7: "동의를 꺼도 계속 동작해요" 배너가 계속 2항목(예정 일정 알림·날씨/휴무 트리거)을 보인다.
    *  - AC-9: OS 권한 DENIED 면 토글이 **real disabled**(눌러도 안 먹음), 부제 "OS 권한 거부로 사용
    *    불가"(침묵 금지) + [설정 이동] 배너가 뜬다. 짝: 허용이면 비활성·denied 배너가 없다.
@@ -35,7 +35,7 @@ describe('토글·철회 게이트 (옛 .test)', () => {
    *    잠근다(repo-traps). permission-denied 전체 dimmed 픽셀·글리프 SVG 도 6-b.
    *
    * (개념) 매처 — `getByText('완전문자열')` 완전일치 / `within(node)` 로 스코프해 같은 문자열이 트리에
-   *  여러 번 있어도(예: '실시간 Plan-B 재계획' 은 용도항목이자 다이얼로그 중단항목) 다중 매치 throw 를
+   *  여러 번 있어도(예: '실시간 일정 재계획' 은 용도항목이자 다이얼로그 중단항목) 다중 매치 throw 를
    *  피한다 / `toBeDisabled()` 는 real `disabled` prop 을 본다(02a §5-A·§5-B).
    */
 
@@ -66,7 +66,7 @@ describe('토글·철회 게이트 (옛 .test)', () => {
       renderScreen({ consentOn: true, disabled: false });
 
       expect(screen.getByText('이동 지연 감지')).toBeOnTheScreen();
-      expect(screen.getByText('실시간 Plan-B 재계획')).toBeOnTheScreen();
+      expect(screen.getByText('실시간 일정 재계획')).toBeOnTheScreen();
       expect(screen.getByText('주변 숙소·일정 추천')).toBeOnTheScreen();
       // 부제(완전일치): 동의 ON 상태.
       expect(screen.getByText('동의함 · 정확한 위치 사용')).toBeOnTheScreen();
@@ -205,7 +205,7 @@ describe('Figma 구조 (옛 .l06parity)', () => {
 
   const USAGE = [
     ['이동 지연 감지', '현재 위치로 일정 지연을 알아차려요'],
-    ['실시간 Plan-B 재계획', '막히면 즉시 대안 동선을 제안해요'],
+    ['실시간 일정 재계획', '막히면 즉시 대안 동선을 제안해요'],
     ['주변 숙소·일정 추천', '지금 위치 기준으로 추천해요'],
   ] as const;
 

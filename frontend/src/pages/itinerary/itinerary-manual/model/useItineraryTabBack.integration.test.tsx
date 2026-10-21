@@ -1,5 +1,6 @@
+import { useEffect } from 'react';
 import { Pressable, Text } from 'react-native';
-import { router, Stack, Tabs } from 'expo-router';
+import { router, Stack, Tabs, useNavigationContainerRef } from 'expo-router';
 import {
   act,
   fireEvent,
@@ -34,9 +35,16 @@ function stub(testID: string) {
   };
 }
 
+/** 라우터가 마운트된 뒤의 컨테이너 ref — 계정 경계 이동을 `useAccountBoundaryReset` 과 같은 통로로 보내려고 탐침이 붙잡아 둔다. */
+let containerRef: ReturnType<typeof useNavigationContainerRef> | null = null;
+
 /** 편집기 자리에 꽂는 탐침 — 훅을 부르고, 돌려받은 함수를 ‹ 처럼 버튼에 건다. */
 function ManualProbe() {
   const goItineraryTab = useItineraryTabBack();
+  const navigation = useNavigationContainerRef();
+  useEffect(() => {
+    containerRef = navigation;
+  }, [navigation]);
   return (
     <Pressable testID="probe-back" onPress={goItineraryTab}>
       <Text>‹</Text>
@@ -205,13 +213,16 @@ describe('🔴 AC-4 · 확정 뒤 h16 으로 바꿔 가는 이동은 막지 않�
 });
 
 describe('🔴 AC-5 · 계정 경계(로그아웃·세션 만료) 이동은 막지 않는다', () => {
-  it('dismissAll 뒤 replace(/login) 하면 로그인 화면이다 — 일정 탭이 아니다', () => {
-    // 준비
+  it('루트 스택 POP_TO_TOP 뒤 replace(/login) 하면 로그인 화면이다 — 일정 탭이 아니다', () => {
+    // 준비 — 루트는 [(tabs), method, manual](index 2).
     const result = openManualFromMethod();
+    const rootStack = containerRef?.getRootState()?.routes[0]?.state;
+    expect(rootStack?.index).toBeGreaterThan(0);
 
-    // 실행 — `useAccountBoundaryReset` 과 같은 순서.
+    // 실행 — `useAccountBoundaryReset`(app 층이라 여기선 못 연다)과 같은 통로·순서: 루트 스택 key 를 겨눈 POP_TO_TOP → replace.
+    // 이 두 줄은 그 훅의 사본이라 훅의 통로가 또 바뀌면 낡는다 — 실물 훅을 태우는 쪽은 tripWizardLeaveSwipe.integration.
     act(() => {
-      router.dismissAll();
+      containerRef?.dispatch({ type: 'POP_TO_TOP', target: rootStack?.key });
       router.replace('/login');
     });
 
@@ -219,6 +230,8 @@ describe('🔴 AC-5 · 계정 경계(로그아웃·세션 만료) 이동은 막�
     expect(result.getPathname()).toBe('/login');
     expect(screen.getByTestId('login-root')).toBeOnTheScreen();
     expect(screen.queryByTestId('tab-itinerary-root')).toBeNull();
+    // 걷기가 가로채기에 막히지 않았다는 증거 — 로그인 아래에 방식 선택·탭이 안 남는다.
+    expect(stackNames(result)).toEqual(['(auth)/login']);
   });
 });
 

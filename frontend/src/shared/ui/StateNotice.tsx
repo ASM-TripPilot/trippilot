@@ -100,7 +100,10 @@ export function StateNotice({
       <Text className="text-center font-noto-bold text-[16px] font-bold text-ink">
         {title}
       </Text>
-      <Text className="text-center font-noto text-label text-muted">
+      <Text
+        className="text-center font-noto text-label text-muted"
+        lineBreakStrategyIOS="hangul-word"
+      >
         {description}
       </Text>
       <View className="gap-[10px]">

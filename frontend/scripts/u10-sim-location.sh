@@ -1,10 +1,11 @@
 #!/bin/zsh
 # TRIP-1344 · U10 시뮬레이터 위치 시나리오 (xcrun simctl location). 포그라운드 판정 확인용 — 백그라운드 wake 는 6-b(TestFlight).
-# 사용: scripts/u10-sim-location.sh <arrive|pass|complete|gap|clear> [lat lng]
+# 사용: scripts/u10-sim-location.sh <arrive|pass|complete|gap|downgrade|restore|clear> [lat lng]
 #   기본 장소 = 부산시립미술관(35.1667,129.1370). 리전 반경 150m · 도착 3분 · 이탈 확인 3분 · 최소 체류 10분(config.ts).
-# 전제: 플래그 ON dev build(TRIPPILOT_LOCATION_AUTOMATION=1 prebuild+run:ios) · 위치 '항상 허용' · 오늘이 여행 날짜인 여행의 i01 진입.
+# 전제: 플래그 ON dev build(prebuild 와 빌드 둘 다 TRIPPILOT_LOCATION_AUTOMATION=1 — docs/u10-location-sim.md) · 위치 '항상 허용' · 오늘이 여행 날짜인 여행의 i01 진입.
+# 시뮬레이터가 여러 대 켜져 있으면 SIM_UDID=<udid> 로 고른다(기본 booted 는 그중 하나에 간다).
 set -e
-DEV=booted
+DEV=${SIM_UDID:-booted}
 LAT=${2:-35.1667}
 LNG=${3:-129.1370}
 FAR_LAT=$(python3 -c "print(round($LAT-0.01,6))")   # 약 1.1km 남쪽(리전 밖)
@@ -28,6 +29,12 @@ case "$1" in
     xcrun simctl location $DEV clear; log "공백 12분"; sleep 720
     xcrun simctl location $DEV start --speed=1.4 $LAT,$LNG $(python3 -c "print(round($LAT+0.008,6))"),$LNG; log "걷기 2"; sleep 300
     log "다음 날 포그라운드에서 업로드 → 세그먼트 2개(잇지 않음) 기대" ;;
+  downgrade) # '항상' → '사용하는 동안' 강등 → MANUAL + 안내 1줄 + 구간 END(PERMISSION_DOWNGRADE) 기대.
+    # ⚠️ 2026-10-20 실측: 시뮬레이터에선 실행 중 앱이 종료되지 않고 포그라운드 복귀에도 강등이 안 보였다 — 판정은 6-b(설정 앱에서 직접 바꾼다).
+    xcrun simctl privacy $DEV revoke location-always com.trippilot.travel
+    xcrun simctl privacy $DEV grant location com.trippilot.travel; log "강등 — 앱을 다시 열어 i01 안내·l06 '사용하는 동안' 확인" ;;
+  restore)   # 강등 복구
+    xcrun simctl privacy $DEV grant location-always com.trippilot.travel; log "'항상' 복구" ;;
   clear) xcrun simctl location $DEV clear; log "해제" ;;
-  *) print "usage: $0 <arrive|pass|complete|gap|clear> [lat lng]"; exit 2 ;;
+  *) print "usage: $0 <arrive|pass|complete|gap|downgrade|restore|clear> [lat lng]"; exit 2 ;;
 esac

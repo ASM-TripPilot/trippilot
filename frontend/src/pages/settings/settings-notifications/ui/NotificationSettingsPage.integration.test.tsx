@@ -62,7 +62,7 @@ const PUSH_STAY = 'notification-settings-toggle-push-STAY';
 const PUSH_SLOT_PRE = 'notification-settings-toggle-push-SLOT_PRE';
 const INAPP_STAY = 'notification-settings-toggle-inapp-STAY';
 const BANNER_ID = 'notification-settings-permission-banner';
-const DENIED_BOTTOM_COPY = '푸시를 꺼도 인앱 알림은 알림함에 계속 누적됩니다';
+const DENIED_BOTTOM_COPY = '푸시를 꺼도 인앱 알림은 알림함에 계속 쌓여요';
 const VISIBLE_KINDS = [
   'STAY',
   'TRIP_PRE',

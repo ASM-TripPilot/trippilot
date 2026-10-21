@@ -24,8 +24,13 @@ export interface StayFilterOptions {
   stayTypes: StayFilterOption[];
 }
 
+// '기타'는 가나다 순으로 맨 앞에 오지만 "나머지 전부"라는 뜻이라 그 묶음의 맨 뒤로 보낸다(TRIP-1430 Q-038).
 function uniqueSorted(values: string[]): string[] {
-  return [...new Set(values.filter((v) => v.length > 0))].sort();
+  const sorted = [...new Set(values.filter((v) => v.length > 0))].sort();
+  return [
+    ...sorted.filter((v) => v !== '기타'),
+    ...sorted.filter((v) => v === '기타'),
+  ];
 }
 
 export function buildStayFilterOptions(

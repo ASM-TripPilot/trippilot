@@ -33,7 +33,7 @@ const SORT_LABELS: Record<MyTripsSortKey, string> = {
 };
 const EMPTY_TITLE = '아직 만든 여행이 없어요';
 const EMPTY_DESCRIPTION =
-  '여행을 만들면 완성·작성중 상태를\n여기서 한눈에 볼 수 있어요';
+  '여행을 만들면 확정·작성중 상태를\n여기서 한눈에 볼 수 있어요';
 const EMPTY_CTA_LABEL = '여행 만들기';
 
 export type MyTripsListMode = 'list' | 'empty' | 'loading';

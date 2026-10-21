@@ -422,7 +422,10 @@ class Facts:
             "intent": self.intent.value,
             "status": self.status.value,
             "needs_trip": self.needs_trip,
-            "rows": [{"label": r.label, "value": r.value} for r in self.rows],
+            # 모르는 입장료는 물었든 안 물었든 답이 "확인할 수 없다"로 같다 — 카드(payload)에는 두고 여기선 뺀다. 실었더니 카페 답마다
+            # "입장료도 미확인이에요"·"대신 입장료도 미확인이에요"가 붙었다(답변 0.3.2 측정, 2026-10-20). 물으면 사실이 없어 "확인되지
+            # 않았어요"로 답한다(단독 경로 14/14). 계획 병합 답에서 장소 정보가 대표가 아니면 카드도 없다 — 그때도 같은 프롬프트 규칙에 기댄다
+            "rows": [{"label": r.label, "value": r.value} for r in self.rows if (r.label, r.value) != ("입장료", _UNKNOWN)],
             "places": [{"name": p.name, "category": p.category, "hours_label": p.hours_label, "fee": p.fee,
                         "distance_range": p.distance_range, "reason": p.reason} for p in self.places],
             "notes": list(self.notes),
@@ -748,18 +751,20 @@ def _weather_default_day(snap: TurnSnapshot, today: date) -> date:
 
 
 def _weather_anchor(ctx: TurnContext) -> _WeatherAnchor | None:
-    """① 그 날(또는 오늘 이후 첫) 슬롯 → ② 여행 지역 중심. 둘 다 없으면 None(EMPTY).
+    """① 말한 지역(`region`)의 중심 → ② 그 날(또는 오늘 이후 첫) 슬롯 → ③ 여행 지역 중심. 셋 다 없으면 None(EMPTY).
 
-    ② 가 없던 동안 일정이 없거나 오늘이 여행일이 아니면 "지금 날씨를 확인할 수 없어요" 만 나갔다 — 좌표는 지역 중심표
-    (`region_centers`)로 충분하다. 표에 없는 지역은 지어내지 않는다. 말한 지역("부산 날씨")은 아직 안 본다 — 인자표의
-    `region` 이 분류 `$intents` 에 실리지 않아(lands_in=None) 핸들러까지 오지 않는다; 싣는 것은 분류 판본·재생 픽스처를
-    바꾸는 일이라 따로 간다(plan_tools PLAN_GAPS REGION_WEATHER 가 그 공백을 센다).
+    ②만 있던 동안 일정이 없거나 오늘이 여행일이 아니면 "지금 날씨를 확인할 수 없어요" 만 나갔다 — 좌표는 지역 중심표
+    (`region_centers`)로 충분하다. 표에 없는 지역은 지어내지 않는다 — 말한 지역이 표 밖이면 일정 지역으로 바꿔 답하지
+    않고 None("부산 날씨" 에 제주 값을 내지 않는다). `region` 은 도우미 분류에서만 묻는다(인자표 `dialogue_only`).
     """
     snap, today = ctx.snapshot, ctx.today
     said_day = ctx.arguments.get("date")
     on = resolve_day(said_day, snap, today) if said_day else None
     if said_day and on is None:
         return None
+    said_region = ctx.arguments.get("region")
+    if said_region:
+        return region_weather_anchor(said_region, on if on is not None else _weather_default_day(snap, today))
     if on is not None:
         slot = next((s for s in snap.on(on) if s.poi_id), None)
         if slot is not None:

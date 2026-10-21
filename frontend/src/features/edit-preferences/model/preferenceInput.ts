@@ -12,7 +12,7 @@ import type { PreferenceInputTransportModesItem } from '@/shared/api/index.schem
  * '느긋하게'…)을 받으므로 이 매핑이 없으면 그대로 보낼 수 없다(그래서 "배선만"이 아니었다).
  *
  * 특례: 동행 'pet' slug 는 companionTypes 항목이 아니라 별도 `petFlag: boolean` 으로 간다
- * (서버 companionTypes enum 에 반려동물이 없다). 미선택 축은 null(→ 서버 "미설정으로 초기화"). 예산(`budgetTier`·`budgetRawAmount`)은 입력 기능을 걷어내
+ * (서버 companionTypes enum 에 반려동물이 없다). 미선택 축은 키를 생략한다(서버 "변경 없음" — null 은 "미설정 초기화"라 보내면 저장분이 지워진다, TRIP-1500 후속). 예산(`budgetTier`·`budgetRawAmount`)은 입력 기능을 걷어내
  * 키 자체를 보내지 않는다 — 생략은 서버에서 "변경 없음"이라 이미 저장된 등급은 그대로 남는다.
  */
 
@@ -24,6 +24,18 @@ export interface PreferenceDraftValues {
   foods: string[] | null;
   transports: string[] | null;
   activities: string[] | null;
+}
+
+/** 6축이 전부 null 이면 true — 재시작 뒤 재진입처럼 취향을 하나도 안 고른 스토어다(PUT 으로 보내면 서버 저장분을 지운다). */
+export function isPreferenceDraftEmpty(draft: PreferenceDraftValues): boolean {
+  return (
+    draft.styles === null &&
+    draft.pace === null &&
+    draft.companions === null &&
+    draft.foods === null &&
+    draft.transports === null &&
+    draft.activities === null
+  );
 }
 
 /** slug→한국어 스타일 라벨 카탈로그. `toPreferenceInput`이 쓰고, TRIP-484 여행 단위 취향
@@ -96,13 +108,23 @@ function mapAxis<T>(
 export function toPreferenceInput(
   draft: PreferenceDraftValues
 ): PreferenceInput {
-  return {
-    styles: mapAxis(draft.styles, STYLE),
-    activities: mapAxis(draft.activities, ACTIVITY),
-    transportModes: mapAxis(draft.transports, TRANSPORT),
-    foodTastes: mapAxis(draft.foods, FOOD),
-    companionTypes: mapAxis(draft.companions, COMPANION),
-    petFlag: draft.companions?.includes('pet') ?? false,
-    pace: draft.pace === null ? null : (PACE[draft.pace] ?? null),
-  };
+  // 안 고른 축(null)은 키 자체를 뺀다 — 서버 PUT 은 생략=변경 없음(Keep)·null=미설정 초기화라,
+  // null 로 실으면 재진입 사용자가 한 축만 골라도 저장돼 있던 나머지 취향이 지워진다(TRIP-1500 후속).
+  const input: PreferenceInput = {};
+  const styles = mapAxis(draft.styles, STYLE);
+  if (styles !== null) input.styles = styles;
+  const activities = mapAxis(draft.activities, ACTIVITY);
+  if (activities !== null) input.activities = activities;
+  const transportModes = mapAxis(draft.transports, TRANSPORT);
+  if (transportModes !== null) input.transportModes = transportModes;
+  const foodTastes = mapAxis(draft.foods, FOOD);
+  if (foodTastes !== null) input.foodTastes = foodTastes;
+  const companionTypes = mapAxis(draft.companions, COMPANION);
+  if (companionTypes !== null) {
+    input.companionTypes = companionTypes;
+    input.petFlag = draft.companions?.includes('pet') ?? false;
+  }
+  const pace = draft.pace === null ? undefined : PACE[draft.pace];
+  if (pace !== undefined) input.pace = pace;
+  return input;
 }

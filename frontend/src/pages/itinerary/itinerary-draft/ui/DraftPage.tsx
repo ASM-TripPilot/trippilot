@@ -239,6 +239,14 @@ export function DraftPage({
       pollExhausted,
   });
 
+  // TRIP-1506 — 안이 비었어도 생성이 진행 중이면(PARTIAL 이고 진행 중 세션이 있으면 — 세션 없는 PARTIAL 은 생성 중이
+  // 아니다 TRIP-1037 플립) "추천안이 없어요" 빈 안내가 아니라 로딩 얼굴이다. 폴링(PARTIAL 일 때만 돈다)과 같은 축이라
+  // 로딩 얼굴이 끝없이 남지 않는다. 진행 중인 일을 "없음"으로 보이는 것은 침묵 실패다(INV-4). 진짜 0곳은 그대로 empty.
+  const generatingNow =
+    view.kind === 'empty' &&
+    itinerary.data?.generationState === 'PARTIAL' &&
+    (itinerary.data.generationSessionId ?? null) !== null;
+
   // 2단계 생성 중(PARTIAL)이면 h07 부분 결과 얼굴 — 완성 얼굴(DraftScreen) 대신 공용 지도+시트
   // 셸을 그린다(01b D1 · TRIP-790). features→widgets 상향 참조 금지라 이 조립은 pages(여기)에서만
   // 할 수 있다. 아래 shell 분기가 `view.kind==='listed' && isPartial` 에서 이 값을 쓴다.
@@ -315,6 +323,9 @@ export function DraftPage({
         return;
       case 'stop':
         leavingRef.current = false;
+        // 확정이면 눌렀는데 아무 일 없는 침묵 대신 이유를 보인다(TRIP-1498 c). MANUAL 은 셸이 곧 응답이라 얼굴이 없다.
+        if (settled.data.status === 'CONFIRMED')
+          setRegenerateConfirmRoute('stop');
         return;
       case 'inProgress':
         // 확인 뒤엔 cancel 을 따로 부르지 않는다 — 같은 여행 POST 가 서버에서 이전 세션을 닫는다(01b Q4).
@@ -460,6 +471,30 @@ export function DraftPage({
   // TRIP-1424 — 셸 [다시 짜기] 확인(같은 얼굴 교체형). 문구는 실제로 갈 길을 따른다 — 생성 POST 면 하루 AI 생성
   // 횟수를 쓴다고 말하고, 여행 중 재계획이면 바로 반영된다고 말한다(남은 횟수 숫자는 계약에 없다). 생성 중(드문
   // 서버 상태)은 결국 생성 POST 길이라 생성 문구다. [다시 짜기]는 연 순간의 판정값을 들고 `handleRetry` 로 간다.
+  // TRIP-1498 (c) — 갈 길이 없는(`'stop'`) 확정 일정이면 확인 대신 이유만 보이고 [확인]은 닫을 뿐이다(확정을 풀지 않는다).
+  if (regenerateConfirmRoute === 'stop') {
+    return (
+      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+        <View className="flex-1 justify-center bg-canvas px-lg">
+          <StateNotice
+            testID="itinerary-regenerate-stop"
+            icon={<AlertCircleGlyph />}
+            title="일정을 다시 짤 수 없어요"
+            description="확정한 일정은 지금 다시 짤 수 없어요"
+            actions={[
+              {
+                testID: 'itinerary-regenerate-stop-ok',
+                label: '확인',
+                variant: 'filled',
+                onPress: () => setRegenerateConfirmRoute(null),
+              },
+            ]}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (regenerateConfirmRoute !== null) {
     const replan = regenerateConfirmRoute === 'replan';
     return (
@@ -555,16 +590,18 @@ export function DraftPage({
         fitPins
         overlay={<GenerationProgressCard cells={cells} onBack={handleBack} />}
         header={
-          // 제목에 날짜를 **합쳐** 한 leaf 로 넣는다(dayLabel/dateLabel 빈 값). 진행 카드 게이지의
-          // done 셀 라벨과 이 제목이 둘 다 "N일차 완성" 이면 `getByText` 가 둘을 잡아 실패하므로
-          // (A8-1b 는 게이지 라벨을 exact 로, A8-1e 는 헤더 제목을 regex 로 잡는다 — 헤더가 더 긴
-          // 문자열이어야 한다), 헤더 제목은 "N일차 완성 · 날짜" 로 게이지 라벨과 겹치지 않게 한다.
+          // 다른 결과 화면과 같은 "제목 · N일차 · 날짜" 칸(TRIP-1436 Q-074). 옛 "N일차 완성 · 날짜" 한 leaf 는 진행 카드
+          // 게이지 라벨 "N일차 완성" 과 getByText 가 겹치지 않게 만든 문구였다 — 테스트는 이제 testID 로 잡는다.
           <SheetHeader
-            title={`${selectedDayNumber}일차 완성 · ${formatDraftDayHeader(
-              selectedDate
-            )}`}
-            dayLabel=""
-            dateLabel=""
+            title={
+              isManual
+                ? '내 일정'
+                : fallbackNotice !== null
+                  ? '기본 일정'
+                  : 'AI 추천안'
+            }
+            dayLabel={`${selectedDayNumber}일차`}
+            dateLabel={formatDraftDayHeader(selectedDate)}
             meta={meta}
           />
         }
@@ -727,18 +764,17 @@ export function DraftPage({
                   label: '다시 짜기',
                   variant: 'outline',
                   onPress: () => {
-                    // 확정 + 여행 기간 밖은 갈 길이 없다 — 눌러도 아무 일 없는 확인을 얹지 않는다(TRIP-1424 Q1=A).
+                    // 확정 + 여행 기간 밖은 갈 길이 없다 — 확인 대신 이유 안내 얼굴을 연다(TRIP-1424 Q1=A → TRIP-1498 c).
                     // 셸(listed)은 일정이 있어야 그려진다 — 없으면 갈 길을 판정할 수 없으니 아무것도 열지 않는다.
                     if (itinerary.data === undefined) return;
                     const route = regenerateRouteOf(itinerary.data);
-                    if (route === 'stop') return;
-                    // 확인 얼굴이 셸을 내렸다 올리므로 [취소] 뒤 경로 그려지기·카드 등장을 다시 재생하지 않게 끈다.
+                    // 확인·안내 얼굴이 셸을 내렸다 올리므로 [취소] 뒤 경로 그려지기·카드 등장을 다시 재생하지 않게 끈다.
                     setRevealing(false);
                     setRegenerateConfirmRoute(route);
                   },
                 },
             {
-              label: '확정하기',
+              label: '완성 일정 보기',
               variant: 'primary',
               onPress: () =>
                 router.push({
@@ -820,7 +856,7 @@ export function DraftPage({
   return (
     <>
       <DraftScreen
-        view={view}
+        view={generatingNow ? { kind: 'loading' } : view}
         tabs={tabs}
         selectedDate={selectedDate}
         canRetry={itinerary.data?.status !== 'CONFIRMED'}

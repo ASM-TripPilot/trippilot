@@ -42,6 +42,11 @@ class TravelEstimator:
     def __init__(self, config: AssemblyConfig) -> None:
         self._cfg = config
 
+    @property
+    def walk_transit_from_km(self) -> float:
+        """도보 여행에서 대중교통으로 바꾸는 도로 km — 화면 감싸개(`WalkFirst`)가 실측 거리에도 같은 기준을 댄다."""
+        return self._cfg.walk_transit_from_km
+
     def estimate(
         self, from_: GeoPoint, to: GeoPoint, mode: TransportMode
     ) -> TravelEstimate:
@@ -93,5 +98,11 @@ class WalkFirst:
         if decided.source == TRANSIT_SOURCE:
             # 실경로는 대중교통으로 재되 출처를 표식으로 바꿔 이름표가 "대중교통"이 되게 한다(화면 전용 감싸개)
             return replace(self._port.estimate(from_, to, TransportMode.PUBLIC), source=TRANSIT_SOURCE)
-        return self._port.estimate(from_, to, mode)
+        measured = self._port.estimate(from_, to, mode)
+        if mode is TransportMode.WALK and measured.distance_km_range[1] >= self._walker.walk_transit_from_km:
+            # 추정(직선 × 1.3)은 기준 아래였는데 실측 경로가 넘는 구간 — 화면의 "1.5km 이상은 대중교통"을 지킨다
+            # (개발 서버 실측 2026-10-20: 추정과 실측이 ±0.3km 어긋났다). 시각은 걷기로 잡혀 있지만 대중교통이
+            # 더 빠르므로 일정은 그대로 성립한다. 실경로가 없는 배선은 실측이 곧 추정이라 여기 걸리지 않는다.
+            return replace(self._port.estimate(from_, to, TransportMode.PUBLIC), source=TRANSIT_SOURCE)
+        return measured
 

@@ -341,13 +341,13 @@ function openDialogForA(): Promise<ReactTestInstance> {
 }
 
 /**
- * TRIP-1441 · 확정 B 의 ⋯ → '삭제' 까지 눌러 다이얼로그를 연다. B 의 일정이 도착해 배지 '완성'이 선 뒤에 ⋯ 를
+ * TRIP-1441 · 확정 B 의 ⋯ → '삭제' 까지 눌러 다이얼로그를 연다. B 의 일정이 도착해 배지 '확정'이 선 뒤에 ⋯ 를
  * 바로(get) 찾는다 — ⋯ 판정은 일정이 와야 의미가 있고, ⋯ 가 없으면 기다림 시간 초과가 아니라 "못 찾음"으로 바로
  * 실패한다(02a ★11).
  */
 async function openDialogForB(): Promise<ReactTestInstance> {
   expect(await screen.findByTestId(`my-trip-badge-${B}`)).toHaveTextContent(
-    '완성'
+    '확정'
   );
   fireEvent.press(screen.getByTestId(`my-trip-menu-${B}`));
   fireEvent.press(screen.getByTestId(`my-trip-menu-delete-${B}`));
@@ -380,6 +380,21 @@ describe('🔴 TRIP-1055 AC-2·3 · 확인 전에는 아무것도 지우지 않�
     expect(screen.queryByTestId(`my-trip-menu-delete-${A}`)).toBeNull();
     expect(deletes()).toEqual([]);
     expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+describe('TRIP-1508 · 삭제 확인창이 떠 있는 동안 탭바를 숨긴다', () => {
+  // ⚠️ 탭바가 실제로 사라지는지·딤이 덮는지는 jest 사각(6-b 실기) — 옵션 호출만 잰다.
+  it('확인창이 열리면 숨기고, 취소로 닫히면 되돌린다', async () => {
+    renderPage();
+    await openDialogForA();
+    expect(mockSetOptions).toHaveBeenLastCalledWith({
+      tabBarStyle: { display: 'none' },
+    });
+
+    fireEvent.press(screen.getByTestId('my-trip-delete-cancel'));
+    await settle();
+    expect(mockSetOptions).toHaveBeenLastCalledWith({ tabBarStyle: undefined });
   });
 });
 
@@ -1667,7 +1682,7 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
 
       // 판정 재료(A 의 일정)가 없으면 고정하지 않는다 — 최신순 B·C·A, A 배지 없음.
       expect(await screen.findByTestId('my-trip-badge-B')).toHaveTextContent(
-        '완성'
+        '확정'
       );
       expect(cardOrder()).toEqual([
         'my-trip-card-B',
@@ -1687,7 +1702,7 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
       ]);
       expect(screen.queryByTestId('my-trip-menu-A')).toBeNull();
       expect(screen.queryByTestId('my-trip-resume-A')).toBeNull();
-      expect(screen.getByTestId('my-trip-badge-C')).toHaveTextContent('완성');
+      expect(screen.getByTestId('my-trip-badge-C')).toHaveTextContent('확정');
     });
 
     it('기간 안 A 의 일정 조회가 500 이면 고정·배지 없음 (INV-4), 기간 안 초안·일정 없음은 "작성중"이고 고정 안 함', async () => {
@@ -1709,7 +1724,7 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
       renderPage();
 
       expect(await screen.findByTestId('my-trip-badge-B')).toHaveTextContent(
-        '완성'
+        '확정'
       );
       expect(await screen.findByTestId('my-trip-badge-A3')).toHaveTextContent(
         '작성중'

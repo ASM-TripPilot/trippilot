@@ -130,9 +130,28 @@ describe('🔴 EditorView · B4-1 — empty 얼굴(AC-1·AC-8·AC-10·AC-12)', (
     const cta = screen.getByTestId('sheet-cta-button-0');
     expect(cta).toHaveTextContent('일정 저장하기');
     expect(cta).toBeDisabled();
-    // 점선 장소추가(AC-8) + 안내줄(AC-12).
+    // 점선 장소추가(AC-8). 끌어 바꿀 카드가 없어 끌기 안내줄은 없다(TRIP-1440 Q-141 — 옛 AC-12 는 카드 있을 때만).
     expect(screen.getByTestId('itinerary-edit-add-place')).toBeOnTheScreen();
-    expect(screen.getByTestId('itinerary-edit-guide')).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-edit-guide')).toBeNull();
+    // 0곳에도 장소 추가 즉시 저장 안내는 남는다(TRIP-1424) — 끌기 안내줄만 숨는다.
+    expect(
+      screen.getByTestId('itinerary-edit-add-saved-hint')
+    ).toBeOnTheScreen();
+  });
+});
+
+describe('TRIP-1440 Q-141 · 편집기 머리 제목 가산 prop', () => {
+  it('title 을 넘기면 그 제목, 안 넘기면 기본 "일정 편집"이다', () => {
+    renderView({ title: '일정 만들기' });
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      '일정 만들기'
+    );
+    screen.unmount();
+
+    renderView({ slots: [slot('a')] });
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      '일정 편집'
+    );
   });
 });
 
@@ -433,6 +452,27 @@ describe('🔴 EditorView · V5 — 위반 배지는 카테고리 아래 연분�
     expect(
       screen.getByTestId(`slot-stopcard-violation-${k('p3')}`)
     ).toHaveTextContent('일정 확인이 필요해요');
+  });
+
+  // TRIP-1505 — 서버 문구가 고정 라벨로 떨어지는 카드가 앞 카드와 시각이 겹치면 어느 곳과 겹쳤는지 말한다(배선 잠금).
+  it('고정 라벨로 떨어지는 카드가 앞 카드와 겹치면 앞 카드 이름을 가리킨다', () => {
+    renderI07({
+      slots: I07_SLOTS.map((s) =>
+        s.poiId === 'p2'
+          ? {
+              ...s,
+              startAt: '10:00:00',
+              endAt: '11:30:00',
+              hasViolation: true,
+              violationReason: null,
+            }
+          : s
+      ),
+    });
+
+    expect(
+      screen.getByTestId(`slot-stopcard-violation-${k('p2')}`)
+    ).toHaveTextContent('‘감천문화마을’ 시각과 겹쳐요');
   });
 
   it('hasViolation 이 false 면 사유 문자열이 있어도 배지가 없다', () => {
@@ -1177,7 +1217,11 @@ describe('🔴 EditorView · 일차 칩 줄 가로 스크롤', () => {
 // 3동작: 준비 = h12 빈 얼굴 / i07 얼굴 → 실행 = 렌더(저장 누름 없음) → 단언 = 안내 한 줄 · 옛 안내줄 그대로.
 describe('🔴 EditorView · H1 — 장소 추가 즉시 저장 안내 한 줄 (TRIP-1424)', () => {
   it.each<[string, () => void, string]>([
-    ['h12 빈 편집기', () => renderView({ slots: [] }), H12_GUIDE],
+    [
+      'h12 편집기(카드 있음)',
+      () => renderView({ slots: [slot('a')] }),
+      H12_GUIDE,
+    ],
     ['i07 여행 중 편집', () => renderI07({ inTrip: true }), I07_GUIDE],
   ])(
     '%s — [저장] 전에도 "장소를 추가하면 바로 저장돼요"가 보이고, 옛 안내줄 문구는 그대로다',

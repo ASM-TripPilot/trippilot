@@ -556,7 +556,7 @@ describe('🔴 SlotFillScreen (h10) — 후보 행 전체가 라디오 (TRIP-102
 describe('🔴 SlotFillScreen — 0건 사유 얼굴(TRIP-948)', () => {
   const ALL_IN_TITLE = '근처 후보가 이미 모두 일정에 있어요';
   const ALL_IN_HINT =
-    '반경을 넓혀도 같아요. 다른 슬롯의 장소를 빼면 후보가 생겨요';
+    '반경을 넓혀도 같아요. 다른 자리의 장소를 빼면 후보가 생겨요';
   const OLD_TITLE = '근처에서 조건에 맞는 곳을 못 찾았어요';
 
   it('E1 · NO_NEARBY — 기존 문구·반경 넓히기·컨셉 변경 유지 + 접미 노드, 검색 버튼 없음', () => {

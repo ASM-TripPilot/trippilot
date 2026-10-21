@@ -1670,3 +1670,43 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — situation-awareness Functional Design 사후 개정(구현 반영), 같은 PR 머지 = 승인(#1071 선례). `aidlc-state.md` 무변경.
 
 ---
+
+## Functional Design 사후 개정 — U10 여행별 자동 기록 일시 중지 구현 반영 (BR-U10-49~52 · frontend-components 스위치 줄·l06 paused)
+**Timestamp**: 2026-10-20T23:40:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 이 세션 2026-10-20, 그대로 인용) 인터뷰 답 — "새 티켓 만들고 지금 먼저 고침" / "BE 도 내가 직접 고침" / "「자동 기록」 고정, 부제만 바뀜" / "치지 않음 — 판정 초기화" / "「일시 중지」 알약 신설" / "같이 지움" / "둘 다 보임 — 안내 위·스위치 아래" / 그리고 AskUserQuestion 답 "진행 — audit append + [개정] 블록 2개".
+**AI Response**: `construction/u10-gps-location-automation/functional-design/business-rules.md` 끝에 `[개정 · 2026-10-20 · TRIP-1486]` 블록 1개(BR-U10-49~52 — 무장 사다리의 여행별 일시 중지 단 · 동의 변경 아님 · 구간 END 사유 `USER_PAUSE` · 판정 중 슬롯 ENTERED/HELD→IDLE · wipe 시 삭제 · 재개는 새 START · 강등 아님), `…/frontend-components.md` 끝(기존 2026-10-12 [개정] 블록 뒤)에 `[개정 · 2026-10-20 · TRIP-1486 — 여행별 일시 중지 스위치 구현]` 블록 1개(i01 스위치 줄 · testID · l06 「일시 중지」 알약 · 프리뷰 키 · Figma u10f 4985:3306·4987:3327 / u10d 4990:3348 · §8 6-b 추가 행 요청). 두 파일 모두 원문 삭제·수정 0줄(append 만). 출처 병기: 코드 근거는 `근거: TRIP-1486 구현 결정` — 요구사항 근거로 인용 금지.
+**Context**: CONSTRUCTION — U10 Functional Design 사후 개정(구현 반영), 커밋 `90c545781`(BE)·`6524f3983`(FE). 사용자 명시 승인(위 원문)에 따라 audit 원문 append 후 반영. `aidlc-state.md`·`docs/SCOPE.md` 무변경.
+
+---
+
+## Functional Design·NFR 사후 개정 — U10 계획｜실제 토글 제거 · 여행별 일시 중지 철회 (TRIP-1520 · TRIP-1521)
+**Timestamp**: 2026-10-21T10:30:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 이 세션 2026-10-21, 그대로 인용) "너가 만든거 보고 평가할게 1. 계획/실제 <- 개 별로임 2. 이 날 기록된 경로가 없어여 <- 개 별로임 3. 자동 기록... <- 개 별로임 자동기록 왜 있는지 모르겠고 계획이랑 실제 같이 보여줘도 되는거 아니야? 저거 버튼이 화면을 좁게만들어 2번도 마찬가지고" / AskUserQuestion 답 — "둘 다 늘 표시" · "기능 자체를 없앰" · "둘 다 바꿈".
+**AI Response**: `construction/u10-gps-location-automation/functional-design/business-rules.md` 끝에 `[개정 · 2026-10-21 · TRIP-1520·TRIP-1521]` 블록 1개(BR-U10-41 개정 — 토글·사유·거리 표기 없이 동의 ∧ 그날 경로면 늘 겹침 / BR-U10-49~52 철회, BE `USER_PAUSE` 값은 forward-only 로 남되 클라이언트 미전송), `…/frontend-components.md` 끝에 같은 날짜 블록 1개(토글 testID 폐기 · 2026-10-20 TRIP-1486 블록 전체 무효 · Figma 삭제·개명 node id), `…/nfr-requirements/nfr-requirements.md` 끝에 PERF-U10-07 마지막 문장 무효 블록 1개. 세 파일 모두 원문 삭제·수정 0줄(append 만).
+**Context**: CONSTRUCTION — U10 Functional Design·NFR 사후 개정(구현 반영), 커밋 `a3b716f14`(TRIP-1521 FE 되돌림) · `bb40a1723`(TRIP-1520). 앞 세션에서 사용자가 승인한 "audit append + [개정] 블록" 절차를 따름. `aidlc-state.md`·`docs/SCOPE.md` 무변경.
+
+---
+
+## Functional Design·NFR 사후 개정 — U10 자동 기록 표식·되돌리기 제거 (TRIP-1523)
+**Timestamp**: 2026-10-21T11:30:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 이 세션 2026-10-21, 그대로 인용) "자동 기록 ... 디자인은 여전히 그대로인 이유" / AskUserQuestion 답 — "둘 다 완전히 없앰"(장소 카드의 「자동 기록」 칩과 「⋯」(되돌리기) 버튼).
+**AI Response**: `construction/u10-gps-location-automation/functional-design/business-rules.md` 끝에 `[개정 · 2026-10-21 · TRIP-1523]` 블록 1개(표식 없음 · BR-U10-31·32 클라이언트 진입 철회 · BR-U10-10 재선택 계기 소멸 · 지표 파급), `…/frontend-components.md` 끝에 같은 날짜 블록 1개(카드·흐름·testID 폐기·코드 삭제·Figma 삭제 node id), `…/nfr-requirements/nfr-requirements.md` 끝에 STORE-U10-01 ② 시연 순서·OBS-U10-03·07 무효화 블록 1개. 세 파일 모두 원문 삭제·수정 0줄(append 만).
+**Context**: CONSTRUCTION — U10 Functional Design·NFR 사후 개정(구현 반영), 커밋 `366750a3a`(TRIP-1523). 앞 세션 사용자 승인 절차("audit append + [개정] 블록")를 따름. `aidlc-state.md`·`docs/SCOPE.md` 무변경.
+
+---
+
+## Functional Design 사후 개정 — U10 여행 중 허브 지도 내 위치 (TRIP-1535)
+**Timestamp**: 2026-10-21T17:20:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 이 세션 2026-10-21, 그대로 인용) "gps가 되있으면 내 위치도 보이나?" / "여행중 실제 경로 말고 현재 내위치만 볼 수 있게 하는건" / "ㄱㄱ 그럼 여행중에 보이는건 지오펜스와 현재 내위치만?" / AskUserQuestion 답 — "동의 + OS 권한 (Recommended)".
+**AI Response**: `construction/u10-gps-location-automation/functional-design/business-rules.md` 끝에 `[개정 · 2026-10-21 · TRIP-1535]` 블록 1개(BR-U10-53 신설 — i01 내 위치: 오늘 · 동의 ∧ OS 권한 · 조회만 · 서버 미전송 · 플래그 무관, 당일 경로 실시간 표시는 하지 않음), `…/frontend-components.md` 끝에 같은 날짜 블록 1개(`showMyLocation` 배선 · testID 없음 · Figma 라벨 알약 제거). 원문 삭제·수정 0줄(append 만).
+**Context**: CONSTRUCTION — U10 Functional Design 사후 개정(구현 반영), 커밋 `5ed015911`(TRIP-1535). 앞 세션 사용자 승인 절차("audit append + [개정] 블록")를 따름. `aidlc-state.md`·`docs/SCOPE.md` 무변경.
+
+---
+
+## Functional Design 사후 개정 — U10 BE USER_PAUSE 되돌림 (TRIP-1521 보충)
+**Timestamp**: 2026-10-21T18:00:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 이 세션 2026-10-21, 그대로 인용) "2.78로는 누가 올린거임?" / "그러니까 나 때문에 올리는게 아니지?" / "추천으로 ㄱㄱ"(BE USER_PAUSE 통째로 되돌리기).
+**AI Response**: `construction/u10-gps-location-automation/functional-design/business-rules.md` 끝에 보충 블록 1개 — 2026-10-21 TRIP-1520·1521 블록의 "BE USER_PAUSE 는 남는다" 서술을 되돌림으로 정정. 원문 수정 0줄(append 만).
+**Context**: CONSTRUCTION — 구현 반영 정정, PR #1498 backend-ci Flyway 버전 중복(develop `V2.77__poi_public_view.sql`) 대응. `aidlc-state.md` 무변경.
+
+---

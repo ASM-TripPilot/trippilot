@@ -1,6 +1,6 @@
 /**
  * 위치 권한 프리프롬프트 프레임 (US-ONB-04 **축소분** · BR-U0-30 · AC D1~D3 ·
- * Figma 1296:1208 / 1297:1208 전체화면 정합 TRIP-162).
+ * Figma 4975:3306 / 4973:3306 전체화면 정합 TRIP-162).
  *
  * ⚠️ 이 컴포넌트는 US-ONB-04 를 **완료시키지 않는다.** BR-U0-30 이 요구한 U0 몫(프레임 정의)만
  *    충족한다 — 실제 발화 지점('내 주변 숙소 탐색'·'여행 중 실행') 배선과 숙소 위치 폴백은
@@ -51,19 +51,23 @@ export function LocationPreprompt({
             </Text>
             <Text
               testID="onboarding-location-denied-body"
+              lineBreakStrategyIOS="hangul-word"
               className="font-noto text-center text-body text-muted"
             >
               {
                 '위치 없이도 계속 쓸 수 있어요.\n숙소를 등록하면 그 위치를 기준으로 탐색·동선을 안내해 드릴게요.'
               }
             </Text>
-            {/* TRIP-717: TRIP-592 인라인 줄(상하 hairline·뉴트럴·닫기 ×) → Figma 1297:1208
+            {/* TRIP-717: TRIP-592 인라인 줄(상하 hairline·뉴트럴·닫기 ×) → Figma 4973:3306
                 정본 복귀 = hairline 테두리 라운드 카드 + 청록(info) 아이콘 + 15 ink 텍스트, 닫기 없음.
                 × 와 1회성 숨김 상태(onDismissNotice/noticeDismissed)는 폐기했다. testID 요소는
                 '설정에서' 조각만 감싼다 — 동결 테스트 앵커 패턴 유지. */}
             <View className="w-full flex-row items-start gap-sm rounded-input border border-hairline p-lg">
               <LocationInfoGlyph color={LOCATION_ICON_COLORS.info} />
-              <Text className="flex-1 font-noto text-card-title text-ink">
+              <Text
+                className="flex-1 font-noto text-card-title text-ink"
+                lineBreakStrategyIOS="hangul-word"
+              >
                 현재 위치 기능은 언제든{' '}
                 <Text testID="onboarding-location-denied-notice">설정에서</Text>{' '}
                 켤 수 있어요
@@ -78,11 +82,15 @@ export function LocationPreprompt({
             </Text>
             <Text
               testID="onboarding-location-purpose"
+              lineBreakStrategyIOS="hangul-word"
               className="font-noto text-body text-muted"
             >
               {purposeContext}
             </Text>
-            <Text className="font-noto text-label text-muted-soft">
+            <Text
+              className="font-noto text-label text-muted-soft"
+              lineBreakStrategyIOS="hangul-word"
+            >
               {
                 '위치 정보는 추천·길안내에만 사용되며,\n언제든 설정에서 끌 수 있어요'
               }
@@ -92,8 +100,9 @@ export function LocationPreprompt({
 
         <View
           testID="onboarding-location-footer"
-          className="gap-sm border-t border-hairline px-2xl pb-2xl pt-lg"
+          className="gap-sm px-2xl pb-2xl pt-lg"
         >
+          <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
           {denied ? (
             <>
               <Pressable

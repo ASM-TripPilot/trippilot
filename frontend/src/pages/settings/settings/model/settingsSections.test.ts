@@ -158,7 +158,7 @@ const CANON = [
     'account',
     '계정',
     [
-      ['nickname', '닉네임·이메일', true],
+      ['nickname', '닉네임', true],
       ['export', '데이터 내보내기', true],
       ['logout', '로그아웃', true],
     ],

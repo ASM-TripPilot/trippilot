@@ -51,6 +51,12 @@ interface NotificationRepository {
      * 어떻게 됐나"를 남기는 칸이다. 남기지 않으면 "왜 푸시가 안 왔나"에 답할 근거가 없다.
      */
     fun markPushResult(notificationId: UUID, sentAt: Instant?, failedReason: String?)
+
+    /**
+     * 같은 묶음([dedupPrefix])의 푸시 판정을 **트랜잭션 끝까지 줄 세운다**(BR-U6-09). 판정은 "창 안에 나간 푸시가
+     * 있나"를 읽고 쏘는 선검사라, 같은 묶음의 두 사건이 동시에 지나면 서로의 미커밋 발송을 못 봐 둘 다 울린다.
+     */
+    fun lockPushGroup(accountId: UUID, dedupPrefix: String)
 }
 
 /** 리마인드 예약 영속 포트. */

@@ -32,7 +32,6 @@ const CANCEL_FAILED_TEXT = '취소하지 못했어요. ‹ 로 나갈 수 있어
 export interface ReplanSolvingViewProps {
   center: MapCenter;
   pins?: MapPin[];
-  currentLocation?: MapCenter;
   /** 칸 2 캡션 — 예: `17시 이후 다시 짜는 중`(페이지가 fromInstant 로 조립). */
   solvingLabel: string;
   dayLabel: string;
@@ -56,7 +55,6 @@ export interface ReplanSolvingViewProps {
 export function ReplanSolvingView({
   center,
   pins,
-  currentLocation,
   solvingLabel,
   dayLabel,
   dateLabel,
@@ -73,7 +71,6 @@ export function ReplanSolvingView({
     <MapSheetShell
       center={center}
       pins={pins}
-      currentLocation={currentLocation}
       snapPoints={SNAP_POINTS}
       overlay={
         <GenerationProgressCard

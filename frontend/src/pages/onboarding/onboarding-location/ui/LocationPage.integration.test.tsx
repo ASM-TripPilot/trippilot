@@ -68,10 +68,10 @@ const routerMock = require('expo-router').router as {
   back: jest.Mock;
 };
 
-/** c08 이 주입해야 하는 Figma 온보딩 목적 문구(브리프 §화면·IO · 1296:1208). 프리뷰의
+/** c08 이 주입해야 하는 Figma 온보딩 목적 문구(브리프 §화면·IO · 4975:3306). 프리뷰의
  * placeholder "내 주변 숙소 탐색" 이 아니라 **화면 정본 문구**여야 한다. toHaveTextContent 는
  * 문자열이면 완전 일치이므로(RNTL matches exact:true 기본), 이 상수 전체가 곧 계약이다. */
-// TRIP-717: Figma 1296:1208 2줄 고정 개행 반영(같은 어구, 중간에 \n). toHaveTextContent 는
+// TRIP-717: Figma 4975:3306 2줄 고정 개행 반영(같은 어구, 중간에 \n). toHaveTextContent 는
 // 공백을 정규화하므로 \n 유무와 무관하게 매치하지만, 앱 문자열과 자구를 일치시켜 계약을 명시한다.
 const ONBOARDING_PURPOSE =
   '내 주변을 알면 더 잘 맞는 곳을 추천하고\n길 안내도 막힘없이 이어져요';

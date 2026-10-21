@@ -1,5 +1,12 @@
 import type { ReactElement } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  Keyboard,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { SparkleGlyph } from '@/features/open-assistant';
 import type { QuickReply } from '../api/assistantContract';
@@ -119,15 +126,7 @@ export function QuickReplyBar({
       className="flex-none grow-0"
       contentContainerClassName="gap-sm px-lg py-sm"
     >
-      {replies.map((reply) => (
-        <ReplyChip
-          key={reply.id}
-          testID={`assistant-quick-reply-${reply.id}`}
-          label={reply.label}
-          disabled={disabled}
-          onPress={() => onPick(reply)}
-        />
-      ))}
+      {/* 상시 칩을 맨 앞에 둔다(TRIP-1436 Q-134) — 서버 칩이 늘면 맨 뒤 칩이 화면 밖으로 밀려 BR-U8-04 상시 노출이 깨졌다. */}
       {showCapabilitiesChip ? (
         <ReplyChip
           testID="assistant-quick-reply-capabilities"
@@ -136,6 +135,23 @@ export function QuickReplyBar({
           onPress={onPressCapabilities}
         />
       ) : null}
+      {/* 서버가 시작 칩 목록 맨 끝에 SHOW_CAPABILITIES 를 직접 넣어 보내는 경우(실서버)에도 앞으로 보낸다 — 그때는
+          클라 칩(showCapabilitiesChip)이 안 그려지므로 정렬로만 맨 앞이 된다. 나머지 순서는 그대로다(안정 정렬). */}
+      {[...replies]
+        .sort(
+          (a, b) =>
+            Number(b.action === 'SHOW_CAPABILITIES') -
+            Number(a.action === 'SHOW_CAPABILITIES')
+        )
+        .map((reply) => (
+          <ReplyChip
+            key={reply.id}
+            testID={`assistant-quick-reply-${reply.id}`}
+            label={reply.label}
+            disabled={disabled}
+            onPress={() => onPick(reply)}
+          />
+        ))}
     </ScrollView>
   );
 }
@@ -154,7 +170,8 @@ export function Composer({
   sendTestID?: string;
 }): ReactElement {
   return (
-    <View className="flex-row items-center gap-sm border-t border-hairline px-lg pb-sm pt-[10px]">
+    <View className="flex-row items-center gap-sm px-lg pb-sm pt-[10px]">
+      <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
       <TextInput
         testID="assistant-input"
         value={value}
@@ -171,7 +188,11 @@ export function Composer({
         accessibilityLabel="보내기"
         accessibilityState={{ disabled: !canSend }}
         disabled={!canSend}
-        onPress={onSend}
+        onPress={() => {
+          // 보내면 키보드를 내린다(TRIP-1436 Q-134 결정 2=A) — 열린 채 답이 도착해 화면 절반을 덮던 것. 이어 물으려면 입력칸을 다시 누른다.
+          Keyboard.dismiss();
+          onSend();
+        }}
         className={`h-[44px] w-[44px] items-center justify-center rounded-full bg-primary${canSend ? '' : ' opacity-40'}`}
       >
         <SendArrowGlyph />

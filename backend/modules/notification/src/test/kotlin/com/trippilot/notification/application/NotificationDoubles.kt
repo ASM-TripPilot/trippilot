@@ -69,6 +69,8 @@ internal class FakeNotifications : NotificationRepository {
         val i = stored.indexOfFirst { it.notificationId == notificationId }
         if (i >= 0) stored[i] = stored[i].copy(pushSentAt = sentAt, pushFailedReason = failedReason)
     }
+
+    override fun lockPushGroup(accountId: UUID, dedupPrefix: String) = Unit // 대역은 단일 스레드
 }
 
 /**

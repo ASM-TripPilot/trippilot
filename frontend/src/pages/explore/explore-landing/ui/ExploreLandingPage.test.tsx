@@ -735,7 +735,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
 
       const chip = screen.getByTestId('explore-region-chip');
       expect(within(chip).getByText('부산광역시')).toBeOnTheScreen();
-      expect(screen.queryByText('도시 · 장소 · 숙소 검색')).toBeNull();
+      expect(screen.queryByText('도시 검색')).toBeNull();
     });
 
     it('칩 ✕ 는 region 키를 비우는 setParams 1회이고, 다시 그리면 칩이 없고 전국 d01 조회(숙소 region 없음·장소 서비스 지역 3곳)로 돌아간다', () => {
@@ -757,7 +757,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       rerender(<ExploreLandingPage />);
 
       expect(screen.queryByTestId('explore-region-chip')).toBeNull();
-      expect(screen.getByText('도시 · 장소 · 숙소 검색')).toBeOnTheScreen();
+      expect(screen.getByText('도시 검색')).toBeOnTheScreen();
       // 전국 d01 과 같은 호출 — 장소는 서비스 지역 3곳, 숙소는 region 없이 켜져 있다.
       expect(enabledMultiCalls(multiFrom).length).toBeGreaterThan(0);
       for (const [regions] of enabledMultiCalls(multiFrom)) {

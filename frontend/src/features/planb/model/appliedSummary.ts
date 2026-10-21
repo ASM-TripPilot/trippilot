@@ -45,8 +45,8 @@ export function appliedSummaryBadges({
   distanceDeltaM,
 }: AppliedSummaryInput): string[] {
   const badges = [
-    `바뀐 곳 ${changedCount}`,
-    `방문지 ${visitsBefore}→${visitsAfter}`,
+    `바뀐 곳 ${changedCount}곳`,
+    `방문지 ${visitsBefore}→${visitsAfter}곳`,
   ];
   if (distanceDeltaM === null) return badges;
 

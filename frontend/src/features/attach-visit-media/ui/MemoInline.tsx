@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, RefObject } from 'react';
 import { useState } from 'react';
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 
@@ -24,7 +24,8 @@ import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 
 export interface MemoInlineProps {
   text?: string | null;
-  onSubmit?: (text: string) => void;
+  /** TRIP-1492 — 두 번째 인자 = 마운트 때 심은 글("손대지 않았다" 판정 기준 — 재조회가 바뀌어도 입력은 심은 값 그대로). */
+  onSubmit?: (text: string, seed: string) => void;
   /** TRIP-1117 — 초안이 바뀔 때마다(글자 수 표시용, i01 허브 메모 시트). */
   onChangeDraft?: (draft: string) => void;
   /** TRIP-1117 — 입력 모양 덮어쓰기(허브 시트는 Figma 14px·상자 안). 미지정이면 j01 모양 그대로. */
@@ -33,6 +34,8 @@ export interface MemoInlineProps {
   editable?: boolean;
   /** TRIP-1426 — false 면 포커스가 빠져도 저장하지 않는다(허브 메모 시트는 [저장] 하나로 저장). 기본 true = j01 지금 동작. */
   submitOnBlur?: boolean;
+  /** TRIP-1503 — 바깥 상자 탭이 입력에 포커스를 넘길 수 있게 입력 ref 를 노출한다(허브 시트). 미지정이면 지금 동작. */
+  inputRef?: RefObject<{ focus(): void } | null>;
 }
 
 export function MemoInline({
@@ -42,17 +45,21 @@ export function MemoInline({
   className = 'min-h-[44px] py-sm font-noto text-label text-ink',
   editable = true,
   submitOnBlur = true,
+  inputRef,
 }: MemoInlineProps): ReactElement {
   const [draft, setDraft] = useState(text ?? '');
+  const [seed] = useState(text ?? '');
 
   const handleSubmit = (): void => {
     const trimmed = draft.trim();
     if (trimmed === '') return;
-    onSubmit?.(trimmed);
+    onSubmit?.(trimmed, seed);
   };
 
   return (
     <BottomSheetTextInput
+      // gorhom 입력의 ref 타입은 제스처 핸들러 TextInput 이라 RN TextInput 과 안 맞는다 — 호출부는 focus() 만 쓴다.
+      ref={inputRef as never}
       testID="record-trip-memo-input"
       accessibilityLabel="메모 입력"
       value={draft}

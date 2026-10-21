@@ -1,6 +1,11 @@
 import { AppState } from 'react-native';
 import type { focusManager as FocusManager } from '@tanstack/react-query';
 
+jest.mock('@react-navigation/native', () => ({
+  DefaultTheme: { colors: {} },
+  ThemeProvider: ({ children }: { children: unknown }) => children,
+}));
+
 // AppProviders 를 로드하는 순간 모듈 스코프에서 focusManager 배선이 걸린다(TRIP-1347).
 // AppState 를 먼저 가로챈 뒤 모듈을 로드해 그 배선이 붙인 리스너를 잡는다.
 

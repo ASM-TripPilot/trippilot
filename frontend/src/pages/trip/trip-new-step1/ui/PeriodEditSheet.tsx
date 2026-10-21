@@ -99,6 +99,7 @@ function DateCell({
   role,
   single,
   past,
+  isToday,
   onPickDate,
 }: {
   date: string;
@@ -106,6 +107,7 @@ function DateCell({
   role: CellRole;
   single: boolean;
   past: boolean;
+  isToday: boolean;
   onPickDate: (date: string) => void;
 }): ReactElement {
   return (
@@ -151,6 +153,17 @@ function DateCell({
         ) : null}
         <Text className={`text-body ${numberClass(role, past)}`}>{day}</Text>
       </Pressable>
+      {/* 오늘 표식(TRIP-1436 Q-057) — 숫자 아래 작은 점. 색이 아니라 testID 로 관측한다(범위 3상태와 같은 관례).
+          pointerEvents none 으로 셀 터치를 가리지 않는다. */}
+      {isToday ? (
+        <View
+          testID={`trip-wizard-period-cell-today-${date}`}
+          pointerEvents="none"
+          className={`absolute bottom-[3px] h-[4px] w-[4px] rounded-full ${
+            role === 'start' || role === 'end' ? 'bg-on-primary' : 'bg-primary'
+          }`}
+        />
+      ) : null}
     </View>
   );
 }
@@ -270,6 +283,7 @@ export function PeriodEditSheet({
                 role={cellRole(date, range)}
                 single={!hasSpan(range)}
                 past={date < today}
+                isToday={date === today}
                 onPickDate={onPickDate}
               />
             );

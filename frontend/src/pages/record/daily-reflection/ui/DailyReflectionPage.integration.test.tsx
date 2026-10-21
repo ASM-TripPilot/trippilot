@@ -1073,12 +1073,17 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
   let putBodies: EditReflectionRequest[];
   let putPaths: string[];
   let putFails: boolean;
+  // TRIP-1497 — PUT 응답을 붙잡는 문(기본은 열려 있다).
+  let putGate: Promise<void>;
+  let releasePut: () => void;
 
   beforeEach(() => {
     serverItem = BASE_REFLECTION;
     putBodies = [];
     putPaths = [];
     putFails = false;
+    putGate = Promise.resolve();
+    releasePut = () => {};
     (router.back as jest.Mock).mockClear();
     setAccessToken('a');
     server.use(
@@ -1092,6 +1097,7 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
           const body = (await request.json()) as EditReflectionRequest;
           putBodies.push(body);
           putPaths.push(new URL(request.url).pathname);
+          await putGate;
           if (putFails) {
             const error: ErrorResponse = {
               error: { code: 'INTERNAL_ERROR', message: '저장 실패' },
@@ -1323,6 +1329,67 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
         await screen.findByTestId(TOAST, {}, TOAST_WAIT)
       ).toHaveTextContent(COPY);
       expect(putBodies).toEqual([{ shortMemo: '바다가 좋았다' }]);
+    });
+
+    it('입력을 마쳐 PUT 이 진행 중일 때 응답 전에 「확인」을 눌러도 PUT 은 1회이고 닫힘도 1회다 (TRIP-1497)', async () => {
+      // 준비 — data-insufficient 날 + PUT 응답을 붙잡는다.
+      serverItem = {
+        ...BASE_REFLECTION,
+        stats: { ...BASE_REFLECTION.stats, visitCount: 1, photoCount: 0 },
+      };
+      putGate = new Promise<void>((resolve) => {
+        releasePut = resolve;
+      });
+      renderPage();
+      const input = await screen.findByTestId('reflection-daily-memo-input');
+      fireEvent.changeText(input, '바다가 좋았다');
+      fireEvent(input, 'endEditing');
+      await waitFor(() => expect(putBodies).toHaveLength(1));
+
+      // 실행 — 응답 전에 「확인」.
+      fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      await act(async () => {
+        releasePut();
+      });
+
+      // 단언 — 한 번만 나가고 한 번만 닫힌다.
+      await waitFor(() => expect(router.back).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      expect(putBodies).toEqual([{ shortMemo: '바다가 좋았다' }]);
+      expect(router.back).toHaveBeenCalledTimes(1);
+    });
+
+    it('PUT 이 진행 중인 사이 한 줄을 더 고치고 「확인」을 누르면 먼저 보낸 저장이 끝난 뒤 고친 글이 한 번 더 저장되고 닫힌다 — 새 글이 사라지지 않는다 (TRIP-1497)', async () => {
+      serverItem = {
+        ...BASE_REFLECTION,
+        stats: { ...BASE_REFLECTION.stats, visitCount: 1, photoCount: 0 },
+      };
+      putGate = new Promise<void>((resolve) => {
+        releasePut = resolve;
+      });
+      renderPage();
+      const input = await screen.findByTestId('reflection-daily-memo-input');
+      fireEvent.changeText(input, 'A글');
+      fireEvent(input, 'endEditing');
+      await waitFor(() => expect(putBodies).toHaveLength(1));
+
+      fireEvent.changeText(input, 'A글 더');
+      fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
+      putGate = Promise.resolve();
+      await act(async () => {
+        releasePut();
+      });
+
+      await waitFor(() => expect(router.back).toHaveBeenCalledTimes(1));
+      expect(putBodies).toEqual([
+        { shortMemo: 'A글' },
+        { shortMemo: 'A글 더' },
+      ]);
     });
 
     it('안 바뀐 한 줄은 입력을 마치거나 「확인」을 눌러도 요청·안내가 없다 — 바뀐 글은 뜬다 (AC-15)', async () => {

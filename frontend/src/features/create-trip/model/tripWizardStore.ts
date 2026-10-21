@@ -249,9 +249,25 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
       // 지우던 옛 구현은 첫 일치만 지워 "누른 것을 지우지 못하던" 뿌리였고(더 전에는 `filter`로
       // 전부 지워 "부산 하나를 지우려다 부산 전부를 잃던" 버그였다), 코드/seq 식별로 그 뿌리를
       // 없앤다. 못 찾는 seq는 조용히 무동작(filter가 아무것도 안 지움).
-      const destinations = renumberSeq(
-        state.destinations.filter((one) => one.seq !== seq)
-      );
+      // 지운 자리(seam)에서 새로 이웃이 된 두 행이 같은 도시면 앞 행에 합친다(TRIP-1499 — 추가 합침과 같은
+      // 규칙·같은 `isSameCity`). 합쳐도 Σnights 는 그대로고 삭제는 Σ 를 줄이므로 상한·하한 검사는 필요 없다.
+      // 연쇄는 없다 — 합친 행의 바깥 이웃은 원래 양쪽 행의 이웃이라 이미 다른 도시다.
+      const at = state.destinations.findIndex((one) => one.seq === seq);
+      const rest = state.destinations.filter((one) => one.seq !== seq);
+      const before = rest[at - 1];
+      const after = rest[at];
+      const joined =
+        at > 0 &&
+        before !== undefined &&
+        after !== undefined &&
+        isSameCity(before, after.region, after.regionCode ?? undefined)
+          ? [
+              ...rest.slice(0, at - 1),
+              { ...before, nights: before.nights + after.nights },
+              ...rest.slice(at + 1),
+            ]
+          : rest;
+      const destinations = renumberSeq(joined);
       return {
         destinations,
         endDate: endAfter(state, destinations),

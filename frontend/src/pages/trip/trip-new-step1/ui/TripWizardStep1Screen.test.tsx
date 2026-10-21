@@ -129,7 +129,7 @@ describe('default 프레젠테이션', () => {
       expect(screen.getByText('어디로 떠날까요?')).toBeOnTheScreen();
       // TRIP-984 D10: 요약이 전부 null 이면 온보딩 값이 없으므로 "온보딩에서 고른 취향" 을 말하지 않는다
       // (TRIP-732 AC-6 의 "전부 null → default 부제" 경계를 뒤집음). 뒤쪽 절만 남는다.
-      expect(root()).not.toHaveTextContent(/온보딩에서 고른 취향/);
+      expect(root()).not.toHaveTextContent(/내 취향을 그대로 반영/);
       expect(screen.getByText('행을 누르면 바꿀 수 있어요')).toBeOnTheScreen();
 
       fireEvent.press(screen.getByTestId('trip-wizard-step1-back'));
@@ -156,7 +156,7 @@ describe('default 프레젠테이션', () => {
   });
 
   /**
-   * TRIP-984 D10 · 부제 "온보딩에서 고른 취향을 그대로 반영했어요" 는 취향이 온보딩 상속
+   * TRIP-984 D10 · 부제 "내 취향을 그대로 반영했어요" 는 취향이 온보딩 상속
    * (`summaryPreferences.onboarding === true`)일 때만. 아니면 뒤쪽 절 "행을 누르면 바꿀 수 있어요" 만.
    */
   describe('AC-D1·D2 · 부제 "온보딩에서" 는 취향이 온보딩 상속일 때만', () => {
@@ -194,7 +194,7 @@ describe('default 프레젠테이션', () => {
       // 비교하므로 여기선 구분하지 못한다 — 구분은 「부제 줄바꿈」 describe 가 원문으로 한다.
       expect(
         screen.getByText(
-          '온보딩에서 고른 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수 있어요'
+          '내 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수 있어요'
         )
       ).toBeOnTheScreen();
     });
@@ -523,7 +523,7 @@ describe('두 상태 얼굴 (empty · loading)', () => {
       render(<TripWizardStep1Screen {...filledProps({ isLoading: true })} />);
 
       expect(root()).toHaveTextContent(/여행 정보를 불러오는 중/);
-      expect(root()).not.toHaveTextContent(/온보딩에서 고른 취향/);
+      expect(root()).not.toHaveTextContent(/내 취향을 그대로 반영/);
       // 타이틀은 얼굴과 무관하게 선다(긍정 앵커).
       expect(screen.getByText('어디로 떠날까요?')).toBeOnTheScreen();
     });
@@ -935,8 +935,8 @@ describe('요약 4행 2톤', () => {
     });
   });
 
-  describe('AC-5 · 취향 온보딩 배지 (스파클 + 분홍 "온보딩")', () => {
-    it('onboarding=true 면 스파클 + 분홍 "온보딩" 텍스트를 붙인다 (옛 " + 온보딩" 문자열 소멸)', () => {
+  describe('AC-5 · 취향 온보딩 배지 (스파클 + 분홍 "내 취향")', () => {
+    it('onboarding=true 면 스파클 + 분홍 "내 취향" 텍스트를 붙인다 (옛 " + 온보딩" 문자열 소멸)', () => {
       render(
         <TripWizardStep1Screen
           {...filledProps({ summaryPreferences: PREFERENCE_VALUE })}
@@ -946,11 +946,11 @@ describe('요약 4행 2톤', () => {
       const pref = screen.getByTestId('trip-wizard-summary-preference');
       // main 은 라벨 조인만.
       expect(within(pref).getByText('미식 · 전시 · 야경')).toBeOnTheScreen();
-      // 배지 — 스파클 글리프(존재만, fill 은 jest 사각) + 분홍 "온보딩" 텍스트.
+      // 배지 — 스파클 글리프(존재만, fill 은 jest 사각) + 분홍 "내 취향" 텍스트.
       expect(
         screen.getByTestId('trip-wizard-preference-sparkle')
       ).toBeOnTheScreen();
-      const badge = within(pref).getByText('온보딩');
+      const badge = within(pref).getByText('내 취향');
       expect(badge).toBeOnTheScreen();
       // 옛 접미 문자열은 화면 어디에도 없다.
       expect(root()).not.toHaveTextContent(/\+ 온보딩/);
@@ -981,13 +981,13 @@ describe('요약 4행 2톤', () => {
       );
 
       expect(root()).toHaveTextContent(/여행지와 기간만 정하면/);
-      expect(root()).not.toHaveTextContent(/온보딩에서 고른 취향/);
+      expect(root()).not.toHaveTextContent(/내 취향을 그대로 반영/);
     });
 
     it('여행지 값이 있으면 default 부제 (empty 부제 아님)', () => {
       render(<TripWizardStep1Screen {...filledProps()} />);
 
-      expect(root()).toHaveTextContent(/온보딩에서 고른 취향/);
+      expect(root()).toHaveTextContent(/내 취향을 그대로 반영/);
       expect(root()).not.toHaveTextContent(/여행지와 기간만 정하면/);
     });
 
@@ -1046,7 +1046,7 @@ describe('요약 4행 2톤', () => {
       render(<TripWizardStep1Screen {...filledProps()} />);
 
       expect(subtitle().props.children).toBe(
-        `온보딩에서 고른 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수${NBSP}있어요`
+        `내 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수${NBSP}있어요`
       );
     });
 

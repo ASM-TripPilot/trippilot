@@ -17,6 +17,8 @@ import com.trippilot.notification.domain.PushedCounts
 import java.sql.Timestamp
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.util.UUID
 
@@ -141,6 +143,13 @@ class NotificationRepositoryAdapter(
         )
     }
 
+    // 트랜잭션 범위 권고 잠금 — 커밋·롤백에 풀린다. hashCode 충돌은 다른 묶음을 잠깐 줄 세울 뿐이다(정합성 영향 없음).
+    // 트랜잭션 밖에서 부르면 문장이 끝나자마자 풀려 아무것도 줄 세우지 않는다 — MANDATORY 로 그 호출을 터뜨린다.
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun lockPushGroup(accountId: UUID, dedupPrefix: String) {
+        jdbc.queryForList("SELECT pg_advisory_xact_lock(?, ?)", LOCK_CLASS_PUSH_GROUP, java.util.Objects.hash(accountId, dedupPrefix))
+    }
+
     override fun markRead(accountId: UUID, notificationId: UUID, at: Instant): Boolean =
         jdbc.update(
             "UPDATE notification SET read_at = ? WHERE notification_id = ? AND account_id = ? AND read_at IS NULL",
@@ -177,3 +186,6 @@ class NotificationRepositoryAdapter(
         pushFailedReason = pushFailedReason,
     )
 }
+
+/** 권고 잠금 분류 — 리마인드 재적재(0x4E53)와 다른 칸. */
+private const val LOCK_CLASS_PUSH_GROUP = 0x4E50
