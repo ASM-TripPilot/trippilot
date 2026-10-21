@@ -10,6 +10,7 @@ import com.trippilot.notification.domain.NotificationToggleRepository
 import com.trippilot.notification.domain.OsPermission
 import com.trippilot.notification.domain.PushMessage
 import com.trippilot.notification.domain.PushPort
+import com.trippilot.notification.domain.PushRateLimited
 import com.trippilot.notification.domain.PushReceipt
 import com.trippilot.notification.domain.PushStatus
 import com.trippilot.notification.domain.PushToken
@@ -392,6 +393,32 @@ class PushDispatchPropertyTest : StringSpec({
         outcome shouldBe PushOutcome.FAILED
         // 발송기 예외는 예외 종류까지 남긴다 — 벤더 사유가 없는 자리라 이것이 유일한 단서다.
         notifications.pushResults.single().third shouldBe "PUSH_ERROR: IllegalStateException"
+    }
+
+    /**
+     * **발송량 한도(429)도 같은 실패 경로다** — 예외를 올리지 않고 FAILED 로 끝나며 컬럼 기록 형식도 같다
+     * (알림은 이미 알림함에 있다). 다른 것은 **지표 칸**뿐이다: 정본 OBS-U6-02 의 레이트리밋 칸으로 센다 —
+     * 네트워크·5xx 와 섞이면 COST-U6-04 재평가 트리거가 가리키는 한도 도달을 지표에서 못 본다.
+     */
+    "발송량 한도에 걸리면 실패로 끝나고 지표는 레이트리밋 칸으로 센다 — 다른 발송기 예외는 PUSH_ERROR" {
+        fun dispatchWith(failure: Throwable): Triple<PushOutcome, String?, String?> {
+            val registry = io.micrometer.core.instrument.simple.SimpleMeterRegistry()
+            val notifications = Notifications()
+            val broken = object : PushPort {
+                override val deliversExternally = true
+                override fun send(tokens: List<String>, message: PushMessage): List<PushReceipt> = throw failure
+            }
+            val outcome = PushDispatchService(
+                Tokens(listOf(token(deliverable = true))), notifications, NotificationToggleService(Toggles(true), clock), broken,
+                NotificationMetrics(registry, notifications), PushRateLimits(), clock,
+            ).dispatch(notification())
+            val tag = registry.find(NotificationMetrics.PUSH_DISPATCH).counters().single().id.getTag("reason")
+            return Triple(outcome, notifications.pushResults.single().third, tag)
+        }
+
+        dispatchWith(PushRateLimited()) shouldBe Triple(PushOutcome.FAILED, "PUSH_ERROR: PushRateLimited", "MessageRateExceeded")
+        dispatchWith(IllegalStateException("네트워크 없음")) shouldBe
+            Triple(PushOutcome.FAILED, "PUSH_ERROR: IllegalStateException", "PUSH_ERROR")
     }
 
     "푸시를 끈 종류는 시도조차 하지 않는다 — 인앱함에는 남는다(BR-U6-36)" {

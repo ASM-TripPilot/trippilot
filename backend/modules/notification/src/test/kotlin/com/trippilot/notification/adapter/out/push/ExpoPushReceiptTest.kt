@@ -1,18 +1,23 @@
 package com.trippilot.notification.adapter.out.push
 
 import com.trippilot.notification.domain.PushMessage
+import com.trippilot.notification.domain.PushRateLimited
 import com.trippilot.notification.domain.PushReceipt
 import com.trippilot.notification.domain.PushStatus
 import com.trippilot.notification.domain.PushUrgency
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.types.shouldNotBeInstanceOf
 import io.kotest.matchers.shouldBe
 import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.test.web.client.MockRestServiceServer
 import org.springframework.test.web.client.match.MockRestRequestMatchers.header
 import org.springframework.test.web.client.match.MockRestRequestMatchers.headerDoesNotExist
 import org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath
 import org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo
+import org.springframework.test.web.client.response.MockRestResponseCreators.withStatus
 import org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess
 import org.springframework.web.client.RestClient
 
@@ -85,5 +90,22 @@ class ExpoPushReceiptTest : StringSpec({
         send(listOf("t1"), """{"data":[{"status":"ok"}]}""", accessToken = "secret").single().status shouldBe PushStatus.SENT
         send(listOf("t1"), """{"data":[{"status":"ok"}]}""", accessToken = "").single().status shouldBe PushStatus.SENT
         send(listOf("t1"), """{"data":[{"status":"ok"}]}""", accessToken = "  ").single().status shouldBe PushStatus.SENT // 공백만 — 빈 Bearer 로 401
+    }
+
+    /**
+     * **프로젝트 발송량 한도(HTTP 429)는 도메인 예외로 올린다** — 정본 COST-U6-04 의 재평가 트리거가 이 한도다.
+     * 웹 예외 그대로 올리면 응용층이 네트워크·5xx 와 구분하지 못해 지표의 레이트리밋 칸이 이 경우를 못 본다.
+     * 다른 HTTP 오류는 종전대로 그대로 올라간다.
+     */
+    "429 는 PushRateLimited 로, 다른 HTTP 오류는 그대로 올라간다" {
+        fun respond(status: HttpStatus): Throwable {
+            val builder = RestClient.builder().baseUrl("http://expo.test")
+            val server = MockRestServiceServer.bindTo(builder).build()
+            server.expect(requestTo(url)).andRespond(withStatus(status))
+            return runCatching { ExpoPushAdapter("", builder.build()).send(listOf("t1"), message) }.exceptionOrNull()!!
+        }
+
+        shouldThrow<PushRateLimited> { throw respond(HttpStatus.TOO_MANY_REQUESTS) }
+        respond(HttpStatus.SERVICE_UNAVAILABLE).shouldNotBeInstanceOf<PushRateLimited>()
     }
 })

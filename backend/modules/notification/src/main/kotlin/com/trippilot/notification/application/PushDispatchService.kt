@@ -4,6 +4,7 @@ import com.trippilot.notification.domain.Notification
 import com.trippilot.notification.domain.NotificationRepository
 import com.trippilot.notification.domain.PushMessage
 import com.trippilot.notification.domain.PushPort
+import com.trippilot.notification.domain.PushRateLimited
 import com.trippilot.notification.domain.PushStatus
 import com.trippilot.notification.domain.PushTokenRepository
 import org.slf4j.LoggerFactory
@@ -97,9 +98,11 @@ class PushDispatchService(
         // 보고 있던 사용자는 놓친다.
         val receipts = runCatching { push.send(deliverable.map { it.token }, notification.toMessage()) }
             .getOrElse { e ->
-                // 발송기 자체가 터진 경우(네트워크·설정). 알림은 이미 알림함에 있다.
+                // 발송기 자체가 터진 경우(네트워크·설정·발송량 한도). 알림은 이미 알림함에 있다.
                 record(notification.notificationId, sentAt = null, reason = "PUSH_ERROR: ${e.javaClass.simpleName}")
-                onReason("PUSH_ERROR")
+                // 발송량 한도만 지표의 레이트리밋 칸으로 센다(OBS-U6-02) — 네트워크·5xx 와 섞이면 COST-U6-04 의
+                // 재평가 트리거가 지표에서 안 보인다. 처리(기록·결말)는 다른 발송기 예외와 같다.
+                onReason(if (e is PushRateLimited) RATE_LIMITED_REASON else "PUSH_ERROR")
                 log.warn("푸시 발송에 실패했습니다. notificationId={} 원인={}", notification.notificationId, e.toString())
                 return PushOutcome.FAILED
             }
@@ -165,6 +168,9 @@ class PushDispatchService(
 
         /** Expo 어댑터가 죽은 토큰에 남기는 사유와 같은 표기(`ExpoPushAdapter` · ExpoPushReceiptTest). */
         private const val DEVICE_NOT_REGISTERED_REASON = "DeviceNotRegistered"
+
+        /** 지표의 레이트리밋 칸(OBS-U6-02). Expo 티켓의 발송 속도 초과 코드와 같은 값이라 한 칸으로 모인다. */
+        private const val RATE_LIMITED_REASON = "MessageRateExceeded"
 
         private val log = LoggerFactory.getLogger(PushDispatchService::class.java)
     }
