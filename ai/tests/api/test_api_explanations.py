@@ -188,7 +188,7 @@ def test_explanations_returns_slot_keyed_map(spy: SpyExplainer) -> None:
 
 def test_explanations_use_inline_preference_profile(monkeypatch: pytest.MonkeyPatch) -> None:
     """그 여행의 취향이 오면 EXPLANATION 프롬프트의 페르소나가 그것이다 — 없으면 종전 재조회."""
-    from trippilot.domain.persona import CompanionType, TasteTag
+    from trippilot.domain.persona import BudgetLevel, CompanionType, PersonaSummary, TasteTag
 
     personas: list = []
 
@@ -208,7 +208,8 @@ def test_explanations_use_inline_preference_profile(monkeypatch: pytest.MonkeyPa
 
     inline, legacy = personas
     assert inline.taste_tags == (TasteTag.FOOD,) and inline.companion is CompanionType.SOLO
-    assert legacy != inline
+    # 없으면 종전 재조회 — dev 조립의 StaticPersonaStore 고정 요약 그대로(지어내지 않는다)
+    assert legacy == PersonaSummary(taste_tags=(), companion=None, budget=BudgetLevel.MID)
 
 
 # ── ⑦ 차선책 문장 (TRIP-887) — 두 번째 호출, 배치 슬롯 설명과 독립 ──────

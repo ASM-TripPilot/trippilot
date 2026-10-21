@@ -40,8 +40,9 @@ generate 봉투 부가 필드 산출 규칙(TRIP-341 — 코드가 실제로 아
   컨텍스트(앵커·이동수단·풀)가 없다 → 기존대로 null. `distance_ranges` 는 POI→POI 구간만
   generate 와 같은 렌더로 채운다(편집 교체 뒤 거리 재산출 — 2026-10-05). 앵커가 없어 각 날
   첫 슬롯은 null, 수단은 수리의 시각 계산과 같은 기본값(PUBLIC).
-- 와이어 `preference_profile`(+ `trip_context.companion_type`)은 generate·replan 에서
-  그 요청의 페르소나다(AI-D09 — D31 "재조회한 값만"의 부분 개정). 전 축 미설정이면 종전대로
+- 와이어 `preference_profile`(+ 동행 — generate·replan 은 `trip_context.companion_type`,
+  explanations·alternatives 는 최상위 `companion_type`)은 네 경로 모두 그 요청의
+  페르소나다(AI-D09 — D31 "재조회한 값만"의 부분 개정). 전 축 미설정이면 종전대로
   주입된 `ContextStore`가 공급한다. 와이어에 사용자 식별자가 없어 principal은 trip_id 파생
   임시값이다(실 어댑터 시 백엔드 합의 필요).
 - validate/repair 와이어에는 원 문제 컨텍스트(이동수단·day window)가 없다 → 기본값

@@ -334,7 +334,7 @@ def test_inline_preference_profile_becomes_the_persona() -> None:
     계정 취향(재조회분)에 덮이면 "취향 반영이 안 된다"가 같이 짜기 후보에 그대로 남는다.
     """
     from trippilot.agents.planb.rag import _join_persona
-    from trippilot.domain.persona import CompanionType, TasteTag
+    from trippilot.domain.persona import BudgetLevel, CompanionType, PersonaSummary, TasteTag
 
     app = build_dev_app()
     seen = _rag_spy(app)
@@ -347,7 +347,8 @@ def test_inline_preference_profile_becomes_the_persona() -> None:
     inline, legacy = seen[0].persona, seen[1].persona
     assert inline.taste_tags == (TasteTag.FOOD,) and inline.companion is CompanionType.SOLO
     assert "취향 FOOD" in _join_persona((), (), inline)        # 프롬프트 페르소나 줄
-    assert legacy is not None and legacy != inline              # 없으면 종전 재조회분
+    # 없으면 종전 재조회분 — dev 조립의 StaticPersonaStore 고정 요약 그대로
+    assert legacy == PersonaSummary(taste_tags=(), companion=None, budget=BudgetLevel.MID)
 
 
 # ── ⑧ 시간 단위 날씨 — 지나간 비에 반응하지 않는다 ───────────────────
