@@ -14,6 +14,23 @@ data class ReflectionVisit(
     val photoCount: Int,
 )
 
+/**
+ * 그날 있었던 일 하나(계약 `TripEventRecordSchema`). [kind] 는 상대가 아는 둘뿐이다 — [SKIPPED] · [PLAN_B].
+ * [detail] 은 짧은 한국어 한 줄이고 **건너뛴 장소의 이름은 넣지 않는다**(아래 [SKIPPED] 참고).
+ */
+data class ReflectionEvent(val kind: String, val date: LocalDate, val detail: String) {
+    companion object {
+        /**
+         * 들르지 못한 곳이 있었다. 상대 프롬프트가 "그 장소의 이름은 쓰지 말라"고 하고 [com.trippilot.reflection.application.HallucinationGate]
+         * 가 뒤에서 그 이름을 막는다 — 이름을 실어 보내면 모델이 그 이름을 쓸 기회만 늘고, 쓰면 카드 전체가 규칙 카드로 내려간다.
+         */
+        const val SKIPPED = "SKIPPED"
+
+        /** 그날 일정을 재계획으로 바꿨다(적용된 재계획만 — 열었다 닫은 세션은 일정이 그대로라 사건이 아니다). */
+        const val PLAN_B = "PLAN_B"
+    }
+}
+
 /** 카드 생성 입력. 상대 계약(`ReflectionGenerateRequest`)이 요구하는 것만 담는다. */
 data class ReflectionAgentInput(
     val kind: String,
@@ -23,6 +40,7 @@ data class ReflectionAgentInput(
     val visits: List<ReflectionVisit>,
     val personaSummary: String?,
     val weatherSummary: String?,
+    val events: List<ReflectionEvent>,
 )
 
 /**

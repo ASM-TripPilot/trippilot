@@ -1,6 +1,7 @@
 package com.trippilot.planbdetection.domain
 
 import com.trippilot.trip.api.TripDestinationRef
+import com.trippilot.trip.api.destinationOn
 import com.trippilot.weathercontext.api.AirRegion
 import com.trippilot.weathercontext.api.WarningArea
 import java.time.LocalDate
@@ -207,12 +208,6 @@ object WeatherAlerts {
 
     private val SUFFIXES = setOf('시', '군', '구')
 
-    private fun destinationOn(refs: List<TripDestinationRef>, startDate: LocalDate, date: LocalDate): TripDestinationRef? {
-        var remaining = ChronoUnit.DAYS.between(startDate, date) + 1
-        for (ref in refs) {
-            if (remaining <= ref.nights) return ref
-            remaining -= ref.nights
-        }
-        return refs.lastOrNull()
-    }
+    private fun destinationOn(refs: List<TripDestinationRef>, startDate: LocalDate, date: LocalDate): TripDestinationRef? =
+        refs.destinationOn(startDate, date) // 규칙 정본은 trip api(박수의 주인) — 사본을 두지 않는다
 }

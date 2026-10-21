@@ -52,6 +52,7 @@ class ReflectionService(
     private val events: DomainEventPublisher,
     private val metrics: ReflectionMetrics,
     private val clock: Clock,
+    private val materials: ReflectionMaterials,
 ) {
     /**
      * 그 날의 회고를 만들거나 다시 만든다. 하루 한 장이라 행은 늘지 않는다.
@@ -230,10 +231,11 @@ class ReflectionService(
 
     /**
      * 경계 입력 조립 — **근거 안에서만**(BR-U5-31). 건너뛴 방문은 싣지 않는다: 안 간 곳이
-     * 카드 장면이 되면 안 된다.
+     * 카드 장면이 되면 안 된다. 건너뛴 사실은 이름 없이 사건([ReflectionMaterials.eventsOn])으로만 간다.
      *
-     * `region` 이 없으면 그대로 넘긴다(빈 문자열이 아니라 목적지 없음). 상대는 `region` 을 필수로
-     * 요구하므로 그 경우 호출이 422 로 거절되고 우리는 규칙 카드로 내려간다 — 지어내지 않는다.
+     * `region` 은 **그날의** 목적지다 — 다목적지 여행의 둘째 날이 첫 목적지로 나가던 것을 고쳤다(TRIP-1463).
+     * 없으면 빈 문자열이고, 어댑터가 부르지 않는다(상대는 `region` 필수) — 지어내지 않는다.
+     * 성향·사건은 [ReflectionMaterials] 가 채운다. 날씨는 비운다 — 그 이유도 거기 있다.
      */
     private fun agentInput(
         accountId: UUID,
@@ -241,27 +243,23 @@ class ReflectionService(
         dayDate: LocalDate,
         visits: List<ArchiveVisitView>,
         surfaces: Map<UUID, PoiSurfaceView>,
-    ) = ReflectionAgentInput(
-        kind = "DAILY",
-        region = regionOf(accountId, tripId),
-        startDate = dayDate,
-        endDate = dayDate,
-        visits = visits.filterNot { it.skipped }.mapIndexedNotNull { index, v ->
-            surfaces[v.poiId]?.let { poi ->
-                ReflectionVisit(v.poiId, dayDate, poi.nameKo, poi.category, index + 1, v.photoCount)
-            }
-        },
-        personaSummary = null,
-        weatherSummary = null,
-    )
-
-    /**
-     * 목적지 이름 — 표시 순서 첫 번째다. 여행이 목적지를 안 들고 있으면 빈 문자열이고, 그 호출은
-     * 상대가 `region` 필수로 거절한다(그러면 규칙 카드로 내려간다). **지어내지 않는다.**
-     */
-    private fun regionOf(accountId: UUID, tripId: UUID): String =
-        trips.findGenerationContext(accountId, tripId)?.destinations?.firstOrNull().orEmpty()
-
+    ): ReflectionAgentInput {
+        val ctx = trips.findGenerationContext(accountId, tripId)
+        return ReflectionAgentInput(
+            kind = "DAILY",
+            region = materials.regionOn(ctx, dayDate),
+            startDate = dayDate,
+            endDate = dayDate,
+            visits = visits.filterNot { it.skipped }.mapIndexedNotNull { index, v ->
+                surfaces[v.poiId]?.let { poi ->
+                    ReflectionVisit(v.poiId, dayDate, poi.nameKo, poi.category, index + 1, v.photoCount)
+                }
+            },
+            personaSummary = materials.personaOf(accountId, ctx),
+            weatherSummary = null,
+            events = materials.eventsOn(accountId, tripId, dayDate, skippedCount = visits.count { it.skipped }),
+        )
+    }
 
     /**
      * 여행 기간 밖 날짜는 거부한다.

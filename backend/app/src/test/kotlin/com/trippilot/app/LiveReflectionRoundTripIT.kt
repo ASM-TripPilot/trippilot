@@ -2,6 +2,7 @@ package com.trippilot.app
 
 import com.trippilot.reflection.domain.port.ReflectionAgentInput
 import com.trippilot.reflection.domain.port.ReflectionAgentPort
+import com.trippilot.reflection.domain.port.ReflectionEvent
 import com.trippilot.reflection.domain.port.ReflectionVisit
 import com.trippilot.reflection.adapter.out.external.ReflectionAgentProperties
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
@@ -75,7 +76,12 @@ class LiveReflectionRoundTripIT : AbstractPostgresIntegrationTest() {
                     ReflectionVisit(UUID.randomUUID(), day, "성산일출봉", "자연", 1, 2),
                     ReflectionVisit(UUID.randomUUID(), day, "올레시장", "맛집", 2, 0),
                 ),
-                personaSummary = null, weatherSummary = null,
+                // 재료가 실린 요청을 상대 실물이 받는지도 이 왕복이 본다(TRIP-1463) — 사건은 객체 배열이라 모양이 틀리면 422 다.
+                personaSummary = "여행 스타일 자연·미식, 일정 느긋하게", weatherSummary = null,
+                events = listOf(
+                    ReflectionEvent(ReflectionEvent.SKIPPED, day, "계획한 곳 중 1곳을 들르지 못했다"),
+                    ReflectionEvent(ReflectionEvent.PLAN_B, day, "자동 감지 · 비 예보"),
+                ),
             ),
         )
 
@@ -85,24 +91,5 @@ class LiveReflectionRoundTripIT : AbstractPostgresIntegrationTest() {
         card!!.title.shouldNotBeBlank()
         card.payload.shouldNotBeBlank()
         card.templateId.shouldNotBeBlank()
-    }
-
-    /**
-     * **방문 0곳도 거절이 아니어야 한다.** 회고는 "기록이 없는 하루"도 그려야 하므로(PBT-U5-1),
-     * 상대가 빈 목록에 422 를 내면 우리는 그 날 AI 단을 못 쓴다 — 규칙 카드로 내려가는 것 자체는
-     * 정상이지만, **그 사실을 여기서 알아야** 계약 협의로 갈 수 있다.
-     */
-    @Test
-    fun `방문 0곳이면 카드가 없거나(거절) 있어도 제목이 있다 — 어느 쪽인지 기록한다`() {
-        val card = agent.generate(
-            ReflectionAgentInput(
-                kind = "DAILY", region = "제주", startDate = day, endDate = day,
-                visits = emptyList(), personaSummary = null, weatherSummary = null,
-            ),
-        )
-
-        // null 이면 상대가 거절했다는 뜻이다(어댑터가 실패를 값으로 낮춘다). 둘 다 허용하되
-        // 카드가 왔다면 제목은 있어야 한다 — 제목 없는 카드는 목록에 빈 줄을 그린다.
-        (card == null || card.title.isNotBlank()) shouldBe true
     }
 }

@@ -1,6 +1,7 @@
 package com.trippilot.reflection.adapter.out.external
 
 import com.trippilot.reflection.domain.port.ReflectionAgentInput
+import com.trippilot.reflection.domain.port.ReflectionEvent
 import com.trippilot.reflection.domain.port.ReflectionVisit
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
@@ -68,10 +69,14 @@ class HttpReflectionAgentAdapterTest : StringSpec({
         return HttpReflectionAgentAdapter(builder.build(), properties, clock) to server
     }
 
-    fun input(region: String = "제주") = ReflectionAgentInput(
+    fun input(
+        region: String = "제주",
+        visits: List<ReflectionVisit> = listOf(ReflectionVisit(UUID.randomUUID(), day, "성산일출봉", "자연", 1, 2)),
+        events: List<ReflectionEvent> = emptyList(),
+        personaSummary: String? = null,
+    ) = ReflectionAgentInput(
         kind = "DAILY", region = region, startDate = day, endDate = day,
-        visits = listOf(ReflectionVisit(UUID.randomUUID(), day, "성산일출봉", "자연", 1, 2)),
-        personaSummary = null, weatherSummary = null,
+        visits = visits, personaSummary = personaSummary, weatherSummary = null, events = events,
     )
 
     val okBody = """
@@ -132,6 +137,51 @@ class HttpReflectionAgentAdapterTest : StringSpec({
 
         // 값이 아니라 **호출 수**를 본다 — null 만 보면 "부르고 실패했다"와 구분되지 않는다.
         counter.calls shouldBe 0
+    }
+
+    /** 상대가 `visits` 를 1건 이상 요구한다(minItems 1) — 0건이면 422 가 확정이라 부르지 않는다(TRIP-1463 댓글: 개발 서버 4건 중 2건). */
+    "실을 방문이 없으면 부르지 않고 null 이다" {
+        val counter = CallCounter()
+        val builder = RestClient.builder().baseUrl("http://ai.test").requestInterceptor(counter)
+            .messageConverters { it.add(0, JacksonJsonHttpMessageConverter(ReflectionBoundaryMapper.create())) }
+        MockRestServiceServer.bindTo(builder).build()
+        val adapter = HttpReflectionAgentAdapter(
+            builder.build(), ReflectionAgentProperties(mode = "http", baseUrl = "http://ai.test"), clock,
+        )
+
+        adapter.generate(input(visits = emptyList())) shouldBe null
+
+        counter.calls shouldBe 0
+    }
+
+    /**
+     * 사건은 **객체 배열**로, 성향은 그 문자열 그대로 나간다(계약 `TripEventRecordSchema` — kind·date·detail 전부 필수).
+     * 이름 대조 게이트는 `events` 라는 이름만 보므로 원소 모양은 여기서 잰다 — 문자열 배열이면 상대가 422 로 거절한다.
+     */
+    "사건·성향이 계약 모양으로 실린다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/reflection/generate"))
+            .andExpect(jsonPath("$.events.length()").value(2))
+            .andExpect(jsonPath("$.events[0].kind").value("SKIPPED"))
+            .andExpect(jsonPath("$.events[0].date").value("2026-08-01"))
+            .andExpect(jsonPath("$.events[0].detail").value("계획한 곳 중 1곳을 들르지 못했다"))
+            .andExpect(jsonPath("$.events[1].kind").value("PLAN_B"))
+            .andExpect(jsonPath("$.events[1].detail").value("자동 감지 · 비 예보"))
+            .andExpect(jsonPath("$.persona_summary").value("여행 스타일 미식"))
+            .andExpect(jsonPath("$.weather_summary").value(""))
+            .andRespond(withSuccess(okBody, MediaType.APPLICATION_JSON))
+
+        adapter.generate(
+            input(
+                events = listOf(
+                    ReflectionEvent(ReflectionEvent.SKIPPED, day, "계획한 곳 중 1곳을 들르지 못했다"),
+                    ReflectionEvent(ReflectionEvent.PLAN_B, day, "자동 감지 · 비 예보"),
+                ),
+                personaSummary = "여행 스타일 미식",
+            ),
+        ) shouldNotBe null
+
+        server.verify()
     }
 
     "상대가 5xx 면 null 이다 — 예외가 새면 폴백이 무력화된다" {

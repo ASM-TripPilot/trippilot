@@ -35,6 +35,12 @@ class HttpReflectionAgentAdapter(
             log.debug("목적지를 몰라 회고 AI 를 부르지 않습니다 — 규칙 카드로 갑니다.")
             return null
         }
+        // 실을 방문이 없으면(전부 건너뛰었거나 그날 방문 0곳) 부르지 않는다 — 상대가 `visits` 를 1건 이상 요구해 422 가 확정이다
+        // (개발 서버 72시간 회고 호출 4건 중 2건이 그 422 였다 — TRIP-1463 댓글).
+        if (input.visits.isEmpty()) {
+            log.debug("실을 방문이 없어 회고 AI 를 부르지 않습니다 — 규칙 카드로 갑니다.")
+            return null
+        }
         return runCatching { call(input) }
             .onFailure { log.warn("회고 AI 호출 실패 — 규칙 카드로 갑니다. base={}", properties.baseUrl, it) }
             .getOrNull()
@@ -55,7 +61,7 @@ class HttpReflectionAgentAdapter(
                 )
             },
             personaSummary = input.personaSummary.orEmpty(),
-            events = emptyList(),
+            events = input.events.map { AiTripEventRecord(it.kind, it.date, it.detail) },
             weatherSummary = input.weatherSummary.orEmpty(),
         )
 
