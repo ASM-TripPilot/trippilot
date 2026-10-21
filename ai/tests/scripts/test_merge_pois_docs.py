@@ -488,9 +488,9 @@ def _tagged(source: str, cid: str, tags: list[str]) -> dict:
 
 
 def test_클럽은_큐레이션_출처만_남고_다른_나이트라이프는_그대로다() -> None:
-    props = [_tagged("OVERTURE", "a", ["나이트라이프", "클럽"]),
-             _tagged("KAKAO_LOCAL", "1", ["나이트라이프", "클럽"]),
-             _tagged("OVERTURE", "b", ["나이트라이프", "와인바"])]
+    props = [_tagged("OVERTURE", "a", ["술집", "클럽"]),
+             _tagged("KAKAO_LOCAL", "1", ["술집", "클럽"]),
+             _tagged("OVERTURE", "b", ["술집", "와인바"])]
     assert M.drop_bad_nightlife(props) == 1
     assert [p["provenance"]["content_id"] for p in props] == ["1", "b"]
 

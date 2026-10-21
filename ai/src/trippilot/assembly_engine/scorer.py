@@ -15,7 +15,7 @@ import zlib
 
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import BudgetLevel, GeoPoint
-from trippilot.domain.poi import TRENDING_TAG, Poi, PoiCategory
+from trippilot.domain.poi import TRENDING_TAG, Poi, PoiCategory, reputation_bonus
 
 # 축은 "그 카테고리가 일정의 주 목적지가 되는 정도" — 명소 최상, 식음은 중간,
 # 쇼핑은 보조, STAY는 앵커라 0(선택 대상 아님). PoiCategory 전 값 커버 필수(직접 조회).
@@ -214,7 +214,7 @@ def build_rule_score(
         dist_penalty = min(haversine_km(anchor, poi.coord) * 0.02, 0.5)
     # 시드 기반 미세 tie-break (crc32 — 파이썬 hash와 달리 실행 간 안정)
     jitter = (zlib.crc32(f"{seed}:{poi.poi_id}".encode()) % 1000) / 1e7
-    return (CATEGORY_WEIGHT[poi.category] + popularity_norm
+    return (CATEGORY_WEIGHT[poi.category] + popularity_norm + reputation_bonus(poi.tags)
             + admission_fit(fee_won, poi.category, budget)
             + directive_fit(poi.category, prefer, avoid)
             + taste_fit(poi.category, taste)

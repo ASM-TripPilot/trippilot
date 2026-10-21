@@ -46,7 +46,8 @@ from trippilot.domain.common import (
 )
 from trippilot.domain.dialogue import ArgumentKind
 from trippilot.domain.intent import DIALOGUE_INTENTS, Intent
-from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory, counts_as_food
+from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory, counts_as_food, reputation_bonus
+from trippilot.domain.theme_tags import themes_in
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.region_centers import region_center
 from trippilot.domain.transit import TransitPurpose
@@ -1314,6 +1315,7 @@ def _explore_rank(pois: Iterable[Poi], category: str | None, theme: str | None) 
     저장 수 → 별점 → 영업시간 보유 → poi_id. 숙소·표시 불가 이름은 뺀다."""
     night = bool(theme and _NIGHT.search(theme)) or category == PoiCategory.NIGHT_VIEW.value
     words = tuple(_THEME_WORD.findall(theme or ""))
+    themes = frozenset(themes_in(theme))   # "혼자 가기 좋은"·"아이랑" → 혼밥·혼술·아이동반 (태그 글자와 안 맞는 말을 잇는다)
     no_food = category is None and bool(theme and _SIGHTSEEING.search(theme))
 
     def fits(p: Poi) -> bool:
@@ -1322,8 +1324,9 @@ def _explore_rank(pois: Iterable[Poi], category: str | None, theme: str | None) 
 
     def key(p: Poi) -> tuple:
         is_night = p.category is PoiCategory.NIGHT_VIEW or NIGHTLIFE_TAG in p.tags
-        hits = sum(1 for w in words if w in p.name or any(w in t for t in p.tags))
-        return (night and not is_night, -hits, TRENDING_TAG not in p.tags, -p.saved_count, -(p.rating or 0.0),
+        hits = sum(1 for w in words if w in p.name or any(w in t for t in p.tags)) + len(themes & set(p.tags))
+        # 평판(인기·평점높음)은 저장 수 뒤, 별점 앞 — 저장 수가 0 인 지금은 사실상 첫 기준이다. 태그가 없으면 0 이라 불이익이 없다
+        return (night and not is_night, -hits, TRENDING_TAG not in p.tags, -p.saved_count, -reputation_bonus(p.tags), -(p.rating or 0.0),
                 0 if p.open_hours else 1, str(p.poi_id))
 
     picked: list[Poi] = []
