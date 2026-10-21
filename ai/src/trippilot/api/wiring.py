@@ -195,6 +195,7 @@ from trippilot.llm_gateway.workers.replan_composition import (
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
+from trippilot.llm_gateway.gates.numbered_selection import NumberedSelectionGate
 from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.place_fees import load_fee_table
@@ -4142,9 +4143,9 @@ def build_orchestrator(
     directive_translator = ReplanDirectiveTranslationWorker(
         GatewayFacade(llm, renderer, ReplanDirectiveTranslationGate(), c1_config, trace)
     )
-    # 다시 짜기의 하루 구성 — 출구는 대체지 선택과 같은 게이트(poiId ⊆ 후보, INV-1).
+    # 다시 짜기의 하루 구성 — 후보를 번호로 싣고, 출구가 번호를 poi_id 로 되돌린 뒤 대체지 선택과 같은 검사(INV-1).
     composer = ReplanCompositionWorker(
-        GatewayFacade(llm, renderer, AlternativeSelectionGate(), c1_config, trace)
+        GatewayFacade(llm, renderer, NumberedSelectionGate(), c1_config, trace)
     )
     # 자연어 재계획 추출 — 뽑은 주장은 배선이 등록 POI·지도·영업시간·시간창·기상청으로 검증한다.
     request_extractor = ReplanRequestExtractionWorker(

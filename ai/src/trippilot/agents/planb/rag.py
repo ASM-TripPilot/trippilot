@@ -47,6 +47,7 @@ from trippilot.llm_gateway.workers.alternative_selection import (
     AlternativeSelectionInput,
     AlternativeSelectionWorker,
 )
+from trippilot.llm_gateway.workers.reminder_copy import _CATEGORY_LABELS
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.kb import KbHit, KbKind
 from trippilot.domain.llm import AlternativePick, CandidatePool, ScoredPoi
@@ -438,7 +439,7 @@ class PlanBAgent:
                 label=_ALTERNATIVE_LABELS[i],
                 poi_ids=(poi_id,),
                 # LLM이 낸 근거(사용자 표시 1문장)가 있으면 그대로, 없으면 출처 표기
-                rationale=reasons.get(str(poi_id)) or self._rationale(request, used_llm),
+                rationale=reasons.get(str(poi_id)) or self._rationale(request, used_llm, poi_id),
             )
             for i, poi_id in enumerate(shown)
         )
@@ -632,9 +633,15 @@ class PlanBAgent:
         share = self._cfg.llm_budget_share if share is None else share
         return request.deadline_ms / 1000.0 * share or None
 
-    def _rationale(self, request: PlanBRagRequest, used_llm: bool) -> str:
-        source = "llm_select_alternatives" if used_llm else "rule_ranking"
-        return f"{request.trigger.kind.value}/{request.reason} · {source}"
+    def _rationale(self, request: PlanBRagRequest, used_llm: bool, poi_id: PoiId) -> str:
+        if used_llm:
+            # LLM 경로(level 0)에서 이유가 빈 것은 게이트가 비웠을 때뿐이다. 백엔드는 level 0 이면 이유를
+            # 그대로 화면에 내므로(강등일 때만 템플릿) 출처 표기 대신 사실만 담은 문장을 둔다 —
+            # 슬롯 차선책 템플릿·백엔드 강등 템플릿("주변 {종류}")과 같은 꼴.
+            poi = next((p for p in request.pool.pois if p.poi_id == poi_id), None)
+            label = _CATEGORY_LABELS.get(poi.category.value, "") if poi else ""
+            return f"주변 {label} 후보" if label else "주변 후보"
+        return f"{request.trigger.kind.value}/{request.reason} · rule_ranking"
 
 
 # ── 질의 조립 (Augment 재료) ────────────────────────────────────────────

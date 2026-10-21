@@ -233,7 +233,7 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
     출력 상한 안에서 쓰이므로, 시한이 짧은 기능은 낮춰야 예산 안에 든다. 실측
     (2026-10-11, 실 경계 하네스):
       - REFLECTION_TEMPLATE — high: 시도당 ~25s·출력 2048 에서 잘림 → 백엔드 시한 15s 초과로
-        고정 템플릿 강등. low: ~10s·출력 ~900, 3/3 성공.
+        고정 템플릿 강등. low: ~10s·출력 ~900, 3/3 성공. 2026-10-20 none 으로 내렸다(표 안 주석).
       - REMINDER_COPY — high: 항목당 ~8s(배치 시한 8s 에 1건도 빠듯). low: ~1.9s.
       - ALTERNATIVE_SELECTION — replan(시한 25s)에서 1차 몫이 ~4s 로 내려와 high(3.5~7s)가
         타임아웃 → 규칙 랭킹. low: ~3.5s, 게이트 드롭 0. 단 low 에서도 사유 `none` 이면 사고가
@@ -249,7 +249,10 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
     """
     return MappingProxyType(
         {
-            LlmFeature.REFLECTION_TEMPLATE: "low",
+            # low → none (2026-10-20, gpt-5.6-terra · 프롬프트 0.3.1 · 시한 15s): 하루 6~12곳에서 low 는 8.5~17s 로
+            # 12회 중 2회 시간 초과 → 고정 폴백, 목록 밖 사진 참조 2회. none 은 12/12 성공 3.5~5.5s(재시도 1회 9.1s),
+            # 사진 장면이 자기 장소 이름을 부르는 비율은 둘 다 100%. 여행 요약도 4.7~9.1s.
+            LlmFeature.REFLECTION_TEMPLATE: "none",
             LlmFeature.REMINDER_COPY: "low",
             LlmFeature.ALTERNATIVE_SELECTION: "low",
             # 같은 재계획 시한(25s) 안에서 PlanB 다음에 돈다 — 대체지 선택과 같은 이유
@@ -260,11 +263,16 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
             # (2026-10-14) — 같은 원문을 읽는 추출은 low 로 2/2 성공했다. 출력은 사전 키만 통과(게이트).
             LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: "low",
             # 도우미 턴 — 백엔드 해석 시한 9s 안에서 분류 ≤4.0s·답변 ≤3.5s·요약 ≤2.0s(2026-10-18 실측 개정)라 사고를 낮춘다
-            # (assistant-orchestrator FD domain-entities §2.10 · BLM 시한표)
-            LlmFeature.DIALOGUE_INTENT: "low",
-            LlmFeature.DIALOGUE_ANSWER: "low",
+            # (assistant-orchestrator FD domain-entities §2.10 · BLM 시한표). 분류·답변은 사고를 끈다(none) — 2026-10-20
+            # luna·같은 시각 A/B(동시 2, 분류 0.2.3 고정·effort 만): 분류 238회 p50 1.53 → 1.24s·p90 2.51 → 1.93s, 평가셋 판단 오답은
+            # 같다(2·2). 단 effort 만 끄면 행사 말을 탐색·장소 정보로 몰아(행사 null 50 → 0%, 두 질문은 40 → 40% 그대로) 분류 0.2.4 와
+            # 같이 간다(0.2.4+none 두 질문 90%·행사 100% — prompts/dialogue_intent.yaml 머리). 답변 27회(단일 사실 9사례): 폴백 3 → 2건
+            # (시한 3 → 1·게이트 드롭 0 → 1)·p90 3.50 → 2.34s(low 쪽은 시한 3건이 p90 자리라 3.5s 상한 값)·짝 위반 0·여는 말·되묻기·
+            # 엉뚱한 마무리 0(답변 담당 세션 원문 검수). 요약은 턴 밖 시한이라 그대로 둔다. none 은 GPT 값이다 — Claude 로 재배정하면 low 로
+            LlmFeature.DIALOGUE_INTENT: "none",
+            LlmFeature.DIALOGUE_ANSWER: "none",
             LlmFeature.DIALOGUE_MEMORY: "low",
-            # 계획(2‴) — 같은 9s 안에서 분류 뒤 ≤3.0s(잔여×0.45). 사고를 끈다(none): 고르는 것은 닫힌 도구 이름·짧은 인자라
+            # 계획(2‴) — 같은 9s 안에서 분류 뒤 ≤3.5s(잔여×0.45). 사고를 끈다(none): 고르는 것은 닫힌 도구 이름·짧은 인자라
             # 사고가 품질을 올리지 않았다 — 2026-10-20 luna·평가셋 38×2·동시 2: low p50 1.61s·p90 2.39s·출력 60 토큰 → none
             # 1.36s·2.28s·32 토큰, 도구 일치 90.0 → 95.0%(틀린 2건은 시한 초과)·도구 없음·주입 100%. luna 는 minimal 을 400 으로
             # 거부하고 none 을 받는다 — 다른 모델을 배정하면 이 값부터 확인 (BR-AO-28)

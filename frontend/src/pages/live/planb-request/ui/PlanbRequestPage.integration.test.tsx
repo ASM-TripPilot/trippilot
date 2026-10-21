@@ -442,6 +442,44 @@ describe('🔴 I7 · 트리거 조회 중엔 정적 날씨, 도착하면 감지 
   });
 });
 
+/**
+ * 사용자 결정(2026-10-20) — 시드 없는 트리거 진입(진입 게이트가 확인을 못 끝낸 길: 조회 실패·3초 초과)에서도 감지 칩의
+ * 사유는 **그 알림이 위험일 때만** 켠다. 주의면 칩은 보이되 꺼져 있고(트리거는 본문에 그대로 실린다), severity 가 없으면
+ * (옛 서버) 위험으로 읽는다(계약 · domain-entities §2 · hubOpportunity 관례). 목록이 오기 전엔 켜지 않는다(I7 — 모르면 켜지 않는다).
+ */
+describe('🔴 I17 · 감지 칩 사유는 그 알림이 위험일 때만 켠다 (사용자 결정)', () => {
+  it.each<{ name: string; severity: Trigger['severity']; selected: boolean }>([
+    { name: '위험(RISK)', severity: 'RISK', selected: true },
+    { name: 'severity 없음(옛 서버)', severity: undefined, selected: true },
+    { name: '주의(CAUTION)', severity: 'CAUTION', selected: false },
+  ])('I17a $name → 사유 켬 $selected', async ({ severity, selected }) => {
+    mockTriggerData = triggerList(mkTrigger({ severity }));
+    render(<PlanbRequestPage tripId={TRIP_ID} triggerId="trg-1" />);
+
+    const chip = screen.getByTestId(TRIGGER_CHIP);
+    if (selected) expect(chip).toBeSelected();
+    else expect(chip).not.toBeSelected();
+
+    await submit();
+    expect(postedBody()).toEqual(
+      body({ reasons: selected ? ['WEATHER'] : [], triggerId: 'trg-1' })
+    );
+  });
+
+  it('I17b 판정은 목록이 처음 온 그 한 번이다 — 주의로 온 뒤 위험으로 바뀌어도 입력 중에 칩이 저절로 켜지지 않는다', () => {
+    mockTriggerData = triggerList(mkTrigger({ severity: 'CAUTION' }));
+    const { rerender } = render(
+      <PlanbRequestPage tripId={TRIP_ID} triggerId="trg-1" />
+    );
+    expect(screen.getByTestId(TRIGGER_CHIP)).not.toBeSelected();
+
+    mockTriggerData = triggerList(mkTrigger({ severity: 'RISK' }));
+    rerender(<PlanbRequestPage tripId={TRIP_ID} triggerId="trg-1" />);
+
+    expect(screen.getByTestId(TRIGGER_CHIP)).not.toBeSelected();
+  });
+});
+
 describe('🔴 I8 · 진입 초기화 후 set 시드 (Q4 · 02a ★11)', () => {
   it('이전 방문의 선택이 남지 않고, 이미 켜져 있던 WEATHER 도 꺼지지 않는다', async () => {
     const store = useReplanFormStore.getState();
