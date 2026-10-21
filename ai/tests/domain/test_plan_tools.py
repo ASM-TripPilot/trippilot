@@ -84,7 +84,7 @@ def test_tools_json_reuses_the_argument_table_parameters_and_swaps_only_the_desc
     assert {s["name"] for s in specs} == {i.value for i in descriptions}
     for spec in specs:
         intent = Intent(spec["name"])
-        (classified,) = tool_specs(frozenset({intent}))
+        (classified,) = tool_specs(frozenset({intent}), dialogue=True)  # 도우미 분류와 같은 렌더(dialogue_only 포함)
         hidden = set(PLAN_TOOLS[intent].hide)
         expected = {**classified["parameters"],
                     "properties": {k: v for k, v in classified["parameters"]["properties"].items() if k not in hidden}}
@@ -97,8 +97,8 @@ def test_weather_hides_the_period_it_cannot_answer() -> None:
     게이트 허용 키에서도 빠진다."""
     assert PLAN_TOOLS[Intent.GET_WEATHER].hide == ("period",)
     (weather,) = json.loads(plan_tool_specs_json({Intent.GET_WEATHER: "날씨"}))
-    assert set(weather["parameters"]["properties"]) == {"date"}
-    assert plan_argument_names(Intent.GET_WEATHER) == frozenset({"date"})
+    assert set(weather["parameters"]["properties"]) == {"date", "region"}  # region 은 도우미 전용 인자 — 계획 도구엔 싣는다
+    assert plan_argument_names(Intent.GET_WEATHER) == frozenset({"date", "region"})
     assert "주말·기간은 못 본다" in PLAN_TOOLS[Intent.GET_WEATHER].summary
 
 
@@ -106,7 +106,7 @@ def test_hidden_arguments_must_be_asked_and_optional() -> None:
     with pytest.raises(ValueError):
         validate_plan_tools({Intent.GET_POI_INFO: PlanTool("장소", hide=("place",))})  # 필수를 숨기면 영영 못 부른다
     with pytest.raises(ValueError):
-        validate_plan_tools({Intent.GET_WEATHER: PlanTool("날씨", hide=("region",))})  # 묻지 않는 인자 — 숨길 것이 없다
+        validate_plan_tools({Intent.GET_WEATHER: PlanTool("날씨", hide=("aspect",))})  # 묻지 않는 인자 — 숨길 것이 없다
 
 
 def test_tools_json_carries_only_the_exposed_tools() -> None:
@@ -119,8 +119,9 @@ def test_classification_schemas_stay_byte_identical() -> None:
     도우미 분류는 14종. 이 두 바이트가 바뀌면 재생 기록 전건 미스·분류 판본 실측 무효다(BR-AO-14)."""
     golden = {
         "intent.yaml($intents)": ("fffa98ade2f9f39654922dd98f25477f6f32e7917d5668f8ea41db1ea478e820", tool_specs_json()),
-        "dialogue_intent.yaml($intents)": ("fdb5d9fc3288830b1b61914979802860f24be9e5dd75f351d74d6c41919cf302",
-                                           tool_specs_json(DIALOGUE_INTENTS)),
+        # 2026-10-20 갱신: GET_WEATHER.region(dialogue_only) 추가 — 도우미 렌더만 바뀌고 intent.yaml 쪽은 그대로다
+        "dialogue_intent.yaml($intents)": ("2e74c510a37e1ef1c5fc4caeafeb95eb7d2b05252a5d63f6e37be1517c8f5b86",
+                                           tool_specs_json(DIALOGUE_INTENTS, dialogue=True)),
     }
     for name, (sha, text) in golden.items():
         assert hashlib.sha256(text.encode()).hexdigest() == sha, name

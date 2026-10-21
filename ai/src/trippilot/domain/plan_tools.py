@@ -54,7 +54,7 @@ class PlanTool:
 PLAN_TOOLS: Mapping[Intent, PlanTool] = {
     Intent.SHOW_SCHEDULE: PlanTool("여행 일정표 — 날짜별 장소와 계획 시각(전체·남은 것·하루)"),
     Intent.GET_NEXT_SLOT: PlanTool("지금 이후 다음 일정 한 곳과 그 계획 시각"),
-    Intent.GET_WEATHER: PlanTool("일정 장소 또는 여행 지역 기준 하루 최대 강수확률 — 주말·기간은 못 본다, 기온·바람·다른 지역 날씨도 없다",
+    Intent.GET_WEATHER: PlanTool("일정 장소·여행 지역·말한 지역(region)의 하루 최대 강수확률 — 주말·기간은 못 본다, 기온·바람은 없다",
                                  ("poi_info", "weather"), hide=("period",)),
     Intent.GET_DISTANCE: PlanTool("두 곳 사이 거리(일정 장소·지역 이름·정확한 이름의 등록 장소) — 소요시간·길 안내는 없다",
                                   ("poi_info", "transit")),
@@ -98,7 +98,7 @@ def plan_tool_specs_json(descriptions: Mapping[Intent, str]) -> str:
     """`$tools` — parameters 는 분류 `$intents` 와 같은 `tool_specs`(한 표)에서 숨긴 인자만 빼고, description 만 도구 설명으로
     바꿔 낀다. 결정론(의도 이름순 · sort_keys). 배포마다 고정이라 프롬프트 고정부(벤더 캐시 접두)에 실린다."""
     specs = []
-    for spec in tool_specs(frozenset(descriptions)):
+    for spec in tool_specs(frozenset(descriptions), dialogue=True):  # 계획 도구는 도우미 쪽 — dialogue_only 인자 포함
         intent = Intent(spec["name"])
         hidden = set(PLAN_TOOLS[intent].hide)
         params = {**spec["parameters"],
