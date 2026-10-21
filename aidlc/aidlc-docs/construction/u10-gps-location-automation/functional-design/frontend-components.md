@@ -221,3 +221,9 @@ settings-location-usage-row-automation
 > 2. **§5 testID 폐기** — `execution-live-slot-auto-badge-{slotKey}`·`-auto-revert-{slotKey}`·`-auto-revert-confirm`·`-auto-revert-cancel`·`-auto-revert-media-notice`·`record-visit-auto-badge-{visitCheckId}`·`record-visit-auto-revert-{visitCheckId}`.
 > 3. **코드** — `features/check-visit` 의 `autoRecord.ts`·`useRevertAutoVisit.ts`·`AutoRevertDialog.tsx` 삭제, `AutomationSinkPort.revertAuto` 와 가짜·HTTP 싱크 구현 삭제(2026-10-12 개정 9번의 "되돌리기만 한 곳에" 서술은 무효). BE 엔드포인트·생성 orval 함수는 남는다.
 > 4. **Figma** — U10 검토 밴드 u10b 표식 default(`4860:2849`)·되돌리기 확인 dialog(`4860:3577`) 삭제.
+
+> **[개정 · 2026-10-21 · TRIP-1535 — 허브 지도 내 위치]** 규칙은 `business-rules.md` 같은 날짜 TRIP-1535 블록(BR-U10-53). 원문·앞 개정 블록은 그대로 두고 이 블록이 우선한다.
+>
+> 1. **§3 i01 허브** — 지도에 내 위치(네이버 기본 현위치, `setLocationTrackingMode('NoFollow')`). 공용 `MapView` 의 옵트인 prop `showMyLocation` → `MapSheetShell`·`LiveHubView` 패스스루, 조건(오늘·동의)은 페이지, OS 권한 조회·앱 복귀 재조회는 `MapView`.
+> 2. **testID 없음** — 네이티브 오버레이라 렌더 트리에 노드가 없다. jest 는 지도 목의 추적 호출 기록으로만 본다(실제 점·방향은 6-b).
+> 3. **Figma** — i01 허브 프레임 20장(및 u10a·u10c·u10e)의 지도 위 「현재 위치」 라벨 알약(`curloc-pill`)을 지웠다 — 점·연한 원(`curloc-dot`·`curloc-ring`)만 남아 SDK 기본 모양과 맞는다.

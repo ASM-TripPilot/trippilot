@@ -1694,3 +1694,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U10 Functional Design·NFR 사후 개정(구현 반영), 커밋 `366750a3a`(TRIP-1523). 앞 세션 사용자 승인 절차("audit append + [개정] 블록")를 따름. `aidlc-state.md`·`docs/SCOPE.md` 무변경.
 
 ---
+
+## Functional Design 사후 개정 — U10 여행 중 허브 지도 내 위치 (TRIP-1535)
+**Timestamp**: 2026-10-21T17:20:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 이 세션 2026-10-21, 그대로 인용) "gps가 되있으면 내 위치도 보이나?" / "여행중 실제 경로 말고 현재 내위치만 볼 수 있게 하는건" / "ㄱㄱ 그럼 여행중에 보이는건 지오펜스와 현재 내위치만?" / AskUserQuestion 답 — "동의 + OS 권한 (Recommended)".
+**AI Response**: `construction/u10-gps-location-automation/functional-design/business-rules.md` 끝에 `[개정 · 2026-10-21 · TRIP-1535]` 블록 1개(BR-U10-53 신설 — i01 내 위치: 오늘 · 동의 ∧ OS 권한 · 조회만 · 서버 미전송 · 플래그 무관, 당일 경로 실시간 표시는 하지 않음), `…/frontend-components.md` 끝에 같은 날짜 블록 1개(`showMyLocation` 배선 · testID 없음 · Figma 라벨 알약 제거). 원문 삭제·수정 0줄(append 만).
+**Context**: CONSTRUCTION — U10 Functional Design 사후 개정(구현 반영), 커밋 `5ed015911`(TRIP-1535). 앞 세션 사용자 승인 절차("audit append + [개정] 블록")를 따름. `aidlc-state.md`·`docs/SCOPE.md` 무변경.
+
+---
