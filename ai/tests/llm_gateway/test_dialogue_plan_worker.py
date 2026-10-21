@@ -94,7 +94,7 @@ def test_empty_inputs_get_the_shared_none_markers() -> None:
 def test_prompt_has_no_memory_section_and_renders_deterministically() -> None:
     registry = PromptRegistry(_PROMPTS)
     prompt, ref = registry.render(_FEAT, _vars())
-    assert (ref.prompt_id, ref.version, ref.feature) == ("prompts/dialogue_plan.yaml", "0.1.2", "DIALOGUE_PLAN")
+    assert (ref.prompt_id, ref.version, ref.feature) == ("prompts/dialogue_plan.yaml", "0.1.3", "DIALOGUE_PLAN")
     assert "[기억]" not in prompt and "$" not in prompt
     assert prompt == registry.render(_FEAT, _vars())[0]
     assert set(re.findall(r"\$(\w+)", _template())) == {"tools", "history", "trip", "utterance"}

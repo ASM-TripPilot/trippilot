@@ -200,6 +200,17 @@ EXPLORE_CASES = [
     ("SUGGEST_ALTERNATIVE", "박물관 말고 바꿀 만한 다른 곳 있어?"),
 ]
 
+# 장소 추천(dialogue_intent 0.2.5 — RECOMMEND_PLACES) — 몇 곳만 골라 달라는 말. 갈림 기준은 개수·"제일·딱·골라"다 — 그런 말 없는
+# "…추천해줘"는 탐색으로 남아야 한다(위 EXPLORE_CASES 의 "제주 야경 예쁜 곳 추천해줘"가 그 음성 사례). 첫 문장은 사용자가 운영
+# 앱에서 막혔다고 한 말 그대로다(2026-10-20). 프롬프트 예시와 다른 문장이다.
+RECOMMEND_CASES = [
+    ("RECOMMEND_PLACES", "서울에서 가볼만한 카페 하나 추천해줘"),
+    ("RECOMMEND_PLACES", "부산 야경 명소 두 군데만 골라줘"),
+    ("RECOMMEND_PLACES", "경주에서 제일 가볼 만한 데 한 곳만"),
+    ("RECOMMEND_PLACES", "여수 맛집 중에 딱 하나 찍어줘"),
+    ("RECOMMEND_PLACES", "이 근처 카페 중에 어디가 제일 좋아?"),
+]
+
 
 # 두 가지를 같이 묻는 말(dialogue_intent 0.2.4) — 의도 하나로 잡으면 나머지 절반을 버린다(2026-10-20 실 스택 E2E: "다음 일정
 # 어디고 그 근처 맛집도"가 다음 일정만, "오늘 남은 일정이랑 비 올 확률"이 날씨만). null 로 넘기면 계획 단계(DIALOGUE_PLAN)가 도구
@@ -236,6 +247,7 @@ def run_intent(prompts: Path, repeat: int) -> None:
     cases += [(label, u, [], "compound") for label, u in COMPOUND_CASES]
     cases += [(label, u, [], "single") for label, u in SINGLE_CASES]
     cases += [(label, u, [], "event") for label, u in EVENT_CASES]
+    cases += [(label, u, [], "recommend") for label, u in RECOMMEND_CASES]
 
     def one(item):
         i, (label, utt, history, kind) = item
@@ -259,13 +271,14 @@ def run_intent(prompts: Path, repeat: int) -> None:
 
     print(json.dumps(dict(prompts=str(prompts), model=MODEL, n=len(rows), eval_acc=acc("eval"),
                           context_acc=acc("context"), accept_acc=acc("accept"), explore_acc=acc("explore"),
-                          compound_acc=acc("compound"), single_acc=acc("single"), event_acc=acc("event"), **_timing(rows)),
+                          compound_acc=acc("compound"), single_acc=acc("single"), event_acc=acc("event"),
+                          recommend_acc=acc("recommend"), **_timing(rows)),
                      ensure_ascii=False))
     for r in rows:
         if not r["ok"]:
             print(f"  ✗ {r['label']:<20} got={r['got']!s:<20} {r['utt']}  ({r['err'] or ''})")
     for r in rows[: len(cases)]:
-        if r["kind"] in ("context", "accept", "explore", "compound", "single", "event"):
+        if r["kind"] in ("context", "accept", "explore", "compound", "single", "event", "recommend"):
             print(f"  · {r['utt']} → {r['got']} {r['slots']}")
 
 
