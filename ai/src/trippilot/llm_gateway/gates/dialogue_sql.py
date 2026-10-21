@@ -30,7 +30,7 @@ MAX_SQL_CHARS = 800
 MAX_LIMIT = 50
 VIEW = "poi_public"
 
-_COLUMNS = frozenset({"poi_id", "name", "category", "sido", "sigungu", "address", "tags", "saved_count"})
+_COLUMNS = frozenset({"poi_id", "name", "category", "sido", "sigungu", "address", "tags", "saved_count", "rich"})
 _KEYWORDS = frozenset({
     "select", "distinct", "from", "where", "and", "or", "not", "in", "like", "ilike", "is", "null", "true", "false",
     "between", "any", "array", "order", "by", "asc", "desc", "nulls", "first", "last", "limit",

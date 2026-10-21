@@ -51,9 +51,10 @@ class PoiPublicViewIT {
         conn("app_migrate", "app_migrate").use { c ->
             c.createStatement().use { s ->
                 s.execute(
-                    "INSERT INTO poi (name_ko, lat, lng, category, region, data_status, source, address, tags) VALUES " +
-                        "('경복궁', 37.58, 126.97, '명소', '종로구', 'ACTIVE', 'TOURAPI', '서울특별시 종로구 사직로 161', '{요즘 인기}')," +
-                        "('문 닫은 집', 37.57, 126.98, '맛집', '중구', 'CLOSED', 'TOURAPI', '서울특별시 중구 어딘가', '{}')",
+                    "INSERT INTO poi (name_ko, lat, lng, category, region, data_status, source, address, tags, image_url, opening_hours) VALUES " +
+                        "('경복궁', 37.58, 126.97, '명소', '종로구', 'ACTIVE', 'TOURAPI', '서울특별시 종로구 사직로 161', '{요즘 인기}', 'https://img/1', '09:00~18:00')," +
+                        "('사진만 있는 곳', 37.58, 126.97, '카페', '종로구', 'ACTIVE', 'LOCALDATA', '서울특별시 종로구 어딘가', '{}', 'https://img/2', NULL)," +
+                        "('문 닫은 집', 37.57, 126.98, '맛집', '중구', 'CLOSED', 'TOURAPI', '서울특별시 중구 어딘가', '{}', NULL, NULL)",
                 )
             }
         }
@@ -67,6 +68,14 @@ class PoiPublicViewIT {
                     rs.getString(2) shouldBe "서울특별시"
                     rs.getString(3) shouldBe "종로구"
                     rs.next() shouldBe false // CLOSED 행은 뷰에 없다
+                }
+                // rich = 사진·영업시간 다 있음(V2.78, BE isDataFull 과 같은 판정) — 영업시간 원문은 여전히 없다
+                s.executeQuery("SELECT name, rich FROM poi_public WHERE name IN ('경복궁', '사진만 있는 곳') ORDER BY name").use { rs ->
+                    rs.next() shouldBe true
+                    rs.getString(1) shouldBe "경복궁"
+                    rs.getBoolean(2) shouldBe true
+                    rs.next() shouldBe true
+                    rs.getBoolean(2) shouldBe false
                 }
                 shouldThrow<SQLException> { s.executeQuery("SELECT opening_hours FROM poi_public") }
                     .message shouldContain "opening_hours" // 시각 열은 뷰에 없다(INV-2)
