@@ -11,7 +11,9 @@ import {
 
 import { server } from '@/mocks/server';
 import { BASE } from '@/test-support/apiBase';
-import { createRequestLog } from '@/test-support/mswItinerary';
+import { day, itinerary, slot } from '@/test-support/itineraryFixtures';
+import { createRequestLog, serveItinerary } from '@/test-support/mswItinerary';
+import { getGetTripsTripIdItineraryQueryKey } from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 import { assistantPort } from '../api/assistantClient';
@@ -38,6 +40,9 @@ import { AssistantSheetPage } from './AssistantSheetPage';
  * 제안 [적용](POST apply) 이 409 STALE 이면 낡음 얼굴 + [다시 제안]이 새 턴 id 로 같은 발화를 다시 보낸다 ·
  * 429 TURN_IN_PROGRESS 는 말풍선·입력을 두고 Retry-After 뒤 **같은 clientTurnId** 로 재전송 ·
  * 429 RATE_LIMITED 는 말풍선을 거두고 입력을 돌려주며 다음 전송은 **새 id** · 이력(b06)은 ACTION_LOG 행과 다른 대화 목록.
+ *
+ * 「일정 보기」 목적지(TRIP-1566)도 이 파일이다 — 누른 시점에 일정 GET 이 몇 번·어떤 응답으로 나갔는지가 계약이라 요청 횟수를
+ * 셀 수 있는 MSW 가 필요하다(node 버킷의 FakeAssistantAdapter 는 일정 서버가 없다).
  *
  * 3동작: 준비=MSW 핸들러 → 실행=렌더·입력·press → 단언=나간 요청 본문·횟수와 보이는 것.
  * ⚠️ MSW `onUnhandledRequest:'error'` 는 테스트를 실패시키지 않는다 — "안 나갔다/몇 번 나갔다" 는 요청 로거로 센다.
@@ -85,9 +90,12 @@ const log = createRequestLog(server);
 let client: QueryClient;
 let turnBodies: SendTurnRequest[] = [];
 
-function renderPage() {
+function renderPage(queryDefaults: Record<string, unknown> = {}) {
   client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    defaultOptions: {
+      queries: { retry: false, ...queryDefaults },
+      mutations: { retry: false },
+    },
   });
   function Wrapper({ children }: { children: ReactNode }) {
     return (
@@ -435,5 +443,274 @@ describe('도우미 시트 · 이력 (TRIP-1514 AC-2)', () => {
     expect((seen as unknown as URL).searchParams.get('limit')).toBe('30');
     expect(page.nextBefore).toBe('cursor-2');
     expect(page.messages.map((message) => message.id)).toEqual(['u-9']);
+  });
+});
+
+// TRIP-1566 — 「일정 보기」(OPEN_ITINERARY)는 고정 라우트가 아니라, 누른 시점에 일정을 조회해 앱 공통 판정
+// (resolveItineraryDestination → itineraryDestinationHref)으로 간다. 조회가 정착하기 전·비-404 실패에는 이동하지 않는다(INV-4).
+describe('도우미 시트 · 일정 보기 목적지', () => {
+  const ITINERARY_KEY = getGetTripsTripIdItineraryQueryKey(TRIP);
+  const itineraryHits = () => log.hitsFor('GET', `/trips/${TRIP}/itinerary`);
+  const CHECKING_TEXT = '일정을 확인하고 있어요';
+  const FAILED_TEXT = '일정을 불러오지 못했어요. 다시 눌러 주세요';
+
+  const greeting = () =>
+    assistantSample('greeting', { id: 'm-greet', tripId: TRIP });
+
+  /** 앱 기본 옵션(retry 켜짐)을 흉내 낸다 — 누름 조회가 retry:false 를 따로 주지 않으면 500 이 3번 나간다. 대기 1ms 라 느려지지 않는다. */
+  const RETRYING = { retry: 2, retryDelay: 1 };
+
+  function holdResponse() {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return { gate, release };
+  }
+
+  async function openedPage(
+    queryDefaults: Record<string, unknown> = {},
+    messages: AssistantMessage[] = [greeting()]
+  ) {
+    serveOpen(opened(messages));
+    renderPage(queryDefaults);
+    await screen.findAllByTestId('assistant-next-action-OPEN_ITINERARY');
+    return () =>
+      screen.getAllByTestId('assistant-next-action-OPEN_ITINERARY')[0];
+  }
+
+  async function press(element: Parameters<typeof fireEvent.press>[0]) {
+    await act(async () => {
+      fireEvent.press(element);
+    });
+  }
+
+  /** 일정 요청이 정착(성공)해 캐시에 들어갔고, 그 뒤 이어지는 마이크로태스크까지 흘렸다 — "안 갔다" 를 말하기 전의 앵커. */
+  async function itineraryResponseConsumed() {
+    await waitFor(() =>
+      expect(client.getQueryState(ITINERARY_KEY)?.status).toBe('success')
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
+  it('O1 확정 일정이면 live 로 replace 한다(날짜와 무관) — 일정 화면(h16)으로 가지 않는다', async () => {
+    serveItinerary(server, {
+      itinerary: () => itinerary({ status: 'CONFIRMED' }),
+    });
+    const row = await openedPage();
+    // 앵커 — 눌러 보기 전엔 요청도 이동도 없다
+    expect(itineraryHits()).toBe(0);
+    expect(mockReplace).not.toHaveBeenCalled();
+
+    await press(row());
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+    expect(mockReplace).toHaveBeenCalledWith(`/trips/${TRIP}/live`);
+    expect(itineraryHits()).toBe(1);
+    expect(mockBack).not.toHaveBeenCalled();
+  });
+
+  it('O2 일정이 아직 없으면(404) 생성 방식 고르기(method) 로 replace 한다', async () => {
+    serveItinerary(server, {
+      itinerary: () =>
+        HttpResponse.json(
+          { error: { code: 'NOT_FOUND', message: '일정 없음' } },
+          { status: 404 }
+        ),
+    });
+    const row = await openedPage(RETRYING);
+
+    await press(row());
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+    expect(mockReplace).toHaveBeenCalledWith(`/trips/${TRIP}/itinerary/method`);
+    // 404 는 "없다"는 답이라 실패 안내를 띄우지 않는다
+    expect(screen.queryByTestId('assistant-itinerary-failed')).toBeNull();
+  });
+
+  // 판정 표 전수는 features/itinerary 의 itineraryDestination.test 가 잠근다 — 여기는 시트가 그 판정·조립기를
+  // 실제로 거쳐 가는지(자기 표를 따로 갖지 않는지) 대표 두 건으로만 본다. live·method 는 위 O1·O2.
+  it.each([
+    [
+      '초안(COMPLETE·미확정) → draft',
+      () => itinerary(),
+      `/trips/${TRIP}/itinerary/draft`,
+    ],
+    [
+      '같이 짜기 생성 중(PARTIAL+CO_PLAN) → 첫 비고정 슬롯 키(# 는 인코딩)로 copick',
+      () =>
+        itinerary({
+          generationState: 'PARTIAL',
+          generationMode: 'CO_PLAN',
+          days: [
+            day('2026-06-10', [
+              slot('poi-fixed', { isFixed: true }),
+              slot('poi-open'),
+            ]),
+          ],
+        }),
+      `/trips/${TRIP}/itinerary/copick/${encodeURIComponent('2026-06-10#poi-open')}`,
+    ],
+  ])('O3 %s', async (_label, body, href) => {
+    serveItinerary(server, { itinerary: body });
+    const row = await openedPage();
+
+    await press(row());
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+    expect(mockReplace).toHaveBeenCalledWith(href);
+  });
+
+  it('O4 조회 중에는 이동하지 않고 상태 줄을 보이며, 응답이 오면 그 결과로 이동한다', async () => {
+    const held = holdResponse();
+    serveItinerary(server, {
+      itinerary: async () => {
+        await held.gate;
+        return itinerary({ status: 'CONFIRMED' });
+      },
+    });
+    const row = await openedPage();
+    // 앵커 — 누르기 전엔 상태 줄이 없다
+    expect(screen.queryByTestId('assistant-itinerary-checking')).toBeNull();
+
+    await press(row());
+
+    // 요청이 서버에 닿았는데(응답은 보류) 이동은 없다 — 상태 줄은 정확히 이 문구다(완전 일치)
+    await waitFor(() => expect(itineraryHits()).toBe(1));
+    expect(
+      await screen.findByTestId('assistant-itinerary-checking')
+    ).toHaveTextContent(CHECKING_TEXT);
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('assistant-itinerary-failed')).toBeNull();
+
+    held.release();
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+    expect(mockReplace).toHaveBeenCalledWith(`/trips/${TRIP}/live`);
+  });
+
+  it.each([
+    ['서버 오류(500)', () => new HttpResponse(null, { status: 500 })],
+    ['네트워크 오류', () => HttpResponse.error()],
+  ])(
+    'O5 %s 면 이동하지 않고 안내를 보이며(시트는 열린 채, 재시도 없음), 다시 누르면 다시 조회해 이동한다',
+    async (_label, failure) => {
+      let calls = 0;
+      serveItinerary(server, {
+        itinerary: () => {
+          calls += 1;
+          return calls === 1 ? failure() : itinerary({ status: 'CONFIRMED' });
+        },
+      });
+      // retry 가 켜진 앱 기본 옵션 아래 — 누름 조회가 retry:false 가 아니면 첫 실패 뒤 1ms 간격으로 더 나간다
+      const row = await openedPage(RETRYING);
+      expect(screen.queryByTestId('assistant-itinerary-failed')).toBeNull();
+
+      await press(row());
+
+      expect(
+        await screen.findByTestId('assistant-itinerary-failed')
+      ).toHaveTextContent(FAILED_TEXT);
+      expect(mockReplace).not.toHaveBeenCalled();
+      // 시트는 열려 있다 — 닫지도 않았고 입력도 그대로 있다
+      expect(mockBack).not.toHaveBeenCalled();
+      expect(screen.getByTestId('assistant-input')).toBeOnTheScreen();
+      // 확인 중 줄이 안내 줄과 겹쳐 남지 않는다
+      expect(screen.queryByTestId('assistant-itinerary-checking')).toBeNull();
+      // 자동 재시도 없음 — 시간이 흘러도 요청은 한 번뿐이다(retry:false + 자동 재누름 없음)
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      expect(itineraryHits()).toBe(1);
+
+      await press(row());
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      expect(mockReplace).toHaveBeenCalledWith(`/trips/${TRIP}/live`);
+      expect(itineraryHits()).toBe(2);
+      expect(screen.queryByTestId('assistant-itinerary-failed')).toBeNull();
+    }
+  );
+
+  it('O6 조회 중 연타해도 일정 요청 1회·이동 1회다', async () => {
+    const held = holdResponse();
+    serveItinerary(server, {
+      itinerary: async () => {
+        await held.gate;
+        return itinerary({ status: 'CONFIRMED' });
+      },
+    });
+    const row = await openedPage();
+
+    await press(row());
+    await waitFor(() => expect(itineraryHits()).toBe(1));
+    await press(row());
+    await press(row());
+    expect(mockReplace).not.toHaveBeenCalled();
+
+    held.release();
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+    await itineraryResponseConsumed();
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(itineraryHits()).toBe(1);
+  });
+
+  it('O7 조회 중 ✕ 로 닫으면(닫힘은 막히지 않는다) 늦게 온 응답에도 이동하지 않는다', async () => {
+    const held = holdResponse();
+    serveItinerary(server, {
+      itinerary: async () => {
+        await held.gate;
+        return itinerary({ status: 'CONFIRMED' });
+      },
+    });
+    const row = await openedPage();
+
+    await press(row());
+    await waitFor(() => expect(itineraryHits()).toBe(1));
+    await press(screen.getByTestId('assistant-sheet-close'));
+    // 앵커 — 확인 중에도 닫기는 동작한다(두 잠금이 한 ref 로 합쳐졌다면 여기서 0)
+    expect(mockBack).toHaveBeenCalledTimes(1);
+
+    held.release();
+    await itineraryResponseConsumed();
+
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('O8 제안을 적용한 뒤에는 신선해 보이는 캐시를 믿지 않고 다시 조회한다(방금 적용한 일정으로 간다)', async () => {
+    // 앱 기본처럼 일정 캐시가 신선한 동안은 재조회하지 않는다 — 캐시엔 적용 전(미확정) 일정이 들어 있다
+    serveItinerary(server, {
+      itinerary: () => itinerary({ status: 'CONFIRMED' }),
+    });
+    server.use(
+      http.post(`${BASE}/assistant/proposals/:proposalId/apply`, () =>
+        HttpResponse.json({
+          proposal: { id: 'proposal-m-1', status: 'APPLIED' },
+          messages: sampleActionLogs(TRIP).slice(1),
+        })
+      )
+    );
+    await openedPage({ staleTime: 60_000 }, [
+      greeting(),
+      proposalMessage('m-1'),
+    ]);
+    client.setQueryData(ITINERARY_KEY, itinerary());
+    expect(client.getQueryState(ITINERARY_KEY)?.isInvalidated).toBe(false);
+
+    await press(await screen.findByTestId('assistant-proposal-apply'));
+    expect(await screen.findByText('적용했어요')).toBeOnTheScreen();
+    expect(client.getQueryState(ITINERARY_KEY)?.isInvalidated).toBe(true);
+    expect(itineraryHits()).toBe(0);
+
+    await press(
+      (await screen.findAllByTestId('assistant-next-action-OPEN_ITINERARY'))[0]
+    );
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+    expect(itineraryHits()).toBe(1);
+    expect(mockReplace).toHaveBeenCalledWith(`/trips/${TRIP}/live`);
   });
 });

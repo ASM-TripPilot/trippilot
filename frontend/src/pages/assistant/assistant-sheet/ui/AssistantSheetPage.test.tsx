@@ -182,16 +182,19 @@ describe('AssistantSheetPage (TRIP-1322)', () => {
     ).toBeOnTheScreen();
   });
 
-  it('next action 은 시트를 닫으며 그 화면으로 간다(replace)', async () => {
+  // TRIP-1566 — 이 자리의 옛 케이스("누르면 replace('/trips/t1/itinerary')")는 고정 라우트를 굳힌 것이라 폐기했다.
+  // 「일정 보기」 의 이동은 누른 시점의 일정 조회 결과로 정해지고 그건 요청 횟수·지연·실패를 봐야 하므로 MSW 가 있는
+  // AssistantSheetPage.integration.test 로 옮겼다. 여기(MSW 없음)는 행이 "그려지는가"까지만 본다 — 누르면 실제 GET 이 나간다.
+  it('여행 문맥이 있으면 「일정 보기」 행이 그대로 그려진다(능력 보기로 안 바뀐다)', async () => {
     renderPage();
-    await act(async () => {
-      fireEvent.press(
-        (
-          await screen.findAllByTestId('assistant-next-action-OPEN_ITINERARY')
-        )[0]
-      );
-    });
-    expect(mockReplace).toHaveBeenCalledWith('/trips/t1/itinerary');
+    expect(
+      (await screen.findAllByTestId('assistant-next-action-OPEN_ITINERARY'))
+        .length
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.queryByTestId('assistant-next-action-SHOW_CAPABILITIES')
+    ).toBeNull();
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });
 

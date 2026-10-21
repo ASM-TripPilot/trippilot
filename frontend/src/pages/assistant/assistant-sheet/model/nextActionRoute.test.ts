@@ -21,7 +21,6 @@ function route(
 
 describe('nextActionRoute (TRIP-1320)', () => {
   it.each([
-    ['OPEN_ITINERARY', `/trips/${T}/itinerary`],
     ['OPEN_ITINERARY_EDIT', `/trips/${T}/itinerary/edit`],
     ['OPEN_ITINERARY_METHOD', `/trips/${T}/itinerary/method`],
     ['OPEN_REGENERATE', `/trips/${T}/itinerary/method`],
@@ -33,6 +32,27 @@ describe('nextActionRoute (TRIP-1320)', () => {
     ['CREATE_TRIP', '/trips/new/step1'],
   ])('%s → %s', (type, href) => {
     expect(route(type)).toEqual({ kind: 'route', href });
+  });
+
+  // TRIP-1566 — 「일정 보기」는 고정 라우트가 아니라 "해결해야 할 이동"이다. 일정이 확정인지는 누른 시점에 조회해야 알 수 있어
+  // (순수 함수가 모른다) href 대신 tripId 만 싣고, 목적지 판정은 시트가 한다. 이전 기대값은 `{ kind:'route', href:'/trips/{id}/itinerary' }` 였다.
+  it('OPEN_ITINERARY 는 href 가 아니라 해결해야 할 이동(kind:itinerary + tripId)이다', () => {
+    expect(route('OPEN_ITINERARY')).toEqual({ kind: 'itinerary', tripId: T });
+  });
+
+  it('OPEN_ITINERARY 의 tripId 는 시트 문맥의 것이고, 서버가 실어 보낸 params.tripId 는 이기지 못한다', () => {
+    expect(route('OPEN_ITINERARY', { tripId: 'other-trip' })).toEqual({
+      kind: 'itinerary',
+      tripId: T,
+    });
+    // 문맥에 여행이 없으면 서버 값이 있어도 갈 곳이 없다 — 행을 그리지 않는다(BR-U8-06)
+    expect(
+      route(
+        'OPEN_ITINERARY',
+        { tripId: 'other-trip' },
+        { tripId: null, surface: 'HOME' }
+      )
+    ).toBeNull();
   });
 
   it('OPEN_PLACE 는 여행 중(LIVE)이면 허브 장소, 아니면 탐색 장소 상세', () => {

@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { Pressable } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
+
+import { isNotFound } from '@/shared/api';
+import { getGetTripsTripIdItineraryQueryOptions } from '@/shared/api/index.hooks';
+import {
+  itineraryDestinationHref,
+  resolveItineraryDestination,
+} from '@/features/itinerary';
 
 import {
   assistantHref,
@@ -35,7 +43,7 @@ import {
 } from '../model/sheetModel';
 import { AnswerFeedback } from './AnswerFeedback';
 import { MessageCard } from './AssistantCards';
-import { TurnStatusRow } from './AssistantSheetChrome';
+import { ItineraryStatusRow, TurnStatusRow } from './AssistantSheetChrome';
 import { MoreVGlyph } from './AssistantSheetGlyphs';
 import { AssistantSheetView } from './AssistantSheetView';
 import { HistoryView } from './HistoryView';
@@ -47,6 +55,8 @@ import { HistoryView } from './HistoryView';
  * - 세션 생성 401 이면 시트를 닫는다(`/assistant` 는 `(tabs)` 밖이라 guard 에 안 걸린다 — frontend-components §1).
  * - next action: 갈 수 있는 것만 그리고(`displayActions`), 누르면 시트 자리를 그 화면으로 **replace** 한다 —
  *   모달을 닫고 push 하는 두 걸음 대신 한 걸음(FD §4-5 와 다름, 개정 블록).
+ * - 「일정 보기」(`kind: 'itinerary'`)는 누른 시점에 일정을 조회해 앱 공통 판정으로 목적지를 정한다(TRIP-1566) —
+ *   조회 중·실패엔 이동하지 않고 상태 줄로 알린다(INV-4). 확인 중 잠금은 `closingRef` 와 따로다(확인 중에도 ✕ 가 눌려야 한다).
  * - "내가 할 수 있는 것 보기" 상시 칩: 서버가 그 quick reply 를 줬으면 그것을 ACTION 으로, 아니면 라벨을
  *   TEXT 턴으로 보낸다 — 클라가 quick reply id 를 지어내지 않는다(위조 차단 규칙).
  * - 답 평가(US-ASSIST-09): 도우미 답 아래 엄지 줄. 평가 값은 메시지 캐시(낙관 갱신·실패 롤백), 펼친 이유 칸·
@@ -90,6 +100,12 @@ export function AssistantSheetPage({
     error: session.error,
     session: session.data?.session,
   });
+
+  const queryClient = useQueryClient();
+  const [itineraryCheck, setItineraryCheck] = useState<
+    'CHECKING' | 'FAILED' | null
+  >(null);
+  const checkingRef = useRef(false);
 
   const closingRef = useRef(false);
   function handleClose(): void {
@@ -239,13 +255,57 @@ export function AssistantSheetPage({
     return null;
   }
 
+  function replaceTo(href: string): void {
+    closingRef.current = true;
+    router.replace(href as Href);
+  }
+
+  async function openItinerary(trip: string): Promise<void> {
+    if (closingRef.current || checkingRef.current) return;
+    checkingRef.current = true;
+    setItineraryCheck('CHECKING');
+    let href: string;
+    try {
+      // retry:false — 앱 기본 재시도(3회)를 이 호출만 끈다. 실패는 상태 줄로 알리고 사용자가 다시 누른다.
+      const data = await queryClient.fetchQuery({
+        ...getGetTripsTripIdItineraryQueryOptions(trip),
+        retry: false,
+      });
+      href = itineraryDestinationHref(
+        trip,
+        resolveItineraryDestination({
+          notFound: false,
+          generationState: data.generationState,
+          status: data.status,
+          generationMode: data.generationMode,
+        }),
+        data.days
+      );
+    } catch (error) {
+      if (!isNotFound(error)) {
+        checkingRef.current = false;
+        setItineraryCheck('FAILED');
+        return;
+      }
+      href = itineraryDestinationHref(trip, 'method', undefined);
+    }
+    checkingRef.current = false;
+    setItineraryCheck(null);
+    // 응답을 기다리는 사이 ✕ 로 닫았거나 다른 이동이 시작됐으면 늦은 응답이 이동시키지 않는다.
+    if (closingRef.current) return;
+    replaceTo(href);
+  }
+
   function handleAction(action: NextAction): void {
     const target = nextActionRoute(action, ctx);
     if (target === null) return;
+    if (target.kind === 'itinerary') {
+      void openItinerary(target.tripId);
+      return;
+    }
     if (target.kind === 'route') {
       if (closingRef.current) return;
-      closingRef.current = true;
-      router.replace(target.href as Href);
+      replaceTo(target.href);
       return;
     }
     switch (target.action) {
@@ -283,14 +343,19 @@ export function AssistantSheetPage({
       repliesDisabled={blocked}
       sendTestID={turn.inFlight ? 'assistant-send-pending' : 'assistant-send'}
       statusRow={
-        <TurnStatusRow
-          sending={turn.inFlight}
-          slow={turn.slow}
-          failed={turn.pending?.status === 'FAILED'}
-          rateLimitedSeconds={turn.rateLimitedSeconds}
-          onCancel={turn.cancel}
-          onResend={turn.resend}
-        />
+        <>
+          {itineraryCheck ? (
+            <ItineraryStatusRow state={itineraryCheck} />
+          ) : null}
+          <TurnStatusRow
+            sending={turn.inFlight}
+            slow={turn.slow}
+            failed={turn.pending?.status === 'FAILED'}
+            rateLimitedSeconds={turn.rateLimitedSeconds}
+            onCancel={turn.cancel}
+            onResend={turn.resend}
+          />
+        </>
       }
       headerTrailing={
         <Pressable

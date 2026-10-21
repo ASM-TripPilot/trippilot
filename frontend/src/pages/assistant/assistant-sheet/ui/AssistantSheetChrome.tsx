@@ -258,6 +258,31 @@ export function Composer({
   );
 }
 
+/** 「일정 보기」를 누른 뒤 목적지를 정하는 동안의 한 줄(TRIP-1566) — 확인 중이거나 조회 실패(다시 누르면 재조회). */
+export function ItineraryStatusRow({
+  state,
+}: {
+  state: 'CHECKING' | 'FAILED';
+}): ReactElement {
+  const failed = state === 'FAILED';
+  return (
+    <View
+      testID={
+        failed ? 'assistant-itinerary-failed' : 'assistant-itinerary-checking'
+      }
+      className="px-lg py-xs"
+    >
+      <Text
+        className={`font-noto text-caption ${failed ? 'text-primary-text' : 'text-muted'}`}
+      >
+        {failed
+          ? '일정을 불러오지 못했어요. 다시 눌러 주세요'
+          : '일정을 확인하고 있어요'}
+      </Text>
+    </View>
+  );
+}
+
 /**
  * 입력창 위 한 줄(TRIP-1326) — 보내는 중(진행 + [대기 취소], 15s 넘으면 강조) · 보내지 못함([다시 보내기]) ·
  * 429(남은 초). 하나도 아니면 그리지 않는다.

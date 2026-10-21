@@ -7,6 +7,8 @@ import type { AssistantSurface, NextAction } from '../api/assistantContract';
  *
  * - `OPEN_OTA` 는 외부 URL 을 직접 열지 않고 숙소 상세로 보낸다 — 제휴 고지 시트(BR-U1-30)를 건너뛰지 않게.
  * - `OPEN_PLACE` 의 "여행 중" 판정은 도우미를 연 화면이 여행 중 허브(`LIVE`)인가로 한다.
+ * - `OPEN_ITINERARY` 는 href 가 아니라 `{ kind: 'itinerary', tripId }` 다 — 일정이 확정·생성 중·없음 중 무엇인지에 따라
+ *   목적지가 달라(앱 공통 판정 `resolveItineraryDestination`) 누른 시점에 조회해서 정한다. 이 함수는 계속 순수하다.
  * - `RESTORE_REVISION` 은 FE 에 리비전 화면(h36)이 없어 null(→ 능력 목록) — FD 개정 블록에 갭으로 남긴다.
  */
 
@@ -15,6 +17,7 @@ export type InternalAction =
 
 export type NextActionTarget =
   | { kind: 'route'; href: string }
+  | { kind: 'itinerary'; tripId: string }
   | { kind: 'internal'; action: InternalAction };
 
 export interface NextActionContext {
@@ -66,7 +69,7 @@ export function nextActionRoute(
   if (!trip) return null;
   switch (action.type) {
     case 'OPEN_ITINERARY':
-      return route(`${trip}/itinerary`);
+      return tripId ? { kind: 'itinerary', tripId } : null;
     case 'OPEN_ITINERARY_EDIT':
       return route(`${trip}/itinerary/edit`);
     case 'OPEN_ITINERARY_METHOD':

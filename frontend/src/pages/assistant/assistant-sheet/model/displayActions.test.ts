@@ -31,6 +31,16 @@ describe('displayActions (TRIP-1322)', () => {
     ).toEqual([act('OPEN_ITINERARY'), act('CREATE_TRIP')]);
   });
 
+  // TRIP-1566 — 「일정 보기」가 새 갈래(kind:itinerary)로 바뀌어도 "그릴 수 있나"의 판정은 그대로다(동기·순수).
+  it('여행 문맥이 없으면 「일정 보기」는 능력 보기로 바뀌고, 서버 params.tripId 는 이를 살리지 못한다', () => {
+    expect(
+      displayActions([act('OPEN_ITINERARY', { tripId: 'other-trip' })], {
+        tripId: null,
+        surface: 'HOME',
+      })
+    ).toEqual([CAPABILITIES_ACTION]);
+  });
+
   it('모르는 type 은 SHOW_CAPABILITIES 로 바뀌고 중복은 하나로 접힌다', () => {
     expect(displayActions([act('OPEN_ADMIN'), act('FOO')], ctx)).toEqual([
       CAPABILITIES_ACTION,
