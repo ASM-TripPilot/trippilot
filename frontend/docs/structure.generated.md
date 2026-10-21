@@ -407,14 +407,14 @@
 
 ## src/features/execution/
 - `src/features/execution/index.ts`  →  useLiveItinerary · buildAppNavUrl · buildWebNavUrl · openNextNav · resolveNextDest · resolveSlotDests · type NavDest
-- `src/features/execution/index.view.ts`  →  BackArrowGlyph · HeroPhotoGlyph · HeroPinGlyph · RailActiveGlyph · RailDoneGlyph · RailUpcomingGlyph · ShareGlyph · WarningFilledGlyph
+- `src/features/execution/index.view.ts`  →  BackArrowGlyph · EventGlyph · HeroPhotoGlyph · HeroPinGlyph · RailActiveGlyph · RailDoneGlyph · RailUpcomingGlyph · ShareGlyph · WarningFilledGlyph
 
 ## src/features/execution/model/
 - `src/features/execution/model/nextNav.ts`  →  NavOrigin · NavDest · buildAppNavUrl · buildWebNavUrl · resolveSlotDests · resolveNextDest · openNextNav
 - `src/features/execution/model/useLiveItinerary.ts`  →  useLiveItinerary
 
 ## src/features/execution/ui/
-- `src/features/execution/ui/ExecutionGlyphs.tsx`  →  RailDoneGlyph · RailActiveGlyph · RailUpcomingGlyph · BackArrowGlyph · ShareGlyph · WarningFilledGlyph · WeatherCloudGlyph · HeroPinGlyph · HeroPhotoGlyph
+- `src/features/execution/ui/ExecutionGlyphs.tsx`  →  RailDoneGlyph · RailActiveGlyph · RailUpcomingGlyph · BackArrowGlyph · ShareGlyph · WarningFilledGlyph · WeatherCloudGlyph · HeroPinGlyph · EventGlyph · HeroPhotoGlyph
 
 ## src/features/explore/
 - `src/features/explore/index.ts`  →  useMultiRegionPlaces · usePlacesInfinite
@@ -478,7 +478,7 @@
 - `src/features/onboarding/ui/OnboardingGlyphs.tsx`  →  CheckGlyph · ViewChevronGlyph · RegenerateGlyph · PositiveCheckGlyph · GlyphComponent · SunGlyph · ForkKnifeGlyph · MountainGlyph · ArtGlyph · ActivityGlyph · CameraGlyph · ShoppingBagGlyph · LandmarkGlyph · FerrisWheelGlyph · CoffeeCupGlyph · MoonGlyph · BalanceGlyph · LightningGlyph · SoloPersonGlyph · FriendsGlyph · HeartGlyph · FamilyGlyph · ParentsGlyph · PetGlyph · WalkGlyph · TransitGlyph · CarGlyph · TaxiGlyph · BikeGlyph · SkipChevronGlyph · InfoCircleGlyph · BackChevronGlyph
 
 ## src/features/open-assistant/
-- `src/features/open-assistant/index.ts`  →  ASSISTANT_FAB_SIZE · FAB_STACK_GAP · TAB_FAB_BASE · TAB_TWO_STACK · assistantFabBottom · stackTop · toastBottomWith · type FabStack · assistantHref · type AssistantHref · type AssistantSurface · AssistantFab · type AssistantFabProps · SparkleGlyph
+- `src/features/open-assistant/index.ts`  →  ASSISTANT_FAB_SIZE · FAB_STACK_GAP · TAB_FAB_BASE · TAB_TWO_STACK · assistantFabBottom · stackTop · toastBottomWith · type FabStack · assistantHref · type AssistantHref · type AssistantSurface · AssistantFab · type AssistantFabProps · ChatBubbleGlyph · SparkleGlyph
 
 ## src/features/open-assistant/model/
 - `src/features/open-assistant/model/assistantHref.ts`  →  AssistantSurface · AssistantHref · assistantHref
@@ -486,7 +486,7 @@
 
 ## src/features/open-assistant/ui/
 - `src/features/open-assistant/ui/AssistantFab.tsx`  →  AssistantFabProps · AssistantFab
-- `src/features/open-assistant/ui/AssistantGlyphs.tsx`  →  SparkleGlyph
+- `src/features/open-assistant/ui/AssistantGlyphs.tsx`  →  SparkleGlyph · ChatBubbleGlyph
 
 ## src/features/planb/config/
 - `src/features/planb/config/watchLabels.ts`  →  WatchKind · WATCH_CATEGORY_LABEL · WatchStatus · WATCH_STATUS_LABEL
@@ -870,6 +870,8 @@
 
 ## src/pages/live/live-itinerary/model/
 - `src/pages/live/live-itinerary/model/automationInput.ts`  →  automationVisitRefs
+- `src/pages/live/live-itinerary/model/barMorph.ts`  →  BarMorphDirection · MorphCell · BarMorphFrame · BAR_ENTER_MS · BAR_EXIT_MS · BAR_ENTER_DELAY_MS · BAR_ENTER_CUT_MS · BAR_EXIT_SWAP_MS · BAR_DEFAULT_WIDTH · barMorphFrame
+- `src/pages/live/live-itinerary/model/editPopupLayout.ts`  →  LIVE_BAR_SIDE · LIVE_BAR_HEIGHT · LIVE_BAR_BOTTOM_GAP · LIVE_BAR_GAP · LIVE_BAR_CAPSULE_PADDING_X · LIVE_BAR_FLOAT_GAP · LIVE_BOTTOM_BAR_RESERVE · EditPopupPlacementInput · editPopupPlacement
 - `src/pages/live/live-itinerary/model/foldScope.ts`  →  foldScope
 - `src/pages/live/live-itinerary/model/hubOpportunity.ts`  →  OpportunityContext · pickOpportunity · OpportunityCopy · opportunityCopy · OpportunityReplanHref · opportunityReplanHref
 - `src/pages/live/live-itinerary/model/hubPillCopy.ts`  →  hubPillCopy
@@ -880,6 +882,8 @@
 - `src/pages/live/live-itinerary/model/visitedLabels.ts`  →  doneVisitCheckIdByPoiId
 
 ## src/pages/live/live-itinerary/ui/
+- `src/pages/live/live-itinerary/ui/LiveBottomBar.tsx`  →  LIVE_BOTTOM_BAR_BOTTOM_GAP · LiveBarActive · LiveBottomBarProps · LiveBottomBar · LIVE_BOTTOM_BAR_RESERVE
+- `src/pages/live/live-itinerary/ui/LiveEditPopup.tsx`  →  LiveEditPopupProps · LiveEditPopup
 - `src/pages/live/live-itinerary/ui/LiveHubView.tsx`  →  LiveHubSlot · LiveHubViewProps · LiveHubView
 - `src/pages/live/live-itinerary/ui/LiveItineraryPage.tsx`  →  LiveItineraryPageProps · LiveItineraryPage
 - `src/pages/live/live-itinerary/ui/MemoSheet.tsx`  →  MemoSheetProps · MemoSheet
@@ -1686,9 +1690,10 @@
 
 ## src/shared/ui/
 - `src/shared/ui/AppBar.tsx`  →  AppBarBack · AppBar
-- `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · BottomTabBarProps · BottomTabBar
+- `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · BottomTabBarProps · ItineraryIconActive · ItineraryIconInactive · TAB_CONFIG · BottomTabBar
 - `src/shared/ui/CollageEmptyState.tsx`  →  CollageEmptyStateProps · CollageEmptyState
 - `src/shared/ui/ConfirmDialog.tsx`  →  ConfirmTone · ConfirmButton · ConfirmDialogProps · ConfirmDialog
+- `src/shared/ui/GlassSurface.tsx`  →  GlassSurfaceProps · GlassSurface
 - `src/shared/ui/HeartButton.tsx`  →  HeartButtonProps · heartSaveLabel · HeartButton
 - `src/shared/ui/HeartGlyphs.tsx`  →  HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph
 - `src/shared/ui/HourMinuteWheel.tsx`  →  HourMinuteWheelProps · HourMinuteWheel
@@ -1727,6 +1732,7 @@
 ## src/test-support/
 - `src/test-support/animatedProbe.ts`  →  AnimatedProbe · useAnimatedProbe · hostNodes
 - `src/test-support/apiBase.ts`  →  BASE
+- `src/test-support/barMotionProbe.ts`  →  BAR_ROOT · CAPSULE_WRAP · BACK · SCHEDULE · EDIT · CHATBOT · EVENT · START_HOME · START_EXPLORE · START_RECORDS · START_MY · START_CELLS · FINAL_IDS · START5_IDS · NEW_CELLS · visibleIds · frameSample · MotionWatch · watchMotion · joinWatches · advance · moved · structureSteady · lastSample · firstSeen · firstGone · staysOnceSeen · staysOnceGone · deferOsAnswer · flushOsAnswer · holdReduceMotionOn · layoutStyle · hiddenSpacingClasses · RowReading · readRow · setWindowWidth · SlotEffect · slotEffect · rootScale · isMounted · scheduleVisibleCenter · InteractionGate · useInteractionGate
 - `src/test-support/basesFakeServer.ts`  →  basesStay · STAY_A · STAY_B · basesAssignment · basesTrip · NETWORK_WAIT · assignNight · sheetClosed · settle · BasesFakeInit · createBasesFakeServer
 - `src/test-support/editDragList.ts`  →  EDIT_LIST · editListData · moveItem · fireEditDragEnd · hoverOverDeleteZone · fireEditDropOnZone · fireEditDragBegin
 - `src/test-support/envSandbox.ts`  →  sandboxEnv
@@ -1741,6 +1747,7 @@
 - `src/test-support/fitBandAsserts.ts`  →  NativeRegion · LatLng · expectPinsInBand · expectHeightLimited
 - `src/test-support/flushNotifications.ts`  →  flushNotifications
 - `src/test-support/freezeDate.ts`  →  REAL_TIMER_APIS · freezeDate
+- `src/test-support/glassAsserts.ts`  →  GLASS_RECIPE · isBlurNode · blurViewsIn · glassAncestor · GlassReading · tintOpacityOf · readGlass · expectGlassRecipe
 - `src/test-support/integrationSetup.ts`  →  (export 없음)
 - `src/test-support/itineraryFixtures.ts`  →  TRIP_ID · DAY1 · DAY2 · DAY3 · trip · slot · day · itinerary · daysOf · threeStopSlots · threeStopDays · oneStopDay · planTrip · twoDayItinerary · busanPoi · busanHotel · busanFourPois · busanTrip
 - `src/test-support/keyWarnings.ts`  →  KeyWarnings · guardKeyWarnings
@@ -1799,4 +1806,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1151개 파일
+합계 1158개 파일
