@@ -1,6 +1,7 @@
 package com.trippilot.recalculation.adapter.out.persistence
 
 import com.trippilot.recalculation.domain.OriginKind
+import com.trippilot.recalculation.domain.ReplanDiff
 import com.trippilot.recalculation.domain.ReplanInitiator
 import com.trippilot.recalculation.domain.ReplanOrigin
 import com.trippilot.recalculation.domain.ReplanScope
@@ -21,6 +22,7 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Component
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.util.UUID
 
 /**
@@ -53,10 +55,14 @@ class ReplanSessionEntity(
     @Column(name = "closed_at") var closedAt: Instant?,
     /** USER·SYSTEM(선계산) — 마이그레이션 `replan_session_initiated_by`. */
     @Column(name = "initiated_by") var initiatedBy: String,
+    /** 반영 직전의 비교 기준·되돌리기 지점·되돌린 시각 — 마이그레이션 `replan_session_revert`(TRIP-1412). */
+    @JdbcTypeCode(SqlTypes.JSON) @Column(name = "applied_before") var appliedBefore: List<Map<String, Any>>?,
+    @JdbcTypeCode(SqlTypes.JSON) @Column(name = "restore_point") var restorePoint: Map<String, Any>?,
+    @Column(name = "reverted_at") var revertedAt: Instant?,
 ) {
     protected constructor() : this(
         UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), null, "", LocalDate.EPOCH, Instant.EPOCH, "", null, null,
-        emptyArray(), emptyArray(), null, emptyArray(), "", null, Instant.EPOCH, null, "",
+        emptyArray(), emptyArray(), null, emptyArray(), "", null, Instant.EPOCH, null, "", null, null, null,
     )
 }
 
@@ -109,6 +115,7 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
                 session.reasons.toTypedArray(), session.directives.toTypedArray(), session.freeText,
                 session.excludedPoiIds.toTypedArray(),
                 session.status.name, session.draft, session.createdAt, session.closedAt, session.initiatedBy.name,
+                session.appliedBefore?.map { it.toJsonMap() }, session.restorePoint, session.revertedAt,
             ),
         ).toDomain()
 
@@ -141,7 +148,9 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
         ReplanOrigin(OriginKind.valueOf(originKind), originLat, originLng),
         reasons.toList(), directives.toList(), freeText, excludedPoiIds.toList(),
         ReplanStatus.valueOf(status), draft, createdAt, closedAt, ReplanInitiator.valueOf(initiatedBy),
+        appliedBefore?.map { it.toSlotView() }, restorePoint, revertedAt,
     )
+
 
     private companion object {
         /**
@@ -155,3 +164,36 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
         private val SYSTEM = ReplanInitiator.SYSTEM.name
     }
 }
+
+/**
+ * 비교 기준 한 칸 ↔ jsonb. 왕복이 항등이어야 한다 — 값이 새면 반영 뒤 비교가 반영 전 화면과 다른 말을 한다.
+ * null 은 넣지 않는다(초안 jsonb 와 같은 규약 — `{k:null}` 과 키 없음이 갈리지 않게).
+ */
+internal fun ReplanDiff.SlotView.toJsonMap(): Map<String, Any> = buildMap {
+    put("slotKey", slotKey)
+    put("startAt", startAt.toString())
+    put("endAt", endAt.toString())
+    put("isFixed", isFixed)
+    put("endsNextDay", endsNextDay)
+    distanceM?.let { put("distanceM", it) }
+    nameKo?.let { put("nameKo", it) }
+    category?.let { put("category", it) }
+    imageUrl?.let { put("imageUrl", it) }
+    lat?.let { put("lat", it) }
+    lng?.let { put("lng", it) }
+}
+
+// 정수 표기로 적힌 수는 잭슨이 Integer·Long 으로 돌려준다 — Number 로 받아 내린다(ReplanProposal 과 같은 관용구).
+internal fun Map<String, Any>.toSlotView() = ReplanDiff.SlotView(
+    slotKey = getValue("slotKey") as String,
+    startAt = LocalTime.parse(getValue("startAt") as String),
+    endAt = LocalTime.parse(getValue("endAt") as String),
+    isFixed = getValue("isFixed") as Boolean,
+    endsNextDay = getValue("endsNextDay") as Boolean,
+    distanceM = (get("distanceM") as? Number)?.toInt(),
+    nameKo = get("nameKo") as? String,
+    category = get("category") as? String,
+    imageUrl = get("imageUrl") as? String,
+    lat = (get("lat") as? Number)?.toDouble(),
+    lng = (get("lng") as? Number)?.toDouble(),
+)

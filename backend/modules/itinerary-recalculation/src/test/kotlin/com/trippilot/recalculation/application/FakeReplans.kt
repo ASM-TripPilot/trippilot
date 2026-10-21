@@ -31,9 +31,22 @@ internal class FakeReplans(
         return proposal
     }
 
-    override fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal, reason: String) {
+    /** 반영이 돌려줄 되돌리기 지점(TRIP-1412). 기본은 "반영 전엔 그 날이 비어 있었다". */
+    var restorePoint: ReplanProposal? = null
+
+    /** 되돌리기 호출 — (반영본, 되돌리기 지점, 사유). [revertFailWith] 로 C8 의 409(STALE)를 흉내 낸다. */
+    val reverted = mutableListOf<Triple<ReplanProposal, ReplanProposal, String>>()
+    var revertFailWith: RuntimeException? = null
+
+    override fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal, reason: String): ReplanProposal {
         applied += proposal
         appliedReasons += reason
+        return restorePoint ?: proposal.copy(slots = emptyList())
+    }
+
+    override fun revert(accountId: UUID, tripId: UUID, applied: ReplanProposal, restore: ReplanProposal, reason: String) {
+        revertFailWith?.let { throw it }
+        reverted += Triple(applied, restore, reason)
     }
 
     companion object {

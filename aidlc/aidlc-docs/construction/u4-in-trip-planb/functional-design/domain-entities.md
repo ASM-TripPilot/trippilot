@@ -120,7 +120,7 @@
 > **[개정 · 2026-10-12] `replan_session` 실장 차이.** ① `originKind`에 **`PURGED`**가 추가됐다 — 위치 동의 철회 시 기준점 좌표를 지우고 "파기됨"을 값으로 남긴다(TRIP-992, `V2.56__replan_origin_purged.sql`). ② **`target_date`**(재계획 대상 일자, NOT NULL 백필)가 추가돼 오늘 외의 날도 다시 짤 수 있다(TRIP-1182, `V2.60__replan_session_target_date.sql`). 본 테이블은 `V2.17__replan_session.sql`.
 
 **INV-U4-05**: `status`가 `APPLIED`가 되기 전에는 `itinerary`·`visit_slot`에 **어떤 쓰기도 발생하지 않는다**. `i18` [취소]는 세션만 `CANCELED`로 닫는다.
-  - **개정(2026-10-14, 사용자 결정)** — 일정 화면의 **[다시 짜기] 원탭**은 누르는 행위가 확인이다: 클라이언트가 초안(`DRAFT`)이 나오는 즉시 `apply` 를 불러 반영하고 추천안 화면으로 간다(사유·칩 모달·i13 검토 없음). 쓰기는 여전히 `APPLIED` 에서만 일어나고(이 불변식 유지), 되돌리기는 적용 전 복원 지점(`ensureRestorePoint`)으로 한다. **단, 확정(`CONFIRMED`) 일정은 지금 복원이 409(`ItineraryRevisionService.requireRestorable`)라 되돌릴 수 없다 — 여행 중 일정은 대개 확정 상태다. 확정 일정의 재계획 되돌리기·적용 뒤 제외 항목 표면은 TRIP-1412(BE)·TRIP-1413(FE).** 사유를 고르는 명시적 재계획(허브 AI 재계획·트리거·알림·어시스턴트)은 종전대로 검토 후 적용.
+  - **개정(2026-10-14, 사용자 결정)** — 일정 화면의 **[다시 짜기] 원탭**은 누르는 행위가 확인이다: 클라이언트가 초안(`DRAFT`)이 나오는 즉시 `apply` 를 불러 반영하고 추천안 화면으로 간다(사유·칩 모달·i13 검토 없음). 쓰기는 여전히 `APPLIED` 에서만 일어나고(이 불변식 유지), 되돌리기는 적용 전 복원 지점(`ensureRestorePoint`)으로 한다. 확정(`CONFIRMED`) 일정은 범용 복원이 409(`ItineraryRevisionService.requireRestorable`)라 — 여행 중 일정은 대개 확정 상태다 — **[개정 2026-10-22 · TRIP-1412]** 이 재계획 하나만 되돌리는 전용 경로(`…/revert`)를 뒀다: 반영 순간 그 날의 직전 모습(동결 참조 포함)을 세션에 떠 두고(`replan_session.restore_point`·`applied_before`), 되돌리면 그 날만 그 모습으로 돌린다(상태·동결 유지, 한 번만). 이 불변식은 그대로다 — 되돌리기도 반영(`APPLIED`)된 세션에서만 일어난다. 화면은 TRIP-1413(FE). 사유를 고르는 명시적 재계획(허브 AI 재계획·트리거·알림·어시스턴트)은 종전대로 검토 후 적용.
 
 **INV-U4-06**: 한 여행에 `COLLECTING`/`SOLVING`/`DRAFT` 세션은 **최대 1개**. 새 재계획 진입은 기존 열린 세션을 `CANCELED`로 닫고 시작한다.
 
