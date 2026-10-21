@@ -215,6 +215,7 @@ import type { PreferenceSelection } from '@/features/edit-preferences';
 import { PreferencesEditView } from '@/pages/settings/settings-preferences/ui/PreferencesEditView';
 import type {
   ItineraryDaysItemSlotsItem,
+  Opportunity,
   ReflectionStats,
   SlotCandidatesCandidatesItem,
   StayDetail,
@@ -232,7 +233,6 @@ import {
   LocationAlwaysExplainer,
   automationNoticeCopy,
 } from '@/shared/location/index.view';
-import { AutoRevertDialog } from '@/features/check-visit/index.view';
 import { MapView, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { StateNotice } from '@/shared/ui/StateNotice';
@@ -816,6 +816,30 @@ function renderRegenerateConfirm(description: string): ReactElement {
               testID: 'itinerary-regenerate-cancel',
               label: '취소',
               variant: 'outline',
+              onPress: noop,
+            },
+          ]}
+        />
+      </View>
+    </SafeAreaView>
+  );
+}
+
+/** TRIP-1498 (c) — 갈 길 없는 확정 일정의 [다시 짜기] 이유 안내. DraftPage 와 같은 글자, [확인]만 있다. */
+function renderRegenerateStop(): ReactElement {
+  return (
+    <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+      <View className="flex-1 justify-center bg-canvas px-lg">
+        <StateNotice
+          testID="itinerary-regenerate-stop"
+          icon={<AlertCircleGlyph />}
+          title="일정을 다시 짤 수 없어요"
+          description="확정한 일정은 지금 다시 짤 수 없어요"
+          actions={[
+            {
+              testID: 'itinerary-regenerate-stop-ok',
+              label: '확인',
+              variant: 'filled',
               onPress: noop,
             },
           ]}
@@ -2167,7 +2191,7 @@ const LIVE_HUB_PREVIEW_SLOTS: LiveHubSlot[] = [
     },
   },
 ];
-// Figma 의 현재위치 점(부산시립미술관 근처).
+// 프리뷰 지도 중심(부산시립미술관 근처).
 const LIVE_HUB_PREVIEW_LOCATION = { lat: 35.1655, lng: 129.1335 };
 
 // TRIP-1344 · U10 프리뷰 — 실제 경로 2세그먼트(감천→광안리 · 강 건너 공백 · 미술관 쪽). 좌표는 슬롯 사이를 굽게 이은 가짜 값.
@@ -2197,12 +2221,6 @@ const u10Notice = (reason: string | null, dropped = 0) => {
       }
     : null;
 };
-const U10_ROUTE_ON = {
-  mode: 'actual' as const,
-  actualAvailable: true,
-  distanceLabel: '실제 3.2km',
-  onChange: noop,
-};
 
 // j04 요약의 일차 회고 칩(TRIP-987) — 여행 기간 3일(6/11~6/13) 전체. 페이지가 `tripDayChips` 로 조립하는 모양.
 const TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS = [1, 2, 3].map((day) => ({
@@ -2213,6 +2231,23 @@ const TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS = [1, 2, 3].map((day) => ({
 // i01 기록 없음(TRIP-747, Figma 4076:2452) — 같은 5곳에서 done 2장의 사진·후기만 뺀다.
 const LIVE_HUB_PREVIEW_SLOTS_NO_RECORDS: LiveHubSlot[] =
   LIVE_HUB_PREVIEW_SLOTS.map(({ slot, state }) => ({ slot, state }));
+
+// TRIP-1522 · i01 하단 바 "행사" 칸 — 기회가 있으면 점이 뜨고, 칸을 누르면 바 위에 카드가 선다(열림은 뷰 상태라
+// 프리뷰도 눌러서 연다). 긴 이름·요즘 인기는 카드 줄바꿈을 보는 용이다.
+const LIVE_HUB_PREVIEW_OPPORTUNITY = {
+  item: {
+    key: 'event:부산 불꽃축제',
+    kind: 'EVENT_VENUE',
+    eventName: '부산 불꽃축제',
+    end: '2026-06-14',
+    poiId: 'preview-venue',
+    poiName: '광안리 해변',
+    nearSlotKey: `${LIVE_HUB_PREVIEW_DATE}#haeundae`,
+    distanceLabel: '약 400m',
+  } satisfies Opportunity,
+  onPressReplan: noop,
+  onDismiss: noop,
+};
 
 function renderLiveHubPreview(
   snap: number,
@@ -2225,11 +2260,11 @@ function renderLiveHubPreview(
       activeDayIndex={1}
       slots={LIVE_HUB_PREVIEW_SLOTS}
       initialSnapIndex={snap}
-      currentLocation={LIVE_HUB_PREVIEW_LOCATION}
       onBack={noop}
       onSelectDay={noop}
       onPressAiReplan={noop}
       onPressManualEdit={noop}
+      onPressChatbot={noop}
       onPressComplete={noop}
       // TRIP-1070 — 관람 중 카드 [사진]·[메모](Figma 4125:4034).
       onPressPhoto={noop}
@@ -2251,7 +2286,7 @@ const LIVE_HUB_PREVIEW_SLOTS_MEMO_SAVED: LiveHubSlot[] =
 // i02 변수 감지(TRIP-748) — 펼침 5곳 위에 해운대(17:00) 매칭 트리거를 싣는다. 알약 카피·배지는
 // 페이지와 같은 순수 함수로 여기서 조립한다(api 로드 0 — TRIP-610).
 const LIVE_TRIGGER_SLOT_KEY = `${LIVE_HUB_PREVIEW_DATE}#haeundae`;
-function renderLiveTriggerPreview(kind: TriggerKind, snap = 2): ReactElement {
+function renderLiveTriggerPreview(kind: TriggerKind, snap = 1): ReactElement {
   const target = LIVE_HUB_PREVIEW_SLOTS.find(
     ({ slot }) => slot.poiId === 'haeundae'
   )?.slot;
@@ -2288,7 +2323,7 @@ function renderLiveRiskSheetPreview(): ReactElement {
   ];
   return (
     <>
-      {renderLiveTriggerPreview('WEATHER', 1)}
+      {renderLiveTriggerPreview('WEATHER', 0)}
       <RiskDetailSheet
         kind="WEATHER"
         title={LIVE_RISK_PREVIEW_TRIGGER.reason}
@@ -2324,7 +2359,7 @@ const LIVE_APPLIED_PREVIEW_SLOTS: LiveHubSlot[] = LIVE_HUB_PREVIEW_SLOTS.map(
 function renderPlanbAppliedPreview(): ReactElement {
   return (
     <>
-      {renderLiveHubPreview(2, {
+      {renderLiveHubPreview(1, {
         slots: LIVE_APPLIED_PREVIEW_SLOTS,
         slotBadgeLabel: (slotKey) =>
           slotKey === LIVE_APPLIED_SLOT_KEY ? '변경됨' : null,
@@ -2907,17 +2942,6 @@ export const PREVIEW_STATES: PreviewState[] = [
       </MapSheetShell>
     ),
   },
-  {
-    key: 'assistant-fab-live',
-    band: 'b',
-    label: 'b✦ · 여행 중 허브 앵커 열',
-    login: null,
-    render: () =>
-      renderLiveHubPreview(1, {
-        assistantFab: <AssistantFab onPress={noop} />,
-      }),
-  },
-
   { key: 'splash', band: 'c', label: 'c01 · 기본', login: null },
   {
     key: 'login-idle',
@@ -3108,7 +3132,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       // c08 이 온보딩 체인에서 실제로 주입하는 Figma 목적 문구(TRIP-459) — 프리뷰도 정본과 맞춘다.
-      // TRIP-717: Figma 1296:1208 2줄 고정 개행(\n) 반영.
+      // TRIP-717: Figma 4975:3306 2줄 고정 개행(\n) 반영.
       <LocationPreprompt
         purposeContext={
           '내 주변을 알면 더 잘 맞는 곳을 추천하고\n길 안내도 막힘없이 이어져요'
@@ -3125,7 +3149,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'c08 · 권한 거부',
     login: null,
     render: () => (
-      // TRIP-717: 거부 안내는 Figma 1297:1208 카드형(hairline 테두리 + 청록 아이콘 + 15 ink),
+      // TRIP-717: 거부 안내는 Figma 4973:3306 카드형(hairline 테두리 + 청록 아이콘 + 15 ink),
       // 닫기 × 없음(onDismissNotice/noticeDismissed 폐기). -denied-dismissed 키는 함께 삭제됨.
       <LocationPreprompt
         purposeContext="내 주변 숙소 탐색"
@@ -3136,7 +3160,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
-    // TRIP-1108 — 위치 카드 다음 온보딩 단계(Figma 4774:2960). 상태 프레임은 default 하나뿐이다.
+    // TRIP-1108 — 위치 카드 다음 온보딩 단계(Figma 4976:3306). 상태 프레임은 default 하나뿐이다.
     key: 'onboarding-push-default',
     band: 'c',
     label: 'c08-push · 기본',
@@ -3708,14 +3732,13 @@ export const PREVIEW_STATES: PreviewState[] = [
     band: '기타',
     label: '기타 · 지도(map-default)',
     login: null,
-    // TRIP-745 — 핀 3상태(done 흰 체크·current 분홍 번호·upcoming 회색 번호)·현재위치 점/링/라벨·
+    // TRIP-745 — 핀 3상태(done 흰 체크·current 분홍 번호·upcoming 회색 번호)·
     // 빨강 경로선을 한 지도에서 6-b 육안 대조하는 자리(jest 는 물방울 모양·색·번호를 못 본다).
     // 좌표는 서울 도심 ~1.5km 안(한 화면). 실지도는 env 키가 있는 실기 빌드에서만 뜬다.
     render: () => (
       <MapView
         center={{ lat: 37.5665, lng: 126.978 }}
         pins={MAP_STATE_PREVIEW_PINS}
-        currentLocation={{ lat: 37.5662, lng: 126.9785 }}
       />
     ),
   },
@@ -3831,7 +3854,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         }
         onPressComplete={noop}
         onPressSkip={noop}
-        // TRIP-1072 — Figma default(1557:1738)처럼 [방문 추가] 버튼을 세운다.
+        // TRIP-1072 — Figma default(5000:3227)처럼 [방문 추가] 버튼을 세운다.
         onPressSpontaneous={noop}
         onPressBack={noop}
         onPressReflection={noop}
@@ -3841,11 +3864,11 @@ export const PREVIEW_STATES: PreviewState[] = [
   // j01 방문 기록 error 얼굴(TRIP-760) — 사진 업로드 실패 표면. default 와 안내문만 다르고(상태별 의도
   // →noticeCopy 분기), 광안리 카드에 upload-failed 셀(⚠ "업로드 실패") + 풀폭 [↻ 다시 시도] 버튼 +
   // "메모와 방문 체크는 저장되었어요"를 얹었다. ⚠ 생김새·surface-strong 톤·↻ 코랄은 jest 사각(6-b 육안).
-  // TRIP-1344 · U10 j01 풀 지도 실제 경로(u10e 4862:3807) + 자동 기록 표식 카드.
+  // TRIP-1344 · U10 j01 풀 지도 실제 경로(u10e 4862:3807). 자동 기록 표식은 TRIP-1523 에서 뺐다.
   {
     key: 'u10-records-route',
     band: 'j',
-    label: 'U10 · j01 풀 지도 실제 경로·자동 기록 표식',
+    label: 'U10 · j01 풀 지도 실제 경로',
     login: null,
     render: () => (
       <TripRecordsView
@@ -3861,7 +3884,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           { number: 1, lat: 35.1532, lng: 129.1187, state: 'done' },
           { number: 2, lat: 35.1667, lng: 129.137, state: 'done' },
         ]}
-        routeToggle={{ ...U10_ROUTE_ON, distanceLabel: '실제 2.8km' }}
         actualRoute={[
           [
             { lat: 35.1532, lng: 129.1187 },
@@ -3883,7 +3905,6 @@ export const PREVIEW_STATES: PreviewState[] = [
             completedAt: '2026-08-21T15:20:00',
             skippedAt: null,
             arrivedLabel: '14:20',
-            autoRecorded: true,
           },
           {
             visitCheckId: 'r2',
@@ -4063,7 +4084,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // j01 방문 시각 수정 시트(TRIP-1069 · Figma 4524:2383) — 부산시립미술관 완료 카드에서 연 모습. 시트는
+  // j01 방문 시각 수정 시트(TRIP-1069 · Figma 4964:3257) — 부산시립미술관 완료 카드에서 연 모습. 시트는
   // 서버 순간(Z)을 받아 서울 시계로 시드한다(06:40Z→15:40 · 07:30Z→16:30). 시트 실제 열림·딤·셀 스크롤·
   // 제스처 충돌은 jest 사각(바텀시트 목 통과형) — 여기가 6-b 육안 자리(AC-11).
   {
@@ -5855,6 +5876,13 @@ export const PREVIEW_STATES: PreviewState[] = [
       ),
   },
   {
+    key: 'h08-regenerate-stop',
+    band: 'h',
+    label: 'h08 · 다시 짜기 불가(확정 이유 안내)',
+    login: null,
+    render: renderRegenerateStop,
+  },
+  {
     key: 'h08-draft-unplaced',
     band: 'h',
     label: 'h08 · 못 넣은 꼭 갈 곳',
@@ -5896,7 +5924,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => renderH07PartialShell(foldedPreviewCells(7, 4)),
   },
-  // h11 같이 결과(CoPick 완료, TRIP-796) — Figma `4257:2148` 대조용. 공용 지도+시트 셸에 CoPick 5슬롯
+  // h11 같이 결과(CoPick 완료, TRIP-796) — Figma `4971:3292` 대조용. 공용 지도+시트 셸에 CoPick 5슬롯
   // (비고정 4 + 고정 숙소 1)을 얹는다. 고정 숙소는 단일 시각 `21:00`+부제+고정 배지, 비고정은 시각
   // 범위 칩만(다른 후보 링크 없음 · h08 과 차이). meta 는 고정 숙소만 뺀 4 → `4곳`(TRIP-1428). 배열에서 fallback
   // 3키 **직전**(h11 그룹 첫 자리)에 둬 안정 정렬이 copick→fallback 순서를 내게 한다
@@ -7206,36 +7234,112 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // i01 여행중 허브(TRIP-746) — 같은 5곳을 시트 초기 스냅만 달리해 Figma 3프레임과 대조한다
-  // (닫힘 4251:2448 · 중간 4251:2640 · 펼침 4125:3957). 실제 스냅 전환은 6-b 실기.
+  // i01 여행중 허브(TRIP-746 → TRIP-1522 v2) — 같은 5곳을 시트 초기 칸만 달리해 Figma 와 대조한다. 칸 번호는 −1 완전 내림 ·
+  // 0 중간 · 1 펼침. 중간 = Figma A `5029:3421`, 수정 팝업 = B `5031:3438`, 시트 내림·바 유지 = C `5035:3455`(바는 세 장 모두 똑같다).
+  // 실제 스냅 전환·시트가 사라졌다 올라오는 모션·유리 블러는 6-b 실기.
   {
     key: 'live-hub-closed',
     band: 'i',
-    label: 'i01 · 여행중 허브 닫힘',
+    label: 'i01 · 여행중 허브 시트 내림(바 유지)',
     login: null,
-    render: () => renderLiveHubPreview(0),
+    render: () => renderLiveHubPreview(-1),
   },
   {
     key: 'live-hub-half',
     band: 'i',
     label: 'i01 · 여행중 허브 중간',
     login: null,
-    render: () => renderLiveHubPreview(1),
+    render: () => renderLiveHubPreview(0),
   },
   {
     key: 'live-hub-expanded',
     band: 'i',
     label: 'i01 · 여행중 허브 펼침',
     login: null,
-    render: () => renderLiveHubPreview(2),
+    render: () => renderLiveHubPreview(1),
   },
-  // i01 수정 알약 열림(TRIP-747, Figma 4055:2427) — 펼침 위에 알약 2개를 처음부터 연다.
+  // i01 수정 팝업(TRIP-1522, Figma B) — 수정 칸 활성·일정 비활성, 칸 위에 AI에게 맡기기(위)·직접 수정(아래) 알약. 처음부터 열린 채다.
   {
-    key: 'live-hub-edit-pills',
+    key: 'live-hub-edit-popup',
     band: 'i',
-    label: 'i01 · 여행중 허브 수정 알약 열림',
+    label: 'i01 · 여행중 허브 수정 팝업 열림',
     login: null,
-    render: () => renderLiveHubPreview(2, { initialEditMenuOpen: true }),
+    render: () => renderLiveHubPreview(0, { initialFloating: 'edit' }),
+  },
+  {
+    key: 'live-hub-edit-popup-ai-disabled',
+    band: 'i',
+    label: 'i01 · 여행중 허브 수정 팝업 AI 항목 비활성(지난 날)',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(0, {
+        initialFloating: 'edit',
+        onPressAiReplan: undefined,
+      }),
+  },
+  // i01 하단 바 · 행사 칸(TRIP-1522) — 기회가 있으면 점이 뜨고(칸 활성), 카드는 바 위에 유리 표면으로 선다. 행사 카드 프레임은 Figma 에 없다.
+  {
+    key: 'live-hub-opportunity',
+    band: 'i',
+    label: 'i01 · 여행중 허브 행사 카드 열림',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(0, {
+        opportunity: LIVE_HUB_PREVIEW_OPPORTUNITY,
+        initialFloating: 'event',
+      }),
+  },
+  {
+    key: 'live-hub-opportunity-trending-long',
+    band: 'i',
+    label: 'i01 · 여행중 허브 행사 카드 요즘 인기·긴 이름(시트 내림)',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(-1, {
+        initialFloating: 'event',
+        opportunity: {
+          ...LIVE_HUB_PREVIEW_OPPORTUNITY,
+          item: {
+            key: 'trending:poi-long',
+            kind: 'TRENDING',
+            poiId: 'preview-trending',
+            poiName: '부산 해운대 해수욕장 옆 오션뷰 전망대 카페 거리',
+            nearSlotKey: `${LIVE_HUB_PREVIEW_DATE}#haeundae`,
+            distanceLabel: '약 1.2km',
+          },
+        },
+      }),
+  },
+  {
+    key: 'live-hub-opportunity-dot',
+    band: 'i',
+    label: 'i01 · 여행중 허브 행사 칸 점(카드 닫힘 — 눌러서 열기)',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(0, { opportunity: LIVE_HUB_PREVIEW_OPPORTUNITY }),
+  },
+  {
+    key: 'live-hub-opportunity-none',
+    band: 'i',
+    label: 'i01 · 여행중 허브 행사 칸 비활성(기회 없음)',
+    login: null,
+    render: () => renderLiveHubPreview(0),
+  },
+  // i01 하단 바 변신 모션(TRIP-1522 사이클 4) — 출발 탭을 주면 홈 탭 바와 같은 5칸(그 탭 활성)으로 시작해 4단계로 변신한다. 다른 허브 키는
+  // 출발 탭이 없어 모션 없이 최종 구조다(스크린샷 무회귀). 뒤로(noop 이동)를 누르면 역순을 재생하고 시작 5칸에서 멈춘다. 모양·길이는 6-b 실기.
+  {
+    key: 'live-hub-morph-home',
+    band: 'i',
+    label: 'i01 · 여행중 허브 바 변신(홈에서 진입)',
+    login: null,
+    render: () => renderLiveHubPreview(0, { departureTab: 'home' }),
+  },
+  {
+    key: 'live-hub-morph-itinerary',
+    band: 'i',
+    label: 'i01 · 여행중 허브 바 변신(일정 탭에서 진입)',
+    login: null,
+    render: () => renderLiveHubPreview(0, { departureTab: 'itinerary' }),
   },
   // TRIP-1344 · U10 GPS·위치 자동화 표면(Figma U10 검토 밴드 y=19950). 판정·OS 대화상자·실제 wake 는 6-b.
   {
@@ -7245,7 +7349,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <View style={StyleSheet.absoluteFill}>
-        {renderLiveHubPreview(0)}
+        {renderLiveHubPreview(-1)}
         <LocationAlwaysExplainer
           dateRangeLabel="6월 10일~12일"
           onEnable={noop}
@@ -7260,7 +7364,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'U10 · i01 강등 안내 1줄(u10c)',
     login: null,
     render: () =>
-      renderLiveHubPreview(1, { automationNotice: u10Notice('when-in-use') }),
+      renderLiveHubPreview(0, { automationNotice: u10Notice('when-in-use') }),
   },
   {
     key: 'u10-dropped-notice',
@@ -7268,101 +7372,16 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'U10 · i01 보내지 못한 자동 기록 N건',
     login: null,
     render: () =>
-      renderLiveHubPreview(1, { automationNotice: u10Notice(null, 2) }),
-  },
-  {
-    key: 'u10-auto-badge',
-    band: 'i',
-    label: 'U10 · i01 자동 기록 표식(u10b)',
-    login: null,
-    render: () =>
-      renderLiveHubPreview(2, {
-        autoRecordedPoiIds: new Set(['gamcheon']),
-        onPressRevertAuto: noop,
-      }),
-  },
-  {
-    key: 'u10-auto-revert-dialog',
-    band: 'i',
-    label: 'U10 · i01 자동 기록 되돌리기 확인(u10b dialog)',
-    login: null,
-    render: () => (
-      <View style={StyleSheet.absoluteFill}>
-        {renderLiveHubPreview(2, {
-          autoRecordedPoiIds: new Set(['gamcheon']),
-          onPressRevertAuto: noop,
-        })}
-        <AutoRevertDialog
-          testIDPrefix="execution-live-slot-auto-revert"
-          placeName="감천문화마을"
-          part="COMPLETION"
-          onCancel={noop}
-          onConfirm={noop}
-        />
-      </View>
-    ),
-  },
-  {
-    key: 'u10-auto-revert-media',
-    band: 'i',
-    label: 'U10 · i01 되돌리기 409 사진·메모 안내',
-    login: null,
-    render: () => (
-      <View style={StyleSheet.absoluteFill}>
-        {renderLiveHubPreview(2, {
-          autoRecordedPoiIds: new Set(['gamcheon']),
-          onPressRevertAuto: noop,
-        })}
-        <AutoRevertDialog
-          testIDPrefix="execution-live-slot-auto-revert"
-          placeName="감천문화마을"
-          part="ARRIVAL"
-          error="media"
-          onCancel={noop}
-          onConfirm={noop}
-        />
-      </View>
-    ),
+      renderLiveHubPreview(0, { automationNotice: u10Notice(null, 2) }),
   },
   {
     key: 'u10-route-actual',
     band: 'i',
-    label: 'U10 · i01 계획｜실제 — 실제 켜짐·공백 있음(u10e)',
+    label: 'U10 · i01 계획 동선 + 실제 경로 함께 — 공백 있음(u10e)',
     login: null,
     render: () =>
-      renderLiveHubPreview(1, {
-        routeToggle: U10_ROUTE_ON,
+      renderLiveHubPreview(0, {
         actualRoute: U10_ACTUAL_ROUTE,
-      }),
-  },
-  {
-    key: 'u10-route-none',
-    band: 'i',
-    label: 'U10 · i01 계획｜실제 — 경로 없음',
-    login: null,
-    render: () =>
-      renderLiveHubPreview(1, {
-        routeToggle: {
-          mode: 'plan',
-          actualAvailable: false,
-          disabledReason: '이 날 기록된 경로가 없어요',
-          onChange: noop,
-        },
-      }),
-  },
-  {
-    key: 'u10-route-no-consent',
-    band: 'i',
-    label: 'U10 · i01 계획｜실제 — 위치 동의 없음',
-    login: null,
-    render: () =>
-      renderLiveHubPreview(1, {
-        routeToggle: {
-          mode: 'plan',
-          actualAvailable: false,
-          disabledReason: '위치 동의가 없어요',
-          onChange: noop,
-        },
       }),
   },
   // TRIP-1260 — 7일 여행 허브, 오늘=6일차로 연다. 화면 밖 선택 칩이 열자마자 보이는지(AC-3b)·FAB 하한이
@@ -7373,7 +7392,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'i01 · 여행중 허브 7일 칩 줄(6일차 오늘)',
     login: null,
     render: () =>
-      renderLiveHubPreview(1, {
+      renderLiveHubPreview(0, {
         days: Array.from({ length: 7 }, (_, index) => ({
           date: `2026-06-${String(6 + index).padStart(2, '0')}`,
         })),
@@ -7387,7 +7406,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'i01 · 여행중 허브 기록 없음',
     login: null,
     render: () =>
-      renderLiveHubPreview(2, { slots: LIVE_HUB_PREVIEW_SLOTS_NO_RECORDS }),
+      renderLiveHubPreview(1, { slots: LIVE_HUB_PREVIEW_SLOTS_NO_RECORDS }),
   },
   // i01 완료 카드 [사진]·[메모](TRIP-1203, Figma 원본 없음 — 관람 중 버튼 재사용). 감천엔 권한 거부 안내 +
   // [설정 열기], 광안리엔 세션 저장본 메모 박스.
@@ -7397,7 +7416,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'i01 · 여행중 허브 완료 카드 사진·메모',
     login: null,
     render: () =>
-      renderLiveHubPreview(2, {
+      renderLiveHubPreview(1, {
         slots: LIVE_HUB_PREVIEW_SLOTS_NO_RECORDS.map((entry) =>
           entry.slot.poiId === 'gwangalli'
             ? { ...entry, memo: '해 질 녘 산책. 다리 불빛이 예뻤다.' }
@@ -7411,7 +7430,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressPhotoSettings: noop,
       }),
   },
-  // i01 메모 시트(TRIP-1117, Figma 4741:2833) — 중간 허브 위에 페이지처럼 형제 시트를 얹고 FAB 를 숨긴다.
+  // i01 메모 시트(TRIP-1117, Figma 4952:3098) — 중간 허브 위에 페이지처럼 형제 시트를 얹고 하단 바를 숨긴다.
   // 저장본을 시드로 넣어 "작성 중" 모습을 낸다(입력칸은 첫 마운트에만 시드를 읽는다).
   {
     key: 'live-hub-memo-sheet',
@@ -7420,7 +7439,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <>
-        {renderLiveHubPreview(1, { fabHidden: true })}
+        {renderLiveHubPreview(0, { barHidden: true })}
         <MemoSheet
           placeName="부산시립미술관"
           text={LIVE_HUB_PREVIEW_MEMO}
@@ -7438,7 +7457,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <>
-        {renderLiveHubPreview(1, { fabHidden: true })}
+        {renderLiveHubPreview(0, { barHidden: true })}
         <MemoSheet
           placeName="부산시립미술관"
           editable={false}
@@ -7456,7 +7475,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <>
-        {renderLiveHubPreview(1, { fabHidden: true })}
+        {renderLiveHubPreview(0, { barHidden: true })}
         <MemoSheet
           placeName="부산시립미술관"
           text={LIVE_HUB_PREVIEW_MEMO}
@@ -7467,14 +7486,14 @@ export const PREVIEW_STATES: PreviewState[] = [
       </>
     ),
   },
-  // i01 메모 저장됨(TRIP-1117, Figma 4741:4650) — 시트 없이 관람 중 카드 버튼 줄 아래 메모 박스.
+  // i01 메모 저장됨(TRIP-1117, Figma 4954:3123) — 시트 없이 관람 중 카드 버튼 줄 아래 메모 박스.
   {
     key: 'live-hub-memo-saved',
     band: 'i',
     label: 'i01 · 여행중 허브 메모 저장됨',
     login: null,
     render: () =>
-      renderLiveHubPreview(1, { slots: LIVE_HUB_PREVIEW_SLOTS_MEMO_SAVED }),
+      renderLiveHubPreview(0, { slots: LIVE_HUB_PREVIEW_SLOTS_MEMO_SAVED }),
   },
   // i02 변수 감지(TRIP-748, Figma 4041:2427 · 4078:2477 · 4081:2502) — 지도 위 알약 + 해운대 배지.
   // 알약 카피는 D2 대로 슬롯명 전체("해운대 해변")라 Figma "해운대"와 다르다(허용 차이).
@@ -7588,7 +7607,6 @@ export const PREVIEW_STATES: PreviewState[] = [
             progress: state,
           }))
         )}
-        currentLocation={LIVE_HUB_PREVIEW_LOCATION}
         solvingLabel="17시 이후 다시 짜는 중"
         dayLabel="2일차"
         dateLabel="6월 11일(목)"
@@ -8235,6 +8253,24 @@ export const PREVIEW_STATES: PreviewState[] = [
         onNavigate={noop}
         onPressBack={noop}
         onMarkAllRead={noop}
+      />
+    ),
+  },
+  // l01 알림함 — 엣지: 조회 실패 오류 얼굴(StateNotice + 다시 시도, TRIP-1501). 서버를 끊어야 실화면에서 보이는 길이라 이 키가 육안 그물.
+  {
+    key: 'notification-inbox-error',
+    band: 'l',
+    label: 'l01 · 알림 조회 실패',
+    login: null,
+    render: () => (
+      <NotificationInboxScreen
+        sections={[]}
+        isEmpty
+        loadFailed
+        onNavigate={noop}
+        onPressBack={noop}
+        onMarkAllRead={noop}
+        onRetry={noop}
       />
     ),
   },

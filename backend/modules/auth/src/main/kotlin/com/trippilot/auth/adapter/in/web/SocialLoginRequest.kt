@@ -3,7 +3,9 @@ package com.trippilot.auth.adapter.`in`.web
 import com.trippilot.auth.application.SocialLoginCommand
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.Provider
+import com.trippilot.auth.domain.RefreshSession
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Size
 import java.time.LocalDate
 import java.util.UUID
 
@@ -19,6 +21,8 @@ data class SocialLoginRequest(
     @field:NotBlank
     val redirectUri: String,
     val ageConfirmation: AgeConfirmation? = null,
+    // 세션 컬럼과 같은 상한([RefreshSession.DEVICE_ID_MAX]) — 여기서 막지 않으면 저장에서 22001 → 500.
+    @field:Size(max = RefreshSession.DEVICE_ID_MAX, message = "deviceId 는 ${RefreshSession.DEVICE_ID_MAX}자 이하입니다.")
     val deviceId: String? = null,
 ) {
     data class AgeConfirmation(

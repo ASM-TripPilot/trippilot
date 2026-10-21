@@ -15,6 +15,12 @@ import type { TextInputProps } from 'react-native';
 // 해서 jest 가 딤의 존재/부재/토큰을 관찰할 수 있게 한다. 실제 라이브러리처럼 시트 콘텐츠
 // **뒤에** 그린다(children 앞에 배치). 목은 애니메이션 prop 을 넘기지 않으므로, 딤 컴포넌트는
 // prop 없이도 자기 노드를 렌더해야 한다.
+// TRIP-1494 — 시트가 다시 스냅하라는 명령을 받았는지 관찰하는 스파이(실제 스냅은 못 한다 — 6-b).
+// ESM 목 모듈은 테스트가 jest.requireMock 으로 같은 인스턴스를 못 받는다(vm-modules) → 전역으로도 건다.
+export const snapToIndexSpy = jest.fn();
+(globalThis as Record<string, unknown>).__bottomSheetSnapToIndexSpy =
+  snapToIndexSpy;
+
 const Passthrough = React.forwardRef<
   unknown,
   {
@@ -28,6 +34,7 @@ const Passthrough = React.forwardRef<
     close: () => {},
     expand: () => {},
     collapse: () => {},
+    snapToIndex: snapToIndexSpy,
   }));
   return (
     <View {...props}>

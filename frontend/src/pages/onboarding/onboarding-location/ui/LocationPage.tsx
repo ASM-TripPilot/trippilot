@@ -18,7 +18,7 @@ import {
 } from '@/shared/location/index.view';
 import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
 
-/** c08 default 목적 문단에 주입하는 Figma 온보딩 문구(1296:1208). 사용자 가시 텍스트라
+/** c08 default 목적 문단에 주입하는 Figma 온보딩 문구(4975:3306). 사용자 가시 텍스트라
  * 자구가 곧 계약이다 — 바꾸려면 게이트① 논의 대상. */
 const ONBOARDING_PURPOSE =
   '내 주변을 알면 더 잘 맞는 곳을 추천하고\n길 안내도 막힘없이 이어져요';

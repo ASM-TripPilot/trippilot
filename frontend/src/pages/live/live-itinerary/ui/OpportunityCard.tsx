@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 
 import type { Opportunity } from '@/shared/api/index.schemas';
 import { CloseGlyph } from '@/shared/ui/glyphs';
+import { GlassSurface } from '@/shared/ui/GlassSurface';
 
 import { opportunityCopy } from '../model/hubOpportunity';
 
@@ -12,6 +13,7 @@ import { opportunityCopy } from '../model/hubOpportunity';
  * 문장은 고정 템플릿(`opportunityCopy`) 한 곳에서 온다 — 카드는 시각·`오늘 열려요`·`N분` 을 만들지 않고 거리는
  * 서버 `distanceLabel` 그대로다(INV-2·3). 고르기·숨김 기억·이동은 페이지·훅 몫이고 카드는 콜백만 부른다.
  * 화면 정본 프레임이 아직 없다(G-SA-12) — 모양은 허브 카드(`SlotProgressCard` 예정 카드)의 기존 토큰을 따른다.
+ * 행사 칸을 누르면 허브 하단 바 위에 뜬다(TRIP-1522) — 자리는 허브가 정하고, 표면은 바와 같은 유리(`GlassSurface`)다.
  */
 
 export interface OpportunityCardProps {
@@ -29,9 +31,10 @@ export function OpportunityCard({
 }: OpportunityCardProps): ReactElement {
   const copy = opportunityCopy(item);
   return (
-    <View
+    <GlassSurface
       testID="execution-live-opportunity-card"
-      className="mb-md gap-[10px] rounded-button border border-hairline bg-canvas p-[14px]"
+      radiusClassName="rounded-button"
+      contentClassName="gap-[10px] p-[14px]"
     >
       <View className="flex-row items-start gap-sm">
         <Text
@@ -69,6 +72,6 @@ export function OpportunityCard({
           넣어서 다시 짜기
         </Text>
       </Pressable>
-    </View>
+    </GlassSurface>
   );
 }

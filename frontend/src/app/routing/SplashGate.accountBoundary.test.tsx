@@ -10,15 +10,19 @@ import { SplashGate, SPLASH_MIN_VISIBLE_MS } from './SplashGate';
 
 /**
  * TRIP-1077 — 계정 경계 정리. 게이트 목적지가 비LOGIN → LOGIN 으로 바뀌면 SplashGate 가 스택을 걷고
- * (`dismissAll` → `replace('/login')`) 이전 계정의 서버 캐시와 취향 세션 스토어를 비운다.
+ * (루트 스택 `POP_TO_TOP` → `replace('/login')`) 이전 계정의 서버 캐시와 취향 세션 스토어를 비운다.
+ * TRIP-1502 — 걷기 통로가 `router.dismissAll()`(포커스된 가장 안쪽 스택부터 받는다)에서 컨테이너 ref 의
+ * `dispatch({ type: 'POP_TO_TOP', target: <루트 스택 key> })` 로 바뀌었다. 이 파일은 그 통로를 목으로 본다.
  *
  * 무엇을 보장하나:
- *  - A: 스택을 그린 뒤의 비LOGIN → LOGIN 전이마다 정리한다. 가드 반영 뒤 실제 스택에 걷을 화면이 있을 때만
- *    (`canGoBack`) dismissAll 을 부르고, 그 **뒤에** replace 한다. 두 호출은 `(auth)` 가 이미 마운트된 커밋 뒤에 일어난다.
+ *  - A: 스택을 그린 뒤의 비LOGIN → LOGIN 전이마다 정리한다. **루트 스택에 쌓인 화면이 있을 때만**(루트 index > 0)
+ *    걷기를 보내되 `target` 이 루트 스택의 key 여야 하고, 그 **뒤에** replace 한다. 두 호출은 `(auth)` 가 이미 마운트된 커밋 뒤에 일어난다.
  *  - N: 첫 부트·스플래시 중 전이·LOGIN→HOME·같은 계정 전이·같은 값 재렌더에서는 아무것도 하지 않는다.
  *
  * 이 트리엔 설정 화면(runLogout)이 없다 — 여기서 정리가 일어났다면 게이트 혼자 한 것이다(세션 만료 경로).
- * 실제 스택 모양·액션 큐 dispatch 는 목이 흉내 내지 않는다 — 진짜 라우터 쪽은 `SplashGate.integration.test` 가 본다.
+ * 실제 스택 모양·액션이 어느 스택에 먹는지는 목이 흉내 내지 않는다 — 진짜 라우터 쪽은 `SplashGate.integration.test` 가 본다.
+ * 여기서 컨테이너 ref(`useNavigationContainerRef`)는 `{ getRootState, dispatch }` 두 개짜리 가짜다. *(개념)* 컨테이너 ref —
+ * 앱 전체 내비게이션 상태를 읽고(`getRootState`) 액션을 직접 보낼(`dispatch`) 수 있는 손잡이. `target` 으로 받을 스택을 지정한다.
  *
  * 3동작 뼈대: 준비=캐시 1건·취향 값·게이트 목적지로 스택 그림 → 실행=목적지 교체 후 rerender → 단언.
  */
@@ -37,9 +41,10 @@ jest.mock('expo-router', () => ({
   router: {
     canDismiss: jest.fn(),
     canGoBack: jest.fn(),
-    dismissAll: jest.fn(),
     replace: jest.fn(),
   },
+  // 훅이 렌더 때 부르는 컨테이너 ref — 같은 객체를 돌려줘야 effect 의존성이 흔들리지 않는다(바깥 변수는 호출 시점에 읽혀 안전).
+  useNavigationContainerRef: () => mockNavigationRef,
 }));
 
 // 하한 기준점(JS 모듈 로드 시각)은 모듈 최상위 값이라 테스트가 바꿀 수 없다 — 목으로 갈아 beforeEach 에서 "지금"으로 맞춘다
@@ -63,10 +68,32 @@ jest.mock('@/shared/push', () => ({
 const mockUseBootstrapGate = useBootstrapGate as jest.MockedFunction<
   typeof useBootstrapGate
 >;
+const mockNavigationRef = { getRootState: jest.fn(), dispatch: jest.fn() };
+const mockGetRootState = mockNavigationRef.getRootState;
+const mockDispatch = mockNavigationRef.dispatch;
 const mockCanDismiss = router.canDismiss as jest.Mock;
 const mockCanGoBack = router.canGoBack as jest.Mock;
-const mockDismissAll = router.dismissAll as jest.Mock;
 const mockReplace = router.replace as jest.Mock;
+
+/** 루트 스택(진짜 걷기 대상)의 key — 아래 래퍼 key 들과 일부러 다르게 둬서 "아무 key 나" 쓰는 구현을 잡는다. */
+const ROOT_STACK_KEY = 'root-stack-key';
+
+/**
+ * expo-router 의 루트 상태 모양: 최상위 컨테이너 상태 → `__root` 래퍼 route → 그 안쪽이 진짜 루트 스택.
+ * `index` 가 0 이면 첫 화면 하나뿐(걷을 게 없다), 1 이상이면 그 위에 쌓인 화면이 있다.
+ */
+function rootState(index: number, stackKey: string = ROOT_STACK_KEY) {
+  return {
+    key: 'container-state-key',
+    routes: [
+      {
+        key: '__root-route-key',
+        name: '__root',
+        state: { key: stackKey, index },
+      },
+    ],
+  };
+}
 
 type GateState = ReturnType<typeof useBootstrapGate>;
 type Destination = NonNullable<GateState['destination']>;
@@ -76,7 +103,7 @@ const PREV_ACCOUNT_KEY = ['/api/v1/me/profile'];
 
 let queryClient: QueryClient;
 /** 스파이가 불린 그 순간 로그인 라우트가 이미 마운트돼 있었는가(02a ★2). */
-let authMountedAt: { dismissAll: boolean | null; replace: boolean | null };
+let authMountedAt: { walk: boolean | null; replace: boolean | null };
 
 function gate(overrides: Partial<GateState> = {}): GateState {
   return {
@@ -128,7 +155,7 @@ function authRouteMounted(): boolean {
 }
 
 function expectNothingCleaned(): void {
-  expect(mockDismissAll).not.toHaveBeenCalled();
+  expect(mockDispatch).not.toHaveBeenCalled();
   expect(mockReplace).not.toHaveBeenCalled();
   expect(cacheSize()).toBe(1);
   expect(usePreferenceStore.getState().pace).toBe('relaxed');
@@ -139,11 +166,14 @@ beforeEach(() => {
   jest.useFakeTimers();
   mockBootAt = Date.now();
   queryClient = new QueryClient();
-  authMountedAt = { dismissAll: null, replace: null };
+  authMountedAt = { walk: null, replace: null };
+  // 옛 판정 도구(canDismiss·canGoBack)는 일부러 "걸을 게 있다"로 둔다 — 새 판정은 루트 index 라, 이 값에 끌려가면 A3 이 잡는다.
   mockCanDismiss.mockReturnValue(true);
   mockCanGoBack.mockReturnValue(true);
-  mockDismissAll.mockImplementation(() => {
-    authMountedAt.dismissAll = authRouteMounted();
+  // 기본 모양: 루트 스택에 화면이 쌓여 있다(첫 화면 + 1).
+  mockGetRootState.mockReturnValue(rootState(1));
+  mockDispatch.mockImplementation(() => {
+    authMountedAt.walk = authRouteMounted();
   });
   mockReplace.mockImplementation(() => {
     authMountedAt.replace = authRouteMounted();
@@ -164,7 +194,7 @@ describe('TRIP-1077 A · 비LOGIN → LOGIN 전이에서 계정 경계를 정리
     // 준비
     const view = mountDrawn('HOME');
     expect(screen.getByTestId('gate-route-(tabs)')).toBeOnTheScreen();
-    expect(mockDismissAll).not.toHaveBeenCalled();
+    expect(mockDispatch).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
     expect(cacheSize()).toBe(1);
     expect(usePreferenceStore.getState().pace).toBe('relaxed');
@@ -172,16 +202,19 @@ describe('TRIP-1077 A · 비LOGIN → LOGIN 전이에서 계정 경계를 정리
     // 실행
     switchTo(view, 'LOGIN');
 
-    // 단언 — 호출 유무·인자
-    expect(mockDismissAll).toHaveBeenCalledTimes(1);
+    // 단언 — 호출 유무·인자: 걷기는 루트 스택 key 를 겨눈 POP_TO_TOP 이다(래퍼 key 가 아니다, TRIP-1502 — 횟수는 구현 형태라 보지 않는다)
+    expect(mockDispatch).toHaveBeenCalledWith({
+      type: 'POP_TO_TOP',
+      target: ROOT_STACK_KEY,
+    });
     expect(mockReplace).toHaveBeenCalledTimes(1);
     expect(mockReplace).toHaveBeenCalledWith('/login');
-    // 단언 — 순서: 걷기가 먼저, 바꿔 끼우기가 나중(반대면 방금 넣은 로그인 화면까지 걷힌다)
-    expect(mockDismissAll.mock.invocationCallOrder[0]).toBeLessThan(
+    // 단언 — 순서: 걷기가 전부 먼저, 바꿔 끼우기가 나중(반대면 방금 넣은 로그인 화면까지 걷힌다)
+    expect(Math.max(...mockDispatch.mock.invocationCallOrder)).toBeLessThan(
       mockReplace.mock.invocationCallOrder[0]
     );
     // 단언 — 시점: 로그인 라우트가 이미 마운트된 커밋 뒤에 불렸다
-    expect(authMountedAt).toEqual({ dismissAll: true, replace: true });
+    expect(authMountedAt).toEqual({ walk: true, replace: true });
     // 단언 — 이전 계정 흔적
     expect(cacheSize()).toBe(0);
     expect(usePreferenceStore.getState().pace).toBeNull();
@@ -194,7 +227,10 @@ describe('TRIP-1077 A · 비LOGIN → LOGIN 전이에서 계정 경계를 정리
 
       switchTo(view, 'LOGIN');
 
-      expect(mockDismissAll).toHaveBeenCalledTimes(1);
+      expect(mockDispatch).toHaveBeenCalledWith({
+        type: 'POP_TO_TOP',
+        target: ROOT_STACK_KEY,
+      });
       expect(mockReplace).toHaveBeenCalledTimes(1);
       expect(mockReplace).toHaveBeenCalledWith('/login');
       expect(cacheSize()).toBe(0);
@@ -202,34 +238,71 @@ describe('TRIP-1077 A · 비LOGIN → LOGIN 전이에서 계정 경계를 정리
     }
   );
 
-  // TRIP-1431 — 가드 반영 전 사본(canDismiss)은 걷을 게 있다 하고 실제 스택(canGoBack)은 없다 하는 QA Q-001 의 모양.
-  it('A3 가드 반영 뒤 실제 스택에 걷을 화면이 없으면(canGoBack 거짓) — 반영 전 사본(canDismiss)이 참이어도 — dismissAll 은 부르지 않고 replace 만 1회 한다', () => {
-    mockCanDismiss.mockReturnValue(true);
-    mockCanGoBack.mockReturnValue(false);
-    const view = mountDrawn('HOME');
+  // TRIP-1431 — 가드 반영 전 사본(canDismiss)과 탭 이력까지 세는 canGoBack 은 "걷을 게 있다" 하는데 루트 스택엔 첫 화면뿐인 모양.
+  // TRIP-1502 — 판정 근거가 canGoBack 에서 루트 스택 index 로 바뀌었다(탭은 POP_TO_TOP 을 처리하지 않아 미처리 dev 경고가 난다).
+  it.each([
+    ['루트 스택에 첫 화면뿐(index 0)', rootState(0)],
+    [
+      '루트 스택 index 가 비어 있다(0 으로 본다)',
+      {
+        key: 'container-state-key',
+        routes: [
+          {
+            key: '__root-route-key',
+            name: '__root',
+            state: { key: ROOT_STACK_KEY },
+          },
+        ],
+      },
+    ],
+    [
+      '루트 스택이 아직 상태를 안 갖는다(마운트 전)',
+      {
+        key: 'container-state-key',
+        routes: [{ key: '__root-route-key', name: '__root' }],
+      },
+    ],
+    ['루트 상태 자체가 없다', undefined],
+  ])(
+    'A3 %s 이면 canGoBack·canDismiss 가 참이어도 걷기를 보내지 않고 replace 만 1회 한다',
+    (_label, state) => {
+      mockCanDismiss.mockReturnValue(true);
+      mockCanGoBack.mockReturnValue(true);
+      mockGetRootState.mockReturnValue(state);
+      const view = mountDrawn('HOME');
 
-    switchTo(view, 'LOGIN');
+      switchTo(view, 'LOGIN');
 
-    expect(mockDismissAll).not.toHaveBeenCalled();
-    expect(mockReplace).toHaveBeenCalledTimes(1);
-    expect(mockReplace).toHaveBeenCalledWith('/login');
-    expect(cacheSize()).toBe(0);
-    expect(usePreferenceStore.getState().pace).toBeNull();
-  });
+      expect(mockDispatch).not.toHaveBeenCalled();
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+      expect(mockReplace).toHaveBeenCalledWith('/login');
+      expect(cacheSize()).toBe(0);
+      expect(usePreferenceStore.getState().pace).toBeNull();
+    }
+  );
 
   it('A4 로그아웃 → 다른 계정 로그인 → 다시 로그아웃이면 두 번째에도 정리한다(한 번 정리로 끝나지 않는다)', () => {
     // 준비: 첫 로그아웃 → 계정 B 로그인, B 의 캐시·취향이 쌓인다.
     const view = mountDrawn('HOME');
     switchTo(view, 'LOGIN');
+    const walksAfterFirst = mockDispatch.mock.calls.length;
+    expect(walksAfterFirst).toBeGreaterThan(0);
     switchTo(view, 'HOME');
     seedPreviousAccount();
     expect(cacheSize()).toBe(1);
+    // 재로그인으로 루트 스택이 새로 만들어졌다 — key 가 바뀐다(첫 로그아웃 때의 key 를 기억해 두고 쓰면 엉뚱한 곳을 겨눈다)
+    const SECOND_STACK_KEY = 'root-stack-key-after-relogin';
+    mockGetRootState.mockReturnValue(rootState(2, SECOND_STACK_KEY));
 
     // 실행: 두 번째 로그아웃
     switchTo(view, 'LOGIN');
 
-    // 단언
-    expect(mockDismissAll).toHaveBeenCalledTimes(2);
+    // 단언 — 두 번째에도 걷기가 다시 요청된다(횟수가 아니라 "늘었는가") — 겨눈 곳은 그때의 루트 스택 key
+    expect(mockDispatch.mock.calls.length).toBeGreaterThan(walksAfterFirst);
+    expect(mockDispatch).toHaveBeenLastCalledWith({
+      type: 'POP_TO_TOP',
+      target: SECOND_STACK_KEY,
+    });
     expect(mockReplace).toHaveBeenCalledTimes(2);
     expect(mockReplace).toHaveBeenLastCalledWith('/login');
     expect(cacheSize()).toBe(0);
@@ -269,7 +342,7 @@ describe('TRIP-1077 N · 정리하지 않는 전이 (AC-5)', () => {
     // 실행 1: 스플래시 중 LOGIN 으로 교정
     switchTo(view, 'LOGIN');
     expect(screen.getByTestId('shell-splash-root')).toBeOnTheScreen();
-    expect(mockDismissAll).not.toHaveBeenCalled();
+    expect(mockDispatch).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
 
     // 실행 2: floor 경과 — 스택이 처음 그려진다
@@ -323,13 +396,15 @@ describe('TRIP-1077 N · 정리하지 않는 전이 (AC-5)', () => {
     const view = mountDrawn('HOME');
     switchTo(view, 'LOGIN');
     expect(mockReplace).toHaveBeenCalledTimes(1);
+    const walksAfterCleanup = mockDispatch.mock.calls.length;
+    expect(walksAfterCleanup).toBeGreaterThan(0);
     seedPreviousAccount();
 
     // 실행
     switchTo(view, 'LOGIN');
 
     // 단언: 호출 수 그대로, 다시 심은 값도 그대로
-    expect(mockDismissAll).toHaveBeenCalledTimes(1);
+    expect(mockDispatch).toHaveBeenCalledTimes(walksAfterCleanup);
     expect(mockReplace).toHaveBeenCalledTimes(1);
     expect(cacheSize()).toBe(1);
     expect(usePreferenceStore.getState().pace).toBe('relaxed');

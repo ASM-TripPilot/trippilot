@@ -47,6 +47,8 @@
 # 체크가 하나도 안 달린다. 위 바퀴들처럼 PR 을 쌓으면 대부분이 여기 해당한다. 수동으로 태운다:
 # `gh workflow run backend-ci.yml --ref <branch>`. 이걸 모르면 "체크 없음"을 통과로 읽는다.
 #
+# 갱신: 2026-10-21 · 기술 강화 루프 8노드 머지 → done(#1428~#1481), COV-RATCHET 에 TRIP-1532·#1493, LOOP-BFF 접음(사용자 결정, #1494 닫음)
+# 갱신: 2026-10-20 · 기술 강화 루프 노드 추가(파일 말미 §기술 강화 루프 · TRIP-1480) — 새 간선 둘은 모두 COV-RATCHET 으로 들어간다
 # 갱신: 2026-10-13 · 출시·4차 승격(#1082) 반영, 끝난 노드 셋 닫음, `AI-NL-EDIT` 접음, **U8·U10 노드 추가**(설계는 10-12 에 끝났는데 노드가 없었다)
 # 갱신: 2026-10-12 · 루프 다섯 노드 머지 완료(#1040~#1044) → done
 # 갱신: 2026-10-12 · `SOCIAL-TOKEN-APP`(TRIP-1317) 추가 — TRIP-1316 잔여(이메일 선점)를 노드로 뗌
@@ -4429,3 +4431,287 @@ to = "U10-SOURCE-CHECK"
 kind = "배포선행"
 verified = false
 reason = "M-U10-a 2단계 CHECK 는 1단계가 운영에 배포되고 옛 파드가 사라진 뒤에만 안전하다."
+
+# ── 기술 강화 루프(2026-10-20 승인 계획안) ─────────────────────────────────────────────
+# 새 기능 없이 기존 기능에 붙인다. 순서는 의존보다 공유 파일이 정한다(openapi.yaml · docker-compose.yml ·
+# app/build.gradle.kts · libs.versions.toml). PR 이 이미 있는 노드의 touches 는 **실제 diff**다 — 머지된 노드는 2026-10-21 에 `gh pr diff <n> --name-only` 로 다시 대조했다.
+
+[[nodes]]
+id = "COV-GATE"
+ticket = "TRIP-1465"
+title = "[Infra] JaCoCo 커버리지 합산 + 전체 하한·모듈 바닥 게이트"
+status = "done"
+touches = [
+  "backend/build.gradle.kts",
+  "backend/app/build.gradle.kts",
+  "backend/gradle/libs.versions.toml",
+  "backend/scripts/coverage_gate.py",
+  "backend/scripts/test_coverage_gate.py",
+  "backend/common/test-support",
+  "backend/.claude/skills/backend-verify-gates/SKILL.md",
+  "backend/modules/archive/src/test",
+  "backend/modules/itinerary-recalculation/src/test",
+  "backend/modules/reflection/src/test",
+  ".github/workflows/backend-ci.yml",
+  ".github/workflows/",
+  # 모듈 디렉토리 문자열은 모듈 단위로 적힌 기존 노드와 겹침을 잡으려는 보수적 표기다(스크립트는 문자열 일치만 본다).
+  "backend/modules/archive",
+  "backend/modules/itinerary-recalculation",
+  "backend/modules/reflection",
+]
+note = """
+PR #1428 — 2026-10-21 머지. 처음 하한 94/83, 모듈 바닥 70/40 — 올리는 일은 COV-RATCHET(TRIP-1532)이 잇는다.
+검수 중 드러난 `AutoVisitIT` 의 KST 자정 직후 실패(develop 에 원래 있던 시각 의존 결함)는 Jira TRIP-1472 가 잇는다(노드 없음).
+기준선은 **#1428 브랜치에서** 쟀다 — 측정 당시 develop 에는 JaCoCo 가 없었다. 2026-10-19 라인 95.4 · 분기 84.8,
+develop(#1431 포함) 병합 뒤 2026-10-20 로컬 재측정 라인 95.5 · 분기 85.3. 분기 분모는 8,084.
+모듈 test 디렉토리 셋은 JaCoCo 합성 필드(`$jacocoData`)를 INV-3 필드 검사에서 빼려고
+`declaredFieldNames()` 로 바꾼 기존 테스트다(하한과는 무관 — 지우면 JaCoCo 가 켜진 빌드에서 INV-3 검사가 깨진다) — reflection/src/test 는 LOOP-COVERAGE 와
+디렉토리만 같고 파일은 다르다(디렉토리 단위로 적어 충돌을 보수적으로 잡는다).
+"""
+
+[[nodes]]
+id = "FIELD-GATE"
+ticket = "TRIP-1466"
+title = "[Infra] OpenAPI 필드 계약 게이트 + 계약 불일치 정정 · deviceId 로그인 500"
+status = "done"
+touches = [
+  "backend/docs/design/openapi.yaml",
+  "backend/app/src/test/kotlin/com/trippilot/app/web/OpenApiContractIT.kt",
+  "backend/app/src/test/kotlin/com/trippilot/app/web/OpenApiSpec.kt",
+  "backend/app/src/test/kotlin/com/trippilot/app/web/SocialLoginControllerIT.kt",
+  "backend/app/src/test/kotlin/com/trippilot/app/web/TokenRefreshControllerIT.kt",
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/adapter/in/web",
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/domain/RefreshSession.kt",
+  "docs/conventions/anti-patterns.md",
+  # 모듈 디렉토리 문자열은 모듈 단위로 적힌 기존 노드와 겹침을 잡으려는 보수적 표기다(스크립트는 문자열 일치만 본다).
+  "backend/modules/auth",
+]
+note = """
+PR #1429 — 2026-10-21 머지. 잔여 둘은 노드 없이 Jira 가 잇는다 — `Capabilities.localLocationUse` 의미 결정(TRIP-1474, 그때까지
+게이트 예외 목록에 사유와 함께 둔다)과 문자열 입력 22001(길이 초과)·NUL 문자 500 의 전역 처리(TRIP-1473).
+"""
+
+[[nodes]]
+id = "POI-REGION-PREFIX"
+ticket = "TRIP-1471"
+title = "[Bug] 잘린 시도명 판정 — #1427 수집본으로 develop CI 가 깨진 것"
+status = "done"
+touches = [
+  "ai/src/trippilot/poi_curation/sourcing/overture_address.py",
+  "ai/tests/poi_curation/test_overture_address.py",
+  "ai/tests/scripts/test_merge_pois_docs.py",
+  "ai/data/collected_pois.json",
+]
+note = """
+PR #1431 머지(2026-10-20). 백엔드 판정은 그대로 두고 AI 병합 단계의 약칭 표에서 편다 — backend diff 0.
+잔여 둘: 거울 테스트를 백엔드 판정만큼 조이는 것은 POI-MIRROR-STRICT(#1446)가, 수집 PR 앞 게이트는 POI-COLLECT-GATE(TRIP-1475)가 잇는다.
+"""
+
+[[nodes]]
+id = "POI-MIRROR-STRICT"
+ticket = "TRIP-1471"
+title = "[Test] 공유본 거울 테스트를 백엔드 시도 판정과 같이 자른다(빈 주소·비ASCII 공백)"
+status = "done"
+touches = ["ai/tests/scripts/test_merge_pois_docs.py"]
+note = """
+PR #1446 — 2026-10-21 머지. #1431 재검수 잔여. 테스트만 바꿨다(공유본에 해당 행 0건이라 결과는 그대로 초록).
+남은 수집 PR 앞 게이트·더 짧은 잘림(`제주특별`)은 POI-COLLECT-GATE(#1473)가 이었다.
+"""
+
+[[nodes]]
+id = "POI-COLLECT-GATE"
+ticket = "TRIP-1475"
+title = "[AI] 수집 공유본 병합 게이트 — 백엔드가 시도를 못 정하는 행은 격리하고 나머지를 병합, 격리가 임계를 넘으면 실패"
+status = "done"
+touches = [
+  "ai/scripts/collect/merge_pois_docs.py",
+  "ai/tests/scripts/test_merge_pois_docs.py",
+  "ai/src/trippilot/poi_curation/sourcing/overture_address.py",
+  ".github/workflows/ai-poi-collect.yml",
+  "docs/guides/poi-수집본-적재.md",
+  # 디렉토리 문자열은 디렉토리 단위로 적힌 기존 노드(RELEASE-MAIN)와 겹침을 잡으려는 보수적 표기다.
+  ".github/workflows/",
+]
+note = """
+PR #1473 — 2026-10-21 develop 머지. 스케줄은 main 의 워크플로 사본으로 돌아, 격리·영속 순서는 main 사본을 맞춘 뒤에 켜진다 —
+main 사본 동기화는 TRIP-1533(`ci(main):` 사본 PR #1495)이 잇는다 — 그 전까지 운영 스케줄은 종전처럼 합치고 `stats.sido_unresolved`·`::warning::` 으로만 드러난다(#1473 판단). 릴리스 승격은 사본을 main 판으로 되돌리는 절차라(RELEASE-MAIN) 이 일을 받지 않는다.
+#1431 4차 검수 잔여. 설계 요건의 정본은 TRIP-1475 본문이다 — 아래는 착수 때 적은 판단 요약(넷, 결과를 덧붙였다):
+(a) 검사는 merge_pois_docs.main() 안에 둔다 — 결과: 약칭 펴기·소급 제거 **뒤**에 돈다. 격리는 `--state` 병합에서만이고,
+    `--state` 없는 경로는 경고·stats(`sido_unresolved`·`sido_unresolved_refs`)만 남긴다.
+(b) 수집 상태 영속(collect-state push)을 게이트 **뒤로** 옮겼다 — 착수 당시에는 merge_pois_docs 실행 자체가 영속 뒤라
+    (a)만으로는 막힌 날 수집분이 '기제안'으로 영구히 빠졌다. 스케줄은 main 의 워크플로 사본으로 도니
+    main 사본도 `ci(main):` 단일 파일 PR 로 맞춰야 적용된다 — TRIP-1533(#1495)이 잇는다.
+(c) 전부-아니면-전무로 막지 않는다 — 결과: 격리는 공유본에 없던 키만(공유본 키는 복원 또는 남겨 둠, (d)), 나머지는 병합하고
+    격리+복원 건수가 상한(`--max-quarantined`)을 넘을 때만 실패.
+(d) 판정을 백엔드와 맞춘다 — 거울 테스트 부분은 POI-MIRROR-STRICT(#1446)가 맡았다. 착수 때 남긴 검토 둘은 #1473 이 닫았다:
+    `_SIDO_RENAMES`(localdata.py)는 약칭 표와 합치지 않는다(카탈로그에서 유도 못 하는 옛→새 명칭 이력이라 성격이 다르다,
+    #1473 판단). 두 글자 이상 잘린 시도명(`제주특별`)은 펴지 않고 시도 게이트(`quarantine_unresolved_sido`)가 다룬다 — `--state` 병합에서만,
+    게이트와 소급 제거를 둘 다 통과하는 앞 판본이 있으면 그것으로 되돌리고, 없으면 공유본에 있던 키는 경고만 남기고 두며,
+    나머지(그날 처음 온 키)는 격리한다(`merge_pois_docs.quarantine_unresolved_sido` docstring). 2026-10-21 공유본 69,587행에서 그런 행·미판정 행은 둘 다 0건(재현:
+    `backend_sido_token` 첫 토큰이 카탈로그 시도가 아닌 행 수).
+"""
+
+[[nodes]]
+id = "LOOP-BFF"
+ticket = "TRIP-1467"
+title = "[BE] 라이브 일정 화면 BFF — 만들지 않는다(2026-10-21 사용자 결정: 앱 진입이 이미 왕복 한 번)"
+status = "dropped"
+touches = [
+  # 착수 전 티켓 원문에서 뽑은 예상이다 — 접어서 develop 에 들어간 diff 는 없다(닫힌 #1494 의 실제 변경은 app views 의 컨트롤러·단위 테스트, ArchitectureRulesTest, openapi, IT 둘, 그리고 이 노드를 done 으로 닫던 work-graph.toml 이었다).
+  "backend/docs/design/openapi.yaml",
+  "backend/app/src/main/kotlin/com/trippilot/app/web",
+  "backend/app/src/test/kotlin/com/trippilot/app/web",
+  "backend/app/src/test/kotlin/com/trippilot/app/architecture/ArchitectureRulesTest.kt",
+  "backend/app/build.gradle.kts",
+  "backend/gradle/libs.versions.toml",
+  "backend/modules/trip/src/main/kotlin/com/trippilot/trip/api",
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/api",
+  "backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/api",
+  "backend/modules/archive/src/main/kotlin/com/trippilot/archive/api",
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/api",
+  # 모듈 디렉토리 문자열은 모듈 단위로 적힌 기존 노드와 겹침을 잡으려는 보수적 표기다(스크립트는 문자열 일치만 본다).
+  "backend/modules/trip",
+  "backend/modules/itinerary-generation",
+  "backend/modules/planb-detection",
+  "backend/modules/archive",
+  "backend/modules/auth",
+]
+note = """
+**접음(2026-10-21, 사용자 결정) — 만들지 않는다.** 구현 PR #1494 는 닫았다(브랜치 `feat/TRIP-1467-live-view-bff` 는 남김).
+프론트를 대조해 보니 진입 화면(홈·여행 목록·기록 달력·여행 카드)이 라이브로 보낼지 정하려고 같은 일정 키를 이미
+받아 두어, 라이브 첫 로딩은 지금도 왕복 한 번이다. 두 번 왕복은 드문 진입 셋(이미 반영된 Plan-B 알림 → 허브,
+도우미 이력의 다른 여행 OPEN_LIVE, 외부 딥링크)뿐이고, 그것도 프론트만으로 같은 효과를 낸다 — 트리거 조회의
+active 게이트를 풀고 그날 방문을 미리 받기. 잇는 곳: 그 프론트 제안은 TRIP-1467 댓글(프론트 몫, 백엔드 노드 없음).
+되살릴 조건: 프론트 안을 넣은 뒤에도 캐시 없는 진입에서 '진입 → 트리거 칩' 시간이 문제로 측정되거나, 진입 화면 캐시
+경로에서도 라이브 첫 화면의 두 번째 왕복이 생기면 다시 연다 — 브랜치 `feat/TRIP-1467-live-view-bff` 에서 집는다.
+"""
+
+[[nodes]]
+id = "LOOP-AIRFLOW"
+ticket = "TRIP-1468"
+title = "[Infra] Airflow 수집 파이프라인(로컬) — 사본→검증→게시"
+status = "done"
+touches = ["batch", "docker-compose.yml", ".github/workflows/batch-ci.yml", ".github/workflows/", ".gitignore", "docs/conventions/anti-patterns.md"]
+note = """
+PR #1432 — 2026-10-21 머지. 실 수집 모드는 넣지 않았다(키 없이 시험 못 함) — 운영 수집은 GitHub Actions 스케줄이 그대로 맡고,
+#1432 가 그쪽으로 넘긴 "병합 → 검증 → 커서 저장" 순서는 POI-COLLECT-GATE(#1473)가 develop 원본에 넣었다 — 운영 스케줄(main 사본)에는 TRIP-1533(#1495) 머지 전까지 꺼져 있다. Airflow 실 키 시연은 승인 계획(11번)대로
+요청 시라 잇는 노드를 두지 않는다. 신선도는 DAG 를 따로 두지 않고 event_collect.validate 안에서 본다 — 그날 유효 건수 ≥30 과 가장 오래된 지역의 마지막 수집이 허용 날수 이내(coverage — 값과 근거는 #1432).
+"""
+
+[[nodes]]
+id = "LOOP-KAFKA"
+ticket = "TRIP-1469"
+title = "[BE] 아웃박스 배달 경로 Kafka 선택지(로컬) — 폴링 대비 지연 측정"
+status = "done"
+touches = [
+  "docker-compose.yml",
+  ".env.example",
+  "backend/app/src/main/kotlin/com/trippilot/app/event/KafkaOutbox.kt",
+  "backend/app/src/main/kotlin/com/trippilot/app/event/OutboxRelay.kt",
+  "backend/app/src/main/resources/application.yml",
+  "backend/app/src/test/kotlin/com/trippilot/app/KafkaOutboxIT.kt",
+  "backend/app/src/test/resources/config/application.yml",
+  "backend/gradle/libs.versions.toml",
+  "backend/app/build.gradle.kts",
+  "docs/guides/로컬-개발-컨테이너.md",
+  "backend/app/src/test/kotlin/com/trippilot/app/DomainNotificationIT.kt",
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/application/NotificationRaiseService.kt",
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/domain/NotificationRepositories.kt",
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/adapter/out/persistence/NotificationPersistence.kt",
+  "backend/modules/notification/src/test",
+  # 모듈 디렉토리 문자열은 모듈 단위로 적힌 기존 노드와 겹침을 잡으려는 보수적 표기다(스크립트는 문자열 일치만 본다).
+  "backend/modules/notification",
+]
+note = """
+PR #1434 — 2026-10-21 머지. 파티션 병렬 소비(3)로 같은 여행의 Plan-B 사건이 동시에 와 묶음 푸시가 두 번 나가던 것을
+알림 모듈의 그룹 잠금으로 닫았다 — 그래서 notification 모듈도 만졌다. 로컬 전용 선택지다(기본 `trippilot.outbox.broker=none`,
+배포에는 브로커가 없다) — 운영 투입은 계획 밖이라 잇는 노드가 없고, 알려진 한계는 #1434 본문에 있다.
+"""
+
+[[nodes]]
+id = "LOOP-COVERAGE"
+ticket = "TRIP-1470"
+title = "[BE] 분기 커버리지 보강(change-log·reflection·notification)"
+status = "done"
+touches = ["backend/modules/change-log/src/test", "backend/modules/reflection/src/test", "backend/modules/notification/src/test", "backend/modules/change-log", "backend/modules/reflection", "backend/modules/notification"]
+note = """
+PR #1433 — 2026-10-21 머지. 테스트 파일만. 보탠 분기 88(reflection)+58(notification) = 146(#1433 본문, 그 트리 분모 8,777) —
+change-log 는 관대한 읽기 케이스를 18차 검수에서 걷고(#1474 와 겹쳐서) JSON 왕복 1건만 남아 분기 기여가 0 이다. change-log 분기를 51.9 → 98.7% 로 올린 것은 #1474(TRIP-1476)다.
+PIT 는 리포에 넣지 않고 **로컬에서만** 쟀다(2026-10-20, 변이 점수 전→후, #1433 7차 검수에서 보탠 단언 전에 잰 값): reflection 48→59% · notification 54→55%.
+change-log 의 19→70% 는 걷어 낸 케이스로 잰 값이라 무효다(#1433 본문, 다시 재지 않았다). CI 가 재현하는 수치가 아니다.
+테스트를 쓰다 찾은 운영 결함(A~)은 TRIP-1476 이 이었다(#1474·#1481, 목록은 Jira TRIP-1476). notification 은 분기만 오르고
+변이 점수가 거의 그대로(54→55%)라 단언 보강 여지가 남았다. 변이 점수는 CI 가 재지 않아 커버리지 게이트로는 못 잡는다 —
+잇는 곳: TRIP-1534(노드 없음, 생존 변이를 겨냥한 단언 보강).
+"""
+
+[[nodes]]
+id = "TRIP-1476"
+ticket = "TRIP-1476"
+title = "[BE] 방어적 읽기·이벤트 payload 구멍 — 옛/깨진 행 영구 500 · 빈 숙소 이름 알림 독"
+status = "done"
+touches = [
+  # #1474 ∪ #1481 의 머지된 diff(테스트는 모듈 test 디렉토리로 묶었다)
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/adapter/in/event/DomainNotificationSubscribers.kt",
+  "backend/modules/change-log/src/main/kotlin/com/trippilot/changelog/adapter/out/persistence/ChangeLogPersistence.kt",
+  "backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/adapter/out/persistence/ReflectionPersistence.kt",
+  "backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/adapter/out/persistence/TripSummaryPersistence.kt",
+  "backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/adapter/out/persistence/StyleAnalysisPersistence.kt",
+  "backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/api/event/ReflectionEvents.kt",
+  "backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/application/PersonalizationService.kt",
+  "backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/application/ReflectionService.kt",
+  "backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/application/TripSummaryService.kt",
+  "backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/domain/Reflection.kt",
+  "backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/domain/StyleAnalysis.kt",
+  "backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/domain/TripSummary.kt",
+  "backend/modules/trip/src/main/kotlin/com/trippilot/trip/api/event/TripEvents.kt",
+  "backend/common/core/src/main/kotlin/com/trippilot/core/error/ErrorCode.kt",
+  "backend/common/core",
+  "backend/docs/design/openapi.yaml",
+  "backend/app/src/test/kotlin/com/trippilot/app/web/ChangeLogApiIT.kt",
+  "backend/app/src/test/kotlin/com/trippilot/app/web/ReflectionUnreadableRowIT.kt",
+  "docs/conventions/anti-patterns.md",
+  "backend/modules/change-log/src/test",
+  "backend/modules/reflection/src/test",
+  "backend/modules/notification/src/test",
+  # 모듈 디렉토리 문자열은 모듈 단위로 적힌 기존 노드와 겹침을 잡으려는 보수적 표기다(스크립트는 문자열 일치만 본다).
+  "backend/modules/change-log",
+  "backend/modules/reflection",
+  "backend/modules/notification",
+  "backend/modules/trip",
+]
+note = """
+PR #1474·#1481 — 2026-10-21 머지.
+LOOP-COVERAGE(#1433)에서 뗀 운영 코드 결함. 처음 A~E 에 #1433 검수에서 항목이 더해졌다 — 목록의 정본은 Jira(본문+댓글),
+여기 건수를 적지 않는다(드리프트한다). 티켓이 "각각 재현 테스트를 먼저 쓴다"고 적어 세 모듈 test 디렉토리도 만졌다.
+착수 때 설계 판단으로 남겼던 셋은 머지된 PR 이 정했다 — E(모르는 source_type)는 그 행만 건너뛰고 WARN(#1474 판단 5),
+C(범위 밖 저장값)는 범위 끝으로 붙이고(clamp) 로그, 행은 버리지 않음(#1481 판단 5), G(모르는 reflection source)는 UNKNOWN·
+아는 단으로 읽지 않고 행 단위로 다시 만듦(요약은 재생성, 회고는 초안째 재생성 — #1481 판단 4). #1433 과 선행 관계는 티켓에 없었다 — 자원 배타뿐.
+잔여: 수정본을 못 읽는 회고에 서버가 내는 409 `REFLECTION_UNREADABLE` 을 앱이 아직 500 처럼 "다시 시도"로 보인다 —
+종결 안내는 프론트 TRIP-1490 이 잇는다(백엔드 노드 없음).
+"""
+
+[[nodes]]
+id = "COV-RATCHET"
+ticket = "TRIP-1532"
+title = "[Infra] 커버리지 래칫 — 전체 94/83 → 95/86 · 모듈 분기 바닥 40 → 50"
+status = "todo"
+touches = ["backend/scripts/coverage_gate.py", "backend/docs/design/work-graph.toml"]
+note = """
+PR #1493. 2026-10-21 develop 실측 라인 96.4 · 분기 87.6 에서 버림 후 1p 여유.
+모듈 라인 바닥 70 은 유지 — 최저(moderation 82.9%)가 10/19 과 같다. 분기 바닥 50 은 최저 moderation(분기 24개 중 18개, 75.0%)에서
+새 분기가 모두 안 덮이면 13개째에 걸리고, 지금 덮인 분기 7개를 잃어도 걸린다 — 테스트가 사실상 빠지는 쪽만 잡는 바닥이다.
+"""
+
+[[edges]]
+from = "COV-GATE"
+to = "COV-RATCHET"
+kind = "판정선행"
+verified = true
+reason = "올릴 하한(TOTAL_FLOORS)·모듈 바닥이 coverage_gate.py 에 있다 — #1428 없이는 고칠 파일이 없다."
+
+[[edges]]
+from = "LOOP-COVERAGE"
+to = "COV-RATCHET"
+kind = "판정선행"
+verified = true
+reason = "2026-10-20 에 끊어서 깨지는 것을 확인했다(#1433 없는 트리 분기 85.3 < 86, 로컬 실측) — 그래서 verified. 선행(LOOP-COVERAGE)이 done 이라 순서 제약은 이미 풀렸다. 오늘(10/21) 트리에서는 #1433 테스트를 빼도 분기 86.46%(7,779/8,997, 로컬 실측)라, 하한 86 은 #1433·#1474·#1481 이 모두 든 트리에서 정한 값이다."

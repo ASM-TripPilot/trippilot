@@ -81,11 +81,16 @@ class NotificationRaiseService(
                 log.debug("푸시 대상이 아닌 사건이라 알림함에만 둡니다. eventId={}", sourceEventId)
                 metrics.suppressed(SuppressReason.IN_APP_ONLY)
             }
-            is PushPolicy.OncePer -> if (coalesced(notification, push)) {
-                log.info("같은 묶음의 푸시가 {} 안에 나가 이번 푸시를 생략합니다. eventId={}", push.window, sourceEventId)
-                metrics.suppressed(SuppressReason.COALESCED)
-            } else {
-                pushes.dispatch(notification)
+            // 판정 전에 묶음을 잠근다 — 앞 사건의 발송이 커밋된 뒤에 읽게. 릴레이 폴링은 단일 실행이지만 Kafka 모드
+            // (TRIP-1469)는 키(triggerId)가 다른 같은 여행의 사건을 소비 스레드 여럿이 동시에 배달한다.
+            is PushPolicy.OncePer -> {
+                notifications.lockPushGroup(notification.accountId, push.dedupPrefix)
+                if (coalesced(notification, push)) {
+                    log.info("같은 묶음의 푸시가 {} 안에 나가 이번 푸시를 생략합니다. eventId={}", push.window, sourceEventId)
+                    metrics.suppressed(SuppressReason.COALESCED)
+                } else {
+                    pushes.dispatch(notification)
+                }
             }
         }
     }
@@ -114,7 +119,7 @@ class NotificationRaiseService(
      *
      * 기존 조회(최근 [RECENT] 건)를 메모리에서 거른다 — 포트·SQL 을 늘리지 않는다. 그 대가로 한 계정에
      * 창 안 알림이 [RECENT] 건을 넘으면 앞선 푸시를 못 볼 수 있다(감지는 여행·회차당 사건 1건이라 전제 밖 —
-     * INV-SA-3). 릴레이는 단일 실행(ShedLock)이라 같은 묶음의 두 사건이 이 판정을 동시에 지나지 않는다.
+     * INV-SA-3). 같은 묶음의 두 사건이 이 판정을 동시에 지나지 않게 호출측이 [NotificationRepository.lockPushGroup] 을 먼저 잡는다.
      * 알림함만·실패·상한으로 안 나간 행은 발송 시각이 없어 근거가 되지 않는다 — 과잉 억제를 막는다.
      */
     private fun pushedWithin(notification: Notification, policy: PushPolicy.OncePer): Boolean {

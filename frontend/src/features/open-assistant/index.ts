@@ -16,4 +16,4 @@ export {
   type AssistantSurface,
 } from './model/assistantHref';
 export { AssistantFab, type AssistantFabProps } from './ui/AssistantFab';
-export { SparkleGlyph } from './ui/AssistantGlyphs';
+export { ChatBubbleGlyph, SparkleGlyph } from './ui/AssistantGlyphs';

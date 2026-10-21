@@ -149,6 +149,10 @@ export function DailyReflectionPage({
         : undefined,
     startDate: date,
     endDate: date,
+    // TRIP-1497 · 기록된 stats 가 있을 때만 통계 자리표시자를 채운다(없으면 그 문장을 빼고 stats 문장으로 폴백).
+    visitCount: res?.stats?.visitCount,
+    distanceKm: missing.distanceDash ? undefined : res?.stats?.distanceKm,
+    photoCount: res?.stats?.photoCount,
   };
   const rawNarrative = resolveDisplayNarrative(res);
   const narrative =

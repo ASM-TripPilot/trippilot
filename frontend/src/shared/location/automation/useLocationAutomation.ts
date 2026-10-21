@@ -7,6 +7,7 @@ import {
   clearNotice,
   evaluate,
   flushQueue,
+  handleWake,
   markExplainerAsked,
   setContext,
   uploadPendingRoutes,
@@ -88,12 +89,16 @@ export function useLocationAutomation(
         slots: ctx.slots,
         visits: ctx.visits,
       });
+      // TRIP-1511 · 포그라운드에서만 등록 기억을 비운다 — OS 가 잃은 지오펜스를 한 번 되살리고, 태스크 경로는 그대로 생략.
+      if (foreground) deps.native.forgetArmedRegions?.();
       let next = await evaluate(deps, {
         flagOn,
         snapshot: await readPermissionSnapshot(),
         onHub,
       });
       if (foreground) {
+        // TRIP-1517 · 정지한 사용자는 새 표본이 안 와 3분 경과분이 안 확정된다 — 판정을 한 번 깨운다(무장 게이트는 엔진).
+        await handleWake(deps);
         await flushQueue(deps);
         await uploadPendingRoutes(deps);
         const prefix = `/trips/${ctx.tripId}/visits`;

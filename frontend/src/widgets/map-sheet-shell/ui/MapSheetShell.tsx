@@ -1,5 +1,12 @@
-import type { ReactElement, ReactNode } from 'react';
-import { useCallback, useContext, useMemo, useState } from 'react';
+import type { ComponentRef, ReactElement, ReactNode } from 'react';
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useWindowDimensions, View } from 'react-native';
 import type { ListRenderItem } from 'react-native';
 import {
@@ -94,6 +101,13 @@ export interface MapSheetShellProps<T = unknown> {
    *  미전달이면 기본 배열은 1(peek), `snapPoints` 를 직접 준 소비처는 0. 펼침 진입 소비처(i06·i07·
    *  `h08-draft-expanded`)가 2 를 준다(TRIP-920). 실 스냅 전환은 6-b 실기 몫. */
   initialIndex?: number;
+  /** TRIP-1494 — 값이 **바뀔 때마다** 시트를 진입 칸(`initialIndex`)으로 다시 올린다. gorhom 은 `index` 값이 바뀔 때만
+   *  스냅하므로, 사용자가 내려 둔 시트를 같은 진입 칸으로 다시 펼치려면 이 신호가 필요하다. 첫 마운트엔 아무것도 안 한다.
+   *  실 스냅은 6-b 실기 몫(통과형 목). */
+  expandSignal?: number;
+  /** TRIP-1496 — 핀 맞춤의 위쪽 가림 예약(pt)에 더하는 값. 셸 기본 오버레이 줄(뒤로·일차 칩) 말고 소비처가 `mapCard` 로 더 얹는
+   *  **항상 보이는** 줄(허브 경로 토글)의 높이. 숨었다 나타나는 줄(허브 알약)은 넣지 않는다(카메라가 튄다 — 1416 AC-10). 기본 0. */
+  fitTopReserve?: number;
   /** 지도 자리 교체 슬롯(TRIP-799 D5·AC-6). 주면 지도 스트립 자리에 `<MapView>` 대신 이 노드를
    *  렌더한다(day-chip·시트·CTA 는 유지 — 화면을 안 비운다, INV-4). 셸 자체 실패 감지보다 우선한다.
    *  미전달이면 MapView 를 그리고, 그 MapView 가 로드 실패를 알리면 셸 기본 `MapFallbackBar` 로
@@ -114,9 +128,6 @@ export interface MapSheetShellProps<T = unknown> {
   /** 지도 잠금 여부(TRIP-746 가산) — 미전달이면 기본 잠금, 기본 배열의 닫힘 칸에서만 풀림(TRIP-920). i01 허브만
    *  `false` 로 열어 여행 중 자유 탐색을 유지한다(TRIP-397 결정 계승). */
   mapViewOnly?: boolean;
-  /** 현재위치 점(TRIP-746 가산) — `<MapView currentLocation>` 으로 흘린다(TRIP-745 계약). 미전달이면
-   *  점 없음. */
-  currentLocation?: MapCenter;
   /** 시트 스냅 이동 시작(TRIP-748 가산) — `<BottomSheet onAnimate>` 로 그대로 흘린다. 마운트 가드
    *  같은 판단은 소비처(i01 허브) 몫이다. 미전달=미부착. */
   onSheetAnimate?: (fromIndex: number, toIndex: number) => void;
@@ -149,6 +160,17 @@ export interface MapSheetShellProps<T = unknown> {
    *  false 면 시트는 손잡이로만 끌린다. 미전달=라이브러리 기본(true).
    *  ⚠️ 정적 값 — 렌더 중 토글 금지(gorhom 이 본문을 재마운트한다, BottomSheetContent.tsx 236–249). */
   contentPanning?: boolean;
+  /** TRIP-1522 — 가장 낮은 칸에서 더 끌어내리면 시트가 완전히 닫힌다(index −1, 핸들도 사라진다). `<BottomSheet
+   *  enablePanDownToClose>` 로 그대로 흘린다. 미전달=라이브러리 기본(false). 다시 올리는 길(`snapRequest`)은 소비처가 둔다. */
+  enablePanDownToClose?: boolean;
+  /** TRIP-1522 — `id` 가 **바뀔 때마다** 시트를 `index` 칸으로 올리라고 요청한다(`snapToIndex`). `expandSignal` 은 진입 칸으로만
+   *  가서 못 하는 "원하는 칸으로"다. 첫 렌더·같은 `id`·`index` 만 바뀐 렌더는 아무것도 안 한다. 미전달=요청 없음. */
+  snapRequest?: { index: number; id: number };
+  /** TRIP-1522 — 지도 로고 여백을 `<MapView logoMargin>` 으로 그대로 흘린다(시트가 내려가 지도가 드러나도 바에 안 가리게).
+   *  렌더마다 새 객체를 넘기지 않는다(MapView 가 memo). 미전달=SDK 기본. */
+  mapLogoMargin?: MapViewProps['logoMargin'];
+  /** TRIP-1535 — `<MapView showMyLocation>` 으로 그대로 흘린다. 미전달=현행. */
+  showMyLocation?: boolean;
 }
 
 export function MapSheetShell<T = unknown>({
@@ -164,12 +186,13 @@ export function MapSheetShell<T = unknown>({
   children,
   cta,
   initialIndex,
+  expandSignal,
+  fitTopReserve = 0,
   mapFallback,
   mapCard,
   list,
   snapPoints,
   mapViewOnly,
-  currentLocation,
   onSheetAnimate,
   onSheetScrollBeginDrag,
   onMapTap,
@@ -180,6 +203,10 @@ export function MapSheetShell<T = unknown>({
   animatedPosition,
   bodyScroll = true,
   contentPanning,
+  enablePanDownToClose,
+  snapRequest,
+  mapLogoMargin,
+  showMyLocation,
 }: MapSheetShellProps<T>): ReactElement {
   // 지도 로드 실패(TRIP-919). 폴백 중엔 MapView 가 트리에서 빠지므로, 재시도로 이 값을 풀면 MapView 가
   // 새 인스턴스로 다시 마운트돼 실패 알림(notifiedRef)도 처음부터 다시 돈다 — 별도 key 가 필요 없다.
@@ -192,6 +219,25 @@ export function MapSheetShell<T = unknown>({
   const startIndex = initialIndex ?? (snapPoints ? 0 : DEFAULT_INDEX);
   // 시트가 멈춘 칸(TRIP-920). 초기값 = 진입 칸 — 라이브러리가 마운트 때 onChange 를 부르는지 jest 는 모른다.
   const [snapIndex, setSnapIndex] = useState(startIndex);
+  // TRIP-1494 — 신호가 바뀌면 진입 칸으로 다시 스냅(첫 렌더는 건너뛴다 — 마운트는 index 가 이미 정한다).
+  const sheetRef = useRef<ComponentRef<typeof BottomSheet>>(null);
+  const seenExpandSignal = useRef(expandSignal);
+  useEffect(() => {
+    if (seenExpandSignal.current === expandSignal) return;
+    seenExpandSignal.current = expandSignal;
+    sheetRef.current?.snapToIndex(startIndex);
+  }, [expandSignal, startIndex]);
+  // TRIP-1522 — 요청 id 가 바뀌면 그 칸으로(첫 렌더는 건너뛴다). 가르는 건 id 뿐이다 — index 만 바뀐 렌더는 요청이 아니다.
+  const seenSnapRequestId = useRef(snapRequest?.id);
+  useEffect(() => {
+    if (
+      snapRequest === undefined ||
+      seenSnapRequestId.current === snapRequest.id
+    )
+      return;
+    seenSnapRequestId.current = snapRequest.id;
+    sheetRef.current?.snapToIndex(snapRequest.index);
+  }, [snapRequest]);
   // "0번 = 닫힘" 은 기본 배열에서만 참 — 직접 준 배열(i05 ['40%','88%'])의 0번은 열린 시트다.
   const sheetClosed = snapPoints === undefined && snapIndex === 0;
   // 태그 밖 상수 — `<MapView>` 태그 안 viewOnly 앞에 `>` 가 들어가면 위 태그 정규식이 잘린다.
@@ -221,11 +267,11 @@ export function MapSheetShell<T = unknown>({
     firstPercent === undefined ? 0 : parseFloat(firstPercent) / 100;
   const fitBand = useMemo(
     () => ({
-      top: (topInset + OVERLAY_ROW_RESERVE) / windowHeight,
+      top: (topInset + OVERLAY_ROW_RESERVE + fitTopReserve) / windowHeight,
       bottom: coveredBottom,
       aspect: windowHeight / windowWidth,
     }),
-    [topInset, coveredBottom, windowHeight, windowWidth]
+    [topInset, fitTopReserve, coveredBottom, windowHeight, windowWidth]
   );
 
   return (
@@ -242,13 +288,14 @@ export function MapSheetShell<T = unknown>({
               center={center}
               pins={pins}
               viewOnly={mapLocked}
-              currentLocation={currentLocation}
               onTapMap={onMapTap}
               radiusCircle={radiusCircle}
               fitPins={fitPins}
               fitBand={fitBand}
               drawPathOnMount={drawPathOnMount}
               actualRoute={actualRoute}
+              logoMargin={mapLogoMargin}
+              showMyLocation={showMyLocation}
               onLoadFailed={handleMapLoadFailed}
             />
           ))}
@@ -290,6 +337,7 @@ export function MapSheetShell<T = unknown>({
           onEndReached)를 VirtualizedList-in-ScrollView 충돌 없이 담는다 — header·children 은 리스트의
           ListHeaderComponent 한 자리에 얹힌다(TRIP-798 묶음 C). 미전달이면 현행 스크롤 경로(6 소비처 무변경). */}
       <BottomSheet
+        ref={sheetRef}
         // gorhom 기본값 accessible=true + 라벨 'Bottom Sheet' 는 시트 본문을 접근성 요소 하나로 묶는다 — 안쪽 텍스트
         // 카드(번호·이름·시각)가 VoiceOver·접근성 트리에서 사라진다(TRIP-1430 Q-081). 본문이 제각각 읽히게 끈다.
         accessible={false}
@@ -306,6 +354,7 @@ export function MapSheetShell<T = unknown>({
         onAnimate={onSheetAnimate}
         animatedPosition={animatedPosition}
         enableContentPanningGesture={contentPanning}
+        enablePanDownToClose={enablePanDownToClose}
       >
         {list ? (
           <BottomSheetFlatList

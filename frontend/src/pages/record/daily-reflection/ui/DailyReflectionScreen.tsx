@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -208,13 +208,42 @@ export function DailyReflectionScreen({
     });
   };
   /** 한 줄이 바뀌었으면 저장한다. 안 바뀌었으면 요청 없이 true. */
-  const flushMemo = async (): Promise<boolean> => {
-    if (!onSaveShortMemo || !memoDirty) return true;
+  // TRIP-1497 · 저장이 진행 중이면 같은 약속을 돌려준다 — 입력 마침(PUT 출발) 직후 응답 전에 「확인」을 눌러도
+  // memoDirty 가 아직 참이라 같은 글로 PUT·토스트가 또 나가던 것을 막는다(ref: 같은 틱 두 번째 호출도 본다).
+  // 진행 중인 글과 지금 글이 다르면(응답 전에 더 고침) 그 저장이 끝난 뒤 지금 글을 보낸다 — 새 글을 버리지 않는다.
+  const memoInFlight = useRef<{ text: string; done: Promise<boolean> } | null>(
+    null
+  );
+  const sendMemo = (text: string): Promise<boolean> => {
+    const done = (onSaveShortMemo?.(text) ?? Promise.resolve(true)).then(
+      (saved) => {
+        // 그사이 더 고친 글이 있으면 초안을 비우지 않는다(보낸 글과 같을 때만 서버 값으로 돌아간다).
+        if (saved)
+          setMemoDraft((d) =>
+            d !== null && toSingleLine(d).trim() !== text ? d : null
+          );
+        else setExtrasFailed(true);
+        return saved;
+      }
+    );
+    const entry = { text, done };
+    memoInFlight.current = entry;
+    const clear = () => {
+      if (memoInFlight.current === entry) memoInFlight.current = null;
+    };
+    void done.then(clear, clear);
+    return done;
+  };
+  const flushMemo = (): Promise<boolean> => {
+    if (!onSaveShortMemo || !memoDirty) return Promise.resolve(true);
+    const inFlight = memoInFlight.current;
+    if (inFlight?.text === memoToSave) return inFlight.done;
     setExtrasFailed(false);
-    const saved = await onSaveShortMemo(memoToSave);
-    if (saved) setMemoDraft(null);
-    else setExtrasFailed(true);
-    return saved;
+    if (inFlight)
+      return inFlight.done.then((saved) =>
+        saved ? sendMemo(memoToSave) : false
+      );
+    return sendMemo(memoToSave);
   };
   // 「확인」은 쓴 한 줄이 저장돼야 닫는다 — 키보드가 떠 있어도 첫 탭이 버튼으로 가서(handled) blur 저장이 안 돈다.
   const handleDataConfirm = () => {

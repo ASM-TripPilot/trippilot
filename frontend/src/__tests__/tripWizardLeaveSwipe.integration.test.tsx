@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Text } from 'react-native';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -11,6 +11,7 @@ import {
 } from 'expo-router/testing-library';
 
 import { server } from '@/mocks/server';
+import { useAccountBoundaryReset } from '@/app/model/useAccountBoundaryReset';
 import { useTripWizardStore } from '@/features/create-trip';
 import { clearAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
@@ -69,6 +70,22 @@ function stub(testID: string) {
   };
 }
 
+/**
+ * 실물 `useAccountBoundaryReset`(계정 경계 훅)을 앱 루트에 꽂는 탐침 — 훅의 걷기 형태가 바뀌어도 이 파일이 낡지 않게
+ * 손으로 흉내 내지 않고 진짜를 태운다(TRIP-1502: 옛 `router.dismissAll()` 한 줄 사본이 낡았다).
+ * 목적지를 `HOME` → `LOGIN` 으로 바꾸면 게이트가 로그아웃·세션 만료를 겪은 것과 같은 전이가 된다.
+ */
+let setBoundaryDestination: ((destination: 'HOME' | 'LOGIN') => void) | null =
+  null;
+function BoundaryProbe(): null {
+  const [destination, setDestination] = useState<'HOME' | 'LOGIN'>('HOME');
+  useEffect(() => {
+    setBoundaryDestination = setDestination;
+  }, []);
+  useAccountBoundaryReset(true, destination);
+  return null;
+}
+
 /** 앱 루트 — 쿼리 캐시를 한 번만 만들어 스택 전체가 공유한다(실물 페이지·이탈 다이얼로그가 쿼리 클라이언트를 쓴다). */
 function RootLayout(): ReactNode {
   const [client] = useState(
@@ -82,6 +99,7 @@ function RootLayout(): ReactNode {
   );
   return (
     <QueryClientProvider client={client}>
+      <BoundaryProbe />
       <Stack screenOptions={{ headerShown: false }} />
     </QueryClientProvider>
   );
@@ -355,28 +373,18 @@ describe('🟢 AC-6 · ‹ 로 연 다이얼로그의 나가기도 가로채기�
 });
 
 describe('🟢 AC-6 · 뒤로가 아닌 이동은 가로채지 않는다 (선제 green)', () => {
-  it('계정 경계(dismissAll → replace(/login))는 다이얼로그 없이 로그인으로 간다', async () => {
-    // 준비
+  it('계정 경계(실물 훅: 루트 스택 POP_TO_TOP → replace(/login))는 다이얼로그 없이 로그인으로 가고 위저드도 남지 않는다', async () => {
+    // 준비 — openStep1 의 앵커: 루트는 ['(tabs)', 'trips/new'](루트 index 1 → 훅이 걷기를 보낸다)
     await openStep1({ withDraft: true });
 
-    // 실행 ① — `useAccountBoundaryReset` 의 첫 줄(POP_TO_TOP).
+    // 실행 — 게이트가 LOGIN 이 된 것과 같은 전이. 훅이 루트 스택을 겨눈 POP_TO_TOP 을 보낸 뒤 replace('/login') 한다.
     act(() => {
-      router.dismissAll();
+      setBoundaryDestination?.('LOGIN');
     });
     await settle();
 
-    // 단언 ① — POP_TO_TOP 을 뒤로 계열로 잘못 분류하면 여기서 위저드가 남고 다이얼로그가 뜬다. 다음 줄의 replace 가
-    // 위저드를 덮어 버려 끝 모습만 보면 그 오분류가 가려진다(02a ★7 — 뮤테이션 생존 실측).
-    expect(rootNames()).toEqual(['(tabs)']);
-    expect(screen.queryByTestId(DIALOG)).toBeNull();
-
-    // 실행 ② — 둘째 줄.
-    act(() => {
-      router.replace('/login');
-    });
-    await settle();
-
-    // 단언 ②
+    // 단언 — POP_TO_TOP 을 뒤로 계열로 잘못 분류해 가로채면 위저드가 루트에 남고 다이얼로그가 뜬다. 끝 모습(로그인 한 장)이 그걸 가른다.
+    expect(rootNames()).toEqual(['(auth)/login']);
     expect(app.getPathname()).toBe('/login');
     expect(screen.getByTestId('login-root')).toBeOnTheScreen();
     expect(screen.queryByTestId(DIALOG)).toBeNull();

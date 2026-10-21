@@ -169,3 +169,129 @@ describe('S6 · 편집이 시드 원본을 건드리지 않는다 (엣지5 — �
     ]);
   });
 });
+
+/**
+ * TRIP-1498 (a) · S7 — 편집 초안에 "사용자가 바꿨다(dirty)" 표시와 "추가한 장소 끼우기".
+ *
+ * 무엇을 보장하나:
+ *  - `dirty` 는 처음 false 이고, 삭제·재정렬(제자리에 놓은 끌기 포함)·시각 조정이 true 로 올린다.
+ *  - `seed`(서버 값으로 초안을 새로 채움)와 `reset` 은 false 로 내린다.
+ *  - `insertSlot` 은 그 날의 지정 자리(없으면 말미)에만 끼우고 dirty 를 건드리지 않는다.
+ *    장소 추가 화면이 "편집기에 저장 안 한 변경이 있을 때 추가분을 초안에 같은 자리로 넣는" 데 쓴다.
+ *
+ * 3동작 뼈대: 준비=reset+시드 → 실행=액션 호출 → 단언=getState() 의 dirty·days.
+ */
+describe('S7 · dirty 표시와 insertSlot (TRIP-1498 a)', () => {
+  function seeded(): void {
+    useItineraryEditStore.getState().seed([
+      { date: DAY1, slots: [slot('a'), slot('b')] },
+      { date: DAY2, slots: [slot('c')] },
+    ]);
+  }
+
+  it('S7a · 처음엔 dirty 가 false 고, 시드해도 false 다', () => {
+    expect(useItineraryEditStore.getState().dirty).toBe(false);
+
+    seeded();
+
+    expect(useItineraryEditStore.getState().dirty).toBe(false);
+  });
+
+  it.each([
+    ['삭제', () => useItineraryEditStore.getState().deleteSlot(DAY1, 'a')],
+    [
+      '재정렬',
+      () =>
+        useItineraryEditStore
+          .getState()
+          .reorderSlots(DAY1, [slot('b'), slot('a')]),
+    ],
+    [
+      '제자리 끌기(같은 순서 그대로)',
+      () =>
+        useItineraryEditStore
+          .getState()
+          .reorderSlots(DAY1, [slot('a'), slot('b')]),
+    ],
+    [
+      '시각 조정',
+      () =>
+        useItineraryEditStore.getState().adjustSlotTime(DAY1, 'a', {
+          startAt: '15:00:00',
+          endAt: '16:00:00',
+          endsNextDay: false,
+        }),
+    ],
+  ])('S7b · %s 하면 dirty 가 true 가 된다', (_name, act) => {
+    seeded();
+    // 앵커 — 하기 전엔 false.
+    expect(useItineraryEditStore.getState().dirty).toBe(false);
+
+    act();
+
+    expect(useItineraryEditStore.getState().dirty).toBe(true);
+  });
+
+  it('S7c · dirty 인 뒤 seed 하면 서버 값으로 채워지고 dirty 가 내려간다', () => {
+    seeded();
+    useItineraryEditStore.getState().deleteSlot(DAY1, 'a');
+    expect(useItineraryEditStore.getState().dirty).toBe(true);
+
+    useItineraryEditStore
+      .getState()
+      .seed([{ date: DAY1, slots: [slot('x'), slot('y')] }]);
+
+    expect(useItineraryEditStore.getState().dirty).toBe(false);
+    expect(poiIds(useItineraryEditStore.getState().days[0].slots)).toEqual([
+      'x',
+      'y',
+    ]);
+  });
+
+  it('S7d · dirty 인 뒤 reset 하면 dirty 가 내려간다', () => {
+    seeded();
+    useItineraryEditStore.getState().deleteSlot(DAY1, 'a');
+    expect(useItineraryEditStore.getState().dirty).toBe(true);
+
+    useItineraryEditStore.getState().reset();
+
+    expect(useItineraryEditStore.getState().dirty).toBe(false);
+  });
+
+  it.each([
+    ['중간 자리(1)', 1, ['a', 'x', 'b']],
+    ['말미를 넘는 index(9)는 말미', 9, ['a', 'b', 'x']],
+    ['index 를 안 주면 말미', undefined, ['a', 'b', 'x']],
+  ] as const)('S7e · insertSlot — %s', (_name, index, expected) => {
+    seeded();
+
+    useItineraryEditStore.getState().insertSlot(DAY1, slot('x'), index);
+
+    const days = useItineraryEditStore.getState().days;
+    expect(poiIds(days[0].slots)).toEqual(expected);
+    // 다른 날은 불변.
+    expect(poiIds(days[1].slots)).toEqual(['c']);
+  });
+
+  it('S7f · insertSlot 은 dirty 를 바꾸지 않고, 없는 날짜는 아무 일도 없다', () => {
+    seeded();
+
+    // false 에서 호출 → false 유지.
+    useItineraryEditStore.getState().insertSlot(DAY1, slot('x'), 1);
+    expect(useItineraryEditStore.getState().dirty).toBe(false);
+
+    // true 에서 호출 → true 유지.
+    useItineraryEditStore.getState().deleteSlot(DAY2, 'c');
+    useItineraryEditStore.getState().insertSlot(DAY1, slot('y'), 0);
+    expect(useItineraryEditStore.getState().dirty).toBe(true);
+
+    // 없는 날짜 → days 불변.
+    const before = useItineraryEditStore
+      .getState()
+      .days.map((d) => poiIds(d.slots));
+    useItineraryEditStore.getState().insertSlot('2099-01-01', slot('z'), 0);
+    expect(
+      useItineraryEditStore.getState().days.map((d) => poiIds(d.slots))
+    ).toEqual(before);
+  });
+});

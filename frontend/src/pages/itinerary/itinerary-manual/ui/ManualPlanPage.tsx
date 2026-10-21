@@ -114,6 +114,7 @@ export function ManualPlanPage({
 
   const {
     seed,
+    seedUnlessDirty,
     deleteSlot,
     reorderSlots,
     adjustSlotTime,
@@ -185,8 +186,8 @@ export function ManualPlanPage({
   // 조회는 시드 소스 — 데이터가 (다시) 도착할 때만 스토어를 채운다(편집 중 재렌더로 되돌려지지 않는다).
   useEffect(() => {
     const loaded = itinerary.data?.days;
-    if (loaded !== undefined) seed(loaded);
-  }, [itinerary.data, seed]);
+    if (loaded !== undefined) seedUnlessDirty(loaded);
+  }, [itinerary.data, seedUnlessDirty]);
 
   function handleSave(): void {
     if (inFlightRef.current) return;
@@ -209,6 +210,8 @@ export function ManualPlanPage({
         // 서버 재검증 결과를 조회 캐시에 직접 써넣는다(재조회 0) — 시드 effect 가 다시 돈다.
         // 토스트는 확정이 실패해도 "저장은 됐다"를 알린다(01 Q3). 확정은 PUT 성공 뒤에만.
         onSuccess: (data) => {
+          // 시드 effect 는 dirty 초안을 건너뛰므로(TRIP-1498) 자기 저장 응답은 먼저 시드한다(dirty 도 내려간다).
+          seed(data.days);
           queryClient.setQueryData(
             getGetTripsTripIdItineraryQueryKey(tripId),
             data

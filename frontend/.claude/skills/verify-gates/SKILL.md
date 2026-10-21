@@ -27,6 +27,7 @@ description: "TripPilot frontend 검증 게이트 실행 순서와 명령. '검�
 4. pnpm test     # test:node + test:integration 순차 — 반드시 둘 다
 ```
 
+- **prettier 는 `frontend/` 에서, 파일을 고를 땐 ts/tsx 만 넘긴다.** `.prettierignore`(`*.md`·`.claude/` 제외)는 **prettier 를 실행한 위치 기준으로만** 읽힌다 — 리포 루트에서 `prettier --write frontend/...` 로 부르거나 `.md` 경로를 명시해 넘기면 무시돼, 손으로 관리하는 문서가 통째로 재서식된다(`~` 범위 표기가 `~~` 취소선으로 바뀌고 들여쓰기가 흐트러진다 — 렌더 결과가 달라지는데 tsc·jest 는 못 본다, 실측 1건, 상세는 하네스 변경이력). 문서를 고친 사이클은 커밋 전 `git diff --numstat -- '*.md'` 로 한 줄 편집이 수십 줄 diff 가 되지 않았는지 본다. *유지 판정: 6사이클 관찰 — md 재서식 diff 가 다시 나오지 않으면 유지(비용 0), 또 나오면 pre-commit 훅으로 격상을 검토한다.*
 - **`pnpm test`를 쪼개 부르지 마라.** 이 리포는 jest 설정이 둘이다(`jest.config.js` node 버킷 + `jest.integration.config.js` MSW 버킷). `pnpm test:node`만 돌리면 통합 테스트가 **0건 실행되고도 green으로 보인다.**
 - 스크립트 이름을 추측하지 말고 `package.json`을 실제로 확인한다 — 위 목록도 스냅샷이다.
 

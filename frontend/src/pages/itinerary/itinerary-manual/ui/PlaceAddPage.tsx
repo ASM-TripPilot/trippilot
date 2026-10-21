@@ -4,8 +4,12 @@ import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Text, View } from 'react-native';
 
-import { addSlot, insertSlotAt } from '@/features/edit-itinerary';
-import { buildEditItineraryRequest } from '@/features/edit-itinerary';
+import {
+  addSlot,
+  buildEditItineraryRequest,
+  insertSlotAt,
+  useItineraryEditStore,
+} from '@/features/edit-itinerary';
 import { buildDraftPins } from '@/features/itinerary';
 import { usePlacesInfinite } from '@/features/explore';
 import { PlaceAddHeader, PlaceAddRow } from '@/features/itinerary';
@@ -15,11 +19,16 @@ import { suggestNextSlotTime } from '@/entities/itinerary-slot';
 import { regionForDay } from '@/entities/trip';
 import {
   getGetTripsTripIdItineraryQueryKey,
+  getPutTripsTripIdItineraryMutationOptions,
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
   usePutTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
-import type { Place, PoiCategory } from '@/shared/api/index.schemas';
+import type {
+  ItineraryDaysItemSlotsItem,
+  Place,
+  PoiCategory,
+} from '@/shared/api/index.schemas';
 import { showToast } from '@/shared/ui/Toast';
 
 import { comparePlaceAdd, placeAddToastMessage } from '../model/placeAddNotice';
@@ -29,6 +38,10 @@ import type { PlaceAddSlotLike } from '../model/placeAddNotice';
 const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };
 /** 검색어가 이 시간 동안 멈춰야 서버 조회 키가 바뀐다(TRIP-1348). */
 const SEARCH_DEBOUNCE_MS = 300;
+const PUT_MUTATION_KEY =
+  getPutTripsTripIdItineraryMutationOptions().mutationKey;
+/** 편집기에 저장 안 한 변경이 있을 때 추가 토스트 뒤에 붙는 꼬리(TRIP-1498) — 추가는 바로 저장됐지만 나머지는 아니다. */
+const UNSAVED_EDITS_TAIL = ' · 다른 수정은 저장해야 남아요';
 
 /**
  * h13 장소 추가 배선(TRIP-798, 구 h20 TRIP-338·TRIP-502 계승) — `usePlacesInfinite` 로 후보를 받아
@@ -80,6 +93,8 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
     date: string;
     requestSlots: PlaceAddSlotLike[];
     addedIndex: number;
+    /** 요청에 넣은 새 슬롯 — 편집기 초안에 끼울 때 응답에서 못 찾으면 이걸 쓴다. */
+    slot: ItineraryDaysItemSlotsItem;
   } | null>(null);
 
   // 검색은 서버가 한다(q) + 커서 무한 스크롤(TRIP-502) — 클라 이름 필터·전량 수신을 없앤다.
@@ -112,18 +127,33 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
         const added = inFlightRef.current;
         if (added === null) return;
         setAddedPoiIds((ids) => [...ids, added.poiId]);
+        // 편집기에 저장 안 한 변경(dirty)이 있으면 편집기는 이 응답으로 초안을 다시 채우지 않는다 — 그러면 추가한
+        // 장소가 초안에 없어 이어 누른 [저장]이 서버에서 그 장소를 지운다. 그래서 초안에도 같은 자리(초안 기준
+        // insertAfter 의 다음, 없으면 말미)에 끼운다. dirty 가 아니면 편집기가 응답으로 시드하므로 손대지 않는다.
+        const draft = useItineraryEditStore.getState();
+        const hasUnsavedEdits = draft.dirty;
+        if (hasUnsavedEdits) {
+          draft.insertSlot(
+            added.date,
+            data.days
+              .find((day) => day.date === added.date)
+              ?.slots.find((slot) => slot.poiId === added.poiId) ?? added.slot,
+            insertAfter !== undefined ? Number(insertAfter) + 1 : undefined
+          );
+        }
         // 서버가 이동을 반영해 시각을 밀었으면 응답 시각 그대로 말한다(INV-2). 응답엔 "밀었다" 필드가 없어
         // 요청과 같은 자리의 슬롯을 견준다(BR-U3-13·14 §3 개정 — 장소·순서는 요청 그대로일 때만 repair 를 쓴다).
         showToast({
           testID: 'itinerary-place-added-toast',
-          message: placeAddToastMessage(
-            comparePlaceAdd({
-              requestSlots: added.requestSlots,
-              responseSlots: data.days.find((day) => day.date === added.date)
-                ?.slots,
-              addedIndex: added.addedIndex,
-            })
-          ),
+          message:
+            placeAddToastMessage(
+              comparePlaceAdd({
+                requestSlots: added.requestSlots,
+                responseSlots: data.days.find((day) => day.date === added.date)
+                  ?.slots,
+                addedIndex: added.addedIndex,
+              })
+            ) + (hasUnsavedEdits ? UNSAVED_EDITS_TAIL : ''),
         });
       },
       // 실패한 추가를 "추가됨"으로 두지 않고 말한다(INV-4). 화면을 떠난 뒤의 실패는 보일 자리가 없다(맹점 ③-c).
@@ -226,6 +256,7 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
         nextDays
           .find((day) => day.date === targetDate)
           ?.slots.indexOf(newSlot) ?? -1,
+      slot: newSlot,
     };
     setAddFailed(false);
     save.mutate({ tripId, data: request });
@@ -268,6 +299,12 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
                 if (notReady) return;
                 // 저장 중엔 다른 추가를 받지 않는다(TRIP-1424 Q3 — 진행 표시는 6-b 결정).
                 if (inFlightRef.current !== null) return;
+                // 다른 화면 인스턴스(나갔다 다시 들어온 이 화면)의 저장이 아직 진행 중이어도 받지 않는다 — ref 는
+                // 인스턴스마다 새로 생겨 그 저장을 모른다(TRIP-1498). 일정 PUT 이 하나라도 도는 중이면 무반응.
+                if (
+                  queryClient.isMutating({ mutationKey: PUT_MUTATION_KEY }) > 0
+                )
+                  return;
                 // 검색 키보드를 내린다 — 목록은 탭을 행에 넘기되(handled) 키보드는 그대로 두므로,
                 // 안 내리면 새 시각 시트가 키보드 밑에 깔린다(TRIP-981 #057).
                 Keyboard.dismiss();

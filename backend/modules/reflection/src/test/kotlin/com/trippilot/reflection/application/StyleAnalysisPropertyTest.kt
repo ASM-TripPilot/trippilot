@@ -16,6 +16,7 @@ import com.trippilot.reflection.domain.StyleAnalysis
 import com.trippilot.reflection.domain.StyleAnalysisRepository
 import com.trippilot.reflection.domain.StyleOutcome
 import com.trippilot.reflection.domain.TraitGauges
+import com.trippilot.testsupport.declaredFieldNames
 import com.trippilot.trip.api.TripListFacade
 import com.trippilot.trip.api.TripSummaryView
 import io.kotest.core.spec.style.StringSpec
@@ -216,7 +217,7 @@ class StyleAnalysisPropertyTest : StringSpec({
     "PBT-U5-5 소요시간 필드는 avgDwellMinutes 하나뿐이다(BR-U5-08a)" {
         val forbidden = listOf("duration", "minutes", "eta", "travelTime", "dwell")
         val fields = listOf(StyleAnalysisBody::class, TraitGaugesResponse::class, CategoryShareResponse::class)
-            .flatMap { it.java.declaredFields.map { f -> f.name } }
+            .flatMap { it.java.declaredFieldNames() }
 
         val hits = fields.filter { f -> forbidden.any { f.contains(it, ignoreCase = true) } }
 

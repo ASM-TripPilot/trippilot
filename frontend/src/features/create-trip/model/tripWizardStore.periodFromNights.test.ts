@@ -234,3 +234,88 @@ describe('TRIP-1027 AC-6 · 속성 — 임의의 입력 순서 뒤에도 끝 −
     );
   });
 });
+
+// ── TRIP-1499 · 삭제 합침의 속성 — `Action`·`apply` 는 재사용하고 생성기만 담기·빼기 쪽으로 기울인다 ─────
+// 도시 이름 3종·코드 없는 길이라 "같은 도시" = 이름 일치. 위 AC-6 PBT 는 손대지 않았다(합침이 Σ 를 보존하므로 그대로 green).
+// 왜 따로 기울이나: 위 `actionArb` 는 네 종류를 같은 비중으로 섞어, 반례(담기 3번 + 가운데 빼기)가 나올 확률이 낮다 —
+// 구현 전 코드에서 15번 돌려 3번은 반례를 못 찾고 green 이었다(PBT 가 운에 달려 red 가 흔들린다).
+const mergeActionArb: fc.Arbitrary<Action> = fc.oneof(
+  {
+    weight: 4,
+    arbitrary: fc.record({
+      kind: fc.constant('add' as const),
+      region: fc.constantFrom('서울특별시', '부산광역시', '경주시'),
+      nights: fc.integer({ min: 1, max: 3 }),
+    }),
+  },
+  {
+    weight: 3,
+    arbitrary: fc.record({
+      kind: fc.constant('remove' as const),
+      seq: fc.integer({ min: 1, max: 4 }),
+    }),
+  },
+  {
+    weight: 1,
+    arbitrary: fc.record({
+      kind: fc.constant('nights' as const),
+      seq: fc.integer({ min: 1, max: 4 }),
+      nights: fc.integer({ min: -1, max: 4 }),
+    }),
+  },
+  {
+    weight: 1,
+    arbitrary: fc.record({
+      kind: fc.constant('start' as const),
+      offsetDays: fc.integer({ min: 0, max: 50 }),
+    }),
+  }
+);
+
+describe('TRIP-1499 AC-5 · 속성 — 어떤 순서로 섞어도 인접한 두 행이 같은 도시인 적이 없다', () => {
+  it('담기·빼기·박수 바꾸기·시작 고르기를 섞은 매 단계 뒤 이웃한 두 행의 지역이 다르다', () => {
+    fc.assert(
+      fc.property(fc.array(mergeActionArb, { maxLength: 12 }), (actions) => {
+        store().reset();
+        for (const action of actions) {
+          apply(action);
+          const regions = store().destinations.map((one) => one.region);
+          regions.forEach((region, index) => {
+            if (index > 0) expect(region).not.toBe(regions[index - 1]);
+          });
+        }
+      }),
+      { numRuns: 500 }
+    );
+  });
+});
+
+describe('TRIP-1499 AC-8(b) · 속성 — 담기는 기존 행 박수를 줄이지 않고, 빼기는 지운 행 박수만큼만 합을 줄인다', () => {
+  it('담기 뒤 앞쪽 행들의 박수는 줄지 않고, 빼기 뒤 박수 합은 (전 합 − 지운 행 박수)다', () => {
+    const sum = (rows: { nights: number }[]) =>
+      rows.reduce((total, one) => total + one.nights, 0);
+    fc.assert(
+      fc.property(fc.array(mergeActionArb, { maxLength: 12 }), (actions) => {
+        store().reset();
+        for (const action of actions) {
+          const before = store().destinations;
+          apply(action);
+          const after = store().destinations;
+          if (action.kind === 'add') {
+            // 합침 행은 늘고, 0 → 1 하한 올림도 줄이는 게 아니며, 거부는 불변이다.
+            before.forEach((row, index) => {
+              expect(after[index].nights).toBeGreaterThanOrEqual(row.nights);
+            });
+          }
+          if (action.kind === 'remove') {
+            // 없는 seq 면 지운 박수는 0 — 합침이 박수를 흘리면 합이 더 줄어 여기서 red.
+            const removed =
+              before.find((one) => one.seq === action.seq)?.nights ?? 0;
+            expect(sum(after)).toBe(sum(before) - removed);
+          }
+        }
+      }),
+      { numRuns: 500 }
+    );
+  });
+});
