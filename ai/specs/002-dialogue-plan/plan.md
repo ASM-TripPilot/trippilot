@@ -22,7 +22,8 @@
 | BLM §11 조립 · DEC-AO-18 | `ai/src/trippilot/api/dialogue.py` `build_dialogue_orchestrator` (포트 선계산·배정 시 워커 조립·기동 줄) |
 | BLM §8 측정 | `ai/data/dialogue_plan_eval_set.yaml` · `ai/scripts/measure/measure_prompt_ab.py plan` |
 
-**무변경**: `ai/docs/openapi.json` · `prompts/{intent,dialogue_intent,dialogue_answer}.yaml` · `workers/dialogue_answer.py` ·
+**무변경**(이 spec 의 PR 기준 — 뒤이은 `dialogue_intent.yaml` 0.2.4 는 두 질문 말을 null 로 닫아 US1 시나리오 2 가 계획 단계에 오게 한다,
+별도 PR · 2026-10-20): `ai/docs/openapi.json` · `prompts/{intent,dialogue_intent,dialogue_answer}.yaml` · `workers/dialogue_answer.py` ·
 `orchestrator/dialogue_handlers.py` · `domain/dialogue.py` · `api/wiring.py` · `tests/fixtures/intent_gate/*` · 백엔드·프론트·배포 전부.
 
 ## Constitution Check

@@ -91,9 +91,13 @@ afterEach(() => {
 describe('AssistantSheetPage (TRIP-1322)', () => {
   it('여행 문맥으로 열면 칩·인사·시작 quick reply 가 뜬다(BR-U8-03·04)', async () => {
     renderPage();
-    expect(
-      await screen.findByTestId('assistant-context-chip')
-    ).toHaveTextContent('부산 2박 3일 · 등록 숙소 서면');
+    // TRIP-1526 — 보이는 문구는 surface 별 고정 라벨, 서버 문구(BR-U8-03)는 접근성 라벨에 실린다.
+    const chip = await screen.findByTestId('assistant-context-chip');
+    expect(chip).toHaveTextContent('이 일정에 관해 질문하기');
+    expect(screen.queryByText('부산 2박 3일 · 등록 숙소 서면')).toBeNull();
+    expect(chip.props.accessibilityLabel).toContain(
+      '부산 2박 3일 · 등록 숙소 서면'
+    );
     expect(
       screen.getByTestId('assistant-quick-reply-qr-review')
     ).toBeOnTheScreen();
@@ -108,6 +112,10 @@ describe('AssistantSheetPage (TRIP-1322)', () => {
     expect(
       screen.getByTestId('assistant-next-action-OPEN_STAY_SEARCH')
     ).toBeOnTheScreen();
+    // TRIP-1526 — 여행 문맥이 없으면 칩이 능력 보기다(surface 보다 우선).
+    expect(screen.getByTestId('assistant-context-chip')).toHaveTextContent(
+      '내가 할 수 있는 것 보기'
+    );
   });
 
   it('열기 실패면 오류 + [다시 시도] — 누르면 다시 연다(BR-U8-07)', async () => {
@@ -178,6 +186,45 @@ describe('AssistantSheetPage (TRIP-1322)', () => {
   });
 });
 
+describe('AssistantSheetPage · NO_CONTEXT 능력 보기 (TRIP-1531 결함 3)', () => {
+  // 서버가 발급한 SHOW_CAPABILITIES 칩이 실린 "여행 없음" 열기 응답 — 라벨을 입력 칩 문구와 달리 둬서 어느 쪽이 갔는지 가른다.
+  const issued = {
+    id: 'qr-issued-capabilities',
+    label: '도움말',
+    action: 'SHOW_CAPABILITIES' as const,
+    params: {},
+  };
+  const seed = () => [
+    {
+      ...assistantSample('no-context', {
+        id: 'm-seed',
+        tripId: null,
+        createdAt: '2026-10-21T00:00:00.000Z',
+      }),
+      quickReplies: [issued],
+    },
+  ];
+
+  it('서버 SHOW_CAPABILITIES 칩은 줄에 안 그리고, 입력 칩을 누르면 서버 발급 id 의 ACTION 으로 보낸다(TEXT 아님)', async () => {
+    renderPage({ seedMessages: seed() }, { surface: 'HOME' });
+    const chip = await screen.findByTestId('assistant-context-chip');
+    expect(
+      screen.queryByTestId('assistant-quick-reply-qr-issued-capabilities')
+    ).toBeNull();
+    const sendTurn = jest.spyOn(fake, 'sendTurn');
+
+    await act(async () => {
+      fireEvent.press(chip);
+    });
+
+    await waitFor(() => expect(sendTurn).toHaveBeenCalledTimes(1));
+    expect(sendTurn.mock.calls[0][1].input).toEqual({
+      type: 'ACTION',
+      quickReplyId: 'qr-issued-capabilities',
+    });
+  });
+});
+
 describe('AssistantSheetPage · 카드 배선 (TRIP-1323)', () => {
   it('검토 quick reply → 진행 검토 카드 + 문제 행, 해결 행동을 누르면 그 화면으로 간다', async () => {
     renderPage();
@@ -240,6 +287,10 @@ describe('AssistantSheetPage · 카드 배선 (TRIP-1323)', () => {
     await act(async () => {
       fireEvent.press(await screen.findByTestId('assistant-fallback-continue'));
     });
+    // TRIP-1528 — 응답 실패 문장은 평문과 카드에 겹쳐 두 번 나오지 않는다
+    expect(
+      screen.getAllByText('지금 도우미가 응답하지 못했어요.')
+    ).toHaveLength(1);
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 });
@@ -319,6 +370,24 @@ describe('AssistantSheetPage · 제안 적용 (TRIP-1324)', () => {
 });
 
 describe('AssistantSheetPage · 이력 (TRIP-1325)', () => {
+  it('TRIP-1525 · 더보기(⋮) 토글은 접근성 라벨 "더보기" 이고 이력일 때 selected, 틀에는 제목이 없다', async () => {
+    renderPage();
+    await screen.findByTestId('assistant-context-chip');
+    const toggle = () => screen.getByTestId('assistant-history-toggle');
+    expect(toggle().props.accessibilityLabel).toBe('더보기');
+    expect(toggle().props.accessibilityState).toEqual(
+      expect.objectContaining({ selected: false })
+    );
+    expect(screen.queryByText('AI 도우미')).toBeNull();
+
+    fireEvent.press(toggle());
+
+    expect(await screen.findByTestId('assistant-history')).toBeOnTheScreen();
+    expect(toggle().props.accessibilityState).toEqual(
+      expect.objectContaining({ selected: true })
+    );
+  });
+
   it('이력 보기로 전환하면 적용 기록 행이 보이고, [대화 이어서]로 돌아온다', async () => {
     renderPage();
     await openAndApplyProposal();
@@ -328,6 +397,17 @@ describe('AssistantSheetPage · 이력 (TRIP-1325)', () => {
     fireEvent.press(screen.getByTestId('assistant-history-continue'));
     expect(screen.queryByTestId('assistant-history')).toBeNull();
     expect(screen.getByTestId('assistant-input')).toBeOnTheScreen();
+  });
+
+  it('TRIP-1529 · 이력의 [닫기]는 헤더 X 와 같은 닫기다 — 라우터 back 1회(연타해도 1회)', async () => {
+    renderPage();
+    await screen.findByTestId('assistant-context-chip');
+    fireEvent.press(screen.getByTestId('assistant-history-toggle'));
+
+    fireEvent.press(await screen.findByTestId('assistant-history-close'));
+    fireEvent.press(screen.getByTestId('assistant-history-close'));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
   it('[이력 지우기] → 확인 전 clear 0회, 확인 → 1회 후 일반 시작 상태로', async () => {

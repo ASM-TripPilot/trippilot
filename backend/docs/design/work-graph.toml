@@ -4487,8 +4487,8 @@ touches = [
   "backend/modules/auth",
 ]
 note = """
-PR #1429 — 2026-10-21 머지. 잔여 둘은 노드 없이 Jira 가 잇는다 — `Capabilities.localLocationUse` 의미 결정(TRIP-1474, 그때까지
-게이트 예외 목록에 사유와 함께 둔다)과 문자열 입력 22001(길이 초과)·NUL 문자 500 의 전역 처리(TRIP-1473).
+PR #1429 — 2026-10-21 머지. 잔여 둘은 노드 없이 Jira 가 잇는다 — `Capabilities.localLocationUse` 의미 결정(TRIP-1474 — 2026-10-20 제거로
+결정, 같은 티켓의 PR 이 openapi 와 게이트 예외 목록에서 지웠다)과 문자열 입력 22001(길이 초과)·NUL 문자 500 의 전역 처리(TRIP-1473).
 """
 
 [[nodes]]

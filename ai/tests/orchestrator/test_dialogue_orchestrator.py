@@ -81,6 +81,7 @@ from trippilot.orchestrator.dialogue_orchestrator import (
     ACK_TEXT,
     CAPABILITIES_LITERAL,
     CAPABILITIES_TEXT,
+    GREETING_TEXT,
     INJECTION_REASON,
     THANKS_TEXT,
     DialogueAnswer,
@@ -546,7 +547,23 @@ def test_closer_the_classifier_closed_gets_a_short_reply_instead_of_the_scope_ca
     assert [a.type for a in without_trip.answer.next_actions] == ["CREATE_TRIP"]
 
 
-@pytest.mark.parametrize("utterance", ["응?", "고마워 근데 내일 날씨는", "주식 어때", "ㅋㅋ"])
+@pytest.mark.parametrize("utterance", ["안녕", "안녕하세요!", "하이~", "hello", "반가워요ㅎㅎ", "안녕 반가워", "네 안녕하세요"])
+def test_greeting_gets_a_warm_reply_that_leads_to_the_trip(utterance: str) -> None:
+    """"안녕" 한마디에 범위 밖 카드가 나가면 딱딱하다(2026-10-21) — 받아 주고 여행 쪽으로 한마디 잇는다. 여행 유무로 문장이 다르다."""
+    out = _build(_canned(None)).orch.turn(_input(utterance, turn_index=2))
+    assert out.outcome == "ANSWER" and out.answer.text == GREETING_TEXT[True] and out.frames == ()
+    assert [a.type for a in out.answer.next_actions] == ["OPEN_ITINERARY"] and out.context == DialogueContext(turn_index=2)
+    without_trip = _build(_canned(None)).orch.turn(_input(utterance, snapshot=_NO_TRIP))
+    assert without_trip.answer.text == GREETING_TEXT[False]
+    assert [a.type for a in without_trip.answer.next_actions] == ["CREATE_TRIP"]
+
+
+def test_greeting_with_thanks_is_answered_as_thanks() -> None:
+    out = _build(_canned(None)).orch.turn(_input("안녕 고마워"))
+    assert out.outcome == "ANSWER" and out.answer.text == THANKS_TEXT
+
+
+@pytest.mark.parametrize("utterance", ["응?", "고마워 근데 내일 날씨는", "주식 어때", "ㅋㅋ", "안녕 내일 날씨는"])
 def test_utterance_that_is_not_wholly_a_closer_stays_out_of_scope(utterance: str) -> None:
     out = _build(_canned(None)).orch.turn(_input(utterance))
     assert out.outcome == "OUT_OF_SCOPE" and out.answer is None
@@ -706,7 +723,7 @@ def test_exhausted_budget_defers_memory_without_writing_but_still_answers() -> N
     assert ("memory", "llm_dialogue_memory", "deferred") in _modes(b.trace)
 
 
-_CAPS_SEC = {"DIALOGUE_INTENT": 4.0, "DIALOGUE_ANSWER": 3.5, "DIALOGUE_MEMORY": 2.0, "DIALOGUE_PLAN": 3.0}
+_CAPS_SEC = {"DIALOGUE_INTENT": 4.0, "DIALOGUE_ANSWER": 3.5, "DIALOGUE_MEMORY": 2.0, "DIALOGUE_PLAN": 3.5}  # BLM §4 시한표
 
 
 @settings(max_examples=60, deadline=None)

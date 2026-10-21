@@ -183,16 +183,17 @@ class _Conn:
 
 def test_executor_wraps_read_only_with_timeout_and_cap_and_returns_only_display_fields() -> None:
     conn = _Conn([[("b",), ("a",), ("b",)],
-                  [("a", "경복궁", "명소", "서울특별시", "종로구", ["요즘 인기", "역사관광지"]),
-                   ("b", "클럽 X", "야경", "서울특별시", "마포구", ["나이트라이프"])]])
+                  [("a", "경복궁", "명소", "서울특별시", "종로구", ["요즘 인기", "역사관광지"], True),
+                   ("b", "클럽 X", "야경", "서울특별시", "마포구", ["나이트라이프"], False)]])
     rows = PgPlaceSql(lambda: conn).run(_OK[0])
     statements = [s for s, _ in conn.log]
     assert statements[0] == "SET TRANSACTION READ ONLY"
     assert statements[1] == f"SET LOCAL statement_timeout = {STATEMENT_TIMEOUT_MS}"
     assert statements[2] == f"SELECT q.poi_id FROM ({_OK[0]}) AS q LIMIT {ROW_CAP}" and conn.log[2][1] is None  # 모델 SQL 엔 인자 없음
     assert conn.log[3][1] == (["b", "a"],) and conn.rolled_back
-    assert [(r.poi_id, r.name, r.trending, r.nightlife) for r in rows] == [("b", "클럽 X", False, True), ("a", "경복궁", True, False)]
-    assert set(rows[0].__slots__) == {"poi_id", "name", "category", "sido", "sigungu", "trending", "nightlife"}  # 주소·저장 수·태그 원문은 안 나간다
+    # 모델 순서는 b, a 지만 '요즘 인기'·정보 충실한 a 가 앞으로(안정 정렬)
+    assert [(r.poi_id, r.name, r.trending, r.nightlife) for r in rows] == [("a", "경복궁", True, False), ("b", "클럽 X", False, True)]
+    assert set(rows[0].__slots__) == {"poi_id", "name", "category", "sido", "sigungu", "trending", "nightlife", "rich"}  # 주소·저장 수·태그 원문은 안 나간다
 
 
 def test_executor_with_no_ids_skips_the_second_query_and_still_rolls_back() -> None:
@@ -205,7 +206,7 @@ class _OneQueryConn(_Conn):
 
 
 def _hit(pid: str, sido: str) -> tuple:
-    return (pid, "광장시장", "쇼핑", sido, "종로구", [])
+    return (pid, "광장시장", "쇼핑", sido, "종로구", [], True)
 
 
 @pytest.mark.parametrize("hits,sido,expected", [
@@ -226,3 +227,17 @@ def test_find_by_name_is_exact_and_never_guesses_among_many(hits, sido, expected
 def test_find_by_name_skips_one_letter_names_without_a_query() -> None:
     conn = _OneQueryConn([])
     assert PgPlaceSql(lambda: conn).find_by_name(" 가 ", "서울") is None and conn.log == []
+
+
+
+def test_executor_puts_rich_places_before_bare_registrations_but_keeps_model_order_otherwise() -> None:
+    def row(pid, rich):
+        return (pid, pid, "카페", "서울특별시", "강남구", [], rich)
+
+    conn = _Conn([[("c",), ("b",), ("a",), ("d",)], [row("a", True), row("b", False), row("c", False), row("d", True)]])
+    rows = PgPlaceSql(lambda: conn).run(_OK[0])
+    assert [r.poi_id for r in rows] == ["a", "d", "c", "b"]  # 정보 충실(a·d)이 먼저, 그 안·그 밖은 모델 순서(c→b→a→d)
+
+
+def test_rich_column_is_allowed_in_place_selects() -> None:
+    assert check_select("SELECT poi_id FROM poi_public WHERE category = '카페' ORDER BY saved_count DESC, rich DESC LIMIT 20") is None

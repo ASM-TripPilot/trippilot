@@ -68,6 +68,9 @@ class CachingScoringWorker:
     def capacity(self) -> int:
         return self._inner.capacity
 
+    def capacity_for(self, timeout_sec: float | None) -> int:
+        return self._inner.capacity_for(timeout_sec)
+
     def score(
         self,
         pool: CandidatePool,

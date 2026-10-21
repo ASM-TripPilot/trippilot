@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable } from 'react-native';
 
+import { useKeyboardVisible } from '@/shared/lib/useKeyboardVisible';
 import { useRaisedToastBottom } from '@/shared/ui/Toast';
 import { SparkleGlyph } from './AssistantGlyphs';
 
@@ -13,7 +14,8 @@ import { SparkleGlyph } from './AssistantGlyphs';
  * - `bottom` 을 주면 그 바닥(px)에 우측 16 으로 절대 배치(탭 화면 = `assistantFabBottom`), 없으면 흐름
  *   배치(여행 중 허브 앵커 열 안).
  * - `toastBottom` 을 주면 붙어 있는 동안 토스트 바닥을 그만큼 올린다(BR-U8-52, G-U8-10).
- * - 시트·키보드가 열린 동안 숨기는 것(BR-U8-53)은 그 상태를 아는 페이지가 이 컴포넌트를 트리에서 빼서 한다.
+ * - 시트가 열린 동안 숨기는 것(BR-U8-53)은 그 상태를 아는 페이지가 이 컴포넌트를 트리에서 빼서 한다.
+ *   키보드가 떠 있는 동안은 이 컴포넌트가 스스로 빠진다(TRIP-1514) — 입력이 있는 화면마다 중복하지 않으려고.
  *
  * 크기는 `h-[56px]` 브래킷(`h-14` 는 rem 49px 함정 — HomeScreen CreateTripFab 주석). 실제 겹침은 6-b 실기.
  */
@@ -38,8 +40,11 @@ export function AssistantFab({
   onPress,
   bottom,
   toastBottom,
-}: AssistantFabProps): ReactElement {
-  useRaisedToastBottom(toastBottom);
+}: AssistantFabProps): ReactElement | null {
+  const keyboardShown = useKeyboardVisible();
+  // 빠진 동안은 토스트도 내린다 — 없는 FAB 위로 뜨지 않게.
+  useRaisedToastBottom(keyboardShown ? undefined : toastBottom);
+  if (keyboardShown) return null;
   return (
     <Pressable
       testID="assistant-fab"

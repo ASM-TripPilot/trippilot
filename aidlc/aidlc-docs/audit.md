@@ -1671,6 +1671,30 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 
 ---
 
+---
+## Functional Design 사후 개정 — U8 최소 마감 (미결 O-U8-1~9 · 갭 G-U8-1~14 · FE R표 R2·R8·R13·R19)
+**Timestamp**: 2026-10-21T09:00:00+09:00 (작업 시점, 초 단위 미측정)
+**User Input**: (메인 세션이 전달한 작업 지시 — 사용자 원문이 아니다) 사용자가 2026-10-20 에 U8 마감 티켓(부모 TRIP-1512, 서브 TRIP-1513~1516)을 "최소 발행만 ㄱㄱ" 로 정했고 "그럼 저것들 워크트리 만들어서 진행 해줘" 로 진행을 지시했다. 같은 날 인터뷰 결정 원문 3건: 도우미 컨텍스트에 포그라운드 현재 위치를 "넣는다 (Recommended)" · 숙소 재질의 "이번엔 뺀다 (Recommended)" · 쓰지 않는 옛 3단 라우터와 섀도 측정 "바로 제거 (Recommended)".
+**AI Response**: `construction/u8-conversational-assistant/functional-design/` 3종에 `[개정 · 2026-10-21 · U8 최소 마감]` 블록을 원문 삭제·수정 0줄로 덧붙였다. `business-rules.md` — 미결 O-U8-1~9 상태표(잠정 고정 2 · 열림 1 · 구현됨/관측 1 · 결정 2 · 보류 1 · 해소 1 · 닫힘 1)와 3단 라우터 제거 결정 기록. `business-logic-model.md` — 갭 G-U8-1~14 상태표(해소 10 · 소멸 1 · 확인 1 · 잔존 2: G-U8-7 프리필 · G-U8-11 `scope_group` 은 미구현, 나머지는 근거 PR·티켓 병기). `frontend-components.md` — R8 해소(TRIP-1514) · R13 변경(TRIP-1513, 서버가 `RESTORE_REVISION` 을 아직 내지 않는다는 경고 포함) · R19 해소 · R2 유지 · 6-b 미수행. 제품 결정을 새로 만들지 않았고 2026-10-20 사용자 결정을 기록으로만 옮겼다. 근거는 develop 코드와 머지 PR 이다.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 개정(마감 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+---
+## Functional Design 정정 — TRIP-1513 변경 이력 화면(h36) 철회 (frontend-components R13 · business-rules O-U8-7)
+**Timestamp**: 2026-10-21T14:00:00+09:00 (작업 시점, 초 단위 미측정)
+**User Input**: (사용자 원문) "저거 화면 없는데" — 변경 이력 화면(h36)은 Figma 에 없다는 지적. 이어서 "피그마 h36은 일단 내가 지움".
+**AI Response**: 직전 2026-10-21 개정 블록(`2a3a32dbd`)이 전제한 변경 이력 화면이 라이브 Figma 정본에 없었다. 구현 커밋 `8723d2ac9` 를 revert(`19ed66df6`)하고, `frontend-components.md` 끝과 `business-rules.md` 끝에 `[정정 · 2026-10-21]` 블록을 원문 삭제·수정 0줄로 덧붙였다 — R13 은 철회 전 상태(RESTORE_REVISION → 능력 목록)로 복귀, O-U8-7 은 보류 유지·선행 조건을 "리비전 화면을 제품에 둘지 결정"으로 변경, 6-b 행은 실기 QA 완료(TRIP-1515)로 정정. 제품 결정은 새로 만들지 않았다.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 정정, 승인 대기(같은 PR 머지 = 승인, #1071 선례). `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+---
+## Functional Design 사후 개정 — U8 도우미 시트 재디자인 (frontend-components §개정 · business-rules BR-U8-03 정정)
+**Timestamp**: 2026-10-21T05:55:00+09:00 (작업 시점, 초 단위 미측정)
+**User Input**: (사용자 원문) "그럼 지금 만든 화면이랑 저거에 맞춰서 다시 화면 수정 ㄱㄱ 티켓 만들고 거기에 맞게 수행하고 다 완료 하면 티켓 완료 처리 이때 나중에 시뮬레이터 테스트 까지 ㄱㄱ" — 직전에 사용자가 "b 전체를 저런식으로 교체 밝은 모드", "응답 대기는 그냥 빼고 이런식으로 8장 그려봐"라고 정한 Figma v3 안을 코드에 반영하라는 지시. 사이클 중 결정은 자율 세션이라 권고대로 정했고 사용자 확인 대상으로 표기했다(새 대화·＋ 버튼 제외, 서버 contextChip 문구의 가시 표기 제거 = BR-U8-03 약화, HOME 칩 라벨, NO_CONTEXT 칩 우선, 솔버 불가 출구 유지, 이력 입력 카드 없음).
+**AI Response**: `construction/u8-conversational-assistant/functional-design/frontend-components.md` 끝에 `[개정 · 2026-10-21 · U8 도우미 시트 재디자인]` 블록 1개(① R9 유지 ② 바뀐 모양 ③ 화면에 넣지 않은 기능 ④ Figma 갱신 후보 ⑤ BR-U8-03 약화 ⑥ 컴포넌트·testID 소급 ⑦ 6-b = TRIP-1531), `business-rules.md` 끝에 BR-U8-03 정정 블록 1개를 원문 삭제·수정 0줄로 덧붙였다. 제품 결정은 새로 만들지 않았고 사용자 지시와 자율 결정(표기)을 기록으로 옮겼다. 근거는 커밋 a6d7a833f(셸·입력)·a9a013e03(메시지·카드)와 사이클 C 구현이다.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 개정, 승인 대기(같은 PR 머지 = 승인, #1071 선례). `aidlc-state.md`·`docs/SCOPE.md` 는 단계 변화가 없어 건드리지 않았다.
 ## Functional Design 사후 개정 — U10 여행별 자동 기록 일시 중지 구현 반영 (BR-U10-49~52 · frontend-components 스위치 줄·l06 paused)
 **Timestamp**: 2026-10-20T23:40:00+09:00 (작업 시점)
 **User Input**: (사용자 원문 — 이 세션 2026-10-20, 그대로 인용) 인터뷰 답 — "새 티켓 만들고 지금 먼저 고침" / "BE 도 내가 직접 고침" / "「자동 기록」 고정, 부제만 바뀜" / "치지 않음 — 판정 초기화" / "「일시 중지」 알약 신설" / "같이 지움" / "둘 다 보임 — 안내 위·스위치 아래" / 그리고 AskUserQuestion 답 "진행 — audit append + [개정] 블록 2개".
