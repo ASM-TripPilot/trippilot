@@ -3,7 +3,6 @@ package com.trippilot.app.web
 import com.fasterxml.jackson.databind.JavaType
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.trippilot.auth.adapter.`in`.web.LocationConsentResponse
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -215,36 +214,39 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
 
     /**
      * 위 게이트의 양성 대조 — 예외 목록이 비면 `stale` 단언은 공허하고, 실제 스펙도 불일치가 0이라
-     * `compare()` 의 한 방향이 회귀해도 위 테스트는 초록이다. 실제 DTO 와 손 스키마로 두 방향·중첩을 직접 확인한다.
+     * `compare()` 의 한 방향이 회귀해도 위 테스트는 초록이다. 전용 probe DTO 와 손 스키마로 두 방향·중첩을 직접 확인한다
+     * (운영 DTO 를 쓰면 정상적인 필드 추가에도 깨진다).
      */
     @Test
     fun `필드 대조는 코드에만·문서에만 두 방향과 중첩 객체의 불일치를 잡는다`() {
         val schema = mapOf(
             "type" to "object",
             "properties" to mapOf(
-                "osPermissionMirror" to mapOf("type" to "string"),
-                "legalConsent" to mapOf("type" to "boolean"),
-                // gpsRecordingOptIn 은 일부러 뺐다 → 코드에만
-                "capabilities" to mapOf(
+                "a" to mapOf("type" to "string"),
+                // onlyInCode 는 일부러 뺐다 → 코드에만
+                "nested" to mapOf(
                     "type" to "object",
                     "properties" to mapOf(
-                        "serverLocationService" to mapOf("type" to "boolean"),
-                        "gpsTrackRetention" to mapOf("type" to "boolean"),
+                        "b" to mapOf("type" to "boolean"),
                         "bogus" to mapOf("type" to "boolean"), // → 문서에만
                     ),
                 ),
             ),
         )
         val out = mutableListOf<String>()
-        compare(mapper.constructType(LocationConsentResponse::class.java), schema, "자기검증", true, out, mutableSetOf())
+        compare(mapper.constructType(Probe::class.java), schema, "자기검증", true, out, mutableSetOf())
 
         assertEquals(
             listOf(
-                "자기검증 LocationConsentResponse: 코드에만 `gpsRecordingOptIn`",
-                "자기검증 LocationConsentResponse.capabilities Capabilities: 문서에만 `bogus`",
+                "자기검증 Probe: 코드에만 `onlyInCode`",
+                "자기검증 Probe.nested Nested: 문서에만 `bogus`",
             ),
             out,
         )
+    }
+
+    private data class Probe(val a: String, val onlyInCode: Boolean, val nested: Nested) {
+        data class Nested(val b: Boolean)
     }
 
     private fun compare(
