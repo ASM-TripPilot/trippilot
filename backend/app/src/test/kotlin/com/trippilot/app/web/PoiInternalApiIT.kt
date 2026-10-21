@@ -236,13 +236,23 @@ class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
             ${item("E2E-LEN-HOURS", hours = "가".repeat(201))},
             ${item("E2E-LEN-ADDR", address = "제주특별자치도 " + "가".repeat(300))},
             ${item("E2E-" + "r".repeat(61))},
-            ${item("E2E-LEN-OK", name = "가".repeat(200))}]}"""
+            ${item("E2E-AT-NAME", name = "가".repeat(200))},
+            ${item("E2E-AT-REGION", region = "가".repeat(60))},
+            ${item("E2E-AT-HOURS", hours = "가".repeat(200))},
+            ${item("E2E-AT-ADDR", address = "제주특별자치도 " + "가".repeat(300 - "제주특별자치도 ".length))},
+            ${item("E2E-" + "r".repeat(60))},
+            ${item("E2E-AT-EMOJI", name = "\uD83C\uDF0A".repeat(200))}]}"""
 
         val (rc, body) = call(HttpMethod.POST, "/internal/pois/proposals", SERVICE_TOKEN, doc)
 
         rc shouldBe 200
-        body["registered"].asInt() shouldBe 1
         body["dropped"]["too_long"].asInt() shouldBe 5
+        // 폭과 정확히 같은 항목은 전부 받는다 — 이모지 이름 200자(UTF-16 으로는 400)도 문자 수로 센다.
+        body["registered"].asInt() shouldBe 6
+        cleanupJdbc.queryForObject(
+            "SELECT count(*) FROM poi WHERE source_ref IN ('E2E-AT-NAME','E2E-AT-REGION','E2E-AT-HOURS','E2E-AT-ADDR','E2E-AT-EMOJI',?)",
+            Int::class.java, "E2E-" + "r".repeat(60),
+        ) shouldBe 6
     }
 
     @Test

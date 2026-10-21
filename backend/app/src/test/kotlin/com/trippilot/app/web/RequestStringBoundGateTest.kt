@@ -1,7 +1,8 @@
 package com.trippilot.app.web
 
+import com.tngtech.archunit.core.importer.ClassFileImporter
+import com.tngtech.archunit.core.importer.ImportOption
 import io.kotest.assertions.withClue
-import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Size
@@ -48,7 +49,11 @@ class RequestStringBoundGateTest {
     fun `요청 본문의 문자열 필드는 상한이 있거나 면제 사유가 있고, 상한은 실제로 검사된다`() {
         val walk = Walk("com.trippilot.", EXEMPT)
         val bodies = requestBodies("com.trippilot")
-        withClue("스캔이 본문을 하나도 못 찾으면 이 게이트는 헛돈다") { bodies.size shouldBeGreaterThan 30 }
+        // 스캔이 본문을 빠뜨리면 이 게이트는 헛돈다 — 컨트롤러 판정과 무관하게(ArchUnit 바이트코드 임포트) 센 수와 대조한다.
+        // 컨트롤러가 아닌 곳의 @RequestBody 나 스캔에서 빠진 컨트롤러가 생기면 여기서 멈춘다.
+        val independent = ClassFileImporter().withImportOption(ImportOption.DoNotIncludeTests()).importPackages("com.trippilot")
+            .sumOf { c -> c.methods.sumOf { m -> m.parameters.count { it.isAnnotatedWith(RequestBody::class.java) } } }
+        withClue("컨트롤러 스캔으로 찾은 본문 수와 바이트코드에서 센 @RequestBody 수가 같아야 한다") { bodies.size shouldBe independent }
         bodies.forEach { walk.root(it) }
 
         withClue("상한 없는 문자열 필드 — @field:CodePointLength(max = 컬럼 폭)을 달거나, 저장되지 않는다면 EXEMPT 에 사유를 적는다") {
@@ -187,7 +192,6 @@ class RequestStringBoundGateTest {
             "$PROFILE.SetNicknameRequest.nickname" to "NicknameRules 가 길이를 판정한다(TOO_LONG → 400)",
             "$REFLECTION.EditReflectionRequest.mood" to "도메인이 코드 모양·길이를 판정한다(400)",
             "$REFLECTION.EditReflectionRequest.shortMemo" to "도메인이 60자(코드 포인트)를 판정한다(400)",
-            "$REFLECTION.EditReflectionRequest.card" to "jsonb 로 저장한다 — 22001 대상이 아니다. 해석·NUL 판정은 ReflectionCardCodec",
             "$TRIP.DestinationDto.regionCode" to "선택 가능한 지역 코드인지 카탈로그와 대조한다(아니면 400)",
             "$PLACE.ProposalPoi.category" to "8종 어휘 판정(밖이면 unknown_category 로 탈락)",
             // 길이 제한 없는 열에 들어간다

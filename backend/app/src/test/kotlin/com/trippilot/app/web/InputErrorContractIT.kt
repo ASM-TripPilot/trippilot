@@ -274,6 +274,28 @@ class InputErrorContractIT : AbstractPostgresIntegrationTest() {
     }
 
     /**
+     * 회고 카드 상한 20000자(코드 포인트) — openapi 가 약속해 온 값이다. 수정 전에는 검사가 없어 20001자도 받았다.
+     * 카드는 JSON 원문 전체 길이로 센다.
+     */
+    @Test
+    fun `회고 카드는 20000자까지 받고 20001자는 400 이다`() {
+        val token = newToken()
+        val tripId = send(HttpMethod.POST, "/api/v1/trips", trip(""), token).second["tripId"].asText()
+        fun card(length: Int): String {
+            val shell = """{"cover":{"title":"t"},"pad":""}"""
+            return shell.replace("\"pad\":\"\"", "\"pad\":\"${"가".repeat(length - shell.length)}\"")
+        }
+        fun put(card: String) = send(
+            HttpMethod.PUT, "/api/v1/trips/$tripId/reflections/2026-12-01", json.writeValueAsString(mapOf("card" to card)), token,
+        )
+
+        put(card(20000)).first shouldBe 200
+        val over = put(card(20001))
+        over.first shouldBe 400
+        over.second["error"]["fields"].map { it["field"].asText() } shouldBe listOf("card")
+    }
+
+    /**
      * 대조군 — 과잉 거부가 아니다. 유니코드 이스케이프(`é`)·제어 문자 이스케이프(`\n`·`\t`)는 그대로 통과하고,
      * `\\u0000`(역슬래시가 이스케이프된 **글자** 여섯 개)은 NUL 이 아니다. 본문은 raw 문자열이라 이스케이프가 JSON 에 그대로 실린다.
      */

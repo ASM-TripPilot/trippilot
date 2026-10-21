@@ -3914,8 +3914,8 @@ components:
         localAssetId:
           type: string
           maxLength: 200
-          description: 기기 로컬 자산 식별자(iOS PHAsset localIdentifier · Android MediaStore id). 기기 안에서만 뜻이 있다.
-        deviceId: { type: string, maxLength: 64 }
+          description: '기기 로컬 자산 식별자(iOS PHAsset localIdentifier · Android MediaStore id). 기기 안에서만 뜻이 있다. 길이는 UTF-16 단위(서버 @Size) — maxLength(코드 포인트)와 BMP 밖 문자에서 다르다'
+        deviceId: { type: string, maxLength: 64, description: '길이는 UTF-16 단위(서버 @Size) — maxLength(코드 포인트)와 BMP 밖 문자에서 다르다' }
         takenAt: { type: string, format: date-time, nullable: true }
         exifLat:
           type: number
@@ -3941,7 +3941,7 @@ components:
       type: object
       required: [text]
       properties:
-        text: { type: string, minLength: 1, maxLength: 2000 }
+        text: { type: string, minLength: 1, maxLength: 2000, description: '길이는 UTF-16 단위(서버 @Size) — maxLength(코드 포인트)와 BMP 밖 문자에서 다르다' }
 
     VisitPhotoList:
       type: object
@@ -4798,8 +4798,8 @@ components:
       type: object
       required: [token, platform]
       properties:
-        token: { type: string, maxLength: 255, description: Expo push token(DEC-U6-3) }
-        deviceId: { type: string, maxLength: 64, nullable: true }
+        token: { type: string, maxLength: 255, description: 'Expo push token(DEC-U6-3). 길이는 UTF-16 단위(서버 @Size) — maxLength(코드 포인트)와 BMP 밖 문자에서 다르다' }
+        deviceId: { type: string, maxLength: 64, nullable: true, description: '길이는 UTF-16 단위(서버 @Size) — maxLength(코드 포인트)와 BMP 밖 문자에서 다르다' }
         platform: { type: string, enum: [IOS, ANDROID] }
         osPermission:
           type: string

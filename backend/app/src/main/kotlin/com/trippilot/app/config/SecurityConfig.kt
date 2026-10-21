@@ -65,18 +65,20 @@ class SecurityConfig {
     }
 
     /**
-     * 필터 체인에서 방화벽이 거부한 요청(경로의 `;`·`//`·`%25`·`..` 등)을 **400 봉투**로 낸다(TRIP-1473).
+     * 필터 체인 입구에서 방화벽이 거부한 요청(경로의 `;`·`//`·`%25`·`..`, 허용되지 않은 HTTP 메서드 등)을 **400 봉투**로
+     * 낸다(TRIP-1473). 요청을 읽는 순간의 거부(파라미터 이름·헤더 제어 문자)도 보안 필터 안에서 읽다 걸리면 이리로 오고,
+     * 디스패치 안에서 걸리면 `GlobalExceptionHandler` 가 같은 봉투로 낸다.
      *
      * 이 빈이 없으면 기본 처리가 `sendError(400)` 을 하고, 그 오류 디스패치가 `/error` 로 가면서 인증 필터를 다시 타지
      * 않아 **401** 로 나갔다(실측: 유효 토큰을 실어도 `GET /api/v1/regions;x=1` → 401, 본문 없음). 클라이언트는 그것을
      * 토큰 만료로 읽고 재로그인으로 간다. 여기서 직접 응답을 쓰면 오류 디스패치가 생기지 않는다.
-     * 거부 사유(예외 메시지)에는 경로 원문이 실려 있어 싣지 않는다(SECURITY-15).
+     * 거부 사유(예외 메시지)에는 경로·메서드 원문이 실려 있어 싣지 않는다(SECURITY-15).
      *
      * 경로의 `%00`·`%2F`·`%5C` 는 이보다 앞에서 Tomcat 이 400(HTML)으로 막는다 — 스프링 밖이라 봉투를 못 씌운다.
      */
     @Bean
     fun requestRejectedHandler(mapper: ObjectMapper): RequestRejectedHandler = RequestRejectedHandler { _, response, _ ->
-        log.warn("방화벽이 요청을 거부했습니다(경로) — 원문은 싣지 않습니다")
+        log.warn("방화벽이 요청을 거부했습니다(필터 체인) — 사유 원문은 싣지 않습니다")
         response.status = HttpServletResponse.SC_BAD_REQUEST
         response.contentType = MediaType.APPLICATION_JSON_VALUE
         response.characterEncoding = Charsets.UTF_8.name()
