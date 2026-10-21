@@ -432,7 +432,7 @@ ShadowRecord (frozen):
 그 범위 검증을 지웠다 — 시한 시나리오는 주입 시계(`FakeClock.advance`)로 만든다. 답변·요약 길이 상한(400자·6줄·20줄·120자·후보 5)의
 정본은 게이트(`gates/dialogue_answer`·`gates/dialogue_memory`)와 `dialogue_handlers`·`DialogueMemory` 상수다.
 
-**[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 상수 넷 — `_PLAN_CAP_MS = 3_000`→**3_500**(**[개정 · 2026-10-20 · 계획 상한]** 시한 잘림 6.5→1.9%) · `_PLAN_SHARE = 0.45` · `_PLAN_MIN_REMAINING_MS = 4_600`(답변 시도선 1.5s 를 지키는 최소 4,542ms — BLM §4 註) · `_TURN_LLM_CAP = 3`(턴당 서비스 LLM 상한 — 계획 턴의 요약 미룸, BR-AO-09). 같은 규칙으로 env·생성자에 노출하지 않는다. 도구 계획 상한 `MAX_PLAN_CALLS = 2`·`MAX_ARG_CHARS = 40` 은 `domain/plan_tools.py`(게이트·프롬프트가 같은 값을 본다).
+**[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 상수 넷 — `_PLAN_CAP_MS = 3_000`→**3_500**(**[개정 · 2026-10-20 · 계획 상한]** 로컬 러너 시한 잘림 — 같은 시각 짝 4/78 → 2/78, 날 합 10/154 → 15/864) · `_PLAN_SHARE = 0.45` · `_PLAN_MIN_REMAINING_MS = 4_600`(답변 시도선 1.5s 를 지키는 최소 4,542ms — BLM §4 註) · `_TURN_LLM_CAP = 3`(턴당 서비스 LLM 상한 — 계획 턴의 요약 미룸, BR-AO-09). 같은 규칙으로 env·생성자에 노출하지 않는다. 도구 계획 상한 `MAX_PLAN_CALLS = 2`·`MAX_ARG_CHARS = 40` 은 `domain/plan_tools.py`(게이트·프롬프트가 같은 값을 본다).
 
 ### 2.9 `PoiInfo` 패킷 — `ProviderKind.POI_INFO` 신설 (`providers/poi_info.py`)
 
