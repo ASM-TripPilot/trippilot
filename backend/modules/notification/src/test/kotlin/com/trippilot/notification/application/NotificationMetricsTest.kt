@@ -86,4 +86,24 @@ class NotificationMetricsTest : StringSpec({
             tags.forEach { allowed.contains(it) shouldBe true }
         }
     }
+
+    /**
+     * 닫힌 집합 안에 있는 것만으로는 부족하다 — **어느 칸으로 접히는지**가 맞아야 한다. 발송기 예외가
+     * `OTHER` 로 접히거나 아는 사유가 `PUSH_ERROR` 로 읽히면 대시보드가 원인을 거꾸로 가리킨다.
+     */
+    "실패 사유는 정해진 칸으로 접힌다 — 발송기 예외는 PUSH_ERROR, 아는 사유는 그대로, 나머지는 OTHER" {
+        val expected = mapOf(
+            null to "none",
+            "PUSH_ERROR: IllegalStateException" to "PUSH_ERROR",
+            "DEVICE_NOT_REGISTERED" to "DEVICE_NOT_REGISTERED",
+            "UNKNOWN" to "UNKNOWN",
+            "MessageTooBig" to "OTHER",
+        )
+        expected.forEach { (raw, tag) ->
+            val (metrics, registry) = fixture()
+            metrics.pushDispatched(PushOutcome.FAILED, reason = raw, deliversExternally = true)
+
+            registry.find(NotificationMetrics.PUSH_DISPATCH).counters().single().id.getTag("reason") shouldBe tag
+        }
+    }
 })

@@ -162,6 +162,22 @@ class PushPolicyTest : StringSpec({
         f.dispatched() shouldBe 1.0
     }
 
+    /**
+     * **묶음 판정 전에 그 묶음을 잠근다**(Kafka 모드 TRIP-1469 — 같은 여행의 사건을 소비 스레드 여럿이 동시에 배달한다).
+     * 잠금이 빠지면 두 스레드가 서로의 발송을 못 본 채 둘 다 쏜다 — 단일 스레드 대역에서는 결과가 같아
+     * 잠갔는지 자체를 본다. 묶음이 없는 정책은 잠글 것이 없다.
+     */
+    "묶음 정책만 그 여행의 묶음을 잠근다 — 알림함만·매번 푸시는 잠그지 않는다" {
+        val f = fixture()
+        val trip = UUID.randomUUID()
+
+        f.raise(UUID.randomUUID(), PushPolicy.InAppOnly)
+        f.raise(UUID.randomUUID(), PushPolicy.Always)
+        f.raise(trip, oncePer(trip))
+
+        f.notifications.lockedGroups shouldBe listOf(acc to "PLAN_B#$trip#")
+    }
+
     "10분이 지나면 다시 푸시한다 — 묶음이 같은 여행을 영영 막지 않는다" {
         val f = fixture()
         val trip = UUID.randomUUID()
@@ -211,7 +227,8 @@ class PushPolicyTest : StringSpec({
 
         // 실패는 사유만 남고 발송 시각은 없다 — 그 행을 근거로 묶으면 위험이 한 번도 안 울린다.
         f.notifications.stored[0].pushSentAt shouldBe null
-        f.notifications.stored[0].pushFailedReason shouldNotBe null
+        // 사유가 없는 영수증은 상태 이름으로 남는다 — 빈 문자열이면 "왜 안 왔나"에 답이 없다.
+        f.notifications.stored[0].pushFailedReason shouldBe "FAILED"
         f.sender.calls shouldBe 2
         f.notifications.stored[1].pushSentAt shouldBe start.plusSeconds(60)
         f.suppressed("COALESCED") shouldBe 0.0

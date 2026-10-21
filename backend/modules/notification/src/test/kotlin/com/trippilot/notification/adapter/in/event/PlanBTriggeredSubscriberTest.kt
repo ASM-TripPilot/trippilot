@@ -319,4 +319,18 @@ class PlanBTriggeredSubscriberTest : StringSpec({
         f.sender.messages.size shouldBe 2
         f.suppressed("COALESCED") shouldBe 1.0
     }
+
+    /**
+     * **묶음 키는 여행·슬롯 단위다**(BR-U6-34 재료). 10분 묶음은 이 접두로 같은 여행을 알아본다 — 슬롯이 빠지면
+     * 같은 슬롯의 반복을 못 가리고, 슬롯이 없는 사건에 `null` 글자가 끼면 그 사건끼리만 따로 묶인다.
+     */
+    "억제 키는 PLAN_B#여행#슬롯이다 — 슬롯이 없으면 빈 꼬리다" {
+        val f = fixture()
+        val trip = UUID.randomUUID()
+
+        f.deliver(current(trip) + ("slotKey" to "2026-10-19#p-1"))
+        f.deliver(current(trip) - "slotKey")
+
+        f.notifications.stored.map { it.dedupKey } shouldBe listOf("PLAN_B#$trip#2026-10-19#p-1", "PLAN_B#$trip#")
+    }
 })
