@@ -62,7 +62,7 @@ class ExpoPushAdapter(
                 .body(ExpoPushResponse::class.java)
         } catch (e: HttpClientErrorException.TooManyRequests) {
             // 프로젝트 발송량 한도(COST-U6-04 재평가 트리거). 응용층이 웹 예외를 몰라도 구분할 수 있게 도메인 타입으로 올린다.
-            throw PushRateLimited(e)
+            throw PushRateLimited(e.message, e)
         }
 
         val tickets = response?.data.orEmpty()

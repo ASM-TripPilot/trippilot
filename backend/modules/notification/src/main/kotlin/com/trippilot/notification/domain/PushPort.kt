@@ -66,4 +66,16 @@ enum class PushStatus {
  * **관측**이다: 정본 COST-U6-04 의 재평가 트리거("무료 티어 초과 / 레이트리밋 도달")가 가리키는 것이 바로 이
  * 한도라, 지표의 레이트리밋 칸(OBS-U6-02)이 이것을 봐야 한다. 응용층이 벤더 웹 예외를 몰라도 되게 도메인 타입으로 올린다.
  */
-class PushRateLimited(cause: Throwable? = null) : RuntimeException("발송 서비스의 발송량 한도에 걸렸습니다(HTTP 429)", cause)
+class PushRateLimited(detail: String? = null, cause: Throwable? = null) : RuntimeException(
+    "발송 서비스의 발송량 한도에 걸렸습니다(HTTP 429)" + detail?.let { " — ${it.take(DETAIL_MAX)}" }.orEmpty(),
+    cause,
+) {
+    private companion object {
+        /**
+         * 상대 응답(상태 줄 + 본문)을 싣는 상한. 발송 실패 로그가 한 줄로 남게 자른다 — 본문은 상대가 정한다.
+         * Expo 429 본문은 `{"errors":[{"code","message"}]}` 형식이라 토큰을 되돌려 싣지 않지만, 형식이 바뀌어도
+         * 로그가 무한히 늘지 않게 상한을 둔다.
+         */
+        const val DETAIL_MAX = 300
+    }
+}

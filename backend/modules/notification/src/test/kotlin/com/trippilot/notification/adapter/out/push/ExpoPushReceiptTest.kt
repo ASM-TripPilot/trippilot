@@ -5,9 +5,10 @@ import com.trippilot.notification.domain.PushRateLimited
 import com.trippilot.notification.domain.PushReceipt
 import com.trippilot.notification.domain.PushStatus
 import com.trippilot.notification.domain.PushUrgency
-import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
-import io.kotest.matchers.types.shouldNotBeInstanceOf
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.shouldBe
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
@@ -19,6 +20,8 @@ import org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPat
 import org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo
 import org.springframework.test.web.client.response.MockRestResponseCreators.withStatus
 import org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess
+import org.springframework.web.client.HttpClientErrorException
+import org.springframework.web.client.HttpServerErrorException
 import org.springframework.web.client.RestClient
 
 /**
@@ -95,17 +98,30 @@ class ExpoPushReceiptTest : StringSpec({
     /**
      * **프로젝트 발송량 한도(HTTP 429)는 도메인 예외로 올린다** — 정본 COST-U6-04 의 재평가 트리거가 이 한도다.
      * 웹 예외 그대로 올리면 응용층이 네트워크·5xx 와 구분하지 못해 지표의 레이트리밋 칸이 이 경우를 못 본다.
-     * 다른 HTTP 오류는 종전대로 그대로 올라간다.
+     * 다른 HTTP 오류는 종전대로 그대로 올라간다. **어느 한도인지**는 응답 본문에만 있어, 그 정보가 예외 메시지에
+     * 남아야 발송 실패 로그(`e.toString()`)가 종전과 같은 단서를 준다.
      */
-    "429 는 PushRateLimited 로, 다른 HTTP 오류는 그대로 올라간다" {
-        fun respond(status: HttpStatus): Throwable {
+    "429 는 PushRateLimited 로 — 원인과 응답 본문을 싣고, 다른 HTTP 오류는 그대로 올라간다" {
+        fun respond(status: HttpStatus, body: String = ""): Throwable {
             val builder = RestClient.builder().baseUrl("http://expo.test")
             val server = MockRestServiceServer.bindTo(builder).build()
-            server.expect(requestTo(url)).andRespond(withStatus(status))
+            server.expect(requestTo(url)).andRespond(withStatus(status).contentType(MediaType.APPLICATION_JSON).body(body))
             return runCatching { ExpoPushAdapter("", builder.build()).send(listOf("t1"), message) }.exceptionOrNull()!!
         }
 
-        shouldThrow<PushRateLimited> { throw respond(HttpStatus.TOO_MANY_REQUESTS) }
-        respond(HttpStatus.SERVICE_UNAVAILABLE).shouldNotBeInstanceOf<PushRateLimited>()
+        val limited = respond(
+            HttpStatus.TOO_MANY_REQUESTS,
+            """{"errors":[{"code":"TOO_MANY_REQUESTS","message":"project push rate exceeded"}]}""",
+        ).shouldBeInstanceOf<PushRateLimited>()
+        limited.cause.shouldBeInstanceOf<HttpClientErrorException.TooManyRequests>()
+        limited.message shouldContain "429"
+        limited.message shouldContain "project push rate exceeded"
+
+        respond(HttpStatus.SERVICE_UNAVAILABLE).shouldBeInstanceOf<HttpServerErrorException.ServiceUnavailable>()
+    }
+
+    /** 응답 본문은 상대가 정한다 — 아무리 길어도 예외 메시지(곧 로그 한 줄)는 상한 안이다. */
+    "429 응답 본문이 길어도 메시지는 상한에서 자른다" {
+        PushRateLimited("x".repeat(10_000)).message!!.length shouldBeLessThanOrEqual 400
     }
 })
