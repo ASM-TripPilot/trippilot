@@ -60,7 +60,10 @@ internal fun opportunityPorts(port: OpportunityPort?): ObjectProvider<Opportunit
         override fun getIfAvailable(): OpportunityPort? = port
     }
 
-/** 그 여행·그 날의 트리거 행 — 기본은 떠 있는 날짜 전체 날씨 위험이다(종류·심각도·상태를 바꿔 대조군을 만든다). */
+/**
+ * 그 여행·그 날의 트리거 행 — 기본은 떠 있는 날짜 전체 날씨 위험이다(종류·심각도·상태를 바꿔 대조군을 만든다).
+ * [detector] 를 주면 스윕 출처 행이다(`payload.detector` — 회수 대상). 기본은 출처 없는 행(날씨 확인 단건)이다.
+ */
 internal fun weatherTrigger(
     tripId: UUID,
     date: LocalDate,
@@ -68,8 +71,10 @@ internal fun weatherTrigger(
     state: TriggerState = TriggerState.ACTIVE,
     kind: TriggerKind = TriggerKind.WEATHER,
     slotKey: String? = null,
+    detector: String? = null,
 ): PlanBTrigger = PlanBTrigger.active(
-    tripId, UUID.randomUUID(), kind, date, slotKey, mapOf("pop" to 70), TriggerScope.FULL_DAY, "비 예보 70%",
+    tripId, UUID.randomUUID(), kind, date, slotKey,
+    mapOf("pop" to 70) + listOfNotNull(detector?.let { PlanBTrigger.PAYLOAD_DETECTOR to it }), TriggerScope.FULL_DAY, "비 예보 70%",
     Instant.parse("2026-10-20T00:15:00Z"), severity,
 ).copy(state = state)
 

@@ -9,6 +9,7 @@ import com.trippilot.planbdetection.domain.Opportunity
 import com.trippilot.planbdetection.domain.OpportunityEventType
 import com.trippilot.planbdetection.domain.OpportunityKind
 import com.trippilot.planbdetection.domain.OpportunityReply
+import com.trippilot.planbdetection.domain.SweepSource
 import com.trippilot.planbdetection.domain.TriggerKind
 import com.trippilot.planbdetection.domain.TriggerSeverity
 import com.trippilot.planbdetection.domain.TriggerState
@@ -22,6 +23,7 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.ObjectProvider
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
@@ -48,7 +50,8 @@ class OpportunityServiceTest : StringSpec({
         clock: Clock = kstClock(today, noon),
         period: TripPeriod = TripPeriod(start, end),
         triggers: InMemoryTriggers = InMemoryTriggers(),
-    ) = OpportunityService(OpportunityTrips(owner, tripId, period), plans, triggers, opportunityPorts(port), clock)
+        watching: ObjectProvider<WatchingSources> = watchingProvider(),
+    ) = OpportunityService(OpportunityTrips(owner, tripId, period), plans, triggers, watching, opportunityPorts(port), clock)
 
     fun trending(near: String, poi: UUID = UUID.randomUUID()) =
         Opportunity("trending:$poi", OpportunityKind.TRENDING, null, null, null, poi, "월정리 카페거리", near, "약 400m")
@@ -274,6 +277,34 @@ class OpportunityServiceTest : StringSpec({
         }
 
         service(port, triggers = others).list(owner, tripId, today) shouldBe sent
+    }
+
+    /**
+     * 회수(BR-SA-13 규칙 1) — 스윕 출처 위험은 그 출처를 지금 감시할 때만 센다. 스윕을 끄면 그 행은 만료되지 않은 채 남고
+     * 트리거 목록은 이미 숨겨 앱엔 비 알약이 없다 — 그래도 축제를 빼면 근거 없는 숨김이 꺼진 동안 내내 이어진다.
+     */
+    "스윕 출처 날씨 위험은 그 출처를 지금 감시할 때만 거른다 — 감시하지 않으면 떠 있든 소비됐든 축제가 남는다" {
+        lateinit var sent: List<Opportunity>
+        val port = RecordingOpportunityPort { q ->
+            val near = q.slots.first().slotKey
+            sent = listOf(event(near, OpportunityEventType.FESTIVAL), event(near, null), trending(near))
+            OpportunityReply(sent, emptyList())
+        }
+        val sweepRain = InMemoryTriggers().apply { save(weatherTrigger(tripId, today, detector = SweepSource.KMA_FORECAST)) }
+        val sweepApplied = InMemoryTriggers().apply {
+            save(weatherTrigger(tripId, today, state = TriggerState.CONSUMED, detector = SweepSource.KMA_WARNING))
+        }
+
+        // 스윕 꺼짐(빈 없음)·다른 출처만 감시 — 세지 않는다.
+        service(port, triggers = sweepRain).list(owner, tripId, today) shouldBe sent
+        service(port, triggers = sweepRain, watching = watchingProvider(SweepSource.PLACE)).list(owner, tripId, today) shouldBe sent
+        service(port, triggers = sweepApplied).list(owner, tripId, today) shouldBe sent
+
+        // 짝 앵커 — 같은 행도 그 출처를 감시 중이면 거른다(행이 애초에 안 걸리는 것과 가른다).
+        val watched = service(port, triggers = sweepRain, watching = watchingProvider(SweepSource.KMA_FORECAST))
+        watched.list(owner, tripId, today) shouldContainExactly listOf(sent[2])
+        val watchedApplied = service(port, triggers = sweepApplied, watching = watchingProvider(SweepSource.KMA_WARNING))
+        watchedApplied.list(owner, tripId, today) shouldContainExactly listOf(sent[2])
     }
 
     "오늘은 KST 로 정한다 — UTC 15시가 자정이다" {

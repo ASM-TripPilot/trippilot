@@ -124,13 +124,15 @@ object OpportunityGate {
  *
  * 그 날짜에 날씨 위험(WEATHER ∧ RISK)이 떠 있거나(ACTIVE) [적용]으로 소비됐으면(CONSUMED) 축제와 **유형을 모르는** 행사를
  * 뺀다 — 비 오는데 야외 축제를 권하지 않고, 모르는 것을 실내라고 단정하지 않는다(INV-SA-2). 공연·전시·팝업과 요즘 인기는
- * 남는다. 소비된 것까지 보는 이유: [적용]이 트리거를 닫아도 비는 그대로다 — 발화 중인 것만 보던 앱은 적용 직후부터 다음
- * 판정 전까지 축제 카드를 되살렸다. 해제·만료(EXPIRED)·끈 알림(SUPPRESSED)·주의(CAUTION)는 보지 않는다.
+ * 남는다. 소비된 것까지 보는 이유: 발화 중인 것만 보던 앱은 [적용] 직후부터 다음 판정 전까지 축제 카드를 되살렸다(적용이
+ * 트리거를 닫아도 비는 대개 그대로다). 대가로 반영한 날은 비가 그쳤는지 다시 보지 않는다 — 위험이 풀려 만료(EXPIRED)된 뒤에
+ * [적용]해도 소비로 바뀌어(BR-SA-14) 그 날 축제는 비가 그쳐도 빠진다. 해제·만료(EXPIRED)·끈 알림(SUPPRESSED)·주의(CAUTION)는
+ * 보지 않는다.
  */
 object OpportunityWeather {
     private val BLOCKING_STATES = setOf(TriggerState.ACTIVE, TriggerState.CONSUMED)
 
-    /** 그 날짜에 행사를 거를 날씨 위험이 있는가. [triggers] 는 그 여행의 행이다(상태 무관). */
+    /** 그 날짜에 행사를 거를 날씨 위험이 있는가. [triggers] 는 그 여행의 셀 행이다(상태 무관 — 회수는 호출자가 거른다). */
     fun blocksOutdoor(triggers: List<PlanBTrigger>, date: LocalDate): Boolean = triggers.any {
         it.kind == TriggerKind.WEATHER && it.severity == TriggerSeverity.RISK && it.affectedDate == date && it.state in BLOCKING_STATES
     }

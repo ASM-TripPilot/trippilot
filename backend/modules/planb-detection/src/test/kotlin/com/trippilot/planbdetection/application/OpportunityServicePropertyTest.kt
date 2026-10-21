@@ -80,7 +80,7 @@ class OpportunityServicePropertyTest : StringSpec({
 
             OpportunityService(
                 OpportunityTrips(owner, tripId, TripPeriod(start, end)), OpportunityPlans(slots), InMemoryTriggers(),
-                opportunityPorts(port), kstClock(today, time),
+                watchingProvider(), opportunityPorts(port), kstClock(today, time),
             ).list(owner, tripId, date)
 
             val eligible = slots.filter { it.date == date && it.lat != null && it.lng != null && !endedAt(it, today, time) }
@@ -121,7 +121,7 @@ class OpportunityServicePropertyTest : StringSpec({
                     plannedSlot(start.minusDays(3), 0, LocalTime.of(23, 0), LocalTime.of(23, 30)),
                     plannedSlot(end.plusDays(3), 0, LocalTime.of(23, 0), LocalTime.of(23, 30)),
                 )), InMemoryTriggers(),
-                opportunityPorts(port), kstClock(today, LocalTime.of(hour, 0)),
+                watchingProvider(), opportunityPorts(port), kstClock(today, LocalTime.of(hour, 0)),
             ).list(owner, tripId, date)
 
             if (outside) {
@@ -145,7 +145,7 @@ class OpportunityServicePropertyTest : StringSpec({
 
             val out = OpportunityService(
                 OpportunityTrips(owner, tripId, TripPeriod(start, end)), OpportunityPlans(slots), InMemoryTriggers(),
-                opportunityPorts(port), kstClock(today, LocalTime.of(12, 0)),
+                watchingProvider(), opportunityPorts(port), kstClock(today, LocalTime.of(12, 0)),
             ).list(owner, tripId, today)
 
             val query = port.queries.single()
@@ -174,9 +174,13 @@ class OpportunityServicePropertyTest : StringSpec({
             listOf(null, Row(today, TriggerKind.WEATHER, TriggerSeverity.RISK, TriggerState.ACTIVE),
                 Row(today, TriggerKind.WEATHER, TriggerSeverity.RISK, TriggerState.CONSUMED)),
         )
+        // 유형은 색인으로 뽑아 바꾼다 — null 이 든 원소를 길이 고정(3..3) Arb.list 로 뽑으면 kotest 5.9 의 가장자리 후보
+        // (빈 목록·한 개·같은 원소 반복) 가운데 반복 목록이 원소가 null 일 때 빠져 길이에 맞는 후보가 하나도 없다 — 입력 생성이
+        // NoSuchElementException 으로 죽어 실행마다 무작위로 빨갰다(성질 위반이 아니다).
         checkAll(
-            Arb.list(rowArb, 0..4), riskArb, Arb.list(Arb.enum<OpportunityKind>(), 0..3), Arb.list(Arb.element(types), 3..3),
-        ) { noise, risk, kinds, eventTypes ->
+            Arb.list(rowArb, 0..4), riskArb, Arb.list(Arb.enum<OpportunityKind>(), 0..3), Arb.list(Arb.int(types.indices), 3..3),
+        ) { noise, risk, kinds, typeIndexes ->
+            val eventTypes = typeIndexes.map(types::get)
             val rows = noise + listOfNotNull(risk)
             val slots = listOf(plannedSlot(today, 0, LocalTime.of(13, 0), LocalTime.of(14, 0)))
             // 행마다 슬롯을 달리해 같은 대상의 ACTIVE 가 둘이 되지 않게 한다(실물 부분 유니크) — 거르기는 날짜만 본다.
@@ -191,7 +195,7 @@ class OpportunityServicePropertyTest : StringSpec({
 
             val out = OpportunityService(
                 OpportunityTrips(owner, tripId, TripPeriod(start, end)), OpportunityPlans(slots), triggers,
-                opportunityPorts(port), kstClock(today, LocalTime.of(12, 0)),
+                watchingProvider(), opportunityPorts(port), kstClock(today, LocalTime.of(12, 0)),
             ).list(owner, tripId, today)
 
             // 명세에서 바로 옮긴 오라클 — 구현의 판정 함수를 부르지 않는다.
