@@ -184,7 +184,7 @@ class _Conn:
 def test_executor_wraps_read_only_with_timeout_and_cap_and_returns_only_display_fields() -> None:
     conn = _Conn([[("b",), ("a",), ("b",)],
                   [("a", "경복궁", "명소", "서울특별시", "종로구", ["요즘 인기", "역사관광지"], True),
-                   ("b", "클럽 X", "야경", "서울특별시", "마포구", ["나이트라이프"], False)]])
+                   ("b", "클럽 X", "야경", "서울특별시", "마포구", ["술집"], False)]])
     rows = PgPlaceSql(lambda: conn).run(_OK[0])
     statements = [s for s, _ in conn.log]
     assert statements[0] == "SET TRANSACTION READ ONLY"

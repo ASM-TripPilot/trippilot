@@ -52,7 +52,8 @@ from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.kb import KbHit, KbKind
 from trippilot.domain.llm import AlternativePick, CandidatePool, ScoredPoi
 from trippilot.domain.persona import PersonaSummary
-from trippilot.domain.poi import PoiCategory
+from trippilot.domain.poi import PoiCategory, reputation_bonus
+from trippilot.domain.theme_tags import themes_in
 from trippilot.domain.trigger import TriggerParams
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.vector_store_port import VectorStorePort
@@ -566,7 +567,7 @@ class PlanBAgent:
         """
         saved_refs = _saved_refs(request.saved_places, context.persona)
         rule_ranked, rule_note = _rule_ranking(
-            saved_refs, request.pool, available, request.reason
+            saved_refs, request.pool, available, request.reason, request.user_request
         )
 
         def _why(cause: str) -> str:  # 폴백 사유 + 규칙 랭킹이 뭘 했는지 (침묵 조정 금지)
@@ -811,11 +812,16 @@ def _with_reasons(schedule_context: str, reasons: Mapping[str, str]) -> str:
 # ── 랭킹·형태 검증 ──────────────────────────────────────────────────────
 
 
+# 규칙 점수(`assembly_engine.scorer.build_rule_score`)의 거리 감점과 같은 눈금 — km 당. 평판 보정과 같은 단위로 견주려는 값이다.
+_RULE_KM_PENALTY = 0.02
+
+
 def _rule_ranking(
     saved_refs: Sequence[str],
     pool: CandidatePool,
     available: tuple[PoiId, ...],
     reason: str,
+    user_request: str = "",
 ) -> tuple[tuple[str, ...], str]:
     """규칙 폴백 랭킹 — 결정론, 외부 호출 0. 반환: (참조 순열, 조정 기록).
 
@@ -824,7 +830,9 @@ def _rule_ranking(
          야외라도 제안하는 편이 낫다)
       ① 저장 장소 우선 (§3 [2]) — 봉투(TRIP-512) ⊕ KB-2 검색 히트.
          단 ⓪이 앞선다: 비 오는 날 야외는 저장이어도 뒤
-      ② 앵커까지 직선거리 오름차순 (haversine) — 풀에 anchor 가 없으면 생략
+      ② 사용자가 쓴 말에 든 테마(혼밥·아이동반·뷰…)와 맞는 태그 수 내림차순 — 말이 없으면 모두 0 이라 무동작
+      ③ 거리 감점 − 평판 보정 오름차순 — 앵커까지 직선거리(haversine, 풀에 anchor 가 없으면 0)에 규칙 점수와 같은 눈금(km 당
+         0.02)을 곱하고 `인기1~5`·`평점높음` 보정을 뺀다. 태그가 없으면 거리 순서와 같고, 평판 최대 +0.10 은 5km 에 해당한다
     안정 정렬이라 동률은 풀 순서를 유지한다(결정론). 평점은 범위 밖 — `rating` 이 실
     어댑터에서 항상 None(백엔드 미제공). 실경로(TMAP)는 장애 경로에 새 장애 모드를
     더하므로 쓰지 않는다 — 폴백은 계산만으로 항상 돌아야 한다 (INV-4).
@@ -834,11 +842,13 @@ def _rule_ranking(
     poi_by_id = {p.poi_id: p for p in pool.pois}
     saved = set(saved_refs)
     anchor = pool.anchor
+    wanted_themes = frozenset(themes_in(user_request))
 
-    def _key(poi_id: PoiId) -> tuple[bool, bool, float]:
+    def _key(poi_id: PoiId) -> tuple[bool, bool, int, float]:
         poi = poi_by_id[poi_id]
         distance = haversine_km(anchor, poi.coord) if anchor is not None else 0.0
-        return (poi.category in demoted, str(poi_id) not in saved, distance)
+        return (poi.category in demoted, str(poi_id) not in saved, -len(wanted_themes & set(poi.tags)),
+                distance * _RULE_KM_PENALTY - reputation_bonus(poi.tags))
 
     ranked = sorted(available, key=_key)
     demoted_count = sum(1 for p in ranked if poi_by_id[p].category in demoted)
@@ -858,7 +868,7 @@ def _shortlist(request: "PlanBRagRequest", persona_hits: Sequence[KbHit]) -> Can
     pool, excluded = request.pool, request.excluded_poi_ids
     available = tuple(p.poi_id for p in pool.pois if p.poi_id not in excluded)
     ranked, _ = _rule_ranking(
-        _saved_refs(request.saved_places, persona_hits), pool, available, request.reason)
+        _saved_refs(request.saved_places, persona_hits), pool, available, request.reason, request.user_request)
     keep = set(ranked[:LLM_SHORTLIST]) | {
         str(p) for p in request.current_slot_ids if p not in excluded}
     pois = tuple(p for p in pool.pois if str(p.poi_id) in keep)

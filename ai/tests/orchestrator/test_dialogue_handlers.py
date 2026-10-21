@@ -1134,7 +1134,7 @@ _X_POOL = _pool(
     _xpoi("평범한 식당", PoiCategory.FOOD, saved=9), _xpoi("인기 식당", PoiCategory.FOOD, tags=("요즘 인기",)),
     _xpoi("셋째 식당", PoiCategory.FOOD, saved=5), _xpoi("인기 카페", PoiCategory.CAFE, tags=("요즘 인기",)),
     _xpoi("바다 전망 카페", PoiCategory.CAFE), _xpoi("황령산 야경", PoiCategory.NIGHT_VIEW),
-    _xpoi("루프탑 바", PoiCategory.FOOD, tags=("나이트라이프",)), _xpoi("해변 호텔", PoiCategory.STAY),
+    _xpoi("루프탑 바", PoiCategory.FOOD, tags=("술집",)), _xpoi("해변 호텔", PoiCategory.STAY),
 )
 _EXPLORE = HANDLERS[Intent.EXPLORE_PLACES]
 
@@ -1415,7 +1415,7 @@ def _explore_pois(draw) -> list[Poi]:
     return [Poi(poi_id=PoiId(str(uuid.uuid5(uuid.NAMESPACE_DNS, f"pbt-{i}"))), name=draw(st.sampled_from(["감천문화마을", "흰여울 카페", "x", "루프탑 바"])) + str(i),
                 category=draw(st.sampled_from(_X_CATS)), coord=GeoPoint(35.1, 129.0), open_hours=(), avg_cost=None,
                 rating=draw(st.one_of(st.none(), st.floats(0, 5))), quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None,
-                saved_count=draw(st.integers(0, 50)), tags=tuple(draw(st.lists(st.sampled_from(["요즘 인기", "나이트라이프", "야경", "오션뷰"]), max_size=2, unique=True))))
+                saved_count=draw(st.integers(0, 50)), tags=tuple(draw(st.lists(st.sampled_from(["요즘 인기", "술집", "야경", "오션뷰"]), max_size=2, unique=True))))
             for i in range(n)]
 
 
@@ -1430,7 +1430,7 @@ def test_explore_rank_stays_inside_the_pool_and_obeys_its_filters(pois, category
     assert all(p.category is not PoiCategory.STAY for p in picked)
     night = bool(theme and dh._NIGHT.search(theme)) or category == PoiCategory.NIGHT_VIEW.value
     if not night:
-        assert all("나이트라이프" not in p.tags for p in picked)
+        assert all("술집" not in p.tags for p in picked)
     if category is not None:
         assert all(p.category.value == category for p in picked)
     else:
