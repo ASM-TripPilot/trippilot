@@ -1702,3 +1702,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U10 Functional Design 사후 개정(구현 반영), 커밋 `5ed015911`(TRIP-1535). 앞 세션 사용자 승인 절차("audit append + [개정] 블록")를 따름. `aidlc-state.md`·`docs/SCOPE.md` 무변경.
 
 ---
+
+## Functional Design 사후 개정 — U10 BE USER_PAUSE 되돌림 (TRIP-1521 보충)
+**Timestamp**: 2026-10-21T18:00:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 이 세션 2026-10-21, 그대로 인용) "2.78로는 누가 올린거임?" / "그러니까 나 때문에 올리는게 아니지?" / "추천으로 ㄱㄱ"(BE USER_PAUSE 통째로 되돌리기).
+**AI Response**: `construction/u10-gps-location-automation/functional-design/business-rules.md` 끝에 보충 블록 1개 — 2026-10-21 TRIP-1520·1521 블록의 "BE USER_PAUSE 는 남는다" 서술을 되돌림으로 정정. 원문 수정 0줄(append 만).
+**Context**: CONSTRUCTION — 구현 반영 정정, PR #1498 backend-ci Flyway 버전 중복(develop `V2.77__poi_public_view.sql`) 대응. `aidlc-state.md` 무변경.
+
+---

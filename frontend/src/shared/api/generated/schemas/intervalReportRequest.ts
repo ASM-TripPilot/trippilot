@@ -18,7 +18,7 @@ export interface IntervalReportRequest {
   kind: IntervalReportRequestKind;
   phase: IntervalReportRequestPhase;
   at: string;
-  /** END 에서만, 필수. SERVER_TIMEOUT 은 서버만 쓴다. USER_PAUSE = 여행 중 사용자가 이 여행의 자동 기록을 잠깐 끔(동의 철회 아님 · TRIP-1486) */
+  /** END 에서만, 필수. SERVER_TIMEOUT 은 서버만 쓴다 */
   endReason?: IntervalReportRequestEndReason;
   /**
    * ROUTE_RECORDING END 의 표본 수
