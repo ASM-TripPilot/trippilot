@@ -3,14 +3,12 @@ package com.trippilot.savedaccommodation.application
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.savedaccommodation.domain.BaseAssignmentRepository
+import com.trippilot.savedaccommodation.domain.DuplicateExternalStay
 import com.trippilot.savedaccommodation.domain.RegisterRoute
 import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.savedaccommodation.api.event.StayRegistered
 import com.trippilot.savedaccommodation.domain.SavedStay
 import com.trippilot.savedaccommodation.domain.SavedStayRepository
-import org.hibernate.exception.ConstraintViolationException
-import org.postgresql.util.PSQLException
-import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
@@ -70,11 +68,9 @@ class SavedStayService(
         }
         return try {
             doRegister(accountId, cmd)
-        } catch (e: DataIntegrityViolationException) {
-            // 동시 등록 경합 — 선검사를 빠져나간 레이스(ux_saved_stay_external). 500 이 아니라 409 다.
-            // **그 제약일 때만**이다. 다른 위반(길이 22001·CHECK)까지 "이미 저장한 숙소"로 바꾸면 결함이 중복으로
-            // 보인다 — 실측: 상한 없던 이름 201자가 409 로 나갔다(TRIP-1473). 나머지는 그대로 올린다.
-            if (!e.violatesConstraint(EXTERNAL_UNIQUE)) throw e
+        } catch (e: DuplicateExternalStay) {
+            // 동시 등록 경합 — 선검사를 빠져나간 레이스. 500 이 아니라 409 다. 어댑터가 **그 유니크 위반일 때만** 이 신호로
+            // 바꾼다 — 다른 위반(길이 22001·CHECK)은 그대로 올라온다(TRIP-1473: 종전엔 모든 무결성 위반을 409 로 읽었다).
             throw ConflictDetected(message = "이미 저장한 숙소입니다.")
         }
     }
@@ -131,21 +127,4 @@ class SavedStayService(
         if (stay.accountId != accountId) throw ResourceNotFound()
         return stay
     }
-
-    private companion object {
-        /** V2.57 의 유니크 인덱스 — 계정당 같은 외부 숙소 1건(TRIP-1059). */
-        const val EXTERNAL_UNIQUE = "ux_saved_stay_external"
-    }
-}
-
-/**
- * 위반한 제약이 [constraint] 인가. **드라이버가 서버에서 받은 구조화 필드**(`ServerErrorMessage.constraint`)를 먼저 본다 —
- * 서버 문구 언어(`lc_messages`)와 무관하다. Hibernate 의 `constraintName` 은 방언이 오류 **문구**에서 뽑을 수 있는 값이라
- * 문구가 영어가 아니면 비어, 진짜 경합이 500 으로 나갈 수 있다. 그래서 드라이버 필드가 없을 때의 보조로만 쓴다.
- */
-internal fun DataIntegrityViolationException.violatesConstraint(constraint: String): Boolean {
-    val chain = generateSequence<Throwable>(this) { it.cause }.toList()
-    val fromServer = chain.filterIsInstance<PSQLException>().firstNotNullOfOrNull { it.serverErrorMessage?.constraint }
-    val name = fromServer ?: chain.filterIsInstance<ConstraintViolationException>().firstNotNullOfOrNull { it.constraintName }
-    return name.equals(constraint, ignoreCase = true)
 }

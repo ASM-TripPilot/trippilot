@@ -1,4 +1,4 @@
-package com.trippilot.savedaccommodation.application
+package com.trippilot.savedaccommodation.adapter.out.persistence
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe

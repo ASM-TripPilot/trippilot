@@ -281,30 +281,33 @@ class InputErrorContractIT : AbstractPostgresIntegrationTest() {
     fun `회고 카드는 20000자까지 받고 20001자는 400 이다`() {
         val token = newToken()
         val tripId = send(HttpMethod.POST, "/api/v1/trips", trip(""), token).second["tripId"].asText()
-        fun card(length: Int): String {
+        /** [length] 는 코드 포인트 수다. [fill] 이 BMP 밖 문자(이모지)면 UTF-16 길이는 그 두 배에 가깝다. */
+        fun card(length: Int, fill: String = "가"): String {
             val shell = """{"cover":{"title":"t"},"pad":""}"""
-            return shell.replace("\"pad\":\"\"", "\"pad\":\"${"가".repeat(length - shell.length)}\"")
+            return shell.replace("\"pad\":\"\"", "\"pad\":\"${fill.repeat(length - shell.length)}\"")
         }
         fun put(card: String) = send(
             HttpMethod.PUT, "/api/v1/trips/$tripId/reflections/2026-12-01", json.writeValueAsString(mapOf("card" to card)), token,
         )
 
         put(card(20000)).first shouldBe 200
+        // 상한은 코드 포인트다 — 이모지로 채운 20000자(UTF-16 으로는 약 40000)도 받는다. `@Size` 였다면 400 이다.
+        put(card(20000, fill = "\uD83C\uDF0A")).first shouldBe 200
         val over = put(card(20001))
         over.first shouldBe 400
         over.second["error"]["fields"].map { it["field"].asText() } shouldBe listOf("card")
     }
 
     /**
-     * 대조군 — 과잉 거부가 아니다. 유니코드 이스케이프(`é`)·제어 문자 이스케이프(`\n`·`\t`)는 그대로 통과하고,
+     * 대조군 — 과잉 거부가 아니다. 유니코드 이스케이프(`\u00e9`)·제어 문자 이스케이프(`\n`·`\t`)는 그대로 통과하고,
      * `\\u0000`(역슬래시가 이스케이프된 **글자** 여섯 개)은 NUL 이 아니다. 본문은 raw 문자열이라 이스케이프가 JSON 에 그대로 실린다.
      */
     @Test
     fun `NUL 이 아닌 이스케이프와 글자 그대로의 백슬래시 u0000 은 통과한다 — 대조군`() {
-        val (status, body) = send(HttpMethod.POST, "/api/v1/trips", trip(""""title":"café\n\t\\u0000","""))
+        val (status, body) = send(HttpMethod.POST, "/api/v1/trips", trip(""""title":"caf\u00e9\n\t\\u0000","""))
 
         status shouldBe 201
-        body["title"].asText() shouldBe "café\n\t\\u0000"
+        body["title"].asText() shouldBe "caf\u00e9\n\t\\u0000"
     }
 
     // ── TRIP-1473 · 길이 초과(22001) — 전역 매핑하지 않고 요청 필드마다 컬럼 폭으로 막는다 ─────────────────

@@ -4,6 +4,7 @@ import java.util.UUID
 
 /** 저장 숙소 영속 포트. 소유 계정 스코프 조회는 서비스가 인가 판정에 사용. */
 interface SavedStayRepository {
+    /** @throws DuplicateExternalStay 같은 계정에 같은 외부 숙소가 이미 있을 때(선검사를 빠져나간 경합). */
     fun save(stay: SavedStay): SavedStay
     fun findById(savedStayId: UUID): SavedStay?
     fun findByAccount(accountId: UUID): List<SavedStay>
@@ -51,3 +52,9 @@ data class GeocodeCandidate(
     val lat: Double,
     val lng: Double,
 )
+
+/**
+ * 같은 외부 숙소가 이미 저장돼 있다 — 저장이 유니크 경합에 걸렸다는 **도메인 신호**(TRIP-1059 · TRIP-1473).
+ * 어떤 DB 제약이었는지는 영속 어댑터가 판정한다. 서비스는 이것만 409 로 번역하고, 다른 무결성 위반은 그대로 올린다.
+ */
+class DuplicateExternalStay(cause: Throwable) : RuntimeException("같은 외부 숙소가 이미 저장돼 있다", cause)

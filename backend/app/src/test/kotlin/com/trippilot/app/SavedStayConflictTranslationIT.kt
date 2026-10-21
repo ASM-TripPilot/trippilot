@@ -20,8 +20,8 @@ import java.time.Clock
 import java.time.Instant
 
 /**
- * 저장 숙소 등록의 제약 위반 번역은 **유니크 경합만** 409 다(TRIP-1473) — 실 DB 로 본다. 제약 이름은 Hibernate 의
- * PostgreSQL 방언이 오류 문구에서 뽑으므로, 이름 비교가 맞는지는 대역으로는 확인되지 않는다.
+ * 저장 숙소 등록의 제약 위반 번역은 **유니크 경합만** 409 다(TRIP-1473). 판정 순서(드라이버 필드 → Hibernate)는 단위 테스트
+ * (`ConstraintViolationTest`)가, 실 DB 에서 유니크 위반만 409 라는 점은 이 IT 가 본다.
  *
  * 선검사(`existsByAccountAndExternal`)를 거짓으로 돌려 경합 순간을 재현한다 — 저장은 실 어댑터(saveAndFlush)다.
  */
