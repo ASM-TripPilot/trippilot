@@ -31,6 +31,8 @@ CATEGORY_WEIGHT: dict[PoiCategory, float] = {
     PoiCategory.NATURE: 0.9,
     PoiCategory.FOOD: 0.8,
     PoiCategory.CULTURE: 0.8,
+    PoiCategory.ART: 0.8,    # 문화에서 갈라진 갤러리·미술관 — 문화와 같은 축
+    PoiCategory.BAR: 0.6,    # 술집 — 주 목적지가 아니라 저녁·밤의 곁가지(카페와 같은 단)
     PoiCategory.CAFE: 0.6,
     PoiCategory.SHOPPING: 0.5,
     PoiCategory.STAY: 0.0,
@@ -60,11 +62,13 @@ _FEE_CEILING: dict[BudgetLevel, dict[PoiCategory, int]] = {
     BudgetLevel.LOW: {
         PoiCategory.NATURE: 5_000,
         PoiCategory.CULTURE: 7_000,
+        PoiCategory.ART: 7_000,
         PoiCategory.SIGHT: 9_500,
     },
     BudgetLevel.MID: {
         PoiCategory.NATURE: 8_000,
         PoiCategory.CULTURE: 13_250,
+        PoiCategory.ART: 13_250,
         PoiCategory.SIGHT: 15_000,
     },
     BudgetLevel.HIGH: {},

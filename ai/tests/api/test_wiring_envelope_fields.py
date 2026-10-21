@@ -63,7 +63,7 @@ def test_generate_candidates_summary_reflects_pool_facts() -> None:
     assert summary["level"] == "LOW"
     assert summary["pool_size"] == 6
     assert set(summary["shortfall_categories"]) == {
-        "FOOD", "CAFE", "NIGHT_VIEW", "NATURE", "CULTURE", "ACTIVITY", "SHOPPING"
+        "FOOD", "CAFE", "NIGHT_VIEW", "NATURE", "CULTURE", "ACTIVITY", "SHOPPING", "ART", "BAR"
     }
 
 

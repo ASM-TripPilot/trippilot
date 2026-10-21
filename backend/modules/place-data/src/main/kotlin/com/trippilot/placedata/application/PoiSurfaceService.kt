@@ -5,6 +5,7 @@ import com.trippilot.placedata.api.PoiSurfaceFacade
 import com.trippilot.placedata.api.PoiSurfaceView
 import com.trippilot.placedata.domain.PoiRepository
 import com.trippilot.placedata.domain.PoiSnapshotRepository
+import com.trippilot.placedata.domain.PublicTags
 import org.springframework.stereotype.Service
 import java.util.UUID
 
@@ -28,7 +29,7 @@ class PoiSurfaceService(
                 categoryCode = p.category.boundaryCode,
                 openingHours = p.openingHours,
                 imageUrl = p.imageUrl,
-                tags = p.tags,
+                tags = PublicTags.of(p.tags),   // 인기·평점높음 은 내보내지 않는다 — PublicTags
             )
         }
     }

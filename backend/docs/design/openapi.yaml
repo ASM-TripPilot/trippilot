@@ -2263,7 +2263,8 @@ components:
 
     PoiCategory:
       type: string
-      enum: [명소, 맛집, 카페, 야경, 자연, 쇼핑, 문화]
+      description: 정본은 DB CHECK(poi_category_check) — 미술·술집은 V2.79(TRIP-1545)에서 추가
+      enum: [명소, 맛집, 카페, 야경, 자연, 쇼핑, 문화, 액티비티, 미술, 술집]
 
     RegionLevel:
       type: string

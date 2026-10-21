@@ -9,6 +9,9 @@
  * OpenAPI spec version: 0.1.0-draft
  */
 
+/**
+ * 정본은 DB CHECK(poi_category_check) — 미술·술집은 V2.79(TRIP-1545)에서 추가
+ */
 export type PoiCategory = (typeof PoiCategory)[keyof typeof PoiCategory];
 
 export const PoiCategory = {
@@ -19,4 +22,7 @@ export const PoiCategory = {
   자연: '자연',
   쇼핑: '쇼핑',
   문화: '문화',
+  액티비티: '액티비티',
+  미술: '미술',
+  술집: '술집',
 } as const;

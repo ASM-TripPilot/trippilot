@@ -42,6 +42,8 @@ STAY_DEFAULT_MIN: dict[PoiCategory, int] = {
     PoiCategory.NIGHT_VIEW: 60,
     PoiCategory.NATURE: 90,
     PoiCategory.CULTURE: 90,
+    PoiCategory.ART: 75,       # 갤러리·미술관 — 문화(90)보다 짧다: 박물관·유적이 빠지고 전시 한두 곳을 도는 체류
+    PoiCategory.BAR: 90,       # 술집 — 한 곳에서 한 잔·한 끼 이어 머무는 시간
     PoiCategory.ACTIVITY: 120,
     PoiCategory.SHOPPING: 60,
     PoiCategory.STAY: 30,
@@ -93,15 +95,15 @@ def stay_for(category: PoiCategory, pace: "Pace | None") -> int:
     return max(_STAY_FLOOR_MIN, base * num // den)
 
 
-# TRIP-383 — 날씨 보정의 실외/실내 판정표 (경계 카테고리 8종 기준).
+# TRIP-383 — 날씨 보정의 실외/실내 판정표 (경계 카테고리 10종 기준).
 # 실외: 자연·야경·액티비티 — 강수에 체험이 직접 훼손되는 축.
-# 실내: 문화(박물관류)·카페·쇼핑 — 강수 대피처로 기능하는 축.
+# 실내: 문화(박물관류)·미술·카페·쇼핑·술집 — 강수 대피처로 기능하는 축.
 # FOOD·SIGHT·STAY는 중립 — 실내외 혼재(식당/명소)라 어느 쪽으로도 밀지 않는다.
 RAIN_OUTDOOR: frozenset[PoiCategory] = frozenset(
     {PoiCategory.NATURE, PoiCategory.NIGHT_VIEW, PoiCategory.ACTIVITY}
 )
 RAIN_INDOOR: frozenset[PoiCategory] = frozenset(
-    {PoiCategory.CULTURE, PoiCategory.CAFE, PoiCategory.SHOPPING}
+    {PoiCategory.CULTURE, PoiCategory.ART, PoiCategory.CAFE, PoiCategory.SHOPPING, PoiCategory.BAR}
 )
 
 # 재계획 "숙소 근처에서 끝내기"(`ItineraryProblem.end_near`) — 마지막 방문지 → 숙소 도로 km 당

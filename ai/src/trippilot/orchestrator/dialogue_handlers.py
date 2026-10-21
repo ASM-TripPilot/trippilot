@@ -107,7 +107,7 @@ _UNRESOLVED_LEG = "구간 미해소 — 목적지를 일정에서 찾지 못했�
 # 스냅샷 category 는 BE 한글 정본(PlannedSlotView.category) — POI_INFO 패킷의 경계 코드를 같은 어휘로 접는다
 _CATEGORY_KO: Mapping[str, str] = {
     "SIGHT": "명소", "FOOD": "맛집", "CAFE": "카페", "NIGHT_VIEW": "야경", "NATURE": "자연", "SHOPPING": "쇼핑",
-    "CULTURE": "문화", "ACTIVITY": "액티비티",
+    "CULTURE": "문화", "ACTIVITY": "액티비티", "ART": "미술", "BAR": "술집",
 }
 _FOOD_LABELS = frozenset({PoiCategory.FOOD.value, _CATEGORY_KO[PoiCategory.FOOD.value]})
 
@@ -1310,6 +1310,10 @@ def explore_needs_region(ctx: TurnContext) -> bool:
     return not ctx.arguments.get("region") and _explore_anchor(ctx) is None
 
 
+# 문화를 고르면 미술(문화에서 갈라진 갤러리·미술관)도 함께 — 분류 선택지에는 미술이 없다(TRIP-1545)
+_EXPLORE_FAMILY: Mapping[str, tuple[str, ...]] = {PoiCategory.CULTURE.value: (PoiCategory.CULTURE.value, PoiCategory.ART.value)}
+
+
 def _explore_rank(pois: Iterable[Poi], category: str | None, theme: str | None) -> list[Poi]:
     """결정론 정렬 — 주제 맞음(밤·야경 주제면 야경·나이트라이프) → 주제 낱말이 태그·이름에 든 수 → '요즘 인기' 태그 →
     저장 수 → 별점 → 영업시간 보유 → poi_id. 숙소·표시 불가 이름은 뺀다."""
@@ -1318,8 +1322,10 @@ def _explore_rank(pois: Iterable[Poi], category: str | None, theme: str | None) 
     themes = frozenset(themes_in(theme))   # "혼자 가기 좋은"·"아이랑" → 혼밥·혼술·아이동반 (태그 글자와 안 맞는 말을 잇는다)
     no_food = category is None and bool(theme and _SIGHTSEEING.search(theme))
 
+    wanted = _EXPLORE_FAMILY.get(category, (category,)) if category else None
+
     def fits(p: Poi) -> bool:
-        return (p.category is not PoiCategory.STAY and (category is None or p.category.value == category)
+        return (p.category is not PoiCategory.STAY and (wanted is None or p.category.value in wanted)
                 and (night or NIGHTLIFE_TAG not in p.tags) and _displayable(p.name) and not (no_food and counts_as_food(p)))
 
     def key(p: Poi) -> tuple:

@@ -44,7 +44,7 @@ _NEARBY_FIT: Mapping[EventType, frozenset[PoiCategory]] = {
     EventType.FESTIVAL: frozenset({PoiCategory.SIGHT, PoiCategory.NATURE, PoiCategory.NIGHT_VIEW,
                                    PoiCategory.ACTIVITY, PoiCategory.CULTURE}),
     EventType.PERFORMANCE: frozenset({PoiCategory.CULTURE, PoiCategory.SIGHT}),
-    EventType.EXHIBITION: frozenset({PoiCategory.CULTURE, PoiCategory.SIGHT}),
+    EventType.EXHIBITION: frozenset({PoiCategory.CULTURE, PoiCategory.ART, PoiCategory.SIGHT}),
 }
 
 

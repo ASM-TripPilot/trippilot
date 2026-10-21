@@ -196,7 +196,7 @@ class PoiProposalIngestService(
         private const val SOURCE_REF_MAX = 64
         private const val ADDRESS_MAX = 300
 
-        /** 우리 8종에 없는 코드(예: AI 내부 전용 `STAY`) 또는 값 자체가 없음. */
+        /** 우리 10종에 없는 코드(예: AI 내부 전용 `STAY`) 또는 값 자체가 없음. */
         const val DROP_UNKNOWN_CATEGORY = "unknown_category"
         const val DROP_OTHER = "other"
     }
