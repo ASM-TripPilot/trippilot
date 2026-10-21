@@ -97,13 +97,13 @@ class NotificationInvariantsTest : StringSpec({
         s.isTooLate(at.plus(grace).plusSeconds(1), grace) shouldBe true
     }
 
-    /** 컬럼 상한(255)과 같아야 한다 — 하나라도 어긋나면 저장 시점에 22001 로 터진다. 경계값 255자는 들어간다. */
+    /** 컬럼 상한(V2.40 `push_token.token varchar(255)`)과 같아야 한다 — 어긋나면 저장 시점에 22001 로 터진다. */
     "푸시 토큰은 비어 있거나 255자를 넘을 수 없다 — 경계값 255자는 들어간다" {
         fun register(token: String) =
             PushToken.register(UUID.randomUUID(), token, null, DevicePlatform.IOS, OsPermission.GRANTED, Instant.EPOCH)
 
         shouldThrow<IllegalArgumentException> { register(" ") }
-        shouldThrow<IllegalArgumentException> { register("x".repeat(PushToken.TOKEN_MAX + 1)) }
-        register("x".repeat(PushToken.TOKEN_MAX)).token.length shouldBe PushToken.TOKEN_MAX
+        shouldThrow<IllegalArgumentException> { register("x".repeat(256)) }
+        register("x".repeat(255)).token.length shouldBe 255
     }
 })

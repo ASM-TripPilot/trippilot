@@ -321,16 +321,16 @@ class PlanBTriggeredSubscriberTest : StringSpec({
     }
 
     /**
-     * **묶음 키는 여행·슬롯 단위다**(BR-U6-34 재료). 10분 묶음은 이 접두로 같은 여행을 알아본다 — 슬롯이 빠지면
-     * 같은 슬롯의 반복을 못 가리고, 슬롯이 없는 사건에 `null` 글자가 끼면 그 사건끼리만 따로 묶인다.
+     * **억제 키 표기는 정본 그대로다** — `PLAN_B#{tripId}#{slotKey}`(U6 functional-design domain-entities `dedup_key`).
+     * 지금 소비처는 10분 묶음의 접두 비교(`PLAN_B#{tripId}#`) 하나뿐이라 슬롯 꼬리는 동작을 바꾸지 않는다 —
+     * 여기서는 정본 표기를 지키는지만 본다(키는 유니크가 아니다; 재배달 멱등은 `source_event_id` 가 맡는다).
      */
-    "억제 키는 PLAN_B#여행#슬롯이다 — 슬롯이 없으면 빈 꼬리다" {
+    "억제 키는 정본 표기 PLAN_B#여행#슬롯이다" {
         val f = fixture()
         val trip = UUID.randomUUID()
 
         f.deliver(current(trip) + ("slotKey" to "2026-10-19#p-1"))
-        f.deliver(current(trip) - "slotKey")
 
-        f.notifications.stored.map { it.dedupKey } shouldBe listOf("PLAN_B#$trip#2026-10-19#p-1", "PLAN_B#$trip#")
+        f.notifications.stored.single().dedupKey shouldBe "PLAN_B#$trip#2026-10-19#p-1"
     }
 })

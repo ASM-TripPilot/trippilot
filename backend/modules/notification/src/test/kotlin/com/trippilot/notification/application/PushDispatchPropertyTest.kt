@@ -96,7 +96,11 @@ class PushDispatchPropertyTest : StringSpec({
         override fun upsert(toggle: NotificationToggle) = toggle
     }
 
-    /** 토큰마다 결과를 정해 주는 발송기. 호출된 토큰 목록을 남겨 "전부에 보냈나"를 볼 수 있게 한다. */
+    /**
+     * 토큰마다 결과를 정해 주는 발송기. 호출된 토큰 목록을 남겨 "전부에 보냈나"를 볼 수 있게 한다.
+     * 사유는 **실 Expo 어댑터가 남기는 표기**를 쓴다(ExpoPushReceiptTest 가 고정) — 대역이 자기 어휘를 쓰면
+     * 지표가 실제 사유를 `OTHER` 로 접어도 여기서는 초록이다(TRIP-1534 검수에서 그렇게 가려졌다).
+     */
     class Sender(private val outcome: (String) -> PushStatus = { PushStatus.SENT }) : PushPort {
         override val deliversExternally = true
 
@@ -108,7 +112,7 @@ class PushDispatchPropertyTest : StringSpec({
         override fun send(tokens: List<String>, message: PushMessage): List<PushReceipt> {
             calls += tokens
             messages += message
-            return tokens.map { PushReceipt(it, outcome(it), if (outcome(it) == PushStatus.SENT) null else outcome(it).name) }
+            return tokens.map { PushReceipt(it, outcome(it), expoReason(outcome(it))) }
         }
     }
 
@@ -309,7 +313,7 @@ class PushDispatchPropertyTest : StringSpec({
         val (id, sentAt, reason) = notifications.pushResults.single()
         id shouldBe n.notificationId
         sentAt shouldBe null
-        reason shouldBe "DEVICE_NOT_REGISTERED"
+        reason shouldBe "DeviceNotRegistered"
     }
 
     /**
@@ -332,6 +336,9 @@ class PushDispatchPropertyTest : StringSpec({
 
         reasonFor(PushStatus.FAILED to "MessageTooBig", PushStatus.FAILED to "MessageTooBig", PushStatus.FAILED to null) shouldBe "MessageTooBig"
         reasonFor(PushStatus.FAILED to null, PushStatus.FAILED to null, PushStatus.FAILED to "MessageTooBig") shouldBe "FAILED"
+        // 소수가 맨 앞이어도 다수가 남는다 — "첫 영수증의 사유"와 구별되는 예시다.
+        reasonFor(PushStatus.FAILED to "MessageTooBig", PushStatus.DEVICE_NOT_REGISTERED to "DeviceNotRegistered", PushStatus.DEVICE_NOT_REGISTERED to "DeviceNotRegistered") shouldBe
+            "DeviceNotRegistered"
     }
 
     /** 계약(입력과 같은 수의 영수증)을 어긴 발송기라도 사유는 비지 않는다 — 고를 다수가 없으면 UNKNOWN 이다. */
@@ -425,3 +432,10 @@ class PushDispatchPropertyTest : StringSpec({
         shouldThrow<IllegalArgumentException> { PushRateLimits(hourly = 51, daily = 50) }
     }
 })
+
+/** `ExpoPushAdapter.toReceipt` 의 사유 — 성공은 사유가 없고, 죽은 토큰은 Expo 오류 코드 그대로다. */
+private fun expoReason(status: PushStatus): String? = when (status) {
+    PushStatus.SENT -> null
+    PushStatus.DEVICE_NOT_REGISTERED -> "DeviceNotRegistered"
+    PushStatus.FAILED -> "MessageRateExceeded"
+}

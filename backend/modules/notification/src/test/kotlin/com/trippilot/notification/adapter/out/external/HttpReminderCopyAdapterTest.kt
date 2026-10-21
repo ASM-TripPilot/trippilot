@@ -189,8 +189,9 @@ class HttpReminderCopyAdapterTest : StringSpec({
 
             val sentTree = ReminderCopyConfiguration.boundaryMapper().readTree(sent.single())
             val meta = sentTree["request_meta"]
-            java.util.UUID.fromString(meta["request_id"].asString()) // UUID 가 아니면 여기서 터진다
-            meta["requested_at"].asString() shouldBe "2026-08-01T00:00:00Z"
+            val requestId = meta["request_id"].asString()
+            java.util.UUID.fromString(requestId).toString() shouldBe requestId // 정규 UUID 표기 그대로다
+            Instant.parse(meta["requested_at"].asString()) shouldBe Instant.parse("2026-08-01T00:00:00Z")
             meta["deadline_ms"].asLong() shouldBe 6_000L
             // 상대는 종류로 말투를, 날짜로 "오늘/내일"을 정한다 — 비면 422 거나 엉뚱한 날 이야기다.
             sentTree["items"].map { it["kind"].asString() to it["date"].asString() } shouldBe

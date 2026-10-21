@@ -73,7 +73,7 @@ class NotificationMetricsTest : StringSpec({
      * 갈라져 수집기를 망가뜨린다 — 어떤 문자열이 와도 태그 값은 닫힌 집합 안이어야 한다.
      */
     "어떤 실패 사유 문자열이 와도 태그는 닫힌 집합 안이다" {
-        val allowed = setOf("none", "OTHER", "PUSH_ERROR", "DEVICE_NOT_REGISTERED", "FAILED", "SENT", "UNKNOWN")
+        val allowed = setOf("none", "OTHER", "PUSH_ERROR", "DeviceNotRegistered", "DEVICE_NOT_REGISTERED", "FAILED", "SENT", "UNKNOWN")
 
         checkAll(Arb.string()) { raw ->
             val (metrics, registry) = fixture()
@@ -95,6 +95,9 @@ class NotificationMetricsTest : StringSpec({
         val expected = mapOf(
             null to "none",
             "PUSH_ERROR: IllegalStateException" to "PUSH_ERROR",
+            // 실 Expo 어댑터가 남기는 표기(`ExpoPushAdapter` · ExpoPushReceiptTest 가 고정) — 정본 OBS-U6-02 의 사유 이름이다.
+            "DeviceNotRegistered" to "DeviceNotRegistered",
+            // 벤더 사유가 없는 영수증은 상태 이름으로 남는다(PushDispatchService.reasonOf).
             "DEVICE_NOT_REGISTERED" to "DEVICE_NOT_REGISTERED",
             "UNKNOWN" to "UNKNOWN",
             "MessageTooBig" to "OTHER",

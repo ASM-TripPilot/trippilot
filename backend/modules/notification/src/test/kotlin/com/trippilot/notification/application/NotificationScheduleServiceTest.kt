@@ -1,6 +1,8 @@
 package com.trippilot.notification.application
 
 import com.trippilot.notification.domain.NotificationKind
+import com.trippilot.notification.domain.NotificationSchedule
+import com.trippilot.notification.domain.NotificationScheduleRepository
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
@@ -43,16 +45,34 @@ class NotificationScheduleServiceTest : StringSpec({
 
     /**
      * **적재는 그 여행을 먼저 잠근다** — 릴레이와 재시도 폴러가 같은 여행을 겹쳐 적재하면 하루 리마인드가
-     * 두 벌이 된다. 단일 스레드 대역에서는 결과가 같아 잠갔는지 자체를 본다. 여행이 없어 비우는 경로도 쓰기다.
+     * 두 벌이 된다. 단일 스레드 대역에서는 결과가 같아, **쓰기마다 그 앞에** 잠금이 있었는지를 순서로 본다.
+     * 여행이 없어 비우는 경로도 쓰기다.
      */
-    "적재는 그 여행을 잠그고 시작한다 — 여행이 없어 비우는 경로도" {
-        val (svc, schedules, trips) = fixture(now = "2026-08-01T00:00:00Z", start = "2026-08-10", end = "2026-08-12")
+    "적재는 그 여행을 잠근 뒤에 쓴다 — 여행이 없어 비우는 경로도" {
+        val fake = FakeSchedules()
+        val trips = FakeTripOwner().apply { put(tripId, acc, LocalDate.parse("2026-08-10"), LocalDate.parse("2026-08-12")) }
+        val events = mutableListOf<String>()
+        val ordered = object : NotificationScheduleRepository by fake {
+            override fun lockTrip(tripId: UUID) {
+                events += "lock"
+                fake.lockTrip(tripId)
+            }
+
+            override fun replacePending(tripId: UUID, schedules: List<NotificationSchedule>) {
+                check(tripId in fake.lockedTrips) { "잠그기 전에 예약을 썼습니다" }
+                events += "write"
+                fake.replacePending(tripId, schedules)
+            }
+        }
+        val svc = NotificationScheduleService(
+            trips, ordered, NoCopies(), FakePlans(), clockAt("2026-08-01T00:00:00Z"), ReminderCopyRetries(180_000),
+        )
 
         svc.reload(tripId)
         trips.remove(tripId)
         svc.reload(tripId)
 
-        schedules.lockedTrips shouldBe listOf(tripId, tripId)
+        events shouldBe listOf("lock", "write", "lock", "write")
     }
 
     "여행 전날 1건 + 여행일수만큼 당일 알림이 적재된다" {

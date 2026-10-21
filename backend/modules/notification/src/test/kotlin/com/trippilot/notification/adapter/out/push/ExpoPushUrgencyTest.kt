@@ -57,17 +57,20 @@ class ExpoPushUrgencyTest : StringSpec({
     /** 긴급도만 맞고 내용이 비면 빈 알림이 울린다 — 제목·본문·탭 목적지도 기기마다 그대로 실린다. */
     "제목·본문·탭 목적지가 기기마다 그대로 실린다" {
         val (adapter, server) = fixture()
-        server.expect(requestTo("http://expo.test/--/api/v2/push/send"))
-            .andExpect(jsonPath("$.length()").value(2))
-            .andExpect(jsonPath("$[1].to").value("ExponentPushToken[b]"))
-            .andExpect(jsonPath("$[1].title").value("오늘의 일정"))
-            .andExpect(jsonPath("$[1].body").value("성산일출봉부터 시작해요"))
-            .andExpect(jsonPath("$[1].data.actionType").value("TRIP_ITINERARY"))
-            .andExpect(jsonPath("$[1].data.tripId").value("t-1"))
-            .andRespond(withSuccess("""{"data":[{"status":"ok"},{"status":"ok"}]}""", MediaType.APPLICATION_JSON))
+        val tokens = listOf("ExponentPushToken[a]", "ExponentPushToken[b]")
+        val expect = server.expect(requestTo("http://expo.test/--/api/v2/push/send"))
+            .andExpect(jsonPath("$.length()").value(tokens.size))
+        tokens.forEachIndexed { i, token ->
+            expect.andExpect(jsonPath("$[$i].to").value(token))
+                .andExpect(jsonPath("$[$i].title").value("오늘의 일정"))
+                .andExpect(jsonPath("$[$i].body").value("성산일출봉부터 시작해요"))
+                .andExpect(jsonPath("$[$i].data.actionType").value("TRIP_ITINERARY"))
+                .andExpect(jsonPath("$[$i].data.tripId").value("t-1"))
+        }
+        expect.andRespond(withSuccess("""{"data":[{"status":"ok"},{"status":"ok"}]}""", MediaType.APPLICATION_JSON))
 
         adapter.send(
-            listOf("ExponentPushToken[a]", "ExponentPushToken[b]"),
+            tokens,
             PushMessage(
                 "오늘의 일정", "성산일출봉부터 시작해요",
                 data = mapOf("actionType" to "TRIP_ITINERARY", "tripId" to "t-1"),
