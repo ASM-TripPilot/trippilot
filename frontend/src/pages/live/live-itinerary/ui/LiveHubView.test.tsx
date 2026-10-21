@@ -63,7 +63,7 @@ import { LiveHubView, type LiveHubSlot } from './LiveHubView';
  *  - 골격: 전면 지도(셸) 위 일자 칩 줄, 시트 헤더 한 줄 "부산 여행 · 2일차 · 6월 11일(목) · 5곳", 카드 5장,
  *    화면 아래 내비 바(둥근 뒤로 + 일정·수정·챗봇·행사 4칸 — TRIP-1522 v2, HN·HE·HF·HS·HC 묶음).
  *  - 부재: 탭바·세그먼트·방패 FAB·옛 헤더·지도 세그먼트·다음 길찾기·레일 시각 열. 수동 [도착]은
- *    `onPressArrive` 를 받고 진행 중 슬롯이 없을 때만 예정 카드에 선다(TRIP-1021 HV9).
+ *    `onPressArrive` 를 받고 예정 카드에 선다 — 진행 중 슬롯이 있으면 그 뒤 카드에만(TRIP-1021 HV9 · TRIP-1561 개정).
  *  - 배선: 뒤로·칩·[방문 완료] 가 콜백으로 이어진다. [사진]/[메모]는 페이지가 콜백을 줄 때만 관람 중
  *    카드에 서고 각자 제 콜백을 부른다(TRIP-1070). 안 주면 없다(TRIP-939 AC-6).
  *  - TRIP-1522 하단 내비 바: 일정이 기본 활성, 수정 칸은 이동 없이 칸 위 팝업을 열고(항목이 이동), 행사 칸은 기회가 있을 때만 활성+점이며 누르면 바 위
@@ -1706,8 +1706,9 @@ describe('🔴 LiveHubView · TRIP-991 오버레이 접근성 (AC-1·AC-2·AC-4)
 // ── TRIP-1021 #059 · 예정 카드 수동 [도착] (AC-1·AC-3 · Seed Q1) ────────────────
 //
 // 뷰는 "오늘인가"를 모른다(페이지가 오늘 탭일 때만 `onPressArrive` 를 넘긴다). 뷰가 정하는 것은 하나 —
-// 진행 중(active) 슬롯이 있으면 어느 카드에도 [도착]을 주지 않는다(deriveVisitProgress 가 active 를
-// 하나만 인정해, 두 번째 도착은 앞 슬롯을 '예정'으로 되돌려 보이게 만든다 — 브리프 Q1).
+// 누구에게 [도착]을 주나. TRIP-1561 전에는 진행 중(active) 슬롯이 있으면 어느 카드에도 주지 않았다(deriveVisitProgress 가
+// active 를 하나만 인정해, 두 번째 도착은 앞 슬롯을 '예정'으로 되돌려 보이게 만든다 — 브리프 Q1). 지금은 페이지가 앞 장소를
+// 먼저 완료하므로 진행 중 슬롯 **뒤의** 예정 카드에 준다.
 
 const ARRIVE_ANY = /^execution-live-slot-arrive-/;
 const arriveId = (poiId: string) =>
@@ -1737,15 +1738,31 @@ describe('LiveHubView · HV9 수동 [도착] (TRIP-1021 AC-1·AC-3 · Q1)', () =
     expect(handlers.onPressComplete).not.toHaveBeenCalled();
   });
 
-  it('HV9b 진행 중 슬롯이 있으면 onPressArrive 를 받아도 어느 카드에도 [도착]이 없다', () => {
-    renderHub({ onPressArrive: jest.fn() });
+  // TRIP-1561 — 옛 HV9b("진행 중이 있으면 어느 카드에도 [도착]이 없다")를 뒤집었다. 그 가드가 막던 "다른 곳에 도착하면 앞 슬롯이
+  // '예정'으로 되돌아 보이고 409"는 페이지가 앞 장소를 먼저 완료한 뒤 도착을 보내므로 사라진다. 뷰가 정하는 것은 "누구에게
+  // [도착]을 주나" 하나다: 진행 중 슬롯 **뒤의** 예정 카드(앞의 done·진행 중 카드에는 없다).
+  it('HV9b 진행 중 슬롯이 있으면 그 뒤 예정 카드에만 [도착]이 서고 누르면 그 poiId 로 1회 불린다 (TRIP-1561)', () => {
+    const onPressArrive = jest.fn();
+    renderHub({ onPressArrive });
 
-    // 짝 앵커 — 카드 5장이 있고, 예정 카드도 실제로 있다(부재가 빈 렌더에서 공허하게 통과하지 않게).
+    // 짝 앵커 — 카드 5장과 진행 중 카드가 실제로 있다(부재가 빈 렌더에서 공허하게 통과하지 않게).
     expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
     expect(
-      screen.getByTestId(`execution-live-slot-status-${DATE}#jeonpo`)
-    ).toHaveTextContent('예정');
-    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+      screen.getByTestId(`execution-live-slot-time-${DATE}#museum`)
+    ).toHaveTextContent('지금 방문 중');
+    // 진행 중 슬롯(museum) 뒤 예정 둘에는 있고, 앞의 done 둘과 진행 중 카드 자신에게는 없다.
+    for (const poiId of ['jeonpo', 'haeundae']) {
+      expect(screen.getByTestId(arriveId(poiId))).toBeOnTheScreen();
+    }
+    for (const poiId of ['gamcheon', 'gwangalli', 'museum']) {
+      expect(screen.queryByTestId(arriveId(poiId))).toBeNull();
+    }
+    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(2);
+
+    fireEvent.press(screen.getByTestId(arriveId('haeundae')));
+
+    expect(onPressArrive).toHaveBeenCalledTimes(1);
+    expect(onPressArrive).toHaveBeenCalledWith('haeundae');
   });
 
   it('HV9c onPressArrive 를 안 넘기면 진행 중이 없어도 [도착]이 없다', () => {
@@ -1753,6 +1770,212 @@ describe('LiveHubView · HV9 수동 [도착] (TRIP-1021 AC-1·AC-3 · Q1)', () =
 
     expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
     expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+  });
+});
+
+// ── TRIP-1561 · [방문 완료]는 "마지막 장소"에만 (수동 허브 — 다음 장소 [도착]이 앞 장소를 완료한다) ───────────────
+//
+// 한 술어가 두 버튼을 정한다: 진행 중 슬롯 뒤에 [도착]을 누를 수 있는 슬롯(예정·건너뛰지 않음·`onPressArrive` 주입)이
+// 있으면 그 슬롯의 [방문 완료]를 숨긴다(다음 [도착]이 완료를 대신한다). 없으면 남긴다. "배열의 마지막인가"로 가르면 건너뛴
+// 슬롯이 뒤에 끼거나 [도착]이 안 서는 화면(오늘이 아닌 탭 등)에서 완료할 길이 사라진다. 자동 기록이 무장(ARMED)이면
+// 최소 체류 미달 이탈(BR-U10-17)의 마무리가 수동 [방문 완료]뿐이라 숨기지 않는다(결정 1).
+// 3동작: 준비(SLOTS = done 2 · 진행 중 · 예정 2, 일부는 slice) → 실행(renderHub·press) → 단언(두 버튼 존재/부재·콜백).
+
+const COMPLETE = 'execution-arrive-complete';
+/** 진행 중(museum)이 마지막인 픽스처 — 뒤에 예정이 없다. */
+const ACTIVE_LAST = SLOTS.slice(0, 3);
+
+describe('LiveHubView · HV10 [방문 완료]는 마지막 장소에만 (TRIP-1561)', () => {
+  it('HV10a 수동 · 진행 중 슬롯 뒤에 [도착]이 서는 슬롯이 있으면 [방문 완료]가 없다 — 카드는 관람 중 그대로', () => {
+    renderHub({ onPressArrive: jest.fn() });
+
+    expect(screen.getByTestId(arriveId('jeonpo'))).toBeOnTheScreen();
+    expect(screen.queryByTestId(COMPLETE)).toBeNull();
+    expect(
+      screen.getByTestId(`execution-live-slot-time-${DATE}#museum`)
+    ).toHaveTextContent('지금 방문 중');
+  });
+
+  it('HV10b 수동 · 진행 중 슬롯이 마지막이면 [방문 완료]가 서고 누르면 onPressComplete 1회 — [도착]은 어디에도 없다', () => {
+    const handlers = renderHub({
+      slots: ACTIVE_LAST,
+      onPressArrive: jest.fn(),
+    });
+
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(3);
+    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+    fireEvent.press(screen.getByTestId(COMPLETE));
+
+    expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('HV10c [도착]이 안 서는 화면(onPressArrive 미주입 — 오늘이 아닌 탭·조회 전)에서는 뒤에 예정이 있어도 [방문 완료]가 남는다 (갇힘 방지)', () => {
+    const handlers = renderHub();
+
+    // 앵커 — 뒤에 예정 카드가 실제로 있고 [도착]은 하나도 없다.
+    expect(
+      screen.getByTestId(`execution-live-slot-status-${DATE}#jeonpo`)
+    ).toHaveTextContent('예정');
+    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+    fireEvent.press(screen.getByTestId(COMPLETE));
+
+    expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('HV10d 뒤의 예정이 전부 건너뜀이면 마지막으로 본다 — [방문 완료]가 서고 건너뛴 카드엔 [도착]이 없다', () => {
+    const handlers = renderHub({
+      onPressArrive: jest.fn(),
+      skippedPoiIds: new Set(['jeonpo', 'haeundae']),
+    });
+
+    expect(
+      screen.getByTestId(`execution-live-slot-status-${DATE}#jeonpo`)
+    ).toHaveTextContent('예정');
+    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+    fireEvent.press(screen.getByTestId(COMPLETE));
+
+    expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('HV10e 건너뜀이 일부면 건너뛰지 않은 슬롯에만 [도착]이 서고 [방문 완료]는 없다', () => {
+    renderHub({
+      onPressArrive: jest.fn(),
+      skippedPoiIds: new Set(['jeonpo']),
+    });
+
+    expect(screen.queryByTestId(arriveId('jeonpo'))).toBeNull();
+    expect(screen.getByTestId(arriveId('haeundae'))).toBeOnTheScreen();
+    expect(screen.queryByTestId(COMPLETE)).toBeNull();
+  });
+
+  it('HV10f 진행 중이 없으면 건너뜀 여부와 무관하게 예정 카드마다 [도착]이 선다 (종전 동작 — 진행 중 슬롯 뒤 기준은 진행 중이 있을 때만)', () => {
+    renderHub({
+      slots: NO_ACTIVE,
+      onPressArrive: jest.fn(),
+      skippedPoiIds: new Set(['jeonpo']),
+    });
+
+    for (const poiId of ['museum', 'jeonpo', 'haeundae']) {
+      expect(screen.getByTestId(arriveId(poiId))).toBeOnTheScreen();
+    }
+  });
+
+  it('HV10g 자동 기록이 무장(ARMED)이면 뒤에 [도착]이 서도 [방문 완료]를 남긴다 — [도착]도 그대로 선다 (결정 1 · BR-U10-17)', () => {
+    const handlers = renderHub({
+      onPressArrive: jest.fn(),
+      automationArmed: true,
+    });
+
+    expect(screen.getByTestId(arriveId('jeonpo'))).toBeOnTheScreen();
+    expect(screen.getByTestId(arriveId('haeundae'))).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId(COMPLETE));
+
+    expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
+  });
+});
+
+// TRIP-1561 5-b 보강(경고-3) — 술어의 두 절을 각각 잠근다: `index > activeIndex`(진행 중 슬롯 **앞** 카드는 [도착] 대상이 아니다)와
+// `state === 'upcoming'`(진행 중 슬롯 **뒤**여도 이미 '완료'인 카드는 대상이 아니다). 진행 중이 없을 때 [도착]이 모든 예정 카드에
+// 서므로(HV10f) p2 에 먼저 도착하면 p1 은 '예정'인 채 p2 가 관람 중이 되는 순서 바꿈 화면이 실제로 도달 가능하다 — 그때 p2 가
+// 마지막이면 [방문 완료]가 남아야 하고, 두 절이 빠지면 그 버튼이 조용히 사라져 마무리할 길이 없어진다.
+// 앵커: 카드 수 + 진행 중 상태줄 + (앞 카드) '예정' 상태줄 — 부재 단언이 빈 렌더에서 공허하게 통과하지 않게 한다.
+describe('LiveHubView · HV12 진행 중 앞의 예정·뒤의 완료는 [도착] 대상이 아니다 (TRIP-1561 5-b 보강)', () => {
+  const ACTIVE_MUSEUM = SLOTS[2];
+  const upcomingOf = (entry: LiveHubSlot): LiveHubSlot => ({
+    state: 'upcoming',
+    slot: entry.slot,
+  });
+  const doneOf = (entry: LiveHubSlot): LiveHubSlot => ({
+    state: 'done',
+    slot: entry.slot,
+  });
+  const expectActiveMuseum = () =>
+    expect(
+      screen.getByTestId(`execution-live-slot-time-${DATE}#museum`)
+    ).toHaveTextContent('지금 방문 중');
+
+  it('HV12a 진행 중 슬롯 앞에 예정 카드가 있고 진행 중이 마지막이면 — 앞 예정 카드엔 [도착]이 없고 진행 중 카드에 [방문 완료]가 선다', () => {
+    // 순서 바꿈: gamcheon 은 아직 '예정'인데 museum 에 먼저 도착했다.
+    const handlers = renderHub({
+      slots: [upcomingOf(SLOTS[0]), ACTIVE_MUSEUM],
+      onPressArrive: jest.fn(),
+    });
+
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(2);
+    expect(
+      screen.getByTestId(`execution-live-slot-status-${DATE}#gamcheon`)
+    ).toHaveTextContent('예정');
+    expectActiveMuseum();
+    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+    fireEvent.press(screen.getByTestId(COMPLETE));
+
+    expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('HV12b 진행 중 앞에 예정, 뒤에도 예정이면 — [도착]은 뒤 예정 카드에만 서고(앞 예정에는 없다) [방문 완료]는 없다', () => {
+    renderHub({
+      slots: [upcomingOf(SLOTS[0]), ACTIVE_MUSEUM, SLOTS[3]],
+      onPressArrive: jest.fn(),
+    });
+
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(3);
+    expect(
+      screen.getByTestId(`execution-live-slot-status-${DATE}#gamcheon`)
+    ).toHaveTextContent('예정');
+    expectActiveMuseum();
+    // 뒤 예정(jeonpo)에만 1개 — 앞 예정(gamcheon)에는 없다.
+    expect(screen.getByTestId(arriveId('jeonpo'))).toBeOnTheScreen();
+    expect(screen.queryByTestId(arriveId('gamcheon'))).toBeNull();
+    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(1);
+    expect(screen.queryByTestId(COMPLETE)).toBeNull();
+  });
+
+  it('HV12c 진행 중 슬롯 뒤에 이미 완료된 카드만 있으면 마지막으로 본다 — 완료 카드엔 [도착]이 없고 [방문 완료]가 선다', () => {
+    // 순서 바꿈: museum 에 도착해 있는 사이 뒤 jeonpo 를 먼저 다녀와 완료했다.
+    const handlers = renderHub({
+      slots: [ACTIVE_MUSEUM, doneOf(SLOTS[3])],
+      onPressArrive: jest.fn(),
+    });
+
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(2);
+    expectActiveMuseum();
+    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+    fireEvent.press(screen.getByTestId(COMPLETE));
+
+    expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
+  });
+});
+
+// TRIP-1561 — [도착]·[방문 완료] 기록 실패 안내(INV-4). 상태는 페이지가 가지고 뷰는 {poiId, text} 를 그 카드에만 그린다.
+// 종전 안내(사진·메모)는 예정 카드에 안 그렸지만(`noticeFor`) 도착 실패는 예정 카드에 서야 하므로 이 안내는 상태를 가리지 않는다.
+describe('LiveHubView · HV11 기록 실패 안내 (TRIP-1561)', () => {
+  const NOTICE = '도착을 기록하지 못했어요. 다시 눌러 주세요.';
+  const noticeId = (poiId: string) =>
+    `execution-live-slot-action-notice-${DATE}#${poiId}`;
+
+  it.each([
+    ['예정', 'jeonpo'],
+    ['관람 중', 'museum'],
+    ['완료', 'gwangalli'],
+  ] as const)(
+    'HV11 %s 카드(%s)에 안내를 주면 그 카드에만 그 문구 한 줄이 선다',
+    (_label, poiId) => {
+      renderHub({ actionNotice: { poiId, text: NOTICE } });
+
+      expect(screen.getByTestId(noticeId(poiId))).toHaveTextContent(NOTICE);
+      expect(
+        screen.getAllByTestId(/^execution-live-slot-action-notice-/)
+      ).toHaveLength(1);
+    }
+  );
+
+  it('HV11b actionNotice 가 null 이거나 없으면 어느 카드에도 안내가 없다 — 카드 5장은 그대로', () => {
+    renderHub({ actionNotice: null });
+
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
+    expect(
+      screen.queryAllByTestId(/^execution-live-slot-action-notice-/)
+    ).toHaveLength(0);
   });
 });
 

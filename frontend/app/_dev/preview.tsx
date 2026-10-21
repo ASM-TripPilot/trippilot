@@ -7325,6 +7325,40 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => renderLiveHubPreview(1),
   },
+  // i01 수동 [도착] 사슬(TRIP-1561, Figma 원본 없음) — 관람 중(미술관) 뒤 예정 둘에 [도착], 관람 중 카드엔 [방문 완료]가 없다.
+  // 마지막 장소가 관람 중이면 [방문 완료]가 남고 [도착]은 없다. 실패 안내는 실패한 카드 아래 한 줄.
+  {
+    key: 'live-hub-manual-arrive',
+    band: 'i',
+    label: 'i01 · 여행중 허브 수동 [도착] (방문 완료 숨김)',
+    login: null,
+    render: () => renderLiveHubPreview(1, { onPressArrive: noop }),
+  },
+  {
+    key: 'live-hub-manual-arrive-notice',
+    band: 'i',
+    label: 'i01 · 여행중 허브 [도착] 실패 안내',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(1, {
+        onPressArrive: noop,
+        actionNotice: {
+          poiId: 'museum',
+          text: '방문 완료를 기록하지 못했어요. 다시 눌러 주세요.',
+        },
+      }),
+  },
+  {
+    key: 'live-hub-manual-last-active',
+    band: 'i',
+    label: 'i01 · 여행중 허브 마지막 장소 관람 중 (방문 완료)',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(1, {
+        slots: LIVE_HUB_PREVIEW_SLOTS.slice(0, 3),
+        onPressArrive: noop,
+      }),
+  },
   // i01 수정 팝업(TRIP-1522, Figma B) — 수정 칸 활성·일정 비활성, 칸 위에 AI에게 맡기기(위)·직접 수정(아래) 알약. 처음부터 열린 채다.
   {
     key: 'live-hub-edit-popup',

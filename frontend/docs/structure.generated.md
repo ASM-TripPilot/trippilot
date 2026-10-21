@@ -207,7 +207,7 @@
 - `src/entities/itinerary-slot/config/altLabel.ts`  →  ALT_LABEL
 
 ## src/entities/itinerary-slot/
-- `src/entities/itinerary-slot/index.ts`  →  deriveEndsNextDay · isValidTimeRange · normalizeOpeningHours · formatOpeningHoursLabel · buildSlotKey · parseSlotKey · buildStatePins · projectSlotProgress · suggestNextSlotTime · timeBandLabel · overlapAwareNotice · VIOLATION_NOTICE · violationNotice · deriveVisitProgress · arrivedLabel · visitedLabelByPoiId · ReplanSlotRow · CategoryBuildingGlyph · CategoryCupGlyph · CategoryForkKnifeGlyph · CategoryImageGlyph · CategoryShoppingBagGlyph · CategoryTreeGlyph · SlotProgressCard · SlotStopCard
+- `src/entities/itinerary-slot/index.ts`  →  deriveEndsNextDay · isValidTimeRange · normalizeOpeningHours · formatOpeningHoursLabel · buildSlotKey · parseSlotKey · buildStatePins · projectSlotProgress · suggestNextSlotTime · timeBandLabel · overlapAwareNotice · VIOLATION_NOTICE · violationNotice · deriveSkippedPoiIds · deriveVisitProgress · arrivedLabel · visitedLabelByPoiId · ReplanSlotRow · CategoryBuildingGlyph · CategoryCupGlyph · CategoryForkKnifeGlyph · CategoryImageGlyph · CategoryShoppingBagGlyph · CategoryTreeGlyph · SlotProgressCard · SlotStopCard
 
 ## src/entities/itinerary-slot/lib/
 - `src/entities/itinerary-slot/lib/categoryPlaceholder.ts`  →  CategoryPlaceholder · resolveCategoryPlaceholder
@@ -221,7 +221,7 @@
 - `src/entities/itinerary-slot/lib/suggestNextSlotTime.ts`  →  suggestNextSlotTime
 - `src/entities/itinerary-slot/lib/timeBandLabel.ts`  →  TimeBandLabel · timeBandLabel
 - `src/entities/itinerary-slot/lib/violationLabel.ts`  →  VIOLATION_NOTICE · violationNotice
-- `src/entities/itinerary-slot/lib/visitProgress.ts`  →  VisitProgress · deriveVisitProgress
+- `src/entities/itinerary-slot/lib/visitProgress.ts`  →  VisitProgress · deriveVisitProgress · deriveSkippedPoiIds
 - `src/entities/itinerary-slot/lib/visitedLabels.ts`  →  arrivedLabel · visitedLabelByPoiId
 
 ## src/entities/itinerary-slot/model/
@@ -362,7 +362,7 @@
 
 ## src/features/check-visit/model/
 - `src/features/check-visit/model/spontaneousNames.ts`  →  rememberSpontaneousName · useSpontaneousNames
-- `src/features/check-visit/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
+- `src/features/check-visit/model/useVisitCheck.ts`  →  VisitCheckOutcome · ArriveAfterCompleteOutcome · useVisitCheck
 - `src/features/check-visit/model/visitStatus.ts`  →  OPTIMISTIC_VISIT_ID_PREFIX · isOptimisticVisit · VisitStatus · deriveVisitStatus
 
 ## src/features/create-trip/

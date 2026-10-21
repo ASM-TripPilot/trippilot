@@ -68,7 +68,7 @@ export interface SlotProgressCardProps {
   visitedLabel?: string | null;
   /** done·active(TRIP-1117). null/미전달이면 메모 박스를 안 그린다. */
   memo?: string | null;
-  /** active [방문 완료]. */
+  /** active [방문 완료]. 미주입이면 버튼을 그리지 않는다(TRIP-1561 — 허브가 "마지막 장소"에서만 준다). */
   onPressComplete?: () => void;
   /** active·done(TRIP-1203) [사진](TRIP-1070). 미주입이면 버튼을 그리지 않는다. */
   onPressPhoto?: () => void;
@@ -92,6 +92,8 @@ export interface SlotProgressCardProps {
   directionsNotice?: string | null;
   /** TRIP-1558 — 지도 핀과 같은 번호(슬롯 위치+1). 미전달이면 번호 노드가 없다. */
   order?: number;
+  /** TRIP-1561 — [도착]·[방문 완료] 기록 실패 안내 한 줄(INV-4, 세 상태 공통). 상태는 부모가 가진다. 비면 안 그린다. */
+  actionNotice?: string | null;
 }
 
 export function SlotProgressCard({
@@ -113,6 +115,7 @@ export function SlotProgressCard({
   onPressDirections,
   directionsNotice,
   order,
+  actionNotice,
 }: SlotProgressCardProps): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
   const fieldId = (role: string): string =>
@@ -242,6 +245,15 @@ export function SlotProgressCard({
       {directionsNotice}
     </Text>
   ) : null;
+  // TRIP-1561 — [도착]·[방문 완료] 실패 안내. 길찾기 안내와 다른 칸(둘이 동시에 설 수 있다).
+  const actionNoticeLine = actionNotice ? (
+    <Text
+      testID={fieldId('action-notice')}
+      className="font-noto text-caption text-muted"
+    >
+      {actionNotice}
+    </Text>
+  ) : null;
 
   // 메모 박스 — done 과 active(TRIP-1117 결정 2, Figma 4741:4804)가 같은 마크업·testID 계열을 쓴다.
   const memoBox = memo ? (
@@ -350,6 +362,7 @@ export function SlotProgressCard({
           photoSettings: fieldId('done-photo-settings'),
           memoNotice: fieldId('done-memo-notice'),
         })}
+        {actionNoticeLine}
         {memoBox}
       </View>
     );
@@ -372,21 +385,24 @@ export function SlotProgressCard({
             : '지금 방문 중'}
         </Text>
         <View className="flex-row flex-wrap items-center gap-sm">
-          <Pressable
-            testID="execution-arrive-complete"
-            accessibilityRole="button"
-            onPress={onPressComplete}
-            className="rounded-[10px] bg-primary px-md py-[10px]"
-          >
-            <Text className="font-noto-bold text-caption font-bold text-on-primary">
-              방문 완료
-            </Text>
-          </Pressable>
+          {onPressComplete ? (
+            <Pressable
+              testID="execution-arrive-complete"
+              accessibilityRole="button"
+              onPress={onPressComplete}
+              className="rounded-[10px] bg-primary px-md py-[10px]"
+            >
+              <Text className="font-noto-bold text-caption font-bold text-on-primary">
+                방문 완료
+              </Text>
+            </Pressable>
+          ) : null}
           {photoButton('execution-arrive-photo')}
           {memoButton('execution-arrive-memo')}
           {directionsButton}
         </View>
         {directionsNoticeLine}
+        {actionNoticeLine}
         {/* TRIP-1117 Q3 — 시트가 닫힌 뒤 도착한 메모 저장 실패(INV-4). 순서: 버튼 줄 → 안내 → 메모 박스(Q9). */}
         {mediaNotices({
           photoNotice: 'execution-arrive-photo-notice',
@@ -455,6 +471,7 @@ export function SlotProgressCard({
         ) : null}
       </View>
       {directionsNoticeLine}
+      {actionNoticeLine}
     </View>
   );
 }

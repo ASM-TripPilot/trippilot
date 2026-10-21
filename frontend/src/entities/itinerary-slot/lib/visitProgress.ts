@@ -76,3 +76,21 @@ export function deriveVisitProgress(
 
   return { completedPoiIds, activePoiId, visitCheckIdByPoiId };
 }
+
+/**
+ * TRIP-1561 — 그 날짜의 계획 레코드 중 건너뜀(skippedAt≠null)인 poi, 오름차순·중복 없음.
+ * 건너뛴 슬롯은 허브에서 '예정'으로 보이므로 이게 없으면 "더 갈 곳 없는 마지막 장소"가 영원히 안 선다.
+ * 같은 poi 의 다른 레코드는 안 본다(visitStatus 우선순위 skipped>completed 와 같다).
+ */
+export function deriveSkippedPoiIds(
+  list: VisitCheckList,
+  date: string
+): string[] {
+  const skipped = new Set<string>();
+  for (const v of list.visits) {
+    if (v.slotKey == null || v.skippedAt == null) continue;
+    const parsed = parseSlotKey(v.slotKey);
+    if (parsed.kind === 'ok' && parsed.date === date) skipped.add(parsed.poiId);
+  }
+  return [...skipped].sort();
+}

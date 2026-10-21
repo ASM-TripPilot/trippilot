@@ -180,6 +180,12 @@ export interface LiveHubViewProps {
     detail: string;
     onPressSettings?: () => void;
   } | null;
+  /** TRIP-1561 — 건너뛴(skippedAt) 슬롯의 poiId. 진행 중 슬롯 뒤에서 [도착] 대상과 "마지막 장소" 판정에서 빠진다. */
+  skippedPoiIds?: ReadonlySet<string>;
+  /** TRIP-1561 — 자동 기록이 무장(ARMED)이면 [방문 완료]를 늘 둔다(BR-U10-17). 기본 false(수동). */
+  automationArmed?: boolean;
+  /** TRIP-1561 — [도착]·[방문 완료] 실패 안내 한 줄 — 그 poiId 카드(상태 무관)에만. 상태는 페이지가 가진다. */
+  actionNotice?: { poiId: string; text: string } | null;
 }
 
 // 레일 점의 행 상단 여백 — 점 크기(22·16·12)가 달라 Figma 에서 상태마다 다르다(rail 인스턴스 y 실측).
@@ -230,6 +236,9 @@ export function LiveHubView({
   automationNotice,
   actualRoute,
   showMyLocation,
+  skippedPoiIds,
+  automationArmed = false,
+  actionNotice,
 }: LiveHubViewProps): ReactElement {
   // Provider 없는 렌더(jest)에서는 null — useSafeAreaInsets 는 throw 하므로 컨텍스트를 직접 읽는다.
   const insets = useContext(SafeAreaInsetsContext);
@@ -321,11 +330,18 @@ export function LiveHubView({
     windowWidth,
     popupWidth: EDIT_POPUP_WIDTH,
   });
-  // 진행 중 슬롯이 있으면 어느 카드에도 [도착]을 안 준다(Q1) — 진행 도출은 active 를 하나만 인정해,
-  // 다른 곳에 도착하면 앞 슬롯이 '예정'으로 되돌아 보이고 거기서 다시 누르면 409 가 난다.
-  const arrive = slots.some(({ state }) => state === 'active')
-    ? undefined
-    : onPressArrive;
+  // TRIP-1561 — [도착]·[방문 완료]를 한 술어가 정한다. 진행 중 슬롯 뒤의 '예정'(건너뛰지 않음)이 [도착] 대상이고,
+  // 대상이 하나라도 있으면 수동 허브의 [방문 완료]는 숨는다(다음 [도착]이 앞 장소를 완료한다). 진행 중이 없으면 모든 예정이 대상.
+  // 건너뛴 슬롯은 허브에서 '예정'으로 보이므로 skippedPoiIds 로 가른다. 무장(ARMED)이면 [방문 완료]를 늘 둔다(BR-U10-17).
+  const activeIndex = slots.findIndex(({ state }) => state === 'active');
+  const canArriveAt = (index: number): boolean =>
+    onPressArrive !== undefined &&
+    slots[index].state === 'upcoming' &&
+    (activeIndex < 0 ||
+      (index > activeIndex && !skippedPoiIds?.has(slots[index].slot.poiId)));
+  const arriveAfterActive =
+    activeIndex >= 0 && slots.some((_slot, index) => canArriveAt(index));
+  const showComplete = automationArmed || !arriveAfterActive;
 
   const header = [
     tripTitle,
@@ -548,7 +564,7 @@ export function LiveHubView({
                     memo={memo}
                     visitedLabel={visitedLabel}
                     onPressComplete={
-                      state === 'active'
+                      state === 'active' && showComplete
                         ? () => {
                             hidePill();
                             onPressComplete?.();
@@ -577,7 +593,9 @@ export function LiveHubView({
                         : undefined
                     }
                     onPressArrive={
-                      arrive ? () => arrive(slot.poiId) : undefined
+                      canArriveAt(index)
+                        ? () => onPressArrive?.(slot.poiId)
+                        : undefined
                     }
                     onPressDirections={
                       state !== 'done' && directionsPoiIds?.has(slot.poiId)
@@ -587,6 +605,11 @@ export function LiveHubView({
                     directionsNotice={
                       directionsNotice?.poiId === slot.poiId
                         ? directionsNotice.text
+                        : undefined
+                    }
+                    actionNotice={
+                      actionNotice?.poiId === slot.poiId
+                        ? actionNotice.text
                         : undefined
                     }
                   />
