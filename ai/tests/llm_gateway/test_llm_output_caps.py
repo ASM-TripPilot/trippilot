@@ -223,7 +223,9 @@ def test_plan_chunks_never_exceeds_chunk_max(n, chunk_size, max_parallel, chunk_
     assert len(ids) == len(set(ids))  # 중복 없음
     assert set(ids) <= pool.poi_ids  # INV-1
     assert all(c.poi_ids == frozenset(p.poi_id for p in c.pois) for c in chunks)
-    assert sum(sizes) == min(n, max_parallel * chunk_max)  # 상한 안이면 전원 간다
+    # 상한 안이면 전원 간다 — 자르는 기준은 청크 크기(시한 역산값)다. chunk_max 로 자르면 병렬 상한에서 청크가
+    # 역산값을 넘겨 시한을 깬다(2026-10-20 개발 서버 1일차 10/10 시한 초과).
+    assert sum(sizes) == min(n, max_parallel * min(chunk_size, chunk_max))
 
 
 def test_worker_capacity_is_parallel_times_chunk_cap() -> None:
@@ -235,6 +237,9 @@ class _CappedScoring:
     """capacity 2 짜리 스코어러 — 받은 풀을 기록하고 전원 0.5 로 답한다."""
 
     capacity = 2
+
+    def capacity_for(self, timeout_sec):  # noqa: ANN001 — 시한과 무관한 가짜
+        return self.capacity
 
     def __init__(self) -> None:
         self.pools: list[CandidatePool] = []
@@ -267,6 +272,41 @@ def test_agent_sends_only_rule_top_to_llm_and_backfills_rest() -> None:
     sent = scoring.pools[0]
     assert sent.poi_ids == frozenset(sp.poi_id for sp in rule[:2])  # 규칙 상위만 LLM 으로
     assert {sp.poi_id for sp in scored} == pool.poi_ids  # 나머지는 규칙 점수로 보충
+    assert sum(sp.is_llm_score for sp in scored) == 2
+
+
+class _BudgetCappedScoring(_CappedScoring):
+    """시한 무관 상한은 넉넉한데(1000) 이 시한에는 2건만 — 에이전트가 `capacity_for` 로 잘라야 한다."""
+
+    capacity = 1000
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.asked: list[float] = []
+
+    def capacity_for(self, timeout_sec):  # noqa: ANN001
+        self.asked.append(timeout_sec)
+        return 2
+
+
+def test_agent_caps_the_llm_pool_by_the_stage_budget_not_the_static_capacity() -> None:
+    """2026-10-20 개발 서버: 시한 무관 상한(250)으로 잘라 1일차 8.1s 예산에 청크 25 가 나가 10/10 시한 초과였다.
+    에이전트는 워커 호출에 주는 시한과 **같은 시한**으로 실을 건수를 묻고, 규칙 점수 상위만 보낸다."""
+    from tests.agents.schedule.test_schedule_agent import _pool as _agent_pool
+
+    trace = InMemoryTrace()
+    scoring = _BudgetCappedScoring()
+    agent = ScheduleAgent(scoring, _AssemblyProvider(trace, _Sink(), primary=True), FakeClock(), trace)
+    request = _request()
+    pool = _agent_pool()
+    budget = allocate(15_000, OrchestratorConfig())
+    remaining = 8_136
+
+    scored, _ = agent._score(request, pool, _PERSONA, budget, remaining, [], _TRACE, _COORD_NOW)
+
+    rule = sorted(agent._rule_scores(request, pool, _PERSONA), key=lambda sp: (-sp.score, str(sp.poi_id)))
+    assert scoring.asked == [min(budget.c1_ms, remaining) / 1000.0]
+    assert scoring.pools[0].poi_ids == frozenset(sp.poi_id for sp in rule[:2])
     assert sum(sp.is_llm_score for sp in scored) == 2
 
 

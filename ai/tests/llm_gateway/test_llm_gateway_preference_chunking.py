@@ -37,6 +37,7 @@ from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.preference import (
     PreferenceScoringWorker,
+    adaptive_chunk_size,
     plan_chunks,
 )
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId, TraceId
@@ -205,9 +206,10 @@ def test_chunks_are_balanced_partition_of_pool() -> None:
     assert max(sizes) - min(sizes) <= 1
     ids_concat = [str(p.poi_id) for c in chunks for p in c.pois]
     assert ids_concat == sorted(str(p) for p in pool.poi_ids)  # 서로소 + 전원 포함
-    # 상한 초과 풀(250 → N=10)도 균형 유지
+    # 상한 초과 풀(250 → N=10)도 균형 유지 — 넘치는 50건은 싣지 않는다(청크는 역산 크기 20 을 넘지 않는다,
+    # 2026-10-20: 전엔 chunk_max 까지 키워 [25]*10 이었고 그래서 1일차 8.1s 예산에서 전부 시한 초과였다)
     over = plan_chunks(_pool(250), 20, 10, chunk_max=25)
-    assert sorted(len(c.pois) for c in over) == [25] * 10
+    assert sorted(len(c.pois) for c in over) == [20] * 10
 
 
 def test_chunks_deterministic_regardless_of_pool_order() -> None:
@@ -357,3 +359,31 @@ def test_chunk_calls_actually_run_in_parallel() -> None:
 
     assert result.is_fallback is False
     assert len(_value_ids(result)) == 40
+
+
+# ── ⑩ 시한이 짧으면 실을 건수도 준다 (2026-10-20 개발 서버: 1일차 8.1s 예산에 청크 25 → 10/10 시한 초과) ──
+
+
+def test_capacity_for_budget_is_parallel_times_adaptive_chunk() -> None:
+    """호출측이 자를 건수는 시한에서 역산한 청크 × 병렬 — 시한 무관 상한(capacity)보다 작다."""
+    worker, _ = _worker(_EchoScoresLlm())
+    cfg = C1Config(model_ids={ModelTier.LIGHT: "m-l", ModelTier.HEAVY: "m-h"})
+
+    assert worker.capacity_for(8.136) == cfg.score_max_parallel * adaptive_chunk_size(8136.0, cfg)
+    assert worker.capacity_for(8.136) < worker.capacity
+
+
+def test_short_budget_never_sends_chunks_above_the_adaptive_size() -> None:
+    """풀이 병렬 상한 × 청크 상한에 꽉 차도(250) 청크는 역산 크기를 넘지 않는다 — 넘치는 건은 싣지 않는다."""
+    llm = _EchoScoresLlm()
+    worker, trace = _worker(llm)
+    cfg = C1Config(model_ids={ModelTier.LIGHT: "m-l", ModelTier.HEAVY: "m-h"})
+    size = adaptive_chunk_size(8136.0, cfg)
+
+    result = worker.score(_pool(250), _PERSONA, _TRACE_ID, _NOW, timeout_sec=8.136)
+
+    assert len(llm.requests) == cfg.score_max_parallel
+    assert max(len(_CANDIDATE_LINE.findall(r.prompt)) for r in llm.requests) == size
+    assert len(_value_ids(result)) == cfg.score_max_parallel * size
+    assert trace.of_type(ScoreChunkEvent)[0].chunk_count == cfg.score_max_parallel
+
