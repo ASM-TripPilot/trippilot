@@ -11,8 +11,9 @@ CI 밖 수동 실행 전용(실 API 를 부른다). few-shot·판단 순서(CoT)
 
 종류:
 - `intent`  DIALOGUE_INTENT — `data/intent_eval_set.yaml`(사람 검수 87문장) + 지시어 사례 6건 + 짧은 수락 사례 8건 + 장소 탐색 6건 + 두 질문 5건(정답 null — 계획 단계로) + 하나로 남을 음성 5건 + 행사 2건(정답 null). OUT_OF_SCOPE 의
-  정답은 판단해서 닫은 거절({"intent": null} 등 — 오케스트레이터가 계획 단계로 넘기는 `_plannable` 과 같은 기준)이다. 시한·벤더
-  실패는 계획 단계로도 못 가니 오답으로 센다. 평가셋 문장을 프롬프트 예시로 옮기면 이 숫자가 무의미해진다(leak).
+  정답은 판단해서 닫은 거절({"intent": null} 등 — 운영이 그 턴을 받는 술어: 맞장구 말은 2″ `_judged_nothing`, 나머지는 2‴
+  `_plannable`)이다. 시한·벤더 실패는 계획 단계로도 못 가니 오답으로 센다. `late_null` 은 정답 null 이지만 4.4s 를 넘겨 운영에서는
+  계획 단계로 못 갔을 수. 평가셋 문장을 프롬프트 예시로 옮기면 이 숫자가 무의미해진다(leak).
 - `directive`  REPLAN_DIRECTIVE_TRANSLATION(sol) — 라벨은 `measure_directive_match.POSITIVES/NEGATIVES` + 부정·혼합
   6건. 완전 일치(겹쳐 고른 지시도 오답)와 허용(정답 포함·금지 지시 없음)을 같이 낸다. 시한 3.75s(DEV 실측 시한).
 - `answer`  DIALOGUE_ANSWER — Facts 11종 + 계획 병합 3종 + 장소 탐색 5종(서울·일정 없음 4 · 일정 근처 1) + 장소 소개 3종 × 반복. 게이트 통과율·시각-장소 짝 위반(오케스트레이터 INV-2 검사와
@@ -29,7 +30,7 @@ CI 밖 수동 실행 전용(실 API 를 부른다). few-shot·판단 순서(CoT)
   먼 곳·꽉 찬 하루에 카페·휴무 교체·피로+저녁·저녁 영업시간). 입력은 배선과 같은 함수로 만들고(`_compose_case`), 품질은
   상황별 코드 판정 + 공통(상한 이하·영업시간이 남은 시간과 60분 이상 겹침). `EVAL_CASES=a,b` 로 상황을 고른다.
   2026-10-18 실측: 0.5.0 이 33/33(천장) — 판단 순서(CoT)·예시(few-shot) 두 판은 품질이 같고 입력 +7~23%·p90 +1.3s 라 버렸다.
-- `plan`  DIALOGUE_PLAN(2‴ 도구 계획) — `data/dialogue_plan_eval_set.yaml` 39문장(도구 1·2 · 도구 없음 · 주입 — v0.3). 도구 집합 완전·허용
+- `plan`  DIALOGUE_PLAN(2‴ 도구 계획) — `data/dialogue_plan_eval_set.yaml`(도구 1·2 · 도구 없음 · 주입 — 사례 수는 파일이 정본). 도구 집합 완전·허용
   일치 · 인자 키 정밀도 · 도구 없음 비움률(gap 일치는 기록만) · 주입 도구 0 률 · 게이트 뒤 위험 인자 · 게이트 드롭률 · 지연·토큰.
   노출 도구는 운영 배선(포트 전부)과 같다. 시한 3.5s(`EVAL_PLAN_TIMEOUT` — 계획 상한). 두 판본·두 모델을 같은 시각에 나란히.
       uv run --env-file ../.env python scripts/measure/measure_prompt_ab.py plan prompts 2
@@ -245,8 +246,10 @@ def run_intent(prompts: Path, repeat: int) -> None:
                             timeout_sec=INTENT_TIMEOUT)
         wall = int((time.monotonic() - t0) * 1000)
         got = None if (r.is_fallback or r.value is None) else r.value.intent.value
-        if label == "OUT_OF_SCOPE":  # 계획 단계(2‴)로 가는 닫힘만 정답 — 오케스트레이터와 같은 술어. 시한·벤더 실패를 정답으로 세면 부푼다
-            ok = got == "OUT_OF_SCOPE" or (got is None and orch._plannable(orch._refusal_reason(r.error or "intent_bad_shape")))
+        if label == "OUT_OF_SCOPE":  # 운영이 그 턴을 받는 술어로 — 맞장구 말은 2″(`_judged_nothing`), 나머지는 2‴(`_plannable`).
+            # 시한·벤더 실패를 정답으로 세면 부푼다
+            pred = orch._judged_nothing if orch.closer_answer(orch.normalize(utt), True) else orch._plannable
+            ok = got == "OUT_OF_SCOPE" or (got is None and pred(orch._refusal_reason(r.error or "intent_bad_shape")))
         else:
             ok = got == label
         slots = dict(r.value.slots) if got else {}
@@ -258,9 +261,14 @@ def run_intent(prompts: Path, repeat: int) -> None:
         sel = [r for r in rows if r["kind"] == kind]
         return round(sum(r["ok"] for r in sel) / len(sel), 4)
 
+    # 정답 null 인데 분류가 4.4s(= 시한 9.0s − 계획 진입 하한 4.6s)를 넘겨 낸 것 — 운영에서는 계획 단계로 못 가고 SCOPE 카드다(맞장구는 2″ 라 제외)
+    late = orch.DEFAULT_DEADLINE_MS - orch._PLAN_MIN_REMAINING_MS
+    late_null = sum(1 for r in rows if r["label"] == "OUT_OF_SCOPE" and r["ok"] and r["wall"] > late
+                    and orch.closer_answer(orch.normalize(r["utt"]), True) is None)
     print(json.dumps(dict(prompts=str(prompts), model=MODEL, n=len(rows), eval_acc=acc("eval"),
                           context_acc=acc("context"), accept_acc=acc("accept"), explore_acc=acc("explore"),
-                          compound_acc=acc("compound"), single_acc=acc("single"), event_acc=acc("event"), **_timing(rows)),
+                          compound_acc=acc("compound"), single_acc=acc("single"), event_acc=acc("event"),
+                          late_null=late_null, **_timing(rows)),
                      ensure_ascii=False))
     for r in rows:
         if not r["ok"]:
