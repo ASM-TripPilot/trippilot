@@ -242,3 +242,18 @@ assistant-history · -history-row-{messageId} · -history-clear · -history-cont
 > **조회가 정착하기 전에는 이동하지 않는다(INV-4).** 조회 중에는 이동 없이 시트 상태 줄에 한 줄(`일정을 확인하고 있어요`, testID `assistant-itinerary-checking`)을 보이고 같은 행 재누름은 무시한다. 404 가 아닌 조회 실패(네트워크·5xx)는 draft 로 추측해 가지 않고 이동하지 않으며 상태 줄에 `일정을 불러오지 못했어요. 다시 눌러 주세요`(testID `assistant-itinerary-failed`)를 보인다 — 다시 누르면 재조회한다(자동 재시도 없음: 이 누름 조회는 `retry:false`, 요청 1회). 기다리는 사이 시트가 닫혔으면(✕) 늦은 응답은 이동하지 않는다. 적용 직후엔 일정 캐시가 무효화돼 있어 다시 조회한다. 이동 방식(`router.replace`, R9)은 그대로다.
 >
 > 근거: 목적지 표 — `frontend/src/features/itinerary/model/planState.ts` 판정 실측(01 브리프 §8, 홈·일정 탭이 같은 함수를 쓴다) · 상태 줄 문구·`retry:false`·재시도 정책·재누름 무시 — **TRIP-1566 구현 결정**(우리가 정한 것 — 다음 사이클이 요구사항 근거로 인용하면 안 된다). 같은 문서 §4 흐름 5 본문("`router.dismiss` 후 `push`")과 일정 탭 카드·완료 바(로딩 중 draft 로 이동)는 이번에 손대지 않았다 — 후자는 새 티켓 후보.
+
+> **[개정 · 2026-10-22 · U8 next action 이동 방식 (TRIP-1565)]** 위 §4 흐름 5항("이동 전에 시트를 닫는다 — `router.dismiss` 후 `push`")과 R9("`router.replace(href)` 한 번")를 **목적지에 따라 갈라 정정한다**(원문 보존). 사용자 결정(2026-10-22 — "탐광 누르고 뒤로가기 누르면 홈인데 챗봇 상태 유지돼야"): **상세·요약류 목적지는 시트를 닫지 않고 그 위에 쌓고(뒤로 = 같은 대화, BR-U8-01·17), 그 밖의 목적지는 지금처럼 시트를 닫고 자리를 교체한다.** 분류의 정본은 `nextActionRoute` 의 반환값(`kind:'route'` 의 `mode`)이고, `mode` 를 안 정한 type 은 기본 replace 다.
+>
+> | 이동 방식 | type | 뒤로 가기 |
+> |---|---|---|
+> | `router.push` (시트 위에 쌓음) | `OPEN_PLACE` · `OPEN_OTA` · `OPEN_REFLECTION` · `OPEN_TRIP_SUMMARY` · `OPEN_STYLE` | 시트가 대화·입력 초안·보기 상태 그대로 남아 있다(언마운트되지 않음) |
+> | `router.replace` (시트를 닫고 자리를 교체) | `OPEN_ITINERARY`(§4.1 TRIP-1566 블록의 조회 뒤 이동) · `OPEN_ITINERARY_EDIT` · `OPEN_ITINERARY_METHOD` · `OPEN_REGENERATE` · `OPEN_REPLAN` · `OPEN_LIVE` · `CREATE_TRIP` · `OPEN_STAY_SEARCH` | 시트가 사라진다(이동한 화면의 이전 화면으로 간다) |
+>
+> **push 갈래의 잠금.** 시트가 남으므로 이동 잠금(`closingRef`)을 세우지 않는다 — 돌아와서 ✕·카드·행이 다시 눌려야 한다. 연타 이중 push 는 공용 연타 가드(`guardPress`, 400ms 창)로 막는다. 시트가 이미 닫히는 중이거나 일정 확인 중(`checkingRef`, TRIP-1566)이면 push 갈래는 무시한다(조회가 끝난 뒤 일정 목적지 replace 가 방금 연 상세를 갈아치우지 않게).
+>
+> **상세가 뜨는 모양.** 루트 스택에서 투명 모달 뒤에 쌓이는 화면은 라이브러리(native-stack)가 모달로 승격하므로, 상세는 오른쪽에서 밀려오는 push 가 아니라 **아래에서 올라오는 모달 카드**로 보인다(실기 확인됨 — 시뮬레이터 6-b, 2026-10-22). 상세 라우트에 `presentation: 'card'` 를 선언하면 승격이 막혀 상세가 시트 밑에 깔릴 수 있다. 상세의 탭바 등 `dismissTo` 로 나가는 경로는 시트까지 함께 걷힌다(수용).
+>
+> §5(✦ FAB)는 이번에 손대지 않았다. 일정 탭 카드·완료 바 등 도우미 밖 입구도 손대지 않았다.
+>
+> 근거: 사용자 결정(티켓 TRIP-1565 「결정 확정 1」 "상세류만 복귀" · 2026-10-22) · 승격 규칙 — `@react-navigation/native-stack` `getModalRoutesKeys` 코드 읽기 + 6-b 실측 · 분류 추가분(`OPEN_ITINERARY_EDIT`·`OPEN_ITINERARY_METHOD`·`OPEN_REGENERATE` 를 replace 로 둠 — 사용자 분류에 이름이 없어 "일정을 바꾸는 흐름"으로 읽음)·잠금 설계(`guardPress` 400ms·`checkingRef` 읽기) — **TRIP-1565 구현 결정**(우리가 정한 것 — 다음 사이클이 요구사항 근거로 인용하면 안 된다).
