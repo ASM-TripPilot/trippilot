@@ -7,6 +7,7 @@ import com.trippilot.itinerarygeneration.domain.GenerationStatus
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
+import com.trippilot.itinerarygeneration.domain.ScoringSignal
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
@@ -29,7 +30,7 @@ class StalePartialSweeperTest : StringSpec({
     fun partialUpdatedAt(at: Instant): Itinerary = Itinerary.reconstitute(
         UUID.randomUUID(), UUID.randomUUID(), com.trippilot.itinerarygeneration.domain.ItineraryStatus.PLANNED,
         SolveMode.FULL_AI, GenerationMode.FULLY_AI, false, GenerationState.PARTIAL,
-        listOf(ItineraryDay.of(start, 0, emptyList())), at, at, null, emptyList(),
+        listOf(ItineraryDay.of(start, 0, emptyList())), at, at, null, emptyList(), ScoringSignal.UNKNOWN,
     )
 
     class Repo(seed: List<Itinerary>) : ItineraryRepository {

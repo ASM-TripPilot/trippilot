@@ -9,6 +9,8 @@ import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.UnplacedReason
+import com.trippilot.itinerarygeneration.domain.ScoringMode
+import com.trippilot.itinerarygeneration.domain.ScoringSignal
 import com.trippilot.itinerarygeneration.domain.SlotAlternative
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.VisitSlot
@@ -103,6 +105,7 @@ class ItineraryRepositoryAdapter(
             domainDays, createdAt, updatedAt,
             candidatesSummary?.toSummary(),
             unplacedMustVisits.toUnplaced(),
+            ScoringSignal(scoringMode?.let(ScoringMode::valueOf), degradations),
         )
     }
 
@@ -111,6 +114,8 @@ class ItineraryRepositoryAdapter(
         createdAt, updatedAt,
         candidatesSummary?.toMap(),
         unplacedMustVisits.map { mapOf("poiId" to it.poiId.toString(), "reasonCode" to it.reasonCode.name) },
+        scoring.mode?.name,
+        scoring.degradations,
     )
 
     /**

@@ -17,6 +17,7 @@ import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
+import com.trippilot.itinerarygeneration.domain.ScoringSignal
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlot
@@ -220,7 +221,7 @@ class EditProposalServiceTest : StringSpec({
     "여행 시작 전 확정 일정은 제안하지 않는다(409) — 여행이 시작되면 제안한다" {
         val confirmed = Itinerary.reconstitute(
             stored.itineraryId, tripId, ItineraryStatus.CONFIRMED, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
-            GenerationState.COMPLETE, stored.days, now, now, null, emptyList(),
+            GenerationState.COMPLETE, stored.days, now, now, null, emptyList(), ScoringSignal.UNKNOWN,
         )
         val agent = Agent(replacing(a, fresh))
 

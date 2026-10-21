@@ -5,6 +5,8 @@ import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.itinerarygeneration.domain.RejectedPoi
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
+import com.trippilot.itinerarygeneration.domain.ScoringMode
+import com.trippilot.itinerarygeneration.domain.ScoringSignal
 import io.kotest.matchers.shouldNotBe
 import com.trippilot.placedata.api.RegionCenter
 import com.trippilot.placedata.api.RegionLookupFacade
@@ -107,6 +109,7 @@ class ReplanFacadeServiceTest : StringSpec({
             ItineraryDay.of(today.plusDays(1), 1, listOf(slot(UUID.randomUUID(), "10:00", "11:00"))),
         ),
         now, GenerationState.COMPLETE,
+        scoring = ScoringSignal(ScoringMode.LLM, listOf("weather:weather_error")),
     )
 
     class Agent(val days: List<DaySchedule>, val totalDistanceKm: Double? = null) : StubScheduleAgent() {
@@ -439,6 +442,8 @@ class ReplanFacadeServiceTest : StringSpec({
         val after = repo.byTrip.getValue(trip)
         after.days[0].slots.map { it.sourcePoiId } shouldContainExactly listOf(replacement)
         after.days[1] shouldBe secondDayBefore
+        // 생성 때의 점수 신호는 그대로다 — 재계획 응답은 신호를 주지 않는다(TRIP-1173)
+        after.scoring shouldBe ScoringSignal(ScoringMode.LLM, listOf("weather:weather_error"))
     }
 
     // 반영 전에 되돌릴 지점이 없으면 "재계획 전으로" 돌아갈 수 없다(BR-U3-19).
@@ -524,6 +529,7 @@ class ReplanFacadeServiceTest : StringSpec({
         // 전 슬롯이 동결 참조를 가진다 — 남은 슬롯은 승계, 재계획이 새로 넣은 슬롯은 지금 동결(INV-U1-03).
         after.days.flatMap { it.slots }.forEach { it.poiSnapshotId shouldNotBe null }
         f.changeLogs.appended.single().sourceType shouldBe ChangeSourceType.PLAN_B // BR-U4-30 그대로
+        after.scoring shouldBe before.scoring // 동결 승계(ConfirmedSnapshots.carry)도 점수 신호를 잃지 않는다(TRIP-1173)
     }
 
     "초안 왕복이 항등이다 — 저장했다 돌아와도 값이 새지 않는다" {

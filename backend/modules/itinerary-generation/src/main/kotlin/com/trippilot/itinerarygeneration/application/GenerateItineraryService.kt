@@ -531,6 +531,7 @@ class GenerateItineraryService(
         return Itinerary.create(
             tripId, solveMode, mode, isFallback, days, clock.instant(), state, candidatesSummary,
             assemblyUnplaced + unplacedMustVisits,
+            scoring, // 안 실으면 응답 직후엔 몰라도 재조회에서 늘 "모름"이 된다(TRIP-1173)
         )
     }
 

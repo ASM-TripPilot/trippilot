@@ -256,6 +256,7 @@ class ReplanFacadeService(
             generationState = current.generationState, days = replaced,
             createdAt = current.createdAt, updatedAt = clock.instant(),
             candidatesSummary = current.candidatesSummary, unplacedMustVisits = current.unplacedMustVisits,
+            scoring = current.scoring,
         )
         // 확정 일정이면 동결을 잇는다(INV-U1-03) — 유지 슬롯은 참조 승계, 새 슬롯은 지금 동결.
         val frozen = ConfirmedSnapshots.carry(next, current) { poiId -> poiSnapshots.freeze(poiId)?.poiSnapshotId }

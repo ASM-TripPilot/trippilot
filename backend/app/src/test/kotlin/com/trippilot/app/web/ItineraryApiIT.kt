@@ -13,6 +13,8 @@ import com.trippilot.placedata.domain.PoiRepository
 import com.trippilot.itinerarygeneration.domain.CandidatesSummary
 import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
+import com.trippilot.itinerarygeneration.domain.ScoringMode
+import com.trippilot.itinerarygeneration.domain.ScoringSignal
 import com.trippilot.itinerarygeneration.domain.SlotAlternative
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.VisitSlot
@@ -522,6 +524,62 @@ fun `차선책이 저장·조회·확정을 관통한다(TRIP-873)`() {
         crc shouldBe 200
         confirmed["days"][0]["slots"][0]["placementReason"].asText() shouldBe "취향(미식)과 동선에 맞는 곳"
         confirmed["candidatesSummary"]["level"].asText() shouldBe "LOW"
+    }
+
+    @Test
+    fun `점수 신호가 저장·재조회·편집·확정을 관통한다 — LLM 실패가 RULE 과 llm 코드로 앱에 닿는다(TRIP-1173)`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        val poi = poiId(token)
+        // Fake 는 신호를 주지 않으므로 리포지토리로 직접 넣어 V2.82 컬럼·jsonb 왕복을 본다.
+        itineraries.replaceForTrip(
+            UUID.fromString(trip),
+            Itinerary.create(UUID.fromString(trip), SolveMode.FULL_AI, GenerationMode.FULLY_AI, isFallback = false,
+                days = listOf(
+                    ItineraryDay.of(
+                        LocalDate.parse("2026-08-01"), 0,
+                        listOf(VisitSlot.of(UUID.fromString(poi), null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"))),
+                    ),
+                ),
+                now = Instant.parse("2026-08-01T00:00:00Z"),
+                scoring = ScoringSignal(ScoringMode.RULE, listOf("llm:c1_fallback", "explanation:explanation_fallback")),
+            ),
+        )
+
+        fun assertSignal(body: JsonNode) {
+            body["solveMode"].asText() shouldBe "FULL_AI" // 조립 축은 여전히 정상 — 그래서 이 신호가 필요하다
+            body["scoringMode"].asText() shouldBe "RULE"
+            body["degradations"].map { it.asText() } shouldBe listOf("llm:c1_fallback", "explanation:explanation_fallback")
+        }
+
+        val (rc, body) = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
+        rc shouldBe 200
+        assertSignal(body)
+
+        val editBody = """{"days":[
+            {"date":"2026-08-01","slots":[{"poiId":"$poi","startAt":"13:00","endAt":"14:00","isFixed":false,"endsNextDay":false}]}]}"""
+        val (erc, edited) = call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, editBody)
+        erc shouldBe 200
+        assertSignal(edited)
+
+        val (crc, confirmed) = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token)
+        crc shouldBe 200
+        assertSignal(confirmed)
+    }
+
+    @Test
+    fun `신호를 주지 않는 생성(Fake)은 scoringMode null · degradations 빈 배열 — 키는 늘 있다(TRIP-1173)`() {
+        val token = newToken()
+        val trip = newTrip(token)
+
+        val (rc, body) = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token, """{"generationMode":"FULLY_AI"}""")
+        rc shouldBe 201
+        body.has("scoringMode") shouldBe true
+        body["scoringMode"].isNull shouldBe true
+        body["degradations"].isArray shouldBe true
+        body["degradations"].size() shouldBe 0
+        val completed = awaitComplete(trip, token)
+        completed["scoringMode"].isNull shouldBe true
     }
 
     @Test
