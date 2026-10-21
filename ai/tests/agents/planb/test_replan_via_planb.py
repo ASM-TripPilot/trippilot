@@ -440,7 +440,8 @@ def test_llm_backed_rank_reaches_the_schedule_task() -> None:
 
     assert len(spy.tasks) == 1
     assert [str(p) for p in spy.tasks[0].planb_rank] == list(ranked), "랭킹이 봉투에 안 실렸다"
-    assert body["retrieved"] == {"SITUATION": 3}  # PlanB 산출이 응답까지 흐른다
+    # PlanB 산출이 응답까지 흐른다 — KB-5 건수만 구성 후보 것이다(스텁 RAG 라 0, 2026-10-21 구성에 장소 지식)
+    assert body["retrieved"] == {"SITUATION": 3, "POI_DESC": 0}
     assert not any("planb_rank_skipped" in n for n in body["notes"])
 
 

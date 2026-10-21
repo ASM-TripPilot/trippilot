@@ -721,7 +721,9 @@ def _jeju_pois() -> list:
         if str(p.poi_id) in seen or p.quality is DataQuality.MINIMAL or p.coord.lat > 34 or p.coord.lat < 33:
             continue
         seen.add(str(p.poi_id))
-        out.append(replace(p, tags=tuple(pr.get("tags") or ())))
+        # 공유본 `poi.source_ref` 는 비어 있다 — 운영 풀은 백엔드가 관광공사 contentid 를 `sourceRef` 로 준다(KB-5 조인 키).
+        ref = (pr.get("provenance") or {}).get("content_id") if pr.get("source") == "TOURAPI" else None
+        out.append(replace(p, tags=tuple(pr.get("tags") or ()), source_ref=p.source_ref or ref))
     return out
 
 
@@ -730,6 +732,50 @@ def _hm(s: str) -> datetime:
 
 
 _KST = timezone(timedelta(hours=9))
+
+
+# KB-5 장소 설명(0.8.0) — `EVAL_COMPOSE_KB5=코퍼스.jsonl.gz,…` 를 주면 운영과 같은 조회(`fetch_place_knowledge` — 상황 질의에
+# 가장 맞는 조각 + 같은 출처 도입부 첫 문장, 300자)로 구성 후보에 붙인다. 벡터는 로컬 서빙 임베딩(`TRIPPILOT_EMBEDDING_BASE_URL`,
+# 보통 http://localhost:8100)으로 그 후보의 조각만 즉석 색인한다. 안 주면 빈 설명 — 0.7.0 렌더와 바이트 동일.
+_KB5 = [Path(x) for x in os.environ.get("EVAL_COMPOSE_KB5", "").split(",") if x]
+_KB5_TRIGGER = {"weather": "WEATHER"}  # 그 밖의 사유는 다시 짜기에서 MANUAL 트리거로 온다
+
+
+_KB5_CACHE = Path(os.environ["EVAL_COMPOSE_KB5_CACHE"]) if os.environ.get("EVAL_COMPOSE_KB5_CACHE") else None
+
+
+def _kb5_docs(shortlist, sc: dict) -> dict:
+    """`EVAL_COMPOSE_KB5_CACHE=파일` 이면 상황별 결과를 적어 두고 다시 쓴다 — CPU 임베딩이라 두 판본을 같은 시각에 돌리려면
+    조회를 먼저 끝내 둬야 한다."""
+    if not _KB5:
+        return {}
+    cache = json.loads(_KB5_CACHE.read_text(encoding="utf-8")) if _KB5_CACHE and _KB5_CACHE.exists() else {}
+    if sc["name"] in cache:
+        return cache[sc["name"]]
+    import gzip
+
+    from trippilot.agents.adapters.memory_vector_store import InMemoryVectorStore
+    from trippilot.agents.planb.kb_retrieval import index_documents
+    from trippilot.agents.planb.place_knowledge import fetch_place_knowledge
+    from trippilot.llm_gateway.adapters.http_embedding_assembly import http_embedding
+    from trippilot.poi_curation.adapters.backend_poi_db import UrllibJsonClient
+    from trippilot.poi_curation.chunking import chunk_corpus
+
+    refs = {p.source_ref for p in shortlist.pois if p.source_ref}
+    rows = [row for path in _KB5 for row in map(json.loads, gzip.open(path, "rt", encoding="utf-8"))
+            if row.get("poi_ref") in refs]
+    embedding = http_embedding(SystemExit, lambda t: UrllibJsonClient(timeout_sec=t), timeout_sec=60.0)
+    store = InMemoryVectorStore()
+    docs = chunk_corpus(rows)
+    if docs:
+        index_documents(docs, embedding, store)
+    reason = (sc.get("reasons") or ("none",))[0]
+    said = f" {sc['free_text'][:100]}" if sc.get("free_text") else ""
+    query = f"{_KB5_TRIGGER.get(reason, 'MANUAL')} {rag._REASON_KO.get(reason, reason)} 상황{said}"
+    knowledge, _ = fetch_place_knowledge(shortlist.pois, query, embedding, store)
+    if _KB5_CACHE:
+        _KB5_CACHE.write_text(json.dumps({**cache, sc["name"]: dict(knowledge)}, ensure_ascii=False), encoding="utf-8")
+    return dict(knowledge)
 
 
 def _compose_case(sc: dict, jeju: list):
@@ -808,6 +854,7 @@ def _compose_case(sc: dict, jeju: list):
                                             free_text=bool(sc.get("free_text"))),
         distance_km={p.poi_id: min(haversine_km(o, p.coord) for o in (_JEJU, *origins)) for p in shortlist.pois},
         hours={p.poi_id: composition.hours_label(p, weekday) or "" for p in shortlist.pois},
+        place_knowledge=_kb5_docs(shortlist, sc),
     )
     ctx = dict(remaining={s for s in slots if status(s) == "남은 일정"}, limit=inp.max_visits,
                far_coord=index[PoiId(sc["far"])].coord if sc.get("far") else None,
@@ -845,6 +892,7 @@ def run_composition(prompts: Path, repeat: int) -> None:
         k, n = per.get(r["name"], (0, 0))
         per[r["name"]] = (k + r["ok"], n + 1)
     print(json.dumps(dict(prompts=str(prompts), model=COMPOSE_MODEL, n=len(rows),
+                          kb5_docs={sc["name"]: len(inp.place_knowledge) for sc, _, inp, _ in built},
                           gate_pass=round(sum(1 for r in rows if r["n"]) / len(rows), 4),
                           quality=round(sum(r["ok"] for r in rows) / len(rows), 4),
                           over_limit=sum(1 for r in rows if r["n"] > r["limit"]),

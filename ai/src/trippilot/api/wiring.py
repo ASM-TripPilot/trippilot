@@ -2516,7 +2516,7 @@ class WiredItineraryOrchestrator:
         # 거리 0 으로 규칙 1위가 되어 숏리스트·LLM 선택 한 자리를 헛되이 차지한다.
         # 구성 LLM 이 있으면 대체지 선택 LLM 은 부르지 않는다(`use_llm`) — 하루는 구성이 고르고,
         # 선택 LLM 은 재계획 시한에서 매번 6s 를 타임아웃으로 태워 구성 몫을 깎았다(2026-10-14 DEV 3/3).
-        planb = self._rag.run(replace(
+        planb_request = replace(
             _replan_rag_request(
                 request, pool, persona, daily_rain, trace_id, now, notes=notes,
                 deadline_ms=max(1, _deadline_budget(meta) - (self._clock.monotonic_ms() - t0)),
@@ -2524,7 +2524,8 @@ class WiredItineraryOrchestrator:
             excluded_poi_ids=frozenset(PoiId(p) for p in request.excluded_poi_ids)
             | {b.poi_id for b in past} | avoided,
             use_llm=self._composer is None,
-        ))
+        )
+        planb = self._rag.run(planb_request)
         notes += [f"planb: {n}" for n in planb.notes]
         # 랭킹은 **LLM 경로일 때만** 넘긴다 (독스트링 마지막 단락).
         planb_rank = () if planb.is_fallback else planb.ranked_poi_ids
@@ -2572,6 +2573,7 @@ class WiredItineraryOrchestrator:
                 nearby=(*nl_near, *night), origins=tuple(p.coord for p in far),
                 window_start=nl.window_start, window_end=day_end,  # 솔버 `day_window` 와 같은 창
                 rules=_category_rule_lines(nl), ctx_out=compose_ctx, holidays=holidays,
+                planb_request=planb_request,
             )
         except Exception as e:  # 설정 버그·렌더 실패도 재계획을 죽이지 않는다 — 종전 경로로(INV-4)
             notes.append(f"llm_compose_error: {type(e).__name__}")
@@ -2788,7 +2790,10 @@ class WiredItineraryOrchestrator:
                             or fb.reason in ("in_progress", "keep_dinner", "nl_at"))))
                 for d in outcome.solution.days)))
         return self._replan_projection(
-            request, outcome, notes, resolved, unknown, retrieved=planb.retrieved,
+            request, outcome, notes, resolved, unknown,
+            # KB-5 는 구성 후보로 찾는다 — 건수도 그쪽 것이다(PlanB 는 선택 LLM 이 없으면 찾지 않는다).
+            retrieved={**planb.retrieved, "POI_DESC": len(compose_ctx[0][0].place_knowledge)}
+            if compose_ctx else planb.retrieved,
             planb_fallback=planb.is_fallback, started_ms=t0, past=past,
             composed=bool(composed),
         )
@@ -3045,6 +3050,7 @@ class WiredItineraryOrchestrator:
         rules: tuple[str, ...] = (),
         ctx_out: list | None = None,
         holidays: Mapping[date, frozenset[str]] | None = None,  # 공휴일 달력 — 진입점이 1회 조회(상황 감지 H1)
+        planb_request: PlanBRagRequest | None = None,  # 후보의 장소 지식(KB-5)을 같은 상황 질의로 찾는다
     ) -> tuple[PoiId, ...]:
         """다시 짜기 — 기존 일정·사유·요청·상황 추천을 보고 LLM 이 남은 하루의 방문 목록을 고른다.
 
@@ -3109,6 +3115,16 @@ class WiredItineraryOrchestrator:
                 return "요청과 안 맞음(교체)"
             return "제외 요청" if pid in excluded else "남은 일정"
 
+        # 후보의 장소 지식(KB-5) — 사용자 결정(2026-10-21 "실어서 써야지"). 종전엔 PlanB 가 다른 후보 집합으로
+        # 찾고 읽는 LLM 없이 버렸다. 부가 정보라 못 찾으면 없이 짠다(INV-4 — 노트는 남긴다).
+        knowledge: Mapping[str, str] = {}
+        if planb_request is not None:
+            try:
+                knowledge, note = self._rag.place_knowledge(planb_request, shortlist.pois)
+            except Exception as e:
+                knowledge, note = {}, f"place_knowledge_unavailable: {type(e).__name__}"
+            if note:
+                notes.append(f"compose: {note}")
         labels = {spec.key: spec.label for spec in self._directives}
         specs = index_of(self._directives)
         chosen = [specs[k] for k in resolved if k in specs]
@@ -3147,7 +3163,15 @@ class WiredItineraryOrchestrator:
                          for p in shortlist.pois},
             hours={p.poi_id: composition.hours_label(p, day, holidays) or ""
                    for p in shortlist.pois},
+            place_knowledge=knowledge,
         )
+        # 장소 지식 조회가 쓴 시간을 뺀 잔여 — 시한 원점은 그대로(#1102).
+        remaining = (budget.total_ms - (self._clock.monotonic_ms() - started_ms)
+                     - budget.c2_reserved_ms)
+        if remaining < _COMPOSE_MIN_MS:
+            notes.append(f"llm_compose_skipped: deadline remaining={remaining}ms")
+            self._compose_event(request.request_meta, f"deadline: remaining={remaining}ms")
+            return ()
         if ctx_out is not None:  # 1회 수리가 같은 입력·제외에서 2차를 만든다(`_repair_day`)
             ctx_out.append((inp, frozenset(excluded)))
         result = self._composer.compose(
