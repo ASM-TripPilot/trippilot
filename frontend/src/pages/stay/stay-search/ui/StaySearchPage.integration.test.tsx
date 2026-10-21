@@ -488,35 +488,15 @@ describe('2단 FAB 목적지 (옛 .fab)', () => {
     });
   });
 
-  // TRIP-1321 · US-ASSIST-01 · BR-U8-50~53 — ✦ 도우미 FAB(스택 맨 위 220). 실제 겹침은 6-b 실기.
-  describe('✦ 도우미 FAB (TRIP-1321)', () => {
-    it('누르면 surface=STAY_SEARCH 만 싣고 도우미 시트로 간다', async () => {
+  // TRIP-1553 — 숙소 검색의 ✦ 도우미 FAB(TRIP-1321)는 헤더로 옮기지 않고 없앴다(사용자 결정 2026-10-22).
+  // 목록 끝 여백이 2단 FAB 윗변으로 돌아오는 것·토스트 바닥은 className 이라 6-b 실기 몫이다.
+  describe('✦ 도우미 FAB 는 없다 (TRIP-1553)', () => {
+    it('2단 FAB 는 뜨는데 ✦ 는 없다', async () => {
       render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
-      fireEvent.press(await screen.findByTestId('assistant-fab'));
-      expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/assistant',
-        params: { surface: 'STAY_SEARCH' },
-      });
-    });
 
-    it('바닥 220(2단 스택 위)에 뜨고, 목록 끝 여백이 ✦ 윗변(276)까지 늘어난다', async () => {
-      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
-      const style = Object.assign(
-        {},
-        ...[(await screen.findByTestId('assistant-fab')).props.style].flat(
-          Infinity
-        )
-      );
-      expect(style).toEqual(expect.objectContaining({ bottom: 220 }));
-      expect(
-        String(screen.getByTestId('stay-search-list-footer').props.className)
-      ).toContain('h-[276px]');
-    });
-
-    it('필터 시트·가격대 시트가 열린 동안은 트리에 없다(BR-U8-53)', async () => {
-      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
-      await screen.findByTestId('assistant-fab');
-      fireEvent.press(screen.getByTestId('stay-search-filter-more'));
+      // 짝 앵커 — FAB 층이 그려진 뒤에도 ✦ 만 없음을 보인다.
+      expect(await screen.findByTestId('stay-search-fab-saved')).toBeTruthy();
+      expect(screen.getByTestId('stay-search-fab-register')).toBeTruthy();
       expect(screen.queryByTestId('assistant-fab')).toBeNull();
     });
   });

@@ -473,14 +473,12 @@
 - `src/features/onboarding/ui/OnboardingGlyphs.tsx`  →  CheckGlyph · ViewChevronGlyph · RegenerateGlyph · PositiveCheckGlyph · GlyphComponent · SunGlyph · ForkKnifeGlyph · MountainGlyph · ArtGlyph · ActivityGlyph · CameraGlyph · ShoppingBagGlyph · LandmarkGlyph · FerrisWheelGlyph · CoffeeCupGlyph · MoonGlyph · BalanceGlyph · LightningGlyph · SoloPersonGlyph · FriendsGlyph · HeartGlyph · FamilyGlyph · ParentsGlyph · PetGlyph · WalkGlyph · TransitGlyph · CarGlyph · TaxiGlyph · BikeGlyph · SkipChevronGlyph · InfoCircleGlyph · BackChevronGlyph
 
 ## src/features/open-assistant/
-- `src/features/open-assistant/index.ts`  →  ASSISTANT_FAB_SIZE · FAB_STACK_GAP · TAB_FAB_BASE · TAB_TWO_STACK · assistantFabBottom · stackTop · toastBottomWith · type FabStack · assistantHref · type AssistantHref · type AssistantSurface · AssistantFab · type AssistantFabProps · ChatBubbleGlyph · SparkleGlyph
+- `src/features/open-assistant/index.ts`  →  assistantHref · type AssistantHref · type AssistantSurface · ChatBubbleGlyph · SparkleGlyph
 
 ## src/features/open-assistant/model/
 - `src/features/open-assistant/model/assistantHref.ts`  →  AssistantSurface · AssistantHref · assistantHref
-- `src/features/open-assistant/model/fabStack.ts`  →  ASSISTANT_FAB_SIZE · FAB_STACK_GAP · TAB_FAB_BASE · FabStack · stackTop · assistantFabBottom · toastBottomWith · TAB_TWO_STACK
 
 ## src/features/open-assistant/ui/
-- `src/features/open-assistant/ui/AssistantFab.tsx`  →  AssistantFabProps · AssistantFab
 - `src/features/open-assistant/ui/AssistantGlyphs.tsx`  →  SparkleGlyph · ChatBubbleGlyph
 
 ## src/features/planb/config/
@@ -1701,7 +1699,7 @@
 - `src/shared/ui/SheetShell.tsx`  →  SheetApply · SheetShellProps · SheetShell
 - `src/shared/ui/Skeleton.tsx`  →  SkeletonProps · Skeleton
 - `src/shared/ui/StateNotice.tsx`  →  StateNoticeAction · StateNoticeProps · StateNotice
-- `src/shared/ui/Toast.tsx`  →  TOAST_VISIBLE_MS · showToast · hideToast · useRaisedToastBottom · ToastHost
+- `src/shared/ui/Toast.tsx`  →  TOAST_VISIBLE_MS · showToast · hideToast · ToastHost
 - `src/shared/ui/ToastGlyphs.tsx`  →  ToastSuccessGlyph
 - `src/shared/ui/Toggle.tsx`  →  ToggleProps · Toggle
 - `src/shared/ui/WheelPicker.tsx`  →  WHEEL_CELL_HEIGHT · WheelPickerProps · WheelPicker
@@ -1802,4 +1800,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1156개 파일
+합계 1154개 파일

@@ -1,13 +1,7 @@
 import { View } from 'react-native';
 import { act, render, screen, within } from '@testing-library/react-native';
 
-import {
-  TOAST_VISIBLE_MS,
-  ToastHost,
-  hideToast,
-  showToast,
-  useRaisedToastBottom,
-} from './Toast';
+import { TOAST_VISIBLE_MS, ToastHost, hideToast, showToast } from './Toast';
 
 /**
  * TRIP-990 · T1~T3 — 공용 토스트 primitive(스토어 + 호스트 + 호출 함수).
@@ -129,51 +123,5 @@ describe('🔴 리셋 장치 · hideToast (01b Q1 — 테스트 간 싱글턴 �
     expect(screen.getByTestId(PROBE_ROOT)).toBeOnTheScreen();
     expect(screen.queryByTestId('toast-a')).toBeNull();
     expect(jest.getTimerCount()).toBe(0);
-  });
-});
-
-// TRIP-1321 · G-U8-10 · BR-U8-52 — ✦ 도우미 FAB 가 있는 화면은 토스트 바닥을 ✦ 윗변 + 12(288)로 올린다.
-// 올림은 그 화면이 붙어 있는 동안만 — 떨어지면 기본 220 으로 돌아간다. 실제 겹침 없음은 6-b 실기.
-describe('🔴 위치 · 화면이 토스트 바닥을 올린다 (TRIP-1321)', () => {
-  function Raiser({ bottom }: { bottom?: number }) {
-    useRaisedToastBottom(bottom);
-    return null;
-  }
-
-  it('올림이 붙어 있으면 그 바닥(style.bottom)에, 떨어지면 기본 220 토큰으로 돌아간다', () => {
-    const { rerender } = render(
-      <>
-        <Raiser bottom={288} />
-        <ToastHost />
-      </>
-    );
-    show('A 문구', 'toast-a');
-    const raised = screen.getByTestId('toast-a');
-    expect(raised.props.style).toEqual(
-      expect.objectContaining({ bottom: 288 })
-    );
-
-    rerender(
-      <>
-        <Raiser />
-        <ToastHost />
-      </>
-    );
-    const lowered = screen.getByTestId('toast-a');
-    expect(lowered.props.style?.bottom).toBeUndefined();
-  });
-
-  it('여러 화면이 올리면 가장 높은 값을 쓴다(어느 ✦ 와도 안 겹치게)', () => {
-    render(
-      <>
-        <Raiser bottom={152} />
-        <Raiser bottom={288} />
-        <ToastHost />
-      </>
-    );
-    show('A 문구', 'toast-a');
-    expect(screen.getByTestId('toast-a').props.style).toEqual(
-      expect.objectContaining({ bottom: 288 })
-    );
   });
 });

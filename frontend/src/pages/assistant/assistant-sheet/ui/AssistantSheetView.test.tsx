@@ -24,7 +24,7 @@ import {
  */
 
 // TRIP-1526 — 키보드 이벤트는 RN `Keyboard` 가 구독하는 기기 이벤트 통로(DeviceEventEmitter)로 쏜다
-// (선례 AssistantFab.test).
+// (선례 useKeyboardVisible.test).
 type KeyboardEventName =
   | 'keyboardWillShow'
   | 'keyboardDidShow'

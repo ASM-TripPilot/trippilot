@@ -237,12 +237,11 @@ describe('LiveHubView · HV2 부재 (AC-2)', () => {
     expect(screen.getByTestId('execution-live-bottom-bar')).toBeOnTheScreen();
 
     const gone = [
-      // TRIP-1522 — 바로 합쳐져 걷힌 것: 수정 FAB·알약 메뉴·시트 윗변 추종 앵커·허브의 ✦ FAB.
+      // TRIP-1522 — 바로 합쳐져 걷힌 것: 수정 FAB·알약 메뉴·시트 윗변 추종 앵커.
       'execution-live-replan-fab',
       'execution-live-fab-anchor',
       'execution-live-edit-pill-ai',
       'execution-live-edit-pill-manual',
-      'assistant-fab',
       'shell-tabbar-root',
       'execution-live-segment-itinerary',
       'execution-live-segment-map',

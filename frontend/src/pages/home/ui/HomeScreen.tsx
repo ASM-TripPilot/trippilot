@@ -38,8 +38,10 @@ import {
   SuitcaseGlyph,
 } from '@/features/home';
 import { CategoryImageGlyph } from '@/entities/itinerary-slot';
+import { SparkleGlyph as AssistantSparkleGlyph } from '@/features/open-assistant';
 import { WarningTriangleGlyph } from '@/features/explore/index.view';
 import { formatCountBadge } from '../lib/formatCountBadge';
+import { GLYPH_COLORS } from '@/shared/ui/glyphs';
 import { HeartButton } from '@/shared/ui/HeartButton';
 import { Image } from '@/shared/ui/Image';
 import { Skeleton } from '@/shared/ui/Skeleton';
@@ -113,16 +115,20 @@ const heroDotShadow = {
 // discovery는 고정 카피, 단계 얼굴은 greetTitle/greetSubtitle/greetName을 주입받는다.
 // TRIP-939 AC-9 — 종은 알림함 진입 버튼이다. role 은 콜백 유무가 아니라 구조로 굳힌다(370-AC-4 집합).
 // 하드코딩 빨간점은 뺐다(Q3 — 읽음 처리 미배선이라 켜지면 꺼지지 않는다).
+// TRIP-1553 — 종 오른쪽 ✦ 는 우하단 FAB 에서 옮겨 온 도우미 진입이다(같은 40 원형·구조 role). 글리프는
+// open-assistant 의 도우미 ✦ (홈 eyebrow 의 같은 이름 별과 다른 것).
 function GreetingHeader({
   title,
   subtitle,
   name,
   onPressBell,
+  onPressAssistant,
 }: {
   title: string;
   subtitle?: string;
   name?: string;
   onPressBell?: () => void;
+  onPressAssistant?: () => void;
 }): ReactElement {
   return (
     <View className="w-full flex-row items-center gap-sm px-lg pb-[10px] pt-lg">
@@ -145,6 +151,16 @@ function GreetingHeader({
         className="h-[40px] w-[40px] items-center justify-center rounded-full bg-canvas"
       >
         <BellGlyph size={22} />
+      </Pressable>
+      <Pressable
+        testID="home-dashboard-assistant"
+        accessibilityRole="button"
+        accessibilityLabel="AI 도우미"
+        onPress={onPressAssistant}
+        style={softCardShadow}
+        className="h-[40px] w-[40px] items-center justify-center rounded-full bg-canvas"
+      >
+        <AssistantSparkleGlyph size={20} color={GLYPH_COLORS.primary} />
       </Pressable>
     </View>
   );
@@ -1019,6 +1035,7 @@ function DiscoveryBody({
   onPressSearch,
   onPressHeroCity,
   onPressBell,
+  onPressAssistant,
 }: {
   hero: readonly HomeMagazineHero[];
   sections: HomeSections;
@@ -1029,6 +1046,7 @@ function DiscoveryBody({
   onPressSearch?: () => void;
   onPressHeroCity?: (regionCode: string) => void;
   onPressBell?: () => void;
+  onPressAssistant?: () => void;
 }): ReactElement {
   return (
     <>
@@ -1036,6 +1054,7 @@ function DiscoveryBody({
         title="오늘은 어디를 상상해볼까요"
         subtitle="떠나지 않아도, 구경하고 모으는 즐거움"
         onPressBell={onPressBell}
+        onPressAssistant={onPressAssistant}
       />
       <SearchBarBlock onPress={onPressSearch} />
       {tripsError ? (
@@ -1145,6 +1164,7 @@ function PlanningBody({
   onPressSearch,
   onPressHeroCity,
   onPressBell,
+  onPressAssistant,
 }: {
   phase: Extract<HomePhase, { kind: 'planning' }>;
   hero: readonly HomeMagazineHero[];
@@ -1156,6 +1176,7 @@ function PlanningBody({
   onPressSearch?: () => void;
   onPressHeroCity?: (regionCode: string) => void;
   onPressBell?: () => void;
+  onPressAssistant?: () => void;
 }): ReactElement {
   return (
     <>
@@ -1164,6 +1185,7 @@ function PlanningBody({
         subtitle={phase.greetSubtitle}
         name={phase.greetName}
         onPressBell={onPressBell}
+        onPressAssistant={onPressAssistant}
       />
       <SearchBarBlock onPress={onPressSearch} />
       <PlanningHeroCarousel
@@ -1205,6 +1227,7 @@ function PostTripBody({
   onPressSearch,
   onPressHeroCity,
   onPressBell,
+  onPressAssistant,
 }: {
   phase: Extract<HomePhase, { kind: 'postTrip' }>;
   hero: readonly HomeMagazineHero[];
@@ -1215,6 +1238,7 @@ function PostTripBody({
   onPressSearch?: () => void;
   onPressHeroCity?: (regionCode: string) => void;
   onPressBell?: () => void;
+  onPressAssistant?: () => void;
 }): ReactElement {
   return (
     <>
@@ -1222,6 +1246,7 @@ function PostTripBody({
         title={phase.greetTitle}
         subtitle={phase.greetSubtitle}
         onPressBell={onPressBell}
+        onPressAssistant={onPressAssistant}
       />
       <SearchBarBlock onPress={onPressSearch} />
       <PlanningHeroCarousel
@@ -1270,6 +1295,7 @@ function PhaseBody({
   onPressSearch,
   onPressHeroCity,
   onPressBell,
+  onPressAssistant,
 }: HomeScreenProps): ReactElement {
   if (phase === undefined || phase.kind === 'discovery') {
     return (
@@ -1283,6 +1309,7 @@ function PhaseBody({
         onPressSearch={onPressSearch}
         onPressHeroCity={onPressHeroCity}
         onPressBell={onPressBell}
+        onPressAssistant={onPressAssistant}
       />
     );
   }
@@ -1300,6 +1327,7 @@ function PhaseBody({
           onPressSearch={onPressSearch}
           onPressHeroCity={onPressHeroCity}
           onPressBell={onPressBell}
+          onPressAssistant={onPressAssistant}
         />
       );
     case 'postTrip':
@@ -1314,12 +1342,13 @@ function PhaseBody({
           onPressSearch={onPressSearch}
           onPressHeroCity={onPressHeroCity}
           onPressBell={onPressBell}
+          onPressAssistant={onPressAssistant}
         />
       );
   }
 }
 
-// 스크롤하는 동안 FAB 3개를 숨기고, 멈춘 뒤 이만큼 지나면 다시 보인다(TRIP-1435 Q-023 결정 1=A — 본문 요소를 덮지 않게).
+// 스크롤하는 동안 FAB 2개를 숨기고, 멈춘 뒤 이만큼 지나면 다시 보인다(TRIP-1435 Q-023 결정 1=A — 본문 요소를 덮지 않게).
 const FAB_REAPPEAR_MS = 250;
 
 export function HomeScreen({
@@ -1338,11 +1367,11 @@ export function HomeScreen({
   onPressSearch,
   onPressHeroCity,
   onPressBell,
+  onPressAssistant,
   savedPlacesCount,
   savedStaysCount,
   savedMenuOpen,
   onToggleSavedMenu,
-  assistantFab,
 }: HomeScreenProps): ReactElement {
   const menuOpen = savedMenuOpen ?? false;
   const [scrolling, setScrolling] = useState(false);
@@ -1386,6 +1415,7 @@ export function HomeScreen({
             onPressSearch={onPressSearch}
             onPressHeroCity={onPressHeroCity}
             onPressBell={onPressBell}
+            onPressAssistant={onPressAssistant}
           />
         </ScrollView>
         {/* TRIP-699 — 로딩이면 두 FAB 숨김(Figma 2174:2307). 로딩은 항상 discovery라 phase 없음. */}
@@ -1417,8 +1447,6 @@ export function HomeScreen({
               savedPlacesCount={savedPlacesCount}
               savedStaysCount={savedStaysCount}
             />
-            {/* TRIP-1321 — ✦ 도우미 FAB 는 스택 맨 위(바닥 220). 메뉴가 펼쳐진 동안은 빼서 딤 위로 뜨지 않게(BR-U8-53). */}
-            {menuOpen ? null : assistantFab}
           </View>
         ) : null}
       </View>

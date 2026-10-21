@@ -3,7 +3,7 @@ import { Keyboard } from 'react-native';
 
 /**
  * 소프트 키보드가 떠 있나. iOS 는 Will* 이 먼저, Android 는 Did* 만 오므로 4종을 모두 듣는다.
- * (TRIP-1514 AssistantFab 인라인 구독을 승격 — 시트도 같은 감지가 필요하다.)
+ * (TRIP-1514 인라인 구독을 승격 — 시트도 같은 감지가 필요하다.)
  */
 export function useKeyboardVisible(): boolean {
   const [visible, setVisible] = useState(false);
