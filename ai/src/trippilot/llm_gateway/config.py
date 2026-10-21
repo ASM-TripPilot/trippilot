@@ -260,9 +260,14 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
             # (2026-10-14) — 같은 원문을 읽는 추출은 low 로 2/2 성공했다. 출력은 사전 키만 통과(게이트).
             LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: "low",
             # 도우미 턴 — 백엔드 해석 시한 9s 안에서 분류 ≤4.0s·답변 ≤3.5s·요약 ≤2.0s(2026-10-18 실측 개정)라 사고를 낮춘다
-            # (assistant-orchestrator FD domain-entities §2.10 · BLM 시한표)
-            LlmFeature.DIALOGUE_INTENT: "low",
-            LlmFeature.DIALOGUE_ANSWER: "low",
+            # (assistant-orchestrator FD domain-entities §2.10 · BLM 시한표). 분류·답변은 사고를 끈다(none) — 2026-10-20
+            # luna·같은 시각 A/B(동시 2, 분류 0.2.3 고정·effort 만): 분류 238회 p50 1.53 → 1.24s·p90 2.51 → 1.93s, 평가셋 판단 오답은
+            # 같다(2·2). 단 effort 만 끄면 행사 말을 탐색·장소 정보로 몰아(행사 null 50 → 0%, 두 질문은 40 → 40% 그대로) 분류 0.2.4 와
+            # 같이 간다(0.2.4+none 두 질문 90%·행사 100% — prompts/dialogue_intent.yaml 머리). 답변 27회(단일 사실 9사례): 폴백 3 → 2건
+            # (시한 3 → 1·게이트 드롭 0 → 1)·p90 3.50 → 2.34s(low 쪽은 시한 3건이 p90 자리라 3.5s 상한 값)·짝 위반 0·여는 말·되묻기·
+            # 엉뚱한 마무리 0(답변 담당 세션 원문 검수). 요약은 턴 밖 시한이라 그대로 둔다. none 은 GPT 값이다 — Claude 로 재배정하면 low 로
+            LlmFeature.DIALOGUE_INTENT: "none",
+            LlmFeature.DIALOGUE_ANSWER: "none",
             LlmFeature.DIALOGUE_MEMORY: "low",
             # 계획(2‴) — 같은 9s 안에서 분류 뒤 ≤3.5s(잔여×0.45). 사고를 끈다(none): 고르는 것은 닫힌 도구 이름·짧은 인자라
             # 사고가 품질을 올리지 않았다 — 2026-10-20 luna·평가셋 38×2·동시 2: low p50 1.61s·p90 2.39s·출력 60 토큰 → none
