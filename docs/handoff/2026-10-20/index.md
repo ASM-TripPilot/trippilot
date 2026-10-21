@@ -1,6 +1,6 @@
 ---
 date: 2026-10-20
-written: 2026-10-21 18:30 KST
+written: 2026-10-21 18:30 KST (20:15 갱신 블록 추가)
 written_by: Kiro (세션 트랜스크립트 19개 + git/gh 실측에서 추출)
 sessions: 19
 weekly_limit_resets: "2026-10-24 08:00 KST"
@@ -15,19 +15,29 @@ weekly_limit_resets: "2026-10-24 08:00 KST"
 - 10-21 12:02 재시도에서는 `Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead` 가 나왔다(1b098b1e). 10-24 이전에 로컬 Claude Code 가 살아날지는 **이 에러를 먼저 확인**해야 한다.
 - 인수인계 시점(10-21)에 worktree 에 남아 있던 **미커밋·미푸시 작업을 전부 push 했다**(아래 표). wip 커밋은 미검증이다.
 
+## ⚠️ 10-21 20:15 KST 갱신 — 다른 에이전트가 이미 이어받아 움직이고 있다
+이 문서를 쓰는 동안(10-21 19:00~20:10 KST) `JunaPark831` 계정으로 PR 이 쏟아졌다(#1500~#1516). 아래 "세션 표"·"열린 PR"·"WIP 브랜치" 표는 **10-21 18:00 스냅샷**이고, 그 뒤 바뀐 것은 이 블록이 정본이다. **집기 전에 `gh pr list --state all --limit 30` 으로 다시 확인하라.**
+
+- 머지됨: #1475(지역 날씨) #1477(tourapi 주석) #1479(개요 수집 안전) #1463(분류 0.2.4·사고 끔) · **#1500** = `fix/ai-place-sql-rich-order` wip 완성(f916bf14 다음 할 일 끝) · **#1501** = `feat/replan-retry-caution-seed`(1b098b1e ⑤⑥) · #1502 계획 0.1.3 지역 날씨 · #1507 다른 후보 이유 · #1509 회고 effort none · #1510 인사·잡담 · #1511 1일차 취향 점수 시한 · #1512 구성 프롬프트 번호화
+- 닫힘: #1476(계획 0.1.2) — #1502 로 대체(추정)
+- **운영 승격 #1503** `release/main-2026-10-21a` ← develop 87fafaac. 아래 "운영에 없는 것" 목록 대부분이 이제 운영에 있다. DIALOGUE_SQL 배정 여부는 미확인.
+- 새로 열린 PR(사용자): **#1504** `feat/assistant-recommend-places`(bb335bd9 의 RECOMMEND_PLACES, PR 로 올라옴) · #1505 분류·계획 상한 후속 · #1513 자차 주차 거점 · #1516 팬아웃 llm_calls. 팀원: #1508 #1515.
+- 아직 그대로: #1486(행사 탐색) #1485(시각 검사, CI 0건) #1462(draft) OPEN. WIP 중 PR 없는 것: `fix/place-watch-unjudged-slots`(TRIP-1487) · `feat/situation-weather-decisions` · `feat/opportunity-rainy-day` · `docs/situation-decisions-25-31` · `integ-recommend`(통합용, 역할 끝났으면 삭제 가능).
+- 따라서 **지금 남은 진행중 축은 상황 감지(1b098b1e) 4개 브랜치 + #1504 리뷰** 다.
+
 ## 세션 19개
 
 | # | 문서 | 역할/이름 | 상태 | 다음 한 줄 |
 |---|---|---|---|---|
-| 1 | [root-1b098b1e-planb-situation-awareness](root-1b098b1e-planb-situation-awareness.md) | Plan-B 상황 감지 에픽 | **진행중** | 5개 WIP 브랜치 rebase·테스트·PR (TRIP-1487 먼저), 10-21 아침 회차 로그 확인 |
-| 2 | [root-f916bf14-chatbot-nl2sql-place-info](root-f916bf14-chatbot-nl2sql-place-info.md) | 챗봇 NL2SQL·장소 정보 | **진행중** | `fix/ai-place-sql-rich-order` wip → V2.78 번호 확인·테스트·PR |
-| 3 | [root-bb335bd9-decisions-codex-review-recommend](root-bb335bd9-decisions-codex-review-recommend.md) | 결정 수집·Codex 리뷰·추천 의도 | **진행중** | `integ-recommend` wip 를 `feat/assistant-recommend-places` 로, 실패 4건 수정 |
-| 4 | [ai-895e45c9-dialogue-plan-intent](ai-895e45c9-dialogue-plan-intent.md) | ai-e3 · 계획 단계·분류 프롬프트 | 리뷰-대기 | #1463(운영 PLAN ON 확인 후)·#1476 머지, #1485 CI 유발 |
+| 1 | [root-1b098b1e-planb-situation-awareness](root-1b098b1e-planb-situation-awareness.md) | Plan-B 상황 감지 에픽 | **진행중** | 4개 WIP 브랜치 rebase·테스트·PR (TRIP-1487 먼저; ⑤⑥는 #1501 로 머지됨), 10-21 아침 회차 로그 확인 |
+| 2 | [root-f916bf14-chatbot-nl2sql-place-info](root-f916bf14-chatbot-nl2sql-place-info.md) | 챗봇 NL2SQL·장소 정보 | 완료(10-21 #1500 머지) | 개발 앱에서 NL2SQL DB 권한 실기 확인만 |
+| 3 | [root-bb335bd9-decisions-codex-review-recommend](root-bb335bd9-decisions-codex-review-recommend.md) | 결정 수집·Codex 리뷰·추천 의도 | 리뷰-대기(10-21 #1504 OPEN) | #1504 리뷰·머지, `integ-recommend` 정리 |
+| 4 | [ai-895e45c9-dialogue-plan-intent](ai-895e45c9-dialogue-plan-intent.md) | ai-e3 · 계획 단계·분류 프롬프트 | 리뷰-대기 | #1463 머지됨·#1476 닫힘(→#1502) → #1485 CI 유발, #1505 리뷰 |
 | 5 | [wt-mlops-serving-c9fb725e-deploy-release](wt-mlops-serving-c9fb725e-deploy-release.md) | 배포 담당 | **진행중** | 20:45 이후 개발 배포 여부 확인 → release/main-2026-10-21a → 운영 2런에 DIALOGUE_SQL |
 | 6 | [ai-053ac554-dialogue-answer-prompt](ai-053ac554-dialogue-answer-prompt.md) | 답변 프롬프트 소유 | 리뷰-대기 | #1486 머지 → 탐색 핸들러 공유 세션에 통보 |
-| 7 | [ai-ea9f15f0-dialogue-weather-region](ai-ea9f15f0-dialogue-weather-region.md) | 날씨·인자표 소유 | 리뷰-대기 | #1475 머지(CLEAN) |
-| 8 | [ai-8e5af015-kb5-overview-collect](ai-8e5af015-kb5-overview-collect.md) | KB-5 개요 수집 | 리뷰-대기 | #1479 머지, 10-22~23 볼거리 완료 시 반영 PR |
-| 9 | [wt-existence-demote-a53b1b44-poi-event-data](wt-existence-demote-a53b1b44-poi-event-data.md) | trippilot-c3 · 장소·행사 데이터 | 리뷰-대기 | #1477 머지, TOUR_API_KEY2 재발급(사용자) |
+| 7 | [ai-ea9f15f0-dialogue-weather-region](ai-ea9f15f0-dialogue-weather-region.md) | 날씨·인자표 소유 | 완료(10-21 #1475 머지) | ai-e3 분류 A/B 재측정 트리거 |
+| 8 | [ai-8e5af015-kb5-overview-collect](ai-8e5af015-kb5-overview-collect.md) | KB-5 개요 수집 | 진행중(#1479 머지됨) | 10-22~23 볼거리 완료 시 반영 PR |
+| 9 | [wt-existence-demote-a53b1b44-poi-event-data](wt-existence-demote-a53b1b44-poi-event-data.md) | trippilot-c3 · 장소·행사 데이터 | 완료(10-21 #1477 머지) | TOUR_API_KEY2 재발급(사용자) |
 | 10 | [ai-55507310-be-ai-contract-trip-list](ai-55507310-be-ai-contract-trip-list.md) | BE↔AI 계약 | 사용자-결정-대기 | 팀원 2명 확인 → #1462 ready·머지 → 앱 PR |
 | 11 | [root-12d2b795-today-window-walk-transit](root-12d2b795-today-window-walk-transit.md) | trippilot-df · 일정 생성 품질 | 완료(확인 대기) | 개발 앱에서 서울·도보 생성 실기 확인 |
 | 12 | [ai-3a974fff-generate-day-areas-replan](ai-3a974fff-generate-day-areas-replan.md) | 동네 분산·재계획 지역 이동 | 완료(확인 대기) | 운영 실기 확인, wt-regen 정리 |
