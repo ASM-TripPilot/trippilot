@@ -2,6 +2,7 @@ package com.trippilot.notification.adapter.out.push
 
 import com.trippilot.notification.domain.PushMessage
 import com.trippilot.notification.domain.PushPort
+import com.trippilot.notification.domain.PushRateLimited
 import com.trippilot.notification.domain.PushReceipt
 import com.trippilot.notification.domain.PushStatus
 import com.trippilot.notification.domain.PushUrgency
@@ -13,6 +14,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Primary
 import org.springframework.stereotype.Component
+import org.springframework.web.client.HttpClientErrorException
 import org.springframework.web.client.RestClient
 
 /**
@@ -47,16 +49,21 @@ class ExpoPushAdapter(
                 priority = message.urgency.expoPriority(),
             )
         }
-        val response = client.post()
-            .uri("/--/api/v2/push/send")
-            .headers { h ->
-                // 프로젝트가 "enhanced security" 를 켰을 때만 필요하다. 비어 있으면 헤더를 아예 안 보낸다 —
-                // 빈 Bearer 를 보내면 401 이라, 안 켠 프로젝트에서 오히려 실패한다.
-                if (accessToken.isNotBlank()) h.setBearerAuth(accessToken)
-            }
-            .body(payload)
-            .retrieve()
-            .body(ExpoPushResponse::class.java)
+        val response = try {
+            client.post()
+                .uri("/--/api/v2/push/send")
+                .headers { h ->
+                    // 프로젝트가 "enhanced security" 를 켰을 때만 필요하다. 비어 있으면 헤더를 아예 안 보낸다 —
+                    // 빈 Bearer 를 보내면 401 이라, 안 켠 프로젝트에서 오히려 실패한다.
+                    if (accessToken.isNotBlank()) h.setBearerAuth(accessToken)
+                }
+                .body(payload)
+                .retrieve()
+                .body(ExpoPushResponse::class.java)
+        } catch (e: HttpClientErrorException.TooManyRequests) {
+            // 프로젝트 발송량 한도(COST-U6-04 재평가 트리거). 응용층이 웹 예외를 몰라도 구분할 수 있게 도메인 타입으로 올린다.
+            throw PushRateLimited(e.message, e)
+        }
 
         val tickets = response?.data.orEmpty()
         if (tickets.size != tokens.size) {

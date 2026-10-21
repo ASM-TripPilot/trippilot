@@ -70,7 +70,12 @@ internal class FakeNotifications : NotificationRepository {
         if (i >= 0) stored[i] = stored[i].copy(pushSentAt = sentAt, pushFailedReason = failedReason)
     }
 
-    override fun lockPushGroup(accountId: UUID, dedupPrefix: String) = Unit // 대역은 단일 스레드
+    /** 잠근 묶음을 남긴다 — 대역은 단일 스레드라 잠금 자체는 흉내 내지 않고, **잠갔는지**만 본다. */
+    val lockedGroups = mutableListOf<Pair<UUID, String>>()
+
+    override fun lockPushGroup(accountId: UUID, dedupPrefix: String) {
+        lockedGroups += accountId to dedupPrefix
+    }
 }
 
 /**
@@ -110,7 +115,12 @@ internal fun testMetrics(notifications: NotificationRepository = FakeNotificatio
 internal class FakeSchedules : NotificationScheduleRepository {
     val stored = mutableListOf<NotificationSchedule>()
 
-    override fun lockTrip(tripId: UUID) = Unit
+    /** 잠근 여행을 남긴다 — 대역은 단일 스레드라 잠금 자체는 흉내 내지 않고, **잠갔는지**만 본다. */
+    val lockedTrips = mutableListOf<UUID>()
+
+    override fun lockTrip(tripId: UUID) {
+        lockedTrips += tripId
+    }
 
     override fun replacePending(tripId: UUID, schedules: List<NotificationSchedule>) {
         stored.removeAll { it.tripId == tripId && it.firedAt == null && it.canceledAt == null }
