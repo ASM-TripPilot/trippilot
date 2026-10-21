@@ -54,7 +54,18 @@ class ReflectionPropertyTest : StringSpec({
     val trips = object : TripFacade {
         override fun findPeriod(accountId: UUID, tripId: UUID) =
             if (accountId == acc) TripPeriod(day, day.plusDays(2)) else null
-        override fun findGenerationContext(accountId: UUID, tripId: UUID) = null
+        // 목적지가 있어야 AI 를 부른다(ReflectionAgentInput.callable) — AI 갈래를 재는 테스트가 그 앞에서 막히지 않게 둔다.
+        override fun findGenerationContext(accountId: UUID, tripId: UUID) = com.trippilot.trip.api.TripGenerationContext(
+            day, day.plusDays(2), listOf(com.trippilot.trip.api.TripDestinationRef("제주", null, 2)), null, null, emptyList(),
+        )
+    }
+
+    /** AI 에 실을 방문이 하나 있는 하루 — AI 를 부르는 갈래를 잴 때 쓴다(방문 0곳이면 부르지 않는다). */
+    val shown = UUID.randomUUID()
+    val shownSurfaces = object : PoiSurfaceFacade {
+        override fun findSurfaces(poiIds: Collection<UUID>) = poiIds.filter { it == shown }
+            .associateWith { PoiSurfaceView(it, "성산일출봉", 33.4, 126.9, "자연", "NATURE", null, null, emptyList()) }
+        override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
     }
 
     class Reflections : ReflectionRepository {
@@ -67,6 +78,12 @@ class ReflectionPropertyTest : StringSpec({
         override fun findForRedraft(tripId: UUID, dayDate: LocalDate, draft: ReflectionCard, source: ReflectionSource) =
             find(tripId, dayDate)?.copy(draftCard = draft, source = source).also { locks++ }
         override fun findByTrip(tripId: UUID) = stored.values.filter { it.tripId == tripId }.sortedBy { it.dayDate }
+    }
+
+    fun shownDay() = object : ArchiveRecordFacade {
+        override fun findDailyVisits(tripId: UUID) =
+            listOf(ArchiveDayView(day, listOf(ArchiveVisitView(UUID.randomUUID(), shown, Instant.parse("2026-08-11T03:00:00Z"), null, false, 0, false))))
+        override fun findRouteDistances(tripId: UUID) = emptyMap<LocalDate, Int>()
     }
 
     class Sink : DomainEventPublisher {
@@ -158,6 +175,7 @@ class ReflectionPropertyTest : StringSpec({
             override fun append(command: com.trippilot.changelog.api.AppendChangeLog) = Unit
             override fun findTimeline(accountId: UUID, tripId: UUID, limit: Int) = emptyList<com.trippilot.changelog.api.ChangeLogEntryView>()
         },
+        org.springframework.transaction.support.TransactionOperations.withoutTransaction(),
     )
 
     /** 계측 대역 — 지표 자체를 재는 테스트만 자기 레지스트리를 따로 본다. */
@@ -172,7 +190,7 @@ class ReflectionPropertyTest : StringSpec({
     // ── 폴백 3단(BR-U5-32) ────────────────────────────────────────────
     "AI 카드가 나오면 그것을 쓰고 source 는 AI 다" {
         val svc = ReflectionService(
-            trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(),
+            trips, shownDay(), shownSurfaces, Reflections(),
             ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), CardAgent("AI 가 쓴 제목"), Sink(), testMetrics(), clock, noMaterials,
         )
 
@@ -209,7 +227,7 @@ class ReflectionPropertyTest : StringSpec({
     "경계가 꺼져 있으면 generate 를 부르지 않는다" {
         val agent = NoAgent()
         val svc = ReflectionService(
-            trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(),
+            trips, shownDay(), shownSurfaces, Reflections(),
             ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), agent, Sink(), testMetrics(), clock, noMaterials,
         )
 
@@ -227,23 +245,23 @@ class ReflectionPropertyTest : StringSpec({
      */
     "AI 가 깨진 payload 를 주면 규칙 카드로 내려간다 — 요청을 죽이지 않는다" {
         val svc = ReflectionService(
-            trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(),
+            trips, shownDay(), shownSurfaces, Reflections(),
             ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), BrokenAgent(), Sink(), testMetrics(), clock, noMaterials,
         )
 
         val r = svc.generateDaily(acc, tripId, day)
 
-        r.source shouldBe ReflectionSource.BASIC
-        r.draftCard.templateId shouldBe ReflectionNarrator.BASIC_TEMPLATE
+        r.source shouldBe ReflectionSource.RULE
+        r.draftCard.templateId shouldBe ReflectionNarrator.RULE_TEMPLATE
     }
 
     "AI 가 예외를 던져도 규칙 카드로 내려간다" {
         val svc = ReflectionService(
-            trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(),
+            trips, shownDay(), shownSurfaces, Reflections(),
             ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), ThrowingAgent(), Sink(), testMetrics(), clock, noMaterials,
         )
 
-        svc.generateDaily(acc, tripId, day).source shouldBe ReflectionSource.BASIC
+        svc.generateDaily(acc, tripId, day).source shouldBe ReflectionSource.RULE
     }
 
     // ── PBT-U5-1 (블로킹) ──────────────────────────────────────────────
@@ -585,6 +603,7 @@ class ReflectionPropertyTest : StringSpec({
     "건너뛴 장소명이 payload 에 있으면 어떤 자리든 강등된다" {
         checkAll(Arb.of("scenes", "hashtags", "cover")) { field ->
             val skippedPoi = UUID.randomUUID()
+            val went = UUID.randomUUID() // 실을 방문이 있어야 AI 를 부른다 — 없으면 강등이 아니라 호출이 없어 이 단정이 공짜로 통과한다
             val name = "장소-${skippedPoi.toString().take(4)}"
             val agent = object : com.trippilot.reflection.domain.port.ReflectionAgentPort {
                 override val enabled = true
@@ -595,8 +614,8 @@ class ReflectionPropertyTest : StringSpec({
                     )
             }
             val svc = ReflectionService(
-                trips, archiveOf(listOf(visitOf(skippedPoi, skipped = true))),
-                surfacesOf(mapOf(skippedPoi to (33.5 to 126.6))), Reflections(),
+                trips, archiveOf(listOf(visitOf(skippedPoi, skipped = true), visitOf(went, skipped = false))),
+                surfacesOf(mapOf(skippedPoi to (33.5 to 126.6), went to (33.4 to 126.5))), Reflections(),
                 ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), agent, Sink(), testMetrics(), clock, noMaterials,
             )
 
@@ -617,7 +636,7 @@ class ReflectionPropertyTest : StringSpec({
                 null.also { locksSeenByAgent = repo.locks }
         }
         val svc = ReflectionService(
-            trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo,
+            trips, shownDay(), shownSurfaces, repo,
             ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), agent, Sink(), testMetrics(), clock, noMaterials,
         )
 
@@ -638,7 +657,7 @@ class ReflectionPropertyTest : StringSpec({
             override fun generate(input: com.trippilot.reflection.domain.port.ReflectionAgentInput) = null.also { calls++ }
         }
         fun serviceOver(repo: ReflectionRepository) = ReflectionService(
-            trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo,
+            trips, shownDay(), shownSurfaces, repo,
             ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), agent, Sink(), testMetrics(), clock, noMaterials,
         )
         val editUnreadable = object : ReflectionRepository by Reflections() {

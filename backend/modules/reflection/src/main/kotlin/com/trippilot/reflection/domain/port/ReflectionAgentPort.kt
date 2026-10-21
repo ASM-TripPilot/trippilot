@@ -41,7 +41,17 @@ data class ReflectionAgentInput(
     val personaSummary: String?,
     val weatherSummary: String?,
     val events: List<ReflectionEvent>,
-)
+) {
+    companion object {
+        /**
+         * 상대가 받아 줄 입력인가 — `region` 필수 · `visits` 1건 이상(minItems 1). 아니면 422 가 확정이라 부르지 않는다.
+         *
+         * **규칙은 여기 한 곳이다.** 어댑터가 호출 직전에 이것으로 막고(계약 가드), 서비스는 재료를 조회하기 **전에** 같은 것으로 묻는다 —
+         * 부르지도 않을 호출을 위해 취향·변경 이력을 읽지 않게(개발 서버 회고 호출의 절반이 방문 0곳인 날이었다 — TRIP-1463 댓글).
+         */
+        fun callable(region: String, visits: List<ReflectionVisit>): Boolean = region.isNotBlank() && visits.isNotEmpty()
+    }
+}
 
 /**
  * 회고 카드 생성 경계(O-U5-6 = `http` · G-U5-4 해소).

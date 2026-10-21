@@ -191,7 +191,8 @@ class ReflectionService(
         null
     } else {
         runCatching {
-            agent.generate(agentInput(accountId, tripId, dayDate, visits, surfaces))
+            agentInput(accountId, tripId, dayDate, visits, surfaces)
+                ?.let { agent.generate(it) }
                 ?.let { cards.read(it.payload) }
                 ?.takeIf { card -> notHallucinating(card.payload, tripId, dayDate, visits, surfaces) }
         }
@@ -234,7 +235,8 @@ class ReflectionService(
      * 카드 장면이 되면 안 된다. 건너뛴 사실은 이름 없이 사건([ReflectionMaterials.eventsOn])으로만 간다.
      *
      * `region` 은 **그날의** 목적지다 — 다목적지 여행의 둘째 날이 첫 목적지로 나가던 것을 고쳤다(TRIP-1463).
-     * 없으면 빈 문자열이고, 어댑터가 부르지 않는다(상대는 `region` 필수) — 지어내지 않는다.
+     * 상대가 받지 않을 입력(목적지 없음·실을 방문 0곳 — [ReflectionAgentInput.callable])이면 **null** 이고 재료를 읽지 않는다 —
+     * 부르지 않을 호출을 위해 취향·변경 이력을 조회하지 않는다. 지어내지도 않는다.
      * 성향·사건은 [ReflectionMaterials] 가 채운다. 날씨는 비운다 — 그 이유도 거기 있다.
      */
     private fun agentInput(
@@ -243,18 +245,24 @@ class ReflectionService(
         dayDate: LocalDate,
         visits: List<ArchiveVisitView>,
         surfaces: Map<UUID, PoiSurfaceView>,
-    ): ReflectionAgentInput {
+    ): ReflectionAgentInput? {
         val ctx = trips.findGenerationContext(accountId, tripId)
+        val region = materials.regionOn(ctx, dayDate)
+        val shown = visits.filterNot { it.skipped }.mapIndexedNotNull { index, v ->
+            surfaces[v.poiId]?.let { poi ->
+                ReflectionVisit(v.poiId, dayDate, poi.nameKo, poi.category, index + 1, v.photoCount)
+            }
+        }
+        if (!ReflectionAgentInput.callable(region, shown)) {
+            log.debug("목적지나 실을 방문이 없어 회고 AI 를 부르지 않습니다 — 규칙 카드로 갑니다. tripId={} date={}", tripId, dayDate)
+            return null
+        }
         return ReflectionAgentInput(
             kind = "DAILY",
-            region = materials.regionOn(ctx, dayDate),
+            region = region,
             startDate = dayDate,
             endDate = dayDate,
-            visits = visits.filterNot { it.skipped }.mapIndexedNotNull { index, v ->
-                surfaces[v.poiId]?.let { poi ->
-                    ReflectionVisit(v.poiId, dayDate, poi.nameKo, poi.category, index + 1, v.photoCount)
-                }
-            },
+            visits = shown,
             personaSummary = materials.personaOf(accountId, ctx),
             weatherSummary = null,
             events = materials.eventsOn(accountId, tripId, dayDate, skippedCount = visits.count { it.skipped }),

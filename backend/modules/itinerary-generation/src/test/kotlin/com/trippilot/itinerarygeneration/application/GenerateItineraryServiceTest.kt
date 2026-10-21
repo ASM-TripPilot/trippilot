@@ -1086,7 +1086,7 @@ class GenerateItineraryServiceTest : StringSpec({
     /**
      * **숙소 없는 날의 앵커는 그 날의 목적지 중심이다.** 박수가 실려 오지 않던 때는 모든 날이 첫
      * 목적지로 접혀 "서울 1박 + 인천 1박"이 서울 2박처럼 나왔다. 날짜→목적지 규칙은 FE
-     * `dayRegion.ts` 와 같다 — seq 순서로 박수만큼, 넘치는 날(체크아웃일)은 마지막 목적지.
+     * `frontend/src/entities/trip/lib/regionForDay.ts`(`regionForDay`)와 같다 — seq 순서로 박수만큼, 넘치는 날(체크아웃일)은 마지막 목적지.
      * 1차(day1)·2차(나머지)가 각자 자기 날짜의 앵커를 싣는지도 함께 본다.
      */
     "서울 1박 + 인천 1박, 숙소 미등록 — 1일차는 서울 중심, 2·3일차는 인천 중심" {

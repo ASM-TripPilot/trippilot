@@ -31,7 +31,7 @@ internal object RegionAnchors {
         ref.regionCode?.let { regions.centerOfCode(it) } ?: regions.centerOf(ref.name)
 
     /**
-     * 계획일 [date] 가 어느 목적지의 날인가 — FE `dayRegion.ts`(같이 짜기 "그날 여행지")와 **같은 규칙**.
+     * 계획일 [date] 가 어느 목적지의 날인가 — FE `frontend/src/entities/trip/lib/regionForDay.ts`(`regionForDay`)와 **같은 규칙**. 본문은 trip api `destinationOn` 에 있다.
      * [refs](seq 순)를 박수만큼 펼치고, 박수 합을 넘는 날(체크아웃일 포함)은 마지막 목적지다.
      * 두 규칙이 갈리면 화면이 "인천"이라 적은 날에 서울 일정이 나온다. 목적지가 없으면 null.
      */
