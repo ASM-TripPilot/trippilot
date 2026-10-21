@@ -8,9 +8,15 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react-native';
 
 import { setAssistantPort } from '../api/assistantClient';
+import type {
+  AssistantMessage,
+  NextAction,
+  QuickReply,
+} from '../api/assistantContract';
 import { assistantSample } from '../api/assistantSamples';
 import {
   FakeAssistantAdapter,
@@ -30,11 +36,13 @@ jest.setTimeout(20000);
 
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
+const mockPush = jest.fn();
 const mockCanGoBack = jest.fn(() => true);
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     back: mockBack,
     replace: mockReplace,
+    push: mockPush,
     canGoBack: mockCanGoBack,
   }),
 }));
@@ -86,6 +94,7 @@ afterEach(() => {
   clients.splice(0).forEach((client) => client.clear());
   mockBack.mockClear();
   mockReplace.mockClear();
+  mockPush.mockClear();
 });
 
 describe('AssistantSheetPage (TRIP-1322)', () => {
@@ -912,5 +921,229 @@ describe('AssistantSheetPage · 답 평가 (US-ASSIST-09)', () => {
         '평가를 저장하지 못했어요. 잠시 후 다시 시도해 주세요'
       )
     );
+  });
+});
+
+// TRIP-1564 — 후보 카드를 눌렀을 때: 고르기가 있으면 고르기(ACTION 턴), 없고 장소 보기가 있으면 그 행과 같은 이동,
+// 둘 다 없으면 눌리지 않는다. 판정 범위는 그 카드가 속한 메시지 하나다(옛 메시지의 고르기는 보지 않는다).
+describe('AssistantSheetPage · 후보 카드 누름', () => {
+  const openPlace = (poiId: string, label = `${poiId} 장소`): NextAction => ({
+    type: 'OPEN_PLACE',
+    label,
+    params: { poiId },
+  });
+  const pickReply = (id: string, poiId: string): QuickReply => ({
+    id,
+    label: `${poiId} 고르기`,
+    action: 'PICK_CANDIDATE',
+    params: { poiId },
+  });
+  const cardsMessage = (
+    id: string,
+    poiIds: string[],
+    parts: { quickReplies?: QuickReply[]; nextActions?: NextAction[] } = {}
+  ): AssistantMessage => ({
+    id,
+    role: 'ASSISTANT',
+    kind: 'CANDIDATES',
+    text: '이런 곳이 있어요.',
+    payload: {
+      candidates: poiIds.map((poiId) => ({
+        poiId,
+        name: `이름-${poiId}`,
+        reason: '이유',
+      })),
+    },
+    nextActions: parts.nextActions ?? [],
+    quickReplies: parts.quickReplies,
+    createdAt: '2026-10-22T00:00:00.000Z',
+  });
+  const infoMessage = (id: string, action: NextAction): AssistantMessage => ({
+    id,
+    role: 'ASSISTANT',
+    kind: 'INFO',
+    text: '장소 정보예요.',
+    payload: {
+      infoKind: 'PLACE',
+      title: '이름-poi-a',
+      rows: [{ label: '영업', value: '매일' }],
+    },
+    nextActions: [action],
+    createdAt: '2026-10-22T00:00:01.000Z',
+  });
+
+  // 같은 poiId 카드가 여러 메시지에 있을 수 있어 항상 메시지 범위부터 잡는다.
+  const card = (messageId: string, poiId: string) =>
+    within(screen.getByTestId(`assistant-message-${messageId}`)).getByTestId(
+      `assistant-candidate-${poiId}`
+    );
+  async function press(element: Parameters<typeof fireEvent.press>[0]) {
+    await act(async () => {
+      fireEvent.press(element);
+    });
+  }
+  // router 의 어느 메서드로 갔는지까지 합친 기록 — TRIP-1565 가 replace→push 로 갈라도 카드·행이 함께 움직이는지 본다.
+  const navCalls = () => [
+    ...mockReplace.mock.calls.map((args) => ['replace', ...args]),
+    ...mockPush.mock.calls.map((args) => ['push', ...args]),
+  ];
+  const navHrefs = () => navCalls().map((call) => call[1]);
+
+  it.each([
+    ['ITINERARY', '/explore/places/poi-a'],
+    ['LIVE', '/trips/t1/live/place/poi-a'],
+  ] as const)(
+    '장소 보기 카드를 누르면(%s) 장소 상세로 가고 새 턴은 안 나간다',
+    async (surface, href) => {
+      renderPage(
+        {
+          seedMessages: [
+            cardsMessage('m-cand', ['poi-a'], {
+              nextActions: [openPlace('poi-a')],
+            }),
+          ],
+        },
+        { tripId: 't1', surface }
+      );
+      await screen.findByTestId('assistant-message-m-cand');
+
+      await press(card('m-cand', 'poi-a'));
+
+      expect(navHrefs()).toEqual([href]);
+      expect(fake.calls.sendTurn).toBe(0);
+    }
+  );
+
+  it('장소 보기 카드가 있으면 같은 장소의 빨간 행은 없고, 다른 메시지(정보 카드)의 같은 장소 행은 남는다', async () => {
+    renderPage({
+      seedMessages: [
+        cardsMessage('m-cand', ['poi-a'], {
+          nextActions: [openPlace('poi-a')],
+        }),
+        infoMessage('m-info', openPlace('poi-a', '장소 보기')),
+      ],
+    });
+    await screen.findByTestId('assistant-message-m-info');
+
+    expect(
+      screen.queryAllByTestId('assistant-next-action-OPEN_PLACE')
+    ).toHaveLength(1);
+    expect(
+      within(screen.getByTestId('assistant-message-m-info')).getByTestId(
+        'assistant-next-action-OPEN_PLACE'
+      )
+    ).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('assistant-message-m-cand')).queryByTestId(
+        'assistant-next-action-OPEN_PLACE'
+      )
+    ).toBeNull();
+  });
+
+  it('카드 누름과 같은 화면 빨간 행 누름은 router 에 같은 호출을 한다(카드 전용 이동 경로가 없다)', async () => {
+    const seed = () => [
+      cardsMessage('m-cand', ['poi-a'], { nextActions: [openPlace('poi-a')] }),
+      infoMessage('m-info', openPlace('poi-a', '장소 보기')),
+    ];
+
+    // 한 페이지는 이동 잠금(closingRef)이 한 번뿐이라 카드·행을 같은 인스턴스에서 못 비교한다 — 따로 띄운다.
+    renderPage({ seedMessages: seed() });
+    await screen.findByTestId('assistant-message-m-cand');
+    await press(card('m-cand', 'poi-a'));
+    const viaCard = navCalls();
+
+    screen.unmount();
+    restore?.();
+    mockReplace.mockClear();
+    mockPush.mockClear();
+
+    renderPage({ seedMessages: seed() });
+    await screen.findByTestId('assistant-message-m-info');
+    await press(
+      within(screen.getByTestId('assistant-message-m-info')).getByTestId(
+        'assistant-next-action-OPEN_PLACE'
+      )
+    );
+    const viaRow = navCalls();
+
+    expect(viaCard).toHaveLength(1);
+    expect(viaCard).toEqual(viaRow);
+  });
+
+  it('고르기 카드를 누르면 그 quick reply 의 ACTION 턴을 보내고 이동은 없다 — 같은 장소의 빨간 행도 그대로 있다', async () => {
+    renderPage({
+      seedMessages: [
+        cardsMessage('m-pick', ['poi-a'], {
+          quickReplies: [pickReply('qr-pick-a', 'poi-a')],
+          nextActions: [openPlace('poi-a')],
+        }),
+      ],
+    });
+    await screen.findByTestId('assistant-message-m-pick');
+    expect(
+      screen.queryAllByTestId('assistant-next-action-OPEN_PLACE')
+    ).toHaveLength(1);
+    const sendTurn = jest.spyOn(fake, 'sendTurn');
+
+    await press(card('m-pick', 'poi-a'));
+
+    await waitFor(() => expect(sendTurn).toHaveBeenCalledTimes(1));
+    expect(sendTurn.mock.calls[0][1].input).toEqual({
+      type: 'ACTION',
+      quickReplyId: 'qr-pick-a',
+    });
+    expect(navCalls()).toEqual([]);
+  });
+
+  it('둘 다 없는 카드는 button 역할이 없고 눌러도 턴·이동이 없다 — 같은 화면의 고르기 카드는 정상 동작', async () => {
+    renderPage({
+      seedMessages: [
+        cardsMessage('m-none', ['poi-a']),
+        cardsMessage('m-pick', ['poi-b'], {
+          quickReplies: [pickReply('qr-pick-b', 'poi-b')],
+        }),
+      ],
+    });
+    await screen.findByTestId('assistant-message-m-pick');
+    const sendTurn = jest.spyOn(fake, 'sendTurn');
+
+    expect(card('m-none', 'poi-a').props.accessibilityRole).not.toBe('button');
+    await press(card('m-none', 'poi-a'));
+    // 앵커 — 같은 화면에서 눌리는 카드는 실제로 턴을 보낸다. 그 한 번이 전부여야 앞의 누름이 아무것도 안 보낸 것이다.
+    await press(card('m-pick', 'poi-b'));
+
+    await waitFor(() => expect(sendTurn).toHaveBeenCalledTimes(1));
+    expect(sendTurn.mock.calls[0][1].input).toEqual({
+      type: 'ACTION',
+      quickReplyId: 'qr-pick-b',
+    });
+    expect(navCalls()).toEqual([]);
+  });
+
+  it('앞선 메시지에 같은 장소의 고르기가 있어도 새 메시지의 카드는 그것을 보내지 않는다(판정 범위는 그 카드의 메시지)', async () => {
+    // 같은 장소의 고르기가 앞선 두 메시지에 각각 다른 id 로 있다 — 대화 전체를 훑는 옛 구현이면 m-new 가 첫 일치(qr-1)를 보낸다
+    renderPage({
+      seedMessages: [
+        cardsMessage('m-old1', ['poi-a'], {
+          quickReplies: [pickReply('qr-1', 'poi-a')],
+        }),
+        cardsMessage('m-old2', ['poi-a'], {
+          quickReplies: [pickReply('qr-2', 'poi-a')],
+        }),
+        cardsMessage('m-new', ['poi-a']),
+      ],
+    });
+    await screen.findByTestId('assistant-message-m-new');
+    const sendTurn = jest.spyOn(fake, 'sendTurn');
+
+    await press(card('m-new', 'poi-a'));
+    // 앵커 — 둘째 메시지의 자기 카드는 자기 고르기(qr-2)로 정상 동작한다. 앞의 누름이 턴을 보냈다면 이 누름은 막혀 qr-1 이 남는다
+    await press(card('m-old2', 'poi-a'));
+
+    await waitFor(() => expect(sendTurn).toHaveBeenCalledTimes(1));
+    expect(sendTurn.mock.calls[0][1].input).toEqual({
+      type: 'ACTION',
+      quickReplyId: 'qr-2',
+    });
   });
 });

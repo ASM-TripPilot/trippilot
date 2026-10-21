@@ -244,4 +244,35 @@ describe('프리뷰 · 도우미 시트 키 (TRIP-1530)', () => {
     expect(screen.queryAllByTestId(/^assistant-user-bubble-/)).toHaveLength(0);
     expect(screen.queryByTestId('assistant-quick-replies-row')).toBeNull();
   });
+
+  // TRIP-1564 — 후보 카드의 눌리는 뜻 둘(장소 보기 · 이동 없음)을 눈으로 보려는 프리뷰 키. 기존 `assistant-candidate` 는 고르기 얼굴이다.
+  it('새 키 "후보 카드(장소 보기)" — 후보 카드는 전부 눌리고, 같은 장소의 빨간 행은 없다', () => {
+    const key = keyByLabel('후보 카드(장소 보기)');
+    expect(key).toBeDefined();
+    mockSearchParams.state = key;
+    render(<DevPreview />);
+    const cards = screen.queryAllByTestId(/^assistant-candidate-/);
+    expect(cards.length).toBeGreaterThanOrEqual(1);
+    cards.forEach((card) =>
+      expect(card.props.accessibilityRole).toBe('button')
+    );
+    expect(
+      screen.queryAllByTestId('assistant-next-action-OPEN_PLACE')
+    ).toHaveLength(0);
+  });
+
+  it('새 키 "후보 카드(이동 없음)" — 후보 카드는 그려지지만 눌리는 카드가 없고 장소 행도 없다', () => {
+    const key = keyByLabel('후보 카드(이동 없음)');
+    expect(key).toBeDefined();
+    mockSearchParams.state = key;
+    render(<DevPreview />);
+    const cards = screen.queryAllByTestId(/^assistant-candidate-/);
+    expect(cards.length).toBeGreaterThanOrEqual(1);
+    cards.forEach((card) =>
+      expect(card.props.accessibilityRole).not.toBe('button')
+    );
+    expect(
+      screen.queryAllByTestId('assistant-next-action-OPEN_PLACE')
+    ).toHaveLength(0);
+  });
 });

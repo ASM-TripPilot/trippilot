@@ -608,7 +608,7 @@
 ## src/pages/assistant/assistant-sheet/model/
 - `src/pages/assistant/assistant-sheet/model/answerFeedback.ts`  →  toggleRating · normalizeComment · canSubmitComment · FEEDBACK_THANKS · FeedbackPanel
 - `src/pages/assistant/assistant-sheet/model/assistantQueries.ts`  →  assistantKeys · appendMessages · useAssistantSession · useAssistantMessages · useAssistantSessions · SendTurnVariables · useSendTurn · useApplyProposal · useDismissProposal · useMarkProposal · useClearSession · FeedbackVariables · useMessageFeedback
-- `src/pages/assistant/assistant-sheet/model/cardModel.ts`  →  slotFaceLine
+- `src/pages/assistant/assistant-sheet/model/cardModel.ts`  →  slotFaceLine · CandidateTarget · candidateTarget · candidateConsumedActions
 - `src/pages/assistant/assistant-sheet/model/clientTurnId.ts`  →  newClientTurnId
 - `src/pages/assistant/assistant-sheet/model/composerLimit.ts`  →  COMPOSER_LIMIT
 - `src/pages/assistant/assistant-sheet/model/displayActions.ts`  →  CAPABILITIES_LABEL · CAPABILITIES_ACTION · displayActions · displayMessage · noContextActionIcon

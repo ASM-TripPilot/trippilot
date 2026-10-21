@@ -24,6 +24,7 @@ import {
 } from '../model/assistantQueries';
 import { useAnswerFeedback } from '../model/useAnswerFeedback';
 import { useTurnFlow } from '../model/useTurnFlow';
+import { candidateTarget } from '../model/cardModel';
 import { CAPABILITIES_LABEL, displayMessage } from '../model/displayActions';
 import { nextActionRoute } from '../model/nextActionRoute';
 import { resolveSheetState } from '../model/resolveSheetState';
@@ -162,15 +163,16 @@ export function AssistantSheetPage({
     }
   }
 
-  // 후보 카드 — 서버가 그 후보에 발급한 PICK_CANDIDATE quick reply 로만 보낸다(id 를 지어내지 않는다).
-  function handlePickCandidate(poiId: string): void {
-    const picked = rawMessages
-      .flatMap((message) => message.quickReplies ?? [])
-      .find(
-        (reply) =>
-          reply.action === 'PICK_CANDIDATE' && reply.params.poiId === poiId
+  // 후보 카드 — 그 카드가 속한 메시지에 서버가 발급한 PICK_CANDIDATE quick reply 로만 보낸다(id 를 지어내지 않는다,
+  // 다른 메시지의 것도 쓰지 않는다 — TRIP-1564). 장소 보기(OPEN)는 카드가 `onPressAction` 으로 따로 올린다.
+  function handlePickCandidate(message: AssistantMessage, poiId: string): void {
+    const target = candidateTarget(message, poiId);
+    if (target.kind === 'PICK') {
+      send(
+        { type: 'ACTION', quickReplyId: target.reply.id },
+        target.reply.label
       );
-    if (picked) send({ type: 'ACTION', quickReplyId: picked.id }, picked.label);
+    }
   }
 
   function handleApply(proposalId: string): void {
@@ -330,7 +332,7 @@ export function AssistantSheetPage({
         <MessageCard
           message={message}
           onPressAction={handleAction}
-          onPickCandidate={handlePickCandidate}
+          onPickCandidate={(poiId) => handlePickCandidate(message, poiId)}
           proposal={{
             applyingId,
             errors: proposalErrors,

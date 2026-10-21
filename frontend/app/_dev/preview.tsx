@@ -2686,6 +2686,41 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => renderAssistantPreview('candidates'),
   },
+  // TRIP-1564 — 후보 카드의 눌림 뜻 둘. 고르기(위 키) 말고 "장소 보기"(› 있음·빨간 행 없음)와 "이동 없음"(› 없음·눌러도 무반응).
+  {
+    key: 'assistant-candidate-open',
+    band: 'b',
+    label: 'b01 · 후보 카드(장소 보기)',
+    login: null,
+    render: () =>
+      renderAssistantPreview('candidates', {
+        mutate: (messages) =>
+          messages.map((message) => ({
+            ...message,
+            quickReplies: [],
+            nextActions: ['poi-bookcafe', 'poi-garden'].map((poiId) => ({
+              type: 'OPEN_PLACE',
+              label: '장소 보기',
+              params: { poiId },
+            })),
+          })),
+      }),
+  },
+  {
+    key: 'assistant-candidate-none',
+    band: 'b',
+    label: 'b01 · 후보 카드(이동 없음)',
+    login: null,
+    render: () =>
+      renderAssistantPreview('candidates', {
+        mutate: (messages) =>
+          messages.map((message) => ({
+            ...message,
+            quickReplies: [],
+            nextActions: [],
+          })),
+      }),
+  },
   {
     key: 'assistant-proposal',
     band: 'b',
