@@ -5,6 +5,7 @@ import com.trippilot.archive.application.VisitRecordService
 import com.trippilot.archive.domain.VisitMemo
 import com.trippilot.archive.domain.VisitPhotoMeta
 import com.trippilot.core.error.AuthenticationRequired
+import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
@@ -37,7 +38,7 @@ class VisitRecordController(private val service: VisitRecordService) {
         principal: Principal,
         @PathVariable tripId: UUID,
         @PathVariable visitCheckId: UUID,
-        @RequestBody request: AddPhotoRequest,
+        @Valid @RequestBody request: AddPhotoRequest,
     ): VisitPhotoResponse = VisitPhotoResponse.from(
         service.addPhoto(principal.accountId(), tripId, visitCheckId, request.toCommand()),
     )
@@ -76,7 +77,7 @@ class VisitRecordController(private val service: VisitRecordService) {
         principal: Principal,
         @PathVariable tripId: UUID,
         @PathVariable visitCheckId: UUID,
-        @RequestBody request: PutMemoRequest,
+        @Valid @RequestBody request: PutMemoRequest,
     ): VisitMemoResponse =
         VisitMemoResponse.from(service.putMemo(principal.accountId(), tripId, visitCheckId, request.text))
 

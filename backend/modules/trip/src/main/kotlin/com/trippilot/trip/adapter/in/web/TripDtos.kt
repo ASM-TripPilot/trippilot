@@ -8,11 +8,16 @@ import com.trippilot.trip.domain.TripCounts
 import com.trippilot.trip.domain.TripDayWindow
 import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripStatus
+import jakarta.validation.Valid
 import jakarta.validation.constraints.NotNull
+import org.hibernate.validator.constraints.CodePointLength
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.util.UUID
+
+/** `trip.title varchar(120)` — 생성·편집이 같은 상한을 쓴다. */
+private const val TITLE_MAX = 120
 
 /**
  * @property regionCode 행정구역 표준코드(TRIP-859). **주면 이름 조회를 건너뛴다** — 동명이지역
@@ -22,7 +27,11 @@ import java.util.UUID
  */
 data class DestinationDto(
     val seq: Int,
-    val region: String,
+    /**
+     * 상한은 `trip_destination.region` 폭이다. 생성은 카탈로그 판정이 모르는 이름을 400 으로 막지만 **편집은 그 판정을
+     * 거치지 않아**, 넘친 이름이 저장에서 22001 → 500 이었다(TRIP-1473). 두 요청의 `destinations` 에 `@Valid` 가 있어야 걸린다.
+     */
+    @field:CodePointLength(max = 60, message = "목적지 이름은 60자 이하입니다.") val region: String,
     val nights: Int,
     val regionCode: String? = null,
 ) {
@@ -32,16 +41,19 @@ data class DestinationDto(
     }
 }
 
-/** 여행 생성. 국내강제·날짜·Σnights 검증은 도메인. 취향 스냅숏은 클라이언트 제공(생성 시 동결). */
+/**
+ * 여행 생성. 국내강제·날짜·Σnights 검증은 도메인. 취향 스냅숏은 클라이언트 제공(생성 시 동결).
+ * [title] 상한은 `trip.title` 컬럼 폭이다 — 없으면 넘친 제목이 22001 로 500 이 된다(TRIP-1473).
+ */
 data class CreateTripRequest(
-    val title: String? = null,
+    @field:CodePointLength(max = TITLE_MAX, message = "제목은 ${TITLE_MAX}자 이하입니다.") val title: String? = null,
     @field:NotNull val startDate: LocalDate?,
     @field:NotNull val endDate: LocalDate?,
     val party: Int = 1,
     val companionType: CompanionType? = null,
     val budgetTotal: Long? = null,
     val preferenceSnapshot: Map<String, Any?> = emptyMap(),
-    val destinations: List<DestinationDto> = emptyList(),
+    @field:Valid val destinations: List<DestinationDto> = emptyList(),
     /**
      * 일과 창 — 하루 몇 시부터 움직이는가. 전부 생략하면 종전대로 기본 창(09:00~21:00)이다.
      *
@@ -61,13 +73,13 @@ data class CreateTripRequest(
 
 /** 여행 편집 — 가변 필드 대체. 취향 스냅숏은 불변. */
 data class EditTripRequest(
-    val title: String? = null,
+    @field:CodePointLength(max = TITLE_MAX, message = "제목은 ${TITLE_MAX}자 이하입니다.") val title: String? = null,
     @field:NotNull val startDate: LocalDate?,
     @field:NotNull val endDate: LocalDate?,
     val party: Int = 1,
     val companionType: CompanionType? = null,
     val budgetTotal: Long? = null,
-    val destinations: List<DestinationDto> = emptyList(),
+    @field:Valid val destinations: List<DestinationDto> = emptyList(),
     /**
      * 일과 창 — 하루 몇 시부터 움직이는가. 전부 생략하면 종전대로 기본 창(09:00~21:00)이다.
      *

@@ -3,12 +3,12 @@ package com.trippilot.savedaccommodation.application
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.savedaccommodation.domain.BaseAssignmentRepository
+import com.trippilot.savedaccommodation.domain.DuplicateExternalStay
 import com.trippilot.savedaccommodation.domain.RegisterRoute
 import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.savedaccommodation.api.event.StayRegistered
 import com.trippilot.savedaccommodation.domain.SavedStay
 import com.trippilot.savedaccommodation.domain.SavedStayRepository
-import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
@@ -68,8 +68,9 @@ class SavedStayService(
         }
         return try {
             doRegister(accountId, cmd)
-        } catch (e: DataIntegrityViolationException) {
-            // 동시 등록 경합 — 선검사를 빠져나간 레이스(ux_saved_stay_external). 500 이 아니라 409 다.
+        } catch (e: DuplicateExternalStay) {
+            // 동시 등록 경합 — 선검사를 빠져나간 레이스. 500 이 아니라 409 다. 어댑터가 **그 유니크 위반일 때만** 이 신호로
+            // 바꾼다 — 다른 위반(길이 22001·CHECK)은 그대로 올라온다(TRIP-1473: 종전엔 모든 무결성 위반을 409 로 읽었다).
             throw ConflictDetected(message = "이미 저장한 숙소입니다.")
         }
     }

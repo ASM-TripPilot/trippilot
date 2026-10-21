@@ -95,6 +95,11 @@ class PoiProposalIngestService(
         var updated = 0
 
         deduped.forEach { (ref, proposal) ->
+            // 컬럼 폭을 넘는 항목은 **그것만** 떨군다 — 저장까지 가면 22001 로 문서 전체가 롤백되고 500 이었다(TRIP-1473).
+            if (exceedsColumns(ref, proposal)) {
+                drop(DROP_TOO_LONG)
+                return@forEach
+            }
             val place = NormalizedPlace(
                 nameKo = proposal.nameKo,
                 lat = proposal.lat,
@@ -154,6 +159,14 @@ class PoiProposalIngestService(
     private fun toHttps(url: String?): String? =
         if (url != null && url.startsWith("http://", ignoreCase = true)) "https://" + url.substring(7) else url
 
+    /** `poi` 의 varchar 폭과 같은 단위(문자 = 코드 포인트)로 센다 — `length`(UTF-16)로 재면 이모지 이름을 잘못 떨군다. */
+    private fun exceedsColumns(ref: String, p: PoiProposal): Boolean =
+        ref.letters() > SOURCE_REF_MAX || p.nameKo.letters() > NAME_MAX ||
+            (p.region?.letters() ?: 0) > REGION_MAX || (p.openingHours?.letters() ?: 0) > OPENING_HOURS_MAX ||
+            (p.address?.letters() ?: 0) > ADDRESS_MAX
+
+    private fun String.letters(): Int = codePointCount(0, length)
+
     /**
      * 게이트 탈락 사유. 게이트 자체는 통과/불통만 말하므로(순수 판정) 사유는 여기서 되짚는다 —
      * 그래야 수집 쪽이 "좌표가 없어서인지 카테고리가 안 맞아서인지"를 안다.
@@ -172,6 +185,16 @@ class PoiProposalIngestService(
         const val DROP_DUPLICATE_IN_DOCUMENT = "duplicate_in_document"
         const val DROP_NO_NAME = "no_name"
         const val DROP_NO_COORD = "no_coord"
+
+        /** 이름·지역·영업시간·식별자·주소 중 하나가 `poi` 컬럼 폭을 넘는다. 잘라 넣지 않는다 — 잘린 이름은 다른 장소가 된다. */
+        const val DROP_TOO_LONG = "too_long"
+
+        /** `poi` 컬럼 폭(V2.x 마이그레이션) — 갈리면 위 판정이 22001 을 못 막는다. */
+        private const val NAME_MAX = 200
+        private const val REGION_MAX = 60
+        private const val OPENING_HOURS_MAX = 200
+        private const val SOURCE_REF_MAX = 64
+        private const val ADDRESS_MAX = 300
 
         /** 우리 8종에 없는 코드(예: AI 내부 전용 `STAY`) 또는 값 자체가 없음. */
         const val DROP_UNKNOWN_CATEGORY = "unknown_category"

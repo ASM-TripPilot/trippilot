@@ -21,6 +21,7 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
+import org.springframework.security.web.firewall.RequestRejectedException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.ExceptionHandler
@@ -160,6 +161,23 @@ class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body)
     }
 
+    /**
+     * 보안 방화벽(`StrictHttpFirewall`)이 거부한 요청 → **400**(TRIP-1473).
+     *
+     * 방화벽이 요청을 **읽는 순간** 검사하는 것 — 파라미터 이름(NUL·제어 문자), 헤더 이름·값의 제어 문자 등 — 은 그 값을
+     * 읽는 곳에서 던져진다. 컨트롤러 인자 해석처럼 디스패치 안이면 이리로 오고, 이 핸들러가 없으면 아래 `Exception` 갈래로
+     * 떨어져 500 이었다(실측: `GET /regions?q%00x=a`). 보안 필터 안에서 읽다 걸리거나 필터 체인 입구에서 거부되는 경우
+     * (경로의 `;`·`//`·`%25`·`..`, 허용되지 않은 HTTP 메서드)는 [requestRejectedBody] 를 쓰는 `SecurityConfig` 의 거부 핸들러가
+     * 같은 봉투를 낸다. 이 예외 하나로는 무엇이 거부됐는지 갈리지 않는다.
+     *
+     * 예외 메시지에는 거부된 이름·값·경로가 **그대로** 실려 있다 — 응답에도 로그에도 싣지 않는다(SECURITY-15).
+     */
+    @ExceptionHandler(RequestRejectedException::class)
+    fun handleRejected(ex: RequestRejectedException): ResponseEntity<ErrorResponse> {
+        log.warn("방화벽이 요청을 거부했습니다(디스패치 중) — 사유 원문은 싣지 않습니다")
+        return ResponseEntity.badRequest().body(requestRejectedBody())
+    }
+
     /** 미처리 예외 — 침묵 금지: 로깅 + 일반화 봉투(내부 정보 비노출). */
     @ExceptionHandler(Exception::class)
     fun handleUnexpected(ex: Exception): ResponseEntity<ErrorResponse> {
@@ -219,3 +237,10 @@ class GlobalExceptionHandler {
 
     private fun traceId(): String? = MDC.get(CorrelationIdFilter.MDC_KEY)
 }
+
+/** 방화벽 거부의 봉투 — 디스패치 안(위 핸들러)과 필터 체인(`SecurityConfig`) 두 곳이 같은 모양을 내도록 한 벌만 둔다. */
+fun requestRejectedBody(): ErrorResponse = ErrorResponse(
+    ErrorResponse.Body(
+        ErrorCode.VALIDATION_ERROR.name, "허용되지 않는 형식의 요청입니다.", MDC.get(CorrelationIdFilter.MDC_KEY), null,
+    ),
+)
