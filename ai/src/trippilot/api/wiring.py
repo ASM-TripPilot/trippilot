@@ -121,6 +121,7 @@ from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
 from trippilot.assembly_engine.repair import RepairChange
 from trippilot.assembly_engine.scorer import build_rule_score
+from trippilot.assembly_engine.parking import ParkingPlan, plan_parking
 from trippilot.assembly_engine.travel import (
     TRANSIT_SOURCE, WALKED_SOURCE, TravelEstimator, WalkFirst, haversine_km,
 )
@@ -877,7 +878,12 @@ def _render_distance(estimate: TravelEstimate, mode: TransportMode) -> str:
     _, road_km = estimate.distance_km_range
     suffix = " 추정" if estimate.is_estimated else ""
     shown = {WALKED_SOURCE: TransportMode.WALK, TRANSIT_SOURCE: TransportMode.PUBLIC}.get(estimate.source, mode)
-    return f"약 {road_km:.1f}km · {_TRANSPORT_LABELS[shown]}{suffix}"
+    label = f"약 {road_km:.1f}km · {_TRANSPORT_LABELS[shown]}{suffix}"
+    if estimate.walk_km >= 0.05:
+        # 자차 주차 거점 오가는 걷기(assembly_engine/parking) — 합친 거리가 앞에 있어 하루 총거리 파서(FE legDistance,
+        # 첫 숫자)는 그대로 맞고, 괄호는 거리라 INV-3 과 무관하다. 0.0km 로 보일 꼬리는 적지 않는다
+        label += f" (주차장 도보 {estimate.walk_km:.1f}km 포함)"
+    return label
 
 
 def _distance_ranges(
@@ -1048,15 +1054,24 @@ class ChainAssemblyProvider:
         self._trace = trace
         self._cfg = config
 
-    def walker(self, walk_max_km: float | None) -> TravelEstimator:
-        """요청별 도보 상한의 추정기 — None 이면 공용 추정기(설정 기본 700m). 조립·화면 거리가 같이 쓴다."""
-        if walk_max_km is None:
+    def walker(self, walk_max_km: float | None, parking: ParkingPlan | None = None) -> TravelEstimator:
+        """요청별 도보 상한·주차 거점의 추정기 — 둘 다 없으면 공용 추정기(설정 기본 700m). 조립·화면 거리가 같이 쓴다."""
+        if walk_max_km is None and parking is None:
             return self._est
-        return TravelEstimator(replace(self._cfg, public_walk_max_km=walk_max_km))
+        cfg = self._cfg if walk_max_km is None else replace(self._cfg, public_walk_max_km=walk_max_km)
+        return TravelEstimator(cfg, parking)
+
+    def parking_for(self, poi_index: Mapping[PoiId, Poi], walk_max_km: float | None) -> ParkingPlan:
+        """자차 여행의 주차 거점 — 풀 전체를 도보 상한(없으면 설정 기본)으로 묶는다. 조립과 화면 거리가 같은 계획을 쓴다."""
+        return plan_parking(
+            (poi.coord for poi in poi_index.values()),
+            walk_max_km=walk_max_km if walk_max_km is not None else self._cfg.public_walk_max_km,
+            detour_factor=self._cfg.detour_factor,
+        )
 
     def for_pool(self, poi_index: Mapping[PoiId, Poi],
-                 walk_max_km: float | None = None) -> HybridAssemblyFacade:
-        est = self.walker(walk_max_km)
+                 walk_max_km: float | None = None, parking: ParkingPlan | None = None) -> HybridAssemblyFacade:
+        est = self.walker(walk_max_km, parking)
         stages = (
             OrToolsAssembler(poi_index, est, self._cfg),
             RuleFallbackAssembler(poi_index, est, self._cfg),
@@ -1949,7 +1964,7 @@ class WiredItineraryOrchestrator:
         solution = outcome.solution
         coords = self._coords_for(solution, outcome.slot_alternatives)
         scoring_mode, degradations = _scoring_signal(outcome)
-        walk = self._walk_first(outcome.walk_max_km)
+        walk = self._walk_first(outcome.walk_max_km, outcome.parking)
         (distance_ranges, slot_alternatives), _ = self._render_distances(
             lambda port: (
                 self._distances_for(request, solution, coords, walk(port)),
@@ -1998,9 +2013,10 @@ class WiredItineraryOrchestrator:
             solution, anchors, coords, port, _transport_from(request)
         )
 
-    def _walk_first(self, walk_max_km: float | None) -> Callable[[TravelPort], TravelPort]:
+    def _walk_first(self, walk_max_km: float | None,
+                    parking: ParkingPlan | None = None) -> Callable[[TravelPort], TravelPort]:
         """조립과 같은 추정기로 구간 수단을 정해 화면 거리를 재는 감싸개(도보 여행의 먼 구간 때문에 늘 감싼다)."""
-        walker = self._assembly_provider.walker(walk_max_km)
+        walker = self._assembly_provider.walker(walk_max_km, parking)
         return lambda port: WalkFirst(port, walker)
 
     def _render_distances(
@@ -3507,7 +3523,7 @@ class WiredItineraryOrchestrator:
         # 두 순회 모두 1차 패스로 받아 적는다 — 좌표 미상 전파 규칙이 달라 구간 집합이
         # 다르다(`_total_distance_km` 은 직전 유효점을 잇는다). 한 표를 같이 쓰면 같은
         # 구간을 두 번 실측하지 않는다 (TRIP-1179).
-        walk = self._walk_first(outcome.walk_max_km)
+        walk = self._walk_first(outcome.walk_max_km, outcome.parking)
         (distance_ranges, total_km), report = self._render_distances(
             lambda port: (
                 _distance_ranges(solution, anchors, coords, walk(port), transport),

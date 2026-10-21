@@ -90,7 +90,10 @@ class _ProblemCapturingProvider:
         self._inner = inner
         self.problems = []
 
-    def for_pool(self, poi_index, walk_max_km=None):
+    def parking_for(self, poi_index, walk_max_km):
+        return self._inner.parking_for(poi_index, walk_max_km)
+
+    def for_pool(self, poi_index, walk_max_km=None, parking=None):
         facade = self._inner.for_pool(poi_index)
         outer = self
 
