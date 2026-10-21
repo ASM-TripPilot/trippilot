@@ -118,6 +118,9 @@ const CATEGORY_CODES: Record<PoiCategory, string> = {
   자연: 'nature',
   쇼핑: 'shopping',
   문화: 'culture',
+  액티비티: 'activity',
+  미술: 'art',
+  술집: 'bar',
 };
 
 const CATEGORY_CHIPS: {

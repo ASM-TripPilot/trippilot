@@ -660,8 +660,8 @@ describe('🔴 D · TRIP-1115 — 라우트 date 가 있으면 그 날에 끼워
   });
 });
 
-describe('🔴 A2 · TRIP-798 — 칩 6종·순서 + 전시→문화 (라벨≠전송값)', () => {
-  it('A2a · 칩이 전체/맛집/명소/카페/전시/야경 6종·이 순서로 렌더된다', async () => {
+describe('🔴 A2 · TRIP-798 — 칩 8종·순서 + 전시→문화 (라벨≠전송값)', () => {
+  it('A2a · 칩이 전체/맛집/명소/카페/전시/미술/야경/술집 8종·이 순서로 렌더된다', async () => {
     await renderPage();
 
     // 노드가 아니라 testID 문자열 배열로 사영한 뒤 비교(785 노드배열 toEqual SIGABRT 회피).
@@ -674,7 +674,9 @@ describe('🔴 A2 · TRIP-798 — 칩 6종·순서 + 전시→문화 (라벨≠�
       'itinerary-place-category-명소',
       'itinerary-place-category-카페',
       'itinerary-place-category-전시',
+      'itinerary-place-category-미술',
       'itinerary-place-category-야경',
+      'itinerary-place-category-술집',
     ]);
   });
 

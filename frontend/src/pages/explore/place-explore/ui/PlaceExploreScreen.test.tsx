@@ -99,6 +99,9 @@ const CATEGORY_CHIPS: { code: string; label: string }[] = [
   { code: 'nature', label: '자연' },
   { code: 'shopping', label: '쇼핑' },
   { code: 'culture', label: '문화' },
+  { code: 'activity', label: '액티비티' },
+  { code: 'art', label: '미술' },
+  { code: 'bar', label: '술집' },
 ];
 
 /** 콜백 4개는 별도로 들고 반환한다 — props 객체로 묶으면 `.mock` 타입이 사라진다. */
@@ -204,7 +207,7 @@ describe('PlaceExploreScreen — 담김 표기 (AC-2)', () => {
 });
 
 describe('PlaceExploreScreen — 카테고리 칩 (AC-3)', () => {
-  it('"전체" + 계약 enum 7종 = 8개가 나열되고, 선택된 칩만 활성이다', () => {
+  it('"전체" + 계약 enum 10종 = 11개가 나열되고, 선택된 칩만 활성이다', () => {
     renderScreen({ selectedCategory: '맛집' });
 
     expect(
@@ -352,8 +355,8 @@ describe('다섯 얼굴 · 실패 배너 · 대기 하트', () => {
     makePlace('p5', '자갈치 시장', '맛집', '중구', 21),
   ];
 
-  /** 카테고리 칩 code(전체 + PoiCategory 7종 선언 순) — 누를 수 있는 것 완전일치 목록의 재료.
-   * `PlaceExploreScreen.tsx`의 `CATEGORY_CODES`/`CATEGORY_CHIPS`와 같은 값이라 8개가 안 바뀐다. */
+  /** 카테고리 칩 code(전체 + PoiCategory 10종 선언 순) — 누를 수 있는 것 완전일치 목록의 재료.
+   * `PlaceExploreScreen.tsx`의 `CATEGORY_CODES`/`CATEGORY_CHIPS`와 같은 값이라 11개가 안 바뀐다. */
   const CATEGORY_CODES = [
     'all',
     'attraction',
@@ -363,6 +366,9 @@ describe('다섯 얼굴 · 실패 배너 · 대기 하트', () => {
     'nature',
     'shopping',
     'culture',
+    'activity',
+    'art',
+    'bar',
   ];
 
   /** 위 본 파일의 렌더 헬퍼(`renderScreen`)와 **완전히 같은 8개 prop** 만 넘긴다 — 새 prop 은 하나도 안 준다.
