@@ -20,8 +20,7 @@ import type {
   ItineraryDaysItemSlotsItem,
   Opportunity,
 } from '@/shared/api/index.schemas';
-import type { MapCenter, RouteToggleProps } from '@/shared/map';
-import { RouteToggle } from '@/shared/map';
+import type { MapCenter } from '@/shared/map';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { DayChipScroller, MapSheetShell } from '@/widgets/map-sheet-shell';
 import { formatCoPickDayHeader } from '@/features/itinerary/index.view';
@@ -80,8 +79,6 @@ const HALF_SNAP = '55%';
 // 오버레이 줄 윗변은 셸이 정한다: 세이프에어리어 top + 셸 `pt-sm`(8). 비율(%)로 두면 상태바가 큰
 // 기기에서 시트가 뒤로가기·일자 칩·트리거 알약을 덮는다(TRIP-748 03b 경고-2).
 const OVERLAY_ROW_TOP_PAD = 8;
-// TRIP-1496 · 경로 토글 줄 높이 + 칩 줄과의 간격(pt) — RouteToggle 알약(p-[3px]·py-[5px]·13pt 글자 ≈ 34) + gap 8. className 기준 추정이라 6-b 실기에서 조정한다.
-const ROUTE_TOGGLE_ROW_RESERVE = 42;
 const EXPANDED_GAP_BELOW_OVERLAY_ROW = 104;
 // 수정 팝업 컨테이너 폭(Figma B 139) — 위치 계산(`editPopupPlacement`)의 입력이고 앵커 폭이다.
 const EDIT_POPUP_WIDTH = 139;
@@ -112,7 +109,6 @@ export interface LiveHubViewProps {
   initialSnapIndex?: number;
   /** TRIP-1494 — 바뀔 때마다 시트를 `initialSnapIndex` 로 다시 올린다(재계획 재적용). */
   expandSignal?: number;
-  currentLocation?: MapCenter;
   onBack: () => void;
   onSelectDay: (index: number) => void;
   /** 수정 팝업의 "AI에게 맡기기" 항목 — 수동 재계획 진입(BR-U4-10). */
@@ -175,14 +171,10 @@ export interface LiveHubViewProps {
    * TRIP-1339 — U10 자동 기록 강등·폐기 안내 1줄(Figma u10c 4857:3012). 시트 헤더 바로 위 연회색 띠 —
    * 제목 + 오른쪽 `설정 열기`(settings 일 때만) + 사유 줄. 미전달이면 띠 없음(플래그 OFF 무회귀). 푸시 아님.
    */
-  /** TRIP-1340 — 서버 출처가 자동인 방문의 poiId(칩). 페이지가 VisitCheck 출처에서 고른다. */
-  autoRecordedPoiIds?: ReadonlySet<string>;
-  /** TRIP-1340 — 자동 기록 카드 `⋯` → 되돌리기 확인(arg = poiId). 미주입이면 진입 없음. */
-  onPressRevertAuto?: (poiId: string) => void;
-  /** TRIP-1343 — 지도 위 `계획｜실제` 토글(Figma u10e). 미전달이면 토글 없음(플래그 OFF 무회귀). */
-  routeToggle?: Omit<RouteToggleProps, 'testIDPrefix'>;
-  /** TRIP-1343 — 실제 경로 세그먼트(토글이 실제일 때만 페이지가 준다). */
+  /** TRIP-1520 — 그날 실제 경로 세그먼트. 주면 계획 동선 위에 늘 겹친다(토글 없음, BR-U10-41 개정). */
   actualRoute?: MapCenter[][];
+  /** TRIP-1535 — 지도에 내 위치(네이버 기본 현위치). 조건(오늘·동의)은 페이지가 판단하고, OS 권한은 지도가 조회만 한다. */
+  showMyLocation?: boolean;
   automationNotice?: {
     title: string;
     detail: string;
@@ -210,7 +202,6 @@ export function LiveHubView({
   slots,
   initialSnapIndex = 0,
   expandSignal,
-  currentLocation,
   onBack,
   onSelectDay,
   onPressAiReplan,
@@ -236,10 +227,8 @@ export function LiveHubView({
   onPressDirections,
   directionsNotice,
   automationNotice,
-  autoRecordedPoiIds,
-  onPressRevertAuto,
-  routeToggle,
   actualRoute,
+  showMyLocation,
 }: LiveHubViewProps): ReactElement {
   // Provider 없는 렌더(jest)에서는 null — useSafeAreaInsets 는 throw 하므로 컨텍스트를 직접 읽는다.
   const insets = useContext(SafeAreaInsetsContext);
@@ -390,7 +379,6 @@ export function LiveHubView({
         center={center}
         pins={pins}
         mapViewOnly={false}
-        currentLocation={currentLocation}
         overlay={overlay}
         snapPoints={snapPoints}
         initialIndex={initialSnapIndex}
@@ -399,21 +387,11 @@ export function LiveHubView({
         enablePanDownToClose
         snapRequest={snapRequest}
         mapLogoMargin={MAP_LOGO_MARGIN}
-        // TRIP-1496 · 경로 토글 줄(칩 줄 아래, 항상 보임)이 맨 위 핀을 가리지 않게 그 높이만큼 위 예약을 더한다(알약은 숨으므로 제외).
-        fitTopReserve={routeToggle ? ROUTE_TOGGLE_ROW_RESERVE : 0}
         // TRIP-1416 · 그날 핀 전부를 시트 중간(55%) 칸 위 띠에 맞춘다(Q-088 — 첫 핀 중심 고정 줌이면 나머지가 시트 뒤).
         fitPins
-        mapCard={
-          routeToggle ? (
-            <View className="gap-sm">
-              <RouteToggle testIDPrefix="execution-live" {...routeToggle} />
-              {hiddenPillKey === pillKey ? null : triggerChip}
-            </View>
-          ) : hiddenPillKey === pillKey ? undefined : (
-            triggerChip
-          )
-        }
+        mapCard={hiddenPillKey === pillKey ? undefined : triggerChip}
         actualRoute={actualRoute}
+        showMyLocation={showMyLocation}
         onMapTap={hidePill}
         onSheetScrollBeginDrag={hidePill}
         onSheetAnimate={(from, to) => {
@@ -551,13 +529,6 @@ export function LiveHubView({
                     directionsNotice={
                       directionsNotice?.poiId === slot.poiId
                         ? directionsNotice.text
-                        : undefined
-                    }
-                    autoRecorded={autoRecordedPoiIds?.has(slot.poiId) === true}
-                    onPressRevertAuto={
-                      onPressRevertAuto &&
-                      autoRecordedPoiIds?.has(slot.poiId) === true
-                        ? () => onPressRevertAuto(slot.poiId)
                         : undefined
                     }
                   />

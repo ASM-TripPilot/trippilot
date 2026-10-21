@@ -128,9 +128,6 @@ export interface MapSheetShellProps<T = unknown> {
   /** 지도 잠금 여부(TRIP-746 가산) — 미전달이면 기본 잠금, 기본 배열의 닫힘 칸에서만 풀림(TRIP-920). i01 허브만
    *  `false` 로 열어 여행 중 자유 탐색을 유지한다(TRIP-397 결정 계승). */
   mapViewOnly?: boolean;
-  /** 현재위치 점(TRIP-746 가산) — `<MapView currentLocation>` 으로 흘린다(TRIP-745 계약). 미전달이면
-   *  점 없음. */
-  currentLocation?: MapCenter;
   /** 시트 스냅 이동 시작(TRIP-748 가산) — `<BottomSheet onAnimate>` 로 그대로 흘린다. 마운트 가드
    *  같은 판단은 소비처(i01 허브) 몫이다. 미전달=미부착. */
   onSheetAnimate?: (fromIndex: number, toIndex: number) => void;
@@ -172,6 +169,8 @@ export interface MapSheetShellProps<T = unknown> {
   /** TRIP-1522 — 지도 로고 여백을 `<MapView logoMargin>` 으로 그대로 흘린다(시트가 내려가 지도가 드러나도 바에 안 가리게).
    *  렌더마다 새 객체를 넘기지 않는다(MapView 가 memo). 미전달=SDK 기본. */
   mapLogoMargin?: MapViewProps['logoMargin'];
+  /** TRIP-1535 — `<MapView showMyLocation>` 으로 그대로 흘린다. 미전달=현행. */
+  showMyLocation?: boolean;
 }
 
 export function MapSheetShell<T = unknown>({
@@ -194,7 +193,6 @@ export function MapSheetShell<T = unknown>({
   list,
   snapPoints,
   mapViewOnly,
-  currentLocation,
   onSheetAnimate,
   onSheetScrollBeginDrag,
   onMapTap,
@@ -208,6 +206,7 @@ export function MapSheetShell<T = unknown>({
   enablePanDownToClose,
   snapRequest,
   mapLogoMargin,
+  showMyLocation,
 }: MapSheetShellProps<T>): ReactElement {
   // 지도 로드 실패(TRIP-919). 폴백 중엔 MapView 가 트리에서 빠지므로, 재시도로 이 값을 풀면 MapView 가
   // 새 인스턴스로 다시 마운트돼 실패 알림(notifiedRef)도 처음부터 다시 돈다 — 별도 key 가 필요 없다.
@@ -289,7 +288,6 @@ export function MapSheetShell<T = unknown>({
               center={center}
               pins={pins}
               viewOnly={mapLocked}
-              currentLocation={currentLocation}
               onTapMap={onMapTap}
               radiusCircle={radiusCircle}
               fitPins={fitPins}
@@ -297,6 +295,7 @@ export function MapSheetShell<T = unknown>({
               drawPathOnMount={drawPathOnMount}
               actualRoute={actualRoute}
               logoMargin={mapLogoMargin}
+              showMyLocation={showMyLocation}
               onLoadFailed={handleMapLoadFailed}
             />
           ))}

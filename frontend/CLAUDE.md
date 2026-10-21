@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working in `fro
 
 **규칙 문서 편집:** `frontend/.claude/**`(에이전트·스킬·settings·이 파일)를 고칠 때는 `harness-rule-edit` 스킬을 사용하라 — 본문에 무엇을 남기고 무엇을 원장으로 보내는지, 압축 전 원장 확인 순서가 거기 있다.
 
-**모델 배치:** 자리별 모델의 정본은 **각 에이전트 frontmatter**다(`frontend/.claude/agents/*.md`). **예외는 없다** — 사이클 SKILL이 오버라이드하던 한 자리(구 4-b)는 2026-07-31 [테스트] 통합 복귀로 사라졌다. 배치를 두 군데 적으면 갈라진다. ⚠️ **메타 스킬 `harness:harness`의 "모든 에이전트는 `model: "opus"`" 지침보다 현재 frontmatter가 우선한다.** 하네스 정비 중 그 스킬이 로드돼도 일괄 opus로 되돌리지 마라 — 배치 원칙(자리별 실패 가시성·되돌리기 비용·호출 빈도)은 이전 모델 세대의 12사이클 실측에서 나왔고, 현 Opus 5.5 배치 자체는 아래 effort 유지 판정으로 관찰 중이다. 근거·관찰 상태는 변경이력에 있다.
+**모델 배치:** 자리별 모델의 정본은 **각 에이전트 frontmatter**다(`frontend/.claude/agents/*.md`). **예외는 없다** — 사이클 SKILL이 오버라이드하던 한 자리(구 4-b)는 2026-07-31 [테스트] 통합 복귀로 사라졌다. 배치를 두 군데 적으면 갈라진다. ⚠️ **메타 스킬 `harness:harness`의 "모든 에이전트는 `model: "opus"`" 지침보다 현재 frontmatter가 우선한다.** 하네스 정비 중 그 스킬이 로드돼도 일괄 opus로 되돌리지 마라 — 배치 원칙(자리별 실패 가시성·되돌리기 비용·호출 빈도)은 이전 모델 세대의 12사이클 실측에서 나왔고, 코드를 쓰고 심판하는 4자리(spec-analyst·test-designer·implementer·code-critic)는 2026-10-20 사용자 결정으로 Sonnet 5.5 로 내렸고(effort 는 `high` 유지), 이 배치는 아래 「sonnet 전환 유지 판정」으로 관찰한다. 근거·관찰 상태는 변경이력에 있다.
 
 **effort 배치:** 같은 원리로 자리별이다 — **에이전트는 frontmatter `effort:`, 오케스트레이터(메인 루프)는 `frontend/.claude/settings.json`의 `effortLevel`**. 전역 `~/.claude/settings.json`은 건드리지 않는다(다른 프로젝트가 딸려간다). 가르는 기준은 모델 배치와 같다 — **실패 가시성 × 되돌리기 비용**. 코드를 쓰거나 심판을 설계하는 자리(spec-analyst·test-designer·implementer·code-critic)는 얕아져도 조용히 통과하고 되돌리려면 새 사이클을 열어야 하므로 effort를 **명시해 상속을 끊는다**(`high`). 메인 루프는 학습 제시·주해·RESUME 기록이라 실패가 즉시 눈에 보이고, 캐시 읽기의 절반을 쓰는 자리다(`medium`). 판독 자리(figma-qa)도 `medium`이다.
 
@@ -23,6 +23,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working in `fro
 ⚠️ **경량 사이클에서는 오케스트레이터가 직접 구현한다** — 그때 메인 루프는 "코드를 안 쓰는 자리"라는 전제가 깨지므로 `/effort high`로 올리고 시작한다. 이 단서를 빼면 규칙이 조용히 물린다.
 
 *유지 판정: 3사이클 관찰 — 메인 루프 요청 수·피크 컨텍스트·사이클 소요 시간을 센다(기준선 151요청/391k). 안 줄면 되돌린다. 줄더라도 code-critic의 심판 사각지대 지적이 줄거나 퀴즈 오답·막힘이 늘면 코드 자리를 `xhigh`로 되돌린다. 지표가 유지되면 코드 자리를 `medium`으로 한 칸 더 내려 본다.*
+
+*sonnet 전환 유지 판정(2026-10-20): 3사이클 관찰 — code-critic 차단·경고 건수, 5-b 이후 [검증]에서 새로 나온 결함, 구현 재시도 횟수, 퀴즈 오답·막힘을 센다(기준선 = 2026-10-17 QA 7회차 배치의 Opus 5.5 사이클). 차단·재시도가 늘거나 심판 사각 지적이 줄면 code-critic·test-designer 부터 Opus 5.5 로 되돌린다. 지표가 유지되면 spec-analyst 를 `medium` 으로 한 칸 더 내려 본다.*
 
 **Ponytail(게으른 구현 사다리):** 플러그인이 정본이다 — **사다리 7단·하드룰 본문을 하네스에 옮겨 적지 마라**(사본은 갈라진다). 하네스가 정하는 것은 배선뿐이고, 그 정본은 `frontend/.claude/settings.json`의 `env` 두 줄이다.
 

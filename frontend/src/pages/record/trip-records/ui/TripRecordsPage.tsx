@@ -18,19 +18,11 @@ import { useSpontaneousNames } from '@/features/check-visit';
 import { useVisitCheck } from '@/features/check-visit';
 import { isOptimisticVisit } from '@/features/check-visit';
 import {
-  AutoRevertDialog,
-  autoRecordPart,
-  useRevertAutoVisit,
-  type AutoRevertError,
-  type AutoRevertPart,
-} from '@/features/check-visit';
-import {
   isLocationAutomationEnabled,
   routeDayForDate,
   routeDayToSegments,
   useTripRoutes,
 } from '@/shared/location';
-import { actualDistanceLabel } from '@/shared/map';
 import { useGetMeLocationConsent } from '@/shared/api/index.hooks';
 import { SkipVisitDialog } from './SkipVisitDialog';
 import type { VisitRecordCardVM } from './VisitRecordCard';
@@ -180,51 +172,19 @@ export function TripRecordsPage({
     : DEFAULT_CENTER;
 
   const automationOn = isLocationAutomationEnabled();
-  const revertAuto = useRevertAutoVisit(tripId);
-  const [revertTarget, setRevertTarget] = useState<{
-    visitCheckId: string;
-    nameKo: string;
-    part: AutoRevertPart;
-    error: AutoRevertError;
-  } | null>(null);
-  const handleRevertAuto = (visitCheckId: string): void => {
-    const visit = records.data?.visits.find(
-      (v) => v.visitCheckId === visitCheckId
-    );
-    const part = visit ? autoRecordPart(visit) : null;
-    if (!visit || !part) return;
-    const card = cards.find((c) => c.visitCheckId === visitCheckId);
-    setRevertTarget({
-      visitCheckId,
-      nameKo: card?.nameKo ?? '이 장소',
-      part,
-      error: null,
-    });
-  };
 
   // TRIP-1343 · 풀 지도 실제 경로 — 그날 경로가 있고 위치 동의가 있을 때만(BR-U10-41). 플래그 OFF 면 조회 0.
   const locationConsent = useGetMeLocationConsent({
     query: { enabled: automationOn },
   });
   const routes = useTripRoutes(automationOn ? tripId : null);
-  const [routeMode, setRouteMode] = useState<'plan' | 'actual'>('plan');
   const dayRoute = routeDayForDate(routes.routes, activeDay);
-  const routeSegments = dayRoute ? routeDayToSegments(dayRoute) : [];
   const consentOn = locationConsent.data?.legalConsent === true;
-  const actualAvailable = consentOn && routeSegments.length > 0;
-  const routeToggle = automationOn
-    ? {
-        mode: actualAvailable ? routeMode : ('plan' as const),
-        actualAvailable,
-        disabledReason: !consentOn
-          ? '위치 동의가 없어요'
-          : '이 날 기록된 경로가 없어요',
-        distanceLabel: dayRoute
-          ? actualDistanceLabel(dayRoute.distanceM)
-          : undefined,
-        onChange: setRouteMode,
-      }
-    : undefined;
+  // TRIP-1520 · 토글 없이 늘 겹친다(BR-U10-41 개정).
+  const actualRoute =
+    automationOn && consentOn && dayRoute
+      ? routeDayToSegments(dayRoute)
+      : undefined;
 
   // TRIP-1372 — 순서는 서버가 도착 순으로 준다(TRIP-1315). 앱이 다시 세우지 않고 배열 순서가 곧 방문 순서다.
   const cards: VisitRecordCardVM[] = (records.data?.visits ?? []).map(
@@ -243,8 +203,6 @@ export function TripRecordsPage({
       arrivedLabel: visit.arrivedAt
         ? seoulTime(new Date(visit.arrivedAt))
         : null,
-      // TRIP-1340 — 서버 출처에서 파생(플래그 OFF 빌드는 자동 기록 자체가 없다).
-      autoRecorded: automationOn && autoRecordPart(visit) !== null,
     })
   );
 
@@ -325,12 +283,7 @@ export function TripRecordsPage({
   return (
     <View className="flex-1">
       <TripRecordsView
-        routeToggle={routeToggle}
-        actualRoute={
-          routeToggle?.mode === 'actual' && actualAvailable
-            ? routeSegments
-            : undefined
-        }
+        actualRoute={actualRoute}
         tripTitle={trip.data?.title}
         dayTabs={dayTabs}
         activeDay={activeDay}
@@ -368,7 +321,6 @@ export function TripRecordsPage({
               onPressComplete={handleComplete}
               onPressSkip={handleSkip}
               onPressEditTime={handleEditTime}
-              onPressRevertAuto={automationOn ? handleRevertAuto : undefined}
             />
           ) : undefined
         }
@@ -432,33 +384,6 @@ export function TripRecordsPage({
           now={new Date().toISOString()}
           onSave={handleSaveTimes}
           onCancel={() => setEditingId(null)}
-        />
-      ) : null}
-
-      {revertTarget != null ? (
-        <AutoRevertDialog
-          testIDPrefix="record-visit-auto-revert"
-          placeName={revertTarget.nameKo}
-          part={revertTarget.part}
-          pending={revertAuto.pending}
-          error={revertTarget.error}
-          onCancel={() => setRevertTarget(null)}
-          onConfirm={() => {
-            void revertAuto
-              .revert(revertTarget.visitCheckId)
-              .then((outcome) => {
-                if (outcome === 'ok') setRevertTarget(null);
-                else
-                  setRevertTarget((t) =>
-                    t
-                      ? {
-                          ...t,
-                          error: outcome === 'media' ? 'media' : 'failed',
-                        }
-                      : t
-                  );
-              });
-          }}
         />
       ) : null}
 

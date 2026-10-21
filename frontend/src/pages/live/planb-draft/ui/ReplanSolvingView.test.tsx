@@ -17,7 +17,7 @@ jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
  *  - 옛 i12 화면의 부제·체크리스트·안심 노트·[백그라운드로]는 사라졌다.
  *  - [취소]는 onCancel 만, ‹ 는 onBack 만 부른다(옛 i12 S2·S3 계약 계승).
  *
- * ⚠️ 원리적 사각: 40% 높이·지도 핀·경로선·현재위치 점은 통과형 시트 목·네이버 목이 못 본다(AC-V1 육안).
+ * ⚠️ 원리적 사각: 40% 높이·지도 핀·경로선은 통과형 시트 목·네이버 목이 못 본다(AC-V1 육안).
  */
 
 const photo = (name: string) => ({ uri: `file:///${name}.jpg` });

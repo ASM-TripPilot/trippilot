@@ -34,6 +34,8 @@ export interface JudgeState {
   /** 계획 순번(보조 규칙 BR-U10-18 의 "직전 슬롯"). */
   order: readonly string[];
   slots: Readonly<Record<string, SlotJudgeState>>;
+  /** 가장 최근 정확 표본 시각(TRIP-1517). 없으면(옛 저장본 포함) 근거 없음. */
+  lastGoodSampleAt?: number;
 }
 
 export type JudgeEvent =
@@ -62,7 +64,11 @@ export type JudgeEmit =
 
 type JudgeConfig = Pick<
   AutomationConfig,
-  'maxAccuracyM' | 'arriveDwellMs' | 'minStayForCompleteMs' | 'exitConfirmMs'
+  | 'maxAccuracyM'
+  | 'arriveDwellMs'
+  | 'minStayForCompleteMs'
+  | 'exitConfirmMs'
+  | 'preEnterSampleMs'
 >;
 
 const IDLE: SlotJudgeState = { phase: 'IDLE', goodSample: false };
@@ -85,18 +91,24 @@ export function judge(
   const at = event.type === 'wake' ? now : event.at;
 
   // 표본은 확정보다 먼저 반영한다 — 창 끝의 표본도 근거가 된다.
+  let lastGoodSampleAt = state.lastGoodSampleAt;
   if (event.type === 'sample' && event.accuracyM <= config.maxAccuracyM) {
+    lastGoodSampleAt = Math.max(lastGoodSampleAt ?? event.at, event.at);
     for (const key of Object.keys(slots)) {
       const s = slots[key];
-      const since = s.enterAt ?? s.arrivedAt;
+      // 진입 직전 preEnterSampleMs 안의 표본도 인정한다 — 표본·진입 처리 순서가 갈려도 결과가 같게(TRIP-1517).
+      const since =
+        s.enterAt != null ? s.enterAt - config.preEnterSampleMs : s.arrivedAt;
+      if (since == null || since > event.at) continue;
       if (
-        (s.phase === 'ENTERED' ||
-          s.phase === 'ARRIVED' ||
-          s.phase === 'EXIT_PENDING') &&
-        since != null &&
-        since <= event.at
+        s.phase === 'ENTERED' ||
+        s.phase === 'ARRIVED' ||
+        s.phase === 'EXIT_PENDING'
       ) {
         slots[key] = { ...s, goodSample: true };
+      } else if (s.phase === 'HELD') {
+        // 근거가 늦게 배달됐을 뿐이면 보류를 푼다 — 포그라운드 wake 가 표본보다 먼저 와 보류로 굳힌 경우(TRIP-1517 5-b).
+        slots[key] = { ...s, phase: 'ENTERED', goodSample: true };
       }
     }
   }
@@ -105,7 +117,7 @@ export function judge(
 
   if (event.type === 'enter' || event.type === 'exit') {
     const s = slots[event.slotKey];
-    if (s) slots[event.slotKey] = applyMove(s, event);
+    if (s) slots[event.slotKey] = applyMove(s, event, lastGoodSampleAt, config);
   } else if (event.type === 'external') {
     const s = slots[event.slotKey];
     if (s && s.phase !== 'DONE') {
@@ -118,19 +130,27 @@ export function judge(
     }
   }
 
-  return { state: { order: state.order, slots }, emit };
+  return {
+    state: { order: state.order, slots, lastGoodSampleAt },
+    emit,
+  };
 }
 
 function applyMove(
   s: SlotJudgeState,
-  event: Extract<JudgeEvent, { type: 'enter' | 'exit' }>
+  event: Extract<JudgeEvent, { type: 'enter' | 'exit' }>,
+  lastGoodSampleAt: number | undefined,
+  config: JudgeConfig
 ): SlotJudgeState {
   if (event.type === 'enter') {
     if (s.phase === 'IDLE') {
       return {
         phase: 'ENTERED',
         enterAt: event.at,
-        goodSample: false,
+        // 진입 직전 창 안에 정확 표본이 이미 처리됐으면 그것이 근거다(없으면 옛 저장본 포함 false).
+        goodSample:
+          lastGoodSampleAt != null &&
+          lastGoodSampleAt >= event.at - config.preEnterSampleMs,
         distanceM: event.distanceM,
       };
     }

@@ -66,16 +66,8 @@ import {
   useLocationAutomation,
   useTripRoutes,
 } from '@/shared/location';
-import { actualDistanceLabel } from '@/shared/map';
 import { automationVisitRefs } from '../model/automationInput';
-import {
-  AutoRevertDialog,
-  autoRecordPart,
-  useRevertAutoVisit,
-  useVisitCheck,
-  type AutoRevertError,
-  type AutoRevertPart,
-} from '@/features/check-visit';
+import { useVisitCheck } from '@/features/check-visit';
 
 import { LiveHubView } from './LiveHubView';
 
@@ -322,10 +314,11 @@ export function LiveItineraryPage({
   );
 
   // TRIP-1339 · U10 위치 자동화 — 오늘(KST) 일정·실적으로 문맥을 만들고 판정은 훅이 한다(페이지 1회).
-  // 플래그 OFF 면 동의 조회도 하지 않고 훅은 효과가 없다(BR-U10-07). 훅 규칙상 조기 반환 위에 둔다.
+  // 플래그 OFF 면 훅은 효과가 없다(BR-U10-07). 동의 조회는 내 위치 표시(TRIP-1535)도 쓰므로 플래그와 무관하게 한다.
+  // 훅 규칙상 조기 반환 위에 둔다.
   const automationOn = isLocationAutomationEnabled();
   const locationConsent = useGetMeLocationConsent({
-    query: { enabled: automationOn },
+    query: { enabled: state.kind === 'active' },
   });
   const tripDays = state.kind === 'active' ? state.itinerary.days : [];
   const todaySlots = tripDays.find((day) => day.date === today)?.slots ?? [];
@@ -353,49 +346,14 @@ export function LiveItineraryPage({
     automation.droppedCount
   );
 
-  // TRIP-1343 · 계획｜실제 토글 — 그날 경로가 있고 위치 동의가 있을 때만 실제 칸이 켜진다(BR-U10-41).
+  // TRIP-1520 · 그날 경로가 있고 위치 동의가 있으면 실제 경로를 계획 동선 위에 늘 겹친다(토글·사유 없음, BR-U10-41 개정).
   const routes = useTripRoutes(automationOn ? tripId : null);
-  const [routeMode, setRouteMode] = useState<'plan' | 'actual'>('plan');
   const dayRoute = routeDayForDate(routes.routes, liveDate);
-  const routeSegments = dayRoute ? routeDayToSegments(dayRoute) : [];
   const consentOn = locationConsent.data?.legalConsent === true;
-  const actualAvailable = consentOn && routeSegments.length > 0;
-  const routeToggle = automationOn
-    ? {
-        mode: actualAvailable ? routeMode : ('plan' as const),
-        actualAvailable,
-        disabledReason: !consentOn
-          ? '위치 동의가 없어요'
-          : '이 날 기록된 경로가 없어요',
-        distanceLabel: dayRoute
-          ? actualDistanceLabel(dayRoute.distanceM)
-          : undefined,
-        onChange: setRouteMode,
-      }
-    : undefined;
-
-  // TRIP-1340 · '자동 기록' 칩·되돌리기 — 서버 출처에서 파생(플래그 ON 일 때만). 확정 전 호출 0회.
-  const autoRecords = new Map<
-    string,
-    { visitCheckId: string; part: AutoRevertPart }
-  >();
-  if (automationOn) {
-    for (const visit of visits.data?.visits ?? []) {
-      const part = autoRecordPart(visit);
-      if (part && visit.slotKey)
-        autoRecords.set(visit.poiId, {
-          visitCheckId: visit.visitCheckId,
-          part,
-        });
-    }
-  }
-  const revertAuto = useRevertAutoVisit(tripId);
-  const [revertTarget, setRevertTarget] = useState<{
-    poiId: string;
-    visitCheckId: string;
-    part: AutoRevertPart;
-    error: AutoRevertError;
-  } | null>(null);
+  const actualRoute =
+    automationOn && consentOn && dayRoute
+      ? routeDayToSegments(dayRoute)
+      : undefined;
 
   // 허브 ‹ 와 같은 규칙 — 딥링크 직행이라 돌아갈 곳이 없으면 홈으로(INV-4 침묵 금지).
   const goBackOrHome = (): void => {
@@ -837,17 +795,11 @@ export function LiveItineraryPage({
         directionsNotice={directionsNotice}
         initialSnapIndex={initialSnapIndex}
         expandSignal={expandSignal}
-        autoRecordedPoiIds={new Set(autoRecords.keys())}
-        routeToggle={routeToggle}
-        actualRoute={
-          routeToggle?.mode === 'actual' && actualAvailable
-            ? routeSegments
-            : undefined
+        actualRoute={actualRoute}
+        // TRIP-1535 — 오늘 일차를 볼 때 · 위치정보 이용 동의가 있을 때만. 좌표는 서버로 안 간다(지도 화면 표시뿐).
+        showMyLocation={
+          liveDate === today && locationConsent.data?.legalConsent === true
         }
-        onPressRevertAuto={(poiId) => {
-          const target = autoRecords.get(poiId);
-          if (target) setRevertTarget({ poiId, ...target, error: null });
-        }}
         automationNotice={
           automationCopy
             ? {
@@ -863,35 +815,6 @@ export function LiveItineraryPage({
             : null
         }
       />
-      {revertTarget ? (
-        <AutoRevertDialog
-          testIDPrefix="execution-live-slot-auto-revert"
-          placeName={
-            activeSlots.find((slot) => slot.poiId === revertTarget.poiId)
-              ?.nameKo ?? '이 장소'
-          }
-          part={revertTarget.part}
-          pending={revertAuto.pending}
-          error={revertTarget.error}
-          onCancel={() => setRevertTarget(null)}
-          onConfirm={() => {
-            void revertAuto
-              .revert(revertTarget.visitCheckId)
-              .then((outcome) => {
-                if (outcome === 'ok') setRevertTarget(null);
-                else
-                  setRevertTarget((t) =>
-                    t
-                      ? {
-                          ...t,
-                          error: outcome === 'media' ? 'media' : 'failed',
-                        }
-                      : t
-                  );
-              });
-          }}
-        />
-      ) : null}
       {automation.state === 'EXPLAINER' && !explainerClosed ? (
         <LocationAlwaysExplainer
           dateRangeLabel={tripDateRangeLabel(

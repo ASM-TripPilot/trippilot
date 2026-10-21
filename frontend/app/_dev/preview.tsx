@@ -233,7 +233,6 @@ import {
   LocationAlwaysExplainer,
   automationNoticeCopy,
 } from '@/shared/location/index.view';
-import { AutoRevertDialog } from '@/features/check-visit/index.view';
 import { MapView, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { StateNotice } from '@/shared/ui/StateNotice';
@@ -2192,7 +2191,7 @@ const LIVE_HUB_PREVIEW_SLOTS: LiveHubSlot[] = [
     },
   },
 ];
-// Figma 의 현재위치 점(부산시립미술관 근처).
+// 프리뷰 지도 중심(부산시립미술관 근처).
 const LIVE_HUB_PREVIEW_LOCATION = { lat: 35.1655, lng: 129.1335 };
 
 // TRIP-1344 · U10 프리뷰 — 실제 경로 2세그먼트(감천→광안리 · 강 건너 공백 · 미술관 쪽). 좌표는 슬롯 사이를 굽게 이은 가짜 값.
@@ -2221,12 +2220,6 @@ const u10Notice = (reason: string | null, dropped = 0) => {
         onPressSettings: copy.settings ? noop : undefined,
       }
     : null;
-};
-const U10_ROUTE_ON = {
-  mode: 'actual' as const,
-  actualAvailable: true,
-  distanceLabel: '실제 3.2km',
-  onChange: noop,
 };
 
 // j04 요약의 일차 회고 칩(TRIP-987) — 여행 기간 3일(6/11~6/13) 전체. 페이지가 `tripDayChips` 로 조립하는 모양.
@@ -2267,7 +2260,6 @@ function renderLiveHubPreview(
       activeDayIndex={1}
       slots={LIVE_HUB_PREVIEW_SLOTS}
       initialSnapIndex={snap}
-      currentLocation={LIVE_HUB_PREVIEW_LOCATION}
       onBack={noop}
       onSelectDay={noop}
       onPressAiReplan={noop}
@@ -3713,14 +3705,13 @@ export const PREVIEW_STATES: PreviewState[] = [
     band: '기타',
     label: '기타 · 지도(map-default)',
     login: null,
-    // TRIP-745 — 핀 3상태(done 흰 체크·current 분홍 번호·upcoming 회색 번호)·현재위치 점/링/라벨·
+    // TRIP-745 — 핀 3상태(done 흰 체크·current 분홍 번호·upcoming 회색 번호)·
     // 빨강 경로선을 한 지도에서 6-b 육안 대조하는 자리(jest 는 물방울 모양·색·번호를 못 본다).
     // 좌표는 서울 도심 ~1.5km 안(한 화면). 실지도는 env 키가 있는 실기 빌드에서만 뜬다.
     render: () => (
       <MapView
         center={{ lat: 37.5665, lng: 126.978 }}
         pins={MAP_STATE_PREVIEW_PINS}
-        currentLocation={{ lat: 37.5662, lng: 126.9785 }}
       />
     ),
   },
@@ -3846,11 +3837,11 @@ export const PREVIEW_STATES: PreviewState[] = [
   // j01 방문 기록 error 얼굴(TRIP-760) — 사진 업로드 실패 표면. default 와 안내문만 다르고(상태별 의도
   // →noticeCopy 분기), 광안리 카드에 upload-failed 셀(⚠ "업로드 실패") + 풀폭 [↻ 다시 시도] 버튼 +
   // "메모와 방문 체크는 저장되었어요"를 얹었다. ⚠ 생김새·surface-strong 톤·↻ 코랄은 jest 사각(6-b 육안).
-  // TRIP-1344 · U10 j01 풀 지도 실제 경로(u10e 4862:3807) + 자동 기록 표식 카드.
+  // TRIP-1344 · U10 j01 풀 지도 실제 경로(u10e 4862:3807). 자동 기록 표식은 TRIP-1523 에서 뺐다.
   {
     key: 'u10-records-route',
     band: 'j',
-    label: 'U10 · j01 풀 지도 실제 경로·자동 기록 표식',
+    label: 'U10 · j01 풀 지도 실제 경로',
     login: null,
     render: () => (
       <TripRecordsView
@@ -3866,7 +3857,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           { number: 1, lat: 35.1532, lng: 129.1187, state: 'done' },
           { number: 2, lat: 35.1667, lng: 129.137, state: 'done' },
         ]}
-        routeToggle={{ ...U10_ROUTE_ON, distanceLabel: '실제 2.8km' }}
         actualRoute={[
           [
             { lat: 35.1532, lng: 129.1187 },
@@ -3888,7 +3878,6 @@ export const PREVIEW_STATES: PreviewState[] = [
             completedAt: '2026-08-21T15:20:00',
             skippedAt: null,
             arrivedLabel: '14:20',
-            autoRecorded: true,
           },
           {
             visitCheckId: 'r2',
@@ -7359,98 +7348,13 @@ export const PREVIEW_STATES: PreviewState[] = [
       renderLiveHubPreview(0, { automationNotice: u10Notice(null, 2) }),
   },
   {
-    key: 'u10-auto-badge',
-    band: 'i',
-    label: 'U10 · i01 자동 기록 표식(u10b)',
-    login: null,
-    render: () =>
-      renderLiveHubPreview(1, {
-        autoRecordedPoiIds: new Set(['gamcheon']),
-        onPressRevertAuto: noop,
-      }),
-  },
-  {
-    key: 'u10-auto-revert-dialog',
-    band: 'i',
-    label: 'U10 · i01 자동 기록 되돌리기 확인(u10b dialog)',
-    login: null,
-    render: () => (
-      <View style={StyleSheet.absoluteFill}>
-        {renderLiveHubPreview(1, {
-          autoRecordedPoiIds: new Set(['gamcheon']),
-          onPressRevertAuto: noop,
-        })}
-        <AutoRevertDialog
-          testIDPrefix="execution-live-slot-auto-revert"
-          placeName="감천문화마을"
-          part="COMPLETION"
-          onCancel={noop}
-          onConfirm={noop}
-        />
-      </View>
-    ),
-  },
-  {
-    key: 'u10-auto-revert-media',
-    band: 'i',
-    label: 'U10 · i01 되돌리기 409 사진·메모 안내',
-    login: null,
-    render: () => (
-      <View style={StyleSheet.absoluteFill}>
-        {renderLiveHubPreview(1, {
-          autoRecordedPoiIds: new Set(['gamcheon']),
-          onPressRevertAuto: noop,
-        })}
-        <AutoRevertDialog
-          testIDPrefix="execution-live-slot-auto-revert"
-          placeName="감천문화마을"
-          part="ARRIVAL"
-          error="media"
-          onCancel={noop}
-          onConfirm={noop}
-        />
-      </View>
-    ),
-  },
-  {
     key: 'u10-route-actual',
     band: 'i',
-    label: 'U10 · i01 계획｜실제 — 실제 켜짐·공백 있음(u10e)',
+    label: 'U10 · i01 계획 동선 + 실제 경로 함께 — 공백 있음(u10e)',
     login: null,
     render: () =>
       renderLiveHubPreview(0, {
-        routeToggle: U10_ROUTE_ON,
         actualRoute: U10_ACTUAL_ROUTE,
-      }),
-  },
-  {
-    key: 'u10-route-none',
-    band: 'i',
-    label: 'U10 · i01 계획｜실제 — 경로 없음',
-    login: null,
-    render: () =>
-      renderLiveHubPreview(0, {
-        routeToggle: {
-          mode: 'plan',
-          actualAvailable: false,
-          disabledReason: '이 날 기록된 경로가 없어요',
-          onChange: noop,
-        },
-      }),
-  },
-  {
-    key: 'u10-route-no-consent',
-    band: 'i',
-    label: 'U10 · i01 계획｜실제 — 위치 동의 없음',
-    login: null,
-    render: () =>
-      renderLiveHubPreview(0, {
-        routeToggle: {
-          mode: 'plan',
-          actualAvailable: false,
-          disabledReason: '위치 동의가 없어요',
-          onChange: noop,
-        },
       }),
   },
   // TRIP-1260 — 7일 여행 허브, 오늘=6일차로 연다. 화면 밖 선택 칩이 열자마자 보이는지(AC-3b)·FAB 하한이
@@ -7676,7 +7580,6 @@ export const PREVIEW_STATES: PreviewState[] = [
             progress: state,
           }))
         )}
-        currentLocation={LIVE_HUB_PREVIEW_LOCATION}
         solvingLabel="17시 이후 다시 짜는 중"
         dayLabel="2일차"
         dateLabel="6월 11일(목)"

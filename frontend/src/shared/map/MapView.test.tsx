@@ -1,4 +1,11 @@
-import { render, screen, within } from '@testing-library/react-native';
+import {
+  act,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react-native';
+import { AppState } from 'react-native';
 
 import { MapView } from '@/shared/map';
 import type { MapCenter, MapPin } from '@/shared/map';
@@ -248,10 +255,10 @@ describe('TRIP-748 — onTapMap: 지도 빈 곳 탭을 부모에 알린다(허�
   });
 });
 
-// ── TRIP-745 · 핀 3상태 + 현재위치 점 + 경로선 색 (01b AC-1~4) ──────────────────
+// ── TRIP-745 · 핀 3상태 + 경로선 색 (01b AC-1~3 — 현재위치 점 AC-4 는 TRIP-1536 에서 삭제) ──────────────────
 //
 // 무엇을 보장하나: MapPin.state 로 핀이 done/current/upcoming 세 얼굴로 갈리고(색·번호·체크),
-// currentLocation 으로 파란 점+링+라벨이 옵션으로 얹히며, 연결 경로선이 빨강(#FF385C)으로
+// 연결 경로선이 빨강(#FF385C)으로
 // 그려진다. 인프라 확장만이라 화면 배선은 이번 범위 밖(TRIP-746).
 //
 // ★ 색은 SVG fill/stroke 리터럴로만 실측 가능(className 은 SVG 에 안 붙는 map 트랩) — 각 상태의
@@ -358,41 +365,6 @@ describe('🟢 AC-2 — state 미전달 = 기존 분홍 핀(무회귀 선제 앵
     ).toBeGreaterThan(0);
     // 기본 핀에 done 체크가 붙으면 안 된다(무번호 완료로 오인 금지).
     expect(within(pin).queryByTestId(CHECK_TESTID(1))).toBeNull();
-  });
-});
-
-describe('🔴 AC-4 — 현재위치 오버레이(파란 점·링·라벨)', () => {
-  it('currentLocation 전달 → 파란(#1659C9) 점·링 + "현재 위치" SVG 라벨, collapsable={false}', () => {
-    // Arrange + Act
-    render(
-      <MapView
-        center={CENTER}
-        pins={PINS}
-        currentLocation={{ lat: 33.5, lng: 126.5 }}
-      />
-    );
-
-    // Assert — 현재위치 마커의 커스텀 뷰(map-current-location)가 뜬다.
-    const cur = screen.queryByTestId('map-current-location');
-    expect(cur).not.toBeNull();
-    // 마커 래스터 필수 prop — 없으면 iOS New Arch 에서 기본 마커로 나온다(실제 flatten 방지는 6-b).
-    expect(
-      (cur as { props: { collapsable?: boolean } }).props.collapsable
-    ).toBe(false);
-    // 라벨은 SVG 라 getByText 가 아니라 content prop 으로 본다(다문자·공백 문자열 매치).
-    expect(
-      within(
-        cur as ReturnType<typeof screen.getByTestId>
-      ).UNSAFE_queryAllByProps({ content: '현재 위치' }).length
-    ).toBeGreaterThan(0);
-  });
-
-  it('currentLocation 미전달 → 현재위치 마커 부재(짝 — 항상 렌더 회귀 방지)', () => {
-    // Arrange + Act
-    render(<MapView center={CENTER} pins={PINS} />);
-
-    // Assert
-    expect(screen.queryByTestId('map-current-location')).toBeNull();
   });
 });
 
@@ -644,5 +616,115 @@ describe('TRIP-1522 v2 — logoMargin: 지도 로고 위치 옵션(옵트인) �
     expect(screen.getByTestId('map-native').props.logoMargin).toEqual({
       bottom: 78,
     });
+  });
+});
+
+// TRIP-1535 · 내 위치(네이버 기본 현위치) — 옵트인. 권한은 조회만 하고 묻지 않는다.
+const mockGetForegroundPermission = jest.fn();
+const mockRequestForegroundPermission = jest.fn();
+jest.mock('expo-location', () => ({
+  getForegroundPermissionsAsync: (...args: unknown[]) =>
+    mockGetForegroundPermission(...args),
+  requestForegroundPermissionsAsync: (...args: unknown[]) =>
+    mockRequestForegroundPermission(...args),
+}));
+const trackingModes = (): string[] =>
+  (globalThis as { __naverTrackingModes?: string[] }).__naverTrackingModes ??
+  [];
+
+describe('TRIP-1535 — showMyLocation: 내 위치 표시(옵트인)', () => {
+  beforeEach(() => {
+    trackingModes().length = 0;
+    mockGetForegroundPermission.mockReset();
+    mockRequestForegroundPermission.mockReset();
+  });
+
+  it('MY1 켜고 OS 권한이 granted 면 → 지도 추적 모드 NoFollow(카메라는 안 따라감), 권한 요청 0회', async () => {
+    // 준비: 권한 granted → 실행: showMyLocation 렌더 → 단언: NoFollow 1회, request 0회
+    mockGetForegroundPermission.mockResolvedValue({ status: 'granted' });
+    render(<MapView center={CENTER} showMyLocation />);
+    await waitFor(() => expect(trackingModes()).toEqual(['NoFollow']));
+    expect(mockRequestForegroundPermission).not.toHaveBeenCalled();
+  });
+
+  it('MY2 켜도 권한이 없으면 → 추적을 켜지 않고 권한도 묻지 않는다', async () => {
+    mockGetForegroundPermission.mockResolvedValue({ status: 'denied' });
+    render(<MapView center={CENTER} showMyLocation />);
+    // 앵커: 권한을 실제로 조회했다(조회 전에 단언해 공허 통과하지 않게).
+    await waitFor(() => expect(mockGetForegroundPermission).toHaveBeenCalled());
+    await Promise.resolve();
+    expect(trackingModes()).not.toContain('NoFollow');
+    expect(mockRequestForegroundPermission).not.toHaveBeenCalled();
+  });
+
+  it('MY3 안 주면 → 권한 조회도 추적 호출도 없다(다른 지도 무회귀)', async () => {
+    render(<MapView center={CENTER} />);
+    expect(screen.getByTestId('map-native')).toBeTruthy();
+    await Promise.resolve();
+    expect(mockGetForegroundPermission).not.toHaveBeenCalled();
+    expect(trackingModes()).toEqual([]);
+  });
+
+  it('MY5 권한 답이 오기 전에 끄면 → 늦게 온 granted 로 켜지 않는다(경합)', async () => {
+    // 준비: 권한 응답을 붙잡아 둔다 → 실행: 켜고 곧바로 끈 뒤 granted 를 돌려준다 → 단언: NoFollow 0회
+    let answer: (value: { status: string }) => void = () => {};
+    mockGetForegroundPermission.mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+    const view = render(<MapView center={CENTER} showMyLocation />);
+    await waitFor(() => expect(mockGetForegroundPermission).toHaveBeenCalled());
+    view.rerender(<MapView center={CENTER} showMyLocation={false} />);
+    await act(async () => {
+      answer({ status: 'granted' });
+    });
+    expect(trackingModes()).not.toContain('NoFollow');
+  });
+
+  it('MY6 맞춤↔카메라 전환으로 지도가 새로 마운트되면 → 새 지도에 다시 켠다', async () => {
+    mockGetForegroundPermission.mockResolvedValue({ status: 'granted' });
+    const view = render(<MapView center={CENTER} showMyLocation />);
+    await waitFor(() => expect(trackingModes()).toEqual(['NoFollow']));
+    // 핀 맞춤을 켜면 지도가 region 모드로 다시 마운트된다(key 변경).
+    view.rerender(
+      <MapView center={CENTER} pins={PINS} fitPins showMyLocation />
+    );
+    await waitFor(() =>
+      expect(trackingModes()).toEqual(['NoFollow', 'None', 'NoFollow'])
+    );
+  });
+
+  it('MY7 처음엔 권한이 없다가 설정에서 허용하고 앱으로 돌아오면 → 그때 켠다', async () => {
+    const listeners: ((state: string) => void)[] = [];
+    const spy = jest
+      .spyOn(AppState, 'addEventListener')
+      .mockImplementation((_type, listener) => {
+        listeners.push(listener as (state: string) => void);
+        return { remove: () => {} } as ReturnType<
+          typeof AppState.addEventListener
+        >;
+      });
+    mockGetForegroundPermission.mockResolvedValue({ status: 'denied' });
+    render(<MapView center={CENTER} showMyLocation />);
+    await waitFor(() =>
+      expect(mockGetForegroundPermission).toHaveBeenCalledTimes(1)
+    );
+    expect(trackingModes()).toEqual([]);
+    mockGetForegroundPermission.mockResolvedValue({ status: 'granted' });
+    await act(async () => {
+      listeners.forEach((listener) => listener('active'));
+    });
+    await waitFor(() => expect(trackingModes()).toEqual(['NoFollow']));
+    expect(mockRequestForegroundPermission).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('MY4 켜져 있다가 끄면 → 추적을 None 으로 되돌린다', async () => {
+    mockGetForegroundPermission.mockResolvedValue({ status: 'granted' });
+    const view = render(<MapView center={CENTER} showMyLocation />);
+    await waitFor(() => expect(trackingModes()).toEqual(['NoFollow']));
+    view.rerender(<MapView center={CENTER} showMyLocation={false} />);
+    expect(trackingModes()).toEqual(['NoFollow', 'None']);
   });
 });

@@ -18,6 +18,14 @@ import { View } from 'react-native';
 // 실제 prop 은 MapView.tsx 가 **네이버 SDK 실타입**으로 검사받고(목 타입은 목 파일 안에서만
 // 쓰인다), 런타임엔 `{...props}` 로 그대로 host View 에 실려 테스트가 관측한다. 여기에
 // `& Record<string, unknown>` 을 더하면 인덱스 시그니처가 children 을 unknown 으로 오염시킨다.
+/**
+ * TRIP-1535 · `setLocationTrackingMode` 호출 기록(순서대로). 모듈 export 로 두면 `jest.requireMock` 이 다른 인스턴스를
+ * 돌려줘 기록이 안 보였다(실측) — 그래서 전역 배열 하나에 둔다. 테스트가 `length = 0` 으로 비운다.
+ */
+const trackingHolder = globalThis as { __naverTrackingModes?: string[] };
+trackingHolder.__naverTrackingModes ??= [];
+const trackingModes = trackingHolder.__naverTrackingModes;
+
 const NaverMapView = React.forwardRef<unknown, { children?: React.ReactNode }>(
   ({ children, ...props }, ref) => {
     React.useImperativeHandle(ref, () => ({
@@ -29,7 +37,10 @@ const NaverMapView = React.forwardRef<unknown, { children?: React.ReactNode }>(
       animateCameraWithTwoCoords: () => {},
       animateCameraTo: () => {},
       cancelAnimation: () => {},
-      setLocationTrackingMode: () => {},
+      // TRIP-1535 — 추적 모드는 prop 이 아니라 ref 호출이라 기록해 둔다(`globalThis.__naverTrackingModes`).
+      setLocationTrackingMode: (mode: string) => {
+        trackingModes.push(mode);
+      },
       showInfoWindow: () => {},
       hideInfoWindow: () => {},
     }));

@@ -411,10 +411,10 @@ describe('MapSheetShell · SH8 — list 슬롯이 body 를 BottomSheetFlatList �
   });
 });
 
-/* ──────────────── TRIP-746 · i01 허브 가산 3종(snapPoints · mapViewOnly · currentLocation) ────────────────
- * i01 여행중 허브는 같은 셸 위에 서되 셋이 다르다: 시트가 3스냅(닫힘·중간·펼침)이고, 지도는 여행 중
- * 자유 탐색이라 **잠그지 않으며**(TRIP-397 결정 계승), 현재위치 점을 얹는다(TRIP-745 계약). 셋 다
- * 옵셔널 가산이라 미전달 기본값이 현행(2스냅·잠금·점 없음)과 같아야 한다 — a 케이스가 그 회귀 앵커다.
+/* ──────────────── TRIP-746 · i01 허브 가산(snapPoints · mapViewOnly — currentLocation 은 TRIP-1536 에서 삭제) ────────────────
+ * i01 여행중 허브는 같은 셸 위에 서되 둘이 다르다: 시트가 3스냅(닫힘·중간·펼침)이고, 지도는 여행 중
+ * 자유 탐색이라 **잠그지 않는다**(TRIP-397 결정 계승). 둘 다
+ * 옵셔널 가산이라 미전달 기본값이 현행(2스냅·잠금)과 같아야 한다 — a 케이스가 그 회귀 앵커다.
  *
  * ⚠️ 원리적 사각(02a ★1·★2): 스냅 실전환은 통과형 목이 못 본다 → `BottomSheet` 에 **넘긴 값**까지만.
  *   지도 목은 env 키가 있어야 `map-native`(prop 기록형)를 그린다 → 지도 케이스는 키를 넣고 원복한다.
@@ -443,25 +443,6 @@ describe('MapSheetShell · SH10 — mapViewOnly 로 지도 잠금을 끈다 (TRI
 
     const map = screen.getByTestId('map-native');
     GESTURE_TOGGLES.forEach((toggle) => expect(map.props[toggle]).toBe(true));
-  });
-});
-
-describe('MapSheetShell · SH11 — currentLocation 을 지도에 흘린다 (TRIP-746)', () => {
-  beforeEach(withMapKey);
-  afterEach(restoreMapKey);
-
-  it('SH11a · currentLocation 미전달이면 현재위치 점이 없다 (선제 green · 회귀 앵커)', () => {
-    renderShell();
-
-    // 짝 — 지도 자체는 떴다.
-    expect(screen.getByTestId('map-native')).toBeOnTheScreen();
-    expect(screen.queryByTestId('map-current-location')).toBeNull();
-  });
-
-  it('🔴 SH11b · currentLocation 을 주면 현재위치 점이 지도 위에 뜬다', () => {
-    renderShell({ currentLocation: { lat: 35.1, lng: 129.05 } });
-
-    expect(screen.getByTestId('map-current-location')).toBeOnTheScreen();
   });
 });
 
