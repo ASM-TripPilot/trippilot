@@ -46,7 +46,7 @@ class CuratedStayAdapter(
     override fun byCity(city: String): List<CuratedStay> = repo.findByCityOrderByRank(city).map { it.toDomain() }
 
     // 도시 이름('강릉')은 카탈로그 별칭이라 codesOf 가 코드('51150')를 준다 — 매핑 표를 따로 두지 않는다.
-    // ponytail: 요청마다 도시 수만큼 별칭 조회(지금 9번). 도시가 수십 개로 늘면 도시→코드를 캐시한다.
+    // ponytail: 요청마다 도시 수만큼 별칭 조회. 도시가 수십 개로 늘면 도시→코드를 캐시한다.
     override fun byRegionCode(regionCode: String): List<CuratedStay> =
         repo.findCities()
             .firstOrNull { city -> regions.codesOf(city).any { regionCode.startsWith(family(it)) } }
