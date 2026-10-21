@@ -5,6 +5,7 @@
 증명하는 것:
   ① generate — 그 날 공휴일 휴무인 곳은 일정에 없다(모드 off 면 놓인다). 여러 날·여러 앵커 구간이어도 달력은 1회.
   ② validate — 같은 휴일 규칙으로 HC1 "공휴일 휴무" — 조립이 둔 해와 검증이 같은 매핑을 본다. off 면 위반 없음.
+     미판정 보고(HOURS_UNKNOWN)도 같은 달력으로 가른다 — on 이면 판정한 것, off 면 영업정보가 없어 못 본 것.
   ③ repair — 휴일 휴무 슬롯은 수리하지 못한다(검증과 같은 판정).
   ④ replan — 휴무 후보는 안 놓이고, "저녁은 그대로"는 그 날 공휴일 휴무인 식당을 잠그지 않는다. 달력 1회.
   ⑤ 편집 검증의 문제 재구성도 같은 달력을 싣는다.
@@ -173,11 +174,14 @@ def test_validate_는_같은_휴일_규칙으로_HC1() -> None:
                            json={"itinerary": _payload(_D1, "museum"), "request_meta": _META}).json()
     [v] = body["violations"]
     assert (v["code"], v["slot_ref"], v["detail"], v["reason_code"]) == ("HC1", "museum", "공휴일 휴무", "HOLIDAY")
+    assert body["unverified_slots"] == []  # 휴일 규칙이 그 날을 닫았다 — 영업정보가 없어도 HC1 을 판정한 것이다
     assert spy.calls == [(_D1, _D1)]
     with TestClient(create_app(_orchestrator(None))) as client:
         body = client.post("/ai/v1/itinerary/validate",
                            json={"itinerary": _payload(_D1, "museum"), "request_meta": _META}).json()
     assert body["violations"] == []
+    # 모드 off — 휴일 규칙을 보지 않으니 영업정보 없는 곳의 HC1 은 못 봤다(위반 0 을 통과로 읽지 않게, 상황 감지 INV-SA-2)
+    assert body["unverified_slots"] == [{"poi_id": "museum", "reason_code": "HOURS_UNKNOWN", "detail": ""}]
 
 
 def test_repair_는_공휴일_휴무_슬롯을_수리하지_못한다() -> None:
