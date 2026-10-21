@@ -266,9 +266,10 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
             # (assistant-orchestrator FD domain-entities §2.10 · BLM 시한표). 분류·답변은 사고를 끈다(none) — 2026-10-20
             # luna·같은 시각 A/B(동시 2, 분류 0.2.3 고정·effort 만): 분류 238회 p50 1.53 → 1.24s·p90 2.51 → 1.93s, 평가셋 판단 오답은
             # 같다(2·2). 단 effort 만 끄면 행사 말을 탐색·장소 정보로 몰아(행사 null 50 → 0%, 두 질문은 40 → 40% 그대로) 분류 0.2.4 와
-            # 같이 간다(0.2.4+none 두 질문 90%·행사 100% — prompts/dialogue_intent.yaml 머리). 답변 27회(단일 사실 9사례): 폴백 3 → 2건
+            # 같이 간다(0.2.4+none 두 질문 90%·행사 null 100%, #1475 뒤 재측정 50% — prompts/dialogue_intent.yaml 머리). 답변 27회(단일 사실 9사례): 폴백 3 → 2건
             # (시한 3 → 1·게이트 드롭 0 → 1)·p90 3.50 → 2.34s(low 쪽은 시한 3건이 p90 자리라 3.5s 상한 값)·짝 위반 0·여는 말·되묻기·
-            # 엉뚱한 마무리 0(답변 담당 세션 원문 검수). 요약은 턴 밖 시한이라 그대로 둔다. none 은 GPT 값이다 — Claude 로 재배정하면 low 로
+            # 엉뚱한 마무리 0(답변 담당 세션 원문 검수) — 10-21 병합 답 포함 22사례 ×3 재측정에서는 지연 차이가 없었다(p90 low 1.87 · none
+            # 2.42s, 시한 0 · 1, 출력 토큰 같음 — low 도 사고를 거의 쓰지 않는다). 요약은 턴 밖 시한이라 그대로 둔다. none 은 GPT 값이다 — Claude 로 재배정하면 low 로
             LlmFeature.DIALOGUE_INTENT: "none",
             LlmFeature.DIALOGUE_ANSWER: "none",
             LlmFeature.DIALOGUE_MEMORY: "low",

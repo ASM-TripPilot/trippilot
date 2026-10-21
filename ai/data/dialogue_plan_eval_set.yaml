@@ -1,4 +1,4 @@
-# 도구 계획(DIALOGUE_PLAN) 측정셋 v0.1 — `scripts/measure/measure_prompt_ab.py plan` 이 읽는다(CI 밖 수동 실측 전용).
+# 도구 계획(DIALOGUE_PLAN) 측정셋(판본은 아래 version 칸) — `scripts/measure/measure_prompt_ab.py plan` 이 읽는다(CI 밖 수동 실측 전용).
 # 정본: assistant-orchestrator FD BR-AO-28 · 사양 §11.3. 분류가 "정해진 의도 없음"으로 닫은 말에 계획기가 고를 도구를 잰다.
 #
 # 고정 스냅샷(러너가 만든다): 제주 2일 — 1일차 성산일출봉·올레국수, 2일차 우도·해녀의집·카페 모카. 지금 = 2일차 10:00, 이력 없음.
@@ -28,7 +28,7 @@ cases:
   - {id: P1-11, group: TOOL1, utterance: "오늘 오후에 비 와?", tools: [GET_WEATHER], keys: {GET_WEATHER: [date]}}
   - {id: P1-12, group: TOOL1, utterance: "카페 모카 말고 비슷한 데", tools: [SUGGEST_ALTERNATIVE], keys: {SUGGEST_ALTERNATIVE: [target]}}
   # 일정 밖 등록 장소 — #1466 부터 장소 정보 도구가 정확한 이름으로 찾는다(v0.2: 종전 P3-10 "롯데월드…" NO_TOOL·forbid 를 대신한다.
-  # 롯데월드는 등록 이름이 아니라(아쿠아리움·몰만 있다) 계획기가 별칭으로 보고 gap 을 골랐다 — 등록 이름 그대로인 곳으로 잰다)
+  # 이름이 정확히 「롯데월드」인 등록 장소는 없다(뒤에 말이 붙은 이름만 있다) — 계획기가 별칭으로 보고 gap 을 골랐다, 등록 이름 그대로인 곳으로 잰다)
   - {id: P1-13, group: TOOL1, utterance: "창덕궁 몇 시에 닫아?", tools: [GET_POI_INFO], keys: {GET_POI_INFO: [place]}}
   # 말한 지역 날씨 — #1475 부터 날씨 도구가 region 을 받는다(v0.3: 종전 P3-09 NO_TOOL·forbid 를 대신한다). 여행지는 제주라 region 이 있어야 맞다
   - {id: P1-14, group: TOOL1, utterance: "서울 날씨는 어때", tools: [GET_WEATHER], keys: {GET_WEATHER: [region]}}
