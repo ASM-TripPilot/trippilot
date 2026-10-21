@@ -1196,7 +1196,8 @@ def test_poi_info_outside_the_itinerary_finds_the_registered_place_by_name() -> 
     assert poi_info.calls[0]["poi_ids"] == frozenset({PoiId(_U["천지연폭포"])}) and poi_info.calls[0]["on"] == _ctx().today
     assert facts.status is FactStatus.OK and facts.kind is AnswerKind.INFO
     assert facts.payload["title"] == "천지연폭포"  # 이름은 DB 값 — 발화 원문("천지연 폭포")이 아니다
-    assert facts.payload["rows"] == [{"label": "분류", "value": "자연"}, {"label": "영업시간", "value": "09:00~18:00"},
+    assert facts.payload["rows"] == [{"label": "위치", "value": "제주특별자치도 서귀포시"},  # 어디의 그곳인지(DB 값)
+                                     {"label": "분류", "value": "자연"}, {"label": "영업시간", "value": "09:00~18:00"},
                                      {"label": "입장료", "value": "5,000원"}]
     assert [(a.type, a.params) for a in facts.next_actions] == [("OPEN_PLACE", {"poiId": _U["천지연폭포"]})]
     assert any("일정 밖" in n for n in facts.notes) and facts.template_text == "장소 정보를 찾아봤어요."
@@ -1227,14 +1228,16 @@ class _Intro:
     def __init__(self, text: str = "우도는 제주 동쪽의 섬이다.") -> None:
         self.text, self.calls = text, []
 
-    def intro(self, source_ref: str, query: str) -> str:
+    def intro(self, source_ref: str, query: str, *, wait_s: float) -> str:
         self.calls.append((source_ref, query))
+        self.wait_s = wait_s
         return self.text
 
 
-def _intro_run(arguments: dict, utterance: str = "") -> tuple[Facts, _Intro]:
+def _intro_run(arguments: dict, utterance: str = "", remaining_ms: int = 3000) -> tuple[Facts, _Intro]:
     intro = _Intro()
-    ctx = replace(_ctx(arguments=arguments, ports=HandlerPorts(poi_info=_RefPoiInfo(), place_intro=intro)), utterance=utterance)
+    ctx = replace(_ctx(arguments=arguments, ports=HandlerPorts(poi_info=_RefPoiInfo(), place_intro=intro),
+                       remaining_ms=remaining_ms), utterance=utterance)
     return _run(HANDLERS[Intent.GET_POI_INFO], ctx), intro
 
 
@@ -1248,6 +1251,15 @@ def test_poi_info_about_a_place_carries_a_kb5_intro_for_the_answer_only() -> Non
 def test_poi_info_hours_or_fee_question_does_not_fetch_an_intro() -> None:
     facts, intro = _intro_run({"place": "우도"}, "우도 몇 시까지 해?")
     assert intro.calls == [] and "intro" not in facts.detail
+
+
+def test_poi_info_waits_for_the_intro_only_within_the_fanout_budget() -> None:
+    # 잔여 3s → 팬아웃 예산 min(2.8, 3×0.4)=1.2s, 카드 돌려줄 여유 0.2s 를 뺀 1.0s 만 소개를 기다린다
+    _, intro = _intro_run({"place": "우도", "aspect": "어떤 곳"}, "우도 어떤 곳이야?")
+    assert intro.wait_s == pytest.approx(1.0)
+    # 잔여 0.9s → 예산 0.36s − 여유 0.2s < 하한 — 소개 없이 카드만
+    facts, intro = _intro_run({"place": "우도", "aspect": "어떤 곳"}, "우도 어떤 곳이야?", remaining_ms=900)
+    assert intro.calls == [] and facts.payload and "intro" not in facts.detail
 
 
 def test_explore_category_filters_the_pool() -> None:

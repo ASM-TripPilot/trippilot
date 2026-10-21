@@ -39,11 +39,12 @@
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import re
 from collections.abc import Callable, Mapping, Sequence
-from concurrent.futures import Executor, ThreadPoolExecutor, wait
+from concurrent.futures import Executor, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, replace
 from datetime import date, datetime, tzinfo
 
@@ -673,6 +674,9 @@ class DialogueOrchestrator:
             # 발화는 싣지 않는다 — 운영에서 이 줄 수로 오탐을 센다(정상 말이 걸리면 범위 밖 카드가 나간다)
             log.info("dialogue_injection_suspected %s", json.dumps({"event": "dialogue_injection_suspected", "trace_id": inp.trace_id}))
             return self._out_of_scope(inp, INJECTION_REASON)
+        # 0″ — 지역을 말한 장소 찾기 말이면 장소 탐색 SQL 작성을 분류와 나란히 미리 시작한다(분류 뒤에 쓰면 팬아웃 시한에 걸렸다, place_sql 註)
+        if self._ports.place_sql is not None:
+            self._ports.place_sql.prefetch(inp.utterance, inp.trace_id, inp.now, self._submit)
         trip_view = _trip_view(inp.snapshot)
         today = inp.now.astimezone(self._tz).date()
         trip_summary = _trip_summary(inp.snapshot, today)
@@ -784,6 +788,11 @@ class DialogueOrchestrator:
             log.warning("intent_shadow submit 실패(%s) — 응답 영향 없음 (trace_id=%s)", type(e).__name__, inp.trace_id)
 
     # ── 4 팬아웃 ─────────────────────────────────────────────────────────
+
+    def _submit(self, fn: Callable[[], object]) -> Future:
+        """공유 풀에 내되 문맥을 복사해 넘긴다 — 턴 `llm_calls`(백엔드 사용량 상한의 원천)가 contextvar 카운터라, 그냥 내면 풀 스레드에서
+        부른 서비스 LLM(장소 탐색 NL2SQL)이 빠진다. 한 사본을 두 스레드가 같이 쓰면 RuntimeError 라 낼 때마다 새로 뜬다."""
+        return self._pool.submit(contextvars.copy_context().run, fn)
 
     def _fanout(self, inp: TurnInput, tasks: Sequence[HandlerTask]) -> dict[str, TaskResult]:
         """공유 풀 팬아웃 (BLM §6, `route_budget.measure_within` 선례) — 마감은 submit **전에** 고정, 미완은 cancel 뒤 TIMEOUT.
