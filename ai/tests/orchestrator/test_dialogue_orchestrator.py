@@ -706,7 +706,7 @@ def test_exhausted_budget_defers_memory_without_writing_but_still_answers() -> N
     assert ("memory", "llm_dialogue_memory", "deferred") in _modes(b.trace)
 
 
-_CAPS_SEC = {"DIALOGUE_INTENT": 4.0, "DIALOGUE_ANSWER": 3.5, "DIALOGUE_MEMORY": 2.0, "DIALOGUE_PLAN": 3.0}
+_CAPS_SEC = {"DIALOGUE_INTENT": 4.0, "DIALOGUE_ANSWER": 3.5, "DIALOGUE_MEMORY": 2.0, "DIALOGUE_PLAN": 3.5}  # BLM §4 시한표
 
 
 @settings(max_examples=60, deadline=None)

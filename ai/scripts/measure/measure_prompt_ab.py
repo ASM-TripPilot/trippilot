@@ -30,7 +30,7 @@ CI 밖 수동 실행 전용(실 API 를 부른다). few-shot·판단 순서(CoT)
   2026-10-18 실측: 0.5.0 이 33/33(천장) — 판단 순서(CoT)·예시(few-shot) 두 판은 품질이 같고 입력 +7~23%·p90 +1.3s 라 버렸다.
 - `plan`  DIALOGUE_PLAN(2‴ 도구 계획) — `data/dialogue_plan_eval_set.yaml` 38문장(도구 1·2 · 도구 없음 · 주입). 도구 집합 완전·허용
   일치 · 인자 키 정밀도 · 도구 없음 비움률(gap 일치는 기록만) · 주입 도구 0 률 · 게이트 뒤 위험 인자 · 게이트 드롭률 · 지연·토큰.
-  노출 도구는 운영 배선(포트 전부)과 같다. 시한 3.0s(`EVAL_PLAN_TIMEOUT` — 계획 상한). 두 판본·두 모델을 같은 시각에 나란히.
+  노출 도구는 운영 배선(포트 전부)과 같다. 시한 3.5s(`EVAL_PLAN_TIMEOUT` — 계획 상한). 두 판본·두 모델을 같은 시각에 나란히.
       uv run --env-file ../.env python scripts/measure/measure_prompt_ab.py plan prompts 2
 - `selection`  ALTERNATIVE_SELECTION(`/alternatives`) — reason 이 문제 상황·요청을 되풀이한 꼴(0.4.1 규칙)과 게이트가 비운 이유.
   2026-10-18 실측: 0.5.0 되풀이 0/36 — few-shot 이 고칠 것이 없어 프롬프트를 안 건드렸다.
@@ -101,7 +101,7 @@ from trippilot.orchestrator.dialogue_handlers import HandlerPorts  # noqa: E402
 MODEL = os.environ.get("EVAL_MODEL", "gpt-5.6-luna")
 INTENT_TIMEOUT = float(os.environ.get("EVAL_INTENT_TIMEOUT", "4.0"))
 ANSWER_TIMEOUT = float(os.environ.get("EVAL_ANSWER_TIMEOUT", "3.5"))
-PLAN_TIMEOUT = float(os.environ.get("EVAL_PLAN_TIMEOUT", "3.0"))
+PLAN_TIMEOUT = float(os.environ.get("EVAL_PLAN_TIMEOUT", "3.5"))
 TRIP = "경주 2박 3일 · 2일차 진행 중"
 _AI_ROOT = Path(__file__).resolve().parents[2]
 
