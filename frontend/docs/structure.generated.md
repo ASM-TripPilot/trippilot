@@ -802,7 +802,7 @@
 - `src/pages/itinerary/itinerary-list/model/tripCardFace.ts`  →  TripCardFace · deriveTripCardFace
 
 ## src/pages/itinerary/itinerary-list/ui/
-- `src/pages/itinerary/itinerary-list/ui/GenerationDoneBar.tsx`  →  GenerationDoneBarProps · GenerationDoneBar
+- `src/pages/itinerary/itinerary-list/ui/GenerationDoneBar.tsx`  →  GenerationDoneBarProps · DONE_BAR_BOTTOM · DONE_BAR_MIN_HEIGHT · GenerationDoneBar
 - `src/pages/itinerary/itinerary-list/ui/MyTripsListPage.tsx`  →  MyTripsListPage
 - `src/pages/itinerary/itinerary-list/ui/MyTripsListScreen.tsx`  →  MyTripsListMode · MyTripsListScreenProps · MyTripsListScreen
 - `src/pages/itinerary/itinerary-list/ui/MyTripsSortSheet.tsx`  →  MyTripsSortSheetProps · MyTripsSortSheet
