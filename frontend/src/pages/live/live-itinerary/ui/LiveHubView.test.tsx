@@ -560,6 +560,14 @@ function fireMapTap(): void {
   });
 }
 
+// TRIP-1558 — 지도 핀 탭. 실물 MapView + 네이버 목이라 마커(`map-marker`)의 `onTap` 이 `onPinTap(핀 배열 위치)` 로 이어진다(키 필요).
+function firePinTap(index: number): void {
+  const marker = screen.getAllByTestId('map-marker')[index];
+  act(() => {
+    (marker.props as { onTap: () => void }).onTap();
+  });
+}
+
 /** 알약을 숨기는 경로(D3 · Seed ②) — 시트 스크롤·끌기, 지도 탭, 허브 안 다른 버튼. */
 const HIDE_PATHS: [string, () => void][] = [
   ['시트 본문 스크롤 시작', fireSheetScrollBeginDrag],
@@ -728,6 +736,10 @@ const snapSpy = () =>
   (globalThis as Record<string, unknown>)
     .__bottomSheetSnapToIndexSpy as jest.Mock;
 beforeEach(() => snapSpy().mockClear());
+// TRIP-1558 — 시트 본문 스크롤 요청(`BottomSheetScrollView.scrollTo`)을 기록하는 목 스파이. 전역이라 파일 최상위에서 비운다.
+const scrollSpy = () =>
+  (globalThis as Record<string, unknown>).__bottomSheetScrollToSpy as jest.Mock;
+beforeEach(() => scrollSpy().mockClear());
 // OS "동작 줄이기" 답을 true 로 고정 — 모프와 무관한 케이스가 모션 타이머·act 경고 없이 돈다(모프 케이스만 바꾼다).
 beforeEach(holdReduceMotionOn);
 
@@ -832,6 +844,8 @@ const FLOATING_CLOSE_PATHS: [string, () => void][] = [
     '[방문 완료]',
     () => fireEvent.press(screen.getByTestId('execution-arrive-complete')),
   ],
+  // TRIP-1558 — 핀 탭도 층을 닫는다(일정 칸과 같은 취급). 행 y 를 안 쟀어도 닫힘은 일어난다.
+  ['지도 핀 탭', () => firePinTap(0)],
 ];
 
 /** (층 × 경로) 전부 — it.each 입력. */
@@ -2071,5 +2085,272 @@ describe('LiveHubView · 지도 핀 맞춤 (AC-4·AC-10 · Q-088)', () => {
 
     // 단언 ②
     expect(hubRegion()).toBe(first);
+  });
+});
+
+/* ──────────────── TRIP-1558 · 카드 번호 = 지도 핀 번호, 핀 탭 → 시트 최상단으로 올림 → 도착 뒤 그 카드로 스크롤 ────────────────
+ * 번호는 슬롯 배열 위치+1 — 핀(`buildStatePins`)과 같은 출처라 좌표 없는 슬롯이 있어도(핀은 ①③④⑤) 카드는 ①②③④⑤ 로 일치한다.
+ * 핀을 누르면: 떠 있는 층을 닫고 → 시트가 최상단 칸(1, 펼침)이 아니면 최상단으로 올리라 요청 → **시트가 그 칸에 도착한 뒤**(onChange)
+ * 그 카드 y 로 스크롤 요청. (gorhom 은 가장 높은 칸에서만 안쪽 스크롤을 허용 — 6-b 실측. 중간 칸에서의 scrollTo 는 무시된다.)
+ * 이미 최상단이면 올림 없이 즉시 스크롤. 도착 전 다른 핀을 누르면 마지막 핀만 스크롤된다.
+ * 핀 배열 위치(index)와 카드 위치는 다를 수 있어 **number** 로 대응한다(HP4). y = 타임라인 y + 행 y (둘 다 onLayout 으로 잰 값).
+ * 통과형 시트 목이라 실제 열림·스크롤 도달은 못 본다(6-b) — "어느 칸으로·언제·어느 y 로 요청이 나갔나"까지만 잠근다.
+ * 목은 onAnimate(이동 시작)·onChange(도착)를 스스로 쏘지 않는다 → 테스트가 host 의 prop 을 직접 부른다(실제 순서 그대로: 시작 → 도착).
+ * 3동작: 준비(좌표 없는 슬롯이 낀 5곳 + 레이아웃 측정) → 실행(핀 탭 / 시트 이동 시작·도착) → 단언(번호 leaf·스파이 인자·호출 횟수). */
+describe('LiveHubView · HP 카드 번호와 핀 탭 (TRIP-1558)', () => {
+  const KEY_NAME = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
+  let original: string | undefined;
+  original = process.env[KEY_NAME];
+  beforeEach(() => {
+    process.env[KEY_NAME] = 'test-naver-client-id';
+  });
+  afterEach(() => {
+    if (original === undefined) delete process.env[KEY_NAME];
+    else process.env[KEY_NAME] = original;
+  });
+
+  // 두 번째 슬롯(광안리)은 좌표가 없다 → 핀 번호 1·3·4·5, 카드 번호 1~5. 상태: done·done·active·upcoming·upcoming.
+  const GAP_SLOTS: LiveHubSlot[] = SLOTS.map((entry, index) =>
+    index === 1
+      ? { ...entry, slot: { ...entry.slot, lat: null, lng: null } }
+      : entry
+  );
+  const KEYS = SLOTS.map(({ slot }) => `${DATE}#${slot.poiId}`);
+  const orderId = (key: string) => `execution-live-slot-order-${key}`;
+  const TIMELINE_Y = 300;
+  const ROW_YS = [24, 170, 340, 520, 690];
+
+  /** 그 testID 노드에 **직접** 달린 onLayout 으로 y 를 흉내 낸다 — 조상의 onLayout 이 대신 불려 거짓 green 되지 않게 먼저 확인한다. */
+  function fireLayoutAt(testID: string, y: number): void {
+    const node = screen.getByTestId(testID);
+    if (typeof node.props.onLayout !== 'function') {
+      throw new Error(`${testID} 노드에 onLayout 이 직접 달려 있지 않다`);
+    }
+    fireEvent(node, 'layout', {
+      nativeEvent: { layout: { x: 0, y, width: 320, height: 120 } },
+    });
+  }
+  function measureHub(): void {
+    fireLayoutAt('execution-live-timeline', TIMELINE_Y);
+    KEYS.forEach((key, index) =>
+      fireLayoutAt(`execution-live-slot-row-${key}`, ROW_YS[index])
+    );
+  }
+  const rowY = (index: number) => TIMELINE_Y + ROW_YS[index];
+
+  it('HP1 세 상태 카드 모두 슬롯 위치+1 번호가 있고(좌표 없는 슬롯 포함), 렌더된 모든 핀의 번호와 그 슬롯 카드 번호가 같다', () => {
+    renderHub({ slots: GAP_SLOTS });
+
+    KEYS.forEach((key, index) =>
+      expect(screen.getByTestId(orderId(key))).toHaveTextContent(
+        String(index + 1)
+      )
+    );
+    // 핀 — 좌표 없는 2번은 핀이 없고 번호는 안 밀린다(①③④⑤).
+    const pinNumbers = screen
+      .getAllByTestId(/^map-marker-pin-/)
+      .map((node) => Number(String(node.props.testID).split('-').pop()));
+    expect(pinNumbers).toEqual([1, 3, 4, 5]);
+    pinNumbers.forEach((n) =>
+      expect(screen.getByTestId(orderId(KEYS[n - 1]))).toHaveTextContent(
+        String(n)
+      )
+    );
+  });
+
+  /** 시트가 그 칸에 **도착해 멈췄다** — host 의 onChange 를 act 안에서 직접 부른다(이동 시작 onAnimate 와 다른 신호). */
+  function fireSheetSettle(index: number): void {
+    const onChange = sheetHost().props.onChange as unknown;
+    if (typeof onChange !== 'function') {
+      throw new Error('시트(BottomSheet)에 onChange 가 달려 있지 않다');
+    }
+    act(() => {
+      (onChange as (i: number, p: number, t: number) => void)(index, 0, 0);
+    });
+  }
+  /** 사용자가 손으로 시트를 옮긴 것 — 실제 순서대로 시작(onAnimate) 뒤 도착(onChange). */
+  function dragSheet(from: number, to: number): void {
+    fireSheetAnimate(from, to);
+    fireSheetSettle(to);
+  }
+  const snapTargets = () => snapSpy().mock.calls.map(([index]) => index);
+  const scrollYs = () => scrollSpy().mock.calls.map(([arg]) => arg.y);
+
+  it('HP2 시트가 완전히 내려가 있으면 핀 탭은 최상단(1)으로 올리라고만 요청하고, 도착한 뒤에야 그 카드 y 로 스크롤을 정확히 1회 요청한다', () => {
+    renderHub({ slots: GAP_SLOTS, initialSnapIndex: -1 });
+    measureHub();
+    expect(snapSpy()).not.toHaveBeenCalled();
+    expect(scrollSpy()).not.toHaveBeenCalled();
+
+    firePinTap(1); // 핀 index 1 = number 3
+
+    expect(snapTargets()).toEqual([1]); // 중간(0)이 아니라 최상단(1)
+    expect(scrollSpy()).not.toHaveBeenCalled(); // 아직 도착 전
+
+    // 이동 시작(onAnimate)은 도착이 아니다 — 여기서 스크롤하면 시트가 아직 안 올라온 때라 무시된다.
+    fireSheetAnimate(-1, 1);
+    expect(scrollSpy()).not.toHaveBeenCalled();
+
+    fireSheetSettle(1); // 도착
+
+    expect(scrollSpy()).toHaveBeenCalledTimes(1);
+    expect(scrollSpy()).toHaveBeenLastCalledWith(
+      expect.objectContaining({ y: rowY(2) })
+    );
+    expect(snapTargets()).toEqual([1]); // 도착 뒤에 시트 요청이 더 늘지 않는다
+
+    // 최상단에 있다 — 같은 핀을 다시 눌러도 시트는 그대로, 스크롤은 즉시(같은 핀 재탭도 요청이다).
+    firePinTap(1);
+    expect(snapTargets()).toEqual([1]);
+    expect(scrollYs()).toEqual([rowY(2), rowY(2)]);
+  });
+
+  it('HP2b 펼침에서 곧장 내려간 뒤(1→-1)에도 중간이 아니라 최상단(1)으로 올리고, 스크롤은 도착 뒤에 낸다', () => {
+    renderHub({ slots: GAP_SLOTS, initialSnapIndex: 1 });
+    measureHub();
+    dragSheet(1, -1);
+
+    firePinTap(0);
+
+    expect(snapTargets()).toEqual([1]);
+    expect(scrollSpy()).not.toHaveBeenCalled();
+
+    fireSheetSettle(1);
+
+    expect(scrollYs()).toEqual([rowY(0)]);
+  });
+
+  it('HP3 시트가 중간(0)이면 최상단(1)으로 올리라고 요청하고, 도착 전엔 스크롤이 없다 — 중간 칸의 scrollTo 는 시트가 무시한다', () => {
+    renderHub({ slots: GAP_SLOTS, initialSnapIndex: 0 });
+    measureHub();
+
+    firePinTap(1);
+
+    expect(snapTargets()).toEqual([1]);
+    expect(scrollSpy()).not.toHaveBeenCalled();
+
+    fireSheetSettle(1);
+
+    expect(scrollYs()).toEqual([rowY(2)]);
+  });
+
+  it('HP3b 시트가 이미 최상단(1)이면 올림 요청 없이 즉시 스크롤한다(펼침을 끌어내리지도, 도착을 기다리지도 않는다)', () => {
+    renderHub({ slots: GAP_SLOTS, initialSnapIndex: 1 });
+    measureHub();
+
+    firePinTap(1);
+
+    expect(snapSpy()).not.toHaveBeenCalled();
+    expect(scrollYs()).toEqual([rowY(2)]);
+  });
+
+  it('HP4 (번호 점프 ①③) 두 번째 핀(index 1, number 3)은 두 번째가 아니라 3번째 카드로, 첫 핀은 첫 카드로 간다', () => {
+    renderHub({ slots: GAP_SLOTS, initialSnapIndex: 1 });
+    measureHub();
+
+    firePinTap(1);
+    firePinTap(0);
+    firePinTap(3); // number 5
+
+    expect(scrollYs()).toEqual([
+      rowY(2), // 640 — index 기준이면 470(2번째 카드)
+      rowY(0),
+      rowY(4),
+    ]);
+  });
+
+  it('HP5 (금지) 행 y 를 아직 못 쟀으면 핀 탭이 던지지 않고, 시트가 도착해도 스크롤을 요청하지 않는다', () => {
+    renderHub({ slots: GAP_SLOTS });
+
+    expect(() => firePinTap(1)).not.toThrow();
+    fireSheetSettle(1);
+
+    expect(scrollSpy()).not.toHaveBeenCalled();
+  });
+
+  it('HP6 도착 전에 다른 핀을 누르면 마지막 핀만 스크롤된다 — 이동 시작(onAnimate)을 도착으로 착각해도 안 된다', () => {
+    renderHub({ slots: GAP_SLOTS, initialSnapIndex: 0 });
+    measureHub();
+
+    firePinTap(1); // number 3 — 올림 요청
+    fireSheetAnimate(0, 1); // 올라가는 중(시작 신호)
+    firePinTap(0); // number 1 — 아직 도착 전
+    expect(scrollSpy()).not.toHaveBeenCalled();
+    expect(snapTargets().every((index) => index === 1)).toBe(true);
+
+    fireSheetSettle(1);
+
+    expect(scrollYs()).toEqual([rowY(0)]); // 첫 핀(number 3)의 y(640)는 나가지 않는다
+  });
+
+  it('HP7 도착해 스크롤한 뒤에 낡은 요청이 되살아나지 않고, 사용자가 시트를 내려 놓은 뒤의 핀 탭은 다시 올림을 요청한다', () => {
+    renderHub({ slots: GAP_SLOTS, initialSnapIndex: 0 });
+    measureHub();
+    firePinTap(1);
+    fireSheetSettle(1);
+    expect(scrollYs()).toEqual([rowY(2)]);
+
+    // 사용자가 중간으로 내렸다가 다시 펼침 — 이미 처리한 요청이 다시 나가면 안 된다.
+    dragSheet(1, 0);
+    dragSheet(0, 1);
+    expect(scrollYs()).toEqual([rowY(2)]);
+
+    // 다시 내려 둔 뒤 핀 탭 — 최상단이 아니니 또 올리고, 도착 뒤 스크롤.
+    dragSheet(1, 0);
+    firePinTap(3); // number 5
+    expect(snapTargets()).toEqual([1, 1]);
+    expect(scrollYs()).toEqual([rowY(2)]);
+    fireSheetSettle(1);
+    expect(scrollYs()).toEqual([rowY(2), rowY(4)]);
+  });
+
+  // TRIP-1558 03b 2회차 경고-1·2 — "대기가 살아 있는 동안" 시트가 딴 칸으로 가는 경우(정상 경로 HP2~7 이 못 보는 가장자리).
+  it.each([
+    ['중간(0)', 0],
+    ['완전 내림(-1)', -1],
+  ])(
+    'HP8 올라가는 도중 사용자가 시트를 %s 으로 끌어가면 대기 y 를 버린다 — 나중에 손으로 펼쳐도 옛 카드로 튀지 않는다',
+    (_label, away) => {
+      renderHub({ slots: GAP_SLOTS, initialSnapIndex: 0 });
+      measureHub();
+      firePinTap(1); // number 3 — 올림 요청 + 대기 y
+
+      fireSheetAnimate(1, away); // 올라가던 시트가 최상단이 아닌 칸으로 이동을 시작한다
+      fireSheetSettle(away);
+      dragSheet(away, 1); // 한참 뒤 사용자가 손으로 최상단까지 올림
+      expect(scrollSpy()).not.toHaveBeenCalled(); // 옛 카드(y=640)로 안 튄다
+
+      // 짝 — 버린 뒤에도 최상단에서의 새 핀 탭은 정상 동작한다.
+      firePinTap(3); // number 5
+      expect(scrollYs()).toEqual([rowY(4)]);
+    }
+  );
+
+  it('HP9 올라가는 도중 일차 칩을 누르면 대기 y 를 버린다 — 도착해도 옛 날짜의 y 로 스크롤하지 않는다', () => {
+    renderHub({ slots: GAP_SLOTS, initialSnapIndex: 0 });
+    measureHub();
+    firePinTap(1);
+    expect(snapTargets()).toEqual([1]);
+
+    fireEvent.press(screen.getByTestId('execution-live-daychip-0')); // 다른 날로 전환
+    fireSheetSettle(1); // 올라가던 시트가 도착
+
+    expect(scrollSpy()).not.toHaveBeenCalled();
+
+    // 짝 — 도착해 있는 지금 새 핀 탭은 즉시 스크롤된다(대기 버림이 흐름을 죽이지 않았다).
+    firePinTap(3);
+    expect(scrollYs()).toEqual([rowY(4)]);
+  });
+
+  it('HP10 최상단이 아닌 칸에 도착(onChange 0·-1)하는 것으로는 대기 스크롤이 나가지 않는다', () => {
+    renderHub({ slots: GAP_SLOTS, initialSnapIndex: 0 });
+    measureHub();
+    firePinTap(1); // 올림 요청 + 대기 y — 이동 시작 신호는 일부러 안 준다(HP8 의 버림 경로와 분리)
+
+    fireSheetSettle(0);
+    fireSheetSettle(-1);
+
+    expect(scrollSpy()).not.toHaveBeenCalled();
+    expect(snapTargets()).toEqual([1]); // 도착 신호가 시트 요청을 더 만들지도 않는다
   });
 });

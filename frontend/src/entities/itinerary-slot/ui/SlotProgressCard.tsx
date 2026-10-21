@@ -90,6 +90,8 @@ export interface SlotProgressCardProps {
   onPressDirections?: () => void;
   /** TRIP-1189 — 길찾기가 앱·웹 모두 실패했을 때 거리 안내 한 줄(INV-4). 상태는 부모가 가진다. 비면 안 그린다. */
   directionsNotice?: string | null;
+  /** TRIP-1558 — 지도 핀과 같은 번호(슬롯 위치+1). 미전달이면 번호 노드가 없다. */
+  order?: number;
 }
 
 export function SlotProgressCard({
@@ -110,6 +112,7 @@ export function SlotProgressCard({
   onPressArrive,
   onPressDirections,
   directionsNotice,
+  order,
 }: SlotProgressCardProps): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
   const fieldId = (role: string): string =>
@@ -130,6 +133,40 @@ export function SlotProgressCard({
     </Text>
   );
 
+  // TRIP-1558 — 지도 핀과 같은 번호. 자매 SlotStopCard 번호 배지 값(squircle·primary)을 따르되, 큰 글자에서 두 자리 번호가
+  // 넘치지 않게 고정 폭 대신 최소 폭이다. 이름 왼쪽에 붙으므로 이름 묶음과 한 덩어리로 head 에 놓는다.
+  const orderBadge =
+    order === undefined ? null : (
+      <View className="min-h-[24px] min-w-[24px] items-center justify-center rounded-[8px] bg-primary px-[4px]">
+        <Text
+          testID={fieldId('order')}
+          className="font-inter-bold text-caption font-bold text-on-primary"
+        >
+          {String(order)}
+        </Text>
+      </View>
+    );
+
+  const nameGroup =
+    // 이름 진입 목적지가 없으면 누를 수 없는 글자로, '›' 도 뺀다(TRIP-939 — 자매 SlotStopCard 선례).
+    onPressName ? (
+      <Pressable
+        testID={fieldId('name')}
+        accessibilityRole="button"
+        onPress={onPressName}
+        className="shrink flex-row items-center gap-xs"
+      >
+        {nameText()}
+        <View testID={fieldId('chevron')}>
+          <ChevronRightGlyph size={18} tone="ink" />
+        </View>
+      </Pressable>
+    ) : (
+      <View className="shrink flex-row items-center gap-xs">
+        {nameText(fieldId('name'))}
+      </View>
+    );
+
   const head = (
     <View
       className={
@@ -138,23 +175,13 @@ export function SlotProgressCard({
           : 'flex-row items-center justify-between gap-sm'
       }
     >
-      {/* 이름 진입 목적지가 없으면 누를 수 없는 글자로, '›' 도 뺀다(TRIP-939 — 자매 SlotStopCard 선례). */}
-      {onPressName ? (
-        <Pressable
-          testID={fieldId('name')}
-          accessibilityRole="button"
-          onPress={onPressName}
-          className="shrink flex-row items-center gap-xs"
-        >
-          {nameText()}
-          <View testID={fieldId('chevron')}>
-            <ChevronRightGlyph size={18} tone="ink" />
-          </View>
-        </Pressable>
-      ) : (
-        <View className="shrink flex-row items-center gap-xs">
-          {nameText(fieldId('name'))}
+      {orderBadge ? (
+        <View className="shrink flex-row items-center gap-sm">
+          {orderBadge}
+          {nameGroup}
         </View>
+      ) : (
+        nameGroup
       )}
       {state === 'done' ? (
         <View className="flex-row items-baseline">

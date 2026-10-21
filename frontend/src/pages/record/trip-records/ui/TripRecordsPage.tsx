@@ -166,6 +166,14 @@ export function TripRecordsPage({
         : 'upcoming',
     }))
   );
+  // TRIP-1558 — 카드·계획 행 번호 = 그날 슬롯 배열 위치+1 = 핀 번호(같은 배열·같은 규칙, 좌표 없는 슬롯도 번호는 안 밀린다). 즉석 방문처럼
+  // 그날 슬롯에 없는 slotKey 는 맵에 없어 번호가 없다.
+  const planOrderBySlotKey = new Map(
+    activeSlots.map((slot, index) => [
+      buildSlotKey(activeDay, slot.poiId),
+      index + 1,
+    ])
+  );
   const firstPin = pins[0];
   const mapCenter: MapCenter = firstPin
     ? { lat: firstPin.lat, lng: firstPin.lng }
@@ -190,6 +198,10 @@ export function TripRecordsPage({
   const cards: VisitRecordCardVM[] = (records.data?.visits ?? []).map(
     (visit, index) => ({
       order: index + 1,
+      planOrder:
+        visit.slotKey == null
+          ? undefined
+          : planOrderBySlotKey.get(visit.slotKey),
       visitCheckId: visit.visitCheckId,
       slotKey: visit.slotKey ?? null,
       poiId: visit.poiId,
@@ -219,6 +231,9 @@ export function TripRecordsPage({
           slotKey: buildSlotKey(activeDay, slot.poiId),
           poiId: slot.poiId,
           nameKo: slot.nameKo ?? slot.poiId,
+          planOrder: planOrderBySlotKey.get(
+            buildSlotKey(activeDay, slot.poiId)
+          ),
         }))
         .filter((row) => !recordedSlotKeys.has(row.slotKey))
     : [];

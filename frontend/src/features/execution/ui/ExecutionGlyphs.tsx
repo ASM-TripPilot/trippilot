@@ -22,9 +22,9 @@ const PRIMARY_TEXT = '#C13515';
 type GlyphProps = { size?: number };
 type TintGlyphProps = GlyphProps & { color?: string };
 
-// TRIP-746 · i01 허브 레일 상태 점 3종(Figma 4125:3957 rail) — 크기가 상태마다 다르다(18·16·12).
+// TRIP-746 · i01 허브 레일 상태 점 3종(Figma 4125:3957 rail) — 크기가 상태마다 다르다(22·16·12 — 완료 22 는 TRIP-1558, 18 이 작아 보인다는 사용자 결정).
 // 완료=success 원 + 흰 테두리 + 흰 체크.
-export function RailDoneGlyph({ size = 18 }: GlyphProps) {
+export function RailDoneGlyph({ size = 22 }: GlyphProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 18 18" fill="none">
       <Circle

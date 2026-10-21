@@ -1469,3 +1469,58 @@ describe('SlotProgressCard · 큰 글자 — INV-3 (TRIP-1270 AC-7)', () => {
     }
   });
 });
+
+// TRIP-1558 — 지도 핀과 같은 번호. 번호는 부모(허브)가 슬롯 위치+1 로 내려 주고 카드는 그리기만 한다.
+// 준비(번호를 주거나 안 주고 세 상태 렌더) → 실행(렌더) → 단언(번호 leaf 글자·부재, 이름 leaf 무변경).
+describe('SlotProgressCard · 지도 핀과 같은 번호', () => {
+  const orderId = `execution-live-slot-order-${KEY}`;
+
+  it.each([
+    ['done', 3],
+    ['active', 1],
+    ['upcoming', 12],
+  ] as const)(
+    '%s 카드는 받은 번호 %s 를 숫자만 한 leaf 로 그리고 이름은 그대로다',
+    (state, order) => {
+      render(
+        <SlotProgressCard
+          slot={mkSlot()}
+          date={DATE}
+          state={state}
+          order={order}
+        />
+      );
+
+      // toHaveTextContent(문자열)은 완전 일치 — "12" 에 "2" 는 통과 못 한다(02a §5).
+      expect(screen.getByTestId(orderId)).toHaveTextContent(String(order));
+      expect(screen.getByTestId(id('name'))).toHaveTextContent('감천문화마을');
+    }
+  );
+
+  it.each(['done', 'active', 'upcoming'] as const)(
+    '%s 카드는 번호를 안 주면 번호 노드가 없다(다른 호출처 무회귀)',
+    (state) => {
+      render(<SlotProgressCard slot={mkSlot()} date={DATE} state={state} />);
+
+      expect(
+        screen.getByTestId(`execution-live-slot-${KEY}`)
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId(orderId)).toBeNull();
+    }
+  );
+
+  it('큰 글자(머리 줄이 세로로 쌓이는 배율)에서도 번호가 선다', () => {
+    setFontScale(3.571);
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="upcoming"
+        order={3}
+      />
+    );
+
+    expect(screen.getByTestId(orderId)).toHaveTextContent('3');
+    expect(screen.getByTestId(id('name'))).toHaveTextContent('감천문화마을');
+  });
+});

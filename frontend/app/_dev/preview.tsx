@@ -3772,6 +3772,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           {
             visitCheckId: 'r1',
             slotKey: '2026-08-21#p1',
+            planOrder: 1,
             poiId: 'p1',
             nameKo: '광안리 해변',
             arrivedAt: '2026-08-21T14:20:00',
@@ -3782,6 +3783,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           {
             visitCheckId: 'r2',
             slotKey: '2026-08-21#p2',
+            planOrder: 2,
             poiId: 'p2',
             nameKo: '부산시립미술관',
             arrivedAt: '2026-08-21T15:40:00',
@@ -3792,6 +3794,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           {
             visitCheckId: 'r3',
             slotKey: '2026-08-21#p3',
+            planOrder: 3,
             poiId: 'p3',
             nameKo: '○○ 카페',
             arrivedAt: null,
@@ -3802,6 +3805,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           {
             visitCheckId: 'r4',
             slotKey: '2026-08-21#p4',
+            planOrder: 4,
             poiId: 'p4',
             // TRIP-1086 — 긴 이름 말줄임(한 줄 `…`)·'— 건너뜀'과의 간격 육안 자리(jest 사각).
             nameKo: '건너뛴 해운대 블루라인파크 청사포 다릿돌전망대',
@@ -4180,10 +4184,30 @@ export const PREVIEW_STATES: PreviewState[] = [
         ]}
         cards={[]}
         planRows={[
-          { slotKey: '2026-08-21#p1', poiId: 'p1', nameKo: '광안리 해변' },
-          { slotKey: '2026-08-21#p2', poiId: 'p2', nameKo: '부산시립미술관' },
-          { slotKey: '2026-08-21#p3', poiId: 'p3', nameKo: '○○ 카페' },
-          { slotKey: '2026-08-21#p4', poiId: 'p4', nameKo: '웨이브온 커피' },
+          {
+            planOrder: 1,
+            slotKey: '2026-08-21#p1',
+            poiId: 'p1',
+            nameKo: '광안리 해변',
+          },
+          {
+            planOrder: 2,
+            slotKey: '2026-08-21#p2',
+            poiId: 'p2',
+            nameKo: '부산시립미술관',
+          },
+          {
+            planOrder: 3,
+            slotKey: '2026-08-21#p3',
+            poiId: 'p3',
+            nameKo: '○○ 카페',
+          },
+          {
+            planOrder: 4,
+            slotKey: '2026-08-21#p4',
+            poiId: 'p4',
+            nameKo: '웨이브온 커피',
+          },
         ]}
         onPressPlanCheck={noop}
         onPressComplete={noop}

@@ -1,4 +1,10 @@
-import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import {
   Keyboard,
   Pressable,
@@ -20,7 +26,11 @@ import {
   VisitCheckUpcomingGlyph,
 } from '@/features/record';
 import { SpontaneousVisitButton } from './SpontaneousVisitButton';
-import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
+import {
+  PlanOrderBadge,
+  VisitRecordCard,
+  type VisitRecordCardVM,
+} from './VisitRecordCard';
 import type { MapCenter, MapPin } from '@/shared/map';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { DayChipOverlay } from '@/widgets/map-sheet-shell';
@@ -67,6 +77,8 @@ export interface RecordPlanRowVM {
   slotKey: string;
   poiId: string;
   nameKo: string;
+  /** TRIP-1558 — 그날 계획 슬롯 위치+1(= 지도 핀 번호). */
+  planOrder?: number;
 }
 
 export interface TripRecordsViewProps {
@@ -119,6 +131,8 @@ const DEFAULT_NOTICE = '오늘의 동선 · 방문한 곳을 사진과 메모로
 const FAB_HEIGHT = 52;
 const FAB_GAP = 8;
 const FAB_RIGHT = 16;
+// 핀 탭이 올려 두는 최상단 칸(j01 기본 배열 0 닫힘·1 peek·2 펼침) — gorhom 은 이 칸에서만 안쪽 스크롤을 허용한다.
+const TOP_SNAP = 2;
 // 그림자 색은 토큰이 없다 — LiveHubView `FAB_SHADOW` 와 같은 값(Figma 0/4/16 8%).
 const FAB_SHADOW = {
   shadowColor: '#000000',
@@ -181,6 +195,21 @@ export function TripRecordsView({
     return () => subs.forEach((sub) => sub.remove());
   }, []);
 
+  // TRIP-1558 — 핀 탭 → 시트를 최상단 칸으로 올리고, **도착한 뒤** 그 번호의 항목으로 스크롤. gorhom 은 가장 높은 칸에서만 안쪽 스크롤을
+  // 허용한다(6-b 실측). j01 기본 배열: 0 닫힘·1 peek·2 펼침(i01 허브의 −1/0/1 과 번호가 다르다). 도착한 칸은 셸 `onSheetChange` 로
+  // 추적한다(초기값 = peek 1). 요청은 id 요청형이라 같은 핀을 다시 눌러도 다시 나간다.
+  const arrivedIndexRef = useRef(1);
+  // 올라가는 동안 마지막으로 누른 핀의 항목 index — 도착하면 스크롤로 승격하고 비운다.
+  const pendingItemRef = useRef<number | undefined>(undefined);
+  const [snapRequest, setSnapRequest] = useState<
+    { index: number; id: number } | undefined
+  >(undefined);
+  const [scrollRequest, setScrollRequest] = useState<
+    { index: number; id: number } | undefined
+  >(undefined);
+  const requestScroll = (index: number): void =>
+    setScrollRequest((prev) => ({ index, id: (prev?.id ?? 0) + 1 }));
+
   // i01 헤더와 같은 조립(LiveHubView) — 'N곳' 은 시트에 보이는 곳 수(카드 + 계획 행, 01b Q2).
   const header = [
     tripTitle ?? '',
@@ -195,6 +224,24 @@ export function TripRecordsView({
     ...cards.map((card) => ({ kind: 'card' as const, card })),
     ...planRows.map((row) => ({ kind: 'plan' as const, row })),
   ];
+
+  // `onPinTap(index)` 의 index 는 mapPins 위치다 — 항목과는 pins[index].number(= 슬롯 위치+1 = planOrder)로 잇는다. 카드가 계획 행보다 앞이라
+  // 같은 번호면 카드가 먼저 걸린다. 항목이 없으면(로딩·결번) 아무것도 안 한다.
+  const handlePinTap = (pinIndex: number): void => {
+    const number = mapPins?.[pinIndex]?.number;
+    const itemIndex = items.findIndex(
+      (item) =>
+        (item.kind === 'card' ? item.card.planOrder : item.row.planOrder) ===
+        number
+    );
+    if (number === undefined || itemIndex < 0) return;
+    if (arrivedIndexRef.current === TOP_SNAP) {
+      requestScroll(itemIndex);
+      return;
+    }
+    pendingItemRef.current = itemIndex;
+    setSnapRequest((prev) => ({ index: TOP_SNAP, id: (prev?.id ?? 0) + 1 }));
+  };
 
   const renderItem = ({ item }: { item: SheetItem }): ReactElement => (
     <View className="px-lg pb-md">
@@ -243,6 +290,20 @@ export function TripRecordsView({
           </View>
         }
         animatedPosition={sheetTop}
+        // 이동 시작이 최상단이 아니면 사용자가 시트를 다른 칸으로 끌어 간 것 — 대기 요청을 버린다(나중에 손으로 펼칠 때 옛 항목으로 튀지 않게).
+        onSheetAnimate={(_from, to) => {
+          if (to !== TOP_SNAP) pendingItemRef.current = undefined;
+        }}
+        onSheetChange={(index) => {
+          arrivedIndexRef.current = index;
+          const itemIndex = pendingItemRef.current;
+          if (index !== TOP_SNAP || itemIndex === undefined) return;
+          pendingItemRef.current = undefined;
+          requestScroll(itemIndex);
+        }}
+        onPinTap={handlePinTap}
+        snapRequest={snapRequest}
+        scrollRequest={scrollRequest}
         // TRIP-761 ⊘ 배지 — 셸 `mapCard` 슬롯(일차 칩 줄 아래, Figma 4705:3557 y=63). 지도 위에 직접
         // absolute 로 얹지 않는다(repo-traps 지도 절). testID 노드 자신이 `pointerEvents="none"` 라 지도
         // 터치를 흡수하지 않는다(A3a — jest 가 볼 수 있는 유일한 그물, 실제 통과는 6-b).
@@ -394,6 +455,12 @@ function renderPlanRow(
     >
       <View className="flex-row items-center gap-sm">
         <VisitCheckUpcomingGlyph size={22} />
+        {row.planOrder != null ? (
+          <PlanOrderBadge
+            testID={`record-trip-plan-order-${row.slotKey}`}
+            order={row.planOrder}
+          />
+        ) : null}
         <Text className="font-noto-bold text-card-title text-ink">
           {row.nameKo}
         </Text>

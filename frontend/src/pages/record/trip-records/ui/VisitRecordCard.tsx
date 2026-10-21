@@ -47,6 +47,8 @@ export interface VisitRecordCardVM {
   arrivedLabel?: string | null;
   /** TRIP-1372 — 몇 번째 방문인가(1-기반). 서버가 도착 순으로 준 배열 순서 그대로다. 없으면 미표시. */
   order?: number;
+  /** TRIP-1558 — 그날 계획 슬롯 위치+1(= 지도 핀 번호). 즉석 방문·계획에 없는 방문은 없다. */
+  planOrder?: number;
 }
 
 export interface VisitRecordCardProps {
@@ -198,6 +200,12 @@ export function VisitRecordCard({
             visitCheckId={card.visitCheckId}
             onPressComplete={onPressComplete}
           />
+          {card.planOrder != null ? (
+            <PlanOrderBadge
+              testID={`record-trip-visit-plan-order-${card.visitCheckId}`}
+              order={card.planOrder}
+            />
+          ) : null}
           <Text
             numberOfLines={1}
             className="shrink font-noto-bold text-card-title text-ink"
@@ -299,6 +307,29 @@ export function VisitRecordCard({
           </Text>
         </View>
       ) : null}
+    </View>
+  );
+}
+
+/**
+ * TRIP-1558 — 지도 핀과 같은 번호 배지(카드·계획 행 공용). 값은 자매 `SlotStopCard`·`SlotProgressCard` 번호 배지(24 squircle·primary)를 따르되
+ * 큰 글자에서 두 자리 번호가 넘치지 않게 고정 폭 대신 최소 폭이다. leaf 는 숫자만(「N번째 방문」과 다른 값 — 그건 도착 순이다).
+ */
+export function PlanOrderBadge({
+  testID,
+  order,
+}: {
+  testID: string;
+  order: number;
+}): ReactElement {
+  return (
+    <View className="min-h-[24px] min-w-[24px] items-center justify-center rounded-[8px] bg-primary px-[4px]">
+      <Text
+        testID={testID}
+        className="font-inter-bold text-caption font-bold text-on-primary"
+      >
+        {String(order)}
+      </Text>
     </View>
   );
 }

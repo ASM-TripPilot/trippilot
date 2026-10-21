@@ -6,7 +6,7 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import { Dimensions, Text } from 'react-native';
+import { Dimensions, FlatList, Text } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import type { MapPin } from '@/shared/map';
@@ -1535,5 +1535,304 @@ describe('MapSheetShell · SR 시트 끝까지 내림 옵션 (TRIP-1522 v2)', ()
     render(shell({ initialIndex: -1 }));
 
     expect(sheetHost().props.index).toBe(-1);
+  });
+});
+
+/* ──────────────── TRIP-1558 · 핀 탭 통과 + 본문 스크롤 요청 — 전부 옵트인("안 주면 지금과 똑같다") ────────────────
+ * 지도 핀을 누르면 소비처(허브·j01)가 시트를 올리고 목록을 그 칸으로 보낸다. 셸은 판단 없이
+ *  - `onPinTap(index)` 를 MapView 로 흘리고(index = pins 배열 위치),
+ *  - `scrollRequest` 의 `id` 가 바뀔 때만 본문을 스크롤한다(`snapRequest` 와 같은 구조 — 첫 값은 출발값, 같은 id 는 조용).
+ *    `y` → 기본 경로(`BottomSheetScrollView.scrollTo`), `index` → list 경로(`FlatList.scrollToIndex`).
+ * 시트 목은 호출 스파이만 있고(실제 스크롤은 6-b), list 경로는 RN FlatList 라 프로토타입 스파이로 본다.
+ * 3동작: 준비(옵션을 주거나 안 주고 마운트) → 실행(마커 탭 / scrollRequest 값 변경·재렌더) → 단언(콜백·스파이 호출). */
+const scrollSpy = () =>
+  (globalThis as Record<string, unknown>).__bottomSheetScrollToSpy as jest.Mock;
+
+describe('MapSheetShell · SC 핀 탭 통과·스크롤 요청 (TRIP-1558)', () => {
+  const LIST_ROWS = ['a', 'b', 'c'];
+
+  beforeEach(() => {
+    withMapKey();
+    scrollSpy().mockClear();
+  });
+  afterEach(() => {
+    restoreMapKey();
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
+
+  function shell(
+    props: Partial<Parameters<typeof MapSheetShell>[0]> = {}
+  ): ReactElement {
+    return (
+      <MapSheetShell
+        center={CENTER}
+        pins={PINS}
+        days={DAYS}
+        selectedDayIndex={0}
+        onSelectDay={jest.fn()}
+        onBack={jest.fn()}
+        header={<Text>헤더</Text>}
+        {...props}
+      >
+        <Text>본문</Text>
+      </MapSheetShell>
+    );
+  }
+
+  const listSlot = {
+    data: LIST_ROWS as readonly unknown[],
+    renderItem: ({ item }: { item: unknown }) => <Text>{String(item)}</Text>,
+    keyExtractor: (item: unknown) => String(item),
+  };
+
+  function tapMarker(index: number): void {
+    const marker = screen.getAllByTestId('map-marker')[index];
+    act(() => {
+      (marker.props as { onTap: () => void }).onTap();
+    });
+  }
+
+  it('SC1 마커를 누르면 onPinTap 이 pins 배열 위치(0 포함)로 불린다', () => {
+    const onPinTap = jest.fn();
+    render(shell({ onPinTap }));
+    expect(onPinTap).not.toHaveBeenCalled();
+
+    tapMarker(1);
+    expect(onPinTap).toHaveBeenCalledTimes(1);
+    expect(onPinTap).toHaveBeenLastCalledWith(1);
+
+    tapMarker(0); // 0 은 falsy — `if (index)` 로 거르면 여기서 red
+    expect(onPinTap).toHaveBeenCalledTimes(2);
+    expect(onPinTap).toHaveBeenLastCalledWith(0);
+  });
+
+  it('SC1b onPinTap 을 안 주면 마커를 눌러도 던지지 않는다 (선제 green · 무회귀)', () => {
+    render(shell());
+
+    expect(() => tapMarker(0)).not.toThrow();
+  });
+
+  it('SC2 scrollRequest{y}: 첫 값은 조용, id 가 바뀔 때만 그 y 로 스크롤 — 같은 id·y 만 바뀜은 조용, y=0 도 요청이다', () => {
+    const { rerender } = render(shell({ scrollRequest: { id: 1, y: 100 } }));
+    expect(scrollSpy()).not.toHaveBeenCalled();
+
+    rerender(shell({ scrollRequest: { id: 2, y: 240 } }));
+    expect(scrollSpy()).toHaveBeenCalledTimes(1);
+    expect(scrollSpy()).toHaveBeenLastCalledWith(
+      expect.objectContaining({ y: 240 })
+    );
+
+    rerender(shell({ scrollRequest: { id: 2, y: 999 } })); // 같은 id
+    expect(scrollSpy()).toHaveBeenCalledTimes(1);
+
+    rerender(shell({ scrollRequest: { id: 3, y: 0 } })); // 맨 위로 — 0 도 값이다
+    expect(scrollSpy()).toHaveBeenCalledTimes(2);
+    expect(scrollSpy()).toHaveBeenLastCalledWith(
+      expect.objectContaining({ y: 0 })
+    );
+  });
+
+  it('SC3 scrollRequest{index}: list 경로 FlatList 가 같은 규칙으로 scrollToIndex 한다 (index=0 포함)', () => {
+    const toIndex = jest
+      .spyOn(FlatList.prototype, 'scrollToIndex')
+      .mockImplementation(() => {});
+    const { rerender } = render(
+      shell({ list: listSlot, scrollRequest: { id: 1, index: 2 } })
+    );
+    expect(toIndex).not.toHaveBeenCalled();
+
+    rerender(shell({ list: listSlot, scrollRequest: { id: 2, index: 2 } }));
+    expect(toIndex).toHaveBeenCalledTimes(1);
+    expect(toIndex).toHaveBeenLastCalledWith(
+      expect.objectContaining({ index: 2 })
+    );
+
+    rerender(shell({ list: listSlot, scrollRequest: { id: 2, index: 1 } })); // 같은 id
+    expect(toIndex).toHaveBeenCalledTimes(1);
+
+    rerender(shell({ list: listSlot, scrollRequest: { id: 3, index: 0 } }));
+    expect(toIndex).toHaveBeenCalledTimes(2);
+    expect(toIndex).toHaveBeenLastCalledWith(
+      expect.objectContaining({ index: 0 })
+    );
+  });
+
+  it('SC4 scrollToIndex 가 실패했다고 알리면 평균 높이×index 위치로 먼저 가고, 타이머 뒤 정확히 한 번 다시 시도한다', () => {
+    jest.useFakeTimers();
+    const toIndex = jest
+      .spyOn(FlatList.prototype, 'scrollToIndex')
+      .mockImplementation(() => {});
+    const toOffset = jest
+      .spyOn(FlatList.prototype, 'scrollToOffset')
+      .mockImplementation(() => {});
+    const { rerender } = render(
+      shell({ list: listSlot, scrollRequest: { id: 1, index: 5 } })
+    );
+    rerender(shell({ list: listSlot, scrollRequest: { id: 2, index: 5 } }));
+    expect(toIndex).toHaveBeenCalledTimes(1);
+    expect(toOffset).not.toHaveBeenCalled();
+
+    const onFailed = screen.UNSAFE_getByType(FlatList).props
+      .onScrollToIndexFailed as unknown;
+    expect(typeof onFailed).toBe('function');
+    act(() => {
+      (onFailed as (info: object) => void)({
+        index: 5,
+        highestMeasuredFrameIndex: 2,
+        averageItemLength: 120,
+      });
+    });
+    expect(toOffset).toHaveBeenCalledTimes(1);
+    expect(toOffset).toHaveBeenLastCalledWith(
+      expect.objectContaining({ offset: 600 })
+    );
+
+    act(() => {
+      jest.runAllTimers();
+    });
+    expect(toIndex).toHaveBeenCalledTimes(2);
+    expect(toIndex).toHaveBeenLastCalledWith(
+      expect.objectContaining({ index: 5 })
+    );
+  });
+
+  // TRIP-1558 5-b 보강 — 폴백 재시도의 상한·리셋·요청 경주(code-critic 경고-1·3). 실패 알림은 RN 이 부르는 콜백이라 props 로 직접 부른다.
+  describe('폴백 재시도 — 상한 · 요청마다 리셋 · 새 요청이 대기 중 재시도를 취소', () => {
+    function setup() {
+      jest.useFakeTimers();
+      const toIndex = jest
+        .spyOn(FlatList.prototype, 'scrollToIndex')
+        .mockImplementation(() => {});
+      const toOffset = jest
+        .spyOn(FlatList.prototype, 'scrollToOffset')
+        .mockImplementation(() => {});
+      const view = render(
+        shell({ list: listSlot, scrollRequest: { id: 1, index: 5 } })
+      );
+      const request = (id: number, index: number) =>
+        view.rerender(shell({ list: listSlot, scrollRequest: { id, index } }));
+      const fail = (index: number) => {
+        const onFailed = screen.UNSAFE_getByType(FlatList).props
+          .onScrollToIndexFailed as (info: object) => void;
+        act(() => {
+          onFailed({
+            index,
+            highestMeasuredFrameIndex: 2,
+            averageItemLength: 120,
+          });
+        });
+      };
+      const flush = () =>
+        act(() => {
+          jest.runAllTimers();
+        });
+      return { toIndex, toOffset, request, fail, flush };
+    }
+
+    it('SC6 같은 요청에서 실패 알림이 연달아 와도 폴백은 한 번 — 재시도가 또 실패해도 더 안 한다', () => {
+      const { toIndex, toOffset, request, fail, flush } = setup();
+      request(2, 5);
+      expect(toIndex).toHaveBeenCalledTimes(1);
+
+      fail(5);
+      fail(5); // 두 번째 실패 — 상한에 막혀야 한다
+      expect(toOffset).toHaveBeenCalledTimes(1);
+
+      flush();
+      expect(toIndex).toHaveBeenCalledTimes(2); // 1(요청) + 1(재시도)
+
+      fail(5); // 재시도도 실패 — 그래도 끝
+      flush();
+      expect(toOffset).toHaveBeenCalledTimes(1);
+      expect(toIndex).toHaveBeenCalledTimes(2);
+    });
+
+    it('SC7 새 요청이 오면 폴백이 다시 한 번 허용된다 (요청마다 리셋)', () => {
+      const { toIndex, toOffset, request, fail, flush } = setup();
+      request(2, 5);
+      fail(5);
+      flush();
+      expect(toOffset).toHaveBeenCalledTimes(1);
+      expect(toIndex).toHaveBeenCalledTimes(2);
+
+      request(3, 7); // 새 핀 — 상한이 리셋돼야 한다
+      expect(toIndex).toHaveBeenCalledTimes(3);
+      fail(7);
+      expect(toOffset).toHaveBeenCalledTimes(2);
+      expect(toOffset).toHaveBeenLastCalledWith(
+        expect.objectContaining({ offset: 840 })
+      );
+      flush();
+      expect(toIndex).toHaveBeenCalledTimes(4);
+      expect(toIndex).toHaveBeenLastCalledWith(
+        expect.objectContaining({ index: 7 })
+      );
+    });
+
+    it('SC8 핀 A 의 재시도 대기 중 새 요청 B 가 오면 A 의 지연 재시도는 실행되지 않는다', () => {
+      const { toIndex, request, fail, flush } = setup();
+      request(2, 8); // 핀 A
+      fail(8); // 재시도 타이머 예약(100ms)
+      expect(toIndex).toHaveBeenCalledTimes(1);
+
+      request(3, 1); // 타이머가 터지기 전에 핀 B
+      expect(toIndex).toHaveBeenCalledTimes(2);
+      expect(toIndex).toHaveBeenLastCalledWith(
+        expect.objectContaining({ index: 1 })
+      );
+
+      flush(); // 옛 타이머가 살아 있으면 여기서 scrollToIndex(8) 이 B 를 덮는다
+      expect(toIndex).toHaveBeenCalledTimes(2);
+      expect(
+        toIndex.mock.calls.filter(
+          ([arg]) => (arg as { index: number }).index === 8
+        )
+      ).toHaveLength(1);
+    });
+  });
+
+  it('SC5 scrollRequest 를 안 주면 마운트·재렌더에도 스크롤 요청이 없다 (선제 green · 무회귀)', () => {
+    const toIndex = jest
+      .spyOn(FlatList.prototype, 'scrollToIndex')
+      .mockImplementation(() => {});
+    const plain = render(shell());
+    plain.rerender(shell({ initialIndex: 0 }));
+    plain.unmount();
+    const withList = render(shell({ list: listSlot }));
+    withList.rerender(shell({ list: listSlot, initialIndex: 2 }));
+
+    expect(scrollSpy()).not.toHaveBeenCalled();
+    expect(toIndex).not.toHaveBeenCalled();
+  });
+
+  // 6-b 수정 — gorhom 은 가장 높은 칸에서만 안쪽 스크롤을 허용한다. 소비처가 "그 칸에 도착한 뒤" 스크롤을 요청하려면 이동 시작(onAnimate)이
+  // 아니라 도착(onChange)을 알아야 한다 → 셸이 시트 onChange 의 index 를 `onSheetChange` 로 흘린다(셸 자신의 칸 추적은 그대로).
+  it('SC9 onSheetChange 는 시트가 도착한 칸(0 포함)을 그대로 알리고, 이동 시작(onAnimate)에는 불리지 않는다', () => {
+    const onSheetChange = jest.fn();
+    render(shell({ onSheetChange, onSheetAnimate: jest.fn() }));
+    expect(onSheetChange).not.toHaveBeenCalled();
+
+    // 이동 시작 — 도착이 아니다.
+    const onAnimate = sheetHost().props.onAnimate as (
+      from: number,
+      to: number
+    ) => void;
+    act(() => onAnimate(1, 2));
+    expect(onSheetChange).not.toHaveBeenCalled();
+
+    changeSnap(2);
+    expect(onSheetChange).toHaveBeenCalledTimes(1);
+    expect(onSheetChange).toHaveBeenLastCalledWith(2);
+
+    changeSnap(0); // 0 은 falsy — `if (index)` 로 거르면 여기서 red
+    expect(onSheetChange).toHaveBeenCalledTimes(2);
+    expect(onSheetChange).toHaveBeenLastCalledWith(0);
+  });
+
+  it('SC9b onSheetChange 를 안 주면 시트가 칸에 도착해도 던지지 않는다 (선제 green · 무회귀)', () => {
+    render(shell());
+
+    expect(() => changeSnap(2)).not.toThrow();
   });
 });

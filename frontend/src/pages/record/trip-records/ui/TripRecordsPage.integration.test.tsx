@@ -3,7 +3,7 @@
  */
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { Linking } from 'react-native';
+import { FlatList, Linking } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
@@ -29,6 +29,7 @@ import { getGetTripsTripIdVisitsVisitCheckIdPhotosQueryKey } from '@/shared/api/
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
+import * as probe from '@/test-support/fabAnchorProbe';
 import { flushNotifications } from '@/test-support/flushNotifications';
 import { createGate } from '@/test-support/mswHookHarness';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
@@ -729,6 +730,142 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
           { number: 3, ...P3, state: 'upcoming' },
         ])
       );
+    });
+  });
+
+  // TRIP-1558 — 카드·계획 행 번호 = 그날 계획 슬롯 위치+1(= 지도 핀 번호). 즉석 방문은 번호가 없다. 핀을 누르면 그 번호의 항목(카드 먼저,
+  // 없으면 계획 행)으로 스크롤 요청이 간다 — 항목 index 는 목록 data 위치(카드들 뒤에 계획 행들)라 number-1 과 다를 수 있다.
+  describe('🔴 TRIP-1558 · 계획 번호 조인과 핀 탭', () => {
+    const orderOf = (id: string) =>
+      screen.getByTestId(`record-trip-visit-plan-order-${id}`);
+
+    it('PJ1 계획 방문 카드와 계획 행에 슬롯 위치+1 번호가 붙고, 즉석 방문 카드엔 번호가 없다', async () => {
+      render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
+
+      await screen.findByTestId('record-trip-visit-card-v-sp');
+      expect(orderOf('v1')).toHaveTextContent('1');
+      expect(orderOf('v2')).toHaveTextContent('2');
+      expect(
+        screen.queryByTestId('record-trip-visit-plan-order-v-sp')
+      ).toBeNull();
+      expect(
+        screen.getByTestId(`record-trip-plan-order-${DAY1}#p3`)
+      ).toHaveTextContent('3');
+    });
+
+    // 5-b 보강(경고-2) — 조인 키는 slotKey 다. 같은 poiId(p3)의 즉석 방문(slotKey 없음)이 계획 ③ 번호를 달면 핀↔카드 대응이 거짓이 된다.
+    it('PJ3 계획에 있는 장소(p3)를 즉석으로 방문한 카드엔 번호가 없고, 번호는 계획 행 쪽에만 남는다', async () => {
+      visitsByDay[DAY1] = [
+        visit({
+          id: 'v1',
+          day: DAY1,
+          poiId: 'p1',
+          planned: true,
+          arrived: true,
+        }),
+        visit({
+          id: 'v-sp3',
+          day: DAY1,
+          poiId: 'p3',
+          planned: false,
+          arrived: true,
+        }),
+      ];
+
+      render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
+
+      await screen.findByTestId('record-trip-visit-card-v-sp3');
+      expect(orderOf('v1')).toHaveTextContent('1'); // 앵커 — 계획 방문은 번호가 있다
+      expect(
+        screen.queryByTestId('record-trip-visit-plan-order-v-sp3')
+      ).toBeNull();
+      expect(
+        screen.getByTestId(`record-trip-plan-order-${DAY1}#p3`)
+      ).toHaveTextContent('3');
+    });
+
+    it('PJ2 좌표 없는 슬롯이 끼면 핀은 ①③ 으로 뛰고 카드 번호도 같다 — 핀 탭은 index 가 아니라 number 로 그 항목에, 시트가 최상단에 도착한 뒤 간다', async () => {
+      const toIndex = jest
+        .spyOn(FlatList.prototype, 'scrollToIndex')
+        .mockImplementation(() => {});
+      const snapToIndex = (globalThis as Record<string, unknown>)
+        .__bottomSheetSnapToIndexSpy as jest.Mock;
+      snapToIndex.mockClear();
+      // 서버가 도착 순으로 [p3, p1] 을 준다 — 카드 번호가 3·1 로 뒤섞여 온다. p2 는 좌표가 없고 기록도 없어 계획 행이다.
+      server.use(
+        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+          HttpResponse.json(
+            tripItinerary(
+              [
+                {
+                  date: DAY1,
+                  slots: [
+                    slot('p1', '광안리 해변', P1.lat, P1.lng),
+                    daySlot('p2', '부산시립미술관'),
+                    slot('p3', '○○ 카페', P3.lat, P3.lng),
+                  ],
+                },
+              ],
+              TRIP_ID
+            )
+          )
+        )
+      );
+      visitsByDay[DAY1] = [
+        visit({
+          id: 'v3',
+          day: DAY1,
+          poiId: 'p3',
+          planned: true,
+          arrived: true,
+        }),
+        visit({
+          id: 'v1',
+          day: DAY1,
+          poiId: 'p1',
+          planned: true,
+          arrived: true,
+        }),
+      ];
+
+      try {
+        render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
+
+        await screen.findByTestId('record-trip-visit-card-v1');
+        await waitFor(() =>
+          expect(
+            pinsOnMap().map((pin: { number: number }) => pin.number)
+          ).toEqual([1, 3])
+        );
+        expect(orderOf('v3')).toHaveTextContent('3');
+        expect(orderOf('v1')).toHaveTextContent('1');
+        expect(
+          screen.getByTestId(`record-trip-plan-order-${DAY1}#p2`)
+        ).toHaveTextContent('2');
+
+        // 목록 data = [v3, v1, 행 p2] → 핀 number 3 → 0, number 1 → 1.
+        // 시트는 peek(1) — 최상단(2)으로 올리라고 요청하고, 도착(onChange 2) 전엔 스크롤이 없다. 도착 뒤엔 올림 없이 즉시 스크롤.
+        act(() => screen.getByTestId('map-root').props.onPinTap(1));
+        expect(snapToIndex.mock.calls.map(([index]) => index)).toEqual([2]);
+        expect(toIndex).not.toHaveBeenCalled();
+
+        act(() => {
+          (
+            probe.sheetHost().props.onChange as (
+              index: number,
+              position: number,
+              type: number
+            ) => void
+          )(2, 0, 0);
+        });
+        expect(toIndex.mock.calls.map(([arg]) => arg.index)).toEqual([0]);
+
+        act(() => screen.getByTestId('map-root').props.onPinTap(0));
+        expect(toIndex.mock.calls.map(([arg]) => arg.index)).toEqual([0, 1]);
+        expect(snapToIndex).toHaveBeenCalledTimes(1);
+      } finally {
+        toIndex.mockRestore();
+      }
     });
   });
 

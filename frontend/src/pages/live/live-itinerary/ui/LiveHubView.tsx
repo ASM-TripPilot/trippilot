@@ -182,9 +182,10 @@ export interface LiveHubViewProps {
   } | null;
 }
 
-// 레일 점의 행 상단 여백 — 점 크기(18·16·12)가 달라 Figma 에서 상태마다 다르다(rail 인스턴스 y 실측).
+// 레일 점의 행 상단 여백 — 점 크기(22·16·12)가 달라 Figma 에서 상태마다 다르다(rail 인스턴스 y 실측).
+// done 은 TRIP-1558 에서 18 → 22 로 키워 중심 y=20 을 지키려 11 → 9 (6-b 스크린샷으로 확정).
 const RAIL_TOP: Record<SlotProgressState, string> = {
-  done: 'pt-[11px]',
+  done: 'pt-[9px]',
   active: 'pt-[6px]',
   upcoming: 'pt-[8px]',
 };
@@ -263,6 +264,19 @@ export function LiveHubView({
   const [snapRequest, setSnapRequest] = useState<
     { index: number; id: number } | undefined
   >(undefined);
+  // TRIP-1558 — 핀 탭 → 그 카드로 스크롤. 시트 본문은 스크롤러 하나라 y = 타임라인 y + 행 y(둘 다 onLayout 으로 잰다 — 리렌더가
+  // 필요 없어 ref). 못 쟀으면(첫 레이아웃 전) 스크롤 요청을 안 낸다.
+  const timelineYRef = useRef<number | undefined>(undefined);
+  const rowYsRef = useRef<Record<string, number>>({});
+  const [scrollRequest, setScrollRequest] = useState<
+    { id: number; y: number } | undefined
+  >(undefined);
+  // 6-b 수정 1 — gorhom 은 가장 높은 칸에서만 안쪽 스크롤을 허용한다: 핀 탭은 시트를 펼침 칸으로 올리고, **도착한 뒤**(onSheetChange)
+  // 스크롤한다. 도착한 칸(초기값 = 진입 칸)과 대기 y(마지막 핀 하나, 처리하면 비운다)는 ref — 리렌더가 필요 없다.
+  const arrivedIndexRef = useRef(initialSnapIndex);
+  const pendingScrollYRef = useRef<number | undefined>(undefined);
+  const requestScroll = (y: number) =>
+    setScrollRequest((prev) => ({ y, id: (prev?.id ?? 0) + 1 }));
   // "어느 트리거를 숨겼나"를 키로 든다 — 새 트리거(다른 키)가 오면 비교가 저절로 풀려 다시 보인다.
   // 키를 안 주면 '' 한 키로 본다(한 번 숨기면 계속 숨김).
   const pillKey = triggerPillKey ?? '';
@@ -329,6 +343,26 @@ export function LiveHubView({
       progress: state,
     }))
   );
+  // `onPinTap(index)` 의 index 는 pins 배열(좌표 없는 슬롯이 빠진) 위치다 — 카드와는 pins[index].number(= 슬롯 위치+1)로 잇는다.
+  const handlePinTap = (index: number) => {
+    const pin = pins[index];
+    const target = pin ? slots[pin.number - 1] : undefined;
+    closeFloating();
+    if (!target) return;
+    const timelineY = timelineYRef.current;
+    const rowY = rowYsRef.current[buildSlotKey(activeDate, target.slot.poiId)];
+    if (timelineY === undefined || rowY === undefined) return;
+    const y = timelineY + rowY;
+    if (arrivedIndexRef.current === expandedSnapIndex) {
+      requestScroll(y);
+      return;
+    }
+    pendingScrollYRef.current = y;
+    setSnapRequest((prev) => ({
+      index: expandedSnapIndex,
+      id: (prev?.id ?? 0) + 1,
+    }));
+  };
   const center = pins[0]
     ? { lat: pins[0].lat, lng: pins[0].lng }
     : FALLBACK_CENTER;
@@ -347,6 +381,8 @@ export function LiveHubView({
               testID={`execution-live-daychip-${index}`}
               onPress={() => {
                 hidePill();
+                // 옛 날짜의 y 는 새 날 목록에 안 맞는다.
+                pendingScrollYRef.current = undefined;
                 onSelectDay(index);
               }}
               accessibilityRole="button"
@@ -386,6 +422,8 @@ export function LiveHubView({
         // 시트를 끝까지 내릴 수 있다 — 되올리는 길은 일정 칸(`snapRequest`). 지도 로고는 바 위로 비킨다.
         enablePanDownToClose
         snapRequest={snapRequest}
+        onPinTap={handlePinTap}
+        scrollRequest={scrollRequest}
         mapLogoMargin={MAP_LOGO_MARGIN}
         // TRIP-1416 · 그날 핀 전부를 시트 중간(55%) 칸 위 띠에 맞춘다(Q-088 — 첫 핀 중심 고정 줌이면 나머지가 시트 뒤).
         fitPins
@@ -394,7 +432,16 @@ export function LiveHubView({
         showMyLocation={showMyLocation}
         onMapTap={hidePill}
         onSheetScrollBeginDrag={hidePill}
+        onSheetChange={(index) => {
+          arrivedIndexRef.current = index;
+          const y = pendingScrollYRef.current;
+          if (index !== expandedSnapIndex || y === undefined) return;
+          pendingScrollYRef.current = undefined;
+          requestScroll(y);
+        }}
         onSheetAnimate={(from, to) => {
+          // 올라가는 도중 최상단이 아닌 칸으로 가면 대기 y 를 버린다 — 나중에 손으로 펼칠 때 옛 카드로 튀지 않게(j01 과 같은 규칙).
+          if (to !== expandedSnapIndex) pendingScrollYRef.current = undefined;
           // 마운트 애니메이션(-1→초기 스냅)·제자리는 사용자 동작이 아니다 — 알약이 뜨자마자 사라지지 않게.
           // 펼침에서 출발한 끌기도 숨기지 않는다 — 펼침은 알약을 덮고 있어, 내려오는 끌기가 알약을
           // 처음 드러내는 동작이다(03b 경고-2 (나)).
@@ -457,6 +504,9 @@ export function LiveHubView({
         {/* 타임라인 — 레일 칸 28 + 카드. 세로선(2px)은 레일 칸 가운데, 첫 행 윗변 20px 아래부터 끝까지. */}
         <View
           testID="execution-live-timeline"
+          onLayout={(e) => {
+            timelineYRef.current = e.nativeEvent.layout.y;
+          }}
           // 목록 끝 카드가 하단 바에 가리지 않게 — 바 점유(바 + 바닥 여백 = 70) + 16 = 86(Figma 시트 하단 패딩). 안전영역은 안 더한다(바도 안 더한다).
           style={{
             paddingBottom: LIVE_BOTTOM_BAR_RESERVE + LIST_BOTTOM_GAP,
@@ -464,7 +514,7 @@ export function LiveHubView({
           className="gap-[22px] px-[20px] pt-xl"
         >
           <View className="absolute bottom-0 left-[33px] top-[40px] w-[2px] bg-hairline-strong" />
-          {slots.map(({ slot, state, photos, memo, visitedLabel }) => {
+          {slots.map(({ slot, state, photos, memo, visitedLabel }, index) => {
             const slotKey = buildSlotKey(activeDate, slot.poiId);
             // [사진]·[메모]는 관람 중 카드와, 페이지가 고른 완료 카드(TRIP-1203)에만.
             const media =
@@ -477,7 +527,14 @@ export function LiveHubView({
                 ? notice.text
                 : undefined;
             return (
-              <View key={slotKey} className="flex-row">
+              <View
+                key={slotKey}
+                testID={`execution-live-slot-row-${slotKey}`}
+                onLayout={(e) => {
+                  rowYsRef.current[slotKey] = e.nativeEvent.layout.y;
+                }}
+                className="flex-row"
+              >
                 <View className={`w-[28px] items-center ${RAIL_TOP[state]}`}>
                   <RailDot state={state} />
                 </View>
@@ -486,6 +543,7 @@ export function LiveHubView({
                     slot={slot}
                     date={activeDate}
                     state={state}
+                    order={index + 1}
                     photos={photos}
                     memo={memo}
                     visitedLabel={visitedLabel}

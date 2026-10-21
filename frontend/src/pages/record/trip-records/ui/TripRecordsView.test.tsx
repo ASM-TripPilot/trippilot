@@ -5,7 +5,13 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import { DeviceEventEmitter, Dimensions, Keyboard, View } from 'react-native';
+import {
+  DeviceEventEmitter,
+  Dimensions,
+  FlatList,
+  Keyboard,
+  View,
+} from 'react-native';
 import { isSharedValue } from 'react-native-reanimated';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { Path } from 'react-native-svg';
@@ -1156,5 +1162,253 @@ describe('「오늘의 회고」 FAB', () => {
       unmount();
       expect(listenerCounts()).toEqual(before);
     });
+  });
+});
+
+/* ──────────────── TRIP-1558 · 계획 번호 + 핀 탭 → 시트 최상단으로 올림 → 도착 뒤 목록 스크롤 ────────────────
+ * 지도 핀 번호 = 그날 계획 슬롯 위치+1. 목록 항목(카드·계획 행)에 같은 번호(`planOrder`)가 실려 오고, 핀을 누르면 그 번호의
+ * 항목으로 간다. 대응 키는 핀 **배열 위치(index)가 아니라 번호(number)** — 좌표 없는 슬롯이 있으면 둘이 다르다.
+ * 시트 칸(j01 기본 배열): 0 닫힘 · 1 peek · 2 펼침(최상단). gorhom 은 가장 높은 칸에서만 안쪽 스크롤을 허용하므로(6-b 실측)
+ * 최상단(2)이 아니면 2 로 올리라 요청하고, **시트가 2 에 도착한 뒤**(onChange)에야 스크롤을 요청한다. 이미 2 면 즉시 스크롤.
+ * 목록 항목 index 는 data 위치(카드들 뒤에 계획 행들)다. 통과형 시트 목·RN FlatList 라 "요청이 나갔다"(스파이)까지만 본다 — 실제 열림·스크롤은 6-b.
+ * 목은 onAnimate(이동 시작)·onChange(도착)를 스스로 쏘지 않는다 → 테스트가 host 의 prop 을 직접 부른다(실제 순서: 시작 → 도착).
+ * 3동작: 준비(카드·계획 행·핀) → 실행(시트 이동 시작·도착 / 핀 탭) → 단언(snapToIndex·scrollToIndex 스파이 · 번호 leaf). */
+const sheetSnapSpy = () =>
+  (globalThis as Record<string, unknown>)
+    .__bottomSheetSnapToIndexSpy as jest.Mock;
+beforeEach(() => sheetSnapSpy().mockClear());
+
+describe('TripRecordsView · 계획 번호 (TRIP-1558 AC-5)', () => {
+  it('PN1 planOrder 를 가진 계획 행만 번호 leaf 가 서고, 없으면 노드가 없다', () => {
+    renderView({
+      planRows: [{ ...ROW_P3, planOrder: 3 }, ROW_P4],
+    });
+
+    expect(
+      screen.getByTestId(`record-trip-plan-order-${ROW_P3.slotKey}`)
+    ).toHaveTextContent('3');
+    // 짝 — 행은 둘 다 있고 번호 없는 쪽엔 노드가 없다.
+    expect(
+      screen.getByTestId(`record-trip-plan-row-${ROW_P4.slotKey}`)
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId(`record-trip-plan-order-${ROW_P4.slotKey}`)
+    ).toBeNull();
+  });
+});
+
+describe('TripRecordsView · 핀 탭 (TRIP-1558 AC-8·AC-9)', () => {
+  let toIndex: jest.SpyInstance;
+  const scrolls = () => toIndex.mock.calls.map(([arg]) => arg);
+
+  beforeEach(() => {
+    toIndex = jest
+      .spyOn(FlatList.prototype, 'scrollToIndex')
+      .mockImplementation(() => {});
+  });
+  afterEach(() => toIndex.mockRestore());
+
+  // 카드는 도착 순이라 계획 번호가 3·1 로 뒤섞여 온다. 2번 슬롯은 좌표가 없어 핀이 없고(핀 index ≠ number-1) 계획 행으로 남았다.
+  // 목록 data 위치: [v-a(3), v-b(1), 행(2)] = 0·1·2 — 어떤 번호의 number-1 과도 우연히 안 겹친다.
+  const CARD_A: VisitRecordCardVM = { ...DONE_CARD, planOrder: 3 };
+  const CARD_B: VisitRecordCardVM = { ...UPCOMING_CARD, planOrder: 1 };
+  const ROW_2: PlanRow = { ...ROW_P3, planOrder: 2 };
+  const GAP_PINS: MapPin[] = [
+    { number: 1, lat: 35.1532, lng: 129.1187 },
+    { number: 3, lat: 35.1555, lng: 129.1216 },
+  ];
+  const withData = (over: Partial<TripRecordsViewProps> = {}) =>
+    renderView({
+      cards: [CARD_A, CARD_B],
+      planRows: [ROW_2],
+      mapPins: GAP_PINS,
+      ...over,
+    });
+  const tapPin = (index: number) =>
+    act(() => {
+      screen.getByTestId('map-root').props.onPinTap(index);
+    });
+  const fireSheetAnimate = (from: number, to: number) =>
+    act(() => {
+      const onAnimate = probe.sheetHost().props.onAnimate as unknown;
+      if (typeof onAnimate !== 'function') {
+        throw new Error(
+          '시트(BottomSheet)에 onAnimate 가 달려 있지 않다 — 뷰가 시트 칸을 추적해야 한다'
+        );
+      }
+      (onAnimate as (f: number, t: number, fp: number, tp: number) => void)(
+        from,
+        to,
+        0,
+        0
+      );
+    });
+  /** 시트가 그 칸에 **도착해 멈췄다** — host 의 onChange 를 직접 부른다(이동 시작 onAnimate 와 다른 신호). */
+  const fireSheetSettle = (index: number) =>
+    act(() => {
+      const onChange = probe.sheetHost().props.onChange as unknown;
+      if (typeof onChange !== 'function') {
+        throw new Error('시트(BottomSheet)에 onChange 가 달려 있지 않다');
+      }
+      (onChange as (i: number, p: number, t: number) => void)(index, 0, 0);
+    });
+  /** 사용자가 손으로 시트를 옮긴 것 — 실제 순서대로 시작 뒤 도착. */
+  const dragSheet = (from: number, to: number) => {
+    fireSheetAnimate(from, to);
+    fireSheetSettle(to);
+  };
+  const snapTargets = () => sheetSnapSpy().mock.calls.map(([index]) => index);
+
+  it('PT1 핀 번호와 같은 planOrder 의 항목으로 스크롤 요청이 간다 — 핀 index(1)가 아니라 number(3) → 카드 v-a(data 0)', () => {
+    withData();
+    dragSheet(1, 2); // 사용자가 최상단(2)으로 펼쳐 둔 상태 — 올림·도착 대기 없이 즉시 스크롤하는 경로
+    expect(scrolls()).toEqual([]);
+
+    tapPin(1); // 핀 index 1 = number 3
+
+    expect(scrolls()).toHaveLength(1);
+    expect(scrolls()[0]).toEqual(expect.objectContaining({ index: 0 }));
+    expect(sheetSnapSpy()).not.toHaveBeenCalled();
+  });
+
+  it('PT1b 첫 핀(index 0 · number 1)은 두 번째 카드(data 1), 번호가 계획 행에 있으면 카드 수 뒤의 행(data 2)으로 간다', () => {
+    withData({
+      mapPins: [
+        ...GAP_PINS,
+        // 번호 2 핀은 좌표가 있는 경우 — 번호 2 항목은 계획 행이다.
+        { number: 2, lat: 35.1601, lng: 129.12 },
+      ],
+    });
+    dragSheet(1, 2);
+
+    tapPin(0);
+    tapPin(2);
+
+    expect(scrolls()).toEqual([
+      expect.objectContaining({ index: 1 }),
+      expect.objectContaining({ index: 2 }),
+    ]);
+  });
+
+  it('PT2 시트가 peek(1)이면 최상단(2)으로 올리라고만 요청하고, 도착한 뒤에야 스크롤을 정확히 1회 요청한다 — 이동 시작은 도착이 아니다', () => {
+    withData();
+    expect(sheetSnapSpy()).not.toHaveBeenCalled();
+    expect(scrolls()).toEqual([]);
+
+    tapPin(1); // 마운트 직후(peek) — number 3 → data 0
+
+    expect(snapTargets()).toEqual([2]); // peek(1)이 아니라 최상단(2)
+    expect(scrolls()).toEqual([]); // 아직 도착 전
+
+    fireSheetAnimate(1, 2); // 올라가는 중(시작 신호)
+    expect(scrolls()).toEqual([]);
+
+    fireSheetSettle(2); // 도착
+
+    expect(scrolls()).toHaveLength(1);
+    expect(scrolls()[0]).toEqual(expect.objectContaining({ index: 0 }));
+    expect(snapTargets()).toEqual([2]); // 도착 뒤에 시트 요청이 더 늘지 않는다
+  });
+
+  it('PT2b 최상단(2)이면 올림 요청 없이 즉시 스크롤하고, 닫힘(0)으로 내려 둔 뒤에는 다시 최상단(2)으로 올리라고 요청한다', () => {
+    withData();
+    dragSheet(1, 2);
+
+    tapPin(1);
+    expect(sheetSnapSpy()).not.toHaveBeenCalled();
+    expect(scrolls()).toHaveLength(1);
+
+    dragSheet(2, 0); // 사용자가 끝까지 내림
+    tapPin(1);
+    expect(snapTargets()).toEqual([2]);
+    expect(scrolls()).toHaveLength(1); // 도착 전
+
+    fireSheetSettle(2);
+    expect(scrolls()).toHaveLength(2);
+  });
+
+  it('PT3 같은 핀을 두 번 눌러도 두 번 스크롤을 요청한다(사용자가 그새 다른 곳으로 스크롤했을 수 있다)', () => {
+    withData();
+    dragSheet(1, 2);
+
+    tapPin(1);
+    tapPin(1);
+
+    expect(scrolls()).toHaveLength(2);
+  });
+
+  it('PT3b 도착 전에 다른 핀을 누르면 마지막 핀만 스크롤된다 — 도착 뒤 낡은 요청은 되살아나지 않는다', () => {
+    withData();
+
+    tapPin(1); // number 3 → data 0 — 올림 요청
+    fireSheetAnimate(1, 2); // 올라가는 중
+    tapPin(0); // number 1 → data 1 — 아직 도착 전
+    expect(scrolls()).toEqual([]);
+    expect(snapTargets().every((index) => index === 2)).toBe(true);
+
+    fireSheetSettle(2);
+
+    expect(scrolls()).toEqual([expect.objectContaining({ index: 1 })]); // 첫 핀(data 0)은 나가지 않는다
+
+    // 사용자가 내렸다가 다시 펼침 — 이미 처리한 요청이 다시 나가면 안 된다.
+    dragSheet(2, 1);
+    dragSheet(1, 2);
+    expect(scrolls()).toHaveLength(1);
+  });
+
+  it('PT4 (금지) 번호에 해당하는 항목이 없으면 시트가 최상단이 아니어도 아무 일도 안 하고 던지지 않는다 — 시트가 올라와도 스크롤은 없다', () => {
+    withData({ mapPins: [{ number: 4, lat: 35.17, lng: 129.13 }] });
+    dragSheet(1, 0);
+    expect(sheetSnapSpy()).not.toHaveBeenCalled();
+    expect(scrolls()).toEqual([]);
+
+    expect(() => tapPin(0)).not.toThrow();
+    fireSheetSettle(2);
+
+    expect(sheetSnapSpy()).not.toHaveBeenCalled();
+    expect(scrolls()).toEqual([]);
+  });
+
+  it('PT5 (금지) 기록을 아직 못 받아 목록이 비어 있어도(로딩) 핀을 눌러 던지거나 요청하지 않는다', () => {
+    withData({ cards: [], planRows: [], recordsStatus: 'loading' });
+    dragSheet(1, 0);
+
+    expect(() => tapPin(0)).not.toThrow();
+    fireSheetSettle(2);
+
+    expect(sheetSnapSpy()).not.toHaveBeenCalled();
+    expect(scrolls()).toEqual([]);
+  });
+
+  // TRIP-1558 03b 2회차 경고-2 — "대기가 살아 있는 동안" 시트가 딴 칸으로 가는 경우(PT1~5 가 못 보는 가장자리).
+  it.each([
+    ['peek(1)', 1],
+    ['닫힘(0)', 0],
+  ])(
+    'PT6 올라가는 도중 사용자가 시트를 %s 으로 끌어가면 대기 항목을 버린다 — 나중에 손으로 펼쳐도 옛 카드로 튀지 않는다',
+    (_label, away) => {
+      withData();
+      tapPin(1); // number 3 → data 0 — 올림 요청 + 대기 항목
+
+      fireSheetAnimate(2, away); // 최상단이 아닌 칸으로 이동을 시작한다
+      fireSheetSettle(away);
+      dragSheet(away, 2); // 한참 뒤 사용자가 손으로 최상단까지 올림
+      expect(scrolls()).toEqual([]); // 옛 카드(data 0)로 안 튄다
+
+      // 짝 — 버린 뒤에도 최상단에서의 새 핀 탭은 정상 동작한다.
+      tapPin(0); // number 1 → data 1
+      expect(scrolls()).toEqual([expect.objectContaining({ index: 1 })]);
+    }
+  );
+
+  it('PT7 최상단이 아닌 칸에 도착(onChange 0·1)하는 것으로는 대기 스크롤이 나가지 않는다', () => {
+    withData();
+    tapPin(1); // peek 에서 올림 요청 + 대기 항목 — 이동 시작 신호는 일부러 안 준다(PT6 의 버림 경로와 분리)
+
+    fireSheetSettle(1);
+    fireSheetSettle(0);
+
+    expect(scrolls()).toEqual([]);
+    expect(snapTargets()).toEqual([2]); // 도착 신호가 시트 요청을 더 만들지도 않는다
   });
 });
