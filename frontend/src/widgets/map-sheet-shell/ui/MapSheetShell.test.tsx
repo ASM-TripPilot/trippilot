@@ -411,10 +411,10 @@ describe('MapSheetShell · SH8 — list 슬롯이 body 를 BottomSheetFlatList �
   });
 });
 
-/* ──────────────── TRIP-746 · i01 허브 가산 3종(snapPoints · mapViewOnly · currentLocation) ────────────────
- * i01 여행중 허브는 같은 셸 위에 서되 셋이 다르다: 시트가 3스냅(닫힘·중간·펼침)이고, 지도는 여행 중
- * 자유 탐색이라 **잠그지 않으며**(TRIP-397 결정 계승), 현재위치 점을 얹는다(TRIP-745 계약). 셋 다
- * 옵셔널 가산이라 미전달 기본값이 현행(2스냅·잠금·점 없음)과 같아야 한다 — a 케이스가 그 회귀 앵커다.
+/* ──────────────── TRIP-746 · i01 허브 가산(snapPoints · mapViewOnly — currentLocation 은 TRIP-1536 에서 삭제) ────────────────
+ * i01 여행중 허브는 같은 셸 위에 서되 둘이 다르다: 시트가 3스냅(닫힘·중간·펼침)이고, 지도는 여행 중
+ * 자유 탐색이라 **잠그지 않는다**(TRIP-397 결정 계승). 둘 다
+ * 옵셔널 가산이라 미전달 기본값이 현행(2스냅·잠금)과 같아야 한다 — a 케이스가 그 회귀 앵커다.
  *
  * ⚠️ 원리적 사각(02a ★1·★2): 스냅 실전환은 통과형 목이 못 본다 → `BottomSheet` 에 **넘긴 값**까지만.
  *   지도 목은 env 키가 있어야 `map-native`(prop 기록형)를 그린다 → 지도 케이스는 키를 넣고 원복한다.
@@ -443,25 +443,6 @@ describe('MapSheetShell · SH10 — mapViewOnly 로 지도 잠금을 끈다 (TRI
 
     const map = screen.getByTestId('map-native');
     GESTURE_TOGGLES.forEach((toggle) => expect(map.props[toggle]).toBe(true));
-  });
-});
-
-describe('MapSheetShell · SH11 — currentLocation 을 지도에 흘린다 (TRIP-746)', () => {
-  beforeEach(withMapKey);
-  afterEach(restoreMapKey);
-
-  it('SH11a · currentLocation 미전달이면 현재위치 점이 없다 (선제 green · 회귀 앵커)', () => {
-    renderShell();
-
-    // 짝 — 지도 자체는 떴다.
-    expect(screen.getByTestId('map-native')).toBeOnTheScreen();
-    expect(screen.queryByTestId('map-current-location')).toBeNull();
-  });
-
-  it('🔴 SH11b · currentLocation 을 주면 현재위치 점이 지도 위에 뜬다', () => {
-    renderShell({ currentLocation: { lat: 35.1, lng: 129.05 } });
-
-    expect(screen.getByTestId('map-current-location')).toBeOnTheScreen();
   });
 });
 
@@ -956,6 +937,24 @@ function firstSheetSnapPoints(): unknown[] {
   return node.props.snapPoints as unknown[];
 }
 
+// TRIP-1507 — 지도가 풀블리드라 상태바 영역에 비치던 것을 흰 막으로 가린다(높이 = 상단 안전 영역).
+describe('MapSheetShell · 상태바 영역 흰 막 (TRIP-1507)', () => {
+  beforeEach(withMapKey);
+  afterEach(restoreMapKey);
+
+  it('상단 안전 영역 47 → 높이 47 의 막이 있고 터치를 통과시킨다', () => {
+    renderWithBottomInset(34);
+    const cover = screen.getByTestId('map-sheet-shell-statusbar-cover');
+    expect(cover.props.style).toEqual(expect.objectContaining({ height: 47 }));
+    expect(cover.props.pointerEvents).toBe('none');
+  });
+
+  it('Provider 없음(안전 영역 0) → 막을 그리지 않는다', () => {
+    renderWithBottomInset(null);
+    expect(screen.queryByTestId('map-sheet-shell-statusbar-cover')).toBeNull();
+  });
+});
+
 describe('MapSheetShell · 닫힘 스냅이 홈 인디케이터 위에 온다', () => {
   beforeEach(withMapKey);
   afterEach(restoreMapKey);
@@ -1271,6 +1270,23 @@ describe('MapSheetShell · 보이는 띠 맞춤 (AC-3·AC-4·AC-5·AC-8·AC-10)'
     });
   });
 
+  it('FB2b TRIP-1496 · fitTopReserve 를 주면 그만큼 위 띠가 더 내려간다(허브 경로 토글 줄) — 안 주면 지금과 같다', () => {
+    // 준비 — FB2 와 같은 과장 인셋 + 소비처가 150pt 줄을 더 얹었다. 예약을 무시하면 위 핀이 (200+52) 선에 놓여 red.
+    render(
+      <SafeAreaInsetsContext.Provider
+        value={{ top: 200, bottom: 34, left: 0, right: 0 }}
+      >
+        {shellWithPins(OTHER_DAY_PINS, { fitTopReserve: 150 })}
+      </SafeAreaInsetsContext.Provider>
+    );
+
+    expectPinsInBand(bandRegion(), OTHER_DAY_PINS, {
+      bottom: 0.45,
+      topPx: 200 + SHELL_OVERLAY_ROW_BOTTOM + 150,
+      screenHeight: WINDOW.height,
+    });
+  });
+
   it("FB3 스냅이 [닫힘, '55%', 펼침] 이면 55% 기준이고, 펼침(2)으로 진입해도 중간(1) 진입과 같은 맞춤이다", () => {
     // 남북으로 긴 동선 — 동서 동선은 세로 맞춤으로 띠 가운데에 떠서 45% 를 그대로 써도 55% 를 우연히 넘는다.
     const hubSnaps = [28, '55%', 700];
@@ -1360,5 +1376,164 @@ describe('MapSheetShell · 보이는 띠 맞춤 (AC-3·AC-4·AC-5·AC-8·AC-10)'
 
     expect(fitNativeProps().region).toBeUndefined();
     expect(fitNativeProps().camera).toBeDefined();
+  });
+});
+
+/* ──────────────── TRIP-1494 · expandSignal — 사용자가 내려 둔 시트를 같은 진입 칸으로 다시 올린다 ────────────────
+ * gorhom 은 `index` 값이 바뀔 때만 스냅한다 → 같은 index 로 다시 펼치려면 신호가 필요하다.
+ * (개념) 목 시트는 `snapToIndex` 호출만 기록하는 스파이를 준다 — 실제 스냅은 6-b 실기 몫.
+ * 3동작: 준비(initialIndex=2 로 마운트) → 실행(expandSignal 값 변경 / 동일 값 재렌더) → 단언(snapToIndex 호출). */
+const spy = () =>
+  (globalThis as Record<string, unknown>)
+    .__bottomSheetSnapToIndexSpy as jest.Mock;
+
+describe('MapSheetShell · SH1494 — expandSignal 이 바뀌면 진입 칸으로 다시 스냅한다 (TRIP-1494)', () => {
+  beforeEach(() => {
+    withMapKey();
+    spy().mockClear();
+  });
+  afterEach(restoreMapKey);
+
+  function shell(expandSignal: number | undefined) {
+    return (
+      <MapSheetShell
+        center={CENTER}
+        pins={PINS}
+        days={DAYS}
+        selectedDayIndex={0}
+        onSelectDay={jest.fn()}
+        onBack={jest.fn()}
+        header={<Text>헤더</Text>}
+        initialIndex={2}
+        expandSignal={expandSignal}
+      >
+        <Text>본문</Text>
+      </MapSheetShell>
+    );
+  }
+
+  it('🔴 SX1 · 마운트엔 호출이 없고, 신호가 0 → 1 로 바뀌면 initialIndex(2) 로 한 번 스냅한다', () => {
+    const { rerender } = render(shell(0));
+    expect(spy()).not.toHaveBeenCalled();
+
+    rerender(shell(1));
+
+    expect(spy()).toHaveBeenCalledTimes(1);
+    expect(spy()).toHaveBeenCalledWith(2);
+  });
+
+  it('SX2 · 같은 신호로 다시 렌더하거나 신호를 안 주면 스냅하지 않는다', () => {
+    const { rerender } = render(shell(1));
+    rerender(shell(1));
+
+    const { rerender: rerenderNone } = render(shell(undefined));
+    rerenderNone(shell(undefined));
+
+    expect(spy()).not.toHaveBeenCalled();
+  });
+
+  it('SX3 · 신호는 그대로이고 initialIndex 만 바뀌면 스냅하지 않는다(내려 둔 시트를 신호 없이 올리지 않는다)', () => {
+    const { rerender } = render(shell(0));
+    rerender(shell(1));
+    spy().mockClear();
+
+    rerender(
+      <MapSheetShell
+        center={CENTER}
+        pins={PINS}
+        days={DAYS}
+        selectedDayIndex={0}
+        onSelectDay={jest.fn()}
+        onBack={jest.fn()}
+        header={<Text>헤더</Text>}
+        initialIndex={1}
+        expandSignal={1}
+      >
+        <Text>본문</Text>
+      </MapSheetShell>
+    );
+
+    expect(spy()).not.toHaveBeenCalled();
+  });
+});
+
+/* ──────────────── TRIP-1522 v2 · 시트를 끝까지 내리는 옵션 prop 3개 — 전부 "안 주면 지금과 똑같다" ────────────────
+ * `MapSheetShell` 은 소비처 약 15곳이 공유한다 → 새 prop 은 모두 옵션이고, 안 주면 거동이 그대로여야 한다(기본값 회귀 가드).
+ *  - `enablePanDownToClose` — 시트를 가장 낮은 칸에서 더 끌어내리면 완전히 닫히게(index −1) 한다. 허브만 켠다.
+ *  - `snapRequest {index,id}` — `id` 가 **바뀔 때마다** 시트를 `index` 칸으로 올리라고 요청(일정 칸). 첫 렌더·같은 `id` 는 조용.
+ *  - `mapLogoMargin` — 지도 로고 마진을 `MapView` 로 흘린다(시트가 내려가 지도가 드러나도 로고가 바에 안 가리게).
+ * (개념) 목 시트는 `snapToIndex` 호출만 기록하는 스파이를 준다 — 실제로 시트가 사라지고 올라오는 것은 6-b 실기 몫.
+ * README 판정 4: 통과형 목 위 prop 전달 단언은 두지 않는 게 원칙이지만, 브리프 AC-9·17 이 [T] 로 정한 "기본값 회귀 가드"가
+ * 본체라 최소 단언으로 둔다(02a ★4 ③).
+ * 3동작: 준비(옵션을 주거나 안 주고 마운트) → 실행(`snapRequest` 값 변경·재렌더) → 단언(스파이 호출·host prop). */
+describe('MapSheetShell · SR 시트 끝까지 내림 옵션 (TRIP-1522 v2)', () => {
+  beforeEach(() => {
+    withMapKey();
+    spy().mockClear();
+  });
+  afterEach(restoreMapKey);
+
+  function shell(
+    props: Partial<Parameters<typeof MapSheetShell>[0]> = {}
+  ): ReactElement {
+    return (
+      <MapSheetShell
+        center={CENTER}
+        pins={PINS}
+        days={DAYS}
+        selectedDayIndex={0}
+        onSelectDay={jest.fn()}
+        onBack={jest.fn()}
+        header={<Text>헤더</Text>}
+        snapPoints={['55%', 700]}
+        initialIndex={1}
+        {...props}
+      >
+        <Text>본문</Text>
+      </MapSheetShell>
+    );
+  }
+
+  it('snapRequest: 안 주면 마운트·재렌더에도 시트 요청(snapToIndex)이 없고(기본값 회귀), 주면 마운트엔 조용하다가 id 가 바뀔 때만 요청한 index 로 간다 — 같은 id·index 만 바뀜은 조용, 진입 칸(initialIndex)이 아니라 요청한 index 로', () => {
+    const quiet = render(shell());
+    quiet.rerender(shell());
+    quiet.rerender(shell({ initialIndex: 0 }));
+    expect(spy()).not.toHaveBeenCalled();
+    quiet.unmount();
+
+    const { rerender } = render(
+      shell({ initialIndex: 1, snapRequest: { index: 0, id: 1 } })
+    );
+    expect(spy()).not.toHaveBeenCalled(); // 첫 값은 요청이 아니라 출발값
+
+    rerender(shell({ initialIndex: 1, snapRequest: { index: 0, id: 2 } }));
+    expect(spy()).toHaveBeenCalledTimes(1);
+    expect(spy()).toHaveBeenLastCalledWith(0);
+
+    rerender(shell({ initialIndex: 1, snapRequest: { index: 0, id: 2 } })); // 같은 id
+    rerender(shell({ initialIndex: 1, snapRequest: { index: 1, id: 2 } })); // index 만 바뀜
+    expect(spy()).toHaveBeenCalledTimes(1);
+
+    rerender(shell({ initialIndex: 1, snapRequest: { index: 1, id: 3 } }));
+    expect(spy()).toHaveBeenCalledTimes(2);
+    expect(spy()).toHaveBeenLastCalledWith(1);
+  });
+
+  it('enablePanDownToClose·mapLogoMargin 은 안 주면 기본값 그대로(시트는 안 켜지고 지도엔 로고 마진이 없다), 주면 시트·지도로 그대로 간다', () => {
+    render(shell());
+    expect(sheetHost().props.enablePanDownToClose).not.toBe(true);
+    expect(screen.getByTestId('map-native').props.logoMargin).toBeUndefined();
+    screen.unmount();
+
+    const margin = { bottom: 78 };
+    render(shell({ enablePanDownToClose: true, mapLogoMargin: margin }));
+    expect(sheetHost().props.enablePanDownToClose).toBe(true);
+    expect(screen.getByTestId('map-native').props.logoMargin).toEqual(margin);
+  });
+
+  it('IN1 initialIndex=-1 이면 시트는 완전 내림(index -1)으로 마운트한다 — 시트 내림 시작 프리뷰·테스트 입구', () => {
+    render(shell({ initialIndex: -1 }));
+
+    expect(sheetHost().props.index).toBe(-1);
   });
 });

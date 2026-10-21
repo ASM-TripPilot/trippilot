@@ -2,5 +2,3 @@
 export * from './index.view';
 
 export { useVisitCheck } from './model/useVisitCheck';
-export { useRevertAutoVisit } from './model/useRevertAutoVisit';
-export type { RevertOutcome } from './model/useRevertAutoVisit';

@@ -1,7 +1,8 @@
 import type { ReactElement } from 'react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { ImageSourcePropType } from 'react-native';
-import { StyleSheet, Text, View } from 'react-native';
+import { AppState, StyleSheet, Text, View } from 'react-native';
+import * as Location from 'expo-location';
 import Svg, {
   Circle,
   ClipPath,
@@ -108,10 +109,6 @@ export interface MapViewProps {
    * `{latitude,longitude}`를 리포 순서 `{lat,lng}`로 감싼다. `maxLevel↔minZoom`과 같은 옵트인 —
    * 프롭을 준 때만 NaverMapView 에 콜백을 단다(미전달 시 콜백 부착 0). */
   onCameraIdle?: (center: MapCenter) => void;
-  /** 현재위치 점(TRIP-745). 좌표를 주면 파란 점+반투명 링+"현재 위치" 라벨을 별도 마커로 얹는다.
-   * 미전달이면 그 마커를 렌더하지 않는다(항상-렌더 회귀 방지). 핀 index 를 오염시키지 않도록
-   * `onPinTap` 을 달지 않는 별도 마커다. */
-  currentLocation?: MapCenter;
   /** +/− 줌 컨트롤(우상단)을 켠다(TRIP-768, 기록·회고 지도). **옵트인** — 미전달이면 명시적으로
    * 끈다(네이버 SDK native default 가 `true` 라 안 넘기면 저절로 뜬다). `viewOnly`(제스처)와 **독립**:
    * 제스처를 잠근 지도에도 줌 버튼은 켤 수 있고, 기존 viewOnly 지도(h05·h07)에 저절로 생기지 않는다. */
@@ -137,6 +134,12 @@ export interface MapViewProps {
    * 기본 0) 핀은 경로가 닿는 순서로 나타난다. 동작 줄이기면 곧장 완성 경로·전체 핀. 실제 경로(`actualRoute`)가
    * 켜진 지도의 계획 연결선과 핀 1개 이하 지도엔 걸리지 않는다. `true` 는 기본값. */
   drawPathOnMount?: boolean | { durationMs?: number; delayMs?: number };
+  /** TRIP-1522 · 네이버 로고(출처 표기) 여백(pt) — 화면 아래에 떠 있는 바가 로고를 가리지 않게 올린다. **옵트인** — 미전달이면
+   * prop 을 아예 달지 않아 SDK 기본 위치(좌하단)를 그대로 쓴다. 렌더마다 새 객체를 넘기지 않는다(memo). */
+  logoMargin?: { top?: number; right?: number; bottom?: number; left?: number };
+  /** TRIP-1535 · 내 위치(네이버 기본 현위치 오버레이, NoFollow — 카메라는 안 따라감). **옵트인**·권한은 조회만(묻지 않는다) —
+   * OS 위치 권한이 granted 일 때만 켜고, 껐다가 다시 false 가 되면 None 으로 되돌린다. 미전달이면 권한 조회도 없다. */
+  showMyLocation?: boolean;
 }
 
 /** 네이버 초기 줌. ponytail: 카카오 기본 level 3 에 대응하는 대략값, 정확 캘리브레이션은 실기(6-b). */
@@ -149,7 +152,6 @@ const INITIAL_ZOOM = 14;
 const PIN_PRIMARY = '#FF385C'; // primary — current·기본 물방울
 const PIN_SUCCESS = '#0E9384'; // success — done 물방울
 const PIN_MUTED_SOFT = '#9AA1AB'; // muted-soft — upcoming 테두리·번호
-const PIN_LINK = '#1659C9'; // link — 현재위치 점·링·라벨
 const PIN_WHITE = '#FFFFFF'; // on-primary·canvas — 흰 테두리·흰 번호·흰 체크
 
 /** Figma 4125:3958 물방울 벡터 1:1. 큰 것(current·기본)은 35×45.5, 작은 것(upcoming·done)은 28×36. */
@@ -263,7 +265,7 @@ function PinTeardrop({
   );
 }
 
-/** stay 마커 몸통 — 아래로 뾰족한 라운드 사각(Figma 1557:1738 침대 마커). 좌표는 아래 꼭짓점(17,39). */
+/** stay 마커 몸통 — 아래로 뾰족한 라운드 사각(Figma 5000:3227 침대 마커). 좌표는 아래 꼭짓점(17,39). */
 const STAY_PIN =
   'M11 2 H23 A9 9 0 0 1 32 11 V21 A9 9 0 0 1 23 30 H21 L17 39 L13 30 H11 A9 9 0 0 1 2 21 V11 A9 9 0 0 1 11 2 Z';
 
@@ -283,8 +285,6 @@ const RECORD_DIMS: Record<
  * 매번 "바뀐 prop"으로 보인다.
  */
 const DROP_ANCHOR = { x: 0.5, y: 1 } as const;
-const CURRENT_LOCATION_ANCHOR = { x: 0.5, y: 0.85 } as const;
-const CURRENT_LOCATION_STYLE = { width: 72, alignItems: 'center' } as const;
 const DROP_WRAP_LARGE_STYLE = { width: 35, height: 46 } as const;
 const DROP_WRAP_SMALL_STYLE = { width: 28, height: 36 } as const;
 const RECORD_WRAP_STYLE: Record<
@@ -502,7 +502,6 @@ function MapViewImpl({
   onLoadFailed,
   maxLevel,
   onCameraIdle,
-  currentLocation,
   showZoomControls,
   showScaleBar,
   radiusCircle,
@@ -510,6 +509,8 @@ function MapViewImpl({
   fitPins,
   fitBand,
   drawPathOnMount,
+  logoMargin,
+  showMyLocation,
 }: MapViewProps): ReactElement {
   // 네이티브 SDK 는 런타임 키를 config plugin 에서 받으므로, 이 env 판정은 "설정 누락 표면"용이다
   // (키가 없으면 회색 빈 지도 대신 안내 화면을 띄운다). 참조는 이 한 곳뿐(A-2 계승).
@@ -558,6 +559,41 @@ function MapViewImpl({
     if (region !== null)
       mapRef.current?.animateRegionTo({ ...region, easing: 'None' });
   };
+
+  // TRIP-1535 — 내 위치. 추적 모드는 prop 이 아니라 ref 호출이다. 맞춤↔카메라 전환으로 지도가 다시 마운트되면
+  // (key 변경) 새 지도에 다시 건다.
+  const regionMode = region !== null;
+  useEffect(() => {
+    if (showMyLocation !== true) return;
+    let alive = true;
+    let applied = false;
+    let armedMap: NaverMapViewRef | null = null; // 켠 그 지도를 기억해 끌 때 같은 지도에 끈다(ref 는 그새 바뀔 수 있다).
+    const tryApply = (): void => {
+      if (applied) return;
+      // Promise.resolve 로 감싸 조회가 동기로 던져도(목·미설치) 렌더를 깨지 않고 '안 보임'으로 접는다.
+      Promise.resolve()
+        .then(() => Location.getForegroundPermissionsAsync())
+        .then((permission) => {
+          if (!alive || applied || permission?.status !== 'granted') return;
+          armedMap = mapRef.current;
+          armedMap?.setLocationTrackingMode('NoFollow');
+          applied = true;
+        })
+        .catch(() => {
+          // 권한 조회 실패 = 안 보인다(안내 없음).
+        });
+    };
+    tryApply();
+    // 설정 앱에서 권한을 켜고 돌아오면 그때 켠다(조회만 — 묻지 않는다).
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'active') tryApply();
+    });
+    return () => {
+      alive = false;
+      subscription?.remove(); // jest RN 목은 구독 객체를 안 돌려준다
+      if (applied) armedMap?.setLocationTrackingMode('None');
+    };
+  }, [showMyLocation, regionMode]);
 
   // TRIP-1385 — 경로가 닿은 핀 수(null=전부). 그려지기가 끝나면 null 이라 이후 좌표가 바뀌어도 핀이 숨지 않는다.
   const [revealCount, setRevealCount] = useState<number | null>(1);
@@ -627,6 +663,7 @@ function MapViewImpl({
         // 저절로 뜨므로, 미전달을 `=== true` 로 눌러 명시적 false 로 "기본 미표시"를 지킨다.
         isShowZoomControls={showZoomControls === true}
         isShowScaleBar={showScaleBar === true}
+        {...(logoMargin !== undefined ? { logoMargin } : {})}
         {...(maxLevel !== undefined
           ? { minZoom: kakaoMaxLevelToNaverMinZoom(maxLevel) }
           : {})}
@@ -724,64 +761,6 @@ function MapViewImpl({
             </NaverMapMarkerOverlay>
           );
         })}
-        {currentLocation ? (
-          // 현재위치는 핀 index 를 흔들지 않는 별도 마커다 — onTap(→onPinTap) 을 달지 않는다.
-          // anchor y 는 하단 점을 좌표에 대략 맞춘다(정확 정렬은 6-b).
-          <NaverMapMarkerOverlay
-            key="current-location"
-            latitude={currentLocation.lat}
-            longitude={currentLocation.lng}
-            anchor={CURRENT_LOCATION_ANCHOR}
-            width={72}
-            height={70}
-          >
-            <View
-              collapsable={false}
-              testID="map-current-location"
-              style={CURRENT_LOCATION_STYLE}
-            >
-              {/* 라벨 pill(흰 배경+파란 텍스트) — 반드시 SVG(Rect+Text). RN <Text> 는 마커 래스터에
-                안 찍힌다(TRIP-876). */}
-              <Svg width={72} height={20} viewBox="0 0 72 20">
-                <Rect
-                  x={0}
-                  y={0}
-                  width={72}
-                  height={20}
-                  rx={8}
-                  fill={PIN_WHITE}
-                />
-                <SvgText
-                  x={36}
-                  y={14}
-                  fill={PIN_LINK}
-                  fontSize={10.5}
-                  textAnchor="middle"
-                >
-                  현재 위치
-                </SvgText>
-              </Svg>
-              {/* 반투명 링(16%) 뒤 · 불투명 점 앞. */}
-              <Svg width={42} height={42} viewBox="0 0 42 42">
-                <Circle
-                  cx={21}
-                  cy={21}
-                  r={21}
-                  fill={PIN_LINK}
-                  fillOpacity={0.16}
-                />
-                <Circle
-                  cx={21}
-                  cy={21}
-                  r={6.75}
-                  fill={PIN_LINK}
-                  stroke={PIN_WHITE}
-                  strokeWidth={2.5}
-                />
-              </Svg>
-            </View>
-          </NaverMapMarkerOverlay>
-        ) : null}
         {showPath ? (
           // 경로선 빨강(primary) + 흰 케이싱(Figma 4125:3958 route/route-casing). width 는 6-b 조정.
           // coords 는 visited(+무-kind) 구간만 — planned·stay 는 선에서 빠진다(위 lineCoords).

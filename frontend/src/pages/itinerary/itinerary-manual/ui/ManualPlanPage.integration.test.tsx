@@ -658,13 +658,13 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
     body.days[0].slots.map((s) => s.poiId);
 
   describe('🔴 M1 · AC-9 — 직접 짜기가 위젯 편집 뷰를 소비하고 헤더 날짜가 괄호형이다', () => {
-    it('드래그 리스트가 있고 헤더가 "일정 편집 · 6월 10일(수) · 3곳" 조각이다', async () => {
+    it('드래그 리스트가 있고 헤더가 "일정 만들기 · 6월 10일(수) · 3곳" 조각이다', async () => {
       renderPage();
       await ready();
 
       expect(screen.getByTestId(EDIT_LIST)).toBeOnTheScreen();
       expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
-        '일정 편집'
+        '일정 만들기'
       );
       expect(screen.getByTestId('sheet-header-date')).toHaveTextContent(
         '6월 10일(수)'

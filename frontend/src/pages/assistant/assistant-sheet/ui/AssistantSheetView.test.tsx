@@ -1,4 +1,4 @@
-import { Text } from 'react-native';
+import { Keyboard, Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { ProposalStatus } from '../api/assistantContract';
@@ -65,6 +65,48 @@ describe('AssistantSheetView (TRIP-1322)', () => {
     const props = renderView();
     fireEvent.press(screen.getByTestId('assistant-quick-reply-capabilities'));
     expect(props.onPressCapabilities).toHaveBeenCalledTimes(1);
+  });
+
+  it('TRIP-1436 Q-134 · 상시 칩이 quick reply 줄의 맨 앞이다(서버 칩이 늘어도 화면 밖으로 안 밀린다)', () => {
+    renderView();
+
+    const ids = screen
+      .getAllByTestId(/^assistant-quick-reply-/)
+      .map((node) => node.props.testID);
+
+    expect(ids.length).toBeGreaterThan(1);
+    expect(ids[0]).toBe('assistant-quick-reply-capabilities');
+  });
+
+  it('TRIP-1436 Q-134 · 실서버 모양(SHOW_CAPABILITIES 가 서버 칩 목록 맨 끝, 클라 칩 없음)이어도 그 칩이 맨 앞이다', () => {
+    const replies = [
+      ...sampleTranscript('greeting').quickReplies,
+      {
+        id: 'qr-capabilities',
+        label: '내가 할 수 있는 것 보기',
+        action: 'SHOW_CAPABILITIES' as const,
+        params: {},
+      },
+    ];
+    renderView({ quickReplies: replies, showCapabilitiesChip: false });
+
+    const ids = screen
+      .getAllByTestId(/^assistant-quick-reply-/)
+      .map((node) => node.props.testID);
+
+    expect(ids[0]).toBe('assistant-quick-reply-qr-capabilities');
+    expect(ids.length).toBe(replies.length);
+  });
+
+  it('TRIP-1436 Q-134 · 보내기를 누르면 키보드를 내리고 onSend 를 부른다', () => {
+    const dismiss = jest.spyOn(Keyboard, 'dismiss');
+    const props = renderView({ canSend: true, draft: '안녕' });
+
+    fireEvent.press(screen.getByTestId('assistant-send'));
+
+    expect(dismiss).toHaveBeenCalledTimes(1);
+    expect(props.onSend).toHaveBeenCalledTimes(1);
+    dismiss.mockRestore();
   });
 
   it('BR-U8-05 · 여행 없이 열면(NO_CONTEXT) 회색 칩 + 입력 활성 + 여행 만들기·숙소 탐색 행동', () => {

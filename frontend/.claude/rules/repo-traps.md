@@ -3,7 +3,7 @@
 리포를 읽어도·테스트를 돌려도·그래프를 봐도 **알 수 없는 것만** 적는다. **밟기 전에 읽는다.**
 이 파일은 `paths` 없는 무조건 규칙이라 메인·서브에이전트에 시작 시 로드된다(그래서 짧게 유지한다).
 
-**경로별 함정은 `traps-*.md`로 쪼갰다**(path-scoped 자동 로드 — 해당 경로 파일을 만질 때만 첨부된다). 여기엔 **폴더에 안 매인 전역 함정만** 남긴다. 경로별: `traps-onboarding-auth.md`·`traps-home.md`·`traps-stay.md`·`traps-itinerary.md`·`traps-execution.md`·`traps-trip.md`·`traps-explore.md`·`traps-shell.md`·`traps-record.md`·`traps-reflection.md`·`traps-notification.md`·`traps-map.md`·`traps-glyphs.md`·`traps-draglist.md`.
+**경로별 함정은 `traps-*.md`로 쪼갰다**(path-scoped 자동 로드 — 해당 경로 파일을 만질 때만 첨부된다). 여기엔 **폴더에 안 매인 전역 함정만** 남긴다. 경로별: `traps-onboarding-auth.md`·`traps-home.md`·`traps-stay.md`·`traps-itinerary.md`·`traps-execution.md`·`traps-trip.md`·`traps-explore.md`·`traps-shell.md`·`traps-record.md`·`traps-reflection.md`·`traps-notification.md`·`traps-map.md`·`traps-glyphs.md`·`traps-draglist.md`·`traps-location.md`.
 
 **여기 적지 않는 것**: 미해결 부채·후속 티켓·"다음 사이클 후보"는 옵시디언 **문제로그** 소관(닫히면 사라질 것). 파일 목록·export·스텁은 `structure.md`(+`--check`) 소관. 테스트가 red로 잡는 것도 아니다. 남는 것은 **부정 사실·지금 어디까지·기계 강제 없는 계약**뿐.
 
@@ -39,7 +39,7 @@
 - **화면 비주얼**은 `figma-screen-impl` 스킬 절차를 따른다(밴드 맵은 `spec-perception/reference/figma-structure.md`).
 - **여러 워크트리를 동시에 열어 두면 Metro(8081)가 다른 워크트리 코드를 서빙 중일 수 있다** → 포트는 워크트리별로 안 갈린다. 캡처·6-b 전에 그 포트를 물고 있는 프로세스의 작업 디렉토리를 확인하고, 이번 브랜치가 아니면 끄고 이 워크트리에서 새로 띄운다(안 그러면 다른 브랜치 화면이 이 사이클 결과로 찍힌다). **같은 워크트리에서도 `pkill -f "expo start"`가 옛 Metro를 못 죽일 수 있다** → 새 Metro가 "Port 8081 is running … Skipping dev server"로 조용히 종료하고, CI 모드(watch 꺼짐)로 뜬 옛 Metro가 편집 전 번들을 계속 서빙해 캡처가 무효가 된다(에러 없이 성공한 것처럼 보인다, 실측 2회). `lsof -ti :8081 -sTCP:LISTEN | xargs kill`로 포트를 직접 비우고 새로 띄운다.
 - **다른 사이클(워크트리)의 jest와 동시에 돌리면 watchman 대기로 멈출 수 있다** → 병행 야간 배치에서 흔함(TRIP-1046 실측). `pnpm test`/`test:node`에 `--no-watchman`을 붙여 파일감시 조율 대기를 건너뛴다. **`--`를 앞에 끼우면 안 된다** — `pnpm test:node -- --no-watchman`은 옵션이 파일 패턴으로 읽혀 0건 실행이 된다(`pnpm test:node --no-watchman`으로). **파일·패턴 단위 실행도 `pnpm test <패턴>`이 아니라 `pnpm test:node`/`pnpm test:integration`으로** — `pnpm test`는 두 버킷을 묶어 패턴이 한쪽에만 붙는다(실측 TRIP-1270).
-- **새 라우트를 머지한 뒤 옛 워크트리에서 `pnpm tsc`가 `Href` 타입 오류로 줄줄이 실패할 수 있다** → typed routes 는 Metro/`expo start`가 `.expo/types/router.d.ts`(gitignore)로 생성하는 파일이라, 라우트 추가 전에 Metro를 돌린 워크트리는 그 사본이 낡아 새 `app/` 라우트를 모른다(코드 오류가 아니다 — CI·새 클론은 이 파일이 없어 통과). `.expo/types`를 치우고 다시 돌리면 풀린다.
+- **새 라우트를 머지한 뒤 옛 워크트리에서 `pnpm tsc`가 `Href` 타입 오류로 줄줄이 실패할 수 있다** → typed routes 는 Metro/`expo start`가 `.expo/types/router.d.ts`(gitignore)로 생성하는 파일이라, 라우트 추가 전에 Metro를 돌린 워크트리는 그 사본이 낡아 새 `app/` 라우트를 모른다(코드 오류가 아니다 — CI·새 클론은 이 파일이 없어 통과). `.expo/types`를 치우고 다시 돌리면 풀린다. **반대 방향도 있다 — 로컬 `tsc` 는 통과하는데 CI 만 실패할 수 있다**: gitignore 된 `.expo/`·`expo-env.d.ts` 가 로컬에서만 `process.env` 값을 `string` 으로 타이핑해, CI(두 파일 없음)에선 `process.env.X ?? ''` 뒤 콜백 인자가 암묵적 any(TS7006)가 됐다(실측 1건, TRIP-1485 PR). `process.env` 값을 가공하면 `String(...)`·인자 타입을 명시하고, 의심되면 두 파일을 옮겨 놓고 `tsc` 를 돌려 CI 조건을 재현한다.
 - **커밋 안 된 변경을 되돌릴 때 `git checkout`·`git stash`·`git reset --hard` 금지 — `cp` 사본 복원 또는 Edit 역치환을 쓴다** (모든 자리 공통: 오케·test-designer·implementer·code-critic·qa-verifier). `git checkout <path>`는 지정 경로의 **커밋 안 된 다른 편집까지 함께 날린다** — 뮤테이션 원복·구조 대조·부분 복원 어디서든 진행 중 작업이 소실된다. 뮤테이션 심기 전에 그 파일을 `cp`로 떠 두고 그 사본으로 되돌린다 — **사본 폴더는 세션 공용 `scratchpad/`(또는 `bak/`) 최상위가 아니라 `{cycle-id}`·자리 고유 이름**(`scratchpad/td1082-bak/`)에 둔다: 병렬 레인이 같은 파일명(`bases.tsx` 등)을 덮어써 다른 레인의 원복 사본이 사라진다(실측 2건, 상세는 하네스 변경이력)(실측 7건·마지막 qa-verifier, 상세는 하네스 변경이력).
 
 ## 유지

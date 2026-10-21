@@ -1,8 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useMemo, useRef, useState } from 'react';
+import { useContext, useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
+import {
+  NavigationContext,
+  NavigationRouteContext,
+} from '@react-navigation/native';
 
-import { AssistantFab, assistantHref } from '@/features/open-assistant';
+import { assistantHref } from '@/features/open-assistant';
 import { Linking, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -22,7 +26,6 @@ import {
 import { MemoSheet } from './MemoSheet';
 import { deriveVisitProgress } from '@/entities/itinerary-slot';
 import { TriggerChip } from './TriggerChip';
-import { OpportunityCard } from './OpportunityCard';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { foldScope } from '../model/foldScope';
 import { hubPillCopy } from '../model/hubPillCopy';
@@ -48,6 +51,7 @@ import {
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
 import { seoulDate } from '@/shared/lib/seoulDate';
+import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { showToast } from '@/shared/ui/Toast';
 import { ArriveRequestSource } from '@/shared/api/index.schemas';
@@ -62,16 +66,8 @@ import {
   useLocationAutomation,
   useTripRoutes,
 } from '@/shared/location';
-import { actualDistanceLabel } from '@/shared/map';
 import { automationVisitRefs } from '../model/automationInput';
-import {
-  AutoRevertDialog,
-  autoRecordPart,
-  useRevertAutoVisit,
-  useVisitCheck,
-  type AutoRevertError,
-  type AutoRevertPart,
-} from '@/features/check-visit';
+import { useVisitCheck } from '@/features/check-visit';
 
 import { LiveHubView } from './LiveHubView';
 
@@ -118,12 +114,42 @@ const PHOTO_SAVED_TOAST = '사진을 기록했어요';
 /** 뒤로 갈 히스토리가 없을 때(딥링크·푸시 직행)의 폴백 — ItineraryPlanPage 관례(INV-4 침묵 금지). */
 const HOME_FALLBACK = '/(tabs)';
 
+/** `(tabs)` 안 라우트 이름 → 탭 key. 홈만 파일 규약상 `index` 다(`app/(tabs)/_layout.tsx` 의 매핑과 같다). */
+const TAB_ROUTE_TO_KEY: Record<string, ShellTabKey> = {
+  index: 'home',
+  explore: 'explore',
+  itinerary: 'itinerary',
+  records: 'records',
+  my: 'my',
+};
+
+/**
+ * 허브로 오기 직전 홈 탭 바에서 활성이던 탭 — 루트 스택에서 허브 바로 아래 라우트가 `(tabs)` 면 그 안의 현재 탭, 아니면 undefined
+ * (푸시 딥링크·planb 등 탭 바 위가 아닌 진입 → 허브 바는 모션 없이 최종 구조). 진입점이 여러 곳이라 href 에 싣지 않고 내비게이션 상태를 읽는다.
+ * 허브가 마운트될 때 한 번만 읽는다(이후 그 아래 탭은 바뀌지 않는다). 내비게이션 문맥이 없는 렌더(jest)에선 undefined 다.
+ */
+function useDepartureTab(): ShellTabKey | undefined {
+  const navigation = useContext(NavigationContext);
+  const route = useContext(NavigationRouteContext);
+  const [tab] = useState(() => {
+    const routes = navigation?.getState().routes ?? [];
+    const below = routes[routes.findIndex((r) => r.key === route?.key) - 1];
+    if (below?.name !== '(tabs)') return undefined;
+    const tabs = below.state;
+    // 탭을 한 번도 안 바꿨으면(기본 상태) 중첩 상태가 부모 라우트에 저장되지 않는다 — 그때 활성 탭은 첫 화면 `index`(홈)다.
+    const name = tabs ? tabs.routes[tabs.index ?? 0]?.name : 'index';
+    return name === undefined ? undefined : TAB_ROUTE_TO_KEY[name];
+  });
+  return tab;
+}
+
 export function LiveItineraryPage({
   tripId,
   today = seoulDate(new Date()),
   appliedSessionId,
   initialDate,
 }: LiveItineraryPageProps) {
+  const departureTab = useDepartureTab();
   const query = useLiveItinerary(tripId);
   const trip = useGetTripsTripId(tripId);
   const queryClient = useQueryClient();
@@ -147,21 +173,25 @@ export function LiveItineraryPage({
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   // i03 위험 상세 시트 열림 = 그 트리거 id(TRIP-749). 재조회로 트리거가 사라지면 시트도 사라진다.
   const [riskTriggerId, setRiskTriggerId] = useState<string | null>(null);
-  // 허브 시트 스냅. gorhom 은 이 값이 바뀔 때마다 그 칸으로 스냅하므로 한 번 2 로 올리면 내리지 않는다 —
+  // 허브 시트 스냅. gorhom 은 이 값이 바뀔 때마다 그 칸으로 스냅하므로 한 번 1(펼침)로 올리면 내리지 않는다 —
   // 닫으며 applied 가 지워져도 펼친 허브를 도로 접지 않는다(Q5).
   const [initialSnapIndex, setInitialSnapIndex] = useState(
-    appliedSessionId ? 2 : undefined
+    appliedSessionId ? 1 : undefined
   );
   // TRIP-1418 — 적용 성공은 `dismissTo` 로 스택의 이 인스턴스에 돌아온다(새로 마운트되지 않는다). 그래서 새 applied 가
   // 도착한 렌더에서 상태를 다시 맞춘다(렌더 중 조정 — 옛 일차로 한 번 그렸다가 바뀌지 않게): 고른 일차를 비워 `day`(없으면
   // 오늘)가 이기게 하고 시트를 펼친다. applied 가 지워질 때(i08 [확인])는 아무것도 바꾸지 않는다.
+  // TRIP-1494 — 시트를 이미 1(펼침)로 올려 둔 뒤 사용자가 내리고 재적용하면 `initialSnapIndex` 는 같은 1 이라 prop 이 안 바뀐다.
+  // 새 applied 마다 1 씩 올리는 신호로 셸이 다시 펼치게 한다.
+  const [expandSignal, setExpandSignal] = useState(0);
   const [seenAppliedSessionId, setSeenAppliedSessionId] =
     useState(appliedSessionId);
   if (appliedSessionId !== seenAppliedSessionId) {
     setSeenAppliedSessionId(appliedSessionId);
     if (appliedSessionId) {
       setSelectedDay(null);
-      setInitialSnapIndex(2);
+      setInitialSnapIndex(1);
+      setExpandSignal((n) => n + 1);
     }
   }
   // [사진] 안내 한 줄(TRIP-1070) — 누른 그 카드(poiId, TRIP-1203)에만. 어느 카드든 다음 [사진] 누름에 지운다.
@@ -272,18 +302,23 @@ export function LiveItineraryPage({
     tripId,
     visitCheckIds: Object.values(mediaVisitIdByPoiId),
   });
-  // 늦게 온 옛 실패가 최신 시도를 덮지 않게 시도 번호를 센다(j01 onSubmitMemo 선례).
-  const memoAttempt = useRef(0);
+  // 늦게 온 옛 실패가 최신 시도를 덮지 않게 시도 번호를 센다(j01 onSubmitMemo 선례). TRIP-1493 — 방문별로 센다
+  // (다른 방문의 저장이 이 방문의 응답을 "옛 것"으로 만들지 않는다).
+  const memoAttempt = useRef<Record<string, number>>({});
   // TRIP-1426 [저장] 잠금 — ref 는 같은 틱 두 번째 누름을 막고(렌더 전이라 disabled 가 아직 안 섰다), state 는
-  // 응답을 기다리는 동안 [저장]을 비활성으로 그린다(directionsBusy 선례).
-  const memoSaving = useRef(false);
-  const [memoSavingShown, setMemoSavingShown] = useState(false);
+  // 응답을 기다리는 동안 [저장]을 비활성으로 그린다(directionsBusy 선례). TRIP-1493 — 방문(visitCheckId)별이다:
+  // 한 방문의 PUT 보류가 다른 방문의 메모를 막지 않는다(BR-U5-14). 같은 방문의 재누름만 막는다.
+  const memoSaving = useRef(new Set<string>());
+  const [memoSavingShown, setMemoSavingShown] = useState<ReadonlySet<string>>(
+    new Set()
+  );
 
   // TRIP-1339 · U10 위치 자동화 — 오늘(KST) 일정·실적으로 문맥을 만들고 판정은 훅이 한다(페이지 1회).
-  // 플래그 OFF 면 동의 조회도 하지 않고 훅은 효과가 없다(BR-U10-07). 훅 규칙상 조기 반환 위에 둔다.
+  // 플래그 OFF 면 훅은 효과가 없다(BR-U10-07). 동의 조회는 내 위치 표시(TRIP-1535)도 쓰므로 플래그와 무관하게 한다.
+  // 훅 규칙상 조기 반환 위에 둔다.
   const automationOn = isLocationAutomationEnabled();
   const locationConsent = useGetMeLocationConsent({
-    query: { enabled: automationOn },
+    query: { enabled: state.kind === 'active' },
   });
   const tripDays = state.kind === 'active' ? state.itinerary.days : [];
   const todaySlots = tripDays.find((day) => day.date === today)?.slots ?? [];
@@ -311,49 +346,14 @@ export function LiveItineraryPage({
     automation.droppedCount
   );
 
-  // TRIP-1343 · 계획｜실제 토글 — 그날 경로가 있고 위치 동의가 있을 때만 실제 칸이 켜진다(BR-U10-41).
+  // TRIP-1520 · 그날 경로가 있고 위치 동의가 있으면 실제 경로를 계획 동선 위에 늘 겹친다(토글·사유 없음, BR-U10-41 개정).
   const routes = useTripRoutes(automationOn ? tripId : null);
-  const [routeMode, setRouteMode] = useState<'plan' | 'actual'>('plan');
   const dayRoute = routeDayForDate(routes.routes, liveDate);
-  const routeSegments = dayRoute ? routeDayToSegments(dayRoute) : [];
   const consentOn = locationConsent.data?.legalConsent === true;
-  const actualAvailable = consentOn && routeSegments.length > 0;
-  const routeToggle = automationOn
-    ? {
-        mode: actualAvailable ? routeMode : ('plan' as const),
-        actualAvailable,
-        disabledReason: !consentOn
-          ? '위치 동의가 없어요'
-          : '이 날 기록된 경로가 없어요',
-        distanceLabel: dayRoute
-          ? actualDistanceLabel(dayRoute.distanceM)
-          : undefined,
-        onChange: setRouteMode,
-      }
-    : undefined;
-
-  // TRIP-1340 · '자동 기록' 칩·되돌리기 — 서버 출처에서 파생(플래그 ON 일 때만). 확정 전 호출 0회.
-  const autoRecords = new Map<
-    string,
-    { visitCheckId: string; part: AutoRevertPart }
-  >();
-  if (automationOn) {
-    for (const visit of visits.data?.visits ?? []) {
-      const part = autoRecordPart(visit);
-      if (part && visit.slotKey)
-        autoRecords.set(visit.poiId, {
-          visitCheckId: visit.visitCheckId,
-          part,
-        });
-    }
-  }
-  const revertAuto = useRevertAutoVisit(tripId);
-  const [revertTarget, setRevertTarget] = useState<{
-    poiId: string;
-    visitCheckId: string;
-    part: AutoRevertPart;
-    error: AutoRevertError;
-  } | null>(null);
+  const actualRoute =
+    automationOn && consentOn && dayRoute
+      ? routeDayToSegments(dayRoute)
+      : undefined;
 
   // 허브 ‹ 와 같은 규칙 — 딥링크 직행이라 돌아갈 곳이 없으면 홈으로(INV-4 침묵 금지).
   const goBackOrHome = (): void => {
@@ -506,7 +506,7 @@ export function LiveItineraryPage({
     activeDate
   );
   // TRIP-1419 — 관람 중 카드 시각은 카드를 관람 중으로 만든 바로 그 기록(activeVisitCheckId)의 실제 도착 시각.
-  // 낙관 구간(응답 전)이면 null → 카드는 시각 없이 "지금 관람 중".
+  // 낙관 구간(응답 전)이면 null → 카드는 시각 없이 "지금 방문 중".
   const activeVisit = visits.data?.visits.find(
     (v) => v.visitCheckId === activeVisitCheckId
   );
@@ -590,20 +590,21 @@ export function LiveItineraryPage({
   // TRIP-1117 [메모] — 허브 위 메모 시트에서 저장한다(TRIP-1070 결정 1(c) 번복). 닫힘은 저장 성공 뒤(Q1).
   const memoSheetPoiId = poiOfVisit(memoSheetFor);
   const memoSheetOpen = memoSheetPoiId !== undefined;
-  const submitMemo = (visitCheckId: string, text: string) => {
-    if (memoSaving.current) return;
-    memoSaving.current = true;
-    setMemoSavingShown(true);
-    const attempt = ++memoAttempt.current;
+  const submitMemo = (visitCheckId: string, text: string, seed: string) => {
+    if (memoSaving.current.has(visitCheckId)) return;
+    memoSaving.current.add(visitCheckId);
+    setMemoSavingShown(new Set(memoSaving.current));
+    const attempt = (memoAttempt.current[visitCheckId] ?? 0) + 1;
+    memoAttempt.current[visitCheckId] = attempt;
     setMemoFailedFor(null);
     const unlock = () => {
-      memoSaving.current = false;
-      setMemoSavingShown(false);
+      memoSaving.current.delete(visitCheckId);
+      setMemoSavingShown(new Set(memoSaving.current));
     };
-    visitMemo.saveMemo(text).then(
+    visitMemo.saveMemo(text, seed).then(
       (saved) => {
         unlock();
-        if (attempt !== memoAttempt.current) return;
+        if (attempt !== memoAttempt.current[visitCheckId]) return;
         setMemoSheetFor((open) => (open === visitCheckId ? null : open));
         // 같은 글(요청 0)은 닫기만 한다(Q2).
         if (saved)
@@ -614,7 +615,8 @@ export function LiveItineraryPage({
       },
       () => {
         unlock();
-        if (attempt === memoAttempt.current) setMemoFailedFor(visitCheckId);
+        if (attempt === memoAttempt.current[visitCheckId])
+          setMemoFailedFor(visitCheckId);
       }
     );
   };
@@ -629,8 +631,8 @@ export function LiveItineraryPage({
         text={visitMemo.savedMemo}
         editable={visitMemo.memoReady}
         notice={memoFailedFor === memoSheetFor ? MEMO_SAVE_FAILED : null}
-        saving={memoSavingShown}
-        onSubmit={(text) => submitMemo(memoSheetFor, text)}
+        saving={memoSavingShown.has(memoSheetFor)}
+        onSubmit={(text, seed) => submitMemo(memoSheetFor, text, seed)}
         onClose={() => setMemoSheetFor(null)}
       />
     ) : null;
@@ -692,6 +694,7 @@ export function LiveItineraryPage({
   return (
     <>
       <LiveHubView
+        departureTab={departureTab}
         tripTitle={trip.data?.title ?? ''}
         days={itinerary.days}
         activeDayIndex={activeDayIndex}
@@ -744,22 +747,26 @@ export function LiveItineraryPage({
             ? { poiId: memoFailedPoiId, text: MEMO_SAVE_FAILED }
             : null
         }
-        fabHidden={memoSheetOpen}
-        // TRIP-1321 — ✦ 도우미는 수정 FAB 앵커 열 맨 위(BR-U8-51). 메모 시트가 열리면 앵커째 빠진다.
-        assistantFab={
-          <AssistantFab
-            onPress={() => router.push(assistantHref('LIVE', tripId))}
-          />
+        // BR-U8-53 — 허브 위에 겹쳐 뜨는 시트·안내가 하나라도 있으면 하단 바를 통째로 그리지 않는다(딤 위로 비치거나 시트
+        // 헤더를 덮지 않게, TRIP-1435 Q-099). 메모 시트(TRIP-1117)에 위험 상세·변경 반영·위치 '항상' 안내를 더했다.
+        barHidden={
+          memoSheetOpen ||
+          riskSheet !== null ||
+          Boolean(appliedSessionId) ||
+          (automation.state === 'EXPLAINER' && !explainerClosed)
         }
+        // TRIP-1321 → TRIP-1522 — ✦ 도우미는 하단 바의 "챗봇" 칸이다(BR-U8-51). 바째 숨는 조건은 위 barHidden 과 같다.
+        onPressChatbot={() => router.push(assistantHref('LIVE', tripId))}
         triggerChip={triggerChip}
-        opportunityCard={
-          opportunity ? (
-            <OpportunityCard
-              item={opportunity.item}
-              onPressReplan={() => router.push(opportunity.replanHref)}
-              onDismiss={opportunity.dismiss}
-            />
-          ) : undefined
+        // 행사 칸이 연다 — 기회가 없으면 칸이 비활성이다. 카드는 허브가 그린다(고르기·숨김은 훅 몫).
+        opportunity={
+          opportunity
+            ? {
+                item: opportunity.item,
+                onPressReplan: () => router.push(opportunity.replanHref),
+                onDismiss: opportunity.dismiss,
+              }
+            : null
         }
         triggerPillKey={chipTrigger?.triggerId}
         slotBadgeLabel={slotBadgeLabel}
@@ -787,17 +794,12 @@ export function LiveItineraryPage({
         onPressDirections={(poiId) => void pressDirections(poiId)}
         directionsNotice={directionsNotice}
         initialSnapIndex={initialSnapIndex}
-        autoRecordedPoiIds={new Set(autoRecords.keys())}
-        routeToggle={routeToggle}
-        actualRoute={
-          routeToggle?.mode === 'actual' && actualAvailable
-            ? routeSegments
-            : undefined
+        expandSignal={expandSignal}
+        actualRoute={actualRoute}
+        // TRIP-1535 — 오늘 일차를 볼 때 · 위치정보 이용 동의가 있을 때만. 좌표는 서버로 안 간다(지도 화면 표시뿐).
+        showMyLocation={
+          liveDate === today && locationConsent.data?.legalConsent === true
         }
-        onPressRevertAuto={(poiId) => {
-          const target = autoRecords.get(poiId);
-          if (target) setRevertTarget({ poiId, ...target, error: null });
-        }}
         automationNotice={
           automationCopy
             ? {
@@ -813,35 +815,6 @@ export function LiveItineraryPage({
             : null
         }
       />
-      {revertTarget ? (
-        <AutoRevertDialog
-          testIDPrefix="execution-live-slot-auto-revert"
-          placeName={
-            activeSlots.find((slot) => slot.poiId === revertTarget.poiId)
-              ?.nameKo ?? '이 장소'
-          }
-          part={revertTarget.part}
-          pending={revertAuto.pending}
-          error={revertTarget.error}
-          onCancel={() => setRevertTarget(null)}
-          onConfirm={() => {
-            void revertAuto
-              .revert(revertTarget.visitCheckId)
-              .then((outcome) => {
-                if (outcome === 'ok') setRevertTarget(null);
-                else
-                  setRevertTarget((t) =>
-                    t
-                      ? {
-                          ...t,
-                          error: outcome === 'media' ? 'media' : 'failed',
-                        }
-                      : t
-                  );
-              });
-          }}
-        />
-      ) : null}
       {automation.state === 'EXPLAINER' && !explainerClosed ? (
         <LocationAlwaysExplainer
           dateRangeLabel={tripDateRangeLabel(

@@ -70,7 +70,8 @@ export function NicknameScreen({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View testID="onboarding-nickname-root" className="flex-1 bg-canvas">
-          <View className="h-[56px] flex-row items-center gap-sm border-b border-hairline px-lg">
+          <View className="h-[56px] flex-row items-center gap-sm px-lg">
+            <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
             <Text className="font-noto-bold text-[16px] font-bold text-ink">
               닉네임 설정
             </Text>
@@ -160,7 +161,8 @@ export function NicknameScreen({
             </Text>
           </View>
 
-          <View className="border-t border-hairline px-2xl pb-[30px] pt-md">
+          <View className="px-2xl pb-[30px] pt-md">
+            <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
             <Pressable
               testID="onboarding-nickname-next"
               disabled={!canProceed}

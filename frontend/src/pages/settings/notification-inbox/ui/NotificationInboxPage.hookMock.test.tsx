@@ -30,7 +30,7 @@ import { NotificationInboxPage } from './NotificationInboxPage';
  *    TRIP_ITINERARY)에 붙이면 일정 화면으로 가는 거짓 라벨이 된다.
  *  - 진입 표시 없음(AC-11, INV-4): 액션 없음·STAY_DETAIL·결측·모르는 값 행은 인라인 링크가 없고, 행이 버튼이
  *    아니고, 눌러도 이동 0회.
- *  - 배선·조립·empty(TRIP-576 유지): 행 개수, 메타 "Plan-B · 10분 전", 0건이면 empty.
+ *  - 배선·조립·empty(TRIP-576 유지): 행 개수, 메타 "재계획 · 10분 전", 0건이면 empty.
  *
  * `router.push` 목은 "불렸다·이 인자로·N회"까지 — 실제 화면 이동과 planb 모달 모양은 6-b 실기 몫.
  */
@@ -103,6 +103,22 @@ function mockItems(items: Notification[]): void {
     data: { items },
     isLoading: false,
     isError: false,
+  });
+}
+
+/** 조회 훅이 돌려줄 실패·로딩 모양을 직접 주입한다 — `refetch` 는 다시 시도 배선 확인용. */
+function mockQueryState(state: {
+  data: { items: Notification[] } | undefined;
+  isError: boolean;
+  isLoading?: boolean;
+  isFetching?: boolean;
+  refetch?: jest.Mock;
+}): void {
+  mockUseGetMeNotifications.mockReturnValue({
+    isLoading: false,
+    isFetching: false,
+    refetch: jest.fn().mockResolvedValue({}),
+    ...state,
   });
 }
 
@@ -251,10 +267,10 @@ describe('AC-11 · 진입 표시 없음 — 인라인 링크 없음 · 버튼 �
 });
 
 describe('조립 · 메타 = 라벨 · 상대시각', () => {
-  it('PLAN_B occurredAt 10분30초 전 → "Plan-B · 10분 전"', () => {
+  it('PLAN_B occurredAt 10분30초 전 → "재계획 · 10분 전"', () => {
     mockItems([PLAN_B]);
     renderPage();
-    expect(screen.getByText('Plan-B · 10분 전')).toBeOnTheScreen();
+    expect(screen.getByText('재계획 · 10분 전')).toBeOnTheScreen();
   });
 });
 
@@ -288,5 +304,54 @@ describe('empty · 알림 0건', () => {
     renderPage();
     expect(screen.getByTestId('notification-inbox-empty')).toBeOnTheScreen();
     expect(screen.queryAllByTestId('notification-inbox-row')).toHaveLength(0);
+  });
+});
+
+// TRIP-1501 · 조회 실패 판정 — 훅 상태 4갈래가 어느 얼굴이 되는지(페이지 판정 = `isError && data === undefined`).
+describe('조회 실패 판정 · isError 와 data 가 함께 살 수 있다', () => {
+  const ERROR = 'notification-inbox-error';
+  const RETRY = 'notification-inbox-retry';
+
+  it('조회 실패(isError, data 없음) → 오류 얼굴 + 다시 시도, empty·"모두 읽음"·행은 없고, 다시 시도 press → refetch 1회', () => {
+    // 준비
+    const refetch = jest.fn().mockResolvedValue({});
+    mockQueryState({ isError: true, data: undefined, refetch });
+    renderPage();
+
+    // 단언 — 실패를 "알림 없음"으로 접지 않는다.
+    expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+    expect(screen.queryByTestId('notification-inbox-empty')).toBeNull();
+    expect(screen.queryByTestId('notification-inbox-mark-all')).toBeNull();
+    expect(screen.queryAllByTestId('notification-inbox-row')).toHaveLength(0);
+
+    // 실행 + 단언 — 다시 시도 = 조회 훅의 refetch.
+    expect(refetch).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByTestId(RETRY));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('재조회만 실패(isError 인데 옛 data 가 남음) → 목록 유지, 오류 얼굴 없음', () => {
+    mockQueryState({ isError: true, data: { items: [PLAN_B] } });
+    renderPage();
+
+    expect(screen.queryAllByTestId('notification-inbox-row')).toHaveLength(1);
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+  });
+
+  it('서버가 준 빈 목록 뒤 재조회 실패(isError, data={items:[]}) → empty 그대로, 오류 얼굴 없음', () => {
+    mockQueryState({ isError: true, data: { items: [] } });
+    renderPage();
+
+    expect(screen.getByTestId('notification-inbox-empty')).toBeOnTheScreen();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+  });
+
+  it('첫 조회 중(isLoading, data 없음, isError 아님) → 오류 얼굴이 뜨지 않는다', () => {
+    mockQueryState({ isError: false, isLoading: true, data: undefined });
+    renderPage();
+
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+    expect(screen.queryByTestId(RETRY)).toBeNull();
   });
 });

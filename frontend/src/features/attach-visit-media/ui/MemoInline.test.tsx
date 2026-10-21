@@ -58,7 +58,7 @@ describe('🔴 TRIP-1078 AC-1·AC-3 · blur 저장 — 공백만이면 저장 �
     fireEvent(input, 'blur');
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
-    expect(onSubmit).toHaveBeenCalledWith('노을이 근사했다');
+    expect(onSubmit).toHaveBeenCalledWith('노을이 근사했다', '');
   });
 
   it('공백만 입력 후 blur → onSubmit 0회', () => {
@@ -133,7 +133,7 @@ describe('🔴 TRIP-1078 AC-2 · return = 제출→blur, 한 번에 저장 1회'
     fireEvent(input, 'blur');
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
-    expect(onSubmit).toHaveBeenCalledWith('파도 소리가 좋았다');
+    expect(onSubmit).toHaveBeenCalledWith('파도 소리가 좋았다', '');
   });
 });
 
@@ -149,5 +149,21 @@ describe('🔴 TRIP-1426 AC-8 · 메모 입력칸의 접근성 이름은 "메모
     const input = screen.getByTestId('record-trip-memo-input');
     expect(input).toHaveAccessibleName('메모 입력');
     expect(screen.getByLabelText('메모 입력')).toBe(input);
+  });
+});
+
+describe('🔴 TRIP-1492 · onSubmit 두 번째 인자는 마운트 때 심은 글이다', () => {
+  it('시드 "서버 글" 로 마운트 → 글을 고쳐 blur 하면 (고친 글, "서버 글"), text prop 이 나중에 바뀌어도 seed 는 그대로', () => {
+    const onSubmit = jest.fn();
+    const { rerender } = render(
+      <MemoInline text="서버 글" onSubmit={onSubmit} />
+    );
+    rerender(<MemoInline text="다른 기기 글" onSubmit={onSubmit} />);
+
+    const input = screen.getByTestId('record-trip-memo-input');
+    fireEvent.changeText(input, '고친 글');
+    fireEvent(input, 'blur');
+
+    expect(onSubmit).toHaveBeenCalledWith('고친 글', '서버 글');
   });
 });

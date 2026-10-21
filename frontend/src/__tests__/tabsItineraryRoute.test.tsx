@@ -413,9 +413,9 @@ describe('🔴 AC-5 · 배지·상태문은 카드별 itinerary 에서 파생된
 
     renderTab();
 
-    // 완성 — "완성" 배지 + "일정 확정"(TRIP-986 Seed D2: 구 "추천안이 준비됐어요" 교체, 상수).
+    // 완성 — "확정" 배지 + "일정 확정"(TRIP-986 Seed D2: 구 "추천안이 준비됐어요" 교체, 상수).
     expect(screen.getByTestId('my-trip-badge-trip-done')).toHaveTextContent(
-      '완성'
+      '확정'
     );
     expect(screen.getByTestId('my-trip-extra-trip-done')).toHaveTextContent(
       '일정 확정'
@@ -459,9 +459,9 @@ describe('🔴 AC-8 · empty 얼굴 — 캘린더 글리프(회색 원 72) + 부
 
     // 부제 2줄 강제 — `toHaveTextContent`/`getByText` 는 개행을 공백으로 정규화해 못 본다(02a ★4·§5-2).
     // 정규식으로 노드를 잡고 정규화 전 원문(`.props.children`)을 직단언해 `\n` 을 잠근다.
-    const subtitle = screen.getByText(/여행을 만들면 완성·작성중 상태를/);
+    const subtitle = screen.getByText(/여행을 만들면 확정·작성중 상태를/);
     expect(subtitle.props.children).toBe(
-      '여행을 만들면 완성·작성중 상태를\n여기서 한눈에 볼 수 있어요'
+      '여행을 만들면 확정·작성중 상태를\n여기서 한눈에 볼 수 있어요'
     );
   });
 });

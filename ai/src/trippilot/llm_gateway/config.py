@@ -189,6 +189,9 @@ def default_feature_max_tokens() -> Mapping[LlmFeature, int]:
 
     REFLECTION_TEMPLATE 은 실측 출력이 950~1016 토큰이라 1024 에 붙어 있다 — 3방문
     짧은 입력도 잘림 1회가 재시도를 부르고, 재시도가 요청 예산을 넘겨 504 가 났다.
+    2048 → 4096 (2026-10-20): 여행 요약(TRIP_SUMMARY, 10~25곳)은 정상 출력이 1639~1935 토큰
+    (gpt-5.6-terra low, 사고 토큰 포함)이라 2048 에 붙어 호출 10회 중 4회가 잘렸다 — 잘리면
+    그 시도는 버려지고 재시도로 15~18초가 더 든다.
 
     SHARE_CARD_COPY 는 claude-fable-5-1(사고 항상 켜짐, 사고 토큰도 이 상한 안)에서 출력이
     1000~1024 토큰 — 1024 에서 잘려 정적 문구로 강등됐다(2026-10-11 실측).
@@ -197,7 +200,7 @@ def default_feature_max_tokens() -> Mapping[LlmFeature, int]:
         {
             LlmFeature.EXPLANATION: 4096,
             LlmFeature.ALTERNATIVE_EXPLANATION: 4096,
-            LlmFeature.REFLECTION_TEMPLATE: 2048,
+            LlmFeature.REFLECTION_TEMPLATE: 4096,
             LlmFeature.SHARE_CARD_COPY: 2048,
             # 고른 곳 ≤ 8건 × 이유 1문장 + fable 사고 토큰 — 대체지 선택(≤ 3건)의 두 배 남짓
             LlmFeature.REPLAN_COMPOSITION: 2048,

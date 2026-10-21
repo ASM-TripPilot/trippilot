@@ -6,6 +6,7 @@ import com.trippilot.auth.domain.Provider
 import com.trippilot.auth.domain.SocialProfile
 import com.trippilot.auth.domain.port.SocialAuthPort
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
+import io.kotest.assertions.withClue
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldNotBeBlank
@@ -51,6 +52,21 @@ class TokenRefreshControllerIT : AbstractPostgresIntegrationTest() {
         )
         status shouldBe 200
         return body["refreshToken"].asText()
+    }
+
+    /** 계약이 400(VALIDATION_ERROR)을 말하는 두 공개 경로 — @NotBlank 가 빠지면 빈 토큰이 revoke·회전으로 흘러간다. */
+    @Test
+    fun `리프레시·로그아웃 본문의 토큰이 비거나 공백뿐이면 400 VALIDATION_ERROR`() {
+        for (path in listOf("/api/v1/auth/token/refresh", "/api/v1/auth/logout")) {
+            for (token in listOf("", "   ")) {
+                val (status, body) = post(path, """{"refreshToken":"$token"}""")
+
+                withClue("$path ← '$token'") {
+                    status shouldBe 400
+                    body["error"]["code"].asText() shouldBe "VALIDATION_ERROR"
+                }
+            }
+        }
     }
 
     @Test

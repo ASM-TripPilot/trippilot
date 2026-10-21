@@ -160,6 +160,48 @@ describe('visitedLabelByPoiId (TRIP-1220)', () => {
   });
 });
 
+describe('TRIP-1495 · 같은 장소에 완료 기록이 둘이면 목록 순서와 무관하게 대표 방문(id 사전순 첫째)의 시각이다', () => {
+  const v1a = vc({
+    poiId: 'p1',
+    visitCheckId: 'v1a',
+    arrivedAt: '2026-08-20T05:07:00Z', // KST 14:07
+    completedAt: '2026-08-20T06:00:00Z',
+  });
+  const v1b = vc({
+    poiId: 'p1',
+    visitCheckId: 'v1b',
+    arrivedAt: '2026-08-20T05:20:00Z', // KST 14:20
+    completedAt: '2026-08-20T06:10:00Z',
+  });
+
+  it('X1 [v1b, v1a] 로 와도 [v1a, v1b] 로 와도 14:07(v1a)이다 — [메모]·[사진] 대상(id 사전순 첫째)과 같은 방문', () => {
+    expect(visitedLabelByPoiId(list(v1b, v1a), DAY)).toEqual({ p1: '14:07' });
+    expect(visitedLabelByPoiId(list(v1a, v1b), DAY)).toEqual({ p1: '14:07' });
+  });
+
+  it('X2 대표 방문에 실제 시각이 없으면 다른 방문의 시각으로 대신하지 않는다(키 없음 — 계획 시각 폴백)', () => {
+    const noTime = vc({
+      poiId: 'p1',
+      visitCheckId: 'v1a',
+      arrivedAt: null,
+      completedAt: '2026-08-20T06:00:00Z',
+    });
+    expect(visitedLabelByPoiId(list(v1b, noTime), DAY)).toEqual({});
+  });
+
+  it('X3 낙관 레코드는 대표가 되지 않는다 — 서버 방문이 시각의 주인이다', () => {
+    const optimistic = vc({
+      poiId: 'p1',
+      visitCheckId: 'optimistic:0',
+      arrivedAt: '2026-08-20T00:00:00Z',
+      completedAt: '2026-08-20T00:00:00Z',
+    });
+    expect(visitedLabelByPoiId(list(optimistic, v1b), DAY)).toEqual({
+      p1: '14:20',
+    });
+  });
+});
+
 describe.each([
   ['UTC', 5],
   ['America/Los_Angeles', 22],

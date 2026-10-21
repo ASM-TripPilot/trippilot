@@ -9,7 +9,7 @@ export type SlotEmptyFace = 'NO_NEARBY' | 'ALL_IN_ITINERARY' | 'FALLBACK';
 
 export const ALL_IN_ITINERARY_TITLE = '근처 후보가 이미 모두 일정에 있어요';
 export const ALL_IN_ITINERARY_HINT =
-  '반경을 넓혀도 같아요. 다른 슬롯의 장소를 빼면 후보가 생겨요';
+  '반경을 넓혀도 같아요. 다른 자리의 장소를 빼면 후보가 생겨요';
 
 export function resolveSlotEmptyFace(reason: unknown): SlotEmptyFace {
   if (reason === 'NO_NEARBY') return 'NO_NEARBY';

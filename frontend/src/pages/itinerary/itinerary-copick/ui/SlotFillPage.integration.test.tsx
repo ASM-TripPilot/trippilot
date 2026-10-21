@@ -2644,7 +2644,7 @@ describe('진행줄·스텝퍼 배선', () => {
    *
    * 무엇을 보장하나:
    *  - 🔴 W1 진행줄: GET 도착 후 진행줄이 뜨고 슬롯 수가 **위치 도출**(비고정 index+1 / 총수)이다.
-   *  - 🔴 W2 스텝퍼 상태 라벨을 **슬롯 위치로 결정론 도출**한다(current 이전=고름·current=지금 고르는
+   *  - 🔴 W2 스텝퍼 상태 라벨을 **슬롯 위치로 결정론 도출**한다(current 이전=선택함·current=지금 고르는
    *       중·이후=비어 있음, seed D1).
    *  - 🔴 W3 이전 단 제목 = 직전 슬롯 이름(GET 캐시).
    *  - 🔴 W4 현재 단 제목: category 있으면 그것(D1).
@@ -2778,12 +2778,12 @@ describe('진행줄·스텝퍼 배선', () => {
       ).toHaveTextContent(/1일차/);
     });
 
-    it('W2 · 스텝퍼 상태 라벨을 슬롯 위치로 도출한다(고름/지금 고르는 중/비어 있음)', async () => {
+    it('W2 · 스텝퍼 상태 라벨을 슬롯 위치로 도출한다(선택함/지금 고르는 중/비어 있음)', async () => {
       renderAtSlotB();
 
       expect(
         await screen.findByTestId('copick-stepper-prev-status')
-      ).toHaveTextContent('고름');
+      ).toHaveTextContent('선택함');
       expect(
         screen.getByTestId('copick-stepper-current-status')
       ).toHaveTextContent('지금 고르는 중');

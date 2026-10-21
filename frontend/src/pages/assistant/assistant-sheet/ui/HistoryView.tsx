@@ -111,7 +111,8 @@ export function HistoryView({
           </View>
         ) : null}
       </ScrollView>
-      <View className="flex-row gap-sm border-t border-hairline px-lg py-sm">
+      <View className="flex-row gap-sm px-lg py-sm">
+        <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
         <ActionButton
           testID="assistant-history-continue"
           label="대화 이어서"

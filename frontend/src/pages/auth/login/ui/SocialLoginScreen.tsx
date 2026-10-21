@@ -236,7 +236,7 @@ export function SocialLoginScreen({
       {showCancelNotice ? (
         <View testID="auth-login-cancel-notice" className="items-center">
           <Text className="font-noto text-body text-muted">
-            로그인이 취소되었습니다
+            로그인이 취소됐어요
           </Text>
         </View>
       ) : null}
@@ -265,7 +265,7 @@ export function SocialLoginScreen({
             className="font-noto text-body text-body"
           >
             {conflictKo
-              ? `이 이메일은 이미 ${conflictKo} 로그인으로 가입되어 있습니다. ${conflictKo} 로그인으로 계속하시겠어요?`
+              ? `이 이메일은 이미 ${conflictKo} 로그인으로 가입되어 있어요. ${conflictKo} 로그인으로 계속하시겠어요?`
               : '다른 방법으로 가입된 계정이에요'}
           </Text>
           <SheetCta

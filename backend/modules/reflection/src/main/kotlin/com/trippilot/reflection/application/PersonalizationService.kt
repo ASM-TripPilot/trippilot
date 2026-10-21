@@ -46,7 +46,10 @@ class PersonalizationService(
             .filter { !it.isOther }
             .mapNotNull { ACTIVITY_BY_CATEGORY[it.category] }
             .distinct()
-        val pace = paceOf(analysis.traitGauges)
+        // 게이지를 못 읽은 분석(TRIP-1476)은 속도의 근거가 아니다 — 자리값 0 이 "알차게"가 되어 고른 적 없는 속도가 추천에 들어간다.
+        val pace = if (analysis.traitGaugesRead) paceOf(analysis.traitGauges) else null
+        // 넘길 것이 하나도 없으면 적용이 아니다 — 근거가 모자란 것과 같다.
+        if (activities.isEmpty() && pace == null) return empty(PersonalizationReason.NOT_ENOUGH_RECORDS)
         return PersonalizationView(
             applied = true,
             reason = PersonalizationReason.APPLIED,
@@ -57,7 +60,7 @@ class PersonalizationService(
                 if (activities.isNotEmpty()) {
                     add(PersonalizationItem("자주 방문한 장소 유형", "추천 장소의 종류를 취향에 맞춥니다"))
                 }
-                add(PersonalizationItem("하루 평균 방문 수", "하루 일정의 빽빽함을 조절합니다"))
+                if (pace != null) add(PersonalizationItem("하루 평균 방문 수", "하루 일정의 빽빽함을 조절합니다"))
             },
         )
     }

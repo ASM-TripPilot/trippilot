@@ -92,6 +92,13 @@ export function SplashGate() {
         name="trips/[tripId]/planb/index"
         options={{ presentation: 'transparentModal' }}
       />
+      {/* i01 여행 중 허브(TRIP-1522) — 전환 없이 즉시 교체한다: 허브 하단 바가 홈 탭 바와 같은 5칸 모양으로 시작해 4단계 모프를 스스로
+          재생하므로, 기본 슬라이드나 fade 는 아래 (tabs) 의 탭 바를 비치게 해 5칸이 이중으로 보인다. 앱 전체 전환·다른 라우트는 그대로(허브 하나만).
+          가드 밖 선언은 planb 와 같은 이유다. */}
+      <Stack.Screen
+        name="trips/[tripId]/live/index"
+        options={{ animation: 'none' }}
+      />
       {/* ✦ AI 도우미 시트(TRIP-1322 · DEC-U8-13) — 진입 화면 위 투명 모달. (tabs) 밖이라 탭바가 가려진다.
           미인증 딥링크는 가드에 안 걸리지만 세션 생성 401 이면 시트가 스스로 닫힌다. */}
       <Stack.Screen

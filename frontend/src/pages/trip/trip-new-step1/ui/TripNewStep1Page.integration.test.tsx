@@ -530,7 +530,7 @@ describe('꼭 갈 곳 자동 시드 폐지 (로그인)', () => {
  * ⚠️ 바텀시트 통과형 목: 마운트하면 children 을 무조건 렌더한다 — 여기서 관측하는 "시트 오픈"은
  * **조건부 마운트 트리 존재/부재**뿐이다. 실제 슬라이드업·딤·중앙정렬·터치차단은 jest 사각(6-b 실기).
  */
-describe('여행지 편집 시트 (W-1~W-5)', () => {
+describe('여행지 편집 시트 (W-1~W-6)', () => {
   afterEach(expectNoExitWizard);
 
   const { preferenceHandler, renderPage, openSheet } = wizardStep1Harness();
@@ -632,6 +632,36 @@ describe('여행지 편집 시트 (W-1~W-5)', () => {
           { seq: 1, region: '부산', nights: 2 },
         ])
       );
+    });
+  });
+
+  // TRIP-1499 AC-9 — 삭제로 같은 도시가 이웃해지면 스토어가 합친다(단위 R1~). 시트는 합쳐진 목록을 그리기만 한다.
+  describe('W-6 · 삭제× 로 같은 도시가 이웃해지면 시트에도 한 행으로 보인다 (TRIP-1499)', () => {
+    it('부산 2박·제주 1박·부산 1박에서 제주를 지우면 부산 한 줄(3박)만 남고 두·세 번째 줄은 없다', async () => {
+      // 준비 — beforeEach 가 담은 부산·경주를 비우고 왕복 동선을 담는다.
+      useTripWizardStore.getState().reset();
+      useTripWizardStore.getState().addDestination('부산', 2);
+      useTripWizardStore.getState().addDestination('제주시', 1);
+      useTripWizardStore.getState().addDestination('부산', 1);
+      renderPage();
+      await openSheet('destination');
+      // 앵커 — 지우기 전에는 세 줄이다(실행을 지워도 green 이 되는 것을 막는다).
+      expect(
+        screen.getByTestId('trip-wizard-destination-row-3')
+      ).toBeOnTheScreen();
+
+      fireEvent.press(screen.getByTestId('trip-wizard-destination-remove-2'));
+
+      await waitFor(() =>
+        expect(screen.queryByTestId('trip-wizard-destination-row-3')).toBeNull()
+      );
+      expect(screen.queryByTestId('trip-wizard-destination-row-2')).toBeNull();
+      const row1 = screen.getByTestId('trip-wizard-destination-row-1');
+      expect(within(row1).getByText('부산')).toBeOnTheScreen();
+      expect(within(row1).getByText('3박')).toBeOnTheScreen();
+      expect(useTripWizardStore.getState().destinations).toEqual([
+        { seq: 1, region: '부산', nights: 3 },
+      ]);
     });
   });
 
@@ -1468,10 +1498,10 @@ describe('취향 편집 시트 (PI·PA)', () => {
       );
       // TRIP-732: 옛 " + 온보딩" 문자열이 스파클+분홍 "온보딩" 배지로 바뀐다 → `\+`를 뗀 `/온보딩/`로
       // 검사(구·신 렌더 모두 "온보딩"을 담아 선제 green, 반전 후 `\+` 부재로 깨지는 것 예방).
-      expect(summaryPreferenceRow()).toHaveTextContent(/온보딩/);
+      expect(summaryPreferenceRow()).toHaveTextContent(/내 취향/);
     });
 
-    it('스타일 오버라이드가 있으면 요약이 effective(휴양)·activities(야경)를 담고 "온보딩"이 사라진다', async () => {
+    it('스타일 오버라이드가 있으면 요약이 effective(휴양)·activities(야경)를 담고 "내 취향" 배지가 사라진다', async () => {
       useTripWizardStore.getState().setPrefStyleOverride(['휴양']);
       renderPage();
       await waitForPrefill();
@@ -1482,7 +1512,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
       // 활동 오버라이드 undefined → 프리필(야경) 그대로 — 이제 시트 활동 칩으로 끌 수 있는 값이다(TRIP-1092).
       expect(summaryPreferenceRow()).toHaveTextContent(/야경/);
       // 바꿨는데 "온보딩" 표식이 남으면 거짓 — 제거돼야 한다.
-      expect(summaryPreferenceRow()).not.toHaveTextContent(/온보딩/);
+      expect(summaryPreferenceRow()).not.toHaveTextContent(/내 취향/);
     });
   });
 
@@ -1521,7 +1551,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
   });
 
   /**
-   * TRIP-984 D10 · 취향 시트 하단 "온보딩에서 고른 취향을 가져왔어요" 는 온보딩 취향이 있을 때만.
+   * TRIP-984 D10 · 취향 시트 하단 "내 취향을 가져왔어요" 는 온보딩 취향이 있을 때만.
    * TRIP-1092 01b Q2: 시트가 활동 축도 그리므로 조건이 styles **또는** activities 1개 이상으로 넓어진다 —
    * 온보딩 활동 칩이 켜진 채 열리는데 "온보딩에서" 를 빼면 출처를 숨긴다. 둘 다 없으면 뒤쪽 절만 남는다.
    */
@@ -1561,7 +1591,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
       const sheet = screen.getByTestId('trip-wizard-pref-sheet');
       expect(
         within(sheet).getByText(
-          '온보딩에서 고른 취향을 가져왔어요 · 프로필 취향은 바뀌지 않아요'
+          '내 취향을 가져왔어요 · 프로필 취향은 바뀌지 않아요'
         )
       ).toBeOnTheScreen();
     });
@@ -1572,9 +1602,7 @@ describe('취향 편집 시트 (PI·PA)', () => {
       await openSheet('preference');
 
       expect(
-        screen.getByText(
-          '온보딩에서 고른 취향을 가져왔어요 · 프로필 취향은 바뀌지 않아요'
-        )
+        screen.getByText('내 취향을 가져왔어요 · 프로필 취향은 바뀌지 않아요')
       ).toBeOnTheScreen();
     });
   });
@@ -3826,6 +3854,32 @@ describe('일과 시간 (TRIP-1308)', () => {
     expect(patched[0].lastDayEndAt).toBe('16:00');
     expect('firstDayStartAt' in patched[0]).toBe(false);
     expect(tracker.postedBodies).toHaveLength(0);
+  });
+
+  // TRIP-1509 — 기간을 안 골랐으면(박수 0 은 기본값) 시트가 "당일치기라" 를 단정하지 않는다. 고른 뒤 당일이면 그대로.
+  it('기간 미선택이면 일과 시간 시트 부제에 "당일치기라" 가 없다', async () => {
+    useTripWizardStore.getState().addDestination('부산', 0);
+    renderPage();
+    await waitForPrefill();
+
+    await openSheet('daywindow');
+    expect(
+      screen.queryByText('당일치기라 시작과 종료를 함께 정해요')
+    ).toBeNull();
+    expect(screen.getByText('시작과 종료 시각을 정해요')).toBeTruthy();
+  });
+
+  it('기간을 하루로 골랐으면 시트 부제는 "당일치기라 …" 그대로다', async () => {
+    const store = useTripWizardStore.getState();
+    store.addDestination('부산', 0);
+    store.setPeriod(undefined, '2026-06-10', '2026-06-10');
+    renderPage();
+    await waitForPrefill();
+
+    await openSheet('daywindow');
+    expect(
+      screen.getByText('당일치기라 시작과 종료를 함께 정해요')
+    ).toBeTruthy();
   });
 
   it('당일치기에서 끝 ≤ 시작이면 [다음]이 닫히고 행이 확인 안내를 단다', async () => {

@@ -1,4 +1,5 @@
 import { http, HttpResponse } from 'msw';
+import type { QueryClient } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -10,8 +11,13 @@ import {
 import { router } from 'expo-router';
 
 import { BASE } from '@/test-support/apiBase';
-import { createGcZeroWrapper } from '@/test-support/queryRender';
+import {
+  createGcZeroWrapper,
+  createWrapper,
+  newTestQueryClient,
+} from '@/test-support/queryRender';
 import { server } from '@/mocks/server';
+import { getGetMeNotificationsQueryKey } from '@/shared/api/index.hooks';
 import type { Notification } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
@@ -40,6 +46,10 @@ import { NotificationInboxPage } from './NotificationInboxPage';
  *    재조회 뒤에도 미읽음이 그대로라 "버튼이 사라진다"를 관측할 수 없다.
  *  - 문(gate) — 테스트가 열 때까지 응답하지 않는 read-all. "응답 전"을 시간이 아니라 신호로 만든다.
  *    `refetchGate` 는 같은 문을 재조회 GET 에 건다 — 비활성이 재조회 **완료**까지 이어지는지 본다.
+ *  - TRIP-1501 조회 실패: 첫 조회가 실패하면 "알림 없음"이 아니라 오류 얼굴 + [다시 시도]. 재조회만 실패하면(옛 data 가 남아 있으면)
+ *    목록을 지키고, 서버가 준 빈 목록은 빈 얼굴 그대로다. 읽음 응답이 알림함을 나간 **뒤** 와도 목록 캐시는 낡음 처리된다.
+ *    (후자는 `gcTime: 0` 래퍼로는 원리적으로 못 본다 — 클라이언트를 직접 쥐는 `createWrapper(client)` 로 잰다.)
+ *  - `listReplies` — 목록 GET 응답 큐(성공·500·네트워크, 문 뒤 보류 가능). 비면 옛 응답 그대로라 기존 `it` 무영향.
  *  - 건별 POST 핸들러는 진짜 서버처럼 답한다(응답 큐·문·204 면 그 id 를 기억) — GET 은 기억한 id 의 행만 readAt 을
  *    채운다. 호출 수(`perIdPosts`)도 세서 '모두 읽음'이 건별을 안 부르는지(AC-12)를 계속 본다.
  */
@@ -125,6 +135,12 @@ type Reply = {
   gate?: ReturnType<typeof createGate>;
 };
 
+/** 목록 GET 한 번을 어떻게 답할지 — 200(정상)·500·네트워크 오류, 필요하면 문 뒤에서. 큐 순서 = GET 순서. */
+type ListReply = {
+  status: 200 | 500 | 'network';
+  gate?: ReturnType<typeof createGate>;
+};
+
 /** GET 이 돌려줄 원본 목록. 최상위 beforeEach 가 BASE_ITEMS 로 되돌린다. */
 let items: Notification[];
 let allRead: boolean;
@@ -138,11 +154,14 @@ let timeline: string[];
 let readAllReplies: Reply[];
 /** 건별 읽음 호출 순서대로 꺼내 쓰는 응답 큐. 비면 204. */
 let readOneReplies: Reply[];
+/** 목록 GET 호출 순서대로 꺼내 쓰는 응답 큐. 비면 상태 기억 정상 응답. */
+let listReplies: ListReply[];
 /** 있으면 read-all 성공 뒤의 목록 GET(재조회)을 이 문 뒤에 붙잡는다. 첫 GET 은 안 막는다. */
 let refetchGate: ReturnType<typeof createGate> | undefined;
 
 const listGets = () => timeline.filter((e) => e === `GET ${LIST_PATH}`).length;
 const pushMock = router.push as jest.Mock;
+const backMock = router.back as jest.Mock;
 
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' });
@@ -163,11 +182,17 @@ beforeEach(() => {
   readAllReplies = [];
   readOneReplies = [];
   refetchGate = undefined;
+  listReplies = [];
   pushMock.mockClear();
+  backMock.mockClear();
   setAccessToken('a');
   server.use(
     // 상태 기억 GET — read-all 이 성공한 뒤로는 전 행이, 건별 읽음이 성공한 행은 그 행만 읽음으로 나간다.
     http.get(`${BASE}/me/notifications`, async () => {
+      const reply = listReplies.shift();
+      if (reply?.gate) await reply.gate.opened;
+      if (reply?.status === 'network') return HttpResponse.error();
+      if (reply?.status === 500) return new HttpResponse(null, { status: 500 });
       if (allRead && refetchGate) await refetchGate.opened;
       return HttpResponse.json({
         items: items.map((item) =>
@@ -236,6 +261,138 @@ async function settle() {
     await new Promise((resolve) => setTimeout(resolve, 50));
   });
 }
+
+/** 앱 전역 QueryClient(AppProviders)와 같은 신선도 — 캐시는 안 지우고(gcTime Infinity), 30초 안엔 다시 안 받는다. */
+function appLikeClient(): QueryClient {
+  const client = newTestQueryClient();
+  const defaults = client.getDefaultOptions();
+  client.setDefaultOptions({
+    ...defaults,
+    queries: { ...defaults.queries, staleTime: 30_000 },
+  });
+  return client;
+}
+
+const ERROR = 'notification-inbox-error';
+const RETRY = 'notification-inbox-retry';
+const EMPTY = 'notification-inbox-empty';
+const ROW = 'notification-inbox-row';
+
+// TRIP-1501 · 조회 실패 얼굴. 클라이언트 재시도 0 이라 실패 응답 1개 = 실패 1회(앱 전역은 3회 재시도 ≈7초 뒤).
+describe('조회 실패 — "알림 없음"으로 접지 않고 오류 얼굴 + 다시 시도', () => {
+  describe('E1 · 첫 조회 실패', () => {
+    it.each<[string, ListReply['status']]>([
+      ['500', 500],
+      ['네트워크 오류', 'network'],
+    ])(
+      '%s 이면 오류 얼굴과 다시 시도가 보이고 empty·행·"모두 읽음"은 없고, 뒤로 갈 길은 열려 있다',
+      async (_label, status) => {
+        // 준비
+        listReplies = [{ status }];
+
+        // 실행
+        renderPage();
+
+        // 단언
+        expect(await screen.findByTestId(ERROR)).toBeOnTheScreen();
+        expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+        expect(screen.queryByTestId(EMPTY)).toBeNull();
+        expect(screen.queryAllByTestId(ROW)).toHaveLength(0);
+        expect(screen.queryByTestId(MARK_ALL)).toBeNull();
+        fireEvent.press(screen.getByTestId('notification-inbox-back'));
+        expect(backMock).toHaveBeenCalledTimes(1);
+      }
+    );
+  });
+
+  describe('E2 · 다시 시도 성공', () => {
+    it('다시 시도를 누르면 목록을 다시 받아 행이 나타나고 오류·빈 얼굴은 사라진다', async () => {
+      // 준비 — 첫 GET 만 실패(큐가 비면 정상).
+      listReplies = [{ status: 500 }];
+      renderPage();
+      await screen.findByTestId(ERROR);
+      expect(listGets()).toBe(1);
+
+      // 실행
+      fireEvent.press(screen.getByTestId(RETRY));
+
+      // 단언
+      await waitFor(() => expect(screen.queryAllByTestId(ROW)).toHaveLength(3));
+      expect(screen.queryByTestId(ERROR)).toBeNull();
+      expect(screen.queryByTestId(EMPTY)).toBeNull();
+      expect(listGets()).toBe(2);
+    });
+  });
+
+  describe('E3 · 다시 시도도 실패', () => {
+    it('재시도 중엔 비활성(연타해도 GET 이 늘지 않음), 끝나도 오류 얼굴이 남고 빈 얼굴로 접히지 않는다', async () => {
+      // 준비 — 두 번째 GET(다시 시도)이 문 뒤에서 실패한다.
+      const gate = createGate();
+      listReplies = [{ status: 500 }, { status: 500, gate }];
+      renderPage();
+      await screen.findByTestId(ERROR);
+
+      // 실행 1 — 누르고, 응답이 붙잡힌 채 한 번 더 누른다.
+      fireEvent.press(screen.getByTestId(RETRY));
+      await waitFor(() => expect(listGets()).toBe(2));
+      await waitFor(() => expect(screen.getByTestId(RETRY)).toBeDisabled());
+      fireEvent.press(screen.getByTestId(RETRY));
+      await settle();
+
+      // 단언 1 — 비활성·GET 2회에 머묾·얼굴 유지.
+      expect(listGets()).toBe(2);
+      expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+      expect(screen.queryByTestId(EMPTY)).toBeNull();
+
+      // 실행 2 — 응답(실패)을 보낸다.
+      await act(async () => {
+        gate.release();
+      });
+
+      // 단언 2 — 다시 누를 수 있고, 오류 얼굴이 그대로다.
+      await waitFor(() => expect(screen.getByTestId(RETRY)).toBeEnabled());
+      expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+      expect(screen.queryByTestId(EMPTY)).toBeNull();
+    });
+  });
+
+  describe('E5 · 서버가 준 빈 목록은 오류가 아니다', () => {
+    it('200 + 빈 items → 빈 얼굴, 오류 얼굴 없음', async () => {
+      // 준비
+      items = [];
+
+      // 실행
+      renderPage();
+
+      // 단언
+      expect(await screen.findByTestId(EMPTY)).toBeOnTheScreen();
+      expect(screen.queryByTestId(ERROR)).toBeNull();
+    });
+
+    it('빈 목록을 받은 뒤 재조회가 실패해도(푸시 무효화 등) 빈 얼굴 그대로다 — 판정은 items.length 가 아니라 data 유무', async () => {
+      // 준비 — 클라이언트를 직접 쥔다(재조회를 밖에서 일으키려고).
+      const client = newTestQueryClient();
+      items = [];
+      listReplies = [{ status: 200 }, { status: 500 }];
+      render(<NotificationInboxPage />, { wrapper: createWrapper(client) });
+      await screen.findByTestId(EMPTY);
+
+      // 실행 — 외부 무효화 → 재조회 500.
+      await act(async () => {
+        await client.invalidateQueries({
+          queryKey: getGetMeNotificationsQueryKey(),
+        });
+      });
+
+      // 단언 — 앵커: 실패가 캐시에 실제로 도착했다. 그 위에서 빈 얼굴 유지·오류 얼굴 없음.
+      expect(
+        client.getQueryState(getGetMeNotificationsQueryKey())?.status
+      ).toBe('error');
+      expect(screen.getByTestId(EMPTY)).toBeOnTheScreen();
+      expect(screen.queryByTestId(ERROR)).toBeNull();
+    });
+  });
+});
 
 describe('AC-12·13 · 성공 — read-all 1회, 응답 뒤 재조회, 버튼·dot 사라짐', () => {
   it('read-all 정확히 1회 · 건별 0회, 204 뒤 GET 이 한 번 더 나가고 미읽음 표시가 전부 사라진다', async () => {
@@ -670,6 +827,119 @@ describe('개별 읽음 — 누른 알림 하나를 읽음 요청하고, 응답 
       expect(perIdPosts).toEqual([STAY_ID]);
       expect(pushMock).toHaveBeenCalledTimes(1);
       expect(pushMock).toHaveBeenCalledWith('/my/stays');
+    });
+  });
+
+  // TRIP-1501 · 목록이 있는 채 재조회만 실패 + 읽음 응답이 알림함을 나간 뒤 도착.
+  describe('TRIP-1501 · 재조회 실패는 목록을 지우지 않는다', () => {
+    it('읽음 204 뒤 재조회만 500 → 행 6개·점이 그대로 남고 오류 얼굴은 없다(isError 와 data 가 함께 산다)', async () => {
+      // 준비 — 첫 GET 정상, 두 번째(읽음 뒤 재조회)만 500. 캐시 상태를 읽으려고 클라이언트를 직접 쥔다.
+      const client = newTestQueryClient();
+      listReplies = [{ status: 200 }, { status: 500 }];
+      render(<NotificationInboxPage />, { wrapper: createWrapper(client) });
+      await waitFor(() => expect(screen.queryAllByTestId(ROW)).toHaveLength(6));
+      expect(dotIn(SUMMARY_TITLE)).toBeOnTheScreen();
+
+      // 실행
+      fireEvent.press(rowOf(SUMMARY_TITLE));
+
+      // 단언 1(앵커) — 실패가 캐시에 도착했는데 옛 data 는 살아 있다.
+      await waitFor(() =>
+        expect(
+          client.getQueryState(getGetMeNotificationsQueryKey())?.status
+        ).toBe('error')
+      );
+      expect(
+        client.getQueryState(getGetMeNotificationsQueryKey())?.data
+      ).toBeDefined();
+      expect(listGets()).toBe(2);
+
+      // 단언 2 — 멀쩡한 목록이 오류 얼굴에 덮이지 않는다(새 목록을 못 받았으니 점도 그대로).
+      expect(screen.queryByTestId(ERROR)).toBeNull();
+      expect(screen.queryAllByTestId(ROW)).toHaveLength(6);
+      expect(dotIn(SUMMARY_TITLE)).toBeOnTheScreen();
+    });
+  });
+
+  describe('TRIP-1501 · 읽음 응답이 알림함을 나간 뒤 와도 목록 캐시는 낡음 처리된다', () => {
+    const listKey = getGetMeNotificationsQueryKey();
+
+    /** 미읽음 행을 누르고, 응답이 문 뒤에 붙잡힌 채 알림함을 나간다(언마운트). 문을 돌려준다. */
+    async function pressUnreadThenLeave(client: QueryClient) {
+      const gate = createGate();
+      readOneReplies = [{ status: 204, gate }];
+      const view = render(<NotificationInboxPage />, {
+        wrapper: createWrapper(client),
+      });
+      await waitFor(() => expect(screen.queryAllByTestId(ROW)).toHaveLength(6));
+      fireEvent.press(rowOf(SUMMARY_TITLE));
+      await waitFor(() => expect(perIdPosts).toHaveLength(1));
+      view.unmount();
+      return gate;
+    }
+
+    it('U1 · 응답이 나간 화면 뒤에 도착해도 낡음 표식이 서고, 보는 화면이 없으니 재조회는 없다', async () => {
+      // 준비 + 실행 1 — 누르고 나간다.
+      const client = appLikeClient();
+      const gate = await pressUnreadThenLeave(client);
+
+      // 단언 1(실행 전 앵커) — 응답 전이라 아직 낡음 표식이 없다.
+      expect(timeline).not.toContain(`POST-done read ${SUMMARY_ID}`);
+      expect(client.getQueryState(listKey)?.isInvalidated).toBe(false);
+
+      // 실행 2 — 응답을 보낸다.
+      await act(async () => {
+        gate.release();
+      });
+
+      // 단언 2 — 응답 뒤에 낡음 표식이 섰고, 화면이 없으니 재조회는 나가지 않았다.
+      await waitFor(() =>
+        expect(timeline).toContain(`POST-done read ${SUMMARY_ID}`)
+      );
+      await waitFor(() =>
+        expect(client.getQueryState(listKey)?.isInvalidated).toBe(true)
+      );
+      await settle();
+      expect(client.getQueryState(listKey)?.isInvalidated).toBe(true);
+      expect(listGets()).toBe(1);
+    });
+
+    it('U2 · 30초 안에 알림함에 다시 들어오면 낡은 목록을 다시 받아 그 행의 점이 사라진다', async () => {
+      // 준비 + 실행 1 — 누르고 나간 뒤 응답을 보낸다(낡음 표식이 서는 것까지 동기화점으로만 기다린다).
+      const client = appLikeClient();
+      const gate = await pressUnreadThenLeave(client);
+      await act(async () => {
+        gate.release();
+      });
+      await waitFor(() =>
+        expect(client.getQueryState(listKey)?.isInvalidated).toBe(true)
+      );
+      expect(listGets()).toBe(1);
+
+      // 실행 2 — 같은 클라이언트로 다시 들어온다.
+      render(<NotificationInboxPage />, { wrapper: createWrapper(client) });
+
+      // 단언 — staleTime 30초가 남았는데도 다시 받는다(표식 때문). 새 목록에선 그 행의 점이 없다.
+      await waitFor(() => expect(listGets()).toBe(2));
+      await waitFor(() => expect(dotIn(SUMMARY_TITLE)).toBeNull());
+      expect(screen.queryAllByTestId(ROW)).toHaveLength(6);
+    });
+
+    it('U2 앵커 · 읽음 없이 나갔다 30초 안에 돌아오면 재조회가 없다(이 래퍼의 staleTime 이 실제로 먹는다)', async () => {
+      // 준비 + 실행 — 렌더 → 나감 → 같은 클라이언트로 다시 들어옴.
+      const client = appLikeClient();
+      const first = render(<NotificationInboxPage />, {
+        wrapper: createWrapper(client),
+      });
+      await waitFor(() => expect(screen.queryAllByTestId(ROW)).toHaveLength(6));
+      first.unmount();
+      render(<NotificationInboxPage />, { wrapper: createWrapper(client) });
+
+      // 단언 — 캐시된 목록이 바로 보이고, 흘려보내도 GET 은 처음 1번뿐이다.
+      expect(screen.queryAllByTestId(ROW)).toHaveLength(6);
+      await settle();
+      expect(listGets()).toBe(1);
+      expect(client.getQueryState(listKey)?.isInvalidated).toBe(false);
     });
   });
 });

@@ -23,7 +23,7 @@ description: "TripPilot 백엔드(Kotlin·Spring·Gradle) 검증 절차 — 빌�
 | 3. 역검증 | 아래 절차 | **가드·검증·불변식을 추가했다면 필수** |
 | 4. 실 DB IT | `./gradlew :app:test --tests "*<X>IT*"` | 스키마·제약·동시성을 건드렸다면 |
 | 4b. 구조·계약 | `./gradlew :app:test --tests "*ArchitectureRulesTest*" --tests "*KonsistRulesTest*" --tests "*OpenApiContractIT*"` | 모듈 경계(R1)·엔드포인트를 건드렸다면. 전체 빌드에 포함되지만 빨리 보고 싶을 때 |
-| 5. 전체 빌드 | `./gradlew build --no-build-cache --rerun-tasks` | **커밋·PR 전 항상** |
+| 5. 전체 빌드 | `./gradlew build :app:coverageGate --no-build-cache --rerun-tasks` | **커밋·PR 전 항상** — CI 가 PR 에서 거는 커버리지 하한(전체·모듈별)까지 같이 본다 |
 | 6. 실 AI 왕복 | 아래 절차 | AI 경계(`ScheduleAgentPort`·어댑터·와이어 DTO)를 건드렸다면 |
 
 ## 전체 빌드는 반드시 캐시를 끈다

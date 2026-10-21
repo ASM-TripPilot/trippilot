@@ -8,13 +8,14 @@ import { DayWindowEditSheet } from './DayWindowEditSheet';
  * TRIP-1308 일과 시간 시트 — 탭 전환·켜기/끄기·되돌리기 비활성·적용 결과·당일치기 오류.
  * 실제 개폐·휠 제스처는 jest 사각(6-b). 여기서는 값 흐름만 본다.
  */
-function open(value: DayWindow = {}, sameDay = false) {
+function open(value: DayWindow = {}, sameDay = false, periodUnset = false) {
   const onApply = jest.fn();
   const onClose = jest.fn();
   render(
     <DayWindowEditSheet
       value={value}
       sameDay={sameDay}
+      periodUnset={periodUnset}
       onApply={onApply}
       onClose={onClose}
     />
@@ -303,6 +304,15 @@ describe('TRIP-1423 · 부제는 사실대로 — 여러 날 / 당일치기', ()
       screen.getByText('당일치기라 시작과 종료를 함께 정해요')
     ).toBeOnTheScreen();
     expect(screen.queryByText(OLD_SUBTITLE)).toBeNull();
+  });
+
+  // TRIP-1509 — 기간을 안 골랐으면(박수 0 은 기본값) "당일치기라" 라고 단정하지 않는다.
+  it('기간 미선택: 당일치기 문구 대신 중립 부제', () => {
+    open({}, true, true);
+    expect(
+      screen.queryByText('당일치기라 시작과 종료를 함께 정해요')
+    ).toBeNull();
+    expect(screen.getByText('시작과 종료 시각을 정해요')).toBeOnTheScreen();
   });
 });
 

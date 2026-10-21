@@ -24,7 +24,7 @@ import {
 const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
 
 describe('🔴 M1 · Figma 예시', () => {
-  it('바뀐 곳 1 · 방문지 5→5 · 이동 −6.9km', () => {
+  it('바뀐 곳 1곳 · 방문지 5→5곳 · 이동 −6.9km', () => {
     const badges = appliedSummaryBadges({
       changedCount: 1,
       visitsBefore: 5,
@@ -32,7 +32,7 @@ describe('🔴 M1 · Figma 예시', () => {
       distanceDeltaM: -6900,
     });
 
-    expect(badges).toEqual(['바뀐 곳 1', '방문지 5→5', '이동 −6.9km']);
+    expect(badges).toEqual(['바뀐 곳 1곳', '방문지 5→5곳', '이동 −6.9km']);
     // 빼기 기호는 하이픈(U+002D)이 아니라 수학 빼기(U+2212)다.
     expect(badges[2].codePointAt(3)).toBe(0x2212);
   });
@@ -56,7 +56,7 @@ describe('🔴 M2 · Q6 — 거리 차이의 부호와 null', () => {
       distanceDeltaM: delta,
     });
 
-    expect(badges).toEqual(['바뀐 곳 2', '방문지 5→4', expected]);
+    expect(badges).toEqual(['바뀐 곳 2곳', '방문지 5→4곳', expected]);
   });
 
   it('Δ=null 이면 거리 배지를 뺀다(서버가 값을 안 줄 때)', () => {
@@ -67,12 +67,12 @@ describe('🔴 M2 · Q6 — 거리 차이의 부호와 null', () => {
       distanceDeltaM: null,
     });
 
-    expect(badges).toEqual(['바뀐 곳 1', '방문지 5→5']);
+    expect(badges).toEqual(['바뀐 곳 1곳', '방문지 5→5곳']);
   });
 });
 
 describe('🔴 M3 · 개수는 받은 값 그대로', () => {
-  it('바뀐 곳 3 · 방문지 4→5', () => {
+  it('바뀐 곳 3곳 · 방문지 4→5곳', () => {
     const badges = appliedSummaryBadges({
       changedCount: 3,
       visitsBefore: 4,
@@ -80,7 +80,7 @@ describe('🔴 M3 · 개수는 받은 값 그대로', () => {
       distanceDeltaM: 300,
     });
 
-    expect(badges).toEqual(['바뀐 곳 3', '방문지 4→5', '이동 +300m']);
+    expect(badges).toEqual(['바뀐 곳 3곳', '방문지 4→5곳', '이동 +300m']);
   });
 });
 
@@ -195,6 +195,6 @@ describe('🔴 M5 · TRIP-1188 — 재계획 비교 응답 → 배지 입력', (
     ).toBeNull();
     expect(
       appliedSummaryBadges(appliedSummaryInputFromDiff(diff({ impact: null })))
-    ).toEqual(['바뀐 곳 3', '방문지 3→2']);
+    ).toEqual(['바뀐 곳 3곳', '방문지 3→2곳']);
   });
 });

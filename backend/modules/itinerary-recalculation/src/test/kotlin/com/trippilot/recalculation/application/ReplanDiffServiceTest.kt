@@ -16,6 +16,7 @@ import com.trippilot.recalculation.domain.OriginKind
 import com.trippilot.recalculation.domain.ReplanOrigin
 import com.trippilot.recalculation.domain.ReplanScope
 import com.trippilot.recalculation.domain.ReplanSession
+import com.trippilot.testsupport.declaredFieldNames
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.boolean
@@ -363,7 +364,7 @@ class ReplanDiffServiceTest : StringSpec({
         val fields = listOf(
             ReplanDiffResponse::class, ReplanDiffSlotResponse::class,
             ReplanDiffEntryResponse::class, ReplanImpactResponse::class,
-        ).flatMap { it.java.declaredFields.map { f -> f.name } }
+        ).flatMap { it.java.declaredFieldNames() }
 
         val hits = fields.filter { f -> forbidden.any { f.contains(it, ignoreCase = true) } }
 

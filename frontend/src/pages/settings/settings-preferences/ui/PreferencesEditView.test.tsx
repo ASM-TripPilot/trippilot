@@ -32,3 +32,34 @@ describe('🔴 PreferencesEditView · TRIP-991 앱바 뒤로', () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('TRIP-1438 Q-122 · 밀도 칩 표시 라벨', () => {
+  it('서버 enum "균형있게"는 화면에 "균형 있게"로 보이고, 누르면 enum 그대로 onToggle 에 간다', () => {
+    const onToggle = jest.fn();
+    render(
+      <PreferencesEditView
+        selection={{
+          styles: null,
+          activities: null,
+          transportModes: null,
+          foodTastes: null,
+          pace: '균형있게',
+          companionTypes: null,
+          petFlag: false,
+        }}
+        saveError={false}
+        onToggle={onToggle}
+        onTogglePet={jest.fn()}
+        onSave={jest.fn()}
+        onBack={jest.fn()}
+      />
+    );
+
+    const chip = screen.getByTestId('settings-pref-pace-균형있게');
+    expect(chip).toHaveTextContent('균형 있게');
+    expect(screen.queryByText('균형있게')).toBeNull();
+
+    fireEvent.press(chip);
+    expect(onToggle).toHaveBeenCalledWith('pace', '균형있게');
+  });
+});

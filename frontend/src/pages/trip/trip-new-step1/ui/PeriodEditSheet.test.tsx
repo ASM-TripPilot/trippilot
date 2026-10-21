@@ -254,6 +254,27 @@ describe('AC-5 · 과거 셀은 진짜 disabled (today 주입, 01b D3)', () => {
   });
 });
 
+describe('TRIP-1436 Q-057 · 오늘 표식', () => {
+  it('오늘 칸에만 오늘 표식(testID)이 있고, 다른 날·다른 달에는 없다', () => {
+    renderSheet({ today: '2026-06-12', month: '2026-06', range: {} });
+
+    expect(
+      screen.getByTestId('trip-wizard-period-cell-today-2026-06-12')
+    ).toBeTruthy();
+    expect(
+      screen.queryByTestId('trip-wizard-period-cell-today-2026-06-13')
+    ).toBeNull();
+  });
+
+  it('오늘이 안 보이는 달을 열면 표식이 하나도 없다', () => {
+    renderSheet({ today: '2026-06-12', month: '2026-07', range: {} });
+
+    expect(
+      screen.queryByTestId('trip-wizard-period-cell-today-2026-06-12')
+    ).toBeNull();
+  });
+});
+
 describe('월 네비 chevron — prev/next 가 뒤바뀌지 않는다', () => {
   it('today 의 달을 보면 prev 는 disabled, next press → onNextMonth (뒤로 안 감)', () => {
     // month = today 의 달(6월) → 그 앞은 전부 과거라 prev 비활성.

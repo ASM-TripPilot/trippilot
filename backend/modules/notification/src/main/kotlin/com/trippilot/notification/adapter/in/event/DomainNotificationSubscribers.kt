@@ -41,7 +41,8 @@ class StayRegisteredSubscriber(
         val payload = envelope.payloadTree(mapper)
         val accountId = payload.uuid("accountId")
             ?: error("StayRegistered payload 에서 accountId 를 읽지 못했습니다. eventId=${envelope.eventId}")
-        val name = payload.text("name") ?: "숙소"
+        // 빈·공백 이름도 없는 것과 같다 — 그대로 실으면 본문 검증(1~400자)에 걸려 재시도마다 같은 예외로 끝내 유실된다.
+        val name = payload.text("name")?.takeIf { it.isNotBlank() } ?: "숙소"
         notifications.raise(
             accountId = accountId,
             kind = NotificationKind.STAY,
@@ -141,8 +142,10 @@ class ReflectionReadySubscriber(
         val payload = envelope.payloadTree(mapper)
         val tripId = payload.text("tripId")
             ?: error("ReflectionReady payload 에서 tripId 를 읽지 못했습니다. eventId=${envelope.eventId}")
+        val tripUuid = runCatching { UUID.fromString(tripId) }.getOrNull()
+            ?: error("ReflectionReady 의 tripId 가 UUID 가 아닙니다. tripId=$tripId eventId=${envelope.eventId}")
         // 이 이벤트는 계정을 싣지 않는다 — 여행 소유자를 물어 온다(R1: trip.api).
-        val accountId = notifications.ownerOfTrip(UUID.fromString(tripId))
+        val accountId = notifications.ownerOfTrip(tripUuid)
             ?: error("ReflectionReady 의 여행 소유자를 찾지 못했습니다. tripId=$tripId eventId=${envelope.eventId}")
         val summary = payload.text("kind") == KIND_SUMMARY
         // 근거가 하나도 없어 **기본 카드**로 떨어진 회고다(BR-U6-12). 열어도 볼 것이 없으므로

@@ -63,6 +63,62 @@ describe('native adapters (INV-4)', () => {
   });
 });
 
+// TRIP-1511 · iOS 는 리전을 다시 등록하면 상태를 곧바로 통지하고 expo 가 그것을 같은 태스크로 보낸다 —
+// 태스크가 매번 재무장하면 무한 루프(분당 수천 회). 같은 리전 집합이면 OS 를 다시 부르지 않는다.
+describe('armGeofences 재등록 생략 (TRIP-1511)', () => {
+  const other = { ...region, slotKey: 'd#q', poiId: 'q', lat: 37.6 };
+  beforeEach(async () => {
+    await nativeAdapters.disarmGeofences(); // 모듈 기억을 비운다
+    L.startGeofencingAsync.mockReset();
+    L.startGeofencingAsync.mockResolvedValue(undefined);
+  });
+
+  it('RG1 같은 리전 집합으로 다시 무장하면 OS 등록 0회(순서만 달라도 같은 집합)', async () => {
+    await nativeAdapters.armGeofences([region, other]);
+    await expect(nativeAdapters.armGeofences([other, region])).resolves.toEqual(
+      { armed: true }
+    );
+    expect(L.startGeofencingAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('RG2 리전 집합이 바뀌면(슬롯 완료로 제외·반경 변경) 다시 등록한다', async () => {
+    await nativeAdapters.armGeofences([region, other]);
+    await nativeAdapters.armGeofences([region]);
+    await nativeAdapters.armGeofences([{ ...region, radiusM: 200 }]);
+    expect(L.startGeofencingAsync).toHaveBeenCalledTimes(3);
+  });
+
+  it('RG3 해제 뒤 같은 집합으로 무장하면 다시 등록한다(기억은 해제와 함께 지워진다)', async () => {
+    await nativeAdapters.armGeofences([region]);
+    await nativeAdapters.disarmGeofences();
+    await nativeAdapters.armGeofences([region]);
+    expect(L.startGeofencingAsync).toHaveBeenCalledTimes(2);
+  });
+
+  it('RG5 forgetArmedRegions 뒤 같은 집합이면 다시 등록한다(포그라운드 복귀 복구 경로)', async () => {
+    await nativeAdapters.armGeofences([region]);
+    nativeAdapters.forgetArmedRegions?.();
+    await nativeAdapters.armGeofences([region]);
+    expect(L.startGeofencingAsync).toHaveBeenCalledTimes(2);
+  });
+
+  it('RG6 좌표만 바뀌어도 다른 집합이다(같은 슬롯·반경)', async () => {
+    await nativeAdapters.armGeofences([region]);
+    await nativeAdapters.armGeofences([{ ...region, lat: 37.51 }]);
+    await nativeAdapters.armGeofences([{ ...region, lat: 37.51, lng: 127.01 }]);
+    expect(L.startGeofencingAsync).toHaveBeenCalledTimes(3);
+  });
+
+  it('RG4 등록이 실패했으면 기억하지 않는다 — 다음 무장이 다시 시도한다', async () => {
+    L.startGeofencingAsync.mockRejectedValueOnce(new Error('os'));
+    await nativeAdapters.armGeofences([region]);
+    await expect(nativeAdapters.armGeofences([region])).resolves.toEqual({
+      armed: true,
+    });
+    expect(L.startGeofencingAsync).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('permission (BR-U10-06 — 거절은 오류가 아니다)', () => {
   const perm = (granted: boolean, canAskAgain = true) =>
     ({

@@ -427,7 +427,7 @@ describe('조회 중·실패·지연', () => {
   /** `resolveSlotSwapError` 문구(slotSwapError.ts MESSAGE) — 화면에 그대로 떠야 한다. */
   const FALLBACK = '지금은 바꿀 수 없어요. 잠시 후 다시 시도해 주세요';
   const NOT_FOUND = '해당 일정을 찾을 수 없어요';
-  const EMPTY_TITLE = '이 슬롯에 맞는 다른 후보가 없어요';
+  const EMPTY_TITLE = '이 자리에 맞는 다른 후보가 없어요';
   const SLOW_TEXT = /시간이 걸리고 있어요/;
 
   const ID = {
