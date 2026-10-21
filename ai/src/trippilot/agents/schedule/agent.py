@@ -63,6 +63,7 @@ from trippilot.assembly_engine.constraints import open_hours_ok
 from trippilot.assembly_engine.day_focus import pick_day_focus
 from trippilot.assembly_engine.facade import AssemblyConflictError
 from trippilot.assembly_engine.fallback_assembler import explain_unplaced
+from trippilot.assembly_engine.parking import ParkingPlan
 from trippilot.assembly_engine.scorer import (
     DIRECTIVE_STEP,
     build_rule_score,
@@ -141,7 +142,11 @@ class AssemblyProvider(Protocol):
     """
 
     def for_pool(self, poi_index: Mapping[PoiId, Poi],
-                 walk_max_km: float | None = None) -> AssemblyFacade: ...
+                 walk_max_km: float | None = None, parking: ParkingPlan | None = None) -> AssemblyFacade: ...
+
+    def parking_for(self, poi_index: Mapping[PoiId, Poi], walk_max_km: float | None) -> ParkingPlan:
+        """자차 여행의 주차 거점(assembly_engine/parking) — 풀 좌표를 도보 상한으로 묶는다. 조립·화면 거리가 같은 계획을 쓴다."""
+        ...
 
 
 # ── 입출력 타입 (도메인 타입 조합 — HTTP 스키마는 경계 어댑터 소관) ──
@@ -645,7 +650,10 @@ class ScheduleAgent:
         )
         # 액티비티 취향이면 조금 더 걷는다(도로 1.0km, 2026-10-19 사용자) — 조립과 화면 거리가 같은 상한을 쓴다.
         walk_max = ACTIVE_WALK_MAX_KM if PoiCategory.ACTIVITY in _wanted_categories(persona) else None
-        assembly = self._assembly_provider.for_pool(index, walk_max_km=walk_max)
+        # 자차면 가까운 장소들은 차를 한 번 세우고 걸어서 돈다(2026-10-21 사용자) — 시간표에 들어가야 솔버가 순서를 고를 때 안다
+        parking = (self._assembly_provider.parking_for(index, walk_max)
+                   if problem.transport is TransportMode.CAR else None)
+        assembly = self._assembly_provider.for_pool(index, walk_max_km=walk_max, parking=parking)
         try:
             solution = assembly.solve(problem, c2_ms, trace_id)
         except AssemblyConflictError as e:
@@ -708,6 +716,7 @@ class ScheduleAgent:
             rule_backfill_count=backfilled,
             repair_hints=hints,
             walk_max_km=walk_max,
+            parking=parking,
         )
 
     # ── ② 선호 점수 + 규칙 점수 폴백 ────────────────────────────────

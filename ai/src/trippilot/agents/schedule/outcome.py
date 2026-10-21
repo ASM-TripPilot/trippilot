@@ -14,6 +14,7 @@ from enum import Enum
 from typing import Mapping
 
 from trippilot.agents.schedule.budget import DeadlineBudget
+from trippilot.assembly_engine.parking import ParkingPlan
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import ItinerarySolution
 from trippilot.domain.llm import CandidatePool, PoiExplanation
@@ -204,6 +205,8 @@ class GenerationOutcome:
     # 이 요청의 도보 상한(도로 km) — 액티비티 취향이면 `ACTIVE_WALK_MAX_KM`, 아니면 None(설정 기본).
     # 조립 뒤 화면 거리가 같은 상한으로 이름표를 붙인다(`travel.WalkFirst`).
     walk_max_km: float | None = None
+    # 자차 여행의 주차 거점(assembly_engine/parking) — 조립이 쓴 계획 그대로 화면 거리가 "도보·자가용" 이름표를 붙인다.
+    parking: ParkingPlan | None = None
 
     def __post_init__(self) -> None:
         failed = self.status is GenerationStatus.FAILED

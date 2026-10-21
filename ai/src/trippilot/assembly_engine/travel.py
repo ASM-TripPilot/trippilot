@@ -17,16 +17,22 @@ from __future__ import annotations
 
 import math
 from dataclasses import replace
+from typing import TYPE_CHECKING
 
 from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.domain.common import GeoPoint, TransportMode
 from trippilot.domain.travel import TravelEstimate
+
+if TYPE_CHECKING:
+    from trippilot.assembly_engine.parking import ParkingPlan
 
 _EARTH_KM = 6371.0088
 # 대중교통 요청에서 걸어가기로 한 구간의 출처 — `api.wiring._render_distance` 가 이것을 보고 "도보"라고 적는다
 WALKED_SOURCE = "haversine_x_detour(walk)"
 # 도보 요청에서 대중교통으로 가기로 한 구간의 출처 — 같은 곳이 이것을 보고 "대중교통"이라고 적는다
 TRANSIT_SOURCE = "haversine_x_detour(transit)"
+# 자차 요청에서 주차 거점을 오가는 운전 구간의 출처(걷는 꼬리가 붙었다) — 이름표는 "자가용" 그대로, 꼬리는 `walk_km`
+PARKED_SOURCE = "haversine_x_detour(parked)"
 
 
 def haversine_km(a: GeoPoint, b: GeoPoint) -> float:
@@ -39,8 +45,14 @@ def haversine_km(a: GeoPoint, b: GeoPoint) -> float:
 class TravelEstimator:
     """TravelPort Protocol 만족."""
 
-    def __init__(self, config: AssemblyConfig) -> None:
+    def __init__(self, config: AssemblyConfig, parking: "ParkingPlan | None" = None) -> None:
         self._cfg = config
+        self._parking = parking
+
+    @property
+    def parking(self) -> "ParkingPlan | None":
+        """자차 여행의 주차 거점(없으면 None) — 화면 감싸개(`WalkFirst`)가 운전 구간을 거점 사이로 실측한다."""
+        return self._parking
 
     @property
     def walk_transit_from_km(self) -> float:
@@ -54,6 +66,7 @@ class TravelEstimator:
         road = straight * self._cfg.detour_factor
         minutes = self._minutes(road, mode) + self._cfg.buffer_min
         source = "haversine_x_detour"
+        walk_km = 0.0  # 운전 구간에 붙은 걷는 꼬리(주차 거점) — 걷는 구간 자체는 0
 
         if mode is TransportMode.PUBLIC:
             # 도로 `public_walk_max_km` 이하만 걷는다 — 계산상 대중교통이 빨라도 걷고, 그 밖은 계산상 도보가
@@ -64,12 +77,30 @@ class TravelEstimator:
             # 도보 여행의 먼 구간은 대중교통이다(config `walk_transit_from_km`) — 대중교통 추정으로 잰다.
             minutes = self._minutes(road, TransportMode.PUBLIC) + self._cfg.buffer_min
             source = TRANSIT_SOURCE
+        elif mode is TransportMode.CAR and self._parking is not None:
+            # 주차 거점(assembly_engine/parking) — 같은 거점이면 차를 세워 두고 걷고, 거점이 다르면 거점에서 거점으로
+            # 운전하되 양 끝에 걷는 꼬리(장소↔거점)가 붙는다. 거점이 없는 지점(숙소·고정 블록)과 거점 자신은 꼬리 0.
+            hub_from, hub_to = self._parking.hub_of(from_), self._parking.hub_of(to)
+            if hub_from is not None and hub_from == hub_to:
+                minutes, source = self._minutes(road, TransportMode.WALK), WALKED_SOURCE
+            else:
+                start = from_ if hub_from is None else hub_from
+                end = to if hub_to is None else hub_to
+                tail = (haversine_km(from_, start) + haversine_km(end, to)) * self._cfg.detour_factor
+                if tail > 0:
+                    walk_km = tail
+                    drive_km = haversine_km(start, end) * self._cfg.detour_factor
+                    road = drive_km + walk_km
+                    minutes = (self._minutes(walk_km, TransportMode.WALK)
+                               + self._minutes(drive_km, mode) + self._cfg.buffer_min)
+                    source = PARKED_SOURCE
 
         return TravelEstimate(
             distance_km_range=(round(straight, 3), round(road, 3)),
             internal_minutes=minutes,
             is_estimated=True,
             source=source,
+            walk_km=round(walk_km, 3),
         )
 
     def _minutes(self, road_km: float, mode: TransportMode) -> int:
@@ -98,6 +129,16 @@ class WalkFirst:
         if decided.source == TRANSIT_SOURCE:
             # 실경로는 대중교통으로 재되 출처를 표식으로 바꿔 이름표가 "대중교통"이 되게 한다(화면 전용 감싸개)
             return replace(self._port.estimate(from_, to, TransportMode.PUBLIC), source=TRANSIT_SOURCE)
+        if decided.source == PARKED_SOURCE:
+            # 자차 주차 거점 — 실경로는 거점에서 거점까지의 운전만 잰다. 걷는 꼬리는 추정값을 거리에 더하고 `walk_km` 로 남겨
+            # 문구가 "(주차장 도보 … 포함)"을 붙이게 한다. 두 번 돌리는 렌더(LegRecorder → 표)도 같은 거점 쌍을 본다.
+            plan = self._walker.parking
+            assert plan is not None
+            start, end = plan.hub_of(from_) or from_, plan.hub_of(to) or to
+            measured = self._port.estimate(start, end, TransportMode.CAR)
+            low, high = measured.distance_km_range
+            return replace(measured, distance_km_range=(round(low + decided.walk_km, 3), round(high + decided.walk_km, 3)),
+                           walk_km=decided.walk_km)
         measured = self._port.estimate(from_, to, mode)
         if mode is TransportMode.WALK and measured.distance_km_range[1] >= self._walker.walk_transit_from_km:
             # 추정(직선 × 1.3)은 기준 아래였는데 실측 경로가 넘는 구간 — 화면의 "1.5km 이상은 대중교통"을 지킨다
