@@ -141,12 +141,7 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
      * 알고 남겨 둔 불일치 — **사유가 없으면 넣지 않는다.** 고쳐져서 더 안 나오면 아래 게이트가 실패해
      * 항목을 지우게 한다(목록이 썩지 않게).
      */
-    private val knownFieldMismatches = mapOf(
-        "GET /api/v1/me/location-consent 응답 LocationConsentResponse.capabilities Capabilities: 문서에만 `localLocationUse`" to
-            "의미 미정 — 팀 결정 대기(TRIP-1474)",
-        "PUT /api/v1/me/location-consent 응답 LocationConsentResponse.capabilities Capabilities: 문서에만 `localLocationUse`" to
-            "위와 같음",
-    )
+    private val knownFieldMismatches = mapOf<String, String>()
 
     /**
      * 필드 계약 — 2xx 응답 본문과 `@RequestBody` 의 **유무·모양·속성 이름**이 openapi 스키마와 같아야 통과.
