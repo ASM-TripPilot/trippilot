@@ -24,6 +24,7 @@ import {
   getGetTripsTripIdItineraryQueryKey,
   getGetTripsTripIdItineraryQueryOptions,
   useGetTripsTripIdItinerary,
+  getPutTripsTripIdItineraryMutationOptions,
   useGetTripsTripIdVisitsDaysDay,
   usePutTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
@@ -71,6 +72,9 @@ const SAVE_GENERATING_NOTE =
   '일정을 만드는 중이에요. 잠시 후 다시 시도해 주세요';
 const SAVE_ERROR_NOTE = '일정을 저장하지 못했어요. 잠시 후 다시 시도해 주세요';
 const SAVED_TOAST = '일정을 저장했어요';
+// 일정 PUT 진행 중 판정 키 — 장소 추가 화면(스택 위, 편집기는 언마운트 안 됨)의 PUT 도 같은 키다.
+const PUT_MUTATION_KEY =
+  getPutTripsTripIdItineraryMutationOptions().mutationKey;
 
 // 핀이 없을 때 지도 중심 — 서울 시청(LiveHubView 선례). {0,0} 은 기니만 바다(null-island)라 무의미하다.
 const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };
@@ -141,6 +145,7 @@ export function ItineraryEditPage({
 
   const {
     seed,
+    seedUnlessDirty,
     deleteSlot,
     reorderSlots,
     adjustSlotTime,
@@ -151,8 +156,8 @@ export function ItineraryEditPage({
 
   useEffect(() => {
     const loaded = itinerary.data?.days;
-    if (loaded !== undefined) seed(loaded);
-  }, [itinerary.data, seed]);
+    if (loaded !== undefined) seedUnlessDirty(loaded);
+  }, [itinerary.data, seedUnlessDirty]);
 
   // 진입 칸은 매 렌더 스토어 days 에서 다시 찾는다 — 초기값에 굳히면 로딩(days=[])·옛 드래프트 순간의
   // 칸으로 고정된다(LiveItineraryPage 선례). 못 찾으면 -1 → 0(1일차). 칩 선택이 이긴다.
@@ -186,6 +191,9 @@ export function ItineraryEditPage({
 
   function handleSave(): void {
     if (inFlightRef.current) return;
+    // 장소 추가 PUT 이 응답 전이면 무반응 — 지금 초안엔 그 장소가 없어 전체 교체 PUT 이 추가분을 지운다(TRIP-1519).
+    // 응답이 오면 편집기 초안이 갱신돼(시드/삽입) 이어 누른 저장은 추가분을 싣는다. 진행 표시는 Figma 공백.
+    if (queryClient.isMutating({ mutationKey: PUT_MUTATION_KEY }) > 0) return;
     inFlightRef.current = true;
     setSaveError(null);
     // 미지정(startAt null) 슬롯은 buildEditItineraryRequest 가 요청에서 뺀다 — 몇 곳이 빠지는지 미리
@@ -203,6 +211,8 @@ export function ItineraryEditPage({
         onSuccess: (data) => {
           // 최신 Itinerary(서버 재검증 결과)를 조회 캐시에 직접 써넣는다 — 재조회 0회. 시드 useEffect 가
           // itinerary.data 참조 변화로 다시 돌아 스토어를 재-시드하고, 새 hasViolation 배지가 지속된다.
+          // 시드 effect 는 dirty 초안을 건너뛰므로(TRIP-1498) 자기 저장 응답은 여기서 먼저 시드한다(dirty 도 내려간다).
+          seed(data.days);
           queryClient.setQueryData(
             getGetTripsTripIdItineraryQueryKey(tripId),
             data

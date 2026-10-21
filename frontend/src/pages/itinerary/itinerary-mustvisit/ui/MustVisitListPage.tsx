@@ -117,6 +117,7 @@ export function MustVisitListPage({
   return (
     <MustVisitPickerScreen
       view={view}
+      mode={mode}
       pins={buildMustVisitPins({
         items,
         savedPlaces: savedPlaces.savedPlaces,

@@ -69,7 +69,7 @@ const DEFAULT_CENTER: MapCenter = { lat: 37.5665, lng: 126.978 };
 /** TRIP-761 · 수동 체크인 모드 안내문 — 법 근거 문구 `(좌표 자동기록 비활성)`(INV-U5-04·BR-U5-12)가
  * load-bearing 이라 자구가 곧 계약이다. 권한이 있으면 이 문자열을 안 내려 화면이 default 를 쓴다. */
 const MANUAL_NOTICE =
-  '수동 체크인 · 방문한 곳을 직접 선택해 기록하세요 (좌표 자동기록 비활성)';
+  '수동 체크인 · 방문한 곳을 직접 선택해 기록해요 (좌표 자동기록 비활성)';
 
 /** TRIP-1069 D6 — 시각 저장 404·네트워크 실패 안내(충돌은 훅의 `VISIT_CONFLICT_NOTICE`). */
 const TIME_SAVE_FAILED = '방문 시각을 저장하지 못했어요';

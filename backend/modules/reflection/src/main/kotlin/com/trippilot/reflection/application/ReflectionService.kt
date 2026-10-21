@@ -2,6 +2,7 @@ package com.trippilot.reflection.application
 
 import com.trippilot.archive.api.ArchiveRecordFacade
 import com.trippilot.archive.api.ArchiveVisitView
+import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
@@ -14,6 +15,7 @@ import com.trippilot.reflection.domain.Reflection
 import com.trippilot.reflection.domain.ReflectionRepository
 import com.trippilot.reflection.domain.ReflectionSource
 import com.trippilot.reflection.domain.ReflectionStats
+import com.trippilot.reflection.domain.UnreadableDraft
 import com.trippilot.reflection.domain.port.ReflectionAgentInput
 import com.trippilot.reflection.domain.port.ReflectionAgentPort
 import com.trippilot.reflection.domain.port.ReflectionVisit
@@ -63,6 +65,14 @@ class ReflectionService(
     fun generateDaily(accountId: UUID, tripId: UUID, dayDate: LocalDate): Reflection {
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
         requireWithinTrip(period, dayDate)
+        // 수정본을 못 읽는 하루(TRIP-1476)는 **AI 를 부르기 전에** 409 로 끝낸다 — 어차피 쓰지 못하고, 앱은 화면을 열 때마다
+        // 이 요청을 보낸다. 초안·출처만 못 읽는 하루는 아래에서 초안을 다시 만들어 고치므로 그대로 간다.
+        // 이 읽기와 아래 잠근 뒤 읽기(findForRedraft)가 둘 다 근거 수치를 읽으므로, 수치가 깨진 하루의 생성은 WARN 을 두 줄 남긴다(수정은 한 줄).
+        try {
+            reflections.find(tripId, dayDate)
+        } catch (_: UnreadableDraft) {
+            // 고칠 수 있는 하루다.
+        }
 
         val saved = reflections.upsert(draftFor(accountId, tripId, dayDate))
         events.publish(
@@ -114,12 +124,23 @@ class ReflectionService(
         requireWithinTrip(period, dayDate)
         // 행이 없으면 **잠그기 전에** 초안부터 만든다(잠금은 draftFor 가 AI 호출 뒤에 잡는다) — 먼저 잡으면
         // AI 호출 동안 그 하루의 다른 쓰기가 전부 기다린다. 그사이 행이 생겼으면 draftFor 가 그 행을 읽어 온다.
-        val current = (if (reflections.exists(tripId, dayDate)) reflections.findForUpdate(tripId, dayDate) else null)
+        val current = (if (reflections.exists(tripId, dayDate)) lockedOrRedraft(tripId, dayDate) else null)
             ?: draftFor(accountId, tripId, dayDate)
         val now = clock.instant()
         // 카드는 **보냈을 때만** 갈아끼운다(TRIP-828) — 기분만 고치는 요청이 카드를 건드리면 안 된다.
         val carded = cardPayload?.let { current.edit(cards.read(it), now) } ?: current
         return reflections.upsert(carded.note(mood, shortMemo, now))
+    }
+
+    /**
+     * 초안·출처를 못 읽는 하루(TRIP-1476)면 null 이다 — 부르는 쪽이 [draftFor] 로 초안을 다시 만들어 그 위에 얹는다. 수정본·기분·메모는
+     * 저장된 그대로 실린다(BR-U5-36: 생성이 망가진 하루에도 직접 쓸 수 있다). 이 하루에서만 잠근 채 초안을 만든다 — 드문 경로라 감수한다.
+     * 수정본을 못 읽는 하루는 여기서 409 로 끝난다(행은 그대로다).
+     */
+    private fun lockedOrRedraft(tripId: UUID, dayDate: LocalDate): Reflection? = try {
+        reflections.findForUpdate(tripId, dayDate)
+    } catch (_: UnreadableDraft) {
+        null
     }
 
     /**
@@ -141,7 +162,8 @@ class ReflectionService(
         val source = if (aiCard != null) ReflectionSource.AI else ReflectionNarrator.sourceFor(stats)
         val now = clock.instant()
         // AI 호출이 끝난 **뒤에** 잠그고 읽는다 — 먼저 읽어 두면 생성 중에 들어온 기분·수정본을 옛 값으로 덮는다.
-        val current = reflections.findForUpdate(tripId, dayDate)
+        // 갈아끼울 초안·출처는 저장된 것을 읽지 않는다 — 그래서 그 둘을 못 읽는 하루도 여기서 낫는다(TRIP-1476).
+        val current = reflections.findForRedraft(tripId, dayDate, draft, source)
         // 통계는 잠근 **뒤에** 다시 센다 — AI 를 기다리는 사이 경로가 올라오면, 앞에서 센 근사값이 경로 갱신(refreshRouteStats)을
         // 덮어쓴다. 잠근 뒤라면 그 갱신은 이 저장 뒤에 돌거나 이미 커밋돼 여기서 보인다.
         val fresh = statsOf(visits, surfaces, archive.findRouteDistances(tripId)[dayDate])
@@ -259,7 +281,16 @@ class ReflectionService(
      */
     @Transactional
     fun refreshRouteStats(tripId: UUID, dayDate: LocalDate) {
-        val current = reflections.findForUpdate(tripId, dayDate) ?: return
+        // 그 하루를 못 읽으면(TRIP-1476) 건너뛴다 — 행 위에 쓰지 않으므로 수정본이 남고, 던지지 않으므로 같은 이벤트의
+        // 요약 갱신이 마저 돈다(던지면 릴레이가 재시도하다 포기해 요약까지 근사값에 남는다). 못 읽은 사유는 저장소가 남겼다(INV-4).
+        // 초안만 깨진 하루도 여기서 고치지 않는다 — 고치려면 초안을 다시 만들어야 하고(AI 호출), 그것은 생성·수정의 몫이다.
+        val current = try {
+            reflections.findForUpdate(tripId, dayDate)
+        } catch (e: RuntimeException) {
+            if (e !is UnreadableDraft && e !is ConflictDetected) throw e
+            log.warn("회고를 읽을 수 없어 이 하루의 경로 통계 갱신은 건너뜁니다. tripId={} date={}", tripId, dayDate)
+            null
+        } ?: return
         val visits = archive.findDailyVisits(tripId).firstOrNull { it.date == dayDate }?.visits.orEmpty()
         val stats = statsOf(visits, poiSurfaces.findSurfaces(visits.map { it.poiId }), archive.findRouteDistances(tripId)[dayDate])
         reflections.upsert(current.copy(stats = stats))

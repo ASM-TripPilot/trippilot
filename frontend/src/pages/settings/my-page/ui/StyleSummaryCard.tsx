@@ -77,7 +77,7 @@ export function StyleSummaryCard({
           내 여행 스타일
         </Text>
         <Text className="font-noto text-label text-muted">
-          10곳 이상 쌓이면 분석을 제공합니다(현재 {vm.current}곳)
+          10곳 이상 쌓이면 분석을 제공해요 (현재 {vm.current}곳)
         </Text>
       </View>
     );

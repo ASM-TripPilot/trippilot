@@ -217,7 +217,7 @@ TurnOutcome (frozen):
 
 | 조건 | 강제 |
 |---|---|
-| `outcome = ANSWER` | `answer ≠ None` ∧ `len(frames) ≤ 1` — 분류를 거친 턴은 1(분류 프레임이 백엔드 관측 칸 `intent`·`match_route` 의 원천), 0단계 리터럴 능력 안내와 2″ 맞장구·인사 답(BR-AO-26)은 0(BE 는 `frames.firstOrNull()` 로 읽어 `intent null`·`match_route "NONE"` 저장 — 미결 #19 A) ∧ `clarify = None` |
+| `outcome = ANSWER` | `answer ≠ None` ∧ `len(frames) ≤ 1` — 분류를 거친 턴은 1(분류 프레임이 백엔드 관측 칸 `intent`·`match_route` 의 원천), 0단계 리터럴 능력 안내와 2″ 맞장구·인사 답(BR-AO-26)은 0(BE 는 `frames.firstOrNull()` 로 읽어 `intent null`·`match_route "NONE"` 저장 — 미결 #19 A) ∧ `clarify = None` **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 프레임 0 의 출처가 셋 — 0단계 능력 안내·2″ 맞장구·**2‴ 계획 답**(BR-AO-28). |
 | `outcome = FRAME` | `answer = None` ∧ `len(frames) = 1` ∧ 그 프레임 `executable` — 1단계에서는 **`EDIT_SCHEDULE` 만** 여기로 온다 |
 | `outcome = ARGUMENT_CLARIFY` | `clarify ≠ None` ∧ `len(frames) = 1` ∧ `clarify.argument ∈ frames[0].missing` ∧ `answer = None` |
 | `outcome = OUT_OF_SCOPE` | `frames` 비어 있음 ∧ `answer = None` ∧ `reason ≠ None`(거절 표지 또는 실패 사유) — **문장 없음**(BE SCOPE 카드) |
@@ -328,7 +328,7 @@ post-init: `template_text` 가 §2.3 의 `text` 검사를 전부 통과 ∧ `kin
 즉 **`Facts` 만으로 유효한 `DialogueAnswer` 가 항상 만들어진다**(`DialogueAnswer.from_facts(facts, text=None)`). 이것이 INV-4 의
 구조적 보장이다: LLM 이 아무것도 못 해도 응답은 있다.
 
-`$facts` 프롬프트 변수 = `Facts` 의 `rows·places(좌표 없음)·notes·status` 를 JSON 으로 직렬화해 `inline()` 한 문자열. 좌표·poi_id 내부
+`$facts` 프롬프트 변수 = `Facts` 의 `rows·places(좌표 없음)·notes·status` 를 JSON 으로 직렬화해 `inline()` 한 문자열 **[개정 · 2026-10-20 · 답변 0.3.2]** rows 에서 ("입장료", "미확인") 줄은 뺀다(카드 payload 는 그대로 — 프롬프트 rows ≠ 카드 rows). 모르는 입장료는 물었든 안 물었든 답이 "확인할 수 없다"로 같고, 실어 두면 카페 답마다 "입장료도 미확인이에요"가 붙었다. 좌표·poi_id 내부
 값은 넣지 않는다(워커 규칙 "좌표 미포함"). `places[].name` 은 `inline()` 으로 눌러 골격 위조를 막는다.
 
 ### 2.6 `DialogueMemory` · `MemoryStorePort` — 장기 기억
@@ -432,6 +432,8 @@ ShadowRecord (frozen):
 그 범위 검증을 지웠다 — 시한 시나리오는 주입 시계(`FakeClock.advance`)로 만든다. 답변·요약 길이 상한(400자·6줄·20줄·120자·후보 5)의
 정본은 게이트(`gates/dialogue_answer`·`gates/dialogue_memory`)와 `dialogue_handlers`·`DialogueMemory` 상수다.
 
+**[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 상수 넷 — `_PLAN_CAP_MS = 3_000` · `_PLAN_SHARE = 0.45` · `_PLAN_MIN_REMAINING_MS = 4_600`(답변 시도선 1.5s 를 지키는 최소 4,542ms — BLM §4 註) · `_TURN_LLM_CAP = 3`(턴당 서비스 LLM 상한 — 계획 턴의 요약 미룸, BR-AO-09). 같은 규칙으로 env·생성자에 노출하지 않는다. 도구 계획 상한 `MAX_PLAN_CALLS = 2`·`MAX_ARG_CHARS = 40` 은 `domain/plan_tools.py`(게이트·프롬프트가 같은 값을 본다).
+
 ### 2.9 `PoiInfo` 패킷 — `ProviderKind.POI_INFO` 신설 (`providers/poi_info.py`)
 
 `domain/freshness.py` 의 `ProviderKind` 에 **`POI_INFO` 1값을 추가**한다(closed-set 변경 — 전 Provider 스윕 테스트가 있으면 함께 갱신).
@@ -457,8 +459,9 @@ LLM 0회(L-5). `hours_label` 은 `on` 의 요일(없으면 `now` 의 요일)로 
 | 값 | 티어 | effort | max_tokens | fallback_modes | 게이트 | 프롬프트 |
 |---|---|---|---|---|---|---|
 | `DIALOGUE_INTENT` | LIGHT | low | 1024(초판 256 — DEV 배포 smoke 실측 출력 239/256, 사고 포함, 2026-10-18) | `("llm_dialogue_intent", "out_of_scope")` | `IntentGate`(재사용) | `prompts/dialogue_intent.yaml` ~~v"0.2.1"(의도 정의·판단 순서·예시, 고정부 앞)~~ **[개정 · 2026-10-19 · 짧은 수락]** v"0.2.2"(의도 정의·판단 순서·예시 + 짧은 수락을 마지막 도우미 제안으로 푸는 규칙 한 줄·예시 2건, 고정부 앞) **[개정 · 2026-10-19 · 장소 탐색]** v"0.2.3"(+ EXPLORE_PLACES 정의 한 줄·SUGGEST_ALTERNATIVE 와의 갈림·판단 순서 4 한 갈래·예시 2건; `$intents` 는 `tool_specs_json(DIALOGUE_INTENTS)` — 14종, intent.yaml 은 13종 그대로 — BR-AO-27) — `$utterance $intents $history $memory $trip` |
-| `DIALOGUE_ANSWER` | LIGHT | low | 512 | `("llm_dialogue_answer", "template_text")` | `DialogueAnswerGate`(신규 파일) | `prompts/dialogue_answer.yaml` ~~v"0.2.0"(답변 순서·예시, 고정부 앞)~~ **[개정 · 2026-10-19 · 친근한 말투]** ~~v"0.3.0"(친근한 해요체 대화 — 맞장구 → 답 → 다음 한 걸음 제안·되묻기, 예시 2건 재작성·숫자 말 규칙, 고정부 앞)~~ **[개정 · 2026-10-19 · 여는 말]** v"0.3.1"(0.3.0 + 어디에나 붙는 여는 말 금지·질문과 이어지는 마무리 규칙, 예시 여는 말 제거 + 날씨 예시, 고정부 앞) — `$intent $facts $utterance $history $memory $trip $style` |
+| `DIALOGUE_ANSWER` | LIGHT | low | 512 | `("llm_dialogue_answer", "template_text")` | `DialogueAnswerGate`(신규 파일) | `prompts/dialogue_answer.yaml` ~~v"0.2.0"(답변 순서·예시, 고정부 앞)~~ **[개정 · 2026-10-19 · 친근한 말투]** ~~v"0.3.0"(친근한 해요체 대화 — 맞장구 → 답 → 다음 한 걸음 제안·되묻기, 예시 2건 재작성·숫자 말 규칙, 고정부 앞)~~ **[개정 · 2026-10-19 · 여는 말]** v"0.3.1"(0.3.0 + 어디에나 붙는 여는 말 금지·질문과 이어지는 마무리 규칙, 예시 여는 말 제거 + 날씨 예시, 고정부 앞) **[개정 · 2026-10-20 · 후보 마무리]** v"0.3.2"(후보 답은 같이 물은 것을 다 답한 뒤 마지막 문장만 [의도]에 맞는 고르기 — 탐색 OPEN_PLACE·대신 갈 곳 PICK_CANDIDATE, 여러 곳 영업시간·거리 제안·분류 읽기·칸 이름 금지, 병합 예시) **[개정 · 2026-10-20 · 장소 소개]** v"0.3.3"(0.3.2 + 장소 소개 detail.intro 는 한두 문장으로 줄여 말하기·주입 방어 대상을 소개 글까지) — `$intent $facts $utterance $history $memory $trip $style` |
 | `DIALOGUE_MEMORY` | LIGHT | low | 2048(20줄×120자 ≈ 1,000~1,500 토큰 + JSON — 1024 는 잘림 위험; 상한은 잘림 방지용, 과금은 실 출력만) | `("llm_dialogue_memory", "deterministic_compress")` | `DialogueMemoryGate`(신규 파일) | `prompts/dialogue_memory.yaml` v"0.1.0" — `$previous_summary $recent_turns $trip` |
+| `DIALOGUE_PLAN` **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** | LIGHT | **none**(2026-10-20 실측 — low 대비 p50 1.61→1.36s·출력 60→32 토큰·도구 일치 90.0→95.0%; luna 는 minimal 거부·none 수용) | 1024(분류와 같은 근거 — JSON 한 줄 + 사고 토큰) | `("llm_dialogue_plan", "out_of_scope")` | `DialoguePlanGate`(신규 파일 — 노출 도구 closed-set) | `prompts/dialogue_plan.yaml` v"0.1.1"(값 출처에서 [여행 상황] 제외·region 은 말한 지역만·"둘 다"·지역 둘 예시) — `$tools $history(최근 4건) $trip $utterance`(`$memory` 없음) · 출력 `{"calls", "refused", "gap"}` · 재시도 미배정(턴당 1회) |
 
 **[개정 · 2026-10-19 · 친근한 말투]** 답변 프롬프트 0.3.0 — 사용자 요청 "지금은 너무 answer 만 띄워 주는 느낌". 0.2.0 은 "짧게 답하세요"·"첫 문장에 답,
 다음 문장에 꼭 필요한 보충만"을 시켰고 예시 둘이 한두 문장 단답이었다(말투는 규칙 줄보다 예시가 정한다). 해요체 대화로 **맞장구·공감 한마디 → 답(사실은
@@ -486,6 +489,42 @@ MEMORY: `{"lines": [str]}`. 게이트 규칙은 BR-AO-04(답변)·BR-AO-09(메�
 `Facts.template_text`(답변 타입의 결정론 문장 칸 — §2.5)와는 다른 자리다(전자는 게이트웨이 `FallbackEvent` 의 to_mode 어휘).
 
 ---
+
+### 2.11 도구 계획(2‴) 타입 **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]**
+
+```
+PlanTool (frozen, domain/plan_tools.py):
+  summary: str                    # 모델에게 보일 "무엇을 돌려주나 · 못 하는 것" 한 줄 1..80자
+  needs: tuple[str, ...] = ()     # 쓰는 HandlerPorts 칸 — 하나라도 None 이면 노출하지 않는다
+  hide: tuple[str, ...] = ()      # 인자표에 있지만 핸들러가 안 읽는 인자 — 광고·게이트 허용 키에서 뺀다(GET_WEATHER period)
+PLAN_TOOLS: Mapping[Intent, PlanTool]   # 정보 핸들러 7종 · NEVER_TOOLS(편집·넘기기 6·범위 밖) · PLAN_TOOLS ∪ NEVER_TOOLS = DIALOGUE_INTENTS ∪ {OUT_OF_SCOPE}
+PLAN_GAPS = (EVENTS, REGION_WEATHER, PLACE_DETAIL, TRANSPORT, AMENITY, BOOKING, LODGING, KNOWLEDGE, ACCOUNT, CHAT, OTHER)   # 관측 전용
+
+DialoguePlanDraft (frozen, llm_gateway/gates/dialogue_plan.py):
+  calls: tuple[IntentDraft, ...] = ()   # 0..2 · slots 는 str 값 · confidence None (IntentDraft 재사용 — 새 call 타입 없음)
+  refused: bool = False
+  gap: str | None = None
+  # post-init: len(calls) ≤ 2 · refused ⇒ calls=() · gap ∈ PLAN_GAPS ∪ {None} · calls ⇒ gap None · 값 전부 str
+
+merge_facts(parts: Sequence[Facts]) -> Facts   (orchestrator/dialogue_plan.py, 순수)
+  # 1건이면 그대로. 대표 = min(쓸 수 없음, UNAVAILABLE, 종류 순위 CANDIDATES<INFO<TEXT, PARTIAL, 계획 순서)
+  # 카드·버튼·템플릿·상태·의도·places = 대표 것 · 나머지 사실 있는 부분 → detail["also"] = [p.to_prompt_dict()] · needTrip 부분은 다른 부분이 있으면 뺀다
+```
+
+`dialogue_plan` 로그 필드(BR-AO-29):
+
+| 필드 | 값 |
+|---|---|
+| `event` | `"dialogue_plan"` |
+| `trace_id` | 턴 trace |
+| `decision` | TOOLS · NO_TOOL · REFUSED · FALLBACK · SKIPPED |
+| `tools` · `arg_keys` | 고른 도구 이름 · 도구별 인자 **키**(정렬) — 값은 없다 |
+| `gap` | NO_TOOL 의 `PLAN_GAPS` 값 또는 null |
+| `primary` | 병합 대표 의도 또는 null |
+| `plan_ms` | 계획 호출 경과(부르지 않았으면 null) |
+| `task_status` | 작업별 전송 결과(`{"0.weather": "OK", "1.explore": "TIMEOUT"}`) — 도구별 TIMEOUT 률 |
+
+금지 칸: 발화·인자 값·account_ref(SEC-U8-06).
 
 ## 3. 와이어 변경 (경계 `POST /ai/v1/dialogue/interpret` + 새 경계 2개)
 
@@ -605,6 +644,7 @@ AI 메모리가 생기지 않으니 지울 것도 없다.
 | `$facts` | §2.5 JSON `inline()` | 좌표·poi_id 내부값 제외 |
 | `$style` | 워커 모듈 상수 — ~~"2~4문장, 존댓말, 평문, `\n` 줄바꿈만, 마크다운·링크·연락처 금지, 소요시간·시각 추정 금지, `$facts` 에 없는 장소·수치 금지"~~ **[개정 · 2026-10-19 · 친근한 말투]** "친근한 해요체 대화, 2~4문장(맞장구 한마디 → 답 → 다음 한 걸음 제안·되묻기), 평문, 줄바꿈만 사용, 마크다운·링크·연락처 금지, 소요시간·시각 추정 금지, 인원·시간 길이를 우리말 수(두 분·이 시간)로 쓰지 않기, 확인된 사실에 없는 장소·수치·특징 금지" — 프롬프트 0.3.0(§2.10 개정)과 같은 말투. 한 줄·단일 공백(워커가 `inline()` 으로 싣는다 — 렌더 결과에 그대로 있어야 한다) | 설정화하지 않는다 |
 | `$previous_summary` · `$recent_turns` | 메모리 요약 입력 | 각 줄 `inline()` |
+| `$tools` **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** | `plan_tool_specs_json(plan_tools(ports))` — parameters 는 `$intents` 와 같은 `tool_specs`(숨긴 인자 제외), description 만 도구 설명(+" (여행 필요)") | 배포마다 고정 — 고정부(벤더 캐시 접두), 7종 2,207자(렌더 전문 ≈4,800자). 계획 프롬프트의 `$history` 는 최근 4건, `$memory` 는 싣지 않는다 |
 
 ---
 
@@ -612,11 +652,11 @@ AI 메모리가 생기지 않으니 지울 것도 없다.
 
 | 불변식 | 이 FD 에서의 의미 |
 |---|---|
-| **INV-1** | 의도 라벨은 `Intent` enum — `IntentGate` 가 `DIALOGUE_INTENT` 산출을 closed-set 으로 검사(벤더 아님). 후보(`CANDIDATES`)는 `PlanBAgent` 가 **반경 풀**(`CandidatePool`) 안에서만 고르고 일정 전부를 `excluded` 로 뺀다; `Facts.places` 는 배치 조회·풀에서 온 닫힌 목록이다. **LLM 문장 안의 장소명은 검사하지 못한다** — 그러나 그 문장은 선택·저장을 일으키지 않으므로 INV-1(후보 선택) 위반이 아니라 "보이는 문장 오염"이고, 수용된 blast radius 다(메모리 노트 prompt-injection-blast-radius, 재제안 금지) |
-| **INV-2** | 사용자에게 보이는 시각은 **스냅샷 `start_at`**(백엔드가 저장·검증한 값)만, 순서는 스냅샷 순서만. `PlanBRagResult.alternatives` 에는 시각 필드가 없다. LLM 은 `$facts` 밖 시각을 만들지 않도록 프롬프트 규칙 + `_TIME_EXPR` 게이트 + **Facts 대조(2026-10-18 — 문장 시각 ⊆ Facts, 장소에 붙은 시각은 그 장소의 값, BR §6 ③; 이름 없이 떠 있는 슬롯 시각끼리는 스냅샷 순서를 따른다, BR §6 ⑨)**가 막는다(`N시`·`오전/오후 N시` 매치 → 드롭 → 템플릿; `HH:MM` 은 Facts 복사만 — 프롬프트 규칙, BR-AO-05). `EDIT_SCHEDULE` 을 1단계에서 FRAME 으로 두는 이유도 이것이다 — 스냅샷에 `end_at`·`is_fixed` 가 없어 AI 가 시각을 지어내야 EditTask 가 만들어진다 |
-| **INV-3** | 거리만 — `TransitInfo.to_public_dict`(`distance_range`), `FactPlace.distance_range`. 소요시간 필드·문장 없음: 스키마 필드명 게이트 + `_TIME_EXPR` 출구 게이트 + AO-P2 |
-| **INV-4** | 계단 전부 결정론 수렴(BLM §7): 분류 실패 → OUT_OF_SCOPE(거절 표지 사유), 답변 실패 → `template_text`, 메모리 실패 → `compress_fallback`, Provider 실패 → 있는 것만 + `notes`, PlanB 실패 → TEXT 안내. 모두 `FallbackEvent`/`notes` 로 보고하고 침묵하지 않는다. 섀도 실패는 응답에 영향 없이 skip 로그 |
-| **DL-3** | 분류 1회(`DIALOGUE_INTENT`). Handler·PlanB 는 프레임의 intent 를 재해석하지 않는다; 섀도는 **관측 전용**으로 서비스 판정에 영향 0 |
+| **INV-1** | 의도 라벨은 `Intent` enum — `IntentGate` 가 `DIALOGUE_INTENT` 산출을 closed-set 으로 검사(벤더 아님). 후보(`CANDIDATES`)는 `PlanBAgent` 가 **반경 풀**(`CandidatePool`) 안에서만 고르고 일정 전부를 `excluded` 로 뺀다; `Facts.places` 는 배치 조회·풀에서 온 닫힌 목록이다. **LLM 문장 안의 장소명은 검사하지 못한다** — 그러나 그 문장은 선택·저장을 일으키지 않으므로 INV-1(후보 선택) 위반이 아니라 "보이는 문장 오염"이고, 수용된 blast radius 다(메모리 노트 prompt-injection-blast-radius, 재제안 금지) **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 계획 LLM 이 내는 것은 닫힌 도구 이름과 문자열 인자뿐 — 장소를 만들 수 없다. 후보는 등록 POI 반경 풀 안에서만, 문장은 목록 밖 장소 검사를 강제로 거치고 BE 가 poiId·OPEN_PLACE 를 정본 대조한다. |
+| **INV-2** | 사용자에게 보이는 시각은 **스냅샷 `start_at`**(백엔드가 저장·검증한 값)만, 순서는 스냅샷 순서만. `PlanBRagResult.alternatives` 에는 시각 필드가 없다. LLM 은 `$facts` 밖 시각을 만들지 않도록 프롬프트 규칙 + `_TIME_EXPR` 게이트 + **Facts 대조(2026-10-18 — 문장 시각 ⊆ Facts, 장소에 붙은 시각은 그 장소의 값, BR §6 ③; 이름 없이 떠 있는 슬롯 시각끼리는 스냅샷 순서를 따른다, BR §6 ⑨)**가 막는다(`N시`·`오전/오후 N시` 매치 → 드롭 → 템플릿; `HH:MM` 은 Facts 복사만 — 프롬프트 규칙, BR-AO-05). `EDIT_SCHEDULE` 을 1단계에서 FRAME 으로 두는 이유도 이것이다 — 스냅샷에 `end_at`·`is_fixed` 가 없어 AI 가 시각을 지어내야 EditTask 가 만들어진다 **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 계획 스키마에 시각 칸이 없고 시각 꼴 인자는 게이트가 버린다. 핸들러는 원문 인자를 Facts 에 싣지 않는다. 병합 답의 시각은 also 까지 Facts 와 대조하고, 카드 종류와 관계없이 시각을 문장마다 그 문장의 이름에 귀속시킨다(`_unpaired_time` — 2026-10-20 #1420 리뷰로 정정본 C5 의 엄격 모드를 교체). 시각을 내는 도구(일정·다음 일정·장소 정보)는 계획당 1건이다. |
+| **INV-3** | 거리만 — `TransitInfo.to_public_dict`(`distance_range`), `FactPlace.distance_range`. 소요시간 필드·문장 없음: 스키마 필드명 게이트 + `_TIME_EXPR` 출구 게이트 + AO-P2 **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 계획 경로도 거리 문자열뿐 — 답변 게이트 무변경. |
+| **INV-4** | 계단 전부 결정론 수렴(BLM §7): 분류 실패 → OUT_OF_SCOPE(거절 표지 사유), 답변 실패 → `template_text`, 메모리 실패 → `compress_fallback`, Provider 실패 → 있는 것만 + `notes`, PlanB 실패 → TEXT 안내. 모두 `FallbackEvent`/`notes` 로 보고하고 침묵하지 않는다. 섀도 실패는 응답에 영향 없이 skip 로그 **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 계획의 모든 갈래가 종전 범위 밖·템플릿·needTrip 으로 수렴하고 폴백에는 이벤트 짝(BLM §7). 병합본도 post-init 을 통과해 Facts 만으로 항상 답이 만들어진다. |
+| **DL-3** | 분류 1회(`DIALOGUE_INTENT`). Handler·PlanB 는 프레임의 intent 를 재해석하지 않는다; 섀도는 **관측 전용**으로 서비스 판정에 영향 0 **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 계획은 분류가 판단해서 닫은 턴에만 — 분류가 고른 의도는 덮지 않고, 계획은 프레임을 만들지 않는다. |
 | **DL-4** | 모든 하위 호출에 잔여 시한을 `timeout_sec` 로 내린다(BLM §4). 잔여 ≤0 이면 호출하지 않고 폴백 |
 | **DL-5** | 오케스트레이터 경계에서 예외 금지 — 수렴값은 미결 #14 (두 안 병기) |
 
@@ -626,7 +666,7 @@ AI 메모리가 생기지 않으니 지울 것도 없다.
 
 | 더블 | 용도 |
 |---|---|
-| `FeatureLlm(by_feature: Mapping[LlmFeature, str \| Exception])` | 한 요청에서 분류·답변·메모리 3 feature 를 다른 canned 로 — `request.prompt_ref.feature` 분기(`test_replan_composition` 로컬 클래스를 공용으로 승격). `FakeLlm` 은 feature 무관 1개라 부족 |
+| `FeatureLlm(by_feature: Mapping[LlmFeature, str \| Exception])` | 한 요청에서 분류·답변·메모리 3 feature 를 다른 canned 로 — `request.prompt_ref.feature` 분기(`test_replan_composition` 로컬 클래스를 공용으로 승격). `FakeLlm` 은 feature 무관 1개라 부족 **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** `DIALOGUE_PLAN` canned 도 같은 더블 — 오케스트레이터 테스트 `_build(with_planner=True)` 가 운영과 같은 길(노출 도구 = 배선된 포트, 같은 counted LLM)로 계획 워커를 붙인다. |
 | `InMemoryDialogueMemoryStore` | 운영 구현(`agents/adapters/memory_memory_store.py`)을 그대로 쓴다 — 별도 fake 없음 |
 | `ScriptedProvider(kind, packets \| delays)` | 느린·실패하는 Provider — 팬아웃 시한 PBT(`FakeClock` 과 함께) |
 | `StubPlanB(result)` | `PlanBAgent.run` 대역 — CANDIDATES closed-set PBT |

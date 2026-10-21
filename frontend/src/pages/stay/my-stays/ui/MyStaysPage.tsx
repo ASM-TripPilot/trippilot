@@ -17,7 +17,7 @@ import { isOtaSource } from '@/entities/stay';
  * 목록을 페이지 상태(`basesByTripId`)로 모은 뒤 `buildStayTripLink` 로 역참조 Map 을 만든다
  * (`TripCardContainer`(l03) N+1 골격 동형).
  *
- * 「출발점 변경」(TRIP-1076 결정 2(A))은 그 여행의 거점 화면(`/trips/[tripId]/bases`)으로 push 만 한다 —
+ * 「거점 변경」(TRIP-1076 결정 2(A))은 그 여행의 거점 화면(`/trips/[tripId]/bases`)으로 push 만 한다 —
  * 이 페이지는 거점을 쓰지 않는다(옛 해제 DELETE 배선 제거). push 라서 거점 화면 CTA 의 `back()` 이 여기로
  * 돌아온다(`ItineraryMethodPage` onPressRebase 선례).
  */
@@ -42,7 +42,7 @@ function TripBasesProbe({
  * 사전에 있는 OTA 코드만 예약, 그 밖의 원천은 탐색에서 저장, 없으면(null·필드 없음) 직접 등록.
  */
 function sourceLabel(stay: SavedStay): string {
-  if (isOtaSource(stay.externalSource)) return 'OTA 예약';
+  if (isOtaSource(stay.externalSource)) return '예약 사이트';
   return stay.externalSource ? '탐색에서 저장' : '직접 등록';
 }
 

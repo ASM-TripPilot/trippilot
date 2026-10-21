@@ -43,20 +43,14 @@ class TripSummaryService(
     @Transactional
     fun generate(tripId: UUID): TripSummary {
         // 잠근 **뒤에** 읽는다 — 경로 갱신(refreshRouteStats)과 겹치면 커밋 전 상태를 보고 덮는다. 같은 잠금을 그쪽도 잡는다.
+        // 못 읽는 요약이어도 그대로 덮는다(TRIP-1476).
         summaries.findForUpdate(tripId)
-        val days = archive.findDailyVisits(tripId)
-        val routes = archive.findRouteDistances(tripId)
-        val surfaces = poiSurfaces.findSurfaces(days.flatMap { d -> d.visits.map { it.poiId } })
-        val summary = TripSummary(
-            tripId = tripId,
-            narrative = narrativeOf(days, surfaces),
-            highlights = highlightsOf(days, surfaces, routes),
-            stats = statsOf(days, surfaces, routes),
-            source = if (days.isEmpty()) ReflectionSource.BASIC else ReflectionSource.RULE,
-            generatedAt = clock.instant(),
-        )
-        val saved = summaries.upsert(summary)
-        events.publish(
+        // **알림은 처음 만들 때만** 낸다. 요약 행을 처음 만드는 곳은 여기뿐이라, 행이 이미 있으면 이 여행의 요약은 한 번 알렸다.
+        // 다시 오는 것은 사실상 `TripEnded` 재배달(at-least-once)뿐인데, 발행마다 이벤트 id 가 새로 나고 알림은 그 id 로만
+        // 중복을 거르므로(`appendIfAbsent`) 다시 내면 "여행 요약이 준비됐어요"가 한 번 더 간다. 조회·경로 갱신의 고침([rebuildUnreadable])과 같은 규칙이다.
+        val existed = summaries.exists(tripId)
+        val saved = summaries.upsert(build(tripId))
+        if (!existed) events.publish(
             ReflectionReady(
                 aggregateId = tripId.toString(),
                 tripId = tripId.toString(),
@@ -68,10 +62,41 @@ class TripSummaryService(
         return saved
     }
 
-    @Transactional(readOnly = true)
+    /** 읽기 전용이 아니다 — 못 읽는 요약은 여기서 다시 만든다([rebuildUnreadable]). */
+    @Transactional
     fun find(accountId: UUID, tripId: UUID): TripSummary? {
         trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
-        return summaries.find(tripId)
+        return summaries.find(tripId) ?: rebuildUnreadable(tripId)
+    }
+
+    /**
+     * 행은 있는데 못 읽는 요약(TRIP-1476)을 다시 만든다 — 없는 요약이면 null 이다(여행이 끝날 때 만든다).
+     *
+     * 생성(`TripEnded`)은 여행당 한 번이라 기다려서는 낫지 않는다. 요약에는 사용자가 쓴 것이 없어 통째로 다시 만들어도 잃는 것이 없다.
+     * 알림 이벤트는 내지 않는다 — 행이 있다는 것은 이미 한 번 만들어 알렸다는 뜻이고, 다시 알리면 같은 "요약이 준비됐어요"가 또 간다.
+     */
+    // 행이 exists 와 upsert 사이에 사라지는 경우(여행 행 물리 삭제 → CASCADE)는 막지 않는다 — 여행 삭제는 소프트 삭제이고
+    // (`TripService.delete`), 지금 코드에 trip·account 행을 지우는 경로가 없다. 생기면 generate 도 같은 모양이라 함께 본다.
+    private fun rebuildUnreadable(tripId: UUID): TripSummary? {
+        if (!summaries.exists(tripId)) return null
+        // 조회는 잠그지 않고 읽었다 — 잠근 뒤 다시 본다. 겹친 요청이 먼저 고쳤으면 그것을 쓴다. 못 읽은 채면 ERROR 가 한 줄 더 남는다
+        // (조회가 고치는 요청은 잠그기 전·후 두 줄).
+        return summaries.findForUpdate(tripId) ?: summaries.upsert(build(tripId))
+    }
+
+    /** 지금 실적·경로로 요약 한 벌을 짠다(저장·발행은 부르는 쪽 몫). */
+    private fun build(tripId: UUID): TripSummary {
+        val days = archive.findDailyVisits(tripId)
+        val routes = archive.findRouteDistances(tripId)
+        val surfaces = poiSurfaces.findSurfaces(days.flatMap { d -> d.visits.map { it.poiId } })
+        return TripSummary(
+            tripId = tripId,
+            narrative = narrativeOf(days, surfaces),
+            highlights = highlightsOf(days, surfaces, routes),
+            stats = statsOf(days, surfaces, routes),
+            source = if (days.isEmpty()) ReflectionSource.BASIC else ReflectionSource.RULE,
+            generatedAt = clock.instant(),
+        )
     }
 
     /**
@@ -114,12 +139,18 @@ class TripSummaryService(
 
     /**
      * 경로가 올라왔다 — 이미 만든 요약의 **통계만** 다시 센다(BR-U10-39). 요약이 아직 없으면 할 일이 없다(여행이 끝날 때 만든다).
+     * 못 읽는 요약이면(TRIP-1476) 통째로 다시 만든다 — 지금 실적·경로로 짜므로 통계도 함께 맞는다.
      */
     @Transactional
     fun refreshRouteStats(tripId: UUID) {
         // 생성과 같은 잠금 — 생성이 커밋 전이면 여기서 기다렸다가 그 결과를 본다(안 기다리면 "요약 없음"으로 지나가고, 생성은 경로 전
         // 값으로 커밋돼 굳는다). 하이라이트는 지금 실적·경로로 다시 짠다 — 경로만 있는 날이 새로 한 칸이 될 수 있다. 서사·출처는 그대로다.
-        val current = summaries.findForUpdate(tripId) ?: return
+        val current = summaries.findForUpdate(tripId) ?: run {
+            // 이미 잠그고 DB 에서 읽었다 — 다시 읽지 않고 바로 만든다(다시 읽으면 같은 ERROR 가 한 줄 더 남고 잠금·조회가 한 번 더 돈다).
+            // 요약이 없는 여행이면 exists 한 번으로 끝난다.
+            if (summaries.exists(tripId)) summaries.upsert(build(tripId))
+            return
+        }
         val days = archive.findDailyVisits(tripId)
         val routes = archive.findRouteDistances(tripId)
         val surfaces = poiSurfaces.findSurfaces(days.flatMap { d -> d.visits.map { it.poiId } })

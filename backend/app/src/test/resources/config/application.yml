@@ -31,6 +31,9 @@ spring:
 # 뜨고, 각 컨텍스트가 커넥션 풀을 따로 잡아 **Postgres 연결 슬롯이 고갈된다**(실측으로 겪었다).
 trippilot:
   outbox:
+    # 셸에 EVENT_BROKER=kafka 가 남아 있어도(호스트 bootRun 용) 테스트는 폴링 모드로 뜬다 — 본 설정의 `${EVENT_BROKER:none}` 이
+    # 그대로 닿으면 브로커 없는 전체 테스트가 fail-fast 로 기동부터 실패한다. Kafka 모드는 KafkaOutboxIT 가 직접 켠다.
+    broker: none
     relay-delay-ms: 3600000
     relay-initial-delay-ms: 3600000
   # 여행 종료 스위퍼도 같은 이유로 끈다(TRIP-554). 배경 스위퍼가 먼저 종료를 찍으면

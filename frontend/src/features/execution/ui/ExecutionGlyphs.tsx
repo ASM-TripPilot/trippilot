@@ -15,6 +15,7 @@ const SUCCESS = '#0E9384';
 const DISABLED = '#C2CCD6';
 const WHITE = '#FFFFFF';
 const INK = '#222222';
+const MUTED = '#6A6A6A';
 // 비구름 글리프 기본색(text-primary-text 토큰의 raw 값).
 const PRIMARY_TEXT = '#C13515';
 
@@ -193,6 +194,23 @@ export function HeroPinGlyph({
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </Svg>
+  );
+}
+
+// TRIP-1522 · i01 하단 바 "행사" 칸 — 깃발(pennant, 킷 `flag`). 활성 primary / 비활성 muted 는 호출부가 `color` 로 고른다.
+// 24 viewBox · stroke 2 를 27 로 그리면 2.25 가 되어 탭 바 아이콘과 굵기가 같다.
+export function EventGlyph({ size = 27, color = MUTED }: TintGlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4 15C4 15 5 14 8 14C11 14 13 16 16 16C19 16 20 15 20 15V3C20 3 19 4 16 4C13 4 11 2 8 2C5 2 4 3 4 3V15Z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path d="M4 22V15" stroke={color} strokeWidth={2} strokeLinecap="round" />
     </Svg>
   );
 }

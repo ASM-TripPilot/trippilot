@@ -173,7 +173,8 @@ function SearchBar({
       <Pressable
         testID="explore-places-filter"
         accessibilityRole="button"
-        accessibilityLabel="필터"
+        // 카테고리 시트를 여는 버튼이라 이름도 카테고리다(TRIP-1440 Q-047).
+        accessibilityLabel="카테고리"
         onPress={onPressFilter}
         className="h-9 w-9 items-center justify-center rounded-pill"
       >

@@ -295,11 +295,11 @@ export function TripRecordsView({
               <InfoCircleGlyph size={20} />
               <View className="flex-1 gap-[3px]">
                 <Text className="font-noto-bold text-label text-ink">
-                  GPS 미동의 — 수동 체크인으로 기록해요
+                  위치 권한 없음 — 수동 체크인으로 기록해요
                 </Text>
                 <Text className="text-caption text-muted">
                   위치 권한이 없어 좌표·이동 경로는 자동 기록되지 않아요. 방문한
-                  장소를 직접 선택해 기록하세요.
+                  장소를 직접 선택해 기록해요.
                 </Text>
               </View>
             </View>

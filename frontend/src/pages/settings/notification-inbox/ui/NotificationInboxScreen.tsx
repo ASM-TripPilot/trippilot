@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { NotificationIconKind } from '../model/notificationKind';
 import { NotifBackChevronGlyph } from '@/features/notification';
+import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
+import { StateNotice } from '@/shared/ui/StateNotice';
 import { NotifBellGlyph } from './NotificationInboxGlyphs';
 import { NotificationRow } from './NotificationRow';
 
@@ -16,7 +18,7 @@ import { NotificationRow } from './NotificationRow';
  * empty 는 StateNotice(제목 16·부제 13 고정)가 아닌 로컬 마크업 — Figma 1599:2388 수치가 다르다.
  *
  * testID: notification-inbox-header / -row / -unread-dot / -action / -mark-all / -mark-all-error /
- * -empty / -empty-box.
+ * -empty / -empty-box / -error / -retry.
  */
 
 // l01 카드 그림자(§8.2 MISS raw 허용 — 그림자는 토큰 대상 아님, RN shadow prop). features 경계로
@@ -60,6 +62,12 @@ export interface NotificationInboxScreenProps {
   markAllPending?: boolean;
   /** 실패 안내 문구(페이지 소유). null/undefined = 안내 없음. */
   markAllError?: string | null;
+  /** TRIP-1501 — 조회 실패(훅이 판정: 받은 목록이 한 번도 없고 실패 이력이 있음). true 면 `isEmpty` 보다 먼저 오류 얼굴. */
+  loadFailed?: boolean;
+  /** 오류 얼굴의 [다시 시도] press 콜백. */
+  onRetry?: () => void;
+  /** 다시 시도 진행 중 — [다시 시도] 비활성. */
+  retrying?: boolean;
 }
 
 /** 글자 줄높이 20 + 위아래 12 = 터치 높이 44. */
@@ -76,8 +84,9 @@ function InboxHeader({
   return (
     <View
       testID="notification-inbox-header"
-      className="flex-row items-center justify-between border-b border-hairline px-lg pb-md pt-sm"
+      className="flex-row items-center justify-between px-lg pb-md pt-sm"
     >
+      <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
       <View className="flex-row items-center gap-sm">
         <Pressable
           testID="notification-inbox-back"
@@ -112,7 +121,35 @@ export function NotificationInboxScreen({
   onMarkAllRead,
   markAllPending = false,
   markAllError,
+  loadFailed = false,
+  onRetry,
+  retrying = false,
 }: NotificationInboxScreenProps): ReactElement {
+  if (loadFailed) {
+    return (
+      <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
+        <InboxHeader onPressBack={onPressBack} />
+        <View className="w-full flex-1 items-center justify-center px-lg">
+          <StateNotice
+            testID="notification-inbox-error"
+            icon={<WarningTriangleGlyph size={32} color="primary" />}
+            title="알림을 불러올 수 없어요"
+            description="잠시 후 다시 시도해 주세요"
+            actions={[
+              {
+                testID: 'notification-inbox-retry',
+                label: '다시 시도',
+                variant: 'filled',
+                onPress: onRetry,
+                disabled: retrying,
+              },
+            ]}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (isEmpty) {
     return (
       <SafeAreaView edges={['top']} className="flex-1 bg-canvas">

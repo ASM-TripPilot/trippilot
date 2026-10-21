@@ -52,7 +52,8 @@ export function PersonalizationScreen({
       edges={['top']}
       className="flex-1 bg-canvas-alt"
     >
-      <View className="flex-row items-center gap-sm border-b border-hairline px-lg pb-md pt-sm">
+      <View className="flex-row items-center gap-sm px-lg pb-md pt-sm">
+        <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
         <Pressable
           testID="settings-personalization-back"
           accessibilityRole="button"

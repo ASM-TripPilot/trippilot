@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 /**
- * TRIP-565 · j01 방문 기록 인라인 아이콘(react-native-svg). path 는 Figma j01(1557:1738)
+ * TRIP-565 · j01 방문 기록 인라인 아이콘(react-native-svg). path 는 Figma j01(5000:3227)
  * 실 에셋에서 옮겼다. `*Glyphs.tsx` raw hex 스캔 제외 관례(SVG stroke/fill 은 className 을 못
  * 받는다) — features 간 import 금지라 execution/auth 글리프를 재사용하지 않고 벡터만 옮겼다.
  *

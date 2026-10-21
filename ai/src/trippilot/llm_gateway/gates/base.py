@@ -142,10 +142,10 @@ _INJECTIONISH = re.compile(
     r"|(?:ignore|disregard|forget)(?:all|any|the|your|previous|prior|above|earlier|these|those|of|system){0,4}"
     r"(?:instructions?|rules|prompts?|directions|guidelines)"
     r"|(?:reveal|print|show|repeat|output)(?:me)?(?:your|the)(?:system)?(?:instructions|prompt|rules)"
-    # 프롬프트 골격 — 도우미 프롬프트 3종(prompts/dialogue_*.yaml)의 칸 머리. 발화에 있으면 골격 위조, 답에 있으면 유출이다
+    # 프롬프트 골격 — 도우미 프롬프트(prompts/dialogue_*.yaml)의 칸 머리. 발화에 있으면 골격 위조, 답에 있으면 유출이다
     r"|당신은여행앱"
     r"|\[(?:확인된사실|여행요약|기억|최근대화|사용자의말|사용자발화|의도|의도정의|의도와인자|문체|답변순서|판단순서|예시"
-    r"|출력json스키마|여행상황|이전요약|여행)\]"
+    r"|출력json스키마|여행상황|이전요약|여행|도구|표|분류인자)\]"
 )
 
 

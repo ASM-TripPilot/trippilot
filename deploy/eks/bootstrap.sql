@@ -23,6 +23,15 @@ CREATE SCHEMA IF NOT EXISTS app AUTHORIZATION app_migrate;
 GRANT USAGE ON SCHEMA app TO app_user;
 ALTER ROLE app_user IN DATABASE trippilot SET search_path = app;
 ALTER ROLE app_migrate IN DATABASE trippilot SET search_path = app;
+-- AI 장소 조회(도우미 NL2SQL): ai_user 는 app.poi_public 뷰 SELECT 만 — 뷰가 보여 줄 수 있는 열·행을 정한다(Flyway V2.77).
+-- 읽기 전용·문장 시한은 롤에 박는다(AI 쪽 SQL 검사가 뚫려도 쓰기·장시간 조회가 여기서 막힌다). 뷰 GRANT 는 Flyway 도 하지만
+-- 마이그레이션이 이 Job 보다 먼저 돈 환경(롤이 그때 없었다)을 위해 뷰가 있으면 여기서도 준다 — 순서와 무관하게 같은 결과.
+GRANT CONNECT ON DATABASE trippilot TO ai_user;
+GRANT USAGE ON SCHEMA app TO ai_user;
+ALTER ROLE ai_user IN DATABASE trippilot SET search_path = app;
+ALTER ROLE ai_user IN DATABASE trippilot SET default_transaction_read_only = on;
+ALTER ROLE ai_user IN DATABASE trippilot SET statement_timeout = '2s';
+SELECT 'GRANT SELECT ON app.poi_public TO ai_user' WHERE to_regclass('app.poi_public') IS NOT NULL \gexec
 
 SELECT 'CREATE DATABASE ai_kb' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'ai_kb') \gexec
 REVOKE CONNECT, TEMPORARY ON DATABASE ai_kb FROM PUBLIC;

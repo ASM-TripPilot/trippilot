@@ -261,7 +261,7 @@ export function SlotStopCard({
               className="rounded-pill bg-surface-strong px-sm py-[2px]"
             >
               <Text className="font-noto-bold text-micro font-bold text-muted">
-                고정
+                {locked ? '방문 완료' : '고정'}
               </Text>
             </View>
           ) : null}

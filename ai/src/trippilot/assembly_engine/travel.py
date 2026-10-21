@@ -16,6 +16,7 @@ time = dist / SPEED[mode] × SAFETY[mode] + BUFFER (내부 전용, INV-3).
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.domain.common import GeoPoint, TransportMode
@@ -24,6 +25,8 @@ from trippilot.domain.travel import TravelEstimate
 _EARTH_KM = 6371.0088
 # 대중교통 요청에서 걸어가기로 한 구간의 출처 — `api.wiring._render_distance` 가 이것을 보고 "도보"라고 적는다
 WALKED_SOURCE = "haversine_x_detour(walk)"
+# 도보 요청에서 대중교통으로 가기로 한 구간의 출처 — 같은 곳이 이것을 보고 "대중교통"이라고 적는다
+TRANSIT_SOURCE = "haversine_x_detour(transit)"
 
 
 def haversine_km(a: GeoPoint, b: GeoPoint) -> float:
@@ -39,6 +42,11 @@ class TravelEstimator:
     def __init__(self, config: AssemblyConfig) -> None:
         self._cfg = config
 
+    @property
+    def walk_transit_from_km(self) -> float:
+        """도보 여행에서 대중교통으로 바꾸는 도로 km — 화면 감싸개(`WalkFirst`)가 실측 거리에도 같은 기준을 댄다."""
+        return self._cfg.walk_transit_from_km
+
     def estimate(
         self, from_: GeoPoint, to: GeoPoint, mode: TransportMode
     ) -> TravelEstimate:
@@ -52,6 +60,10 @@ class TravelEstimator:
             # 빨라도 대중교통이다(config 주석). 걸어갈 땐 정류장 대기·환승이 없으므로 buffer 를 빼고 잰다.
             if road <= self._cfg.public_walk_max_km:
                 minutes, source = self._minutes(road, TransportMode.WALK), WALKED_SOURCE
+        elif mode is TransportMode.WALK and road >= self._cfg.walk_transit_from_km:
+            # 도보 여행의 먼 구간은 대중교통이다(config `walk_transit_from_km`) — 대중교통 추정으로 잰다.
+            minutes = self._minutes(road, TransportMode.PUBLIC) + self._cfg.buffer_min
+            source = TRANSIT_SOURCE
 
         return TravelEstimate(
             distance_km_range=(round(straight, 3), round(road, 3)),
@@ -68,10 +80,11 @@ class TravelEstimator:
 
 
 class WalkFirst:
-    """TravelPort — 도보 상한 안의 대중교통 구간은 걷기로 잰다(액티비티 취향 상향, 2026-10-19).
+    """TravelPort — 구간 수단을 조립과 같은 추정기로 정하고 화면 거리를 잰다.
 
-    조립은 요청별 추정기(`ChainAssemblyProvider.walker`)로 그 구간을 걸었다고 계산한다 — 화면 거리도 같은
-    판정이어야 시각과 "도보·대중교통" 이름표가 어긋나지 않는다. 걷는 구간은 실경로(ODsay)를 부르지 않는다.
+    대중교통 여행의 도보 상한 안 구간은 걷기로(액티비티 취향 상향, 2026-10-19), 도보 여행의 먼 구간은
+    대중교통으로(2026-10-20) — 조립은 요청별 추정기(`ChainAssemblyProvider.walker`)로 그렇게 계산한다. 화면 거리도
+    같은 판정이어야 시각과 "도보·대중교통" 이름표가 어긋나지 않는다. 걷는 구간은 실경로(ODsay)를 부르지 않는다.
     """
 
     def __init__(self, port, walker: TravelEstimator) -> None:
@@ -79,9 +92,17 @@ class WalkFirst:
         self._walker = walker
 
     def estimate(self, from_: GeoPoint, to: GeoPoint, mode: TransportMode) -> TravelEstimate:
-        if mode is TransportMode.PUBLIC:
-            walked = self._walker.estimate(from_, to, mode)
-            if walked.source == WALKED_SOURCE:
-                return walked
-        return self._port.estimate(from_, to, mode)
+        decided = self._walker.estimate(from_, to, mode)
+        if decided.source == WALKED_SOURCE:
+            return decided
+        if decided.source == TRANSIT_SOURCE:
+            # 실경로는 대중교통으로 재되 출처를 표식으로 바꿔 이름표가 "대중교통"이 되게 한다(화면 전용 감싸개)
+            return replace(self._port.estimate(from_, to, TransportMode.PUBLIC), source=TRANSIT_SOURCE)
+        measured = self._port.estimate(from_, to, mode)
+        if mode is TransportMode.WALK and measured.distance_km_range[1] >= self._walker.walk_transit_from_km:
+            # 추정(직선 × 1.3)은 기준 아래였는데 실측 경로가 넘는 구간 — 화면의 "1.5km 이상은 대중교통"을 지킨다
+            # (개발 서버 실측 2026-10-20: 추정과 실측이 ±0.3km 어긋났다). 시각은 걷기로 잡혀 있지만 대중교통이
+            # 더 빠르므로 일정은 그대로 성립한다. 실경로가 없는 배선은 실측이 곧 추정이라 여기 걸리지 않는다.
+            return replace(self._port.estimate(from_, to, TransportMode.PUBLIC), source=TRANSIT_SOURCE)
+        return measured
 

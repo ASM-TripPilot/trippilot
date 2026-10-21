@@ -1,6 +1,7 @@
-import type { ReactElement } from 'react';
+import { useContext, type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import type { MyTripsSortKey } from '../model/myTripsOrder';
 
@@ -22,7 +23,7 @@ const OPTIONS: readonly {
 }[] = [
   { key: 'recent', label: '최신순', hint: '최근에 고친 여행부터' },
   { key: 'start', label: '출발일순', hint: '가까운 출발일부터' },
-  { key: 'title', label: '이름순' },
+  { key: 'title', label: '이름순', hint: '가나다순으로' },
 ];
 
 export interface MyTripsSortSheetProps {
@@ -36,6 +37,9 @@ export function MyTripsSortSheet({
   onSelect,
   onClose,
 }: MyTripsSortSheetProps): ReactElement {
+  // 시트가 열리면 탭바가 숨어(TRIP-1240) 홈 인디케이터만 남는다 — 마지막 옵션이 화면 가장자리에 붙지 않게 하단 안전영역을
+  // 본문 아래 여백에 더한다(TRIP-1436 Q-131). Provider 없으면 0(MapSheetShell 선례).
+  const bottomInset = useContext(SafeAreaInsetsContext)?.bottom ?? 0;
   return (
     <BottomSheet
       index={0}
@@ -55,7 +59,8 @@ export function MyTripsSortSheet({
     >
       <BottomSheetView
         testID="my-trips-sort-sheet"
-        className="gap-lg rounded-sheet-top px-lg pb-2xl pt-md"
+        style={{ paddingBottom: 24 + bottomInset }}
+        className="gap-lg rounded-sheet-top px-lg pt-md"
       >
         {/* grabber — Figma 는 40×5 r2.5 지만 킷·리포 선례(40×4 pill)를 따른다. */}
         <View className="h-[4px] w-[40px] self-center rounded-pill bg-hairline-strong" />

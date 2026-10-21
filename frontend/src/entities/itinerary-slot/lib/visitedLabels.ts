@@ -24,15 +24,23 @@ export function visitedLabelByPoiId(
   list: VisitCheckList,
   date: string
 ): Record<string, string> {
-  const labels: Record<string, string> = {};
+  // TRIP-1495 — 같은 poi 에 완료 기록이 둘이면 대표는 id 사전순 첫째다(허브 [사진]·[메모] 대상
+  // `doneVisitCheckIdByPoiId` 와 같은 규칙 — 목록 순서는 계약이 아니다). 시각의 주인 = 기록 대상. 낙관 레코드는 뺀다.
+  const owner: Record<string, VisitCheck> = {};
   for (const v of list.visits) {
     if (v.slotKey == null || v.completedAt == null || v.skippedAt != null)
       continue;
-    const label = arrivedLabel(v);
-    if (label === null) continue;
+    if (v.visitCheckId.startsWith('optimistic:')) continue;
     const parsed = parseSlotKey(v.slotKey);
     if (parsed.kind !== 'ok' || parsed.date !== date) continue;
-    labels[parsed.poiId] = label;
+    const prev = owner[parsed.poiId];
+    if (prev === undefined || v.visitCheckId < prev.visitCheckId)
+      owner[parsed.poiId] = v;
+  }
+  const labels: Record<string, string> = {};
+  for (const [poiId, v] of Object.entries(owner)) {
+    const label = arrivedLabel(v);
+    if (label !== null) labels[poiId] = label;
   }
   return labels;
 }

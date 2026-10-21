@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { PushPreprompt } from './PushPreprompt';
 
 /**
- * TRIP-1108 · c08-push 푸시 알림 사전 안내 카드(Figma 4774:2960) — **화면(순수 뷰)**.
+ * TRIP-1108 · c08-push 푸시 알림 사전 안내 카드(Figma 4976:3306) — **화면(순수 뷰)**.
  *
  * 무엇을 보장하나:
  *  - 벨 히어로 · 제목 · 목적 · 보조 문구와 `계속` 버튼 하나를 그린다(건너뛰기 없음 — 5.1.1(iv))(문구는 Figma 원문, 2줄 개행 포함).

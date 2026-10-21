@@ -8,7 +8,15 @@ export interface TemplateContext {
   region?: string;
   startDate?: string;
   endDate?: string;
+  /** TRIP-1497 · 기록된 stats 값 — 있으면 `{visit_count}`·`{distance_km}`·`{photo_count}` 를 채운다(숫자만, 단위는 문장이 쓴다). */
+  visitCount?: number;
+  distanceKm?: number;
+  photoCount?: number;
 }
+
+const PLACEHOLDER = /\{([^{}]*)\}/g;
+/** 값이 없어도 자리표시자만 걷고 문장은 남기는 종류(TRIP-1212) — 그 밖(통계·`{poi:…}`·모르는 것)은 값이 없으면 문장을 뺀다. */
+const STRIP_ONLY_KEYS = new Set(['region', 'start_date', 'end_date']);
 
 /** 백엔드 `ReflectionNarrator.BASIC_DAILY` 와 같은 문장 — 회고 글이 아니라 안내문이다. */
 export const GUIDE_TEXTS: readonly string[] = [
@@ -30,6 +38,12 @@ export function fillTemplate(text: string, ctx: TemplateContext): string {
     region: ctx.region,
     start_date: ctx.startDate,
     end_date: ctx.endDate,
+    visit_count: ctx.visitCount?.toString(),
+    distance_km:
+      ctx.distanceKm === undefined
+        ? undefined
+        : String(Math.round(ctx.distanceKm * 10) / 10),
+    photo_count: ctx.photoCount?.toString(),
   };
   // TRIP-1425 · 하루 회고는 시작=끝=그날 — `X~X` 대신 날짜 하나로 접는다.
   const folded =
@@ -39,8 +53,25 @@ export function fillTemplate(text: string, ctx: TemplateContext): string {
           '{start_date}'
         )
       : text;
-  return folded
-    .replace(/\{([^{}]*)\}/g, (_, key: string) => known[key.trim()] ?? '')
+  // TRIP-1497 · 채울 수 없는 통계·모르는 자리표시자가 낀 문장은 통째로 뺀다 — 토큰만 지우면 "오늘 곳을 다녀왔어요"처럼 깨진다.
+  // 조각 = 마침표류(뒤에 공백·끝이 올 때만 — 3.5km·9.30 의 점은 안 자른다)·`·`·줄바꿈까지(뒤따르는 공백 포함해 이어 붙여도
+  // 모양이 같다). `{…}` 는 쪼개지 않는다(`{poi:1.name}` 의 점). `·` 로 끊어 "3곳 · {거리} · 사진 2장" 은 거리 조각만 빠진다.
+  const lookup = (key: string): string | undefined =>
+    Object.prototype.hasOwnProperty.call(known, key) ? known[key] : undefined;
+  const unfillable = (sentence: string): boolean =>
+    [...sentence.matchAll(PLACEHOLDER)].some((m) => {
+      const key = (m[1] ?? '').trim();
+      return !STRIP_ONLY_KEYS.has(key) && lookup(key) === undefined;
+    });
+  const kept = (
+    folded.match(
+      /(?:\{[^{}]*\}|[^.!?。…·\n]|[.!?。…](?=\S))+(?:[.!?。…]+|·)?\s*|\n|·\s*/g
+    ) ?? [folded]
+  )
+    .filter((sentence) => !unfillable(sentence))
+    .join('');
+  return kept
+    .replace(PLACEHOLDER, (_, key: string) => lookup(key.trim()) ?? '')
     .replace(/\s*[·~]\s*(?=[·~]|$)/g, '') // 값이 빠져 매달린 구분자
     .replace(/^\s*[·~]\s*/, '')
     .replace(/[ \t]{2,}/g, ' ')

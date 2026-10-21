@@ -628,3 +628,21 @@ describe('맞춤·카메라 모드가 바뀌면 네이티브 지도를 새로 �
     });
   });
 });
+
+describe('TRIP-1522 v2 — logoMargin: 지도 로고 위치 옵션(옵트인) — 안 주면 지금과 같다', () => {
+  it('LG1 logoMargin 을 주면 네이티브 지도로 그대로 가고, 안 주면 logoMargin·logoAlign 둘 다 달지 않는다 (공용 기본값 회귀 가드)', () => {
+    // 준비·실행 — 안 준 지도(모든 지도 화면의 지금 모양).
+    render(<MapView center={CENTER} pins={PINS} />);
+    const bare = screen.getByTestId('map-native');
+    // 안 주면 prop 자체를 안 단다 — 네이버 SDK 기본(좌하단 로고)을 건드리지 않는다.
+    expect(bare.props.logoMargin).toBeUndefined();
+    expect(bare.props.logoAlign).toBeUndefined();
+    screen.unmount();
+
+    // 준 지도 — 시트가 내려가 지도가 드러났을 때 로고가 하단 바에 안 가리게 아래 여백을 올린다(허브만 준다).
+    render(<MapView center={CENTER} pins={PINS} logoMargin={{ bottom: 78 }} />);
+    expect(screen.getByTestId('map-native').props.logoMargin).toEqual({
+      bottom: 78,
+    });
+  });
+});

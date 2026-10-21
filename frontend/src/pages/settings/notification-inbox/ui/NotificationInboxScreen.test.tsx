@@ -128,13 +128,13 @@ describe('행·헤더·빈 화면 (옛 .test)', () => {
       renderScreen({
         sections: [
           section('today', '오늘', [
-            row({ title: '비 예보 — 일정 영향', meta: 'Plan-B · 10분 전' }),
+            row({ title: '비 예보 — 일정 영향', meta: '재계획 · 10분 전' }),
           ]),
         ],
       });
 
       expect(screen.getByText('비 예보 — 일정 영향')).toBeOnTheScreen();
-      expect(screen.getByText('Plan-B · 10분 전')).toBeOnTheScreen();
+      expect(screen.getByText('재계획 · 10분 전')).toBeOnTheScreen();
     });
   });
 
@@ -363,6 +363,82 @@ describe('행·헤더·빈 화면 (옛 .test)', () => {
       ).toBeOnTheScreen();
     });
   });
+
+  // TRIP-1501 · 조회 실패 얼굴. 페이지가 `isError && data === undefined` 를 판정해 loadFailed 로 내리고,
+  // 화면은 재판정 없이 그린다. 실패 때 페이지는 items=[] 라 isEmpty=true 도 같이 내려오므로 loadFailed 가 이겨야 한다.
+  describe('TRIP-1501 · 조회 실패(loadFailed) = 오류 얼굴 + 다시 시도, empty 로 접지 않는다', () => {
+    const ERROR = 'notification-inbox-error';
+    const RETRY = 'notification-inbox-retry';
+
+    it('오류 얼굴·다시 시도·헤더가 보이고 empty·"모두 읽음"·행은 없다, 다시 시도 press → onRetry 1회', () => {
+      // 준비
+      const onRetry = jest.fn();
+      renderScreen({
+        loadFailed: true,
+        isEmpty: true,
+        sections: [],
+        onRetry,
+      });
+
+      // 단언 1 — 오류 얼굴 + 헤더(뒤로 갈 길은 열려 있다).
+      expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+      expect(screen.getByTestId('notification-inbox-header')).toBeOnTheScreen();
+      expect(screen.getByTestId('notification-inbox-back')).toBeOnTheScreen();
+      // 단언 2 — 실패를 "알림 없음"으로 위장하지 않고, 목록 얼굴 전용 요소도 없다.
+      expect(screen.queryByTestId('notification-inbox-empty')).toBeNull();
+      expect(screen.queryByTestId(MARK_ALL)).toBeNull();
+      expect(screen.queryAllByTestId('notification-inbox-row')).toHaveLength(0);
+
+      // 실행 + 단언 3 — 다시 시도를 누르면 콜백이 실제로 불린다.
+      fireEvent.press(screen.getByTestId(RETRY));
+      expect(onRetry).toHaveBeenCalledTimes(1);
+    });
+
+    it('재시도 중(retrying)엔 다시 시도가 비활성이고, 눌러도 onRetry 는 0회, 오류 얼굴은 그대로다', () => {
+      // 준비
+      const onRetry = jest.fn();
+      renderScreen({
+        loadFailed: true,
+        isEmpty: true,
+        sections: [],
+        retrying: true,
+        onRetry,
+      });
+
+      // 실행
+      fireEvent.press(screen.getByTestId(RETRY));
+
+      // 단언
+      expect(screen.getByTestId(RETRY)).toBeDisabled();
+      expect(onRetry).not.toHaveBeenCalled();
+      expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+    });
+
+    it('loadFailed 가 아니면(false·미지정) 오류 얼굴은 없다 — 목록·empty 얼굴은 각자 그대로 (긍정 짝)', () => {
+      // 준비 + 실행 — 목록 얼굴(loadFailed false 명시).
+      const { unmount } = render(
+        <NotificationInboxScreen
+          sections={[section('today', '오늘', [row({ unread: true })])]}
+          isEmpty={false}
+          loadFailed={false}
+          onNavigate={jest.fn()}
+          onMarkAllRead={jest.fn()}
+        />
+      );
+      // 단언 — 행은 보이고 오류 얼굴은 없다.
+      expect(screen.queryAllByTestId('notification-inbox-row')).toHaveLength(1);
+      expect(screen.queryByTestId(ERROR)).toBeNull();
+      expect(screen.queryByTestId(RETRY)).toBeNull();
+      unmount();
+
+      // 준비 + 실행 — empty 얼굴(loadFailed 미지정).
+      renderScreen({ isEmpty: true, sections: [] });
+      // 단언 — empty 는 보이고 오류 얼굴은 없다.
+      expect(screen.getByTestId('notification-inbox-empty')).toBeOnTheScreen();
+      expect(screen.queryByTestId(ERROR)).toBeNull();
+    });
+  });
 });
 
 // TRIP-1075
@@ -471,7 +547,7 @@ describe('본문 줄 (옛 .body)', () => {
       const planB = row({
         title: '비 예보 — 일정 영향',
         body: '14:00 한강공원 일정이 비 예보로 영향을 받아요',
-        meta: 'Plan-B · 10일 전',
+        meta: '재계획 · 10일 전',
         inlineActionLabel: PLAN_B_LABEL,
         route: '/trips/t1/planb',
       });
@@ -491,7 +567,7 @@ describe('본문 줄 (옛 .body)', () => {
         [
           '비 예보 — 일정 영향',
           '14:00 한강공원 일정이 비 예보로 영향을 받아요',
-          'Plan-B · 10일 전',
+          '재계획 · 10일 전',
           PLAN_B_LABEL,
         ].sort()
       );

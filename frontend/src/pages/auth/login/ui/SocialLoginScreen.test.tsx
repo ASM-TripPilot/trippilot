@@ -146,15 +146,13 @@ describe('c02-social-login — 기본 화면 (AC-ONB-01-12 · §10 이메일 버
 });
 
 describe('c02-social-login — 취소 안내 (AC-ONB-01-4)', () => {
-  it('phase=cancelled 이면 "로그인이 취소되었습니다" 토스트를 표시한다', () => {
+  it('phase=cancelled 이면 "로그인이 취소됐어요" 토스트를 표시한다', () => {
     renderScreen({ phase: 'cancelled' });
     const notice = screen.getByTestId('auth-login-cancel-notice');
     expect(notice).toBeOnTheScreen();
     // 문구는 안내 노드 '안'에서 찾는다 — 화면 전역으로 찾으면 문구만 버튼 위로 빠지고 빈 testID
     // 껍데기가 남는 회귀(5-b 경고-1 M1)를 놓친다(에러 배너 AC-V3 의 within 과 대칭).
-    expect(
-      within(notice).getByText('로그인이 취소되었습니다')
-    ).toBeOnTheScreen();
+    expect(within(notice).getByText('로그인이 취소됐어요')).toBeOnTheScreen();
   });
 });
 

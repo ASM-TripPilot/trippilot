@@ -82,11 +82,32 @@ export function buildPastTripCards(
     }));
 }
 
+/**
+ * 여행별 마킹 색(TRIP-1436 Q-159) — 칸 배경·날짜 글자·legend 점이 같은 인덱스를 쓴다. 클래스는 정적 문자열이어야
+ * Tailwind 가 읽는다. 색은 tailwind 토큰(raw hex 아님). 여행이 3개를 넘으면 순환한다.
+ */
+export const TRIP_COLORS = [
+  { cell: 'bg-primary-pale', text: 'text-primary-text', dot: 'bg-primary' },
+  {
+    cell: 'bg-presence-blue-bg',
+    text: 'text-ink',
+    dot: 'bg-presence-blue',
+  },
+  { cell: 'bg-success-bg', text: 'text-ink', dot: 'bg-success' },
+] as const;
+
+/** 범례 줄이 없는 마킹(일정 0일 여행 등)의 칸 — 어느 여행 색도 빌리지 않는 중립색(TRIP-1436 5-b 경고-1). */
+export const UNLISTED_COLOR = {
+  cell: 'bg-surface-strong',
+  text: 'text-body',
+} as const;
+
 /** 캘린더 아래 legend 한 줄 — 여행 하나, 또는 기간(시작·종료)이 같은 여행 2건 이상의 묶음. */
 export type LegendRow =
-  | ({ kind: 'trip' } & PastTripCardVM)
+  | ({ kind: 'trip'; colorIndex?: number } & PastTripCardVM)
   | {
       kind: 'group';
+      colorIndex?: number;
       /** `${startDate}_${endDate}` */
       key: string;
       /** 입력 순서 첫째 구성원의 제목. */
@@ -101,6 +122,8 @@ export interface MonthLegends {
   /** 묶음·정렬이 끝난 전체 줄. 보이는 줄 = 앞 `rows.length - hiddenCount`. */
   rows: LegendRow[];
   hiddenCount: number;
+  /** 마킹된 날(YYYY-MM-DD) → 그 날을 칠하는 여행 줄의 `colorIndex`. 줄이 없는 마킹(일정 없는 여행 등)은 키가 없다. */
+  dayColors?: Record<string, number>;
 }
 
 const LEGEND_VISIBLE_MAX = 3;
@@ -119,7 +142,7 @@ function legendCard(trip: Trip): PastTripCardVM {
 /**
  * TRIP-1084 · j07 legend. 이 달에 걸친 여행(마킹과 같은 기준) 중 `itineraryDayCount === 0`(일정 없는
  * 작성중)만 빼고 — 필드가 없는 값은 모르는 값이라 숨기지 않는다 — 기간이 같은 여행을 한 줄로 묶어
- * 시작일·종료일 내림차순으로 놓는다. 앞 3줄 뒤는 `hiddenCount`로 개수를 드러낸다(INV-4).
+ * 시작일·종료일 오름차순으로 놓는다(TRIP-1436 — 옛 TRIP-1084 는 내림차순). 줄마다 색 인덱스를 준다. 앞 3줄 뒤는 `hiddenCount`로 개수를 드러낸다(INV-4).
  */
 export function buildMonthLegends(
   trips: readonly (Trip | null)[] | null | undefined,
@@ -135,15 +158,26 @@ export function buildMonthLegends(
     else byPeriod.set(key, [trip]);
   }
 
-  // 키 'YYYY-MM-DD_YYYY-MM-DD'의 사전순 내림차순 = 시작일 내림차순 → 종료일 내림차순. 키는 유일하다.
+  // 키 'YYYY-MM-DD_YYYY-MM-DD'의 사전순 오름차순 = 시작일 오름차순 → 종료일 오름차순(달력을 읽는 순서, TRIP-1436 결정 4).
+  // 키는 유일하다. 줄 위치가 곧 색 인덱스다.
+  const dayColors: Record<string, number> = {};
   const rows = [...byPeriod.entries()]
-    .sort(([a], [b]) => (a < b ? 1 : -1))
-    .map(([key, members]): LegendRow => {
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([key, members], index): LegendRow => {
+      const colorIndex = index % TRIP_COLORS.length;
+      for (const member of members) {
+        for (const day of markedDaysOfMonth([member], yearMonth)) {
+          dayColors[day] = colorIndex;
+        }
+      }
       const [first] = members;
-      if (members.length === 1) return { kind: 'trip', ...legendCard(first) };
+      if (members.length === 1) {
+        return { kind: 'trip', colorIndex, ...legendCard(first) };
+      }
       const card = legendCard(first);
       return {
         kind: 'group',
+        colorIndex,
         key,
         representativeTitle: first.title,
         dateRangeLabel: card.dateRangeLabel,
@@ -155,6 +189,7 @@ export function buildMonthLegends(
   return {
     rows,
     hiddenCount: Math.max(0, rows.length - LEGEND_VISIBLE_MAX),
+    dayColors,
   };
 }
 

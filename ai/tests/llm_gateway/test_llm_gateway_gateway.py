@@ -320,6 +320,10 @@ _EXPECTED_MODES = {
     LlmFeature.DIALOGUE_INTENT: ("llm_dialogue_intent", "out_of_scope"),
     LlmFeature.DIALOGUE_ANSWER: ("llm_dialogue_answer", "template_text"),
     LlmFeature.DIALOGUE_MEMORY: ("llm_dialogue_memory", "deterministic_compress"),
+    # 범위 밖 질문의 도구 계획(2‴) — 실패·시한 부족이면 종전 범위 밖(BE SCOPE 카드)으로 수렴
+    LlmFeature.DIALOGUE_PLAN: ("llm_dialogue_plan", "out_of_scope"),
+    # 장소 탐색 NL2SQL — 실패·검사 탈락이면 종전 반경 탐색
+    LlmFeature.DIALOGUE_SQL: ("llm_dialogue_sql", "explore_radius"),
 }
 
 

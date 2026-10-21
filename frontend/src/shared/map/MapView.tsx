@@ -137,6 +137,9 @@ export interface MapViewProps {
    * 기본 0) 핀은 경로가 닿는 순서로 나타난다. 동작 줄이기면 곧장 완성 경로·전체 핀. 실제 경로(`actualRoute`)가
    * 켜진 지도의 계획 연결선과 핀 1개 이하 지도엔 걸리지 않는다. `true` 는 기본값. */
   drawPathOnMount?: boolean | { durationMs?: number; delayMs?: number };
+  /** TRIP-1522 · 네이버 로고(출처 표기) 여백(pt) — 화면 아래에 떠 있는 바가 로고를 가리지 않게 올린다. **옵트인** — 미전달이면
+   * prop 을 아예 달지 않아 SDK 기본 위치(좌하단)를 그대로 쓴다. 렌더마다 새 객체를 넘기지 않는다(memo). */
+  logoMargin?: { top?: number; right?: number; bottom?: number; left?: number };
 }
 
 /** 네이버 초기 줌. ponytail: 카카오 기본 level 3 에 대응하는 대략값, 정확 캘리브레이션은 실기(6-b). */
@@ -263,7 +266,7 @@ function PinTeardrop({
   );
 }
 
-/** stay 마커 몸통 — 아래로 뾰족한 라운드 사각(Figma 1557:1738 침대 마커). 좌표는 아래 꼭짓점(17,39). */
+/** stay 마커 몸통 — 아래로 뾰족한 라운드 사각(Figma 5000:3227 침대 마커). 좌표는 아래 꼭짓점(17,39). */
 const STAY_PIN =
   'M11 2 H23 A9 9 0 0 1 32 11 V21 A9 9 0 0 1 23 30 H21 L17 39 L13 30 H11 A9 9 0 0 1 2 21 V11 A9 9 0 0 1 11 2 Z';
 
@@ -510,6 +513,7 @@ function MapViewImpl({
   fitPins,
   fitBand,
   drawPathOnMount,
+  logoMargin,
 }: MapViewProps): ReactElement {
   // 네이티브 SDK 는 런타임 키를 config plugin 에서 받으므로, 이 env 판정은 "설정 누락 표면"용이다
   // (키가 없으면 회색 빈 지도 대신 안내 화면을 띄운다). 참조는 이 한 곳뿐(A-2 계승).
@@ -627,6 +631,7 @@ function MapViewImpl({
         // 저절로 뜨므로, 미전달을 `=== true` 로 눌러 명시적 false 로 "기본 미표시"를 지킨다.
         isShowZoomControls={showZoomControls === true}
         isShowScaleBar={showScaleBar === true}
+        {...(logoMargin !== undefined ? { logoMargin } : {})}
         {...(maxLevel !== undefined
           ? { minZoom: kakaoMaxLevelToNaverMinZoom(maxLevel) }
           : {})}

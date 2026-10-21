@@ -1,5 +1,5 @@
 /**
- * 푸시 알림 사전 안내 카드 (TRIP-1108 · Figma 4774:2960 c08-push · US-NOTIF-02·03·05).
+ * 푸시 알림 사전 안내 카드 (TRIP-1108 · Figma 4976:3306 c08-push · US-NOTIF-02·03·05).
  *
  * 온보딩 위치 카드 바로 뒤에 나오는 짝 화면이라 하단 바·버튼·히어로 틀을 위치 카드(LocationPreprompt)
  * 코드와 글자까지 같게 둔다(R5 — Figma 원값 h54·pb26 등이 아니라 선례를 따른다).
@@ -27,18 +27,23 @@ export function PushPreprompt({ onProceed }: PushPrepromptProps): ReactElement {
           </Text>
           <Text
             testID="onboarding-push-purpose"
+            lineBreakStrategyIOS="hangul-word"
             className="font-noto text-body text-muted"
           >
             {
               '일정 시작 전 리마인드와 여행 중 날씨·휴무 변화를\n푸시로 알려 드려요'
             }
           </Text>
-          <Text className="font-noto text-label text-muted-soft">
+          <Text
+            className="font-noto text-label text-muted-soft"
+            lineBreakStrategyIOS="hangul-word"
+          >
             알림은 언제든 설정에서 끌 수 있어요
           </Text>
         </View>
 
-        <View className="gap-sm border-t border-hairline px-2xl pb-2xl pt-lg">
+        <View className="gap-sm px-2xl pb-2xl pt-lg">
+          <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
           <Pressable
             testID="onboarding-push-allow"
             onPress={onProceed}

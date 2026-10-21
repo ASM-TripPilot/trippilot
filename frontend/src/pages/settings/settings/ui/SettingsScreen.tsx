@@ -221,13 +221,7 @@ export function SettingsScreen({
               <RowBody
                 rowKey="delete-account"
                 label="계정 삭제"
-                right={
-                  <View className="rounded-[8px] bg-ink px-[10px] py-xs">
-                    <Text className="font-noto-bold text-micro text-canvas">
-                      위험
-                    </Text>
-                  </View>
-                }
+                // '위험' 배지는 뺐다 — 바로 위 섹션 제목 '위험 영역' 과 중복(TRIP-1440 Q-127).
               />
             </Pressable>
             {deleteRequestError ? (
@@ -247,7 +241,8 @@ export function SettingsScreen({
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
-      <View className="flex-row items-center gap-sm border-b border-hairline px-lg pb-md pt-sm">
+      <View className="flex-row items-center gap-sm px-lg pb-md pt-sm">
+        <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
         <Pressable
           testID="settings-back"
           accessibilityRole="button"

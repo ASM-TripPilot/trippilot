@@ -284,3 +284,64 @@ describe('PrefStep1Page — skip-top 온보딩 완료 (TRIP-1421 AC3 · AC4 · A
     expect(mockCompleteOnboarding).toHaveBeenCalledTimes(1);
   });
 });
+
+// TRIP-1500 — 03b(TRIP-1421) 경고: 게이트 대기 줄과 [다음] 잠금 줄은 지워도 전체가 green 이었다(심판 부재).
+describe('PrefStep1Page — skip-top 은 게이트가 HOME 을 연 뒤에만 이동한다 (TRIP-1500 AC3)', () => {
+  it('완료가 성공해도 게이트 목적지가 아직 ONBOARDING 이면 홈으로 보내지 않고, HOME 이 되는 순간 보낸다', async () => {
+    // 준비 — 재평가 신호가 게이트를 바로 안 바꾸게 한다(부트스트랩 재조회가 아직 진행 중인 순간).
+    mockNotifyReeval.mockImplementation(() => {});
+    render(<PrefStep1Page />);
+
+    // 실행 ① — skip-top 탭 → 완료 성공(재평가 신호 1회)까지 흘려보내고 한 바퀴 더 돈다.
+    fireEvent.press(screen.getByTestId('onboarding-pref1-skip-top'));
+    await waitFor(() => expect(mockNotifyReeval).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // 단언 ① — 목적지가 ONBOARDING 인 동안 '/'로 보내면 온보딩 index 로 떨어진다.
+    expect(routerMock.replace).not.toHaveBeenCalled();
+
+    // 실행 ② — 게이트가 HOME 을 공개한다.
+    act(() => {
+      publishGateDestination('HOME');
+    });
+
+    // 단언 ② — 그제야 홈으로 정확히 한 번.
+    await waitFor(() => expect(routerMock.replace.mock.calls).toEqual([['/']]));
+  });
+});
+
+describe('PrefStep1Page — skip-top 응답 대기 중 [다음] 잠금 (TRIP-1500 AC4)', () => {
+  it('완료 응답을 기다리는 동안 [다음]을 눌러도 2/2 로 push 하지 않는다', async () => {
+    // 준비 — 완료 응답을 붙잡아 둔다.
+    let resolveComplete!: () => void;
+    mockCompleteOnboarding.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveComplete = resolve;
+      })
+    );
+    render(<PrefStep1Page />);
+
+    // 실행 ① — skip-top 탭 → 한 바퀴 → 연타 창을 닫고(400ms 창이 아니라 "응답 대기 잠금"만 시험) [다음] 탭.
+    fireEvent.press(screen.getByTestId('onboarding-pref1-skip-top'));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    resetPressGuard();
+    fireEvent.press(screen.getByTestId('onboarding-pref1-next'));
+
+    // 단언 ① — 앵커: skip-top 이 실제로 대기 상태를 만들었다(완료 1회). 그런데도 push 0.
+    expect(mockCompleteOnboarding).toHaveBeenCalledTimes(1);
+    expect(routerMock.push).not.toHaveBeenCalled();
+
+    // 실행 ② — 완료 성공.
+    await act(async () => {
+      resolveComplete();
+    });
+
+    // 단언 ② — 홈 이동 1회, push 는 끝까지 0.
+    await waitFor(() => expect(routerMock.replace.mock.calls).toEqual([['/']]));
+    expect(routerMock.push).not.toHaveBeenCalled();
+  });
+});

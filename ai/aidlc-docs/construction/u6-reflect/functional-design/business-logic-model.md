@@ -89,6 +89,8 @@ LlmPort 직접 import 금지(L-3) 전부 기존 아키텍처 테스트가 자동
                    교체 **뒤**여야 교체가 만든 안전 문구(`{poi:k.name}에서의 기억`)까지 채운다. 못 채우는 토큰
                    (`{distance_km}`·사진 0장의 `{photo_count}`·빈 이름)이 남은 문구는 안전 문구로 바꾼다.
                    자리표시자뿐인 부제만 그대로 — FE 의 "서술 없음" 신호 (계약 §2 개정 2026-10-19 · `composer.bind_placeholders`)
+                   토큰 바로 뒤 조사(은/는·이/가·을/를·과/와·으로/로)는 채운 값의 받침에 맞춘다 — LLM 은 값을 못 본 채
+                   조사를 붙여 "아쿠아플라넷 제주과" 가 나왔다 (2026-10-20 실측 · `composer.fit_josa`)
 ⑥ 봉투 조립        ReflectionTemplate(is_fallback=False) — 3회 전부 파싱 실패 시 fallback.py 고정 템플릿
                    (is_fallback=True) + FallbackEvent (INV-4 — 서버 숫자는 항상 참이므로 폴백도 거짓 없는 결과물).
                    폴백도 ⑤′ 바인딩을 지난다 — 안 그러면 `{region}에서 우리가 지나온 길` 이 화면에 그대로 나간다

@@ -180,6 +180,15 @@ describe('AC-1b · 인기 여행지 가로 스트립 (TRIP-650)', () => {
     expect(screen.getByText('미추홀구')).toBeOnTheScreen();
   });
 
+  it('TRIP-1436 Q-138 — 인기 카드마다 버튼 역할과 그 카드 글자(시·도 이름 시작)의 라벨이 있다', () => {
+    render(<RegionPickerScreen {...props({ query: '' })} />);
+
+    const card = screen.getByTestId('explore-region-popular-28');
+
+    expect(card.props.accessibilityRole).toBe('button');
+    expect(card.props.accessibilityLabel).toMatch(/^인천광역시/);
+  });
+
   it('TRIP-707 — 첫 카드에 인기 배지가 붙고, 태그라인(로컬 카탈로그)이 뜬다', () => {
     render(<RegionPickerScreen {...props({ query: '' })} />);
 
@@ -248,13 +257,18 @@ describe('AC-2 · 드릴다운 진입/복귀 + 상세 뒤로 ≠ 앱바 뒤로',
     expect(onBack).not.toHaveBeenCalled();
   });
 
-  it('앱바 뒤로(explore-region-back)는 상세에서도 라우터 back(onBack)을 부른다 (★3 분리 짝)', () => {
+  it('앱바 뒤로(explore-region-back)는 상세에서는 1단으로 복귀하고, 1단에서만 라우터 back(onBack)을 부른다 (TRIP-1436 Q-138)', () => {
     const onBack = jest.fn();
     render(<RegionPickerScreen {...props({ query: '', onBack })} />);
 
     fireEvent.press(screen.getByTestId('explore-region-sido-28')); // 드릴인
-    fireEvent.press(screen.getByTestId('explore-region-back')); // 앱바 뒤로
+    fireEvent.press(screen.getByTestId('explore-region-back')); // 앱바 뒤로 — 상세 → 1단
 
+    expect(screen.getByTestId('explore-region-sido-28')).toBeTruthy();
+    expect(screen.queryByTestId('explore-region-28177')).toBeNull();
+    expect(onBack).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('explore-region-back')); // 1단 — 피커 이탈
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 });

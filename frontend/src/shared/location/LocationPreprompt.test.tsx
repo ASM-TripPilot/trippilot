@@ -109,7 +109,7 @@ describe('LocationPreprompt — 권한 거부 상태 (AC D3)', () => {
 });
 
 /**
- * 비주얼 구조 가드 — 옛 LocationPreprompt.visual.test.tsx (c08-location 전체화면 1296:1208 / 1297:1208 ·
+ * 비주얼 구조 가드 — 옛 LocationPreprompt.visual.test.tsx (c08-location 전체화면 4975:3306 / 4973:3306 ·
  * Seed 확정 1·5 · TRIP-162·717·935).
  *
  * 문구 일반 규칙: testID 만 단언돼 온 지점(allow·later 버튼)은 Figma 문구를 채택하되 TRIP-935 AC-7(R8)로

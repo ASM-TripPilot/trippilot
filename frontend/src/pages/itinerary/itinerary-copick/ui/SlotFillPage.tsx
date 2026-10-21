@@ -250,7 +250,7 @@ export function SlotFillPage({
     const currentSlot = ctx.nonFixed[ctx.index];
     const prev: CoPickStep = {
       title: prevSlot.nameKo ?? '',
-      status: '고름',
+      status: '선택함',
       done: true,
     };
     const current: CoPickStep = {

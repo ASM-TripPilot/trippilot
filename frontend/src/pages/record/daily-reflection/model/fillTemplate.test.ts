@@ -35,10 +35,8 @@ describe('fillTemplate', () => {
     expect(out).toBe('부산');
   });
 
-  it('모르는 자리표시자({poi:1.name})도 지운다', () => {
-    expect(fillTemplate('오늘 {poi:1.name} 다녀왔어요', ctx)).toBe(
-      '오늘 다녀왔어요'
-    );
+  it('채울 수 없는 자리표시자({poi:1.name})가 낀 문장은 통째로 뺀다 — "오늘 다녀왔어요" 같은 깨진 문장을 만들지 않는다 (TRIP-1497)', () => {
+    expect(fillTemplate('오늘 {poi:1.name} 다녀왔어요', ctx)).toBe('');
   });
 
   it('템플릿이 없으면 문장을 그대로 둔다', () => {
@@ -155,6 +153,98 @@ describe('fillTemplate — 시작과 끝이 같은 날이면 한 번만', () => 
         expect(out.split(day).length - 1).toBe(1);
         expect(out).not.toContain(`${day}~${day}`);
       })
+    );
+  });
+});
+
+// TRIP-1497 · 통계 자리표시자 — 값이 있으면 채우고, 없으면 그 문장을 뺀다(깨진 문장 금지, BR-U5-31: 쓰는 값은 기록된 stats 에서만).
+describe('fillTemplate · 통계 자리표시자 (TRIP-1497)', () => {
+  const stats = { visitCount: 3, distanceKm: 4.2, photoCount: 2 };
+
+  it('F1 방문 수·거리·사진 수를 stats 값으로 채운다', () => {
+    expect(
+      fillTemplate(
+        '{visit_count}곳 · {distance_km}km · 사진 {photo_count}장',
+        stats
+      )
+    ).toBe('3곳 · 4.2km · 사진 2장');
+  });
+
+  it('F2 거리 값이 없으면 그 문장만 빠지고 나머지 문장은 남는다', () => {
+    expect(
+      fillTemplate(
+        '광안리에서 시작했어요. 오늘 {distance_km}km 걸었어요. 좋았어요.',
+        {
+          visitCount: 3,
+        }
+      )
+    ).toBe('광안리에서 시작했어요. 좋았어요.');
+  });
+
+  it('F3 문장 하나뿐인데 채울 값이 없으면 빈 문자열이다(화면이 stats 문장으로 폴백)', () => {
+    expect(fillTemplate('{visit_count}곳을 다녀왔어요', {})).toBe('');
+  });
+
+  it('F4 region·날짜는 종전대로 — 값이 없어도 문장을 빼지 않고 자리표시자만 걷는다', () => {
+    expect(fillTemplate('{region}에서 보낸 하루', {})).toBe('에서 보낸 하루');
+  });
+
+  it('F6 소수점·시각의 점에서 문장을 자르지 않는다 — 자리표시자가 앞 조각에만 있어도 뒤 조각이 남지 않는다', () => {
+    expect(
+      fillTemplate('오늘은 약 {distance_km}km, 하루 평균 3.5km 걸었어요.', {})
+    ).toBe('');
+    expect(fillTemplate('오전 9.30에 {poi:1.name} 도착, 즐거웠어요.', {})).toBe(
+      ''
+    );
+  });
+
+  it('F7 가운뎃점으로 이은 캡션은 못 채우는 조각만 빠진다 — 알려진 값은 남는다', () => {
+    expect(
+      fillTemplate('{visit_count}곳 · {distance_km}km · 사진 {photo_count}장', {
+        visitCount: 3,
+        photoCount: 2,
+      })
+    ).toBe('3곳 · 사진 2장');
+  });
+
+  it('F8 거리는 소수 첫째 자리로 반올림한다', () => {
+    expect(
+      fillTemplate('{distance_km}km 걸었어요', { distanceKm: 4.2345 })
+    ).toBe('4.2km 걸었어요');
+  });
+
+  it('F9 {constructor} 같은 객체 기본 키도 모르는 자리표시자다 — 함수 문자열이 본문에 찍히지 않는다', () => {
+    expect(fillTemplate('좋았어요. {constructor} 최고', {})).toBe('좋았어요.');
+  });
+
+  it('F5 어떤 자리표시자·값이든 결과에 중괄호가 남지 않는다 (PBT)', () => {
+    const key = fc.constantFrom(
+      'region',
+      'start_date',
+      'end_date',
+      'visit_count',
+      'distance_km',
+      'photo_count',
+      'poi:1.name',
+      'x'
+    );
+    const word = fc.constantFrom(
+      '바다',
+      '오늘',
+      '곳을',
+      '걸었어요.',
+      '좋았다.'
+    );
+    fc.assert(
+      fc.property(
+        fc.array(fc.tuple(word, key), { minLength: 1, maxLength: 4 }),
+        fc.option(fc.integer({ min: 0, max: 99 }), { nil: undefined }),
+        (parts, n) => {
+          const text = parts.map(([w, k]) => `${w} {${k}}`).join(' ');
+          const out = fillTemplate(text, { visitCount: n, photoCount: n });
+          expect(out).not.toMatch(/[{}]/);
+        }
+      )
     );
   });
 });

@@ -172,12 +172,14 @@ export function MyTripsListPage(): ReactElement {
   // 정렬 시트가 열려 있는 동안 하단 탭바를 숨긴다(TRIP-1240) — 탭바는 탭 레이아웃이 그리는 absolute 오버레이라
   // 씬 안의 시트 아래쪽('이름순')을 가렸다. 탭 레이아웃 어댑터가 이 옵션을 읽어 탭바를 안 그린다. 닫히거나
   // 화면이 사라지면 되돌린다(`tabBarStyle: undefined` — 탭 레이아웃은 display 가 'none' 일 때만 숨기므로 이 값이면 보인다).
+  // TRIP-1508 — 삭제 확인창이 떠 있는 동안도 같다: 딤이 탭바를 못 덮어 탭바가 밝게 남고 눌리기까지 했다.
   const { setOptions } = useNavigation();
+  const hideTabBar = sortOpen || deleteTargetId !== null;
   useEffect(() => {
-    if (!sortOpen) return undefined;
+    if (!hideTabBar) return undefined;
     setOptions({ tabBarStyle: { display: 'none' } });
     return () => setOptions({ tabBarStyle: undefined });
-  }, [sortOpen, setOptions]);
+  }, [hideTabBar, setOptions]);
   const sortPickedRef = useRef(false);
 
   useEffect(() => {

@@ -155,7 +155,7 @@ const GRANTED = {
 } as const;
 // 사용자 가시 카피 = 계약(brief §화면·IO 실측). MANUAL_NOTICE 는 법 문구 "(좌표 자동기록 비활성)" 을 담는다.
 const MANUAL_NOTICE =
-  '수동 체크인 · 방문한 곳을 직접 선택해 기록하세요 (좌표 자동기록 비활성)';
+  '수동 체크인 · 방문한 곳을 직접 선택해 기록해요 (좌표 자동기록 비활성)';
 const hitCount = (needle: string) =>
   observedHits.filter((hit) => hit === needle).length;
 const mockPick = jest.fn();
@@ -2906,6 +2906,36 @@ describe('메모 저장 실패 안내·세션 캐시 시드', () => {
         expect(memoBodies).toContainEqual({ text: '다른 글' })
       );
       expect(memoBodies).toEqual([{ text: '다른 글' }]);
+    });
+
+    it('J9 심은 글을 안 고친 채 재조회가 다른 기기 글을 가져온 뒤 blur 해도 PUT 0회다 (TRIP-1492)', async () => {
+      // 준비 — 1차 '서버 글', 재조회부터 '다른 기기 글'.
+      recordsReply = (call) =>
+        recordsOf([
+          actualVisit('v-in', call === 1 ? '서버 글' : '다른 기기 글'),
+        ]);
+      const client = newClient();
+      renderPage(client);
+      await waitFor(() => expect(valueOf()).toBe('서버 글'));
+      await memoInput();
+      await act(async () => {
+        void client.invalidateQueries();
+      });
+      await waitFor(() =>
+        expect(hitCount(RECORDS_GET)).toBeGreaterThanOrEqual(2)
+      );
+      await flushNotifications();
+
+      // 실행 — 손대지 않고 blur → 고쳐서 blur(센티널).
+      fireEvent(field(), 'blur');
+      fireEvent.changeText(field(), '고친 글');
+      fireEvent(field(), 'blur');
+
+      // 단언 — 센티널만 나갔다.
+      await waitFor(() =>
+        expect(memoBodies).toContainEqual({ text: '고친 글' })
+      );
+      expect(memoBodies).toEqual([{ text: '고친 글' }]);
     });
 
     it.each<[string, number]>([

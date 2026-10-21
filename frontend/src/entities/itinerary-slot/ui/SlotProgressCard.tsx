@@ -26,7 +26,7 @@ import {
  *  - done     = 이름 › + 우측 실제 방문 시각 "09:30" + "방문"(TRIP-1220 — 실제 시각이 없으면 계획 시각 + "계획") / 사진 N장 / 후기. 사진·후기가 없으면 그 칸을
  *               통째로 안 그린다(G6 — 실앱은 조회 계약이 없어 늘 없다). 사진·메모 콜백을 받으면 active 와 같은
  *               [사진]·[메모]와 안내 줄(TRIP-1203 — testID 는 `execution-live-slot-done-*-{slotKey}`).
- *  - active   = 상태줄 "13:00 도착 · 지금 관람 중"(시각 = 실제 도착 `visitedLabel`, TRIP-1419 — 없으면 "지금 관람 중")
+ *  - active   = 상태줄 "13:00 도착 · 지금 방문 중"(시각 = 실제 도착 `visitedLabel`, TRIP-1419 — 없으면 "지금 방문 중")
  *               + [방문 완료]·[사진]·[메모] + (있으면) 메모 박스(TRIP-1117).
  *               [사진]은 `onPressPhoto`, [메모]는 `onPressMemo` 를 부른다(TRIP-1070). 받지 않은 버튼은
  *               그리지 않는다(TRIP-939 — 심사 2.1). 사진 안내 한 줄(`photoNotice`)의 상태는 부모가 쥔다.
@@ -63,7 +63,7 @@ export interface SlotProgressCardProps {
   photos?: ImageSourcePropType[];
   /**
    * done·active — 실제 도착 시각 'HH:mm'(KST, 기록 j01 과 같은 값). done 은 없으면 계획 시각 + "계획"(TRIP-1220),
-   * active 는 없으면 시각 없이 "지금 관람 중"(TRIP-1419). upcoming 은 무시한다(계획값만, BR-U4-34).
+   * active 는 없으면 시각 없이 "지금 방문 중"(TRIP-1419). upcoming 은 무시한다(계획값만, BR-U4-34).
    */
   visitedLabel?: string | null;
   /** done·active(TRIP-1117). null/미전달이면 메모 박스를 안 그린다. */
@@ -341,8 +341,8 @@ export function SlotProgressCard({
           className="font-noto text-caption text-muted"
         >
           {visitedLabel
-            ? `${visitedLabel} 도착 · 지금 관람 중`
-            : '지금 관람 중'}
+            ? `${visitedLabel} 도착 · 지금 방문 중`
+            : '지금 방문 중'}
         </Text>
         <View className="flex-row flex-wrap items-center gap-sm">
           <Pressable

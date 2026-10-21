@@ -103,8 +103,8 @@ def test_max_tokens_per_feature_reaches_vendor(feature: LlmFeature) -> None:
     expected = {
         LlmFeature.EXPLANATION: 4096,
         LlmFeature.ALTERNATIVE_EXPLANATION: 4096,
-        # 실측 출력 950~1016 토큰 — 1024 에 붙어 잘림 1회가 재시도 → 504 로 번졌다
-        LlmFeature.REFLECTION_TEMPLATE: 2048,
+        # 여행 요약 실측 출력 1639~1935 토큰 — 2048 에서 10회 중 4회 잘림(2026-10-20)
+        LlmFeature.REFLECTION_TEMPLATE: 4096,
         # fable(사고 토큰도 상한 안) 실측 출력 1000~1024 — 1024 에서 잘림
         LlmFeature.SHARE_CARD_COPY: 2048,
         # 다시 짜기 하루 구성 — 고른 곳 ≤ 8건 × 이유 + fable 사고 토큰
@@ -114,6 +114,8 @@ def test_max_tokens_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         LlmFeature.DIALOGUE_INTENT: 1024,  # DEV 실측 출력 239/256 — 사고 토큰이 상한에 붙었다
         LlmFeature.DIALOGUE_ANSWER: 512,
         LlmFeature.DIALOGUE_MEMORY: 2048,
+        LlmFeature.DIALOGUE_PLAN: 1024,  # 분류와 같은 근거 — JSON 한 줄 + 사고 토큰(출력 239/256 실측)
+        LlmFeature.DIALOGUE_SQL: 512,  # SELECT 한 문장 JSON, 사고 끔
     }.get(feature, 1024)
     assert [r.max_tokens for r in llm.requests] == [expected]
 
@@ -149,6 +151,8 @@ def test_effort_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         LlmFeature.DIALOGUE_INTENT: "low",
         LlmFeature.DIALOGUE_ANSWER: "low",
         LlmFeature.DIALOGUE_MEMORY: "low",
+        LlmFeature.DIALOGUE_PLAN: "none",  # 같은 9s 안의 2‴ 계획(≤3.0s) — 사고 없이 더 빠르고 품질이 같거나 낫다(2026-10-20 실측)
+        LlmFeature.DIALOGUE_SQL: "none",  # 팬아웃 안(≤3s)의 짧은 변환
     }.get(feature)
     assert [r.effort for r in llm.requests] == [expected]
 

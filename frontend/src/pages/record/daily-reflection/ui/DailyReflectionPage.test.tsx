@@ -324,6 +324,27 @@ describe('얼굴 — 레코드 없음 ≠ 활동 없음, 생성 조건', () => {
       ).toBe('제주에서 보낸 2026-09-25');
     });
 
+    it('{visit_count}·{photo_count} 는 기록된 stats 로 채우고, 채울 수 없는 {poi:…} 문장은 빠진다 — 깨진 문장 없음 (TRIP-1497)', () => {
+      arrange({
+        reflection: record(
+          { visitCount: 3, photoCount: 2 },
+          {
+            card: card(
+              '오늘 {visit_count}곳을 다녀왔어요. {poi:1.name}에서 사진 {photo_count}장을 남겼어요.'
+            ),
+          }
+        ),
+      });
+      tripWith({});
+
+      render(page(PAST_TODAY));
+
+      const body = screen.getByTestId('reflection-daily-narrative');
+      expect(body).toHaveTextContent('오늘 3곳을 다녀왔어요.');
+      expect(body).not.toHaveTextContent(/[{}]/);
+      expect(body).not.toHaveTextContent('남겼어요');
+    });
+
     it('섞인 문장의 {start_date}~{end_date} 는 그날 날짜 한 번이다 (AC-4)', () => {
       arrange({
         reflection: record(

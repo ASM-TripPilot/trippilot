@@ -17,6 +17,15 @@ export interface UseNotificationInboxResult {
   items: Notification[];
   isLoading: boolean;
   isError: boolean;
+  /**
+   * 목록을 한 번도 못 받았고 실패했다 — 오류 얼굴 판정. `isError` 만으로는 안 된다: v5 는 재조회가 실패해도
+   * 옛 data 를 남기고(목록을 오류로 덮으면 안 됨), data 없는 쿼리의 [다시 시도] 가 시작되면 status 를
+   * pending 으로 되돌려 `isError` 가 꺼지므로 실패 이력(errorUpdateCount)을 함께 본다.
+   */
+  loadFailed: boolean;
+  /** 다시 시도 진행 중(재조회 요청 중). */
+  isFetching: boolean;
+  refetch: () => unknown;
   /** 미읽음 전부 읽음 처리(`POST /me/notifications/read-all` 1회). 실패하면 false. */
   markAllRead: () => Promise<boolean>;
   /** 알림 1건 읽음(`POST /me/notifications/{id}/read`). 응답이 끝나면 성공·실패 무관 재조회. */
@@ -63,6 +72,10 @@ export function useNotificationInbox(): UseNotificationInboxResult {
     items,
     isLoading: query.isLoading,
     isError: query.isError,
+    loadFailed:
+      query.data === undefined && (query.isError || query.errorUpdateCount > 0),
+    isFetching: query.isFetching,
+    refetch: query.refetch,
     markAllRead,
     markRead,
   };

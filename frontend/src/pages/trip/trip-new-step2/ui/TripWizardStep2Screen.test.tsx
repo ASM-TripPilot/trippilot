@@ -171,7 +171,7 @@ describe('박별 거점 카드 (AC-2)', () => {
 
     // 카드1 — 배정된 밤. 각 필드를 RegExp(부분 포함)로 잰다(카드 전체 텍스트가 이어붙으므로).
     const card1 = screen.getByTestId('trip-base-night-card-1');
-    expect(card1).toHaveTextContent(/1박/);
+    expect(card1).toHaveTextContent(/1번째 밤/);
     expect(card1).toHaveTextContent(/6\/10\(수\)/);
     expect(card1).toHaveTextContent(/부산/);
     expect(card1).toHaveTextContent(/해운대 오션 호텔/);
@@ -183,7 +183,7 @@ describe('박별 거점 카드 (AC-2)', () => {
     renderScreen();
 
     const card3 = screen.getByTestId('trip-base-night-card-3');
-    expect(card3).toHaveTextContent(/3박/);
+    expect(card3).toHaveTextContent(/3번째 밤/);
     expect(card3).toHaveTextContent(/6\/12\(금\)/);
     expect(card3).toHaveTextContent(/경주/);
     expect(card3).toHaveTextContent(/숙소 미정/);
@@ -210,6 +210,21 @@ describe('하단 CTA 2종 (AC-5) — 게이트 없이 둘 다 활성', () => {
     fireEvent.press(generate);
 
     expect(props.onGenerate).toHaveBeenCalledTimes(1);
+  });
+
+  it('TRIP-1439 Q-139 · 배정한 밤이 하나라도 있으면 "이 거점으로 일정 만들기", 하나도 없으면 "일정 만들기"다', () => {
+    renderScreen();
+    expect(screen.getByTestId('trip-base-generate')).toHaveTextContent(
+      '이 거점으로 일정 만들기'
+    );
+    screen.unmount();
+
+    renderScreen({
+      cards: CARDS.map(({ stayName: _stayName, ...rest }) => rest),
+    });
+    expect(screen.getByTestId('trip-base-generate')).toHaveTextContent(
+      /^일정 만들기$/
+    );
   });
 
   it('"숙소 없이 시작하기"가 활성이고 누르면 onNoStayStart 를 부른다', () => {
@@ -274,7 +289,7 @@ describe('empty 얼굴 (AC-1 · AC-3) — 저장 숙소 0', () => {
     // 박별 미정 행 3개 — 메타는 뜨되(부분 포함) "숙소 미정" 둘째 줄은 없다(chevron 만).
     expect(screen.getAllByTestId(/^trip-base-empty-night-/)).toHaveLength(3);
     const row1 = screen.getByTestId('trip-base-empty-night-1');
-    expect(row1).toHaveTextContent(/1박/);
+    expect(row1).toHaveTextContent(/1번째 밤/);
     expect(row1).toHaveTextContent(/부산/);
     expect(row1).not.toHaveTextContent(/숙소 미정/);
     // ★2 상호배타 — empty 는 default 카드(stayName 렌더)로 새지 않는다.
@@ -454,7 +469,7 @@ describe('단일 카드 컨테이너 구조 (AC-D1 · AC-E1 · AC-L1)', () => {
 
 /**
  * TRIP-1082 · g02 **거점 편집 얼굴**(Figma `4700:2688`, 결정 2 (a)) — `onDone` 이 있으면 편집 얼굴이다.
- * l04 '출발점 변경'으로 확정된 여행의 거점만 바꾸러 들어온 화면이라, 위저드 온램프(진행바·'2 / 4'·
+ * l04 '거점 변경'으로 확정된 여행의 거점만 바꾸러 들어온 화면이라, 위저드 온램프(진행바·'2 / 4'·
  * GuideRow)와 **누르면 일정이 안 만들어지는 거짓 라벨**('이 거점으로 일정 만들기'·'숙소 없이 시작하기/계속',
  * INV-4)을 전부 숨기고 하단에 [완료] 하나만 둔다. error 얼굴의 '숙소 없이 시작하기'도 같은 거짓 라벨이다.
  *

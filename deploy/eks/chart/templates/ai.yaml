@@ -83,6 +83,9 @@ spec:
                    (dialogue_memory, assistant-orchestrator FD DE §4) lives in ai_kb too, and
                    runtime_secrets.runtime_manifests synthesizes the value unconditionally. */}}
             {{- include "trippilot.secretEnv" (dict "env" "TRIPPILOT_VECTOR_DB_URL" "secret" "trippilot-ai") | nindent 12 }}
+            {{- /* Place lookup for the assistant (NL2SQL over app.poi_public). Optional: a secret synced before
+                   runtime_secrets synthesized it must not stop the pod; unset = the assistant keeps the radius pool. */}}
+            {{- include "trippilot.secretEnv" (dict "env" "TRIPPILOT_PLACE_DB_URL" "secret" "trippilot-ai" "optional" true) | nindent 12 }}
             {{- if .Values.embedding.enabled }}
             - name: TRIPPILOT_EMBEDDING_PROVIDER
               value: http

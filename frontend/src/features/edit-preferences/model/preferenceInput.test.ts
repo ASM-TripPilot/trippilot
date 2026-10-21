@@ -1,4 +1,4 @@
-import { toPreferenceInput } from './preferenceInput';
+import { isPreferenceDraftEmpty, toPreferenceInput } from './preferenceInput';
 
 /**
  * TRIP-471 — 온보딩 취향 slug → 서버 PreferenceInput 번역기.
@@ -58,16 +58,34 @@ describe('toPreferenceInput — 축별 slug→서버값 번역(TRIP-471)', () =>
     expect(result.petFlag).toBe(false);
   });
 
-  it('미선택 축은 null 로 남는다(서버: 미설정으로 초기화)', () => {
-    const result = toPreferenceInput(EMPTY);
-    expect(result.styles).toBeNull();
-    expect(result.pace).toBeNull();
-    expect(result.companionTypes).toBeNull();
-    expect(result.petFlag).toBe(false); // 동행 축 미선택이면 반려동물도 아님
+  it('미선택 축은 키가 없다(서버: 생략=변경 없음 — null 이면 저장분이 초기화된다, TRIP-1500 후속)', () => {
+    expect(toPreferenceInput(EMPTY)).toEqual({});
+    // 한 축만 골랐으면 그 축만 실린다 — petFlag 도 동행 축을 골랐을 때만.
+    expect(toPreferenceInput({ ...EMPTY, styles: ['rest'] })).toEqual({
+      styles: ['휴양'],
+    });
   });
 
   it('알 수 없는 slug 는 조용히 버린다(가비지 전송 방지)', () => {
     const result = toPreferenceInput({ ...EMPTY, styles: ['rest', 'bogus'] });
     expect(result.styles).toEqual(['휴양']);
+  });
+});
+
+// TRIP-1500 — 재진입 2/2 [완료]가 빈 스토어를 PUT 하면 서버에 저장된 취향이 null 로 지워진다 → 비어 있으면 PUT 을 건너뛴다.
+describe('isPreferenceDraftEmpty — 빈 스토어 판정 (TRIP-1500)', () => {
+  it('6축이 전부 null 이면 비어 있다', () => {
+    expect(isPreferenceDraftEmpty(EMPTY)).toBe(true);
+  });
+
+  it.each([
+    ['styles', { styles: ['rest'] }],
+    ['pace', { pace: 'relaxed' }],
+    ['companions', { companions: ['solo'] }],
+    ['foods', { foods: ['korean'] }],
+    ['transports', { transports: ['walk'] }],
+    ['activities', { activities: ['nature'] }],
+  ])('%s 한 축만 값이 있어도 비어 있지 않다', (_axis, picked) => {
+    expect(isPreferenceDraftEmpty({ ...EMPTY, ...picked })).toBe(false);
   });
 });
