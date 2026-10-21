@@ -80,7 +80,7 @@ class LiveReflectionRoundTripIT : AbstractPostgresIntegrationTest() {
                 personaSummary = "여행 스타일 자연·미식, 일정 느긋하게", weatherSummary = null,
                 events = listOf(
                     ReflectionEvent(ReflectionEvent.SKIPPED, day, "계획한 곳 중 1곳을 들르지 못했다"),
-                    ReflectionEvent(ReflectionEvent.PLAN_B, day, "자동 감지 · 비 예보"),
+                    ReflectionEvent(ReflectionEvent.PLAN_B, day, "상황 변화를 감지해 일정을 바꿨다"),
                 ),
             ),
         )

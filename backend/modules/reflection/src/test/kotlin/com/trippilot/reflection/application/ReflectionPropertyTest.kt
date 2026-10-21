@@ -175,8 +175,10 @@ class ReflectionPropertyTest : StringSpec({
             override fun append(command: com.trippilot.changelog.api.AppendChangeLog) = Unit
             override fun findTimeline(accountId: UUID, tripId: UUID, limit: Int) = emptyList<com.trippilot.changelog.api.ChangeLogEntryView>()
         },
-        org.springframework.transaction.support.TransactionOperations.withoutTransaction(),
     )
+
+    /** 단위 테스트에는 트랜잭션이 없다 — 쓰기 트랜잭션의 경계는 실 Postgres IT(`ReflectionMaterialsIsolationIT`)가 잰다. */
+    val noTx = org.springframework.transaction.support.TransactionOperations.withoutTransaction()
 
     /** 계측 대역 — 지표 자체를 재는 테스트만 자기 레지스트리를 따로 본다. */
     fun testMetrics() = ReflectionMetrics(io.micrometer.core.instrument.simple.SimpleMeterRegistry())
@@ -184,14 +186,14 @@ class ReflectionPropertyTest : StringSpec({
     fun service(visits: List<ArchiveVisitView>, coords: Map<UUID, Pair<Double, Double>>, events: Sink = Sink()) =
         ReflectionService(
             trips, archiveOf(visits), surfacesOf(coords), Reflections(),
-            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), events, testMetrics(), clock, noMaterials,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), events, testMetrics(), clock, noMaterials, noTx,
         )
 
     // ── 폴백 3단(BR-U5-32) ────────────────────────────────────────────
     "AI 카드가 나오면 그것을 쓰고 source 는 AI 다" {
         val svc = ReflectionService(
             trips, shownDay(), shownSurfaces, Reflections(),
-            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), CardAgent("AI 가 쓴 제목"), Sink(), testMetrics(), clock, noMaterials,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), CardAgent("AI 가 쓴 제목"), Sink(), testMetrics(), clock, noMaterials, noTx,
         )
 
         val r = svc.generateDaily(acc, tripId, day)
@@ -208,7 +210,7 @@ class ReflectionPropertyTest : StringSpec({
     "AI 가 null 을 주면 규칙 카드로 내려가고 source 는 AI 가 아니다" {
         val svc = ReflectionService(
             trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(),
-            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials, noTx,
         )
 
         val r = svc.generateDaily(acc, tripId, day)
@@ -228,7 +230,7 @@ class ReflectionPropertyTest : StringSpec({
         val agent = NoAgent()
         val svc = ReflectionService(
             trips, shownDay(), shownSurfaces, Reflections(),
-            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), agent, Sink(), testMetrics(), clock, noMaterials,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), agent, Sink(), testMetrics(), clock, noMaterials, noTx,
         )
 
         svc.generateDaily(acc, tripId, day)
@@ -246,7 +248,7 @@ class ReflectionPropertyTest : StringSpec({
     "AI 가 깨진 payload 를 주면 규칙 카드로 내려간다 — 요청을 죽이지 않는다" {
         val svc = ReflectionService(
             trips, shownDay(), shownSurfaces, Reflections(),
-            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), BrokenAgent(), Sink(), testMetrics(), clock, noMaterials,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), BrokenAgent(), Sink(), testMetrics(), clock, noMaterials, noTx,
         )
 
         val r = svc.generateDaily(acc, tripId, day)
@@ -258,7 +260,7 @@ class ReflectionPropertyTest : StringSpec({
     "AI 가 예외를 던져도 규칙 카드로 내려간다" {
         val svc = ReflectionService(
             trips, shownDay(), shownSurfaces, Reflections(),
-            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), ThrowingAgent(), Sink(), testMetrics(), clock, noMaterials,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), ThrowingAgent(), Sink(), testMetrics(), clock, noMaterials, noTx,
         )
 
         svc.generateDaily(acc, tripId, day).source shouldBe ReflectionSource.RULE
@@ -329,7 +331,7 @@ class ReflectionPropertyTest : StringSpec({
             ArchiveVisitView(UUID.randomUUID(), poi, Instant.parse("2026-08-11T03:00:00Z"), null, false, 1, false),
         )
         val repo = Reflections()
-        val svc = ReflectionService(trips, archiveOf(visits), surfacesOf(mapOf(poi to (33.4 to 126.5))), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials)
+        val svc = ReflectionService(trips, archiveOf(visits), surfacesOf(mapOf(poi to (33.4 to 126.5))), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials, noTx)
 
         svc.generateDaily(acc, tripId, day)
         svc.generateDaily(acc, tripId, day)
@@ -340,7 +342,7 @@ class ReflectionPropertyTest : StringSpec({
     // ── 초안·수정본 2열(INV-U5-06 · TRIP-553) ─────────────────────────
     "재생성이 사용자 수정본을 지우지 않는다 — 초안만 갈아끼운다" {
         val repo = Reflections()
-        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials)
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials, noTx)
         svc.generateDaily(acc, tripId, day)
         val edited = svc.edit(acc, tripId, day, userCard("내가 쓴 제목"))
 
@@ -355,7 +357,7 @@ class ReflectionPropertyTest : StringSpec({
 
     "수정해도 초안은 남는다 — 2열 비교의 왼쪽(INV-U5-06)" {
         val svc = ReflectionService(
-            trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(), ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials,
+            trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(), ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials, noTx,
         )
         val draft = svc.generateDaily(acc, tripId, day).draftCard.title
 
@@ -368,7 +370,7 @@ class ReflectionPropertyTest : StringSpec({
     "회고가 없어도 바로 쓸 수 있다 — 기본 카드 위에 얹는다(BR-U5-36)" {
         val repo = Reflections()
         val events = Sink()
-        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), events, testMetrics(), clock, noMaterials)
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), events, testMetrics(), clock, noMaterials, noTx)
 
         val written = svc.edit(acc, tripId, day, userCard("생성은 실패했지만 내가 쓴다"))
 
@@ -382,7 +384,7 @@ class ReflectionPropertyTest : StringSpec({
     // ── 기분·한 줄 메모(TRIP-828) ─────────────────────────────────────
     "기분·한 줄만 보내면 카드는 그대로다 — 다시 들어와도 남아 있다" {
         val repo = Reflections()
-        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials)
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials, noTx)
         svc.edit(acc, tripId, day, userCard("내가 쓴 제목"))
 
         svc.edit(acc, tripId, day, cardPayload = null, mood = "GOOD", shortMemo = "바람이 좋았다")
@@ -395,7 +397,7 @@ class ReflectionPropertyTest : StringSpec({
 
     "한쪽만 고치면 다른 쪽은 남고, 빈 문자열은 지운다 — null 과 빈 값을 뭉치면 메모 수정이 기분을 지운다" {
         val repo = Reflections()
-        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials)
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials, noTx)
         svc.edit(acc, tripId, day, null, "GOOD", "처음 메모")
 
         svc.edit(acc, tripId, day, null, null, "고친 메모").mood shouldBe "GOOD"
@@ -407,7 +409,7 @@ class ReflectionPropertyTest : StringSpec({
 
     "재생성이 기분·한 줄을 지우지 않는다 — 초안은 다시 만들 수 있지만 사용자가 쓴 것은 어디에도 없다" {
         val repo = Reflections()
-        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials)
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials, noTx)
         svc.edit(acc, tripId, day, null, "GOOD", "바람이 좋았다")
 
         val again = svc.generateDaily(acc, tripId, day)
@@ -418,7 +420,7 @@ class ReflectionPropertyTest : StringSpec({
 
     "한 줄은 60자까지다 — 이모지도 한 글자로 센다. 기분에는 문장을 못 넣는다" {
         val repo = Reflections()
-        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials)
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials, noTx)
 
         svc.edit(acc, tripId, day, null, null, "😀".repeat(60)).shortMemo shouldBe "😀".repeat(60)
         shouldThrow<ValidationFailed> { svc.edit(acc, tripId, day, null, null, "가".repeat(61)) }
@@ -428,7 +430,7 @@ class ReflectionPropertyTest : StringSpec({
 
     "한 줄에는 줄바꿈·제어 문자를 못 넣는다 — NUL 은 DB 가 거부해 500 이 된다. 앞뒤 공백은 세지 않는다" {
         val repo = Reflections()
-        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials)
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials, noTx)
 
         shouldThrow<ValidationFailed> { svc.edit(acc, tripId, day, null, null, "첫 줄\n둘째 줄") }
         shouldThrow<ValidationFailed> { svc.edit(acc, tripId, day, null, null, "널\u0000문자") }
@@ -441,7 +443,7 @@ class ReflectionPropertyTest : StringSpec({
 
     "아무것도 안 보내면 400 이다 — 조용히 200 이면 저장된 줄 안다" {
         val repo = Reflections()
-        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials)
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials, noTx)
 
         shouldThrow<ValidationFailed> { svc.edit(acc, tripId, day, null, null, null) }
         repo.stored.size shouldBe 0
@@ -449,7 +451,7 @@ class ReflectionPropertyTest : StringSpec({
 
     "여행 기간 밖 날짜는 거부한다 — 근거 데이터가 없는 날이다" {
         val svc = ReflectionService(
-            trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(), ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials,
+            trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(), ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials, noTx,
         )
 
         shouldThrow<ValidationFailed> { svc.generateDaily(acc, tripId, day.minusDays(1)) }
@@ -489,7 +491,7 @@ class ReflectionPropertyTest : StringSpec({
         val poi = UUID.randomUUID()
         fun gen(visits: List<ArchiveVisitView>, routeM: Int?) = ReflectionService(
             trips, archiveOf(visits, routeM), surfacesOf(mapOf(poi to (33.4 to 126.5))), Reflections(),
-            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials, noTx,
         ).generateDaily(acc, tripId, day).stats
 
         gen(listOf(visitOf(poi, false)), 4_200).let { (it.distanceKm to it.distanceSource) shouldBe (4.2 to DistanceSource.ROUTE) }
@@ -508,7 +510,7 @@ class ReflectionPropertyTest : StringSpec({
         }
         val stats = ReflectionService(
             trips, archive, surfacesOf(mapOf(poi to (33.4 to 126.5))), Reflections(),
-            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials, noTx,
         ).generateDaily(acc, tripId, day).stats
         (stats.distanceKm to stats.distanceSource) shouldBe (6.0 to DistanceSource.ROUTE)
     }
@@ -523,7 +525,7 @@ class ReflectionPropertyTest : StringSpec({
         }
         val svc = ReflectionService(
             trips, archive, surfacesOf(mapOf(poi to (33.4 to 126.5))), repo,
-            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock, noMaterials, noTx,
         )
 
         svc.refreshRouteStats(tripId, day)
@@ -548,7 +550,7 @@ class ReflectionPropertyTest : StringSpec({
             surfacesOf(coords), Reflections(),
             ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()),
             HallucinatingAgent("장소-${skippedPoi.toString().take(4)}"), Sink(),
-            ReflectionMetrics(registry), clock, noMaterials,
+            ReflectionMetrics(registry), clock, noMaterials, noTx,
         )
 
         val r = svc.generateDaily(acc, tripId, day)
@@ -576,7 +578,7 @@ class ReflectionPropertyTest : StringSpec({
                 skippedPoi to "카페", wentPoi to "카페 델문도",
             )),
             Reflections(), ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()),
-            HallucinatingAgent("카페 델문도"), Sink(), ReflectionMetrics(registry), clock, noMaterials,
+            HallucinatingAgent("카페 델문도"), Sink(), ReflectionMetrics(registry), clock, noMaterials, noTx,
         )
 
         val r = svc.generateDaily(acc, tripId, day)
@@ -590,7 +592,7 @@ class ReflectionPropertyTest : StringSpec({
         val svc = ReflectionService(
             trips, archiveOf(listOf(visitOf(went, skipped = false))), surfacesOf(mapOf(went to (33.4 to 126.5))),
             Reflections(), ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()),
-            HallucinatingAgent("장소-${went.toString().take(4)}"), Sink(), testMetrics(), clock, noMaterials,
+            HallucinatingAgent("장소-${went.toString().take(4)}"), Sink(), testMetrics(), clock, noMaterials, noTx,
         )
 
         svc.generateDaily(acc, tripId, day).source shouldBe ReflectionSource.AI
@@ -616,7 +618,7 @@ class ReflectionPropertyTest : StringSpec({
             val svc = ReflectionService(
                 trips, archiveOf(listOf(visitOf(skippedPoi, skipped = true), visitOf(went, skipped = false))),
                 surfacesOf(mapOf(skippedPoi to (33.5 to 126.6), went to (33.4 to 126.5))), Reflections(),
-                ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), agent, Sink(), testMetrics(), clock, noMaterials,
+                ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), agent, Sink(), testMetrics(), clock, noMaterials, noTx,
             )
 
             svc.generateDaily(acc, tripId, day).source shouldNotBe ReflectionSource.AI
@@ -637,7 +639,7 @@ class ReflectionPropertyTest : StringSpec({
         }
         val svc = ReflectionService(
             trips, shownDay(), shownSurfaces, repo,
-            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), agent, Sink(), testMetrics(), clock, noMaterials,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), agent, Sink(), testMetrics(), clock, noMaterials, noTx,
         )
 
         svc.edit(acc, tripId, day, cardPayload = null, mood = "GOOD")
@@ -658,7 +660,7 @@ class ReflectionPropertyTest : StringSpec({
         }
         fun serviceOver(repo: ReflectionRepository) = ReflectionService(
             trips, shownDay(), shownSurfaces, repo,
-            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), agent, Sink(), testMetrics(), clock, noMaterials,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), agent, Sink(), testMetrics(), clock, noMaterials, noTx,
         )
         val editUnreadable = object : ReflectionRepository by Reflections() {
             override fun find(tripId: UUID, dayDate: LocalDate): Reflection? =

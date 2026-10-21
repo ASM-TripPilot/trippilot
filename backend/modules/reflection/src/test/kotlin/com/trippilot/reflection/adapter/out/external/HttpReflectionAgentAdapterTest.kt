@@ -166,7 +166,7 @@ class HttpReflectionAgentAdapterTest : StringSpec({
             .andExpect(jsonPath("$.events[0].date").value("2026-08-01"))
             .andExpect(jsonPath("$.events[0].detail").value("계획한 곳 중 1곳을 들르지 못했다"))
             .andExpect(jsonPath("$.events[1].kind").value("PLAN_B"))
-            .andExpect(jsonPath("$.events[1].detail").value("자동 감지 · 비 예보"))
+            .andExpect(jsonPath("$.events[1].detail").value("상황 변화를 감지해 일정을 바꿨다"))
             .andExpect(jsonPath("$.persona_summary").value("여행 스타일 미식"))
             .andExpect(jsonPath("$.weather_summary").value(""))
             .andRespond(withSuccess(okBody, MediaType.APPLICATION_JSON))
@@ -175,7 +175,7 @@ class HttpReflectionAgentAdapterTest : StringSpec({
             input(
                 events = listOf(
                     ReflectionEvent(ReflectionEvent.SKIPPED, day, "계획한 곳 중 1곳을 들르지 못했다"),
-                    ReflectionEvent(ReflectionEvent.PLAN_B, day, "자동 감지 · 비 예보"),
+                    ReflectionEvent(ReflectionEvent.PLAN_B, day, "상황 변화를 감지해 일정을 바꿨다"),
                 ),
                 personaSummary = "여행 스타일 미식",
             ),

@@ -10,12 +10,7 @@ import com.trippilot.reflection.domain.port.ReflectionEvent
 import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.destinationOn
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Component
-import org.springframework.transaction.PlatformTransactionManager
-import org.springframework.transaction.TransactionDefinition
-import org.springframework.transaction.support.TransactionOperations
-import org.springframework.transaction.support.TransactionTemplate
 import java.time.LocalDate
 import java.util.UUID
 
@@ -27,10 +22,9 @@ import java.util.UUID
  * **재료를 못 구하면 비운다 — 회고를 막지 않는다.** 상대는 빈 값을 "(요약 없음)"·"(이벤트 없음)"으로 받고 그 줄을 쓰지 않는다.
  * 대신 못 구한 사실은 로그로 남긴다(INV-4 침묵 금지).
  *
- * **두 조회(취향·변경 이력)는 따로 연 읽기 전용 트랜잭션에서 돈다**([isolated] = `REQUIRES_NEW`·readOnly). 회고 생성은 쓰기 트랜잭션 안에서
- * 이 재료를 구하는데, 그 트랜잭션에 참여한 채 조회가 실패하면 `runCatching` 으로 잡아도 바깥 트랜잭션이 rollback-only 로 표시되고
- * (PG 는 SQL 오류 뒤 그 트랜잭션의 모든 문장을 거절한다) 커밋에서 회고 저장까지 통째로 무너진다. 떼어 두면 실패가 그 조회 안에서 끝난다.
- * 값: 생성 한 번에 커넥션 하나를 잠깐 더 쓴다(바깥 트랜잭션이 하나를 쥔 채). 그날 지역은 이미 읽은 여행 컨텍스트에서 계산만 한다 — 조회가 없다.
+ * **트랜잭션 밖에서 부른다**(호출자 몫 — [ReflectionService] 는 쓰기 트랜잭션을 열기 전에 재료를 구한다). 쓰기 트랜잭션에 참여한 채 조회가
+ * 실패하면 `runCatching` 으로 잡아도 그 트랜잭션이 rollback-only 가 되고(PG 는 SQL 오류 뒤 그 트랜잭션의 문장을 전부 거절한다) 회고 저장까지
+ * 무너진다. 밖에서 부르면 각 퍼사드가 자기 읽기 트랜잭션을 열고 닫으므로 실패가 그 조회 안에서 끝나고, 커넥션도 한 번에 하나만 쓴다.
  *
  * **날씨는 싣지 않는다**(`weather_summary` 는 계속 빈 값). weather-context 가 저장하는 것은 **예보**뿐이다 — `weather_snapshot` 은
  * 묻는 날의 최대 강수확률(발표분마다), `weather_grid_forecast` 는 격자당 최신 발표분 한 행(지난 시각은 덮인다). 그날 실제로 어땠는지는
@@ -38,20 +32,10 @@ import java.util.UUID
  * 그것은 근거 밖 문장이다(BR-U5-31). 관측값 저장이 생기면 그때 채운다.
  */
 @Component
-class ReflectionMaterials internal constructor(
+class ReflectionMaterials(
     private val preferences: PreferenceFacade,
     private val changeLogs: ChangeLogFacade,
-    private val isolated: TransactionOperations,
 ) {
-    @Autowired
-    constructor(preferences: PreferenceFacade, changeLogs: ChangeLogFacade, transactions: PlatformTransactionManager) : this(
-        preferences, changeLogs,
-        TransactionTemplate(transactions).apply {
-            propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
-            isReadOnly = true
-        },
-    )
-
     /** 그날의 목적지 이름 — 다목적지 여행이면 박수로 펼친 그날의 것이다(FE `regionForDay` 와 같은 규칙). 모르면 빈 문자열. */
     fun regionOn(ctx: TripGenerationContext?, date: LocalDate): String =
         ctx?.destinationRefs?.destinationOn(ctx.startDate, date)?.name.orEmpty()
@@ -63,7 +47,7 @@ class ReflectionMaterials internal constructor(
      * 예산·이동수단은 넣지 않는다 — 회고 문장의 재료가 아니다. 여행 스냅숏은 클라이언트가 보낸 자유 맵이라 길이를 [PERSONA_MAX] 로 자른다.
      */
     fun personaOf(accountId: UUID, ctx: TripGenerationContext?): String {
-        val prefs = runCatching { isolated.execute { preferences.findPreferences(accountId) } }
+        val prefs = runCatching { preferences.findPreferences(accountId) }
             .onFailure { log.warn("회고 성향 재료를 읽지 못해 비웁니다. accountId={}", accountId, it) }
             .getOrNull() ?: return ""
         return personaLine(prefs.overriddenBy(ctx?.preferenceSnapshot.orEmpty()), ctx?.companionType)
@@ -84,7 +68,7 @@ class ReflectionMaterials internal constructor(
      */
     fun eventsOn(accountId: UUID, tripId: UUID, date: LocalDate, skippedCount: Int): List<ReflectionEvent> {
         val skipped = if (skippedCount > 0) listOf(ReflectionEvent(ReflectionEvent.SKIPPED, date, "계획한 곳 중 ${skippedCount}곳을 들르지 못했다")) else emptyList()
-        val timeline = runCatching { isolated.execute { changeLogs.findTimeline(accountId, tripId, TIMELINE_LIMIT) } }
+        val timeline = runCatching { changeLogs.findTimeline(accountId, tripId, TIMELINE_LIMIT) }
             .onFailure { log.warn("회고 재계획 재료를 읽지 못해 비웁니다. tripId={} date={}", tripId, date, it) }
             .getOrNull().orEmpty()
         if (timeline.size >= TIMELINE_LIMIT) {

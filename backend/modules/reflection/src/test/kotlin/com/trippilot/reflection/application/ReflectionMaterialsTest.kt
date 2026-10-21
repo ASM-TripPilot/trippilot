@@ -67,9 +67,7 @@ class ReflectionMaterialsTest : StringSpec({
 
     fun changeLogOf(entries: List<ChangeLogEntryView>) = CountingChangeLog(entries)
 
-    /** 단위 테스트는 트랜잭션이 없다 — 격리 자체는 실 Postgres 통합 테스트(`ReflectionMaterialsIsolationIT`)가 잰다. */
-    fun materials(preferences: PreferenceFacade, changeLogs: ChangeLogFacade) =
-        ReflectionMaterials(preferences, changeLogs, TransactionOperations.withoutTransaction())
+    fun materials(preferences: PreferenceFacade, changeLogs: ChangeLogFacade) = ReflectionMaterials(preferences, changeLogs)
 
     fun snapshot(vararg days: Pair<LocalDate, UUID>) = ItinerarySnapshotView(
         days.map { (date, poi) -> DaySnapshotView(date, listOf(SlotSnapshotView(poi, LocalTime.NOON, LocalTime.of(13, 0), false, false))) },
@@ -248,6 +246,8 @@ class ReflectionMaterialsTest : StringSpec({
             object : DomainEventPublisher { override fun publish(event: DomainEvent) = Unit },
             ReflectionMetrics(io.micrometer.core.instrument.simple.SimpleMeterRegistry()), clock,
             materials(preferences, changeLogs),
+            // 단위 테스트에는 트랜잭션이 없다 — 쓰기 트랜잭션의 경계는 실 Postgres IT(`ReflectionMaterialsIsolationIT`)가 잰다.
+            TransactionOperations.withoutTransaction(),
         )
     }
 
