@@ -87,7 +87,7 @@ export interface PlaceExploreScreenProps {
   onRetry?: () => void;
   /** empty 안내의 `다른 지역 보기`·상단 지역 칩(TRIP-1023 #026) 공용. */
   onPressChangeRegion?: () => void;
-  /** 지역 칩 라벨의 출처 — 페이지가 라우트 `region`을 배열로 편 것. 미지정 = [] = "전국". */
+  /** 지역 칩 라벨의 출처 — 페이지가 라우트 `region`을 배열로 편 것. 미지정 = [] = "전체 지역". */
   regionNames?: readonly string[];
   /** filter-zero 안내의 해제 버튼 — 지목한 하나만 해제한다(01b Seed Q3 ⓐ). */
   onClearFilter?: () => void;

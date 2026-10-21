@@ -13,7 +13,8 @@ import { mergePlacesByPoiId } from './mergePlaces';
  * 한 지역이 실패해도 나머지는 살리고(부분 성공), 전부 실패면 throw(전부 성공/부분 실패만 통과).
  * 무한 스크롤은 포기하므로(단일지역 경로가 담당) `fetchNextPage`/`hasNextPage` 는 no-op·false 다.
  *
- * `enabled: regions.length >= 2` — 0/1지역은 `usePlacesInfinite`(무한 스크롤 보존)가 맡고,
+ * `enabled: regions.length >= 2` — 1지역은 `usePlacesInfinite`(무한 스크롤 보존)가 맡고(d04 의 지역
+ * 미지정은 서비스 지역 이름 배열을 넘겨 이 훅을 탄다 — TRIP-1560, 그래서 서비스 지역이 2곳 미만이 되면 꺼진다),
  * 이 훅은 화면에서 무조건 호출되되 게이팅으로만 꺼진다(React 훅 규칙 준수). 반환은
  * `usePlacesInfinite` 필드 집합에 **`degraded`(부분 실패 표식, TRIP-692)를 더한 모양**이라
  * `PlaceExplorePage` 가 둘 중 하나를 골라 소비하되 degraded 는 다지역 경로에서만 참이 된다.

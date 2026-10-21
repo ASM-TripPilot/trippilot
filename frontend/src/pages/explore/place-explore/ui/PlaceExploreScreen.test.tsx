@@ -706,7 +706,7 @@ describe('다섯 얼굴 · 실패 배너 · 대기 하트', () => {
       // ③ 누를 수 있는 것 = 뒤로(1) + 카테고리 칩 + 카드 5 + 하트 5 + ♥FAB + ＋FAB + 지역 칩
       //    (TRIP-1562 가 검색바 ⇅ 필터 버튼을 지워 하나 줄었다 — 남아 있으면 이 목록이 red.)
       //    (TRIP-1020 이전 17 — 카드 루트가 role=button 이 되어 5장이 더해졌다. TRIP-1023 칸 B 가
-      //    상시 지역 칩을 더했다 — 이 헬퍼는 regionNames 를 안 넘기므로 칩은 "전국" 으로 뜬다).
+      //    상시 지역 칩을 더했다 — 이 헬퍼는 regionNames 를 안 넘기므로 칩은 "전체 지역" 으로 뜬다).
       //    renderAsFrozenHelper 는 onPressSavedPlaces 를 **안 넘긴다** — 그래도
       //    두 FAB 가 떠야 한다(콜백 옵셔널·무동작 허용, Figma 상시 노출). 이 완전일치 목록은
       //    FAB 하나라도 빠지면(뮤테이션) 어긋나 red 다 — 현 15 에서 CTA(-1)·FAB(+2)·필터(+1)로
@@ -908,7 +908,7 @@ describe('다섯 얼굴 · 실패 배너 · 대기 하트', () => {
 
 // ── 지역 칩 (옛 `PlaceExploreScreen.region.test.tsx`, TRIP-1023 칸 B #026 · 결정5 · Seed Q4·Q5·Q6) ───
 // 상시 지역 칩(`explore-places-region`)의 라벨은 `regionNames` prop(페이지가 라우트 `region` 을 배열로
-// 편 것)에서 나오고(없음 "전국" · 한 곳 그 이름 · 여러 곳 "{첫 지역} 외 N곳"), 누르면 빈 상태의 "다른
+// 편 것)에서 나오고(없음 "전체 지역" · 한 곳 그 이름 · 여러 곳 "{첫 지역} 외 N곳"), 누르면 빈 상태의 "다른
 // 지역 보기"와 같은 콜백(`onPressChangeRegion`)을 올린다.
 // ★ 라벨은 칩 서브트리 안에서 `getByText(문자열)`(완전일치)로 잰다 — 카드 부제에 같은 지명이 또 있다.
 // ★ 칩 자리(카테고리 칩 줄 바로 아래)는 호스트 트리 순서와 "가장 가까운 스크롤 조상"으로 잰다.
@@ -969,18 +969,20 @@ describe('지역 칩', () => {
   }
 
   describe('🔴 1023-B #026 · 지역 칩 라벨 (AC-B5 · AC-B6 · AC-B10)', () => {
-    it('regionNames 를 안 넘기면(탐색 탭·홈 진입 = 지역 없음) 칩이 "전국" 이다', () => {
+    it('regionNames 를 안 넘기면(탐색 탭·홈 진입 = 지역 없음) 칩이 "전체 지역" 이고 "전국" 은 없다 (TRIP-1560 AC-2)', () => {
       renderRegionScreen();
 
-      expect(within(regionChip()).getByText('전국')).toBeOnTheScreen();
+      // 긍정 앵커를 먼저 — 새 라벨이 실제로 그려졌다. 이게 있어야 "전국 없음"이 공허하지 않다.
+      expect(within(regionChip()).getByText('전체 지역')).toBeOnTheScreen();
+      expect(within(regionChip()).queryByText('전국')).toBeNull();
     });
 
-    it('한 곳이면 그 이름이 라벨이고 "전국" 은 없다', () => {
+    it('한 곳이면 그 이름이 라벨이고 "전체 지역" 은 없다', () => {
       renderRegionScreen({ regionNames: ['강릉시'] });
 
       // 긍정 앵커를 먼저 — 칩이 실제로 그려졌고 라벨이 지역 이름이다.
       expect(within(regionChip()).getByText('강릉시')).toBeOnTheScreen();
-      expect(within(regionChip()).queryByText('전국')).toBeNull();
+      expect(within(regionChip()).queryByText('전체 지역')).toBeNull();
     });
 
     it('여러 곳이면 "{첫 지역} 외 N곳" 이다 (Seed Q5 — 칩 한 줄 폭을 지킨다)', () => {
