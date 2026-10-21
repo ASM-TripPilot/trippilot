@@ -609,7 +609,7 @@ def test_prompt_renders_deterministically() -> None:
     p1, ref = reg.render(_FEAT, build_reflection_template_vars(_request()))
     p2, _ = reg.render(_FEAT, build_reflection_template_vars(_request()))
     assert p1 == p2
-    assert ref.prompt_id == "prompts/reflection_template.yaml" and ref.version == "0.3.0"
+    assert ref.prompt_id == "prompts/reflection_template.yaml" and ref.version == "0.3.1"
     assert ref.feature == "REFLECTION_TEMPLATE"
     assert "부산" in p1 and "감천문화마을" in p1 and "poi:0" in p1 and "PLAN_B" in p1
 
@@ -642,7 +642,7 @@ def test_vision_prompt_states_photoless_rule() -> None:
     variables = {**build_reflection_template_vars(_request()), "highlights": "(대표 사진 없음)"}
     prompt, ref = PromptRegistry(_PROMPTS).render(
         LlmFeature.REFLECTION_TEMPLATE_VISION, variables)
-    assert _PHOTOLESS_RULE in prompt and ref.version == "0.3.0"
+    assert _PHOTOLESS_RULE in prompt and ref.version == "0.3.1"
 
 
 def test_build_vars_stringifies_with_defaults_and_no_time_fields() -> None:

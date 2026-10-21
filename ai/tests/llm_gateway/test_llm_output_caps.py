@@ -140,8 +140,9 @@ def test_effort_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         pytest.skip(f"{feature.value} 라우팅 미설정 — effort 와 무관")
 
     expected = {
-        # fable 실측(2026-10-11): 백엔드 시한(회고 15s·리마인드 8s·replan 25s) 안에 들려면 low
-        LlmFeature.REFLECTION_TEMPLATE: "low",
+        # fable 실측(2026-10-11): 백엔드 시한(리마인드 8s·replan 25s) 안에 들려면 low
+        # 회고는 terra 실측(2026-10-20)으로 none — low 는 하루 6~12곳에서 시한 15s 를 넘겼다
+        LlmFeature.REFLECTION_TEMPLATE: "none",
         LlmFeature.REMINDER_COPY: "low",
         LlmFeature.ALTERNATIVE_SELECTION: "low",
         LlmFeature.REPLAN_COMPOSITION: "low",  # 같은 replan 25s 안에서 PlanB 다음에 돈다

@@ -233,7 +233,7 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
     출력 상한 안에서 쓰이므로, 시한이 짧은 기능은 낮춰야 예산 안에 든다. 실측
     (2026-10-11, 실 경계 하네스):
       - REFLECTION_TEMPLATE — high: 시도당 ~25s·출력 2048 에서 잘림 → 백엔드 시한 15s 초과로
-        고정 템플릿 강등. low: ~10s·출력 ~900, 3/3 성공.
+        고정 템플릿 강등. low: ~10s·출력 ~900, 3/3 성공. 2026-10-20 none 으로 내렸다(표 안 주석).
       - REMINDER_COPY — high: 항목당 ~8s(배치 시한 8s 에 1건도 빠듯). low: ~1.9s.
       - ALTERNATIVE_SELECTION — replan(시한 25s)에서 1차 몫이 ~4s 로 내려와 high(3.5~7s)가
         타임아웃 → 규칙 랭킹. low: ~3.5s, 게이트 드롭 0. 단 low 에서도 사유 `none` 이면 사고가
@@ -249,7 +249,10 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
     """
     return MappingProxyType(
         {
-            LlmFeature.REFLECTION_TEMPLATE: "low",
+            # low → none (2026-10-20, gpt-5.6-terra · 프롬프트 0.3.1 · 시한 15s): 하루 6~12곳에서 low 는 8.5~17s 로
+            # 12회 중 2회 시간 초과 → 고정 폴백, 목록 밖 사진 참조 2회. none 은 12/12 성공 3.5~5.5s(재시도 1회 9.1s),
+            # 사진 장면이 자기 장소 이름을 부르는 비율은 둘 다 100%. 여행 요약도 4.7~9.1s.
+            LlmFeature.REFLECTION_TEMPLATE: "none",
             LlmFeature.REMINDER_COPY: "low",
             LlmFeature.ALTERNATIVE_SELECTION: "low",
             # 같은 재계획 시한(25s) 안에서 PlanB 다음에 돈다 — 대체지 선택과 같은 이유
