@@ -67,15 +67,20 @@ enum class PushStatus {
  * 한도라, 지표의 레이트리밋 칸(OBS-U6-02)이 이것을 봐야 한다. 응용층이 벤더 웹 예외를 몰라도 되게 도메인 타입으로 올린다.
  */
 class PushRateLimited(detail: String? = null, cause: Throwable? = null) : RuntimeException(
-    "발송 서비스의 발송량 한도에 걸렸습니다(HTTP 429)" + detail?.let { " — ${it.take(DETAIL_MAX)}" }.orEmpty(),
+    "발송 서비스의 발송량 한도에 걸렸습니다(HTTP 429)" + detail?.let { " — ${clip(it)}" }.orEmpty(),
     cause,
 ) {
     private companion object {
         /**
-         * 상대 응답(상태 줄 + 본문)을 싣는 상한. 발송 실패 로그가 한 줄로 남게 자른다 — 본문은 상대가 정한다.
-         * Expo 429 본문은 `{"errors":[{"code","message"}]}` 형식이라 토큰을 되돌려 싣지 않지만, 형식이 바뀌어도
-         * 로그가 무한히 늘지 않게 상한을 둔다.
+         * 상대 응답(상태 줄 + 본문)을 싣는 상한. 본문은 상대가 정하므로 발송 실패 로그가 무한히 늘지 않게 자른다.
+         * Expo 429 본문은 `{"errors":[{"code","message"}]}` 형식이라 토큰을 되돌려 싣지 않는다.
          */
         const val DETAIL_MAX = 300
+
+        /** 앞에서부터 [DETAIL_MAX] 자. 경계가 서로게이트 쌍 가운데면 반쪽 문자를 남기지 않게 한 칸 덜 자른다. */
+        fun clip(detail: String): String {
+            val head = detail.take(DETAIL_MAX)
+            return if (head.length == DETAIL_MAX && head.last().isHighSurrogate()) head.dropLast(1) else head
+        }
     }
 }

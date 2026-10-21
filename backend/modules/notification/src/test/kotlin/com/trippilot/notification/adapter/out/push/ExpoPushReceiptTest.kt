@@ -6,7 +6,6 @@ import com.trippilot.notification.domain.PushReceipt
 import com.trippilot.notification.domain.PushStatus
 import com.trippilot.notification.domain.PushUrgency
 import io.kotest.core.spec.style.StringSpec
-import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.shouldBe
@@ -114,14 +113,26 @@ class ExpoPushReceiptTest : StringSpec({
             """{"errors":[{"code":"TOO_MANY_REQUESTS","message":"project push rate exceeded"}]}""",
         ).shouldBeInstanceOf<PushRateLimited>()
         limited.cause.shouldBeInstanceOf<HttpClientErrorException.TooManyRequests>()
-        limited.message shouldContain "429"
+        // 고정 문구에도 "429" 가 있어 그것만으로는 원인이 실렸는지 모른다 — 상태 줄 전체와 본문을 본다.
+        limited.message shouldContain "429 Too Many Requests"
         limited.message shouldContain "project push rate exceeded"
 
         respond(HttpStatus.SERVICE_UNAVAILABLE).shouldBeInstanceOf<HttpServerErrorException.ServiceUnavailable>()
     }
 
-    /** 응답 본문은 상대가 정한다 — 아무리 길어도 예외 메시지(곧 로그 한 줄)는 상한 안이다. */
-    "429 응답 본문이 길어도 메시지는 상한에서 자른다" {
-        PushRateLimited("x".repeat(10_000)).message!!.length shouldBeLessThanOrEqual 400
+    /** 응답 본문은 상대가 정한다 — 아무리 길어도 **앞에서부터 300자**만 싣는다(앞이 상태 줄이라 단서가 거기 있다). */
+    "429 원인 메시지는 앞에서부터 300자만 싣는다" {
+        val prefix = "발송 서비스의 발송량 한도에 걸렸습니다(HTTP 429)"
+        val detail = "a" + "x".repeat(10_000)
+
+        PushRateLimited(detail).message shouldBe "$prefix — ${detail.take(300)}"
+    }
+
+    /** 300자 경계에 이모지(서로게이트 쌍)가 걸리면 반쪽 문자를 남기지 않고 그 문자째 뺀다. */
+    "300자 경계에 걸린 서로게이트 쌍은 쪼개지 않는다" {
+        val prefix = "발송 서비스의 발송량 한도에 걸렸습니다(HTTP 429)"
+        val detail = "x".repeat(299) + "😀" + "뒤"
+
+        PushRateLimited(detail).message shouldBe "$prefix — ${"x".repeat(299)}"
     }
 })
