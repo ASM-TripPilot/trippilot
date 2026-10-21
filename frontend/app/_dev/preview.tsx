@@ -2645,6 +2645,7 @@ function renderAssistantPreview(
   return (
     <AssistantSheetView
       state={options.state ?? (tripId === null ? 'NO_CONTEXT' : 'READY')}
+      surface={ASSISTANT_PREVIEW_CTX.surface}
       contextChip={transcript.session.contextChip}
       messages={raw.map((message) => displayMessage(message, ctx))}
       quickReplies={replies}
@@ -2768,6 +2769,7 @@ export const PREVIEW_STATES: PreviewState[] = [
             confirmingClear={false}
             clearing={false}
             onContinue={noop}
+            onClose={noop}
             onRequestClear={noop}
             onConfirmClear={noop}
             onCancelClear={noop}
@@ -2790,6 +2792,7 @@ export const PREVIEW_STATES: PreviewState[] = [
             confirmingClear
             clearing={false}
             onContinue={noop}
+            onClose={noop}
             onRequestClear={noop}
             onConfirmClear={noop}
             onCancelClear={noop}
@@ -2797,6 +2800,30 @@ export const PREVIEW_STATES: PreviewState[] = [
           />
         ),
       }),
+  },
+  {
+    key: 'assistant-long-chat',
+    band: 'b',
+    label: 'b01 · 긴 대화(스크롤해서 ↓ 확인)',
+    login: null,
+    // 같은 날씨 문답을 5번 이어 붙여(id 만 바꿔) 목록이 한 화면을 넘게 한다 — 위로 올리면 ↓ 버튼이 뜬다.
+    render: () =>
+      renderAssistantPreview('weather', {
+        mutate: (messages) =>
+          [0, 1, 2, 3, 4].flatMap((round) =>
+            messages.map((message) => ({
+              ...message,
+              id: `${message.id}-r${round}`,
+            }))
+          ),
+      }),
+  },
+  {
+    key: 'assistant-chip-stack',
+    band: 'b',
+    label: 'b01 · 제안 칩 스택(대화 전)',
+    login: null,
+    render: () => renderAssistantPreview('greeting'),
   },
   {
     key: 'assistant-no-context',

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import { Pressable, Text } from 'react-native';
+import { Pressable } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 
 import {
@@ -35,6 +35,7 @@ import {
 import { AnswerFeedback } from './AnswerFeedback';
 import { MessageCard } from './AssistantCards';
 import { TurnStatusRow } from './AssistantSheetChrome';
+import { MoreVGlyph } from './AssistantSheetGlyphs';
 import { AssistantSheetView } from './AssistantSheetView';
 import { HistoryView } from './HistoryView';
 
@@ -263,6 +264,7 @@ export function AssistantSheetPage({
   return (
     <AssistantSheetView
       state={state}
+      surface={surface}
       contextChip={session.data?.session.contextChip ?? null}
       messages={messages}
       quickReplies={quickReplies}
@@ -292,15 +294,14 @@ export function AssistantSheetPage({
         <Pressable
           testID="assistant-history-toggle"
           accessibilityRole="button"
+          accessibilityLabel="더보기"
           accessibilityState={{ selected: view === 'HISTORY' }}
           onPress={() =>
             setView((prev) => (prev === 'CHAT' ? 'HISTORY' : 'CHAT'))
           }
-          hitSlop={8}
+          className="h-[44px] w-[44px] items-center justify-center"
         >
-          <Text className="font-noto text-label text-muted">
-            {view === 'HISTORY' ? '대화' : '이력'}
-          </Text>
+          <MoreVGlyph />
         </Pressable>
       }
       body={
@@ -315,6 +316,7 @@ export function AssistantSheetPage({
             confirmingClear={confirmingClear}
             clearing={clearSession.isPending}
             onContinue={() => setView('CHAT')}
+            onClose={handleClose}
             onRequestClear={() => setConfirmingClear(true)}
             onCancelClear={() => setConfirmingClear(false)}
             onConfirmClear={handleConfirmClear}

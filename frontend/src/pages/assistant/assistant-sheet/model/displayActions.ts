@@ -72,3 +72,8 @@ export function displayMessage(
   }
   return shown;
 }
+
+/** 여행 없음(NO_CONTEXT) 아이콘 행의 앞 글리프 — 숙소 탐색만 돋보기, 나머지는 플러스(기본값은 확인 대상). */
+export function noContextActionIcon(type: string): 'search' | 'plus' {
+  return type === 'OPEN_STAY_SEARCH' ? 'search' : 'plus';
+}
