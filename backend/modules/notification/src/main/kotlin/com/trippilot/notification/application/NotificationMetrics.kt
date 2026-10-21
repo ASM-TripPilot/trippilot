@@ -121,13 +121,14 @@ class NotificationMetrics(
         private const val PUSH_ERROR_PREFIX = "PUSH_ERROR"
 
         /**
-         * 벤더·도메인이 아는 값. 여기 없는 것은 [OTHER] 로 접는다.
+         * 벤더·도메인이 아는 실패 사유. 여기 없는 것은 [OTHER] 로 접는다.
          *
-         * `DeviceNotRegistered` 는 **Expo 어댑터가 실제로 남기는 표기**다(정본 OBS-U6-02 의 사유 이름). 처음엔
-         * 상태 이름(`DEVICE_NOT_REGISTERED`)만 있어 운영의 죽은 토큰이 전부 `OTHER` 로 세어졌다. 상태 이름은
-         * 벤더 사유가 없는 영수증이 `reasonOf` 에서 상태 이름으로 남을 때를 위해 둔다.
+         * 정본 OBS-U6-02 의 칸은 `DeviceNotRegistered`·레이트리밋·기타다 — 앞의 둘은 **Expo 어댑터가 실제로 남기는
+         * 표기** 그대로다(`MessageRateExceeded` = Expo 티켓의 발송 속도 초과). 처음엔 상태 이름(`DEVICE_NOT_REGISTERED`)만
+         * 있어 운영의 죽은 토큰이 전부 `OTHER` 로 세어졌다. 죽은 토큰은 `reasonOf` 가 표기 하나로 접어 상태 이름은
+         * 여기까지 오지 않는다. `FAILED`·`UNKNOWN` 은 벤더 사유가 없는 실패의 상태·기본값이다.
          */
-        private val KNOWN_REASONS = setOf("DeviceNotRegistered", "DEVICE_NOT_REGISTERED", "FAILED", "SENT", "UNKNOWN")
+        private val KNOWN_REASONS = setOf("DeviceNotRegistered", "MessageRateExceeded", "FAILED", "UNKNOWN")
     }
 }
 

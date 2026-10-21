@@ -136,9 +136,16 @@ class PushDispatchService(
         notifications.markPushResult(notificationId, sentAt, reason?.take(REASON_MAX))
     }
 
-    /** 대표 사유 하나. 기기마다 다를 수 있어 **가장 흔한 것**을 남긴다(전부 남기면 컬럼이 넘친다). */
+    /**
+     * 대표 사유 하나. 기기마다 다를 수 있어 **가장 흔한 것**을 남긴다(전부 남기면 컬럼이 넘친다).
+     *
+     * 사유가 없는 영수증은 상태로 센다. **죽은 토큰은 원인 하나에 표기 하나다** — Expo 표기
+     * `DeviceNotRegistered`(정본 OBS-U6-02)로 접는다. 상태 이름으로 따로 세면 같은 원인이 두 표로 갈려
+     * 다수결에서 소수에 지고, 컬럼·지표에도 두 값으로 남는다.
+     */
     private fun reasonOf(receipts: List<com.trippilot.notification.domain.PushReceipt>): String =
-        receipts.groupingBy { it.reason ?: it.status.name }.eachCount().maxByOrNull { it.value }?.key ?: "UNKNOWN"
+        receipts.groupingBy { it.reason ?: if (it.status == PushStatus.DEVICE_NOT_REGISTERED) DEVICE_NOT_REGISTERED_REASON else it.status.name }
+            .eachCount().maxByOrNull { it.value }?.key ?: "UNKNOWN"
 
     private fun Notification.toMessage() = PushMessage(
         title = title,
@@ -155,6 +162,9 @@ class PushDispatchService(
     private companion object {
         /** `notification.push_failed_reason` 컬럼 상한과 같아야 한다. */
         private const val REASON_MAX = 200
+
+        /** Expo 어댑터가 죽은 토큰에 남기는 사유와 같은 표기(`ExpoPushAdapter` · ExpoPushReceiptTest). */
+        private const val DEVICE_NOT_REGISTERED_REASON = "DeviceNotRegistered"
 
         private val log = LoggerFactory.getLogger(PushDispatchService::class.java)
     }

@@ -318,10 +318,11 @@ class PushDispatchPropertyTest : StringSpec({
 
     /**
      * **대표 사유는 가장 흔한 것이다**(컬럼 하나에 기기 여럿의 사유를 다 담으면 넘친다). 벤더 사유가 없는
-     * 영수증은 상태 이름으로 센다 — 그래야 "사유 없는 실패 둘 vs 사유 있는 실패 하나"에서 다수가 남는다.
+     * 영수증은 상태로 센다 — 그래야 "사유 없는 실패 둘 vs 사유 있는 실패 하나"에서 다수가 남는다. 죽은 토큰은
+     * 사유가 없어도 Expo 표기 `DeviceNotRegistered` 하나로 센다(원인 하나에 표기 하나).
      * 빈 문자열이나 소수 쪽이 남으면 "왜 푸시가 안 왔나"에 엉뚱한 답을 한다.
      */
-    "전 기기 실패면 가장 흔한 사유를 남긴다 — 벤더 사유가 없으면 상태 이름으로 센다" {
+    "전 기기 실패면 가장 흔한 사유를 남긴다 — 벤더 사유가 없으면 상태로, 죽은 토큰은 한 표기로 센다" {
         fun reasonFor(vararg receipts: Pair<PushStatus, String?>): String? {
             val tokens = Tokens(receipts.map { token(deliverable = true) })
             val notifications = Notifications()
@@ -336,6 +337,11 @@ class PushDispatchPropertyTest : StringSpec({
 
         reasonFor(PushStatus.FAILED to "MessageTooBig", PushStatus.FAILED to "MessageTooBig", PushStatus.FAILED to null) shouldBe "MessageTooBig"
         reasonFor(PushStatus.FAILED to null, PushStatus.FAILED to null, PushStatus.FAILED to "MessageTooBig") shouldBe "FAILED"
+        // 죽은 토큰은 사유가 있든 없든 한 표기로 센다 — 두 표기로 갈리면 1:1:1 동률이 돼 맨 앞의 소수가 남는다.
+        reasonFor(
+            PushStatus.FAILED to "MessageTooBig",
+            PushStatus.DEVICE_NOT_REGISTERED to "DeviceNotRegistered", PushStatus.DEVICE_NOT_REGISTERED to null,
+        ) shouldBe "DeviceNotRegistered"
         // 소수가 맨 앞이어도 다수가 남는다 — "첫 영수증의 사유"와 구별되는 예시다.
         reasonFor(PushStatus.FAILED to "MessageTooBig", PushStatus.DEVICE_NOT_REGISTERED to "DeviceNotRegistered", PushStatus.DEVICE_NOT_REGISTERED to "DeviceNotRegistered") shouldBe
             "DeviceNotRegistered"
