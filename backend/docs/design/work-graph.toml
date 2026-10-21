@@ -4694,9 +4694,10 @@ C(범위 밖 저장값)는 범위 끝으로 붙이고(clamp) 로그, 행은 버�
 id = "COV-RATCHET"
 ticket = "TRIP-1532"
 title = "[Infra] 커버리지 래칫 — 전체 94/83 → 95/86 · 모듈 분기 바닥 40 → 50"
-status = "todo"
+status = "done"
 touches = ["backend/scripts/coverage_gate.py", "backend/docs/design/work-graph.toml"]
 note = """
+[완료 2026-10-21] #1493 머지(97bfb066).
 PR #1493. 2026-10-21 develop 실측 라인 96.4 · 분기 87.6 에서 버림 후 1p 여유.
 모듈 라인 바닥 70 은 유지 — 최저(moderation 82.9%)가 10/19 과 같다. 분기 바닥 50 은 최저 moderation(분기 24개 중 18개, 75.0%)에서
 새 분기가 모두 안 덮이면 13개째에 걸리고, 지금 덮인 분기 7개를 잃어도 걸린다 — 테스트가 사실상 빠지는 쪽만 잡는 바닥이다.
