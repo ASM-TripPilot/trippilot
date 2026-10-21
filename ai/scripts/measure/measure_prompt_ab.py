@@ -120,7 +120,7 @@ def _gateway(prompts: Path, feature: LlmFeature, gate, model: str = MODEL) -> Ga
 
 
 def _run(fn, cases):
-    # 동시 호출 수 — 기본 8. A/B 를 같은 시각에 나란히 돌릴 땐 2 로 낮춘다(32 동시면 게이트웨이 대기로 시한 초과가 30% 섞였다, 2026-10-20)
+    # 동시 호출 수 — 기본 8. A/B 를 같은 시각에 나란히 돌릴 땐 2 로 낮춘다(2026-10-20 계획 측정 첫 런 — 세 모델을 기본 8 로 동시에 돌려 76회 중 21~23회가 시한 초과였다)
     with ThreadPoolExecutor(int(os.environ.get("EVAL_WORKERS", "8"))) as ex:
         return list(ex.map(fn, enumerate(cases)))
 
