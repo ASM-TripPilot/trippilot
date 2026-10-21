@@ -49,6 +49,9 @@ data class VisitCheck(
     val autoSuppressedAt: Instant? = null,
 ) {
     companion object {
+        /** `visit_check.slot_key` 컬럼 상한과 같아야 한다 — 요청이 이를 넘기면 저장 시점에 22001 → 500 이다(TRIP-1473). */
+        const val SLOT_KEY_MAX = 100
+
         /** 도착 체크. 지오펜스가 깨웠거나 사용자가 직접 눌렀다. */
         fun arrive(tripId: UUID, slotKey: String?, poiId: UUID, source: CheckSource, at: Instant) =
             VisitCheck(UUID.randomUUID(), tripId, slotKey, poiId, at, null, null, source, at, at)

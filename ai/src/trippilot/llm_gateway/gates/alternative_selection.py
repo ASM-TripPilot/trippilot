@@ -13,6 +13,8 @@ from trippilot.llm_gateway.gates.base import (
 # 시간 표현 판정의 정본은 reflection_template 게이트 하나다 — share_card_copy 와
 # 같은 이유로 재사용만 한다(같은 규칙을 두 벌 쓰면 한쪽만 고쳐져 조용히 갈라진다).
 from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
+# `_TIME_EXPR` 는 `HH:MM` 을 일부러 통과시킨다 — 시계 시각 판정은 도우미 장소 소개와 같은 것을 쓴다.
+from trippilot.llm_gateway.gates.dialogue_answer import clock_times
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm import AlternativePick, CandidatePool, LlmFeature
 from trippilot.domain.observability import GateDropEvent
@@ -79,7 +81,11 @@ class AlternativeSelectionGate:
                 # 텍스트(위키 발췌·POI 상호명)의 영향을 받는 자유 서술이고, 앱 화면에
                 # **TripPilot 이 쓴 추천 이유**로 보인다. 낯선 도메인이 그 자리에 뜨면
                 # 앱 신뢰도를 빌린 유인 문구가 된다. 버리는 대가는 "이유 한 줄이 빈다" 뿐이다.
-                safe = "" if (_TIME_EXPR.search(reason) or has_contact_like(reason)) else reason
+                # 시계 시각("매일 10:00 수문장 교대식")도 같다 — KB-5 문서의 원문 시각을 옮기면 검증 안 된
+                # 시각이 화면에 뜬다(INV-2). `_TIME_EXPR` 는 이 꼴을 못 잡는다.
+                safe = "" if (
+                    _TIME_EXPR.search(reason) or any(clock_times(reason)) or has_contact_like(reason)
+                ) else reason
                 survivors.append(AlternativePick(poi_id=pid, reason=safe))
             else:
                 dropped.append(pid)

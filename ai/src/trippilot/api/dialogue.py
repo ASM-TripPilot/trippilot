@@ -253,7 +253,7 @@ def build_dialogue_orchestrator(
         log.info("도우미 계획 단계 on — 도구 %d종(%s) · 미배선 도구 %d종(%s)", len(tools),
                  ",".join(sorted(i.value for i in tools)), len(unwired), ",".join(unwired) or "-")
     else:
-        log.info("도우미 계획 단계 off — DIALOGUE_PLAN 미배정이라 미배선(범위 밖 질문은 종전 SCOPE 카드)")
+        log.info("도우미 계획 단계 off — DIALOGUE_PLAN 미배정이라 미배선(범위 밖·두 가지를 같이 묻는 말은 SCOPE 카드)")
     return DialogueOrchestrator(
         # 분류는 기존 IntentGate(closed-set) 재사용 — 프롬프트만 다르다(dialogue_intent.yaml, BR-AO-14)
         intent_worker=DialogueIntentWorker(GatewayFacade(counted, renderer, IntentGate(), c1_config, trace)),

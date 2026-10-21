@@ -7,7 +7,6 @@ import type {
   AssistantSessionSummary,
 } from '../api/assistantContract';
 import { ActionLogRow } from './AssistantCards';
-import { AssistantBubble } from './MessageList';
 
 /**
  * b06 이력 보기(TRIP-1325 · BR-U8-17~21) — 별도 라우트가 아니라 시트 안 보기 전환(페이지 로컬 `CHAT|HISTORY`).
@@ -25,6 +24,8 @@ export interface HistoryViewProps {
   confirmingClear: boolean;
   clearing: boolean;
   onContinue: () => void;
+  /** 시트 전체 닫기 — 헤더 X 와 같은 함수(01b Q2). */
+  onClose: () => void;
   onRequestClear: () => void;
   onConfirmClear: () => void;
   onCancelClear: () => void;
@@ -49,6 +50,8 @@ function ActionButton({
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
+      // 시각 높이 35 — 터치는 위아래 5씩 늘려 44 이상.
+      hitSlop={{ top: 5, bottom: 5 }}
       className="rounded-button border border-hairline-strong bg-canvas px-[14px] py-sm"
     >
       <Text className="font-noto text-label text-ink">{label}</Text>
@@ -62,6 +65,7 @@ export function HistoryView({
   confirmingClear,
   clearing,
   onContinue,
+  onClose,
   onRequestClear,
   onConfirmClear,
   onCancelClear,
@@ -70,7 +74,11 @@ export function HistoryView({
   return (
     <View testID="assistant-history" className="flex-1">
       <ScrollView contentContainerClassName="gap-md px-lg py-lg">
-        <AssistantBubble text="이번 여행에서 도우미와 한 대화·변경이에요." />
+        <View testID="assistant-history-intro">
+          <Text className="font-noto text-body leading-[22px] text-ink">
+            이번 여행에서 도우미와 한 대화·변경이에요.
+          </Text>
+        </View>
         {logs.length === 0 ? (
           <Text
             testID="assistant-history-empty"
@@ -83,6 +91,7 @@ export function HistoryView({
             <ActionLogRow
               key={log.id}
               testID={`assistant-history-row-${log.id}`}
+              id={log.id}
               payload={log.payload as ActionLogPayload}
             />
           ))
@@ -123,6 +132,11 @@ export function HistoryView({
           label="이력 지우기"
           onPress={onRequestClear}
           disabled={clearing}
+        />
+        <ActionButton
+          testID="assistant-history-close"
+          label="닫기"
+          onPress={onClose}
         />
       </View>
 

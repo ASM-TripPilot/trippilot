@@ -36,12 +36,17 @@ const FAILED_NOTICE = {
 };
 const NO_SOLUTION_TITLE = '대안을 찾지 못했어요';
 const TITLE = 'AI 재계획안';
-// 상황 감지 FE-B(frontend-components §3.6) — 문구는 정본 그대로. 재요청 실패는 i04 시작 실패와 같은 문장이다.
+// 상황 감지 FE-B(frontend-components §3.6) — 문구는 정본 그대로. 재요청 실패는 i04 시작 실패와 같은 문장이다
+// (낡음 얼굴 [새 대안 보기] · 실패 얼굴 [다시 시도] 공용).
 const PREPARED_MARK = '미리 준비한 대안';
 const STALE_TITLE = '시간이 지나 이 대안은 지금 일정과 맞지 않아요';
 const STALE_RETRY_LABEL = '새 대안 보기';
-const STALE_RETRY_FAILED =
+const RETRY_FAILED =
   '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요';
+// 실패 얼굴 [다시 시도]가 지난 날이라 막혔다(409) — 다시 눌러도 같은 거절이라 '잠시 후 다시 시도'라고 하지 않는다. i04 가
+// 같은 409 에 보이는 날짜 안내(`NO_ITINERARY_DAY_TEXT`)와 같은 문장이다.
+const RETRY_PAST_DAY =
+  '아직 일정이 없는 날이거나 여행 기간이 아니라서 AI가 다시 짤 수 없어요';
 // TRIP-1214 — 셸 기본 배열의 닫힘 칸(28)은 CTA 바를 뺀다. 초안은 시트를 내리고 지도를 보다 바로 [적용하기]를
 // 눌러야 하므로, 가장 낮은 칸을 CTA 바 위(손잡이 28 + 바 높이 + 하단 안전 영역)로 직접 준다 — 직접 준 배열은
 // 닫힘 규칙이 안 걸려 버튼이 항상 남고, 손잡이는 바 위에 보인다. 셸 기본값은 안 건드린다(다른 소비처 영향).
@@ -88,7 +93,11 @@ export interface ReplanDraftViewProps {
   applyFailed?: boolean;
   /** 오늘 대안 없음 + 내일이 일정에 있을 때만 페이지가 준다 — 안내 아래 [내일 일정 다시 짜기]. 없으면 안 그린다. */
   onReplanNextDay?: () => void;
-  /** 내일 재계획 시작 요청 중 — 보조 버튼 잠금(이중 POST 차단). */
+  /**
+   * 새 세션 시작 요청 중 — 이름과 달리 내일 재계획만이 아니라 페이지(`PlanbDraftPage`)의 공용 `startReplan.isPending` 이다
+   * (실패 [다시 시도]·[새 대안 보기]도 같은 요청). [내일 일정 다시 짜기]·대안 없음·실패 얼굴의 주 버튼([조건 바꿔 다시 짜기]·
+   * [다시 시도])·[직접 수정]을 잠근다 — 이중 POST 차단 · 교차 잠금(성공하면 이 화면이 solving 으로 갈아 끼워진다).
+   */
   replanNextDayPending?: boolean;
   /** 상황 감지 FE-B — 서버가 미리 짠 대안(SYSTEM 세션)이면 머리에 `미리 준비한 대안` 표식. */
   prepared?: boolean;
@@ -100,11 +109,16 @@ export interface ReplanDraftViewProps {
   staleRetryPending?: boolean;
   /** 새 세션 요청 실패 — 낡음 안내 아래 한 줄(INV-4). */
   staleRetryFailed?: boolean;
+  /** 실패 얼굴 [다시 시도](같은 입력으로 새 세션)가 실패했다 — 부제를 시작 실패 문장으로 바꾼다(INV-4). */
+  retryFailed?: boolean;
+  /** 그 실패가 지난 날이라 막힌 409 다(다시 눌러도 같다) — 부제를 i04 와 같은 날짜 안내로 바꾼다. */
+  retryPastDay?: boolean;
   /** 넣으려던 장소가 초안에 없다는 문장(페이지가 만든다) — 없으면 안 그린다. */
   includeMissingText?: string | null;
   onBack: () => void;
   onManualEdit: () => void;
   onApply: () => void;
+  /** 대안 없음 [조건 바꿔 다시 짜기]·실패 [다시 시도] — 무엇을 하는지(시드 i04 · 같은 입력 새 세션)는 페이지 몫. */
   onReopenRequest: () => void;
   onPressCandidates?: (slotKey: string) => void;
 }
@@ -133,6 +147,8 @@ export function ReplanDraftView({
   onRetryStale,
   staleRetryPending,
   staleRetryFailed,
+  retryFailed = false,
+  retryPastDay = false,
   includeMissingText = null,
   onBack,
   onManualEdit,
@@ -146,7 +162,12 @@ export function ReplanDraftView({
     variant === 'noSolution'
       ? { title: NO_SOLUTION_TITLE, description: noSolutionDescription ?? '' }
       : variant === 'failed'
-        ? FAILED_NOTICE
+        ? retryFailed
+          ? {
+              ...FAILED_NOTICE,
+              description: retryPastDay ? RETRY_PAST_DAY : RETRY_FAILED,
+            }
+          : FAILED_NOTICE
         : applyFailed
           ? APPLY_FAILED_NOTICE
           : draftNotice;
@@ -156,7 +177,8 @@ export function ReplanDraftView({
     variant: 'outline',
     onPress: onManualEdit,
     // 교차 잠금(PlanbDiffPage 선례) — 확정 요청 중 편집으로 떠나면 밑에 남은 이 화면의 onSuccess 가
-    // 맨 위(편집) 화면을 허브로 갈아 끼운다. 내일 재계획 시작 요청 중도 같은 이유(solving 으로 갈아 끼움).
+    // 맨 위(편집) 화면을 허브로 갈아 끼운다. 새 세션 시작 요청 중(내일 다시 짜기·[다시 시도]·[새 대안 보기])도
+    // 같은 이유(solving 으로 갈아 끼움).
     disabled: applyPending || replanNextDayPending,
   };
   const primaryButton: CtaButton = isDraft
@@ -211,7 +233,7 @@ export function ReplanDraftView({
                   testID="planb-draft-stale-failed"
                   className="font-noto text-label text-muted"
                 >
-                  {STALE_RETRY_FAILED}
+                  {RETRY_FAILED}
                 </Text>
               ) : null}
               {/* 보조 버튼 자리·모양은 [내일 일정 다시 짜기]와 같다 — CTA 바는 1~2버튼이라 안내 아래에 둔다.

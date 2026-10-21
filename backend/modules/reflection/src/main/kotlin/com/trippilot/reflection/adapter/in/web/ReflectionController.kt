@@ -3,6 +3,8 @@ package com.trippilot.reflection.adapter.`in`.web
 import com.trippilot.core.error.AuthenticationRequired
 import com.trippilot.reflection.application.ReflectionService
 import com.trippilot.reflection.domain.Reflection
+import jakarta.validation.Valid
+import org.hibernate.validator.constraints.CodePointLength
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -39,7 +41,7 @@ class ReflectionController(private val service: ReflectionService) {
         principal: Principal,
         @PathVariable tripId: UUID,
         @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) dayDate: LocalDate,
-        @RequestBody request: EditReflectionRequest,
+        @Valid @RequestBody request: EditReflectionRequest,
     ): ReflectionResponse = ReflectionResponse.from(
         service.edit(principal.accountId(), tripId, dayDate, request.card, request.mood, request.shortMemo),
     )
@@ -53,15 +55,16 @@ private fun Principal.accountId(): UUID =
  * 수정본은 **카드 통째**다(BR-U5-35 · 2026-09-01). 장면·캡션 단위 편집은 화면이 정해진 뒤에 정한다 —
  * 지금 쪼개면 근거 없이 계약을 좁힌다.
  *
- * [card] 는 카드 원문(JSON 문자열)이다. 상한은 문장 시절 4000자보다 넉넉히 잡는다 — 장면이 여럿이면
- * 원문이 그만큼 길어진다. 형식·`cover.title` 검사는 [ReflectionCardCodec] 이 400 으로 낸다.
+ * [card] 는 카드 원문(JSON 문자열)이다. 상한(20000자, 코드 포인트)은 문장 시절 4000자보다 넉넉히 잡는다 — 장면이
+ * 여럿이면 원문이 그만큼 길어진다. 계약(openapi `maxLength: 20000`)은 이 값을 약속해 왔는데 검사가 없었다(TRIP-1473).
+ * 형식·`cover.title`·NUL 검사는 [ReflectionCardCodec] 이 400 으로 낸다.
  *
  * **셋 다 선택이고 하나는 있어야 한다**(TRIP-828). [mood]·[shortMemo] 는 카드와 별개의 입력이라
  * 그것만 보내는 요청이 카드를 건드리지 않는다. null 은 "그대로", 빈 문자열은 "지운다" — 검사는
- * `Reflection.note` 가 한다(이 컨트롤러는 `@Valid` 를 걸지 않아 애너테이션이 실행되지 않는다).
+ * `Reflection.note` 가 한다(이 DTO 에 단 애너테이션은 [card] 상한뿐이다).
  */
 data class EditReflectionRequest(
-    val card: String? = null,
+    @field:CodePointLength(max = 20000, message = "카드는 20000자 이하입니다.") val card: String? = null,
     val mood: String? = null,
     val shortMemo: String? = null,
 )

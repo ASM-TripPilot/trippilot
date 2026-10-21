@@ -23,7 +23,7 @@ from trippilot.domain.reflection import (
     SceneLayout,
 )
 
-# 계약 §3 자리표시자 기본형 — 값 채움은 FE/BE 렌더 준비 소유 (LLM·AI 계산 0)
+# 계약 §3 자리표시자 기본형 — 값 채움은 composer.bind_placeholders (LLM 호출 0)
 FALLBACK_COVER_TITLE = "{region} 여행의 기록"
 FALLBACK_COVER_SUBTITLE = "{region} · {start_date}~{end_date}"
 FALLBACK_STATS_CAPTION = "이번 여행의 발자취를 한눈에"
