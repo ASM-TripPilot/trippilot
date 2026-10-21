@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -15,6 +16,7 @@ import { day, itinerary, slot } from '@/test-support/itineraryFixtures';
 import { createRequestLog, serveItinerary } from '@/test-support/mswItinerary';
 import { getGetTripsTripIdItineraryQueryKey } from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 
 import { assistantPort } from '../api/assistantClient';
 import type {
@@ -65,10 +67,12 @@ jest.mock('@/shared/storage', () => ({
 
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
+const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     back: mockBack,
     replace: mockReplace,
+    push: mockPush,
     canGoBack: () => true,
   }),
 }));
@@ -186,6 +190,9 @@ beforeEach(() => {
   mockUuid = 0;
   mockBack.mockClear();
   mockReplace.mockClear();
+  mockPush.mockClear();
+  // TRIP-1565 — push 갈래가 여는 모듈 전역 연타 창이 테스트 사이에 새지 않게(파일 최상위)
+  resetPressGuard();
   setAccessToken('valid-access');
 });
 
@@ -712,5 +719,75 @@ describe('도우미 시트 · 일정 보기 목적지', () => {
     await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
     expect(itineraryHits()).toBe(1);
     expect(mockReplace).toHaveBeenCalledWith(`/trips/${TRIP}/live`);
+  });
+  // TRIP-1565 R-A — push 갈래(상세)가 시트 위에 쌓이는 동안 늦게 끝난 일정 조회의 replace 가 "맨 위 화면"인 상세를 갈아치우면
+  // 스택이 어긋난다. 그래서 일정 확인 중에는 push 갈래를 받지 않는다.
+  describe('일정 확인과 push 갈래 (TRIP-1565)', () => {
+    const placeInfo = (): AssistantMessage => ({
+      id: 'm-place',
+      role: 'ASSISTANT',
+      kind: 'INFO',
+      text: '장소 정보예요.',
+      payload: {
+        infoKind: 'PLACE',
+        title: '이름',
+        rows: [{ label: '영업', value: '매일' }],
+      },
+      nextActions: [
+        { type: 'OPEN_PLACE', label: '장소 보기', params: { poiId: 'poi-a' } },
+      ],
+      createdAt: '2026-10-22T00:00:00.000Z',
+    });
+    const placeRow = () =>
+      within(screen.getByTestId('assistant-message-m-place')).getByTestId(
+        'assistant-next-action-OPEN_PLACE'
+      );
+
+    it('O9 일정 확인 중에 장소 보기(push 갈래)를 누르면 무시되고, 확인이 끝나면 replace 는 일정 목적지로 정확히 1회다', async () => {
+      const held = holdResponse();
+      serveItinerary(server, {
+        itinerary: async () => {
+          await held.gate;
+          return itinerary({ status: 'CONFIRMED' });
+        },
+      });
+      const row = await openedPage({}, [greeting(), placeInfo()]);
+
+      await press(row());
+      await waitFor(() => expect(itineraryHits()).toBe(1));
+      // 앵커 — 지금은 확인 중이다(이 상태에서 누른 것만 의미가 있다)
+      expect(
+        await screen.findByTestId('assistant-itinerary-checking')
+      ).toBeOnTheScreen();
+
+      await press(placeRow());
+
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(mockReplace).not.toHaveBeenCalled();
+
+      held.release();
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      expect(mockReplace).toHaveBeenCalledWith(`/trips/${TRIP}/live`);
+      await itineraryResponseConsumed();
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('O10 (O9 의 앵커) 일정 확인이 실패로 끝난 뒤에는 장소 보기가 다시 눌려 push 된다 — 확인 중 무시가 영구 잠금이 아니다', async () => {
+      serveItinerary(server, {
+        itinerary: () => new HttpResponse(null, { status: 500 }),
+      });
+      const row = await openedPage({}, [greeting(), placeInfo()]);
+
+      await press(row());
+      await screen.findByTestId('assistant-itinerary-failed');
+      // 앵커 — 확인이 끝났다(확인 중 줄 없음)
+      expect(screen.queryByTestId('assistant-itinerary-checking')).toBeNull();
+
+      await press(placeRow());
+
+      expect(mockPush.mock.calls).toEqual([['/explore/places/poi-a']]);
+      expect(mockReplace).not.toHaveBeenCalled();
+    });
   });
 });

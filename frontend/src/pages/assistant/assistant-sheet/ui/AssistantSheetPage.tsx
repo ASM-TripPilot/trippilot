@@ -4,6 +4,7 @@ import { useRouter, type Href } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { isNotFound } from '@/shared/api';
+import { guardPress } from '@/shared/lib/pressGuard';
 import { getGetTripsTripIdItineraryQueryOptions } from '@/shared/api/index.hooks';
 import {
   itineraryDestinationHref,
@@ -54,7 +55,9 @@ import { HistoryView } from './HistoryView';
  * - 문맥은 라우트가 넘긴 `surface`·`tripId` 뿐이다(BR-U8-02). 여행 없이 열면 b07(일반 도움 모드, 비활성 아님).
  * - 세션 생성 401 이면 시트를 닫는다(`/assistant` 는 `(tabs)` 밖이라 guard 에 안 걸린다 — frontend-components §1).
  * - next action: 갈 수 있는 것만 그리고(`displayActions`), 누르면 시트 자리를 그 화면으로 **replace** 한다 —
- *   모달을 닫고 push 하는 두 걸음 대신 한 걸음(FD §4-5 와 다름, 개정 블록).
+ *   모달을 닫고 push 하는 두 걸음 대신 한 걸음(FD §4-5 와 다름, 개정 블록). 단 상세·요약류(`mode: 'push'`)는
+ *   시트를 둔 채 그 위에 push 한다 — 뒤로 오면 같은 대화(TRIP-1565). 이때 `closingRef` 는 읽기만 하고,
+ *   연타는 `guardPress` 가 막는다(돌아와 다시 누르면 다시 이동).
  * - 「일정 보기」(`kind: 'itinerary'`)는 누른 시점에 일정을 조회해 앱 공통 판정으로 목적지를 정한다(TRIP-1566) —
  *   조회 중·실패엔 이동하지 않고 상태 줄로 알린다(INV-4). 확인 중 잠금은 `closingRef` 와 따로다(확인 중에도 ✕ 가 눌려야 한다).
  * - "내가 할 수 있는 것 보기" 상시 칩: 서버가 그 quick reply 를 줬으면 그것을 ACTION 으로, 아니면 라벨을
@@ -296,6 +299,10 @@ export function AssistantSheetPage({
     replaceTo(href);
   }
 
+  const pushTo = guardPress((href: string): void => {
+    router.push(href as Href);
+  });
+
   function handleAction(action: NextAction): void {
     const target = nextActionRoute(action, ctx);
     if (target === null) return;
@@ -305,6 +312,11 @@ export function AssistantSheetPage({
     }
     if (target.kind === 'route') {
       if (closingRef.current) return;
+      if (target.mode === 'push') {
+        // 일정 확인 중엔 push 하지 않는다 — 확인 뒤 replace 가 방금 연 상세를 갈아치운다.
+        if (!checkingRef.current) pushTo(target.href);
+        return;
+      }
       replaceTo(target.href);
       return;
     }

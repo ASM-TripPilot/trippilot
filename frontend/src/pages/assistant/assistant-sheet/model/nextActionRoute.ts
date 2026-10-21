@@ -9,14 +9,18 @@ import type { AssistantSurface, NextAction } from '../api/assistantContract';
  * - `OPEN_PLACE` 의 "여행 중" 판정은 도우미를 연 화면이 여행 중 허브(`LIVE`)인가로 한다.
  * - `OPEN_ITINERARY` 는 href 가 아니라 `{ kind: 'itinerary', tripId }` 다 — 일정이 확정·생성 중·없음 중 무엇인지에 따라
  *   목적지가 달라(앱 공통 판정 `resolveItineraryDestination`) 누른 시점에 조회해서 정한다. 이 함수는 계속 순수하다.
+ * - 라우트에는 `mode` 가 붙는다 — 기본 `replace`(시트 자리를 그 화면으로 갈아끼운다), 상세·요약처럼 보고 나서
+ *   **돌아올 곳이 이 대화**인 5종(OPEN_PLACE·OPEN_OTA·OPEN_REFLECTION·OPEN_TRIP_SUMMARY·OPEN_STYLE)만 `push`(TRIP-1565).
  * - `RESTORE_REVISION` 은 FE 에 리비전 화면(h36)이 없어 null(→ 능력 목록) — FD 개정 블록에 갭으로 남긴다.
  */
 
 export type InternalAction =
   'RETRY_TURN' | 'CONTINUE_WITHOUT_ASSISTANT' | 'SHOW_CAPABILITIES';
 
+export type RouteMode = 'push' | 'replace';
+
 export type NextActionTarget =
-  | { kind: 'route'; href: string }
+  | { kind: 'route'; href: string; mode: RouteMode }
   | { kind: 'itinerary'; tripId: string }
   | { kind: 'internal'; action: InternalAction };
 
@@ -35,8 +39,8 @@ function seg(value: string): string {
   return encodeURIComponent(value);
 }
 
-function route(href: string): NextActionTarget {
-  return { kind: 'route', href };
+function route(href: string, mode: RouteMode = 'replace'): NextActionTarget {
+  return { kind: 'route', href, mode };
 }
 
 export function nextActionRoute(
@@ -53,17 +57,19 @@ export function nextActionRoute(
     case 'OPEN_STAY_SEARCH':
       return route('/stays');
     case 'OPEN_STYLE':
-      return route('/records/style');
+      return route('/records/style', 'push');
     case 'CREATE_TRIP':
       return route('/trips/new/step1');
     case 'OPEN_OTA':
-      return params.stayId ? route(`/stays/${seg(params.stayId)}`) : null;
+      return params.stayId
+        ? route(`/stays/${seg(params.stayId)}`, 'push')
+        : null;
     case 'OPEN_PLACE':
       if (!params.poiId) return null;
       if (surface === 'LIVE' && trip) {
-        return route(`${trip}/live/place/${seg(params.poiId)}`);
+        return route(`${trip}/live/place/${seg(params.poiId)}`, 'push');
       }
-      return route(`/explore/places/${seg(params.poiId)}`);
+      return route(`/explore/places/${seg(params.poiId)}`, 'push');
   }
 
   if (!trip) return null;
@@ -83,10 +89,11 @@ export function nextActionRoute(
       return route(
         params.date
           ? `${trip}/records/reflection/${seg(params.date)}`
-          : `${trip}/records`
+          : `${trip}/records`,
+        'push'
       );
     case 'OPEN_TRIP_SUMMARY':
-      return route(`${trip}/records/summary`);
+      return route(`${trip}/records/summary`, 'push');
     default:
       return null;
   }

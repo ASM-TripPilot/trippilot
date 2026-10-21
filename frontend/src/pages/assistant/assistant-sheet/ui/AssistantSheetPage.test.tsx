@@ -11,6 +11,8 @@ import {
   within,
 } from '@testing-library/react-native';
 
+import { resetPressGuard } from '@/shared/lib/pressGuard';
+
 import { setAssistantPort } from '../api/assistantClient';
 import type {
   AssistantMessage,
@@ -88,6 +90,10 @@ function renderPage(
     { wrapper: Wrapper }
   );
 }
+
+// TRIP-1565 — push 갈래는 모듈 전역 400ms 연타 창(guardPress)을 연다. 창이 테스트 사이에 새면 다음 테스트의 첫 누름이
+// 조용히 먹힌다(순서 의존 간헐 실패) → describe 안이 아니라 파일 최상위에서 매번 닫는다.
+beforeEach(() => resetPressGuard());
 
 afterEach(() => {
   restore?.();
@@ -286,7 +292,9 @@ describe('AssistantSheetPage · 카드 배선 (TRIP-1323)', () => {
     await act(async () => {
       fireEvent.press(screen.getByTestId('assistant-scope-ota'));
     });
-    expect(mockReplace).toHaveBeenCalledWith('/stays/stay-songjeong');
+    // TRIP-1565 — 상세류(숙소)는 시트 위에 쌓는다. 이전 기대값은 mockReplace 였다.
+    expect(mockPush.mock.calls).toEqual([['/stays/stay-songjeong']]);
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 
   it('폴백 [도우미 없이 계속]은 시트를 닫는다(BR-U8-41)', async () => {
@@ -1013,6 +1021,8 @@ describe('AssistantSheetPage · 후보 카드 누름', () => {
       await press(card('m-cand', 'poi-a'));
 
       expect(navHrefs()).toEqual([href]);
+      // TRIP-1565 — 장소 상세는 push 다(카드 전용 경로가 없다 — 빨간 행과 같은 이동).
+      expect(navCalls()).toEqual([['push', href]]);
       expect(fake.calls.sendTurn).toBe(0);
     }
   );
@@ -1044,24 +1054,22 @@ describe('AssistantSheetPage · 후보 카드 누름', () => {
   });
 
   it('카드 누름과 같은 화면 빨간 행 누름은 router 에 같은 호출을 한다(카드 전용 이동 경로가 없다)', async () => {
-    const seed = () => [
-      cardsMessage('m-cand', ['poi-a'], { nextActions: [openPlace('poi-a')] }),
-      infoMessage('m-info', openPlace('poi-a', '장소 보기')),
-    ];
+    renderPage({
+      seedMessages: [
+        cardsMessage('m-cand', ['poi-a'], {
+          nextActions: [openPlace('poi-a')],
+        }),
+        infoMessage('m-info', openPlace('poi-a', '장소 보기')),
+      ],
+    });
+    await screen.findByTestId('assistant-message-m-info');
 
-    // 한 페이지는 이동 잠금(closingRef)이 한 번뿐이라 카드·행을 같은 인스턴스에서 못 비교한다 — 따로 띄운다.
-    renderPage({ seedMessages: seed() });
-    await screen.findByTestId('assistant-message-m-cand');
     await press(card('m-cand', 'poi-a'));
     const viaCard = navCalls();
-
-    screen.unmount();
-    restore?.();
+    // TRIP-1565 — push 갈래는 이동 잠금(closingRef)을 세우지 않아 같은 인스턴스에서 둘을 다 누를 수 있다. 연타 창만 닫아 준다.
     mockReplace.mockClear();
     mockPush.mockClear();
-
-    renderPage({ seedMessages: seed() });
-    await screen.findByTestId('assistant-message-m-info');
+    resetPressGuard();
     await press(
       within(screen.getByTestId('assistant-message-m-info')).getByTestId(
         'assistant-next-action-OPEN_PLACE'
@@ -1069,8 +1077,8 @@ describe('AssistantSheetPage · 후보 카드 누름', () => {
     );
     const viaRow = navCalls();
 
-    expect(viaCard).toHaveLength(1);
-    expect(viaCard).toEqual(viaRow);
+    expect(viaCard).toEqual([['push', '/explore/places/poi-a']]);
+    expect(viaRow).toEqual(viaCard);
   });
 
   it('고르기 카드를 누르면 그 quick reply 의 ACTION 턴을 보내고 이동은 없다 — 같은 장소의 빨간 행도 그대로 있다', async () => {
@@ -1148,5 +1156,201 @@ describe('AssistantSheetPage · 후보 카드 누름', () => {
       type: 'ACTION',
       quickReplyId: 'qr-2',
     });
+  });
+});
+
+// TRIP-1565 — 이동 방식. 상세류(장소·숙소·회고·요약·스타일)는 시트를 닫지 않고 그 위에 쌓고(router.push),
+// 흐름·탭 목적지는 시트 자리를 교체한다(router.replace). push 갈래는 시트가 남으므로 이동 잠금(closingRef)을 세우지 않고
+// 연타만 공용 가드(400ms)로 막는다 — 돌아와서 ✕·같은 행이 다시 눌려야 한다.
+// 못 보는 것(6-b): 상세가 뜨는 모양 · 시트가 밑에 남는 것 · 스크롤 위치 · 400ms 를 빠져나가는 느린 이중 탭.
+describe('AssistantSheetPage · 이동 방식 (TRIP-1565)', () => {
+  const act1 = (type: string, params: Record<string, string> = {}) => ({
+    type,
+    label: `${type} 라벨`,
+    params,
+  });
+  const actionInfo = (id: string, action: NextAction): AssistantMessage => ({
+    id,
+    role: 'ASSISTANT',
+    kind: 'INFO',
+    text: '안내예요.',
+    payload: {
+      infoKind: 'PLACE',
+      title: '이름',
+      rows: [{ label: '영업', value: '매일' }],
+    },
+    nextActions: [action],
+    createdAt: '2026-10-22T00:00:00.000Z',
+  });
+  const rowOf = (messageId: string, type: string) =>
+    within(screen.getByTestId(`assistant-message-${messageId}`)).getByTestId(
+      `assistant-next-action-${type}`
+    );
+  async function press(element: Parameters<typeof fireEvent.press>[0]) {
+    await act(async () => {
+      fireEvent.press(element);
+    });
+  }
+  /** 행 하나만 있는 시트를 띄우고 행이 그려질 때까지 기다린다. */
+  async function openWith(
+    action: NextAction,
+    surface: 'ITINERARY' | 'LIVE' = 'ITINERARY'
+  ) {
+    renderPage(
+      { seedMessages: [actionInfo('m-1', action)] },
+      { tripId: 't1', surface }
+    );
+    await screen.findByTestId('assistant-message-m-1');
+    return () => rowOf('m-1', action.type);
+  }
+
+  it.each([
+    ['OPEN_PLACE', { poiId: 'poi-a' }, 'ITINERARY', '/explore/places/poi-a'],
+    ['OPEN_PLACE', { poiId: 'poi-a' }, 'LIVE', '/trips/t1/live/place/poi-a'],
+    ['OPEN_OTA', { stayId: 'stay-1' }, 'ITINERARY', '/stays/stay-1'],
+    ['OPEN_STYLE', {}, 'ITINERARY', '/records/style'],
+    ['OPEN_TRIP_SUMMARY', {}, 'ITINERARY', '/trips/t1/records/summary'],
+    [
+      'OPEN_REFLECTION',
+      { date: '2026-11-02' },
+      'ITINERARY',
+      '/trips/t1/records/reflection/2026-11-02',
+    ],
+  ] as const)(
+    '%s(%j · %s) 는 시트를 닫지 않고 그 위에 쌓는다 — push 1회·replace 0회',
+    async (type, params, surface, href) => {
+      const row = await openWith(act1(type, params), surface);
+      // 앵커 — 누르기 전엔 이동이 없다
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(mockReplace).not.toHaveBeenCalled();
+
+      await press(row());
+
+      expect(mockPush.mock.calls).toEqual([[href]]);
+      expect(mockReplace).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    ['OPEN_STAY_SEARCH', '/stays'],
+    ['OPEN_REPLAN', '/trips/t1/planb'],
+    ['OPEN_LIVE', '/trips/t1/live'],
+    ['OPEN_ITINERARY_EDIT', '/trips/t1/itinerary/edit'],
+    ['OPEN_ITINERARY_METHOD', '/trips/t1/itinerary/method'],
+    ['OPEN_REGENERATE', '/trips/t1/itinerary/method'],
+    ['CREATE_TRIP', '/trips/new/step1'],
+  ])(
+    '%s 는 시트 자리를 교체한다 — replace 1회·push 0회',
+    async (type, href) => {
+      const row = await openWith(act1(type));
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(mockReplace).not.toHaveBeenCalled();
+
+      await press(row());
+
+      expect(mockReplace.mock.calls).toEqual([[href]]);
+      expect(mockPush).not.toHaveBeenCalled();
+    }
+  );
+
+  it('push 로 이동한 뒤(연타 창이 지난 뒤) 같은 행을 다시 누르면 다시 이동한다 — 총 2회', async () => {
+    const row = await openWith(act1('OPEN_PLACE', { poiId: 'poi-a' }));
+
+    await press(row());
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    // 상세를 보고 돌아오는 데 걸리는 시간 — 창(400ms)이 지난 상태
+    resetPressGuard();
+    await press(row());
+
+    expect(mockPush.mock.calls).toEqual([
+      ['/explore/places/poi-a'],
+      ['/explore/places/poi-a'],
+    ]);
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  describe('연타 창의 경계', () => {
+    const FROZEN_NOW = 1_790_000_000_000;
+    let clock: jest.SpyInstance | undefined;
+    afterEach(() => clock?.mockRestore());
+
+    it('창은 400ms 다 — 399ms 뒤 누름은 무시되고 400ms 뒤 누름은 다시 이동한다', async () => {
+      const row = await openWith(act1('OPEN_PLACE', { poiId: 'poi-a' }));
+      // 시계는 화면이 다 그려진 뒤에 멈춘다(그 전에 멈추면 쿼리 신선도가 뒤틀린다) — 이후엔 waitFor 를 쓰지 않는다
+      clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+
+      fireEvent.press(row());
+      expect(mockPush).toHaveBeenCalledTimes(1);
+
+      clock.mockReturnValue(FROZEN_NOW + 399);
+      fireEvent.press(row());
+      expect(mockPush).toHaveBeenCalledTimes(1);
+
+      clock.mockReturnValue(FROZEN_NOW + 400);
+      fireEvent.press(row());
+      expect(mockPush).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('같은 틱에 두 번 눌러도(연타) push 는 1회다', async () => {
+    const row = await openWith(act1('OPEN_PLACE', { poiId: 'poi-a' }));
+
+    await act(async () => {
+      fireEvent.press(row());
+      fireEvent.press(row());
+    });
+
+    expect(mockPush.mock.calls).toEqual([['/explore/places/poi-a']]);
+  });
+
+  it('push 로 이동한 뒤에도 ✕ 는 시트를 닫는다(이동 잠금이 안 남았다) — back 1회', async () => {
+    const row = await openWith(act1('OPEN_PLACE', { poiId: 'poi-a' }));
+    await press(row());
+    // 앵커 — push 가 실제로 나갔다
+    expect(mockPush).toHaveBeenCalledTimes(1);
+
+    await press(screen.getByTestId('assistant-sheet-close'));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('✕ 로 닫는 중에는 push 갈래를 눌러도 이동하지 않는다', async () => {
+    const row = await openWith(act1('OPEN_PLACE', { poiId: 'poi-a' }));
+    await press(screen.getByTestId('assistant-sheet-close'));
+    // 앵커 — 닫기가 실제로 나갔다
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    // 연타 창이 아니라 닫는 중 잠금이 막는 것을 고립한다
+    resetPressGuard();
+
+    await press(row());
+
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('replace 갈래를 한 번 누르면 이후 다른 이동은 replace 든 push 든 막힌다', async () => {
+    renderPage(
+      {
+        seedMessages: [
+          actionInfo('m-stay', act1('OPEN_STAY_SEARCH')),
+          actionInfo('m-replan', act1('OPEN_REPLAN')),
+          actionInfo('m-place', act1('OPEN_PLACE', { poiId: 'poi-a' })),
+        ],
+      },
+      { tripId: 't1', surface: 'ITINERARY' }
+    );
+    await screen.findByTestId('assistant-message-m-place');
+
+    await press(rowOf('m-stay', 'OPEN_STAY_SEARCH'));
+    // 앵커 — 첫 이동은 나갔다
+    expect(mockReplace.mock.calls).toEqual([['/stays']]);
+    resetPressGuard();
+
+    await press(rowOf('m-replan', 'OPEN_REPLAN'));
+    await press(rowOf('m-place', 'OPEN_PLACE'));
+
+    expect(mockReplace.mock.calls).toEqual([['/stays']]);
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,9 @@
 import fc from 'fast-check';
 
-import { NEXT_ACTION_TYPES } from '../api/assistantContract';
+import {
+  NEXT_ACTION_TYPES,
+  type NextActionType,
+} from '../api/assistantContract';
 import { nextActionRoute, type NextActionContext } from './nextActionRoute';
 
 /**
@@ -20,18 +23,19 @@ function route(
 }
 
 describe('nextActionRoute (TRIP-1320)', () => {
+  // TRIP-1565 — route 갈래는 이동 방식(mode)을 싣는다. 이 표의 이전 기대값은 `{ kind:'route', href }` 였다(방식 없음 = 전부 replace).
   it.each([
-    ['OPEN_ITINERARY_EDIT', `/trips/${T}/itinerary/edit`],
-    ['OPEN_ITINERARY_METHOD', `/trips/${T}/itinerary/method`],
-    ['OPEN_REGENERATE', `/trips/${T}/itinerary/method`],
-    ['OPEN_REPLAN', `/trips/${T}/planb`],
-    ['OPEN_LIVE', `/trips/${T}/live`],
-    ['OPEN_STAY_SEARCH', '/stays'],
-    ['OPEN_TRIP_SUMMARY', `/trips/${T}/records/summary`],
-    ['OPEN_STYLE', '/records/style'],
-    ['CREATE_TRIP', '/trips/new/step1'],
-  ])('%s → %s', (type, href) => {
-    expect(route(type)).toEqual({ kind: 'route', href });
+    ['OPEN_ITINERARY_EDIT', `/trips/${T}/itinerary/edit`, 'replace'],
+    ['OPEN_ITINERARY_METHOD', `/trips/${T}/itinerary/method`, 'replace'],
+    ['OPEN_REGENERATE', `/trips/${T}/itinerary/method`, 'replace'],
+    ['OPEN_REPLAN', `/trips/${T}/planb`, 'replace'],
+    ['OPEN_LIVE', `/trips/${T}/live`, 'replace'],
+    ['OPEN_STAY_SEARCH', '/stays', 'replace'],
+    ['OPEN_TRIP_SUMMARY', `/trips/${T}/records/summary`, 'push'],
+    ['OPEN_STYLE', '/records/style', 'push'],
+    ['CREATE_TRIP', '/trips/new/step1', 'replace'],
+  ])('%s → %s (%s)', (type, href, mode) => {
+    expect(route(type)).toEqual({ kind: 'route', href, mode });
   });
 
   // TRIP-1566 — 「일정 보기」는 고정 라우트가 아니라 "해결해야 할 이동"이다. 일정이 확정인지는 누른 시점에 조회해야 알 수 있어
@@ -61,10 +65,12 @@ describe('nextActionRoute (TRIP-1320)', () => {
     ).toEqual({
       kind: 'route',
       href: `/trips/${T}/live/place/p1`,
+      mode: 'push',
     });
     expect(route('OPEN_PLACE', { poiId: 'p1' })).toEqual({
       kind: 'route',
       href: '/explore/places/p1',
+      mode: 'push',
     });
   });
 
@@ -72,6 +78,7 @@ describe('nextActionRoute (TRIP-1320)', () => {
     expect(route('OPEN_OTA', { stayId: 's1' })).toEqual({
       kind: 'route',
       href: '/stays/s1',
+      mode: 'push',
     });
   });
 
@@ -79,10 +86,13 @@ describe('nextActionRoute (TRIP-1320)', () => {
     expect(route('OPEN_REFLECTION', { date: '2026-11-02' })).toEqual({
       kind: 'route',
       href: `/trips/${T}/records/reflection/2026-11-02`,
+      mode: 'push',
     });
+    // 날짜가 없어 기록 화면으로 가는 갈래도 같은 type 이라 같은 방식이다(type 하나 = 방식 하나, 01b 결정 1)
     expect(route('OPEN_REFLECTION')).toEqual({
       kind: 'route',
       href: `/trips/${T}/records`,
+      mode: 'push',
     });
   });
 
@@ -125,6 +135,64 @@ describe('nextActionRoute (TRIP-1320)', () => {
     expect(route('OPEN_OTA', { stayId: '../admin?x=1' })).toEqual({
       kind: 'route',
       href: '/stays/..%2Fadmin%3Fx%3D1',
+      mode: 'push',
     });
+  });
+});
+
+// TRIP-1565 — 이동 방식 분류의 정본은 이 함수의 반환값이다. 상세류(장소·숙소·회고·요약·스타일)는 시트 위에 쌓고(push),
+// 탭·흐름 목적지는 시트 자리를 교체한다(replace). 분류는 type 마다 표에 적혀 있어야 한다 — 새 type 이 분류 없이 늘면 실패한다.
+describe('nextActionRoute · 이동 방식 분류 (TRIP-1565)', () => {
+  type Expected = 'push' | 'replace' | 'itinerary' | 'internal' | 'null';
+  // Record<NextActionType, …> — 계약에 type 이 늘면 tsc 가 먼저 막고, 아래 첫 케이스가 런타임에서 한 번 더 막는다.
+  const EXPECTED: Record<NextActionType, Expected> = {
+    OPEN_PLACE: 'push',
+    OPEN_OTA: 'push',
+    OPEN_REFLECTION: 'push',
+    OPEN_TRIP_SUMMARY: 'push',
+    OPEN_STYLE: 'push',
+    OPEN_ITINERARY: 'itinerary',
+    OPEN_ITINERARY_EDIT: 'replace',
+    OPEN_ITINERARY_METHOD: 'replace',
+    OPEN_REGENERATE: 'replace',
+    OPEN_REPLAN: 'replace',
+    OPEN_LIVE: 'replace',
+    CREATE_TRIP: 'replace',
+    OPEN_STAY_SEARCH: 'replace',
+    RETRY_TURN: 'internal',
+    CONTINUE_WITHOUT_ASSISTANT: 'internal',
+    SHOW_CAPABILITIES: 'internal',
+    RESTORE_REVISION: 'null',
+  };
+  // 필수 파라미터를 전부 준다 — 분류가 파라미터 유무로 갈리지 않는다는 전제(날짜 없는 회고는 위 개별 케이스).
+  const FULL = { poiId: 'p1', stayId: 's1', date: '2026-11-02' };
+
+  it('분류표가 NEXT_ACTION_TYPES 전부를 빠짐없이, 더도 없이 덮는다', () => {
+    expect(Object.keys(EXPECTED).sort()).toEqual([...NEXT_ACTION_TYPES].sort());
+  });
+
+  it.each(Object.entries(EXPECTED))('%s → %s', (type, expected) => {
+    const target = route(type, FULL);
+    if (expected === 'push' || expected === 'replace') {
+      expect(target).toMatchObject({ kind: 'route', mode: expected });
+    } else if (expected === 'null') {
+      expect(target).toBeNull();
+    } else {
+      expect(target).toMatchObject({ kind: expected });
+    }
+  });
+
+  it('route 갈래의 mode 는 push 또는 replace 뿐이다 — mode 없는 route 는 없다', () => {
+    for (const type of NEXT_ACTION_TYPES) {
+      const target = route(type, FULL) as {
+        kind: string;
+        mode?: string;
+      } | null;
+      if (target?.kind === 'route') {
+        expect(['push', 'replace']).toContain(target.mode);
+      }
+    }
+    // 앵커 — 위 훑기가 공허하지 않다(route 갈래가 실제로 있다)
+    expect(route('OPEN_PLACE', FULL)).toMatchObject({ kind: 'route' });
   });
 });
