@@ -83,6 +83,7 @@ class PushDispatchPropertyTest : StringSpec({
         /** 이 스펙은 '모두 읽음'을 쓰지 않는다 — 계약을 만족시키기만 한다. */
         override fun markAllRead(accountId: UUID, at: Instant): Int = 0
         override fun exists(accountId: UUID, notificationId: UUID) = true
+        override fun lockPushGroup(accountId: UUID, dedupPrefix: String) = Unit // 대역은 단일 스레드
         override fun markPushResult(notificationId: UUID, sentAt: Instant?, failedReason: String?) {
             pushResults += Triple(notificationId, sentAt, failedReason)
         }

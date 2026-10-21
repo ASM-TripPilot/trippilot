@@ -107,7 +107,7 @@ describe('🔴 RiskDetailSheet · 머리(eyebrow·제목) (AC-1)', () => {
     renderSheet();
 
     expect(screen.getByTestId('planb-risk-watch-label')).toHaveTextContent(
-      'Plan-B가 지켜보는 것'
+      '재계획이 지켜보는 것'
     );
     expect(screen.getByTestId('planb-risk-cta')).toHaveTextContent('대안 보기');
   });

@@ -16,7 +16,8 @@ import {
  *  - 이 달에 걸친 여행만 줄이 된다(달 경계 여행은 양쪽 달 — 마킹과 같은 기준).
  *  - `itineraryDayCount === 0` 인 여행만 빠진다(undefined 는 남는다). 마킹은 그대로다.
  *  - 기간(시작·종료)이 같은 여행 2건 이상은 한 줄(`kind: 'group'`)이 되고, 대표는 입력 순서 첫째다.
- *  - 줄은 시작일 내림차순 → 종료일 내림차순이다.
+ *  - 줄은 시작일 오름차순 → 종료일 오름차순이다(TRIP-1436 — 달력을 읽는 순서). 줄마다 색 인덱스(`colorIndex`)가 있고
+ *    마킹된 날은 그 줄 색으로 `dayColors` 에 매핑된다.
  *  - 3줄을 넘으면 넘친 만큼이 `hiddenCount` 다(숨긴 줄을 개수 없이 버리지 않는다 — INV-4).
  *  - 속성: 어떤 목록이든 보이는 줄 ≤ 3, 보이는 + 숨긴 = 묶은 뒤 전체, 여행이 사라지거나 겹치지 않는다.
  *
@@ -88,10 +89,10 @@ describe('🔴 TRIP-1084 · buildMonthLegends — 이 달 여행만 (AC-1)', () 
       trip('oct', '시월 여행', '2026-10-05', '2026-10-06'),
     ];
 
-    // 실행 / 단언: 9월엔 시작일 늦은 부산이 위, 10월 여행은 없다.
+    // 실행 / 단언: 9월엔 시작일 이른 경계 여행이 위(오름차순), 10월 여행은 없다.
     expect(summarize(buildMonthLegends(trips, '2026-09').rows)).toEqual([
-      'bs',
       'edge',
+      'bs',
     ]);
     expect(summarize(buildMonthLegends(trips, '2026-08').rows)).toEqual([
       'edge',
@@ -117,7 +118,7 @@ describe('🔴 TRIP-1084 · 일정 0일 여행 제외 (AC-2 · 결정 1 · Q4)',
     const legends = buildMonthLegends(trips, '2026-09');
 
     // 단언: legend 에서는 빠지고, 캘린더 마킹(BR-U5-49 "모두")은 그 날을 계속 칠한다.
-    expect(summarize(legends.rows)).toEqual(['ok', 'unknown']);
+    expect(summarize(legends.rows)).toEqual(['unknown', 'ok']);
     expect(markedDaysOfMonth(trips, '2026-09')).toContain('2026-09-13');
   });
 
@@ -132,6 +133,7 @@ describe('🔴 TRIP-1084 · 일정 0일 여행 제외 (AC-2 · 결정 1 · Q4)',
     expect(rows).toEqual([
       {
         kind: 'trip',
+        colorIndex: 0,
         tripId: 'real',
         title: '서울특별시 여행',
         dateRangeLabel: '9.28–9.30',
@@ -146,14 +148,14 @@ describe('🔴 TRIP-1084 · 같은 기간 묶음 · 정렬 · 자르기 (AC-3 ·
     // 실행
     const legends = buildMonthLegends(FIGMA_SEPTEMBER, '2026-09');
 
-    // 단언 ① 줄 순서 — 시작일 내림차순, 같은 9.28 시작이면 종료일 늦은 9.30 이 위.
+    // 단언 ① 줄 순서 — 시작일 오름차순, 같은 9.28 시작이면 종료일 이른 9.29 가 위.
     //         묶음 구성원은 입력 순서 그대로(강진 k2 가 서울 사이에 끼어 있다).
     expect(summarize(legends.rows)).toEqual([
-      '2026-09-28_2026-09-30[s1,s2,s3,s4,s5,s6]',
-      '2026-09-28_2026-09-29[k1,k2,k3,k4]',
-      'bs',
-      'jj',
       'gn',
+      'jj',
+      'bs',
+      '2026-09-28_2026-09-29[k1,k2,k3,k4]',
+      '2026-09-28_2026-09-30[s1,s2,s3,s4,s5,s6]',
     ]);
     // 단언 ② 묶음은 1줄로 센다 — 5줄 중 3줄이 보이고 2줄이 숨는다.
     expect(legends.hiddenCount).toBe(2);
@@ -164,8 +166,9 @@ describe('🔴 TRIP-1084 · 같은 기간 묶음 · 정렬 · 자르기 (AC-3 ·
       dateRangeLabel: '9.28–9.30',
       nightsLabel: '2박 3일',
     });
-    expect(legends.rows[0]).toEqual({
+    expect(legends.rows[4]).toEqual({
       kind: 'group',
+      colorIndex: 1,
       key: '2026-09-28_2026-09-30',
       representativeTitle: SEOUL,
       dateRangeLabel: '9.28–9.30',
@@ -175,6 +178,7 @@ describe('🔴 TRIP-1084 · 같은 기간 묶음 · 정렬 · 자르기 (AC-3 ·
     // 단언 ④ 개별 줄 객체 통째 — 지금 legend 행과 같은 라벨.
     expect(legends.rows[2]).toEqual({
       kind: 'trip',
+      colorIndex: 2,
       tripId: 'bs',
       title: '부산 여행',
       dateRangeLabel: '9.12–9.14',
@@ -201,7 +205,7 @@ describe('🔴 TRIP-1084 · 같은 기간 묶음 · 정렬 · 자르기 (AC-3 ·
     expect(summarize(rows)).toEqual(['2026-09-28_2026-09-29[k2,k1]']);
   });
 
-  it('시작일이 같으면 종료일이 늦은 쪽이 위다 — 입력 순서가 반대여도', () => {
+  it('시작일이 같으면 종료일이 이른 쪽이 위다 — 입력 순서가 반대여도', () => {
     // 준비: 9.28–9.29 가 먼저 들어온다(입력 순서대로 두면 틀린다).
     const trips = [
       trip('short', '강진군 여행', '2026-09-28', '2026-09-29'),
@@ -210,8 +214,8 @@ describe('🔴 TRIP-1084 · 같은 기간 묶음 · 정렬 · 자르기 (AC-3 ·
 
     // 실행 / 단언
     expect(summarize(buildMonthLegends(trips, '2026-09').rows)).toEqual([
-      'long',
       'short',
+      'long',
     ]);
   });
 
@@ -226,13 +230,14 @@ describe('🔴 TRIP-1084 · 같은 기간 묶음 · 정렬 · 자르기 (AC-3 ·
       hiddenCount: 0,
     });
     expect(summarize(buildMonthLegends(three, '2026-09').rows)).toEqual([
-      'c',
-      'b',
       'a',
+      'b',
+      'c',
     ]);
     expect(buildMonthLegends(three, '2026-11')).toEqual({
       rows: [],
       hiddenCount: 0,
+      dayColors: {},
     });
   });
 });
@@ -249,10 +254,12 @@ describe('🔴 TRIP-1084 · 반쪽 방어 (AC-6)', () => {
     expect(buildMonthLegends(null, '2026-09')).toEqual({
       rows: [],
       hiddenCount: 0,
+      dayColors: {},
     });
     expect(buildMonthLegends(undefined, '2026-09')).toEqual({
       rows: [],
       hiddenCount: 0,
+      dayColors: {},
     });
     expect(summarize(buildMonthLegends(dirty, '2026-09').rows)).toEqual(['ok']);
   });
@@ -364,12 +371,48 @@ describe('🔴 TRIP-1084 · buildMonthLegends 속성 (AC-7)', () => {
           }
           keys.push(period);
         }
-        // 단언 ⑤ 기간 키가 엄격 내림차순(시작일 → 종료일, 'YYYY-MM-DD_YYYY-MM-DD' 사전순).
+        // 단언 ⑤ 기간 키가 엄격 오름차순(시작일 → 종료일, 'YYYY-MM-DD_YYYY-MM-DD' 사전순).
         for (let i = 1; i < keys.length; i++) {
-          expect(keys[i - 1] > keys[i]).toBe(true);
+          expect(keys[i - 1] < keys[i]).toBe(true);
         }
       }),
       { numRuns: 300, examples: [BRANCH_EXAMPLE] }
     );
+  });
+});
+
+describe('TRIP-1436 Q-159 · 여행마다 다른 마킹 색(줄 인덱스 = 칸 색 = 범례 점)', () => {
+  it('두 여행이 한 달에 걸치면 줄마다 colorIndex 가 다르고, 마킹된 날은 그 줄 색으로 매핑된다', () => {
+    const trips = [
+      trip('late', '서귀포 여행', '2026-11-20', '2026-11-21'),
+      trip('early', '서울 여행', '2026-11-07', '2026-11-08'),
+    ];
+
+    const { rows, dayColors } = buildMonthLegends(trips, '2026-11');
+
+    expect(rows.map((row) => row.colorIndex)).toEqual([0, 1]);
+    expect(dayColors).toEqual({
+      '2026-11-07': 0,
+      '2026-11-08': 0,
+      '2026-11-20': 1,
+      '2026-11-21': 1,
+    });
+  });
+
+  it('같은 기간 묶음은 한 색이고, 색은 3개를 넘으면 순환한다', () => {
+    const grouped = [
+      trip('a', 'A', '2026-09-01', '2026-09-02'),
+      trip('b', 'B', '2026-09-01', '2026-09-02'),
+    ];
+    const { rows, dayColors } = buildMonthLegends(grouped, '2026-09');
+    expect(rows).toHaveLength(1);
+    expect(dayColors?.['2026-09-01']).toBe(0);
+
+    const five = [1, 2, 3, 4, 5].map((n) =>
+      trip(`t${n}`, `T${n}`, `2026-09-0${n}`, `2026-09-0${n}`)
+    );
+    expect(
+      buildMonthLegends(five, '2026-09').rows.map((row) => row.colorIndex)
+    ).toEqual([0, 1, 2, 0, 1]);
   });
 });

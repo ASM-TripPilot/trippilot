@@ -51,7 +51,7 @@ function editedInstant(original: string | null, hhmm: string): string | null {
 
 export interface VisitTimeSheetProps {
   visitCheckId: string;
-  /** 부제 — 어느 장소의 시각을 고치는지(Figma 4524:2383). */
+  /** 부제 — 어느 장소의 시각을 고치는지(Figma 4964:3257). */
   placeName: string;
   /** 원본 UTC 순간 ISO(`Z`) 또는 null(미기록). */
   arrivedAt: string | null;
@@ -156,7 +156,7 @@ export function VisitTimeSheet({
           </Text>
         </View>
 
-        {/* Figma 4524:2383 — 도착·완료 두 칸을 가로 2열로. 칸 안은 HH:mm 박스 대신 시·분 휠(편집 상태
+        {/* Figma 4964:3257 — 도착·완료 두 칸을 가로 2열로. 칸 안은 HH:mm 박스 대신 시·분 휠(편집 상태
             프레임이 Figma 에 없어 기존 토큰으로 최소 모양 — 휠 제스처 분리는 위 머리 주석). */}
         <View className="w-full flex-row gap-md">
           <View

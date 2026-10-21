@@ -232,7 +232,7 @@ describe('탭·검색·후보·제출 (옛 본 파일)', () => {
       // 긍정 — 안내문과 두 후보가 실제로 그려진다(Figma multi-candidate 실측 문구).
       expect(
         within(screen.getByTestId('stay-register-candidate-hint')).getByText(
-          '여러 숙소가 검색됐어요. 정확한 곳을 선택하세요'
+          '여러 숙소가 검색됐어요. 정확한 곳을 선택해 주세요'
         )
       ).toBeOnTheScreen();
 

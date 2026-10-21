@@ -205,14 +205,20 @@ export function CheckCircleGlyph({ size = 20, testID }: GlyphProps) {
 
 // 카드 우측 편집 연필(20) — Figma `1876:1099`. FIXED 항목에만 붙는 muted-soft 가 기본이고,
 // h19 hero 의 primary 원 안에서는 white 로, i01 [직접 수정] 흰 알약(TRIP-747)에서는 primary 로
-// 스냅한다(같은 도형, 색만 — PlusGlyph tone 패턴과 동형).
+// 스냅한다(같은 도형, 색만 — PlusGlyph tone 패턴과 동형). TRIP-1522 하단 바 "수정" 칸의 비활성은 `muted`.
 export function PencilGlyph({
   size = 20,
   tone = 'mutedSoft',
   testID,
-}: GlyphProps & { tone?: 'mutedSoft' | 'white' | 'primary' }) {
+}: GlyphProps & { tone?: 'mutedSoft' | 'white' | 'primary' | 'muted' }) {
   const stroke =
-    tone === 'white' ? WHITE : tone === 'primary' ? PRIMARY : MUTED_SOFT;
+    tone === 'white'
+      ? WHITE
+      : tone === 'primary'
+        ? PRIMARY
+        : tone === 'muted'
+          ? MUTED
+          : MUTED_SOFT;
   return (
     <Svg
       testID={testID}

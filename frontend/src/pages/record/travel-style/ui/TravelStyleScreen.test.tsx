@@ -178,7 +178,7 @@ describe('Figma 정합 — 2톤 타일·헤딩 병합·남은 곳 계산·# 접�
    *    그린다. `getByText(/72분/)` 는 flat·nested 둘 다 통과하므로(§5 A·B 실측) **단위가 별도 노드**인지를
    *    `within(타일).getByText('분')`(exact) 로 가른다 — nested 만 FOUND, flat 은 null.
    *  - 🔴 AC-5 병합: 헤딩+진행문구가 **한 노드**로 병합(testID reflection-style-progress). `within(진행노드)`
-   *    로 "부족합니다"가 그 노드 안에 있는지를 잰다(현재는 형제라 within 밖 → null → red, §5 D·E 실측).
+   *    로 "부족해요"가 그 노드 안에 있는지를 잰다(현재는 형제라 within 밖 → null → red, §5 D·E 실측).
    *  - 🔴 AC-6 값 인터폴레이션: 진행 바 아래 "{required-current}곳 더 필요" 가 리터럴이 아니라 계산값
    *    (두 픽스처 4곳/7곳 으로 잠근다).
    *  - 🔴 AC-7 `#`접두: 미리보기 칩을 컴포넌트가 `#${descriptor}` 로 그린다(§5 F 실측).
@@ -234,7 +234,7 @@ describe('Figma 정합 — 2톤 타일·헤딩 병합·남은 곳 계산·# 접�
   });
 
   describe('🔴 TRIP-765 · AC-5 insufficient 헤딩 병합', () => {
-    it('헤딩+진행문구가 한 노드로 병합돼 진행 testID 안에 "부족합니다"가 있다', () => {
+    it('헤딩+진행문구가 한 노드로 병합돼 진행 testID 안에 "부족해요"가 있다', () => {
       // Arrange — 임시 얼굴, 3/10.
       render(
         <TravelStyleScreen
@@ -249,7 +249,7 @@ describe('Figma 정합 — 2톤 타일·헤딩 병합·남은 곳 계산·# 접�
       const progress = screen.getByTestId('reflection-style-progress');
 
       // Assert — 병합돼 같은 노드 안에 헤딩·진행이 함께 있다(현재는 헤딩이 형제라 within 밖 → red, §5 D·E).
-      expect(within(progress).getByText(/부족합니다/)).toBeOnTheScreen();
+      expect(within(progress).getByText(/부족해요/)).toBeOnTheScreen();
       expect(within(progress).getByText(/현재 3곳/)).toBeOnTheScreen();
       // Assert — 필요 수치도 전역에서 findable(무회귀).
       expect(screen.getByText(/필요 10곳/)).toBeOnTheScreen();
@@ -437,7 +437,7 @@ describe('TRIP-1425 · 칩의 # 은 한 번만 · 진행 문구 한 줄 삭제',
     expect(screen.queryByText(/채우면/)).toBeNull();
     // 남는 세 요소 — 현재 N곳/필요 10곳 · 게이지 · 정식 아님(+ 잔여 행).
     const progress = screen.getByTestId('reflection-style-progress');
-    expect(within(progress).getByText(/부족합니다/)).toBeOnTheScreen();
+    expect(within(progress).getByText(/부족해요/)).toBeOnTheScreen();
     expect(within(progress).getByText(/현재 6곳/)).toBeOnTheScreen();
     expect(screen.getByText(/필요 10곳/)).toBeOnTheScreen();
     expect(

@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
@@ -7,7 +7,7 @@ import { MemoInline } from '@/features/attach-visit-media/index.view';
 import { CloseGlyph } from '@/features/record';
 
 /**
- * TRIP-1117 · i01 허브 메모 시트(Figma 4741:2833 · 시트 4741:2984) — 순수 바텀시트(props + 콜백만).
+ * TRIP-1117 · i01 허브 메모 시트(Figma 4952:3098 · 시트 4741:2984) — 순수 바텀시트(props + 콜백만).
  *
  * 허브 [메모]를 누르면 페이지가 이 시트를 허브의 **형제로 조건부 마운트**한다(열림 = 트리에 있음, i03 선례).
  * 입력은 `MemoInline`(2000자) — 시트 안이라 `BottomSheetTextInput` 문맥이 선다. TRIP-1426 · 저장 경로는 [저장] 하나다
@@ -30,7 +30,8 @@ export interface MemoSheetProps {
   /** TRIP-1426 — 저장 요청이 진행 중이면 true([저장] 비활성). 같은 틱 중복은 페이지의 ref 잠금이 막는다. */
   saving?: boolean;
   /** [저장] 누름 — 앞뒤 공백을 걷은 초안. */
-  onSubmit: (text: string) => void;
+  /** 두 번째 인자 = 입력에 심은 글(TRIP-1492 — 손대지 않은 저장을 PUT 없이 닫게 하는 기준). */
+  onSubmit: (text: string, seed: string) => void;
   onClose: () => void;
 }
 
@@ -61,13 +62,17 @@ export function MemoSheet({
 }: MemoSheetProps): ReactElement {
   // 초안 사본 — MemoInline 이 초안을 쥐므로 바뀔 때마다 받아 둔다(글자 수·[저장]용). 시작값 = 시드(저장본).
   const [draft, setDraft] = useState(text ?? '');
+  const [seed, setSeed] = useState(text ?? '');
   // 잠금이 풀리면 입력은 key 로 다시 마운트돼 `text` 로 심기고, 초안 사본도 같은 시드로 맞춘다(0/2000 금지).
   // 시트 전체를 key 로 다시 그리면 바텀시트가 다시 올라오므로 입력만 다시 심는다.
   const [seededEditable, setSeededEditable] = useState(editable);
   if (seededEditable !== editable) {
     setSeededEditable(editable);
     setDraft(text ?? '');
+    setSeed(text ?? '');
   }
+  // TRIP-1503 — 입력 상자 어디를 눌러도 포커스(입력 자체는 첫 줄 높이만 눌려서 빈 영역 탭이 키보드를 못 띄웠다).
+  const inputRef = useRef<{ focus(): void } | null>(null);
   const saveDisabled = draft.trim() === '' || !editable || saving;
 
   return (
@@ -118,12 +123,17 @@ export function MemoSheet({
         </View>
 
         {/* 입력 상자 — 배경·테두리는 감싸는 View 에(MemoInline 입력 className 에 bg 를 넣지 않는다). */}
-        <View className="h-[140px] justify-between rounded-input border border-hairline-strong bg-surface-soft px-lg py-md">
+        <Pressable
+          testID="live-memo-box"
+          accessible={false}
+          onPress={() => inputRef.current?.focus()}
+          className="h-[140px] justify-between rounded-input border border-hairline-strong bg-surface-soft px-lg py-md"
+        >
           <MemoInline
+            inputRef={inputRef}
             key={editable ? 'open' : 'locked'}
             editable={editable}
             text={text}
-            submitOnBlur={false}
             onChangeDraft={setDraft}
             className="max-h-[96px] p-0 font-noto text-body text-ink"
           />
@@ -133,7 +143,7 @@ export function MemoSheet({
           >
             {`${draft.length}/${MEMO_MAX}`}
           </Text>
-        </View>
+        </Pressable>
 
         {notice ? (
           <Text
@@ -149,7 +159,7 @@ export function MemoSheet({
           testID="live-memo-save"
           accessibilityRole="button"
           disabled={saveDisabled}
-          onPress={() => onSubmit(draft.trim())}
+          onPress={() => onSubmit(draft.trim(), seed)}
           className={`h-[52px] items-center justify-center rounded-button bg-primary ${
             saveDisabled ? 'opacity-40' : ''
           }`}

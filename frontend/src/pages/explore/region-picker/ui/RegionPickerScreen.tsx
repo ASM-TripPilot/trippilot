@@ -77,7 +77,7 @@ const COPY: Record<
     appBar: '지역 선택',
     title: '어디서 묵을까요?',
     subtitle: '지역을 고르면 숙소를 모아 보여드려요',
-    placeholder: '지역·숙소 이름 검색',
+    placeholder: '지역 이름 검색',
     popular: '인기 지역',
     section: '지역별 둘러보기',
   },
@@ -369,6 +369,10 @@ function PopularStrip({
           <Pressable
             key={group.sidoCode}
             testID={`explore-region-popular-${group.sidoCode}`}
+            accessibilityRole="button"
+            accessibilityLabel={
+              tagline ? `${group.sidoName}, ${tagline}` : group.sidoName
+            }
             onPress={() => onOpenSido(group.sidoCode)}
             className="w-[150px] overflow-hidden rounded-card bg-canvas"
           >
@@ -446,7 +450,8 @@ export function RegionPickerScreen({
           testID="explore-region-back"
           accessibilityRole="button"
           accessibilityLabel="뒤로"
-          onPress={onBack}
+          // 드릴다운이 열려 있으면 한 단계(시·도 목록)만 돌아가고, 1단에서만 피커를 나간다(TRIP-1436 Q-138).
+          onPress={detail ? () => setOpenSidoCode(null) : onBack}
           hitSlop={8}
         >
           <BackChevronGlyph />

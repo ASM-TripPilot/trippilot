@@ -47,7 +47,7 @@ export function ChevronRightGlyph({
   );
 }
 
-/** 등록 숙소·예약 기록 행 — 책갈피/기록. */
+/** 등록 숙소 행 — 책갈피/기록. */
 export function BookmarkGlyph({ size = 20, testID }: GlyphProps) {
   return (
     <Svg
@@ -492,7 +492,7 @@ export function BedGlyph({ size = 44, testID }: GlyphProps) {
 }
 
 /**
- * l03 메뉴 첫 행(등록 숙소·예약 기록) — 침대(Figma 1602:2494 실측 path, 22 격자). l04 빈 상태
+ * l03 메뉴 첫 행(등록 숙소) — 침대(Figma 1602:2494 실측 path, 22 격자). l04 빈 상태
  * `BedGlyph`(muted-soft·24 격자)와 색·격자가 달라 따로 둔다 — 같은 메뉴의 다른 행(body 톤)과 맞춘다.
  */
 export function MenuBedGlyph({ size = 22, testID }: GlyphProps) {

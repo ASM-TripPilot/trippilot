@@ -32,8 +32,9 @@ export function CtaBar({ buttons }: CtaBarProps): ReactElement {
   return (
     <View
       testID="sheet-cta-root"
-      className="flex-row gap-sm border-t border-hairline bg-canvas px-lg pb-lg pt-md"
+      className="flex-row gap-sm bg-canvas px-lg pb-lg pt-md"
     >
+      <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
       {buttons.map((button, index) => {
         const primary = button.variant === 'primary';
         // 비활성이면 press 를 죽이고(Pressable disabled) primary 채움을 회색으로 바꾼다(TRIP-799 D6·AC-9).

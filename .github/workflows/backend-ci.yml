@@ -36,9 +36,38 @@ jobs:
           # (실측 ~4분/회 × 하루 20회+). buildkit mode=min 전환으로 캐시 자리를 먼저 비웠다 —
           # 10GB 상한이 꽉 찬 상태에서 붙이면 도커 레이어에 밀려 바로 증발한다.
           cache: gradle
-      - name: gradle build (test 포함)
+      - name: 커버리지 게이트 스크립트 검사
         working-directory: backend
-        run: ./gradlew build --no-daemon
+        run: python3 -m unittest scripts/test_coverage_gate.py
+      # 커버리지를 build 와 **같은 Gradle 호출에** 싣는다 — JVM 기동·구성 단계를 한 번만 거친다.
+      # 하한선(전체·모듈별, 규칙은 scripts/coverage_gate.py)은 develop 으로 가는 PR·그 밖의 브랜치 수동 실행(스택 PR 검증에
+      # 쓴다)에서 **막는다** — 여기서 막는다는 잡(체크)을 실패시킨다는 뜻이다. 브랜치 보호가 없어 머지 자체는 막지 않는다.
+      # develop push · 릴리스 PR · develop/main 수동 실행은 막지 않는다 — 이미 머지된 코드라(게이트가 막는 자리는 그 전의
+      # PR 단계다). develop push 에서 막으면 `needs: test` 인 이미지 발행(image 잡)이 멈추고, 릴리스 PR 에서 막으면 커버리지
+      # 부채로 승격 PR 이 빨개져 판단을 흐린다. 릴리스 PR 은 두 꼴이다: docs/conventions/branch.md 의 `develop` → `main`,
+      # 그리고 실제 관행인 `release/main-*`(main 에서 따서 develop 커밋을 머지한 브랜치 — 머지된 릴리스 PR 이 전부 이 이름).
+      # main 으로 가는 그 밖의 PR(branch.md 의 hotfix/* 는 main 에서 분기, 관행상 ci/* 등도)은 develop 을 거치지 않은
+      # 코드라 **막는다**. 판정이 브랜치 이름이라(fork 에서 온 PR 은 이름이 같아도 릴리스로 보지 않는다), 이 저장소 안에서
+      # 릴리스가 아닌 수정을 `release/main-*` 로 올리면 경고로만 지나간다. main 이 이미 하한 미달이면(advisory 로 나간
+      # 릴리스의 부채) hotfix 도 자기 변경과 무관하게 빨개진다 — 그때는 요약의 모듈 표로 자기 변경분을 판단한다.
+      # 대신 막지 않는 경우의 실패를
+      # `::warning::` 주석으로 커밋 체크에 남긴다(COVERAGE_ADVISORY). 각자 통과한 PR 둘이 합쳐 하한 아래로 떨어진 시점이
+      # 그 머지 커밋에 보이게 — 안 남기면 무관한 다음 PR 이 처음 빨개져 원인을 거꾸로 추적해야 한다.
+      # 표와 실패 사유는 잡 요약(Summary 탭)에 남는다.
+      - name: gradle build (test 포함) + 커버리지
+        working-directory: backend
+        env:
+          # 막지 않는 경우: develop push · 릴리스 PR(develop 또는 release/main-* → main) · develop/main 자체를 수동 실행(이미 머지된 코드다)
+          COVERAGE_ADVISORY: ${{ (github.event_name == 'push' || (github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository && (github.head_ref == 'develop' || startsWith(github.head_ref, 'release/main-'))) || (github.event_name == 'workflow_dispatch' && (github.ref_name == 'develop' || github.ref_name == 'main'))) && '1' || '' }}
+        run: ./gradlew build :app:coverageGate --no-daemon
+      - name: 커버리지 리포트 보관
+        if: ${{ !cancelled() && github.event_name != 'push' }}   # 검토용(PR·수동) — 실패해도 남기되, 취소된 실행은 건너뛴다
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/app/build/reports/jacoco/
+          if-no-files-found: ignore
+          retention-days: 7   # PR 검토 동안만 쓸모 있다 — 기본 90일이면 하루 20회+ 실행분이 할당량을 쌓는다
 
   # 2) 이미지 빌드 → GHCR push (develop push 에서만 publish)
   image:

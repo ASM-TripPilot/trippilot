@@ -8,9 +8,15 @@ plugins {
     alias(libs.plugins.spring.dependencyManagement) apply false
 }
 
+// `subprojects {}` 안의 `libs` 는 하위 프로젝트 확장으로 찾아 실패한다 — 루트에서 꺼내 넘긴다.
+val jacocoVersion = libs.versions.jacoco.get()
+
 // 전 모듈 공통 컴파일/테스트 규약. 모듈별 build.gradle.kts는 의존성만 선언한다.
 subprojects {
     apply(plugin = "org.jetbrains.kotlin.jvm")
+    // 커버리지 측정 — 각 모듈 test 가 실행 데이터를 남기고, 합산 리포트는 app 이 만든다(app/build.gradle.kts).
+    apply(plugin = "jacoco")
+    extensions.configure<JacocoPluginExtension> { toolVersion = jacocoVersion }
 
     group = "com.trippilot"
     version = "0.0.1-SNAPSHOT"
@@ -36,6 +42,8 @@ subprojects {
 
     tasks.withType<Test>().configureEach {
         useJUnitPlatform()
+        // 계측은 우리 코드만 — 안 좁히면 Spring·Hibernate·Jackson 클래스까지 로딩마다 계측한다(리포트는 안 쓴다).
+        extensions.configure<JacocoTaskExtension> { includes = listOf("com.trippilot.*") }
         // **테스트 JVM 은 Gradle 데몬과 별도 프로세스라 `org.gradle.jvmargs` 를 안 물려받는다.**
         // 기본 512m 으로는 Spring 컨텍스트 + Testcontainers 가 든 IT 에서 OOM 이 난다
         // (2026-09-25 실측 — `TokenRefreshControllerIT` 가 `EnumSet.java:118` 에서 죽었다).

@@ -1,4 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import { TermsScreen, type TermsScreenProps } from './TermsScreen';
 
@@ -399,6 +404,26 @@ describe('비주얼 구조', () => {
       expect(onViewTerms).toHaveBeenCalledWith('PRIVACY_POLICY');
       // "보기" 탭이 체크박스 행 press 로 전파되면 동의 상태가 바뀌어 버린다 — 절대 금지.
       expect(onToggle).not.toHaveBeenCalled();
+    });
+
+    it('"보기"는 체크박스 요소 밖 형제 버튼이다 — 라벨 "{약관명} 보기", 체크박스 라벨에는 "보기"가 없다 (TRIP-1430 Q-012)', () => {
+      render(<TermsScreen {...makeMixedProps()} />);
+
+      const checkbox = screen.getByTestId('onboarding-terms-PRIVACY_POLICY');
+      const viewButton = screen.getByRole('button', {
+        name: /개인정보.* 보기$/,
+      });
+
+      // 체크박스 안에 "보기"가 들어 있으면 접근성 요소 하나로 합쳐져 따로 초점을 못 받는다.
+      expect(
+        within(checkbox).queryByTestId('onboarding-terms-view-PRIVACY_POLICY')
+      ).toBeNull();
+      expect(viewButton).toBe(
+        screen.getByTestId('onboarding-terms-view-PRIVACY_POLICY')
+      );
+      expect(checkbox.props.accessibilityRole).toBe('checkbox');
+      expect(checkbox.props.accessibilityLabel).toBeUndefined();
+      expect(within(checkbox).queryByText('보기')).toBeNull();
     });
 
     it('onViewTerms 미전달이면 "보기"를 탭해도 크래시 없이 아무 일도 일어나지 않는다', () => {

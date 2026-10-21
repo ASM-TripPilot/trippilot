@@ -20,7 +20,7 @@ import {
  * — d02 담은 장소 화면의 **렌더 계약**.
  *
  * 무엇을 보장하나:
- *  - **T-1 (A-1)** N곳이면 부제가 `{N}곳 · 마음에 든 순서대로`이고 행마다 순번 1..N 이 붙는다.
+ *  - **T-1 (A-1)** N곳이면 부제가 `{N}곳 · 담은 순서대로`이고 행마다 순번 1..N 이 붙는다.
  *  - **T-2~T-5 (A-3·A-4·A-7 · BR-U1-06)** 지역·태그·사진·상태배지가 없어도 **행을 숨기지 않는다.**
  *  - **T-6·T-7 (A-5·A-6)** 하트와 하단 CTA 가 각자의 콜백을 정확히 한 번 올린다.
  *  - **T-8 (E-1·E-2·E-3)** 0곳이면 안내 + `장소 둘러보기`만 있고 여행 만들기 CTA 도 부제도 없다.
@@ -159,7 +159,7 @@ describe('T-1 · 순번 목록 (A-1)', () => {
     // `{n}곳 · …` 로 쓰든 템플릿 문자열로 쓰든 같은 단언이 통한다.
     expect(
       within(screen.getByTestId('explore-saved-subtitle')).getByText(
-        '4곳 · 마음에 든 순서대로'
+        '4곳 · 담은 순서대로'
       )
     ).toBeOnTheScreen();
 
@@ -607,7 +607,7 @@ describe('T-17 · released 는 목록에 남되 개수·CTA 에서 빠진다 (AC
     // 단언 ① 부제는 released 를 뺀 3곳을 센다(제외를 지우면 '4곳'이 떠 red).
     expect(
       within(screen.getByTestId('explore-saved-subtitle')).getByText(
-        '3곳 · 마음에 든 순서대로'
+        '3곳 · 담은 순서대로'
       )
     ).toBeOnTheScreen();
     // 단언 ② 그래도 released 행은 목록에서 사라지지 않는다(4행 그대로).
@@ -867,7 +867,7 @@ describe('담은 장소 행 — 해제됨 글자·흐림', () => {
     expect(itemTestIds()).toHaveLength(4);
     expect(
       within(screen.getByTestId('explore-saved-subtitle')).getByText(
-        '3곳 · 마음에 든 순서대로'
+        '3곳 · 담은 순서대로'
       )
     ).toBeOnTheScreen();
   });

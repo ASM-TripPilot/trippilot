@@ -5,6 +5,7 @@ import {
   initialWindowMetrics,
   SafeAreaProvider,
 } from 'react-native-safe-area-context';
+import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import NetInfo from '@react-native-community/netinfo';
 import * as SplashScreen from 'expo-splash-screen';
 import {
@@ -35,6 +36,15 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// 스택·탭 화면 배경은 React Navigation 테마 색(기본 #F2F2F2)이 깔린다 — 화면 루트 SafeAreaView 에 배경이 없으면
+// 상태바·홈 인디케이터 영역에 그 회색이 비친다(TRIP-1434 Q-002). 앱 테마 배경을 canvas(tailwind.config.js)로
+// 한 번에 바꾼다. Stack contentStyle 이 아니라 테마인 이유: transparentModal(재계획 시트·AI 도우미)에는 테마 배경이
+// 안 깔려 뒤 화면이 비쳐야 하는데, contentStyle 은 그 모달에도 깔린다.
+const APP_THEME = {
+  ...DefaultTheme,
+  colors: { ...DefaultTheme.colors, background: '#FFFFFF' },
+};
 
 // RN 에는 document 가 없어 focusManager 가 항상 focused 로 읽힌다 — 배선하지 않으면 백그라운드에서도
 // refetchInterval 이 돈다. AppState 'active' 만 focused 로 본다(TRIP-1347). jest 는 이 배선을 못 본다.
@@ -94,7 +104,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
             Provider가 자기보다 아래에 있게 되어 깨진다(AppProviders.test.tsx가
             SplashGate를 목으로 갈아끼운 상태에서 이 배치를 간접적으로 강제한다). */}
         <QueryClientProvider client={queryClient}>
-          {children}
+          <ThemeProvider value={APP_THEME}>{children}</ThemeProvider>
         </QueryClientProvider>
         {/* TRIP-990 — 토스트 호스트는 Stack(SplashGate) 바깥에 한 번. 화면이 back 으로 떠나도 남는다. */}
         <ToastHost />

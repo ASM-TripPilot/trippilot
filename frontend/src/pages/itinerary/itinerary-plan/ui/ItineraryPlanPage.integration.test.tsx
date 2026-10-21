@@ -190,7 +190,7 @@ describe('확정 CTA·재조회 배선', () => {
    * 지도를 얇은 가짜로 바꿔 렌더 노이즈를 없앤다(이 파일의 관심사는 요청 건수지 지도가 아니다).
    *
    * **재작성(TRIP-799 · narrow)**: PLANNED 완성 일정이 이제 옛 `TimelineScreen` 이 아니라 **지도+시트
-   * 셸**(`MapSheetShell`)로 그려진다(01b D1). 그래서 확정 CTA 는 `sheet-cta-button-0`("일정 저장하기"),
+   * 셸**(`MapSheetShell`)로 그려진다(01b D1). 그래서 확정 CTA 는 `sheet-cta-button-0`("일정 확정하기"),
    * 확정 실패 안내는 셸 안 `itinerary-confirm-error`, 잔존 얼굴은 `map-sheet-shell-root` 다 — I4~I10 이
    * 이 셸 testID 로 뒤집힌다(★2·★4). `handleConfirm` 로직(setQueryData 성공·409 재조회·404/500/network
    * 무재조회)은 무변경이라 재조회 계수 심판(GET 1 vs 2)은 그대로다. I2 는 CONFIRMED 라 TimelineScreen
@@ -330,16 +330,16 @@ describe('확정 CTA·재조회 배선', () => {
    *  - 🔴 409 는 침묵 없이 안내 + 재조회로 정합하되, 전환과 잔존을 케이스로 가른다(I5a·I5b · ★2).
    *  - 🔴 404 는 status 불변·재조회 없음(I7 · ★5). 409(+1)와 404(불변)를 GET 실건수로 가른다.
    */
-  describe('🔴 I4 · AC-8 · TRIP-1047 AC-1 — "일정 저장하기" 성공(200)은 재조회 없이 확정 셸로 전환하고 확정 토스트를 띄운다 (setQueryData · US-SCHED-12)', () => {
+  describe('🔴 I4 · AC-8 · TRIP-1047 AC-1 — "일정 확정하기" 성공(200)은 재조회 없이 확정 셸로 전환하고 확정 토스트를 띄운다 (setQueryData · US-SCHED-12)', () => {
     it('셸 CTA press → POST /confirm 1건, GET 재조회 없이 CONFIRMED 셸로 전환하고 "일정이 확정됐어요" 토스트가 뜬다(상주 배너는 없다)', async () => {
       itineraryHandler = () => HttpResponse.json(plannedItinerary());
       confirmHandler = () => HttpResponse.json(confirmedItinerary());
 
       renderPageWithToast();
 
-      // PLANNED 로 열려 셸의 확정 CTA(sheet-cta-button-0 "일정 저장하기", 1버튼)가 뜬다(첫 GET 1건).
+      // PLANNED 로 열려 셸의 확정 CTA(sheet-cta-button-0 "일정 확정하기", 1버튼)가 뜬다(첫 GET 1건).
       const cta = await screen.findByTestId('sheet-cta-button-0');
-      expect(cta).toHaveTextContent('일정 저장하기');
+      expect(cta).toHaveTextContent('일정 확정하기');
       await waitFor(() => expect(itineraryGetCalls).toBe(1));
       // 앵커 — 확정 전엔 토스트가 없다(뒤에 보이는 토스트가 이번 확정 몫임을 가른다 · 02a ★2).
       expect(screen.queryByTestId(CONFIRMED_TOAST)).toBeNull();
@@ -626,6 +626,23 @@ describe('확정 CTA·재조회 배선', () => {
         pathname: '/assistant',
         params: { surface: 'ITINERARY', tripId: TRIP_ID },
       });
+    });
+
+    it('시트가 펼침(88%, index 2)으로 가면 ✦ 를 그리지 않고, 내려가면 다시 그린다 (TRIP-1435 Q-082)', async () => {
+      renderPageWithToast();
+      await screen.findByTestId('assistant-fab');
+      const onAnimate = (): ((from: number, to: number) => void) => {
+        const host = screen.root
+          .findAll((node) => Array.isArray(node.props?.snapPoints))
+          .find((node) => typeof node.type === 'string');
+        return host?.props.onAnimate;
+      };
+
+      act(() => onAnimate()(1, 2));
+      expect(screen.queryByTestId('assistant-fab')).toBeNull();
+
+      act(() => onAnimate()(2, 1));
+      expect(screen.getByTestId('assistant-fab')).toBeTruthy();
     });
   });
 });
@@ -1304,7 +1321,7 @@ describe('확정 예방 잠금(PARTIAL)', () => {
    * TRIP-337 → TRIP-799 · AC-9 확정 예방 잠금을 **실 HTTP 로** 태우는 심판.
    *
    * **재작성(TRIP-799 · narrow)**: PLANNED 완성 일정이 이제 지도+시트 셸이라 확정 CTA 는
-   * `sheet-cta-button-0`("일정 저장하기")이고, PARTIAL 잠금은 **CtaButton.disabled**(가산 prop)로
+   * `sheet-cta-button-0`("일정 확정하기")이고, PARTIAL 잠금은 **CtaButton.disabled**(가산 prop)로
    * 표현된다(★5). 그리고 옛 잠금 **배너**(`itinerary-confirm-locked-notice`)는 새 흐름에서 **제거**된다
    * (D6 — h14 는 PARTIAL 도달 안 함) → A4-1 은 "배너가 뜬다"에서 "배너가 부재한다"로 뒤집힌다.
    *
@@ -1444,7 +1461,7 @@ describe('확정 예방 잠금(PARTIAL)', () => {
 describe('지도 실패 폴백', () => {
   /**
    * TRIP-919 · AC-5 — h14 완성 일정(PLANNED 셸)에서 지도가 실패하면 **페이지 코드 변경 없이** 셸이 폴백
-   * 바를 띄우고, 시트 카드 목록과 [일정 저장하기] CTA 는 그대로 남는다(INV-4 · US-SCHED-06 예외).
+   * 바를 띄우고, 시트 카드 목록과 [일정 확정하기] CTA 는 그대로 남는다(INV-4 · US-SCHED-06 예외).
    *
    * 무엇을 보장하나: 실패 감지·폴백 표시는 셸 몫이라 9 소비처가 공짜로 얻는다 — 그중 h14 페이지 층에서
    * "셸이 실패를 받아 처리한다"를 한 번 확인한다. 페이지 파일(ItineraryPlanPage.tsx) 무변경은 명령 검증
@@ -1487,7 +1504,7 @@ describe('지도 실패 폴백', () => {
   const CARD_B = `slot-stopcard-${DAY1}#poi-b`;
 
   describe('🔴 PF1 · AC-5 — h14 셸에서 지도가 실패하면 폴백 바가 뜨고 카드·CTA 는 남는다', () => {
-    it('map-root 의 onLoadFailed 발화 → map-sheet-fallback 표시 · 지도 자리 교체 · 카드 2장·일정 저장하기 유지', async () => {
+    it('map-root 의 onLoadFailed 발화 → map-sheet-fallback 표시 · 지도 자리 교체 · 카드 2장·일정 확정하기 유지', async () => {
       // 준비 — PLANNED 셸 도착, 실패 전 카드·CTA 확인(부정 단언의 공허 통과 방지).
       renderPage();
       await screen.findByTestId('map-sheet-shell-root');
@@ -1506,12 +1523,12 @@ describe('지도 실패 폴백', () => {
       const fallback = screen.getByTestId('map-sheet-fallback');
       expect(within(fallback).getByText(FALLBACK_MESSAGE)).toBeOnTheScreen();
       expect(screen.queryByTestId('map-root')).toBeNull();
-      // 화면을 비우지 않는다(INV-4) — 카드 2장과 [일정 저장하기] CTA 가 그대로다.
+      // 화면을 비우지 않는다(INV-4) — 카드 2장과 [일정 확정하기] CTA 가 그대로다.
       expect(screen.getByTestId(CARD_A)).toBeOnTheScreen();
       expect(screen.getByTestId(CARD_B)).toBeOnTheScreen();
       expect(
         within(screen.getByTestId('sheet-cta-button-0')).getByText(
-          '일정 저장하기'
+          '일정 확정하기'
         )
       ).toBeOnTheScreen();
     });
@@ -1521,7 +1538,7 @@ describe('지도 실패 폴백', () => {
 // TRIP-1013 #057 · 옛 ItineraryPlanPage.pressGuard.integration.test.tsx — 시계 정지(Date.now 스파이)는 이 describe 안에만 건다.
 describe('연타 가드 — 저장 직후 일정 수정 관통 차단', () => {
   /**
-   * TRIP-1013 #057 — '일정 저장하기' 연타의 두 번째 탭이, 확정 성공으로 같은 CTA 자리에 새로 뜬
+   * TRIP-1013 #057 — '일정 확정하기' 연타의 두 번째 탭이, 확정 성공으로 같은 CTA 자리에 새로 뜬
    * '일정 수정'을 누르지 않는다(실기에서는 확정 직후 편집 화면으로 들어갔다).
    *
    * 가드는 이 페이지가 만드는 cta 배열의 콜백에 건다 — `CtaBar` 는 소비처가 여럿이라 건드리지 않는다
@@ -1593,11 +1610,11 @@ describe('연타 가드 — 저장 직후 일정 수정 관통 차단', () => {
     });
   }
 
-  /** PLANNED 로 열려 '일정 저장하기' 1버튼이 뜰 때까지 기다린다. */
+  /** PLANNED 로 열려 '일정 확정하기' 1버튼이 뜰 때까지 기다린다. */
   async function openPlanned(): Promise<void> {
     renderGuardPage();
     const cta = await screen.findByTestId('sheet-cta-button-0');
-    expect(cta).toHaveTextContent('일정 저장하기');
+    expect(cta).toHaveTextContent('일정 확정하기');
   }
 
   /** 확정 성공으로 같은 자리가 '일정 수정'으로 바뀔 때까지 기다린다. */
@@ -1627,7 +1644,7 @@ describe('연타 가드 — 저장 직후 일정 수정 관통 차단', () => {
     it('창 안의 "일정 수정"은 편집 push 가 0회이고, 창이 지난 뒤 한 번 누르면 정확히 1회다', async () => {
       await openPlanned();
 
-      // 실행 ① — 첫 탭(일정 저장하기).
+      // 실행 ① — 첫 탭(일정 확정하기).
       fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
       await waitForEditCta();
       // 앵커 — 첫 탭은 제 할 일을 했다(확정 POST 1건).
@@ -1677,7 +1694,7 @@ describe('연타 가드 — 저장 직후 일정 수정 관통 차단', () => {
     });
   });
 
-  describe('01b Q3 · 창 안에서 "일정 저장하기"를 다시 눌러도 확정 요청은 1건이다', () => {
+  describe('01b Q3 · 창 안에서 "일정 확정하기"를 다시 눌러도 확정 요청은 1건이다', () => {
     it('응답을 기다리는 동안 연타해도 POST /confirm 이 한 번만 나간다', async () => {
       await openPlanned();
       holdConfirm();
@@ -3136,7 +3153,7 @@ describe('같은 날 같은 장소 두 번', () => {
 describe('TRIP-1428 · 확정 성공은 완료 배너 seen 에 그 여행을 남긴다 — 확정 대기 중 화면을 떠나도', () => {
   /**
    * 무엇을 보장하나:
-   *  - 🔴 [일정 저장하기] 뒤 응답이 오기 전에 화면이 사라져도(뒤로 가기 등), 성공 응답이 오면 그 여행 id 가
+   *  - 🔴 [일정 확정하기] 뒤 응답이 오기 전에 화면이 사라져도(뒤로 가기 등), 성공 응답이 오면 그 여행 id 가
    *    seen(키 `itinerary.doneBar.seen`)에 더해지고 이미 있던 id 는 남는다.
    *    페이지의 호출별 콜백(`mutate(…, { onSuccess })`)에 두면 화면이 사라진 뒤엔 안 불려 red 다(02a ★6).
    *  - 확정 응답 전엔 seen 을 쓰지 않는다(앵커).
@@ -3170,12 +3187,12 @@ describe('TRIP-1428 · 확정 성공은 완료 배너 seen 에 그 여행을 남
     });
   });
 
-  it('🔴 [일정 저장하기] → 응답 전에 화면이 사라져도, 성공 응답이 오면 그 여행 id 가 seen 에 더해진다 (기존 id 보존)', async () => {
+  it('🔴 [일정 확정하기] → 응답 전에 화면이 사라져도, 성공 응답이 오면 그 여행 id 가 seen 에 더해진다 (기존 id 보존)', async () => {
     // 준비 — 다른 여행 하나를 이미 알렸다.
     (readIdSet as jest.Mock).mockResolvedValue(['trip-old']);
     const view = renderPage();
     const cta = await screen.findByTestId('sheet-cta-button-0');
-    expect(cta).toHaveTextContent('일정 저장하기');
+    expect(cta).toHaveTextContent('일정 확정하기');
 
     // 실행 ① 누르고, 확정 POST 가 서버에 도착할 때까지 기다린다.
     fireEvent.press(cta);

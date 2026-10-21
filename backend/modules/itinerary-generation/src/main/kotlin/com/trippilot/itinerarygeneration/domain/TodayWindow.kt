@@ -9,7 +9,10 @@ import java.time.LocalTime
 object TodayWindow {
     private const val LEAD_MIN = 30 // 첫 장소까지 이동 여유
     private const val STEP_MIN = 30 // 시작을 정시·반에 맞춘다(19:07 같은 시작 시각을 만들지 않게)
-    private const val EVENING_SPAN_MIN = 120 // 저녁에 만들어도 지금부터 이만큼은 연다(한두 곳)
+    private const val EVENING_SPAN_MIN = 120 // 지금부터 이만큼도 하루 안(23:59)에 못 채우면 익일 01:00 으로 넘긴다
+    // 저녁에 만들어도 지금부터 이만큼은 연다 — 저녁·카페·야경이 들어갈 길이(2026-10-20 사용자 "시작+4시간"). 종전 2시간은
+    // 17:49 에 만든 서울 여행이 18:30~21:00 으로 2곳에 그쳤다(개발 서버 실측). 하루 끝(23:59)은 넘지 않는다.
+    private const val EVENING_REACH_MIN = 240
     private const val NIGHT_END_MIN = 23 * 60 + 59 // 밤에도 야경 한두 곳 — 하루 안 표현이라 23:59 에서 멈춘다
     private const val MINUTES_PER_DAY = 24 * 60
     // 밤 늦게 만든 오늘은 익일 01:00 까지(2026-10-20 사용자) — 끝이 시작보다 이른 새벽 시각이면 **다음 날**이다
@@ -50,10 +53,10 @@ object TodayWindow {
         return if (isOvernight(start, end)) raw + MINUTES_PER_DAY else raw
     }
 
-    /** [from] 부터 한두 곳이 들어가도록 **기본 끝** [end] 를 늘린 값 — 지금부터 2시간, 하루 끝(23:59)까지. 줄이지는 않는다. */
+    /** [from] 부터 저녁이 들어가도록 **기본 끝** [end] 를 늘린 값 — 지금부터 4시간, 하루 끝(23:59)까지. 줄이지는 않는다. */
     fun eveningEnd(from: LocalTime, end: LocalTime): LocalTime {
         val fromMin = from.toSecondOfDay() / 60
         val endMin = end.toSecondOfDay() / 60
-        return LocalTime.ofSecondOfDay(maxOf(endMin, minOf(fromMin + EVENING_SPAN_MIN, NIGHT_END_MIN)) * 60L)
+        return LocalTime.ofSecondOfDay(maxOf(endMin, minOf(fromMin + EVENING_REACH_MIN, NIGHT_END_MIN)) * 60L)
     }
 }

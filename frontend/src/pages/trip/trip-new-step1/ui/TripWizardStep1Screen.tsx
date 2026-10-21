@@ -220,6 +220,7 @@ function MustVisitStrip({
           <Text className="font-inter-bold font-bold text-ink">
             {mustVisits.length}
           </Text>
+          곳
         </Text>
         {/* 전체 보기 — 담은 곳이 하나라도 있을 때만(TRIP-732 AC-7). 0곳이면 볼 목록이 없어 안 그린다. */}
         {mustVisits.length > 0 ? (
@@ -397,7 +398,7 @@ export function TripWizardStep1Screen({
                   : isEmptyFace
                     ? '여행지와 기간만 정하면 나머지는 채워둘게요 · 행을 누르면 바꿀 수\u00A0있어요'
                     : summaryPreferences?.onboarding === true
-                      ? '온보딩에서 고른 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수\u00A0있어요'
+                      ? '내 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수\u00A0있어요'
                       : '행을 누르면 바꿀 수 있어요'}
               </Text>
             </View>
@@ -480,7 +481,7 @@ export function TripWizardStep1Screen({
                         size={14}
                       />
                       <Text className="font-noto-bold text-caption font-bold text-primary">
-                        온보딩
+                        내 취향
                       </Text>
                     </View>
                   ) : null
@@ -502,7 +503,8 @@ export function TripWizardStep1Screen({
         </ScrollView>
 
         {/* 하단바 — 실패 배너(있을 때만) + [다음] */}
-        <View className="border-t border-hairline bg-canvas px-lg pb-[20px] pt-md">
+        <View className="bg-canvas px-lg pb-[20px] pt-md">
+          <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
           {submitError ? (
             <View
               testID="trip-wizard-submit-banner"

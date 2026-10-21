@@ -503,6 +503,26 @@ export function handleLocations(
   });
 }
 
+/** TRIP-1517 · 표본 없이 판정만 깨운다 — 포그라운드 복귀(정지한 사용자는 새 표본이 안 온다). */
+export function handleWake(deps: EngineDeps): Promise<void> {
+  return withStore(async () => {
+    const { state: loaded } = deps.store.load();
+    const ctx = loaded.ctx;
+    if (!ctx || !isArmed(loaded)) return;
+    const now = deps.now();
+    const judged = runJudge(
+      ensureJudge(loaded, ctx),
+      [{ type: 'wake', at: now }],
+      now
+    );
+    let state = applyEmits(deps, judged.state, ctx, judged.emits);
+    if (judged.emits.length > 0)
+      await deps.native.armGeofences(regionsFor(state, ctx));
+    state = (await flushInner(deps, state)).state;
+    deps.store.save(state);
+  });
+}
+
 export function flushQueue(
   deps: EngineDeps
 ): Promise<{ dropped: number; consentRejected: boolean }> {

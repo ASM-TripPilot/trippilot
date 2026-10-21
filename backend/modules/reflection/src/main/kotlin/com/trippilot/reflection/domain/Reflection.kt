@@ -185,5 +185,18 @@ interface ReflectionRepository {
      */
     fun findForUpdate(tripId: UUID, dayDate: LocalDate): Reflection?
 
+    /**
+     * **초안을 갈아끼우려고** 잠그고 읽는다 — [findForUpdate] 와 같되, 저장된 초안·출처 대신 [draft]·[source] 를 얹어 읽는다.
+     * 갈아끼울 값이라 저장된 것을 읽을 필요가 없고, 그래서 초안·출처를 못 읽는 하루([UnreadableDraft])도 다시 만들면 낫는다 —
+     * 수정본·기분·메모·최초 생성 시각은 저장된 그대로 실린다(TRIP-553). 수정본을 못 읽으면 [findForUpdate] 처럼 거절한다.
+     */
+    fun findForRedraft(tripId: UUID, dayDate: LocalDate, draft: ReflectionCard, source: ReflectionSource): Reflection?
+
     fun findByTrip(tripId: UUID): List<Reflection>
 }
+
+/**
+ * 그 하루의 **초안·출처를** 못 읽는다(TRIP-1476 — 손상·수동 변경·이 버전이 모르는 단). 사용자가 쓴 것(수정본·기분·메모)은 읽혔다 —
+ * 초안을 다시 만들면([ReflectionRepository.findForRedraft]) 낫는다. 수정본을 못 읽는 하루는 이것이 아니라 409(`REFLECTION_UNREADABLE`)다.
+ */
+class UnreadableDraft(message: String) : IllegalArgumentException(message)

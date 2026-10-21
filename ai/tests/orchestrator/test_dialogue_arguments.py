@@ -168,6 +168,19 @@ def test_argument_is_not_asked_when_its_value_would_be_discarded() -> None:
                 assert not s.asked(), f"{intent.value}.{s.name}"
 
 
+def test_dialogue_only_argument_is_asked_but_kept_out_of_the_router_render() -> None:
+    """`dialogue_only` — 게이트 허용 키엔 있고(asked), 도우미 렌더엔 실리고, 3단 라우터 렌더(intent.yaml `$intents`)엔 없다.
+    지금 표에서 이 사유인 것은 GET_WEATHER.region 하나다 — 늘어나면 근거를 적고 이 단언을 고칠 것."""
+    only = [(i, s) for i in ROUTABLE_INTENTS for s in specs_of(i) if s.dialogue_only]
+    assert [(i.value, s.name) for i, s in only] == [("GET_WEATHER", "region")]
+    (region,) = [s for _, s in only]
+    assert region.asked() and region.lands_in
+    router = {t["name"]: set(t["parameters"]["properties"]) for t in tool_specs()}
+    dialogue = {t["name"]: set(t["parameters"]["properties"]) for t in tool_specs(dialogue=True)}
+    assert "region" not in router["GET_WEATHER"] and "region" in dialogue["GET_WEATHER"]
+    assert {k: v for k, v in dialogue.items() if k != "GET_WEATHER"} == {k: v for k, v in router.items() if k != "GET_WEATHER"}
+
+
 def test_handler_owned_argument_is_not_asked_even_though_it_lands() -> None:
     """받을 칸이 **있는데도** 묻지 않는 자리 — `lands_in is None` 과 이유가 다르다.
 
@@ -209,10 +222,14 @@ def test_spec_rejects_required_argument_nobody_asks_for() -> None:
 
 
 def test_tool_specs_omit_arguments_nobody_asks_for() -> None:
-    """스키마의 정본은 `asked_specs_of` 하나 — 게이트의 허용 집합과 같은 함수를 본다."""
-    by_name = {t["name"]: set(t["parameters"]["properties"]) for t in tool_specs()}
+    """스키마의 정본은 `asked_specs_of` 하나 — 게이트의 허용 집합과 같은 함수를 본다.
+    도우미 렌더(dialogue=True)가 허용 집합과 정확히 같고, 3단 라우터 렌더는 거기서 `dialogue_only` 만 뺀 것이다."""
+    dialogue = {t["name"]: set(t["parameters"]["properties"]) for t in tool_specs(dialogue=True)}
+    router = {t["name"]: set(t["parameters"]["properties"]) for t in tool_specs()}
     for intent in ROUTABLE_INTENTS:
-        assert by_name[intent.value] == asked_argument_names(intent)
+        assert dialogue[intent.value] == asked_argument_names(intent)
+        only = {s.name for s in specs_of(intent) if s.dialogue_only}
+        assert router[intent.value] == asked_argument_names(intent) - only
 
 
 def test_tool_specs_cover_the_closed_set_and_exclude_the_fallback_label() -> None:

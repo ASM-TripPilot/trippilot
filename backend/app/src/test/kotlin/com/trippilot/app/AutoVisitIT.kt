@@ -54,15 +54,18 @@ class AutoVisitIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var txManager: org.springframework.transaction.PlatformTransactionManager
 
     private val zone = ZoneId.of("Asia/Seoul")
-    private val today = LocalDate.now(zone)
-    private val early = today.atStartOfDay(zone).toInstant().plusSeconds(60) // 오늘(서울) 00:01 — 지금보다 앞선다
+    // 사건은 그날(서울) 00:01 부터 최대 20분 뒤(00:21)까지 — 서버는 지금 + 5분보다 미래를 거절한다(BR-U10-21). 그날을 "오늘"로 두면
+    // 자정 직후(지금 < 00:16)엔 마지막 사건이 지금 + 5분을 넘어 OUT_OF_WINDOW 로 깨진다(TRIP-1472). 한 시간 전의 날짜로 두면 01시
+    // 이후엔 오늘, 그 전엔 어제라 사건이 언제나 지금보다 앞선다.
+    private val day = LocalDate.ofInstant(Instant.now().minusSeconds(3_600), zone)
+    private val early = day.atStartOfDay(zone).toInstant().plusSeconds(60)
 
     private fun seed(): Triple<UUID, UUID, List<UUID>> {
         val past = Instant.now().minusSeconds(86_400)
         val accountId = accounts.save(Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, past)).id.value
         val tripId = trips.save(
             Trip.create(
-                accountId = accountId, title = null, startDate = today.minusDays(1), endDate = today.plusDays(1),
+                accountId = accountId, title = null, startDate = day.minusDays(1), endDate = day.plusDays(1),
                 party = 2, companionType = null, budgetTotal = null, preferenceSnapshot = emptyMap(),
                 destinations = listOf(TripDestination(0, "제주", 2)), now = past,
             ),
@@ -71,7 +74,7 @@ class AutoVisitIT : AbstractPostgresIntegrationTest() {
         itineraries.save(
             Itinerary.create(
                 tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, isFallback = false,
-                days = listOf(ItineraryDay.of(today, 0, pois.mapIndexed { i, p -> VisitSlot.of(p, null, i, LocalTime.of(10 + i, 0), LocalTime.of(11 + i, 0)) })),
+                days = listOf(ItineraryDay.of(day, 0, pois.mapIndexed { i, p -> VisitSlot.of(p, null, i, LocalTime.of(10 + i, 0), LocalTime.of(11 + i, 0)) })),
                 now = past,
             ),
         )
@@ -86,12 +89,12 @@ class AutoVisitIT : AbstractPostgresIntegrationTest() {
     @Test
     fun `한 항목의 거절이 다른 항목을 되돌리지 않고, 도착·완료마다 사건이 쌓인다`() {
         val (accountId, tripId, pois) = seed()
-        val slot = "$today#${pois[0]}"
+        val slot = "$day#${pois[0]}"
         val result = auto.apply(
             accountId, tripId,
             listOf(
                 AutoVisitEvent(UUID.randomUUID(), AutoVisitKind.ARRIVE, slot, pois[0], early),
-                AutoVisitEvent(UUID.randomUUID(), AutoVisitKind.ARRIVE, "$today#${UUID.randomUUID()}", UUID.randomUUID(), early), // 일정에 없다
+                AutoVisitEvent(UUID.randomUUID(), AutoVisitKind.ARRIVE, "$day#${UUID.randomUUID()}", UUID.randomUUID(), early), // 일정에 없다
                 AutoVisitEvent(UUID.randomUUID(), AutoVisitKind.COMPLETE, slot, pois[0], early.plusSeconds(1200), CompletionSource.AUTO_GEOFENCE_EXIT),
             ),
         )
@@ -109,7 +112,7 @@ class AutoVisitIT : AbstractPostgresIntegrationTest() {
     fun `같은 슬롯 도착이 동시에 와도 하나만 들어가고 다른 쪽은 이미 기록됨으로 끝난다`() {
         repeat(5) {
             val (accountId, tripId, pois) = seed()
-            val slot = "$today#${pois[0]}"
+            val slot = "$day#${pois[0]}"
             val start = java.util.concurrent.CountDownLatch(1)
             val pool = java.util.concurrent.Executors.newFixedThreadPool(2)
             val runs = List(2) {
@@ -130,7 +133,7 @@ class AutoVisitIT : AbstractPostgresIntegrationTest() {
     @Test
     fun `자동 결과는 슬롯 행을 잡은 다른 트랜잭션이 끝날 때까지 기다린다`() {
         val (accountId, tripId, pois) = seed()
-        val slot = "$today#${pois[0]}"
+        val slot = "$day#${pois[0]}"
         auto.apply(accountId, tripId, listOf(AutoVisitEvent(UUID.randomUUID(), AutoVisitKind.ARRIVE, slot, pois[0], early)))
         val tx = org.springframework.transaction.support.TransactionTemplate(txManager)
         val holding = java.util.concurrent.CountDownLatch(1)
@@ -166,7 +169,7 @@ class AutoVisitIT : AbstractPostgresIntegrationTest() {
     @Test
     fun `쓰기 응답의 갱신 시각을 그대로 보내 되돌리기를 이어 할 수 있다`() {
         val (accountId, tripId, pois) = seed()
-        val slot = "$today#${pois[0]}"
+        val slot = "$day#${pois[0]}"
         val completed = auto.apply(
             accountId, tripId,
             listOf(
@@ -183,7 +186,7 @@ class AutoVisitIT : AbstractPostgresIntegrationTest() {
     @Test
     fun `되돌린 자리를 수동 도착이 같은 행으로 쓰고, 그날 자동 기록은 막힌다`() {
         val (accountId, tripId, pois) = seed()
-        val slot = "$today#${pois[1]}"
+        val slot = "$day#${pois[1]}"
         val arrived = auto.apply(accountId, tripId, listOf(AutoVisitEvent(UUID.randomUUID(), AutoVisitKind.ARRIVE, slot, pois[1], early)))
             .results.single().visitCheck!!
 

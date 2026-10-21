@@ -52,7 +52,7 @@ describe('🔴 1123 AC-2 · 목록·빈 문구·CTA 가 없다', () => {
     // 단언(존재 짝) — 화면이 통째로 안 그려져 공짜 통과하는 것을 막는다.
     expect(screen.getByTestId('my-profile-card')).toBeOnTheScreen();
     expect(screen.getByText('지난 여행')).toBeOnTheScreen();
-    expect(screen.getByText('아직 종료된 여행이 없습니다')).toBeOnTheScreen();
+    expect(screen.getByText('아직 종료된 여행이 없어요')).toBeOnTheScreen();
   });
 });
 
@@ -102,7 +102,7 @@ describe('🔴 AC-6 · 지난 여행 "캘린더" 링크', () => {
     );
 
     expect(screen.getByTestId('my-past-calendar')).toBeOnTheScreen();
-    expect(screen.getByText('아직 종료된 여행이 없습니다')).toBeOnTheScreen();
+    expect(screen.getByText('아직 종료된 여행이 없어요')).toBeOnTheScreen();
     expect(screen.queryAllByTestId(/^my-trip-reflection-/)).toHaveLength(0);
   });
 

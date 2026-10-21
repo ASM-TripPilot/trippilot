@@ -267,7 +267,8 @@ function ListHeader({
         testID="stay-search-header"
         className="font-noto text-label text-muted"
       >
-        {region} · 날짜 미정{showCount ? ` · ${count}곳` : ''}
+        {region}
+        {showCount ? ` · ${count}곳` : ''}
       </Text>
       <View className="flex-row gap-sm">
         {(showPriceFilter
@@ -316,7 +317,7 @@ function RegisterPromptCard({
           이미 예약한 숙소가 있나요?
         </Text>
         <Text className="font-noto text-caption text-muted">
-          OTA에 없어도 위치 · 이름으로 직접 등록
+          찾는 숙소가 없으면 위치 · 이름으로 직접 등록
         </Text>
       </View>
       <ChevronRightGlyph size={20} />
@@ -701,7 +702,7 @@ export function StaySearchScreen({
         <Pressable
           testID="stay-search-fab-saved"
           accessibilityRole="button"
-          accessibilityLabel="담은 숙소"
+          accessibilityLabel="저장한 숙소"
           onPress={onPressSaved}
           style={fabShadow}
           className="absolute bottom-[152px] right-lg h-[56px] w-[56px] items-center justify-center rounded-pill border border-hairline bg-canvas"

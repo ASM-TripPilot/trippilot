@@ -65,6 +65,12 @@ export function insertSlotAt(slots: Slot[], slot: Slot, index: number): Slot[] {
 
 export interface ItineraryEditState {
   days: ItineraryDaysItem[];
+  /**
+   * 사용자가 초안을 바꿨다(삭제·재정렬·시각 조정) — 저장 전 변경이 있다는 표시. 편집기의 "조회 데이터가 바뀌면
+   * 시드" 규칙이 남이 바꾼 캐시(예: 장소 추가 응답)로 이 변경을 덮지 않게 하는 가드 재료다(TRIP-1498).
+   * `seed`·`reset` 이 내린다.
+   */
+  dirty: boolean;
   /** GET 결과로 1회 시드 — 원본 배열과 독립하도록 얕게 복사해 담는다(비파괴). */
   seed(days: ItineraryDaysItem[]): void;
   /** 해당 날에서 첫 일치 슬롯 제거. */
@@ -82,20 +88,30 @@ export interface ItineraryEditState {
     poiId: string,
     patch: { startAt: string; endAt: string; endsNextDay: boolean }
   ): void;
+  /**
+   * 그 날의 `index` 자리에 슬롯을 끼운다(`insertSlotAt` 규칙 — 없으면 말미). 없는 날짜는 무해.
+   * **`dirty` 는 건드리지 않는다** — 서버에 이미 저장된 추가분을 초안에 맞춰 넣는 것이지 사용자의 새 변경이 아니다.
+   */
+  insertSlot(date: string, slot: Slot, index?: number): void;
   /** 테스트/재진입 초기화(싱글턴 격리). */
   reset(): void;
 }
 
-const INITIAL: Pick<ItineraryEditState, 'days'> = { days: [] };
+const INITIAL: Pick<ItineraryEditState, 'days' | 'dirty'> = {
+  days: [],
+  dirty: false,
+};
 
 const createItineraryEditStore: StateCreator<ItineraryEditState> = (set) => ({
   ...INITIAL,
   seed: (days) =>
     set({
       days: days.map((day) => ({ date: day.date, slots: [...day.slots] })),
+      dirty: false,
     }),
   deleteSlot: (date, poiId) =>
     set((state) => ({
+      dirty: true,
       days: state.days.map((day) =>
         day.date === date
           ? { ...day, slots: removeSlot(day.slots, poiId) }
@@ -104,12 +120,14 @@ const createItineraryEditStore: StateCreator<ItineraryEditState> = (set) => ({
     })),
   reorderSlots: (date, reordered) =>
     set((state) => ({
+      dirty: true,
       days: state.days.map((day) =>
         day.date === date ? { ...day, slots: [...reordered] } : day
       ),
     })),
   adjustSlotTime: (date, poiId, patch) =>
     set((state) => ({
+      dirty: true,
       days: state.days.map((day) =>
         day.date === date
           ? {
@@ -124,6 +142,20 @@ const createItineraryEditStore: StateCreator<ItineraryEditState> = (set) => ({
                     }
                   : slot
               ),
+            }
+          : day
+      ),
+    })),
+  insertSlot: (date, slot, index) =>
+    set((state) => ({
+      days: state.days.map((day) =>
+        day.date === date
+          ? {
+              ...day,
+              slots:
+                index === undefined
+                  ? addSlot(day.slots, slot)
+                  : insertSlotAt(day.slots, slot, index),
             }
           : day
       ),

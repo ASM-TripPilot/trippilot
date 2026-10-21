@@ -320,3 +320,191 @@ describe('visitJudge (PBT-U10-F3)', () => {
     );
   });
 });
+
+// ── TRIP-1517 · 진입 직전 근거 창 ───────────────────────────────────
+// 진입 직전 PRE(60초) 안의 정확 표본도 그 진입의 근거다. 표본과 진입이 같은 순간 들어와
+// 처리 순서가 갈려도 결과가 같아야 한다(경합 제거). 정지해 있으면 새 표본이 안 오므로 이 기억이 유일한 근거다.
+
+const PRE = cfg.preEnterSampleMs;
+const bad = (at: number): JudgeEvent => ({
+  type: 'sample',
+  at,
+  accuracyM: cfg.maxAccuracyM + 50,
+});
+const ARRIVE_A = [{ kind: 'ARRIVE', slotKey: 'A', occurredAt: T0 }];
+
+describe('visitJudge — 진입 직전 근거 창 (TRIP-1517)', () => {
+  it('VJ11 진입 직전 창 안의 정확 표본 + 이후 표본 없음 → 3분 뒤 wake 에서 도착(진입 시각)', () => {
+    const { emits } = run([
+      good(T0 - 30_000),
+      enter('A', T0),
+      wake(T0 + 4 * MIN),
+    ]);
+    expect(emits).toEqual(ARRIVE_A);
+  });
+
+  it('VJ12 경계는 포함: 정확히 PRE 전은 인정, 1ms 더 옛은 불인정', () => {
+    const at = (sampleAt: number) =>
+      run([good(sampleAt), enter('A', T0), wake(T0 + 4 * MIN)]).emits;
+    expect(at(T0 - PRE)).toEqual(ARRIVE_A);
+    expect(at(T0 - PRE - 1)).toEqual([]);
+  });
+
+  it('VJ13 창 밖(더 이전) 표본만 → 근거 없음, 보류(기존 규칙)', () => {
+    const { emits } = run([
+      good(T0 - 2 * MIN),
+      enter('A', T0),
+      wake(T0 + 4 * MIN),
+    ]);
+    expect(emits).toEqual([]);
+  });
+
+  it('VJ14 창 안이어도 정확도 100m 초과 표본은 근거가 아니다', () => {
+    const { emits } = run([
+      bad(T0 - 10_000),
+      enter('A', T0),
+      wake(T0 + 4 * MIN),
+    ]);
+    expect(emits).toEqual([]);
+  });
+
+  it('VJ15 나중에 온 부정확 표본이 앞선 정확 표본의 기억을 지우지 않는다', () => {
+    const { emits } = run([
+      good(T0 - 30_000),
+      bad(T0 - 10_000),
+      enter('A', T0),
+      wake(T0 + 4 * MIN),
+    ]);
+    expect(emits).toEqual(ARRIVE_A);
+  });
+
+  it('VJ16 더 옛 정확 표본이 늦게 처리돼도 "가장 최근 시각" 이 남는다', () => {
+    const { emits } = run([
+      good(T0 - 10_000),
+      good(T0 - 100_000),
+      enter('A', T0),
+      wake(T0 + 4 * MIN),
+    ]);
+    expect(emits).toEqual(ARRIVE_A);
+  });
+
+  it('VJ17 한 표본이 겹친 두 슬롯의 근거가 되고, 중심이 가까운 하나만 도착한다(BR-U10-19)', () => {
+    const { emits } = run([
+      good(T0 - 30_000),
+      enter('A', T0, 120),
+      enter('B', T0, 30),
+      wake(T0 + 5 * MIN),
+    ]);
+    expect(emits).toEqual([{ kind: 'ARRIVE', slotKey: 'B', occurredAt: T0 }]);
+  });
+
+  it('VJ18 옛 표본은 "이번 진입" 기준으로 창 밖이면 인정하지 않는다(이탈 후 재진입)', () => {
+    const { emits } = run([
+      good(T0 - 30_000),
+      enter('A', T0),
+      exit('A', T0 + MIN),
+      enter('A', T0 + 10 * MIN),
+      wake(T0 + 14 * MIN),
+    ]);
+    expect(emits).toEqual([]);
+  });
+
+  it('VJ19 진입이 먼저 처리되고 옛 시각 표본이 늦게 도착해도 같은 결과(순서 무관)', () => {
+    const { emits } = run([
+      enter('A', T0),
+      good(T0 - 30_000),
+      wake(T0 + 4 * MIN),
+    ]);
+    expect(emits).toEqual(ARRIVE_A);
+  });
+
+  it('VJ20 옛 저장 상태(새 필드 없음)도 깨지지 않고 같은 규칙으로 올라간다', () => {
+    // initialJudgeState 는 구현이 새 필드를 채울 수 있어 "옛 모양"이 아니다 — 필드를 안 적은 리터럴을 쓴다.
+    const legacy = (): JudgeState => ({
+      order: ORDER,
+      slots: Object.fromEntries(
+        ORDER.map((k) => [k, { phase: 'IDLE' as const, goodSample: false }])
+      ),
+    });
+    expect(run([enter('A', T0), wake(T0 + 4 * MIN)], legacy()).emits).toEqual(
+      []
+    );
+    expect(
+      run([good(T0 - 30_000), enter('A', T0), wake(T0 + 4 * MIN)], legacy())
+        .emits
+    ).toEqual(ARRIVE_A);
+  });
+
+  // 5-b 경고 · 포그라운드 wake 가 근거 표본보다 먼저 와 슬롯을 보류(HELD)로 굳혀도, 늦게 배달된 진입 근거 표본이
+  // 그 보류를 풀어야 한다(경로 기록은 표본을 최대 2분 모아 보낸다 — deferredUpdatesIntervalMs).
+  it('VJ22 보류(HELD) 뒤 늦게 온 진입 근거 표본이 도착을 되살린다(진입 시각)', () => {
+    const { emits } = run([
+      enter('A', T0),
+      wake(T0 + 4 * MIN),
+      good(T0 + MIN),
+      wake(T0 + 6 * MIN),
+    ]);
+    expect(emits).toEqual(ARRIVE_A);
+  });
+
+  it('VJ23 보류를 되살리는 것은 진입 근거 창 안의 표본뿐 — 더 옛 표본은 여전히 보류', () => {
+    const { emits, state } = run([
+      enter('A', T0),
+      wake(T0 + 4 * MIN),
+      good(T0 - PRE - 1),
+      wake(T0 + 6 * MIN),
+    ]);
+    expect(emits).toEqual([]);
+    expect(state.slots.A.phase).toBe('HELD');
+  });
+
+  it('VJ21 기본 창은 60초(설정값, 시드 결정)', () => {
+    expect(cfg.preEnterSampleMs).toBe(60_000);
+  });
+});
+
+describe('visitJudge (PBT-U10-F3) — TRIP-1517', () => {
+  it('⑥ 표본·진입 처리 순서를 바꿔도 결과가 같고, 그 결과는 "정확 + 창 안" 모델과 같다', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: -2 * PRE, max: 0 }), // 표본이 진입보다 앞선 정도
+        fc.integer({ min: 5, max: 300 }), // 표본 정확도(m)
+        fc.integer({ min: 3 * MIN, max: 13 * MIN }), // 진입 뒤 wake 까지
+        (d, acc, after) => {
+          const sample: JudgeEvent = {
+            type: 'sample',
+            at: T0 + d,
+            accuracyM: acc,
+          };
+          const tail = wake(T0 + after);
+          const a = run([sample, enter('A', T0), tail]);
+          const b = run([enter('A', T0), sample, tail]);
+
+          const arrives = acc <= cfg.maxAccuracyM && d >= -PRE;
+          for (const r of [a, b]) {
+            expect(r.emits).toEqual(arrives ? ARRIVE_A : []);
+            expect(r.state.slots.A.phase).toBe(arrives ? 'ARRIVED' : 'HELD');
+          }
+        }
+      ),
+      { numRuns: 500 }
+    );
+  });
+
+  it('⑦ 도착은 반드시 진입 직전 창(또는 이후)의 정확 표본이 받쳐 준다', () => {
+    fc.assert(
+      fc.property(arbEvents, (events) => {
+        for (const e of run(events).emits.filter((x) => x.kind === 'ARRIVE')) {
+          const backed = events.some(
+            (ev) =>
+              ev.type === 'sample' &&
+              ev.accuracyM <= cfg.maxAccuracyM &&
+              ev.at >= e.occurredAt - PRE
+          );
+          expect(backed).toBe(true);
+        }
+      }),
+      { numRuns: 500 }
+    );
+  });
+});
