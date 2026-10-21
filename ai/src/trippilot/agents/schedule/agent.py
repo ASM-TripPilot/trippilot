@@ -753,10 +753,13 @@ class ScheduleAgent:
             return self._rule_scores(request, pool, persona), ScoringMode.RULE
 
         llm_pool = pool
-        capacity = self._scoring.capacity
+        # 이 시한에 실을 건수(병렬 상한 × 시한 역산 청크) — 시한 무관 상한(`capacity`)으로 자르면 청크가
+        # 역산값을 넘겨 1일차(8.1s 예산)에서 10/10 시한 초과였다(2026-10-20 개발 서버). 아래 호출의
+        # timeout_sec 와 같은 값이어야 워커가 같은 청크 크기를 계산한다.
+        capacity = self._scoring.capacity_for(min(budget.c1_ms, remaining_ms) / 1000.0)
         if len(pool.pois) > capacity:
-            # 워커가 한 번에 실을 수 있는 건수(병렬 상한 × 청크 상한)를 넘는 풀 — 청크를
-            # 키우면 출력 상한에서 잘려 전량 폐기된다(풀 515 → 청크 ~52건, 0/10 성공).
+            # 워커가 이 시한에 실을 수 있는 건수를 넘는 풀 — 청크를 키우면 시한을 넘기거나 출력 상한에서
+            # 잘려 전량 폐기된다(풀 515 → 청크 ~52건, 0/10 성공).
             # LLM 엔 규칙 점수 상위만 보내고, 나머지는 아래 rule_backfill 이 채운다.
             top = sorted(self._rule_scores(request, pool, persona),
                          key=lambda sp: (-sp.score, str(sp.poi_id)))[:capacity]
