@@ -26,5 +26,12 @@ interface CuratedStayPort {
     /** 도시의 목록, 순위 오름차순. 모르는 도시면 빈 목록 — 404 가 아니다(목록이 아직 없을 뿐). */
     fun byCity(city: String): List<CuratedStay>
 
+    /**
+     * 지역 코드가 속한 도시의 목록 — 화면은 카탈로그 코드만 갖고 있어 도시 이름(`'부산'`)을 모른다.
+     * 시군구·행정구 코드도 그 도시로 잡힌다(`50130` 서귀포 → 제주, `52111` 전주 완산구 → 전주).
+     * 도(道) 코드처럼 한 도시로 좁혀지지 않으면 빈 목록이다.
+     */
+    fun byRegionCode(regionCode: String): List<CuratedStay>
+
     fun findByHotelId(hotelId: String): CuratedStay?
 }
