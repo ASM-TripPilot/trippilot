@@ -32,7 +32,8 @@ import { PlanbDraftPage } from './PlanbDraftPage';
  *    replace 면 스택 밑의 원래 허브 위에 허브가 한 장 더 쌓인다. 스택 모양 자체는 `planbApplyStack.integration`).
  *  - 확정 요청 중이면 [적용하기] 잠금, 실패면 같은 안내 자리에 "변경을 반영하지 못했어요"(Q6).
  *  - NO_SOLUTION·FAILED → 같은 뷰의 안내 상태. FAILED 에서 옛 manual?variant=error push 는 없다(E3).
- *    [조건 바꿔 다시 짜기]/[다시 시도] → i04(`/trips/{id}/planb`), [직접 수정] → planb/manual.
+ *    [조건 바꿔 다시 짜기] → 같은 입력을 시드로, 같은 트리거에 이은 i04(`/trips/{id}/planb` + 시드 쿼리),
+ *    [다시 시도] → 같은 입력·같은 트리거로 바로 새 세션 → i05(사용자 결정 2026-10-20), [직접 수정] → planb/manual.
  *  - SOLVING·미도착 → 아무것도 안 그린다. data 없는 조회 실패만 오류 얼굴(TRIP-1277 AC12).
  *  - (TRIP-1289) 끝난 세션(APPLIED·CANCELED)은 종료 얼굴 + [나가기] — 빈 화면이면 침묵 실패다(INV-4).
  *  - (TRIP-1277) 초안 얼굴의 ‹·스와이프·하드웨어 뒤로는 이탈 확인부터 — [나가기]여야 나가고(확정·취소 0),
@@ -122,13 +123,19 @@ jest.mock('../model/useIncludedPlaceName', () => ({
 
 // 대안 없음 → [내일 일정 다시 짜기] — 세션 시작 seam(`useStartReplan`, 허브·i04 와 같은 래퍼).
 // 페이지가 `{ tripId, data }` + onSuccess 로 부른다. 기본은 대기·실패 없음.
+// 실패의 오류 객체(`error`)까지 싣는다 — 지난 날 세션의 재요청 409 를 상태 코드로 가른다.
 const mockStartMutate = jest.fn();
-const mockStart = { isPending: false, isError: false };
+const mockStart: { isPending: boolean; isError: boolean; error: unknown } = {
+  isPending: false,
+  isError: false,
+  error: null,
+};
 jest.mock('@/features/request-replan/model/useStartReplan', () => ({
   useStartReplan: () => ({
     mutate: mockStartMutate,
     isPending: mockStart.isPending,
     isError: mockStart.isError,
+    error: mockStart.error,
   }),
 }));
 
@@ -382,7 +389,11 @@ const MANUAL_HREF = {
   pathname: '/trips/[tripId]/planb/manual',
   params: { tripId: TRIP_ID, date: DAY },
 };
-const REQUEST_HREF = `/trips/${TRIP_ID}/planb`;
+/** 대안 없음 [조건 바꿔 다시 짜기]의 i04 — 시드·트리거는 라우트 쿼리로 간다(라우트가 갈라 i04 에 내린다). */
+const requestHref = (params: Record<string, string>) => ({
+  pathname: '/trips/[tripId]/planb',
+  params: { tripId: TRIP_ID, ...params },
+});
 
 beforeEach(() => {
   resetFakeNavigator();
@@ -403,6 +414,7 @@ beforeEach(() => {
   mockStartMutate.mockClear();
   mockStart.isPending = false;
   mockStart.isError = false;
+  mockStart.error = null;
   mockSession.data = undefined;
   mockItinerary = undefined;
   mockDiff.state = 'ok';
@@ -964,36 +976,115 @@ describe('🔴 P6 · AC-10 · Q4 — NO_SOLUTION 은 같은 뷰의 대안 없음
 
     fireEvent.press(screen.getByText('조건 바꿔 다시 짜기'));
     expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(mockPush).toHaveBeenLastCalledWith(REQUEST_HREF);
+    // 입력이 비어 있어도 시드로 연다(빈 시드) — 트리거 없는 세션이라 트리거 키도 없다.
+    expect(mockPush).toHaveBeenLastCalledWith(
+      requestHref({
+        seedReasons: '',
+        seedDirectives: '',
+        seedExcludedPoiIds: '',
+        scope: 'PARTIAL_SLOTS',
+      })
+    );
 
     fireEvent.press(screen.getByText('직접 수정'));
     expect(mockPush).toHaveBeenCalledTimes(2);
     expect(mockPush).toHaveBeenLastCalledWith(MANUAL_HREF);
     expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 사용자 결정(2026-10-20) — 대안 없음 [조건 바꿔 다시 짜기]는 조건을 바꾸라는 뜻이라 바로 다시 짜지 않는다. 대신 알림과
+ * 끊긴 빈 요청 화면이 아니라, 이 세션의 입력을 시드로 채우고 같은 트리거에 이은 요청 화면을 연다(사유를 다시 고르지 않고,
+ * 적용하면 그 알림이 소비되고, 전날 창에서도 막히지 않게).
+ */
+describe('🔴 대안 없음 [조건 바꿔 다시 짜기] — 같은 입력을 시드로, 같은 알림에 이은 요청 화면 (사용자 결정)', () => {
+  it('Q1 알림으로 들어온 세션이면 사유·지시·제외·자유 입력·범위와 그 트리거를 실어 i04 를 연다 — 세션 시작 0', () => {
+    mockSession.data = session('NO_SOLUTION', {
+      targetDate: seoulDate(new Date()),
+      triggerId: 'trg-1',
+      reasons: ['WEATHER', 'TIRED'],
+      directives: ['INDOOR'],
+      excludedPoiIds: ['poi-out'],
+      freeText: '카페로만',
+    });
+    renderPage();
+
+    fireEvent.press(screen.getByText('조건 바꿔 다시 짜기'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith(
+      requestHref({
+        seedReasons: 'WEATHER,TIRED',
+        seedDirectives: 'INDOOR',
+        seedExcludedPoiIds: 'poi-out',
+        triggerId: 'trg-1',
+        scope: 'PARTIAL_SLOTS',
+        prefill: '카페로만',
+      })
+    );
+    expect(mockStartMutate).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('Q2 넣으려던 POI 가 있으면 그것도 잇는다(i04 → i05 → i06 미포함 안내)', () => {
+    mockSession.data = session('NO_SOLUTION', {
+      targetDate: seoulDate(new Date()),
+    });
+    render(
+      <PlanbDraftPage
+        tripId={TRIP_ID}
+        sessionId={SESSION_ID}
+        includePoiId="poi-sky"
+      />
+    );
+
+    fireEvent.press(screen.getByText('조건 바꿔 다시 짜기'));
+
+    expect(mockPush).toHaveBeenCalledWith(
+      requestHref({
+        seedReasons: '',
+        seedDirectives: '',
+        seedExcludedPoiIds: '',
+        scope: 'PARTIAL_SLOTS',
+        includePoiId: 'poi-sky',
+      })
+    );
   });
 });
 
 describe('🔴 TRIP-1195 · 다시 요청은 그 세션이 다시 짜던 날로 간다 (INV-4 — 오늘로 조용히 바뀌면 위반)', () => {
-  it('R1 오늘이 아닌 날 세션이 NO_SOLUTION 이면 [조건 바꿔 다시 짜기]가 같은 targetDate 를 싣는다', () => {
+  it('R1 오늘이 아닌 날 세션이 NO_SOLUTION 이면 [조건 바꿔 다시 짜기]가 같은 targetDate 를 싣는다(범위는 i04 가 고정)', () => {
     mockSession.data = session('NO_SOLUTION', { targetDate: '2999-01-02' });
     renderPage();
 
     fireEvent.press(screen.getByText('조건 바꿔 다시 짜기'));
 
     expect(mockPush).toHaveBeenLastCalledWith(
-      `${REQUEST_HREF}?targetDate=2999-01-02`
+      requestHref({
+        seedReasons: '',
+        seedDirectives: '',
+        seedExcludedPoiIds: '',
+        targetDate: '2999-01-02',
+      })
     );
   });
 
-  it('R2 무회귀 — 오늘 세션이면 쿼리 없는 종전 경로다', () => {
-    mockSession.data = session('FAILED', {
+  it('R2 무회귀 — 오늘 세션이면 날짜 키 없이 세션 범위로 연다', () => {
+    mockSession.data = session('NO_SOLUTION', {
       targetDate: seoulDate(new Date()),
+      scope: 'FULL_DAY',
     });
     renderPage();
 
-    fireEvent.press(screen.getByText('다시 시도'));
+    fireEvent.press(screen.getByText('조건 바꿔 다시 짜기'));
 
-    expect(mockPush).toHaveBeenLastCalledWith(REQUEST_HREF);
+    const [href] = mockPush.mock.calls[0] as [
+      { params: Record<string, string> },
+    ];
+    expect(href.params).toMatchObject({ scope: 'FULL_DAY' });
+    expect(href.params).not.toHaveProperty('targetDate');
   });
 });
 
@@ -1215,7 +1306,7 @@ describe('🔴 TRIP-1233 · [직접 수정]은 세션이 다시 짜던 날로 �
 });
 
 describe('🔴 P7 · AC-10 · E3 — FAILED 도 같은 뷰에 착지한다(옛 variant=error push 반전)', () => {
-  it('안내 "다시 짜지 못했어요", 렌더만으로 push 0, [다시 시도]→i04 · [직접 수정]→manual(variant 없음)', () => {
+  it('안내 "다시 짜지 못했어요", 렌더만으로 push·세션 시작 0, [다시 시도]는 화면을 옮기지 않고 다시 짠다 · [직접 수정]→manual(variant 없음)', () => {
     mockSession.data = session('FAILED');
     renderPage();
 
@@ -1226,18 +1317,251 @@ describe('🔴 P7 · AC-10 · E3 — FAILED 도 같은 뷰에 착지한다(옛 v
       screen.getByTestId('planb-draft-notice-description')
     ).toHaveTextContent('잠시 후 다시 시도하거나 직접 고쳐 주세요');
     expect(mockPush).not.toHaveBeenCalled();
+    expect(mockStartMutate).not.toHaveBeenCalled();
     // 5-b 차단-1 — 실패 얼굴에서도 초안 조회는 꺼져 있고 초안 행이 없다.
     expectDiffNeverEnabled();
     expect(screen.queryAllByTestId(/^planb-draft-slot-name-/)).toHaveLength(0);
 
     fireEvent.press(screen.getByText('다시 시도'));
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(mockPush).toHaveBeenLastCalledWith(REQUEST_HREF);
+    expect(mockStartMutate).toHaveBeenCalledTimes(1);
+    expect(mockPush).not.toHaveBeenCalled();
 
     fireEvent.press(screen.getByText('직접 수정'));
-    expect(mockPush).toHaveBeenCalledTimes(2);
+    expect(mockPush).toHaveBeenCalledTimes(1);
     expect(mockPush).toHaveBeenLastCalledWith(MANUAL_HREF);
   });
+});
+
+/**
+ * 사용자 결정(2026-10-20) — 실패(FAILED) [다시 시도]는 알림과 끊긴 빈 요청 화면을 열지 않고, 같은 입력·같은 알림으로 바로
+ * 다시 짠다(낡음 얼굴 [새 대안 보기]와 같은 봉투). 화면 구성은 그대로다 — 요청 중엔 버튼 잠금, 실패면 부제가 시작 실패 문장.
+ */
+describe('🔴 실패 [다시 시도] — 같은 입력·같은 알림으로 바로 다시 짠다 (사용자 결정)', () => {
+  const FAILED_INPUTS = {
+    targetDate: '2999-01-02',
+    scope: 'FULL_DAY',
+    triggerId: 'trg-1',
+    reasons: ['WEATHER'],
+    directives: ['AVOID_OUTDOOR'],
+    excludedPoiIds: ['poi-out'],
+    freeText: '실내로 바꿔 줘',
+  };
+
+  it('K1 사유·지시·제외·자유 입력·날짜와 그 트리거로 세션을 열고, 성공하면 새 세션의 i05 로 replace — i04 push 0', () => {
+    mockSession.data = session('FAILED', FAILED_INPUTS);
+    renderPage();
+
+    fireEvent.press(screen.getByText('다시 시도'));
+
+    expect(mockStartMutate).toHaveBeenCalledTimes(1);
+    const [variables, options] = mockStartMutate.mock.calls[0] as [
+      { tripId: string; data: unknown },
+      { onSuccess: (next: { sessionId: string }) => void },
+    ];
+    expect(variables).toEqual({
+      tripId: TRIP_ID,
+      data: {
+        scope: 'FULL_DAY',
+        targetDate: '2999-01-02',
+        originKind: null,
+        reasons: ['WEATHER'],
+        directives: ['AVOID_OUTDOOR'],
+        freeText: '실내로 바꿔 줘',
+        excludedPoiIds: ['poi-out'],
+        triggerId: 'trg-1',
+      },
+    });
+    expect(mockReplace).not.toHaveBeenCalled();
+
+    act(() => options.onSuccess({ sessionId: 's10' }));
+
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/planb/solving',
+      params: { tripId: TRIP_ID, sessionId: 's10' },
+    });
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockMutate).not.toHaveBeenCalled();
+  });
+
+  it('K2 같은 틱에 두 번 눌러도 세션 시작은 1회다', () => {
+    mockSession.data = session('FAILED', FAILED_INPUTS);
+    renderPage();
+    const retry = screen.getByText('다시 시도');
+
+    fireEvent.press(retry);
+    fireEvent.press(retry);
+
+    expect(mockStartMutate).toHaveBeenCalledTimes(1);
+  });
+
+  it('K3 요청 중엔 [다시 시도]·[직접 수정]이 잠기고, 실패하면 같은 안내 자리의 부제가 시작 실패 문장이 된다', () => {
+    mockSession.data = session('FAILED', FAILED_INPUTS);
+    // 다시 그릴 때마다 새 엘리먼트 — 같은 엘리먼트를 다시 넘기면 React 가 그리기를 건너뛴다.
+    const page = () => (
+      <PlanbDraftPage tripId={TRIP_ID} sessionId={SESSION_ID} />
+    );
+    const { rerender } = render(page());
+    fireEvent.press(screen.getByText('다시 시도'));
+    const [, options] = mockStartMutate.mock.calls[0] as [
+      unknown,
+      { onError: (error: unknown) => void },
+    ];
+
+    mockStart.isPending = true;
+    rerender(page());
+    const manual = screen.getByTestId('sheet-cta-button-0');
+    const retry = screen.getByTestId('sheet-cta-button-1');
+    expect(manual).toHaveTextContent('직접 수정');
+    expect(retry).toHaveTextContent('다시 시도');
+    expect(manual).toBeDisabled();
+    expect(retry).toBeDisabled();
+
+    mockStart.isPending = false;
+    mockStart.isError = true;
+    act(() => options.onError(new Error('500')));
+    rerender(page());
+
+    expect(screen.getByTestId('planb-draft-notice-title')).toHaveTextContent(
+      '다시 짜지 못했어요'
+    );
+    expect(
+      screen.getByTestId('planb-draft-notice-description')
+    ).toHaveTextContent(
+      '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요'
+    );
+    expect(screen.getByTestId('sheet-cta-button-1')).toBeEnabled();
+  });
+
+  it('K4 재요청이 실패하면 잠금이 풀려 다시 누를 수 있다', () => {
+    mockSession.data = session('FAILED', FAILED_INPUTS);
+    renderPage();
+
+    fireEvent.press(screen.getByText('다시 시도'));
+    const [, options] = mockStartMutate.mock.calls[0] as [
+      unknown,
+      { onError: (error: unknown) => void },
+    ];
+    act(() => options.onError(new Error('500')));
+    fireEvent.press(screen.getByText('다시 시도'));
+
+    expect(mockStartMutate).toHaveBeenCalledTimes(2);
+  });
+
+  it('K5 넣으려던 POI 는 새 세션의 i05 까지 잇는다(서버엔 안 보낸다)', () => {
+    mockSession.data = session('FAILED', FAILED_INPUTS);
+    render(
+      <PlanbDraftPage
+        tripId={TRIP_ID}
+        sessionId={SESSION_ID}
+        includePoiId="poi-sky"
+      />
+    );
+
+    fireEvent.press(screen.getByText('다시 시도'));
+    const [variables, options] = mockStartMutate.mock.calls[0] as [
+      { data: unknown },
+      { onSuccess: (next: { sessionId: string }) => void },
+    ];
+    expect(JSON.stringify(variables.data)).not.toContain('poi-sky');
+    act(() => options.onSuccess({ sessionId: 's10' }));
+
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/planb/solving',
+      params: { tripId: TRIP_ID, sessionId: 's10', includePoiId: 'poi-sky' },
+    });
+  });
+});
+
+/**
+ * 지난 날 세션(날짜 < 오늘 KST)의 실패 [다시 시도]는 같은 날짜로 다시 열어 서버가 늘 409(지난 날짜는 다시 짤 수 없다)다.
+ * 그때 "잠시 후 다시 시도해 주세요"는 사실과 다르다 — 종전 i04 경로가 같은 409 에 보이던 날짜 안내로 가른다.
+ * 버튼·얼굴 구성은 그대로다. 오늘 세션의 409(경합)·지난 날의 5xx 는 종전 시작 실패 문장이다.
+ * 닿는 길: 실패 얼굴을 자정 넘겨 열어 둔 채 [다시 시도].
+ */
+describe('🔴 지난 날 세션의 실패 [다시 시도] — 409 면 i04 와 같은 날짜 안내 (다시 눌러도 같은 거절)', () => {
+  // KST 2026-06-12 10:00 — 세션 날짜 06-11 은 어제다.
+  const NEXT_MORNING = new Date('2026-06-12T01:00:00Z');
+  // 서버가 실제로 내는 모양(ErrorResponse 봉투 · ReplanSessionService) — 둘 다 일반 CONFLICT 다(코드로는 못 가른다).
+  const conflict409 = (message: string) => ({
+    isAxiosError: true,
+    response: { status: 409, data: { error: { code: 'CONFLICT', message } } },
+  });
+  const PAST_DAY_409 = conflict409('지난 날짜는 다시 짤 수 없습니다.');
+  const RACE_409 = conflict409(
+    '다른 재계획이 막 시작됐어요. 다시 시도해 주세요.'
+  );
+  const page = () => <PlanbDraftPage tripId={TRIP_ID} sessionId={SESSION_ID} />;
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  /** 실패 세션에서 [다시 시도] → 서버가 `error` 로 거절 → 다시 그린다. */
+  function retryRejectedWith(targetDate: string, error: unknown): void {
+    jest.useFakeTimers({ now: NEXT_MORNING });
+    mockSession.data = session('FAILED', { targetDate, scope: 'FULL_DAY' });
+    const { rerender } = render(page());
+    fireEvent.press(screen.getByText('다시 시도'));
+    const [, options] = mockStartMutate.mock.calls[0] as [
+      unknown,
+      { onError: (error: unknown) => void },
+    ];
+    mockStart.isError = true;
+    mockStart.error = error;
+    act(() => options.onError(error));
+    rerender(page());
+  }
+
+  it('K6 어제 세션이 409 면 부제가 i04 날짜 안내다 — "잠시 후 다시 시도" 없음 · 버튼 둘은 그대로', () => {
+    retryRejectedWith('2026-06-11', PAST_DAY_409);
+
+    // 앵커 — 그 날짜 그대로 다시 열었다(오늘로 바꿔 보내지 않는다, INV-4). 서버가 지난 날로 거절하는 요청이다.
+    const [variables] = mockStartMutate.mock.calls[0] as [
+      { data: { targetDate?: string } },
+    ];
+    expect(variables.data.targetDate).toBe('2026-06-11');
+    expect(screen.getByTestId('planb-draft-notice-title')).toHaveTextContent(
+      '다시 짜지 못했어요'
+    );
+    expect(
+      screen.getByTestId('planb-draft-notice-description')
+    ).toHaveTextContent(
+      '아직 일정이 없는 날이거나 여행 기간이 아니라서 AI가 다시 짤 수 없어요'
+    );
+    expect(screen.queryByText(/잠시 후 다시 시도/)).toBeNull();
+    // 얼굴 구성은 그대로 — [직접 수정]·[다시 시도] 두 버튼, 새 버튼·이동 없음.
+    expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
+      '직접 수정'
+    );
+    expect(screen.getByTestId('sheet-cta-button-1')).toHaveTextContent(
+      '다시 시도'
+    );
+    expect(screen.getByTestId('sheet-cta-button-1')).toBeEnabled();
+    expect(screen.queryByTestId('sheet-cta-button-2')).toBeNull();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['오늘 세션의 409(경합)', '2026-06-12', RACE_409],
+    [
+      '어제 세션의 500',
+      '2026-06-11',
+      { isAxiosError: true, response: { status: 500, data: {} } },
+    ],
+  ])(
+    'K7 %s → 종전 시작 실패 문장이다 — 날짜 탓으로 돌리지 않는다',
+    (_name, targetDate, error) => {
+      retryRejectedWith(targetDate, error);
+
+      expect(
+        screen.getByTestId('planb-draft-notice-description')
+      ).toHaveTextContent(
+        '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요'
+      );
+      expect(screen.queryByText(/아직 일정이 없는 날/)).toBeNull();
+    }
+  );
 });
 
 // TRIP-1289 — 옛 P8 은 APPLIED·CANCELED 도 "렌더 없음"으로 굳혀 두었다(실기 빈 화면의 원인, 01b). 두 행을 빼고

@@ -18,7 +18,9 @@ import { useApplyReplan } from '@/features/apply-replan';
 import {
   includeMissingText,
   isIncludeMissing,
+  isPastDayRetryConflict,
   isStaleApplyError,
+  reopenRequestParams,
   staleRetryRequest,
 } from '../model/draftNotice';
 import { useIncludedPlaceName } from '../model/useIncludedPlaceName';
@@ -46,7 +48,13 @@ import { ReplanNoticeFace } from './ReplanNoticeFace';
  *  - 'noSolution' → variant 'noSolution'. 서버가 사유를 주지 않으므로 부제는 뒤 절만(Seed Q4).
  *                    오늘(KST) 세션이고 내일이 일정에 있으면 [내일 일정 다시 짜기] — 같은 조건 · targetDate=내일 ·
  *                    FULL_DAY 로 세션을 새로 열고(`useStartReplan`) solving 으로 replace(i04 와 같은 착지).
- *  - 'failed'     → variant 'failed'(E3 — 다른 화면으로 튕기지 않고 같은 자리에 안내, INV-4).
+ *                    [조건 바꿔 다시 짜기]는 바로 다시 짜지 않는다(조건을 바꾸라는 뜻) — 이 세션의 입력(사유·지시·제외·
+ *                    자유 입력·범위·날짜)을 시드로, 같은 트리거에 이어 i04 를 연다(`reopenRequestParams` — 라우트가 시드를
+ *                    보면 게이트를 지나지 않는다).
+ *  - 'failed'     → variant 'failed'(E3 — 다른 화면으로 튕기지 않고 같은 자리에 안내, INV-4). [다시 시도]는 같은 입력·
+ *                    같은 트리거로 바로 다시 짠다(아래 [새 대안 보기]와 같은 `retrySameInput` — 실패면 부제를 시작 실패 문장으로,
+ *                    지난 날 세션이 409 로 막히면 i04 와 같은 날짜 안내로 — 다시 눌러도 같은 거절이다).
+ *                    빈 i04 를 열면 알림과 끊겨 사유를 다시 골라야 하고, 적용해도 알약이 남는다(사용자 결정 2026-10-20).
  *  - 'solving'·미도착 → null. data 없는 조회 실패만 오류 얼굴([다시 시도]=재조회, [나가기]) — TRIP-1277 AC12.
  *    재조회 중에도 오류 얼굴을 지키고 [다시 시도]만 잠근다(TRIP-1293 — 판정은 실패 이력 `errorUpdateCount`).
  *  - 'closed'(APPLIED·CANCELED) → 종료 얼굴 + [나가기](TRIP-1289 — 새 요청이 옛 세션을 닫으면 정상 흐름에서도
@@ -77,7 +85,7 @@ import { ReplanNoticeFace } from './ReplanNoticeFace';
  * 상황 감지 FE-B(frontend-components §3.6) — 판정은 `model/draftNotice`, 여기는 배선만:
  *  - 세션 `initiatedBy = SYSTEM` 이고 초안 얼굴이면 머리에 `미리 준비한 대안` 표식(대안 없음·실패 얼굴엔 달지 않는다).
  *  - 적용 409 `EXPIRED`·`STALE` → 낡음 얼굴(일반 실패로 접지 않는다) + [새 대안 보기] = 같은 입력으로 새 세션 → i05 replace.
- *    재누름 잠금은 `staleRetryRef`(실패에서만 푼다 — 새 POST 는 방금 연 세션을 닫는다, INV-U4-06).
+ *    재누름 잠금은 `retryRef`(실패에서만 푼다 — 새 POST 는 방금 연 세션을 닫는다, INV-U4-06).
  *  - `includePoiId`(기회 카드에서 넣으려던 장소)가 초안 after 에 없으면 그 이름(`useIncludedPlaceName`)으로 미포함 안내.
  */
 
@@ -187,8 +195,8 @@ export function PlanbDraftPage({
       ? (includePoiId ?? null)
       : null;
   const includedName = useIncludedPlaceName(missingPoiId);
-  // [새 대안 보기] 재누름 잠금 — 같은 틱 두 번째 누름은 옛 state 를 본다(ref).
-  const staleRetryRef = useRef(false);
+  // [새 대안 보기]·실패 [다시 시도] 재누름 잠금 — 같은 틱 두 번째 누름은 옛 state 를 본다(ref).
+  const retryRef = useRef(false);
 
   const isDraft = state?.kind === 'draft';
   const busy = apply.isPending || startReplan.isPending;
@@ -255,9 +263,10 @@ export function PlanbDraftPage({
   // 지난 날의 낡은 초안(BR-SA-19 ①)은 같은 날로 다시 짤 수 없다 — 서버가 늘 409(지난 날짜는 다시 짤 수 없다)라
   // [새 대안 보기]를 두지 않는다(누를 때마다 "잠시 후 다시 시도"로 실패하는 버튼). 낡음 문구는 그대로다.
   const canRetryStale = !data.targetDate || data.targetDate >= today;
-  const retryStale = () => {
-    if (staleRetryRef.current) return;
-    staleRetryRef.current = true;
+  // 같은 입력(사유·지시·제외·범위·날짜·트리거)으로 새 세션 → i05 — 낡음 얼굴 [새 대안 보기]와 실패 얼굴 [다시 시도] 공용.
+  const retrySameInput = () => {
+    if (retryRef.current) return;
+    retryRef.current = true;
     startReplan.mutate(
       { tripId, data: staleRetryRequest(data, seoulDate(new Date())) },
       {
@@ -269,7 +278,7 @@ export function PlanbDraftPage({
               : { tripId, sessionId: next.sessionId },
           }),
         onError: () => {
-          staleRetryRef.current = false;
+          retryRef.current = false;
         },
       }
     );
@@ -350,9 +359,12 @@ export function PlanbDraftPage({
         // 초안 얼굴에만 — 대안 없음·실패 얼굴에 '미리 준비한 대안'을 달면 없는 대안을 말한다(BR-SA-23 은 DRAFT 행에만 단다).
         prepared={data.initiatedBy === 'SYSTEM' && state.kind === 'draft'}
         stale={stale}
-        onRetryStale={canRetryStale ? retryStale : undefined}
+        onRetryStale={canRetryStale ? retrySameInput : undefined}
         staleRetryPending={startReplan.isPending}
         staleRetryFailed={startReplan.isError}
+        retryFailed={startReplan.isError}
+        // 지난 날 세션은 같은 날짜로 다시 열어 서버가 늘 409 다 — '잠시 후 다시 시도' 대신 i04 와 같은 날짜 안내.
+        retryPastDay={isPastDayRetryConflict(startReplan.error, data, today)}
         includeMissingText={
           missingPoiId !== null && includedName !== undefined
             ? includeMissingText(includedName)
@@ -386,13 +398,23 @@ export function PlanbDraftPage({
             }
           )
         }
-        // TRIP-1195 — 오늘이 아닌 날을 다시 짜던 세션이면 같은 날로 다시 연다(날짜를 빠뜨리면 오늘로 조용히 바뀐다, INV-4).
-        onReopenRequest={() =>
-          router.push(
-            data.targetDate && data.targetDate !== seoulDate(new Date())
-              ? `/trips/${tripId}/planb?targetDate=${data.targetDate}`
-              : `/trips/${tripId}/planb`
-          )
+        // 실패 [다시 시도] = 같은 입력으로 바로 다시 짜기. 대안 없음 [조건 바꿔 다시 짜기] = 같은 입력을 시드로 같은 트리거의
+        // i04(TRIP-1195 — 오늘이 아닌 날을 다시 짜던 세션이면 같은 날로 연다. 날짜를 빠뜨리면 오늘로 조용히 바뀐다, INV-4).
+        onReopenRequest={
+          state.kind === 'failed'
+            ? retrySameInput
+            : () =>
+                router.push({
+                  pathname: '/trips/[tripId]/planb',
+                  params: {
+                    tripId,
+                    ...reopenRequestParams(
+                      data,
+                      seoulDate(new Date()),
+                      includePoiId
+                    ),
+                  },
+                })
         }
       />
       {leaveOpen ? (

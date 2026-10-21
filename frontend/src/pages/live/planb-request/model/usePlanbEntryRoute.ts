@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { useActiveTriggers } from '@/features/planb';
 import { isNotFound } from '@/shared/api';
 import {
   useGetTripsTripIdReplanSessionsPrepared,
@@ -14,6 +15,9 @@ import { entryRoute, type EntryLookup, type EntryRoute } from './entryRoute';
  *
  *  - 트리거 상세 → 그 `affectedDate` 로 준비된 대안(날짜 키 — 해제 뒤 다시 선 트리거도 같은 대안으로 이어진다).
  *  - 둘 합쳐 최대 3초(`useElapsedFlag` — 마운트부터 결정 전까지). 재시도하지 않는다 — 실패는 곧장 i04 다(막다른 길 없음).
+ *  - i04 시드의 재료로 떠 있는 알림 목록(`useActiveTriggers` — 허브·i04 와 같은 쿼리다. 캐시가 있으면 그대로 쓰고, 없으면 i04 가
+ *    어차피 부를 같은 조회를 먼저 건다 — 새 경로 없음)을 함께 읽는다. 결정을 그 목록에 묶지 않는다 — 판정 시점에 없으면
+ *    심각도를 모르는 것이고, 모르면 시드를 켜지 않는다(`entryRoute`). 굳은 뒤엔 이것도 끈다.
  *  - **결정은 한 번만 굳힌다** — 처음 `wait` 가 아닌 답을 상태로 쥐고, 그 뒤 재조회·포커스 복귀가 다른 답을 줘도 그대로다.
  *    굳은 뒤에는 두 조회를 끈다(쓸 데 없는 재조회 0). `gcTime: 0` — 다음 진입이 지난 진입의 캐시로 판정하지 않게.
  */
@@ -49,11 +53,13 @@ export function usePlanbEntryRoute(
     { date: date ?? '' },
     { query: { enabled: open && date !== undefined, retry: false, gcTime: 0 } }
   );
+  const active = useActiveTriggers(tripId, { enabled: open });
   const timedOut = useElapsedFlag(open, ENTRY_WAIT_MS);
 
   const live = entryRoute({
     trigger: lookupOf(detail),
     prepared: lookupOf(prepared),
+    activeTriggers: active.data?.triggers,
     timedOut,
     today,
   });

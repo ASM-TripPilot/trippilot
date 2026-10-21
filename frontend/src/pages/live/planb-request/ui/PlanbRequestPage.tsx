@@ -21,7 +21,9 @@ import type { ItineraryDaysItem } from '@/shared/api/index.schemas';
  * - 진입할 때 폼을 비우고(이전 방문 값 제거) URL scope 를 반영한다. 한 흐름에 모아 두는 이유는
  *   라우트·페이지 effect 순서에 기대지 않기 위해서다.
  * - 감지 트리거 = URL `triggerId` 와 같은 id 의 활성 트리거(MANUAL 제외). 있으면 대응 사유를 **한 번만**
- *   켠다(토글이 아니라 set — 이미 켜져 있으면 그대로). 사용자가 끈 뒤엔 다시 켜지 않는다.
+ *   켠다(토글이 아니라 set — 이미 켜져 있으면 그대로). 사용자가 끈 뒤엔 다시 켜지 않는다. 그 알림이 위험일 때만 켠다
+ *   (사용자 결정 2026-10-20 — 주의면 칩은 보이되 꺼져 있다. severity 가 없으면(옛 서버) 위험). 이 길은 진입 게이트가
+ *   확인을 못 끝냈을 때(조회 실패·3초 초과)다 — 목록이 오기 전엔 켜지 않는다(모르면 켜지 않는다).
  * - `[AI가 다시 짜기]` → GPS origin 1회 읽기(최대 5초, 실패면 origin 없이 — 막지 않는다, TRIP-979)
  *   → body 조립(감지 트리거 id 포함) → POST → 성공 시 응답 세션 id 를 싣고 solving 으로
  *   **replace**(TRIP-752). 이 시트는 허브 위 투명 모달이라 push 로 쌓으면 solving 의 ‹ 가 요청 시트로 돌아간다.
@@ -47,7 +49,7 @@ export interface PlanbRequestPageProps {
   triggerId?: string;
   /** URL 원문 — 오늘이 아닌 날을 다시 짤 때 허브가 싣는 'YYYY-MM-DD'(신뢰 경계 — 형식을 검사한다). */
   targetDate?: string;
-  /** 처음 켜 둘 사유(진입 게이트 — 준비 세션 입력 또는 kind 사유, 주의면 빈 배열). 시드 셋 중 하나라도 오면 kind 자동 시드를 끈다. */
+  /** 처음 켜 둘 사유(진입 게이트 — 준비 세션 입력 또는 kind 사유, 지금 알림이 위험이 아니면(주의·모름) 빈 배열 · i06 대안 없음 — 그 세션 입력). 시드 셋 중 하나라도 오면 kind 자동 시드를 끈다. */
   seedReasons?: string[];
   /** 처음 켜 둘 지시. */
   seedDirectives?: string[];
@@ -158,6 +160,8 @@ export function PlanbRequestPage(props: PlanbRequestPageProps): ReactElement {
         }
       : null;
   const detectedReasonKey = detected?.reasonKey;
+  // 감지 칩을 켤 만한 알림인가 — 위험일 때만(주의면 칩은 보이되 꺼져 있다). severity 가 없으면(옛 서버) 위험으로 읽는다.
+  const detectedRisk = (trigger?.severity ?? 'RISK') === 'RISK';
 
   // 진입 초기화 — reset 뒤 알려진 scope 만 반영한다. 아래 시드 effect 보다 먼저 선언해야 한다
   // (같은 컴포넌트의 effect 는 선언 순서대로 돈다). 진입 시드·prefill 도 reset 뒤 여기서 한 번 켠다(값이 굳어 있어 다시 돌지 않는다).
@@ -185,14 +189,16 @@ export function PlanbRequestPage(props: PlanbRequestPageProps): ReactElement {
   ]);
 
   // 감지 트리거 시드 — 데이터가 도착한 첫 순간 한 번만(set 의미). 진입 시드가 왔으면 그것이 대신한다(§3.3).
+  // 판정도 그 한 번이다 — 주의로 도착했으면 켜지 않고, 뒤에 심각도가 바뀌어도 다시 보지 않는다(입력 중 칩이 저절로 켜지지 않게).
   const seededRef = useRef(false);
   useEffect(() => {
     if (seededRef.current || entrySeed !== null || !detectedReasonKey) return;
     seededRef.current = true;
+    if (!detectedRisk) return;
     if (!useReplanFormStore.getState().reasons.includes(detectedReasonKey)) {
       toggleReason(detectedReasonKey);
     }
-  }, [entrySeed, detectedReasonKey, toggleReason]);
+  }, [entrySeed, detectedReasonKey, detectedRisk, toggleReason]);
 
   // GPS 를 기다리는 동안과 POST 응답을 기다리는 동안 재누름은 무시한다 — 읽기·POST 각 1회(AC-A5).
   // TRIP-1294: 서버는 새 POST 가 열린 세션을 CANCELED 로 닫는다(INV-U4-06) — 그래서 성공이면 화면을 떠날 때까지,
