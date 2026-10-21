@@ -128,11 +128,13 @@ class ExpoPushReceiptTest : StringSpec({
         PushRateLimited(detail).message shouldBe "$prefix — ${detail.take(300)}"
     }
 
-    /** 300자 경계에 이모지(서로게이트 쌍)가 걸리면 반쪽 문자를 남기지 않고 그 문자째 뺀다. */
+    /** 300자 경계에 이모지(서로게이트 쌍)가 걸리면 반쪽 문자를 남기지 않고 그 문자째 뺀다 — 쌍이 경계 안에서 끝나면 남긴다. */
     "300자 경계에 걸린 서로게이트 쌍은 쪼개지 않는다" {
         val prefix = "발송 서비스의 발송량 한도에 걸렸습니다(HTTP 429)"
         val detail = "x".repeat(299) + "😀" + "뒤"
 
         PushRateLimited(detail).message shouldBe "$prefix — ${"x".repeat(299)}"
+        // 완전한 쌍이 정확히 300자에서 끝나면 남긴다 — 덜 자르는 것은 쌍이 경계에서 쪼개질 때뿐이다.
+        PushRateLimited("x".repeat(298) + "😀" + "뒤").message shouldBe "$prefix — ${"x".repeat(298)}😀"
     }
 })
