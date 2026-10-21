@@ -1734,3 +1734,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — 구현 반영 정정, PR #1498 backend-ci Flyway 버전 중복(develop `V2.77__poi_public_view.sql`) 대응. `aidlc-state.md` 무변경.
 
 ---
+
+## Functional Design 사후 개정 — U8 진입점 ✦ FAB 퇴역 (TRIP-1553)
+**Timestamp**: 2026-10-22T03:50:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 2026-10-22 실기 둘러보기 지적·티켓 TRIP-1553 「결정 확정」 그대로 인용) "홈 fab 에 어시스턴트 — 알람 오른쪽에 아이콘 놓는 걸로" / "범위 — 홈은 벨 오른쪽 헤더 아이콘, 숙소 검색·일정 상세의 ✦ FAB 는 제거(헤더로 옮기지 않음)". (자율 세션 — 이번 세션에서 새 질의 없음, 위 티켓의 사전 결정을 따름.)
+**AI Response**: `construction/u8-conversational-assistant/functional-design/business-rules.md` 끝에 `[개정 · 2026-10-22 · TRIP-1553]` 블록 1개 — BR-U8-50·51·52 퇴역(홈=헤더 벨 오른쪽 ✦ 아이콘 `home-dashboard-assistant`, 숙소 검색·일정 상세 진입 제거, 1차 진입 화면 = 홈 헤더 + 허브 하단 바 2곳, 토스트 ✦ 올림(288) 장치 삭제), BR-U8-53 정정(헤더 ✦ 는 항상 그려지고 담은 곳 메뉴 딤이 위를 덮음), PBT-U8-F1 퇴역(대상 함수 `fabStack` 삭제). 원문 삭제·수정 0줄(append 만). 같은 폴더의 `business-logic-model.md`(DEC-U8-12·G-U8-9·10)·`frontend-components.md`(§5·R7·R20)·inception `stories.md`(US-ASSIST-01)는 **이번에 손대지 않았다** — 후속 개정 대기.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 개정(구현 반영), 사이클 `20261022-trip1553-assistant-header`(부모 TRIP-1552 레인 A 첫 칸). 이전 세션들의 "audit append + [개정] 블록" 선례 절차를 따름; 승인 게이트는 티켓에 기록된 사용자 결정으로 갈음(자율 세션). `aidlc-state.md`·`docs/SCOPE.md` 무변경.
+
+---
