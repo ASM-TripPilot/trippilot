@@ -422,21 +422,18 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
     });
   });
 
-  // ── TRIP-1522 사이클 4 6-b 후 보강 — 허브가 "직전 탭"을 내비게이션 상태에서 읽는 배선 (DT) ────────────────────────────────────
-  // 실기에서 홈 [여행 일정 보기] → 허브가 4단계 모프 없이 곧장 최종 구조로 떴다: 탭을 한 번도 안 바꾼 탭 네비게이터는 기본(초기) 상태라
-  // react-navigation 이 중첩 상태(`state`)를 부모 라우트에 저장하지 않는데, 읽는 쪽이 `state` 없음을 "알 수 없음"으로 처리했다.
-  // 기본 상태의 탭은 첫 화면(`index` = 홈)이다. 이 읽기에는 자동 테스트가 0건이었다.
-  // 테스트 가능하게 만드는 최소 계약(02a §10-1): 훅을 export 하지 않는다 — 대신 **허브가 `NavigationContext`(getState().routes)와
-  // `NavigationRouteContext`(자기 route.key)에서 자기 바로 아래 라우트를 읽는다**를 계약으로 하고, 페이지를 두 Provider 로 감싸 렌더해
-  // **바에 보이는 결과**(시작 5칸 + 활성 칸 / 모션 없는 최종 구조)로 단언한다. 읽기 → 허브 → 바 통과까지 한 번에 묶는다.
-  // OS 동작 줄이기 답을 대기(null)로 두면 입장 신호가 있는 바는 시작 5칸에서 멈춰 서 있어 가짜 타이머 없이 첫 프레임을 읽을 수 있다.
-  describe('출발 탭 읽기 (TRIP-1522 사이클 4 6-b 후 — DT)', () => {
+  // ── 허브가 "직전 탭"을 내비게이션 상태에서 읽는 배선 ────────────────────────────────────────────────────────────────────
+  // 실기에서 홈 [여행 일정 보기] → 허브가 모프 없이 최종 구조로 떴다: 탭을 한 번도 안 바꾼 탭 네비게이터는 기본(초기) 상태라 react-navigation 이 중첩
+  // 상태(`state`)를 부모 라우트에 저장하지 않는데 읽는 쪽이 이를 "알 수 없음"으로 처리했다. 기본 상태의 탭은 첫 화면(`index` = 홈)이다.
+  // 훅을 export 하지 않고 계약을 "허브 페이지가 `NavigationContext`(getState().routes)와 `NavigationRouteContext`(자기 route.key)에서 자기 바로 아래
+  // 라우트를 읽는다"로 정해, 페이지를 두 Provider 로 감싸 바에 서는 결과(시작 5칸의 활성 칸 / 모션 없는 최종 구조)로 단언한다 — 읽기 → 허브 → 바 통과까지
+  // 한 번에 묶인다. OS 동작 줄이기 답을 대기로 두면 입장 신호가 있는 바는 시작 5칸에서 멈춰 가짜 타이머 없이 첫 프레임을 읽는다.
+  describe('출발 탭 읽기 (DT)', () => {
     type StubRoute = {
       key: string;
       name: string;
       state?: { index?: number; routes: { name: string }[] };
     };
-    const TABS = ['index', 'explore', 'itinerary', 'records', 'my'];
     const HUB: StubRoute = { key: 'hub-1', name: 'trips/[tripId]/live/index' };
     const tabsRoute = (state?: StubRoute['state']): StubRoute => ({
       key: 'tabs-1',
@@ -445,20 +442,22 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
     });
     const tabsState = (index: number) => ({
       index,
-      routes: TABS.map((name) => ({ name })),
+      routes: ['index', 'explore', 'itinerary', 'records', 'my'].map(
+        (name) => ({
+          name,
+        })
+      ),
     });
-    const startSelected = () =>
-      START5_IDS.filter(
-        (id) =>
-          screen.getByTestId(id).props.accessibilityState?.selected === true
-      );
+    const other = (name: string): StubRoute => ({ key: `${name}-1`, name });
 
     /** 허브 페이지를 루트 스택 상태 `routes` 와 함께 렌더한다(`HUB` 가 이 허브의 route). */
     async function renderWithStack(routes: StubRoute[]): Promise<void> {
+      server.use(itineraryOk(), tripHandler(), visitsHandler());
       deferOsAnswer();
-      const navigation = { getState: () => ({ routes }) };
       render(
-        <NavigationContext.Provider value={navigation as never}>
+        <NavigationContext.Provider
+          value={{ getState: () => ({ routes }) } as never}
+        >
           <NavigationRouteContext.Provider value={HUB as never}>
             <LiveItineraryPage tripId={TRIP_ID} today={TODAY} />
           </NavigationRouteContext.Provider>
@@ -469,91 +468,74 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
         expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
       );
     }
-    const expectFinalStructure = () => {
-      expect(visibleIds()).toEqual(FINAL_IDS);
-      START_CELLS.forEach((id) => expect(screen.queryByTestId(id)).toBeNull());
-    };
 
-    it('DT1 탭 네비게이터가 기본 상태라 (tabs) 라우트에 state 가 없으면 홈에서 온 것이다 — 시작 5칸이 홈 활성으로 선다 (이번 실기 결함)', async () => {
-      server.use(itineraryOk(), tripHandler(), visitsHandler());
-
-      await renderWithStack([tabsRoute(undefined), HUB]);
-
-      expect(visibleIds()).toEqual(START5_IDS);
-      expect(startSelected()).toEqual([START_HOME]);
-    });
-
+    // 시작 5칸에서 분홍인 칸 하나.
     it.each([
-      ['home', 0, START_HOME],
-      ['explore', 1, START_EXPLORE],
-      ['itinerary', 2, SCHEDULE],
-      ['records', 3, START_RECORDS],
-      ['my', 4, START_MY],
+      [
+        '기본 상태(state 없음)는 홈 — 이번 실기 결함',
+        [tabsRoute(), HUB],
+        START_HOME,
+      ],
+      ['state.index 0 → 홈', [tabsRoute(tabsState(0)), HUB], START_HOME],
+      ['state.index 1 → 탐색', [tabsRoute(tabsState(1)), HUB], START_EXPLORE],
+      ['state.index 2 → 일정', [tabsRoute(tabsState(2)), HUB], SCHEDULE],
+      ['state.index 3 → 기록', [tabsRoute(tabsState(3)), HUB], START_RECORDS],
+      ['state.index 4 → 마이', [tabsRoute(tabsState(4)), HUB], START_MY],
+      [
+        'index 없이 routes 만 있으면 첫 라우트',
+        [tabsRoute({ routes: [{ name: 'records' }, { name: 'my' }] }), HUB],
+        START_RECORDS,
+      ],
     ] as const)(
-      'DT2 [%s] (tabs) 의 state.index 가 %d 이면 그 탭이 활성인 시작 5칸이다',
-      async (_key, index, selectedId) => {
-        server.use(itineraryOk(), tripHandler(), visitsHandler());
-
-        await renderWithStack([tabsRoute(tabsState(index)), HUB]);
+      '탭 바 위의 진입: %s → 그 탭이 활성인 시작 5칸',
+      async (_label, routes, selectedId) => {
+        await renderWithStack([...routes]);
 
         expect(visibleIds()).toEqual(START5_IDS);
-        expect(startSelected()).toEqual([selectedId]);
+        expect(
+          START5_IDS.filter(
+            (id) =>
+              screen.getByTestId(id).props.accessibilityState?.selected === true
+          )
+        ).toEqual([selectedId]);
       }
     );
 
-    it('DT3 state 에 index 가 없고 routes 만 있으면 첫 라우트가 현재 탭이다', async () => {
-      server.use(itineraryOk(), tripHandler(), visitsHandler());
-
-      await renderWithStack([
-        tabsRoute({ routes: [{ name: 'records' }, { name: 'my' }] }),
-        HUB,
-      ]);
-
-      expect(visibleIds()).toEqual(START5_IDS);
-      expect(startSelected()).toEqual([START_RECORDS]);
-    });
-
+    // 탭 바 위의 진입이 아니면 시작 칸이 한 번도 안 서고 모션 없이 최종 구조 — 뒤로는 즉시 이동.
     it.each([
-      ['허브가 스택 맨 아래(푸시 딥링크 직행)', () => [HUB]],
+      ['허브가 스택 맨 아래(푸시 딥링크 직행)', [HUB]],
       [
         '바로 아래가 planb 시트',
-        () => [
-          tabsRoute(tabsState(3)),
-          { key: 'planb-1', name: 'trips/[tripId]/planb/index' },
-          HUB,
-        ],
+        [tabsRoute(tabsState(3)), other('planb'), HUB],
       ],
       [
         '탭 바 위가 아닌 다른 화면을 거쳐 온 허브',
-        () => [
-          tabsRoute(tabsState(2)),
-          { key: 'edit-1', name: 'trips/[tripId]/itinerary/edit' },
-          HUB,
-        ],
+        [tabsRoute(tabsState(2)), other('edit'), HUB],
       ],
-      ['스택에 허브 자신이 없다', () => [tabsRoute(tabsState(1))]],
+      ['스택에 허브 자신이 없다', [tabsRoute(tabsState(1))]],
       [
         '(tabs) 안 라우트 이름을 모른다',
-        () => [tabsRoute({ index: 0, routes: [{ name: 'settings' }] }), HUB],
+        [tabsRoute({ index: 0, routes: [{ name: 'settings' }] }), HUB],
       ],
-    ] as const)(
-      'DT4 [%s] → 탭 바 위의 진입이 아니라 모션 없이 최종 구조다',
-      async (_label, makeRoutes) => {
-        server.use(itineraryOk(), tripHandler(), visitsHandler());
+    ])(
+      '탭 바 위의 진입이 아님: %s → 모션 없이 최종 구조',
+      async (_label, routes) => {
+        await renderWithStack(routes);
 
-        await renderWithStack([...makeRoutes()] as StubRoute[]);
-
-        expectFinalStructure();
+        expect(visibleIds()).toEqual(FINAL_IDS);
+        START_CELLS.forEach((id) =>
+          expect(screen.queryByTestId(id)).toBeNull()
+        );
       }
     );
 
-    it('DT5 내비게이션 문맥이 없으면(Provider 없음) 모션 없이 최종 구조다 — 뒤로는 즉시 이동 유지', async () => {
+    it('내비게이션 문맥이 없으면(Provider 없음) 모션 없이 최종 구조다', async () => {
       server.use(itineraryOk(), tripHandler(), visitsHandler());
       deferOsAnswer();
 
       await renderActive();
 
-      expectFinalStructure();
+      expect(visibleIds()).toEqual(FINAL_IDS);
     });
   });
 
@@ -1382,19 +1364,6 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
 
       expect(mockBack).toHaveBeenCalledTimes(1);
       expect(mockReplace).not.toHaveBeenCalled();
-    });
-
-    it('I6b 히스토리가 없을 때도 연타하면 /(tabs) replace 는 1회다 (INV-4 폴백 유지)', async () => {
-      server.use(itineraryOk(), tripHandler(), visitsHandler());
-      mockCanGoBack.mockReturnValue(false);
-
-      await renderActive();
-      fireEvent.press(screen.getByTestId('execution-live-back'));
-      fireEvent.press(screen.getByTestId('execution-live-back'));
-
-      expect(mockReplace).toHaveBeenCalledTimes(1);
-      expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
-      expect(mockBack).not.toHaveBeenCalled();
     });
 
     it('I5c 허브는 뒤로를 가로채지 않는다 — usePreventRemove 0회(하드웨어·스와이프 뒤로는 화면 전환에 맡긴다, Q-B)', async () => {

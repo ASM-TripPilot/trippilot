@@ -435,25 +435,16 @@ describe.each([
 });
 
 /**
- * TRIP-1522 사이클 4 · Q1 — 허브(`trips/[tripId]/live/index`)로 들어갈 때만 전환이 `none`(즉시 교체)이다.
- * (사이클 3 의 `fade` 를 교체: 크로스페이드는 아래 `(tabs)` 의 탭 바가 비쳐 허브 바의 시작 5칸 복제본과 이중으로 보인다.)
- *
- * 왜: 허브 하단 바가 홈 탭 바와 같은 5칸으로 시작해 4단계 모프를 혼자 재생하려면, 아래 `(tabs)` 화면(탭 바 포함)이 옆으로 밀리거나
- * 비치지 않고 허브가 즉시 그 자리를 대체해야 한다(기본 전환은 iOS 에서 오른쪽에서 밀려 들어온다). 허브로 들어가는 모든 길(홈 hero·
- * 일정 탭·기록 달력·도우미 다음 행동·일정 편집 replace·푸시 딥링크)이 이 한 선언에 걸린다.
- *
- * 선언 위치가 `SplashGate` 인 이유(02a §1-1): `planb`·`assistant` 가 같은 자리에서 `options` 를 선언하는 선례 · 라우트 파일 안에서
- * 하면 `liveHubRoute.test` 의 `expo-router` 목이 깨진다 · 허브로 들어가는 모든 경로에 한 번에 걸린다.
- *
- * 무엇을 보장하나: ① 가드 밖에 선언이 하나 있고 `options.animation` 이 `none` ② **다른 라우트의 전환은 안 바뀐다**(`animation` 없음,
- * `planb`·`assistant` 는 그대로 `transparentModal`) ③ 루트 `screenOptions` 에도 `animation` 이 없다(허브 하나만 none, 앱 전체 전환 불변).
- * jest 가 잠그는 것은 **선언까지**다(스택 목은 options 를 그리지 않는다 — 02a ★8). 실제 전환 모양·스와이프 뒤로·탭 바와의 겹침은 6-b.
+ * 허브(`trips/[tripId]/live/index`)로 들어갈 때만 전환이 `none`(즉시 교체)이다 — 허브 바가 홈 탭 바와 같은 5칸으로 시작해 모프를 혼자 재생하려면
+ * 아래 `(tabs)`(탭 바 포함)가 밀리거나 비치지 않고 허브가 즉시 그 자리를 대체해야 한다(크로스페이드는 탭 바가 비쳐 이중으로 보인다). 허브로 들어가는 모든 길이
+ * 이 한 선언에 걸린다. 선언 위치가 `SplashGate` 인 이유: planb·assistant 선례, 라우트 파일 안에서 하면 `liveHubRoute.test` 의 expo-router 목이 깨진다.
+ * jest 가 잠그는 것은 선언까지다(스택 목은 options 를 그리지 않는다) — 실제 전환·스와이프 뒤로·탭 바와의 겹침은 6-b.
  */
-describe('SplashGate · SG-HUB 허브 라우트 none 전환 선언 (TRIP-1522 사이클 4 AC-1)', () => {
+describe('SplashGate · 허브 라우트 none 전환 선언', () => {
   const HUB_ROUTE = 'trips/[tripId]/live/index';
 
   it.each(['HOME', 'LOGIN'] as const)(
-    'SG-HUB1 목적지 %s 에서도 가드 밖에 허브 라우트 선언이 하나 있고 animation 이 none(즉시 교체)이다',
+    '목적지 %s 에서도 가드 밖에 허브 라우트 선언이 하나 있고 animation 이 none 이다',
     (destination) => {
       mockUseBootstrapGate.mockReturnValue(gate({ destination }));
 
@@ -469,7 +460,7 @@ describe('SplashGate · SG-HUB 허브 라우트 none 전환 선언 (TRIP-1522 �
     }
   );
 
-  it('SG-HUB2 허브 말고는 어느 선언에도 animation 이 없고, planb·assistant 는 그대로 transparentModal 이다 (다른 전환 무회귀)', () => {
+  it('허브 하나만 none 이다 — 다른 선언·루트 screenOptions 에는 animation 이 없고 planb·assistant 는 그대로 transparentModal 이다', () => {
     mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
 
     render(<SplashGate />);
@@ -478,27 +469,17 @@ describe('SplashGate · SG-HUB 허브 라우트 none 전환 선언 (TRIP-1522 �
     const others = screen
       .UNSAFE_getAllByType(Stack.Screen)
       .filter((node) => node.props.name !== HUB_ROUTE);
-    // 짝 앵커 — 다른 선언이 실제로 여럿 있다(빈 목록이라 공허하게 통과하지 않게).
-    expect(others.length).toBeGreaterThanOrEqual(3);
+    expect(others.length).toBeGreaterThanOrEqual(3); // 짝 앵커 — 빈 목록이라 공허하게 통과하지 않게
     others.forEach((node) =>
       expect(node.props.options?.animation).toBeUndefined()
     );
-    for (const routeName of ['trips/[tripId]/planb/index', 'assistant/index']) {
-      const declared = others.filter((node) => node.props.name === routeName);
-      expect(declared).toHaveLength(1);
-      expect(declared[0].props.options?.presentation).toBe('transparentModal');
-    }
-  });
-
-  it('SG-HUB3 루트 Stack 의 screenOptions 에는 animation 이 없다 — 앱 전체 전환은 그대로, 허브만 none', () => {
-    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
-
-    render(<SplashGate />);
-    passFloor();
-
-    const stack = screen.UNSAFE_getByType(Stack);
-    expect(stack.props.screenOptions).toBeDefined();
-    expect(stack.props.screenOptions.animation).toBeUndefined();
-    expect(stack.props.screenOptions.headerShown).toBe(false);
+    for (const routeName of ['trips/[tripId]/planb/index', 'assistant/index'])
+      expect(
+        others.find((node) => node.props.name === routeName)?.props.options
+          ?.presentation
+      ).toBe('transparentModal');
+    expect(
+      screen.UNSAFE_getByType(Stack).props.screenOptions.animation
+    ).toBeUndefined();
   });
 });

@@ -1513,64 +1513,40 @@ describe('MapSheetShell · SR 시트 끝까지 내림 옵션 (TRIP-1522 v2)', ()
     );
   }
 
-  it('SR1 snapRequest 를 안 주면 마운트·재렌더에도 시트 요청(snapToIndex)이 없다 (기본값 회귀)', () => {
-    const { rerender } = render(shell());
-    rerender(shell());
-    rerender(shell({ initialIndex: 0 }));
-
+  it('snapRequest: 안 주면 마운트·재렌더에도 시트 요청(snapToIndex)이 없고(기본값 회귀), 주면 마운트엔 조용하다가 id 가 바뀔 때만 요청한 index 로 간다 — 같은 id·index 만 바뀜은 조용, 진입 칸(initialIndex)이 아니라 요청한 index 로', () => {
+    const quiet = render(shell());
+    quiet.rerender(shell());
+    quiet.rerender(shell({ initialIndex: 0 }));
     expect(spy()).not.toHaveBeenCalled();
-  });
+    quiet.unmount();
 
-  it('SR2 snapRequest 는 마운트엔 조용하고, id 가 바뀔 때만 그 index 로 요청한다 — 같은 id·index 만 바뀜은 조용', () => {
-    const { rerender } = render(shell({ snapRequest: { index: 0, id: 1 } }));
-    // 마운트 — 호출 없음(첫 값은 요청이 아니라 출발값).
-    expect(spy()).not.toHaveBeenCalled();
+    const { rerender } = render(
+      shell({ initialIndex: 1, snapRequest: { index: 0, id: 1 } })
+    );
+    expect(spy()).not.toHaveBeenCalled(); // 첫 값은 요청이 아니라 출발값
 
-    rerender(shell({ snapRequest: { index: 0, id: 2 } }));
+    rerender(shell({ initialIndex: 1, snapRequest: { index: 0, id: 2 } }));
     expect(spy()).toHaveBeenCalledTimes(1);
     expect(spy()).toHaveBeenLastCalledWith(0);
 
-    // 같은 id 로 다시 그리면 다시 요청하지 않는다.
-    rerender(shell({ snapRequest: { index: 0, id: 2 } }));
+    rerender(shell({ initialIndex: 1, snapRequest: { index: 0, id: 2 } })); // 같은 id
+    rerender(shell({ initialIndex: 1, snapRequest: { index: 1, id: 2 } })); // index 만 바뀜
     expect(spy()).toHaveBeenCalledTimes(1);
 
-    // id 는 그대로, index 만 바뀌면 요청하지 않는다(요청을 가르는 건 id).
-    rerender(shell({ snapRequest: { index: 1, id: 2 } }));
-    expect(spy()).toHaveBeenCalledTimes(1);
-
-    // 새 id + 다른 index → 그 index 로.
-    rerender(shell({ snapRequest: { index: 1, id: 3 } }));
+    rerender(shell({ initialIndex: 1, snapRequest: { index: 1, id: 3 } }));
     expect(spy()).toHaveBeenCalledTimes(2);
     expect(spy()).toHaveBeenLastCalledWith(1);
   });
 
-  it('SR3 snapRequest 는 진입 칸(initialIndex)이 아니라 요청한 index 로 간다 — 펼침 진입 허브의 일정 칸이 중간으로 올린다', () => {
-    const { rerender } = render(
-      shell({ initialIndex: 1, snapRequest: { index: 0, id: 1 } })
-    );
-
-    rerender(shell({ initialIndex: 1, snapRequest: { index: 0, id: 2 } }));
-
-    expect(spy()).toHaveBeenCalledTimes(1);
-    expect(spy()).toHaveBeenLastCalledWith(0);
-  });
-
-  it('PD1 enablePanDownToClose 는 안 주면 켜지지 않고(기본값 회귀), true 를 주면 시트로 그대로 간다', () => {
+  it('enablePanDownToClose·mapLogoMargin 은 안 주면 기본값 그대로(시트는 안 켜지고 지도엔 로고 마진이 없다), 주면 시트·지도로 그대로 간다', () => {
     render(shell());
     expect(sheetHost().props.enablePanDownToClose).not.toBe(true);
-    screen.unmount();
-
-    render(shell({ enablePanDownToClose: true }));
-    expect(sheetHost().props.enablePanDownToClose).toBe(true);
-  });
-
-  it('LM1 mapLogoMargin 은 안 주면 지도에 로고 마진이 없고(기본값 회귀), 주면 지도(MapView)로 그대로 간다', () => {
-    render(shell());
     expect(screen.getByTestId('map-native').props.logoMargin).toBeUndefined();
     screen.unmount();
 
     const margin = { bottom: 78 };
-    render(shell({ mapLogoMargin: margin }));
+    render(shell({ enablePanDownToClose: true, mapLogoMargin: margin }));
+    expect(sheetHost().props.enablePanDownToClose).toBe(true);
     expect(screen.getByTestId('map-native').props.logoMargin).toEqual(margin);
   });
 

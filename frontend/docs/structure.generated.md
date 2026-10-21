@@ -1732,7 +1732,7 @@
 ## src/test-support/
 - `src/test-support/animatedProbe.ts`  →  AnimatedProbe · useAnimatedProbe · hostNodes
 - `src/test-support/apiBase.ts`  →  BASE
-- `src/test-support/barMotionProbe.ts`  →  BAR_ROOT · CAPSULE_WRAP · BACK · SCHEDULE · EDIT · CHATBOT · EVENT · START_HOME · START_EXPLORE · START_RECORDS · START_MY · START_CELLS · FINAL_IDS · START5_IDS · NEW_CELLS · visibleIds · frameSample · MotionWatch · watchMotion · joinWatches · advance · moved · structureSteady · lastSample · firstSeen · firstGone · staysOnceSeen · staysOnceGone · deferOsAnswer · flushOsAnswer · holdReduceMotionOn · layoutStyle · hiddenSpacingClasses · RowReading · readRow · setWindowWidth · SlotEffect · slotEffect · rootScale · isMounted · scheduleVisibleCenter · InteractionGate · useInteractionGate
+- `src/test-support/barMotionProbe.ts`  →  BAR_ROOT · SCHEDULE · START_HOME · START_EXPLORE · START_RECORDS · START_MY · START_CELLS · FINAL_IDS · START5_IDS · NEW_CELLS · visibleIds · frameSample · MotionWatch · watchMotion · joinWatches · advance · moved · structureSteady · lastSample · firstSeen · firstGone · staysOnceSeen · staysOnceGone · deferOsAnswer · flushOsAnswer · holdReduceMotionOn · layoutStyle · hiddenSpacingClasses · RowReading · readRow · setWindowWidth · SlotEffect · slotEffect · rootScale · isMounted · scheduleVisibleCenter · InteractionGate · useInteractionGate
 - `src/test-support/basesFakeServer.ts`  →  basesStay · STAY_A · STAY_B · basesAssignment · basesTrip · NETWORK_WAIT · assignNight · sheetClosed · settle · BasesFakeInit · createBasesFakeServer
 - `src/test-support/editDragList.ts`  →  EDIT_LIST · editListData · moveItem · fireEditDragEnd · hoverOverDeleteZone · fireEditDropOnZone · fireEditDragBegin
 - `src/test-support/envSandbox.ts`  →  sandboxEnv
@@ -1747,7 +1747,6 @@
 - `src/test-support/fitBandAsserts.ts`  →  NativeRegion · LatLng · expectPinsInBand · expectHeightLimited
 - `src/test-support/flushNotifications.ts`  →  flushNotifications
 - `src/test-support/freezeDate.ts`  →  REAL_TIMER_APIS · freezeDate
-- `src/test-support/glassAsserts.ts`  →  GLASS_RECIPE · isBlurNode · blurViewsIn · glassAncestor · GlassReading · tintOpacityOf · readGlass · expectGlassRecipe
 - `src/test-support/integrationSetup.ts`  →  (export 없음)
 - `src/test-support/itineraryFixtures.ts`  →  TRIP_ID · DAY1 · DAY2 · DAY3 · trip · slot · day · itinerary · daysOf · threeStopSlots · threeStopDays · oneStopDay · planTrip · twoDayItinerary · busanPoi · busanHotel · busanFourPois · busanTrip
 - `src/test-support/keyWarnings.ts`  →  KeyWarnings · guardKeyWarnings
@@ -1806,4 +1805,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1158개 파일
+합계 1157개 파일

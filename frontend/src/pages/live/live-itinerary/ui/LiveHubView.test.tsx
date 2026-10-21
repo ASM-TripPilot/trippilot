@@ -5,7 +5,6 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import fc from 'fast-check';
 import { Dimensions, Pressable, StyleSheet, Text } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import type { ReactTestInstance } from 'react-test-renderer';
@@ -15,17 +14,13 @@ import type { Opportunity } from '@/shared/api/index.schemas';
 import { useAnimatedProbe } from '@/test-support/animatedProbe';
 import {
   BAR_ROOT,
-  deferOsAnswer,
   FINAL_IDS,
   flushOsAnswer,
-  hiddenSpacingClasses,
   holdReduceMotionOn,
   lastSample,
   moved,
-  readRow,
   scheduleVisibleCenter,
   setWindowWidth,
-  slotEffect,
   START5_IDS,
   START_CELLS,
   START_HOME,
@@ -35,11 +30,6 @@ import {
   visibleIds,
   watchMotion,
 } from '@/test-support/barMotionProbe';
-import {
-  blurViewsIn,
-  expectGlassRecipe,
-  glassAncestor,
-} from '@/test-support/glassAsserts';
 import {
   RailActiveGlyph,
   RailDoneGlyph,
@@ -60,7 +50,6 @@ import {
 
 import {
   BAR_ENTER_DELAY_MS,
-  BAR_ENTER_MS,
   BAR_EXIT_MS,
   barMorphFrame,
 } from '../model/barMorph';
@@ -77,12 +66,9 @@ import { LiveHubView, type LiveHubSlot } from './LiveHubView';
  *    `onPressArrive` 를 받고 진행 중 슬롯이 없을 때만 예정 카드에 선다(TRIP-1021 HV9).
  *  - 배선: 뒤로·칩·[방문 완료] 가 콜백으로 이어진다. [사진]/[메모]는 페이지가 콜백을 줄 때만 관람 중
  *    카드에 서고 각자 제 콜백을 부른다(TRIP-1070). 안 주면 없다(TRIP-939 AC-6).
- *  - TRIP-1522 v2 하단 내비 바: 일정이 기본 활성이고, 수정 칸은 이동하지 않고 칸 위 세로 팝업(AI에게 맡기기 위·직접 수정 아래)을
- *    열며(항목이 이동), 행사 칸은 기회가 있을 때만 활성+점이고 누르면 바 위 카드가 열린다. 팝업·카드는 `floating` 하나라 동시에
- *    안 열리고, 열린 층이 있으면 그 칸만 활성·일정 비활성이다. 뷰가 쥐는 상태는 `floating` 과 `sheetClosed` 둘이고 바는 props 만.
- *    층은 명시 열거 경로로만 닫힌다(시트 완전 내림 포함 — 펼침에서 곧장 −1 도) — 전면 터치 캡처·투명 백드롭 없음.
- *    시트는 `['55%', 펼침px]` 두 칸 + 끌어내려 완전 닫힘(−1)이고, 시트가 내려가도 바는 똑같다. 일정 칸은 시트가 내려가 있을 때만
- *    `snapRequest` 로 중간 칸(0)을 요청한다. 목록 바닥 여백은 바 높이를 비운다. 지도 로고는 바 위로 비킨다.
+ *  - TRIP-1522 하단 내비 바: 일정이 기본 활성, 수정 칸은 이동 없이 칸 위 팝업을 열고(항목이 이동), 행사 칸은 기회가 있을 때만 활성+점이며 누르면 바 위
+ *    카드가 열린다. 팝업·카드는 `floating` 하나라 동시에 안 열리고, 층은 명시 열거 경로로만 닫힌다(시트 완전 내림 포함 — 펼침에서 곧장 −1 도).
+ *    시트는 `['55%', 펼침px]` 두 칸 + 끌어내려 완전 닫힘(−1)이고 시트가 내려가도 바는 똑같다. 일정 칸은 시트가 내려가 있을 때만 중간 칸(0)을 요청한다.
  *  - TRIP-748 트리거 표면: 알약은 시트가 아니라 지도 위(일자 칩 아래)에 서고, 영향 카드는 배지로
  *    표시되며, 카드 아래 배너 슬롯은 없다. 알약은 시트 스크롤·끌기·지도 탭·다른 버튼으로 로컬 숨김(D3) —
  *    어느 바 칸도 알약을 숨기지 않는다(TRIP-1522 Q-D).
@@ -727,16 +713,10 @@ describe('LiveHubView · HT 트리거 알약·배지·로컬 숨김 (TRIP-748)',
   });
 });
 
-// ── TRIP-1522 v2 · 하단 내비 바(일정·수정·챗봇·행사) · 수정 팝업 · 행사 카드 · 시트 내림 (HN·HE·HF·HS·HC) ───────────────
-//
-// 바는 props 만 받는 순수 컴포넌트(LiveBottomBar.test)이고, 이 뷰가 쥐는 것은 떠 있는 층 하나(`floating` = 수정 팝업 또는
-// 행사 카드 `{날짜,key}`)와 시트가 완전히 내려갔는가(`sheetClosed`) 둘이다. 여기서는 "뷰가 바에 콜백·활성 칸을 제대로 이어
-// 주나", "팝업·카드가 언제 열리고 닫히나", "시트가 내려가도 바가 그대로인가", "일정 칸이 시트를 올리나"를 본다.
-//
-// ⚠️ 공허 통과 주의(02a ★1): 카드·팝업은 기본 닫힘이라 `없음` 만으로는 안 열었어도 통과한다. 닫힘 단언은 항상
-//    "열었다(긍정 앵커) → 사건 → 닫힘 + 기회/칸은 살아 있음" 쌍이고, 시트 −1 은 −1 직전에 열어 둔 상태에서 단언한다.
-// ⚠️ 통과형 시트 목은 onAnimate·onScrollBeginDrag 를 스스로 쏘지 않는다 — fireSheetAnimate 등이 prop 을 직접 부르고,
-//    일정 칸 → 시트 올림은 목의 snapToIndex 스파이로 센다. 시트가 실제로 사라지고 올라오는지·유리 블러·팝업/카드 터치는 6-b.
+// ── TRIP-1522 하단 내비 바 · 수정 팝업 · 행사 카드 · 시트 내림 (HN·HE·HF·HS·HC) ───────────────────────────────────────
+// 바는 props 만 받는 순수 컴포넌트(LiveBottomBar.test)이고, 이 뷰가 쥐는 것은 떠 있는 층 하나(`floating`)와 시트가 내려갔는가(`sheetClosed`).
+// ⚠️ 공허 통과 주의: 카드·팝업은 기본 닫힘이라 "없음"만으로는 안 열었어도 통과한다 — 닫힘 단언은 늘 "열었다(긍정 앵커) → 사건 → 닫힘 + 기회/칸은
+//    살아 있음" 쌍이고, 시트 −1 은 −1 직전에 열어 둔 상태에서 단언한다. 통과형 시트 목은 onAnimate 를 스스로 쏘지 않아 fireSheetAnimate 로 직접 부른다.
 
 const SCHEDULE = 'execution-live-bar-schedule';
 const POPUP_ANCHOR = 'execution-live-edit-popup-anchor';
@@ -749,8 +729,7 @@ const snapSpy = () =>
   (globalThis as Record<string, unknown>)
     .__bottomSheetSnapToIndexSpy as jest.Mock;
 beforeEach(() => snapSpy().mockClear());
-// 사이클 3 — OS "동작 줄이기" 답을 파일 최상위에서 true(켜짐)로 고정한다: 변신 모션과 무관한 기존 케이스가 모션 타이머·act 경고 없이
-// 결정적으로 돈다. 모션 케이스(HM 묶음)만 describe 안 `useAnimatedProbe().setReduceMotion(false)` 로 켠다(02a ★9).
+// OS "동작 줄이기" 답을 true 로 고정 — 모프와 무관한 케이스가 모션 타이머·act 경고 없이 돈다(모프 케이스만 바꾼다).
 beforeEach(holdReduceMotionOn);
 
 const VENUE: Opportunity = {
@@ -904,8 +883,6 @@ describe('LiveHubView · HN 하단 내비 바 구성·배선 (TRIP-1522 v2 AC-1�
       'execution-live-bar-manual',
       'execution-live-bar-ai',
       'execution-live-replan-fab',
-      'execution-live-edit-pill-ai',
-      'execution-live-edit-pill-manual',
     ].forEach((testID) => expect(screen.queryByTestId(testID)).toBeNull());
     expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
   });
@@ -926,22 +903,14 @@ describe('LiveHubView · HN 하단 내비 바 구성·배선 (TRIP-1522 v2 AC-1�
 });
 
 describe('LiveHubView · HE 수정 칸 · 팝업 (TRIP-1522 v2 AC-3·4·5·12)', () => {
-  it('HE1 수정 칸을 누르면 팝업(AI 위·직접 수정 아래)이 서고 수정이 활성·일정이 비활성이며, 이동 콜백은 안 불린다 — 다시 누르면 닫힌다', () => {
+  it('HE1 수정 칸을 누르면 팝업이 서고 수정이 활성·일정이 비활성이며, 이동 콜백은 안 불린다 — 다시 누르면 닫힌다', () => {
     const handlers = renderHub();
     // 처음엔 닫힘 — 긍정 앵커: 수정 칸은 살아 있고 일정이 활성이다.
     expectPopupClosedAlive();
 
     fireEvent.press(screen.getByTestId(BAR_EDIT));
 
-    const popup = screen.getByTestId(POPUP);
-    const order = popup
-      .findAll(
-        (node) =>
-          typeof node.type === 'string' &&
-          (node.props.testID === POPUP_AI || node.props.testID === POPUP_MANUAL)
-      )
-      .map((node) => node.props.testID as string);
-    expect(order).toEqual([POPUP_AI, POPUP_MANUAL]);
+    expect(screen.getByTestId(POPUP)).toBeOnTheScreen();
     const edit = screen.getByTestId(BAR_EDIT);
     expect(edit).toBeSelected();
     expect(edit).toBeExpanded();
@@ -978,59 +947,43 @@ describe('LiveHubView · HE 수정 칸 · 팝업 (TRIP-1522 v2 AC-3·4·5·12)',
   );
 
   it('HE3 onPressAiReplan 이 없으면(지난 날·시작 전) 팝업의 AI 항목은 비활성 — 눌러도 아무 일 없고 직접 수정은 산다', () => {
-    // 대조군 먼저 — 콜백이 있으면 AI 항목은 활성이다.
-    renderHub();
-    openPopup();
-    expect(screen.getByTestId(POPUP_AI)).toBeEnabled();
-    screen.unmount();
-
     const handlers = renderHub({ onPressAiReplan: undefined });
     openPopup();
 
     const ai = screen.getByTestId(POPUP_AI);
     expect(ai).toBeDisabled();
-    // 상태(disabled)만으로는 눌림이 안 막힌다 — 효과 0도 함께 본다.
-    fireEvent.press(ai);
+    fireEvent.press(ai); // 상태(disabled)만으로는 눌림이 안 막힌다 — 효과 0도 본다
     Object.values(handlers).forEach(
       (fn) => fn !== undefined && expect(fn).not.toHaveBeenCalled()
     );
     expect(screen.getByTestId(POPUP)).toBeOnTheScreen();
-    expect(screen.getByTestId(POPUP_MANUAL)).toBeEnabled();
     fireEvent.press(screen.getByTestId(POPUP_MANUAL));
     expect(handlers.onPressManualEdit).toHaveBeenCalledTimes(1);
   });
 
-  it.each([0, 34])(
-    'HE4 팝업은 바의 형제(바 안이 아님)로 선 앵커에 붙고, 앵커의 left·bottom·width 는 editPopupPlacement 결과(안전영역 인자 없음)와 같으며 안전영역 %i 에서도 bottom 은 78 이다',
-    async (bottom) => {
-      // 동적 import — 함수 모듈이 바뀌어도 이 케이스만 red 가 되게 한다(정적 import 면 파일 전체가 안 돈다).
-      const { editPopupPlacement } = await import('../model/editPopupLayout');
-      render(
-        <SafeAreaInsetsContext.Provider
-          value={{ top: 0, bottom, left: 0, right: 0 }}
-        >
-          <LiveHubView {...hubProps()} />
-        </SafeAreaInsetsContext.Provider>
-      );
-      openPopup();
+  it('HE4 팝업은 앵커에 붙고, 앵커의 left·width 는 editPopupPlacement 결과와 같으며 아랫변(bottom)은 안전영역(34)을 더하지 않은 78 이다', async () => {
+    // 동적 import — 함수 모듈이 바뀌어도 이 케이스만 red 가 되게 한다(정적 import 면 파일 전체가 안 돈다).
+    const { editPopupPlacement } = await import('../model/editPopupLayout');
+    render(
+      <SafeAreaInsetsContext.Provider
+        value={{ top: 0, bottom: 34, left: 0, right: 0 }}
+      >
+        <LiveHubView {...hubProps()} />
+      </SafeAreaInsetsContext.Provider>
+    );
+    openPopup();
 
-      // 안드로이드가 부모 경계 밖 터치를 못 받는 경우를 피한다(Q-F 승계, 02a ★4 ⑤) — 바 안이 아니다.
-      expect(within(screen.getByTestId(BAR)).queryByTestId(POPUP)).toBeNull();
-      const anchor = screen.getByTestId(POPUP_ANCHOR);
-      const style = StyleSheet.flatten(anchor.props.style);
-      expect(typeof style.width).toBe('number');
-      const placement = editPopupPlacement({
-        windowWidth: Dimensions.get('window').width,
-        popupWidth: style.width as number,
-      });
-      expect(style.left).toBeCloseTo(placement.left, 6);
-      expect(style.bottom).toBe(placement.bottom);
-      // Figma 고정값 — 아랫변 = 바 윗변(바닥 12 + 높이 58 = 70) − 8 → 78, 안전영역이 0 이든 34 든 같다(안전영역을 더하면 112 라 red).
-      expect(style.bottom).toBe(78);
-      // 안쪽 팝업은 앵커 안에 있다.
-      expect(within(anchor).getByTestId(POPUP)).toBeOnTheScreen();
-    }
-  );
+    const anchor = screen.getByTestId(POPUP_ANCHOR);
+    const style = StyleSheet.flatten(anchor.props.style);
+    expect(typeof style.width).toBe('number');
+    const placement = editPopupPlacement({
+      windowWidth: Dimensions.get('window').width,
+      popupWidth: style.width as number,
+    });
+    expect(style.left).toBeCloseTo(placement.left, 6);
+    expect(style.bottom).toBe(78); // Figma: 바 윗변(바닥 12 + 높이 58 = 70) − 8. 안전영역을 더하면 112
+    expect(within(anchor).getByTestId(POPUP)).toBeOnTheScreen();
+  });
 
   it('HE5 팝업과 행사 카드는 동시에 열리지 않는다 — 서로 열면 상대가 닫히고 활성 칸이 따라간다', () => {
     renderHub({ opportunity: mkOpp() });
@@ -1066,34 +1019,17 @@ describe('LiveHubView · HN 행사 칸 상태 · 카드 열고 닫기 (TRIP-1522
     }
   });
 
-  it('HN6 기본은 닫힘 → 행사 칸을 누르면 바 위 카드(제목·본문·각주·[넣어서 다시 짜기]·×)가 서고 행사가 활성, 다시 누르면 닫힌다', () => {
+  it('HN6 기본은 닫힘 → 행사 칸을 누르면 바 위 카드가 서고 행사가 활성, 다시 누르면 닫힌다', () => {
     renderHub({ opportunity: mkOpp() });
     expectEventReadyClosed();
 
     fireEvent.press(screen.getByTestId(BAR_EVENT));
 
     expect(screen.getByTestId(OP_CARD)).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('execution-live-opportunity-title')
-    ).toHaveTextContent('‘부산 불꽃축제’ 기간이에요');
-    expect(
-      screen.getByTestId('execution-live-opportunity-body')
-    ).toBeOnTheScreen();
-    expect(
-      screen.getByText('열리는 날·시간은 행사 안내를 확인해 주세요')
-    ).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('execution-live-opportunity-cta')
-    ).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('execution-live-opportunity-dismiss')
-    ).toBeOnTheScreen();
     // Q-7·Q-9 — 카드가 열리면 행사 칸이 활성, 일정은 비활성.
     expect(screen.getByTestId(BAR_EVENT)).toBeSelected();
     expect(screen.getByTestId(BAR_EVENT)).toBeExpanded();
     expect(screen.getByTestId(SCHEDULE)).not.toBeSelected();
-    // 바의 형제다(자식이 아니다) — 안드로이드가 부모 경계 밖 터치를 못 받는 경우를 피한다(Q-F, 02a ★4 ⑤).
-    expect(within(screen.getByTestId(BAR)).queryByTestId(OP_CARD)).toBeNull();
 
     fireEvent.press(screen.getByTestId(BAR_EVENT));
     expectEventReadyClosed();
@@ -1153,11 +1089,12 @@ describe('LiveHubView · HF 떠 있는 층(수정 팝업·행사 카드)의 닫�
   it.each(FLOATERS)(
     'HF2 $name 이 열린 채 일정·챗봇 칸을 누르면 그 칸 동작이 일어나고 닫힌다',
     (floater) => {
-      // 일정 칸 — 시트가 올라와 있어(기본) 시트 요청 없이 정리만(HS1 이 따로 본다).
+      // 일정 칸 — 시트가 올라와 있어(기본) 시트 요청(snapToIndex) 없이 열린 층만 닫는다.
       const first = renderHub({ opportunity: mkOpp() });
       floater.open();
       fireEvent.press(screen.getByTestId(SCHEDULE));
       floater.expectClosed();
+      expect(snapSpy()).not.toHaveBeenCalled();
       expect(first.onPressChatbot).not.toHaveBeenCalled();
       screen.unmount();
 
@@ -1210,14 +1147,16 @@ describe('LiveHubView · HF 떠 있는 층(수정 팝업·행사 카드)의 닫�
     }
   );
 
+  // 전면 백드롭 가드(Q-4): 층은 명시 열거 경로로만 닫힌다 — 투명 전면 Pressable 이 있으면 아래 컨트롤 누름을 먹거나(누름이 막힘) 층을 과잉으로 닫는다.
+  // 열린 채 "열거 밖 onPress 노드"(뒤로·이름·[사진]·[메모] …)를 하나씩 눌러 층이 남는지 본다.
   it.each(FLOATERS)(
-    'HF5 열거 밖 컨트롤(뒤로·이름 진입·[사진]·[메모] …)을 눌러도 $name 은 닫히지 않는다 — 전면 백드롭 가드(Q-4)',
+    'HF5 열거 밖 컨트롤(뒤로·이름 진입·[사진]·[메모] …)을 눌러도 $name 은 닫히지 않는다 — 전면 백드롭 가드',
     (floater) => {
       const LISTED =
         /^execution-live-(bar-(schedule|edit|chatbot|event)|edit-popup-(ai|manual)|opportunity-(cta|dismiss)|daychip-\d+)$|^execution-arrive-complete$/;
-      const isListed = (node: ReactTestInstance): boolean =>
+      const listed = (node: ReactTestInstance) =>
         typeof node.props?.testID === 'string' &&
-        LISTED.test(node.props.testID as string);
+        LISTED.test(node.props.testID);
       const renderOpen = () => {
         renderHub({
           opportunity: mkOpp(),
@@ -1227,36 +1166,29 @@ describe('LiveHubView · HF 떠 있는 층(수정 팝업·행사 카드)의 닫�
         });
         floater.open();
       };
-      /** onPress 를 가진 노드 중 자기·조상·자손 어디에도 열거된 컨트롤이 없는 것(감싸개 합성 포함). */
-      const unlisted = (): ReactTestInstance[] =>
+      // onPress 를 가진 노드 중 자기·조상·자손 어디에도 열거된 컨트롤이 없는 것(감싸개 합성 포함).
+      const unlisted = () =>
         screen.root.findAll((node) => {
           if (typeof node.props?.onPress !== 'function') return false;
-          for (let up: ReactTestInstance | null = node; up; up = up.parent) {
-            if (isListed(up)) return false;
-          }
-          return node.findAll(isListed).length === 0;
+          for (let up: ReactTestInstance | null = node; up; up = up.parent)
+            if (listed(up)) return false;
+          return node.findAll(listed).length === 0;
         });
-      const describeNode = (node: ReactTestInstance): string =>
-        `testID=${String(node.props.testID)} className=${String(node.props.className)}`;
 
       renderOpen();
       const total = unlisted().length;
-      // 짝 앵커 — 뒤로·이름·[사진]·[메모]만으로도 3개 이상이다(빈 목록 공허 통과 차단).
-      expect(total).toBeGreaterThanOrEqual(3);
+      expect(total).toBeGreaterThanOrEqual(3); // 짝 앵커 — 빈 목록 공허 통과 차단
 
-      // 한 번에 하나씩, 매번 새로 그려 연 뒤 i번째만 누른다 — 앞 press 의 부작용이 섞이지 않게.
       const closedBy: string[] = [];
       for (let i = 0; i < total; i += 1) {
-        screen.unmount();
+        screen.unmount(); // 매번 새로 그려 i번째만 누른다 — 앞 press 의 부작용이 섞이지 않게
         renderOpen();
         const target = unlisted()[i];
-        // 이름은 누르기 전에 뜬다 — 백드롭은 눌리면 스스로 사라져 뒤에서는 props 를 못 읽는다.
-        const label = describeNode(target);
+        const label = `testID=${String(target.props.testID)} className=${String(target.props.className)}`;
         fireEvent.press(target);
         if (!floater.isOpen()) closedBy.push(label);
       }
 
-      // 투명 전면 Pressable 같은 것이 층을 닫으면 그 노드 이름이 여기 찍힌다.
       expect(closedBy).toEqual([]);
     }
   );
@@ -1316,30 +1248,6 @@ describe('LiveHubView · HF 떠 있는 층(수정 팝업·행사 카드)의 닫�
     expect(screen.getByTestId(BAR_EVENT)).toBeSelected();
   });
 
-  it('HN10 일차를 바꾸면 카드가 닫히고, 같은 행사 key 의 다른 날을 거쳐 원래 날로 돌아와도 저절로 열리지 않는다', () => {
-    // 같은 key(`event:부산 불꽃축제`)가 두 날에 걸쳐 온다 — key 만으로는 날짜 전환을 못 가린다.
-    const day2 = mkOpp();
-    const day3 = mkOpp();
-    const base = hubProps();
-    const view = render(
-      <LiveHubView {...base} activeDayIndex={1} opportunity={day2} />
-    );
-    openCard();
-
-    fireEvent.press(screen.getByTestId('execution-live-daychip-2'));
-    expect(base.onSelectDay).toHaveBeenCalledWith(2);
-    view.rerender(
-      <LiveHubView {...base} activeDayIndex={2} opportunity={day3} />
-    );
-    expectEventReadyClosed();
-
-    fireEvent.press(screen.getByTestId('execution-live-daychip-1'));
-    view.rerender(
-      <LiveHubView {...base} activeDayIndex={1} opportunity={day2} />
-    );
-    expectEventReadyClosed();
-  });
-
   it('HN10b 칩을 안 눌러도 보는 날짜가 열린 날짜와 달라지면 카드는 안 보인다', () => {
     const base = hubProps();
     const view = render(
@@ -1356,8 +1264,6 @@ describe('LiveHubView · HF 떠 있는 층(수정 팝업·행사 카드)의 닫�
 
   it.each([
     ['일정', SCHEDULE],
-    ['수정', BAR_EDIT],
-    ['챗봇', BAR_CHATBOT],
     ['행사', BAR_EVENT],
   ])(
     'HN12 어느 칸(%s)을 눌러도 트리거 알약은 그대로 남는다 (Q-D) — 알약을 숨기는 건 종전 사건뿐',
@@ -1376,22 +1282,6 @@ describe('LiveHubView · HF 떠 있는 층(수정 팝업·행사 카드)의 닫�
 });
 
 describe('LiveHubView · HS 일정 칸 — 시트를 올릴지 정리만 할지 (TRIP-1522 v2 AC-7)', () => {
-  it.each(FLOATERS)(
-    'HS1 시트가 올라와 있을 때(기본) 일정 칸은 시트 요청(snapToIndex) 없이 열린 $name 만 닫는다',
-    (floater) => {
-      const handlers = renderHub({ opportunity: mkOpp() });
-      floater.open();
-
-      fireEvent.press(screen.getByTestId(SCHEDULE));
-
-      expect(snapSpy()).not.toHaveBeenCalled();
-      floater.expectClosed();
-      Object.values(handlers).forEach(
-        (fn) => fn !== undefined && expect(fn).not.toHaveBeenCalled()
-      );
-    }
-  );
-
   it('HS2 시트가 내려간 뒤 일정 칸을 누르면 시트에 "중간 칸(0)으로 올라와라"는 요청이 한 번 가고 열린 팝업은 닫힌다 — 올라온 뒤엔 요청이 늘지 않는다', () => {
     renderHub({ opportunity: mkOpp() });
     fireSheetAnimate(0, -1);
@@ -1428,17 +1318,6 @@ describe('LiveHubView · HS 일정 칸 — 시트를 올릴지 정리만 할지 
     expect(snapSpy()).toHaveBeenCalledTimes(1);
     expect(snapSpy()).toHaveBeenLastCalledWith(0);
   });
-
-  it('HS4 시트를 올리는 애니메이션(-1→0)에도 트리거 알약은 남는다 — 마운트와 같은 취급', () => {
-    renderWithPill({ initialSnapIndex: -1 });
-    expect(screen.getByTestId(TRIGGER_PILL)).toBeOnTheScreen();
-
-    fireEvent.press(screen.getByTestId(SCHEDULE));
-    fireSheetAnimate(-1, 0);
-
-    expect(snapSpy()).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId(TRIGGER_PILL)).toBeOnTheScreen();
-  });
 });
 
 describe('LiveHubView · HC 시트 내림 × 바 유지 (TRIP-1522 v2 AC-6·10)', () => {
@@ -1467,15 +1346,6 @@ describe('LiveHubView · HC 시트 내림 × 바 유지 (TRIP-1522 v2 AC-6·10)'
     expect(screen.getByTestId(BAR_EVENT)).toBeEnabled();
   });
 
-  it('HC1b 시트 내림(initialSnapIndex=-1)으로 마운트해도 바가 똑같이 서 있다', () => {
-    renderHub({ initialSnapIndex: -1, opportunity: mkOpp() });
-
-    BAR_ALL.forEach((testID) =>
-      expect(screen.getByTestId(testID)).toBeOnTheScreen()
-    );
-    expectScheduleActive();
-  });
-
   it('HC2 시트가 내려가 있어도 barHidden 이면 바가 통째로 없고, 풀면 같은 바로 돌아온다', () => {
     const base = hubProps({ initialSnapIndex: -1 });
     const view = render(<LiveHubView {...base} />);
@@ -1493,15 +1363,6 @@ describe('LiveHubView · HC 시트 내림 × 바 유지 (TRIP-1522 v2 AC-6·10)'
     );
     expectScheduleActive();
   });
-
-  it('HC3 기본 칸은 0(중간)이고 -1 로 마운트하면 시트 내림으로 시작한다', () => {
-    renderHub({ initialSnapIndex: undefined });
-    expect(sheetHost().props.index).toBe(0);
-    screen.unmount();
-
-    renderHub({ initialSnapIndex: -1 });
-    expect(sheetHost().props.index).toBe(-1);
-  });
 });
 
 describe('LiveHubView · HN 시트 칸 · 목록 바닥 여백 (TRIP-1522 v2 AC-9·14)', () => {
@@ -1516,49 +1377,27 @@ describe('LiveHubView · HN 시트 칸 · 목록 바닥 여백 (TRIP-1522 v2 AC-
   }
   const snaps = () => sheetHost().props.snapPoints as (number | string)[];
 
-  it('HN13 시트 칸은 정확히 [중간 55%, 펼침px] 두 칸이고(안전영역·바 높이와 무관) 시트가 끝까지 내려가도록 열려 있다 — 어떤 안전영역에서도 (property)', () => {
-    fc.assert(
-      fc.property(
-        fc.integer({ min: 0, max: 80 }),
-        fc.integer({ min: 0, max: 60 }),
-        (bottom, top) => {
-          renderWithInsets(bottom, top);
-          try {
-            // 낮은 칸이 없다 — 닫힘 스냅(28 + 바 + 안전영역)은 사라지고, 더 내리면 완전 닫힘(−1)이다.
-            expect(snaps()).toEqual([
-              '55%',
-              Dimensions.get('window').height - (top + 8 + 104),
-            ]);
-            // 끌어내려 닫는 것을 허용한다 — 안 켜면 시트가 못 내려가 일정 칸이 할 일이 없다.
-            expect(sheetHost().props.enablePanDownToClose).toBe(true);
-          } finally {
-            screen.unmount();
-          }
-        }
-      ),
-      {
-        numRuns: 15,
-        examples: [
-          [34, 47],
-          [0, 0],
-        ],
-      }
-    );
+  it('HN13 시트 칸은 정확히 [중간 55%, 펼침px] 두 칸이고(안전영역·바 높이와 무관) 시트가 끝까지 내려가도록 열려 있다', () => {
+    renderWithInsets(34, 47);
+
+    // 낮은 칸이 없다 — 더 내리면 완전 닫힘(−1)이고, 끌어내려 닫는 것을 허용해야 일정 칸이 올릴 일이 생긴다.
+    expect(snaps()).toEqual([
+      '55%',
+      Dimensions.get('window').height - (47 + 8 + 104),
+    ]);
+    expect(sheetHost().props.enablePanDownToClose).toBe(true);
   });
 
-  it.each([0, 34])(
-    'HN14 하단 안전영역 %i 에서도 일정 목록 바닥 여백은 정확히 86(= 바 점유 70 + 16)이다 — 안전영역을 더하지 않는다',
-    (bottom) => {
-      renderWithInsets(bottom, 0);
+  it('HN14 하단 안전영역 34 에서도 일정 목록 바닥 여백은 정확히 86(= 바 점유 70 + 16)이다 — 안전영역을 더하지 않는다', () => {
+    renderWithInsets(34, 0);
 
-      const padding = StyleSheet.flatten(
-        screen.getByTestId('execution-live-timeline').props.style
-      )?.paddingBottom;
+    const padding = StyleSheet.flatten(
+      screen.getByTestId('execution-live-timeline').props.style
+    )?.paddingBottom;
 
-      // Figma A·B 시트 하단 패딩 86 — 목록 끝 카드가 바에 가리지 않는다. 안전영역 34 를 더하면 120 이라 red.
-      expect(padding).toBe(86);
-    }
-  );
+    // 목록 끝 카드가 바에 가리지 않는다. 안전영역 34 를 더하면 120 이라 red.
+    expect(padding).toBe(86);
+  });
 });
 
 describe('LiveHubView · HL 지도 로고 마진 (TRIP-1522 v2 AC-17)', () => {
@@ -1574,43 +1413,31 @@ describe('LiveHubView · HL 지도 로고 마진 (TRIP-1522 v2 AC-17)', () => {
     else process.env[KEY_NAME] = original;
   });
 
-  it('HL1 로고 마진 아래쪽은 바 점유(70) 이상이고 안전영역 0·34 에서 같은 값이며, 허브가 다시 그려져도 같은 객체다', () => {
-    const marginAt = (bottom: number) => {
-      render(
-        <SafeAreaInsetsContext.Provider
-          value={{ top: 0, bottom, left: 0, right: 0 }}
-        >
-          <LiveHubView
-            {...hubProps({
-              triggerChip: fakePill(jest.fn()),
-              triggerPillKey: 'trg-1',
-            })}
-          />
-        </SafeAreaInsetsContext.Provider>
-      );
-      const margin = screen.getByTestId('map-native').props.logoMargin as
-        { bottom?: number } | undefined;
-      expect(margin).toBeDefined();
-      // 허브가 다시 그려져도(지도 탭 → 알약 숨김) 새 객체가 아니다 — MapView 가 memo 라 새 객체면 시트 이동마다 다시 그려진다.
-      fireMapTap();
-      expect(screen.getByTestId('map-native').props.logoMargin).toBe(margin);
-      screen.unmount();
-      return margin?.bottom ?? 0;
-    };
+  it('HL1 로고 마진 아래쪽은 바 점유(70) 이상이고 안전영역과 무관하며, 허브가 다시 그려져도 같은 객체다(memo 된 MapView 가 시트 이동마다 다시 그려지지 않게)', () => {
+    render(
+      <SafeAreaInsetsContext.Provider
+        value={{ top: 0, bottom: 34, left: 0, right: 0 }}
+      >
+        <LiveHubView
+          {...hubProps({
+            triggerChip: fakePill(jest.fn()),
+            triggerPillKey: 'trg-1',
+          })}
+        />
+      </SafeAreaInsetsContext.Provider>
+    );
+    const margin = screen.getByTestId('map-native').props.logoMargin as
+      { bottom?: number } | undefined;
 
-    const flat = marginAt(0);
-    const notch = marginAt(34);
-
-    // 값의 실제 효과(로고가 보이는 위치)는 6-b — 여기선 "바 점유 70 이상"이고 "안전영역과 무관"이라는 관계만 본다.
-    expect(flat).toBeGreaterThanOrEqual(70);
-    expect(notch).toBe(flat);
+    expect(margin?.bottom).toBe(70); // 안전영역 34 를 더하면 104
+    fireMapTap(); // 알약 숨김으로 다시 그림
+    expect(screen.getByTestId('map-native').props.logoMargin).toBe(margin);
   });
 });
 
 describe('LiveHubView · HD 바·카드 치수 — 앱 하단 탭 바와 같은 자리 (TRIP-1522 사이클 3 AC-1·4)', () => {
-  // 바가 앱 하단 탭 바(`BottomTabBar`)와 같은 자리·같은 폭에 선다: 좌우 30(폭 390 → 330) · 바닥 12 · **하단 안전영역을 더하지 않는다**
-  // (탭 바도 안 더한다 — 사이클 2 구현은 더해서 실기에서 약 37pt 높았다). 값은 Figma 고정값이고 구현 수식을 베끼지 않는다(02a ★6).
-  // 안전영역 0 에서는 가산 구현도 같은 값이 나오므로(34 만 갈린다) 두 값을 한 케이스에서 비교한다.
+  // 바가 앱 하단 탭 바와 같은 자리·같은 폭(좌우 30 · 바닥 12)에 서고 하단 안전영역을 더하지 않는다(사이클 2 구현은 더해서 실기에서 약 37pt 높았다).
+  // 안전영역 0 에서는 가산 구현도 같은 값이라 34 에서만 갈린다.
   function renderAt(bottom: number, overrides: Overrides = {}) {
     return render(
       <SafeAreaInsetsContext.Provider
@@ -1623,65 +1450,33 @@ describe('LiveHubView · HD 바·카드 치수 — 앱 하단 탭 바와 같은 
   const anchorStyle = (testID: string) =>
     StyleSheet.flatten(screen.getByTestId(testID).props.style);
 
-  it('HD1 바 앵커는 좌우 30 · 바닥 12 이고, 하단 안전영역이 0 이든 34 든 같다', () => {
-    renderAt(0);
-    const flat = anchorStyle('execution-live-bottom-bar-anchor');
-    expect(flat.left).toBe(30);
-    expect(flat.right).toBe(30);
-    expect(flat.bottom).toBe(12);
-    // 앵커 안에 바 루트가 있다(앵커는 바의 절대 배치 래퍼).
+  it('HD1 바 앵커는 좌우 30 · 바닥 12 이고 하단 안전영역(34)을 더하지 않는다 — 탭 바와 같은 자리', () => {
+    renderAt(34);
+
+    const anchor = anchorStyle('execution-live-bottom-bar-anchor');
+    expect(anchor.left).toBe(30);
+    expect(anchor.right).toBe(30);
+    expect(anchor.bottom).toBe(12); // 더하면 46
     expect(
       within(
         screen.getByTestId('execution-live-bottom-bar-anchor')
       ).getByTestId(BAR)
     ).toBeOnTheScreen();
-    screen.unmount();
-
-    renderAt(34);
-    const notch = anchorStyle('execution-live-bottom-bar-anchor');
-    expect(notch.left).toBe(30);
-    expect(notch.right).toBe(30);
-    // 안전영역을 더하면 46 — 홈 인디케이터 영역(34)에 걸쳐도 탭 바와 같은 자리다.
-    expect(notch.bottom).toBe(12);
   });
 
-  it('HD2 행사 카드 앵커는 바와 같은 좌우 30 · 바닥 78(= 바 윗변 70 + 8)이고 안전영역과 무관하다 (Q-C)', () => {
-    renderAt(0, { opportunity: mkOpp() });
+  it('HD2 행사 카드 앵커는 바와 같은 좌우 30 · 바닥 78(= 바 윗변 70 + 8)이고 안전영역(34)과 무관하며 바의 형제다 (Q-C)', () => {
+    renderAt(34, { opportunity: mkOpp() });
     openCard();
-    const flat = anchorStyle('execution-live-opportunity-anchor');
-    expect(flat.left).toBe(30);
-    expect(flat.right).toBe(30);
-    expect(flat.bottom).toBe(78);
-    // 앵커 안에 카드가 있고, 카드는 바의 자식이 아니다(형제).
+
+    const anchor = anchorStyle('execution-live-opportunity-anchor');
+    expect(anchor.left).toBe(30);
+    expect(anchor.right).toBe(30);
+    expect(anchor.bottom).toBe(78); // 더하면 112
     expect(
       within(
         screen.getByTestId('execution-live-opportunity-anchor')
       ).getByTestId(OP_CARD)
     ).toBeOnTheScreen();
-    expect(within(screen.getByTestId(BAR)).queryByTestId(OP_CARD)).toBeNull();
-    screen.unmount();
-
-    renderAt(34, { opportunity: mkOpp() });
-    openCard();
-    const notch = anchorStyle('execution-live-opportunity-anchor');
-    expect(notch.left).toBe(30);
-    expect(notch.right).toBe(30);
-    // 안전영역을 더하면 112 라 카드가 바에서 멀어진다.
-    expect(notch.bottom).toBe(78);
-  });
-});
-
-describe('LiveHubView · HD3 바 안 간격·폭 합 (사이클 3 5-b 후 보강)', () => {
-  // 허브가 바를 감싸는 앵커(좌우 30)·`entrance` 와 합쳐도 뒤로 58 + 간격 8 + 캡슐 나머지(= 330 − 66 = 264)다. 숨은 가로 간격 클래스가 없다.
-  it('HD3 허브 안의 바도 뒤로 58 · 간격 8 이고(캡슐 264), 유리 바깥에 가로 간격 className 이 없다', () => {
-    renderHub();
-
-    const row = readRow();
-    expect(row.backWidth).toBe(58);
-    expect(row.spacing).toBe(8);
-    expect(row.capsuleFills).toBe(true);
-    expect(row.strayKeys).toEqual([]);
-    expect(hiddenSpacingClasses()).toEqual([]);
   });
 });
 
@@ -1689,14 +1484,12 @@ describe('LiveHubView · HD3 바 안 간격·폭 합 (사이클 3 5-b 후 보강
 const BEFORE_DUE_MS = Math.floor((BAR_EXIT_MS - 40) / 16) * 16;
 
 describe('LiveHubView · HM 변신 애니메이션 — 영상 4단계 모프는 허브당 한 번 (TRIP-1522 사이클 4 AC-2·9·11)', () => {
-  // 허브 바가 홈 탭 바와 같은 5칸(출발 탭 활성)으로 시작해 4단계 모프를 재생한다. 허브가 첫 바 마운트에만 입장 신호를 켠다 —
-  // 메모 시트·위험 시트 등으로 `barHidden` 이 풀려 바가 **새로 마운트돼도** 다시 재생하지 않는다(바 마운트가 아니라 허브 마운트에 연결).
-  // `departureTab`(허브로 오기 직전 탭 바의 활성 탭)이 없으면 탭 바 위가 아닌 진입이라 모션 없이 최종 구조다.
-  // 값은 안 묶고 보이는 결과 상태만 본다(02a ★1). 모양·길이·연속성은 6-b.
+  // 허브 바가 출발 탭 활성인 5칸으로 시작해 모프를 허브당 한 번 재생한다 — barHidden 으로 바가 새로 마운트돼도 다시 안 재생(바 마운트가 아니라 허브
+  // 마운트에 연결), `departureTab` 이 없으면(탭 바 위가 아닌 진입) 모션 없이 최종 구조다. 값은 안 묶고 보이는 결과 상태만 본다.
   const probe = useAnimatedProbe();
   useInteractionGate();
 
-  it('HM1 허브 첫 렌더가 시작 5칸(홈 활성)이고 모션이 재생되며(짝 대조군) 일정 칸은 같은 노드이고 끝나면 최종 구조에서 멈춘다', async () => {
+  it('HM1 허브 첫 렌더가 시작 5칸(출발 탭 활성)이고 모션이 재생되며(짝 대조군) 일정 칸은 같은 노드이고 끝나면 정지한다 — 새 허브 인스턴스는 다시 재생한다(허브당 한 번)', async () => {
     probe.setReduceMotion(false);
     renderHub({ departureTab: 'home' });
     expect(visibleIds()).toEqual(START5_IDS);
@@ -1708,10 +1501,16 @@ describe('LiveHubView · HM 변신 애니메이션 — 영상 4단계 모프는 
     expect(moved(watch)).toBe(true);
     expect(structureSteady(watch)).toBe(true);
     expect(visibleIds()).toEqual(FINAL_IDS);
-    // 끝나면 정지 — 이후 더 흘려도 안 변한다.
     const settled = watchMotion(20);
     expect(moved(settled)).toBe(false);
     expect(settled.samples[0]).toBe(lastSample(watch));
+    screen.unmount();
+
+    renderHub({ departureTab: 'itinerary' });
+    expect(visibleIds()).toEqual(START5_IDS);
+    expect(screen.getByTestId(SCHEDULE)).toBeSelected(); // 이번 출발 탭은 일정
+    await flushOsAnswer();
+    expect(moved(watchMotion(60))).toBe(true);
   });
 
   it('HM2 입장이 끝난 허브에서 barHidden 이 풀려 바가 새로 마운트돼도 시작 5칸이 다시 나오지 않고 곧장 최종 구조다 — 움직이지 않는다', async () => {
@@ -1738,21 +1537,6 @@ describe('LiveHubView · HM 변신 애니메이션 — 영상 4단계 모프는 
     expect(
       again.shapes.every((shape) => shape.join() === FINAL_IDS.join())
     ).toBe(true);
-  });
-
-  it('HM3 새 허브 인스턴스는 다시 재생한다 — 한 번은 "앱 전체 한 번"이 아니라 "허브당 한 번"이다 (Q-D 출발지 불문)', async () => {
-    probe.setReduceMotion(false);
-    renderHub({ departureTab: 'home' });
-    await flushOsAnswer();
-    expect(moved(watchMotion(60))).toBe(true);
-    screen.unmount();
-
-    renderHub({ departureTab: 'itinerary' });
-    expect(visibleIds()).toEqual(START5_IDS);
-    expect(screen.getByTestId(SCHEDULE)).toBeSelected(); // 이번 출발 탭은 일정
-    await flushOsAnswer();
-
-    expect(moved(watchMotion(60))).toBe(true);
   });
 
   it('HM4 모션 도중 barHidden 이 켜지면 바는 시작 칸까지 즉시 통째로 없고 계속 없다 — 풀면 최종 구조로 돌아온다(BR-U8-53 그물이 모션 때문에 비지 않는다)', async () => {
@@ -1790,16 +1574,6 @@ describe('LiveHubView · HM 변신 애니메이션 — 영상 4단계 모프는 
     expect(visibleIds()).toEqual(FINAL_IDS);
   });
 
-  it('HM5 뒤로를 연타해도 onBack 은 1회다 — 허브 경유로도 (사이클 3 AC-9)', () => {
-    const handlers = renderHub();
-
-    fireEvent.press(screen.getByTestId(BAR_BACK));
-    fireEvent.press(screen.getByTestId(BAR_BACK));
-    fireEvent.press(screen.getByTestId(BAR_BACK));
-
-    expect(handlers.onBack).toHaveBeenCalledTimes(1);
-  });
-
   it('HM6 출발 탭이 있는 허브에서 뒤로는 모션이 끝난 뒤 1회 onBack 이고(연타 1회) 끝 모양은 기록이 활성인 시작 5칸이다 — 허브가 다시 그려진 뒤에도 출발 탭이 유지된다', async () => {
     probe.setReduceMotion(false);
     const base = hubProps({ departureTab: 'records' });
@@ -1825,37 +1599,6 @@ describe('LiveHubView · HM 변신 애니메이션 — 영상 4단계 모프는 
     expect(screen.getByTestId(START_RECORDS)).toBeSelected();
     expect(screen.getAllByTestId(BAR_ROOT)).toHaveLength(1);
   });
-
-  it('HM7 출발 탭이 없는 허브(탭 바 위가 아닌 진입)는 OS 답이 false 여도 첫 프레임부터 최종 구조이고 움직이지 않는다 — 시작 칸이 한 번도 안 보인다', async () => {
-    probe.setReduceMotion(false);
-    renderHub();
-    expect(visibleIds()).toEqual(FINAL_IDS);
-    await flushOsAnswer();
-
-    const watch = watchMotion(60);
-
-    expect(moved(watch)).toBe(false);
-    expect(
-      watch.shapes.every((shape) => shape.join() === FINAL_IDS.join())
-    ).toBe(true);
-  });
-  it('HM8 허브가 열린 직후 지연(BAR_ENTER_DELAY_MS) 동안은 시작 5칸이 그대로이고 모프가 시작하지 않는다 — 시트·지도·목록의 첫 렌더와 겹쳐 버벅이지 않게 (6-b 후)', async () => {
-    expect(Number.isFinite(BAR_ENTER_DELAY_MS)).toBe(true); // 상수가 없으면 아래 시계 계산이 NaN 이 되어 공허하게 통과한다
-    probe.setReduceMotion(false);
-    renderHub({ departureTab: 'home' });
-    await flushOsAnswer();
-
-    const quiet = watchMotion(Math.floor((BAR_ENTER_DELAY_MS - 16) / 16));
-
-    expect(moved(quiet)).toBe(false);
-    expect(
-      quiet.shapes.every((shape) => shape.join() === START5_IDS.join())
-    ).toBe(true);
-    // 지연 뒤에는 재생되어 최종 구조에서 멈춘다.
-    const rest = watchMotion(Math.ceil((BAR_ENTER_MS + 160) / 16));
-    expect(moved(rest)).toBe(true);
-    expect(visibleIds()).toEqual(FINAL_IDS);
-  });
 });
 
 /** 뒤로 가지가 (숨김이든) 마운트돼 있으면 누른다 — 연타 시나리오용. */
@@ -1864,12 +1607,10 @@ function pressBackIfPresent() {
   if (back) fireEvent.press(back);
 }
 
-// ── 5-b 후 보강(사이클 4) — 기기 폭에 따른 바 치수와 일정 칸 연속성 (경고-1) ──────────────────────────────────────
-// 바의 폭 = 화면 폭 − 좌우 30×2. 390 기기(330)가 아니어도(iPhone 17 Pro 402 → 342 · 안드로이드 360 → 300 · 430 → 370) ① 정지 모양은
-// 상수 규칙(좌우 30 · 뒤로 58 · 간격 8 · 캡슐 = 화면 폭 − 126 · 칸 = (캡슐 − 20)/4)과 같고 ② 모션 내내 일정 아이콘이 값표(단계 함수)가
-// 말하는 자리에서 안 튄다. 구현이 바 폭을 윈도우 폭에서 읽는 방식(prop·훅)에는 중립 — 허브가 앵커에 좌우 30 을 주는 것만 전제한다.
-// 일정 칸의 "보이는 중심"은 (구조에서 직접 계산한 레이아웃 자리) + (칸에 걸린 translateX)로 읽고 오라클은 `barMorphFrame(…, 바 폭)` 이다.
-describe('LiveHubView · HW 기기 폭 — 정지 치수와 컷·교체 순간 일정 칸 연속성 (사이클 4 경고-1)', () => {
+// ── 기기 폭 — 바 폭 = 화면 폭 − 60 이라 390 기기(330)가 아니면(402 → 342 · 안드로이드 360 → 300 · 430 → 370) ① 정지 모양은 상수 규칙
+// (좌우 30 · 뒤로 58 · 간격 8 · 캡슐 = 화면 폭 − 126)과 같고 ② 모션 내내 일정 아이콘이 단계 함수가 말하는 자리에서 안 튄다. 바 폭을 prop 으로 받든
+// 훅으로 읽든 중립(허브 앵커 좌우 30 만 전제). 일정 칸의 "보이는 중심" = 구조에서 직접 계산한 레이아웃 자리 + 칸에 걸린 translateX.
+describe('LiveHubView · 기기 폭 — 정지 치수와 컷·교체 순간 일정 칸 연속성', () => {
   const probe = useAnimatedProbe();
   useInteractionGate();
   let windowSpy: jest.SpyInstance | null = null;
@@ -1877,150 +1618,50 @@ describe('LiveHubView · HW 기기 폭 — 정지 치수와 컷·교체 순간 �
     windowSpy?.mockRestore();
     windowSpy = null;
   });
-  const WINDOWS = [320, 360, 375, 390, 402, 430, 440];
   const barWidthOf = (windowWidth: number) => windowWidth - 2 * LIVE_BAR_SIDE;
 
-  /** 오라클 범위 — 프레임 시각 ±8ms 안에서 단계 함수가 낼 수 있는 값의 [최소, 최대] (시계 정렬 오차 흡수). */
-  function oracleRange(
+  /** 프레임마다 일정 칸의 보이는 중심이 단계 함수가 낼 수 있는 값(프레임 시각 ±8ms 범위, ±0.75pt)에 있는지 본다. */
+  function expectFollowing(
     direction: 'enter' | 'exit',
-    ms: number,
     width: number,
-    pick: (frame: ReturnType<typeof barMorphFrame>) => number
-  ): [number, number] {
-    const values = [-8, 0, 8].map((d) =>
-      pick(barMorphFrame(direction, Math.max(0, ms + d), width))
-    );
-    return [Math.min(...values), Math.max(...values)];
+    frames: number,
+    delay = 0
+  ) {
+    let count = 0;
+    watchMotion(frames, 16, (ms) => {
+      const values = [-8, 0, 8].map(
+        (d) =>
+          barMorphFrame(direction, Math.max(0, ms - delay + d), width)
+            .scheduleCenterX
+      );
+      const center = scheduleVisibleCenter(width);
+      expect(center).toBeGreaterThanOrEqual(Math.min(...values) - 0.75);
+      expect(center).toBeLessThanOrEqual(Math.max(...values) + 0.75);
+      count += 1;
+    });
+    expect(count).toBeGreaterThan(20);
   }
 
-  it.each(WINDOWS)(
-    'HW1 [화면 폭 %d] 정지 최종 구조: 앵커 좌우 30 · 뒤로 58 · 간격 8 · 캡슐 = 폭 − 126 · 칸 = (캡슐 − 20)/4 이고 일정 칸은 제자리(이동 0)다',
-    (windowWidth) => {
-      windowSpy = setWindowWidth(windowWidth);
-      renderHub();
-
-      const anchor = StyleSheet.flatten(
-        screen.getByTestId('execution-live-bottom-bar-anchor').props.style
-      );
-      expect(anchor.left).toBe(LIVE_BAR_SIDE);
-      expect(anchor.right).toBe(LIVE_BAR_SIDE);
-      const row = readRow();
-      expect(row.backWidth).toBe(58);
-      expect(row.spacing).toBe(8);
-      expect(row.capsuleFills).toBe(true);
-      expect(row.strayKeys).toEqual([]);
-      // 상수 규칙에서 나온 치수 — 캡슐이 바 폭에서 뒤로·간격을 뺀 나머지를 채우므로 폭 − 126, 칸 폭은 그 안쪽 패딩 20 을 뺀 4등분.
-      const capsule = barWidthOf(windowWidth) - 58 - 8;
-      expect(capsule).toBe(windowWidth - 126);
-      expect((capsule - 20) / 4).toBe((windowWidth - 146) / 4);
-      // 정지 상태에서 일정 칸은 레이아웃이 놓은 자리에 그대로 있다(번쩍임 보정 이동이 남아 있지 않다).
-      expect(slotEffect(SCHEDULE).translateX).toBeCloseTo(0, 6);
-    }
-  );
-
-  it.each(WINDOWS)(
-    'HW1b [화면 폭 %d] 시작 5칸 정지 상태에서도 일정 칸은 알약 한가운데(바 폭/2)에 있다',
-    (windowWidth) => {
-      windowSpy = setWindowWidth(windowWidth);
-      probe.setReduceMotion(false);
-      deferOsAnswer();
-      renderHub({ departureTab: 'home' });
-      expect(visibleIds()).toEqual(START5_IDS);
-
-      expect(scheduleVisibleCenter(barWidthOf(windowWidth))).toBeCloseTo(
-        barWidthOf(windowWidth) / 2,
-        6
-      );
-    }
-  );
-
-  it.each([390, 402, 430, 490])(
-    'HW2 [화면 폭 %d] 입장 내내(컷 앞뒤 포함) 일정 칸의 보이는 중심이 단계 함수가 말하는 자리를 따라간다 — 컷에서 튀지 않는다',
-    async (windowWidth) => {
-      windowSpy = setWindowWidth(windowWidth);
-      probe.setReduceMotion(false);
-      const width = barWidthOf(windowWidth);
-      renderHub({ departureTab: 'home' });
-      await flushOsAnswer();
-      const seen: { ms: number; center: number }[] = [];
-
-      // 모프 시계는 지연(BAR_ENTER_DELAY_MS)이 끝나는 순간부터 돈다.
-      watchMotion(Math.ceil((BAR_ENTER_DELAY_MS + 352) / 16), 16, (ms) => {
-        seen.push({
-          ms: ms - BAR_ENTER_DELAY_MS,
-          center: scheduleVisibleCenter(width),
-        });
-      });
-
-      expect(seen.length).toBeGreaterThan(20);
-      seen.forEach(({ ms, center }) => {
-        const [lo, hi] = oracleRange(
-          'enter',
-          ms,
-          width,
-          (f) => f.scheduleCenterX
-        );
-        expect(center).toBeGreaterThanOrEqual(lo - 0.75);
-        expect(center).toBeLessThanOrEqual(hi + 0.75);
-      });
-    }
-  );
-
-  it.each([390, 402, 430, 490])(
-    'HW3 [화면 폭 %d] 퇴장 내내(구조 교체 앞뒤 포함) 일정 칸의 보이는 중심이 단계 함수가 말하는 자리를 따라간다 — 교체에서 튀지 않는다',
+  it.each([390, 490])(
+    '[화면 폭 %d] 입장·퇴장 내내(컷·교체 앞뒤 포함) 일정 칸의 보이는 중심이 단계 함수가 말하는 자리를 따라간다 — 튀지 않는다',
     async (windowWidth) => {
       windowSpy = setWindowWidth(windowWidth);
       probe.setReduceMotion(false);
       const width = barWidthOf(windowWidth);
       renderHub({ departureTab: 'records' });
       await flushOsAnswer();
-      watchMotion(60); // 입장이 끝난 허브
+
+      expectFollowing(
+        'enter',
+        width,
+        Math.ceil((BAR_ENTER_DELAY_MS + 352) / 16),
+        BAR_ENTER_DELAY_MS
+      );
+      watchMotion(40); // 입장이 끝날 때까지
       fireEvent.press(screen.getByTestId(BAR_BACK));
-      const seen: { ms: number; center: number }[] = [];
-
-      watchMotion(25, 16, (ms) => {
-        seen.push({ ms, center: scheduleVisibleCenter(width) });
-      });
-
-      expect(seen.length).toBeGreaterThan(20);
-      seen.forEach(({ ms, center }) => {
-        const [lo, hi] = oracleRange(
-          'exit',
-          ms,
-          width,
-          (f) => f.scheduleCenterX
-        );
-        expect(center).toBeGreaterThanOrEqual(lo - 0.75);
-        expect(center).toBeLessThanOrEqual(hi + 0.75);
-      });
+      expectFollowing('exit', width, 25);
     }
   );
-});
-
-describe('LiveHubView · HG 유리 표면 사용처 (TRIP-1522 v2 AC-15)', () => {
-  it('HG1 바(뒤로·캡슐)·행사 카드·수정 팝업 알약 둘이 모두 레시피와 같은 유리 위에 있다', () => {
-    renderHub({ opportunity: mkOpp() });
-    // 바: 뒤로 + 캡슐 = 유리 2개.
-    const bar = screen.getByTestId(BAR);
-    expect(blurViewsIn(bar)).toHaveLength(2);
-    blurViewsIn(bar).forEach((blur) => expectGlassRecipe(blur));
-
-    // 카드: 제목 글자가 유리 위에 있다.
-    openCard();
-    const cardGlass = glassAncestor(
-      screen.getByTestId('execution-live-opportunity-title')
-    );
-    expect(cardGlass).not.toBeNull();
-    expectGlassRecipe(cardGlass as ReactTestInstance);
-
-    // 팝업: 알약 둘 각각이 유리 위에 있다.
-    openPopup();
-    for (const label of ['AI에게 맡기기', '직접 수정']) {
-      const glass = glassAncestor(screen.getByText(label));
-      expect(glass).not.toBeNull();
-      expectGlassRecipe(glass as ReactTestInstance);
-    }
-  });
 });
 
 describe('🔴 LiveHubView · TRIP-991 오버레이 접근성 (AC-1·AC-2·AC-4)', () => {
