@@ -198,7 +198,7 @@ export const putMePreferences = (
   preferenceInput: PreferenceInput,
   signal?: AbortSignal
 ) => {
-  return customInstance<void>({
+  return customInstance<PreferenceView>({
     url: `/me/preferences`,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },

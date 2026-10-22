@@ -10,8 +10,12 @@ import {
 import {
   DailyReflectionScreen,
   type DailyReflectionScreenProps,
-  type ReflectionFace,
 } from './DailyReflectionScreen';
+import {
+  flushOsAnswer,
+  holdReduceMotionOn,
+} from '@/test-support/barMotionProbe';
+
 import { ReflectionStatsRow } from './ReflectionStatsRow';
 
 // 지도 가지(좌표 있음)를 잠그려면 실제 MapView(네이버 네이티브)가 jest 에서 SDK 를 못 올리므로
@@ -24,8 +28,16 @@ type ExtendedProps = DailyReflectionScreenProps & {
   dayTabs?: ReflectionDayTab[];
   activeDay?: number;
   onSelectDay?: (day: number) => void;
-  onPressTab?: (key: string) => void;
 };
+
+// TRIP-1584 — 하단 바(기록·회고·요약, 회고 활성)는 `recordBar`(칸 이동 콜백 묶음)를 받을 때만 그린다. 옛 5칸 탭바(`onPressTab`)는 사라졌다.
+const BAR = 'reflection-daily-bottom-bar';
+const makeRecordBar = () => ({
+  onBack: jest.fn(),
+  onPressRecords: jest.fn(),
+  onPressReflection: jest.fn(),
+  onPressSummary: jest.fn(),
+});
 
 /**
  * TRIP-571 · AC-5(BR-U5-36)·AC-6(§7 폼검증) — j03 회고 화면(순수 프레젠테이션, VM 주입).
@@ -234,7 +246,7 @@ describe('default 얼굴 재구성 — 표면·일차 탭·통계·지도·서�
    * ★ 신규 prop 은 전부 **옵셔널**이다 — 동결 파일·프리뷰의 기존 props 객체가 그대로 컴파일돼야
    *   하므로(신규 required 를 더하면 그 객체들이 tsc 로 깨진다). 구현 전이라 화면을 **확장 prop
    *   타입으로 재대입**해 테스트만 컴파일한다(선례 TripRecordsScreen.test 의 `ScreenWithAttr`).
-   *   구현자가 이 계약(dayTabs·activeDay·onSelectDay·onPressTab)을 실제 prop·렌더로 채운다.
+   *   구현자가 이 계약(dayTabs·activeDay·onSelectDay)을 실제 prop·렌더로 채운다.
    *
    * 무엇을 보장하나(승인 계약):
    *  - 🔴 AC-1: default 얼굴이 새 표면 요소를 **전부** 그린다(빈 화면·부분 재구성 아님).
@@ -251,7 +263,7 @@ describe('default 얼굴 재구성 — 표면·일차 탭·통계·지도·서�
    *  - 🔴 AC-8(TRIP-935 로 뒤집힘 → 메모 숨김): 메모 **입력** 행이 시스템 변경요약을 **대체**(changeSummary 를 줘도 변경요약 행 부재 +
    *    메모 입력 present) · maxLength 60 · 카운터 "N/60".
    *  - 🔴 AC-9(TRIP-935 로 뒤집힘 → `-confirm`·"확인"): 저장 CTA testID `-confirm`→`-save` 개명 + 라벨 "저장" + press→콜백 1회(콜백명 onConfirm 유지).
-   *  - 🔴 AC-10: 하단 탭바(shared/ui BottomTabBar 재사용) records 활성 + press→onPressTab 1회.
+   *  - 🔴 AC-10 → TRIP-1584 AC-12: 하단 5칸 탭바는 사라지고 3칸 바(기록·회고·요약, 회고 활성)가 선다 — 아래 AC-12 묶음.
    *  - 🔴 AC-12: 헤더 "편집"(reflection-daily-edit) 유지(공유와 다름) — press→편집 진입.
    *
    * (개념) `accessibilityState.selected` = 선택 상태를 색이 아니라 접근성 플래그로 노출(jest 가 읽는
@@ -294,7 +306,7 @@ describe('default 얼굴 재구성 — 표면·일차 탭·통계·지도·서�
       dayTabs: [{ day: 1 }, { day: 2, today: true }, { day: 3 }],
       activeDay: 2,
       onSelectDay: jest.fn(),
-      onPressTab: jest.fn(),
+      recordBar: makeRecordBar(),
       onEnterEdit: jest.fn(),
       onConfirm: jest.fn(),
       onSaveEdit: jest.fn(),
@@ -309,7 +321,7 @@ describe('default 얼굴 재구성 — 표면·일차 탭·통계·지도·서�
   }
 
   describe('🔴 AC-1 · default 얼굴이 남는 표면 요소를 전부 그린다(긍정 앵커 · TRIP-935 갱신)', () => {
-    it('일차 탭·통계·서술·사진·확인·탭바가 모두 실재한다(기분·메모는 TRIP-935 로 숨김 — AC-3·8)', () => {
+    it('일차 탭·통계·서술·사진·바가 실재하고 하단 「확인」은 없다(기분·메모는 TRIP-935 로 숨김 — AC-3·8 · TRIP-1591)', () => {
       renderScreen();
 
       // 일차 탭 3개
@@ -322,7 +334,7 @@ describe('default 얼굴 재구성 — 표면·일차 탭·통계·지도·서�
       expect(
         screen.getByTestId('reflection-daily-day-tab-3')
       ).toBeOnTheScreen();
-      // 통계·서술·사진(보존 testID) · 확인(TRIP-935 — 구 저장)
+      // 통계·서술·사진(보존 testID)
       expect(screen.getByTestId('reflection-daily-stats')).toBeOnTheScreen();
       expect(
         screen.getByTestId('reflection-daily-narrative')
@@ -330,9 +342,10 @@ describe('default 얼굴 재구성 — 표면·일차 탭·통계·지도·서�
       expect(
         screen.getByTestId('reflection-daily-photo-grid')
       ).toBeOnTheScreen();
-      expect(screen.getByTestId('reflection-daily-confirm')).toBeOnTheScreen();
-      // 탭바
-      expect(screen.getByTestId('shell-tabbar-root')).toBeOnTheScreen();
+      // TRIP-1591 — 하단 「확인」은 없앴다(나가는 길은 바 뒤로). 위 앵커들이 같은 얼굴에 있으니 부재가 공허하지 않다.
+      expect(screen.queryByTestId('reflection-daily-confirm')).toBeNull();
+      // 하단 바(TRIP-1584)
+      expect(screen.getByTestId(BAR)).toBeOnTheScreen();
     });
   });
 
@@ -493,44 +506,48 @@ describe('default 얼굴 재구성 — 표면·일차 탭·통계·지도·서�
     });
   });
 
-  describe('🔴 AC-9 · 하단 버튼은 "확인"(TRIP-935 — 저장할 것이 없으니 "저장" 아님)', () => {
-    it('확인 버튼(reflection-daily-confirm)이 있고 옛 -save 와 "저장" 글자는 없다', () => {
+  // TRIP-1584 AC-12 — 홈 5칸 탭바(`BottomTabBar`)를 허브식 3칸 바로 갈아 끼운다. 칸 이동 판단(스택·날짜)은 페이지 훅 몫이라 여기선 콜백 호출만 본다.
+  describe('🔴 TRIP-1584 AC-12 · 하단 바(기록·회고·요약, 회고 활성)가 5칸 탭바를 대신한다', () => {
+    it('3칸 바가 서고 회고 칸만 활성이며 옛 5칸 탭바와 헤더 ‹ 는 없다 (헤더 「편집」은 그대로)', () => {
       renderScreen();
 
-      const confirm = screen.getByTestId('reflection-daily-confirm');
-      expect(within(confirm).getByText('확인')).toBeOnTheScreen();
-      expect(screen.queryByTestId('reflection-daily-save')).toBeNull();
-      // 편집 전(비편집) 화면에는 "저장" 글자가 없다 — 편집 모드의 저장은 동결 테스트가 지킨다(02a ★17).
-      expect(screen.queryAllByText('저장')).toHaveLength(0);
+      expect(screen.getByTestId(BAR)).toBeOnTheScreen();
+      expect(screen.getByTestId(`${BAR}-tab-reflection`)).toBeSelected();
+      expect(screen.getByTestId(`${BAR}-tab-records`)).not.toBeSelected();
+      expect(screen.queryByTestId('shell-tabbar-root')).toBeNull();
+      expect(screen.queryByTestId('reflection-daily-back')).toBeNull();
+      expect(screen.getByTestId('reflection-daily-edit')).toBeOnTheScreen();
     });
 
-    it('확인 press → 콜백(onConfirm)을 정확히 1회 부른다', () => {
-      const { onConfirm } = renderScreen();
+    it('기록·요약 칸과 뒤로는 제 콜백만 1회 부르고, 활성인 회고 칸은 아무것도 안 부른다', async () => {
+      holdReduceMotionOn(); // 뒤로가 기록 탭으로 가는 바라 퇴장 모션 뒤 이동한다 — 동작 줄이기 켜짐이면 즉시(TRIP-1591)
+      const { recordBar } = renderScreen();
+      await flushOsAnswer();
+      const bar = recordBar as ReturnType<typeof makeRecordBar>;
 
-      fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
+      fireEvent.press(screen.getByTestId(`${BAR}-tab-reflection`));
+      expect(Object.values(bar).flatMap((fn) => fn.mock.calls)).toEqual([]);
 
-      expect(onConfirm).toHaveBeenCalledTimes(1);
+      fireEvent.press(screen.getByTestId(`${BAR}-tab-records`));
+      fireEvent.press(screen.getByTestId(`${BAR}-tab-summary`));
+      fireEvent.press(screen.getByTestId(`${BAR}-back`));
+      expect(bar.onPressRecords).toHaveBeenCalledTimes(1);
+      expect(bar.onPressSummary).toHaveBeenCalledTimes(1);
+      expect(bar.onBack).toHaveBeenCalledTimes(1);
+      expect(bar.onPressReflection).not.toHaveBeenCalled();
     });
-  });
 
-  describe('🔴 AC-10 · 하단 탭바(BottomTabBar 재사용 · records 활성)', () => {
-    it('탭바가 뜨고 기록 탭이 활성이다', () => {
+    it('편집 모드에선 바가 빠지고(저장·취소 푸터가 키보드 위에 있어야 한다) 편집을 닫으면 돌아온다', () => {
       renderScreen();
 
-      expect(screen.getByTestId('shell-tabbar-root')).toBeOnTheScreen();
+      fireEvent.press(screen.getByTestId('reflection-daily-edit'));
+      expect(screen.queryByTestId(BAR)).toBeNull();
       expect(
-        screen.getByTestId('shell-tabbar-tab-records').props.accessibilityState
-          ?.selected
-      ).toBe(true);
-    });
+        screen.getByTestId('reflection-daily-edit-input')
+      ).toBeOnTheScreen(); // 짝 앵커
 
-    it('다른 탭 press → onPressTab 을 그 키로 1회 부른다', () => {
-      const { onPressTab } = renderScreen();
-
-      fireEvent.press(screen.getByTestId('shell-tabbar-tab-home'));
-
-      expect(onPressTab).toHaveBeenCalledTimes(1);
-      expect(onPressTab).toHaveBeenCalledWith('home');
+      fireEvent.press(screen.getByTestId('reflection-daily-edit-cancel'));
+      expect(screen.getByTestId(BAR)).toBeOnTheScreen();
     });
   });
 
@@ -566,7 +583,7 @@ describe('3얼굴(data-insufficient·empty·error) — 위치 박스·일차 탭
    *  - 🔴 AC-5: 일차 탭이 **3얼굴 전부**에 뜬다(현 `face==='default'` 게이트 제거) — day-tab 3개 +
    *    활성만 selected + press→onSelectDay(day) 1회. day-tab testID 는 reflection 것만(record 것 금지=G2).
    *  - 🔴 AC-6: 바텀 탭바가 **3얼굴 전부**에 뜨고(records 활성) 하단 CTA 와 **공존**한다("택1"→"둘 다") +
-   *    탭 press→onPressTab(key) 1회.
+   *    (TRIP-1584: 5칸 탭바 → 3칸 바. 칸 이동 콜백은 기본 얼굴 AC-12 묶음이 잰다.)
    *  - 🔴 AC-7: error 재시도(reflection-daily-retry) 보존 + press→onConfirm 1회(무회귀).
    *
    * (개념) `getByText('문자열')` = host Text 텍스트 완전 일치 → title·body 를 각각 완전 일치로 집으면
@@ -596,12 +613,8 @@ describe('3얼굴(data-insufficient·empty·error) — 위치 박스·일차 탭
 
   const DAY_TABS = [{ day: 1 }, { day: 2, today: true }, { day: 3 }];
 
-  /** 얼굴별 하단 CTA 이름표 — data 얼굴="확인"(-confirm), empty/error="직접 회고 작성"(-compose). */
-  const CTA_TESTID: Record<Face, string> = {
-    'data-insufficient': 'reflection-daily-confirm',
-    empty: 'reflection-daily-compose',
-    error: 'reflection-daily-compose',
-  };
+  /** 하단 CTA 는 empty/error 의 "직접 회고 작성"(-compose) 뿐이다. data-insufficient 의 「확인」은 TRIP-1591 에서 없앴다. */
+  const CTA_FACES = ['empty', 'error'] as const;
 
   function baseProps(over: Partial<FacesProps> = {}): FacesProps {
     return {
@@ -622,7 +635,7 @@ describe('3얼굴(data-insufficient·empty·error) — 위치 박스·일차 탭
       dayTabs: DAY_TABS,
       activeDay: 2,
       onSelectDay: jest.fn(),
-      onPressTab: jest.fn(),
+      recordBar: makeRecordBar(),
       onEnterEdit: jest.fn(),
       onConfirm: jest.fn(),
       onSaveEdit: jest.fn(),
@@ -699,30 +712,32 @@ describe('3얼굴(data-insufficient·empty·error) — 위치 박스·일차 탭
     );
   });
 
-  describe('🔴 AC-6 · 바텀 탭바가 3얼굴에 뜨고 하단 CTA 와 공존한다', () => {
-    it.each(FACES)('%s: 탭바(기록 활성) + 하단 CTA 가 함께 뜬다', (face) => {
-      renderFace({ face });
-
-      expect(screen.getByTestId('shell-tabbar-root')).toBeOnTheScreen();
-      expect(
-        screen.getByTestId('shell-tabbar-tab-records').props.accessibilityState
-          ?.selected
-      ).toBe(true);
-      // CTA 공존 — 탭바가 CTA 를 지우지 않는다(세로 순서는 6-b 육안).
-      expect(screen.getByTestId(CTA_TESTID[face])).toBeOnTheScreen();
-    });
-
-    it.each(FACES)(
-      '%s: 다른 탭 press → onPressTab 을 그 키로 1회 부른다',
+  describe('🔴 AC-6 → TRIP-1584 · 하단 바가 3얼굴에 뜨고(회고 활성) 하단 CTA 와 공존한다', () => {
+    it.each(CTA_FACES)(
+      '%s: 3칸 바(회고 활성) + 하단 CTA 가 함께 뜬다',
       (face) => {
-        const { onPressTab } = renderFace({ face });
+        renderFace({ face });
 
-        fireEvent.press(screen.getByTestId('shell-tabbar-tab-home'));
-
-        expect(onPressTab).toHaveBeenCalledTimes(1);
-        expect(onPressTab).toHaveBeenCalledWith('home');
+        expect(screen.getByTestId(BAR)).toBeOnTheScreen();
+        expect(screen.getByTestId(`${BAR}-tab-reflection`)).toBeSelected();
+        expect(screen.queryByTestId('shell-tabbar-root')).toBeNull();
+        expect(screen.queryByTestId('reflection-daily-back')).toBeNull(); // 헤더 ‹ 는 5얼굴 어디에도 없다
+        // CTA 공존 — 바가 CTA 를 지우지 않는다(세로 순서는 6-b 육안).
+        expect(
+          screen.getByTestId('reflection-daily-compose')
+        ).toBeOnTheScreen();
       }
     );
+
+    // TRIP-1591 — 앵커(바·통계)가 같은 얼굴에 서 있으니 「확인」 부재가 공허하지 않다.
+    it('data-insufficient: 3칸 바는 서 있고 하단 「확인」·「직접 회고 작성」은 없다', () => {
+      renderFace({ face: 'data-insufficient' });
+
+      expect(screen.getByTestId(BAR)).toBeOnTheScreen();
+      expect(screen.getByTestId('reflection-daily-stats')).toBeOnTheScreen();
+      expect(screen.queryByTestId('reflection-daily-confirm')).toBeNull();
+      expect(screen.queryByTestId('reflection-daily-compose')).toBeNull();
+    });
   });
 
   describe('🔴 AC-7 · 에러 재시도 보존(무회귀)', () => {
@@ -813,135 +828,6 @@ describe('지도 자리 사유 leaf', () => {
   });
 });
 
-describe('헤더 ‹ — 5얼굴 버튼·옵셔널 prop·편집 중 닫기', () => {
-  // TRIP-1119 (옛 DailyReflectionScreen.back.test.tsx)
-  /**
-   * TRIP-1119 · j03 오늘의 회고 헤더 ‹ — 순수 프레젠테이션(prop 주입).
-   *
-   * 무엇을 보장하나:
-   *  - AC3: 5얼굴 전부 ‹(`reflection-daily-back`)가 button 역할·"뒤로" 이름을 갖고, 누르면 `onBack` 1회.
-   *  - AC5: `onBack` 을 안 넘기는 호출자(프리뷰·기존 테스트)에서도 ‹ 는 그려지고 눌러도 깨지지 않는다.
-   *  - AC7(결정 2 b): 편집 중 ‹ 는 화면을 떠나지 않고 편집만 닫는다(`onBack`·`onSaveEdit` 0회).
-   *    편집이 닫힌 뒤의 ‹ 는 다시 `onBack` 을 부른다.
-   *
-   * `onBack` 은 구현 전이라 화면 prop 타입에 없다 — 테스트 안에서만 넓힌 타입으로 캐스팅한다
-   * (선례 `.faces.test.tsx` 의 FacesProps).
-   */
-
-  type BackProps = DailyReflectionScreenProps & { onBack?: () => void };
-
-  const Screen = DailyReflectionScreen as unknown as (
-    props: BackProps
-  ) => ReactElement;
-
-  const FACES: ReflectionFace[] = [
-    'default',
-    'data-insufficient',
-    'empty',
-    'error',
-    'pending',
-  ];
-
-  function baseProps(
-    face: ReflectionFace,
-    over: Partial<BackProps> = {}
-  ): BackProps {
-    return {
-      face,
-      narrative: '바다를 보며 걸은 하루',
-      editableText: '바다를 보며 걸은 하루',
-      stats: {
-        visitCount: 4,
-        distanceKm: 12,
-        distanceSource: 'VISIT_LINE',
-        photoCount: 6,
-      },
-      distanceDash: false,
-      mapNotice: null,
-      hidePhotoGrid: true,
-      photos: [],
-      changeSummary: null,
-      onEnterEdit: jest.fn(),
-      onConfirm: jest.fn(),
-      onSaveEdit: jest.fn(),
-      ...over,
-    };
-  }
-
-  describe('AC3 · 5얼굴 전부 헤더 ‹ 가 누를 수 있는 "뒤로" 버튼이다', () => {
-    it.each(FACES)('%s: ‹ 는 button 역할이고 이름이 "뒤로"다', (face) => {
-      render(<Screen {...baseProps(face, { onBack: jest.fn() })} />);
-
-      const back = screen.getByTestId('reflection-daily-back');
-      expect(back).toHaveProp('accessibilityRole', 'button');
-      expect(back).toHaveProp('accessibilityLabel', '뒤로');
-    });
-
-    it.each(FACES)('%s: ‹ 를 누르면 onBack 을 1회 부른다', (face) => {
-      const onBack = jest.fn();
-      render(<Screen {...baseProps(face, { onBack })} />);
-
-      fireEvent.press(screen.getByTestId('reflection-daily-back'));
-
-      expect(onBack).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('AC5 · onBack 을 안 넘기는 호출자도 그대로 그려진다 (옵셔널 prop)', () => {
-    it.each(FACES)(
-      '%s: onBack 없이도 ‹ 가 있고, 눌러도 예외가 나지 않는다',
-      (face) => {
-        render(<Screen {...baseProps(face)} />);
-
-        const back = screen.getByTestId('reflection-daily-back');
-        expect(() => fireEvent.press(back)).not.toThrow();
-      }
-    );
-  });
-
-  describe('AC7 · 편집 중 ‹ 는 편집만 닫는다 (결정 2 b)', () => {
-    it.each<ReflectionFace>(['default', 'empty'])(
-      '%s: 편집 중 ‹ → onBack·onSaveEdit 0회, 입력칸이 닫히고 헤더 "편집"이 돌아온다',
-      (face) => {
-        const onBack = jest.fn();
-        const onSaveEdit = jest.fn();
-        render(<Screen {...baseProps(face, { onBack, onSaveEdit })} />);
-        fireEvent.press(screen.getByTestId('reflection-daily-edit'));
-        fireEvent.changeText(
-          screen.getByTestId('reflection-daily-edit-input'),
-          '저장 안 한 글'
-        );
-        // 앵커 — 편집이 실제로 열렸고, 편집 중에도 ‹ 는 보인다.
-        expect(
-          screen.getByTestId('reflection-daily-edit-input')
-        ).toBeOnTheScreen();
-        expect(screen.queryByTestId('reflection-daily-edit')).toBeNull();
-
-        fireEvent.press(screen.getByTestId('reflection-daily-back'));
-
-        expect(onBack).not.toHaveBeenCalled();
-        expect(onSaveEdit).not.toHaveBeenCalled();
-        expect(screen.queryByTestId('reflection-daily-edit-input')).toBeNull();
-        expect(screen.getByTestId('reflection-daily-edit')).toBeOnTheScreen();
-      }
-    );
-
-    it('편집을 ‹ 로 닫은 뒤 ‹ 를 다시 누르면 그때는 onBack 을 1회 부른다', () => {
-      const onBack = jest.fn();
-      render(<Screen {...baseProps('default', { onBack })} />);
-      fireEvent.press(screen.getByTestId('reflection-daily-edit'));
-      fireEvent.press(screen.getByTestId('reflection-daily-back'));
-      // 앵커 — 첫 ‹ 는 편집만 닫았다.
-      expect(screen.queryByTestId('reflection-daily-edit-input')).toBeNull();
-      expect(onBack).not.toHaveBeenCalled();
-
-      fireEvent.press(screen.getByTestId('reflection-daily-back'));
-
-      expect(onBack).toHaveBeenCalledTimes(1);
-    });
-  });
-});
-
 describe('헤더 공유 아이콘 없음', () => {
   // TRIP-762 AC-11 (옛 DailyReflectionScreen.share.test.tsx)
   /**
@@ -988,7 +874,7 @@ describe('헤더 공유 아이콘 없음', () => {
       dayTabs: [{ day: 1, today: true }],
       activeDay: 1,
       onSelectDay: jest.fn(),
-      onPressTab: jest.fn(),
+      recordBar: makeRecordBar(),
       onEnterEdit: jest.fn(),
       onConfirm: jest.fn(),
       onSaveEdit: jest.fn(),

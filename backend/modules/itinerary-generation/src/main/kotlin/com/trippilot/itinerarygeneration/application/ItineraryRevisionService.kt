@@ -1,6 +1,7 @@
 package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.domain.DaySnapshot
 import com.trippilot.itinerarygeneration.domain.GenerationState
@@ -107,8 +108,14 @@ class ItineraryRevisionService(
 
         return tx.execute {
             // 가드를 **트랜잭션 안에서 다시** 본다 — 위 검증(외부 호출) 동안 확정이 커밋됐으면 그 확정을 되돌리게 된다.
-            val current = itineraries.findByTrip(tripId).firstOrNull() ?: throw ResourceNotFound("생성된 일정이 없습니다.")
+            // 일정 쓰기 잠금을 잡고 읽는다(TRIP-1412) — 편집·재계획 반영·되돌리기·확정과 직렬화된다.
+            val current = itineraries.lockForTrip(tripId) ?: throw ResourceNotFound("생성된 일정이 없습니다.")
             requireRestorable(current)
+            // 재검증은 잠그기 전의 [preview] 로 만든 초안을 판정했다 — 그 사이 일정이 갈렸거나 내용이 바뀌었으면 그 판정이
+            // 지금 쓸 조합의 것이 아니다(위반 표시가 엉뚱한 슬롯에 붙는다). 409 로 물러난다.
+            if (current.itineraryId != preview.itineraryId || !ItineraryContent.sameAs(current, preview)) {
+                throw ConflictDetected(message = "그 사이 일정이 바뀌었습니다. 다시 시도해 주세요.", errorCode = ErrorCode.STALE)
+            }
 
             val restoredDays = target.snapshot.toDays(fixedFrom = current, verdict = verdict)
             ViolationText.warnUnattached(verdict.violations(), restoredDays, tripId)
@@ -116,6 +123,7 @@ class ItineraryRevisionService(
                 current.itineraryId, current.tripId, ItineraryStatus.PLANNED, current.solveMode, current.generationMode, current.isFallback,
                 current.generationState, restoredDays, current.createdAt, clock.instant(), current.candidatesSummary,
                 current.unplacedMustVisits, // 되돌리기도 배치 판정을 바꾸지 않는다
+                current.scoring,
             )
             // 이미 같은 내용이면 쌓지 않는다 — 목록이 같은 버전으로 도배된다(편집과 같은 기준).
             // 위반 상태까지 포함해 비교한다 — 스냅숏 비교는 위반 변화를 못 보고, 도메인 직접 비교는

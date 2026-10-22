@@ -34,6 +34,7 @@ import re
 import unicodedata
 from collections.abc import Mapping
 
+from trippilot.domain.poi import NIGHTLIFE_TAG as _DOMAIN_NIGHTLIFE_TAG
 from trippilot.domain.poi import PoiCategory
 
 SOURCE_NAME = "OVERTURE"
@@ -142,7 +143,7 @@ _CATEGORY_MAP: Mapping[str, PoiCategory] = {
 
 # ── 나이트라이프 태그 ──────────────────────────────────────────────────
 # 원천 카테고리 → 세부 태그. `나이트라이프` 는 이 표에 걸린 전건에 **반드시** 붙는다.
-NIGHTLIFE_TAG = "나이트라이프"
+NIGHTLIFE_TAG = _DOMAIN_NIGHTLIFE_TAG   # domain 과 한 이름(TRIP-1537: 나이트라이프 → 술집)
 NIGHTLIFE_DETAIL: dict[str, str] = {
     "dance_club": "클럽",
     "cocktail_bar": "칵테일바",

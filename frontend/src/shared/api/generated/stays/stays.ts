@@ -338,15 +338,15 @@ export function useGetStaysStayId<
 }
 
 /**
- * 트립닷컴 제휴 Promotion Center 의 도시별 인기 목록(Hot Sellers)을 순위대로 돌려준다. 행은 반복 시드가 채운다(시범: 서울 15곳). 각 항목의 `stayId`(`"TRIPCOM:{트립닷컴 hotelId}"`)를 그대로 `/stays/{stayId}/outbound` 에 넘기면 트립닷컴 호텔 상세로 간다. 상세(`/stays/{stayId}`)는 이 출처를 모른다(404) — 목록 항목이 곧 카드다.
+ * 트립닷컴 제휴 Promotion Center 의 도시별 인기 목록(Hot Sellers, 모자라면 Top Deals)을 순위대로 돌려준다. 행은 반복 시드가 채운다 — 도시는 '서울'·'부산'·'제주'·'강릉'·'경주'·'인천'·'대구'·'전주'·'속초', 도시당 최대 15곳. `address` 는 서울만 채워져 있고 나머지는 null 이다. 각 항목의 `stayId`(`"TRIPCOM:{트립닷컴 hotelId}"`)를 그대로 `/stays/{stayId}/outbound` 에 넘기면 트립닷컴 호텔 상세로 간다. 상세(`/stays/{stayId}`)는 이 출처를 모른다(404) — 목록 항목이 곧 카드다.
  *
  * **평점·가격이 없는 것은 의도다** — 평점은 앱 안에 두지 않고(BR-U1-18), Promotion Center 가격은 실시간 값이 아니다(INV-U1-05). 모르는 도시는 빈 목록 200 이다.
  *
- * ⚠ 출시 조건: 트립닷컴 제휴 계약 3.2.2·3.2.4 — 트립닷컴 이미지·홍보 콘텐츠를 자체 콘텐츠와 함께 노출하려면 **사전 서면 승인**이 필요하다. 승인 전에는 화면이 이 목록을 띄우지 않는다.
+ * ⚠ 트립닷컴 제휴 계약 3.2.2·3.2.4 는 이미지·홍보 콘텐츠 노출에 **사전 서면 승인**을 요구한다. 회신을 기다리지 않고 노출하기로 했다(2026-10-21 제품 결정). 트립닷컴이 막으면 목록이 빈 배열로 바뀐다 — 화면은 빈 목록이면 섹션을 숨겨야 한다(요구 사항 — 이 목록을 부르는 화면은 아직 없다).
  * @summary 도시별 큐레이션 숙소(트립닷컴 Promotion Center 인기 목록)
  */
 export const getStaysCurated = (
-  params: GetStaysCuratedParams,
+  params?: GetStaysCuratedParams,
   signal?: AbortSignal
 ) => {
   return customInstance<CuratedStayList>({
@@ -365,7 +365,7 @@ export const getGetStaysCuratedQueryOptions = <
   TData = Awaited<ReturnType<typeof getStaysCurated>>,
   TError = ValidationErrorResponse,
 >(
-  params: GetStaysCuratedParams,
+  params?: GetStaysCuratedParams,
   options?: {
     query?: Partial<
       UseQueryOptions<
@@ -400,7 +400,7 @@ export function useGetStaysCurated<
   TData = Awaited<ReturnType<typeof getStaysCurated>>,
   TError = ValidationErrorResponse,
 >(
-  params: GetStaysCuratedParams,
+  params: undefined | GetStaysCuratedParams,
   options: {
     query: Partial<
       UseQueryOptions<
@@ -426,7 +426,7 @@ export function useGetStaysCurated<
   TData = Awaited<ReturnType<typeof getStaysCurated>>,
   TError = ValidationErrorResponse,
 >(
-  params: GetStaysCuratedParams,
+  params?: GetStaysCuratedParams,
   options?: {
     query?: Partial<
       UseQueryOptions<
@@ -452,7 +452,7 @@ export function useGetStaysCurated<
   TData = Awaited<ReturnType<typeof getStaysCurated>>,
   TError = ValidationErrorResponse,
 >(
-  params: GetStaysCuratedParams,
+  params?: GetStaysCuratedParams,
   options?: {
     query?: Partial<
       UseQueryOptions<
@@ -474,7 +474,7 @@ export function useGetStaysCurated<
   TData = Awaited<ReturnType<typeof getStaysCurated>>,
   TError = ValidationErrorResponse,
 >(
-  params: GetStaysCuratedParams,
+  params?: GetStaysCuratedParams,
   options?: {
     query?: Partial<
       UseQueryOptions<

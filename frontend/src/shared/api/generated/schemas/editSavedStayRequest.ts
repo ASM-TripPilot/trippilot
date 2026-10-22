@@ -10,11 +10,13 @@
  */
 
 export interface EditSavedStayRequest {
+  /** @maxLength 200 */
   name: string;
   lat?: number | null;
   lng?: number | null;
   coordConfirmed?: boolean;
   checkIn?: string | null;
   checkOut?: string | null;
+  /** @maxLength 500 */
   memo?: string | null;
 }

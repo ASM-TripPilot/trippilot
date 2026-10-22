@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
-import { render, screen } from '@testing-library/react-native';
+import { FlatList } from 'react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
 /**
  * TRIP-939 AC-10 — 개발 프리뷰(`/_dev/preview`)는 운영 빌드에서 열리지 않는다(심사 2.1).
@@ -192,6 +193,10 @@ const ASSISTANT_SHEET_KEYS = [
   'assistant-rate-limited',
   'assistant-slow',
   'assistant-open-failed',
+  // 후속 20261022 — 「이전 대화 더 보기」 행의 세 얼굴(30건 넘는 대화)
+  'assistant-older-idle',
+  'assistant-older-loading',
+  'assistant-older-error',
 ];
 
 function keyByLabel(fragment: string): string | undefined {
@@ -233,15 +238,137 @@ describe('프리뷰 · 도우미 시트 키 (TRIP-1530)', () => {
     ).toBeGreaterThanOrEqual(2);
   });
 
-  it('새 키 "제안 칩 스택(대화 전)" — 대화 전이라 사용자 말 없이 칩이 세로 스택으로 그려진다', () => {
-    const key = keyByLabel('제안 칩 스택(대화 전)');
+  // TRIP-1567 — 옛 계약("대화 전엔 카드 위에 제안 칩이 세로 스택으로 보인다")은 폐기: 칩이 접힌 기본값이고, 누르면 카드 안에 펼쳐진다.
+  // 라벨은 구현이 고칠 수 있게 키 id(`assistant-chip-stack`, 변동 없음)로 찾는다.
+  it('키 assistant-chip-stack — 대화 전이라 사용자 말 없이 접힌 칩만 있고, 칩을 누르면 추천 질문이 펼쳐진다', () => {
+    const key = 'assistant-chip-stack';
+    expect(
+      previewModule.PREVIEW_STATES.some((state) => state.key === key)
+    ).toBe(true);
+    mockSearchParams.state = key;
+    render(<DevPreview />);
+    expect(screen.queryAllByTestId(/^assistant-user-bubble-/)).toHaveLength(0);
+    // 접힌 기본값 — 목록도 카드 위 줄도 없고, 칩은 있다(앵커)
+    expect(screen.getByTestId('assistant-context-chip')).toBeCollapsed();
+    expect(screen.queryByTestId('assistant-chip-suggestions')).toBeNull();
+    expect(screen.queryByTestId('assistant-quick-replies-stack')).toBeNull();
+    expect(screen.queryByTestId('assistant-quick-replies-row')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('assistant-context-chip'));
+
+    expect(screen.getByTestId('assistant-chip-suggestions')).toBeOnTheScreen();
+  });
+
+  // TRIP-1564 — 후보 카드의 눌리는 뜻 둘(장소 보기 · 이동 없음)을 눈으로 보려는 프리뷰 키. 기존 `assistant-candidate` 는 고르기 얼굴이다.
+  it('새 키 "후보 카드(장소 보기)" — 후보 카드는 전부 눌리고, 같은 장소의 빨간 행은 없다', () => {
+    const key = keyByLabel('후보 카드(장소 보기)');
     expect(key).toBeDefined();
     mockSearchParams.state = key;
     render(<DevPreview />);
+    const cards = screen.queryAllByTestId(/^assistant-candidate-/);
+    expect(cards.length).toBeGreaterThanOrEqual(1);
+    cards.forEach((card) =>
+      expect(card.props.accessibilityRole).toBe('button')
+    );
     expect(
-      screen.getByTestId('assistant-quick-replies-stack')
-    ).toBeOnTheScreen();
-    expect(screen.queryAllByTestId(/^assistant-user-bubble-/)).toHaveLength(0);
-    expect(screen.queryByTestId('assistant-quick-replies-row')).toBeNull();
+      screen.queryAllByTestId('assistant-next-action-OPEN_PLACE')
+    ).toHaveLength(0);
   });
+
+  it('새 키 "후보 카드(이동 없음)" — 후보 카드는 그려지지만 눌리는 카드가 없고 장소 행도 없다', () => {
+    const key = keyByLabel('후보 카드(이동 없음)');
+    expect(key).toBeDefined();
+    mockSearchParams.state = key;
+    render(<DevPreview />);
+    const cards = screen.queryAllByTestId(/^assistant-candidate-/);
+    expect(cards.length).toBeGreaterThanOrEqual(1);
+    cards.forEach((card) =>
+      expect(card.props.accessibilityRole).not.toBe('button')
+    );
+    expect(
+      screen.queryAllByTestId('assistant-next-action-OPEN_PLACE')
+    ).toHaveLength(0);
+  });
+
+  // 후속 20261022 — 키 장부에만 있고 행이 없는 빈 껍데기를 막는다. 행 뿌리(assistant-older-more)는 세 얼굴 공통이고,
+  // 안쪽 로딩/실패 표식은 그 얼굴에서만 떠야 한다(idle 은 둘 다 없다).
+  it.each([
+    ['assistant-older-idle', null],
+    ['assistant-older-loading', 'assistant-older-loading'],
+    ['assistant-older-error', 'assistant-older-error'],
+  ])('%s — 한 쪽(30건)을 넘는 대화 아래 행이 그려진다(%s)', (key, inner) => {
+    mockSearchParams.state = key;
+    render(<DevPreview />);
+
+    expect(screen.getByTestId('assistant-older-more')).toBeOnTheScreen();
+    for (const id of ['assistant-older-loading', 'assistant-older-error']) {
+      if (id === inner) expect(screen.getByTestId(id)).toBeOnTheScreen();
+      else expect(screen.queryByTestId(id)).toBeNull();
+    }
+    expect(
+      screen.UNSAFE_getByType(FlatList).props.data.length
+    ).toBeGreaterThanOrEqual(40);
+  });
+
+  // 5-b W-1 — `older` 옵션의 기본값이 켜지면 모든 도우미 프리뷰 하단에 가짜 행이 붙는다. 긍정 짝(시트 뿌리)과 함께 부재를 단언.
+  // 키는 메시지 목록을 실제로 그리는 것이어야 한다 — 이력 키(`assistant-history`)는 목록 자체가 없어 뮤턴트를 못 잡았다(실측).
+  it('기존 도우미 키는 「이전 대화 더 보기」 행 없이 그려진다(older 기본값 꺼짐)', () => {
+    const key = keyByLabel('긴 대화(스크롤해서 ↓ 확인)');
+    expect(key).toBeDefined();
+    mockSearchParams.state = key;
+    render(<DevPreview />);
+    expect(screen.getByTestId('assistant-message-list')).toBeOnTheScreen();
+    expect(screen.queryByTestId('assistant-older-more')).toBeNull();
+  });
+
+  it('「이전 대화 더 보기」 행은 안내 글을 그대로 보인다', () => {
+    mockSearchParams.state = 'assistant-older-idle';
+    render(<DevPreview />);
+    expect(screen.getByTestId('assistant-older-more')).toHaveTextContent(
+      '이전 대화 더 보기'
+    );
+  });
+
+  it('index.view 는 긴 대화 샘플을 내보낸다(네트워크 계층 없이 — 지뢰 목 아래에서 로드된다)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const view = require('@/pages/assistant/assistant-sheet/index.view') as {
+      sampleLongConversation?: (count: number) => unknown[];
+    };
+    expect(typeof view.sampleLongConversation).toBe('function');
+    expect(view.sampleLongConversation?.(75)).toHaveLength(75);
+  });
+});
+
+// TRIP-1595 AC7 — 기능 안내 6장 프리뷰 키. 순수 뷰(`OnboardingTourView`)에 `initialPage` 로 n장을 처음부터 태운다.
+// 이 파일에 붙인 이유: 프리뷰 키 렌더 심판은 이 스모크뿐이고 키별 파일을 새로 만들지 않는다.
+// ⚠️ 진행 값만 본다 — n장 내용이 실제로 화면에 보이는지(페이저가 그 위치까지 굴러 있는지)는 jest 사각이라 키마다 앱을 재기동해 캡처한다(6-b).
+const ONBOARDING_TOUR_KEYS = [1, 2, 3, 4, 5, 6].map(
+  (page) => [page, `onboarding-tour-${page}`] as const
+);
+
+describe('프리뷰 · 기능 안내 6장 키 (TRIP-1595)', () => {
+  it('D1 장부에 onboarding-tour-1 … onboarding-tour-6 여섯 키가 모두 있다', () => {
+    const keys = previewModule.PREVIEW_STATES.map((state) => state.key);
+    expect(keys).toEqual(
+      expect.arrayContaining(ONBOARDING_TOUR_KEYS.map(([, key]) => key))
+    );
+  });
+
+  it.each(ONBOARDING_TOUR_KEYS)(
+    'D2 %i장 키로 열면 기능 안내가 그 장 진행 값으로 처음부터 그려진다',
+    (page, key) => {
+      mockSearchParams.state = key;
+      render(<DevPreview />);
+
+      expect(screen.getByTestId('dev-preview-root')).toBeOnTheScreen();
+      expect(
+        screen.getByTestId(`onboarding-tour-page-${page}`)
+      ).toBeOnTheScreen();
+      expect(
+        screen.getByTestId('onboarding-tour-progress')
+      ).toHaveAccessibilityValue({ now: page });
+      // 폴백(splash)으로 떨어지지 않았다
+      expect(screen.queryByTestId('shell-splash-root')).toBeNull();
+    }
+  );
 });

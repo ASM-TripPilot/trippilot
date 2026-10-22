@@ -21,7 +21,7 @@
  * 스크롤 콘텐츠 하단 여백을 넉넉히 둬 마지막 항목이 안 가리게 한다. 탭바는 SafeArea 를 모르는
  * 순수 뷰다(repo-trap).
  */
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -29,6 +29,7 @@ import type { PlaceCardVM } from '@/entities/place';
 import { PlaceRailCard, type PlaceRailCardSave } from '@/entities/place';
 import type { StayCardVM } from '@/entities/stay';
 import { StaySearchCard } from '@/entities/stay';
+import { useScrollHide } from '@/shared/lib/useScrollHide';
 import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 
 import {
@@ -42,6 +43,8 @@ import {
 } from '@/features/explore/index.view';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import { DismissNotice } from '@/shared/ui/NoticeBanner';
+import { FAB_STACK_TOP } from '@/shared/ui/toastBottom';
+import { useToastBottom } from '@/shared/ui/useToastBottom';
 
 // 카드 뷰모델은 entities 로 이관됐다(StayCardVM=807 · PlaceCardVM=806) — 여기서 재수출해 기존
 // 소비처(placePhoto 테스트·라우트)의 `./ExploreLandingScreen`·이 파일 경유
@@ -102,10 +105,14 @@ export interface ExploreLandingScreenProps {
     // 역조회해 상세 push 한다(onToggleSave 선례). 하트 press 는 카드 push 를 안 삼킨다(★F-4).
     onPressCard?: (card: StayCardVM) => void;
   };
+  /** 인기 숙소 레인(TRIP-1580) — 있으면 숙소 레인 제목을 「인기 숙소」로 바꾸고 몸통(카드·재시도)을 이 노드로
+   * 갈아 끼운다('모두 보기'는 그대로). 화면은 위젯을 모르므로 page 가 완성 노드를 넘긴다 — 넘길지(지역 필터·
+   * 카드 있음)는 page 가 정한다. 로딩 얼굴이면 스켈레톤이 이긴다. 생략 = 지금 레인 그대로(무회귀). */
+  curatedStayLane?: ReactNode;
   /** 담은 곳 saved-menu FAB(우하단, Figma a01 3012:1731). 하트 FAB 을 누르면 두 미니 FAB
    * (담은 장소→d02 · 저장한 숙소→e04)으로 펼쳐지고, 열린 상태에선 하트가 X(닫기)로 바뀐다.
-   * 열림 상태·라우팅은 순수 화면이 못 지므로 라우트가 소유해 prop 으로 내린다(구조 가드 —
-   * 화면 useState 0건). 개수는 접근성 라벨로만 알린다. */
+   * 열림 상태·라우팅은 순수 화면이 못 지므로 라우트가 소유해 prop 으로 내린다(스크롤 중 FAB
+   * 숨김만 화면 안 `useScrollHide` 가 쥔다 — 뷰 로컬 표시 상태). 개수는 접근성 라벨로만 알린다. */
   savedMenu: {
     open: boolean;
     savedCount: number;
@@ -291,8 +298,11 @@ export function ExploreLandingScreen({
   regionFilter,
   placeLane,
   stayLane,
+  curatedStayLane,
   savedMenu,
 }: ExploreLandingScreenProps): ReactElement {
+  useToastBottom(FAB_STACK_TOP); // 토스트가 FAB 스택 위로 뜬다(TRIP-1559)
+  const { hidden: fabsHidden, onScroll } = useScrollHide(savedMenu.open);
   const {
     savedKeys = [],
     pendingKeys = [],
@@ -318,8 +328,11 @@ export function ExploreLandingScreen({
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="explore-landing" className="flex-1 bg-canvas">
         <ScrollView
+          testID="explore-landing-scroll"
           className="flex-1"
           showsVerticalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onScroll={onScroll}
           contentContainerStyle={{
             paddingTop: 12,
             paddingHorizontal: 16,
@@ -364,7 +377,13 @@ export function ExploreLandingScreen({
           {/* 숙소 가로 레인 */}
           <View testID="explore-lane-stay" className="mt-2xl">
             <LaneHeader
-              title={regionFilter ? `${regionFilter.label} 숙소` : '숙소'}
+              title={
+                curatedStayLane
+                  ? '인기 숙소'
+                  : regionFilter
+                    ? `${regionFilter.label} 숙소`
+                    : '숙소'
+              }
               onSeeAll={stayLane.onSeeAll}
               seeAllTestID="explore-lane-stay-seeall"
             />
@@ -378,6 +397,8 @@ export function ExploreLandingScreen({
                 width={160}
                 height={182}
               />
+            ) : curatedStayLane ? (
+              curatedStayLane
             ) : stayLane.error ? (
               <StayLaneError onRetry={stayLane.onRetry} />
             ) : (
@@ -390,10 +411,12 @@ export function ExploreLandingScreen({
                 <View className="flex-row gap-md">
                   {stayLane.cards.map((card) => (
                     // rail 카드 — 하트는 카드가 소유(save 계약). 담김/미담김은 색이 아니라 서로 다른
-                    // 글리프 testID + selected 로 관측한다(★5). 사진은 회색 자리(URL 계약 무 · INV-1).
+                    // 글리프 testID + selected 로 관측한다(★5). 사진은 URL 계약이 없어(INV-1) key 로 고른 숙소 그림(TRIP-1588).
                     <StaySearchCard
                       key={card.key}
                       testID={`explore-stay-card-${card.key}`}
+                      photoTestID={`explore-stay-photo-${card.key}`}
+                      coverKey={card.key}
                       name={card.name}
                       region={card.region}
                       priceText={card.priceText}
@@ -487,7 +510,7 @@ export function ExploreLandingScreen({
         {/* 담은 곳 saved-menu FAB — 우하단 하트 FAB 을 누르면 두 미니 FAB 으로 펼쳐진다(Figma
             a01 3012:1731). 왼→오: 담은 장소(위치핀→d02) · 저장한 숙소(가방→e04) · 하트/닫기.
             열리면 배후 backdrop 이 뜨고, 바깥 탭으로 닫힌다. 풀폭 핑크 CTA 바에서 교체(TRIP-494).
-            열림 상태는 라우트 소유(화면 useState 0건 구조 가드). */}
+            열림 상태는 라우트 소유. 세로 스크롤 중엔 아래 FAB 묶음이 숨는다(메뉴가 열려 있으면 유지). */}
         {!isLoading && savedMenu.open ? (
           <Pressable
             testID="explore-saved-menu-backdrop"
@@ -501,7 +524,12 @@ export function ExploreLandingScreen({
             나온다) · 아래=＋ 여행 만들기. items-end 로 둘 다 오른쪽에 정렬한다. 로딩 중엔 조작
             대상이 없어 통째로 미렌더한다(TRIP-704). */}
         {isLoading ? null : (
-          <View className="absolute bottom-[84px] right-lg items-end gap-md">
+          <View
+            testID="explore-fab-stack"
+            pointerEvents={fabsHidden ? 'none' : 'box-none'}
+            style={{ opacity: fabsHidden ? 0 : 1 }}
+            className="absolute bottom-[84px] right-lg items-end gap-md"
+          >
             <View className="flex-row items-center gap-md">
               {savedMenu.open ? (
                 <>

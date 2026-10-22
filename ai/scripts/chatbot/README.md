@@ -52,6 +52,8 @@ nohup uv run python scripts/chatbot/chat_lab.py > /tmp/chat_lab.log 2>&1 &
 
 분류가 "정해진 의도 없음"으로 닫은 말("내일 비 오면 실내 갈 데 있어?")은 계획 LLM(`DIALOGUE_PLAN`)이 조회 도구 ≤2 를 골라 답한다(#1420). 테스트 화면은 기본으로 켜 둔다 — 끄려면 `LAB_PLAN=0`.
 
+장소의 영업시간·휴무일·입장료가 "미확인"이면 `UnknownHandlingAgent`(`PLACE_FACT_LOOKUP`)가 벤더 웹 검색으로 뒤에서 찾는다 — 첫 질문은 "찾아보고 있어요" 각주와 [다시 묻기] 칩, 10초쯤 뒤 다시 물으면 출처와 함께 답한다. 결과는 로컬 벡터 DB `place_fact_cache` 에 남는다(표가 없으면 `docker exec -i trippilot-ai-vectordb psql -U ai_kb -d ai_kb < ai/docker/vector-init/03-place-fact-cache.sql`). 끄려면 `LAB_UNKNOWN=0`. 다시 찾게 하려면 그 장소 행을 지운다.
+
 ## 장소 조회(NL2SQL)
 
 일정에 없는 장소의 영업시간·입장료("경복궁 몇 시까지 해?")와 일정 밖 두 곳 사이 거리("강남에서 홍대 어떻게 가?")는 같은 DB 에서 **정확한 이름**으로 찾는다(LLM 없음, 별칭·체인점은 찾지 않는다). "서울 요즘 핫한 곳"·"망원동 산책할 곳"처럼 **지역을 말한 장소 탐색**은 LLM 이 쓴 SELECT 로 백엔드 장소 DB 를 읽는다(`DIALOGUE_SQL`). 테스트 화면은 기본으로 켜 둔다 — `DIALOGUE_SQL` 을 분류와 같은 모델에 배정하고 `ai_user`(읽기 전용)로 로컬 백엔드 DB 에 붙는다. 끄려면 `LAB_PLACE_SQL=0`.

@@ -1,16 +1,16 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { Image } from '@/shared/ui/Image';
+import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 
 import { ALT_LABEL } from '../config/altLabel';
+import { parseSlotKey } from '../lib/slotKey';
 import type { ReplanSlotVM } from '../model';
 import { ClockGlyph, LockGlyph } from './SlotGlyphs';
-import { SlotPhotoPlaceholder } from './SlotPhotoPlaceholder';
 
 /**
  * TRIP-751 · AC-3 — i05·i06 재계획안 슬롯 1행(순수 props+콜백, 라우팅·훅 모름). Figma `4314:1923`.
  *
- * 카드 안 좌측 번호 원(tone: visited 초록 / planned 빨강) · 사진 72(없으면 카테고리 플레이스홀더) ·
+ * 카드 안 좌측 번호 원(tone: visited 초록 / planned 빨강) · 사진 72(없으면 카테고리 생성 이미지) ·
  * 시간 알약 · 장소명 · 카테고리 · "다른 후보". 값이 없으면 요소째 안 그린다(빈 알약 금지).
  * `SlotStopCard` 와 모양이 비슷하지만 입력(서버 슬롯+date)·이름 chevron 고정이 달라 따로 둔다(Seed Q2).
  *
@@ -57,6 +57,14 @@ export function ReplanSlotRow({
   } = vm;
   const fieldId = (role: string): string =>
     `planb-draft-slot-${role}-${slotKey}`;
+  // VM 의 photo 는 `{uri}`·`require()` 둘 다 받는 RN 원천 타입이지만 생산자는 `{uri}` 만 넣는다 — uri 를 꺼내 PlacePhoto 로.
+  const imageUrl =
+    photo !== null && typeof photo === 'object' && 'uri' in photo
+      ? photo.uri
+      : null;
+  // 생성 이미지 변형은 `{date}#{poiId}` 의 poiId 로 해시한다(통째로 해시하면 날짜가 섞여 목록↔상세 그림이 어긋난다).
+  const parsedKey = parseSlotKey(slotKey);
+  const poiId = parsedKey.kind === 'ok' ? parsedKey.poiId : undefined;
 
   return (
     <View
@@ -77,20 +85,15 @@ export function ReplanSlotRow({
         </Text>
       </View>
 
-      {photo !== null ? (
-        <Image
-          testID={fieldId('photo')}
-          source={photo}
-          contentFit="cover"
-          cachePolicy="memory-disk"
-          className="h-[72px] w-[72px] rounded-thumb"
-        />
-      ) : (
-        <SlotPhotoPlaceholder
-          category={category}
-          testID={fieldId('photoplaceholder')}
-        />
-      )}
+      <PlacePhoto
+        testID={fieldId('photo')}
+        imageUrl={imageUrl}
+        category={category}
+        poiId={poiId}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        className="h-[72px] w-[72px] rounded-thumb"
+      />
 
       <View className="flex-1 gap-[6px]">
         {timeLabel !== null ? (

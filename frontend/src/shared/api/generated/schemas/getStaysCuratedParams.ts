@@ -11,7 +11,12 @@
 
 export type GetStaysCuratedParams = {
   /**
-   * 표시용 도시명
+   * 지역 카탈로그 코드 — 화면은 이것을 쓴다. 시군구·행정구 코드도 그 도시로 잡힌다(50130 서귀포 → 제주). 도 코드처럼 한 도시로 좁혀지지 않으면 빈 목록
+   * @pattern ^([0-9]{2}|[0-9]{5})$
    */
-  city: string;
+  regionCode?: string;
+  /**
+   * 짧은 도시명(서울·부산…). regionCode 와 둘 중 하나만 — 둘 다 오거나 둘 다 없으면 400
+   */
+  city?: string;
 };

@@ -16,6 +16,8 @@
 
 > **[개정 · 2026-10-20 — 구현 반영]** 이 문서가 기대는 사용자 답이 둘 늘었다(2026-10-19 정본 승인 뒤, 결정 수집 문서 「결정 대기 목록 (10-19)」 — 원문 표 전체는 `functional-design/business-logic-model.md` §0.4): #1 "운영에서 실사용자에게 위험 푸시 켜기"(추천 (나) "운영 dry-run·본인 계정 카나리까지만, 전원은 그때 다시 묻기") · #2 "위험·주의 푸시를 광고 동의 없이 보내는 '정보성 알림'으로 볼지"(추천 (가) "정보성으로 보고 진행") — 답은 둘 다 "추천대로 진행". 반영은 §7 · LEGAL-SA-02 개정 블록.
 
+> **[개정 · 2026-10-20 — 사용자 결정 25~31]** 이 문서가 기대는 사용자 답이 더 늘었다(2026-10-20, 같은 결정 수집 문서의 「추가 결정 7건 — 상황 감지 (10-20)」 — 원문 표 전체는 `functional-design/business-logic-model.md` §0.4 개정 블록): 26 "산지 권역 특보(강원중부산지 등)만 걸린 강원·경북 시군 여행지. …"(추천 (라) "(나) + 시군·도 이름으로 시작하지 않는 구역은 '모름'(거짓 '특보 없음' 차단)" — (나) "그대로 + 켜기 전 특보구역 목록 전체 대조") · 28 "미리 짜 둔 대안이 '낡음'으로 처리되는 2분 기준에 줄 대기 시간이 들어간다. …"(추천 "(다). 개발 서버에서 미리 계산을 켜 보고, 낡음으로 닫히는 비율이 눈에 띄면 (가)") · 31 "운영 서버에 공휴일 휴무(공휴일·명절에 쉬는 곳을 일정에서 빼기)를 켤지. …"(추천 (가) "개발 서버의 첫 실제 조회(10-21 07:15 장소 점검)가 경고 없이 지나면 운영도 켬") — 답은 25~31번 7건 모두 "추천대로 진행". 25·27·29·30번은 '안 정하면 · 마감' 칸의 마감만 쓴다. 반영은 §7 개정 블록.
+
 ---
 
 ## 0. 이 확장에서 새로 생기는 축
@@ -46,6 +48,10 @@
 | **PERF-SA-09** | **감시 상태 신선도 창 = 날씨 2시간 · 장소 14시간**(BR-SA-13). 날씨는 매시 회차를 한 번 놓쳐도, 장소는 아침→저녁(07:15→20:15) 간격을 덮는 값이다. 회차가 없는 밤에는 날씨가 20:40 회차 2시간 뒤부터 07:15 회차까지 `UNKNOWN`('확인 불가')으로 보인다 | **근거 없는 초기값**. 밤 표시는 INV-SA-5(밤에 돌지 않는다)의 결과다 |
 
 > **[개정 · 2026-10-20 — 구현 반영]** PERF-SA-08 — 값(#1422): `deadline_ms` 3s · 소켓 읽기 상한 **9s** · 연결 1s(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/adapter/out/external/OpportunityConfiguration.kt:34-37`). 읽기 상한은 위의 '시한 + 여유(`readTimeoutMarginMs` 2s 관례)'가 아니라 **상대 백스톱(시한 + 5s — `TRIPPILOT_TIMEOUT_MARGIN_MS` 기본)보다 1s 길게** 잡았다. 같거나 짧으면 상대가 마감을 넘겨 정리해 보내는 응답(백스톱 504 포함)을 우리 소켓이 먼저 끊는다 — 우리 소켓 시계는 요청을 다 보낸 순간 출발해 상대 시계보다 앞서고, 응답은 돌아오는 길도 걸린다. 리마인드 14s·회고 21s 경계와 같은 꼴이고, 설정이 '읽기 상한 ≥ 시한 + 5s'를 기동에서 강제한다(`:45-48,56`). AI 쪽은 시한의 70% 안에서 반경 조회(≤ 8회)를 끊는다(`ai/src/trippilot/api/opportunities.py:35-36`).
+
+> **[개정 · 2026-10-22 — 구현 반영]** PERF-SA-01·02·03 — 운영 준비 감사(2026-10-20)에서 코드와 맞춘 것.
+> - **PERF-SA-01 의 '락 상한 PT25M'은 `PT24M`** 이다(`tech-stack-decisions.md` 델타 1 개정 블록).
+> - **PERF-SA-02·03 의 'AI 검증 실측 20.1s'(2026-08-21 · 시한 미집행)는 지금 경로보다 앞선 값이다** — 하루 점검의 검증은 `deadline_ms` 3s 를 싣고 AI 백스톱은 시한 + 5s(8s)라, 그보다 길면 보류(영업시간 모름)로 끝난다(`functional-design/business-logic-model.md` §6.3 개정 블록). PERF-SA-03 의 '≈ 119여행'은 그 값으로 낸 계산이라 함께 다시 낸다. 켜기 1·3단계 dry-run 에서 `detectorMs{place}` p95 와 장소 모름 수(`unknown={place:n}`)를 같이 본다 — 실측이 백스톱 근처면 보류가 회차 회로(연속 3번)를 열어 그 회차 남은 여행의 영업시간 판정이 꺼진다(BR-SA-17).
 
 ## 2. 비용·외부 호출 (COST-SA-\*)
 
@@ -79,6 +85,15 @@
 | **RES-SA-12** | **강등 허용 워크로드** — 스윕·선계산·기회 조회는 멈춰도 일정 조회·편집·사용자 재계획이 그대로다. 별도 가용성 목표를 두지 않는다. 멈춤은 감시 상태 '확인 불가'와 요약 줄 부재로 드러난다 | RESILIENCY-01 · INV-4 |
 | **RES-SA-13** ★ | **계약 호환 — 추가형만**. openapi 새 필드는 required 밖(FE 계약 가드·옛 픽스처 보호) · 이벤트 payload 새 필드는 기본값 null(옛 행·옛 구독자 호환, JSON 트리로 읽는다) · 마이그레이션 3건은 상수 기본값 확장형(롤링 창의 옛 파드에 무해 — shared-infra 증분 SA.4) · 새 상태값·`TriggerKind`·`NotificationKind` 없음 · 저장값이 집합 밖이면 응답은 null 이고 FE 는 kind 라벨. 구 앱(OTA 없음)의 날짜 오동작은 서버 진입 강제(BR-SA-20)가, 라벨 오표기는 켜는 순서(O-SA-7)가 막는다 | 계획 Q8=A. 새 kind 하나로 구 앱 알림함이 죽는다(`frontend/src/pages/settings/notification-inbox/ui/NotificationInboxPage.tsx:35` — 모르는 kind 구조분해) |
 
+> **[개정 · 2026-10-22 — 구현 반영]** RES-SA-01·06·13.
+> - **RES-SA-01 모름 목록에 더한다** — 특보 매칭의 낯선 하위 구역(도의 시군·광역시의 군 목적지) · 관서 묶음 줄 × 그 묶음의 다른 광역 목적지(`functional-design/business-rules.md` BR-SA-16 개정 블록) · AI 가 판정하지 못했다고 답한 장소의 영업시간(검증 응답 `unverified_slots` — BR-SA-17 개정 블록). 셋 다 신호가 없으면 확인하지 않는다.
+> - **RES-SA-06 의 '락은 상한(PT25M) 뒤 풀린다'는 `PT24M`** 이다 — 20:15 를 쥔 파드가 비정상 종료해도 락이 20:39 무렵 풀려 20:40 보충이 잡는다(`tech-stack-decisions.md` 델타 1 개정 블록).
+> - **RES-SA-13 의 '마이그레이션 3건'에 확장형 하나가 더해진다** — `weather_grid_forecast.daily` 의 기본값 `'{}'`(코드가 그 칸을 매핑하지 않는다). 칸 삭제는 옛 파드가 남지 않은 다음 배포의 후속이다(`functional-design/domain-entities.md` §8.1 개정 블록). 응답 선택 필드(AI 검증 `unverified_slots` 사유 · 기회 `event_type`/`eventType`)는 추가형이지만 BE 경계 계약 시험이 키·enum 을 정확 일치로 보므로 AI·BE 를 같은 변경에 싣는다.
+
+> **[개정 · 2026-10-22 — 구현 반영]** RES-SA-01·10(G-SA-19·21·22).
+> - **RES-SA-01 모름 목록에 더한다** — 특보 제외 줄이 목적지 시군의 하위 권역만 뺌(G-SA-19 · `functional-design/business-rules.md` BR-SA-16 개정 블록) · 특일 달력을 못 읽은 검증에서 주간 영업 창으로 HC1 을 통과한 태그형 휴일 규칙 장소의 슬롯(G-SA-22 · BR-SA-17 개정 블록 ⓑ). 그리고 **일부 모름도 감시 상태를 남기지 않는다** — 장소 감지기가 그 날 본 대상 가운데 발견이 없는데 상태·영업시간을 모르는 것이 하나라도 있으면 발견·해제는 그대로 쓰되 감시 상태 행을 건드리지 않는다(G-SA-21 · BR-SA-17 개정 블록 ⓐ).
+> - **RES-SA-10 의 '날짜 명시형 규칙만 쓴다'는 판정·조립에 그대로다** — 생성·재계획·기회·편집·수리와 검증의 위반 판정 모두 못 읽은 달력을 빈 달력으로 읽는다. 더해진 것은 검증·수리 응답의 미판정 보고뿐이다 — 태그형 휴일 규칙과 주간 영업 창이 있는 장소의 슬롯이 그 창으로 HC1 을 통과했으면 `HOURS_UNKNOWN` 으로 싣고, 백엔드 하루 점검이 그것을 모름으로 읽어 그 날 장소 감시는 '확인 불가'가 된다(G-SA-22 · #1572 · G-SA-21). 특일 조회가 계속 실패하면 그런 슬롯이 낀 날마다 '영업' 감시가 그렇게 보인다.
+
 ## 4. 관측 (OBS-SA-\*)
 
 **원천은 로그다** — EKS 에서 OTLP·OTel 이 꺼져 있어(`deploy/eks/chart/templates/backend.yaml:91-99`) 카운터는 운영에서 보이지 않는다. 컨테이너 로그는 dev 스택에서 켜져 있고 보존 90일이다(`infra/terraform/environments/dev.tfvars:11-12`).
@@ -108,6 +123,19 @@ planb.situation_sweep mode= phase= trips= skipped= failed= live=[] off=[] observ
 | `elapsedMs` · `detectorMs` | 회차 소요 · 출처별 감지 지연 p50/p95 |
 
 좌표·계정 id 를 싣지 않는다(SEC-SA-05).
+
+> **[개정 · 2026-10-22 — 구현 반영]** 관측의 판독(운영 준비 감사 2026-10-20 — 코드로 확인 · 줄 번호는 `origin/develop` `49bda757f`).
+> - **`dry-run` 의 '쓰기 0'** — 트리거·감시 상태·아웃박스(사건)·푸시 쓰기가 0 이다. 감지기는 그대로 불리므로 격자 캐시 upsert 와 ShedLock 락 행 갱신은 일어난다 — 허용된 쓰기다(`functional-design/business-logic-model.md` §7 개정 블록).
+> - **`dry-run` 표본 해석**(OBS-SA-01 · 켜기 1·3·8단계) — `dry-run` 은 행이 없어 회차마다 '지금 켜면'을 다시 센다 — 같은 위험이 매시 다시 세지고, 요약 줄의 `announced`·`pushed`·`quiet` 는 그 회차의 값이라 회차끼리 더하지 않는다. 표본 줄 `planb.situation_sample tripId= source= kind= date= variant= severity= slot=` 은 신호(양성)만 싣는다 — 모름은 요약 줄의 출처별 수(`unknown=`)로 본다. 장소 표본의 `slot` 은 `{date}#{poiId}` 이고 날씨 표본은 비어 있다. 오탐은 (`tripId`, `source`, `date`, `variant`)로 중복을 걷어 센다 — 장소는 `slot` 이 장소를 가른다(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/application/SituationSweep.kt:219-221,288-298`).
+> - **OBS-SA-02 의 빈칸** — 대기 중 2분을 넘겨 낡은 이른 날짜 SYSTEM 세션을 늦은 날짜 사건이 닫고 연 경우가 `outcome=OPENED` 로만 남는다 — 결정 28 의 '낡음으로 닫히는 비율'을 이 줄로 셀 수 없다(G-SA-23 — 6단계 전에 가르는 수단을 둔다).
+
+> **[개정 · 2026-10-22 — 구현 반영]** OBS-SA-01 표본 줄 — 슬롯 신호는 끝에 `name="장소 이름"` 과 `at=요일 HH:mm~HH:mm`(자정 넘김 `(+1)`)을 더 싣는다. 날짜 전체 신호(날씨·특보)는 `name=null at=null` 이다. 장소 id 는 환경마다 다른 무작위 값이라 이것 없이는 휴무 오탐을 영업시간 원문과 로그만으로 대조할 수 없었다 — 운영 dry-run 첫 07:15 회차(2026-10-22)에서 켰다면 9건 중 3건에 휴무 푸시가 나갈 뻔했는데(OUT_OF_HOURS 2 · CLOSED_DAY 1) 대조하지 못했다. 좌표·계정 id 는 여전히 싣지 않는다(SEC-SA-05). 사용자 결정 2026-10-22(`business-logic-model.md` §0.4) · TRIP-1569 · #1542.
+
+> **[개정 · 2026-10-22 — 구현 반영]** OBS-SA-02 — §4 첫 개정 블록(관측의 판독)의 'OBS-SA-02 의 빈칸'을 메우고 결과값 목록을 코드에 맞춘다(G-SA-23 · #1573 · 줄 번호 기준 커밋 `68cecd987` · `backend/modules/itinerary-recalculation/src/main/kotlin/com/trippilot/recalculation/application/PreparedReplanService.kt`).
+> - **사건마다 한 줄** — `OPENED` · 건너뜀 사유(`DUPLICATE`·`TRIP_CAP`·`GLOBAL_CAP`·`INVALID`·`OPEN_SESSION`·`EARLIER_OPEN`·`BUSY`) · `OLD`(사건 나이 30분 초과 — BR-SA-18 ①) · `REJECTED`(종료 중 실행기가 받지 않아 세션을 FAILED 로 닫음)(`:93,97,112,136,138-142`). 적용·거절은 세션 쪽 줄이다 — `APPLIED` · `REFUSED staleness=`(`backend/modules/itinerary-recalculation/src/main/kotlin/com/trippilot/recalculation/application/ReplanSessionService.kt:452,509`).
+> - **`EARLIER_STALE`(신설)** — 그 사건이 계산 중(대기 포함) 2분을 넘긴 더 이른 날짜의 선계산을 닫고 열었으면 `OPENED`(종료 중이라 실행기가 받지 않았으면 `REJECTED`) 앞에 한 줄 더 남는다 — `session`·`date` 는 닫힌 쪽이다. `OPENED` 는 종전대로 한 줄이라 분모가 흔들리지 않는다.
+> - **`FINISHED status= waitMs= ageMs=`(신설)** — 산출이 끝날 때 한 줄. 기록조차 못 한 산출과 배포 종료 대기를 넘겨 시작 못 하고 버린 산출은 남기지 않는다.
+> - **판독**(켜기 6단계) — 낡음으로 닫힌 비율 = `count(EARLIER_STALE) / count(OPENED)` · '없음'으로 보인 비율 = `count(FINISHED ∧ ageMs > 120000) / count(FINISHED)` · 줄 대기는 `waitMs` 분포. `EARLIER_STALE` 의 두 갈래(기다리거나 계산하다 낡음 / 파드 종료·기록 실패로 멈춤)는 같은 `session` 의 `FINISHED` 유무로 가른다(상태는 `CANCELED` 또는 `null` — 버려진 대기 산출은 '멈춤'에 섞인다)(`functional-design/business-rules.md` BR-SA-19 개정 블록). 좌표·계정 id 는 싣지 않는다(SEC-SA-05).
 
 ## 5. 보안 (SEC-SA-\*)
 
@@ -169,6 +197,25 @@ planb.situation_sweep mode= phase= trips= skipped= failed= live=[] off=[] observ
 > - 8단계의 키는 O-SA-1 종결(`PUBLIC_DATA_API_KEY` — SEC-SA-03 개정 블록)로 통한다(2026-10-19 실측). 남은 것은 요약 줄의 그 출처 Unknown 소멸·실응답 표본 확인과 `observe-only` 에서 빼는 커밋이다.
 > - 9단계(`HOLIDAY_CLOSURE_MODE=on`)의 확인 '생성 샘플 비교'는 2026-10-20 에 마쳤다(로컬 측정 — 코드 밖 사실). 실키 특일 응답 12회 p50 83ms·최대 101ms(소켓 2s 초과 0) · 공유본 60,521곳 중 휴일 규칙 1,905곳(매핑 실패 0), 원인 36종 표본 약 150건 원문 대조 오탐 0 · 같은 후보 60곳 조립 on/off(서울·제주·부산 × 설 연휴·추석 연휴·평범한 주말 3일) — 연휴는 off 가 그 날 닫힌 곳을 3~7곳 방문하고 on 은 0, 빈 날 없음, 평범한 주말은 on/off 같은 해. 개발부터 켠다.
 
+> **[개정 · 2026-10-20 — 사용자 결정 25~31]** 단계에 더하는 조건(원문 표와 근거는 `functional-design/business-logic-model.md` §0.4 · §7 개정 블록).
+> - **9단계 운영**(31번 (가)) — 개발은 10-20 부터 켜져 있다(31번 원문 — 코드 밖 사실). 개발 서버의 첫 실제 조회(10-21 07:15 장소 점검)가 경고 없이 지나면 운영도 켠다 — 마감 12-25.
+> - **8단계**(26번 (라)) — 특보를 `observe-only` 에서 빼기 전에 개편 특보구역 목록 전체를 매칭 규칙과 대조한다. 도 단위 산지 이름이 실제 특보 문장에 계속 쓰이면 그때 권역 → 시군 표를 다시 본다(`functional-design/business-rules.md` BR-SA-16 개정 블록).
+> - **6단계**(28번 (다)) — 개발에서 켠 뒤 낡음으로 닫히는 선계산 비율을 본다 — 눈에 띄면 2분을 계산 시작부터 잰다(DB 칸 추가 — BR-SA-19 개정 블록).
+> - **구현의 마감** — 25번(한파·폭염 판정값)은 5단계 전 · 늦어도 11월 하순, 29번(재계획 화면 [다시 시도])의 앱 빌드는 6단계 전, 27번(기회 카드)·30번(요청 화면 시드 기준 — 앱 빌드)은 4단계의 '`ACCOUNT_IDS` 비움'(전원) 전.
+
+> **[개정 · 2026-10-22 — 구현 반영]** 단계 판독 갱신(운영 준비 감사 2026-10-20 · 결정 25~30 구현 — 근거는 `functional-design/business-logic-model.md` §7 · §9 개정 블록).
+> - **1·3단계** — 판독은 §4 개정 블록(같은 위험의 매시 재집계 · 양성만 싣는 표본 · 중복 제거 키). `detectorMs{place}` p95 와 장소 모름 수는 PERF-SA-02·03 을 다시 정하는 값이다(§1 개정 블록).
+> - **2단계** — 개발 `=on` 전에 같은 날 판정·미판정이 섞인 장소의 감시 상태(G-SA-21)를 정한다.
+> - **4단계 카나리는 한 입력으로만** — `runtime_switches` 에 `PLANB_SITUATION_SWEEP=on;PLANB_SITUATION_SWEEP_ACCOUNT_IDS=<UUID>` 를 함께 싣는다. `=on` 만 넣으면 저장된 목록이 없을 때 그 배포부터 전원이다.
+> - **6단계** — 개발에서 켜기 전에 낡음으로 닫힌 선계산을 가르는 수단(G-SA-23)이 있어야 결정 28 의 다시 볼 조건을 잰다.
+> - **8단계** — 개편 특보구역 목록 전체 대조는 마쳤다(`functional-design/business-rules.md` BR-SA-16 개정 블록). `observe-only` 에서 빼기 전에 t6 실응답 표본으로 G-SA-18(광역 줄의 단위)·G-SA-19(제외 줄의 하위 권역)를 정한다. §10 의 '2026 특보구역 개편 시행' 재평가는 이 대조로 한 번 돌았다 — 다음 개편이면 새 목록으로 대조 시험을 다시 돌린다.
+
+> **[개정 · 2026-10-22 — 구현 반영]** 단계 진행과 판독 갱신(근거는 `functional-design/business-logic-model.md` §7·§9 개정 블록).
+> - **2단계 — 개발 `=on`(2026-10-22 14:16 KST · 배포 런 39726251832).** 조건이던 G-SA-21 은 #1546 으로 닫혔다. 첫 `on` 회차(15:15)는 여행 5 · 사건 0 · WARN 0(코드 밖 사실). 표의 확인(`plan_b_trigger` 행 · 알림함 행 · 감시 상태)에 장소 감시 '확인 불가' 빈도를 더해 본다 — G-SA-21 결정의 대가다.
+> - **6단계** — 재는 수단이 생겼다(G-SA-23 · #1573). 판독은 §4 개정 블록(OBS-SA-02).
+> - **8단계** — G-SA-19 는 닫혔다(#1571). 빼기 전에 남은 것: 특보는 t6 광역 줄의 단위(G-SA-18) · 하위 권역 제외의 모름을 걸림으로 좁힐지(G-SA-24 — 사용자에게 묻는다) · 제주 시 목적지 매칭(G-SA-20), 대기질은 에어코리아 읽기 시한 실패의 빈도(TRIP-1576)를 요약 줄 `unknown` 의 `airkorea` 비율로 며칠 더 본다.
+> - **9단계 운영 — 켰다**(2026-10-21 · 배포 런 39585752292 — 운영 `PLANB_SITUATION_SWEEP=dry-run` 을 쓴 같은 런 · `HOLIDAY_CLOSURE_MODE=on`). 31번 (가)의 조건인 개발 서버 첫 실제 조회(10-21 07:15 장소 점검)가 경고 없이 지났다(코드 밖 사실). #1572 가 운영에 실린 뒤로는 운영 특일 조회가 실패한 회차의 검증이 태그형 규칙 장소를 미판정으로 싣는다(RES-SA-10 개정 블록).
+
 ## 8. PBT (blocking · 확장 Partial 모드)
 
 `functional-design/business-rules.md` 의 **PBT-SA-01~22**(전부 blocking)를 그대로 승계한다. NFR 성질이 큰 것은 PBT-SA-04(푸시 상한 · 회차당 사건 ≤ 1) · 07(밤 창 경계) · 17(선계산 구독자 멱등 · 상한 · BUSY 는 세션 0) · 18(같은 여행 10분 1회)이다 — 실행 패턴의 실패 모드를 이 넷과 스윕 단위 테스트가 보므로 NFR Design 을 두지 않는다(계획 Q10=A). 확장 규칙과의 대응:
@@ -183,6 +230,8 @@ planb.situation_sweep mode= phase= trips= skipped= failed= live=[] off=[] observ
 | PBT-09 프레임워크 | Kotest property(BE) · hypothesis(AI) · fast-check(FE) — 상속 | — |
 
 **PBT·CI 사각**: 실푸시 도달 · 콜드/웜 탭 · 포그라운드 배너 · 실 기상청·에어코리아·특일 응답 형식 · 지연·오탐 실측은 실기·운영 확인(콜드·웜 탭 → 올바른 화면 · 운영 카나리 실푸시 1회 왕복 · 개발·운영 dry-run 요약 줄 · `LIVE_KMA=1` 격자 왕복 · 키 등록 뒤 실응답 표본 수집)이 유일한 그물이다. CI 외부 호출은 0이고 대역은 실물처럼 예외로 실패한다.
+
+> **[개정 · 2026-10-22 — 구현 반영]** §8 — PBT-02 행의 ② `GridForecast` ↔ jsonb 왕복은 `hourly` 만이다 — `daily` 칸은 매핑하지 않는다(`functional-design/domain-entities.md` §8.1 개정 블록). PBT-07 생성기 품질에 하나를 더한다 — 성질의 전제(행사만으로 3장 · 그 날 위험 행)를 생성기가 거의 만들지 못하면 성질이 공허하게 통과한다: PBT-SA-19 는 붐비는 장면을, PBT-SA-20 은 셋에 둘 꼴로 그 날 위험 행을 일부러 싣는다(역검증으로 확인 — `functional-design/business-rules.md` §10 개정 블록).
 
 ## 9. 확장 기준선 대응
 

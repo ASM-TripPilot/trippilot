@@ -602,3 +602,43 @@ describe('TRIP-1372 · 몇 번째 방문인지', () => {
     expect(screen.queryByText(/번째 방문/)).toBeNull();
   });
 });
+
+// TRIP-1558 — 계획 번호(지도 핀 번호)와 기존 「N번째 방문」(도착 순)은 뜻이 달라 한 카드에 같이 뜬다.
+// 준비(planOrder·order 를 준/안 준 카드) → 실행(렌더) → 단언(번호 leaf 글자·부재, 「N번째 방문」 유지).
+describe('계획 번호 · planOrder', () => {
+  it('planOrder 가 오면 제목 옆 번호 leaf 를 그리고 「N번째 방문」도 그대로 둔다', () => {
+    render(
+      <VisitRecordCard
+        card={baseCard({
+          visitCheckId: 'v1',
+          poiId: 'p1',
+          arrivedAt: T,
+          order: 1,
+          planOrder: 3,
+        })}
+      />
+    );
+
+    expect(
+      screen.getByTestId('record-trip-visit-plan-order-v1')
+    ).toHaveTextContent('3');
+    expect(screen.getByText('1번째 방문')).toBeOnTheScreen();
+  });
+
+  it('planOrder 가 없으면(즉석 방문·계획에 없는 방문) 번호 노드가 없다', () => {
+    render(
+      <VisitRecordCard
+        card={baseCard({
+          visitCheckId: 'v1',
+          poiId: 'p1',
+          arrivedAt: T,
+          order: 1,
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('record-trip-visit-card-v1')).toBeOnTheScreen();
+    expect(screen.queryByTestId('record-trip-visit-plan-order-v1')).toBeNull();
+    expect(screen.getByText('1번째 방문')).toBeOnTheScreen();
+  });
+});

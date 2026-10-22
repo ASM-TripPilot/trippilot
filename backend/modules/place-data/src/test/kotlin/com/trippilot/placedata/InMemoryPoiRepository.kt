@@ -39,17 +39,18 @@ class InMemoryPoiRepository : PoiRepository {
         query: String,
         after: PoiCursor?,
         limit: Int,
+        seed: String?,
     ) = stored.filter { p ->
         active(p) &&
             (category == null || p.category == category) &&
             (regionCodes.isEmpty() || regionCodes.any { c -> p.regionCode?.startsWith(c) == true }) &&
             (query.isEmpty() || p.nameKo.contains(query, ignoreCase = true))
-    }.sortedWith(compareBy({ PoiSearchOrder.rank(query, it.nameKo) }, { PoiSearchOrder.sortKey(it.nameKo) }, { it.poiId }))
+    }.sortedWith(compareBy({ PoiSearchOrder.rank(query, it.nameKo) }, { PoiSearchOrder.key(it.nameKo, it.poiId, seed) }, { it.poiId }))
         .filter { p ->
             // 정렬 키와 **같은 순서로** 비교해야 커서가 정확히 맞물린다(TRIP-1003 (A) 3축).
             after == null || run {
                 val r = PoiSearchOrder.rank(query, p.nameKo)
-                val k = PoiSearchOrder.sortKey(p.nameKo)
+                val k = PoiSearchOrder.key(p.nameKo, p.poiId, seed)
                 r > after.rank || (r == after.rank && (k > after.sortKey || (k == after.sortKey && p.poiId > after.poiId)))
             }
         }

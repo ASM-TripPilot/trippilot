@@ -113,6 +113,14 @@ class LlmFeature(Enum):
     # 장소 탐색의 말 → 장소 뷰 `poi_public` SELECT 한 문장(NL2SQL, 2026-10-20 사용자 결정). 출구 게이트가 허용 목록으로 거르고,
     # DB 롤은 그 뷰만 읽기 전용으로 읽는다(V2.77). 결과 행은 등록 POI 라 INV-1 그대로. 배정이 곧 켜기 — 미배정이면 반경 탐색만.
     DIALOGUE_SQL = "DIALOGUE_SQL"
+    # 인사·잡담 한마디(2″ 인사·2‴ gap CHAT, BR-AO-26 개정 2026-10-22) — 사실 없이 말을 받아 주고 여행 쪽으로 이끄는 질문 하나로
+    # 끝낸다. 장소·시각·수치는 만들 수 없다(출구 게이트 + 오케스트레이터의 목록 밖 장소 검사). 배정이 곧 켜기 — 미배정이면 고정 문장.
+    # 별도 feature 인 이유: 배정만 바꿔 로컬 모델로 옮길 수 있게(REMINDER_COPY 와 같은 길, 2026-10-22 사용자 결정 1번).
+    DIALOGUE_SMALLTALK = "DIALOGUE_SMALLTALK"
+    # 도우미가 "미확인"으로 답하던 등록 장소의 영업시간·휴무일·입장료를 벤더 웹 검색으로 그때그때 찾는다(UnknownHandlingAgent,
+    # 2026-10-22 사용자 결정 — 먼저 답하고 뒤에서 찾아 저장, 다시 물으면 출처와 함께). 장소는 이미 등록된 곳이라 INV-1 그대로,
+    # 값은 도우미 답에만 쓰고 일정 조립에는 넣지 않는다(INV-2). 출구 게이트가 형식·출처(검색이 단 인용 URL)를 본다. 배정이 곧 켜기.
+    PLACE_FACT_LOOKUP = "PLACE_FACT_LOOKUP"
 
 
 class ModelTier(Enum):

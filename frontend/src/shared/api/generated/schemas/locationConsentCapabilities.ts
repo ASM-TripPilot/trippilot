@@ -10,7 +10,6 @@
  */
 
 export type LocationConsentCapabilities = {
-  localLocationUse?: boolean;
   serverLocationService?: boolean;
   gpsTrackRetention?: boolean;
 };

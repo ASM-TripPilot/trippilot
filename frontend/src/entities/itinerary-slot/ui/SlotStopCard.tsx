@@ -1,13 +1,12 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { Image } from '@/shared/ui/Image';
+import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 
 import { ALT_LABEL } from '../config/altLabel';
 import { buildSlotKey } from '../lib/slotKey';
 import { ChevronRightGlyph, ClockGlyph } from './SlotGlyphs';
-import { SlotPhotoPlaceholder } from './SlotPhotoPlaceholder';
 
 /** TRIP-797 · 미지정(startAt 없는) 슬롯 칩 문구 — 정본 공백 발명 카피(Figma 근거 6-b 이연). */
 export const UNSPECIFIED_CHIP_LABEL = '시간대 설정';
@@ -24,7 +23,7 @@ export const UNSPECIFIED_CHIP_LABEL = '시간대 설정';
  * 뗀다. 이름 뒤 `›`·"다른 후보" 뒤 `›` 중 이름 chevron 은 **글리프**(텍스트 아님)라 이름 leaf 텍스트가
  * 이름 하나로 유지되고, "다른 후보 ›" 의 `›` 는 상수(`ALT_LABEL`)에 든 **텍스트**다.
  *
- * 반쪽 계약: 사진 null → `SlotPhotoPlaceholder`(카테고리 틴트+아이콘, 더미 사진 금지 INV-1) · 시각
+ * 반쪽 계약: 사진 null → `PlacePhoto` 가 카테고리 생성 이미지를 그린다 · 시각
  * null → 칩 요소 부재(빈 칩 금지). 소요시간 문자열은 없다(INV-3 — 시각 칩은 시각 범위이지 소요시간 아님).
  */
 
@@ -102,7 +101,6 @@ export function SlotStopCard({
 }: SlotStopCardProps): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
   const fieldId = (role: string): string => `slot-stopcard-${role}-${slotKey}`;
-  const hasImage = slot.imageUrl !== null && slot.imageUrl !== undefined;
   const hasTime = timeLabel !== null && timeLabel !== undefined;
   // 잠긴 슬롯은 편집 어포던스를 안 붙인다(INV-U3-03) — onPressTimeChip 을 줬어도 누름 칩 부재.
   const editable = onPressTimeChip !== undefined && locked !== true;
@@ -127,22 +125,17 @@ export function SlotStopCard({
         </View>
       )}
 
-      {/* 사진 72×72 — 없으면 카테고리 플레이스홀더로 대체(엣지 E1). */}
-      {hasImage ? (
-        <Image
-          testID={fieldId('photo')}
-          source={{ uri: slot.imageUrl as string }}
-          contentFit="cover"
-          cachePolicy="memory-disk"
-          recyclingKey={slot.poiId}
-          className="h-[72px] w-[72px] rounded-thumb"
-        />
-      ) : (
-        <SlotPhotoPlaceholder
-          category={slot.category}
-          testID={fieldId('photoplaceholder')}
-        />
-      )}
+      {/* 사진 72×72 — 없으면 카테고리 생성 이미지로 대체(엣지 E1). */}
+      <PlacePhoto
+        testID={fieldId('photo')}
+        imageUrl={slot.imageUrl}
+        category={slot.category}
+        poiId={slot.poiId}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        recyclingKey={slot.poiId}
+        className="h-[72px] w-[72px] rounded-thumb"
+      />
 
       {/* 텍스트 컬럼 — 각 leaf 는 값 하나. */}
       <View className="flex-1 gap-[6px]">

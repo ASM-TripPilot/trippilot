@@ -30,10 +30,9 @@ import java.util.UUID
  *
  * 영업시간 원문 해석은 AI 한 곳이다 — 여기는 원문도 위반 detail 도 파싱하지 않고 위반의 **타입과 위치**만 읽는다.
  * 모름은 OK 로 채우지 않는다(INV-SA-2): AI 모드가 http 가 아님(가짜 검증의 빈 목록은 판정이 아니다) · 영업시간을 빼라고
- * 함 · 보류 · 영업시간 원문 없음은 전부 [HoursVerdict.UNKNOWN] 이다. 위치 없는 위반·HC2~HC4 는 슬롯에 붙이지 않는다.
- * **알려진 틈**: AI 는 원문이 있어도 해석하지 못하면 영업정보 없음으로 보고 HC1 을 적용하지 않는데, validate 응답은 위반만
- * 싣고 그 사실을 싣지 않는다 — 그런 슬롯은 OK 로 읽힌다. 슬롯별 'HC1 미판정'은 하위 코드와 함께 경계를 여는 PR-H1 몫이다
- * (이 변경은 포트·와이어를 바꾸지 않는다).
+ * 함 · 보류 · 영업시간 원문 없음 · **AI 가 판정하지 못했다고 답한 장소**는 전부 [HoursVerdict.UNKNOWN] 이다. 마지막 것은
+ * 원문이 있어도 해석하지 못한 곳(AI 는 영업정보 없음으로 보고 HC1 을 적용하지 않는다)·미등록·매핑 실패다 — 위반 0 만으로는
+ * '통과'와 구별되지 않아 검증 응답의 `unverified_slots` 를 사유와 무관하게 읽는다. 위치 없는 위반·HC2~HC4 는 슬롯에 붙이지 않는다.
  *
  * AI 모드는 설정값으로 읽는다 — 그 설정 클래스(`ScheduleAgentProperties`)는 http 조건부라 주입받으면 fake 모드 기동이
  * 깨진다(안티패턴 로그). 어댑터를 켜는 조건(`@ConditionalOnProperty` — 대소문자 무시)과 같은 규칙으로 비교한다.
@@ -65,8 +64,11 @@ class ItineraryDayCheckService(
             .filter { it.dayIndex == 0 && ViolationText.isOpeningHours(it.type) }
             .mapNotNull { v -> v.slotIndex?.let { it to v.reasonCode } }
             .toMap()
+        // AI 가 판정하지 못했다고 답한 장소 — 위반이 없어도 OK 가 아니다(INV-SA-2). 사유로 가르지 않는다(어느 것이든 못 봤다).
+        val unverified = (verdict as? Revalidation.Judged)?.unverified.orEmpty()
         return DayCheck(
             judged = verdict != Revalidation.Withheld, // 부르지 않은 날은 보류가 아니다 — 영업시간은 아래에서 UNKNOWN 이다
+            answered = verdict is Revalidation.Judged, // 전부 못 봤다고 답해도 답이다 — 장소 감지의 회로가 0 으로 돌아간다
             slots = day.slots.mapIndexed { i, s ->
                 val known = surface[s.sourcePoiId]
                 CheckedSlot(
@@ -77,6 +79,7 @@ class ItineraryDayCheckService(
                     hours = when {
                         verdict !is Revalidation.Judged || known?.openingHoursKnown != true -> HoursVerdict.UNKNOWN
                         i in violated -> HoursVerdict.VIOLATED
+                        s.sourcePoiId in unverified -> HoursVerdict.UNKNOWN
                         else -> HoursVerdict.OK
                     },
                     reasonCode = violated[i],

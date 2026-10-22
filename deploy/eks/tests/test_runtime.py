@@ -77,6 +77,11 @@ class SecretTests(unittest.TestCase):
             {"backend": {"ITINERARY_GENERATION_DAILY_LIMIT": "0"}},
             {"backend": {"ITINERARY_GENERATION_DAILY_LIMIT": "abc"}},
             {"backend": {"ITINERARY_GENERATION_DAILY_LIMIT": "2147483648"}},
+            # 공유 문구 하루 상한(TRIP-1411) — 같은 검사다(백엔드가 1 미만을 기동에서 거부한다).
+            {"backend": {"SHARE_CARD_DAILY_LIMIT": ""}},
+            {"backend": {"SHARE_CARD_DAILY_LIMIT": "0"}},
+            {"backend": {"SHARE_CARD_DAILY_LIMIT": "-1"}},
+            {"backend": {"SHARE_CARD_DAILY_LIMIT": "2147483648"}},
             {"backend": {"ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": "not-a-uuid"}},
             # 파이썬 uuid 는 받지만 백엔드는 못 읽는 모양 — DB 도구에서 대시 없이 복사해 오는 것이 흔하다.
             {"backend": {"ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": "0d7f17ab5c4b4d6da7f7484ba11dda46"}},
@@ -94,7 +99,7 @@ class SecretTests(unittest.TestCase):
         runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
             "AFFILIATE_MODE": "tripcom", "TRIPCOM_ALLIANCE_ID": "a", "TRIPCOM_SID": "s", "TRIPCOM_AD_ID": "D1"}})
         runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
-            "ITINERARY_GENERATION_DAILY_LIMIT": "50", "ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS":
+            "ITINERARY_GENERATION_DAILY_LIMIT": "50", "SHARE_CARD_DAILY_LIMIT": "30", "ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS":
             "0D7F17AB-5c4b-4d6d-a7f7-484ba11dda46, 11111111-2222-4333-8444-555555555555"}})
         runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
             "ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS": ""}})
@@ -318,6 +323,23 @@ class SecretTests(unittest.TestCase):
             "CREATE TABLE IF NOT EXISTS public.dialogue_memory",
             "CREATE INDEX IF NOT EXISTS ix_dialogue_memory_account ON public.dialogue_memory",
             "CREATE INDEX IF NOT EXISTS ix_dialogue_memory_trip ON public.dialogue_memory"})
+
+    def test_place_fact_cache_ddl_is_identical_in_both_canons(self):
+        """`place_fact_cache`(UnknownHandlingAgent 저장소)도 dialogue_memory 와 같은 두 정본 규칙 — 갈리면 로컬에서 통과한 DML 이
+        배포에서 깨진다. GRANT 는 bootstrap 에만(이유는 위 테스트)."""
+        import re
+
+        def statements(path):
+            text = re.sub(r"--[^\n]*", "", path.read_text(encoding="utf-8"))
+            return {" ".join(stmt.split()) for stmt in text.split(";") if "place_fact_cache" in stmt}
+
+        bootstrap = Path(runtime_db.__file__).with_name("bootstrap.sql")
+        compose = Path(__file__).resolve().parents[3] / "ai" / "docker" / "vector-init" / "03-place-fact-cache.sql"
+        eks, local = statements(bootstrap), statements(compose)
+        grants = {stmt for stmt in eks if stmt.startswith("GRANT")}
+        self.assertEqual(grants, {"GRANT SELECT, INSERT, UPDATE, DELETE ON public.place_fact_cache TO ai_user"})
+        self.assertEqual(eks - grants, local)
+        self.assertEqual({stmt.split(" (")[0] for stmt in local}, {"CREATE TABLE IF NOT EXISTS public.place_fact_cache"})
         # ai_kb 데이터베이스 안에서만 — \connect 뒤에 있어야 trippilot DB 에 잘못 만들지 않는다.
         sql = bootstrap.read_text(encoding="utf-8")
         self.assertLess(sql.index("\\connect ai_kb"), sql.index("dialogue_memory"))

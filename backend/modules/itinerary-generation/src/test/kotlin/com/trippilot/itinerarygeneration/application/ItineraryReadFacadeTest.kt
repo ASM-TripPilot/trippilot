@@ -5,6 +5,7 @@ import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
+import com.trippilot.itinerarygeneration.domain.ScoringSignal
 import com.trippilot.placedata.api.FrozenPoiView
 import com.trippilot.placedata.api.PoiSurfaceFacade
 import com.trippilot.placedata.api.PoiSurfaceView
@@ -49,7 +50,7 @@ class ItineraryReadFacadeTest : StringSpec({
             ItineraryDay.of(d1, 0, listOf(slot(poiA, 0, "10:00"))),
             ItineraryDay.of(d2, 1, listOf(slot(poiB, 0, "11:00"))),
         ),
-        now, now, null, emptyList(),
+        now, now, null, emptyList(), ScoringSignal.UNKNOWN,
     )
 
     val trips = object : TripFacade {
@@ -163,7 +164,7 @@ class ItineraryReadFacadeTest : StringSpec({
             UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
             GenerationState.COMPLETE,
             listOf(ItineraryDay.of(d1, 0, listOf(slot(poiA, 0, "10:00"), slot(poiC, 1, "14:00")))),
-            now, now, null, emptyList(),
+            now, now, null, emptyList(), ScoringSignal.UNKNOWN,
         )
         ItineraryReadFacade(trips, repo(multi), SlotSurfaceAssembler(surfaces(emptyMap())))
             .findCurrent(acc, tripId)!!.slotKeys shouldContainExactly listOf("$d1#$poiA", "$d1#$poiC")
@@ -188,7 +189,7 @@ class ItineraryReadFacadeTest : StringSpec({
             GenerationState.COMPLETE,
             // 뒤에 저장된 것이 orderIndex 는 앞이다.
             listOf(ItineraryDay.of(d1, 0, listOf(slot(poiA, 1, "14:00"), slot(poiC, 0, "10:00")))),
-            now, now, null, emptyList(),
+            now, now, null, emptyList(), ScoringSignal.UNKNOWN,
         )
         val facade = ItineraryReadFacade(
             trips, repo(multi), SlotSurfaceAssembler(surfaces(mapOf(poiA to "나중", poiC to "먼저"))),

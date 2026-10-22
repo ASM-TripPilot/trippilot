@@ -12,6 +12,8 @@ import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 const MISSING = '미확인';
 
 export interface PlaceDetailView {
+  /** 사진이 없을 때 생성 이미지 변형을 해시하는 장소 id(목록→상세 같은 그림). */
+  poiId: string;
   name: string;
   category: string | null;
   tags: string[];
@@ -46,6 +48,7 @@ export function buildPlaceDetailView(
   const openingHoursMissing = rawHours === null || rawHours === undefined;
 
   return {
+    poiId: slot.poiId,
     name: slot.nameKo ?? MISSING,
     category: slot.category ?? null,
     tags: slot.tags,

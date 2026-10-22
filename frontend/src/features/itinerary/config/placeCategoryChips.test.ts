@@ -18,8 +18,8 @@ import { PoiCategory } from '@/shared/api/index.schemas';
 
 import { PLACE_CATEGORY_CHIPS } from './placeCategoryChips';
 
-describe('🔴 CFG1 · 칩 6종·순서·매핑 정본 (AC-2)', () => {
-  it('전체/맛집/명소/카페/전시/야경 6종이 이 순서로, testID·label·category 가 각각 명시된다', () => {
+describe('🔴 CFG1 · 칩 8종·순서·매핑 정본 (AC-2 · TRIP-1545 미술·술집 추가)', () => {
+  it('전체/맛집/명소/카페/전시/미술/야경/술집 8종이 이 순서로, testID·label·category 가 각각 명시된다', () => {
     // 단언 — 배열 전수 완전일치. 순서·개수·매핑이 한 번에 굳는다.
     expect(PLACE_CATEGORY_CHIPS).toEqual([
       { testId: 'all', label: '전체', category: null },
@@ -27,7 +27,9 @@ describe('🔴 CFG1 · 칩 6종·순서·매핑 정본 (AC-2)', () => {
       { testId: '명소', label: '명소', category: '명소' },
       { testId: '카페', label: '카페', category: '카페' },
       { testId: '전시', label: '전시', category: '문화' },
+      { testId: '미술', label: '미술', category: '미술' },
       { testId: '야경', label: '야경', category: '야경' },
+      { testId: '술집', label: '술집', category: '술집' },
     ]);
   });
 });

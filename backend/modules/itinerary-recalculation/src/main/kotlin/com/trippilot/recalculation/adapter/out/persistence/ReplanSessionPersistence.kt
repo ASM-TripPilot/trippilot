@@ -1,6 +1,7 @@
 package com.trippilot.recalculation.adapter.out.persistence
 
 import com.trippilot.recalculation.domain.OriginKind
+import com.trippilot.recalculation.domain.ReplanDiff
 import com.trippilot.recalculation.domain.ReplanInitiator
 import com.trippilot.recalculation.domain.ReplanOrigin
 import com.trippilot.recalculation.domain.ReplanScope
@@ -21,6 +22,7 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Component
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.util.UUID
 
 /**
@@ -53,10 +55,18 @@ class ReplanSessionEntity(
     @Column(name = "closed_at") var closedAt: Instant?,
     /** USER·SYSTEM(선계산) — 마이그레이션 `replan_session_initiated_by`. */
     @Column(name = "initiated_by") var initiatedBy: String,
+    /**
+     * 반영 직전의 비교 기준·되돌리기 지점·되돌린 시각 — 마이그레이션 `replan_session_revert`(TRIP-1412).
+     * 두 jsonb 칸은 **날 JSON 문자열**로 받는다 — 타입을 박아 매핑하면 맨 위 모양이 틀린 행(`{}` 자리에 `[]`) 하나가 엔티티 적재에서
+     * 터져 그 세션의 모든 읽기가 500 이 된다. 풀기는 [toDomain] 이 `runCatching` 안에서 한다.
+     */
+    @JdbcTypeCode(SqlTypes.JSON) @Column(name = "applied_before") var appliedBefore: String?,
+    @JdbcTypeCode(SqlTypes.JSON) @Column(name = "restore_point") var restorePoint: String?,
+    @Column(name = "reverted_at") var revertedAt: Instant?,
 ) {
     protected constructor() : this(
         UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), null, "", LocalDate.EPOCH, Instant.EPOCH, "", null, null,
-        emptyArray(), emptyArray(), null, emptyArray(), "", null, Instant.EPOCH, null, "",
+        emptyArray(), emptyArray(), null, emptyArray(), "", null, Instant.EPOCH, null, "", null, null, null,
     )
 }
 
@@ -109,6 +119,8 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
                 session.reasons.toTypedArray(), session.directives.toTypedArray(), session.freeText,
                 session.excludedPoiIds.toTypedArray(),
                 session.status.name, session.draft, session.createdAt, session.closedAt, session.initiatedBy.name,
+                session.appliedBefore?.let { JSON.writeValueAsString(it.map { v -> v.toJsonMap() }) },
+                session.restorePoint?.let { JSON.writeValueAsString(it) }, session.revertedAt,
             ),
         ).toDomain()
 
@@ -141,7 +153,32 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
         ReplanOrigin(OriginKind.valueOf(originKind), originLat, originLng),
         reasons.toList(), directives.toList(), freeText, excludedPoiIds.toList(),
         ReplanStatus.valueOf(status), draft, createdAt, closedAt, ReplanInitiator.valueOf(initiatedBy),
+        appliedBefore?.let { raw -> decodeAppliedBefore(sessionId, raw) }, restorePoint?.let { raw -> decodeRestorePoint(sessionId, raw) },
+        revertedAt,
     )
+
+    /**
+     * 비교 기준은 **세션을 읽을 때마다** 풀린다(조회·준비된 대안·확정·취소 전부). 깨진 행 하나가 그 경로를 다 500 으로 막지 않게,
+     * 못 풀면 기준이 없는 것으로 읽고 경고를 남긴다 — 비교는 `ready=false` 가 된다(옛 반영분과 같은 결과, 지어내지 않는다).
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun decodeAppliedBefore(sessionId: UUID, raw: String): List<ReplanDiff.SlotView>? =
+        runCatching { (JSON.readValue(raw, List::class.java) as List<Map<String, Any>>).map { it.toSlotView() } }.getOrElse {
+            log.warn("재계획 세션의 applied_before 를 읽지 못했습니다 — 반영 뒤 비교 없이 둡니다. session={}", sessionId, it)
+            null
+        }
+
+    /**
+     * 되돌리기 지점 — 맨 위가 객체가 아니면 없는 것으로 읽는다(되돌리기는 409 "되돌릴 수 없어요"). 안쪽 모양(`slots` 누락 등)은
+     * 되돌리는 순간 [com.trippilot.recalculation.application.ReplanSessionService.revert] 가 본다.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun decodeRestorePoint(sessionId: UUID, raw: String): Map<String, Any>? =
+        runCatching { JSON.readValue(raw, Map::class.java) as Map<String, Any> }.getOrElse {
+            log.warn("재계획 세션의 restore_point 를 읽지 못했습니다 — 되돌리기를 막습니다. session={}", sessionId, it)
+            null
+        }
+
 
     private companion object {
         /**
@@ -153,5 +190,43 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
         )
 
         private val SYSTEM = ReplanInitiator.SYSTEM.name
+
+        private val log = org.slf4j.LoggerFactory.getLogger(ReplanSessionPersistence::class.java)
+
+        /** 두 jsonb 칸의 직렬화 — 날 문자열 매핑이라 여기서 쓰고 읽는다(초안 칸은 종전대로 하이버네이트가 맵으로). */
+        private val JSON = com.fasterxml.jackson.databind.ObjectMapper()
     }
 }
+
+/**
+ * 비교 기준 한 칸 ↔ jsonb. 왕복이 항등이어야 한다 — 값이 새면 반영 뒤 비교가 반영 전 화면과 다른 말을 한다.
+ * null 은 넣지 않는다(초안 jsonb 와 같은 규약 — `{k:null}` 과 키 없음이 갈리지 않게).
+ */
+internal fun ReplanDiff.SlotView.toJsonMap(): Map<String, Any> = buildMap {
+    put("slotKey", slotKey)
+    put("startAt", startAt.toString())
+    put("endAt", endAt.toString())
+    put("isFixed", isFixed)
+    put("endsNextDay", endsNextDay)
+    distanceM?.let { put("distanceM", it) }
+    nameKo?.let { put("nameKo", it) }
+    category?.let { put("category", it) }
+    imageUrl?.let { put("imageUrl", it) }
+    lat?.let { put("lat", it) }
+    lng?.let { put("lng", it) }
+}
+
+// 정수 표기로 적힌 수는 잭슨이 Integer·Long 으로 돌려준다 — Number 로 받아 내린다(ReplanProposal 과 같은 관용구).
+internal fun Map<String, Any>.toSlotView() = ReplanDiff.SlotView(
+    slotKey = getValue("slotKey") as String,
+    startAt = LocalTime.parse(getValue("startAt") as String),
+    endAt = LocalTime.parse(getValue("endAt") as String),
+    isFixed = getValue("isFixed") as Boolean,
+    endsNextDay = getValue("endsNextDay") as Boolean,
+    distanceM = (get("distanceM") as? Number)?.toInt(),
+    nameKo = get("nameKo") as? String,
+    category = get("category") as? String,
+    imageUrl = get("imageUrl") as? String,
+    lat = (get("lat") as? Number)?.toDouble(),
+    lng = (get("lng") as? Number)?.toDouble(),
+)

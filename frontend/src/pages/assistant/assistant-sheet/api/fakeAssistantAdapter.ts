@@ -53,6 +53,8 @@ export interface FakeAssistantOptions {
   turnInProgressSeconds?: number | null;
   /** 답 평가(PUT·DELETE)를 5xx 로 만든다 — 낙관 갱신 롤백·안내 시연(US-ASSIST-09). */
   feedback?: 'OK' | 'SERVER_ERROR';
+  /** 메시지 조회(`getMessages`)를 5xx 로 만든다 — 이전 대화 더 보기 실패 시연. */
+  messages?: 'OK' | 'SERVER_ERROR';
   /** 응답 지연(ms). 0 이면 즉시. 앱 기본값은 체감용 약간의 지연. */
   latencyMs?: number;
   /** 세션을 열 때 이미 있는 대화(이어 열기 시연). */
@@ -107,6 +109,9 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+const PAGE_DEFAULT = 30;
+const PAGE_MAX = 100;
+
 interface SessionState {
   tripId: string | null;
   messages: AssistantMessage[];
@@ -130,6 +135,7 @@ export class FakeAssistantAdapter implements AssistantPort {
     applyProposal: 0,
     dismissProposal: 0,
     clearSession: 0,
+    getMessages: 0,
     putFeedback: 0,
     deleteFeedback: 0,
   };
@@ -217,7 +223,11 @@ export class FakeAssistantAdapter implements AssistantPort {
     }
     const quickReplies = startQuickReplies(req.tripId !== null);
     this.remember(quickReplies);
-    return { session, messages: [...state.messages], quickReplies };
+    return {
+      session,
+      quickReplies,
+      ...this.page(state, {}),
+    };
   }
 
   async listSessions(): Promise<AssistantSessionSummary[]> {
@@ -231,12 +241,42 @@ export class FakeAssistantAdapter implements AssistantPort {
     }));
   }
 
-  async getMessages(sessionId: string) {
-    await delay(this.options.latencyMs ?? 0);
+  /**
+   * 서버(`AssistantSessionService`)처럼 한 쪽을 자른다 — 커서는 쪽의 가장 오래된 메시지 순번 문자열이고,
+   * 순번은 대화에 쌓인 순서라 새 메시지가 붙어도 옛 커서가 어긋나지 않는다. limit 1~100·깨진 커서는 400(→ SERVER).
+   */
+  private page(
+    state: SessionState,
+    opts: { before?: string; limit?: number }
+  ): { messages: AssistantMessage[]; nextBefore: string | null } {
+    const limit = opts.limit ?? PAGE_DEFAULT;
+    if (!Number.isInteger(limit) || limit < 1 || limit > PAGE_MAX) {
+      throw new AssistantApiError('SERVER', { message: 'BAD_REQUEST' });
+    }
+    let end = state.messages.length;
+    if (opts.before !== undefined) {
+      end = /^\d+$/.test(opts.before) ? Number(opts.before) : -1;
+      if (end < 1 || end > state.messages.length) {
+        throw new AssistantApiError('SERVER', { message: 'BAD_REQUEST' });
+      }
+    }
+    const start = Math.max(0, end - limit);
     return {
-      messages: [...this.session(sessionId).messages],
-      nextBefore: null,
+      messages: state.messages.slice(start, end),
+      nextBefore: start > 0 ? String(start) : null,
     };
+  }
+
+  async getMessages(
+    sessionId: string,
+    opts: { before?: string; limit?: number } = {}
+  ) {
+    this.calls.getMessages += 1;
+    await delay(this.options.latencyMs ?? 0);
+    if (this.options.messages === 'SERVER_ERROR') {
+      throw new AssistantApiError('SERVER');
+    }
+    return this.page(this.session(sessionId), opts);
   }
 
   async sendTurn(

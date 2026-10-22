@@ -124,9 +124,39 @@ def test_scripted_llm_returns_llm_copy() -> None:
         body = res.json()
         assert set(body) == _CONTRACT_KEYS
         assert body["is_fallback"] is False
-        assert body["caption"].startswith("{region}에서 보낸 이틀")
+        assert body["caption"].startswith("부산에서 보낸 이틀")  # 자리표시자는 경계가 채운다
         assert body["hashtags"] == ["#부산여행", "#감천문화마을"]
         _assert_no_banned_tokens(res.text)
+
+
+def _copy(caption: str, hashtags: list[str]) -> str:
+    return json.dumps({"share_card": {"caption": caption, "hashtags": hashtags, "places": []}},
+                      ensure_ascii=False)
+
+
+def test_share_copy_leaves_no_placeholder_on_the_wire() -> None:
+    """BE 가 이 응답을 앱에 그대로 넘긴다(TRIP-1411) — 자리표시자가 남으면 SNS 문구에 중괄호째 나간다.
+
+    채울 수 있으면 채우고(방문 수·사진 수·날짜·지역, 조사 포함), 값이 없는 토큰(사진 0장의
+    `{photo_count}`)이 캡션에 있으면 정적 폴백. `#{region}여행` 태그는 게이트가 받고 경계가 채운다."""
+    app = build_dev_app(llm=FakeLlm(canned=_copy(
+        "{region}은 {visit_count}곳, 사진 {photo_count}장으로 남았다 ({start_date}~{end_date})",
+        ["#{region}여행"])), model_id="m-fake")
+    with TestClient(app, raise_server_exceptions=False) as client:
+        body = client.post(_URL, json=_request()).json()
+    assert body["is_fallback"] is False
+    assert body["caption"] == "부산은 2곳, 사진 3장으로 남았다 (2026-08-01~2026-08-02)"
+    assert body["hashtags"] == ["#부산여행"]
+
+    photoless = _request()
+    for v in photoless["visits"]:
+        v["photo_count"] = 0
+    trace = InMemoryTrace()
+    response = _wired(FakeLlm(canned=_copy("사진 {photo_count}장으로 남은 이틀", ["#부산여행"])), trace) \
+        .reflection_share_card(schemas.ReflectionGenerateRequest(**photoless))
+    assert response.is_fallback is True and response.caption == "부산 여행의 기록"
+    assert [e.reason for e in trace.of_type(FallbackEvent) if e.component == "api.wiring"] \
+        == ["share_card_unbound_placeholder"]
 
 
 def test_scripted_llm_violation_converges_to_static_fallback() -> None:

@@ -25,7 +25,7 @@ from trippilot.poi_curation.adapters.kma_weather import (
     base_datetime_for,
     latlon_to_grid,
 )
-from trippilot.ports.weather_port import WeatherError
+from trippilot.ports.weather_port import DayWeather, WeatherError
 from trippilot.domain.common import GeoPoint
 
 _KST = timezone(timedelta(hours=9))
@@ -232,6 +232,44 @@ def test_explicit_hub_base_switches_both_host_and_param() -> None:
     assert url.startswith(hub)
     assert params["authKey"] == "huBkey1234567890abcdef"
     assert "serviceKey" not in params
+
+
+def _slot(fcst_date: str, fcst_time: str, category: str, value: str) -> dict:
+    return {**_item(fcst_date, category, value), "fcstTime": fcst_time}
+
+
+def test_daily_detail_folds_sky_precipitation_and_temperature_per_day() -> None:
+    """하늘 = 낮(06~21시) 최다값·동률은 더 흐린 쪽 · 강수 형태 = 그 날 최대 코드 · 기온 = TMN/TMX, 없으면 TMP 최소·최대."""
+    http = _FakeHttp(_body({"item": [
+        # D1: 낮 SKY 1,4,4 → 흐림(4) · 새벽 03시 SKY 1 은 투표 밖 · PTY 0,1,0 → 비(1) · TMN/TMX 소수 문자열
+        _slot("20260805", "0300", "SKY", "1"),
+        _slot("20260805", "0900", "SKY", "1"), _slot("20260805", "1200", "SKY", "4"), _slot("20260805", "1500", "SKY", "4"),
+        _slot("20260805", "0900", "PTY", "0"), _slot("20260805", "1200", "PTY", "1"), _slot("20260805", "1500", "PTY", "0"),
+        _slot("20260805", "0600", "TMN", "9.0"), _slot("20260805", "1500", "TMX", "15.0"),
+        _slot("20260805", "1200", "TMP", "13"),
+        # D2: SKY 1 과 3 동률 → 구름많음(3) · PTY 전부 0 · TMN/TMX 없음 → TMP 최소·최대
+        _slot("20260806", "0900", "SKY", "1"), _slot("20260806", "1500", "SKY", "3"),
+        _slot("20260806", "0900", "PTY", "0"), _slot("20260806", "1500", "PTY", "0"),
+        _slot("20260806", "0900", "TMP", "11"), _slot("20260806", "1500", "TMP", "19"), _slot("20260806", "1200", "TMP", "16"),
+        _slot("20260806", "1200", "SKY", "9"),      # 코드표 밖 — 스킵
+        _slot("20260806", "1200", "PTY", "강수없음"),  # 비수치 — 스킵
+        _slot("20260807", "1200", "SKY", "4"),       # 요청 날짜 밖 — 버림
+    ]}))
+    detail = _adapter(http).daily_detail(_COORD, (_D1, _D2))
+    assert detail == {
+        _D1: DayWeather(sky=4, pty=1, tmn=9, tmx=15),
+        _D2: DayWeather(sky=3, pty=0, tmn=11, tmx=19),
+    }
+    assert len(http.calls) == 1
+
+
+def test_daily_detail_leaves_unknown_cells_none_and_shares_the_one_call() -> None:
+    http = _FakeHttp(_body({"item": [_slot("20260805", "1200", "POP", "30"), _slot("20260805", "1200", "SKY", "1")]}))
+    adapter = _adapter(http)
+    assert adapter.daily_forecast(_COORD, (_D1,)) == {_D1: 30}
+    assert adapter.daily_detail(_COORD, (_D1,)) == {_D1: DayWeather(sky=1, pty=None, tmn=None, tmx=None)}
+    assert adapter.daily_detail(_COORD, ()) == {}
+    assert len(http.calls) == 1  # 강수확률·상세 둘 다 같은 응답을 접는다
 
 
 def test_daily_and_hourly_together_stay_one_call() -> None:

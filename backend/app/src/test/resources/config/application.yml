@@ -46,6 +46,11 @@ trippilot:
   location-automation:
     sweep-ms: 3600000
     sweep-initial-delay-ms: 3600000
+  # 요약 회고 다시 맡기기 스윕도 같은 이유로 끈다(TRIP-1488) — 캐시된 컨텍스트가 다른 IT 의 규칙 요약을 집어 그 IT 의 AI 대역을
+  # 부른다. 동작은 `TripSummaryNarratorIT`·`TripSummaryNarratorTest` 가 sweep() 직접 호출로 잰다.
+  reflection:
+    summary-narrate-sweep-ms: 3600000
+    summary-narrate-sweep-initial-delay-ms: 3600000
   # 리마인드 폴링도 같은 이유로 사실상 끈다(TRIP-547). 배경 폴링이 도래분을 먼저 집어 가면
   # `NotificationScheduleIT` 가 세운 예약이 테스트가 보기 전에 사라져 간헐 실패가 된다.
   notification:

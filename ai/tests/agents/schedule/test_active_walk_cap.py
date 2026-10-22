@@ -29,7 +29,7 @@ class _Recording(_AssemblyProvider):
         super().__init__(trace, _Sink(), primary=True)
         self.walk_caps: list = []
 
-    def for_pool(self, poi_index, walk_max_km=None):
+    def for_pool(self, poi_index, walk_max_km=None, parking=None):
         self.walk_caps.append(walk_max_km)
         return super().for_pool(poi_index)
 

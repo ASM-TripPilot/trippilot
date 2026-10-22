@@ -35,4 +35,19 @@ export default defineConfig([
     files: ['./src/shared/lib/**'],
     rules: { 'fsd/shared-lib-grouping': 'off' },
   },
+  // 예외 5(범위 끄기): 인기 숙소 세 슬라이스의 insignificant-slice(TRIP-1579).
+  // 이유: widgets/curated-stays 는 이번 칸에서 만들기만 하고 숙소 탭 배치는 다음 칸 몫이라 아직 참조 0 이다(이 규칙은
+  //   참조 2 미만이면 실패라 page 1곳 배치로도 안 풀린다). features/curated-stay 는 설계(TRIP-1577 스펙 §설계 3)대로
+  //   위젯 하나만 조립해 참조 1 이다. features/stay-outbound 는 실제로 2곳(stay-detail·위젯)이 무는데, 위젯 경로를
+  //   이 규칙에서 빼면 그 참조도 안 세어져(0.7 실측) 함께 뺀다. 끈 동안 세 슬라이스의 참조 수는 무감시다.
+  // 다시 켤 조건: pages 2곳 이상이 CuratedStaysSection 을 물면 위젯·stay-outbound 경로를 지운다. curated-stay 는
+  //   위젯 밖 소비처가 생기거나 위젯 안(model·ui 세그먼트)으로 합치면 지운다.
+  {
+    files: [
+      './src/widgets/curated-stays/**',
+      './src/features/curated-stay/**',
+      './src/features/stay-outbound/**',
+    ],
+    rules: { 'fsd/insignificant-slice': 'off' },
+  },
 ]);

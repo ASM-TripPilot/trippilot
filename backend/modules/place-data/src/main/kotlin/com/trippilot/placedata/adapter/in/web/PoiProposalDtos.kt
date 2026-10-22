@@ -37,7 +37,7 @@ data class ProposalItem(
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class ProposalPoi(
     val name: String? = null,
-    /** AI 경계 코드(SIGHT/FOOD/…). 우리 8종에 없으면 탈락한다 — 임의 매핑하지 않는다. */
+    /** AI 경계 코드(SIGHT/FOOD/…). 우리 10종에 없으면 탈락한다 — 임의 매핑하지 않는다. */
     val category: String? = null,
     val coord: ProposalCoord? = null,
 )

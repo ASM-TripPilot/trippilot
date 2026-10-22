@@ -108,10 +108,10 @@ def test_category_tables_have_no_stale_keys() -> None:
 
 
 def test_boundary_categories_match_backend_contract() -> None:
-    """경계 8종 = 백엔드 `/internal/pois` 코드 집합. STAY는 내부 전용이라 제외 (PR #104 회신)."""
+    """경계 10종 = 백엔드 `/internal/pois` 코드 집합. STAY는 내부 전용이라 제외 (PR #104 회신). ART·BAR 는 TRIP-1545."""
     boundary = {
         "SIGHT", "FOOD", "CAFE", "NIGHT_VIEW",
-        "NATURE", "SHOPPING", "CULTURE", "ACTIVITY",
+        "NATURE", "SHOPPING", "CULTURE", "ACTIVITY", "ART", "BAR",
     }
     assert {c.value for c in PoiCategory} - {"STAY"} == boundary
 

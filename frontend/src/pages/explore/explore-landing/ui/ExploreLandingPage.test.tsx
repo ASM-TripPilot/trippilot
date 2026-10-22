@@ -15,6 +15,7 @@ import type {
 } from '@/shared/api/index.schemas';
 import { RegionLevel } from '@/shared/api/index.schemas';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 import { formatPrice } from '@/entities/stay';
 import { stayKey } from '@/features/save-stay';
 import { regionPickerHref } from '@/features/explore';
@@ -81,6 +82,23 @@ jest.mock('@/features/save-place/model/savedPlaces', () => ({
 const mockUseSavedStays = jest.fn();
 jest.mock('@/features/save-stay/model/savedStays', () => ({
   useSavedStays: (...args: unknown[]) => mockUseSavedStays(...args),
+}));
+
+// TRIP-1580 — 지역 필터 갈래는 인기 숙소 컨트롤러(react-query 셋)를 문다. QueryClient 없는 버킷이라 숨김 값으로
+// 목한다 — 숨김이면 지금 레인 그대로라 이 파일의 단언은 그대로다(교체 동작은 integration 이 실물로 잰다).
+jest.mock('@/widgets/curated-stays', () => ({
+  ...jest.requireActual('@/widgets/curated-stays'),
+  useCuratedStaysController: () => ({
+    props: { variant: 'lane' },
+    items: [],
+    hidden: true,
+    isSaved: () => false,
+    pendingStayId: null,
+    onPressCard: jest.fn(),
+    onToggleSave: jest.fn(),
+    onPressBrowseAll: jest.fn(),
+    sheetProps: null,
+  }),
 }));
 
 function stayItem(
@@ -269,8 +287,15 @@ describe('전국 d01 — 구획·검색·레인', () => {
 
     [CARD_A, CARD_B].forEach((item) => {
       const card = screen.getByTestId(`explore-stay-card-${stayKey(item)}`);
-      // getByText(문자열) = 완전 일치 — 금액이 독립 Text 노드여야 통과. 145000 → '145,000원~', null → '가격 미확인'.
-      expect(within(card).getByText(formatPrice(item.price))).toBeOnTheScreen();
+      // getByText(문자열) = 완전 일치 — 금액이 독립 Text 노드여야 통과. 145000 → '145,000원~'.
+      // 가격 스냅숏이 없으면(null) 「가격 미확인」 줄을 그리지 않는다(TRIP-1577 — 인기 숙소 카드와 같은 모양).
+      if (item.price == null) {
+        expect(within(card).queryByText('가격 미확인')).toBeNull();
+      } else {
+        expect(
+          within(card).getByText(formatPrice(item.price))
+        ).toBeOnTheScreen();
+      }
       expect(card).toHaveTextContent(new RegExp(item.region));
       expect(within(card).queryByText(/1박/)).toBeNull();
     });
@@ -331,6 +356,34 @@ describe('전국 d01 — 구획·검색·레인', () => {
 
     expect(mockPush).toHaveBeenCalledTimes(1);
     expect(String(mockPush.mock.calls[0][0])).toBe('/explore/places/poi-2');
+  });
+
+  it('사진 없는 장소 카드는 서버 장소의 category·poiId 로 고른 생성 이미지를 그린다 (페이지가 카드에 category 를 싣는다)', () => {
+    multiResult = multiOk([
+      {
+        poiId: 'p2',
+        nameKo: '광안리 야경',
+        region: '수영구',
+        category: '야경',
+        imageUrl: null,
+      },
+      {
+        poiId: 'p4',
+        nameKo: '자갈치 시장',
+        region: '중구',
+        category: '맛집',
+        imageUrl: 'https://img.example/p4.jpg',
+      },
+    ]);
+    render(<ExploreLandingPage />);
+
+    // p2 는 변형 3 → night_view-3. 사진이 있는 p4 는 그 사진 그대로.
+    expect(
+      screen.getByTestId('explore-place-card-image-p2').props.source
+    ).toEqual([coverFor('야경', 'p2')]);
+    expect(
+      screen.getByTestId('explore-place-card-image-p4').props.source
+    ).toEqual([{ uri: 'https://img.example/p4.jpg' }]);
   });
 
   it('장소 조회가 전부 실패하면 장소 레인 자리에 재시도를 그리고, 누르면 그 조회를 다시 부른다', () => {
@@ -872,12 +925,12 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       expect(mockPlacesRefetch).not.toHaveBeenCalled();
     });
 
-    it('스냅숏 없는 숙소 카드에 "가격 미확인"이 보인다', () => {
+    it('스냅숏 없는 숙소 카드에는 "가격 미확인" 줄을 그리지 않는다(TRIP-1577)', () => {
       render(<ExploreLandingPage />);
       expect(screen.getByTestId('explore-region-chip')).toBeOnTheScreen();
 
       const card = screen.getByTestId(`explore-stay-card-${STAY_KEY}`);
-      expect(within(card).getByText('가격 미확인')).toBeOnTheScreen();
+      expect(within(card).queryByText('가격 미확인')).toBeNull();
     });
   });
 

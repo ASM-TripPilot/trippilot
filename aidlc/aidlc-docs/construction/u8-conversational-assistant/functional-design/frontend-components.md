@@ -227,3 +227,44 @@ assistant-history · -history-row-{messageId} · -history-clear · -history-cont
 > **⑥ 소급 기록** — §2 컴포넌트: `OutlineCard`·`ActionRow`(외곽선 껍데기·행 카드), 평문 도우미 답, ↓ 버튼, `noContextActionIcon`. §8 testID 추가: `assistant-sheet-mode-full|compact|shrunk` · `assistant-sheet-mark` · `assistant-sheet-handle` · `assistant-quick-replies-stack|row` · `assistant-message-text-{id}` · `assistant-scroll-down` · `assistant-badge-{id}` · `assistant-history-intro` · `assistant-history-close` · `assistant-next-action-icon-{type}` · `assistant-footnote-{id}`. 새 대화·＋ 에 대응하는 testID 는 없다.
 >
 > **⑦ 6-b** — 시뮬레이터 실기 QA 는 TRIP-1531.
+
+> **[개정 · 2026-10-22 · U8 일정 보기 목적지 (TRIP-1566)]** §4.1 표의 `OPEN_ITINERARY` 행(`/trips/[tripId]/itinerary` 고정)을 정정한다(원문 보존). `OPEN_ITINERARY` 는 고정 라우트가 아니라 **누른 시점에 일정을 조회해 앱의 일정 진입 목적지 판정(`resolveItineraryDestination` → `itineraryDestinationHref`, `frontend/src/features/itinerary/model/planState.ts`)을 경유한다** — 홈 카드 CTA·일정 탭·완료 바와 같은 규칙이라, 확정 일정에서 도우미만 h16 으로 가던 어긋남을 없앤다. `nextActionRoute` 는 순수 함수라 이 행에 한해 이동 대신 `{kind:'itinerary', tripId}`(tripId 없으면 기존처럼 `null`)를 돌려주고, 실제 조회·이동은 시트(`AssistantSheetPage.openItinerary`)가 한다. `OPEN_ITINERARY_EDIT`·`OPEN_ITINERARY_METHOD`·`OPEN_REGENERATE` 는 상태로 목적지가 갈리지 않아 §4.1 표대로다.
+>
+> | 일정 조회 결과 | 이동 |
+> |---|---|
+> | 404(일정 없음) | `/trips/[tripId]/itinerary/method` |
+> | 생성 중(PARTIAL) | 같이 짜기면 `…/itinerary/copick/[slotKey]`, 그 밖이면 `…/itinerary/generating` |
+> | 2차 실패(FAILED) | `…/itinerary/draft` |
+> | 확정(CONFIRMED, 날짜 무관) | `/trips/[tripId]/live` |
+> | 같이 짜기 완성·미확정 | `…/itinerary/copick/complete` |
+> | 그 밖(초안) | `…/itinerary/draft` |
+>
+> **조회가 정착하기 전에는 이동하지 않는다(INV-4).** 조회 중에는 이동 없이 시트 상태 줄에 한 줄(`일정을 확인하고 있어요`, testID `assistant-itinerary-checking`)을 보이고 같은 행 재누름은 무시한다. 404 가 아닌 조회 실패(네트워크·5xx)는 draft 로 추측해 가지 않고 이동하지 않으며 상태 줄에 `일정을 불러오지 못했어요. 다시 눌러 주세요`(testID `assistant-itinerary-failed`)를 보인다 — 다시 누르면 재조회한다(자동 재시도 없음: 이 누름 조회는 `retry:false`, 요청 1회). 기다리는 사이 시트가 닫혔으면(✕) 늦은 응답은 이동하지 않는다. 적용 직후엔 일정 캐시가 무효화돼 있어 다시 조회한다. 이동 방식(`router.replace`, R9)은 그대로다.
+>
+> 근거: 목적지 표 — `frontend/src/features/itinerary/model/planState.ts` 판정 실측(01 브리프 §8, 홈·일정 탭이 같은 함수를 쓴다) · 상태 줄 문구·`retry:false`·재시도 정책·재누름 무시 — **TRIP-1566 구현 결정**(우리가 정한 것 — 다음 사이클이 요구사항 근거로 인용하면 안 된다). 같은 문서 §4 흐름 5 본문("`router.dismiss` 후 `push`")과 일정 탭 카드·완료 바(로딩 중 draft 로 이동)는 이번에 손대지 않았다 — 후자는 새 티켓 후보.
+
+> **[개정 · 2026-10-22 · U8 next action 이동 방식 (TRIP-1565)]** 위 §4 흐름 5항("이동 전에 시트를 닫는다 — `router.dismiss` 후 `push`")과 R9("`router.replace(href)` 한 번")를 **목적지에 따라 갈라 정정한다**(원문 보존). 사용자 결정(2026-10-22 — "탐광 누르고 뒤로가기 누르면 홈인데 챗봇 상태 유지돼야"): **상세·요약류 목적지는 시트를 닫지 않고 그 위에 쌓고(뒤로 = 같은 대화, BR-U8-01·17), 그 밖의 목적지는 지금처럼 시트를 닫고 자리를 교체한다.** 분류의 정본은 `nextActionRoute` 의 반환값(`kind:'route'` 의 `mode`)이고, `mode` 를 안 정한 type 은 기본 replace 다.
+>
+> | 이동 방식 | type | 뒤로 가기 |
+> |---|---|---|
+> | `router.push` (시트 위에 쌓음) | `OPEN_PLACE` · `OPEN_OTA` · `OPEN_REFLECTION` · `OPEN_TRIP_SUMMARY` · `OPEN_STYLE` | 시트가 대화·입력 초안·보기 상태 그대로 남아 있다(언마운트되지 않음) |
+> | `router.replace` (시트를 닫고 자리를 교체) | `OPEN_ITINERARY`(§4.1 TRIP-1566 블록의 조회 뒤 이동) · `OPEN_ITINERARY_EDIT` · `OPEN_ITINERARY_METHOD` · `OPEN_REGENERATE` · `OPEN_REPLAN` · `OPEN_LIVE` · `CREATE_TRIP` · `OPEN_STAY_SEARCH` | 시트가 사라진다(이동한 화면의 이전 화면으로 간다) |
+>
+> **push 갈래의 잠금.** 시트가 남으므로 이동 잠금(`closingRef`)을 세우지 않는다 — 돌아와서 ✕·카드·행이 다시 눌려야 한다. 연타 이중 push 는 공용 연타 가드(`guardPress`, 400ms 창)로 막는다. 시트가 이미 닫히는 중이거나 일정 확인 중(`checkingRef`, TRIP-1566)이면 push 갈래는 무시한다(조회가 끝난 뒤 일정 목적지 replace 가 방금 연 상세를 갈아치우지 않게).
+>
+> **상세가 뜨는 모양.** 루트 스택에서 투명 모달 뒤에 쌓이는 화면은 라이브러리(native-stack)가 모달로 승격하므로, 상세는 오른쪽에서 밀려오는 push 가 아니라 **아래에서 올라오는 모달 카드**로 보인다(실기 확인됨 — 시뮬레이터 6-b, 2026-10-22). 상세 라우트에 `presentation: 'card'` 를 선언하면 승격이 막혀 상세가 시트 밑에 깔릴 수 있다. 상세의 탭바 등 `dismissTo` 로 나가는 경로는 시트까지 함께 걷힌다(수용).
+>
+> §5(✦ FAB)는 이번에 손대지 않았다. 일정 탭 카드·완료 바 등 도우미 밖 입구도 손대지 않았다.
+>
+> 근거: 사용자 결정(티켓 TRIP-1565 「결정 확정 1」 "상세류만 복귀" · 2026-10-22) · 승격 규칙 — `@react-navigation/native-stack` `getModalRoutesKeys` 코드 읽기 + 6-b 실측 · 분류 추가분(`OPEN_ITINERARY_EDIT`·`OPEN_ITINERARY_METHOD`·`OPEN_REGENERATE` 를 replace 로 둠 — 사용자 분류에 이름이 없어 "일정을 바꾸는 흐름"으로 읽음)·잠금 설계(`guardPress` 400ms·`checkingRef` 읽기) — **TRIP-1565 구현 결정**(우리가 정한 것 — 다음 사이클이 요구사항 근거로 인용하면 안 된다).
+
+## [개정 · 2026-10-22 · 이전 대화 더 보기 (사이클 20261021-assistant-older-messages)]
+
+> 원문 위 절들은 보존한다(append-only). 서버가 `nextBefore` 를 이미 내려주는데(`AssistantController.kt` "프론트 계약에 없던 칸") FE 계약·정본에 없어 30건 넘는 대화의 앞부분을 못 보던 드리프트의 기록. 사용자 결정 2026-10-21: 트리거는 눌러서 부르는 행 · 세션 재조회는 합치기 · Figma 시안 없이 기존 톤.
+
+| # | 원문 | 구현(근거 코드) | 이유 |
+|---|---|---|---|
+| R21 | §6 `useAssistantSession` 응답 `{session, messages[], quickReplies[]}` | 응답에 **`nextBefore: string \| null`**(서버 required — 이어 연 대화에 더 오래된 메시지가 있으면 그 커서). `assistantContract.ts` `OpenSessionResponse.nextBefore`, 세션 열기가 메시지 캐시를 심을 때 `nextBefore: response.nextBefore ?? null` | `openapi.yaml` `AssistantOpenSessionResponse` 와 맞춤. 종전 `null` 하드코딩이 서버의 "더 있다"를 버렸다 |
+| R22 | §2·§3·§6 더 보기 규칙 없음 | **규칙 신설**: ① 트리거 = 목록 맨 위(inverted FlatList `ListFooterComponent`) Pressable 하나 `assistant-older-more` — `nextBefore !== null` 일 때만 존재(비활성이 아니라 부재) ② 누르면 `getMessages(sessionId, {before})`(커서는 불투명 문자열 그대로, `limit` 미지정 = 서버 기본 30) → 로딩(disabled + 스피너) → 실패는 같은 자리에 `assistant-older-error` + 「다시 시도」(기존 메시지 유지, INV-4) ③ 성공은 `prependMessages(옛 쪽, 현재)` — 옛 쪽 전체 앞, id 중복은 기존 것 유지, **응답 도착 시점의 최신 캐시**에 붙인다 · 캐시 `nextBefore` ← 응답값 ④ 진행 중 재호출 차단, 실패 뒤 재호출 허용 ⑤ 세션 재조회(`useAssistantSession` 재실행)는 캐시가 있으면 `appendMessages(기존, 첫 쪽)` 로 **합치고 기존 커서 유지** — 통째 덮지 않는다(비용: 캐시된 메시지의 제안 상태가 서버 최신값으로 갱신되지 않는다 — 후속) ⑥ 이력 지우기 뒤 도착한 늦은 응답은 캐시를 새로 만들지 않는다 · 세션이 바뀌면 상태 초기화 ⑦ 턴 진행 중에도 누를 수 있다 ⑧ 스크롤 위치 보정 코드 없음(inverted 라 옛 쪽이 리스트 끝에 붙어 구조상 유지 — 실기 확인 항목). 훅 `useLoadOlderMessages(sessionId) → {hasMore, status: idle\|loading\|error, loadOlder}`, 가짜 어댑터는 `before`/`limit`(1~100)을 서버와 같은 규칙으로 거절·자른다 | 정본 공백(US-ASSIST-05 는 "이어 보기"만). `useInfiniteQuery` 는 캐시 모양이 바뀌어 평가·제안 패치 전부에 번져 안 썼다 |
+| R23 | R22 ⑤ "세션 재조회는 새 id 만 뒤에 더한다" | **개정(2026-10-22, 사용자 결정 a)**: 캐시와 **id 가 겹치는** 메시지는 `proposal` 칸만 응답값으로 교체한다(응답 `proposal` 이 없으면 캐시 유지) — 다른 칸(평가·본문)·순서·`nextBefore` 는 캐시 유지, 새 id 는 뒤에. 재조회 응답은 최근 30건이라 더 보기로 붙인 그 밖의 제안 카드는 갱신되지 않는다(적용 시 409 로만 안다). 프리뷰 키 `assistant-older-idle`/`-loading`/`-error` 신설 | R22 ⑤ 그대로면 다른 기기에서 적용·만료된 제안의 [적용] 버튼이 계속 보였다(5-b W2). 통째 교체는 평가 낙관 갱신 재조회 레이스(H10)와 충돌해 `proposal` 한 칸만. 남은 경쟁: 적용(APPLIED) 뒤 **먼저 시작된** 재조회의 옛 스냅샷이 늦게 와 되돌릴 수 있다 — 후속(종결 상태는 되돌리지 않기) |
+| R24 | R23 "겹치는 id 는 `proposal` 칸만 응답값" | **보충(2026-10-22)**: 한 번 결정된 제안(`status !== 'PROPOSED'` — APPLIED·DISMISSED·EXPIRED·STALE·FAILED)은 응답의 `PROPOSED` 로 되돌리지 않는다. 결정 상태끼리(APPLIED → EXPIRED)와 캐시 PROPOSED(내용만 바뀜 포함)·캐시에 제안 없음(새 제안)은 응답이 이긴다 | R23 의 남은 경쟁 — [적용] 보다 먼저 떠난 재조회의 옛 스냅샷이 APPLIED 를 PROPOSED 로 되감아 [적용] 버튼이 되살아났다. 집합 열거 대신 "PROPOSED 만 미결"(`ProposalStatus` 6값) — 새 상태는 보수적으로 결정됨 쪽. 현 BE 에 PROPOSED 로 되돌리는 전이가 없어(되돌리기 API 없음, BR-U8-20) 서버 변화를 숨기지 않는다 |

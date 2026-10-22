@@ -120,28 +120,30 @@ const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'] as const;
  *     `dayOfWeek`(에포크 산술)로 구해 시계를 안 읽는다.
  *  3. **숙소명** — `sections`(toBaseSections 출력)를 그 밤 날짜로 조인. 그 날짜를 덮는 배정이
  *     있고 이름이 비어 있지 않으면 그 이름, 아니면 `stayName` 키를 아예 안 단다(미배정).
- *     날짜 조인이라 배정 공백에도 밤↔숙소가 어긋나지 않는다.
+ *     날짜 조인이라 배정 공백에도 밤↔숙소가 어긋나지 않는다. 숙소명이 붙는 밤엔 그 배정의 `savedStayId` 도
+ *     같이 붙는다(배선이 썸네일 그림 키를 찾는 데 쓴다, TRIP-1588).
  *
- * 출력 필드는 `{ nightNumber, dateLabel, region, stayName? }` 정확히 이 넷(INV-3 — 소요시간·거리 없음).
+ * 출력 필드는 `{ nightNumber, dateLabel, region, stayName?, savedStayId? }` 정확히 이 다섯(INV-3 — 소요시간·거리 없음).
  */
 export interface NightlyBaseCard {
   nightNumber: number;
   dateLabel: string;
   region: string;
   stayName?: string;
+  savedStayId?: string;
 }
 
-/** 그 밤 날짜를 덮는 배정의 숙소명. `dateTo`는 체크아웃(배타)이라 `[dateFrom, dateTo)` 안이면
+/** 그 밤 날짜를 덮는 배정. `dateTo`는 체크아웃(배타)이라 `[dateFrom, dateTo)` 안이면
  * 덮는다. 빈 이름은 미부착으로 본다 — `toBaseSections`가 짝 없는 저장 숙소에 빈 문자열을 낸다. */
-function stayNameForNight(
+function sectionForNight(
   sections: BaseSection[],
   nightEpoch: number
-): string | undefined {
+): BaseSection | undefined {
   for (const section of sections) {
     const from = toEpochDay(section.dateFrom);
     const to = toEpochDay(section.dateTo);
     if (from <= nightEpoch && nightEpoch < to) {
-      return section.stayName === '' ? undefined : section.stayName;
+      return section.stayName === '' ? undefined : section;
     }
   }
   return undefined;
@@ -185,9 +187,12 @@ export function nightlyBaseCards({
       dateLabel: `${month}/${day}(${WEEKDAYS[dayOfWeek(nightEpoch)]})`,
       region,
     };
-    // 미배정 밤은 `stayName` 키 자체를 안 단다 — N5가 `Object.keys`로 3키/4키를 가른다.
-    const stayName = stayNameForNight(sections, nightEpoch);
-    if (stayName !== undefined) card.stayName = stayName;
+    // 미배정 밤은 `stayName`·`savedStayId` 키 자체를 안 단다 — N5가 `Object.keys`로 키 수를 가른다.
+    const section = sectionForNight(sections, nightEpoch);
+    if (section !== undefined) {
+      card.stayName = section.stayName;
+      card.savedStayId = section.savedStayId;
+    }
     return card;
   });
 }

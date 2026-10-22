@@ -40,11 +40,16 @@ class IntentDispatcherTest : StringSpec({
         }
     }
 
-    "장소 탐색은 여행 없이도 처리기가 답한다 — 상대가 꺼진 대역 모드에서는 못 찾는다고 말하고 능력 안내로 잇는다" {
+    "장소 탐색·추천은 여행 없이도 처리기가 답한다 — 상대가 꺼진 대역 모드에서는 못 찾는다고 말하고 능력 안내로 잇는다" {
         val dispatch = dispatcher(FakeTripData(acc))
         val noTrip = ctx(false).copy(tripId = null, trip = null)
-        val message = dispatch.dispatch(Intent.EXPLORE_PLACES, noTrip)
-        message.text shouldBe "가 볼 만한 곳 찾기는 지금 도와드리기 어려워요. 아래 버튼에서 제가 할 수 있는 걸 확인해 보세요."
-        message.nextActions.map { it.type } shouldBe listOf("SHOW_CAPABILITIES")
+        listOf(Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES).forEach { intent ->
+            val message = dispatch.dispatch(intent, noTrip)
+            message.text shouldBe "가 볼 만한 곳 찾기는 지금 도와드리기 어려워요. 아래 버튼에서 제가 할 수 있는 걸 확인해 보세요."
+            message.nextActions.map { it.type } shouldBe listOf("SHOW_CAPABILITIES")
+        }
+        val region = dispatch.dispatch(Intent.RECOMMEND_REGION, noTrip)
+        region.text shouldBe "취향에 맞는 지역 추천은 지금 도와드리기 어려워요. 아래 버튼에서 제가 할 수 있는 걸 확인해 보세요."
+        region.nextActions.map { it.type } shouldBe listOf("SHOW_CAPABILITIES")
     }
 })

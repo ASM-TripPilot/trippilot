@@ -1,5 +1,8 @@
 package com.trippilot.placedata.domain
 
+import java.security.MessageDigest
+import java.util.UUID
+
 /**
  * 탐색 목록의 정렬 재료(TRIP-1003 (A) · US-EXPL-04).
  *
@@ -18,6 +21,19 @@ object PoiSearchOrder {
     private val CORP_PREFIX = Regex("""^\s*(\([^)]*\)|（[^）]*）|[㈜㈔㈗㈐])\s*""")
 
     fun sortKey(nameKo: String): String = nameKo.replace(CORP_PREFIX, "").ifBlank { nameKo }
+
+    /**
+     * 무작위 정렬 키(TRIP-1570) — `md5(seed + poiId)` 소문자 hex. 결정적이라 keyset 커서가 그대로 산다
+     * (같은 seed 로 이어 받으면 중복·누락 0). SQL 은 `md5(:seed || cast(p.poi_id as text))` — 같은 바이트여야 한다.
+     * 고정 길이 hex 라 DB 콜레이션과 JVM 코드포인트 순서가 갈리지 않는다.
+     */
+    fun randomKey(seed: String, poiId: UUID): String =
+        MessageDigest.getInstance("MD5").digest((seed + poiId.toString()).toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+
+    /** 둘째 정렬 축 — seed 가 없으면 이름순(TRIP-1003), 있으면 무작위(TRIP-1570). */
+    fun key(nameKo: String, poiId: UUID, seed: String?): String =
+        if (seed == null) sortKey(nameKo) else randomKey(seed, poiId)
 
     fun rank(query: String, nameKo: String): Int {
         val q = query.trim().lowercase()

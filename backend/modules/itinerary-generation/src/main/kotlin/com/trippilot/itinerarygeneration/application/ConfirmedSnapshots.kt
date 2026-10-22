@@ -59,7 +59,7 @@ internal object ConfirmedSnapshots {
         return Itinerary.reconstitute(
             edited.itineraryId, edited.tripId, edited.status, edited.solveMode, edited.generationMode,
             edited.isFallback, edited.generationState, days, edited.createdAt, edited.updatedAt,
-            edited.candidatesSummary, edited.unplacedMustVisits,
+            edited.candidatesSummary, edited.unplacedMustVisits, edited.scoring,
         )
     }
 

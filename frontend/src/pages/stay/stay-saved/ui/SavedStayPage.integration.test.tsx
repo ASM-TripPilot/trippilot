@@ -8,10 +8,13 @@ import {
 } from '@testing-library/react-native';
 import { BASE } from '@/test-support/apiBase';
 import { createGcZeroWrapper, settle } from '@/test-support/queryRender';
+import { stayCoverFor } from '@/test-support/placeCoverFixtures';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { SavedStay } from '@/shared/api/index.schemas';
+
+import * as Linking from 'expo-linking';
 
 import { SavedStayPage } from './SavedStayPage';
 
@@ -54,6 +57,12 @@ jest.mock('expo-router', () => ({
   router: { push: (...args: unknown[]) => mockPush(...args), back: () => {} },
   useRouter: () => ({ push: mockPush, back: () => {} }),
   useLocalSearchParams: () => ({}),
+}));
+
+// TRIP-1583 — 인기 숙소(TRIPCOM) 카드는 제휴 시트를 거쳐 브라우저로 연다(실제 열기는 목).
+jest.mock('expo-linking', () => ({
+  openURL: jest.fn().mockResolvedValue(true),
+  canOpenURL: jest.fn().mockResolvedValue(true),
 }));
 
 // 하트 저장분(외부키 있음) — stayId는 stayKey(=SOURCE:ID)가 돼야 한다.
@@ -229,6 +238,29 @@ describe('AC-11 · 실앱 degrade — 페이지가 거점/지역/가격을 발�
     expect(screen.queryByTestId('saved-stay-card-ss-1-base-badge')).toBeNull();
     expect(screen.queryByText('거점')).toBeNull();
     expect(card).not.toHaveTextContent(/원~|₩/);
+  });
+});
+
+describe('TRIP-1588 · 카드 사진 칸 = 저장한 숙소 키로 고른 숙소 그림', () => {
+  it('외부 키가 있으면 stayKey(검색 목록과 같은 그림), 없으면 savedStayId 로 고른다', async () => {
+    // 준비 — 하트 저장분(NAVER:n-99 → 1번, savedStayId ss-1 이었다면 6번)과 핀(ss-2 → 3번, "null:null" 이었다면 4번).
+    server.use(
+      http.get(`${BASE}/saved-stays`, () =>
+        HttpResponse.json([HEARTED, PINNED])
+      )
+    );
+    render(<SavedStayPage />, { wrapper: createGcZeroWrapper() });
+    await screen.findByTestId('saved-stay-card-ss-1');
+
+    // 단언
+    expect(
+      screen.getByTestId('saved-stay-card-ss-1-photo').props.source
+    ).toEqual([stayCoverFor('NAVER:n-99')]);
+    expect(
+      screen.getByTestId('saved-stay-card-ss-2-photo').props.source
+    ).toEqual([stayCoverFor('ss-2')]);
+    // 앵커 — 오배선이면 다른 그림이 나온다(키를 savedStayId 로 쓰면 6번, 폴백이 "null:null" 이면 4번).
+    expect(stayCoverFor('NAVER:n-99')).not.toBe(stayCoverFor('ss-1'));
   });
 });
 
@@ -551,5 +583,58 @@ describe('RM · 하트로 저장을 푼다 (D1~D5 · 01b Q3·Q5 · INV-4)', () =
       );
       expect(screen.getByTestId(BANNER)).toBeOnTheScreen();
     });
+  });
+});
+
+// TRIP-1583 — 인기 숙소에서 담은 숙소(TRIPCOM)는 앱 안 상세가 없다(서버 GET /stays/{id} 404) → 제휴 시트 → 호텔 상세.
+describe('TRIP-1583 · TRIPCOM 카드 → 제휴 시트 → 호텔 상세 아웃바운드', () => {
+  const TRIPCOM: SavedStay = {
+    ...PINNED,
+    savedStayId: 'ss-3',
+    name: '해운대 오션 호텔',
+    registerRoute: 'MAP_SEARCH',
+    externalSource: 'TRIPCOM',
+    externalId: '123',
+  };
+  const mockOpenURL = Linking.openURL as jest.Mock;
+
+  beforeEach(() => {
+    mockOpenURL.mockClear();
+    server.use(
+      http.get(`${BASE}/saved-stays`, () =>
+        HttpResponse.json([HEARTED, TRIPCOM])
+      ),
+      http.get(`${BASE}/me/settings`, () =>
+        HttpResponse.json({ affiliateNoticeDismissed: false })
+      )
+    );
+  });
+
+  it('상세로 가지 않고 시트를 연 뒤 [이동]이 TRIPCOM:{id} 아웃바운드를 연다', async () => {
+    render(<SavedStayPage />, { wrapper: createGcZeroWrapper() });
+    fireEvent.press(await screen.findByTestId('saved-stay-card-ss-3'));
+
+    await screen.findByTestId('stay-ota-sheet');
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockOpenURL).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('stay-ota-confirm'));
+    await waitFor(() =>
+      expect(mockOpenURL).toHaveBeenCalledWith(
+        `${BASE}/stays/TRIPCOM%3A123/outbound`
+      )
+    );
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('다른 출처 카드는 지금처럼 상세로 간다(시트 없음)', async () => {
+    render(<SavedStayPage />, { wrapper: createGcZeroWrapper() });
+    fireEvent.press(await screen.findByTestId('saved-stay-card-ss-1'));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/stays/[stayId]',
+      params: { stayId: 'NAVER:n-99' },
+    });
+    expect(screen.queryByTestId('stay-ota-sheet')).toBeNull();
   });
 });

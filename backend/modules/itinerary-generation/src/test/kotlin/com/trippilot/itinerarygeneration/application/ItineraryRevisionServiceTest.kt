@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.domain.GenerationMode
@@ -14,6 +15,8 @@ import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.NewRevision
 import com.trippilot.itinerarygeneration.domain.RevisionActor
 import com.trippilot.itinerarygeneration.domain.RevisionKind
+import com.trippilot.itinerarygeneration.domain.ScoringMode
+import com.trippilot.itinerarygeneration.domain.ScoringSignal
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlot
@@ -81,6 +84,10 @@ class ItineraryRevisionServiceTest : StringSpec({
         override fun replaceIfCurrent(tripId: UUID, expectedItineraryId: UUID, itinerary: Itinerary) =
             true.also { current = itinerary }
         override fun findStalePartial(updatedBefore: Instant) = emptyList<Itinerary>()
+
+        /** 잠금 뒤에 보이는 일정 — 다르게 두면 "검증(외부 호출) 동안 커밋된 쓰기"를 흉내 낸다. 기본은 같은 값. */
+        var lockedView: Itinerary? = null
+        override fun lockForTrip(tripId: UUID) = lockedView ?: current
     }
 
     val trips = object : TripFacade {
@@ -94,7 +101,7 @@ class ItineraryRevisionServiceTest : StringSpec({
     fun itinerary(slots: List<VisitSlot>, status: ItineraryStatus = ItineraryStatus.PLANNED, state: GenerationState = GenerationState.COMPLETE) =
         Itinerary.reconstitute(
             UUID.randomUUID(), tripId, status, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false, state,
-            listOf(ItineraryDay.of(d1, 0, slots)), now, now, null, emptyList(),
+            listOf(ItineraryDay.of(d1, 0, slots)), now, now, null, emptyList(), ScoringSignal.UNKNOWN,
         )
 
     fun service(revs: Revisions, its: Itineraries) = ItineraryRevisionService(revs, its, trips, NoopValidateAgent(), REV_NOOP_TX, clock)
@@ -119,12 +126,14 @@ class ItineraryRevisionServiceTest : StringSpec({
         val target = revs.stored.single()
         // 사용자가 편집해 상태가 달라진 뒤
         val v2 = itinerary(listOf(slot(cafe, "15:00", "16:00")))
-        its.current = Itinerary.reconstitute(v1.itineraryId, tripId, ItineraryStatus.PLANNED, v1.solveMode, GenerationMode.FULLY_AI, false, GenerationState.COMPLETE, v2.days, now, now, null, emptyList())
+        val signal = ScoringSignal(ScoringMode.RULE, listOf("llm:c1_fallback"))
+        its.current = Itinerary.reconstitute(v1.itineraryId, tripId, ItineraryStatus.PLANNED, v1.solveMode, GenerationMode.FULLY_AI, false, GenerationState.COMPLETE, v2.days, now, now, null, emptyList(), signal)
         svc.record(its.current!!, RevisionActor.USER, RevisionKind.EDIT, "수정")
 
         val restored = svc.restore(acc, tripId, target.revisionId)
 
         restored.days.single().slots.single().startAt shouldBe LocalTime.parse("10:00") // 과거 버전으로 복원
+        restored.scoring shouldBe signal // 점수 신호는 현행 그대로 — 후보 요약·미배치 보고와 같은 규칙(TRIP-1173)
         revs.stored.map { it.kind } shouldContainExactly
             listOf(RevisionKind.BASELINE, RevisionKind.EDIT, RevisionKind.RESTORE) // 과거를 지우지 않는다
         revs.stored.map { it.seq } shouldContainExactly listOf(1, 2, 3)
@@ -140,7 +149,7 @@ class ItineraryRevisionServiceTest : StringSpec({
         val target = revs.stored.single()
         // 현재는 숙소 고정 시각이 16:00 으로 바뀐 상태
         val nowFixed = itinerary(listOf(slot(hotel, "16:00", "17:00", fixed = true), slot(cafe, "20:00", "21:00", order = 1)))
-        its.current = Itinerary.reconstitute(old.itineraryId, tripId, ItineraryStatus.PLANNED, old.solveMode, GenerationMode.FULLY_AI, false, GenerationState.COMPLETE, nowFixed.days, now, now, null, emptyList())
+        its.current = Itinerary.reconstitute(old.itineraryId, tripId, ItineraryStatus.PLANNED, old.solveMode, GenerationMode.FULLY_AI, false, GenerationState.COMPLETE, nowFixed.days, now, now, null, emptyList(), ScoringSignal.UNKNOWN)
 
         val restored = svc.restore(acc, tripId, target.revisionId)
 
@@ -167,6 +176,34 @@ class ItineraryRevisionServiceTest : StringSpec({
         val svc = service(revs, Itineraries(base))
         svc.record(base, RevisionActor.AI, RevisionKind.BASELINE, "처음")
         shouldThrow<ConflictDetected> { svc.restore(acc, tripId, revs.stored.single().revisionId) }
+    }
+
+    // TRIP-1412 — 트랜잭션 안의 재확인이 일정 쓰기 잠금을 잡고 읽는다. 검증 동안 확정이 커밋됐으면 그 확정을 되돌리지 않는다.
+    "검증 동안 확정됐으면 잠금 뒤 읽기가 409 로 막는다" {
+        val revs = Revisions()
+        val base = itinerary(listOf(slot(cafe, "10:00", "11:00")))
+        val repo = Itineraries(base).apply { lockedView = itinerary(listOf(slot(cafe, "10:00", "11:00")), status = ItineraryStatus.CONFIRMED) }
+        val svc = service(revs, repo)
+        svc.record(base, RevisionActor.AI, RevisionKind.BASELINE, "처음")
+
+        shouldThrow<ConflictDetected> { svc.restore(acc, tripId, revs.stored.single().revisionId) }.message shouldBe "확정된 일정은 되돌릴 수 없습니다."
+        repo.current shouldBe base
+    }
+
+    // 3차 검수 감사 — 재검증은 잠그기 전 일정(preview)으로 만든 초안을 판정했다. 그 사이 내용이 바뀌었으면 그 판정은 지금 쓸 조합의 것이 아니다.
+    "검증 동안 내용이 바뀌었으면 409 STALE — 잠금 전 판정으로 쓰지 않는다" {
+        val revs = Revisions()
+        val base = itinerary(listOf(slot(cafe, "10:00", "11:00")))
+        val moved = Itinerary.reconstitute(
+            base.itineraryId, base.tripId, base.status, base.solveMode, base.generationMode, base.isFallback, base.generationState,
+            listOf(ItineraryDay.of(d1, 0, listOf(slot(cafe, "12:00", "13:00")))), base.createdAt, base.updatedAt,
+            base.candidatesSummary, base.unplacedMustVisits, base.scoring,
+        )
+        val repo = Itineraries(base).apply { lockedView = moved }
+        val svc = service(revs, repo)
+        svc.record(base, RevisionActor.AI, RevisionKind.BASELINE, "처음")
+
+        shouldThrow<ConflictDetected> { svc.restore(acc, tripId, revs.stored.single().revisionId) }.errorCode shouldBe ErrorCode.STALE
     }
 
     "생성 중(PARTIAL)에는 되돌릴 수 없다(409)" {
@@ -196,7 +233,7 @@ class ItineraryRevisionServiceTest : StringSpec({
         val othersTrip = UUID.randomUUID()
         val others = Itinerary.reconstitute(
             UUID.randomUUID(), othersTrip, ItineraryStatus.PLANNED, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
-            GenerationState.COMPLETE, listOf(ItineraryDay.of(d1, 0, listOf(slot(cafe, "20:00", "21:00")))), now, now, null, emptyList(),
+            GenerationState.COMPLETE, listOf(ItineraryDay.of(d1, 0, listOf(slot(cafe, "20:00", "21:00")))), now, now, null, emptyList(), ScoringSignal.UNKNOWN,
         )
         svc.record(others, RevisionActor.USER, RevisionKind.EDIT, "남의 여행")
         val foreign = revs.stored.single { it.tripId == othersTrip }
@@ -221,7 +258,7 @@ class ItineraryRevisionServiceTest : StringSpec({
                     ),
                 ),
             ),
-            now, now, null, emptyList(),
+            now, now, null, emptyList(), ScoringSignal.UNKNOWN,
         )
         val its = Itineraries(flagged)
         val down = NoopValidateAgent(failure = RuntimeException("AI 다운"))
@@ -251,5 +288,35 @@ class ItineraryRevisionServiceTest : StringSpec({
         val s0 = restored.days.single().slots.single()
         s0.hasViolation shouldBe true
         s0.violationReason shouldBe "앞 장소에서 이동할 시간이 빠듯해요" // 타입 번역(TRIP-1030)
+    }
+
+    // 미판정 목록은 장소 감지의 하루 점검만 읽는다(INV-SA-2) — 되돌리기는 종전대로 위반만 본다. 보류로 읽으면 직전 배지가
+    // 남고, 위반으로 읽으면 없던 배지가 켜진다.
+    "AI 가 판정하지 못했다고 답한 장소가 있어도 되돌리기 표면은 그대로다 — 판정이 났으니 위반 0 이면 배지가 꺼진다" {
+        val revs = Revisions()
+        val flagged = Itinerary.reconstitute(
+            UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            GenerationState.COMPLETE,
+            listOf(
+                ItineraryDay.of(
+                    d1, 0,
+                    listOf(
+                        VisitSlot.of(
+                            cafe, null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+                            hasViolation = true, violationReason = "이동이 빠듯해요",
+                        ),
+                    ),
+                ),
+            ),
+            now, now, null, emptyList(), ScoringSignal.UNKNOWN,
+        )
+        val its = Itineraries(flagged)
+        val svc = ItineraryRevisionService(revs, its, trips, NoopValidateAgent(unverified = setOf(cafe)), REV_NOOP_TX, clock)
+        svc.record(flagged, RevisionActor.AI, RevisionKind.BASELINE, "처음")
+
+        val s0 = svc.restore(acc, tripId, revs.stored.single().revisionId).days.single().slots.single()
+
+        s0.hasViolation shouldBe false
+        s0.violationReason shouldBe null
     }
 })

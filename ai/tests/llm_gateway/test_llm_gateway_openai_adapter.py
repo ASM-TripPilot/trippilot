@@ -173,3 +173,46 @@ def test_other_api_errors_propagate_for_gateway_to_convert() -> None:
     # LlmTimeoutError로 둔갑시키지 않고 그대로 — 게이트웨이가 llm_error 폴백으로 수렴
     with pytest.raises(openai.APIConnectionError):
         OpenAIAdapter(BrokenClient()).invoke(_REQUEST)
+
+
+class _WebSearchClient(RecordingResponsesClient):
+    """웹 검색 응답 꼴(멘토 게이트웨이 2026-10-22 실측) — 메시지 content 의 url_citation annotation."""
+
+    def _create(self, **kwargs):
+        self.kwargs = kwargs
+        cite = lambda url: SimpleNamespace(type="url_citation", url=url)  # noqa: E731
+        message = SimpleNamespace(type="message", content=[SimpleNamespace(
+            type="output_text", text="{}", annotations=[cite("https://royal.khs.go.kr/a"), cite("https://blog.example.com/b"),
+                                                       cite("https://royal.khs.go.kr/a")])])
+        search = SimpleNamespace(type="web_search_call", action=SimpleNamespace(
+            sources=[SimpleNamespace(url="https://gyeongbokgungtickets.com/g"), {"url": "https://royal.khs.go.kr/a"}]))
+        return SimpleNamespace(output_text='{"hours": "09:00~18:00"}', output=[search, message],
+                               usage=SimpleNamespace(input_tokens=12, output_tokens=7), model=kwargs["model"])
+
+
+def test_responses_web_search_sends_the_tool_and_returns_cited_urls_only() -> None:
+    from dataclasses import replace
+
+    client = _WebSearchClient()
+    response = OpenAIAdapter(client, api="responses").invoke(replace(_REQUEST, web_search=True))
+    assert client.kwargs["tools"] == [{"type": "web_search"}]
+    assert client.kwargs["include"] == ["web_search_call.action.sources"]  # JSON 만 내면 본문 인용이 안 붙는다
+    # 본문 인용 먼저, 그다음 검색이 본 출처 — 순서 유지·중복 제거
+    assert response.citations == ("https://royal.khs.go.kr/a", "https://blog.example.com/b", "https://gyeongbokgungtickets.com/g")
+
+
+def test_responses_without_web_search_sends_no_tools_and_no_citations() -> None:
+    client = _WebSearchClient()
+    response = OpenAIAdapter(client, api="responses").invoke(_REQUEST)
+    assert "tools" not in client.kwargs and "include" not in client.kwargs and response.citations == ()
+
+
+def test_chat_surface_refuses_web_search_instead_of_silently_dropping_it() -> None:
+    from dataclasses import replace
+
+    import pytest
+
+    from trippilot.ports.llm_port import LlmUnsupportedError
+
+    with pytest.raises(LlmUnsupportedError):
+        OpenAIAdapter(RecordingResponsesClient(), api="chat").invoke(replace(_REQUEST, web_search=True))

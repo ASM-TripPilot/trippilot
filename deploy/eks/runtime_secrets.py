@@ -20,7 +20,7 @@ KAKAO_CLIENT_SECRET NAVER_CLIENT_ID NAVER_CLIENT_SECRET APPLE_CLIENT_ID WEATHER_
 APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY SOCIAL_TOKEN_ENCRYPTION_KEY
 PUSH_EXPO_ACCESS_TOKEN PLACE_GEOCODE_MODE WEATHER_MODE PUSH_MODE AI_REMINDER_COPY_MODE
 AFFILIATE_MODE TRIPCOM_ALLIANCE_ID TRIPCOM_SID TRIPCOM_AD_ID
-ITINERARY_GENERATION_DAILY_LIMIT ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS
+ITINERARY_GENERATION_DAILY_LIMIT ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS SHARE_CARD_DAILY_LIMIT
 KAKAO_APP_ID ASSISTANT_INTERPRET_MODE LOCATION_AUTOMATION_ENABLED PUBLIC_DATA_API_KEY
 PLANB_SITUATION_SWEEP PLANB_SITUATION_HORIZON PLANB_SITUATION_SWEEP_ACCOUNT_IDS PLANB_PREPARED_REPLAN
 """.split())
@@ -272,11 +272,12 @@ def validate_groups(groups):
             "GOOGLE_CLIENT_SECRET must stay empty: the Google client is a public (iOS) client, "
             "so sending a secret makes Google reject the exchange with invalid_client"
         )
-    # 생성 상한 2종(TRIP-1314)은 없으면 백엔드 기본(10·예외 없음)이다. **있는데 틀리면** 백엔드가 기동에서
-    # 죽는다(빈 상한·0·UUID 오타) — 파드가 뜨다 죽기 전에 여기서 막는다.
-    limit = backend.get("ITINERARY_GENERATION_DAILY_LIMIT")
-    if limit is not None and not (limit.isascii() and limit.isdigit() and 1 <= int(limit) <= 2**31 - 1):
-        raise ValueError("ITINERARY_GENERATION_DAILY_LIMIT must be a positive integer; remove the key to use the default")
+    # 생성 상한 2종(TRIP-1314)·공유 문구 하루 상한(TRIP-1411)은 없으면 백엔드 기본(10·예외 없음·30)이다. **있는데 틀리면**
+    # 백엔드가 기동에서 죽는다(빈 상한·0·UUID 오타) — 파드가 뜨다 죽기 전에 여기서 막는다.
+    for name in ("ITINERARY_GENERATION_DAILY_LIMIT", "SHARE_CARD_DAILY_LIMIT"):
+        limit = backend.get(name)
+        if limit is not None and not (limit.isascii() and limit.isdigit() and 1 <= int(limit) <= 2**31 - 1):
+            raise ValueError(f"{name} must be a positive integer; remove the key to use the default")
     require_uuid_list(backend, "ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS")
     # 상황 감시 운영 카나리(스윕 대상 계정). 비면 전원이다 — 인가가 아니라 대상만 좁힌다(SEC-SA-04). 공백만 든 값은 '빈 값'이
     # 아니다 — 백엔드 바인딩이 [null] 로 읽어 아무 계정도 안 맞는 목록(조용히 0 여행)이 되므로 백엔드가 기동에서 거부한다.

@@ -79,10 +79,11 @@ def test_empty_pool_is_no_candidates() -> None:
 
 
 def test_undersized_pool_is_low() -> None:
-    full = list(_BOUNDARY)  # 8건 — 모든 카테고리 있음
+    full = list(_BOUNDARY)  # 경계 카테고리 수만큼 1건씩 — 모든 카테고리 있음
     assert candidates_report(_pool(full), days=1, persona=None).level == "OK"
-    # 2일 = 최소 10슬롯 > 8건
-    assert candidates_report(_pool(full), days=2, persona=None).level == "LOW"
+    # 최소 슬롯(일수 × MIN_SLOTS_PER_DAY)이 건수보다 크면 LOW — 카테고리가 늘면 일수도 따라 올린다
+    days = len(full) // MIN_SLOTS_PER_DAY + 1
+    assert candidates_report(_pool(full), days=days, persona=None).level == "LOW"
 
 
 _categories = st.lists(st.sampled_from(list(PoiCategory)), max_size=40)

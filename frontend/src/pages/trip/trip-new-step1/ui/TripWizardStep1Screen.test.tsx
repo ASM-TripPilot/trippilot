@@ -6,6 +6,7 @@ import {
 } from '@testing-library/react-native';
 
 import type { MustVisitSeedItem } from '@/features/create-trip';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 import { TripWizardHeader } from '@/widgets/trip-wizard-header';
 import { TripWizardStep1Screen } from './TripWizardStep1Screen';
 import type { TripWizardStep1ScreenProps } from './TripWizardStep1Screen';
@@ -565,8 +566,8 @@ describe('두 상태 얼굴 (empty · loading)', () => {
  * TRIP-665 g01 default 재작성 — **꼭 갈 곳 가로 스트립 전담**(Figma `3742:2068`).
  *
  * 무엇을 보장하나: 스트립이 헤더("꼭 갈 곳 {N}") + 전체 보기 + 더 담기(첫 위치) + 담은 곳 카드(이름)로
- * 서고, 카운트가 `mustVisits.length` 이며, 카드 이미지는 imageUrl 이 있을 때만 그린다(없으면 회색 자리,
- * INV-1). 그리고 **옛 스트립의 개별 제거(×)·+N 오버플로우가 신 계약에서 사라졌다**(01b D3 — 제거는 S12
+ * 서고, 카운트가 `mustVisits.length` 이며, 카드 사진 칸은 imageUrl 이 있으면 그 사진, 없으면(사이클
+ * 20261022-place-category-covers) 항목의 category·sourcePoiId 로 고른 카테고리 생성 이미지다. 그리고 **옛 스트립의 개별 제거(×)·+N 오버플로우가 신 계약에서 사라졌다**(01b D3 — 제거는 S12
  * 전체 보기 몫). 0곳도 헤더+더담기+전체보기로 graceful degrade(empty 일러스트 얼굴은 S7).
  *
  * 왜 재작성인가: 옛 스트립은 4얼굴 판별 유니온(seeded/empty/failed/loading)·overflow·remove× 를 가졌다.
@@ -607,13 +608,13 @@ describe('꼭 갈 곳 가로 스트립', () => {
       });
     });
 
-    it('사진이 있으면 그리고 없으면 자리만 둔다 (★6 짝 — 기본 이미지를 지어내지 않는다)', () => {
+    it('사진이 있으면 그 사진, 없으면 그 항목의 category·poiId 로 고른 생성 이미지가 같은 칸에 선다 (★6 짝)', () => {
       render(
         <TripWizardStep1Screen
           {...props({
             mustVisits: [
               seed('poi-1', '감천마을', 'https://cdn.example.com/a.jpg'),
-              seed('poi-2', '광안리', null),
+              { ...seed('poi-2', '광안리', null), category: '야경' },
             ],
           })}
         />
@@ -621,11 +622,12 @@ describe('꼭 갈 곳 가로 스트립', () => {
 
       // 두 항목이 서로의 짝이다 — 하나만 두면 "이미지를 아예 안 그리는" 구현도 통과한다.
       expect(
-        screen.getByTestId('trip-wizard-mustvisit-image-poi-1')
-      ).toBeOnTheScreen();
+        screen.getByTestId('trip-wizard-mustvisit-image-poi-1').props.source
+      ).toEqual([{ uri: 'https://cdn.example.com/a.jpg' }]);
+      // poi-2 는 변형 3 → night_view-3.
       expect(
-        screen.queryByTestId('trip-wizard-mustvisit-image-poi-2')
-      ).toBeNull();
+        screen.getByTestId('trip-wizard-mustvisit-image-poi-2').props.source
+      ).toEqual([coverFor('야경', 'poi-2')]);
       // 사진이 없어도 카드·이름표는 남는다.
       expect(
         within(screen.getByTestId('trip-wizard-mustvisit-poi-2')).getByText(

@@ -1,15 +1,24 @@
 import { DeviceEventEmitter, Keyboard, Text, TextInput } from 'react-native';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import type {
   AssistantSurface,
   ProposalStatus,
+  QuickReply,
+  QuickReplyAction,
 } from '../api/assistantContract';
 import {
   assistantSample,
   sampleActionLogs,
   sampleTranscript,
 } from '../api/assistantSamples';
+import { needsCapabilitiesChip } from '../model/sheetModel';
 import {
   AssistantSheetView,
   type AssistantSheetViewProps,
@@ -24,7 +33,7 @@ import {
  */
 
 // TRIP-1526 — 키보드 이벤트는 RN `Keyboard` 가 구독하는 기기 이벤트 통로(DeviceEventEmitter)로 쏜다
-// (선례 AssistantFab.test).
+// (선례 useKeyboardVisible.test).
 type KeyboardEventName =
   | 'keyboardWillShow'
   | 'keyboardDidShow'
@@ -78,6 +87,32 @@ function renderView(overrides: Partial<AssistantSheetViewProps> = {}) {
   return props;
 }
 
+// TRIP-1567 — 컨텍스트 칩이 추천 질문 목록을 펼친다. 항목 testID 는 목록 안에서도, 카드 위 줄(되묻기 보기·재시도)에서도
+// 같은 형식이라 "어디에 있나"를 가르려면 목록 범위(within)로 센다(02a ★2).
+const REPLY_ID = /^assistant-quick-reply-/;
+const LINE_ID = /^assistant-quick-replies-(stack|row)$/;
+const chip = () => screen.getByTestId('assistant-context-chip');
+const suggestionList = () => screen.queryByTestId('assistant-chip-suggestions');
+const idsOf = (nodes: ReturnType<typeof screen.queryAllByTestId>): string[] =>
+  nodes.map((node) => node.props.testID);
+const listIds = () =>
+  idsOf(
+    within(screen.getByTestId('assistant-chip-suggestions')).queryAllByTestId(
+      REPLY_ID
+    )
+  );
+const allReplyIds = () => idsOf(screen.queryAllByTestId(REPLY_ID));
+const lineIds = () =>
+  screen
+    .queryAllByTestId(LINE_ID)
+    .flatMap((line) => idsOf(within(line).queryAllByTestId(REPLY_ID)));
+const mkReply = (id: string, action: QuickReplyAction): QuickReply => ({
+  id,
+  label: `${id} 라벨`,
+  action,
+  params: {},
+});
+
 describe('AssistantSheetView (TRIP-1322)', () => {
   it('BR-U8-03·04 · 칩 문구·직전 메시지·시작 quick reply 를 그린다', () => {
     const transcript = sampleTranscript('review');
@@ -96,6 +131,9 @@ describe('AssistantSheetView (TRIP-1322)', () => {
     expect(
       screen.getByTestId(`assistant-user-bubble-${transcript.messages[0].id}`)
     ).toHaveTextContent('지금까지 짠 일정 검토해줘');
+    // TRIP-1567 — quick reply 는 칩 안에 접혀 있다가 칩을 누르면 보인다(옛: 열자마자 줄로 보임).
+    expect(allReplyIds()).toEqual([]);
+    fireEvent.press(chip);
     transcript.quickReplies.forEach((reply) =>
       expect(
         screen.getByTestId(`assistant-quick-reply-${reply.id}`)
@@ -103,18 +141,22 @@ describe('AssistantSheetView (TRIP-1322)', () => {
     );
   });
 
-  it('BR-U8-04 · "내가 할 수 있는 것 보기" 칩이 상시 있다', () => {
+  it('BR-U8-04 · "내가 할 수 있는 것 보기"는 칩을 펼치면 늘 닿는다(TRIP-1567: 상시 = 열자마자 줄 → 한 번 눌러 닿는 목록)', () => {
     const props = renderView();
+    // 펼치기 전엔 닿지 않는다 — 앵커(옛 계약: 열자마자 줄로 보였다)
+    expect(
+      screen.queryByTestId('assistant-quick-reply-capabilities')
+    ).toBeNull();
+    fireEvent.press(chip());
     fireEvent.press(screen.getByTestId('assistant-quick-reply-capabilities'));
     expect(props.onPressCapabilities).toHaveBeenCalledTimes(1);
   });
 
-  it('TRIP-1436 Q-134 · 상시 칩이 quick reply 줄의 맨 앞이다(서버 칩이 늘어도 화면 밖으로 안 밀린다)', () => {
+  it('TRIP-1436 Q-134 · 상시 칩이 추천 질문 목록의 맨 앞이다(서버 칩이 늘어도 뒤로 안 밀린다)', () => {
     renderView();
+    fireEvent.press(chip());
 
-    const ids = screen
-      .getAllByTestId(/^assistant-quick-reply-/)
-      .map((node) => node.props.testID);
+    const ids = listIds();
 
     expect(ids.length).toBeGreaterThan(1);
     expect(ids[0]).toBe('assistant-quick-reply-capabilities');
@@ -131,10 +173,9 @@ describe('AssistantSheetView (TRIP-1322)', () => {
       },
     ];
     renderView({ quickReplies: replies, showCapabilitiesChip: false });
+    fireEvent.press(chip());
 
-    const ids = screen
-      .getAllByTestId(/^assistant-quick-reply-/)
-      .map((node) => node.props.testID);
+    const ids = listIds();
 
     expect(ids[0]).toBe('assistant-quick-reply-qr-capabilities');
     expect(ids.length).toBe(replies.length);
@@ -215,6 +256,9 @@ describe('AssistantSheetView (TRIP-1322)', () => {
 
   it('금지 · 뷰는 재판정하지 않는다 — state 가 OPEN_FAILED 면 메시지가 있어도 오류 얼굴', () => {
     renderView({ state: 'OPEN_FAILED' });
+    // 접힌 quick reply 는 어차피 안 보여 이것만으론 공허하다 — 칩·입력 카드 자체가 없는 것을 함께 본다.
+    expect(screen.queryByTestId('assistant-context-chip')).toBeNull();
+    expect(screen.queryByTestId('assistant-input')).toBeNull();
     expect(
       screen.queryByTestId('assistant-quick-reply-capabilities')
     ).toBeNull();
@@ -287,6 +331,84 @@ describe('답 평가 줄 자리 (US-ASSIST-09)', () => {
   });
 });
 
+describe('목록 맨 위 "이전 대화 더 보기" 행', () => {
+  const review = sampleTranscript('review').messages;
+
+  // inverted 목록: 트리 순서는 최신 → 옛 → 푸터이고, 푸터가 화면 맨 위에 그려진다(실제 위치는 6-b 실기).
+  const rowTestIds = () =>
+    screen
+      .getAllByTestId(
+        /^assistant-(?:user-bubble-|message-(?!list$)|older-more$)/
+      )
+      .map((node) => node.props.testID as string);
+
+  it('idle 이면 행이 있고(버튼·문구), 모든 메시지 행보다 뒤(= 화면 맨 위)이며, 누르면 onPress', () => {
+    // Arrange
+    const onPress = jest.fn();
+    renderView({ messages: review, older: { status: 'idle', onPress } });
+
+    // Act
+    fireEvent.press(screen.getByTestId('assistant-older-more'));
+
+    // Assert
+    const row = screen.getByTestId('assistant-older-more');
+    expect(row).toHaveTextContent('이전 대화 더 보기');
+    expect(row.props.accessibilityRole).toBe('button');
+    const ids = rowTestIds();
+    expect(ids.length).toBeGreaterThan(1);
+    expect(ids[ids.length - 1]).toBe('assistant-older-more');
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([undefined, null])(
+    'older 가 %s 면 행 자체가 없다(비활성이 아니라 부재)',
+    (older) => {
+      renderView({ older });
+
+      expect(screen.getByTestId('assistant-message-list')).toBeOnTheScreen();
+      expect(screen.queryByTestId('assistant-older-more')).toBeNull();
+      expect(screen.queryByTestId('assistant-older-loading')).toBeNull();
+      expect(screen.queryByTestId('assistant-older-error')).toBeNull();
+    }
+  );
+
+  it('loading 이면 로딩 표시로 바뀌고 다시 누를 수 없다(콜백 0회)', () => {
+    // Arrange
+    const onPress = jest.fn();
+    renderView({ older: { status: 'loading', onPress } });
+
+    // Act
+    fireEvent.press(screen.getByTestId('assistant-older-more'));
+
+    // Assert
+    expect(screen.getByTestId('assistant-older-loading')).toBeOnTheScreen();
+    expect(screen.getByTestId('assistant-older-more')).toBeDisabled();
+    expect(screen.queryByText('이전 대화 더 보기')).toBeNull();
+    expect(onPress).not.toHaveBeenCalled();
+  });
+
+  it('error 이면 같은 자리에 실패 문구 + 다시 시도가 보이고(침묵 금지), 보이던 메시지는 그대로이며, 누르면 재요청', () => {
+    // Arrange
+    const onPress = jest.fn();
+    renderView({ messages: review, older: { status: 'error', onPress } });
+
+    // Act
+    fireEvent.press(screen.getByTestId('assistant-older-more'));
+
+    // Assert
+    expect(screen.getByTestId('assistant-older-error')).toHaveTextContent(
+      '이전 대화를 불러오지 못했어요'
+    );
+    expect(screen.getByText('다시 시도')).toBeOnTheScreen();
+    expect(screen.getByTestId('assistant-older-more')).toBeEnabled();
+    expect(screen.queryByTestId('assistant-older-loading')).toBeNull();
+    expect(
+      screen.getByTestId('assistant-user-bubble-u-review')
+    ).toBeOnTheScreen();
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('헤더 (TRIP-1525 · 01b Q1)', () => {
   it('✦ 마크 + 닫기만 있고, 제목 "AI 도우미"·새 대화 아이콘은 없다', () => {
     renderView();
@@ -356,15 +478,18 @@ describe('입력 카드 · 컨텍스트 칩 (TRIP-1526 · 01b Q3·Q4)', () => {
     expect(chip.props.accessibilityLabel).toContain('이 숙소에 관해 질문하기');
   });
 
-  it('READY 칩을 누르면 입력에 포커스만 간다 — 보내기·능력 보기·입력 변경은 없다', () => {
+  // TRIP-1567 — 옛 계약 "READY 칩 = 입력 포커스"는 뒤집혔다: 칩은 추천 질문을 펼치고 포커스는 하지 않는다.
+  it('READY 칩을 누르면 포커스가 아니라 추천 질문이 펼쳐진다 — 보내기·능력 보기·입력 변경은 없다', () => {
     inputFocus.mockClear();
     const props = renderView({ surface: 'ITINERARY' });
-    // 아직 포커스 호출 없음 — 앵커
+    // 아직 포커스 호출도 목록도 없다 — 앵커
     expect(inputFocus).not.toHaveBeenCalled();
+    expect(suggestionList()).toBeNull();
 
-    fireEvent.press(screen.getByTestId('assistant-context-chip'));
+    fireEvent.press(chip());
 
-    expect(inputFocus).toHaveBeenCalledTimes(1);
+    expect(inputFocus).not.toHaveBeenCalled();
+    expect(suggestionList()).toBeOnTheScreen();
     expect(props.onSend).not.toHaveBeenCalled();
     expect(props.onPressCapabilities).not.toHaveBeenCalled();
     expect(props.onChangeDraft).not.toHaveBeenCalled();
@@ -384,17 +509,18 @@ describe('입력 카드 · 컨텍스트 칩 (TRIP-1526 · 01b Q3·Q4)', () => {
     expect(inputFocus).not.toHaveBeenCalled();
   });
 
-  it('HOME + READY(진행 중 여행 있음) 칩은 "이 일정에 관해 질문하기" 이고 누르면 포커스다 — 문장을 보내지 않는다', () => {
+  it('HOME + READY(진행 중 여행 있음) 칩은 "이 일정에 관해 질문하기" 이고 누르면 펼쳐진다 — 능력 보기·문장 전송은 없다', () => {
     inputFocus.mockClear();
     const props = renderView({ state: 'READY', surface: 'HOME' });
-    const chip = screen.getByTestId('assistant-context-chip');
-    expect(chip).toHaveTextContent('이 일정에 관해 질문하기');
+    expect(chip()).toHaveTextContent('이 일정에 관해 질문하기');
     // 아직 아무것도 안 불렸다 — 앵커
     expect(inputFocus).not.toHaveBeenCalled();
+    expect(suggestionList()).toBeNull();
 
-    fireEvent.press(chip);
+    fireEvent.press(chip());
 
-    expect(inputFocus).toHaveBeenCalledTimes(1);
+    expect(suggestionList()).toBeOnTheScreen();
+    expect(inputFocus).not.toHaveBeenCalled();
     expect(props.onPressCapabilities).not.toHaveBeenCalled();
     expect(props.onSend).not.toHaveBeenCalled();
   });
@@ -410,14 +536,16 @@ describe('입력 카드 · 컨텍스트 칩 (TRIP-1526 · 01b Q3·Q4)', () => {
   ];
 
   it.each(SURFACES)(
-    'READY · surface %s 칩은 능력 보기로 가지 않고 포커스만 한다',
+    'READY · surface %s 칩은 능력 보기로 가지 않고 목록만 펼친다(포커스도 없다)',
     (surface) => {
       inputFocus.mockClear();
       const props = renderView({ state: 'READY', surface });
 
-      fireEvent.press(screen.getByTestId('assistant-context-chip'));
+      fireEvent.press(chip());
 
-      expect(inputFocus).toHaveBeenCalledTimes(1);
+      expect(suggestionList()).toBeOnTheScreen();
+      expect(chip()).toBeExpanded();
+      expect(inputFocus).not.toHaveBeenCalled();
       expect(props.onPressCapabilities).not.toHaveBeenCalled();
     }
   );
@@ -436,6 +564,11 @@ describe('입력 카드 · 컨텍스트 칩 (TRIP-1526 · 01b Q3·Q4)', () => {
 
       expect(props.onPressCapabilities).toHaveBeenCalledTimes(1);
       expect(inputFocus).not.toHaveBeenCalled();
+      // TRIP-1567 — 능력 보기 칩은 펼치는 칩이 아니다: 목록도, 펼침 상태 표시(스크린리더가 "펼치기" 로 읽음)도 없다.
+      expect(suggestionList()).toBeNull();
+      expect(chip()).not.toBeExpanded();
+      expect(chip()).not.toBeCollapsed();
+      expect(chip().props.accessibilityState?.expanded).toBeUndefined();
     }
   );
 
@@ -492,57 +625,306 @@ describe('이력 보기(body) 중 틀 (W1)', () => {
   });
 });
 
-describe('quick reply 배치 (TRIP-1526 · 01b Q8)', () => {
-  it('대화가 없으면(인사만) 세로 스택이고 상시 칩이 맨 앞이다', () => {
-    renderView({ messages: sampleTranscript('greeting').messages });
+// TRIP-1567 · 컨텍스트 칩 = 추천 질문 펼침. 옛 "quick reply 배치(대화 전 세로 스택/대화 중 가로 줄)" 계약(TRIP-1526 · 01b Q8)은
+// 폐기했다 — READY 에서는 질문형 quick reply 가 입력 카드 안 칩 아래 목록으로 들어가고, 카드 위 줄에는 응답에 묶인 보기
+// (되묻기 PICK_OPTION·재시도 RETRY)만 남는다. 줄의 얼굴(stack/row)은 굳히지 않는다(생김새 — 02a ★3).
+// 못 보는 것(6-b): 카드가 위로 자라는 모양 · maxHeight 와의 충돌 · 키보드가 올라온 채 펼쳤을 때 입력칸 가림 · 포커스 유지.
+describe('추천 질문 펼침 (TRIP-1567)', () => {
+  const greeting = () => sampleTranscript('greeting');
+  // 서버 목록 하나로 렌더하고, 상시 능력 칩 필요 여부는 page 가 하는 대로 계산한다.
+  const renderWith = (
+    quickReplies: QuickReply[],
+    overrides: Partial<AssistantSheetViewProps> = {}
+  ) =>
+    renderView({
+      quickReplies,
+      showCapabilitiesChip: needsCapabilitiesChip(quickReplies),
+      ...overrides,
+    });
 
-    expect(
-      screen.getByTestId('assistant-quick-replies-stack')
-    ).toBeOnTheScreen();
-    expect(screen.queryByTestId('assistant-quick-replies-row')).toBeNull();
-    const ids = screen
-      .getAllByTestId(/^assistant-quick-reply-/)
-      .map((node) => node.props.testID);
-    expect(ids[0]).toBe('assistant-quick-reply-capabilities');
+  let dismiss: jest.SpyInstance;
+  beforeEach(() => {
+    dismiss = jest.spyOn(Keyboard, 'dismiss');
+  });
+  afterEach(() => {
+    dismiss.mockRestore();
   });
 
-  it('메시지가 아예 없어도 세로 스택이다', () => {
-    renderView({ messages: [] });
-    expect(
-      screen.getByTestId('assistant-quick-replies-stack')
-    ).toBeOnTheScreen();
+  it('처음 열면 접혀 있다 — 목록도 카드 위 질문 줄도 없고 칩과 입력만 있다 (AC 접힘 기본)', () => {
+    renderView();
+
+    // 칩이 접힌 펼침 버튼으로 있다 — 화면이 통째로 비어서 우연히 green 이 되는 것을 막는 앵커
+    expect(chip()).toBeCollapsed();
+    expect(screen.getByTestId('assistant-input')).toBeOnTheScreen();
+    expect(suggestionList()).toBeNull();
+    expect(allReplyIds()).toEqual([]);
+    expect(screen.queryAllByTestId(LINE_ID)).toHaveLength(0);
   });
 
-  it('사용자가 말한 대화가 있으면 가로 줄이고 상시 칩이 맨 앞이다', () => {
-    renderView({ messages: sampleTranscript('review').messages });
+  it('칩을 누르면 펼치고 다시 누르면 접는다 — 입력칸 포커스·전송·능력 보기는 일어나지 않는다', () => {
+    inputFocus.mockClear();
+    const props = renderView();
+    // 눌러 보기 전엔 아무것도 안 불렸다 — 앵커
+    expect(inputFocus).not.toHaveBeenCalled();
+    expect(chip()).toBeCollapsed();
 
-    expect(screen.getByTestId('assistant-quick-replies-row')).toBeOnTheScreen();
-    expect(screen.queryByTestId('assistant-quick-replies-stack')).toBeNull();
-    const ids = screen
-      .getAllByTestId(/^assistant-quick-reply-/)
-      .map((node) => node.props.testID);
-    expect(ids[0]).toBe('assistant-quick-reply-capabilities');
+    fireEvent.press(chip());
+    expect(suggestionList()).toBeOnTheScreen();
+    expect(chip()).toBeExpanded();
+
+    fireEvent.press(chip());
+    expect(suggestionList()).toBeNull();
+    expect(chip()).toBeCollapsed();
+
+    expect(inputFocus).not.toHaveBeenCalled();
+    expect(dismiss).not.toHaveBeenCalled();
+    expect(props.onSend).not.toHaveBeenCalled();
+    expect(props.onChangeDraft).not.toHaveBeenCalled();
+    expect(props.onPressCapabilities).not.toHaveBeenCalled();
+    expect(props.onPressQuickReply).not.toHaveBeenCalled();
+  });
+
+  it('펼치면 항목이 이 순서로 있다 — 능력 보기 맨 앞, 서버 순서 그대로, 라벨은 서버 문구', () => {
+    const { quickReplies } = greeting();
+    renderWith(quickReplies);
+
+    fireEvent.press(chip());
+
+    expect(listIds()).toEqual([
+      'assistant-quick-reply-capabilities',
+      ...quickReplies.map((r) => `assistant-quick-reply-${r.id}`),
+    ]);
+    expect(
+      screen.getByTestId('assistant-quick-reply-capabilities')
+    ).toHaveTextContent('내가 할 수 있는 것 보기');
+    quickReplies.forEach((r) =>
+      expect(
+        screen.getByTestId(`assistant-quick-reply-${r.id}`)
+      ).toHaveTextContent(r.label)
+    );
+  });
+
+  it('서버가 능력 보기를 목록 맨 끝에 줘도 맨 앞이고, 클라 합성 칩과 겹쳐 두 번 나오지 않는다', () => {
+    const replies = [
+      ...greeting().quickReplies,
+      mkReply('qr-capabilities', 'SHOW_CAPABILITIES'),
+    ];
+    renderWith(replies);
+
+    fireEvent.press(chip());
+
+    expect(listIds()[0]).toBe('assistant-quick-reply-qr-capabilities');
+    expect(listIds()).toHaveLength(replies.length);
+  });
+
+  it('후보 고르기(PICK_CANDIDATE)는 접혀 있어도 펼쳐도 어디에도 없다 — 후보 카드가 고르기를 맡는다', () => {
+    const send = mkReply('qr-send', 'SEND_TEXT');
+    renderWith([
+      send,
+      mkReply('qr-pick-a', 'PICK_CANDIDATE'),
+      mkReply('qr-pick-b', 'PICK_CANDIDATE'),
+    ]);
+    expect(allReplyIds()).toEqual([]);
+
+    fireEvent.press(chip());
+
+    expect(allReplyIds().filter((id) => id.includes('qr-pick'))).toEqual([]);
+    // 앵커 — 같은 목록의 질문형 항목은 펼침에 있다(분류가 전부 지운 게 아니다)
+    expect(listIds()).toContain('assistant-quick-reply-qr-send');
+  });
+
+  it('되묻기 보기(PICK_OPTION)·재시도(RETRY)는 칩을 안 눌러도 카드 위 줄에 있고, 펼침 목록에는 없다 (BR-U8-11)', () => {
+    const props = renderWith(
+      [
+        mkReply('qr-send', 'SEND_TEXT'),
+        mkReply('qr-opt-a', 'PICK_OPTION'),
+        mkReply('qr-opt-b', 'PICK_OPTION'),
+        mkReply('qr-retry', 'RETRY'),
+      ],
+      { messages: sampleTranscript('review').messages }
+    );
+    const answers = [
+      'assistant-quick-reply-qr-opt-a',
+      'assistant-quick-reply-qr-opt-b',
+      'assistant-quick-reply-qr-retry',
+    ];
+
+    // 접힌 채로도 답할 방법이 보인다
+    expect(suggestionList()).toBeNull();
+    expect(lineIds()).toEqual(answers);
+
+    fireEvent.press(chip());
+
+    expect(lineIds()).toEqual(answers);
+    expect(listIds()).not.toEqual(expect.arrayContaining(answers));
+    expect(listIds()).toContain('assistant-quick-reply-qr-send');
+
+    fireEvent.press(screen.getByTestId('assistant-quick-reply-qr-opt-b'));
+    expect(props.onPressQuickReply).toHaveBeenCalledTimes(1);
+    expect(props.onPressQuickReply).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'qr-opt-b', action: 'PICK_OPTION' })
+    );
+  });
+
+  it('응답 중(repliesDisabled)이면 카드 위 줄의 보기도 비활성이다 — 눌러도 아무것도 안 올린다', () => {
+    const props = renderWith(
+      [mkReply('qr-opt-a', 'PICK_OPTION'), mkReply('qr-retry', 'RETRY')],
+      { repliesDisabled: true }
+    );
+    // 줄이 실제로 있다 — 앵커
+    expect(lineIds()).toHaveLength(2);
+
+    lineIds().forEach((id) => {
+      expect(screen.getByTestId(id).props.accessibilityState).toEqual(
+        expect.objectContaining({ disabled: true })
+      );
+      fireEvent.press(screen.getByTestId(id));
+    });
+
+    expect(props.onPressQuickReply).not.toHaveBeenCalled();
   });
 
   it.each([
-    ['세로 스택', () => sampleTranscript('greeting')],
-    ['가로 줄', () => sampleTranscript('review')],
-  ])('%s 에서도 칩을 누르면 그 칩을 올린다', (_name, transcript) => {
-    const { messages, quickReplies } = transcript();
-    const props = renderView({ messages, quickReplies });
-    const first = quickReplies[0];
+    ['대화 전(인사만)', () => sampleTranscript('greeting')],
+    ['대화 중(사용자 말 있음)', () => sampleTranscript('review')],
+  ])(
+    '%s 에도 카드 위에 질문 줄이 남지 않는다 — 화면의 모든 quick reply 가 펼침 목록 안에 있다 (AC 금지)',
+    (_name, transcript) => {
+      const { messages, quickReplies } = transcript();
+      renderWith(quickReplies, { messages });
+      // 접힘 — 줄 없음 + 칩은 있음(앵커)
+      expect(chip()).toBeCollapsed();
+      expect(screen.queryAllByTestId(LINE_ID)).toHaveLength(0);
 
+      fireEvent.press(chip());
+
+      expect(screen.queryAllByTestId(LINE_ID)).toHaveLength(0);
+      expect(listIds().length).toBeGreaterThan(0);
+      // 개수 등식 — 목록과 줄에 같은 칩을 이중으로 그리면 화면 전체가 목록보다 많아진다
+      expect(allReplyIds()).toEqual(listIds());
+    }
+  );
+
+  it.each([0, 1, 2])(
+    '서버 항목 #%i 를 누르면 그 reply 로 전송을 1회 올리고 목록이 접히고 키보드를 내린다 (AC 항목 누름)',
+    (index) => {
+      const { messages, quickReplies } = greeting();
+      const props = renderWith(quickReplies, { messages });
+      fireEvent.press(chip());
+      // 펼치는 것만으로는 키보드를 내리지 않는다 — 앵커
+      expect(dismiss).not.toHaveBeenCalled();
+      const picked = quickReplies[index];
+
+      fireEvent.press(screen.getByTestId(`assistant-quick-reply-${picked.id}`));
+
+      expect(props.onPressQuickReply).toHaveBeenCalledTimes(1);
+      expect(props.onPressQuickReply).toHaveBeenCalledWith(picked);
+      expect(props.onSend).not.toHaveBeenCalled();
+      expect(props.onChangeDraft).not.toHaveBeenCalled();
+      expect(props.onPressCapabilities).not.toHaveBeenCalled();
+      expect(suggestionList()).toBeNull();
+      expect(chip()).toBeCollapsed();
+      expect(dismiss).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it('능력 보기 항목 · 클라 합성 항목은 onPressCapabilities 를 올리고 접히고 키보드를 내린다', () => {
+    const first = renderView();
+    fireEvent.press(chip());
+    fireEvent.press(screen.getByTestId('assistant-quick-reply-capabilities'));
+    expect(first.onPressCapabilities).toHaveBeenCalledTimes(1);
+    expect(first.onPressQuickReply).not.toHaveBeenCalled();
+    expect(suggestionList()).toBeNull();
+    expect(dismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('능력 보기 항목 · 서버가 발급한 SHOW_CAPABILITIES 는 그 reply 로 올린다(능력 보기 콜백이 아니다)', () => {
+    const issued = mkReply('qr-capabilities', 'SHOW_CAPABILITIES');
+    const props = renderWith([issued, mkReply('qr-send', 'SEND_TEXT')]);
+    fireEvent.press(chip());
+
+    fireEvent.press(
+      screen.getByTestId('assistant-quick-reply-qr-capabilities')
+    );
+
+    expect(props.onPressQuickReply).toHaveBeenCalledTimes(1);
+    expect(props.onPressQuickReply).toHaveBeenCalledWith(issued);
+    expect(props.onPressCapabilities).not.toHaveBeenCalled();
+    expect(suggestionList()).toBeNull();
+    expect(dismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('응답 중(repliesDisabled)에는 항목이 비활성이라 눌러도 전송·접힘·키보드가 없고, 칩 토글은 그대로 된다 (AC 비활성)', () => {
+    const props = renderView({ repliesDisabled: true });
+
+    // 칩 토글은 응답 중에도 된다 — "눌렀는데 아무 일도 없음" 이 이번 티켓의 원 결함이다
+    fireEvent.press(chip());
+    expect(chip()).toBeExpanded();
+    const ids = listIds();
+    expect(ids.length).toBeGreaterThan(1);
+
+    ids.forEach((id) => {
+      expect(screen.getByTestId(id).props.accessibilityState).toEqual(
+        expect.objectContaining({ disabled: true })
+      );
+      fireEvent.press(screen.getByTestId(id));
+    });
+
+    expect(props.onPressQuickReply).not.toHaveBeenCalled();
+    expect(props.onPressCapabilities).not.toHaveBeenCalled();
+    expect(suggestionList()).toBeOnTheScreen();
+    expect(dismiss).not.toHaveBeenCalled();
+
+    fireEvent.press(chip());
+    expect(suggestionList()).toBeNull();
+    fireEvent.press(chip());
+    expect(suggestionList()).toBeOnTheScreen();
+  });
+
+  it('키보드가 떠도(compact) 펼친 목록은 그대로 있고 입력 카드도 사라지지 않는다 — 칩은 포커스를 건드리지 않는다', () => {
+    inputFocus.mockClear();
+    renderView();
+    // 키보드 전엔 full — 앞 케이스가 남긴 compact 가 새서 green 이 되는 것을 막는 앵커
+    expect(
+      screen
+        .queryAllByTestId(/^assistant-sheet-mode-/)
+        .map((n) => n.props.testID)
+    ).toEqual(['assistant-sheet-mode-full']);
+    fireEvent.press(chip());
+    expect(suggestionList()).toBeOnTheScreen();
+
+    emitKeyboard('keyboardDidShow');
+
+    expect(
+      screen
+        .queryAllByTestId(/^assistant-sheet-mode-/)
+        .map((n) => n.props.testID)
+    ).toEqual(['assistant-sheet-mode-compact']);
+    expect(suggestionList()).toBeOnTheScreen();
+    expect(chip()).toBeExpanded();
+    expect(screen.getByTestId('assistant-input')).toBeOnTheScreen();
+    expect(inputFocus).not.toHaveBeenCalled();
+  });
+
+  it('키보드 + 대화 전(compact)에는 카드 위에 줄이 없고, 카드 안에서 칩을 눌러 펼쳐 항목을 보낼 수 있다', () => {
+    const { messages, quickReplies } = greeting();
+    const props = renderView({ messages, quickReplies });
+    emitKeyboard('keyboardDidShow');
+    expect(
+      screen
+        .queryAllByTestId(/^assistant-sheet-mode-/)
+        .map((n) => n.props.testID)
+    ).toEqual(['assistant-sheet-mode-compact']);
+    expect(chip()).toBeCollapsed();
+    expect(screen.queryAllByTestId(LINE_ID)).toHaveLength(0);
+    expect(allReplyIds()).toEqual([]);
+
+    fireEvent.press(chip());
+    const first = quickReplies[0];
     fireEvent.press(screen.getByTestId(`assistant-quick-reply-${first.id}`));
 
     expect(props.onPressQuickReply).toHaveBeenCalledWith(first);
-  });
-
-  it('repliesDisabled 이면 칩이 비활성이다(스택 모드)', () => {
-    renderView({ messages: [], repliesDisabled: true });
-    expect(
-      screen.getByTestId('assistant-quick-reply-capabilities').props
-        .accessibilityState
-    ).toEqual(expect.objectContaining({ disabled: true }));
+    expect(suggestionList()).toBeNull();
   });
 });
 
@@ -612,7 +994,8 @@ describe('상시 능력 칩 중복 제거 (TRIP-1531 결함 3)', () => {
     );
   });
 
-  it('READY 면 서버 SHOW_CAPABILITIES 칩이 지금처럼 줄에 남는다', () => {
+  // TRIP-1567 — READY 의 "줄에 남는다"는 "펼침 목록 안에 있다"로 바뀌었다(NO_CONTEXT 위 3건은 줄 그대로).
+  it('READY 면 서버 SHOW_CAPABILITIES 칩이 펼침 목록에 남는다', () => {
     renderView({
       quickReplies: [
         {
@@ -624,17 +1007,19 @@ describe('상시 능력 칩 중복 제거 (TRIP-1531 결함 3)', () => {
       ],
       showCapabilitiesChip: false,
     });
+    fireEvent.press(chip());
 
-    expect(
-      screen.getByTestId('assistant-quick-reply-qr-capabilities')
-    ).toBeOnTheScreen();
+    expect(listIds()).toEqual(['assistant-quick-reply-qr-capabilities']);
   });
 
-  it('READY 는 상시 능력 칩이 빠른 답 줄에 남는다(BR-U8-04)', () => {
+  it('READY 는 상시 능력 칩이 펼침 목록에 남는다(BR-U8-04)', () => {
     renderView({ state: 'READY', showCapabilitiesChip: true });
+    fireEvent.press(chip());
 
     expect(
-      screen.getByTestId('assistant-quick-reply-capabilities')
+      within(screen.getByTestId('assistant-chip-suggestions')).getByTestId(
+        'assistant-quick-reply-capabilities'
+      )
     ).toBeOnTheScreen();
   });
 });
@@ -646,7 +1031,7 @@ describe('키보드 모드 (TRIP-1526 · 01b Q6)', () => {
   const review = () => sampleTranscript('review').messages;
 
   it.each<KeyboardEventName>(['keyboardWillShow', 'keyboardDidShow'])(
-    '%s · 대화 없음 + 키보드 → 작은 입력 카드(손잡이·본문 없음, 제안 칩 스택은 남는다)',
+    '%s · 대화 없음 + 키보드 → 작은 입력 카드(손잡이·본문 없음, 카드 위 줄도 없다)',
     (showEvent) => {
       renderView({ messages: [] });
       // 아직 full — 앞 케이스가 남긴 "떠 있음"이 새도 green 이 되는 것을 막는 앵커
@@ -658,7 +1043,7 @@ describe('키보드 모드 (TRIP-1526 · 01b Q6)', () => {
       expect(modeIds()).toEqual(['assistant-sheet-mode-compact']);
       expect(screen.queryByTestId('assistant-sheet-handle')).toBeNull();
       expect(screen.queryByTestId('assistant-message-list')).toBeNull();
-      expect(screen.queryByTestId('assistant-quick-replies-row')).toBeNull();
+      expect(screen.queryAllByTestId(LINE_ID)).toHaveLength(0);
       expect(screen.getByTestId('assistant-context-chip')).toBeOnTheScreen();
       expect(screen.getByTestId('assistant-input')).toBeOnTheScreen();
       expect(screen.getByTestId('assistant-send')).toBeOnTheScreen();
@@ -708,9 +1093,9 @@ describe('키보드 모드 (TRIP-1526 · 01b Q6)', () => {
 
       expect(modeIds()).toEqual(['assistant-sheet-mode-full']);
       expect(screen.getByTestId('assistant-sheet-handle')).toBeOnTheScreen();
-      expect(
-        screen.getByTestId('assistant-quick-replies-stack')
-      ).toBeOnTheScreen();
+      // TRIP-1567 — 내려와도 카드 위 줄은 없고 칩만 있다(접힌 기본값)
+      expect(screen.getByTestId('assistant-context-chip')).toBeOnTheScreen();
+      expect(screen.queryAllByTestId(LINE_ID)).toHaveLength(0);
     }
   );
 
@@ -722,66 +1107,8 @@ describe('키보드 모드 (TRIP-1526 · 01b Q6)', () => {
     emitKeyboard('keyboardWillHide');
 
     expect(modeIds()).toEqual(['assistant-sheet-mode-full']);
-    expect(screen.getByTestId('assistant-quick-replies-row')).toBeOnTheScreen();
-  });
-});
-
-const modeOf = () =>
-  screen.queryAllByTestId(/^assistant-sheet-mode-/).map((n) => n.props.testID);
-
-describe('키보드 + 대화 전: 제안 칩 스택이 카드 위에 남는다 (Figma bv3-입력(제안 칩))', () => {
-  const greeting = () => sampleTranscript('greeting');
-
-  it.each<KeyboardEventName>(['keyboardWillShow', 'keyboardDidShow'])(
-    '%s · compact 에서도 세로 스택 칩이 입력 카드와 같이 그려지고 누르면 올린다',
-    (showEvent) => {
-      const { messages, quickReplies } = greeting();
-      const props = renderView({ messages, quickReplies });
-      // 키보드 전에는 스택이 이미 있다 — 앵커
-      expect(
-        screen.getByTestId('assistant-quick-replies-stack')
-      ).toBeOnTheScreen();
-
-      emitKeyboard(showEvent);
-
-      expect(
-        screen
-          .queryAllByTestId(/^assistant-sheet-mode-/)
-          .map((n) => n.props.testID)
-      ).toEqual(['assistant-sheet-mode-compact']);
-      expect(
-        screen.getByTestId('assistant-quick-replies-stack')
-      ).toBeOnTheScreen();
-      expect(screen.queryByTestId('assistant-quick-replies-row')).toBeNull();
-      expect(screen.getByTestId('assistant-input')).toBeOnTheScreen();
-      expect(screen.getByTestId('assistant-send')).toBeOnTheScreen();
-      // 본문·헤더·손잡이는 계속 없다
-      expect(screen.queryByTestId('assistant-message-list')).toBeNull();
-      expect(screen.queryByTestId('assistant-sheet-mark')).toBeNull();
-      expect(screen.queryByTestId('assistant-sheet-close')).toBeNull();
-      expect(screen.queryByTestId('assistant-sheet-handle')).toBeNull();
-      const first = quickReplies[0];
-      fireEvent.press(screen.getByTestId(`assistant-quick-reply-${first.id}`));
-      expect(props.onPressQuickReply).toHaveBeenCalledWith(first);
-    }
-  );
-
-  it('compact 에서도 상시 칩이 스택 맨 앞이다', () => {
-    renderView({ messages: [] });
-    emitKeyboard('keyboardDidShow');
-
-    const ids = screen
-      .getAllByTestId(/^assistant-quick-reply-/)
-      .map((n) => n.props.testID);
-    expect(ids[0]).toBe('assistant-quick-reply-capabilities');
-  });
-
-  it('대화가 있으면(shrunk) 가로 줄이 그대로 보존된다', () => {
-    renderView({ messages: sampleTranscript('review').messages });
-    emitKeyboard('keyboardDidShow');
-
-    expect(modeOf()).toEqual(['assistant-sheet-mode-shrunk']);
-    expect(screen.getByTestId('assistant-quick-replies-row')).toBeOnTheScreen();
-    expect(screen.queryByTestId('assistant-quick-replies-stack')).toBeNull();
+    // TRIP-1567 — 옛: 가로 줄이 돌아온다. 새: 줄이 없고 칩이 돌아온다
+    expect(screen.getByTestId('assistant-context-chip')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(LINE_ID)).toHaveLength(0);
   });
 });

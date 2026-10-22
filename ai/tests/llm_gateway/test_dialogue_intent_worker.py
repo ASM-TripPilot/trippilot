@@ -99,7 +99,7 @@ def _classify(worker: DialogueIntentWorker, utterance: str = _UTTERANCE, **kw):
 def test_prompt_loads_with_semver_and_carries_every_section() -> None:
     prompt, ref = PromptRegistry(_PROMPTS).render(_FEAT, _vars())
     assert (ref.prompt_id, ref.version, ref.feature) == (
-        "prompts/dialogue_intent.yaml", "0.2.4", "DIALOGUE_INTENT")
+        "prompts/dialogue_intent.yaml", "0.2.7", "DIALOGUE_INTENT")
     assert _UTTERANCE in prompt
     assert "- 사용자: 내일 경복궁 가는 날 날씨 어때?" in prompt
     assert "- 도우미: 내일 서울은 강수확률 20%예요." in prompt
@@ -159,8 +159,11 @@ def test_prompt_hands_two_lookups_in_one_turn_to_the_plan_step() -> None:
                    "한 곳의 여러 속성(다음 일정이 어디고 몇 시인지·한 장소의 영업시간과 입장료)은 그 의도 하나",
                    "일정을 바꾸는 요청(넣기·빼기·옮기기·다시 짜기·회고 쓰기)이 섞이면 그 바꾸는 의도를 고르세요",
                    '서로 다른 것을 둘 이상 같이 물으면 {"intent": null}(한 곳의 여러 속성은 하나)',
+                   '하나만 고르지 말고 {"intent": null}로 두세요',
                    '발화 "내일 첫 일정이랑 그날 비 소식 같이 알려줘"'):
         assert phrase in prompt, phrase
+    answers = {m["utterance"]: json.loads(m["answer"]) for m in _EXAMPLE.finditer(prompt)}
+    assert answers["내일 첫 일정이랑 그날 비 소식 같이 알려줘"] == {"intent": None}  # 결정을 뒤집는 변이도 잡는다
 
 
 # 예시 한 건 =`- [최근 대화 "…" · ]발화 "…"` 줄 + 다음 줄 `→ {…}` (yaml 블록이 들여쓰기를 걷어 낸 렌더 결과 기준)

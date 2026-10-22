@@ -6,7 +6,7 @@
  *
  * 구성: 인사 헤더 → 검색바 → magazineHero(영감 카드) → "요즘 사람들이 담는 곳"(가로 스크롤) →
  * "지금 뜨는 장소"(2×2 그리드) → softNote(장소 온램프) → FAB.
- * 사진 에셋은 미번들이라 토큰색 플레이스홀더 + 스크림 그라디언트로 대체한다(가정 C).
+ * 서버 사진이 없으면 카테고리별 번들 생성 이미지(`PlacePhoto`) + 스크림 그라디언트로 채운다.
  *
  * TRIP-317 — 여행 단계 얼굴 4종을 phase 판별값으로 얹는다(collecting·planning·upcoming·postTrip).
  * 화면은 phase.kind로 스위치만 하고 여행 데이터를 뜯어 단계를 스스로 도출하지 않는다(TRIP-206
@@ -14,7 +14,7 @@
  * softNote·미니맵 카드 등)을 단계 데이터로 파라미터화해 조립한다. INV-3(소요시간 미표시)는
  * 어떤 얼굴에도 소요시간 문자열·필드를 두지 않는다 — 시각(09:30)·거리(950m)만 표시한다.
  */
-import { memo, useEffect, useRef, useState, type ReactElement } from 'react';
+import { memo, useState, type ReactElement } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -37,11 +37,16 @@ import {
   SparkleGlyph,
   SuitcaseGlyph,
 } from '@/features/home';
-import { CategoryImageGlyph } from '@/entities/itinerary-slot';
+import { SparkleGlyph as AssistantSparkleGlyph } from '@/features/open-assistant';
 import { WarningTriangleGlyph } from '@/features/explore/index.view';
 import { formatCountBadge } from '../lib/formatCountBadge';
+import { GLYPH_COLORS } from '@/shared/ui/glyphs';
 import { HeartButton } from '@/shared/ui/HeartButton';
+import { FAB_STACK_TOP } from '@/shared/ui/toastBottom';
+import { useScrollHide } from '@/shared/lib/useScrollHide';
+import { useToastBottom } from '@/shared/ui/useToastBottom';
 import { Image } from '@/shared/ui/Image';
+import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import type {
   HomeCollectionCard,
@@ -113,16 +118,20 @@ const heroDotShadow = {
 // discovery는 고정 카피, 단계 얼굴은 greetTitle/greetSubtitle/greetName을 주입받는다.
 // TRIP-939 AC-9 — 종은 알림함 진입 버튼이다. role 은 콜백 유무가 아니라 구조로 굳힌다(370-AC-4 집합).
 // 하드코딩 빨간점은 뺐다(Q3 — 읽음 처리 미배선이라 켜지면 꺼지지 않는다).
+// TRIP-1553 — 종 왼쪽 ✦ 는(후속: ✦ 왼쪽·종이 오른쪽 끝) 우하단 FAB 에서 옮겨 온 도우미 진입이다(같은 40 원형·구조 role). 글리프는
+// open-assistant 의 도우미 ✦ (홈 eyebrow 의 같은 이름 별과 다른 것).
 function GreetingHeader({
   title,
   subtitle,
   name,
   onPressBell,
+  onPressAssistant,
 }: {
   title: string;
   subtitle?: string;
   name?: string;
   onPressBell?: () => void;
+  onPressAssistant?: () => void;
 }): ReactElement {
   return (
     <View className="w-full flex-row items-center gap-sm px-lg pb-[10px] pt-lg">
@@ -137,6 +146,17 @@ function GreetingHeader({
           <Text className="font-noto text-[12.5px] text-muted">{subtitle}</Text>
         ) : null}
       </View>
+      {/* TRIP-1553 후속(2026-10-22 사용자) — ✦ 도우미가 왼쪽, 알림 벨이 행의 오른쪽 끝. */}
+      <Pressable
+        testID="home-dashboard-assistant"
+        accessibilityRole="button"
+        accessibilityLabel="AI 도우미"
+        onPress={onPressAssistant}
+        style={softCardShadow}
+        className="h-[40px] w-[40px] items-center justify-center rounded-full bg-canvas"
+      >
+        <AssistantSparkleGlyph size={20} color={GLYPH_COLORS.primary} />
+      </Pressable>
       <Pressable
         testID="home-dashboard-bell"
         accessibilityRole="button"
@@ -401,20 +421,6 @@ function SectionHeader({
   );
 }
 
-// 사진 없는 카드(서버 imageUrl 없음)의 대체 표시 — 일정 슬롯과 같은 이미지 글리프를 카드 가운데 위쪽에
-// 얹는다(새 자산 없음, TRIP-1221). 스크림·글씨 아래층이라 제목 가독성은 그대로.
-function PhotoPlaceholder({ testID }: { testID: string }): ReactElement {
-  return (
-    <View
-      testID={testID}
-      pointerEvents="none"
-      className="absolute inset-x-0 top-0 h-3/5 items-center justify-center"
-    >
-      <CategoryImageGlyph size={36} />
-    </View>
-  );
-}
-
 // ── 컬렉션 카드(요즘 사람들이 담는 곳 · 내가 담은 곳 · 추천) ─────────────
 // 하단 메타는 지역+핀으로 그린다(discovery·추천 공용).
 function CollectionCard({
@@ -436,17 +442,17 @@ function CollectionCard({
       className="h-[300px] w-[230px] overflow-hidden rounded-[18px]"
     >
       <View className="absolute inset-0 bg-surface-strong" />
-      <Image
-        source={card.imageUrl ? { uri: card.imageUrl } : undefined}
+      <PlacePhoto
+        testID={`home-collection-photo-${index}`}
+        imageUrl={card.imageUrl}
+        category={card.category}
+        poiId={poiId}
         contentFit="cover"
         cachePolicy="memory-disk"
         recyclingKey={poiId ?? card.imageUrl ?? undefined}
         transition={120}
         style={ABSOLUTE_FILL}
       />
-      {card.imageUrl ? null : (
-        <PhotoPlaceholder testID="home-collection-photo-placeholder" />
-      )}
       <LinearGradient
         colors={DEST_SCRIM_COLORS}
         locations={SCRIM_LOCATIONS}
@@ -499,17 +505,17 @@ function SpotCard({
       className="h-[166px] flex-1 overflow-hidden rounded-card"
     >
       <View className="absolute inset-0 bg-surface-strong" />
-      <Image
-        source={card.imageUrl ? { uri: card.imageUrl } : undefined}
+      <PlacePhoto
+        testID={`home-spot-photo-${index}`}
+        imageUrl={card.imageUrl}
+        category={card.category}
+        poiId={poiId}
         contentFit="cover"
         cachePolicy="memory-disk"
         recyclingKey={poiId ?? card.imageUrl ?? undefined}
         transition={120}
         style={ABSOLUTE_FILL}
       />
-      {card.imageUrl ? null : (
-        <PhotoPlaceholder testID="home-spot-photo-placeholder" />
-      )}
       <LinearGradient
         colors={SPOT_SCRIM_COLORS}
         locations={SCRIM_LOCATIONS}
@@ -1019,6 +1025,7 @@ function DiscoveryBody({
   onPressSearch,
   onPressHeroCity,
   onPressBell,
+  onPressAssistant,
 }: {
   hero: readonly HomeMagazineHero[];
   sections: HomeSections;
@@ -1029,6 +1036,7 @@ function DiscoveryBody({
   onPressSearch?: () => void;
   onPressHeroCity?: (regionCode: string) => void;
   onPressBell?: () => void;
+  onPressAssistant?: () => void;
 }): ReactElement {
   return (
     <>
@@ -1036,6 +1044,7 @@ function DiscoveryBody({
         title="오늘은 어디를 상상해볼까요"
         subtitle="떠나지 않아도, 구경하고 모으는 즐거움"
         onPressBell={onPressBell}
+        onPressAssistant={onPressAssistant}
       />
       <SearchBarBlock onPress={onPressSearch} />
       {tripsError ? (
@@ -1145,6 +1154,7 @@ function PlanningBody({
   onPressSearch,
   onPressHeroCity,
   onPressBell,
+  onPressAssistant,
 }: {
   phase: Extract<HomePhase, { kind: 'planning' }>;
   hero: readonly HomeMagazineHero[];
@@ -1156,6 +1166,7 @@ function PlanningBody({
   onPressSearch?: () => void;
   onPressHeroCity?: (regionCode: string) => void;
   onPressBell?: () => void;
+  onPressAssistant?: () => void;
 }): ReactElement {
   return (
     <>
@@ -1164,6 +1175,7 @@ function PlanningBody({
         subtitle={phase.greetSubtitle}
         name={phase.greetName}
         onPressBell={onPressBell}
+        onPressAssistant={onPressAssistant}
       />
       <SearchBarBlock onPress={onPressSearch} />
       <PlanningHeroCarousel
@@ -1205,6 +1217,7 @@ function PostTripBody({
   onPressSearch,
   onPressHeroCity,
   onPressBell,
+  onPressAssistant,
 }: {
   phase: Extract<HomePhase, { kind: 'postTrip' }>;
   hero: readonly HomeMagazineHero[];
@@ -1215,6 +1228,7 @@ function PostTripBody({
   onPressSearch?: () => void;
   onPressHeroCity?: (regionCode: string) => void;
   onPressBell?: () => void;
+  onPressAssistant?: () => void;
 }): ReactElement {
   return (
     <>
@@ -1222,6 +1236,7 @@ function PostTripBody({
         title={phase.greetTitle}
         subtitle={phase.greetSubtitle}
         onPressBell={onPressBell}
+        onPressAssistant={onPressAssistant}
       />
       <SearchBarBlock onPress={onPressSearch} />
       <PlanningHeroCarousel
@@ -1270,6 +1285,7 @@ function PhaseBody({
   onPressSearch,
   onPressHeroCity,
   onPressBell,
+  onPressAssistant,
 }: HomeScreenProps): ReactElement {
   if (phase === undefined || phase.kind === 'discovery') {
     return (
@@ -1283,6 +1299,7 @@ function PhaseBody({
         onPressSearch={onPressSearch}
         onPressHeroCity={onPressHeroCity}
         onPressBell={onPressBell}
+        onPressAssistant={onPressAssistant}
       />
     );
   }
@@ -1300,6 +1317,7 @@ function PhaseBody({
           onPressSearch={onPressSearch}
           onPressHeroCity={onPressHeroCity}
           onPressBell={onPressBell}
+          onPressAssistant={onPressAssistant}
         />
       );
     case 'postTrip':
@@ -1314,13 +1332,11 @@ function PhaseBody({
           onPressSearch={onPressSearch}
           onPressHeroCity={onPressHeroCity}
           onPressBell={onPressBell}
+          onPressAssistant={onPressAssistant}
         />
       );
   }
 }
-
-// 스크롤하는 동안 FAB 3개를 숨기고, 멈춘 뒤 이만큼 지나면 다시 보인다(TRIP-1435 Q-023 결정 1=A — 본문 요소를 덮지 않게).
-const FAB_REAPPEAR_MS = 250;
 
 export function HomeScreen({
   hero,
@@ -1338,31 +1354,18 @@ export function HomeScreen({
   onPressSearch,
   onPressHeroCity,
   onPressBell,
+  onPressAssistant,
   savedPlacesCount,
   savedStaysCount,
   savedMenuOpen,
   onToggleSavedMenu,
-  assistantFab,
 }: HomeScreenProps): ReactElement {
+  useToastBottom(FAB_STACK_TOP); // 토스트가 FAB 스택 위로 뜬다(TRIP-1559)
   const menuOpen = savedMenuOpen ?? false;
-  const [scrolling, setScrolling] = useState(false);
-  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handleScroll = () => {
-    setScrolling(true);
-    if (settleTimer.current) clearTimeout(settleTimer.current);
-    settleTimer.current = setTimeout(
-      () => setScrolling(false),
-      FAB_REAPPEAR_MS
-    );
-  };
-  useEffect(
-    () => () => {
-      if (settleTimer.current) clearTimeout(settleTimer.current);
-    },
-    []
-  );
-  // 메뉴가 열려 있으면 딤·미니 FAB 을 그대로 둔다 — 스크롤 숨김은 닫힌 상태의 FAB 만 다룬다.
-  const fabsHidden = scrolling && !menuOpen;
+  // 스크롤하는 동안 FAB 을 숨긴다(TRIP-1435 Q-023 결정 1=A — 본문 요소를 덮지 않게). 메뉴가 열려 있으면 딤·미니 FAB 을
+  // 그대로 둔다 — 스크롤 숨김은 닫힌 상태의 FAB 만 다룬다.
+  const { hidden: fabsHidden, onScroll: handleScroll } =
+    useScrollHide(menuOpen);
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="home-dashboard-root" className="flex-1 bg-canvas">
@@ -1386,6 +1389,7 @@ export function HomeScreen({
             onPressSearch={onPressSearch}
             onPressHeroCity={onPressHeroCity}
             onPressBell={onPressBell}
+            onPressAssistant={onPressAssistant}
           />
         </ScrollView>
         {/* TRIP-699 — 로딩이면 두 FAB 숨김(Figma 2174:2307). 로딩은 항상 discovery라 phase 없음. */}
@@ -1417,8 +1421,6 @@ export function HomeScreen({
               savedPlacesCount={savedPlacesCount}
               savedStaysCount={savedStaysCount}
             />
-            {/* TRIP-1321 — ✦ 도우미 FAB 는 스택 맨 위(바닥 220). 메뉴가 펼쳐진 동안은 빼서 딤 위로 뜨지 않게(BR-U8-53). */}
-            {menuOpen ? null : assistantFab}
           </View>
         ) : null}
       </View>

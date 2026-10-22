@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { Image } from '@/shared/ui/Image';
+import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -152,7 +153,7 @@ export function PlaceDetailScreen({
       className="bg-canvas"
     >
       <ScrollView className="flex-1" contentContainerClassName="pb-xl">
-        {/* 갤러리 히어로(풀블리드 430) — 사진이 없으면 지어내지 않고 회색 자리(D6·INV-1). */}
+        {/* 갤러리 히어로(풀블리드 430) — 사진이 없으면 카테고리 생성 이미지 1장(D6). */}
         <View
           testID="execution-place-hero"
           className="h-[430px] w-full overflow-hidden bg-surface-strong"
@@ -165,10 +166,12 @@ export function PlaceDetailScreen({
               showsHorizontalScrollIndicator={false}
             >
               {view.galleryUrls.map((uri, index) => (
-                <Image
+                <PlacePhoto
                   key={`${index}-${uri}`}
                   testID={`execution-place-gallery-${index}`}
-                  source={{ uri }}
+                  imageUrl={uri}
+                  category={view.category}
+                  poiId={view.poiId}
                   contentFit="cover"
                   cachePolicy="memory-disk"
                   className="h-full"
@@ -176,7 +179,16 @@ export function PlaceDetailScreen({
                 />
               ))}
             </ScrollView>
-          ) : null}
+          ) : (
+            <PlacePhoto
+              testID="execution-place-hero-photo"
+              category={view.category}
+              poiId={view.poiId}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              className="h-full w-full"
+            />
+          )}
           <LinearGradient
             colors={SCRIM_COLORS}
             locations={SCRIM_LOCATIONS}

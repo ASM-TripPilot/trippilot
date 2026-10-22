@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.itinerarygeneration.domain.PersonalizationHints
 import com.trippilot.profile.api.PreferenceSnapshot
+import com.trippilot.profile.api.overriddenBy
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.property.Arb

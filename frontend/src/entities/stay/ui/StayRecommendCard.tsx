@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Image } from '@/shared/ui/Image';
+import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import type { ImageSourcePropType } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
@@ -16,8 +17,10 @@ import Svg, { Path } from 'react-native-svg';
 export interface StayRecommendCardProps {
   testID: string;
   name: string;
-  /** 번들 `require` 또는 `{ uri }`. 없으면 회색 자리. */
+  /** 번들 `require` 또는 `{ uri }`(프리뷰 픽스처). 없으면 `coverKey` 의 숙소 그림(TRIP-1588). */
   imageSource?: ImageSourcePropType;
+  /** 사진 칸 그림 키 — 소비처가 `savedStayId` 로 준다. 사진 testID 는 `{testID}-photo`. */
+  coverKey?: string;
   /** 예 `평균 900m`. */
   avgLabel: string;
   /** 예 `최대 1.4km`. */
@@ -68,6 +71,7 @@ export function StayRecommendCard({
   testID,
   name,
   imageSource,
+  coverKey,
   avgLabel,
   maxLabel,
   subtitle,
@@ -92,13 +96,20 @@ export function StayRecommendCard({
     >
       {imageSource !== undefined ? (
         <Image
+          testID={`${testID}-photo`}
           source={imageSource}
           contentFit="cover"
           cachePolicy="memory-disk"
           className="h-[64px] w-[64px] rounded-[12px]"
         />
       ) : (
-        <View className="h-[64px] w-[64px] rounded-[12px] bg-surface-strong" />
+        <PlacePhoto
+          testID={`${testID}-photo`}
+          category="숙소"
+          poiId={coverKey}
+          contentFit="cover"
+          className="h-[64px] w-[64px] rounded-[12px] bg-surface-strong"
+        />
       )}
       <View className="flex-1 gap-[6px]">
         <View className="w-full flex-row items-center gap-[7px]">

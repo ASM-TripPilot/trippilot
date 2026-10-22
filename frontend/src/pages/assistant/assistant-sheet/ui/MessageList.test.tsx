@@ -8,7 +8,7 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { AssistantMessage } from '../api/assistantContract';
+import type { AssistantMessage, NextAction } from '../api/assistantContract';
 import { assistantSample, userMessage } from '../api/assistantSamples';
 import { MessageCard } from './AssistantCards';
 import { MessageList, type MessageListProps } from './MessageList';
@@ -355,4 +355,116 @@ describe('MessageList · next action 행 모양 가름 (TRIP-1529 · 01b Q6)', (
       expect(props.onPressAction).toHaveBeenCalledWith(createTrip);
     }
   );
+});
+
+// TRIP-1564 — 후보 카드가 "장소 보기"(OPEN) 얼굴이면 같은 장소의 빨간 행은 숨긴다(카드가 그 행의 일을 한다).
+// 고르기(PICK) 카드의 행은 그대로 둔다. 숨긴 뒤 줄이 비면 빈 버튼 줄 껍데기도 그리지 않는다.
+describe('MessageList · 후보 카드와 버튼 줄', () => {
+  const openPlace = (poiId: string, label: string): NextAction => ({
+    type: 'OPEN_PLACE',
+    label,
+    params: { poiId },
+  });
+  const itinerary: NextAction = {
+    type: 'OPEN_ITINERARY',
+    label: '일정 보기',
+    params: {},
+  };
+  function candidatesMessage(
+    id: string,
+    poiIds: string[],
+    parts: { nextActions?: NextAction[]; pickPoiIds?: string[] }
+  ): AssistantMessage {
+    return {
+      id,
+      role: 'ASSISTANT',
+      kind: 'CANDIDATES',
+      text: '이런 곳이 있어요.',
+      payload: {
+        candidates: poiIds.map((poiId) => ({
+          poiId,
+          name: `이름-${poiId}`,
+          reason: '이유',
+        })),
+      },
+      nextActions: parts.nextActions ?? [],
+      quickReplies: (parts.pickPoiIds ?? []).map((poiId) => ({
+        id: `qr-pick-${poiId}`,
+        label: `${poiId} 고르기`,
+        action: 'PICK_CANDIDATE' as const,
+        params: { poiId },
+      })),
+      createdAt: '',
+    };
+  }
+  const rows = () =>
+    screen.queryAllByTestId('assistant-next-action-OPEN_PLACE');
+  // 한 메시지가 그리는 View 개수 — 빈 버튼 줄 껍데기는 testID 가 없어 개수 차이로만 보인다.
+  function viewCount(message: AssistantMessage): number {
+    const { unmount } = renderList({ messages: [message], ...withCards() });
+    const count = within(
+      screen.getByTestId(`assistant-message-${message.id}`)
+    ).UNSAFE_queryAllByType(View).length;
+    unmount();
+    return count;
+  }
+
+  it('장소 보기 카드의 같은 장소 행은 없다(같은 장소가 둘이어도 둘 다). 카드에 없는 장소 행·다른 type 행은 남는다', () => {
+    renderList({
+      messages: [
+        candidatesMessage('c1', ['a', 'b'], {
+          nextActions: [
+            openPlace('a', '장소-a'),
+            openPlace('a', '장소-a(중복)'),
+            openPlace('z', '장소-z'),
+            itinerary,
+          ],
+        }),
+      ],
+      ...withCards(),
+    });
+
+    // 존재 앵커 — 카드는 그려졌고, 남아야 할 행은 남았다
+    expect(screen.getByTestId('assistant-candidate-a')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('assistant-next-action-OPEN_ITINERARY')
+    ).toBeOnTheScreen();
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]).toHaveTextContent('장소-z');
+  });
+
+  it('고르기 카드는 같은 장소의 OPEN_PLACE 행을 숨기지 않는다(카드가 장소 보기가 아니므로)', () => {
+    renderList({
+      messages: [
+        candidatesMessage('c1', ['a'], {
+          pickPoiIds: ['a'],
+          nextActions: [openPlace('a', '장소-a')],
+        }),
+      ],
+      ...withCards(),
+    });
+
+    expect(screen.getByTestId('assistant-candidate-a')).toBeOnTheScreen();
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]).toHaveTextContent('장소-a');
+  });
+
+  it('행이 전부 숨겨지면 빈 버튼 줄도 안 그린다 — 행동 없는 메시지와 같은 모양이고, 행이 남으면 더 그린다', () => {
+    const hidden = candidatesMessage('h', ['a'], {
+      nextActions: [openPlace('a', '장소-a')],
+    });
+    // 같은 카드 얼굴(고르기)에 행동이 아예 없는 메시지 — 버튼 줄이 있을 수 없는 기준선
+    const baseline = candidatesMessage('b', ['a'], { pickPoiIds: ['a'] });
+    // 앵커: 행이 하나 남는 메시지는 기준선보다 View 가 많다(개수가 의미 있다는 증거)
+    const oneRow = candidatesMessage('o', ['a'], {
+      pickPoiIds: ['a'],
+      nextActions: [itinerary],
+    });
+
+    expect(viewCount(oneRow)).toBeGreaterThan(viewCount(baseline));
+    expect(viewCount(hidden)).toBe(viewCount(baseline));
+
+    renderList({ messages: [hidden], ...withCards() });
+    expect(screen.queryAllByTestId(/^assistant-next-action-/)).toHaveLength(0);
+  });
 });

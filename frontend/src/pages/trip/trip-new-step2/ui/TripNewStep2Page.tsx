@@ -11,7 +11,7 @@ import {
 import { deriveEndDate } from '@/features/create-trip';
 import { useTripWizardStore } from '@/features/create-trip';
 import { useSavedStays } from '@/features/trip';
-import { isOptimisticSavedStayId } from '@/features/save-stay';
+import { isOptimisticSavedStayId, savedStayKey } from '@/features/save-stay';
 import { useStayAddresses } from '../model/useStayAddresses';
 import { useAssignBase, useTripBases } from '@/features/assign-trip-base';
 import {
@@ -167,11 +167,23 @@ export function BaseNightsFlow({
     startDate: tripStartDate,
   });
   // 카드 수(여행 기간 · 남은 밤 채움)는 nightlyBaseCards 가 소유한다 — 배선은 종료일을 넘기기만 한다(TRIP-1010).
+  // TRIP-1588 — 배정 밤 썸네일 그림 키는 그 밤 숙소의 savedStayKey(저장 목록·시트와 같은 그림).
+  const stayById = new Map(
+    savedStayList.map((stay) => [stay.savedStayId, stay] as const)
+  );
   const cards = nightlyBaseCards({
     destinations,
     startDate: tripStartDate,
     endDate,
     sections,
+  }).map((card) => {
+    const stay =
+      card.savedStayId === undefined
+        ? undefined
+        : stayById.get(card.savedStayId);
+    return stay === undefined
+      ? card
+      : { ...card, coverKey: savedStayKey(stay) };
   });
 
   // 두 목록은 `saved-stays`·`bases`에서 나오므로 하나만 죽어도 골격이 없다 — 부분 표시를
@@ -268,7 +280,10 @@ export function BaseNightsFlow({
     const address = stayAddresses[stay.savedStayId];
     const region =
       address?.status === 'known' ? sigunguLabel(address.address) : null;
-    return region === null ? stay : { ...stay, region };
+    const coverKey = savedStayKey(stay);
+    return region === null
+      ? { ...stay, coverKey }
+      : { ...stay, region, coverKey };
   });
 
   /** 둘러보기 — 지역을 실어 보낸다. 안 실으면 검색 화면이 기본값 '부산'을 연다(TRIP-1011 #037). */

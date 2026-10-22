@@ -21,13 +21,15 @@ export interface MustVisitSeedItem {
   /** 등록 요청의 `poiId`이자 testID의 꼬리. */
   sourcePoiId: string;
   name: string;
-  /** 값이 없으면 `null` — 기본 이미지를 지어내지 않는다(`Place.imageUrl` 계약 주석). */
+  /** 값이 없으면 `null` — 서버가 기본 이미지를 지어내지 않는다(`Place.imageUrl` 계약). 칸은 `category` 로 고른 생성 이미지로 채운다. */
   imageUrl: string | null;
   /** 담은 장소의 지역(서버 원문 무가공). 값이 없으면 `null` — `imageUrl`과 동형(발명 금지). */
   region: string | null;
   /** 담은 장소의 행정구역 코드 — 지역 밖 판정(BR-U1-58, 판정은 page 가 `regionCodeInTrip`으로).
    * 값이 없으면 `null`(판정 불가 → 안으로 친다). 옵셔널인 이유: 이 키 없는 시드 리터럴이 리포에 많다. */
   regionCode?: string | null;
+  /** 담은 장소의 카테고리(한글 정본) — 사진이 없을 때 스트립이 고르는 생성 이미지의 재료. 옵셔널: 이 키 없는 시드 리터럴이 리포에 많다. */
+  category?: string | null;
 }
 
 /** 썸네일 상한(게이트① 확정 — 특례 없음). 4건이면 3장 + `+1`이다. */
@@ -39,7 +41,8 @@ export function seedMustVisits(savedPlaces: SavedPlace[]): MustVisitSeedItem[] {
   const seeds: MustVisitSeedItem[] = [];
 
   for (const entry of savedPlaces) {
-    const { poiId, nameKo, imageUrl, region, regionCode } = entry.place;
+    const { poiId, nameKo, imageUrl, region, regionCode, category } =
+      entry.place;
     if (seen.has(poiId)) {
       continue;
     }
@@ -50,6 +53,7 @@ export function seedMustVisits(savedPlaces: SavedPlace[]): MustVisitSeedItem[] {
       imageUrl: imageUrl ?? null,
       region: region ?? null,
       regionCode: regionCode ?? null,
+      category,
     });
   }
 

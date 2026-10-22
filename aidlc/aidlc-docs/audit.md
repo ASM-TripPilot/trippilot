@@ -1734,3 +1734,117 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — 구현 반영 정정, PR #1498 backend-ci Flyway 버전 중복(develop `V2.77__poi_public_view.sql`) 대응. `aidlc-state.md` 무변경.
 
 ---
+
+## Functional Design 사후 개정 — U8 진입점 ✦ FAB 퇴역 (TRIP-1553)
+**Timestamp**: 2026-10-22T03:50:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 2026-10-22 실기 둘러보기 지적·티켓 TRIP-1553 「결정 확정」 그대로 인용) "홈 fab 에 어시스턴트 — 알람 오른쪽에 아이콘 놓는 걸로" / "범위 — 홈은 벨 오른쪽 헤더 아이콘, 숙소 검색·일정 상세의 ✦ FAB 는 제거(헤더로 옮기지 않음)". (자율 세션 — 이번 세션에서 새 질의 없음, 위 티켓의 사전 결정을 따름.)
+**AI Response**: `construction/u8-conversational-assistant/functional-design/business-rules.md` 끝에 `[개정 · 2026-10-22 · TRIP-1553]` 블록 1개 — BR-U8-50·51·52 퇴역(홈=헤더 벨 오른쪽 ✦ 아이콘 `home-dashboard-assistant`, 숙소 검색·일정 상세 진입 제거, 1차 진입 화면 = 홈 헤더 + 허브 하단 바 2곳, 토스트 ✦ 올림(288) 장치 삭제), BR-U8-53 정정(헤더 ✦ 는 항상 그려지고 담은 곳 메뉴 딤이 위를 덮음), PBT-U8-F1 퇴역(대상 함수 `fabStack` 삭제). 원문 삭제·수정 0줄(append 만). 같은 폴더의 `business-logic-model.md`(DEC-U8-12·G-U8-9·10)·`frontend-components.md`(§5·R7·R20)·inception `stories.md`(US-ASSIST-01)는 **이번에 손대지 않았다** — 후속 개정 대기.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 개정(구현 반영), 사이클 `20261022-trip1553-assistant-header`(부모 TRIP-1552 레인 A 첫 칸). 이전 세션들의 "audit append + [개정] 블록" 선례 절차를 따름; 승인 게이트는 티켓에 기록된 사용자 결정으로 갈음(자율 세션). `aidlc-state.md`·`docs/SCOPE.md` 무변경.
+
+---
+
+---
+
+## Functional Design 사후 개정 — U8 일정 보기 목적지 (TRIP-1566)
+**Timestamp**: 2026-10-22T07:30:00+09:00 (작업 시점)
+**User Input**: (이번 세션에서 새 질의 없음 — 자율 세션.) 사용자 지적 2026-10-22 원문(티켓 TRIP-1566 근거 절): "일정 보기 누르면 생성 일정으로 가짐". 정본 반영은 티켓 본문 「문서-구현 드리프트 주의」의 "판정 함수를 따르고 FD 표에 'resolveItineraryDestination 경유' 개정을 남긴다"에 따른 사전 선택. 열린 질문 4건은 오케스트레이터가 권고안으로 채택했다 — 사용자 발화 아님.
+**AI Response**: `construction/u8-conversational-assistant/functional-design/frontend-components.md` 끝에 `[개정 · 2026-10-22 · U8 일정 보기 목적지 (TRIP-1566)]` 블록 1개 — §4.1 `OPEN_ITINERARY` 행을 고정 경로에서 "누른 시점 일정 조회 → `resolveItineraryDestination` 경유"로 정정(조회 결과별 목적지 표, 조회 중·실패 시 이동 없음 + 상태 줄, INV-4). 원문 삭제·수정 0줄(append 만). 같은 문서 §4 흐름 5 본문과 같은 폴더의 다른 파일, `aidlc-state.md`·`docs/SCOPE.md` 는 손대지 않았다.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 개정(구현 반영), 사이클 `20261022-trip1566-open-itinerary`(부모 TRIP-1552 레인 A 일곱 번째 칸). 선례("audit append + [개정] 블록", TRIP-1553)를 따랐고 승인 게이트는 티켓의 사전 선택으로 갈음(자율 세션).
+
+---
+
+## Functional Design 사후 개정 — U8 next action 이동 방식 (TRIP-1565)
+**Timestamp**: 2026-10-22T08:30:00+09:00 (작업 시점)
+**User Input**: (이번 세션에서 새 질의 없음 — 자율 세션.) 사용자 지적 2026-10-22 원문(티켓 TRIP-1565 근거 절): "탐광 누르고 뒤로가기 누르면 홈인데 챗봇 상태 유지돼야". 티켓 「결정 확정 1」: "상세류만 복귀". 열린 질문 6건(분류 밖 EDIT/METHOD/REGENERATE 처리·날짜 없는 OPEN_REFLECTION·모달 카드 모양 수용·잠금 설계·상세 탭바 dismissTo 수용·개정 범위)은 오케스트레이터가 권고안으로 채택했다 — 사용자 발화 아님. (티켓 본문 원문은 이 기록 단계에서 직접 열람하지 못하고 오케스트레이터가 전달한 인용을 따랐다.)
+**AI Response**: `construction/u8-conversational-assistant/functional-design/frontend-components.md` 끝에 `[개정 · 2026-10-22 · U8 next action 이동 방식 (TRIP-1565)]` 블록 1개 — §4 흐름 5항("dismiss 후 push")·R9("replace 한 번")·§4.1 표를 목적지별로 갈라 정정(상세·요약류 5종 OPEN_PLACE·OPEN_OTA·OPEN_REFLECTION·OPEN_TRIP_SUMMARY·OPEN_STYLE = 시트 위 push, 그 밖 = 닫고 replace, OPEN_ITINERARY 는 TRIP-1566 블록 참조, push 갈래 잠금, 상세가 투명 모달 위라 모달 카드로 표시). 원문 삭제·수정 0줄(append 만). §5·`aidlc-state.md`·`docs/SCOPE.md` 는 손대지 않았다.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 개정(구현 반영), 사이클 `20261022-trip1565-sheet-return`(부모 TRIP-1552 레인 A 여덟 번째 칸). 선례("audit append + [개정] 블록", TRIP-1553·1566)를 따랐고 승인 게이트는 티켓의 사전 선택으로 갈음(자율 세션). 스테이지 규칙 파일(`.aidlc-rule-details/construction/…`)은 새로 로드하지 않았다.
+
+---
+
+## Functional Design 사후 개정 — U10/U4 수동 다음 도착 시 앞 장소 완료 (TRIP-1561)
+**Timestamp**: 2026-10-22T07:40:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 이 세션 2026-10-22, 그대로 인용) "도착 누르고 방문 완료 눌러서 기록하는 구조 이상하지 않나" / 결정 확정 1 — "A안 — 다음 장소 [도착] 때 앞 장소 완료, 그날 마지막 장소만 [방문 완료] 유지" / 배치 지시 — "1561 의 U4/U10 업무 규칙 개정은 사용자가 사전 선택".
+**AI Response**: `construction/u10-gps-location-automation/functional-design/business-rules.md` 끝에 `[개정 · 2026-10-22 · TRIP-1561]` 블록 1개(BR-U10-01·17 보강 읽기 · BR-U10-18 원문 유지 + 신규 BR-U10-54~57 수동 확장 — 조건 없음·출처 `MANUAL`·마지막 장소만 [방문 완료]·무장 여행 [방문 완료] 유지·체류에 이동 포함 메모 · O-U10-3 파급 메모), `…/u10-gps-location-automation/functional-design/business-logic-model.md` 끝에 블록 1개(DEC-U10-2·276·283행 좁혀 읽기), `construction/u4-in-trip-planb/functional-design/business-rules.md` 끝에 BR-U4-37 주석 블록 1개, `…/u4-in-trip-planb/functional-design/frontend-components.md` 끝에 89행 "[방문 완료]는 지우지 않는다" 정정 블록 1개, `…/u4-in-trip-planb/functional-design/business-logic-model.md` 끝에 214행 정정 블록 1개. 다섯 파일 모두 원문 삭제·수정 0줄(append 만). 출처 병기: `근거: TRIP-1561 구현 결정` — 요구사항 근거로 인용 금지.
+**Context**: CONSTRUCTION — U10/U4 Functional Design 사후 개정(구현 반영), 커밋 `79a5d5375`(TRIP-1561 FE). 사용자 사전 선택(위 원문)에 따라 audit 원문 append 후 반영(앞 개정들과 같은 절차 — 같은 PR 머지 = 승인). `aidlc-state.md`·`docs/SCOPE.md` 무변경.
+
+---
+
+## CONSTRUCTION — U8 FE 정본 반영 (이전 대화 더 보기)
+**Timestamp**: 2026-10-22T01:30:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 세션 2026-10-21, 그대로 인용) "이전 대화 더 보기 진행해" / "대신 각 일정id에 대응되는 챗봇형태이어야 할 거 같아." → 코드 확인 뒤 "이미 여행별 대화"임을 보고하자 선택지에서 "더 보기 페이지네이션 진행" · 3-a 결정: 트리거 "맨 위 '이전 대화 더 보기' 행" · 세션 재조회 "붙여 둔 옛 메시지 유지·합침" · 정본 반영 "frontend-components.md §6 응답에 nextBefore 추가, 더 보기 규칙 절 추가".
+**AI Response**: `construction/u8-conversational-assistant/functional-design/frontend-components.md` 끝에 개정 블록 1개(R21 §6 `nextBefore` · R22 더 보기 규칙 ①~⑧) append. 원문 수정 0줄. 코드는 `frontend/src/pages/assistant/assistant-sheet/` (같은 PR).
+**Context**: CONSTRUCTION — 사이클 20261021-assistant-older-messages [기록] 정본 반영. 옵시디언 볼트 부재로 개발로그·이해부채는 `_workspace/`(git 미추적)에 센티넬·학습노트로 남김. `aidlc-state.md` 무변경.
+## Functional Design 사후 개정 — U8 홈 헤더 ✦ 위치 (TRIP-1553 후속)
+**Timestamp**: 2026-10-22T11:55:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 2026-10-22 지시 그대로 인용) "홈 알람이랑 챗봇 아이콘 위치 바꿔줘". 이번 세션에서 새 질의 없음 — 자율 세션, 정본 반영은 사용자가 사전 선택했다.
+**AI Response**: `construction/u8-conversational-assistant/functional-design/business-rules.md` 끝에 `[개정 · 2026-10-22 · TRIP-1553 후속]` 블록 1개 — 앞선 TRIP-1553 개정 블록 BR-U8-50 의 "알림 벨 오른쪽의 ✦ 아이콘"을 "벨 왼쪽(✦ 먼저, 벨이 헤더 행 오른쪽 끝)"으로 대체. testID·라벨·40 원형·모든 얼굴·assistantHref 는 무변경. 원문 삭제·수정 0줄(append 만). `aidlc-state.md`·`docs/SCOPE.md` 는 손대지 않았다.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 개정(구현 반영), 사이클 `20261022-trip1553-header-icon-order`. 선례("audit append + [개정] 블록", TRIP-1553·1565·1566)를 따랐고 승인 게이트는 사용자의 사전 선택으로 갈음(자율 세션). 스테이지 규칙 파일은 새로 로드하지 않았다.
+
+---
+
+## Functional Design·NFR Requirements 사후 개정 — situation-awareness 사용자 결정 25~31 (G-SA-15·16·17 해소 · BR-SA-15·16·18·19·22 · §0.4 · §7 · FE §3.2·§3.3·§4)
+**Timestamp**: 2026-10-20T18:17:44+09:00 (작업 시점)
+**User Input**: (워크플로 스크립트가 계산한 작업 지시 — 사용자 원문이 아니다. 그 실행을 띄운 사용자 요청 원문은 "하던거 마저해".) 기록한 사용자 결정 원문 7건(2026-10-20, 결정 수집 문서 「결정 대기 목록 (10-19)」의 「추가 결정 7건 — 상황 감지 (10-20)」 25~31번 결정 칸): 7건 모두 "추천대로 진행", 메모 칸은 비어 있다. 각 추천 — 25 "(다). 저녁·아침 판정이 같아져 알림이 켜졌다 꺼지지 않는다. 폭염 '그 날 최고기온'도 같은 원칙으로 맞춘다" · 26 "(라)" = "(나) + 시군·도 이름으로 시작하지 않는 구역은 '모름'(거짓 '특보 없음' 차단)" · 27 "(나). 비 오는 날 실내 행사(전시·공연·팝업)는 남기고 야외 축제만 뺀다" · 28 "(다). 개발 서버에서 미리 계산을 켜 보고, 낡음으로 닫히는 비율이 눈에 띄면 (가)" · 29 "(나). 가장 작은 변경으로 막다른 길과 남는 알림 표시를 없앤다" · 30 "(가). 진입 확인이 3초를 넘길 때의 문제도 함께 풀린다" · 31 "(가)" = "개발 서버의 첫 실제 조회(10-21 07:15 장소 점검)가 경고 없이 지나면 운영도 켬". 결정할 것·선택지·'안 정하면 · 마감' 원문 표 전체는 `construction/situation-awareness/functional-design/business-logic-model.md` §0.4 개정 블록.
+**AI Response**: 결정 수집 문서의 원문을 읽어 `construction/situation-awareness/` 5종에 `[개정 · 2026-10-20 — 사용자 결정 25~31]` 블록 16개를 덧붙였다(원문 삭제·수정 0줄). `functional-design/business-logic-model.md` — §0.4(결정 7건 원문 표 · 27번 '계약 변경 없음'과 응답 선택 필드의 관계) · §1.2(폭염·한파 감지 근거) · §4.7(행사 카드 숨김 범위 · 기회 접점 선택 필드) · §7(켜는 조건 · 구현의 마감) · §9(G-SA-15·16·17 해소 · FE 정본 결정 대기 2건 종결); `functional-design/business-rules.md` — BR-SA-15 · BR-SA-16 · BR-SA-18(② '오늘 우선'의 예외를 가리킴) · BR-SA-19 · BR-SA-22; `functional-design/domain-entities.md` — §11(`eventType?`); `functional-design/frontend-components.md` — §3.2 · §3.3 · §4; `nfr-requirements/nfr-requirements.md` — 머리 표(기대는 사용자 답) · §7. 제품 결정 변경 7건 — ① 25번 (다): 한파는 그 날 `TMN` 을, 폭염은 그 날 `TMX` 를 판정에서 빼고 일정 시각의 `TMP` 만 본다(폭염은 한낮 12~17시 칸). 임계·해제 수치는 그대로다(종전: 하루 값을 함께 봤다). 근거 — 그 날 `TMN` 은 02시 발표분에만 실리고 그 날 `TMX` 는 14시 발표분부터 빠져(2026-10-20 실측), 하루 값을 쓰면 저녁 발화 → 다음 날 07:15 해제 깜빡임과 오후 과경보가 생긴다. ② 26번 (라): 산지 권역 특보는 '모름' 그대로 · 특보 감지기 켜기 전에 개편 특보구역 목록 전체를 대조 · 도의 시군 목적지에서 시군·도 이름으로 시작하지 않는 구역은 '안 걸림' 대신 '모름'(종전: 안 걸림). 도 단위 산지 이름이 실제 특보 문장에 계속 쓰이면 권역 → 시군 표를 다시 본다. ③ 27번 (나): AI 가 3장 중 한 자리를 '요즘 인기'에 남기고(후보가 있으면), 백엔드가 그 날 날씨 위험 트리거가 떠 있거나 [적용]으로 반영된 날 야외 축제(`FESTIVAL`·유형 모름)를 빼고 넘기며, 앱의 위험 날 행사 숨김은 야외 축제·유형 모름으로 좁힌다 — AI 응답 `event_type`·앱 응답 `eventType` 선택 필드를 더한다(종전: 순위로만 3장 · 위험 날 행사 카드 전부 숨김). 실외 일정이 없는 날·스윕이 꺼진 동안 숨김 근거가 없는 한계는 남는다. ④ 28번 (다): 선계산 2분 낡음은 대기 포함 그대로 두고 BR-SA-18 ② '오늘 우선'의 공식 예외('계산 중 2분이 넘은(대기 포함) 이른 날짜 선계산은 늦은 날짜 사건에 닫힐 수 있다')로 적는다. 개발 서버에서 선계산을 켠 뒤 낡음으로 닫히는 비율이 눈에 띄면 '2분을 계산 시작부터 잰다'(DB 칸 추가)로 간다. ⑤ 29번 (나): i05 는 `stale` 을 읽지 않고 8분 상한까지 기다린다(게이트로 되돌리지 않는다). 8분 상한·실패 얼굴의 [다시 시도]는 같은 입력·같은 알림으로 다시 짜고, 대안 없음 얼굴의 버튼은 같은 입력이 채워지고 같은 알림에 연결된 요청 화면을 연다 — 화면 구성 변경 없음(종전: 알림과 끊긴 빈 요청 화면). ⑥ 30번 (가): 요청 화면이 사유를 미리 켤지는 지금 떠 있는 알림의 심각도로 정한다 — 위험일 때만 켜고 모르면 켜지 않으며, 진입 확인 3초 초과 길도 같다. 서버 변경 없음(종전: 누른 옛 알림의 심각도 — 주의만 빈 시드). ⑦ 31번 (가): 운영 `HOLIDAY_CLOSURE_MODE` 는 개발 서버의 첫 실제 조회(10-21 07:15 장소 점검)가 경고 없이 지나면 켠다 — 마감 12-25(종전: '개발부터 켠다'까지만 있었다). 각 구현의 마감(25번 `HORIZON=tomorrow` 전 · 29번 `PREPARED_REPLAN=on` 전 · 27·30번 운영 전원 전)은 §7 · NFR §7 블록에 적었다.
+**Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(사용자 결정 기록), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design·NFR Requirements 사후 개정 — situation-awareness 결정 25~30 구현 반영 · 운영 준비 감사 (BR-SA-01·15·16·17·22·23 · §10 · DE §7.1·§8.1·§11 · FE §3.1·§3.3·§3.6·§4·§12·§14 · BLM §4.1·§4.9·§5·§6.2·§6.3·§7·§9 · NFR §1·§3·§4·§7·§8 · tech-stack 델타 1·3·§4 · G-SA-18~23)
+**Timestamp**: 2026-10-22T11:02:00+09:00 (작업 시점)
+**User Input**: (워크플로 스크립트가 계산한 작업 지시 — 사용자 원문이 아니다. 그 실행을 띄운 사용자 요청 원문은 "서브 에이전트들도 마저 시켜".) 새 사용자 결정은 없다 — 근거는 바로 앞 항목의 사용자 결정 25~31(2026-10-20, 7건 모두 "추천대로 진행")과 그 구현 코드, 운영 준비 감사(2026-10-20)의 사실이다.
+**AI Response**: `construction/situation-awareness/` 6종에 `[개정 · 2026-10-22 — 구현 반영]` 블록 31개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 사실은 구현 커밋을 읽어 확인했다 — 결정 25·26 = 브랜치 `feat/situation-weather-decisions` `b9c1cb52e`(#1540) · 장소 미판정 = `fix/place-watch-unjudged-slots` `45288d752`(#1539) · 결정 27 = `feat/opportunity-rainy-day` `df092009a`(#1541) · 결정 29·30 = develop #1501 · 운영 준비 감사 = `origin/develop` `49bda757f`. 기록한 것: ① 한파·폭염은 판정 시각 `TMP` 만 보고 하루 값(`TMN`·`TMX`)은 받지도 저장하지도 않는다 — `weather_grid_forecast.daily` 는 매핑 해제·기본값 `'{}'`, 칸 삭제는 후속 ② 특보 매칭 — 관서 묶음 구역 표(신설) · 섬 구역 2개 추가 · 관서 묶음 줄 × 그 묶음의 다른 광역 목적지 = 모름 · 낯선 하위 구역의 모름을 광역시의 군까지 · WARN 범위 · 서울 군 판정 ③ 결정 26 '켜기 전 개편 특보구역 목록 전체 대조' 완료 — 공식 목록(기준일 2026-06-01) 육상 300행, 모르는 최상위 이름 0, 도 단위 산지 이름 없음 ④ 장소 하루 점검 — AI 가 판정하지 못했다고 답한 장소(`unverified_slots`, 새 사유 `HOURS_UNKNOWN`)는 모름, 회로는 `DayCheck.answered` 로 0 ⑤ 기회 카드 — 마지막 자리 요즘 인기 · 서버 거르기(`ACTIVE`·`CONSUMED`, 스윕 회수) · 앱 거르기 · `event_type`·`eventType` ⑥ 앱 — 시드 진입 라우트 · 재계획 화면 [다시 시도]와 실패 부제 · 지난 날 409 날짜 안내 · 시드 심각도의 출처 ⑦ 운영 준비 감사 — 락 상한 `PT24M`(정본 `PT25M` 정정) · `dry-run` '쓰기 0'의 범위와 표본 판독 · 운영 카나리는 한 입력으로 · AI 검증 20.1s 재측정. 새 열린 질문 G-SA-18~23(t6 광역 줄의 단위 · 제외 줄의 하위 권역 · 제주 시 매칭 · 판정·미판정이 섞인 장소 감시 상태 · 공휴일 달력 실패 · 선계산 낡음 비율)을 정본 결정 대기로 올렸다. 제품 결정은 새로 만들지 않았다.
+**Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design·NFR Requirements 사후 개정 — situation-awareness 사용자 결정 3건(2026-10-22) · 머지 커밋 표기 (G-SA-21 해소 · OBS-SA-01 · §0.4 · §9)
+**Timestamp**: 2026-10-22T12:13:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 상황 감지 세션 2026-10-22 질문에 고른 선택지 그대로) 운영 범위: "전원 dry-run 유지 (Recommended)" · 카나리 UUID: "카나리 직전에 물어봐 (Recommended)" / 운영 07:15 휴무 표본 대조: "표본 줄에 이름·시각 싣기 (Recommended)" / 같은 날 확인·미확인 장소가 섞일 때 '영업' 배지: "하나라도 모르면 '확인 불가' (Recommended)".
+**AI Response**: `construction/situation-awareness/functional-design/business-logic-model.md` §0.4 끝(사용자 답 3건 표)·§9 끝(G-SA-21 해소), `nfr-requirements/nfr-requirements.md` §4 끝(OBS-SA-01 표본 줄 `name`·`at`)에 `[개정 · 2026-10-22 — 사용자 결정]`·`[개정 · 2026-10-22 — 구현 반영]` 블록 3개를 덧붙였다(원문·머지된 블록 삭제·수정 0줄). 같은 PR 의 앞선 구현 반영 블록(미머지)이 줄 번호 기준으로 인용하던 머지 전 브랜치 커밋 3개를 스쿼시 머지 커밋으로 바꿨다 — `d31384535`→`b9c1cb52e`(#1540) · `6b190374e`→`45288d752`(#1539) · `94a816ed7`→`df092009a`(#1541). 제품 결정 변경: ① 운영 상황 감시는 전원 대상 dry-run 을 유지하고 카나리 계정 UUID 는 카나리 직전에 묻는다(결정 (1) 범위 안) ② dry-run 표본 줄에 장소 이름·계획 시각(요일)을 싣는다(TRIP-1569 · #1542) ③ G-SA-21 — 그 날 영업시간·상태를 모르는 장소가 하나라도 있으면 장소 감시 상태를 '확인'으로 남기지 않는다(TRIP-1571 · #1546).
+**Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(사용자 결정 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — U1 장소 사진 칸 BR-U1-60 신설 · U3 슬롯 사진 testID 정정 (사이클 20261022-place-category-covers)
+**Timestamp**: 2026-10-22T12:17:23+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 이 세션 2026-10-22, 그대로 인용) "사진 있는 경우는 그냥 그거 쓰는걸로" / "나를 인터뷰 해서 정해봐" / AskUserQuestion 답 — "사진 칸 19곳을 각각 따로 고칠까요, 아니면 \"사진 있으면 서버 사진 / 없거나 로드 실패면 카테고리 생성 이미지\"라는 판단을 공용 컴포넌트(PlacePhoto) 한 군데에 모을까요?"="한 군데로 모은다 (권고)" · "일정표의 작은 72px 칸(지금은 사진이 없으면 카테고리 색+아이콘 타일)도 PlacePhoto로 바꿔서 생성 이미지를 넣을까요?"="생성 이미지로 교체" · "서버 사진 URL이 있는데 실제로 안 열릴 때(깨진 링크·http 차단·삭제된 이미지) 자동으로 카테고리 생성 이미지로 바꿔 보여줄까요?"="생성 이미지로 갈아끼운다 (권고)" · "홈 화면의 '사진 있는 곳 먼저' 정렬(실제 사진이 있는 장소를 앞에 세움)을 어떻게 할까요?"="그대로 둔다 (권고)" · "서버가 사진 칸에 빈 문자열('')이나 공백('  ')을 내려줄 때도 \"사진 없음\"으로 보고 생성 이미지를 채울까요?"="없음으로 본다 (권고)" · "세로 전용 10장은 폐기하고 가로 3장을 세로 칸에 크롭해서 쓰는 걸로 확정할까요?"="폐기, 가로만 사용 (권고)" · "이번 변경으로 쓰이지 않게 되는 코드(홈의 옛 회색 글리프 PhotoPlaceholder, 슬롯 타일 SlotPhotoPlaceholder·categoryPlaceholder·카테고리 아이콘)는 어떻게 할까요?"="참조 0건이 된 것만 함께 삭제 (권고)" · "정본 반영은 어느 것까지 할까요? (사이클 끝 기록 단계에서 반영, 해당하는 것만 고르세요)"="(가) openapi 2338행,(나) openapi 3389~3395행,(다) BR-U1-06 오귀속 정정,(라) u3 frontend-components 223행" · "어디까지 진행할까요?"="학습은 퀴즈 대기로 미루고 지금 기록→커밋→PR".
+**AI Response**: `construction/u1-accommodation-trip/functional-design/business-rules.md` 끝에 새 절 「장소 사진 칸 (BR-U1-60)」(BR-U1-60 신설 + 종전 openapi 의 BR-U1-06 이미지 인용이 오귀속이었다는 `[정정 · 2026-10-22]` 블록) append. `construction/u3-ai-itinerary/functional-design/frontend-components.md` 의 `itinerary-draft-slot-image-{slotKey}` testID 목록 뒤에 `[정정 · 2026-10-22 · 장소 사진 칸 일러스트]` 블록 1개 insert(슬롯 사진 칸이 `SlotStopCard`·`ReplanSlotRow` 로 옮겨졌고 항상 그려진다). 원문 수정 0줄(append 만). 같은 사이클에서 `backend/docs/design/openapi.yaml` 의 `Place.imageUrl`·슬롯 후보 응답 문구((가)(나))는 scribe 가 반영.
+**Context**: CONSTRUCTION — Functional Design 사후 개정(구현 반영). 사이클 `20261022-place-category-covers`(브랜치 `feature/place-category-covers`, 티켓 없음). 사용자 승인 절차("audit append + [개정]/[정정] 블록")는 2026-10-21 U10 사후 개정 선례를 따름. `aidlc-state.md` 무변경.
+
+---
+
+## CONSTRUCTION — U8 FE 정본 반영 (이전 대화 더 보기 후속)
+**Timestamp**: 2026-10-22T16:40:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 세션 2026-10-22, 그대로 인용) "하던거 마저해! 너의 서브에이전트도 하던거 마저 하게해!" → 선행 사이클 새 티켓 후보 3건(W1·N1 심판·프리뷰 긴 대화·W2)을 이음. 3-a 선택: W2 "(a) 제안(proposal) 칸만 서버값으로" · 정본 "같이 개정".
+**AI Response**: `construction/u8-conversational-assistant/functional-design/frontend-components.md` 개정 블록(2026-10-22)에 R23 1행 append — R22 ⑤ 를 "겹치는 id 는 `proposal` 만 응답값, 나머지 캐시 유지" 로 개정, 한계(최근 30건 밖 미갱신·종결 상태 되돌림 경쟁)와 프리뷰 키 3개 기록. 원문 수정 0줄.
+**Context**: CONSTRUCTION — 사이클 20261022-assistant-older-followups [기록]. 옵시디언 볼트 부재 → 개발로그·학습노트는 `_workspace/`(git 미추적). `aidlc-state.md` 무변경.
+
+---
+
+## Functional Design·NFR Requirements 사후 개정 — situation-awareness 후속 3건 구현 반영 (G-SA-19·22·23 해소 · G-SA-24 신설 · BR-SA-16·17·19 · §10 · BLM §6.2·§6.3·§7·§9 · DE §6.3 · NFR §3·§4·§7)
+**Timestamp**: 2026-10-22T16:28:00+09:00 (작업 시점)
+**User Input**: (새 사용자 결정 없음 — 자율 세션. 이 작업을 띄운 사용자 요청 원문은 "하던거 마저해".) 근거는 앞 항목들의 사용자 결정(25~31 · 2026-10-22 3건)과 구현 커밋, 그리고 코드 밖 사실 넷이다 — 개발 `PLANB_SITUATION_SWEEP=on`(2026-10-22 배포 런 39726251832) · 운영 `HOLIDAY_CLOSURE_MODE=on`(2026-10-21 배포 런 39585752292) · 에어코리아 응답 지연 조사(TRIP-1576 댓글 2026-10-22) · G-SA-19 적대적 검토의 옛·새 판정 대조(9,115,264칸 · 의도 밖 변화 0).
+**AI Response**: `construction/situation-awareness/` 4종에 `[개정 · 2026-10-22 — 구현 반영]` 블록 12개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). `functional-design/business-rules.md` — BR-SA-16(G-SA-19: 제외 줄은 시군 전체 이름일 때만 그 시군을 뺀다 · 하위 권역만 뺐으면 모름 · 섬 구역은 표로) · BR-SA-17(남는 틈 ⓐ G-SA-21 일부 모름이면 감시 상태를 남기지 않음 · ⓑ G-SA-22 달력을 못 읽은 검증은 태그형 휴일 규칙 장소를 미판정) · BR-SA-19(G-SA-23: `EARLIER_STALE`·`FINISHED` 요약 줄과 판독식) · §10(PBT-SA-09·12 읽기 갱신 · AI 검증 미판정 성질); `functional-design/business-logic-model.md` — §6.2 · §6.3(G-SA-19 위험 닫힘) · §7(개발 SWEEP=on · 운영 HOLIDAY_CLOSURE_MODE=on 기록 · 대기질 관찰 전용 해제 전 확인) · §9(G-SA-19·22·23 해소 · **G-SA-24 신설** — 하위 권역만 뺀 제외 줄의 모름을 걸림으로 좁힐지, 특보를 관찰 전용에서 빼기 전에 사용자에게 묻는다 · G-SA-18·20 덧붙임); `functional-design/domain-entities.md` §6.3(`Detection.Checked.partial`); `nfr-requirements/nfr-requirements.md` — §3(RES-SA-01·10) · §4(OBS-SA-02 결과값 목록과 판독) · §7(2·6·8·9단계). 사실은 커밋을 읽어 확인했다 — G-SA-19 = `8fb1eee65`(#1571) · G-SA-21 = `43aca7f13`(#1546) · G-SA-22 = `7086b3be7`(#1572) · G-SA-23 = `68cecd987`(#1573). `docs/conventions/anti-patterns.md` 에 1줄(닫힌 집합의 소속 판정을 원소 하나로만 시험하지 말 것 — G-SA-22 검토 역검증). 블록은 독립 검증(읽기 전용 4갈래 + 반박 — 확정 지적 9 · 사소 14, 반박된 것 0)을 거쳐 고쳤고, 그 검증이 찾은 코드 주석 한 곳(`PreparedReplanService.kt` KDoc — `EARLIER_STALE` 두 갈래를 `FINISHED status=CANCELED` 로 가른다는 서술)을 같은 PR 에서 바로잡았다.
+**Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+## Functional Design 사후 개정 — U1 BR-U1-60 을 숙소 사진 칸까지 확장 (TRIP-1589 · 부모 TRIP-1586)
+**Timestamp**: 2026-10-22T17:30:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 세션 2026-10-22, 그대로 인용) "사진이 없는칸은 다 채우자 랜덤은 장소 사진처럼 id%6"
+**AI Response**: `construction/u1-accommodation-trip/functional-design/business-rules.md` 끝에 BR-U1-60 의 `[개정 · 2026-10-22]` 블록 1개 append — 적용 범위를 장소 사진 칸에서 숙소 사진 칸(검색 카드·탐색 숙소 줄·저장한 숙소·g02 시트 후보·g02 거점 썸네일·숙소 상세·동선 추천 카드)까지 넓히고, 일반 숙소 그림 6장·숙소 키 해시 % 6(랜덤 아님)·저장한 숙소 키 규칙(외부 키 있으면 `{externalSource}:{externalId}`, 없으면 `savedStayId`)을 적음. 원문 수정 0줄(append 만). `openapi.yaml` 변경 없음(숙소 계약에 사진 필드 없음).
+**Context**: CONSTRUCTION — Functional Design 사후 개정(구현 반영, FE TRIP-1587·1588). 사용자 승인 절차("audit append + [개정] 블록")는 같은 날 장소 사진 칸 BR-U1-60 신설 선례를 따름. `aidlc-state.md` 무변경.
+
+---
+
+## CONSTRUCTION — U8 FE 정본 보충 (재조회 옛 스냅샷의 제안 상태 되돌림 방지)
+**Timestamp**: 2026-10-22T19:50:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 세션 2026-10-22, 그대로 인용) "하던거 계속해" → 선행 PR #1580 적대적 리뷰 W-2(결정된 제안 상태가 늦은 재조회의 PROPOSED 스냅샷으로 되감김)를 경량 사이클로 처리.
+**AI Response**: `construction/u8-conversational-assistant/functional-design/frontend-components.md` 개정 블록(2026-10-22)에 R24 1행 append — R23 보충: `status !== 'PROPOSED'` 인 제안은 응답의 PROPOSED 로 되돌리지 않는다. 원문 수정 0줄.
+**Context**: CONSTRUCTION — 사이클 20261022-assistant-proposal-no-downgrade(경량) [기록]. 코드 `mergeReopened` 가드 3줄 + 테스트 8건(같은 PR). 옵시디언 볼트 부재 → `_workspace/`. `aidlc-state.md` 무변경.
+
+---
+
+## Functional Design 사후 개정 — U0 온보딩 완료 → 기능 안내(c10) 경로 · testID 추가 (TRIP-1594 · 1595)
+**Timestamp**: 2026-10-22T21:05:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 세션 2026-10-22, 그대로 인용) "아니야 모든 기능 설명한 한번의 온보딩에서 다 처리하자 애니메이션도 좀 넣어보고" / "저대로 해서 develop에 브랜치 만들어서 티켓 만들고 진행 ㄱㄱ 하는데2/6 숙소에 가격정보는 빼고" / AskUserQuestion 답 — "취향 단계에서 '나중에 설정하고 시작'(일괄 건너뛰기)을 눌러 온보딩을 끝낸 사람도 기능 안내를 보게 할까요?"="둘 다 본다 (Recommended)" · "U0 설계 문서(frontend-components §2 '완료 시 홈 진입', §6 testID 목록)에 기능 안내 화면이 없습니다. 사이클 끝 [기록]에서 정본에 반영할까요?"="반영한다 (Recommended)".
+**AI Response**: `construction/u0-foundation/functional-design/frontend-components.md` §2 「온보딩 위저드 UX 규칙」 아래와 §6 testID 목록 아래에 `[개정 · 2026-10-22 · TRIP-1594]` 블록 각 1개 insert — 세 완료 출구가 기능 안내(`onboarding-tour`, 6장)로 가고 거기서 홈으로 간다(1회, 플래그 없음), 기능 안내 testID 9종. 원문 수정 0줄.
+**Context**: CONSTRUCTION — Functional Design 사후 개정(구현 반영, FE TRIP-1595, 사이클 20261022-trip1594-c10-tour-s1 [기록]). scribe 가 (B) 절차상 원문 부재로 미반영한 것을 오케가 원문과 함께 적용. `aidlc-state.md` 무변경.

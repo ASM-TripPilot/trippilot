@@ -8,7 +8,6 @@ export {
   GpsOffGlyph,
   InfoCircleGlyph,
   LegendChevronGlyph,
-  NoteGlyph,
   PlusGlyph,
   RetryGlyph,
   VisitCheckActiveGlyph,

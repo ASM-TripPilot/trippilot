@@ -19,7 +19,7 @@ import { PrefStep1Page } from './PrefStep1Page';
  * AC3 · AC4 — 취향 1/2 배선(스토어 ↔ 화면 ↔ 라우터).
  *
  * 무엇을 보장하나: 카드 탭이 실제로 스토어를 바꾸고 그 결과가 화면에 다시 반영되며(왕복),
- * '다음'은 0개 선택에도 2/2로 push하고, 상·하단 '나중에 설정하고 시작'은 홈으로
+ * '다음'은 0개 선택에도 2/2로 push하고, 상·하단 '나중에 설정하고 시작'은 기능 안내(/onboarding-tour, TRIP-1595 D3 — 홈은 거기서 연다)로
  * replace하면서 스토어를 건드리지 않는다(미선택 축이 []로 새지 않는다 — AC4).
  *
  * expo-router는 인라인 factory 목(§7-10 — 컨테이너 useRouter는 이 방식, 레이아웃/Redirect
@@ -27,7 +27,7 @@ import { PrefStep1Page } from './PrefStep1Page';
  * 전 reset()한다(모듈 싱글턴이 테스트 간 상태를 새게 두지 않기 위해 — §7-6).
  *
  * TRIP-1421: 상단 '나중에 설정하고 시작'은 **온보딩 완료(`POST /onboarding/complete`)가 성공하고 루트 게이트가
- * HOME 을 연 뒤에만** 홈으로 간다. 실패하면 화면에 남아 오류 한 줄을 보이고, 대기 중 재탭은 완료를 한 번만 보낸다.
+ * HOME 을 연 뒤에만** 기능 안내로 간다(TRIP-1595: 목적지가 '/'에서 '/onboarding-tour'로 바뀜, 정확히 1회·'/' 0회). 실패하면 화면에 남아 오류 한 줄을 보이고, 대기 중 재탭은 완료를 한 번만 보낸다.
  * 게이트 흉내: 재평가 신호 목이 불리면 `publishGateDestination('HOME')`(진짜 부트스트랩 재평가가 하는 일).
  *
  * 3동작: 준비(reset+렌더) → 실행(탭) → 단언(화면 반영/스토어 값/라우터 호출).
@@ -44,6 +44,9 @@ jest.mock('expo-router', () => {
   };
 });
 
+// TRIP-1595 D3 — 1/2·2/2 의 모든 완료 출구는 홈('/')이 아니라 기능 안내로 간다.
+const TOUR_ROUTE = '/onboarding-tour';
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const routerMock = require('expo-router').router as {
   replace: jest.Mock;
@@ -52,7 +55,7 @@ const routerMock = require('expo-router').router as {
 };
 
 // TRIP-353 — 온보딩 완료 재평가 신호를 목킹해, 일괄 탈출이 신호를 발화하는지 spy 로 관찰한다.
-// 취향 1/2 의 '나중에 설정하고 시작'도 완료 탈출구라 홈 진입해야 한다(ticket AC-A · US-ONB-11).
+// 취향 1/2 의 '나중에 설정하고 시작'도 완료 탈출구라 기능 안내로 진입해야 한다(ticket AC-A · US-ONB-11).
 jest.mock('@/shared/lib/bootstrapReeval', () => ({
   notifyBootstrapReeval: jest.fn(),
   subscribeBootstrapReeval: jest.fn(() => () => {}),
@@ -132,7 +135,7 @@ describe('PrefStep1Page — 다음 내비게이션 (AC3 · AC-nav-1 · 5-2)', ()
 describe('PrefStep1Page — 일괄 탈출 (AC4 · AC-11-1·2 · AC-14-1 · 5-3)', () => {
   // TRIP-718: Figma 1643:1183 에 하단 링크가 없어 제거 — 탈출구는 상단 하나(US-ONB-11 충족).
   it.each([['상단', 'onboarding-pref1-skip-top']])(
-    '%s skip을 탭하면 홈으로 replace하고 5축이 전부 null로 유지된다',
+    '%s skip을 탭하면 기능 안내로 replace하고 5축이 전부 null로 유지된다',
     async (_label, testId) => {
       // 준비 — 아무 것도 고르지 않은 채 렌더(reset 직후).
       render(<PrefStep1Page />);
@@ -140,8 +143,10 @@ describe('PrefStep1Page — 일괄 탈출 (AC4 · AC-11-1·2 · AC-14-1 · 5-3)'
       // 실행 — skip 탭.
       fireEvent.press(screen.getByTestId(testId));
 
-      // 단언 — 완료 성공·게이트 전환 뒤 홈으로 replace.
-      await waitFor(() => expect(routerMock.replace).toHaveBeenCalledWith('/'));
+      // 단언 — 완료 성공·게이트 전환 뒤 기능 안내로 replace(정확히 1회, '/' 0회).
+      await waitFor(() =>
+        expect(routerMock.replace.mock.calls).toEqual([[TOUR_ROUTE]])
+      );
       // 단언 — 5축 전부 null 유지(빈 배열로 바뀌지 않는다 — US-ONB-14).
       const state = usePreferenceStore.getState();
       expect(state.styles).toBeNull();
@@ -171,7 +176,7 @@ describe('PrefStep1Page — 페이스 축 탭↔스토어 왕복 (AC3 · US-ONB-
 
 describe('PrefStep1Page — 온보딩 완료 재평가 신호 발화 (ticket AC-A · US-ONB-11 · TRIP-353)', () => {
   it.each([['상단', 'onboarding-pref1-skip-top']])(
-    '%s 일괄 탈출을 탭하면 재평가 신호를 발화하고 홈으로 replace 한다',
+    '%s 일괄 탈출을 탭하면 재평가 신호를 발화하고 기능 안내로 replace 한다',
     async (_label, testId) => {
       // 준비 — 렌더.
       render(<PrefStep1Page />);
@@ -180,14 +185,16 @@ describe('PrefStep1Page — 온보딩 완료 재평가 신호 발화 (ticket AC-
       fireEvent.press(screen.getByTestId(testId));
 
       // 단언 — 취향 1/2 탈출도 재평가 신호를 발화(결함 A — pref2 뿐 아니라 여기서도) + replace 유지.
-      await waitFor(() => expect(routerMock.replace).toHaveBeenCalledWith('/'));
+      await waitFor(() =>
+        expect(routerMock.replace.mock.calls).toEqual([[TOUR_ROUTE]])
+      );
       expect(mockNotifyReeval).toHaveBeenCalledTimes(1);
     }
   );
 });
 
 describe('PrefStep1Page — 일괄 탈출은 기존 선택을 보존한다 (AC4 · US-ONB-11 · US-ONB-14 · 5-12)', () => {
-  it('이미 고른 값이 있어도 skip은 그 값을 지우지 않고 홈으로 replace한다', async () => {
+  it('이미 고른 값이 있어도 skip은 그 값을 지우지 않고 기능 안내로 replace한다', async () => {
     // 준비 — 화면을 거치지 않고 스토어에 직접 선주입(여기 관심사는 "skip 핸들러가
     // 스토어를 건드리는가"이지 값이 어떻게 들어왔는가가 아니다 — 탭으로 만들 필요 없음).
     usePreferenceStore.getState().toggleStyle('rest');
@@ -200,13 +207,15 @@ describe('PrefStep1Page — 일괄 탈출은 기존 선택을 보존한다 (AC4 
     // 그대로 남는다(빈 배열로 초기화되지 않는다).
     expect(usePreferenceStore.getState().styles).toEqual(['rest']);
     // 단언 ② — 보존만 하고 못 나가면 반쪽이므로 내비도 함께 본다.
-    await waitFor(() => expect(routerMock.replace).toHaveBeenCalledWith('/'));
+    await waitFor(() =>
+      expect(routerMock.replace.mock.calls).toEqual([[TOUR_ROUTE]])
+    );
   });
 });
 
 // TRIP-1421 — 온보딩 완료를 닉네임 단계에서 취향 출구로 옮겼다(1/2 의 출구는 skip-top 하나).
 describe('PrefStep1Page — skip-top 온보딩 완료 (TRIP-1421 AC3 · AC4 · AC5)', () => {
-  it('skip-top 은 PUT 없이 완료를 보내고, 성공한 뒤에만 재평가·홈 이동을 한다 (AC3)', async () => {
+  it('skip-top 은 PUT 없이 완료를 보내고, 성공한 뒤에만 재평가·기능 안내 이동을 한다 (AC3)', async () => {
     // 준비 — 완료 응답을 붙잡아 둔다.
     let resolveComplete!: () => void;
     mockCompleteOnboarding.mockReturnValue(
@@ -233,12 +242,14 @@ describe('PrefStep1Page — skip-top 온보딩 완료 (TRIP-1421 AC3 · AC4 · A
       resolveComplete();
     });
 
-    // 단언 ② — 재평가 1 · 홈 1.
-    await waitFor(() => expect(routerMock.replace.mock.calls).toEqual([['/']]));
+    // 단언 ② — 재평가 1 · 기능 안내 1.
+    await waitFor(() =>
+      expect(routerMock.replace.mock.calls).toEqual([[TOUR_ROUTE]])
+    );
     expect(mockNotifyReeval).toHaveBeenCalledTimes(1);
   });
 
-  it('완료가 실패하면 화면에 남아 오류 한 줄을 보이고, 다시 누르면 재시도해 성공 시 홈으로 간다 (AC4)', async () => {
+  it('완료가 실패하면 화면에 남아 오류 한 줄을 보이고, 다시 누르면 재시도해 성공 시 기능 안내로 간다 (AC4)', async () => {
     // 준비 — 1차 실패, 2차 성공.
     mockCompleteOnboarding
       .mockRejectedValueOnce(new Error('500'))
@@ -261,8 +272,10 @@ describe('PrefStep1Page — skip-top 온보딩 완료 (TRIP-1421 AC3 · AC4 · A
     resetPressGuard();
     fireEvent.press(screen.getByTestId('onboarding-pref1-skip-top'));
 
-    // 단언 ② — 완료 2회째 · 홈 1회.
-    await waitFor(() => expect(routerMock.replace.mock.calls).toEqual([['/']]));
+    // 단언 ② — 완료 2회째 · 기능 안내 1회.
+    await waitFor(() =>
+      expect(routerMock.replace.mock.calls).toEqual([[TOUR_ROUTE]])
+    );
     expect(mockCompleteOnboarding).toHaveBeenCalledTimes(2);
   });
 
@@ -287,7 +300,7 @@ describe('PrefStep1Page — skip-top 온보딩 완료 (TRIP-1421 AC3 · AC4 · A
 
 // TRIP-1500 — 03b(TRIP-1421) 경고: 게이트 대기 줄과 [다음] 잠금 줄은 지워도 전체가 green 이었다(심판 부재).
 describe('PrefStep1Page — skip-top 은 게이트가 HOME 을 연 뒤에만 이동한다 (TRIP-1500 AC3)', () => {
-  it('완료가 성공해도 게이트 목적지가 아직 ONBOARDING 이면 홈으로 보내지 않고, HOME 이 되는 순간 보낸다', async () => {
+  it('완료가 성공해도 게이트 목적지가 아직 ONBOARDING 이면 기능 안내로 보내지 않고, HOME 이 되는 순간 보낸다', async () => {
     // 준비 — 재평가 신호가 게이트를 바로 안 바꾸게 한다(부트스트랩 재조회가 아직 진행 중인 순간).
     mockNotifyReeval.mockImplementation(() => {});
     render(<PrefStep1Page />);
@@ -299,7 +312,7 @@ describe('PrefStep1Page — skip-top 은 게이트가 HOME 을 연 뒤에만 이
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    // 단언 ① — 목적지가 ONBOARDING 인 동안 '/'로 보내면 온보딩 index 로 떨어진다.
+    // 단언 ① — 목적지가 ONBOARDING 인 동안 어디로든 보내면 온보딩 index 로 떨어진다.
     expect(routerMock.replace).not.toHaveBeenCalled();
 
     // 실행 ② — 게이트가 HOME 을 공개한다.
@@ -307,8 +320,10 @@ describe('PrefStep1Page — skip-top 은 게이트가 HOME 을 연 뒤에만 이
       publishGateDestination('HOME');
     });
 
-    // 단언 ② — 그제야 홈으로 정확히 한 번.
-    await waitFor(() => expect(routerMock.replace.mock.calls).toEqual([['/']]));
+    // 단언 ② — 그제야 기능 안내로 정확히 한 번.
+    await waitFor(() =>
+      expect(routerMock.replace.mock.calls).toEqual([[TOUR_ROUTE]])
+    );
   });
 });
 
@@ -340,8 +355,10 @@ describe('PrefStep1Page — skip-top 응답 대기 중 [다음] 잠금 (TRIP-150
       resolveComplete();
     });
 
-    // 단언 ② — 홈 이동 1회, push 는 끝까지 0.
-    await waitFor(() => expect(routerMock.replace.mock.calls).toEqual([['/']]));
+    // 단언 ② — 기능 안내 이동 1회, push 는 끝까지 0.
+    await waitFor(() =>
+      expect(routerMock.replace.mock.calls).toEqual([[TOUR_ROUTE]])
+    );
     expect(routerMock.push).not.toHaveBeenCalled();
   });
 });

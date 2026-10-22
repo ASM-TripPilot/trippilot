@@ -12,6 +12,7 @@ import type { CompanionType } from './companionType';
 import type { TripDestination } from './tripDestination';
 
 export interface EditTripRequest {
+  /** @maxLength 120 */
   title?: string | null;
   startDate: string;
   endDate: string;

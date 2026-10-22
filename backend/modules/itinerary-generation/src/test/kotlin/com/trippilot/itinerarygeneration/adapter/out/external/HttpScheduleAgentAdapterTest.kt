@@ -610,6 +610,49 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         adapter.validate(dummyOutput()) shouldBe emptyList()
     }
 
+    "validate — 판정 못 한 장소(unverified_slots)를 사유와 무관하게 읽고, 위반만 묻는 호출은 그대로다(상황 감지 INV-SA-2)" {
+        val (unregistered, unmappable, hoursUnknown, newReason) = List(4) { UUID.randomUUID() }
+        val body = """
+            {"violations":[{"code":"HC2","slot_ref":"2026-08-01#q","detail":"이동이 빠듯해요","day_index":0,"slot_index":1}],
+             "unverified_slots":[{"poi_id":"$unregistered","reason_code":"NOT_REGISTERED","detail":""},
+                                 {"poi_id":"$unmappable","reason_code":"UNMAPPABLE","detail":"lat"},
+                                 {"poi_id":"$hoursUnknown","reason_code":"HOURS_UNKNOWN","detail":""},
+                                 {"poi_id":"$newReason","reason_code":"NEW_REASON","detail":""},
+                                 {"poi_id":"not-a-uuid","reason_code":"HOURS_UNKNOWN","detail":""}]}
+        """.trimIndent()
+        val (adapter, server) = fixture()
+        repeat(2) {
+            server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate")).andRespond(withSuccess(body, MediaType.APPLICATION_JSON))
+        }
+
+        val judged = adapter.validateWithUnverified(dummyOutput())
+        val violationsOnly = adapter.validate(dummyOutput())
+
+        // 모르는 사유도 '못 봤다'다 — 응답 전체를 잃지 않는다. 슬롯에 붙일 수 없는(UUID 아닌) 한 건만 버린다.
+        judged.unverifiedPoiIds shouldBe setOf(unregistered, unmappable, hoursUnknown, newReason)
+        judged.violations.single().type shouldBe "HC2"
+        violationsOnly shouldBe judged.violations // 편집·되돌리기가 받는 값은 미판정 목록과 무관하다
+        server.verify()
+    }
+
+    "validate — 미판정 목록이 없는 옛 응답은 빈 집합이다(못 본 장소를 지어내지 않는다)" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate"))
+            .andRespond(withSuccess("""{"violations":[]}""", MediaType.APPLICATION_JSON))
+
+        adapter.validateWithUnverified(dummyOutput()).unverifiedPoiIds shouldBe emptySet()
+        server.verify()
+    }
+
+    "미판정 목록을 모르는 옛 와이어도 HOURS_UNKNOWN 이 실린 응답을 읽는다 — 경계 매퍼는 모르는 키를 무시한다(배포 순서: AI 먼저)" {
+        val old = ScheduleAgentConfiguration.boundaryMapper().readValue(
+            """{"violations":[],"unverified_slots":[{"poi_id":"$poi","reason_code":"HOURS_UNKNOWN","detail":""}]}""",
+            PreUnverifiedValidateResponse::class.java,
+        )
+
+        old.violations shouldBe emptyList()
+    }
+
     // ───────── 편집 제안(U8 G-U8-2) ─────────
 
     val newPoi = UUID.randomUUID()
@@ -1040,6 +1083,9 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         server.verify()
     }
 })
+
+/** 미판정 목록을 읽기 전 validate 응답 와이어 그대로 — 옛 백엔드가 새 AI 응답을 받는지(배포 순서) 재는 데만 쓴다. */
+internal data class PreUnverifiedValidateResponse(val violations: List<AiViolation> = emptyList())
 
 private fun dummyOutput() = com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput(
     days = emptyList(), day1ReadyAt = null, explanations = emptyMap(),

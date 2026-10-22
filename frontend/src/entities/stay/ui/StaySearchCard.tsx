@@ -1,20 +1,22 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { heartSaveLabel } from '@/shared/ui/HeartButton';
-import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
+import { HeartButton } from '@/shared/ui/HeartButton';
+import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 
 /**
  * TRIP-807 · AC-3 — 숙소 검색 풀/레인 카드(e02 세로178 · d01 레인160 공용). props-only.
  *
- * 사진은 계약(StayItem)에 URL 필드가 없어 항상 회색 자리(bg-surface-strong) — URL 을 지어내지
- * 않는다(INV-1). 메타는 이름·지역·가격 텍스트뿐(거리·소요시간 없음 · INV-3).
+ * 사진은 계약(StayItem)에 URL 필드가 없어 URL 을 지어내지 않고(INV-1) `coverKey`(숙소 키)로 고른
+ * 일반 숙소 그림(`PlacePhoto` `category="숙소"`, TRIP-1588)을 사진 칸 바닥 레이어로 깐다 — 하트 오버레이는
+ * 그 위 형제로 그대로다. 메타는 이름·지역·가격 텍스트뿐(거리·소요시간 없음 · INV-3).
  *
  * testID 스킴은 소비처가 **명시 문자열**로 주입한다(★3) — e02 는 `stay-card-save-{key}-filled`,
  * d01 은 `explore-stay-heart-filled-{key}` 로 save/글리프 스킴이 갈려 단일 prefix 로 재현 불가라,
  * 카드가 완성된 testID(root/photo/save/filled/outline)를 받는다. 담김/미담김은 fill 색이 아니라
  * 서로 다른 글리프(HeartFilledGlyph/HeartOutlineGlyph) + accessibilityState.selected 로 관측한다
  * (글리프 fill 함정 회피). pending 이면 저장 Pressable 이 진짜 disabled(연타 가드).
+ * 저장 하트는 공용 `HeartButton`(누르면 튐 — TRIP-1125)이다(TRIP-1599 — 직접 그리던 SaveButton 은 튐이 없었다).
  *
  * 카드 루트가 Pressable, 저장이 그 자식 Pressable — 하트 press 는 findEventHandler 가 하트에서
  * 멈춰 카드 push(onPress)를 삼키지 않는다(★F-4).
@@ -34,11 +36,14 @@ export interface StaySearchCardSave {
 export interface StaySearchCardProps {
   /** 루트 Pressable testID(소비처 스킴 주입). */
   testID: string;
-  /** 사진 자리 testID — e02 만 지정(d01 미지정 = 사진 View 무 testID). */
+  /** 사진(그림) testID — 지정 시 그림 노드 자체에 단다(e02·d01). 미지정 = 무 testID. */
   photoTestID?: string;
+  /** 사진 칸 그림을 고르는 숙소 키(`stayKey`) — 같은 숙소는 어느 화면에서나 같은 그림(TRIP-1588). */
+  coverKey?: string;
   name: string;
   region: string;
-  priceText: string;
+  /** 생략 = 가격 줄 없음(e02 — 데이터에 가격이 없다, TRIP-1581). d01·e03 은 지금처럼 넘긴다. */
+  priceText?: string;
   /** full=e02(w-full·사진178·border+shadow) · rail=d01(w-160·사진120 — 장소 카드와 같은 폭, TRIP-1105 QA #7). */
   variant: 'full' | 'rail';
   /** 저장 하트 — 지정 시에만 그린다(미지정 = 하트 없음). */
@@ -57,42 +62,10 @@ const cardShadow = {
   elevation: 4,
 } as const;
 
-function SaveButton({
-  save,
-  name,
-  size,
-  className,
-}: {
-  save: StaySearchCardSave;
-  name: string;
-  size: number;
-  className: string;
-}): ReactElement {
-  return (
-    <Pressable
-      testID={save.testID}
-      accessibilityRole="button"
-      accessibilityLabel={heartSaveLabel(name)}
-      // 담김=선택됨 — 빈/찬을 색이 아니라 이 상태 + 아래 글리프 정체성으로 관찰한다.
-      accessibilityState={{ selected: save.saved }}
-      // pending 이면 눌러도 onToggle 이 안 불린다(연타 가드) — disabled 가
-      // accessibilityState.disabled 도 함께 세운다.
-      disabled={save.pending}
-      onPress={save.onToggle}
-      className={className}
-    >
-      {save.saved ? (
-        <HeartFilledGlyph testID={save.filledTestID} size={size} />
-      ) : (
-        <HeartOutlineGlyph testID={save.outlineTestID} size={size} />
-      )}
-    </Pressable>
-  );
-}
-
 export function StaySearchCard({
   testID,
   photoTestID,
+  coverKey,
   name,
   region,
   priceText,
@@ -112,16 +85,25 @@ export function StaySearchCard({
         style={cardShadow}
         className="w-full overflow-hidden rounded-card border border-hairline bg-canvas"
       >
-        <View
-          testID={photoTestID}
-          className="h-[178px] w-full bg-surface-strong"
-        >
+        <View className="h-[178px] w-full bg-surface-strong">
+          <PlacePhoto
+            testID={photoTestID}
+            category="숙소"
+            poiId={coverKey}
+            contentFit="cover"
+            className="absolute inset-0"
+          />
           {save ? (
-            <SaveButton
-              save={save}
+            <HeartButton
+              saved={save.saved}
+              pending={save.pending}
+              onPress={save.onToggle}
+              testID={save.testID}
+              filledTestID={save.filledTestID}
+              outlineTestID={save.outlineTestID}
               name={name}
-              size={22}
-              className="absolute right-[32px] top-[14px] h-8 w-8 items-center justify-center rounded-pill bg-on-primary"
+              glyphSize={22}
+              className="absolute right-[32px] top-[14px]"
             />
           ) : null}
         </View>
@@ -134,7 +116,7 @@ export function StaySearchCard({
            * Text 로 그린다: bold "{천단위}원" + muted "~"(BR-U1-12 "부터"의 시각 표기).
            * 바깥은 반드시 View(Text 아님) — 두 Text 가 View 형제라야 결합 노드로 집계되지
            * 않는다. 결측("가격 미확인", "~" 없음)은 muted regular 단일 노드로 접는다. */}
-          {priceText.endsWith('~') ? (
+          {priceText === undefined ? null : priceText.endsWith('~') ? (
             <View className="flex-row items-baseline">
               <Text className="font-inter-bold text-[16px] font-bold text-ink">
                 {priceText.slice(0, -1)}
@@ -157,16 +139,25 @@ export function StaySearchCard({
       onPress={onPress}
       className="w-[160px]"
     >
-      <View
-        testID={photoTestID}
-        className="h-[120px] w-full rounded-card bg-surface-strong"
-      >
+      <View className="h-[120px] w-full rounded-card bg-surface-strong">
+        <PlacePhoto
+          testID={photoTestID}
+          category="숙소"
+          poiId={coverKey}
+          contentFit="cover"
+          className="absolute inset-0 rounded-card"
+        />
         {save ? (
-          <SaveButton
-            save={save}
+          <HeartButton
+            saved={save.saved}
+            pending={save.pending}
+            onPress={save.onToggle}
+            testID={save.testID}
+            filledTestID={save.filledTestID}
+            outlineTestID={save.outlineTestID}
             name={name}
-            size={18}
-            className="absolute right-sm top-sm h-8 w-8 items-center justify-center rounded-pill bg-on-primary"
+            glyphSize={18}
+            className="absolute right-sm top-sm"
           />
         ) : null}
       </View>
