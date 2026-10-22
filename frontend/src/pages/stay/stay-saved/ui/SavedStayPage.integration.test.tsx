@@ -13,6 +13,8 @@ import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { SavedStay } from '@/shared/api/index.schemas';
 
+import * as Linking from 'expo-linking';
+
 import { SavedStayPage } from './SavedStayPage';
 
 /**
@@ -54,6 +56,12 @@ jest.mock('expo-router', () => ({
   router: { push: (...args: unknown[]) => mockPush(...args), back: () => {} },
   useRouter: () => ({ push: mockPush, back: () => {} }),
   useLocalSearchParams: () => ({}),
+}));
+
+// TRIP-1583 — 인기 숙소(TRIPCOM) 카드는 제휴 시트를 거쳐 브라우저로 연다(실제 열기는 목).
+jest.mock('expo-linking', () => ({
+  openURL: jest.fn().mockResolvedValue(true),
+  canOpenURL: jest.fn().mockResolvedValue(true),
 }));
 
 // 하트 저장분(외부키 있음) — stayId는 stayKey(=SOURCE:ID)가 돼야 한다.
@@ -551,5 +559,58 @@ describe('RM · 하트로 저장을 푼다 (D1~D5 · 01b Q3·Q5 · INV-4)', () =
       );
       expect(screen.getByTestId(BANNER)).toBeOnTheScreen();
     });
+  });
+});
+
+// TRIP-1583 — 인기 숙소에서 담은 숙소(TRIPCOM)는 앱 안 상세가 없다(서버 GET /stays/{id} 404) → 제휴 시트 → 호텔 상세.
+describe('TRIP-1583 · TRIPCOM 카드 → 제휴 시트 → 호텔 상세 아웃바운드', () => {
+  const TRIPCOM: SavedStay = {
+    ...PINNED,
+    savedStayId: 'ss-3',
+    name: '해운대 오션 호텔',
+    registerRoute: 'MAP_SEARCH',
+    externalSource: 'TRIPCOM',
+    externalId: '123',
+  };
+  const mockOpenURL = Linking.openURL as jest.Mock;
+
+  beforeEach(() => {
+    mockOpenURL.mockClear();
+    server.use(
+      http.get(`${BASE}/saved-stays`, () =>
+        HttpResponse.json([HEARTED, TRIPCOM])
+      ),
+      http.get(`${BASE}/me/settings`, () =>
+        HttpResponse.json({ affiliateNoticeDismissed: false })
+      )
+    );
+  });
+
+  it('상세로 가지 않고 시트를 연 뒤 [이동]이 TRIPCOM:{id} 아웃바운드를 연다', async () => {
+    render(<SavedStayPage />, { wrapper: createGcZeroWrapper() });
+    fireEvent.press(await screen.findByTestId('saved-stay-card-ss-3'));
+
+    await screen.findByTestId('stay-ota-sheet');
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockOpenURL).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('stay-ota-confirm'));
+    await waitFor(() =>
+      expect(mockOpenURL).toHaveBeenCalledWith(
+        `${BASE}/stays/TRIPCOM%3A123/outbound`
+      )
+    );
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('다른 출처 카드는 지금처럼 상세로 간다(시트 없음)', async () => {
+    render(<SavedStayPage />, { wrapper: createGcZeroWrapper() });
+    fireEvent.press(await screen.findByTestId('saved-stay-card-ss-1'));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/stays/[stayId]',
+      params: { stayId: 'NAVER:n-99' },
+    });
+    expect(screen.queryByTestId('stay-ota-sheet')).toBeNull();
   });
 });
