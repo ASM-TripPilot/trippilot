@@ -190,9 +190,9 @@ export interface LiveHubViewProps {
 }
 
 // 레일 점의 행 상단 여백 — 점 크기(22·16·12)가 달라 Figma 에서 상태마다 다르다(rail 인스턴스 y 실측).
-// done 은 TRIP-1558 에서 18 → 22 로 키워 중심 y=20 을 지키려 11 → 9 (6-b 스크린샷으로 확정).
+// done 은 TRIP-1558 에서 18 → 22 로 키워 중심 y=20 을 지키려 11 → 9, TRIP-1592 에서 22 → 26 으로 키워 9 → 7 (6-b 스크린샷으로 확정).
 const RAIL_TOP: Record<SlotProgressState, string> = {
-  done: 'pt-[9px]',
+  done: 'pt-[7px]',
   active: 'pt-[6px]',
   upcoming: 'pt-[8px]',
 };
