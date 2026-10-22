@@ -2459,7 +2459,8 @@ def test_region_recommendation_from_saved_tastes_names_table_regions_with_reason
     assert facts.intent is Intent.RECOMMEND_REGION and facts.status is FactStatus.OK and facts.kind is AnswerKind.TEXT
     names = facts.detail["regions"]
     assert len(names) == 2 and all(region_center(n) is not None for n in names)  # 지역 표 이름만(INV-1)
-    assert [r.label for r in facts.rows] == names and all("많은 편" in r.value for r in facts.rows)
+    assert [r.label for r in facts.rows] == names and all(r.value and "평균" not in r.value for r in facts.rows)  # 종류 이름만
+    assert facts.detail["compared_to"] == "전국 평균"  # 비교 기준은 한 번(행마다 실으면 답이 베낀다)
     assert [q.label for q in facts.quick_replies] == [f"{n} 가볼 만한 곳" for n in names]  # 누르면 장소 탐색으로 이어진다
     assert _types(facts) == ["CREATE_TRIP"] and facts.detail["basis"] == "저장된 취향" and not facts.needs_trip
     assert all(n in facts.template_text for n in names)

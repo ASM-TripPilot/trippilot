@@ -2172,13 +2172,15 @@ def _assemble_region(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Fac
     if not picks:
         return _text_facts(intent, FactStatus.EMPTY, (_action("CREATE_TRIP"),),
                            notes=("성격표에서 그 취향에 맞는 지역을 고르지 못함",), detail=detail)
-    rows = tuple(FactRow(p.name, f"{'·'.join(p.reasons)} 장소가 전국 평균보다 많은 편") for p in picks)
+    # 이유는 종류 이름만, 비교 기준은 detail 에 한 번 — 행마다 "…장소가 전국 평균보다 많은 편" 같은 문장을 실으면 답이 지역마다 그
+    # 문장을 베꼈다(2026-10-22 개발 서버 실측 3회 되풀이, 사용자 "너무 형식적"). 문장은 답변 LLM 이 짓는다(답변 0.3.8)
+    rows = tuple(FactRow(p.name, "·".join(p.reasons)) for p in picks)
     names = [p.name for p in picks]
     return Facts(intent, FactStatus.OK, AnswerKind.TEXT, rows=rows, places=(), notes=(), payload=None,
                  next_actions=(_action("CREATE_TRIP"),),
                  quick_replies=tuple(QuickReplyDraft(f"{name} 가볼 만한 곳", "SEND_TEXT") for name in names),
                  template_text=fallback_answer_text(intent, {"status": "OK", "names": names}),
-                 detail={**detail, "regions": names})
+                 detail={**detail, "regions": names, "compared_to": "전국 평균"})
 
 
 # ── 표 ───────────────────────────────────────────────────────────────────────

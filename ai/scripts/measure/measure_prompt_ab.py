@@ -402,13 +402,13 @@ ANSWER_CASES += [
 # 특징을 지어내면 사람이 읽어서 본다
 ANSWER_CASES += [
     ("RECOMMEND_REGION", "내 취향 기반해서 가볼 지역 추천해줘", _facts(
-        "RECOMMEND_REGION", rows=[("단양", "자연·체험·액티비티 장소가 전국 평균보다 많은 편"),
-                                  ("가평", "체험·액티비티 장소가 전국 평균보다 많은 편"),
-                                  ("태안", "자연 장소가 전국 평균보다 많은 편")],
-        basis="저장된 취향", pick_count=3, regions=["단양", "가평", "태안"])),
+        "RECOMMEND_REGION", rows=[("단양", "자연·체험·액티비티"),
+                                  ("가평", "체험·액티비티"),
+                                  ("태안", "자연")],
+        basis="저장된 취향", pick_count=3, regions=["단양", "가평", "태안"], compared_to="전국 평균")),
     ("RECOMMEND_REGION", "역사 여행 갈 만한 데 한 곳만", _facts(
-        "RECOMMEND_REGION", rows=[("경주", "명소·문화·역사 장소가 전국 평균보다 많은 편")], basis="말한 바람", pick_count=1,
-        regions=["경주"])),
+        "RECOMMEND_REGION", rows=[("경주", "명소·문화·역사")], basis="말한 바람", pick_count=1,
+        regions=["경주"], compared_to="전국 평균")),
 ]
 
 # 장소 소개(KB-5 한 조각, #1469) — `_assemble_poi_info` 모양: detail 의 target·intro. 영업시간·요금을 묻는 말엔 소개가 없다.
