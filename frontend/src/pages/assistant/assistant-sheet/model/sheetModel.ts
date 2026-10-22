@@ -24,6 +24,33 @@ export function currentQuickReplies(
   return [...sessionReplies];
 }
 
+/** quick reply 분류 결과(TRIP-1567) — 칩 안 펼침 항목과 카드 위 한 줄에 남는 응답 보기. */
+export interface SplitQuickReplies {
+  /** 칩 안 펼침 항목 — 일반 질문형. SHOW_CAPABILITIES 가 앞, 나머지는 입력 순서. */
+  suggestions: QuickReply[];
+  /** 카드 위 한 줄에 남는 응답 보기 — PICK_OPTION·RETRY, 입력 순서. */
+  choices: QuickReply[];
+}
+
+/**
+ * quick reply 를 둘로 가른다(TRIP-1567). PICK_CANDIDATE(후보 카드가 고르기 담당)와 모르는 action 은 어디에도 안 보낸다 —
+ * 모르는 종류는 응답에 묶인 답인지 질문인지 클라가 모르므로 닫힌 목록으로만 그린다.
+ */
+export function splitQuickReplies(
+  replies: readonly QuickReply[]
+): SplitQuickReplies {
+  const capabilities = replies.filter((r) => r.action === 'SHOW_CAPABILITIES');
+  const asks = replies.filter(
+    (r) => r.action === 'SEND_TEXT' || r.action === 'REVIEW'
+  );
+  return {
+    suggestions: [...capabilities, ...asks],
+    choices: replies.filter(
+      (r) => r.action === 'PICK_OPTION' || r.action === 'RETRY'
+    ),
+  };
+}
+
 /** 서버가 이미 "내가 할 수 있는 것" quick reply 를 줬으면 상시 칩을 겹쳐 그리지 않는다. */
 export function needsCapabilitiesChip(replies: readonly QuickReply[]): boolean {
   return !replies.some((reply) => reply.action === 'SHOW_CAPABILITIES');

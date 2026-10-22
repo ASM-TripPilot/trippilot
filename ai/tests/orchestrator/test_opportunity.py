@@ -308,7 +308,7 @@ _FIT = {
     EventType.FESTIVAL: {PoiCategory.SIGHT, PoiCategory.NATURE, PoiCategory.NIGHT_VIEW, PoiCategory.ACTIVITY,
                          PoiCategory.CULTURE},
     EventType.PERFORMANCE: {PoiCategory.CULTURE, PoiCategory.SIGHT},
-    EventType.EXHIBITION: {PoiCategory.CULTURE, PoiCategory.SIGHT},
+    EventType.EXHIBITION: {PoiCategory.CULTURE, PoiCategory.ART, PoiCategory.SIGHT},
 }
 _KIND_RANK = {OpportunityKind.EVENT_VENUE: 0, OpportunityKind.EVENT_NEARBY: 1, OpportunityKind.TRENDING: 2}
 

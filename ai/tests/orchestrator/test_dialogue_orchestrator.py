@@ -275,6 +275,30 @@ def test_capabilities_literal_is_a_deterministic_answer_without_llm() -> None:
 # ── 2·4·5단 — 분류 → 팬아웃 → 답변 ────────────────────────────────────────
 
 
+class _LlmInFanout(_Weather):
+    """팬아웃 스레드 안에서 서비스 LLM 을 부르는 포트 — NL2SQL(장소 탐색 DIALOGUE_SQL)과 같은 꼴. 백엔드 사용량 상한이 세는
+    턴 `llm_calls` 는 contextvar 카운터라, 풀 스레드에 문맥이 안 넘어가면 이 호출이 빠진다(계획 턴은 실제 4회인데 3으로 셌다)."""
+
+    class _Inner:
+        def invoke(self, request):
+            return None
+
+    def __init__(self, calls_per_fetch: int = 1) -> None:
+        super().__init__()
+        self._llm, self._n = CountingLlm(self._Inner()), calls_per_fetch
+
+    def fetch(self, params: dict) -> InfoPacket:
+        for _ in range(self._n):
+            self._llm.invoke(None)
+        return super().fetch(params)
+
+
+def test_service_llm_calls_made_inside_fanout_threads_count_toward_the_turn() -> None:
+    b = _build(_canned(Intent.GET_WEATHER), ports=HandlerPorts(poi_info=_PoiInfo(), weather=_LlmInFanout()))
+    out = b.orch.turn(_input("오늘 날씨 어때"))
+    assert out.outcome == "ANSWER" and out.llm_calls == 3  # 분류 + 팬아웃 안 1 + 답변 (BR-AO-07·COST-U8-02)
+
+
 def test_weather_turn_classifies_fans_out_and_composes_an_info_answer() -> None:
     b = _build(_canned(Intent.GET_WEATHER))
     out = b.orch.turn(_input("오늘 날씨 어때"))
@@ -1015,6 +1039,9 @@ def test_recent_turn_rejects_bad_role_and_length(role: str, text: str) -> None:
     ("다음은 해녀의집이에요. 12:00 에 가요.", True),  # Facts 의 계획 시각 복사 — 통과
     ("다음은 해녀의집이에요. 15:45에 방문하세요.", False),  # Facts 밖 시각 — 카드(12:00)와 엇갈린다 (INV-2)
     ("다음은 해녀의집이에요. 3:45pm 에 가요.", False),
+    ("다음은 해녀의집이에요. 3pm 에 가요.", False),  # 분 없는 am/pm(#1420 리뷰 C4)
+    ("다음은 해녀의집이에요. １２：００ 에 가요.", True),  # 전각이어도 Facts 의 12:00 이다
+    ("다음은 해녀의집이에요. １５：４５ 에 가요.", False),
     ("다음은 해녀의집이에요. 오후 세 시에 가요.", False),  # 대조할 수 없는 한글 시각
 ])
 def test_answer_clock_times_must_come_from_facts(text: str, kept: bool) -> None:

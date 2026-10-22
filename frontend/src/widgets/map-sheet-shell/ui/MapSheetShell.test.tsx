@@ -11,12 +11,17 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import type { MapPin } from '@/shared/map';
 import { buildFitRegion } from '@/shared/map/fitRegion';
+import { getToastBottoms, resetToastBottoms } from '@/shared/ui/toastBottom';
 import {
   expectHeightLimited,
   expectPinsInBand,
 } from '@/test-support/fitBandAsserts';
 
+import { CTA_BAR_HEIGHT } from './CtaBar';
 import { MapSheetShell } from './MapSheetShell';
+
+// TRIP-1559 — 토스트 바닥 레지스트리는 모듈 싱글턴이다. 파일 최상위(describe 밖)에서 리셋해야 앞 테스트의 신고가 안 샌다.
+afterEach(() => resetToastBottoms());
 
 // TRIP-1416 FB5 — 셸 지도가 맞춤을 다시 계산했는지 센다(MapView 는 memo 라 같은 props 면 본문이 안 돈다).
 // 동작은 실물 그대로 감싸기만 한다 → 이 파일의 다른 케이스는 무영향. jest.mock 은 파일 맨 위로 끌어올려진다.
@@ -1834,5 +1839,60 @@ describe('MapSheetShell · SC 핀 탭 통과·스크롤 요청 (TRIP-1558)', () 
     render(shell());
 
     expect(() => changeSnap(2)).not.toThrow();
+  });
+});
+
+describe('MapSheetShell · 토스트 바닥 신고 — CTA 바가 그려지는 동안만 (TRIP-1559 T5)', () => {
+  afterEach(restoreMapKey);
+
+  // 셸이 SafeArea 컨텍스트로 인셋을 읽으므로 같은 컨텍스트를 감싼다 — CTA 바(+홈 인디케이터 칸)가 토스트가 피할 높이다.
+  const INSET = 34;
+  function renderWithInset(overrides: Parameters<typeof renderShell>[0] = {}) {
+    return render(
+      <SafeAreaInsetsContext.Provider
+        value={{ top: 47, bottom: INSET, left: 0, right: 0 }}
+      >
+        <MapSheetShell
+          center={CENTER}
+          pins={PINS}
+          days={DAYS}
+          selectedDayIndex={0}
+          onSelectDay={jest.fn()}
+          onBack={jest.fn()}
+          header={<Text>헤더</Text>}
+          cta={[{ label: '확정하기', variant: 'primary', onPress: jest.fn() }]}
+          {...overrides}
+        >
+          <Text>본문</Text>
+        </MapSheetShell>
+      </SafeAreaInsetsContext.Provider>
+    );
+  }
+
+  it('CTA 바가 있으면 (바 높이 + 인셋) 을 신고하고, 시트를 닫힘 칸으로 내리면 빠지고, 다시 올리면 돌아온다', () => {
+    withMapKey();
+    expect(getToastBottoms()).toEqual([]);
+
+    renderWithInset();
+    expect(getToastBottoms()).toEqual([CTA_BAR_HEIGHT + INSET]);
+
+    // 닫힘 칸에선 CTA 바가 안 그려진다(TRIP-920) → 토스트가 바 높이만큼 떠 있을 이유도 없다.
+    changeSnap(0);
+    expect(screen.queryByTestId('sheet-cta-root')).toBeNull();
+    expect(getToastBottoms()).toEqual([]);
+
+    changeSnap(1);
+    expect(getToastBottoms()).toEqual([CTA_BAR_HEIGHT + INSET]);
+  });
+
+  it('(금지) CTA 를 안 주거나 빈 배열이면 신고하지 않는다', () => {
+    withMapKey();
+
+    const view = renderWithInset({ cta: [] });
+    expect(getToastBottoms()).toEqual([]);
+
+    view.unmount();
+    renderWithInset({ cta: undefined });
+    expect(getToastBottoms()).toEqual([]);
   });
 });

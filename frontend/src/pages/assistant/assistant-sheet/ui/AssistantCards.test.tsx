@@ -1,9 +1,17 @@
 import fc from 'fast-check';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import Svg from 'react-native-svg';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import type {
   AssistantMessage,
   FallbackCause,
+  NextAction,
+  QuickReply,
   ReviewPayload,
 } from '../api/assistantContract';
 import { assistantSample } from '../api/assistantSamples';
@@ -110,6 +118,110 @@ describe('CandidateCard (TRIP-1323)', () => {
     });
     fireEvent.press(row);
     expect(onPickCandidate).toHaveBeenCalledWith('poi-bookcafe');
+  });
+});
+
+// TRIP-1564 — 후보 카드 한 장의 얼굴은 그 카드의 누름이 무엇을 하느냐로 정해진다:
+// 고르기(PICK) · 장소 보기(OPEN) 는 눌리는 모양(button 역할 + ›), 둘 다 없으면 눌리는 모양이 없다(NONE).
+describe('CandidateCard · 누름의 뜻에 따른 세 얼굴', () => {
+  const reply = (poiId: string): QuickReply => ({
+    id: `qr-pick-${poiId}`,
+    label: `${poiId} 고르기`,
+    action: 'PICK_CANDIDATE',
+    params: { poiId },
+  });
+  const open = (poiId: string): NextAction => ({
+    type: 'OPEN_PLACE',
+    label: `${poiId} 장소`,
+    params: { poiId },
+  });
+  function candidatesMessage(
+    poiIds: string[],
+    parts: { quickReplies?: QuickReply[]; nextActions?: NextAction[] }
+  ): AssistantMessage {
+    return {
+      id: 'c1',
+      role: 'ASSISTANT',
+      kind: 'CANDIDATES',
+      payload: {
+        candidates: poiIds.map((poiId) => ({
+          poiId,
+          name: `이름-${poiId}`,
+          distanceRange: '630m',
+          reason: `이유-${poiId}`,
+        })),
+      },
+      nextActions: parts.nextActions ?? [],
+      quickReplies: parts.quickReplies,
+      createdAt: '',
+    };
+  }
+  const arrowCount = (poiId: string) =>
+    within(
+      screen.getByTestId(`assistant-candidate-${poiId}`)
+    ).UNSAFE_queryAllByType(Svg).length;
+  const roleOf = (poiId: string) =>
+    screen.getByTestId(`assistant-candidate-${poiId}`).props.accessibilityRole;
+
+  it('고르기 얼굴: button 역할 + › 가 있고, 누르면 poiId 를 올린다(장소 보기 핸들러는 안 부른다)', () => {
+    const message = candidatesMessage(['a'], { quickReplies: [reply('a')] });
+    const { onPickCandidate, onPressAction } = renderCard(message);
+
+    expect(roleOf('a')).toBe('button');
+    expect(arrowCount('a')).toBe(1);
+    fireEvent.press(screen.getByTestId('assistant-candidate-a'));
+
+    expect(onPickCandidate).toHaveBeenCalledTimes(1);
+    expect(onPickCandidate).toHaveBeenCalledWith('a');
+    expect(onPressAction).not.toHaveBeenCalled();
+  });
+
+  it('장소 보기 얼굴: button 역할 + › 가 있고, 누르면 그 OPEN_PLACE 행동을 빨간 행과 같은 핸들러로 올린다', () => {
+    const action = open('a');
+    const message = candidatesMessage(['a'], { nextActions: [action] });
+    const { onPickCandidate, onPressAction } = renderCard(message);
+
+    expect(roleOf('a')).toBe('button');
+    expect(arrowCount('a')).toBe(1);
+    fireEvent.press(screen.getByTestId('assistant-candidate-a'));
+
+    expect(onPressAction).toHaveBeenCalledTimes(1);
+    expect(onPressAction).toHaveBeenCalledWith(action);
+    expect(onPickCandidate).not.toHaveBeenCalled();
+  });
+
+  it('눌러서 갈 곳이 없는 얼굴: button 역할·› 가 없고 이름·부제·testID 는 그대로이며 눌러도 아무 핸들러도 안 불린다', () => {
+    const message = candidatesMessage(['a'], {});
+    const { onPickCandidate, onPressAction } = renderCard(message);
+
+    // 존재 앵커 — 카드가 실제로 그려졌고 이름·부제가 보인다
+    const card = screen.getByTestId('assistant-candidate-a');
+    expect(card).toHaveTextContent('이름-a', { exact: false });
+    expect(card).toHaveTextContent('630m · 이유-a', { exact: false });
+    // 부재 — 누를 수 있는 것이 화면에 하나도 없고 › 도 없다
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    expect(arrowCount('a')).toBe(0);
+
+    fireEvent.press(card);
+    expect(onPickCandidate).not.toHaveBeenCalled();
+    expect(onPressAction).not.toHaveBeenCalled();
+  });
+
+  it('한 메시지 안에서도 얼굴은 카드마다 정해진다(a 고르기 · b 장소 보기 · c 없음)', () => {
+    const message = candidatesMessage(['a', 'b', 'c'], {
+      quickReplies: [reply('a')],
+      nextActions: [open('b')],
+    });
+    renderCard(message);
+
+    expect(roleOf('a')).toBe('button');
+    expect(roleOf('b')).toBe('button');
+    expect(screen.getByTestId('assistant-candidate-c')).toBeOnTheScreen();
+    expect(roleOf('c')).not.toBe('button');
+    expect([arrowCount('a'), arrowCount('b'), arrowCount('c')]).toEqual([
+      1, 1, 0,
+    ]);
+    expect(screen.queryAllByRole('button')).toHaveLength(2);
   });
 });
 

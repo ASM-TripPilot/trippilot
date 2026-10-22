@@ -39,11 +39,12 @@
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import re
 from collections.abc import Callable, Mapping, Sequence
-from concurrent.futures import Executor, ThreadPoolExecutor, wait
+from concurrent.futures import Executor, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, replace
 from datetime import date, datetime, tzinfo
 
@@ -145,7 +146,8 @@ _MEMORY_MIN_REMAINING_MS = 2_500  # 미만이면 결정론 압축
 # 2‴ 계획 LLM(BR-AO-28): min(cap, 잔여×share). 잔여 < 4.6s 면 부르지 않는다 — 계획이 몫(0.45R)을 다 쓰고 팬아웃이 남은 것의
 # 0.40 을 다 써도 답변 앞 잔여 ≥1.5s(답변 시도선)이려면 R ≥ 4,542ms(정수 내림 산술: 4,542 → 계획 2,043 → 2,499 → 팬아웃 999
 # → 1,500). 4,500 이면 1,485 라 늘 템플릿이다(정정본 C1). 상한 3.5s(초판 3.0s) — 2026-10-20 luna·effort none 실측에서 3.0s 는
-# 계획 호출의 6.5%(154회 중 10)가 시한에 잘렸고 3.5s 는 1.9%(624회 중 12)였다. 하한 산술은 몫(0.45R)만 쓰므로 상한과 무관하다.
+# 같은 시각 짝에서 시한 잘림이 4/78 → 2/78 이었다(같은 날 런 합 3.0s 10/154 · 3.5s 15/864 — 시각·판본이 섞인 합, 러너의 SDK
+# 단위 시한 기준). 운영 실효 시한은 min(3.5s, 0.45R) 라 분류 1.6s 턴은 ≈3.33s 다. 하한 산술은 몫(0.45R)만 쓰므로 상한과 무관하다.
 _PLAN_CAP_MS, _PLAN_SHARE, _PLAN_MIN_REMAINING_MS = 3_500, 0.45, 4_600
 _TURN_LLM_CAP = 3  # 턴당 서비스 LLM 상한(BR-AO-07·COST-U8-06) — 계획 턴(분류·계획·답변)에서 닿으면 요약을 한 번 미룬다(BR-AO-09)
 _MEMORY_CAP_MS = 2_000
@@ -672,6 +674,9 @@ class DialogueOrchestrator:
             # 발화는 싣지 않는다 — 운영에서 이 줄 수로 오탐을 센다(정상 말이 걸리면 범위 밖 카드가 나간다)
             log.info("dialogue_injection_suspected %s", json.dumps({"event": "dialogue_injection_suspected", "trace_id": inp.trace_id}))
             return self._out_of_scope(inp, INJECTION_REASON)
+        # 0″ — 지역을 말한 장소 찾기 말이면 장소 탐색 SQL 작성을 분류와 나란히 미리 시작한다(분류 뒤에 쓰면 팬아웃 시한에 걸렸다, place_sql 註)
+        if self._ports.place_sql is not None:
+            self._ports.place_sql.prefetch(inp.utterance, inp.trace_id, inp.now, self._submit)
         trip_view = _trip_view(inp.snapshot)
         today = inp.now.astimezone(self._tz).date()
         trip_summary = _trip_summary(inp.snapshot, today)
@@ -784,6 +789,11 @@ class DialogueOrchestrator:
 
     # ── 4 팬아웃 ─────────────────────────────────────────────────────────
 
+    def _submit(self, fn: Callable[[], object]) -> Future:
+        """공유 풀에 내되 문맥을 복사해 넘긴다 — 턴 `llm_calls`(백엔드 사용량 상한의 원천)가 contextvar 카운터라, 그냥 내면 풀 스레드에서
+        부른 서비스 LLM(장소 탐색 NL2SQL)이 빠진다. 한 사본을 두 스레드가 같이 쓰면 RuntimeError 라 낼 때마다 새로 뜬다."""
+        return self._pool.submit(contextvars.copy_context().run, fn)
+
     def _fanout(self, inp: TurnInput, tasks: Sequence[HandlerTask]) -> dict[str, TaskResult]:
         """공유 풀 팬아웃 (BLM §6, `route_budget.measure_within` 선례) — 마감은 submit **전에** 고정, 미완은 cancel 뒤 TIMEOUT.
 
@@ -803,7 +813,7 @@ class DialogueOrchestrator:
         results: dict[str, TaskResult] = {}
         for task in tasks:
             try:
-                futures[task.name] = self._pool.submit(task.fn)
+                futures[task.name] = self._submit(task.fn)
             except Exception as e:  # noqa: BLE001 — 풀이 닫혔다 등: 그 작업만 SKIPPED
                 results[task.name] = self._failed_task(inp, task.name, "SKIPPED", f"submit: {type(e).__name__}")
         if futures:
@@ -899,7 +909,7 @@ class DialogueOrchestrator:
             return DialogueAnswer.from_facts(facts)
         # INV-1 — 후보 답(대안·탐색)과 탐색의 빈 결과 답이 목록 밖 장소를 권했다. 탐색 EMPTY 는 장소가 없어 "대신 ○○해변은
         # 어떠세요?"를 지어낼 자리가 가장 큰 답이다
-        closed = closed or facts.kind is AnswerKind.CANDIDATES or intent is Intent.EXPLORE_PLACES
+        closed = closed or facts.kind is AnswerKind.CANDIDATES or intent in (Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES)
         if closed and any(_foreign_place(part, known) for part in parts):
             self._fallback(inp, "llm", *_ANSWER_MODES, "place_not_in_facts")
             return DialogueAnswer.from_facts(facts)

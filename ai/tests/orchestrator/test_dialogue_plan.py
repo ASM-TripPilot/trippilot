@@ -63,7 +63,7 @@ def test_every_tool_is_exposed_when_every_port_is_wired_with_a_trip_tag_on_trip_
 
 @pytest.mark.parametrize(("missing", "hidden"), [
     ("weather", {Intent.GET_WEATHER}),  # 운영에서 유일하게 빠질 수 있는 포트(providers.get)
-    ("pool_builder", {Intent.EXPLORE_PLACES, Intent.SUGGEST_ALTERNATIVE}),
+    ("pool_builder", {Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES, Intent.SUGGEST_ALTERNATIVE}),
     ("poi_info", {Intent.GET_WEATHER, Intent.GET_DISTANCE, Intent.GET_POI_INFO, Intent.SUGGEST_ALTERNATIVE}),
 ])
 def test_a_tool_whose_port_is_unwired_is_not_offered(missing: str, hidden: set[Intent]) -> None:
@@ -272,6 +272,8 @@ def test_null_turn_plans_one_tool_and_answers_frameless_with_three_service_calls
     assert b.llm.features() == ["DIALOGUE_INTENT", "DIALOGUE_PLAN", "DIALOGUE_ANSWER"] and out.llm_calls == 3
     assert NULL_INTENT in out.reason and out.reason.endswith("plan:EXPLORE_PLACES")
     assert out.answer.text == "감천문화마을을 골라 봤어요." and _plan_events(b) == []
+    (plan_req,) = [r for r in b.llm.requests if r.prompt_ref.feature == "DIALOGUE_PLAN"]
+    assert plan_req.timeout_sec == pytest.approx(3.5)  # BLM §4 — 잔여 9.0s: min(3.5, 9.0×0.45=4.05), 상한에 걸린다
 
 
 def test_two_tools_fan_out_once_with_prefixed_task_names_and_merge_into_the_candidate_card() -> None:

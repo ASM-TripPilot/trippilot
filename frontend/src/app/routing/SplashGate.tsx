@@ -100,10 +100,11 @@ export function SplashGate() {
         options={{ animation: 'none' }}
       />
       {/* ✦ AI 도우미 시트(TRIP-1322 · DEC-U8-13) — 진입 화면 위 투명 모달. (tabs) 밖이라 탭바가 가려진다.
-          미인증 딥링크는 가드에 안 걸리지만 세션 생성 401 이면 시트가 스스로 닫힌다. */}
+          미인증 딥링크는 가드에 안 걸리지만 세션 생성 401 이면 시트가 스스로 닫힌다.
+          TRIP-1554 — 아래에서 올라오는 모달 전환 없이 그 자리에 바로 뜨고 닫힌다(사용자 결정 "화면에서 바로 나오게", 페이드 아님). */}
       <Stack.Screen
         name="assistant/index"
-        options={{ presentation: 'transparentModal' }}
+        options={{ presentation: 'transparentModal', animation: 'none' }}
       />
     </Stack>
   );
