@@ -1025,4 +1025,70 @@ describe('세션 재조회 합치기 (W2)', () => {
     expect(find('old')).toBe(older);
     expect(find('old')?.proposal?.status).toBe('PROPOSED');
   });
+
+  // 후속 20261022 (5-b W-2) — [적용] 성공으로 캐시가 APPLIED 가 된 뒤, 적용보다 **먼저 떠난** 재조회의 옛 스냅샷(PROPOSED)이
+  // 늦게 도착하면 되돌아가 [적용] 버튼이 다시 보였다. 한 번 결정된 상태(PROPOSED 가 아닌 것)는 PROPOSED 로 되돌리지 않는다.
+  it.each(['APPLIED', 'DISMISSED', 'EXPIRED', 'STALE', 'FAILED'] as const)(
+    '캐시가 %s 인데 응답이 PROPOSED(옛 스냅샷)면 캐시 상태를 지킨다',
+    async (decided) => {
+      const decidedP: AssistantMessage = {
+        ...cachedP,
+        proposal: { ...(cachedP.proposal as Proposal), status: decided },
+      };
+      const find = await reopenOver(
+        { messages: [decidedP], nextBefore: 'c0' },
+        [
+          {
+            ...cachedP,
+            proposal: { ...(cachedP.proposal as Proposal), status: 'PROPOSED' },
+          },
+        ]
+      );
+
+      expect(find('p')?.proposal?.status).toBe(decided);
+    }
+  );
+
+  // 5-b(경량 W-2 가드) 심판 사각 두 건 — 가드가 과잉이면 여기서 빨개진다.
+  it('캐시도 응답도 PROPOSED 인데 내용(violations)만 바뀌면 응답을 따른다', async () => {
+    const find = await reopenOver({ messages: [cachedP], nextBefore: 'c0' }, [
+      {
+        ...cachedP,
+        proposal: {
+          ...(cachedP.proposal as Proposal),
+          violations: ['서버가 새로 본 위반'],
+        },
+      },
+    ]);
+
+    expect(find('p')?.proposal?.status).toBe('PROPOSED');
+    expect(find('p')?.proposal?.violations).toEqual(['서버가 새로 본 위반']);
+  });
+
+  it('캐시 메시지에 제안이 없고 응답에 새 제안(PROPOSED)이 붙으면 그대로 들어온다', async () => {
+    const plain: AssistantMessage = { ...cachedP, proposal: undefined };
+    const find = await reopenOver({ messages: [plain], nextBefore: 'c0' }, [
+      {
+        ...cachedP,
+        proposal: { ...(cachedP.proposal as Proposal), status: 'PROPOSED' },
+      },
+    ]);
+
+    expect(find('p')?.proposal?.status).toBe('PROPOSED');
+  });
+
+  it('캐시가 결정된 상태라도 응답이 다른 결정 상태면 응답을 따른다(APPLIED → EXPIRED)', async () => {
+    const appliedP: AssistantMessage = {
+      ...cachedP,
+      proposal: { ...(cachedP.proposal as Proposal), status: 'APPLIED' },
+    };
+    const find = await reopenOver({ messages: [appliedP], nextBefore: 'c0' }, [
+      {
+        ...cachedP,
+        proposal: { ...(cachedP.proposal as Proposal), status: 'EXPIRED' },
+      },
+    ]);
+
+    expect(find('p')?.proposal?.status).toBe('EXPIRED');
+  });
 });
