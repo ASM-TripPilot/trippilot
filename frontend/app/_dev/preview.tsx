@@ -286,6 +286,13 @@ try {
 
 // 프리뷰는 보기 전용이라 화면이 요구하는 콜백을 전부 빈 함수로 채운다.
 const noop = () => {};
+// TRIP-1584 j03·j04 하단 바(기록·회고·요약) — 프리뷰라 칸 이동은 no-op. 바는 이 묶음이 있을 때만 그려진다.
+const PREVIEW_RECORD_BAR = {
+  onBack: noop,
+  onPressRecords: noop,
+  onPressReflection: noop,
+  onPressSummary: noop,
+};
 
 // d01 탐색 랜딩 숙소 레인 카드(라우트가 formatPrice·stayKey 로 만드는 뷰모델의 프리뷰 값).
 // 가격 미확인 카드를 한 장 섞어 formatPrice 두 갈래를 눈으로 확인한다(BR-U1-12/14).
@@ -4305,7 +4312,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
         activeDay={2}
         onSelectDay={noop}
-        onPressTab={noop}
+        recordBar={PREVIEW_RECORD_BAR}
         onEnterEdit={noop}
         onConfirm={noop}
         onSaveEdit={noop}
@@ -4346,7 +4353,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           ]}
           activeDay={2}
           onSelectDay={noop}
-          onPressTab={noop}
+          recordBar={PREVIEW_RECORD_BAR}
           onEnterEdit={noop}
           onConfirm={noop}
           onSaveEdit={noop}
@@ -4378,7 +4385,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
         activeDay={2}
         onSelectDay={noop}
-        onPressTab={noop}
+        recordBar={PREVIEW_RECORD_BAR}
         onEnterEdit={noop}
         onConfirm={noop}
         onSaveEdit={noop}
@@ -4409,7 +4416,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
         activeDay={2}
         onSelectDay={noop}
-        onPressTab={noop}
+        recordBar={PREVIEW_RECORD_BAR}
         onEnterEdit={noop}
         onConfirm={noop}
         onSaveEdit={noop}
@@ -4441,7 +4448,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
         activeDay={2}
         onSelectDay={noop}
-        onPressTab={noop}
+        recordBar={PREVIEW_RECORD_BAR}
         onEnterEdit={noop}
         onConfirm={noop}
         onSaveEdit={noop}
@@ -4494,8 +4501,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         ]}
         orderedVisits={[]}
         shareEnabled
-        onBack={noop}
-        onPressTab={noop}
+        recordBar={PREVIEW_RECORD_BAR}
         tripTitle="부산 여행"
         onPressRecords={noop}
         dayReflections={TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS}
@@ -4522,8 +4528,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           { order: 4, dayLabel: '3일차', place: '전포 카페거리' },
         ]}
         shareEnabled
-        onBack={noop}
-        onPressTab={noop}
+        recordBar={PREVIEW_RECORD_BAR}
         tripTitle="부산 여행"
         onPressRecords={noop}
         dayReflections={TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS}

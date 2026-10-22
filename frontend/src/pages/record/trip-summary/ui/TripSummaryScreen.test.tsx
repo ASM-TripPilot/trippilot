@@ -8,7 +8,6 @@ import {
 } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
-import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { useAnimatedProbe } from '@/test-support/animatedProbe';
 
 import { DayHighlightCard } from './DayHighlightCard';
@@ -22,6 +21,15 @@ import {
 // `<Text testID="map-root">${lat},${lng}</Text>` 로 center 를 노출한다.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
+
+// TRIP-1584 — 하단 바(기록·회고·요약, 요약 활성)는 `recordBar`(칸 이동 콜백 묶음)를 받을 때만 그린다.
+const BAR = 'reflection-summary-bottom-bar';
+const makeRecordBar = () => ({
+  onBack: jest.fn(),
+  onPressRecords: jest.fn(),
+  onPressReflection: jest.fn(),
+  onPressSummary: jest.fn(),
+});
 
 /**
  * 호스트 노드가 "누를 수 있는 것"인가 — Pressable 은 onPress 가 없어도 호스트에 응답자 핸들러
@@ -78,7 +86,6 @@ function baseProps(
     ],
     shareEnabled: true,
     onShare: jest.fn(),
-    onBack: jest.fn(),
     ...over,
   };
 }
@@ -288,13 +295,13 @@ describe('Figma 정합 — 지도 캡션·2톤 카드·방문행 라벨·바텀�
    * ★ 신 계약(구현 전이라 프로덕션 타입엔 아직 없다) — 테스트만 캐스팅으로 표현하고 구현자가 채운다
    *   (선례 `DailyReflectionScreen.test` 의 3얼굴·default 묶음 ExtendedProps):
    *   ① DayCardVM shape 변경: `{dateLabel,countLabel}` → `{dayLabel,visitCountLabel}`(날짜 제거·2톤 분리).
-   *   ② `onPressTab?` prop 신설(하단 BottomTabBar 배선, j03 동형).
+   *   ② (TRIP-1584 에서 `onPressTab` 5칸 탭바 → `recordBar` 3칸 바로 교체됨.)
    *
    * 무엇을 보장하나(승인 계약):
    *  - 🔴 AC-2(지도 캡션): MAP 얼굴에 `코랄 선 = 이동 경로 · 숙 = 거점 숙소` 가 뜨고, VISIT_LIST 엔 없다.
    *  - 🔴 AC-3(2톤 카드): 카드가 `1일차`(완전일치=자기 Text)와 `5곳`(별도 Text)을 그리고 날짜는 없다.
    *  - 🟢 AC-4(방문라벨 구조 앵커): 방문 행이 `1일차`+장소명(별도 Text)이고 옛 `Day1` 은 없다.
-   *  - 🔴 AC-6(바텀탭): 양 얼굴에 BottomTabBar(records 활성) + 탭 press → onPressTab(key) 1회.
+   *  - 🔴 AC-6 → TRIP-1584 AC-12(하단 바): 양 얼굴에 3칸 바(요약 활성) — 아래 묶음.
    *
    * (개념) `getByText('문자열')`=host Text **완전 일치**(정규화 후 전체 문자열 동일 — 융합 노드면 부분을
    *   못 집는다) → 2톤을 "별도 Text"로 강제 · `getByText(/정규식/)`=**부분매칭**(구분자 `· 5곳` vs `5곳`
@@ -316,7 +323,6 @@ describe('Figma 정합 — 지도 캡션·2톤 카드·방문행 라벨·바텀�
 
   type ParityProps = Omit<TripSummaryScreenProps, 'dayCards'> & {
     dayCards: ParityDayCardVM[];
-    onPressTab?: (key: ShellTabKey) => void;
   };
 
   const Screen = TripSummaryScreen as unknown as (
@@ -341,8 +347,7 @@ describe('Figma 정합 — 지도 캡션·2톤 카드·방문행 라벨·바텀�
       orderedVisits: [],
       shareEnabled: true,
       onShare: jest.fn(),
-      onBack: jest.fn(),
-      onPressTab: jest.fn(),
+      recordBar: makeRecordBar(),
       ...over,
     };
   }
@@ -427,27 +432,38 @@ describe('Figma 정합 — 지도 캡션·2톤 카드·방문행 라벨·바텀�
     });
   });
 
-  describe('🔴 AC-6 · 바텀탭(records 활성 + onPressTab 배선)', () => {
+  // TRIP-1584 AC-12 — 홈 5칸 탭바(`BottomTabBar`)를 허브식 3칸 바로 갈아 끼운다. 칸 이동 판단(스택·날짜·요약 준비)은 페이지 훅 몫이라 여기선 콜백 호출만 본다.
+  describe('🔴 TRIP-1584 AC-12 · 하단 바(기록·회고·요약, 요약 활성)가 5칸 탭바를 대신한다', () => {
     it.each([['MAP'], ['VISIT_LIST']] as const)(
-      '%s 얼굴에 탭바가 뜨고 기록 탭이 활성이다',
+      '%s 얼굴: 3칸 바가 서고 요약 칸만 활성이며 옛 5칸 탭바와 헤더 ‹ 는 없다 (헤더 「공유」는 그대로)',
       (view) => {
         renderScreen(view === 'MAP' ? { view: 'MAP' } : VISIT_LIST_OVER);
 
-        expect(screen.getByTestId('shell-tabbar-root')).toBeOnTheScreen();
+        expect(screen.getByTestId(BAR)).toBeOnTheScreen();
+        expect(screen.getByTestId(`${BAR}-tab-summary`)).toBeSelected();
+        expect(screen.getByTestId(`${BAR}-tab-records`)).not.toBeSelected();
+        expect(screen.queryByTestId('shell-tabbar-root')).toBeNull();
+        expect(screen.queryByTestId('reflection-summary-back')).toBeNull();
         expect(
-          screen.getByTestId('shell-tabbar-tab-records').props
-            .accessibilityState?.selected
-        ).toBe(true);
+          screen.getByTestId('reflection-summary-share')
+        ).toBeOnTheScreen();
       }
     );
 
-    it('다른 탭 press → onPressTab 을 그 키로 1회 부른다', () => {
-      const { onPressTab } = renderScreen({ view: 'MAP' });
+    it('기록·회고 칸과 뒤로는 제 콜백만 1회 부르고, 활성인 요약 칸은 아무것도 안 부른다', () => {
+      const { recordBar } = renderScreen({ view: 'MAP' });
+      const bar = recordBar as ReturnType<typeof makeRecordBar>;
 
-      fireEvent.press(screen.getByTestId('shell-tabbar-tab-home'));
+      fireEvent.press(screen.getByTestId(`${BAR}-tab-summary`));
+      expect(Object.values(bar).flatMap((fn) => fn.mock.calls)).toEqual([]);
 
-      expect(onPressTab).toHaveBeenCalledTimes(1);
-      expect(onPressTab).toHaveBeenCalledWith('home');
+      fireEvent.press(screen.getByTestId(`${BAR}-tab-records`));
+      fireEvent.press(screen.getByTestId(`${BAR}-tab-reflection`));
+      fireEvent.press(screen.getByTestId(`${BAR}-back`));
+      expect(bar.onPressRecords).toHaveBeenCalledTimes(1);
+      expect(bar.onPressReflection).toHaveBeenCalledTimes(1);
+      expect(bar.onBack).toHaveBeenCalledTimes(1);
+      expect(bar.onPressSummary).not.toHaveBeenCalled();
     });
   });
 });

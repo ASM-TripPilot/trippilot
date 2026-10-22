@@ -11,7 +11,11 @@ import {
   shareEnabled,
   toOrderedVisitList,
 } from '@/features/reflection';
-import { useTripSummary } from '@/features/reflection';
+import {
+  pickReflectionDate,
+  useRecordBarNav,
+  useTripSummary,
+} from '@/features/reflection';
 import { TripSummaryScreen, type DayCardVM } from './TripSummaryScreen';
 import { tripDayChips } from '@/features/add-must-visit';
 import { formatDayLabel } from '@/entities/trip';
@@ -22,8 +26,8 @@ import {
   isLocationAutomationEnabled,
   useTripRoutes,
 } from '@/shared/location';
-import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
-import { shellTabHref } from '@/shared/ui/BottomTabBar';
+import { seoulDate } from '@/shared/lib/seoulDate';
+import { RecordNavBar } from '@/widgets/bottom-nav-bar';
 
 /**
  * TRIP-572 · trip-summary 페이지 — j04 요약 조회·조립·배선의 단일 출처(FSD).
@@ -44,6 +48,8 @@ import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
 export interface TripSummaryPageProps {
   tripId: string;
+  /** TRIP-1584 · 'YYYY-MM-DD' KST 오늘 — 하단 바 「회고」 칸이 갈 날짜(여행 중이면 오늘·끝났으면 마지막 일차)를 정하는 테스트 주입 seam. */
+  today?: string;
 }
 
 const PENDING_ILLUSTRATION = (
@@ -52,6 +58,7 @@ const PENDING_ILLUSTRATION = (
 
 export function TripSummaryPage({
   tripId,
+  today = seoulDate(new Date()),
 }: TripSummaryPageProps): ReactElement {
   const summary = useTripSummary(tripId);
   const envelope = summary.envelope;
@@ -63,13 +70,31 @@ export function TripSummaryPage({
   const routes = useTripRoutes(automationOn ? tripId : null);
   const tripDays = trip.data ? tripDayChips(trip.data) : [];
 
-  const handleBack = () => {
-    if (router.canGoBack()) router.back();
-  };
+  // TRIP-1584 · 하단 바(기록·회고·요약) — 칸 이동·뒤로는 훅이 진다. 회고 칸은 여행 기간 규칙(여행 중이면 오늘, 끝났으면 마지막 일차, 시작 전이면 비활성).
+  // 막다른 화면이 안 되게 준비 중·실패 얼굴에도 같은 바를 붙인다(`withBar`).
+  // 바는 **얼굴과 무관한 한 자리**(모든 얼굴이 같은 래퍼 View 의 같은 위치)에 둔다 — 얼굴마다 다른 트리 자리에 두면 요약이 도착해 얼굴이 바뀔 때 바가
+  // 새로 마운트돼 입장 모프가 한 번 더 돈다(5-b W1).
+  const recordBar = useRecordBarNav({
+    tripId,
+    reflectionDate: pickReflectionDate(
+      tripDays.map((chip) => chip.date),
+      today
+    ),
+  });
+  const withBar = (face: ReactElement): ReactElement => (
+    <View className="flex-1">
+      {face}
+      <RecordNavBar
+        testIDPrefix="reflection-summary-bottom-bar"
+        active="summary"
+        {...recordBar}
+      />
+    </View>
+  );
   const openRecords = () => router.push(`/trips/${tripId}/records`);
 
   if (summary.isError) {
-    return (
+    return withBar(
       <StateNotice
         testID="reflection-summary-error"
         illustration={PENDING_ILLUSTRATION}
@@ -99,7 +124,7 @@ export function TripSummaryPage({
     !data.stats ||
     !data.highlights
   ) {
-    return (
+    return withBar(
       <StateNotice
         testID="reflection-summary-pending"
         illustration={PENDING_ILLUSTRATION}
@@ -137,7 +162,7 @@ export function TripSummaryPage({
       : undefined,
   }));
 
-  return (
+  return withBar(
     <TripSummaryScreen
       stats={stats}
       distanceSourceLabel={distanceSourceLabel(
@@ -154,8 +179,6 @@ export function TripSummaryPage({
           ? () => router.push(`/trips/${tripId}/records/share`)
           : undefined
       }
-      onBack={handleBack}
-      onPressTab={(key: ShellTabKey) => router.dismissTo(shellTabHref(key))}
       tripTitle={trip.data?.title}
       onPressRecords={openRecords}
       // 번호는 여행 기간 기준(1-기반, j03 탭과 같다) — `highlight.dayOrder` 는 기록 있는 날 순번이라 쓰지 않는다.

@@ -52,7 +52,7 @@ import {
   BAR_ENTER_DELAY_MS,
   BAR_EXIT_MS,
   barMorphFrame,
-} from '../model/barMorph';
+} from '@/widgets/bottom-nav-bar';
 import {
   LIVE_BAR_SIDE,
   LIVE_BOTTOM_BAR_RESERVE,

@@ -196,7 +196,7 @@ export function RecordsIconActive({ size = 27 }: TabIconProps) {
     </Svg>
   );
 }
-function RecordsIconInactive({ size = 27 }: TabIconProps) {
+export function RecordsIconInactive({ size = 27 }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
