@@ -3857,7 +3857,7 @@ class WiredItineraryOrchestrator:
         packets = self._info.collect(
             Intent.EDIT_SCHEDULE,
             {
-                "pool_request": CandidatePoolRequest(
+                "pool_request": (pool_request := CandidatePoolRequest(
                     anchor=GeoPoint(request.anchor.lat, request.anchor.lng),
                     dates=tuple(
                         sorted({d.date for d in request.itinerary.days})
@@ -3865,7 +3865,7 @@ class WiredItineraryOrchestrator:
                     budget=_token_or(
                         _BUDGET_TOKENS, request.budget_level, BudgetLevel.MID),
                     transport=transport,
-                ),
+                )),
                 "now": now,
             },
         )
@@ -3900,6 +3900,9 @@ class WiredItineraryOrchestrator:
             utterance=request.utterance,
             command=command,
             confirm=request.confirm,
+            # 사이 넣기 구간 풀 — 같은 요구표·공급자로 그 날만 한 번 더 모은다(INV-1). 에이전트가 자리를 코드로 풀었을 때만 부른다
+            segment_pool=lambda center, km: self._pool_from(self._info.collect(Intent.EDIT_SCHEDULE, {"pool_request": replace(
+                pool_request, anchor=center, radius_override_km=km, dates=(request.target_date,)), "now": now}), now),
         ))
         return self._edit_response(outcome)
 
