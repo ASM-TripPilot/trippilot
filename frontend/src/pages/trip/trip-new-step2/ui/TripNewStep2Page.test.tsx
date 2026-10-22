@@ -11,6 +11,7 @@ import type { BaseAssignment, SavedStay } from '@/shared/api/index.schemas';
 import { useTripWizardStore } from '@/features/create-trip';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 
+import { stayCoverFor } from '@/test-support/placeCoverFixtures';
 import { TripNewStep2Page } from './TripNewStep2Page';
 
 /**
@@ -397,6 +398,43 @@ describe('배선 — 변형 판정·박별 카드·CTA', () => {
       expect(card3).toHaveTextContent(/경주/);
       expect(card3).toHaveTextContent(/숙소 미정/);
     });
+
+    it('TRIP-1588 · 배정된 밤 썸네일 = 그 밤 숙소의 savedStayKey 그림 (외부 키 있으면 stayKey, 없으면 savedStayId)', () => {
+      // 준비 — 밤1·2 = A(외부 키 NAVER:n-99 → 1번, savedStayId stay-a 였다면 3번), 밤3 = B(외부 키 없음 → stay-b 4번).
+      mockSavedStaysResult = loaded([
+        stay({ externalSource: 'NAVER', externalId: 'n-99' }),
+        stay({ savedStayId: 'stay-b', name: '경주 게스트하우스' }),
+      ]);
+      mockBasesResult = loaded([
+        assignment(),
+        assignment({
+          baseAssignmentId: 'ba-2',
+          savedStayId: 'stay-b',
+          dateFrom: '2026-06-12',
+          dateTo: '2026-06-13',
+        }),
+      ]);
+
+      // 실행
+      render(<TripNewStep2Page />);
+
+      // 단언
+      [1, 2].forEach((night) =>
+        expect(
+          screen.getByTestId(`trip-base-night-thumb-${night}`).props.source
+        ).toEqual([stayCoverFor('NAVER:n-99')])
+      );
+      expect(
+        screen.getByTestId('trip-base-night-thumb-3').props.source
+      ).toEqual([stayCoverFor('stay-b')]);
+    });
+
+    it('TRIP-1588 · 미배정 밤은 썸네일이 없다 (숙소 미정)', () => {
+      render(<TripNewStep2Page />);
+
+      expect(screen.getByTestId('trip-base-night-thumb-1')).toBeOnTheScreen();
+      expect(screen.queryByTestId('trip-base-night-thumb-3')).toBeNull();
+    });
   });
 
   // TRIP-1010(D7) — 카드 수는 박수 합이 아니라 **여행 기간**이다. 배선이 스토어 `endDate` 를
@@ -723,6 +761,25 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
     // 배정 0 — 세 밤 모두 "숙소 미정". 후보는 저장 숙소 두 곳.
     mockSavedStaysResult = loaded([STAY_A, STAY_B]);
     mockBasesResult = loaded<BaseAssignment[]>([]);
+  });
+
+  describe('TRIP-1588 · 시트 후보 사진 칸 = savedStayKey 그림', () => {
+    it('외부 키 있는 A 는 stayKey, 없는 B 는 savedStayId 로 고른다', () => {
+      mockSavedStaysResult = loaded([
+        { ...STAY_A, externalSource: 'NAVER', externalId: 'n-99' },
+        STAY_B,
+      ]);
+      render(<TripNewStep2Page />);
+
+      fireEvent.press(screen.getByTestId('trip-base-night-card-2'));
+
+      expect(
+        screen.getByTestId('trip-base-staysheet-cand-stay-a-photo').props.source
+      ).toEqual([stayCoverFor('NAVER:n-99')]);
+      expect(
+        screen.getByTestId('trip-base-staysheet-cand-stay-b-photo').props.source
+      ).toEqual([stayCoverFor('stay-b')]);
+    });
   });
 
   describe('I1 · 카드 탭 → 시트 오픈 (AC-1 재연결)', () => {

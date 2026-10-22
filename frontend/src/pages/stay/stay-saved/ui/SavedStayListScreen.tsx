@@ -31,8 +31,8 @@ import {
  * 화면이 끝나지 않는 로딩이 되므로, 게스트 여부를 얼굴 판정의 가장 앞에 둔다.
  *
  * **카드는 계약이 채울 수 있는 것만 정직하게 그린다** — `SavedStay` 스키마엔 사진·지역·거리·
- * 가격이 없어(brief §화면·IO) 이름 + (있으면)날짜라벨만 그린다(g02 line 140 회색 플레이스홀더
- * 선례 승계, 날짜는 체크인/아웃이지 소요시간이 아니다·INV-3). 사진 자리는 회색 배지로 남긴다.
+ * 가격이 없어(brief §화면·IO) 이름 + (있으면)날짜라벨만 그린다(날짜는 체크인/아웃이지 소요시간이
+ * 아니다·INV-3). 사진 칸은 VM `coverKey`(생산자가 `savedStayKey` 로 채운다)의 숙소 그림이다(TRIP-1588).
  *
  * **담김 하트는 색(SVG fill)으로 안 잰다** — repo-trap: `*Glyphs.tsx` fill 은 jest 렌더 트리에
  * 안 남는다. 담김을 별도 testID(`saved-stay-heart-filled-{id}`) + 카드의
@@ -142,6 +142,7 @@ const SavedStayRow = memo(function SavedStayRow({
       isBase={vm.isBase}
       region={vm.region}
       priceLabel={vm.priceLabel}
+      coverKey={vm.coverKey}
       trailing={
         // TRIP-1429 — 하트는 저장 풀기 버튼이다(Q-040). 자기 onPress 가 있어야 누름이 카드(상세 이동)로
         // 새지 않는다. 화살표로 id 만 올린다(직결하면 눌림 이벤트가 id 자리로 간다). 글리프는 Figma 27 그대로

@@ -7,7 +7,7 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import { coverFor } from '@/test-support/placeCoverFixtures';
+import { coverFor, stayCoverFor } from '@/test-support/placeCoverFixtures';
 
 import {
   ExploreLandingScreen,
@@ -651,6 +651,29 @@ describe('TRIP-457 · 숙소 카드 press 분리', () => {
     expect(() =>
       fireEvent.press(screen.getByTestId(`explore-stay-card-${STAY_CARD.key}`))
     ).not.toThrow();
+  });
+});
+
+// TRIP-1588 — 숙소 레인 카드 사진 칸 = 그 카드 `key`(stayKey)로 고른 숙소 그림. 두 카드(6번·3번)를 섞어
+// 키를 바꿔 끼우는 오배선을 잡는다. 하트 오버레이 testID 는 그대로다.
+describe('TRIP-1588 · 숙소 레인 카드 사진 칸', () => {
+  it('카드마다 자기 key 의 숙소 그림(explore-stay-photo-{key})이고 하트는 그대로 있다', () => {
+    const cardB: StayCardVM = { ...STAY_CARD, key: 'NAVER:s2', name: 'B' };
+    render(
+      <ExploreLandingScreen
+        {...baseProps({ stayLane: stayLane({ cards: [STAY_CARD, cardB] }) })}
+      />
+    );
+
+    expect(
+      screen.getByTestId(`explore-stay-photo-${STAY_CARD.key}`).props.source
+    ).toEqual([stayCoverFor(STAY_CARD.key)]);
+    expect(
+      screen.getByTestId('explore-stay-photo-NAVER:s2').props.source
+    ).toEqual([stayCoverFor('NAVER:s2')]);
+    expect(
+      screen.getByTestId(`explore-stay-save-${STAY_CARD.key}`)
+    ).toBeOnTheScreen();
   });
 });
 

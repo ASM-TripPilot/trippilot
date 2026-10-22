@@ -40,4 +40,6 @@ export interface SavedStayCardVM {
   region?: string;
   /** 가격(표시용 "145,000원~") — 있을 때만 2톤 가격줄. 실앱은 계약 공백이라 미설정. */
   priceLabel?: string;
+  /** 사진 칸 그림 키(TRIP-1588) — 생산자(페이지)가 `savedStayKey`(외부 키 있으면 `stayKey`, 없으면 `savedStayId`)로 채운다. */
+  coverKey?: string;
 }

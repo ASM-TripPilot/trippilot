@@ -19,6 +19,7 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { StayDetail } from '@/shared/api/index.schemas';
 import { getGetMeSettingsQueryKey } from '@/shared/api/index.hooks';
 import { formatPrice } from '@/entities/stay';
+import { stayCoverFor } from '@/test-support/placeCoverFixtures';
 import { StayDetailPage } from './StayDetailPage';
 
 /**
@@ -290,6 +291,10 @@ describe('D1·D2 · 데이터는 서버 조회 GET /stays/{stayId} 하나에서 
       /051-749-7000/
     );
     expect(screen.getByTestId('stay-detail-rooms')).toHaveTextContent(/120실/);
+    // TRIP-1588 — 큰 사진 칸 = 응답의 stayKey(목록 카드와 같은 키)로 고른 숙소 그림.
+    expect(screen.getByTestId('stay-detail-hero').props.source).toEqual([
+      stayCoverFor('NAVER:s1'),
+    ]);
   });
 
   it('D2 · item param 이 함께 와도 읽지 않는다 — 로딩 중에도, 응답 뒤에도 카드 이름이 안 보인다', async () => {
