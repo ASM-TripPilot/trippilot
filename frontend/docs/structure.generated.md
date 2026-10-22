@@ -375,6 +375,19 @@
 - `src/features/create-trip/model/tripWizardStore.ts`  →  TripWizardField · TripWizardDraft · minNightsFor · useTripWizardStore
 - `src/features/create-trip/model/wizardOrigin.ts`  →  WizardOriginParams · wizardOriginParams · isWizardOrigin
 
+## src/features/curated-stay/
+- `src/features/curated-stay/index.ts`  →  useCuratedStays
+- `src/features/curated-stay/index.view.ts`  →  curatedKey · BrowseAllButton · CuratedStayCard · type CuratedStayCardProps · CuratedStayRow · type CuratedStayRowProps
+
+## src/features/curated-stay/model/
+- `src/features/curated-stay/model/curatedKey.ts`  →  curatedKey
+- `src/features/curated-stay/model/useCuratedStays.ts`  →  useCuratedStays
+
+## src/features/curated-stay/ui/
+- `src/features/curated-stay/ui/BrowseAllButton.tsx`  →  BrowseAllButton
+- `src/features/curated-stay/ui/CuratedStayCard.tsx`  →  CuratedStayCardProps · CuratedStayCard
+- `src/features/curated-stay/ui/CuratedStayRow.tsx`  →  CuratedStayRowProps · CuratedStayRow
+
 ## src/features/edit-itinerary/
 - `src/features/edit-itinerary/index.ts`  →  buildEditItineraryRequest · addSlot · insertSlotAt · useItineraryEditStore · useEditorDraft · useConfirmItinerary · resolveSlotSwapError · swapSlotPoi · SaveConflictDialog
 
@@ -1792,6 +1805,12 @@
 ## src/widgets/bottom-nav-bar/ui/
 - `src/widgets/bottom-nav-bar/ui/BottomNavBar.tsx`  →  NavBarCellSpec · BottomNavBarProps · NavBarBackButton · NavBarCapsule · NavBarCell · BottomNavBar
 
+## src/widgets/curated-stays/
+- `src/widgets/curated-stays/index.ts`  →  CuratedStaysSection · type CuratedStaysSectionProps
+
+## src/widgets/curated-stays/ui/
+- `src/widgets/curated-stays/ui/CuratedStaysSection.tsx`  →  CuratedStaysSectionProps · CuratedStaysSection
+
 ## src/widgets/map-sheet-shell/
 - `src/widgets/map-sheet-shell/index.ts`  →  CTA_BAR_HEIGHT · DayChipOverlay · DayChipScroller · DistanceConnector · EditorView · GenerationProgressCard · BackChevronGlyph · FullAiGlyph · MapSheetShell · SheetHeader
 
@@ -1825,4 +1844,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1167개 파일
+합계 1176개 파일
