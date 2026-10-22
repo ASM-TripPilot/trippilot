@@ -102,6 +102,17 @@ class ReplanController(
         @PathVariable sessionId: UUID,
     ): ReplanDiffResponse = ReplanDiffResponse.from(diffs.diff(principal.accountId(), tripId, sessionId))
 
+    /**
+     * 반영한 재계획 되돌리기(TRIP-1412) — 원탭 [다시 짜기]가 적용한 그 날을 반영 직전으로 돌린다. **확정 일정에서도** 된다.
+     * 이미 되돌렸거나·되돌리기 지점이 없거나·지난 날·되돌리면 빠지는 곳에 다녀온 기록이 있거나·그 사이 그 날이 바뀌었으면(`STALE`) 409.
+     */
+    @PostMapping("/{sessionId}/revert")
+    fun revert(
+        principal: Principal,
+        @PathVariable tripId: UUID,
+        @PathVariable sessionId: UUID,
+    ): ReplanSessionResponse = respond(principal) { service.revert(it, tripId, sessionId) }
+
     @PostMapping("/{sessionId}/cancel")
     fun cancel(
         principal: Principal,
@@ -190,6 +201,13 @@ data class ReplanSessionResponse(
      * 사용자 세션은 늘 false 다. `APPLIED` 가 아니면 상태와 무관하게 '준비된 대안 없음'으로 읽는다 — 갈 곳은 BR-SA-23 판정표.
      */
     val stale: Boolean,
+    /** 되돌린 시각(TRIP-1412). 되돌리지 않았으면 null — 상태는 되돌려도 `APPLIED` 그대로다. */
+    val revertedAt: Instant?,
+    /**
+     * [되돌리기]를 그릴 수 있는가 — 반영됐고, 아직 안 되돌렸고, 되돌리기 지점이 있다(이 기능 이전 반영분은 false).
+     * true 여도 누르면 409 일 수 있다 — 지난 날·되돌리면 빠지는 곳의 방문 기록·그 사이 바뀐 일정은 누르는 순간에만 판정한다.
+     */
+    val revertible: Boolean,
 ) {
     companion object {
         fun from(v: SessionView): ReplanSessionResponse {
@@ -198,7 +216,7 @@ data class ReplanSessionResponse(
                 s.sessionId, s.tripId, s.itineraryId, s.triggerId, s.scope, s.targetDate, s.fromInstant,
                 s.origin.kind, s.origin.lat, s.origin.lng, s.origin.isEstimated,
                 s.reasons, s.directives, s.freeText, s.excludedPoiIds,
-                s.status, s.createdAt, s.closedAt, s.initiatedBy, v.stale,
+                s.status, s.createdAt, s.closedAt, s.initiatedBy, v.stale, s.revertedAt, s.isRevertible,
             )
         }
     }

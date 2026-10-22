@@ -12,6 +12,7 @@ import {
   ItineraryStatus,
 } from '@/shared/api/index.schemas';
 import { seoulDate } from '@/shared/lib/seoulDate';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 import {
   guardPress,
   openPressGuardWindow,
@@ -236,7 +237,7 @@ function laneError(refetch: jest.Mock): void {
 type PlacesCall = [unknown, { query?: { enabled?: boolean } } | undefined];
 type MultiCall = [
   readonly string[],
-  { category?: unknown; q?: unknown } | undefined,
+  { category?: unknown; q?: unknown; seed?: unknown } | undefined,
 ];
 
 /** 요청이 실제로 나가는 단일 지역 조회 호출만 — enabled 미지정은 켜짐(react-query 기본). */
@@ -264,6 +265,8 @@ function expectServiceRegionQuery(): void {
     expect(regions).toEqual(SERVICE_REGION_NAMES);
     expect(filters?.category ?? null).toBeNull();
     expect(filters?.q ?? '').toBe('');
+    // TRIP-1563 — 무작위 시드는 d04 만 쓴다. 홈이 seed 를 넘기면 d04 와 달리 캐시를 못 나누고 순서도 바뀐다.
+    expect(filters?.seed).toBeUndefined();
   }
   expect(enabledRegionlessPlacesCalls()).toHaveLength(0);
 }
@@ -809,6 +812,20 @@ describe('요즘 사람들이 담는 곳 — 실장소(TRIP-1209)', () => {
     expect(screen.queryByText('당일치기')).toBeNull();
     expect(screen.queryByText('1박 2일')).toBeNull();
     expect(screen.queryByText('반나절')).toBeNull();
+  });
+
+  it('레인 카드의 사진 칸은 그 장소의 category·poiId 로 고른 생성 이미지다 (사진 없는 서버 장소 — 사이클 20261022-place-category-covers)', () => {
+    render(<HomePage />);
+
+    const spot = (index: number) =>
+      screen.getByTestId(`home-spot-photo-${index}`).props.source;
+    const collection = (index: number) =>
+      screen.getByTestId(`home-collection-photo-${index}`).props.source;
+    // 인기순 rk0..rk3 = 스팟 4장, rk4..rk6 = 컬렉션 3장. 홀짝에 따라 카페/명소가 번갈아 온다.
+    expect(spot(0)).toEqual([coverFor('카페', 'rk0')]);
+    expect(spot(3)).toEqual([coverFor('명소', 'rk3')]);
+    expect(collection(1)).toEqual([coverFor('명소', 'rk5')]);
+    expect(collection(2)).toEqual([coverFor('카페', 'rk6')]);
   });
 
   it('"지금 뜨는 장소" 4장과 겹치지 않는다', () => {

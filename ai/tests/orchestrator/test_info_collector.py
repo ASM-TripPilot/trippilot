@@ -24,6 +24,7 @@ from trippilot.orchestrator.info_collector import (
     InfoCollector,
     UnknownIntentError,
 )
+from trippilot.ports.weather_port import DayWeather
 from trippilot.providers.weather import WeatherProvider
 
 _ANCHOR = GeoPoint(35.1587, 129.1604)
@@ -46,6 +47,29 @@ class _FakePort:
 class _FailingPort:
     def daily_forecast(self, coord, days):
         raise TimeoutError("kma down")
+
+
+def test_daily_detail_rides_along_as_json_without_unknown_cells() -> None:
+    """상세는 선택 능력 — 있으면 날짜별 dict 로 싣고 None 칸은 뺀다, 포트가 없으면 빈 dict(키는 항상 있다)."""
+    class _Detailed(_FakePort):
+        def daily_detail(self, coord, days):
+            return {_D1: DayWeather(sky=4, pty=1, tmn=9, tmx=None)}
+
+    packet = WeatherProvider(_Detailed({_D1: 80})).fetch(_PARAMS)
+    assert packet.data["detail"] == {"2026-08-20": {"sky": 4, "pty": 1, "tmn": 9}}
+    assert WeatherProvider(_FakePort({_D1: 80})).fetch(_PARAMS).data["detail"] == {}
+
+
+def test_daily_detail_failure_keeps_rain_and_leaves_a_warning(caplog) -> None:
+    class _DetailBroken(_FakePort):
+        def daily_detail(self, coord, days):
+            raise TimeoutError("kma detail down")
+
+    with caplog.at_level("WARNING", logger="trippilot.providers.weather"):
+        packet = WeatherProvider(_DetailBroken({_D1: 10})).fetch(_PARAMS)
+    assert packet.status is ProviderStatus.OK and packet.data["daily"] == {"2026-08-20": 10}
+    assert packet.data["detail"] == {}
+    assert any("daily_detail" in r.getMessage() and "kma detail down" in r.getMessage() for r in caplog.records)
 
 
 # ── ① Provider 성공 ──────────────────────────────────────────────────
@@ -365,5 +389,7 @@ def test_collector_logs_one_timing_line_per_provider(caplog) -> None:
         _slow_collector(0.0).collect(Intent.GENERATE_SCHEDULE, _PARAMS)
 
     lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("provider_timing")]
-    assert sorted(lines) == sorted(f"provider_timing kind={k.name} ms=0" for k in _GEN_KINDS)
+    # 제공자마다 정확히 한 줄 — ms 값은 시계라 0 으로 못 박지 않는다(CI 러너에서 sleep(0) 도 1ms 가 나왔다, 2026-10-22 두 번).
+    assert sorted(line.split(" ms=")[0] for line in lines) == sorted(f"provider_timing kind={k.name}" for k in _GEN_KINDS)
+    assert all(line.split(" ms=")[1].isdigit() for line in lines)
 

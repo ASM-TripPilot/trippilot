@@ -11,6 +11,7 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { SLOT_SWAP_CONFLICT_CODES } from '@/features/edit-itinerary/model/slotSwapError';
 import type {
@@ -928,6 +929,7 @@ describe('후보 이름·태그·사진', () => {
         distanceRange: '420m',
         rationale: '가장 가까운 교회',
         nameKo: '남부산교회',
+        category: '카페',
         tags: ['교회', '야외'],
         imageUrl: X_IMG,
       },
@@ -936,6 +938,7 @@ describe('후보 이름·태그·사진', () => {
         distanceRange: '1.1km',
         rationale: '조용한 곳',
         nameKo: null,
+        category: '맛집',
         tags: [],
         imageUrl: null,
       },
@@ -944,6 +947,7 @@ describe('후보 이름·태그·사진', () => {
         distanceRange: '2.4km',
         rationale: '바다 옆 사찰',
         nameKo: '해동용궁사',
+        category: '자연',
         tags: ['사찰'],
         imageUrl: '',
       },
@@ -1017,17 +1021,20 @@ describe('후보 이름·태그·사진', () => {
       );
     });
 
-    it('H2 · AC-4·비주얼(a) — 사진 있으면 그 URL 이 source, null·빈 문자열이면 source 없는 회색 자리', async () => {
+    it('H2 · AC-4·비주얼(a) — 사진 있으면 그 URL 이 source, null·빈 문자열이면 그 후보의 카테고리·poiId 로 고른 생성 이미지', async () => {
       await renderAndWaitCandidates();
 
       expect(
         screen.getByTestId('itinerary-candidate-image-X').props.source
       ).toEqual([{ uri: X_IMG }]);
-      // 회색 자리도 testID 는 유지된다(존재) — 그리고 이미지 source 는 없다(부재). 둘을 짝으로 본다.
-      for (const id of [RAW_ID, 'Z']) {
-        const leaf = screen.getByTestId(`itinerary-candidate-image-${id}`);
-        expect(leaf.props.source).toBeUndefined();
-      }
+      // 같은 testID 의 칸이 비지 않는다 — 후보마다 자기 카테고리·poiId 다
+      // (RAW_ID → 맛집·변형 2, Z → 자연·변형 1). 카테고리를 행에 안 실으면 폴백이다.
+      expect(
+        screen.getByTestId(`itinerary-candidate-image-${RAW_ID}`).props.source
+      ).toEqual([coverFor('맛집', RAW_ID)]);
+      expect(
+        screen.getByTestId('itinerary-candidate-image-Z').props.source
+      ).toEqual([coverFor('자연', 'Z')]);
     });
 
     it('H3 · AC-5 — 현재 행 사진은 GET 슬롯의 imageUrl 이다', async () => {
@@ -1038,6 +1045,32 @@ describe('후보 이름·태그·사진', () => {
         expect(
           screen.getByTestId('itinerary-candidate-image-current').props.source
         ).toEqual([{ uri: CURRENT_IMG }])
+      );
+    });
+
+    it('H3b · AC-5 — 현재 슬롯에 사진이 없으면 현재 행은 슬롯의 카테고리(문화)·진짜 poiId(a)로 고른 그림이다 — 카드의 가짜 "current" 가 아니다', async () => {
+      const base = itinerary();
+      server.use(
+        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+          HttpResponse.json({
+            ...base,
+            days: [
+              {
+                ...base.days[0],
+                slots: [{ ...base.days[0].slots[0], imageUrl: null }],
+              },
+            ],
+          })
+        )
+      );
+      await renderAndWaitCandidates();
+
+      // GET 과 POST 도착 순서는 보장이 없다 — 현재 슬롯 정보가 들어올 때까지 기다린다.
+      // 'a' 는 변형 2 → culture-2 ('current' 로 해시했다면 culture-1).
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('itinerary-candidate-image-current').props.source
+        ).toEqual([coverFor('문화', 'a')])
       );
     });
 
@@ -1425,6 +1458,10 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       expect(
         screen.getByTestId('itinerary-candidate-image-P').props.source
       ).toEqual([{ uri: P_IMG }]);
+      // 사진 없는 차선책 Q 도 같은 칸에 자기 카테고리(문화)·poiId(Q → 변형 3)의 그림이다.
+      expect(
+        screen.getByTestId('itinerary-candidate-image-Q').props.source
+      ).toEqual([coverFor('문화', 'Q')]);
       expect(
         screen.getByTestId('itinerary-candidate-distance-P')
       ).toHaveTextContent('약 1.2km · 도보 추정');

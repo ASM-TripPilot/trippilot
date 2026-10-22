@@ -59,6 +59,8 @@ export interface TripSummaryScreenProps {
   mapCenter?: MapCenter;
   mapPins?: MapPin[];
   dayCards: DayCardVM[];
+  /** TRIP-1489 · 여행 전체 요약 문장(`summary.narrative`) — 일차 카드 목록의 첫 카드. 비었으면 카드를 그리지 않는다. */
+  narrative?: string;
   orderedVisits: OrderedVisit[];
   shareEnabled: boolean;
   /** TRIP-939 — 미주입이면 [공유]를 그리지 않는다(공유 카드 미장전 시 페이지가 넘기지 않음). */
@@ -101,6 +103,21 @@ function StatCell({
   );
 }
 
+/** TRIP-1489 · Figma j04(5063:3498) — 일차 카드와 같은 윤곽의 글 카드. 목적지가 없어 누를 수 없다. */
+function NarrativeCard({ text }: { text: string }): ReactElement {
+  return (
+    <View
+      testID="reflection-summary-narrative"
+      className="w-full gap-[4px] rounded-card border border-hairline bg-canvas p-[14px]"
+    >
+      <Text className="font-noto-bold text-card-title font-bold text-ink">
+        이번 여행
+      </Text>
+      <Text className="text-label text-muted">{text}</Text>
+    </View>
+  );
+}
+
 export function TripSummaryScreen({
   stats,
   distanceSourceLabel,
@@ -108,6 +125,7 @@ export function TripSummaryScreen({
   mapCenter,
   mapPins,
   dayCards,
+  narrative,
   orderedVisits,
   shareEnabled,
   onShare,
@@ -124,6 +142,8 @@ export function TripSummaryScreen({
     onShare?.();
   };
   const hasMap = mapCenter !== undefined && (mapPins?.length ?? 0) > 0;
+  const narrativeText = narrative?.trim() ?? '';
+  const narrativeOffset = narrativeText ? 1 : 0;
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }} className="bg-canvas">
@@ -217,8 +237,14 @@ export function TripSummaryScreen({
               </Text>
             )}
 
+            {narrativeText ? (
+              <DayCardReveal index={0}>
+                <NarrativeCard text={narrativeText} />
+              </DayCardReveal>
+            ) : null}
+
             {dayCards.map((card, index) => (
-              <DayCardReveal key={card.key} index={index}>
+              <DayCardReveal key={card.key} index={index + narrativeOffset}>
                 <DayHighlightCard
                   dayLabel={card.dayLabel}
                   visitCountLabel={card.visitCountLabel}

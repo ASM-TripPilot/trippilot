@@ -6,8 +6,9 @@ import {
   waitFor,
   within,
 } from '@testing-library/react-native';
+import { QueryClient } from '@tanstack/react-query';
 import { BASE } from '@/test-support/apiBase';
-import { createGcZeroWrapper } from '@/test-support/queryRender';
+import { createGcZeroWrapper, createWrapper } from '@/test-support/queryRender';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
@@ -46,6 +47,9 @@ import { PlaceExplorePage } from './PlaceExplorePage';
  *    (fan-out) 병합 결과를 한 목록에 함께 그린다 — 단일지역 경로(P-2)의 무한 스크롤은 안 탄다.
  *  - **P-16 (TRIP-1560)** 지역을 안 고르면 전국 조회(region 없음)가 아니라 서비스 지역(서울·부산·제주)별로
  *    조회한다 — 카테고리·검색어를 걸어도 같고, 일부·전부 실패는 배너·error 얼굴로 갈린다(AC-4·S-4 가 AC-5).
+ *  - **P-17 (TRIP-1563)** 목록은 이름순이 아니라 진입마다 새로 뽑는 시드 무작위다 — 모든 `/places` 요청이
+ *    `order=random&seed=<이번 진입의 번호표>` 를 싣고, 진입 중에는 고정(칩·검색·다시 시도·이어받기·지역 바꾸기),
+ *    재진입에는 새 번호표 + 캐시 미재사용, 3지역 병합은 지역을 번갈아 놓는다(아래 `P-17` describe).
  *  - **P-12 (AC-1)** ♥ FAB 는 담은 장소(d02, `/explore/saved-places`)로 push.
  *  - **P-13 (AC-1)** 복제 BottomTabBar 는 push·replace 가 아니라 dismissTo 로 항법한다(TRIP-1262).
  *  - **P-14 (TRIP-1562)** 검색바 ⇅ 버튼·카테고리 시트가 없다 — 어떤 조작으로도 시트가 마운트되지 않는다.
@@ -80,6 +84,11 @@ jest.mock('@/entities/place/ui/PlaceSubtitle', () => {
     PlaceSubtitle: jest.fn((props: unknown) => actual.PlaceSubtitle(props)),
   };
 });
+
+// TRIP-1563 — 시드는 `expo-crypto` 의 randomUUID 에서 나오는데, jest 에서 실물은 undefined 를 돌려준다(네이티브 모듈 없음).
+// 호출마다 다른 유효 값(숫자·하이픈 36자)을 주는 목으로 갈아 "진입마다 다름"을 우리가 통제한 값으로 증명한다.
+const mockRandomUUID = jest.fn();
+jest.mock('expo-crypto', () => ({ randomUUID: () => mockRandomUUID() }));
 
 jest.mock('@/shared/storage', () => ({
   saveTokens: jest.fn().mockResolvedValue(undefined),
@@ -226,7 +235,13 @@ beforeAll(() => {
   });
 });
 
+let uuidSeq = 0;
+
 beforeEach(() => {
+  uuidSeq = 0;
+  mockRandomUUID.mockImplementation(
+    () => `00000000-0000-4000-8000-${String((uuidSeq += 1)).padStart(12, '0')}`
+  );
   observed = [];
   savedRows = [];
   mockParams = {};
@@ -272,7 +287,15 @@ beforeEach(() => {
   );
 });
 
+/** 서버 계약(openapi /places)의 seed 규칙 — random 이면 필수이고 이 모양이어야 400 이 아니다. */
+const SEED_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
 afterEach(() => {
+  // TRIP-1563 INV-4 — 어느 테스트에서든 order 를 실은 요청은 규칙에 맞는 seed 도 실었다(시드 없는 random → 서버 400 → 목록이 비는 침묵 실패 방지).
+  hitsOf('GET', '/api/v1/places').forEach((hit) => {
+    const query = new URL(hit.url).searchParams;
+    if (query.has('order')) expect(query.get('seed')).toMatch(SEED_PATTERN);
+  });
   server.resetHandlers();
   // 연타 가드 창은 모듈 싱글턴 — 앞 테스트가 연 창이 다음 테스트로 새지 않게 닫는다(TRIP-1282).
   resetPressGuard();
@@ -655,10 +678,11 @@ describe('P-9 · 다지역이면 지역별로 조회해 한 목록에 합쳐 그
 
     // ③ 병합 결과 — 부산 2곳 + 경주 2곳이 한 목록에 함께 뜬다(입력 순서 보존 = 부산 먼저).
     //    둘째 지역 누락 뮤턴트면 경주 카드(g1·g2)가 없어 red.
+    //    TRIP-1563: d04 는 시드를 들고 있어 지역을 번갈아 놓는다(부산1·경주1·부산2·경주2) — 지역 블록이 아니다.
     expect(cardTestIds()).toEqual([
       'explore-places-card-b1',
-      'explore-places-card-b2',
       'explore-places-card-g1',
+      'explore-places-card-b2',
       'explore-places-card-g2',
     ]);
 
@@ -841,12 +865,13 @@ describe('P-16 · 지역을 안 고르면 서비스 지역(서울·부산·제�
     expectWaveCoversServiceRegions(hits);
     expect(regionsOf(hits)).not.toContain(null);
 
-    // ② 결과 — 세 지역 장소가 지역 블록 순서(서울 → 부산 → 제주)로 한 목록에 있다(병합 순서는 입력 순서 = 응답 도착 순서가 아니다).
+    // ② 결과 — 세 지역 장소가 지역을 번갈아(서울1·부산1·제주1·서울2) 한 목록에 있다(응답 도착 순서가 아니라 입력 순서 기준).
+    //    TRIP-1563: 시드가 있는 d04 는 지역 블록(s1,s2,b1,j1)이 아니라 라운드 로빈이다.
     expect(cardTestIds()).toEqual([
       'explore-places-card-s1',
-      'explore-places-card-s2',
       'explore-places-card-b1',
       'explore-places-card-j1',
+      'explore-places-card-s2',
     ]);
     // 전부 성공이면 부분 실패 배너가 없다.
     expect(screen.queryByTestId('explore-places-partialfailure')).toBeNull();
@@ -902,10 +927,11 @@ describe('P-16 · 지역을 안 고르면 서비스 지역(서울·부산·제�
       ).toBeOnTheScreen()
     );
     // 받은 두 지역(서울·제주)은 그대로 뜨고, 실패한 부산은 없다 — error 얼굴이 아니라 배너다.
+    // TRIP-1563: 살아남은 서울·제주도 번갈아 놓인다(서울1·제주1·서울2).
     expect(cardTestIds()).toEqual([
       'explore-places-card-s1',
-      'explore-places-card-s2',
       'explore-places-card-j1',
+      'explore-places-card-s2',
     ]);
     expect(screen.queryByTestId('explore-places-error')).toBeNull();
     // 앵커 — 누르기 전엔 첫 파도뿐이다(아래 증분이 재요청임을 보장).
@@ -918,6 +944,197 @@ describe('P-16 · 지역을 안 고르면 서비스 지역(서울·부산·제�
       expect(hitsOf('GET', '/api/v1/places')).toHaveLength(2 * WAVE)
     );
     expectWaveCoversServiceRegions(hitsOf('GET', '/api/v1/places').slice(WAVE));
+  });
+});
+
+describe('P-17 · 진입마다 새 시드로 무작위 순서를 묻는다 (TRIP-1563)', () => {
+  // 개념: **시드(seed)** 는 "섞는 방법을 정하는 번호표"다. 같은 번호표면 서버가 늘 같은 순서를, 바꾸면 다른 순서를 준다.
+  // 이 describe 가 보증하는 것은 "올바른 번호표를 모든 요청에 싣는다"까지다 — 실제로 섞여 보이는지는 서버 테스트와 6-b 몫이다.
+  const queryOf = (hit: { url: string }) => new URL(hit.url).searchParams;
+  const allPlaceHits = () => hitsOf('GET', '/api/v1/places');
+
+  /** 이 요청들이 전부 order=random 과 규칙에 맞는 seed 를 실었다. */
+  function expectRandomWithSeed(hits: { url: string }[]): void {
+    expect(hits.length).toBeGreaterThan(0);
+    hits.forEach((hit) => {
+      expect(queryOf(hit).get('order')).toBe('random');
+      expect(queryOf(hit).get('seed')).toMatch(SEED_PATTERN);
+    });
+  }
+
+  /** 위에 더해 요청들이 **같은 하나의** seed 를 썼다 — 그 seed 를 돌려준다. */
+  function expectOneSharedSeed(hits: { url: string }[]): string {
+    expectRandomWithSeed(hits);
+    const seeds = new Set(hits.map((hit) => queryOf(hit).get('seed')));
+    expect([...seeds]).toHaveLength(1);
+    return [...seeds][0] as string;
+  }
+
+  it('지역이 한 곳이면 첫 조회가 order=random 과 규칙에 맞는 seed 를 싣는다 (AC-1)', async () => {
+    setAccessToken('valid-access');
+    mockParams = { region: 'jeju' };
+
+    await renderPage();
+
+    const hits = allPlaceHits();
+    expect(hits).toHaveLength(1);
+    expectRandomWithSeed(hits);
+  });
+
+  it.each<[string, Record<string, string | string[]>, number]>([
+    ['지역 미지정(서비스 지역 전부)', {}, WAVE],
+    ['지역 2곳', { region: ['부산광역시', '경주시'] }, 2],
+  ])(
+    '%s 이면 지역별 요청 전부가 같은 order=random&seed 를 싣는다 (AC-2)',
+    async (_label, routeParams, expectedRequests) => {
+      setAccessToken('valid-access');
+      mockParams = routeParams;
+
+      await renderPage();
+
+      const hits = allPlaceHits();
+      expect(hits).toHaveLength(expectedRequests);
+      expectOneSharedSeed(hits);
+    }
+  );
+
+  it.each<[string, Record<string, string>, number]>([
+    ['지역 한 곳', { region: 'jeju' }, 1],
+    ['지역 미지정', {}, WAVE],
+  ])(
+    '%s: 닫았다 다시 들어오면 새 seed 로 서버에 새로 묻는다 — 지난 진입의 캐시를 읽지 않는다 (AC-3 · AC-7)',
+    async (_label, routeParams, perEntry) => {
+      setAccessToken('valid-access');
+      mockParams = routeParams;
+      // 캐시를 오래 들고 stale 도 되지 않는 클라이언트 — gcTime 0 래퍼로는 "지난 캐시를 읽는 사고"가 안 보인다.
+      const client = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false, gcTime: Infinity, staleTime: Infinity },
+          mutations: { retry: false, gcTime: Infinity },
+        },
+      });
+      const wrapper = createWrapper(client);
+
+      const firstEntry = render(<PlaceExplorePage />, { wrapper });
+      await waitFor(() =>
+        expect(
+          screen.getAllByTestId(/^explore-places-card-/).length
+        ).toBeGreaterThan(0)
+      );
+      const firstSeed = expectOneSharedSeed(allPlaceHits());
+      expect(allPlaceHits()).toHaveLength(perEntry);
+      firstEntry.unmount();
+
+      render(<PlaceExplorePage />, { wrapper });
+
+      // 두 번째 진입은 요청이 새로 나가 누계가 정확히 2배가 된다(캐시 히트면 그대로라 여기서 시간 초과로 red).
+      await waitFor(() => expect(allPlaceHits()).toHaveLength(2 * perEntry));
+      const secondSeed = expectOneSharedSeed(allPlaceHits().slice(perEntry));
+      expect(secondSeed).not.toBe(firstSeed);
+      client.clear();
+    }
+  );
+
+  it('지역 한 곳에서 다음 장을 이어 받을 때 cursor 와 함께 첫 장과 같은 seed·order 를 싣고, 카드는 중복이 없다 (AC-4)', async () => {
+    setAccessToken('valid-access');
+    mockParams = { region: 'jeju' };
+    const PAGE2 = [makePlace('p6', '태종대', '명소', '영도구', 5)];
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const cursor = new URL(request.url).searchParams.get('cursor');
+        return cursor
+          ? HttpResponse.json({ items: PAGE2, nextCursor: null })
+          : HttpResponse.json({ items: PLACES, nextCursor: 'CURSOR_2' });
+      })
+    );
+    await renderPage();
+
+    fireEvent(screen.getByTestId('explore-places-grid'), 'endReached');
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-places-card-p6')).toBeOnTheScreen()
+    );
+
+    const hits = allPlaceHits();
+    expect(hits).toHaveLength(2);
+    expect(queryOf(hits[0]).get('cursor')).toBeNull();
+    expect(queryOf(hits[1]).get('cursor')).toBe('CURSOR_2');
+    expectOneSharedSeed(hits);
+    const cards = cardTestIds();
+    expect(cards).toHaveLength(6);
+    expect(new Set(cards).size).toBe(6);
+  });
+
+  it('지역 미지정에서 카테고리 칩·검색어를 바꿔도 새 요청 전부가 같은 seed 를 쓴다 (AC-5)', async () => {
+    setAccessToken('valid-access');
+    await renderPage();
+
+    fireEvent.press(screen.getByTestId('explore-places-category-food'));
+    await waitFor(() => expect(allPlaceHits()).toHaveLength(2 * WAVE));
+    fireEvent.changeText(screen.getByTestId('explore-places-search'), '해변');
+    await waitFor(() => expect(allPlaceHits()).toHaveLength(3 * WAVE));
+
+    // 세 파도(첫 조회 · 칩 · 검색어) 전체가 하나의 번호표를 쓴다.
+    expectOneSharedSeed(allPlaceHits());
+  });
+
+  it('부분 실패 배너의 다시 시도도 같은 seed 로 재조회한다 — 실패 후 재시도에 목록이 뒤바뀌지 않는다 (AC-5)', async () => {
+    setAccessToken('valid-access');
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const region = new URL(request.url).searchParams.get('region');
+        return region === SERVICE_REGION_NAMES[1]
+          ? new HttpResponse(null, { status: 500 })
+          : HttpResponse.json({ items: PLACES, nextCursor: null });
+      })
+    );
+    render(<PlaceExplorePage />, { wrapper: createGcZeroWrapper() });
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('explore-places-partialfailure')
+      ).toBeOnTheScreen()
+    );
+
+    fireEvent.press(screen.getByTestId('explore-places-partialfailure-retry'));
+    await waitFor(() => expect(allPlaceHits()).toHaveLength(2 * WAVE));
+
+    expectOneSharedSeed(allPlaceHits());
+  });
+
+  it('지역 한 곳에서도 칩·검색어를 바꾸면 같은 seed 를 쓴다 (AC-5)', async () => {
+    setAccessToken('valid-access');
+    mockParams = { region: 'jeju' };
+    await renderPage();
+
+    fireEvent.press(screen.getByTestId('explore-places-category-food'));
+    await waitFor(() => expect(allPlaceHits()).toHaveLength(2));
+    fireEvent.changeText(screen.getByTestId('explore-places-search'), '해변');
+    await waitFor(() => expect(allPlaceHits()).toHaveLength(3));
+
+    expectOneSharedSeed(allPlaceHits());
+  });
+
+  it('같은 화면 인스턴스에서 지역만 바뀌어도(지역 바꾸기) seed 는 그대로다 (AC-6)', async () => {
+    setAccessToken('valid-access');
+    const { rerender } = render(<PlaceExplorePage />, {
+      wrapper: createGcZeroWrapper(),
+    });
+    await waitFor(() =>
+      expect(
+        screen.getAllByTestId(/^explore-places-card-/).length
+      ).toBeGreaterThan(0)
+    );
+    const enterSeed = expectOneSharedSeed(allPlaceHits());
+    expect(allPlaceHits()).toHaveLength(WAVE);
+
+    // dismissTo 로 기존 d04 가 앞으로 당겨지며 라우트 파라미터만 바뀌는 상황 — 새 마운트가 아니다.
+    mockParams = { region: 'jeju' };
+    rerender(<PlaceExplorePage />);
+    await waitFor(() => expect(allPlaceHits()).toHaveLength(WAVE + 1));
+
+    const afterChange = allPlaceHits()[WAVE];
+    expect(queryOf(afterChange).get('region')).toBe('jeju');
+    expect(queryOf(afterChange).get('seed')).toBe(enterSeed);
+    expect(queryOf(afterChange).get('order')).toBe('random');
   });
 });
 

@@ -427,7 +427,23 @@ export function sampleTranscript(
     session: sampleSession(tripId),
     messages,
     quickReplies: assistant.quickReplies ?? startQuickReplies(tripId !== null),
+    nextBefore: null,
   };
+}
+
+/** 긴 대화(한 쪽 30건을 넘는) 시연용 — `long-1`…`long-N`, 오래된 것 먼저, 홀수 사용자·짝수 도우미. */
+export function sampleLongConversation(
+  count = 75,
+  tripId: string | null = SAMPLE_TRIP_ID
+): AssistantMessage[] {
+  const start = Date.parse(SAMPLE_CREATED_AT);
+  return Array.from({ length: count }, (_, i) => {
+    const n = i + 1;
+    const createdAt = new Date(start + n * 60_000).toISOString();
+    return n % 2 === 1
+      ? userMessage(`long-${n}`, `이전 질문 ${n}`, createdAt)
+      : assistantSample('unknown', { id: `long-${n}`, tripId, createdAt });
+  });
 }
 
 /** 이력(b06) 샘플 — ACTION_LOG 2건. */

@@ -60,6 +60,7 @@ from trippilot.llm_gateway.gates.intent import NULL_INTENT
 from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker
 from trippilot.llm_gateway.workers.dialogue_intent import DialogueIntentWorker
 from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
+from trippilot.llm_gateway.workers.dialogue_smalltalk import DialogueSmalltalkWorker
 from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
 from trippilot.orchestrator.dialogue_handlers import (
     HANDLERS,
@@ -74,6 +75,7 @@ from trippilot.orchestrator.dialogue_handlers import (
     TurnContext,
     TurnSnapshot,
     edit_arguments,
+    insert_day,
     validate_answer_shape,
     validate_answer_text,
 )
@@ -182,8 +184,8 @@ _GREETS = frozenset({
 })
 THANKS_TEXT = "천만에요! 더 궁금한 게 생기면 언제든 물어봐 주세요."
 ACK_TEXT = "알겠어요! 필요한 게 생기면 언제든 말씀해 주세요."
-# 인사·잡담 답 — 여행이 있으면 지금 여행으로, 없으면 여행 만들기로 잇는다(버튼은 `_home_action` 과 같은 갈래). LLM 없이 고정 문장이다
-# (BR-AO-26 과 같은 결정론) — 말투를 바꾸려면 여기만 고친다.
+# 인사·잡담 답 — 여행이 있으면 지금 여행으로, 없으면 여행 만들기로 잇는다(버튼은 `_home_action` 과 같은 갈래). DIALOGUE_SMALLTALK 이
+# 배정돼 있으면 LLM 이 즉석에서 짓고(`_smalltalk`), 미배정·실패·목록 밖 장소면 이 고정 문장이다(INV-4 마지막 계단, BR-AO-26 개정 10-22).
 GREETING_TEXT = {
     True: "네, 안녕하세요~ 여행 준비는 잘 되고 있나요? 다음 장소나 날씨, 근처에 가 볼 만한 곳이 궁금하면 편하게 물어봐 주세요.",
     False: "네, 안녕하세요~ 어디로 떠날 생각이세요? 여행을 만들면 일정이랑 날씨, 가 볼 만한 곳을 같이 챙겨 드릴게요.",
@@ -200,6 +202,7 @@ _INTENT_MODES = ("llm_dialogue_intent", "out_of_scope")
 _ANSWER_MODES = ("llm_dialogue_answer", "template_text")
 _MEMORY_MODES = ("llm_dialogue_memory", "deterministic_compress")
 _PLAN_MODES = ("llm_dialogue_plan", "out_of_scope")
+_SMALLTALK_MODES = ("llm_dialogue_smalltalk", "fixed_text")
 # 인프라 실패 접두(게이트웨이 `_invoke` 의 사유 + 호출 예외) — 모델이 판단해서 거절한 것이 아니라 거절 표지를 붙이지 않는다
 _INFRA_PREFIXES = ("timeout", "llm_error", "unsupported", "intent_error")
 
@@ -383,6 +386,17 @@ def _squash(text: str) -> str:
     return normalize(text).replace(" ", "")
 
 
+# "이 근처"·"여기 주변"·"숙소 근처" 같은 지시어는 지역 이름이 아니다 — 분류가 region 칸에 담아도(2026-10-21 실측 "근처·주변" 다섯 말
+# 40회 중 0.2.3 9회·0.2.4 5회) 핸들러에는 없는 것으로 넘긴다. 탐색은 일정 근처로 가고, 여행도 없으면 지역을 되묻는다 — 지역 표에서
+# 못 찾아 "그 지역은 아직 찾아 줄 수 없어요"로 끝나지 않게. 날씨도 같은 칸을 읽는다(일정 장소로 간다)
+_DEICTIC_REGION = re.compile(r"(?:(?:이|그|저|여기|거기|숙소|호텔|지금)\s*)?(?:근처|주변|부근|인근|가까이|여기|거기)(?:\s*(?:근처|주변|부근))?")
+
+
+def _without_deictic_region(args: Mapping[str, str]) -> dict[str, str]:
+    region = (args.get("region") or "").strip()
+    return {k: v for k, v in args.items() if k != "region"} if region and _DEICTIC_REGION.fullmatch(region) else dict(args)
+
+
 def _grounded_args(slots: Mapping[str, str], said: str) -> dict[str, str]:
     """계획 인자의 region 은 사용자가 말한 지역만(BR-AO-28) — 모델이 [여행 상황]의 여행지를 옮겨 적으면 탐색 기준이 '다음 일정 근처'에서
     '지역 중심'으로 바뀐다(제주는 끝에서 끝이 70km 다). 프롬프트 0.1.1 뒤에도 "저녁 먹을 데랑 그 다음 일정" 이 2/2 로 region "제주" 를
@@ -551,6 +565,9 @@ def _prompt_names(prompt: Mapping) -> list[str]:
     """`to_prompt_dict` 모양 사실의 장소·대상·앵커 이름 — 계획 병합본은 also 부분까지(정정본 C4). 측정 러너도 이것으로 아는 이름을 만든다."""
     names = [p["name"] for p in prompt.get("places", ()) if isinstance(p, Mapping) and isinstance(p.get("name"), str)]
     names += [v for v in (prompt.get("target"), prompt.get("anchor")) if isinstance(v, str)]
+    # 행사(장소 탐색의 행사 주제) — 행사 이름·장소 주소도 사실 칸에 글자 그대로 있는 이름이다("여의도한강공원")
+    names += [v for e in prompt.get("events", ()) if isinstance(e, Mapping) for v in (e.get("name"), e.get("place"))
+              if isinstance(v, str)]
     # 장소 소개(KB-5) 글자 그대로 있는 이름은 말해도 된다 — "근정전·광화문"이 목록 밖 장소로 막히지 않게(사실 칸 원칙, ai-4e 합의)
     intro = prompt.get("intro")
     if isinstance(intro, str):
@@ -621,8 +638,10 @@ class DialogueOrchestrator:
         confident_intent: Callable[[str], Intent | None] | None = None,
         pool: Executor | None = None,
         planner: DialoguePlanWorker | None = None,
+        smalltalk: DialogueSmalltalkWorker | None = None,
     ) -> None:
         self._intent = intent_worker
+        self._smalltalk_worker = smalltalk
         self._answer = answer_worker
         self._memory = memory_worker
         self._store = memory_store
@@ -692,12 +711,19 @@ class DialogueOrchestrator:
                 reason = reason or "intent_fallback"
                 closer = closer_answer(text, inp.snapshot.trip is not None) if _judged_nothing(reason) else None
                 if closer is not None:  # 2″ — 할 일이 없는 말에 범위 밖 카드를 내지 않는다(BR-AO-26)
+                    if closer.text == GREETING_TEXT[inp.snapshot.trip is not None]:  # 인사만 LLM 으로 — 감사·맞장구는 고정 한 줄로 충분하다
+                        closer = self._smalltalk(inp, closer, memory_lines, trip_summary)
                     return TurnOutcome("ANSWER", (), None, closer, cleared, 0, reason)
                 if self._planner is not None and _plannable(reason):  # 2‴ — 정해진 의도 밖이라도 조회로 도울 수 있으면 돕는다(BR-AO-28)
                     return self._plan_turn(inp, text, memory_lines, trip_summary, cleared, reason)
                 return self._out_of_scope(inp, reason)
             # 3 — 필수 인자 되묻기 (요청당 1회, 기존 로직)
             interp = from_match(match, inp.context, trip_view)
+            if interp.outcome == "ARGUMENT_CLARIFY" and match.intent is Intent.EDIT_SCHEDULE and (on := insert_day(
+                    inp.utterance, inp.snapshot, inp.now.astimezone(self._tz).date(), self._ports, inp.now,
+                    remaining_ms=self._remaining(inp))) is not None:
+                # 사이 넣기는 말의 자리로 날을 푼다 — 되물으면 답 턴에 원문이 없다(PendingFrame 에 발화 칸이 없다, spec 003)
+                interp = from_match(replace(match, slots={**match.slots, "day": on.isoformat()}), inp.context, trip_view)
         if interp.outcome == "ARGUMENT_CLARIFY":
             return TurnOutcome("ARGUMENT_CLARIFY", interp.frames, interp.clarify, None, interp.context, 0, interp.reason)
         if interp.outcome == "OUT_OF_SCOPE":  # from_match 는 FALLBACK 매치에서만 — 여기로는 오지 않는다(방어)
@@ -705,7 +731,8 @@ class DialogueOrchestrator:
         (frame,) = interp.frames
         handler = HANDLERS[frame.intent]
         ctx = TurnContext(
-            snapshot=inp.snapshot, arguments=frame.arguments, now=inp.now, tz=self._tz, trace_id=inp.trace_id,
+            snapshot=inp.snapshot, arguments=_without_deictic_region(frame.arguments), now=inp.now, tz=self._tz,
+            trace_id=inp.trace_id,
             remaining_ms=lambda: self._remaining(inp), ports=self._ports, utterance=inp.utterance,
             earlier=tuple((turn.role, turn.text) for turn in inp.recent_turns),
         )
@@ -920,6 +947,45 @@ class DialogueOrchestrator:
             self._fallback(inp, "llm", *_ANSWER_MODES, f"answer_shape: {e}")
             return DialogueAnswer.from_facts(facts)
 
+    # ── 2″·2‴ 인사·잡담 (BR-AO-26 개정 2026-10-22) ─────────────────────
+
+    def _smalltalk(
+        self, inp: TurnInput, fixed: DialogueAnswer, memory_lines: Sequence[str], trip_summary: str,
+    ) -> DialogueAnswer:
+        """인사·잡담 한마디를 LLM 이 즉석에서 — 사실 없이 말을 받아 주고 여행 쪽 질문으로 끝낸다. 미배정이면 `fixed` 그대로(이벤트 없음 —
+        의도된 결정론). 시한 부족·실패·게이트 드롭·목록 밖 장소(INV-1 — 사실이 없으니 스냅샷 장소 말고는 전부 지어낸 것)면 `fixed`
+        + FallbackEvent 짝(INV-4). 버튼·칩은 `fixed` 의 것 그대로 — LLM 은 문장만 쓴다."""
+        if self._smalltalk_worker is None:
+            return fixed
+        remaining = self._remaining(inp)
+        if remaining < _ANSWER_MIN_REMAINING_MS:
+            self._fallback(inp, "llm", *_SMALLTALK_MODES, f"budget_exhausted(remaining_ms={remaining})")
+            return fixed
+        timeout_ms = min(_ANSWER_CAP_MS, remaining - _ANSWER_RESERVE_MS)
+        try:
+            result = self._smalltalk_worker.compose(
+                inp.utterance, inp.recent_turns, memory_lines, trip_summary, inp.trace_id, inp.now, timeout_sec=timeout_ms / 1000,
+            )
+        except Exception as e:  # noqa: BLE001
+            self._fallback(inp, "llm", *_SMALLTALK_MODES, f"smalltalk_error: {type(e).__name__}: {e}")
+            return fixed
+        draft = result.value
+        if result.is_fallback or draft is None:  # FallbackEvent 는 게이트웨이가 냈다
+            return fixed
+        known = tuple(k for k in (_squash(s.name) for _, s in inp.snapshot.slots() if s.name) if k)
+        times, unverifiable = clock_times(draft.text)
+        if times or unverifiable:  # 사실이 없는 자리 — 시각은 전부 지어낸 것(INV-2)
+            self._fallback(inp, "llm", *_SMALLTALK_MODES, "time_not_in_facts")
+            return fixed
+        if _foreign_place(draft.text, known):
+            self._fallback(inp, "llm", *_SMALLTALK_MODES, "place_not_in_facts")
+            return fixed
+        try:
+            return replace(fixed, text=draft.text)
+        except ValueError as e:  # 게이트와 같은 검사 — 어긋나면 고정 문장
+            self._fallback(inp, "llm", *_SMALLTALK_MODES, f"answer_shape: {e}")
+            return fixed
+
     # ── 2‴ 도구 계획 (BR-AO-28·29) ──────────────────────────────────────
 
     def _plan_turn(
@@ -956,14 +1022,16 @@ class DialogueOrchestrator:
         if draft.refused or not draft.calls:  # 판단한 거절·도구 없음 — 의도된 결정론, 이벤트 없음
             if not draft.refused and draft.gap == "CHAT":  # 잡담은 범위 밖 카드 대신 받아 준다(2″ 인사와 같은 결정론 문장)
                 self._log_plan(inp, "NO_TOOL", plan_ms=plan_ms, gap=draft.gap)
-                answer = DialogueAnswer(AnswerKind.TEXT, CHAT_TEXT[inp.snapshot.trip is not None], None,
-                                        (_home_action(inp.snapshot.trip is not None),), None, None)
+                fixed = DialogueAnswer(AnswerKind.TEXT, CHAT_TEXT[inp.snapshot.trip is not None], None,
+                                       (_home_action(inp.snapshot.trip is not None),), None, None)
+                answer = self._smalltalk(inp, fixed, memory_lines, trip_summary)
                 return TurnOutcome("ANSWER", (), None, answer, cleared, 0, f"{reason}; plan:no_tool")
             return self._plan_declined(inp, reason, "REFUSED" if draft.refused else "NO_TOOL", plan_ms=plan_ms, gap=draft.gap)
         handlers = [HANDLERS[call.intent] for call in draft.calls]
         said = _squash(" ".join([text, *(turn.text for turn in inp.recent_turns)]))
         earlier = tuple((turn.role, turn.text) for turn in inp.recent_turns)
-        ctxs = [TurnContext(snapshot=inp.snapshot, arguments=_grounded_args(call.slots, said), now=inp.now, tz=self._tz,
+        ctxs = [TurnContext(snapshot=inp.snapshot, arguments=_without_deictic_region(_grounded_args(call.slots, said)),
+                            now=inp.now, tz=self._tz,
                             trace_id=inp.trace_id, remaining_ms=lambda: self._remaining(inp), ports=self._ports,
                             earlier=earlier, heard=text)
                 for call in draft.calls]

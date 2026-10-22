@@ -189,7 +189,7 @@ export function useGetRegions<
 }
 
 /**
- * 수집 게이트(INV-1) 통과한 정본 POI. 소요시간 미표시(INV-3). 반경/취향 후보풀은 별도(C8 소비). 정렬은 **이름순**이며 동명은 `poiId` 로 갈린다 — 같은 조회가 매번 같은 순서를 준다.
+ * 수집 게이트(INV-1) 통과한 정본 POI. 소요시간 미표시(INV-3). 반경/취향 후보풀은 별도(C8 소비). 정렬은 기본 **이름순**이며 동명은 `poiId` 로 갈린다 — 같은 조회가 매번 같은 순서를 준다. `order=random&seed=…` 이면 **시드 기반 무작위**다(TRIP-1570) — 같은 seed 면 같은 순서라 커서로 이어 받아도 중복·누락이 없다. 화면은 한 진입 동안 seed 를 고정하고, 다시 들어오면 새 seed 를 쓴다.
  * @summary 장소(POI) 탐색 — ACTIVE만(INV-U1-01), 지역·카테고리 필터
  */
 export const getPlaces = (params?: GetPlacesParams, signal?: AbortSignal) => {

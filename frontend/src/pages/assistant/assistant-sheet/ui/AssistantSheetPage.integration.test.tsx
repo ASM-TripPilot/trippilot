@@ -116,6 +116,7 @@ function opened(messages: AssistantMessage[] = []): OpenSessionResponse {
     session: SESSION,
     messages,
     quickReplies: startQuickReplies(true),
+    nextBefore: null,
   };
 }
 

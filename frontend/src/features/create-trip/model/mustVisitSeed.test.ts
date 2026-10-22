@@ -112,6 +112,7 @@ describe('N1 · seedMustVisits — 예제 (AC-1 · AC-3 · BR-U1-37)', () => {
         imageUrl: 'https://cdn.example.com/a.jpg',
         region: '수영구',
         regionCode: null,
+        category: '명소',
       },
       {
         sourcePoiId: 'poi-2',
@@ -119,6 +120,7 @@ describe('N1 · seedMustVisits — 예제 (AC-1 · AC-3 · BR-U1-37)', () => {
         imageUrl: null,
         region: '수영구',
         regionCode: null,
+        category: '명소',
       },
       {
         sourcePoiId: 'poi-3',
@@ -126,6 +128,7 @@ describe('N1 · seedMustVisits — 예제 (AC-1 · AC-3 · BR-U1-37)', () => {
         imageUrl: null,
         region: '수영구',
         regionCode: null,
+        category: '명소',
       },
     ]);
   });
@@ -147,6 +150,7 @@ describe('N1 · seedMustVisits — 예제 (AC-1 · AC-3 · BR-U1-37)', () => {
         imageUrl: null,
         region: null,
         regionCode: null,
+        category: '명소',
       },
       {
         sourcePoiId: 'poi-2',
@@ -154,6 +158,7 @@ describe('N1 · seedMustVisits — 예제 (AC-1 · AC-3 · BR-U1-37)', () => {
         imageUrl: null,
         region: null,
         regionCode: null,
+        category: '명소',
       },
     ]);
   });
@@ -173,6 +178,23 @@ describe('N1 · seedMustVisits — 예제 (AC-1 · AC-3 · BR-U1-37)', () => {
     // 단언 — 순서대로 '52190', null, null. `toEqual` 은 null 과 undefined 를 가르므로 "키를 안 만드는"
     // 구현도 여기서 red 다.
     expect(seeds.map((seed) => seed.regionCode)).toEqual(['52190', null, null]);
+  });
+
+  // 사이클 20261022-place-category-covers — 꼭 갈 곳 스트립의 사진 칸이 사진 없는 항목에 카테고리 생성 이미지를 채울 재료.
+  it('N1-1d 담은 장소의 카테고리를 그대로 나른다 (장소마다 자기 값, 지어내지 않는다)', () => {
+    const given: SavedPlace[] = [
+      savedPlace('sp-1', 'poi-1', { category: '술집' }),
+      savedPlace('sp-2', 'poi-2', { category: '카페' }),
+      savedPlace('sp-3', 'poi-3', { category: '미술' }),
+    ];
+
+    const seeds = seedMustVisits(given);
+
+    expect(seeds.map((seed) => seed.category)).toEqual([
+      '술집',
+      '카페',
+      '미술',
+    ]);
   });
 
   it('N1-2 같은 장소가 두 행으로 와도 한 번만 담고 첫 등장 순서를 지킨다', () => {

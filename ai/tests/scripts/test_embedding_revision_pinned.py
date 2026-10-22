@@ -12,6 +12,8 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 _AI = Path(__file__).resolve().parents[2]
 _DOCKERFILE = _AI / "embedding" / "Dockerfile"
 _BANK_VECTORS = _AI / "data" / "intent_question_bank.vectors.json.gz"
@@ -36,9 +38,10 @@ def test_precomputed_bank_vectors_match_the_baked_revision() -> None:
     assert provenance.get("model_revision") == _baked_revision(), provenance
 
 
-def test_precomputed_place_vectors_match_the_baked_revision() -> None:
+@pytest.mark.parametrize("name", ["place_corpus_wiki.vectors.json.gz", "place_corpus_overview.vectors.json.gz"])
+def test_precomputed_place_vectors_match_the_baked_revision(name: str) -> None:
     """KB-5 장소 조각 벡터(2026-10-18 청킹)도 같다 — 배포 적재가 그 벡터를 그대로 넣고 질의는 서빙 임베딩으로 한다."""
-    path = _AI / "data" / "place_corpus_wiki.vectors.json.gz"
+    path = _AI / "data" / name
     if not path.exists():
         return
     with gzip.open(path, "rt", encoding="utf-8") as stream:

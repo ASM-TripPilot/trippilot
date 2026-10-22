@@ -76,6 +76,15 @@ class VisitSlotEntity(
 interface ItineraryJpaRepository : JpaRepository<ItineraryEntity, UUID> {
     fun findByTripId(tripId: UUID): List<ItineraryEntity>
 
+    /**
+     * 트랜잭션 범위 권고 잠금(TRIP-1412) — 일정 쓰기를 여행 단위로 줄 세운다. 행 잠금(`FOR UPDATE`)을 쓰지 않는 이유: 교체
+     * (`replaceForTrip`)가 같은 PK 로 지우고 다시 넣어, 그 뒤에서 기다린 READ COMMITTED 의 `FOR UPDATE` 가 0행을 본다
+     * (쓰기가 셋이면 재질의도 0행이었다 — 2·3차 검수 재현). 권고 잠금은 행과 무관한 키라 그런 일이 없다.
+     * FROM 절 형태인 이유는 `GenerationSessionJpaRepository.advisoryXactLock` 주석과 같다.
+     */
+    @Query(value = "SELECT 1 FROM pg_advisory_xact_lock(:namespace, :key)", nativeQuery = true)
+    fun advisoryXactLock(@Param("namespace") namespace: Int, @Param("key") key: Int): Int
+
     // 여행 일정 교체용 — itinerary 삭제 시 day/slot은 DB FK ON DELETE CASCADE로 함께 제거.
     @Modifying(clearAutomatically = true)
     @Query("delete from ItineraryEntity i where i.tripId = :tripId")

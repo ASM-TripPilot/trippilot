@@ -1,6 +1,6 @@
 import { memo, type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { Image } from '@/shared/ui/Image';
+import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 
 import type { Place } from '../model';
 
@@ -17,7 +17,7 @@ import { PlaceSubtitle } from './PlaceSubtitle';
  *
  * 담김/미담김은 색이 아니라 저장 하트의 `accessibilityState.selected` + 서로 다른 글리프로 잰다
  * (글리프 fill 함정 회피). 담기면 "담음" 배지가 함께 뜬다. pending 이면 하트 disabled(연타 가드).
- * `imageUrl` null 이면 사진 leaf 를 안 그린다(회색 자리 · INV-1). 부제는 `카테고리 · 지역`(지역 없으면
+ * 사진은 `PlacePhoto` — `imageUrl` 이 없으면 카테고리 생성 이미지. 부제는 `카테고리 · 지역`(지역 없으면
  * 카테고리만).
  */
 export interface PlaceGridCardProps {
@@ -56,16 +56,17 @@ function PlaceGridCardImpl({
       className="w-[48%] gap-[7px]"
     >
       <View className="h-[132px] w-full overflow-hidden rounded-[14px] bg-surface-soft">
-        {place.imageUrl ? (
-          <Image
-            source={{ uri: place.imageUrl }}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            recyclingKey={place.poiId}
-            transition={120}
-            className="h-full w-full"
-          />
-        ) : null}
+        <PlacePhoto
+          testID={`explore-places-photo-${place.poiId}`}
+          imageUrl={place.imageUrl}
+          category={place.category}
+          poiId={place.poiId}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          recyclingKey={place.poiId}
+          transition={120}
+          className="h-full w-full"
+        />
         {saved ? (
           <View className="absolute left-sm top-sm flex-row items-center gap-xs rounded-pill bg-primary pb-[5px] pl-[9px] pr-[11px] pt-[5px]">
             <HeartBadgeGlyph size={12} />

@@ -209,9 +209,10 @@ export function SlotCandidatePanelContainer({
         nameKo: currentSlot?.nameKo,
         tags: currentSlot?.tags,
         imageUrl: currentSlot?.imageUrl,
+        category: currentSlot?.category,
         distanceRange: currentSlot?.distanceRange,
       }}
-      // 후보(또는 차선책)의 이름·태그·사진을 그대로 내린다(TRIP-1024, QA #053 "이름 준비 중"·회색 사진).
+      // 후보(또는 차선책)의 이름·태그·사진을 그대로 내린다(TRIP-1024, QA #053 "이름 준비 중"·사진 없음).
       candidates={rows}
       startAt={currentSlot?.startAt}
       endAt={currentSlot?.endAt}

@@ -24,7 +24,7 @@ export interface Place {
   address?: string | null;
   /** NULL=미확인 */
   openingHours?: string | null;
-  /** 대표 사진. NULL=미확보 — 서버가 기본 이미지를 지어내지 않으므로 클라가 자리만 비운다(BR-U1-06 취지) */
+  /** 대표 사진. NULL=미확보 — 서버가 기본 이미지를 지어내지 않는다. 클라는 NULL·빈 문자열·공백·로드 실패면 카테고리 일러스트(번들 에셋 — 실사진이 아님)로 칸을 채운다 */
   imageUrl?: string | null;
   /** 표시용 태그(감성 골목·야경·카페 등). 열린 집합이며 미확보 시 빈 배열 */
   tags: string[];

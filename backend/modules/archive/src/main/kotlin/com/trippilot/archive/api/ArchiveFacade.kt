@@ -23,6 +23,13 @@ interface ArchiveFacade {
     fun getCompletedSlots(tripId: UUID): Set<String>
 
     /**
+     * **다녀온 슬롯 키** — 도착했거나 완료한 곳(건너뛴 곳·자동 되돌림 억제 표식은 빼고). 재계획 되돌리기(TRIP-1412)가
+     * "이 슬롯을 계획에서 떼면 그 실적이 계획 없이 남는가"를 묻는다. 잠금([getCompletedSlots])보다 넓다 — 잠금은
+     * 아직 떠날 수 있는 도착을 풀어 주지만, 되돌리기는 이미 남은 도착 기록을 고아로 만들면 안 된다.
+     */
+    fun getVisitedSlots(tripId: UUID): Set<String>
+
+    /**
      * 기준점 사다리 3단의 **마지막 완료 방문지**(BR-U4-19). 좌표가 아니라 `poiId` 를 준다 —
      * 실적은 좌표를 들고 있지 않고, 정본은 POI(C7)에 있다.
      */

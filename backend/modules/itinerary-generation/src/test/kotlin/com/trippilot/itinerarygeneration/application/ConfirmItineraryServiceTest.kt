@@ -49,6 +49,10 @@ private class ConfirmFakeItineraries : ItineraryRepository {
     }
     override fun findStalePartial(updatedBefore: java.time.Instant): List<Itinerary> = emptyList()
 
+    /** 잠금 뒤에 보이는 일정 — 잠금 없는 읽기와 다르게 두면 "그 사이 커밋된 쓰기"를 흉내 낸다. 기본은 같은 값. */
+    var lockedView: Itinerary? = null
+    override fun lockForTrip(tripId: UUID) = lockedView ?: findByTrip(tripId).firstOrNull()
+
 }
 
 private class ConfirmCapturingPublisher : DomainEventPublisher {
@@ -143,6 +147,15 @@ class ConfirmItineraryServiceTest : StringSpec({
         val svc = service(repo)
         svc.confirm(acc, tripId)
         shouldThrow<ConflictDetected> { svc.confirm(acc, tripId) }
+    }
+
+    // TRIP-1412 — 확정은 일정 쓰기 잠금을 잡고 읽는다. 잠금 없는 읽기는 그 사이 커밋된 확정(또는 재계획 반영)을 못 보고 PLANNED 로 덮는다.
+    "잠금 뒤에 이미 확정돼 있으면 409 — 잠금 없는 읽기의 PLANNED 로 판정하지 않는다" {
+        val repo = ConfirmFakeItineraries().apply { replaceForTrip(tripId, planned()) }
+        val alreadyConfirmed = repo.findByTrip(tripId).single().confirm(emptyMap(), clock.instant())
+        repo.lockedView = alreadyConfirmed
+
+        shouldThrow<ConflictDetected> { service(repo).confirm(acc, tripId) }.message shouldBe "이미 확정된 일정입니다."
     }
 
     "생성된 일정 없으면 404" {

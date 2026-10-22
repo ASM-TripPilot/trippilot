@@ -15,6 +15,7 @@ import type {
   HomeSpotsLane,
 } from '../model/homeTypes';
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/features/home';
+import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
 import { HomeScreen } from './HomeScreen';
 import {
   FAB_STACK_TOP,
@@ -1402,6 +1403,88 @@ describe('지금 뜨는 장소 — 저장 하트·카드 접근성 라벨', () =
     );
     expect(buttonIds).not.toContain('home-spot-card-0');
     expect(buttonIds).not.toContain('home-spot-card-1');
+  });
+});
+
+/**
+ * 사이클 20261022-place-category-covers — 홈 장소 카드(요즘 담는 곳 컬렉션 230×300 · 지금 뜨는 스팟 166)의 사진 칸.
+ * 옛 `HomeScreen.noPhoto.test.tsx`("사진 없음 → 글리프 placeholder")를 이 파일로 합치며 뒤집었다 — 사진이 없으면
+ * 회색 + 글리프가 아니라 카드의 카테고리·poiId 로 고른 생성 이미지가 칸을 채운다(스크림·글씨는 그 위, 가독성은 6-b).
+ *
+ * 카테고리는 카드의 **`category` 필드**에서 온다 — `badge`(컬렉션 좌상단 pill 의 표시 글자: 픽스처는 '당일치기')와 다른 값이다.
+ */
+describe('홈 카드 사진 칸 · 생성 이미지', () => {
+  it('스팟 카드 — 사진 있으면 그 사진, 없으면 category·poiId 의 생성 이미지, 정보가 없는 카드(픽스처)는 중립 폴백', () => {
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        spotsLane={{
+          status: 'ready',
+          onRetry: jest.fn(),
+          cards: [
+            {
+              poiId: 'p2',
+              title: '야경 스팟',
+              tag: '#a',
+              imageUrl: null,
+              category: '야경',
+            },
+            {
+              poiId: 'p1',
+              title: '사진 있음',
+              tag: '#b',
+              imageUrl: 'https://x/1.jpg',
+              category: '맛집',
+            },
+            { title: '픽스처형', tag: '#c' },
+          ],
+        }}
+      />
+    );
+
+    const photo = (index: number) =>
+      screen.getByTestId(`home-spot-photo-${index}`).props.source;
+    // p2 는 변형 3 → night_view-3.
+    expect(photo(0)).toEqual([coverFor('야경', 'p2')]);
+    expect(photo(1)).toEqual([{ uri: 'https://x/1.jpg' }]);
+    expect(photo(2)).toEqual([FALLBACK_COVER]);
+  });
+
+  it('컬렉션 카드 — 사진 없으면 category(미술)·poiId(p1)의 생성 이미지다 (배지 글자 "당일치기" 가 아니라 category 필드)', () => {
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        collectionsLane={{
+          status: 'ready',
+          onRetry: jest.fn(),
+          cards: [
+            {
+              poiId: 'p1',
+              title: '미술관',
+              region: '서울',
+              badge: '당일치기',
+              category: '미술',
+            },
+            {
+              poiId: 'p2',
+              title: '사진 있음',
+              region: '서울',
+              badge: '명소',
+              category: '명소',
+              imageUrl: 'https://x/2.jpg',
+            },
+          ],
+        }}
+      />
+    );
+
+    // p1 은 변형 2 → art-2.
+    expect(screen.getByTestId('home-collection-photo-0').props.source).toEqual([
+      coverFor('미술', 'p1'),
+    ]);
+    expect(screen.getByTestId('home-collection-photo-1').props.source).toEqual([
+      { uri: 'https://x/2.jpg' },
+    ]);
   });
 });
 

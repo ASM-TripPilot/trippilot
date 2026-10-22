@@ -33,7 +33,7 @@ class StalePartialSweeperTest : StringSpec({
         listOf(ItineraryDay.of(start, 0, emptyList())), at, at, null, emptyList(), ScoringSignal.UNKNOWN,
     )
 
-    class Repo(seed: List<Itinerary>) : ItineraryRepository {
+    open class Repo(seed: List<Itinerary>) : ItineraryRepository {
         val byTrip = seed.associateBy { it.tripId }.toMutableMap()
         override fun save(itinerary: Itinerary) = itinerary.also { byTrip[it.tripId] = it }
         override fun findById(itineraryId: UUID) = byTrip.values.firstOrNull { it.itineraryId == itineraryId }
@@ -49,6 +49,51 @@ class StalePartialSweeperTest : StringSpec({
             byTrip.values.filter { it.generationState == GenerationState.PARTIAL && it.updatedAt < updatedBefore }
     }
 
+    // TRIP-1412 4차 검수 — 목록을 읽은 뒤 그 사이 편집이 커밋됐으면, 옛 목록 값으로 FAILED 를 덮어 그 편집을 지우지 않는다.
+    // 잠금 뒤 현행을 다시 읽고 그 값을 FAILED 로 내린다.
+    "목록을 읽은 뒤 바뀐 일정은 잠금 뒤 현행을 FAILED 로 내린다 — 옛 목록 값으로 덮지 않는다" {
+        val stale = partialUpdatedAt(now.minus(defaultDeadlines.staleAfter).minusSeconds(1))
+        val editedPoi = UUID.randomUUID()
+        val edited = Itinerary.reconstitute(
+            stale.itineraryId, stale.tripId, stale.status, stale.solveMode, stale.generationMode, stale.isFallback, GenerationState.PARTIAL,
+            listOf(ItineraryDay.of(start, 0, listOf(com.trippilot.itinerarygeneration.domain.VisitSlot.of(editedPoi, null, 0, java.time.LocalTime.NOON, java.time.LocalTime.NOON.plusHours(1))))),
+            stale.createdAt, stale.updatedAt, null, emptyList(),
+        )
+        val repo = object : Repo(listOf(stale)) {
+            override fun lockForTrip(tripId: UUID) = edited.also { byTrip[tripId] = it }
+        }
+        val sessionRepo = FakeGenerationSessions()
+
+        StalePartialSweeper(repo, genSessions(repo = sessionRepo, clock = clock), clock, defaultDeadlines, NOOP_TX).sweep()
+
+        val after = repo.byTrip.getValue(stale.tripId)
+        after.generationState shouldBe GenerationState.FAILED
+        after.days.single().slots.single().sourcePoiId shouldBe editedPoi
+    }
+
+    "잠금 뒤에 이미 끝난 일정은 건드리지 않는다" {
+        val stale = partialUpdatedAt(now.minus(defaultDeadlines.staleAfter).minusSeconds(1))
+        val done = Itinerary.reconstitute(
+            stale.itineraryId, stale.tripId, stale.status, stale.solveMode, stale.generationMode, stale.isFallback, GenerationState.COMPLETE,
+            stale.days, stale.createdAt, stale.updatedAt, null, emptyList(),
+        )
+        val repo = object : Repo(listOf(stale)) {
+            override fun lockForTrip(tripId: UUID) = done.also { byTrip[tripId] = it }
+        }
+
+        val appender = ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>().apply { start() }
+        val logger = org.slf4j.LoggerFactory.getLogger(StalePartialSweeper::class.java) as ch.qos.logback.classic.Logger
+        logger.addAppender(appender)
+        try {
+            StalePartialSweeper(repo, genSessions(repo = FakeGenerationSessions(), clock = clock), clock, defaultDeadlines, NOOP_TX).sweep()
+        } finally {
+            logger.detachAppender(appender)
+        }
+
+        repo.byTrip.getValue(stale.tripId).generationState shouldBe GenerationState.COMPLETE
+        appender.list.size shouldBe 0 // 정상인 일정을 "정리 실패"로 경고하지 않는다
+    }
+
     /**
      * 기준은 **기다려 주기로 한 시간에서 파생**된다(`ScheduleDeadlineProperties.staleAfter`).
      * 상수로 고정하면 시간제약을 푼 모드(TRIP-474)에서 **살아 있는 2차를 잘라낸다** —
@@ -59,7 +104,7 @@ class StalePartialSweeperTest : StringSpec({
         val repo = Repo(listOf(stale))
         val sessionRepo = FakeGenerationSessions()
         val session = sessionRepo.save(GenerationSession.start(UUID.randomUUID(), stale.tripId, GenerationMode.FULLY_AI, now))
-        StalePartialSweeper(repo, genSessions(repo = sessionRepo, clock = clock), clock, defaultDeadlines).sweep()
+        StalePartialSweeper(repo, genSessions(repo = sessionRepo, clock = clock), clock, defaultDeadlines, NOOP_TX).sweep()
 
         val swept = repo.byTrip.getValue(stale.tripId)
         swept.generationState shouldBe GenerationState.FAILED
@@ -79,7 +124,7 @@ class StalePartialSweeperTest : StringSpec({
         val sessionRepo = FakeGenerationSessions()
         sessionRepo.save(GenerationSession.start(UUID.randomUUID(), stale.tripId, GenerationMode.FULLY_AI, now))
 
-        StalePartialSweeper(repo, genSessions(repo = sessionRepo, clock = clock, deadlines = enforced), clock, enforced).sweep()
+        StalePartialSweeper(repo, genSessions(repo = sessionRepo, clock = clock, deadlines = enforced), clock, enforced, NOOP_TX).sweep()
 
         repo.byTrip.getValue(stale.tripId).generationState shouldBe GenerationState.FAILED
     }
@@ -90,9 +135,17 @@ class StalePartialSweeperTest : StringSpec({
         val repo = Repo(listOf(running))
         val sessionRepo = FakeGenerationSessions()
         val session = sessionRepo.save(GenerationSession.start(UUID.randomUUID(), running.tripId, GenerationMode.FULLY_AI, now))
-        StalePartialSweeper(repo, genSessions(repo = sessionRepo, clock = clock), clock, defaultDeadlines).sweep()
+        StalePartialSweeper(repo, genSessions(repo = sessionRepo, clock = clock), clock, defaultDeadlines, NOOP_TX).sweep()
 
         repo.byTrip.getValue(running.tripId).generationState shouldBe GenerationState.PARTIAL
         sessionRepo.rows.getValue(session.sessionId).status shouldBe GenerationStatus.RUNNING
     }
 })
+
+/** 트랜잭션 없이 그 자리에서 실행 — 단위 테스트는 결정론이 우선이다(잠금 경합은 실 DB IT 몫). */
+private val NOOP_TX = object : org.springframework.transaction.PlatformTransactionManager {
+    override fun getTransaction(definition: org.springframework.transaction.TransactionDefinition?) =
+        org.springframework.transaction.support.SimpleTransactionStatus()
+    override fun commit(status: org.springframework.transaction.TransactionStatus) = Unit
+    override fun rollback(status: org.springframework.transaction.TransactionStatus) = Unit
+}

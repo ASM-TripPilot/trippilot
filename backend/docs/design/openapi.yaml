@@ -761,7 +761,9 @@ paths:
       summary: 장소(POI) 탐색 — ACTIVE만(INV-U1-01), 지역·카테고리 필터
       description: >
         수집 게이트(INV-1) 통과한 정본 POI. 소요시간 미표시(INV-3). 반경/취향 후보풀은 별도(C8 소비).
-        정렬은 **이름순**이며 동명은 `poiId` 로 갈린다 — 같은 조회가 매번 같은 순서를 준다.
+        정렬은 기본 **이름순**이며 동명은 `poiId` 로 갈린다 — 같은 조회가 매번 같은 순서를 준다.
+        `order=random&seed=…` 이면 **시드 기반 무작위**다(TRIP-1570) — 같은 seed 면 같은 순서라 커서로 이어 받아도
+        중복·누락이 없다. 화면은 한 진입 동안 seed 를 고정하고, 다시 들어오면 새 seed 를 쓴다.
       parameters:
         - name: region
           in: query
@@ -787,6 +789,22 @@ paths:
           required: false
           schema: { type: integer, minimum: 1, maximum: 200, default: 200 }
           description: 한 장의 최대 건수. **미지정·초과도 200 으로 맞춘다** — 지역을 안 골라도 전량이 나가지 않는다.
+        - name: order
+          in: query
+          required: false
+          schema: { type: string, enum: [name, random], default: name }
+          description: >
+            정렬 방식(TRIP-1570). `name`(기본) = 위 이름순·관련도순 그대로. `random` = 시드 기반 무작위 —
+            둘째 정렬 축이 이름 대신 `md5(seed || poiId)` 가 된다. q 가 있으면 관련도 축(정확 > 접두 > 부분)은
+            여전히 첫 축이라 무작위는 같은 관련도 안에서만 섞인다. 모르는 값은 400.
+        - name: seed
+          in: query
+          required: false
+          schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' }
+          description: >
+            `order=random` 의 시드 — **그때는 필수다**(없거나 형식이 깨지면 400. 이름순으로 조용히 떨어뜨리면 화면이
+            그것을 "섞었다"고 그린다). 같은 seed 로 받은 `nextCursor` 만 이어 쓴다 — seed 를 바꾸면 처음부터 받는다.
+            `order=name` 이면 무시한다.
         - name: cursor
           in: query
           required: false
@@ -1824,7 +1842,8 @@ paths:
         **일정이 바뀌는 유일한 지점**이다(INV-U4-05) — 그 전까지 `itinerary`·`visit_slot` 은 진입 전과 같다.
         대상 일자만 교체하고 나머지 일자는 손대지 않으며, 되돌릴 지점을 먼저 남긴다(BR-U3-19).
         완료·시각 고정 슬롯은 산출 단계에서 이미 잠겨 있어 그대로 남는다(INV-U4-04).
-        반영 후 세션은 `APPLIED` 로 닫히고 `ItineraryRecalculated` 가 나간다.
+        반영 후 세션은 `APPLIED` 로 닫히고 `ItineraryRecalculated` 가 나간다. 반영 순간 그 날의 직전 모습을 세션에 떠 둔다 —
+        반영 뒤 비교(`…/diff`)와 되돌리기(`…/revert`)가 그것을 쓴다(TRIP-1412).
       responses:
         '200': { description: 반영됨, content: { application/json: { schema: { $ref: '#/components/schemas/ReplanSession' } } } }
         '404': { description: 여행 없음/타 계정/세션 없음 }
@@ -1840,7 +1859,7 @@ paths:
       - { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
     get:
       tags: [replan]
-      summary: 확정 전 전후 비교(i18)
+      summary: 전후 비교(i18) — 확정 전, 그리고 반영 뒤 빠진 곳(TRIP-1412)
       description: >
         **읽기만** 한다 — 확정 전까지 원 일정에는 어떤 쓰기도 없다(INV-U4-05).
 
@@ -1859,11 +1878,40 @@ paths:
         오류를 그릴지 정하지 못한다.
 
 
+        **반영된(`APPLIED`) 세션도 비교를 준다**(TRIP-1412) — 원탭 [다시 짜기]는 초안을 보자마자 반영하므로
+        "무엇이 빠졌나"를 볼 수 있는 때가 반영 뒤뿐이다. `before` 는 반영 순간 떠 둔 그 날의 원 일정이고,
+        `after` 는 반영된 초안이다 — 반영 직전 화면이 보였을 비교와 같다. 되돌린 뒤에도 같은 비교를 준다(무엇을 되돌렸는지).
+        이 기능 이전에 반영된 세션은 기준이 남지 않아 `ready=false` 다. 취소·실패·대안 없음도 `ready=false`.
+
+
         ⚠ **소요시간 필드가 없다**(INV-3) — 전후 스냅숏은 시각과 순서만 다룬다.
         `returnTimeDeltaMinutes` 는 이동 소요가 아니라 **복귀 시각이 밀린 정도**다.
       responses:
         '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/ReplanDiff' } } } }
         '404': { description: 여행/세션 없음 · 타 계정 }
+  /trips/{tripId}/replan-sessions/{sessionId}/revert:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 반영한 재계획 되돌리기 — 그 날을 반영 직전으로(TRIP-1412)
+      description: >
+        원탭 [다시 짜기]가 반영한 그 날을 **반영 직전 모습으로** 돌린다. **확정(`CONFIRMED`) 일정에서도** 된다 —
+        상태는 그대로이고 확정 동결(poi_snapshot)은 반영 직전 참조를 다시 단다. 범용 되돌리기
+        (`/itinerary/revisions/{revisionId}/restore`)는 확정 일정을 409 로 막는다 — 그 대신 이 재계획 하나만 되돌리는 경로다.
+        다른 날은 손대지 않는다. 한 번만 된다 — 세션은 `APPLIED` 그대로이고 `revertedAt` 이 찍힌다.
+        변경 이력 1행(`MANUAL`, 사유 `재계획 되돌림 · …`)과 일정 리비전이 남는다.
+      responses:
+        '200': { description: 되돌림, content: { application/json: { schema: { $ref: '#/components/schemas/ReplanSession' } } } }
+        '404': { description: 여행 없음/타 계정/세션 없음 }
+        '409':
+          description: >
+            반영 세션이 아님(`되돌릴 재계획이 없습니다.`) · 이미 되돌림 · 되돌리기 지점 없음(이 기능 이전에 반영된 세션) ·
+            지난 날 · 되돌리면 빠지는 곳(재계획이 넣었고 반영 전엔 없던 곳)에 다녀온 기록(도착·완료, 건너뜀 제외)이 있음(INV-U4-04 —
+            반영 전에도 있던 곳·계획에 없던 곳·다른 날의 실적은 막지 않는다) ·
+            그 사이 그 날이 바뀜(편집·다른 재계획 — 오류 코드 `STALE`, 덮으면 그 변경이 사라진다). 같은 여행의 다른 교체와 겹치면
+            일정 쓰기 잠금(여행 단위)을 기다렸다가 잠금 뒤의 일정으로 판정한다
   /trips/{tripId}/replan-sessions/{sessionId}/cancel:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -2336,7 +2384,7 @@ components:
         imageUrl:
           type: string
           nullable: true
-          description: 대표 사진. NULL=미확보 — 서버가 기본 이미지를 지어내지 않으므로 클라가 자리만 비운다(BR-U1-06 취지)
+          description: 대표 사진. NULL=미확보 — 서버가 기본 이미지를 지어내지 않는다. 클라는 NULL·빈 문자열·공백·로드 실패면 카테고리 일러스트(번들 에셋 — 실사진이 아님)로 칸을 채운다
         tags:
           type: array
           items: { type: string }
@@ -3226,11 +3274,13 @@ components:
         date: { type: string, format: date, nullable: true, description: 재계획 대상 날짜. 비교는 이 하루만 본다 }
         before:
           type: array
-          description: 원 일정(그 날짜분).
+          description: 원 일정(그 날짜분). `APPLIED` 면 반영 순간 떠 둔 반영 직전 모습이다(TRIP-1412).
           items: { $ref: '#/components/schemas/ReplanDiffSlot' }
         after:
           type: array
-          description: 초안. **확정 전까지 원 일정에 반영되지 않는다**(INV-U4-05).
+          description: >
+            초안. `DRAFT` 면 **확정 전까지 원 일정에 반영되지 않는다**(INV-U4-05). `APPLIED` 면 반영된 그 초안이다 —
+            되돌렸으면(`ReplanSession.revertedAt`) 지금 일정에는 없다.
           items: { $ref: '#/components/schemas/ReplanDiffSlot' }
         entries:
           type: array
@@ -3344,6 +3394,16 @@ components:
           description: >
             미리 짠 대안이 낡았는가(BR-SA-19) — 적용하면 409 EXPIRED·STALE 인 초안 · 대체돼 닫힌 선계산 · 2분 넘게 산출 중인
             선계산. 사용자 세션은 늘 false. APPLIED 가 아니면 상태와 무관하게 '준비된 대안 없음'으로 읽는다 — 갈 곳은 BR-SA-23
+        revertedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: 반영한 재계획을 되돌린 시각(TRIP-1412). 되돌려도 status 는 APPLIED 그대로다
+        revertible:
+          type: boolean
+          description: >
+            [되돌리기]를 그릴 수 있는가 — 반영됐고, 아직 안 되돌렸고, 되돌리기 지점이 있다(이 기능 이전 반영분은 false).
+            true 여도 누르면 409 일 수 있다 — 지난 날·되돌리면 빠지는 곳의 방문 기록·그 사이 바뀐 일정은 누르는 순간에만 판정한다
     SlotCandidatesRequest:
       type: object
       required: [slotKey]
@@ -3396,9 +3456,10 @@ components:
               rationale: { type: string, description: closed-set 근거 — 시각·소요시간 언급 없음(BR-U2-09) }
               # POI 표면(TRIP-851) — 후보 카드를 **추가 왕복 없이** 그린다. 후보마다 `GET /places/{id}`
               # 를 부르면 N+1 이라 응답에 싣는다. 정본에 없으면 전부 null 이고, 그때 화면은
-              # "이름 준비 중"·회색 썸네일로 떨어진다(값을 지어내지 않는다, BR-U1-06).
+              # "이름 준비 중"·카테고리 일러스트 썸네일(클라가 채운다 — category 가 있으면 그 카테고리 그림,
+              # 없으면 중립 그림)로 떨어진다(서버는 값을 지어내지 않는다).
               nameKo: { type: string, nullable: true }
-              category: { type: string, nullable: true, description: 경계 코드(SIGHT/FOOD/…) }
+              category: { type: string, nullable: true, description: 한글 정본(명소·맛집·카페·야경·자연·쇼핑·문화·액티비티·미술·술집) — 일정 슬롯과 같은 값. 클라가 이 값으로 사진 없는 칸의 카테고리 일러스트를 고른다 }
               tags: { type: array, items: { type: string }, description: 미확보 시 빈 배열 }
               imageUrl: { type: string, nullable: true, description: NULL = 미확보. 대표 1장 }
               # 후보 핀 좌표(TRIP-1063 · QA #044) — '후보 고르기' 지도에 A/B/C 핀을 찍는 값.

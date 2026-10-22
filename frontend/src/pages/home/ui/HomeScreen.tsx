@@ -6,7 +6,7 @@
  *
  * 구성: 인사 헤더 → 검색바 → magazineHero(영감 카드) → "요즘 사람들이 담는 곳"(가로 스크롤) →
  * "지금 뜨는 장소"(2×2 그리드) → softNote(장소 온램프) → FAB.
- * 사진 에셋은 미번들이라 토큰색 플레이스홀더 + 스크림 그라디언트로 대체한다(가정 C).
+ * 서버 사진이 없으면 카테고리별 번들 생성 이미지(`PlacePhoto`) + 스크림 그라디언트로 채운다.
  *
  * TRIP-317 — 여행 단계 얼굴 4종을 phase 판별값으로 얹는다(collecting·planning·upcoming·postTrip).
  * 화면은 phase.kind로 스위치만 하고 여행 데이터를 뜯어 단계를 스스로 도출하지 않는다(TRIP-206
@@ -37,7 +37,6 @@ import {
   SparkleGlyph,
   SuitcaseGlyph,
 } from '@/features/home';
-import { CategoryImageGlyph } from '@/entities/itinerary-slot';
 import { SparkleGlyph as AssistantSparkleGlyph } from '@/features/open-assistant';
 import { WarningTriangleGlyph } from '@/features/explore/index.view';
 import { formatCountBadge } from '../lib/formatCountBadge';
@@ -47,6 +46,7 @@ import { FAB_STACK_TOP } from '@/shared/ui/toastBottom';
 import { useScrollHide } from '@/shared/lib/useScrollHide';
 import { useToastBottom } from '@/shared/ui/useToastBottom';
 import { Image } from '@/shared/ui/Image';
+import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import type {
   HomeCollectionCard,
@@ -421,20 +421,6 @@ function SectionHeader({
   );
 }
 
-// 사진 없는 카드(서버 imageUrl 없음)의 대체 표시 — 일정 슬롯과 같은 이미지 글리프를 카드 가운데 위쪽에
-// 얹는다(새 자산 없음, TRIP-1221). 스크림·글씨 아래층이라 제목 가독성은 그대로.
-function PhotoPlaceholder({ testID }: { testID: string }): ReactElement {
-  return (
-    <View
-      testID={testID}
-      pointerEvents="none"
-      className="absolute inset-x-0 top-0 h-3/5 items-center justify-center"
-    >
-      <CategoryImageGlyph size={36} />
-    </View>
-  );
-}
-
 // ── 컬렉션 카드(요즘 사람들이 담는 곳 · 내가 담은 곳 · 추천) ─────────────
 // 하단 메타는 지역+핀으로 그린다(discovery·추천 공용).
 function CollectionCard({
@@ -456,17 +442,17 @@ function CollectionCard({
       className="h-[300px] w-[230px] overflow-hidden rounded-[18px]"
     >
       <View className="absolute inset-0 bg-surface-strong" />
-      <Image
-        source={card.imageUrl ? { uri: card.imageUrl } : undefined}
+      <PlacePhoto
+        testID={`home-collection-photo-${index}`}
+        imageUrl={card.imageUrl}
+        category={card.category}
+        poiId={poiId}
         contentFit="cover"
         cachePolicy="memory-disk"
         recyclingKey={poiId ?? card.imageUrl ?? undefined}
         transition={120}
         style={ABSOLUTE_FILL}
       />
-      {card.imageUrl ? null : (
-        <PhotoPlaceholder testID="home-collection-photo-placeholder" />
-      )}
       <LinearGradient
         colors={DEST_SCRIM_COLORS}
         locations={SCRIM_LOCATIONS}
@@ -519,17 +505,17 @@ function SpotCard({
       className="h-[166px] flex-1 overflow-hidden rounded-card"
     >
       <View className="absolute inset-0 bg-surface-strong" />
-      <Image
-        source={card.imageUrl ? { uri: card.imageUrl } : undefined}
+      <PlacePhoto
+        testID={`home-spot-photo-${index}`}
+        imageUrl={card.imageUrl}
+        category={card.category}
+        poiId={poiId}
         contentFit="cover"
         cachePolicy="memory-disk"
         recyclingKey={poiId ?? card.imageUrl ?? undefined}
         transition={120}
         style={ABSOLUTE_FILL}
       />
-      {card.imageUrl ? null : (
-        <PhotoPlaceholder testID="home-spot-photo-placeholder" />
-      )}
       <LinearGradient
         colors={SPOT_SCRIM_COLORS}
         locations={SCRIM_LOCATIONS}

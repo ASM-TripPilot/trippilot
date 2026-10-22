@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
+from dataclasses import asdict
 from datetime import date, datetime
 from typing import Sequence
 
@@ -79,11 +80,24 @@ class WeatherProvider:
             except Exception as e:  # 일 단위는 살아 있다 — 부분 성공을 버리지 않는다
                 _log.warning("hourly_forecast 실패 — 일 단위 폴백: %s", e)
                 hourly = {}
+        # 하늘·강수 형태·기온도 같은 선택 능력(`DailyWeatherDetailPort`) — 같은 응답의 다른 접기라
+        # 포털 호출은 그대로 1건. 모르는 칸(None)은 싣지 않아 소비측이 키 부재로 안다.
+        detail: dict[str, dict[str, int]] = {}
+        if hasattr(self._port, "daily_detail"):
+            try:
+                detail = {
+                    d.isoformat(): {k: v for k, v in asdict(w).items() if v is not None}
+                    for d, w in self._port.daily_detail(params["anchor"], days).items()
+                }
+            except Exception as e:  # 강수확률은 살아 있다 — 상세만 비운다
+                _log.warning("daily_detail 실패 — 강수확률만: %s", e)
+                detail = {}
         return InfoPacket(
             provider=ProviderKind.WEATHER,
             status=ProviderStatus.OK,
             data={"daily": {d.isoformat(): pop for d, pop in daily.items()},
                   "hourly": hourly,
+                  "detail": detail,
                   "triggers": triggers},
             freshness=FreshnessMeta(
                 source="KMA",

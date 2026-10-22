@@ -38,6 +38,7 @@ from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker
 from trippilot.llm_gateway.workers.dialogue_intent import DialogueIntentWorker
 from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
 from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
+from trippilot.llm_gateway.workers.dialogue_smalltalk import DialogueSmalltalkWorker
 from trippilot.llm_gateway.workers.dialogue_sql import DialogueSqlWorker
 from trippilot.orchestrator.dialogue_handlers import DayView, HandlerPorts, SlotView, TripInfo, TurnSnapshot
 from trippilot.orchestrator.dialogue_interpreter import (
@@ -240,13 +241,20 @@ def build_dialogue_orchestrator(
     place_intro = PlaceIntro(embedding, kb_store) if kb_store is not None else None
     ports = HandlerPorts(poi_info=providers[ProviderKind.POI_INFO], weather=providers.get(ProviderKind.WEATHER),
                          transit=providers[ProviderKind.TRANSIT], pool_builder=pool_builder, planb=rag,
-                         place_sql=place_lookup, place_intro=place_intro)
+                         place_sql=place_lookup, place_intro=place_intro, events=providers.get(ProviderKind.EVENT))
     tools = plan_tools(ports)  # 배선된 도구 → 설명(여행 필요 꼬리표 포함) — 게이트 closed-set 과 `$tools` 가 같은 사전에서 나온다
     planner = None
     if LlmFeature.DIALOGUE_PLAN in c1_config.feature_models:  # DEC-AO-18 — 배정이 곧 켜기(env 무증가)
         planner = DialoguePlanWorker(
             GatewayFacade(counted, renderer, DialoguePlanGate(frozenset(tools)), c1_config, trace),  # counted 공유 → llm_calls
             plan_tool_specs_json(tools))
+    # 인사·잡담 한마디(2″·2‴ gap CHAT) — DIALOGUE_SMALLTALK 배정이 있을 때만 LLM, 없으면 고정 문장(BR-AO-26 개정 10-22). 게이트는 답변 것 그대로
+    smalltalk = None
+    if LlmFeature.DIALOGUE_SMALLTALK in c1_config.feature_models:
+        smalltalk = DialogueSmalltalkWorker(GatewayFacade(counted, renderer, DialogueAnswerGate(), c1_config, trace))
+        log.info("도우미 인사·잡담 LLM on")
+    else:
+        log.info("도우미 인사·잡담 LLM off — DIALOGUE_SMALLTALK 미배정이라 미배선(고정 문장)")
     unwired = sorted(i.value for i in PLAN_TOOLS if i not in tools)
     # 두 줄 모두 표식 `미배선` 을 담는다 — 배포 smoke 의 `ai-wiring:` 이 끌어올린다(deploy/eks/runtime_smoke.py _WIRING_MARKERS)
     if planner is not None:
@@ -262,6 +270,7 @@ def build_dialogue_orchestrator(
         memory_store=memory_store,
         ports=ports,
         planner=planner,
+        smalltalk=smalltalk,
         clock=clock, trace=trace, tz=tz,
         shadow=ShadowIntentProbe(shadow_router, rate=shadow_rate, rng=shadow_rng, counting=shadow_llm),
         shadow_meta=shadow_meta(renderer, bank, shadow_cfg),

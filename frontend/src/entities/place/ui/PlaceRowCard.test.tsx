@@ -1,6 +1,8 @@
 import { Text } from 'react-native';
 import { render, screen, fireEvent } from '@testing-library/react-native';
 
+import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
+
 import { PlaceRowCard } from './PlaceRowCard';
 
 /**
@@ -16,7 +18,8 @@ import { PlaceRowCard } from './PlaceRowCard';
  *    + `accessibilityState.selected` 로 잰다(색 토글 아님, 글리프 fill 함정 회피 02a ★5). 하트 press → onToggle.
  *  - 🔴 `trailing?` 슬롯(h13 추가 버튼 자리)을 그대로 렌더한다. `save` 없으면 하트를 안 그린다.
  *  - 🔴 `subtitle` 은 ReactNode 슬롯(소비처가 지역·태그 or 메타 조립).
- *  - 🔴 `imageUrl` null 이면 회색 자리(INV-1).
+ *  - 🔴 사진 칸 `{prefix}-photo-{id}` 는 항상 있다 — `imageUrl` 이 있으면 그 사진, 없으면(사이클
+ *    20261022-place-category-covers) `category` 와 `id`(= poiId) 로 고른 카테고리 생성 이미지.
  *
  * 3동작 뼈대: 준비=prop → 실행=렌더/press → 단언=testID·selected·콜백.
  */
@@ -99,6 +102,46 @@ describe('🔴 PlaceRowCard (AC-M2·M4·M5 — 중립 접두 자기 계약)', ()
       />
     );
 
-    expect(screen.getByTestId('place-row-photo-p1')).toBeTruthy();
+    expect(screen.getByTestId('place-row-photo-p1').props.source).toEqual([
+      { uri: 'https://example.com/x.jpg' },
+    ]);
+  });
+
+  it('W6 · imageUrl 이 없으면 category(카페)·id(p1) 로 고른 생성 이미지를 같은 testID 로 그린다', () => {
+    render(
+      <PlaceRowCard
+        testIDPrefix="place-row"
+        id="p1"
+        name="감천문화마을"
+        imageUrl={null}
+        category="카페"
+      />
+    );
+
+    // 'p1' 은 변형 2 → cafe-2. 호출부가 category 를 안 넘기면(아래 W6b) 이 그림이 아니라 폴백이다.
+    expect(screen.getByTestId('place-row-photo-p1').props.source).toEqual([
+      coverFor('카페', 'p1'),
+    ]);
+  });
+
+  it('W6b · category 를 안 주거나 모르는 값이면 중립 폴백 place.webp 이다', () => {
+    const { rerender } = render(
+      <PlaceRowCard testIDPrefix="place-row" id="p1" name="감천문화마을" />
+    );
+    expect(screen.getByTestId('place-row-photo-p1').props.source).toEqual([
+      FALLBACK_COVER,
+    ]);
+
+    rerender(
+      <PlaceRowCard
+        testIDPrefix="place-row"
+        id="p1"
+        name="감천문화마을"
+        category="미지"
+      />
+    );
+    expect(screen.getByTestId('place-row-photo-p1').props.source).toEqual([
+      FALLBACK_COVER,
+    ]);
   });
 });
