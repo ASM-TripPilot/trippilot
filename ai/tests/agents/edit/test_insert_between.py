@@ -21,6 +21,7 @@ from trippilot.agents.edit.insert_between import (
     detour_km,
     parse_insert_ask,
     parse_insert_place,
+    position_cue,
     rank_on_segment,
     resolve_gap,
     segment_anchor,
@@ -162,6 +163,55 @@ def test_day_end_words_land_after_the_last_slot_unless_a_slot_has_that_name() ->
     assert not isinstance(gap, str) and (gap.after, gap.before) == (3, 4)
 
 
+@pytest.mark.parametrize("said, expected", [
+    ("홍대입구역 가기 전에 카페 하나 넣어줘", (1, 2)),        # 동네 역은 그 동네다 — 하루 끝이 아니다(2차 리뷰)
+    ("이태원역 다음에 카페 하나 넣어줘", (1, 2)),
+    ("이태원 쪽에서 홍대로 넘어갈 때 한 군데 더", (1, 2)),   # '쪽'은 앞 낱말과 붙여 읽는다
+    ("마지막 일정 전에 카페 하나 넣어줘", (2, 3)),           # 마지막 '앞'
+    ("오늘 일정 끝나고 숙소 가기 전에 카페 하나 넣어줘", (3, None)),
+    ("비행기 타기 전에 카페 하나 넣어줘", (3, None)),
+    ("집에 가기 전에 한 군데 더 넣어줘", (3, None)),
+])
+def test_day_end_and_station_words_by_shape(said: str, expected: tuple) -> None:
+    gap = resolve_gap(_REFS, parse_insert_place(said))
+    assert not isinstance(gap, str) and (gap.after, gap.before) == expected, (said, gap)
+
+
+@pytest.mark.parametrize("said", [
+    "오전 일정 끝나고 카페 하나 넣어줘",   # 하루 한가운데 — 끝으로 단정하지 않는다
+    "공항 다음에 카페 하나 넣어줘",        # 도착 뒤 — 하루 끝이 아니다
+])
+def test_day_end_needs_the_right_shape_and_no_modifier(said: str) -> None:
+    assert isinstance(resolve_gap(_REFS, parse_insert_place(said)), str), said
+
+
+def test_city_region_still_resolves_when_it_does_not_cover_the_day() -> None:
+    """'포항'은 하루 끝 말이 아니라 지역이다 — 경주→포항 하루에서 포항 쪽 첫 슬롯 앞."""
+    day = [SlotRef(PoiId("g1"), "불국사", GeoPoint(35.7900, 129.3320)), SlotRef(PoiId("g2"), "대릉원", GeoPoint(35.8380, 129.2120)),
+           SlotRef(PoiId("g3"), "영일대해수욕장", GeoPoint(36.0570, 129.3780)), SlotRef(PoiId("g4"), "죽도시장", GeoPoint(36.0350, 129.3650))]
+    gap = resolve_gap(day, parse_insert_place("포항 가기 전에 카페 하나 넣어줘"))
+    assert not isinstance(gap, str) and (gap.after, gap.before) == (1, 2)
+
+
+@pytest.mark.parametrize("said", [
+    "효창공원도 가보고 싶은데 경리단길 다음에 넣어줘",      # 바람 — 절이 아니다
+    "경리단길 다음에 조용하고 예쁜 카페 하나 넣어줘",      # 형용사 나열
+    "아이 데리고 가기 좋은 효창공원 경리단길 다음에 넣어줘",
+    "경리단길 다음에 예약 필요 없는 카페 하나 넣어줘",     # '필요 없'은 조건이다
+])
+def test_wishes_lists_and_conditions_keep_the_position(said: str) -> None:
+    place = parse_insert_place(said)
+    assert place is not None and not place.extra_clause, said
+    gap = resolve_gap(_REFS, place)
+    assert not isinstance(gap, str) and (gap.after, gap.before) == (1, 2), said
+
+
+def test_position_cue_catches_what_the_parser_cannot_place() -> None:
+    assert parse_insert_place("효창공원 경리단길 다음 순서로 넣어줘") is None  # '순서'는 옮기기 말 — 자리를 못 읽는다
+    assert position_cue("효창공원 경리단길 다음 순서로 넣어줘")
+    assert not position_cue("다음 날 카페 하나 추가해줘") and not position_cue("카페 하나 추가해줘")
+
+
 def test_two_matching_pairs_are_ambiguous_not_the_first() -> None:
     twice = [SlotRef(PoiId(f"s{i}"), name, None) for i, name in enumerate(("이태원 거리", "홍대 앞", "이태원 시장", "홍대 놀이터"))]
     assert resolve_gap(twice, parse_insert_ask("이태원에서 홍대로 넘어갈 때 한 군데 더 넣어줘")) == "ambiguous_gap"
@@ -239,6 +289,19 @@ def test_rank_key_order_and_next_door_trending_loses_to_the_middle() -> None:
     out = rank_on_segment((plain, saved, hours, famous, trending, next_door), GYEONGNI.coord, YEONNAM.coord, slack_km=2.0,
                           exclude=(), taken_names=(), kind=None, not_kinds=(), night=False, day=D, holidays=None)
     assert [p.name for p, _ in out] == ["인기 명소", "평판 명소", "영업시간 명소", "저장 명소", "그냥 명소", "연남 인기 암장"]
+
+
+def test_rank_prefers_on_the_line_middle_and_night_places_at_night() -> None:
+    """길 위 가운데 먼저 — '두 끝까지 짧은 쪽이 긴 곳'으로 재면 우회 한도 가장자리가 1등이 됐다(2차 리뷰 모의)."""
+    on_line = _poi(50, "길 위 명소", PoiCategory.SIGHT, (GYEONGNI.coord.lat + YEONNAM.coord.lat) / 2,
+                   (GYEONGNI.coord.lng + YEONNAM.coord.lng) / 2)
+    off_line = _poi(51, "길 밖 명소", PoiCategory.SIGHT, on_line.coord.lat + 0.0035, on_line.coord.lng + 0.0035)
+    club = _poi(52, "공덕 클럽", PoiCategory.ACTIVITY, on_line.coord.lat - 0.002, on_line.coord.lng - 0.002, tags=(NIGHTLIFE_TAG,))
+    args = dict(slack_km=2.0, exclude=(), taken_names=(), kind=None, not_kinds=(), day=D, holidays=None)
+    day = rank_on_segment((off_line, on_line, club), GYEONGNI.coord, YEONNAM.coord, night=False, **args)
+    assert [p.name for p, _ in day] == ["길 위 명소", "길 밖 명소"]  # 낮엔 클럽이 없다
+    night = rank_on_segment((off_line, on_line, club), GYEONGNI.coord, YEONNAM.coord, night=True, **args)
+    assert night[0][0].name == "공덕 클럽"  # "클럽 한 군데 더" — 밤 말이면 밤 장소 먼저
 
 
 def test_rank_prefers_the_middle_and_drops_namesakes_of_planned_slots() -> None:

@@ -706,7 +706,8 @@ class DialogueOrchestrator:
             # 3 — 필수 인자 되묻기 (요청당 1회, 기존 로직)
             interp = from_match(match, inp.context, trip_view)
             if interp.outcome == "ARGUMENT_CLARIFY" and match.intent is Intent.EDIT_SCHEDULE and (on := insert_day(
-                    inp.utterance, inp.snapshot, inp.now.astimezone(self._tz).date(), self._ports, inp.now)) is not None:
+                    inp.utterance, inp.snapshot, inp.now.astimezone(self._tz).date(), self._ports, inp.now,
+                    remaining_ms=self._remaining(inp))) is not None:
                 # 사이 넣기는 말의 자리로 날을 푼다 — 되물으면 답 턴에 원문이 없다(PendingFrame 에 발화 칸이 없다, spec 003)
                 interp = from_match(replace(match, slots={**match.slots, "day": on.isoformat()}), inp.context, trip_view)
         if interp.outcome == "ARGUMENT_CLARIFY":

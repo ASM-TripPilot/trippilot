@@ -475,6 +475,21 @@ def test_edit_insert_day_is_left_out_when_two_days_match_or_names_need_coords() 
     assert edit_arguments(_said(_ctx(seoul, ports=broken), said)) == {}
 
 
+
+def test_edit_insert_day_asks_coords_only_when_names_fail_and_time_allows() -> None:
+    """이름으로 풀리면 조회 0회, 지역이라 좌표가 필요해도 남은 시한이 모자라면 조회하지 않는다(동기 HTTP, 2차 리뷰)."""
+    by_name = _Coords({})
+    assert edit_arguments(_said(_ctx(arguments={}, ports=HandlerPorts(poi_info=by_name)), "우도 다음에 한 군데 더 넣어줘")) == {
+        "day": _D2.isoformat()}
+    assert by_name.calls == 0
+    itaewon, hongdae = str(uuid.uuid4()), str(uuid.uuid4())
+    seoul = _snapshot(((_D3, (SlotView.from_wire(f"{_D3}#{itaewon}", "경리단길", time(11), "액티비티"),
+                              SlotView.from_wire(f"{_D3}#{hongdae}", "경의선숲길", time(15), "액티비티"))),))
+    coords = _Coords({itaewon: GeoPoint(37.5385, 126.9875), hongdae: GeoPoint(37.5617, 126.9231)})
+    late = _ctx(seoul, ports=HandlerPorts(poi_info=coords), remaining_ms=900)
+    assert edit_arguments(_said(late, "이태원에서 홍대로 넘어갈 때 한 군데 더")) == {} and coords.calls == 0
+
+
 # ── ④ 의도별 — 스냅샷 계산 ──────────────────────────────────────────────────
 
 

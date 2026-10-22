@@ -331,3 +331,27 @@ def test_car_trip_remove_is_validated_with_the_car_too() -> None:
     command = {"op": "REMOVE_SLOT", "params": {}, "affected_slots": [str(YEONNAM.poi_id)]}
     body = _post({**_body(command=command), "transport_mode": "자가용"})
     assert body["status"] == "APPLIED", body
+
+
+# ── 2026-10-22 2차 리뷰 확정 지적 ────────────────────────────────────────
+
+
+def test_other_days_are_not_revalidated_by_this_edit() -> None:
+    """검증은 고친 날만 — 생성이 다른 추정기로 잡은 다른 날을 기본 추정기로 다시 재면 모든 편집이 막혔다(develop 부터)."""
+    tight = [_slot(GYEONGBOK, "09:00:00", "10:00:00"),  # 7km 를 5분 — 기본 추정기로는 HC2
+             {**_slot(MANGWON, "10:05:00", "11:00:00"), "is_fixed": True}]  # 다른 날의 예약 — 고친 날만 볼 때 HC3 도 그 날만
+    body = _post(_body(utterance=_SAID, day2=tight))
+    assert body["status"] == "APPLIED", body
+
+
+def test_unreadable_position_with_a_cue_is_not_appended() -> None:
+    """자리 단서는 있는데 못 읽었다 — 번역의 기준점 없는 추가를 맨 끝에 붙이면 '반영됨' 위장이다."""
+    canned = json.dumps({"editCommand": {"op": "ADD_SLOT", "params": {"targetPoiId": str(HYOCHANG.poi_id)},
+                                         "affectedSlots": []}})
+    body = _post(_body(utterance="효창공원 경리단길 다음 순서로 넣어줘"), llm=FakeLlm(canned=canned))
+    assert body["status"] == "TRANSLATION_FAILED" and "position_unread" in body["reason"], body
+
+
+def test_neighbourhood_station_resolves_to_its_neighbourhood() -> None:
+    body = _post(_body(utterance="홍대입구역 가기 전에 카페 하나 넣어줘"))
+    assert body["status"] == "APPLIED" and _ids(body)[2] == str(GONGDEOK_CAFE.poi_id), body

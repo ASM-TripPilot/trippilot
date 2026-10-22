@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass, replace
@@ -56,15 +57,17 @@ _ADD = re.compile(r"추가|넣|끼워|끼우|들르|들를|하나\s?더|한\s?(�
 # 자리 말을 뺀 나머지에서만 본다 — "옮겨 갈 때"는 자리 말이다. '빼고'는 제외("카페는 빼고")라 따로 본다
 _NOT_ADD = re.compile(r"빼(?!고)|삭제|지워|지우|없애|취소|대신|옮겨|옮기|바꿔|바꾸|순서")
 # "추가하지 마"·"넣진 마"·"안 넣어도 돼"·"넣을 필요 없어" — 더하지 말라는 말을 더하라는 말로 읽지 않는다
+# 부정은 더하기 동사에 붙은 꼴만 본다 — '예약 필요 없는 카페'의 '필요 없'은 조건이다(2026-10-22 2차 리뷰)
 _NEG_ADD = re.compile(
     r"(?:추가|넣|끼우|끼워|들르)\S*?\s?(?:하지|지|진|지는|지도)\s?(?:마|말|않)"
-    r"|(?<![가-힣])안\s?(?:넣|추가|끼우|끼워|들르|들러|해도)|필요\S{0,2}\s?없|(?:추가|넣)\S*\s?(?:싫|별로|싶지\s?않)")
+    r"|(?<![가-힣])안\s?(?:넣|추가|끼우|끼워|들르|들러|해도)"
+    r"|(?:추가|넣|끼우|끼워|들르)\S*\s?(?:필요\S{0,2}\s?없|건\s?별로|기\s?싫|고\s?싶지\s?않)")
 _MANY = re.compile(r"(?:두|세|네|다섯|여섯|일곱|여덟|아홉|열|[2-9]|몇|여러)\s?(?:군데|곳|개)|두어|씩"
                    r"|(?:하나|한\s?곳)\s?(?:랑|하고|와|과|,)\s?\S{0,15}\s?(?:하나|한\s?곳)")
 # 끝 말 한 낱말 — 길이를 묶는다(무공백 긴 말에서 역추적이 n³ 으로 늘었다, 2026-10-22 리뷰 실측 500자 5.8s)
 _W = r"\S{1,15}"
 _AFTER_WORDS = r"(?:바로\s?)?(?:다음에|다음으로|다음|끝나고|끝나면|보고\s?나서|들렀다가|갔다가|다녀와서|후에|이후에|직후에|뒤에)"
-_BEFORE_WORDS = (r"(?:(?:으로|로)?\s?가는\s?길|(?:(?:들어|돌아|되돌아)?\s?가기|들르기|도착하기)\s?(?:바로\s?|직)?전"
+_BEFORE_WORDS = (r"(?:(?:으로|로)?\s?가는\s?길|(?:(?:들어|돌아|되돌아)?\s?가기|타기|들르기|도착하기)\s?(?:바로\s?|직)?전"
                  r"|(?:바로\s?|직)?전에)")
 _POSITIONS: tuple[tuple[Shape, re.Pattern[str]], ...] = (
     (Shape.BETWEEN, re.compile(
@@ -80,11 +83,19 @@ _JOSA = re.compile(r"(?:에서|으로|까지|부터|로|이랑|랑|와|과|하�
 _NOT_END = frozenset("바로 그 이 저 거기 오늘 내일 그날 거".split())
 # 출발이 지금 있는 곳인 말("지금 있는 곳에서·숙소에서 연남동 가는 길에") — 사이가 아니라 B 앞이다
 _HERE = re.compile(r"^(?:지금|여기|현재|있는\s?곳|현\s?위치|숙소|호텔|집)$")
-# 하루 끝으로 가는 말("공항·숙소·서울역 가기 전에", "일정 끝나고", "마지막 일정 다음에") — 일정에 그 이름이 없으면 마지막 슬롯 뒤다
-DAY_END = re.compile(r"^(?:숙소|호텔|집|\S*공항|\S*역|\S*터미널|\S*항|기차|KTX|비행기|버스|일정|마지막(?:\s?(?:일정|장소|코스|곳))?)$")
-# 자리 말 밖의 다른 서술절("점심 먹고"·"구경하고") — 더하기·제외 말은 빼고 본다
-_CLAUSE = re.compile(
-    r"(?<![가-힣])(?!(?:추가|넣|끼우|끼워|들르)|(?:말고|빼고|말구|싫고|됐고|아니고|하고|그리고)(?=\s|$))[가-힣]{1,10}(?:고|다가)(?=\s|$)")
+# 하루 끝 — 꼴로 가른다(2026-10-22 2차 리뷰: '공항 다음에'·'마지막 일정 전에'가 끝으로 갔다). 일정에 그 이름이 없을 때만이다.
+# 떠나는 곳(B 쪽 끝 말: "공항·숙소·서울역·KTX 타기 전에") = 마지막 슬롯 뒤. 하루 마지막(A 쪽: "일정 끝나고", "마지막 일정 다음에") = 같은 자리.
+# "마지막 일정 전에"(B 쪽 '마지막')는 마지막 슬롯 앞이다
+_DAY_END_TO = re.compile(r"^(?:숙소|호텔|집|\S*공항|\S*역|\S*터미널|기차|KTX|비행기|버스)$")
+_DAY_END_FROM = re.compile(r"^(?:오늘\s?)?(?:마지막\s?)?(?:일정|코스)$|^마지막$")
+_LAST_SLOT = re.compile(r"^마지막(?:\s?(?:일정|장소|코스|곳))?$")
+# 동네 권역(반경 ≤ 이 값)은 하루 끝 말보다 먼저 본다 — '홍대입구역'은 홍대다. 광역('서울역'의 서울)만 하루 끝에 진다
+_NEIGHBORHOOD_KM = 3.0
+# 끝 말만으로 뜻이 서지 않는 말 — 앞 낱말과 붙여 읽는다("이태원 쪽", "마지막 일정", "오전 일정"). 부정 꼴은 붙이지 않는다
+_GENERIC_END = re.compile(r"^(?:일정|코스|장소|곳|쪽|근처|앞|옆|뒤|주변|부근|건너편|입구|길)$")
+_NEG_WORD = re.compile(r"(?:말고|말구|말곤|빼고|싫고|됐고|아니면|아니고)$")
+# 자리 말 밖의 다른 서술절 — 행위 동사만("점심 먹고"·"구경하고"). '가보고 싶은데'(바람)·'조용하고 예쁜'(나열)·'데리고'는 절이 아니다
+_CLAUSE = re.compile(r"(?<![가-힣])[가-힣]{0,4}(?:먹고|마시고|보고|구경하고|쇼핑하고|산책하고|놀고|쉬고|찍고)(?!\s?싶)(?=\s|$)")
 # 종류 — 하나만 걸릴 때만 쓴다(둘 이상이면 종류 없음으로 — 오탐보다 미탐)
 _KINDS: tuple[tuple[PoiCategory, re.Pattern[str]], ...] = (
     (PoiCategory.CAFE, re.compile(r"카페|커피|디저트|빵집|베이커리")),
@@ -130,15 +141,45 @@ def _end(text: str | None) -> str | None:
     return t if len(_norm(t)) >= 2 and t not in _NOT_END else None
 
 
-def _position(text: str) -> tuple[Shape, str | None, str | None, re.Match[str]] | None:
-    """첫 자리 말 — 꼴마다 끝 말이 유효한 첫 일치를 고른다(BETWEEN → BEFORE → AFTER)."""
+def _with_prev(text: str, start: int, raw: str | None) -> tuple[str | None, int]:
+    """끝 말이 뜻이 안 서는 낱말(쪽·근처·일정·1자)이면 바로 앞 낱말을 붙인다 → (끝 말, 새 시작)."""
+    if raw is None:
+        return None, start
+    core = _JOSA.sub("", raw.strip()) or raw
+    if not (_GENERIC_END.match(core) or len(_norm(core)) < 2):
+        return raw, start
+    head = text[:start].rstrip()
+    prev = head.rsplit(" ", 1)[-1] if head else ""
+    if not prev or _NEG_WORD.search(prev):
+        return raw, start
+    return f"{prev} {raw}", start - (len(text[:start]) - len(head)) - len(prev)
+
+
+def _position(text: str) -> tuple[Shape, str | None, str | None, int, int] | None:
+    """첫 자리 말 — 꼴마다 끝 말이 유효한 첫 일치를 고른다(BETWEEN → BEFORE → AFTER). (꼴, A, B, 구절 시작, 구절 끝)."""
     for shape, pattern in _POSITIONS:
         for m in pattern.finditer(text):
-            a = _end(m.groupdict().get("a"))
-            b = _end(m.groupdict().get("b"))
+            g = m.groupdict()
+            raw_a, start = _with_prev(text, m.start(), g.get("a")) if g.get("a") is not None else (None, m.start())
+            if g.get("b") is not None and g.get("a") is None:  # BEFORE — 끝 말이 구절 맨 앞
+                raw_b, start = _with_prev(text, m.start(), g.get("b"))
+            else:
+                raw_b = g.get("b")
+            a, b = _end(raw_a), _end(raw_b)
             if (shape is Shape.BETWEEN and a and b) or (shape is Shape.BEFORE and b) or (shape is Shape.AFTER and a):
-                return shape, a, b, m
+                return shape, a, b, start, m.end()
     return None
+
+
+# 자리 단서 — 이 말이 있는데 자리를 못 읽었으면 끝에 붙이지 않는다(번역이 기준점을 빼면 '반영됨' 위장, 2026-10-22 2차 리뷰 안전망)
+_POSITION_CUE = re.compile(r"다음(?!\s?(?:날|주|달|번|여행))|뒤에|가기\s?전|전에|사이에|중간에|가는\s?길|넘어갈|넘어가는"
+                           r"|끝나고|끝나면|들렀다가|갔다가|이후에|직후에|직전에")
+
+
+def position_cue(utterance: str) -> bool:
+    """더하기 말에 자리 단서가 있나 — 자리를 못 읽은 기준점 없는 추가를 끝에 붙이지 않을 때 본다."""
+    text = " ".join(utterance.split())
+    return bool(_ADD.search(text) and _POSITION_CUE.search(text) and not _NEG_ADD.search(text))
 
 
 def parse_insert_ask(utterance: str) -> InsertAsk | None:
@@ -151,8 +192,8 @@ def parse_insert_ask(utterance: str) -> InsertAsk | None:
     found = _position(text) if ask is not None else None
     if ask is None or found is None or not _INDEFINITE.search(text):
         return None
-    m = found[3]
-    rest = _ADD_WORD.sub(" ", _INDEFINITE.sub(" ", text[:m.start()] + " " + text[m.end():]))
+    start, end = found[3], found[4]
+    rest = _ADD_WORD.sub(" ", _INDEFINITE.sub(" ", text[:start] + " " + text[end:]))
     if "빼고" in rest and ask.kind is not None:
         return None  # "카페 빼고 공원 하나" — 교체일 수 있다(번역기가 REPLACE 로 옮긴다)
     for _, pattern in _KINDS:
@@ -171,8 +212,8 @@ def parse_insert_place(utterance: str) -> InsertAsk | None:
     found = _position(text)
     if found is None:
         return None
-    shape, frm, to, m = found
-    outside = text[:m.start()] + " " + text[m.end():]
+    shape, frm, to, start, end = found
+    outside = text[:start] + " " + text[end:]
     if _NOT_ADD.search(outside):
         return None
     if shape is Shape.BETWEEN and frm is not None and _HERE.match(frm):
@@ -209,22 +250,32 @@ class Gap:
     resolved_by: tuple[str, ...]
 
 
-def _hits(text: str, slots: Sequence[SlotRef]) -> tuple[set[int], str]:
+def _hits(text: str, slots: Sequence[SlotRef], role: str) -> tuple[set[int], str]:
+    """끝 말 → 슬롯 인덱스와 푼 방법. 이름 → 동네 권역 → 하루 끝(꼴별, `role` from|to) → 광역 순."""
     key = _norm(text)
     tokens = [_norm(t) for t in text.split() if len(_norm(t)) >= 2]
     named = {i for i, s in enumerate(slots) if s.name and len(_norm(s.name)) >= 2
              and (_norm(s.name) in key or key in _norm(s.name) or any(t in _norm(s.name) for t in tokens))}
     if named:
         return named, "name"
-    if DAY_END.match(text):  # 일정에 그 이름이 없는 역·공항·숙소 — 지역('서울역'의 서울)으로 읽기 전에 하루 끝이다
-        return set(), "day_end"
     hit = region_center(text)
-    if hit is None:
-        return set(), "none"
-    _, center, km = hit
-    near = {i for i, s in enumerate(slots) if s.coord is not None and haversine_km(center, s.coord) <= km}
-    # 그 날 슬롯을 다 덮는 지역은 가리키는 게 없다 — '서울역'의 '서울'(5km)이 하루 전체를 잡아 맨 앞에 끼웠다(2026-10-22 리뷰)
-    return (set(), "region_wide") if len(slots) > 1 and len(near) == len(slots) else (near, "region")
+    near: set[int] = set()
+    km = 0.0
+    if hit is not None:
+        _, center, km = hit
+        near = {i for i, s in enumerate(slots) if s.coord is not None and haversine_km(center, s.coord) <= km}
+        if len(slots) > 1 and len(near) == len(slots):
+            near = set()  # 그 날 슬롯을 다 덮는 지역은 가리키는 게 없다('서울역'의 서울 5km, 2026-10-22 리뷰)
+    if near and km <= _NEIGHBORHOOD_KM:
+        return near, "region"
+    core = _JOSA.sub("", text) or text  # '집에'·'집으로'
+    if role == "to" and (_DAY_END_TO.match(text) or _DAY_END_TO.match(core)):
+        return set(), "day_end"
+    if role == "to" and _LAST_SLOT.match(text):
+        return set(), "last_slot"
+    if role == "from" and (_DAY_END_FROM.match(text) or _DAY_END_FROM.match(core)):
+        return set(), "day_end"
+    return (near, "region") if near else (set(), "none")
 
 
 def _run(indices: set[int]) -> tuple[int, int] | None:
@@ -245,12 +296,16 @@ def resolve_gap(slots: Sequence[SlotRef], ask: InsertAsk) -> Gap | str:
     last = len(slots) - 1
     end_of_day = Gap(last, None, ("day_end",))
     if ask.shape is Shape.BETWEEN:
-        a, by_a = _hits(ask.frm or "", slots)
-        b, by_b = _hits(ask.to or "", slots)
+        a, by_a = _hits(ask.frm or "", slots, "from")
+        b, by_b = _hits(ask.to or "", slots, "to")
+        if by_a == "day_end":  # "오늘 일정 끝나고 숙소 가기 전에" — 하루 마지막에서 출발
+            a = {last}
         if not a:
             return "unresolved_from"
         if by_b == "day_end":  # "경복궁에서 숙소 갈 때" — 경복궁이 마지막이어야 그 길이다
             return replace(end_of_day, resolved_by=(by_a, "day_end")) if max(a) == last else "not_adjacent"
+        if by_b == "last_slot":
+            b = {last}
         if not b:
             return "unresolved_to"
         pairs = [i for i in sorted(a) if i + 1 in b and i + 1 not in a]
@@ -258,7 +313,7 @@ def resolve_gap(slots: Sequence[SlotRef], ask: InsertAsk) -> Gap | str:
             return "not_adjacent" if not pairs else "ambiguous_gap"
         return Gap(pairs[0], pairs[0] + 1, (by_a, by_b))
     if ask.shape is Shape.AFTER:
-        a, by_a = _hits(ask.frm or "", slots)
+        a, by_a = _hits(ask.frm or "", slots, "from")
         if by_a == "day_end":
             return end_of_day
         run = _run(a)
@@ -266,9 +321,11 @@ def resolve_gap(slots: Sequence[SlotRef], ask: InsertAsk) -> Gap | str:
             return "unresolved_from" if not a else "ambiguous_from"
         after = run[1]
         return Gap(after, after + 1 if after + 1 < len(slots) else None, (by_a,))
-    b, by_b = _hits(ask.to or "", slots)
+    b, by_b = _hits(ask.to or "", slots, "to")
     if by_b == "day_end":
         return end_of_day
+    if by_b == "last_slot":  # "마지막 일정 전에" — 마지막 슬롯 앞
+        return Gap(last - 1 if last > 0 else None, last, ("last_slot",))
     run = _run(b)
     if run is None:
         return "unresolved_to" if not b else "ambiguous_to"
@@ -292,6 +349,14 @@ def segment_anchor(a: GeoPoint | None, b: GeoPoint | None, slack_km: float) -> t
     point = a if a is not None else b
     assert point is not None
     return point, slack_km / 2
+
+
+def _progress(a: GeoPoint, b: GeoPoint, x: GeoPoint) -> float:
+    """A→B 에 투영한 X 의 진행률(0=A, 1=B) — 평면 근사(경도는 cos 위도 배). 수 km 구간이라 충분하다."""
+    k = math.cos(math.radians((a.lat + b.lat) / 2))
+    dx, dy = (b.lng - a.lng) * k, b.lat - a.lat
+    length = dx * dx + dy * dy
+    return 0.5 if length == 0 else ((x.lng - a.lng) * k * dx + (x.lat - a.lat) * dy) / length
 
 
 def detour_km(a: GeoPoint | None, b: GeoPoint | None, x: GeoPoint) -> float:
@@ -339,14 +404,18 @@ def rank_on_segment(
     span = haversine_km(a, b) if a is not None and b is not None else None
 
     def key(item: tuple[Poi, float]) -> tuple:
-        # 양 끝이 있으면 **가운데에 가까운 곳** 먼저(두 끝까지 거리 중 짧은 쪽이 긴 곳) — 우회만 보면 끝점 바로 옆이 늘 0 이라
-        # "넘어가는 길에 들를 곳"이 아니라 앞·뒤 일정의 옆집이 뽑힌다. 끝점 옆(짧은 쪽 < 구간의 1/4, 최소 0.5km)은 인기 키보다도 뒤다 —
-        # 실데이터에서 B 옆 0.48km '요즘 인기' 암장이 1등이었다(2026-10-22). 한쪽만 있으면(맨 앞·맨 끝) 가까운 곳 먼저
+        # 양 끝이 있으면 **길 위 가운데** 먼저 — A→B 에 투영한 진행률 t 가 0.5 에 가까운 곳, 같으면 우회가 작은 곳.
+        # 우회만 보면 끝점 바로 옆이 늘 0 이라 앞·뒤 일정의 옆집이 뽑힌다(2026-10-22 실측: 다음 슬롯 옆 입구 0.06km). 끝점 옆
+        # (t < 0.2·> 0.8, 구간 1km 이상)은 인기 키보다도 뒤다 — 재적재 데이터에서 B 옆 0.48km '요즘 인기' 암장이 1등이었다.
+        # '두 끝까지 짧은 쪽이 긴 곳'으로 재면 우회 한도 가장자리(길에서 먼 곳)가 1등이 됐다(2차 리뷰 모의). 한쪽만 있으면 가까운 곳 먼저
         p, d = item
-        nearest = min(haversine_km(a, p.coord), haversine_km(p.coord, b)) if span is not None else None
-        near_end = nearest is not None and nearest < max(span / 4, 0.5)
-        spread = -nearest if nearest is not None else d
-        return (d > slack_km / 2, near_end, TRENDING_TAG not in p.tags, -reputation_bonus(p.tags),
-                0 if p.open_hours else 1, -p.saved_count, round(spread, 1), round(d, 3), str(p.poi_id))
+        if span is not None:
+            t = _progress(a, b, p.coord)
+            near_end, spread = span >= 1.0 and not 0.2 <= t <= 0.8, round(abs(t - 0.5), 1)
+        else:
+            near_end, spread = False, round(d, 1)
+        nightish = NIGHTLIFE_TAG in p.tags or p.category in (PoiCategory.BAR, PoiCategory.NIGHT_VIEW)
+        return (d > slack_km / 2, near_end, night and kind is None and not nightish, TRENDING_TAG not in p.tags,
+                -reputation_bonus(p.tags), 0 if p.open_hours else 1, -p.saved_count, spread, round(d, 2), str(p.poi_id))
 
     return tuple(sorted(keep, key=key))

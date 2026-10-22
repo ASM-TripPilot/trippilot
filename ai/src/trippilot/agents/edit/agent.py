@@ -48,6 +48,7 @@ from trippilot.agents.edit.insert_between import (
     SlotRef,
     parse_insert_ask,
     parse_insert_place,
+    position_cue,
     rank_on_segment,
     resolve_gap,
     segment_anchor,
@@ -228,6 +229,8 @@ class EditAgent:
             # 번역이 "무엇", 코드가 "어디"를 맡아 기준점을 채운다(2026-10-22 실측: "효창공원을 경리단길 끝나고"가 맨 끝에 붙었다)
             place = ask or (parse_insert_place(task.utterance)
                             if command.op is EditOp.ADD_SLOT and not _anchored(command) else None)
+            if place is None and command.op is EditOp.ADD_SLOT and not _anchored(command) and position_cue(task.utterance):
+                return EditOutcome(status=EditStatus.TRANSLATION_FAILED, reason="insert_between: position_unread")
             if place is not None and command.op is EditOp.ADD_SLOT and not _anchored(command):
                 gap = unresolved if ask is not None else self._resolve(task, place)
                 if isinstance(gap, str):
@@ -294,9 +297,12 @@ class EditAgent:
 
         # ⑤ 어셈블리 검증 — 통과분만 노출 (INV-2). 검증 수단 = 재타이밍 수단 — 문제 빌더는 와이어에 수단이 없어 대중교통으로 채우는데,
         #    편집 요청엔 수단이 있다. 안 맞추면 자차 여행은 재타이밍(자차)이 잡은 간격을 검증(대중교통)이 늘 HC2 로 떨어뜨린다(2026-10-22 리뷰 재현)
+        #    검증은 고친 날만 — 다른 날 시각은 이 편집이 만든 것이 아니다. 생성이 다른 추정기(액티비티 취향 걷기 1.0km 등)로 잡은 날을
+        #    기본 추정기로 다시 재면 손 안 댄 날의 HC2 가 모든 편집을 막았다(develop 부터, 2026-10-22 2차 리뷰 재현). HC1~4 는 날 단위다
         facade = self._assembly_provider.for_pool(merged_index)
-        checked = replace(problem or self._problem_for(mutated), transport=task.transport)
-        violations = tuple(facade.validate(mutated, checked, task.deadline_ms, task.trace_id))
+        checked = replace(problem or self._problem_for(mutated), transport=task.transport, days=(task.target_date,))
+        edited_day = replace(mutated, days=tuple(d for d in mutated.days if d.date == task.target_date))
+        violations = tuple(facade.validate(edited_day, checked, task.deadline_ms, task.trace_id))
         if violations:
             return EditOutcome(
                 status=EditStatus.REJECTED,

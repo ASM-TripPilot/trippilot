@@ -1663,21 +1663,34 @@ def edit_arguments(ctx: TurnContext) -> dict[str, str]:
         on = resolve_day(said, ctx.snapshot, ctx.today)
         if on is not None:
             out["day"] = on.isoformat()
-    elif (on := insert_day(ctx.utterance, ctx.snapshot, ctx.today, ctx.ports, ctx.now)) is not None:
+    elif (on := insert_day(ctx.utterance, ctx.snapshot, ctx.today, ctx.ports, ctx.now,
+                           remaining_ms=ctx.remaining_ms())) is not None:
         out["day"] = on.isoformat()
     return out
 
 
-def insert_day(utterance: str, snapshot: TurnSnapshot, today: date, ports: HandlerPorts, now: datetime) -> date | None:
-    """사이 넣기 말의 자리가 오늘 이후 한 날에만 풀리면 그 날 — 아니면 None. 오케스트레이터가 edit_scope 되묻기 앞에서도 부른다."""
+# 좌표 조회(장소 정보 공급자, 동기 HTTP)를 걸 만한 남은 턴 시한 — 모자라면 날 힌트만 포기한다(FRAME 은 그대로 나간다)
+_INSERT_COORDS_MIN_MS = 1_500
+
+
+def insert_day(utterance: str, snapshot: TurnSnapshot, today: date, ports: HandlerPorts, now: datetime, *,
+               remaining_ms: int | None = None) -> date | None:
+    """사이 넣기 말의 자리가 오늘 이후 한 날에만 풀리면 그 날 — 아니면 None. 오케스트레이터가 edit_scope 되묻기 앞에서도 부른다.
+
+    이름으로 먼저 푼다(I/O 0). 이름으로 한 날도 안 풀릴 때만 좌표를 묻는다 — 지역 이름("이태원")은 좌표가 있어야 풀린다."""
     place = parse_insert_place(utterance) if utterance else None
     if place is None:
         return None
     days = [d for d in snapshot.days if d.date >= today and d.slots]
-    coords = _slot_coords(ports, now, [s.poi_id for d in days for s in d.slots if s.poi_id])
-    hits = [d.date for d in days if not isinstance(resolve_gap(
-        [SlotRef(PoiId(s.poi_id or s.slot_key), s.name, coords.get(s.poi_id or "")) for s in d.slots], place), str)]
-    return hits[0] if len(hits) == 1 else None
+
+    def resolved(coords: Mapping[str, GeoPoint]) -> list[date]:
+        return [d.date for d in days if not isinstance(resolve_gap(
+            [SlotRef(PoiId(s.poi_id or s.slot_key), s.name, coords.get(s.poi_id or "")) for s in d.slots], place), str)]
+
+    found = resolved({})
+    if not found and (remaining_ms is None or remaining_ms >= _INSERT_COORDS_MIN_MS):
+        found = resolved(_slot_coords(ports, now, [s.poi_id for d in days for s in d.slots if s.poi_id]))
+    return found[0] if len(found) == 1 else None
 
 
 def _slot_coords(ports: HandlerPorts, now: datetime, poi_ids: list[str]) -> dict[str, GeoPoint]:
