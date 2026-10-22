@@ -102,7 +102,7 @@ Base `/api/v1` · `Authorization: Bearer` 무상태 · JSON camelCase · 에러 
 | GET · PATCH `/reflections/{tripId}/{day}` | 오늘의 회고(자동+수동, 3단 fallback) | j03 |
 | GET `/trips/{id}/summary` | 여행 요약 | j04 |
 | GET `/users/{id}/style-analysis` | 스타일 분석(임계 10 visit 게이팅) | j05 |
-| POST `/trips/{id}/share-card` | 공유 카드(aspectRatio·caption·includePhotos) | j06 |
+| POST `/trips/{id}/share-card/copy` | 공유 카드 **문구**(캡션·해시태그, AI·규칙 폴백) — 카드 이미지는 기기가 그린다(BR-U5-46, TRIP-1411) | j06 |
 | GET `/trips?status=past` / `?month=` | 캘린더·지난 여행 | j07 |
 
 ## 10. MVP/후속 · 크로스유닛 계약
