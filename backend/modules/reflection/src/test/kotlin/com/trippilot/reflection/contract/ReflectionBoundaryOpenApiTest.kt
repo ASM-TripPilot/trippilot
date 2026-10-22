@@ -8,11 +8,13 @@ import com.trippilot.reflection.adapter.out.external.AiReflectionRequestMeta
 import com.trippilot.reflection.adapter.out.external.AiReflectionVisit
 import com.trippilot.reflection.adapter.out.external.AiTripEventRecord
 import com.trippilot.reflection.adapter.out.external.AiReflectionVisitRef
+import com.trippilot.reflection.adapter.out.external.AiShareCardCopyResponse
 import com.trippilot.reflection.adapter.out.external.ReflectionBoundaryMapper
 import com.trippilot.testsupport.ContractShape
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.shouldBe
 import java.io.File
 import java.time.Instant
 import java.time.LocalDate
@@ -75,6 +77,13 @@ class ReflectionBoundaryOpenApiTest : StringSpec({
     "generate 응답 키가 계약과 정확히 일치한다" {
         wireKeys(sampleResponse) shouldContainExactly props("ReflectionGenerateResponse")
         wireKeys(sampleResponse.cover) shouldContainExactly props("CoverSchema")
+    }
+
+    /** 공유 카드 문구(TRIP-1411). 요청은 generate 와 같은 타입이라 위가 이미 잰다 — 응답만 따로 본다. */
+    "share-card 응답 키가 계약과 정확히 일치하고, 요청 스키마가 generate 와 같다" {
+        wireKeys(AiShareCardCopyResponse("캡션", listOf("#제주여행"), isFallback = false)) shouldContainExactly props("ShareCardCopyResponse")
+        val shareRequest = requireNotNull(contract["paths"]?.get(AiReflectionPaths.SHARE_CARD)?.get("post"))["requestBody"]["content"]["application/json"]["schema"]["\$ref"].asText()
+        shareRequest shouldBe "#/components/schemas/ReflectionGenerateRequest"
     }
 })
 
