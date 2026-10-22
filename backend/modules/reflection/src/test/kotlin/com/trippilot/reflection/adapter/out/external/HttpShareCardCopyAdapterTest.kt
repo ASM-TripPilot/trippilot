@@ -66,6 +66,11 @@ class HttpShareCardCopyAdapterTest : StringSpec({
         server.verify()
     }
 
+    "최대 대기는 연결 + 읽기 상한이다 — 동시 요청 거절의 Retry-After 가 이 값이다" {
+        HttpShareCardCopyAdapter(RestClient.create(), ReflectionAgentProperties(mode = "http", connectTimeoutMs = 3_000, readTimeoutMs = 21_000), clock)
+            .maxWaitMs shouldBe 24_000L
+    }
+
     "해시태그가 없는 응답도 읽는다 — 계약상 선택 필드다" {
         val (adapter, server) = fixture()
         server.expect(requestTo("http://ai.test/ai/v1/reflection/share-card"))

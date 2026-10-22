@@ -89,8 +89,12 @@ class ShareCardCopyService(
             events = emptyList(),
         )
         // 같은 계정이 이미 짓고 있으면 **하루 횟수를 집기 전에** 거절한다 — 두 번 누른 [공유]가 횟수를 둘 태우지 않게.
+        // `Retry-After` 는 앞 요청이 붙들 수 있는 최대(연결 + 읽기 상한)를 올림한 초다 — 그 전에 다시 오면 또 거절이다.
         if (!inFlight.add(accountId)) {
-            throw RateLimited(retryAfterSeconds = 1, message = "공유 문구를 만들고 있어요. 끝나면 다시 시도해 주세요.")
+            throw RateLimited(
+                retryAfterSeconds = ((copier.maxWaitMs + 999) / 1000).coerceAtLeast(1),
+                message = "공유 문구를 만들고 있어요. 끝나면 다시 시도해 주세요.",
+            )
         }
         val ai = try {
             guardDailyLimit(accountId)

@@ -25,6 +25,12 @@ interface ShareCardCopyPort {
     /** 켜져 있지 않으면 입력 조립(방문·장소·취향 조회)을 아예 하지 않는다 — [ReflectionAgentPort.enabled] 와 같은 이유. */
     val enabled: Boolean
 
+    /**
+     * 호출 하나가 응답까지 붙들 수 있는 최대 시간(ms) — 연결 + 읽기 상한. 같은 계정의 두 번째 요청에 "언제 다시"(`Retry-After`)를
+     * 이 값으로 알린다(도우미 `TURN_IN_PROGRESS` 와 같은 관례 — 1초로 알리면 앱이 앞 요청이 끝나기 전에 다시 두드린다).
+     */
+    val maxWaitMs: Long
+
     fun copy(input: ReflectionAgentInput): ShareCardCopy?
 }
 

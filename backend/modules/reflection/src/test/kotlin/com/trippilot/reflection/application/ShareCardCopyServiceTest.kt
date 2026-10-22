@@ -74,6 +74,7 @@ class ShareCardCopyServiceTest : StringSpec({
     }
 
     class Copier(private val answer: ShareCardCopy?, override val enabled: Boolean = true) : ShareCardCopyPort {
+        override val maxWaitMs = 24_000L
         var sent: ReflectionAgentInput? = null
         override fun copy(input: ReflectionAgentInput) = answer.also { sent = input }
     }
@@ -263,6 +264,7 @@ class ShareCardCopyServiceTest : StringSpec({
         val release = CountDownLatch(1)
         val blocking = object : ShareCardCopyPort {
             override val enabled = true
+            override val maxWaitMs = 24_001L // 연결 3초 + 읽기 21초 + 1ms — 올림을 본다
             override fun copy(input: ReflectionAgentInput): ShareCardCopy {
                 entered.countDown()
                 release.await(5, TimeUnit.SECONDS)
@@ -278,6 +280,7 @@ class ShareCardCopyServiceTest : StringSpec({
 
             val e = shouldThrow<RateLimited> { svc.copy(acc, tripId) }
             e.errorCode shouldBe ErrorCode.RATE_LIMITED
+            e.retryAfterSeconds shouldBe 25L // 앞 요청이 붙들 수 있는 최대를 올림한 초
             usage.claims.size shouldBe 1 // 두 번째는 횟수를 태우지 않았다
 
             release.countDown()
@@ -293,6 +296,7 @@ class ShareCardCopyServiceTest : StringSpec({
         var calls = 0
         val throwing = object : ShareCardCopyPort {
             override val enabled = true
+            override val maxWaitMs = 24_000L
             override fun copy(input: ReflectionAgentInput): ShareCardCopy? {
                 calls++
                 if (calls == 1) error("어댑터가 약속을 어겼다")

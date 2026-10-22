@@ -30,6 +30,8 @@ class HttpShareCardCopyAdapter(
 
     override val enabled = true
 
+    override val maxWaitMs = properties.connectTimeoutMs + properties.readTimeoutMs
+
     override fun copy(input: ReflectionAgentInput): ShareCardCopy? {
         // 상대가 422 로 거절할 입력은 보내지 않는다(목적지 필수 · 방문 1건 이상) — 규칙은 한 곳([ReflectionAgentInput.callable]).
         if (!ReflectionAgentInput.callable(input.region, input.visits)) {
@@ -74,6 +76,8 @@ class ShareCardCopyConfiguration {
     @ConditionalOnMissingBean(ShareCardCopyPort::class)
     fun unwiredShareCardCopy(): ShareCardCopyPort = object : ShareCardCopyPort {
         override val enabled = false
+
+        override val maxWaitMs = 0L // 부르지 않는다 — 동시 요청 거절까지 오지 않는다(꺼져 있으면 그 전에 규칙 조립)
 
         override fun copy(input: ReflectionAgentInput): ShareCardCopy? {
             log.debug("공유 문구 AI 경계 미배선 — 규칙 문구로 갑니다.")
