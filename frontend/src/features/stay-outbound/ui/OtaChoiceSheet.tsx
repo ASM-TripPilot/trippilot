@@ -29,7 +29,7 @@ import {
   ChevronRightGlyph,
   InfoGlyph,
   WarningTriangleGlyph,
-} from '@/features/stay/index.view';
+} from './OutboundGlyphs';
 
 // 법정성 문구(BR-U1-30 → l07 두 문장). 각 문장을 한 Text 노드로 렌더해 오탈자가 완전일치 red 가 되게 한다.
 // 가운뎃점은 Figma 원문 그대로 U+00B7.
@@ -45,7 +45,10 @@ const SHEET_BACKGROUND = {
 } as const;
 
 export interface OtaChoiceSheetProps {
-  item: StayItem;
+  /** 시트가 실제로 읽는 두 값만(TRIP-1579) — `StayItem`·`StayDetail` 은 그대로 들어맞는다. */
+  item: Pick<StayItem, 'externalSource'> & Partial<Pick<StayItem, 'price'>>;
+  /** 생략 = true(가격 칸을 그린다 — 값이 없으면 '가격 미확인'). 가격이 없는 출처(인기 숙소·전체 보기)는 호출부가 false 로 준다. */
+  showPrice?: boolean;
   /** 생략 = 'default'. 'error' 는 이동 실패 뒤의 얼굴(BR-U1-55). */
   variant?: 'default' | 'error';
   dontShowAgain: boolean;
@@ -61,6 +64,7 @@ export interface OtaChoiceSheetProps {
 
 export function OtaChoiceSheet({
   item,
+  showPrice = true,
   variant = 'default',
   dontShowAgain,
   onToggleDontShowAgain,
@@ -120,10 +124,16 @@ export function OtaChoiceSheet({
               <Text className="font-inter-bold text-body font-bold text-ink">
                 {otaDisplayName(item.externalSource)}
               </Text>
-              <Text className="font-noto text-label text-muted-soft">·</Text>
-              <Text className="font-inter-bold text-body font-bold text-ink">
-                {formatPrice(item.price)}
-              </Text>
+              {showPrice ? (
+                <>
+                  <Text className="font-noto text-label text-muted-soft">
+                    ·
+                  </Text>
+                  <Text className="font-inter-bold text-body font-bold text-ink">
+                    {formatPrice(item.price)}
+                  </Text>
+                </>
+              ) : null}
             </View>
             <ChevronRightGlyph size={18} />
           </View>

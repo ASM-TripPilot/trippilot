@@ -11,7 +11,10 @@
 import type { ArriveRequestSource } from './arriveRequestSource';
 
 export interface ArriveRequest {
-  /** 슬롯 경계 키 "{date}#{poiId}". **비우면 즉석 방문**(계획에 없던 곳) */
+  /**
+   * 슬롯 경계 키 "{date}#{poiId}". **비우면 즉석 방문**(계획에 없던 곳)
+   * @maxLength 100
+   */
   slotKey?: string | null;
   poiId: string;
   /** 권한이 없거나 정확도가 낮으면 수동으로 대체된다(BR-U4-36) */

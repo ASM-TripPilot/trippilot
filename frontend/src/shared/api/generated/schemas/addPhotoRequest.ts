@@ -11,11 +11,14 @@
 
 export interface AddPhotoRequest {
   /**
-   * 기기 로컬 자산 식별자(iOS PHAsset localIdentifier · Android MediaStore id). 기기 안에서만 뜻이 있다.
+   * 기기 로컬 자산 식별자(iOS PHAsset localIdentifier · Android MediaStore id). 기기 안에서만 뜻이 있다. 길이는 UTF-16 단위(서버 @Size) — maxLength(코드 포인트)와 BMP 밖 문자에서 다르다
    * @maxLength 200
    */
   localAssetId: string;
-  /** @maxLength 64 */
+  /**
+   * 길이는 UTF-16 단위(서버 @Size) — maxLength(코드 포인트)와 BMP 밖 문자에서 다르다
+   * @maxLength 64
+   */
   deviceId: string;
   takenAt?: string | null;
   /** 위치 동의가 없으면 **저장되지 않는다**(INV-U5-04). 보내는 것 자체는 오류가 아니다. */

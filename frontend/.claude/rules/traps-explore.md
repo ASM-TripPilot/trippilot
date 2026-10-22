@@ -20,7 +20,7 @@ paths:
 
 ## 탐색 랜딩 (explore/d01)
 
-- **`ExploreLandingScreen`을 렌더하는 node-버킷 테스트는 `useGetPlaces`도 목해야 크래시 안 남** → `ExploreLandingPage`(`pages/explore/explore-landing`)가 가볼 곳 레인용으로 `useGetPlaces()`(react-query)를 문다. `QueryClientProvider` 없는 node 버킷에서 이 page(또는 그것을 꽂은 라우트 래퍼)를 렌더하는 새 테스트 파일은 지역 카탈로그의 `useRegions` 함정(위 절)과 동형으로 이 목이 필요하다는 걸 기계가 강제하지 않는다.
+- **`ExploreLandingScreen`을 렌더하는 node-버킷 테스트는 `useGetPlaces`도 목해야 크래시 안 남** → `ExploreLandingPage`(`pages/explore/explore-landing`)가 가볼 곳 레인용으로 `useGetPlaces()`(react-query)를 문다. `QueryClientProvider` 없는 node 버킷에서 이 page(또는 그것을 꽂은 라우트 래퍼)를 렌더하는 새 테스트 파일은 지역 카탈로그의 `useRegions` 함정(위 절)과 동형으로 이 목이 필요하다는 걸 기계가 강제하지 않는다. 지역 필터 갈래(`region` 파라미터)는 인기 숙소 컨트롤러 `useCuratedStaysController`(`widgets/curated-stays`, react-query 셋)도 물어 같은 이유로 목이 필요하다(TRIP-1580 — `ExploreLandingPage.test.tsx`는 숨김 값으로 목한다).
 
 ## 하트 글리프 정본
 

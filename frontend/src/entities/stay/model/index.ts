@@ -17,7 +17,8 @@ export interface StayCardVM {
   key: string;
   name: string;
   region: string;
-  priceText: string;
+  /** 가격 스냅숏이 없으면 생략 — 카드가 가격 줄을 그리지 않는다. */
+  priceText?: string;
 }
 
 /**

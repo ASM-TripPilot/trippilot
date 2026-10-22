@@ -375,6 +375,19 @@
 - `src/features/create-trip/model/tripWizardStore.ts`  →  TripWizardField · TripWizardDraft · minNightsFor · useTripWizardStore
 - `src/features/create-trip/model/wizardOrigin.ts`  →  WizardOriginParams · wizardOriginParams · isWizardOrigin
 
+## src/features/curated-stay/
+- `src/features/curated-stay/index.ts`  →  useCuratedStays
+- `src/features/curated-stay/index.view.ts`  →  curatedKey · BrowseAllButton · CuratedStayCard · type CuratedStayCardProps · CuratedStayRow · type CuratedStayRowProps
+
+## src/features/curated-stay/model/
+- `src/features/curated-stay/model/curatedKey.ts`  →  curatedKey
+- `src/features/curated-stay/model/useCuratedStays.ts`  →  useCuratedStays
+
+## src/features/curated-stay/ui/
+- `src/features/curated-stay/ui/BrowseAllButton.tsx`  →  BrowseAllButton
+- `src/features/curated-stay/ui/CuratedStayCard.tsx`  →  CuratedStayCardProps · CuratedStayCard
+- `src/features/curated-stay/ui/CuratedStayRow.tsx`  →  CuratedStayRowProps · CuratedStayRow
+
 ## src/features/edit-itinerary/
 - `src/features/edit-itinerary/index.ts`  →  buildEditItineraryRequest · addSlot · insertSlotAt · useItineraryEditStore · useEditorDraft · useConfirmItinerary · resolveSlotSwapError · swapSlotPoi · SaveConflictDialog
 
@@ -543,7 +556,7 @@
 - `src/features/save-stay/index.view.ts`  →  stayKey
 
 ## src/features/save-stay/model/
-- `src/features/save-stay/model/buildSaveStayRequest.ts`  →  buildSaveStayRequest
+- `src/features/save-stay/model/buildSaveStayRequest.ts`  →  SavableStay · coordsOf · buildSaveStayRequest
 - `src/features/save-stay/model/savedStayIndex.ts`  →  findSavedStayId · optimisticSavedStayId · isOptimisticSavedStayId
 - `src/features/save-stay/model/savedStays.ts`  →  SavedStaysFailureReason · SavedStaysOutcome · useSavedStays
 - `src/features/save-stay/model/stayKey.ts`  →  stayKey
@@ -561,6 +574,18 @@
 ## src/features/share-trip-card/model/
 - `src/features/share-trip-card/model/shareCapture.ts`  →  SaveShareCardResult · ShareShareCardResult · isShareCaptureArmed · saveShareCardImage · shareShareCardImage
 - `src/features/share-trip-card/model/shareCaptureNative.ts`  →  captureRef · requestPermissionsAsync · saveToLibraryAsync · shareAsync
+
+## src/features/stay-outbound/
+- `src/features/stay-outbound/index.ts`  →  useStayOutboundFlow · type OutboundTarget
+- `src/features/stay-outbound/index.view.ts`  →  OtaChoiceSheet · type OtaChoiceSheetProps
+
+## src/features/stay-outbound/model/
+- `src/features/stay-outbound/model/stayOutbound.ts`  →  StayOutboundMode · stayOutboundMode · OutboundQuery · stayOutboundUrl · browseOutboundUrl · openStayOutbound · openBrowseOutbound
+- `src/features/stay-outbound/model/useStayOutboundFlow.ts`  →  OutboundTarget · useStayOutboundFlow
+
+## src/features/stay-outbound/ui/
+- `src/features/stay-outbound/ui/OtaChoiceSheet.tsx`  →  OtaChoiceSheetProps · OtaChoiceSheet
+- `src/features/stay-outbound/ui/OutboundGlyphs.tsx`  →  ChevronRightGlyph · InfoGlyph · CheckGlyph · WarningTriangleGlyph
 
 ## src/features/stay/
 - `src/features/stay/index.ts`  →  useStaySearch
@@ -1219,11 +1244,7 @@
 ## src/pages/stay/stay-detail/
 - `src/pages/stay/stay-detail/index.ts`  →  StayDetailPage
 
-## src/pages/stay/stay-detail/model/
-- `src/pages/stay/stay-detail/model/stayOutbound.ts`  →  StayOutboundMode · stayOutboundMode · openStayOutbound
-
 ## src/pages/stay/stay-detail/ui/
-- `src/pages/stay/stay-detail/ui/OtaChoiceSheet.tsx`  →  OtaChoiceSheetProps · OtaChoiceSheet
 - `src/pages/stay/stay-detail/ui/StayDetailPage.tsx`  →  StayDetailPage
 - `src/pages/stay/stay-detail/ui/StayDetailScreen.tsx`  →  StayDetailState · StayDetailScreenProps · StayDetailScreen
 
@@ -1784,6 +1805,12 @@
 ## src/widgets/bottom-nav-bar/ui/
 - `src/widgets/bottom-nav-bar/ui/BottomNavBar.tsx`  →  NavBarCellSpec · BottomNavBarProps · NavBarBackButton · NavBarCapsule · NavBarCell · BottomNavBar
 
+## src/widgets/curated-stays/
+- `src/widgets/curated-stays/index.ts`  →  CuratedStaysSection · CuratedStaysSheet · useCuratedStaysController · type CuratedStaysController · type CuratedStaysProps
+
+## src/widgets/curated-stays/ui/
+- `src/widgets/curated-stays/ui/CuratedStaysSection.tsx`  →  CuratedStaysProps · CuratedStaysController · useCuratedStaysController · CuratedStaysSection · CuratedStaysSheet
+
 ## src/widgets/map-sheet-shell/
 - `src/widgets/map-sheet-shell/index.ts`  →  CTA_BAR_HEIGHT · DayChipOverlay · DayChipScroller · DistanceConnector · EditorView · GenerationProgressCard · BackChevronGlyph · FullAiGlyph · MapSheetShell · SheetHeader
 
@@ -1817,4 +1844,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1163개 파일
+합계 1176개 파일

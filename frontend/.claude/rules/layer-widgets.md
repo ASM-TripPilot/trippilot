@@ -4,10 +4,10 @@ paths:
 ---
 # `src/widgets/` — FSD widgets 층
 
-여러 화면이 쓰는 **화면 조각**(지도+시트 셸 같은 조립 단위)을 두는 층. 담은 곳 FAB 스택(a01·d01·d03)은 소비처가 전부 features 층 화면이라 넣지 않았다 — features→widgets 상향 참조가 된다. **소비처가 한 page뿐인 부품은 위젯이 아니라 그 page 안에 둔다**(공식 FSD — TRIP-1143으로 `CoPickStepper`·`GenerationDoneBar`가 `pages/itinerary/itinerary-copick`·`pages/itinerary/itinerary-list`로 들어갔다). 지금 이 층은 `map-sheet-shell`·`time-sheet`·`bottom-nav-bar` 이다(`bottom-nav-bar`는 TRIP-1557 — 소비처가 `pages/live`·`pages/record` 두 page 라 승격됐다).
+여러 화면이 쓰는 **화면 조각**(지도+시트 셸 같은 조립 단위)을 두는 층. 담은 곳 FAB 스택(a01·d01·d03)은 소비처가 전부 features 층 화면이라 넣지 않았다 — features→widgets 상향 참조가 된다. **소비처가 한 page뿐인 부품은 위젯이 아니라 그 page 안에 둔다**(공식 FSD — TRIP-1143으로 `CoPickStepper`·`GenerationDoneBar`가 `pages/itinerary/itinerary-copick`·`pages/itinerary/itinerary-list`로 들어갔다). 지금 이 층은 `map-sheet-shell`·`time-sheet`·`bottom-nav-bar`·`curated-stays` 이다(`bottom-nav-bar`는 TRIP-1557 — 소비처가 `pages/live`·`pages/record` 두 page 라 승격됐다. `curated-stays`는 TRIP-1579 — 소비처는 d01·e02 등 page 들, TRIP-1580~).
 
 ## import 방향
-- widgets → entities · shared 만 참조한다. 층 린트는 widgets→features를 막지 않는다(그것을 막던 소스 스캔은 TRIP-1145에서 지웠다 — 기계 강제 없음). 그래서 위젯은 features의 판단·글리프를 못 물고 로컬 복제하거나 소비처가 문자열로 넘긴다(`MapSheetGlyphs`·`EditorGlyphs`·`EditorView`의 `dateLabel`).
+- widgets → entities · shared 만 참조하는 것이 이 층의 옛 관례다(예외: `curated-stays`는 공식 FSD 대로 features 셋을 조립한다, TRIP-1579). 층 린트는 widgets→features를 막지 않는다(그것을 막던 소스 스캔은 TRIP-1145에서 지웠다 — 기계 강제 없음). 그래서 위젯은 features의 판단·글리프를 못 물고 로컬 복제하거나 소비처가 문자열로 넘긴다(`MapSheetGlyphs`·`EditorGlyphs`·`EditorView`의 `dateLabel`).
 - pages · app · app-shell 은 참조하지 못한다. `eslint.config.js`의 층 zone이 강제하고 (층 방향 탐침은 TRIP-1350 에서 지웠다 — CI lint 가 본다).
 - ⚠️ **features→widgets 는 상향 참조라 금지**다. 위젯을 쓰는 자리는 **pages/app** — features 화면은 `ReactNode` 슬롯으로 완성된 노드만 받는다.
 
@@ -51,3 +51,12 @@ paths:
 | 파일 | 역할 |
 |---|---|
 | `src/widgets/time-sheet/ui/TimeSheet.tsx` | 공용 시각 시트 — 모든 소비처가 **한 입력**을 쓴다(TRIP-1196): 시작/종료 세그(`shared/ui/SegmentedControl`) + readout(시작·종료 둘 다 항상 실제 시각 — 종료 '설정 안 됨' 얼굴은 TRIP-1417 에서 사라졌다, 종료를 안 건드려도 `endAt`을 보인다) + 24시간 시·분 휠 2열(`shared/ui/HourMinuteWheel` — TRIP-1437, 오전/오후 열·12↔24 접기 함수 소멸, 값은 `HH:mm` 한 덩이, testID `{p}-wheel-h-NN`/`-wheel-m-NN` zero-pad) + 단일 '적용' + 머리 오른쪽 **X 닫기**(`{prefix}-close`, 44×44, `CloseGlyph color="ink"`, `onPress={onCancel}` = 딤·끌어내림과 같은 길 — 하단 취소 버튼은 여전히 없다. Figma 4970:3288 는 X 미개정이라 6-b 육안 대조에서 '알려진 차이'). 소비처 차이는 `title`(기본 '시각 조정', 편집기만 '시간대 조정')과 `placeSummary`(편집기만 장소 요약 행)뿐. `onApply({startAt,endAt,endsNextDay})` — 종료를 안 건드리면 `endAt`은 현재 값 유지(null 없음)·`endsNextDay`만 재유도. 분은 bare 숫자(INV-3), `endsNextDay` 유도는 `entities/itinerary-slot/lib/endsNextDay.ts`의 `deriveEndsNextDay`만 쓴다(재구현 금지는 코드 리뷰 몫 — `<=` 개수 소스 스캔은 TRIP-1356 에서 지웠다). (시작, 실제로 실릴 종료 — 안 건드렸으면 숨은 `endAt`) 쌍이 `isValidTimeRange`를 어기면 `${prefix}-error` 문구 + [적용] `disabled`·`bg-hairline-strong`(TRIP-1215, 매 렌더 판정 — 소비처는 재판정하지 않으므로 시트가 유일한 문). `enablePanDownToClose`·`enableContentPanningGesture={false}`(휠 스크롤이 시트 끌기로 새지 않게)·`onClose={onCancel}` — jest 통과형 목의 사각이라 6-b 전용(prop 값만 `TimeSheet.test.tsx` D1 이 잠금) |
+
+## `src/widgets/curated-stays/` — 인기 숙소 줄 + Trip.com 전체 보기 (TRIP-1579)
+
+`features/curated-stay`(목록·카드)·`features/save-stay`(하트)·`features/stay-outbound`(제휴 시트·아웃바운드)를 한 덩어리로 조립한다 — features 끼리 서로 모르므로 이어 붙이기가 여기 있다. steiger `insignificant-slice` 예외 5(소비처 0).
+
+| 파일 | 역할 |
+|---|---|
+| `src/widgets/curated-stays/index.ts` | 공개 API — `useCuratedStaysController`·`CuratedStaysSection`·`CuratedStaysSheet` |
+| `src/widgets/curated-stays/ui/CuratedStaysSection.tsx` | 컨트롤러 + 두 조각(TRIP-1580 보완). `useCuratedStaysController(props)` — props `{regionCode?, city?(regionCode 없을 때만 조회에 씀), regionName?, trip?, variant:'lane'\|'list'\|'sheet', showBrowseAll?(기본 true), title?, testIDPrefix?}`, 조회·하트·제휴 흐름·pending 을 소유하고 `hidden` 을 내놓는다(소비처의 교체 판단용). 카드 누름 → `request({kind:'stay'})`, 전체 보기 → `request({kind:'browse', region: regionName, regionCode})`, 둘 다 `trip` 쿼리. 하트는 `curatedKey`로 좌표 없이 담고 미인증 결과면 `/(auth)/login`(정적 `router` — e02 통합 목이 `useRouter` 없이 정적 router 만 준다). `CuratedStaysSection({controller})` = 줄+버튼(스크롤 안 — 순수 화면엔 슬롯으로), `hidden`이면 줄·제목만 숨기고 버튼은 `showBrowseAll`일 때 남는다(둘 다 없으면 `null`), `variant`는 좌우 여백만 가른다. `CuratedStaysSheet({controller})` = 제휴 시트(gorhom, 포털 없음 — 부모를 채우므로 page 루트 형제로 둔다) |

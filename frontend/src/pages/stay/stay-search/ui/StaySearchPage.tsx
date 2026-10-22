@@ -4,6 +4,10 @@
  * `useQuery` 상태를 `resolveStaySearchState`에 넘겨 판별 유니온 하나로 접어 `StaySearchScreen`에
  * 내린다 — 상태 판정은 이 파일만 한다(화면은 다시 판정하지 않는다, AC-8 단일 출처). `다시
  * 시도`는 같은 쿼리의 `refetch`를 그대로 물린다(Q8, 스텁이 아니라 실배선).
+ *
+ * 인기 숙소 줄 + 「Trip.com에서 전체 숙소 보기」(TRIP-1581): URL 의 `regionCode` 로 인기 숙소를 묻고(코드가 없으면
+ * 묻지 않아 버튼만), 전체 보기는 화면에 보이는 지역 이름·코드로 연다. 줄은 화면 슬롯(목록 헤더 안), 제휴 시트는
+ * 화면 루트 형제다(gorhom 시트는 부모를 채운다). 목록 상태와 독립이다.
  */
 import type { ReactElement } from 'react';
 import { useState } from 'react';
@@ -33,6 +37,11 @@ import { useStaySearch } from '@/features/stay';
 import { StayFilterSheet } from './StayFilterSheet';
 import { StayPriceSheet } from './StayPriceSheet';
 import { StaySearchScreen } from './StaySearchScreen';
+import {
+  CuratedStaysSection,
+  CuratedStaysSheet,
+  useCuratedStaysController,
+} from '@/widgets/curated-stays';
 
 /** URL은 신뢰 경계 — 같은 쿼리 키가 중복되면 배열로 온다. 계약(`GetStaysSearchParams`)은
  * `amenity`·`stayType` 둘 다 `string[]`이므로 단일 문자열은 배열로 감싼다. 빈 값은 파라미터
@@ -53,6 +62,14 @@ export function StaySearchPage(): ReactElement {
   }>();
   const rawRegion = Array.isArray(region) ? region[0] : region;
   const resolvedRegion = rawRegion || '부산';
+  const rawRegionCode = Array.isArray(regionCode) ? regionCode[0] : regionCode;
+  const curated = useCuratedStaysController({
+    regionCode: rawRegionCode || undefined,
+    regionName: resolvedRegion,
+    variant: 'list',
+    title: '인기 숙소',
+    testIDPrefix: 'stay-search-curated',
+  });
   // 같은 키가 중복되면 배열로 온다(신뢰 경계) — region 과 같이 첫 값만 쓴다.
   const rawSido = Array.isArray(sido) ? sido[0] : sido;
   const amenityList = toParamList(amenity);
@@ -237,7 +254,9 @@ export function StaySearchPage(): ReactElement {
         )}
         nameQuery={nameQuery}
         onChangeNameQuery={setNameQuery}
+        curatedStays={<CuratedStaysSection controller={curated} />}
       />
+      <CuratedStaysSheet controller={curated} />
       {sheetOpen ? (
         <StayFilterSheet
           amenities={filterOptions.amenities}

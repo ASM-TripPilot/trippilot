@@ -14,5 +14,10 @@ import type { EditItineraryRequestDaysItem } from './editItineraryRequestDaysIte
  * 편집(전체 교체) — 수정된 일자·슬롯 배열. 슬롯 순서 = 배열 순서
  */
 export interface EditItineraryRequest {
+  /**
+   * 선택 — 변경 이력에 남는다
+   * @maxLength 500
+   */
+  reason?: string | null;
   days: EditItineraryRequestDaysItem[];
 }

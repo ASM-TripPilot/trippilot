@@ -11,6 +11,7 @@
 import type { CuratedStay } from './curatedStay';
 
 export interface CuratedStayList {
-  city: string;
+  /** 잡힌 도시명 — regionCode 가 어느 도시에도 안 걸리면 null */
+  city: string | null;
   items: CuratedStay[];
 }

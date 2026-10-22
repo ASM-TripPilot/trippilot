@@ -17,6 +17,12 @@ import { useSavedPlaces } from '@/features/save-place';
 import { regionPickerHref } from '@/features/explore';
 import { useGetPlaces } from '@/shared/api/index.hooks';
 import { useTripWizardStore } from '@/features/create-trip';
+import {
+  CuratedStaysSection,
+  CuratedStaysSheet,
+  useCuratedStaysController,
+  type CuratedStaysController,
+} from '@/widgets/curated-stays';
 import { filterBySido } from '../model/sidoFilter';
 import {
   ExploreLandingScreen,
@@ -49,6 +55,10 @@ import {
  *
  * 담기 하트(TRIP-447): 탐색 탭은 (tabs) 라 로그인 뒤에만 열린다(SplashGate HOME 가드) — 게스트
  * 분기(로그인 유도) 없이 담기 훅에 로그인 상태를 넘긴다(TRIP-1164). 숙소 담기는 `SavableStayLane` 이 진다.
+ *
+ * 인기 숙소 레인(TRIP-1580): 지역 필터(코드)가 있으면 그 코드로 인기 숙소를 묻고, 카드가 오면 숙소 레인을
+ * 인기 숙소 줄(카드만 — 전체 보기 버튼 없음)로 바꾼다. 비었거나 아직 오는 중·실패면 지금 레인 그대로.
+ * 제휴 시트는 스크롤 밖 화면 루트 형제로 둔다(gorhom 시트는 부모를 채운다).
  */
 
 type LandingBase = Pick<
@@ -61,6 +71,7 @@ type LandingBase = Pick<
   | 'regionFilter'
   | 'placeLane'
   | 'savedMenu'
+  | 'curatedStayLane'
 > & {
   stayLane: Pick<
     ExploreLandingScreenProps['stayLane'],
@@ -145,6 +156,12 @@ function RegionExplore({ regionCode }: { regionCode: string }): ReactElement {
   const row = regions.data?.find((r) => r.regionCode === regionCode);
   const regionName = row?.name;
   const enabled = regionName !== undefined;
+  // 인기 숙소는 카탈로그 코드 그대로 묻는다(이름을 기다리지 않는다 — 계약이 코드를 받는다).
+  const curated = useCuratedStaysController({
+    regionCode,
+    variant: 'lane',
+    showBrowseAll: false,
+  });
   const stay = useStaySearch({ region: regionName }, { enabled });
   const places = useGetPlaces(
     { region: regionName, limit: PLACE_LANE_LIMIT },
@@ -162,6 +179,7 @@ function RegionExplore({ regionCode }: { regionCode: string }): ReactElement {
 
   return (
     <ExploreLanding
+      curated={curated}
       filter={{
         label: regionName ?? regionCode,
         regionName,
@@ -198,10 +216,13 @@ function ExploreLanding({
   stay,
   places,
   filter,
+  curated,
 }: {
   stay: LaneQuery<StayItem>;
   places: LaneQuery<Place>;
   filter?: RegionFilter;
+  /** 지역 필터일 때만 — 전국 d01 은 인기 숙소를 묻지 않는다. */
+  curated?: CuratedStaysController;
 }): ReactElement {
   const router = useRouter();
   const savedPlaces = useSavedPlaces({ isAuthed: true });
@@ -237,7 +258,8 @@ function ExploreLanding({
     key: stayKey(item),
     name: item.name,
     region: item.region,
-    priceText: formatPrice(item.price),
+    // 스냅숏이 없으면 줄을 그리지 않는다(TRIP-1577 — 「가격 미확인」 폐기, 인기 숙소 카드와 같은 모양).
+    priceText: item.price == null ? undefined : formatPrice(item.price),
   }));
 
   // "모두 보기"가 실어 보낼 지역 — 필터 중이면 필터 지역 이름, 아니면 레인 첫 카드의 지역(TRIP-412).
@@ -318,6 +340,11 @@ function ExploreLanding({
         }
       },
     },
+    // 인기 숙소가 왔을 때만 레인을 바꾼다 — 숨김(로딩·실패·빈 목록)이면 지금 레인 그대로(TRIP-1580).
+    curatedStayLane:
+      curated && !curated.hidden ? (
+        <CuratedStaysSection controller={curated} />
+      ) : undefined,
     // 담은 곳 saved-menu FAB(TRIP-494) — 하트 FAB 을 누르면 두 미니 FAB 으로 펼쳐진다:
     // 담은 장소→d02(/explore/saved-places) · 저장한 숙소→e04(/stays/saved). 미니 press 는
     // 메뉴를 닫고 이동한다. 0곳이어도 FAB 은 유지돼 d02/e04 빈 상태로 간다(TRIP-448 계승).
@@ -336,7 +363,12 @@ function ExploreLanding({
     },
   };
 
-  return <SavableStayLane base={base} items={items} />;
+  return (
+    <>
+      <SavableStayLane base={base} items={items} />
+      {curated ? <CuratedStaysSheet controller={curated} /> : null}
+    </>
+  );
 }
 
 /**

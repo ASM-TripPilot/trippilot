@@ -825,3 +825,56 @@ describe('스크롤하는 동안 FAB 숨김', () => {
     expect(screen.queryByTestId('explore-fab-stack') === null).toBe(true);
   });
 });
+
+// TRIP-1580 — 인기 숙소 레인 슬롯. 화면은 위젯을 모른다(순수 뷰) — page 가 완성 노드를 넘긴다.
+describe('TRIP-1580 · 인기 숙소 레인 슬롯(curatedStayLane)', () => {
+  const { View } = jest.requireActual('react-native');
+  const slot = <View testID="curated-slot" />;
+
+  it('C1 · 슬롯이 있으면 숙소 레인 몸통이 슬롯으로 바뀌고 제목은 "인기 숙소", 모두 보기는 그대로다', () => {
+    const onSeeAll = jest.fn();
+    render(
+      <ExploreLandingScreen
+        {...baseProps({
+          regionFilter: { label: '부산', onClear: jest.fn() },
+          stayLane: stayLane({ cards: [STAY_CARD], onSeeAll }),
+          curatedStayLane: slot,
+        })}
+      />
+    );
+    const lane = screen.getByTestId('explore-lane-stay');
+    expect(within(lane).getByTestId('curated-slot')).toBeOnTheScreen();
+    expect(within(lane).getByText('인기 숙소')).toBeOnTheScreen();
+    expect(screen.queryByText('부산 숙소')).toBeNull();
+    expect(
+      screen.queryByTestId(`explore-stay-card-${STAY_CARD.key}`)
+    ).toBeNull();
+    fireEvent.press(screen.getByTestId('explore-lane-stay-seeall'));
+    expect(onSeeAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('C2 · 숙소 조회가 실패여도 슬롯이 있으면 재시도 대신 슬롯을 그린다', () => {
+    render(
+      <ExploreLandingScreen
+        {...baseProps({
+          stayLane: stayLane({ error: true }),
+          curatedStayLane: slot,
+        })}
+      />
+    );
+    expect(screen.getByTestId('curated-slot')).toBeOnTheScreen();
+    expect(screen.queryByTestId('explore-lane-stay-retry')).toBeNull();
+  });
+
+  it('C3 · 로딩 얼굴이면 슬롯이 있어도 스켈레톤이다', () => {
+    render(
+      <ExploreLandingScreen
+        {...baseProps({ isLoading: true, curatedStayLane: slot })}
+      />
+    );
+    expect(screen.queryByTestId('curated-slot')).toBeNull();
+    expect(
+      screen.getByTestId('explore-landing-skeleton-stay-0')
+    ).toBeOnTheScreen();
+  });
+});

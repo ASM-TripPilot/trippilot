@@ -16,4 +16,8 @@ export interface StaySearchResponse {
   degraded: boolean;
   /** 필터로 0건일 때 완화 후보(예: stayType, amenity:오션뷰) */
   filterZeroReasons: string[];
+  /** false = 편의시설 정보를 **아직 모른다**(없는 것이 아니다). 편의시설 필터 비활성화 또는 "정보 준비 중" 안내 — 안 그러면 0건이 "그런 숙소가 없다"로 읽힌다 */
+  amenitiesKnown: boolean;
+  /** true = 지역 미선택이라 전국 중 **일부만** 본 결과. "조건에 맞는 숙소가 없다"고 단정하지 말고 지역 선택을 권한다 */
+  truncated: boolean;
 }
