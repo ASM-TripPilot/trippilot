@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import type { ImageSourcePropType } from 'react-native';
 
 // 홈 "발견·영감 피드" 프레젠테이션 화면의 prop 계약(TRIP-316 · 라이브 Figma 2091:1357).
@@ -252,9 +251,6 @@ export interface HomeScreenProps {
   onPressHeroCity?: (regionCode: string) => void;
   /** 인사 헤더 종 press → 알림함(TRIP-939). 라우팅은 `(tabs)/index.tsx` 가 진다. */
   onPressBell?: () => void;
-  /**
-   * ✦ AI 도우미 FAB 슬롯(TRIP-1321) — page 가 `AssistantFab` 을 조립해 넣는다. 화면은 다른 FAB 와 같은
-   * 조건(로딩 아님)에서, 담은 곳 메뉴가 펼쳐지지 않은 동안만 그린다(BR-U8-53). 미지정이면 없음.
-   */
-  assistantFab?: ReactNode;
+  /** 인사 헤더 ✦ press → 도우미 시트(TRIP-1553). 라우팅(`assistantHref`)은 page 가 진다. */
+  onPressAssistant?: () => void;
 }

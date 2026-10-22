@@ -616,33 +616,14 @@ describe('확정 CTA·재조회 배선', () => {
     });
   });
 
-  // TRIP-1321 · US-ASSIST-01 · BR-U8-50·51 — 일정 상세(탭 밖)의 ✦ 도우미. 하단은 CTA 바·시트가 차지해
-  // 지도 우상단(일차 칩 아래) 카드 슬롯에 둔다(FD "하단 안전영역+24" 와 다름 — FD 개정 블록). 실제 위치는 6-b.
-  describe('✦ 도우미 FAB (TRIP-1321)', () => {
-    it('누르면 surface=ITINERARY · 이 여행 id 를 싣고 도우미 시트로 간다', async () => {
+  // TRIP-1553 — 일정 상세의 ✦ 도우미(TRIP-1321, 지도 우상단 카드 슬롯)는 헤더로 옮기지 않고 없앴다(사용자 결정 2026-10-22).
+  describe('✦ 도우미 FAB 는 없다 (TRIP-1553)', () => {
+    it('지도+시트 셸은 뜨는데 ✦ 는 없다', async () => {
       renderPageWithToast();
-      fireEvent.press(await screen.findByTestId('assistant-fab'));
-      expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/assistant',
-        params: { surface: 'ITINERARY', tripId: TRIP_ID },
-      });
-    });
 
-    it('시트가 펼침(88%, index 2)으로 가면 ✦ 를 그리지 않고, 내려가면 다시 그린다 (TRIP-1435 Q-082)', async () => {
-      renderPageWithToast();
-      await screen.findByTestId('assistant-fab');
-      const onAnimate = (): ((from: number, to: number) => void) => {
-        const host = screen.root
-          .findAll((node) => Array.isArray(node.props?.snapPoints))
-          .find((node) => typeof node.type === 'string');
-        return host?.props.onAnimate;
-      };
-
-      act(() => onAnimate()(1, 2));
+      // 짝 앵커 — 셸이 그려진 뒤에도 ✦ 만 없음을 보인다.
+      await screen.findByTestId('map-sheet-shell-root');
       expect(screen.queryByTestId('assistant-fab')).toBeNull();
-
-      act(() => onAnimate()(2, 1));
-      expect(screen.getByTestId('assistant-fab')).toBeTruthy();
     });
   });
 });

@@ -45,7 +45,7 @@ from tests.fakes.fake_clock import FakeClock
 from tests.fakes.fake_llm import FailingLlm
 from tests.fakes.in_memory_poi import InMemoryPoi
 from tests.fakes.in_memory_trace import InMemoryTrace
-from tests.api.test_e2e_boundary import _C1CFG, _PersonaStore
+from tests.api.test_e2e_boundary import _C1CFG, _PersonaStore, _hours_unknown
 
 _KST = timezone(timedelta(hours=9))
 _D1 = date(2026, 10, 25)
@@ -177,10 +177,12 @@ def test_풀_밖_고정_블록도_OR_이_풀고_이동이_검증된다(days, sta
         # 고정 블록 옆에 실제로 무언가가 놓였다 — 빈 날이면 이동 검증이 무의미하다
         assert len(body["days"][0]["slots"]) >= 2
         assert _travel_gaps_ok(body["days"]) == []
-        # validate 는 DB 에서 POI 를 찾는다 — 되먹여 위반 0 이면 화면 시각이 참이다
+        # validate 는 DB 에서 POI 를 찾는다 — 되먹여 위반 0 이면 화면 시각이 참이다. 못 본 것은 영업정보 없는
+        # 픽스처의 HC1 뿐이다(HOURS_UNKNOWN) — 풀 밖 장소도 정본에서 찾아 이동(HC2)은 전부 판정됐다
         revalidated = client.post("/ai/v1/itinerary/validate", json={
             "itinerary": body, "request_meta": _request(days, [])["request_meta"]})
-        assert revalidated.json() == {"violations": [], "unverified_slots": []}
+        placed = [s["poi_id"] for d in body["days"] for s in d["slots"]]
+        assert revalidated.json() == {"violations": [], "unverified_slots": _hours_unknown(placed)}
 
 
 # ── ② 미등록 id — 빼고 보고한다 ─────────────────────────────────────────

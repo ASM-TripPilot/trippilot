@@ -13,6 +13,7 @@ import type {
   ReviewPayload,
   ScopePayload,
 } from '../api/assistantContract';
+import { candidateTarget } from '../model/cardModel';
 import { ProposalCard } from './ProposalCard';
 import { ActionRow, OutlineCard } from './OutlineCard';
 import {
@@ -139,21 +140,23 @@ export function ReviewCard({
 }
 
 export function CandidateCard({
+  message,
   payload,
   onPick,
+  onPressAction,
 }: {
+  message: AssistantMessage;
   payload: CandidatesPayload;
   onPick: (poiId: string) => void;
+  onPressAction: (action: NextAction) => void;
 }): ReactElement {
   return (
     <View className="gap-md">
-      {payload.candidates.map((candidate) => (
-        <Pressable
-          key={candidate.poiId}
-          testID={`assistant-candidate-${candidate.poiId}`}
-          accessibilityRole="button"
-          onPress={() => onPick(candidate.poiId)}
-        >
+      {payload.candidates.map((candidate) => {
+        const target = candidateTarget(message, candidate.poiId);
+        const testID = `assistant-candidate-${candidate.poiId}`;
+        // 눌러서 갈 곳이 없는 카드(NONE)는 버튼이 아니라 정보다 — 역할·› 없이 이름·부제만(INV-4).
+        const body = (
           <OutlineCard className="flex-row items-center gap-md px-[14px] py-md">
             <View className="flex-1 gap-[3px]">
               <Text className="font-noto-bold text-card-title font-bold text-ink">
@@ -165,10 +168,33 @@ export function CandidateCard({
                   .join(' · ')}
               </Text>
             </View>
-            <ChevronRightGlyph size={20} color="#6A6A6A" />
+            {target.kind === 'NONE' ? null : (
+              <ChevronRightGlyph size={20} color="#6A6A6A" />
+            )}
           </OutlineCard>
-        </Pressable>
-      ))}
+        );
+        if (target.kind === 'NONE') {
+          return (
+            <View key={candidate.poiId} testID={testID}>
+              {body}
+            </View>
+          );
+        }
+        return (
+          <Pressable
+            key={candidate.poiId}
+            testID={testID}
+            accessibilityRole="button"
+            onPress={() =>
+              target.kind === 'PICK'
+                ? onPick(candidate.poiId)
+                : onPressAction(target.action)
+            }
+          >
+            {body}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -419,8 +445,10 @@ export function MessageCard({
     case 'CANDIDATES':
       return (
         <CandidateCard
+          message={message}
           payload={payload as CandidatesPayload}
           onPick={onPickCandidate}
+          onPressAction={onPressAction}
         />
       );
     case 'INFO':

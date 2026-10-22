@@ -2,6 +2,7 @@ package com.trippilot.planbdetection.adapter.out.external
 
 import com.sun.net.httpserver.HttpServer
 import com.trippilot.planbdetection.domain.Opportunity
+import com.trippilot.planbdetection.domain.OpportunityEventType
 import com.trippilot.planbdetection.domain.OpportunityKind
 import com.trippilot.planbdetection.domain.OpportunityQuery
 import com.trippilot.planbdetection.domain.OpportunitySlot
@@ -79,11 +80,11 @@ class HttpOpportunityAdapterTest : StringSpec({
     }
 
     "응답을 도메인 값으로 읽는다 — 행사 기간은 일 단위, 요즘 인기는 행사 필드가 없다" {
-        val venue = """{"key":"event:tourapi-1","kind":"EVENT_VENUE","event_name":"제주 들불축제","start":"2026-10-18",
-            "end":"2026-10-25","poi_id":"e0000000-0000-4000-8000-000000000012","poi_name":"새별오름",
+        val venue = """{"key":"event:tourapi-1","kind":"EVENT_VENUE","event_name":"제주 들불축제","event_type":"FESTIVAL",
+            "start":"2026-10-18","end":"2026-10-25","poi_id":"e0000000-0000-4000-8000-000000000012","poi_name":"새별오름",
             "near_slot_key":"$date#$p1","distance_label":"약 1.0km"}"""
         val trending = """{"key":"trending:e0000000-0000-4000-8000-000000000003","kind":"TRENDING","event_name":null,
-            "start":null,"end":null,"poi_id":"e0000000-0000-4000-8000-000000000003","poi_name":"월정리 카페거리",
+            "event_type":null,"start":null,"end":null,"poi_id":"e0000000-0000-4000-8000-000000000003","poi_name":"월정리 카페거리",
             "near_slot_key":"$date#$p2","distance_label":"약 400m"}"""
         withServer(reply(items = "$venue,$trending", notes = "\"events_low\"")) { url, _ ->
             val out = adapter(url).find(query)
@@ -92,7 +93,7 @@ class HttpOpportunityAdapterTest : StringSpec({
                 Opportunity(
                     "event:tourapi-1", OpportunityKind.EVENT_VENUE, "제주 들불축제", LocalDate.parse("2026-10-18"),
                     LocalDate.parse("2026-10-25"), UUID.fromString("e0000000-0000-4000-8000-000000000012"), "새별오름",
-                    "$date#$p1", "약 1.0km",
+                    "$date#$p1", "약 1.0km", OpportunityEventType.FESTIVAL,
                 ),
                 Opportunity(
                     "trending:e0000000-0000-4000-8000-000000000003", OpportunityKind.TRENDING, null, null, null,
@@ -100,6 +101,21 @@ class HttpOpportunityAdapterTest : StringSpec({
                 ),
             )
             out.notes shouldContainExactly listOf("events_low")
+        }
+    }
+
+    /**
+     * 행사 유형은 선택 필드다 — 옛 AI 는 싣지 않고, 새 AI 가 모르는 값을 실을 수 있다. 둘 다 '모름'(null)이고 카드는 그대로 읽는다:
+     * 모르는 kind 처럼 답 전체를 버리면 비 오지 않는 날의 카드까지 사라진다. 모름은 날씨 위험 날 축제처럼 빠질 뿐이다.
+     */
+    "행사 유형이 없거나 모르는 값이면 모름(null)으로 읽고 카드는 버리지 않는다" {
+        val absent = """{"key":"event:tourapi-2","kind":"EVENT_NEARBY","event_name":"제주 들불축제","start":"2026-10-18",
+            "end":"2026-10-25","poi_id":"${UUID.randomUUID()}","poi_name":"새별오름","near_slot_key":"$date#$p1","distance_label":"약 300m"}"""
+        val unknown = absent.replace("tourapi-2", "tourapi-3").replace("\"start\"", "\"event_type\":\"SPORTS\",\"start\"")
+        withServer(reply(items = "$absent,$unknown")) { url, _ ->
+            val out = adapter(url).find(query)
+
+            out.items.map { it.key to it.eventType } shouldContainExactly listOf("event:tourapi-2" to null, "event:tourapi-3" to null)
         }
     }
 

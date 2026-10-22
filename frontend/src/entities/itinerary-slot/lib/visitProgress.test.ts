@@ -2,7 +2,7 @@ import fc from 'fast-check';
 
 import type { VisitCheck, VisitCheckList } from '@/shared/api/index.schemas';
 
-import { deriveVisitProgress } from './visitProgress';
+import { deriveSkippedPoiIds, deriveVisitProgress } from './visitProgress';
 
 /**
  * TRIP-396 · AC-2 (US-ONTRIP-01) — 방문 기록에서 슬롯 진행 상태를 도출한다.
@@ -492,5 +492,86 @@ describe('deriveVisitProgress — 즉석 방문·날짜 경계·순서 불변 (T
       }),
       { numRuns: 300 }
     );
+  });
+});
+
+/**
+ * TRIP-1561 — 건너뜀 slot 판정. `deriveVisitProgress` 는 건너뜀을 결과에 내지 않아 허브에서 그 슬롯이 '예정'으로
+ * 보인다 — 그대로면 "진행 중 슬롯 뒤에 [도착]을 누를 수 있는 슬롯이 있나"를 건너뛴 슬롯까지 세어 마지막 장소의
+ * [방문 완료]가 숨는다(막다른 길). 그래서 허브가 쓸 "건너뛴 poi 목록"만 따로 낸다.
+ *
+ * 무엇을 보장하나: 그 날짜 **계획 레코드**(slotKey 가 `{date}#{poiId}` 로 파싱되는 것) 중 skippedAt≠null 인 poi 를
+ * poiId 오름차순·중복 없이 낸다. 즉석 방문·다른 날짜·깨진 키는 세지 않는다(`deriveVisitProgress` 와 같은 눈금).
+ * 같은 poi 의 다른 레코드는 보지 않는다(건너뜀 레코드가 하나라도 있으면 그 poi). 입력 순서와 무관하다.
+ * 3동작: 준비(방문 기록 조합) → 실행(deriveSkippedPoiIds) → 단언(poiId 배열).
+ */
+describe('deriveSkippedPoiIds (TRIP-1561)', () => {
+  it('SK1 건너뜀 레코드가 있는 poi 만 낸다 — 도착만·완료만·기록 없음은 아니다', () => {
+    const result = deriveSkippedPoiIds(
+      list(
+        vc({ visitCheckId: 'v1', poiId: 'p1', arrivedAt: T }),
+        vc({ visitCheckId: 'v2', poiId: 'p2', arrivedAt: T, completedAt: T2 }),
+        vc({ visitCheckId: 'v3', poiId: 'p3', skippedAt: T })
+      ),
+      DAY
+    );
+
+    expect(result).toEqual(['p3']);
+  });
+
+  it('SK2 건너뜀이 완료를 이긴다 — skippedAt 과 completedAt 이 둘 다 있어도 건너뜀이다(visitStatus 우선순위)', () => {
+    const result = deriveSkippedPoiIds(
+      list(
+        vc({
+          visitCheckId: 'v1',
+          poiId: 'p1',
+          arrivedAt: T,
+          completedAt: T2,
+          skippedAt: T2,
+        })
+      ),
+      DAY
+    );
+
+    expect(result).toEqual(['p1']);
+  });
+
+  it('SK3 즉석 방문·다른 날짜·깨진 키·slotKey 없는 레코드는 건너뜀이어도 세지 않는다', () => {
+    const result = deriveSkippedPoiIds(
+      list(
+        spontaneous({ visitCheckId: 'vA', poiId: 'p1', skippedAt: T }),
+        withoutSlotKey(vc({ visitCheckId: 'vB', poiId: 'p2', skippedAt: T })),
+        vc({
+          visitCheckId: 'vC',
+          poiId: 'p3',
+          slotKey: `${OTHER_DAY}#p3`,
+          skippedAt: T,
+        }),
+        vc({ visitCheckId: 'vD', poiId: 'p4', slotKey: 'p4', skippedAt: T }),
+        // 앵커 — 같은 목록에 세어지는 레코드가 하나 있다(전부 빈 결과가 공허하게 통과하지 않게).
+        vc({ visitCheckId: 'vE', poiId: 'p5', skippedAt: T })
+      ),
+      DAY
+    );
+
+    expect(result).toEqual(['p5']);
+  });
+
+  it('SK4 poiId 오름차순·중복 없이 내고, 입력 순서를 바꿔도 같다', () => {
+    const records = [
+      vc({ visitCheckId: 'v3', poiId: 'p3', skippedAt: T }),
+      vc({ visitCheckId: 'v1', poiId: 'p1', skippedAt: T }),
+      vc({ visitCheckId: 'v1b', poiId: 'p1', skippedAt: T2 }),
+    ];
+
+    expect(deriveSkippedPoiIds(list(...records), DAY)).toEqual(['p1', 'p3']);
+    expect(deriveSkippedPoiIds(list(...[...records].reverse()), DAY)).toEqual([
+      'p1',
+      'p3',
+    ]);
+  });
+
+  it('SK5 기록이 없으면 빈 배열이다', () => {
+    expect(deriveSkippedPoiIds(list(), DAY)).toEqual([]);
   });
 });

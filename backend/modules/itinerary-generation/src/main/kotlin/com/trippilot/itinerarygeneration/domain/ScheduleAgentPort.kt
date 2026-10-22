@@ -16,6 +16,16 @@ import java.util.UUID
 interface ScheduleAgentPort {
     fun generate(input: ScheduleAgentInput): ScheduleAgentOutput
     fun validate(solution: ScheduleAgentOutput): List<Violation>
+
+    /**
+     * [validate] 에 **상대가 판정하지 못한 장소**를 더해 돌려준다 — AI `unverified_slots`(미등록·매핑 실패·영업시간 모름).
+     * 위반 0 이 '통과'인지 '못 봄'인지 가려야 하는 소비자(장소 감지의 하루 점검 — INV-SA-2)만 그 목록을 쓴다. 편집·되돌리기
+     * 재검증은 위반만 읽는다(사용자 표면 그대로).
+     * 기본 구현은 못 본 장소를 비운다 — 대역(Fake·테스트)이 [validate] 만 구현해도 되게. 실 어댑터는 재정의한다.
+     */
+    fun validateWithUnverified(solution: ScheduleAgentOutput): ValidationResult =
+        ValidationResult(validate(solution), emptySet())
+
     fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult
 
     /**
@@ -525,6 +535,12 @@ data class Violation(
      */
     val reasonCode: String? = null,
 )
+
+/**
+ * 검증 결과 — 위반 + **상대가 판정하지 못한 장소**([unverifiedPoiIds], AI `unverified_slots`). 그 장소의 슬롯은 위반이
+ * 없어도 통과가 아니다(못 봤다). 사유(미등록·매핑 실패·영업시간 모름)로 가르지 않는다 — 어느 것이든 영업시간(HC1)을 못 봤다.
+ */
+data class ValidationResult(val violations: List<Violation>, val unverifiedPoiIds: Set<UUID>)
 
 /**
  * 수리 요청에 싣는 여행 컨텍스트 — generate 와 **같은 출처**의 일자별 앵커와 취향 이동수단(`transport_modes`).

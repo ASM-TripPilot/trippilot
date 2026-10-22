@@ -13,10 +13,11 @@
 
 from __future__ import annotations
 
+import time
 from datetime import date, datetime, timezone
 
 from trippilot.domain.common import GeoPoint
-from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
+from trippilot.domain.freshness import FreshnessMeta, InfoPacket, ProviderKind, ProviderStatus
 from trippilot.domain.intent import ROUTABLE_INTENTS, Intent
 from trippilot.orchestrator.info_collector import (
     INFO_REQUIREMENTS,
@@ -305,3 +306,64 @@ def test_collector_resolve_pool_delegates_to_place_provider() -> None:
 
     assert collector.resolve_pool(packet.data["pool_ref"]) is pool
     assert InfoCollector({}).resolve_pool("아무-키") is None  # PLACE 미등록
+
+
+# ── ⑥ 동시 수집 — 2026-10-21 개발 서버: 직렬 합 2.4~5.2s 가 1일차 15s 시한을 먹어 점수 묶음이 시한 초과했다 ──
+
+
+class _SlowProvider:
+    """지정한 시간만큼 걸리는 제공자 — 예외를 주면 그대로 새어 나간다."""
+
+    def __init__(self, kind: ProviderKind, seconds: float, error: Exception | None = None) -> None:
+        self._kind, self._seconds, self._error = kind, seconds, error
+
+    def fetch(self, params: dict) -> InfoPacket:
+        time.sleep(self._seconds)
+        if self._error is not None:
+            raise self._error
+        return InfoPacket(provider=self._kind, status=ProviderStatus.OK, data={},
+                          freshness=FreshnessMeta(source="FAKE", fetched_at=_NOW, cache_hit=False, ttl_sec=60, stale=False))
+
+
+_GEN_KINDS = INFO_REQUIREMENTS[Intent.GENERATE_SCHEDULE]
+
+
+def _slow_collector(seconds: float, overrides: dict | None = None) -> InfoCollector:
+    overrides = overrides or {}
+    return InfoCollector({k: overrides.get(k, _SlowProvider(k, seconds)) for k in _GEN_KINDS})
+
+
+def test_collector_calls_providers_concurrently_and_keeps_table_order() -> None:
+    started = time.monotonic()
+    packets = _slow_collector(0.3).collect(Intent.GENERATE_SCHEDULE, _PARAMS)
+    elapsed = time.monotonic() - started
+
+    assert tuple(packets) == _GEN_KINDS                       # 묶음 순서 = 요구표 순서(도착 순서 아님)
+    assert all(p.status is ProviderStatus.OK for p in packets.values())
+    assert elapsed < 0.3 * len(_GEN_KINDS) * 0.75             # 직렬 합(1.2s)보다 뚜렷이 짧다
+
+
+def test_permission_denied_still_pierces_when_other_providers_succeed() -> None:
+    denied = _SlowProvider(_GEN_KINDS[1], 0.0, PermissionDeniedError("남의 ref"))
+
+    with pytest.raises(PermissionDeniedError):
+        _slow_collector(0.05, {_GEN_KINDS[1]: denied}).collect(Intent.GENERATE_SCHEDULE, _PARAMS)
+
+
+def test_leaked_exception_in_one_provider_keeps_the_others() -> None:
+    broken = _SlowProvider(_GEN_KINDS[0], 0.0, RuntimeError("boom"))
+
+    packets = _slow_collector(0.0, {_GEN_KINDS[0]: broken}).collect(Intent.GENERATE_SCHEDULE, _PARAMS)
+
+    assert packets[_GEN_KINDS[0]].status is ProviderStatus.UNAVAILABLE
+    assert "boom" in packets[_GEN_KINDS[0]].data["reason"]
+    assert all(packets[k].status is ProviderStatus.OK for k in _GEN_KINDS[1:])
+
+
+def test_collector_logs_one_timing_line_per_provider(caplog) -> None:
+    with caplog.at_level("INFO", logger="trippilot.orchestrator.info_collector"):
+        _slow_collector(0.0).collect(Intent.GENERATE_SCHEDULE, _PARAMS)
+
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("provider_timing")]
+    assert sorted(lines) == sorted(f"provider_timing kind={k.name} ms=0" for k in _GEN_KINDS)
+

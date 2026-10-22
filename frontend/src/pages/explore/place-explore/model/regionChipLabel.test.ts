@@ -5,11 +5,11 @@ import { formatRegionChipLabel } from './regionChipLabel';
  *
  * 입력은 d04 라우트 `region` 파라미터를 배열로 편 것이다(`PlaceExplorePage` 의 `regions` — 없으면 [],
  * 한 곳이면 [이름], '더 담기'면 여러 곳, TRIP-687). 화면은 이 함수의 출력만 칩에 그린다 — 화면과
- * 페이지가 라벨 규칙을 각자 적으면 "전국" 철자·"외 N곳" 셈이 갈라진다.
+ * 페이지가 라벨 규칙을 각자 적으면 "전체 지역" 철자·"외 N곳" 셈이 갈라진다.
  */
 describe('🔴 1023-B #026 · formatRegionChipLabel — 지역 칩 라벨', () => {
-  it('지역이 없으면 "전국" 이다 (AC-B5 — 탐색 탭·홈 "장소 더 보기" 진입)', () => {
-    expect(formatRegionChipLabel([])).toBe('전국');
+  it('지역이 없으면 "전체 지역" 이다 (AC-B5 · TRIP-1560 — 탐색 탭·홈 "장소 더 보기" 진입, 서비스 지역 전체를 묻는다)', () => {
+    expect(formatRegionChipLabel([])).toBe('전체 지역');
   });
 
   it('한 곳이면 그 이름 그대로다 (AC-B6 — 피커가 싣는 한글 이름)', () => {

@@ -470,6 +470,8 @@ LLM 문장 품질은 PR마다 평가할 수 없다 (비용·시간·비결정성
 
 **후속**: `/explanations`·`/alternatives` 는 요청에 프로필 필드가 없어 여전히 고정 요약이다 — 백엔드 계약(프로필 필드 추가 또는 accountId 전달) 합의가 필요하다.
 
+**추기 (2026-10-22) — 후속 해소, 범위는 네 경로다**: #996(5c8d41ccf, 2026-10-05)이 `/explanations`·`/alternatives` 요청에 선택 필드 `preference_profile`·`companion_type` 을 열고 같은 `_inline_persona` 로 그 요청의 페르소나를 만든다(전 축 미설정이면 종전 재조회 — 결정 3 그대로). 백엔드는 생성과 같은 소스(계정 취향 위에 여행 스냅숏을 덮은 값)를 싣는다. 따라서 위 **범위**는 generate·replan·explanations·alternatives 로 읽는다(본문은 append-only 라 고치지 않는다). TRIP-1238.
+
 ---
 
 ## 미결 결정 사항

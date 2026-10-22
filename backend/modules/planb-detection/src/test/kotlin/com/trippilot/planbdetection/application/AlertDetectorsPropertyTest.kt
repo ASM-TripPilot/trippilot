@@ -182,9 +182,10 @@ private val AREAS = listOf(
     WarningArea("강원도", listOf("강릉시평지", "강원북부산지")), WarningArea("경기도", listOf("남양주", "가평")), WarningArea("광주"),
     WarningArea("전라남도", listOf("목포", "여수")), WarningArea("인천", listOf("강화군", "옹진군"), excluding = true),
     WarningArea("동해중부안쪽먼바다"), WarningArea("제주도남쪽먼바다"), WarningArea("경기도", listOf("수원", "양주")),
-    // 섬 구역 · 산지 권역 · 광역시 군 구역 · 표에 없는 이름(통합 이름 · 전각 괄호)
+    // 섬 구역 · 산지 권역 · 광역시 군 구역 · 표에 없는 이름(통합 이름 · 전각 괄호 · 도 줄의 낯선 하위 구역)
     WarningArea("서해5도"), WarningArea("추자도"), WarningArea("거문도.초도"), WarningArea("강원도", listOf("강원중부산지")),
     WarningArea("인천", listOf("옹진")), WarningArea("전남광주통합특별시", listOf("목포")), WarningArea("경상북도（포항）"),
+    WarningArea("경상북도", listOf("울진산지", "북동산지")), WarningArea("강원도", listOf("영동북부")),
 )
 
 private val TYPES = listOf("호우", "대설", "강풍", "태풍", "한파", "폭염", "황사", "풍랑", "폭풍해일", "건조", "지진해일")
