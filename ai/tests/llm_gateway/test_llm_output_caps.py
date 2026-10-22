@@ -116,6 +116,7 @@ def test_max_tokens_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         LlmFeature.DIALOGUE_MEMORY: 2048,
         LlmFeature.DIALOGUE_PLAN: 1024,  # 분류와 같은 근거 — JSON 한 줄 + 사고 토큰(출력 239/256 실측)
         LlmFeature.DIALOGUE_SQL: 512,  # SELECT 한 문장 JSON, 사고 끔
+        LlmFeature.DIALOGUE_SMALLTALK: 512,  # 잡담 1~3문장 JSON — 답변과 같은 상한
     }.get(feature, 1024)
     assert [r.max_tokens for r in llm.requests] == [expected]
 
@@ -154,6 +155,7 @@ def test_effort_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         LlmFeature.DIALOGUE_MEMORY: "low",
         LlmFeature.DIALOGUE_PLAN: "none",  # 같은 9s 안의 2‴ 계획(≤3.5s) — 사고 없이 더 빠르고 품질이 같거나 낫다(2026-10-20 실측)
         LlmFeature.DIALOGUE_SQL: "none",  # 팬아웃 안(≤3s)의 짧은 변환
+        LlmFeature.DIALOGUE_SMALLTALK: "none",  # 답변과 같은 자리(≤3.5s)
     }.get(feature)
     assert [r.effort for r in llm.requests] == [expected]
 
