@@ -48,19 +48,6 @@ class WeatherAlertsZoneListTest : StringSpec({
         unknown shouldBe NOT_READ_BY_NAME
     }
 
-    "도 묶음에 든 다른 광역 구역(섬 구역 · 관서 묶음 구역 표의 코드가 다른 광역)은 묶음 표와 같다 — 규칙 4 의 모름이 이 표로 가린다" {
-        val fromList = groups.mapNotNull { (head, zones) ->
-            val province = Province.ofKmaName(head.name) ?: return@mapNotNull null
-            val others = zones.map { it.name }.filter { name ->
-                val code = WeatherAlerts.ISLANDS[name] ?: WeatherAlerts.CROSS_ZONES[name]
-                code != null && province !in Province.ofRegionCode(code).orEmpty()
-            }
-            others.takeIf { it.isNotEmpty() }?.let { province to it.toSet() }
-        }.toMap()
-
-        WeatherAlerts.CROSS_GROUPS shouldBe fromList
-    }
-
     "묶음 하나를 한 줄로 읽어도 모르는 이름 WARN 이 나지 않는다" {
         groups.forEach { (head, zones) ->
             withClue(head.name) { WeatherAlerts.unknownNames(WarningArea(head.name, zones.map { it.name })).shouldBeEmpty() }
