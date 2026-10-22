@@ -69,8 +69,6 @@ export interface TripSummaryScreenProps {
   recordBar?: RecordBarNav;
   /** TRIP-987 — 여행 이름. 미주입(여행 조회 전·실패)이면 줄을 그리지 않는다. */
   tripTitle?: string;
-  /** TRIP-987 — [방문 기록 보기](j01). 미주입이면 버튼을 그리지 않는다. */
-  onPressRecords?: () => void;
   /** TRIP-987 — 여행 기간 전체 일차의 회고 진입(j03). 비었으면 칩 줄을 그리지 않는다. */
   dayReflections?: DayReflectionVM[];
   onPressDayReflection?: (day: number) => void;
@@ -130,7 +128,6 @@ export function TripSummaryScreen({
   onShare,
   recordBar,
   tripTitle,
-  onPressRecords,
   dayReflections = [],
   onPressDayReflection,
 }: TripSummaryScreenProps): ReactElement {
@@ -306,18 +303,6 @@ export function TripSummaryScreen({
               </Pressable>
             ))}
           </View>
-        ) : null}
-        {onPressRecords ? (
-          <Pressable
-            testID="reflection-summary-records"
-            accessibilityRole="button"
-            onPress={onPressRecords}
-            className="h-12 w-full items-center justify-center rounded-button border border-hairline-strong bg-canvas"
-          >
-            <Text className="font-noto-bold text-card-title font-bold text-ink">
-              방문 기록 보기
-            </Text>
-          </Pressable>
         ) : null}
       </ScrollView>
 

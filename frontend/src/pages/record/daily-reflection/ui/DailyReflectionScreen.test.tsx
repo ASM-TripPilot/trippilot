@@ -11,6 +11,11 @@ import {
   DailyReflectionScreen,
   type DailyReflectionScreenProps,
 } from './DailyReflectionScreen';
+import {
+  flushOsAnswer,
+  holdReduceMotionOn,
+} from '@/test-support/barMotionProbe';
+
 import { ReflectionStatsRow } from './ReflectionStatsRow';
 
 // 지도 가지(좌표 있음)를 잠그려면 실제 MapView(네이버 네이티브)가 jest 에서 SDK 를 못 올리므로
@@ -316,7 +321,7 @@ describe('default 얼굴 재구성 — 표면·일차 탭·통계·지도·서�
   }
 
   describe('🔴 AC-1 · default 얼굴이 남는 표면 요소를 전부 그린다(긍정 앵커 · TRIP-935 갱신)', () => {
-    it('일차 탭·통계·서술·사진·확인·탭바가 모두 실재한다(기분·메모는 TRIP-935 로 숨김 — AC-3·8)', () => {
+    it('일차 탭·통계·서술·사진·바가 실재하고 하단 「확인」은 없다(기분·메모는 TRIP-935 로 숨김 — AC-3·8 · TRIP-1591)', () => {
       renderScreen();
 
       // 일차 탭 3개
@@ -329,7 +334,7 @@ describe('default 얼굴 재구성 — 표면·일차 탭·통계·지도·서�
       expect(
         screen.getByTestId('reflection-daily-day-tab-3')
       ).toBeOnTheScreen();
-      // 통계·서술·사진(보존 testID) · 확인(TRIP-935 — 구 저장)
+      // 통계·서술·사진(보존 testID)
       expect(screen.getByTestId('reflection-daily-stats')).toBeOnTheScreen();
       expect(
         screen.getByTestId('reflection-daily-narrative')
@@ -337,7 +342,8 @@ describe('default 얼굴 재구성 — 표면·일차 탭·통계·지도·서�
       expect(
         screen.getByTestId('reflection-daily-photo-grid')
       ).toBeOnTheScreen();
-      expect(screen.getByTestId('reflection-daily-confirm')).toBeOnTheScreen();
+      // TRIP-1591 — 하단 「확인」은 없앴다(나가는 길은 바 뒤로). 위 앵커들이 같은 얼굴에 있으니 부재가 공허하지 않다.
+      expect(screen.queryByTestId('reflection-daily-confirm')).toBeNull();
       // 하단 바(TRIP-1584)
       expect(screen.getByTestId(BAR)).toBeOnTheScreen();
     });
@@ -500,26 +506,6 @@ describe('default 얼굴 재구성 — 표면·일차 탭·통계·지도·서�
     });
   });
 
-  describe('🔴 AC-9 · 하단 버튼은 "확인"(TRIP-935 — 저장할 것이 없으니 "저장" 아님)', () => {
-    it('확인 버튼(reflection-daily-confirm)이 있고 옛 -save 와 "저장" 글자는 없다', () => {
-      renderScreen();
-
-      const confirm = screen.getByTestId('reflection-daily-confirm');
-      expect(within(confirm).getByText('확인')).toBeOnTheScreen();
-      expect(screen.queryByTestId('reflection-daily-save')).toBeNull();
-      // 편집 전(비편집) 화면에는 "저장" 글자가 없다 — 편집 모드의 저장은 동결 테스트가 지킨다(02a ★17).
-      expect(screen.queryAllByText('저장')).toHaveLength(0);
-    });
-
-    it('확인 press → 콜백(onConfirm)을 정확히 1회 부른다', () => {
-      const { onConfirm } = renderScreen();
-
-      fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
-
-      expect(onConfirm).toHaveBeenCalledTimes(1);
-    });
-  });
-
   // TRIP-1584 AC-12 — 홈 5칸 탭바(`BottomTabBar`)를 허브식 3칸 바로 갈아 끼운다. 칸 이동 판단(스택·날짜)은 페이지 훅 몫이라 여기선 콜백 호출만 본다.
   describe('🔴 TRIP-1584 AC-12 · 하단 바(기록·회고·요약, 회고 활성)가 5칸 탭바를 대신한다', () => {
     it('3칸 바가 서고 회고 칸만 활성이며 옛 5칸 탭바와 헤더 ‹ 는 없다 (헤더 「편집」은 그대로)', () => {
@@ -533,8 +519,10 @@ describe('default 얼굴 재구성 — 표면·일차 탭·통계·지도·서�
       expect(screen.getByTestId('reflection-daily-edit')).toBeOnTheScreen();
     });
 
-    it('기록·요약 칸과 뒤로는 제 콜백만 1회 부르고, 활성인 회고 칸은 아무것도 안 부른다', () => {
+    it('기록·요약 칸과 뒤로는 제 콜백만 1회 부르고, 활성인 회고 칸은 아무것도 안 부른다', async () => {
+      holdReduceMotionOn(); // 뒤로가 기록 탭으로 가는 바라 퇴장 모션 뒤 이동한다 — 동작 줄이기 켜짐이면 즉시(TRIP-1591)
       const { recordBar } = renderScreen();
+      await flushOsAnswer();
       const bar = recordBar as ReturnType<typeof makeRecordBar>;
 
       fireEvent.press(screen.getByTestId(`${BAR}-tab-reflection`));
@@ -625,12 +613,8 @@ describe('3얼굴(data-insufficient·empty·error) — 위치 박스·일차 탭
 
   const DAY_TABS = [{ day: 1 }, { day: 2, today: true }, { day: 3 }];
 
-  /** 얼굴별 하단 CTA 이름표 — data 얼굴="확인"(-confirm), empty/error="직접 회고 작성"(-compose). */
-  const CTA_TESTID: Record<Face, string> = {
-    'data-insufficient': 'reflection-daily-confirm',
-    empty: 'reflection-daily-compose',
-    error: 'reflection-daily-compose',
-  };
+  /** 하단 CTA 는 empty/error 의 "직접 회고 작성"(-compose) 뿐이다. data-insufficient 의 「확인」은 TRIP-1591 에서 없앴다. */
+  const CTA_FACES = ['empty', 'error'] as const;
 
   function baseProps(over: Partial<FacesProps> = {}): FacesProps {
     return {
@@ -729,15 +713,30 @@ describe('3얼굴(data-insufficient·empty·error) — 위치 박스·일차 탭
   });
 
   describe('🔴 AC-6 → TRIP-1584 · 하단 바가 3얼굴에 뜨고(회고 활성) 하단 CTA 와 공존한다', () => {
-    it.each(FACES)('%s: 3칸 바(회고 활성) + 하단 CTA 가 함께 뜬다', (face) => {
-      renderFace({ face });
+    it.each(CTA_FACES)(
+      '%s: 3칸 바(회고 활성) + 하단 CTA 가 함께 뜬다',
+      (face) => {
+        renderFace({ face });
+
+        expect(screen.getByTestId(BAR)).toBeOnTheScreen();
+        expect(screen.getByTestId(`${BAR}-tab-reflection`)).toBeSelected();
+        expect(screen.queryByTestId('shell-tabbar-root')).toBeNull();
+        expect(screen.queryByTestId('reflection-daily-back')).toBeNull(); // 헤더 ‹ 는 5얼굴 어디에도 없다
+        // CTA 공존 — 바가 CTA 를 지우지 않는다(세로 순서는 6-b 육안).
+        expect(
+          screen.getByTestId('reflection-daily-compose')
+        ).toBeOnTheScreen();
+      }
+    );
+
+    // TRIP-1591 — 앵커(바·통계)가 같은 얼굴에 서 있으니 「확인」 부재가 공허하지 않다.
+    it('data-insufficient: 3칸 바는 서 있고 하단 「확인」·「직접 회고 작성」은 없다', () => {
+      renderFace({ face: 'data-insufficient' });
 
       expect(screen.getByTestId(BAR)).toBeOnTheScreen();
-      expect(screen.getByTestId(`${BAR}-tab-reflection`)).toBeSelected();
-      expect(screen.queryByTestId('shell-tabbar-root')).toBeNull();
-      expect(screen.queryByTestId('reflection-daily-back')).toBeNull(); // 헤더 ‹ 는 5얼굴 어디에도 없다
-      // CTA 공존 — 바가 CTA 를 지우지 않는다(세로 순서는 6-b 육안).
-      expect(screen.getByTestId(CTA_TESTID[face])).toBeOnTheScreen();
+      expect(screen.getByTestId('reflection-daily-stats')).toBeOnTheScreen();
+      expect(screen.queryByTestId('reflection-daily-confirm')).toBeNull();
+      expect(screen.queryByTestId('reflection-daily-compose')).toBeNull();
     });
   });
 
