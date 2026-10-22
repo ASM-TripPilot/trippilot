@@ -161,26 +161,41 @@ class TripSummaryNarrator internal constructor(
     private fun reclaimAfter(): Duration = agent.summaryCallTimeout.plus(RECLAIM_MARGIN)
 
     /**
-     * AI 문장 한 번 — 근거를 모으고, 부르기 직전에 시도를 선점하고, 부르고, 쓸 수 있으면 잠근 뒤 쓴다. **던지지 않는다.**
+     * AI 문장 한 번 — 근거를 모으고, 부르기 직전에 시도를 선점하고, 부르고, 쓸 수 있으면 잠근 뒤 쓴다. **`Exception` 은 던지지 않는다**(`Error` 는
+     * 그대로 올린다 — 메모리 부족 같은 것을 시도 실패로 삼키지 않는다).
      *
      * 어디서 던지든(근거 조회·선점·카드 읽기·환각 대조·쓰기) 그 실패는 **시도 하나로 센다** — 선점 전에 던졌으면 여기서 선점해 센다. 안 세면
      * 늘 던지는 여행이 7일 동안 5분마다 다시 집혀(스택이 든 WARN 이 하루 수백 줄) 오래된 순 상위 자리를 차지해 다른 여행을 굶긴다. 상한(3)이 그것을 묶는다.
+     * 예외: 선점 전에 **종료 인터럽트**로 끊긴 것은 세지 않는다 — 파드가 사라진 것과 같고(시도를 안 쓴다) 인터럽트 표시는 그대로 둔다.
      */
     internal fun narrate(tripId: UUID) {
         val claim = Claim()
         try {
             narrateOnce(tripId, claim)
-        } catch (e: RuntimeException) {
-            val attempt = claim.attempt
-                ?: runCatching { writes.execute { summaries.claimAiAttempt(tripId, reclaimAfter(), MAX_ATTEMPTS) } }.getOrNull()
-            val next = when {
-                attempt == null -> "시도를 기록하지 못했거나 다른 쪽이 맡고 있습니다 — 스윕 기준대로 다시 집힐 수 있습니다"
-                attempt >= MAX_ATTEMPTS -> "시도 상한($MAX_ATTEMPTS)을 다 써 더 맡지 않고 규칙 요약으로 남깁니다"
-                else -> "시도 $attempt/$MAX_ATTEMPTS 로 세고 스윕이 다시 맡습니다"
+        } catch (e: Exception) {
+            val stage = if (claim.attempt == null) "선점 전" else "선점 뒤"
+            if (claim.attempt == null && interrupted(e)) {
+                log.warn("요약 회고 준비가 종료로 끊겼습니다(선점 전) — 시도를 쓰지 않았고 스윕이 다시 맡습니다. tripId={}", tripId, e)
+                return
             }
-            log.warn("요약 회고 중 실패했습니다({}) — {}. tripId={}", if (claim.attempt == null) "선점 전" else "선점 뒤", next, tripId, e)
+            val next = claim.attempt?.let(::afterAttempt) ?: try {
+                writes.execute { summaries.claimAiAttempt(tripId, reclaimAfter(), MAX_ATTEMPTS) }?.let(::afterAttempt)
+                    ?: "시도로 세지 못했습니다 — 다른 파드가 맡고 있거나 이미 AI 문장이 붙었거나 시도 상한을 다 썼습니다"
+            } catch (counting: Exception) {
+                e.addSuppressed(counting)
+                "시도를 기록하지 못했습니다(쓰기 실패 — 함께 붙인 예외) — 시도 수가 그대로라 다음 스윕이 다시 집습니다"
+            }
+            log.warn("요약 회고 중 실패했습니다({}) — {}. tripId={}", stage, next, tripId, e)
         }
     }
+
+    private fun afterAttempt(attempt: Int): String =
+        if (attempt >= MAX_ATTEMPTS) "시도 상한($MAX_ATTEMPTS)을 다 써 더 맡지 않고 규칙 요약으로 남깁니다"
+        else "시도 $attempt/$MAX_ATTEMPTS 로 세고 스윕이 다시 맡습니다"
+
+    /** 종료 인터럽트인가 — 표시가 서 있거나 원인 사슬에 [InterruptedException] 이 있다(드라이버가 감싸 올린다). 표시를 지우지 않는다. */
+    private fun interrupted(e: Throwable): Boolean =
+        Thread.currentThread().isInterrupted || generateSequence(e) { it.cause }.any { it is InterruptedException }
 
     /** 이번 회차에 선점한 시도 번호 — 실패가 선점 전인지 뒤인지 가른다. */
     private class Claim { var attempt: Int? = null }
@@ -222,9 +237,12 @@ class TripSummaryNarrator internal constructor(
             // 부르기 **전에** 남긴다 — 이 시도가 파드와 함께 사라져도 "더 맡지 않는다"가 기록된다.
             log.warn("요약 회고 마지막 시도({}/{})입니다 — 이번에도 못 붙이면 더 맡지 않고 규칙 요약으로 남깁니다. tripId={}", attempt, MAX_ATTEMPTS, tripId)
         }
-        val card = runCatching { agent.generate(input)?.let { cards.read(it.payload) } }
-            .onFailure { log.warn("요약 회고 카드를 읽을 수 없어 규칙 요약으로 둡니다. tripId={}", tripId, it) }
-            .getOrNull() ?: return outcome("NO_CARD", tripId)
+        val card = try {
+            agent.generate(input)?.let { cards.read(it.payload) }
+        } catch (e: Exception) { // Error 는 삼키지 않는다 — narrate 와 같은 규칙
+            log.warn("요약 회고 카드를 읽을 수 없어 규칙 요약으로 둡니다. tripId={}", tripId, e)
+            null
+        } ?: return outcome("NO_CARD", tripId)
         // 상대 자기 폴백이면 쓰지 않는다 — 하루 회고와 다르다: 요약 문장은 우리 규칙 문장이 실적 수치를 담고 있어 상대 고정 문구보다 낫다.
         if (mapper.readTree(card.payload).path("is_fallback").asBoolean(false)) return outcome("AI_FALLBACK", tripId)
         // 자리표시자가 남은 부제(`{region} · {start_date}~{end_date}`)는 "서술 없음" 신호다.
