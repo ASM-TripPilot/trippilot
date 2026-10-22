@@ -77,8 +77,8 @@ data class PrepareReplan(
 
 /** 선계산 결과 — 저장하지 않는다(요약 로그 `replan.prepared outcome=`). */
 sealed interface Prepared {
-    /** SYSTEM 세션을 산출 직전(SOLVING)까지 열었다 — 산출은 전용 실행기 몫이다. */
-    data class Opened(val session: ReplanSession) : Prepared
+    /** SYSTEM 세션을 산출 직전(SOLVING)까지 열었다 — 산출은 전용 실행기 몫이다. [replaced] 는 그러려고 닫은 열린 세션(닫기 전 모습)이다. */
+    data class Opened(val session: ReplanSession, val replaced: ReplanSession?) : Prepared
     data class Skipped(val reason: PrepareSkip) : Prepared
 }
 
@@ -234,7 +234,7 @@ class ReplanSessionService(
                 initiatedBy = ReplanInitiator.SYSTEM,
             ),
         )
-        return Prepared.Opened(sessions.save(opened.solving()))
+        return Prepared.Opened(sessions.save(opened.solving()), replaced = open)
     }
 
     /**
