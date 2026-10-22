@@ -531,7 +531,7 @@ fun `차선책이 저장·조회·확정을 관통한다(TRIP-873)`() {
         val token = newToken()
         val trip = newTrip(token)
         val poi = poiId(token)
-        // Fake 는 신호를 주지 않으므로 리포지토리로 직접 넣어 V2.82 컬럼·jsonb 왕복을 본다.
+        // Fake 는 신호를 주지 않으므로 리포지토리로 직접 넣어 V2.83 컬럼·jsonb 왕복을 본다.
         itineraries.replaceForTrip(
             UUID.fromString(trip),
             Itinerary.create(UUID.fromString(trip), SolveMode.FULL_AI, GenerationMode.FULLY_AI, isFallback = false,

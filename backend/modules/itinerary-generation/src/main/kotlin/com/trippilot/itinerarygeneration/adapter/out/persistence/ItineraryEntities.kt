@@ -34,7 +34,7 @@ class ItineraryEntity(
     // 미배치 필수 방문지 보고(계약 M2). 빈 배열 = 전부 배치됨.
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "unplaced_must_visits") var unplacedMustVisits: List<Map<String, Any>>,
-    // 취향 점수 신호(V2.82 · TRIP-1173). null = 모름. 강등 코드는 문자열 배열(빈 배열 = 강등 없음 또는 모름).
+    // 취향 점수 신호(V2.83 · TRIP-1173). null = 모름. 강등 코드는 문자열 배열(빈 배열 = 강등 없음 또는 모름).
     @Column(name = "scoring_mode") var scoringMode: String?,
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "degradations") var degradations: List<String>,
