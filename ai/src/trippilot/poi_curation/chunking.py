@@ -151,8 +151,8 @@ def text_hash(text: str) -> str:
 
 
 def dump_chunk_vectors(path, docs: Sequence[KbDocument], model: str, vectors, *, provenance=None) -> None:
-    """fp16 로 저장 — 머리(`path`: 모델·조각 id·본문 지문, JSON)와 벡터 본체(`blob_path(path)`: fp16 원본 바이트)를
-    **두 파일로**. 한 JSON 에 base64 로 넣으면 읽을 때 압축본·풀린 JSON·base64 문자열·바이트를 한꺼번에 들고 있어
+    """fp16 로 저장 — 머리(`path`: 모델·조각 id·본문 지문, JSON)와 벡터 본체(fp16 원본 바이트 — 한 몫이면
+    `blob_path(path)`, 크면 `F16_SHARD_CHUNKS` 조각씩 `x.vectors.f16.{k}.gz`)를 **따로**. 한 JSON 에 base64 로 넣으면 읽을 때 압축본·풀린 JSON·base64 문자열·바이트를 한꺼번에 들고 있어
     파일 크기의 6배 넘게 쓴다 — 관광공사 개요(약 3.4만 조각, 70MB)에서 454MB 로 적재 Job(512Mi)을 넘볼 실측
     (2026-10-20). 본체를 따로 두면 그대로 스트리밍해 읽는다."""
     import gzip
@@ -167,11 +167,30 @@ def dump_chunk_vectors(path, docs: Sequence[KbDocument], model: str, vectors, *,
     blob = bytearray()
     for v in vectors:  # 조각 하나씩 — 3.4만 × 1024 를 파이썬 실수 목록으로 한꺼번에 펼치지 않는다
         blob += struct.pack(f"<{dim}e", *v)
+    # 본체는 `F16_SHARD_CHUNKS` 조각씩 나눠 쓴다 — 한 몫이면 종전 이름 그대로(위키 파일 무변).
+    size = F16_SHARD_CHUNKS * dim * 2
+    parts = [bytes(blob[i:i + size]) for i in range(0, len(blob), size)] or [b""]
+    names = ([blob_path(path).name] if len(parts) == 1
+             else [_shard_name(path, k) for k in range(len(parts))])
+    for name, part in zip(names, parts):
+        path.with_name(name).write_bytes(gzip.compress(part, mtime=0))
+    stem = blob_path(path).name.removesuffix(".gz")
+    for old in path.parent.glob(f"{stem}*.gz"):  # 줄어든 몫의 옛 본체 — 이미지에 낡은 파일이 구워지지 않게
+        if old.name not in names:
+            old.unlink()
     head = {"model": model, "dim": dim, "count": len(docs), "provenance": dict(provenance or {}),
             "ids": [d.doc_id for d in docs], "hashes": [text_hash(d.text) for d in docs],
-            "f16": blob_path(path).name}
-    blob_path(path).write_bytes(gzip.compress(bytes(blob), mtime=0))
+            "f16": names[0] if len(names) == 1 else names}
     path.write_bytes(gzip.compress(json.dumps(head).encode(), mtime=0))
+
+
+# 본체 한 파일의 조각 수 — 16,384 × 1024차원 × fp16 = 32MB(압축해도 비슷하다, 실측 0.92). 관광공사 개요 전량(약 5만
+# 조각, 102MB)이 GitHub 파일 한도 100MB(LFS 없음)·경고 50MB 안에 들게 나눈다.
+F16_SHARD_CHUNKS = 16_384
+
+
+def _shard_name(vectors_file, k: int) -> str:
+    return blob_path(vectors_file).name.replace(".vectors.f16.gz", f".vectors.f16.{k}.gz")
 
 
 def blob_path(vectors_file):
@@ -214,8 +233,12 @@ def load_chunk_vectors(path) -> ChunkVectors | None:
     if "f16_b64" in doc:  # 옛 한 파일 형식(머리에 base64 본체) — 읽기만 지원한다
         raw = base64.b64decode(doc.pop("f16_b64"))
     else:
-        with gzip.open(path.with_name(doc["f16"]), "rb") as f:
-            raw = f.read()
+        names = doc["f16"] if isinstance(doc["f16"], list) else [doc["f16"]]
+        buf = bytearray()
+        for name in names:  # 나눠 쓴 본체를 차례로 이어 붙인다 — 한꺼번에 여러 벌을 들지 않는다
+            with gzip.open(path.with_name(name), "rb") as f:
+                buf += f.read()
+        raw = buf  # `bytes(buf)` 로 바꾸면 본체(개요 전량 102MB)를 잠깐 두 벌 든다 — 읽기만 하므로 그대로 쓴다
     count, dim = int(doc["count"]), int(doc["dim"])
     if len(raw) != count * dim * 2 or len(doc["ids"]) != count or len(doc["hashes"]) != count:
         raise ValueError(f"{path.name}: 벡터 파일 크기·개수가 머리와 다르다")

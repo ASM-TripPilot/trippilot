@@ -297,22 +297,29 @@ def load_corpus(path: Path, documents, fresh, embedding, store, budget_sec: floa
     count, done, embedded = _index_corpus(fresh, embedding, store, budget_sec, precomputed)
     fresh_bases = base_ids(fresh)
     pending = fresh_bases - done
-    complete = base_ids(documents) - pending
-    n_chunks: dict[str, int] = {}
-    for d in documents:
-        b = d.doc_id.split("#", 1)[0]
-        n_chunks[b] = n_chunks.get(b, 0) + 1
-    stale = set(complete)  # 통문서
-    for b in complete:
-        stale.update(chunk_ids(b)[n_chunks[b]:MAX_CHUNKS_PER_DOC])
+    corpus = base_ids(documents)
+    complete = corpus - pending
     orphan = 0
-    if not pending and hasattr(store, "item_ids_like"):
+    if hasattr(store, "item_ids_like"):
+        # 저장소에 **실제로 있는** 행에서 고른다 — 끝난 문서마다 꼬리 id(#n..#39)를 펼치면 관광공사 개요 전량에서
+        # 약 95만 개 id 를 만들어 매 배포 DELETE 로 보냈다(적재 Job 피크 약 126MB 몫, 한도 512Mi).
         current = {d.doc_id for d in documents}
         prefix = documents[0].doc_id.split(":", 1)[0]
-        gone = {i for i in store.item_ids_like(coll, f"{prefix}:%") if i not in current}
-        orphan = len(gone)
-        stale |= gone
-    removed = _delete_ids(store, coll, stale)
+        leftover = [i for i in store.item_ids_like(coll, f"{prefix}:%") if i not in current]
+        stale = {i for i in leftover if i.split("#", 1)[0] in complete}  # 끝난 문서의 통문서·낡은 꼬리
+        if not pending:  # 코퍼스 밖 정리는 예산에 안 걸린 실행에서만 — 종전 규칙 그대로
+            gone = {i for i in leftover if i.split("#", 1)[0] not in corpus}
+            orphan = len(gone)
+            stale |= gone
+    else:  # 행 목록을 못 내는 저장소 — 꼬리 id 를 펼친다
+        n_chunks: dict[str, int] = {}
+        for d in documents:
+            b = d.doc_id.split("#", 1)[0]
+            n_chunks[b] = n_chunks.get(b, 0) + 1
+        stale = set(complete)  # 통문서
+        for b in complete:
+            stale.update(chunk_ids(b)[n_chunks[b]:MAX_CHUNKS_PER_DOC])
+    removed = _delete_ids(store, coll, stale) if stale else 0
     return (f"{path.name}: 조각 {len(documents)}건 중 {count}건 적재(원격 임베딩 {embedded}건"
             + (f" — 미리 계산 벡터 미사용: {why}" if why else "") + f") · 정리 {removed}행"
             + (f"(코퍼스 밖 위키 행 {orphan})" if orphan else "")
