@@ -813,7 +813,7 @@ class DialogueOrchestrator:
         results: dict[str, TaskResult] = {}
         for task in tasks:
             try:
-                futures[task.name] = self._pool.submit(task.fn)
+                futures[task.name] = self._submit(task.fn)
             except Exception as e:  # noqa: BLE001 — 풀이 닫혔다 등: 그 작업만 SKIPPED
                 results[task.name] = self._failed_task(inp, task.name, "SKIPPED", f"submit: {type(e).__name__}")
         if futures:
