@@ -518,7 +518,12 @@ describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
     제주: [lanePlace('j0', '50110', false)],
   };
 
-  let placesQueries: { region: string | null; limit: string | null }[] = [];
+  let placesQueries: {
+    region: string | null;
+    limit: string | null;
+    order: string | null;
+    seed: string | null;
+  }[] = [];
 
   /** 지역별로 응답한다. `failing` 에 든 지역은 500. */
   function servePlaces(failing: string[] = []): void {
@@ -526,7 +531,12 @@ describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
       http.get(`${BASE}/places`, ({ request }) => {
         const url = new URL(request.url);
         const region = url.searchParams.get('region');
-        placesQueries.push({ region, limit: url.searchParams.get('limit') });
+        placesQueries.push({
+          region,
+          limit: url.searchParams.get('limit'),
+          order: url.searchParams.get('order'),
+          seed: url.searchParams.get('seed'),
+        });
         if (region !== null && failing.includes(region)) {
           return new HttpResponse(null, { status: 500 });
         }
@@ -561,6 +571,10 @@ describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
       ['부산', '서울', '제주'].sort()
     );
     expect(placesQueries.every((q) => q.limit === '200')).toBe(true);
+    // TRIP-1563 — 무작위 시드는 d04 만 쓴다: d01 은 order·seed 를 안 보내 홈과 같은 이름순·같은 캐시를 유지한다.
+    expect(
+      placesQueries.every((q) => q.order === null && q.seed === null)
+    ).toBe(true);
     for (const id of ['s0', 's1', 's2', 's3', 's4', 's5', 's6']) {
       expect(screen.getByTestId(`explore-place-card-${id}`)).toBeOnTheScreen();
     }
