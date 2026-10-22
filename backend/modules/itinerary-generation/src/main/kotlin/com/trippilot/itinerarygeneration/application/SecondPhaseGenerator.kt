@@ -17,6 +17,7 @@ import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.SolveMode
+import com.trippilot.itinerarygeneration.domain.SlotExplanations
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.ScoredCandidatePoolStore
 import com.trippilot.itinerarygeneration.domain.VisitSlot
@@ -144,18 +145,8 @@ class SecondPhaseGenerator(
 
         // 2) 근거를 받아 온다. 실패는 어댑터가 빈 맵으로 접는다 — 근거가 없다고 일정을 죽이지 않는다.
         val reasons = scheduleAgent.explanations(tripId, allDays.toOutput(current, clock.instant()), preference, companionType)
-        val withReasons = allDays.map { d ->
-            ItineraryDay.of(
-                d.date, d.dayOrder,
-                d.slots.map { slot ->
-                    // 이미 있는 근거를 빈 값으로 덮지 않는다 — 조회가 일부만 답해도 있던 문장은 남는다.
-                    slot.withPlacementReason(
-                        BoundedText.clamp(reasons.slots[SlotKey.of(d.date, slot.sourcePoiId)], BoundedText.PLACEMENT_REASON_MAX)
-                            ?: slot.placementReason,
-                    ).withAlternativeRationales(reasons.alternatives) { SlotKey.of(d.date, it.poiId) }
-                },
-            )
-        }
+        // 근거 붙임이 몇 개나 맞았는지 세는 용도다 — 실제로 쓰는 일자는 잠금 뒤 현행 위에 다시 붙인다(아래 3).
+        val withReasons = allDays.withReasons(reasons)
         SlotKey.warnIfUnmatched(
             received = reasons.slots.size,
             matched = withReasons.sumOf { d -> d.slots.count { it.placementReason != null } },
@@ -189,9 +180,17 @@ class SecondPhaseGenerator(
             // 이 판정과 조건부 쓰기 사이에 다른 쓰기가 끼어 그 결과를 덮지 않게 한다. 조건부 쓰기는 재생성(새 id) 방어로 그대로 둔다.
             val latest = itineraries.lockForTrip(tripId)
             if (latest == null || !latest.isPendingSecondPhase(itineraryId, tripId)) return@execute null
+            // 근거를 받는 동안(실측 17.5초) 같은 일정에 쓰기가 끼었을 수 있다 — 이미 있는 일자의 편집(TRIP-1000), 재계획 반영·되돌리기.
+            // 잠금 전 일자로 쓰면 그 쓰기가 조용히 되돌아간다. 그래서 **잠금 뒤 일자** 위에 2차 몫을 잇고 근거를 다시 붙인다
+            // (근거는 날짜·장소로 맞춘다 — 끼어든 쓰기가 바꾼 슬롯은 맞는 근거가 없으면 제 문장을 지킨다).
+            // 일자 구성이 바뀌었으면(2차 몫과 날이 겹칠 수 있다) 잇지 않고 버린다.
+            if (latest.days.map { it.date } != current.days.map { it.date }) {
+                log.info("생성 마무리 폐기 — 근거를 받는 사이 일자 구성이 바뀜. tripId={}", tripId)
+                return@execute null
+            }
 
             val updated = latest.completeGeneration(
-                withReasons,
+                (latest.days + remaining).withReasons(reasons),
                 clock.instant(),
                 output?.solveMode ?: latest.solveMode,
                 output?.isFallback ?: latest.isFallback,
@@ -218,6 +217,19 @@ class SecondPhaseGenerator(
             )
             updated
         }
+    }
+
+    /** 근거 붙이기 — 날짜·장소로 맞춘다. 이미 있는 근거를 빈 값으로 덮지 않는다(조회가 일부만 답해도 있던 문장은 남는다). */
+    private fun List<ItineraryDay>.withReasons(reasons: SlotExplanations): List<ItineraryDay> = map { d ->
+        ItineraryDay.of(
+            d.date, d.dayOrder,
+            d.slots.map { slot ->
+                slot.withPlacementReason(
+                    BoundedText.clamp(reasons.slots[SlotKey.of(d.date, slot.sourcePoiId)], BoundedText.PLACEMENT_REASON_MAX)
+                        ?: slot.placementReason,
+                ).withAlternativeRationales(reasons.alternatives) { SlotKey.of(d.date, it.poiId) }
+            },
+        )
     }
 
     /** 아직 이 마무리가 반영될 자리인가 — 재생성으로 교체됐거나 상태가 바뀌었으면 아니다. */

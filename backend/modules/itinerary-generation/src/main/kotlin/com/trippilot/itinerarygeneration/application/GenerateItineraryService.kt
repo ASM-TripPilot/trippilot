@@ -120,7 +120,7 @@ class GenerateItineraryService(
             prev?.let {
                 rejectionStore.record(tripId, it.days.flatMap { d -> d.slots.map { s -> s.sourcePoiId } }, RejectedPoi.Kind.REGENERATED)
             }
-            return createEmpty(tripId, ctx, planDates, prev)
+            return createEmpty(tripId, ctx, planDates)
         }
 
         // day1 조기 노출(TRIP-267 · PR #104 합의): 1차는 첫날만 짧은 시한으로 풀어 즉시 반환하고,
@@ -261,10 +261,11 @@ class GenerateItineraryService(
         tripId: UUID,
         ctx: TripGenerationContext,
         dates: List<LocalDate>,
-        previous: Itinerary?,
     ): Itinerary = tx.execute {
         // 일정 쓰기 잠금(TRIP-1412)을 잡고 잠금 뒤 현행으로 전환 전 상태를 남긴다 — 진행분이 사라지지 않게.
-        itineraries.lockForTrip(tripId)?.let { revisions.ensureRestorePoint(it) }
+        // 리비전 종류(처음 vs 다시)도 같은 잠금 뒤 값으로 정한다 — 잠금 전 값과 갈리면 지점과 종류가 서로 다른 일정을 말한다.
+        val locked = itineraries.lockForTrip(tripId)
+        locked?.let { revisions.ensureRestorePoint(it) }
         // 직접 만들기엔 점수 풀이 없다(TRIP-969) — 이전 생성의 풀이 남으면 그 판단으로 즉답하게 된다.
         scoredPools.delete(tripId)
         val empty = Itinerary.create(
@@ -276,7 +277,7 @@ class GenerateItineraryService(
         events.publish(ItineraryGenerated(saved.itineraryId.toString(), tripId.toString(), saved.isFallback))
         revisions.record(
             saved, RevisionActor.USER,
-            if (previous == null) RevisionKind.BASELINE else RevisionKind.GENERATE,
+            if (locked == null) RevisionKind.BASELINE else RevisionKind.GENERATE,
             "직접 만들기로 시작",
         )
         saved

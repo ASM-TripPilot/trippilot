@@ -12,6 +12,7 @@ import com.trippilot.itinerarygeneration.domain.GenerationStatus
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.NewRevision
 import com.trippilot.itinerarygeneration.domain.ItineraryRevisionRepository
+import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.itinerarygeneration.domain.ItineraryRevision
 import com.trippilot.itinerarygeneration.domain.ItineraryRevisionSummary
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
@@ -196,11 +197,15 @@ internal val stubTrips = object : TripFacade {
     override fun findGenerationContext(accountId: UUID, tripId: UUID) = null
 }
 
-internal fun genRevisions(repo: ItineraryRepository, trips: TripFacade, clock: Clock = Clock.fixed(Instant.parse("2026-07-25T00:00:00Z"), ZoneOffset.UTC)) =
-    ItineraryRevisionService(GenFakeRevisions(), repo, trips, NoopValidateAgent(), NOOP_TX, clock)
+internal fun genRevisions(
+    repo: ItineraryRepository,
+    trips: TripFacade,
+    clock: Clock = Clock.fixed(Instant.parse("2026-07-25T00:00:00Z"), ZoneOffset.UTC),
+    log: ItineraryRevisionRepository = GenFakeRevisions(),
+) = ItineraryRevisionService(log, repo, trips, NoopValidateAgent(), NOOP_TX, clock)
 
 /** 리비전 기록을 관찰하는 인메모리 저장소 — seq 는 순서대로 부여. */
-private class GenFakeRevisions : ItineraryRevisionRepository {
+internal class GenFakeRevisions : ItineraryRevisionRepository {
     val appended = mutableListOf<NewRevision>()
     override fun append(revision: NewRevision): ItineraryRevision {
         appended += revision
@@ -271,6 +276,7 @@ class GenerateItineraryServiceTest : StringSpec({
         firstDayStartAt: LocalTime? = null,
         lastDayEndAt: LocalTime? = null,
         visits: VisitRecordPort = NoVisits,
+        revisionLog: ItineraryRevisionRepository = GenFakeRevisions(),
     ): GenerateItineraryService {
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
@@ -295,7 +301,7 @@ class GenerateItineraryServiceTest : StringSpec({
         // 1차·2차가 **같은 세션**을 봐야 취소가 2차에 전달된다 — 인스턴스를 나누면 취소가 사라진다.
         val sessions = genSessions(trips, sessionRepo, clock, defaultDeadlines)
         val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), sessions, scoredPools, NOOP_TX, clock)
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, publisher, second, sessions, genRevisions(repo, trips), StubRegions, rejectionStore, scoredPools, personalization, visits, NOOP_TX, clock, defaultDeadlines)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, publisher, second, sessions, genRevisions(repo, trips, log = revisionLog), StubRegions, rejectionStore, scoredPools, personalization, visits, NOOP_TX, clock, defaultDeadlines)
     }
 
     val fullPrefs = PreferenceSnapshot(
@@ -445,6 +451,23 @@ class GenerateItineraryServiceTest : StringSpec({
         events.windowed(2).filter { it[1] == "write" }.forEach { it[0] shouldBe "lock" }
         events.count { it == "write" } shouldBe 2
         events.first() shouldBe "ai"
+    }
+
+    // 5차 검수 — 리비전 종류(처음 vs 다시)도 잠금 뒤 값으로 정한다. 잠금 전엔 없던 일정이 잠금 뒤 보이면 "다시 만들기"다.
+    "직접 만들기의 리비전 종류는 잠금 뒤 일정으로 정한다" {
+        val existing = Itinerary.create(tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(start, 0, emptyList())), now, GenerationState.COMPLETE,
+        )
+        val repo = object : FakeItineraries() {
+            override fun findByTrip(tripId: UUID): List<Itinerary> = emptyList() // 잠금 전 읽기엔 없었다
+            override fun lockForTrip(tripId: UUID) = existing
+        }
+        val log = GenFakeRevisions()
+
+        service(CapturingAgent(now), fullPrefs, emptyList(), repo = repo, revisionLog = log).generate(acc, tripId, GenerationMode.MANUAL)
+
+        log.appended.last().kind shouldBe RevisionKind.GENERATE
+        log.appended.first().kind shouldBe RevisionKind.BASELINE // 잠금 뒤 현행이 되돌리기 지점으로 남았다
     }
 
     "직접 만들기도 일정 쓰기 잠금을 잡은 뒤에 쓴다" {
@@ -1719,6 +1742,57 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         stored.generationState shouldBe GenerationState.PARTIAL       // 마무리가 반영되지 않았다
         stored.days.map { it.date } shouldContainExactly listOf(start) // day1 은 남는다
         sessionRepo.rows.values.single().status shouldBe GenerationStatus.CANCELED
+    }
+
+    // 5차 검수 — 2차 근거를 받는 동안(실측 17.5초) 같은 일정의 이미 있는 일자가 편집됐다(TRIP-1000 · 재계획 반영·되돌리기도 같다).
+    // 잠금 전 일자로 쓰면 그 편집이 조용히 되돌아간다. 잠금 뒤 일자 위에 2차 몫을 잇는다.
+    "근거를 받는 동안 1일차가 바뀌었으면 마무리는 잠금 뒤 1일차 위에 잇는다 — 편집을 되돌리지 않는다" {
+        val end = start.plusDays(1)
+        val (agent, poiByDate) = emittingAgent(end)
+        val partial = Itinerary.create(tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(start, 0, listOf(VisitSlot.of(UUID.randomUUID(), null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"))))),
+            now, GenerationState.PARTIAL,
+        )
+        val userPick = UUID.randomUUID()
+        val editedMeanwhile = Itinerary.reconstitute(
+            partial.itineraryId, partial.tripId, partial.status, partial.solveMode, partial.generationMode, partial.isFallback,
+            GenerationState.PARTIAL, listOf(ItineraryDay.of(start, 0, listOf(VisitSlot.of(userPick, null, 0, LocalTime.parse("13:00"), LocalTime.parse("14:00"))))),
+            partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits,
+        )
+        val repo = object : FakeItineraries() {
+            override fun lockForTrip(tripId: UUID) = editedMeanwhile.also { byTrip[tripId] = it }
+        }
+        repo.byTrip[tripId] = partial
+
+        SecondPhaseGenerator(agent, repo, genRevisions(repo, stubTrips), genSessions(), FakeScoredCandidatePoolStore(), NOOP_TX, clock)
+            .completeRemaining(tripId, partial.itineraryId, agentInputFor(end), isRegeneration = false)
+
+        val finished = repo.byTrip.getValue(tripId)
+        finished.generationState shouldBe GenerationState.COMPLETE
+        finished.days.first { it.date == start }.slots.single().sourcePoiId shouldBe userPick // 잠금 뒤 편집 보존
+        finished.days.first { it.date == end }.slots.single().sourcePoiId shouldBe poiByDate.getValue(end) // 2차 몫
+    }
+
+    "근거를 받는 동안 일자 구성이 바뀌었으면 마무리를 버린다 — 2차 몫과 날이 겹칠 수 있다" {
+        val end = start.plusDays(1)
+        val (agent, _) = emittingAgent(end)
+        val partial = Itinerary.create(tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(start, 0, emptyList())), now, GenerationState.PARTIAL,
+        )
+        val reshaped = Itinerary.reconstitute(
+            partial.itineraryId, partial.tripId, partial.status, partial.solveMode, partial.generationMode, partial.isFallback,
+            GenerationState.PARTIAL, listOf(ItineraryDay.of(start, 0, emptyList()), ItineraryDay.of(end, 1, emptyList())),
+            partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits,
+        )
+        val repo = object : FakeItineraries() {
+            override fun lockForTrip(tripId: UUID) = reshaped.also { byTrip[tripId] = it }
+        }
+        repo.byTrip[tripId] = partial
+
+        SecondPhaseGenerator(agent, repo, genRevisions(repo, stubTrips), genSessions(), FakeScoredCandidatePoolStore(), NOOP_TX, clock)
+            .completeRemaining(tripId, partial.itineraryId, agentInputFor(end), isRegeneration = false)
+
+        repo.byTrip.getValue(tripId) shouldBe reshaped // 그대로
     }
 
     // 4차 검수 — 2차 마무리는 잠금 **뒤** 현행으로 판정한다. 잠금 전에 읽은 값(PARTIAL)으로 정하면, 그 사이 끝난 편집(COMPLETE)
