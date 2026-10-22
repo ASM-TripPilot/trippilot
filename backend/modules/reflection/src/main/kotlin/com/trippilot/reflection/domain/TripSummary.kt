@@ -75,4 +75,22 @@ interface TripSummaryRepository {
      * 기본 구현은 [find] 와 같다(못 읽는 행이 없는 저장소 — 대역).
      */
     fun exists(tripId: UUID): Boolean = find(tripId) != null
+
+    /**
+     * AI 회고 시도를 **선점**한다(TRIP-1488) — 규칙 요약(`RULE`)이고 시도가 [maxAttempts] 미만이며 마지막 시도가 [staleBefore] 이전(또는 없음)일 때만
+     * 시도 수를 1 올리고 시각을 [now] 로 찍는다. 선점했으면 올린 뒤의 시도 수, 못 했으면 null. 한 문장(조건부 UPDATE)이라 파드 사이에서도 한쪽만 이긴다.
+     */
+    fun claimAiAttempt(tripId: UUID, now: Instant, staleBefore: Instant, maxAttempts: Int): Int? =
+        throw UnsupportedOperationException("요약 회고 시도 기록을 지원하지 않는 저장소입니다.")
+
+    /** 더 시도할 것이 없는 여행(지워졌거나 실을 방문이 없다) — 시도 수를 [maxAttempts] 로 채워 스윕이 다시 집지 않게 한다. */
+    fun retireAiAttempts(tripId: UUID, maxAttempts: Int): Unit =
+        throw UnsupportedOperationException("요약 회고 시도 기록을 지원하지 않는 저장소입니다.")
+
+    /**
+     * 스윕이 다시 맡을 여행 — 규칙 요약이고 · [generatedAfter] 뒤에 만들어졌고 · 시도가 [maxAttempts] 미만이고 · 마지막 시도가 [staleBefore] 이전(또는 없음).
+     * 오래된 것부터 [limit] 개.
+     */
+    fun findAiPending(generatedAfter: Instant, staleBefore: Instant, maxAttempts: Int, limit: Int): List<UUID> =
+        throw UnsupportedOperationException("요약 회고 시도 기록을 지원하지 않는 저장소입니다.")
 }

@@ -7,6 +7,7 @@ import com.trippilot.reflection.domain.port.ReflectionAgentPort
 import org.slf4j.LoggerFactory
 import org.springframework.web.client.RestClient
 import java.time.Clock
+import java.time.Duration
 import java.util.UUID
 
 /**
@@ -31,6 +32,8 @@ class HttpReflectionAgentAdapter(
 ) : ReflectionAgentPort {
 
     override val enabled = true
+
+    override val summaryCallTimeout: Duration = Duration.ofMillis(properties.connectTimeoutMs + properties.summaryReadTimeoutMs)
 
     override fun generate(input: ReflectionAgentInput): ReflectionCard? {
         // 목적지를 모르거나 실을 방문이 없으면 부르지 않는다 — 상대가 `region` 필수·`visits` 1건 이상을 요구해 422 가 확정이다.

@@ -31,7 +31,11 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.springframework.transaction.support.TransactionOperations
+import java.time.Clock
+import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.AbstractExecutorService
@@ -70,10 +74,29 @@ class TripSummaryNarratorTest : StringSpec({
         Instant.parse("2026-08-13T00:00:00Z"),
     )
 
+    /** 저장소 대역 — 시도 선점·스윕 조회도 실 어댑터(조건부 UPDATE·SELECT)와 같은 조건으로 흉내 낸다(실 쿼리는 IT 가 본다). */
     class Summaries(initial: TripSummary?) : TripSummaryRepository {
         var stored: TripSummary? = initial
         var beforeLock: () -> Unit = {}
         var locks = 0
+        var attempts = 0
+        var attemptedAt: Instant? = null
+        override fun claimAiAttempt(tripId: UUID, now: Instant, staleBefore: Instant, maxAttempts: Int): Int? {
+            val s = stored ?: return null
+            if (s.source != ReflectionSource.RULE || attempts >= maxAttempts || attemptedAt?.isBefore(staleBefore) == false) return null
+            attempts++
+            attemptedAt = now
+            return attempts
+        }
+        override fun retireAiAttempts(tripId: UUID, maxAttempts: Int) { attempts = maxOf(attempts, maxAttempts) }
+        var pendingQueries = 0
+        override fun findAiPending(generatedAfter: Instant, staleBefore: Instant, maxAttempts: Int, limit: Int): List<UUID> {
+            pendingQueries++
+            val s = stored ?: return emptyList()
+            val due = s.source == ReflectionSource.RULE && s.generatedAt.isAfter(generatedAfter) && attempts < maxAttempts &&
+                attemptedAt?.isBefore(staleBefore) != false
+            return if (due) listOf(s.tripId) else emptyList()
+        }
         override fun upsert(summary: TripSummary) = summary.also { stored = it }
         override fun find(tripId: UUID) = stored
         override fun findForUpdate(tripId: UUID): TripSummary? {
@@ -85,6 +108,7 @@ class TripSummaryNarratorTest : StringSpec({
 
     class Agent(var reply: (ReflectionAgentInput) -> ReflectionCard?) : ReflectionAgentPort {
         override var enabled = true
+        override val summaryCallTimeout: Duration = Duration.ofMinutes(10)
         val sent = mutableListOf<ReflectionAgentInput>()
         override fun generate(input: ReflectionAgentInput): ReflectionCard? = reply(input.also { sent += it })
     }
@@ -100,13 +124,21 @@ class TripSummaryNarratorTest : StringSpec({
     class HeldExecutor : AbstractExecutorService() {
         val held = ArrayDeque<Runnable>()
         var reject = false
+        var terminates = true
         fun run() { while (held.isNotEmpty()) held.removeFirst().run() }
         override fun execute(command: Runnable) { if (reject) throw RejectedExecutionException("full") else held += command }
         override fun shutdown() = Unit
         override fun shutdownNow(): MutableList<Runnable> = mutableListOf()
         override fun isShutdown() = false
         override fun isTerminated() = false
-        override fun awaitTermination(timeout: Long, unit: TimeUnit) = true
+        override fun awaitTermination(timeout: Long, unit: TimeUnit) = terminates
+    }
+
+    /** 스윕의 "마지막 시도 뒤 상한이 지났나"를 재려고 움직이는 시계. */
+    class MutableClock(var now: Instant) : Clock() {
+        override fun getZone(): ZoneId = ZoneOffset.UTC
+        override fun withZone(zone: ZoneId?) = this
+        override fun instant() = now
     }
 
     class Fixture(
@@ -115,7 +147,9 @@ class TripSummaryNarratorTest : StringSpec({
         val executor: HeldExecutor,
         val registry: SimpleMeterRegistry,
         val narrator: TripSummaryNarrator,
+        val clock: MutableClock,
     )
+
 
     fun fixture(
         summary: TripSummary? = ruleSummary(),
@@ -127,6 +161,7 @@ class TripSummaryNarratorTest : StringSpec({
         val agent = Agent(reply)
         val executor = HeldExecutor()
         val registry = SimpleMeterRegistry()
+        val clock = MutableClock(Instant.parse("2026-08-13T01:00:00Z"))
         val owners = object : TripOwnerFacade { override fun findOwnedPeriod(tripId: UUID) = owned }
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = null
@@ -154,9 +189,9 @@ class TripSummaryNarratorTest : StringSpec({
         val narrator = TripSummaryNarrator(
             owners, trips, archive, surfaces, summaries, agent, ReflectionCardCodec(ObjectMapper()),
             ReflectionMaterials(preferences, changeLog), ReflectionMetrics(registry), ObjectMapper(),
-            TransactionOperations.withoutTransaction(), executor,
+            TransactionOperations.withoutTransaction(), executor, clock,
         )
-        return Fixture(summaries, agent, executor, registry, narrator)
+        return Fixture(summaries, agent, executor, registry, narrator, clock)
     }
 
     "AI 가 회고를 주면 같은 요약의 문장을 그 부제로, 출처를 AI 로 바꾼다 — 실적·통계는 그대로다" {
@@ -210,7 +245,8 @@ class TripSummaryNarratorTest : StringSpec({
         f.narrator.request(tripId)
         f.executor.run()
         f.summaries.stored shouldBe ruleSummary()
-        f.registry.counter(ReflectionMetrics.HALLUCINATION_REJECTED).count() shouldBe 1.0
+        f.registry.counter(ReflectionMetrics.HALLUCINATION_REJECTED, "kind", "TRIP_SUMMARY").count() shouldBe 1.0
+        f.registry.counter(ReflectionMetrics.HALLUCINATION_REJECTED, "kind", "DAILY").count() shouldBe 0.0 // 하루 회고 강등률을 오염시키지 않는다
     }
 
     "AI 가 못 만들거나 던지면 규칙 요약이 남는다" {
@@ -252,6 +288,10 @@ class TripSummaryNarratorTest : StringSpec({
         allSkipped.executor.run()
         allSkipped.agent.sent shouldBe emptyList()
         allSkipped.summaries.stored shouldBe ruleSummary()
+        // 더 할 것이 없다 — 스윕이 다시 집지 않게 시도를 채운다(방문 0곳·전부 건너뜀 요약을 쓸어 담지 않는다)
+        (deleted.summaries.attempts to allSkipped.summaries.attempts) shouldBe (TripSummaryNarrator.MAX_ATTEMPTS to TripSummaryNarrator.MAX_ATTEMPTS)
+        allSkipped.narrator.sweep()
+        allSkipped.executor.held.size shouldBe 0
     }
 
     "경계가 꺼져 있으면 맡지도 않는다" {
@@ -290,5 +330,90 @@ class TripSummaryNarratorTest : StringSpec({
         f.summaries.stored shouldBe ruleSummary()
         f.narrator.request(tripId)
         f.executor.held.size shouldBe 1
+    }
+
+    // ── 사라진 회고를 다시 맡기기(스윕) ──────────────────────────────
+
+    fun warns(block: () -> Unit): List<String> {
+        val appender = ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>().apply { start() }
+        val logger = org.slf4j.LoggerFactory.getLogger(TripSummaryNarrator::class.java) as ch.qos.logback.classic.Logger
+        logger.addAppender(appender)
+        try { block() } finally { logger.detachAppender(appender) }
+        return appender.list.filter { it.level == ch.qos.logback.classic.Level.WARN }.map { it.formattedMessage }
+    }
+
+    "대기열이 넘쳐 버린 회고는 스윕이 다시 맡아 붙인다 — 넘침은 시도를 쓰지 않는다" {
+        val f = fixture()
+        f.executor.reject = true
+        f.narrator.request(tripId)
+        f.executor.reject = false
+        f.summaries.attempts shouldBe 0
+
+        f.narrator.sweep()
+        f.executor.run()
+
+        f.summaries.stored?.source shouldBe ReflectionSource.AI
+        f.summaries.attempts shouldBe 1
+    }
+
+    "진행 중일 수 있는 시도는 호출 상한이 지나기 전엔 다시 맡지도 선점하지도 않는다 — 다른 파드의 호출을 중복하지 않는다" {
+        val f = fixture(reply = { null })
+        f.narrator.request(tripId)
+        f.executor.run() // 1회 시도, 실패
+        f.clock.now = f.clock.now.plus(Duration.ofMinutes(9))
+        f.narrator.sweep()
+        f.executor.held.size shouldBe 0
+        f.narrator.request(tripId) // 재배달이 와도
+        f.executor.run()
+        f.agent.sent.size shouldBe 1
+
+        f.clock.now = f.clock.now.plus(Duration.ofMinutes(2)) // 마지막 시도에서 10분 넘게 지났다
+        f.narrator.sweep()
+        f.executor.run()
+        f.agent.sent.size shouldBe 2
+    }
+
+    "시도 상한을 다 쓰면 더 맡지 않고 WARN 을 한 번 남긴다" {
+        val f = fixture(reply = { null })
+        val messages = warns {
+            repeat(TripSummaryNarrator.MAX_ATTEMPTS + 2) {
+                f.narrator.sweep()
+                f.executor.run()
+                f.clock.now = f.clock.now.plus(Duration.ofMinutes(11))
+            }
+        }
+        f.agent.sent.size shouldBe TripSummaryNarrator.MAX_ATTEMPTS
+        f.summaries.stored shouldBe ruleSummary()
+        messages.filter { "상한" in it && tripId.toString() in it }.size shouldBe 1
+    }
+
+    "스윕은 창보다 오래된 요약·이미 AI 인 요약을 집지 않고, 경계가 꺼져 있으면 돌지 않는다" {
+        val old = fixture()
+        old.clock.now = ruleSummary().generatedAt.plus(TripSummaryNarrator.SWEEP_WINDOW).plusSeconds(1)
+        old.narrator.sweep()
+        old.executor.held.size shouldBe 0
+
+        val ai = fixture(summary = ruleSummary(ReflectionSource.AI))
+        ai.narrator.sweep()
+        ai.executor.held.size shouldBe 0
+
+        val off = fixture()
+        off.agent.enabled = false
+        off.narrator.sweep()
+        off.executor.held.size shouldBe 0
+        off.summaries.pendingQueries shouldBe 0 // 맡지도 않을 것을 찾으러 DB 에 가지 않는다
+    }
+
+    "종료 대기를 넘기면 대기·진행 중이던 여행을 남긴다 — 스윕이 다시 맡는다" {
+        val f = fixture()
+        val other = UUID.randomUUID()
+        f.narrator.request(tripId)
+        f.narrator.request(other)
+        f.executor.terminates = false
+
+        val messages = warns { f.narrator.shutdown() }
+
+        messages.single().let { (tripId.toString() in it && other.toString() in it && "2건" in it) shouldBe true }
+        warns { f.executor.terminates = true; f.narrator.shutdown() } shouldBe emptyList() // 제때 끝나면 조용하다
     }
 })

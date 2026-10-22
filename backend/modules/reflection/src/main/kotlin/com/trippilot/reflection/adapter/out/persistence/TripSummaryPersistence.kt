@@ -89,6 +89,38 @@ class TripSummaryRepositoryAdapter(private val jpa: TripSummaryJpaRepository) : 
         return jpa.findById(tripId).orElse(null)?.also { em.refresh(it) }?.toDomain()
     }
 
+    // 시도 기록(V2.84)은 엔티티에 매핑하지 않는다 — 요약을 덮는 생성·경로 갱신이 지우지 않게. 쓰기 둘은 호출자의 트랜잭션을 탄다.
+    override fun claimAiAttempt(tripId: UUID, now: Instant, staleBefore: Instant, maxAttempts: Int): Int? =
+        em.createNativeQuery(
+            """
+            UPDATE trip_summary SET ai_attempts = ai_attempts + 1, ai_attempted_at = :now
+             WHERE trip_id = :tripId AND source = 'RULE' AND ai_attempts < :max
+               AND (ai_attempted_at IS NULL OR ai_attempted_at < :staleBefore)
+            RETURNING ai_attempts
+            """.trimIndent(),
+        ).setParameter("now", now).setParameter("tripId", tripId).setParameter("max", maxAttempts).setParameter("staleBefore", staleBefore)
+            .resultList.firstOrNull()?.let { (it as Number).toInt() }
+
+    override fun retireAiAttempts(tripId: UUID, maxAttempts: Int) {
+        em.createNativeQuery("UPDATE trip_summary SET ai_attempts = GREATEST(ai_attempts, :max) WHERE trip_id = :tripId")
+            .setParameter("max", maxAttempts).setParameter("tripId", tripId).executeUpdate()
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    override fun findAiPending(generatedAfter: Instant, staleBefore: Instant, maxAttempts: Int, limit: Int): List<UUID> =
+        (
+            em.createNativeQuery(
+                """
+                SELECT trip_id FROM trip_summary
+                 WHERE source = 'RULE' AND generated_at > :after AND ai_attempts < :max
+                   AND (ai_attempted_at IS NULL OR ai_attempted_at < :staleBefore)
+                 ORDER BY generated_at
+                 LIMIT :limit
+                """.trimIndent(),
+            ).setParameter("after", generatedAfter).setParameter("max", maxAttempts).setParameter("staleBefore", staleBefore)
+                .setParameter("limit", limit).resultList as List<Any>
+            ).map { it as? UUID ?: UUID.fromString(it.toString()) }
+
     private fun TripSummary.toEntity() = TripSummaryEntity(
         tripId, narrative, highlights.map { it.toMap() }, stats.toMap(), source.name, generatedAt,
     )

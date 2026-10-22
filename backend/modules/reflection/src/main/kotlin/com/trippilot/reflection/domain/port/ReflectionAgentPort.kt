@@ -1,6 +1,7 @@
 package com.trippilot.reflection.domain.port
 
 import com.trippilot.reflection.domain.ReflectionCard
+import java.time.Duration
 import java.time.LocalDate
 import java.util.UUID
 
@@ -74,6 +75,12 @@ interface ReflectionAgentPort {
      * 회고 생성뿐 아니라 편집 경로도 같은 값을 치른다.
      */
     val enabled: Boolean
+
+    /**
+     * 여행 요약 회고(`TRIP_SUMMARY`) 한 번이 걸릴 수 있는 최대 시간(연결 + 소켓 read 상한). 요약 회고 스윕(TRIP-1488)이 이만큼 지나기 전에는
+     * 같은 여행을 다시 선점하지 않는다 — 다른 파드가 아직 기다리는 호출을 중복하지 않게. 경계가 꺼져 있으면 쓰이지 않는다.
+     */
+    val summaryCallTimeout: Duration get() = Duration.ZERO
 
     fun generate(input: ReflectionAgentInput): ReflectionCard?
 }

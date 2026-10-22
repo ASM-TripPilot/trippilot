@@ -51,8 +51,8 @@ class TripSummaryService(
         val existed = summaries.exists(tripId)
         val built = build(tripId)
         // 이미 붙은 AI 회고 문장(TRIP-1488 [TripSummaryNarrator])은 재배달로 규칙 문장에 되돌리지 않는다 — 실적·통계만 다시 짠다.
-        // 다시 짠 요약이 방문 0곳(BASIC)이면 그 문장의 근거가 사라졌으므로 기본 문장으로 간다.
-        val ai = current?.takeIf { it.source == ReflectionSource.AI && built.source == ReflectionSource.RULE }
+        // 다시 짠 요약에 다녀온 곳이 없으면(방문 0곳 BASIC, 또는 전부 건너뛴 RULE) 그 문장의 근거가 사라졌으므로 지금 문장으로 간다.
+        val ai = current?.takeIf { it.source == ReflectionSource.AI && built.stats.totalVisits > 0 }
         val saved = summaries.upsert(ai?.let { built.copy(narrative = it.narrative, source = ReflectionSource.AI) } ?: built)
         if (!existed) events.publish(
             ReflectionReady(

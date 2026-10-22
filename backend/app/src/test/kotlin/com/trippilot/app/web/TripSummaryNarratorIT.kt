@@ -31,6 +31,14 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.time.Duration
+import com.trippilot.reflection.application.TripSummaryNarrator
+import com.trippilot.reflection.application.TripSummaryService
+import com.trippilot.reflection.domain.TripSummaryRepository
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * 여행이 끝나면 규칙 요약이 먼저 저장되고, 그 뒤 **백그라운드에서** AI 회고 문장이 같은 행에 붙는다(TRIP-1488 · 실 Postgres · 실 배선).
@@ -45,18 +53,23 @@ import java.util.concurrent.CopyOnWriteArrayList
         "spring.datasource.hikari.maximum-pool-size=1",
         "spring.datasource.hikari.minimum-idle=1",
         "spring.datasource.hikari.connection-timeout=2000",
+        // 스윕은 테스트가 직접 부른다 — 예약 실행이 끼면 시도 수가 흔들린다.
+        "trippilot.reflection.summary-narrate-sweep-initial-delay-ms=3600000",
     ],
 )
 class TripSummaryNarratorIT : AbstractPostgresIntegrationTest() {
 
-    /** 여행 요약에만 카드를 준다. 하루 회고는 null(규칙 카드). 받은 입력을 남긴다. */
+    /** 여행 요약에만 카드를 준다. 하루 회고는 null(규칙 카드). 받은 입력을 남긴다. [gate] 가 있으면 열릴 때까지 답하지 않는다(AI 대기 흉내). */
     class SummaryAgent : ReflectionAgentPort {
         val sent = CopyOnWriteArrayList<ReflectionAgentInput>()
+        @Volatile var gate: CountDownLatch? = null
+        val waiting = CountDownLatch(1)
         override val enabled = true
+        override val summaryCallTimeout: Duration = Duration.ofMinutes(10)
         override fun generate(input: ReflectionAgentInput): ReflectionCard? {
             sent += input
             if (input.kind != ReflectionAgentInput.KIND_TRIP_SUMMARY) return null
-            Thread.sleep(300) // 구독자가 이 호출을 기다리지 않는다는 것을 보이려고 조금 걸린다
+            gate?.let { waiting.countDown(); it.await(30, TimeUnit.SECONDS) }
             val payload = """{"template_id":"ai.summary.v1","kind":"TRIP_SUMMARY","format":"CARD","is_fallback":false,
                 "cover":{"title":"제주 이틀","subtitle":"바다를 따라 함께 걸었다."},"scenes":[{"caption":"성산일출봉"}]}"""
             return ReflectionCard("ai.summary.v1", "CARD", "제주 이틀", "바다를 따라 함께 걸었다.", payload)
@@ -77,6 +90,10 @@ class TripSummaryNarratorIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var subscriber: TripEndedSubscriber
     @Autowired private lateinit var agent: SummaryAgent
     @Autowired private lateinit var jdbc: JdbcTemplate
+    @Autowired private lateinit var summaryService: TripSummaryService
+    @Autowired private lateinit var narrator: TripSummaryNarrator
+    @Autowired private lateinit var summaries: TripSummaryRepository
+    @Autowired private lateinit var txManager: PlatformTransactionManager
 
     private val json = ObjectMapper()
     private val day1 = LocalDate.parse("2026-08-01")
@@ -109,8 +126,8 @@ class TripSummaryNarratorIT : AbstractPostgresIntegrationTest() {
         while (summaryRow(tripId)?.second != source && System.nanoTime() < until) Thread.sleep(100)
     }
 
-    @Test
-    fun `여행이 끝나면 규칙 요약이 먼저 서고, 뒤이어 AI 회고 문장이 붙는다 — 재배달은 다시 부르지 않고 문장을 지킨다`() {
+    /** 제주 1박 여행 — 하나는 다녀오고 하나는 건너뛰었다. */
+    private fun tripWithVisits(): UUID {
         val accountId = accounts.save(Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, Instant.parse("2026-08-01T00:00:00Z"))).id.value
         val token = accessTokenIssuer.issue(accountId.toString()).value
         val created = RestClient.builder().baseUrl("http://localhost:$port").build()
@@ -130,10 +147,29 @@ class TripSummaryNarratorIT : AbstractPostgresIntegrationTest() {
             pinToDay1(it.visitCheckId)
         }
         pinToDay1(visits.skipPlanned(accountId, tripId, "$day1#$missed", missed).visitCheckId)
+        return tripId
+    }
 
-        subscriber.handle(ended(tripId))
-        // 구독자는 AI 를 기다리지 않는다 — 돌아온 순간 규칙 요약이 서 있다.
-        summaryRow(tripId)?.second shouldBe "RULE"
+    @Test
+    fun `여행이 끝나면 규칙 요약이 먼저 서고, 뒤이어 AI 회고 문장이 붙는다 — 재배달은 다시 부르지 않고 문장을 지킨다`() {
+        agent.sent.clear() // 같은 빈을 두 테스트가 쓴다
+        val tripId = tripWithVisits()
+        val gate = CountDownLatch(1).also { agent.gate = it }
+        try {
+            subscriber.handle(ended(tripId))
+            // 구독자는 AI 를 기다리지 않는다 — 돌아온 순간 규칙 요약이 서 있다.
+            summaryRow(tripId)?.second shouldBe "RULE"
+
+            // AI 를 기다리는 동안 커넥션을 쥐지 않는다 — 풀이 하나뿐인데 그 사이 다른 읽기·쓰기가 연결 대기(2초) 안에 끝난다.
+            agent.waiting.await(10, TimeUnit.SECONDS) shouldBe true
+            val started = System.nanoTime()
+            jdbc.queryForObject("SELECT ai_attempts FROM trip_summary WHERE trip_id = ?", Int::class.java, tripId) shouldBe 1
+            jdbc.update("UPDATE trip_summary SET generated_at = generated_at WHERE trip_id = ?", tripId) shouldBe 1
+            (System.nanoTime() - started < 1_500_000_000L) shouldBe true
+        } finally {
+            gate.countDown()
+            agent.gate = null
+        }
 
         awaitSource(tripId, "AI")
         summaryRow(tripId) shouldBe ("바다를 따라 함께 걸었다." to "AI")
@@ -152,5 +188,44 @@ class TripSummaryNarratorIT : AbstractPostgresIntegrationTest() {
         jdbc.queryForObject(
             "SELECT count(*) FROM outbox_event WHERE event_type = 'reflection.ReflectionReady' AND aggregate_id = ?", Int::class.java, tripId.toString(),
         ) shouldBe 1
+    }
+
+    /** 시도 선점과 스윕 조회의 실 SQL(V2.84) — 대역은 같은 조건을 흉내 낼 뿐이라 쿼리 자체는 여기서 본다. */
+    @Test
+    fun `시도 선점은 한 번만 이기고, 스윕은 상한·최근 시도·창·출처를 지켜 집고, 집은 회고를 붙인다`() {
+        agent.sent.clear()
+        val tripId = tripWithVisits()
+        summaryService.generate(tripId) // 구독자 없이 규칙 요약만 — AI 는 아직 안 맡겼다
+        val tx = TransactionTemplate(txManager)
+        val now = Instant.now()
+        val stale = now.minus(Duration.ofMinutes(10))
+        fun pending() = summaries.findAiPending(now.minus(Duration.ofDays(7)), stale, 3, 100).contains(tripId)
+        fun claim(at: Instant = now) = tx.execute { summaries.claimAiAttempt(tripId, at, at.minus(Duration.ofMinutes(10)), 3) }
+
+        pending() shouldBe true
+        claim() shouldBe 1
+        claim() shouldBe null // 진행 중일 수 있는 시도 — 다른 파드도 못 가져간다
+        pending() shouldBe false
+        jdbc.update("UPDATE trip_summary SET ai_attempted_at = ? WHERE trip_id = ?", java.sql.Timestamp.from(now.minus(Duration.ofMinutes(11))), tripId)
+        pending() shouldBe true
+        claim() shouldBe 2
+        jdbc.update("UPDATE trip_summary SET ai_attempts = 3, ai_attempted_at = NULL WHERE trip_id = ?", tripId)
+        (pending() to claim()) shouldBe (false to null) // 상한
+        jdbc.update("UPDATE trip_summary SET ai_attempts = 0, generated_at = ? WHERE trip_id = ?", java.sql.Timestamp.from(now.minus(Duration.ofDays(8))), tripId)
+        pending() shouldBe false // 창 밖
+        jdbc.update("UPDATE trip_summary SET generated_at = now() WHERE trip_id = ?", tripId)
+        tx.executeWithoutResult { summaries.retireAiAttempts(tripId, 3) }
+        pending() shouldBe false // 더 할 것이 없는 여행
+        // 요약을 다시 덮어도(재배달·경로 갱신) 시도 기록은 지워지지 않는다 — 엔티티가 그 칸을 매핑하지 않는다.
+        summaryService.generate(tripId)
+        jdbc.queryForObject("SELECT ai_attempts FROM trip_summary WHERE trip_id = ?", Int::class.java, tripId) shouldBe 3
+
+        // 스윕이 실제로 집어 붙인다.
+        jdbc.update("UPDATE trip_summary SET ai_attempts = 0, ai_attempted_at = NULL WHERE trip_id = ?", tripId)
+        narrator.sweep()
+        awaitSource(tripId, "AI")
+        summaryRow(tripId) shouldBe ("바다를 따라 함께 걸었다." to "AI")
+        jdbc.update("UPDATE trip_summary SET ai_attempts = 0 WHERE trip_id = ?", tripId)
+        pending() shouldBe false // 이미 AI
     }
 }

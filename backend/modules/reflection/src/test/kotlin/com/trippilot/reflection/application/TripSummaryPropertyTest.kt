@@ -260,6 +260,11 @@ class TripSummaryPropertyTest : StringSpec({
 
         val empty = serviceOf(emptyList(), known, Sink(), repo).generate(tripId)
         (empty.narrative to empty.source) shouldBe (TripSummaryService.BASIC_SUMMARY to ReflectionSource.BASIC)
+
+        // 전부 건너뛴 여행은 출처가 RULE 이어도 다녀온 곳이 없다 — AI 문장(다녀온 곳을 말한다)을 지키지 않는다.
+        repo.stored[tripId] = first.copy(narrative = "바다를 따라 걸었다.", source = ReflectionSource.AI)
+        val allSkipped = serviceOf(listOf(ArchiveDayView(day0, listOf(visit(poi, skipped = true)))), known, Sink(), repo).generate(tripId)
+        (allSkipped.narrative to allSkipped.source) shouldBe (TripSummaryService.BASIC_SUMMARY to ReflectionSource.RULE)
     }
 
     "PBT-U5-5 요약 수치에 소요시간 필드가 없다(INV-3)" {
