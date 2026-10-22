@@ -210,6 +210,10 @@ class ChunkVectors:
     def __len__(self) -> int:
         return len(self._at)
 
+    def ids(self) -> list[str]:
+        """파일에 적힌 순서 그대로 — 증분 빌드가 앞쪽 순서를 지켜 본체 앞 몫을 바이트까지 같게 둔다."""
+        return list(self._at)
+
     def hash_of(self, doc_id: str) -> str | None:
         hit = self._at.get(doc_id)
         return hit[0] if hit else None
