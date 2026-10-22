@@ -144,17 +144,18 @@ class _PoiInfo:
 
 
 class _Weather:
-    def __init__(self, pop: int | None = 80, *, unknown: bool = False) -> None:
+    def __init__(self, pop: int | None = 80, *, unknown: bool = False, detail: dict | None = None) -> None:
         self.calls: list[dict] = []
-        self._pop, self._unknown = pop, unknown
+        self._pop, self._unknown, self._detail = pop, unknown, detail
 
     def fetch(self, params: dict) -> InfoPacket:
         self.calls.append(params)
         if self._unknown:
             return InfoPacket(ProviderKind.WEATHER, ProviderStatus.WEATHER_UNKNOWN, {"reason": "kma down"}, None)
         daily = {d.isoformat(): self._pop for d in params["days"]} if self._pop is not None else {}
+        detail = {d.isoformat(): dict(self._detail) for d in params["days"]} if self._detail is not None else {}
         return InfoPacket(ProviderKind.WEATHER, ProviderStatus.OK,
-                          {"daily": daily, "hourly": {}, "triggers": ()}, _fresh(params["now"]))
+                          {"daily": daily, "hourly": {}, "detail": detail, "triggers": ()}, _fresh(params["now"]))
 
 
 class _Transit:
@@ -521,6 +522,34 @@ def test_weather_plan_chains_poi_info_coordinates_into_the_weather_provider() ->
     assert facts.payload == {"infoKind": "WEATHER", "title": "제주 날씨", "rows": [{"label": "오늘 최대 강수확률", "value": "80%"}]}
     assert _types(facts) == ["OPEN_ITINERARY"] and facts.template_text == "오늘 예보예요."
     assert facts.detail["date"] == _D2.isoformat()
+
+
+def test_weather_detail_adds_sky_and_temperature_rows_before_the_rain_row() -> None:
+    """사용자(2026-10-21) "강수량만 알려주네" — 하늘·강수 형태·기온이 있으면 그 순서로 줄을 더한다.
+
+    코드 → 말 번역은 핸들러 한 곳: SKY 4 흐림 + PTY 1 비 → "흐림 · 비", TMN/TMX → "최저 … · 최고 …".
+    """
+    weather = _Weather(pop=80, detail={"sky": 4, "pty": 1, "tmn": 9, "tmx": 15})
+    facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)))
+    assert facts.payload["rows"] == [
+        {"label": "하늘", "value": "흐림 · 비"},
+        {"label": "기온", "value": "최저 9° · 최고 15°"},
+        {"label": "오늘 최대 강수확률", "value": "80%"},
+    ]
+
+
+def test_weather_detail_skips_unknown_cells_and_omits_dry_precipitation_type() -> None:
+    """모르는 칸은 줄을 만들지 않는다(기온 없음 → 기온 줄 없음) · PTY 0(없음)은 하늘만 말한다 · 최고만 알면 그것만."""
+    weather = _Weather(pop=10, detail={"sky": 1, "pty": 0, "tmx": 22})
+    facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)))
+    assert facts.payload["rows"] == [
+        {"label": "하늘", "value": "맑음"},
+        {"label": "기온", "value": "최고 22°"},
+        {"label": "오늘 최대 강수확률", "value": "10%"},
+    ]
+    # 상세가 통째로 없으면(옛 포트) 종전과 같은 한 줄
+    facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(ports=HandlerPorts(poi_info=_PoiInfo(), weather=_Weather(pop=10))))
+    assert facts.payload["rows"] == [{"label": "오늘 최대 강수확률", "value": "10%"}]
 
 
 def test_weather_date_argument_moves_anchor_and_row_label() -> None:
