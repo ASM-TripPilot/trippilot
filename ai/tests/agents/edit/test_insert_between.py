@@ -93,6 +93,8 @@ def test_parse_reads_position_and_kind(utterance: str, expected: tuple) -> None:
     "경리단길 다음에 한 곳 더 넣을 필요 없어",
     "이태원에서 홍대 갈 때 갈 만한 곳 두 군데 추가해줘",   # 여럿 — 한 곳 표현을 지나도 걸린다
     "이태원이랑 홍대 사이에 카페나 공원 하나 넣어줘",       # 종류 둘 — 고르지 않는다
+    "경리단길 다음에 갈 만한 곳 다섯 군데 추가해줘",
+    "이태원에서 홍대 갈 때 한 군데 더 넣을 필요는 없어",
 ])
 def test_parse_leaves_everything_else_to_the_translator(utterance: str) -> None:
     assert parse_insert_ask(utterance) is None
@@ -148,7 +150,8 @@ def test_resolve_by_region_when_names_lack_the_area() -> None:
 def test_day_end_words_land_after_the_last_slot_unless_a_slot_has_that_name() -> None:
     """공항·숙소·서울역 가기 전에, 일정 끝나고 — 종전 끝 추가가 맞던 말을 '못 알아들음'으로 바꾸지 않는다(2026-10-22 리뷰)."""
     for said in ("공항 가기 전에 카페 하나 넣어줘", "숙소 가기 전에 한 군데 더", "오늘 일정 끝나고 카페 하나 넣어줘",
-                 "마지막 일정 다음에 한 곳 더 추가"):
+                 "마지막 일정 다음에 한 곳 더 추가", "숙소 들어가기 전에 카페 하나 넣어줘", "호텔 돌아가기 전에 한 군데 더 넣어줘",
+                 "효창공원을 마지막 일정 다음에 넣어줘"):
         gap = resolve_gap(_REFS, parse_insert_place(said))
         assert not isinstance(gap, str) and (gap.after, gap.before) == (3, None), said
     # '서울역'의 '서울'(반경 5km)은 하루를 다 덮는다 — 지역으로 맨 앞에 끼우지 않고 하루 끝이다
