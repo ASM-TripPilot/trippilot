@@ -197,7 +197,7 @@ class ItineraryRevisionServiceTest : StringSpec({
         val moved = Itinerary.reconstitute(
             base.itineraryId, base.tripId, base.status, base.solveMode, base.generationMode, base.isFallback, base.generationState,
             listOf(ItineraryDay.of(d1, 0, listOf(slot(cafe, "12:00", "13:00")))), base.createdAt, base.updatedAt,
-            base.candidatesSummary, base.unplacedMustVisits,
+            base.candidatesSummary, base.unplacedMustVisits, base.scoring,
         )
         val repo = Itineraries(base).apply { lockedView = moved }
         val svc = service(revs, repo)

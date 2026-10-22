@@ -1777,7 +1777,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         val editedMeanwhile = Itinerary.reconstitute(
             partial.itineraryId, partial.tripId, partial.status, partial.solveMode, partial.generationMode, partial.isFallback,
             GenerationState.PARTIAL, listOf(ItineraryDay.of(start, 0, listOf(VisitSlot.of(userPick, null, 0, LocalTime.parse("13:00"), LocalTime.parse("14:00"))))),
-            partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits,
+            partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits, partial.scoring,
         )
         val repo = object : FakeItineraries() {
             override fun lockForTrip(tripId: UUID) = editedMeanwhile.also { byTrip[tripId] = it }
@@ -1804,7 +1804,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         val dropped = Itinerary.reconstitute(
             partial.itineraryId, partial.tripId, partial.status, partial.solveMode, partial.generationMode, partial.isFallback,
             GenerationState.PARTIAL, listOf(ItineraryDay.of(start, 0, emptyList())),
-            partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits,
+            partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits, partial.scoring,
         )
         val repo = object : FakeItineraries() {
             override fun lockForTrip(tripId: UUID) = byTrip[tripId]?.takeIf { it.days.size == 1 } ?: dropped.also { byTrip[tripId] = it }
@@ -1834,7 +1834,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         val overlapping = Itinerary.reconstitute(
             partial.itineraryId, partial.tripId, partial.status, partial.solveMode, partial.generationMode, partial.isFallback,
             GenerationState.PARTIAL, listOf(ItineraryDay.of(start, 0, emptyList()), ItineraryDay.of(end, 1, emptyList())),
-            partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits,
+            partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits, partial.scoring,
         )
         val repo = object : FakeItineraries() {
             override fun lockForTrip(tripId: UUID) = byTrip[tripId]?.takeIf { it.generationState != GenerationState.PARTIAL || it.days.size == 2 }
@@ -1861,7 +1861,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         )
         val editedMeanwhile = Itinerary.reconstitute(
             partial.itineraryId, partial.tripId, partial.status, partial.solveMode, partial.generationMode, partial.isFallback,
-            GenerationState.COMPLETE, partial.days, partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits,
+            GenerationState.COMPLETE, partial.days, partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits, partial.scoring,
         )
         val repo = object : FakeItineraries() {
             override fun lockForTrip(tripId: UUID) = editedMeanwhile
@@ -2110,7 +2110,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         )
         val doneMeanwhile = Itinerary.reconstitute(
             partial.itineraryId, partial.tripId, partial.status, partial.solveMode, partial.generationMode, partial.isFallback,
-            GenerationState.COMPLETE, partial.days, partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits,
+            GenerationState.COMPLETE, partial.days, partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits, partial.scoring,
         )
         var locks = 0
         val repo = object : FakeItineraries() {

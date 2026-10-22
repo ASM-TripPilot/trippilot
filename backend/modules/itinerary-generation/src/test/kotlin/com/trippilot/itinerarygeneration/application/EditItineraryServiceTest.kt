@@ -280,7 +280,7 @@ class EditItineraryServiceTest : StringSpec({
         repo.lockedView = Itinerary.reconstitute(
             c.itineraryId, c.tripId, c.status, c.solveMode, c.generationMode, c.isFallback, c.generationState,
             c.days.map { d -> ItineraryDay.of(d.date, d.dayOrder, d.slots.map { VisitSlot.of(newer, null, it.orderIndex, it.startAt, it.endAt) }) },
-            c.createdAt, c.updatedAt, c.candidatesSummary, c.unplacedMustVisits,
+            c.createdAt, c.updatedAt, c.candidatesSummary, c.unplacedMustVisits, c.scoring,
         )
         val logs = CapturingChangeLogs()
         EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), logs, FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
@@ -307,7 +307,7 @@ class EditItineraryServiceTest : StringSpec({
     }
 
     fun Itinerary.with(id: UUID = itineraryId, state: GenerationState = generationState) = Itinerary.reconstitute(
-        id, tripId, status, solveMode, generationMode, isFallback, state, days, createdAt, updatedAt, candidatesSummary, unplacedMustVisits,
+        id, tripId, status, solveMode, generationMode, isFallback, state, days, createdAt, updatedAt, candidatesSummary, unplacedMustVisits, scoring,
     )
 
     fun editWith(repo: EditFakeItineraries, logs: CapturingChangeLogs = CapturingChangeLogs()) =
@@ -516,7 +516,7 @@ class EditItineraryServiceTest : StringSpec({
         val interleaved = Itinerary.reconstitute(
             c.itineraryId, c.tripId, c.status, c.solveMode, c.generationMode, c.isFallback, c.generationState,
             listOf(ItineraryDay.of(day, 0, listOf(VisitSlot.of(poiA, null, 0, LocalTime.parse("15:00"), LocalTime.parse("16:00"))))),
-            c.createdAt, clock.instant(), c.candidatesSummary, c.unplacedMustVisits,
+            c.createdAt, clock.instant(), c.candidatesSummary, c.unplacedMustVisits, c.scoring,
         )
         val agent = EditFakeAgent(repairWith = { repo.replaceForTrip(tripId, interleaved); RepairResult(it, emptyList(), unrepairable = true) })
         val facade: ItineraryEditFacade =
