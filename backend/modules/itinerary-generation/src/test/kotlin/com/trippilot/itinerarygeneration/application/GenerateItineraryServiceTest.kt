@@ -1773,26 +1773,62 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         finished.days.first { it.date == end }.slots.single().sourcePoiId shouldBe poiByDate.getValue(end) // 2차 몫
     }
 
-    "근거를 받는 동안 일자 구성이 바뀌었으면 마무리를 버린다 — 2차 몫과 날이 겹칠 수 있다" {
+    // 6차 검수 — 2차가 도는 사이 편집이 이미 있던 날 하나를 뺐다(PUT 으로 일자 삭제). 버리면 일정이 PARTIAL 로 영영 남고
+    // 세션만 완료가 된다. 잠금 뒤 일자 뒤에 2차 몫을 이어 완료하고, 순서는 날짜순으로 다시 매긴다(빈 번호 없음).
+    "2차 동안 편집이 날을 뺐으면 남은 날 뒤에 2차 몫을 이어 완료한다 — 순서는 다시 매기고 세션도 완료" {
+        val end = start.plusDays(2)
+        val (agent, poiByDate) = emittingAgent(end)
+        val partial = Itinerary.create(tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(start, 0, emptyList()), ItineraryDay.of(start.plusDays(1), 1, emptyList())), now, GenerationState.PARTIAL,
+        )
+        val dropped = Itinerary.reconstitute(
+            partial.itineraryId, partial.tripId, partial.status, partial.solveMode, partial.generationMode, partial.isFallback,
+            GenerationState.PARTIAL, listOf(ItineraryDay.of(start, 0, emptyList())),
+            partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits,
+        )
+        val repo = object : FakeItineraries() {
+            override fun lockForTrip(tripId: UUID) = byTrip[tripId]?.takeIf { it.days.size == 1 } ?: dropped.also { byTrip[tripId] = it }
+        }
+        repo.byTrip[tripId] = partial
+        val sessionRepo = FakeGenerationSessions()
+        val session = sessionRepo.save(GenerationSession.start(acc, tripId, GenerationMode.FULLY_AI, now))
+
+        SecondPhaseGenerator(agent, repo, genRevisions(repo, stubTrips), genSessions(repo = sessionRepo), FakeScoredCandidatePoolStore(), NOOP_TX, clock)
+            .completeRemaining(tripId, partial.itineraryId, agentInputFor(end), isRegeneration = false, sessionId = session.sessionId)
+
+        val finished = repo.byTrip.getValue(tripId)
+        finished.generationState shouldBe GenerationState.COMPLETE
+        finished.days.map { it.date } shouldContainExactly listOf(start, end)
+        finished.days.map { it.dayOrder } shouldContainExactly listOf(0, 1)
+        finished.days.single { it.date == end }.slots.single().sourcePoiId shouldBe poiByDate.getValue(end)
+        sessionRepo.rows.getValue(session.sessionId).status shouldBe GenerationStatus.COMPLETED
+    }
+
+    // 방어 — 같은 일정의 쓰기는 날을 더하지 않아 겹칠 수 없다. 그래도 겹치면 조용히 버리지 않고 실패로 드러낸다(INV-4).
+    "2차 몫과 같은 날이 잠금 뒤 일정에 있으면 FAILED 로 드러낸다 — 세션도 실패" {
         val end = start.plusDays(1)
         val (agent, _) = emittingAgent(end)
         val partial = Itinerary.create(tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
             listOf(ItineraryDay.of(start, 0, emptyList())), now, GenerationState.PARTIAL,
         )
-        val reshaped = Itinerary.reconstitute(
+        val overlapping = Itinerary.reconstitute(
             partial.itineraryId, partial.tripId, partial.status, partial.solveMode, partial.generationMode, partial.isFallback,
             GenerationState.PARTIAL, listOf(ItineraryDay.of(start, 0, emptyList()), ItineraryDay.of(end, 1, emptyList())),
             partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits,
         )
         val repo = object : FakeItineraries() {
-            override fun lockForTrip(tripId: UUID) = reshaped.also { byTrip[tripId] = it }
+            override fun lockForTrip(tripId: UUID) = byTrip[tripId]?.takeIf { it.generationState != GenerationState.PARTIAL || it.days.size == 2 }
+                ?: overlapping.also { byTrip[tripId] = it }
         }
         repo.byTrip[tripId] = partial
+        val sessionRepo = FakeGenerationSessions()
+        val session = sessionRepo.save(GenerationSession.start(acc, tripId, GenerationMode.FULLY_AI, now))
 
-        SecondPhaseGenerator(agent, repo, genRevisions(repo, stubTrips), genSessions(), FakeScoredCandidatePoolStore(), NOOP_TX, clock)
-            .completeRemaining(tripId, partial.itineraryId, agentInputFor(end), isRegeneration = false)
+        SecondPhaseGenerator(agent, repo, genRevisions(repo, stubTrips), genSessions(repo = sessionRepo), FakeScoredCandidatePoolStore(), NOOP_TX, clock)
+            .completeRemaining(tripId, partial.itineraryId, agentInputFor(end), isRegeneration = false, sessionId = session.sessionId)
 
-        repo.byTrip.getValue(tripId) shouldBe reshaped // 그대로
+        repo.byTrip.getValue(tripId).generationState shouldBe GenerationState.FAILED
+        sessionRepo.rows.getValue(session.sessionId).status shouldBe GenerationStatus.FAILED
     }
 
     // 4차 검수 — 2차 마무리는 잠금 **뒤** 현행으로 판정한다. 잠금 전에 읽은 값(PARTIAL)으로 정하면, 그 사이 끝난 편집(COMPLETE)

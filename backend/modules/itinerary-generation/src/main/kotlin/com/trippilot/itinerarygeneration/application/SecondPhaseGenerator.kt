@@ -36,8 +36,9 @@ import java.util.UUID
  * 진행 상태·재시도·노출 책임은 백엔드가 진다.
  *
  * **별도 빈인 이유**: `@Async` 는 프록시로 동작해 같은 빈 내부 호출(self-invocation)에는 걸리지 않는다.
- * **경합 처리**: 2차 결과 반영은 아직 PARTIAL 인 일정에만 적용한다. 그 사이 사용자가 편집·재생성했다면
- * `completeGeneration` 이 409 를 던지므로 **덮어쓰지 않고 포기**한다(lost update 방지).
+ * **경합 처리**(일정 쓰기 잠금 뒤 현행으로 판정 — TRIP-1412): 재생성(다른 id)이나 상태 전이(PARTIAL 이 아님)가 있었으면
+ * 결과를 **버린다**(덮어쓰지 않는다). 같은 일정의 이미 있는 일자 편집(TRIP-1000)·재계획 반영·되돌리기는 막지 않는다 —
+ * 2차 몫을 **잠금 뒤 일자** 뒤에 이어 붙여, 그 사이 쓰기가 되돌아가지 않게 한다.
  */
 @Component
 class SecondPhaseGenerator(
@@ -183,14 +184,18 @@ class SecondPhaseGenerator(
             // 근거를 받는 동안(실측 17.5초) 같은 일정에 쓰기가 끼었을 수 있다 — 이미 있는 일자의 편집(TRIP-1000), 재계획 반영·되돌리기.
             // 잠금 전 일자로 쓰면 그 쓰기가 조용히 되돌아간다. 그래서 **잠금 뒤 일자** 위에 2차 몫을 잇고 근거를 다시 붙인다
             // (근거는 날짜·장소로 맞춘다 — 끼어든 쓰기가 바꾼 슬롯은 맞는 근거가 없으면 제 문장을 지킨다).
-            // 일자 구성이 바뀌었으면(2차 몫과 날이 겹칠 수 있다) 잇지 않고 버린다.
-            if (latest.days.map { it.date } != current.days.map { it.date }) {
-                log.info("생성 마무리 폐기 — 근거를 받는 사이 일자 구성이 바뀜. tripId={}", tripId)
-                return@execute null
+            //
+            // 그 쓰기들은 날을 더하지 않는다(편집은 없는 날을 409 로 막고, 재계획은 있는 날만 바꾼다) — 그래서 2차 몫과 날이
+            // 겹치는 일은 없다. 편집이 날을 **뺐을** 수는 있어, 순서는 날짜순으로 다시 매긴다(빈 번호를 남기지 않는다).
+            // 그래도 겹치면 불변식이 깨진 것이라 던진다 — 위 호출부가 FAILED 로 드러낸다(INV-4).
+            check(latest.days.none { d -> remaining.any { it.date == d.date } }) {
+                "2차 몫과 같은 날이 이미 일정에 있습니다 — 이어 붙일 수 없습니다. tripId=$tripId"
             }
+            val merged = (latest.days + remaining).sortedBy { it.date }
+                .mapIndexed { i, d -> if (d.dayOrder == i) d else ItineraryDay.of(d.date, i, d.slots) }
 
             val updated = latest.completeGeneration(
-                (latest.days + remaining).withReasons(reasons),
+                merged.withReasons(reasons),
                 clock.instant(),
                 output?.solveMode ?: latest.solveMode,
                 output?.isFallback ?: latest.isFallback,
