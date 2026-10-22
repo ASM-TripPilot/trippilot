@@ -46,6 +46,27 @@ def test_pair_ignores_relations_and_names_that_only_contain_a_region(text: str) 
     assert region_pair(text) is None
 
 
+@pytest.mark.parametrize("text", ["제주 애월 가는 길에 카페 추천해줘", "서울 홍대 가는 길에 들를 곳", "부산 해운대 가는 길에 맛집", "홍대 이태원 가는 길에",
+                                  "서울에서 홍대 가는 길에 들를 곳", "부산에서 해운대 가는 길에 맛집", "제주 공항에서 애월 가는 길에 카페",
+                                  "해운대에서 부산역 가는 길", "홍대에서 서울역 가는 길", "애월에서 제주 가는 길",  # 거꾸로도 — 시청 한 점이 끝이 된다
+                                  "홍대 말고, 이태원 가는 길에 카페", "홍대 아니고 이태원 가는 길에 들를 곳", "홍대는 됐고 이태원 가는 길에"])
+def test_route_pair_needs_a_departure_marker_and_not_a_city_to_its_own_district(text: str) -> None:
+    assert region_pair(text) is None  # 시·도가 동네를 꾸민 말 · 시·도와 그 안의 동네 · 배제("말고")는 출발이 아니다
+
+
+@pytest.mark.parametrize("text", ["애월에서 성산 가는 길", "홍대 찍고 이태원 가는 길에 들를 곳", "홍대 들렀다 이태원 가는 길에", "홍대 구경하고 이태원 가는 길에",
+                                  "홍대 놀다가 이태원 가는 길에", "홍대 들러서 이태원 가는 중에", "홍대 보고, 이태원 가는 길에"])
+def test_route_pair_with_a_departure_marker_is_a_pair(text: str) -> None:
+    assert region_pair(text) is not None
+
+
+def test_plain_region_is_a_table_name_plus_particles_only() -> None:
+    from trippilot.domain.region_centers import plain_region
+
+    assert plain_region("홍대에") == "홍대" and plain_region("이태원") == "이태원" and plain_region("제주도") == "제주"  # '도'는 조사로도 읽힌다 — 지역 낱말이긴 하다
+    assert plain_region("서울역") is None and plain_region("해운대해수욕장") is None and plain_region("서울숲") is None
+
+
 def test_mentions_are_regions_said_not_names_that_contain_one() -> None:
     assert [n for _, n in region_mentions("서울 전주비빔밥 맛집")] == ["서울"]
     assert region_mentions("성수기에도 한적한 곳") == [] and region_mentions("세종대왕 동상 근처") == []

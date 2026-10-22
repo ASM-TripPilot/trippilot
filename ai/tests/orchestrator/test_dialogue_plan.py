@@ -277,6 +277,35 @@ def test_plan_path_follow_up_keeps_the_previous_area_not_the_itinerary() -> None
     assert [c["name"] for c in out.answer.payload["candidates"]] == ["흰여울 카페"]
 
 
+def test_plan_path_pair_in_the_utterance_steers_only_a_single_tool() -> None:
+    """"홍대 맛집이랑 거기서 이태원 가는 길에 들를 카페" 가 도구 둘로 나뉘면 홍대 맛집 몫은 홍대 앵커여야 한다 — 발화의 짝을 모든
+    도구에 주면 홍대 맛집도 홍대·이태원 사이가 됐다(2026-10-22 검증)."""
+    from trippilot.domain.region_centers import region_center
+
+    class _Recording(to._ExplorePool):
+        def __init__(self) -> None:
+            self.requests: list = []
+
+        def build(self, request, now):
+            self.requests.append(request)
+            return super().build(request, now)
+
+    pool = _Recording()
+    plan = _plan_json(("EXPLORE_PLACES", {"region": "홍대", "category": "FOOD"}), ("EXPLORE_PLACES", {"region": "이태원", "category": "CAFE"}))
+    b = _plan_build(plan, ports=HandlerPorts(poi_info=to._PoiInfo(), weather=to._Weather(), pool_builder=pool))
+    b.orch.turn(to._input("홍대 맛집이랑 거기서 이태원 가는 길에 들를 카페 알려줘", snapshot=to._NO_TRIP))
+    assert {r.anchor for r in pool.requests} == {region_center("홍대")[1], region_center("이태원")[1]}
+
+
+def test_plan_path_follow_up_still_skips_shown_places_when_split_into_two_tools() -> None:
+    """도구 둘로 나뉜 "더 알려줘"에도 최근 대화는 가야 한다 — 짝만 막으려고 heard 를 비우자 보인 곳이 다시 나왔다(재검증)."""
+    plan = _plan_json(("EXPLORE_PLACES", {"region": "홍대", "category": "FOOD"}), ("EXPLORE_PLACES", {"region": "이태원", "category": "CAFE"}))
+    b = _plan_build(plan, ports=_PLAN_PORTS)
+    turns = (to.RecentTurn("USER", "홍대 맛집이랑 이태원 카페 알려줘"), to.RecentTurn("ASSISTANT", "감천문화마을, 흰여울 카페가 있어요."))
+    out = b.orch.turn(to._input("홍대 맛집이랑 이태원 카페 더 알려줘", snapshot=to._NO_TRIP, recent_turns=turns))
+    assert out.answer.payload is None  # 흰여울 카페는 앞 답에 적힌 곳 — 다시 내지 않는다
+
+
 def _plan_events(b) -> list[FallbackEvent]:
     return [e for e in to._fallbacks(b.trace) if e.from_mode == "llm_dialogue_plan"]
 

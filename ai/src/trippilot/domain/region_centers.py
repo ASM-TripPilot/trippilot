@@ -55,14 +55,44 @@ def region_center(text: str) -> tuple[str, GeoPoint, float] | None:
 
 # 표 이름 뒤에 와도 되는 말 — 그 지역을 가리키는 접미 + 조사(홍대입구역이랑·제주도·서울에서). 다른 한글이 붙으면 다른 낱말이다
 # (성수기·세종대왕·서울대·인천공항·전주비빔밥·명동교자). 성산동은 서울 마포라 제주 성산이 아니다
-_MENTION_TAIL = re.compile(r"(?:특별시|광역시|특별자치도|특별자치시|입구역|입구|해수욕장|해변|시내|시|도|군|구|동|읍|면|역|섬|항|쪽|근처|일대)?"
-                           r"(?:에서|에선|엔|에|의|으로|로|이랑|랑|하고|와|과|이나|나|인데|이야|은|는|이|가|을|를|도|만|까지|부터|요){0,2}")
+_SUFFIX = r"(?:특별시|광역시|특별자치도|특별자치시|입구역|입구|해수욕장|해변|시내|시|도|군|구|동|읍|면|역|섬|항|쪽|근처|일대)?"
+_JOSA = r"(?:에서|에선|엔|에|의|으로|로|이랑|랑|하고|와|과|이나|나|인데|이야|은|는|이|가|을|를|도|만|까지|부터|요){0,2}"
+_MENTION_TAIL = re.compile(_SUFFIX + _JOSA)
+_JOSA_ONLY = re.compile(_JOSA)
 # '…동'이 다른 곳인 이름 — 서울 성산동·평창동, 부산 거제동, 성남 여수동
 _NOT_WITH_DONG = frozenset({"성산", "평창", "거제", "여수"})
 # 두 번째 이름 뒤(역·입구역·쪽·근처·까지·의 같은 접미 낱말과 '그·둘'을 사이에 두어도 된다)의 '사이' — 사이다·사이즈·사이판·사이트는
 # 아니다. 관계의 사이("현지인 사이에서 유명한 제주 애월")는 이름 앞이라 아니다. '중간'은 뺐다 — "부산 해운대 중간 가격"
-_BETWEEN_AFTER = re.compile(r"(?:\s?(?:역|입구역|입구|쪽|근처|까지|의))*\s?,?\s?(?:(?:그|둘)\s?)?사이(?![다즈판트드렌클버언])"
-                            r"(?!에서\s?(?:고민|망설|고르|골라|결정|갈등))")  # "A랑 B 사이에서 고민" — 고르는 사이다
+_BETWEEN_AFTER = re.compile(r"(?:\s?(?:역|입구역|입구|쪽|근처|까지|의))*\s?,?\s?(?:(?P<between>(?:그|둘)\s?)?사이(?![다즈판트드렌클버언])"
+                            r"(?!에서\s?(?:고민|망설|고르|골라|결정|갈등))"  # "A랑 B 사이에서 고민" — 고르는 사이다
+                            # "A에서 B 가는 길에"·"A에 있다가 B 넘어가는길에"·"B로 가다가" — 두 곳 사이를 지나는 길
+                            r"|(?P<route>(?:\s?(?:역|입구역|입구|쪽))?(?:으로|로|에|까지)?\s?(?:넘어|건너)?\s?(?:가는\s?(?:길|중|도중)|가다가)))")
+# 가는 길 꼴은 앞 이름 뒤에 출발 표지(에서·부터·출발·머물다 떠나는 말 — 있다가·놀다가·찍고·구경하고·들러서·들렀다·보고)가 있어야
+# 짝이다 — "제주 애월 가는 길에"·"서울 홍대 가는 길에"는 시·도가 동네를 꾸민 말이다. 배제·대조("홍대 말고, 이태원 가는 길")는 짝이
+# 아니다 — 어미만 보면 '말고'의 '고'가 출발이 됐다
+_DEPART = re.compile(r"에서|부터|출발|(?:있다가|놀다가|쉬다가|머물다가|갔다가|갔다|찍고|구경하고|들러서|들렀다가|들렀다|들르고|보고|먹고"
+                     r"|거쳐서|거쳐|지나서|지나)(?=[\s,]|$)")
+_NOT_FROM = re.compile(r"말고|아니고|아니라|빼고|제외|됐고|싫|별로")
+
+# 지역 표 이름의 행정 구역 — (시·도 앞글자, 시·군·구 앞글자). NL2SQL 행(sido·sigungu 칸)을 이것으로 거른다 — SQL 은 위치가 아니라
+# 이름을 읽어 "홍대"에 천안홍대용과학관(충남)·쾨닉 서울(용산구)을 냈다(2026-10-22 테스트 화면). 시·군은 sigungu 만(도 정식 이름이
+# 바뀐다 — 전북특별자치도), 시·도는 sido 만
+_AREA: dict[str, tuple[str | None, tuple[str, ...]]] = {
+    **{name: (name, ()) for name in ("서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "제주")},
+    "강남": ("서울", ("강남구", "서초구")),  # 강남역 서편(서초동·신논현)은 서초구
+    "홍대": ("서울", ("마포구",)), "명동": ("서울", ("중구",)), "종로": ("서울", ("종로구",)), "이태원": ("서울", ("용산구",)),
+    "성수": ("서울", ("성동구",)), "잠실": ("서울", ("송파구",)), "여의도": ("서울", ("영등포구",)),
+    "해운대": ("부산", ("해운대구",)), "광안리": ("부산", ("수영구",)), "남포": ("부산", ("중구",)), "기장": ("부산", ("기장군",)),
+    "서귀포": ("제주", ("서귀포시",)), "애월": ("제주", ("제주시",)), "성산": ("제주", ("서귀포시",)), "중문": ("제주", ("서귀포시",)),
+    "우도": ("제주", ("제주시",)),
+}
+
+
+def region_area(name: str) -> tuple[str | None, tuple[str, ...]]:
+    """표 이름 → (sido 앞글자, sigungu 앞글자들) — (None, ()) 이면 표에 없는 이름(거르지 않는다)."""
+    if name in _AREA:
+        return _AREA[name]
+    return (None, (name,)) if name in _CENTERS else (None, ())
 
 
 def region_mentions(text: str) -> list[tuple[int, str]]:
@@ -102,6 +132,20 @@ def region_pair(text: str) -> tuple[tuple[str, GeoPoint], tuple[str, GeoPoint]] 
         return None
     first, second = sorted((next(h for h in hits if h[2] == n) for n in names), key=lambda h: h[1])
     after = text[second[1] + len(second[2]):]
-    if not _BETWEEN_AFTER.match(after, _MENTION_TAIL.match(after).end()):
+    m = _BETWEEN_AFTER.match(after, _MENTION_TAIL.match(after).end())
+    if m is None:
         return None
+    if m.group("route"):  # 시·도와 그 안의 동네("서울에서 홍대 가는 길"·"해운대에서 부산역 가는 길")는 시청 한 점이 끝이 된다 — 동네 한 곳으로
+        between = text[first[1] + len(first[2]):second[1]]
+        if not _DEPART.search(between) or _NOT_FROM.search(between) or _city_and_its_district(first[2], second[2]):
+            return None
     return tuple((name, GeoPoint(*_CENTERS[name][:2])) for _, _, name in (first, second))
+
+
+def _city_and_its_district(a: str, b: str) -> bool:
+    return any(x in _AREA and _AREA[x][1] == () and region_area(y)[0] == x for x, y in ((a, b), (b, a)))
+
+
+def plain_region(word: str) -> str | None:
+    """낱말이 표 이름 + 조사뿐이면 그 이름("홍대에"·"이태원") — 접미가 붙은 "서울역"·"해운대해수욕장"은 다른 이름이라 None."""
+    return next((name for name in _CENTERS if word.startswith(name) and _JOSA_ONLY.fullmatch(word, len(name))), None)

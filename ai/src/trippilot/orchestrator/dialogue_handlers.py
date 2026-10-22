@@ -52,7 +52,7 @@ from trippilot.domain.intent import DIALOGUE_INTENTS, Intent
 from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory, counts_as_food, reputation_bonus
 from trippilot.domain.theme_tags import themes_in
 from trippilot.domain.poi_curation import CandidatePoolRequest
-from trippilot.domain.region_centers import bare_region, region_center, region_mentions, region_pair
+from trippilot.domain.region_centers import bare_region, plain_region, region_area, region_center, region_mentions, region_pair
 from trippilot.domain.transit import TransitPurpose
 from trippilot.domain.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, _MAX_LENGTH, _violates, clock_times
@@ -228,6 +228,7 @@ class TurnContext:
     # 이번 발화 원문 — 이어 묻기 판정에만 쓴다. 계획 경로는 utterance 를 비우지만(NL2SQL 이 다른 도구 몫을 읽지 않게) 이건 싣는다 —
     # 분류가 "더알려줘"를 계획으로 보내면 이어 묻기를 몰라 제주 일정 근처가 다시 나왔다(2026-10-22 실 스택)
     heard: str = ""
+    solo: bool = True  # 이 발화가 이 핸들러 몫뿐인가 — 계획 경로가 도구 둘 이상으로 나누면 False(발화의 두 곳 사이는 도구 하나일 때만)
 
     def __post_init__(self) -> None:
         if self.now.tzinfo is None:
@@ -1347,6 +1348,7 @@ class _Anchor:
 # 바꿔 찾으면 물은 것과 다른 답이다. 같은 섬·같은 도 안의 짝(애월·성산 57km, 강릉·속초 56km)은 사이로 찾는다
 _BETWEEN_KM = (1.0, 8.0)
 _BETWEEN_BAND = (0.25, 0.8, 2.0)
+_BETWEEN_INNER = (0.15, 0.85)
 _BETWEEN_MAX_APART_KM = 80.0
 _FAR_NOTE = "두 곳이 멀어 그 사이는 아직 찾아 줄 수 없다"
 # 앞 요청을 이어서 더 달라는 말 — 요청 동사 앞이나 문장 끝의 더·또("더 알려줘"·"더알려줘"·"좀더 보여줘"·"또 없어?"·"하나만 더"),
@@ -1379,20 +1381,26 @@ def _within_pair(said: str, pair: _Anchor) -> bool:
     return bool(said_names) and said_names <= names
 
 
-def _on_the_way(anchor: _Anchor) -> Callable[[GeoPoint], bool]:
-    """두 곳을 잇는 선분에서 띠 폭 안인가 — between 이 아니면 늘 참. 선분 위 가장 가까운 점은 평면 근사(경도에 cos 위도)로 찾는다."""
+def _on_the_way(anchor: _Anchor) -> tuple[Callable[[GeoPoint], float | None], Callable[[float | None], bool]]:
+    """(띠 안이면 선분 위 자리 0~1 아니면 None, 그 자리가 가운데인가). between 이 아니면 모두 0.5·참. 가운데 = 양 끝 동네(선분의
+    15% 안)를 뺀 것 — 끝은 '사이'가 아니다(홍대·이태원 사이에 이태원 끝만 다섯 곳 나왔다, 2026-10-22 테스트 화면). 선분이 띠 폭의
+    두 배보다 짧으면(명동·종로 1km) 가운데를 가르지 않는다. 선분 위 가장 가까운 점은 평면 근사(경도에 cos 위도)로 찾는다."""
     if anchor.ends is None:
-        return lambda p: True
+        return (lambda p: 0.5), (lambda t: t is not None)
     (_, a), (_, b) = anchor.ends
     ratio, low, high = _BETWEEN_BAND
-    band = min(max(haversine_km(a, b) * ratio, low), high)
+    apart = haversine_km(a, b)
+    band = min(max(apart * ratio, low), high)
     k = math.cos(math.radians((a.lat + b.lat) / 2))
     dx, dy = (b.lng - a.lng) * k, b.lat - a.lat
 
-    def near(p: GeoPoint) -> bool:
+    def near(p: GeoPoint) -> float | None:
         t = max(0.0, min(1.0, ((p.lng - a.lng) * k * dx + (p.lat - a.lat) * dy) / (dx * dx + dy * dy or 1.0)))
-        return haversine_km(p, GeoPoint(a.lat + t * dy, a.lng + t * dx / k)) <= band
-    return near
+        return t if haversine_km(p, GeoPoint(a.lat + t * dy, a.lng + t * dx / k)) <= band else None
+
+    def inner(t: float | None) -> bool:
+        return t is not None and (apart < 2 * band or _BETWEEN_INNER[0] <= t <= _BETWEEN_INNER[1])
+    return near, inner
 
 
 def _follow_up(ctx: TurnContext) -> tuple[str, str, str, tuple[str, ...]] | None:
@@ -1411,8 +1419,8 @@ def _follow_up(ctx: TurnContext) -> tuple[str, str, str, tuple[str, ...]] | None
             if holder is None and region_mentions(normalize(text)):
                 holder = text
             continue
-        if not asks_for_places(text) and _event_noun(text, None) is None:  # 행사를 묻는 꼴이어야 사슬을 연다
-            return None
+        if not asks_for_places(text) and _event_noun(text, None) is None and region_pair(normalize(text)) is None:
+            return None  # 장소·행사 찾기 말이나 두 곳 사이 말("사이 거리 얼마야?"도 — 그 사이를 이어 묻는 것이 그럴듯하다)이어야 사슬을 연다
         shown = " ".join(t for r, t in turns[i + 1:] if r == "ASSISTANT")  # 사슬 전체에서 보인 곳
         return holder or text, shown, " ".join(t for _, t in turns[i:]), tuple(t for r, t in turns[i:] if r == "USER")
     return None
@@ -1474,7 +1482,8 @@ def _explore_anchor(ctx: TurnContext) -> _Anchor | None:
     said = ctx.arguments.get("region")
     # 발화의 두 곳 사이 — 분류는 둘 중 한 곳만 채우기도 한다. 분류가 짝 밖의 지역을 채웠으면 그것이 이긴다("홍대 이태원 사이 말고
     # 성수 쪽"). 계획 경로는 발화가 없어 인자로 본다
-    between = _between(ctx.utterance)
+    # 계획 경로는 utterance 를 비운다 — heard 에 발화가 있다. 도구 둘로 나뉜 발화의 짝은 한 도구(홍대 맛집) 몫이 아니다
+    between = _between(ctx.heard or ctx.utterance) if ctx.solo else None
     if between is None or said and not _within_pair(said, between):
         between = _between(" ".join(v for v in (said, ctx.arguments.get("theme")) if v))
     if between is not None:
@@ -1517,11 +1526,14 @@ def _said_night(category: str | None, theme: str | None, utterance: str) -> bool
     return bool(_NIGHT.search(f"{theme or ''} {utterance}")) or category == PoiCategory.NIGHT_VIEW.value
 
 
-def _explore_rank(pois: Iterable[Poi], category: str | None, theme: str | None, utterance: str = "") -> list[Poi]:
-    """결정론 정렬 — 주제 맞음(밤·야경 주제면 야경·나이트라이프) → 주제 낱말이 태그·이름에 든 수 → '요즘 인기' 태그 →
-    저장 수 → 별점 → 영업시간 보유 → poi_id. 숙소·표시 불가 이름은 뺀다."""
+def _explore_rank(pois: Iterable[Poi], category: str | None, theme: str | None, utterance: str = "", *,
+                  ahead: Callable[[Poi], bool] | None = None) -> list[Poi]:
+    """결정론 정렬 — `ahead`(두 곳 사이의 가운데) → 주제 맞음(밤·야경 주제면 야경·나이트라이프) → 주제 낱말이 태그·이름에 든 수 →
+    '요즘 인기' 태그 → 저장 수 → 별점 → 영업시간 보유 → poi_id. 숙소·표시 불가 이름은 뺀다."""
     night = _said_night(category, theme, utterance)
-    words = tuple(w for w in _THEME_WORD.findall(theme or "") if w not in _GENERIC_WORDS)
+    # 지역 이름 + 조사("홍대에 있다가 이태원 넘어가는길에")는 앵커지 이름 적중이 아니다 — 이태원 이름이 든 곳만 위로 왔다(2026-10-22).
+    # "서울역"·"해운대해수욕장"처럼 접미가 붙은 말은 그 이름의 장소를 가리키니 남긴다
+    words = tuple(w for w in _THEME_WORD.findall(theme or "") if w not in _GENERIC_WORDS and plain_region(w) is None)
     themes = frozenset(themes_in(theme))   # "혼자 가기 좋은"·"아이랑" → 혼밥·혼술·아이동반 (태그 글자와 안 맞는 말을 잇는다)
     no_food = category is None and bool(theme and _SIGHTSEEING.search(theme))
 
@@ -1535,8 +1547,9 @@ def _explore_rank(pois: Iterable[Poi], category: str | None, theme: str | None, 
         is_night = p.category is PoiCategory.NIGHT_VIEW or NIGHTLIFE_TAG in p.tags
         hits = sum(1 for w in words if w in p.name or any(w in t for t in p.tags)) + len(themes & set(p.tags))
         # 평판(인기·평점높음)은 저장 수 뒤, 별점 앞 — 저장 수가 0 인 지금은 사실상 첫 기준이다. 태그가 없으면 0 이라 불이익이 없다
-        return (night and not is_night, -hits, TRENDING_TAG not in p.tags, -p.saved_count, -reputation_bonus(p.tags), -(p.rating or 0.0),
-                0 if p.open_hours else 1, str(p.poi_id))
+        # 가운데 먼저(ahead)는 주제 맞음·이름 적중 뒤, '요즘 인기' 앞 — 끝의 인기 장소가 가운데를 밀던 것만 막는다(끝의 야경은 밤 주제면 먼저)
+        return (night and not is_night, -hits, ahead is not None and not ahead(p), TRENDING_TAG not in p.tags, -p.saved_count,
+                -reputation_bonus(p.tags), -(p.rating or 0.0), 0 if p.open_hours else 1, str(p.poi_id))
 
     picked: list[Poi] = []
     per: dict[PoiCategory, int] = {}
@@ -1558,8 +1571,15 @@ def _explore_by_sql(ctx: TurnContext, anchor: _Anchor | None, category: str | No
     args = {k: v for k, v in (("region", ctx.arguments.get("region")), ("theme", theme),
                               ("category", _CATEGORY_KO.get(category or "", category))) if v}
     night = _said_night(category, theme, _night_heard(ctx))
-    sido = anchor.label if anchor is not None and anchor.kind == "region" and anchor.label in _SIDO_LEVEL else None
+    sido, gus = region_area(anchor.label) if anchor is not None and anchor.kind == "region" else (None, ())
     shown = _shown_before(ctx)  # 자르기 전에 뺀다 — 자른 다섯 곳에서 빼면 남은 행이 있어도 비었다
+
+    def in_area(r: PlaceRow) -> bool:  # 앵커 지역의 시·도·시군구 밖 행은 버린다 — SQL 은 이름을 읽어 "홍대"에 천안·용산구 행을 냈다
+        if sido is not None and not (r.sido or "").startswith(sido):
+            return False
+        if not gus or any((r.sigungu or "").startswith(gu) for gu in gus):
+            return True
+        return r.sigungu is None  # 시군구를 못 뽑은 행은 대조할 수 없으니 둔다(시·도 앵커면 위에서 시·도는 맞춘 뒤다)
 
     def fn() -> dict:
         budget = min(_FANOUT_SQL_CAP_S, ctx.remaining_ms() * 0.4 / 1000)  # 팬아웃 예산(오케스트레이터 min(3s, 잔여×0.4)) 안
@@ -1568,8 +1588,7 @@ def _explore_by_sql(ctx: TurnContext, anchor: _Anchor | None, category: str | No
         rows = port.lookup(ctx.utterance, args, ctx.trace_id, ctx.now, timeout_sec=budget)
         if rows is None:
             return {"status": "UNAVAILABLE", "reason": "place_sql"}
-        kept = [r for r in rows if _displayable(r.name) and (night or not r.nightlife)
-                and (sido is None or (r.sido or "").startswith(sido))]
+        kept = [r for r in rows if _displayable(r.name) and (night or not r.nightlife) and in_area(r)]
         picked = [r for r in kept if not shown(r.name)][:MAX_CANDIDATES]
         areas = Counter(r.sigungu for r in picked or kept if r.sigungu).most_common(1)
         label = anchor.label if anchor is not None else (areas[0][0] if areas else None)
@@ -1807,7 +1826,7 @@ def _explore_events(ctx: TurnContext, anchor: _Anchor, theme: str | None) -> Han
         # 두 곳 사이면 두 곳을 잇는 선 가까이만, 이어 묻기면 앞에서 보인 행사는 뺀다(장소와 같다, BR-AO-27)
         on_the_way, said_before = _on_the_way(anchor), _shown_before(ctx)
         near = [e for e in map(EventInfo.from_dict, packet.data.get("events", ()))
-                if shown_event(e) and _event_text_ok(e.name) and inside(e) and on_the_way(e.coord)]
+                if shown_event(e) and _event_text_ok(e.name) and inside(e) and on_the_way[0](e.coord) is not None]
         def fits(e: EventInfo) -> bool:  # 물은 것을 채우는가 — 동네·글자 이름, 글자 이름이 없으면 종류
             hay = f"{e.name}{e.address or ''}".replace(" ", "").casefold()
             return ((not places or any(haversine_km(at, e.coord) <= km for at, km in places))
@@ -1853,13 +1872,17 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
                                  ctx.now)
         except Exception as e:  # 풀 조립은 상태값 계약이 없다 — 여기서 수렴 (DL-5), 메시지는 싣지 않는다(키 든 URL)
             return {"status": "UNAVAILABLE", "reason": f"pool_error:{type(e).__name__}"}
-        shown, on_the_way = _shown_before(ctx), _on_the_way(anchor)
+        shown, (on_the_way, inner) = _shown_before(ctx), _on_the_way(anchor)
+        at = {p.poi_id: on_the_way(p.coord) for p in pool.pois}
+        # 두 곳 사이면 가운데가 먼저, 양 끝은 모자랄 때만 — 한 번에 순위를 매겨 종류 상한(_PER_CATEGORY)이 전체에 걸리게
+        ranked = _explore_rank((p for p in pool.pois if not shown(p.name) and at[p.poi_id] is not None), category, theme,
+                               _night_heard(ctx), ahead=lambda p: inner(at[p.poi_id]))
         candidates = [{
             "poi_id": str(p.poi_id), "name": p.name, "category": _CATEGORY_KO.get(p.category.value),
             # 지역 중심에서의 거리는 사용자에게 뜻이 없다 — 일정 근처일 때만 그 일정에서의 거리를 싣는다(INV-3 거리만)
             "distance_range": _km_label(haversine_km(center, p.coord)) if anchor.kind == "itinerary" else None,
             "reason": "요즘 인기" if TRENDING_TAG in p.tags else (_CATEGORY_KO.get(p.category.value) or "가 볼 만한 곳"),
-        } for p in _explore_rank((p for p in pool.pois if not shown(p.name) and on_the_way(p.coord)), category, theme, _night_heard(ctx))]
+        } for p in ranked]
         return {"status": "OK", "candidates": candidates}
 
     return (HandlerTask("explore", fn), *sql)
