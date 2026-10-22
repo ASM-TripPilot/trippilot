@@ -159,6 +159,7 @@ class TripSummaryNarratorTest : StringSpec({
         owned: OwnedTripPeriod? = OwnedTripPeriod(acc, start, end),
         trip: List<ArchiveDayView> = days,
         onLookup: () -> Unit = {},
+        onArchive: () -> Unit = {},
     ): Fixture {
         val clock = MutableClock(Instant.parse("2026-08-13T01:00:00Z"))
         val summaries = Summaries(summary, clock)
@@ -173,7 +174,7 @@ class TripSummaryNarratorTest : StringSpec({
             )
         }
         val archive = object : ArchiveRecordFacade {
-            override fun findDailyVisits(tripId: UUID) = trip.also { onLookup() }
+            override fun findDailyVisits(tripId: UUID) = trip.also { onArchive() }
             override fun findRouteDistances(tripId: UUID) = emptyMap<LocalDate, Int>()
         }
         val surfaces = object : PoiSurfaceFacade {
@@ -187,7 +188,7 @@ class TripSummaryNarratorTest : StringSpec({
         }
         val changeLog = object : ChangeLogFacade {
             override fun append(command: AppendChangeLog) = Unit
-            override fun findTimeline(accountId: UUID, tripId: UUID, limit: Int) = emptyList<ChangeLogEntryView>()
+            override fun findTimeline(accountId: UUID, tripId: UUID, limit: Int) = emptyList<ChangeLogEntryView>().also { onLookup() } // 근거 조회의 마지막
         }
         val narrator = TripSummaryNarrator(
             owners, trips, archive, surfaces, summaries, agent, ReflectionCardCodec(ObjectMapper()),
@@ -293,6 +294,7 @@ class TripSummaryNarratorTest : StringSpec({
         allSkipped.summaries.stored shouldBe ruleSummary()
         // 더 할 것이 없다 — 스윕이 다시 집지 않게 시도를 채운다(방문 0곳·전부 건너뜀 요약을 쓸어 담지 않는다)
         (deleted.summaries.attempts to allSkipped.summaries.attempts) shouldBe (TripSummaryNarrator.MAX_ATTEMPTS to TripSummaryNarrator.MAX_ATTEMPTS)
+        (deleted.summaries.attemptedAt to allSkipped.summaries.attemptedAt) shouldBe (null to null) // 선점 없이 채운다 — 부르러 간 적이 없다
         allSkipped.narrator.sweep()
         allSkipped.executor.held.size shouldBe 0
     }
@@ -413,7 +415,7 @@ class TripSummaryNarratorTest : StringSpec({
         warnedBeforeCall shouldBe true
     }
 
-    "선점은 조회가 끝난 뒤, 부르기 바로 앞이다 — 다시 선점 여유가 덮을 것은 연결 시간뿐이다" {
+    "선점은 조회가 다 끝난 뒤(마지막 조회 = 변경 이력), 부르기 바로 앞이다 — 다시 선점 여유가 덮을 것은 연결 시간뿐이다" {
         var attemptsAtLookup: Int? = null
         var attemptsAtCall: Int? = null
         lateinit var f: Fixture
@@ -459,5 +461,51 @@ class TripSummaryNarratorTest : StringSpec({
 
         messages.single().let { (tripId.toString() in it && other.toString() in it && "2건" in it) shouldBe true }
         warns { f.executor.terminates = true; f.narrator.shutdown() } shouldBe emptyList() // 제때 끝나면 조용하다
+    }
+
+    "선점 전 조회가 늘 던지는 여행도 시도로 세어 상한에서 멈춘다 — 매 스윕 되풀이하며 다른 여행을 굶기지 않는다" {
+        var lookups = 0
+        val f = fixture(onArchive = { lookups++; error("실적 조회가 늘 깨진다") })
+        val messages = warns {
+            repeat(TripSummaryNarrator.MAX_ATTEMPTS + 3) {
+                f.narrator.sweep()
+                f.executor.run()
+                f.clock.now = f.clock.now.plus(Duration.ofMinutes(12))
+            }
+        }
+        lookups shouldBe TripSummaryNarrator.MAX_ATTEMPTS
+        f.agent.sent shouldBe emptyList()
+        messages.count { "선점 전" in it && "시도 1/3" in it } shouldBe 1
+        messages.count { "선점 전" in it && "상한(3)을 다 써" in it && tripId.toString() in it } shouldBe 1
+    }
+
+    "선점 전 실패도 진행 중인 다른 쪽 시도는 덮어 세지 않는다 — 다시 선점 기준을 지킨다" {
+        val f = fixture(onArchive = { error("실적 조회가 깨졌다") })
+        f.summaries.attempts = 1
+        f.summaries.attemptedAt = f.clock.now.minus(Duration.ofMinutes(1)) // 다른 파드가 1분 전에 선점해 아직 기다리는 중
+        f.narrator.request(tripId)
+        f.executor.run()
+        f.summaries.attempts shouldBe 1
+    }
+
+    "선점 뒤에 던지면 쓴 시도를 밝혀 남긴다" {
+        val f = fixture()
+        f.summaries.beforeLock = { error("쓰기 DB 가 죽었다") }
+        warns {
+            f.narrator.request(tripId)
+            f.executor.run()
+        }.single().let { ("선점 뒤" in it && "시도 1/3 로 세고 스윕이 다시 맡습니다" in it) shouldBe true }
+    }
+
+    "스윕은 맡긴 것과 이 파드에서 이미 대기·진행 중이라 건너뛴 것을 따로 센다" {
+        val f = fixture()
+        f.narrator.request(tripId) // 대기 중(아직 안 돌았다)
+        val appender = ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>().apply { start() }
+        val logger = org.slf4j.LoggerFactory.getLogger(TripSummaryNarrator::class.java) as ch.qos.logback.classic.Logger
+        logger.addAppender(appender)
+        try { f.narrator.sweep() } finally { logger.detachAppender(appender) }
+        appender.list.single { "다시 맡깁니다" in it.formattedMessage }.formattedMessage.let {
+            ("다시 맡깁니다 0건" in it && "건너뜀 1건" in it) shouldBe true
+        }
     }
 })

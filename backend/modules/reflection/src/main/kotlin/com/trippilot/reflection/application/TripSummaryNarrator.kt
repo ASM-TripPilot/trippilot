@@ -46,8 +46,8 @@ import java.util.concurrent.atomic.AtomicInteger
  * read 상한 605초+), 종료·크래시. 사용자 결정은 "만들어지기만 하면 된다"라 버려 두지 않는다: 시도는 요약 행에 남고(V2.84 `ai_attempts`·
  * `ai_attempted_at`), [sweep] 이 마지막으로 다시 짠 지 [SWEEP_WINDOW] 안인 규칙 요약 중 시도가 [MAX_ATTEMPTS] 미만이고 마지막 시도에서
  * [reclaimAfter] 가 지난 것을 다시 맡긴다.
- * **선점이 시도 하나를 쓴다** — 선점은 AI 를 부르기 바로 앞이고, 진행 중 배포·크래시로 끊긴 시도도 한 번으로 센다. 쓰지 않는 것은 실행기가 받지 않은
- * 경우(넘침·종료 중)와 선점 전 조회에서 끊긴 경우다 — 둘 다 다음 회차에 다시 집힌다.
+ * **선점이 시도 하나를 쓴다** — 선점은 AI 를 부르기 바로 앞이고, 진행 중 배포·크래시로 끊긴 시도도 한 번으로 센다. 선점 전 조회가 던져도 그 자리에서
+ * 선점해 한 번으로 센다([narrate]). 쓰지 않는 것은 실행기가 받지 않은 경우(넘침·종료 중)와 선점 전에 파드가 사라진 경우다 — 둘 다 다음 회차에 다시 집힌다.
  * 마지막 시도를 선점하는 순간 WARN 을 남긴다 — 그 시도가 파드와 함께 사라져도 "더 맡지 않는다"가 조용히 지나가지 않게(INV-4).
  * - **트랜잭션 밖이다**(TRIP-1463 교훈). 실적·재료 조회와 AI 호출은 각 퍼사드의 짧은 읽기 트랜잭션만 쓰고, 마지막 쓰기만 짧은
  *   트랜잭션에서 요약 잠금([TripSummaryRepository.findForUpdate])을 잡는다 — 커넥션을 AI 대기 동안 쥐지 않는다.
@@ -119,10 +119,7 @@ class TripSummaryNarrator internal constructor(
         return try {
             executor.execute {
                 try {
-                    narrate(tripId)
-                } catch (e: RuntimeException) {
-                    // 쓰기(DB)까지 실패한 경우다 — AI 실패는 narrate 안에서 값으로 끝난다. 규칙 요약은 남아 있다.
-                    log.warn("요약 회고를 붙이지 못했습니다 — 규칙 요약이 남습니다. tripId={}", tripId, e)
+                    narrate(tripId) // 던지지 않는다 — 실패는 안에서 시도로 세고 남긴다
                 } finally {
                     inFlight.remove(tripId)
                 }
@@ -148,8 +145,12 @@ class TripSummaryNarrator internal constructor(
         if (!agent.enabled) return
         val pending = summaries.findAiPending(SWEEP_WINDOW, reclaimAfter(), MAX_ATTEMPTS, WAITING)
         if (pending.isEmpty()) return
-        val rejected = pending.count { submit(it) == Submitted.REJECTED }
-        log.info("요약 회고를 다시 맡깁니다 {}건(시도 기록 기준 — 넘침·행·종료로 사라진 것).", pending.size - rejected)
+        val results = pending.groupingBy { submit(it) }.eachCount()
+        val rejected = results[Submitted.REJECTED] ?: 0
+        log.info(
+            "요약 회고를 다시 맡깁니다 {}건(시도 기록 기준 — 넘침·행·종료로 사라진 것). 이 파드에서 이미 대기·진행 중이라 건너뜀 {}건.",
+            results[Submitted.ACCEPTED] ?: 0, results[Submitted.SKIPPED] ?: 0,
+        )
         if (rejected > 0) log.warn("요약 회고 실행기가 {}건을 받지 않았습니다(대기열 포화·종료 중) — 다음 회차에 다시 맡습니다.", rejected)
     }
 
@@ -159,8 +160,32 @@ class TripSummaryNarrator internal constructor(
      */
     private fun reclaimAfter(): Duration = agent.summaryCallTimeout.plus(RECLAIM_MARGIN)
 
-    /** AI 문장 한 번 — 근거를 모으고, 부르기 직전에 시도를 선점하고, 부르고, 쓸 수 있으면 잠근 뒤 쓴다. */
+    /**
+     * AI 문장 한 번 — 근거를 모으고, 부르기 직전에 시도를 선점하고, 부르고, 쓸 수 있으면 잠근 뒤 쓴다. **던지지 않는다.**
+     *
+     * 어디서 던지든(근거 조회·선점·카드 읽기·환각 대조·쓰기) 그 실패는 **시도 하나로 센다** — 선점 전에 던졌으면 여기서 선점해 센다. 안 세면
+     * 늘 던지는 여행이 7일 동안 5분마다 다시 집혀(스택이 든 WARN 이 하루 수백 줄) 오래된 순 상위 자리를 차지해 다른 여행을 굶긴다. 상한(3)이 그것을 묶는다.
+     */
     internal fun narrate(tripId: UUID) {
+        val claim = Claim()
+        try {
+            narrateOnce(tripId, claim)
+        } catch (e: RuntimeException) {
+            val attempt = claim.attempt
+                ?: runCatching { writes.execute { summaries.claimAiAttempt(tripId, reclaimAfter(), MAX_ATTEMPTS) } }.getOrNull()
+            val next = when {
+                attempt == null -> "시도를 기록하지 못했거나 다른 쪽이 맡고 있습니다 — 스윕 기준대로 다시 집힐 수 있습니다"
+                attempt >= MAX_ATTEMPTS -> "시도 상한($MAX_ATTEMPTS)을 다 써 더 맡지 않고 규칙 요약으로 남깁니다"
+                else -> "시도 $attempt/$MAX_ATTEMPTS 로 세고 스윕이 다시 맡습니다"
+            }
+            log.warn("요약 회고 중 실패했습니다({}) — {}. tripId={}", if (claim.attempt == null) "선점 전" else "선점 뒤", next, tripId, e)
+        }
+    }
+
+    /** 이번 회차에 선점한 시도 번호 — 실패가 선점 전인지 뒤인지 가른다. */
+    private class Claim { var attempt: Int? = null }
+
+    private fun narrateOnce(tripId: UUID, claim: Claim) {
         val owned = owners.findOwnedPeriod(tripId) ?: return retire("DELETED", tripId)
         val ctx = trips.findGenerationContext(owned.accountId, tripId)
         val days = archive.findDailyVisits(tripId)
@@ -192,6 +217,7 @@ class TripSummaryNarrator internal constructor(
         // 지워진 여행·실을 방문이 없는 여행은 선점 없이 위에서 끝난다(시도를 쓰지 않고 채운다 — 어느 파드가 봐도 같은 결론이다).
         val attempt = writes.execute { summaries.claimAiAttempt(tripId, reclaimAfter(), MAX_ATTEMPTS) }
             ?: return outcome("NOT_CLAIMED", tripId) // 요약이 없음·이미 AI·기본 요약이거나, 다른 파드가 진행 중이거나, 상한을 다 썼다
+        claim.attempt = attempt
         if (attempt >= MAX_ATTEMPTS) {
             // 부르기 **전에** 남긴다 — 이 시도가 파드와 함께 사라져도 "더 맡지 않는다"가 기록된다.
             log.warn("요약 회고 마지막 시도({}/{})입니다 — 이번에도 못 붙이면 더 맡지 않고 규칙 요약으로 남깁니다. tripId={}", attempt, MAX_ATTEMPTS, tripId)

@@ -77,8 +77,11 @@ interface ReflectionAgentPort {
     val enabled: Boolean
 
     /**
-     * 여행 요약 회고(`TRIP_SUMMARY`) 한 번이 걸릴 수 있는 최대 시간(연결 + 소켓 read 상한). 요약 회고 스윕(TRIP-1488)이 이만큼 지나기 전에는
+     * 여행 요약 회고(`TRIP_SUMMARY`) 한 번을 기다리는 상한 — 연결 상한 + 소켓 read 상한. 요약 회고 스윕(TRIP-1488)이 이만큼(+ 여유) 지나기 전에는
      * 같은 여행을 다시 선점하지 않는다 — 다른 파드가 아직 기다리는 호출을 중복하지 않게. 경계가 꺼져 있으면 쓰이지 않는다.
+     *
+     * **총 소요의 엄밀한 상한은 아니다** — 소켓 read 상한은 바이트 사이 무응답 상한이고 DNS 조회는 들지 않는다. 총 소요를 실제로 묶는 것은 상대
+     * 백스톱(마감 없는 요청 605초 — 넘기면 상대가 504 로 끊는다)이고, read 상한(610초)이 그보다 길어 그 응답을 받는다.
      */
     val summaryCallTimeout: Duration get() = Duration.ZERO
 

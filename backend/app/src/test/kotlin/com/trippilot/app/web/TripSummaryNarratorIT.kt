@@ -229,6 +229,11 @@ class TripSummaryNarratorIT : AbstractPostgresIntegrationTest() {
         narrator.sweep()
         awaitSource(tripId, "AI")
         summaryRow(tripId) shouldBe ("바다를 따라 함께 걸었다." to "AI")
+        // 시도 채움은 규칙 요약에만 — AI 문장이 붙은 요약의 기록은 건드리지 않는다.
+        fun attempts() = jdbc.queryForObject("SELECT ai_attempts FROM trip_summary WHERE trip_id = ?", Int::class.java, tripId)
+        val before = attempts()
+        tx.executeWithoutResult { summaries.retireAiAttempts(tripId, 3) }
+        (before to attempts()) shouldBe (1 to 1)
         jdbc.update("UPDATE trip_summary SET ai_attempts = 0 WHERE trip_id = ?", tripId)
         pending() shouldBe false // 이미 AI
     }
