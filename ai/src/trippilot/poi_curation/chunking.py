@@ -168,7 +168,7 @@ def dump_chunk_vectors(path, docs: Sequence[KbDocument], model: str, vectors, *,
     for v in vectors:  # 조각 하나씩 — 3.4만 × 1024 를 파이썬 실수 목록으로 한꺼번에 펼치지 않는다
         blob += struct.pack(f"<{dim}e", *v)
     # 본체는 `F16_SHARD_CHUNKS` 조각씩 나눠 쓴다 — 한 몫이면 종전 이름 그대로(위키 파일 무변).
-    size = F16_SHARD_CHUNKS * dim * 2
+    size = max(1, F16_SHARD_CHUNKS * dim * 2)  # 빈 목록(dim 0)이면 간격 0 으로 range 가 죽는다
     parts = [bytes(blob[i:i + size]) for i in range(0, len(blob), size)] or [b""]
     names = ([blob_path(path).name] if len(parts) == 1
              else [_shard_name(path, k) for k in range(len(parts))])

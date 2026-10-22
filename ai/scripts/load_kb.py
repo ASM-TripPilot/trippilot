@@ -304,8 +304,8 @@ def load_corpus(path: Path, documents, fresh, embedding, store, budget_sec: floa
         # 저장소에 **실제로 있는** 행에서 고른다 — 끝난 문서마다 꼬리 id(#n..#39)를 펼치면 관광공사 개요 전량에서
         # 약 95만 개 id 를 만들어 매 배포 DELETE 로 보냈다(적재 Job 피크 약 126MB 몫, 한도 512Mi).
         current = {d.doc_id for d in documents}
-        prefix = documents[0].doc_id.split(":", 1)[0]
-        leftover = [i for i in store.item_ids_like(coll, f"{prefix}:%") if i not in current]
+        prefixes = sorted({d.doc_id.split(":", 1)[0] for d in documents})  # 한 파일에 출처가 섞여도 전부 본다
+        leftover = [i for p in prefixes for i in store.item_ids_like(coll, f"{p}:%") if i not in current]
         stale = {i for i in leftover if i.split("#", 1)[0] in complete}  # 끝난 문서의 통문서·낡은 꼬리
         if not pending:  # 코퍼스 밖 정리는 예산에 안 걸린 실행에서만 — 종전 규칙 그대로
             gone = {i for i in leftover if i.split("#", 1)[0] not in corpus}

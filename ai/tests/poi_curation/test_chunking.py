@@ -178,3 +178,10 @@ def test_large_vector_bodies_are_split_into_shards_under_the_file_limit(tmp_path
     assert json.loads(gzip.decompress(p.read_bytes()))["f16"] == "x.vectors.f16.gz"
     assert sorted(f.name for f in tmp_path.iterdir()) == ["x.vectors.f16.gz", "x.vectors.json.gz"]
 
+
+def test_empty_vectors_still_round_trip(tmp_path) -> None:
+    """빈 코퍼스도 머리·본체를 쓰고 0건으로 읽힌다 — 나눠 쓰기 간격이 0 이 되어 죽던 회귀(리뷰 2026-10-22)."""
+    p = tmp_path / "x.vectors.json.gz"
+    c.dump_chunk_vectors(p, [], "m", [])
+    assert len(c.load_chunk_vectors(p)) == 0
+
