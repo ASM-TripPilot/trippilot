@@ -1,6 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { GenerationDoneBar } from './GenerationDoneBar';
+import { resetToast } from '@/test-support/toastHarness';
+import { getToastBottoms } from '@/shared/ui/toastBottom';
+
+import {
+  DONE_BAR_BOTTOM,
+  DONE_BAR_MIN_HEIGHT,
+  GenerationDoneBar,
+} from './GenerationDoneBar';
 
 /**
  * TRIP-788 · AC-7 — GenerationDoneBar: BottomTab 위 완료 도킹 배너(신규 widgets, prop-driven).
@@ -18,6 +25,9 @@ import { GenerationDoneBar } from './GenerationDoneBar';
  */
 
 const noop = () => {};
+
+// 토스트 바닥 레지스트리는 모듈 싱글턴 — 파일 최상위에서 리셋한다(describe 안에만 걸면 앞 케이스의 도킹 신고가 샌다).
+afterEach(() => resetToast());
 
 describe('🔴 AC-7 · GenerationDoneBar — 체크 + 완성 문구 + 보기', () => {
   it('구조·문구·콜백: "{여행명} 일정이 완성됐어요" + 보기 press → onPressView 1회', () => {
@@ -131,5 +141,58 @@ describe('🔴 inline · 떠 있지 않은 모양 (기본은 지금 도킹 그�
     fireEvent.press(screen.getByTestId('generation-done-bar-close'));
     expect(onPressView).toHaveBeenCalledTimes(1);
     expect(onPressClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+// TRIP-1556 — 도킹이면 토스트 바닥 레지스트리에 바 윗변을 신고한다(안 하면 토스트가 바와 겹친다).
+// 바의 위치·폭(className/style)은 jest 로 잠그지 않는다 — 6-b(402·390 기기에서 아랫변이 탭 바 알약 윗변 바로 위인지).
+
+describe('🔴 TRIP-1556 · 도킹 바가 토스트 바닥을 신고한다', () => {
+  it('앵커: 아직 아무것도 안 그렸으면 신고가 없다(앞 케이스의 신고가 새지 않는다)', () => {
+    expect(getToastBottoms()).toEqual([]);
+  });
+
+  it('도킹이면 바 윗변(아랫변 + 최소 높이) 1건을 신고한다', () => {
+    // 준비·실행 — 기본(도킹) 렌더.
+    render(<GenerationDoneBar tripName="제주 여행" onPressView={noop} />);
+
+    // 단언 — 상수끼리 비교라 값 자체(82·52)는 6-b 가 본다. 정확히 1건(누적이면 길이가 늘어 red).
+    expect(getToastBottoms()).toEqual([DONE_BAR_BOTTOM + DONE_BAR_MIN_HEIGHT]);
+  });
+
+  it('inline 이면 신고하지 않는다(값 0 신고도 아님)', () => {
+    render(
+      <GenerationDoneBar tripName="제주 여행" onPressView={noop} inline />
+    );
+
+    expect(getToastBottoms()).toEqual([]);
+  });
+
+  it('도킹 바가 사라지면 신고가 해제된다', () => {
+    const view = render(
+      <GenerationDoneBar tripName="제주 여행" onPressView={noop} />
+    );
+    expect(getToastBottoms()).toHaveLength(1); // 앵커 — 해제 전엔 있다.
+
+    view.unmount();
+
+    expect(getToastBottoms()).toEqual([]);
+  });
+
+  it('inline 이 바뀌면 신고가 따라가고, 다시 그려도 늘어나지 않는다', () => {
+    const view = render(
+      <GenerationDoneBar tripName="제주 여행" onPressView={noop} />
+    );
+    expect(getToastBottoms()).toHaveLength(1);
+
+    view.rerender(
+      <GenerationDoneBar tripName="제주 여행" onPressView={noop} inline />
+    );
+    expect(getToastBottoms()).toEqual([]);
+
+    view.rerender(
+      <GenerationDoneBar tripName="부산 여행" onPressView={noop} />
+    );
+    expect(getToastBottoms()).toHaveLength(1);
   });
 });

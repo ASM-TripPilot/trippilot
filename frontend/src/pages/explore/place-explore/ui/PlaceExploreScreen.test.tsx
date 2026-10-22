@@ -15,6 +15,11 @@ import {
   PlaceExploreScreen,
   type PlaceExploreScreenProps,
 } from './PlaceExploreScreen';
+import {
+  FAB_STACK_TOP,
+  getToastBottoms,
+  resetToastBottoms,
+} from '@/shared/ui/toastBottom';
 
 /**
  * AC-1 · AC-2 · AC-3 · AC-4 · AC-5 · AC-6 · AC-G1 · AC-G2 · AC-V1(01b Seed) —
@@ -1176,5 +1181,20 @@ describe('카드 press 버블링', () => {
       expect(onToggleSave).not.toHaveBeenCalled();
       expect(onPressCard).not.toHaveBeenCalled();
     });
+  });
+});
+
+// 토스트 바닥 레지스트리는 모듈 싱글턴이다 — 파일 최상위(describe 밖)에서 리셋해야 앞 테스트의 신고가 안 샌다(TRIP-1559).
+afterEach(() => resetToastBottoms());
+
+describe('PlaceExploreScreen — 토스트 바닥 신고: FAB 2단 스택 (TRIP-1559 이음새 ③)', () => {
+  it('FAB 스택이 있는 장소 탐색은 그 윗변(FAB_STACK_TOP)을 신고하고 unmount 로 해제한다', () => {
+    expect(getToastBottoms()).toEqual([]);
+
+    renderScreen();
+    expect(getToastBottoms()).toContain(FAB_STACK_TOP);
+
+    screen.unmount();
+    expect(getToastBottoms()).toEqual([]);
   });
 });

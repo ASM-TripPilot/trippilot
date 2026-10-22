@@ -420,7 +420,6 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       expect(
         within(screen.getByTestId(BAR)).getByTestId(BAR_CHATBOT)
       ).toBeEnabled();
-      expect(screen.queryByTestId('assistant-fab')).toBeNull();
       fireEvent.press(screen.getByTestId(BAR_CHATBOT));
       expect(mockPush).toHaveBeenCalledWith({
         pathname: '/assistant',

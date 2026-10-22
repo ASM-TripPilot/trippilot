@@ -8,6 +8,11 @@ import { Keyboard } from 'react-native';
 import type { StayItem } from '@/shared/api/index.schemas';
 import { stayKey } from '@/features/save-stay/index.view';
 import { StaySearchScreen } from './StaySearchScreen';
+import {
+  FAB_STACK_TOP,
+  getToastBottoms,
+  resetToastBottoms,
+} from '@/shared/ui/toastBottom';
 import type { StaySearchState } from '../model/staySearchState';
 import { PRICE_BUCKETS, type PriceBucketId } from '../model/priceRangeFilter';
 
@@ -1586,5 +1591,21 @@ describe('하단 탭바 (옛 .tabbar)', () => {
         fireEvent.press(screen.getByTestId('shell-tabbar-tab-explore'))
       ).not.toThrow();
     });
+  });
+});
+
+// 토스트 바닥 레지스트리는 모듈 싱글턴이다 — 파일 최상위(describe 밖)에서 리셋해야 앞 테스트의 신고가 안 샌다(TRIP-1559).
+afterEach(() => resetToastBottoms());
+
+describe('e02 토스트 바닥 신고: FAB 2단 스택 (TRIP-1559 이음새 ③)', () => {
+  it('FAB 스택이 있는 숙소 검색은 그 윗변(FAB_STACK_TOP)을 신고하고 unmount 로 해제한다 (화면 안 탭바 신고와 같이 있어도 FAB 쪽이 보인다)', () => {
+    expect(getToastBottoms()).toEqual([]);
+
+    const view = render(<StaySearchScreen region="부산" items={[]} />);
+
+    expect(getToastBottoms()).toContain(FAB_STACK_TOP);
+
+    view.unmount();
+    expect(getToastBottoms()).toEqual([]);
   });
 });

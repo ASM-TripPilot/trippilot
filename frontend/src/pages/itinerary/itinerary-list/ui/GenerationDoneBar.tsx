@@ -2,7 +2,9 @@ import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { CloseGlyph } from '@/features/itinerary/index.view';
+import { TAB_BAR_TOP } from '@/shared/ui/BottomTabBar';
 import { ToastSuccessGlyph } from '@/shared/ui/ToastGlyphs';
+import { useToastBottom } from '@/shared/ui/useToastBottom';
 
 /**
  * TRIP-788 · AC-7 — 완료 도킹 배너(prop-driven, 소비처가 이 page 하나라 TRIP-1143 에 widgets 에서 이동). BottomTab 위에 뜨는 흰 카드로
@@ -23,6 +25,20 @@ export interface GenerationDoneBarProps {
   inline?: boolean;
 }
 
+/**
+ * TRIP-1556 — 도킹 바닥 = 탭 바 알약 윗변 + 12(TRIP-1559 토스트 간격과 같은 관례). Figma(3911:2327)는 96 띠 위 108 이지만
+ * 실화면 탭 바는 떠 있는 알약이라 108 은 약 40pt 떠 보였다(사용자 지적). NativeWind 클래스는 리터럴이라 bottom 은 style 로 계산한다.
+ */
+export const DONE_BAR_BOTTOM = TAB_BAR_TOP + 12;
+/** 도킹 바 최소 높이(도킹 style 의 minHeight 와 신고가 같은 상수를 쓴다) — 긴 여행명이 두 줄이면 실제 높이가 더 커져 신고가 과소가 된다(6-b). */
+export const DONE_BAR_MIN_HEIGHT = 52;
+
+/** 도킹일 때만 그려 바 윗변을 토스트 바닥으로 신고한다(훅은 조건부 호출이 안 되므로 조건부 자식으로 격리) — 토스트가 바를 덮지 않게. */
+function DockedToastBottom(): null {
+  useToastBottom(DONE_BAR_BOTTOM + DONE_BAR_MIN_HEIGHT);
+  return null;
+}
+
 const DONE_SUFFIX = ' 일정이 완성됐어요';
 const VIEW_LABEL = '보기';
 
@@ -39,9 +55,15 @@ export function GenerationDoneBar({
         inline
           ? // 폭은 목록 스크롤 칸(px-lg)에 늘어나 카드 열과 맞는다 — 고정 358 을 두면 좁은 기기에서 넘친다.
             'min-h-[52px] flex-row items-center gap-[12px] rounded-card border border-hairline bg-canvas px-lg py-[12px]'
-          : 'absolute bottom-[108px] left-[16px] min-h-[52px] w-[358px] flex-row items-center gap-[12px] rounded-card border border-hairline bg-canvas px-lg py-[12px]'
+          : 'absolute left-lg right-lg flex-row items-center gap-[12px] rounded-card border border-hairline bg-canvas px-lg py-[12px]'
+      }
+      style={
+        inline
+          ? undefined
+          : { bottom: DONE_BAR_BOTTOM, minHeight: DONE_BAR_MIN_HEIGHT }
       }
     >
+      {inline ? null : <DockedToastBottom />}
       <ToastSuccessGlyph size={20} testID="generation-done-bar-check" />
       <Text
         testID="generation-done-bar-text"

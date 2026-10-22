@@ -32,6 +32,9 @@ import {
 import { PartialFailureBanner } from './PartialFailureBanner';
 import { NoticeBanner } from '@/shared/ui/NoticeBanner';
 import { AppBar } from '@/shared/ui/AppBar';
+import { useScrollHide } from '@/shared/lib/useScrollHide';
+import { FAB_STACK_TOP } from '@/shared/ui/toastBottom';
+import { useToastBottom } from '@/shared/ui/useToastBottom';
 
 // 우하단 FAB 그림자 — `ExploreLandingScreen`의 FAB_SHADOW와 동형
 // (RN에 CSS box-shadow가 없어 style prop으로 옮긴다). `#000000`은 raw-hex 가드
@@ -501,6 +504,8 @@ export function PlaceExploreScreen({
   isFetchingMore = false,
   degraded = false,
 }: PlaceExploreScreenProps): ReactElement {
+  useToastBottom(FAB_STACK_TOP); // 토스트가 FAB 스택 위로 뜬다(TRIP-1559)
+  const { hidden: fabsHidden, onScroll } = useScrollHide();
   const savedSet = useMemo(() => new Set(savedPoiIds), [savedPoiIds]);
   const pendingSet = useMemo(() => new Set(pendingPoiIds), [pendingPoiIds]);
 
@@ -512,6 +517,8 @@ export function PlaceExploreScreen({
         <FlatList<Place>
           testID="explore-places-grid"
           className="flex-1"
+          scrollEventThrottle={16}
+          onScroll={onScroll}
           data={places}
           keyExtractor={(place) => place.poiId}
           numColumns={2}
@@ -593,7 +600,12 @@ export function PlaceExploreScreen({
             아래=＋ 여행 만들기(핑크 원). CtaBar(담은 수>0 조건부)를 대체한다 — 담은 수·상태
             얼굴과 무관하게 상시 노출한다(Figma). 콜백은 옵셔널(♥)이라 미전달이면 무동작.
             단 `hideCreateTrip`(위저드 출처, TRIP-1026)이면 ＋만 빠지고 ♥가 그 자리로 내려앉는다. */}
-        <View className="absolute bottom-[84px] right-lg items-end gap-md">
+        <View
+          testID="explore-places-fab-stack"
+          pointerEvents={fabsHidden ? 'none' : 'box-none'}
+          style={{ opacity: fabsHidden ? 0 : 1 }}
+          className="absolute bottom-[84px] right-lg items-end gap-md"
+        >
           <Pressable
             testID="explore-places-saved-fab"
             accessibilityRole="button"

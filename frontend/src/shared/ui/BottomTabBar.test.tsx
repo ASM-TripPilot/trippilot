@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { BottomTabBar } from './BottomTabBar';
+import { BottomTabBar, TAB_BAR_TOP } from './BottomTabBar';
+import { getToastBottoms, resetToastBottoms } from './toastBottom';
 
 /**
  * AC-6~AC-8 · Q4 — 순수 뷰 탭바(`shared/ui/BottomTabBar`).
@@ -10,6 +11,9 @@ import { BottomTabBar } from './BottomTabBar';
  * Q4(탭바 전면 커스텀)가 요구하는 접근성 속성(`accessibilityRole="tab"`·
  * `accessibilityState.selected`) 수동 보강이 여기서 강제된다.
  */
+
+// TRIP-1559 — 토스트 바닥 레지스트리는 모듈 싱글턴이다. 파일 최상위(describe 밖)에서 리셋해야 앞 테스트의 신고가 안 샌다.
+afterEach(() => resetToastBottoms());
 
 const TAB_KEYS = ['home', 'explore', 'itinerary', 'records', 'my'] as const;
 
@@ -84,5 +88,33 @@ describe('BottomTabBar — press 콜백 (AC-8)', () => {
 
     expect(onPressTab).toHaveBeenNthCalledWith(1, 'explore');
     expect(onPressTab).toHaveBeenNthCalledWith(2, 'my');
+  });
+});
+
+describe('BottomTabBar — 토스트 바닥 신고 (TRIP-1559 T4·T5)', () => {
+  it('내비게이션 없이 그려도 throw 하지 않고, 그리는 동안 알약 윗변(TAB_BAR_TOP)을 신고하며 unmount 로 해제한다', () => {
+    // 준비 — 그리기 전엔 신고가 없다(앵커).
+    expect(getToastBottoms()).toEqual([]);
+
+    // 실행 — 네비게이터 밖 단독 렌더.
+    const view = render(
+      <BottomTabBar activeKey="home" onPressTab={jest.fn()} />
+    );
+
+    // 단언 — 상수는 import 해서 비교한다(리터럴 복제 금지). 값 자체는 6-b 가 본다.
+    expect(getToastBottoms()).toEqual([TAB_BAR_TOP]);
+
+    view.unmount();
+    expect(getToastBottoms()).toEqual([]);
+  });
+
+  it('활성 탭이 바뀌어 다시 그려도 신고는 하나다', () => {
+    const view = render(
+      <BottomTabBar activeKey="home" onPressTab={jest.fn()} />
+    );
+
+    view.rerender(<BottomTabBar activeKey="records" onPressTab={jest.fn()} />);
+
+    expect(getToastBottoms()).toEqual([TAB_BAR_TOP]);
   });
 });

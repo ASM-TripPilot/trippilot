@@ -57,11 +57,6 @@ import {
 } from '@/pages/explore/explore-landing/ui/ExploreLandingScreen';
 import { HomeScreen } from '@/pages/home/ui/HomeScreen';
 import {
-  AssistantFab,
-  TAB_TWO_STACK,
-  assistantFabBottom,
-} from '@/features/open-assistant';
-import {
   AssistantSheetView,
   HistoryView,
   MessageCard,
@@ -2668,10 +2663,6 @@ function renderAssistantPreview(
   );
 }
 
-const ASSISTANT_FAB_PREVIEW = (
-  <AssistantFab onPress={noop} bottom={assistantFabBottom(TAB_TWO_STACK)} />
-);
-
 export const PREVIEW_STATES: PreviewState[] = [
   // ── b 밴드 · U8 AI 도우미(TRIP-1327) ──
   {
@@ -2694,6 +2685,41 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'b01 · 대체 후보',
     login: null,
     render: () => renderAssistantPreview('candidates'),
+  },
+  // TRIP-1564 — 후보 카드의 눌림 뜻 둘. 고르기(위 키) 말고 "장소 보기"(› 있음·빨간 행 없음)와 "이동 없음"(› 없음·눌러도 무반응).
+  {
+    key: 'assistant-candidate-open',
+    band: 'b',
+    label: 'b01 · 후보 카드(장소 보기)',
+    login: null,
+    render: () =>
+      renderAssistantPreview('candidates', {
+        mutate: (messages) =>
+          messages.map((message) => ({
+            ...message,
+            quickReplies: [],
+            nextActions: ['poi-bookcafe', 'poi-garden'].map((poiId) => ({
+              type: 'OPEN_PLACE',
+              label: '장소 보기',
+              params: { poiId },
+            })),
+          })),
+      }),
+  },
+  {
+    key: 'assistant-candidate-none',
+    band: 'b',
+    label: 'b01 · 후보 카드(이동 없음)',
+    login: null,
+    render: () =>
+      renderAssistantPreview('candidates', {
+        mutate: (messages) =>
+          messages.map((message) => ({
+            ...message,
+            quickReplies: [],
+            nextActions: [],
+          })),
+      }),
   },
   {
     key: 'assistant-proposal',
@@ -2821,7 +2847,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'assistant-chip-stack',
     band: 'b',
-    label: 'b01 · 제안 칩 스택(대화 전)',
+    label: 'b01 · 접힌 추천 질문 칩(대화 전)',
     login: null,
     render: () => renderAssistantPreview('greeting'),
   },
@@ -2876,71 +2902,6 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'b0x · 열기 실패',
     login: null,
     render: () => renderAssistantPreview('greeting', { state: 'OPEN_FAILED' }),
-  },
-  // ✦ FAB 위치(BR-U8-50~52) — 실제 겹침(＋84·하트152·✦220·토스트288·탭바)은 6-b 육안의 유일한 자리.
-  {
-    key: 'assistant-fab-home',
-    band: 'b',
-    label: 'b✦ · 홈 FAB 스택',
-    login: null,
-    render: () =>
-      withShellTabBar(
-        <HomeScreen
-          {...HOME_DEFAULT_PROPS}
-          spotsLane={HOME_SPOTS_LANE}
-          assistantFab={ASSISTANT_FAB_PREVIEW}
-        />
-      ),
-  },
-  {
-    key: 'assistant-fab-stay-search',
-    band: 'b',
-    label: 'b✦ · 숙소 검색 FAB 스택',
-    login: null,
-    render: () => (
-      <StaySearchScreen
-        region="부산"
-        items={STAY_SEARCH_PREVIEW_ITEMS}
-        nameQuery=""
-        onChangeNameQuery={noop}
-        onToggleSave={noop}
-        onPressSaved={noop}
-        onPressRegister={noop}
-        assistantFab={ASSISTANT_FAB_PREVIEW}
-      />
-    ),
-  },
-  {
-    key: 'assistant-fab-itinerary',
-    band: 'b',
-    label: 'b✦ · 일정 상세 지도 우상단',
-    login: null,
-    render: () => (
-      <MapSheetShell
-        center={{ lat: 35.1532, lng: 129.1188 }}
-        pins={buildDraftPins(H14_PLAN_NO_BASE_SLOTS)}
-        days={[{ label: '1일차' }, { label: '2일차' }]}
-        selectedDayIndex={0}
-        onSelectDay={noop}
-        onBack={noop}
-        mapCard={
-          <View pointerEvents="box-none" className="items-end pt-md">
-            <AssistantFab onPress={noop} />
-          </View>
-        }
-        header={
-          <SheetHeader
-            title="부산 여행"
-            dayLabel="1일차"
-            dateLabel="6월 10일(수)"
-            meta="4곳"
-          />
-        }
-        cta={[{ label: '일정 확정하기', variant: 'primary', onPress: noop }]}
-      >
-        <View />
-      </MapSheetShell>
-    ),
   },
   { key: 'splash', band: 'c', label: 'c01 · 기본', login: null },
   {
