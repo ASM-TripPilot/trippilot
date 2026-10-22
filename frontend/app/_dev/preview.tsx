@@ -171,7 +171,7 @@ import {
   SavedStayListScreen,
   type SavedStayCardVM,
 } from '@/pages/stay/stay-saved/ui/SavedStayListScreen';
-import { OtaChoiceSheet } from '@/pages/stay/stay-detail/ui/OtaChoiceSheet';
+import { OtaChoiceSheet } from '@/features/stay-outbound/ui/OtaChoiceSheet';
 import { StayPriceSheet } from '@/pages/stay/stay-search/ui/StayPriceSheet';
 import { StayFilterSheet } from '@/pages/stay/stay-search/ui/StayFilterSheet';
 import {

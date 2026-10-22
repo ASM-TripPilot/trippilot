@@ -355,3 +355,41 @@ describe('W · 웹검색 폴백 얼굴과 제휴 얼굴 (TRIP-1019 #018 · 01b Q
     expect(screen.queryByText('검색 결과로 이동')).toBeNull();
   });
 });
+
+/**
+ * TRIP-1579 — 인기 숙소·전체 보기(Trip.com)는 가격이 없다. 가격 칸은 호출부가 `showPrice` 로 정한다 —
+ * 생략하면 지금처럼 그린다(LOCALDATA 상세의 '가격 미확인' 무회귀), false 면 가격도 구분점도 없다.
+ */
+describe('P · 가격 칸 표시 prop (TRIP-1579)', () => {
+  it('TRIPCOM + showPrice=false: 행은 "Trip.com" 만, 가격·구분점 없음, 버튼 "Trip.com으로 이동"', () => {
+    render(
+      <OtaChoiceSheet
+        {...sheetProps({
+          item: { externalSource: 'TRIPCOM' },
+          showPrice: false,
+        })}
+      />
+    );
+
+    const row = screen.getByTestId('stay-ota-option-TRIPCOM');
+    expect(within(row).getByText('Trip.com')).toBeOnTheScreen();
+    expect(within(row).queryByText('·')).toBeNull();
+    expect(within(row).queryByText(formatPrice(undefined))).toBeNull();
+    expect(
+      within(screen.getByTestId('stay-ota-confirm')).getByText(
+        'Trip.com으로 이동'
+      )
+    ).toBeOnTheScreen();
+    // 법정 고지는 그대로(BR-U1-30).
+    expect(screen.getByTestId('stay-ota-notice-box')).toBeOnTheScreen();
+  });
+
+  it('showPrice 생략 + price null: 지금처럼 "가격 미확인" 을 그린다', () => {
+    render(
+      <OtaChoiceSheet {...sheetProps({ item: { ...ITEM, price: null } })} />
+    );
+
+    const row = screen.getByTestId('stay-ota-option-NAVER');
+    expect(within(row).getByText(formatPrice(null))).toBeOnTheScreen();
+  });
+});

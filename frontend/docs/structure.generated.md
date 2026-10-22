@@ -543,7 +543,7 @@
 - `src/features/save-stay/index.view.ts`  →  stayKey
 
 ## src/features/save-stay/model/
-- `src/features/save-stay/model/buildSaveStayRequest.ts`  →  buildSaveStayRequest
+- `src/features/save-stay/model/buildSaveStayRequest.ts`  →  SavableStay · coordsOf · buildSaveStayRequest
 - `src/features/save-stay/model/savedStayIndex.ts`  →  findSavedStayId · optimisticSavedStayId · isOptimisticSavedStayId
 - `src/features/save-stay/model/savedStays.ts`  →  SavedStaysFailureReason · SavedStaysOutcome · useSavedStays
 - `src/features/save-stay/model/stayKey.ts`  →  stayKey
@@ -561,6 +561,18 @@
 ## src/features/share-trip-card/model/
 - `src/features/share-trip-card/model/shareCapture.ts`  →  SaveShareCardResult · ShareShareCardResult · isShareCaptureArmed · saveShareCardImage · shareShareCardImage
 - `src/features/share-trip-card/model/shareCaptureNative.ts`  →  captureRef · requestPermissionsAsync · saveToLibraryAsync · shareAsync
+
+## src/features/stay-outbound/
+- `src/features/stay-outbound/index.ts`  →  useStayOutboundFlow · type OutboundTarget
+- `src/features/stay-outbound/index.view.ts`  →  OtaChoiceSheet · type OtaChoiceSheetProps
+
+## src/features/stay-outbound/model/
+- `src/features/stay-outbound/model/stayOutbound.ts`  →  StayOutboundMode · stayOutboundMode · OutboundQuery · stayOutboundUrl · browseOutboundUrl · openStayOutbound · openBrowseOutbound
+- `src/features/stay-outbound/model/useStayOutboundFlow.ts`  →  OutboundTarget · useStayOutboundFlow
+
+## src/features/stay-outbound/ui/
+- `src/features/stay-outbound/ui/OtaChoiceSheet.tsx`  →  OtaChoiceSheetProps · OtaChoiceSheet
+- `src/features/stay-outbound/ui/OutboundGlyphs.tsx`  →  ChevronRightGlyph · InfoGlyph · CheckGlyph · WarningTriangleGlyph
 
 ## src/features/stay/
 - `src/features/stay/index.ts`  →  useStaySearch
@@ -1219,11 +1231,7 @@
 ## src/pages/stay/stay-detail/
 - `src/pages/stay/stay-detail/index.ts`  →  StayDetailPage
 
-## src/pages/stay/stay-detail/model/
-- `src/pages/stay/stay-detail/model/stayOutbound.ts`  →  StayOutboundMode · stayOutboundMode · openStayOutbound
-
 ## src/pages/stay/stay-detail/ui/
-- `src/pages/stay/stay-detail/ui/OtaChoiceSheet.tsx`  →  OtaChoiceSheetProps · OtaChoiceSheet
 - `src/pages/stay/stay-detail/ui/StayDetailPage.tsx`  →  StayDetailPage
 - `src/pages/stay/stay-detail/ui/StayDetailScreen.tsx`  →  StayDetailState · StayDetailScreenProps · StayDetailScreen
 
@@ -1817,4 +1825,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1163개 파일
+합계 1167개 파일

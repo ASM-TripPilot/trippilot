@@ -1,6 +1,12 @@
 import * as Linking from 'expo-linking';
 
-import { openStayOutbound, stayOutboundMode } from './stayOutbound';
+import {
+  browseOutboundUrl,
+  openBrowseOutbound,
+  openStayOutbound,
+  stayOutboundMode,
+  stayOutboundUrl,
+} from './stayOutbound';
 
 /**
  * TRIP-1167 — 제휴 시트 [이동]은 서버 아웃바운드 `GET /stays/{stayId}/outbound` 를 브라우저로 연다.
@@ -78,5 +84,88 @@ describe('O3 · openStayOutbound 실패 (침묵 금지)', () => {
 describe('O4 · stayOutboundMode — 이동은 서버 아웃바운드 = 제휴 (TRIP-1167 · BR-U1-30)', () => {
   it("인자 없이 부르면 'affiliate' 를 돌려준다", () => {
     expect(stayOutboundMode()).toBe('affiliate');
+  });
+});
+
+/**
+ * TRIP-1579 — 아웃바운드 URL 조립(순수 함수). 날짜는 checkin·checkout 둘 다 YYYY-MM-DD 이고
+ * checkout > checkin 일 때만, adults 는 양의 정수일 때만 붙인다 — 어긋난 값을 서버로 흘리지 않는다.
+ */
+describe('U · 아웃바운드 URL 조립 (TRIP-1579)', () => {
+  it('쿼리가 없으면 지금과 같은 주소다', () => {
+    expect(stayOutboundUrl('TRIPCOM:123')).toBe(
+      `${API_BASE}/stays/TRIPCOM%3A123/outbound`
+    );
+    expect(browseOutboundUrl({})).toBe(`${API_BASE}/stays/browse/outbound`);
+  });
+
+  it('날짜 둘 다 + 순서 맞음 + adults 양수 → 셋 다 붙는다', () => {
+    expect(
+      stayOutboundUrl('TRIPCOM:123', {
+        checkin: '2026-11-01',
+        checkout: '2026-11-03',
+        adults: 2,
+      })
+    ).toBe(
+      `${API_BASE}/stays/TRIPCOM%3A123/outbound?checkin=2026-11-01&checkout=2026-11-03&adults=2`
+    );
+  });
+
+  it.each([
+    ['checkout 없음', { checkin: '2026-11-01' }],
+    ['checkin 없음', { checkout: '2026-11-03' }],
+    ['같은 날', { checkin: '2026-11-01', checkout: '2026-11-01' }],
+    ['순서 뒤집힘', { checkin: '2026-11-03', checkout: '2026-11-01' }],
+    ['형식 아님', { checkin: '2026/11/01', checkout: '2026/11/03' }],
+  ])('날짜가 %s 이면 날짜를 하나도 안 붙인다', (_label, query) => {
+    expect(stayOutboundUrl('TRIPCOM:1', query)).toBe(
+      `${API_BASE}/stays/TRIPCOM%3A1/outbound`
+    );
+  });
+
+  it.each([0, -1, 1.5, Number.NaN])('adults=%p 는 안 붙인다', (adults) => {
+    expect(stayOutboundUrl('TRIPCOM:1', { adults })).toBe(
+      `${API_BASE}/stays/TRIPCOM%3A1/outbound`
+    );
+  });
+
+  it('전체 보기: region·regionCode 를 이스케이프해 붙이고 날짜·인원이 뒤따른다', () => {
+    expect(
+      browseOutboundUrl(
+        { region: '부산 광역시&x', regionCode: '26' },
+        { checkin: '2026-11-01', checkout: '2026-11-02', adults: 1 }
+      )
+    ).toBe(
+      `${API_BASE}/stays/browse/outbound?region=%EB%B6%80%EC%82%B0%20%EA%B4%91%EC%97%AD%EC%8B%9C%26x&regionCode=26&checkin=2026-11-01&checkout=2026-11-02&adults=1`
+    );
+  });
+});
+
+describe('B · openBrowseOutbound (TRIP-1579)', () => {
+  it('전체 보기 URL 로 openURL 하고 "web", 실패면 fallback + "failed"', async () => {
+    mockOpenURL.mockResolvedValueOnce(true);
+    const fallback = jest.fn();
+
+    expect(await openBrowseOutbound({ regionCode: '11' }, fallback)).toBe(
+      'web'
+    );
+    expect(mockOpenURL).toHaveBeenCalledWith(
+      `${API_BASE}/stays/browse/outbound?regionCode=11`
+    );
+    expect(fallback).not.toHaveBeenCalled();
+
+    mockOpenURL.mockRejectedValueOnce(new Error('no browser'));
+    expect(await openBrowseOutbound({}, fallback)).toBe('failed');
+    expect(fallback).toHaveBeenCalledTimes(1);
+  });
+
+  it('openStayOutbound 도 쿼리를 받아 같은 규칙으로 붙인다', async () => {
+    mockOpenURL.mockResolvedValueOnce(true);
+
+    await openStayOutbound('TRIPCOM:9', () => {}, { adults: 3 });
+
+    expect(mockOpenURL).toHaveBeenCalledWith(
+      `${API_BASE}/stays/TRIPCOM%3A9/outbound?adults=3`
+    );
   });
 });
