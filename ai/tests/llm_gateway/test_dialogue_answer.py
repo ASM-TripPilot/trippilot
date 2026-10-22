@@ -421,6 +421,26 @@ def test_pbt_event_fallback_text_satisfies_the_gate(events: list) -> None:
     assert out.error is None and out.value.text == text
 
 
+def test_candidate_fallback_lists_safe_card_names_so_a_follow_up_can_skip_them() -> None:
+    """탐색·추천 폴백 문장도 카드 이름을 싣는다 — "더 알려줘"가 도우미 말에서 보인 곳을 뺀다. 검사를 못 넘는 이름은 뺀다."""
+    names = ["아일드블루", "오후 3시 라운지", "베이스먼트", "010-1234-5678 바", "앙리17"]
+    assert fallback_answer_text(Intent.RECOMMEND_PLACES, {"status": "OK", "names": names}) == \
+        "가 볼 만한 곳을 골라 봤어요. 아일드블루, 베이스먼트, 앙리17."
+    assert fallback_answer_text(Intent.EXPLORE_PLACES, {"status": "OK", "names": [f"곳{i}" for i in range(8)]}) == \
+        "가 볼 만한 곳을 찾아봤어요. 곳0, 곳1, 곳2, 곳3, 곳4."  # ≤5
+    assert fallback_answer_text(Intent.EXPLORE_PLACES, {"status": "OK", "names": ["오후 3시 라운지"]}) == "가 볼 만한 곳을 찾아봤어요."
+    assert fallback_answer_text(Intent.GET_POI_INFO, {"status": "OK", "names": ["아일드블루"]}) == "장소 정보를 찾아봤어요."  # 후보 카드만
+
+
+@given(names=st.lists(_EVENT_NAMES, max_size=12), intent=st.sampled_from([Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES]))
+@settings(max_examples=200, deadline=None)
+def test_pbt_candidate_fallback_text_satisfies_the_gate(names: list, intent: Intent) -> None:
+    """INV-4 마지막 계단 — 어떤 카드 이름이 와도 이름을 붙인 결정론 문장이 게이트를 스스로 넘는다."""
+    text = fallback_answer_text(intent, {"status": "OK", "names": names})
+    out = _apply(_raw(text))
+    assert out.error is None and out.value.text == text
+
+
 def test_fallback_text_mirrors_backend_templates() -> None:
     """BE AssistantTemplates·QueryCards·ProposalCards·IntentDispatcher 문구 이식 (DEC-U8-6 개정 전 화면 문장)."""
     assert fallback_answer_text(Intent.GET_NEXT_SLOT, {}) == "다음 장소예요."
