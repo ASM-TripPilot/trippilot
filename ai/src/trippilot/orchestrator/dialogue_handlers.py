@@ -53,10 +53,11 @@ from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory, 
 from trippilot.domain.theme_tags import themes_in
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.region_centers import bare_region, plain_region, region_area, region_center, region_mentions, region_pair
+from trippilot.domain.region_recommend import preference_weights, recommend_regions
 from trippilot.domain.transit import TransitPurpose
 from trippilot.domain.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, _MAX_LENGTH, _violates, clock_times
-from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEXT, fallback_answer_text
+from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEXT, REGION_ASK_TASTE_TEXT, fallback_answer_text
 from trippilot.orchestrator.arguments import extract_kind
 from trippilot.orchestrator.intent_router import normalize
 from trippilot.orchestrator.opportunity import _displayable, shown_event
@@ -184,6 +185,8 @@ class TurnSnapshot:
     base_stays: tuple[str, ...]  # 이름뿐 — 좌표 없음
     itinerary_status: str | None  # None = 일정 자체가 없다
     days: tuple[DayView, ...]
+    # 계정 취향 (styles, activities) — 백엔드가 대화 문맥에 실을 때만. 지역 추천(RECOMMEND_REGION)만 읽는다. None = 모름
+    tastes: tuple[tuple[str, ...], tuple[str, ...]] | None = None
 
     def slots(self) -> tuple[tuple[date, SlotView], ...]:
         """(날짜, 슬롯) 를 날짜순·슬롯은 스냅샷 순서대로 — 순서는 스냅샷 것이다 (INV-2)."""
@@ -639,7 +642,8 @@ _NEED_TRIP_ACTIONS = ("CREATE_TRIP", "OPEN_STAY_SEARCH")
 
 def needs_trip(intent: Intent) -> bool:
     """여행이 있어야 넘길 화면이 있는 의도 — BE IntentDispatcher.NEEDS_TRIP 과 같은 집합."""
-    return intent not in (Intent.STYLE_ANALYSIS, Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES, Intent.OUT_OF_SCOPE)
+    return intent not in (Intent.STYLE_ANALYSIS, Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES, Intent.RECOMMEND_REGION,
+                          Intent.OUT_OF_SCOPE)
 
 
 def need_trip_facts(intent: Intent) -> Facts:
@@ -2142,6 +2146,41 @@ def _assemble_recommend(ctx: TurnContext, results: Mapping[str, TaskResult]) -> 
                    detail={**facts.detail, "pick_count": n})
 
 
+# RECOMMEND_REGION — 취향(대화 문맥의 계정 취향)·말한 바람 × 지역 성격표 → 가볼 지역 몇 곳 (`domain.region_recommend`, LLM 0).
+# 지역은 지역 표 이름만(INV-1). 장소가 아니라 카드·장소 보기 버튼이 없다 — 문장(TEXT) + 지역마다 "○○ 가볼 만한 곳" 빠른 답
+# (누르면 그 말이 다음 발화로 가서 장소 탐색으로 이어진다) + 여행 만들기. 취향도 바람도 없으면 고정 문장으로 묻는다.
+# 2026-10-22 사용자: "내 취향 기반해서 가볼 지역 추천해달라고 했는데 그것도 안 해주네" — 여행 스타일 넘기기로 끝났다.
+_REGION_ASK_REPLIES = ("바다 보러 갈 지역 추천해줘", "맛집 많은 지역 추천해줘", "역사 여행 지역 추천해줘")
+
+
+def _assemble_region(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts:
+    intent = Intent.RECOMMEND_REGION
+    styles, activities = ctx.snapshot.tastes or ((), ())
+    theme = ctx.arguments.get("theme")
+    weights = preference_weights(styles, activities, theme)
+    if not weights:  # 고를 근거가 없다 — 묻는다 (사실 없음 → LLM 없이 이 문장 그대로, BR-AO-25)
+        return Facts(intent, FactStatus.EMPTY, AnswerKind.TEXT, rows=(), places=(), notes=(), payload=None,
+                     next_actions=(_action("CREATE_TRIP"),),
+                     quick_replies=tuple(QuickReplyDraft(t, "SEND_TEXT") for t in _REGION_ASK_REPLIES),
+                     template_text=REGION_ASK_TASTE_TEXT)
+    said = ctx.arguments.get("count")
+    n = int(said) if said in {"1", "2", "3", "4", "5"} else _RECOMMEND_DEFAULT
+    picks = recommend_regions(weights, n)
+    # 근거 — 발화 원문(theme)은 싣지 않는다(INV-2: Facts 시각 허용 집합). 무엇을 기준으로 골랐는지만
+    basis = "말한 바람과 취향" if theme and (styles or activities) else ("말한 바람" if theme else "저장된 취향")
+    detail = {"basis": basis, "pick_count": n}
+    if not picks:
+        return _text_facts(intent, FactStatus.EMPTY, (_action("CREATE_TRIP"),),
+                           notes=("성격표에서 그 취향에 맞는 지역을 고르지 못함",), detail=detail)
+    rows = tuple(FactRow(p.name, f"{'·'.join(p.reasons)} 장소가 전국 평균보다 많은 편") for p in picks)
+    names = [p.name for p in picks]
+    return Facts(intent, FactStatus.OK, AnswerKind.TEXT, rows=rows, places=(), notes=(), payload=None,
+                 next_actions=(_action("CREATE_TRIP"),),
+                 quick_replies=tuple(QuickReplyDraft(f"{name} 가볼 만한 곳", "SEND_TEXT") for name in names),
+                 template_text=fallback_answer_text(intent, {"status": "OK", "names": names}),
+                 detail={**detail, "regions": names})
+
+
 # ── 표 ───────────────────────────────────────────────────────────────────────
 
 
@@ -2197,6 +2236,7 @@ HANDLERS: Mapping[Intent, Handler] = {
     Intent.STYLE_ANALYSIS: _handler(Intent.STYLE_ANALYSIS, _handoff_to(Intent.STYLE_ANALYSIS, "OPEN_STYLE")),
     Intent.EXPLORE_PLACES: _handler(Intent.EXPLORE_PLACES, _assemble_explore, _plan_explore,
                                     ask=lambda ctx: ("region", EXPLORE_ASK_REGION_TEXT) if explore_needs_region(ctx) else None),
+    Intent.RECOMMEND_REGION: _handler(Intent.RECOMMEND_REGION, _assemble_region),
     Intent.RECOMMEND_PLACES: _handler(Intent.RECOMMEND_PLACES, _assemble_recommend, _plan_explore,
                                       ask=lambda ctx: ("region", EXPLORE_ASK_REGION_TEXT) if explore_needs_region(ctx) else None),
 }

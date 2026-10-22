@@ -638,3 +638,10 @@
 - **검증**: 오케스트레이터·계획·게이트웨이·출력 상한·API 턴 375 passed(배정 시 LLM 문장·llm_calls 2, 실패/지어낸 장소/시각 → 고정 문장 + 이벤트, 감사·맞장구는 LLM 안 부름, CHAT gap LLM llm_calls 3).
 - **배포**: 개발·운영 `llm_feature_models` 에 `DIALOGUE_SMALLTALK=<경량 모델>` 을 더해야 켜진다(배포 담당 세션, 새 이름이라 두 번 배포 규칙).
 
+## 2026-10-22 — 도우미 가볼 지역 추천 RECOMMEND_REGION + 되풀이 줄이기 (BR-AO-31)
+**Timestamp**: 2026-10-22 · 브랜치 `feat/assistant-recommend-region` · **승인 대기**(같은 PR 머지 = 승인)
+- **입력**: 사용자 — "방금 챗봇 좀 돌려봤는데 내 취향 기반해서 가볼 지역추천해달라고 했는데 그것도 안해주네. 되게 만들어봐. 그리고 계속 같은 말만 내뱉던데,,조금씩은 달라야할듯해. 챗봇이 너무 형식적이잖아!!!!"
+- **확인**: 챗봇 테스트 화면에서 그 말이 STYLE_ANALYSIS → "여행 스타일은 기록에서 볼 수 있어요" 넘김. 대화 맥락에 취향이 없었다(생성 요청만 preference_profile 을 받는다).
+- **무엇을 했나**: ① AI 의도·인자표·계획 도구·핸들러 `_assemble_region`·템플릿 + BE enum·디스패처(오케스트레이터 off 넘김 문장) ② BE `ContextSnapshotBuilder` 가 `PreferenceFacade` 로 취향 두 축을 싣고, 와이어 `preference_profile`(선택) ③ 지역 성격표 생성기 `scripts/chatbot/build_region_profiles.py` + `data/region_profiles.json`(52곳) + `domain/region_recommend.py` ④ 분류 0.2.7·계획 0.1.6·답변 0.3.7 ⑤ 계획이 지역 이름 있는 말에 지역 고르기를 고르면 그 지역 탐색으로(`_region_named`) ⑥ 결정론 문장 되풀이 바꿈(`unrepeated`·감사·맞장구 변형) ⑦ 측정 사례(분류 6·답변 2).
+- **지키는 것**: 탐색 코드 무변경 · intent.yaml·뱅크·재생 픽스처 무변경 · wiring.py 무변경 · 개인정보 경계(취향 두 축만, ContextSnapshot 화이트리스트 테스트 갱신).
+- **남긴 것**: 성격표는 관광공사 수집 범위에 기댄다(지방 소도시 표본 100곳 안팎, 야경·바는 중립) — 정밀해야 하면 지역 문서(KB)·인기 신호를 더한다. 잡담 문장 되풀이는 DIALOGUE_SMALLTALK(#1570) 몫.

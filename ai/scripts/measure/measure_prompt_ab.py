@@ -228,6 +228,16 @@ RECOMMEND_CASES = [
     ("RECOMMEND_PLACES", "여수 맛집 중에 딱 하나 찍어줘"),
     ("RECOMMEND_PLACES", "이 근처 카페 중에 어디가 제일 좋아?"),
 ]
+# 지역 추천(dialogue_intent 0.2.7 — RECOMMEND_REGION) — 가볼 지역·여행지를 골라 달라는 말. 첫 문장은 사용자가 막혔다고 한 말 그대로다
+# (2026-10-22, 여행 스타일 넘기기로 끝났다). 뒤 둘은 음성 — 내 취향 자체를 보여 달라(스타일), 지역을 정하고 장소를 묻는다(탐색).
+REGION_CASES = [
+    ("RECOMMEND_REGION", "내 취향 기반해서 가볼 지역 추천해줘"),
+    ("RECOMMEND_REGION", "나한테 맞는 여행지 어디야?"),
+    ("RECOMMEND_REGION", "이번 휴가 어디로 갈지 골라줘"),
+    ("RECOMMEND_REGION", "바다 보러 가기 좋은 지역 추천해줘"),
+    ("STYLE_ANALYSIS", "지금까지 다닌 걸로 보면 내 여행 스타일이 어때?"),
+    ("EXPLORE_PLACES", "속초에서 가볼 만한 데 있어?"),
+]
 SINGLE_CASES = [
     ("GET_NEXT_SLOT", "다음 일정 어디고 몇 시야"),
     ("GET_POI_INFO", "해녀의집 몇 시에 열고 입장료 얼마야"),
@@ -254,6 +264,7 @@ def run_intent(prompts: Path, repeat: int) -> None:
     cases += [(label, u, [], "single") for label, u in SINGLE_CASES]
     cases += [(label, u, [], "event") for label, u in EVENT_CASES]
     cases += [(label, u, [], "recommend") for label, u in RECOMMEND_CASES]
+    cases += [(label, u, [], "region") for label, u in REGION_CASES]
 
     def one(item):
         i, (label, utt, history, kind) = item
@@ -284,13 +295,13 @@ def run_intent(prompts: Path, repeat: int) -> None:
     print(json.dumps(dict(prompts=str(prompts), model=MODEL, n=len(rows), eval_acc=acc("eval"),
                           context_acc=acc("context"), accept_acc=acc("accept"), explore_acc=acc("explore"),
                           compound_acc=acc("compound"), single_acc=acc("single"), event_acc=acc("event"),
-                          late_null=late_null, recommend_acc=acc("recommend"), **_timing(rows)),
+                          late_null=late_null, recommend_acc=acc("recommend"), region_acc=acc("region"), **_timing(rows)),
                      ensure_ascii=False))
     for r in rows:
         if not r["ok"]:
             print(f"  ✗ {r['label']:<20} got={r['got']!s:<20} {r['utt']}  ({r['err'] or ''})")
     for r in rows[: len(cases)]:
-        if r["kind"] in ("context", "accept", "explore", "compound", "single", "event", "recommend"):
+        if r["kind"] in ("context", "accept", "explore", "compound", "single", "event", "recommend", "region"):
             print(f"  · {r['utt']} → {r['got']} {r['slots']}")
 
 
@@ -385,6 +396,19 @@ ANSWER_CASES += [
     ("EXPLORE_PLACES", "박물관 근처에 카페 있어?", _explore(
         "국립경주박물관", _place("카페 소소", "카페", reason="요즘 인기", dist="약 0.5km"),
         _place("황리단 커피", "카페", reason="카페", dist="약 1.1km"), kind="itinerary")),
+]
+
+# 지역 추천(RECOMMEND_REGION, 답변 0.3.7) — `_assemble_region` 모양: rows = 지역·이유, detail 의 basis·regions. 장소 이름·rows 밖
+# 특징을 지어내면 사람이 읽어서 본다
+ANSWER_CASES += [
+    ("RECOMMEND_REGION", "내 취향 기반해서 가볼 지역 추천해줘", _facts(
+        "RECOMMEND_REGION", rows=[("단양", "자연·체험·액티비티 장소가 전국 평균보다 많은 편"),
+                                  ("가평", "체험·액티비티 장소가 전국 평균보다 많은 편"),
+                                  ("태안", "자연 장소가 전국 평균보다 많은 편")],
+        basis="저장된 취향", pick_count=3, regions=["단양", "가평", "태안"])),
+    ("RECOMMEND_REGION", "역사 여행 갈 만한 데 한 곳만", _facts(
+        "RECOMMEND_REGION", rows=[("경주", "명소·문화·역사 장소가 전국 평균보다 많은 편")], basis="말한 바람", pick_count=1,
+        regions=["경주"])),
 ]
 
 # 장소 소개(KB-5 한 조각, #1469) — `_assemble_poi_info` 모양: detail 의 target·intro. 영업시간·요금을 묻는 말엔 소개가 없다.
@@ -1048,7 +1072,9 @@ def run_plan(prompts: Path, repeat: int) -> None:
                         timeout_sec=PLAN_TIMEOUT)
         wall = int((time.monotonic() - t0) * 1000)
         draft = None if r.is_fallback else r.value
-        calls = [(c.intent.value, dict(c.slots)) for c in draft.calls] if draft is not None else []
+        # 런타임처럼 지역 이름이 있는 지역 고르기는 탐색으로 바꿔 센다(`orch._region_named`) — 핸들러에 닿는 것을 잰다
+        calls = [(c.intent.value, dict(c.slots)) for c in (orch._region_named(c, case["utterance"]) for c in draft.calls)
+                 ] if draft is not None else []
         return dict(case=case, tid=f"plan-ab-{i}", ok=draft is not None, calls=calls, refused=bool(draft and draft.refused),
                     gap=draft.gap if draft is not None else None, err=r.error, wall=wall, **_usage(r))
 

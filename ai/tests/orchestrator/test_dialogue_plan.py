@@ -15,7 +15,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from trippilot.domain.intent import Intent
+from trippilot.domain.intent import Intent, IntentDraft
 from trippilot.domain.plan_tools import PLAN_TOOLS, PlanTool
 from trippilot.orchestrator import dialogue_plan as dp
 from trippilot.orchestrator.dialogue_handlers import (
@@ -641,6 +641,19 @@ def test_region_the_user_did_not_say_is_dropped_so_explore_stays_near_the_itiner
     assert grounded({"region": "부산", "category": "FOOD"}, squash("저녁 먹을 데")) == {"category": "FOOD"}
     assert grounded({"region": "해운대"}, squash("해운대 야경 알려줘 그럼 거기 맛집도")) == {"region": "해운대"}
 
+
+
+def test_region_recommend_for_an_utterance_that_already_names_a_region_becomes_explore_there() -> None:
+    """계획이 가볼 지역 고르기를 골라도 말에 표 지역이 있으면 그 지역 안 탐색이다(프롬프트 0.1.6 에도 3/3 실측, 2026-10-22).
+    지역을 내치거나("말고") 바깥을 가리키면("근교") 지역 고르기 그대로."""
+    named = orch_mod._region_named
+    call = IntentDraft(Intent.RECOMMEND_REGION, {"theme": "반나절"}, None)
+    assert named(call, "경주에서 반나절 보낼 만한 데") == IntentDraft(Intent.EXPLORE_PLACES, {"region": "경주", "theme": "반나절"}, None)
+    assert named(call, "조용히 쉬기 좋은 여행지 어디야") is call
+    assert named(call, "제주 말고 바다 보러 갈 곳") is call
+    assert named(call, "서울 근교로 갈 만한 데") is call
+    explore = IntentDraft(Intent.EXPLORE_PLACES, {"region": "경주"}, None)
+    assert named(explore, "경주에서 반나절") is explore
 
 # 13 — 턴당 LLM 3회: 요약은 한 번만 미루고, 연속이면 결정론 압축 (C9)
 

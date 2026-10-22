@@ -37,6 +37,7 @@ class Intent(Enum):
     GET_POI_INFO = "GET_POI_INFO"
     EXPLORE_PLACES = "EXPLORE_PLACES"  # 도우미 직접 분류 전용 — 3단 라우터·질문뱅크 대상이 아니다(아래 DIALOGUE_INTENTS)
     RECOMMEND_PLACES = "RECOMMEND_PLACES"  # 도우미 직접 분류 전용 — "골라 줘"(탐색은 "찾아 줘"). 같은 풀, 고른 몇 곳만
+    RECOMMEND_REGION = "RECOMMEND_REGION"  # 도우미 직접 분류 전용 — 취향에 맞는 가볼 지역(장소가 아니라 지역을 고른다)
     OUT_OF_SCOPE = "OUT_OF_SCOPE"  # 폴백 전용 — 위임 대상 아님
 
 
@@ -99,19 +100,21 @@ ROUTING_TABLE: dict[Intent, RoutingEntry] = {
     Intent.GET_POI_INFO: RoutingEntry(None, RoutingMode.FAST_PATH),  # PlaceProvider
     Intent.EXPLORE_PLACES: RoutingEntry(None, RoutingMode.FAST_PATH),  # 등록 POI 반경 풀 (도우미 전용)
     Intent.RECOMMEND_PLACES: RoutingEntry(None, RoutingMode.FAST_PATH),  # 같은 풀에서 고른 몇 곳 (도우미 전용)
+    Intent.RECOMMEND_REGION: RoutingEntry(None, RoutingMode.FAST_PATH),  # 지역 성격표 × 취향 (도우미 전용, LLM 0)
     Intent.OUT_OF_SCOPE: RoutingEntry(None, RoutingMode.FALLBACK),
 }
 
 # 위임·Fast Path 대상 13종 (폴백 라벨 제외) — 질문뱅크가 커버해야 하는 집합.
-# EXPLORE_PLACES·RECOMMEND_PLACES 는 빠진다: 3단 라우터(섀도 측정 전용)는 현행 그대로여야 한다 — 뱅크·벡터·intent.yaml·재생 픽스처
+# EXPLORE_PLACES·RECOMMEND_PLACES·RECOMMEND_REGION 은 빠진다: 3단 라우터(섀도 측정 전용)는 현행 그대로여야 한다 — 뱅크·벡터·intent.yaml·재생 픽스처
 # 무변경(assistant-orchestrator BR-AO-14). 이 집합을 넓히면 intent.yaml 의 `$intents` 가 바뀌어 재생 기록 61건이 전건 미스다.
 ROUTABLE_INTENTS: frozenset[Intent] = frozenset(ROUTING_TABLE) - {Intent.OUT_OF_SCOPE, Intent.EXPLORE_PLACES,
-                                                                    Intent.RECOMMEND_PLACES}
+                                                                    Intent.RECOMMEND_PLACES, Intent.RECOMMEND_REGION}
 
 # 도우미 직접 분류(DIALOGUE_INTENT)가 고를 수 있는 집합 = 13종 + 장소 탐색(2026-10-19 사용자 결정 — "다룰 수 있는 카테고리를
 # 늘려라") + 장소 추천(2026-10-20 사용자 결정 — "서울에서 가볼만한 카페 하나 추천해줘"를 고른 답으로).
 # 핸들러 표(`dialogue_handlers.HANDLERS`)·도우미 프롬프트의 `$intents` 가 이 집합을 본다.
-DIALOGUE_INTENTS: frozenset[Intent] = ROUTABLE_INTENTS | {Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES}
+# 취향 기반 지역 추천(2026-10-22 사용자 — "내 취향 기반해서 가볼 지역 추천해줘"가 여행 스타일 넘기기로 끝났다).
+DIALOGUE_INTENTS: frozenset[Intent] = ROUTABLE_INTENTS | {Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES, Intent.RECOMMEND_REGION}
 
 
 def route_for(intent: Intent) -> RoutingEntry:

@@ -16,7 +16,7 @@ enum class Intent {
     EDIT_SCHEDULE, SUGGEST_ALTERNATIVE, REPLAN, REGENERATE, GENERATE_SCHEDULE,
     SHOW_SCHEDULE, GET_NEXT_SLOT, GET_DISTANCE, GET_POI_INFO, GET_WEATHER,
     GENERATE_REFLECTION, TRIP_SUMMARY, STYLE_ANALYSIS,
-    EXPLORE_PLACES, RECOMMEND_PLACES,
+    EXPLORE_PLACES, RECOMMEND_PLACES, RECOMMEND_REGION,
     OUT_OF_SCOPE,
 }
 
@@ -78,7 +78,11 @@ data class ContextSnapshot(
     /** 기준 숙소 이름. 지금은 첫 숙박일의 것 하나만 실린다(칩이 말하는 그 숙소). */
     val baseStays: List<String>,
     val itinerary: ItineraryBlock?,
+    /** 계정 취향 — 지역 추천(RECOMMEND_REGION) 재료. 고른 축이 하나도 없으면 null. 상대가 쓰는 두 축(styles·activities)만 싣는다(SEC-U8-08). */
+    val tastes: Tastes? = null,
 ) {
+    data class Tastes(val styles: List<String>, val activities: List<String>)
+
     /** @property phase `PLANNING`|`IN_TRIP`|`ENDED` */
     data class TripBlock(val tripId: UUID, val regions: List<String>, val startDate: LocalDate, val endDate: LocalDate, val phase: String)
 

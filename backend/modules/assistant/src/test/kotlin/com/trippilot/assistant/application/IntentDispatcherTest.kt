@@ -48,5 +48,8 @@ class IntentDispatcherTest : StringSpec({
             message.text shouldBe "가 볼 만한 곳 찾기는 지금 도와드리기 어려워요. 아래 버튼에서 제가 할 수 있는 걸 확인해 보세요."
             message.nextActions.map { it.type } shouldBe listOf("SHOW_CAPABILITIES")
         }
+        val region = dispatch.dispatch(Intent.RECOMMEND_REGION, noTrip)
+        region.text shouldBe "취향에 맞는 지역 추천은 지금 도와드리기 어려워요. 아래 버튼에서 제가 할 수 있는 걸 확인해 보세요."
+        region.nextActions.map { it.type } shouldBe listOf("SHOW_CAPABILITIES")
     }
 })
