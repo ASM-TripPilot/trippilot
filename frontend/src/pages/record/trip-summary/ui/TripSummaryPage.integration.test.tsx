@@ -226,6 +226,33 @@ describe('🔴 TRIP-987 B-1·B-2·B-3 · 요약에서 기록·회고로 간다',
   );
 });
 
+describe('🔴 TRIP-1489 · 서버가 준 summary.narrative 가 일차 카드 앞에 그대로 보인다', () => {
+  it('문장은 서버 값 그대로이고 일차 카드(1일차)도 함께 있다', async () => {
+    server.use(
+      summaryHandler({
+        ready: true,
+        summary: {
+          ...summary(true, ['A', 'B']),
+          narrative: '비가 스친 날에도 바다를 따라 걸었다.',
+        },
+      }),
+      tripOk()
+    );
+
+    renderPage();
+    await waitSummary();
+
+    expect(
+      within(screen.getByTestId('reflection-summary-narrative')).getByText(
+        '비가 스친 날에도 바다를 따라 걸었다.'
+      )
+    ).toBeOnTheScreen();
+    expect(screen.getAllByTestId('reflection-summary-day-card')).toHaveLength(
+      1
+    );
+  });
+});
+
 describe('🔴 TRIP-987 B-4 · 위치 전무 + 방문 0곳 (QA #025)', () => {
   it('빈 문구가 뜨고 "대신…" 문장은 없으며, 회고·방문 기록 진입은 그대로 있다', async () => {
     server.use(
