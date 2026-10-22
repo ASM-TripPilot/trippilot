@@ -831,12 +831,35 @@ def _assemble_weather(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Fa
     # 슬롯 앵커면 여행 지역(없으면 슬롯명), 지역 중심 앵커면 그 지역 — "부산 날씨" 에 일정 지역 이름을 달지 않는다
     region = anchor.label if anchor.coord is not None else (trip.regions[0] if trip is not None and trip.regions else anchor.label)
     label = "오늘 최대 강수확률" if on == ctx.today else f"{_date_label(on)} 최대 강수확률"  # BE 행 라벨 — 그 날의 최댓값
-    rows = (FactRow(label, f"{pop}%"),)
+    detail = value.get("data", {}).get("detail", {}).get(on.isoformat(), {})
+    rows = _weather_rows(detail, FactRow(label, f"{pop}%"))
     return Facts(
         intent, FactStatus.OK, AnswerKind.INFO, rows=rows, places=(), notes=(),
         payload=_info("WEATHER", f"{region} 날씨", rows), next_actions=(_itinerary_action(ctx.snapshot),), quick_replies=(),
         template_text=_template(intent, FactStatus.OK), detail={"date": on.isoformat(), "anchor": anchor.label},
     )
+
+
+_SKY_LABEL = {1: "맑음", 3: "구름많음", 4: "흐림"}
+_PTY_LABEL = {1: "비", 2: "비/눈", 3: "눈", 4: "소나기"}  # 0(없음)은 하늘 상태만 말한다
+
+
+def _weather_rows(detail: Mapping[str, object], pop_row: FactRow) -> tuple[FactRow, ...]:
+    """하늘 → 기온 → 강수확률 순. 상세(`DailyWeatherDetailPort`)가 없으면 종전처럼 강수확률 한 줄.
+
+    사용자(2026-10-21): "강수량만 알려주네… 맑아요·구름이 껴요·비가 와요처럼 더 담아서". 코드 → 말 번역은
+    여기 한 곳(어댑터는 코드 그대로 넘긴다). 모르는 칸은 줄을 안 만든다 — 지어내지 않는다.
+    """
+    rows: list[FactRow] = []
+    sky, pty = _SKY_LABEL.get(detail.get("sky")), _PTY_LABEL.get(detail.get("pty"))  # type: ignore[arg-type]
+    if sky or pty:
+        rows.append(FactRow("하늘", " · ".join(x for x in (sky, pty) if x)))
+    tmn, tmx = detail.get("tmn"), detail.get("tmx")
+    temps = tuple(t for t in ((f"최저 {tmn}°" if tmn is not None else None), (f"최고 {tmx}°" if tmx is not None else None)) if t)
+    if temps:
+        rows.append(FactRow("기온", " · ".join(temps)))
+    rows.append(pop_row)
+    return tuple(rows)
 
 
 # GET_DISTANCE — 일정상 그 장소의 **직전 구간**만 (BE QueryCards.distance, G-U8-5)

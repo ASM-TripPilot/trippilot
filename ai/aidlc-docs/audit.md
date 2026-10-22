@@ -625,3 +625,9 @@
 - **판 번호**: 분류 0.2.4(#1463)·답변 0.3.4(행사 C)는 열린 PR 몫이라 비워 두었다 — 그쪽이 다시 올릴 때 판을 하나씩 올린다. 계획은 #1502(0.1.2·0.1.3) 위 0.1.4, 측정셋은 0.3 위 0.4.
 - **지키는 것**: 탐색 코드 무변경 · intent.yaml·뱅크·재생 픽스처 무변경(intent.yaml $intents 해시 그대로) · wiring.py 무변경.
 
+## 2026-10-22 — 도우미 날씨 답에 하늘·강수 형태·기온을 더한다 (DailyWeatherDetailPort)
+**Timestamp**: 2026-10-22 · 브랜치 `feat/weather-detail-facts` · **승인 대기**(같은 PR 머지 = 승인)
+- **입력**: 사용자(2026-10-21, 일정 품질 세션 전달) "챗봇에게 날씨 물었는데 강수량만 알려주네… 오늘 날씨는 맑아요, 구름이 껴요, 비가 와요 뭐 이렇게 정보를 더 담아서 답변하게". 기상청 단기예보 응답에 SKY·PTY·TMP·TMN·TMX 가 같은 1회 호출에 이미 실려 있었다.
+- **무엇을 했나**: ① `WeatherPort` 에 선택 능력 `DailyWeatherDetailPort.daily_detail` + `DayWeather(sky·pty·tmn·tmx)` — 기상청 코드 그대로, 모르는 칸 None ② `KmaWeatherAdapter.daily_detail` — 같은 응답의 다른 접기(`_slots` 공용 파서; SKY 는 낮 06~21시 최다값·동률은 흐린 쪽, PTY 는 그 날 최대 코드, 기온은 TMN/TMX 없으면 TMP 최소·최대) ③ `WeatherProvider` 패킷 `data["detail"]`(None 칸 제외, 실패는 경고 로그 + 빈 dict — 강수확률은 산다) ④ `_assemble_weather` 행 = 하늘 → 기온 → 최대 강수확률(상세 없으면 종전 한 줄). 코드→말 번역(맑음·구름많음·흐림 / 비·비/눈·눈·소나기)은 핸들러 한 곳.
+- **지키는 것**: 포털 호출 1건(테스트) · 와이어·openapi·`wiring.py`·프롬프트 무변경(답변 프롬프트 예시가 이미 "하늘" 행을 안다) · INV-3(기온·확률만) · INV-4(상세 실패가 답을 막지 않는다). 생성·재계획이 읽는 `daily`·`hourly` 는 그대로.
+- **남긴 것**: 시트 "오늘 날씨" **버튼**은 BE 경로(weather-context → QueryCards.weather)라 여전히 강수확률만 — BE 몫. 분류 경로 `period`(주말) 미지원은 미결 #27 그대로.
