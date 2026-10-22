@@ -513,3 +513,55 @@ describe('SplashGate · none 전환 범위', () => {
     ).toBeUndefined();
   });
 });
+
+/**
+ * TRIP-1595 — 기능 안내 라우트(`onboarding-tour`)는 HOME 가드 **안**에서 선언한다.
+ *
+ * 무엇을 보장하나: 취향 2/2 완료 뒤 게이트가 HOME 을 연 다음에 가는 화면이라 HOME 일 때만 서 있고,
+ * 로그아웃·401 로 목적지가 바뀌면 가드가 치워 준다. 미인증 딥링크로 열리는 가드 밖 파일시스템 라우트가 하나 늘지 않는다.
+ * 스와이프 뒤로를 막는 `gestureEnabled: false` 와, 전환 `animation` 을 주지 않는 것(위 "animation 선언은 8곳뿐" 가드)도 선언까지 잠근다.
+ * jest 가 잠그는 것은 선언까지다 — 실제 스택 모양은 `SplashGate.integration.test` 가, 안드로이드 하드웨어 뒤로는 뷰 테스트와 6-b 가 본다.
+ */
+describe('SplashGate · 기능 안내 라우트 선언 (TRIP-1595)', () => {
+  const TOUR_ROUTE = 'onboarding-tour';
+
+  it('S1 HOME 에서는 가드 안에 선언이 하나 있고 스와이프 뒤로가 꺼져 있으며 전환 animation 은 없다', () => {
+    // 준비
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
+
+    // 실행
+    render(<SplashGate />);
+    passFloor();
+
+    // 단언
+    const declared = screen
+      .UNSAFE_getAllByType(Stack.Screen)
+      .filter((node) => node.props.name === TOUR_ROUTE);
+    expect(declared).toHaveLength(1);
+    expect(insideProtected(declared[0])).toBe(true);
+    expect(declared[0].props.options?.gestureEnabled).toBe(false);
+    expect(declared[0].props.options?.animation).toBeUndefined();
+    expect(screen.getByTestId(`gate-route-${TOUR_ROUTE}`)).toBeOnTheScreen();
+  });
+
+  it.each([
+    ['ONBOARDING', 'gate-route-(onboarding)'],
+    ['LOGIN', 'gate-route-(auth)'],
+    ['RECONSENT', 'gate-route-reconsent'],
+    ['FORCE_UPDATE', 'gate-route-force-update'],
+  ] as const)(
+    'S2 목적지 %s 에서는 기능 안내가 마운트되지 않는다(가드 밖으로 새지 않는다)',
+    (destination, ownRoute) => {
+      // 준비
+      mockUseBootstrapGate.mockReturnValue(gate({ destination }));
+
+      // 실행
+      render(<SplashGate />);
+      passFloor();
+
+      // 단언 — 짝: 그 목적지의 자기 라우트는 서 있다(빈 스택이라 부재가 공허하게 참인 것이 아니다)
+      expect(screen.getByTestId(ownRoute)).toBeOnTheScreen();
+      expect(screen.queryByTestId(`gate-route-${TOUR_ROUTE}`)).toBeNull();
+    }
+  );
+});

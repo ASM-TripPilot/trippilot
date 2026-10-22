@@ -68,6 +68,7 @@
 
 ## app/
 - `app/notifications.tsx`  →  (export 없음)
+- `app/onboarding-tour.tsx`  →  (export 없음)
 - `app/reconsent.tsx`  →  (export 없음)
 
 ## app/records/
@@ -1042,6 +1043,19 @@
 - `src/pages/onboarding/onboarding-terms/ui/TermsPage.tsx`  →  TermsPage
 - `src/pages/onboarding/onboarding-terms/ui/TermsScreen.tsx`  →  TermsItemView · TermsScreenProps · TermsScreen
 
+## src/pages/onboarding/onboarding-tour/
+- `src/pages/onboarding/onboarding-tour/index.ts`  →  OnboardingTourPage
+
+## src/pages/onboarding/onboarding-tour/model/
+- `src/pages/onboarding/onboarding-tour/model/tourPages.ts`  →  TOUR_PAGE_COUNT · TourPageSpec · TOUR_PAGES
+
+## src/pages/onboarding/onboarding-tour/ui/
+- `src/pages/onboarding/onboarding-tour/ui/OnboardingTourPage.tsx`  →  OnboardingTourPage
+- `src/pages/onboarding/onboarding-tour/ui/OnboardingTourView.tsx`  →  OnboardingTourViewProps · OnboardingTourView
+- `src/pages/onboarding/onboarding-tour/ui/TourFragments.tsx`  →  TourPlacesFragment · TourStayFragment · TourPlanFragment · TourTripFragment · TourRecordFragment · TourAssistantFragment
+- `src/pages/onboarding/onboarding-tour/ui/TourGlyphs.tsx`  →  TourRoute · TourStopPin · TourMapPinBody · TourProgressDots · TourFlameGlyph · TourVisitCheck · TourMapBackdrop · TourMapRoute · TourScaleBar
+- `src/pages/onboarding/onboarding-tour/ui/TourStage.tsx`  →  TourStage
+
 ## src/pages/record/daily-reflection/
 - `src/pages/record/daily-reflection/index.ts`  →  DailyReflectionPage
 
@@ -1853,4 +1867,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1183개 파일
+합계 1191개 파일

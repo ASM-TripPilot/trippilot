@@ -206,6 +206,7 @@ import { BaseRegenerateDialog } from '@/pages/trip/trip-new-step2/ui/BaseRegener
 import { TripWizardLeaveDialog } from '@/pages/trip/trip-new-step1/ui/TripWizardLeaveDialog';
 import { PrefStep1Screen } from '@/pages/onboarding/onboarding-pref1/ui/PrefStep1Screen';
 import { PrefStep2Screen } from '@/pages/onboarding/onboarding-pref2/ui/PrefStep2Screen';
+import { OnboardingTourView } from '@/pages/onboarding/onboarding-tour/ui/OnboardingTourView';
 import { TermsScreen } from '@/pages/onboarding/onboarding-terms/ui/TermsScreen';
 import type { PreferenceSelection } from '@/features/edit-preferences';
 import { PreferencesEditView } from '@/pages/settings/settings-preferences/ui/PreferencesEditView';
@@ -3182,6 +3183,16 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => <PushPreprompt onProceed={noop} />,
   },
+  // TRIP-1595 — c10 기능 안내 6장(Figma 5094:3522 …). 키마다 앱을 재기동해 캡처한다 — 프리뷰는 진입 시 딥링크 상태를 1회만 읽는다.
+  ...[1, 2, 3, 4, 5, 6].map((page): PreviewState => ({
+    key: `onboarding-tour-${page}`,
+    band: 'c',
+    label: `c10 · 기능 안내 ${page}/6`,
+    login: null,
+    render: () => (
+      <OnboardingTourView initialPage={page} onSkip={noop} onStart={noop} />
+    ),
+  })),
   // ── e00·d1b 지역 선택 4키(TRIP-183) — 컨테이너 없이 화면에 props를 직접 넣는다 ──
   // ⚠️ 프리뷰는 정적이라 **실제 OS 권한 다이얼로그는 뜨지 않는다.** 여기서 보는 것은
   //    "권한이 거부됐을 때 화면이 어떻게 생겼나"까지고, 다이얼로그 자체는 실제 라우트
