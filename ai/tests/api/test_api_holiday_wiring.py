@@ -4,8 +4,11 @@
 
 증명하는 것:
   ① generate — 그 날 공휴일 휴무인 곳은 일정에 없다(모드 off 면 놓인다). 여러 날·여러 앵커 구간이어도 달력은 1회.
+     달력을 못 읽으면 종전대로 빈 달력으로 짠다.
   ② validate — 같은 휴일 규칙으로 HC1 "공휴일 휴무" — 조립이 둔 해와 검증이 같은 매핑을 본다. off 면 위반 없음.
      미판정 보고(HOURS_UNKNOWN)도 같은 달력으로 가른다 — on 이면 판정한 것, off 면 영업정보가 없어 못 본 것.
+     달력을 못 읽으면(실패·키 미등록) 태그형 휴일 규칙이 있는 곳은 영업 창이 있어도 못 본 것이다(G-SA-22) — 수리도 같다.
+     그 미판정은 `detail` 표지(`holiday_calendar_unread`)로 원문 없음(빈 문자열)과 갈린다.
   ③ repair — 휴일 휴무 슬롯은 수리하지 못한다(검증과 같은 판정).
   ④ replan — 휴무 후보는 안 놓이고, "저녁은 그대로"는 그 날 공휴일 휴무인 식당을 잠그지 않는다. 달력 1회.
   ⑤ 편집 검증의 문제 재구성도 같은 달력을 싣는다.
@@ -53,6 +56,17 @@ class _SpyCalendar:
         return {d: frozenset({"PUBLIC"}) for d in self.days if start <= d <= end}
 
 
+class _FailingCalendar(_SpyCalendar):
+    """조회 실패(불통·키 오류·형식 깨짐) — 어댑터는 None 을 돌려준다."""
+
+    def __init__(self) -> None:
+        super().__init__(())
+
+    def holidays_between(self, start: date, end: date):
+        super().holidays_between(start, end)
+        return None
+
+
 def _poi(pid: str, lat: float, lng: float, *, rules=frozenset(), cat=PoiCategory.SIGHT,
          hours: tuple[OpenHour, ...] = ()) -> Poi:
     return Poi(poi_id=PoiId(pid), name=pid, category=cat, coord=GeoPoint(lat, lng), open_hours=hours,
@@ -92,6 +106,15 @@ def test_generate_모드_off_면_놓이고_달력을_부르지_않는다() -> No
         body = client.post("/ai/v1/itinerary/generate", json=_request((_D1,), [])).json()
     assert "museum" in _placed(body["days"])
     assert spy.calls == []
+
+
+def test_generate_는_달력을_못_읽어도_빈_달력으로_짠다() -> None:
+    """미판정 보고는 검증 몫이다 — 생성은 종전대로 날짜 명시형 규칙만 보고 짠다(태그형 규칙이 있는 곳도 놓인다)."""
+    failing = _FailingCalendar()
+    with TestClient(create_app(_orchestrator(HolidaySource(enabled=True, calendar=failing)))) as client:
+        body = client.post("/ai/v1/itinerary/generate", json=_request((_D1,), [])).json()
+    assert "museum" in _placed(body["days"])
+    assert failing.calls == [(_D1, _D1)]
 
 
 def test_generate_여러_앵커_구간이어도_달력은_1회다() -> None:
@@ -194,6 +217,54 @@ def test_repair_는_공휴일_휴무_슬롯을_수리하지_못한다() -> None:
         body = client.post("/ai/v1/itinerary/repair", json={
             "itinerary": _payload(_D1, "museum"), "violations": [], "request_meta": _META}).json()
     assert body["repaired"] is not None
+
+
+# 주간 영업 창이 있는 두 곳 — 하나만 공휴일 휴무 규칙이 있다. 둘 다 창 안에 놓는다.
+_OPEN = tuple(OpenHour(d, 540, 1080) for d in range(7))
+_TAGGED = _poi("tagged", _ANCHOR.lat + 0.002, _ANCHOR.lng, rules={"PUBLIC"}, hours=_OPEN)
+_PLAIN = _poi("plain", _ANCHOR.lat + 0.004, _ANCHOR.lng, hours=_OPEN)
+_BOTH = {"days": [{"date": _D2.isoformat(), "slots": [
+    {"poi_id": "tagged", "start_at": "10:00:00", "end_at": "11:00:00", "is_fixed": False},
+    {"poi_id": "plain", "start_at": "12:00:00", "end_at": "13:00:00", "is_fixed": False}]}],
+    "is_fallback": False, "solve_mode": "OR_TOOLS"}
+_TAGGED_UNKNOWN = [{"poi_id": "tagged", "reason_code": "HOURS_UNKNOWN", "detail": "holiday_calendar_unread"}]
+
+
+def _check_both(holidays: HolidaySource | None, path: str = "validate") -> dict:
+    body = {"itinerary": _BOTH, "request_meta": _META} | ({"violations": []} if path == "repair" else {})
+    with TestClient(create_app(_orchestrator(holidays, pois=(_TAGGED, _PLAIN)))) as client:
+        return client.post(f"/ai/v1/itinerary/{path}", json=body).json()
+
+
+def test_validate_는_달력을_못_읽으면_태그형_규칙이_있는_곳을_미판정으로_싣는다() -> None:
+    """G-SA-22 — 달력을 못 읽으면 빈 달력으로 판정해 태그형 휴일 규칙(공휴일 휴무)을 보지 못하는데, 주간 영업 창이
+    있으면 HC1 이 통과시켜 흔적이 없었다 — 장소 감지가 진짜 공휴일 휴무를 '확인'으로 접을 수 있었다(INV-SA-2).
+    규칙이 없는 곳은 그대로 판정이다. `detail` 표지로 원문 없음(빈 문자열 — 종전)과 운영에서 가른다."""
+    failing = _FailingCalendar()
+    for holidays in (HolidaySource(enabled=True, calendar=failing),  # 조회 실패
+                     HolidaySource(enabled=True, calendar=None)):    # 키 미등록 — 달력이 없다
+        assert _check_both(holidays) == {"violations": [], "unverified_slots": _TAGGED_UNKNOWN}
+    assert failing.calls == [(_D2, _D2)]
+    # 영업정보가 없는 곳은 태그형 규칙이 있어도 원문 없음이다 — 표지 없이 종전대로
+    with TestClient(create_app(_orchestrator(HolidaySource(enabled=True, calendar=_FailingCalendar())))) as client:
+        body = client.post("/ai/v1/itinerary/validate",
+                           json={"itinerary": _payload(_D1, "museum"), "request_meta": _META}).json()
+    assert body["unverified_slots"] == [{"poi_id": "museum", "reason_code": "HOURS_UNKNOWN", "detail": ""}]
+
+
+def test_validate_는_달력을_읽었거나_모드_off_면_종전대로다() -> None:
+    no_holiday = _check_both(HolidaySource(enabled=True, calendar=_SpyCalendar(())))  # 그 날 공휴일이 없다고 안다
+    assert no_holiday == {"violations": [], "unverified_slots": []}
+    holiday = _check_both(HolidaySource(enabled=True, calendar=_SpyCalendar((_D2,))))  # 공휴일 — 휴무가 증명됐다
+    assert [(v["slot_ref"], v["reason_code"]) for v in holiday["violations"]] == [("tagged", "HOLIDAY")]
+    assert holiday["unverified_slots"] == []
+    assert _check_both(None) == {"violations": [], "unverified_slots": []}  # 모드 off — 공휴일을 보지 않는다
+
+
+def test_repair_도_달력을_못_읽으면_태그형_규칙이_있는_곳을_미판정으로_싣는다() -> None:
+    body = _check_both(HolidaySource(enabled=True, calendar=_FailingCalendar()), "repair")
+    assert body["unverified_slots"] == _TAGGED_UNKNOWN
+    assert _check_both(HolidaySource(enabled=True, calendar=_SpyCalendar(())), "repair")["unverified_slots"] == []
 
 
 # ── ④ replan ─────────────────────────────────────────────────────────

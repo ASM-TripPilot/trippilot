@@ -328,7 +328,8 @@ class UnverifiedSlotSchema(BoundaryModel):
     - `NOT_REGISTERED`: POI 정본(place-data)이 그 id를 안 돌려줬다 — 미등록·비ACTIVE
     - `UNMAPPABLE`: 돌려줬으나 판정에 쓸 수 없다 — `detail`이 원인 필드명
       (좌표 null·모르는 category/data_quality 등, 즉 경계 enum 드리프트가 여기로 온다)
-    - `HOURS_UNKNOWN`: 정본은 있으나 그 날 영업 창을 모른다(영업 원문 없음·해석 실패 — 둘 다 영업 창 0건)
+    - `HOURS_UNKNOWN`: 정본은 있으나 그 날 영업 창을 모른다(영업 원문 없음·해석 실패 — 둘 다 영업 창 0건), 또는
+      특일 달력을 못 읽어 태그형 휴일 규칙을 판정하지 못했다(주간 영업 창은 있음 — `detail` 이 `holiday_calendar_unread`)
       — **HC1 만** 못 봤고 HC2 는 판정됐다. 같은 장소가 여러 날이면 하루라도 못 봤으면 실린다
     """
 
