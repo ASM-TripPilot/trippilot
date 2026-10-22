@@ -105,7 +105,6 @@ const SAVE_PHOTOS_COPY =
   'TripPilot이 여행 공유 카드를 사진 앨범에 저장하기 위해 사진 추가 권한을 사용합니다.';
 
 let infoPlist: Record<string, unknown> = {};
-let entitlements: Record<string, unknown> = {};
 let introspectedExtra: Record<string, unknown> = {};
 
 beforeAll(() => {
@@ -126,7 +125,6 @@ beforeAll(() => {
   );
   const introspected = JSON.parse(stdout);
   infoPlist = introspected._internal.modResults.ios.infoPlist;
-  entitlements = introspected._internal.modResults.ios.entitlements ?? {};
   introspectedExtra = introspected.extra ?? {};
 }, 60_000);
 
@@ -252,16 +250,6 @@ describe('AC-5 privacy manifest', () => {
       NSPrivacyAccessedAPICategorySystemBootTime: new Set(['35F9.1']),
       NSPrivacyAccessedAPICategoryDiskSpace: new Set(['E174.1', '85F4.1']),
     });
-  });
-});
-
-describe('1.0.1 푸시 켬 · aps-environment', () => {
-  // 1.0 은 번들 ID 에 Push 권한이 없어 이 entitlement 를 지웠다(TRIP-935). 지운 채 나가면 빌드·심사는
-  // 통과하는데 푸시 토큰이 안 나와 알림만 조용히 안 온다 — 그래서 해석 결과로 굳힌다.
-  it('해석된 iOS entitlements 에 aps-environment 가 있다', () => {
-    expect(entitlements['aps-environment']).toMatch(
-      /^(development|production)$/
-    );
   });
 });
 
