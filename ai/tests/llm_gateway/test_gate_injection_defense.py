@@ -114,14 +114,15 @@ def test_no_real_poi_name_is_flagged() -> None:
     assert [n for n in names if has_contact_like(n)] == []
 
 
-def test_no_wiki_excerpt_sentence_is_flagged() -> None:
+@pytest.mark.parametrize("name", ["place_corpus_wiki.jsonl.gz", "place_corpus_overview.jsonl.gz"])
+def test_no_wiki_excerpt_sentence_is_flagged(name: str) -> None:
     """KB-5 발췌도 같은 이유 — 위키 본문이 프롬프트를 거쳐 문장에 섞인다. **실제로 싣는 원천**(본문 전문 코퍼스)을
     본다 — 옛 통문서 파일을 보면 전문에 새로 들어온 연락처 문장을 못 잡는다(2026-10-18 청킹)."""
     import gzip
 
     from trippilot.poi_curation.chunking import chunk_corpus
 
-    with gzip.open(_DATA / "place_corpus_wiki.jsonl.gz", "rt", encoding="utf-8") as f:
+    with gzip.open(_DATA / name, "rt", encoding="utf-8") as f:
         docs = chunk_corpus(json.loads(line) for line in f if line.strip())
     sentences = [
         s.strip()

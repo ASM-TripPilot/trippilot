@@ -423,20 +423,21 @@ def test_default_seeds_exist_in_the_repo_and_load_the_chunk_corpus() -> None:
 
     load_kb = _load_kb_module()
     root = Path(__file__).resolve().parents[3]
-    assert "data/place_corpus_wiki.jsonl.gz" in load_kb._DEFAULT_SEEDS
+    assert {"data/place_corpus_wiki.jsonl.gz", "data/place_corpus_overview.jsonl.gz"} <= set(load_kb._DEFAULT_SEEDS)
     missing = [s for s in load_kb._DEFAULT_SEEDS if not (root / s).is_file()]
     assert missing == [], "기본 seed 가 리포에 없다 — 배포 KB 적재 Job 이 매번 죽는다"
     assert len(load_kb._documents_of(root / "data/place_corpus_wiki.jsonl.gz")) > 5_000
 
 
-def test_committed_place_vectors_cover_the_corpus() -> None:
+@pytest.mark.parametrize("name", ["place_corpus_wiki.jsonl.gz", "place_corpus_overview.jsonl.gz"])
+def test_committed_place_vectors_cover_the_corpus(name: str) -> None:
     """코퍼스·청킹 규칙을 바꾸고 벡터를 다시 안 만들면 배포 적재가 그 조각을 운영 임베딩 파드로 돌린다(수 시간)."""
     from pathlib import Path
 
     from trippilot.poi_curation.chunking import load_chunk_vectors, text_hash, vectors_path
 
     load_kb = _load_kb_module()
-    corpus = Path(__file__).resolve().parents[3] / "data/place_corpus_wiki.jsonl.gz"
+    corpus = Path(__file__).resolve().parents[3] / "data" / name
     loaded = load_chunk_vectors(vectors_path(corpus))
     assert loaded is not None, "scripts/collect/build_place_vectors.py 로 만든다"
     assert loaded.model == "nlpai-lab/KURE-v1" and loaded.dim == 1024

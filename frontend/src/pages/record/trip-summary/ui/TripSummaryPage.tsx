@@ -145,6 +145,7 @@ export function TripSummaryPage({
       )}
       view={resolveSummaryView(data.stats)}
       dayCards={dayCards}
+      narrative={data.narrative}
       orderedVisits={toOrderedVisitList(data.highlights)}
       shareEnabled={shareEnabled(envelope)}
       // TRIP-939 Q2: 공유 카드의 저장·공유가 미장전이면 진입점([공유])을 넘기지 않는다(막다른 화면 차단).
