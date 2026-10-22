@@ -48,6 +48,11 @@ class WeatherAlertsZoneListTest : StringSpec({
         unknown shouldBe NOT_READ_BY_NAME
     }
 
+    "제 구역이 있는 광역시의 군은 목록과 같다 — 그 군 이름으로 시작하는 구역이 있는 군(규칙 7 — 그 광역의 권역이 덮지 않는다)" {
+        val metroGun = WeatherAlerts.CITY_STEMS.filterKeys { it.wide }.values.flatten()
+        metroGun.filter { stem -> rows.any { it.name.startsWith(stem) } }.toSet() shouldBe WeatherAlerts.OWN_ZONE_GUN
+    }
+
     "묶음 하나를 한 줄로 읽어도 모르는 이름 WARN 이 나지 않는다" {
         groups.forEach { (head, zones) ->
             withClue(head.name) { WeatherAlerts.unknownNames(WarningArea(head.name, zones.map { it.name })).shouldBeEmpty() }

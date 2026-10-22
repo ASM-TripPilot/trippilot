@@ -22,9 +22,9 @@ import io.kotest.property.checkAll
  * - **`(…제외)` 줄은 시군 전체 이름일 때만 안 걸림**(G-SA-19) — 제 시군 전체 이름(어간 · 어간+시/군)을 뺐으면 안 걸림, 제 하위 권역(어간 +
  *   다른 꼬리)만 뺐으면 모름(목적지가 뺀 쪽에 있는지 모른다 — 시군째 빼면 나머지 권역의 특보를 '특보 없음'으로 확인한다), 둘 다 없으면 걸림.
  * - **표에 없는 이름이 끼면 절대 '안 걸림'이 아니다** — 제 이름이 없고 낯선 이름(구역 개편)이 하나라도 있으면 모름(제외 줄이면 걸림 ·
- *   광역시의 군은 권역이 끼면 걸림). '안 걸림'은 '특보 없음' 확인의 재료라 모름을 거기 접으면 거짓 해제다.
+ *   광역시의 군은 권역이 끼면 걸림 — 제 구역이 있는 군은 모름). '안 걸림'은 '특보 없음' 확인의 재료라 모름을 거기 접으면 거짓 해제다.
  * - **아는 이름뿐이면 가른다** — 다른 시군·섬 구역·관서 묶음 구역·바다뿐이면 안 걸림, 광역 권역이 끼면 도의 시군은 모름·광역시의 군은
- *   걸림(규칙 7 — 줄 전체).
+ *   걸림(규칙 7 — 줄 전체). 제 구역이 있는 광역시의 군(강화·옹진·군위·달성)은 권역이 덮지 않아 권역만으로는 안 걸림이다.
  *
  * 오라클은 생성기가 붙인 갈래 표지로 적는다 — 구현의 갈래 함수(`zoneKind`)를 다시 부르지 않는다.
  */
@@ -35,12 +35,14 @@ class WeatherAlertsPropertyTest : StringSpec({
             val got = WeatherAlerts.match(c.area, c.place)
             val land = c.zones.filter { it.kind != Kind.SEA }
             val named = land.any { it.name.startsWith(c.place.stem!!) }
+            val metroGun = c.place.provinces.single().wide
+            val ownZone = metroGun && c.place.stem in OWN_ZONE_GUN // 공식 목록에 제 구역이 있는 광역시의 군 — 권역이 덮지 않는다
             val expected = when {
                 c.area.excluding -> excludedExpected(land)
                 land.isEmpty() -> Match.MISS
                 named -> Match.HIT
-                c.place.provinces.single().wide && land.any { it.kind == Kind.REGIONAL } -> Match.HIT // 광역시의 군 — 권역 줄이면 줄 전체
-                land.any { it.kind == Kind.REGIONAL || it.kind == Kind.STRANGE } -> Match.UNSURE
+                metroGun && !ownZone && land.any { it.kind == Kind.REGIONAL } -> Match.HIT // 광역시의 군 — 권역 줄이면 줄 전체
+                land.any { (it.kind == Kind.REGIONAL && !ownZone) || it.kind == Kind.STRANGE } -> Match.UNSURE
                 else -> Match.MISS
             }
             withClue("${c.area} × ${c.place}") {
@@ -81,6 +83,9 @@ private data class Case(val place: Place, val zones: List<Zone>, val area: Warni
 
 /** 구역 개편으로 생길 법한 낯선 이름 — 어느 광역의 시군 어간으로도 광역 이름으로도 시작하지 않는다(위 전제 검사가 지킨다). */
 private val STRANGE = listOf("북동산지", "중부산간", "남부내륙", "서부평야", "동부해안", "내륙북부")
+
+/** 제 구역이 있는 광역시의 군 — 오라클의 리터럴(구현 표를 다시 부르지 않는다 · 목록 대조는 `WeatherAlertsZoneListTest`). */
+private val OWN_ZONE_GUN = setOf("강화", "옹진", "군위", "달성")
 
 /**
  * 규칙 9 의 정답 — 제 시군 전체 이름을 뺐으면 안 걸림, 제 하위 권역만 뺐으면 모름, 둘 다 없으면 나열 밖이라 걸림. 섬·관서 묶음 구역은

@@ -29,7 +29,8 @@ import java.time.temporal.ChronoUnit
  * 7. 특별·광역시와 제주의 시·구(해운대구·서귀포시 …)는 광역 목적지처럼 그 광역 줄 전체로 맞춘다 — 그 광역의 구역 이름(`부산동부` ·
  *    `제주도남부`)에 시·구 이름이 없어 6 으로는 영영 걸리지 않는다(광역 목적지 규칙의 근거와 같다). 과잉 경보는 관찰 전용 출발이 잰다(BR-SA-04).
  *    광역시의 **군**(강화·옹진·기장 …)은 6 으로 맞춘다 — 구역 이름에 군 이름이 나온다(`인천(강화)`). 다만 그 줄에 광역 이름으로 시작하는
- *    권역(`부산동부`)이 있으면 그 군이 들었을 수 있어 줄 전체로 맞춘다(7 의 근거와 같다). 그 광역의 군 어간([CITY_STEMS])·광역 이름·표
+ *    권역(`부산동부`)이 있으면 그 군이 들었을 수 있어 줄 전체로 맞춘다(7 의 근거와 같다) — 제 구역이 있는 군([OWN_ZONE_GUN] — 강화·옹진·
+ *    군위·달성)은 빼고: 그 광역의 권역(`인천영종` · `대구중부`)은 그 군을 덮지 않는다. 그 광역의 군 어간([CITY_STEMS])·광역 이름·표
  *    (규칙 3)·바다 어디에도 안 드는 이름이 있으면 모름이다 — 8 의 낯선 이름과 같다(G-SA-16 결정 2026-10-20).
  * 8. 도의 시군은 6 으로 안 걸려도 그 줄에 광역 이름으로 시작하는 권역(`강원중부산지` · `경북북동산지`)이 있으면 모름이다 — 그 권역이 시군을
  *    덮는지 이름으로 가릴 수 없다(평창의 평지만 풀리고 대관령 경보가 남은 회차). 권역은 시군 표로 걸지 않고 모름으로 둔다(G-SA-16 결정
@@ -209,6 +210,14 @@ object WeatherAlerts {
         return Place(code, provinces, stem, province.wide && !isGun(province, code), if (province.wide) province.label else stem ?: province.label)
     }
 
+    /**
+     * 제 구역이 있는 광역시의 군 — 공식 목록에 그 군 이름으로 시작하는 구역이 있다(강화 · 옹진 · 군위 · 달성 — `기상청_기상특보구역정보_20260601`).
+     * 그 광역의 권역(`인천영종` · `인천남부` · `대구중부`)은 이 군을 덮지 않으니 권역 줄로 걸지 않는다(규칙 7) — 실응답 `인천(옹진, 인천영종)`
+     * (2026-10-16~22 강풍경보)이 강화를 경보하면 과잉이다. 제 구역이 없는 군(기장 · 울주)은 그 광역의 권역 안에 든다.
+     * `WeatherAlertsZoneListTest` 가 목록과 대조한다.
+     */
+    val OWN_ZONE_GUN: Set<String> = setOf("강화", "옹진", "군위", "달성")
+
     /** 이 특보 구역이 이 목적지에 걸리는가(위 규칙 1~9). */
     fun match(area: WarningArea, place: Place): Match {
         val name = area.name.trim()
@@ -224,9 +233,10 @@ object WeatherAlerts {
         if (area.excluding) return excludedMatch(land, place)
         if (land.isEmpty()) return Match.MISS
         if (named || place.wide) return Match.HIT
-        if (province.wide && land.any(province::isRegional)) return Match.HIT // 규칙 7 — 광역시의 군: 권역 줄이면 줄 전체
+        val ownZone = province.wide && place.stem in OWN_ZONE_GUN // 권역이 덮지 않는 광역시의 군
+        if (province.wide && !ownZone && land.any(province::isRegional)) return Match.HIT // 규칙 7 — 광역시의 군: 권역 줄이면 줄 전체
         // 규칙 7·8 — 광역 권역(도의 시군)이나 표에 없는 이름이 하나라도 있으면 그 구역이 목적지를 덮는지 가릴 수 없다
-        val kinds = land.map { zoneKind(province, it) }
+        val kinds = land.map { zoneKind(province, it) }.filterNot { ownZone && it == ZoneKind.REGIONAL }
         return if (ZoneKind.REGIONAL in kinds || ZoneKind.UNKNOWN in kinds) Match.UNSURE else Match.MISS
     }
 

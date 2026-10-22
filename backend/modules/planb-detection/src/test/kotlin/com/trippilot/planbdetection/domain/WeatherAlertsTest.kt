@@ -344,7 +344,10 @@ class WeatherAlertsTest : StringSpec({
             Triple(WarningArea("부산", listOf("동해안권")), gijang, UNSURE),
             Triple(WarningArea("부산", listOf("동해안권"), excluding = true), gijang, HIT), // 제외 줄은 그대로
             Triple(WarningArea("대구", listOf("달성북부")), dalseong, HIT),
-            Triple(WarningArea("대구", listOf("대구중부")), dalseong, HIT), // 권역 줄 — 줄 전체
+            Triple(WarningArea("대구", listOf("대구중부")), dalseong, MISS), // 제 구역(달성 · 달성북부 · 달성남부)이 있는 군 — 권역이 덮지 않는다
+            Triple(WarningArea("대구", listOf("대구중부")), gunwi, MISS),
+            Triple(WarningArea("인천", listOf("인천", "인천영종")), ganghwa, MISS), // `인천`(L1110100)도 그 광역의 권역이다
+            Triple(WarningArea("인천", listOf("인천영종", "교동권")), ganghwa, UNSURE), // 낯선 이름은 그대로 모름
             Triple(WarningArea("대구", listOf("군위", "남부권")), dalseong, UNSURE),
             Triple(WarningArea("인천", listOf("옹진", "서해5도")), ganghwa, MISS), // 다른 군·섬 구역뿐
             // 규칙 9 — 제외 줄은 시군 전체 이름(어간 · 어간+시/군)일 때만 그 시군을 뺀다. 개편 목록은 시군을 권역으로 나눴다 — 하위 권역만
@@ -380,6 +383,12 @@ class WeatherAlertsTest : StringSpec({
             Triple(WarningArea("인천", listOf("옹진"), excluding = true), ganghwa, HIT),
             Triple(WarningArea("인천", listOf("강화"), excluding = true), ganghwa, MISS),
             Triple(WarningArea("대구", listOf("군위")), gunwi, HIT),
+            Triple(WarningArea("인천", listOf("옹진", "인천영종")), ganghwa, MISS), // 제 구역이 있는 군 — 영종 강풍경보로 강화를 경보하지 않는다
+            Triple(WarningArea("인천", listOf("옹진", "인천영종")), ongjin, HIT),
+            Triple(WarningArea("인천", listOf("옹진", "인천영종")), yeonsu, HIT), // 광역시의 구 — 줄 전체(규칙 7)
+            Triple(WarningArea("인천", listOf("강화", "인천남부", "인천북부")), ongjin, MISS),
+            Triple(WarningArea("인천", listOf("강화", "인천남부", "인천북부")), ganghwa, HIT),
+            Triple(WarningArea("인천", listOf("강화", "인천북부")), ongjin, MISS),
             Triple(WarningArea("충청남도", listOf("금산"), excluding = true), geumsan, MISS),
             Triple(WarningArea("충청남도", listOf("금산"), excluding = true), cheonan, HIT),
             Triple(WarningArea("충청남도", listOf("금산"), excluding = true), daejeon, MISS), // 대전은 제 줄로 나온다(G-SA-18)
