@@ -120,7 +120,7 @@ def test_classification_schemas_stay_byte_identical() -> None:
     golden = {
         "intent.yaml($intents)": ("fffa98ade2f9f39654922dd98f25477f6f32e7917d5668f8ea41db1ea478e820", tool_specs_json()),
         # 2026-10-20 갱신: GET_WEATHER.region(dialogue_only, #1475) · RECOMMEND_PLACES 추가 — intent.yaml 쪽은 그대로다
-        "dialogue_intent.yaml($intents)": ("36081baaf72356ccaa416a834d41dc32af5d1f50b0958627655a19e7b638428c",
+        "dialogue_intent.yaml($intents)": ("bf750b1e8e05c482238fd1540f39d803489f96276dca49c1c781477473e6d939",
                                            tool_specs_json(DIALOGUE_INTENTS, dialogue=True)),
     }
     for name, (sha, text) in golden.items():
