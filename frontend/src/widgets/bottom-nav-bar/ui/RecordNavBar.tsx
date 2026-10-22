@@ -43,6 +43,8 @@ export interface RecordNavBarProps {
   onPressActive?: () => void;
   /** 바를 뺀다(j03 편집 모드 — 저장·취소 푸터가 키보드 위에 있어야 한다). 키보드가 떠 있을 때도 스스로 뺀다. */
   hidden?: boolean;
+  /** 뒤로의 도착지가 탭인가(기본 참). 거짓이면(알림함·도우미 등) 5칸 탭 바로 접히는 역순 모프 없이 곧장 `onBack` — TRIP-1600. */
+  exitToTab?: boolean;
 }
 
 const noop = (): void => {};
@@ -62,6 +64,7 @@ export function RecordNavBar({
   onPressSummary,
   onPressActive,
   hidden = false,
+  exitToTab = true,
 }: RecordNavBarProps): ReactElement | null {
   const departureTab = useDepartureTab();
   const keyboardShown = useKeyboardVisible();
@@ -140,7 +143,7 @@ export function RecordNavBar({
         ]}
         entrance={entranceRef.current}
         departureTab={departureTab}
-        exitTab="records"
+        exitTab={exitToTab ? 'records' : undefined}
       />
       <ReserveToastBottom />
     </View>

@@ -71,6 +71,8 @@ export interface TripRecordsViewProps {
   activeDay: string;
   onSelectDay: (day: string) => void;
   onPressBack?: () => void;
+  /** 뒤로의 도착지가 탭인가(기본 참) — 거짓이면 하단 바가 탭 바로 접히는 모프 없이 곧장 간다(TRIP-1600). */
+  backExitToTab?: boolean;
   mapCenter: MapCenter;
   /** 페이지가 판정한 핀(체크=`done`·번호=`upcoming`). 받은 그대로 셸에 넘긴다. */
   mapPins?: MapPin[];
@@ -129,6 +131,7 @@ export function TripRecordsView({
   activeDay,
   onSelectDay,
   onPressBack,
+  backExitToTab,
   mapCenter,
   mapPins,
   cards,
@@ -374,6 +377,7 @@ export function TripRecordsView({
         testIDPrefix="record-trip-bottom-bar"
         active="records"
         onBack={onPressBack ?? noop}
+        exitToTab={backExitToTab}
         onPressReflection={onPressReflection}
         onPressSummary={onPressSummary}
         // TRIP-1593 — 활성 「기록」 칸: 내려가 있으면(핸들 칸 0·완전 내림 -1) 중간 칸으로 되올린다. 올라와 있으면 아무 일 없다. id 카운터는 핀 탭과 공유.

@@ -479,6 +479,38 @@ describe.each(NONE_ROUTES)(
   }
 );
 
+/**
+ * TRIP-1600 — 회고(j03)·요약(j04)은 iOS 가장자리 스와이프 뒤로를 끈다(사용자 결정 2026-10-23 "스와이프를 빼라").
+ * 뒤로 가기의 단일 경로는 하단 바의 뒤로 원이다. 다른 바 화면(기록 j01·숙소 검색·장소 탐색·여행 스타일)과 허브·도우미는
+ * 이번 범위 밖이라 스와이프 선언이 없어야 한다(늘어나면 이 표를 같이 고친다). jest 는 선언까지 — 실제 제스처는 6-b.
+ */
+const NO_SWIPE_ROUTES = [
+  'trips/[tripId]/records/reflection/[date]',
+  'trips/[tripId]/records/summary',
+];
+
+describe('SplashGate · 회고·요약 스와이프 뒤로 끄기 (TRIP-1600)', () => {
+  it.each(NONE_ROUTES)(
+    '%s — 회고·요약만 gestureEnabled false 이고 나머지는 선언이 없다',
+    (_label, routeName) => {
+      // 준비 — HOME 으로 그린다.
+      mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
+      render(<SplashGate />);
+      passFloor();
+
+      // 실행 — 그 라우트의 선언을 찾는다.
+      const [declared] = screen
+        .UNSAFE_getAllByType(Stack.Screen)
+        .filter((node) => node.props.name === routeName);
+
+      // 단언 — 두 라우트만 스와이프가 꺼지고, 전환 none 은 그대로다.
+      const expected = NO_SWIPE_ROUTES.includes(routeName) ? false : undefined;
+      expect(declared.props.options?.gestureEnabled).toBe(expected);
+      expect(declared.props.options?.animation).toBe('none');
+    }
+  );
+});
+
 describe('SplashGate · none 전환 범위', () => {
   const PLANB_ROUTE = 'trips/[tripId]/planb/index';
 

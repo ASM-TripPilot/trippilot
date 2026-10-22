@@ -32,6 +32,15 @@ const BAR_SCREEN_ROUTES = [
 ] as const;
 
 /**
+ * 회고(j03)·요약(j04)은 iOS 가장자리 스와이프 뒤로를 끈다 — 뒤로 가기의 단일 경로는 하단 바의 뒤로 원이다(TRIP-1600,
+ * 사용자 결정 2026-10-23). 스와이프는 바 모프 없이 화면만 밀어내 하단 바와 어긋난다. 다른 바 화면은 범위 밖이라 그대로다.
+ */
+const NO_SWIPE_ROUTES: ReadonlySet<string> = new Set([
+  'trips/[tripId]/records/reflection/[date]',
+  'trips/[tripId]/records/summary',
+]);
+
+/**
  * 부트스트랩 게이트 컨테이너(D1 A안, 루트 셸에 마운트). useBootstrapGate 를 구독해
  * loading 이거나 목적지 미결이거나 최소 노출 하한(SPLASH_MIN_VISIBLE_MS) 미경과면 SplashScreen 을,
  * resolved+하한 경과면 destination 으로 가드된 Stack.Protected 그룹만 노출한다. destination 이
@@ -122,7 +131,15 @@ export function SplashGate() {
       />
       {/* 바를 화면 안에 그리는 push 화면(TRIP-1584) — 위 BAR_SCREEN_ROUTES 주해. 가드 밖 선언은 허브·planb 와 같은 이유다. */}
       {BAR_SCREEN_ROUTES.map((name) => (
-        <Stack.Screen key={name} name={name} options={{ animation: 'none' }} />
+        <Stack.Screen
+          key={name}
+          name={name}
+          options={
+            NO_SWIPE_ROUTES.has(name)
+              ? { animation: 'none', gestureEnabled: false }
+              : { animation: 'none' }
+          }
+        />
       ))}
       {/* ✦ AI 도우미 시트(TRIP-1322 · DEC-U8-13) — 진입 화면 위 투명 모달. (tabs) 밖이라 탭바가 가려진다.
           미인증 딥링크는 가드에 안 걸리지만 세션 생성 401 이면 시트가 스스로 닫힌다.

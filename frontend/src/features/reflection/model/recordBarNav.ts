@@ -5,6 +5,8 @@
 /** 하단 바(`RecordNavBar`)에 그대로 펼쳐 넣는 칸 이동 콜백 묶음. 없는 칸 콜백 = 그 칸은 눌리지 않는다(회고 = 갈 날짜 없음, 요약 = 서버가 준비 전). */
 export interface RecordBarNav {
   onBack: () => void;
+  /** 뒤로의 도착지가 탭인가 — 거짓이면 바가 탭 바로 접히는 모프 없이 곧장 간다(TRIP-1600). 렌더 때 스택으로 정한다. */
+  exitToTab?: boolean;
   onPressRecords: () => void;
   onPressReflection?: () => void;
   onPressSummary?: () => void;

@@ -107,6 +107,8 @@ const ROUTES = {
   '(tabs)/index': Empty,
   '(tabs)/itinerary': Empty,
   '(tabs)/records': Empty,
+  notifications: Empty,
+  'assistant/index': Empty,
   'trips/[tripId]/records/index': RecordsScreen,
   'trips/[tripId]/records/reflection/[date]': ReflectionScreen,
   'trips/[tripId]/records/summary': SummaryScreen,
@@ -203,6 +205,42 @@ describe('RecordNavBar + 실제 라우터 · 바 뒤로는 항상 기록 탭 (TR
       expect(app.getPathname()).toBe('/records');
     }
   );
+});
+
+// TRIP-1600 — 탭이 아닌 화면(알림함·도우미)에서 열린 기록 묶음은 바 뒤로가 그 화면으로 돌아간다(사용자 결정 2026-10-23 절충안).
+// 회고·요약은 스와이프 뒤로를 껐으므로 이게 그 화면으로 돌아가는 유일한 길이다. 탭 위에서 열렸거나 아래에 아무것도 없으면 위 TRIP-1591 대로 기록 탭.
+// 판정은 스택 맨 위에서부터 연달아 쌓인 기록·회고·요약 묶음 바로 아래 화면 — 도우미 위로 다시 열린 경우([tabs, j04, 도우미, j03])도 도우미로 간다.
+describe('RecordNavBar + 실제 라우터 · 탭 밖에서 왔으면 바 뒤로는 그 화면 (TRIP-1600)', () => {
+  const J04 = `/trips/${TRIP}/records/summary`;
+  const J03 = `/trips/${TRIP}/records/reflection/${DAY}`;
+  it.each([
+    ['알림함에서 j03', ['/notifications', J03], REF, ['tabs', 'notifications']],
+    ['도우미에서 j04', ['/assistant', J04], SUM, ['tabs', 'assistant/index']],
+    [
+      '도우미에서 j03 → 칸 이동 j04',
+      ['/assistant', J03, J04],
+      SUM,
+      ['tabs', 'assistant/index'],
+    ],
+    [
+      'j04 위 도우미에서 다시 j03',
+      [J04, '/assistant', J03],
+      REF,
+      ['tabs', 'j04', 'assistant/index'],
+    ],
+  ])('%s: 뒤로 → 그 화면으로', async (_label, pushes, bar, expected) => {
+    // 준비 — 홈 탭에서 시작해 화면을 쌓는다.
+    const app = renderRouter(ROUTES, { initialUrl: '/' });
+    for (const href of pushes)
+      await act(async () => router.push(href as never));
+    await act(async () => {});
+
+    // 실행 — 바 뒤로.
+    tap(`${bar}-back`);
+
+    // 단언 — 기록 묶음만 걷히고 온 화면이 맨 위다.
+    expect(stack(app)).toEqual(expected);
+  });
 });
 
 // 5-b W1 — j04 는 얼굴(요약 대기 ↔ 요약 있음)이 바뀌어도 하단 바가 같은 인스턴스여야 한다. 바를 얼굴마다 다른 트리 자리에 두면 얼굴이 바뀌는 순간
