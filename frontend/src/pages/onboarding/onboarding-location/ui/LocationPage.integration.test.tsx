@@ -8,7 +8,7 @@ import {
 import { AppState } from 'react-native';
 
 import { server } from '@/mocks/server';
-import { resetPressGuard } from '@/shared/lib/pressGuard';
+import { guardPress, resetPressGuard } from '@/shared/lib/pressGuard';
 import { LocationPage } from './LocationPage';
 
 /**
@@ -558,5 +558,91 @@ describe('LocationPage — 설정에서 돌아오면 다시 조회 (AC-L1 · AC-
     );
     await flushAsync();
     expect(routerMock.replace).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * TRIP-1601 — 기존 계정 HOME 진입 전 권한 안내가 같은 카드를 **다른 목적지로** 재사용한다(`onNext` prop).
+ *
+ * 무엇을 보장하나: `onNext` 가 주어지면 카드를 빠져나가는 **세 경로 전부**가 `router.replace` 가 아니라 `onNext` 를 1회 부른다 —
+ *  (1) 허용 → OS 가 granted  (2) 거부 프레임의 [계속]  (3) 설정 앱에서 허용하고 돌아와 재조회가 granted.
+ * 왜 세 경로를 따로 보나: 하나라도 하드코딩된 `'/(onboarding)/push'` 가 남으면 HOME 계정에겐 그 그룹이 잠겨 있어
+ * 이동이 **에러 없이 무시**되고(TRIP-1597 과 같은 병) 그 경로의 [계속]만 조용히 무반응이 된다.
+ * 무회귀(`onNext` 생략 → 현행 푸시 카드로 replace)는 위의 기존 케이스들이 수정 없이 지킨다(AC5).
+ * 연타 창: 이동 직전에 열려 있어야 한다 — 마지막 카드 [계속] 자리에 홈 탭 바(또는 다음 카드 버튼)가 온다(X3 와 같은 사고).
+ */
+describe('🔴 TRIP-1601 · onNext 가 주어지면 세 이동 경로가 모두 onNext 를 쓴다', () => {
+  const onNext = jest.fn();
+  let clock: jest.SpyInstance;
+
+  beforeEach(() => {
+    onNext.mockClear();
+    // 시계를 멈춘다 — 연타 창이 열려 있음을 실시간에 맡기지 않는다.
+    clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+  });
+  afterEach(() => clock.mockRestore());
+
+  /** "탭 바 자리의 다음 버튼" — 창이 열려 있으면 이 가드 버튼은 눌려도 무시된다. */
+  function expectPressWindowOpen() {
+    const nextButton = jest.fn();
+    guardPress(nextButton)();
+    expect(nextButton).not.toHaveBeenCalled();
+  }
+
+  it('N1 허용 → granted: onNext 1회, router.replace 0회, 이동 직전에 연타 창이 열린다', async () => {
+    // 준비
+    mockRequestForeground.mockResolvedValue(GRANTED);
+    render(<LocationPage onNext={onNext} />);
+
+    // 실행
+    fireEvent.press(screen.getByTestId('onboarding-location-allow'));
+
+    // 단언
+    await waitFor(() => expect(onNext).toHaveBeenCalledTimes(1), {
+      timeout: RED_WAIT,
+    });
+    await flushAsync();
+    expect(onNext).toHaveBeenCalledTimes(1);
+    expect(routerMock.replace).not.toHaveBeenCalled();
+    expectPressWindowOpen();
+  });
+
+  it('N2 거부 프레임의 [계속]: onNext 1회(연타해도 1회), router.replace 0회', async () => {
+    // 준비 — 허용 → OS 거부 → 거부 프레임
+    mockRequestForeground.mockResolvedValue(DENIED);
+    render(<LocationPage onNext={onNext} />);
+    fireEvent.press(screen.getByTestId('onboarding-location-allow'));
+    await screen.findByTestId('onboarding-location-continue');
+    resetPressGuard();
+
+    // 실행 — 빠르게 두 번
+    fireEvent.press(screen.getByTestId('onboarding-location-continue'));
+    fireEvent.press(screen.getByTestId('onboarding-location-continue'));
+
+    // 단언
+    expect(onNext).toHaveBeenCalledTimes(1);
+    expect(routerMock.replace).not.toHaveBeenCalled();
+  });
+
+  it('N3 거부 프레임에서 설정 앱에서 허용하고 돌아오면: onNext 1회(신호가 겹쳐도 1회), router.replace 0회', async () => {
+    // 준비 — 거부 프레임, 그 사이 설정 앱에서 허용됨
+    mockRequestForeground.mockResolvedValue(DENIED);
+    render(<LocationPage onNext={onNext} />);
+    fireEvent.press(screen.getByTestId('onboarding-location-allow'));
+    await screen.findByTestId('onboarding-location-continue');
+    resetPressGuard();
+    mockGetForeground.mockResolvedValue(GRANTED);
+
+    // 실행 — 설정 앱으로 나갔다가 돌아온다(활성 신호가 두 번 온다)
+    emitAppState('background', 'active', 'active');
+
+    // 단언
+    await waitFor(() => expect(onNext).toHaveBeenCalledTimes(1), {
+      timeout: RED_WAIT,
+    });
+    await flushAsync();
+    expect(onNext).toHaveBeenCalledTimes(1);
+    expect(routerMock.replace).not.toHaveBeenCalled();
+    expect(mockRequestForeground).toHaveBeenCalledTimes(1);
   });
 });

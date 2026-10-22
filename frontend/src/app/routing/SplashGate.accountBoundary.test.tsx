@@ -47,6 +47,12 @@ jest.mock('expo-router', () => ({
   useNavigationContainerRef: () => mockNavigationRef,
 }));
 
+// 권한 안내(TRIP-1601)는 SplashGate.test(선언·스플래시 유지)와 SplashGate.integration.test(진짜 라우터)가 본다 — 여기선 끈다.
+// 진짜 훅은 조회가 비동기라 첫 마운트에서 스플래시를 붙잡는데, 이 파일은 동기 advanceTimers 흐름이고 router 목에 없는 API 를 부를 수 있다.
+jest.mock('@/app/model/usePermissionCatchUp', () => ({
+  usePermissionCatchUp: jest.fn(() => false),
+}));
+
 // 하한 기준점(JS 모듈 로드 시각)은 모듈 최상위 값이라 테스트가 바꿀 수 없다 — 목으로 갈아 beforeEach 에서 "지금"으로 맞춘다
 // (그래야 마운트 시점 경과 0 = 옛 동작과 같다). 경과를 흉내 내는 테스트는 mockBootAt 을 과거로 둔다(TRIP-1362).
 let mockBootAt = 0;

@@ -69,6 +69,8 @@
 ## app/
 - `app/notifications.tsx`  →  (export 없음)
 - `app/onboarding-tour.tsx`  →  (export 없음)
+- `app/permission-location.tsx`  →  (export 없음)
+- `app/permission-push.tsx`  →  (export 없음)
 - `app/reconsent.tsx`  →  (export 없음)
 
 ## app/records/
@@ -199,6 +201,7 @@
 
 ## src/app/model/
 - `src/app/model/useAccountBoundaryReset.ts`  →  useAccountBoundaryReset
+- `src/app/model/usePermissionCatchUp.ts`  →  PERMISSION_LOOKUP_WAIT_MAX_MS · usePermissionCatchUp
 - `src/app/model/usePushRouting.ts`  →  usePushRouting
 
 ## src/app/routing/
@@ -1721,7 +1724,8 @@
 
 ## src/shared/storage/
 - `src/shared/storage/idSet.ts`  →  readIdSet · writeIdSet
-- `src/shared/storage/index.ts`  →  PUSH_REGISTERED_KEY · TokenBundle · saveTokens · getTokens · clearTokens · hasStoredToken · readIdSet · writeIdSet · getInstallId · readStringValue · writeStringValue
+- `src/shared/storage/index.ts`  →  PUSH_REGISTERED_KEY · TokenBundle · saveTokens · getTokens · clearTokens · hasStoredToken · readIdSet · writeIdSet · getInstallId · readStringValue · writeStringValue · readInstallFlag · writeInstallFlag
+- `src/shared/storage/installFlag.ts`  →  readInstallFlag · writeInstallFlag
 - `src/shared/storage/installId.ts`  →  getInstallId
 - `src/shared/storage/stringValue.ts`  →  readStringValue · writeStringValue
 
@@ -1784,7 +1788,7 @@
 - `src/test-support/expoRouterStackMock.tsx`  →  Stack
 - `src/test-support/expoRouterTabsMock.tsx`  →  capturedTabsProps · Tabs · useRouter
 - `src/test-support/fabAnchorProbe.ts`  →  FRAME_MS · sheetHost · sheetPosition · flushFrames · moveSheet · layoutOverlay · anchorStyle · anchorTop
-- `src/test-support/fakeExpoFileSystem.ts`  →  fakeExpoFileSystemModule · resetFakeFs · seedCacheFile · cacheFilesIn · cacheFileCount · failFileWrites
+- `src/test-support/fakeExpoFileSystem.ts`  →  fakeExpoFileSystemModule · resetFakeFs · seedCacheFile · cacheFilesIn · cacheFileCount · failFileWrites · documentFileCount · failFileReads
 - `src/test-support/fakePreventRemoveNavigator.tsx`  →  MockNavAction · MockPreventCallback · mockExits · mockRemove · mockNavigation · useNavigation · usePreventRemove · resetFakeNavigator
 - `src/test-support/fitBandAsserts.ts`  →  NativeRegion · LatLng · expectPinsInBand · expectHeightLimited
 - `src/test-support/flushNotifications.ts`  →  flushNotifications
@@ -1869,4 +1873,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1193개 파일
+합계 1197개 파일

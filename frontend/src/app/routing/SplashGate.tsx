@@ -3,6 +3,7 @@ import { InteractionManager } from 'react-native';
 import { Stack } from 'expo-router';
 
 import { useAccountBoundaryReset } from '@/app/model/useAccountBoundaryReset';
+import { usePermissionCatchUp } from '@/app/model/usePermissionCatchUp';
 import { usePushRouting } from '@/app/model/usePushRouting';
 import { useBootstrapGate } from '@/features/auth';
 import { SplashScreen } from '@/features/auth';
@@ -84,8 +85,11 @@ export function SplashGate() {
     };
   }, [destination]);
 
-  const drawn = phase !== 'loading' && destination !== null && floorElapsed;
+  const ready = phase !== 'loading' && destination !== null && floorElapsed;
   // 훅이라 조기 반환 위에서 부른다(렌더마다 훅 개수가 같아야 한다).
+  // 기존 계정 HOME 진입 전 미결정 권한 안내(TRIP-1601) — 조회가 안 끝났으면 첫 화면만 최대 1초 더 스플래시를 붙잡는다.
+  const holdSplash = usePermissionCatchUp(ready, destination);
+  const drawn = ready && !holdSplash;
   useAccountBoundaryReset(drawn, destination);
   usePushRouting(drawn, destination);
 
@@ -113,6 +117,16 @@ export function SplashGate() {
             스와이프 뒤로를 끈다(진입·퇴장 모두 replace 라 아래에 돌아갈 화면도 없다). animation 은 주지 않는다. */}
         <Stack.Screen
           name="onboarding-tour"
+          options={{ gestureEnabled: false }}
+        />
+        {/* 기존 계정 HOME 진입 전 권한 안내(TRIP-1601) — usePermissionCatchUp 이 replace 로 보내고 카드가 '/(tabs)' 로 replace 해 나간다.
+            투어와 같은 이유로 HOME 가드 안·스와이프 뒤로 끔·animation 없음. */}
+        <Stack.Screen
+          name="permission-location"
+          options={{ gestureEnabled: false }}
+        />
+        <Stack.Screen
+          name="permission-push"
           options={{ gestureEnabled: false }}
         />
       </Stack.Protected>
