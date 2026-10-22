@@ -58,5 +58,5 @@ paths:
 
 | 파일 | 역할 |
 |---|---|
-| `src/widgets/curated-stays/index.ts` | 공개 API — `CuratedStaysSection` |
-| `src/widgets/curated-stays/ui/CuratedStaysSection.tsx` | props `{regionCode?, regionName?, trip?, variant:'lane'\|'list'\|'sheet', showBrowseAll?(기본 true), title?, testIDPrefix?}`. 카드 누름 → `request({kind:'stay'})`, 전체 보기 → `request({kind:'browse', region: regionName, regionCode})`, 둘 다 `trip` 쿼리. 하트는 `curatedKey`로 좌표 없이 담고 미인증 결과면 `/(auth)/login`. `hidden`이면 줄·제목만 숨기고 버튼은 `showBrowseAll`일 때 남는다(둘 다 없으면 `null`). `variant`는 좌우 여백만 가른다(lane = 부모 여백 안에서 줄만 번짐, list·sheet = 스스로 16). ⚠️ 시트(gorhom `BottomSheet`, 포털 없음)는 덩어리 View 밖 형제로 그리지만 여전히 위젯의 부모를 채운다 — 스크롤 안에 두면 시트가 스크롤 내용에 갇힌다(배치 티켓 6-b 몫) |
+| `src/widgets/curated-stays/index.ts` | 공개 API — `useCuratedStaysController`·`CuratedStaysSection`·`CuratedStaysSheet` |
+| `src/widgets/curated-stays/ui/CuratedStaysSection.tsx` | 컨트롤러 + 두 조각(TRIP-1580 보완). `useCuratedStaysController(props)` — props `{regionCode?, city?(regionCode 없을 때만 조회에 씀), regionName?, trip?, variant:'lane'\|'list'\|'sheet', showBrowseAll?(기본 true), title?, testIDPrefix?}`, 조회·하트·제휴 흐름·pending 을 소유하고 `hidden` 을 내놓는다(소비처의 교체 판단용). 카드 누름 → `request({kind:'stay'})`, 전체 보기 → `request({kind:'browse', region: regionName, regionCode})`, 둘 다 `trip` 쿼리. 하트는 `curatedKey`로 좌표 없이 담고 미인증 결과면 `/(auth)/login`. `CuratedStaysSection({controller})` = 줄+버튼(스크롤 안 — 순수 화면엔 슬롯으로), `hidden`이면 줄·제목만 숨기고 버튼은 `showBrowseAll`일 때 남는다(둘 다 없으면 `null`), `variant`는 좌우 여백만 가른다. `CuratedStaysSheet({controller})` = 제휴 시트(gorhom, 포털 없음 — 부모를 채우므로 page 루트 형제로 둔다) |

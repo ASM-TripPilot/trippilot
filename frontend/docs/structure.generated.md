@@ -1806,10 +1806,10 @@
 - `src/widgets/bottom-nav-bar/ui/BottomNavBar.tsx`  →  NavBarCellSpec · BottomNavBarProps · NavBarBackButton · NavBarCapsule · NavBarCell · BottomNavBar
 
 ## src/widgets/curated-stays/
-- `src/widgets/curated-stays/index.ts`  →  CuratedStaysSection · type CuratedStaysSectionProps
+- `src/widgets/curated-stays/index.ts`  →  CuratedStaysSection · CuratedStaysSheet · useCuratedStaysController · type CuratedStaysController · type CuratedStaysProps
 
 ## src/widgets/curated-stays/ui/
-- `src/widgets/curated-stays/ui/CuratedStaysSection.tsx`  →  CuratedStaysSectionProps · CuratedStaysSection
+- `src/widgets/curated-stays/ui/CuratedStaysSection.tsx`  →  CuratedStaysProps · CuratedStaysController · useCuratedStaysController · CuratedStaysSection · CuratedStaysSheet
 
 ## src/widgets/map-sheet-shell/
 - `src/widgets/map-sheet-shell/index.ts`  →  CTA_BAR_HEIGHT · DayChipOverlay · DayChipScroller · DistanceConnector · EditorView · GenerationProgressCard · BackChevronGlyph · FullAiGlyph · MapSheetShell · SheetHeader

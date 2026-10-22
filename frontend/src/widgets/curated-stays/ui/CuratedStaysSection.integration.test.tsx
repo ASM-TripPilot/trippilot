@@ -15,7 +15,12 @@ import type { CuratedStay, SavedStay } from '@/shared/api/index.schemas';
 import { BASE } from '@/test-support/apiBase';
 import { createGcZeroWrapper } from '@/test-support/queryRender';
 
-import { CuratedStaysSection } from './CuratedStaysSection';
+import {
+  CuratedStaysSection,
+  CuratedStaysSheet,
+  useCuratedStaysController,
+  type CuratedStaysProps,
+} from './CuratedStaysSection';
 
 /**
  * TRIP-1579 — 인기 숙소 줄 + Trip.com 전체 보기 + 제휴 시트를 한 덩어리로 조립한 위젯.
@@ -25,6 +30,8 @@ import { CuratedStaysSection } from './CuratedStaysSection';
  *  - S3 하트(로그인) → POST 본문에 lat/lng 키가 없고 좌표 미확정이다.
  *  - S4 showBrowseAll=false + 빈 목록 → 아무 버튼도 없다(죽은 버튼 금지 — 줄도 없으니 빈 덩어리).
  *  - S5 게스트 → 인기 숙소 요청 0(인증 필요 계약) · 전체 보기만, 시트에 "다시 보지 않기" 없음.
+ *  - S6 컨트롤러 + 두 조각(TRIP-1580 보완) — 줄(Section)은 시트를 그리지 않고 시트 조각(Sheet)이 그린다.
+ *  - S7 regionCode 가 없으면 city(이름)로 조회한다.
  */
 
 jest.mock('@/shared/storage', () => ({
@@ -93,11 +100,25 @@ function serve(items: CuratedStay[]): void {
   );
 }
 
+// 소비처 모양 그대로 — 훅은 한 번, 줄과 시트는 형제(시트는 화면 루트에 둔다).
+function Harness({
+  withSheet = true,
+  ...props
+}: CuratedStaysProps & { withSheet?: boolean }) {
+  const controller = useCuratedStaysController(props);
+  return (
+    <>
+      <CuratedStaysSection controller={controller} />
+      {withSheet ? <CuratedStaysSheet controller={controller} /> : null}
+    </>
+  );
+}
+
 function renderSection(
-  props: Partial<Parameters<typeof CuratedStaysSection>[0]> = {}
+  props: Partial<CuratedStaysProps> & { withSheet?: boolean } = {}
 ) {
   return render(
-    <CuratedStaysSection
+    <Harness
       regionCode="26"
       regionName="부산"
       trip={TRIP}
@@ -223,5 +244,38 @@ describe('S5 · 게스트', () => {
     expect(screen.queryByTestId('curated-stay-card-123')).toBeNull();
     expect(screen.queryByTestId('stay-ota-dont-show')).toBeNull();
     expect(curatedHits).toBe(0);
+  });
+});
+
+describe('S6 · 줄과 시트는 따로 그린다', () => {
+  it('시트 조각이 없으면 카드를 눌러도 줄 안에 시트가 생기지 않는다', async () => {
+    setAccessToken('valid-access');
+    serve([STAY]);
+    renderSection({ withSheet: false });
+
+    fireEvent.press(await screen.findByTestId('curated-stay-card-123'));
+    await act(async () => {});
+
+    expect(screen.queryByTestId('stay-ota-sheet')).toBeNull();
+  });
+});
+
+describe('S7 · 지역 코드가 없으면 이름(city)으로 조회', () => {
+  it('city 쿼리로 묻고 카드를 그린다', async () => {
+    setAccessToken('valid-access');
+    let seen: string | null = null;
+    serve([STAY]);
+    server.use(
+      http.get(`${BASE}/stays/curated`, ({ request }) => {
+        seen = new URL(request.url).search;
+        return HttpResponse.json({ city: '부산', items: [STAY] });
+      })
+    );
+    renderSection({ regionCode: undefined, city: '부산' });
+
+    expect(
+      await screen.findByTestId('curated-stay-card-123')
+    ).toBeOnTheScreen();
+    expect(seen).toBe(`?city=${encodeURIComponent('부산')}`);
   });
 });

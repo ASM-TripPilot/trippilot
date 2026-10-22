@@ -1,4 +1,7 @@
 export {
   CuratedStaysSection,
-  type CuratedStaysSectionProps,
+  CuratedStaysSheet,
+  useCuratedStaysController,
+  type CuratedStaysController,
+  type CuratedStaysProps,
 } from './ui/CuratedStaysSection';
