@@ -696,8 +696,9 @@ describe('TRIP-1580 · 지역 필터 숙소 레인 → 인기 숙소', () => {
     renderPage();
 
     await waitFor(() => expect(curatedQueries).toHaveLength(1), WAIT);
+    // 지금의 숙소 레인(LOCALDATA 조회)도 비동기로 온다 — 도착을 기다린 뒤 단언한다(CI 느린 러너에서 경합).
+    expect(await screen.findByTestId(LOCAL_CARD, {}, WAIT)).toBeOnTheScreen();
     await act(async () => {});
-    expect(screen.getByTestId(LOCAL_CARD)).toBeOnTheScreen();
     expect(screen.queryByTestId('curated-stays-row')).toBeNull();
     expect(screen.queryByText('인기 숙소')).toBeNull();
   });
