@@ -81,6 +81,23 @@ jest.mock('@/features/save-stay/model/savedStays', () => ({
   }),
 }));
 
+// TRIP-1580·1581 — 두 페이지가 인기 숙소 컨트롤러(react-query 셋)를 문다. QueryClient 없는 버킷이라 숨김 값으로 목한다
+// (숨김 = 지금 레인·목록 그대로라 이 파일의 관찰 대상은 안 바뀐다).
+jest.mock('@/widgets/curated-stays', () => ({
+  ...jest.requireActual('@/widgets/curated-stays'),
+  useCuratedStaysController: () => ({
+    props: { variant: 'list', showBrowseAll: false },
+    items: [],
+    hidden: true,
+    isSaved: () => false,
+    pendingStayId: null,
+    onPressCard: jest.fn(),
+    onToggleSave: jest.fn(),
+    onPressBrowseAll: jest.fn(),
+    sheetProps: null,
+  }),
+}));
+
 jest.mock('@/features/explore/model/regions', () => ({
   ...jest.requireActual('@/features/explore/model/regions'),
   useRegions: () => ({ data: [mockBusan] }),

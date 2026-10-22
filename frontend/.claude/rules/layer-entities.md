@@ -38,7 +38,7 @@ paths:
 |---|---|
 | `model/index.ts` | `StayItem`·`SavedStay`·`StayPrice` 재수출 + `StayCardVM`(검색/레인)·`SavedStayCardVM`(저장 degrade). |
 | `lib/formatPrice.ts` | 가격 표기(출력 계약 `'가격 미확인'`/`'{천단위}원~'`). |
-| `ui/StaySearchCard.tsx` | 검색 풀/레인 카드(e02·d01·d05, `variant: 'full'\|'rail'`). **testID는 완성 문자열 prop**(root/photo/save/filled/outline) — 소비처마다 save/글리프 testID 스킴이 달라 단일 prefix로 못 접는다. 하트는 `@/shared/ui/HeartGlyphs`에서만. 이미지 필드가 없어 사진 자리는 항상 회색(INV-1). |
+| `ui/StaySearchCard.tsx` | 검색 풀/레인 카드(e02·d01·d05, `variant: 'full'\|'rail'`). **testID는 완성 문자열 prop**(root/photo/save/filled/outline) — 소비처마다 save/글리프 testID 스킴이 달라 단일 prefix로 못 접는다. 하트는 `@/shared/ui/HeartGlyphs`에서만. 이미지 필드가 없어 사진 자리는 항상 회색(INV-1). `priceText?` 생략 = full 가격 줄 없음(e02, TRIP-1581 — d01·e03 은 그대로 넘긴다). |
 | `ui/SavedStayCard.tsx` | degrade 카드(e04·g02 시트, `layout: 'vertical'\|'row'`). 계약에 사진·지역·거리·가격이 없어 이름+`subtitle`만. 하트/체크는 소비처가 `trailing` 슬롯으로 주입(카드는 하트 불가지, `save` prop 없음). |
 | `ui/StayRecommendCard.tsx` | h15 동선 기준 추천 카드(props-only). 거리만(INV-3), 문자열은 소비처가 서식해 넘긴다. 선택은 `accessibilityState.selected`와 테두리를 **같은 루트**에 건다. `SavedStayCard`의 layout으로 얹지 않는다 — degrade 카드 계약(배지·거리 줄·선택 테두리 없음)이 흐려진다. |
 | `config/affiliateNotice.ts` | (TRIP-1155로 features/stay에서 이사) `otaConfirmLabel(externalSource)`(`Map` 사전 — 프로토타입 키 오염 회피, 모르면 "외부 사이트로 이동", INV-1)·`isOtaSource`(사전 포함 여부 판정 창구 — `otaConfirmLabel`은 폴백 때문에 판정에 못 쓴다). "다시 보지 않기"는 서버 `/me/settings.affiliateNoticeDismissed`에 저장 |

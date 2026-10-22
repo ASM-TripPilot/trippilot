@@ -15,7 +15,7 @@
  */
 import type { ReactElement } from 'react';
 import { useState } from 'react';
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
 import { Text, View } from 'react-native';
 
 import { getAccessToken } from '@/shared/api';
@@ -77,7 +77,7 @@ export function useCuratedStaysController(
   props: CuratedStaysProps
 ): CuratedStaysController {
   const { regionCode, city, regionName, trip } = props;
-  const router = useRouter();
+  // 정적 `router` 싱글턴 — 소비처 page(e02)의 통합 테스트 목이 `useRouter` 없이 정적 router 만 준다(StaySearchPage 선례).
   // 렌더 시점 1회 동기 판정(StayDetailPage 선례).
   const isAuthed = getAccessToken() !== null;
   const { items, hidden } = useCuratedStays({ regionCode, city, isAuthed });

@@ -12,7 +12,7 @@
  * 대기(disabled)를 그리되 저장/해제 판정·네트워크는 모른다(TRIP-417, 미지정=빈 하트 무회귀).
  * `다시 시도`는 `onRetry`(=`refetch`)에 실배선된다(Q8).
  */
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import {
   FlatList,
   Keyboard,
@@ -23,7 +23,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { formatPrice } from '@/entities/stay';
 import { StaySearchCard } from '@/entities/stay';
 import type { StayItem } from '@/shared/api/index.schemas';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
@@ -109,6 +108,9 @@ export interface StaySearchScreenProps {
   /** 가격대 칩을 그릴지(TRIP-1429) — 판정(가격 있는 숙소가 있나)은 페이지 몫이고 화면은 받은 값대로 뺀다.
    * 미지정 = 그린다(기존 호출·화면 단위 테스트가 칩을 누른다). */
   showPriceFilter?: boolean;
+  /** 인기 숙소 줄 + 전체 보기(TRIP-1581) — 검색창 아래·건수 줄/필터 위에 그린다. 화면은 위젯을 모르므로
+   * page 가 완성 노드를 넘긴다. 목록 상태(loading·error·empty)와 독립이다. 생략 = 없음(무회귀). */
+  curatedStays?: ReactNode;
 }
 
 /** 이름·지역 부분일치로 좁힌다 — 빈 검색어는 전체를 그대로(입력 없음 ≠ 일치 없음). */
@@ -571,6 +573,7 @@ export function StaySearchScreen({
   onChangeNameQuery,
   priceBucket,
   showPriceFilter = true,
+  curatedStays,
 }: StaySearchScreenProps): ReactElement {
   useToastBottom(FAB_STACK_TOP); // 토스트가 FAB 스택 위로 뜬다(TRIP-1559)
   // loading·error엔 'degraded'가 없다 — `in` 좁히기로 판별 유니온을 안전하게 읽는다.
@@ -621,6 +624,9 @@ export function StaySearchScreen({
                   </View>
                 </View>
               ) : null}
+              {curatedStays ? (
+                <View className="pt-lg">{curatedStays}</View>
+              ) : null}
               <ListHeader
                 region={region}
                 count={visibleItems.length}
@@ -661,7 +667,7 @@ export function StaySearchScreen({
                   photoTestID={`stay-card-photo-${key}`}
                   name={item.name}
                   region={item.region}
-                  priceText={formatPrice(item.price)}
+                  // 가격 줄은 그리지 않는다 — 데이터에 가격이 없다(TRIP-1581). 가격대 칩은 그대로다.
                   variant="full"
                   save={{
                     saved: savedKeys.includes(key),

@@ -38,7 +38,8 @@ export interface StaySearchCardProps {
   photoTestID?: string;
   name: string;
   region: string;
-  priceText: string;
+  /** 생략 = 가격 줄 없음(e02 — 데이터에 가격이 없다, TRIP-1581). d01·e03 은 지금처럼 넘긴다. */
+  priceText?: string;
   /** full=e02(w-full·사진178·border+shadow) · rail=d01(w-160·사진120 — 장소 카드와 같은 폭, TRIP-1105 QA #7). */
   variant: 'full' | 'rail';
   /** 저장 하트 — 지정 시에만 그린다(미지정 = 하트 없음). */
@@ -134,7 +135,7 @@ export function StaySearchCard({
            * Text 로 그린다: bold "{천단위}원" + muted "~"(BR-U1-12 "부터"의 시각 표기).
            * 바깥은 반드시 View(Text 아님) — 두 Text 가 View 형제라야 결합 노드로 집계되지
            * 않는다. 결측("가격 미확인", "~" 없음)은 muted regular 단일 노드로 접는다. */}
-          {priceText.endsWith('~') ? (
+          {priceText === undefined ? null : priceText.endsWith('~') ? (
             <View className="flex-row items-baseline">
               <Text className="font-inter-bold text-[16px] font-bold text-ink">
                 {priceText.slice(0, -1)}
