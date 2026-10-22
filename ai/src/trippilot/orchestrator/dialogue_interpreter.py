@@ -73,6 +73,7 @@ _REFERENCE_KINDS = frozenset({
 # contextvar 에 새 카운터를 걸고, 라우터 전용 LLM 래퍼가 걸린 카운터에만 더한다.
 _llm_calls: contextvars.ContextVar[list[int] | None] = contextvars.ContextVar(
     "dialogue_llm_calls", default=None)
+_llm_calls_lock = threading.Lock()  # 팬아웃 스레드 둘이 같은 카운터를 올린다(오케스트레이터가 문맥을 복사해 넘긴다)
 
 
 class CountingLlm:
@@ -84,7 +85,8 @@ class CountingLlm:
     def invoke(self, request: LlmRequest) -> LlmResponse:
         counter = _llm_calls.get()
         if counter is not None:
-            counter[0] += 1
+            with _llm_calls_lock:
+                counter[0] += 1
         return self._inner.invoke(request)
 
 

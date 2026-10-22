@@ -21,6 +21,7 @@ import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.placedata.api.CandidatePoolPort
+import com.trippilot.itinerarygeneration.domain.ValidationResult
 import com.trippilot.itinerarygeneration.domain.Violation
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Primary
@@ -96,13 +97,16 @@ class HttpScheduleAgentAdapter(
      * 편집 재검증(HC1-4). 위반은 **정상 응답 200**이고 빈 목록 = 위반 없음이다(IO-7).
      * 산출물 전체를 되돌려 보낸다 — 슬롯만 보내면 상대가 날짜 맥락을 잃어 위치 인덱스를 계산할 수 없다.
      */
-    override fun validate(solution: ScheduleAgentOutput): List<Violation> =
+    override fun validate(solution: ScheduleAgentOutput): List<Violation> = validateWithUnverified(solution).violations
+
+    /** 같은 호출 — 상대가 판정하지 못한 장소(`unverified_slots`)까지 돌려준다. */
+    override fun validateWithUnverified(solution: ScheduleAgentOutput): ValidationResult =
         post(
             VALIDATE_PATH,
             AiValidateRequest(solution.toWire(), requestMeta(VALIDATE_DEADLINE_MS)),
             AiValidateResponse::class.java,
             scheduleAgentBoundedRestClient,
-        ).violations.map { it.toDomain() }
+        ).toDomain()
 
     /**
      * 추천 근거 조회(TRIP-511). 편집 경로와 같은 **짧게 끊는 클라이언트**를 쓴다 —

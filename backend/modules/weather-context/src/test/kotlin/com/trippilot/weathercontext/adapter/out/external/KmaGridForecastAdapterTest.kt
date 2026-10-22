@@ -9,7 +9,6 @@ import com.trippilot.placedata.api.RegionCenter
 import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.weathercontext.api.HourlyForecastUnavailable
 import com.trippilot.weathercontext.application.HourlyForecastService
-import com.trippilot.weathercontext.domain.GridDay
 import com.trippilot.weathercontext.domain.GridForecast
 import com.trippilot.weathercontext.domain.GridForecastMissing
 import com.trippilot.weathercontext.domain.GridForecastPort
@@ -32,7 +31,6 @@ import java.net.InetSocketAddress
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
@@ -52,12 +50,13 @@ class KmaGridForecastAdapterTest : StringSpec({
     }
 
     /**
-     * 같은 getVilageFcst 응답 한 건에서 **오늘·내일**의 시간별(POP·PTY·SKY·TMP·WSD)과 날짜별(TMN·TMX)을 읽는다 — 추가 호출 0.
-     * **모레는 시간별만** 담는다 — 저녁 회차가 보는 내일 슬롯이 자정을 넘기면(23:30 끝 → 모레 00시 칸) 판정 시각이 모레에 걸린다.
-     * 모레의 최저·최고는 감시 지평(오늘·내일) 밖이라 담지 않는다.
-     * 표본은 실측 변주대로 값이 문자열이고, 읽지 않는 카테고리(PCP·REH·SNO·UUU·VVV·WAV·VEC)와 모레 값이 섞여 있다.
+     * 같은 getVilageFcst 응답 한 건에서 **오늘·내일**의 시간별(POP·PTY·SKY·TMP·WSD)을 읽는다 — 추가 호출 0.
+     * **모레도** 담는다 — 저녁 회차가 보는 내일 슬롯이 자정을 넘기면(23:30 끝 → 모레 00시 칸) 판정 시각이 모레에 걸린다.
+     * 날짜별 최저·최고(TMN 06시 · TMX 15시)는 읽지 않는다 — 발표분에 따라 실렸다 빠졌다 해 기온 판정은 시간별 TMP 만 본다
+     * (G-SA-15 결정 2026-10-20). 그 칸이 시간별 칸을 만들거나 섞이지 않는다.
+     * 표본은 실측 변주대로 값이 문자열이고, 읽지 않는 카테고리(PCP·REH·SNO·UUU·VVV·WAV·VEC·TMN·TMX)와 모레 값이 섞여 있다.
      */
-    "두 날짜 전 카테고리 표본에서 오늘·내일과 모레 시간별을 읽는다 — 모레 최저·최고와 읽지 않는 카테고리는 버린다" {
+    "두 날짜 전 카테고리 표본에서 오늘·내일과 모레 시간별을 읽는다 — 최저·최고(TMN·TMX)와 읽지 않는 카테고리는 버린다" {
         withGridServer(listOf(okReply(fullSample()))) { url, hits ->
             val grid = gridAdapter(url).fetchGrid("53,38", AT)
 
@@ -72,9 +71,10 @@ class KmaGridForecastAdapterTest : StringSpec({
             grid.hourly[hourOf("2026-10-20T10:00")] shouldBe GridHour(pop = 60, pty = 1, sky = 4, tmp = 18.0, wsd = 3.2)
             grid.hourly[hourOf("2026-10-21T15:00")] shouldBe GridHour(pop = 10, pty = 0, sky = 1, tmp = 21.0, wsd = 1.5)
             grid.hourly[hourOf("2026-10-22T00:00")] shouldBe GridHour(pop = 20, pty = 0, sky = 3, tmp = 9.0, wsd = 2.0)
-            grid.hourly.keys.map { it.toLocalDate() }.toSet() shouldBe setOf(TODAY, TOMORROW, TOMORROW.plusDays(1))
-            // 오늘 최저(06시)는 08시 발표분에 없다 — 있는 것만 싣는다(지어내지 않는다).
-            grid.daily shouldBe mapOf(TODAY to GridDay(tmn = null, tmx = 21.0), TOMORROW to GridDay(tmn = 10.0, tmx = 19.0))
+            // TMN(06시)·TMX(15시)만 있는 시각은 칸이 생기지 않는다 — 시간별 다섯 카테고리가 있는 시각뿐이다.
+            grid.hourly.keys shouldBe listOf(
+                "2026-10-20T10:00", "2026-10-21T10:00", "2026-10-21T15:00", "2026-10-22T00:00", "2026-10-22T10:00",
+            ).map(::hourOf).toSet()
         }
     }
 
@@ -100,14 +100,12 @@ class KmaGridForecastAdapterTest : StringSpec({
             item("SKY", "20261020", "1200", "3"),
             item("TMP", "20261020", "1200", "19.5"),
             item("WSD", "20261020", "1200", "900"),
-            item("TMX", "20261020", "1500", "강함"),
         )
         withGridServer(listOf(okReply(odd))) { url, _ ->
             val grid = gridAdapter(url).fetchGrid("53,38", AT)
 
             grid.hourly[hourOf("2026-10-20T11:00")] shouldBe GridHour(null, null, null, null, null)
             grid.hourly[hourOf("2026-10-20T12:00")] shouldBe GridHour(pop = 30, pty = 4, sky = 3, tmp = 19.5, wsd = null)
-            grid.daily[TODAY] shouldBe GridDay(null, null)
         }
     }
 
@@ -310,8 +308,6 @@ private fun hourOf(local: String): LocalDateTime = LocalDateTime.parse(local)
 
 /** KST 2026-10-20(화) 09:30 — 08시 발표분이 최신인 시각. */
 private val AT: Instant = kstAt("2026-10-20T09:30")
-private val TODAY: LocalDate = LocalDate.parse("2026-10-20")
-private val TOMORROW: LocalDate = TODAY.plusDays(1)
 private val FIXED_CLOCK: Clock = Clock.fixed(AT, ZoneOffset.UTC)
 
 private val jejuRegions = object : RegionLookupFacade {

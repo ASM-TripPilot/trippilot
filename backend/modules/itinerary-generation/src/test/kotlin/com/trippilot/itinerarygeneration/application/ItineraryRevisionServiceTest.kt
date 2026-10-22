@@ -256,4 +256,34 @@ class ItineraryRevisionServiceTest : StringSpec({
         s0.hasViolation shouldBe true
         s0.violationReason shouldBe "앞 장소에서 이동할 시간이 빠듯해요" // 타입 번역(TRIP-1030)
     }
+
+    // 미판정 목록은 장소 감지의 하루 점검만 읽는다(INV-SA-2) — 되돌리기는 종전대로 위반만 본다. 보류로 읽으면 직전 배지가
+    // 남고, 위반으로 읽으면 없던 배지가 켜진다.
+    "AI 가 판정하지 못했다고 답한 장소가 있어도 되돌리기 표면은 그대로다 — 판정이 났으니 위반 0 이면 배지가 꺼진다" {
+        val revs = Revisions()
+        val flagged = Itinerary.reconstitute(
+            UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            GenerationState.COMPLETE,
+            listOf(
+                ItineraryDay.of(
+                    d1, 0,
+                    listOf(
+                        VisitSlot.of(
+                            cafe, null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+                            hasViolation = true, violationReason = "이동이 빠듯해요",
+                        ),
+                    ),
+                ),
+            ),
+            now, now, null, emptyList(),
+        )
+        val its = Itineraries(flagged)
+        val svc = ItineraryRevisionService(revs, its, trips, NoopValidateAgent(unverified = setOf(cafe)), REV_NOOP_TX, clock)
+        svc.record(flagged, RevisionActor.AI, RevisionKind.BASELINE, "처음")
+
+        val s0 = svc.restore(acc, tripId, revs.stored.single().revisionId).days.single().slots.single()
+
+        s0.hasViolation shouldBe false
+        s0.violationReason shouldBe null
+    }
 })

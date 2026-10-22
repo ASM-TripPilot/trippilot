@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.api.test_e2e_boundary import _BANNED_TOKENS, _meta, _validate_body, make_client
+from tests.api.test_e2e_boundary import _BANNED_TOKENS, _hours_unknown, _meta, _validate_body, make_client
 
 _DAY = "2026-08-05"
 
@@ -69,7 +69,8 @@ def test_validate_absorbs_backend_solve_mode_vocabulary(
 
     assert response.status_code != 422, response.text
     assert response.status_code == 200, response.text
-    assert response.json() == {"violations": [], "unverified_slots": []}
+    # 픽스처는 영업정보가 없어 HC1 은 못 본 것으로 실린다(HOURS_UNKNOWN) — 위반은 없다
+    assert response.json() == {"violations": [], "unverified_slots": _hours_unknown(["p1"])}
 
 
 # ── ② FULL_AI 일정의 repair 경로 관통 ────────────────────────────────
@@ -99,7 +100,7 @@ def test_repair_pierces_with_backend_full_ai_mode() -> None:
             "/ai/v1/itinerary/validate", json=_validate_body(body["repaired"])
         )
         assert revalidated.status_code == 200
-        assert revalidated.json() == {"violations": [], "unverified_slots": []}
+        assert revalidated.json() == {"violations": [], "unverified_slots": _hours_unknown(["p1", "p2"])}
 
 
 # ── ③ 미지 값은 여전히 422 (무한 관대 금지) ──────────────────────────

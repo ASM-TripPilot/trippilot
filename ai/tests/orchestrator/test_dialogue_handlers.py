@@ -33,7 +33,7 @@ from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.region_centers import region_center
 from trippilot.domain.trigger import TriggerKind
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_LENGTH, _violates
-from trippilot.llm_gateway.workers.dialogue_answer import NEED_TRIP_TEXT, fallback_answer_text
+from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEXT, NEED_TRIP_TEXT, fallback_answer_text
 from trippilot.poi_curation.adapters.pg_place_sql import PlaceRow
 from trippilot.orchestrator import dialogue_handlers as dh
 from trippilot.agents.planb.rag import _REASON_KO
@@ -1035,7 +1035,7 @@ _arguments = st.fixed_dictionaries({}, optional={
     "day": st.sampled_from(["1일차", "2일차", "둘째 날", "오늘", "x"]), "date": st.sampled_from(["오늘", "내일", "10월 18일", "x"]),
     "scope": st.sampled_from(["ALL", "REMAINING"]), "reason": st.sampled_from(["weather", "closed", "none"]),
     "region": st.sampled_from(["부산", "제주 애월", "강원도", ""]), "category": st.sampled_from(["CAFE", "NIGHT_VIEW", "FOOD"]),
-    "theme": st.sampled_from(["요즘 핫한", "야경", "분위기 좋은 바"]),
+    "theme": st.sampled_from(["요즘 핫한", "야경", "분위기 좋은 바"]), "count": st.sampled_from(["1", "3", "5", "열"]),
 })
 _outcomes = st.sampled_from(["ok", "TIMEOUT", "UNAVAILABLE"])
 
@@ -1072,7 +1072,7 @@ def test_every_handler_is_deterministic_valid_and_free_of_duration(data, intent:
                        "detail": first.to_prompt_dict()}, ensure_ascii=False, default=str).lower()
     assert not any(tok in wire for tok in _INV3_TOKENS)
     if snapshot.trip is None:
-        assert first.needs_trip is (intent not in (Intent.STYLE_ANALYSIS, Intent.EXPLORE_PLACES))
+        assert first.needs_trip is (intent not in (Intent.STYLE_ANALYSIS, Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES))
     for task in tasks:
         assert task.fn() == task.fn()  # 콜러블도 결정론 (대역이 결정론이라 그렇다 — 핸들러가 상태를 섞지 않는다)
 
@@ -1196,7 +1196,8 @@ def test_poi_info_outside_the_itinerary_finds_the_registered_place_by_name() -> 
     assert poi_info.calls[0]["poi_ids"] == frozenset({PoiId(_U["천지연폭포"])}) and poi_info.calls[0]["on"] == _ctx().today
     assert facts.status is FactStatus.OK and facts.kind is AnswerKind.INFO
     assert facts.payload["title"] == "천지연폭포"  # 이름은 DB 값 — 발화 원문("천지연 폭포")이 아니다
-    assert facts.payload["rows"] == [{"label": "분류", "value": "자연"}, {"label": "영업시간", "value": "09:00~18:00"},
+    assert facts.payload["rows"] == [{"label": "위치", "value": "제주특별자치도 서귀포시"},  # 어디의 그곳인지(DB 값)
+                                     {"label": "분류", "value": "자연"}, {"label": "영업시간", "value": "09:00~18:00"},
                                      {"label": "입장료", "value": "5,000원"}]
     assert [(a.type, a.params) for a in facts.next_actions] == [("OPEN_PLACE", {"poiId": _U["천지연폭포"]})]
     assert any("일정 밖" in n for n in facts.notes) and facts.template_text == "장소 정보를 찾아봤어요."
@@ -1227,14 +1228,16 @@ class _Intro:
     def __init__(self, text: str = "우도는 제주 동쪽의 섬이다.") -> None:
         self.text, self.calls = text, []
 
-    def intro(self, source_ref: str, query: str) -> str:
+    def intro(self, source_ref: str, query: str, *, wait_s: float) -> str:
         self.calls.append((source_ref, query))
+        self.wait_s = wait_s
         return self.text
 
 
-def _intro_run(arguments: dict, utterance: str = "") -> tuple[Facts, _Intro]:
+def _intro_run(arguments: dict, utterance: str = "", remaining_ms: int = 3000) -> tuple[Facts, _Intro]:
     intro = _Intro()
-    ctx = replace(_ctx(arguments=arguments, ports=HandlerPorts(poi_info=_RefPoiInfo(), place_intro=intro)), utterance=utterance)
+    ctx = replace(_ctx(arguments=arguments, ports=HandlerPorts(poi_info=_RefPoiInfo(), place_intro=intro),
+                       remaining_ms=remaining_ms), utterance=utterance)
     return _run(HANDLERS[Intent.GET_POI_INFO], ctx), intro
 
 
@@ -1248,6 +1251,15 @@ def test_poi_info_about_a_place_carries_a_kb5_intro_for_the_answer_only() -> Non
 def test_poi_info_hours_or_fee_question_does_not_fetch_an_intro() -> None:
     facts, intro = _intro_run({"place": "우도"}, "우도 몇 시까지 해?")
     assert intro.calls == [] and "intro" not in facts.detail
+
+
+def test_poi_info_waits_for_the_intro_only_within_the_fanout_budget() -> None:
+    # 잔여 3s → 팬아웃 예산 min(2.8, 3×0.4)=1.2s, 카드 돌려줄 여유 0.2s 를 뺀 1.0s 만 소개를 기다린다
+    _, intro = _intro_run({"place": "우도", "aspect": "어떤 곳"}, "우도 어떤 곳이야?")
+    assert intro.wait_s == pytest.approx(1.0)
+    # 잔여 0.9s → 예산 0.36s − 여유 0.2s < 하한 — 소개 없이 카드만
+    facts, intro = _intro_run({"place": "우도", "aspect": "어떤 곳"}, "우도 어떤 곳이야?", remaining_ms=900)
+    assert intro.calls == [] and facts.payload and "intro" not in facts.detail
 
 
 def test_explore_category_filters_the_pool() -> None:
@@ -1378,6 +1390,51 @@ def test_explore_sql_finds_a_district_the_region_table_does_not_know() -> None:
     assert facts.detail == {"anchor": "마포구", "anchor_kind": "region"}  # 행의 구군(DB 값)이 앵커
 
 
+# ── RECOMMEND_PLACES — 탐색과 같은 풀에서 "골라 준" 몇 곳 ──
+
+_RECOMMEND = HANDLERS[Intent.RECOMMEND_PLACES]
+
+
+def _recommend(arguments: dict, rows=None, *, utterance: str = "서울 카페 하나 추천해줘",
+               snapshot: TurnSnapshot = _EMPTY_SNAP) -> tuple[Facts, _PlaceSql, _PoolBuilder]:
+    port, builder = _PlaceSql(rows), _PoolBuilder(_X_POOL)
+    ports = HandlerPorts(poi_info=_PoiInfo(), pool_builder=builder, place_sql=port if rows is not None else None)
+    return _run(_RECOMMEND, replace(_ctx(snapshot, arguments, ports=ports), utterance=utterance)), port, builder
+
+
+def test_recommend_prefers_the_ranked_radius_pool_over_sql_rows_and_cuts_to_the_said_count() -> None:
+    """SQL 행은 인기 신호가 태그 하나라 고르기 순서로 약하다 — 반경 결과가 있으면 그것(요즘 인기 → 저장 수 순)을 쓴다."""
+    rows = [_row("가나다 카페", "카페"), _row("고센인코퍼레이티드", "카페")]
+    facts, port, builder = _recommend({"region": "부산", "theme": "요즘 핫한", "count": "1"}, rows)
+    explored, _ = _explore({"region": "부산", "theme": "요즘 핫한"})
+    assert port.calls and builder.requests  # 둘 다 돌지만
+    assert facts.intent is Intent.RECOMMEND_PLACES and facts.kind is AnswerKind.CANDIDATES
+    assert _names_of(facts) == _names_of(explored)[:1]  # 반경 순위의 첫 곳 하나
+    assert [p.name for p in facts.places] == _names_of(facts) and _types(facts) == ["OPEN_PLACE"]  # 카드·문장 재료·버튼이 같은 한 곳
+    assert facts.detail["pick_count"] == 1 and facts.template_text == "가 볼 만한 곳을 골라 봤어요."
+
+
+def test_recommend_without_a_count_picks_three_and_ignores_a_count_outside_the_enum() -> None:
+    for args in ({"region": "부산"}, {"region": "부산", "count": "열"}):
+        facts, _, _ = _recommend(args)
+        assert len(_names_of(facts)) == 3 and facts.detail["pick_count"] == 3
+
+
+def test_recommend_from_sql_rows_alone_puts_trending_first_in_sql_order() -> None:
+    rows = [_row("망원 카페 A", "카페", "마포구"), _row("망원 카페 B", "카페", "마포구", trending=True),
+            _row("망원 카페 C", "카페", "마포구")]
+    facts, _, builder = _recommend({"region": "망원동", "category": "CAFE", "count": "2"}, rows, utterance="망원동 카페 두 곳 골라줘")
+    assert builder.requests == []  # 표에 없는 동네 — 반경은 못 돈다
+    assert _names_of(facts) == ["망원 카페 B", "망원 카페 A"]
+
+
+def test_recommend_passes_non_candidate_answers_through_as_recommend() -> None:
+    asked, _, _ = _recommend({}, snapshot=_snapshot((), trip=None, status=None))
+    assert asked.intent is Intent.RECOMMEND_PLACES and asked.template_text == EXPLORE_ASK_REGION_TEXT  # 지역 되묻기 그대로
+    unknown, _, _ = _recommend({"region": "강원도"})
+    assert unknown.status is FactStatus.EMPTY and unknown.template_text == "그 조건에 맞는 곳을 아직 찾지 못했어요."
+
+
 def test_explore_sql_with_nothing_found_for_an_unknown_district_stays_empty() -> None:
     facts, _, _ = _explore_sql({"region": "망원동"}, [])
     assert facts.status is FactStatus.EMPTY and facts.detail == {}
@@ -1393,6 +1450,272 @@ def test_explore_sql_skips_the_llm_when_the_turn_has_too_little_time_left() -> N
     assert port.calls == [] and "인기 카페" in _names_of(facts)
 
 
+_BETWEEN_ASK = "홍대와 이태원 사이에 가볼만한 곳 알려줘"
+
+
+def _at(name: str, category: PoiCategory, lat: float, lng: float, *, tags: tuple[str, ...] = ()) -> Poi:
+    return replace(_xpoi(name, category, tags=tags), coord=GeoPoint(lat, lng))
+
+
+# 홍대·이태원 선분에서의 거리 — 효창공원 0.02km·경의선숲길 0.35·숙대입구 0.34·신촌 0.42·남산타워 1.54(띠 1.71 안)·
+# 명동 2.45·여의도 2.97(원 안이지만 선에서 멀다)
+_LINE_POOL = _pool(
+    _at("효창공원", PoiCategory.NATURE, 37.5446, 126.9616), _at("경의선숲길", PoiCategory.SIGHT, 37.5440, 126.9516),
+    _at("숙대입구 카페", PoiCategory.CAFE, 37.5446, 126.9720), _at("신촌 식당", PoiCategory.FOOD, 37.5559, 126.9368),
+    _at("남산타워", PoiCategory.NIGHT_VIEW, 37.5512, 126.9882),
+    _at("명동실탄사격장", PoiCategory.ACTIVITY, 37.5609, 126.9853, tags=("요즘 인기",)),
+    _at("더현대 서울", PoiCategory.SHOPPING, 37.5258, 126.9284, tags=("요즘 인기",)),
+)
+_ON_LINE = {"효창공원", "경의선숲길", "숙대입구 카페", "신촌 식당", "남산타워"}
+
+
+def _midpoint(a: str, b: str) -> tuple[GeoPoint, float]:
+    from trippilot.assembly_engine.travel import haversine_km
+
+    (_, pa, _), (_, pb, _) = region_center(a), region_center(b)
+    return GeoPoint((pa.lat + pb.lat) / 2, (pa.lng + pb.lng) / 2), haversine_km(pa, pb) / 2
+
+
+@pytest.mark.parametrize(("arguments", "utterance"), [
+    ({"region": "이태원"}, _BETWEEN_ASK),  # 분류가 한 곳만 채웠다 — 발화의 '사이'가 이긴다
+    ({"region": "홍대와 이태원 사이"}, ""),  # 계획 경로 — 인자만 온다
+])
+def test_explore_between_two_regions_searches_the_circle_between_them_without_sql(arguments, utterance) -> None:
+    # 지역 표 조회는 둘 중 뒤의 것(이태원)만 잡았고, 이름을 읽는 SQL 은 '천안홍대용과학관'을 냈다(2026-10-21 테스트 화면)
+    facts, port, builder = _explore_sql(arguments, [_row("천안홍대용과학관", sido="충청남도", sigungu="천안시")],
+                                        utterance=utterance, pool=_LINE_POOL)
+    (request, _), = builder.requests
+    center, half = _midpoint("홍대", "이태원")
+    assert request.anchor == center and request.radius_override_km == pytest.approx(half)  # 두 곳을 지름으로 하는 원
+    assert port.calls == [] and "천안홍대용과학관" not in _names_of(facts)
+    assert set(_names_of(facts)) == _ON_LINE  # 원 안이어도 선에서 먼 명동·여의도는 뺀다('요즘 인기'여도)
+    assert facts.detail == {"anchor": "홍대·이태원 사이", "anchor_kind": "between"}
+    assert all(c["distanceRange"] is None for c in facts.payload["candidates"])  # 가운데에서의 거리는 뜻이 없다
+
+
+@pytest.mark.parametrize(("said", "km"), [
+    ("제주와 서귀포 사이", 8.0),  # 27km 의 절반이 아니라 상한 — 지역 표의 가장 넓은 반경(BE 반경 조회 예산)
+    ("명동과 종로 사이", 1.0),  # 1km 남짓의 절반이 아니라 하한
+])
+def test_explore_between_radius_stays_inside_the_table_range(said: str, km: float) -> None:
+    facts, builder = _explore({"region": said})
+    assert facts.detail["anchor_kind"] == "between" and builder.requests[0][0].radius_override_km == km
+
+
+_SHOWN = "인기 식당, 인기 카페가 있어요. 궁금한 곳을 눌러서 자세히 볼까요?"
+
+
+def _follow(utterance: str, earlier: tuple, arguments: dict | None = None, *, rows=None,
+            snapshot: TurnSnapshot = _SNAP, pool: CandidatePool = _X_POOL) -> tuple[Facts, _PlaceSql, _PoolBuilder]:
+    port, builder = _PlaceSql(rows), _PoolBuilder(pool)
+    ctx = replace(_ctx(snapshot, arguments, ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=builder, place_sql=port)),
+                  utterance=utterance, earlier=earlier)
+    return _run(_EXPLORE, ctx), port, builder
+
+
+@pytest.mark.parametrize("arguments", [{}, {"region": "제주"}, {"region": "이태원"}])
+def test_explore_follow_up_keeps_the_previous_area_and_leaves_out_places_already_shown(arguments) -> None:
+    # "더 알려줘"에 분류가 지역을 비우면 일정(제주) 근처를 찾았다 — 채워도 발화에 없는 추정이라 앞 요청이 이긴다
+    shown = "효창공원, 경의선숲길이 있어요. 궁금한 곳을 눌러서 자세히 볼까요?"
+    facts, port, builder = _follow("더 알려줘", (("USER", _BETWEEN_ASK), ("ASSISTANT", shown)), arguments, pool=_LINE_POOL)
+    (request, _), = builder.requests
+    assert request.anchor == _midpoint("홍대", "이태원")[0] and port.calls == []
+    assert facts.detail == {"anchor": "홍대·이태원 사이", "anchor_kind": "between"}
+    assert set(_names_of(facts)) == {"숙대입구 카페", "신촌 식당", "남산타워"}  # 보인 곳·선에서 먼 곳은 뺀다
+
+
+def test_explore_chained_follow_ups_reach_back_to_the_request_and_leave_out_every_shown_place() -> None:
+    earlier = (("USER", "부산 해운대 가볼 만한 곳"), ("ASSISTANT", _SHOWN), ("USER", "더 알려줘"),
+               ("ASSISTANT", "바다 전망 카페, 셋째 식당도 있어요."))
+    facts, _, builder = _follow("또 없어?", earlier)
+    assert facts.detail == {"anchor": "해운대", "anchor_kind": "region"}
+    assert builder.requests[0][0].radius_override_km == region_center("해운대")[2]
+    assert not {"인기 식당", "인기 카페", "바다 전망 카페", "셋째 식당"} & set(_names_of(facts))
+
+
+def test_explore_follow_up_that_names_a_region_searches_there_and_still_skips_shown_places() -> None:
+    facts, port, _ = _follow("강남에도 더 있어?", (("USER", _BETWEEN_ASK), ("ASSISTANT", _SHOWN)), {"region": "강남"})
+    assert facts.detail == {"anchor": "강남", "anchor_kind": "region"} and port.calls  # 말한 지역 — SQL 도 종전대로
+    assert not {"인기 식당", "인기 카페"} & set(_names_of(facts))
+
+
+@pytest.mark.parametrize("utterance", ["망원동엔 더 없어?", "망원동도 추가로 알려줘"])
+def test_explore_follow_up_naming_a_district_the_table_does_not_know_is_not_carried(utterance: str) -> None:
+    # 표 밖 동네는 발화의 지역 표 이름으로 못 알아본다 — 분류가 채운 지역이 발화에 그대로 있으면 말한 것이다(2026-10-22 리뷰 재현:
+    # 앞 요청 해운대로 바꾸고 SQL 도 건너뛰었다)
+    rows = [_row("망원한강공원", sigungu="마포구"), _row("망리단길", sigungu="마포구")]
+    facts, port, builder = _follow(utterance, (("USER", "부산 해운대 가볼 만한 곳"), ("ASSISTANT", _SHOWN)),
+                                   {"region": "망원동"}, rows=rows, snapshot=_EMPTY_SNAP)
+    assert port.calls and builder.requests == [] and _names_of(facts) == ["망원한강공원", "망리단길"]
+
+
+def test_explore_relation_between_is_not_two_places() -> None:
+    # "현지인 사이에서 유명한"의 '사이'는 관계다 — 지역 되묻기 문안이 권하는 "제주 애월" 꼴과 겹쳐 제주·애월 사이를 찾았다
+    facts, port, builder = _explore_sql({"region": "제주 애월", "category": "CAFE"}, None,
+                                        utterance="현지인 사이에서 유명한 제주 애월 카페 알려줘")
+    assert facts.detail == {"anchor": "애월", "anchor_kind": "region"} and port.calls
+    assert builder.requests[0][0].radius_override_km == region_center("애월")[2]
+
+
+def test_explore_a_name_containing_another_city_is_not_a_pair() -> None:
+    # 성산동(서울 마포)의 '성산'이 제주 성산을 잡아 455km 떨어진 가운데를 찾았다
+    facts, _, builder = _explore_sql({"region": "홍대"}, None, utterance="홍대랑 성산동 사이 카페")
+    assert facts.detail == {"anchor": "홍대", "anchor_kind": "region"}
+    assert builder.requests[0][0].anchor == region_center("홍대")[1]
+
+
+def test_explore_two_places_too_far_apart_say_so_instead_of_searching_one() -> None:
+    facts, port, builder = _explore_sql({"region": "부산"}, None, utterance="서울이랑 부산 사이 가볼 만한 곳")
+    assert facts.status is FactStatus.EMPTY and facts.notes == ("두 곳이 멀어 그 사이는 아직 찾아 줄 수 없다",)
+    assert facts.detail == {"anchor": "서울·부산 사이", "anchor_kind": "far"} and port.calls == [] and builder.requests == []
+
+
+def test_explore_pair_inside_one_island_is_still_between() -> None:
+    facts, _, builder = _explore_sql({"region": "애월"}, None, utterance="애월이랑 성산 사이에 가볼만한 곳 알려줘")
+    assert facts.detail == {"anchor": "애월·성산 사이", "anchor_kind": "between"}  # 57km — 같은 섬
+
+
+def test_explore_a_classified_region_outside_the_pair_wins() -> None:
+    facts, port, _ = _explore_sql({"region": "성수", "category": "CAFE"}, None, utterance="아까 홍대 이태원 사이 말고 성수 쪽 카페 알려줘")
+    assert facts.detail == {"anchor": "성수", "anchor_kind": "region"} and port.calls
+
+
+def test_explore_follow_up_on_sql_rows_skips_shown_places_before_the_cut() -> None:
+    # SQL 은 20행까지 낸다 — 다섯 곳으로 자른 뒤에 빼면 남은 행이 있어도 '없음'이 됐다
+    rows = [_row(f"장소{n}", sigungu="마포구") for n in range(1, 9)]
+    shown = "장소1, 장소2, 장소3, 장소4, 장소5가 있어요."
+    facts, _, _ = _follow("더 알려줘", (("USER", "망원동 산책할 곳"), ("ASSISTANT", shown)), {"region": "망원동"},
+                          rows=rows, snapshot=_EMPTY_SNAP)
+    assert _names_of(facts) == ["장소6", "장소7", "장소8"]
+
+
+def test_explore_follow_up_without_an_area_before_keeps_the_usual_anchor_but_still_skips_shown_places() -> None:
+    facts, _, _ = _follow("다른 데는?", (("USER", "근처 카페 알려줘"), ("ASSISTANT", _SHOWN)))
+    assert facts.detail["anchor_kind"] == "itinerary"  # 앞 요청도 일정 근처였다
+    assert not {"인기 식당", "인기 카페"} & set(_names_of(facts))
+
+
+def test_explore_follow_up_for_a_district_the_table_does_not_know_still_uses_sql_without_shown_rows() -> None:
+    rows = [_row("망원한강공원", sigungu="마포구"), _row("망리단길", sigungu="마포구")]
+    earlier = (("USER", "망원동 산책할 곳"), ("ASSISTANT", "망원한강공원이 있어요."))
+    facts, port, _ = _follow("더 알려줘", earlier, {"region": "망원동"}, rows=rows, snapshot=_EMPTY_SNAP)
+    assert port.calls and _names_of(facts) == ["망리단길"]  # 표에 없는 동네는 SQL 이 유일한 길이다
+
+
+@pytest.mark.parametrize("utterance", ["더알려줘", "좀더 알려줘", "또없어?", "더있어?", "더보여줘", "더요", "다른 장소는?", "딴 데는?",
+                                       "하나만 더"])
+def test_explore_glued_and_short_follow_ups_still_carry(utterance: str) -> None:
+    # 붙여 쓰면 이어 묻기로 못 알아봐 제주 일정 근처가 나왔다(2026-10-22 재검증)
+    facts, _, _ = _follow(utterance, (("USER", _BETWEEN_ASK), ("ASSISTANT", _SHOWN)), pool=_LINE_POOL)
+    assert facts.detail == {"anchor": "홍대·이태원 사이", "anchor_kind": "between"}
+
+
+@pytest.mark.parametrize("utterance", ["다음 일정 근처에 더 조용한 카페 있어?", "좀 더 싼 맛집 알려줘"])
+def test_explore_comparative_more_is_a_new_request(utterance: str) -> None:
+    facts, _, _ = _follow(utterance, (("USER", _BETWEEN_ASK), ("ASSISTANT", _SHOWN)))
+    assert facts.detail["anchor_kind"] == "itinerary"  # 비교의 '더' — 앞 요청을 잇지 않는다
+
+
+def test_explore_follow_up_after_a_weather_question_does_not_carry_its_region() -> None:
+    facts, _, _ = _follow("또 가볼 만한 데 있어?", (("USER", "서울 날씨 어때?"), ("ASSISTANT", "서울은 내일 맑아요.")))
+    assert facts.detail["anchor_kind"] == "itinerary"
+
+
+@pytest.mark.parametrize("utterance", ["내 일정 근처에 더 가볼 만한 데 있어?", "숙소 근처에 다른 데는?", "지금 여기 근처엔 또 뭐 있어?"])
+def test_explore_follow_up_that_moves_the_place_does_not_carry(utterance: str) -> None:
+    shown = "인기 식당, 인기 카페가 있어요."
+    facts, _, _ = _follow(utterance, (("USER", _BETWEEN_ASK), ("ASSISTANT", shown)))
+    assert facts.detail["anchor_kind"] == "itinerary" and not {"인기 식당", "인기 카페"} & set(_names_of(facts))
+
+
+def test_explore_follow_up_still_carries_when_it_refers_back_to_there() -> None:
+    facts, _, _ = _follow("그 근처에 더 없어?", (("USER", _BETWEEN_ASK), ("ASSISTANT", _SHOWN)), pool=_LINE_POOL)
+    assert facts.detail["anchor_kind"] == "between"
+
+
+@pytest.mark.parametrize(("utterance", "shown"), [
+    ("이태원 앤틱가구거리 말고 또 없어?", "이태원 앤틱가구거리, 효창공원이 있어요."),  # 보인 장소 이름 속 지역은 새 지역이 아니다
+    ("명동교자 말고 다른 데는?", "명동교자, 효창공원이 있어요."),  # 이름 속 지역
+])
+def test_explore_follow_up_naming_a_shown_place_still_carries(utterance: str, shown: str) -> None:
+    facts, _, _ = _follow(utterance, (("USER", _BETWEEN_ASK), ("ASSISTANT", shown)), pool=_LINE_POOL)
+    assert facts.detail["anchor_kind"] == "between" and "효창공원" not in _names_of(facts)
+
+
+@pytest.mark.parametrize(("ask", "region", "anchor"), [
+    ("서울 전주비빔밥 맛집 알려줘", "서울", "서울"),  # 분류가 대화에 근거 있는 지역을 채웠다
+    ("서울 전주비빔밥 맛집 알려줘", None, "서울"),  # 비웠다 — 이름 속 전주는 지역이 아니다
+    ("부산 사람들이 자주 가는 제주 맛집", None, "제주"),  # 마지막에 말한 지역
+    ("홍대에서 출발해서 강릉 가볼 만한 곳", None, "강릉"),
+])
+def test_explore_follow_up_carries_the_region_the_request_meant(ask: str, region: str | None, anchor: str) -> None:
+    facts, _, _ = _follow("더 알려줘", (("USER", ask), ("ASSISTANT", "인기 식당이 있어요.")), {"region": region} if region else {})
+    assert facts.detail["anchor"] == anchor
+
+
+def test_explore_follow_up_without_a_said_region_in_the_request_keeps_the_usual_anchor() -> None:
+    facts, _, _ = _follow("더 알려줘", (("USER", "성수기에도 한적한 가볼 만한 곳"), ("ASSISTANT", "인기 식당이 있어요.")))
+    assert facts.detail["anchor_kind"] == "itinerary"  # '성수기'의 성수는 서울 성수가 아니다
+
+
+def test_explore_follow_up_chain_through_an_unknown_district_stays_there() -> None:
+    # 표 밖 동네로 옮긴 사슬이 그보다 앞 요청(홍대·이태원 사이)으로 되돌아갔다(2026-10-22 재검증)
+    earlier = (("USER", _BETWEEN_ASK), ("ASSISTANT", _SHOWN), ("USER", "연남동에도 더 있어?"), ("ASSISTANT", "연남동 카페가 있어요."))
+    rows = [_row("연트럴파크", sigungu="마포구"), _row("연남동 카페", sigungu="마포구")]
+    facts, port, builder = _follow("더 알려줘", earlier, {"region": "연남동"}, rows=rows, snapshot=_EMPTY_SNAP)
+    assert port.calls and builder.requests == [] and _names_of(facts) == ["연트럴파크"]
+
+
+def test_explore_follow_up_with_every_sql_row_already_shown_says_nothing_more() -> None:
+    rows = [_row("망원한강공원", sigungu="마포구"), _row("망리단길", sigungu="마포구")]
+    facts, _, _ = _follow("더 알려줘", (("USER", "망원동 산책할 곳"), ("ASSISTANT", "망원한강공원, 망리단길이 있어요.")),
+                          {"region": "망원동"}, rows=rows, snapshot=_EMPTY_SNAP)
+    assert facts.status is FactStatus.EMPTY and facts.notes == ("앞에서 보여 준 곳 말고는 더 찾지 못함",)
+    assert facts.detail == {"anchor": "마포구", "anchor_kind": "region"}  # '그 지역은 못 찾는다'가 아니다
+
+
+def test_explore_follow_up_keeps_a_place_the_classifier_resolved_from_the_answer() -> None:
+    # "거기 근처"를 분류가 도우미 말의 장소로 풀면 그것을 따른다 — 앞 요청의 넓은 제주로 덮어쓰면 develop(성산 4km + SQL)보다 나빴다
+    earlier = (("USER", "제주 가볼 만한 곳 알려줘"), ("ASSISTANT", "성산일출봉, 우도가 있어요."))
+    facts, port, builder = _follow("거기 근처에 맛집 또 있어?", earlier, {"region": "성산일출봉"})
+    assert facts.detail["anchor"] == "성산" and port.calls
+    assert builder.requests[0][0].anchor == region_center("성산")[1]
+
+
+def test_explore_follow_up_chain_through_a_table_region_keeps_it_and_skips_every_shown_place() -> None:
+    earlier = (("USER", _BETWEEN_ASK), ("ASSISTANT", "효창공원, 경의선숲길이 있어요."), ("USER", "강남에도 더 있어?"),
+               ("ASSISTANT", "인기 카페, 인기 식당이 있어요."))
+    facts, _, _ = _follow("더 알려줘", earlier)
+    assert facts.detail == {"anchor": "강남", "anchor_kind": "region"}  # 사슬이 끊겨 일정 근처로 갔다
+    assert not {"인기 카페", "인기 식당"} & set(_names_of(facts))  # 사슬 전체에서 보인 곳
+
+
+@pytest.mark.parametrize("ask", ["서울엔 요즘 핫한 곳 어디야?", "서울에선 가볼 만한 곳 어디야?", "서울에서는 뭐 구경할까? 추천해줘"])
+def test_explore_follow_up_reads_a_region_with_stacked_particles(ask: str) -> None:
+    facts, _, _ = _follow("더 알려줘", (("USER", ask), ("ASSISTANT", "인기 식당이 있어요.")))
+    assert facts.detail == {"anchor": "서울", "anchor_kind": "region"}
+
+
+def test_explore_follow_up_ignores_a_classified_region_that_only_hid_inside_an_earlier_name() -> None:
+    # 앞서 물은 "제주문학관"의 제주는 근거가 아니다 — 분류가 [여행 상황]에서 옮긴 제주로 사이를 덮었다
+    earlier = (("USER", "제주문학관 오늘 문 열어?"), ("ASSISTANT", "오늘 열어요."), ("USER", _BETWEEN_ASK), ("ASSISTANT", _SHOWN))
+    facts, _, _ = _follow("더 알려줘", earlier, {"region": "제주"}, pool=_LINE_POOL)
+    assert facts.detail == {"anchor": "홍대·이태원 사이", "anchor_kind": "between"}
+
+
+def test_explore_more_words_without_earlier_turns_change_nothing() -> None:
+    facts, _, _ = _follow("더 알려줘", ())
+    assert facts.detail["anchor_kind"] == "itinerary" and {"인기 식당", "인기 카페"} & set(_names_of(facts))
+
+
+@settings(max_examples=60, deadline=None)
+@given(shown=st.sets(st.sampled_from([p.name for p in _LINE_POOL.pois])), ask=st.sampled_from(["더 알려줘", "다른 데는?", "또 있어?"]))
+def test_explore_follow_up_never_repeats_a_shown_place_and_stays_on_the_way(shown, ask) -> None:
+    facts, _, _ = _follow(ask, (("USER", _BETWEEN_ASK), ("ASSISTANT", ", ".join(sorted(shown)) + "이 있어요.")), pool=_LINE_POOL)
+    names = set(_names_of(facts)) if facts.payload else set()
+    assert not names & shown and names <= _ON_LINE  # 닫힌 목록 안(INV-1)·두 곳을 잇는 선 가까이
+
+
 def test_explore_asks_for_a_region_only_when_no_anchor_can_be_found() -> None:
     ask = HANDLERS[Intent.EXPLORE_PLACES].ask
     nothing = _ctx(_snapshot((), trip=None, status=None), ports=HandlerPorts(poi_info=_PoiInfo()))
@@ -1400,7 +1723,7 @@ def test_explore_asks_for_a_region_only_when_no_anchor_can_be_found() -> None:
     assert ask(_ctx(_snapshot((), trip=None, status=None), {"region": "강원도"})) is None  # 말했으면 묻지 않는다 — 못 찾으면 EMPTY
     assert ask(_ctx(_SNAP, ports=HandlerPorts(poi_info=_PoiInfo()))) is None  # 일정 근처
     assert ask(_ctx(_snapshot((), trip=_TRIP))) is None  # 여행 목적지
-    assert all(HANDLERS[i].ask is None for i in HANDLERS if i is not Intent.EXPLORE_PLACES)
+    assert all(HANDLERS[i].ask is None for i in HANDLERS if i not in (Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES))
 
 
 # ── EXPLORE_PLACES PBT (BR-AO-27) — 후보는 풀 안·≤5·결정론·입력 순서 무관, 숙소 0, 밤 주제가 아니면 나이트라이프 0, 종류 필터·한 종류 ≤2 ──

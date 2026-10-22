@@ -151,6 +151,37 @@ class ClosureRulesTest : StringSpec({
         }
     }
 
+    "발견이 없는 대상 가운데 상태(ACTIVE)·영업시간(UNKNOWN 아님) 중 하나라도 모르는 것이 있으면 unknown 이다 (G-SA-21)" {
+        checkAll(cases) { c ->
+            val v = judge(c)
+            val raised = v.findings.map { it.slotKey }.toSet()
+            v.unknown shouldBe c.seen.any {
+                it.slotKey !in raised && (c.status?.get(it.poiId) != PoiLifeStatus.ACTIVE || it.hours == HoursVerdict.UNKNOWN)
+            }
+            if (v.blind) v.unknown shouldBe true // 아무것도 모르면 당연히 일부도 모른다
+        }
+    }
+
+    "예 — 같은 날 확인한 장소와 모르는 장소가 섞이면 unknown(확인은 그대로) · 다 판정하면 아니다 · 발견된 장소와 상태 모름 (G-SA-21)" {
+        val now = at(today, "07:15")
+        val active = mapOf(pois[0] to PoiLifeStatus.ACTIVE, pois[1] to PoiLifeStatus.ACTIVE)
+
+        val mixed = ClosureRules.judge(today, now, listOf(slot(pois[0], "10:00"), slot(pois[1], "12:00", HoursVerdict.UNKNOWN)), active, emptyMap())
+        val judged = ClosureRules.judge(today, now, listOf(slot(pois[0], "10:00"), slot(pois[1], "12:00")), active, emptyMap())
+        val found = ClosureRules.judge(today, now, listOf(slot(pois[0], "10:00", HoursVerdict.VIOLATED), slot(pois[1], "12:00")), active, emptyMap())
+        val lost = ClosureRules.judge(
+            today, now, listOf(slot(pois[0], "10:00"), slot(pois[1], "12:00")),
+            mapOf(pois[0] to PoiLifeStatus.ACTIVE, pois[1] to PoiLifeStatus.OTHER), emptyMap(),
+        )
+
+        mixed.checked shouldBe setOf("$today#${pois[0]}")
+        mixed.unknown shouldBe true
+        mixed.blind shouldBe false
+        judged.unknown shouldBe false
+        found.unknown shouldBe false // 발견한 장소는 모르는 것이 아니다
+        lost.unknown shouldBe true // 상태를 모르면 영업시간이 OK 여도 모른다
+    }
+
     "아무것도 알아내지 못했을 때만 모름이다 — 모름이면 발견도 확인도 없다" {
         checkAll(cases) { c ->
             val v = judge(c)

@@ -12,6 +12,8 @@ INV-3)·연락처·주입 꼴도 같은 검사(`_violates`)로 문장째 뺀다.
 from __future__ import annotations
 
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from trippilot.agents.planb.place_knowledge import MAX_DOC_CHARS, fetch_place_knowledge
@@ -21,6 +23,11 @@ from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.vector_store_port import VectorStorePort
 
 log = logging.getLogger(__name__)
+
+# 소개는 덧붙임이다 — 카드(분류·영업시간·입장료)를 팬아웃 시한 초과로 통째로 잃지 않게 호출측이 준 시한(`wait_s`)만 기다리고
+# 빈 소개로 간다. 2026-10-21 로컬 실측: KB-5 조회 2.3~4.0s(조각 id 를 펼친 검색) → "남산서울타워 어떤 곳이야?"가 카드 없이
+# TIMEOUT 이었다. 동시에 도는 소개 조회가 상한이면 새로 내지 않는다(시한을 넘겨 뒤에서 도는 조회가 느린 스토어에 쌓이지 않게).
+INTRO_WAIT_S, INTRO_MAX_INFLIGHT = 2.0, 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,10 +51,27 @@ def clean_intro(text: str) -> str:
 class PlaceIntro:
     def __init__(self, embedding: EmbeddingPort, store: VectorStorePort) -> None:
         self._embedding, self._store = embedding, store
+        self._pool = ThreadPoolExecutor(INTRO_MAX_INFLIGHT, thread_name_prefix="place-intro")
+        self._slots = threading.BoundedSemaphore(INTRO_MAX_INFLIGHT)
 
-    def intro(self, source_ref: str, query: str) -> str:
-        """장소 하나(조인 키 = TourAPI contentid)의 소개 — 없거나 스토어 장애면 빈 문자열(부가 정보라 없이 간다, INV-4)."""
-        knowledge, note = fetch_place_knowledge((_Ref(source_ref),), query, self._embedding, self._store)  # type: ignore[arg-type]
+    def _fetch(self, source_ref: str, query: str) -> str:
+        try:
+            knowledge, note = fetch_place_knowledge((_Ref(source_ref),), query, self._embedding, self._store)  # type: ignore[arg-type]
+        finally:
+            self._slots.release()
         if note:
             log.info("place_intro %s", note)
         return clean_intro(knowledge.get(source_ref, ""))
+
+    def intro(self, source_ref: str, query: str, *, wait_s: float = INTRO_WAIT_S) -> str:
+        """장소 하나(조인 키 = TourAPI contentid)의 소개 — 없거나 스토어 장애·`wait_s` 초과면 빈 문자열(부가 정보라 없이 간다,
+        INV-4). 시한을 넘긴 조회는 뒤에서 끝까지 돌고 버려진다."""
+        if not self._slots.acquire(blocking=False):
+            log.info("place_intro skip reason=busy")
+            return ""
+        future = self._pool.submit(self._fetch, source_ref, query)
+        try:
+            return future.result(timeout=wait_s)
+        except Exception as e:  # noqa: BLE001 — 시한(TimeoutError)·스토어 예외 — 소개 없이 카드만
+            log.info("place_intro skip reason=%s", type(e).__name__)
+            return ""

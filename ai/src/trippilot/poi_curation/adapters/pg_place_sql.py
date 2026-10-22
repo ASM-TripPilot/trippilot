@@ -49,10 +49,14 @@ class PgPlaceSql:
     def __init__(self, connect: Callable[[], Any]) -> None:
         self._connect = connect
 
-    def find_by_name(self, name: str, sido_prefix: str | None = None) -> PlaceRow | None:
+    def find_by_name(self, name: str, area: str | None = None) -> PlaceRow | None:
         """일정 밖 장소를 이름으로 한 곳 찾는다 — **우리가 쓴** 매개변수 SQL(LLM 없음). 공백만 뗀 **완전 일치**만 본다.
-        여러 곳이면(체인점) 여행 시·도(`sido_prefix`)로 좁히고, 그래도 둘 이상이면 None — 하나를 골라 다른 곳의 영업시간을 말하면
-        "못 찾았어요"보다 나쁘다. 별칭·부분 일치("남산타워"↔"N서울타워")는 같은 이유로 하지 않는다. 2자 미만은 찾지 않는다."""
+        여러 곳이면(체인점) 여행 지역(`area` — 지역 표 이름: "서울"·"제주"·"강릉")으로 좁힌다. 행의 시·도나 구·군이 그 이름으로 시작하면
+        같은 지역이다("강릉"→강릉시, 도 아래 시군 여행도 걸린다). 그 안에서 정보가 충실한 곳(rich — 사진·영업시간)이 하나뿐이면 그곳이다
+        ("경복궁"은 서울에만 9곳 — 같은 이름의 식당·업소 사업자 등록 사이에서 관광지 한 곳만 사진·영업시간을 갖췄다, 2026-10-21 로컬 적재).
+        그래도 둘 이상이면 None — 하나를 골라 다른 곳의 영업시간을 말하면
+        "못 찾았어요"보다 나쁘다. 별칭·부분 일치("남산타워"↔"N서울타워")는 같은 이유로 하지 않는다. 2자 미만은 찾지 않는다.
+        한 곳만 맞으면 지역이 달라도 돌려준다 — 대신 호출측이 그 위치(시·도·구군)를 카드에 싣는다(다른 지역의 같은 이름이면 드러나게)."""
         key = "".join(name.split())
         if len(key) < 2:
             return None
@@ -63,16 +67,19 @@ class PgPlaceSql:
                     cur.execute(f"SET LOCAL statement_timeout = {STATEMENT_TIMEOUT_MS}")
                     cur.execute(
                         f"SELECT {_ROW_COLUMNS} FROM poi_public WHERE replace(name, ' ', '') = %(key)s "
-                        "ORDER BY (sido LIKE %(sido)s) DESC, poi_id LIMIT 3",
-                        {"key": key, "sido": f"{sido_prefix}%" if sido_prefix else "%"},
+                        "ORDER BY (sido LIKE %(area)s OR sigungu LIKE %(area)s) DESC, rich DESC, poi_id LIMIT 5",
+                        {"key": key, "area": f"{area}%" if area else "%"},
                     )
                     hits = [_row(r) for r in cur.fetchall()]
             finally:
                 conn.rollback()
         if len(hits) == 1:
             return hits[0]
-        local = [h for h in hits if sido_prefix and (h.sido or "").startswith(sido_prefix)]
-        return local[0] if len(local) == 1 else None
+        local = [h for h in hits if area and ((h.sido or "").startswith(area) or (h.sigungu or "").startswith(area))]
+        if len(local) == 1:
+            return local[0]
+        rich = [h for h in (local or hits) if h.rich]  # 지역 안(없으면 전체)에서 정보 충실한 곳이 하나뿐인가 — 정렬이 rich 를 앞에 둔다
+        return rich[0] if len(rich) == 1 else None
 
     def run(self, sql: str) -> list[PlaceRow]:
         """검사를 통과한 SELECT → 그 순서의 `PlaceRow` (≤ `ROW_CAP`). DB 오류·시한은 예외로 올라간다."""

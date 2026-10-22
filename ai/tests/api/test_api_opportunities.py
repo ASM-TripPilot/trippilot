@@ -5,7 +5,7 @@
 증명하는 것:
   ① 구형 조립(핸들러 없음)은 503 명시 실패
   ② 배선된 앱이 행사장·요즘 인기 카드를 와이어로 사영한다 — 기간은 일 단위, 거리는 문자열(시각·소요시간 없음,
-     INV-2·3). 슬롯의 장소와 일정에 있는 곳은 카드가 되지 않는다
+     INV-2·3). 슬롯의 장소와 일정에 있는 곳은 카드가 되지 않는다. 행사 유형은 EventType 값 그대로(요즘 인기는 null)
   ③ LLM 을 부르지 않는다
   ④ 행사 미배선 → `events_unwired` · 행사 조회 실패·패킷 형식 위반 → `events_unavailable: …` — 요즘 인기는 낸다.
      저장소가 잘려 왔으면(LOW) 받은 만큼 쓰고 `events_low`
@@ -71,13 +71,13 @@ _FEST = EventInfo("tourapi-2786391", "남산공원 야외식물원 국화 축제
 
 _VENUE_CARD = {
     "key": "event:tourapi-2786391", "kind": "EVENT_VENUE",
-    "event_name": "남산공원 야외식물원 국화 축제", "start": "2026-10-18", "end": "2026-10-22",
+    "event_name": "남산공원 야외식물원 국화 축제", "event_type": "FESTIVAL", "start": "2026-10-18", "end": "2026-10-22",
     "poi_id": "p-garden", "poi_name": "남산공원 야외식물원",
     "near_slot_key": "2026-10-20#p-slot1", "distance_label": "약 400m",
 }
 _TRENDING_CARD = {
-    "key": "trending:p-bakery", "kind": "TRENDING", "event_name": None, "start": None, "end": None,
-    "poi_id": "p-bakery", "poi_name": "성수 베이커리",
+    "key": "trending:p-bakery", "kind": "TRENDING", "event_name": None, "event_type": None, "start": None,
+    "end": None, "poi_id": "p-bakery", "poi_name": "성수 베이커리",
     "near_slot_key": "2026-10-20#p-slot2", "distance_label": "약 500m",
 }
 
@@ -195,6 +195,19 @@ def test_거리는_1km_미만이면_100m_단위로_반올림하고_100m_보다_�
 
     assert [(o.poi_id, o.distance_label) for o in response.opportunities] == [
         ("p-0", "약 100m"), ("p-437", "약 400m"), ("p-960", "약 1.0km")]
+
+
+@pytest.mark.parametrize("etype", [t for t in EventType if t is not EventType.OTHER], ids=lambda t: t.value)
+def test_행사_카드는_행사_유형을_EventType_값_그대로_싣는다(etype: EventType) -> None:
+    """비 오는 날 축제만 빼는 재료(G-SA-17) — 백엔드는 축제·유형 모름만 빼고 공연·전시·팝업은 남긴다.
+    카드에 오르는 유형(OTHER 제외)마다 본다 — EventType 에 값이 늘면 스키마 리터럴에 없어 여기서 깨진다
+    (백엔드 enum 은 백엔드 계약 게이트가 이 계약과 맞대 본다)."""
+    fest = replace(_FEST, event_type=etype)
+
+    response = _find(_TickingPoiDb(_POIS, step_s=0.0), _body(), provider=EventProvider(_Store([fest])))
+
+    assert [(o.key, o.event_type) for o in response.opportunities] == [
+        ("event:tourapi-2786391", etype.value), ("trending:p-bakery", None)]
 
 
 def test_LLM_을_부르지_않는다() -> None:
@@ -338,7 +351,9 @@ _requests = st.builds(
     planned_poi_ids=st.lists(_texts, max_size=8), request_meta=_metas)
 _cards = st.builds(
     schemas.OpportunitySchema, key=_texts, kind=st.sampled_from(("EVENT_VENUE", "EVENT_NEARBY", "TRENDING")),
-    event_name=st.none() | _texts, start=st.none() | _dates, end=st.none() | _dates, poi_id=_texts,
+    event_name=st.none() | _texts,
+    event_type=st.none() | st.sampled_from(("FESTIVAL", "PERFORMANCE", "EXHIBITION", "POPUP")),
+    start=st.none() | _dates, end=st.none() | _dates, poi_id=_texts,
     poi_name=_texts, near_slot_key=_texts, distance_label=_texts)
 _responses = st.builds(
     schemas.OpportunitiesResponse, opportunities=st.lists(_cards, max_size=3), notes=st.lists(_texts, max_size=4))

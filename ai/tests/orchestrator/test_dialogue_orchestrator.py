@@ -275,6 +275,30 @@ def test_capabilities_literal_is_a_deterministic_answer_without_llm() -> None:
 # ── 2·4·5단 — 분류 → 팬아웃 → 답변 ────────────────────────────────────────
 
 
+class _LlmInFanout(_Weather):
+    """팬아웃 스레드 안에서 서비스 LLM 을 부르는 포트 — NL2SQL(장소 탐색 DIALOGUE_SQL)과 같은 꼴. 백엔드 사용량 상한이 세는
+    턴 `llm_calls` 는 contextvar 카운터라, 풀 스레드에 문맥이 안 넘어가면 이 호출이 빠진다(계획 턴은 실제 4회인데 3으로 셌다)."""
+
+    class _Inner:
+        def invoke(self, request):
+            return None
+
+    def __init__(self, calls_per_fetch: int = 1) -> None:
+        super().__init__()
+        self._llm, self._n = CountingLlm(self._Inner()), calls_per_fetch
+
+    def fetch(self, params: dict) -> InfoPacket:
+        for _ in range(self._n):
+            self._llm.invoke(None)
+        return super().fetch(params)
+
+
+def test_service_llm_calls_made_inside_fanout_threads_count_toward_the_turn() -> None:
+    b = _build(_canned(Intent.GET_WEATHER), ports=HandlerPorts(poi_info=_PoiInfo(), weather=_LlmInFanout()))
+    out = b.orch.turn(_input("오늘 날씨 어때"))
+    assert out.outcome == "ANSWER" and out.llm_calls == 3  # 분류 + 팬아웃 안 1 + 답변 (BR-AO-07·COST-U8-02)
+
+
 def test_weather_turn_classifies_fans_out_and_composes_an_info_answer() -> None:
     b = _build(_canned(Intent.GET_WEATHER))
     out = b.orch.turn(_input("오늘 날씨 어때"))
@@ -1231,6 +1255,31 @@ def test_explore_empty_answer_cannot_invent_a_place_either() -> None:
     assert out.answer.text == "그 조건에 맞는 곳을 아직 찾지 못했어요." and out.answer.kind is AnswerKind.TEXT
     assert any(e.reason == "place_not_in_facts" for e in _fallbacks(b.trace))
 
+
+
+class _RecordingPool(_ExplorePool):
+    def __init__(self) -> None:
+        self.requests: list = []
+
+    def build(self, request, now):
+        self.requests.append(request)
+        return super().build(request, now)
+
+
+def test_explore_follow_up_turn_keeps_the_area_from_recent_turns_not_the_itinerary() -> None:
+    """"더 알려줘"에 분류가 지역을 비워도 앞 요청(홍대·이태원 사이)을 잇는다 — 일정(제주) 근처가 아니다(2026-10-21 테스트 화면).
+    이미 보인 곳은 뺀다 — 최근 대화가 핸들러까지 간다."""
+    from trippilot.domain.region_centers import region_center
+
+    answer = json.dumps({"text": "흰여울 카페도 가 볼 만해요.", "footnote": None}, ensure_ascii=False)
+    pool = _RecordingPool()
+    b = _build(_canned(Intent.EXPLORE_PLACES, answer=answer), ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=pool))
+    turns = (RecentTurn("USER", "홍대와 이태원 사이에 가볼만한 곳 알려줘"), RecentTurn("ASSISTANT", "감천문화마을이 있어요."))
+    out = b.orch.turn(_input("더 알려줘", recent_turns=turns))
+    (_, hongdae, _), (_, itaewon, _) = region_center("홍대"), region_center("이태원")
+    (request,) = pool.requests
+    assert request.anchor == GeoPoint((hongdae.lat + itaewon.lat) / 2, (hongdae.lng + itaewon.lng) / 2)
+    assert out.outcome == "ANSWER" and [c["name"] for c in out.answer.payload["candidates"]] == ["흰여울 카페"]
 
 
 def test_explore_without_any_anchor_asks_for_the_region_once_and_the_answer_runs_without_classifying() -> None:

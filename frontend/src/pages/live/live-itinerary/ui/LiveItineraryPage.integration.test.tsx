@@ -420,7 +420,6 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       expect(
         within(screen.getByTestId(BAR)).getByTestId(BAR_CHATBOT)
       ).toBeEnabled();
-      expect(screen.queryByTestId('assistant-fab')).toBeNull();
       fireEvent.press(screen.getByTestId(BAR_CHATBOT));
       expect(mockPush).toHaveBeenCalledWith({
         pathname: '/assistant',
@@ -1737,13 +1736,16 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       );
 
       await renderActive();
-      // 세 상태가 실제로 섰다 — done 우측 시각 · active [방문 완료] · upcoming 상태줄.
+      // 세 상태가 실제로 섰다 — done 우측 시각 · active 상태줄 · upcoming 상태줄.
+      // (TRIP-1561 — active 카드 뒤에 [도착]이 서는 p3 이 있어 [방문 완료]는 숨는다. 앵커를 버튼에서 상태줄로 옮겼다.)
       await waitFor(() =>
         expect(
           screen.getByTestId(`execution-live-slot-visit-time-${TODAY}#p1`)
         ).toHaveTextContent('10:02')
       );
-      expect(screen.getByTestId('execution-arrive-complete')).toBeOnTheScreen();
+      expect(
+        screen.getByTestId(`execution-live-slot-time-${TODAY}#p2`)
+      ).toHaveTextContent(/지금 방문 중/);
       expect(
         screen.getByTestId(`execution-live-slot-time-${TODAY}#p3`)
       ).toHaveTextContent('15:00 도착 예정');
@@ -5572,7 +5574,9 @@ describe('방문 체크', () => {
       }
     );
 
-    it('W6 진행 중 슬롯이 있으면 다른 예정 카드에도 [도착]이 없다 (AC-3 · Q1)', async () => {
+    it('W6 진행 중 슬롯 뒤 예정 카드에 [도착]이 서고, 진행 중 카드에는 [방문 완료]가 없다 (TRIP-1561 AC-3 — 옛 W6 "진행 중이면 [도착] 없음"을 뒤집음)', async () => {
+      // 옛 W6 는 "active 가 있으면 어느 카드에도 [도착]이 없다"를 못박았다(Q1: 다른 곳에 도착하면 앞 슬롯이 '예정'으로
+      // 되돌아 보이고 409). 지금은 [도착]이 앞 장소 완료를 먼저 하므로 그 이유가 사라졌다 — 의도된 반전이다.
       server.use(
         ...baseHandlers(
           liveItinerary([
@@ -5581,6 +5585,7 @@ describe('방문 체크', () => {
               slots: [
                 liveSlot('p1', '감천문화마을', '13:00:00'),
                 liveSlot('p2', '광안리 해변', '15:00:00'),
+                liveSlot('p3', '해운대 해변', '17:00:00'),
               ],
             },
           ])
@@ -5594,18 +5599,20 @@ describe('방문 체크', () => {
 
       render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
 
-      // 짝 앵커 — p1 은 active([방문 완료]), p2 는 예정 카드로 실제로 떴다.
+      // 앵커 — p1 은 관람 중으로 섰고 p2·p3 은 예정 카드다.
       await waitFor(() =>
         expect(
-          screen.getByTestId('execution-arrive-complete')
-        ).toBeOnTheScreen()
+          screen.getByTestId(`execution-live-slot-time-${TODAY}#p1`)
+        ).toHaveTextContent(/지금 방문 중/)
       );
       expect(
         screen.getByTestId(`execution-live-slot-status-${TODAY}#p2`)
       ).toHaveTextContent('예정');
-      expect(
-        screen.queryAllByTestId(/^execution-live-slot-arrive-/)
-      ).toHaveLength(0);
+      // 단언 — [도착]은 뒤의 예정 둘에만, [방문 완료]는 어디에도 없다(다음 [도착]이 완료를 대신한다).
+      expect(screen.getByTestId(arriveId(TODAY, 'p2'))).toBeOnTheScreen();
+      expect(screen.getByTestId(arriveId(TODAY, 'p3'))).toBeOnTheScreen();
+      expect(screen.queryByTestId(arriveId(TODAY, 'p1'))).toBeNull();
+      expect(screen.queryByTestId('execution-arrive-complete')).toBeNull();
     });
 
     it('W7 [도착]은 오늘 탭에서만 — 내일 탭엔 없고, 오늘로 돌아오면 다시 선다 (Q6)', async () => {
@@ -6007,6 +6014,874 @@ describe('방문 체크', () => {
     });
   });
 
+  /**
+   * TRIP-1561 — 수동 허브: 다음 장소 [도착]이 앞 장소를 먼저 완료한다(완료 요청 → 도착 요청), [방문 완료]는 마지막 장소에만.
+   *
+   * 무엇을 보장하나(페이지 배선 — 사슬 자체의 순서·롤백은 `useVisitCheck.integration` CH1~CH6 이 따로 잠근다):
+   *  - AC-1 진행 중 p1 · 예정 p2 에서 p2 [도착] → 요청 순서 완료(v1) → 도착(p2), 도착은 완료 응답 전에 안 나간다. 완료 요청엔 본문이 없다(AC-10).
+   *  - AC-2 마지막 장소가 진행 중이면 [방문 완료]가 있고 누르면 완료 1회(기존 동작 유지), [도착]은 없다.
+   *  - AC-3 (W6) 진행 중 슬롯 뒤 예정 카드에만 [도착] · 진행 중 카드엔 [방문 완료] 없음.
+   *  - AC-4 건너뛴 슬롯은 [도착] 대상·"마지막 장소" 판정에서 빠진다 / 오늘이 아닌 탭에서는 [도착]이 없고 [방문 완료]가 남는다.
+   *  - AC-5 완료 실패 → 도착 0회 · 앞 장소 진행 중 복귀 · 앞 카드에 안내. 다시 누르면 사슬이 처음부터. 409 는 그날 기록 1회 재조회.
+   *  - AC-6 도착 실패 → 앞 장소 완료 유지 · 다음 카드 예정 복귀 + 안내. 다시 누르면 평범한 도착(완료 요청 없음).
+   *  - AC-7 연타 → 완료·도착 POST 각 1회, 연타가 실패 안내를 띄우지 않는다. AC-8 낙관 id → 요청 0.
+   *  - AC-9 사슬 없는 단독 [도착]·[방문 완료]의 침묵 실패도 같은 안내(종전엔 outcome 을 버렸다 — 침묵 금지 INV-4).
+   *  - 결정 1 자동 기록이 무장(ARMED)이면 [방문 완료]를 남긴다 — [도착] 사슬은 무장 여부와 무관.
+   *  - 대기 중 언마운트 → 사슬은 끝까지 간다(완료만 나가고 도착이 안 나가는 반쪽 상태를 만들지 않는다) · 경고 없음.
+   *
+   * 3동작: 준비(일정 n곳 · 방문 기록 · 완료/도착 핸들러) → 실행([도착]·[방문 완료] press) → 단언(요청 기록 순서·카드 상태·안내 leaf).
+   */
+  describe('LiveItineraryPage · 수동 [도착] 은 앞 장소를 먼저 완료한다 (TRIP-1561)', () => {
+    const COMPLETE_FAILED = '방문 완료를 기록하지 못했어요. 다시 눌러 주세요.';
+    const ARRIVE_FAILED = '도착을 기록하지 못했어요. 다시 눌러 주세요.';
+    const noticeId = (poiId: string) =>
+      `execution-live-slot-action-notice-${TODAY}#${poiId}`;
+    const NOTICE_ANY = /^execution-live-slot-action-notice-/;
+    const ARRIVE_ANY = /^execution-live-slot-arrive-/;
+    const COMPLETE_V1 = `POST /api/v1/trips/${TRIP_ID}/visits/v1/complete`;
+    const COMPLETE_BTN = 'execution-arrive-complete';
+    const T_DONE = '2026-08-20T04:40:00Z';
+    const T_NEXT = '2026-08-20T04:41:00Z';
+    const posts = () => observedHits.filter((hit) => hit.startsWith('POST '));
+
+    /** 일정 n곳(13:00 · 15:00 · 17:00). */
+    const plan = (n: number): Itinerary =>
+      liveItinerary([
+        {
+          date: TODAY,
+          slots: [
+            liveSlot('p1', '감천문화마을', '13:00:00'),
+            liveSlot('p2', '광안리 해변', '15:00:00'),
+            liveSlot('p3', '해운대 해변', '17:00:00'),
+          ].slice(0, n),
+        },
+      ]);
+    const activeP1 = () =>
+      vc({ visitCheckId: 'v1', poiId: 'p1', arrivedAt: T });
+    const completedP1 = () =>
+      vc({
+        visitCheckId: 'v1',
+        poiId: 'p1',
+        arrivedAt: T,
+        completedAt: T_DONE,
+      });
+    const arrivedAt = (poiId: string) =>
+      vc({ visitCheckId: `v-${poiId}`, poiId, arrivedAt: T_NEXT });
+    const skipped = (poiId: string) =>
+      vc({
+        visitCheckId: `vs-${poiId}`,
+        poiId,
+        arrivedAt: null,
+        skippedAt: T,
+      });
+    const visitsGet = (visits: () => VisitCheck[]) =>
+      http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
+        HttpResponse.json({ visits: visits() })
+      );
+    const completeHandler = (
+      respond: () => Response | Promise<Response> = () =>
+        HttpResponse.json(completedP1())
+    ) =>
+      http.post(`${BASE}/trips/:tripId/visits/:visitCheckId/complete`, respond);
+    /** 도착 POST — 본문은 arriveBodies 에 쌓는다. */
+    const arriveHandler = (
+      respond: (poiId: string) => Response | Promise<Response> = (poiId) =>
+        HttpResponse.json(arrivedAt(poiId), { status: 201 })
+    ) =>
+      http.post(`${BASE}/trips/:tripId/visits`, async ({ request }) => {
+        const body = (await request.json()) as { poiId: string };
+        arriveBodies.push(body);
+        return respond(body.poiId);
+      });
+    const timeOf = (poiId: string) =>
+      screen.getByTestId(`execution-live-slot-time-${TODAY}#${poiId}`);
+    const card = (poiId: string) =>
+      screen.getByTestId(`execution-live-slot-${TODAY}#${poiId}`);
+    const doneTimeOf = (poiId: string) =>
+      screen.queryByTestId(`execution-live-slot-visit-time-${TODAY}#${poiId}`);
+
+    afterEach(() => {
+      mockAutomation = null;
+    });
+
+    it('P1 p2 [도착] → 완료 요청(v1)이 먼저, 도착 요청은 완료 응답 뒤에만 — 완료 본문 없음 · 재조회 0 · 끝나면 p2 가 관람 중이고 p1 은 완료 (AC-1·AC-10)', async () => {
+      const gate = createGate();
+      let completeBody: string | null = null;
+      server.use(
+        ...baseHandlers(plan(2)),
+        visitsGet(() => [activeP1()]),
+        http.post(
+          `${BASE}/trips/:tripId/visits/:visitCheckId/complete`,
+          async ({ request }) => {
+            completeBody = await request.text();
+            await gate.opened;
+            return HttpResponse.json(completedP1());
+          }
+        ),
+        arriveHandler()
+      );
+
+      try {
+        render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+          wrapper,
+        });
+        // 준비 — p1 관람 중, p2 에 [도착]이 서 있다.
+        const arrive = await screen.findByTestId(arriveId(TODAY, 'p2'));
+        expect(timeOf('p1')).toHaveTextContent(/지금 방문 중/);
+
+        // 실행 ① — [도착]. 완료 응답은 문 뒤에서 대기한다.
+        fireEvent.press(arrive);
+        await waitFor(() => expect(hitCount(COMPLETE_V1)).toBe(1));
+        await settle();
+
+        // 단언 ① — 완료 응답 전에는 도착 요청이 한 번도 안 나갔다(서버는 열린 도착 둘을 받아 주므로 순서는 클라 몫).
+        expect(hitCount(VISITS_PATH)).toBe(0);
+
+        // 실행 ② — 완료 응답을 푼다.
+        gate.release();
+        await waitFor(() => expect(hitCount(VISITS_PATH)).toBe(1));
+
+        // 단언 ② — 요청 순서는 완료 → 도착, 도착 본문은 p2 의 슬롯 키를 실은 수동 도착이다.
+        expect(posts()).toEqual([COMPLETE_V1, VISITS_PATH]);
+        expect(arriveBodies).toEqual([
+          { slotKey: `${TODAY}#p2`, poiId: 'p2', source: 'MANUAL' },
+        ]);
+        // 단언 ③ — 완료 요청엔 본문이 없다(AC-10: 출처는 서버가 MANUAL 로 채운다 — FE 는 아무것도 안 보낸다).
+        expect(completeBody).toBe('');
+        // 단언 ④ — p1 은 완료 카드(방문 시각), p2 는 관람 중이며 마지막 장소라 [방문 완료]가 선다. 안내는 없다. 재조회 0.
+        await waitFor(() => expect(doneTimeOf('p1')).not.toBeNull());
+        await waitFor(() =>
+          expect(timeOf('p2')).toHaveTextContent(/지금 방문 중/)
+        );
+        expect(within(card('p2')).getByTestId(COMPLETE_BTN)).toBeOnTheScreen();
+        expect(screen.queryAllByTestId(NOTICE_ANY)).toHaveLength(0);
+        expect(hitCount(VISITS_GET_TODAY)).toBe(1);
+      } finally {
+        gate.release();
+      }
+    });
+
+    it('P2 진행 중 슬롯이 마지막이면 [방문 완료]가 있고 [도착]은 없다 — 누르면 완료 요청 1회로 완료 카드가 된다, 도착 요청은 0 (AC-2)', async () => {
+      server.use(
+        ...baseHandlers(plan(2)),
+        visitsGet(() => [
+          vc({
+            visitCheckId: 'v0',
+            poiId: 'p1',
+            arrivedAt: T,
+            completedAt: T_DONE,
+          }),
+          vc({ visitCheckId: 'v2', poiId: 'p2', arrivedAt: T_NEXT }),
+        ]),
+        completeHandler(() =>
+          HttpResponse.json(
+            vc({
+              visitCheckId: 'v2',
+              poiId: 'p2',
+              arrivedAt: T_NEXT,
+              completedAt: '2026-08-20T05:10:00Z',
+            })
+          )
+        )
+      );
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+
+      // 앵커 — p2 가 관람 중이고 그 카드 안에 [방문 완료]가 있다. [도착]은 어디에도 없다.
+      await waitFor(() =>
+        expect(within(card('p2')).getByTestId(COMPLETE_BTN)).toBeOnTheScreen()
+      );
+      expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+
+      fireEvent.press(within(card('p2')).getByTestId(COMPLETE_BTN));
+
+      await waitFor(() =>
+        expect(
+          hitCount(`POST /api/v1/trips/${TRIP_ID}/visits/v2/complete`)
+        ).toBe(1)
+      );
+      await waitFor(() => expect(doneTimeOf('p2')).not.toBeNull());
+      expect(hitCount(VISITS_PATH)).toBe(0);
+    });
+
+    it.each([
+      ['p2 만 건너뜀(p3 가 남아 있다)', ['p2'], ['p3'], false],
+      ['p2·p3 모두 건너뜀(마지막 장소)', ['p2', 'p3'], [], true],
+    ] as const)(
+      'P3 %s → [도착]은 건너뛰지 않은 슬롯에만 서고, [방문 완료]는 마지막일 때만 선다 (AC-4)',
+      async (_name, skippedPois, arriveOn, completeShown) => {
+        server.use(
+          ...baseHandlers(plan(3)),
+          visitsGet(() => [activeP1(), ...skippedPois.map(skipped)])
+        );
+
+        render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+          wrapper,
+        });
+
+        // 앵커 — p1 관람 중, 건너뛴 슬롯도 허브에선 예정 카드로 그려진다(건너뜀 UI 는 없다).
+        await waitFor(() =>
+          expect(timeOf('p1')).toHaveTextContent(/지금 방문 중/)
+        );
+        expect(
+          screen.getByTestId(`execution-live-slot-status-${TODAY}#p2`)
+        ).toHaveTextContent('예정');
+        // 단언 — 건너뛴 슬롯엔 [도착]이 없고, 남은 슬롯에만 선다.
+        for (const poiId of ['p2', 'p3']) {
+          const expected = (arriveOn as readonly string[]).includes(poiId);
+          expect(screen.queryByTestId(arriveId(TODAY, poiId)) !== null).toBe(
+            expected
+          );
+        }
+        expect(screen.queryByTestId(COMPLETE_BTN) !== null).toBe(completeShown);
+      }
+    );
+
+    it('P4 오늘이 아닌 탭에서는 [도착]이 없고, 그 탭의 진행 중 카드는 [방문 완료]가 남는다 — 뒤에 예정이 있어도 (AC-4 갇힘 방지)', async () => {
+      server.use(
+        ...baseHandlers(
+          liveItinerary([
+            {
+              date: TODAY,
+              slots: [liveSlot('p1', '감천문화마을', '13:00:00')],
+            },
+            {
+              date: TOMORROW,
+              slots: [
+                liveSlot('p3', '해운대 해변', '10:00:00'),
+                liveSlot('p4', '동백섬', '12:00:00'),
+              ],
+            },
+          ])
+        ),
+        http.get(`${BASE}/trips/:tripId/visits/days/:day`, ({ params }) =>
+          HttpResponse.json({
+            visits:
+              params.day === TOMORROW
+                ? [
+                    vc({
+                      visitCheckId: 'v3',
+                      poiId: 'p3',
+                      slotKey: `${TOMORROW}#p3`,
+                      arrivedAt: '2026-08-21T01:00:00Z',
+                    }),
+                  ]
+                : [],
+          })
+        )
+      );
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+
+      // 앵커 — 오늘 탭에는 [도착]이 선다(게이트가 "항상 끔"으로 공허하게 통과하지 않게).
+      expect(
+        await screen.findByTestId(arriveId(TODAY, 'p1'))
+      ).toBeOnTheScreen();
+
+      // 실행 — 내일 탭.
+      fireEvent.press(screen.getByTestId('execution-live-daychip-1'));
+
+      // 단언 — 내일 탭의 관람 중 p3 카드 안에 [방문 완료]가 있고, [도착]은 어디에도 없다(p4 가 예정이어도).
+      const p3Card = await screen.findByTestId(
+        `execution-live-slot-${TOMORROW}#p3`
+      );
+      await waitFor(() =>
+        expect(within(p3Card).getByTestId(COMPLETE_BTN)).toBeOnTheScreen()
+      );
+      expect(
+        screen.getByTestId(`execution-live-slot-status-${TOMORROW}#p4`)
+      ).toHaveTextContent('예정');
+      expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+    });
+
+    it.each([
+      ['500', () => new HttpResponse(null, { status: 500 }), false],
+      ['네트워크 끊김', () => HttpResponse.error(), false],
+      ['409 이미 완료', () => new HttpResponse(null, { status: 409 }), true],
+    ] as const)(
+      'P5 완료가 %s 로 실패하면 도착을 보내지 않고, 앞 장소 카드에 안내가 서며, p1 은 (409 면 서버 진실대로 완료, 아니면) 관람 중으로 돌아온다 (AC-5)',
+      async (_name, failure, isConflict) => {
+        let gets = 0;
+        server.use(
+          ...baseHandlers(plan(2)),
+          // 409 는 서버가 이미 완료한 상태 — 그날 방문 기록을 다시 읽으면 완료 레코드가 온다.
+          visitsGet(() =>
+            ++gets > 1 && isConflict ? [completedP1()] : [activeP1()]
+          ),
+          completeHandler(failure),
+          arriveHandler()
+        );
+
+        render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+          wrapper,
+        });
+        fireEvent.press(await screen.findByTestId(arriveId(TODAY, 'p2')));
+
+        // 단언 ① — 안내가 앞 장소(p1) 카드에 선다 — 문구 그대로. 다음 카드(p2)에는 없다.
+        await waitFor(() =>
+          expect(screen.getByTestId(noticeId('p1'))).toHaveTextContent(
+            COMPLETE_FAILED
+          )
+        );
+        expect(screen.queryByTestId(noticeId('p2'))).toBeNull();
+        // 단언 ② — 도착 요청은 끝내 한 번도 안 나갔다.
+        await settle();
+        expect(hitCount(VISITS_PATH)).toBe(0);
+        expect(hitCount(COMPLETE_V1)).toBe(1);
+        if (isConflict) {
+          // 409 — 그날 방문 기록을 정확히 1회 다시 읽어 서버 진실(완료)에 맞춘다(결정 5).
+          await waitFor(() => expect(hitCount(VISITS_GET_TODAY)).toBe(2));
+          await waitFor(() => expect(doneTimeOf('p1')).not.toBeNull());
+        } else {
+          // 그 밖의 실패 — p1 이 관람 중으로 돌아왔고 p2 [도착]이 다시 눌릴 수 있다. 재조회 0.
+          await waitFor(() =>
+            expect(timeOf('p1')).toHaveTextContent(/지금 방문 중/)
+          );
+          expect(doneTimeOf('p1')).toBeNull();
+          expect(screen.getByTestId(arriveId(TODAY, 'p2'))).toBeOnTheScreen();
+          expect(hitCount(VISITS_GET_TODAY)).toBe(1);
+        }
+      }
+    );
+
+    it('P5b 완료 실패 뒤 [도착]을 다시 누르면 사슬이 처음부터 다시 돈다(완료 → 도착) — 성공하면 안내가 사라진다 (AC-5)', async () => {
+      let completes = 0;
+      server.use(
+        ...baseHandlers(plan(2)),
+        visitsGet(() => [activeP1()]),
+        completeHandler(() => {
+          completes += 1;
+          return completes === 1
+            ? new HttpResponse(null, { status: 500 })
+            : HttpResponse.json(completedP1());
+        }),
+        arriveHandler()
+      );
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+      fireEvent.press(await screen.findByTestId(arriveId(TODAY, 'p2')));
+      await waitFor(() =>
+        expect(screen.getByTestId(noticeId('p1'))).toBeOnTheScreen()
+      );
+      // 가드 해제가 롤백 재렌더보다 늦게 오는 구현도 있다 — 사람 손가락처럼 한 틱 쉬고 새로 찾아 누른다.
+      await settle();
+
+      fireEvent.press(screen.getByTestId(arriveId(TODAY, 'p2')));
+
+      await waitFor(() => expect(hitCount(VISITS_PATH)).toBe(1));
+      expect(hitCount(COMPLETE_V1)).toBe(2);
+      expect(posts().slice(-2)).toEqual([COMPLETE_V1, VISITS_PATH]);
+      await waitFor(() =>
+        expect(screen.queryAllByTestId(NOTICE_ANY)).toHaveLength(0)
+      );
+    });
+
+    it.each([
+      ['500', () => new HttpResponse(null, { status: 500 })],
+      ['네트워크 끊김', () => HttpResponse.error()],
+    ] as const)(
+      'P6 완료는 성공하고 도착이 %s 로 실패하면 p1 은 완료로 남고, p2 는 예정으로 돌아와 [도착]이 다시 서며, p2 카드에 안내가 선다 (AC-6)',
+      async (_name, failure) => {
+        server.use(
+          ...baseHandlers(plan(2)),
+          visitsGet(() => [activeP1()]),
+          completeHandler(),
+          arriveHandler(failure)
+        );
+
+        render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+          wrapper,
+        });
+        fireEvent.press(await screen.findByTestId(arriveId(TODAY, 'p2')));
+
+        // 단언 ① — 안내가 도착이 실패한 p2 카드에 선다 — 문구 그대로. p1 카드에는 없다.
+        await waitFor(() =>
+          expect(screen.getByTestId(noticeId('p2'))).toHaveTextContent(
+            ARRIVE_FAILED
+          )
+        );
+        expect(screen.queryByTestId(noticeId('p1'))).toBeNull();
+        // 단언 ② — p1 은 완료로 남고(되돌리지 않는다), p2 는 예정 + [도착]이다.
+        await waitFor(() => expect(doneTimeOf('p1')).not.toBeNull());
+        expect(
+          screen.getByTestId(`execution-live-slot-status-${TODAY}#p2`)
+        ).toHaveTextContent('예정');
+        await waitFor(() =>
+          expect(screen.getByTestId(arriveId(TODAY, 'p2'))).toBeOnTheScreen()
+        );
+        // 단언 ③ — 완료·도착 요청은 각 1회.
+        expect(hitCount(COMPLETE_V1)).toBe(1);
+        expect(hitCount(VISITS_PATH)).toBe(1);
+      }
+    );
+
+    it('P6b 도착 실패 뒤 [도착]을 다시 누르면 평범한 도착으로 나간다 — 완료 요청은 더 안 나가고, 성공하면 p2 관람 중·안내 사라짐 (AC-6)', async () => {
+      let arrives = 0;
+      server.use(
+        ...baseHandlers(plan(2)),
+        visitsGet(() => [activeP1()]),
+        completeHandler(),
+        arriveHandler((poiId) => {
+          arrives += 1;
+          return arrives === 1
+            ? new HttpResponse(null, { status: 500 })
+            : HttpResponse.json(arrivedAt(poiId), { status: 201 });
+        })
+      );
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+      fireEvent.press(await screen.findByTestId(arriveId(TODAY, 'p2')));
+      await waitFor(() =>
+        expect(screen.getByTestId(noticeId('p2'))).toBeOnTheScreen()
+      );
+      await settle();
+
+      fireEvent.press(await screen.findByTestId(arriveId(TODAY, 'p2')));
+
+      await waitFor(() => expect(hitCount(VISITS_PATH)).toBe(2));
+      expect(hitCount(COMPLETE_V1)).toBe(1);
+      await waitFor(() =>
+        expect(timeOf('p2')).toHaveTextContent(/지금 방문 중/)
+      );
+      expect(screen.queryAllByTestId(NOTICE_ANY)).toHaveLength(0);
+    });
+
+    it('P7 사슬이 도는 동안 [도착]을 연타해도(같은 카드 두 번 · 다른 카드) 완료·도착 POST 는 각 1회이고, 연타가 실패 안내를 띄우지 않는다 (AC-7)', async () => {
+      const gate = createGate();
+      server.use(
+        ...baseHandlers(plan(3)),
+        visitsGet(() => [activeP1()]),
+        completeHandler(async () => {
+          await gate.opened;
+          return HttpResponse.json(completedP1());
+        }),
+        arriveHandler()
+      );
+
+      try {
+        render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+          wrapper,
+        });
+        // 같은 참조를 연달아 — 캐시 갱신의 재렌더는 미뤄져 두 번째 press 때도 버튼이 트리에 남아 있다.
+        const arriveP2 = await screen.findByTestId(arriveId(TODAY, 'p2'));
+        const arriveP3 = screen.getByTestId(arriveId(TODAY, 'p3'));
+        fireEvent.press(arriveP2);
+        fireEvent.press(arriveP2);
+        fireEvent.press(arriveP3);
+        await waitFor(() => expect(hitCount(COMPLETE_V1)).toBe(1));
+        await settle();
+
+        // 단언 ① — 응답을 기다리는 동안 도착 요청은 한 번도 안 나갔고(낙관 완료로 p1 이 완료로 보여 "진행 중 없음" 얼굴이
+        // 돼도 단독 [도착] 경로가 열리지 않는다 — 열리면 완료 응답 전에 도착이 나간다), 안내는 어느 카드에도 없다
+        // (막힌 호출은 실패가 아니다).
+        expect(hitCount(VISITS_PATH)).toBe(0);
+        expect(screen.queryAllByTestId(NOTICE_ANY)).toHaveLength(0);
+
+        gate.release();
+        await waitFor(() => expect(hitCount(VISITS_PATH)).toBe(1));
+        await settle();
+
+        // 단언 ② — 완료·도착 POST 는 각 1회, 도착은 첫 누름의 p2 다. 끝난 뒤에도 안내는 없다.
+        expect(hitCount(COMPLETE_V1)).toBe(1);
+        expect(hitCount(VISITS_PATH)).toBe(1);
+        expect(arriveBodies).toEqual([
+          { slotKey: `${TODAY}#p2`, poiId: 'p2', source: 'MANUAL' },
+        ]);
+        expect(screen.queryAllByTestId(NOTICE_ANY)).toHaveLength(0);
+      } finally {
+        gate.release();
+      }
+    });
+
+    it('P7b 같은 렌더에서 [도착]을 두 번 눌러도(한 act 안) 완료·도착 POST 는 각 1회다 — 두 번째 사슬은 요청 없이 막힌다 (AC-7)', async () => {
+      const gate = createGate();
+      server.use(
+        ...baseHandlers(plan(2)),
+        visitsGet(() => [activeP1()]),
+        completeHandler(async () => {
+          await gate.opened;
+          return HttpResponse.json(completedP1());
+        }),
+        arriveHandler()
+      );
+
+      try {
+        render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+          wrapper,
+        });
+        const arrive = await screen.findByTestId(arriveId(TODAY, 'p2'));
+        act(() => {
+          fireEvent.press(arrive);
+          fireEvent.press(arrive);
+        });
+        await waitFor(() => expect(hitCount(COMPLETE_V1)).toBe(1));
+        await settle();
+        expect(screen.queryAllByTestId(NOTICE_ANY)).toHaveLength(0);
+
+        gate.release();
+        await waitFor(() => expect(hitCount(VISITS_PATH)).toBe(1));
+        await settle();
+
+        expect(hitCount(COMPLETE_V1)).toBe(1);
+        expect(hitCount(VISITS_PATH)).toBe(1);
+        expect(screen.queryAllByTestId(NOTICE_ANY)).toHaveLength(0);
+      } finally {
+        gate.release();
+      }
+    });
+
+    it('P8 관람 중 방문 id 가 낙관 id(optimistic:…)이면 [도착]을 눌러도 요청이 하나도 안 나간다 (AC-8 — 서버에 없는 id 로 완료하면 404)', async () => {
+      server.use(
+        ...baseHandlers(plan(2)),
+        visitsGet(() => [
+          vc({ visitCheckId: 'optimistic:p1', poiId: 'p1', arrivedAt: T }),
+        ]),
+        completeHandler(),
+        arriveHandler()
+      );
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+      // 앵커 — p1 은 낙관 id 로 관람 중이고 p2 [도착]이 서 있다.
+      const arrive = await screen.findByTestId(arriveId(TODAY, 'p2'));
+      expect(timeOf('p1')).toHaveTextContent(/지금 방문 중/);
+
+      fireEvent.press(arrive);
+      await settle();
+
+      expect(posts()).toEqual([]);
+    });
+
+    it('P9 진행 중이 없을 때 단독 [도착]이 실패하면 그 카드에 안내가 서고(종전엔 침묵), 다시 눌러 성공하면 사라진다 (AC-9 · INV-4)', async () => {
+      let arrives = 0;
+      server.use(
+        ...baseHandlers(plan(1)),
+        visitsGet(() => []),
+        arriveHandler((poiId) => {
+          arrives += 1;
+          return arrives === 1
+            ? new HttpResponse(null, { status: 500 })
+            : HttpResponse.json(arrivedAt(poiId), { status: 201 });
+        })
+      );
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+      fireEvent.press(await screen.findByTestId(arriveId(TODAY, 'p1')));
+
+      await waitFor(() =>
+        expect(screen.getByTestId(noticeId('p1'))).toHaveTextContent(
+          ARRIVE_FAILED
+        )
+      );
+      // 되돌아간 예정 카드에 [도착]이 다시 서 있다.
+      await waitFor(() =>
+        expect(screen.getByTestId(arriveId(TODAY, 'p1'))).toBeOnTheScreen()
+      );
+      await settle();
+
+      fireEvent.press(screen.getByTestId(arriveId(TODAY, 'p1')));
+      await waitFor(() =>
+        expect(timeOf('p1')).toHaveTextContent(/지금 방문 중/)
+      );
+      expect(screen.queryAllByTestId(NOTICE_ANY)).toHaveLength(0);
+    });
+
+    it('P9b 마지막 장소의 단독 [방문 완료]가 실패하면 그 카드에 안내가 서고 카드는 관람 중으로 돌아온다(종전엔 침묵), 다시 눌러 성공하면 사라진다 (AC-9 · INV-4)', async () => {
+      let completes = 0;
+      server.use(
+        ...baseHandlers(plan(1)),
+        visitsGet(() => [activeP1()]),
+        completeHandler(() => {
+          completes += 1;
+          return completes === 1
+            ? new HttpResponse(null, { status: 500 })
+            : HttpResponse.json(completedP1());
+        })
+      );
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+      fireEvent.press(await screen.findByTestId(COMPLETE_BTN));
+
+      await waitFor(() =>
+        expect(screen.getByTestId(noticeId('p1'))).toHaveTextContent(
+          COMPLETE_FAILED
+        )
+      );
+      // 되돌아간 관람 중 카드에 [방문 완료]가 다시 서 있다.
+      await waitFor(() =>
+        expect(screen.getByTestId(COMPLETE_BTN)).toBeOnTheScreen()
+      );
+      await settle();
+
+      fireEvent.press(screen.getByTestId(COMPLETE_BTN));
+      await waitFor(() => expect(doneTimeOf('p1')).not.toBeNull());
+      expect(screen.queryAllByTestId(NOTICE_ANY)).toHaveLength(0);
+    });
+
+    it('P9c 단독 [도착]을 연타해도 응답을 기다리는 동안 실패 안내가 뜨지 않는다 — 연타 가드의 되돌림은 실패가 아니다 (AC-9)', async () => {
+      const gate = createGate();
+      server.use(
+        ...baseHandlers(plan(1)),
+        visitsGet(() => []),
+        arriveHandler(async (poiId) => {
+          await gate.opened;
+          return HttpResponse.json(arrivedAt(poiId), { status: 201 });
+        })
+      );
+
+      try {
+        render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+          wrapper,
+        });
+        const arrive = await screen.findByTestId(arriveId(TODAY, 'p1'));
+        // 한 act 안에서 두 번 — 사이에 재렌더가 없어 두 번째 press 가 확실히 핸들러에 닿는다(따로 누르면 첫 press 의 재렌더로
+        // [도착]이 사라져 두 번째가 허공에 간다 — 이 한 틱 창이 연타 가드의 유일한 심판 자리다).
+        act(() => {
+          fireEvent.press(arrive);
+          fireEvent.press(arrive);
+        });
+        await waitFor(() => expect(hitCount(VISITS_PATH)).toBe(1));
+        await settle();
+
+        expect(screen.queryAllByTestId(NOTICE_ANY)).toHaveLength(0);
+
+        gate.release();
+        await waitFor(() =>
+          expect(timeOf('p1')).toHaveTextContent(/지금 방문 중/)
+        );
+        await settle();
+        expect(hitCount(VISITS_PATH)).toBe(1);
+        expect(screen.queryAllByTestId(NOTICE_ANY)).toHaveLength(0);
+      } finally {
+        gate.release();
+      }
+    });
+
+    it('P10 자동 기록이 무장(ARMED)이면 [방문 완료]가 남고, [도착]은 같이 서며 눌러도 사슬이 그대로 돈다(완료 → 도착) (결정 1 · BR-U10-17)', async () => {
+      mockAutomation = { state: 'ARMED', notice: null, droppedCount: 0 };
+      server.use(
+        ...baseHandlers(plan(2)),
+        visitsGet(() => [activeP1()]),
+        completeHandler(),
+        arriveHandler()
+      );
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+
+      // 앵커·단언 — p1 관람 중 카드에 [방문 완료]가 있고 p2 에 [도착]도 있다.
+      const arrive = await screen.findByTestId(arriveId(TODAY, 'p2'));
+      expect(within(card('p1')).getByTestId(COMPLETE_BTN)).toBeOnTheScreen();
+
+      fireEvent.press(arrive);
+
+      await waitFor(() => expect(hitCount(VISITS_PATH)).toBe(1));
+      expect(posts()).toEqual([COMPLETE_V1, VISITS_PATH]);
+    });
+
+    it('P11 사슬을 기다리는 중에 허브를 떠나도(언마운트) 사슬은 끝까지 간다 — 완료만 나가고 도착이 안 나가는 반쪽 상태를 만들지 않고, React 경고도 없다', async () => {
+      const gate = createGate();
+      const errorSpy = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+      server.use(
+        ...baseHandlers(plan(2)),
+        visitsGet(() => [activeP1()]),
+        completeHandler(async () => {
+          await gate.opened;
+          return HttpResponse.json(completedP1());
+        }),
+        arriveHandler()
+      );
+
+      try {
+        const { unmount } = render(
+          <LiveItineraryPage tripId={TRIP_ID} today={TODAY} />,
+          { wrapper }
+        );
+        fireEvent.press(await screen.findByTestId(arriveId(TODAY, 'p2')));
+        await waitFor(() => expect(hitCount(COMPLETE_V1)).toBe(1));
+
+        // 실행 — 완료 응답을 기다리는 중에 화면이 사라진다. 그 뒤 응답이 온다.
+        unmount();
+        gate.release();
+
+        // 단언 — 도착 요청이 정확히 1회 나가고(사슬 완주), React 경고·에러 로그가 없다.
+        await waitFor(() => expect(hitCount(VISITS_PATH)).toBe(1));
+        await settle();
+        expect(posts()).toEqual([COMPLETE_V1, VISITS_PATH]);
+        const reactWarnings = errorSpy.mock.calls.filter(([message]) =>
+          /not wrapped in act|unmounted component|state update/i.test(
+            String(message)
+          )
+        );
+        expect(reactWarnings).toEqual([]);
+      } finally {
+        gate.release();
+        errorSpy.mockRestore();
+      }
+    });
+
+    // ── 5-b 보강(경고-1·2) ───────────────────────────────────────────────────────────────────────────────────────
+    // 앞 케이스(P1~P11)는 "사슬 1회 → 단언 → 끝"이라 두 가지 잠금 회귀를 못 봤다: ① 성공한 사슬/도착이 잠금을 쥔 채 끝나는 것
+    // (3곳 일정의 두 번째 이동부터 [도착]이 아무 반응 없이 무시된다), ② 단독 [방문 완료] 같은 틱 연타(완료 POST 2회 + 거짓 실패 안내).
+
+    it('P12 3곳 일정에서 첫 이동(p1→p2)이 성공한 뒤 다음 이동(p2→p3)도 사슬로 나간다 — 잠금이 성공 뒤에도 풀린다 (AC-7 · 5-b 경고-1)', async () => {
+      server.use(
+        ...baseHandlers(plan(3)),
+        visitsGet(() => [activeP1()]),
+        // 완료 요청은 방문 id 로 응답을 가른다(첫 이동은 v1, 둘째 이동은 방금 도착한 v-p2) — 핸들러는 먼저 맞는 것이 이긴다.
+        http.post(
+          `${BASE}/trips/:tripId/visits/:visitCheckId/complete`,
+          ({ params }) =>
+            HttpResponse.json(
+              params.visitCheckId === 'v1'
+                ? completedP1()
+                : vc({
+                    visitCheckId: 'v-p2',
+                    poiId: 'p2',
+                    arrivedAt: T_NEXT,
+                    completedAt: T_DONE,
+                  })
+            )
+        ),
+        arriveHandler()
+      );
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+
+      // 실행 ① — p2 [도착](사슬 1회). 끝나면 p2 가 관람 중이고, p3 가 뒤 예정이라 [방문 완료]는 숨고 p3 에 [도착]이 선다(앵커).
+      fireEvent.press(await screen.findByTestId(arriveId(TODAY, 'p2')));
+      await waitFor(() => expect(hitCount(VISITS_PATH)).toBe(1));
+      await waitFor(() =>
+        expect(timeOf('p2')).toHaveTextContent(/지금 방문 중/)
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId(arriveId(TODAY, 'p3'))).toBeOnTheScreen()
+      );
+      expect(screen.queryByTestId(COMPLETE_BTN)).toBeNull();
+      // 사람 손가락처럼 한 틱 쉬고 새로 찾아 누른다(잠금 해제가 재렌더보다 늦게 오는 구현도 걸러지게).
+      await settle();
+
+      // 실행 ② — p3 [도착]. 단언 — 이번에도 무시되지 않고 완료(p2) → 도착(p3)이 한 번씩 더 나간다.
+      fireEvent.press(screen.getByTestId(arriveId(TODAY, 'p3')));
+      await waitFor(() => expect(hitCount(VISITS_PATH)).toBe(2));
+      expect(posts()).toEqual([
+        COMPLETE_V1,
+        VISITS_PATH,
+        `POST /api/v1/trips/${TRIP_ID}/visits/v-p2/complete`,
+        VISITS_PATH,
+      ]);
+      expect(arriveBodies).toEqual([
+        { slotKey: `${TODAY}#p2`, poiId: 'p2', source: 'MANUAL' },
+        { slotKey: `${TODAY}#p3`, poiId: 'p3', source: 'MANUAL' },
+      ]);
+      await waitFor(() =>
+        expect(timeOf('p3')).toHaveTextContent(/지금 방문 중/)
+      );
+      await waitFor(() => expect(doneTimeOf('p1')).not.toBeNull());
+      await waitFor(() => expect(doneTimeOf('p2')).not.toBeNull());
+      expect(screen.queryAllByTestId(NOTICE_ANY)).toHaveLength(0);
+      // p3 는 마지막 장소라 [방문 완료]가 선다.
+      expect(within(card('p3')).getByTestId(COMPLETE_BTN)).toBeOnTheScreen();
+    });
+
+    it('P13 단독 [방문 완료]를 같은 렌더에서 두 번 눌러도(한 act 안) 완료 POST 는 1회고, 연타가 실패 안내를 띄우거나 완료를 되돌리지 않는다 (5-b 경고-2)', async () => {
+      const gate = createGate();
+      let completes = 0;
+      server.use(
+        ...baseHandlers(plan(1)),
+        visitsGet(() => [activeP1()]),
+        // 두 번째 호출은 "이미 완료"라 409 — 잠금이 없으면 이 응답이 첫 응답이 만든 완료를 되돌리고 거짓 실패 안내를 세운다.
+        completeHandler(async () => {
+          completes += 1;
+          if (completes > 1) return new HttpResponse(null, { status: 409 });
+          await gate.opened;
+          return HttpResponse.json(completedP1());
+        })
+      );
+
+      try {
+        render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+          wrapper,
+        });
+        const complete = await screen.findByTestId(COMPLETE_BTN);
+        // 한 act 안에서 두 번 — 사이에 재렌더가 없어 두 번째 press 가 확실히 핸들러에 닿는다(P9c 와 같은 이유).
+        act(() => {
+          fireEvent.press(complete);
+          fireEvent.press(complete);
+        });
+        await waitFor(() => expect(hitCount(COMPLETE_V1)).toBe(1));
+        await settle();
+
+        // 단언 ① — 응답을 기다리는 동안 완료 요청은 1회뿐이고 안내는 없다(막힌 두 번째는 실패가 아니다).
+        expect(hitCount(COMPLETE_V1)).toBe(1);
+        expect(screen.queryAllByTestId(NOTICE_ANY)).toHaveLength(0);
+
+        gate.release();
+        await waitFor(() => expect(doneTimeOf('p1')).not.toBeNull());
+        await settle();
+
+        // 단언 ② — 끝난 뒤에도 1회·안내 없음·카드는 완료 그대로(관람 중으로 되돌아가지 않는다).
+        expect(hitCount(COMPLETE_V1)).toBe(1);
+        expect(screen.queryAllByTestId(NOTICE_ANY)).toHaveLength(0);
+        expect(doneTimeOf('p1')).not.toBeNull();
+        expect(screen.queryByTestId(COMPLETE_BTN)).toBeNull();
+      } finally {
+        gate.release();
+      }
+    });
+
+    it('P13b 단독 [방문 완료]는 성공한 뒤에도 잠금이 풀려, 이어서 도착한 다음 장소의 [방문 완료]가 완료 요청을 낸다 — 순서 바꿈(p2 먼저)에서 p2 → p1 (5-b 경고-2 잠금 해제)', async () => {
+      server.use(
+        ...baseHandlers(plan(2)),
+        // p2 에 먼저 도착해 있다 — p1 은 진행 중 앞의 '예정'이라 [도착]이 없고, p2 는 마지막이라 [방문 완료]가 선다.
+        visitsGet(() => [
+          vc({ visitCheckId: 'v2', poiId: 'p2', arrivedAt: T_NEXT }),
+        ]),
+        http.post(
+          `${BASE}/trips/:tripId/visits/:visitCheckId/complete`,
+          ({ params }) =>
+            HttpResponse.json(
+              vc({
+                visitCheckId: String(params.visitCheckId),
+                poiId: params.visitCheckId === 'v2' ? 'p2' : 'p1',
+                arrivedAt: T_NEXT,
+                completedAt: T_DONE,
+              })
+            )
+        ),
+        arriveHandler()
+      );
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+
+      // 앵커 — p2 관람 중·[방문 완료] 있음·[도착]은 어디에도 없다(p1 은 앞 예정).
+      await waitFor(() =>
+        expect(within(card('p2')).getByTestId(COMPLETE_BTN)).toBeOnTheScreen()
+      );
+      expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+
+      // 실행 ① — p2 [방문 완료](성공). 이제 진행 중이 없으니 p1 에 [도착]이 선다.
+      fireEvent.press(within(card('p2')).getByTestId(COMPLETE_BTN));
+      await waitFor(() => expect(doneTimeOf('p2')).not.toBeNull());
+      await settle();
+      fireEvent.press(await screen.findByTestId(arriveId(TODAY, 'p1')));
+      await waitFor(() =>
+        expect(timeOf('p1')).toHaveTextContent(/지금 방문 중/)
+      );
+      await settle();
+
+      // 실행 ② — p1 [방문 완료]. 단언 — 잠금이 풀려 있어 두 번째 완료 요청이 나간다(v-p1).
+      fireEvent.press(within(card('p1')).getByTestId(COMPLETE_BTN));
+      await waitFor(() =>
+        expect(
+          hitCount(`POST /api/v1/trips/${TRIP_ID}/visits/v-p1/complete`)
+        ).toBe(1)
+      );
+      await waitFor(() => expect(doneTimeOf('p1')).not.toBeNull());
+      expect(screen.queryAllByTestId(NOTICE_ANY)).toHaveLength(0);
+    });
+  });
+
   describe('LiveItineraryPage · 즉석 방문은 허브 판정에서 빠진다 (TRIP-1079)', () => {
     /** 즉석 방문 — slotKey 가 null(서버가 계획 밖 방문으로 기록한 것). */
     const spontaneous = (
@@ -6015,17 +6890,8 @@ describe('방문 체크', () => {
 
     it('W16 계획 슬롯 도착 + 즉석 도착이 같은 날이면 계획 카드가 관람 중이고, [방문 완료]는 계획 레코드 id 로 나간다 (AC-1)', async () => {
       server.use(
-        ...baseHandlers(
-          liveItinerary([
-            {
-              date: TODAY,
-              slots: [
-                liveSlot('p1', '감천문화마을', '13:00:00'),
-                liveSlot('p2', '광안리 해변', '15:00:00'),
-              ],
-            },
-          ])
-        ),
+        // TRIP-1561 — 일정은 p1 한 곳이다. 뒤에 예정 p2 가 있으면 p1 은 "마지막 장소"가 아니라 [방문 완료]가 숨는다.
+        ...baseHandlers(),
         // 서버는 도착 최신순 — 먼저 도착한 즉석 X 가 목록 끝에 온다(QA 066 재현 순서, 02a ★1).
         http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
           HttpResponse.json({
@@ -6065,10 +6931,7 @@ describe('방문 체크', () => {
       expect(
         screen.getByTestId(`execution-live-slot-time-${TODAY}#p1`)
       ).toHaveTextContent('13:00 도착 · 지금 방문 중');
-      expect(
-        screen.getByTestId(`execution-live-slot-status-${TODAY}#p2`)
-      ).toHaveTextContent('예정');
-      // 관람 중 1장 ↔ [도착] 전부 숨김(AC-8 짝).
+      // 관람 중 1장 ↔ [도착] 없음(AC-8 짝 — 다른 예정 카드가 없다).
       expect(
         screen.queryAllByTestId(/^execution-live-slot-arrive-/)
       ).toHaveLength(0);
@@ -6270,7 +7133,9 @@ describe('방문 체크', () => {
   });
 
   describe('LiveItineraryPage · 관람 중 후보가 둘이면 계획 순서가 가른다 (TRIP-1079 5-c 경고-1)', () => {
-    it('W20 오늘 슬롯 [p1, p2]가 둘 다 도착·미완료이고 서버 목록이 p2 를 앞에 주어도 p1 이 관람 중이고, [방문 완료]는 p1 레코드 id 로 나간다 (AC-6)', async () => {
+    it('W20 오늘 슬롯 [p1, p2]가 둘 다 도착·미완료이고 서버 목록이 p2 를 앞에 주어도 p1 이 관람 중이고, 사슬의 완료 요청은 p1 레코드 id 로 나간다 (AC-6 · TRIP-1561 개정)', async () => {
+      // TRIP-1561 — p1 뒤에 [도착]이 서는 p2 가 있어 [방문 완료]가 숨는다. 완료는 p2 [도착] 사슬이 부른다:
+      // 사슬의 완료 대상도 "계획 순서가 앞선 p1 의 v1" 이어야 한다(목록 첫째 v2 가 아니라).
       server.use(
         ...baseHandlers(
           liveItinerary([
@@ -6305,25 +7170,29 @@ describe('방문 체크', () => {
               completedAt: '2026-08-20T13:40:00',
             })
           )
+        ),
+        http.post(`${BASE}/trips/:tripId/visits`, () =>
+          HttpResponse.json(
+            vc({ visitCheckId: 'v2b', poiId: 'p2', arrivedAt: T }),
+            { status: 201 }
+          )
         )
       );
 
       render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
 
-      // 단언 ① — 계획 순서가 앞선 p1 카드 **안에** [방문 완료]가 있고, p2 는 예정이다.
+      // 단언 ① — 계획 순서가 앞선 p1 이 관람 중이고, p2 는 예정이며 [도착]이 선다.
       await waitFor(() =>
         expect(
-          within(
-            screen.getByTestId(`execution-live-slot-${TODAY}#p1`)
-          ).getByTestId('execution-arrive-complete')
-        ).toBeOnTheScreen()
+          screen.getByTestId(`execution-live-slot-time-${TODAY}#p1`)
+        ).toHaveTextContent(/지금 방문 중/)
       );
       expect(
         screen.getByTestId(`execution-live-slot-status-${TODAY}#p2`)
       ).toHaveTextContent('예정');
 
-      // 실행 — [방문 완료]. 단언 ② — p1 레코드(v1)로 나가고 p2 레코드(v2)로는 안 나간다.
-      fireEvent.press(screen.getByTestId('execution-arrive-complete'));
+      // 실행 — p2 [도착]. 단언 ② — 완료는 p1 레코드(v1)로 나가고 p2 레코드(v2)로는 안 나간다.
+      fireEvent.press(screen.getByTestId(arriveId(TODAY, 'p2')));
       await waitFor(() =>
         expect(
           hitCount(`POST /api/v1/trips/${TRIP_ID}/visits/v1/complete`)
@@ -6346,10 +7215,9 @@ describe('방문 체크', () => {
       liveItinerary([
         {
           date: TODAY,
-          slots: [
-            liveSlot('p1', '부산시립미술관', '14:44:00'),
-            liveSlot('p2', '광안리 해변', '16:00:00'),
-          ],
+          // TRIP-1561 — 한 곳이다: 뒤에 예정이 있으면 [방문 완료]가 숨는다(마지막 장소에만 선다). 예정 카드의 계획 시각은
+          // 카드 단위 AV3 와 W3 가 잠근다.
+          slots: [liveSlot('p1', '부산시립미술관', '14:44:00')],
         },
       ]);
     const timeOf = (poiId: string) =>
@@ -6393,8 +7261,6 @@ describe('방문 체크', () => {
         ).toBeOnTheScreen()
       );
       expect(timeOf('p1')).toHaveTextContent('14:07 도착 · 지금 방문 중');
-      // 단언 ② — 예정 카드는 계획 시각 그대로(BR-U4-34 · AC-7).
-      expect(timeOf('p2')).toHaveTextContent('16:00 도착 예정');
       // 단언 ③ — 관람 중 카드 어디에도 체류·경과 시간이 없다(INV-3 · BR-U4-37). 짝 앵커: 14:07 은 있다.
       const activeCard = screen.getByTestId(`execution-live-slot-${TODAY}#p1`);
       expect(activeCard).toHaveTextContent(/14:07/);
@@ -6533,7 +7399,8 @@ describe('방문 체크', () => {
  *  - 허브가 **보고 있는 날짜**로 `GET /trips/{id}/opportunities?date=` 를 부르고(일차 칩을 바꾸면 그 날로), 고른 1장을
  *    하단 바의 행사 칸에 점으로 알리며 **칸을 누르면** 바 위 작은 카드로 연다(TRIP-1522 — 종전엔 시트 머리에 늘 떠 있었다).
  *    여행 중 허브(active)가 아니면 부르지 않는다.
- *  - 같은 날 날씨 위험 트리거가 발화 중이면 행사 카드 대신 다음 항목(요즘 인기)을 그린다 — 트리거 목록이 온 뒤에.
+ *  - 같은 날 날씨 위험 트리거가 발화 중이면 축제·유형 모름 행사 카드 대신 다음 항목(실내형 행사·요즘 인기)을 그린다 —
+ *    트리거 목록이 온 뒤에(G-SA-17 — 공연·전시·팝업은 남는다).
  *  - [넣어서 다시 짜기] → i04 를 `prefill`·`includePoiId`(오늘이 아니면 `targetDate`)로 연다. 이동만 하고 쓰기 요청 0
  *    (INV-SA-1 — 일정은 i06 [적용]으로만).
  *  - × → 그 자리에서 사라지고 다음 항목으로 채우지 않는다. 숨김은 그 날 기기에 남아 다시 열어도 없다 — 다른 날은 그대로.
@@ -6550,6 +7417,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     key: 'event:부산 불꽃축제',
     kind: 'EVENT_VENUE',
     eventName: '부산 불꽃축제',
+    eventType: 'FESTIVAL',
     start: '2026-08-18',
     end: '2026-08-24',
     poiId: 'poi-venue',
@@ -6771,6 +7639,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
 
   // 5-b 후 보강(03b 경고-1) — 같은 날 안에서 기회가 행사 A → (날씨 위험) 요즘 인기 B → (위험 해제) 행사 A 로 돌아와도,
   // 열어 둔 카드가 사용자가 누르지 않았는데 저절로 다시 열리지 않는다. 실제 경로: 트리거 목록 갱신(O12 와 같은 장치).
+  // 테스트 상한 20초 — O12 와 같은 이유(O12 머리 주석).
   it('O3c 열어 둔 행사 카드는 날씨 위험으로 요즘 인기가 됐다 위험이 풀려 행사로 돌아와도 저절로 다시 열리지 않는다', async () => {
     // 준비 — 트리거 목록은 테스트가 바꾼다(앞에 건 핸들러가 이기므로 liveHubHandlers 보다 먼저).
     let serverTriggers: Trigger[] = [];
@@ -6828,9 +7697,9 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
       exact: true,
     });
-  });
+  }, 20_000);
 
-  it('O4 같은 날 날씨 위험이 발화 중이면 행사 카드 대신 요즘 인기를 그린다', async () => {
+  it('O4 같은 날 날씨 위험이 발화 중이면 축제 카드 대신 요즘 인기를 그린다', async () => {
     await renderHub({ [TODAY]: [VENUE, TRENDING] }, { triggers: [rain] });
 
     // 트리거 목록이 도착한 뒤에 판정한다(알약 = 목록 도착의 증거) — '아직 모름'이라 행사를 뺀 것과 가른다.
@@ -6840,6 +7709,29 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     expect(screen.getByTestId(TITLE)).toHaveTextContent(TRENDING_TITLE, {
       exact: true,
     });
+    expect(screen.queryByText(VENUE_TITLE)).toBeNull();
+  });
+
+  it('O16 같은 날 날씨 위험이 발화 중이어도 실내형 행사(전시) 카드는 축제를 뺀 자리에 그린다', async () => {
+    const expo: Opportunity = {
+      ...VENUE,
+      key: 'event:부산 비엔날레',
+      eventName: '부산 비엔날레',
+      eventType: 'EXHIBITION',
+      poiId: 'poi-expo',
+      poiName: '부산현대미술관',
+    };
+    await renderHub({ [TODAY]: [VENUE, expo, TRENDING] }, { triggers: [rain] });
+
+    // 트리거 목록이 도착한 뒤에 판정한다(알약 = 목록 도착의 증거).
+    await screen.findByTestId('execution-live-trigger-chip');
+    await eventReady();
+    openCard();
+    expect(screen.getByTestId(TITLE)).toHaveTextContent(
+      '‘부산 비엔날레’ 기간이에요',
+      { exact: true }
+    );
+    expect(screen.getAllByTestId(CARD)).toHaveLength(1);
     expect(screen.queryByText(VENUE_TITLE)).toBeNull();
   });
 
@@ -7018,6 +7910,12 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     expectEventIdle();
   });
 
+  // 테스트 상한 20초(W21 과 같다) — 닫기 둘·트리거 재조회 둘·다시 열기를 잇는 케이스라 jest 기본 상한(5초 — 이 버킷의 기다림
+  // 상한과 같다)이 CPU 경합에서 모자란다. 기다림의 확인이 실패할 때마다 jest 가 받은 노드를 문자열로 찍느라 수백 ms 를 쓴다
+  // (로컬 실측: 떠 있는 알약에 `toBeNull` 한 번 ≈ 0.4초 — 이 케이스 1.1초 중 알약이 사라지길 기다리는 데만 ≈ 0.85초).
+  // 실측: 2026-10-20 승격 PR CI 에서 두 번 'Exceeded timeout of 5000 ms' 로 죽었고(develop·재실행은 통과), 10-21 배경 QoS
+  // 6개 동시 실행으로 재현하면 6/6 실패(5.4~5.5초)였다. 상한을 올려도 초록은 느려지지 않고, 기다림 하나가 끝내 안 풀리면 그
+  // 기다림(5초)이 먼저 끝나 원인 메시지로 죽는다.
   it('O12 같은 날 두 번째 ×가 첫 숨김을 지우지 않는다 — 비 위험으로 바뀐 카드를 또 닫고 위험이 풀려도, 처음 닫은 카드는 그 날 다시 없다', async () => {
     // 준비 — 트리거 목록은 테스트가 바꾼다. 한 번의 server.use 안에서는 앞에 건 핸들러가 이기므로 liveHubHandlers 보다 먼저 둔다.
     let serverTriggers: Trigger[] = [];
@@ -7092,7 +7990,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     await settle();
     expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
     expectEventIdle();
-  });
+  }, 20_000);
 
   /**
    * 일정이 바뀌는 길은 여럿이다(재계획 확정 = 일정 무효화 · 직접 수정 저장 = 응답을 캐시에 직접 쓰기 · 도우미 편집). 어느

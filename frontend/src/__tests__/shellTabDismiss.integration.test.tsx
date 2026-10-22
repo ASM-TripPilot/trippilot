@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react';
 import { router, Stack, Tabs } from 'expo-router';
 import {
   act,
@@ -6,6 +7,9 @@ import {
   screen,
 } from 'expo-router/testing-library';
 
+import { TAB_BAR_TOP } from '@/shared/ui/BottomTabBar';
+import { getToastBottoms, resetToastBottoms } from '@/shared/ui/toastBottom';
+import { useToastBottom } from '@/shared/ui/useToastBottom';
 import { TravelStylePage } from '@/pages/record/travel-style';
 import { useStyleAnalysis } from '@/pages/record/travel-style/model/useStyleAnalysis';
 
@@ -89,5 +93,65 @@ describe('🔴 TRIP-1262 · 탭바 이동은 아래 스택을 걷어낸다 (진�
     // 단언 — 탭으로 교체(무반응·겹쌓임 없음).
     expect(rootStackNames(app.getRouterState())).toEqual(['(tabs)']);
     expect(app.getPathname()).toBe('/records');
+  });
+});
+
+/**
+ * TRIP-1559 T3 — 같은 실물 라우터(`renderRouter`)로 **토스트 바닥 신고가 포커스를 따라가는가**를 잰다.
+ * 위 describe 들은 쓰는 가짜 앱이 `<Tabs>` 기본 탭바라 이 일에는 못 쓴다 — 여기선 앱의 실제 `(tabs)/_layout`(탭 바 어댑터 + BottomTabBar)을 꽂는다.
+ *
+ * *(개념)* 포커스 = "지금 맨 위에 보이는 화면". 홈 탭은 위에 스택 화면이 올라와도 마운트된 채 남는다 — 그 홈(탭 바)의 신고가 위 화면의
+ * 토스트 바닥에 새면 안 된다(옛 ✦ 올림이 "마운트 기준"이라 샜다). 탭 바 렌더프롭이 `(tabs)` 스택 라우트 컨텍스트 안에서 그려져 push 되면 blur 된다는
+ * 것을 코드로 확인(2026-10-22 스파이크)하고 이 테스트가 상시 심판이 된다.
+ *
+ * 무엇을 보장하나: 탭 화면에선 탭 바 값만 · 스택 화면을 올리면 그 화면 값만(탭 바 값 없음) · 돌아오면 다시 탭 바 값만 · 탭을 옮겨도 탭 바 신고는 하나.
+ * 3동작 뼈대: 준비=실제 레이아웃으로 앱 모양 렌더 → 실행=push/back/탭 이동 → 단언=레지스트리.
+ */
+
+// 모듈 싱글턴 — 파일 최상위(describe 밖)에서 리셋한다.
+afterEach(() => resetToastBottoms());
+
+describe('TRIP-1559 T3 · 탭 바 위에 스택 화면이 올라오면 탭 바 신고가 빠진다 (진짜 라우터)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const TabsLayout = require('@routes/(tabs)/_layout')
+    .default as () => ReactElement;
+
+  // 바(CTA 바 등)를 가진 스택 화면 흉내 — 실물 CtaBar 의 신고는 CtaBar.test 가 잰다.
+  const STACK_BAR_HEIGHT = 120;
+  function StackScreenWithBar() {
+    useToastBottom(STACK_BAR_HEIGHT);
+    return null;
+  }
+  const TOAST_ROUTES = {
+    _layout: () => <Stack screenOptions={{ headerShown: false }} />,
+    '(tabs)/_layout': TabsLayout,
+    '(tabs)/index': Empty,
+    '(tabs)/explore': Empty,
+    h16: StackScreenWithBar,
+  };
+
+  it('탭 화면에선 탭 바 값만 · 스택 화면을 올리면 그 화면 값만 · 돌아오면 다시 탭 바 값만 보인다', () => {
+    // 준비 — 앱과 같은 모양: 루트 스택 아래에 (tabs) 가 마운트돼 있다. 그리기 전엔 신고가 없다(앵커).
+    expect(getToastBottoms()).toEqual([]);
+    renderRouter(TOAST_ROUTES, { initialUrl: '/' });
+    expect(getToastBottoms()).toEqual([TAB_BAR_TOP]);
+
+    // 실행 — 스택 화면을 위에 올린다.
+    act(() => router.push('/h16' as never));
+
+    // 단언 — 아래 (tabs) 는 마운트돼 있어도 포커스가 아니라 탭 바 값이 새지 않는다.
+    expect(getToastBottoms()).toEqual([STACK_BAR_HEIGHT]);
+
+    // 실행·단언 — 돌아오면 탭 바 값이 돌아오고 스택 화면 값은 사라진다.
+    act(() => router.back());
+    expect(getToastBottoms()).toEqual([TAB_BAR_TOP]);
+  });
+
+  it('탭을 옮겨도 탭 바 신고는 하나다', () => {
+    renderRouter(TOAST_ROUTES, { initialUrl: '/' });
+
+    act(() => router.navigate('/explore' as never));
+
+    expect(getToastBottoms()).toEqual([TAB_BAR_TOP]);
   });
 });

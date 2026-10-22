@@ -9,6 +9,7 @@ import type {
   FallbackPayload,
   NextAction,
 } from '../api/assistantContract';
+import { candidateConsumedActions } from '../model/cardModel';
 import { noContextActionIcon } from '../model/displayActions';
 import { cardConsumes } from './AssistantCards';
 import { ArrowDownGlyph } from './AssistantSheetGlyphs';
@@ -93,9 +94,12 @@ function AssistantMessageBlock({
   noContext: boolean;
 }): ReactElement {
   // 카드가 스스로 그린 행동(외부 위임 링크·폴백 다시 시도/계속)은 버튼 줄에서 뺀다.
+  // 후보 카드는 눌러서 장소로 가는 카드(OPEN 얼굴)면 그 후보의 `OPEN_PLACE` 행만 뺀다(TRIP-1564).
   const consumed = cardConsumes(message);
+  const consumedActions = candidateConsumedActions(message);
   const buttons = message.nextActions.filter(
-    (action) => !consumed.includes(action.type)
+    (action) =>
+      !consumed.includes(action.type) && !consumedActions.includes(action)
   );
   // "적용 전까지 일정은 그대로" 류 각주는 제안이 아직 열려 있을 때만 맞다 — 적용·취소·만료 뒤엔 숨긴다.
   const proposalSettled =

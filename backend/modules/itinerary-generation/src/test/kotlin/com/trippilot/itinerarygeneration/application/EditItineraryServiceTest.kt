@@ -34,6 +34,7 @@ import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.UnplacedReason
+import com.trippilot.itinerarygeneration.domain.ValidationResult
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.DayAnchor
@@ -95,6 +96,7 @@ private class EditFakeAgent(
     private val violations: List<Violation> = emptyList(),
     private val failure: RuntimeException? = null, // AI 장애 재현
     private val repairWith: (ScheduleAgentOutput) -> RepairResult = { RepairResult(it, emptyList(), unrepairable = true) },
+    private val unverified: Set<UUID> = emptySet(), // AI 가 판정하지 못했다고 답한 장소(검증 응답 unverified_slots)
 ) : StubScheduleAgent() {
     var validateCalls = 0
     var repairCalls = 0
@@ -103,6 +105,7 @@ private class EditFakeAgent(
         validateCalls++
         return failure?.let { throw it } ?: violations
     }
+    override fun validateWithUnverified(solution: ScheduleAgentOutput) = ValidationResult(validate(solution), unverified)
     var lastContext: RepairContext? = null
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult {
         repairCalls++
@@ -505,6 +508,23 @@ class EditItineraryServiceTest : StringSpec({
         result.judged shouldBe false
         result.hasViolation shouldBe false // 직전 표시를 이은 값일 뿐이다 — 이것만 보면 깨끗해 보인다
         repo.findByTrip(tripId).single().days.single().slots.map { it.sourcePoiId } shouldBe listOf(poiB, poiA) // 저장은 됐다
+    }
+
+    // 미판정 목록은 장소 감지의 하루 점검만 읽는다(INV-SA-2). 편집 표면에 새면 영업 원문을 해석 못 한 장소(공유본 원문의 8.5%)마다
+    // 저장 결과가 '보류'나 위반 배지로 바뀐다 — 편집은 종전대로 위반만으로 표시·판정 여부를 정한다.
+    "AI 가 판정하지 못했다고 답한 장소가 있어도 편집 표면은 그대로다 — 위반 표시·판정 여부는 위반만 본다" {
+        val repo = repoWith(current())
+        val agent = EditFakeAgent(unverified = setOf(poiA, poiB))
+        val facade: ItineraryEditFacade =
+            EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+
+        val result = facade.edit(acc, tripId, facadeDays, null, ItineraryEditSource.ASSISTANT)
+
+        agent.validateCalls shouldBe 1 // 재검증이 실제로 돌았다 — 미판정 목록을 받은 채로
+        result.judged shouldBe true
+        result.hasViolation shouldBe false
+        repo.findByTrip(tripId).single().days.single().slots.map { it.hasViolation to it.violationReason } shouldBe
+            listOf(false to null, false to null)
     }
 
     // REST 는 요청 DTO 가 500자를 막는다. 퍼사드가 안 막으면 여행 중 편집에서 변경 이력 칸(varchar 500)이 넘쳐

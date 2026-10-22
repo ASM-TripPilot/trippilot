@@ -188,8 +188,10 @@ def test_explanations_returns_slot_keyed_map(spy: SpyExplainer) -> None:
 
 def test_explanations_use_inline_preference_profile(monkeypatch: pytest.MonkeyPatch) -> None:
     """그 여행의 취향이 오면 EXPLANATION 프롬프트의 페르소나가 그것이다 — 없으면 종전 재조회."""
-    from trippilot.domain.persona import CompanionType, TasteTag
+    from trippilot.domain.persona import BudgetLevel, CompanionType, PersonaSummary, TasteTag
 
+    # 재조회분임을 가려내는 표지 — 빈 요약이면 인라인 변환이 지어낸 빈 요약과 구별되지 않는다
+    mark = PersonaSummary(taste_tags=(TasteTag.NATURE,), companion=None, budget=BudgetLevel.HIGH)
     personas: list = []
 
     class Recording(SpyExplainer):
@@ -201,14 +203,15 @@ def test_explanations_use_inline_preference_profile(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(wiring, "ExplanationWorker", lambda gateway: instance)
     ids = [str(p.poi_id) for p in _SEED[:2]]
     body = _explanations_body(*ids)
-    with TestClient(build_dev_app(), raise_server_exceptions=False) as client:
+    app = build_dev_app(context_store=wiring.StaticPersonaStore(mark))
+    with TestClient(app, raise_server_exceptions=False) as client:
         assert client.post("/ai/v1/itinerary/explanations", json={
             **body, "preference_profile": {"styles": ["미식"]}, "companion_type": "혼자"}).status_code == 200
         assert client.post("/ai/v1/itinerary/explanations", json=body).status_code == 200
 
     inline, legacy = personas
     assert inline.taste_tags == (TasteTag.FOOD,) and inline.companion is CompanionType.SOLO
-    assert legacy != inline
+    assert legacy == mark  # 없으면 종전 재조회 — 주입한 ContextStore 의 값 그대로
 
 
 # ── ⑦ 차선책 문장 (TRIP-887) — 두 번째 호출, 배치 슬롯 설명과 독립 ──────

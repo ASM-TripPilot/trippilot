@@ -25,6 +25,7 @@ import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.TimeWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.SolveMode
+import com.trippilot.itinerarygeneration.domain.ValidationResult
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import com.trippilot.placedata.api.GroundedPlace
@@ -273,7 +274,20 @@ private fun JsonNode?.toCandidatesSummary(): CandidatesSummary? {
  */
 internal data class AiValidateRequest(val itinerary: AiSchedulePayload, val requestMeta: AiRequestMeta)
 
-internal data class AiValidateResponse(val violations: List<AiViolation> = emptyList())
+/**
+ * [unverifiedSlots] — 상대가 판정하지 못한 장소(위반이 아니다). **기본 빈 목록** — 이 필드가 없는 옛 AI 응답도 같은 뜻이 되게 한다.
+ * 장소 감지의 하루 점검만 읽는다(INV-SA-2) — 편집·되돌리기 재검증은 위반만 쓴다.
+ */
+internal data class AiValidateResponse(
+    val violations: List<AiViolation> = emptyList(),
+    val unverifiedSlots: List<AiUnverifiedSlot> = emptyList(),
+)
+
+/**
+ * 판정 못 함 1건(AI `UnverifiedSlotSchema`) — `reason_code` 는 닫힌 집합(`NOT_REGISTERED`·`UNMAPPABLE`·`HOURS_UNKNOWN`)이지만
+ * **문자열로 받는다**: 우리는 사유로 가르지 않고(어느 것이든 못 봤다) 모르는 사유 하나로 응답 전체를 잃지 않게. 어휘는 계약 게이트가 잡는다.
+ */
+internal data class AiUnverifiedSlot(val poiId: String, val reasonCode: String, val detail: String = "")
 
 /**
  * `POST /ai/v1/itinerary/explanations` — 일정 본문을 그대로 되돌려 보내고 근거만 받는다.
@@ -341,6 +355,16 @@ internal data class AiRequestMeta(val requestId: String, val requestedAt: Instan
 
 internal fun AiViolation.toDomain(): Violation =
     Violation(code, dayIndex, slotIndex, detail.takeIf { it.isNotBlank() }, slotRef, reasonCode)
+
+internal fun AiValidateResponse.toDomain(): ValidationResult =
+    ValidationResult(violations.map { it.toDomain() }, unverifiedSlots.mapNotNull { it.poiUuid() }.toSet())
+
+/** 판정 못 한 장소 id — UUID 가 아니면 슬롯에 붙일 수 없어 그 한 건만 버리고 드러낸다(미배치 보고와 같은 처리). */
+private fun AiUnverifiedSlot.poiUuid(): UUID? {
+    val id = runCatching { UUID.fromString(poiId) }.getOrNull()
+    if (id == null) wireLog.warn("미판정 보고의 poi_id 가 UUID 가 아닙니다 — 그 한 건만 버립니다. poiId={} reasonCode={}", poiId, reasonCode)
+    return id
+}
 
 /** 도메인 산출물 → 상대 본문. 왕복 형태가 같아(생성 응답 = 검증 요청) 그대로 되돌려 보낸다. */
 internal fun ScheduleAgentOutput.toWire(): AiSchedulePayload = AiSchedulePayload(

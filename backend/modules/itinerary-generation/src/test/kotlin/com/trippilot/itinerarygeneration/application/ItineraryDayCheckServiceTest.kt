@@ -12,6 +12,7 @@ import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.SolveMode
+import com.trippilot.itinerarygeneration.domain.ValidationResult
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.placedata.api.FrozenPoiView
@@ -50,11 +51,15 @@ private class TrackingTx : PlatformTransactionManager {
     override fun rollback(status: TransactionStatus) { open-- }
 }
 
-/** validate 대역 — 받은 일정과 그때 열린 트랜잭션 수를 적는다. 실패는 실물처럼 예외다. */
+/**
+ * validate 대역 — 받은 일정과 그때 열린 트랜잭션 수를 적는다. 실패는 실물처럼 예외다.
+ * [unverified] = AI 가 판정하지 못했다고 답한 장소(검증 응답 `unverified_slots` — 실물 어댑터가 사유와 무관하게 모은 id).
+ */
 private class DayValidator(
     private val tx: TrackingTx,
     private val violations: List<Violation> = emptyList(),
     private val failure: RuntimeException? = null,
+    private val unverified: Set<UUID> = emptySet(),
 ) : StubScheduleAgent() {
     val received = mutableListOf<ScheduleAgentOutput>()
     val openAtCall = mutableListOf<Int>()
@@ -64,12 +69,13 @@ private class DayValidator(
         failure?.let { throw it }
         return violations
     }
+    override fun validateWithUnverified(solution: ScheduleAgentOutput) = ValidationResult(validate(solution), unverified)
 }
 
 /**
  * 하루 점검(T-D3-U · BR-SA-17 · domain-entities §7.1) — 장소 감지의 영업시간 재료.
  *
- * 핵심은 **모름을 OK 로 채우지 않는 것**이다: AI 모드가 가짜·보류·영업시간 원문 없음은 전부 UNKNOWN 이고,
+ * 핵심은 **모름을 OK 로 채우지 않는 것**이다: AI 모드가 가짜·보류·영업시간 원문 없음·AI 가 판정하지 못했다고 답한 장소는 전부 UNKNOWN 이고,
  * 편집 때 이미 본 경고(hoursWarnedBefore)는 영업시간 문구일 때만 참이다 — 보류 중 중립 문구·이동 문구를 경고로 읽으면
  * 처음 보는 영업시간 위반이 '이미 본 경고'로 묻힌다.
  */
@@ -224,6 +230,7 @@ class ItineraryDayCheckServiceTest : StringSpec({
 
         ai.received.shouldBeEmpty()
         day.judged shouldBe true // judged=false 는 보류(불통·5xx·시한)만이다(domain-entities §7.1) — 장소 감지의 회로가 이것만 센다
+        day.answered shouldBe false // 부르지 않았으니 답도 아니다 — 회로를 0 으로 되돌리지 않는다
         day.slots.map { it.hours } shouldContainExactly listOf(HoursVerdict.UNKNOWN, HoursVerdict.UNKNOWN)
     }
 
@@ -259,8 +266,36 @@ class ItineraryDayCheckServiceTest : StringSpec({
         }
 
         day.shouldNotBeNull().judged shouldBe false
+        day.answered shouldBe false
         day.slots.map { it.hours } shouldContainExactly listOf(HoursVerdict.UNKNOWN, HoursVerdict.UNKNOWN)
         appender.list.count { it.level == Level.WARN } shouldBe 1
+    }
+
+    "AI 가 판정하지 못했다고 답한 장소는 원문이 있어도 UNKNOWN 이다 — 재현 둘(해석 실패 원문), 위반 0 을 OK 로 읽지 않는다(INV-SA-2)" {
+        // 원문은 있다(openingHoursKnown) — 그래서 AI 에 묻는다. AI 는 둘 다 영업 창 0건으로 읽어 HC1 을 건너뛰고 HOURS_UNKNOWN 으로 답한다.
+        val unparsed = names +
+            (poiA to live(poiA, "성산일출봉", hours = "09:00~18:00\n휴무: 동절기 휴장")) +
+            (poiB to live(poiB, "흑돼지거리", hours = "매일 오전 열시부터 저녁까지")) +
+            (poiC to live(poiC, "협재해수욕장", hours = "09:00~18:00"))
+        val day1 = itinerary(ItineraryDay.of(d1, 0, listOf(slot(poiA, 0, "10:00"), slot(poiB, 1, "12:00"), slot(poiC, 2, "14:00"))))
+        val (svc, ai) = service(stored = day1, surface = surfaces(unparsed), agent = { DayValidator(it, unverified = setOf(poiA, poiB)) })
+
+        val day = svc.checkDay(acc, tripId, d1).shouldNotBeNull()
+
+        ai.received.size shouldBe 1
+        day.judged shouldBe true
+        day.answered shouldBe true
+        day.slots.map { it.hours } shouldContainExactly listOf(HoursVerdict.UNKNOWN, HoursVerdict.UNKNOWN, HoursVerdict.OK)
+    }
+
+    "AI 가 그 날 장소를 하나도 판정하지 못했다고 답해도 답이다 — answered 는 참, 영업시간은 전부 UNKNOWN(장소 감지의 회로가 0 으로 돌아간다)" {
+        val (svc) = service(agent = { DayValidator(it, unverified = setOf(poiA, poiB)) })
+
+        val day = svc.checkDay(acc, tripId, d1).shouldNotBeNull()
+
+        day.judged shouldBe true
+        day.answered shouldBe true
+        day.slots.map { it.hours } shouldContainExactly listOf(HoursVerdict.UNKNOWN, HoursVerdict.UNKNOWN)
     }
 
     "영업시간 원문이 없으면 UNKNOWN 이다 — 원문 없이 낸 '위반 없음'은 판정이 아니다" {

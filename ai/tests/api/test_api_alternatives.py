@@ -334,9 +334,12 @@ def test_inline_preference_profile_becomes_the_persona() -> None:
     계정 취향(재조회분)에 덮이면 "취향 반영이 안 된다"가 같이 짜기 후보에 그대로 남는다.
     """
     from trippilot.agents.planb.rag import _join_persona
-    from trippilot.domain.persona import CompanionType, TasteTag
+    from trippilot.api.wiring import StaticPersonaStore
+    from trippilot.domain.persona import BudgetLevel, CompanionType, PersonaSummary, TasteTag
 
-    app = build_dev_app()
+    # 재조회분임을 가려내는 표지 — 빈 요약이면 인라인 변환이 지어낸 빈 요약과 구별되지 않는다
+    mark = PersonaSummary(taste_tags=(TasteTag.NATURE,), companion=None, budget=BudgetLevel.HIGH)
+    app = build_dev_app(context_store=StaticPersonaStore(mark))
     seen = _rag_spy(app)
     with TestClient(app) as client:
         with_profile = client.post("/ai/v1/planb/alternatives", json=_request_body(
@@ -347,7 +350,7 @@ def test_inline_preference_profile_becomes_the_persona() -> None:
     inline, legacy = seen[0].persona, seen[1].persona
     assert inline.taste_tags == (TasteTag.FOOD,) and inline.companion is CompanionType.SOLO
     assert "취향 FOOD" in _join_persona((), (), inline)        # 프롬프트 페르소나 줄
-    assert legacy is not None and legacy != inline              # 없으면 종전 재조회분
+    assert legacy == mark  # 없으면 종전 재조회분 — 주입한 ContextStore 의 값 그대로
 
 
 # ── ⑧ 시간 단위 날씨 — 지나간 비에 반응하지 않는다 ───────────────────
