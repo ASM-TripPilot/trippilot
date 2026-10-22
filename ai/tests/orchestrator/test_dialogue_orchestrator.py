@@ -1281,13 +1281,19 @@ def test_explore_turn_answers_with_registered_places_without_a_trip() -> None:
     assert {x.type for x in a.next_actions} == {"OPEN_PLACE"} and _fallbacks(b.trace) == []
 
 
+def _explore_fallback(out) -> str:
+    """탐색 폴백 문장 — 안내 뒤에 카드 이름(이어 묻기가 보인 곳을 빼는 재료). 이름은 카드에 있는 것뿐이다(INV-1)."""
+    names = [c["name"] for c in out.answer.payload["candidates"]]
+    return "가 볼 만한 곳을 찾아봤어요. " + ", ".join(names) + "."
+
+
 @pytest.mark.parametrize("text", [
     "부산이라면 해동용궁사 말고 송도해수욕장도 좋아요.",  # 풀 밖 장소 — 접미 '해수욕장'
     "감천문화마을과 함께 국제시장에도 들러 보세요.",  # 하나는 풀, 하나는 밖 — 조사 '에도' 앞의 '국제시장'
 ])
 def test_explore_answer_naming_a_place_outside_the_pool_falls_back_to_the_template(text: str) -> None:
     out, b = _explore_turn(text)
-    assert out.answer.text == "가 볼 만한 곳을 찾아봤어요." and out.answer.kind is AnswerKind.CANDIDATES  # 카드는 그대로
+    assert out.answer.text == _explore_fallback(out) and out.answer.kind is AnswerKind.CANDIDATES  # 카드는 그대로
     assert ("llm", "llm_dialogue_answer", "template_text") in _modes(b.trace)
     assert any(e.reason == "place_not_in_facts" for e in _fallbacks(b.trace))
 
@@ -1369,7 +1375,7 @@ def test_explore_theme_times_are_not_facts() -> None:
     b = _build(_canned(Intent.EXPLORE_PLACES, answer=answer, region="부산", theme="22:00 이후 야경"),
                ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool()))
     out = b.orch.turn(_input("부산 22:00 이후 야경", snapshot=_NO_TRIP))
-    assert out.answer.text == "가 볼 만한 곳을 찾아봤어요."
+    assert out.answer.text == _explore_fallback(out)
     assert any(e.reason == "time_not_in_facts" for e in _fallbacks(b.trace))
 
 

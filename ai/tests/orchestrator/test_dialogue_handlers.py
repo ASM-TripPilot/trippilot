@@ -1216,6 +1216,11 @@ def test_explore_night_is_read_from_the_utterance_when_the_theme_dropped_it() ->
     assert "앙리17" not in _names_of(facts)  # 밤 말이 없으면 그대로 뺀다
 
 
+def test_explore_fallback_text_names_the_cards_it_shows() -> None:
+    facts, _ = _explore({"region": "부산", "theme": "요즘 핫한"})
+    assert facts.template_text == "가 볼 만한 곳을 찾아봤어요. " + ", ".join(_names_of(facts)) + "."
+
+
 def test_explore_generic_adjective_in_the_theme_is_not_a_name_hit() -> None:
     pool = (_xpoi("날마다좋은집", PoiCategory.FOOD), _xpoi("광안리 해변", PoiCategory.NATURE, tags=("요즘 인기",)))
     # 종전엔 '좋은'이 이름에 맞아 식당이 인기 명소를 앞질렀다(테스트 화면 "부산 분위기 좋은 …")
@@ -1460,7 +1465,8 @@ def test_recommend_prefers_the_ranked_radius_pool_over_sql_rows_and_cuts_to_the_
     assert facts.intent is Intent.RECOMMEND_PLACES and facts.kind is AnswerKind.CANDIDATES
     assert _names_of(facts) == _names_of(explored)[:1]  # 반경 순위의 첫 곳 하나
     assert [p.name for p in facts.places] == _names_of(facts) and _types(facts) == ["OPEN_PLACE"]  # 카드·문장 재료·버튼이 같은 한 곳
-    assert facts.detail["pick_count"] == 1 and facts.template_text == "가 볼 만한 곳을 골라 봤어요."
+    # 폴백 문장도 고른 곳 이름을 싣는다 — 답변 LLM 이 시한을 넘긴 턴에도 "더 알려줘"가 그곳을 뺀다
+    assert facts.detail["pick_count"] == 1 and facts.template_text == f"가 볼 만한 곳을 골라 봤어요. {_names_of(facts)[0]}."
 
 
 def test_recommend_without_a_count_picks_three_and_ignores_a_count_outside_the_enum() -> None:
@@ -1580,6 +1586,15 @@ def test_explore_chained_follow_ups_reach_back_to_the_request_and_leave_out_ever
     assert facts.detail == {"anchor": "해운대", "anchor_kind": "region"}
     assert builder.requests[0][0].radius_override_km == region_center("해운대")[2]
     assert not {"인기 식당", "인기 카페", "바다 전망 카페", "셋째 식당"} & set(_names_of(facts))
+
+
+def test_explore_follow_up_skips_places_named_by_the_previous_fallback_sentence() -> None:
+    # 답변 LLM 이 시한을 넘긴 턴은 폴백 문장이 나간다 — 거기에 카드 이름이 있어야 "더 알려줘"가 같은 곳을 다시 내지 않는다
+    # (2026-10-22 테스트 화면 "부산 분위기 좋은 바" → "더 알려줘" 가 같은 바 셋)
+    first, _ = _explore({"region": "부산 해운대", "theme": "가볼 만한"})
+    earlier = (("USER", "부산 해운대 가볼 만한 곳"), ("ASSISTANT", first.template_text))
+    facts, _, _ = _follow("더 알려줘", earlier)
+    assert _names_of(first) and not set(_names_of(first)) & set(_names_of(facts))
 
 
 def test_explore_follow_up_that_names_a_region_searches_there_and_still_skips_shown_places() -> None:

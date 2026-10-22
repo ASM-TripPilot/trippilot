@@ -30,7 +30,7 @@ import math
 import re
 import uuid
 from collections import Counter
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time, timedelta, tzinfo
 from enum import Enum
@@ -442,9 +442,10 @@ class Facts:
         }
 
 
-def _template(intent: Intent, status: FactStatus, *, needs_trip: bool = False, target: str | None = None) -> str:
+def _template(intent: Intent, status: FactStatus, *, needs_trip: bool = False, target: str | None = None,
+              names: Sequence[str] = ()) -> str:
     """결정론 문장 한 벌 — BE 문구 이식본은 `workers.dialogue_answer` 가 들고 있다. 여기서 두 번 적지 않는다."""
-    return fallback_answer_text(intent, {"status": status.value, "needs_trip": needs_trip, "target": target})
+    return fallback_answer_text(intent, {"status": status.value, "needs_trip": needs_trip, "target": target, "names": list(names)})
 
 
 def _action(type_: str, **params: str) -> NextAction:
@@ -1907,7 +1908,8 @@ def _assemble_explore(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Fa
     # 고르기(PICK_CANDIDATE)는 바꿀 슬롯이 있어야 한다 — 탐색엔 없으니 후보마다 장소 보기 버튼으로 연다
     actions = tuple(NextAction("OPEN_PLACE", _clip(c["name"]), {"poiId": c["poi_id"]}) for c in candidates)
     return Facts(intent, FactStatus.OK, AnswerKind.CANDIDATES, rows=(), places=places, notes=asked, payload=payload,
-                 next_actions=actions, quick_replies=(), template_text=_template(intent, FactStatus.OK), detail=detail)
+                 next_actions=actions, quick_replies=(),
+                 template_text=_template(intent, FactStatus.OK, names=[c["name"] for c in candidates]), detail=detail)
 
 
 # 넘기기(handoff) — 화면으로 보낸다. 실행이 아니라 이동이다 (BE IntentDispatcher)
@@ -1970,7 +1972,8 @@ def _assemble_recommend(ctx: TurnContext, results: Mapping[str, TaskResult]) -> 
         return replace(facts, intent=intent, template_text=facts.template_text if keep else _template(intent, facts.status))
     n = _recommend_count(ctx)
     return replace(facts, intent=intent, places=facts.places[:n], payload={"candidates": facts.payload["candidates"][:n]},
-                   next_actions=facts.next_actions[:n], template_text=_template(intent, facts.status),
+                   next_actions=facts.next_actions[:n],
+                   template_text=_template(intent, facts.status, names=[p.name for p in facts.places[:n]]),
                    detail={**facts.detail, "pick_count": n})
 
 

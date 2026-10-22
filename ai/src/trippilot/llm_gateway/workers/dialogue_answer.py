@@ -153,7 +153,8 @@ def fallback_answer_text(intent: Intent, facts: Mapping[str, object]) -> str:
 
     읽는 facts 키(전부 선택): `needs_trip`(참이면 여행 없음 안내) · `status`("EMPTY"|"UNAVAILABLE" 만 분기)
     · `target`(SUGGEST_ALTERNATIVE 의 대상 장소 표시명) · `events`(EXPLORE_PLACES 가 찾은 행사 — 카드가 없어 이름·기간을 늘어놓는다,
-    대상 장소와 같은 검사). 나머지 키는 보지 않는다 — 문장에 사실을 섞으면
+    대상 장소와 같은 검사) · `names`(탐색·추천 카드의 장소 이름 — 대상 장소와 같은 검사, 이어 묻기가 도우미 말에서 보인 곳을 뺀다).
+    나머지 키는 보지 않는다 — 문장에 사실을 섞으면
     게이트 자가 만족을 보장할 수 없다(INFO 카드의 값은 payload 로 간다).
     """
     if facts.get("needs_trip"):
@@ -167,7 +168,16 @@ def fallback_answer_text(intent: Intent, facts: Mapping[str, object]) -> str:
         return f"{_safe_target(facts.get('target'))} 대신 갈 만한 곳이에요."
     if facts.get("events"):  # 의도와 무관 — 탐색을 감싸는 의도(추천)가 의도만 바꿔 내도 행사가 보인다
         return _events_text(facts["events"])
+    if facts.get("names") and intent in (Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES):
+        return _names_text(_ANSWER_TEXT[intent], facts["names"])
     return _ANSWER_TEXT[intent]
+
+
+def _names_text(lead: str, names: object) -> str:
+    """후보 카드 이름을 안내 문장 뒤에 — 이어 묻기("더 알려줘")는 도우미 말에 적힌 이름으로 보인 곳을 뺀다(`_shown_before`). 폴백 문장에
+    이름이 없으면 같은 곳이 다시 나왔다(2026-10-22 테스트 화면, 답변 LLM 시한 초과 턴). 검사를 못 넘는 이름은 뺀다."""
+    listed = [n for n in (_safe_target(x) for x in (names if isinstance(names, (list, tuple)) else ())) if n != _FALLBACK_TARGET]
+    return f"{lead} {', '.join(listed[:_MAX_EVENTS_LISTED])}." if listed else lead
 
 
 def _events_text(events: object) -> str:
