@@ -1,5 +1,7 @@
 package com.trippilot.planbdetection.domain
 
+import com.trippilot.planbdetection.domain.WeatherAlerts.Match
+import com.trippilot.planbdetection.domain.WeatherAlerts.Place
 import com.trippilot.planbdetection.domain.WeatherAlerts.Province
 import com.trippilot.planbdetection.domain.WeatherAlerts.ZoneKind
 import com.trippilot.weathercontext.api.WarningArea
@@ -7,6 +9,7 @@ import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 
 /**
  * 특보구역 공식 목록 대조(BR-SA-16 · G-SA-16 결정 2026-10-20 — 특보 켜기 전 개편 목록 전체 대조). 매칭 표(광역 이름 · 섬 구역 · 관서 묶음
@@ -62,6 +65,55 @@ class WeatherAlertsZoneListTest : StringSpec({
         groups.forEach { (head, zones) ->
             withClue(head.name) { WeatherAlerts.unknownNames(WarningArea(head.name, zones.map { it.name })).shouldBeEmpty() }
         }
+    }
+
+    /**
+     * 개편 목록은 시군을 권역으로 나눴다 — 코드 끝 두 자리가 `00` 이 아닌 줄이 앞 여섯 자리가 같은 `00` 줄(시군)의 하위 권역이다
+     * (`경주` L1073100 → `경주동부` L1073120). 그 권역 하나만 뺀 제외 줄을 그 시군째 빼면 나머지 권역의 특보를 '특보 없음'으로 확인한다
+     * (G-SA-19 · INV-SA-2). 시군 이름을 뺀 줄은 대조군이다 — 그 시군은 안 걸림이다. 이름으로 맞추는 시군(시군 어간 표)만 본다 — 인천·광주·
+     * 세종의 권역은 시군이 아니라 광역을 나눈 것이고, 제주의 시는 표에 없다(G-SA-20).
+     */
+    "시군의 하위 권역 하나만 뺀 제외 줄은 그 시군 목적지에 안 걸림이 아니다 — 시군 이름을 뺀 줄은 안 걸림" {
+        val parts = rows.filterNot { it.head || it.code.endsWith("00") }.mapNotNull { zone ->
+            val head = heads.single { it.group == zone.group }
+            val province = Province.ofKmaName(head.name) ?: return@mapNotNull null
+            val city = rows.single { it.code == zone.code.take(6) + "00" }.name
+            if (city !in WeatherAlerts.CITY_STEMS[province].orEmpty()) return@mapNotNull null
+            Triple(head.name, Place("00000", setOf(province), city, wide = false, label = city), zone.name)
+        }
+
+        parts.size shouldBe 88 // 경기 10 · 강원 22 · 충남 4 · 충북 2 · 전남 16 · 전북 5 · 경북 15 · 경남 12 · 대구 2
+        parts.forEach { (head, place, zone) ->
+            withClue("$head($zone 제외) × ${place.stem}") {
+                WeatherAlerts.match(WarningArea(head, listOf(zone), excluding = true), place) shouldNotBe Match.MISS
+            }
+            withClue("$head(${place.stem} 제외) × ${place.stem}") {
+                WeatherAlerts.match(WarningArea(head, listOf(place.stem!!), excluding = true), place) shouldBe Match.MISS
+            }
+        }
+    }
+
+    /**
+     * 섬 구역은 시군의 일부이거나(서해5도 · 백령도.대청도 · 연평도.우도 = 옹진 · 흑산도.홍도 = 신안 · 거문도.초도 = 여수 · 추자도 = 제주시 — 목록에
+     * 그 시군의 다른 구역이 있다) 시군 전체다(울릉도.독도 = 울릉군 L1072100 — 울릉의 다른 구역이 없다). 그 섬을 뺀 그 광역의 제외 줄은 일부면
+     * 본토가 남아 그 시군에 걸리고, 전체면 그 시군이 빠진다(규칙 9). 시군 이름은 행정구역 시드에서 읽는다 — 목록에 시군 줄이 없는 섬(울릉)이 있다.
+     */
+    "섬 구역을 뺀 제외 줄은 그 섬이 시군 전체가 아니면 그 시군에 걸림, 시군 전체면 안 걸림 — 시군 전체인 섬 구역 표는 목록과 같다" {
+        val names = seedSigungu().toMap()
+        val islands = rows.filterNot { it.head }.map { it.name }.filter { it in WeatherAlerts.ISLANDS }.distinct()
+        islands.toSet() shouldBe WeatherAlerts.ISLANDS.keys // 표의 섬 구역이 전부 목록에 있다 — 아래 성질의 전제
+
+        val whole = islands.filter { island ->
+            val code = WeatherAlerts.ISLANDS.getValue(island)
+            val place = WeatherAlerts.placeOf(code, names.getValue(code))!!
+            val head = heads.single { Province.ofKmaName(it.name) in place.provinces }.name
+            val alone = rows.none { !it.head && it.name !in WeatherAlerts.ISLANDS && it.name.startsWith(place.stem!!) }
+            withClue("$head($island 제외) × ${place.stem}") {
+                WeatherAlerts.match(WarningArea(head, listOf(island), excluding = true), place) shouldBe if (alone) Match.MISS else Match.HIT
+            }
+            alone
+        }
+        WeatherAlerts.WHOLE_CITY_ISLANDS shouldBe whole.toSet()
     }
 })
 
