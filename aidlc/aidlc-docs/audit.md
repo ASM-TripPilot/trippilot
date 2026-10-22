@@ -1821,3 +1821,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — 사이클 20261022-assistant-older-followups [기록]. 옵시디언 볼트 부재 → 개발로그·학습노트는 `_workspace/`(git 미추적). `aidlc-state.md` 무변경.
 
 ---
+
+## Functional Design·NFR Requirements 사후 개정 — situation-awareness 후속 3건 구현 반영 (G-SA-19·22·23 해소 · G-SA-24 신설 · BR-SA-16·17·19 · §10 · BLM §6.2·§7·§9 · DE §6.3 · NFR §3·§4·§7)
+**Timestamp**: 2026-10-22T16:28:00+09:00 (작업 시점)
+**User Input**: (새 사용자 결정 없음 — 자율 세션. 이 작업을 띄운 사용자 요청 원문은 "하던거 마저해".) 근거는 앞 항목들의 사용자 결정(25~31 · 2026-10-22 3건)과 구현 커밋, 그리고 코드 밖 사실 셋이다 — 개발 `PLANB_SITUATION_SWEEP=on`(2026-10-22 배포 런 39726251832) · 운영 `HOLIDAY_CLOSURE_MODE=on`(2026-10-21 배포 런 39585752292) · 에어코리아 응답 지연 조사(TRIP-1576 댓글 2026-10-22).
+**AI Response**: `construction/situation-awareness/` 4종에 `[개정 · 2026-10-22 — 구현 반영]` 블록 11개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). `functional-design/business-rules.md` — BR-SA-16(G-SA-19: 제외 줄은 시군 전체 이름일 때만 그 시군을 뺀다 · 하위 권역만 뺐으면 모름 · 섬 구역은 표로) · BR-SA-17(남는 틈 ⓐ G-SA-21 일부 모름이면 감시 상태를 남기지 않음 · ⓑ G-SA-22 달력을 못 읽은 검증은 태그형 휴일 규칙 장소를 미판정) · BR-SA-19(G-SA-23: `EARLIER_STALE`·`FINISHED` 요약 줄과 판독식) · §10(PBT-SA-09·12 읽기 갱신 · AI 검증 미판정 성질); `functional-design/business-logic-model.md` — §6.2 · §7(개발 SWEEP=on 기록 · 대기질 관찰 전용 해제 전 확인) · §9(G-SA-19·22·23 해소 · **G-SA-24 신설** — 하위 권역만 뺀 제외 줄의 모름을 걸림으로 좁힐지, 특보를 관찰 전용에서 빼기 전에 사용자에게 묻는다 · G-SA-18·20 덧붙임); `functional-design/domain-entities.md` §6.3(`Detection.Checked.partial`); `nfr-requirements/nfr-requirements.md` — §3(RES-SA-01·10) · §4(OBS-SA-02 결과값 목록과 판독) · §7(2·6·8·9단계). 사실은 커밋을 읽어 확인했다 — G-SA-19 = `8fb1eee65`(#1571) · G-SA-21 = `43aca7f13`(#1546) · G-SA-22 = `7086b3be7`(#1572) · G-SA-23 = `68cecd987`(#1573). `docs/conventions/anti-patterns.md` 에 1줄(닫힌 집합의 소속 판정을 원소 하나로만 시험하지 말 것 — G-SA-22 검토 역검증).
+**Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
