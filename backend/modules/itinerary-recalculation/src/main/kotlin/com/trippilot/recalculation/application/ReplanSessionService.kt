@@ -436,9 +436,12 @@ class ReplanSessionService(
         if (today < period.startDate && !preTripEntry(period, today, session.triggerId != null, session.targetDate, session.scope)) {
             throw ConflictDetected(message = PRE_TRIP_ONLY)
         }
-        // 반영 직전의 비교 기준을 **반영 전에** 뜬다(TRIP-1412) — 반영 뒤에는 원 일정이 이미 바뀌어 있다.
-        val before = plans.beforeOf(accountId, tripId, session.targetDate)
-        val restorePoint = replans.apply(accountId, tripId, ReplanProposal.fromMap(draft), changeReason(session))
+        // 반영 직전의 비교 기준을 **일정 행을 잠근 뒤, 쓰기 전에** 뜬다(TRIP-1412) — 되돌리기 지점과 같은 일정이어야 하고,
+        // 반영 뒤에는 원 일정이 이미 바뀌어 있다.
+        var before: List<ReplanDiff.SlotView> = emptyList()
+        val restorePoint = replans.apply(accountId, tripId, ReplanProposal.fromMap(draft), changeReason(session)) {
+            before = plans.beforeOf(accountId, tripId, session.targetDate)
+        }
         val applied = sessions.save(session.applied(now, before, restorePoint.toMap()))
         events.publish(
             ItineraryRecalculated(

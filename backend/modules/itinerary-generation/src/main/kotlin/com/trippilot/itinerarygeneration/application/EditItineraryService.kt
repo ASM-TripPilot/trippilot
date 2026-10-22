@@ -148,7 +148,8 @@ class EditItineraryService(
         ViolationText.warnUnattached(verdict.violations(), flagged.days, tripId)
         val saved = tx.execute {
             // 트랜잭션 안에서 다시 읽는다 — 위 재검증(외부 호출) 동안 다른 편집이 커밋됐으면 밖에서 읽은 값은 낡았다.
-            val beforeWrite = itineraries.findByTrip(tripId).firstOrNull() ?: current
+            // 일정 행을 잠그고 읽는다(TRIP-1412) — 재계획 반영·되돌리기·복원·확정과 직렬화된다.
+            val beforeWrite = itineraries.lockForTrip(tripId) ?: current
             // 호출측의 조건은 **여기서** 본다 — 쓰기와 같은 트랜잭션, 다시 읽은 값으로. 던지면 아무것도 쓰이지 않는다.
             if (onlyIf != null && !onlyIf(beforeWrite.days.map { d -> EditDayCommand(d.date, d.slots.map { EditSlotCommand(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }) })) {
                 throw ConflictDetected(message = "그 사이 일정이 바뀌었습니다.", errorCode = ErrorCode.STALE)

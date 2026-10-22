@@ -41,7 +41,8 @@ internal class FakeReplans(
     /** 되돌리기가 받은 실적 읽기를 실제로 불러 본 값 — C10 이 넘기는 집합이 맞는지 본다(판정 자체는 C8 스펙). */
     val visitedSeen = mutableListOf<Set<String>>()
 
-    override fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal, reason: String): ReplanProposal {
+    override fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal, reason: String, afterLock: () -> Unit): ReplanProposal {
+        afterLock()
         applied += proposal
         appliedReasons += reason
         return restorePoint ?: proposal.copy(slots = emptyList())

@@ -23,6 +23,7 @@ import java.util.UUID
  */
 @Component
 class ItineraryRepositoryAdapter(
+    private val entityManager: jakarta.persistence.EntityManager,
     private val itineraries: ItineraryJpaRepository,
     private val days: ItineraryDayJpaRepository,
     private val slots: VisitSlotJpaRepository,
@@ -77,8 +78,14 @@ class ItineraryRepositoryAdapter(
     override fun findByTrip(tripId: UUID): List<Itinerary> =
         itineraries.findByTripId(tripId).map { it.toDomain() }
 
-    override fun lockForTrip(tripId: UUID): Itinerary? =
-        itineraries.findForUpdateByTripId(tripId)?.toDomain()
+    override fun lockForTrip(tripId: UUID): Itinerary? {
+        // 0행이면 **한 번 더** 묻는다. 기다린 상대가 교체(`replaceForTrip` — 같은 PK 로 지우고 다시 넣기)를 커밋하면,
+        // READ COMMITTED 의 `FOR UPDATE` 는 지워진 옛 행만 보고 0행을 낸다(새 행은 그 문장의 스냅숏 밖이다). 새 문장은 새 행을 본다.
+        val locked = itineraries.findForUpdateByTripId(tripId) ?: itineraries.findForUpdateByTripId(tripId) ?: return null
+        // 이 트랜잭션이 이미 그 엔티티를 들고 있었으면(앞선 조회) 쿼리 결과가 옛 상태를 덮지 않는다 — 잠금 뒤 값으로 다시 읽는다.
+        entityManager.refresh(locked)
+        return locked.toDomain()
+    }
 
     private fun ItineraryEntity.toDomain(): Itinerary {
         val dayEntities = days.findByItineraryIdOrderByDayOrderAsc(itineraryId)

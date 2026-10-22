@@ -30,10 +30,12 @@ interface ReplanFacade {
      * 만들고, [reason] 은 세션의 사유·지시어를 아는 C10 이 조립해 넘긴다 — 각자 가진 것만 낸다.
      *
      * @param reason 왜 바꿨는지 한 줄(BR-U4-31). **비워서 넘기지 않는다** — 이력의 존재 이유가 이 칸이다.
+     * @param afterLock 일정 행을 잠근 **뒤**, 쓰기 전에 부른다 — C10 이 반영 직전 비교 기준을 같은 잠금 아래에서 뜬다(TRIP-1412).
+     *   잠금 전에 뜨면 그 사이 커밋된 쓰기(확정·편집)가 기준과 되돌리기 지점을 서로 다른 일정으로 만든다.
      * @return 반영 **직전**의 그 날(되돌리기 지점, TRIP-1412). 슬롯마다 동결 참조([ReplanSlot.poiSnapshotId])를 싣는다 —
      *   [revert] 에 그대로 돌려주면 그 날이 이 모습으로 돌아간다. C10 이 세션에 보관한다(일정 쪽에는 그 날만의 지점이 없다).
      */
-    fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal, reason: String): ReplanProposal
+    fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal, reason: String, afterLock: () -> Unit = {}): ReplanProposal
 
     /**
      * 반영한 재계획 하나를 되돌린다(TRIP-1412) — [applied] 의 날을 [restore](반영 직전, [apply] 의 반환값)로 되돌린다.

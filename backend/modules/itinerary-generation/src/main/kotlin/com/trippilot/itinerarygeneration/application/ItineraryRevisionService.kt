@@ -107,7 +107,8 @@ class ItineraryRevisionService(
 
         return tx.execute {
             // 가드를 **트랜잭션 안에서 다시** 본다 — 위 검증(외부 호출) 동안 확정이 커밋됐으면 그 확정을 되돌리게 된다.
-            val current = itineraries.findByTrip(tripId).firstOrNull() ?: throw ResourceNotFound("생성된 일정이 없습니다.")
+            // 일정 행을 잠그고 읽는다(TRIP-1412) — 편집·재계획 반영·되돌리기·확정과 직렬화된다.
+            val current = itineraries.lockForTrip(tripId) ?: throw ResourceNotFound("생성된 일정이 없습니다.")
             requireRestorable(current)
 
             val restoredDays = target.snapshot.toDays(fixedFrom = current, verdict = verdict)

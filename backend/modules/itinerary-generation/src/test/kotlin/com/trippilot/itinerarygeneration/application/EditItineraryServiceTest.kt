@@ -78,6 +78,9 @@ private class EditFakeItineraries : ItineraryRepository {
     }
     override fun findStalePartial(updatedBefore: java.time.Instant): List<Itinerary> = emptyList()
 
+    /** 잠금 뒤에 보이는 일정 — 다르게 두면 "재검증 동안 커밋된 쓰기"를 흉내 낸다. 기본은 같은 값. */
+    var lockedView: Itinerary? = null
+    override fun lockForTrip(tripId: UUID) = lockedView ?: findByTrip(tripId).firstOrNull()
 }
 
 private val NOOP_TX = object : PlatformTransactionManager {
@@ -263,6 +266,24 @@ class EditItineraryServiceTest : StringSpec({
         edited.actor shouldBe RevisionActor.USER
         edited.summary shouldBe "비 예보로 실내로 변경"
         edited.snapshot.days.single().slots.map { it.poiId } shouldBe editReq.days.single().slots.map { it.poiId }
+    }
+
+    // TRIP-1412 — 쓰기 직전 재읽기가 일정 행을 잠그고 읽는다. 재검증(외부 호출) 동안 커밋된 쓰기가 그 재읽기에 보여야
+    // 변경 이력의 "전"이 실제로 덮은 일정이 된다.
+    "쓰기 직전 재읽기는 잠금 뒤 일정이다 — 이력의 전이 그 사이 커밋된 일정이다" {
+        val repo = repoWith(current())
+        val newer = UUID.randomUUID()
+        val c = current()
+        repo.lockedView = Itinerary.reconstitute(
+            c.itineraryId, c.tripId, c.status, c.solveMode, c.generationMode, c.isFallback, c.generationState,
+            c.days.map { d -> ItineraryDay.of(d.date, d.dayOrder, d.slots.map { VisitSlot.of(newer, null, it.orderIndex, it.startAt, it.endAt) }) },
+            c.createdAt, c.updatedAt, c.candidatesSummary, c.unplacedMustVisits,
+        )
+        val logs = CapturingChangeLogs()
+        EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), logs, FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+            .edit(acc, tripId, editReq.copy(reason = "실내로"))
+
+        logs.appended.single().before.days.single().slots.map { it.poiId } shouldBe listOf(newer)
     }
 
     "사유가 없으면 기본 문구로 남는다(summary 는 표시 문구라 비울 수 없다)" {

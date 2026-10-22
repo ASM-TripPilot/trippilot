@@ -231,10 +231,11 @@ class ReplanFacadeService(
      * 되돌릴 지점을 먼저 남긴다(BR-U3-19) — 반영 후에 남기면 그 시점으로 못 돌아간다.
      */
     @Transactional
-    override fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal, reason: String): ReplanProposal {
+    override fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal, reason: String, afterLock: () -> Unit): ReplanProposal {
         // 일정 행을 잠그고 읽는다 — 같은 여행의 되돌리기와 직렬화한다(TRIP-1412). 잠금 뒤의 읽기라 그 전 커밋이 다 보인다.
         trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
         val current = itineraries.lockForTrip(tripId) ?: throw ResourceNotFound("일정이 없습니다.")
+        afterLock()
         if (current.itineraryId != proposal.itineraryId) {
             // 그 사이 재생성으로 일정이 교체됐다 — 낡은 초안을 덮어쓰면 방금 만든 일정이 사라진다.
             throw ConflictDetected(message = "그 사이 일정이 바뀌었습니다. 다시 재계획해 주세요.")

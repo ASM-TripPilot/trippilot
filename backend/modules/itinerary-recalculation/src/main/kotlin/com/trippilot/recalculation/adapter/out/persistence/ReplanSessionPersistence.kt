@@ -55,9 +55,13 @@ class ReplanSessionEntity(
     @Column(name = "closed_at") var closedAt: Instant?,
     /** USER·SYSTEM(선계산) — 마이그레이션 `replan_session_initiated_by`. */
     @Column(name = "initiated_by") var initiatedBy: String,
-    /** 반영 직전의 비교 기준·되돌리기 지점·되돌린 시각 — 마이그레이션 `replan_session_revert`(TRIP-1412). */
-    @JdbcTypeCode(SqlTypes.JSON) @Column(name = "applied_before") var appliedBefore: List<Map<String, Any>>?,
-    @JdbcTypeCode(SqlTypes.JSON) @Column(name = "restore_point") var restorePoint: Map<String, Any>?,
+    /**
+     * 반영 직전의 비교 기준·되돌리기 지점·되돌린 시각 — 마이그레이션 `replan_session_revert`(TRIP-1412).
+     * 두 jsonb 칸은 **날 JSON 문자열**로 받는다 — 타입을 박아 매핑하면 맨 위 모양이 틀린 행(`{}` 자리에 `[]`) 하나가 엔티티 적재에서
+     * 터져 그 세션의 모든 읽기가 500 이 된다. 풀기는 [toDomain] 이 `runCatching` 안에서 한다.
+     */
+    @JdbcTypeCode(SqlTypes.JSON) @Column(name = "applied_before") var appliedBefore: String?,
+    @JdbcTypeCode(SqlTypes.JSON) @Column(name = "restore_point") var restorePoint: String?,
     @Column(name = "reverted_at") var revertedAt: Instant?,
 ) {
     protected constructor() : this(
@@ -115,7 +119,8 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
                 session.reasons.toTypedArray(), session.directives.toTypedArray(), session.freeText,
                 session.excludedPoiIds.toTypedArray(),
                 session.status.name, session.draft, session.createdAt, session.closedAt, session.initiatedBy.name,
-                session.appliedBefore?.map { it.toJsonMap() }, session.restorePoint, session.revertedAt,
+                session.appliedBefore?.let { JSON.writeValueAsString(it.map { v -> v.toJsonMap() }) },
+                session.restorePoint?.let { JSON.writeValueAsString(it) }, session.revertedAt,
             ),
         ).toDomain()
 
@@ -148,16 +153,29 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
         ReplanOrigin(OriginKind.valueOf(originKind), originLat, originLng),
         reasons.toList(), directives.toList(), freeText, excludedPoiIds.toList(),
         ReplanStatus.valueOf(status), draft, createdAt, closedAt, ReplanInitiator.valueOf(initiatedBy),
-        appliedBefore?.let { rows -> decodeAppliedBefore(sessionId, rows) }, restorePoint, revertedAt,
+        appliedBefore?.let { raw -> decodeAppliedBefore(sessionId, raw) }, restorePoint?.let { raw -> decodeRestorePoint(sessionId, raw) },
+        revertedAt,
     )
 
     /**
      * 비교 기준은 **세션을 읽을 때마다** 풀린다(조회·준비된 대안·확정·취소 전부). 깨진 행 하나가 그 경로를 다 500 으로 막지 않게,
      * 못 풀면 기준이 없는 것으로 읽고 경고를 남긴다 — 비교는 `ready=false` 가 된다(옛 반영분과 같은 결과, 지어내지 않는다).
      */
-    private fun decodeAppliedBefore(sessionId: UUID, rows: List<Map<String, Any>>): List<ReplanDiff.SlotView>? =
-        runCatching { rows.map { it.toSlotView() } }.getOrElse {
+    @Suppress("UNCHECKED_CAST")
+    private fun decodeAppliedBefore(sessionId: UUID, raw: String): List<ReplanDiff.SlotView>? =
+        runCatching { (JSON.readValue(raw, List::class.java) as List<Map<String, Any>>).map { it.toSlotView() } }.getOrElse {
             log.warn("재계획 세션의 applied_before 를 읽지 못했습니다 — 반영 뒤 비교 없이 둡니다. session={}", sessionId, it)
+            null
+        }
+
+    /**
+     * 되돌리기 지점 — 맨 위가 객체가 아니면 없는 것으로 읽는다(되돌리기는 409 "되돌릴 수 없어요"). 안쪽 모양(`slots` 누락 등)은
+     * 되돌리는 순간 [com.trippilot.recalculation.application.ReplanSessionService.revert] 가 본다.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun decodeRestorePoint(sessionId: UUID, raw: String): Map<String, Any>? =
+        runCatching { JSON.readValue(raw, Map::class.java) as Map<String, Any> }.getOrElse {
+            log.warn("재계획 세션의 restore_point 를 읽지 못했습니다 — 되돌리기를 막습니다. session={}", sessionId, it)
             null
         }
 
@@ -174,6 +192,9 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
         private val SYSTEM = ReplanInitiator.SYSTEM.name
 
         private val log = org.slf4j.LoggerFactory.getLogger(ReplanSessionPersistence::class.java)
+
+        /** 두 jsonb 칸의 직렬화 — 날 문자열 매핑이라 여기서 쓰고 읽는다(초안 칸은 종전대로 하이버네이트가 맵으로). */
+        private val JSON = com.fasterxml.jackson.databind.ObjectMapper()
     }
 }
 
