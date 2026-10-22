@@ -645,3 +645,9 @@
 - **무엇을 했나**: ① AI 의도·인자표·계획 도구·핸들러 `_assemble_region`·템플릿 + BE enum·디스패처(오케스트레이터 off 넘김 문장) ② BE `ContextSnapshotBuilder` 가 `PreferenceFacade` 로 취향 두 축을 싣고, 와이어 `preference_profile`(선택) ③ 지역 성격표 생성기 `scripts/chatbot/build_region_profiles.py` + `data/region_profiles.json`(52곳) + `domain/region_recommend.py` ④ 분류 0.2.7·계획 0.1.6·답변 0.3.7 ⑤ 계획이 지역 이름 있는 말에 지역 고르기를 고르면 그 지역 탐색으로(`_region_named`) ⑥ 결정론 문장 되풀이 바꿈(`unrepeated`·감사·맞장구 변형) ⑦ 측정 사례(분류 6·답변 2).
 - **지키는 것**: 탐색 코드 무변경 · intent.yaml·뱅크·재생 픽스처 무변경 · wiring.py 무변경 · 개인정보 경계(취향 두 축만, ContextSnapshot 화이트리스트 테스트 갱신).
 - **남긴 것**: 성격표는 관광공사 수집 범위에 기댄다(지방 소도시 표본 100곳 안팎, 야경·바는 중립) — 정밀해야 하면 지역 문서(KB)·인기 신호를 더한다. 잡담 문장 되풀이는 DIALOGUE_SMALLTALK(#1570) 몫.
+
+## 2026-10-22 — 도우미 지역 답이 지역마다 같은 문장을 베끼지 않게 (답변 0.3.8, BR-AO-31 개정)
+**Timestamp**: 2026-10-22 · 브랜치 `fix/assistant-region-reason-wording` · **승인 대기**(같은 PR 머지 = 승인)
+- **입력**: #1579 개발 서버 확인(AI 파드 안 직접 호출 6건, 전부 의도대로) 중 취향 기반 지역 추천 답이 "…장소가 전국 평균보다 많은 편"을 세 번 되풀이 — 사용자 지적("너무 형식적")과 같은 결.
+- **무엇을 했나**: ① `_assemble_region` 사실 행을 종류 이름만으로, 비교 기준은 `detail.compared_to` 한 번 ② 답변 0.3.8 규칙 줄(지역마다 같은 문장 꼴 금지·비교 기준 한 번) ③ 측정 사례 행 모양 동기화. 행 문구만 줄인 판은 같은 꼴을 다시 베껴 버렸다.
+- **지키는 것**: 지역 고르기·와이어·BE 무변경, 다른 의도 답 무변경.
