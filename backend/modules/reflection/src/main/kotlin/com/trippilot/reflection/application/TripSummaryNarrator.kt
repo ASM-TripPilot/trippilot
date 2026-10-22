@@ -46,7 +46,8 @@ import java.util.concurrent.atomic.AtomicInteger
  * read 상한 605초+), 종료·크래시. 사용자 결정은 "만들어지기만 하면 된다"라 버려 두지 않는다: 시도는 요약 행에 남고(V2.84 `ai_attempts`·
  * `ai_attempted_at`), [sweep] 이 마지막으로 다시 짠 지 [SWEEP_WINDOW] 안인 규칙 요약 중 시도가 [MAX_ATTEMPTS] 미만이고 마지막 시도에서
  * [reclaimAfter] 가 지난 것을 다시 맡긴다.
- * **선점이 시도 하나를 쓴다** — 진행 중 배포·크래시로 끊긴 시도도 한 번으로 센다. 쓰지 않는 것은 실행기가 받지 않은 경우(넘침·종료 중)뿐이다.
+ * **선점이 시도 하나를 쓴다** — 선점은 AI 를 부르기 바로 앞이고, 진행 중 배포·크래시로 끊긴 시도도 한 번으로 센다. 쓰지 않는 것은 실행기가 받지 않은
+ * 경우(넘침·종료 중)와 선점 전 조회에서 끊긴 경우다 — 둘 다 다음 회차에 다시 집힌다.
  * 마지막 시도를 선점하는 순간 WARN 을 남긴다 — 그 시도가 파드와 함께 사라져도 "더 맡지 않는다"가 조용히 지나가지 않게(INV-4).
  * - **트랜잭션 밖이다**(TRIP-1463 교훈). 실적·재료 조회와 AI 호출은 각 퍼사드의 짧은 읽기 트랜잭션만 쓰고, 마지막 쓰기만 짧은
  *   트랜잭션에서 요약 잠금([TripSummaryRepository.findForUpdate])을 잡는다 — 커넥션을 AI 대기 동안 쥐지 않는다.
@@ -153,23 +154,13 @@ class TripSummaryNarrator internal constructor(
     }
 
     /**
-     * 다시 선점해도 되는 때 — 마지막 시도에서 요약 호출 상한이 지나고 [RECLAIM_MARGIN] 이 더 지난 뒤. 선점 시각은 호출 **전**(실적·재료 조회 앞)이라
-     * 그 조회와 커넥션 대기만큼 실제 호출이 늦게 시작한다 — 상한에 딱 맞추면 아직 기다리는 다른 파드의 호출을 중복한다.
+     * 다시 선점해도 되는 때 — 마지막 시도에서 요약 호출 상한이 지나고 [RECLAIM_MARGIN] 이 더 지난 뒤. 선점은 호출 바로 앞이지만 선점 트랜잭션 커밋과
+     * HTTP 연결 사이에도 틈이 있고 두 파드의 시계 처리도 다르다 — 상한에 딱 맞추면 아직 기다리는 다른 파드의 호출을 중복할 수 있다.
      */
     private fun reclaimAfter(): Duration = agent.summaryCallTimeout.plus(RECLAIM_MARGIN)
 
-    /** AI 문장 한 번 — 시도를 선점하고, 근거를 모으고, 부르고, 쓸 수 있으면 잠근 뒤 쓴다. */
+    /** AI 문장 한 번 — 근거를 모으고, 부르기 직전에 시도를 선점하고, 부르고, 쓸 수 있으면 잠근 뒤 쓴다. */
     internal fun narrate(tripId: UUID) {
-        val attempt = writes.execute { summaries.claimAiAttempt(tripId, reclaimAfter(), MAX_ATTEMPTS) }
-            ?: return outcome("NOT_CLAIMED", tripId) // 요약이 없음·이미 AI·기본 요약이거나, 다른 파드가 진행 중이거나, 상한을 다 썼다
-        if (attempt >= MAX_ATTEMPTS) {
-            // 부르기 **전에** 남긴다 — 이 시도가 파드와 함께 사라져도 "더 맡지 않는다"가 기록된다.
-            log.warn("요약 회고 마지막 시도({}/{})입니다 — 이번에도 못 붙이면 더 맡지 않고 규칙 요약으로 남깁니다. tripId={}", attempt, MAX_ATTEMPTS, tripId)
-        }
-        narrateClaimed(tripId, attempt)
-    }
-
-    private fun narrateClaimed(tripId: UUID, attempt: Int) {
         val owned = owners.findOwnedPeriod(tripId) ?: return retire("DELETED", tripId)
         val ctx = trips.findGenerationContext(owned.accountId, tripId)
         val days = archive.findDailyVisits(tripId)
@@ -197,6 +188,14 @@ class TripSummaryNarrator internal constructor(
                     .associateWith { skippedByDate[it] ?: 0 },
             ),
         )
+        // 선점은 **부르기 바로 앞**이다 — 위 조회들(커넥션 대기 포함)이 끝난 뒤라, 다시 선점 여유([RECLAIM_MARGIN])가 덮을 것은 연결 시간뿐이다.
+        // 지워진 여행·실을 방문이 없는 여행은 선점 없이 위에서 끝난다(시도를 쓰지 않고 채운다 — 어느 파드가 봐도 같은 결론이다).
+        val attempt = writes.execute { summaries.claimAiAttempt(tripId, reclaimAfter(), MAX_ATTEMPTS) }
+            ?: return outcome("NOT_CLAIMED", tripId) // 요약이 없음·이미 AI·기본 요약이거나, 다른 파드가 진행 중이거나, 상한을 다 썼다
+        if (attempt >= MAX_ATTEMPTS) {
+            // 부르기 **전에** 남긴다 — 이 시도가 파드와 함께 사라져도 "더 맡지 않는다"가 기록된다.
+            log.warn("요약 회고 마지막 시도({}/{})입니다 — 이번에도 못 붙이면 더 맡지 않고 규칙 요약으로 남깁니다. tripId={}", attempt, MAX_ATTEMPTS, tripId)
+        }
         val card = runCatching { agent.generate(input)?.let { cards.read(it.payload) } }
             .onFailure { log.warn("요약 회고 카드를 읽을 수 없어 규칙 요약으로 둡니다. tripId={}", tripId, it) }
             .getOrNull() ?: return outcome("NO_CARD", tripId)
@@ -263,7 +262,7 @@ class TripSummaryNarrator internal constructor(
          */
         val SWEEP_WINDOW: Duration = Duration.ofDays(7)
 
-        /** 다시 선점 여유([reclaimAfter]) — 선점 뒤 실적·재료 조회와 커넥션 대기(Hikari 기본 30초)를 덮는다. */
+        /** 다시 선점 여유([reclaimAfter]) — 선점(호출 바로 앞) 커밋과 HTTP 연결 사이의 틈을 덮는다. 조회는 선점 앞이라 여기 들지 않는다. */
         val RECLAIM_MARGIN: Duration = Duration.ofSeconds(60)
 
         internal fun newExecutor(): ExecutorService {

@@ -103,7 +103,7 @@ class TripSummaryRepositoryAdapter(private val jpa: TripSummaryJpaRepository) : 
             .resultList.firstOrNull()?.let { (it as Number).toInt() }
 
     override fun retireAiAttempts(tripId: UUID, maxAttempts: Int) {
-        em.createNativeQuery("UPDATE trip_summary SET ai_attempts = GREATEST(ai_attempts, :max) WHERE trip_id = :tripId")
+        em.createNativeQuery("UPDATE trip_summary SET ai_attempts = GREATEST(ai_attempts, :max) WHERE trip_id = :tripId AND source = 'RULE'")
             .setParameter("max", maxAttempts).setParameter("tripId", tripId).executeUpdate()
     }
 

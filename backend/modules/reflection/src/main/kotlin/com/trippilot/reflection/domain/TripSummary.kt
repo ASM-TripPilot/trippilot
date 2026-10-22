@@ -85,13 +85,15 @@ interface TripSummaryRepository {
     fun claimAiAttempt(tripId: UUID, reclaimAfter: Duration, maxAttempts: Int): Int? =
         throw UnsupportedOperationException("요약 회고 시도 기록을 지원하지 않는 저장소입니다.")
 
-    /** 더 시도할 것이 없는 여행(지워졌거나 실을 방문이 없다) — 시도 수를 [maxAttempts] 로 채워 스윕이 다시 집지 않게 한다. */
+    /** 더 시도할 것이 없는 여행(지워졌거나 실을 방문이 없다) — 규칙 요약이면 시도 수를 [maxAttempts] 로 채워 스윕이 다시 집지 않게 한다(선점 없이). */
     fun retireAiAttempts(tripId: UUID, maxAttempts: Int): Unit =
         throw UnsupportedOperationException("요약 회고 시도 기록을 지원하지 않는 저장소입니다.")
 
     /**
      * 스윕이 다시 맡을 여행 — 규칙 요약이고 · 마지막으로 다시 짠 지(`generated_at`) [window] 안이고 · 시도가 [maxAttempts] 미만이고 ·
-     * 마지막 시도에서 [reclaimAfter] 가 지났다(또는 시도 없음). 오래된 것부터 [limit] 개. 시각은 DB 시계다([claimAiAttempt] 와 같은 기준).
+     * 마지막 시도에서 [reclaimAfter] 가 지났다(또는 시도 없음). 오래된 것부터 [limit] 개.
+     * 다시 선점 판정은 양쪽 다 DB 시계다([claimAiAttempt] 와 같다). 창은 앱이 쓴 `generated_at` 을 DB `now()` 와 비교한다 — 두 시계의 몇 초 차이는
+     * 7일 창에서 무해하다.
      */
     fun findAiPending(window: Duration, reclaimAfter: Duration, maxAttempts: Int, limit: Int): List<UUID> =
         throw UnsupportedOperationException("요약 회고 시도 기록을 지원하지 않는 저장소입니다.")

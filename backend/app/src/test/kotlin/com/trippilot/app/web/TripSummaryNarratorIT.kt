@@ -200,11 +200,14 @@ class TripSummaryNarratorIT : AbstractPostgresIntegrationTest() {
         fun claim() = tx.execute { summaries.claimAiAttempt(tripId, reclaim, 3) }
 
         pending() shouldBe true
-        claim() shouldBe 1
+        // 선점 시각은 DB 시계다 — 같은 트랜잭션의 now()(트랜잭션 시작 시각)와 정확히 같다. 앱 시계로 찍으면 이 등호가 깨진다.
+        tx.execute {
+            summaries.claimAiAttempt(tripId, reclaim, 3) to
+                jdbc.queryForObject("SELECT ai_attempted_at = now() FROM trip_summary WHERE trip_id = ?", Boolean::class.java, tripId)
+        } shouldBe (1 to true)
         claim() shouldBe null // 진행 중일 수 있는 시도 — 다른 파드도 못 가져간다
         pending() shouldBe false
-        // 시각은 DB 시계로 찍힌다 — 앱 시계가 아니라 DB now() 기준으로 늙힌다.
-        jdbc.queryForObject("SELECT ai_attempted_at > now() - interval '1 minute' FROM trip_summary WHERE trip_id = ?", Boolean::class.java, tripId) shouldBe true
+        // 기준도 DB now() 다 — DB 시계로 늙힌다.
         jdbc.update("UPDATE trip_summary SET ai_attempted_at = now() - interval '9 minutes' WHERE trip_id = ?", tripId)
         (pending() to claim()) shouldBe (false to null) // 다시 선점 기준(10분) 안
         jdbc.update("UPDATE trip_summary SET ai_attempted_at = now() - interval '11 minutes' WHERE trip_id = ?", tripId)

@@ -158,6 +158,7 @@ class TripSummaryNarratorTest : StringSpec({
         reply: (ReflectionAgentInput) -> ReflectionCard? = { card("바다와 오름을 따라 함께 걸었다.") },
         owned: OwnedTripPeriod? = OwnedTripPeriod(acc, start, end),
         trip: List<ArchiveDayView> = days,
+        onLookup: () -> Unit = {},
     ): Fixture {
         val clock = MutableClock(Instant.parse("2026-08-13T01:00:00Z"))
         val summaries = Summaries(summary, clock)
@@ -172,7 +173,7 @@ class TripSummaryNarratorTest : StringSpec({
             )
         }
         val archive = object : ArchiveRecordFacade {
-            override fun findDailyVisits(tripId: UUID) = trip
+            override fun findDailyVisits(tripId: UUID) = trip.also { onLookup() }
             override fun findRouteDistances(tripId: UUID) = emptyMap<LocalDate, Int>()
         }
         val surfaces = object : PoiSurfaceFacade {
@@ -392,15 +393,34 @@ class TripSummaryNarratorTest : StringSpec({
         messages.filter { "마지막 시도" in it && tripId.toString() in it }.size shouldBe 1
     }
 
-    "마지막 시도가 답 없이 사라져도(배포·크래시) WARN 은 이미 남았다" {
-        val f = fixture(reply = { null })
+    "마지막 시도의 WARN 은 부르기 전에 남는다 — 그 호출이 파드와 함께 사라져도 기록돼 있다" {
+        val appender = ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>().apply { start() }
+        val logger = org.slf4j.LoggerFactory.getLogger(TripSummaryNarrator::class.java) as ch.qos.logback.classic.Logger
+        var warnedBeforeCall: Boolean? = null
+        val f = fixture(reply = {
+            // 부르는 순간을 본다 — 이 뒤로는 아무것도 실행되지 않는다고 친다(파드가 사라졌다).
+            warnedBeforeCall = appender.list.any { "마지막 시도(3/3)" in it.formattedMessage && tripId.toString() in it.formattedMessage }
+            error("파드가 이 호출 도중 사라졌다")
+        })
         f.summaries.attempts = TripSummaryNarrator.MAX_ATTEMPTS - 1
-        f.agent.reply = { error("파드가 이 호출 도중 사라졌다") } // 부르는 순간 끊긴다 — 실패 처리까지 못 간다고 본다
-        val messages = warns {
+        logger.addAppender(appender)
+        try {
             f.narrator.request(tripId)
             f.executor.run()
+        } finally {
+            logger.detachAppender(appender)
         }
-        messages.any { "마지막 시도(3/3)" in it && tripId.toString() in it } shouldBe true
+        warnedBeforeCall shouldBe true
+    }
+
+    "선점은 조회가 끝난 뒤, 부르기 바로 앞이다 — 다시 선점 여유가 덮을 것은 연결 시간뿐이다" {
+        var attemptsAtLookup: Int? = null
+        var attemptsAtCall: Int? = null
+        lateinit var f: Fixture
+        f = fixture(onLookup = { attemptsAtLookup = f.summaries.attempts }, reply = { attemptsAtCall = f.summaries.attempts; card("바다를 걸었다.") })
+        f.narrator.request(tripId)
+        f.executor.run()
+        (attemptsAtLookup to attemptsAtCall) shouldBe (0 to 1)
     }
 
     "스윕에서 넘친 것은 한 줄로 모아 남기고 시도를 쓰지 않는다" {
