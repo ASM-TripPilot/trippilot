@@ -205,7 +205,7 @@ describe('AC1 부속 · 완료 연타의 둘째 탭은 기능 안내 다음을 �
     expect(screen.getByTestId('onboarding-tour-skip')).toBeOnTheScreen(); // 앵커 — 투어 1장이 떴다
     fireEvent.press(screen.getByTestId('onboarding-tour-skip'));
 
-    // 단언 — 삼켜졌다: 홈('/')으로 가지 않았다
+    // 단언 — 삼켜졌다: 홈('/(tabs)')으로 가지 않았다
     expect(routerMock.replace.mock.calls).toEqual([['/onboarding-tour']]);
 
     // 무회귀 — 창이 닫힌 뒤 사람이 누르면 홈으로 간다(= 위 누름이 전달되는 요소였다)
@@ -213,7 +213,7 @@ describe('AC1 부속 · 완료 연타의 둘째 탭은 기능 안내 다음을 �
     fireEvent.press(screen.getByTestId('onboarding-tour-skip'));
     expect(routerMock.replace.mock.calls).toEqual([
       ['/onboarding-tour'],
-      ['/'],
+      ['/(tabs)'],
     ]);
   });
 });
