@@ -257,3 +257,12 @@ assistant-history · -history-row-{messageId} · -history-clear · -history-cont
 > §5(✦ FAB)는 이번에 손대지 않았다. 일정 탭 카드·완료 바 등 도우미 밖 입구도 손대지 않았다.
 >
 > 근거: 사용자 결정(티켓 TRIP-1565 「결정 확정 1」 "상세류만 복귀" · 2026-10-22) · 승격 규칙 — `@react-navigation/native-stack` `getModalRoutesKeys` 코드 읽기 + 6-b 실측 · 분류 추가분(`OPEN_ITINERARY_EDIT`·`OPEN_ITINERARY_METHOD`·`OPEN_REGENERATE` 를 replace 로 둠 — 사용자 분류에 이름이 없어 "일정을 바꾸는 흐름"으로 읽음)·잠금 설계(`guardPress` 400ms·`checkingRef` 읽기) — **TRIP-1565 구현 결정**(우리가 정한 것 — 다음 사이클이 요구사항 근거로 인용하면 안 된다).
+
+## [개정 · 2026-10-22 · 이전 대화 더 보기 (사이클 20261021-assistant-older-messages)]
+
+> 원문 위 절들은 보존한다(append-only). 서버가 `nextBefore` 를 이미 내려주는데(`AssistantController.kt` "프론트 계약에 없던 칸") FE 계약·정본에 없어 30건 넘는 대화의 앞부분을 못 보던 드리프트의 기록. 사용자 결정 2026-10-21: 트리거는 눌러서 부르는 행 · 세션 재조회는 합치기 · Figma 시안 없이 기존 톤.
+
+| # | 원문 | 구현(근거 코드) | 이유 |
+|---|---|---|---|
+| R21 | §6 `useAssistantSession` 응답 `{session, messages[], quickReplies[]}` | 응답에 **`nextBefore: string \| null`**(서버 required — 이어 연 대화에 더 오래된 메시지가 있으면 그 커서). `assistantContract.ts` `OpenSessionResponse.nextBefore`, 세션 열기가 메시지 캐시를 심을 때 `nextBefore: response.nextBefore ?? null` | `openapi.yaml` `AssistantOpenSessionResponse` 와 맞춤. 종전 `null` 하드코딩이 서버의 "더 있다"를 버렸다 |
+| R22 | §2·§3·§6 더 보기 규칙 없음 | **규칙 신설**: ① 트리거 = 목록 맨 위(inverted FlatList `ListFooterComponent`) Pressable 하나 `assistant-older-more` — `nextBefore !== null` 일 때만 존재(비활성이 아니라 부재) ② 누르면 `getMessages(sessionId, {before})`(커서는 불투명 문자열 그대로, `limit` 미지정 = 서버 기본 30) → 로딩(disabled + 스피너) → 실패는 같은 자리에 `assistant-older-error` + 「다시 시도」(기존 메시지 유지, INV-4) ③ 성공은 `prependMessages(옛 쪽, 현재)` — 옛 쪽 전체 앞, id 중복은 기존 것 유지, **응답 도착 시점의 최신 캐시**에 붙인다 · 캐시 `nextBefore` ← 응답값 ④ 진행 중 재호출 차단, 실패 뒤 재호출 허용 ⑤ 세션 재조회(`useAssistantSession` 재실행)는 캐시가 있으면 `appendMessages(기존, 첫 쪽)` 로 **합치고 기존 커서 유지** — 통째 덮지 않는다(비용: 캐시된 메시지의 제안 상태가 서버 최신값으로 갱신되지 않는다 — 후속) ⑥ 이력 지우기 뒤 도착한 늦은 응답은 캐시를 새로 만들지 않는다 · 세션이 바뀌면 상태 초기화 ⑦ 턴 진행 중에도 누를 수 있다 ⑧ 스크롤 위치 보정 코드 없음(inverted 라 옛 쪽이 리스트 끝에 붙어 구조상 유지 — 실기 확인 항목). 훅 `useLoadOlderMessages(sessionId) → {hasMore, status: idle\|loading\|error, loadOlder}`, 가짜 어댑터는 `before`/`limit`(1~100)을 서버와 같은 규칙으로 거절·자른다 | 정본 공백(US-ASSIST-05 는 "이어 보기"만). `useInfiniteQuery` 는 캐시 모양이 바뀌어 평가·제안 패치 전부에 번져 안 썼다 |
