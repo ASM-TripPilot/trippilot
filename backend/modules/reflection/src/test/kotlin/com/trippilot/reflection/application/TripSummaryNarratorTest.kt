@@ -12,6 +12,7 @@ import com.trippilot.placedata.api.PoiSurfaceFacade
 import com.trippilot.placedata.api.PoiSurfaceView
 import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.profile.api.PreferenceSnapshot
+import com.trippilot.reflection.domain.AiAttempt
 import com.trippilot.reflection.domain.ReflectionCard
 import com.trippilot.reflection.domain.ReflectionSource
 import com.trippilot.reflection.domain.TripSummary
@@ -82,6 +83,7 @@ class TripSummaryNarratorTest : StringSpec({
         var attempts = 0
         var attemptedAt: Instant? = null
         var claimFails = false
+        override fun findAiAttempt(tripId: UUID) = stored?.let { AiAttempt(it.source.name, attempts, attemptedAt) }
         override fun claimAiAttempt(tripId: UUID, reclaimAfter: Duration, maxAttempts: Int): Int? {
             if (claimFails) throw IllegalStateException("선점 쓰기가 실패했다")
             val s = stored ?: return null
@@ -481,13 +483,13 @@ class TripSummaryNarratorTest : StringSpec({
         messages.count { "선점 전" in it && "상한(3)을 다 써" in it && tripId.toString() in it } shouldBe 1
     }
 
-    "선점 전 실패도 진행 중인 다른 쪽 시도는 덮어 세지 않는다 — 다시 선점 기준을 지킨다" {
+    "선점 전 실패도 진행 중인 다른 쪽 시도는 덮어 세지 않는다 — 다시 선점 기준을 지키고, 기준이 지나면 다시 집힌다고 말한다" {
         val f = fixture(onArchive = { error("실적 조회가 깨졌다") })
         f.summaries.attempts = 1
         f.summaries.attemptedAt = f.clock.now.minus(Duration.ofMinutes(1)) // 다른 파드가 1분 전에 선점해 아직 기다리는 중
-        f.narrator.request(tripId)
-        f.executor.run()
+        val message = warns { f.narrator.request(tripId); f.executor.run() }.single()
         f.summaries.attempts shouldBe 1
+        ("최근 시도가 다시 선점 기준(660초) 안에" in message && "그 기준이 지나면 스윕이 다시 집습니다" in message) shouldBe true
     }
 
     "선점 뒤에 던지면 쓴 시도를 밝혀 남긴다" {
@@ -529,11 +531,15 @@ class TripSummaryNarratorTest : StringSpec({
         f.summaries.attempts shouldBe 0
     }
 
-    "선점 전 실패인데 셀 수 없으면(이미 AI·다른 쪽 진행 중·상한) 다시 집힌다고 말하지 않는다" {
-        val f = fixture(onArchive = { error("실적 조회가 깨졌다") })
-        f.summaries.attempts = TripSummaryNarrator.MAX_ATTEMPTS
-        val message = events { f.narrator.request(tripId); f.executor.run() }.single().formattedMessage
-        ("시도로 세지 못했습니다" in message && "다시 집" !in message) shouldBe true
+    "선점 전 실패인데 셀 수 없으면 까닭을 가려 말한다 — 상한·이미 AI·행 없음은 다시 집히지 않는다" {
+        fun messageFor(summary: TripSummary?, attempts: Int): String {
+            val f = fixture(summary = summary, onArchive = { error("실적 조회가 깨졌다") })
+            f.summaries.attempts = attempts
+            return events { f.narrator.request(tripId); f.executor.run() }.single().formattedMessage
+        }
+        messageFor(ruleSummary(), TripSummaryNarrator.MAX_ATTEMPTS).let { ("시도 상한(3)을 이미 다 썼습니다" in it && "다시 집히지 않습니다" in it) shouldBe true }
+        messageFor(ruleSummary(ReflectionSource.AI), 0).let { ("이미 AI 문장이 붙었거나" in it && "다시 집히지 않습니다" in it) shouldBe true }
+        messageFor(null, 0).let { ("요약 행이 없습니다" in it && "다시 집히지 않습니다" in it) shouldBe true }
     }
 
     "선점 전에 종료 인터럽트로 끊기면 시도로 세지 않고 인터럽트 표시를 지우지 않는다" {
@@ -550,16 +556,36 @@ class TripSummaryNarratorTest : StringSpec({
         }
     }
 
-    "Error 는 시도 실패로 삼키지 않고 올린다 — 실행 중 표시는 풀린다" {
+    fun errors(block: () -> Unit): List<ch.qos.logback.classic.spi.ILoggingEvent> {
+        val appender = ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>().apply { start() }
+        val logger = org.slf4j.LoggerFactory.getLogger(TripSummaryNarrator::class.java) as ch.qos.logback.classic.Logger
+        logger.addAppender(appender)
+        try { block() } finally { logger.detachAppender(appender) }
+        return appender.list.filter { it.level == ch.qos.logback.classic.Level.ERROR }
+    }
+
+    "Error 는 삼키지 않고 올린다 — 그 전에 tripId 와 함께 우리 로그에 남기고 선점 전이면 시도로 센다, 실행 중 표시는 풀린다" {
         val f = fixture(onArchive = { throw AssertionError("메모리 부족 같은 것") })
         f.narrator.request(tripId)
-        io.kotest.assertions.throwables.shouldThrow<AssertionError> { f.executor.run() }
-        f.summaries.attempts shouldBe 0
+        val logged = errors { io.kotest.assertions.throwables.shouldThrow<AssertionError> { f.executor.run() } }
+        logged.single().formattedMessage.let { ("선점 전" in it && "시도 1/3" in it && tripId.toString() in it) shouldBe true }
+        f.summaries.attempts shouldBe 1 // 늘 Error 를 내는 여행도 상한이 묶는다
         f.narrator.request(tripId)
         f.executor.held.size shouldBe 1
 
-        val call = fixture(reply = { throw AssertionError("호출 중 Error") }) // 카드 경로도 같은 규칙
+        val call = fixture(reply = { throw AssertionError("호출 중 Error") }) // 카드 경로도 같은 규칙 — 이미 선점했다
         call.narrator.request(tripId)
-        io.kotest.assertions.throwables.shouldThrow<AssertionError> { call.executor.run() }
+        errors { io.kotest.assertions.throwables.shouldThrow<AssertionError> { call.executor.run() } }
+            .single().formattedMessage.let { ("선점 뒤" in it && "시도 1/3" in it) shouldBe true }
+        call.summaries.attempts shouldBe 1 // 두 번 세지 않는다
+    }
+
+    "Error 를 세는 쓰기가 실패해도 Error 를 가리지 않는다 — 그 예외는 붙여 올린다" {
+        val f = fixture(onArchive = { throw AssertionError("메모리 부족 같은 것") })
+        f.summaries.claimFails = true
+        f.narrator.request(tripId)
+        val thrown = io.kotest.assertions.throwables.shouldThrow<AssertionError> { f.executor.run() }
+        thrown.message shouldBe "메모리 부족 같은 것"
+        thrown.suppressed.map { it.message } shouldBe listOf("선점 쓰기가 실패했다")
     }
 })

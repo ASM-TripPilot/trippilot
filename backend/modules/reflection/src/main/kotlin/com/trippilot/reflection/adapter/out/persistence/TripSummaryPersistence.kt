@@ -1,5 +1,6 @@
 package com.trippilot.reflection.adapter.out.persistence
 
+import com.trippilot.reflection.domain.AiAttempt
 import com.trippilot.reflection.domain.DayHighlight
 import com.trippilot.reflection.domain.DistanceSource
 import com.trippilot.reflection.domain.ReflectionSource
@@ -101,6 +102,14 @@ class TripSummaryRepositoryAdapter(private val jpa: TripSummaryJpaRepository) : 
             """.trimIndent(),
         ).setParameter("tripId", tripId).setParameter("max", maxAttempts).setParameter("secs", reclaimAfter.seconds.toDouble())
             .resultList.firstOrNull()?.let { (it as Number).toInt() }
+
+    override fun findAiAttempt(tripId: UUID): AiAttempt? =
+        em.createNativeQuery("SELECT source, ai_attempts, ai_attempted_at FROM trip_summary WHERE trip_id = :tripId")
+            .setParameter("tripId", tripId).resultList.firstOrNull()
+            ?.let { row ->
+                val cols = row as Array<*>
+                AiAttempt(cols[0] as String, (cols[1] as Number).toInt(), (cols[2] as? java.sql.Timestamp)?.toInstant() ?: cols[2] as? Instant)
+            }
 
     override fun retireAiAttempts(tripId: UUID, maxAttempts: Int) {
         em.createNativeQuery("UPDATE trip_summary SET ai_attempts = GREATEST(ai_attempts, :max) WHERE trip_id = :tripId AND source = 'RULE'")

@@ -3,6 +3,7 @@ package com.trippilot.reflection.application
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.archive.api.ArchiveRecordFacade
 import com.trippilot.placedata.api.PoiSurfaceFacade
+import com.trippilot.reflection.domain.AiAttempt
 import com.trippilot.reflection.domain.ReflectionSource
 import com.trippilot.reflection.domain.TripSummaryRepository
 import com.trippilot.reflection.domain.port.ReflectionAgentInput
@@ -162,7 +163,7 @@ class TripSummaryNarrator internal constructor(
 
     /**
      * AI 문장 한 번 — 근거를 모으고, 부르기 직전에 시도를 선점하고, 부르고, 쓸 수 있으면 잠근 뒤 쓴다. **`Exception` 은 던지지 않는다**(`Error` 는
-     * 그대로 올린다 — 메모리 부족 같은 것을 시도 실패로 삼키지 않는다).
+     * 우리 로그에 남기고·선점 전이면 시도로 센 뒤 그대로 올린다 — 메모리 부족 같은 것을 시도 실패로 삼키지 않는다).
      *
      * 어디서 던지든(근거 조회·선점·카드 읽기·환각 대조·쓰기) 그 실패는 **시도 하나로 센다** — 선점 전에 던졌으면 여기서 선점해 센다. 안 세면
      * 늘 던지는 여행이 7일 동안 5분마다 다시 집혀(스택이 든 WARN 이 하루 수백 줄) 오래된 순 상위 자리를 차지해 다른 여행을 굶긴다. 상한(3)이 그것을 묶는다.
@@ -178,15 +179,33 @@ class TripSummaryNarrator internal constructor(
                 log.warn("요약 회고 준비가 종료로 끊겼습니다(선점 전) — 시도를 쓰지 않았고 스윕이 다시 맡습니다. tripId={}", tripId, e)
                 return
             }
-            val next = claim.attempt?.let(::afterAttempt) ?: try {
-                writes.execute { summaries.claimAiAttempt(tripId, reclaimAfter(), MAX_ATTEMPTS) }?.let(::afterAttempt)
-                    ?: "시도로 세지 못했습니다 — 다른 파드가 맡고 있거나 이미 AI 문장이 붙었거나 시도 상한을 다 썼습니다"
-            } catch (counting: Exception) {
-                e.addSuppressed(counting)
-                "시도를 기록하지 못했습니다(쓰기 실패 — 함께 붙인 예외) — 시도 수가 그대로라 다음 스윕이 다시 집습니다"
-            }
+            val next = claim.attempt?.let(::afterAttempt) ?: countPreClaim(tripId, e)
             log.warn("요약 회고 중 실패했습니다({}) — {}. tripId={}", stage, next, tripId, e)
+        } catch (e: Error) {
+            // 삼키지 않는다 — 다만 실행기 밖(JVM 기본 처리기 → 표준 오류, tripId 없음)으로 나가기 전에 우리 로그에 남기고, 선점 전이면 시도로 센다.
+            // 안 세면 늘 Error 를 내는 여행이 7일 동안 5분마다 다시 집힌다. 세는 일이 실패해도 Error 를 가리지 않는다(붙여서 그대로 올린다).
+            val next = claim.attempt?.let(::afterAttempt) ?: countPreClaim(tripId, e)
+            log.error("요약 회고 중 Error 가 났습니다({}) — {}. tripId={}", if (claim.attempt == null) "선점 전" else "선점 뒤", next, tripId, e)
+            throw e
         }
+    }
+
+    /**
+     * 선점 전 실패를 시도 하나로 센다 — 다음 행동을 문장으로 돌려준다. 세는 쓰기·조회가 실패하면 그 예외를 [cause] 에 붙인다(가리지 않는다).
+     * 못 셌으면(선점 조건에 걸렸다) 행을 한 번 읽어 까닭을 가린다 — 그래야 "다시 집히는가"를 맞게 말한다.
+     */
+    private fun countPreClaim(tripId: UUID, cause: Throwable): String = try {
+        writes.execute { summaries.claimAiAttempt(tripId, reclaimAfter(), MAX_ATTEMPTS) }?.let(::afterAttempt) ?: notCounted(summaries.findAiAttempt(tripId))
+    } catch (counting: Exception) {
+        cause.addSuppressed(counting)
+        "시도를 기록하지 못했습니다(쓰기·조회 실패 — 함께 붙인 예외) — 시도 수가 그대로라 다음 스윕이 다시 집습니다"
+    }
+
+    private fun notCounted(row: AiAttempt?): String = when {
+        row == null -> "시도로 세지 않았습니다 — 요약 행이 없습니다(여행이 지워졌을 수 있다). 다시 집히지 않습니다"
+        row.source != ReflectionSource.RULE.name -> "시도로 세지 않았습니다 — 이미 AI 문장이 붙었거나 규칙 요약이 아닙니다. 다시 집히지 않습니다"
+        row.attempts >= MAX_ATTEMPTS -> "시도로 세지 않았습니다 — 시도 상한($MAX_ATTEMPTS)을 이미 다 썼습니다. 다시 집히지 않습니다"
+        else -> "시도로 세지 않았습니다 — 다른 쪽의 최근 시도가 다시 선점 기준(${reclaimAfter().toSeconds()}초) 안에 있습니다. 그 기준이 지나면 스윕이 다시 집습니다"
     }
 
     private fun afterAttempt(attempt: Int): String =
