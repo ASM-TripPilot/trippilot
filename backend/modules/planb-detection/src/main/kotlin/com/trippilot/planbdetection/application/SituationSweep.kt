@@ -31,8 +31,10 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.format.TextStyle
 import java.time.temporal.ChronoUnit
 import java.util.Collections
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutionException
@@ -218,7 +220,7 @@ class SituationSweep(
             val observations = observe(round, trip, slots, rows.findActiveByTrip(trip.tripId), at)
             // 판정에 드는 관측 = 켰을 때 쓰는 출처(목록 안 ∧ 관찰 전용 아님). 쓰지 않는 결과(관찰 전용 · dry-run 전부)는 표본 줄로.
             val (judged, unjudged) = observations.partition { writes(it.source) }
-            sample(trip, if (props.mode == SweepMode.ON) unjudged else observations)
+            sample(trip, if (props.mode == SweepMode.ON) unjudged else observations, slots)
             val writeAt = round.now()
             if (!round.scope.writable(writeAt)) { // 감지하는 사이 20:58 을 넘겼다 — 쓰지 않는다(dry-run 도 켰을 때와 같은 수를 센다)
                 round.skipped.incrementAndGet()
@@ -274,25 +276,33 @@ class SituationSweep(
 
     /**
      * 감시 상태 — 쓴 출처가 이 회차에 본 날짜를 **모두 확인했을 때만** 확인을 남긴다(BR-SA-13 ③ · RES-SA-01).
-     * 모름(회로 차단 포함)이 낀 출처는 행을 건드리지 않는다 — 마지막 확인이 신선 창을 지나면 '확인 불가'가 된다.
-     * 그래서 일시 모름 한 번은 창이 흡수하고(PERF-SA-09) 거짓 '정상'도 새로 쓰지 않는다. 관찰 전용·안 부른 출처는 쓰지 않는다.
+     * 모름(회로 차단 포함)이나 일부 모름([Detection.Checked.partial] — G-SA-21)이 낀 출처는 행을 건드리지 않는다 — 마지막 확인이
+     * 신선 창을 지나면 '확인 불가'가 된다. 그래서 일시 모름 한 번은 창이 흡수하고(PERF-SA-09) 거짓 '정상'도 새로 쓰지 않는다.
+     * 관찰 전용·안 부른 출처는 쓰지 않는다.
      */
     private fun record(trip: WatchedTrip, written: List<Observation>, at: Instant) {
         written.groupBy { it.source }.forEach { (source, seen) ->
-            if (seen.any { it.detection !is Detection.Checked }) return@forEach
+            if (seen.any { val d = it.detection; d !is Detection.Checked || d.partial }) return@forEach
             runCatching { watches.upsert(PlanBWatch(trip.tripId, source, WatchStatus.CHECKED, at)) }
                 .onFailure { log.warn("감시 상태를 남기지 못했습니다 — 다음 회차가 다시 씁니다. tripId={} source={}", trip.tripId, source, it) }
         }
     }
 
-    /** 쓰지 않은 신호의 표본 줄 — dry-run·관찰 전용으로 휴무 오탐·광역 특보를 재는 재료(OBS-SA-01). 좌표·계정 id 는 싣지 않는다. */
-    private fun sample(trip: WatchedTrip, observed: List<Observation>) {
+    /**
+     * 쓰지 않은 신호의 표본 줄 — dry-run·관찰 전용으로 휴무 오탐·광역 특보를 재는 재료(OBS-SA-01). 좌표·계정 id 는 싣지 않는다.
+     * 슬롯 신호는 장소 이름과 계획 시각(요일 포함)을 싣는다 — 장소 id 는 환경마다 다른 무작위 값이라, 이것 없이는 영업시간 원문과
+     * 로그만으로 대조할 수 없다(운영 dry-run 첫 아침 표본 3건이 그랬다). 날짜 전체 신호는 둘 다 null 이다.
+     */
+    private fun sample(trip: WatchedTrip, observed: List<Observation>, slots: List<PlannedSlotView>) {
+        val byKey = slots.associateBy { it.slotKey }
         for (o in observed) {
             val checked = o.detection as? Detection.Checked ?: continue
             for (s in checked.signals) {
+                val slot = s.slotKey?.let(byKey::get)
                 log.info(
-                    "planb.situation_sample tripId={} source={} kind={} date={} variant={} severity={} slot={}",
+                    "planb.situation_sample tripId={} source={} kind={} date={} variant={} severity={} slot={} name={} at={}",
                     trip.tripId, o.source, s.kind, s.affectedDate, s.variant, s.severity, s.slotKey,
+                    slot?.nameKo?.let { "\"${it.replace('"', '\'')}\"" }, slot?.let(::plannedAt),
                 )
             }
         }
@@ -452,6 +462,11 @@ data class SweepSummary(
 }
 
 private fun Collection<String>.listed(): String = sorted().joinToString(",", "[", "]")
+
+/** 표본 줄의 계획 시각 — `화 18:00~19:00`(자정을 넘기면 끝에 `(+1)`). 정기 휴무는 요일로, 영업시간은 시각으로 대조한다. */
+private fun plannedAt(slot: PlannedSlotView): String =
+    "${slot.date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.KOREAN)} ${slot.startAt}~${slot.endAt}" +
+        if (slot.endsNextDay) "(+1)" else ""
 
 private val WatchedTrip.period: TripPeriod get() = TripPeriod(startDate, endDate)
 

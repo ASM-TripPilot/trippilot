@@ -14,6 +14,10 @@ import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.planbdetection.adapter.out.external.HttpOpportunityAdapter
 import com.trippilot.planbdetection.domain.OpportunityPort
+import com.trippilot.planbdetection.domain.PlanBTrigger
+import com.trippilot.planbdetection.domain.PlanBTriggerRepository
+import com.trippilot.planbdetection.domain.TriggerKind
+import com.trippilot.planbdetection.domain.TriggerScope
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import com.trippilot.trip.domain.Trip
@@ -65,6 +69,7 @@ class OpportunityHttpModeIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var tokens: AccessTokenIssuer
     @Autowired private lateinit var clock: Clock
     @Autowired private lateinit var opportunityPort: OpportunityPort
+    @Autowired private lateinit var triggers: PlanBTriggerRepository
 
     private val json = ObjectMapper()
 
@@ -72,6 +77,7 @@ class OpportunityHttpModeIT : AbstractPostgresIntegrationTest() {
     fun reset() {
         FakeAi.received.clear()
         FakeAi.status = 200
+        FakeAi.events = { emptyList() }
     }
 
     private fun call(path: String, token: String): Pair<Int, JsonNode> {
@@ -152,7 +158,33 @@ class OpportunityHttpModeIT : AbstractPostgresIntegrationTest() {
         item["nearSlotKey"].asText() shouldBe "$tomorrow#$SEONGSAN"
         item["distanceLabel"].asText() shouldBe "약 400m"
         item["eventName"].isNull shouldBe true
+        item["eventType"].isNull shouldBe true
         item["end"].isNull shouldBe true
+    }
+
+    /**
+     * G-SA-17(2026-10-20 결정) — 그 날 날씨 위험이 떠 있으면 서버가 축제 카드를 빼고 실내형 행사·요즘 인기는 상대 순서대로 남긴다.
+     * 트리거는 실 저장소(DB)에서 읽는다 — 인메모리 대역으로는 날짜 조회·상태 어휘가 실물과 같은지 못 본다.
+     */
+    @Test
+    fun `그 날 날씨 위험이 떠 있으면 축제 카드는 빠지고 전시 카드와 요즘 인기는 남는다`() {
+        val f = inProgressTrip()
+        val tomorrow = f.today.plusDays(1)
+        triggers.save(
+            PlanBTrigger.active(
+                f.tripId, UUID.randomUUID(), TriggerKind.WEATHER, tomorrow, null, mapOf("pop" to 80), TriggerScope.FULL_DAY,
+                "비 예보 80%", clock.instant(),
+            ),
+        )
+        FakeAi.events = { near ->
+            listOf(eventItem("tourapi-fest", FESTIVAL_POI, "FESTIVAL", near, f.today), eventItem("tourapi-expo", EXPO_POI, "EXHIBITION", near, f.today))
+        }
+
+        val (rc, body) = call("/trips/${f.tripId}/opportunities?date=$tomorrow", f.token)
+
+        rc shouldBe 200
+        body["items"].map { it["key"].asText() } shouldContainExactly listOf("event:tourapi-expo", "trending:$WOLJEONGRI")
+        body["items"][0]["eventType"].asText() shouldBe "EXHIBITION"
     }
 
     @Test
@@ -178,11 +210,14 @@ class OpportunityHttpModeIT : AbstractPostgresIntegrationTest() {
         FakeAi.received.shouldBeEmpty()
     }
 
-    /** 상대 대역 — 받은 본문을 모으고, 보낸 첫 슬롯 곁의 '요즘 인기' 한 곳(일정 밖 시드 장소)을 답한다. */
+    /** 상대 대역 — 받은 본문을 모으고, 보낸 첫 슬롯 곁의 [events](기본 없음) 뒤에 '요즘 인기' 한 곳(일정 밖 시드 장소)을 답한다. */
     private object FakeAi {
         val received: MutableList<String> = Collections.synchronizedList(mutableListOf())
 
         @Volatile var status = 200
+
+        /** 요즘 인기 앞에 실을 행사 카드(와이어 JSON) — 슬롯 키를 받아 만든다. */
+        @Volatile var events: (near: String) -> List<String> = { emptyList() }
 
         val server: HttpServer by lazy {
             HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
@@ -193,9 +228,11 @@ class OpportunityHttpModeIT : AbstractPostgresIntegrationTest() {
                         ex.sendResponseHeaders(status, -1)
                     } else {
                         val near = ObjectMapper().readTree(body)["slots"][0]["slot_key"].asText()
-                        val reply = """{"opportunities":[{"key":"trending:$WOLJEONGRI","kind":"TRENDING","event_name":null,
+                        val trending = """{"key":"trending:$WOLJEONGRI","kind":"TRENDING","event_name":null,
                             "start":null,"end":null,"poi_id":"$WOLJEONGRI","poi_name":"월정리 카페거리",
-                            "near_slot_key":"$near","distance_label":"약 400m"}],"notes":["events_unwired"]}""".toByteArray()
+                            "near_slot_key":"$near","distance_label":"약 400m"}"""
+                        val items = (events(near) + trending).joinToString(",")
+                        val reply = """{"opportunities":[$items],"notes":["events_unwired"]}""".toByteArray()
                         ex.responseHeaders.add("Content-Type", "application/json")
                         ex.sendResponseHeaders(200, reply.size.toLong())
                         ex.responseBody.use { it.write(reply) }
@@ -213,6 +250,14 @@ class OpportunityHttpModeIT : AbstractPostgresIntegrationTest() {
         private val SEONGSAN: UUID = UUID.fromString("e0000000-0000-4000-8000-000000000001")   // 시드 '성산일출봉' 33.4587, 126.9427
         private val MANJANGGUL: UUID = UUID.fromString("e0000000-0000-4000-8000-000000000007") // 시드 '만장굴'
         private val WOLJEONGRI: UUID = UUID.fromString("e0000000-0000-4000-8000-000000000003") // 시드 '월정리 카페거리' — 일정 밖
+        private val FESTIVAL_POI: UUID = UUID.fromString("a0000000-0000-4000-8000-000000000001") // 일정 밖 — 게이트는 실재를 보지 않는다
+        private val EXPO_POI: UUID = UUID.fromString("a0000000-0000-4000-8000-000000000002")
+
+        /** [from] 부터 나흘 열리는 행사의 행사장 카드(와이어 JSON). */
+        private fun eventItem(eventId: String, poi: UUID, type: String, near: String, from: LocalDate) =
+            """{"key":"event:$eventId","kind":"EVENT_VENUE","event_name":"제주 들불축제","event_type":"$type",
+                "start":"$from","end":"${from.plusDays(3)}","poi_id":"$poi","poi_name":"새별오름",
+                "near_slot_key":"$near","distance_label":"약 1.0km"}"""
 
         /** 이름을 베이스(`springProperties`)와 달리 둔다 — 같은 이름의 정적 메서드는 상위 것을 가릴 수 있다. */
         @JvmStatic

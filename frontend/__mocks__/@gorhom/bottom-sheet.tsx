@@ -20,6 +20,9 @@ import type { TextInputProps } from 'react-native';
 export const snapToIndexSpy = jest.fn();
 (globalThis as Record<string, unknown>).__bottomSheetSnapToIndexSpy =
   snapToIndexSpy;
+// TRIP-1558 — 본문 스크롤 요청(`BottomSheetScrollView` ref.scrollTo)을 관찰하는 스파이. 시트·스크롤 래퍼가 같은 통과형이라 핸들을 공유한다.
+export const scrollToSpy = jest.fn();
+(globalThis as Record<string, unknown>).__bottomSheetScrollToSpy = scrollToSpy;
 
 const Passthrough = React.forwardRef<
   unknown,
@@ -35,6 +38,7 @@ const Passthrough = React.forwardRef<
     expand: () => {},
     collapse: () => {},
     snapToIndex: snapToIndexSpy,
+    scrollTo: scrollToSpy,
   }));
   return (
     <View {...props}>

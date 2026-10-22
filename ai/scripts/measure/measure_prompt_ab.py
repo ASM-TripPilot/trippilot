@@ -11,8 +11,9 @@ CI 밖 수동 실행 전용(실 API 를 부른다). few-shot·판단 순서(CoT)
 
 종류:
 - `intent`  DIALOGUE_INTENT — `data/intent_eval_set.yaml`(사람 검수 87문장) + 지시어 사례 6건 + 짧은 수락 사례 8건 + 장소 탐색 6건 + 두 질문 5건(정답 null — 계획 단계로) + 하나로 남을 음성 5건 + 행사 2건(정답 null). OUT_OF_SCOPE 의
-  정답은 판단해서 닫은 거절({"intent": null} 등 — 오케스트레이터가 계획 단계로 넘기는 `_plannable` 과 같은 기준)이다. 시한·벤더
-  실패는 계획 단계로도 못 가니 오답으로 센다. 평가셋 문장을 프롬프트 예시로 옮기면 이 숫자가 무의미해진다(leak).
+  정답은 판단해서 닫은 거절({"intent": null} 등 — 운영이 그 턴을 받는 술어: 맞장구 말은 2″ `_judged_nothing`, 나머지는 2‴
+  `_plannable`)이다. 시한·벤더 실패는 계획 단계로도 못 가니 오답으로 센다. `late_null` 은 정답 null 이지만 4.4s 를 넘겨 운영에서는
+  계획 단계로 못 갔을 수. 평가셋 문장을 프롬프트 예시로 옮기면 이 숫자가 무의미해진다(leak).
 - `directive`  REPLAN_DIRECTIVE_TRANSLATION(sol) — 라벨은 `measure_directive_match.POSITIVES/NEGATIVES` + 부정·혼합
   6건. 완전 일치(겹쳐 고른 지시도 오답)와 허용(정답 포함·금지 지시 없음)을 같이 낸다. 시한 3.75s(DEV 실측 시한).
 - `answer`  DIALOGUE_ANSWER — Facts 11종 + 계획 병합 3종 + 장소 탐색 5종(서울·일정 없음 4 · 일정 근처 1) + 장소 소개 3종 × 반복. 게이트 통과율·시각-장소 짝 위반(오케스트레이터 INV-2 검사와
@@ -29,7 +30,7 @@ CI 밖 수동 실행 전용(실 API 를 부른다). few-shot·판단 순서(CoT)
   먼 곳·꽉 찬 하루에 카페·휴무 교체·피로+저녁·저녁 영업시간). 입력은 배선과 같은 함수로 만들고(`_compose_case`), 품질은
   상황별 코드 판정 + 공통(상한 이하·영업시간이 남은 시간과 60분 이상 겹침). `EVAL_CASES=a,b` 로 상황을 고른다.
   2026-10-18 실측: 0.5.0 이 33/33(천장) — 판단 순서(CoT)·예시(few-shot) 두 판은 품질이 같고 입력 +7~23%·p90 +1.3s 라 버렸다.
-- `plan`  DIALOGUE_PLAN(2‴ 도구 계획) — `data/dialogue_plan_eval_set.yaml` 38문장(도구 1·2 · 도구 없음 · 주입). 도구 집합 완전·허용
+- `plan`  DIALOGUE_PLAN(2‴ 도구 계획) — `data/dialogue_plan_eval_set.yaml`(도구 1·2 · 도구 없음 · 주입 — 사례 수는 파일이 정본). 도구 집합 완전·허용
   일치 · 인자 키 정밀도 · 도구 없음 비움률(gap 일치는 기록만) · 주입 도구 0 률 · 게이트 뒤 위험 인자 · 게이트 드롭률 · 지연·토큰.
   노출 도구는 운영 배선(포트 전부)과 같다. 시한 3.5s(`EVAL_PLAN_TIMEOUT` — 계획 상한). 두 판본·두 모델을 같은 시각에 나란히.
       uv run --env-file ../.env python scripts/measure/measure_prompt_ab.py plan prompts 2
@@ -212,6 +213,16 @@ COMPOUND_CASES = [  # 계획 측정셋(dialogue_plan_eval_set.yaml)과 겹치지
     ("OUT_OF_SCOPE", "동문재래시장 몇 시에 닫는지랑 숙소까지 거리"),
     ("OUT_OF_SCOPE", "라토커피제주 대신 갈 데랑 내일 비 소식"),
 ]
+# 장소 추천(dialogue_intent 0.2.5 — RECOMMEND_PLACES) — 몇 곳만 골라 달라는 말. 갈림 기준은 개수·"제일·딱·골라"다 — 그런 말 없는
+# "…추천해줘"는 탐색으로 남아야 한다(위 EXPLORE_CASES 의 "제주 야경 예쁜 곳 추천해줘"가 그 음성 사례). 첫 문장은 사용자가 운영
+# 앱에서 막혔다고 한 말 그대로다(2026-10-20). 프롬프트 예시와 다른 문장이다.
+RECOMMEND_CASES = [
+    ("RECOMMEND_PLACES", "서울에서 가볼만한 카페 하나 추천해줘"),
+    ("RECOMMEND_PLACES", "부산 야경 명소 두 군데만 골라줘"),
+    ("RECOMMEND_PLACES", "경주에서 제일 가볼 만한 데 한 곳만"),
+    ("RECOMMEND_PLACES", "여수 맛집 중에 딱 하나 찍어줘"),
+    ("RECOMMEND_PLACES", "이 근처 카페 중에 어디가 제일 좋아?"),
+]
 SINGLE_CASES = [
     ("GET_NEXT_SLOT", "다음 일정 어디고 몇 시야"),
     ("GET_POI_INFO", "해녀의집 몇 시에 열고 입장료 얼마야"),
@@ -237,6 +248,7 @@ def run_intent(prompts: Path, repeat: int) -> None:
     cases += [(label, u, [], "compound") for label, u in COMPOUND_CASES]
     cases += [(label, u, [], "single") for label, u in SINGLE_CASES]
     cases += [(label, u, [], "event") for label, u in EVENT_CASES]
+    cases += [(label, u, [], "recommend") for label, u in RECOMMEND_CASES]
 
     def one(item):
         i, (label, utt, history, kind) = item
@@ -245,8 +257,10 @@ def run_intent(prompts: Path, repeat: int) -> None:
                             timeout_sec=INTENT_TIMEOUT)
         wall = int((time.monotonic() - t0) * 1000)
         got = None if (r.is_fallback or r.value is None) else r.value.intent.value
-        if label == "OUT_OF_SCOPE":  # 계획 단계(2‴)로 가는 닫힘만 정답 — 오케스트레이터와 같은 술어. 시한·벤더 실패를 정답으로 세면 부푼다
-            ok = got == "OUT_OF_SCOPE" or (got is None and orch._plannable(orch._refusal_reason(r.error or "intent_bad_shape")))
+        if label == "OUT_OF_SCOPE":  # 운영이 그 턴을 받는 술어로 — 맞장구 말은 2″(`_judged_nothing`), 나머지는 2‴(`_plannable`).
+            # 시한·벤더 실패를 정답으로 세면 부푼다
+            pred = orch._judged_nothing if orch.closer_answer(orch.normalize(utt), True) else orch._plannable
+            ok = got == "OUT_OF_SCOPE" or (got is None and pred(orch._refusal_reason(r.error or "intent_bad_shape")))
         else:
             ok = got == label
         slots = dict(r.value.slots) if got else {}
@@ -258,15 +272,20 @@ def run_intent(prompts: Path, repeat: int) -> None:
         sel = [r for r in rows if r["kind"] == kind]
         return round(sum(r["ok"] for r in sel) / len(sel), 4)
 
+    # 정답 null 인데 분류가 4.4s(= 시한 9.0s − 계획 진입 하한 4.6s)를 넘겨 낸 것 — 운영에서는 계획 단계로 못 가고 SCOPE 카드다(맞장구는 2″ 라 제외)
+    late = orch.DEFAULT_DEADLINE_MS - orch._PLAN_MIN_REMAINING_MS
+    late_null = sum(1 for r in rows if r["label"] == "OUT_OF_SCOPE" and r["ok"] and r["wall"] > late
+                    and orch.closer_answer(orch.normalize(r["utt"]), True) is None)
     print(json.dumps(dict(prompts=str(prompts), model=MODEL, n=len(rows), eval_acc=acc("eval"),
                           context_acc=acc("context"), accept_acc=acc("accept"), explore_acc=acc("explore"),
-                          compound_acc=acc("compound"), single_acc=acc("single"), event_acc=acc("event"), **_timing(rows)),
+                          compound_acc=acc("compound"), single_acc=acc("single"), event_acc=acc("event"),
+                          late_null=late_null, recommend_acc=acc("recommend"), **_timing(rows)),
                      ensure_ascii=False))
     for r in rows:
         if not r["ok"]:
             print(f"  ✗ {r['label']:<20} got={r['got']!s:<20} {r['utt']}  ({r['err'] or ''})")
     for r in rows[: len(cases)]:
-        if r["kind"] in ("context", "accept", "explore", "compound", "single", "event"):
+        if r["kind"] in ("context", "accept", "explore", "compound", "single", "event", "recommend"):
             print(f"  · {r['utt']} → {r['got']} {r['slots']}")
 
 
@@ -721,7 +740,9 @@ def _jeju_pois() -> list:
         if str(p.poi_id) in seen or p.quality is DataQuality.MINIMAL or p.coord.lat > 34 or p.coord.lat < 33:
             continue
         seen.add(str(p.poi_id))
-        out.append(replace(p, tags=tuple(pr.get("tags") or ())))
+        # 공유본 `poi.source_ref` 는 비어 있다 — 운영 풀은 백엔드가 관광공사 contentid 를 `sourceRef` 로 준다(KB-5 조인 키).
+        ref = (pr.get("provenance") or {}).get("content_id") if pr.get("source") == "TOURAPI" else None
+        out.append(replace(p, tags=tuple(pr.get("tags") or ()), source_ref=p.source_ref or ref))
     return out
 
 
@@ -730,6 +751,50 @@ def _hm(s: str) -> datetime:
 
 
 _KST = timezone(timedelta(hours=9))
+
+
+# KB-5 장소 설명(0.8.0) — `EVAL_COMPOSE_KB5=코퍼스.jsonl.gz,…` 를 주면 운영과 같은 조회(`fetch_place_knowledge` — 상황 질의에
+# 가장 맞는 조각 + 같은 출처 도입부 첫 문장, 300자)로 구성 후보에 붙인다. 벡터는 로컬 서빙 임베딩(`TRIPPILOT_EMBEDDING_BASE_URL`,
+# 보통 http://localhost:8100)으로 그 후보의 조각만 즉석 색인한다. 안 주면 빈 설명 — 0.7.0 렌더와 바이트 동일.
+_KB5 = [Path(x) for x in os.environ.get("EVAL_COMPOSE_KB5", "").split(",") if x]
+_KB5_TRIGGER = {"weather": "WEATHER"}  # 그 밖의 사유는 다시 짜기에서 MANUAL 트리거로 온다
+
+
+_KB5_CACHE = Path(os.environ["EVAL_COMPOSE_KB5_CACHE"]) if os.environ.get("EVAL_COMPOSE_KB5_CACHE") else None
+
+
+def _kb5_docs(shortlist, sc: dict) -> dict:
+    """`EVAL_COMPOSE_KB5_CACHE=파일` 이면 상황별 결과를 적어 두고 다시 쓴다 — CPU 임베딩이라 두 판본을 같은 시각에 돌리려면
+    조회를 먼저 끝내 둬야 한다."""
+    if not _KB5:
+        return {}
+    cache = json.loads(_KB5_CACHE.read_text(encoding="utf-8")) if _KB5_CACHE and _KB5_CACHE.exists() else {}
+    if sc["name"] in cache:
+        return cache[sc["name"]]
+    import gzip
+
+    from trippilot.agents.adapters.memory_vector_store import InMemoryVectorStore
+    from trippilot.agents.planb.kb_retrieval import index_documents
+    from trippilot.agents.planb.place_knowledge import fetch_place_knowledge
+    from trippilot.llm_gateway.adapters.http_embedding_assembly import http_embedding
+    from trippilot.poi_curation.adapters.backend_poi_db import UrllibJsonClient
+    from trippilot.poi_curation.chunking import chunk_corpus
+
+    refs = {p.source_ref for p in shortlist.pois if p.source_ref}
+    rows = [row for path in _KB5 for row in map(json.loads, gzip.open(path, "rt", encoding="utf-8"))
+            if row.get("poi_ref") in refs]
+    embedding = http_embedding(SystemExit, lambda t: UrllibJsonClient(timeout_sec=t), timeout_sec=60.0)
+    store = InMemoryVectorStore()
+    docs = chunk_corpus(rows)
+    if docs:
+        index_documents(docs, embedding, store)
+    reason = (sc.get("reasons") or ("none",))[0]
+    said = f" {sc['free_text'][:100]}" if sc.get("free_text") else ""
+    query = f"{_KB5_TRIGGER.get(reason, 'MANUAL')} {rag._REASON_KO.get(reason, reason)} 상황{said}"
+    knowledge, _ = fetch_place_knowledge(shortlist.pois, query, embedding, store)
+    if _KB5_CACHE:
+        _KB5_CACHE.write_text(json.dumps({**cache, sc["name"]: dict(knowledge)}, ensure_ascii=False), encoding="utf-8")
+    return dict(knowledge)
 
 
 def _compose_case(sc: dict, jeju: list):
@@ -808,6 +873,7 @@ def _compose_case(sc: dict, jeju: list):
                                             free_text=bool(sc.get("free_text"))),
         distance_km={p.poi_id: min(haversine_km(o, p.coord) for o in (_JEJU, *origins)) for p in shortlist.pois},
         hours={p.poi_id: composition.hours_label(p, weekday) or "" for p in shortlist.pois},
+        place_knowledge=_kb5_docs(shortlist, sc),
     )
     ctx = dict(remaining={s for s in slots if status(s) == "남은 일정"}, limit=inp.max_visits,
                far_coord=index[PoiId(sc["far"])].coord if sc.get("far") else None,
@@ -845,6 +911,7 @@ def run_composition(prompts: Path, repeat: int) -> None:
         k, n = per.get(r["name"], (0, 0))
         per[r["name"]] = (k + r["ok"], n + 1)
     print(json.dumps(dict(prompts=str(prompts), model=COMPOSE_MODEL, n=len(rows),
+                          kb5_docs={sc["name"]: len(inp.place_knowledge) for sc, _, inp, _ in built},
                           gate_pass=round(sum(1 for r in rows if r["n"]) / len(rows), 4),
                           quality=round(sum(r["ok"] for r in rows) / len(rows), 4),
                           over_limit=sum(1 for r in rows if r["n"] > r["limit"]),

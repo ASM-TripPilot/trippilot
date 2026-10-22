@@ -156,3 +156,32 @@ def test_vectors_are_written_as_a_small_header_and_a_separate_binary_body(tmp_pa
     old.write_bytes(gzip.compress(json.dumps({**head, "f16": None, "f16_b64": base64.b64encode(
         struct.pack("<2e", 0.5, -0.25)).decode()}).encode()))
     assert c.load_chunk_vectors(old).vector(docs[0].doc_id) == (0.5, -0.25)
+
+
+def test_large_vector_bodies_are_split_into_shards_under_the_file_limit(tmp_path, monkeypatch) -> None:
+    """관광공사 개요 전량(약 5만 조각)이면 fp16 본체가 100MB 안팎 — GitHub 파일 한도(100MB, LFS 없음)에 닿는다.
+    본체를 조각 수로 나눠 쓰고, 다시 쓸 때 줄어든 몫의 옛 파일은 지운다(이미지에 낡은 파일이 구워지지 않게)."""
+    import gzip
+    import json
+
+    monkeypatch.setattr(c, "F16_SHARD_CHUNKS", 2)
+    docs = [c.chunk_document({"doc_id": f"wiki:{i}", "poi_ref": str(i),
+                              "sections": [{"heading": "개요", "text": _S}]})[0] for i in range(5)]
+    vecs = [(i / 8, -i / 8) for i in range(5)]
+    p = tmp_path / "x.vectors.json.gz"
+    c.dump_chunk_vectors(p, docs, "m", vecs)
+    head = json.loads(gzip.decompress(p.read_bytes()))
+    assert head["f16"] == ["x.vectors.f16.0.gz", "x.vectors.f16.1.gz", "x.vectors.f16.2.gz"]
+    v = c.load_chunk_vectors(p)
+    assert [v.vector(d.doc_id) for d in docs] == vecs
+    c.dump_chunk_vectors(p, docs[:1], "m", vecs[:1])  # 한 몫이면 종전 이름 하나 — 위키 파일은 그대로다
+    assert json.loads(gzip.decompress(p.read_bytes()))["f16"] == "x.vectors.f16.gz"
+    assert sorted(f.name for f in tmp_path.iterdir()) == ["x.vectors.f16.gz", "x.vectors.json.gz"]
+
+
+def test_empty_vectors_still_round_trip(tmp_path) -> None:
+    """빈 코퍼스도 머리·본체를 쓰고 0건으로 읽힌다 — 나눠 쓰기 간격이 0 이 되어 죽던 회귀(리뷰 2026-10-22)."""
+    p = tmp_path / "x.vectors.json.gz"
+    c.dump_chunk_vectors(p, [], "m", [])
+    assert len(c.load_chunk_vectors(p)) == 0
+

@@ -183,12 +183,12 @@ def test_2차_해가_1차에_놓인_곳을_잃으면_1차를_낸다() -> None:
 
 # 0.5.0 판 `template` 의 sha256 — 0.6.0 템플릿에서 `$repair` 를 지운 글이 이것과 같아야 한다(2026-10-19 고정).
 # git 에서 읽으면 CI(얕은 체크아웃)·머지 뒤(develop 이 0.6.0)에 늘 건너뛴다(리뷰 10-19).
-# 0.7.0(후보 번호화, 2026-10-21) 렌더 — 1차는 `$repair` 만 빈다. 0.5.0 은 6615c838…
-_TEMPLATE_0_7_0_SHA256 = "c148f03bbaf7c0286003c0ce5e34111d3d858df96f4fc120d2bc060c36fb65af"
+# 0.8.0(후보 줄 끝 장소 설명, 2026-10-21) 렌더 — 1차는 `$repair` 만 빈다. 0.7.0 은 c148f03b…, 0.5.0 은 6615c838…
+_TEMPLATE_0_8_0_SHA256 = "f7768f64696ada1bb420dd6a190216dbe64997af53e4967d76c2b6fff0d8e352"
 
 
-def test_수리할_것이_없으면_1차_프롬프트는_0_7_0_과_같다(monkeypatch) -> None:
-    """`$repair` 는 1차에서 빈 문자열이다 — 템플릿의 나머지가 0.7.0 과 바이트까지 같고, 워커가 실제로 빈 값을 준다."""
+def test_수리할_것이_없으면_1차_프롬프트는_0_8_0_과_같다(monkeypatch) -> None:
+    """`$repair` 는 1차에서 빈 문자열이다 — 템플릿의 나머지가 0.8.0 과 바이트까지 같고, 워커가 실제로 빈 값을 준다."""
     import hashlib
     import pathlib
 
@@ -198,7 +198,7 @@ def test_수리할_것이_없으면_1차_프롬프트는_0_7_0_과_같다(monkey
 
     root = pathlib.Path(__file__).resolve().parents[3]
     template = yaml.safe_load((root / "prompts" / "replan_composition.yaml").read_text(encoding="utf-8"))["template"]
-    assert hashlib.sha256(template.replace("$repair", "").encode()).hexdigest() == _TEMPLATE_0_7_0_SHA256
+    assert hashlib.sha256(template.replace("$repair", "").encode()).hexdigest() == _TEMPLATE_0_8_0_SHA256
     seen: list[dict[str, str]] = []
     real = worker.build_compose_vars
     monkeypatch.setattr(worker, "build_compose_vars", lambda pool, inp: seen.append(real(pool, inp)) or seen[-1])

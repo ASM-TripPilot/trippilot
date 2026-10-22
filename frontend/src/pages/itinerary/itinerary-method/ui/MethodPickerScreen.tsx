@@ -40,7 +40,6 @@ interface MethodCardProps {
   testID: string;
   icon: ReactNode;
   iconBg: string;
-  highlighted?: boolean;
   disabled?: boolean;
   title: string;
   description: string;
@@ -51,7 +50,6 @@ function MethodCard({
   testID,
   icon,
   iconBg,
-  highlighted = false,
   disabled = false,
   title,
   description,
@@ -65,9 +63,10 @@ function MethodCard({
       disabled={disabled}
       onPress={onPress}
       style={cardShadow}
-      className={`w-full flex-row items-center gap-[14px] rounded-card bg-canvas px-lg py-[18px] ${
-        highlighted ? 'border-[1.5px] border-primary' : 'border border-hairline'
-      } ${disabled ? 'opacity-40' : ''}`}
+      // 세 카드는 같은 모양이다 — 하나만 강조하면 이미 고른 것처럼 보인다(TRIP-1568).
+      className={`w-full flex-row items-center gap-[14px] rounded-card border border-hairline bg-canvas px-lg py-[18px] ${
+        disabled ? 'opacity-40' : ''
+      }`}
     >
       <View
         className={`h-12 w-12 items-center justify-center rounded-pill ${iconBg}`}
@@ -202,8 +201,7 @@ export function MethodPickerScreen({
           <MethodCard
             testID="itinerary-method-copick"
             icon={<CoPickGlyph />}
-            iconBg="bg-primary-pale"
-            highlighted
+            iconBg="bg-surface-strong"
             title="AI와 같이 짜기"
             description="AI 추천 위에서 골라가며 완성"
             onPress={onPressCoPick}

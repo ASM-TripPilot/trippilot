@@ -1,7 +1,6 @@
 package com.trippilot.planbdetection.application
 
 import com.trippilot.itinerarygeneration.api.DayCheck
-import com.trippilot.itinerarygeneration.api.HoursVerdict
 import com.trippilot.itinerarygeneration.api.ItineraryDayCheckFacade
 import com.trippilot.placedata.api.PoiLifeStatus
 import com.trippilot.placedata.api.PoiStatusFacade
@@ -22,7 +21,7 @@ import java.util.UUID
  * 재료는 둘이다: 하루 점검(C8 — AI 하루 검증의 영업시간 판정)과 장소 상태(C7 — 폐업). 판정은 [ClosureRules] 한 곳이고,
  * 여기는 재료를 모으고 실패를 감지 계약으로 옮긴다(설계서 §4.3 실패·모름 표):
  * - 하루 점검 null(비소유·일정 없음·그 날 없음) → 모름
- * - AI 보류·모드가 http 아님 → 영업시간은 모름(하루 점검이 UNKNOWN 으로 준다), 폐업 판정은 그대로.
+ * - AI 보류·모드가 http 아님·AI 가 그 장소를 판정하지 못했다고 답함 → 영업시간은 모름(하루 점검이 UNKNOWN 으로 준다), 폐업 판정은 그대로.
  *   보류가 한 회차에서 연속 3번이면 그 회차의 남은 여행은 AI 를 부르지 않는다([HoursCircuit])
  * - 상태 조회 예외 → 폐업 발견 0 · 확인 비움(영업시간 발견은 그대로)
  * - 아무것도 알아내지 못했으면 모름 — 빈 확인으로 내면 감시 상태가 '확인됨'이 된다(RES-SA-01)
@@ -80,6 +79,8 @@ class PlaceDetector(
                     dataSource = f.dataSource,
                 )
             },
+            // 하나라도 모르면 그 날은 '확인'을 남기지 않는다 — 발견·해제는 그대로(G-SA-21)
+            partial = verdict.unknown,
         )
     }
 
@@ -128,7 +129,7 @@ class PlaceDetector(
                         HOURS_CIRCUIT_LIMIT, round,
                     )
                 }
-                day.slots.any { it.hours != HoursVerdict.UNKNOWN } -> withheld = 0 // AI 가 답했다
+                day.answered -> withheld = 0 // AI 가 답했다 — 그 날 장소를 하나도 판정하지 못했다고 답했어도
             }
         }
     }

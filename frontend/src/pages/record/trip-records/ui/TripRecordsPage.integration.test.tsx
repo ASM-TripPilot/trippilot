@@ -3,7 +3,7 @@
  */
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { Linking } from 'react-native';
+import { FlatList, Linking } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
@@ -25,10 +25,14 @@ import {
 } from '@/shared/location';
 import { encodePolyline } from '@/shared/location/automation/polyline';
 import type { VisitPhoto } from '@/shared/api/index.schemas';
-import { getGetTripsTripIdVisitsVisitCheckIdPhotosQueryKey } from '@/shared/api/index.hooks';
+import {
+  getGetTripsTripIdSummaryQueryKey,
+  getGetTripsTripIdVisitsVisitCheckIdPhotosQueryKey,
+} from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
+import * as probe from '@/test-support/fabAnchorProbe';
 import { flushNotifications } from '@/test-support/flushNotifications';
 import { createGate } from '@/test-support/mswHookHarness';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
@@ -39,6 +43,7 @@ import {
   daySlot,
   daySlotAt,
   recordsHandler,
+  summaryHandler,
   tripItinerary,
   tripRecord,
 } from '@/test-support/tripRecordsFixtures';
@@ -169,7 +174,8 @@ beforeAll(() => {
   });
 });
 beforeEach(() => {
-  server.use(recordsHandler());
+  // TRIP-1557 — 하단 바 요약 칸이 summary 를 조회한다: 기본은 여행 중(ready:false). 안 걸면 마운트하는 모든 묶음이 unhandled 로 죽는다.
+  server.use(recordsHandler(), summaryHandler());
 });
 afterEach(() => {
   resetPressGuard();
@@ -432,7 +438,7 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
    *                  않았으면** 체크 핀(`done`), 아니면 번호 핀(`upcoming`). 즉석 방문은 핀이 없다. 같은 장소의
    *                  즉석 방문이 계획 핀을 체크하지 않는다(poiId 가 아니라 slotKey). 핀 전부 맞추기·지도 잠금.
    *  - MS7 (AC-2)   셸 일차 칩을 누르면 그날 기록을 조회하고 카드·핀이 그날 것으로 바뀐다.
-   *  - MS8 (AC-3)   ‹(`sheet-daychip-back`)는 뒤로 갈 곳이 있을 때만 back 한다.
+   *  - MS8 (AC-3 · TRIP-1557) 하단 바 뒤로(`record-trip-bottom-bar-back`)는 뒤로 갈 곳이 있을 때만 back 한다(좌상단 ‹ 는 없다).
    *
    * ★핀은 `toEqual` 정확 일치 — `kind` 가 붙으면 지도가 기록 마커족(사진·점선)으로 그려 Figma 체크/번호 핀이
    *   아니게 된다. `objectContaining` 이면 그 회귀가 통과한다.
@@ -732,6 +738,142 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
     });
   });
 
+  // TRIP-1558 — 카드·계획 행 번호 = 그날 계획 슬롯 위치+1(= 지도 핀 번호). 즉석 방문은 번호가 없다. 핀을 누르면 그 번호의 항목(카드 먼저,
+  // 없으면 계획 행)으로 스크롤 요청이 간다 — 항목 index 는 목록 data 위치(카드들 뒤에 계획 행들)라 number-1 과 다를 수 있다.
+  describe('🔴 TRIP-1558 · 계획 번호 조인과 핀 탭', () => {
+    const orderOf = (id: string) =>
+      screen.getByTestId(`record-trip-visit-plan-order-${id}`);
+
+    it('PJ1 계획 방문 카드와 계획 행에 슬롯 위치+1 번호가 붙고, 즉석 방문 카드엔 번호가 없다', async () => {
+      render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
+
+      await screen.findByTestId('record-trip-visit-card-v-sp');
+      expect(orderOf('v1')).toHaveTextContent('1');
+      expect(orderOf('v2')).toHaveTextContent('2');
+      expect(
+        screen.queryByTestId('record-trip-visit-plan-order-v-sp')
+      ).toBeNull();
+      expect(
+        screen.getByTestId(`record-trip-plan-order-${DAY1}#p3`)
+      ).toHaveTextContent('3');
+    });
+
+    // 5-b 보강(경고-2) — 조인 키는 slotKey 다. 같은 poiId(p3)의 즉석 방문(slotKey 없음)이 계획 ③ 번호를 달면 핀↔카드 대응이 거짓이 된다.
+    it('PJ3 계획에 있는 장소(p3)를 즉석으로 방문한 카드엔 번호가 없고, 번호는 계획 행 쪽에만 남는다', async () => {
+      visitsByDay[DAY1] = [
+        visit({
+          id: 'v1',
+          day: DAY1,
+          poiId: 'p1',
+          planned: true,
+          arrived: true,
+        }),
+        visit({
+          id: 'v-sp3',
+          day: DAY1,
+          poiId: 'p3',
+          planned: false,
+          arrived: true,
+        }),
+      ];
+
+      render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
+
+      await screen.findByTestId('record-trip-visit-card-v-sp3');
+      expect(orderOf('v1')).toHaveTextContent('1'); // 앵커 — 계획 방문은 번호가 있다
+      expect(
+        screen.queryByTestId('record-trip-visit-plan-order-v-sp3')
+      ).toBeNull();
+      expect(
+        screen.getByTestId(`record-trip-plan-order-${DAY1}#p3`)
+      ).toHaveTextContent('3');
+    });
+
+    it('PJ2 좌표 없는 슬롯이 끼면 핀은 ①③ 으로 뛰고 카드 번호도 같다 — 핀 탭은 index 가 아니라 number 로 그 항목에, 시트가 최상단에 도착한 뒤 간다', async () => {
+      const toIndex = jest
+        .spyOn(FlatList.prototype, 'scrollToIndex')
+        .mockImplementation(() => {});
+      const snapToIndex = (globalThis as Record<string, unknown>)
+        .__bottomSheetSnapToIndexSpy as jest.Mock;
+      snapToIndex.mockClear();
+      // 서버가 도착 순으로 [p3, p1] 을 준다 — 카드 번호가 3·1 로 뒤섞여 온다. p2 는 좌표가 없고 기록도 없어 계획 행이다.
+      server.use(
+        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+          HttpResponse.json(
+            tripItinerary(
+              [
+                {
+                  date: DAY1,
+                  slots: [
+                    slot('p1', '광안리 해변', P1.lat, P1.lng),
+                    daySlot('p2', '부산시립미술관'),
+                    slot('p3', '○○ 카페', P3.lat, P3.lng),
+                  ],
+                },
+              ],
+              TRIP_ID
+            )
+          )
+        )
+      );
+      visitsByDay[DAY1] = [
+        visit({
+          id: 'v3',
+          day: DAY1,
+          poiId: 'p3',
+          planned: true,
+          arrived: true,
+        }),
+        visit({
+          id: 'v1',
+          day: DAY1,
+          poiId: 'p1',
+          planned: true,
+          arrived: true,
+        }),
+      ];
+
+      try {
+        render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
+
+        await screen.findByTestId('record-trip-visit-card-v1');
+        await waitFor(() =>
+          expect(
+            pinsOnMap().map((pin: { number: number }) => pin.number)
+          ).toEqual([1, 3])
+        );
+        expect(orderOf('v3')).toHaveTextContent('3');
+        expect(orderOf('v1')).toHaveTextContent('1');
+        expect(
+          screen.getByTestId(`record-trip-plan-order-${DAY1}#p2`)
+        ).toHaveTextContent('2');
+
+        // 목록 data = [v3, v1, 행 p2] → 핀 number 3 → 0, number 1 → 1.
+        // 시트는 peek(1) — 최상단(2)으로 올리라고 요청하고, 도착(onChange 2) 전엔 스크롤이 없다. 도착 뒤엔 올림 없이 즉시 스크롤.
+        act(() => screen.getByTestId('map-root').props.onPinTap(1));
+        expect(snapToIndex.mock.calls.map(([index]) => index)).toEqual([2]);
+        expect(toIndex).not.toHaveBeenCalled();
+
+        act(() => {
+          (
+            probe.sheetHost().props.onChange as (
+              index: number,
+              position: number,
+              type: number
+            ) => void
+          )(2, 0, 0);
+        });
+        expect(toIndex.mock.calls.map(([arg]) => arg.index)).toEqual([0]);
+
+        act(() => screen.getByTestId('map-root').props.onPinTap(0));
+        expect(toIndex.mock.calls.map(([arg]) => arg.index)).toEqual([0, 1]);
+        expect(snapToIndex).toHaveBeenCalledTimes(1);
+      } finally {
+        toIndex.mockRestore();
+      }
+    });
+  });
+
   describe('🔴 TRIP-1085 AC-2 · 셸 일차 칩으로 날을 바꾼다', () => {
     it('MS7 2일차 칩을 누르면 그날 기록을 조회하고 카드·핀이 2일차 것으로 바뀐다', async () => {
       render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
@@ -754,13 +896,15 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
     });
   });
 
-  describe('🔴 TRIP-1085 AC-3 · ‹ 는 뒤로 갈 곳이 있을 때만 back', () => {
-    it('MS8a canGoBack 이 true 면 sheet-daychip-back 을 누를 때 back 이 1회 불린다', async () => {
+  // TRIP-1557 — 뒤로는 좌상단 ‹(`sheet-daychip-back`)에서 하단 바(`record-trip-bottom-bar-back`)로 옮겼다. 목적지 계산은 그대로다.
+  describe('🔴 TRIP-1085 AC-3 · TRIP-1557 AC-7·AC-8 · 하단 바 뒤로는 갈 곳이 있을 때만 back', () => {
+    it('MS8a canGoBack 이 true 면 하단 바 뒤로를 누를 때 back 이 1회 불리고, 좌상단 ‹ 는 없다', async () => {
       jest.mocked(router.canGoBack).mockReturnValue(true);
       render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
       await screen.findByTestId('record-trip-visit-card-v1');
 
-      fireEvent.press(screen.getByTestId('sheet-daychip-back'));
+      expect(screen.queryByTestId('sheet-daychip-back')).toBeNull();
+      fireEvent.press(screen.getByTestId('record-trip-bottom-bar-back'));
 
       expect(router.back).toHaveBeenCalledTimes(1);
     });
@@ -769,7 +913,7 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
       render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
       await screen.findByTestId('record-trip-visit-card-v1');
 
-      fireEvent.press(screen.getByTestId('sheet-daychip-back'));
+      fireEvent.press(screen.getByTestId('record-trip-bottom-bar-back'));
 
       expect(router.canGoBack).toHaveBeenCalled();
       expect(router.back).not.toHaveBeenCalled();
@@ -3352,22 +3496,30 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
   });
 });
 
-describe('「오늘의 회고」 FAB 배선', () => {
-  // TRIP-1088 (옛 TripRecordsPage.reflectionFab.integration.test.tsx)
+describe('하단 바 배선 — 회고 칸(j03)·요약 칸(j04)', () => {
+  // TRIP-1557 (옛 TRIP-1088 「오늘의 회고」 FAB 배선 — FAB 는 사라지고 같은 가드가 바의 회고 칸으로 옮겨 갔다)
   /**
-   * 🔴 TRIP-1088 · P1~P7 — j01 「오늘의 회고」 FAB 페이지 배선(US-REC-06 · 지라 결정 2·3).
+   * 🔴 TRIP-1557 · j01 하단 바 페이지 배선(US-REC-06·08 · BR-U5-48 · INV-4).
    *
    * 무엇을 보장하나:
-   *  - 누르면 **지금 선택된 일차**의 j03(`/trips/{tripId}/records/reflection/{YYYY-MM-DD}`)으로 1회 간다(P1·P2·P4).
-   *  - 미래 일차엔 없고 오늘·지난 일차엔 있다(P3·P4). 끝난 여행도 모든 일차에 있다(P5 — 여행 상태로 안 가른다).
-   *  - 일정이 오기 전(활성 일자 '')엔 없다 — `'' <= today` 가 참이라 가드가 없으면 날짜 없는 경로로 간다(P6).
-   *  - 연타해도 이동은 1회(P7, guardPress).
+   *  - 회고 칸(P1~P7): 누르면 **지금 선택된 일차**의 j03(`/trips/{tripId}/records/reflection/{YYYY-MM-DD}`)으로 1회 간다.
+   *    미래 일차엔 **비활성**(눌러도 push 0), 오늘·지난 일차·끝난 여행엔 활성. 일정이 오기 전(활성 일자 '')엔 비활성 —
+   *    `'' <= today` 가 참이라 가드가 없으면 날짜 없는 경로로 간다. 연타해도 1회(guardPress).
+   *  - 요약 칸(S1~S5): `GET /trips/{tripId}/summary` 가 `ready:true` 일 때만 활성이고 누르면 `/trips/{tripId}/records/summary` 로 push.
+   *    `ready:false`·응답 전·조회 실패는 전부 **비활성 + 이동 0**이다 — 실패를 준비됨으로 접으면 BR-U5-48·INV-4 위반.
+   *  - 뒤로(MS8)는 위 「셸 조립」 묶음.
    *
    * 방문은 전부 0건 — 그날 계획 행 이름이 "그날 로드 완료" 앵커다(부재 단언이 로딩 중에 공짜로 통과하지 않게).
-   * (개념) `findByTestId` = 나타날 때까지 기다렸다 찾는다 · `queryByTestId` = 없으면 null(부재 단언용).
+   * 비활성은 상태(`toBeDisabled`)만이 아니라 효과(눌러도 push 0)까지 본다 — RNTL 은 `Pressable disabled` 의 press 를 막으므로(실측,
+   * 02a 근거) 효과 0 이 "disabled prop 이 실제로 걸렸다"의 증거다.
+   * (개념) `findByTestId` = 나타날 때까지 기다렸다 찾는다 · `getQueryState(key).status` = react-query 캐시의 조회 결과('pending'|'success'|'error').
    */
 
   const FAB = 'record-trip-reflection-fab';
+  const TAB_REFLECTION = 'record-trip-bottom-bar-tab-reflection';
+  const TAB_SUMMARY = 'record-trip-bottom-bar-tab-summary';
+  const SUMMARY_PATH = `/trips/${TRIP_ID}/records/summary`;
+  const SUMMARY_HIT = 'GET /api/v1/trips/t1/summary';
 
   function itinerary() {
     return tripItinerary(
@@ -3393,8 +3545,27 @@ describe('「오늘의 회고」 FAB 배선', () => {
     await screen.findByText(DAY_ANCHOR[index] ?? '');
   }
 
+  /** 요약 조회 결과를 캐시에서 읽으려고 클라이언트를 직접 쥔다(요약 칸은 비활성 ↔ 활성만 보여, 실패가 가라앉았는지 화면으론 못 가린다). */
+  function renderWithClient(today: string) {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    }
+    render(<TripRecordsPage tripId={TRIP_ID} today={today} />, {
+      wrapper: Wrapper,
+    });
+    const summaryStatus = () =>
+      client.getQueryState(getGetTripsTripIdSummaryQueryKey(TRIP_ID))?.status;
+    return { summaryStatus };
+  }
+
   beforeEach(() => {
     setAccessToken('a');
+    observedHits = [];
     server.use(
       http.get(`${BASE}/trips/:tripId`, () =>
         HttpResponse.json(tripRecordsTrip())
@@ -3418,7 +3589,7 @@ describe('「오늘의 회고」 FAB 배선', () => {
     jest.mocked(router.push).mockClear();
   });
 
-  describe('🔴 TRIP-1088 P1·P2 · 누르면 선택된 일차의 j03 으로 간다', () => {
+  describe('🔴 TRIP-1557 P1·P2 · 회고 칸을 누르면 선택된 일차의 j03 으로 간다', () => {
     it('P1·P2 오늘(2일차)에서 누르면 2일차 경로, 1일차로 옮겨 누르면 1일차 경로로 간다 — 오늘로 고정하지 않는다', async () => {
       render(<TripRecordsPage tripId={TRIP_ID} today="2026-08-21" />, {
         wrapper,
@@ -3428,12 +3599,13 @@ describe('「오늘의 회고」 FAB 배선', () => {
 
       // 실행 ① — 오늘 탭(2일차)에서 누른다.
       await selectDay(1);
-      fireEvent.press(screen.getByTestId(FAB));
+      expect(screen.getByTestId(TAB_REFLECTION)).toBeEnabled();
+      fireEvent.press(screen.getByTestId(TAB_REFLECTION));
 
       // 실행 ② — 400ms 가 흐른 것으로 치고(guardPress 창 닫기) 1일차로 옮겨 누른다.
       resetPressGuard();
       await selectDay(0);
-      fireEvent.press(screen.getByTestId(FAB));
+      fireEvent.press(screen.getByTestId(TAB_REFLECTION));
 
       expect(jest.mocked(router.push).mock.calls).toEqual([
         [reflectionPath('2026-08-21')],
@@ -3442,36 +3614,41 @@ describe('「오늘의 회고」 FAB 배선', () => {
     });
   });
 
-  describe('🔴 TRIP-1088 P3·P4·P5 · 미래 일차에선 숨고, 오늘·지난 일차·끝난 여행에선 보인다', () => {
-    it('P3 오늘이 1일차면 1일차엔 있고 2일차·3일차(미래)엔 없다', async () => {
+  describe('🔴 TRIP-1557 P3·P4·P5 · 미래 일차에선 비활성, 오늘·지난 일차·끝난 여행에선 활성', () => {
+    it('P3 오늘이 1일차면 1일차엔 활성이고 2일차·3일차(미래)엔 비활성 — 눌러도 이동 0회', async () => {
       render(<TripRecordsPage tripId={TRIP_ID} today="2026-08-20" />, {
         wrapper,
       });
       await screen.findByText(DAY_ANCHOR[0] ?? '');
-      expect(screen.getByTestId(FAB)).toBeOnTheScreen();
+      expect(screen.getByTestId(TAB_REFLECTION)).toBeEnabled();
 
       await selectDay(1);
-      expect(screen.queryByTestId(FAB)).toBeNull();
+      expect(screen.getByTestId(TAB_REFLECTION)).toBeDisabled();
+      fireEvent.press(screen.getByTestId(TAB_REFLECTION));
 
       await selectDay(2);
-      expect(screen.queryByTestId(FAB)).toBeNull();
+      expect(screen.getByTestId(TAB_REFLECTION)).toBeDisabled();
+      fireEvent.press(screen.getByTestId(TAB_REFLECTION));
+
+      expect(jest.mocked(router.push).mock.calls).toEqual([]);
     });
 
-    it('P4 오늘이 3일차면 지난 1일차에도 있고, 누르면 1일차 경로로 간다', async () => {
+    it('P4 오늘이 3일차면 지난 1일차에도 활성이고, 누르면 1일차 경로로 간다', async () => {
       render(<TripRecordsPage tripId={TRIP_ID} today="2026-08-22" />, {
         wrapper,
       });
       await screen.findByText(DAY_ANCHOR[0] ?? '');
 
-      fireEvent.press(screen.getByTestId(FAB));
+      expect(screen.getByTestId(TAB_REFLECTION)).toBeEnabled();
+      fireEvent.press(screen.getByTestId(TAB_REFLECTION));
 
       expect(jest.mocked(router.push).mock.calls).toEqual([
         [reflectionPath('2026-08-20')],
       ]);
     });
 
-    it('P5 여행이 끝난 뒤(오늘 08-30, 여행 상태 ENDED)엔 모든 일차에 있다', async () => {
-      // 준비 — 여행 응답을 끝난 여행(ENDED)으로 덮는다. 상태로 FAB 를 가르는 퇴행을 잡으려면 픽스처가
+    it('P5 여행이 끝난 뒤(오늘 08-30, 여행 상태 ENDED)엔 모든 일차에서 활성이다', async () => {
+      // 준비 — 여행 응답을 끝난 여행(ENDED)으로 덮는다. 상태로 칸을 가르는 퇴행을 잡으려면 픽스처가
       // 실제로 ENDED 여야 한다(ACTIVE 그대로면 그 퇴행이 green 으로 통과 — 03b 경고-1).
       server.use(
         http.get(`${BASE}/trips/:tripId`, () =>
@@ -3482,24 +3659,24 @@ describe('「오늘의 회고」 FAB 배선', () => {
         wrapper,
       });
       await screen.findByText(DAY_ANCHOR[0] ?? '');
-      // 여행 응답이 도착했는지(헤더에 여행명) 먼저 확인 — 로딩 중이라 FAB 가 보이는 경우와 가른다.
+      // 여행 응답이 도착했는지(헤더에 여행명) 먼저 확인 — 로딩 중이라 칸이 켜져 보이는 경우와 가른다.
       await waitFor(() =>
         expect(
           screen.getByTestId('record-trip-sheet-header')
         ).toHaveTextContent(/^부산 여행 · /)
       );
-      expect(screen.getByTestId(FAB)).toBeOnTheScreen();
+      expect(screen.getByTestId(TAB_REFLECTION)).toBeEnabled();
 
       await selectDay(1);
-      expect(screen.getByTestId(FAB)).toBeOnTheScreen();
+      expect(screen.getByTestId(TAB_REFLECTION)).toBeEnabled();
 
       await selectDay(2);
-      expect(screen.getByTestId(FAB)).toBeOnTheScreen();
+      expect(screen.getByTestId(TAB_REFLECTION)).toBeEnabled();
     });
   });
 
-  describe('🔴 TRIP-1088 P6 · 일정이 오기 전(활성 일자 없음)엔 없다', () => {
-    it('P6 itinerary 응답을 붙잡은 동안엔 뷰만 있고 FAB 는 없다 — 응답이 오면 선다', async () => {
+  describe('🔴 TRIP-1557 P6 · 일정이 오기 전(활성 일자 없음)엔 비활성이다', () => {
+    it('P6 itinerary 응답을 붙잡은 동안엔 바는 있으나 회고 칸이 비활성(눌러도 이동 0)이고 FAB 는 없다 — 응답이 오면 활성이 된다', async () => {
       // 준비 — itinerary GET 을 게이트로 붙잡는다(바로 주면 로딩 창이 한 번에 지나간다, 02a ★8).
       let release: () => void = () => {};
       const gate = new Promise<void>((resolve) => {
@@ -3516,32 +3693,135 @@ describe('「오늘의 회고」 FAB 배선', () => {
         wrapper,
       });
 
-      // 단언 ① — 화면은 그려졌지만(앵커) 날짜가 없어 FAB 가 없다.
+      // 단언 ① — 화면과 바는 그려졌지만(앵커) 날짜가 없어 회고 칸이 잠겨 있다. 눌러도 날짜 없는 경로로 가지 않는다.
       expect(screen.getByTestId('record-trip-view')).toBeOnTheScreen();
+      expect(screen.getByTestId('record-trip-bottom-bar')).toBeOnTheScreen();
       expect(screen.queryByTestId(FAB)).toBeNull();
+      expect(screen.getByTestId(TAB_REFLECTION)).toBeDisabled();
+      fireEvent.press(screen.getByTestId(TAB_REFLECTION));
+      expect(jest.mocked(router.push).mock.calls).toEqual([]);
 
       // 실행 — 응답을 보낸다.
       release();
 
-      // 단언 ② — 1일차(= 오늘)가 활성이 되면 선다.
-      expect(await screen.findByTestId(FAB)).toBeOnTheScreen();
+      // 단언 ② — 1일차(= 오늘)가 활성이 되면 켜진다.
+      await waitFor(() =>
+        expect(screen.getByTestId(TAB_REFLECTION)).toBeEnabled()
+      );
     });
   });
 
-  describe('🔴 TRIP-1088 P7 · 연타해도 j03 은 한 번만 쌓인다', () => {
+  describe('🔴 TRIP-1557 P7 · 연타해도 j03 은 한 번만 쌓인다', () => {
     it('P7 같은 순간 두 번 눌러도 push 는 1회다', async () => {
       render(<TripRecordsPage tripId={TRIP_ID} today="2026-08-20" />, {
         wrapper,
       });
       await screen.findByText(DAY_ANCHOR[0] ?? '');
 
-      const fab = screen.getByTestId(FAB);
-      fireEvent.press(fab);
-      fireEvent.press(fab);
+      const tab = screen.getByTestId(TAB_REFLECTION);
+      fireEvent.press(tab);
+      fireEvent.press(tab);
 
       expect(jest.mocked(router.push).mock.calls).toEqual([
         [reflectionPath('2026-08-20')],
       ]);
+    });
+  });
+
+  describe('🔴 TRIP-1557 S1~S5 · 요약 칸은 요약이 준비됐을 때만 j04 로 간다 (BR-U5-48 · INV-4)', () => {
+    it('S1 ready:true 면 요약 칸이 켜지고, 누르면 /records/summary 로 1회 push 한다 (연타해도 1회)', async () => {
+      server.use(summaryHandler(() => HttpResponse.json({ ready: true })));
+      render(<TripRecordsPage tripId={TRIP_ID} today="2026-08-20" />, {
+        wrapper,
+      });
+      await screen.findByText(DAY_ANCHOR[0] ?? '');
+
+      await waitFor(() =>
+        expect(screen.getByTestId(TAB_SUMMARY)).toBeEnabled()
+      );
+      expect(hitCount(SUMMARY_HIT)).toBe(1);
+      fireEvent.press(screen.getByTestId(TAB_SUMMARY));
+      fireEvent.press(screen.getByTestId(TAB_SUMMARY));
+
+      expect(jest.mocked(router.push).mock.calls).toEqual([[SUMMARY_PATH]]);
+    });
+
+    it('S2 ready:false(여행 중 — 서버는 404 가 아니라 200 으로 준다)면 응답이 온 뒤에도 비활성이고 「요약 준비 중」으로 읽히며 눌러도 이동 0회다', async () => {
+      server.use(summaryHandler(() => HttpResponse.json({ ready: false })));
+      const { summaryStatus } = renderWithClient('2026-08-20');
+      await screen.findByText(DAY_ANCHOR[0] ?? '');
+
+      await waitFor(() => expect(summaryStatus()).toBe('success'));
+      const tab = screen.getByTestId(TAB_SUMMARY);
+      expect(tab).toBeDisabled();
+      expect(tab).toHaveAccessibilityValue({ text: '요약 준비 중' });
+      fireEvent.press(tab);
+
+      expect(jest.mocked(router.push).mock.calls).toEqual([]);
+    });
+
+    it('S3 응답을 붙잡은 동안(조회 중)엔 비활성이고 눌러도 이동 0회 — 응답이 ready:true 로 오면 켜진다', async () => {
+      const gate = createGate();
+      server.use(
+        summaryHandler(async () => {
+          await gate.opened;
+          return HttpResponse.json({ ready: true });
+        })
+      );
+      const { summaryStatus } = renderWithClient('2026-08-20');
+      await screen.findByText(DAY_ANCHOR[0] ?? '');
+
+      // 요청은 나갔고 응답은 아직 — 조회 중이다.
+      await waitFor(() => expect(hitCount(SUMMARY_HIT)).toBe(1));
+      expect(summaryStatus()).toBe('pending');
+      expect(screen.getByTestId(TAB_SUMMARY)).toBeDisabled();
+      fireEvent.press(screen.getByTestId(TAB_SUMMARY));
+      expect(jest.mocked(router.push).mock.calls).toEqual([]);
+
+      gate.release();
+
+      await waitFor(() =>
+        expect(screen.getByTestId(TAB_SUMMARY)).toBeEnabled()
+      );
+    });
+
+    it.each([
+      [
+        '서버 오류 500',
+        () => HttpResponse.json({ code: 'INTERNAL' }, { status: 500 }),
+      ],
+      ['네트워크 실패', () => HttpResponse.error()],
+    ] as const)(
+      'S4 조회가 %s 로 실패하면 캐시가 error 로 가라앉은 뒤에도 요약 칸은 비활성이고 눌러도 이동 0회다 — 실패를 「준비됨」으로 접지 않는다',
+      async (_name, reply) => {
+        server.use(summaryHandler(reply));
+        const { summaryStatus } = renderWithClient('2026-08-20');
+        await screen.findByText(DAY_ANCHOR[0] ?? '');
+
+        await waitFor(() => expect(summaryStatus()).toBe('error'));
+        await flushNotifications();
+        const tab = screen.getByTestId(TAB_SUMMARY);
+        expect(tab).toBeDisabled();
+        fireEvent.press(tab);
+
+        expect(jest.mocked(router.push).mock.calls).toEqual([]);
+        // 짝 앵커 — 요약만 잠겼다. 회고 칸은 살아 있어 바가 통째로 죽은 렌더가 아니다.
+        expect(screen.getByTestId(TAB_REFLECTION)).toBeEnabled();
+      }
+    );
+
+    it('S5 요약 칸은 날짜와 무관하다 — 미래 일차를 보고 있어도 ready:true 면 켜진다(회고 칸만 잠긴다)', async () => {
+      server.use(summaryHandler(() => HttpResponse.json({ ready: true })));
+      render(<TripRecordsPage tripId={TRIP_ID} today="2026-08-20" />, {
+        wrapper,
+      });
+      await screen.findByText(DAY_ANCHOR[0] ?? '');
+      await selectDay(2);
+
+      await waitFor(() =>
+        expect(screen.getByTestId(TAB_SUMMARY)).toBeEnabled()
+      );
+      expect(screen.getByTestId(TAB_REFLECTION)).toBeDisabled();
     });
   });
 });
