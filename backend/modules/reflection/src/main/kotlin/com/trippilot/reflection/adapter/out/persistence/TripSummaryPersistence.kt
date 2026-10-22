@@ -103,12 +103,16 @@ class TripSummaryRepositoryAdapter(private val jpa: TripSummaryJpaRepository) : 
         ).setParameter("tripId", tripId).setParameter("max", maxAttempts).setParameter("secs", reclaimAfter.seconds.toDouble())
             .resultList.firstOrNull()?.let { (it as Number).toInt() }
 
-    override fun findAiAttempt(tripId: UUID): AiAttempt? =
-        em.createNativeQuery("SELECT source, ai_attempts, ai_attempted_at FROM trip_summary WHERE trip_id = :tripId")
-            .setParameter("tripId", tripId).resultList.firstOrNull()
+    override fun findAiAttempt(tripId: UUID, reclaimAfter: Duration): AiAttempt? =
+        em.createNativeQuery(
+            """
+            SELECT source, ai_attempts, COALESCE(ai_attempted_at >= now() - make_interval(secs => :secs), false)
+              FROM trip_summary WHERE trip_id = :tripId
+            """.trimIndent(),
+        ).setParameter("tripId", tripId).setParameter("secs", reclaimAfter.seconds.toDouble()).resultList.firstOrNull()
             ?.let { row ->
                 val cols = row as Array<*>
-                AiAttempt(cols[0] as String, (cols[1] as Number).toInt(), (cols[2] as? java.sql.Timestamp)?.toInstant() ?: cols[2] as? Instant)
+                AiAttempt(cols[0] as String, (cols[1] as Number).toInt(), cols[2] as Boolean)
             }
 
     override fun retireAiAttempts(tripId: UUID, maxAttempts: Int) {

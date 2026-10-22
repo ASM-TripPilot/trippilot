@@ -179,33 +179,43 @@ class TripSummaryNarrator internal constructor(
                 log.warn("요약 회고 준비가 종료로 끊겼습니다(선점 전) — 시도를 쓰지 않았고 스윕이 다시 맡습니다. tripId={}", tripId, e)
                 return
             }
-            val next = claim.attempt?.let(::afterAttempt) ?: countPreClaim(tripId, e)
-            log.warn("요약 회고 중 실패했습니다({}) — {}. tripId={}", stage, next, tripId, e)
+            val counted = claim.attempt?.let { Counted(afterAttempt(it), null) } ?: countPreClaim(tripId, e)
+            log.warn("요약 회고 중 실패했습니다({}) — {}. tripId={}", stage, counted.next, tripId, e)
+            // 세는 중에 Error 가 났으면 삼키지 않는다 — 원 예외(위 로그에 붙어 있다)는 Exception 이라 여기서 끝나지만 그 Error 는 올린다.
+            (counted.failure as? Error)?.let { throw it }
         } catch (e: Error) {
             // 삼키지 않는다 — 다만 실행기 밖(JVM 기본 처리기 → 표준 오류, tripId 없음)으로 나가기 전에 우리 로그에 남기고, 선점 전이면 시도로 센다.
             // 안 세면 늘 Error 를 내는 여행이 7일 동안 5분마다 다시 집힌다. 세는 일이 실패해도 Error 를 가리지 않는다(붙여서 그대로 올린다).
-            val next = claim.attempt?.let(::afterAttempt) ?: countPreClaim(tripId, e)
-            log.error("요약 회고 중 Error 가 났습니다({}) — {}. tripId={}", if (claim.attempt == null) "선점 전" else "선점 뒤", next, tripId, e)
+            // 세기는 무엇을 던져도 밖으로 새지 않는다(붙여서 돌아온다) — 그래서 세고, 남기고, **원래 Error** 를 올린다.
+            val counted = claim.attempt?.let { Counted(afterAttempt(it), null) } ?: countPreClaim(tripId, e)
+            log.error("요약 회고 중 Error 가 났습니다({}) — {}. tripId={}", if (claim.attempt == null) "선점 전" else "선점 뒤", counted.next, tripId, e)
             throw e
         }
     }
 
+    /** 세기 결과 — 다음 행동 문장과, 세다가 난 것(원 실패에 붙였다). */
+    private class Counted(val next: String, val failure: Throwable?)
+
     /**
-     * 선점 전 실패를 시도 하나로 센다 — 다음 행동을 문장으로 돌려준다. 세는 쓰기·조회가 실패하면 그 예외를 [cause] 에 붙인다(가리지 않는다).
-     * 못 셌으면(선점 조건에 걸렸다) 행을 한 번 읽어 까닭을 가린다 — 그래야 "다시 집히는가"를 맞게 말한다.
+     * 선점 전 실패를 시도 하나로 센다. **무엇을 던져도 밖으로 새지 않는다** — 세는 쓰기·조회가 던지면(Error 포함) 그것을 [cause] 에 붙이고 돌려준다
+     * (원 실패를 가리지 않는다). 못 셌으면(선점 조건에 걸렸다) 행을 한 번 읽어 까닭을 가린다 — 그래야 "다시 집히는가"를 맞게 말한다.
      */
-    private fun countPreClaim(tripId: UUID, cause: Throwable): String = try {
-        writes.execute { summaries.claimAiAttempt(tripId, reclaimAfter(), MAX_ATTEMPTS) }?.let(::afterAttempt) ?: notCounted(summaries.findAiAttempt(tripId))
-    } catch (counting: Exception) {
+    private fun countPreClaim(tripId: UUID, cause: Throwable): Counted = try {
+        val next = writes.execute { summaries.claimAiAttempt(tripId, reclaimAfter(), MAX_ATTEMPTS) }?.let(::afterAttempt)
+            ?: notCounted(summaries.findAiAttempt(tripId, reclaimAfter()))
+        Counted(next, null)
+    } catch (counting: Throwable) {
         cause.addSuppressed(counting)
-        "시도를 기록하지 못했습니다(쓰기·조회 실패 — 함께 붙인 예외) — 시도 수가 그대로라 다음 스윕이 다시 집습니다"
+        Counted("시도를 기록하지 못했습니다(쓰기·조회 실패 — 함께 붙인 예외) — 시도 수가 그대로라 다음 스윕이 다시 집습니다", counting)
     }
 
+    /** 선점과 원자적이지 않은 조회라 단정하지 않는다 — "…로 보입니다". */
     private fun notCounted(row: AiAttempt?): String = when {
-        row == null -> "시도로 세지 않았습니다 — 요약 행이 없습니다(여행이 지워졌을 수 있다). 다시 집히지 않습니다"
-        row.source != ReflectionSource.RULE.name -> "시도로 세지 않았습니다 — 이미 AI 문장이 붙었거나 규칙 요약이 아닙니다. 다시 집히지 않습니다"
-        row.attempts >= MAX_ATTEMPTS -> "시도로 세지 않았습니다 — 시도 상한($MAX_ATTEMPTS)을 이미 다 썼습니다. 다시 집히지 않습니다"
-        else -> "시도로 세지 않았습니다 — 다른 쪽의 최근 시도가 다시 선점 기준(${reclaimAfter().toSeconds()}초) 안에 있습니다. 그 기준이 지나면 스윕이 다시 집습니다"
+        row == null -> "시도로 세지 않았습니다 — 요약 행이 없는 것으로 보입니다(여행이 지워졌을 수 있다). 다시 집히지 않을 것입니다"
+        row.source != ReflectionSource.RULE.name -> "시도로 세지 않았습니다 — 이미 AI 문장이 붙었거나 규칙 요약이 아닌 것으로 보입니다. 다시 집히지 않을 것입니다"
+        row.attempts >= MAX_ATTEMPTS -> "시도로 세지 않았습니다 — 시도 상한($MAX_ATTEMPTS)을 이미 다 쓴 것으로 보입니다. 다시 집히지 않을 것입니다"
+        row.recentAttempt -> "시도로 세지 않았습니다 — 다른 쪽의 최근 시도가 다시 선점 기준(${reclaimAfter().toSeconds()}초) 안에 있는 것으로 보입니다. 그 기준이 지나면 스윕이 다시 집습니다"
+        else -> "시도로 세지 않았습니다 — 그 사이 상태가 바뀌었습니다(다시 읽으니 선점할 수 있는 상태다). 다음 스윕이 다시 판단합니다"
     }
 
     private fun afterAttempt(attempt: Int): String =

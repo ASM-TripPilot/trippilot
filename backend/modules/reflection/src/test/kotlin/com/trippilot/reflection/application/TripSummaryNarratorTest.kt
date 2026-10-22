@@ -83,9 +83,15 @@ class TripSummaryNarratorTest : StringSpec({
         var attempts = 0
         var attemptedAt: Instant? = null
         var claimFails = false
-        override fun findAiAttempt(tripId: UUID) = stored?.let { AiAttempt(it.source.name, attempts, attemptedAt) }
+        var claimThrows: Throwable? = null
+        var claimRefuses = false // 선점은 졌는데 다시 읽으면 선점할 수 있는 상태 — 그 사이 바뀐 것을 흉내 낸다
+        override fun findAiAttempt(tripId: UUID, reclaimAfter: Duration) = stored?.let {
+            AiAttempt(it.source.name, attempts, attemptedAt?.isBefore(clock.instant().minus(reclaimAfter)) == false)
+        }
         override fun claimAiAttempt(tripId: UUID, reclaimAfter: Duration, maxAttempts: Int): Int? {
             if (claimFails) throw IllegalStateException("선점 쓰기가 실패했다")
+            claimThrows?.let { throw it }
+            if (claimRefuses) return null
             val s = stored ?: return null
             val now = clock.instant()
             if (s.source != ReflectionSource.RULE || attempts >= maxAttempts || attemptedAt?.isBefore(now.minus(reclaimAfter)) == false) return null
@@ -489,7 +495,7 @@ class TripSummaryNarratorTest : StringSpec({
         f.summaries.attemptedAt = f.clock.now.minus(Duration.ofMinutes(1)) // 다른 파드가 1분 전에 선점해 아직 기다리는 중
         val message = warns { f.narrator.request(tripId); f.executor.run() }.single()
         f.summaries.attempts shouldBe 1
-        ("최근 시도가 다시 선점 기준(660초) 안에" in message && "그 기준이 지나면 스윕이 다시 집습니다" in message) shouldBe true
+        ("최근 시도가 다시 선점 기준(660초) 안에 있는 것으로 보입니다" in message && "그 기준이 지나면 스윕이 다시 집습니다" in message) shouldBe true
     }
 
     "선점 뒤에 던지면 쓴 시도를 밝혀 남긴다" {
@@ -537,9 +543,30 @@ class TripSummaryNarratorTest : StringSpec({
             f.summaries.attempts = attempts
             return events { f.narrator.request(tripId); f.executor.run() }.single().formattedMessage
         }
-        messageFor(ruleSummary(), TripSummaryNarrator.MAX_ATTEMPTS).let { ("시도 상한(3)을 이미 다 썼습니다" in it && "다시 집히지 않습니다" in it) shouldBe true }
-        messageFor(ruleSummary(ReflectionSource.AI), 0).let { ("이미 AI 문장이 붙었거나" in it && "다시 집히지 않습니다" in it) shouldBe true }
-        messageFor(null, 0).let { ("요약 행이 없습니다" in it && "다시 집히지 않습니다" in it) shouldBe true }
+        messageFor(ruleSummary(), TripSummaryNarrator.MAX_ATTEMPTS).let { ("시도 상한(3)을 이미 다 쓴 것으로 보입니다" in it && "다시 집히지 않을 것입니다" in it) shouldBe true }
+        messageFor(ruleSummary(ReflectionSource.AI), 0).let { ("이미 AI 문장이 붙었거나" in it && "다시 집히지 않을 것입니다" in it) shouldBe true }
+        messageFor(null, 0).let { ("요약 행이 없는 것으로 보입니다" in it && "다시 집히지 않을 것입니다" in it) shouldBe true }
+    }
+
+    "선점에 졌는데 다시 읽으면 선점할 수 있는 상태면 그 사이 바뀐 것으로 말한다 — 단정하지 않는다" {
+        val f = fixture(onArchive = { error("실적 조회가 깨졌다") })
+        f.summaries.claimRefuses = true
+        val message = warns { f.narrator.request(tripId); f.executor.run() }.single()
+        ("그 사이 상태가 바뀌었습니다" in message && "다음 스윕이 다시 판단합니다" in message) shouldBe true
+    }
+
+    "Exception 갈래에서 세다가 Error 가 나면 원 예외에 붙여 WARN 으로 남기고, 그 Error 는 삼키지 않는다" {
+        val f = fixture(onArchive = { error("실적 조회가 깨졌다") })
+        f.summaries.claimThrows = AssertionError("세다가 난 Error")
+        f.narrator.request(tripId)
+        lateinit var thrown: AssertionError
+        val warn = events { thrown = io.kotest.assertions.throwables.shouldThrow<AssertionError> { f.executor.run() } }.single()
+        thrown.message shouldBe "세다가 난 Error"
+        (tripId.toString() in warn.formattedMessage && "시도를 기록하지 못했습니다" in warn.formattedMessage) shouldBe true
+        warn.throwableProxy.message shouldBe "실적 조회가 깨졌다"
+        warn.throwableProxy.suppressed.map { it.message } shouldBe listOf("세다가 난 Error")
+        f.narrator.request(tripId)
+        f.executor.held.size shouldBe 1 // 실행 중 표시는 풀렸다
     }
 
     "선점 전에 종료 인터럽트로 끊기면 시도로 세지 않고 인터럽트 표시를 지우지 않는다" {
@@ -578,6 +605,17 @@ class TripSummaryNarratorTest : StringSpec({
         errors { io.kotest.assertions.throwables.shouldThrow<AssertionError> { call.executor.run() } }
             .single().formattedMessage.let { ("선점 뒤" in it && "시도 1/3" in it) shouldBe true }
         call.summaries.attempts shouldBe 1 // 두 번 세지 않는다
+    }
+
+    "Error 갈래에서 세다가 Error 가 또 나도 원래 Error 를 올리고 그것을 붙인다 — tripId 로그도 남는다" {
+        val f = fixture(onArchive = { throw AssertionError("원래 Error") })
+        f.summaries.claimThrows = AssertionError("세다가 난 Error")
+        f.narrator.request(tripId)
+        lateinit var thrown: AssertionError
+        val logged = errors { thrown = io.kotest.assertions.throwables.shouldThrow<AssertionError> { f.executor.run() } }.single()
+        thrown.message shouldBe "원래 Error"
+        thrown.suppressed.map { it.message } shouldBe listOf("세다가 난 Error")
+        (tripId.toString() in logged.formattedMessage && "시도를 기록하지 못했습니다" in logged.formattedMessage) shouldBe true
     }
 
     "Error 를 세는 쓰기가 실패해도 Error 를 가리지 않는다 — 그 예외는 붙여 올린다" {

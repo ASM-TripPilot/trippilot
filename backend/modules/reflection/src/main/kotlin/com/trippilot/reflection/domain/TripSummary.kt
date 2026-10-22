@@ -85,8 +85,11 @@ interface TripSummaryRepository {
     fun claimAiAttempt(tripId: UUID, reclaimAfter: Duration, maxAttempts: Int): Int? =
         throw UnsupportedOperationException("요약 회고 시도 기록을 지원하지 않는 저장소입니다.")
 
-    /** 시도 기록 한 줄 — 선점에 진 까닭을 가리는 데만 쓴다(값싼 조회). 행이 없으면 null. */
-    fun findAiAttempt(tripId: UUID): AiAttempt? =
+    /**
+     * 시도 기록 한 줄 — 선점에 진 까닭을 가리는 데만 쓴다(값싼 조회, 선점과 원자적이지 않다). 마지막 시도가 [reclaimAfter] 안인지는 DB 시계로 잰다.
+     * 행이 없으면 null.
+     */
+    fun findAiAttempt(tripId: UUID, reclaimAfter: Duration): AiAttempt? =
         throw UnsupportedOperationException("요약 회고 시도 기록을 지원하지 않는 저장소입니다.")
 
     /** 더 시도할 것이 없는 여행(지워졌거나 실을 방문이 없다) — 규칙 요약이면 시도 수를 [maxAttempts] 로 채워 스윕이 다시 집지 않게 한다(선점 없이). */
@@ -103,5 +106,5 @@ interface TripSummaryRepository {
         throw UnsupportedOperationException("요약 회고 시도 기록을 지원하지 않는 저장소입니다.")
 }
 
-/** 요약 회고 시도 기록(V2.84) — 출처·시도 수·마지막 선점 시각(DB 시계). */
-data class AiAttempt(val source: String, val attempts: Int, val attemptedAt: Instant?)
+/** 요약 회고 시도 기록(V2.84) — 출처·시도 수·마지막 시도가 다시 선점 기준 안인가(DB 시계로 잼). */
+data class AiAttempt(val source: String, val attempts: Int, val recentAttempt: Boolean)

@@ -205,13 +205,14 @@ class TripSummaryNarratorIT : AbstractPostgresIntegrationTest() {
             summaries.claimAiAttempt(tripId, reclaim, 3) to
                 jdbc.queryForObject("SELECT ai_attempted_at = now() FROM trip_summary WHERE trip_id = ?", Boolean::class.java, tripId)
         } shouldBe (1 to true)
-        summaries.findAiAttempt(tripId)!!.let { (it.source to it.attempts to (it.attemptedAt != null)) shouldBe ("RULE" to 1 to true) } // 까닭 가리기용 조회
+        summaries.findAiAttempt(tripId, reclaim)!!.let { (it.source to it.attempts to it.recentAttempt) shouldBe ("RULE" to 1 to true) } // 까닭 가리기용 조회(DB 시계)
         claim() shouldBe null // 진행 중일 수 있는 시도 — 다른 파드도 못 가져간다
         pending() shouldBe false
         // 기준도 DB now() 다 — DB 시계로 늙힌다.
         jdbc.update("UPDATE trip_summary SET ai_attempted_at = now() - interval '9 minutes' WHERE trip_id = ?", tripId)
         (pending() to claim()) shouldBe (false to null) // 다시 선점 기준(10분) 안
         jdbc.update("UPDATE trip_summary SET ai_attempted_at = now() - interval '11 minutes' WHERE trip_id = ?", tripId)
+        summaries.findAiAttempt(tripId, reclaim)!!.recentAttempt shouldBe false
         pending() shouldBe true
         claim() shouldBe 2
         jdbc.update("UPDATE trip_summary SET ai_attempts = 3, ai_attempted_at = NULL WHERE trip_id = ?", tripId)
