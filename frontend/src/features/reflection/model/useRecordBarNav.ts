@@ -1,6 +1,7 @@
 import { router, type Href } from 'expo-router';
 
 import { guardPress } from '@/shared/lib/pressGuard';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { useStackRoutes } from '@/shared/lib/useStackRoutes';
 
 import type { RecordBarNav } from './recordBarNav';
@@ -17,7 +18,7 @@ import { useTripSummary } from './useTripSummary';
  *
  * 요약 칸은 서버가 `ready:true` 를 줄 때만 켜진다(BR-U5-48) — 조회 중·실패·`ready:false` 는 전부 꺼짐이라 실패를 "준비됨"으로 접지 않는다(INV-4).
  * 회고 칸은 `reflectionDate` 가 있을 때만 켜진다(날짜 판정은 호출자 — 미래 일차는 안 준다). `recordsDay` 가 있으면 기록 칸이 그 날짜를 싣고 간다.
- * 뒤로는 히스토리가 있으면 back, 없으면(딥링크·푸시 직행) 기록 탭으로 replace — 죽은 버튼 금지(INV-4).
+ * 뒤로는 어디서 왔든 기록 탭으로 `dismissTo` 한다(TRIP-1591 — 히스토리 유무로 갈리지 않으니 직행해도 죽은 버튼이 없다, INV-4). 5칸 탭 바 복제 화면들과 같은 `shellTabHref`.
  */
 
 const ROUTE_RECORDS = 'trips/[tripId]/records/index';
@@ -44,10 +45,7 @@ export function useRecordBarNav({
     });
   const base = `/trips/${tripId}/records`;
   return {
-    onBack: () => {
-      if (router.canGoBack()) router.back();
-      else router.replace('/(tabs)/records');
-    },
+    onBack: () => router.dismissTo(shellTabHref('records')),
     onPressRecords: go(
       ROUTE_RECORDS,
       recordsDay ? `${base}?day=${recordsDay}` : base

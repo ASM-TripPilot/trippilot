@@ -193,19 +193,12 @@ export function DailyReflectionPage({
 
   // TRIP-1584 · 하단 바(기록·회고·요약)의 칸 이동·뒤로는 훅이 진다 — 기록 칸은 보고 있는 날짜를 싣고 간다(`?day=`).
   const recordBar = useRecordBarNav({ tripId, recordsDay: date });
-  // TRIP-1119 · 딥링크(푸시 REFLECTION_DAILY) 콜드 스타트면 히스토리가 없어 canGoBack()===false —
-  // 침묵 no-op(죽은 버튼) 대신 기록 탭으로 replace(TravelStylePage 선례 동형, INV-4). 바 뒤로와 「확인」이 공유(훅의 뒤로).
-  const handleBack = recordBar.onBack;
 
+  // error 얼굴의 "다시 시도" = 생성 실패면 POST 1회 재발사(Seed Q1), 조회 실패면 재조회. (기분·한 줄은 고르는 즉시·입력을 마칠 때 저장된다 — TRIP-1372, narrative 는 수정 경로)
   const handleConfirm = () => {
-    // error 얼굴의 "다시 시도" = 생성 실패면 POST 1회 재발사(Seed Q1), 조회 실패면 재조회. data 얼굴의
-    // "저장/확인" = 닫기(기분·한 줄은 고르는 즉시·입력을 마칠 때 저장된다 — TRIP-1372, narrative 는 수정 경로).
-    if (face === 'error') {
-      if (daily.isCreateError) daily.create();
-      else daily.refetch();
-      return;
-    }
-    handleBack();
+    if (face !== 'error') return;
+    if (daily.isCreateError) daily.create();
+    else daily.refetch();
   };
 
   return (

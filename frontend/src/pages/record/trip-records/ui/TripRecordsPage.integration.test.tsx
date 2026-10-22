@@ -31,7 +31,12 @@ import {
 } from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
+import {
+  flushOsAnswer,
+  holdReduceMotionOn,
+} from '@/test-support/barMotionProbe';
 import * as probe from '@/test-support/fabAnchorProbe';
 import { flushNotifications } from '@/test-support/flushNotifications';
 import { createGate } from '@/test-support/mswHookHarness';
@@ -87,6 +92,7 @@ jest.mock('expo-router', () => {
     back: jest.fn(),
     replace: jest.fn(),
     push: jest.fn(),
+    dismissTo: jest.fn(),
   };
   return { router, useRouter: () => router };
 });
@@ -438,7 +444,7 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
    *                  않았으면** 체크 핀(`done`), 아니면 번호 핀(`upcoming`). 즉석 방문은 핀이 없다. 같은 장소의
    *                  즉석 방문이 계획 핀을 체크하지 않는다(poiId 가 아니라 slotKey). 핀 전부 맞추기·지도 잠금.
    *  - MS7 (AC-2)   셸 일차 칩을 누르면 그날 기록을 조회하고 카드·핀이 그날 것으로 바뀐다.
-   *  - MS8 (AC-3 · TRIP-1557) 하단 바 뒤로(`record-trip-bottom-bar-back`)는 뒤로 갈 곳이 있을 때만 back 한다(좌상단 ‹ 는 없다).
+   *  - MS8 (AC-3 · TRIP-1557 · TRIP-1591) 하단 바 뒤로(`record-trip-bottom-bar-back`)는 히스토리와 무관하게 기록 탭으로 dismissTo 한다(좌상단 ‹ 는 없다).
    *
    * ★핀은 `toEqual` 정확 일치 — `kind` 가 붙으면 지도가 기록 마커족(사진·점선)으로 그려 Figma 체크/번호 핀이
    *   아니게 된다. `objectContaining` 이면 그 회귀가 통과한다.
@@ -600,10 +606,11 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
     server.resetHandlers();
     clearAccessToken();
     resetPressGuard();
-    // 호출 기록까지 지운다 — MS8b 의 "canGoBack 을 물었다" 단언이 앞 테스트 호출로 공허해지지 않게.
+    // 호출 기록까지 지운다 — MS8 의 "dismissTo 1회·back/replace 0회" 단언이 앞 테스트 호출로 흐려지지 않게.
     jest.mocked(router.canGoBack).mockReset().mockReturnValue(false);
     jest.mocked(router.back).mockClear();
     jest.mocked(router.replace).mockClear();
+    jest.mocked(router.dismissTo).mockClear();
   });
 
   describe('🔴 TRIP-1085 AC-1 · 페이지가 전면 지도 + 바텀시트로 열린다', () => {
@@ -897,30 +904,28 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
     });
   });
 
-  // TRIP-1557 — 뒤로는 좌상단 ‹(`sheet-daychip-back`)에서 하단 바(`record-trip-bottom-bar-back`)로 옮겼다. 목적지 계산은 그대로다.
-  describe('🔴 TRIP-1085 AC-3 · TRIP-1557 AC-7·AC-8 · 하단 바 뒤로는 갈 곳이 있을 때만 back', () => {
-    it('MS8a canGoBack 이 true 면 하단 바 뒤로를 누를 때 back 이 1회 불리고, 좌상단 ‹ 는 없다', async () => {
-      jest.mocked(router.canGoBack).mockReturnValue(true);
-      render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
-      await screen.findByTestId('record-trip-visit-card-v1');
+  // TRIP-1557 — 뒤로는 좌상단 ‹(`sheet-daychip-back`)에서 하단 바(`record-trip-bottom-bar-back`)로 옮겼다.
+  // TRIP-1591 — 그 바 뒤로의 목적지는 히스토리와 무관하게 기록 탭이다(이전 화면 back·replace 폴백 폐지). 실제 스택 결과는 recordBarStack.
+  describe('🔴 TRIP-1085 AC-3 · TRIP-1557 AC-7·AC-8 · TRIP-1591 · 하단 바 뒤로는 기록 탭으로 dismissTo', () => {
+    beforeEach(holdReduceMotionOn); // 동작 줄이기 켜짐 — 모션 없이 즉시 이동
 
-      expect(screen.queryByTestId('sheet-daychip-back')).toBeNull();
-      fireEvent.press(screen.getByTestId('record-trip-bottom-bar-back'));
+    it.each([[true], [false]])(
+      'MS8 canGoBack=%s 에서도 하단 바 뒤로는 dismissTo(기록 탭) 1회이고 back·replace 는 없다 — 좌상단 ‹ 도 없다',
+      async (history) => {
+        jest.mocked(router.canGoBack).mockReturnValue(history);
+        render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
+        await screen.findByTestId('record-trip-visit-card-v1');
+        await flushOsAnswer();
 
-      expect(router.back).toHaveBeenCalledTimes(1);
-    });
+        expect(screen.queryByTestId('sheet-daychip-back')).toBeNull();
+        fireEvent.press(screen.getByTestId('record-trip-bottom-bar-back'));
 
-    // TRIP-1584 Q5 — 히스토리 없는 직행(딥링크·푸시)에서 뒤로가 죽은 버튼이면 안 된다: 기록 탭으로 replace 한다(INV-4, 옛 j03 ‹ 폴백과 같은 길).
-    it('MS8b canGoBack 이 false 면 back 이 아니라 기록 탭으로 replace 한다 (죽은 버튼 금지)', async () => {
-      render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
-      await screen.findByTestId('record-trip-visit-card-v1');
-
-      fireEvent.press(screen.getByTestId('record-trip-bottom-bar-back'));
-
-      expect(router.canGoBack).toHaveBeenCalled();
-      expect(router.back).not.toHaveBeenCalled();
-      expect(router.replace).toHaveBeenCalledWith('/(tabs)/records');
-    });
+        expect(router.dismissTo).toHaveBeenCalledTimes(1);
+        expect(router.dismissTo).toHaveBeenCalledWith(shellTabHref('records'));
+        expect(router.back).not.toHaveBeenCalled();
+        expect(router.replace).not.toHaveBeenCalled();
+      }
+    );
   });
 });
 

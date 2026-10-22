@@ -9,6 +9,10 @@ import {
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import { useAnimatedProbe } from '@/test-support/animatedProbe';
+import {
+  flushOsAnswer,
+  holdReduceMotionOn,
+} from '@/test-support/barMotionProbe';
 
 import { DayHighlightCard } from './DayHighlightCard';
 import {
@@ -450,8 +454,10 @@ describe('Figma 정합 — 지도 캡션·2톤 카드·방문행 라벨·바텀�
       }
     );
 
-    it('기록·회고 칸과 뒤로는 제 콜백만 1회 부르고, 활성인 요약 칸은 아무것도 안 부른다', () => {
+    it('기록·회고 칸과 뒤로는 제 콜백만 1회 부르고, 활성인 요약 칸은 아무것도 안 부른다', async () => {
+      holdReduceMotionOn(); // 뒤로가 기록 탭으로 가는 바라 퇴장 모션 뒤 이동한다 — 동작 줄이기 켜짐이면 즉시(TRIP-1591)
       const { recordBar } = renderScreen({ view: 'MAP' });
+      await flushOsAnswer();
       const bar = recordBar as ReturnType<typeof makeRecordBar>;
 
       fireEvent.press(screen.getByTestId(`${BAR}-tab-summary`));

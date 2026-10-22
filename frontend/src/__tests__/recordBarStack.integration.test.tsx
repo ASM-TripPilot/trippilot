@@ -105,6 +105,7 @@ const ROUTES = {
   _layout: () => <Stack screenOptions={{ headerShown: false }} />,
   '(tabs)/_layout': () => <Tabs screenOptions={{ headerShown: false }} />,
   '(tabs)/index': Empty,
+  '(tabs)/itinerary': Empty,
   '(tabs)/records': Empty,
   'trips/[tripId]/records/index': RecordsScreen,
   'trips/[tripId]/records/reflection/[date]': ReflectionScreen,
@@ -166,17 +167,42 @@ describe('RecordNavBar + 실제 라우터 · 칸 이동 스택 (AC-8·10)', () =
     expect(stack(app)).toEqual(['tabs', `j01:${SUMMARY_DATE}`]);
   });
 
-  it('탭에서 바로 j04 로 온 뒤 기록 칸을 누르면 j04 를 바꿔치지 않고 그 위에 쌓인다 — 뒤로는 j04 로 돌아온다', async () => {
+  it('탭에서 바로 j04 로 온 뒤 기록 칸을 누르면 j04 를 바꿔치지 않고 그 위에 쌓인다', async () => {
     const app = await openFromTab(`/trips/${TRIP}/records/summary`);
     expect(stack(app)).toEqual(['tabs', 'j04']);
 
     tap(`${SUM}-tab-records`);
     expect(stack(app)).toEqual(['tabs', 'j04', 'j01']);
     expect(hasStartCells(REC)).toBe(false); // 아래가 (tabs) 였다면 입장 모프가 다시 돌았을 자리
-
-    tap(`${REC}-back`);
-    expect(stack(app)).toEqual(['tabs', 'j04']);
   });
+});
+
+// TRIP-1591 — 바 뒤로는 이전 화면(pop)이 아니라 어느 화면·어느 스택에서든 기록 탭이다. 옛 규칙(히스토리 있으면 back)은 [tabs, j04, j01] 에서 j04 로 돌아갔다.
+// 3동작: 준비(가짜 앱에 스택 쌓기) → 실행(바 뒤로 누르기) → 단언(루트 스택이 (tabs) 하나만 남고 현재 경로가 기록 탭 `/records`).
+// 마지막 줄은 콜드 오픈(스택에 (tabs) 가 없다) — 뒤로 갈 곳이 없어도 죽은 버튼이 아니라 기록 탭으로 바뀐다(INV-4, 옛 replace 폴백 대체).
+describe('RecordNavBar + 실제 라우터 · 바 뒤로는 항상 기록 탭 (TRIP-1591)', () => {
+  const J04 = `/trips/${TRIP}/records/summary`;
+  const J03 = `/trips/${TRIP}/records/reflection/${DAY}`;
+  const J01 = `/trips/${TRIP}/records`;
+  it.each([
+    ['일정 탭 위에서 j04 → j03', '/itinerary', [J04, J03], REF],
+    ['홈 탭 위에서 j04 → j01 (칸 이동으로 쌓인 j01)', '/', [J04, J01], REC],
+    ['홈 탭 위에서 j01 → j03 → j04', '/', [J01, J03, J04], SUM],
+    ['스택에 (tabs) 가 없는 콜드 오픈 j03', J03, [], REF],
+  ])(
+    '%s: 뒤로 → (tabs) 하나만 남고 기록 탭',
+    async (_label, start, pushes, bar) => {
+      const app = renderRouter(ROUTES, { initialUrl: start });
+      for (const href of pushes)
+        await act(async () => router.push(href as never));
+      await act(async () => {}); // OS 동작 줄이기 답(켜짐)이 반영돼 뒤로가 즉시 이동이 되게 한 바퀴 흘린다
+
+      tap(`${bar}-back`);
+
+      expect(stack(app)).toEqual(['tabs']);
+      expect(app.getPathname()).toBe('/records');
+    }
+  );
 });
 
 // 5-b W1 — j04 는 얼굴(요약 대기 ↔ 요약 있음)이 바뀌어도 하단 바가 같은 인스턴스여야 한다. 바를 얼굴마다 다른 트리 자리에 두면 얼굴이 바뀌는 순간

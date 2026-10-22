@@ -1835,6 +1835,12 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 
 ---
 
+## CONSTRUCTION — U8 FE 정본 보충 (재조회 옛 스냅샷의 제안 상태 되돌림 방지)
+**Timestamp**: 2026-10-22T19:50:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 세션 2026-10-22, 그대로 인용) "하던거 계속해" → 선행 PR #1580 적대적 리뷰 W-2(결정된 제안 상태가 늦은 재조회의 PROPOSED 스냅샷으로 되감김)를 경량 사이클로 처리.
+**AI Response**: `construction/u8-conversational-assistant/functional-design/frontend-components.md` 개정 블록(2026-10-22)에 R24 1행 append — R23 보충: `status !== 'PROPOSED'` 인 제안은 응답의 PROPOSED 로 되돌리지 않는다. 원문 수정 0줄.
+**Context**: CONSTRUCTION — 사이클 20261022-assistant-proposal-no-downgrade(경량) [기록]. 코드 `mergeReopened` 가드 3줄 + 테스트 8건(같은 PR). 옵시디언 볼트 부재 → `_workspace/`. `aidlc-state.md` 무변경.
+
 ---
 
 ## Functional Design 사후 개정 — U0 온보딩 완료 → 기능 안내(c10) 경로 · testID 추가 (TRIP-1594 · 1595)

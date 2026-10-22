@@ -96,6 +96,7 @@ from trippilot.llm_gateway.workers.reminder_copy import (
     ReminderCopyWorker,
 )
 from trippilot.agents.reflect.agent import ReflectAgent, ReflectTask
+from trippilot.agents.reflect.composer import bind_share_card_copy
 from trippilot.llm_gateway.gates.reflection_nudge import ReflectionNudgeGate
 from trippilot.llm_gateway.gates.photo_highlight import PhotoHighlightGate
 from trippilot.llm_gateway.gates.reflection_template import ReflectionTemplateGate
@@ -1427,6 +1428,10 @@ _COMPOSE_MAX_MS = 18_000
 # 1회 수리 2차 구성의 후보 수 — 빈 틈에 그대로 드는 곳 중 그 틈 앞 장소에서 가까운 순. 고를 것은 틈 수(1~3)뿐이라
 # 1차(40곳)만큼 줄 이유가 없고, 짧을수록 2차 호출이 빨라 시한(25s) 안에 든다.
 _REPAIR_SHORTLIST = 20
+# PlanB 노트 중 **장애**를 뜻하는 머리 — 이벤트로도 남긴다(`_rag_events`). 일부러 끈 것(`alternative_llm_skipped`)·상한
+# 노트(`llm_shortlist`·`place_knowledge_truncated`)는 장애가 아니라 빼고, LLM 실패는 게이트웨이가 이미 낸다.
+_RAG_DEGRADED = ("pipeline_error", "embed_batch_degraded", "retrieve_situation_error", "retrieve_persona_error",
+                 "place_knowledge_unavailable")
 
 
 def _persona_line(persona: PersonaSummary | None) -> str:
@@ -2289,6 +2294,7 @@ class WiredItineraryOrchestrator:
                     c for c in request.categories if c not in ignored_categories),
             )
         )
+        self._rag_events(request.request_meta, result.notes)
         return schemas.AlternativesResponse(
             alternatives=[
                 schemas.AlternativeSchema(
@@ -2543,6 +2549,7 @@ class WiredItineraryOrchestrator:
             use_llm=self._composer is None,
         )
         planb = self._rag.run(planb_request)
+        self._rag_events(meta, planb.notes)
         notes += [f"planb: {n}" for n in planb.notes]
         # 랭킹은 **LLM 경로일 때만** 넘긴다 (독스트링 마지막 단락).
         planb_rank = () if planb.is_fallback else planb.ranked_poi_ids
@@ -2814,6 +2821,18 @@ class WiredItineraryOrchestrator:
             planb_fallback=planb.is_fallback, started_ms=t0, past=past,
             composed=bool(composed),
         )
+
+    def _rag_events(self, meta: schemas.RequestMetaSchema, notes) -> None:
+        """PlanB 의 검색·장소 지식 장애를 이벤트로 — 대안은 규칙대로 나와 200 이라 notes 만으론 감시 집계에 안 보인다(INV-4).
+        LLM 실패는 게이트웨이가 이미 낸다 — 여기는 그 밖(임베딩·벡터 저장소·파이프라인 예외)만."""
+        for note in notes:
+            if note.startswith(_RAG_DEGRADED):
+                self._trace.emit(FallbackEvent(
+                    trace_id=TraceId(meta.request_id),
+                    occurred_at=_tz_aware(meta.requested_at, self._tz),
+                    component="planb.rag", stage="agent",
+                    from_mode="planb_rag", to_mode="without_knowledge", reason=note[:300],
+                ))
 
     def _compose_event(self, meta: schemas.RequestMetaSchema, reason: str) -> None:
         """구성을 못 탄 사실을 이벤트로 — 노트만 남기면 트레이스 집계에서 안 보인다(INV-4)."""
@@ -3142,6 +3161,7 @@ class WiredItineraryOrchestrator:
                 knowledge, note = {}, f"place_knowledge_unavailable: {type(e).__name__}"
             if note:
                 notes.append(f"compose: {note}")
+                self._rag_events(request.request_meta, (note,))
         labels = {spec.key: spec.label for spec in self._directives}
         specs = index_of(self._directives)
         chosen = [specs[k] for k in resolved if k in specs]
@@ -4090,10 +4110,11 @@ class WiredItineraryOrchestrator:
             # 예산이 실리는 순간 여기만 기본 타임아웃으로 돈다 (`reflection_generate` 대칭)
             timeout_sec=_deadline_budget(meta) / 1000.0,
         )
-        if result.is_fallback or not result.value:
+        # 자리표시자는 응답 전에 채운다 — 못 채우는 캡션({distance_km} 등)은 정적 폴백 (회고 카드와 같은 바인딩)
+        bound = None if result.is_fallback or not result.value else bind_share_card_copy(result.value, domain_request)
+        if bound is None:
             if not result.is_fallback:
-                # 방어 분기 — 현 게이트 계약상 도달 불가(빈 캡션은 게이트가 error로 낸다).
-                # 게이트 완화 시 계측 없는 침묵 폴백이 되지 않게 여기서 발행한다.
+                # 빈 값은 방어 분기 — 현 게이트 계약상 도달 불가(빈 캡션은 게이트가 error로 낸다).
                 # 직행 패턴의 발행 주체는 경계다 — component="api.wiring" (FD §2.1 관측 규칙).
                 self._trace.emit(FallbackEvent(
                     trace_id=TraceId(meta.request_id),
@@ -4102,11 +4123,12 @@ class WiredItineraryOrchestrator:
                     stage="agent",
                     from_mode="llm_share_card",
                     to_mode="static_copy",
-                    reason="share_card_empty_value_without_fallback_flag",
+                    reason=("share_card_unbound_placeholder" if result.value
+                            else "share_card_empty_value_without_fallback_flag"),
                 ))
             return schemas.ShareCardCopyResponse(
                 **fallback_share_card_copy(domain_request).to_dict())
-        return schemas.ShareCardCopyResponse(**result.value.to_dict())
+        return schemas.ShareCardCopyResponse(**bound.to_dict())
 
     def planb_opportunities(self, request: schemas.OpportunitiesRequest) -> schemas.OpportunitiesResponse:
         """동선 근처 기회(행사·요즘 인기, LLM 0회 · 트리거 아님) — 재료 수집·판정·사영은 `api/opportunities.py`."""

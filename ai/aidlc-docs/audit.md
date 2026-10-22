@@ -645,3 +645,15 @@
 - **무엇을 했나**: ① AI 의도·인자표·계획 도구·핸들러 `_assemble_region`·템플릿 + BE enum·디스패처(오케스트레이터 off 넘김 문장) ② BE `ContextSnapshotBuilder` 가 `PreferenceFacade` 로 취향 두 축을 싣고, 와이어 `preference_profile`(선택) ③ 지역 성격표 생성기 `scripts/chatbot/build_region_profiles.py` + `data/region_profiles.json`(52곳) + `domain/region_recommend.py` ④ 분류 0.2.7·계획 0.1.6·답변 0.3.7 ⑤ 계획이 지역 이름 있는 말에 지역 고르기를 고르면 그 지역 탐색으로(`_region_named`) ⑥ 결정론 문장 되풀이 바꿈(`unrepeated`·감사·맞장구 변형) ⑦ 측정 사례(분류 6·답변 2).
 - **지키는 것**: 탐색 코드 무변경 · intent.yaml·뱅크·재생 픽스처 무변경 · wiring.py 무변경 · 개인정보 경계(취향 두 축만, ContextSnapshot 화이트리스트 테스트 갱신).
 - **남긴 것**: 성격표는 관광공사 수집 범위에 기댄다(지방 소도시 표본 100곳 안팎, 야경·바는 중립) — 정밀해야 하면 지역 문서(KB)·인기 신호를 더한다. 잡담 문장 되풀이는 DIALOGUE_SMALLTALK(#1570) 몫.
+
+## 2026-10-22 — 도우미 지역 답이 지역마다 같은 문장을 베끼지 않게 (답변 0.3.8, BR-AO-31 개정)
+**Timestamp**: 2026-10-22 · 브랜치 `fix/assistant-region-reason-wording` · **승인 대기**(같은 PR 머지 = 승인)
+- **입력**: #1579 개발 서버 확인(AI 파드 안 직접 호출 6건, 전부 의도대로) 중 취향 기반 지역 추천 답이 "…장소가 전국 평균보다 많은 편"을 세 번 되풀이 — 사용자 지적("너무 형식적")과 같은 결.
+- **무엇을 했나**: ① `_assemble_region` 사실 행을 종류 이름만으로, 비교 기준은 `detail.compared_to` 한 번 ② 답변 0.3.8 규칙 줄(지역마다 같은 문장 꼴 금지·비교 기준 한 번) ③ 측정 사례 행 모양 동기화. 행 문구만 줄인 판은 같은 꼴을 다시 베껴 버렸다.
+- **지키는 것**: 지역 고르기·와이어·BE 무변경, 다른 의도 답 무변경.
+
+## 2026-10-22 — j06 공유 문구도 자리표시자를 채워 보낸다 · 공유 프롬프트 0.1.1
+**Timestamp**: 2026-10-22 · 브랜치 `fix/share-card-bind`(develop c1918bdb8 위) · **승인 대기**(같은 PR 머지 = 승인)
+- **입력**: BE 가 `/ai/v1/reflection/share-card` 를 부르기 시작했다(#1564, 응답을 그대로 앱에 넘긴다). 공유 프롬프트는 숫자를 `{visit_count}`·`{distance_km}` 로 쓰라고 하는데 채우는 쪽이 AI·BE·FE 어디에도 없었다 — 앱이 붙이면 SNS 문구에 중괄호째 나간다.
+- **무엇을 했나**: ① `composer.bind_share_card_copy` — 회고 카드와 같은 바인딩(`_binder` 로 공유, 조사 맞춤 포함). 못 채우는 캡션은 정적 폴백 + `FallbackEvent(reason=share_card_unbound_placeholder)`, 못 채운 태그는 뺀다 ② 경계(`reflection_share_card`)가 응답 전에 부른다 ③ 공유 게이트가 `#{region}여행` 을 파생으로 받는다(회고 게이트 #1408 과 같은 `_BOUND_TAG`) — 종전엔 HASHTAG_OUT 하나로 문구 전체가 폴백이었다 ④ 프롬프트 0.1.1 — 값 없는 `{distance_km}`·사진 0장의 `{photo_count}` 금지.
+- **지키는 것**: 와이어·openapi 무변경. 변이 3종(경계 바인딩 제거·`{region}` 태그 허용 제거·못 채운 캡션 통과) 전부 빨강.

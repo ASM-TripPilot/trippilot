@@ -4514,7 +4514,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         shareEnabled
         recordBar={PREVIEW_RECORD_BAR}
         tripTitle="부산 여행"
-        onPressRecords={noop}
         dayReflections={TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS}
         onPressDayReflection={noop}
       />
@@ -4541,7 +4540,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         shareEnabled
         recordBar={PREVIEW_RECORD_BAR}
         tripTitle="부산 여행"
-        onPressRecords={noop}
         dayReflections={TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS}
         onPressDayReflection={noop}
       />
