@@ -5,6 +5,8 @@ import {
   COVER_SLUGS,
   FALLBACK_COVER,
   SLUG_OF,
+  STAY_COVER,
+  STAY_VARIANT_OF,
   UUID_V1,
   UUID_V2,
   UUID_V3,
@@ -133,7 +135,7 @@ describe('placeCoverSource · 폴백 (AC-P7·P8)', () => {
     ['null', null],
     ['undefined', undefined],
     ['빈 문자열', ''],
-    ['모르는 한글', '숙소'],
+    ['모르는 한글', '공항'],
     ['영문 코드 FOOD', 'FOOD'],
     ['영문 코드 소문자 food', 'food'],
     ['영문 코드 NIGHT_VIEW', 'NIGHT_VIEW'],
@@ -178,6 +180,86 @@ describe('placeCoverSource · 폴백 (AC-P7·P8)', () => {
 });
 
 /**
+ * 숙소 일반 그림(TRIP-1587) — `'숙소'` 는 6장이고 변형은 `FNV-1a(키) % 6 + 1`. 같은 함수가 맵의 길이로 나누므로
+ * 장소(3장)의 결과는 그대로다(위 해시·변형 표 테스트가 그걸 잠근다). 기대값은 `STAY_COVER`·`STAY_VARIANT_OF` 손 표에서.
+ */
+describe('placeCoverSource · 숙소 6장 (TRIP-1587)', () => {
+  it.each(Object.entries(STAY_VARIANT_OF))(
+    '숙소 키 %s → 변형 %i 번 숙소 그림',
+    (key, variant) => {
+      expect(placeCoverSource('숙소', key)).toBe(
+        STAY_COVER[variant as keyof typeof STAY_COVER]
+      );
+    }
+  );
+
+  it('손으로 박은 숙소 키 → 변형 표가 구현의 해시 % 6 과 일치한다', () => {
+    for (const [key, variant] of Object.entries(STAY_VARIANT_OF)) {
+      expect({ key, variant: (fnv1a32(key) % 6) + 1 }).toEqual({
+        key,
+        variant,
+      });
+    }
+  });
+
+  it('6장이 전부 서로 다르고 장소 30장·폴백과도 다르다', () => {
+    const picked = Object.keys(STAY_VARIANT_OF).map((key) =>
+      placeCoverSource('숙소', key)
+    );
+    const places = COVER_SLUGS.flatMap((slug) => [
+      COVER[slug][1],
+      COVER[slug][2],
+      COVER[slug][3],
+    ]);
+
+    expect(new Set(picked).size).toBe(6);
+    expect(picked).not.toContain(FALLBACK_COVER);
+    picked.forEach((cover) => expect(places).not.toContain(cover));
+  });
+
+  it.each([undefined, null, ''])(
+    '키가 %p 이면 해시하지 않고 1번 숙소 그림이다',
+    (key) => {
+      expect(placeCoverSource('숙소', key)).toBe(STAY_COVER[1]);
+    }
+  );
+
+  it('UUID 모양 키 3000개를 뽑으면 여섯 변형이 거의 고르게 나온다 (고정 시드 — 각 12%~21%)', () => {
+    // 준비 — 위 장소 분포 테스트와 같은 고정 시드 난수열(mulberry32).
+    let seed = 20261022;
+    const next = (): number => {
+      seed = (seed + 0x6d2b79f5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const hex = (length: number): string =>
+      Array.from({ length }, () => Math.floor(next() * 16).toString(16)).join(
+        ''
+      );
+    const variants = [1, 2, 3, 4, 5, 6] as const;
+    const counts = [0, 0, 0, 0, 0, 0];
+
+    // 실행
+    for (let i = 0; i < 3000; i += 1) {
+      const picked = placeCoverSource(
+        '숙소',
+        `${hex(8)}-${hex(4)}-4${hex(3)}-${hex(4)}-${hex(12)}`
+      );
+      const index = variants.findIndex((v) => STAY_COVER[v] === picked);
+      expect(index).toBeGreaterThanOrEqual(0);
+      counts[index] += 1;
+    }
+
+    // 단언 — 여섯 변형이 모두 나오고 각각 전체의 12%~21%(기댓값 16.7%).
+    counts.forEach((count) => {
+      expect(count).toBeGreaterThan(3000 * 0.12);
+      expect(count).toBeLessThan(3000 * 0.21);
+    });
+  });
+});
+
+/**
  * 성질 기반 테스트(PBT) — 무작위 입력 수백 개로 규칙이 항상 성립하는지 본다. (개념) `examples` = 무작위에 맡기지 않고
  * 반드시 한 번은 넣는 입력. "세 변형이 모두 나오는가" 는 확률에 맡기지 않고 실 UUID 3개를 박는다(README PBT 규칙).
  */
@@ -214,7 +296,7 @@ describe('placeCoverSource · 성질 (PBT)', () => {
       fc.property(
         fc
           .string({ maxLength: 20 })
-          .filter((text) => !CATEGORIES.includes(text)),
+          .filter((text) => !CATEGORIES.includes(text) && text !== '숙소'),
         fc.uuid(),
         (category, poiId) => {
           expect(placeCoverSource(category, poiId)).toBe(FALLBACK_COVER);

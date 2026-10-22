@@ -152,6 +152,44 @@ export const VARIANT_OF: Readonly<Record<string, Variant>> = {
 };
 
 /**
+ * 숙소 일반 그림 6장(TRIP-1587 · `assets/stay-covers/stay-1~6.webp`) — 장소처럼 카테고리 `'숙소'` 로 고르고
+ * 변형은 `FNV-1a 32비트 % 6 + 1` 이다. 유형별 세트는 없다(호텔·리조트 구분 없이 한 세트).
+ */
+type StayVariant = 1 | 2 | 3 | 4 | 5 | 6;
+
+export const STAY_COVER: Record<StayVariant, ImageSourcePropType> = {
+  1: require('../../assets/stay-covers/stay-1.webp'),
+  2: require('../../assets/stay-covers/stay-2.webp'),
+  3: require('../../assets/stay-covers/stay-3.webp'),
+  4: require('../../assets/stay-covers/stay-4.webp'),
+  5: require('../../assets/stay-covers/stay-5.webp'),
+  6: require('../../assets/stay-covers/stay-6.webp'),
+};
+
+/**
+ * 테스트가 쓰는 숙소 키마다 `FNV-1a 32비트 % 6 + 1` 을 node 로 **독립 계산해 박은** 표(계산법은 위 `VARIANT_OF` 와 같고
+ * 끝만 `h%6+1`). 키 모양은 검색 목록과 같은 `stayKey`(`{externalSource}:{externalId}`) 또는 외부 키가 없는 저장
+ * 숙소의 `savedStayId`. `KAKAO:13`~`KAKAO:18` 은 변형 1~6 이 차례로 나오는 키다.
+ */
+export const STAY_VARIANT_OF: Readonly<Record<string, StayVariant>> = {
+  'KAKAO:13': 1,
+  'KAKAO:14': 2,
+  'KAKAO:15': 3,
+  'KAKAO:16': 4,
+  'KAKAO:17': 5,
+  'KAKAO:18': 6,
+};
+
+/** 숙소 키에 대한 **기대 숙소 그림**. 키가 표에 없으면 던진다 · 키가 없으면(undefined·'') 변형 1. */
+export function stayCoverFor(key?: string): ImageSourcePropType {
+  if (key === undefined || key === '') return STAY_COVER[1];
+  const variant = STAY_VARIANT_OF[key];
+  if (variant === undefined)
+    throw new Error(`stayCoverFor: STAY_VARIANT_OF 에 없는 키 ${key}`);
+  return STAY_COVER[variant];
+}
+
+/**
  * 한글 카테고리 + poiId 에 대한 **기대 생성 이미지**. poiId 가 표에 없으면 던진다(조용히 변형 1 로 가면 "poiId 를
  * 무시하는 구현" 이 통과한다). poiId 를 안 주면(undefined) 변형 1 이다.
  */
