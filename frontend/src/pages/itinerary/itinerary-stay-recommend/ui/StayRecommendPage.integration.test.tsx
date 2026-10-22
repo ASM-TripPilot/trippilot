@@ -595,7 +595,8 @@ describe('TRIP-1582 · 빈 추천 → 인기 숙소', () => {
     expect(
       await screen.findByTestId('curated-stay-card-123')
     ).toBeOnTheScreen();
-    expect(curatedQueries).toEqual(['?regionCode=26']);
+    // TRIP-1603 — 부산(26)은 짧은 도시 이름을 알아 city 로 묻는다(운영 서버는 regionCode 를 못 받는다).
+    expect(curatedQueries).toEqual([`?city=${encodeURIComponent('부산')}`]);
     expect(screen.getByText(NOTICE)).toBeOnTheScreen();
     expect(screen.getByText('인기 숙소')).toBeOnTheScreen();
     expect(
