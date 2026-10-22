@@ -1,8 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { heartSaveLabel } from '@/shared/ui/HeartButton';
-import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
+import { HeartButton } from '@/shared/ui/HeartButton';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 
 /**
@@ -17,6 +16,7 @@ import { PlacePhoto } from '@/shared/ui/PlacePhoto';
  * 카드가 완성된 testID(root/photo/save/filled/outline)를 받는다. 담김/미담김은 fill 색이 아니라
  * 서로 다른 글리프(HeartFilledGlyph/HeartOutlineGlyph) + accessibilityState.selected 로 관측한다
  * (글리프 fill 함정 회피). pending 이면 저장 Pressable 이 진짜 disabled(연타 가드).
+ * 저장 하트는 공용 `HeartButton`(누르면 튐 — TRIP-1125)이다(TRIP-1599 — 직접 그리던 SaveButton 은 튐이 없었다).
  *
  * 카드 루트가 Pressable, 저장이 그 자식 Pressable — 하트 press 는 findEventHandler 가 하트에서
  * 멈춰 카드 push(onPress)를 삼키지 않는다(★F-4).
@@ -62,39 +62,6 @@ const cardShadow = {
   elevation: 4,
 } as const;
 
-function SaveButton({
-  save,
-  name,
-  size,
-  className,
-}: {
-  save: StaySearchCardSave;
-  name: string;
-  size: number;
-  className: string;
-}): ReactElement {
-  return (
-    <Pressable
-      testID={save.testID}
-      accessibilityRole="button"
-      accessibilityLabel={heartSaveLabel(name)}
-      // 담김=선택됨 — 빈/찬을 색이 아니라 이 상태 + 아래 글리프 정체성으로 관찰한다.
-      accessibilityState={{ selected: save.saved }}
-      // pending 이면 눌러도 onToggle 이 안 불린다(연타 가드) — disabled 가
-      // accessibilityState.disabled 도 함께 세운다.
-      disabled={save.pending}
-      onPress={save.onToggle}
-      className={className}
-    >
-      {save.saved ? (
-        <HeartFilledGlyph testID={save.filledTestID} size={size} />
-      ) : (
-        <HeartOutlineGlyph testID={save.outlineTestID} size={size} />
-      )}
-    </Pressable>
-  );
-}
-
 export function StaySearchCard({
   testID,
   photoTestID,
@@ -127,11 +94,16 @@ export function StaySearchCard({
             className="absolute inset-0"
           />
           {save ? (
-            <SaveButton
-              save={save}
+            <HeartButton
+              saved={save.saved}
+              pending={save.pending}
+              onPress={save.onToggle}
+              testID={save.testID}
+              filledTestID={save.filledTestID}
+              outlineTestID={save.outlineTestID}
               name={name}
-              size={22}
-              className="absolute right-[32px] top-[14px] h-8 w-8 items-center justify-center rounded-pill bg-on-primary"
+              glyphSize={22}
+              className="absolute right-[32px] top-[14px]"
             />
           ) : null}
         </View>
@@ -176,11 +148,16 @@ export function StaySearchCard({
           className="absolute inset-0 rounded-card"
         />
         {save ? (
-          <SaveButton
-            save={save}
+          <HeartButton
+            saved={save.saved}
+            pending={save.pending}
+            onPress={save.onToggle}
+            testID={save.testID}
+            filledTestID={save.filledTestID}
+            outlineTestID={save.outlineTestID}
             name={name}
-            size={18}
-            className="absolute right-sm top-sm h-8 w-8 items-center justify-center rounded-pill bg-on-primary"
+            glyphSize={18}
+            className="absolute right-sm top-sm"
           />
         ) : null}
       </View>
