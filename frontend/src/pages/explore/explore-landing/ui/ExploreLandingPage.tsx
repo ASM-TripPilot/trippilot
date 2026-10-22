@@ -258,7 +258,8 @@ function ExploreLanding({
     key: stayKey(item),
     name: item.name,
     region: item.region,
-    priceText: formatPrice(item.price),
+    // 스냅숏이 없으면 줄을 그리지 않는다(TRIP-1577 — 「가격 미확인」 폐기, 인기 숙소 카드와 같은 모양).
+    priceText: item.price == null ? undefined : formatPrice(item.price),
   }));
 
   // "모두 보기"가 실어 보낼 지역 — 필터 중이면 필터 지역 이름, 아니면 레인 첫 카드의 지역(TRIP-412).

@@ -287,8 +287,15 @@ describe('전국 d01 — 구획·검색·레인', () => {
 
     [CARD_A, CARD_B].forEach((item) => {
       const card = screen.getByTestId(`explore-stay-card-${stayKey(item)}`);
-      // getByText(문자열) = 완전 일치 — 금액이 독립 Text 노드여야 통과. 145000 → '145,000원~', null → '가격 미확인'.
-      expect(within(card).getByText(formatPrice(item.price))).toBeOnTheScreen();
+      // getByText(문자열) = 완전 일치 — 금액이 독립 Text 노드여야 통과. 145000 → '145,000원~'.
+      // 가격 스냅숏이 없으면(null) 「가격 미확인」 줄을 그리지 않는다(TRIP-1577 — 인기 숙소 카드와 같은 모양).
+      if (item.price == null) {
+        expect(within(card).queryByText('가격 미확인')).toBeNull();
+      } else {
+        expect(
+          within(card).getByText(formatPrice(item.price))
+        ).toBeOnTheScreen();
+      }
       expect(card).toHaveTextContent(new RegExp(item.region));
       expect(within(card).queryByText(/1박/)).toBeNull();
     });
@@ -918,12 +925,12 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       expect(mockPlacesRefetch).not.toHaveBeenCalled();
     });
 
-    it('스냅숏 없는 숙소 카드에 "가격 미확인"이 보인다', () => {
+    it('스냅숏 없는 숙소 카드에는 "가격 미확인" 줄을 그리지 않는다(TRIP-1577)', () => {
       render(<ExploreLandingPage />);
       expect(screen.getByTestId('explore-region-chip')).toBeOnTheScreen();
 
       const card = screen.getByTestId(`explore-stay-card-${STAY_KEY}`);
-      expect(within(card).getByText('가격 미확인')).toBeOnTheScreen();
+      expect(within(card).queryByText('가격 미확인')).toBeNull();
     });
   });
 
