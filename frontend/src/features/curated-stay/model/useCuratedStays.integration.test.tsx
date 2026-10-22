@@ -72,14 +72,43 @@ function renderCurated(
 }
 
 describe('C1 · 성공 + 항목 있음 → hidden=false', () => {
-  it('regionCode 를 그대로 실어 한 번 묻고 항목을 돌려준다', async () => {
-    serve(() => HttpResponse.json({ city: '부산', items: [ITEM] }));
+  it('짧은 도시 이름이 없는 코드는 regionCode 를 그대로 실어 한 번 묻고 항목을 돌려준다', async () => {
+    serve(() => HttpResponse.json({ city: '포항', items: [ITEM] }));
 
-    const { result } = renderCurated({ regionCode: '26', isAuthed: true });
+    const { result } = renderCurated({ regionCode: '47110', isAuthed: true });
 
     await waitFor(() => expect(result.current.hidden).toBe(false));
     expect(result.current.items).toEqual([ITEM]);
-    expect(requests).toEqual(['?regionCode=26']);
+    expect(requests).toEqual(['?regionCode=47110']);
+  });
+});
+
+/**
+ * TRIP-1603 — 운영 서버(main)는 `?city=` 만 받고 `?regionCode=` 는 400 이다(#1524 는 develop 에만). 앱이 짧은 도시 이름을 아는
+ * 지역 코드(서울 11 · 부산 26 · 제주 50 · 인천 28 · 대구 27 · 강릉 51150 · 속초 51210 · 경주 47130 · 전주 5211x — 운영 시드 9개 도시)는 city 로 묻는다. 개발 서버는 둘 다 받아 그대로 동작한다.
+ */
+describe('C1b · 짧은 도시 이름을 아는 지역 코드는 city 로 묻는다 (TRIP-1603)', () => {
+  it.each([
+    ['11', '서울'],
+    ['26', '부산'],
+    ['26350', '부산'],
+    ['50', '제주'],
+    ['28', '인천'],
+    ['27', '대구'],
+    ['51150', '강릉'],
+    ['51210', '속초'],
+    ['47130', '경주'],
+    ['52111', '전주'],
+  ])('regionCode %s → city=%s 하나만', async (code, city) => {
+    // 준비 — 서버는 항목 하나를 준다.
+    serve(() => HttpResponse.json({ city, items: [ITEM] }));
+
+    // 실행 — 지역 코드로 훅을 부른다.
+    const { result } = renderCurated({ regionCode: code, isAuthed: true });
+
+    // 단언 — 요청은 city 하나만이고 항목이 보인다.
+    await waitFor(() => expect(result.current.hidden).toBe(false));
+    expect(requests).toEqual([`?city=${encodeURIComponent(city)}`]);
   });
 });
 
