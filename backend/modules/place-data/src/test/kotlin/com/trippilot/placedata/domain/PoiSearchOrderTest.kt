@@ -30,4 +30,18 @@ class PoiSearchOrderTest : StringSpec({
         PoiSearchOrder.sortKey("명동(본점)") shouldBe "명동(본점)"
         PoiSearchOrder.sortKey("(전부괄호)") shouldBe "(전부괄호)"
     }
+
+    // ── 무작위 정렬(TRIP-1570) ─────────────────────────────────────────────
+    // 기대값은 셸 `printf '%s' 'seed-a<uuid>' | md5` 로 따로 낸 것 — PostgreSQL `md5(seed || poi_id::text)` 와
+    // 같은 바이트(UTF-8)·같은 표기(소문자 hex)여야 커서가 DB 정렬과 맞물린다. 실 DB 일치는 PlacesSearchOrderIT.
+    "무작위 키 — md5(seed + poiId) 소문자 hex 그대로다" {
+        PoiSearchOrder.randomKey("seed-a", java.util.UUID.fromString("11111111-1111-4111-8111-111111111111")) shouldBe
+            "b72c49af271051b0dd25ee80708c03ef"
+    }
+
+    "정렬 키 — seed 가 없으면 이름 키, 있으면 무작위 키" {
+        val id = java.util.UUID.fromString("11111111-1111-4111-8111-111111111111")
+        PoiSearchOrder.key("(주)카페온", id, seed = null) shouldBe "카페온"
+        PoiSearchOrder.key("(주)카페온", id, seed = "seed-a") shouldBe "b72c49af271051b0dd25ee80708c03ef"
+    }
 })

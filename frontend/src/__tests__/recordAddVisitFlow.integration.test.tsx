@@ -19,7 +19,10 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Place } from '@/shared/api/index.schemas';
 import { RecordAddVisitPage } from '@/pages/record/record-add-visit';
 import { TripRecordsPage } from '@/pages/record/trip-records';
-import { recordsHandler } from '@/test-support/tripRecordsFixtures';
+import {
+  recordsHandler,
+  summaryHandler,
+} from '@/test-support/tripRecordsFixtures';
 
 /**
  * 🔴 TRIP-1072 · AC-5~12·AC-14 — j01 [방문 추가] 장소 피커(즉석 방문 = 계획에 없던 곳의 도착 기록).
@@ -216,6 +219,12 @@ const dayVisitHits = () =>
   hitsOf('GET', `/api/v1/trips/${TRIP_ID}/visits/days/${DAY}`);
 const regionsOf = (hits: { url: string }[]) =>
   hits.map((hit) => new URL(hit.url).searchParams.get('region'));
+/** TRIP-1563 — 무작위 시드는 d04 만 쓴다. 이 화면의 후보 조회에는 order·seed 키가 아예 없다. */
+const randomKeysOf = (hits: { url: string }[]) =>
+  hits.filter((hit) => {
+    const query = new URL(hit.url).searchParams;
+    return query.has('order') || query.has('seed');
+  });
 
 /** 그 서버처럼 region·category·q 로 거르는 장소 핸들러. */
 function placesHandler() {
@@ -266,6 +275,8 @@ beforeEach(() => {
     ),
     // TRIP-1415 — 방문 카드가 서버 메모(records)를 조회한다(기본 실적 0건).
     recordsHandler(),
+    // TRIP-1557 — j01 하단 바 요약 칸의 조회(기본 여행 중 ready:false).
+    summaryHandler(),
     http.post(`${BASE}/trips/:tripId/visits`, async ({ request }) => {
       const body = (await request.json()) as PostBody;
       postBodies.push(body);
@@ -385,6 +396,7 @@ describe('🔴 AC-5 · 후보는 GET /places 결과만, 여행 목적지로 좁�
     const regions = regionsOf(placeHits());
     expect(regions.length).toBeGreaterThanOrEqual(1);
     expect(regions).toEqual(regions.map(() => '부산'));
+    expect(randomKeysOf(placeHits())).toHaveLength(0);
   });
 
   it('P5-b: 목적지가 부산·경주면 지역마다 묻고 두 지역 후보를 함께 보여 준다', async () => {
@@ -409,6 +421,7 @@ describe('🔴 AC-5 · 후보는 GET /places 결과만, 여행 목적지로 좁�
       '경주',
       '부산',
     ]);
+    expect(randomKeysOf(placeHits())).toHaveLength(0);
   });
 
   it.each([

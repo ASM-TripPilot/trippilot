@@ -1,7 +1,9 @@
 """지역 중심 표 — 가장 구체적인 이름이 이기고, 표에 없는 지역은 지어내지 않는다."""
 
 from trippilot.domain.common import GeoPoint
-from trippilot.domain.region_centers import region_center
+import pytest
+
+from trippilot.domain.region_centers import region_center, region_mentions, region_pair
 
 
 def test_most_specific_name_wins_and_unknown_is_none() -> None:
@@ -10,3 +12,44 @@ def test_most_specific_name_wins_and_unknown_is_none() -> None:
     assert region_center("서울특별시 22:00") == region_center("서울")  # 이름은 표의 것 — 발화 원문이 아니다
     assert region_center("강원도") is None  # 도 이름은 한 점으로 대표할 수 없다
     assert region_center("") is None
+
+
+def test_pair_needs_the_word_between_and_two_names_and_keeps_the_said_order() -> None:
+    (a, pa), (b, pb) = region_pair("홍대와 이태원 사이에 가볼만한 곳 알려줘")
+    assert (a, pa) == region_center("홍대")[:2] and (b, pb) == region_center("이태원")[:2]
+    assert [n for n, _ in region_pair("이태원역이랑 홍대입구역 사이")] == ["이태원", "홍대"]  # 말한 순서
+    assert [n for n, _ in region_pair("서울 홍대 이태원 사이 카페")] == ["홍대", "이태원"]  # 셋이면 구체적인 둘
+    assert region_pair("홍대 사이 카페") is None and region_pair("홍대 이태원 맛집") is None  # 이름 하나 · '사이' 없음
+    assert region_pair("홍대 이태원 사이다 맛집") is None and region_pair("부산 해운대 중간 가격") is None
+    # 관계의 '사이'는 이름 앞이다 — 두 곳 사이가 아니다
+    assert region_pair("현지인 사이에서 유명한 제주 애월 카페") is None
+    assert region_pair("요즘 20대 사이에서 핫한 부산 해운대 맛집") is None
+
+
+@pytest.mark.parametrize("text", [
+    "이태원역이랑 홍대 입구역 사이에 가볼만한 곳", "홍대 입구역이랑 이태원 역 사이", "홍대랑 이태원 그 사이", "홍대와 이태원, 그 사이에 있는 곳",
+    "홍대 쪽이랑 이태원 쪽 사이", "홍대 근처랑 이태원 근처 사이", "홍대랑 이태원 사이는 뭐 있어?", "홍대랑 이태원 사이?", "홍대랑 이태원 사이요",
+    "홍대랑 이태원 사이도 알려줘", "홍대와이태원사이에", "애월이랑 성산 사이에 가볼만한 곳", "성수동이랑 홍대 사이",
+])
+def test_pair_reads_spaced_suffixes_particles_and_glued_forms(text: str) -> None:
+    assert region_pair(text) is not None
+
+
+@pytest.mark.parametrize("text", [
+    "제주 애월현지인 사이에서", "부산 해운대20대 사이에서 핫한 맛집", "커플 사이에 인기 많은 홍대 이태원 카페",  # 관계의 사이
+    "홍대랑 서울대 사이 카페", "인천공항이랑 홍대 사이", "해운대랑 부산대 사이 맛집",  # 이름 속 지역 — 서울대·인천공항·부산대
+    "홍대랑 성산동 사이 카페", "세종문화회관이랑 명동 사이",  # 성산동은 서울 마포, 세종문화회관은 세종시가 아니다
+    "종로랑 평창동 사이 카페", "해운대랑 거제동 사이 맛집",  # 평창동은 서울 종로, 거제동은 부산 연제
+    "홍대랑 이태원 사이에서 고민 중이야",  # 고르는 사이
+])
+def test_pair_ignores_relations_and_names_that_only_contain_a_region(text: str) -> None:
+    assert region_pair(text) is None
+
+
+def test_mentions_are_regions_said_not_names_that_contain_one() -> None:
+    assert [n for _, n in region_mentions("서울 전주비빔밥 맛집")] == ["서울"]
+    assert region_mentions("성수기에도 한적한 곳") == [] and region_mentions("세종대왕 동상 근처") == []
+    assert region_mentions("명동교자 말고 다른 데는?") == []
+    assert [n for _, n in region_mentions("부산 사람들이 자주 가는 제주 맛집")] == ["부산", "제주"]  # 말한 순서
+    assert [n for _, n in region_mentions("홍대입구역에서 서귀포시까지")] == ["홍대", "서귀포"]
+    assert [n for _, n in region_mentions("서울엔 요즘 핫한 곳 어디야? 부산에선 강릉에서는")] == ["서울", "부산", "강릉"]  # 겹친 조사

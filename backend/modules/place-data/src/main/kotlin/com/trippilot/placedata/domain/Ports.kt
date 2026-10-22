@@ -52,6 +52,7 @@ interface PoiRepository {
      * @param query 이름 부분일치. 빈 문자열 = 안 걸렀다.
      * @param after 이 지점 **다음**부터. null 이면 처음부터.
      * @param limit 최대 건수. 호출자가 상한을 정한다.
+     * @param seed 무작위 정렬 시드(TRIP-1570). null 이면 이름순 — 둘째 정렬 축은 [PoiSearchOrder.key].
      */
     fun findActive(
         regionCodes: List<String>,
@@ -59,6 +60,7 @@ interface PoiRepository {
         query: String,
         after: PoiCursor?,
         limit: Int,
+        seed: String? = null,
     ): List<Poi>
 
     /** 반경 검색 프리필터 — bounding-box 내 ACTIVE. 정밀 반경 컷은 서비스(하버사인). */

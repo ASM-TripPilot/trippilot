@@ -276,12 +276,13 @@ class SituationSweep(
 
     /**
      * 감시 상태 — 쓴 출처가 이 회차에 본 날짜를 **모두 확인했을 때만** 확인을 남긴다(BR-SA-13 ③ · RES-SA-01).
-     * 모름(회로 차단 포함)이 낀 출처는 행을 건드리지 않는다 — 마지막 확인이 신선 창을 지나면 '확인 불가'가 된다.
-     * 그래서 일시 모름 한 번은 창이 흡수하고(PERF-SA-09) 거짓 '정상'도 새로 쓰지 않는다. 관찰 전용·안 부른 출처는 쓰지 않는다.
+     * 모름(회로 차단 포함)이나 일부 모름([Detection.Checked.partial] — G-SA-21)이 낀 출처는 행을 건드리지 않는다 — 마지막 확인이
+     * 신선 창을 지나면 '확인 불가'가 된다. 그래서 일시 모름 한 번은 창이 흡수하고(PERF-SA-09) 거짓 '정상'도 새로 쓰지 않는다.
+     * 관찰 전용·안 부른 출처는 쓰지 않는다.
      */
     private fun record(trip: WatchedTrip, written: List<Observation>, at: Instant) {
         written.groupBy { it.source }.forEach { (source, seen) ->
-            if (seen.any { it.detection !is Detection.Checked }) return@forEach
+            if (seen.any { val d = it.detection; d !is Detection.Checked || d.partial }) return@forEach
             runCatching { watches.upsert(PlanBWatch(trip.tripId, source, WatchStatus.CHECKED, at)) }
                 .onFailure { log.warn("감시 상태를 남기지 못했습니다 — 다음 회차가 다시 씁니다. tripId={} source={}", trip.tripId, source, it) }
         }

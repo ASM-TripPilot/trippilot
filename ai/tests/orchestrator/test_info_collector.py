@@ -389,5 +389,7 @@ def test_collector_logs_one_timing_line_per_provider(caplog) -> None:
         _slow_collector(0.0).collect(Intent.GENERATE_SCHEDULE, _PARAMS)
 
     lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("provider_timing")]
-    assert sorted(lines) == sorted(f"provider_timing kind={k.name} ms=0" for k in _GEN_KINDS)
+    # 제공자마다 정확히 한 줄 — ms 값은 시계라 0 으로 못 박지 않는다(CI 러너에서 sleep(0) 도 1ms 가 나왔다, 2026-10-22 두 번).
+    assert sorted(line.split(" ms=")[0] for line in lines) == sorted(f"provider_timing kind={k.name}" for k in _GEN_KINDS)
+    assert all(line.split(" ms=")[1].isdigit() for line in lines)
 

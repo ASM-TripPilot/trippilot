@@ -46,6 +46,13 @@ from trippilot.ports.poi_db_port import PoiLookup, PoiMiss
 
 logger = logging.getLogger(__name__)
 
+# 영업 원문 파싱은 행 변환의 절반이다 — 서울 10km 반경 조회 37,609행에서 _to_poi 2.16s 중 1.4s. 원문은
+# 8,447종으로 행 수의 1/4.5 라 같은 문자열을 요청마다 다시 파싱하고 있었다(2026-10-22 개발 파드 실측).
+# 결과가 불변(tuple[OpenHour]·frozenset)이라 공유해도 안전하다. 실측: 차가울 때 1.36s · 따뜻할 때 0.47s.
+# ponytail: 프로세스 캐시 상한 32k 원문(공유본 영업 원문 보유분 ≈38k 의 대부분), 모자라면 올린다.
+_parse_hours = functools.lru_cache(maxsize=32_768)(parse_opening_hours_raw)
+_parse_holidays = functools.lru_cache(maxsize=32_768)(parse_holiday_rules)
+
 _RADIUS_PATH = "/internal/pois"
 _BATCH_PATH = "/internal/pois/batch-get"
 # 백엔드 `PoiReadService.MAX_BATCH_SIZE`(200) 의 미러 — 넘기면 400 → 경계가 422 로 번역해 생성
@@ -255,7 +262,7 @@ class BackendPoiDb:
             name=row["name_ko"],
             category=_enum_or_raise(PoiCategory, row.get("category"), "category"),
             coord=GeoPoint(float(row["lat"]), float(row["lng"])),
-            open_hours=parse_opening_hours_raw(row.get("opening_hours")),
+            open_hours=_parse_hours(row.get("opening_hours")),
             avg_cost=None,   # 백엔드 미제공 → 예산 필터 통과 (풀 빌더 ② 계약)
             rating=None,     # 별점 소스 없음 — 지어내지 않는다 (인기는 saved_count)
             saved_count=int(row.get("saved_count") or 0),
@@ -273,5 +280,5 @@ class BackendPoiDb:
             source_ref=(str(row["source_ref"]) if row.get("source_ref") else None),
             # 공휴일 휴무(상황 감지 H1) — 같은 원문 칸의 휴무·영업 원문에서. 모드와 무관하게 늘 읽는다 —
             # 판정은 달력이 있을 때만(`open_windows_on`), off 면 이 값은 무력하다.
-            holiday_rules=parse_holiday_rules(rest_raw, hours_raw),
+            holiday_rules=_parse_holidays(rest_raw, hours_raw),
         )
