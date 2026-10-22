@@ -321,6 +321,42 @@ class PlaceApiIT : AbstractPostgresIntegrationTest() {
         call("/api/v1/places?cursor=!!!broken!!!", newToken()).first shouldBe 400
     }
 
+    /** 무작위 정렬(TRIP-1570) — seed 없는 random 을 이름순으로 떨어뜨리면 화면은 그것을 "섞었다"고 그린다. */
+    @Test
+    fun `무작위 정렬에 seed 가 없거나 깨졌거나 모르는 order 면 400 이다`() {
+        val token = newToken()
+        call("/api/v1/places?order=random", token).first shouldBe 400
+        call("/api/v1/places?order=random&seed=%00", token).first shouldBe 400
+        call("/api/v1/places?order=shuffle", token).first shouldBe 400
+    }
+
+    @Test
+    fun `무작위 정렬도 커서로 전부 이어 받으면 한 번에 받은 것과 같다`() {
+        val token = newToken()
+        val ids = (1..7).map { seedPoi("섞기검증-%02d".format(it), 35.13, 129.05, "26170") }
+
+        try {
+            val base = "/api/v1/places?region=동구&q=섞기검증&order=random&seed=e2e-seed"
+            val whole = call(base, token).second.names()
+            whole.size shouldBe 7
+
+            val paged = mutableListOf<String>()
+            var cursor: String? = null
+            var guard = 0
+            do {
+                val url = "$base&limit=3" + (cursor?.let { "&cursor=" + java.net.URLEncoder.encode(it, "UTF-8") } ?: "")
+                val body = call(url, token).second
+                paged += body.names()
+                cursor = body.nextCursor()
+                guard++
+            } while (cursor != null && guard < 10)
+
+            paged shouldBe whole
+        } finally {
+            ids.forEach { cleanupJdbc.update("DELETE FROM poi WHERE poi_id = ?", it) }
+        }
+    }
+
     /** 지역을 안 골라도 전량이 나가지 않는다 — 상한은 요청하지 않아도 걸린다(fail-safe). */
     @Test
     fun `지역을 안 골라도 상한이 걸린다`() {

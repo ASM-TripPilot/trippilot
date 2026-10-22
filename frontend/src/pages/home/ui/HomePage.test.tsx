@@ -236,7 +236,7 @@ function laneError(refetch: jest.Mock): void {
 type PlacesCall = [unknown, { query?: { enabled?: boolean } } | undefined];
 type MultiCall = [
   readonly string[],
-  { category?: unknown; q?: unknown } | undefined,
+  { category?: unknown; q?: unknown; seed?: unknown } | undefined,
 ];
 
 /** 요청이 실제로 나가는 단일 지역 조회 호출만 — enabled 미지정은 켜짐(react-query 기본). */
@@ -264,6 +264,8 @@ function expectServiceRegionQuery(): void {
     expect(regions).toEqual(SERVICE_REGION_NAMES);
     expect(filters?.category ?? null).toBeNull();
     expect(filters?.q ?? '').toBe('');
+    // TRIP-1563 — 무작위 시드는 d04 만 쓴다. 홈이 seed 를 넘기면 d04 와 달리 캐시를 못 나누고 순서도 바뀐다.
+    expect(filters?.seed).toBeUndefined();
   }
   expect(enabledRegionlessPlacesCalls()).toHaveLength(0);
 }

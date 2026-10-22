@@ -67,15 +67,15 @@ interface PoiJpaRepository : JpaRepository<PoiEntity, UUID> {
      * 둘 다 DB 가 한다. 한쪽이라도 앱으로 넘어오면 콜레이션과 코드포인트 순서가 갈려
      * 커서가 가리키는 지점이 정렬 순서와 어긋나고, 행이 중복·누락된다.
      */
-    // 정렬 = (관련도, 법인 접두를 뗀 이름, id) — TRIP-1003 (A). 식은 도메인 `PoiSearchOrder` 와
+    // 정렬 = (관련도, 법인 접두를 뗀 이름 | seed 가 있으면 md5(seed || poi_id), id) — TRIP-1003 (A) · TRIP-1570. 식은 도메인 `PoiSearchOrder` 와
     // **같아야 한다**(커서는 그쪽이 만든다). JPQL 엔 regexp 가 없어 네이티브다.
     @Query(
         nativeQuery = true,
         value = "select p.* from poi p where p.data_status = 'ACTIVE' " +
             "and (:category is null or p.category = :category) " +
             "and lower(p.name_ko) like lower('%' || :q || '%') escape '\\' " +
-            "and ((case when :q = '' then 0 when lower(p.name_ko) = lower(:q) then 0 when lower(p.name_ko) like lower(:q) || '%' escape '\\' then 1 else 2 end), coalesce(nullif(regexp_replace(p.name_ko, '^\\s*(\\([^)]*\\)|（[^）]*）|[㈜㈔㈗㈐])\\s*', ''), ''), p.name_ko), p.poi_id) > (:afterRank, :afterKey, :afterId) " +
-            "order by (case when :q = '' then 0 when lower(p.name_ko) = lower(:q) then 0 when lower(p.name_ko) like lower(:q) || '%' escape '\\' then 1 else 2 end), coalesce(nullif(regexp_replace(p.name_ko, '^\\s*(\\([^)]*\\)|（[^）]*）|[㈜㈔㈗㈐])\\s*', ''), ''), p.name_ko), p.poi_id limit :limit",
+            "and ((case when :q = '' then 0 when lower(p.name_ko) = lower(:q) then 0 when lower(p.name_ko) like lower(:q) || '%' escape '\\' then 1 else 2 end), (case when :seed = '' then coalesce(nullif(regexp_replace(p.name_ko, '^\\s*(\\([^)]*\\)|（[^）]*）|[㈜㈔㈗㈐])\\s*', ''), ''), p.name_ko) else md5(:seed || cast(p.poi_id as text)) end), p.poi_id) > (:afterRank, :afterKey, :afterId) " +
+            "order by (case when :q = '' then 0 when lower(p.name_ko) = lower(:q) then 0 when lower(p.name_ko) like lower(:q) || '%' escape '\\' then 1 else 2 end), (case when :seed = '' then coalesce(nullif(regexp_replace(p.name_ko, '^\\s*(\\([^)]*\\)|（[^）]*）|[㈜㈔㈗㈐])\\s*', ''), ''), p.name_ko) else md5(:seed || cast(p.poi_id as text)) end), p.poi_id limit :limit",
     )
     fun findActive(
         @Param("category") category: String?,
@@ -84,6 +84,7 @@ interface PoiJpaRepository : JpaRepository<PoiEntity, UUID> {
         @Param("afterKey") afterKey: String,
         @Param("afterId") afterId: UUID,
         @Param("limit") limit: Int,
+        @Param("seed") seed: String,
     ): List<PoiEntity>
 
     /**
@@ -100,8 +101,8 @@ interface PoiJpaRepository : JpaRepository<PoiEntity, UUID> {
             "and (:category is null or p.category = :category) " +
             "and substring(p.region_code, 1, :len) in (:codes) " +
             "and lower(p.name_ko) like lower('%' || :q || '%') escape '\\' " +
-            "and ((case when :q = '' then 0 when lower(p.name_ko) = lower(:q) then 0 when lower(p.name_ko) like lower(:q) || '%' escape '\\' then 1 else 2 end), coalesce(nullif(regexp_replace(p.name_ko, '^\\s*(\\([^)]*\\)|（[^）]*）|[㈜㈔㈗㈐])\\s*', ''), ''), p.name_ko), p.poi_id) > (:afterRank, :afterKey, :afterId) " +
-            "order by (case when :q = '' then 0 when lower(p.name_ko) = lower(:q) then 0 when lower(p.name_ko) like lower(:q) || '%' escape '\\' then 1 else 2 end), coalesce(nullif(regexp_replace(p.name_ko, '^\\s*(\\([^)]*\\)|（[^）]*）|[㈜㈔㈗㈐])\\s*', ''), ''), p.name_ko), p.poi_id limit :limit",
+            "and ((case when :q = '' then 0 when lower(p.name_ko) = lower(:q) then 0 when lower(p.name_ko) like lower(:q) || '%' escape '\\' then 1 else 2 end), (case when :seed = '' then coalesce(nullif(regexp_replace(p.name_ko, '^\\s*(\\([^)]*\\)|（[^）]*）|[㈜㈔㈗㈐])\\s*', ''), ''), p.name_ko) else md5(:seed || cast(p.poi_id as text)) end), p.poi_id) > (:afterRank, :afterKey, :afterId) " +
+            "order by (case when :q = '' then 0 when lower(p.name_ko) = lower(:q) then 0 when lower(p.name_ko) like lower(:q) || '%' escape '\\' then 1 else 2 end), (case when :seed = '' then coalesce(nullif(regexp_replace(p.name_ko, '^\\s*(\\([^)]*\\)|（[^）]*）|[㈜㈔㈗㈐])\\s*', ''), ''), p.name_ko) else md5(:seed || cast(p.poi_id as text)) end), p.poi_id limit :limit",
     )
     fun findActiveByRegionPrefixes(
         @Param("len") len: Int,
@@ -112,6 +113,7 @@ interface PoiJpaRepository : JpaRepository<PoiEntity, UUID> {
         @Param("afterKey") afterKey: String,
         @Param("afterId") afterId: UUID,
         @Param("limit") limit: Int,
+        @Param("seed") seed: String,
     ): List<PoiEntity>
 
     @Query(
@@ -187,27 +189,30 @@ class PoiRepositoryAdapter(
         query: String,
         after: PoiCursor?,
         limit: Int,
+        seed: String?,
     ): List<Poi> {
+        // 빈 문자열 = 이름순(위 KDoc 의 센티넬 규칙 — null 바인드는 타입 추론 500). 서비스가 빈 seed 를 거절하므로 겹치지 않는다.
+        val s = seed ?: ""
         // (-1, "") 은 모든 행보다 앞 — "처음부터". rank 최소값이 0 이라 -1 이 안전한 바닥이다.
         val rank = after?.rank ?: -1
         val key = after?.sortKey ?: ""
         val id = after?.poiId ?: FIRST_ID
         if (regionCodes.isEmpty()) {
-            return jpa.findActive(category?.name, query, rank, key, id, limit).map { it.toDomain() }
+            return jpa.findActive(category?.name, query, rank, key, id, limit, s).map { it.toDomain() }
         }
         val byLength = regionCodes.groupBy { it.length }
         if (byLength.size == 1) {
             val (len, codes) = byLength.entries.single()
-            return jpa.findActiveByRegionPrefixes(len, codes, category?.name, query, rank, key, id, limit)
+            return jpa.findActiveByRegionPrefixes(len, codes, category?.name, query, rank, key, id, limit, s)
                 .map { it.toDomain() }
         }
         // 층이 섞이는 이름은 현재 카탈로그에 없다. 생기면 병합 정렬을 앱이 맡는다(도메인과 같은 식) — 로그로 드러낸다.
         log.warn("지역 코드 길이가 섞였습니다 — 병합 정렬을 앱에서 수행합니다. codes={}", regionCodes)
         return byLength.entries
-            .flatMap { (len, codes) -> jpa.findActiveByRegionPrefixes(len, codes, category?.name, query, rank, key, id, limit) }
+            .flatMap { (len, codes) -> jpa.findActiveByRegionPrefixes(len, codes, category?.name, query, rank, key, id, limit, s) }
             .distinctBy { it.poiId }
             .map { it.toDomain() }
-            .sortedWith(compareBy({ PoiSearchOrder.rank(query, it.nameKo) }, { PoiSearchOrder.sortKey(it.nameKo) }, { it.poiId }))
+            .sortedWith(compareBy({ PoiSearchOrder.rank(query, it.nameKo) }, { PoiSearchOrder.key(it.nameKo, it.poiId, seed) }, { it.poiId }))
             .take(limit)
     }
 
