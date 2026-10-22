@@ -280,7 +280,7 @@ class ShareCardCopyServiceTest : StringSpec({
 
             val e = shouldThrow<RateLimited> { svc.copy(acc, tripId) }
             e.errorCode shouldBe ErrorCode.RATE_LIMITED
-            e.retryAfterSeconds shouldBe 25L // 앞 요청이 붙들 수 있는 최대를 올림한 초
+            e.retryAfterSeconds shouldBe 25L // 앞 요청의 정상 경로 상한을 올림한 초
             usage.claims.size shouldBe 1 // 두 번째는 횟수를 태우지 않았다
 
             release.countDown()

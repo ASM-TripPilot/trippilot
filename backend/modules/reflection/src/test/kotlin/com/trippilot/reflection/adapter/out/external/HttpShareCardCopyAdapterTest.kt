@@ -66,7 +66,7 @@ class HttpShareCardCopyAdapterTest : StringSpec({
         server.verify()
     }
 
-    "최대 대기는 연결 + 읽기 상한이다 — 동시 요청 거절의 Retry-After 가 이 값이다" {
+    "정상 경로 상한은 연결 + 읽기다 — 동시 요청 거절의 Retry-After 가 이 값이다" {
         HttpShareCardCopyAdapter(RestClient.create(), ReflectionAgentProperties(mode = "http", connectTimeoutMs = 3_000, readTimeoutMs = 21_000), clock)
             .maxWaitMs shouldBe 24_000L
     }
