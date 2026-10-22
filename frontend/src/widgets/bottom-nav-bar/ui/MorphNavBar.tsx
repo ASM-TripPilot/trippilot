@@ -92,6 +92,11 @@ export interface MorphNavBarProps {
    * 없으면 탭 바 위가 아닌 진입이라 모션 없이 최종 구조이고 뒤로는 즉시 `onBack` 이다.
    */
   departureTab?: ShellTabKey;
+  /**
+   * 뒤로 **버튼**의 퇴장이 끝날 때 활성인 탭(기록 3종은 늘 'records' — 어디서 왔든 뒤로는 기록 탭이다). 주면 출발 탭이 없어도 역순 모프를 재생하고(동작 줄이기만 즉시 이동),
+   * 퇴장 중 시작 5칸의 활성 칸은 이 탭이다. 안 주면 위 `departureTab` 규칙 그대로(허브). 입장 모프는 여전히 `departureTab` 이 있어야 돈다.
+   */
+  exitTab?: ShellTabKey;
 }
 
 type Layer = 'start' | 'final';
@@ -213,6 +218,7 @@ export function MorphNavBar({
   newCells,
   entrance = false,
   departureTab,
+  exitTab,
 }: MorphNavBarProps): ReactElement {
   // 칸 구성 — 생존 칸이 홈 탭 바 몇 번째 자리인지(순서)와 새 칸 수(길이)에서 나온다. 시작 칸은 그 5칸에서 생존 칸을 뺀 4개.
   const startTabs = TAB_CONFIG.filter((tab) => tab.key !== survivorTab);
@@ -301,8 +307,11 @@ export function MorphNavBar({
   const pressBack = () => {
     if (leaving.current) return;
     leaving.current = true;
-    // 출발 탭을 모르면 끝 모양(어느 칸이 활성인 5칸인가)을 못 만든다 · 동작 줄이기 켜짐이면 모션이 없다 → 즉시 이동.
-    if (departureTab === undefined || reduceRef.current === true) {
+    // 출발 탭도 `exitTab` 도 모르면 끝 모양(어느 칸이 활성인 5칸인가)을 못 만든다 · 동작 줄이기 켜짐이면 모션이 없다 → 즉시 이동.
+    if (
+      (departureTab === undefined && exitTab === undefined) ||
+      reduceRef.current === true
+    ) {
       onBack();
       return;
     }
@@ -339,16 +348,18 @@ export function MorphNavBar({
     return { marginLeft: frame.barLeft - frame.backSize };
   });
   const start = layer === 'start';
+  // 퇴장 중이면 시작 5칸의 활성 칸은 `exitTab` — ref 라 렌더 본문에서 매번 읽는다(`pressBack` 의 `showLayer('start')` 재렌더가 이 값을 바꾼다).
+  const activeTab = leaving.current && exitTab ? exitTab : departureTab;
   const startSlot = (tab: (typeof TAB_CONFIG)[number], index: number) => (
     <MorphSlot key={tab.key} clock={clock} group="start" index={index}>
       <StartCell
         testID={startCellTestID(tab.key)}
         tab={tab}
-        selected={departureTab === tab.key}
+        selected={activeTab === tab.key}
       />
     </MorphSlot>
   );
-  const survivorOn = start ? departureTab === survivorTab : survivorSelected;
+  const survivorOn = start ? activeTab === survivorTab : survivorSelected;
   return (
     <Animated.View
       testID={testID}

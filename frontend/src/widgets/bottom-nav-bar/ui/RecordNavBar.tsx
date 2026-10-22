@@ -137,6 +137,7 @@ export function RecordNavBar({
         ]}
         entrance={entranceRef.current}
         departureTab={departureTab}
+        exitTab="records"
       />
       <ReserveToastBottom />
     </View>

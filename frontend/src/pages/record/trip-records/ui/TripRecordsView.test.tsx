@@ -7,6 +7,10 @@ import {
 } from '@testing-library/react-native';
 import { DeviceEventEmitter, FlatList, Keyboard, View } from 'react-native';
 
+import {
+  flushOsAnswer,
+  holdReduceMotionOn,
+} from '@/test-support/barMotionProbe';
 import * as probe from '@/test-support/fabAnchorProbe';
 import { MemoInline } from '@/features/attach-visit-media/index.view';
 import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
@@ -216,8 +220,10 @@ describe('🔴 TRIP-1085 AC-2·AC-3 · 셸 일차 칩과 뒤로', () => {
   });
 
   // TRIP-1557 — 뒤로는 좌상단 ‹(셸 `hideBack`)에서 하단 바로 옮겼다. 두 곳에 있으면 안 된다(AC-7·AC-8).
-  it('V4 하단 바 뒤로(record-trip-bottom-bar-back)를 누르면 onPressBack 이 1회 불리고, 좌상단 ‹(sheet-daychip-back)·옛 record-trip-back 은 없다', () => {
+  it('V4 하단 바 뒤로(record-trip-bottom-bar-back)를 누르면 onPressBack 이 1회 불리고, 좌상단 ‹(sheet-daychip-back)·옛 record-trip-back 은 없다', async () => {
+    holdReduceMotionOn(); // 뒤로가 기록 탭으로 가는 바라 퇴장 모션 뒤 이동한다 — 동작 줄이기 켜짐이면 즉시(TRIP-1591)
     const props = renderView();
+    await flushOsAnswer();
 
     // 앵커 — 일차 칩 줄은 그대로 서 있다(‹ 만 빠졌다).
     expect(screen.getByTestId('sheet-daychip-root')).toBeOnTheScreen();
@@ -994,8 +1000,10 @@ describe('하단 바 — 허브식 뒤로 + 기록·회고·요약', () => {
 
     it.each(['loading', 'error'] as const)(
       'D8 기록 조회가 %s 여도 바는 서 있고 뒤로가 눌린다 (나갈 길이 없는 화면 금지)',
-      (recordsStatus) => {
+      async (recordsStatus) => {
+        holdReduceMotionOn(); // 바 뒤로는 퇴장 모션 뒤 이동한다 — 동작 줄이기 켜짐이면 즉시(TRIP-1591)
         const props = renderWithBar({ recordsStatus, cards: [], planRows: [] });
+        await flushOsAnswer();
 
         expect(screen.getByTestId(BAR)).toBeOnTheScreen();
         fireEvent.press(screen.getByTestId(BACK));

@@ -9,6 +9,7 @@ import {
   within,
 } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
+import { router } from 'expo-router';
 
 import { server } from '@/mocks/server';
 import type {
@@ -17,6 +18,11 @@ import type {
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
+import {
+  flushOsAnswer,
+  holdReduceMotionOn,
+} from '@/test-support/barMotionProbe';
 
 import { TripSummaryPage } from './TripSummaryPage';
 
@@ -24,13 +30,13 @@ import { TripSummaryPage } from './TripSummaryPage';
  * TRIP-987 B · j04 여행 요약에서 방문 기록(j01)·일차 회고(j03)로 가는 진입 + 여행 이름 + 빈 상태.
  *
  * 무엇을 보장하나:
- *  - B-1 '방문 기록 보기'(`reflection-summary-records`) → `/trips/{id}/records`.
+ *  - B-1 (TRIP-1591) 본문의 '방문 기록 보기' 버튼(`reflection-summary-records`)은 없다 — 기록으로 가는 길은 하단 바 기록 칸.
  *  - B-2 여행 기간 전체 일자마다 '{N}일차 회고'(`reflection-summary-day-reflection-{N}`, 1-기반) →
  *    `/trips/{id}/records/reflection/{YYYY-MM-DD}`. 지도·방문 목록 두 얼굴 모두, 방문 0곳이어도.
  *  - B-3 여행 이름(`reflection-summary-trip-title`) = `Trip.title` 원문.
  *  - B-4 위치 전무 + 방문 0곳 → "대신…" 문장 대신 빈 문구(QA #025 실화면 모양).
  *  - B-6 공유 진입은 되살아나지 않는다(TRIP-939 Q2 — 캡처 미장전).
- *  - B-7 여행 조회 실패 → 이름·일차 회고는 숨기고 요약 본문·'방문 기록 보기'는 남는다(Seed Q3).
+ *  - B-7 여행 조회 실패 → 이름·일차 회고는 숨기고 요약 본문은 남는다(Seed Q3).
  *  - B-8 요약 대기(ready:false) 얼굴에도 '방문 기록 보기'(`reflection-summary-pending-records`, Q4).
  *  - B-9 요약 날짜 카드는 여전히 누를 수 없다(카드 일차 번호 ≠ 여행 일차 — Seed Q2).
  *
@@ -179,7 +185,7 @@ const FACES: [string, TripSummary][] = [
 
 describe('🔴 TRIP-987 B-1·B-2·B-3 · 요약에서 기록·회고로 간다', () => {
   it.each(FACES)(
-    '%s — 여행 이름 · 방문 기록 보기 · 1일차·2일차 회고가 있고 각각 제 라우트로 간다',
+    '%s — 여행 이름 · 1일차·2일차 회고가 있고 각각 제 라우트로 가며 본문 「방문 기록 보기」는 없다',
     async (_face, data) => {
       server.use(summaryHandler({ ready: true, summary: data }), tripOk());
 
@@ -204,11 +210,9 @@ describe('🔴 TRIP-987 B-1·B-2·B-3 · 요약에서 기록·회고로 간다',
         screen.getByTestId('reflection-summary-day-reflection-2')
       ).toHaveTextContent('2일차 회고');
 
-      // B-1 방문 기록 보기.
-      const records = screen.getByTestId('reflection-summary-records');
-      expect(records).toHaveTextContent('방문 기록 보기');
+      // B-1 (TRIP-1591) 본문의 '방문 기록 보기' 버튼은 없다 — 같은 화면에 회고 칩·통계가 서 있으니 부재가 공허하지 않다.
+      expect(screen.queryByTestId('reflection-summary-records')).toBeNull();
 
-      fireEvent.press(records);
       fireEvent.press(
         screen.getByTestId('reflection-summary-day-reflection-1')
       );
@@ -217,7 +221,6 @@ describe('🔴 TRIP-987 B-1·B-2·B-3 · 요약에서 기록·회고로 간다',
       );
 
       expect(mockPush.mock.calls).toEqual([
-        [`/trips/${TRIP_ID}/records`],
         [`/trips/${TRIP_ID}/records/reflection/2026-09-24`],
         [`/trips/${TRIP_ID}/records/reflection/2026-09-25`],
       ]);
@@ -282,12 +285,11 @@ describe('🔴 TRIP-987 B-4 · 위치 전무 + 방문 0곳 (QA #025)', () => {
         screen.getAllByTestId(/^reflection-summary-day-reflection-\d+$/)
       ).toHaveLength(2)
     );
-    expect(screen.getByTestId('reflection-summary-records')).toBeOnTheScreen();
   });
 });
 
 describe('🔴 TRIP-987 B-7 · 여행 조회가 실패하면 이름·회고만 숨긴다 (Seed Q3)', () => {
-  it('요약 본문과 방문 기록 보기는 남고, 여행 이름·일차 회고는 없다', async () => {
+  it('요약 본문은 남고, 여행 이름·일차 회고는 없다', async () => {
     server.use(
       summaryHandler({ ready: true, summary: summary(false, ['코엑스']) }),
       tripFails()
@@ -306,14 +308,10 @@ describe('🔴 TRIP-987 B-7 · 여행 조회가 실패하면 이름·회고만 �
     );
 
     expect(screen.getByTestId('reflection-summary-stats')).toBeOnTheScreen();
-    expect(screen.getByTestId('reflection-summary-records')).toBeOnTheScreen();
     expect(screen.queryByTestId('reflection-summary-trip-title')).toBeNull();
     expect(
       screen.queryAllByTestId(/^reflection-summary-day-reflection-/)
     ).toHaveLength(0);
-
-    fireEvent.press(screen.getByTestId('reflection-summary-records'));
-    expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/records`);
   });
 });
 
@@ -420,4 +418,19 @@ describe('🔴 TRIP-1584 · 하단 바 — 5칸 복제 탭바(옛 TRIP-1262 dism
       ]);
     }
   );
+
+  // TRIP-1591 — 바 뒤로는 히스토리가 있어도(이 파일의 canGoBack 은 true) 이전 화면이 아니라 기록 탭이다. 실제 스택 결과는 recordBarStack.
+  it('바 뒤로 → dismissTo(기록 탭) 1회이고 back·replace 는 없다', async () => {
+    holdReduceMotionOn(); // 동작 줄이기 켜짐 — 모션 없이 즉시 이동
+    server.use(summaryHandler({ ready: false }), tripOk());
+    renderPage();
+    await screen.findByTestId(`${BAR}-back`);
+    await flushOsAnswer();
+
+    fireEvent.press(screen.getByTestId(`${BAR}-back`));
+
+    expect(mockDismissTo.mock.calls).toEqual([[shellTabHref('records')]]);
+    expect(router.back).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
 });

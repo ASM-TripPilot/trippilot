@@ -188,20 +188,30 @@ describe('RecordNavBar · 입장 모프와 출발 탭 (AC-4·5·7·11)', () => {
     }
   });
 
-  it('뒤로: 역순 재생이 끝난 뒤 정확히 1회, 끝 모양은 출발 탭(기록)이 분홍인 5칸', async () => {
-    probe.setReduceMotion(false);
-    const onBack = jest.fn();
-    render(tree({ onBack }, [tabsRoute(3), HERE]));
-    await flushOsAnswer();
-    watchMotion(Math.ceil((BAR_ENTER_DELAY_MS + BAR_ENTER_MS + 100) / 16));
+  // TRIP-1591 — 목적지가 늘 기록 탭이라 끝 모양(기록 분홍 5칸)이 출발과 무관하다: 다른 탭에서 왔어도, 탭 바 위가 아닌 진입(스택에 (tabs) 없음)이어도 역순을 재생한다.
+  it.each([
+    ['출발 탭이 기록', [tabsRoute(3), HERE]],
+    ['출발 탭이 홈', [tabsRoute(0), HERE]],
+    ['출발 탭 없음(탭 바 위가 아닌 진입)', undefined],
+  ] as const)(
+    '뒤로 · %s: 역순 재생이 끝난 뒤 정확히 1회, 끝 모양은 기록이 분홍인 5칸',
+    async (_label, stack) => {
+      probe.setReduceMotion(false);
+      const onBack = jest.fn();
+      render(tree({ onBack }, stack && [...stack]));
+      await flushOsAnswer();
+      watchMotion(Math.ceil((BAR_ENTER_DELAY_MS + BAR_ENTER_MS + 100) / 16));
 
-    fireEvent.press(screen.getByTestId(IDS.back));
-    advance(BAR_EXIT_MS - 1);
-    expect(onBack).not.toHaveBeenCalled();
-    advance(1);
-    expect(onBack).toHaveBeenCalledTimes(1);
-    expect(selectedIds(IDS.start5)).toEqual([TAB_RECORDS]);
-  });
+      fireEvent.press(screen.getByTestId(IDS.back));
+      expect(moved(watchMotion(20))).toBe(true); // 즉시 이동이 아니라 퇴장 모션이 흐른다(20×16ms)
+      expect(onBack).not.toHaveBeenCalled();
+      advance(BAR_EXIT_MS - 20 * 16 - 1);
+      expect(onBack).not.toHaveBeenCalled();
+      advance(1);
+      expect(onBack).toHaveBeenCalledTimes(1);
+      expect(selectedIds(IDS.start5)).toEqual([TAB_RECORDS]);
+    }
+  );
 
   it('숨겼다 다시 나타나도(편집 모드 hidden) 입장 모프를 다시 재생하지 않고 곧장 최종 모양이다 · 토스트 바닥 신고는 보일 때만(Q7)', async () => {
     probe.setReduceMotion(false);

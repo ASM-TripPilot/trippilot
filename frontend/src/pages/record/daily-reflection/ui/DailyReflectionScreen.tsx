@@ -168,7 +168,6 @@ export function DailyReflectionScreen({
   const [saveFailed, setSaveFailed] = useState(false);
   // 서버 기본 안내문은 회고 글이 아니다(TRIP-1212) — 그대로 저장되면 안내문이 회고로 남는다.
   const canSave = text.trim().length > 0 && !isGuideText(text);
-  const isDataFace = face === 'default' || face === 'data-insufficient';
 
   const handleEnterEdit = () => {
     onEnterEdit();
@@ -233,17 +232,6 @@ export function DailyReflectionScreen({
       );
     return sendMemo(memoToSave);
   };
-  // 「확인」은 쓴 한 줄이 저장돼야 닫는다 — 키보드가 떠 있어도 첫 탭이 버튼으로 가서(handled) blur 저장이 안 돈다.
-  const handleDataConfirm = () => {
-    if (!extrasOn || !memoDirty) {
-      onConfirm();
-      return;
-    }
-    void flushMemo().then((saved) => {
-      if (saved) onConfirm();
-    });
-  };
-
   const handleSave = () => {
     if (!canSave) return;
     setSaveFailed(false);
@@ -420,7 +408,9 @@ export function DailyReflectionScreen({
             Platform.OS === 'ios' ? 'interactive' : 'on-drag'
           }
           contentContainerClassName={`gap-md px-lg pt-[8px] ${
-            face === 'default' && !editing ? 'pb-[120px]' : 'pb-[32px]'
+            (face === 'default' || face === 'data-insufficient') && !editing
+              ? 'pb-[120px]'
+              : 'pb-[32px]'
           }`}
         >
           {editing ? (
@@ -532,16 +522,6 @@ export function DailyReflectionScreen({
               {extrasBlock}
 
               {/* changeSummary 는 default 얼굴에서 그리지 않는다(prop 은 무회귀로 유지). */}
-              {/* 하단 CTA — 저장할 입력이 없으니 "확인"(TRIP-935 R7). data-insufficient 와 같은 이름표. */}
-              <Pressable
-                testID="reflection-daily-confirm"
-                onPress={handleDataConfirm}
-                className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
-              >
-                <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                  확인
-                </Text>
-              </Pressable>
             </>
           ) : (
             // data-insufficient (무회귀 — 기존 표면 유지).
@@ -605,32 +585,20 @@ export function DailyReflectionScreen({
               </Pressable>
             </View>
           </View>
-        ) : face !== 'default' && face !== 'pending' ? (
-          // 하단 CTA(data-insufficient: "확인" · empty/error: "직접 회고 작성"=편집 진입). TRIP-1425 · 편집 푸터처럼
-          // 회피 컨테이너 안·스크롤 뒤에 둬야 한 줄 입력 중 키보드에 밀려 올라와 [확인]이 안 가린다(실기 6-b).
+        ) : face === 'empty' || face === 'error' ? (
+          // 하단 CTA(empty/error: "직접 회고 작성"=편집 진입). TRIP-1425 · 편집 푸터처럼
+          // 회피 컨테이너 안·스크롤 뒤에 둬야 한 줄 입력 중 키보드에 밀려 올라와 CTA 가 안 가린다(실기 6-b).
           // pb-[104px] 는 탭바(96) 위에 앉히는 여백 — 키보드가 떠도 남는 빈 띠는 그대로 둔다(Seed Q4).
           <View className="w-full bg-canvas px-lg pb-[104px] pt-[8px]">
-            {isDataFace ? (
-              <Pressable
-                testID="reflection-daily-confirm"
-                onPress={handleDataConfirm}
-                className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
-              >
-                <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                  확인
-                </Text>
-              </Pressable>
-            ) : (
-              <Pressable
-                testID="reflection-daily-compose"
-                onPress={handleEnterEdit}
-                className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
-              >
-                <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                  직접 회고 작성
-                </Text>
-              </Pressable>
-            )}
+            <Pressable
+              testID="reflection-daily-compose"
+              onPress={handleEnterEdit}
+              className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
+            >
+              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+                직접 회고 작성
+              </Text>
+            </Pressable>
           </View>
         ) : null}
       </KeyboardAvoidingView>

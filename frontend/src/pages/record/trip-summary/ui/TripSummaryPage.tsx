@@ -180,7 +180,6 @@ export function TripSummaryPage({
           : undefined
       }
       tripTitle={trip.data?.title}
-      onPressRecords={openRecords}
       // 번호는 여행 기간 기준(1-기반, j03 탭과 같다) — `highlight.dayOrder` 는 기록 있는 날 순번이라 쓰지 않는다.
       dayReflections={tripDays.map((_, index) => ({
         day: index + 1,
