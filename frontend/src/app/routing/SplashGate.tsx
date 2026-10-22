@@ -17,6 +17,21 @@ export const SPLASH_MIN_VISIBLE_MS = 1300;
 export const PUSH_REGISTER_DELAY_MS = 2500;
 
 /**
+ * 하단 바를 **자기 화면 안에** 그리는 push 화면(허브 제외 — 허브는 아래에 따로 선언) — TRIP-1584.
+ * 이런 화면이 기본 슬라이드로 열리면 바 사본이 화면과 함께 밀려 들어와 아래 `(tabs)` 의 진짜 탭 바 위로 "새 바"가 겹쳐 보인다.
+ * 페이드는 진짜 탭 바가 비쳐 이중으로 보이므로 `none`(즉시 교체)이다. 바 없는 풀스크린(상세·위저드 등)은 슬라이드 그대로 둔다.
+ * 바를 화면 안에 그리는 새 라우트를 만들면 여기에 이름을 더한다 — 빠지면 슬라이드로 조용히 돌아간다(스캔 가드 없음).
+ */
+const BAR_SCREEN_ROUTES = [
+  'stays/index',
+  'explore/places',
+  'records/style',
+  'trips/[tripId]/records/index',
+  'trips/[tripId]/records/reflection/[date]',
+  'trips/[tripId]/records/summary',
+] as const;
+
+/**
  * 부트스트랩 게이트 컨테이너(D1 A안, 루트 셸에 마운트). useBootstrapGate 를 구독해
  * loading 이거나 목적지 미결이거나 최소 노출 하한(SPLASH_MIN_VISIBLE_MS) 미경과면 SplashScreen 을,
  * resolved+하한 경과면 destination 으로 가드된 Stack.Protected 그룹만 노출한다. destination 이
@@ -93,12 +108,16 @@ export function SplashGate() {
         options={{ presentation: 'transparentModal' }}
       />
       {/* i01 여행 중 허브(TRIP-1522) — 전환 없이 즉시 교체한다: 허브 하단 바가 홈 탭 바와 같은 5칸 모양으로 시작해 4단계 모프를 스스로
-          재생하므로, 기본 슬라이드나 fade 는 아래 (tabs) 의 탭 바를 비치게 해 5칸이 이중으로 보인다. 앱 전체 전환·다른 라우트는 그대로(허브 하나만).
+          재생하므로, 기본 슬라이드나 fade 는 아래 (tabs) 의 탭 바를 비치게 해 5칸이 이중으로 보인다. 바를 화면 안에 그리는 다른 push 화면도 같은 이유로 none 이다(위 BAR_SCREEN_ROUTES).
           가드 밖 선언은 planb 와 같은 이유다. */}
       <Stack.Screen
         name="trips/[tripId]/live/index"
         options={{ animation: 'none' }}
       />
+      {/* 바를 화면 안에 그리는 push 화면(TRIP-1584) — 위 BAR_SCREEN_ROUTES 주해. 가드 밖 선언은 허브·planb 와 같은 이유다. */}
+      {BAR_SCREEN_ROUTES.map((name) => (
+        <Stack.Screen key={name} name={name} options={{ animation: 'none' }} />
+      ))}
       {/* ✦ AI 도우미 시트(TRIP-1322 · DEC-U8-13) — 진입 화면 위 투명 모달. (tabs) 밖이라 탭바가 가려진다.
           미인증 딥링크는 가드에 안 걸리지만 세션 생성 401 이면 시트가 스스로 닫힌다.
           TRIP-1554 — 아래에서 올라오는 모달 전환 없이 그 자리에 바로 뜨고 닫힌다(사용자 결정 "화면에서 바로 나오게", 페이드 아님). */}
