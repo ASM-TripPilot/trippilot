@@ -317,7 +317,8 @@ class ReplanSessionService(
 
     /**
      * 전날 창이 받는 것(BR-SA-20 ②③) — **알림으로 들어온 첫날 하루 전체**뿐이다. 진입과 적용이 같은 조건을 본다.
-     * 트리거 없는 진입은 여행 구간 안에서만이다 — 여행 전 확정 일정은 복원이 409 라 되돌릴 수 없다(INV-U3-04).
+     * 트리거 없는 진입은 여행 구간 안에서만이다 — 여행 전 확정 일정은 범용 복원이 409 다(INV-U3-04). 반영한 재계획
+     * 하나는 [revert] 로 되돌릴 수 있지만(TRIP-1412), 그것이 여행 전 편집 잠금(BR-U3-28)을 푸는 근거는 아니다.
      */
     private fun preTripEntry(period: TripPeriod, today: LocalDate, fromTrigger: Boolean, target: LocalDate, scope: ReplanScope) =
         preTripWindowOpen(period, today) && fromTrigger && target == period.startDate && scope == ReplanScope.FULL_DAY
@@ -417,26 +418,28 @@ class ReplanSessionService(
     fun apply(accountId: UUID, tripId: UUID, sessionId: UUID): ReplanSession {
         val session = owned(accountId, tripId, sessionId, sessions::findByIdForUpdate)
         val now = clock.instant()
-        stalenessOf(accountId, session, now)?.let { staleness ->
-            log.info("replan.prepared outcome=REFUSED staleness={} tripId={} session={}", staleness, tripId, sessionId)
-            throw when (staleness) {
-                Staleness.EXPIRED -> ConflictDetected(message = "시간이 지나 이 대안은 지금 일정과 맞지 않아요.", errorCode = ErrorCode.EXPIRED)
-                Staleness.STALE -> ConflictDetected(message = "그 사이 일정이 바뀌어 이 대안은 쓸 수 없어요.", errorCode = ErrorCode.STALE)
-            }
-        }
+        // 낡음은 두 번 본다. 여기서는 닫힌·지난 선계산을 일정 잠금 없이 일찍 거르고, 초안의 사실(지금 일정·완료 실적)은
+        // 일정 쓰기 잠금을 잡은 **뒤** 다시 본다(아래 afterLock) — 잠금 전 읽기로 정하면 그 사이 커밋된 편집·체크인을 못 본다.
+        refuseIfStale(accountId, session, now)
         if (session.status != ReplanStatus.DRAFT) {
             throw ConflictDetected(message = "확정할 재계획안이 없습니다.")
         }
         val draft = session.draft ?: throw ConflictDetected(message = "재계획안이 비어 있습니다.")
         // 여행 전 반영 가드 — 일정 쪽 적용에는 여행 전 확정 일정 가드가 없다(TRIP-999 — 세션이 여행 중에만 열린다는 전제였다).
-        // 전날 창이 그 전제를 넓히므로 여기서 막는다. 확정 일정은 복원이 409 라 되돌릴 수 없다(INV-U3-04).
+        // 전날 창이 그 전제를 넓히므로 여기서 막는다. 여행 전 확정 일정은 편집이 잠겨 있다(BR-U3-28 · 범용 복원도 409, INV-U3-04).
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
         val today = LocalDate.ofInstant(now, TRAVEL_ZONE)
         if (today < period.startDate && !preTripEntry(period, today, session.triggerId != null, session.targetDate, session.scope)) {
             throw ConflictDetected(message = PRE_TRIP_ONLY)
         }
-        replans.apply(accountId, tripId, ReplanProposal.fromMap(draft), changeReason(session))
-        val applied = sessions.save(session.applied(now))
+        // 반영 직전의 비교 기준을 **일정 쓰기 잠금을 잡은 뒤, 쓰기 전에** 뜬다(TRIP-1412) — 되돌리기 지점과 같은 일정이어야 하고,
+        // 반영 뒤에는 원 일정이 이미 바뀌어 있다.
+        var before: List<ReplanDiff.SlotView> = emptyList()
+        val restorePoint = replans.apply(accountId, tripId, ReplanProposal.fromMap(draft), changeReason(session)) {
+            refuseIfStale(accountId, session, now)
+            before = plans.beforeOf(accountId, tripId, session.targetDate)
+        }
+        val applied = sessions.save(session.applied(now, before, restorePoint.toMap()))
         events.publish(
             ItineraryRecalculated(
                 tripId.toString(), sessionId.toString(),
@@ -449,6 +452,65 @@ class ReplanSessionService(
             log.info("replan.prepared outcome=APPLIED tripId={} session={}", tripId, sessionId)
         }
         return applied
+    }
+
+    /**
+     * 반영한 재계획을 되돌린다(TRIP-1412 · BR-U4-25·28 · INV-U4-05 개정 주) — 원탭 [다시 짜기]의 되돌리기 지점이다.
+     * **확정 일정에서도** 된다(범용 복원은 확정 일정을 409 로 막는다). 그 날만, 반영 직전 모습으로 돌린다.
+     *
+     * 막는 것(모두 409):
+     * - 반영 세션이 아니거나, 이미 되돌렸거나, 되돌리기 지점이 없거나 읽지 못한다(이 기능 이전 반영분 · 깨진 행)
+     * - 지난 날 — 이미 지나간 하루의 계획을 바꾸지 않는다(진입의 지난 날 가드와 같은 취지)
+     * - **되돌리면 빠지는 곳에 다녀온 기록이 있다**(INV-U4-04) — 재계획이 넣었고 반영 전엔 없던 곳에 도착·완료했으면 그 실적이
+     *   계획 없이 남는다. 판정은 C8 이 일정 쓰기 잠금을 잡은 뒤 한다([ArchiveFacade.getVisitedSlots] 를 그때 읽는다)
+     * - 그 사이 그 날이 바뀌었다(`STALE`) — C8 이 판정한다(일정을 아는 쪽)
+     *
+     * 세션 행을 **잠가 읽는다** — 두 번 눌러도 한 번만 된다(확정·취소와 같은 관용구).
+     */
+    @Transactional
+    fun revert(accountId: UUID, tripId: UUID, sessionId: UUID): ReplanSession {
+        val session = owned(accountId, tripId, sessionId, sessions::findByIdForUpdate)
+        if (!session.isRevertible) {
+            throw ConflictDetected(
+                message = when {
+                    session.status != ReplanStatus.APPLIED -> "되돌릴 재계획이 없습니다."
+                    session.revertedAt != null -> "이미 되돌린 재계획입니다."
+                    else -> "이 재계획은 되돌릴 수 없어요."
+                },
+            )
+        }
+        val now = clock.instant()
+        if (session.targetDate < LocalDate.ofInstant(now, TRAVEL_ZONE)) {
+            throw ConflictDetected(message = "지난 날의 재계획은 되돌릴 수 없어요.")
+        }
+        // 깨진 지점으로 되돌리면 그 날이 조용히 비거나 엉뚱해진다 — 못 읽으면 되돌리지 않는다(INV-4).
+        // `slots` 키가 없는 것과 빈 목록은 다르다: 빈 목록은 "반영 전 그 날이 비어 있었다"는 사실이다.
+        val (applied, restore) = runCatching {
+            val raw = session.restorePoint!!
+            require(raw["slots"] is List<*>) { "restore_point 에 slots 가 없습니다." }
+            ReplanProposal.fromMap(session.draft!!) to ReplanProposal.fromMap(raw)
+        }.getOrElse {
+            log.warn("재계획 되돌리기 지점을 읽지 못했습니다 — 되돌리지 않습니다. tripId={} session={}", tripId, sessionId, it)
+            throw ConflictDetected(message = "이 재계획은 되돌릴 수 없어요.")
+        }
+        // 사유는 "되돌림 · 원래 사유" — 앞에 둬야 길이 상한에 잘려도 되돌렸다는 사실이 남는다.
+        val reason = "$REVERT_PREFIX$REASON_SEPARATOR${changeReason(session)}".take(REASON_MAX)
+        replans.revert(accountId, tripId, applied, restore, reason) { archive.getVisitedSlots(tripId) }
+        val reverted = sessions.save(session.reverted(now))
+        // 리마인드 예약이 되돌린 일정을 따라오게 같은 사건을 낸다(구독자: 알림 재적재). 트리거는 싣지 않는다 —
+        // C9 는 트리거가 있을 때만 소비하므로, 되돌리기가 이미 소비된 트리거를 다시 건드리지 않는다.
+        events.publish(ItineraryRecalculated(tripId.toString(), sessionId.toString(), triggerId = null, targetDate = session.targetDate.toString()))
+        return reverted
+    }
+
+    /** 낡은 선계산이면 409 `EXPIRED`·`STALE`(BR-SA-19 · INV-SA-7). 사용자 세션은 늘 통과한다([stalenessOf]). */
+    private fun refuseIfStale(accountId: UUID, session: ReplanSession, now: Instant) {
+        val staleness = stalenessOf(accountId, session, now) ?: return
+        log.info("replan.prepared outcome=REFUSED staleness={} tripId={} session={}", staleness, session.tripId, session.sessionId)
+        throw when (staleness) {
+            Staleness.EXPIRED -> ConflictDetected(message = "시간이 지나 이 대안은 지금 일정과 맞지 않아요.", errorCode = ErrorCode.EXPIRED)
+            Staleness.STALE -> ConflictDetected(message = "그 사이 일정이 바뀌어 이 대안은 쓸 수 없어요.", errorCode = ErrorCode.STALE)
+        }
     }
 
     /**
@@ -515,6 +577,9 @@ class ReplanSessionService(
         private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
 
         private const val REASON_SEPARATOR = " · "
+
+        /** 되돌리기 이력의 사유 머리 — 뒤에 무엇을 되돌렸는지(원래 사유)를 잇는다(BR-U4-31 — 비워 두지 않는다). */
+        private const val REVERT_PREFIX = "재계획 되돌림"
 
         /** 사유·지시어를 하나도 안 고른 수동 진입의 최소 문구 — 빈 칸으로 남기지 않는다(BR-U4-31). */
         private const val DEFAULT_REASON = "여행 중 재계획"

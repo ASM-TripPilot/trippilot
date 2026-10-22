@@ -121,7 +121,7 @@ class GenerateItineraryService(
             prev?.let {
                 rejectionStore.record(tripId, it.days.flatMap { d -> d.slots.map { s -> s.sourcePoiId } }, RejectedPoi.Kind.REGENERATED)
             }
-            return createEmpty(tripId, ctx, planDates, prev)
+            return createEmpty(tripId, ctx, planDates)
         }
 
         // day1 조기 노출(TRIP-267 · PR #104 합의): 1차는 첫날만 짧은 시한으로 풀어 즉시 반환하고,
@@ -191,7 +191,10 @@ class GenerateItineraryService(
 
             // 영속 + 생성이벤트(TRIP-230)를 한 트랜잭션으로 — confirm()과 대칭(향후 아웃박스 relay 원자성). 발행은 인프로세스.
             tx.execute {
-                previous?.let { revisions.ensureRestorePoint(it) }
+                // 일정 쓰기 잠금(TRIP-1412) — 쓰기 트랜잭션 안에서만 잡는다(AI 호출은 위에서 끝났다). 반영·되돌리기·편집·복원·확정·
+                // 2차 마무리와 줄을 서, 그 쓰기의 읽기와 교체(trip_id 로 지우기) 사이에 이 교체가 끼어들어 한쪽이 조용히 사라지지 않게 한다.
+                // 되돌리기 지점은 잠금 뒤의 현행으로 남긴다 — AI 를 기다리는 사이 바뀌었을 수 있다.
+                itineraries.lockForTrip(tripId)?.let { revisions.ensureRestorePoint(it) }
                 // 점수 후보 풀(TRIP-969)은 **이번 생성의 파생물**이다 — 새 일정과 함께 갈아끼우고,
                 // 풀 없이 온 생성(http 미개통·폴백)은 **지운다**. 이전 생성의 풀을 남겨 두면
                 // 슬롯 교체 즉답이 지금 일정과 무관한 판단으로 답한다.
@@ -259,9 +262,11 @@ class GenerateItineraryService(
         tripId: UUID,
         ctx: TripGenerationContext,
         dates: List<LocalDate>,
-        previous: Itinerary?,
     ): Itinerary = tx.execute {
-        previous?.let { revisions.ensureRestorePoint(it) } // 전환 전 상태를 남긴다 — 진행분이 사라지지 않게
+        // 일정 쓰기 잠금(TRIP-1412)을 잡고 잠금 뒤 현행으로 전환 전 상태를 남긴다 — 진행분이 사라지지 않게.
+        // 리비전 종류(처음 vs 다시)도 같은 잠금 뒤 값으로 정한다 — 잠금 전 값과 갈리면 지점과 종류가 서로 다른 일정을 말한다.
+        val locked = itineraries.lockForTrip(tripId)
+        locked?.let { revisions.ensureRestorePoint(it) }
         // 직접 만들기엔 점수 풀이 없다(TRIP-969) — 이전 생성의 풀이 남으면 그 판단으로 즉답하게 된다.
         scoredPools.delete(tripId)
         val empty = Itinerary.create(
@@ -273,7 +278,7 @@ class GenerateItineraryService(
         events.publish(ItineraryGenerated(saved.itineraryId.toString(), tripId.toString(), saved.isFallback))
         revisions.record(
             saved, RevisionActor.USER,
-            if (previous == null) RevisionKind.BASELINE else RevisionKind.GENERATE,
+            if (locked == null) RevisionKind.BASELINE else RevisionKind.GENERATE,
             "직접 만들기로 시작",
         )
         saved
