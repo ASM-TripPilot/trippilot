@@ -1504,6 +1504,13 @@ def explore_needs_region(ctx: TurnContext) -> bool:
 _EXPLORE_FAMILY: Mapping[str, tuple[str, ...]] = {PoiCategory.CULTURE.value: (PoiCategory.CULTURE.value, PoiCategory.ART.value)}
 
 
+def _night_heard(ctx: TurnContext) -> str:
+    """밤 판정에 쓸 발화 — 이어 묻기면 사슬의 요청 원문까지("부산 분위기 좋은 바" → "더 알려줘" 가 바가 아니라 명소를 냈다 — 이번 말에
+    '바'가 없어서, 2026-10-22 테스트 화면). 지역 잇기(`_carry`)와 같은 사슬이다."""
+    follow = _follow_up(ctx)
+    return " ".join((ctx.utterance, *follow[3])) if follow else ctx.utterance
+
+
 def _said_night(category: str | None, theme: str | None, utterance: str) -> bool:
     """밤·야경·술집을 찾는 말인가 — 분류 주제에 더해 발화도 본다(분류가 "분위기 좋은 바"를 theme "분위기 좋은" 으로 '바'를 뺐다 —
     그러면 NL2SQL 이 찾은 술집을 전부 버리고 반경 탐색으로 떨어졌다, 2026-10-22 테스트 화면)."""
@@ -1550,7 +1557,7 @@ def _explore_by_sql(ctx: TurnContext, anchor: _Anchor | None, category: str | No
     port = ctx.ports.place_sql
     args = {k: v for k, v in (("region", ctx.arguments.get("region")), ("theme", theme),
                               ("category", _CATEGORY_KO.get(category or "", category))) if v}
-    night = _said_night(category, theme, ctx.utterance)
+    night = _said_night(category, theme, _night_heard(ctx))
     sido = anchor.label if anchor is not None and anchor.kind == "region" and anchor.label in _SIDO_LEVEL else None
     shown = _shown_before(ctx)  # 자르기 전에 뺀다 — 자른 다섯 곳에서 빼면 남은 행이 있어도 비었다
 
@@ -1852,7 +1859,7 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
             # 지역 중심에서의 거리는 사용자에게 뜻이 없다 — 일정 근처일 때만 그 일정에서의 거리를 싣는다(INV-3 거리만)
             "distance_range": _km_label(haversine_km(center, p.coord)) if anchor.kind == "itinerary" else None,
             "reason": "요즘 인기" if TRENDING_TAG in p.tags else (_CATEGORY_KO.get(p.category.value) or "가 볼 만한 곳"),
-        } for p in _explore_rank((p for p in pool.pois if not shown(p.name) and on_the_way(p.coord)), category, theme, ctx.utterance)]
+        } for p in _explore_rank((p for p in pool.pois if not shown(p.name) and on_the_way(p.coord)), category, theme, _night_heard(ctx))]
         return {"status": "OK", "candidates": candidates}
 
     return (HandlerTask("explore", fn), *sql)
