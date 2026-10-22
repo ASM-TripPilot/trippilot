@@ -1,5 +1,8 @@
 package com.trippilot.planbdetection.application
 
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.trippilot.core.event.DomainEvent
 import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.itinerarygeneration.api.ItineraryFacade
@@ -26,6 +29,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.DisposableBean
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.context.annotation.AnnotationConfigApplicationContext
@@ -254,6 +258,19 @@ private fun props(
     budget: Duration = Duration.ofMinutes(20),
 ) = SituationSweepProperties(mode, horizon, accountIds, sources, observeOnly, parallelism, budget)
 
+/** 스윕 로거의 INFO 줄(포맷된 문장) — 여행 처리 스레드의 줄도 잡힌다. */
+private fun sweepLogs(block: () -> Unit): List<String> {
+    val logger = LoggerFactory.getLogger(SituationSweep::class.java) as Logger
+    val appender = ListAppender<ILoggingEvent>().apply { start() }
+    logger.addAppender(appender)
+    try {
+        block()
+    } finally {
+        logger.detachAppender(appender)
+    }
+    return appender.list.map { it.formattedMessage }
+}
+
 /**
  * 상황 감시 스윕(설계서 §4.1 규칙 1~5 · BR-SA-01~04 · INV-SA-3·5 · T-D1-U 스윕 항목).
  *
@@ -305,6 +322,35 @@ class SituationSweepTest : StringSpec({
         warning.calls.size shouldBe 1
         summary.announced shouldBe 0
         world.events.published.shouldBeEmpty()
+    }
+
+    "dry-run 표본 줄 — 슬롯 신호는 장소 이름과 계획 시각(요일)을 싣고, 날짜 전체 신호는 둘 다 null 이다(휴무 오탐 대조 재료)" {
+        val world = World()
+        val tripId = world.trip()
+        val place = FakeDetector(SweepSource.PLACE, kind = TriggerKind.CLOSURE, answer = { t ->
+            Detection.Checked(
+                emptySet(),
+                listOf(
+                    DetectionSignal(
+                        kind = TriggerKind.CLOSURE, affectedDate = t.date, slotKey = t.slots.first().slotKey, payload = emptyMap(),
+                        reason = "‘성산일출봉’은 정기 휴무일로 나와요", scope = TriggerScope.PARTIAL_SLOTS, variant = TriggerVariant.CLOSED_DAY,
+                    ),
+                ),
+            )
+        })
+        val forecast = FakeDetector(SweepSource.KMA_FORECAST, answer = ::rain)
+
+        val lines = sweepLogs {
+            world.sweep(props(mode = SweepMode.DRY_RUN), listOf(forecast, place), StepClock(at("12:15"))).sweep(at("12:15"))
+        }.filter { it.startsWith("planb.situation_sample") }
+
+        val slotKey = place.calls.single().slots.first().slotKey
+        lines shouldContainExactlyInAnyOrder listOf(
+            "planb.situation_sample tripId=$tripId source=place kind=CLOSURE date=$DAY variant=CLOSED_DAY severity=RISK " +
+                "slot=$slotKey name=\"성산일출봉\" at=화 18:00~19:00",
+            "planb.situation_sample tripId=$tripId source=kma-forecast kind=WEATHER date=$DAY variant=RAIN severity=RISK " +
+                "slot=null name=null at=null",
+        )
     }
 
     "on — 감지 결과를 판정으로 쓰고(사건 1건) 부른 출처의 감시 상태를 남긴다" {

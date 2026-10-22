@@ -458,3 +458,8 @@ POST /trips/{tripId}/location-automation/intervals
 > **[개정 · 2026-10-19 · situation-awareness FD]** G-U10-3 — 스케줄러 경로의 계정
 > 스케줄러 경로의 계정은 trip `api` 의 새 좁은 퍼사드 `TripWatchFacade` 가 진행 중 여행과 함께 돌려준다(`TripFacade` 대역 보호). 단건 소유자 조회는 `TripOwnerFacade.findOwnedPeriod(tripId)`(`backend/modules/trip/src/main/kotlin/com/trippilot/trip/api/TripOwnerFacade.kt` — 알림 구독자 선례)가 맡는다. U10 의 진행 중 판정 스케줄러도 이 경로로 계정을 얻을 수 있고, 락·파일·설정 키는 상황 감시와 분리한다.
 > → [DEC-SA-1](../../situation-awareness/functional-design/business-logic-model.md) · [BR-SA-02](../../situation-awareness/functional-design/business-rules.md)
+
+> **[개정 · 2026-10-22 · TRIP-1561]** DEC-U10-2(26행)의 "수동 [방문 완료]는 폴백으로 남는다"와 283행 "최소 체류 미달 이탈 — 카드에 [방문 완료] 버튼 그대로"를 좁혀 읽는다. 원문은 그대로 두고 이 블록이 우선한다. 근거: 사용자 결정 2026-10-22(A안) · `근거: TRIP-1561 구현 결정`(요구사항 근거로 인용 금지).
+> - **수동 허브(자동 기록 무장 아님)**: [방문 완료]는 "그 슬롯 뒤에 [도착]이 서는 슬롯이 없을 때(그날 마지막 장소)"만 보인다. 그 밖에는 다음 장소 [도착]이 앞 장소 완료를 대신한다(BR-U10-54~56, `completion_source = MANUAL`, 10분 조건 없음).
+> - **무장(ARMED) 여행**: 종전대로 [방문 완료]가 늘 보인다 — 276행 "수동 [도착]·[방문 완료]"(MANUAL 폴백)와 283행(최소 체류 미달 이탈) 모두 영향 없다. 자동 도착이 이미 기록된 다음 슬롯에서 앞 슬롯이 active 로 남는 막다른 길을 막으려는 것이다.
+> - 수동 확장 완료는 BR-U10-24 의 체류 초과 제외 대상이 아니다(이동 시간 포함, BR-U10-57 메모).

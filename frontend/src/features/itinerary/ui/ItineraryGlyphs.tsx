@@ -544,7 +544,8 @@ export function FullAiGlyph({
   return <SharedFullAiGlyph size={size} color={tone} testID={testID} />;
 }
 
-// 「AI와 같이 짜기」 — 반쯤 채운 원(테두리 + 왼쪽 절반 fill).
+// 「AI와 같이 짜기」 — 반쯤 채운 원(테두리 + 왼쪽 절반 fill). 다른 두 방식과 같은 회색(`body`) — 분홍이면
+// 이미 고른 것처럼 보였다(TRIP-1568).
 export function CoPickGlyph({ size = 24, testID }: GlyphProps) {
   return (
     <Svg
@@ -556,14 +557,14 @@ export function CoPickGlyph({ size = 24, testID }: GlyphProps) {
     >
       <Path
         d="M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 16.9706 7.02944 21 12 21Z"
-        stroke={PRIMARY_TEXT}
+        stroke={BODY}
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M12 3C9.61305 3 7.32387 3.94821 5.63604 5.63604C3.94821 7.32387 3 9.61305 3 12C3 14.3869 3.94821 16.6761 5.63604 18.364C7.32387 20.0518 9.61305 21 12 21V3Z"
-        fill={PRIMARY_TEXT}
+        fill={BODY}
       />
     </Svg>
   );

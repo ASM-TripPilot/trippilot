@@ -181,11 +181,18 @@ export interface LiveHubViewProps {
     detail: string;
     onPressSettings?: () => void;
   } | null;
+  /** TRIP-1561 — 건너뛴(skippedAt) 슬롯의 poiId. 진행 중 슬롯 뒤에서 [도착] 대상과 "마지막 장소" 판정에서 빠진다. */
+  skippedPoiIds?: ReadonlySet<string>;
+  /** TRIP-1561 — 자동 기록이 무장(ARMED)이면 [방문 완료]를 늘 둔다(BR-U10-17). 기본 false(수동). */
+  automationArmed?: boolean;
+  /** TRIP-1561 — [도착]·[방문 완료] 실패 안내 한 줄 — 그 poiId 카드(상태 무관)에만. 상태는 페이지가 가진다. */
+  actionNotice?: { poiId: string; text: string } | null;
 }
 
-// 레일 점의 행 상단 여백 — 점 크기(18·16·12)가 달라 Figma 에서 상태마다 다르다(rail 인스턴스 y 실측).
+// 레일 점의 행 상단 여백 — 점 크기(22·16·12)가 달라 Figma 에서 상태마다 다르다(rail 인스턴스 y 실측).
+// done 은 TRIP-1558 에서 18 → 22 로 키워 중심 y=20 을 지키려 11 → 9 (6-b 스크린샷으로 확정).
 const RAIL_TOP: Record<SlotProgressState, string> = {
-  done: 'pt-[11px]',
+  done: 'pt-[9px]',
   active: 'pt-[6px]',
   upcoming: 'pt-[8px]',
 };
@@ -230,6 +237,9 @@ export function LiveHubView({
   automationNotice,
   actualRoute,
   showMyLocation,
+  skippedPoiIds,
+  automationArmed = false,
+  actionNotice,
 }: LiveHubViewProps): ReactElement {
   useToastBottom(LIVE_BOTTOM_BAR_RESERVE); // 토스트가 하단 내비 바 위로 뜬다(TRIP-1559)
   // Provider 없는 렌더(jest)에서는 null — useSafeAreaInsets 는 throw 하므로 컨텍스트를 직접 읽는다.
@@ -265,6 +275,19 @@ export function LiveHubView({
   const [snapRequest, setSnapRequest] = useState<
     { index: number; id: number } | undefined
   >(undefined);
+  // TRIP-1558 — 핀 탭 → 그 카드로 스크롤. 시트 본문은 스크롤러 하나라 y = 타임라인 y + 행 y(둘 다 onLayout 으로 잰다 — 리렌더가
+  // 필요 없어 ref). 못 쟀으면(첫 레이아웃 전) 스크롤 요청을 안 낸다.
+  const timelineYRef = useRef<number | undefined>(undefined);
+  const rowYsRef = useRef<Record<string, number>>({});
+  const [scrollRequest, setScrollRequest] = useState<
+    { id: number; y: number } | undefined
+  >(undefined);
+  // 6-b 수정 1 — gorhom 은 가장 높은 칸에서만 안쪽 스크롤을 허용한다: 핀 탭은 시트를 펼침 칸으로 올리고, **도착한 뒤**(onSheetChange)
+  // 스크롤한다. 도착한 칸(초기값 = 진입 칸)과 대기 y(마지막 핀 하나, 처리하면 비운다)는 ref — 리렌더가 필요 없다.
+  const arrivedIndexRef = useRef(initialSnapIndex);
+  const pendingScrollYRef = useRef<number | undefined>(undefined);
+  const requestScroll = (y: number) =>
+    setScrollRequest((prev) => ({ y, id: (prev?.id ?? 0) + 1 }));
   // "어느 트리거를 숨겼나"를 키로 든다 — 새 트리거(다른 키)가 오면 비교가 저절로 풀려 다시 보인다.
   // 키를 안 주면 '' 한 키로 본다(한 번 숨기면 계속 숨김).
   const pillKey = triggerPillKey ?? '';
@@ -309,11 +332,18 @@ export function LiveHubView({
     windowWidth,
     popupWidth: EDIT_POPUP_WIDTH,
   });
-  // 진행 중 슬롯이 있으면 어느 카드에도 [도착]을 안 준다(Q1) — 진행 도출은 active 를 하나만 인정해,
-  // 다른 곳에 도착하면 앞 슬롯이 '예정'으로 되돌아 보이고 거기서 다시 누르면 409 가 난다.
-  const arrive = slots.some(({ state }) => state === 'active')
-    ? undefined
-    : onPressArrive;
+  // TRIP-1561 — [도착]·[방문 완료]를 한 술어가 정한다. 진행 중 슬롯 뒤의 '예정'(건너뛰지 않음)이 [도착] 대상이고,
+  // 대상이 하나라도 있으면 수동 허브의 [방문 완료]는 숨는다(다음 [도착]이 앞 장소를 완료한다). 진행 중이 없으면 모든 예정이 대상.
+  // 건너뛴 슬롯은 허브에서 '예정'으로 보이므로 skippedPoiIds 로 가른다. 무장(ARMED)이면 [방문 완료]를 늘 둔다(BR-U10-17).
+  const activeIndex = slots.findIndex(({ state }) => state === 'active');
+  const canArriveAt = (index: number): boolean =>
+    onPressArrive !== undefined &&
+    slots[index].state === 'upcoming' &&
+    (activeIndex < 0 ||
+      (index > activeIndex && !skippedPoiIds?.has(slots[index].slot.poiId)));
+  const arriveAfterActive =
+    activeIndex >= 0 && slots.some((_slot, index) => canArriveAt(index));
+  const showComplete = automationArmed || !arriveAfterActive;
 
   const header = [
     tripTitle,
@@ -331,6 +361,26 @@ export function LiveHubView({
       progress: state,
     }))
   );
+  // `onPinTap(index)` 의 index 는 pins 배열(좌표 없는 슬롯이 빠진) 위치다 — 카드와는 pins[index].number(= 슬롯 위치+1)로 잇는다.
+  const handlePinTap = (index: number) => {
+    const pin = pins[index];
+    const target = pin ? slots[pin.number - 1] : undefined;
+    closeFloating();
+    if (!target) return;
+    const timelineY = timelineYRef.current;
+    const rowY = rowYsRef.current[buildSlotKey(activeDate, target.slot.poiId)];
+    if (timelineY === undefined || rowY === undefined) return;
+    const y = timelineY + rowY;
+    if (arrivedIndexRef.current === expandedSnapIndex) {
+      requestScroll(y);
+      return;
+    }
+    pendingScrollYRef.current = y;
+    setSnapRequest((prev) => ({
+      index: expandedSnapIndex,
+      id: (prev?.id ?? 0) + 1,
+    }));
+  };
   const center = pins[0]
     ? { lat: pins[0].lat, lng: pins[0].lng }
     : FALLBACK_CENTER;
@@ -349,6 +399,8 @@ export function LiveHubView({
               testID={`execution-live-daychip-${index}`}
               onPress={() => {
                 hidePill();
+                // 옛 날짜의 y 는 새 날 목록에 안 맞는다.
+                pendingScrollYRef.current = undefined;
                 onSelectDay(index);
               }}
               accessibilityRole="button"
@@ -388,6 +440,8 @@ export function LiveHubView({
         // 시트를 끝까지 내릴 수 있다 — 되올리는 길은 일정 칸(`snapRequest`). 지도 로고는 바 위로 비킨다.
         enablePanDownToClose
         snapRequest={snapRequest}
+        onPinTap={handlePinTap}
+        scrollRequest={scrollRequest}
         mapLogoMargin={MAP_LOGO_MARGIN}
         // TRIP-1416 · 그날 핀 전부를 시트 중간(55%) 칸 위 띠에 맞춘다(Q-088 — 첫 핀 중심 고정 줌이면 나머지가 시트 뒤).
         fitPins
@@ -396,7 +450,16 @@ export function LiveHubView({
         showMyLocation={showMyLocation}
         onMapTap={hidePill}
         onSheetScrollBeginDrag={hidePill}
+        onSheetChange={(index) => {
+          arrivedIndexRef.current = index;
+          const y = pendingScrollYRef.current;
+          if (index !== expandedSnapIndex || y === undefined) return;
+          pendingScrollYRef.current = undefined;
+          requestScroll(y);
+        }}
         onSheetAnimate={(from, to) => {
+          // 올라가는 도중 최상단이 아닌 칸으로 가면 대기 y 를 버린다 — 나중에 손으로 펼칠 때 옛 카드로 튀지 않게(j01 과 같은 규칙).
+          if (to !== expandedSnapIndex) pendingScrollYRef.current = undefined;
           // 마운트 애니메이션(-1→초기 스냅)·제자리는 사용자 동작이 아니다 — 알약이 뜨자마자 사라지지 않게.
           // 펼침에서 출발한 끌기도 숨기지 않는다 — 펼침은 알약을 덮고 있어, 내려오는 끌기가 알약을
           // 처음 드러내는 동작이다(03b 경고-2 (나)).
@@ -459,6 +522,9 @@ export function LiveHubView({
         {/* 타임라인 — 레일 칸 28 + 카드. 세로선(2px)은 레일 칸 가운데, 첫 행 윗변 20px 아래부터 끝까지. */}
         <View
           testID="execution-live-timeline"
+          onLayout={(e) => {
+            timelineYRef.current = e.nativeEvent.layout.y;
+          }}
           // 목록 끝 카드가 하단 바에 가리지 않게 — 바 점유(바 + 바닥 여백 = 70) + 16 = 86(Figma 시트 하단 패딩). 안전영역은 안 더한다(바도 안 더한다).
           style={{
             paddingBottom: LIVE_BOTTOM_BAR_RESERVE + LIST_BOTTOM_GAP,
@@ -466,7 +532,7 @@ export function LiveHubView({
           className="gap-[22px] px-[20px] pt-xl"
         >
           <View className="absolute bottom-0 left-[33px] top-[40px] w-[2px] bg-hairline-strong" />
-          {slots.map(({ slot, state, photos, memo, visitedLabel }) => {
+          {slots.map(({ slot, state, photos, memo, visitedLabel }, index) => {
             const slotKey = buildSlotKey(activeDate, slot.poiId);
             // [사진]·[메모]는 관람 중 카드와, 페이지가 고른 완료 카드(TRIP-1203)에만.
             const media =
@@ -479,7 +545,14 @@ export function LiveHubView({
                 ? notice.text
                 : undefined;
             return (
-              <View key={slotKey} className="flex-row">
+              <View
+                key={slotKey}
+                testID={`execution-live-slot-row-${slotKey}`}
+                onLayout={(e) => {
+                  rowYsRef.current[slotKey] = e.nativeEvent.layout.y;
+                }}
+                className="flex-row"
+              >
                 <View className={`w-[28px] items-center ${RAIL_TOP[state]}`}>
                   <RailDot state={state} />
                 </View>
@@ -488,11 +561,12 @@ export function LiveHubView({
                     slot={slot}
                     date={activeDate}
                     state={state}
+                    order={index + 1}
                     photos={photos}
                     memo={memo}
                     visitedLabel={visitedLabel}
                     onPressComplete={
-                      state === 'active'
+                      state === 'active' && showComplete
                         ? () => {
                             hidePill();
                             onPressComplete?.();
@@ -521,7 +595,9 @@ export function LiveHubView({
                         : undefined
                     }
                     onPressArrive={
-                      arrive ? () => arrive(slot.poiId) : undefined
+                      canArriveAt(index)
+                        ? () => onPressArrive?.(slot.poiId)
+                        : undefined
                     }
                     onPressDirections={
                       state !== 'done' && directionsPoiIds?.has(slot.poiId)
@@ -531,6 +607,11 @@ export function LiveHubView({
                     directionsNotice={
                       directionsNotice?.poiId === slot.poiId
                         ? directionsNotice.text
+                        : undefined
+                    }
+                    actionNotice={
+                      actionNotice?.poiId === slot.poiId
+                        ? actionNotice.text
                         : undefined
                     }
                   />

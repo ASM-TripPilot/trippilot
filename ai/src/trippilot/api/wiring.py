@@ -116,7 +116,7 @@ from trippilot.domain.reflection import (
 )
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
 from trippilot.assembly_engine.config import RAIN_OUTDOOR, AssemblyConfig, stay_for
-from trippilot.assembly_engine.constraints import open_hours_ok
+from trippilot.assembly_engine.constraints import hc1_unjudged, open_hours_ok
 from trippilot.assembly_engine.facade import HybridAssemblyFacade, AssemblyConflictError
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
@@ -693,6 +693,17 @@ def _unverified(misses: Sequence[PoiMiss]) -> tuple[WiredUnverifiedSlot, ...]:
             detail=m.detail,
         )
         for m in misses
+    )
+
+
+def _hours_unknown(
+    solution: ItinerarySolution, problem: ItineraryProblem, poi_index: Mapping[PoiId, Poi],
+) -> tuple[WiredUnverifiedSlot, ...]:
+    """영업 창을 몰라 HC1 을 적용하지 못한 등록 POI → 경계 보고(HOURS_UNKNOWN). 판정은 규칙 옆 `hc1_unjudged` 한 곳 —
+    검증과 같은 휴일 달력(`problem.holidays`)으로 본다."""
+    return tuple(
+        WiredUnverifiedSlot(poi_id=str(p), reason_code="HOURS_UNKNOWN")
+        for p in hc1_unjudged(solution, poi_index, problem.holidays)
     )
 
 
@@ -2179,10 +2190,12 @@ class WiredItineraryOrchestrator:
         ids = frozenset(s.poi_id for day in solution.days for s in day.slots)
         # 미등록 POI는 인덱스에 없다 → HC1·HC2 미적용("정보 없음은 막지 않는다", c2 규칙).
         # 규칙은 그대로 두되 **무엇이 빠졌는지는 값으로 들고 나간다**(TRIP-537, INV-4) —
-        # 막지 않는 것과 알리지 않는 것은 다르다.
+        # 막지 않는 것과 알리지 않는 것은 다르다. 등록됐어도 그 날 영업 창을 모르면(원문 없음·해석 실패)
+        # HC1 만 미적용이다 — 같은 목록에 HOURS_UNKNOWN 으로 싣는다(장소 감지가 그 슬롯을 '확인'으로 접지 않게, INV-SA-2).
         lookup = self._poi_db.lookup_by_ids(ids)
         poi_index = {p.poi_id: p for p in lookup.pois}
-        return solution, problem, poi_index, _unverified(lookup.misses)
+        return solution, problem, poi_index, (
+            _unverified(lookup.misses) + _hours_unknown(solution, problem, poi_index))
 
     def alternatives(
         self, request: schemas.AlternativesRequest

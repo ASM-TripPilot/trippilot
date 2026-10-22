@@ -117,6 +117,7 @@ export * from './notificationToggleKind';
 export * from './notificationToggleList';
 export * from './notificationTripAction';
 export * from './opportunity';
+export * from './opportunityEventType';
 export * from './opportunityKind';
 export * from './opportunityList';
 export * from './patchMeLocationConsentOsPermissionBody';

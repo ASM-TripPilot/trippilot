@@ -22,8 +22,11 @@ import java.util.UUID
  */
 internal sealed interface Revalidation {
 
-    /** AI 가 판정했다. 목록이 비었으면 진짜로 위반이 없는 것이다. */
-    data class Judged(val violations: List<Violation>) : Revalidation
+    /**
+     * AI 가 판정했다. 목록이 비었으면 진짜로 위반이 없는 것이다 — 단 [unverified] 장소의 슬롯은 예외다(AI 가 그 장소의
+     * 영업시간을 못 봤다 — 미등록·매핑 실패·영업시간 모름). 그것을 가려 쓰는 것은 하루 점검뿐이고 편집·되돌리기는 위반만 본다.
+     */
+    data class Judged(val violations: List<Violation>, val unverified: Set<UUID> = emptySet()) : Revalidation
 
     /** AI 를 못 불렀다(장애·시한). 아무것도 주장하지 않는다. */
     data object Withheld : Revalidation
@@ -36,7 +39,7 @@ internal sealed interface Revalidation {
          * 외부 호출이라 **트랜잭션 밖**에서 부른다(DB 커넥션을 물지 않게, generate 와 동일).
          */
         fun attempt(agent: ScheduleAgentPort, output: ScheduleAgentOutput, tripId: UUID): Revalidation =
-            runCatching { Judged(agent.validate(output)) }
+            runCatching { agent.validateWithUnverified(output).let { Judged(it.violations, it.unverifiedPoiIds) } }
                 .getOrElse { e ->
                     log.warn(
                         "일정 재검증 실패 — 직전 위반 표시를 유지한 채 진행합니다(판정 보류). tripId={}",

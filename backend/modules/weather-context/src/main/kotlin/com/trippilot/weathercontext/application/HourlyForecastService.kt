@@ -1,6 +1,5 @@
 package com.trippilot.weathercontext.application
 
-import com.trippilot.weathercontext.api.DailyWeather
 import com.trippilot.weathercontext.api.HourlyForecastFacade
 import com.trippilot.weathercontext.api.HourlyForecastUnavailable
 import com.trippilot.weathercontext.api.HourlyWeather
@@ -69,7 +68,6 @@ class HourlyForecastService(
         gridKey = gridKey,
         baseAt = baseAt,
         hourly = hourly.mapValues { (_, h) -> HourlyWeather(h.pop, precipitationOf(h.pty), skyOf(h.sky), h.tmp, h.wsd) },
-        daily = daily.mapValues { (_, d) -> DailyWeather(d.tmn, d.tmx) },
     )
 
     private fun precipitationOf(code: Int?): Precipitation? = when (code) {

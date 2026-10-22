@@ -8,11 +8,14 @@
   ④ OTHER·기간 밖·좌표 없는 행사는 카드가 되지 않는다
   ⑤ TRENDING: 태그 '요즘 인기' — 한 POI 는 한 장(행사가 이긴다)
   ⑥ 결정론 순위: VENUE > NEARBY > TRENDING → 짧은 기간 → 거리 → key, 최대 3
+  ⑥′ 마지막 자리는 '요즘 인기' 몫: 행사만으로 3장이 차면 앞 두 장과 장소·key 가 안 겹치는 가장 좋은 요즘 인기로
+     바꾼다 — 비 오는 날 축제 카드가 빠져도 카드가 남게(G-SA-17, 2026-10-20 결정)
   ⑦ 제외: 나이트라이프·숙소·그 요일 휴무 증명·이미 일정에 있음 (영업시간 정보 없음은 막지 않는다)
   ⑧ 표시 게이트: 이름 2~60자·연락처 꼴 금지
   [PBT — 임의 입력]
   INV-1 닫힌 집합 · 근접·기간 겹침·OTHER·출처 · 입력 순서 불변 · ≤3·유일·순위 정렬 · 제외 · 표시 게이트 ·
-  빠뜨림 없음(3장이 안 찼으면 자격 있는 '요즘 인기'와 행사는 카드에 있다)
+  빠뜨림 없음(3장이 안 찼으면 자격 있는 '요즘 인기'와 행사는 카드에 있다) ·
+  요즘 인기 자리(행사만 3장이면 앞 두 장의 장소를 피한 자격 있는 '요즘 인기'가 없다)
 """
 
 from __future__ import annotations
@@ -241,14 +244,13 @@ def test_행사장_가까이보다_행사장이_먼저고_같은_종류는_짧�
     market = _poi("p-market", "광장시장", 100, category=PoiCategory.FOOD)
     plaza = _poi("p-plaza", "청계광장", 50, category=PoiCategory.SIGHT)
     stage = _poi("p-stage", "거리 예술 무대", 2800, category=PoiCategory.CULTURE)
-    hot = _poi("p-hot", "성수 베이커리", 200, category=PoiCategory.CAFE, tags=(TRENDING_TAG,))
     short = _event("tourapi-1", "광장시장 먹거리 축제", 150, start=_DAY - timedelta(days=1),
                    end=_DAY + timedelta(days=1))                                   # 3일
     long = _event("tourapi-2", "청계천 등불 축제", 60, address="서울 중구 청계광장 일대",
                   start=_DAY - timedelta(days=5), end=_DAY + timedelta(days=4))    # 10일 — 장소는 더 가깝다
     nearby = _event("tourapi-3", "가을 버스킹 축제", 2900, address="서울 어딘가")  # 1일, 무대에서 100m
 
-    cards = _find([nearby, long, short], [hot, stage, plaza, market])
+    cards = _find([nearby, long, short], [stage, plaza, market])
 
     assert [c.key for c in cards] == ["event:tourapi-1", "event:tourapi-2", "event:tourapi-3"]
 
@@ -262,6 +264,52 @@ def test_같은_종류_같은_기간이면_가까운_곳이_먼저고_같은_거
     cards = _find(pois=[twin_b, far, twin_a, near])
 
     assert [c.key for c in cards] == ["trending:p-b-near", "trending:p-a-far", "trending:p-twin-a"]
+
+
+# ── ⑥′ 마지막 자리는 '요즘 인기' 몫 (G-SA-17) ──────────────────────────
+
+
+def _three_festivals(*, market_tags: tuple[str, ...] = (), stage_tags: tuple[str, ...] = ()):
+    """⑥ 의 장면 — 행사장 둘(광장시장·청계광장) + 행사장 가까이 하나(무대). 순위만으로는 행사 세 장이다."""
+    market = _poi("p-market", "광장시장", 100, category=PoiCategory.FOOD, tags=market_tags)
+    plaza = _poi("p-plaza", "청계광장", 50, category=PoiCategory.SIGHT)
+    stage = _poi("p-stage", "거리 예술 무대", 2800, category=PoiCategory.CULTURE, tags=stage_tags)
+    events = [
+        _event("tourapi-1", "광장시장 먹거리 축제", 150, start=_DAY - timedelta(days=1), end=_DAY + timedelta(days=1)),
+        _event("tourapi-2", "청계천 등불 축제", 60, address="서울 중구 청계광장 일대",
+               start=_DAY - timedelta(days=5), end=_DAY + timedelta(days=4)),
+        _event("tourapi-3", "가을 버스킹 축제", 2900, address="서울 어딘가"),
+    ]
+    return events, [market, plaza, stage]
+
+
+def test_행사만_세_장이면_셋째를_가장_좋은_요즘_인기로_바꾼다() -> None:
+    """비 오는 날 앱·서버가 축제 카드를 빼면 행사만 3장인 날은 카드가 0장이었다 — 한 자리는 요즘 인기에 남긴다."""
+    events, places = _three_festivals()
+    hot = _poi("p-hot", "성수 베이커리", 200, category=PoiCategory.CAFE, tags=(TRENDING_TAG,))
+    far_hot = _poi("p-far-hot", "망원 카페", 600, category=PoiCategory.CAFE, tags=(TRENDING_TAG,))
+
+    cards = _find(events, [far_hot, *places, hot])
+
+    assert [c.key for c in cards] == ["event:tourapi-1", "event:tourapi-2", "trending:p-hot"]
+
+
+def test_셋째_행사의_장소가_요즘_인기면_그_장소의_요즘_인기가_자리를_잇는다() -> None:
+    """행사 카드를 가져간 장소라서 사라지던 요즘 인기 — 셋째 자리를 비우면 앞 자리와 겹치지 않는다."""
+    events, places = _three_festivals(stage_tags=(TRENDING_TAG,))
+
+    cards = _find(events, places)
+
+    assert [c.key for c in cards] == ["event:tourapi-1", "event:tourapi-2", "trending:p-stage"]
+
+
+def test_요즘_인기가_앞_두_장의_장소뿐이면_행사_세_장_그대로다() -> None:
+    """한 POI 한 장 — 첫째 행사의 장소를 요즘 인기로 다시 쓰지 않는다(없으면 지금처럼)."""
+    events, places = _three_festivals(market_tags=(TRENDING_TAG,))
+
+    cards = _find(events, places)
+
+    assert [c.key for c in cards] == ["event:tourapi-1", "event:tourapi-2", "event:tourapi-3"]
 
 
 # ── ⑦ 제외 ───────────────────────────────────────────────────────────
@@ -351,6 +399,28 @@ def _scenes(draw):
     return slots, tuple(events), pois, planned
 
 
+@st.composite
+def _crowded_scenes(draw):
+    """행사장이 여럿인 장면 — 행사 카드만으로 3장이 자주 차서 마지막 자리(⑥′)가 실제로 시험된다.
+
+    위 `_scenes` 로는 행사 카드가 2장 이상인 장면이 2,000건에 0건이었다(실측 2026-10-20). 장소마다 제 이름의 행사가
+    (반쯤) 열리고, 장소의 절반쯤이 '요즘 인기'다 — 행사장과 요즘 인기가 같은 장소인 경우가 섞인다.
+    """
+    names = draw(st.lists(st.sampled_from(_GOOD_NAMES[:-1]), min_size=3, max_size=7, unique=True))  # '남산'(2자)은 대조 밖
+    pois = tuple(
+        _poi(f"p{i}", name, draw(st.integers(-900, 900)),
+             category=draw(st.sampled_from((PoiCategory.SIGHT, PoiCategory.NATURE, PoiCategory.CULTURE,
+                                            PoiCategory.CAFE))),
+             tags=(TRENDING_TAG,) if draw(st.booleans()) else ())
+        for i, name in enumerate(names))
+    events = tuple(
+        EventInfo(f"tourapi-{i}", f"{p.name} 축제", EventType.FESTIVAL, _DAY - timedelta(days=draw(st.integers(0, 3))),
+                  _DAY + timedelta(days=draw(st.integers(0, 3))), p.coord, None)
+        for i, p in enumerate(pois) if draw(st.booleans()))
+    planned = frozenset(p.poi_id for p in pois if draw(st.integers(0, 5)) == 0)
+    return (("s0", _BASE),), events, pois, planned
+
+
 def _squash(text: str) -> str:
     return re.sub(r"\s+", "", text).lower()
 
@@ -417,7 +487,7 @@ def test_PBT_근접_기간_유형_출처_규칙을_지킨다(scene) -> None:
 
 
 @settings(max_examples=200, deadline=None)
-@given(_scenes(), st.randoms(use_true_random=False))
+@given(st.one_of(_scenes(), _crowded_scenes()), st.randoms(use_true_random=False))
 def test_PBT_입력_순서를_섞어도_결과가_같다(scene, rnd) -> None:
     slots, events, pois, planned = scene
     shuffled = [list(slots), list(events), list(pois)]
@@ -429,7 +499,7 @@ def test_PBT_입력_순서를_섞어도_결과가_같다(scene, rnd) -> None:
 
 
 @settings(max_examples=300, deadline=None)
-@given(_scenes())
+@given(st.one_of(_scenes(), _crowded_scenes()))
 def test_PBT_최대_3장이고_key_장소가_유일하며_순위대로_놓인다(scene) -> None:
     cards = find_opportunities(_DAY, *scene)
 
@@ -482,6 +552,32 @@ def test_PBT_3장이_안_찼으면_자격_있는_요즘_인기와_행사를_빠�
         hosts = {p.poi_id for p in eligible if _venue_ok(e, p) or _nearby_ok(e, p)}
         if hosts:  # 카드가 있거나, 그 행사의 장소를 더 높은 카드가 이미 가져갔다(한 POI 한 장)
             assert f"event:{e.event_id}" in keys or hosts & used
+
+
+# 행사 셋이 각자 행사장(이름 대조)을 갖고, 일정 밖 '요즘 인기' 한 곳이 따로 있는 장면 — 무작위로는 드물다.
+_RESERVE_SCENE = (
+    (("s0", _BASE),),
+    tuple(EventInfo(f"tourapi-{i}", f"{name} 축제", EventType.FESTIVAL, _DAY, _DAY, _at(10.0 * i), None)
+          for i, name in enumerate(("서울숲", "남산공원", "시립미술관"))),
+    (_poi("p0", "서울숲", 0, category=PoiCategory.NATURE), _poi("p1", "남산공원", 10, category=PoiCategory.NATURE),
+     _poi("p2", "시립미술관", 20, category=PoiCategory.CULTURE),
+     _poi("p3", "성수 베이커리", 30, category=PoiCategory.CAFE, tags=(TRENDING_TAG,))),
+    frozenset(),
+)
+
+
+@settings(max_examples=300, deadline=None)
+@given(st.one_of(_scenes(), _crowded_scenes()))
+@example(_RESERVE_SCENE)
+def test_PBT_행사만_3장이면_앞_두_장의_장소를_피한_자격_있는_요즘_인기가_없다(scene) -> None:
+    """마지막 자리는 '요즘 인기' 몫이다 — 고를 요즘 인기가 있었으면 카드에 요즘 인기가 있다."""
+    slots, events, pois, planned = scene
+    cards = find_opportunities(_DAY, slots, events, pois, planned)
+    if any(c.kind is OpportunityKind.TRENDING for c in cards):
+        return
+    front = {c.poi.poi_id for c in cards[:2]}
+    assert [p.poi_id for p in pois
+            if TRENDING_TAG in p.tags and _eligible(p, slots, planned) and p.poi_id not in front] == []
 
 
 # ── 공휴일 휴무(상황 감지 H1) — 카드의 휴무 증명도 같은 헬퍼 ──────────────────

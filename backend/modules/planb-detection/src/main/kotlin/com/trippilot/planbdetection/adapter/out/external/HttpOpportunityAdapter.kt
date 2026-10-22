@@ -1,6 +1,7 @@
 package com.trippilot.planbdetection.adapter.out.external
 
 import com.trippilot.planbdetection.domain.Opportunity
+import com.trippilot.planbdetection.domain.OpportunityEventType
 import com.trippilot.planbdetection.domain.OpportunityKind
 import com.trippilot.planbdetection.domain.OpportunityPort
 import com.trippilot.planbdetection.domain.OpportunityQuery
@@ -79,6 +80,7 @@ internal data class AiOpportunity(
     val key: String,
     val kind: String,
     val eventName: String? = null,
+    val eventType: String? = null,
     val start: LocalDate? = null,
     val end: LocalDate? = null,
     val poiId: String,
@@ -86,7 +88,10 @@ internal data class AiOpportunity(
     val nearSlotKey: String,
     val distanceLabel: String,
 ) {
-    /** 모르는 종류·UUID 아닌 장소는 예외 — 기본값으로 흡수하면 계약 드리프트가 정상 동작으로 위장된다. */
+    /**
+     * 모르는 종류·UUID 아닌 장소는 예외 — 기본값으로 흡수하면 계약 드리프트가 정상 동작으로 위장된다.
+     * 행사 유형만은 없거나 모르는 값이 null(모름)이다 — 카드는 그대로 그릴 수 있고, 날씨 위험 날 축제처럼 빠질 뿐이다.
+     */
     fun toDomain() = Opportunity(
         key = key,
         kind = OpportunityKind.valueOf(kind),
@@ -97,5 +102,6 @@ internal data class AiOpportunity(
         poiName = poiName,
         nearSlotKey = nearSlotKey,
         distanceLabel = distanceLabel,
+        eventType = OpportunityEventType.of(eventType),
     )
 }

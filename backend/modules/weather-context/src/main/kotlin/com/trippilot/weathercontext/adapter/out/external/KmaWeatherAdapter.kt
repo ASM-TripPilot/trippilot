@@ -1,7 +1,6 @@
 package com.trippilot.weathercontext.adapter.out.external
 
 import com.trippilot.placedata.api.RegionLookupFacade
-import com.trippilot.weathercontext.domain.GridDay
 import com.trippilot.weathercontext.domain.GridForecast
 import com.trippilot.weathercontext.domain.GridForecastMissing
 import com.trippilot.weathercontext.domain.GridForecastPort
@@ -53,8 +52,8 @@ import java.util.concurrent.atomic.AtomicReference
  *
  * ## 격자 경로(상황 감지 단기예보 · [GridForecastPort])
  *
- * 같은 `getVilageFcst` 응답 1건에서 오늘·내일(시간별은 자정을 넘긴 내일 슬롯 몫으로 모레까지)의 시간별(POP·PTY·SKY·TMP·WSD)과
- * 날짜별(TMN·TMX)을 읽는다 — 추가 호출 0.
+ * 같은 `getVilageFcst` 응답 1건에서 오늘·내일(자정을 넘긴 내일 슬롯 몫으로 모레까지)의 시간별(POP·PTY·SKY·TMP·WSD)을 읽는다 —
+ * 추가 호출 0. 날짜별(TMN·TMX)은 읽지 않는다 — 발표분에 따라 실렸다 빠졌다 해 기온 판정은 시간별 TMP 만 본다(G-SA-15 결정 2026-10-20).
  * 이름 경로와 다른 점은 셋이다(RES-SA-02·03 · COST-SA-02).
  * - **03(NO_DATA)만 즉시 ≤2회 다시 묻는다** — 기상청은 03 을 200 으로, 좌표·발표분과 무관하게 섞어 준다(실측 15회 중 6회).
  *   계정·키 오류·시한·5xx 는 다시 부르지 않는다(재시도 없음 기반선의 유일한 예외).
@@ -179,7 +178,7 @@ class KmaWeatherAdapter(
     /**
      * 발표분 → 격자 예보. **묻는 날짜**([at] 의 KST 오늘)부터 고른다 — 발표 날짜가 아니다(자정 직후엔 어제 23시 발표분).
      * 시간별은 오늘·내일과 **모레**까지 담는다 — 저녁 회차가 보는 내일 슬롯이 자정을 넘기면(23:30 끝 → 모레 00시 칸) 판정 시각이
-     * 모레에 걸린다. 날짜별(TMN·TMX)은 오늘·내일만 — 모레는 감시 지평 밖이다.
+     * 모레에 걸린다.
      * 오늘·내일 칸이 하나도 없으면 정상 코드여도 형식 깨짐이다 — 빈 예보를 '정상'으로 캐시하면 다음 발표까지 모름이 '확인'처럼 돈다.
      */
     private fun gridOf(root: JsonNode, gridKey: String, baseAt: Instant, at: Instant): GridForecast {
@@ -187,19 +186,14 @@ class KmaWeatherAdapter(
         val horizon = setOf(today, today.plusDays(1))
         val spill = today.plusDays(2)
         val hours = LinkedHashMap<LocalDateTime, MutableMap<String, String>>()
-        val days = LinkedHashMap<LocalDate, MutableMap<String, String>>()
         for (item in root.at("/response/body/items/item")) {
             val date = runCatching { LocalDate.parse(item["fcstDate"].asString(), DATE) }.getOrNull() ?: continue
             if (date !in horizon && date != spill) continue
             val category = item["category"].valueText() ?: continue
             val value = item["fcstValue"].valueText()?.trim() ?: continue
-            when (category) {
-                "TMN", "TMX" -> if (date in horizon) days.getOrPut(date) { HashMap() }[category] = value
-                in HOURLY -> {
-                    val time = runCatching { LocalTime.parse(item["fcstTime"].asString(), TIME) }.getOrNull() ?: continue
-                    hours.getOrPut(date.atTime(time)) { HashMap() }[category] = value
-                }
-            }
+            if (category !in HOURLY) continue
+            val time = runCatching { LocalTime.parse(item["fcstTime"].asString(), TIME) }.getOrNull() ?: continue
+            hours.getOrPut(date.atTime(time)) { HashMap() }[category] = value
         }
         if (hours.keys.none { it.toLocalDate() in horizon }) throw WeatherLookupFailed("기상청 격자 예보에 오늘·내일 칸이 없습니다. grid=$gridKey")
         return GridForecast(
@@ -214,7 +208,6 @@ class KmaWeatherAdapter(
                     wsd = v["WSD"]?.toDoubleOrNull()?.takeIf { it in WIND_RANGE },
                 )
             },
-            daily = days.mapValues { (_, v) -> GridDay(tmn = celsius(v["TMN"]), tmx = celsius(v["TMX"])) },
             fetchedAt = at,
             // 다음 발표가 실제로 제공되는 시각까지 — 그 10분 동안 손에 넣을 수 있는 가장 새 근거라서다.
             expiresAt = baseAt.plus(Duration.ofHours(PUBLISH_INTERVAL_HOURS)).plus(Duration.ofMinutes(PROVIDE_LAG_MIN)),
@@ -318,7 +311,7 @@ class KmaWeatherAdapter(
         /** 격자 경로 시도 수 = 1 + 03 즉시 재요청 2(RES-SA-03). */
         private const val GRID_ATTEMPTS = 3
 
-        /** 격자 경로가 읽는 시간별 카테고리 — 판정이 읽는 칸만(PCP·SNO·REH·UUU·VVV·VEC·WAV 는 읽는 곳이 없다). */
+        /** 격자 경로가 읽는 시간별 카테고리 — 판정이 읽는 칸만(PCP·SNO·REH·UUU·VVV·VEC·WAV·TMN·TMX 는 읽는 곳이 없다). */
         private val HOURLY = setOf("POP", "PTY", "SKY", "TMP", "WSD")
 
         /** 단기예보 PTY 0(없음)~4(소나기). 5~7 은 초단기 전용이다. */
