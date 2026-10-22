@@ -1297,6 +1297,8 @@ _PER_CATEGORY = 2  # 종류를 안 정했을 때 한 종류가 후보를 다 차
 # 밤·야경 주제 — 이때만 나이트라이프 태그 장소를 권한다(평소엔 기회 카드와 같이 뺀다, opportunity._eligible)
 _NIGHT = re.compile(r"야경|야간|밤|나이트|(?<![가-힣])바(?![가-힣])|술집|펍|클럽|칵테일|와인|이자카야")
 _THEME_WORD = re.compile(r"[가-힣A-Za-z]{2,}")
+# 주제의 일반 형용사 — 이름 적중으로 세지 않는다("분위기 좋은" 의 '좋은'이 날마다좋은집·좋은하루를 올렸다, 2026-10-22 테스트 화면)
+_GENERIC_WORDS = frozenset({"좋은", "괜찮은", "멋진", "예쁜", "근사한"})
 # 구경·관광·놀거리 주제 — 종류를 안 정했으면 식당을 뺀다("가볼 만한 곳"에 기사식당이 섞였다 · 계획 경로 "실내 데이트할 곳"에
 # 몸국·반점이 섞였다, 2026-10-20 테스트 화면·실 스택 E2E). 먹을 곳을 말하면 분류가 category=FOOD 를 채우므로 여기 안 온다.
 _SIGHTSEEING = re.compile(r"가\s?볼|구경|볼거리|관광|명소|놀러|둘러|놀\s?거리|할\s?거리|실내|데이트")
@@ -1474,11 +1476,17 @@ def explore_needs_region(ctx: TurnContext) -> bool:
 _EXPLORE_FAMILY: Mapping[str, tuple[str, ...]] = {PoiCategory.CULTURE.value: (PoiCategory.CULTURE.value, PoiCategory.ART.value)}
 
 
-def _explore_rank(pois: Iterable[Poi], category: str | None, theme: str | None) -> list[Poi]:
+def _said_night(category: str | None, theme: str | None, utterance: str) -> bool:
+    """밤·야경·술집을 찾는 말인가 — 분류 주제에 더해 발화도 본다(분류가 "분위기 좋은 바"를 theme "분위기 좋은" 으로 '바'를 뺐다 —
+    그러면 NL2SQL 이 찾은 술집을 전부 버리고 반경 탐색으로 떨어졌다, 2026-10-22 테스트 화면)."""
+    return bool(_NIGHT.search(f"{theme or ''} {utterance}")) or category == PoiCategory.NIGHT_VIEW.value
+
+
+def _explore_rank(pois: Iterable[Poi], category: str | None, theme: str | None, utterance: str = "") -> list[Poi]:
     """결정론 정렬 — 주제 맞음(밤·야경 주제면 야경·나이트라이프) → 주제 낱말이 태그·이름에 든 수 → '요즘 인기' 태그 →
     저장 수 → 별점 → 영업시간 보유 → poi_id. 숙소·표시 불가 이름은 뺀다."""
-    night = bool(theme and _NIGHT.search(theme)) or category == PoiCategory.NIGHT_VIEW.value
-    words = tuple(_THEME_WORD.findall(theme or ""))
+    night = _said_night(category, theme, utterance)
+    words = tuple(w for w in _THEME_WORD.findall(theme or "") if w not in _GENERIC_WORDS)
     themes = frozenset(themes_in(theme))   # "혼자 가기 좋은"·"아이랑" → 혼밥·혼술·아이동반 (태그 글자와 안 맞는 말을 잇는다)
     no_food = category is None and bool(theme and _SIGHTSEEING.search(theme))
 
@@ -1514,7 +1522,7 @@ def _explore_by_sql(ctx: TurnContext, anchor: _Anchor | None, category: str | No
     port = ctx.ports.place_sql
     args = {k: v for k, v in (("region", ctx.arguments.get("region")), ("theme", theme),
                               ("category", _CATEGORY_KO.get(category or "", category))) if v}
-    night = bool(theme and _NIGHT.search(theme)) or category == PoiCategory.NIGHT_VIEW.value
+    night = _said_night(category, theme, ctx.utterance)
     sido = anchor.label if anchor is not None and anchor.kind == "region" and anchor.label in _SIDO_LEVEL else None
     shown = _shown_before(ctx)  # 자르기 전에 뺀다 — 자른 다섯 곳에서 빼면 남은 행이 있어도 비었다
 
@@ -1572,7 +1580,7 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
             # 지역 중심에서의 거리는 사용자에게 뜻이 없다 — 일정 근처일 때만 그 일정에서의 거리를 싣는다(INV-3 거리만)
             "distance_range": _km_label(haversine_km(center, p.coord)) if anchor.kind == "itinerary" else None,
             "reason": "요즘 인기" if TRENDING_TAG in p.tags else (_CATEGORY_KO.get(p.category.value) or "가 볼 만한 곳"),
-        } for p in _explore_rank((p for p in pool.pois if not shown(p.name) and on_the_way(p.coord)), category, theme)]
+        } for p in _explore_rank((p for p in pool.pois if not shown(p.name) and on_the_way(p.coord)), category, theme, ctx.utterance)]
         return {"status": "OK", "candidates": candidates}
 
     return (HandlerTask("explore", fn), *sql)

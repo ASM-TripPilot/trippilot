@@ -625,3 +625,10 @@
 - **판 번호**: 분류 0.2.4(#1463)·답변 0.3.4(행사 C)는 열린 PR 몫이라 비워 두었다 — 그쪽이 다시 올릴 때 판을 하나씩 올린다. 계획은 #1502(0.1.2·0.1.3) 위 0.1.4, 측정셋은 0.3 위 0.4.
 - **지키는 것**: 탐색 코드 무변경 · intent.yaml·뱅크·재생 픽스처 무변경(intent.yaml $intents 해시 그대로) · wiring.py 무변경.
 
+## 2026-10-22 — 도우미 인사·잡담을 LLM 이 즉석에서 (DIALOGUE_SMALLTALK 신설, BR-AO-26 개정)
+
+- **왜**: 10-21 고정 문장은 "너무 딱딱하다" → 사용자 지시 "LLM 이 여행 쪽으로 대화 유도하게 잡담 문장을 즉석에서". 잡담 전담 로컬 LLM 제안은 검토 뒤 보류(Bedrock 학생 모델은 5분 유휴 뒤 콜드 스타트 ≈2분·호출당 5분 창 $0.39, EKS GPU 쿼터 없음) — 사용자 결정 1번: **별도 feature 로 만들고 지금은 호스팅 경량 모델**, 로컬 전환은 배정만 바꾼다.
+- **무엇을 했나**: ① `LlmFeature.DIALOGUE_SMALLTALK`(LIGHT·512·effort none·폴백 짝 `llm_dialogue_smalltalk→fixed_text`) ② `prompts/dialogue_smalltalk.yaml` 0.1.0(사실 없는 프롬프트 — 답변 프롬프트의 "사실이 비면 확인 불가라 말하라"를 피하려고 가른다) ③ `workers/dialogue_smalltalk.py`(게이트는 `DialogueAnswerGate` 재사용) ④ 오케스트레이터 `_smalltalk` — 2″ 인사·2‴ gap CHAT 두 자리, 미배정이면 고정 문장, 시한·실패·시각·목록 밖 장소(스냅샷 슬롯만 허용)면 고정 문장 + FallbackEvent ⑤ `api/dialogue.py` 배정이 곧 켜기(`미배선` 표식 로그) ⑥ chat_lab 은 LAB_SMALLTALK 로 같은 모델에 배정.
+- **검증**: 오케스트레이터·계획·게이트웨이·출력 상한·API 턴 375 passed(배정 시 LLM 문장·llm_calls 2, 실패/지어낸 장소/시각 → 고정 문장 + 이벤트, 감사·맞장구는 LLM 안 부름, CHAT gap LLM llm_calls 3).
+- **배포**: 개발·운영 `llm_feature_models` 에 `DIALOGUE_SMALLTALK=<경량 모델>` 을 더해야 켜진다(배포 담당 세션, 새 이름이라 두 번 배포 규칙).
+

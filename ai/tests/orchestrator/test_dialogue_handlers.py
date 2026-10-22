@@ -1173,6 +1173,25 @@ def test_explore_night_theme_puts_night_view_and_nightlife_first() -> None:
     assert set(_names_of(facts)[:2]) == {"황령산 야경", "루프탑 바"}
 
 
+def test_explore_night_is_read_from_the_utterance_when_the_theme_dropped_it() -> None:
+    # 분류가 "분위기 좋은 바"의 '바'를 빼도(theme "분위기 좋은") 발화로 밤 장소를 찾는 말임을 안다 — 반경·NL2SQL 둘 다
+    said = "부산 분위기 좋은 바 추천해줘"
+    facts, _, _ = _explore_sql({"region": "부산", "theme": "분위기 좋은"}, None, utterance=said)
+    assert set(_names_of(facts)[:2]) == {"황령산 야경", "루프탑 바"}
+    bars = [_row("앙리17", "술집", "수영구", sido="부산광역시", trending=True, nightlife=True),
+            _row("아일드블루", "술집", "수영구", sido="부산광역시", nightlife=True)]
+    facts, _, _ = _explore_sql({"region": "부산", "theme": "분위기 좋은"}, bars, utterance=said)
+    assert _names_of(facts) == ["앙리17", "아일드블루"]  # 종전엔 nightlife 라 전부 버려 반경 탐색으로 떨어졌다
+    facts, _, _ = _explore_sql({"region": "부산", "theme": "분위기 좋은"}, bars, utterance="부산 분위기 좋은 곳")
+    assert "앙리17" not in _names_of(facts)  # 밤 말이 없으면 그대로 뺀다
+
+
+def test_explore_generic_adjective_in_the_theme_is_not_a_name_hit() -> None:
+    pool = (_xpoi("날마다좋은집", PoiCategory.FOOD), _xpoi("광안리 해변", PoiCategory.NATURE, tags=("요즘 인기",)))
+    # 종전엔 '좋은'이 이름에 맞아 식당이 인기 명소를 앞질렀다(테스트 화면 "부산 분위기 좋은 …")
+    assert [p.name for p in dh._explore_rank(pool, None, "분위기 좋은")][0] == "광안리 해변"
+
+
 @pytest.mark.parametrize("theme", ["가볼 만한", "실내 데이트", "놀거리"])
 def test_explore_sightseeing_theme_without_a_category_leaves_out_restaurants(theme: str) -> None:
     names = _names_of(_explore({"region": "부산", "theme": theme})[0])

@@ -54,6 +54,8 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             LlmFeature.DIALOGUE_PLAN: ModelTier.LIGHT,
             # 장소 탐색 NL2SQL — 짧은 SELECT 한 문장, 같은 9s 안의 팬아웃 작업이라 LIGHT
             LlmFeature.DIALOGUE_SQL: ModelTier.LIGHT,
+            # 인사·잡담 한마디 — 답변과 같은 급·같은 9s 안이라 LIGHT. 배정(feature_models)이 곧 켜기, 로컬 모델 전환도 배정으로
+            LlmFeature.DIALOGUE_SMALLTALK: ModelTier.LIGHT,
             LlmFeature.EXPLANATION: ModelTier.HEAVY,
             # 차선책 근거 문장 — 설명(EXPLANATION)과 같은 급의 취향 그라운딩 문장 (TRIP-887)
             LlmFeature.ALTERNATIVE_EXPLANATION: ModelTier.HEAVY,
@@ -144,6 +146,8 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # 같은 곳 — SQL 을 못 만들면(시한·깨진 출력·허용 목록 탈락) 종전 반경 탐색(지역 중심 표 + 결정론 정렬)으로 내려간다.
             # "장소 조회로 답할 말이 아님"(sql=null)은 성공·0건이라 이 짝이 나가지 않는다.
             LlmFeature.DIALOGUE_SQL: ("llm_dialogue_sql", "explore_radius"),
+            # 같은 곳 2″·2‴ — 잡담 문장을 못 만들면(게이트 드롭·시한·목록 밖 장소) 인사·잡담 고정 문장(GREETING_TEXT·CHAT_TEXT)
+            LlmFeature.DIALOGUE_SMALLTALK: ("llm_dialogue_smalltalk", "fixed_text"),
             # intent_router `_vote` — 유사질문이 없으면 투표를 접고 3차(LLM 직접
             # 분류)로 **승급**한다. 규칙으로 내려가는 강등이 아니다.
             LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
@@ -222,6 +226,8 @@ def default_feature_max_tokens() -> Mapping[LlmFeature, int]:
             LlmFeature.DIALOGUE_PLAN: 1024,
             # SELECT 한 문장(≤800자) JSON — 사고를 끄므로(none) 출력 자체만 든다
             LlmFeature.DIALOGUE_SQL: 512,
+            # 잡담 1~3문장 JSON — 답변과 같은 상한
+            LlmFeature.DIALOGUE_SMALLTALK: 512,
         }
     )
 
@@ -280,6 +286,8 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
             LlmFeature.DIALOGUE_PLAN: "none",
             # 팬아웃 안(≤3s)의 짧은 변환이라 사고를 끈다 — luna 는 minimal 을 400 으로 거부하고 none 을 받는다(DIALOGUE_PLAN 실측)
             LlmFeature.DIALOGUE_SQL: "none",
+            # 잡담 — 답변과 같은 자리(≤3.5s), 사고 없이
+            LlmFeature.DIALOGUE_SMALLTALK: "none",
         }
     )
 
