@@ -100,6 +100,12 @@ export function SplashGate() {
       </Stack.Protected>
       <Stack.Protected guard={destination === 'HOME'}>
         <Stack.Screen name="(tabs)" />
+        {/* c10 기능 안내(TRIP-1595) — 취향 2/2 완료가 HOME 을 연 뒤 replace 로 오는 화면이라 HOME 가드 안이다(로그아웃·401 이면 가드가 치운다).
+            스와이프 뒤로를 끈다(진입·퇴장 모두 replace 라 아래에 돌아갈 화면도 없다). animation 은 주지 않는다. */}
+        <Stack.Screen
+          name="onboarding-tour"
+          options={{ gestureEnabled: false }}
+        />
       </Stack.Protected>
       {/* i04 재계획 요청 시트 — 허브 위에 겹쳐 띄운다(TRIP-750 D1). trips 라우트는 어떤 가드에도
           속하지 않으므로 선언도 가드 밖에 둔다. */}

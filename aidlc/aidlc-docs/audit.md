@@ -1842,3 +1842,9 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — 사이클 20261022-assistant-proposal-no-downgrade(경량) [기록]. 코드 `mergeReopened` 가드 3줄 + 테스트 8건(같은 PR). 옵시디언 볼트 부재 → `_workspace/`. `aidlc-state.md` 무변경.
 
 ---
+
+## Functional Design 사후 개정 — U0 온보딩 완료 → 기능 안내(c10) 경로 · testID 추가 (TRIP-1594 · 1595)
+**Timestamp**: 2026-10-22T21:05:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 세션 2026-10-22, 그대로 인용) "아니야 모든 기능 설명한 한번의 온보딩에서 다 처리하자 애니메이션도 좀 넣어보고" / "저대로 해서 develop에 브랜치 만들어서 티켓 만들고 진행 ㄱㄱ 하는데2/6 숙소에 가격정보는 빼고" / AskUserQuestion 답 — "취향 단계에서 '나중에 설정하고 시작'(일괄 건너뛰기)을 눌러 온보딩을 끝낸 사람도 기능 안내를 보게 할까요?"="둘 다 본다 (Recommended)" · "U0 설계 문서(frontend-components §2 '완료 시 홈 진입', §6 testID 목록)에 기능 안내 화면이 없습니다. 사이클 끝 [기록]에서 정본에 반영할까요?"="반영한다 (Recommended)".
+**AI Response**: `construction/u0-foundation/functional-design/frontend-components.md` §2 「온보딩 위저드 UX 규칙」 아래와 §6 testID 목록 아래에 `[개정 · 2026-10-22 · TRIP-1594]` 블록 각 1개 insert — 세 완료 출구가 기능 안내(`onboarding-tour`, 6장)로 가고 거기서 홈으로 간다(1회, 플래그 없음), 기능 안내 testID 9종. 원문 수정 0줄.
+**Context**: CONSTRUCTION — Functional Design 사후 개정(구현 반영, FE TRIP-1595, 사이클 20261022-trip1594-c10-tour-s1 [기록]). scribe 가 (B) 절차상 원문 부재로 미반영한 것을 오케가 원문과 함께 적용. `aidlc-state.md` 무변경.

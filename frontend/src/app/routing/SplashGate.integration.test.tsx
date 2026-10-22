@@ -103,6 +103,7 @@ const ROUTES = {
     <Stack screenOptions={{ headerShown: false }} />
   ),
   '(onboarding)/welcome': Empty,
+  'onboarding-tour': stub('tour-root'),
   '(tabs)/_layout': () => <Tabs screenOptions={{ headerShown: false }} />,
   '(tabs)/index': stub('home-root'),
   '(tabs)/my': Empty,
@@ -388,5 +389,42 @@ describe('푸시 탭은 진짜 라우터에서 알림함과 같은 곳으로 간
       tripId: 'trip-1',
       triggerId: 'trigger-1',
     });
+  });
+});
+
+// TRIP-1595 AC1·AC3 — 취향 2/2 완료 직후 기능 안내. 배선은 `replace` 두 번이라(진입·퇴장) 스택에 되돌아갈 화면이 남지 않아야
+// 안드로이드 하드웨어 뒤로·iOS 가장자리 스와이프가 투어로 돌아오지 못한다. 목 라우터로는 이 스택 모양을 못 본다(브리프 4-1).
+// 선제 green 가능: 라우트 파일만 있어도 expo-router 가 자동 등록하므로 SplashGate 에 선언이 없어도 이동은 된다 —
+// 이 케이스가 지키는 것은 "선언을 ONBOARDING 가드 안에 두면 HOME 이 된 뒤 이동이 안 먹는다" 같은 잘못된 위치다.
+describe('기능 안내는 진짜 라우터에서 한 장만 남는다 (TRIP-1595)', () => {
+  it('온보딩 → 게이트 HOME → replace(/onboarding-tour) 뒤 투어 하나만 남고, replace(/) 뒤엔 홈 하나만 남는다', () => {
+    // 준비 — 온보딩 중. 앵커: 온보딩 그룹만 그려져 있다.
+    gateDestination = 'ONBOARDING';
+    const app = renderRouter(ROUTES, { initialUrl: '/welcome' });
+    act(() => {
+      jest.advanceTimersByTime(SPLASH_MIN_VISIBLE_MS);
+    });
+    expect(rootStackNames(app)).toEqual(['(onboarding)']);
+
+    // 실행 1 — 완료 응답 뒤 게이트가 HOME 을 열고, 그 다음에 투어로 보낸다(PrefStep2Page 의 순서).
+    act(() => {
+      flipGateTo('HOME');
+    });
+    act(() => router.replace('/onboarding-tour' as never));
+
+    // 단언 1 — 투어 하나뿐이고 뒤로 갈 곳이 없다.
+    expect(rootStackNames(app)).toEqual(['onboarding-tour']);
+    expect(app.getPathname()).toBe('/onboarding-tour');
+    expect(screen.getByTestId('tour-root')).toBeOnTheScreen();
+    expect(router.canGoBack()).toBe(false);
+
+    // 실행 2 — 건너뛰기·시작하기.
+    act(() => router.replace('/'));
+
+    // 단언 2 — 홈 하나뿐, 투어는 스택에 없다.
+    expect(rootStackNames(app)).toEqual(['(tabs)']);
+    expect(screen.getByTestId('home-root')).toBeOnTheScreen();
+    expect(screen.queryByTestId('tour-root')).toBeNull();
+    expect(router.canGoBack()).toBe(false);
   });
 });
