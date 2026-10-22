@@ -118,7 +118,7 @@ const heroDotShadow = {
 // discovery는 고정 카피, 단계 얼굴은 greetTitle/greetSubtitle/greetName을 주입받는다.
 // TRIP-939 AC-9 — 종은 알림함 진입 버튼이다. role 은 콜백 유무가 아니라 구조로 굳힌다(370-AC-4 집합).
 // 하드코딩 빨간점은 뺐다(Q3 — 읽음 처리 미배선이라 켜지면 꺼지지 않는다).
-// TRIP-1553 — 종 오른쪽 ✦ 는 우하단 FAB 에서 옮겨 온 도우미 진입이다(같은 40 원형·구조 role). 글리프는
+// TRIP-1553 — 종 왼쪽 ✦ 는(후속: ✦ 왼쪽·종이 오른쪽 끝) 우하단 FAB 에서 옮겨 온 도우미 진입이다(같은 40 원형·구조 role). 글리프는
 // open-assistant 의 도우미 ✦ (홈 eyebrow 의 같은 이름 별과 다른 것).
 function GreetingHeader({
   title,
@@ -146,15 +146,7 @@ function GreetingHeader({
           <Text className="font-noto text-[12.5px] text-muted">{subtitle}</Text>
         ) : null}
       </View>
-      <Pressable
-        testID="home-dashboard-bell"
-        accessibilityRole="button"
-        onPress={onPressBell}
-        style={softCardShadow}
-        className="h-[40px] w-[40px] items-center justify-center rounded-full bg-canvas"
-      >
-        <BellGlyph size={22} />
-      </Pressable>
+      {/* TRIP-1553 후속(2026-10-22 사용자) — ✦ 도우미가 왼쪽, 알림 벨이 행의 오른쪽 끝. */}
       <Pressable
         testID="home-dashboard-assistant"
         accessibilityRole="button"
@@ -164,6 +156,15 @@ function GreetingHeader({
         className="h-[40px] w-[40px] items-center justify-center rounded-full bg-canvas"
       >
         <AssistantSparkleGlyph size={20} color={GLYPH_COLORS.primary} />
+      </Pressable>
+      <Pressable
+        testID="home-dashboard-bell"
+        accessibilityRole="button"
+        onPress={onPressBell}
+        style={softCardShadow}
+        className="h-[40px] w-[40px] items-center justify-center rounded-full bg-canvas"
+      >
+        <BellGlyph size={22} />
       </Pressable>
     </View>
   );
