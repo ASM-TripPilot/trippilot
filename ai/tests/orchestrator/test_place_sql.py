@@ -125,6 +125,9 @@ def _now_submit(fn) -> Future:
     ("홍대와 이태원 사이에 가볼만한 곳 알려줘", False),  # 두 곳 사이는 반경으로만 찾는다 — 미리 써 봐야 버린다
     ("홍대와 이태원사이😊 카페", False),  # 핸들러와 같게 정규화해서 본다
     ("서울이랑 부산 사이 가볼 만한 곳", False),  # 너무 먼 짝 — 핸들러는 찾지 않고 그렇다고 답한다
+    ("홍대 한군데 들리려고", True), ("부산 한 곳만 더", True),  # 들르다·한 군데
+    ("서울 소식 들리는 거 있어?", False), ("제주 한 곳에서 며칠 머물까?", False),  # 듣다·머물다 — 장소 찾기가 아니다
+    ("서울 한 곳만 더 알려줘", True), ("일정에 제주 한 곳만 더 넣어줘", False), ("서울 일정에서 한 곳만 빼줘", False),  # 편집 말은 아니다
 ])
 def test_place_query_needs_a_known_region_and_a_place_word(said: str, expected: bool) -> None:
     assert looks_like_place_query(said) is expected

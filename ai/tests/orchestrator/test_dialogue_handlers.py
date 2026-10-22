@@ -1787,6 +1787,108 @@ def test_explore_a_classified_region_outside_the_pair_wins() -> None:
     assert facts.detail == {"anchor": "성수", "anchor_kind": "region"} and port.calls
 
 
+@pytest.mark.parametrize(("region", "rows", "kept"), [
+    # "홍대"에 NL2SQL 이 이름의 '홍대'·발화의 '이태원'·'서울'을 읽어 천안·용산구 행을 냈다(2026-10-22 테스트 화면) — 앵커의 시·도·시군구 밖은 버린다
+    ("홍대", [_row("홍대 벽화거리", sigungu="마포구"), _row("천안홍대용과학관", "문화", "천안시", sido="충청남도"),
+            _row("쾨닉 서울", "문화", "용산구"), _row("이태원 우사단길", sigungu="용산구")], ["홍대 벽화거리"]),
+    ("강릉", [_row("강릉 커피거리", sigungu="강릉시", sido="강원특별자치도"), _row("속초 중앙시장", sigungu="속초시", sido="강원특별자치도")],
+     ["강릉 커피거리"]),  # 시·군은 시군구로(도 이름은 바뀐다)
+    ("애월", [_row("애월 카페", "카페", "제주시", sido="제주특별자치도"), _row("성산 카페", "카페", "서귀포시", sido="제주특별자치도")], ["애월 카페"]),
+    ("제주", [_row("애월 카페", "카페", "제주시", sido="제주특별자치도"), _row("성산 카페", "카페", "서귀포시", sido="제주특별자치도")],
+     ["애월 카페", "성산 카페"]),  # 시·도는 시·도만
+])
+def test_explore_sql_rows_outside_the_anchor_area_are_dropped(region: str, rows, kept) -> None:
+    facts, _, _ = _explore_sql({"region": region}, rows, utterance=f"{region} 가볼 만한 곳")
+    assert _names_of(facts) == kept
+
+
+def test_explore_between_is_read_from_the_plan_path_heard_text() -> None:
+    # 계획 경로는 utterance 를 비운다(NL2SQL 재료) — 사이는 heard 에서 읽어야 한다
+    port, builder = _PlaceSql([_row("천안홍대용과학관", "문화", "천안시", sido="충청남도")]), _PoolBuilder(_LINE_POOL)
+    ctx = replace(_ctx(_EMPTY_SNAP, {"region": "홍대"}, ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=builder, place_sql=port)),
+                  utterance="", heard="홍대와 이태원 사이에 있는 곳중에 갈만한 곳 알려줘")
+    facts = _run(_EXPLORE, ctx)
+    assert facts.detail == {"anchor": "홍대·이태원 사이", "anchor_kind": "between"} and port.calls == []
+
+
+@pytest.mark.parametrize("utterance", ["홍대에서 이태원 가는 길에 들를 곳", "홍대에 있다가 이태원 넘어가는길에 한군데 들리려고",
+                                       "홍대역에서 이태원역 가는 중에 갈 데"])
+def test_explore_on_the_way_between_two_places_is_between(utterance: str) -> None:
+    facts, port, _ = _explore_sql({"region": "이태원"}, None, utterance=utterance, pool=_LINE_POOL)
+    assert facts.detail == {"anchor": "홍대·이태원 사이", "anchor_kind": "between"} and port.calls == []
+
+
+_ENDS = (_at("홍대 놀이터", PoiCategory.SIGHT, 37.5563, 126.9220, tags=("요즘 인기",)),  # 선분 0%
+         _at("이태원회관", PoiCategory.FOOD, 37.5345, 126.9946, tags=("요즘 인기",)))  # 100%
+
+
+def test_explore_between_puts_the_middle_before_the_two_ends() -> None:
+    # 이태원 끝의 '요즘 인기' 다섯 곳만 나왔다 — 가운데(선분 15~85%)가 먼저, 끝은 모자랄 때만
+    facts, _, _ = _explore_sql({"region": "홍대와 이태원 사이"}, None, utterance="", pool=_pool(*_LINE_POOL.pois, *_ENDS))
+    assert set(_names_of(facts)) == _ON_LINE  # 가운데 다섯 — 끝의 인기 장소 둘은 밀린다
+    few = _pool(*[p for p in _LINE_POOL.pois if p.name in ("효창공원", "경의선숲길")], *_ENDS)
+    facts, _, _ = _explore_sql({"region": "홍대와 이태원 사이"}, None, utterance="", pool=few)
+    assert _names_of(facts)[:2] == ["효창공원", "경의선숲길"] and set(_names_of(facts)[2:]) == {"홍대 놀이터", "이태원회관"}
+
+
+def test_explore_sql_gangnam_keeps_seocho_rows_and_rows_without_a_district_in_the_city() -> None:
+    rows = [_row("강남역 교보타워", sigungu="서초구"), _row("코엑스", sigungu="강남구"), _row("신논현 맛집", sigungu="서초구"),
+            _row("주소 짧은 곳", sigungu=None), _row("수원 카페", "카페", "수원시", sido="경기도")]
+    facts, _, _ = _explore_sql({"region": "강남"}, rows, utterance="강남 가볼 만한 곳")
+    assert _names_of(facts) == ["강남역 교보타워", "코엑스", "신논현 맛집", "주소 짧은 곳"]  # 강남역 서편은 서초구 · 시군구 없는 행은 시·도로
+
+
+def test_explore_between_caps_each_category_once_across_middle_and_ends() -> None:
+    middle = (_at("효창 국수", PoiCategory.FOOD, 37.5446, 126.9616), _at("공덕 족발", PoiCategory.FOOD, 37.5440, 126.9516),
+              _at("숙대 카페", PoiCategory.CAFE, 37.5446, 126.9720))
+    ends = (_at("홍대 돈까스", PoiCategory.FOOD, 37.5563, 126.9220, tags=("요즘 인기",)), _at("이태원 케밥", PoiCategory.FOOD, 37.5345, 126.9946, tags=("요즘 인기",)),
+            _at("홍대 서점", PoiCategory.SHOPPING, 37.5563, 126.9220), _at("이태원 앤틱거리", PoiCategory.SHOPPING, 37.5345, 126.9946))
+    facts, _, _ = _explore_sql({"region": "홍대와 이태원 사이"}, None, utterance="", pool=_pool(*middle, *ends))
+    names = _names_of(facts)
+    assert names[:3] == ["효창 국수", "공덕 족발", "숙대 카페"] or set(names[:3]) == {"효창 국수", "공덕 족발", "숙대 카페"}
+    assert set(names[3:]) == {"홍대 서점", "이태원 앤틱거리"}  # 식당은 가운데 둘로 상한 — 끝의 인기 식당은 밀린다
+
+
+def test_explore_short_pair_does_not_split_middle_from_ends() -> None:
+    # 명동·종로 1km — 가운데 15% 가 150m 라 길 위 명동성당이 끝으로 밀렸다. 선분이 띠 폭의 두 배보다 짧으면 가르지 않는다
+    pool = _pool(_at("명동성당", PoiCategory.CULTURE, 37.5633, 126.9870, tags=("요즘 인기",)), _at("을지로 노가리골목", PoiCategory.FOOD, 37.5668, 126.9890))
+    facts, _, _ = _explore_sql({"region": "명동과 종로 사이"}, None, utterance="", pool=pool)
+    assert _names_of(facts)[0] == "명동성당"
+
+
+def test_explore_between_night_theme_still_puts_night_places_first_even_at_an_end() -> None:
+    # 가운데 먼저가 주제 맞음보다 앞에 있어 "사이 야경"에서 끝의 야경이 빠졌다(재검증) — 주제·이름 적중 뒤, '요즘 인기' 앞
+    bar = _at("이태원 루프탑 바", PoiCategory.NIGHT_VIEW, 37.5345, 126.9946, tags=("요즘 인기",))
+    facts, _, _ = _explore_sql({"region": "홍대와 이태원 사이", "theme": "야경"}, None, utterance="", pool=_pool(*_LINE_POOL.pois, bar))
+    assert _names_of(facts)[:2] == ["남산타워", "이태원 루프탑 바"]  # 야경이 먼저(가운데 남산 → 끝 루프탑), 낮 장소는 뒤
+
+
+def test_explore_sql_county_anchor_keeps_rows_without_a_district() -> None:
+    rows = [_row("강릉 커피거리", sigungu="강릉시", sido="강원특별자치도"), _row("주소 짧은 곳", sigungu=None, sido="강원특별자치도"),
+            _row("속초 중앙시장", sigungu="속초시", sido="강원특별자치도")]
+    facts, _, _ = _explore_sql({"region": "강릉"}, rows, utterance="강릉 가볼 만한 곳")
+    assert _names_of(facts) == ["강릉 커피거리", "주소 짧은 곳"]  # 시군구를 못 뽑은 행은 대조할 수 없어 둔다
+
+
+def test_explore_theme_station_names_still_count_as_name_hits() -> None:
+    pool = _pool(_at("명동 칼국수", PoiCategory.FOOD, 37.56, 126.98, tags=("요즘 인기",)), _at("서울역 앞 설렁탕", PoiCategory.FOOD, 37.5547, 126.9707))
+    assert [p.name for p in dh._explore_rank(pool.pois, None, "서울역 근처 맛집")] == ["서울역 앞 설렁탕", "명동 칼국수"]
+
+
+def test_explore_follow_up_opens_after_an_on_the_way_request() -> None:
+    # "들리려고"·"들를 곳"은 장소 찾기 말에 없었다 — 짝 발화는 사슬을 연다
+    earlier = (("USER", "홍대에 있다가 이태원 넘어가는길에 한군데 들리려고"), ("ASSISTANT", "효창공원, 경의선숲길이 있어요."))
+    facts, _, _ = _follow("더 알려줘", earlier, pool=_LINE_POOL)
+    assert facts.detail == {"anchor": "홍대·이태원 사이", "anchor_kind": "between"} and "효창공원" not in _names_of(facts)
+
+
+def test_explore_theme_region_words_do_not_count_as_name_hits() -> None:
+    # theme "홍대에 있다가 이태원 넘어가는길에 들를 만한 곳"의 '이태원'이 이름 적중이 되어 이태원 이름이 든 곳이 위로 왔다
+    pool = _pool(_at("이태원회관", PoiCategory.FOOD, 37.5446, 126.9616), _at("효창공원", PoiCategory.NATURE, 37.5446, 126.9616, tags=("요즘 인기",)))
+    ranked = dh._explore_rank(pool.pois, None, "홍대에 있다가 이태원 넘어가는길에 들를 만한 곳")
+    assert [p.name for p in ranked] == ["효창공원", "이태원회관"]
+
+
 def test_explore_follow_up_on_sql_rows_skips_shown_places_before_the_cut() -> None:
     # SQL 은 20행까지 낸다 — 다섯 곳으로 자른 뒤에 빼면 남은 행이 있어도 '없음'이 됐다
     rows = [_row(f"장소{n}", sigungu="마포구") for n in range(1, 9)]

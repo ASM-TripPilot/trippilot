@@ -1033,7 +1033,7 @@ class DialogueOrchestrator:
         ctxs = [TurnContext(snapshot=inp.snapshot, arguments=_without_deictic_region(_grounded_args(call.slots, said)),
                             now=inp.now, tz=self._tz,
                             trace_id=inp.trace_id, remaining_ms=lambda: self._remaining(inp), ports=self._ports,
-                            earlier=earlier, heard=text)
+                            earlier=earlier, heard=text, solo=len(draft.calls) == 1)
                 for call in draft.calls]
         n = len(ctxs)
         results = self._fanout(inp, step_tasks([h.plan(ctx) for h, ctx in zip(handlers, ctxs, strict=True)]))
