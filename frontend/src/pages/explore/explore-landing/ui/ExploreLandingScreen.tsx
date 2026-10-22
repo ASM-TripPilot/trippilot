@@ -21,7 +21,7 @@
  * 스크롤 콘텐츠 하단 여백을 넉넉히 둬 마지막 항목이 안 가리게 한다. 탭바는 SafeArea 를 모르는
  * 순수 뷰다(repo-trap).
  */
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -105,6 +105,10 @@ export interface ExploreLandingScreenProps {
     // 역조회해 상세 push 한다(onToggleSave 선례). 하트 press 는 카드 push 를 안 삼킨다(★F-4).
     onPressCard?: (card: StayCardVM) => void;
   };
+  /** 인기 숙소 레인(TRIP-1580) — 있으면 숙소 레인 제목을 「인기 숙소」로 바꾸고 몸통(카드·재시도)을 이 노드로
+   * 갈아 끼운다('모두 보기'는 그대로). 화면은 위젯을 모르므로 page 가 완성 노드를 넘긴다 — 넘길지(지역 필터·
+   * 카드 있음)는 page 가 정한다. 로딩 얼굴이면 스켈레톤이 이긴다. 생략 = 지금 레인 그대로(무회귀). */
+  curatedStayLane?: ReactNode;
   /** 담은 곳 saved-menu FAB(우하단, Figma a01 3012:1731). 하트 FAB 을 누르면 두 미니 FAB
    * (담은 장소→d02 · 저장한 숙소→e04)으로 펼쳐지고, 열린 상태에선 하트가 X(닫기)로 바뀐다.
    * 열림 상태·라우팅은 순수 화면이 못 지므로 라우트가 소유해 prop 으로 내린다(스크롤 중 FAB
@@ -294,6 +298,7 @@ export function ExploreLandingScreen({
   regionFilter,
   placeLane,
   stayLane,
+  curatedStayLane,
   savedMenu,
 }: ExploreLandingScreenProps): ReactElement {
   useToastBottom(FAB_STACK_TOP); // 토스트가 FAB 스택 위로 뜬다(TRIP-1559)
@@ -372,7 +377,13 @@ export function ExploreLandingScreen({
           {/* 숙소 가로 레인 */}
           <View testID="explore-lane-stay" className="mt-2xl">
             <LaneHeader
-              title={regionFilter ? `${regionFilter.label} 숙소` : '숙소'}
+              title={
+                curatedStayLane
+                  ? '인기 숙소'
+                  : regionFilter
+                    ? `${regionFilter.label} 숙소`
+                    : '숙소'
+              }
               onSeeAll={stayLane.onSeeAll}
               seeAllTestID="explore-lane-stay-seeall"
             />
@@ -386,6 +397,8 @@ export function ExploreLandingScreen({
                 width={160}
                 height={182}
               />
+            ) : curatedStayLane ? (
+              curatedStayLane
             ) : stayLane.error ? (
               <StayLaneError onRetry={stayLane.onRetry} />
             ) : (

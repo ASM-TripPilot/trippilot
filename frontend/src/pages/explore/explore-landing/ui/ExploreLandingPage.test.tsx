@@ -84,6 +84,23 @@ jest.mock('@/features/save-stay/model/savedStays', () => ({
   useSavedStays: (...args: unknown[]) => mockUseSavedStays(...args),
 }));
 
+// TRIP-1580 — 지역 필터 갈래는 인기 숙소 컨트롤러(react-query 셋)를 문다. QueryClient 없는 버킷이라 숨김 값으로
+// 목한다 — 숨김이면 지금 레인 그대로라 이 파일의 단언은 그대로다(교체 동작은 integration 이 실물로 잰다).
+jest.mock('@/widgets/curated-stays', () => ({
+  ...jest.requireActual('@/widgets/curated-stays'),
+  useCuratedStaysController: () => ({
+    props: { variant: 'lane' },
+    items: [],
+    hidden: true,
+    isSaved: () => false,
+    pendingStayId: null,
+    onPressCard: jest.fn(),
+    onToggleSave: jest.fn(),
+    onPressBrowseAll: jest.fn(),
+    sheetProps: null,
+  }),
+}));
+
 function stayItem(
   externalSource: string,
   externalId: string,
