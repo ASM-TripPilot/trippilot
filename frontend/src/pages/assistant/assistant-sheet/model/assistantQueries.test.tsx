@@ -5,10 +5,12 @@ import fc from 'fast-check';
 
 import { setAssistantPort } from '../api/assistantClient';
 import type {
+  AssistantMessage,
   FeedbackRequest,
   FeedbackResponse,
   MessagesPage,
   OpenSessionResponse,
+  Proposal,
 } from '../api/assistantContract';
 import { AssistantApiError, type AssistantPort } from '../api/assistantPort';
 import {
@@ -314,10 +316,12 @@ const idsOf = (messages: readonly { id: string }[]) =>
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
     resolve = res;
+    reject = rej;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 function cacheOf(client: QueryClient): MessagesPage | undefined {
@@ -763,5 +767,262 @@ describe('커서는 다른 캐시 갱신이 건드리지 않는다 (AC-7·AC-8 �
     });
 
     expect(cacheOf(client)).toBeUndefined();
+  });
+});
+
+// ── 세션 경계 가드 뮤테이션 심판 (후속 20261022) ───────────────────────────────
+// 구현(W1·N1)이 먼저 들어가 있어 red 단계가 없다 — 가드를 지우면 해당 케이스만 red 가 되는지를 뮤테이션으로 실측했다.
+describe('useLoadOlderMessages · 세션 경계 가드 (W1·N1)', () => {
+  const olderPage: MessagesPage = { messages: [m('o1')], nextBefore: null };
+  const flush = () =>
+    act(async () => {
+      await new Promise((done) => setTimeout(done, 0));
+    });
+
+  function setupTwoSessions() {
+    const held = {
+      s1: deferred<MessagesPage>(),
+      s2: deferred<MessagesPage>(),
+    };
+    const getMessages = jest.fn((sessionId: string) =>
+      sessionId === 's1' ? held.s1.promise : held.s2.promise
+    );
+    restore = setAssistantPort(stubPort({ getMessages }));
+    const client = newClient();
+    for (const id of ['s1', 's2']) {
+      client.setQueryData<MessagesPage>(assistantKeys.messages(id), {
+        messages: [m(`${id}-a`)],
+        nextBefore: 'c1',
+      });
+    }
+    const hook = renderHook(
+      ({ id }: { id: string }) => useLoadOlderMessages(id),
+      { initialProps: { id: 's1' }, wrapper: wrapperWith(client) }
+    );
+    const pageOf = (id: string) =>
+      client.getQueryData<MessagesPage>(assistantKeys.messages(id));
+    const callsFor = (id: string) =>
+      getMessages.mock.calls.filter(([sessionId]) => sessionId === id).length;
+    return { client, held, pageOf, callsFor, ...hook };
+  }
+
+  /** s1 요청이 떠 있는 채로 s2 로 옮기고, s2 요청도 떠 있게 한다. */
+  async function s1InFlightThenS2Loading(
+    ctx: ReturnType<typeof setupTwoSessions>
+  ) {
+    await act(async () => {
+      ctx.result.current.loadOlder();
+    });
+    ctx.rerender({ id: 's2' });
+    await act(async () => {
+      ctx.result.current.loadOlder();
+    });
+    await waitFor(() => expect(ctx.result.current.status).toBe('loading'));
+  }
+
+  it('W1 · 요청이 떠 있는 동안 캐시가 지워지면(이력 지우기) 늦은 응답이 캐시를 새로 심지 않는다', async () => {
+    // Arrange
+    const ctx = setupTwoSessions();
+    await act(async () => {
+      ctx.result.current.loadOlder();
+    });
+
+    // Act — useClearSession 과 같은 removeQueries, 그 뒤에 응답이 도착
+    act(() => {
+      ctx.client.removeQueries({ queryKey: assistantKeys.messages('s1') });
+    });
+    await act(async () => {
+      ctx.held.s1.resolve(olderPage);
+    });
+    await waitFor(() => expect(ctx.result.current.status).toBe('idle'));
+
+    // Assert
+    expect(ctx.pageOf('s1')).toBeUndefined();
+  });
+
+  it.each(['error', 'loading'] as const)(
+    'N1 · 세션이 바뀌면 %s 였던 상태가 idle 로 돌아오고 새 세션에서 요청을 보낼 수 있다',
+    async (before) => {
+      // Arrange — s1 을 error 또는 loading 으로 만든다
+      const ctx = setupTwoSessions();
+      await act(async () => {
+        ctx.result.current.loadOlder();
+      });
+      if (before === 'error') {
+        await act(async () => {
+          ctx.held.s1.reject(new AssistantApiError('SERVER'));
+        });
+      }
+      await waitFor(() => expect(ctx.result.current.status).toBe(before));
+
+      // Act
+      ctx.rerender({ id: 's2' });
+
+      // Assert
+      await waitFor(() => expect(ctx.result.current.status).toBe('idle'));
+      await act(async () => {
+        ctx.result.current.loadOlder();
+      });
+      expect(ctx.callsFor('s2')).toBe(1);
+    }
+  );
+
+  it('N1 · 이전 세션의 늦은 성공은 새 세션의 loading 을 건드리지 않고, 새 세션 캐시도 안 바꾼다', async () => {
+    // Arrange
+    const ctx = setupTwoSessions();
+    await s1InFlightThenS2Loading(ctx);
+    const s2Before = ctx.pageOf('s2');
+
+    // Act
+    await act(async () => {
+      ctx.held.s1.resolve(olderPage);
+    });
+    await flush();
+
+    // Assert — 옛 쪽은 요청 당시 세션(s1)에 붙고, s2 는 그대로
+    expect(ctx.result.current.status).toBe('loading');
+    expect(idsOf(ctx.pageOf('s1')?.messages ?? [])).toEqual(['o1', 's1-a']);
+    expect(ctx.pageOf('s2')).toBe(s2Before);
+  });
+
+  it('N1 · 이전 세션의 늦은 실패는 새 세션을 error 로 바꾸지 않는다', async () => {
+    // Arrange
+    const ctx = setupTwoSessions();
+    await s1InFlightThenS2Loading(ctx);
+
+    // Act
+    await act(async () => {
+      ctx.held.s1.reject(new AssistantApiError('SERVER'));
+    });
+    await flush();
+
+    // Assert
+    expect(ctx.result.current.status).toBe('loading');
+  });
+
+  it('N1 · 이전 세션 요청이 끝나도 새 세션의 진행 중 표식은 풀리지 않아, 같은 틱 재호출은 요청 1회로 막힌다', async () => {
+    // Arrange
+    const ctx = setupTwoSessions();
+    await s1InFlightThenS2Loading(ctx);
+    expect(ctx.callsFor('s2')).toBe(1);
+
+    // Act — s1 이 끝난 뒤 s2 에서 두 번 더 부른다
+    await act(async () => {
+      ctx.held.s1.resolve(olderPage);
+    });
+    await flush();
+    await act(async () => {
+      ctx.result.current.loadOlder();
+      ctx.result.current.loadOlder();
+    });
+
+    // Assert — 처음 1회뿐
+    expect(ctx.callsFor('s2')).toBe(1);
+  });
+});
+
+// ── 세션 재조회 합치기 W2 (후속 20261022) ─────────────────────────────────────
+// 겹치는 id 는 proposal 칸만 서버값, 나머지 칸은 캐시(평가 낙관 갱신 보호 — 기존 H10 이 그대로 green 이어야 한다).
+describe('세션 재조회 합치기 (W2)', () => {
+  const cachedProposal = assistantSample('proposal', { id: 'p' });
+  const serverProposal: Proposal = {
+    ...(cachedProposal.proposal as Proposal),
+    status: 'APPLIED',
+    violations: ['서버 판정'],
+    applyHint: 'AUTO_APPLY',
+  };
+  const cachedP: AssistantMessage = {
+    ...cachedProposal,
+    text: '캐시 문장',
+    feedback: 'UP',
+  };
+
+  async function reopenOver(
+    cache: MessagesPage,
+    incoming: AssistantMessage[],
+    nextBefore: string | null = 'c-server'
+  ) {
+    restore = setAssistantPort(
+      stubPort({
+        openSession: jest.fn(() =>
+          Promise.resolve({
+            session: { id: 's1', tripId: 'trip-1', contextChip: null },
+            messages: incoming,
+            quickReplies: [],
+            nextBefore,
+          })
+        ),
+      })
+    );
+    const client = newClient();
+    client.setQueryData<MessagesPage>(assistantKeys.messages('s1'), cache);
+    const { result } = renderHook(() => useAssistantSession('trip-1'), {
+      wrapper: wrapperWith(client),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const find = (id: string) =>
+      cacheOf(client)?.messages.find((message) => message.id === id);
+    return Object.assign(find, { page: () => cacheOf(client) });
+  }
+
+  it('겹치는 id 의 proposal 은 응답 값으로 통째 바뀐다(status·violations·applyHint)', async () => {
+    const find = await reopenOver({ messages: [cachedP], nextBefore: 'c0' }, [
+      { ...cachedP, proposal: serverProposal },
+    ]);
+
+    expect(find('p')?.proposal).toEqual(serverProposal);
+  });
+
+  it('proposal 말고 다른 칸(text·평가)은 캐시 값을 지킨다', async () => {
+    const find = await reopenOver({ messages: [cachedP], nextBefore: 'c0' }, [
+      {
+        ...cachedP,
+        text: '서버 문장',
+        feedback: null,
+        proposal: serverProposal,
+      },
+    ]);
+
+    expect(find('p')?.text).toBe('캐시 문장');
+    expect(find('p')?.feedback).toBe('UP');
+  });
+
+  it.each([undefined, null])(
+    '응답의 proposal 이 %s 이면 캐시 proposal 을 지킨다',
+    async (empty) => {
+      const find = await reopenOver({ messages: [cachedP], nextBefore: 'c0' }, [
+        { ...cachedP, proposal: empty },
+      ]);
+
+      expect(find('p')?.proposal).toEqual(cachedP.proposal);
+    }
+  );
+
+  it('새 id 는 뒤에 붙고 겹친 id 는 캐시 자리에 남으며, 보관 중인 커서는 응답이 바꾸지 않는다', async () => {
+    const cache: MessagesPage = {
+      messages: [m('a'), cachedP, m('b')],
+      nextBefore: 'c0',
+    };
+
+    const find = await reopenOver(cache, [
+      { ...cachedP, proposal: serverProposal },
+      m('c'),
+    ]);
+
+    expect(idsOf(find.page()?.messages ?? [])).toEqual(['a', 'p', 'b', 'c']);
+    expect(find.page()?.nextBefore).toBe('c0');
+  });
+
+  it('응답 30건 밖의 옛 메시지는 바뀌지 않는다(제안 상태도 그대로 — 알려진 한계)', async () => {
+    const older: AssistantMessage = {
+      ...assistantSample('proposal', { id: 'old' }),
+    };
+    const find = await reopenOver(
+      { messages: [older, cachedP], nextBefore: 'c0' },
+      [{ ...cachedP, proposal: serverProposal }]
+    );
+
+    expect(find('old')).toBe(older);
+    expect(find('old')?.proposal?.status).toBe('PROPOSED');
   });
 });

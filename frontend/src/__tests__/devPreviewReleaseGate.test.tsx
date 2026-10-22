@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import { FlatList } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 /**
@@ -192,6 +193,10 @@ const ASSISTANT_SHEET_KEYS = [
   'assistant-rate-limited',
   'assistant-slow',
   'assistant-open-failed',
+  // 후속 20261022 — 「이전 대화 더 보기」 행의 세 얼굴(30건 넘는 대화)
+  'assistant-older-idle',
+  'assistant-older-loading',
+  'assistant-older-error',
 ];
 
 function keyByLabel(fragment: string): string | undefined {
@@ -283,5 +288,53 @@ describe('프리뷰 · 도우미 시트 키 (TRIP-1530)', () => {
     expect(
       screen.queryAllByTestId('assistant-next-action-OPEN_PLACE')
     ).toHaveLength(0);
+  });
+
+  // 후속 20261022 — 키 장부에만 있고 행이 없는 빈 껍데기를 막는다. 행 뿌리(assistant-older-more)는 세 얼굴 공통이고,
+  // 안쪽 로딩/실패 표식은 그 얼굴에서만 떠야 한다(idle 은 둘 다 없다).
+  it.each([
+    ['assistant-older-idle', null],
+    ['assistant-older-loading', 'assistant-older-loading'],
+    ['assistant-older-error', 'assistant-older-error'],
+  ])('%s — 한 쪽(30건)을 넘는 대화 아래 행이 그려진다(%s)', (key, inner) => {
+    mockSearchParams.state = key;
+    render(<DevPreview />);
+
+    expect(screen.getByTestId('assistant-older-more')).toBeOnTheScreen();
+    for (const id of ['assistant-older-loading', 'assistant-older-error']) {
+      if (id === inner) expect(screen.getByTestId(id)).toBeOnTheScreen();
+      else expect(screen.queryByTestId(id)).toBeNull();
+    }
+    expect(
+      screen.UNSAFE_getByType(FlatList).props.data.length
+    ).toBeGreaterThanOrEqual(40);
+  });
+
+  // 5-b W-1 — `older` 옵션의 기본값이 켜지면 모든 도우미 프리뷰 하단에 가짜 행이 붙는다. 긍정 짝(시트 뿌리)과 함께 부재를 단언.
+  // 키는 메시지 목록을 실제로 그리는 것이어야 한다 — 이력 키(`assistant-history`)는 목록 자체가 없어 뮤턴트를 못 잡았다(실측).
+  it('기존 도우미 키는 「이전 대화 더 보기」 행 없이 그려진다(older 기본값 꺼짐)', () => {
+    const key = keyByLabel('긴 대화(스크롤해서 ↓ 확인)');
+    expect(key).toBeDefined();
+    mockSearchParams.state = key;
+    render(<DevPreview />);
+    expect(screen.getByTestId('assistant-message-list')).toBeOnTheScreen();
+    expect(screen.queryByTestId('assistant-older-more')).toBeNull();
+  });
+
+  it('「이전 대화 더 보기」 행은 안내 글을 그대로 보인다', () => {
+    mockSearchParams.state = 'assistant-older-idle';
+    render(<DevPreview />);
+    expect(screen.getByTestId('assistant-older-more')).toHaveTextContent(
+      '이전 대화 더 보기'
+    );
+  });
+
+  it('index.view 는 긴 대화 샘플을 내보낸다(네트워크 계층 없이 — 지뢰 목 아래에서 로드된다)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const view = require('@/pages/assistant/assistant-sheet/index.view') as {
+      sampleLongConversation?: (count: number) => unknown[];
+    };
+    expect(typeof view.sampleLongConversation).toBe('function');
+    expect(view.sampleLongConversation?.(75)).toHaveLength(75);
   });
 });

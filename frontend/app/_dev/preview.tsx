@@ -65,6 +65,7 @@ import {
   displayMessage,
   needsCapabilitiesChip,
   sampleActionLogs,
+  sampleLongConversation,
   sampleTranscript,
   type AssistantMessage,
   type AssistantScenario,
@@ -2636,6 +2637,7 @@ function renderAssistantPreview(
     mutate?: (messages: AssistantMessage[]) => AssistantMessage[];
     statusRow?: ReactElement;
     body?: ReactElement;
+    older?: 'idle' | 'loading' | 'error';
   } = {}
 ): ReactElement {
   const tripId = options.tripId === undefined ? 'trip-busan' : options.tripId;
@@ -2664,6 +2666,7 @@ function renderAssistantPreview(
       onRetryOpen={noop}
       statusRow={options.statusRow}
       body={options.body}
+      older={options.older ? { status: options.older, onPress: noop } : null}
       renderCard={(message) => (
         <MessageCard message={message} {...ASSISTANT_PREVIEW_HANDLERS} />
       )}
@@ -2850,6 +2853,42 @@ export const PREVIEW_STATES: PreviewState[] = [
               id: `${message.id}-r${round}`,
             }))
           ),
+      }),
+  },
+  {
+    key: 'assistant-older-idle',
+    band: 'b',
+    label: 'b01 · 이전 대화 더 보기(기본)',
+    login: null,
+    // 한 쪽(30건)을 넘는 대화의 최근 쪽 — 목록 맨 위 행의 세 얼굴.
+    render: () =>
+      renderAssistantPreview('greeting', {
+        older: 'idle',
+        mutate: () => sampleLongConversation(75).slice(-45),
+      }),
+  },
+  {
+    key: 'assistant-older-loading',
+    band: 'b',
+    label: 'b01 · 이전 대화 더 보기(불러오는 중)',
+    login: null,
+    // 한 쪽(30건)을 넘는 대화의 최근 쪽 — 목록 맨 위 행의 세 얼굴.
+    render: () =>
+      renderAssistantPreview('greeting', {
+        older: 'loading',
+        mutate: () => sampleLongConversation(75).slice(-45),
+      }),
+  },
+  {
+    key: 'assistant-older-error',
+    band: 'b',
+    label: 'b01 · 이전 대화 더 보기(실패)',
+    login: null,
+    // 한 쪽(30건)을 넘는 대화의 최근 쪽 — 목록 맨 위 행의 세 얼굴.
+    render: () =>
+      renderAssistantPreview('greeting', {
+        older: 'error',
+        mutate: () => sampleLongConversation(75).slice(-45),
       }),
   },
   {

@@ -42,6 +42,22 @@ export function appendMessages(
   return [...current, ...incoming.filter((message) => !seen.has(message.id))];
 }
 
+/**
+ * 재조회 합치기 — 새 id 는 뒤에 붙이고, 겹치는 id 는 **`proposal` 칸만** 응답값으로 바꾼다(서버가 옮긴 제안 상태 반영).
+ * 응답 `proposal` 이 없으면 캐시를 둔다. 평가·문장 등 다른 칸은 캐시 그대로(낙관 갱신 보호).
+ */
+function mergeReopened(
+  current: readonly AssistantMessage[],
+  incoming: readonly AssistantMessage[]
+): AssistantMessage[] {
+  const fresh = new Map(incoming.map((message) => [message.id, message]));
+  const refreshed = current.map((message) => {
+    const proposal = fresh.get(message.id)?.proposal;
+    return proposal ? { ...message, proposal } : message;
+  });
+  return appendMessages(refreshed, incoming);
+}
+
 /** 옛 쪽 전체를 앞에 붙인다. 이미 캐시에 있는 id 는 **기존 것**을 둔다(낙관 갱신된 평가·제안 상태를 옛 값으로 되돌리지 않는다). */
 export function prependMessages(
   older: readonly AssistantMessage[],
@@ -99,7 +115,7 @@ export function useAssistantSession(tripId: string | null) {
           page
             ? {
                 ...page,
-                messages: appendMessages(page.messages, response.messages),
+                messages: mergeReopened(page.messages, response.messages),
               }
             : {
                 messages: response.messages,

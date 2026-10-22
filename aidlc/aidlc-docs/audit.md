@@ -1813,3 +1813,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — Functional Design 사후 개정(구현 반영). 사이클 `20261022-place-category-covers`(브랜치 `feature/place-category-covers`, 티켓 없음). 사용자 승인 절차("audit append + [개정]/[정정] 블록")는 2026-10-21 U10 사후 개정 선례를 따름. `aidlc-state.md` 무변경.
 
 ---
+
+## CONSTRUCTION — U8 FE 정본 반영 (이전 대화 더 보기 후속)
+**Timestamp**: 2026-10-22T16:40:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 세션 2026-10-22, 그대로 인용) "하던거 마저해! 너의 서브에이전트도 하던거 마저 하게해!" → 선행 사이클 새 티켓 후보 3건(W1·N1 심판·프리뷰 긴 대화·W2)을 이음. 3-a 선택: W2 "(a) 제안(proposal) 칸만 서버값으로" · 정본 "같이 개정".
+**AI Response**: `construction/u8-conversational-assistant/functional-design/frontend-components.md` 개정 블록(2026-10-22)에 R23 1행 append — R22 ⑤ 를 "겹치는 id 는 `proposal` 만 응답값, 나머지 캐시 유지" 로 개정, 한계(최근 30건 밖 미갱신·종결 상태 되돌림 경쟁)와 프리뷰 키 3개 기록. 원문 수정 0줄.
+**Context**: CONSTRUCTION — 사이클 20261022-assistant-older-followups [기록]. 옵시디언 볼트 부재 → 개발로그·학습노트는 `_workspace/`(git 미추적). `aidlc-state.md` 무변경.
+
+---
