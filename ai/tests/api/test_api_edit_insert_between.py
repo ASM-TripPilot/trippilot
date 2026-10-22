@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from tests.fakes.fake_llm import FakeLlm
 from trippilot.api.wiring import StaticPoiDb, build_dev_app
+from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.poi import NIGHTLIFE_TAG, DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 
@@ -205,3 +206,128 @@ def test_named_add_without_anchor_gets_the_position_from_code() -> None:
     assert slots[3]["start_at"] >= "15:00:00"  # 기준점 있는 추가 — 뒤를 앞당기지 않는다
     unknown = _post(_body(utterance="효창공원을 남산 다음에 넣어줘"), llm=FakeLlm(canned=canned))  # 남산 슬롯이 없다
     assert unknown["status"] == "TRANSLATION_FAILED" and "position_dropped (unresolved_from)" in unknown["reason"]
+
+
+# ── 2026-10-22 리뷰 확정 지적 ────────────────────────────────────────────
+
+
+def test_utc_requested_at_still_floors_on_the_local_clock() -> None:
+    """BE 는 requested_at 을 UTC(…Z)로 보낸다 — 하한을 그대로 쓰면 슬롯이 UTC 벽시계(04:10)로 나갔다. 분 올림은 조립 하한과 같다."""
+    body = _post(_body(utterance=_SAID, at=f"{_DAY}T04:10:37.482913Z"))  # = 13:10:37 KST, 이동 중
+    assert body["status"] == "APPLIED", body
+    added = body["itinerary"]["days"][0]["slots"][2]
+    assert added["poi_id"] == str(GONGDEOK_CAFE.poi_id) and added["start_at"] == "13:11:00"
+
+
+def test_named_place_with_one_more_goes_to_the_translator_and_keeps_the_position() -> None:
+    """이름 + '하나 더'를 결정론이 가로채 다른 곳을 넣었다 — 번역이 무엇(효창공원)을, 코드가 어디를 맡는다."""
+    canned = json.dumps({"editCommand": {"op": "ADD_SLOT", "params": {"targetPoiId": str(HYOCHANG.poi_id)},
+                                         "affectedSlots": []}})
+    body = _post(_body(utterance="이태원에서 홍대로 넘어갈 때 효창공원 하나 더 넣어줘"), llm=FakeLlm(canned=canned))
+    assert body["status"] == "APPLIED", body
+    assert _ids(body)[1:4] == [str(GYEONGNI.poi_id), str(HYOCHANG.poi_id), str(YEONNAM.poi_id)]
+
+
+def test_before_the_airport_lands_at_the_end_of_the_day() -> None:
+    """'공항 가기 전에'는 종전 끝 추가가 맞던 말이다 — '못 알아들음'으로 바꾸지 않고 마지막 일정 뒤에 넣는다(LLM 0회)."""
+    mangwon_cafe = _poi(30, "망원 카페", PoiCategory.CAFE, 37.5560, 126.8970)  # 마지막 일정(망원한강공원) 1km 안
+    body = _post(_body(utterance="공항 가기 전에 카페 하나 넣어줘"), seed=(*SEED, mangwon_cafe))
+    assert body["status"] == "APPLIED", body
+    assert _ids(body) == [*(str(p.poi_id) for p in DAY), str(mangwon_cafe.poi_id)]
+
+
+def test_chained_clause_does_not_guess_the_gap() -> None:
+    """'경복궁 보고 나서 점심 먹고 …' — 첫 자리 말에 붙이면 점심 앞에 끼운다. 어느 틈인지 단정하지 않는다."""
+    canned = json.dumps({"editCommand": {"op": "ADD_SLOT", "params": {"targetPoiId": str(GONGDEOK_CAFE.poi_id)},
+                                         "affectedSlots": []}})
+    body = _post(_body(utterance="경복궁 보고 나서 점심 먹고 카페 하나 넣어줘"), llm=FakeLlm(canned=canned))
+    assert body["status"] == "TRANSLATION_FAILED" and "ambiguous_clause" in body["reason"], body
+
+
+def test_car_trip_insert_is_validated_with_the_car() -> None:
+    """재타이밍은 자차, 검증 문제는 대중교통이라 자차 여행의 사이 넣기가 늘 HC2 로 떨어졌다 — 검증 수단을 요청 수단에 맞춘다."""
+    body = _post({**_body(utterance=_SAID), "transport_mode": "자가용"})
+    assert body["status"] == "APPLIED", body
+
+
+def test_translator_anchored_add_gets_the_same_trip_day_rules() -> None:
+    """번역이 기준점을 채워 온 추가도 지난 자리 거부·지금 이후 시작을 탄다(`_apply` 한 곳)."""
+    canned = json.dumps({"editCommand": {"op": "ADD_SLOT", "params": {
+        "targetPoiId": str(HYOCHANG.poi_id), "afterPoiId": str(GYEONGNI.poi_id)}, "affectedSlots": []}})
+    past = _post(_body(utterance="효창공원을 경리단길 끝나고 넣어줘", at=f"{_DAY}T15:30:00+09:00"), llm=FakeLlm(canned=canned))
+    assert past["status"] == "REJECTED" and "past_gap" in past["reason"], past
+    transit = _post(_body(utterance="효창공원을 경리단길 끝나고 넣어줘", at=f"{_DAY}T13:40:00+09:00"),
+                    llm=FakeLlm(canned=canned))
+    assert transit["status"] == "APPLIED" and transit["itinerary"]["days"][0]["slots"][2]["start_at"] >= "13:40:00"
+
+
+class _RecordingPoiDb(StaticPoiDb):
+    """반경 조회 인자를 적는다 — 구간 풀이 실제로 구간 원으로 모였는지, 비면 기본 풀로 돌아가는지 본다."""
+
+    def __init__(self, seed: tuple[Poi, ...], *, empty_after: int | None = None) -> None:
+        super().__init__(seed)
+        self.calls: list[tuple[GeoPoint, float]] = []
+        self._empty_after = empty_after
+
+    def find_by_radius(self, center: GeoPoint, radius_km: float) -> tuple[Poi, ...]:
+        self.calls.append((center, radius_km))
+        if self._empty_after is not None and len(self.calls) > self._empty_after:
+            return ()  # 두 번째 조회가 일시 실패해 빈 풀로 흡수된 경우
+        return super().find_by_radius(center, radius_km)
+
+
+def _post_db(body: dict, db: StaticPoiDb) -> dict:
+    with TestClient(build_dev_app(poi_db=db), raise_server_exceptions=False) as client:
+        res = client.post("/ai/v1/itinerary/edit", json=body)
+    assert res.status_code == 200, res.text
+    return res.json()
+
+
+def test_segment_pool_is_fetched_on_the_detour_circle_and_an_empty_one_falls_back() -> None:
+    db = _RecordingPoiDb(SEED)
+    assert _post_db(_body(utterance=_SAID), db)["status"] == "APPLIED"
+    (_, base_km), (center, km) = db.calls
+    d = haversine_km(GYEONGNI.coord, YEONNAM.coord)
+    assert abs(km - (d + 2.0) / 2) < 1e-6 and km < base_km  # 대중교통 우회 2km 타원을 덮는 원 — 기본 풀(10km)보다 좁다
+    assert haversine_km(center, GeoPoint((GYEONGNI.coord.lat + YEONNAM.coord.lat) / 2,
+                                         (GYEONGNI.coord.lng + YEONNAM.coord.lng) / 2)) < 1e-6
+    flaky = _RecordingPoiDb(SEED, empty_after=1)
+    body = _post_db(_body(utterance=_SAID), flaky)
+    assert body["status"] == "APPLIED" and _ids(body)[2] == str(GONGDEOK_CAFE.poi_id)  # 기본 풀로 계속한다
+
+
+def test_inserted_stay_is_capped_at_an_hour() -> None:
+    long_day = [_slot(GYEONGBOK, "09:00:00", "11:00:00"), _slot(GYEONGNI, "11:30:00", "13:30:00"),
+                _slot(YEONNAM, "17:00:00", "19:00:00"), _slot(MANGWON, "19:30:00", "21:30:00")]  # 체류 120분
+    body = _post({**_body(utterance=_SAID), "itinerary": {**_body()["itinerary"], "days": [{"date": _DAY, "slots": long_day}]}})
+    assert body["status"] == "APPLIED", body
+    added = body["itinerary"]["days"][0]["slots"][2]
+    start, end = (int(added[k][:2]) * 60 + int(added[k][3:5]) for k in ("start_at", "end_at"))
+    assert end - start == 60
+
+
+def test_one_sided_gaps_at_the_ends_of_the_day() -> None:
+    """마지막 일정 뒤·첫 일정 앞 — 한쪽 끝만 있는 틈도 사유 없는 예외 없이 그 자리에 넣는다."""
+    mangwon_cafe = _poi(30, "망원 카페", PoiCategory.CAFE, 37.5560, 126.8970)
+    after_last = _post(_body(utterance="망원한강공원 다음에 갈 만한 곳 하나 추가해줘"), seed=(*SEED, mangwon_cafe))
+    assert after_last["status"] == "APPLIED" and _ids(after_last)[-1] == str(mangwon_cafe.poi_id)
+    samcheong = _poi(31, "삼청 갤러리", PoiCategory.ART, 37.5830, 126.9810)  # 경복궁 0.5km
+    before_first = _post(_body(utterance="경복궁 가기 전에 한 군데 더 넣어줘"), seed=(*SEED, samcheong))
+    assert before_first["status"] == "APPLIED" and _ids(before_first)[:2] == [str(samcheong.poi_id), str(GYEONGBOK.poi_id)]
+
+
+def test_named_add_on_the_trip_day_gets_the_same_rules_when_code_fills_the_position() -> None:
+    canned = json.dumps({"editCommand": {"op": "ADD_SLOT", "params": {"targetPoiId": str(HYOCHANG.poi_id)},
+                                         "affectedSlots": []}})
+    past = _post(_body(utterance="효창공원을 경리단길 끝나고 넣어줘", at=f"{_DAY}T15:30:00+09:00"), llm=FakeLlm(canned=canned))
+    assert past["status"] == "REJECTED" and "past_gap" in past["reason"], past
+    transit = _post(_body(utterance="효창공원을 경리단길 끝나고 넣어줘", at=f"{_DAY}T13:10:00+09:00"),
+                    llm=FakeLlm(canned=canned))
+    assert transit["status"] == "APPLIED" and transit["itinerary"]["days"][0]["slots"][2]["start_at"] >= "13:10:00"
+
+
+def test_car_trip_remove_is_validated_with_the_car_too() -> None:
+    """검증 수단 맞춤은 편집 전반의 결함이었다 — 자차 여행의 빼기도 대중교통 HC2 로 떨어졌다(develop 재현)."""
+    command = {"op": "REMOVE_SLOT", "params": {}, "affected_slots": [str(YEONNAM.poi_id)]}
+    body = _post({**_body(command=command), "transport_mode": "자가용"})
+    assert body["status"] == "APPLIED", body

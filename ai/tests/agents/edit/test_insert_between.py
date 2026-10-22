@@ -7,6 +7,9 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
+import time
+from dataclasses import replace
+
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -17,6 +20,7 @@ from trippilot.agents.edit.insert_between import (
     SlotRef,
     detour_km,
     parse_insert_ask,
+    parse_insert_place,
     rank_on_segment,
     resolve_gap,
     segment_anchor,
@@ -26,7 +30,7 @@ from trippilot.assembly_engine.travel import TravelEstimator, haversine_km
 from trippilot.domain.common import GeoPoint, PoiId, TransportMode
 from trippilot.domain.edit import EditCommand, EditOp
 from trippilot.domain.itinerary import DaySolution, VisitSlot
-from trippilot.domain.poi import NIGHTLIFE_TAG, DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 
 KST = timezone(timedelta(hours=9))
 D = date(2026, 10, 21)  # 수요일
@@ -52,6 +56,13 @@ def _poi(n: int, name: str, cat: PoiCategory, lat: float, lng: float, *, tags=()
     ("남산 다음에 갈 만한 곳 하나 추가해줘", (Shape.AFTER, "남산", None, None)),
     ("이태원이랑 홍대 사이에 미술관 하나 넣어줘", (Shape.BETWEEN, "이태원", "홍대", PoiCategory.ART)),  # 문화에서 갈라짐
     ("이태원에서 홍대 갈 때 박물관 하나 넣어줘", (Shape.BETWEEN, "이태원", "홍대", PoiCategory.CULTURE)),
+    ("이태원에서 홍대 넘어가는 중간에 어디 하나 끼워줘", (Shape.BETWEEN, "이태원", "홍대", None)),  # '중간'을 '중'으로 자르지 않는다
+    ("경리단길 바로 다음에 한 군데 더 넣어줘", (Shape.AFTER, "경리단길", None, None)),  # '바로'는 끝 말이 아니다
+    ("공원 하나 경리단길 다음에 넣어줘", (Shape.AFTER, "경리단길", None, PoiCategory.NATURE)),  # 종류가 자리 말 앞에 와도
+    ("지금 있는 곳에서 연남동 가는 길에 한 군데 더", (Shape.BEFORE, None, "연남동", None)),  # 출발이 지금 있는 곳 = B 앞
+    ("경리단길에서 연남동까지 가는 길에 한 곳 더", (Shape.BETWEEN, "경리단길", "연남동", None)),
+    ("종로 다음에 카페 하나 넣어줘", (Shape.AFTER, "종로", None, PoiCategory.CAFE)),  # '로'는 조사가 아니다
+    ("공항 가기 전에 카페 하나 넣어줘", (Shape.BEFORE, None, "공항", PoiCategory.CAFE)),
 ])
 def test_parse_reads_position_and_kind(utterance: str, expected: tuple) -> None:
     ask = parse_insert_ask(utterance)
@@ -71,9 +82,35 @@ def test_parse_reads_position_and_kind(utterance: str, expected: tuple) -> None:
     "이태원 들렀다가 홍대 가기 전에 뭐 먹지?",            # '들렀다가'는 자리 말이지 더하기가 아니다
     "카페 하나 추가해줘",                               # 자리가 없다 — 종전 번역 경로
     "응",
+    # 2026-10-22 리뷰 확정 — 낱말 표 밖의 말이 남으면 뜻을 바꾼다(번역기 몫)
+    "이태원에서 홍대 갈 때 효창공원 하나 더 넣어줘",       # 이름 + '하나 더'
+    "한 군데 더 넣어줘, 효창공원으로 경리단길 다음에",
+    "경리단길 다음 카페 빼고 공원 하나 넣어줘",            # 교체일 수 있다
+    "경복궁 보고 나서 점심 먹고 카페 하나 넣어줘",          # 다른 서술절
+    "카페랑 공원 하나씩 경리단길 다음에 넣어줘",           # 여럿
+    "경리단길 다음에 한 군데 더 넣진 마",
+    "경리단길 다음에 한 군데 더 추가 안 해도 돼",
+    "경리단길 다음에 한 곳 더 넣을 필요 없어",
+    "이태원에서 홍대 갈 때 갈 만한 곳 두 군데 추가해줘",   # 여럿 — 한 곳 표현을 지나도 걸린다
+    "이태원이랑 홍대 사이에 카페나 공원 하나 넣어줘",       # 종류 둘 — 고르지 않는다
 ])
 def test_parse_leaves_everything_else_to_the_translator(utterance: str) -> None:
     assert parse_insert_ask(utterance) is None
+
+
+def test_parse_is_bounded_on_long_unspaced_input() -> None:
+    """끝 말 길이를 묶는다 — 묶기 전에는 '에서가' 반복 500자가 5.8s 동안 GIL 을 쥐었다(2026-10-22 리뷰 실측)."""
+    started = time.monotonic()
+    parse_insert_place("추가 " + "에서가" * 166)
+    parse_insert_ask("한 군데 더 " + "에서" * 240)
+    assert time.monotonic() - started < 0.5
+
+
+def test_place_marks_another_clause_so_the_gap_is_not_guessed() -> None:
+    place = parse_insert_place("경복궁 보고 나서 점심 먹고 카페 하나 넣어줘")
+    assert place is not None and place.extra_clause
+    assert resolve_gap(_REFS, place) == "ambiguous_clause"
+    assert not parse_insert_place("카페는 싫고 경리단길 다음에 한 군데 더").extra_clause  # 부정은 절이 아니다
 
 
 def test_negated_kind_is_excluded_not_chosen() -> None:
@@ -84,6 +121,14 @@ def test_negated_kind_is_excluded_not_chosen() -> None:
     assert ask is not None and ask.not_kinds == {PoiCategory.CAFE}
     ask = parse_insert_ask("이태원이랑 홍대 사이에 카페 말고 박물관 하나 넣어줘")
     assert ask is not None and ask.kind is PoiCategory.CULTURE and ask.not_kinds == {PoiCategory.CAFE}
+    ask = parse_insert_ask("카페 말고 이태원에서 홍대로 넘어갈 때 한 군데 더 넣어줘")  # 부정이 자리 말 앞에 와도
+    assert ask is not None and ask.frm == "이태원" and ask.not_kinds == {PoiCategory.CAFE}
+    ask = parse_insert_ask("카페는 싫고 경리단길 다음에 한 군데 더")  # '싫고'도 뺄 종류 — 카페를 고르면 반대다
+    assert ask is not None and ask.kind is None and ask.not_kinds == {PoiCategory.CAFE}
+    place = parse_insert_place("경리단길 다음에 술 한잔할 곳 하나 넣어줘")  # 술을 말했는데 밤 규칙이 술집을 빼면 반대다
+    assert place is not None and place.night
+    assert parse_insert_ask("경리단길 다음에 맥주 하나 넣어줘") is None or parse_insert_place(
+        "경리단길 다음에 맥주 하나 넣어줘").kind is PoiCategory.BAR
 
 
 # ── 자리 해소 ───────────────────────────────────────────────────────────
@@ -98,6 +143,25 @@ _REFS = [SlotRef(p.poi_id, p.name, p.coord) for p in (GYEONGBOK, GYEONGNI, YEONN
 def test_resolve_by_region_when_names_lack_the_area() -> None:
     gap = resolve_gap(_REFS, parse_insert_ask("이태원에서 홍대로 넘어갈 때 한 군데 더 추가했으면 좋겠어"))
     assert not isinstance(gap, str) and (gap.after, gap.before, gap.resolved_by) == (1, 2, ("region", "region"))
+
+
+def test_day_end_words_land_after_the_last_slot_unless_a_slot_has_that_name() -> None:
+    """공항·숙소·서울역 가기 전에, 일정 끝나고 — 종전 끝 추가가 맞던 말을 '못 알아들음'으로 바꾸지 않는다(2026-10-22 리뷰)."""
+    for said in ("공항 가기 전에 카페 하나 넣어줘", "숙소 가기 전에 한 군데 더", "오늘 일정 끝나고 카페 하나 넣어줘",
+                 "마지막 일정 다음에 한 곳 더 추가"):
+        gap = resolve_gap(_REFS, parse_insert_place(said))
+        assert not isinstance(gap, str) and (gap.after, gap.before) == (3, None), said
+    # '서울역'의 '서울'(반경 5km)은 하루를 다 덮는다 — 지역으로 맨 앞에 끼우지 않고 하루 끝이다
+    gap = resolve_gap(_REFS, parse_insert_place("서울역 가기 전에 한 군데 더 넣어줘"))
+    assert not isinstance(gap, str) and (gap.after, gap.before, gap.resolved_by) == (3, None, ("day_end",))
+    station = [*_REFS, SlotRef(PoiId("s9"), "서울역", GeoPoint(37.5547, 126.9707))]
+    gap = resolve_gap(station, parse_insert_place("서울역 가기 전에 한 군데 더 넣어줘"))  # 일정에 그 이름이 있으면 그 앞
+    assert not isinstance(gap, str) and (gap.after, gap.before) == (3, 4)
+
+
+def test_two_matching_pairs_are_ambiguous_not_the_first() -> None:
+    twice = [SlotRef(PoiId(f"s{i}"), name, None) for i, name in enumerate(("이태원 거리", "홍대 앞", "이태원 시장", "홍대 놀이터"))]
+    assert resolve_gap(twice, parse_insert_ask("이태원에서 홍대로 넘어갈 때 한 군데 더 넣어줘")) == "ambiguous_gap"
 
 
 def test_resolve_never_invents_a_gap() -> None:
@@ -156,6 +220,22 @@ def test_rank_filters_and_orders_deterministically() -> None:
     assert [p.name for p, _ in rank_on_segment((pub,), GYEONGNI.coord, YEONNAM.coord, slack_km=2.0, exclude=(),
                                                taken_names=(), kind=None, not_kinds=(), night=False, day=D,
                                                holidays=None)] == []
+
+
+def test_rank_key_order_and_next_door_trending_loses_to_the_middle() -> None:
+    """FR-004 순서 — 끝점 옆은 '요즘 인기'여도 가운데 뒤(실데이터: B 옆 0.48km 인기 암장이 1등이었다), 그다음 인기·평판·영업시간·저장 수."""
+    mid = (37.5440, 126.9510)  # 경리단길↔연남동 가운데쯤
+    def at(n, name, **kw):
+        return _poi(n, name, PoiCategory.SIGHT, mid[0] + n * 0.0002, mid[1], **kw)
+    plain = at(40, "그냥 명소")
+    saved = replace(at(41, "저장 명소"), saved_count=3)
+    hours = at(42, "영업시간 명소", hours=(OpenHour(2, 540, 1200),))
+    famous = at(43, "평판 명소", tags=("인기5",))
+    trending = at(44, "인기 명소", tags=(TRENDING_TAG,))
+    next_door = _poi(45, "연남 인기 암장", PoiCategory.ACTIVITY, 37.5577, 126.9259, tags=(TRENDING_TAG,))
+    out = rank_on_segment((plain, saved, hours, famous, trending, next_door), GYEONGNI.coord, YEONNAM.coord, slack_km=2.0,
+                          exclude=(), taken_names=(), kind=None, not_kinds=(), night=False, day=D, holidays=None)
+    assert [p.name for p, _ in out] == ["인기 명소", "평판 명소", "영업시간 명소", "저장 명소", "그냥 명소", "연남 인기 암장"]
 
 
 def test_rank_prefers_the_middle_and_drops_namesakes_of_planned_slots() -> None:

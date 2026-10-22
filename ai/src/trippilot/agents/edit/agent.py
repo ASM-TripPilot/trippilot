@@ -28,12 +28,13 @@ import logging
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from statistics import median
 from typing import Protocol
 
 from trippilot.agents.edit.commands import (
     EditRejected,
+    apply_command,
     EditStatus,
     RetimeContext,
     edited_solution,
@@ -173,6 +174,14 @@ def _anchored(command: EditCommand) -> bool:
     return any(is_anchor_param_key(k) for k in command.params)
 
 
+def _next_started(day, command: EditCommand, now: datetime) -> bool:
+    """기준점 있는 추가의 바로 뒤 일정이 이미 시작했나 — 자리는 `apply_command` 와 같은 규칙으로 구한다."""
+    order = apply_command(day, command)
+    i = order.index(PoiId(command.params["targetPoiId"]))
+    after = order[i + 1] if i + 1 < len(order) else None
+    return any(s.poi_id == after and s.start_at <= now for s in day.slots)
+
+
 def _anchors(day, gap: Gap) -> dict[str, str]:
     """틈 → ADD 기준점 params (맨 앞·맨 끝이면 한쪽만)."""
     return {k: str(day.slots[i].poi_id) for k, i in (("afterPoiId", gap.after), ("beforePoiId", gap.before))
@@ -225,20 +234,21 @@ class EditAgent:
                     return EditOutcome(status=EditStatus.TRANSLATION_FAILED,
                                        reason=f"insert_between: position_dropped ({gap})")
                 day = next(d for d in task.solution.days if d.date == task.target_date)
-                if self._past(task, day, gap):
-                    return self._rejected(task, place, "past_gap", {"resolved_by": list(gap.resolved_by)})
                 command = EditCommand(command.op, {**command.params, **_anchors(day, gap)}, command.affected_slots)
-                self._log(task, place, outcome="ANCHORED", resolved_by=list(gap.resolved_by))
-                return self._apply(task, command, apply_mode, not_before=self._floor(task))
+                out = self._apply(task, command, apply_mode)
+                self._log(task, place, outcome=f"ANCHORED_{out.status.value}", resolved_by=list(gap.resolved_by),
+                          codes=sorted({v.code for v in out.violations}))
+                return out
         else:
             assert task.command is not None  # __post_init__ 이 보장
             command, apply_mode = task.command, resolve_apply_mode(task.command)
         return self._apply(task, command, apply_mode)
 
     def _apply(self, task: EditTask, command: EditCommand, apply_mode: ApplyMode, *,
-               stay: Mapping[PoiId, int] | None = None, problem: ItineraryProblem | None = None,
-               not_before: datetime | None = None) -> EditOutcome:
-        """② 검증 → ③ 확인 게이트 → ④ 변형·재타이밍 → ⑤ 어셈블리 검증. 두 진입(번역·사이 넣기)이 같은 길이다."""
+               stay: Mapping[PoiId, int] | None = None, problem: ItineraryProblem | None = None) -> EditOutcome:
+        """② 검증 → ③ 확인 게이트 → ④ 변형·재타이밍 → ⑤ 어셈블리 검증. 세 진입(번역·사이 넣기·이름 지목 자리 채우기)이 같은 길이다.
+
+        기준점 있는 추가의 여행 당일 규칙(지난 자리 거부·지금 이후 시작)은 여기 한 곳에 건다 — 번역이 기준점을 채워 온 추가도 같은 규칙을 탄다."""
         current_ids = frozenset(
             s.poi_id for day in task.solution.days for s in day.slots)
         # 대상 일자의 예약(is_fixed) 슬롯 — 편집 대상 불가·재타이밍 닻 (TRIP-526)
@@ -262,15 +272,17 @@ class EditAgent:
                 )
 
             # ④ 시퀀스 변형 + 결정론 재타이밍
-            target_day_slots = next(
-                (d.slots for d in task.solution.days
-                 if d.date == task.target_date), ())
+            target_day = next((d for d in task.solution.days if d.date == task.target_date), None)
+            target_day_slots = target_day.slots if target_day is not None else ()
+            floor = self._floor(task) if command.op is EditOp.ADD_SLOT and _anchored(command) else None
+            if floor is not None and target_day is not None and _next_started(target_day, command, task.now):
+                raise EditRejected("past_gap — 넣을 자리 바로 뒤 일정이 이미 시작했다(지난 일정을 미래로 밀게 된다)")
             ctx = RetimeContext(
                 coords={pid: p.coord for pid, p in merged_index.items()},
                 stay_min={**{s.poi_id: s.stay_min for s in target_day_slots}, **dict(stay or {})},
                 estimator=self._estimator,
                 transport=task.transport,
-                not_before=not_before,
+                not_before=floor,
             )
             mutated = edited_solution(
                 task.solution, task.target_date, command, ctx, self._tz)
@@ -280,10 +292,11 @@ class EditAgent:
                 command=command, apply_mode=apply_mode, reason=str(e),
             )
 
-        # ⑤ 어셈블리 검증 — 통과분만 노출 (INV-2)
+        # ⑤ 어셈블리 검증 — 통과분만 노출 (INV-2). 검증 수단 = 재타이밍 수단 — 문제 빌더는 와이어에 수단이 없어 대중교통으로 채우는데,
+        #    편집 요청엔 수단이 있다. 안 맞추면 자차 여행은 재타이밍(자차)이 잡은 간격을 검증(대중교통)이 늘 HC2 로 떨어뜨린다(2026-10-22 리뷰 재현)
         facade = self._assembly_provider.for_pool(merged_index)
-        violations = tuple(facade.validate(
-            mutated, problem or self._problem_for(mutated), task.deadline_ms, task.trace_id))
+        checked = replace(problem or self._problem_for(mutated), transport=task.transport)
+        violations = tuple(facade.validate(mutated, checked, task.deadline_ms, task.trace_id))
         if violations:
             return EditOutcome(
                 status=EditStatus.REJECTED,
@@ -348,8 +361,7 @@ class EditAgent:
         rejects: list[str] = []
         for poi, detour in ranked[:MAX_TRIES]:
             command = EditCommand(EditOp.ADD_SLOT, {"targetPoiId": str(poi.poi_id), **_anchors(day, gap)}, ())
-            out = self._apply(on_pool, command, resolve_apply_mode(command), stay={poi.poi_id: stay},
-                              problem=problem, not_before=self._floor(task))
+            out = self._apply(on_pool, command, resolve_apply_mode(command), stay={poi.poi_id: stay}, problem=problem)
             if out.status is EditStatus.APPLIED:
                 self._log(task, ask, outcome="APPLIED", tried=len(rejects) + 1, detour_km=round(detour, 2),
                           category=poi.category.value, **log)
@@ -359,11 +371,18 @@ class EditAgent:
         return self._rejected(task, ask, f"all_rejected(tried={len(rejects)})", {**log, "rejects": rejects})
 
     def _floor(self, task: EditTask) -> datetime | None:
-        """여행 당일이면 지금 — 끼운 곳을 지금보다 앞에 두지 않는다. 다른 날은 하한 없음."""
-        return task.now if task.now.astimezone(self._tz).date() == task.target_date else None
+        """여행 당일이면 지금(현지 시각, 분 올림) — 끼운 곳을 지금보다 앞에 두지 않는다. 다른 날은 하한 없음.
+
+        BE 는 requested_at 을 UTC(…Z)로 보낸다 — 그 객체를 그대로 하한으로 쓰면 슬롯 시각이 UTC 벽시계로 사영되고 HC1·HC4 도 그 시·분으로
+        판정한다(2026-10-22 리뷰 재현: 13:10 이 04:10 으로). 분 올림은 조립 `not_before_floor`·재계획 하한과 같은 규칙이다."""
+        local = task.now.astimezone(self._tz)
+        if local.date() != task.target_date:
+            return None
+        minute = local.replace(second=0, microsecond=0)
+        return minute if minute == local else minute + timedelta(minutes=1)
 
     def _past(self, task: EditTask, day, gap: Gap) -> bool:
-        """여행 당일 뒤 슬롯이 이미 시작했으면 지난 자리다 — 넣으면 지난 슬롯을 미래로 밀어 버린다."""
+        """여행 당일 뒤 슬롯이 이미 시작했으면 지난 자리다 — 구간 풀을 모으기 전에 거른다(같은 판정은 `_apply` 가 다시 건다)."""
         return (self._floor(task) is not None and gap.before is not None
                 and day.slots[gap.before].start_at <= task.now)
 
