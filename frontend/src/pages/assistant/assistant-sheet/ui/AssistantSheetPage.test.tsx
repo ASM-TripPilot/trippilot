@@ -103,8 +103,13 @@ afterEach(() => {
   mockPush.mockClear();
 });
 
+// TRIP-1567 — 시작 quick reply 는 칩 안에 접혀 있다. 누르기 전에 칩으로 펼친다.
+async function openSuggestions(): Promise<void> {
+  fireEvent.press(await screen.findByTestId('assistant-context-chip'));
+}
+
 describe('AssistantSheetPage (TRIP-1322)', () => {
-  it('여행 문맥으로 열면 칩·인사·시작 quick reply 가 뜬다(BR-U8-03·04)', async () => {
+  it('여행 문맥으로 열면 칩·인사가 뜨고 시작 quick reply 는 칩을 펼치면 보인다(BR-U8-03·04)', async () => {
     renderPage();
     // TRIP-1526 — 보이는 문구는 surface 별 고정 라벨, 서버 문구(BR-U8-03)는 접근성 라벨에 실린다.
     const chip = await screen.findByTestId('assistant-context-chip');
@@ -113,6 +118,10 @@ describe('AssistantSheetPage (TRIP-1322)', () => {
     expect(chip.props.accessibilityLabel).toContain(
       '부산 2박 3일 · 등록 숙소 서면'
     );
+    // TRIP-1567 — 시작 quick reply 는 칩 안에 접혀 있다가 칩을 누르면 보인다(옛: 열자마자 줄로 보임).
+    expect(chip).toBeCollapsed();
+    expect(screen.queryByTestId('assistant-quick-reply-qr-review')).toBeNull();
+    fireEvent.press(chip);
     expect(
       screen.getByTestId('assistant-quick-reply-qr-review')
     ).toBeOnTheScreen();
@@ -178,10 +187,9 @@ describe('AssistantSheetPage (TRIP-1322)', () => {
 
   it('quick reply 를 누르면 ACTION 턴으로 보내고 응답 카드가 붙는다', async () => {
     renderPage();
+    await openSuggestions();
     await act(async () => {
-      fireEvent.press(
-        await screen.findByTestId('assistant-quick-reply-qr-review')
-      );
+      fireEvent.press(screen.getByTestId('assistant-quick-reply-qr-review'));
     });
     expect(
       await screen.findByText('지금까지 진행 상태를 정리했어요.')
@@ -243,13 +251,133 @@ describe('AssistantSheetPage · NO_CONTEXT 능력 보기 (TRIP-1531 결함 3)', 
   });
 });
 
+// TRIP-1567 — 컨텍스트 칩이 추천 질문을 펼치고, 항목 누름은 기존 handleQuickReply(ACTION + quickReplyId)를 쓴다.
+// 못 보는 것(6-b): 카드가 위로 자라는 모양 · 키보드와의 공존 · 입력 포커스 유지.
+describe('AssistantSheetPage · 추천 질문 배선 (TRIP-1567)', () => {
+  const LIST = 'assistant-chip-suggestions';
+  const optionReply = (id: string, label: string): QuickReply => ({
+    id,
+    label,
+    action: 'PICK_OPTION',
+    params: {},
+  });
+  const clarifyMessage = (): AssistantMessage => ({
+    id: 'm-clarify',
+    role: 'ASSISTANT',
+    kind: 'CLARIFY',
+    text: '어느 쪽을 말씀하세요?',
+    nextActions: [
+      {
+        type: 'SHOW_CAPABILITIES',
+        label: '내가 할 수 있는 것 보기',
+        params: {},
+      },
+    ],
+    quickReplies: [
+      optionReply('qr-opt-a', '둘째 날 검토'),
+      optionReply('qr-opt-b', '셋째 날 검토'),
+    ],
+    createdAt: '2026-10-22T00:00:00.000Z',
+  });
+
+  it('항목을 누르면 서버 id 의 ACTION 턴 1회로 보내고(TEXT 아님) 목록이 접힌다', async () => {
+    renderPage();
+    const chip = await screen.findByTestId('assistant-context-chip');
+    const sendTurn = jest.spyOn(fake, 'sendTurn');
+    // 눌러 보기 전엔 아무 턴도 안 나갔고 목록도 없다 — 앵커
+    expect(sendTurn).not.toHaveBeenCalled();
+    expect(screen.queryByTestId(LIST)).toBeNull();
+    fireEvent.press(chip);
+    expect(screen.getByTestId(LIST)).toBeOnTheScreen();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-quick-reply-qr-next'));
+    });
+
+    await waitFor(() => expect(sendTurn).toHaveBeenCalledTimes(1));
+    // 라벨(다음 장소 어디야)이 말풍선에 보이는 것과 별개로, 전송 입력은 발급 id 의 ACTION 이다
+    expect(sendTurn.mock.calls[0][1].input).toEqual({
+      type: 'ACTION',
+      quickReplyId: 'qr-next',
+    });
+    expect(await screen.findByText('다음 장소 어디야')).toBeOnTheScreen();
+    expect(screen.queryByTestId(LIST)).toBeNull();
+    expect(chip).toBeCollapsed();
+  });
+
+  it('응답 중에는 항목이 비활성이라 눌러도 턴이 더 나가지 않고, 칩 토글은 된다', async () => {
+    renderPage();
+    const chip = await screen.findByTestId('assistant-context-chip');
+    fake.configure({ latencyMs: 400 });
+    fireEvent.press(chip);
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-quick-reply-qr-review'));
+    });
+    // 응답이 아직 안 왔다 — 앵커
+    expect(await screen.findByTestId('assistant-progress')).toBeOnTheScreen();
+    expect(fake.calls.sendTurn).toBe(1);
+
+    fireEvent.press(chip);
+
+    expect(chip).toBeExpanded();
+    const items = within(screen.getByTestId(LIST)).getAllByTestId(
+      /^assistant-quick-reply-/
+    );
+    expect(items.length).toBeGreaterThan(1);
+    items.forEach((item) => {
+      expect(item.props.accessibilityState).toEqual(
+        expect.objectContaining({ disabled: true })
+      );
+      fireEvent.press(item);
+    });
+    expect(fake.calls.sendTurn).toBe(1);
+
+    // 열려 있는 요청을 끝까지 흘려 보낸다(테스트 사이로 새지 않게)
+    expect(
+      await screen.findByText('지금까지 진행 상태를 정리했어요.')
+    ).toBeOnTheScreen();
+  });
+
+  it('되묻기 보기(PICK_OPTION)는 칩을 안 눌러도 카드 위에 보이고 펼침 목록에는 없으며, 누르면 그 id 의 ACTION 턴이다 (BR-U8-11)', async () => {
+    renderPage({ seedMessages: [clarifyMessage()] });
+    await screen.findByTestId('assistant-message-m-clarify');
+    const sendTurn = jest.spyOn(fake, 'sendTurn');
+    expect(screen.queryByTestId(LIST)).toBeNull();
+    expect(
+      screen.getByTestId('assistant-quick-reply-qr-opt-a')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('assistant-quick-reply-qr-opt-b')
+    ).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId('assistant-context-chip'));
+
+    // 펼친 목록 안에는 없다 — 앵커: 목록은 실제로 열렸고 능력 보기 항목이 있다
+    const list = within(screen.getByTestId(LIST));
+    expect(
+      list.getByTestId('assistant-quick-reply-capabilities')
+    ).toBeOnTheScreen();
+    expect(list.queryByTestId('assistant-quick-reply-qr-opt-a')).toBeNull();
+    expect(list.queryByTestId('assistant-quick-reply-qr-opt-b')).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-quick-reply-qr-opt-a'));
+    });
+
+    await waitFor(() => expect(sendTurn).toHaveBeenCalledTimes(1));
+    expect(sendTurn.mock.calls[0][1].input).toEqual({
+      type: 'ACTION',
+      quickReplyId: 'qr-opt-a',
+    });
+  });
+});
+
 describe('AssistantSheetPage · 카드 배선 (TRIP-1323)', () => {
   it('검토 quick reply → 진행 검토 카드 + 문제 행, 해결 행동을 누르면 그 화면으로 간다', async () => {
     renderPage();
+    await openSuggestions();
     await act(async () => {
-      fireEvent.press(
-        await screen.findByTestId('assistant-quick-reply-qr-review')
-      );
+      fireEvent.press(screen.getByTestId('assistant-quick-reply-qr-review'));
     });
     expect(
       await screen.findByTestId('assistant-review-card')

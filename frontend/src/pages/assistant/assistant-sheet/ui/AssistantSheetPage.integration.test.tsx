@@ -223,6 +223,10 @@ describe('도우미 시트 · 열기와 턴 (TRIP-1514 AC-2)', () => {
     expect(chip.props.accessibilityLabel).toContain(
       '부산 2박 3일 · 등록 숙소 서면'
     );
+    // TRIP-1567 — 시작 quick reply 는 칩 안에 접혀 있다가 칩을 누르면 보인다(옛: 열자마자 줄로 보임).
+    expect(chip).toBeCollapsed();
+    expect(screen.queryByTestId('assistant-quick-reply-qr-review')).toBeNull();
+    fireEvent.press(chip);
     expect(
       screen.getByTestId('assistant-quick-reply-qr-review')
     ).toBeOnTheScreen();

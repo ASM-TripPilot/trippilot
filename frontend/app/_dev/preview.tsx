@@ -2847,7 +2847,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'assistant-chip-stack',
     band: 'b',
-    label: 'b01 · 제안 칩 스택(대화 전)',
+    label: 'b01 · 접힌 추천 질문 칩(대화 전)',
     login: null,
     render: () => renderAssistantPreview('greeting'),
   },

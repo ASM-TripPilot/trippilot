@@ -1,4 +1,4 @@
-import { useRef, type ReactElement } from 'react';
+import { useRef, useState, type ReactElement } from 'react';
 import {
   Keyboard,
   Pressable,
@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 
 import { SparkleGlyph } from '@/features/open-assistant';
+import { ChevronDownGlyph } from '@/shared/ui/glyphs';
 import type { QuickReply } from '../api/assistantContract';
 import { COMPOSER_LIMIT } from '../model/composerLimit';
 import { CAPABILITIES_LABEL } from '../model/displayActions';
@@ -55,14 +56,19 @@ export function AssistantSheetHeader({
   );
 }
 
-/** 입력 카드 안 컨텍스트 칩 — 보이는 문구는 surface 별 고정 라벨, 서버 문구(BR-U8-03)는 접근성 라벨에 싣는다. */
+/**
+ * 입력 카드 안 컨텍스트 칩 — 보이는 문구는 surface 별 고정 라벨, 서버 문구(BR-U8-03)는 접근성 라벨에 싣는다.
+ * `expanded` 가 boolean 이면 추천 질문을 펼치는 칩(⌃/⌄ 표시), undefined 면 일반 버튼(NO_CONTEXT 능력 보기).
+ */
 function ContextChip({
   label,
   accessibilityLabel,
+  expanded,
   onPress,
 }: {
   label: string;
   accessibilityLabel: string;
+  expanded?: boolean;
   onPress: () => void;
 }): ReactElement {
   return (
@@ -70,6 +76,7 @@ function ContextChip({
       testID="assistant-context-chip"
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityState={expanded === undefined ? undefined : { expanded }}
       onPress={onPress}
       // 시각 높이 37(Figma) — 터치는 위아래 4씩 늘려 45.
       hitSlop={{ top: 4, bottom: 4 }}
@@ -77,6 +84,12 @@ function ContextChip({
     >
       <ListGlyph />
       <Text className="font-noto text-label text-ink">{label}</Text>
+      {expanded === undefined ? null : (
+        // Figma: 펼친 상태 ⌃(14). 접힌 상태는 아래를 가리키는 ⌄ — 같은 글리프를 뒤집는다.
+        <View style={expanded ? { transform: [{ rotate: '180deg' }] } : null}>
+          <ChevronDownGlyph size={14} color="muted" strokeWidth={2.2} />
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -121,55 +134,30 @@ function ReplyChip({
 }
 
 /**
- * 서버 발급 quick reply + 상시 "내가 할 수 있는 것 보기"(BR-U8-04 — 클라가 만드는 유일한 칩).
- * 대화가 없으면 세로 스택(답장 아이콘 + 면 칩), 있으면 가로 스크롤 줄(외곽선 칩).
+ * 카드 위 응답 보기 줄(되묻기 PICK_OPTION · 재시도 RETRY, NO_CONTEXT 는 서버 quick reply 전부) —
+ * 일반 질문형은 입력 카드의 칩 안 펼침으로 갔다(TRIP-1567). 대화가 없으면 세로 스택, 있으면 가로 스크롤 줄.
  */
 export function QuickReplyBar({
   replies,
-  showCapabilitiesChip,
   onPick,
-  onPressCapabilities,
   disabled = false,
   stacked,
 }: {
   replies: readonly QuickReply[];
-  showCapabilitiesChip: boolean;
   onPick: (reply: QuickReply) => void;
-  onPressCapabilities: () => void;
   disabled?: boolean;
   stacked: boolean;
 }): ReactElement {
-  // 상시 칩을 맨 앞에 둔다(TRIP-1436 Q-134) — 서버 칩이 늘면 맨 뒤 칩이 화면 밖으로 밀려 BR-U8-04 상시 노출이 깨졌다.
-  // 서버가 SHOW_CAPABILITIES 를 목록 맨 끝에 직접 넣어 보내는 경우(실서버)에도 앞으로 보낸다(안정 정렬).
-  const chips = (
-    <>
-      {showCapabilitiesChip ? (
-        <ReplyChip
-          testID="assistant-quick-reply-capabilities"
-          label={CAPABILITIES_LABEL}
-          disabled={disabled}
-          stacked={stacked}
-          onPress={onPressCapabilities}
-        />
-      ) : null}
-      {[...replies]
-        .sort(
-          (a, b) =>
-            Number(b.action === 'SHOW_CAPABILITIES') -
-            Number(a.action === 'SHOW_CAPABILITIES')
-        )
-        .map((reply) => (
-          <ReplyChip
-            key={reply.id}
-            testID={`assistant-quick-reply-${reply.id}`}
-            label={reply.label}
-            disabled={disabled}
-            stacked={stacked}
-            onPress={() => onPick(reply)}
-          />
-        ))}
-    </>
-  );
+  const chips = replies.map((reply) => (
+    <ReplyChip
+      key={reply.id}
+      testID={`assistant-quick-reply-${reply.id}`}
+      label={reply.label}
+      disabled={disabled}
+      stacked={stacked}
+      onPress={() => onPick(reply)}
+    />
+  ));
   if (stacked) {
     return (
       <View
@@ -195,7 +183,18 @@ export function QuickReplyBar({
   );
 }
 
-/** 입력 카드 — 위 컨텍스트 칩 + 입력 행(입력 · 전송 원형). READY 칩은 입력 포커스, 능력 보기 칩은 SHOW_CAPABILITIES. */
+/** 칩 안 펼침 목록의 입력(TRIP-1567) — 합성 능력 보기(맨 앞) + 서버 추천 질문. */
+interface SuggestionsInput {
+  replies: readonly QuickReply[];
+  showCapabilitiesChip: boolean;
+  onPick: (reply: QuickReply) => void;
+  disabled: boolean;
+}
+
+/**
+ * 입력 카드 — 위 컨텍스트 칩 + (펼치면) 추천 질문 목록 + 입력 행(입력 · 전송 원형).
+ * `suggestions` 가 있으면 칩은 목록 펼침 토글(포커스 안 간다), 없으면(NO_CONTEXT) 칩 = 능력 보기.
+ */
 export function Composer({
   value,
   onChange,
@@ -203,6 +202,7 @@ export function Composer({
   canSend,
   sendTestID = 'assistant-send',
   chip,
+  suggestions,
   onPressCapabilities,
 }: {
   value: string;
@@ -210,22 +210,54 @@ export function Composer({
   onSend: () => void;
   canSend: boolean;
   sendTestID?: string;
-  chip: { label: string; accessibilityLabel: string; capabilities: boolean };
+  chip: { label: string; accessibilityLabel: string };
+  suggestions?: SuggestionsInput;
   onPressCapabilities: () => void;
 }): ReactElement {
+  // 펼침은 뷰 로컬 — 입력 카드는 키보드 모드가 바뀌어도 같은 자리라 remount 되지 않아 유지된다.
   const inputRef = useRef<TextInput>(null);
+  const [open, setOpen] = useState(false);
+  // 항목을 고르면 전송 1회 + 접고 + 키보드를 내린다(칩 토글은 키보드를 건드리지 않는다).
+  const pick = (send: () => void) => () => {
+    setOpen(false);
+    Keyboard.dismiss();
+    send();
+  };
   return (
     // 카드 반경 28 은 킷 토큰에 없다(Figma 입력 카드 r28) — 브래킷.
     <View className="gap-sm rounded-[28px] border border-hairline-strong bg-canvas px-md pb-[13px] pt-[15px]">
       <ContextChip
         label={chip.label}
         accessibilityLabel={chip.accessibilityLabel}
-        onPress={
-          chip.capabilities
-            ? onPressCapabilities
-            : () => inputRef.current?.focus()
-        }
+        expanded={suggestions ? open : undefined}
+        onPress={suggestions ? () => setOpen((v) => !v) : onPressCapabilities}
       />
+      {suggestions && open ? (
+        <View
+          testID="assistant-chip-suggestions"
+          className="items-start gap-sm"
+        >
+          {suggestions.showCapabilitiesChip ? (
+            <ReplyChip
+              testID="assistant-quick-reply-capabilities"
+              label={CAPABILITIES_LABEL}
+              disabled={suggestions.disabled}
+              stacked
+              onPress={pick(onPressCapabilities)}
+            />
+          ) : null}
+          {suggestions.replies.map((reply) => (
+            <ReplyChip
+              key={reply.id}
+              testID={`assistant-quick-reply-${reply.id}`}
+              label={reply.label}
+              disabled={suggestions.disabled}
+              stacked
+              onPress={pick(() => suggestions.onPick(reply))}
+            />
+          ))}
+        </View>
+      ) : null}
       <View className="flex-row items-center gap-sm">
         <TextInput
           ref={inputRef}

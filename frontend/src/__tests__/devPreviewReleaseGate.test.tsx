@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
 /**
  * TRIP-939 AC-10 — 개발 프리뷰(`/_dev/preview`)는 운영 빌드에서 열리지 않는다(심사 2.1).
@@ -233,16 +233,25 @@ describe('프리뷰 · 도우미 시트 키 (TRIP-1530)', () => {
     ).toBeGreaterThanOrEqual(2);
   });
 
-  it('새 키 "제안 칩 스택(대화 전)" — 대화 전이라 사용자 말 없이 칩이 세로 스택으로 그려진다', () => {
-    const key = keyByLabel('제안 칩 스택(대화 전)');
-    expect(key).toBeDefined();
+  // TRIP-1567 — 옛 계약("대화 전엔 카드 위에 제안 칩이 세로 스택으로 보인다")은 폐기: 칩이 접힌 기본값이고, 누르면 카드 안에 펼쳐진다.
+  // 라벨은 구현이 고칠 수 있게 키 id(`assistant-chip-stack`, 변동 없음)로 찾는다.
+  it('키 assistant-chip-stack — 대화 전이라 사용자 말 없이 접힌 칩만 있고, 칩을 누르면 추천 질문이 펼쳐진다', () => {
+    const key = 'assistant-chip-stack';
+    expect(
+      previewModule.PREVIEW_STATES.some((state) => state.key === key)
+    ).toBe(true);
     mockSearchParams.state = key;
     render(<DevPreview />);
-    expect(
-      screen.getByTestId('assistant-quick-replies-stack')
-    ).toBeOnTheScreen();
     expect(screen.queryAllByTestId(/^assistant-user-bubble-/)).toHaveLength(0);
+    // 접힌 기본값 — 목록도 카드 위 줄도 없고, 칩은 있다(앵커)
+    expect(screen.getByTestId('assistant-context-chip')).toBeCollapsed();
+    expect(screen.queryByTestId('assistant-chip-suggestions')).toBeNull();
+    expect(screen.queryByTestId('assistant-quick-replies-stack')).toBeNull();
     expect(screen.queryByTestId('assistant-quick-replies-row')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('assistant-context-chip'));
+
+    expect(screen.getByTestId('assistant-chip-suggestions')).toBeOnTheScreen();
   });
 
   // TRIP-1564 — 후보 카드의 눌리는 뜻 둘(장소 보기 · 이동 없음)을 눈으로 보려는 프리뷰 키. 기존 `assistant-candidate` 는 고르기 얼굴이다.

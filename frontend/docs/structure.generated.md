@@ -614,7 +614,7 @@
 - `src/pages/assistant/assistant-sheet/model/displayActions.ts`  →  CAPABILITIES_LABEL · CAPABILITIES_ACTION · displayActions · displayMessage · noContextActionIcon
 - `src/pages/assistant/assistant-sheet/model/nextActionRoute.ts`  →  InternalAction · RouteMode · NextActionTarget · NextActionContext · nextActionRoute
 - `src/pages/assistant/assistant-sheet/model/resolveSheetState.ts`  →  SheetState · SheetSessionQuery · resolveSheetState
-- `src/pages/assistant/assistant-sheet/model/sheetModel.ts`  →  currentQuickReplies · needsCapabilitiesChip · isSendableText · contextChipLabel
+- `src/pages/assistant/assistant-sheet/model/sheetModel.ts`  →  currentQuickReplies · SplitQuickReplies · splitQuickReplies · needsCapabilitiesChip · isSendableText · contextChipLabel
 - `src/pages/assistant/assistant-sheet/model/turnTiming.ts`  →  SLOW_TURN_MS · isSlowTurn · secondsLeft
 - `src/pages/assistant/assistant-sheet/model/useAnswerFeedback.ts`  →  AnswerFeedbackFlow · useAnswerFeedback
 - `src/pages/assistant/assistant-sheet/model/useTurnFlow.ts`  →  PendingTurn · TurnFlow · useTurnFlow
