@@ -304,6 +304,15 @@
 >   - 시군 어간으로 갈리는 하위 구역 239개는 그 시군 이름이거나 그 시군 안의 권역(평지·산지·동부·도서·면 …)이다 — 다른 시군을 덮는 앞붙음 이름은 없다(이 개정이 같은 목록·표로 분류해 확인했다 — 시험으로 고정하지는 않았다).
 > - **켜기 전 남는 결정** — t6 광역 줄의 단위(G-SA-18) · 제외 줄에 하위 권역이 나열될 때(G-SA-19 — INV-SA-2 위험) · 제주 시 목적지 매칭(G-SA-20) — `business-logic-model.md` §9 개정 블록.
 
+> **[개정 · 2026-10-22 — 구현 반영]** BR-SA-16 — 제외 줄(규칙 9)은 시군 **전체 이름**을 뺐을 때만 그 시군을 뺀다(G-SA-19 해소 · 줄 번호 기준 커밋 `8fb1eee65`(#1571) · `backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/domain/WeatherAlerts.kt`). 관찰 전용 출발은 그대로다.
+> - **시군 전체 이름**(어간 그대로 · 어간+시/군 — `경주` · `경주시` · `강화군`)을 뺀 `(…제외)` 줄 × 그 시군 목적지는 안 걸림이다(종전과 같다).
+> - **그 시군의 하위 권역만**(어간 + 다른 꼬리 — `경주동부` · `울진평지` · `보령도서`) 뺀 줄 × 그 시군 목적지는 **모름**이다 — 목적지가 뺀 권역에 있는지 이름으로 가릴 수 없다(`:38-42,318-332`). 종전에는 어간 앞붙음으로 시군째 빼서 `경상북도(경주동부 제외)` × 경주가 안 걸림, 곧 경주의 나머지 권역 특보를 '특보 없음'으로 확인했다(INV-SA-2). 이 모름의 사유 값(`Detection.Unknown.why`)은 `unattributed-zone` 이고, 그 회차 특보에 표가 모르는 이름이 있으면 `unknown-area` 다(위 블록의 귀속 규칙 그대로 · `backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/application/KmaWarningDetector.kt:92,167-171`). 이 값은 운영 로그에 찍히지 않는다 — 요약 줄은 출처별 모름 수(`unknown={kma-warning:N}`)만 실어 이 모름을 다른 특보 모름과 가르지 못한다(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/application/SituationSweep.kt:377,459`).
+> - **섬 구역은 표로만 본다** — 이름 앞붙음으로 읽지 않는다. 시군 전체인 섬(`WHOLE_CITY_ISLANDS` = `울릉도.독도` — 공식 목록에 울릉의 다른 구역이 없다)을 빼면 그 시군이 빠지고, 시군의 일부인 섬(`서해5도`·`백령도.대청도`·`연평도.우도`·`흑산도.홍도`·`거문도.초도`·`추자도`)을 빼면 본토가 남아 걸림이다(종전과 같다). `인천(서해5도 제외)` × 인천 서해구를 '서해' 앞붙음으로 안 걸림이라 읽던 오인도 이것으로 막혔다(`:70-74,323-329`).
+> - **관서 묶음 줄(규칙 4)의 제외도 같은 원칙**이다 — 그 묶음의 다른 광역 목적지를 덮는 구역을 전체 이름으로 다 뺐을 때만 안 걸림이고, 아니면 모름이다(`:343`).
+> - **바뀌지 않은 것** — 제외 줄이 아닌 줄의 판정, 그리고 같은 광역 제외 줄 × 광역 목적지. 관서 묶음 제외 줄 × 그 묶음의 다른 광역 목적지(대구·대전 …)는 위 원칙을 따라 안 걸림 → 모름으로 바뀔 수 있지만 공식 목록 이름으로는 그런 칸이 없다. 적대적 검토가 옛·새 판정 9,115,264칸을 대조했다 — 바뀐 3,817칸은 모두 제외 줄의 판정이었고 의도 밖 변화는 0 이었다(검토 산출 — 코드 밖 사실).
+> - **회귀** — 공식 목록(2026-06-01)으로 성질 둘을 더했다: 시군 하위 권역 88개를 뺀 줄은 그 시군에 안 걸림이 아니다 · 섬 구역 7개를 뺀 줄은 시군 전체 섬일 때만 안 걸림이다(`backend/modules/planb-detection/src/test/kotlin/com/trippilot/planbdetection/domain/WeatherAlertsZoneListTest.kt:76,101`). 매칭 PBT 는 §10 개정 블록.
+> - **켜기 전 남는 결정**(위 블록의 목록 갱신) — t6 광역 줄의 단위(G-SA-18) · 하위 권역만 뺀 줄의 모름을 걸림으로 좁힐지(G-SA-24 — 경주는 4권역 중 3권역이 특보 중인 줄이다) · 제주 시 목적지 매칭(G-SA-20) — `business-logic-model.md` §9 개정 블록.
+
 ### BR-SA-17 · 장소 감지
 
 **규칙.** 장소 감지기는 아침에 오늘, 저녁에 내일 슬롯을 다시 본다. 오늘은 계획 시작이 지금 이후인 슬롯만 보고, 신호는 모두 위험이다.
@@ -337,6 +346,13 @@
 > - **회차 회로** — 위 블록의 'AI 가 답하면 0 으로 돌아가고'는 '하루 점검이 AI 의 답을 받았으면(`DayCheck.answered`) 그 날 슬롯이 전부 `UNKNOWN` 이어도 0'으로 읽는다. 종전 추론('판정 있는 슬롯이 있으면 답한 것')은 AI 가 그 날 장소를 하나도 판정하지 못했다고 답한 날에 틀린다(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/application/PlaceDetector.kt:130`).
 > - **계약** — AI·BE 를 같은 변경에 싣는다: BE 경계 계약 시험이 검증 응답 키와 미판정 사유 집합을 `ai/docs/openapi.json` 과 정확 일치로 본다 — 새 사유가 생기면 그것을 '못 봄'으로 읽을지 판단이 기록에 남는다(`AiBoundaryOpenApiTest`). 배포는 어느 쪽 먼저여도 무해하다(옛 BE 는 그 목록을 읽지 않고, 옛 AI 응답은 빈 목록이다) — 틈은 둘 다 배포돼야 닫힌다.
 > - **남는 틈** — ⓐ 같은 날 판정된 슬롯과 미판정 슬롯이 섞이면 그 날은 `Checked` 로 나가 장소 감시 상태가 '확인'(i09 '정상')이 된다 — 미판정 슬롯은 해제 근거가 아니지만 '정상'은 그 날 일부만 본 결과다(G-SA-21 — 정본 결정 대기). ⓑ 공휴일 달력 조회가 실패하면 빈 달력으로 판정해 태그형 휴일 규칙을 보지 못하고, 주간 영업 창이 있는 장소는 흔적 없이 `OK` 가 된다(G-SA-22). ⓒ 앱 일정 조회의 `openingHoursKnown`(US-SCHED-03 확인 후보 분리)은 원문 유무만 본다 — 해석 실패 원문도 '영업시간 확인'으로 보인다(이 개정 밖 — 후속 판단). G-SA 둘은 `business-logic-model.md` §9 개정 블록.
+
+> **[개정 · 2026-10-22 — 구현 반영]** BR-SA-17 — 위 블록의 '남는 틈' ⓐ·ⓑ 를 닫는다(ⓒ 는 그대로 후속).
+> - **ⓐ 같은 날 판정·미판정이 섞이면 '확인'을 남기지 않는다**(G-SA-21 — 사용자 결정 2026-10-22 '하나라도 모르면 확인 불가' · 줄 번호 기준 커밋 `43aca7f13`(#1546)). 판정의 `unknown` 은 발견이 없는 대상 가운데 상태(`ACTIVE`)·영업시간(`UNKNOWN` 아님) 중 하나라도 모르는 것이 있으면 참이다 — 발견한 장소와, 공휴일 휴무가 떠 있어 해제만 안 하는 장소는 모르는 것이 아니다(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/domain/ClosureRules.kt:44,69-72`). 감지기는 발견·확인(해제 근거)을 그대로 내고 `Detection.Checked(partial = true)` 로 표시하며(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/application/PlaceDetector.kt:82-83`), 스윕은 모름이나 일부 모름이 낀 출처의 감시 상태 행을 건드리지 않는다 — 마지막 확인이 신선 창(장소 14시간)을 지나면 '확인 불가'다(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/application/SituationSweep.kt:277-288`). 규칙 ④ 의 확인 집합과 해제는 바뀌지 않았다 — 바뀐 것은 감시 상태뿐이다.
+> - **ⓑ 공휴일 달력을 못 읽은 검증은 태그형 휴일 규칙 장소를 미판정으로 싣는다**(G-SA-22 · 줄 번호 기준 커밋 `7086b3be7`(#1572)). 특일 조회가 실패했거나 키가 없으면 달력은 `UNREAD_CALENDAR`(읽기 전용 빈 매핑)다 — 판정·조립 코드에는 빈 달력과 똑같이 읽히고(생성·재계획·기회·편집 결과와 수리한 일정은 불변), 정체(`is`)로 가르는 곳은 미판정 보고(`hc1_unjudged`) 하나다(`ai/src/trippilot/domain/poi.py:116-119` · `ai/src/trippilot/ports/holiday_calendar_port.py:29-45`). 그 달력으로 본 슬롯의 장소에 태그형 휴일 규칙(공휴일·설·추석·석가탄신일 — `HOLIDAY_TAGS`)과 주간 영업 창이 함께 있고 슬롯이 그 창으로 HC1 을 통과했으면 `unverified_slots` 에 `HOURS_UNKNOWN` · `detail="holiday_calendar_unread"` 로 싣는다(`ai/src/trippilot/assembly_engine/constraints.py:81-100` · `ai/src/trippilot/api/wiring.py:699-709`). 주간 영업 창이 없는 장소(원문 없음·해석 실패)는 태그형 규칙이 있어도 종전 갈래로 실리고 `detail` 은 빈 문자열이다. 검증과 수리는 같은 재구성을 거쳐 둘 다 이 목록을 싣는다(`wiring.py:2133,2148,2199-2200`) — 백엔드가 읽는 것은 검증 응답뿐이다(위 #1539 블록). 이미 위반인 슬롯(휴일 규칙은 닫기만 한다) · 날짜 명시형 규칙만 있는 장소 · 달력 성공 · 모드 off 는 종전대로다. 백엔드 하루 점검은 #1539 부터 사유와 무관하게 이 목록을 읽으므로 그 슬롯은 `UNKNOWN` 이고, ⓐ 에 따라 그 날 장소 감시는 '확인 불가'가 된다.
+> - **`detail` 표지는 응답에만 있다** — 원문 없음·해석 실패(`detail` 빈 문자열)와 응답 본문에서 가르고, AI·BE 어느 로그에도 남지 않는다 — 백엔드는 장소 id 만 꺼낸다(`backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/ScheduleAgentWire.kt:323-324`). 달력을 못 읽은 사실은 특일 어댑터가 상태가 바뀔 때 남기는 WARN 으로 본다(`ai/src/trippilot/poi_curation/adapters/kasi_holiday_calendar.py:116-125`).
+> - **계약** — 사유 집합은 그대로다(`HOURS_UNKNOWN` 설명에 달력 미독 경우만 더했다 — `ai/src/trippilot/api/schemas.py:331-333` · `ai/docs/openapi.json`). BE 경계 계약 시험은 키·enum 만 보므로 AI 만 배포하면 된다.
+> - 성질은 §10 개정 블록.
 
 ---
 
@@ -415,6 +431,11 @@
 > - **BR-SA-18 ② '오늘 우선'의 공식 예외** — 계산 중 2분이 넘은(대기 포함) 이른 날짜 선계산은 늦은 날짜 사건에 닫힐 수 있다.
 > - **다시 볼 조건** — 개발 서버에서 선계산(`PLANB_PREPARED_REPLAN`)을 켜 본 뒤 낡음으로 닫히는 비율이 눈에 띄면 '2분을 계산 시작부터 잰다'(DB 칸 추가 — 28번 (가))로 간다. 고르지 않은 안: 닫기 판정만 15분 '멈춤' 기준((나)).
 > - 본문 '앱이 같은 입력으로 다시 요청한다'는 진입 게이트(BR-SA-23 — `stale` 은 '없음'으로 읽어 i04 시드)와 재계획 화면의 [다시 시도](사용자 결정 29번 — `frontend-components.md` §3.2 개정 블록)가 맡는다 — 앱이 `stale` 을 보고 저절로 다시 요청하지 않는다.
+
+> **[개정 · 2026-10-22 — 구현 반영]** BR-SA-19 — 결정 28 의 '다시 볼 조건'을 재는 요약 줄 둘(G-SA-23 해소 · 줄 번호 기준 커밋 `68cecd987`(#1573) · `backend/modules/itinerary-recalculation/src/main/kotlin/com/trippilot/recalculation/application/PreparedReplanService.kt`). 2분 기준(세션 생성부터 · 대기 포함)과 닫기 규칙은 바꾸지 않았다.
+> - **`outcome=EARLIER_STALE`** — 늦은 날짜 사건이 계산 중(대기 포함) 2분을 넘긴 더 이른 날짜의 선계산을 닫고 열 때, 그 사건의 `OPENED`(종료 중이라 실행기가 받지 않았으면 `REJECTED`) 앞에 한 줄 더 남긴다. `session`·`date` 는 닫힌 쪽, `triggerId` 는 닫은 사건이다. 판정은 도메인 낡음(`stalenessAt`)을 초안 사실 없이 불러 쓴다 — 그래서 `STALE` 은 수집·산출 2분뿐이고 2분 규칙을 복사하지 않는다. 초안의 사실로 낡은 것·지난 날 것은 '오늘 우선'의 예외가 아니라 세지 않는다(`:114,123-143`).
+> - **`outcome=FINISHED status= waitMs= ageMs=`** — 전용 실행기가 산출을 끝내면 남긴다. `status` 는 결과 상태(`DRAFT`·`NO_SOLUTION`·`FAILED`, 기다리거나 산출하는 사이 대체·취소됐으면 `CANCELED` · 못 읽으면 `null`), `waitMs` 는 산출을 시작할 때의 세션 나이(실행 자리 대기열에서 보낸 시간), `ageMs` 는 끝낼 때의 세션 나이다. `ageMs` 가 120000 을 넘었으면 그동안 앱은 이 대안을 '없음'으로 읽었다. 이 줄이 없는 산출은 기록조차 못 한 것(DB 예외)과 배포 종료 대기(65초)를 넘겨 시작 못 하고 버린 것(`FAILED` 로 닫음 — 종료 WARN 의 건수로만 보인다)이다(`:146-156,169-183,189-196`).
+> - **판독**(`nfr-requirements.md` OBS-SA-02 개정 블록) — 낡음으로 닫힌 비율 = `count(EARLIER_STALE) / count(OPENED)` · '없음'으로 보인 비율 = `count(FINISHED ∧ ageMs > 120000) / count(FINISHED)`. `EARLIER_STALE` 은 기다리거나 계산하다 낡은 것과 파드 종료·기록 실패로 `SOLVING` 에 멈춘 것을 함께 센다 — 같은 `session` 의 `FINISHED` 가 뒤따르면(상태는 `CANCELED`, 못 읽었으면 `null`) 앞의 것, 없으면 뒤의 것이다. 배포 종료 대기를 넘겨 버려진 대기 산출은 `FINISHED` 가 없어 뒤의 것에 섞이고, 종료 중 실행기가 거절한 사건의 `EARLIER_STALE` 은 분모 `OPENED` 가 없다(둘 다 드물다 · `:53-57`).
 
 ### BR-SA-20 · 트리거 진입 날짜 강제 · 전날 창 · 여행 전 반영 가드
 
@@ -603,6 +624,11 @@ PBT-U4-1~5 는 그대로다. PBT-U4-2(무발화 보존)는 PBT-SA-02·09 가 해
 > - **PBT-SA-19** — 마지막 자리: 결과에 요즘 인기가 없으면, 앞 두 장의 장소를 피한 자격 있는 요즘 인기도 없다. 생성기는 행사만으로 3장이 차는 붐비는 장면을 일부러 만든다 — 무작위 장면만으로는 그 전제가 생기지 않았다(행사 카드 2장 이상 0/2,000 — 역검증).
 > - **PBT-SA-20** — 날씨 거르기: 그 날 날씨 위험(떠 있음·소비됨)이 있으면 축제·유형 모름 행사만 빠지고 나머지는 받은 순서 그대로, 위험이 없으면(주의·해제·끈 알림·다른 날·다른 종류뿐) 받은 그대로다 — 과잉 거르기도 실패다. 생성기는 셋에 둘 꼴로 그 날 위험 행을 싣는다 — 무작위 행만으로는 위험 날이 6% 남짓이라 거르기를 망가뜨려도 초록이었다(역검증).
 > - **PBT-SA-21** — 판정표 전수에 떠 있는 알림 목록 축(미도착 · 없음 · 주의 · 위험 · 심각도 없음)과 시드 오라클을 더한다 — 목록은 갈 곳을 바꾸지 않고 i04 행의 시드만 정한다: 지금 알림이 위험으로 확인될 때만 찬다(#1501).
+
+> **[개정 · 2026-10-22 — 구현 반영]** §10 — G-SA-19·21·22 의 구현이 더하거나 바꾼 성질(G-SA-23 은 성질 변화 없음 · 표의 행은 그대로 — 줄 번호 기준은 각 규칙의 개정 블록).
+> - **PBT-SA-09(특보 매칭)** — 위 블록의 '제외 줄이면 안 걸림'은 '제외 줄이면 **제 시군 전체 이름을 뺐을 때만** 안 걸림, 제 하위 권역만 뺐으면 절대 안 걸림이 아니다(모름), 둘 다 없으면 걸림'으로 읽는다(BR-SA-16 개정 블록). 무작위 줄 생성기는 제외 줄이 다섯에 하나라 전제(제 하위 권역만 뺀 줄)가 200회 중 평균 8회이고 0회인 시드도 있어(시드 2,000개 실측) 같은 생성기를 제외 줄로만 돌린다 — 평균 43회 · 최소 21회(`backend/modules/planb-detection/src/test/kotlin/com/trippilot/planbdetection/domain/WeatherAlertsPropertyTest.kt:54-57`).
+> - **PBT-SA-12(장소 판정)** — 일부 모름 성질을 곁들인다: `unknown` ⇔ 발견 없는 대상 가운데 상태·영업시간 모름이 있다(G-SA-21 · `backend/modules/planb-detection/src/test/kotlin/com/trippilot/planbdetection/domain/ClosureRulesTest.kt:154`).
+> - **검증 미판정(AI)** — 달력을 못 읽으면 태그형 규칙이 있는 곳은 통과로 남지 않는다(위반이거나 미판정), 위반 목록은 빈 달력과 같다(G-SA-22 · `ai/tests/assembly_engine/test_assembly_engine_hc1_unjudged.py:173`). 예시와 생성기 표본에 `PUBLIC` 밖의 태그(설·추석)를 넣는다 — `PUBLIC` 만 쓰면 판정을 '`PUBLIC` 만'으로 좁힌 변이가 산다(검토 역검증 · `docs/conventions/anti-patterns.md`).
 
 ---
 
