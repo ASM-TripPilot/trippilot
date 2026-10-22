@@ -30,6 +30,16 @@ paths:
 | `model/summaryStats.test.ts` | 0채움·거리 대시·완전 입력 |
 | `model/useTripSummary.ts` | `useGetTripsTripIdSummary` 얇은 래퍼(새 HTTP 0), envelope 그대로 |
 
+## 기록 하단 바 칸 이동 (j01·j03·j04 공용 — TRIP-1584)
+
+세 page 가 같은 25줄을 풀어 쓰지 않으려고 여기 모았다(소비처 3 page · 도메인 판단 · 안 모으면 3곳 복제 — 추출 규칙 세 조건). 바 자체(그림·모션)는 `widgets/bottom-nav-bar`(`layer-widgets.md`).
+
+| 파일 | 역할 |
+|---|---|
+| `model/recordBarNav.ts` | 순수. `RecordBarNav`(`onBack`·`onPressRecords`·`onPressReflection?`·`onPressSummary?` 콜백 묶음 타입 — 바에 그대로 펼쳐 넣는다; 없는 칸 콜백 = 그 칸은 안 눌림) + `pickReflectionDate(여행 일차 날짜 오름차순, 오늘)` — 오늘이 기간 안이면 오늘 · 끝난 여행이면 마지막 일차 · 시작 전이거나 일정이 아직 없으면(빈 배열) `undefined`(칸 비활성). ISO 날짜는 사전순 = 시간순이라 문자열로 비교한다(⚠️ jest 에서 `toBeLessThanOrEqual` 은 숫자 전용 — 문자열은 `(a <= b)` + `toBe(true)`). `index.view` 로도 나간다(프리뷰·순수 Screen 이 타입만 필요 — 훅까지 끌면 프리뷰 지뢰 목이 터진다) |
+| `model/recordBarNav.test.ts` | 경계 행(미래 일차 불가·끝난 여행 마지막 일차·시작 전·일정 없음) |
+| `model/useRecordBarNav.ts` | `useRecordBarNav({tripId, recordsDay?, reflectionDate?}) → RecordBarNav`. **이동 규칙**: 앞으로 가는 칸은 `router.push`(화면이 한 장씩 쌓여 모프가 다시 안 돎), 가려는 화면이 **이미 스택에 있으면** `dismissTo`(위를 걷어내고 파라미터 교체) — 🧪 `dismissTo` 는 스택에 **없으면 push 가 아니라 맨 위 화면을 바꿔치기**하므로 일괄 dismissTo 면 입장 모프가 다시 돈다(2026-10-22 `renderRouter` 실측). "있나"는 **누르는 순간** `useStackRoutes().getRoutes()` 로 읽는다(렌더 때 굳히면 낡은 스택). 세 이동 모두 `guardPress`(400ms 모듈 전역 연타 창). 요약 칸은 `useTripSummary` 의 `ready:true` 일 때만(BR-U5-48 — 조회 중·실패·`ready:false` 는 꺼짐, 실패를 "준비됨"으로 접지 않는다 INV-4). 회고 칸은 `reflectionDate` 가 있을 때만. `recordsDay` 가 있으면 기록 칸이 `?day=` 로 싣고 간다(j03 → j01 에서 보던 날짜 유지). 뒤로: `router.canGoBack()` 이면 back, 아니면(딥링크·푸시 직행) `/(tabs)/records` replace — 죽은 버튼 금지. ⚠️ **features 가 `expo-router` 의 `router` 를 직접 부르는 첫 사례**다(지금까지는 href 문자열만 만들고 호출은 pages 가 했다) — 싫으면 세 page 에 풀어 쓰는 쪽으로 되돌릴 수 있다(테스트 영향 작음). 이 파일은 `index.ts` 로만 나간다(`index.view` 아님 — 네트워크 훅이라 프리뷰가 값으로 로드하면 안 된다) |
+
 ## j06 공유 카드
 
 카드는 지도·경로 핀·사진을 그리지 않는다 — 계약에 좌표가 없다. 워터마크·동선 목록·그라디언트 오버레이로만 조립한다. 캡처(PNG)·앨범 저장·OS 공유·해시태그 인라인 편집은 TRIP-1071로 실구현(네이티브 3종 — `traps-reflection.md`, 재빌드 전엔 버튼 줄 자체가 안 뜬다).

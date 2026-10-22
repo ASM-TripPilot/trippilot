@@ -12,7 +12,7 @@ j07 화면 뷰(`RecordsCalendarScreen`·`TripCalendarMonth`·`PastTripList`)는 
 
 | 파일 | 역할 |
 |---|---|
-| `ui/RecordGlyphs.tsx` | 체크서클·즉석추가·Chevron·Calendar 등 벡터(features 간 import 금지라 로컬). 다음(›) 화살표는 `BackArrowGlyph`를 `scaleX:-1`로 뒤집어 쓴다. `NoteGlyph`(TRIP-1088)는 문서 아이콘(20-viewBox·기본 흰색·선 4개 — 지금은 j01 하단 바 회고 칸이 크기·색만 인자로 써 재사용한다). `SummaryChartGlyph`(TRIP-1557)는 j01 하단 바 요약 칸 막대 아이콘(막대 3 + 바닥선, 27 격자·두께 2.25·`muted` 색 인자 — `features/settings` `BarChartGlyph` 는 색 고정·22 격자·두께 2 라 허브 칸 아이콘과 두께가 달라 못 썼다) — `SettingsGlyphs.DocumentGlyph`는 형제 feature라 import 못 하고 색이 고정이라 새로 그렸다. `LegendChevronGlyph`(TRIP-1120)는 j07 legend 줄 끝 `›` — 14 슬롯에 `viewBox="5 5 14 14"`로 24 박스 벡터의 가운데만 잘라 담는다(줄 높이 32를 안 늘림). 색 muted-soft hex는 이 파일 안에만. 기존 `ChevronRightGlyph`(20 박스·#C2C7CE·stroke 1.7)와 모양·굵기가 달라 재사용 안 함 |
+| `ui/RecordGlyphs.tsx` | 체크서클·즉석추가·Chevron·Calendar 등 벡터(features 간 import 금지라 로컬). 다음(›) 화살표는 `BackArrowGlyph`를 `scaleX:-1`로 뒤집어 쓴다. `NoteGlyph`·`SummaryChartGlyph` 는 TRIP-1584 에서 `shared/ui/glyphs`(`ActionGlyphs.tsx`)로 **이사**했다 — 기록 하단 바(`widgets/bottom-nav-bar` 의 `RecordNavBar`)가 쓰는데 위젯은 features 를 못 물어서다(`features/record/index` export 도 삭제). `LegendChevronGlyph`(TRIP-1120)는 j07 legend 줄 끝 `›` — 14 슬롯에 `viewBox="5 5 14 14"`로 24 박스 벡터의 가운데만 잘라 담는다(줄 높이 32를 안 늘림). 색 muted-soft hex는 이 파일 안에만. 기존 `ChevronRightGlyph`(20 박스·#C2C7CE·stroke 1.7)와 모양·굵기가 달라 재사용 안 함 |
 | `__tests__/photoUploadGuard.test.ts` | `src/__tests__/` 소재(`layer-test.md`) — INV-U5-03(사진 바이너리 서버 미전송)은 계약이 구조적으로 만족하고, 이 가드는 새 업로드 경로를 짓지 않게 소스 그래프를 잠근다([[계약이 구조적으로 막는다]]) |
 
 ## 관련
