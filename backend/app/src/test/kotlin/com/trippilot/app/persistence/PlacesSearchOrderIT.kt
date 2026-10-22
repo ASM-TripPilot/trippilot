@@ -75,4 +75,46 @@ class PlacesSearchOrderIT : AbstractPostgresIntegrationTest() {
         // 정확(연속IT) → 접두(연속IT카페·(주)연속IT공방? — 접두는 원 이름 기준이라 "(주)…"는 부분) 순서 확인
         collected.first() shouldBe "연속IT"
     }
+
+    // ── 무작위 정렬(TRIP-1570) ─────────────────────────────────────────────
+    // 커서의 정렬 키는 도메인(JVM MessageDigest)이 만들고 정렬·비교는 DB(md5)가 한다 —
+    // 두 md5 입력 바이트가 어긋나면 이 케이스만 중복·누락으로 드러난다.
+
+    private fun drainRandom(seed: String, q: String, size: Int): List<String> {
+        val collected = mutableListOf<String>()
+        var cursor: String? = null
+        var guard = 0
+        do {
+            val page = places.search(region = null, category = null, query = q, cursor = cursor, limit = size, order = "random", seed = seed)
+            collected += page.items.map { it.nameKo }
+            cursor = page.nextCursor
+            guard++
+        } while (cursor != null && guard < 50)
+        return collected
+    }
+
+    @Test
+    fun `무작위 커서 이어받기 - 같은 seed 면 중복·누락 없이 같은 순서(SQL md5 · 도메인 md5 일치)`() {
+        val all = (1..9).map { insert("섞기IT-%02d".format(it)) }
+
+        val paged = drainRandom("it-seed-1", "섞기IT", 2)
+        val whole = drainRandom("it-seed-1", "섞기IT", 200)
+
+        paged.size shouldBe all.size
+        paged.toSet() shouldBe all.toSet()
+        paged shouldBe whole
+    }
+
+    @Test
+    fun `무작위 - seed 가 다르면 순서가 다르고 이름순도 아니다`() {
+        val all = (1..12).map { insert("다른씨IT-%02d".format(it)) }
+
+        val a = drainRandom("seed-a", "다른씨IT", 200)
+        val b = drainRandom("seed-b", "다른씨IT", 200)
+
+        a.toSet() shouldBe all.toSet()
+        (a == b) shouldBe false
+        (a == all.sorted()) shouldBe false
+    }
 }
+

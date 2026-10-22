@@ -236,7 +236,7 @@ function laneError(refetch: jest.Mock): void {
 type PlacesCall = [unknown, { query?: { enabled?: boolean } } | undefined];
 type MultiCall = [
   readonly string[],
-  { category?: unknown; q?: unknown } | undefined,
+  { category?: unknown; q?: unknown; seed?: unknown } | undefined,
 ];
 
 /** 요청이 실제로 나가는 단일 지역 조회 호출만 — enabled 미지정은 켜짐(react-query 기본). */
@@ -264,6 +264,8 @@ function expectServiceRegionQuery(): void {
     expect(regions).toEqual(SERVICE_REGION_NAMES);
     expect(filters?.category ?? null).toBeNull();
     expect(filters?.q ?? '').toBe('');
+    // TRIP-1563 — 무작위 시드는 d04 만 쓴다. 홈이 seed 를 넘기면 d04 와 달리 캐시를 못 나누고 순서도 바뀐다.
+    expect(filters?.seed).toBeUndefined();
   }
   expect(enabledRegionlessPlacesCalls()).toHaveLength(0);
 }
@@ -1707,7 +1709,7 @@ describe('연타 관통 — 홈 쪽 반쪽', () => {
   });
 });
 
-// TRIP-1553 · US-ASSIST-01 — ✦ AI 도우미가 우하단 FAB(TRIP-1321)에서 헤더 벨 오른쪽 버튼으로 옮겨 왔다.
+// TRIP-1553 · US-ASSIST-01 — ✦ AI 도우미가 우하단 FAB(TRIP-1321)에서 헤더 벨 왼쪽 버튼으로 옮겨 왔다.
 // 목적지 계산은 그대로 page 몫이다. 담은 곳 메뉴 딤이 ✦ 를 덮는지·실제 위치는 jest 사각이라 6-b 실기.
 describe('헤더 ✦ 도우미 (TRIP-1553)', () => {
   it('여행이 없으면 surface 만 싣고 도우미 시트로 1회 간다', () => {

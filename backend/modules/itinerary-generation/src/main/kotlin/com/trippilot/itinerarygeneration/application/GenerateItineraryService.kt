@@ -37,6 +37,7 @@ import com.trippilot.itinerarygeneration.domain.VisitRecordPort
 import com.trippilot.itinerarygeneration.domain.ScoredCandidatePoolStore
 import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.profile.api.PreferenceSnapshot
+import com.trippilot.profile.api.overriddenBy
 import com.trippilot.savedaccommodation.api.BaseAnchorFacade
 import com.trippilot.savedaccommodation.api.DayAnchorView
 import com.trippilot.trip.api.TripFacade
@@ -440,8 +441,8 @@ class GenerateItineraryService(
      *
      * 정본은 숙소 없는 생성을 허용한다(BR-U1-40 · BR-U1-47 · US-SCHED-11) — 계약이 그걸 막고 있었다.
      *
-     * **다목적지는 그 날의 목적지 중심을 쓴다**([RegionAnchors.destinationOn] — FE `dayRegion.ts` 와 같은
-     * 규칙). 예전엔 박수가 실려 오지 않아 모든 날이 첫 목적지로 접혔고, "서울 1박 + 인천 1박"이
+     * **다목적지는 그 날의 목적지 중심을 쓴다**([RegionAnchors.destinationOn] → trip api `destinationOn` — FE
+     * `frontend/src/entities/trip/lib/regionForDay.ts` 의 `regionForDay` 와 같은 규칙). 예전엔 박수가 실려 오지 않아 모든 날이 첫 목적지로 접혔고, "서울 1박 + 인천 1박"이
      * 서울 2박처럼 나왔다. 그 날 목적지의 좌표가 없으면 첫 목적지 중심으로 떨어진다(종전 동작).
      * 우선순위: 숙소 좌표 → 그 날의 목적지 중심 → 첫 목적지 중심.
      *

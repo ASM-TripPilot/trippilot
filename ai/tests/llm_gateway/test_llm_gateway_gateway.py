@@ -324,6 +324,8 @@ _EXPECTED_MODES = {
     LlmFeature.DIALOGUE_PLAN: ("llm_dialogue_plan", "out_of_scope"),
     # 장소 탐색 NL2SQL — 실패·검사 탈락이면 종전 반경 탐색
     LlmFeature.DIALOGUE_SQL: ("llm_dialogue_sql", "explore_radius"),
+    # 인사·잡담 — 실패면 고정 문장(GREETING_TEXT·CHAT_TEXT)
+    LlmFeature.DIALOGUE_SMALLTALK: ("llm_dialogue_smalltalk", "fixed_text"),
 }
 
 

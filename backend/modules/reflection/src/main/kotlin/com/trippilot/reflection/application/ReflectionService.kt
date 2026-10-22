@@ -12,6 +12,7 @@ import com.trippilot.placedata.api.PoiSurfaceView
 import com.trippilot.reflection.api.event.ReflectionReady
 import com.trippilot.reflection.domain.DistanceSource
 import com.trippilot.reflection.domain.Reflection
+import com.trippilot.reflection.domain.ReflectionCard
 import com.trippilot.reflection.domain.ReflectionRepository
 import com.trippilot.reflection.domain.ReflectionSource
 import com.trippilot.reflection.domain.ReflectionStats
@@ -22,8 +23,12 @@ import com.trippilot.reflection.domain.port.ReflectionVisit
 import com.trippilot.trip.api.TripFacade
 import org.slf4j.LoggerFactory
 import com.trippilot.trip.api.TripPeriod
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionOperations
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
 import java.time.LocalDate
 import java.util.UUID
@@ -42,7 +47,7 @@ import kotlin.math.sqrt
  * **방향은 한쪽뿐이다**: 여기서 `ArchiveRecordFacade` 를 읽고, archive 는 이 모듈을 모른다(BR-U5-51).
  */
 @Service
-class ReflectionService(
+class ReflectionService internal constructor(
     private val trips: TripFacade,
     private val archive: ArchiveRecordFacade,
     private val poiSurfaces: PoiSurfaceFacade,
@@ -52,7 +57,25 @@ class ReflectionService(
     private val events: DomainEventPublisher,
     private val metrics: ReflectionMetrics,
     private val clock: Clock,
+    private val materials: ReflectionMaterials,
+    /** 쓰기 트랜잭션 — 생성·수정은 초안(AI 호출·재료 조회)을 **이 밖에서** 만들고, 잠금·저장·발행만 이 안에서 한다. */
+    private val writes: TransactionOperations,
 ) {
+    @Autowired
+    constructor(
+        trips: TripFacade,
+        archive: ArchiveRecordFacade,
+        poiSurfaces: PoiSurfaceFacade,
+        reflections: ReflectionRepository,
+        cards: ReflectionCardCodec,
+        agent: ReflectionAgentPort,
+        events: DomainEventPublisher,
+        metrics: ReflectionMetrics,
+        clock: Clock,
+        materials: ReflectionMaterials,
+        transactions: PlatformTransactionManager,
+    ) : this(trips, archive, poiSurfaces, reflections, cards, agent, events, metrics, clock, materials, TransactionTemplate(transactions))
+
     /**
      * 그 날의 회고를 만들거나 다시 만든다. 하루 한 장이라 행은 늘지 않는다.
      *
@@ -60,8 +83,11 @@ class ReflectionService(
      * 그대로다. 매번 새 행을 얹던 이전 구현은 재생성 한 번에 사용자의 문장을 지웠다.
      *
      * 발행은 같은 트랜잭션 안이다 — 회고는 저장됐는데 알림 이벤트만 사라지는 구간을 만들지 않는다.
+     *
+     * **트랜잭션은 쓰기에만 연다**(TRIP-1463). 초안 준비 — AI 호출(읽기 제한 21초)과 재료 조회(취향·변경 이력) — 는 그 밖이다. 안에서 하면
+     * 생성 한 번이 AI 를 기다리는 내내 커넥션을 쥐고, 재료 조회가 실패하면 바깥 트랜잭션이 rollback-only 가 돼 회고 저장까지 무너진다.
+     * 잠금(권고 잠금 + 행 잠금)은 종전대로 쓰기 트랜잭션 첫머리의 [ReflectionRepository.findForRedraft] 가 잡는다 — 겹친 생성의 순서·결과는 그대로다.
      */
-    @Transactional
     fun generateDaily(accountId: UUID, tripId: UUID, dayDate: LocalDate): Reflection {
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
         requireWithinTrip(period, dayDate)
@@ -74,17 +100,20 @@ class ReflectionService(
             // 고칠 수 있는 하루다.
         }
 
-        val saved = reflections.upsert(draftFor(accountId, tripId, dayDate))
-        events.publish(
-            ReflectionReady(
-                aggregateId = saved.reflectionId.toString(),
-                tripId = tripId.toString(),
-                dayDate = dayDate.toString(),
-                kind = KIND_DAILY,
-                source = saved.source.name,
-            ),
-        )
-        return saved
+        val draft = prepare(accountId, tripId, dayDate)
+        return writes.execute {
+            val saved = reflections.upsert(finish(tripId, dayDate, draft))
+            events.publish(
+                ReflectionReady(
+                    aggregateId = saved.reflectionId.toString(),
+                    tripId = tripId.toString(),
+                    dayDate = dayDate.toString(),
+                    kind = KIND_DAILY,
+                    source = saved.source.name,
+                ),
+            )
+            saved
+        }!!
     }
 
     @Transactional(readOnly = true)
@@ -106,8 +135,10 @@ class ReflectionService(
      * 직접 회고를 쓸 수 있다"). 404 로 막으면 화면은 "쓰려면 먼저 생성 버튼을 누르세요"가 되는데,
      * 생성이 실패해서 여기 온 사용자에게 그건 답이 아니다. 만들어지는 초안은 근거 수치만으로 된
      * 기본 카드라 **지어낸 문장이 아니다**(BR-U5-31).
+     *
+     * 초안이 필요한 하루(행이 없거나 초안·출처를 못 읽는다)면 그 초안을 **쓰기 트랜잭션 밖에서** 만든다 — 생성과 같은 이유다([generateDaily]).
+     * 초안을 못 읽는 하루는 잠근 읽기로 그 사실을 안 뒤 트랜잭션을 닫고 초안을 만들어 다시 연다 — 드문 경로라 두 번 여는 값을 감수한다.
      */
-    @Transactional
     fun edit(
         accountId: UUID,
         tripId: UUID,
@@ -122,19 +153,26 @@ class ReflectionService(
         }
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
         requireWithinTrip(period, dayDate)
-        // 행이 없으면 **잠그기 전에** 초안부터 만든다(잠금은 draftFor 가 AI 호출 뒤에 잡는다) — 먼저 잡으면
-        // AI 호출 동안 그 하루의 다른 쓰기가 전부 기다린다. 그사이 행이 생겼으면 draftFor 가 그 행을 읽어 온다.
-        val current = (if (reflections.exists(tripId, dayDate)) lockedOrRedraft(tripId, dayDate) else null)
-            ?: draftFor(accountId, tripId, dayDate)
-        val now = clock.instant()
-        // 카드는 **보냈을 때만** 갈아끼운다(TRIP-828) — 기분만 고치는 요청이 카드를 건드리면 안 된다.
-        val carded = cardPayload?.let { current.edit(cards.read(it), now) } ?: current
-        return reflections.upsert(carded.note(mood, shortMemo, now))
+        fun applied(current: Reflection): Reflection {
+            val now = clock.instant()
+            // 카드는 **보냈을 때만** 갈아끼운다(TRIP-828) — 기분만 고치는 요청이 카드를 건드리면 안 된다.
+            val carded = cardPayload?.let { current.edit(cards.read(it), now) } ?: current
+            return reflections.upsert(carded.note(mood, shortMemo, now))
+        }
+        // 행이 있고 초안을 읽을 수 있으면 잠근 채 고치고 끝이다. 수정본을 못 읽는 하루는 잠근 읽기가 409 로 끝낸다(행은 그대로다).
+        if (reflections.exists(tripId, dayDate)) {
+            writes.execute { lockedOrRedraft(tripId, dayDate)?.let(::applied) }?.let { return it }
+            // 초안·출처를 못 읽는 하루 — 아래에서 초안을 다시 만들어 그 위에 얹는다(BR-U5-36).
+        }
+        // 초안은 **잠그기 전에**, 트랜잭션 밖에서 만든다 — 잠근 채 AI 를 기다리면 그 하루의 다른 쓰기가 전부 멈추고, 커넥션도 그동안 쥔다.
+        // 그사이 행이 생겼으면 finish 가 그 행을 잠가 읽어 온다(초안만 갈아끼운다).
+        val draft = prepare(accountId, tripId, dayDate)
+        return writes.execute { applied(finish(tripId, dayDate, draft)) }!!
     }
 
     /**
-     * 초안·출처를 못 읽는 하루(TRIP-1476)면 null 이다 — 부르는 쪽이 [draftFor] 로 초안을 다시 만들어 그 위에 얹는다. 수정본·기분·메모는
-     * 저장된 그대로 실린다(BR-U5-36: 생성이 망가진 하루에도 직접 쓸 수 있다). 이 하루에서만 잠근 채 초안을 만든다 — 드문 경로라 감수한다.
+     * 초안·출처를 못 읽는 하루(TRIP-1476)면 null 이다 — 부르는 쪽이 미리 만든 초안([prepare])을 [finish] 로 얹는다. 수정본·기분·메모는
+     * 저장된 그대로 실린다(BR-U5-36: 생성이 망가진 하루에도 직접 쓸 수 있다).
      * 수정본을 못 읽는 하루는 여기서 409 로 끝난다(행은 그대로다).
      */
     private fun lockedOrRedraft(tripId: UUID, dayDate: LocalDate): Reflection? = try {
@@ -143,13 +181,18 @@ class ReflectionService(
         null
     }
 
+    /** 쓰기 트랜잭션 전에 만든 초안 — 그날 방문·표면과 고른 카드·출처. 저장된 행은 아직 읽지 않았다. */
+    private class PreparedDraft(
+        val visits: List<ArchiveVisitView>,
+        val surfaces: Map<UUID, PoiSurfaceView>,
+        val draft: ReflectionCard,
+        val source: ReflectionSource,
+    )
+
     /**
-     * 그 날의 초안을 만든다 — 기존 행이 있으면 **초안만 갈아끼운다**(수정본·최초 생성 시각 보존).
-     *
-     * 발행은 여기서 하지 않는다. 수정 경로가 이 함수를 쓰기 때문이다 — 사용자가 글을 쓰는 순간에
-     * `ReflectionReady` 가 나가면 "회고가 준비됐어요" 알림이 본인에게 간다.
+     * 그 날의 초안을 만든다 — **트랜잭션 밖에서** 부른다(AI 호출·재료 조회가 커넥션을 쥐지 않게). 저장된 행은 읽지 않는다.
      */
-    private fun draftFor(accountId: UUID, tripId: UUID, dayDate: LocalDate): Reflection {
+    private fun prepare(accountId: UUID, tripId: UUID, dayDate: LocalDate): PreparedDraft {
         val visits = archive.findDailyVisits(tripId).firstOrNull { it.date == dayDate }?.visits.orEmpty()
         val surfaces = poiSurfaces.findSurfaces(visits.map { it.poiId })
         val stats = statsOf(visits, surfaces, archive.findRouteDistances(tripId)[dayDate])
@@ -160,14 +203,25 @@ class ReflectionService(
         val aiCard = aiCardOrNull(accountId, tripId, dayDate, visits, surfaces)
         val draft = aiCard ?: ReflectionNarrator.dailyCard(placeNames, stats)
         val source = if (aiCard != null) ReflectionSource.AI else ReflectionNarrator.sourceFor(stats)
+        return PreparedDraft(visits, surfaces, draft, source)
+    }
+
+    /**
+     * 준비한 초안을 그 날의 행에 얹는다 — **쓰기 트랜잭션 안에서** 부른다. 기존 행이 있으면 **초안만 갈아끼운다**(수정본·최초 생성 시각 보존).
+     *
+     * 발행은 여기서 하지 않는다. 수정 경로가 이 함수를 쓰기 때문이다 — 사용자가 글을 쓰는 순간에
+     * `ReflectionReady` 가 나가면 "회고가 준비됐어요" 알림이 본인에게 간다.
+     */
+    private fun finish(tripId: UUID, dayDate: LocalDate, prepared: PreparedDraft): Reflection {
         val now = clock.instant()
         // AI 호출이 끝난 **뒤에** 잠그고 읽는다 — 먼저 읽어 두면 생성 중에 들어온 기분·수정본을 옛 값으로 덮는다.
         // 갈아끼울 초안·출처는 저장된 것을 읽지 않는다 — 그래서 그 둘을 못 읽는 하루도 여기서 낫는다(TRIP-1476).
-        val current = reflections.findForRedraft(tripId, dayDate, draft, source)
+        val current = reflections.findForRedraft(tripId, dayDate, prepared.draft, prepared.source)
         // 통계는 잠근 **뒤에** 다시 센다 — AI 를 기다리는 사이 경로가 올라오면, 앞에서 센 근사값이 경로 갱신(refreshRouteStats)을
         // 덮어쓴다. 잠근 뒤라면 그 갱신은 이 저장 뒤에 돌거나 이미 커밋돼 여기서 보인다.
-        val fresh = statsOf(visits, surfaces, archive.findRouteDistances(tripId)[dayDate])
-        return current?.regenerate(draft, source, fresh, now) ?: Reflection.of(tripId, dayDate, draft, source, fresh, now)
+        val fresh = statsOf(prepared.visits, prepared.surfaces, archive.findRouteDistances(tripId)[dayDate])
+        return current?.regenerate(prepared.draft, prepared.source, fresh, now)
+            ?: Reflection.of(tripId, dayDate, prepared.draft, prepared.source, fresh, now)
     }
 
     /**
@@ -190,7 +244,8 @@ class ReflectionService(
         null
     } else {
         runCatching {
-            agent.generate(agentInput(accountId, tripId, dayDate, visits, surfaces))
+            agentInput(accountId, tripId, dayDate, visits, surfaces)
+                ?.let { agent.generate(it) }
                 ?.let { cards.read(it.payload) }
                 ?.takeIf { card -> notHallucinating(card.payload, tripId, dayDate, visits, surfaces) }
         }
@@ -230,10 +285,12 @@ class ReflectionService(
 
     /**
      * 경계 입력 조립 — **근거 안에서만**(BR-U5-31). 건너뛴 방문은 싣지 않는다: 안 간 곳이
-     * 카드 장면이 되면 안 된다.
+     * 카드 장면이 되면 안 된다. 건너뛴 사실은 이름 없이 사건([ReflectionMaterials.eventsOn])으로만 간다.
      *
-     * `region` 이 없으면 그대로 넘긴다(빈 문자열이 아니라 목적지 없음). 상대는 `region` 을 필수로
-     * 요구하므로 그 경우 호출이 422 로 거절되고 우리는 규칙 카드로 내려간다 — 지어내지 않는다.
+     * `region` 은 **그날의** 목적지다 — 다목적지 여행의 둘째 날이 첫 목적지로 나가던 것을 고쳤다(TRIP-1463).
+     * 상대가 받지 않을 입력(목적지 없음·실을 방문 0곳 — [ReflectionAgentInput.callable])이면 **null** 이고 재료를 읽지 않는다 —
+     * 부르지 않을 호출을 위해 취향·변경 이력을 조회하지 않는다. 지어내지도 않는다.
+     * 성향·사건은 [ReflectionMaterials] 가 채운다. 날씨는 비운다 — 그 이유도 거기 있다.
      */
     private fun agentInput(
         accountId: UUID,
@@ -241,27 +298,29 @@ class ReflectionService(
         dayDate: LocalDate,
         visits: List<ArchiveVisitView>,
         surfaces: Map<UUID, PoiSurfaceView>,
-    ) = ReflectionAgentInput(
-        kind = "DAILY",
-        region = regionOf(accountId, tripId),
-        startDate = dayDate,
-        endDate = dayDate,
-        visits = visits.filterNot { it.skipped }.mapIndexedNotNull { index, v ->
+    ): ReflectionAgentInput? {
+        val ctx = trips.findGenerationContext(accountId, tripId)
+        val region = materials.regionOn(ctx, dayDate)
+        val shown = visits.filterNot { it.skipped }.mapIndexedNotNull { index, v ->
             surfaces[v.poiId]?.let { poi ->
                 ReflectionVisit(v.poiId, dayDate, poi.nameKo, poi.category, index + 1, v.photoCount)
             }
-        },
-        personaSummary = null,
-        weatherSummary = null,
-    )
-
-    /**
-     * 목적지 이름 — 표시 순서 첫 번째다. 여행이 목적지를 안 들고 있으면 빈 문자열이고, 그 호출은
-     * 상대가 `region` 필수로 거절한다(그러면 규칙 카드로 내려간다). **지어내지 않는다.**
-     */
-    private fun regionOf(accountId: UUID, tripId: UUID): String =
-        trips.findGenerationContext(accountId, tripId)?.destinations?.firstOrNull().orEmpty()
-
+        }
+        if (!ReflectionAgentInput.callable(region, shown)) {
+            log.debug("목적지나 실을 방문이 없어 회고 AI 를 부르지 않습니다 — 규칙 카드로 갑니다. tripId={} date={}", tripId, dayDate)
+            return null
+        }
+        return ReflectionAgentInput(
+            kind = "DAILY",
+            region = region,
+            startDate = dayDate,
+            endDate = dayDate,
+            visits = shown,
+            personaSummary = materials.personaOf(accountId, ctx),
+            weatherSummary = null,
+            events = materials.eventsOn(accountId, tripId, dayDate, skippedCount = visits.count { it.skipped }),
+        )
+    }
 
     /**
      * 여행 기간 밖 날짜는 거부한다.

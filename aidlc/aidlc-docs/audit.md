@@ -1768,3 +1768,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U10/U4 Functional Design 사후 개정(구현 반영), 커밋 `79a5d5375`(TRIP-1561 FE). 사용자 사전 선택(위 원문)에 따라 audit 원문 append 후 반영(앞 개정들과 같은 절차 — 같은 PR 머지 = 승인). `aidlc-state.md`·`docs/SCOPE.md` 무변경.
 
 ---
+
+## Functional Design 사후 개정 — U8 홈 헤더 ✦ 위치 (TRIP-1553 후속)
+**Timestamp**: 2026-10-22T11:55:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 2026-10-22 지시 그대로 인용) "홈 알람이랑 챗봇 아이콘 위치 바꿔줘". 이번 세션에서 새 질의 없음 — 자율 세션, 정본 반영은 사용자가 사전 선택했다.
+**AI Response**: `construction/u8-conversational-assistant/functional-design/business-rules.md` 끝에 `[개정 · 2026-10-22 · TRIP-1553 후속]` 블록 1개 — 앞선 TRIP-1553 개정 블록 BR-U8-50 의 "알림 벨 오른쪽의 ✦ 아이콘"을 "벨 왼쪽(✦ 먼저, 벨이 헤더 행 오른쪽 끝)"으로 대체. testID·라벨·40 원형·모든 얼굴·assistantHref 는 무변경. 원문 삭제·수정 0줄(append 만). `aidlc-state.md`·`docs/SCOPE.md` 는 손대지 않았다.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 개정(구현 반영), 사이클 `20261022-trip1553-header-icon-order`. 선례("audit append + [개정] 블록", TRIP-1553·1565·1566)를 따랐고 승인 게이트는 사용자의 사전 선택으로 갈음(자율 세션). 스테이지 규칙 파일은 새로 로드하지 않았다.
+
+---
