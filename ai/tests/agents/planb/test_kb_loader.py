@@ -348,6 +348,49 @@ def test_reload_removes_legacy_rows_stale_tail_chunks_and_rows_outside_the_corpu
     assert left == {d.doc_id for d in docs} | {"intro:5"}
 
 
+def test_unchanged_reload_sends_no_ids_to_delete(tmp_path) -> None:
+    """정리는 저장소에 **실제로 있는** 행 중에서 고른다 — 끝난 문서마다 꼬리 id(#n..#39)를 펼치면 관광공사 개요 전량에서
+    약 95만 개 id 를 만들어 매 배포 DELETE 로 보냈다(적재 Job 피크 480MB 중 약 126MB, 한도 512Mi)."""
+    from tests.fakes.in_memory_vector_store import InMemoryVectorStore
+
+    class _Spy(InMemoryVectorStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.deleted: list[int] = []
+
+        def delete_many(self, collection, item_ids):
+            self.deleted.append(len(list(item_ids)))
+            return super().delete_many(collection, item_ids)
+
+    load_kb = _load_kb_module()
+    emb, store = _CountingEmbedding(), _Spy()
+    p = _corpus_file(tmp_path, _rows(3))
+    docs = load_kb._documents_of(p)
+    load_kb.load_corpus(p, docs, list(docs), emb, store)
+    store.deleted.clear()
+    line = load_kb.load_corpus(p, docs, list(docs), emb, store)
+    assert sum(store.deleted) == 0, (store.deleted, line)
+
+
+def test_cleanup_covers_every_source_in_one_corpus_file(tmp_path) -> None:
+    """한 파일에 출처가 둘 이상 섞여도 뒤쪽 출처의 통문서·낡은 꼬리를 지운다 — 첫 문서의 접두사만 보던 회귀(리뷰 2026-10-22)."""
+    from tests.fakes.in_memory_vector_store import InMemoryVectorStore
+    from trippilot.agents.planb.kb_retrieval import collection_for
+    from trippilot.domain.kb import KbKind
+
+    load_kb = _load_kb_module()
+    emb, store = _CountingEmbedding(), InMemoryVectorStore()
+    coll = collection_for(KbKind.POI_DESC, emb.model_id)
+    for legacy in ("overview:1", "overview:1#39"):
+        store.upsert(coll, legacy, emb.embed(legacy), {"kb": "POI_DESC", "text": legacy})
+    over = {**_rows(2)[1], "doc_id": "overview:1"}
+    p = _corpus_file(tmp_path, [_rows(1)[0], over])
+    docs = load_kb._documents_of(p)
+    load_kb.load_corpus(p, docs, list(docs), emb, store)
+    left = {h.item_id for h in store.search(coll, emb.embed("x"), 10_000)}
+    assert left == {d.doc_id for d in docs}, left - {d.doc_id for d in docs}
+
+
 def test_partial_load_keeps_the_legacy_row_of_pending_documents(tmp_path, monkeypatch) -> None:
     from tests.fakes.in_memory_vector_store import InMemoryVectorStore
     from trippilot.agents.planb.kb_retrieval import collection_for

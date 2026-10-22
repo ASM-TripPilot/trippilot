@@ -353,6 +353,18 @@ class SituationSweepTest : StringSpec({
         )
     }
 
+    "일부 모름(partial)인 출처는 감시 상태를 남기지 않는다 — 다 확인한 출처만 남긴다(G-SA-21)" {
+        val world = World()
+        world.trip()
+        val place = FakeDetector(SweepSource.PLACE, kind = TriggerKind.CLOSURE, answer = { Detection.Checked(setOf(null), emptyList(), partial = true) })
+        val forecast = FakeDetector(SweepSource.KMA_FORECAST)
+
+        world.sweep(props(), listOf(forecast, place), StepClock(at("12:15"))).sweep(at("12:15"))
+
+        place.calls.size shouldBe 1
+        world.watches.all.map { it.source } shouldBe listOf(SweepSource.KMA_FORECAST)
+    }
+
     "on — 감지 결과를 판정으로 쓰고(사건 1건) 부른 출처의 감시 상태를 남긴다" {
         val world = World()
         val tripId = world.trip()

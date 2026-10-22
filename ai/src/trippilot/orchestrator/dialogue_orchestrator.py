@@ -707,6 +707,7 @@ class DialogueOrchestrator:
         ctx = TurnContext(
             snapshot=inp.snapshot, arguments=frame.arguments, now=inp.now, tz=self._tz, trace_id=inp.trace_id,
             remaining_ms=lambda: self._remaining(inp), ports=self._ports, utterance=inp.utterance,
+            earlier=tuple((turn.role, turn.text) for turn in inp.recent_turns),
         )
         if handler.handoff_frame:  # EDIT_SCHEDULE — 1단계 FRAME (BR-AO-17): 인자만 정리하고 BE 제안 경로로
             tidy = replace(frame, arguments=edit_arguments(ctx))
@@ -961,8 +962,10 @@ class DialogueOrchestrator:
             return self._plan_declined(inp, reason, "REFUSED" if draft.refused else "NO_TOOL", plan_ms=plan_ms, gap=draft.gap)
         handlers = [HANDLERS[call.intent] for call in draft.calls]
         said = _squash(" ".join([text, *(turn.text for turn in inp.recent_turns)]))
+        earlier = tuple((turn.role, turn.text) for turn in inp.recent_turns)
         ctxs = [TurnContext(snapshot=inp.snapshot, arguments=_grounded_args(call.slots, said), now=inp.now, tz=self._tz,
-                            trace_id=inp.trace_id, remaining_ms=lambda: self._remaining(inp), ports=self._ports)
+                            trace_id=inp.trace_id, remaining_ms=lambda: self._remaining(inp), ports=self._ports,
+                            earlier=earlier, heard=text)
                 for call in draft.calls]
         n = len(ctxs)
         results = self._fanout(inp, step_tasks([h.plan(ctx) for h, ctx in zip(handlers, ctxs, strict=True)]))

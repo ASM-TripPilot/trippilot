@@ -79,6 +79,8 @@ class PlaceDetector(
                     dataSource = f.dataSource,
                 )
             },
+            // 하나라도 모르면 그 날은 '확인'을 남기지 않는다 — 발견·해제는 그대로(G-SA-21)
+            partial = verdict.unknown,
         )
     }
 
