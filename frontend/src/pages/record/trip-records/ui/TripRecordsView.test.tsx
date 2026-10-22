@@ -1365,8 +1365,10 @@ describe('TripRecordsView · 핀 탭 (TRIP-1558 AC-8·AC-9)', () => {
       }
     });
 
-    it('RS4 시트가 내려가 있어도 일차 칩·뒤로·회고 칸은 제 일을 하고 시트를 올리지 않는다', () => {
+    it('RS4 시트가 내려가 있어도 일차 칩·뒤로·회고 칸은 제 일을 하고 시트를 올리지 않는다', async () => {
+      holdReduceMotionOn(); // 뒤로는 퇴장 모션 뒤 이동한다(TRIP-1591) — V4 와 같이 동작 줄이기 켜짐이면 즉시. #1587 이 #1585 보다 먼저 쓴 단언이라 develop 에서 red 였다
       const props = withData({ onPressReflection: jest.fn() });
+      await flushOsAnswer();
       fireSheetAnimate(1, -1);
 
       fireEvent.press(screen.getByTestId('sheet-daychip-0'));
