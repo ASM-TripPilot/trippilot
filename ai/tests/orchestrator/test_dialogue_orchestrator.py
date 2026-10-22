@@ -392,6 +392,17 @@ def test_edit_schedule_is_a_frame_with_tidied_day_and_no_answer() -> None:
     assert out.llm_calls == 1 and b.llm.features() == ["DIALOGUE_INTENT"]
 
 
+def test_edit_insert_ask_with_only_a_position_skips_the_day_question() -> None:
+    """분류가 자리만 준 사이 넣기 — 되물으면 답 턴엔 원문이 없어 편집이 "알아듣지 못했어요"로 끝난다(PendingFrame 에 발화 칸이 없다).
+    말의 자리가 한 날에만 풀리면 그 날로 FRAME 을 낸다(2026-10-22 실측: 여행 중 "경리단길 다음에 갈 만한 곳 하나"가 되묻기로 갔다)."""
+    b = _build(_canned(Intent.EDIT_SCHEDULE, position="우도 다음"))
+    out = b.orch.turn(_input("우도 다음에 갈 만한 곳 하나 추가해줘"))
+    assert out.outcome == "FRAME" and out.clarify is None
+    assert out.frames[0].arguments == {"position": "우도 다음", "day": _D2.isoformat()}
+    asked = _build(_canned(Intent.EDIT_SCHEDULE, position="한라산 다음")).orch.turn(_input("한라산 다음에 한 군데 더"))
+    assert asked.outcome == "ARGUMENT_CLARIFY"  # 일정에 없는 이름 — 종전대로 묻는다
+
+
 @settings(max_examples=40, deadline=None)
 @given(day=st.one_of(st.none(), st.sampled_from(["둘째 날", "1일차", "언젠가", "2026-10-19"])),
        target=st.one_of(st.none(), st.text(min_size=1, max_size=12)), with_trip=st.booleans())

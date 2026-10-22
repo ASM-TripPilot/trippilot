@@ -35,6 +35,7 @@ from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time, timedelta, tzinfo
 from enum import Enum
 
+from trippilot.agents.edit.insert_between import SlotRef, parse_insert_place, resolve_gap
 from trippilot.agents.planb.rag import _REASON_KO, PlanBAgent, PlanBRagRequest
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import (
@@ -1651,14 +1652,44 @@ def _assemble_replan(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Fac
 
 def edit_arguments(ctx: TurnContext) -> dict[str, str]:
     """EDIT_SCHEDULE 은 1단계에서 FRAME 이다(DEC-AO-6) — 인자만 정리한다: `day` 를 읽을 수 있으면 ISO 날짜로
-    (BE ProposalCards.targetDate 가 ISO·맨 숫자만 읽는다), 못 읽으면 손대지 않는다. `target` 은 BE `mentioned` 가 푼다."""
+    (BE ProposalCards.targetDate 가 ISO·맨 숫자만 읽는다), 못 읽으면 손대지 않는다. `target` 은 BE `mentioned` 가 푼다.
+
+    날을 말하지 않은 **사이 넣기**("이태원에서 홍대로 넘어갈 때 한 군데 더")는 그 자리가 오늘 이후 **한 날에만** 이웃 짝으로 풀리면 그 날을
+    `day` 로 싣는다(`ai/specs/003-edit-insert-between`). 안 실으면 BE 는 여행 전에 날을 못 고른다 — 분류가 `target` 에 '한 군데'·'카페'를
+    싣기 때문이다(2026-10-22 실측: "어느 날 일정을 바꿀지 알 수 없었어요"로 끝났다). 둘 이상의 날이면 싣지 않는다(넘겨짚지 않는다)."""
     out = dict(ctx.arguments)
     said = out.get("day")
     if said:
         on = resolve_day(said, ctx.snapshot, ctx.today)
         if on is not None:
             out["day"] = on.isoformat()
+    elif (on := insert_day(ctx.utterance, ctx.snapshot, ctx.today, ctx.ports, ctx.now)) is not None:
+        out["day"] = on.isoformat()
     return out
+
+
+def insert_day(utterance: str, snapshot: TurnSnapshot, today: date, ports: HandlerPorts, now: datetime) -> date | None:
+    """사이 넣기 말의 자리가 오늘 이후 한 날에만 풀리면 그 날 — 아니면 None. 오케스트레이터가 edit_scope 되묻기 앞에서도 부른다."""
+    place = parse_insert_place(utterance) if utterance else None
+    if place is None:
+        return None
+    days = [d for d in snapshot.days if d.date >= today and d.slots]
+    coords = _slot_coords(ports, now, [s.poi_id for d in days for s in d.slots if s.poi_id])
+    hits = [d.date for d in days if not isinstance(resolve_gap(
+        [SlotRef(PoiId(s.poi_id or s.slot_key), s.name, coords.get(s.poi_id or "")) for s in d.slots], place), str)]
+    return hits[0] if len(hits) == 1 else None
+
+
+def _slot_coords(ports: HandlerPorts, now: datetime, poi_ids: list[str]) -> dict[str, GeoPoint]:
+    """슬롯 좌표 — 지역 이름("이태원")으로 풀 재료. 스냅샷엔 좌표가 없어 장소 정보 공급자로 한 번 묻는다(LLM 0).
+    포트가 없거나 실패하면 빈 표 — 이름으로만 푼다."""
+    if ports.poi_info is None or not poi_ids:
+        return {}
+    try:
+        packet = ports.poi_info.fetch({"poi_ids": poi_ids, "on": None, "now": now})
+        return {p["poi_id"]: GeoPoint(p["lat"], p["lng"]) for p in packet.data.get("pois") or ()}
+    except Exception:  # 공급자 계약 밖 예외·모양 — 날 힌트만 포기한다(FRAME 은 그대로 나간다)
+        return {}
 
 
 # RECOMMEND_PLACES — "골라 줘". 탐색과 같은 앵커·풀·되묻기(탐색 플랜·조립을 그대로 부른다 — 탐색 코드는 손대지 않는다)에서

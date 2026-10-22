@@ -75,6 +75,7 @@ from trippilot.orchestrator.dialogue_handlers import (
     TurnContext,
     TurnSnapshot,
     edit_arguments,
+    insert_day,
     validate_answer_shape,
     validate_answer_text,
 )
@@ -704,6 +705,10 @@ class DialogueOrchestrator:
                 return self._out_of_scope(inp, reason)
             # 3 — 필수 인자 되묻기 (요청당 1회, 기존 로직)
             interp = from_match(match, inp.context, trip_view)
+            if interp.outcome == "ARGUMENT_CLARIFY" and match.intent is Intent.EDIT_SCHEDULE and (on := insert_day(
+                    inp.utterance, inp.snapshot, inp.now.astimezone(self._tz).date(), self._ports, inp.now)) is not None:
+                # 사이 넣기는 말의 자리로 날을 푼다 — 되물으면 답 턴에 원문이 없다(PendingFrame 에 발화 칸이 없다, spec 003)
+                interp = from_match(replace(match, slots={**match.slots, "day": on.isoformat()}), inp.context, trip_view)
         if interp.outcome == "ARGUMENT_CLARIFY":
             return TurnOutcome("ARGUMENT_CLARIFY", interp.frames, interp.clarify, None, interp.context, 0, interp.reason)
         if interp.outcome == "OUT_OF_SCOPE":  # from_match 는 FALLBACK 매치에서만 — 여기로는 오지 않는다(방어)
