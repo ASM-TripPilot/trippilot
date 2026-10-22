@@ -1784,3 +1784,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(사용자 결정 기록), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
+
+## Functional Design·NFR Requirements 사후 개정 — situation-awareness 결정 25~30 구현 반영 · 운영 준비 감사 (BR-SA-01·15·16·17·22·23 · §10 · DE §7.1·§8.1·§11 · FE §3.1·§3.3·§3.6·§4·§12·§14 · BLM §4.1·§4.9·§5·§6.2·§6.3·§7·§9 · NFR §1·§3·§4·§7·§8 · tech-stack 델타 1·3·§4 · G-SA-18~23)
+**Timestamp**: 2026-10-22T11:02:00+09:00 (작업 시점)
+**User Input**: (워크플로 스크립트가 계산한 작업 지시 — 사용자 원문이 아니다. 그 실행을 띄운 사용자 요청 원문은 "서브 에이전트들도 마저 시켜".) 새 사용자 결정은 없다 — 근거는 바로 앞 항목의 사용자 결정 25~31(2026-10-20, 7건 모두 "추천대로 진행")과 그 구현 코드, 운영 준비 감사(2026-10-20)의 사실이다.
+**AI Response**: `construction/situation-awareness/` 6종에 `[개정 · 2026-10-22 — 구현 반영]` 블록 31개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 사실은 구현 커밋을 읽어 확인했다 — 결정 25·26 = 브랜치 `feat/situation-weather-decisions` `d31384535` · 장소 미판정 = `fix/place-watch-unjudged-slots` `6b190374e` · 결정 27 = `feat/opportunity-rainy-day` `94a816ed7` · 결정 29·30 = develop #1501 · 운영 준비 감사 = `origin/develop` `49bda757f`. 기록한 것: ① 한파·폭염은 판정 시각 `TMP` 만 보고 하루 값(`TMN`·`TMX`)은 받지도 저장하지도 않는다 — `weather_grid_forecast.daily` 는 매핑 해제·기본값 `'{}'`, 칸 삭제는 후속 ② 특보 매칭 — 관서 묶음 구역 표(신설) · 섬 구역 2개 추가 · 관서 묶음 줄 × 그 묶음의 다른 광역 목적지 = 모름 · 낯선 하위 구역의 모름을 광역시의 군까지 · WARN 범위 · 서울 군 판정 ③ 결정 26 '켜기 전 개편 특보구역 목록 전체 대조' 완료 — 공식 목록(기준일 2026-06-01) 육상 300행, 모르는 최상위 이름 0, 도 단위 산지 이름 없음 ④ 장소 하루 점검 — AI 가 판정하지 못했다고 답한 장소(`unverified_slots`, 새 사유 `HOURS_UNKNOWN`)는 모름, 회로는 `DayCheck.answered` 로 0 ⑤ 기회 카드 — 마지막 자리 요즘 인기 · 서버 거르기(`ACTIVE`·`CONSUMED`, 스윕 회수) · 앱 거르기 · `event_type`·`eventType` ⑥ 앱 — 시드 진입 라우트 · 재계획 화면 [다시 시도]와 실패 부제 · 지난 날 409 날짜 안내 · 시드 심각도의 출처 ⑦ 운영 준비 감사 — 락 상한 `PT24M`(정본 `PT25M` 정정) · `dry-run` '쓰기 0'의 범위와 표본 판독 · 운영 카나리는 한 입력으로 · AI 검증 20.1s 재측정. 새 열린 질문 G-SA-18~23(t6 광역 줄의 단위 · 제외 줄의 하위 권역 · 제주 시 매칭 · 판정·미판정이 섞인 장소 감시 상태 · 공휴일 달력 실패 · 선계산 낡음 비율)을 정본 결정 대기로 올렸다. 제품 결정은 새로 만들지 않았다.
+**Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---

@@ -46,6 +46,9 @@ planb-detection  build.gradle.kts
 - 새 락 이름은 `shedlock` 테이블(V1.0)에 행을 스스로 만든다 — 마이그레이션이 없다.
 - 개발·운영 대상은 DB 가 따로라 `shedlock` 도 따로다 — 두 대상의 스윕은 각자 돈다.
 
+> **[개정 · 2026-10-22 — 구현 반영]** 델타 1 — **`lockAtMostFor = PT24M`** 이다(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/application/SituationSweep.kt:103,110` · 줄 번호는 `origin/develop` `49bda757f`). 위 텍스트 블록의 `PT25M` 과 '경계' 문단은 이것으로 읽는다 — '정본 승인 때 PT25M 유지 여부를 함께 확인한다'의 답이다(운영 준비 감사 2026-10-20). 상한이 간격(25분)과 같으면 락 만료(DB 시각)와 20:40 보충의 획득 시도가 같은 순간이라 밀리초 경합이고, 지면 ShedLock 은 DEBUG 만 남겨 그 날 내일 점검이 조용히 빠진다. 24분은 예산 20분 + 진행 중 여행 마무리(감지 시한 ≤ 62초)보다 길고 간격보다 짧다(`:96-101`). 시험이 이 값을 고정한다(`SituationSweepScheduleTest`).
+> - `dry-run` 도 회차마다 이 락 행을 갱신한다 — 델타 6 표의 '`dry-run` = 판정·요약 로그만, 쓰기 0'은 트리거·감시 상태·아웃박스·푸시 쓰기 0 이고, 락 행과 격자 캐시(델타 3) upsert 는 허용된 쓰기다(`functional-design/business-logic-model.md` §7 개정 블록).
+
 ### 델타 2 — 스케줄러 풀 1 → 4
 
 ```text
@@ -78,6 +81,8 @@ weather-context
 - **`weather_snapshot`(V2.19)은 그대로 둔다** — 그 행은 하루 최대 POP 하나만 담아(`KmaWeatherAdapter.kt:108-128`) 시간별·변형별 판정을 못 한다. 날씨 확인(이름 경로)은 계속 그 캐시를 쓴다.
 - **캐시 미들웨어를 들이지 않는다** — 복제본 사이에서 공유되고 재시작에 살아남아야 해서 DB 테이블이다. Redis 는 제거 결정(shared-infra §12 Q5=A).
 - 특보 = 파드 메모리 20분(회차당 1콜), 대기질 = 발표 단위 메모리 캐시 — 원문을 DB 에 남기지 않는다.
+
+> **[개정 · 2026-10-22 — 구현 반영]** 델타 3 — 위 텍스트 블록의 `daily jsonb 날짜별 TMN·TMX` 는 더 쓰지 않는다(사용자 결정 25번 (다)의 정리 · 줄 번호 기준 커밋 `d31384535` — `functional-design/domain-entities.md` §8.1 개정 블록). 어댑터는 같은 응답에서 시간별 칸만 읽고, `PointForecast` 에 하루 값이 없으며, 엔티티는 `daily` 칸을 매핑하지 않는다. 칸은 확장형 마이그레이션(`V2.NN__weather_grid_forecast_daily_default.sql` — 기본값 `'{}'`)으로 남기고, 삭제는 옛 파드가 남지 않은 다음 배포의 후속이다 — 델타 7 의 '마이그레이션 3'에 확장형 하나가 더해지고 삭제 하나가 뒤따른다.
 
 ### 델타 4 — 선계산 전용 실행기 (C10)
 
@@ -177,3 +182,5 @@ itinerary-recalculation  application/PreparedReplanService.kt
 - **`minSupportedVersion` 상향**(O-SA-7) — `trippilot.bootstrap.min-supported-version` 설정 커밋 1건(`BootstrapProperties.kt:12`).
 - **리마인드 문구 세션 알림** — 스케줄러 풀 4(델타 2) · 앱 푸시 수신·탭 처리가 리마인드에도 적용된다는 것.
 - **법무 확인 묶음**(LEGAL-SA-02).
+
+> **[개정 · 2026-10-22 — 구현 반영]** §4 — 위 '실응답 표본 수집'의 `LIVE_KMA=1` 격자 왕복에서 'TMN·TMX 실재'는 더 확인할 것이 없다 — 판정이 하루 값을 쓰지 않는다(델타 3 개정 블록). 특보구역은 공식 개편 목록 대조를 마쳤고(`functional-design/business-rules.md` BR-SA-16 개정 블록), t6 실응답 표본에 남은 몫은 광역 줄의 단위·제외 줄의 하위 권역 판정이다(G-SA-18·19 — `functional-design/business-logic-model.md` §9 개정 블록). 'dry-run 실측'의 AI 검증 지연(`detectorMs{place}` p95)은 시한 3s·백스톱 8s 경로에서 다시 잰다 — 'AI 검증 실측 20.1s'는 그 전 값이다(`nfr-requirements.md` §1 개정 블록).

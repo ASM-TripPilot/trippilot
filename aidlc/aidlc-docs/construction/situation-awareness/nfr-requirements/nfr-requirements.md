@@ -49,6 +49,10 @@
 
 > **[개정 · 2026-10-20 — 구현 반영]** PERF-SA-08 — 값(#1422): `deadline_ms` 3s · 소켓 읽기 상한 **9s** · 연결 1s(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/adapter/out/external/OpportunityConfiguration.kt:34-37`). 읽기 상한은 위의 '시한 + 여유(`readTimeoutMarginMs` 2s 관례)'가 아니라 **상대 백스톱(시한 + 5s — `TRIPPILOT_TIMEOUT_MARGIN_MS` 기본)보다 1s 길게** 잡았다. 같거나 짧으면 상대가 마감을 넘겨 정리해 보내는 응답(백스톱 504 포함)을 우리 소켓이 먼저 끊는다 — 우리 소켓 시계는 요청을 다 보낸 순간 출발해 상대 시계보다 앞서고, 응답은 돌아오는 길도 걸린다. 리마인드 14s·회고 21s 경계와 같은 꼴이고, 설정이 '읽기 상한 ≥ 시한 + 5s'를 기동에서 강제한다(`:45-48,56`). AI 쪽은 시한의 70% 안에서 반경 조회(≤ 8회)를 끊는다(`ai/src/trippilot/api/opportunities.py:35-36`).
 
+> **[개정 · 2026-10-22 — 구현 반영]** PERF-SA-01·02·03 — 운영 준비 감사(2026-10-20)에서 코드와 맞춘 것.
+> - **PERF-SA-01 의 '락 상한 PT25M'은 `PT24M`** 이다(`tech-stack-decisions.md` 델타 1 개정 블록).
+> - **PERF-SA-02·03 의 'AI 검증 실측 20.1s'(2026-08-21 · 시한 미집행)는 지금 경로보다 앞선 값이다** — 하루 점검의 검증은 `deadline_ms` 3s 를 싣고 AI 백스톱은 시한 + 5s(8s)라, 그보다 길면 보류(영업시간 모름)로 끝난다(`functional-design/business-logic-model.md` §6.3 개정 블록). PERF-SA-03 의 '≈ 119여행'은 그 값으로 낸 계산이라 함께 다시 낸다. 켜기 1·3단계 dry-run 에서 `detectorMs{place}` p95 와 장소 모름 수(`unknown={place:n}`)를 같이 본다 — 실측이 백스톱 근처면 보류가 회차 회로(연속 3번)를 열어 그 회차 남은 여행의 영업시간 판정이 꺼진다(BR-SA-17).
+
 ## 2. 비용·외부 호출 (COST-SA-\*)
 
 | ID | 요구 | 근거 |
@@ -81,6 +85,11 @@
 | **RES-SA-12** | **강등 허용 워크로드** — 스윕·선계산·기회 조회는 멈춰도 일정 조회·편집·사용자 재계획이 그대로다. 별도 가용성 목표를 두지 않는다. 멈춤은 감시 상태 '확인 불가'와 요약 줄 부재로 드러난다 | RESILIENCY-01 · INV-4 |
 | **RES-SA-13** ★ | **계약 호환 — 추가형만**. openapi 새 필드는 required 밖(FE 계약 가드·옛 픽스처 보호) · 이벤트 payload 새 필드는 기본값 null(옛 행·옛 구독자 호환, JSON 트리로 읽는다) · 마이그레이션 3건은 상수 기본값 확장형(롤링 창의 옛 파드에 무해 — shared-infra 증분 SA.4) · 새 상태값·`TriggerKind`·`NotificationKind` 없음 · 저장값이 집합 밖이면 응답은 null 이고 FE 는 kind 라벨. 구 앱(OTA 없음)의 날짜 오동작은 서버 진입 강제(BR-SA-20)가, 라벨 오표기는 켜는 순서(O-SA-7)가 막는다 | 계획 Q8=A. 새 kind 하나로 구 앱 알림함이 죽는다(`frontend/src/pages/settings/notification-inbox/ui/NotificationInboxPage.tsx:35` — 모르는 kind 구조분해) |
 
+> **[개정 · 2026-10-22 — 구현 반영]** RES-SA-01·06·13.
+> - **RES-SA-01 모름 목록에 더한다** — 특보 매칭의 낯선 하위 구역(도의 시군·광역시의 군 목적지) · 관서 묶음 줄 × 그 묶음의 다른 광역 목적지(`functional-design/business-rules.md` BR-SA-16 개정 블록) · AI 가 판정하지 못했다고 답한 장소의 영업시간(검증 응답 `unverified_slots` — BR-SA-17 개정 블록). 셋 다 신호가 없으면 확인하지 않는다.
+> - **RES-SA-06 의 '락은 상한(PT25M) 뒤 풀린다'는 `PT24M`** 이다 — 20:15 를 쥔 파드가 비정상 종료해도 락이 20:39 무렵 풀려 20:40 보충이 잡는다(`tech-stack-decisions.md` 델타 1 개정 블록).
+> - **RES-SA-13 의 '마이그레이션 3건'에 확장형 하나가 더해진다** — `weather_grid_forecast.daily` 의 기본값 `'{}'`(코드가 그 칸을 매핑하지 않는다). 칸 삭제는 옛 파드가 남지 않은 다음 배포의 후속이다(`functional-design/domain-entities.md` §8.1 개정 블록). 응답 선택 필드(AI 검증 `unverified_slots` 사유 · 기회 `event_type`/`eventType`)는 추가형이지만 BE 경계 계약 시험이 키·enum 을 정확 일치로 보므로 AI·BE 를 같은 변경에 싣는다.
+
 ## 4. 관측 (OBS-SA-\*)
 
 **원천은 로그다** — EKS 에서 OTLP·OTel 이 꺼져 있어(`deploy/eks/chart/templates/backend.yaml:91-99`) 카운터는 운영에서 보이지 않는다. 컨테이너 로그는 dev 스택에서 켜져 있고 보존 90일이다(`infra/terraform/environments/dev.tfvars:11-12`).
@@ -110,6 +119,11 @@ planb.situation_sweep mode= phase= trips= skipped= failed= live=[] off=[] observ
 | `elapsedMs` · `detectorMs` | 회차 소요 · 출처별 감지 지연 p50/p95 |
 
 좌표·계정 id 를 싣지 않는다(SEC-SA-05).
+
+> **[개정 · 2026-10-22 — 구현 반영]** 관측의 판독(운영 준비 감사 2026-10-20 — 코드로 확인 · 줄 번호는 `origin/develop` `49bda757f`).
+> - **`dry-run` 의 '쓰기 0'** — 트리거·감시 상태·아웃박스(사건)·푸시 쓰기가 0 이다. 감지기는 그대로 불리므로 격자 캐시 upsert 와 ShedLock 락 행 갱신은 일어난다 — 허용된 쓰기다(`functional-design/business-logic-model.md` §7 개정 블록).
+> - **`dry-run` 표본 해석**(OBS-SA-01 · 켜기 1·3·8단계) — `dry-run` 은 행이 없어 회차마다 '지금 켜면'을 다시 센다 — 같은 위험이 매시 다시 세지고, 요약 줄의 `announced`·`pushed`·`quiet` 는 그 회차의 값이라 회차끼리 더하지 않는다. 표본 줄 `planb.situation_sample tripId= source= kind= date= variant= severity= slot=` 은 신호(양성)만 싣는다 — 모름은 요약 줄의 출처별 수(`unknown=`)로 본다. 장소 표본의 `slot` 은 `{date}#{poiId}` 이고 날씨 표본은 비어 있다. 오탐은 (`tripId`, `source`, `date`, `variant`)로 중복을 걷어 센다 — 장소는 `slot` 이 장소를 가른다(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/application/SituationSweep.kt:219-221,288-298`).
+> - **OBS-SA-02 의 빈칸** — 대기 중 2분을 넘겨 낡은 이른 날짜 SYSTEM 세션을 늦은 날짜 사건이 닫고 연 경우가 `outcome=OPENED` 로만 남는다 — 결정 28 의 '낡음으로 닫히는 비율'을 이 줄로 셀 수 없다(G-SA-23 — 6단계 전에 가르는 수단을 둔다).
 
 ## 5. 보안 (SEC-SA-\*)
 
@@ -177,6 +191,13 @@ planb.situation_sweep mode= phase= trips= skipped= failed= live=[] off=[] observ
 > - **6단계**(28번 (다)) — 개발에서 켠 뒤 낡음으로 닫히는 선계산 비율을 본다 — 눈에 띄면 2분을 계산 시작부터 잰다(DB 칸 추가 — BR-SA-19 개정 블록).
 > - **구현의 마감** — 25번(한파·폭염 판정값)은 5단계 전 · 늦어도 11월 하순, 29번(재계획 화면 [다시 시도])의 앱 빌드는 6단계 전, 27번(기회 카드)·30번(요청 화면 시드 기준 — 앱 빌드)은 4단계의 '`ACCOUNT_IDS` 비움'(전원) 전.
 
+> **[개정 · 2026-10-22 — 구현 반영]** 단계 판독 갱신(운영 준비 감사 2026-10-20 · 결정 25~30 구현 — 근거는 `functional-design/business-logic-model.md` §7 · §9 개정 블록).
+> - **1·3단계** — 판독은 §4 개정 블록(같은 위험의 매시 재집계 · 양성만 싣는 표본 · 중복 제거 키). `detectorMs{place}` p95 와 장소 모름 수는 PERF-SA-02·03 을 다시 정하는 값이다(§1 개정 블록).
+> - **2단계** — 개발 `=on` 전에 같은 날 판정·미판정이 섞인 장소의 감시 상태(G-SA-21)를 정한다.
+> - **4단계 카나리는 한 입력으로만** — `runtime_switches` 에 `PLANB_SITUATION_SWEEP=on;PLANB_SITUATION_SWEEP_ACCOUNT_IDS=<UUID>` 를 함께 싣는다. `=on` 만 넣으면 저장된 목록이 없을 때 그 배포부터 전원이다.
+> - **6단계** — 개발에서 켜기 전에 낡음으로 닫힌 선계산을 가르는 수단(G-SA-23)이 있어야 결정 28 의 다시 볼 조건을 잰다.
+> - **8단계** — 개편 특보구역 목록 전체 대조는 마쳤다(`functional-design/business-rules.md` BR-SA-16 개정 블록). `observe-only` 에서 빼기 전에 t6 실응답 표본으로 G-SA-18(광역 줄의 단위)·G-SA-19(제외 줄의 하위 권역)를 정한다. §10 의 '2026 특보구역 개편 시행' 재평가는 이 대조로 한 번 돌았다 — 다음 개편이면 새 목록으로 대조 시험을 다시 돌린다.
+
 ## 8. PBT (blocking · 확장 Partial 모드)
 
 `functional-design/business-rules.md` 의 **PBT-SA-01~22**(전부 blocking)를 그대로 승계한다. NFR 성질이 큰 것은 PBT-SA-04(푸시 상한 · 회차당 사건 ≤ 1) · 07(밤 창 경계) · 17(선계산 구독자 멱등 · 상한 · BUSY 는 세션 0) · 18(같은 여행 10분 1회)이다 — 실행 패턴의 실패 모드를 이 넷과 스윕 단위 테스트가 보므로 NFR Design 을 두지 않는다(계획 Q10=A). 확장 규칙과의 대응:
@@ -191,6 +212,8 @@ planb.situation_sweep mode= phase= trips= skipped= failed= live=[] off=[] observ
 | PBT-09 프레임워크 | Kotest property(BE) · hypothesis(AI) · fast-check(FE) — 상속 | — |
 
 **PBT·CI 사각**: 실푸시 도달 · 콜드/웜 탭 · 포그라운드 배너 · 실 기상청·에어코리아·특일 응답 형식 · 지연·오탐 실측은 실기·운영 확인(콜드·웜 탭 → 올바른 화면 · 운영 카나리 실푸시 1회 왕복 · 개발·운영 dry-run 요약 줄 · `LIVE_KMA=1` 격자 왕복 · 키 등록 뒤 실응답 표본 수집)이 유일한 그물이다. CI 외부 호출은 0이고 대역은 실물처럼 예외로 실패한다.
+
+> **[개정 · 2026-10-22 — 구현 반영]** §8 — PBT-02 행의 ② `GridForecast` ↔ jsonb 왕복은 `hourly` 만이다 — `daily` 칸은 매핑하지 않는다(`functional-design/domain-entities.md` §8.1 개정 블록). PBT-07 생성기 품질에 하나를 더한다 — 성질의 전제(행사만으로 3장 · 그 날 위험 행)를 생성기가 거의 만들지 못하면 성질이 공허하게 통과한다: PBT-SA-19 는 붐비는 장면을, PBT-SA-20 은 셋에 둘 꼴로 그 날 위험 행을 일부러 싣는다(역검증으로 확인 — `functional-design/business-rules.md` §10 개정 블록).
 
 ## 9. 확장 기준선 대응
 
