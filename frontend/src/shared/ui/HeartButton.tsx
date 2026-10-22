@@ -7,7 +7,7 @@ import { HeartFilledGlyph, HeartOutlineGlyph } from './HeartGlyphs';
 
 /**
  * 카드 사진 위 저장 하트(TRIP-1049) — Figma HeartButton `4462:1407`: 32 흰 원 + 18 하트.
- * 장소 카드(entities/place)와 홈 스팟 카드(features/home)가 함께 쓴다. 위치는 소비처가
+ * 장소 카드(entities/place)와 홈 스팟 카드(features/home)·숙소 카드(entities/stay, TRIP-1599)가 함께 쓴다. 위치는 소비처가
  * `className` 으로 주고, 모양은 여기서 고정한다.
  *
  * 담김/안 담김은 색이 아니라 `accessibilityState.selected` + 서로 다른 글리프 testID 로 갈린다
@@ -31,6 +31,8 @@ export interface HeartButtonProps {
   className?: string;
   /** 저장 대상 이름 — 라벨 `{name} 저장`. 비었거나 공백뿐이면 `담기`. */
   name?: string;
+  /** 하트 글리프 크기(기본 18). 숙소 카드는 22(e02)·18(d01) — TRIP-1599. 원(32)은 그대로다. */
+  glyphSize?: number;
 }
 
 /** 저장 하트 라벨(TRIP-1281) — 하트를 따로 그리는 카드·행도 이걸 쓴다. */
@@ -47,6 +49,7 @@ export function HeartButton({
   outlineTestID,
   className = '',
   name,
+  glyphSize = 18,
 }: HeartButtonProps): ReactElement {
   const scale = useRef(new Animated.Value(1)).current;
   const wasSaved = useRef(saved);
@@ -94,9 +97,9 @@ export function HeartButton({
     >
       <Animated.View style={{ transform: [{ scale }] }}>
         {saved ? (
-          <HeartFilledGlyph testID={filledTestID} size={18} />
+          <HeartFilledGlyph testID={filledTestID} size={glyphSize} />
         ) : (
-          <HeartOutlineGlyph testID={outlineTestID} size={18} />
+          <HeartOutlineGlyph testID={outlineTestID} size={glyphSize} />
         )}
       </Animated.View>
     </Pressable>
