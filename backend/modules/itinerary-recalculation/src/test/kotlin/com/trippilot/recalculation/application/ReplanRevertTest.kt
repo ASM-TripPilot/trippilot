@@ -212,7 +212,7 @@ class ReplanRevertTest : StringSpec({
         f.replans.reverted.shouldBeEmpty()
     }
 
-    // INV-U4-04 판정은 C8 이 일정 행을 잠근 뒤 한다(ReplanFacadeServiceTest). 여기서 볼 것은 **무엇을 넘기는가** —
+    // INV-U4-04 판정은 C8 이 일정 쓰기 잠금을 잡은 뒤 한다(ReplanFacadeServiceTest). 여기서 볼 것은 **무엇을 넘기는가** —
     // 완료만 넘기면 도착만 한 기록이 되돌린 뒤 고아가 된다.
     "다녀온 기록은 도착만 한 것까지 C8 에 넘긴다 — 완료분만이 아니다" {
         val arrivedOnly = "$today#$added"

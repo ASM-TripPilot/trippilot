@@ -149,7 +149,7 @@ class ConfirmItineraryServiceTest : StringSpec({
         shouldThrow<ConflictDetected> { svc.confirm(acc, tripId) }
     }
 
-    // TRIP-1412 — 확정은 일정 행을 잠그고 읽는다. 잠금 없는 읽기는 그 사이 커밋된 확정(또는 재계획 반영)을 못 보고 PLANNED 로 덮는다.
+    // TRIP-1412 — 확정은 일정 쓰기 잠금을 잡고 읽는다. 잠금 없는 읽기는 그 사이 커밋된 확정(또는 재계획 반영)을 못 보고 PLANNED 로 덮는다.
     "잠금 뒤에 이미 확정돼 있으면 409 — 잠금 없는 읽기의 PLANNED 로 판정하지 않는다" {
         val repo = ConfirmFakeItineraries().apply { replaceForTrip(tripId, planned()) }
         val alreadyConfirmed = repo.findByTrip(tripId).single().confirm(emptyMap(), clock.instant())

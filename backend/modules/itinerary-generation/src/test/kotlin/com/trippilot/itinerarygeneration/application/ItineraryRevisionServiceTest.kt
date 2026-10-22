@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.domain.GenerationMode
@@ -173,7 +174,7 @@ class ItineraryRevisionServiceTest : StringSpec({
         shouldThrow<ConflictDetected> { svc.restore(acc, tripId, revs.stored.single().revisionId) }
     }
 
-    // TRIP-1412 — 트랜잭션 안의 재확인이 일정 행을 잠그고 읽는다. 검증 동안 확정이 커밋됐으면 그 확정을 되돌리지 않는다.
+    // TRIP-1412 — 트랜잭션 안의 재확인이 일정 쓰기 잠금을 잡고 읽는다. 검증 동안 확정이 커밋됐으면 그 확정을 되돌리지 않는다.
     "검증 동안 확정됐으면 잠금 뒤 읽기가 409 로 막는다" {
         val revs = Revisions()
         val base = itinerary(listOf(slot(cafe, "10:00", "11:00")))
@@ -183,6 +184,22 @@ class ItineraryRevisionServiceTest : StringSpec({
 
         shouldThrow<ConflictDetected> { svc.restore(acc, tripId, revs.stored.single().revisionId) }.message shouldBe "확정된 일정은 되돌릴 수 없습니다."
         repo.current shouldBe base
+    }
+
+    // 3차 검수 감사 — 재검증은 잠그기 전 일정(preview)으로 만든 초안을 판정했다. 그 사이 내용이 바뀌었으면 그 판정은 지금 쓸 조합의 것이 아니다.
+    "검증 동안 내용이 바뀌었으면 409 STALE — 잠금 전 판정으로 쓰지 않는다" {
+        val revs = Revisions()
+        val base = itinerary(listOf(slot(cafe, "10:00", "11:00")))
+        val moved = Itinerary.reconstitute(
+            base.itineraryId, base.tripId, base.status, base.solveMode, base.generationMode, base.isFallback, base.generationState,
+            listOf(ItineraryDay.of(d1, 0, listOf(slot(cafe, "12:00", "13:00")))), base.createdAt, base.updatedAt,
+            base.candidatesSummary, base.unplacedMustVisits,
+        )
+        val repo = Itineraries(base).apply { lockedView = moved }
+        val svc = service(revs, repo)
+        svc.record(base, RevisionActor.AI, RevisionKind.BASELINE, "처음")
+
+        shouldThrow<ConflictDetected> { svc.restore(acc, tripId, revs.stored.single().revisionId) }.errorCode shouldBe ErrorCode.STALE
     }
 
     "생성 중(PARTIAL)에는 되돌릴 수 없다(409)" {

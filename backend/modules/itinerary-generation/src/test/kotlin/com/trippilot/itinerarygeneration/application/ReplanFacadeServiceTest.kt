@@ -65,7 +65,7 @@ private class ReplanItineraries : ItineraryRepository {
     }
     override fun findStalePartial(updatedBefore: Instant): List<Itinerary> = emptyList()
 
-    /** 잠금 순서를 보려고 남긴다 — 실 잠금(FOR UPDATE)은 `ReplanRevertIT` 가 본다. */
+    /** 잠금 순서를 보려고 남긴다 — 실 잠금(여행 단위 권고 잠금)은 `ReplanRevertIT` 가 본다. */
     val events = mutableListOf<String>()
     override fun lockForTrip(tripId: UUID): Itinerary? = findByTrip(tripId).firstOrNull().also { events += "lock" }
 }
@@ -657,7 +657,7 @@ class ReplanFacadeServiceTest : StringSpec({
         f.repo.byTrip.getValue(trip).days[0].slots.map { it.sourcePoiId } shouldContainExactly listOf(morning, fixedNoon, evening)
     }
 
-    "반영도 같은 일정 행 잠금을 잡는다 — 되돌리기와 직렬화된다" {
+    "반영도 같은 일정 쓰기 잠금을 잡는다 — 되돌리기와 직렬화된다" {
         val f = fixture(Agent(proposal(replacement)))
         val proposal = f.svc.propose(command())!!
         f.repo.events.clear()
@@ -667,7 +667,7 @@ class ReplanFacadeServiceTest : StringSpec({
         f.repo.events shouldContainExactly listOf("lock")
     }
 
-    "실적은 일정 행을 잠근 뒤에 읽는다 — 잠금 전 체크인이 판정에 다 보이게" {
+    "실적은 일정 쓰기 잠금을 잡은 뒤에 읽는다 — 잠금 전 체크인이 판정에 다 보이게" {
         val f = fixture(Agent(proposal(replacement)))
         val proposal = f.svc.propose(command())!!
         val restore = f.svc.apply(acc, trip, proposal, REASON)

@@ -32,8 +32,8 @@ class ConfirmItineraryService(
     @Transactional
     fun confirm(accountId: UUID, tripId: UUID): Itinerary {
         trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
-        // 일정 행을 잠그고 읽는다(TRIP-1412) — 편집·복원·재계획 반영·되돌리기와 직렬화된다. 잠금 없이 읽으면 그 사이 반영된
-        // 재계획을 PLANNED 로 덮어 동결 없이 확정하거나, 확정을 PLANNED 반영이 덮는다.
+        // 일정 쓰기 잠금을 잡고 읽는다(TRIP-1412) — 편집·복원·재계획 반영·되돌리기와 직렬화된다. 판정(이미 확정?)과 쓰는 값이
+        // 모두 잠금 뒤 읽기다 — 잠금 전 값으로 정하면 그 사이 커밋된 확정·편집을 못 보고 덮는다.
         val current = itineraries.lockForTrip(tripId) ?: throw ResourceNotFound("생성된 일정이 없습니다.")
         // 재확정은 동결 전 조기 차단(409) — freeze 부작용 없이.
         if (current.status != ItineraryStatus.PLANNED) throw ConflictDetected(message = "이미 확정된 일정입니다.")

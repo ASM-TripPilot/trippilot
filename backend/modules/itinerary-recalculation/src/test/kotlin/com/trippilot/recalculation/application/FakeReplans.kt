@@ -41,7 +41,11 @@ internal class FakeReplans(
     /** 되돌리기가 받은 실적 읽기를 실제로 불러 본 값 — C10 이 넘기는 집합이 맞는지 본다(판정 자체는 C8 스펙). */
     val visitedSeen = mutableListOf<Set<String>>()
 
+    /** 잠금을 잡는 순간에 끼워 넣을 일 — "잠금 전 읽기와 잠금 뒤 읽기 사이에 커밋된 쓰기"를 흉내 낸다. */
+    var onLock: () -> Unit = {}
+
     override fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal, reason: String, afterLock: () -> Unit): ReplanProposal {
+        onLock()
         afterLock()
         applied += proposal
         appliedReasons += reason

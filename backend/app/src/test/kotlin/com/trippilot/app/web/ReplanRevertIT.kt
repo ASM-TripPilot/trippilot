@@ -224,13 +224,17 @@ class ReplanRevertIT : AbstractPostgresIntegrationTest() {
     }
 
     /**
-     * 다른 트랜잭션이 일정 행 잠금을 쥔 채 내일 시각을 30분 미루고 멈춘다 — [action] 이 그 잠금을 **기다리는 것**을 DB 로 확인한 뒤 풀어 준다.
+     * 다른 트랜잭션이 일정 쓰기 잠금을 쥔 채 내일 시각을 30분 미루고 멈춘다 — [action] 이 그 잠금을 **기다리는 것**을 DB 로 확인한 뒤 풀어 준다.
      * 상대 쓰기는 실 저장소의 교체(`replaceForTrip` — 편집·복원·반영·되돌리기가 쓰는 같은 PK 지우고 다시 넣기)다.
      */
-    private fun <T> behindLockedReplace(tripId: UUID, date: LocalDate, action: () -> T): T {
+    private fun <T> behindLockedReplace(tripId: UUID, date: LocalDate, action: () -> T): T =
+        behindLockedReplace(tripId, date, listOf(action)).single()
+
+    /** 여러 쓰기가 한꺼번에 같은 잠금 뒤에 줄을 선다 — [actions] 가 **모두** 기다리는 것을 확인한 뒤 풀어 준다. */
+    private fun <T> behindLockedReplace(tripId: UUID, date: LocalDate, actions: List<() -> T>): List<T> {
         val locked = CountDownLatch(1)
         val release = CountDownLatch(1)
-        val pool = Executors.newFixedThreadPool(2)
+        val pool = Executors.newFixedThreadPool(1 + actions.size)
         try {
             val writer = pool.submit {
                 TransactionTemplate(transactions).executeWithoutResult {
@@ -250,11 +254,11 @@ class ReplanRevertIT : AbstractPostgresIntegrationTest() {
                 }
             }
             check(locked.await(20, TimeUnit.SECONDS)) { "교체가 잠금을 잡지 못했습니다." }
-            val result = pool.submit<T> { action() }
-            awaitLockWaiter()
+            val results = actions.map { a -> pool.submit<T> { a() } }
+            awaitLockWaiters(actions.size)
             release.countDown()
             writer.get(20, TimeUnit.SECONDS)
-            return result.get(20, TimeUnit.SECONDS)
+            return results.map { it.get(20, TimeUnit.SECONDS) }
         } finally {
             release.countDown()
             pool.shutdownNow()
@@ -312,12 +316,12 @@ class ReplanRevertIT : AbstractPostgresIntegrationTest() {
     }
 
     /**
-     * 되돌리기와 다른 교체가 겹치면 — 되돌리기는 일정 행 잠금을 기다렸다가 **잠금 뒤의 일정**으로 판정한다. 먼저 커밋된 교체가
+     * 되돌리기와 다른 교체가 겹치면 — 되돌리기는 일정 쓰기 잠금을 기다렸다가 **잠금 뒤의 일정**으로 판정한다. 먼저 커밋된 교체가
      * 그 날을 바꿨으면 409 `STALE` 이고, 세션에 되돌린 시각이 찍히지 않으며, 그 교체는 지워지지 않는다(조용히 잃지 않는다).
      * 상대는 실 저장소의 교체(`replaceForTrip` — 편집·재생성·복원·반영이 모두 쓰는 쓰기)를 잠금을 쥔 채 커밋 직전에 멈춰 둔 것이다.
      */
     @Test
-    fun `되돌리기는 다른 교체가 쥔 일정 행 잠금을 기다리고, 그 교체가 날을 바꿨으면 STALE 로 물러난다`() {
+    fun `되돌리기는 다른 교체가 쥔 일정 쓰기 잠금을 기다리고, 그 교체가 날을 바꿨으면 STALE 로 물러난다`() {
         val a = appliedReplan()
 
         val (rc, body) = behindLockedReplace(a.tripId, a.tomorrow) {
@@ -332,8 +336,8 @@ class ReplanRevertIT : AbstractPostgresIntegrationTest() {
     }
 
     /**
-     * 반영이 다른 교체 뒤에서 기다리면 — 상대 커밋은 같은 PK 를 지우고 다시 넣어 READ COMMITTED 의 첫 `FOR UPDATE` 가 0행을 본다.
-     * 잠금이 새 문장으로 다시 물어 새 행을 잡아야 반영이 "일정이 없습니다"(404)가 아니라 정상 반영된다. 그리고 반영 직전 비교 기준·되돌리기
+     * 반영이 다른 교체 뒤에서 기다리면 — 상대 커밋은 같은 PK 를 지우고 다시 넣는다. 행 잠금(`FOR UPDATE`)이었다면 READ COMMITTED 에서
+     * 0행을 봐 반영이 "일정이 없습니다"(404)였다(2차 검수 재현). 권고 잠금 뒤의 새 문장은 커밋된 새 행을 본다. 그리고 반영 직전 비교 기준·되돌리기
      * 지점은 **잠금 뒤** 일정(상대가 미룬 10:30)으로 떠져야 한다 — 잠금 전에 뜨면 기준이 실제로 덮은 일정과 어긋난다.
      */
     @Test
@@ -350,6 +354,33 @@ class ReplanRevertIT : AbstractPostgresIntegrationTest() {
         // 되돌리기 지점도 같은 일정이다 — 되돌리면 상대가 미룬 시각으로 돌아온다.
         call(HttpMethod.POST, "/trips/${d.tripId}/replan-sessions/${d.sessionId}/revert", d.token).first shouldBe 200
         firstStart(d.tripId, d.tomorrow) shouldBe "10:30:00"
+    }
+
+    /**
+     * 쓰기 셋이 한 여행에 겹친다 — 교체 하나가 잠금을 쥐고, 반영과 또 하나의 잠금 읽기(편집·복원·확정이 쓰는 그 읽기)가 뒤에 선다.
+     * 행 잠금(`FOR UPDATE`) 시절엔 같은 PK 재삽입 뒤 0행이 나와 재질의로도 못 막았다(3차 검수 재현 — 반영 404). 권고 잠금은 행과 무관해
+     * 둘 다 잠금 뒤의 실제 일정을 받는다.
+     */
+    @Test
+    fun `쓰기 셋이 겹쳐도 뒤에 선 반영과 잠금 읽기가 일정을 잃지 않는다`() {
+        val d = draftedReplan()
+        val actions: List<() -> Any> = listOf(
+            { call(HttpMethod.POST, "/trips/${d.tripId}/replan-sessions/${d.sessionId}/apply", d.token).first },
+            {
+                TransactionTemplate(transactions).execute {
+                    val seen = itineraries.lockForTrip(d.tripId)
+                    // 다음 쓰기를 흉내 낸다 — 같은 PK 로 다시 넣어 뒤에 선 쪽에 또 한 번 재삽입을 남긴다.
+                    seen?.let { itineraries.replaceForTrip(d.tripId, it) }
+                    seen != null
+                }!!
+            },
+        )
+
+        val (applyRc, lockedRead) = behindLockedReplace(d.tripId, d.tomorrow, actions)
+
+        applyRc shouldBe 200
+        lockedRead shouldBe true
+        call(HttpMethod.GET, "/trips/${d.tripId}/replan-sessions/${d.sessionId}", d.token).second["status"].asText() shouldBe "APPLIED"
     }
 
     /** 같은 트랜잭션이 먼저 읽어 둔 일정(관리 중 엔티티)이 있어도, 잠금 뒤 읽기는 그 사이 커밋된 값이다(JPA 는 쿼리로 덮지 않는다). */
@@ -369,18 +400,20 @@ class ReplanRevertIT : AbstractPostgresIntegrationTest() {
         }
     }
 
-    /** 되돌리기 요청이 행 잠금을 **실제로 기다리는 중**인지 — 고정 sleep 대신 DB 가 말하는 대기 상태로 본다. */
-    private fun awaitLockWaiter() {
+    /** 요청들이 일정 쓰기 권고 잠금을 **실제로 기다리는 중**인지 — 고정 sleep 대신 DB 가 말하는 대기 상태로 본다. */
+    private fun awaitLockWaiters(count: Int) {
         val deadline = System.nanoTime() + java.time.Duration.ofSeconds(20).toNanos()
+        var waiting = 0
         while (System.nanoTime() < deadline) {
-            val waiting = jdbc.queryForObject(
-                "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query ILIKE '%itinerary%for%'",
+            waiting = jdbc.queryForObject(
+                "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND wait_event = 'advisory' " +
+                    "AND query ILIKE '%pg_advisory_xact_lock%'",
                 Int::class.java,
             )!!
-            if (waiting > 0) return
+            if (waiting >= count) return
             Thread.sleep(20)
         }
-        error("되돌리기가 일정 행 잠금을 기다리지 않았습니다.")
+        error("일정 쓰기 잠금을 기다리는 요청이 $count 개가 아닙니다(본 것 $waiting).")
     }
 
     /** 비교 기준 칸이 깨진 행도 세션 조회를 500 으로 막지 않는다 — 기준 없이 읽혀 비교만 ready=false 가 된다. */
