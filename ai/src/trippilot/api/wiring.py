@@ -2417,7 +2417,8 @@ class WiredItineraryOrchestrator:
                     radius_pool = self._pool_from(packets, now)
                     notes.append(f"pool_widened: {base:g}->{widened:g}km, before=0, after={len(radius_pool.pois)}")
         pool = self._with_current_slots(radius_pool, request, now, notes)
-        if not pool.pois:
+        # END_DAY 는 새 방문이 없어 후보가 필요 없다 — 풀이 비어도(장소 조회 실패) 잠금만으로 하루를 끝낸다.
+        if not pool.pois and "END_DAY" not in resolved:
             return self._replan_empty("NO_CANDIDATE", notes, resolved, unknown)
 
         persona = (_inline_persona(request.preference_profile, request.trip_context.companion_type)
