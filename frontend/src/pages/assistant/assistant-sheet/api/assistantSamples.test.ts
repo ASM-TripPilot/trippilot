@@ -4,6 +4,7 @@ import { NEXT_ACTION_TYPES } from './assistantContract';
 import {
   assistantSample,
   sampleActionLogs,
+  sampleLongConversation,
   sampleTranscript,
   type AssistantScenario,
 } from './assistantSamples';
@@ -74,5 +75,26 @@ describe('도우미 샘플 계약 (TRIP-1319)', () => {
     expect(
       assistantSample('proposal', { id: 'x' }).proposal?.violations
     ).toEqual([]);
+  });
+});
+
+describe('긴 대화 샘플 (이전 대화 더 보기)', () => {
+  it('오래된 것 먼저 long-1…long-N, 홀수는 사용자 짝수는 도우미, 시각은 엄격 증가', () => {
+    // Arrange · Act
+    const messages = sampleLongConversation(75);
+
+    // Assert
+    expect(messages.map((m) => m.id)).toEqual(
+      Array.from({ length: 75 }, (_, i) => `long-${i + 1}`)
+    );
+    messages.forEach((message, index) =>
+      expect(message.role).toBe(index % 2 === 0 ? 'USER' : 'ASSISTANT')
+    );
+    const times = messages.map((m) => Date.parse(m.createdAt));
+    times.slice(1).forEach((time, i) => expect(time).toBeGreaterThan(times[i]));
+  });
+
+  it('개수 인자를 따른다', () => {
+    expect(sampleLongConversation(31)).toHaveLength(31);
   });
 });

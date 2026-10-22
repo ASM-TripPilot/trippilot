@@ -1769,6 +1769,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 
 ---
 
+## CONSTRUCTION — U8 FE 정본 반영 (이전 대화 더 보기)
+**Timestamp**: 2026-10-22T01:30:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 세션 2026-10-21, 그대로 인용) "이전 대화 더 보기 진행해" / "대신 각 일정id에 대응되는 챗봇형태이어야 할 거 같아." → 코드 확인 뒤 "이미 여행별 대화"임을 보고하자 선택지에서 "더 보기 페이지네이션 진행" · 3-a 결정: 트리거 "맨 위 '이전 대화 더 보기' 행" · 세션 재조회 "붙여 둔 옛 메시지 유지·합침" · 정본 반영 "frontend-components.md §6 응답에 nextBefore 추가, 더 보기 규칙 절 추가".
+**AI Response**: `construction/u8-conversational-assistant/functional-design/frontend-components.md` 끝에 개정 블록 1개(R21 §6 `nextBefore` · R22 더 보기 규칙 ①~⑧) append. 원문 수정 0줄. 코드는 `frontend/src/pages/assistant/assistant-sheet/` (같은 PR).
+**Context**: CONSTRUCTION — 사이클 20261021-assistant-older-messages [기록] 정본 반영. 옵시디언 볼트 부재로 개발로그·이해부채는 `_workspace/`(git 미추적)에 센티넬·학습노트로 남김. `aidlc-state.md` 무변경.
 ## Functional Design 사후 개정 — U8 홈 헤더 ✦ 위치 (TRIP-1553 후속)
 **Timestamp**: 2026-10-22T11:55:00+09:00 (작업 시점)
 **User Input**: (사용자 원문 — 2026-10-22 지시 그대로 인용) "홈 알람이랑 챗봇 아이콘 위치 바꿔줘". 이번 세션에서 새 질의 없음 — 자율 세션, 정본 반영은 사용자가 사전 선택했다.
