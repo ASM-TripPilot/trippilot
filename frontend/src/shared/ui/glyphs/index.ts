@@ -19,5 +19,10 @@ export {
   WarningTriangleGlyph,
 } from './StatusGlyphs';
 export { CarGlyph, MapPinGlyph, SuitcaseGlyph, WalkGlyph } from './PlaceGlyphs';
-export { SearchGlyph, TrashGlyph } from './ActionGlyphs';
+export {
+  NoteGlyph,
+  SearchGlyph,
+  SummaryChartGlyph,
+  TrashGlyph,
+} from './ActionGlyphs';
 export { HeartStrokeFilledGlyph, HeartStrokeOutlineGlyph } from './HeartGlyphs';

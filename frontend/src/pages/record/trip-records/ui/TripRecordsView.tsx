@@ -1,19 +1,11 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ReactElement,
-  type ReactNode,
-} from 'react';
-import { Keyboard, Pressable, Text, View } from 'react-native';
+import { useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { Pressable, Text, View } from 'react-native';
 
 import { formatDayLabel } from '@/entities/trip';
 import { formatCoPickDayHeader } from '@/features/itinerary/index.view';
 import {
   GpsOffGlyph,
   InfoCircleGlyph,
-  NoteGlyph,
-  SummaryChartGlyph,
   VisitCheckUpcomingGlyph,
 } from '@/features/record';
 import { SpontaneousVisitButton } from './SpontaneousVisitButton';
@@ -23,15 +15,8 @@ import {
   type VisitRecordCardVM,
 } from './VisitRecordCard';
 import type { MapCenter, MapPin } from '@/shared/map';
-import { RecordsIconActive } from '@/shared/ui/BottomTabBar';
-import { GLYPH_COLORS } from '@/shared/ui/glyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
-import {
-  BottomNavBar,
-  NAV_BAR_BOTTOM_GAP,
-  NAV_BAR_RESERVE,
-  NAV_BAR_SIDE,
-} from '@/widgets/bottom-nav-bar';
+import { NAV_BAR_RESERVE, RecordNavBar } from '@/widgets/bottom-nav-bar';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 
 /**
@@ -162,22 +147,6 @@ export function TripRecordsView({
   actualRoute,
 }: TripRecordsViewProps): ReactElement {
   const activeIndex = dayTabs.findIndex((tab) => tab.day === activeDay);
-  // TRIP-1280 — 메모 입력으로 키보드가 뜨면 gorhom 이 시트를 밀어 올려 화면 아래 바가 시트 헤더·입력을 덮는다.
-  // 키보드가 떠 있는 동안만 하단 바를 뺀다(시트 위치로 판정하면 펼침 스냅에서도 숨는다). Android 는
-  // Will* 이벤트가 오지 않아 Did* 도 함께 받는다.
-  const [keyboardShown, setKeyboardShown] = useState(false);
-  useEffect(() => {
-    const show = (): void => setKeyboardShown(true);
-    const hide = (): void => setKeyboardShown(false);
-    const subs = [
-      Keyboard.addListener('keyboardWillShow', show),
-      Keyboard.addListener('keyboardDidShow', show),
-      Keyboard.addListener('keyboardWillHide', hide),
-      Keyboard.addListener('keyboardDidHide', hide),
-    ];
-    return () => subs.forEach((sub) => sub.remove());
-  }, []);
-
   // TRIP-1558 — 핀 탭 → 시트를 최상단 칸으로 올리고, **도착한 뒤** 그 번호의 항목으로 스크롤. gorhom 은 가장 높은 칸에서만 안쪽 스크롤을
   // 허용한다(6-b 실측). j01 기본 배열: 0 닫힘·1 peek·2 펼침(i01 허브의 −1/0/1 과 번호가 다르다). 도착한 칸은 셸 `onSheetChange` 로
   // 추적한다(초기값 = peek 1). 요청은 id 요청형이라 같은 핀을 다시 눌러도 다시 나간다.
@@ -388,57 +357,16 @@ export function TripRecordsView({
         </View>
       </MapSheetShell>
 
-      {/* TRIP-1557 하단 바 — 허브(i01)와 같은 조각. 셸 뒤 형제라 시트 위에 얹힌다(시트 안·셸 오버레이 슬롯이 아니다). 시트가 어디 있든 똑같다.
-          키보드 표시 중엔 트리에서 뺀다(TRIP-1280) — 투명 처리면 보이지 않는 바가 시트 입력 위 터치를 가로챈다. 비활성은 칸이 지는 신호:
-          회고 = 미래·로딩 판정(페이지), 요약 = 서버 ready(페이지) — 뷰는 콜백 유무만 본다. */}
-      {keyboardShown ? null : (
-        <View
-          pointerEvents="box-none"
-          style={{
-            position: 'absolute',
-            left: NAV_BAR_SIDE,
-            right: NAV_BAR_SIDE,
-            bottom: NAV_BAR_BOTTOM_GAP,
-          }}
-        >
-          <BottomNavBar
-            testID="record-trip-bottom-bar"
-            backTestID="record-trip-bottom-bar-back"
-            onBack={onPressBack ?? noop}
-            cells={[
-              {
-                key: 'records',
-                testID: 'record-trip-bottom-bar-tab-records',
-                label: '기록',
-                icon: <RecordsIconActive size={27} />,
-                selected: true,
-                onPress: noop,
-              },
-              {
-                key: 'reflection',
-                testID: 'record-trip-bottom-bar-tab-reflection',
-                label: '회고',
-                icon: <NoteGlyph size={27} color={GLYPH_COLORS.muted} />,
-                selected: false,
-                disabled: !onPressReflection,
-                onPress: onPressReflection ?? noop,
-              },
-              {
-                key: 'summary',
-                testID: 'record-trip-bottom-bar-tab-summary',
-                label: '요약',
-                icon: (
-                  <SummaryChartGlyph size={27} color={GLYPH_COLORS.muted} />
-                ),
-                selected: false,
-                disabled: !onPressSummary,
-                value: onPressSummary ? undefined : '요약 준비 중',
-                onPress: onPressSummary ?? noop,
-              },
-            ]}
-          />
-        </View>
-      )}
+      {/* TRIP-1557 하단 바 → TRIP-1584 공용 `RecordNavBar`(허브와 같은 변신 모션). 셸 뒤 형제라 시트 위에 얹힌다(시트 안·셸 오버레이 슬롯이 아니다). 시트가
+          어디 있든 똑같다. 키보드 표시 중엔 바가 스스로 빠진다(TRIP-1280). 비활성은 칸이 지는 신호: 회고 = 미래·로딩 판정(페이지), 요약 = 서버 ready(페이지) —
+          뷰는 콜백 유무만 본다. */}
+      <RecordNavBar
+        testIDPrefix="record-trip-bottom-bar"
+        active="records"
+        onBack={onPressBack ?? noop}
+        onPressReflection={onPressReflection}
+        onPressSummary={onPressSummary}
+      />
     </View>
   );
 }

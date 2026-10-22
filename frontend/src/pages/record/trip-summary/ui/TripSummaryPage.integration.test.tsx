@@ -16,6 +16,7 @@ import type {
   TripSummaryEnvelope,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 
 import { TripSummaryPage } from './TripSummaryPage';
 
@@ -126,7 +127,7 @@ const tripFails = () =>
     () => new HttpResponse(null, { status: 500 })
   );
 
-function renderPage(): QueryClient {
+function renderPage(today?: string): QueryClient {
   const client = new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: 0 },
@@ -138,7 +139,7 @@ function renderPage(): QueryClient {
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
   }
-  render(<TripSummaryPage tripId={TRIP_ID} />, { wrapper });
+  render(<TripSummaryPage tripId={TRIP_ID} today={today} />, { wrapper });
   return client;
 }
 
@@ -160,7 +161,9 @@ beforeEach(() => {
   setAccessToken('a');
   mockShareArmed.value = false;
 });
+// 칸 이동은 연타 가드(모듈 전역 400ms 창)를 지난다 — 앞 테스트의 누름이 뒤 테스트를 막지 않게 파일 최상위에서 닫는다.
 afterEach(() => {
+  resetPressGuard();
   server.resetHandlers();
   clearAccessToken();
   mockPush.mockClear();
@@ -364,26 +367,57 @@ describe('🔴 TRIP-574 AC-6a · 공유 → j06 라우트 push (TRIP-939: 캡처
   });
 });
 
-describe('🔴 TRIP-1262 · 복제 탭바는 dismissTo 로 탭에 간다 (QA F3)', () => {
+describe('🔴 TRIP-1584 · 하단 바 — 5칸 복제 탭바(옛 TRIP-1262 dismissTo 계약) 대신 3칸 바', () => {
   /**
-   * 무엇을 보장하나: 요약 화면(스택 화면)의 탭바로 탭을 누르면 `router.dismissTo(탭 경로)` 1회 —
-   * replace 면 이 화면만 (tabs) 로 바뀌고 아래 스택이 남아 탭 루트에서 스와이프가 되살린다.
-   * 준비: 요약·여행 응답 → 실행: 홈·일정 탭 press → 단언: dismissTo 인자 순서, replace·push 0회.
+   * 무엇을 보장하나: 대기·실패 얼굴에도 요약 활성 3칸 바가 서고(막다른 화면 금지, Q8) 5칸 탭바는 없다 · 회고 칸 목적지는 여행 기간 규칙(Q6 — 여행 중이면 오늘,
+   * 끝났으면 마지막 일차, 시작 전이면 비활성) · 기록 칸은 날짜 없이 기록으로. (문맥 없는 이 파일은 스택에 기록 화면이 없다고 보므로 push — dismissTo 선택은 recordBarStack.)
    */
-  it('홈·일정 탭 press → dismissTo(/(tabs)) · dismissTo(/itinerary), replace 0회', async () => {
-    server.use(
-      summaryHandler({ ready: true, summary: summary(true, ['코엑스']) }),
-      tripOk()
-    );
+  const BAR = 'reflection-summary-bottom-bar';
+  const REFLECTION = `${BAR}-tab-reflection`;
 
-    renderPage();
-    await waitSummary();
+  it.each([
+    ['요약 준비 중(ready:false)', () => summaryHandler({ ready: false })],
+    [
+      '조회 실패',
+      () =>
+        http.get(
+          `${BASE}/trips/:tripId/summary`,
+          () => new HttpResponse(null, { status: 500 })
+        ),
+    ],
+  ])(
+    '%s 얼굴에도 요약 활성 3칸 바가 서고 5칸 탭바는 없다',
+    async (_label, handler) => {
+      server.use(handler(), tripOk());
 
-    fireEvent.press(screen.getByTestId('shell-tabbar-tab-home'));
-    fireEvent.press(screen.getByTestId('shell-tabbar-tab-itinerary'));
+      renderPage();
 
-    expect(mockDismissTo.mock.calls).toEqual([['/(tabs)'], ['/itinerary']]);
-    expect(mockReplace).not.toHaveBeenCalled();
-    expect(mockPush).not.toHaveBeenCalled();
-  });
+      expect(await screen.findByTestId(BAR)).toBeOnTheScreen();
+      // 활성 칸은 요약 응답이 없어도 꺼지지 않는다(막다른 화면 금지).
+      expect(screen.getByTestId(`${BAR}-tab-summary`)).toBeSelected();
+      expect(screen.getByTestId(`${BAR}-tab-summary`)).toBeEnabled();
+      expect(screen.queryByTestId('shell-tabbar-root')).toBeNull();
+    }
+  );
+
+  it.each([
+    ['여행 중', '2026-09-25', '2026-09-25'],
+    ['끝난 여행 → 마지막 일차', '2026-10-30', '2026-09-25'],
+  ])(
+    '회고 칸 · %s(오늘 %s) → %s 의 회고로 간다',
+    async (_label, today, target) => {
+      server.use(
+        summaryHandler({ ready: true, summary: summary(true, ['코엑스']) }),
+        tripOk()
+      );
+
+      renderPage(today);
+      await waitFor(() => expect(screen.getByTestId(REFLECTION)).toBeEnabled());
+      fireEvent.press(screen.getByTestId(REFLECTION));
+
+      expect(mockPush.mock.calls).toEqual([
+        [`/trips/${TRIP_ID}/records/reflection/${target}`],
+      ]);
+    }
+  );
 });

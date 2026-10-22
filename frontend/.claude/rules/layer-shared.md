@@ -45,6 +45,7 @@ paths:
 | `src/shared/ui/HeartGlyphs.tsx` | 하트 채움/외곽 인라인 SVG — place 카드와 stay 검색 카드가 공유. `features/stay/ui/StayGlyphs.tsx`에 22-viewBox 하트 사본이 따로 남아 있다 |
 | `src/shared/ui/glyphs/index.ts` | (TRIP-1358) 공용 글리프 배럴 — 21이름(BackChevron·BackArrow·ChevronRight(20)·Close·Plus·Check·WarningTriangle·InfoCircle·Lock·Clock·FullAi·MapPin·Suitcase·Walk·Car·AlertCircle·ChevronDown(20)·Search(20)·Trash(20)·HeartStrokeFilled/Outline(22-viewBox 하트, `shared/ui/HeartGlyphs`의 18-viewBox 하트와 모양이 달라 이름을 분리). 2차분은 `strokeWidth` prop 으로 소비처별 굵기를 보존한다. 각 `*Glyphs.tsx` 가 이걸 **재수출**하거나(기본 size·색이 같을 때) 얇은 래퍼로 `tone`→`color` 를 매핑한다(기본 size·tone 이 달라서) — 소비처 import 경로·테스트는 그대로. 이름만 같고 그림이 다른 글리프(Family·Share·Bed 류)와 viewBox·strokeWidth 가 달라 **육안 동일이지만 픽셀은 다른** 사본(BackChevron stroke 2 vs 2.2 등)은 합치지 않았다 |
 | `src/shared/ui/glyphs/colors.ts` · `types.ts` | `GLYPH_COLORS`(토큰 이름→hex, 이 폴더에서 hex 를 가진 유일한 파일 · 토큰과 수동 동기화) · `GlyphProps { size?; color?: GlyphColor; testID? }` |
+| `src/shared/ui/glyphs/ActionGlyphs.tsx` | 돋보기·휴지통에 더해 `NoteGlyph`(20 박스·`muted` 기본·선 두께는 크기에 비례)·`SummaryChartGlyph`(27 격자·두께 2.25 — 허브 칸 아이콘과 두께를 맞춘 것이라 `BarChartGlyph`(settings, 22 격자·두께 2)로 못 갈음)를 TRIP-1584 에 `features/record` 에서 이사받았다(위젯 `RecordNavBar` 가 features 를 못 물어서). 소비처는 `RecordNavBar` 뿐 |
 | `src/shared/ui/glyphs/NavigationGlyphs.tsx` · `StatusGlyphs.tsx` · `PlaceGlyphs.tsx` | 공용 글리프 본체. 색은 `GLYPH_COLORS[color]` 로만 읽는다(raw hex 0). 담김/안 담김 하트는 여기 없다 — `HeartGlyphs.tsx` 정본(서로 다른 컴포넌트 + testID, `useState` 토글 금지) |
 | `src/shared/ui/ConfirmDialog.tsx` | (TRIP-1359) 확인/삭제류 오버레이 다이얼로그 틀 — 루트 `absolute inset-0` 딤 + 카드 `w-[330px]` + 제목·본문·children·실패 문구·버튼 N개(`tone` 6종 · `size` lg/md/sm · `shadow` default/soft/none · `layout` 기본은 버튼 3개 이상이면 column). 래퍼 11개(`LogoutConfirmDialog`·`DeleteAccountDialog`·`RevokeConfirmDialog` 등)가 파일·태그명·testID 를 유지한 채 이걸 쓴다. **RN Modal·백드롭 탭 닫기·애니메이션이 없다** · 잠금 ref(`lockedRef` 류)는 래퍼/페이지 몫 · 그림자 색은 `'black'`(hex 0 규칙 — 옛 `#000000` 과 같은 색) |
 | `src/shared/ui/SheetShell.tsx` | (TRIP-1360) 바텀시트 공용 틀 — 개폐 틀(index 0·아래로 닫기·딤) + 본문 컨테이너 + 머리글(`title`·`subtitle`) + 적용 버튼(`apply`). 소비 9시트(g01 편집 5·g02 거점 선택·e02 필터·가격·OTA). `handle`·`keyboard`·`dismissKeyboardOnBodyTap`·`backdrop`·`backgroundStyle` 은 소비처가 **명시**한다. **gorhom 통과형 목은 prop 을 지워도 green 이다 — 실기(6-b)가 유일한 그물.** `contentPanning`·`backdropTestID`·`scroll` 은 소비처가 없어 만들지 않았다 |
@@ -129,7 +130,8 @@ paths:
 
 | 파일 | 역할 |
 |---|---|
-| `src/shared/lib/useKeyboardVisible.ts` | `useKeyboardVisible(): boolean` — will/did show·hide 4종을 듣는다(iOS Will 먼저·Android Did 만). 초기값 항상 false. 소비처 도우미 시트(`TripRecordsView` 는 아직 인라인 사본 — 정리 부채). shared/lib 16개로 steiger `shared-lib-grouping` 예외 4 |
+| `src/shared/lib/useStackRoutes.ts` | `useStackRoutes() → {getRoutes, selfKey}` (TRIP-1584) — 내비게이션 스택을 읽는 훅. `getRoutes()` 는 **렌더 때 굳히지 않고 부를 때** 스택을 돌려준다(칸을 누르는 순간 "가려는 화면이 이미 스택에 있나"를 보려고). 내비게이션 문맥 밖(jest)·모듈 부재면 빈 스택. ⚠️ **`@react-navigation/native` 를 정적 import 하지 마라** — node 버킷에선 ESM 이라 로드가 안 되고, 이 훅이 위젯·피처 배럴에 걸리면 뷰 테스트 수백 개가 터진다(그래서 지연 `require` + try/catch + `createContext` 폴백). 소비처: `widgets/bottom-nav-bar` 의 `useDepartureTab`, `features/reflection` 의 `useRecordBarNav` |
+| `src/shared/lib/useKeyboardVisible.ts` | `useKeyboardVisible(): boolean` — will/did show·hide 4종을 듣는다(iOS Will 먼저·Android Did 만). 초기값 항상 false. 소비처 도우미 시트·`TripRecordsPage`·기록 하단 바 `RecordNavBar`(TRIP-1584 로 `TripRecordsView` 의 인라인 사본 해소). shared/lib 16개로 steiger `shared-lib-grouping` 예외 4 |
 | `src/shared/lib/useKeyboardVisible.test.tsx` | 이벤트별 true/false·언마운트 구독 해제(`listenerCount` 기준선) |
 
 **소비처** 명부 검사는 없다(TRIP-1145에서 스캔 삭제).

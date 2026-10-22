@@ -93,30 +93,6 @@ export function PlusGlyph({
   );
 }
 
-/** 문서(모서리 접힘 + 가로줄 2) — j01 「오늘의 회고」 FAB(Figma 4716:2946 `note`). 코랄 위라 기본 흰색. */
-export function NoteGlyph({
-  size = 20,
-  color = 'white',
-}: GlyphProps & { color?: string }): ReactElement {
-  const stroke = {
-    stroke: color,
-    strokeWidth: 1.66667 * (size / 20),
-    strokeLinecap: 'round',
-    strokeLinejoin: 'round',
-  } as const;
-  return (
-    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
-      <Path
-        d="M11.6667 2.5H5.83333C5.39131 2.5 4.96738 2.67559 4.65482 2.98816C4.34226 3.30072 4.16667 3.72464 4.16667 4.16667V15.8333C4.16667 16.2754 4.34226 16.6993 4.65482 17.0118C4.96738 17.3244 5.39131 17.5 5.83333 17.5H14.1667C14.6087 17.5 15.0326 17.3244 15.3452 17.0118C15.6577 16.6993 15.8333 16.2754 15.8333 15.8333V6.66667L11.6667 2.5Z"
-        {...stroke}
-      />
-      <Path d="M11.6667 2.5V6.66667H15.8333" {...stroke} />
-      <Path d="M7.5 10.8333H12.5" {...stroke} />
-      <Path d="M7.5 14.1667H10.8333" {...stroke} />
-    </Svg>
-  );
-}
-
 /**
  * ⚠ 업로드 실패 셀 아이콘(경고 삼각 + 느낌표) — muted-soft.
  * TRIP-760 · 색·정확한 벡터는 jest 사각(6-b 육안, Figma 1561:1790).
@@ -351,27 +327,6 @@ export function CloseGlyph({ size = 24 }: GlyphProps): ReactElement {
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M6 6L18 18" stroke={INK} strokeWidth={2} strokeLinecap="round" />
       <Path d="M18 6L6 18" stroke={INK} strokeWidth={2} strokeLinecap="round" />
-    </Svg>
-  );
-}
-
-/**
- * 막대 그래프(27 격자, 세로 막대 3 + 바닥선) — j01 하단 바 「요약」 칸(Figma 5053:3539 `barChart`). 같은 벡터를 쓰는
- * `features/settings` 의 `BarChartGlyph` 는 색이 고정이라 못 쓴다(features 간 import 금지이기도 하다). 두께 2.25 = 하단 바 다른 칸 아이콘과 같다.
- */
-export function SummaryChartGlyph({
-  size = 27,
-  color = MUTED,
-}: GlyphProps & { color?: string }): ReactElement {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
-      <Path
-        d="M6.75 22.5V14.625M13.5 22.5V5.625M20.25 22.5V10.125M3.375 22.5H23.625"
-        stroke={color}
-        strokeWidth={2.25}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
     </Svg>
   );
 }

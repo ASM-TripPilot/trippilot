@@ -19,8 +19,9 @@ import { useStyleAnalysis } from '@/pages/record/travel-style/model/useStyleAnal
  * 페이지 테스트들은 expo-router 를 목으로 바꿔 "dismissTo 를 이 경로로 불렀다"까지만 본다. 여기서는
  * `renderRouter`(expo-router 가 테스트용으로 주는 가짜 앱 — 목 없이 진짜 라우터를 돌린다)에 앱과 같은
  * 모양(루트 Stack 위에 (tabs) · 위저드 · 탭바 가진 스택 화면)을 쌓고, 실물 `TravelStylePage` 의 탭바를
- * 눌러 루트 스택이 어떻게 남는지를 본다. 다섯 화면은 같은 한 줄(`router.dismissTo(shellTabHref(key))`)을
- * 쓰므로 대표로 하나를 태운다 — 화면별 배선은 각 페이지 테스트가 잠근다.
+ * 눌러 루트 스택이 어떻게 남는지를 본다. 5칸 탭바를 복제해 그리는 세 화면(숙소 검색·장소 탐색·여행 스타일)은 같은 한 줄
+ * (`router.dismissTo(shellTabHref(key))`)을 쓰므로 대표로 하나를 태운다 — 화면별 배선은 각 페이지 테스트가 잠근다.
+ * (회고·요약은 TRIP-1584 에서 3칸 바로 바뀌어 빠졌다 — 그쪽 스택은 `recordBarStack.integration.test.tsx`.)
  *
  * (개념) 루트 스택의 라우트 이름 목록 = 엣지 스와이프 뒤로가 되짚을 화면들. `(tabs)` 하나만 남아야
  * 탭 루트에서 스와이프가 무반응이다. 옛 `replace` 는 [(tabs), 위저드, (tabs)] 를 남겼다(뮤테이션 red 실측).

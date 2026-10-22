@@ -14,6 +14,8 @@ import type { ReactTestInstance } from 'react-test-renderer';
  * 모션 **값**(스케일·폭·곡선)은 순수 함수 `barMorphFrame` 의 숫자 계약(barMorph.test)이 맡고, 여기서는 눈에 보이는 결과 상태
  * (보이는 칸 목록·루트 1개·일정 칸 같은 노드·움직였나·칸이 처음 보인/사라진 시각)와 OS 동작 줄이기 답의 순서를 잰다.
  * ⚠️ reanimated 스타일은 `props.style` 로 읽으면 첫 렌더 값에 굳는다 — `getAnimatedStyle` + 가짜 타이머(`useAnimatedProbe`)로만 읽는다.
+ *
+ * TRIP-1584 · 기록 바(`RecordNavBar`)도 같은 도구로 잰다 — id 를 쓰는 함수들은 "지금 id 묶음"(`withBarIds`, 기본 = 허브)을 읽는다. 허브 테스트는 안 바뀐다.
  */
 
 export const BAR_ROOT = 'execution-live-bottom-bar';
@@ -39,14 +41,49 @@ export const START5_IDS = [
   START_MY,
 ];
 export const NEW_CELLS = [BACK, EDIT, CHATBOT, EVENT];
-const TRACKED = [...new Set([...START5_IDS, ...FINAL_IDS])];
+
+/** 바 하나의 id 묶음 — 모든 목록은 트리 순서. `start5` 는 시작 5칸(생존 칸 포함), `startCells` 는 그중 생존 칸을 뺀 4개. */
+export interface BarIds {
+  root: string;
+  capsule: string;
+  back: string;
+  survivor: string;
+  startCells: string[];
+  start5: string[];
+  final: string[];
+  /** 최종 구조에서 새로 나타나는 것(뒤로 포함). */
+  fresh: string[];
+}
+export const HUB_IDS: BarIds = {
+  root: BAR_ROOT,
+  capsule: CAPSULE_WRAP,
+  back: BACK,
+  survivor: SCHEDULE,
+  startCells: START_CELLS,
+  start5: START5_IDS,
+  final: FINAL_IDS,
+  fresh: NEW_CELLS,
+};
+let current: BarIds = HUB_IDS;
+/** describe 본문에서 한 번 — 그 describe 동안 id 를 쓰는 도우미들이 이 묶음을 읽는다(끝나면 허브로 되돌린다). */
+export function withBarIds(ids: BarIds): void {
+  beforeEach(() => {
+    current = ids;
+  });
+  afterEach(() => {
+    current = HUB_IDS;
+  });
+}
+const tracked = (): string[] => [
+  ...new Set([...current.start5, ...current.final]),
+];
 
 /** 지금 **접근성에 보이는** 추적 칸을 트리 순서로 — 언마운트든 접근성 숨김이든 같게 읽힌다(opacity 0 만으로 숨긴 건 보이는 것). */
 export function visibleIds(): string[] {
   const inTree = screen.root
     .findAll(
       (node: ReactTestInstance) =>
-        typeof node.type === 'string' && TRACKED.includes(node.props.testID)
+        typeof node.type === 'string' && tracked().includes(node.props.testID)
     )
     .map((node) => node.props.testID as string);
   return [...new Set(inTree)].filter((id) => screen.queryByTestId(id) !== null);
@@ -55,12 +92,12 @@ export function visibleIds(): string[] {
 /** 한 장의 지문 = 캡슐 래퍼의 reanimated 스타일 + 보이는 칸. 움직임은 지문이 달라지는 것으로 읽는다. */
 export const frameSample = (): string =>
   JSON.stringify([
-    getAnimatedStyle(screen.getByTestId(CAPSULE_WRAP)),
+    getAnimatedStyle(screen.getByTestId(current.capsule)),
     visibleIds(),
   ]);
 
 const scheduleNode = (): ReactTestInstance | null =>
-  screen.queryByTestId(SCHEDULE, { includeHiddenElements: true });
+  screen.queryByTestId(current.survivor, { includeHiddenElements: true });
 
 export interface MotionWatch {
   samples: string[];
@@ -89,7 +126,7 @@ export function watchMotion(
   const take = (ms: number) => {
     watch.samples.push(frameSample());
     watch.shapes.push(visibleIds());
-    watch.rootCounts.push(screen.queryAllByTestId(BAR_ROOT).length);
+    watch.rootCounts.push(screen.queryAllByTestId(current.root).length);
     watch.schedules.push(scheduleNode());
     watch.scheduleSelected.push(
       scheduleNode()?.props.accessibilityState?.selected === true
@@ -235,7 +272,7 @@ const H_SPACING_CLASS =
 
 /** 가로 간격 className 을 가진 유리 바깥 노드들 — 비어 있어야 한다. */
 export function hiddenSpacingClasses(): string[] {
-  return hostsOutsideGlass(screen.getByTestId(BAR_ROOT))
+  return hostsOutsideGlass(screen.getByTestId(current.root))
     .filter((node) => H_SPACING_CLASS.test(String(node.props.className ?? '')))
     .map(
       (node) =>
@@ -262,7 +299,7 @@ export interface RowReading {
 }
 
 export function readRow(): RowReading {
-  const root = screen.getByTestId(BAR_ROOT);
+  const root = screen.getByTestId(current.root);
   const branches = directHostChildren(root);
   const branchWith = (id: string) =>
     branches.find(
@@ -270,8 +307,8 @@ export function readRow(): RowReading {
         branch.props.testID === id ||
         branch.findAll((node) => node.props?.testID === id).length > 0
     );
-  const backBranch = branchWith(BACK); // 시작 5칸에서는 없을 수 있다 → 폭 0
-  const capsuleBranch = branchWith(CAPSULE_WRAP);
+  const backBranch = branchWith(current.back); // 시작 5칸에서는 없을 수 있다 → 폭 0
+  const capsuleBranch = branchWith(current.capsule);
   if (!capsuleBranch) throw new Error('바 루트 바로 아래에 캡슐 가지가 없다');
   const row = layoutStyle(root);
   const back: Style = backBranch ? layoutStyle(backBranch) : { width: 0 };
@@ -321,7 +358,7 @@ const transformsOf = (style: Style): Record<string, unknown>[] =>
 /** 칸 `id` 에서 캡슐 래퍼 앞까지의 조상 효과(없으면 불투명도 1·확대 1·이동 0). */
 export function slotEffect(id: string): SlotEffect {
   const effect: SlotEffect = { opacity: 1, scale: 1, translateX: 0 };
-  const capsule = screen.getByTestId(CAPSULE_WRAP);
+  const capsule = screen.getByTestId(current.capsule);
   let node: ReactTestInstance | null = screen.getByTestId(id, {
     includeHiddenElements: true,
   });
@@ -340,7 +377,7 @@ export function slotEffect(id: string): SlotEffect {
 
 /** 바 루트의 바 전체 확대. */
 export const rootScale = (): number =>
-  transformsOf(layoutStyle(screen.getByTestId(BAR_ROOT))).reduce(
+  transformsOf(layoutStyle(screen.getByTestId(current.root))).reduce(
     (scale, entry) =>
       typeof entry.scale === 'number' ? scale * entry.scale : scale,
     1
@@ -358,7 +395,11 @@ export function scheduleVisibleCenter(barWidth: number): number {
   const row = readRow();
   const barLeft = (row.backWidth ?? 0) + row.spacing;
   const inner = barWidth - barLeft - 20;
-  const slotIds = [...START_CELLS, SCHEDULE, EDIT, CHATBOT, EVENT];
+  const slotIds = [
+    ...current.startCells,
+    current.survivor,
+    ...current.fresh.filter((id) => id !== current.back),
+  ];
   const order = screen.root
     .findAll(
       (node: ReactTestInstance) =>
@@ -366,9 +407,9 @@ export function scheduleVisibleCenter(barWidth: number): number {
     )
     .map((node) => node.props.testID as string)
     .filter((id, index, all) => all.indexOf(id) === index);
-  const index = order.indexOf(SCHEDULE);
+  const index = order.indexOf(current.survivor);
   const layoutCenter = barLeft + 10 + (inner * (index + 0.5)) / order.length;
-  return layoutCenter + slotEffect(SCHEDULE).translateX;
+  return layoutCenter + slotEffect(current.survivor).translateX;
 }
 
 // ── 입장 모프 시작 지연 ────────────────────────────────────────────────────────────────────────────────────────────────

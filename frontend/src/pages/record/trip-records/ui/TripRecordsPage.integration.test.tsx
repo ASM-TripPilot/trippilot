@@ -603,6 +603,7 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
     // 호출 기록까지 지운다 — MS8b 의 "canGoBack 을 물었다" 단언이 앞 테스트 호출로 공허해지지 않게.
     jest.mocked(router.canGoBack).mockReset().mockReturnValue(false);
     jest.mocked(router.back).mockClear();
+    jest.mocked(router.replace).mockClear();
   });
 
   describe('🔴 TRIP-1085 AC-1 · 페이지가 전면 지도 + 바텀시트로 열린다', () => {
@@ -909,7 +910,8 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
       expect(router.back).toHaveBeenCalledTimes(1);
     });
 
-    it('MS8b canGoBack 이 false 면 back 을 부르지 않는다', async () => {
+    // TRIP-1584 Q5 — 히스토리 없는 직행(딥링크·푸시)에서 뒤로가 죽은 버튼이면 안 된다: 기록 탭으로 replace 한다(INV-4, 옛 j03 ‹ 폴백과 같은 길).
+    it('MS8b canGoBack 이 false 면 back 이 아니라 기록 탭으로 replace 한다 (죽은 버튼 금지)', async () => {
       render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
       await screen.findByTestId('record-trip-visit-card-v1');
 
@@ -917,6 +919,7 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
 
       expect(router.canGoBack).toHaveBeenCalled();
       expect(router.back).not.toHaveBeenCalled();
+      expect(router.replace).toHaveBeenCalledWith('/(tabs)/records');
     });
   });
 });
@@ -3724,6 +3727,31 @@ describe('하단 바 배선 — 회고 칸(j03)·요약 칸(j04)', () => {
 
       expect(jest.mocked(router.push).mock.calls).toEqual([
         [reflectionPath('2026-08-20')],
+      ]);
+    });
+  });
+
+  describe('🔴 TRIP-1584 P8 · 같은 화면에 ?day= 가 다시 실려도(회고·요약에서 기록 칸으로 dismissTo) 활성 일차가 따라간다', () => {
+    it('P8 사용자가 고른 일차가 있어도 마운트 뒤 day prop 이 바뀌면 그 날로 옮겨 가고, 회고 칸도 그 날 경로로 간다', async () => {
+      const view = render(
+        <TripRecordsPage
+          tripId={TRIP_ID}
+          today="2026-08-22"
+          day="2026-08-20"
+        />,
+        { wrapper }
+      );
+      await screen.findByText(DAY_ANCHOR[0] ?? '');
+      await selectDay(1); // 사용자가 2일차 칩을 직접 골랐다 — day prop 보다 이 선택이 이겨 왔다
+
+      view.rerender(
+        <TripRecordsPage tripId={TRIP_ID} today="2026-08-22" day="2026-08-22" />
+      );
+      await screen.findByText(DAY_ANCHOR[2] ?? '');
+      fireEvent.press(screen.getByTestId(TAB_REFLECTION));
+
+      expect(jest.mocked(router.push).mock.calls).toEqual([
+        [reflectionPath('2026-08-22')],
       ]);
     });
   });

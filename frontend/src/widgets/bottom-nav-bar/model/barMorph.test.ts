@@ -5,6 +5,7 @@ import {
   BAR_ENTER_MS,
   BAR_EXIT_MS,
   barMorphFrame,
+  RECORD_BAR_SHAPE,
   type BarMorphDirection,
   type BarMorphFrame,
 } from './barMorph';
@@ -323,5 +324,34 @@ describe('barMorph · 입장 시작 지연 상수', () => {
     expect(Number.isInteger(BAR_ENTER_DELAY_MS)).toBe(true);
     expect(BAR_ENTER_DELAY_MS).toBeGreaterThanOrEqual(250);
     expect(BAR_ENTER_DELAY_MS).toBeLessThanOrEqual(600);
+  });
+});
+
+// ── TRIP-1584 · 칸 구성 매개(생존 칸 자리·새 칸 수) ──────────────────────────────────────────────────────────────────────
+// 허브(일정 5칸 중 3번째, 새 칸 3)와 기록 3종(기록 4번째, 새 칸 2)이 같은 단계 함수를 쓴다. 안 주면 허브 값 — 위 기존 테스트 전부가 그 게이트다.
+// 오라클은 위와 같은 기하(5등분 k번째 / (1+새 칸 수)등분 첫째)에서 직접 구한다.
+const slotStart = (w: number, slot: number) =>
+  PAD + ((w - 2 * PAD) / 5) * (slot + 0.5);
+const slotFinal = (w: number, newCount: number) =>
+  BACK_AND_GAP + PAD + (w - BACK_AND_GAP - 2 * PAD) / (2 * (1 + newCount));
+
+describe('barMorph · 칸 구성 매개 (TRIP-1584)', () => {
+  it('기록 모양(바 폭 430): 생존 칸이 5등분 4번째에서 3등분 첫째로(퇴장은 거울상), 새 칸은 2개·시작 칸은 4개다', () => {
+    const w = 430;
+    const frame = (dir: BarMorphDirection, ms: number) =>
+      barMorphFrame(dir, ms, w, RECORD_BAR_SHAPE);
+    const [s, f] = [slotStart(w, 3), slotFinal(w, 2)];
+    expect(frame('enter', 0).scheduleCenterX).toBeCloseTo(s, 9);
+    expect(frame('enter', BAR_ENTER_MS).scheduleCenterX).toBeCloseTo(f, 9);
+    expect(frame('exit', 0).scheduleCenterX).toBeCloseTo(f, 9);
+    expect(frame('exit', BAR_EXIT_MS).scheduleCenterX).toBeCloseTo(s, 9);
+    expect(frame('enter', 0).newCells).toHaveLength(2);
+    expect(frame('enter', 0).startCells).toHaveLength(4);
+  });
+
+  // 🧨 worklet 함정: 매개변수 기본값(`= HUB_BAR_SHAPE`)은 UI 스레드에서 모듈 상수를 못 잡아 실기에서만 ReferenceError(jest 는 JS 스레드라 통과).
+  // 함수 `length` 는 "첫 기본값 앞 매개변수 개수"라 새 매개를 기본값으로 쓰면 4 → 3 이 되어 red — 소스를 읽지 않는 런타임 심판.
+  it('새 매개는 기본값이 아니라 본문에서 푼다 — 네 매개변수 모두 기본값 없음(length 4)', () => {
+    expect(barMorphFrame).toHaveLength(4);
   });
 });

@@ -47,6 +47,18 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
+// TRIP-1584 — 하단 바가 `useTripSummary`(GET /summary)를 읽는다. `onUnhandledRequest:'error'` 라 스텁(조회 중)으로 막는다.
+jest.mock('@/features/reflection/model/useTripSummary', () => ({
+  useTripSummary: () => ({
+    envelope: undefined,
+    summary: undefined,
+    source: undefined,
+    isPending: true,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
+
 // 사진 배선(TRIP-1444)은 useReflectionPhotos.test 가 본다 — 여기선 사진 요청이 가짜 서버로 새지 않게 비운다.
 jest.mock('../model/useReflectionPhotos', () => ({
   useReflectionPhotos: () => [],

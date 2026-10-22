@@ -17,7 +17,7 @@ import { useAdjustVisitTimes } from '../model/useAdjustVisitTimes';
 import { useSpontaneousNames } from '@/features/check-visit';
 import { useVisitCheck } from '@/features/check-visit';
 import { isOptimisticVisit } from '@/features/check-visit';
-import { shareEnabled, useTripSummary } from '@/features/reflection';
+import { useRecordBarNav } from '@/features/reflection';
 import {
   isLocationAutomationEnabled,
   routeDayForDate,
@@ -87,6 +87,13 @@ export function TripRecordsPage({
   const days = itinerary.data?.days ?? [];
 
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  // TRIP-1584 — 회고·요약에서 기록 칸을 누르면 같은 화면에 새 `?day=` 가 실려 온다(dismissTo). 칩으로 고른 일차보다 새 `day` 를 따른다(렌더 중 조정 —
+  // 옛 일차로 한 번 그렸다가 바뀌지 않게).
+  const [seenDay, setSeenDay] = useState(day);
+  if (day !== seenDay) {
+    setSeenDay(day);
+    setSelectedDay(null);
+  }
   const activeDay = selectedDay ?? day ?? days[0]?.date ?? '';
 
   // TRIP-761 모드 seam — 위치 권한을 "다시 묻지 않고" 현재 상태만 조회해(LocationPage 선례) 없으면
@@ -110,11 +117,13 @@ export function TripRecordsPage({
   const visitCheck = useVisitCheck({ tripId, day: activeDay });
   const adjustTimes = useAdjustVisitTimes({ tripId, day: activeDay });
   const spontaneousNames = useSpontaneousNames(tripId);
-  // TRIP-1557 하단 바 「요약」 칸 — 서버가 `ready:true` 를 줄 때만 활성(BR-U5-48). 조회 중·실패·`ready:false` 는 전부 false 라
-  // 실패를 "준비됨"으로 접지 않는다(INV-4). 새 조회 코드 없이 j04 가 쓰는 훅을 그대로 재사용한다(같은 캐시 키).
-  const summary = useTripSummary(tripId);
-  const summaryReady =
-    summary.envelope !== undefined && shareEnabled(summary.envelope);
+  // TRIP-1557 하단 바 — 회고 칸은 선택된 일차의 j03 으로(오늘 고정 아님). 미래 일차엔 없다(결정 2, ISO 날짜 사전순 = 시간순), 끝난 여행은 가르지 않는다
+  // (결정 3). '' <= today 는 참이라 일정 로딩 전(빈 날짜)을 따로 막는다. 요약 칸 켜짐(서버 ready)·칸 이동(push/dismissTo)·뒤로 폴백은 훅이 진다(TRIP-1584).
+  const recordBar = useRecordBarNav({
+    tripId,
+    reflectionDate:
+      activeDay !== '' && activeDay <= today ? activeDay : undefined,
+  });
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [timeResult, setTimeResult] = useState<string | null>(null);
@@ -362,24 +371,9 @@ export function TripRecordsPage({
               )
             : undefined
         }
-        // TRIP-1088(FAB) → TRIP-1557(하단 바 「회고」 칸) — 선택된 일차의 j03 으로(오늘 고정 아님). 미래 일차엔 없다(결정 2, ISO 날짜 사전순 =
-        // 시간순), 끝난 여행은 가르지 않는다(결정 3). '' <= today 는 참이라 일정 로딩 전(빈 날짜)을 따로 막는다.
-        onPressReflection={
-          activeDay !== '' && activeDay <= today
-            ? guardPress(() =>
-                router.push(`/trips/${tripId}/records/reflection/${activeDay}`)
-              )
-            : undefined
-        }
-        // TRIP-1557 — 요약은 날짜가 아니라 서버 준비 여부로만 가른다(끝난 여행이어도 `ready:false` 면 비활성). 회고 칸과 독립.
-        onPressSummary={
-          summaryReady
-            ? guardPress(() => router.push(`/trips/${tripId}/records/summary`))
-            : undefined
-        }
-        onPressBack={() => {
-          if (router.canGoBack()) router.back();
-        }}
+        onPressReflection={recordBar.onPressReflection}
+        onPressSummary={recordBar.onPressSummary}
+        onPressBack={recordBar.onBack}
       />
 
       {timeResult != null ? (

@@ -13,8 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { formatDayLabel } from '@/entities/trip';
 import { MapView, type MapCenter, type MapPin } from '@/shared/map';
-import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { RecordNavBar } from '@/widgets/bottom-nav-bar';
 import type { ReflectionStats } from '@/shared/api/index.schemas';
 
 import type { MapNotice } from '../model/missingParts';
@@ -22,11 +22,11 @@ import { ChangeSummaryRow } from './ChangeSummaryRow';
 import { isGuideText } from '../model/fillTemplate';
 import { NarrativeBlock } from './NarrativeBlock';
 import {
-  BackArrowGlyph,
   EmptyCircleGlyph,
   LocationOffGlyph,
   PhotoOffGlyph,
   RetryGlyph,
+  type RecordBarNav,
 } from '@/features/reflection/index.view';
 import { ReflectionPhotoGrid } from './ReflectionPhotoGrid';
 import { ReflectionStatsRow } from './ReflectionStatsRow';
@@ -37,14 +37,15 @@ import { ReflectionStatsRow } from './ReflectionStatsRow';
  * import — 프리뷰 격리 렌더 안전, FSD 경계). 화면은 완성된 `narrative`·`editableText` 를 받고,
  * `draftNarrative`/`editedNarrative`/`resolveDisplayNarrative` 어느 것도 참조하지 않는다.
  *
- * 5얼굴(TRIP-763: 일차 탭·하단 탭바(기록)·헤더 "편집"은 전 얼굴 공통 크롬):
+ * 5얼굴(TRIP-763: 일차 탭·하단 바·헤더 "편집"은 전 얼굴 공통 크롬. TRIP-1584 — 하단은 홈 5칸 탭바가 아니라 뒤로 + 기록·회고·요약 3칸 바(`RecordNavBar`,
+ * 회고 활성)이고 헤더 ‹ 는 그 바의 뒤로가 대신한다. 편집 중엔 바가 빠진다 — 저장·취소 푸터가 키보드 위에 있어야 한다):
  *  - default            : stats · 풀폭 지도(좌표 있을 때만) · 서술 카드 · 사진 그리드 · "확인".
  *  - data-insufficient  : stats(거리 "—") + 지도 자리 사유(제목/본문 2줄) + 서술 + "사진 없음" 자리 · "확인".
  *  - empty              : 빈 원 일러스트 + "오늘 기록된 활동이 없습니다" · 하단 CTA "직접 회고 작성".
  *  - error              : stats 채움(BASIC 카드, INV-U5-07) + 에러 카드(다시 시도) · CTA "직접 회고 작성".
  *  - pending            : (TRIP-1068) 조회·생성 중 안내 본문만 · 하단 CTA 없음(empty 로 접지 않는다, INV-4).
  *
- * ★ 신규 표면 prop(dayTabs·activeDay·onSelectDay·onPressTab)은 전부 **옵셔널** — 미주입 호출자(프리뷰·
+ * ★ 신규 표면 prop(dayTabs·activeDay·onSelectDay·recordBar)은 전부 **옵셔널** — 미주입 호출자(프리뷰·
  *   무회귀 테스트)가 그대로 컴파일된다. 기분 3택·한 줄 메모는
  *   TRIP-935 R7 에서 저장 계약이 없어 걷었다가, 서버가 mood·shortMemo 를 받게 되어(TRIP-828) TRIP-1372 에서
  *   되살렸다 — `onChangeMood`·`onSaveShortMemo` 가 둘 다 있을 때만 그린다(글리프 없는 글자 칩, Figma 확인 필요).
@@ -108,18 +109,13 @@ export interface DailyReflectionScreenProps {
   activeDay?: number;
   /** TRIP-762(default) — 일차 탭 선택. */
   onSelectDay?: (day: number) => void;
-  /** TRIP-762(default) — 하단 탭바 라우팅. */
-  onPressTab?: (key: ShellTabKey) => void;
+  /** TRIP-1584 — 하단 바(기록·회고·요약)의 칸 이동 콜백 묶음. 미주입이면 바를 그리지 않는다(프리뷰·무회귀 테스트). */
+  recordBar?: RecordBarNav;
   /**
    * TRIP-980 · 보고 있는 날이 KST 오늘인가(옵셔널, 미주입=오늘). 아니면 헤더 "하루 회고"·empty
    * "이 날 기록된 활동이 없습니다"(사용자 확정 D2).
    */
   isToday?: boolean;
-  /**
-   * TRIP-1119 · 헤더 ‹ 뒤로가기(옵셔널, 미주입=‹ 는 그리되 눌러도 이동 없음). 편집 중 ‹ 는 화면이
-   * 먼저 가로채 편집만 닫는다(결정 2 b — 편집은 화면 안 하위 상태, onBack 0회).
-   */
-  onBack?: () => void;
   /** TRIP-1372 · 서버가 돌려준 그날의 기분 코드(없으면 null). */
   mood?: string | null;
   /** TRIP-1372 · 서버가 돌려준 한 줄 메모(없으면 null). */
@@ -157,9 +153,8 @@ export function DailyReflectionScreen({
   dayTabs,
   activeDay,
   onSelectDay,
-  onPressTab,
+  recordBar,
   isToday = true,
-  onBack,
   mood,
   shortMemo,
   onChangeMood,
@@ -183,13 +178,6 @@ export function DailyReflectionScreen({
   };
   const handleCancel = () => {
     setEditing(false);
-  };
-  const handleBack = () => {
-    if (editing) {
-      handleCancel();
-      return;
-    }
-    onBack?.();
   };
   // TRIP-1372 · 기분·한 줄. 한 줄 초안은 손대기 전(null)엔 서버 값을 그대로 보인다.
   const extrasOn = onChangeMood !== undefined && onSaveShortMemo !== undefined;
@@ -361,18 +349,8 @@ export function DailyReflectionScreen({
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }} className="bg-canvas">
-      {/* 헤더 — 뒤로 · 제목 · (data 얼굴·비편집) 편집 링크. TRIP-762: 헤더 공유 제거(j03 공유 0). */}
-      <View className="w-full flex-row items-center bg-canvas pb-[12px] pl-[12px] pr-lg pt-[4px]">
-        <Pressable
-          testID="reflection-daily-back"
-          accessibilityRole="button"
-          accessibilityLabel="뒤로"
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          onPress={handleBack}
-          className="pr-[4px]"
-        >
-          <BackArrowGlyph size={24} />
-        </Pressable>
+      {/* 헤더 — 제목 · (data 얼굴·비편집) 편집 링크. TRIP-762: 헤더 공유 제거(j03 공유 0). TRIP-1584: ‹ 는 하단 바 뒤로로 옮겼다. */}
+      <View className="w-full flex-row items-center bg-canvas px-lg pb-[12px] pt-[4px]">
         <Text className="font-noto-bold text-[18px] font-bold text-ink">
           {isToday ? '오늘의 회고' : '하루 회고'}
         </Text>
@@ -657,13 +635,15 @@ export function DailyReflectionScreen({
         ) : null}
       </KeyboardAvoidingView>
 
-      {/* 하단 탭바(기록 활성) — 전 얼굴 공통 오버레이, 편집 중엔 숨김. CTA 는 위 회피 컨테이너 안에 있다. */}
-      {editing ? null : (
-        <BottomTabBar
-          activeKey="records"
-          onPressTab={onPressTab ?? (() => {})}
+      {/* 하단 바(회고 활성) — 전 얼굴 공통 오버레이, 편집 중엔 숨김. CTA 는 위 회피 컨테이너 안에 있다. */}
+      {recordBar ? (
+        <RecordNavBar
+          testIDPrefix="reflection-daily-bottom-bar"
+          active="reflection"
+          hidden={editing}
+          {...recordBar}
         />
-      )}
+      ) : null}
     </SafeAreaView>
   );
 }

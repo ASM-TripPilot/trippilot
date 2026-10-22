@@ -177,6 +177,7 @@
 - `src/__tests__/pressGuardOnboardingPush.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardStaySeeAll.test.tsx`  →  (export 없음)
 - `src/__tests__/recordAddVisitFlow.integration.test.tsx`  →  (export 없음)
+- `src/__tests__/recordBarStack.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/releaseBuildConfig.test.ts`  →  (export 없음)
 - `src/__tests__/shellTabDismiss.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/socialSdkSecrets.test.ts`  →  (export 없음)
@@ -510,20 +511,22 @@
 - `src/features/planb/ui/PlanbGlyphs.tsx`  →  AppliedAlertGlyph · RiskWarningGlyph · ChevronRightGlyph · LockGlyph
 
 ## src/features/record/
-- `src/features/record/index.ts`  →  BackArrowGlyph · BookmarkGlyph · CalendarGlyph · ChevronDownGlyph · ChevronRightGlyph · CloseGlyph · GpsOffGlyph · InfoCircleGlyph · LegendChevronGlyph · NoteGlyph · PlusGlyph · RetryGlyph · SummaryChartGlyph · VisitCheckActiveGlyph · VisitCheckDoneGlyph · VisitCheckSkippedGlyph · VisitCheckUpcomingGlyph · WarningTriangleGlyph
+- `src/features/record/index.ts`  →  BackArrowGlyph · BookmarkGlyph · CalendarGlyph · ChevronDownGlyph · ChevronRightGlyph · CloseGlyph · GpsOffGlyph · InfoCircleGlyph · LegendChevronGlyph · PlusGlyph · RetryGlyph · VisitCheckActiveGlyph · VisitCheckDoneGlyph · VisitCheckSkippedGlyph · VisitCheckUpcomingGlyph · WarningTriangleGlyph
 
 ## src/features/record/ui/
-- `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · NoteGlyph · WarningTriangleGlyph · RetryGlyph · BackArrowGlyph · ChevronRightGlyph · LegendChevronGlyph · ChevronDownGlyph · InfoCircleGlyph · GpsOffGlyph · CalendarGlyph · BookmarkGlyph · CloseGlyph · SummaryChartGlyph
+- `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · WarningTriangleGlyph · RetryGlyph · BackArrowGlyph · ChevronRightGlyph · LegendChevronGlyph · ChevronDownGlyph · InfoCircleGlyph · GpsOffGlyph · CalendarGlyph · BookmarkGlyph · CloseGlyph
 
 ## src/features/reflection/
-- `src/features/reflection/index.ts`  →  useTripSummary
-- `src/features/reflection/index.view.ts`  →  formatKm · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · SHARE_FORMATS · buildShareCard · formatShareCardStats · validateCaption · validateHashtags · summaryStats · daySubtitle · distanceSourceLabel · resolveSummaryView · shareEnabled · toOrderedVisitList · BackArrowGlyph · EmptyCircleGlyph · LocationOffGlyph · PhotoOffGlyph · RetryGlyph
+- `src/features/reflection/index.ts`  →  useTripSummary · useRecordBarNav
+- `src/features/reflection/index.view.ts`  →  formatKm · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · SHARE_FORMATS · buildShareCard · formatShareCardStats · validateCaption · validateHashtags · pickReflectionDate · summaryStats · daySubtitle · distanceSourceLabel · resolveSummaryView · shareEnabled · toOrderedVisitList · BackArrowGlyph · EmptyCircleGlyph · LocationOffGlyph · PhotoOffGlyph · RetryGlyph
 
 ## src/features/reflection/model/
 - `src/features/reflection/model/formatKm.ts`  →  formatKm
+- `src/features/reflection/model/recordBarNav.ts`  →  RecordBarNav · pickReflectionDate
 - `src/features/reflection/model/shareCard.ts`  →  ShareFormat · SHARE_FORMATS · ShareCardMode · ShareCardVM · BuildShareCardInput · buildShareCard · formatShareCardStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · validateCaption · validateHashtags
 - `src/features/reflection/model/summaryStats.ts`  →  SummaryStatCells · summaryStats
 - `src/features/reflection/model/summaryView.ts`  →  OrderedVisit · shareEnabled · resolveSummaryView · toOrderedVisitList · distanceSourceLabel · daySubtitle
+- `src/features/reflection/model/useRecordBarNav.ts`  →  useRecordBarNav
 - `src/features/reflection/model/useTripSummary.ts`  →  UseTripSummaryResult · useTripSummary
 
 ## src/features/reflection/ui/
@@ -887,7 +890,6 @@
 
 ## src/pages/live/live-itinerary/model/
 - `src/pages/live/live-itinerary/model/automationInput.ts`  →  automationVisitRefs
-- `src/pages/live/live-itinerary/model/barMorph.ts`  →  BarMorphDirection · MorphCell · BarMorphFrame · BAR_ENTER_MS · BAR_EXIT_MS · BAR_ENTER_DELAY_MS · BAR_ENTER_CUT_MS · BAR_EXIT_SWAP_MS · BAR_DEFAULT_WIDTH · barMorphFrame
 - `src/pages/live/live-itinerary/model/editPopupLayout.ts`  →  LIVE_BAR_SIDE · LIVE_BAR_HEIGHT · LIVE_BAR_BOTTOM_GAP · LIVE_BAR_GAP · LIVE_BAR_CAPSULE_PADDING_X · LIVE_BAR_FLOAT_GAP · LIVE_BOTTOM_BAR_RESERVE · EditPopupPlacementInput · editPopupPlacement
 - `src/pages/live/live-itinerary/model/foldScope.ts`  →  foldScope
 - `src/pages/live/live-itinerary/model/hubOpportunity.ts`  →  OpportunityContext · pickOpportunity · OpportunityCopy · opportunityCopy · OpportunityReplanHref · opportunityReplanHref
@@ -1635,6 +1637,7 @@
 - `src/shared/lib/useQueryDataUpdateCount.ts`  →  useQueryDataUpdateCount
 - `src/shared/lib/useScrollHide.ts`  →  useScrollHide
 - `src/shared/lib/useSeoulToday.ts`  →  useSeoulToday
+- `src/shared/lib/useStackRoutes.ts`  →  StackRouteLike · useStackRoutes
 
 ## src/shared/location/
 - `src/shared/location/LocationAlwaysExplainer.tsx`  →  LocationAlwaysExplainerProps · LocationAlwaysExplainer
@@ -1708,7 +1711,7 @@
 
 ## src/shared/ui/
 - `src/shared/ui/AppBar.tsx`  →  AppBarBack · AppBar
-- `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · TAB_BAR_TOP · BottomTabBarProps · ItineraryIconActive · ItineraryIconInactive · RecordsIconActive · TAB_CONFIG · BottomTabBar
+- `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · TAB_BAR_TOP · BottomTabBarProps · ItineraryIconActive · ItineraryIconInactive · RecordsIconActive · RecordsIconInactive · TAB_CONFIG · BottomTabBar
 - `src/shared/ui/CollageEmptyState.tsx`  →  CollageEmptyStateProps · CollageEmptyState
 - `src/shared/ui/ConfirmDialog.tsx`  →  ConfirmTone · ConfirmButton · ConfirmDialogProps · ConfirmDialog
 - `src/shared/ui/GlassSurface.tsx`  →  GlassSurfaceProps · GlassSurface
@@ -1729,13 +1732,13 @@
 - `src/shared/ui/WheelPicker.tsx`  →  WHEEL_CELL_HEIGHT · WheelPickerProps · WheelPicker
 
 ## src/shared/ui/glyphs/
-- `src/shared/ui/glyphs/ActionGlyphs.tsx`  →  SearchGlyph · TrashGlyph
+- `src/shared/ui/glyphs/ActionGlyphs.tsx`  →  SearchGlyph · TrashGlyph · NoteGlyph · SummaryChartGlyph
 - `src/shared/ui/glyphs/HeartGlyphs.tsx`  →  HeartStrokeFilledGlyph · HeartStrokeOutlineGlyph
 - `src/shared/ui/glyphs/NavigationGlyphs.tsx`  →  BackChevronGlyph · BackArrowGlyph · ChevronDownGlyph · ChevronRightGlyph · CloseGlyph · PlusGlyph · CheckGlyph
 - `src/shared/ui/glyphs/PlaceGlyphs.tsx`  →  MapPinGlyph · SuitcaseGlyph · WalkGlyph · CarGlyph
 - `src/shared/ui/glyphs/StatusGlyphs.tsx`  →  AlertCircleGlyph · WarningTriangleGlyph · InfoCircleGlyph · LockGlyph · ClockGlyph · FullAiGlyph
 - `src/shared/ui/glyphs/colors.ts`  →  GLYPH_COLORS · GlyphColor
-- `src/shared/ui/glyphs/index.ts`  →  GLYPH_COLORS · BackArrowGlyph · BackChevronGlyph · CheckGlyph · ChevronDownGlyph · ChevronRightGlyph · CloseGlyph · PlusGlyph · AlertCircleGlyph · ClockGlyph · FullAiGlyph · InfoCircleGlyph · LockGlyph · WarningTriangleGlyph · CarGlyph · MapPinGlyph · SuitcaseGlyph · WalkGlyph · SearchGlyph · TrashGlyph · HeartStrokeFilledGlyph · HeartStrokeOutlineGlyph
+- `src/shared/ui/glyphs/index.ts`  →  GLYPH_COLORS · BackArrowGlyph · BackChevronGlyph · CheckGlyph · ChevronDownGlyph · ChevronRightGlyph · CloseGlyph · PlusGlyph · AlertCircleGlyph · ClockGlyph · FullAiGlyph · InfoCircleGlyph · LockGlyph · WarningTriangleGlyph · CarGlyph · MapPinGlyph · SuitcaseGlyph · WalkGlyph · NoteGlyph · SearchGlyph · SummaryChartGlyph · TrashGlyph · HeartStrokeFilledGlyph · HeartStrokeOutlineGlyph
 - `src/shared/ui/glyphs/types.ts`  →  GlyphProps
 
 ## src/shared/ui/placeholders/
@@ -1755,7 +1758,7 @@
 ## src/test-support/
 - `src/test-support/animatedProbe.ts`  →  AnimatedProbe · useAnimatedProbe · hostNodes
 - `src/test-support/apiBase.ts`  →  BASE
-- `src/test-support/barMotionProbe.ts`  →  BAR_ROOT · SCHEDULE · START_HOME · START_EXPLORE · START_RECORDS · START_MY · START_CELLS · FINAL_IDS · START5_IDS · NEW_CELLS · visibleIds · frameSample · MotionWatch · watchMotion · joinWatches · advance · moved · structureSteady · lastSample · firstSeen · firstGone · staysOnceSeen · staysOnceGone · deferOsAnswer · flushOsAnswer · holdReduceMotionOn · layoutStyle · hiddenSpacingClasses · RowReading · readRow · setWindowWidth · SlotEffect · slotEffect · rootScale · isMounted · scheduleVisibleCenter · InteractionGate · useInteractionGate
+- `src/test-support/barMotionProbe.ts`  →  BAR_ROOT · SCHEDULE · START_HOME · START_EXPLORE · START_RECORDS · START_MY · START_CELLS · FINAL_IDS · START5_IDS · NEW_CELLS · BarIds · HUB_IDS · withBarIds · visibleIds · frameSample · MotionWatch · watchMotion · joinWatches · advance · moved · structureSteady · lastSample · firstSeen · firstGone · staysOnceSeen · staysOnceGone · deferOsAnswer · flushOsAnswer · holdReduceMotionOn · layoutStyle · hiddenSpacingClasses · RowReading · readRow · setWindowWidth · SlotEffect · slotEffect · rootScale · isMounted · scheduleVisibleCenter · InteractionGate · useInteractionGate
 - `src/test-support/basesFakeServer.ts`  →  basesStay · STAY_A · STAY_B · basesAssignment · basesTrip · NETWORK_WAIT · assignNight · sheetClosed · settle · BasesFakeInit · createBasesFakeServer
 - `src/test-support/editDragList.ts`  →  EDIT_LIST · editListData · moveItem · fireEditDragEnd · hoverOverDeleteZone · fireEditDropOnZone · fireEditDragBegin
 - `src/test-support/envSandbox.ts`  →  sandboxEnv
@@ -1800,10 +1803,16 @@
 - `src/widgets/bottom-nav-bar/config/navBarLayout.ts`  →  NAV_BAR_SIDE · NAV_BAR_HEIGHT · NAV_BAR_BOTTOM_GAP · NAV_BAR_GAP · NAV_BAR_CAPSULE_PADDING_X · NAV_BAR_RESERVE · NAV_BAR_CELL_HEIGHT
 
 ## src/widgets/bottom-nav-bar/
-- `src/widgets/bottom-nav-bar/index.ts`  →  BottomNavBar · NavBarBackButton · NavBarCapsule · NavBarCell · NAV_BAR_BOTTOM_GAP · NAV_BAR_CAPSULE_PADDING_X · NAV_BAR_CELL_HEIGHT · NAV_BAR_GAP · NAV_BAR_HEIGHT · NAV_BAR_RESERVE · NAV_BAR_SIDE
+- `src/widgets/bottom-nav-bar/index.ts`  →  BottomNavBar · NavBarBackButton · NavBarCapsule · NavBarCell · NAV_BAR_BOTTOM_GAP · NAV_BAR_CAPSULE_PADDING_X · NAV_BAR_CELL_HEIGHT · NAV_BAR_GAP · NAV_BAR_HEIGHT · NAV_BAR_RESERVE · NAV_BAR_SIDE · MorphNavBar · RecordNavBar · useDepartureTab · BAR_ENTER_DELAY_MS · BAR_ENTER_MS · BAR_EXIT_MS · barMorphFrame · HUB_BAR_SHAPE · RECORD_BAR_SHAPE
+
+## src/widgets/bottom-nav-bar/model/
+- `src/widgets/bottom-nav-bar/model/barMorph.ts`  →  BarMorphDirection · MorphCell · BarMorphFrame · BarMorphShape · HUB_BAR_SHAPE · RECORD_BAR_SHAPE · BAR_ENTER_MS · BAR_EXIT_MS · BAR_ENTER_DELAY_MS · BAR_ENTER_CUT_MS · BAR_EXIT_SWAP_MS · BAR_DEFAULT_WIDTH · barMorphFrame
+- `src/widgets/bottom-nav-bar/model/useDepartureTab.ts`  →  useDepartureTab
 
 ## src/widgets/bottom-nav-bar/ui/
 - `src/widgets/bottom-nav-bar/ui/BottomNavBar.tsx`  →  NavBarCellSpec · BottomNavBarProps · NavBarBackButton · NavBarCapsule · NavBarCell · BottomNavBar
+- `src/widgets/bottom-nav-bar/ui/MorphNavBar.tsx`  →  MorphNavBarProps · MorphNavBar
+- `src/widgets/bottom-nav-bar/ui/RecordNavBar.tsx`  →  RecordBarTab · RecordNavBarProps · RecordNavBar
 
 ## src/widgets/curated-stays/
 - `src/widgets/curated-stays/index.ts`  →  CuratedStaysSection · CuratedStaysSheet · useCuratedStaysController · type CuratedStaysController · type CuratedStaysProps
@@ -1844,4 +1853,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1176개 파일
+합계 1183개 파일
