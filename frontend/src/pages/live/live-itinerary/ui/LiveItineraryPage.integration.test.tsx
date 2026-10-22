@@ -6532,7 +6532,8 @@ describe('방문 체크', () => {
  *  - 허브가 **보고 있는 날짜**로 `GET /trips/{id}/opportunities?date=` 를 부르고(일차 칩을 바꾸면 그 날로), 고른 1장을
  *    하단 바의 행사 칸에 점으로 알리며 **칸을 누르면** 바 위 작은 카드로 연다(TRIP-1522 — 종전엔 시트 머리에 늘 떠 있었다).
  *    여행 중 허브(active)가 아니면 부르지 않는다.
- *  - 같은 날 날씨 위험 트리거가 발화 중이면 행사 카드 대신 다음 항목(요즘 인기)을 그린다 — 트리거 목록이 온 뒤에.
+ *  - 같은 날 날씨 위험 트리거가 발화 중이면 축제·유형 모름 행사 카드 대신 다음 항목(실내형 행사·요즘 인기)을 그린다 —
+ *    트리거 목록이 온 뒤에(G-SA-17 — 공연·전시·팝업은 남는다).
  *  - [넣어서 다시 짜기] → i04 를 `prefill`·`includePoiId`(오늘이 아니면 `targetDate`)로 연다. 이동만 하고 쓰기 요청 0
  *    (INV-SA-1 — 일정은 i06 [적용]으로만).
  *  - × → 그 자리에서 사라지고 다음 항목으로 채우지 않는다. 숨김은 그 날 기기에 남아 다시 열어도 없다 — 다른 날은 그대로.
@@ -6549,6 +6550,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     key: 'event:부산 불꽃축제',
     kind: 'EVENT_VENUE',
     eventName: '부산 불꽃축제',
+    eventType: 'FESTIVAL',
     start: '2026-08-18',
     end: '2026-08-24',
     poiId: 'poi-venue',
@@ -6770,6 +6772,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
 
   // 5-b 후 보강(03b 경고-1) — 같은 날 안에서 기회가 행사 A → (날씨 위험) 요즘 인기 B → (위험 해제) 행사 A 로 돌아와도,
   // 열어 둔 카드가 사용자가 누르지 않았는데 저절로 다시 열리지 않는다. 실제 경로: 트리거 목록 갱신(O12 와 같은 장치).
+  // 테스트 상한 20초 — O12 와 같은 이유(O12 머리 주석).
   it('O3c 열어 둔 행사 카드는 날씨 위험으로 요즘 인기가 됐다 위험이 풀려 행사로 돌아와도 저절로 다시 열리지 않는다', async () => {
     // 준비 — 트리거 목록은 테스트가 바꾼다(앞에 건 핸들러가 이기므로 liveHubHandlers 보다 먼저).
     let serverTriggers: Trigger[] = [];
@@ -6827,9 +6830,9 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
       exact: true,
     });
-  });
+  }, 20_000);
 
-  it('O4 같은 날 날씨 위험이 발화 중이면 행사 카드 대신 요즘 인기를 그린다', async () => {
+  it('O4 같은 날 날씨 위험이 발화 중이면 축제 카드 대신 요즘 인기를 그린다', async () => {
     await renderHub({ [TODAY]: [VENUE, TRENDING] }, { triggers: [rain] });
 
     // 트리거 목록이 도착한 뒤에 판정한다(알약 = 목록 도착의 증거) — '아직 모름'이라 행사를 뺀 것과 가른다.
@@ -6839,6 +6842,29 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     expect(screen.getByTestId(TITLE)).toHaveTextContent(TRENDING_TITLE, {
       exact: true,
     });
+    expect(screen.queryByText(VENUE_TITLE)).toBeNull();
+  });
+
+  it('O16 같은 날 날씨 위험이 발화 중이어도 실내형 행사(전시) 카드는 축제를 뺀 자리에 그린다', async () => {
+    const expo: Opportunity = {
+      ...VENUE,
+      key: 'event:부산 비엔날레',
+      eventName: '부산 비엔날레',
+      eventType: 'EXHIBITION',
+      poiId: 'poi-expo',
+      poiName: '부산현대미술관',
+    };
+    await renderHub({ [TODAY]: [VENUE, expo, TRENDING] }, { triggers: [rain] });
+
+    // 트리거 목록이 도착한 뒤에 판정한다(알약 = 목록 도착의 증거).
+    await screen.findByTestId('execution-live-trigger-chip');
+    await eventReady();
+    openCard();
+    expect(screen.getByTestId(TITLE)).toHaveTextContent(
+      '‘부산 비엔날레’ 기간이에요',
+      { exact: true }
+    );
+    expect(screen.getAllByTestId(CARD)).toHaveLength(1);
     expect(screen.queryByText(VENUE_TITLE)).toBeNull();
   });
 
@@ -7017,6 +7043,12 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     expectEventIdle();
   });
 
+  // 테스트 상한 20초(W21 과 같다) — 닫기 둘·트리거 재조회 둘·다시 열기를 잇는 케이스라 jest 기본 상한(5초 — 이 버킷의 기다림
+  // 상한과 같다)이 CPU 경합에서 모자란다. 기다림의 확인이 실패할 때마다 jest 가 받은 노드를 문자열로 찍느라 수백 ms 를 쓴다
+  // (로컬 실측: 떠 있는 알약에 `toBeNull` 한 번 ≈ 0.4초 — 이 케이스 1.1초 중 알약이 사라지길 기다리는 데만 ≈ 0.85초).
+  // 실측: 2026-10-20 승격 PR CI 에서 두 번 'Exceeded timeout of 5000 ms' 로 죽었고(develop·재실행은 통과), 10-21 배경 QoS
+  // 6개 동시 실행으로 재현하면 6/6 실패(5.4~5.5초)였다. 상한을 올려도 초록은 느려지지 않고, 기다림 하나가 끝내 안 풀리면 그
+  // 기다림(5초)이 먼저 끝나 원인 메시지로 죽는다.
   it('O12 같은 날 두 번째 ×가 첫 숨김을 지우지 않는다 — 비 위험으로 바뀐 카드를 또 닫고 위험이 풀려도, 처음 닫은 카드는 그 날 다시 없다', async () => {
     // 준비 — 트리거 목록은 테스트가 바꾼다. 한 번의 server.use 안에서는 앞에 건 핸들러가 이기므로 liveHubHandlers 보다 먼저 둔다.
     let serverTriggers: Trigger[] = [];
@@ -7091,7 +7123,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     await settle();
     expect(screen.getByTestId(TODAY_SLOT)).toBeTruthy();
     expectEventIdle();
-  });
+  }, 20_000);
 
   /**
    * 일정이 바뀌는 길은 여럿이다(재계획 확정 = 일정 무효화 · 직접 수정 저장 = 응답을 캐시에 직접 쓰기 · 도우미 편집). 어느

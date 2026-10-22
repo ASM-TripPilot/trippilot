@@ -1682,6 +1682,23 @@
             ],
             "title": "Event Name"
           },
+          "event_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "FESTIVAL",
+                  "PERFORMANCE",
+                  "EXHIBITION",
+                  "POPUP"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Type"
+          },
           "key": {
             "title": "Key",
             "type": "string"

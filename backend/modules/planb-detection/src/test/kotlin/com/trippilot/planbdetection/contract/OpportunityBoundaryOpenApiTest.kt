@@ -9,6 +9,7 @@ import com.trippilot.planbdetection.adapter.out.external.AiOpportunitySlot
 import com.trippilot.planbdetection.adapter.out.external.HttpOpportunityAdapter
 import com.trippilot.planbdetection.adapter.out.external.OpportunityConfiguration
 import com.trippilot.planbdetection.application.OpportunityService
+import com.trippilot.planbdetection.domain.OpportunityEventType
 import com.trippilot.planbdetection.domain.OpportunityGate
 import com.trippilot.planbdetection.domain.OpportunityKind
 import com.trippilot.testsupport.ContractShape
@@ -88,6 +89,17 @@ class OpportunityBoundaryOpenApiTest : StringSpec({
         OpportunityKind.entries.map { it.name }.toSet() shouldBe contractKinds
     }
 
+    /**
+     * 모르는 행사 유형은 '모름'(null)으로 읽혀 날씨 위험 날 축제처럼 빠진다 — 새 실내형 유형이 비 오는 날 조용히 사라지지
+     * 않게, 상대가 유형을 늘리면 여기서 깨져 우리 enum 과 앱 계약을 함께 늘린다. 계약은 nullable 리터럴(`anyOf: [enum, null]`)이다.
+     */
+    "행사 유형 집합이 계약 enum 과 같다" {
+        val branches = schema("OpportunitySchema")["properties"]["event_type"]["anyOf"]
+        val contractTypes = branches.flatMap { b -> b["enum"]?.map { it.asString() }.orEmpty() }.toSet()
+        branches.any { it["type"]?.asString() == "null" } shouldBe true
+        OpportunityEventType.entries.map { it.name }.toSet() shouldBe contractTypes
+    }
+
     "보내는 슬롯·계획 POI 상한이 계약 maxItems 안이고, 응답 상한은 계약과 같다" {
         val request = schema("OpportunitiesRequest")["properties"]
         OpportunityService.MAX_SLOTS shouldBeLessThanOrEqual request["slots"]["maxItems"].asInt()
@@ -127,6 +139,7 @@ private val sampleOpportunity = AiOpportunity(
     key = "event:tourapi-1",
     kind = "EVENT_VENUE",
     eventName = "제주 들불축제",
+    eventType = "FESTIVAL",
     start = LocalDate.parse("2026-10-18"),
     end = LocalDate.parse("2026-10-25"),
     poiId = "e0000000-0000-4000-8000-000000000012",

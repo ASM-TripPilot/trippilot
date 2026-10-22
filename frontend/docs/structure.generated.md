@@ -1444,6 +1444,7 @@
 - `src/shared/api/generated/schemas/notificationToggleList.ts`  →  NotificationToggleList
 - `src/shared/api/generated/schemas/notificationTripAction.ts`  →  NotificationTripAction
 - `src/shared/api/generated/schemas/opportunity.ts`  →  Opportunity
+- `src/shared/api/generated/schemas/opportunityEventType.ts`  →  OpportunityEventType
 - `src/shared/api/generated/schemas/opportunityKind.ts`  →  OpportunityKind
 - `src/shared/api/generated/schemas/opportunityList.ts`  →  OpportunityList
 - `src/shared/api/generated/schemas/patchMeLocationConsentOsPermissionBody.ts`  →  PatchMeLocationConsentOsPermissionBody

@@ -5,6 +5,7 @@ import fc from 'fast-check';
 
 import type {
   Opportunity,
+  OpportunityEventType,
   OpportunityKind,
   Trigger,
   TriggerKind,
@@ -21,7 +22,8 @@ import {
  * 상황 감지 FE-C · frontend-components §4.1·§4.2·§4.3 · BR-SA-22 — 허브 기회 카드의 판정(순수).
  *
  * 무엇을 보장하나:
- *  - 고르기(§4.1): ① 같은 날짜에 발화 중인 날씨 위험(WEATHER ∧ 위험 — severity 없음도 위험)이 있으면 행사 카드를 뺀다
+ *  - 고르기(§4.1): ① 같은 날짜에 발화 중인 날씨 위험(WEATHER ∧ 위험 — severity 없음도 위험)이 있으면 축제·유형 모름
+ *    행사 카드를 뺀다 — 공연·전시·팝업은 남는다(G-SA-17, 모르는 유형은 실내라고 단정하지 않는다)
  *    ② 남은 첫 항목 1장(서버 순위 그대로) ③ 그 항목을 이 날 기기에서 숨겼으면 아무것도 그리지 않는다 — 숨긴 자리를
  *    다음 항목으로 채우지 않는다(날짜당 1장). 트리거를 아직 모르면(조회 중·실패) 아무것도 고르지 않는다 — 행사를 뺀
  *    요즘 인기를 먼저 그렸다가 트리거가 오면 행사로 바뀌어, 누르려던 카드가 손끝에서 바뀌지 않게. 행사 카드인데
@@ -92,8 +94,12 @@ describe('pickOpportunity — 날짜당 1장 고르기 (§4.1)', () => {
     ).toBe(items[0]);
   });
 
-  it('K2 같은 날 날씨 위험이 발화 중이면 행사 카드를 빼고 남은 첫 장(요즘 인기)', () => {
-    const items = [event(), event({ key: 'event:b', kind: 'EVENT_NEARBY' })];
+  it('K2 같은 날 날씨 위험이 발화 중이면 축제·유형 모름 행사를 빼고 남은 첫 장(요즘 인기)', () => {
+    // 축제 하나와 유형을 모르는 행사(옛 서버) 하나.
+    const items = [
+      event({ eventType: 'FESTIVAL' }),
+      event({ key: 'event:b', kind: 'EVENT_NEARBY' }),
+    ];
     const withTrending = [...items, trending()];
 
     expect(
@@ -249,6 +255,40 @@ describe('pickOpportunity — 날짜당 1장 고르기 (§4.1)', () => {
       pickOpportunity(items, { date: DATE, triggers: [trigger()], hiddenKeys })
     ).toBeNull();
   });
+
+  it.each(['PERFORMANCE', 'EXHIBITION', 'POPUP'] as const)(
+    'K13 같은 날 날씨 위험이어도 실내형 행사(%s)는 남는다 — 축제를 뺀 뒤의 첫 장',
+    (eventType) => {
+      const items = [
+        event({ eventType: 'FESTIVAL' }),
+        event({ key: 'event:indoor', eventType }),
+        trending(),
+      ];
+
+      expect(
+        pickOpportunity(items, {
+          date: DATE,
+          triggers: [trigger()],
+          hiddenKeys: [],
+        })
+      ).toBe(items[1]);
+    }
+  );
+
+  it('K14 모르는 유형 값(새 서버의 새 값)은 실내라고 단정하지 않는다 — 날씨 위험 날 뺀다', () => {
+    const items = [
+      event({ eventType: 'SPORTS' as unknown as OpportunityEventType }),
+      trending(),
+    ];
+
+    expect(
+      pickOpportunity(items, {
+        date: DATE,
+        triggers: [trigger()],
+        hiddenKeys: [],
+      })
+    ).toBe(items[1]);
+  });
 });
 
 describe('opportunityCopy — kind 별 고정 템플릿 (§4.2)', () => {
@@ -340,15 +380,18 @@ const SEVERITIES: (TriggerSeverity | undefined)[] = [
 const blocksEvents = (t: Trigger): boolean =>
   t.kind === 'WEATHER' && t.severity !== 'CAUTION' && t.affectedDate === DATE;
 
+/** 명세에서 바로 옮긴 "날씨 위험 날에도 남는 행사 유형" — 공연·전시·팝업(축제·없음·모르는 값은 아니다). */
+const INDOOR_TYPES: readonly unknown[] = ['PERFORMANCE', 'EXHIBITION', 'POPUP'];
+
 /**
- * 명세에서 바로 옮긴 "그릴 수 있는 항목" — 요즘 인기는 늘, 행사(행사장·행사장 가까이)는 막히지 않았고 이름·마지막 날이
- * 있을 때만, 그 밖의 kind 는 절대(템플릿이 없다).
+ * 명세에서 바로 옮긴 "그릴 수 있는 항목" — 요즘 인기는 늘, 행사(행사장·행사장 가까이)는 막히지 않았고(날씨 위험 날엔
+ * 실내형 유형만) 이름·마지막 날이 있을 때만, 그 밖의 kind 는 절대(템플릿이 없다).
  */
 const drawable = (item: Opportunity, eventsBlocked: boolean): boolean => {
   if (item.kind === 'TRENDING') return true;
   if (item.kind !== 'EVENT_VENUE' && item.kind !== 'EVENT_NEARBY') return false;
   return (
-    !eventsBlocked &&
+    (!eventsBlocked || INDOOR_TYPES.includes(item.eventType)) &&
     (item.eventName ?? '').trim() !== '' &&
     /^\d{4}-\d{2}-\d{2}$/.test(item.end ?? '')
   );
@@ -356,6 +399,8 @@ const drawable = (item: Opportunity, eventsBlocked: boolean): boolean => {
 
 /** 모르는 kind — 새 서버가 값을 늘려도 옛 앱(OTA 없음)이 받는다. */
 const UNKNOWN_KIND = 'POPUP' as unknown as OpportunityKind;
+/** 모르는 행사 유형 — 같은 이유로 옛 앱이 받는다. */
+const UNKNOWN_EVENT_TYPE = 'SPORTS' as unknown as OpportunityEventType;
 
 const itemArb: fc.Arbitrary<Opportunity> = fc
   .record({
@@ -373,9 +418,18 @@ const itemArb: fc.Arbitrary<Opportunity> = fc
       undefined,
       '11월 2일'
     ),
+    eventType: fc.constantFrom<OpportunityEventType | undefined>(
+      'FESTIVAL',
+      'PERFORMANCE',
+      'EXHIBITION',
+      'POPUP',
+      null,
+      undefined,
+      UNKNOWN_EVENT_TYPE
+    ),
   })
-  .map(({ key, kind, eventName, end }) =>
-    event({ key, kind, eventName, end, poiId: `poi-${key}` })
+  .map(({ key, kind, eventName, end, eventType }) =>
+    event({ key, kind, eventName, end, eventType, poiId: `poi-${key}` })
   );
 const itemsArb = fc.uniqueArray(itemArb, {
   selector: (item) => item.key,
@@ -430,8 +484,18 @@ describe('pickOpportunity 성질 (§4.1)', () => {
       }),
       {
         examples: [
-          // 같은 날 날씨 위험 + 행사 첫 장 → 요즘 인기.
+          // 같은 날 날씨 위험 + 유형 모름 행사 첫 장 → 요즘 인기.
           [[event(), trending()], [trigger()], []],
+          // 같은 날 날씨 위험 + 축제 다음 전시 → 전시(실내형은 남는다).
+          [
+            [
+              event({ eventType: 'FESTIVAL' }),
+              event({ key: 'event:expo', eventType: 'EXHIBITION' }),
+              trending(),
+            ],
+            [trigger()],
+            [],
+          ],
           // 첫 장 숨김 → 없음(다음 장으로 안 채움).
           [[event(), trending()], [], [0]],
           // 둘째를 숨긴 뒤에도 먼저 숨긴 첫 장은 없음.
@@ -445,7 +509,7 @@ describe('pickOpportunity 성질 (§4.1)', () => {
     );
   });
 
-  it('P2 트리거를 모르면 늘 없음, 같은 날 날씨 위험이면 없음 또는 요즘 인기', () => {
+  it('P2 트리거를 모르면 늘 없음, 같은 날 날씨 위험이면 없음·요즘 인기·실내형 행사(축제·유형 모름은 아니다)', () => {
     fc.assert(
       fc.property(itemsArb, triggersArb, hiddenArb, (items, triggers, h) => {
         fc.pre(triggers === undefined || triggers.some(blocksEvents));
@@ -458,12 +522,24 @@ describe('pickOpportunity 성질 (§4.1)', () => {
         if (triggers === undefined) {
           expect(result).toBeNull();
         } else {
-          expect(result === null || result.kind === 'TRENDING').toBe(true);
+          expect(
+            result === null ||
+              result.kind === 'TRENDING' ||
+              INDOOR_TYPES.includes(result.eventType)
+          ).toBe(true);
         }
       }),
       {
         examples: [
           [[event(), trending()], [trigger()], []],
+          [
+            [
+              event({ eventType: 'FESTIVAL' }),
+              event({ key: 'event:popup', eventType: 'POPUP' }),
+            ],
+            [trigger()],
+            [],
+          ],
           [[trending()], undefined, []],
         ],
       }
