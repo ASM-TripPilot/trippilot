@@ -1310,4 +1310,75 @@ describe('TripRecordsView · 핀 탭 (TRIP-1558 AC-8·AC-9)', () => {
     expect(scrolls()).toEqual([]);
     expect(snapTargets()).toEqual([2]); // 도착 신호가 시트 요청을 더 만들지도 않는다
   });
+
+  // TRIP-1593 — 시트를 끝까지 내린 뒤 하단 바 「기록」 칸(활성 칸)으로 되올린다. 칸 번호: -1 완전 내림 · 0 핸들 · 1 중간 · 2 펼침.
+  // 시트가 실제로 내려가는지(`enablePanDownToClose`)·로고 여백은 통과형 목이 못 본다 → 6-b. 여기는 "언제 어느 칸으로 요청이 나가는가"만 본다.
+  describe('기록 칸으로 시트 되올리기', () => {
+    const pressRecords = () =>
+      fireEvent.press(screen.getByTestId('record-trip-bottom-bar-tab-records'));
+
+    it('RS1 내려간 뒤 누르면 펼침에서 내려왔어도 중간(1)으로 한 번 올리고, 올라온 뒤엔 요청이 늘지 않고, 다시 내렸다 누르면 또 나간다 (핀 탭 요청과 id 가 안 겹친다)', () => {
+      withData();
+      tapPin(0); // 핀 탭이 낸 요청([2]) — 같은 요청 쪽지(id 카운터)를 쓴다
+      fireSheetAnimate(1, 2);
+      fireSheetAnimate(2, -1); // 펼침에서 곧장 완전 내림
+
+      pressRecords();
+      expect(snapTargets()).toEqual([2, 1]);
+
+      fireSheetAnimate(-1, 1); // 올라왔다
+      pressRecords();
+      expect(snapTargets()).toEqual([2, 1]);
+
+      fireSheetAnimate(1, -1);
+      pressRecords();
+      expect(snapTargets()).toEqual([2, 1, 1]);
+    });
+
+    it.each([
+      [0, [1]], // 핸들만 보이는 칸도 "내려간 것"
+      [1, []],
+      [2, []], // 올라와 있으면 펼침도 끌어내리지 않는다
+    ])('RS2 시트 목표 칸이 %i 일 때 누르면 올림 요청 %j', (to, expected) => {
+      withData();
+      fireSheetAnimate(2, to);
+
+      pressRecords();
+
+      expect(snapTargets()).toEqual(expected);
+    });
+
+    it('RS3 시트가 내려가는 순간에만 키보드를 내린다 (메모 입력 중 끝까지 내리면 키보드·바가 갇히지 않게)', () => {
+      const dismiss = jest.spyOn(Keyboard, 'dismiss');
+      try {
+        withData();
+        fireSheetAnimate(1, 2);
+        fireSheetAnimate(2, 0);
+        fireSheetAnimate(0, 1);
+        expect(dismiss).not.toHaveBeenCalled(); // 앵커 — 다른 칸 이동에선 안 부른다
+
+        fireSheetAnimate(1, -1);
+
+        expect(dismiss).toHaveBeenCalledTimes(1);
+      } finally {
+        dismiss.mockRestore();
+      }
+    });
+
+    it('RS4 시트가 내려가 있어도 일차 칩·뒤로·회고 칸은 제 일을 하고 시트를 올리지 않는다', () => {
+      const props = withData({ onPressReflection: jest.fn() });
+      fireSheetAnimate(1, -1);
+
+      fireEvent.press(screen.getByTestId('sheet-daychip-0'));
+      fireEvent.press(screen.getByTestId('record-trip-bottom-bar-back'));
+      fireEvent.press(
+        screen.getByTestId('record-trip-bottom-bar-tab-reflection')
+      );
+
+      expect(props.onSelectDay).toHaveBeenCalledWith('2026-06-10');
+      expect(props.onPressBack).toHaveBeenCalledTimes(1);
+      expect(props.onPressReflection).toHaveBeenCalledTimes(1);
+      expect(snapTargets()).toEqual([]);
+    });
+  });
 });
