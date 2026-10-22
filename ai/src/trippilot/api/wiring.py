@@ -700,9 +700,11 @@ def _hours_unknown(
     solution: ItinerarySolution, problem: ItineraryProblem, poi_index: Mapping[PoiId, Poi],
 ) -> tuple[WiredUnverifiedSlot, ...]:
     """영업 창을 몰라 HC1 을 적용하지 못한 등록 POI → 경계 보고(HOURS_UNKNOWN). 판정은 규칙 옆 `hc1_unjudged` 한 곳 —
-    검증과 같은 휴일 달력(`problem.holidays`)으로 본다."""
+    검증과 같은 휴일 달력(`problem.holidays`)으로 본다. 주간 영업 창이 있는데 실렸으면 특일 달력을 못 읽어 태그형 휴일
+    규칙을 판정하지 못한 갈래뿐이다(G-SA-22) — `detail` 표지로 원문 없음·해석 실패(빈 문자열)와 운영에서 가른다."""
     return tuple(
-        WiredUnverifiedSlot(poi_id=str(p), reason_code="HOURS_UNKNOWN")
+        WiredUnverifiedSlot(poi_id=str(p), reason_code="HOURS_UNKNOWN",
+                            detail="holiday_calendar_unread" if poi_index[p].open_hours else "")
         for p in hc1_unjudged(solution, poi_index, problem.holidays)
     )
 

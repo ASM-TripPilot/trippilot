@@ -8,6 +8,7 @@
   ② validate — 같은 휴일 규칙으로 HC1 "공휴일 휴무" — 조립이 둔 해와 검증이 같은 매핑을 본다. off 면 위반 없음.
      미판정 보고(HOURS_UNKNOWN)도 같은 달력으로 가른다 — on 이면 판정한 것, off 면 영업정보가 없어 못 본 것.
      달력을 못 읽으면(실패·키 미등록) 태그형 휴일 규칙이 있는 곳은 영업 창이 있어도 못 본 것이다(G-SA-22) — 수리도 같다.
+     그 미판정은 `detail` 표지(`holiday_calendar_unread`)로 원문 없음(빈 문자열)과 갈린다.
   ③ repair — 휴일 휴무 슬롯은 수리하지 못한다(검증과 같은 판정).
   ④ replan — 휴무 후보는 안 놓이고, "저녁은 그대로"는 그 날 공휴일 휴무인 식당을 잠그지 않는다. 달력 1회.
   ⑤ 편집 검증의 문제 재구성도 같은 달력을 싣는다.
@@ -226,7 +227,7 @@ _BOTH = {"days": [{"date": _D2.isoformat(), "slots": [
     {"poi_id": "tagged", "start_at": "10:00:00", "end_at": "11:00:00", "is_fixed": False},
     {"poi_id": "plain", "start_at": "12:00:00", "end_at": "13:00:00", "is_fixed": False}]}],
     "is_fallback": False, "solve_mode": "OR_TOOLS"}
-_TAGGED_UNKNOWN = [{"poi_id": "tagged", "reason_code": "HOURS_UNKNOWN", "detail": ""}]
+_TAGGED_UNKNOWN = [{"poi_id": "tagged", "reason_code": "HOURS_UNKNOWN", "detail": "holiday_calendar_unread"}]
 
 
 def _check_both(holidays: HolidaySource | None, path: str = "validate") -> dict:
@@ -238,12 +239,17 @@ def _check_both(holidays: HolidaySource | None, path: str = "validate") -> dict:
 def test_validate_는_달력을_못_읽으면_태그형_규칙이_있는_곳을_미판정으로_싣는다() -> None:
     """G-SA-22 — 달력을 못 읽으면 빈 달력으로 판정해 태그형 휴일 규칙(공휴일 휴무)을 보지 못하는데, 주간 영업 창이
     있으면 HC1 이 통과시켜 흔적이 없었다 — 장소 감지가 진짜 공휴일 휴무를 '확인'으로 접을 수 있었다(INV-SA-2).
-    규칙이 없는 곳은 그대로 판정이다."""
+    규칙이 없는 곳은 그대로 판정이다. `detail` 표지로 원문 없음(빈 문자열 — 종전)과 운영에서 가른다."""
     failing = _FailingCalendar()
     for holidays in (HolidaySource(enabled=True, calendar=failing),  # 조회 실패
                      HolidaySource(enabled=True, calendar=None)):    # 키 미등록 — 달력이 없다
         assert _check_both(holidays) == {"violations": [], "unverified_slots": _TAGGED_UNKNOWN}
     assert failing.calls == [(_D2, _D2)]
+    # 영업정보가 없는 곳은 태그형 규칙이 있어도 원문 없음이다 — 표지 없이 종전대로
+    with TestClient(create_app(_orchestrator(HolidaySource(enabled=True, calendar=_FailingCalendar())))) as client:
+        body = client.post("/ai/v1/itinerary/validate",
+                           json={"itinerary": _payload(_D1, "museum"), "request_meta": _META}).json()
+    assert body["unverified_slots"] == [{"poi_id": "museum", "reason_code": "HOURS_UNKNOWN", "detail": ""}]
 
 
 def test_validate_는_달력을_읽었거나_모드_off_면_종전대로다() -> None:

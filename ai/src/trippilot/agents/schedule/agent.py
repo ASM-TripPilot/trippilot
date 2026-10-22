@@ -231,8 +231,9 @@ class GenerateItineraryRequest:
     # PlanB 가산 서열을 흔들 이유가 없다.
     diversity_jitter: float = 0.0
     # 특일 달력 (상황 감지 H1) — 배선이 요청 진입점에서 1회 조회해 싣는다(조립 루프는 I/O 를 타지 않는다).
-    # 의미는 `ItineraryProblem.holidays` — None = `HOLIDAY_CLOSURE_MODE=off`(공휴일 규칙 없음), 빈 매핑 = 달력
-    # 실패(날짜 명시형만). 에이전트의 사전 판정(⓪′ 핀·한 곳 추가·차선책)도 같은 값으로 조립과 같은 그 날 창을 본다.
+    # 의미는 `ItineraryProblem.holidays` — None = `HOLIDAY_CLOSURE_MODE=off`(공휴일 규칙 없음), 빈 매핑 = 그 범위에
+    # 공휴일 없음 또는 달력 실패(`UNREAD_CALENDAR` — 어느 쪽이든 날짜 명시형만). 에이전트의 사전 판정(⓪′ 핀·한 곳 추가·
+    # 차선책)도 같은 값으로 조립과 같은 그 날 창을 본다.
     holidays: Mapping[date, frozenset[str]] | None = None
 
     def __post_init__(self) -> None:

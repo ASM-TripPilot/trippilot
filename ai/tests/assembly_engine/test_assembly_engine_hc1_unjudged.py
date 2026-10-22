@@ -10,7 +10,8 @@
      미판정이다(G-SA-22). 위반·날짜 명시형만 있는 곳·규칙 없는 곳·성공한 빈 달력·모드 off 는 종전대로
   ③ 첫 등장 순·중복 없음 — 여러 날 중 하루라도 못 봤으면 싣는다
   ④ PBT — 하루짜리 해에서 미판정 POI 와 HC1 위반 POI 는 겹치지 않는다(같은 술어 `open_windows_on`). 달력을 못 읽으면
-     태그형 규칙이 있는 곳은 위반이거나 미판정이고, 위반 목록은 빈 달력과 같다(생성·조립은 그대로 짠다)
+     태그형 규칙이 있는 곳은 위반이거나 미판정이고, 위반 목록은 빈 달력과 같다(생성·조립은 그대로 짠다). 달력 탓으로만
+     실린 곳은 주간 영업 창이 있는 곳이다(배선이 그것으로 `detail` 표지를 단다)
 """
 
 from __future__ import annotations
@@ -92,15 +93,18 @@ def test_휴일_규칙이_그날을_닫으면_판정이고_아니면_미판정�
 
 def test_달력을_못_읽으면_태그형_규칙이_있는_곳은_영업_창으로_통과해도_미판정이다() -> None:
     """빈 달력으로 판정하면 태그형 규칙이 그 날을 닫는지 모르는데, 주간 영업 창이 있으면 HC1 이 통과시켜 흔적이 없었다 —
-    진짜 공휴일 휴무가 장소 감지에서 '확인'으로 접힐 수 있었다(INV-SA-2). 날짜 명시형은 달력 없이 판정한다."""
+    진짜 공휴일 휴무가 장소 감지에서 '확인'으로 접힐 수 있었다(INV-SA-2). 태그형은 공휴일만이 아니다 — 명절 규칙만
+    있는 곳(`설·추석 당일 휴무`)도 같다. 날짜 명시형은 달력 없이 판정한다."""
     index = _index(_poi("tagged", hours=_NINE_TO_SIX, rules={"PUBLIC"}),
+                   _poi("myeongjeol", hours=_NINE_TO_SIX, rules={"SEOLLAL_DAY", "CHUSEOK_DAY"}),
                    _poi("dated", hours=_NINE_TO_SIX, rules={"01-01"}), _poi("plain", hours=_NINE_TO_SIX))
-    sol = _sol((_HANGUL, (_slot("tagged", _HANGUL, 10), _slot("dated", _HANGUL, 12), _slot("plain", _HANGUL, 14))))
+    sol = _sol((_HANGUL, (_slot("tagged", _HANGUL, 10), _slot("myeongjeol", _HANGUL, 11),
+                          _slot("dated", _HANGUL, 12), _slot("plain", _HANGUL, 14))))
 
-    assert hc1_unjudged(sol, index, UNREAD_CALENDAR) == [PoiId("tagged")]
+    assert hc1_unjudged(sol, index, UNREAD_CALENDAR) == [PoiId("tagged"), PoiId("myeongjeol")]
     assert check_hc1(sol, index, UNREAD_CALENDAR) == []  # 위반은 빈 달력과 같다 — 미판정 보고만 다르다
     assert hc1_unjudged(sol, index, {}) == []    # 성공한 빈 달력 — 그 날 공휴일이 없다고 안다
-    assert hc1_unjudged(sol, index, _CAL) == []  # 공휴일이라고 안다 — tagged 는 HC1 HOLIDAY 위반(판정)
+    assert hc1_unjudged(sol, index, _CAL) == []  # 공휴일이라고 안다 — tagged 는 HC1 HOLIDAY 위반, 명절은 연다(판정)
     assert hc1_unjudged(sol, index) == []        # 모드 off — 공휴일을 보지 않는다(종전)
 
 
@@ -138,13 +142,13 @@ def test_첫_등장_순이고_중복이_없고_하루라도_못_봤으면_싣는
 
 @st.composite
 def _one_day(draw):
-    """하루짜리 해 — POI 마다 영업정보 유무·휴일 규칙을 섞고, 일부는 인덱스에서 뺀다."""
+    """하루짜리 해 — POI 마다 영업정보 유무·휴일 규칙(공휴일·명절)을 섞고, 일부는 인덱스에서 뺀다."""
     day = draw(st.sampled_from((_HANGUL, _THU)))
     n = draw(st.integers(1, 6))
     pois, starts = [], []
     for i in range(n):
         hours = draw(st.sampled_from(((), _NINE_TO_SIX, (OpenHour(day.weekday(), 600, 720),))))
-        rules = draw(st.sampled_from((frozenset(), frozenset({"PUBLIC"}))))
+        rules = draw(st.sampled_from((frozenset(), frozenset({"PUBLIC"}), frozenset({"SEOLLAL_DAY", "CHUSEOK_DAY"}))))
         if draw(st.booleans()) or i == 0:
             pois.append(_poi(f"p{i}", hours=hours, rules=rules))
         starts.append((draw(st.integers(0, 22)), f"p{i}"))
@@ -176,3 +180,5 @@ def test_PBT_달력을_못_읽으면_태그형_규칙이_있는_곳은_통과로
 
     assert tagged <= unjudged | {v.slot_ref for v in violations}
     assert violations == check_hc1(sol, index, {})  # 판정은 빈 달력과 같다 — 생성·조립은 그대로 짠다
+    # 달력 탓으로만 실린 곳 = 주간 영업 창이 있는 곳 — 배선이 이것으로 `detail` 표지를 단다(원문 없음과 가른다)
+    assert unjudged - set(hc1_unjudged(sol, index, {})) == {p for p in unjudged if index[p].open_hours}
