@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from trippilot.domain.common import GeoPoint
 from trippilot.domain.freshness import FreshnessMeta, InfoPacket, ProviderKind, ProviderStatus
@@ -268,6 +268,61 @@ def test_place_provider_empty_pool_is_no_candidates_with_ref() -> None:
 
     assert packet.status is ProviderStatus.NO_CANDIDATES
     assert provider.resolve(packet.data["pool_ref"]) is not None
+
+
+class _CountingBuilder(_FakeBuilder):
+    def __init__(self, pool=None) -> None:
+        super().__init__(pool)
+        self.calls = 0
+
+    def build(self, request, now):
+        self.calls += 1
+        return super().build(request, now)
+
+
+def test_place_provider_reuses_snapshot_for_same_conditions_within_ttl() -> None:
+    """같은 조건(앵커·요일·예산·수단·반경)은 TTL 안에서 한 번만 짓는다 — 재생성·다시 짜기가 후보 조회 2s 를
+    다시 내지 않는다. 날짜가 달라도 요일이 같으면 같은 풀, 반경(넓혀 다시)·요일이 다르면 새 풀, TTL 이 지나면 새 풀."""
+    builder = _CountingBuilder()
+    provider = PlaceProvider(builder, ttl_sec=600)
+    first = provider.fetch({"pool_request": _POOL_REQUEST, "now": _NOW})
+    same_dow = CandidatePoolRequest(anchor=_ANCHOR, dates=(_D1 + timedelta(days=7),),
+                                    budget=BudgetLevel.MID, transport=TransportMode.PUBLIC)
+    second = provider.fetch({"pool_request": same_dow, "now": _NOW + timedelta(seconds=599)})
+
+    assert builder.calls == 1
+    assert (first.freshness.cache_hit, second.freshness.cache_hit) == (False, True)
+    assert second.freshness.source == "M7_CACHE" and second.freshness.fetched_at == _NOW
+    assert provider.resolve(first.data["pool_ref"]) is provider.resolve(second.data["pool_ref"])
+
+    widened = CandidatePoolRequest(anchor=_ANCHOR, dates=(_D1,), budget=BudgetLevel.MID,
+                                   transport=TransportMode.PUBLIC, radius_override_km=15.0)
+    provider.fetch({"pool_request": widened, "now": _NOW})
+    provider.fetch({"pool_request": CandidatePoolRequest(anchor=_ANCHOR, dates=(_D2,), budget=BudgetLevel.MID,
+                                                         transport=TransportMode.PUBLIC), "now": _NOW})
+    assert builder.calls == 3
+    expired = provider.fetch({"pool_request": _POOL_REQUEST, "now": _NOW + timedelta(seconds=600)})
+    assert builder.calls == 4 and expired.freshness.cache_hit is False
+
+
+def test_place_provider_build_failure_is_not_cached() -> None:
+    """실패는 스냅샷에 남지 않는다 — 다음 요청이 다시 짓는다(캐시가 장애를 고착하면 INV-4 의 반대 오염)."""
+    class _FlakyBuilder(_FakeBuilder):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls = 0
+
+        def build(self, request, now):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("db down")
+            return super().build(request, now)
+
+    builder = _FlakyBuilder()
+    provider = PlaceProvider(builder)
+    assert "pool_ref" not in provider.fetch({"pool_request": _POOL_REQUEST, "now": _NOW}).data
+    assert provider.fetch({"pool_request": _POOL_REQUEST, "now": _NOW}).status is ProviderStatus.OK
+    assert builder.calls == 2
 
 
 def test_place_provider_build_failure_has_no_ref() -> None:
