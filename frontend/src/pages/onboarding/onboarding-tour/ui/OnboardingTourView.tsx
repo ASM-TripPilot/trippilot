@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { guardPress } from '@/shared/lib/pressGuard';
+import { useReduceMotion } from '@/shared/lib/reduceMotion';
 
 import { TOUR_PAGE_COUNT, TOUR_PAGES } from '../model/tourPages';
 
@@ -24,12 +25,13 @@ import {
   TourTripFragment,
 } from './TourFragments';
 import { TourProgressDots } from './TourGlyphs';
+import { TourPageMotion } from './TourMotion';
 import { TourStage } from './TourStage';
 
 /**
  * c10 기능 안내 6장 순수 뷰(TRIP-1595 · S1 정지 화면) — 라우터·api 를 모른다(프리뷰가 이 파일만 문다).
  * 가로 페이저(`ScrollView pagingEnabled`)가 장(무대 + 카피)을 넘기고, 진행 점·건너뛰기·다음/시작하기는 페이저 **밖** 고정 크롬이다.
- * 현재 장은 상태로 쥔다 — S2 모션이 "보이는 장"만 재생하는 근거다.
+ * 현재 장은 상태로 쥔다 — S2 모션(TRIP-1596, `TourPageMotion`)이 "보이는 장"만 재생하는 근거다.
  */
 export interface OnboardingTourViewProps {
   /** 1~6, 기본 1. testID·프리뷰 키와 같은 1부터 세는 번호. */
@@ -65,6 +67,8 @@ export function OnboardingTourView({
     y: 0,
   }));
   const isLast = page === TOUR_PAGE_COUNT;
+  // 동작 줄이기는 뷰 한 곳에서 한 번만 묻고 6장에 내린다(TRIP-1596). 답 전엔 null.
+  const reduce = useReduceMotion();
 
   // 상태와 스크롤을 같이 갱신한다 — 프로그램 스크롤이 `onMomentumScrollEnd` 를 모든 플랫폼에서 부른다는 보장이 없다.
   const goTo = (next: number): void => {
@@ -140,9 +144,15 @@ export function OnboardingTourView({
                 testID={`onboarding-tour-page-${spec.page}`}
                 style={{ width }}
               >
-                <TourStage spec={spec}>
-                  <Fragment />
-                </TourStage>
+                <TourPageMotion
+                  page={spec.page}
+                  active={spec.page === page}
+                  reduce={reduce}
+                >
+                  <TourStage spec={spec}>
+                    <Fragment />
+                  </TourStage>
+                </TourPageMotion>
                 <View className="gap-md px-2xl pb-3xl pt-sm">
                   <Text
                     testID={`onboarding-tour-title-${spec.page}`}

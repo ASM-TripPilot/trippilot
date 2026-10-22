@@ -1,4 +1,11 @@
-import { BackHandler, Dimensions, Platform } from 'react-native';
+import {
+  AccessibilityInfo,
+  BackHandler,
+  Dimensions,
+  Platform,
+  StyleSheet,
+} from 'react-native';
+import { getAnimatedStyle } from 'react-native-reanimated';
 import type { ReactTestInstance } from 'react-test-renderer';
 import {
   act,
@@ -8,12 +15,21 @@ import {
   within,
 } from '@testing-library/react-native';
 
+import * as reduceMotion from '@/shared/lib/reduceMotion';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
+import { useAnimatedProbe } from '@/test-support/animatedProbe';
+import {
+  advance,
+  deferOsAnswer,
+  flushOsAnswer,
+} from '@/test-support/barMotionProbe';
 import {
   closestScrollView,
   renderedText,
   stubScrollTo,
 } from '@/test-support/sheetTree';
+
+import { TOUR_PAGES } from '../model/tourPages';
 
 import { OnboardingTourView } from './OnboardingTourView';
 
@@ -34,8 +50,17 @@ import { OnboardingTourView } from './OnboardingTourView';
  */
 
 // 연타 가드 창(모듈 전역 400ms)은 파일 최상위에서 닫는다 — `다음`이 guardPress 라 앞 누름이 뒤 테스트로 샌다(02a ★6).
+// TRIP-1596: 뷰가 `useReduceMotion` 을 부르면 답이 비동기로 와 act 경고(테스트마다 수십 건)가 쏟아지고 모션이 시간 따라 변한다 —
+// 모션과 무관한 기존 케이스는 훅을 "켜짐(true)"으로 못박아(답 즉시·재생 없음·끝 모양) 결정적으로 돌린다. 모션 describe 는 이 스파이를 푼다.
+let reduceHookSpy: jest.SpyInstance;
 beforeEach(() => {
   resetPressGuard();
+  reduceHookSpy = jest
+    .spyOn(reduceMotion, 'useReduceMotion')
+    .mockReturnValue(true);
+});
+afterEach(() => {
+  reduceHookSpy.mockRestore();
 });
 
 const PAGE_IDS = [1, 2, 3, 4, 5, 6] as const;
@@ -544,5 +569,588 @@ describe('AC8 · 안드로이드 하드웨어 뒤로 가기', () => {
 
     // 단언 — 등록 수만큼 해제
     expect(remove).toHaveBeenCalledTimes(add.mock.calls.length);
+  });
+});
+
+/**
+ * ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ * TRIP-1596 · 장마다 경로가 그려지고 조각이 한 번 움직인다 (모션 S2)
+ *
+ * 무엇을 보장하나(값 자체는 `model/tourMotion.test.ts` 가 맡고, 여기는 "그 값이 화면에 연결됐는가"와 재생 규칙):
+ *  - 장이 보이면 0부터 재생해 2.4초 뒤 끝 모양, 안 본 장은 시작 프레임(AC1·AC5).
+ *  - 동작 줄이기 켜짐이면 6장 전부 처음부터 끝 모양이고 번쩍임·재생이 없다. 답 전에는 시작 프레임이되 무대는 그려져 있다(AC2).
+ *  - 재생 중에도 다음·건너뛰기·시작하기·스와이프가 막히지 않는다(AC3). 숫자·거리 글자는 시간에 따라 변하지 않는다(AC4).
+ *  - 재방문은 다시 그리고, 떠난 장은 슬라이드 동안 사라지지 않다가 지연 뒤 시작 프레임으로 돌아간다(AC5). 반복 없음(AC7).
+ *  - 제목·본문·진행 점·버튼은 움직이는 스타일 아래에 없고 무대는 모션 중에도 장식이다(AC6).
+ *
+ * 커버하지 않는 것: 이징 느낌·슬라이드와 재생 시작이 겹치는 체감·안드로이드 클립 레이아웃·점선 절단면·UI 스레드 실제 응답·동작 줄이기 첫 프레임
+ * 육안(README 판정 4 · 6-b). reanimated 스타일은 `props.style` 로 읽으면 첫 렌더 값에 굳는다 → `getAnimatedStyle` + 가짜 타이머로만 읽는다.
+ *
+ * 계약(02a §2): 경로 클립 `onboarding-tour-route-{n}`(스타일 width) · 정류장/도착 핀 `onboarding-tour-stop-{n}` ·
+ * 장별 조각 `onboarding-tour-motion-{n}-{key}`(키는 아래 PAGE_ITEMS). 읽는 값은 그 노드부터 장 루트 직전까지 올라가며 합친다
+ * (불투명도 곱·세로 이동 합·확대 곱) — 어느 래퍼가 값을 내든 같게 읽힌다.
+ *
+ * 3동작 뼈대: 준비(OS 동작 줄이기 답 + 가짜 시계 + 렌더) → 실행(시계를 흘리고 누르기·스와이프) → 단언(조각 값·진행 값·콜백).
+ */
+
+interface Effect {
+  opacity: number;
+  translateY: number;
+  scale: number;
+}
+const HIDDEN_UP = (shift: number): Effect => ({
+  opacity: 0,
+  translateY: shift,
+  scale: 1,
+});
+const SHOWN: Effect = { opacity: 1, translateY: 0, scale: 1 };
+const GONE: Effect = { opacity: 0, translateY: 0, scale: 1 };
+const START_SCALE_TO = (scale: number): Effect => ({
+  opacity: 0,
+  translateY: 0,
+  scale,
+});
+const FADE_IN: Effect = { opacity: 0, translateY: 0, scale: 1 };
+
+/** 장별 조각의 (출발, 끝) — 02a §2 표. 값은 티켓 S2 표(= Figma)에서 왔다. */
+const PAGE_ITEMS: Record<number, Record<string, [Effect, Effect]>> = {
+  1: {
+    'heart-fill': [FADE_IN, SHOWN],
+    'heart-outline': [SHOWN, GONE],
+  },
+  2: { card: [HIDDEN_UP(8), SHOWN] },
+  3: {
+    'pin-0': [HIDDEN_UP(-8), SHOWN],
+    'pin-1': [HIDDEN_UP(-8), SHOWN],
+    'pin-2': [HIDDEN_UP(-8), SHOWN],
+    'pin-3': [HIDDEN_UP(-8), SHOWN],
+    'label-0': [FADE_IN, SHOWN],
+    'label-1': [FADE_IN, SHOWN],
+    'label-2': [FADE_IN, SHOWN],
+  },
+  4: {
+    check: [START_SCALE_TO(0.6), SHOWN],
+    'check-ring': [SHOWN, GONE],
+    push: [HIDDEN_UP(-16), SHOWN],
+  },
+  5: {
+    'stat-0': [FADE_IN, SHOWN],
+    'stat-1': [FADE_IN, SHOWN],
+    'stat-2': [FADE_IN, SHOWN],
+  },
+  6: {
+    'row-user': [HIDDEN_UP(8), SHOWN],
+    'row-reply': [HIDDEN_UP(8), SHOWN],
+  },
+};
+const STOP_START = HIDDEN_UP(-12);
+
+type Style = Record<string, unknown>;
+const transformsOf = (style: Style): Record<string, unknown>[] =>
+  Array.isArray(style.transform)
+    ? (style.transform as Record<string, unknown>[])
+    : [];
+
+/** 노드 하나의 지금 스타일(고정 + reanimated 보간). 애니메이션이 없는 노드는 고정 스타일만 나온다. */
+const styleOf = (node: ReactTestInstance): Style => {
+  try {
+    return getAnimatedStyle(node) as Style;
+  } catch {
+    // `style={[undefined, 애니메이션]}` 처럼 배열에 빈 칸이 있으면 getAnimatedStyle 이 TypeError 를 던진다(02a ★) — 같은 값을 직접 읽는다.
+    return {
+      ...(StyleSheet.flatten(node.props.style) as Style | undefined),
+      ...(node.props.jestAnimatedStyle?.value as Style | undefined),
+    };
+  }
+};
+
+/** `testID` 노드부터 장 루트 직전까지 올라가며 합친 효과. */
+function effectOf(testID: string, page: number): Effect {
+  const root = screen.getByTestId(`onboarding-tour-page-${page}`);
+  const effect: Effect = { opacity: 1, translateY: 0, scale: 1 };
+  let node: ReactTestInstance | null = screen.getByTestId(testID, {
+    hidden: true,
+  });
+  for (; node && node !== root; node = node.parent) {
+    if (typeof node.type !== 'string') continue;
+    const style = styleOf(node);
+    if (typeof style.opacity === 'number') effect.opacity *= style.opacity;
+    for (const entry of transformsOf(style)) {
+      if (typeof entry.translateY === 'number')
+        effect.translateY += entry.translateY;
+      if (typeof entry.scale === 'number') effect.scale *= entry.scale;
+    }
+  }
+  return effect;
+}
+const stopEffect = (page: number): Effect =>
+  effectOf(`onboarding-tour-stop-${page}`, page);
+const itemEffect = (page: number, key: string): Effect =>
+  effectOf(`onboarding-tour-motion-${page}-${key}`, page);
+
+/** 경로 클립 폭(점선이 드러난 길이). */
+function routeWidth(page: number): number {
+  const width = styleOf(
+    screen.getByTestId(`onboarding-tour-route-${page}`, { hidden: true })
+  ).width;
+  if (typeof width !== 'number')
+    throw new Error(`${page}장 경로 클립에 숫자 width 가 없다`);
+  return width;
+}
+const fullRoute = (page: number): number => TOUR_PAGES[page - 1].route.width;
+
+/** 단언용 — `toBeCloseTo` 를 세 칸에 건다. */
+function expectEffect(actual: Effect, expected: Effect, label = ''): void {
+  expect([label, 'opacity', actual.opacity]).toEqual([
+    label,
+    'opacity',
+    expect.closeTo(expected.opacity, 4),
+  ]);
+  expect([label, 'translateY', actual.translateY]).toEqual([
+    label,
+    'translateY',
+    expect.closeTo(expected.translateY, 4),
+  ]);
+  expect([label, 'scale', actual.scale]).toEqual([
+    label,
+    'scale',
+    expect.closeTo(expected.scale, 4),
+  ]);
+}
+
+/** 지금 6장 전부의 모션 값 지문 — 같으면 "안 움직인다". */
+function fingerprint(): string {
+  return JSON.stringify(
+    PAGE_IDS.map((page) => [
+      routeWidth(page),
+      stopEffect(page),
+      ...Object.keys(PAGE_ITEMS[page]).map((key) => itemEffect(page, key)),
+    ])
+  );
+}
+
+/** 한 장이 시작 프레임인가 / 끝 프레임인가. */
+function expectStartFrame(page: number): void {
+  expect(routeWidth(page)).toBe(0);
+  expectEffect(stopEffect(page), STOP_START, `${page}장 정류장`);
+  Object.entries(PAGE_ITEMS[page]).forEach(([key, [start]]) =>
+    expectEffect(itemEffect(page, key), start, `${page}장 ${key}`)
+  );
+}
+function expectEndFrame(page: number): void {
+  expect(routeWidth(page)).toBeCloseTo(fullRoute(page), 4);
+  expectEffect(stopEffect(page), SHOWN, `${page}장 정류장`);
+  Object.entries(PAGE_ITEMS[page]).forEach(([key, [, end]]) =>
+    expectEffect(itemEffect(page, key), end, `${page}장 ${key}`)
+  );
+}
+
+describe('TRIP-1596 · 모션 (AC1~AC7)', () => {
+  const probe = useAnimatedProbe(); // 가짜 타이머 + 동작 줄이기 답 복원 — 이 describe 안에서만
+
+  beforeEach(() => {
+    reduceHookSpy.mockRestore(); // 실제 훅(OS 답을 Promise 로 묻는다)을 쓴다
+    probe.setReduceMotion(false);
+  });
+
+  /** 렌더 + OS 답 반영(마이크로태스크 비움). 이 시점이 시계 0ms 다. */
+  async function mount(initialPage?: number) {
+    const view = renderTour(initialPage);
+    await flushOsAnswer();
+    advance(0);
+    return view;
+  }
+
+  it('A1 1장: 경로가 먼저 그려지고(0–1s) 핀이 내려앉은 뒤(1–1.4s) 하트가 채워지며, 2.4초 뒤엔 끝 모양이다', async () => {
+    // 준비 — 동작 줄이기 꺼짐(false) 답 + 1장
+    await mount(1);
+
+    // 단언 0 — 출발 프레임
+    expectStartFrame(1);
+
+    // 실행·단언 1 — 0.5초: 경로는 일부만, 핀은 아직 안 보임
+    advance(500);
+    expect(routeWidth(1)).toBeGreaterThan(0);
+    expect(routeWidth(1)).toBeLessThan(fullRoute(1));
+    expect(stopEffect(1).opacity).toBe(0);
+
+    // 실행·단언 2 — 1.15초: 경로는 끝, 핀은 내려오는 중(투명도 0과 1 사이)
+    advance(650);
+    expect(routeWidth(1)).toBeCloseTo(fullRoute(1), 4);
+    expect(stopEffect(1).opacity).toBeGreaterThan(0);
+    expect(stopEffect(1).opacity).toBeLessThan(1);
+    expect(itemEffect(1, 'heart-fill').opacity).toBe(0); // 장별 조각은 1.4초부터
+
+    // 실행·단언 3 — 2.5초: 끝 모양(S1 정지 화면과 같은 값)
+    advance(1350);
+    expectEndFrame(1);
+  });
+
+  it.each(PAGE_IDS)(
+    'A2 %i장: 장이 처음 보이면 모든 조각이 출발 프레임에서 시작해 2.4초 뒤 표의 끝값에 닿는다',
+    async (page) => {
+      // 준비
+      await mount(page);
+
+      // 단언 1 — 출발
+      expectStartFrame(page);
+
+      // 실행·단언 2 — 끝(2.4초 + 여유)
+      advance(2500);
+      expectEndFrame(page);
+    }
+  );
+
+  it('A3 한 번도 안 본 장은 시작 프레임으로 있고, 무대 글자는 그대로 트리에 있다', async () => {
+    // 준비·실행 — 1장을 끝까지 재생
+    await mount(1);
+    advance(3000);
+
+    // 단언 — 앵커(1장은 끝까지 갔다) + 2~6장은 시작 프레임
+    expectEndFrame(1);
+    [2, 3, 4, 5, 6].forEach((page) => {
+      expectStartFrame(page);
+      STAGE_TEXTS[page].forEach((text) =>
+        expect(
+          within(stageOf(page)).getByText(text, { hidden: true })
+        ).toBeTruthy()
+      );
+    });
+  });
+
+  it('A4 동작 줄이기 답을 뷰가 한 번만 묻는다(6장 × 훅 6번 금지)', async () => {
+    // 준비
+    const ask = jest.mocked(AccessibilityInfo.isReduceMotionEnabled);
+    ask.mockClear();
+
+    // 실행
+    await mount(1);
+
+    // 단언
+    expect(ask).toHaveBeenCalledTimes(1);
+  });
+
+  describe('AC2 · 동작 줄이기', () => {
+    it('A5 켜짐(true)이면 6장 모두 처음부터 끝 모양이고, 시간이 흘러도 한 가지 모양뿐이다', async () => {
+      // 준비
+      probe.setReduceMotion(true);
+      await mount(1);
+
+      // 단언 1 — 답이 반영된 첫 순간부터 6장 전부 끝 모양(활성 장만이 아니다)
+      PAGE_IDS.forEach(expectEndFrame);
+
+      // 실행·단언 2 — 3초 동안 지문이 한 가지
+      const seen = new Set<string>([fingerprint()]);
+      for (let i = 0; i < 30; i += 1) {
+        advance(100);
+        seen.add(fingerprint());
+      }
+      expect(seen.size).toBe(1);
+    });
+
+    it('A5b 켜짐(true)에서 다음으로 넘겨도 6장 모두 끝 모양 그대로다(떠난 장이 빈 무대로 돌아가지 않는다)', async () => {
+      // 준비
+      probe.setReduceMotion(true);
+      await mount(1);
+      const before = fingerprint();
+
+      // 실행 — 다음 + 슬라이드·리셋 지연이 지날 만큼
+      pressNext();
+      advance(1500);
+
+      // 단언
+      expectPage(2);
+      PAGE_IDS.forEach(expectEndFrame);
+      expect(fingerprint()).toBe(before);
+    });
+
+    it('A6 답을 기다리는 동안은 시작 프레임이되 무대는 그려져 있고, true 가 오면 끝 모양으로 한 번만 바뀐다', async () => {
+      // 준비 — 답을 보류
+      const os = deferOsAnswer();
+      renderTour(2);
+
+      // 단언 1 — 앵커: 무대 글자가 트리에 있다(답 전에 렌더를 숨기면 기존 쿼리가 죽는다) + 시작 프레임
+      expect(
+        within(stageOf(2)).getByText('외부에서 예약하기', { hidden: true })
+      ).toBeTruthy();
+      expectStartFrame(2);
+
+      // 실행 1 — 답 없이 0.6초: 안 변한다(재생 시작 안 함)
+      const before = new Set<string>([fingerprint()]);
+      for (let i = 0; i < 6; i += 1) {
+        advance(100);
+        before.add(fingerprint());
+      }
+      expect(before.size).toBe(1);
+
+      // 실행 2 — true 도착
+      os.resolve(true);
+      await flushOsAnswer();
+
+      // 단언 2 — 끝 모양으로 점프, 이후 안 변함(중간값 없음)
+      PAGE_IDS.forEach(expectEndFrame);
+      const after = new Set<string>([fingerprint()]);
+      for (let i = 0; i < 20; i += 1) {
+        advance(100);
+        after.add(fingerprint());
+      }
+      expect(after.size).toBe(1);
+      expect(after.has([...before][0])).toBe(false); // 시작 ≠ 끝 — 앞 단언이 공허하지 않다
+    });
+
+    it('A7 답이 늦게 false 로 오면 그때부터 0 부터 재생한다(기다린 시간만큼 건너뛰지 않는다)', async () => {
+      // 준비
+      const os = deferOsAnswer();
+      renderTour(1);
+      advance(1500); // 답 없이 1.5초
+
+      // 실행
+      os.resolve(false);
+      await flushOsAnswer();
+
+      // 단언 1 — 방금 시작 프레임
+      expectStartFrame(1);
+
+      // 실행·단언 2 — 1.1초 뒤 경로 끝·핀 진행 중, 2.5초 뒤 끝
+      advance(1100);
+      expect(routeWidth(1)).toBeCloseTo(fullRoute(1), 4);
+      expect(stopEffect(1).opacity).toBeGreaterThan(0);
+      advance(1400);
+      expectEndFrame(1);
+    });
+  });
+
+  describe('AC3 · 입력은 모션에 막히지 않는다', () => {
+    it('A8 재생 0.5초 시점에 다음·스와이프·건너뛰기가 모두 동작한다', async () => {
+      // 준비 — 1장 재생 중
+      const { onSkip } = await mount(1);
+      advance(500);
+      expect(routeWidth(1)).toBeGreaterThan(0); // 앵커: 정말 재생 중이다
+      expect(routeWidth(1)).toBeLessThan(fullRoute(1));
+
+      // 실행·단언 1 — 다음
+      pressNext();
+      expectPage(2);
+
+      // 실행·단언 2 — 스와이프
+      advance(300);
+      swipeTo(2 * pageWidth());
+      expectPage(3);
+
+      // 실행·단언 3 — 건너뛰기
+      advance(100);
+      fireEvent.press(screen.getByTestId(TESTID.skip));
+      expect(onSkip).toHaveBeenCalledTimes(1);
+    });
+
+    it('A9 6장 재생 중에도 시작하기가 눌린다', async () => {
+      // 준비
+      const { onStart } = await mount(6);
+      advance(300);
+      expect(routeWidth(6)).toBeGreaterThan(0); // 앵커: 정말 재생 중이다
+
+      // 실행
+      fireEvent.press(screen.getByTestId(TESTID.start));
+
+      // 단언
+      expect(onStart).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('AC4 · 숫자와 거리는 카운트업이 없다', () => {
+    it.each([3, 5])(
+      'A10 %i장의 무대 글자는 0·중간·끝 시각 모두 같은 문자열이다(투명도만 변한다)',
+      async (page) => {
+        // 준비
+        await mount(page);
+        const textAt = () => renderedText(stageOf(page));
+        const samples = [textAt()];
+
+        // 실행 — 0 · 1.7초 · 2.5초
+        advance(1700);
+        samples.push(textAt());
+        advance(800);
+        samples.push(textAt());
+
+        // 단언 — 앵커(숫자/거리가 실제로 있다) + 세 시각 동일
+        const anchors =
+          page === 3 ? ['2.1km', '0.8km', '0.6km'] : ['12', '38km', '24'];
+        anchors.forEach((a) => expect(samples[0]).toContain(a));
+        expect(new Set(samples).size).toBe(1);
+        // 앵커 2 — 조각이 정말 움직였다(공허 방지)
+        expectEndFrame(page);
+      }
+    );
+  });
+
+  describe('AC5 · 장이 보일 때마다 그 장을 처음부터', () => {
+    it('A11 다음을 누르면 다음 장이 0 부터 재생되고, 떠난 장은 슬라이드 동안 끝 모양으로 남다가 지연 뒤 시작 프레임으로 돌아간다', async () => {
+      // 준비 — 1장을 끝까지 본다
+      await mount(1);
+      advance(2500);
+      expectEndFrame(1);
+
+      // 실행 1 — 다음
+      pressNext();
+      expectPage(2);
+
+      // 단언 1 — 2장은 막 시작, 1장은 아직 그대로(슬라이드 중 빈 무대가 되면 안 된다)
+      expect(routeWidth(2)).toBe(0);
+      expectEndFrame(1);
+
+      // 실행 2·단언 2 — 0.2초 뒤: 2장 경로가 자라는 중, 1장은 여전히 끝 모양
+      advance(200);
+      expect(routeWidth(2)).toBeGreaterThan(0);
+      expect(routeWidth(2)).toBeLessThan(fullRoute(2));
+      expectEndFrame(1);
+
+      // 실행 3·단언 3 — 떠난 지 1.1초 뒤: 1장은 시작 프레임으로 돌아가 있다
+      advance(900);
+      expectStartFrame(1);
+      expect(routeWidth(2)).toBeCloseTo(fullRoute(2), 4); // 2장은 그동안 재생됨(앵커)
+    });
+
+    it('A11b 재생 도중에 떠나도 슬라이드 동안 빈 무대로 바뀌지 않는다', async () => {
+      // 준비 — 1장 재생 1.2초 시점(경로는 이미 끝까지 그려졌다)
+      await mount(1);
+      advance(1200);
+      expect(routeWidth(1)).toBeCloseTo(fullRoute(1), 4);
+
+      // 실행 — 다음 + 0.3초(슬라이드가 도는 동안)
+      pressNext();
+      advance(300);
+
+      // 단언 — 경로가 다시 0이 되지 않았다(떠나는 순간 건드리지 않는다)
+      expectPage(2);
+      expect(routeWidth(1)).toBeCloseTo(fullRoute(1), 4);
+      expect(routeWidth(2)).toBeGreaterThan(0); // 앵커: 2장은 재생 중
+    });
+
+    it('A12 스와이프로 본 장에 돌아오면 시작 프레임에서 다시 그린다(끝 모양이 번쩍이지 않는다)', async () => {
+      // 준비 — 1장 끝까지 → 다음 → 충분히 기다려 1장이 리셋된 상태
+      await mount(1);
+      advance(2500);
+      pressNext();
+      advance(2500);
+      expectPage(2);
+
+      // 단언 0 — 돌아오기 **전에** 1장은 이미 시작 프레임이다. 도착할 때 되돌리면 끝 모양이 보이다가 꺼졌다 다시 그려지는
+      // 번쩍임이 나는데 jest 는 그 한 프레임을 못 본다 — 그래서 "미리 되돌려 뒀다"를 여기서 잰다(02a ★)
+      expectStartFrame(1);
+
+      // 실행 — 손가락으로 1장으로 되돌림
+      swipeTo(0);
+
+      // 단언 1 — 도착한 순간에도 시작 프레임
+      expectPage(1);
+      expectStartFrame(1);
+
+      // 실행·단언 2 — 다시 2.5초 뒤 끝
+      advance(2500);
+      expectEndFrame(1);
+    });
+
+    it('A13 같은 장을 다시 고르면(장이 안 바뀐 부분 스와이프) 재생을 처음부터 다시 하지 않는다', async () => {
+      // 준비 — 1장 재생 1.2초 시점
+      await mount(1);
+      advance(1200);
+      expect(routeWidth(1)).toBeCloseTo(fullRoute(1), 4); // 앵커: 경로는 이미 끝
+
+      // 실행 — 1장 위치에서 손가락이 살짝 움직였다 멈춤(반올림해도 1장)
+      swipeTo(100);
+
+      // 단언 1 — 경로가 0으로 되돌아가지 않았다
+      expectPage(1);
+      expect(routeWidth(1)).toBeCloseTo(fullRoute(1), 4);
+
+      // 실행·단언 2 — 원래 일정대로 2.5초 시점에 끝
+      advance(1300);
+      expectEndFrame(1);
+    });
+  });
+
+  describe('AC7 · 반복하지 않는다', () => {
+    it('A14 끝난 뒤 6초가 흘러도 값이 변하지 않는다', async () => {
+      // 준비·실행
+      await mount(4);
+      advance(2500);
+      expectEndFrame(4);
+      const seen = new Set<string>([fingerprint()]);
+      for (let i = 0; i < 30; i += 1) {
+        advance(200);
+        seen.add(fingerprint());
+      }
+
+      // 단언
+      expect(seen.size).toBe(1);
+    });
+  });
+
+  describe('AC6 · 기존 계약 보존', () => {
+    it('A15 제목·본문·진행 점·버튼은 움직이는 스타일(불투명도·이동·확대) 아래에 없다', async () => {
+      // 준비 — 재생 중간 시점과 시작 시점 둘 다
+      await mount(1);
+      const ids = [
+        'onboarding-tour-title-1',
+        'onboarding-tour-body-1',
+        'onboarding-tour-title-3',
+        TESTID.progress,
+        TESTID.skip,
+        TESTID.next,
+      ];
+      const moving = (testID: string): string[] => {
+        const found: string[] = [];
+        let node: ReactTestInstance | null = screen.getByTestId(testID, {
+          hidden: true,
+        });
+        for (; node; node = node.parent) {
+          if (typeof node.type !== 'string') continue;
+          const style = styleOf(node);
+          if ('opacity' in style || 'transform' in style)
+            found.push(String(node.props.testID ?? node.type));
+        }
+        return found;
+      };
+
+      // 실행·단언 — 시작과 한창일 때 모두
+      [0, 1200].forEach((ms) => {
+        if (ms > 0) advance(ms);
+        ids.forEach((id) => expect([id, moving(id)]).toEqual([id, []]));
+      });
+      // 앵커: 그 시점에 무대는 실제로 움직이고 있다
+      expect(stopEffect(1).opacity).toBeGreaterThan(0);
+    });
+
+    it('A16 모션 중에도 무대는 장식이다 — 숨김 속성 3종 유지, 누를 수 있는 것 0개', async () => {
+      // 준비
+      await mount(3);
+      advance(1000);
+      const stage = stageOf(3);
+
+      // 단언
+      expect(stage.props.pointerEvents).toBe('none');
+      expect(stage.props.accessibilityElementsHidden).toBe(true);
+      expect(stage.props.importantForAccessibility).toBe('no-hide-descendants');
+      expect(pressableHostsIn(stage)).toHaveLength(0);
+      expect(
+        within(stage).queryAllByRole('button', { hidden: true })
+      ).toHaveLength(0);
+      expect(routeWidth(3)).toBeGreaterThan(0); // 앵커: 모션 노드가 실제로 있다
+    });
+
+    it.each(PAGE_IDS)(
+      'A17 %i장 경로 클립은 넘치는 부분을 잘라 숨긴다(overflow hidden) — 폭만 자라고 안쪽 점선이 처음부터 다 보이면 안 된다',
+      async (page) => {
+        // 준비
+        await mount(page);
+        const clip = screen.getByTestId(`onboarding-tour-route-${page}`, {
+          hidden: true,
+        });
+
+        // 단언 — 앵커: 지금 폭이 0(그려지기 전)인 바로 그 노드가 잘라 숨기는 상자다
+        expect(routeWidth(page)).toBe(0);
+        expect(StyleSheet.flatten(clip.props.style).overflow).toBe('hidden');
+      }
+    );
   });
 });

@@ -145,6 +145,15 @@ export function TourVisitCheck(): ReactElement {
   );
 }
 
+/** 4/6 모션 시작 모양 — 체크가 들어오기 전의 빈 링(hairline-strong). 체크가 켜질 때 같이 빠진다(TRIP-1596). */
+export function TourVisitCheckRing(): ReactElement {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 18 18" fill="none">
+      <Circle cx={9} cy={9} r={8} stroke={HAIRLINE_STRONG} strokeWidth={2} />
+    </Svg>
+  );
+}
+
 /**
  * 3/6 단순화 지도 바탕 342×200(결정 D2) — 해안선·도로 몇 줄로만 그린 추상 도형이다. 이미지 basemap·출처 표기 없음.
  * 핀·동선·거리 라벨은 위에 RN 으로 얹는다.

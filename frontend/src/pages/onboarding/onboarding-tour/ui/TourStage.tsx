@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import type { TourPageSpec } from '../model/tourPages';
 
 import { TourRoute, TourStopPin } from './TourGlyphs';
+import { TourMotionRoute, TourMotionStop } from './TourMotion';
 
 // 조각 래퍼 높이 — 어느 조각보다 크게 잡아 `justifyContent: 'center'` 가 조각을 offset 중심에 앉힌다(Yoga 는 자식이 더 크면 가운데로 안 모은다).
 const FRAGMENT_BOX = 400;
@@ -40,10 +41,17 @@ export function TourStage({
           height: 0,
         }}
       >
-        <View style={{ position: 'absolute', left: 0, top: route.top }}>
+        <TourMotionRoute
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: route.top,
+            height: route.height,
+          }}
+        >
           <TourRoute d={route.d} width={route.width} height={route.height} />
-        </View>
-        <View
+        </TourMotionRoute>
+        <TourMotionStop
           style={{
             position: 'absolute',
             left: pin.left,
@@ -51,7 +59,7 @@ export function TourStage({
           }}
         >
           <TourStopPin />
-        </View>
+        </TourMotionStop>
         <View
           style={{
             position: 'absolute',

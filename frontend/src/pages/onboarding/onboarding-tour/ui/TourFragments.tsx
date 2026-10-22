@@ -17,9 +17,12 @@ import {
   TourMapRoute,
   TourScaleBar,
   TourVisitCheck,
+  TourVisitCheckRing,
 } from './TourGlyphs';
+import { TourMotionPiece } from './TourMotion';
 
 // c10 무대 조각 6벌(TRIP-1595) — 전부 **장식**이다. 누르는 요소(Pressable)를 하나도 두지 않는다(AC5): 하트·예약 버튼·칩은 모양만 같은 View 다.
+// 모션(TRIP-1596): 움직이는 조각만 `TourMotionPiece` 로 감싼다 — 레이아웃·카피·testID 는 그대로이고 끝 프레임이 이 정지 모양이다.
 // 사진은 Figma 실사진이 아니라 번들 일러스트(결정 D1): 감천 26380 · 광안리 26500 · 해운대 호텔은 숙소 일반 그림. 값은 Figma 노드 그대로다.
 
 // 그림자는 토큰 대상이 아니다 — RN 은 box-shadow 가 없어 shadow* 로 옮긴다(HomeScreen 카드 그림자 관례).
@@ -49,12 +52,25 @@ const GAMCHEON_COVER = pickRegionCover([{ seq: 1, regionCode: '26380' }]);
 const GWANGALLI_COVER = pickRegionCover([{ seq: 1, regionCode: '26500' }]);
 
 /** 사진 우상단 흰 원 32 + 하트 18 — 눌리지 않는 장식(`HeartButton` 은 Pressable 이라 쓰지 않는다). */
+const STACKED = {
+  position: 'absolute',
+  top: 0,
+  right: 0,
+  bottom: 0,
+  left: 0,
+  alignItems: 'center',
+  justifyContent: 'center',
+} as const;
+
 function HeartDot({
   filled,
+  animated = false,
   right,
   top,
 }: {
   filled: boolean;
+  /** 1/6 첫 카드 — 외곽선 위에 분홍 채움이 겹쳐 들어온다(끝 모양은 채움 하나). */
+  animated?: boolean;
   right: number;
   top: number;
 }): ReactElement {
@@ -63,7 +79,20 @@ function HeartDot({
       className="absolute h-[32px] w-[32px] items-center justify-center rounded-pill bg-canvas"
       style={[{ right, top }, DOT_SHADOW]}
     >
-      {filled ? <HeartFilledGlyph /> : <HeartOutlineGlyph />}
+      {animated ? (
+        <>
+          <TourMotionPiece id="heart-outline" style={STACKED}>
+            <HeartOutlineGlyph />
+          </TourMotionPiece>
+          <TourMotionPiece id="heart-fill" style={STACKED}>
+            <HeartFilledGlyph />
+          </TourMotionPiece>
+        </>
+      ) : filled ? (
+        <HeartFilledGlyph />
+      ) : (
+        <HeartOutlineGlyph />
+      )}
     </View>
   );
 }
@@ -72,11 +101,13 @@ function PlaceCard({
   name,
   meta,
   filled,
+  animated,
   cover,
 }: {
   name: string;
   meta: ReactNode;
   filled: boolean;
+  animated?: boolean;
   cover: ReturnType<typeof pickRegionCover>;
 }): ReactElement {
   return (
@@ -89,7 +120,7 @@ function PlaceCard({
             style={{ width: '100%', height: '100%' }}
           />
         ) : null}
-        <HeartDot filled={filled} right={8} top={8} />
+        <HeartDot filled={filled} animated={animated} right={8} top={8} />
       </View>
       <Text className="font-noto-bold text-body font-bold text-ink">
         {name}
@@ -105,6 +136,7 @@ export function TourPlacesFragment(): ReactElement {
       <PlaceCard
         name="감천문화마을"
         filled
+        animated
         cover={GAMCHEON_COVER}
         meta={
           <Text className="font-noto text-caption text-muted">부산 사하구</Text>
@@ -129,36 +161,40 @@ export function TourPlacesFragment(): ReactElement {
 
 export function TourStayFragment(): ReactElement {
   return (
-    // 그림자는 바깥, 사진 모서리 클립은 안쪽 — overflow 를 같은 View 에 두면 iOS 에서 그림자가 잘린다.
-    <View
-      className="w-[300px] rounded-button border border-hairline bg-canvas"
-      style={CARD_SHADOW}
-    >
-      <View className="overflow-hidden rounded-button">
-        <View className="h-[140px] w-full">
-          <PlacePhoto
-            category="숙소"
-            poiId="onboarding-tour-stay"
-            contentFit="cover"
-            style={{ width: '100%', height: '100%' }}
-          />
-          <HeartDot filled={false} right={10} top={12} />
-        </View>
-        <View className="gap-xs px-lg pb-lg pt-md">
-          <Text className="font-noto-bold text-card-title font-bold text-ink">
-            해운대 오션 호텔
-          </Text>
-          <Text className="font-noto text-label text-muted">해운대 · 350m</Text>
-          <View className="flex-row pt-sm">
-            <View className="h-[36px] items-center justify-center rounded-button border border-hairline-strong bg-canvas px-md">
-              <Text className="font-noto-bold text-label font-bold text-ink">
-                외부에서 예약하기
-              </Text>
+    <TourMotionPiece id="card">
+      {/* 그림자는 바깥, 사진 모서리 클립은 안쪽 — overflow 를 같은 View 에 두면 iOS 에서 그림자가 잘린다. */}
+      <View
+        className="w-[300px] rounded-button border border-hairline bg-canvas"
+        style={CARD_SHADOW}
+      >
+        <View className="overflow-hidden rounded-button">
+          <View className="h-[140px] w-full">
+            <PlacePhoto
+              category="숙소"
+              poiId="onboarding-tour-stay"
+              contentFit="cover"
+              style={{ width: '100%', height: '100%' }}
+            />
+            <HeartDot filled={false} right={10} top={12} />
+          </View>
+          <View className="gap-xs px-lg pb-lg pt-md">
+            <Text className="font-noto-bold text-card-title font-bold text-ink">
+              해운대 오션 호텔
+            </Text>
+            <Text className="font-noto text-label text-muted">
+              해운대 · 350m
+            </Text>
+            <View className="flex-row pt-sm">
+              <View className="h-[36px] items-center justify-center rounded-button border border-hairline-strong bg-canvas px-md">
+                <Text className="font-noto-bold text-label font-bold text-ink">
+                  외부에서 예약하기
+                </Text>
+              </View>
             </View>
           </View>
         </View>
       </View>
-    </View>
+    </TourMotionPiece>
   );
 }
 
@@ -217,20 +253,31 @@ export function TourPlanFragment(): ReactElement {
       <View className="h-[200px] w-[342px] overflow-hidden rounded-button">
         <TourMapBackdrop />
         <TourMapRoute points={MAP_ROUTE_POINTS} />
-        {MAP_LABELS.map(({ text, x, y }) => (
-          <Text
+        {MAP_LABELS.map(({ text, x, y }, i) => (
+          <TourMotionPiece
             key={text}
-            className="absolute font-inter-bold text-micro font-bold text-ink"
-            style={[{ left: x, top: y }, HALO]}
+            id={`label-${i}`}
+            style={{ position: 'absolute', left: x, top: y }}
           >
-            {text}
-          </Text>
+            <Text
+              className="font-inter-bold text-micro font-bold text-ink"
+              style={HALO}
+            >
+              {text}
+            </Text>
+          </TourMotionPiece>
         ))}
-        {MAP_PINS.map(({ n, x, y }) => (
-          <View
+        {MAP_PINS.map(({ n, x, y }, i) => (
+          <TourMotionPiece
             key={n}
-            className="absolute h-[36px] w-[28px]"
-            style={{ left: x, top: y }}
+            id={`pin-${i}`}
+            style={{
+              position: 'absolute',
+              left: x,
+              top: y,
+              width: 28,
+              height: 36,
+            }}
           >
             <TourMapPinBody />
             <Text
@@ -239,7 +286,7 @@ export function TourPlanFragment(): ReactElement {
             >
               {n}
             </Text>
-          </View>
+          </TourMotionPiece>
         ))}
         <View className="absolute" style={{ left: 274, top: 186 }}>
           <TourScaleBar />
@@ -263,46 +310,55 @@ export function TourPlanFragment(): ReactElement {
 export function TourTripFragment(): ReactElement {
   return (
     <View className="w-[342px] gap-md">
-      <View
-        className="gap-sm rounded-button border border-hairline bg-canvas px-lg py-md"
-        style={CARD_SHADOW}
-      >
-        <View className="flex-row items-center gap-sm">
-          <LinearGradient
-            colors={APP_ICON_COLORS}
-            style={{
-              width: 20,
-              height: 20,
-              borderRadius: 4.455,
-              alignItems: 'center',
-              justifyContent: 'center',
-              shadowColor: '#DB2647',
-              shadowOffset: { width: 0, height: 0.909 },
-              shadowOpacity: 0.28,
-              shadowRadius: 2.182,
-            }}
-          >
-            <AppIconGlyph size={12} />
-          </LinearGradient>
-          <Text className="flex-1 font-inter-bold text-caption font-bold text-body">
-            TripPilot
-          </Text>
-          <Text className="font-noto text-caption text-muted">지금</Text>
+      <TourMotionPiece id="push">
+        <View
+          className="gap-sm rounded-button border border-hairline bg-canvas px-lg py-md"
+          style={CARD_SHADOW}
+        >
+          <View className="flex-row items-center gap-sm">
+            <LinearGradient
+              colors={APP_ICON_COLORS}
+              style={{
+                width: 20,
+                height: 20,
+                borderRadius: 4.455,
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor: '#DB2647',
+                shadowOffset: { width: 0, height: 0.909 },
+                shadowOpacity: 0.28,
+                shadowRadius: 2.182,
+              }}
+            >
+              <AppIconGlyph size={12} />
+            </LinearGradient>
+            <Text className="flex-1 font-inter-bold text-caption font-bold text-body">
+              TripPilot
+            </Text>
+            <Text className="font-noto text-caption text-muted">지금</Text>
+          </View>
+          <View className="gap-xs">
+            <Text className="font-noto-bold text-body font-bold text-ink">
+              날씨가 일정에 영향을 줄 수 있어요
+            </Text>
+            <Text className="font-noto text-label text-body">
+              비 예보 · 해운대 17시
+            </Text>
+          </View>
         </View>
-        <View className="gap-xs">
-          <Text className="font-noto-bold text-body font-bold text-ink">
-            날씨가 일정에 영향을 줄 수 있어요
-          </Text>
-          <Text className="font-noto text-label text-body">
-            비 예보 · 해운대 17시
-          </Text>
-        </View>
-      </View>
+      </TourMotionPiece>
       <View
         className="flex-row items-center gap-md rounded-button border border-hairline bg-canvas px-lg py-md"
         style={CARD_SHADOW}
       >
-        <TourVisitCheck />
+        <View style={{ width: 18, height: 18 }}>
+          <TourMotionPiece id="check-ring" style={STACKED}>
+            <TourVisitCheckRing />
+          </TourMotionPiece>
+          <TourMotionPiece id="check" style={STACKED}>
+            <TourVisitCheck />
+          </TourMotionPiece>
+        </View>
         <View className="flex-1 gap-xs">
           <Text className="font-noto-bold text-card-title font-bold text-ink">
             광안리 해변
@@ -315,19 +371,23 @@ export function TourTripFragment(): ReactElement {
 }
 
 function Stat({
+  id,
   value,
   label,
 }: {
+  id: string;
   value: string;
   label: string;
 }): ReactElement {
   return (
-    <View className="flex-1 items-center gap-xs">
-      <Text className="font-inter-bold text-hero font-bold text-ink">
-        {value}
-      </Text>
-      <Text className="font-noto text-caption text-muted">{label}</Text>
-    </View>
+    <TourMotionPiece id={id} style={{ flex: 1 }}>
+      <View className="items-center gap-xs">
+        <Text className="font-inter-bold text-hero font-bold text-ink">
+          {value}
+        </Text>
+        <Text className="font-noto text-caption text-muted">{label}</Text>
+      </View>
+    </TourMotionPiece>
   );
 }
 
@@ -338,9 +398,9 @@ export function TourRecordFragment(): ReactElement {
         className="flex-row items-center rounded-button border border-hairline bg-canvas py-[18px]"
         style={DOT_SHADOW}
       >
-        <Stat value="12" label="총 방문" />
-        <Stat value="38km" label="총 거리" />
-        <Stat value="24" label="총 사진" />
+        <Stat id="stat-0" value="12" label="총 방문" />
+        <Stat id="stat-1" value="38km" label="총 거리" />
+        <Stat id="stat-2" value="24" label="총 사진" />
       </View>
       <View
         className="flex-row items-center gap-md rounded-button border border-hairline bg-canvas px-[14px] py-md"
@@ -378,25 +438,29 @@ export function TourAssistantFragment(): ReactElement {
       className="w-[342px] gap-md rounded-button border border-hairline bg-canvas p-lg"
       style={CARD_SHADOW}
     >
-      <View className="flex-row justify-end">
-        <View className="rounded-card bg-surface-strong px-[14px] py-sm">
-          <Text className="font-noto text-body leading-[22px] text-ink">
-            지금까지 짠 일정 검토해줘
+      <TourMotionPiece id="row-user">
+        <View className="flex-row justify-end">
+          <View className="rounded-card bg-surface-strong px-[14px] py-sm">
+            <Text className="font-noto text-body leading-[22px] text-ink">
+              지금까지 짠 일정 검토해줘
+            </Text>
+          </View>
+        </View>
+      </TourMotionPiece>
+      <TourMotionPiece id="row-reply">
+        <View className="flex-row items-start gap-md">
+          <View
+            className="h-[40px] w-[40px] items-center justify-center rounded-pill bg-canvas"
+            style={DOT_SHADOW}
+          >
+            <SparkleGlyph size={20} color={GLYPH_COLORS.primary} />
+          </View>
+          <Text className="flex-1 font-noto text-body leading-[22px] text-ink">
+            1일차 동선을 보니 황령산에서 미술관까지 0.8km예요. 그대로 두셔도
+            괜찮아요.
           </Text>
         </View>
-      </View>
-      <View className="flex-row items-start gap-md">
-        <View
-          className="h-[40px] w-[40px] items-center justify-center rounded-pill bg-canvas"
-          style={DOT_SHADOW}
-        >
-          <SparkleGlyph size={20} color={GLYPH_COLORS.primary} />
-        </View>
-        <Text className="flex-1 font-noto text-body leading-[22px] text-ink">
-          1일차 동선을 보니 황령산에서 미술관까지 0.8km예요. 그대로 두셔도
-          괜찮아요.
-        </Text>
-      </View>
+      </TourMotionPiece>
     </View>
   );
 }
