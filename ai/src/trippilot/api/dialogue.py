@@ -30,6 +30,7 @@ from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerGate
 from trippilot.llm_gateway.gates.dialogue_memory import DialogueMemoryGate
 from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanGate
 from trippilot.llm_gateway.gates.dialogue_sql import DialogueSqlGate
+from trippilot.llm_gateway.gates.place_fact import PlaceFactGate
 from trippilot.llm_gateway.gates.intent import IntentGate
 from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
 from trippilot.llm_gateway.gateway import GatewayFacade
@@ -40,6 +41,7 @@ from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
 from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
 from trippilot.llm_gateway.workers.dialogue_smalltalk import DialogueSmalltalkWorker
 from trippilot.llm_gateway.workers.dialogue_sql import DialogueSqlWorker
+from trippilot.llm_gateway.workers.place_fact_lookup import PlaceFactLookupWorker
 from trippilot.orchestrator.dialogue_handlers import DayView, HandlerPorts, SlotView, TripInfo, TurnSnapshot
 from trippilot.orchestrator.dialogue_interpreter import (
     Clarify,
@@ -58,6 +60,7 @@ from trippilot.orchestrator.dialogue_orchestrator import (
 from trippilot.orchestrator.dialogue_plan import plan_tools
 from trippilot.orchestrator.intent_router import IntentRouter, IntentRouterConfig
 from trippilot.orchestrator.place_intro import PlaceIntro
+from trippilot.orchestrator.unknown_handling import InMemoryPlaceFactStore, PlaceFactStore, UnknownHandlingAgent
 from trippilot.orchestrator.place_sql import PlaceSqlLookup
 from trippilot.orchestrator.question_bank import BankEntry, bank_fingerprint
 from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql
@@ -211,6 +214,7 @@ def build_dialogue_orchestrator(
     shadow_rng: random.Random | None,
     place_sql: PgPlaceSql | None = None,
     kb_store: VectorStorePort | None = None,
+    place_fact_store: PlaceFactStore | None = None,
 ) -> DialogueOrchestrator:
     """서비스 워커 3종(`counted` 공유 — 백엔드 사용량 상한의 원천) + 섀도 전용 3단 라우터 + 핸들러 포트를 묶는다.
 
@@ -239,9 +243,19 @@ def build_dialogue_orchestrator(
         log.info("도우미 장소 DB off — TRIPPILOT_PLACE_DB_URL 미설정이라 미배선(장소 탐색은 반경 풀, 일정 밖 장소는 못 찾는다)")
     # 장소 소개(KB-5) — PlanB 와 같은 임베딩·벡터 스토어. 스토어가 미배선(Unwired)이면 조회가 빈 결과로 강등될 뿐이라 늘 붙인다
     place_intro = PlaceIntro(embedding, kb_store) if kb_store is not None else None
+    # 미확인 칸 웹 확인(UnknownHandlingAgent) — PLACE_FACT_LOOKUP 배정이 곧 켜기. 조회는 턴 밖(뒤에서)이라 서비스 카운터(`counted`)가
+    # 아니라 `llm` 으로 부른다(턴 llm_calls 에 들지 않는다 — 대신 프로세스당 하루 상한, unknown_handling 註)
+    unknown = None
+    if LlmFeature.PLACE_FACT_LOOKUP in c1_config.feature_models:
+        unknown = UnknownHandlingAgent(PlaceFactLookupWorker(GatewayFacade(llm, renderer, PlaceFactGate(), c1_config, trace)),
+                                       place_fact_store if place_fact_store is not None else InMemoryPlaceFactStore())
+        log.info("도우미 미확인 정보 웹 확인 on — 저장소 %s", "ai_kb" if place_fact_store is not None else "프로세스 메모리")
+    else:
+        log.info("도우미 미확인 정보 웹 확인 off — PLACE_FACT_LOOKUP 미배정이라 미배선(카드는 \"미확인\" 그대로)")
     ports = HandlerPorts(poi_info=providers[ProviderKind.POI_INFO], weather=providers.get(ProviderKind.WEATHER),
                          transit=providers[ProviderKind.TRANSIT], pool_builder=pool_builder, planb=rag,
-                         place_sql=place_lookup, place_intro=place_intro, events=providers.get(ProviderKind.EVENT))
+                         place_sql=place_lookup, place_intro=place_intro, events=providers.get(ProviderKind.EVENT),
+                         unknown=unknown)
     tools = plan_tools(ports)  # 배선된 도구 → 설명(여행 필요 꼬리표 포함) — 게이트 closed-set 과 `$tools` 가 같은 사전에서 나온다
     planner = None
     if LlmFeature.DIALOGUE_PLAN in c1_config.feature_models:  # DEC-AO-18 — 배정이 곧 켜기(env 무증가)

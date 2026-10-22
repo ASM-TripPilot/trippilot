@@ -318,6 +318,23 @@ class SecretTests(unittest.TestCase):
             "CREATE TABLE IF NOT EXISTS public.dialogue_memory",
             "CREATE INDEX IF NOT EXISTS ix_dialogue_memory_account ON public.dialogue_memory",
             "CREATE INDEX IF NOT EXISTS ix_dialogue_memory_trip ON public.dialogue_memory"})
+
+    def test_place_fact_cache_ddl_is_identical_in_both_canons(self):
+        """`place_fact_cache`(UnknownHandlingAgent 저장소)도 dialogue_memory 와 같은 두 정본 규칙 — 갈리면 로컬에서 통과한 DML 이
+        배포에서 깨진다. GRANT 는 bootstrap 에만(이유는 위 테스트)."""
+        import re
+
+        def statements(path):
+            text = re.sub(r"--[^\n]*", "", path.read_text(encoding="utf-8"))
+            return {" ".join(stmt.split()) for stmt in text.split(";") if "place_fact_cache" in stmt}
+
+        bootstrap = Path(runtime_db.__file__).with_name("bootstrap.sql")
+        compose = Path(__file__).resolve().parents[3] / "ai" / "docker" / "vector-init" / "03-place-fact-cache.sql"
+        eks, local = statements(bootstrap), statements(compose)
+        grants = {stmt for stmt in eks if stmt.startswith("GRANT")}
+        self.assertEqual(grants, {"GRANT SELECT, INSERT, UPDATE, DELETE ON public.place_fact_cache TO ai_user"})
+        self.assertEqual(eks - grants, local)
+        self.assertEqual({stmt.split(" (")[0] for stmt in local}, {"CREATE TABLE IF NOT EXISTS public.place_fact_cache"})
         # ai_kb 데이터베이스 안에서만 — \connect 뒤에 있어야 trippilot DB 에 잘못 만들지 않는다.
         sql = bootstrap.read_text(encoding="utf-8")
         self.assertLess(sql.index("\\connect ai_kb"), sql.index("dialogue_memory"))

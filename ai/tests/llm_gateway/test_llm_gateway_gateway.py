@@ -326,6 +326,8 @@ _EXPECTED_MODES = {
     LlmFeature.DIALOGUE_SQL: ("llm_dialogue_sql", "explore_radius"),
     # 인사·잡담 — 실패면 고정 문장(GREETING_TEXT·CHAT_TEXT)
     LlmFeature.DIALOGUE_SMALLTALK: ("llm_dialogue_smalltalk", "fixed_text"),
+    # 미확인 장소 정보 웹 확인(뒤에서) — 못 찾으면 저장하지 않고 카드는 "미확인" 그대로
+    LlmFeature.PLACE_FACT_LOOKUP: ("llm_place_fact_lookup", "unknown_kept"),
 }
 
 

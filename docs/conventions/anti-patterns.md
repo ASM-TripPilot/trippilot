@@ -102,6 +102,7 @@
 - **RestClient(`SimpleClientHttpRequestFactory`)의 읽기 시간 초과를 `ResourceAccessException` 으로 단정해 잡지 말 것 → `RestClientException` 으로 받고 원인이 `SocketTimeoutException` 인지 본다.** 응답 머리를 본문을 추출할 때 늦게 읽어서 시간 초과가 그 상위 예외로 올라온다 — 하위 예외만 잡으면 시간 초과가 '모르는 실패'로 새어 강등 경로를 빗나간다. 실측(2026-10-19, 상황 감지 기회 조회 어댑터): 운영 기본 읽기 9s 를 실 소켓으로 재자 `RestClientException`(원인 `SocketTimeoutException`)이 났다. (TRIP-1461)
 - **`stringData` 로 넣은 쿠버네티스 Secret 키를 매니페스트에서 빼는 것으로 지웠다고 믿지 말 것 → 키 이름만 실은 merge patch(`{"data": {KEY: null}}`)로 지운다.** server-side apply 는 `stringData` 소유만 기록하고 `data` 키 소유는 남지 않아, 매니페스트에서 키가 빠져도 클러스터 Secret 에는 그대로 남는다 — 원천(Secrets Manager)에서는 지웠는데 파드는 옛 값으로 계속 뜬다(스위치를 껐는데 켜진 채). 실측(2026-10-20, 배포 입력 runtime_switches — 로컬 k3s v1.35, EKS 와 같은 판): patch 를 뺀 대조군에서 키가 남았다. 없는 키에 보내면 아무 일도 없어 재실행에 안전하다. 손으로 Secrets Manager 에서 지운 다른 키도 같은 함정이다.
 - **발표분마다 실렸다 빠졌다 하는 원천 값을 판정 재료로 섞지 말 것 → 모든 발표분에 같은 꼴로 실리는 칸만 쓴다.** 기상청 단기예보의 '그 날 최저기온(TMN)'은 02시 발표분에만, '그 날 최고기온(TMX)'은 11시 발표분까지만 실린다(실측 2026-10-20, 격자 60,127). 저녁 회차가 내일 TMN 으로 한파를 띄우면 아침 회차(05시 발표분 — 그 날 TMN 없음)가 해제해 깜빡였고, 새벽 TMN 으로 오후 일정까지 과경보했다. 시간별 TMP 만 보도록 고쳤다(상황 감지 결정 25 · G-SA-15 · #1540).
+- **웹 검색 도구를 켠 LLM 에 "JSON 만 내라"고 하면서 출처를 본문 인용(url_citation annotation)에서만 찾지 말 것 → Responses 에 `include=["web_search_call.action.sources"]` 를 실어 검색이 본 출처 목록을 받고, 모델이 든 근거 URL 은 그 목록 안에 있을 때만 쓴다.** JSON 만 낸 응답에는 본문 인용이 하나도 안 붙어 출처가 비었다 — 미확인 장소 정보 웹 확인이 값을 찾고도 `no_citation` 으로 전부 버려졌다(2026-10-22 테스트 화면 경복궁). 같은 질문을 자유 문장으로 물으면 인용이 붙어 프로브에서는 안 드러났다.
 
 ## 아키텍처 · 구현
 

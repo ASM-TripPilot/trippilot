@@ -139,10 +139,11 @@ class GatewayFacade:
         # 4 호출 — SDK가 닿는 유일한 지점
         # 호출측 단계 예산 override (TRIP-376) — PREFERENCE_SCORING처럼 단계 상한이
         # 있는 호출이 넘긴다. 미지정이면 설정 기본.
+        web = feature in self._cfg.web_search_features
         response, reason, spent_ms = self._invoke(
             model_id, prompt, prompt_ref,
             self._cfg.timeout_sec if timeout_sec is None else timeout_sec, images,
-            self._cfg.max_tokens_for(feature), self._cfg.effort_for(feature),
+            self._cfg.max_tokens_for(feature), self._cfg.effort_for(feature), web,
         )
         retry_model = self._cfg.retry_models.get(feature)
         if (
@@ -162,16 +163,16 @@ class GatewayFacade:
             model_id = retry_model
             response, reason, spent_ms = self._invoke(
                 model_id, prompt, prompt_ref, retry_timeout_sec, images,
-                self._cfg.max_tokens_for(feature), self._cfg.effort_for(feature),
+                self._cfg.max_tokens_for(feature), self._cfg.effort_for(feature), web,
             )
         if response is None:
             return self._fallback(
                 feature, model_id, prompt_ref, trace_id, now, None, reason,
                 consent_ref=consent_ref, spent_ms=spent_ms, modes=fallback_modes,
             )
-        # 5·6 파서 + closed-set 게이트 (INV-1)
+        # 5·6 파서 + closed-set 게이트 (INV-1) — 웹 검색 기능은 닫힌 집합이 검색이 실제로 단 인용 URL 이다(지어낸 출처를 막는다)
         outcome = self._gate.apply(
-            response.raw_text, pool, feature=feature, trace_id=trace_id, now=now
+            response.raw_text, response.citations if web else pool, feature=feature, trace_id=trace_id, now=now
         )
         if outcome.drop_event is not None:
             self._trace.emit(outcome.drop_event)
@@ -209,6 +210,7 @@ class GatewayFacade:
         images: tuple[LlmImagePart, ...],
         max_tokens: int,
         effort: str | None,
+        web_search: bool = False,
     ) -> tuple[LlmResponse | None, str | None, int]:
         """벤더 호출 1회 → (응답, 폴백 사유, 경과 ms). 예외를 위로 던지지 않는다.
 
@@ -233,6 +235,7 @@ class GatewayFacade:
                     timeout_sec=timeout_sec,
                     images=images,
                     effort=effort,
+                    web_search=web_search,
                 )
             )
         except LlmTimeoutError as e:

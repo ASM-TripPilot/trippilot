@@ -63,6 +63,7 @@ from trippilot.orchestrator.dialogue_handlers import (
     resolve_day,
     resolve_slot,
 )
+from trippilot.ports.place_fact_store_port import FactRecord, PlaceFacts
 
 _KST = timezone(timedelta(hours=9))
 _D1, _D2, _D3 = date(2026, 10, 18), date(2026, 10, 19), date(2026, 10, 20)
@@ -815,6 +816,74 @@ def test_poi_info_unknown_hours_keep_the_provider_wording_and_free_is_free() -> 
     facts = _run(HANDLERS[Intent.GET_POI_INFO], ctx)
     assert facts.payload["rows"] == [{"label": "분류", "value": "자연"}, {"label": "영업시간", "value": "영업시간 정보 없음"},
                                      {"label": "입장료", "value": "무료"}]
+
+
+class _Unknown:
+    """UnknownHandlingAgent 대역 — 저장된 결과를 돌려주고 뒤에서 찾기 요청을 기록한다."""
+
+    def __init__(self, stored=None, *, accept: bool = True) -> None:
+        self.stored, self.accept, self.requests = stored, accept, []
+
+    def known(self, poi_id, now):
+        return self.stored
+
+    def request(self, poi_id, place, fields, on, trace_id, now):
+        self.requests.append((poi_id, place, tuple(fields)))
+        return self.accept
+
+
+_WEB = PlaceFacts(hours="08:30~17:30", last_entry="17:00", closed="연중무휴", fee=None,
+                  source_url="https://www.visitjeju.net/udo", source_host="visitjeju.net")
+
+
+def _unknown_run(utterance: str, agent: _Unknown, place: str = "우도") -> Facts:
+    ctx = replace(_ctx(arguments={"place": place}, ports=HandlerPorts(poi_info=_PoiInfo(), unknown=agent)), utterance=utterance)
+    return _run(HANDLERS[Intent.GET_POI_INFO], ctx)
+
+
+def test_poi_info_unknown_hours_start_a_web_lookup_and_answer_that_it_is_on_the_way() -> None:
+    agent = _Unknown()
+    facts = _unknown_run("우도 몇 시까지 해?", agent)
+    ((poi_id, place, fields),) = agent.requests
+    assert poi_id == _U["우도"] and place.startswith("우도") and fields == ("hours", "last_entry")
+    assert facts.template_text == f"장소 정보를 찾아봤어요. {dh.WEB_PENDING_TEXT}"
+    assert [(q.label, q.action) for q in facts.quick_replies] == [("우도 몇 시까지 해?", "SEND_TEXT")]  # 누르면 같은 질문이 다시 간다
+    assert any("찾는 중" in n for n in facts.notes) and facts.footnote == dh.WEB_PENDING_TEXT  # LLM 이 notes 를 놓쳐도 각주로 안다
+    assert facts.payload["rows"][1] == {"label": "영업시간", "value": "영업시간 정보 없음"}  # 카드는 그대로 — 찾은 값이 아니다
+
+
+def test_poi_info_shows_a_stored_web_value_with_its_source() -> None:
+    agent = _Unknown(FactRecord(_U["우도"], _WEB, _NOW, _NOW + timedelta(days=7)))
+    facts = _unknown_run("우도 몇 시까지 해?", agent)
+    assert agent.requests == [] and facts.quick_replies == ()
+    assert facts.payload["rows"] == [{"label": "분류", "value": "자연"}, {"label": "영업시간", "value": "08:30~17:30"},
+                                     {"label": "입장료", "value": "무료"}, {"label": "입장 마감", "value": "17:00"},
+                                     {"label": "휴무일", "value": "연중무휴"}, {"label": "출처", "value": "웹 확인 · visitjeju.net"}]
+    assert any("웹 검색" in n and "주소는 말하지" in n for n in facts.notes) and facts.footnote == dh.WEB_FOUND_TEXT
+    assert {"08:30", "17:30", "17:00"} <= dh.clock_times(str(facts.to_prompt_dict()))[0]  # 답변이 그 시각을 말할 수 있다
+
+
+def test_poi_info_stored_nothing_found_keeps_the_card_and_does_not_look_again() -> None:
+    agent = _Unknown(FactRecord(_U["우도"], None, _NOW, _NOW + timedelta(days=1)))
+    facts = _unknown_run("우도 몇 시까지 해?", agent)
+    assert agent.requests == [] and facts.quick_replies == () and not any("웹" in n for n in facts.notes)
+
+
+@pytest.mark.parametrize("utterance,place,fields", [
+    ("우도 어떤 곳이야?", "우도", None),  # 칸을 묻지 않았다
+    ("해녀의집 몇 시까지 해?", "해녀의집", None),  # DB 가 시간을 안다
+    ("해녀의집 입장료 얼마야?", "해녀의집", None),  # 요금표가 안다
+    ("해녀의집 쉬는 날 언제야?", "해녀의집", ("closed",)),  # 휴무일은 카드에 칸이 없다
+])
+def test_poi_info_looks_up_only_asked_fields_the_card_does_not_know(utterance, place, fields) -> None:
+    agent = _Unknown()
+    _unknown_run(utterance, agent, place)
+    assert [r[2] for r in agent.requests] == ([fields] if fields else [])
+
+
+def test_poi_info_over_the_daily_cap_answers_as_before() -> None:
+    facts = _unknown_run("우도 몇 시까지 해?", _Unknown(accept=False))
+    assert facts.quick_replies == () and facts.template_text == "장소 정보를 찾아봤어요."
 
 
 def test_poi_info_date_argument_sets_the_weekday_lookup() -> None:
