@@ -1654,6 +1654,23 @@ def test_explore_follow_up_skips_places_named_by_the_previous_fallback_sentence(
     assert _names_of(first) and not set(_names_of(first)) & set(_names_of(facts))
 
 
+def test_explore_follow_up_keeps_looking_for_night_places_when_the_request_asked_for_a_bar() -> None:
+    # "더 알려줘"에는 '바'가 없다 — 사슬의 첫 요청이 바를 찾았으면 이어서도 밤 장소다(지역 잇기와 같은 사슬)
+    earlier = (("USER", "부산 분위기 좋은 바 추천해줘"), ("ASSISTANT", "아일드블루, 베이스먼트가 있어요."))
+    facts, _, _ = _follow("더 알려줘", earlier, {"region": "부산", "theme": "분위기 좋은"})
+    assert set(_names_of(facts)[:2]) == {"황령산 야경", "루프탑 바"}
+    plain = (("USER", "부산 분위기 좋은 곳 알려줘"), ("ASSISTANT", "인기 카페가 있어요."))
+    facts, _, _ = _follow("더 알려줘", plain, {"region": "부산", "theme": "분위기 좋은"})
+    assert "루프탑 바" not in _names_of(facts)  # 밤 말이 없던 사슬은 그대로 뺀다
+
+
+def test_explore_follow_up_after_a_mood_request_keeps_its_region() -> None:
+    # "분위기 좋은 곳"이 장소 찾기 말로 안 잡혀 사슬이 안 열렸다 — "더 알려줘"가 여행 지역(제주) 근처를 찾았다(2026-10-22 테스트 화면)
+    earlier = (("USER", "부산 분위기 좋은 곳"), ("ASSISTANT", "인기 카페가 있어요."))
+    facts, _, _ = _follow("더 알려줘", earlier, {})
+    assert facts.detail == {"anchor": "부산", "anchor_kind": "region"} and "인기 카페" not in _names_of(facts)
+
+
 def test_explore_follow_up_that_names_a_region_searches_there_and_still_skips_shown_places() -> None:
     facts, port, _ = _follow("강남에도 더 있어?", (("USER", _BETWEEN_ASK), ("ASSISTANT", _SHOWN)), {"region": "강남"})
     assert facts.detail == {"anchor": "강남", "anchor_kind": "region"} and port.calls  # 말한 지역 — SQL 도 종전대로
