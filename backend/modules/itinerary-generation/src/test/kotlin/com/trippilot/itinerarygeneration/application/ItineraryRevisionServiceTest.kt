@@ -275,7 +275,7 @@ class ItineraryRevisionServiceTest : StringSpec({
                     ),
                 ),
             ),
-            now, now, null, emptyList(),
+            now, now, null, emptyList(), ScoringSignal.UNKNOWN,
         )
         val its = Itineraries(flagged)
         val svc = ItineraryRevisionService(revs, its, trips, NoopValidateAgent(unverified = setOf(cafe)), REV_NOOP_TX, clock)
