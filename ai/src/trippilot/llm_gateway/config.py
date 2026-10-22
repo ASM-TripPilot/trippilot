@@ -56,6 +56,8 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             LlmFeature.DIALOGUE_SQL: ModelTier.LIGHT,
             # 인사·잡담 한마디 — 답변과 같은 급·같은 9s 안이라 LIGHT. 배정(feature_models)이 곧 켜기, 로컬 모델 전환도 배정으로
             LlmFeature.DIALOGUE_SMALLTALK: ModelTier.LIGHT,
+            # 미확인 장소 정보 웹 확인 — 턴 밖(뒤에서) 도는 짧은 추출이라 LIGHT. 검색 자체가 7~12s 다(2026-10-22 실측 luna 8.8s·sol 6.9~11.1s)
+            LlmFeature.PLACE_FACT_LOOKUP: ModelTier.LIGHT,
             LlmFeature.EXPLANATION: ModelTier.HEAVY,
             # 차선책 근거 문장 — 설명(EXPLANATION)과 같은 급의 취향 그라운딩 문장 (TRIP-887)
             LlmFeature.ALTERNATIVE_EXPLANATION: ModelTier.HEAVY,
@@ -148,6 +150,8 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             LlmFeature.DIALOGUE_SQL: ("llm_dialogue_sql", "explore_radius"),
             # 같은 곳 2″·2‴ — 잡담 문장을 못 만들면(게이트 드롭·시한·목록 밖 장소) 인사·잡담 고정 문장(GREETING_TEXT·CHAT_TEXT)
             LlmFeature.DIALOGUE_SMALLTALK: ("llm_dialogue_smalltalk", "fixed_text"),
+            # 같은 곳(뒤에서) — 못 찾으면(시한·형식·출처 없음) 저장하지 않고 카드는 "미확인" 그대로다. 다음에 물으면 다시 찾는다.
+            LlmFeature.PLACE_FACT_LOOKUP: ("llm_place_fact_lookup", "unknown_kept"),
             # intent_router `_vote` — 유사질문이 없으면 투표를 접고 3차(LLM 직접
             # 분류)로 **승급**한다. 규칙으로 내려가는 강등이 아니다.
             LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
@@ -228,6 +232,8 @@ def default_feature_max_tokens() -> Mapping[LlmFeature, int]:
             LlmFeature.DIALOGUE_SQL: 512,
             # 잡담 1~3문장 JSON — 답변과 같은 상한
             LlmFeature.DIALOGUE_SMALLTALK: 512,
+            # 칸 셋 JSON — 검색 뒤 사고 토큰이 상한에 든다(실측 800 으로 잘림 없음)
+            LlmFeature.PLACE_FACT_LOOKUP: 1024,
         }
     )
 
@@ -288,6 +294,8 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
             LlmFeature.DIALOGUE_SQL: "none",
             # 잡담 — 답변과 같은 자리(≤3.5s), 사고 없이
             LlmFeature.DIALOGUE_SMALLTALK: "none",
+            # 검색 결과에서 값 셋을 고르는 일 — 사고는 짧게(검색 도구는 none 에서도 돈다고 확신 못 해 low)
+            LlmFeature.PLACE_FACT_LOOKUP: "low",
         }
     )
 
@@ -343,6 +351,8 @@ class C1Config:
     )
     # 사고 깊이 — 기능별 지정만, 공용 값 없음(`effort_for`, 미지정 = 모델 기본값).
     feature_effort: Mapping[LlmFeature, str] = field(default_factory=default_feature_effort)
+    # 벤더 웹 검색 도구를 켜는 기능 — 게이트의 닫힌 집합이 후보 풀 대신 응답의 인용 URL 이 된다(`GatewayFacade.call`).
+    web_search_features: frozenset[LlmFeature] = frozenset({LlmFeature.PLACE_FACT_LOOKUP})
     # PREFERENCE_SCORING 병렬 청킹 (TRIP-378) — 청크 크기는 고정 상수가 아니라
     # 단계 예산에서 유도한다 (TRIP-380 적응형 공식, workers/preference.py
     # adaptive_chunk_size). 종전 score_chunk_size=20 상수는 공식이 대체 — 예산

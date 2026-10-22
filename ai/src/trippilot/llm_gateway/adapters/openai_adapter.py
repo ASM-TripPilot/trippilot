@@ -29,6 +29,24 @@ from trippilot.ports.llm_port import (
 )
 
 
+def _citations(resp) -> tuple[str, ...]:
+    """검색이 실제로 본·단 URL — 본문 인용(url_citation annotation) 먼저, 그다음 검색 호출의 출처 목록(action.sources).
+    순서 유지·중복 제거. 모델이 본문에 적은 문자열이 아니라 벤더가 단 것이다."""
+    cited: list[str] = []
+    seen: list[str] = []
+    for item in getattr(resp, "output", None) or ():
+        action = getattr(item, "action", None)
+        for src in getattr(action, "sources", None) or ():
+            seen.append(src.get("url") if isinstance(src, dict) else getattr(src, "url", None))
+        for part in getattr(item, "content", None) or ():
+            cited += [getattr(ann, "url", None) for ann in getattr(part, "annotations", None) or ()]
+    urls: list[str] = []
+    for url in (*cited, *seen):
+        if isinstance(url, str) and url and url not in urls:
+            urls.append(url)
+    return tuple(urls)
+
+
 def _responses_input(request: LlmRequest):
     """responses 표면 입력 조립. 이미지가 없으면 종전과 **같은 문자열**을 준다 —
     기존 호출의 와이어 모양을 바꾸지 않는다.
@@ -61,6 +79,8 @@ class OpenAIAdapter:
     def invoke(self, request: LlmRequest) -> LlmResponse:
         started = time.monotonic()
         try:
+            if request.web_search and self._api != "responses":
+                raise LlmUnsupportedError(f"웹 검색은 responses 표면에서만 지원 (현재: {self._api})")
             if request.images and self._api != "responses":
                 # chat.completions 경로는 이미지 변환을 구현하지 않았다 —
                 # 조용히 텍스트만 보내면 "사진을 본 회고"라는 거짓이 된다
@@ -75,6 +95,10 @@ class OpenAIAdapter:
                 # 받는다(2026-10-14 실호출). chat 표면엔 싣지 않는다 — 로컬 서빙(MLX·vLLM) 호환.
                 # 그래서 OPENAI_API=chat 으로 GPT 를 붙이면 effort 는 빠진다(운영은 responses 고정).
                 extra = {"reasoning": {"effort": request.effort}} if request.effort else {}
+                if request.web_search:  # 벤더 쪽 검색 도구(멘토 게이트웨이 2026-10-22 실측: luna·sol 모두 받는다)
+                    # JSON 만 내게 하면 본문 인용(annotation)이 안 붙는다 — 검색이 본 출처 목록을 따로 받는다(같은 날 실측)
+                    extra["tools"] = [{"type": "web_search"}]
+                    extra["include"] = ["web_search_call.action.sources"]
                 resp = self._client.responses.create(
                     model=request.model_id,
                     max_output_tokens=request.max_tokens,
@@ -90,6 +114,7 @@ class OpenAIAdapter:
                 truncated = getattr(resp, "status", None) == "incomplete" and (
                     getattr(details, "reason", None) == "max_output_tokens"
                 )
+                citations = _citations(resp) if request.web_search else ()
             else:
                 resp = self._client.chat.completions.create(
                     model=request.model_id,
@@ -104,6 +129,7 @@ class OpenAIAdapter:
                 input_tokens = resp.usage.prompt_tokens
                 output_tokens = resp.usage.completion_tokens
                 truncated = getattr(resp.choices[0], "finish_reason", None) == "length"
+                citations = ()
         except openai.APITimeoutError as e:
             raise LlmTimeoutError(f"timeout > {request.timeout_sec}s: {e}") from e
         latency_ms = int((time.monotonic() - started) * 1000)
@@ -114,4 +140,5 @@ class OpenAIAdapter:
             latency_ms=latency_ms,
             model_id=resp.model,
             truncated=truncated,
+            citations=citations,
         )

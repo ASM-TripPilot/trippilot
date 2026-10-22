@@ -61,6 +61,8 @@ from trippilot.orchestrator.arguments import extract_kind
 from trippilot.orchestrator.intent_router import normalize
 from trippilot.orchestrator.opportunity import _displayable, shown_event
 from trippilot.orchestrator.place_intro import PlaceIntro
+from trippilot.orchestrator.unknown_handling import UnknownHandlingAgent
+from trippilot.ports.place_fact_store_port import PlaceFacts
 from trippilot.orchestrator.place_sql import PlaceSqlLookup, asks_for_places
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder, restrict_pool_to_target_role
 from trippilot.providers.base import Provider
@@ -209,6 +211,7 @@ class HandlerPorts:
     place_sql: PlaceSqlLookup | None = None  # 장소 탐색 NL2SQL — DIALOGUE_SQL 배정 + 장소 DB DSN 이 있을 때만
     place_intro: PlaceIntro | None = None  # 장소 소개 한 조각(KB-5) — 벡터 스토어가 배선됐을 때만
     events: Provider | None = None  # EventProvider.fetch({anchor, days, now}) — 행사 저장소가 배선됐을 때만(장소 탐색의 행사 주제)
+    unknown: UnknownHandlingAgent | None = None  # 미확인 칸 웹 확인(뒤에서) — PLACE_FACT_LOOKUP 배정이 있을 때만
 
 
 @dataclass(frozen=True, slots=True)
@@ -1098,6 +1101,42 @@ def _intro_for(ctx: TurnContext, packet: Mapping[str, object], poi_id: str, left
         return ""
 
 
+_NO_HOURS = "영업시간 정보 없음"  # providers.poi_info.hours_label — DB 에 시간이 없다(휴무 증명은 None)
+_ASK_HOURS = re.compile(r"영업|몇\s?시|열어|열려|여는|닫|마감|시간")
+_ASK_CLOSED = re.compile(r"휴무|휴관|휴궁|쉬는|쉬어|문\s?닫는\s?날")
+_ASK_FEE = re.compile(r"입장료|요금|가격|얼마|무료")
+
+
+def _unknown_asked(ctx: TurnContext, row: Mapping[str, object] | None) -> tuple[str, ...]:
+    """물은 칸 중 카드가 모르는 것 — 영업시간(DB 에 시간 없음)·휴무일(카드에 칸이 없다)·입장료(요금표에 없음). 묻지 않은 칸은 찾지
+    않는다(비용·묻지 않은 말)."""
+    said = f"{ctx.arguments.get('aspect') or ''} {ctx.utterance}"
+    fields: list[str] = []
+    if _ASK_HOURS.search(said) and (row is None or row.get("hours_label") == _NO_HOURS):
+        fields += ["hours", "last_entry"]
+    if _ASK_CLOSED.search(said):
+        fields.append("closed")
+    if _ASK_FEE.search(said) and (row is None or row.get("fee") is None):
+        fields.append("fee")
+    return tuple(fields)
+
+
+def _web_facts(ctx: TurnContext, packet: Mapping[str, object], poi_id: str, place: str) -> dict:
+    """미확인 칸 — 저장된 웹 확인 값이 있으면 그것(`web`), 없으면 뒤에서 찾기를 내고 `web_pending`. 이번 턴은 기다리지 않는다
+    (검색 7~12s > 팬아웃 시한, 2026-10-22 사용자 결정: 먼저 답하고 뒤에서 찾기)."""
+    agent = ctx.ports.unknown
+    data = packet.get("data") if isinstance(packet, Mapping) else None
+    pois = data.get("pois", ()) if isinstance(data, Mapping) else ()
+    row = next((p for p in pois if isinstance(p, Mapping) and p.get("poi_id") == poi_id), None)
+    fields = _unknown_asked(ctx, row) if agent is not None else ()
+    if not fields:
+        return {}
+    stored = agent.known(poi_id, ctx.now)
+    if stored is not None:  # 찾았거나 못 찾음이 저장돼 있다 — 못 찾음이면 종전대로 "미확인"
+        return {"web": stored.facts} if stored.facts is not None else {}
+    return {"web_pending": True} if agent.request(poi_id, place, fields, ctx.today, ctx.trace_id, ctx.now) else {}
+
+
 def _plan_poi_info(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     slot = _place_slot(ctx)
     port = ctx.ports.poi_info
@@ -1111,7 +1150,8 @@ def _plan_poi_info(ctx: TurnContext) -> tuple[HandlerTask, ...]:
         def fn() -> dict:
             left = _fanout_left(ctx)
             packet = port.fetch({"poi_ids": frozenset({PoiId(slot.poi_id)}), "on": on, "now": ctx.now}).to_dict()
-            return {**packet, "intro": _intro_for(ctx, packet, slot.poi_id, left)}
+            place = " ".join(x for x in (slot.name, _trip_area(ctx)) if x)
+            return {**packet, "intro": _intro_for(ctx, packet, slot.poi_id, left), **_web_facts(ctx, packet, slot.poi_id, place)}
 
         return (HandlerTask("poi_info", fn),)
     said, finder = ctx.arguments.get("place"), ctx.ports.place_sql
@@ -1125,9 +1165,10 @@ def _plan_poi_info(ctx: TurnContext) -> tuple[HandlerTask, ...]:
         if found is None:  # 없거나 여럿(체인점) — 하나를 골라 다른 곳의 영업시간을 말하지 않는다
             return {"status": "EMPTY", "reason": "place_not_found"}
         packet = port.fetch({"poi_ids": frozenset({PoiId(found.poi_id)}), "on": on, "now": ctx.now}).to_dict()
-        return {**packet, "lookup": {"poi_id": found.poi_id, "name": found.name, "category": found.category,
-                                     "area": " ".join(x for x in (found.sido, found.sigungu) if x)},
-                "intro": _intro_for(ctx, packet, found.poi_id, left)}
+        area = " ".join(x for x in (found.sido, found.sigungu) if x)
+        return {**packet, "lookup": {"poi_id": found.poi_id, "name": found.name, "category": found.category, "area": area},
+                "intro": _intro_for(ctx, packet, found.poi_id, left),
+                **_web_facts(ctx, packet, found.poi_id, " ".join(x for x in (found.name, area) if x))}
 
     return (HandlerTask("poi_info", find),)
 
@@ -1156,16 +1197,35 @@ def _assemble_poi_info(ctx: TurnContext, results: Mapping[str, TaskResult]) -> F
     if row is not None and "hours_label" in row and hours is None:
         hours = _CLOSED  # "미확인"으로 뭉개면 "오늘 영업 여부는 확인할 수 없어요"가 된다(2026-10-19 E2E: 제주문학관 월요일)
     fee = row.get("fee") if row else None
+    # 미확인 칸의 웹 확인 값(UnknownHandlingAgent — 저장된 것만, 이번 턴에 찾은 것이 아니다). DB 값이 있으면 그것이 이긴다
+    web = value.get("web") if isinstance(value, Mapping) and isinstance(value.get("web"), PlaceFacts) else None
+    pending = bool(isinstance(value, Mapping) and value.get("web_pending"))
+    if web is not None and web.hours and hours in (None, _NO_HOURS):  # 그날 휴무가 증명됐으면(_CLOSED) 그대로
+        hours = web.hours
+    fee_text = web.fee if web is not None and web.fee and fee is None else _fee_label(fee)
     # 영업시간은 이 날 기준(_plan_poi_info 와 같은 날) — 오늘이 아니면 날짜를 밝힌다
     on = (ctx.snapshot.day_of(slot) if slot is not None else _outside_day(ctx)) or ctx.today
     # 일정 밖 장소는 어디의 그곳인지 밝힌다 — 같은 이름이 한 곳만 맞으면 여행 지역 밖이어도 돌려주므로 위치로 드러나게(DB 값)
     area = str(lookup.get("area") or "") if slot is None else ""
     rows = ((FactRow("날짜", _date_label(on)),) if on != ctx.today else ()) + ((FactRow("위치", area),) if area else ()) + (
-        FactRow("분류", category or _UNKNOWN), FactRow("영업시간", hours or _UNKNOWN), FactRow("입장료", _fee_label(fee)))
+        FactRow("분류", category or _UNKNOWN), FactRow("영업시간", hours or _UNKNOWN), FactRow("입장료", fee_text))
+    if web is not None:
+        rows += tuple(FactRow(k, v) for k, v in (("입장 마감", web.last_entry), ("휴무일", web.closed)) if v) + (
+            FactRow("출처", f"웹 확인 · {web.source_host}"),)
     name = (slot.name if slot is not None else str(lookup.get("name") or "")) or (str(row["name"]) if row else _UNNAMED)
     status, notes = (FactStatus.OK, ()) if row else (FactStatus.PARTIAL, ("장소 정보 미확인 — 일정 값만 보인다",))
     if slot is None:
         notes = notes + ("일정 밖 장소 — 등록 장소에서 이름으로 찾았다",)
+    quick: tuple[QuickReplyDraft, ...] = ()
+    template, footnote = _template(intent, status), None
+    if web is not None:
+        footnote = WEB_FOUND_TEXT
+        notes = notes + ("'출처' 칸이 있는 값은 웹 검색으로 확인한 정보다 — '공식 누리집에서 확인한 정보'처럼 말하고, 바뀔 수 있으니 "
+                         "방문 전에 한 번 더 확인하라고 덧붙인다. 출처 주소는 말하지 않는다",)
+    elif pending:
+        notes = notes + ("물은 정보가 확인되지 않아 지금 웹에서 찾는 중 — 잠시 뒤 다시 물으면 출처와 함께 답할 수 있다고 말한다",)
+        quick = (QuickReplyDraft(_again_label(ctx, name), "SEND_TEXT"),)
+        template, footnote = f"{template} {WEB_PENDING_TEXT}", WEB_PENDING_TEXT
     actions = (_action("OPEN_PLACE", poiId=poi_id),) if poi_id else (_action("OPEN_ITINERARY"),)
     # 소개(KB-5)는 카드(payload)에 싣지 않고 답변 재료로만 — 위키 원문을 그대로 보이면 출처 표기가 걸린다(place_intro 註)
     intro = value.get("intro") if isinstance(value, Mapping) else None
@@ -1173,9 +1233,23 @@ def _assemble_poi_info(ctx: TurnContext, results: Mapping[str, TaskResult]) -> F
     return Facts(
         intent, status, AnswerKind.INFO, rows=rows,
         places=(FactPlace(poi_id, name, category, hours_label=hours, fee=fee if isinstance(fee, int) else None),),
-        notes=notes, payload=_info("PLACE", name, rows), next_actions=actions, quick_replies=(),
-        template_text=_template(intent, status), detail=detail,
+        notes=notes, payload=_info("PLACE", name, rows), next_actions=actions, quick_replies=quick,
+        template_text=template, detail=detail, footnote=footnote,
     )
+
+
+# 각주는 결정론 — 답변 LLM 이 각주를 쓰지 않으면 이 문장이 나간다(LLM 이 notes 를 놓쳐도 사용자는 안다, 2026-10-22 테스트 화면)
+WEB_PENDING_TEXT = "확인 안 된 정보는 지금 찾아보고 있어요. 잠시 뒤에 다시 물어봐 주세요."
+WEB_FOUND_TEXT = "출처 칸의 값은 웹에서 확인한 정보라 바뀔 수 있어요. 방문 전에 한 번 더 확인해 주세요."
+
+
+def _again_label(ctx: TurnContext, name: str) -> str:
+    """다시 묻기 칩 — 누르면 이 글이 그대로 다시 간다(SEND_TEXT). 발화가 칩에 들어가면 그것, 아니면 이름 + 묻는 칸."""
+    said = " ".join(ctx.utterance.split())
+    if 1 <= len(said) <= _LABEL_MAX:
+        return said
+    ask = "입장료" if _ASK_FEE.search(said) and not _ASK_HOURS.search(said) else "휴무일" if _ASK_CLOSED.search(said) else "영업시간"
+    return f"{name[:_LABEL_MAX - len(ask) - 5].strip()} {ask} 알려줘"
 
 
 # SUGGEST_ALTERNATIVE — POI_INFO(대상 좌표) → 풀 조립 → WEATHER → PlanBAgent.run, 한 스레드 체인 (BLM §6 — 풀은 한 번만 꺼낸다)

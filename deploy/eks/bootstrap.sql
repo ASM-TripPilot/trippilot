@@ -63,3 +63,12 @@ CREATE TABLE IF NOT EXISTS public.dialogue_memory (
 CREATE INDEX IF NOT EXISTS ix_dialogue_memory_account ON public.dialogue_memory (account_ref, updated_at DESC);
 CREATE INDEX IF NOT EXISTS ix_dialogue_memory_trip ON public.dialogue_memory (trip_id);
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.dialogue_memory TO ai_user;
+-- Assistant unknown-fact web lookups (UnknownHandlingAgent, 2026-10-22). DDL canon is shared with
+-- ai/docker/vector-init/03-place-fact-cache.sql (deploy/eks/tests compares them); the adapter does DML only.
+CREATE TABLE IF NOT EXISTS public.place_fact_cache (
+  poi_id     text PRIMARY KEY,       -- registered POI id (backend poi.poi_id)
+  facts      jsonb,                  -- {hours,last_entry,closed,fee,source_url,source_host} | null = looked up, nothing sourced
+  fetched_at timestamptz NOT NULL,
+  expires_at timestamptz NOT NULL    -- found +7d | not found +1d
+);
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.place_fact_cache TO ai_user;

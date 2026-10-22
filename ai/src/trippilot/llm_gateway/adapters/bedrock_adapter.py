@@ -73,6 +73,8 @@ class BedrockAdapter:
         return self._by_timeout[timeout_sec]
 
     def invoke(self, request: LlmRequest) -> LlmResponse:
+        if request.web_search:
+            raise LlmUnsupportedError("BedrockAdapter 는 웹 검색 도구가 없다")
         if request.images:
             # 학생 모델은 텍스트 전용이다. 조용히 이미지를 버리면 호출측은 모델이
             # 사진을 봤다고 믿는다 — 그 침묵을 막는다(회고 비전 경로와 같은 이유).

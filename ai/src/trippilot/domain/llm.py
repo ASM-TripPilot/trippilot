@@ -117,6 +117,10 @@ class LlmFeature(Enum):
     # 끝낸다. 장소·시각·수치는 만들 수 없다(출구 게이트 + 오케스트레이터의 목록 밖 장소 검사). 배정이 곧 켜기 — 미배정이면 고정 문장.
     # 별도 feature 인 이유: 배정만 바꿔 로컬 모델로 옮길 수 있게(REMINDER_COPY 와 같은 길, 2026-10-22 사용자 결정 1번).
     DIALOGUE_SMALLTALK = "DIALOGUE_SMALLTALK"
+    # 도우미가 "미확인"으로 답하던 등록 장소의 영업시간·휴무일·입장료를 벤더 웹 검색으로 그때그때 찾는다(UnknownHandlingAgent,
+    # 2026-10-22 사용자 결정 — 먼저 답하고 뒤에서 찾아 저장, 다시 물으면 출처와 함께). 장소는 이미 등록된 곳이라 INV-1 그대로,
+    # 값은 도우미 답에만 쓰고 일정 조립에는 넣지 않는다(INV-2). 출구 게이트가 형식·출처(검색이 단 인용 URL)를 본다. 배정이 곧 켜기.
+    PLACE_FACT_LOOKUP = "PLACE_FACT_LOOKUP"
 
 
 class ModelTier(Enum):

@@ -26,7 +26,7 @@ import time
 
 import anthropic
 
-from trippilot.ports.llm_port import LlmRequest, LlmResponse, LlmTimeoutError
+from trippilot.ports.llm_port import LlmRequest, LlmResponse, LlmTimeoutError, LlmUnsupportedError
 
 
 def _content(request: LlmRequest):
@@ -61,6 +61,8 @@ class AnthropicAdapter:
         self._client = client
 
     def invoke(self, request: LlmRequest) -> LlmResponse:
+        if request.web_search:  # Claude 서버 도구는 아직 안 붙였다 — 조용히 끄면 기억으로 지어낸 값이 "찾은 값"이 된다
+            raise LlmUnsupportedError("AnthropicAdapter 는 웹 검색 도구를 아직 싣지 않는다")
         # effort 는 지정됐을 때만 — haiku-4-5 처럼 파라미터째 거부하는 모델이 있다.
         extra = {"output_config": {"effort": request.effort}} if request.effort else {}
         started = time.monotonic()
