@@ -860,6 +860,10 @@ def test_poi_info_shows_a_stored_web_value_with_its_source() -> None:
                                      {"label": "입장료", "value": "무료"}, {"label": "입장 마감", "value": "17:00"},
                                      {"label": "휴무일", "value": "연중무휴"}, {"label": "출처", "value": "웹 확인 · visitjeju.net"}]
     assert any("웹 검색" in n and "주소는 말하지" in n for n in facts.notes) and facts.footnote == dh.WEB_FOUND_TEXT
+    # 답변 LLM 이 떨어져도 찾은 값이 문장에 남는다(요금표가 아는 입장료 '무료'는 웹 값으로 덮지 않는다 — 그래서 문장에도 없다)
+    assert facts.template_text == "영업시간은 08:30~17:30, 입장 마감은 17:00, 휴무일은 연중무휴이에요."
+    (place,) = facts.places
+    assert place.hours_label == "08:30~17:30, 입장 마감 17:00"  # 마감 시각도 그 장소의 시각 — 답변 시각 짝 검사가 받는다
     assert {"08:30", "17:30", "17:00"} <= dh.clock_times(str(facts.to_prompt_dict()))[0]  # 답변이 그 시각을 말할 수 있다
 
 

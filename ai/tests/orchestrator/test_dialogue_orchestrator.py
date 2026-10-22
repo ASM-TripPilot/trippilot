@@ -1439,3 +1439,13 @@ def test_event_names_and_places_in_the_facts_are_known_names() -> None:
     assert _prompt_names(facts) == ["서울", "서울세계불꽃축제", "여의도한강공원"]
     assert not _foreign_place("이번 주말 여의도한강공원에서 서울세계불꽃축제가 열려요.", tuple(map(_squash, _prompt_names(facts))))
     assert _foreign_place("근처 한강시민공원도 좋아요.", tuple(map(_squash, _prompt_names(facts))))  # 사실 밖 이름은 그대로 걸린다
+
+
+def test_last_entry_next_to_the_place_name_is_that_places_time() -> None:
+    """웹 확인 입장 마감(17:00)이 장소 이름 곁에 와도 그 장소의 시각이다 — hours_label 에 실리므로 짝 검사가 받는다(2026-10-22
+    테스트 화면: "경복궁의 입장 마감은 17:00"이 time_not_in_facts 로 떨어지던 것)."""
+    from trippilot.orchestrator import dialogue_orchestrator as dlg
+
+    pairs = dlg._hours_pairs({"places": [{"name": "경복궁", "hours_label": "09:00~18:00, 입장 마감 17:00"}]})
+    assert not dlg._misplaced_time("경복궁의 영업시간은 09:00~18:00이고 경복궁 입장 마감은 17:00이에요.", pairs)
+    assert dlg._misplaced_time("경복궁 입장 마감은 16:00이에요.", pairs)  # 없는 시각은 여전히 막는다

@@ -1221,6 +1221,7 @@ def _assemble_poi_info(ctx: TurnContext, results: Mapping[str, TaskResult]) -> F
     template, footnote = _template(intent, status), None
     if web is not None:
         footnote = WEB_FOUND_TEXT
+        template = _web_sentence(web, fee is None) or template  # 답변 LLM 이 떨어져도 찾은 값이 문장에 남는다
         notes = notes + ("'출처' 칸이 있는 값은 웹 검색으로 확인한 정보다 — '공식 누리집에서 확인한 정보'처럼 말하고, 바뀔 수 있으니 "
                          "방문 전에 한 번 더 확인하라고 덧붙인다. 출처 주소는 말하지 않는다",)
     elif pending:
@@ -1233,7 +1234,10 @@ def _assemble_poi_info(ctx: TurnContext, results: Mapping[str, TaskResult]) -> F
     detail = {"target": name, **({"intro": intro} if isinstance(intro, str) and intro else {})}
     return Facts(
         intent, status, AnswerKind.INFO, rows=rows,
-        places=(FactPlace(poi_id, name, category, hours_label=hours, fee=fee if isinstance(fee, int) else None),),
+        # 입장 마감도 그 장소의 시각이다 — 답변 시각 검사(_misplaced_time)는 장소 이름 곁의 시각을 hours_label 로 대조한다. 행에만 두면
+        # "경복궁의 입장 마감은 17:00"이 남의 시각으로 떨어졌다(2026-10-22 테스트 화면 5번 중 4번 time_not_in_facts)
+        places=(FactPlace(poi_id, name, category, fee=fee if isinstance(fee, int) else None,
+                          hours_label=f"{hours}, 입장 마감 {web.last_entry}" if web and web.last_entry and hours else hours),),
         notes=notes, payload=_info("PLACE", name, rows), next_actions=actions, quick_replies=quick,
         template_text=template, detail=detail, footnote=footnote,
     )
@@ -1242,6 +1246,15 @@ def _assemble_poi_info(ctx: TurnContext, results: Mapping[str, TaskResult]) -> F
 # 각주는 결정론 — 답변 LLM 이 각주를 쓰지 않으면 이 문장이 나간다(LLM 이 notes 를 놓쳐도 사용자는 안다, 2026-10-22 테스트 화면)
 WEB_PENDING_TEXT = "확인 안 된 정보는 지금 찾아보고 있어요. 잠시 뒤에 다시 물어봐 주세요."
 WEB_FOUND_TEXT = "출처 칸의 값은 웹에서 확인한 정보라 바뀔 수 있어요. 방문 전에 한 번 더 확인해 주세요."
+
+
+def _web_sentence(web: PlaceFacts, fee_unknown: bool) -> str:
+    """웹 확인 값을 한 문장으로 — 폴백 문장(답변 LLM 시한 초과·게이트 탈락)에도 값이 남게. 값은 게이트가 꼴을 본 것뿐이라 시각 검사와
+    맞고, 장소 이름은 싣지 않는다(이름은 웹 수집분이라 결정론 문장을 스스로 막을 수 있다). 2026-10-22 테스트 화면: "경복궁 몇 시까지 해?"
+    4번 중 2번이 답변 LLM 시각 검사(time_not_in_facts)로 떨어져 "장소 정보를 찾아봤어요."만 나갔다."""
+    parts = [f"{label} {value}" for label, value in (("영업시간은", web.hours), ("입장 마감은", web.last_entry),
+                                                    ("휴무일은", web.closed), ("입장료는", web.fee if fee_unknown else None)) if value]
+    return f"{', '.join(parts)}이에요." if parts else ""
 
 
 def _again_label(ctx: TurnContext, name: str) -> str:
