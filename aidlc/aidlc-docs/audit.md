@@ -1821,3 +1821,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — 사이클 20261022-assistant-older-followups [기록]. 옵시디언 볼트 부재 → 개발로그·학습노트는 `_workspace/`(git 미추적). `aidlc-state.md` 무변경.
 
 ---
+
+## Functional Design 사후 개정 — U1 BR-U1-60 을 숙소 사진 칸까지 확장 (TRIP-1589 · 부모 TRIP-1586)
+**Timestamp**: 2026-10-22T17:30:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 세션 2026-10-22, 그대로 인용) "사진이 없는칸은 다 채우자 랜덤은 장소 사진처럼 id%6"
+**AI Response**: `construction/u1-accommodation-trip/functional-design/business-rules.md` 끝에 BR-U1-60 의 `[개정 · 2026-10-22]` 블록 1개 append — 적용 범위를 장소 사진 칸에서 숙소 사진 칸(검색 카드·탐색 숙소 줄·저장한 숙소·g02 시트 후보·g02 거점 썸네일·숙소 상세·동선 추천 카드)까지 넓히고, 일반 숙소 그림 6장·숙소 키 해시 % 6(랜덤 아님)·저장한 숙소 키 규칙(외부 키 있으면 `{externalSource}:{externalId}`, 없으면 `savedStayId`)을 적음. 원문 수정 0줄(append 만). `openapi.yaml` 변경 없음(숙소 계약에 사진 필드 없음).
+**Context**: CONSTRUCTION — Functional Design 사후 개정(구현 반영, FE TRIP-1587·1588). 사용자 승인 절차("audit append + [개정] 블록")는 같은 날 장소 사진 칸 BR-U1-60 신설 선례를 따름. `aidlc-state.md` 무변경.
+
+---
