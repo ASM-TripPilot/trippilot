@@ -11,6 +11,7 @@
 
 export interface PutMemoRequest {
   /**
+   * 길이는 UTF-16 단위(서버 @Size) — maxLength(코드 포인트)와 BMP 밖 문자에서 다르다
    * @minLength 1
    * @maxLength 2000
    */

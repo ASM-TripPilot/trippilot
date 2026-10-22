@@ -11,6 +11,7 @@
 import type { RegisterRoute } from './registerRoute';
 
 export interface RegisterSavedStayRequest {
+  /** @maxLength 200 */
   name: string;
   registerRoute: RegisterRoute;
   lat?: number | null;
@@ -18,7 +19,10 @@ export interface RegisterSavedStayRequest {
   coordConfirmed?: boolean;
   checkIn?: string | null;
   checkOut?: string | null;
+  /** @maxLength 40 */
   externalSource?: string | null;
+  /** @maxLength 120 */
   externalId?: string | null;
+  /** @maxLength 500 */
   memo?: string | null;
 }

@@ -13,11 +13,14 @@ import type { RegisterPushTokenRequestPlatform } from './registerPushTokenReques
 
 export interface RegisterPushTokenRequest {
   /**
-   * Expo push token(DEC-U6-3)
+   * Expo push token(DEC-U6-3). 길이는 UTF-16 단위(서버 @Size) — maxLength(코드 포인트)와 BMP 밖 문자에서 다르다
    * @maxLength 255
    */
   token: string;
-  /** @maxLength 64 */
+  /**
+   * 길이는 UTF-16 단위(서버 @Size) — maxLength(코드 포인트)와 BMP 밖 문자에서 다르다
+   * @maxLength 64
+   */
   deviceId?: string | null;
   platform: RegisterPushTokenRequestPlatform;
   /** 안 주면 `NOT_DETERMINED` — **모른다는 뜻이라 쏘지 않는다**. */
