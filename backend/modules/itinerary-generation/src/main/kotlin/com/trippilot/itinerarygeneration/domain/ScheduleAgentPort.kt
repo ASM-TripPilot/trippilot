@@ -461,7 +461,8 @@ data class CandidatesSummary(
 
 /**
  * 취향 점수 신호(TRIP-1173) — 점수를 LLM 이 매겼나. `solveMode` 는 조립기 축이라 늘 FULL_AI 여서
- * LLM 실패를 가리지 못했다(FE "LLM 이 안 돈다" 오판). **판정은 AI 소유** — 백엔드는 보관·전달만 한다.
+ * LLM 실패를 가리지 못했다(FE "LLM 이 안 돈다" 오판). **호출 하나의 판정은 AI 소유** — 백엔드는 2단계 생성을
+ * 합칠 때만 [merge] 로 접고(같으면 그대로·갈리면 MIXED·모름이 섞이면 null), 강등 코드는 어댑터가 코드 모양만 통과시킨다.
  *
  * [mode] null = 모름(필드 없는 옛 응답 · Fake · 직접 만들기 · 최소 폴백). [degradations] 는 밟은 강등 계단
  * `"{stage}:{사유}"` 기계 코드(예 `llm:c1_fallback`)다 — 설명 단계 강등(`explanation:…`)도 섞여 있으니

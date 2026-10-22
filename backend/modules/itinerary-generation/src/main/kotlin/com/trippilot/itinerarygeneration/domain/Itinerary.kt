@@ -171,7 +171,7 @@ class Itinerary private constructor(
      */
     val unplacedMustVisits: List<UnplacedMustVisit>,
     /**
-     * 취향 점수 신호(TRIP-1173) — AI 판정 그대로 보관한다. **기본값을 두지 않는다**(위 두 필드와 같은 이유 —
+     * 취향 점수 신호(TRIP-1173) — AI 판정을 보관하되 2단계 생성은 [ScoringSignal.merge] 로 합친 값이다. **기본값을 두지 않는다**(위 두 필드와 같은 이유 —
      * 전이 지점에서 빠지면 편집·확정 한 번에 신호가 "모름"으로 바뀐다).
      */
     val scoring: ScoringSignal,
