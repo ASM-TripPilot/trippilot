@@ -60,6 +60,7 @@ from trippilot.llm_gateway.gates.intent import NULL_INTENT
 from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker
 from trippilot.llm_gateway.workers.dialogue_intent import DialogueIntentWorker
 from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
+from trippilot.llm_gateway.workers.dialogue_smalltalk import DialogueSmalltalkWorker
 from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
 from trippilot.orchestrator.dialogue_handlers import (
     HANDLERS,
@@ -182,8 +183,8 @@ _GREETS = frozenset({
 })
 THANKS_TEXT = "천만에요! 더 궁금한 게 생기면 언제든 물어봐 주세요."
 ACK_TEXT = "알겠어요! 필요한 게 생기면 언제든 말씀해 주세요."
-# 인사·잡담 답 — 여행이 있으면 지금 여행으로, 없으면 여행 만들기로 잇는다(버튼은 `_home_action` 과 같은 갈래). LLM 없이 고정 문장이다
-# (BR-AO-26 과 같은 결정론) — 말투를 바꾸려면 여기만 고친다.
+# 인사·잡담 답 — 여행이 있으면 지금 여행으로, 없으면 여행 만들기로 잇는다(버튼은 `_home_action` 과 같은 갈래). DIALOGUE_SMALLTALK 이
+# 배정돼 있으면 LLM 이 즉석에서 짓고(`_smalltalk`), 미배정·실패·목록 밖 장소면 이 고정 문장이다(INV-4 마지막 계단, BR-AO-26 개정 10-22).
 GREETING_TEXT = {
     True: "네, 안녕하세요~ 여행 준비는 잘 되고 있나요? 다음 장소나 날씨, 근처에 가 볼 만한 곳이 궁금하면 편하게 물어봐 주세요.",
     False: "네, 안녕하세요~ 어디로 떠날 생각이세요? 여행을 만들면 일정이랑 날씨, 가 볼 만한 곳을 같이 챙겨 드릴게요.",
@@ -200,6 +201,7 @@ _INTENT_MODES = ("llm_dialogue_intent", "out_of_scope")
 _ANSWER_MODES = ("llm_dialogue_answer", "template_text")
 _MEMORY_MODES = ("llm_dialogue_memory", "deterministic_compress")
 _PLAN_MODES = ("llm_dialogue_plan", "out_of_scope")
+_SMALLTALK_MODES = ("llm_dialogue_smalltalk", "fixed_text")
 # 인프라 실패 접두(게이트웨이 `_invoke` 의 사유 + 호출 예외) — 모델이 판단해서 거절한 것이 아니라 거절 표지를 붙이지 않는다
 _INFRA_PREFIXES = ("timeout", "llm_error", "unsupported", "intent_error")
 
@@ -621,8 +623,10 @@ class DialogueOrchestrator:
         confident_intent: Callable[[str], Intent | None] | None = None,
         pool: Executor | None = None,
         planner: DialoguePlanWorker | None = None,
+        smalltalk: DialogueSmalltalkWorker | None = None,
     ) -> None:
         self._intent = intent_worker
+        self._smalltalk_worker = smalltalk
         self._answer = answer_worker
         self._memory = memory_worker
         self._store = memory_store
@@ -692,6 +696,8 @@ class DialogueOrchestrator:
                 reason = reason or "intent_fallback"
                 closer = closer_answer(text, inp.snapshot.trip is not None) if _judged_nothing(reason) else None
                 if closer is not None:  # 2″ — 할 일이 없는 말에 범위 밖 카드를 내지 않는다(BR-AO-26)
+                    if closer.text == GREETING_TEXT[inp.snapshot.trip is not None]:  # 인사만 LLM 으로 — 감사·맞장구는 고정 한 줄로 충분하다
+                        closer = self._smalltalk(inp, closer, memory_lines, trip_summary)
                     return TurnOutcome("ANSWER", (), None, closer, cleared, 0, reason)
                 if self._planner is not None and _plannable(reason):  # 2‴ — 정해진 의도 밖이라도 조회로 도울 수 있으면 돕는다(BR-AO-28)
                     return self._plan_turn(inp, text, memory_lines, trip_summary, cleared, reason)
@@ -919,6 +925,45 @@ class DialogueOrchestrator:
             self._fallback(inp, "llm", *_ANSWER_MODES, f"answer_shape: {e}")
             return DialogueAnswer.from_facts(facts)
 
+    # ── 2″·2‴ 인사·잡담 (BR-AO-26 개정 2026-10-22) ─────────────────────
+
+    def _smalltalk(
+        self, inp: TurnInput, fixed: DialogueAnswer, memory_lines: Sequence[str], trip_summary: str,
+    ) -> DialogueAnswer:
+        """인사·잡담 한마디를 LLM 이 즉석에서 — 사실 없이 말을 받아 주고 여행 쪽 질문으로 끝낸다. 미배정이면 `fixed` 그대로(이벤트 없음 —
+        의도된 결정론). 시한 부족·실패·게이트 드롭·목록 밖 장소(INV-1 — 사실이 없으니 스냅샷 장소 말고는 전부 지어낸 것)면 `fixed`
+        + FallbackEvent 짝(INV-4). 버튼·칩은 `fixed` 의 것 그대로 — LLM 은 문장만 쓴다."""
+        if self._smalltalk_worker is None:
+            return fixed
+        remaining = self._remaining(inp)
+        if remaining < _ANSWER_MIN_REMAINING_MS:
+            self._fallback(inp, "llm", *_SMALLTALK_MODES, f"budget_exhausted(remaining_ms={remaining})")
+            return fixed
+        timeout_ms = min(_ANSWER_CAP_MS, remaining - _ANSWER_RESERVE_MS)
+        try:
+            result = self._smalltalk_worker.compose(
+                inp.utterance, inp.recent_turns, memory_lines, trip_summary, inp.trace_id, inp.now, timeout_sec=timeout_ms / 1000,
+            )
+        except Exception as e:  # noqa: BLE001
+            self._fallback(inp, "llm", *_SMALLTALK_MODES, f"smalltalk_error: {type(e).__name__}: {e}")
+            return fixed
+        draft = result.value
+        if result.is_fallback or draft is None:  # FallbackEvent 는 게이트웨이가 냈다
+            return fixed
+        known = tuple(k for k in (_squash(s.name) for _, s in inp.snapshot.slots() if s.name) if k)
+        times, unverifiable = clock_times(draft.text)
+        if times or unverifiable:  # 사실이 없는 자리 — 시각은 전부 지어낸 것(INV-2)
+            self._fallback(inp, "llm", *_SMALLTALK_MODES, "time_not_in_facts")
+            return fixed
+        if _foreign_place(draft.text, known):
+            self._fallback(inp, "llm", *_SMALLTALK_MODES, "place_not_in_facts")
+            return fixed
+        try:
+            return replace(fixed, text=draft.text)
+        except ValueError as e:  # 게이트와 같은 검사 — 어긋나면 고정 문장
+            self._fallback(inp, "llm", *_SMALLTALK_MODES, f"answer_shape: {e}")
+            return fixed
+
     # ── 2‴ 도구 계획 (BR-AO-28·29) ──────────────────────────────────────
 
     def _plan_turn(
@@ -955,8 +1000,9 @@ class DialogueOrchestrator:
         if draft.refused or not draft.calls:  # 판단한 거절·도구 없음 — 의도된 결정론, 이벤트 없음
             if not draft.refused and draft.gap == "CHAT":  # 잡담은 범위 밖 카드 대신 받아 준다(2″ 인사와 같은 결정론 문장)
                 self._log_plan(inp, "NO_TOOL", plan_ms=plan_ms, gap=draft.gap)
-                answer = DialogueAnswer(AnswerKind.TEXT, CHAT_TEXT[inp.snapshot.trip is not None], None,
-                                        (_home_action(inp.snapshot.trip is not None),), None, None)
+                fixed = DialogueAnswer(AnswerKind.TEXT, CHAT_TEXT[inp.snapshot.trip is not None], None,
+                                       (_home_action(inp.snapshot.trip is not None),), None, None)
+                answer = self._smalltalk(inp, fixed, memory_lines, trip_summary)
                 return TurnOutcome("ANSWER", (), None, answer, cleared, 0, f"{reason}; plan:no_tool")
             return self._plan_declined(inp, reason, "REFUSED" if draft.refused else "NO_TOOL", plan_ms=plan_ms, gap=draft.gap)
         handlers = [HANDLERS[call.intent] for call in draft.calls]

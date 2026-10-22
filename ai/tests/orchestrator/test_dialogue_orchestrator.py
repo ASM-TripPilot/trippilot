@@ -92,6 +92,7 @@ from trippilot.orchestrator.dialogue_orchestrator import (
 )
 from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanGate
 from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
+from trippilot.llm_gateway.workers.dialogue_smalltalk import DialogueSmalltalkWorker
 from trippilot.domain.plan_tools import plan_tool_specs_json
 from trippilot.orchestrator.dialogue_plan import plan_tools
 from trippilot.orchestrator.intent_eval import is_refusal
@@ -112,6 +113,7 @@ _U = {n: str(uuid.uuid5(uuid.NAMESPACE_DNS, n)) for n in ("성산일출봉", "�
 _COORD = {n: GeoPoint(33.4 + i * 0.01, 126.5 + i * 0.01) for i, n in enumerate(_U)}
 _INTENT, _ANSWER, _MEMORY = LlmFeature.DIALOGUE_INTENT, LlmFeature.DIALOGUE_ANSWER, LlmFeature.DIALOGUE_MEMORY
 _PLAN = LlmFeature.DIALOGUE_PLAN
+_SMALLTALK = LlmFeature.DIALOGUE_SMALLTALK
 
 
 def _slot(name: str, hhmm: str, category: str, on: date) -> SlotView:
@@ -205,7 +207,8 @@ _PORTS = HandlerPorts(poi_info=_PoiInfo(), weather=_Weather())
 def _build(by_feature: dict, *, clock: FakeClock | None = None, store=None, ports: HandlerPorts = _PORTS,
            shadow: ShadowIntentProbe | None = None, shadow_meta: dict | None = None, confident_intent=None,
            advance: dict[LlmFeature, int] | None = None, intent_worker=None,
-           pool: Executor | None = None, with_planner: bool = False, planner=None, wrap=None) -> SimpleNamespace:
+           pool: Executor | None = None, with_planner: bool = False, planner=None, wrap=None,
+           with_smalltalk: bool = False) -> SimpleNamespace:
     """`with_planner` — 2‴ 계획 워커를 운영과 같은 길(노출 도구 = 배선된 포트, 같은 counted LLM)로 붙인다. `planner` 는 대역을 직접 넣을 때,
     `wrap` 은 LLM 응답을 손볼 때(절단 등) — 셋 다 없으면 종전 조립과 바이트 단위로 같다."""
     llm = FeatureRoutingLlm(by_feature)
@@ -222,12 +225,14 @@ def _build(by_feature: dict, *, clock: FakeClock | None = None, store=None, port
     if with_planner:
         tools = plan_tools(ports)
         planner = DialoguePlanWorker(gw(DialoguePlanGate(frozenset(tools))), plan_tool_specs_json(tools))
+    smalltalk = DialogueSmalltalkWorker(gw(DialogueAnswerGate())) if with_smalltalk else None  # 답변 게이트 그대로
     orch = DialogueOrchestrator(
         intent_worker=intent_worker if intent_worker is not None else DialogueIntentWorker(gw(IntentGate())),
         answer_worker=DialogueAnswerWorker(gw(DialogueAnswerGate())),
         memory_worker=DialogueMemoryWorker(gw(DialogueMemoryGate())),
         memory_store=store, ports=ports, clock=clock, trace=trace, tz=_KST,
         shadow=shadow, shadow_meta=shadow_meta, confident_intent=confident_intent, pool=pool, planner=planner,
+        smalltalk=smalltalk,
     )
     return SimpleNamespace(orch=orch, llm=llm, trace=trace, store=store, clock=clock, advancing=advancing)
 
@@ -580,6 +585,47 @@ def test_greeting_gets_a_warm_reply_that_leads_to_the_trip(utterance: str) -> No
     without_trip = _build(_canned(None)).orch.turn(_input(utterance, snapshot=_NO_TRIP))
     assert without_trip.answer.text == GREETING_TEXT[False]
     assert [a.type for a in without_trip.answer.next_actions] == ["CREATE_TRIP"]
+
+
+_SMALLTALK_JSON = '{"text": "네, 안녕하세요~ 반가워요! 오늘 여행은 어떠세요? 다음 장소나 날씨가 궁금하면 물어봐 주세요.", "footnote": null}'
+
+
+def _smalltalk_build(reply: str | Exception = _SMALLTALK_JSON):
+    return _build({**_canned(None), _SMALLTALK: reply}, with_smalltalk=True)
+
+
+def test_greeting_is_written_by_the_smalltalk_llm_when_assigned() -> None:
+    """DIALOGUE_SMALLTALK 배정 = 켜기(2026-10-22 결정 1번) — 인사 문장은 LLM 이 즉석에서, 버튼·프레임·맥락은 고정 문장 때와 같다."""
+    b = _smalltalk_build()
+    out = b.orch.turn(_input("안녕", turn_index=2))
+    assert out.outcome == "ANSWER" and out.frames == () and out.answer.text == json.loads(_SMALLTALK_JSON)["text"]
+    assert [a.type for a in out.answer.next_actions] == ["OPEN_ITINERARY"] and out.answer.quick_replies is None
+    assert out.llm_calls == 2 and out.context == DialogueContext(turn_index=2)  # 분류 1 + 잡담 1
+    assert [e for e in _fallbacks(b.trace) if e.from_mode == "llm_dialogue_smalltalk"] == []
+    (req,) = [r for r in b.llm.requests if r.prompt_ref.feature == _SMALLTALK.value]
+    assert "안녕" in req.prompt and "[확인된 사실]" not in req.prompt  # 사실 없는 프롬프트 — 답변 프롬프트가 아니다
+
+
+@pytest.mark.parametrize(("reply", "reason"), [
+    (RuntimeError("vendor down"), None),  # 게이트웨이가 폴백 이벤트를 낸다
+    ('{"text": "해운대해수욕장 가 보세요! 다음 장소 알려 드릴까요?", "footnote": null}', "place_not_in_facts"),  # INV-1 — 사실 없는 자리의 장소는 지어낸 것
+    ('{"text": "안녕하세요~ 14:00 에 출발하면 좋겠어요.", "footnote": null}', "time_not_in_facts"),  # INV-2
+])
+def test_smalltalk_failure_or_invented_fact_falls_back_to_the_fixed_line(reply, reason) -> None:
+    b = _smalltalk_build(reply)
+    out = b.orch.turn(_input("안녕하세요"))
+    assert out.outcome == "ANSWER" and out.answer.text == GREETING_TEXT[True]
+    events = [e for e in _fallbacks(b.trace) if e.from_mode == "llm_dialogue_smalltalk"]
+    assert len(events) == 1 and events[0].to_mode == "fixed_text"
+    if reason is not None:
+        assert events[0].reason == reason
+
+
+def test_thanks_and_acks_stay_fixed_even_with_the_smalltalk_llm() -> None:
+    b = _smalltalk_build()
+    assert b.orch.turn(_input("고마워")).answer.text == THANKS_TEXT
+    assert b.orch.turn(_input("응")).answer.text == ACK_TEXT
+    assert not [r for r in b.llm.requests if r.prompt_ref.feature == _SMALLTALK.value]
 
 
 def test_greeting_with_thanks_is_answered_as_thanks() -> None:
