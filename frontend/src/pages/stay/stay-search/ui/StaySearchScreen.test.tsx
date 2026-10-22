@@ -7,6 +7,7 @@ import {
 import { Keyboard } from 'react-native';
 import type { StayItem } from '@/shared/api/index.schemas';
 import { stayKey } from '@/features/save-stay/index.view';
+import { stayCoverFor } from '@/test-support/placeCoverFixtures';
 import { StaySearchScreen } from './StaySearchScreen';
 import {
   FAB_STACK_TOP,
@@ -167,9 +168,10 @@ describe('헤더·카드·목록 프레임 (옛 본 파일)', () => {
           within(card).getByTestId(`stay-card-save-${key}`)
         ).toBeOnTheScreen();
 
+        // TRIP-1588 — 사진 칸은 그 카드 자기 stayKey 의 숙소 그림(세 카드가 2·6·3번이라 바꿔 끼우면 red).
         expect(
-          within(card).getByTestId(`stay-card-photo-${key}`)
-        ).toBeOnTheScreen();
+          within(card).getByTestId(`stay-card-photo-${key}`).props.source
+        ).toEqual([stayCoverFor(key)]);
       });
     });
   });

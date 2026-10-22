@@ -1,6 +1,8 @@
 import { Text } from 'react-native';
 import { render, screen, fireEvent } from '@testing-library/react-native';
 
+import { stayCoverFor } from '@/test-support/placeCoverFixtures';
+
 import { SavedStayCard } from './SavedStayCard';
 
 /**
@@ -8,7 +10,8 @@ import { SavedStayCard } from './SavedStayCard';
  *
  * 무엇을 보장하나(신규 개념 학습 1순위 — **degrade 카드 = 계약 공백을 정직하게 비운다**):
  *  - 🔴 이름 + `subtitle` 슬롯(있으면)만 그린다 — `SavedStay` 계약에 사진 URL·지역·거리·가격이 없어
- *    **가격·거리·₩ 문자열을 발명하지 않는다**(INV-1 · DC6). 사진은 회색 자리.
+ *    **가격·거리·₩ 문자열을 발명하지 않는다**(INV-1 · DC6). 사진 칸은 숙소 키(`coverKey`)로 고른 일반 숙소
+ *    그림(TRIP-1588, 기대 그림은 손 표 `stayCoverFor`).
  *  - 🔴 담김 표식은 `accessibilityState.selected`(색 아님, ★4·★5) — e04 는 항상채움 표시용이라 카드에
  *    fill 토글 상태가 없다(하트는 소비처가 `trailing` 으로 주입 = 카드는 하트 불가지).
  *  - 🔴 `trailing` 슬롯(e04 항상채움 하트 · g02 선택 체크)과 `subtitle` 슬롯이 주입될 때만 렌더된다.
@@ -121,7 +124,8 @@ describe.each(LAYOUTS)('SavedStayCard — layout=%s', (layout) => {
  * TRIP-741 · AC-4·5·6·6b — g02 전용 row 브랜치 optional 슬롯(사진·동네·거리·가격) + 선택 테두리.
  *
  * 무엇을 보장하나(**계약 공백의 정직한 degrade**가 핵심):
- *  - 🔴 AC-6  imageUrl 지정 시 `<Image testID={id}-photo>`, 미지정 시 회색 placeholder(`{id}-photo-placeholder`).
+ *  - 🔴 AC-6  imageUrl 지정 시 `{id}-photo` 가 그 사진, 미지정 시 같은 `{id}-photo` 가 `coverKey` 의 숙소 그림(TRIP-1588 —
+ *    옛 회색 placeholder `{id}-photo-placeholder` 는 없다).
  *  - 🔴 AC-6b region·distance·priceLabel 지정 시 그 값이 렌더, 미지정 시 미렌더(값이 있을 때만 렌더 = degrade).
  *  - 🔴 AC-5  optional 을 하나도 안 주면(=실데이터 경로, `SavedStay` 계약 공백) 가격·거리 문자열 0건(INV-1).
  *
@@ -143,17 +147,39 @@ describe('SavedStayCard — g02 row optional 슬롯 (TRIP-741)', () => {
       />
     );
 
-    expect(screen.getByTestId(`${rootId}-photo`)).toBeOnTheScreen();
+    expect(screen.getByTestId(`${rootId}-photo`).props.source).toEqual([
+      { uri: 'https://cdn.example/gwangalli.jpg' },
+    ]);
     expect(screen.queryByTestId(`${rootId}-photo-placeholder`)).toBeNull();
   });
 
-  it('🔴 AC-6 · imageUrl 미지정 → 회색 placeholder + 사진 부재 (degrade)', () => {
+  it('🔴 AC-6 · imageUrl 미지정 → coverKey 의 숙소 그림, 회색 placeholder 없음 (TRIP-1588)', () => {
     render(
-      <SavedStayCard testID={rootId} name="광안리 뷰 호텔" layout="row" />
+      <>
+        <SavedStayCard
+          testID="trip-base-staysheet-cand-a"
+          coverKey="KAKAO:13"
+          name="A"
+          layout="row"
+        />
+        <SavedStayCard
+          testID="trip-base-staysheet-cand-b"
+          coverKey="KAKAO:16"
+          name="B"
+          layout="row"
+        />
+      </>
     );
 
-    expect(screen.getByTestId(`${rootId}-photo-placeholder`)).toBeOnTheScreen();
-    expect(screen.queryByTestId(`${rootId}-photo`)).toBeNull();
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-a-photo').props.source
+    ).toEqual([stayCoverFor('KAKAO:13')]);
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-b-photo').props.source
+    ).toEqual([stayCoverFor('KAKAO:16')]);
+    expect(
+      screen.queryByTestId('trip-base-staysheet-cand-a-photo-placeholder')
+    ).toBeNull();
   });
 
   it('🔴 AC-6b · region·priceLabel 지정 → 두 값 렌더 (거리 슬롯은 제거됨)', () => {
@@ -219,18 +245,43 @@ describe('SavedStayCard — g02 row optional 슬롯 (TRIP-741)', () => {
     expect(card).toHaveTextContent(/6\/11–6\/12 · 1박/);
   });
 
-  it('🔴 슬롯은 row 전용 — vertical(e04)은 imageUrl 을 무시한다 (scope 잠금)', () => {
+  it('🔴 슬롯은 row 전용 — vertical(e04)은 imageUrl 을 무시하고 coverKey 의 숙소 그림을 깐다 (scope 잠금)', () => {
     render(
       <SavedStayCard
         testID="saved-stay-card-ss-1"
+        coverKey="KAKAO:16"
         name="해운대 오션뷰"
         layout="vertical"
         imageUrl="https://cdn.example/x.jpg"
       />
     );
 
-    // vertical 은 자체 178px 회색 자리만 — row 사진 슬롯 testID 를 안 낸다.
-    expect(screen.queryByTestId('saved-stay-card-ss-1-photo')).toBeNull();
+    expect(
+      screen.getByTestId('saved-stay-card-ss-1-photo').props.source
+    ).toEqual([stayCoverFor('KAKAO:16')]);
+  });
+
+  it('vertical(e04) — 숙소 그림 위 거점 배지·trailing 오버레이는 그대로다 (TRIP-1588)', () => {
+    const onHeart = jest.fn();
+    render(
+      <SavedStayCard
+        testID="saved-stay-card-ss-1"
+        coverKey="KAKAO:13"
+        name="해운대 오션뷰"
+        layout="vertical"
+        isBase
+        trailing={<Text onPress={onHeart}>하트</Text>}
+      />
+    );
+
+    expect(
+      screen.getByTestId('saved-stay-card-ss-1-photo').props.source
+    ).toEqual([stayCoverFor('KAKAO:13')]);
+    expect(
+      screen.getByTestId('saved-stay-card-ss-1-base-badge')
+    ).toBeOnTheScreen();
+    fireEvent.press(screen.getByText('하트'));
+    expect(onHeart).toHaveBeenCalledTimes(1);
   });
 });
 

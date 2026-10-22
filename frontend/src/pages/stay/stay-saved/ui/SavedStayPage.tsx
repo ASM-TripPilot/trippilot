@@ -29,7 +29,7 @@ import {
 import type { NoticeBannerNotice } from '@/shared/ui/NoticeBanner';
 
 import { resolvePlaceListState } from '@/features/explore';
-import { stayKey } from '@/features/save-stay';
+import { savedStayKey } from '@/features/save-stay';
 import {
   SavedStayListScreen,
   type SavedStayCardVM,
@@ -99,6 +99,7 @@ export function SavedStayPage(): ReactElement {
       savedStays.map((stay) => ({
         savedStayId: stay.savedStayId,
         name: stay.name,
+        coverKey: savedStayKey(stay),
       })),
     [savedStays]
   );
@@ -113,13 +114,7 @@ export function SavedStayPage(): ReactElement {
       }
       // 하트 저장분(외부키 있음)은 stayKey(=SOURCE:ID), 핀·수동(외부키 null)은 savedStayId 폴백 —
       // 폴백이 없으면 핀 숙소가 route key "null:null" 로 충돌한다(★2).
-      const stayId =
-        stay.externalSource && stay.externalId
-          ? stayKey({
-              externalSource: stay.externalSource,
-              externalId: stay.externalId,
-            })
-          : stay.savedStayId;
+      const stayId = savedStayKey(stay);
       // 인기 숙소(TRIPCOM)는 상세 대신 제휴 시트 → 호텔 상세 아웃바운드(stayId 'TRIPCOM:{id}', TRIP-1583).
       if (stay.externalSource === 'TRIPCOM' && stay.externalId) {
         outbound.request({ kind: 'stay', stayId, source: 'TRIPCOM' });

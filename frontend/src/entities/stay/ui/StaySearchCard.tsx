@@ -3,12 +3,14 @@ import { Pressable, Text, View } from 'react-native';
 
 import { heartSaveLabel } from '@/shared/ui/HeartButton';
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
+import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 
 /**
  * TRIP-807 · AC-3 — 숙소 검색 풀/레인 카드(e02 세로178 · d01 레인160 공용). props-only.
  *
- * 사진은 계약(StayItem)에 URL 필드가 없어 항상 회색 자리(bg-surface-strong) — URL 을 지어내지
- * 않는다(INV-1). 메타는 이름·지역·가격 텍스트뿐(거리·소요시간 없음 · INV-3).
+ * 사진은 계약(StayItem)에 URL 필드가 없어 URL 을 지어내지 않고(INV-1) `coverKey`(숙소 키)로 고른
+ * 일반 숙소 그림(`PlacePhoto` `category="숙소"`, TRIP-1588)을 사진 칸 바닥 레이어로 깐다 — 하트 오버레이는
+ * 그 위 형제로 그대로다. 메타는 이름·지역·가격 텍스트뿐(거리·소요시간 없음 · INV-3).
  *
  * testID 스킴은 소비처가 **명시 문자열**로 주입한다(★3) — e02 는 `stay-card-save-{key}-filled`,
  * d01 은 `explore-stay-heart-filled-{key}` 로 save/글리프 스킴이 갈려 단일 prefix 로 재현 불가라,
@@ -34,8 +36,10 @@ export interface StaySearchCardSave {
 export interface StaySearchCardProps {
   /** 루트 Pressable testID(소비처 스킴 주입). */
   testID: string;
-  /** 사진 자리 testID — e02 만 지정(d01 미지정 = 사진 View 무 testID). */
+  /** 사진(그림) testID — 지정 시 그림 노드 자체에 단다(e02·d01). 미지정 = 무 testID. */
   photoTestID?: string;
+  /** 사진 칸 그림을 고르는 숙소 키(`stayKey`) — 같은 숙소는 어느 화면에서나 같은 그림(TRIP-1588). */
+  coverKey?: string;
   name: string;
   region: string;
   /** 생략 = 가격 줄 없음(e02 — 데이터에 가격이 없다, TRIP-1581). d01·e03 은 지금처럼 넘긴다. */
@@ -94,6 +98,7 @@ function SaveButton({
 export function StaySearchCard({
   testID,
   photoTestID,
+  coverKey,
   name,
   region,
   priceText,
@@ -113,10 +118,14 @@ export function StaySearchCard({
         style={cardShadow}
         className="w-full overflow-hidden rounded-card border border-hairline bg-canvas"
       >
-        <View
-          testID={photoTestID}
-          className="h-[178px] w-full bg-surface-strong"
-        >
+        <View className="h-[178px] w-full bg-surface-strong">
+          <PlacePhoto
+            testID={photoTestID}
+            category="숙소"
+            poiId={coverKey}
+            contentFit="cover"
+            className="absolute inset-0"
+          />
           {save ? (
             <SaveButton
               save={save}
@@ -158,10 +167,14 @@ export function StaySearchCard({
       onPress={onPress}
       className="w-[160px]"
     >
-      <View
-        testID={photoTestID}
-        className="h-[120px] w-full rounded-card bg-surface-strong"
-      >
+      <View className="h-[120px] w-full rounded-card bg-surface-strong">
+        <PlacePhoto
+          testID={photoTestID}
+          category="숙소"
+          poiId={coverKey}
+          contentFit="cover"
+          className="absolute inset-0 rounded-card"
+        />
         {save ? (
           <SaveButton
             save={save}

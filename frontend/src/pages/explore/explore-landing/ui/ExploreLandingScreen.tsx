@@ -411,10 +411,12 @@ export function ExploreLandingScreen({
                 <View className="flex-row gap-md">
                   {stayLane.cards.map((card) => (
                     // rail 카드 — 하트는 카드가 소유(save 계약). 담김/미담김은 색이 아니라 서로 다른
-                    // 글리프 testID + selected 로 관측한다(★5). 사진은 회색 자리(URL 계약 무 · INV-1).
+                    // 글리프 testID + selected 로 관측한다(★5). 사진은 URL 계약이 없어(INV-1) key 로 고른 숙소 그림(TRIP-1588).
                     <StaySearchCard
                       key={card.key}
                       testID={`explore-stay-card-${card.key}`}
+                      photoTestID={`explore-stay-photo-${card.key}`}
+                      coverKey={card.key}
                       name={card.name}
                       region={card.region}
                       priceText={card.priceText}

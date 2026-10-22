@@ -107,6 +107,7 @@ export function StayDetailPage(): ReactElement {
     <>
       <StayDetailScreen
         state={state}
+        coverKey={item === null ? undefined : stayKey(item)}
         saved={saved}
         pending={pending}
         onToggleSave={() => void handleToggleSave()}

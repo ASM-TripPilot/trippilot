@@ -178,6 +178,18 @@ export const STAY_VARIANT_OF: Readonly<Record<string, StayVariant>> = {
   'KAKAO:16': 4,
   'KAKAO:17': 5,
   'KAKAO:18': 6,
+  'NAVER:n-99': 1,
+  'NAVER:s1': 6,
+  'NAVER:s2': 3,
+  'NAVER:s3': 2,
+  'TRIPCOM:123': 4,
+  'ss-1': 6,
+  'stay-a': 3,
+  'stay-b': 4,
+  'aaaaaaaa-0000-4000-8000-000000000001': 5,
+  'aaaaaaaa-0000-4000-8000-000000000002': 6,
+  'aaaaaaaa-0000-4000-8000-000000000003': 1,
+  'ss-2': 3,
 };
 
 /** 숙소 키에 대한 **기대 숙소 그림**. 키가 표에 없으면 던진다 · 키가 없으면(undefined·'') 변형 1. */

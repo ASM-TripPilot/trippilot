@@ -665,6 +665,7 @@ export function StaySearchScreen({
                 <StaySearchCard
                   testID={`stay-card-${key}`}
                   photoTestID={`stay-card-photo-${key}`}
+                  coverKey={key}
                   name={item.name}
                   region={item.region}
                   // 가격 줄은 그리지 않는다 — 데이터에 가격이 없다(TRIP-1581). 가격대 칩은 그대로다.
