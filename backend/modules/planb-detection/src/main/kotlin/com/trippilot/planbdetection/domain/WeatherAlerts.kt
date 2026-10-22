@@ -40,7 +40,8 @@ import java.time.temporal.ChronoUnit
  *    시군이 빠진다. 그 시군의 하위 권역(어간 + 다른 꼬리 — `경주동부` · `울진평지` · `보령도서`)만 나열됐으면 목적지가 뺀 쪽에 있는지 이름으로
  *    가릴 수 없어 모름이다. 개편 목록은 시군을 권역으로 나눠, 시군째 빼면 나머지 권역의 특보를 '특보 없음'으로 확인한다(G-SA-19 · INV-SA-2).
  *    섬 구역은 앞붙음이 아니라 표([ISLANDS])로 본다 — 시군 전체인 섬([WHOLE_CITY_ISLANDS] — 울릉도.독도 = 울릉군)을 빼면 그 시군이 빠지고,
- *    시군의 일부인 섬(서해5도 · 흑산도.홍도 · 거문도.초도 · 추자도 …)을 빼면 본토가 남아 그 시군에 걸린다.
+ *    시군의 일부인 섬(서해5도 · 흑산도.홍도 · 거문도.초도 · 추자도 …)을 빼면 본토가 남아 그 시군에 걸린다. 거꾸로 시군 전체 이름을 뺐어도
+ *    그 시군의 섬이 광역 줄 안의 하위 구역이면([LINE_ISLANDS] — `전라남도(여수 제외)` 의 거문도.초도) 그 섬이 남아 모름이다.
  */
 object WeatherAlerts {
 
@@ -67,6 +68,14 @@ object WeatherAlerts {
         "울릉도.독도" to "47940", "서해5도" to "28720", "흑산도.홍도" to "12870", "거문도.초도" to "12130", "추자도" to "50110",
         "백령도.대청도" to "28720", "연평도.우도" to "28720",
     )
+
+    /**
+     * 광역 줄 안에 하위 구역으로 나오는 섬 구역(규칙 9) — 실응답(2026-10-16~22 특보 통보문)에서 `전라남도(흑산도.홍도)` ·
+     * `전라남도(…, 거문도.초도, …)` · `제주도(…, 추자도, …)` 로 나왔다(서해5도 · 울릉도.독도는 제 줄이다). 그 광역의 `(…제외)` 줄은 나열하지
+     * 않은 이 섬을 덮으므로, 시군 전체 이름을 빼도(`전라남도(여수 제외)`) 그 시군의 이 섬(거문도.초도 = 여수)은 특보 중이다 — 그 시군은
+     * 안 걸림이 아니라 모름이다(INV-SA-2 · G-SA-18).
+     */
+    val LINE_ISLANDS: Set<String> = setOf("흑산도.홍도", "거문도.초도", "추자도")
 
     /**
      * 시군 전체인 섬 구역(규칙 9) — `(…제외)` 줄에 나오면 그 시군째 빠진다. 울릉도.독도는 울릉군 전체다(공식 목록에 울릉의 다른 구역이 없다).
@@ -321,7 +330,10 @@ object WeatherAlerts {
      */
     private fun excludedMatch(land: List<String>, place: Place): Match {
         val stem = place.stem
-        if (stem != null && land.any { isWhole(it, stem) }) return Match.MISS
+        if (stem != null && land.any { isWhole(it, stem) }) {
+            val islandLeft = LINE_ISLANDS.any { island -> island !in land && ISLANDS[island]?.let { place.code.startsWith(it) } == true }
+            return if (islandLeft) Match.UNSURE else Match.MISS
+        }
         if (land.any { zone -> zone in WHOLE_CITY_ISLANDS && ISLANDS[zone]?.let { place.code.startsWith(it) } == true }) return Match.MISS
         val partial = stem != null && land.any { it !in ISLANDS && it.startsWith(stem) }
         return if (partial) Match.UNSURE else Match.HIT

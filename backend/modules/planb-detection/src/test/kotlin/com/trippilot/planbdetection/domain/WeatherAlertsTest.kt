@@ -371,6 +371,11 @@ class WeatherAlertsTest : StringSpec({
             Triple(WarningArea("제주도", listOf("추자도"), excluding = true), jejuCity, HIT),
             Triple(WarningArea("제주도", listOf("추자도"), excluding = true), jeju, HIT), // 광역 목적지 — 나머지 제주가 걸린다(규칙 5)
             Triple(WarningArea("전라남도", listOf("거문도.초도"), excluding = true), yeosu, HIT),
+            // 거꾸로 시군 전체 이름을 빼도 광역 줄 안의 그 시군 섬(거문도.초도 = 여수)은 남는다 — 모름(실응답: 섬이 `전라남도(…)` 안에 나온다)
+            Triple(WarningArea("전라남도", listOf("여수"), excluding = true), yeosu, UNSURE),
+            Triple(WarningArea("전라남도", listOf("여수", "거문도.초도"), excluding = true), yeosu, MISS),
+            Triple(WarningArea("전라남도", listOf("여수"), excluding = true), mokpo, HIT),
+            Triple(WarningArea("인천", listOf("옹진"), excluding = true), ongjin, MISS), // 서해5도는 제 줄로 나온다 — 인천 줄의 섬이 아니다
             Triple(WarningArea("전라남도", listOf("흑산도.홍도"), excluding = true), sinan, HIT),
             Triple(WarningArea("경상북도", listOf("울릉도.독도"), excluding = true), gyeongbukWide, HIT), // 시군 전체인 섬은 그 시군만 — 나머지 경북
             // 관서 묶음 줄의 제외 줄도 그 묶음의 다른 광역 목적지에 안 걸린다(규칙 4 — G-SA-18) — 제 광역 줄의 제외 줄이면 규칙 9 그대로다
