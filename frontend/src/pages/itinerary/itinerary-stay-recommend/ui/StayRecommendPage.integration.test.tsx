@@ -14,9 +14,11 @@ import type {
   StayRecommendView,
 } from '../model/stayRecommend';
 import { server } from '@/mocks/server';
+import * as Linking from 'expo-linking';
 import type {
   AssignBaseRequest,
   BaseAssignment,
+  CuratedStay,
   Trip,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
@@ -79,6 +81,12 @@ jest.mock('expo-router', () => ({
     replace: mockReplace,
     canGoBack: mockCanGoBack,
   },
+}));
+
+// TRIP-1582 — 인기 숙소 카드·전체 보기는 제휴 시트를 거쳐 브라우저로 연다(실제 열기는 목).
+jest.mock('expo-linking', () => ({
+  openURL: jest.fn().mockResolvedValue(true),
+  canOpenURL: jest.fn().mockResolvedValue(true),
 }));
 
 const BASE = 'http://localhost:8080/api/v1';
@@ -539,5 +547,103 @@ describe('🔴 E3 · AC-10 — 안내 얼굴의 탈출구가 실제로 동작한
 
     expect(mockReplace).toHaveBeenCalledWith(`/trips/${TRIP_ID}/itinerary`);
     expect(mockBack).not.toHaveBeenCalled();
+  });
+});
+
+// TRIP-1582 — 추천이 비면 이 여행 목적지의 인기 숙소를 대신 보인다(Figma 5066:4325). 인기 숙소도 없으면 지금 안내 + 전체 보기.
+describe('TRIP-1582 · 빈 추천 → 인기 숙소', () => {
+  const CURATED: CuratedStay = {
+    rank: 1,
+    stayId: 'TRIPCOM:123',
+    name: '해운대 오션 호텔',
+    address: null,
+    imageUrl: 'https://ak-d.tripcdn.com/images/a.jpg',
+  };
+  const NOTICE =
+    '이번 동선 기준 추천은 아직 없어요 · 대신 인기 숙소를 보여 드려요';
+  const mockOpenURL = Linking.openURL as jest.Mock;
+  let curatedQueries: string[] = [];
+
+  function serveCurated(items: CuratedStay[]): void {
+    server.use(
+      http.get(`${BASE}/stays/curated`, ({ request }) => {
+        curatedQueries.push(new URL(request.url).search);
+        return HttpResponse.json({ city: '부산', items });
+      }),
+      http.get(`${BASE}/me/settings`, () =>
+        HttpResponse.json({ affiliateNoticeDismissed: false })
+      ),
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([]))
+    );
+  }
+
+  beforeEach(() => {
+    curatedQueries = [];
+    mockOpenURL.mockClear();
+  });
+
+  it('목적지 지역 코드로 묻고, 안내 문구를 바꿔 인기 숙소 줄·전체 보기를 보인다 · 카드는 여행 맥락을 실어 연다', async () => {
+    useServer({
+      trip: {
+        ...trip('2026-06-10', '2026-06-12'),
+        destinations: [{ seq: 1, region: '부산', nights: 2, regionCode: '26' }],
+      },
+    });
+    serveCurated([CURATED]);
+    renderPage();
+
+    expect(
+      await screen.findByTestId('curated-stay-card-123')
+    ).toBeOnTheScreen();
+    expect(curatedQueries).toEqual(['?regionCode=26']);
+    expect(screen.getByText(NOTICE)).toBeOnTheScreen();
+    expect(screen.getByText('인기 숙소')).toBeOnTheScreen();
+    expect(
+      screen.queryByText('지금은 동선 기준 추천을 보여 드릴 수 없어요')
+    ).toBeNull();
+    expect(screen.getByTestId('curated-stay-browse-all')).toBeOnTheScreen();
+    // 탈출구(뒤로)는 남는다.
+    fireEvent.press(screen.getByTestId('stay-recommend-empty-back'));
+    expect(mockBack).toHaveBeenCalledTimes(1);
+
+    fireEvent.press(screen.getByTestId('curated-stay-card-123'));
+    await screen.findByTestId('stay-ota-sheet');
+    fireEvent.press(screen.getByTestId('stay-ota-confirm'));
+    await waitFor(() =>
+      expect(mockOpenURL).toHaveBeenCalledWith(
+        `${BASE}/stays/TRIPCOM%3A123/outbound?checkin=2026-06-10&checkout=2026-06-12&adults=2`
+      )
+    );
+  });
+
+  it('지역 코드가 없으면 이름(city)으로 묻고, 비면 지금의 안내 그대로 + 전체 보기만(지역 이름으로 연다)', async () => {
+    useServer();
+    serveCurated([]);
+    renderPage();
+
+    await waitFor(() => expect(curatedQueries).toHaveLength(1));
+    expect(curatedQueries[0]).toBe(`?city=${encodeURIComponent('부산')}`);
+    await expectEmptyFace();
+    expect(screen.queryByText(NOTICE)).toBeNull();
+    expect(screen.queryByTestId('curated-stay-card-123')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('curated-stay-browse-all'));
+    await screen.findByTestId('stay-ota-sheet');
+    fireEvent.press(screen.getByTestId('stay-ota-confirm'));
+    await waitFor(() =>
+      expect(mockOpenURL).toHaveBeenCalledWith(
+        `${BASE}/stays/browse/outbound?region=${encodeURIComponent('부산')}&checkin=2026-06-10&checkout=2026-06-12&adults=2`
+      )
+    );
+  });
+
+  it('추천이 있으면 인기 숙소를 묻지 않고 전체 보기도 없다(회귀 없음)', async () => {
+    useServer();
+    serveCurated([CURATED]);
+    renderPage(VIEW);
+
+    await readyCta();
+    expect(curatedQueries).toHaveLength(0);
+    expect(screen.queryByTestId('curated-stay-browse-all')).toBeNull();
   });
 });
