@@ -8,6 +8,7 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { OpportunityEventType } from './opportunityEventType';
 import type { OpportunityKind } from './opportunityKind';
 
 /**
@@ -20,6 +21,8 @@ export interface Opportunity {
   kind: OpportunityKind;
   /** 행사 이름 — 행사 카드만(TRENDING 은 null) */
   eventName?: string | null;
+  /** 행사 유형(축제·공연·전시·팝업) — 행사 카드만이고 TRENDING 은 null 이다. 행사 카드인데 null 이면 유형을 모른다(옛 AI·모르는 값). 날씨 위험 날에 뺄 행사를 가르는 재료다 — 축제와 모름은 빼고 공연·전시·팝업은 남긴다. 앱 문장은 이 값으로 바뀌지 않는다. */
+  eventType?: OpportunityEventType;
   /** 행사 시작일(일 단위) — 행사 카드만 */
   start?: string | null;
   /** 행사 마지막 날(일 단위) — 행사 카드만. 앱의 "M월 d일까지" */

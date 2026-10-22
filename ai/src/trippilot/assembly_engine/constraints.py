@@ -4,7 +4,7 @@ I/O 없음 — (solution, problem, poi_index, estimator)만으로 판정. oracle
 빈 리스트 = 유효. 예산은 검사하지 않음(소프트, INV-SOLVE3).
 
 영업시간 판정 규칙 — 그 날 창은 `poi.open_windows_on` 하나로만 읽는다(조립 전 경로와 같은 함수):
-- poi.open_hours 비어 있음 = 영업정보 없음 → HC1 미적용 (알 수 없는 것은 막지 않는다)
+- poi.open_hours 비어 있음 = 영업정보 없음 → HC1 미적용 (알 수 없는 것은 막지 않는다 — 못 본 슬롯은 `hc1_unjudged`)
 - 항목이 있는데 해당 요일이 없음 = 휴무 → HC1 위반
 - 휴일 규칙이 그 날을 닫음(상황 감지 H1, `problem.holidays` 가 있을 때만) → HC1 위반 — 영업정보가 없어도
 - close_min > 1440(자정 초과)은 시작일 귀속 규칙으로 그대로 비교
@@ -76,6 +76,23 @@ def check_hc1(solution: ItinerarySolution, poi_index: Mapping[PoiId, Poi],
             end_m = start_m + int((slot.end_at - slot.start_at).total_seconds() // 60)
             out.append(Violation("HC1", slot.poi_id, f"영업시간 밖: {start_m}~{end_m}", OUT_OF_HOURS))
     return out
+
+
+def hc1_unjudged(solution: ItinerarySolution, poi_index: Mapping[PoiId, Poi],
+                 holidays: HolidayCalendar | None = None) -> list[PoiId]:
+    """HC1 을 적용하지 못한 슬롯의 POI — 첫 등장 순·중복 없음. 같은 장소가 여러 날이면 하루라도 못 봤으면 싣는다.
+
+    `check_hc1` 이 '정보 없음 → 미적용'으로 통과시키는 바로 그 슬롯이다(그 날 `open_windows_on` 이 None — 영업정보
+    없음·원문 해석 실패). 위반이 아니라 판정 밖이라 위반 목록에 섞지 않고 따로 낸다 — 모르는 것을 '통과'로 읽게 두지
+    않는다(상황 감지 INV-SA-2). 인덱스에 없는 POI 는 세지 않는다(HC1·HC2 를 둘 다 못 본 것이라 경계가 따로 낸다).
+    """
+    out: dict[PoiId, None] = {}
+    for day in solution.days:
+        for slot in day.slots:
+            poi = poi_index.get(slot.poi_id)
+            if poi is not None and open_windows_on(poi, slot.start_at.date(), holidays) is None:
+                out.setdefault(slot.poi_id)
+    return list(out)
 
 
 def check_hc2(solution: ItinerarySolution, poi_index: Mapping[PoiId, Poi],

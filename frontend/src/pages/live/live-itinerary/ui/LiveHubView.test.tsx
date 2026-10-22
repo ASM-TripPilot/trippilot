@@ -67,7 +67,7 @@ import { LiveHubView, type LiveHubSlot } from './LiveHubView';
  *  - 골격: 전면 지도(셸) 위 일자 칩 줄, 시트 헤더 한 줄 "부산 여행 · 2일차 · 6월 11일(목) · 5곳", 카드 5장,
  *    화면 아래 내비 바(둥근 뒤로 + 일정·수정·챗봇·행사 4칸 — TRIP-1522 v2, HN·HE·HF·HS·HC 묶음).
  *  - 부재: 탭바·세그먼트·방패 FAB·옛 헤더·지도 세그먼트·다음 길찾기·레일 시각 열. 수동 [도착]은
- *    `onPressArrive` 를 받고 진행 중 슬롯이 없을 때만 예정 카드에 선다(TRIP-1021 HV9).
+ *    `onPressArrive` 를 받고 예정 카드에 선다 — 진행 중 슬롯이 있으면 그 뒤 카드에만(TRIP-1021 HV9 · TRIP-1561 개정).
  *  - 배선: 뒤로·칩·[방문 완료] 가 콜백으로 이어진다. [사진]/[메모]는 페이지가 콜백을 줄 때만 관람 중
  *    카드에 서고 각자 제 콜백을 부른다(TRIP-1070). 안 주면 없다(TRIP-939 AC-6).
  *  - TRIP-1522 하단 내비 바: 일정이 기본 활성, 수정 칸은 이동 없이 칸 위 팝업을 열고(항목이 이동), 행사 칸은 기회가 있을 때만 활성+점이며 누르면 바 위
@@ -563,6 +563,14 @@ function fireMapTap(): void {
   });
 }
 
+// TRIP-1558 — 지도 핀 탭. 실물 MapView + 네이버 목이라 마커(`map-marker`)의 `onTap` 이 `onPinTap(핀 배열 위치)` 로 이어진다(키 필요).
+function firePinTap(index: number): void {
+  const marker = screen.getAllByTestId('map-marker')[index];
+  act(() => {
+    (marker.props as { onTap: () => void }).onTap();
+  });
+}
+
 /** 알약을 숨기는 경로(D3 · Seed ②) — 시트 스크롤·끌기, 지도 탭, 허브 안 다른 버튼. */
 const HIDE_PATHS: [string, () => void][] = [
   ['시트 본문 스크롤 시작', fireSheetScrollBeginDrag],
@@ -731,6 +739,10 @@ const snapSpy = () =>
   (globalThis as Record<string, unknown>)
     .__bottomSheetSnapToIndexSpy as jest.Mock;
 beforeEach(() => snapSpy().mockClear());
+// TRIP-1558 — 시트 본문 스크롤 요청(`BottomSheetScrollView.scrollTo`)을 기록하는 목 스파이. 전역이라 파일 최상위에서 비운다.
+const scrollSpy = () =>
+  (globalThis as Record<string, unknown>).__bottomSheetScrollToSpy as jest.Mock;
+beforeEach(() => scrollSpy().mockClear());
 // OS "동작 줄이기" 답을 true 로 고정 — 모프와 무관한 케이스가 모션 타이머·act 경고 없이 돈다(모프 케이스만 바꾼다).
 beforeEach(holdReduceMotionOn);
 
@@ -835,6 +847,8 @@ const FLOATING_CLOSE_PATHS: [string, () => void][] = [
     '[방문 완료]',
     () => fireEvent.press(screen.getByTestId('execution-arrive-complete')),
   ],
+  // TRIP-1558 — 핀 탭도 층을 닫는다(일정 칸과 같은 취급). 행 y 를 안 쟀어도 닫힘은 일어난다.
+  ['지도 핀 탭', () => firePinTap(0)],
 ];
 
 /** (층 × 경로) 전부 — it.each 입력. */
@@ -1695,8 +1709,9 @@ describe('🔴 LiveHubView · TRIP-991 오버레이 접근성 (AC-1·AC-2·AC-4)
 // ── TRIP-1021 #059 · 예정 카드 수동 [도착] (AC-1·AC-3 · Seed Q1) ────────────────
 //
 // 뷰는 "오늘인가"를 모른다(페이지가 오늘 탭일 때만 `onPressArrive` 를 넘긴다). 뷰가 정하는 것은 하나 —
-// 진행 중(active) 슬롯이 있으면 어느 카드에도 [도착]을 주지 않는다(deriveVisitProgress 가 active 를
-// 하나만 인정해, 두 번째 도착은 앞 슬롯을 '예정'으로 되돌려 보이게 만든다 — 브리프 Q1).
+// 누구에게 [도착]을 주나. TRIP-1561 전에는 진행 중(active) 슬롯이 있으면 어느 카드에도 주지 않았다(deriveVisitProgress 가
+// active 를 하나만 인정해, 두 번째 도착은 앞 슬롯을 '예정'으로 되돌려 보이게 만든다 — 브리프 Q1). 지금은 페이지가 앞 장소를
+// 먼저 완료하므로 진행 중 슬롯 **뒤의** 예정 카드에 준다.
 
 const ARRIVE_ANY = /^execution-live-slot-arrive-/;
 const arriveId = (poiId: string) =>
@@ -1726,15 +1741,31 @@ describe('LiveHubView · HV9 수동 [도착] (TRIP-1021 AC-1·AC-3 · Q1)', () =
     expect(handlers.onPressComplete).not.toHaveBeenCalled();
   });
 
-  it('HV9b 진행 중 슬롯이 있으면 onPressArrive 를 받아도 어느 카드에도 [도착]이 없다', () => {
-    renderHub({ onPressArrive: jest.fn() });
+  // TRIP-1561 — 옛 HV9b("진행 중이 있으면 어느 카드에도 [도착]이 없다")를 뒤집었다. 그 가드가 막던 "다른 곳에 도착하면 앞 슬롯이
+  // '예정'으로 되돌아 보이고 409"는 페이지가 앞 장소를 먼저 완료한 뒤 도착을 보내므로 사라진다. 뷰가 정하는 것은 "누구에게
+  // [도착]을 주나" 하나다: 진행 중 슬롯 **뒤의** 예정 카드(앞의 done·진행 중 카드에는 없다).
+  it('HV9b 진행 중 슬롯이 있으면 그 뒤 예정 카드에만 [도착]이 서고 누르면 그 poiId 로 1회 불린다 (TRIP-1561)', () => {
+    const onPressArrive = jest.fn();
+    renderHub({ onPressArrive });
 
-    // 짝 앵커 — 카드 5장이 있고, 예정 카드도 실제로 있다(부재가 빈 렌더에서 공허하게 통과하지 않게).
+    // 짝 앵커 — 카드 5장과 진행 중 카드가 실제로 있다(부재가 빈 렌더에서 공허하게 통과하지 않게).
     expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
     expect(
-      screen.getByTestId(`execution-live-slot-status-${DATE}#jeonpo`)
-    ).toHaveTextContent('예정');
-    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+      screen.getByTestId(`execution-live-slot-time-${DATE}#museum`)
+    ).toHaveTextContent('지금 방문 중');
+    // 진행 중 슬롯(museum) 뒤 예정 둘에는 있고, 앞의 done 둘과 진행 중 카드 자신에게는 없다.
+    for (const poiId of ['jeonpo', 'haeundae']) {
+      expect(screen.getByTestId(arriveId(poiId))).toBeOnTheScreen();
+    }
+    for (const poiId of ['gamcheon', 'gwangalli', 'museum']) {
+      expect(screen.queryByTestId(arriveId(poiId))).toBeNull();
+    }
+    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(2);
+
+    fireEvent.press(screen.getByTestId(arriveId('haeundae')));
+
+    expect(onPressArrive).toHaveBeenCalledTimes(1);
+    expect(onPressArrive).toHaveBeenCalledWith('haeundae');
   });
 
   it('HV9c onPressArrive 를 안 넘기면 진행 중이 없어도 [도착]이 없다', () => {
@@ -1742,6 +1773,212 @@ describe('LiveHubView · HV9 수동 [도착] (TRIP-1021 AC-1·AC-3 · Q1)', () =
 
     expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
     expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+  });
+});
+
+// ── TRIP-1561 · [방문 완료]는 "마지막 장소"에만 (수동 허브 — 다음 장소 [도착]이 앞 장소를 완료한다) ───────────────
+//
+// 한 술어가 두 버튼을 정한다: 진행 중 슬롯 뒤에 [도착]을 누를 수 있는 슬롯(예정·건너뛰지 않음·`onPressArrive` 주입)이
+// 있으면 그 슬롯의 [방문 완료]를 숨긴다(다음 [도착]이 완료를 대신한다). 없으면 남긴다. "배열의 마지막인가"로 가르면 건너뛴
+// 슬롯이 뒤에 끼거나 [도착]이 안 서는 화면(오늘이 아닌 탭 등)에서 완료할 길이 사라진다. 자동 기록이 무장(ARMED)이면
+// 최소 체류 미달 이탈(BR-U10-17)의 마무리가 수동 [방문 완료]뿐이라 숨기지 않는다(결정 1).
+// 3동작: 준비(SLOTS = done 2 · 진행 중 · 예정 2, 일부는 slice) → 실행(renderHub·press) → 단언(두 버튼 존재/부재·콜백).
+
+const COMPLETE = 'execution-arrive-complete';
+/** 진행 중(museum)이 마지막인 픽스처 — 뒤에 예정이 없다. */
+const ACTIVE_LAST = SLOTS.slice(0, 3);
+
+describe('LiveHubView · HV10 [방문 완료]는 마지막 장소에만 (TRIP-1561)', () => {
+  it('HV10a 수동 · 진행 중 슬롯 뒤에 [도착]이 서는 슬롯이 있으면 [방문 완료]가 없다 — 카드는 관람 중 그대로', () => {
+    renderHub({ onPressArrive: jest.fn() });
+
+    expect(screen.getByTestId(arriveId('jeonpo'))).toBeOnTheScreen();
+    expect(screen.queryByTestId(COMPLETE)).toBeNull();
+    expect(
+      screen.getByTestId(`execution-live-slot-time-${DATE}#museum`)
+    ).toHaveTextContent('지금 방문 중');
+  });
+
+  it('HV10b 수동 · 진행 중 슬롯이 마지막이면 [방문 완료]가 서고 누르면 onPressComplete 1회 — [도착]은 어디에도 없다', () => {
+    const handlers = renderHub({
+      slots: ACTIVE_LAST,
+      onPressArrive: jest.fn(),
+    });
+
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(3);
+    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+    fireEvent.press(screen.getByTestId(COMPLETE));
+
+    expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('HV10c [도착]이 안 서는 화면(onPressArrive 미주입 — 오늘이 아닌 탭·조회 전)에서는 뒤에 예정이 있어도 [방문 완료]가 남는다 (갇힘 방지)', () => {
+    const handlers = renderHub();
+
+    // 앵커 — 뒤에 예정 카드가 실제로 있고 [도착]은 하나도 없다.
+    expect(
+      screen.getByTestId(`execution-live-slot-status-${DATE}#jeonpo`)
+    ).toHaveTextContent('예정');
+    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+    fireEvent.press(screen.getByTestId(COMPLETE));
+
+    expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('HV10d 뒤의 예정이 전부 건너뜀이면 마지막으로 본다 — [방문 완료]가 서고 건너뛴 카드엔 [도착]이 없다', () => {
+    const handlers = renderHub({
+      onPressArrive: jest.fn(),
+      skippedPoiIds: new Set(['jeonpo', 'haeundae']),
+    });
+
+    expect(
+      screen.getByTestId(`execution-live-slot-status-${DATE}#jeonpo`)
+    ).toHaveTextContent('예정');
+    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+    fireEvent.press(screen.getByTestId(COMPLETE));
+
+    expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('HV10e 건너뜀이 일부면 건너뛰지 않은 슬롯에만 [도착]이 서고 [방문 완료]는 없다', () => {
+    renderHub({
+      onPressArrive: jest.fn(),
+      skippedPoiIds: new Set(['jeonpo']),
+    });
+
+    expect(screen.queryByTestId(arriveId('jeonpo'))).toBeNull();
+    expect(screen.getByTestId(arriveId('haeundae'))).toBeOnTheScreen();
+    expect(screen.queryByTestId(COMPLETE)).toBeNull();
+  });
+
+  it('HV10f 진행 중이 없으면 건너뜀 여부와 무관하게 예정 카드마다 [도착]이 선다 (종전 동작 — 진행 중 슬롯 뒤 기준은 진행 중이 있을 때만)', () => {
+    renderHub({
+      slots: NO_ACTIVE,
+      onPressArrive: jest.fn(),
+      skippedPoiIds: new Set(['jeonpo']),
+    });
+
+    for (const poiId of ['museum', 'jeonpo', 'haeundae']) {
+      expect(screen.getByTestId(arriveId(poiId))).toBeOnTheScreen();
+    }
+  });
+
+  it('HV10g 자동 기록이 무장(ARMED)이면 뒤에 [도착]이 서도 [방문 완료]를 남긴다 — [도착]도 그대로 선다 (결정 1 · BR-U10-17)', () => {
+    const handlers = renderHub({
+      onPressArrive: jest.fn(),
+      automationArmed: true,
+    });
+
+    expect(screen.getByTestId(arriveId('jeonpo'))).toBeOnTheScreen();
+    expect(screen.getByTestId(arriveId('haeundae'))).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId(COMPLETE));
+
+    expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
+  });
+});
+
+// TRIP-1561 5-b 보강(경고-3) — 술어의 두 절을 각각 잠근다: `index > activeIndex`(진행 중 슬롯 **앞** 카드는 [도착] 대상이 아니다)와
+// `state === 'upcoming'`(진행 중 슬롯 **뒤**여도 이미 '완료'인 카드는 대상이 아니다). 진행 중이 없을 때 [도착]이 모든 예정 카드에
+// 서므로(HV10f) p2 에 먼저 도착하면 p1 은 '예정'인 채 p2 가 관람 중이 되는 순서 바꿈 화면이 실제로 도달 가능하다 — 그때 p2 가
+// 마지막이면 [방문 완료]가 남아야 하고, 두 절이 빠지면 그 버튼이 조용히 사라져 마무리할 길이 없어진다.
+// 앵커: 카드 수 + 진행 중 상태줄 + (앞 카드) '예정' 상태줄 — 부재 단언이 빈 렌더에서 공허하게 통과하지 않게 한다.
+describe('LiveHubView · HV12 진행 중 앞의 예정·뒤의 완료는 [도착] 대상이 아니다 (TRIP-1561 5-b 보강)', () => {
+  const ACTIVE_MUSEUM = SLOTS[2];
+  const upcomingOf = (entry: LiveHubSlot): LiveHubSlot => ({
+    state: 'upcoming',
+    slot: entry.slot,
+  });
+  const doneOf = (entry: LiveHubSlot): LiveHubSlot => ({
+    state: 'done',
+    slot: entry.slot,
+  });
+  const expectActiveMuseum = () =>
+    expect(
+      screen.getByTestId(`execution-live-slot-time-${DATE}#museum`)
+    ).toHaveTextContent('지금 방문 중');
+
+  it('HV12a 진행 중 슬롯 앞에 예정 카드가 있고 진행 중이 마지막이면 — 앞 예정 카드엔 [도착]이 없고 진행 중 카드에 [방문 완료]가 선다', () => {
+    // 순서 바꿈: gamcheon 은 아직 '예정'인데 museum 에 먼저 도착했다.
+    const handlers = renderHub({
+      slots: [upcomingOf(SLOTS[0]), ACTIVE_MUSEUM],
+      onPressArrive: jest.fn(),
+    });
+
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(2);
+    expect(
+      screen.getByTestId(`execution-live-slot-status-${DATE}#gamcheon`)
+    ).toHaveTextContent('예정');
+    expectActiveMuseum();
+    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+    fireEvent.press(screen.getByTestId(COMPLETE));
+
+    expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('HV12b 진행 중 앞에 예정, 뒤에도 예정이면 — [도착]은 뒤 예정 카드에만 서고(앞 예정에는 없다) [방문 완료]는 없다', () => {
+    renderHub({
+      slots: [upcomingOf(SLOTS[0]), ACTIVE_MUSEUM, SLOTS[3]],
+      onPressArrive: jest.fn(),
+    });
+
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(3);
+    expect(
+      screen.getByTestId(`execution-live-slot-status-${DATE}#gamcheon`)
+    ).toHaveTextContent('예정');
+    expectActiveMuseum();
+    // 뒤 예정(jeonpo)에만 1개 — 앞 예정(gamcheon)에는 없다.
+    expect(screen.getByTestId(arriveId('jeonpo'))).toBeOnTheScreen();
+    expect(screen.queryByTestId(arriveId('gamcheon'))).toBeNull();
+    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(1);
+    expect(screen.queryByTestId(COMPLETE)).toBeNull();
+  });
+
+  it('HV12c 진행 중 슬롯 뒤에 이미 완료된 카드만 있으면 마지막으로 본다 — 완료 카드엔 [도착]이 없고 [방문 완료]가 선다', () => {
+    // 순서 바꿈: museum 에 도착해 있는 사이 뒤 jeonpo 를 먼저 다녀와 완료했다.
+    const handlers = renderHub({
+      slots: [ACTIVE_MUSEUM, doneOf(SLOTS[3])],
+      onPressArrive: jest.fn(),
+    });
+
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(2);
+    expectActiveMuseum();
+    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+    fireEvent.press(screen.getByTestId(COMPLETE));
+
+    expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
+  });
+});
+
+// TRIP-1561 — [도착]·[방문 완료] 기록 실패 안내(INV-4). 상태는 페이지가 가지고 뷰는 {poiId, text} 를 그 카드에만 그린다.
+// 종전 안내(사진·메모)는 예정 카드에 안 그렸지만(`noticeFor`) 도착 실패는 예정 카드에 서야 하므로 이 안내는 상태를 가리지 않는다.
+describe('LiveHubView · HV11 기록 실패 안내 (TRIP-1561)', () => {
+  const NOTICE = '도착을 기록하지 못했어요. 다시 눌러 주세요.';
+  const noticeId = (poiId: string) =>
+    `execution-live-slot-action-notice-${DATE}#${poiId}`;
+
+  it.each([
+    ['예정', 'jeonpo'],
+    ['관람 중', 'museum'],
+    ['완료', 'gwangalli'],
+  ] as const)(
+    'HV11 %s 카드(%s)에 안내를 주면 그 카드에만 그 문구 한 줄이 선다',
+    (_label, poiId) => {
+      renderHub({ actionNotice: { poiId, text: NOTICE } });
+
+      expect(screen.getByTestId(noticeId(poiId))).toHaveTextContent(NOTICE);
+      expect(
+        screen.getAllByTestId(/^execution-live-slot-action-notice-/)
+      ).toHaveLength(1);
+    }
+  );
+
+  it('HV11b actionNotice 가 null 이거나 없으면 어느 카드에도 안내가 없다 — 카드 5장은 그대로', () => {
+    renderHub({ actionNotice: null });
+
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
+    expect(
+      screen.queryAllByTestId(/^execution-live-slot-action-notice-/)
+    ).toHaveLength(0);
   });
 });
 
@@ -2074,6 +2311,273 @@ describe('LiveHubView · 지도 핀 맞춤 (AC-4·AC-10 · Q-088)', () => {
 
     // 단언 ②
     expect(hubRegion()).toBe(first);
+  });
+});
+
+/* ──────────────── TRIP-1558 · 카드 번호 = 지도 핀 번호, 핀 탭 → 시트 최상단으로 올림 → 도착 뒤 그 카드로 스크롤 ────────────────
+ * 번호는 슬롯 배열 위치+1 — 핀(`buildStatePins`)과 같은 출처라 좌표 없는 슬롯이 있어도(핀은 ①③④⑤) 카드는 ①②③④⑤ 로 일치한다.
+ * 핀을 누르면: 떠 있는 층을 닫고 → 시트가 최상단 칸(1, 펼침)이 아니면 최상단으로 올리라 요청 → **시트가 그 칸에 도착한 뒤**(onChange)
+ * 그 카드 y 로 스크롤 요청. (gorhom 은 가장 높은 칸에서만 안쪽 스크롤을 허용 — 6-b 실측. 중간 칸에서의 scrollTo 는 무시된다.)
+ * 이미 최상단이면 올림 없이 즉시 스크롤. 도착 전 다른 핀을 누르면 마지막 핀만 스크롤된다.
+ * 핀 배열 위치(index)와 카드 위치는 다를 수 있어 **number** 로 대응한다(HP4). y = 타임라인 y + 행 y (둘 다 onLayout 으로 잰 값).
+ * 통과형 시트 목이라 실제 열림·스크롤 도달은 못 본다(6-b) — "어느 칸으로·언제·어느 y 로 요청이 나갔나"까지만 잠근다.
+ * 목은 onAnimate(이동 시작)·onChange(도착)를 스스로 쏘지 않는다 → 테스트가 host 의 prop 을 직접 부른다(실제 순서 그대로: 시작 → 도착).
+ * 3동작: 준비(좌표 없는 슬롯이 낀 5곳 + 레이아웃 측정) → 실행(핀 탭 / 시트 이동 시작·도착) → 단언(번호 leaf·스파이 인자·호출 횟수). */
+describe('LiveHubView · HP 카드 번호와 핀 탭 (TRIP-1558)', () => {
+  const KEY_NAME = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
+  let original: string | undefined;
+  original = process.env[KEY_NAME];
+  beforeEach(() => {
+    process.env[KEY_NAME] = 'test-naver-client-id';
+  });
+  afterEach(() => {
+    if (original === undefined) delete process.env[KEY_NAME];
+    else process.env[KEY_NAME] = original;
+  });
+
+  // 두 번째 슬롯(광안리)은 좌표가 없다 → 핀 번호 1·3·4·5, 카드 번호 1~5. 상태: done·done·active·upcoming·upcoming.
+  const GAP_SLOTS: LiveHubSlot[] = SLOTS.map((entry, index) =>
+    index === 1
+      ? { ...entry, slot: { ...entry.slot, lat: null, lng: null } }
+      : entry
+  );
+  const KEYS = SLOTS.map(({ slot }) => `${DATE}#${slot.poiId}`);
+  const orderId = (key: string) => `execution-live-slot-order-${key}`;
+  const TIMELINE_Y = 300;
+  const ROW_YS = [24, 170, 340, 520, 690];
+
+  /** 그 testID 노드에 **직접** 달린 onLayout 으로 y 를 흉내 낸다 — 조상의 onLayout 이 대신 불려 거짓 green 되지 않게 먼저 확인한다. */
+  function fireLayoutAt(testID: string, y: number): void {
+    const node = screen.getByTestId(testID);
+    if (typeof node.props.onLayout !== 'function') {
+      throw new Error(`${testID} 노드에 onLayout 이 직접 달려 있지 않다`);
+    }
+    fireEvent(node, 'layout', {
+      nativeEvent: { layout: { x: 0, y, width: 320, height: 120 } },
+    });
+  }
+  function measureHub(): void {
+    fireLayoutAt('execution-live-timeline', TIMELINE_Y);
+    KEYS.forEach((key, index) =>
+      fireLayoutAt(`execution-live-slot-row-${key}`, ROW_YS[index])
+    );
+  }
+  const rowY = (index: number) => TIMELINE_Y + ROW_YS[index];
+
+  it('HP1 세 상태 카드 모두 슬롯 위치+1 번호가 있고(좌표 없는 슬롯 포함), 렌더된 모든 핀의 번호와 그 슬롯 카드 번호가 같다', () => {
+    renderHub({ slots: GAP_SLOTS });
+
+    KEYS.forEach((key, index) =>
+      expect(screen.getByTestId(orderId(key))).toHaveTextContent(
+        String(index + 1)
+      )
+    );
+    // 핀 — 좌표 없는 2번은 핀이 없고 번호는 안 밀린다(①③④⑤).
+    const pinNumbers = screen
+      .getAllByTestId(/^map-marker-pin-/)
+      .map((node) => Number(String(node.props.testID).split('-').pop()));
+    expect(pinNumbers).toEqual([1, 3, 4, 5]);
+    pinNumbers.forEach((n) =>
+      expect(screen.getByTestId(orderId(KEYS[n - 1]))).toHaveTextContent(
+        String(n)
+      )
+    );
+  });
+
+  /** 시트가 그 칸에 **도착해 멈췄다** — host 의 onChange 를 act 안에서 직접 부른다(이동 시작 onAnimate 와 다른 신호). */
+  function fireSheetSettle(index: number): void {
+    const onChange = sheetHost().props.onChange as unknown;
+    if (typeof onChange !== 'function') {
+      throw new Error('시트(BottomSheet)에 onChange 가 달려 있지 않다');
+    }
+    act(() => {
+      (onChange as (i: number, p: number, t: number) => void)(index, 0, 0);
+    });
+  }
+  /** 사용자가 손으로 시트를 옮긴 것 — 실제 순서대로 시작(onAnimate) 뒤 도착(onChange). */
+  function dragSheet(from: number, to: number): void {
+    fireSheetAnimate(from, to);
+    fireSheetSettle(to);
+  }
+  const snapTargets = () => snapSpy().mock.calls.map(([index]) => index);
+  const scrollYs = () => scrollSpy().mock.calls.map(([arg]) => arg.y);
+
+  it('HP2 시트가 완전히 내려가 있으면 핀 탭은 최상단(1)으로 올리라고만 요청하고, 도착한 뒤에야 그 카드 y 로 스크롤을 정확히 1회 요청한다', () => {
+    renderHub({ slots: GAP_SLOTS, initialSnapIndex: -1 });
+    measureHub();
+    expect(snapSpy()).not.toHaveBeenCalled();
+    expect(scrollSpy()).not.toHaveBeenCalled();
+
+    firePinTap(1); // 핀 index 1 = number 3
+
+    expect(snapTargets()).toEqual([1]); // 중간(0)이 아니라 최상단(1)
+    expect(scrollSpy()).not.toHaveBeenCalled(); // 아직 도착 전
+
+    // 이동 시작(onAnimate)은 도착이 아니다 — 여기서 스크롤하면 시트가 아직 안 올라온 때라 무시된다.
+    fireSheetAnimate(-1, 1);
+    expect(scrollSpy()).not.toHaveBeenCalled();
+
+    fireSheetSettle(1); // 도착
+
+    expect(scrollSpy()).toHaveBeenCalledTimes(1);
+    expect(scrollSpy()).toHaveBeenLastCalledWith(
+      expect.objectContaining({ y: rowY(2) })
+    );
+    expect(snapTargets()).toEqual([1]); // 도착 뒤에 시트 요청이 더 늘지 않는다
+
+    // 최상단에 있다 — 같은 핀을 다시 눌러도 시트는 그대로, 스크롤은 즉시(같은 핀 재탭도 요청이다).
+    firePinTap(1);
+    expect(snapTargets()).toEqual([1]);
+    expect(scrollYs()).toEqual([rowY(2), rowY(2)]);
+  });
+
+  it('HP2b 펼침에서 곧장 내려간 뒤(1→-1)에도 중간이 아니라 최상단(1)으로 올리고, 스크롤은 도착 뒤에 낸다', () => {
+    renderHub({ slots: GAP_SLOTS, initialSnapIndex: 1 });
+    measureHub();
+    dragSheet(1, -1);
+
+    firePinTap(0);
+
+    expect(snapTargets()).toEqual([1]);
+    expect(scrollSpy()).not.toHaveBeenCalled();
+
+    fireSheetSettle(1);
+
+    expect(scrollYs()).toEqual([rowY(0)]);
+  });
+
+  it('HP3 시트가 중간(0)이면 최상단(1)으로 올리라고 요청하고, 도착 전엔 스크롤이 없다 — 중간 칸의 scrollTo 는 시트가 무시한다', () => {
+    renderHub({ slots: GAP_SLOTS, initialSnapIndex: 0 });
+    measureHub();
+
+    firePinTap(1);
+
+    expect(snapTargets()).toEqual([1]);
+    expect(scrollSpy()).not.toHaveBeenCalled();
+
+    fireSheetSettle(1);
+
+    expect(scrollYs()).toEqual([rowY(2)]);
+  });
+
+  it('HP3b 시트가 이미 최상단(1)이면 올림 요청 없이 즉시 스크롤한다(펼침을 끌어내리지도, 도착을 기다리지도 않는다)', () => {
+    renderHub({ slots: GAP_SLOTS, initialSnapIndex: 1 });
+    measureHub();
+
+    firePinTap(1);
+
+    expect(snapSpy()).not.toHaveBeenCalled();
+    expect(scrollYs()).toEqual([rowY(2)]);
+  });
+
+  it('HP4 (번호 점프 ①③) 두 번째 핀(index 1, number 3)은 두 번째가 아니라 3번째 카드로, 첫 핀은 첫 카드로 간다', () => {
+    renderHub({ slots: GAP_SLOTS, initialSnapIndex: 1 });
+    measureHub();
+
+    firePinTap(1);
+    firePinTap(0);
+    firePinTap(3); // number 5
+
+    expect(scrollYs()).toEqual([
+      rowY(2), // 640 — index 기준이면 470(2번째 카드)
+      rowY(0),
+      rowY(4),
+    ]);
+  });
+
+  it('HP5 (금지) 행 y 를 아직 못 쟀으면 핀 탭이 던지지 않고, 시트가 도착해도 스크롤을 요청하지 않는다', () => {
+    renderHub({ slots: GAP_SLOTS });
+
+    expect(() => firePinTap(1)).not.toThrow();
+    fireSheetSettle(1);
+
+    expect(scrollSpy()).not.toHaveBeenCalled();
+  });
+
+  it('HP6 도착 전에 다른 핀을 누르면 마지막 핀만 스크롤된다 — 이동 시작(onAnimate)을 도착으로 착각해도 안 된다', () => {
+    renderHub({ slots: GAP_SLOTS, initialSnapIndex: 0 });
+    measureHub();
+
+    firePinTap(1); // number 3 — 올림 요청
+    fireSheetAnimate(0, 1); // 올라가는 중(시작 신호)
+    firePinTap(0); // number 1 — 아직 도착 전
+    expect(scrollSpy()).not.toHaveBeenCalled();
+    expect(snapTargets().every((index) => index === 1)).toBe(true);
+
+    fireSheetSettle(1);
+
+    expect(scrollYs()).toEqual([rowY(0)]); // 첫 핀(number 3)의 y(640)는 나가지 않는다
+  });
+
+  it('HP7 도착해 스크롤한 뒤에 낡은 요청이 되살아나지 않고, 사용자가 시트를 내려 놓은 뒤의 핀 탭은 다시 올림을 요청한다', () => {
+    renderHub({ slots: GAP_SLOTS, initialSnapIndex: 0 });
+    measureHub();
+    firePinTap(1);
+    fireSheetSettle(1);
+    expect(scrollYs()).toEqual([rowY(2)]);
+
+    // 사용자가 중간으로 내렸다가 다시 펼침 — 이미 처리한 요청이 다시 나가면 안 된다.
+    dragSheet(1, 0);
+    dragSheet(0, 1);
+    expect(scrollYs()).toEqual([rowY(2)]);
+
+    // 다시 내려 둔 뒤 핀 탭 — 최상단이 아니니 또 올리고, 도착 뒤 스크롤.
+    dragSheet(1, 0);
+    firePinTap(3); // number 5
+    expect(snapTargets()).toEqual([1, 1]);
+    expect(scrollYs()).toEqual([rowY(2)]);
+    fireSheetSettle(1);
+    expect(scrollYs()).toEqual([rowY(2), rowY(4)]);
+  });
+
+  // TRIP-1558 03b 2회차 경고-1·2 — "대기가 살아 있는 동안" 시트가 딴 칸으로 가는 경우(정상 경로 HP2~7 이 못 보는 가장자리).
+  it.each([
+    ['중간(0)', 0],
+    ['완전 내림(-1)', -1],
+  ])(
+    'HP8 올라가는 도중 사용자가 시트를 %s 으로 끌어가면 대기 y 를 버린다 — 나중에 손으로 펼쳐도 옛 카드로 튀지 않는다',
+    (_label, away) => {
+      renderHub({ slots: GAP_SLOTS, initialSnapIndex: 0 });
+      measureHub();
+      firePinTap(1); // number 3 — 올림 요청 + 대기 y
+
+      fireSheetAnimate(1, away); // 올라가던 시트가 최상단이 아닌 칸으로 이동을 시작한다
+      fireSheetSettle(away);
+      dragSheet(away, 1); // 한참 뒤 사용자가 손으로 최상단까지 올림
+      expect(scrollSpy()).not.toHaveBeenCalled(); // 옛 카드(y=640)로 안 튄다
+
+      // 짝 — 버린 뒤에도 최상단에서의 새 핀 탭은 정상 동작한다.
+      firePinTap(3); // number 5
+      expect(scrollYs()).toEqual([rowY(4)]);
+    }
+  );
+
+  it('HP9 올라가는 도중 일차 칩을 누르면 대기 y 를 버린다 — 도착해도 옛 날짜의 y 로 스크롤하지 않는다', () => {
+    renderHub({ slots: GAP_SLOTS, initialSnapIndex: 0 });
+    measureHub();
+    firePinTap(1);
+    expect(snapTargets()).toEqual([1]);
+
+    fireEvent.press(screen.getByTestId('execution-live-daychip-0')); // 다른 날로 전환
+    fireSheetSettle(1); // 올라가던 시트가 도착
+
+    expect(scrollSpy()).not.toHaveBeenCalled();
+
+    // 짝 — 도착해 있는 지금 새 핀 탭은 즉시 스크롤된다(대기 버림이 흐름을 죽이지 않았다).
+    firePinTap(3);
+    expect(scrollYs()).toEqual([rowY(4)]);
+  });
+
+  it('HP10 최상단이 아닌 칸에 도착(onChange 0·-1)하는 것으로는 대기 스크롤이 나가지 않는다', () => {
+    renderHub({ slots: GAP_SLOTS, initialSnapIndex: 0 });
+    measureHub();
+    firePinTap(1); // 올림 요청 + 대기 y — 이동 시작 신호는 일부러 안 준다(HP8 의 버림 경로와 분리)
+
+    fireSheetSettle(0);
+    fireSheetSettle(-1);
+
+    expect(scrollSpy()).not.toHaveBeenCalled();
+    expect(snapTargets()).toEqual([1]); // 도착 신호가 시트 요청을 더 만들지도 않는다
   });
 });
 

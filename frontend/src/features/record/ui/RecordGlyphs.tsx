@@ -354,3 +354,24 @@ export function CloseGlyph({ size = 24 }: GlyphProps): ReactElement {
     </Svg>
   );
 }
+
+/**
+ * 막대 그래프(27 격자, 세로 막대 3 + 바닥선) — j01 하단 바 「요약」 칸(Figma 5053:3539 `barChart`). 같은 벡터를 쓰는
+ * `features/settings` 의 `BarChartGlyph` 는 색이 고정이라 못 쓴다(features 간 import 금지이기도 하다). 두께 2.25 = 하단 바 다른 칸 아이콘과 같다.
+ */
+export function SummaryChartGlyph({
+  size = 27,
+  color = MUTED,
+}: GlyphProps & { color?: string }): ReactElement {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
+      <Path
+        d="M6.75 22.5V14.625M13.5 22.5V5.625M20.25 22.5V10.125M3.375 22.5H23.625"
+        stroke={color}
+        strokeWidth={2.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}

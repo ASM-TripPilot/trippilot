@@ -119,6 +119,9 @@ def _now_submit(fn) -> Future:
     ("서울 요즘 핫한 곳", True), ("강남역 근처 카페", True), ("부산 가볼만한 곳", True),
     ("다음 일정 뭐야", False), ("고마워!", False), ("근처 카페 있어?", False),  # 지역을 말하지 않았다 — 탐색도 SQL 을 안 쓴다
     ("서울 날씨 어때", False),
+    ("홍대와 이태원 사이에 가볼만한 곳 알려줘", False),  # 두 곳 사이는 반경으로만 찾는다 — 미리 써 봐야 버린다
+    ("홍대와 이태원사이😊 카페", False),  # 핸들러와 같게 정규화해서 본다
+    ("서울이랑 부산 사이 가볼 만한 곳", False),  # 너무 먼 짝 — 핸들러는 찾지 않고 그렇다고 답한다
 ])
 def test_place_query_needs_a_known_region_and_a_place_word(said: str, expected: bool) -> None:
     assert looks_like_place_query(said) is expected

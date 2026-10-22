@@ -244,7 +244,8 @@ def validate(
     """편집 재검증(HC1~4). 위반은 정상 응답 200 — 변경 차단 판단은 백엔드 몫이다.
 
     `unverified_slots`는 위반이 **아니다** — POI 정본을 못 찾아 HC1·HC2를 아예 못
-    본 슬롯이다(TRIP-537). 위반 0 + 이 목록 비어 있음 = 진짜 통과.
+    본 슬롯(TRIP-537)과 영업 창을 몰라 HC1을 못 본 슬롯(`HOURS_UNKNOWN`)이다.
+    위반 0 + 이 목록 비어 있음 = 진짜 통과.
     """
 
     def run() -> ValidateItineraryResponse:

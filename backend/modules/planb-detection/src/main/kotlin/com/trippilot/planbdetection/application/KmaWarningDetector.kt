@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicReference
  * | 여행·목적지를 못 읽음 | 모름 |
  * | 아는 종류가 그 날의 목적지에 걸림 | 위험 신호(실외 슬롯 전부) — 실외 슬롯 없이 미분류만 남았으면 모름(지어내지 않는다) |
  * | 모르는 종류가 걸림 · 코드 없는 목적지(동명이지역)가 섞임 | 신호가 없으면 모름 — '특보 없음'으로 확인하지 않는다(INV-SA-2) |
- * | 모르는 최상위 구역 이름 · 광역 하위 권역(산지)이 목적지 시군을 덮는지 가릴 수 없음 | 신호가 없으면 모름 — 모르는 이름은 바뀔 때 WARN 한 번 |
+ * | 모르는 구역 이름(최상위 · 도·광역시 줄의 하위 구역) · 광역 하위 권역(산지)이 목적지 시군을, 관서 묶음 줄(`경상남도`)이 그 묶음의 다른 광역 목적지(부산)를 덮는지 가릴 수 없음 | 신호가 없으면 모름 — 모르는 이름은 바뀔 때 WARN 한 번 |
  * | 그 밖(걸린 특보 없음 — 특보 없음 `o 없 음` 포함) | 확인(날짜 전체) |
  *
  * **오늘만** 본다(`wants`) — 특보현황에 종료 시각이 없어 내일 이어질지 모른다. 실외 집합은 단기예보와 같은 [WeatherHazards.OUTDOOR] 다.
@@ -95,18 +95,19 @@ class KmaWarningDetector(private val alerts: WeatherAlertFacade, private val tri
     }
 
     /**
-     * 모르는 최상위 구역 이름(광역·섬 구역·바다가 아님 — `WeatherAlerts` 규칙 2) — t6 형식 변화·구역 개편의 신호라 바뀔 때만 WARN 한 번
-     * (파드 범위 · 같은 이름이 이어지면 조용하다). 많거나 긴 이름은 잘라 싣는다. t6 는 정상 응답의 구역 이름이라 키가 없지만, 응답에서 온
-     * 글자라 ASCII 영숫자는 가려 싣는다(SEC-SA-03 — 구역 이름은 한글·문장부호다).
+     * 모르는 구역 이름 — 최상위(광역·섬 구역·바다가 아님 — `WeatherAlerts` 규칙 2)와 도·군이 있는 광역시 줄의 하위 구역(시군 어간·광역
+     * 권역·섬·관서 묶음 구역·바다가 아님 — 규칙 7·8). t6 형식 변화·구역 개편의 신호라 바뀔 때만 WARN 한 번(파드 범위 · 같은 이름이
+     * 이어지면 조용하다). 많거나 긴 이름은 잘라 싣는다. t6 는 정상 응답의 구역 이름이라 키가 없지만, 응답에서 온 글자라 ASCII 영숫자는
+     * 가려 싣는다(SEC-SA-03 — 구역 이름은 한글·문장부호다).
      */
     private fun noteUnknownAreas(live: List<ActiveWarning>): Set<String> {
-        val names = live.flatMap { it.areas }.filterNot(WeatherAlerts::isKnownArea)
-            .map { area -> area.name.trim().take(NAME_CAP).map { if (it.code < 128 && it.isLetterOrDigit()) '*' else it }.joinToString("") }
+        val names = live.flatMap { it.areas }.flatMap(WeatherAlerts::unknownNames)
+            .map { name -> name.take(NAME_CAP).map { if (it.code < 128 && it.isLetterOrDigit()) '*' else it }.joinToString("") }
             .toSortedSet()
         if (seenUnknownAreas.getAndSet(names) != names && names.isNotEmpty()) {
             log.warn(
                 "기상특보 — 모르는 특보 구역 이름 {} 이 있습니다(t6 형식 변화·특보구역 개편). 그 구역은 목적지를 가릴 수 없어 '특보 없음'으로 " +
-                    "확인하지 않고 모름으로 둡니다 — WeatherAlerts 의 광역·섬 구역 표를 확인하십시오.",
+                    "확인하지 않고 모름으로 둡니다 — WeatherAlerts 의 광역·섬 구역·관서 묶음 구역·시군 어간 표를 확인하십시오.",
                 names.take(NAMES_CAP),
             )
         }
@@ -162,10 +163,10 @@ class KmaWarningDetector(private val alerts: WeatherAlertFacade, private val tri
         private const val UNKNOWN_KIND = "unknown-warning"
         private const val UNCLASSIFIED = "unclassified-slots"
 
-        /** 표에 없는 최상위 구역 이름이 있다(규칙 2). */
+        /** 표에 없는 구역 이름이 있다 — 최상위(규칙 2) 또는 도·광역시 줄의 하위 구역(규칙 7·8). */
         private const val UNKNOWN_AREA = "unknown-area"
 
-        /** 광역 하위 권역(산지)이 목적지 시군을 덮는지 가릴 수 없다(규칙 8). */
+        /** 광역 하위 권역(산지)이 목적지 시군을, 관서 묶음 줄이 그 묶음의 다른 광역 목적지를 덮는지 가릴 수 없다(규칙 8 · 4). */
         private const val UNATTRIBUTED = "unattributed-zone"
 
         private const val NAME_CAP = 30

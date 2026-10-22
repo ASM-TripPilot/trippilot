@@ -15,7 +15,9 @@ FastAPI TestClient + **실 오케스트레이터·실 M7·실 C1·실 C2** + fak
   ④ validate·repair 관통: 위반 일정 → 위반 목록(day_index 포함) → repair 수리 후
      재검증 위반 0, 수리 불가는 200 + repaired=null(IO-7)
   ④-보강 미검증 보고(TRIP-537): 미등록 POI 가 낀 일정은 HC1·HC2 판정 밖인데
-     위반 0 으로만 보였다 — 이제 `unverified_slots` 에 사유와 함께 실린다(INV-4)
+     위반 0 으로만 보였다 — 이제 `unverified_slots` 에 사유와 함께 실린다(INV-4).
+     영업정보 없는 등록 POI 는 HC1 만 판정 밖이라 HOURS_UNKNOWN 으로 실린다(상황 감지 INV-SA-2) —
+     원문이 있어도 해석하지 못하면(재현 둘, 정본 조회 어댑터의 실 행 매핑) 같다
   ⑤ 에러 계약: 모순 고정블록 409 · 잘못된 스키마/조립 불가 입력 422
   ⑥ 로컬 스모크 조립(main.py 경로): build_dev_app이 fake만으로 200을 낸다
 """
@@ -24,6 +26,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -37,7 +40,8 @@ from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.domain.common import BudgetLevel, GeoPoint
 from trippilot.domain.llm import ModelTier
 from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.poi_curation.adapters.backend_poi_db import BackendPoiDb
 from trippilot.ports.llm_port import LlmRequest, LlmResponse
 
 from tests.fakes.fake_clock import FakeClock
@@ -199,6 +203,11 @@ def _slot_ids(body: dict) -> list[str]:
     return [s["poi_id"] for d in body["days"] for s in d["slots"]]
 
 
+def _hours_unknown(poi_ids: list[str]) -> list[dict]:
+    """영업정보 없는 픽스처 POI(open_hours=())의 미판정 보고 — HC1 만 못 봤다(상황 감지 INV-SA-2). 첫 등장 순·중복 없음."""
+    return [{"poi_id": p, "reason_code": "HOURS_UNKNOWN", "detail": ""} for p in dict.fromkeys(poi_ids)]
+
+
 def _validate_body(itinerary: dict, deadline_ms: int = 20_000) -> dict:
     return {"itinerary": itinerary, "request_meta": _meta(deadline_ms)}
 
@@ -241,12 +250,13 @@ def test_generate_pierces_http_to_assembly() -> None:
         for banned in _BANNED_TOKENS:
             assert banned not in response.text, f"INV-3/IO-3 위반: {banned!r}"
 
-        # HC 통과를 HTTP로 증명: generate 응답을 validate에 되먹이면 위반 0
+        # HC 통과를 HTTP로 증명: generate 응답을 validate에 되먹이면 위반 0 — 픽스처는 영업정보가 없어
+        # HC1 은 못 본 것으로 함께 실린다(위반 0 이 영업시간 통과로 읽히지 않게)
         revalidated = client.post(
             "/ai/v1/itinerary/validate", json=_validate_body(body)
         )
         assert revalidated.status_code == 200
-        assert revalidated.json() == {"violations": [], "unverified_slots": []}
+        assert revalidated.json() == {"violations": [], "unverified_slots": _hours_unknown(placed)}
 
 
 # ── ①-보강 고정 블록 is_fixed 관통 (TRIP-343) ────────────────────────
@@ -531,7 +541,7 @@ def test_repair_fixes_then_revalidates_clean() -> None:
             "/ai/v1/itinerary/validate", json=_validate_body(body["repaired"])
         )
         assert revalidated.status_code == 200
-        assert revalidated.json() == {"violations": [], "unverified_slots": []}
+        assert revalidated.json() == {"violations": [], "unverified_slots": _hours_unknown(["p1", "p2"])}
 
 
 def test_repair_honest_failure_when_fixed_slot_blocks_shift() -> None:
@@ -548,7 +558,7 @@ def test_repair_honest_failure_when_fixed_slot_blocks_shift() -> None:
         )
 
     assert response.status_code == 200
-    assert response.json() == {"repaired": None, "changes": [], "unverified_slots": []}
+    assert response.json() == {"repaired": None, "changes": [], "unverified_slots": _hours_unknown(["p1", "p2"])}
 
 
 # ── ④-보강 미검증 보고 (TRIP-537) ────────────────────────────────────
@@ -577,14 +587,19 @@ def test_unregistered_poi_is_reported_as_unverified_not_as_pass() -> None:
     assert [v for v in body["violations"] if v["code"] in ("HC1", "HC2")] == []
     assert body["unverified_slots"] == [
         {"poi_id": _UNREGISTERED, "reason_code": "NOT_REGISTERED", "detail": ""}
-    ]
+    ] + _hours_unknown(["p1"])  # 미등록이 먼저, 영업정보 없는 등록 POI 가 뒤
     for banned in _BANNED_TOKENS:                    # INV-3 — 새 필드에도 적용
         assert banned not in response.text, f"INV-3 위반: {banned!r}"
 
 
+# 영업정보가 있는 픽스처 — 하루 종일 연다(HC1 이 실제로 적용되되 이 시나리오의 시각을 막지 않는다).
+_POIS_WITH_HOURS = tuple(
+    replace(p, open_hours=tuple(OpenHour(d, 0, 1440) for d in range(7))) for p in _POIS)
+
+
 def test_fully_registered_itinerary_reports_no_unverified_slots() -> None:
-    """전부 등록된 일정이면 빈 목록 = 모든 슬롯이 실제로 판정을 받았다."""
-    with make_client() as client:
+    """전부 등록되고 영업정보가 있으면 빈 목록 = 모든 슬롯이 실제로 HC1·HC2 판정을 받았다."""
+    with make_client(pois=_POIS_WITH_HOURS) as client:
         response = client.post(
             "/ai/v1/itinerary/validate", json=_validate_body(_payload(_VIOLATING))
         )
@@ -593,6 +608,67 @@ def test_fully_registered_itinerary_reports_no_unverified_slots() -> None:
     body = response.json()
     assert body["unverified_slots"] == []
     assert any(v["code"] == "HC2" for v in body["violations"])   # 판정은 실제로 돌았다
+
+
+def test_registered_poi_without_hours_is_hours_unknown_not_pass() -> None:
+    """등록됐어도 영업정보가 없으면 HC1 은 못 봤다 — HOURS_UNKNOWN. HC2 는 판정됐다(위반이 나온다).
+
+    상황 감지 INV-SA-2: 위반 0 만 보고 장소 감지가 이 슬롯을 '영업시간 확인'으로 접었다(원문 해석 실패 ≈ 8.5%).
+    """
+    with make_client() as client:
+        response = client.post(
+            "/ai/v1/itinerary/validate", json=_validate_body(_payload(_VIOLATING))
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["unverified_slots"] == _hours_unknown(["p1", "p2"])
+    assert [v["code"] for v in body["violations"]] == ["HC2"]
+
+
+# 해석에 실패하는 원문 꼴 둘(공유본 원문 23,712곳 중 2,005곳) — 원문은 있는데 영업 창이 0건이다. 백엔드는 원문이
+# 있으면 영업시간을 안다고 보고(openingHoursKnown) 묻는다 — 그래서 위반 0 이 장소 감지에서 '확인'으로 접혔다.
+_UNPARSED_HOURS = {"raw-winter": "09:00~18:00\n휴무: 동절기 휴장", "raw-words": "매일 오전 열시부터 저녁까지"}
+
+
+class _BatchRows:
+    """`/internal/pois/batch-get` 대역 — 받은 행을 그대로 돌려준다(HttpJson 구조 계약, 실 호출 0)."""
+
+    def __init__(self, rows: list[dict]) -> None:
+        self._rows = rows
+
+    def request_json(self, method, url, *, params=None, body=None, headers=None):  # noqa: ANN001
+        return self._rows
+
+
+def _backend_pois(raw_hours: dict[str, str]) -> tuple[Poi, ...]:
+    """정본 조회 어댑터(`BackendPoiDb`)의 실 행 매핑으로 만든 POI — 원문 → 영업 창 해석을 손으로 흉내내지 않는다."""
+    rows = [
+        {"poi_id": pid, "name_ko": pid, "category": "SIGHT", "lat": _ANCHOR.lat, "lng": _ANCHOR.lng,
+         "opening_hours": raw, "source": "TOURAPI", "saved_count": 0, "data_quality": "FULL"}
+        for pid, raw in raw_hours.items()
+    ]
+    return BackendPoiDb(_BatchRows(rows), "http://backend.test", "t").lookup_by_ids(frozenset(raw_hours)).pois
+
+
+def test_unparsed_hours_raw_is_reported_as_hours_unknown() -> None:
+    """재현 둘 — 원문을 해석하지 못하면 영업 창 0건 → HC1 미적용 → `HOURS_UNKNOWN` 으로 실린다(상황 감지 INV-SA-2).
+
+    대조군(해석되는 원문)은 같은 일정에서 HC1 판정을 받아 목록에 없다 — 셋의 차이는 원문 해석뿐이다.
+    """
+    pois = _backend_pois({**_UNPARSED_HOURS, "raw-ok": "09:00~18:00"})
+    assert {p.poi_id: len(p.open_hours) for p in pois} == {"raw-winter": 0, "raw-words": 0, "raw-ok": 7}  # 전제
+    itinerary = _payload([
+        _slot("raw-winter", "10:00:00", "11:00:00"),
+        _slot("raw-words", "13:00:00", "14:00:00"),
+        _slot("raw-ok", "16:00:00", "17:00:00"),
+    ])
+
+    with make_client(pois=pois) as client:
+        response = client.post("/ai/v1/itinerary/validate", json=_validate_body(itinerary))
+
+    assert response.status_code == 200
+    assert response.json() == {"violations": [], "unverified_slots": _hours_unknown(["raw-winter", "raw-words"])}
 
 
 def test_repair_also_reports_unverified_slots() -> None:
@@ -607,7 +683,7 @@ def test_repair_also_reports_unverified_slots() -> None:
     assert response.status_code == 200
     assert response.json()["unverified_slots"] == [
         {"poi_id": _UNREGISTERED, "reason_code": "NOT_REGISTERED", "detail": ""}
-    ]
+    ] + _hours_unknown(["p1"])
 
 
 # ── ⑤ 에러 계약 ──────────────────────────────────────────────────────

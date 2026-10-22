@@ -186,7 +186,7 @@ export function ItineraryIconInactive({ size = 27 }: TabIconProps) {
   );
 }
 
-function RecordsIconActive({ size = 27 }: TabIconProps) {
+export function RecordsIconActive({ size = 27 }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
