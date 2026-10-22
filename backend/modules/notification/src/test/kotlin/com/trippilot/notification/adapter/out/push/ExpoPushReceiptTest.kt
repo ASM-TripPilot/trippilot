@@ -1,19 +1,26 @@
 package com.trippilot.notification.adapter.out.push
 
 import com.trippilot.notification.domain.PushMessage
+import com.trippilot.notification.domain.PushRateLimited
 import com.trippilot.notification.domain.PushReceipt
 import com.trippilot.notification.domain.PushStatus
 import com.trippilot.notification.domain.PushUrgency
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.shouldBe
 import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.test.web.client.MockRestServiceServer
 import org.springframework.test.web.client.match.MockRestRequestMatchers.header
 import org.springframework.test.web.client.match.MockRestRequestMatchers.headerDoesNotExist
 import org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath
 import org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo
+import org.springframework.test.web.client.response.MockRestResponseCreators.withStatus
 import org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess
+import org.springframework.web.client.HttpClientErrorException
+import org.springframework.web.client.HttpServerErrorException
 import org.springframework.web.client.RestClient
 
 /**
@@ -85,5 +92,49 @@ class ExpoPushReceiptTest : StringSpec({
         send(listOf("t1"), """{"data":[{"status":"ok"}]}""", accessToken = "secret").single().status shouldBe PushStatus.SENT
         send(listOf("t1"), """{"data":[{"status":"ok"}]}""", accessToken = "").single().status shouldBe PushStatus.SENT
         send(listOf("t1"), """{"data":[{"status":"ok"}]}""", accessToken = "  ").single().status shouldBe PushStatus.SENT // 공백만 — 빈 Bearer 로 401
+    }
+
+    /**
+     * **프로젝트 발송량 한도(HTTP 429)는 도메인 예외로 올린다** — 정본 COST-U6-04 의 재평가 트리거가 이 한도다.
+     * 웹 예외 그대로 올리면 응용층이 네트워크·5xx 와 구분하지 못해 지표의 레이트리밋 칸이 이 경우를 못 본다.
+     * 다른 HTTP 오류는 종전대로 그대로 올라간다. **어느 한도인지**는 응답 본문에만 있어, 그 정보가 예외 메시지에
+     * 남아야 발송 실패 로그(`e.toString()`)가 종전과 같은 단서를 준다.
+     */
+    "429 는 PushRateLimited 로 — 원인과 응답 본문을 싣고, 다른 HTTP 오류는 그대로 올라간다" {
+        fun respond(status: HttpStatus, body: String = ""): Throwable {
+            val builder = RestClient.builder().baseUrl("http://expo.test")
+            val server = MockRestServiceServer.bindTo(builder).build()
+            server.expect(requestTo(url)).andRespond(withStatus(status).contentType(MediaType.APPLICATION_JSON).body(body))
+            return runCatching { ExpoPushAdapter("", builder.build()).send(listOf("t1"), message) }.exceptionOrNull()!!
+        }
+
+        val limited = respond(
+            HttpStatus.TOO_MANY_REQUESTS,
+            """{"errors":[{"code":"TOO_MANY_REQUESTS","message":"project push rate exceeded"}]}""",
+        ).shouldBeInstanceOf<PushRateLimited>()
+        limited.cause.shouldBeInstanceOf<HttpClientErrorException.TooManyRequests>()
+        // 고정 문구에도 "429" 가 있어 그것만으로는 원인이 실렸는지 모른다 — 상태 줄 전체와 본문을 본다.
+        limited.message shouldContain "429 Too Many Requests"
+        limited.message shouldContain "project push rate exceeded"
+
+        respond(HttpStatus.SERVICE_UNAVAILABLE).shouldBeInstanceOf<HttpServerErrorException.ServiceUnavailable>()
+    }
+
+    /** 응답 본문은 상대가 정한다 — 아무리 길어도 **앞에서부터 300자**만 싣는다(앞이 상태 줄이라 단서가 거기 있다). */
+    "429 원인 메시지는 앞에서부터 300자만 싣는다" {
+        val prefix = "발송 서비스의 발송량 한도에 걸렸습니다(HTTP 429)"
+        val detail = "a" + "x".repeat(10_000)
+
+        PushRateLimited(detail).message shouldBe "$prefix — ${detail.take(300)}"
+    }
+
+    /** 300자 경계에 이모지(서로게이트 쌍)가 걸리면 반쪽 문자를 남기지 않고 그 문자째 뺀다 — 쌍이 경계 안에서 끝나면 남긴다. */
+    "300자 경계에 걸린 서로게이트 쌍은 쪼개지 않는다" {
+        val prefix = "발송 서비스의 발송량 한도에 걸렸습니다(HTTP 429)"
+        val detail = "x".repeat(299) + "😀" + "뒤"
+
+        PushRateLimited(detail).message shouldBe "$prefix — ${"x".repeat(299)}"
+        // 완전한 쌍이 정확히 300자에서 끝나면 남긴다 — 덜 자르는 것은 쌍이 경계에서 쪼개질 때뿐이다.
+        PushRateLimited("x".repeat(298) + "😀" + "뒤").message shouldBe "$prefix — ${"x".repeat(298)}😀"
     }
 })

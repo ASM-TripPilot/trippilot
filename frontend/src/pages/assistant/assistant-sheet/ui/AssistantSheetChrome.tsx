@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { useRef, useState, type ReactElement } from 'react';
 import {
   Keyboard,
   Pressable,
@@ -9,14 +9,20 @@ import {
 } from 'react-native';
 
 import { SparkleGlyph } from '@/features/open-assistant';
+import { ChevronDownGlyph } from '@/shared/ui/glyphs';
 import type { QuickReply } from '../api/assistantContract';
 import { COMPOSER_LIMIT } from '../model/composerLimit';
 import { CAPABILITIES_LABEL } from '../model/displayActions';
-import { CloseGlyph, SendArrowGlyph } from './AssistantSheetGlyphs';
+import {
+  CloseGlyph,
+  ListGlyph,
+  ReplyGlyph,
+  SendArrowGlyph,
+} from './AssistantSheetGlyphs';
 
 /**
- * 시트 테두리 부품(TRIP-1322) — 헤더 · 컨텍스트 칩 · quick reply 줄 · 입력창. 라이브 Figma b01 default 를 옮겼다
- * (헤더 ✦ 원 30 + "AI 도우미", 칩 = info 연청 바탕 + 점, quick reply = 외곽선 알약, 입력 = 둥근 칸 + 분홍 원 보내기 44).
+ * 시트 테두리 부품(TRIP-1322, 틀 개정 TRIP-1525·1526) — 헤더 · quick reply · 입력 카드(컨텍스트 칩 + 입력 + 전송).
+ * 라이브 Figma bv3 프레임을 옮겼다(헤더 = ✦ 원 30 + 더보기 + 닫기 각 44, 입력 카드 r28, 전송 원형 44).
  */
 
 export function AssistantSheetHeader({
@@ -27,54 +33,64 @@ export function AssistantSheetHeader({
   trailing?: ReactElement | null;
 }): ReactElement {
   return (
-    <View className="flex-row items-center justify-between px-lg pb-sm pt-xs">
-      <View className="flex-row items-center gap-sm">
-        <View className="h-[30px] w-[30px] items-center justify-center rounded-full bg-primary">
-          <SparkleGlyph size={17} />
-        </View>
-        <Text className="font-noto-bold text-section font-bold text-ink">
-          AI 도우미
-        </Text>
+    <View className="h-[44px] flex-row items-center justify-between pl-lg pr-sm">
+      <View
+        testID="assistant-sheet-mark"
+        className="h-[30px] w-[30px] items-center justify-center rounded-full bg-primary"
+      >
+        <SparkleGlyph size={16} />
       </View>
-      <View className="flex-row items-center gap-md">
+      <View className="flex-row items-center">
         {trailing}
         <Pressable
           testID="assistant-sheet-close"
           accessibilityRole="button"
           accessibilityLabel="닫기"
-          hitSlop={8}
           onPress={onClose}
+          className="h-[44px] w-[44px] items-center justify-center"
         >
-          <CloseGlyph />
+          <CloseGlyph size={24} />
         </Pressable>
       </View>
     </View>
   );
 }
 
-/** 사용한 컨텍스트 칩 — 서버 문구 그대로(BR-U8-03). 없으면(여행 없이 연 b07) 회색 "진행 중인 여행 없음". */
-export function ContextChip({ text }: { text: string | null }): ReactElement {
-  const hasContext = text !== null && text !== '';
+/**
+ * 입력 카드 안 컨텍스트 칩 — 보이는 문구는 surface 별 고정 라벨, 서버 문구(BR-U8-03)는 접근성 라벨에 싣는다.
+ * `expanded` 가 boolean 이면 추천 질문을 펼치는 칩(⌃/⌄ 표시), undefined 면 일반 버튼(NO_CONTEXT 능력 보기).
+ */
+function ContextChip({
+  label,
+  accessibilityLabel,
+  expanded,
+  onPress,
+}: {
+  label: string;
+  accessibilityLabel: string;
+  expanded?: boolean;
+  onPress: () => void;
+}): ReactElement {
   return (
-    <View className="flex-row px-lg pb-md">
-      <View
-        testID="assistant-context-chip"
-        className={`flex-row items-center gap-sm rounded-button border px-md py-[7px] ${
-          hasContext
-            ? 'border-info-border bg-info-bg'
-            : 'border-hairline bg-surface-strong'
-        }`}
-      >
-        <View
-          className={`h-[7px] w-[7px] rounded-full ${hasContext ? 'bg-info' : 'bg-muted-soft'}`}
-        />
-        <Text
-          className={`font-noto text-caption ${hasContext ? 'text-info' : 'text-muted'}`}
-        >
-          {hasContext ? text : '진행 중인 여행 없음'}
-        </Text>
-      </View>
-    </View>
+    <Pressable
+      testID="assistant-context-chip"
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={expanded === undefined ? undefined : { expanded }}
+      onPress={onPress}
+      // 시각 높이 37(Figma) — 터치는 위아래 4씩 늘려 45.
+      hitSlop={{ top: 4, bottom: 4 }}
+      className="min-h-[37px] flex-row items-center gap-[6px] self-start rounded-pill border border-hairline-strong bg-canvas px-md"
+    >
+      <ListGlyph />
+      <Text className="font-noto text-label text-ink">{label}</Text>
+      {expanded === undefined ? null : (
+        // Figma: 펼친 상태 ⌃(14). 접힌 상태는 아래를 가리키는 ⌄ — 같은 글리프를 뒤집는다.
+        <View style={expanded ? { transform: [{ rotate: '180deg' }] } : null}>
+          <ChevronDownGlyph size={14} color="muted" strokeWidth={2.2} />
+        </View>
+      )}
+    </Pressable>
   );
 }
 
@@ -83,11 +99,13 @@ function ReplyChip({
   label,
   onPress,
   disabled,
+  stacked,
 }: {
   testID: string;
   label: string;
   onPress: () => void;
   disabled: boolean;
+  stacked: boolean;
 }): ReactElement {
   return (
     <Pressable
@@ -96,29 +114,63 @@ function ReplyChip({
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      className={`rounded-button border border-hairline-strong bg-canvas px-[14px] py-sm${disabled ? ' opacity-40' : ''}`}
+      // 시각 높이 36 전후 — 터치는 위아래 4씩 늘려 44 이상. 글자 크기가 커지면 min-h 로 칩이 함께 커진다.
+      hitSlop={{ top: 4, bottom: 4 }}
+      className={
+        (stacked
+          ? 'min-h-[36px] flex-row items-center gap-sm self-start rounded-pill bg-surface-strong pl-[14px] pr-lg'
+          : 'rounded-pill border border-hairline-strong bg-canvas px-[14px] py-[9px]') +
+        (disabled ? ' opacity-40' : '')
+      }
     >
-      <Text className="font-noto text-label text-ink">{label}</Text>
+      {stacked ? <ReplyGlyph /> : null}
+      <Text
+        className={`font-noto ${stacked ? 'text-body' : 'text-label'} text-ink`}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
 
-/** 서버 발급 quick reply + 상시 "내가 할 수 있는 것 보기"(BR-U8-04 — 클라가 만드는 유일한 칩). */
+/**
+ * 카드 위 응답 보기 줄(되묻기 PICK_OPTION · 재시도 RETRY, NO_CONTEXT 는 서버 quick reply 전부) —
+ * 일반 질문형은 입력 카드의 칩 안 펼침으로 갔다(TRIP-1567). 대화가 없으면 세로 스택, 있으면 가로 스크롤 줄.
+ */
 export function QuickReplyBar({
   replies,
-  showCapabilitiesChip,
   onPick,
-  onPressCapabilities,
   disabled = false,
+  stacked,
 }: {
   replies: readonly QuickReply[];
-  showCapabilitiesChip: boolean;
   onPick: (reply: QuickReply) => void;
-  onPressCapabilities: () => void;
   disabled?: boolean;
+  stacked: boolean;
 }): ReactElement {
+  const chips = replies.map((reply) => (
+    <ReplyChip
+      key={reply.id}
+      testID={`assistant-quick-reply-${reply.id}`}
+      label={reply.label}
+      disabled={disabled}
+      stacked={stacked}
+      onPress={() => onPick(reply)}
+    />
+  ));
+  if (stacked) {
+    return (
+      <View
+        testID="assistant-quick-replies-stack"
+        className="items-start gap-sm px-md pb-sm"
+      >
+        {chips}
+      </View>
+    );
+  }
   return (
     <ScrollView
+      testID="assistant-quick-replies-row"
       horizontal
       showsHorizontalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
@@ -126,77 +178,139 @@ export function QuickReplyBar({
       className="flex-none grow-0"
       contentContainerClassName="gap-sm px-lg py-sm"
     >
-      {/* 상시 칩을 맨 앞에 둔다(TRIP-1436 Q-134) — 서버 칩이 늘면 맨 뒤 칩이 화면 밖으로 밀려 BR-U8-04 상시 노출이 깨졌다. */}
-      {showCapabilitiesChip ? (
-        <ReplyChip
-          testID="assistant-quick-reply-capabilities"
-          label={CAPABILITIES_LABEL}
-          disabled={disabled}
-          onPress={onPressCapabilities}
-        />
-      ) : null}
-      {/* 서버가 시작 칩 목록 맨 끝에 SHOW_CAPABILITIES 를 직접 넣어 보내는 경우(실서버)에도 앞으로 보낸다 — 그때는
-          클라 칩(showCapabilitiesChip)이 안 그려지므로 정렬로만 맨 앞이 된다. 나머지 순서는 그대로다(안정 정렬). */}
-      {[...replies]
-        .sort(
-          (a, b) =>
-            Number(b.action === 'SHOW_CAPABILITIES') -
-            Number(a.action === 'SHOW_CAPABILITIES')
-        )
-        .map((reply) => (
-          <ReplyChip
-            key={reply.id}
-            testID={`assistant-quick-reply-${reply.id}`}
-            label={reply.label}
-            disabled={disabled}
-            onPress={() => onPick(reply)}
-          />
-        ))}
+      {chips}
     </ScrollView>
   );
 }
 
+/** 칩 안 펼침 목록의 입력(TRIP-1567) — 합성 능력 보기(맨 앞) + 서버 추천 질문. */
+interface SuggestionsInput {
+  replies: readonly QuickReply[];
+  showCapabilitiesChip: boolean;
+  onPick: (reply: QuickReply) => void;
+  disabled: boolean;
+}
+
+/**
+ * 입력 카드 — 위 컨텍스트 칩 + (펼치면) 추천 질문 목록 + 입력 행(입력 · 전송 원형).
+ * `suggestions` 가 있으면 칩은 목록 펼침 토글(포커스 안 간다), 없으면(NO_CONTEXT) 칩 = 능력 보기.
+ */
 export function Composer({
   value,
   onChange,
   onSend,
   canSend,
   sendTestID = 'assistant-send',
+  chip,
+  suggestions,
+  onPressCapabilities,
 }: {
   value: string;
   onChange: (text: string) => void;
   onSend: () => void;
   canSend: boolean;
   sendTestID?: string;
+  chip: { label: string; accessibilityLabel: string };
+  suggestions?: SuggestionsInput;
+  onPressCapabilities: () => void;
 }): ReactElement {
+  // 펼침은 뷰 로컬 — 입력 카드는 키보드 모드가 바뀌어도 같은 자리라 remount 되지 않아 유지된다.
+  const inputRef = useRef<TextInput>(null);
+  const [open, setOpen] = useState(false);
+  // 항목을 고르면 전송 1회 + 접고 + 키보드를 내린다(칩 토글은 키보드를 건드리지 않는다).
+  const pick = (send: () => void) => () => {
+    setOpen(false);
+    Keyboard.dismiss();
+    send();
+  };
   return (
-    <View className="flex-row items-center gap-sm px-lg pb-sm pt-[10px]">
-      <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
-      <TextInput
-        testID="assistant-input"
-        value={value}
-        onChangeText={onChange}
-        placeholder="무엇이든 물어보세요…"
-        placeholderTextColor="#9AA1AB"
-        maxLength={COMPOSER_LIMIT}
-        multiline
-        className="max-h-[96px] min-h-[46px] flex-1 rounded-input border border-hairline-strong bg-canvas px-lg py-[12px] font-noto text-body text-ink"
+    // 카드 반경 28 은 킷 토큰에 없다(Figma 입력 카드 r28) — 브래킷.
+    <View className="gap-sm rounded-[28px] border border-hairline-strong bg-canvas px-md pb-[13px] pt-[15px]">
+      <ContextChip
+        label={chip.label}
+        accessibilityLabel={chip.accessibilityLabel}
+        expanded={suggestions ? open : undefined}
+        onPress={suggestions ? () => setOpen((v) => !v) : onPressCapabilities}
       />
-      <Pressable
-        testID={sendTestID}
-        accessibilityRole="button"
-        accessibilityLabel="보내기"
-        accessibilityState={{ disabled: !canSend }}
-        disabled={!canSend}
-        onPress={() => {
-          // 보내면 키보드를 내린다(TRIP-1436 Q-134 결정 2=A) — 열린 채 답이 도착해 화면 절반을 덮던 것. 이어 물으려면 입력칸을 다시 누른다.
-          Keyboard.dismiss();
-          onSend();
-        }}
-        className={`h-[44px] w-[44px] items-center justify-center rounded-full bg-primary${canSend ? '' : ' opacity-40'}`}
+      {suggestions && open ? (
+        <View
+          testID="assistant-chip-suggestions"
+          className="items-start gap-sm"
+        >
+          {suggestions.showCapabilitiesChip ? (
+            <ReplyChip
+              testID="assistant-quick-reply-capabilities"
+              label={CAPABILITIES_LABEL}
+              disabled={suggestions.disabled}
+              stacked
+              onPress={pick(onPressCapabilities)}
+            />
+          ) : null}
+          {suggestions.replies.map((reply) => (
+            <ReplyChip
+              key={reply.id}
+              testID={`assistant-quick-reply-${reply.id}`}
+              label={reply.label}
+              disabled={suggestions.disabled}
+              stacked
+              onPress={pick(() => suggestions.onPick(reply))}
+            />
+          ))}
+        </View>
+      ) : null}
+      <View className="flex-row items-center gap-sm">
+        <TextInput
+          ref={inputRef}
+          testID="assistant-input"
+          value={value}
+          onChangeText={onChange}
+          placeholder="무엇이든 물어보세요…"
+          placeholderTextColor="#9AA1AB"
+          maxLength={COMPOSER_LIMIT}
+          multiline
+          className="max-h-[96px] min-h-[44px] flex-1 font-noto text-body text-ink"
+        />
+        <Pressable
+          testID={sendTestID}
+          accessibilityRole="button"
+          accessibilityLabel="보내기"
+          accessibilityState={{ disabled: !canSend }}
+          disabled={!canSend}
+          onPress={() => {
+            // 보내면 키보드를 내린다(TRIP-1436 Q-134 결정 2=A) — 열린 채 답이 도착해 화면 절반을 덮던 것. 이어 물으려면 입력칸을 다시 누른다.
+            Keyboard.dismiss();
+            onSend();
+          }}
+          className={`h-[44px] w-[44px] items-center justify-center rounded-full ${canSend ? 'bg-primary' : 'bg-surface-strong'}`}
+        >
+          <SendArrowGlyph color={canSend ? '#FFFFFF' : '#9AA1AB'} />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+/** 「일정 보기」를 누른 뒤 목적지를 정하는 동안의 한 줄(TRIP-1566) — 확인 중이거나 조회 실패(다시 누르면 재조회). */
+export function ItineraryStatusRow({
+  state,
+}: {
+  state: 'CHECKING' | 'FAILED';
+}): ReactElement {
+  const failed = state === 'FAILED';
+  return (
+    <View
+      testID={
+        failed ? 'assistant-itinerary-failed' : 'assistant-itinerary-checking'
+      }
+      className="px-lg py-xs"
+    >
+      <Text
+        className={`font-noto text-caption ${failed ? 'text-primary-text' : 'text-muted'}`}
       >
-        <SendArrowGlyph />
-      </Pressable>
+        {failed
+          ? '일정을 불러오지 못했어요. 다시 눌러 주세요'
+          : '일정을 확인하고 있어요'}
+      </Text>
     </View>
   );
 }

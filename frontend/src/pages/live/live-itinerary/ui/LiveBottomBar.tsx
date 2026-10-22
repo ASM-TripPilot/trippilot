@@ -8,7 +8,6 @@ import {
 import {
   AccessibilityInfo,
   InteractionManager,
-  Pressable,
   Text,
   useWindowDimensions,
   View,
@@ -25,14 +24,18 @@ import { EventGlyph } from '@/features/execution/index.view';
 import { PencilGlyph } from '@/features/itinerary/index.view';
 import { ChatBubbleGlyph } from '@/features/open-assistant';
 import { GLYPH_COLORS } from '@/shared/ui/glyphs';
-import { GlassSurface } from '@/shared/ui/GlassSurface';
 import {
   ItineraryIconActive,
   ItineraryIconInactive,
   TAB_CONFIG,
   type ShellTabKey,
 } from '@/shared/ui/BottomTabBar';
-import { BackChevronGlyph } from '@/widgets/map-sheet-shell';
+import {
+  NAV_BAR_CELL_HEIGHT,
+  NavBarBackButton,
+  NavBarCapsule,
+  NavBarCell,
+} from '@/widgets/bottom-nav-bar';
 
 import {
   BAR_ENTER_CUT_MS,
@@ -76,9 +79,6 @@ import {
 export { LIVE_BOTTOM_BAR_RESERVE };
 /** 바 아래 띄움 — 부모가 안전영역에 더해 절대 배치한다. */
 export const LIVE_BOTTOM_BAR_BOTTOM_GAP = LIVE_BAR_BOTTOM_GAP;
-
-/** 칸 높이 = 바 58 − 캡슐 위아래 패딩 2×2 (Figma 칸 68×54). 폭은 `flex-1` 로 나눠 갖는다. */
-const CELL_HEIGHT = LIVE_BAR_HEIGHT - 4;
 
 // 칸 슬롯 — 같은 구조 안의 칸들이 캡슐 폭을 똑같이 나눠 갖는다(시작 5칸은 5등분, 최종 4칸은 4등분). 모양 변화는 불투명도·확대로만 한다.
 const CELL_SLOT = { flexGrow: 1, flexBasis: 0 } as const;
@@ -192,7 +192,7 @@ function StartCell({
       accessibilityRole="tab"
       accessibilityLabel={tab.label}
       accessibilityState={{ selected }}
-      style={{ height: CELL_HEIGHT }}
+      style={{ height: NAV_BAR_CELL_HEIGHT }}
       className="items-center justify-center gap-[3px]"
     >
       <Icon size={27} />
@@ -208,67 +208,6 @@ function StartCell({
         {tab.label}
       </Text>
     </View>
-  );
-}
-
-function Cell({
-  testID,
-  label,
-  icon,
-  selected,
-  expanded,
-  disabled = false,
-  value,
-  dot = false,
-  onPress,
-}: {
-  testID: string;
-  label: string;
-  icon: ReactNode;
-  selected: boolean;
-  expanded?: boolean;
-  disabled?: boolean;
-  value?: string;
-  dot?: boolean;
-  onPress: () => void;
-}): ReactElement {
-  return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected, expanded, disabled }}
-      accessibilityValue={value === undefined ? undefined : { text: value }}
-      disabled={disabled}
-      onPress={onPress}
-      style={{ height: CELL_HEIGHT }}
-      className={`items-center justify-center gap-[3px] ${
-        disabled ? 'opacity-40' : ''
-      }`}
-    >
-      <View>
-        {icon}
-        {dot ? (
-          <View
-            testID="execution-live-bar-event-dot"
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-            className="absolute -right-xs top-0 h-sm w-sm rounded-pill bg-primary"
-          />
-        ) : null}
-      </View>
-      <Text
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        className={
-          selected
-            ? 'font-noto-bold text-micro font-bold text-primary'
-            : 'font-noto text-micro text-muted'
-        }
-      >
-        {label}
-      </Text>
-    </Pressable>
   );
 }
 
@@ -426,20 +365,10 @@ export function LiveBottomBar({
       {start ? null : (
         <Animated.View style={[{ height: LIVE_BAR_HEIGHT }, backWrapStyle]}>
           <Animated.View style={[BACK_SLOT_ABSOLUTE, backCircleStyle]}>
-            <GlassSurface
-              style={{ height: LIVE_BAR_HEIGHT, width: LIVE_BAR_HEIGHT }}
-            >
-              <Pressable
-                testID="execution-live-back"
-                accessibilityRole="button"
-                accessibilityLabel="뒤로"
-                onPress={pressBack}
-                style={{ height: LIVE_BAR_HEIGHT, width: LIVE_BAR_HEIGHT }}
-                className="items-center justify-center"
-              >
-                <BackChevronGlyph size={27} />
-              </Pressable>
-            </GlassSurface>
+            <NavBarBackButton
+              testID="execution-live-back"
+              onPress={pressBack}
+            />
           </Animated.View>
         </Animated.View>
       )}
@@ -447,14 +376,11 @@ export function LiveBottomBar({
         testID="execution-live-bar-capsule"
         style={[{ flex: 1 }, capsuleWrapStyle]}
       >
-        <GlassSurface
-          style={{ height: LIVE_BAR_HEIGHT }}
-          contentClassName="flex-1 flex-row items-center px-[10px] py-[2px]"
-        >
+        <NavBarCapsule>
           {startSlot(0)}
           {startSlot(1)}
           <ScheduleSlot clock={clock} layerSv={layerSv}>
-            <Cell
+            <NavBarCell
               testID="execution-live-bar-schedule"
               label="일정"
               icon={
@@ -472,7 +398,7 @@ export function LiveBottomBar({
           {startSlot(3)}
           {start ? null : (
             <MorphSlot clock={clock} group="new" index={0}>
-              <Cell
+              <NavBarCell
                 testID="execution-live-bar-edit"
                 label="수정"
                 icon={
@@ -489,7 +415,7 @@ export function LiveBottomBar({
           )}
           {start ? null : (
             <MorphSlot clock={clock} group="new" index={1}>
-              <Cell
+              <NavBarCell
                 testID="execution-live-bar-chatbot"
                 label="챗봇"
                 icon={<ChatBubbleGlyph size={27} color={GLYPH_COLORS.muted} />}
@@ -500,7 +426,7 @@ export function LiveBottomBar({
           )}
           {start ? null : (
             <MorphSlot clock={clock} group="new" index={2}>
-              <Cell
+              <NavBarCell
                 testID="execution-live-bar-event"
                 label="행사"
                 icon={<EventGlyph size={27} color={tone(active === 'event')} />}
@@ -513,7 +439,7 @@ export function LiveBottomBar({
               />
             </MorphSlot>
           )}
-        </GlassSurface>
+        </NavBarCapsule>
       </Animated.View>
     </Animated.View>
   );

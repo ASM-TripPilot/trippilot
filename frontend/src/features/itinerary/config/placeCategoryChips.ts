@@ -24,5 +24,8 @@ export const PLACE_CATEGORY_CHIPS: readonly PlaceCategoryChip[] = [
   { testId: '명소', label: '명소', category: '명소' },
   { testId: '카페', label: '카페', category: '카페' },
   { testId: '전시', label: '전시', category: '문화' },
+  // 갤러리·미술관은 문화에서 갈라진 정식 카테고리라 '전시' 칩(문화)에 안 잡힌다 — 따로 둔다(TRIP-1545)
+  { testId: '미술', label: '미술', category: '미술' },
   { testId: '야경', label: '야경', category: '야경' },
+  { testId: '술집', label: '술집', category: '술집' },
 ];

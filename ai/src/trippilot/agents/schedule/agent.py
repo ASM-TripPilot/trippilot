@@ -63,6 +63,7 @@ from trippilot.assembly_engine.constraints import open_hours_ok
 from trippilot.assembly_engine.day_focus import pick_day_focus
 from trippilot.assembly_engine.facade import AssemblyConflictError
 from trippilot.assembly_engine.fallback_assembler import explain_unplaced
+from trippilot.assembly_engine.parking import ParkingPlan
 from trippilot.assembly_engine.scorer import (
     DIRECTIVE_STEP,
     build_rule_score,
@@ -141,7 +142,11 @@ class AssemblyProvider(Protocol):
     """
 
     def for_pool(self, poi_index: Mapping[PoiId, Poi],
-                 walk_max_km: float | None = None) -> AssemblyFacade: ...
+                 walk_max_km: float | None = None, parking: ParkingPlan | None = None) -> AssemblyFacade: ...
+
+    def parking_for(self, poi_index: Mapping[PoiId, Poi], walk_max_km: float | None) -> ParkingPlan:
+        """자차 여행의 주차 거점(assembly_engine/parking) — 풀 좌표를 도보 상한으로 묶는다. 조립·화면 거리가 같은 계획을 쓴다."""
+        ...
 
 
 # ── 입출력 타입 (도메인 타입 조합 — HTTP 스키마는 경계 어댑터 소관) ──
@@ -640,12 +645,16 @@ class ScheduleAgent:
         #    OR-Tools는 anytime — 잔여 시간이 곧 최적성이고 해 자체는 나온다.
         #    체인 폴백(OR-Tools→LLM→규칙→최소)은 어셈블리가 이미 갖고 있다. 여기서
         #    재시도·재조립을 얹으면 이중 폴백이 되어 시한만 두 배로 쓴다 — 하지 않는다.
+        # 액티비티 취향이면 조금 더 걷는다(도로 1.0km, 2026-10-19 사용자) — 조립과 화면 거리가 같은 상한을 쓴다.
+        walk_max = ACTIVE_WALK_MAX_KM if PoiCategory.ACTIVITY in _wanted_categories(persona) else None
+        # 자차면 가까운 장소들은 차를 한 번 세우고 걸어서 돈다(2026-10-21 사용자) — 시간표에 들어가야 솔버가 순서를 고를 때 안다.
+        # 묶기는 잔여 시한을 재기 전에 — 그 시간도 조립 시한 안에서 쓴다
+        parking = (self._assembly_provider.parking_for(index, walk_max)
+                   if problem.transport is TransportMode.CAR else None)
         c2_ms = max(
             budget.c2_reserved_ms, budget.total_ms - (self._clock.monotonic_ms() - t0)
         )
-        # 액티비티 취향이면 조금 더 걷는다(도로 1.0km, 2026-10-19 사용자) — 조립과 화면 거리가 같은 상한을 쓴다.
-        walk_max = ACTIVE_WALK_MAX_KM if PoiCategory.ACTIVITY in _wanted_categories(persona) else None
-        assembly = self._assembly_provider.for_pool(index, walk_max_km=walk_max)
+        assembly = self._assembly_provider.for_pool(index, walk_max_km=walk_max, parking=parking)
         try:
             solution = assembly.solve(problem, c2_ms, trace_id)
         except AssemblyConflictError as e:
@@ -708,6 +717,7 @@ class ScheduleAgent:
             rule_backfill_count=backfilled,
             repair_hints=hints,
             walk_max_km=walk_max,
+            parking=parking,
         )
 
     # ── ② 선호 점수 + 규칙 점수 폴백 ────────────────────────────────
@@ -753,10 +763,13 @@ class ScheduleAgent:
             return self._rule_scores(request, pool, persona), ScoringMode.RULE
 
         llm_pool = pool
-        capacity = self._scoring.capacity
+        # 이 시한에 실을 건수(병렬 상한 × 시한 역산 청크) — 시한 무관 상한(`capacity`)으로 자르면 청크가
+        # 역산값을 넘겨 1일차(8.1s 예산)에서 10/10 시한 초과였다(2026-10-20 개발 서버). 아래 호출의
+        # timeout_sec 와 같은 값이어야 워커가 같은 청크 크기를 계산한다.
+        capacity = self._scoring.capacity_for(min(budget.c1_ms, remaining_ms) / 1000.0)
         if len(pool.pois) > capacity:
-            # 워커가 한 번에 실을 수 있는 건수(병렬 상한 × 청크 상한)를 넘는 풀 — 청크를
-            # 키우면 출력 상한에서 잘려 전량 폐기된다(풀 515 → 청크 ~52건, 0/10 성공).
+            # 워커가 이 시한에 실을 수 있는 건수를 넘는 풀 — 청크를 키우면 시한을 넘기거나 출력 상한에서
+            # 잘려 전량 폐기된다(풀 515 → 청크 ~52건, 0/10 성공).
             # LLM 엔 규칙 점수 상위만 보내고, 나머지는 아래 rule_backfill 이 채운다.
             top = sorted(self._rule_scores(request, pool, persona),
                          key=lambda sp: (-sp.score, str(sp.poi_id)))[:capacity]
@@ -1449,6 +1462,8 @@ _CATEGORY_LABELS: Mapping[PoiCategory, str] = {
     PoiCategory.CULTURE: "문화",
     PoiCategory.ACTIVITY: "액티비티",
     PoiCategory.SHOPPING: "쇼핑",
+    PoiCategory.ART: "미술",
+    PoiCategory.BAR: "술집",
     PoiCategory.STAY: "숙소",
 }
 

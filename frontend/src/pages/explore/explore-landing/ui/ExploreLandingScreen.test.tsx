@@ -1,4 +1,6 @@
+import { StyleSheet } from 'react-native';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -11,6 +13,11 @@ import {
   type PlaceCardVM,
   type StayCardVM,
 } from './ExploreLandingScreen';
+import {
+  FAB_STACK_TOP,
+  getToastBottoms,
+  resetToastBottoms,
+} from '@/shared/ui/toastBottom';
 
 /**
  * d01 탐색 랜딩(순수 화면) 단위 테스트 — 옛 `.parity`·`.regionFilter`·`.placeSave`·`.loading`·
@@ -720,5 +727,92 @@ describe('TRIP-1048 · 장소 레인 카드 폭', () => {
       expect(tokens).toContain('w-[160px]');
       expect(tokens).not.toContain('w-full');
     }
+  });
+});
+
+// 토스트 바닥 레지스트리는 모듈 싱글턴이다 — 파일 최상위(describe 밖)에서 리셋해야 앞 테스트의 신고가 안 샌다(TRIP-1559).
+afterEach(() => resetToastBottoms());
+
+describe('TRIP-1559 · d01 토스트 바닥 신고: FAB 2단 스택 (이음새 ③)', () => {
+  it('FAB 스택이 있는 탐색 랜딩은 그 윗변(FAB_STACK_TOP)을 신고하고 unmount 로 해제한다', () => {
+    expect(getToastBottoms()).toEqual([]);
+
+    const view = render(<ExploreLandingScreen {...baseProps()} />);
+
+    expect(getToastBottoms()).toContain(FAB_STACK_TOP);
+
+    view.unmount();
+    expect(getToastBottoms()).toEqual([]);
+  });
+});
+
+// TRIP-1555 — 세로 스크롤하는 동안 FAB 숨김(홈 TRIP-1435 Q-023 결정 1=A 를 탐색 랜딩에도).
+// 훅 자체(디바운스·keepVisible 파생·정리)는 `useScrollHide.test.ts` 가 맡는다 — 여기는 "이 화면이 훅을 바깥
+// 세로 ScrollView 와 FAB 래퍼에 제대로 이었는가"만 본다. 가로 레인 비영향은 jest 로 못 잰다(`fireEvent.scroll`
+// 이 조상 onScroll 로 올라간다) → 6-b. pointerEvents·opacity 는 보이는 모양이 아니라 터치 통과 계약 + 숨김 자체(02a ★5).
+describe('스크롤하는 동안 FAB 숨김', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  // pointerEvents 와 opacity 가 같은 편을 들 때만 'hidden'/'shown' — 어긋나면 'mixed'(유령 FAB·터치 삼킴).
+  function fabVisibility(testID: string): 'hidden' | 'shown' | 'mixed' {
+    const { pointerEvents, style } = screen.getByTestId(testID).props;
+    const opacity = StyleSheet.flatten(style)?.opacity ?? 1;
+    if (pointerEvents === 'none' && opacity === 0) return 'hidden';
+    if (pointerEvents !== 'none' && opacity === 1) return 'shown';
+    return 'mixed';
+  }
+  const scrollDown = () =>
+    fireEvent.scroll(screen.getByTestId('explore-landing-scroll'), {
+      nativeEvent: { contentOffset: { y: 120 } },
+    });
+
+  it('FAB 묶음은 바깥 세로 스크롤 안에서 ♥·＋ 를 모두 감싸고, 처음엔 보인다(앵커)', () => {
+    render(<ExploreLandingScreen {...baseProps()} />);
+
+    const stack = screen.getByTestId('explore-fab-stack');
+    expect(within(stack).getByTestId('explore-saved-menu-toggle')).toBeTruthy();
+    expect(within(stack).getByTestId('explore-create-trip-fab')).toBeTruthy();
+    // 세로 컨테이너(가로 레인이 아니라) 가 testID 를 가졌는지 — 레인이 그 안에 있다.
+    expect(
+      within(screen.getByTestId('explore-landing-scroll')).getByTestId(
+        'explore-lane-place'
+      )
+    ).toBeTruthy();
+    expect(fabVisibility('explore-fab-stack')).toBe('shown');
+  });
+
+  it('스크롤하면 숨고 터치를 막지 않으며, 멈춘 지 250ms 뒤에 다시 보인다', () => {
+    render(<ExploreLandingScreen {...baseProps()} />);
+
+    scrollDown();
+    expect(fabVisibility('explore-fab-stack')).toBe('hidden');
+
+    act(() => jest.advanceTimersByTime(249));
+    expect(fabVisibility('explore-fab-stack')).toBe('hidden');
+
+    act(() => jest.advanceTimersByTime(1));
+    expect(fabVisibility('explore-fab-stack')).toBe('shown');
+  });
+
+  it('담은 곳 메뉴가 열려 있으면 스크롤해도 숨기지 않는다', () => {
+    render(
+      <ExploreLandingScreen
+        {...baseProps({ savedMenu: savedMenu({ open: true }) })}
+      />
+    );
+    // 앵커 — 미니 FAB 둘이 실제로 펼쳐져 있다.
+    expect(screen.getByTestId('explore-saved-places-fab')).toBeTruthy();
+    expect(screen.getByTestId('explore-saved-stays-fab')).toBeTruthy();
+
+    scrollDown();
+
+    expect(fabVisibility('explore-fab-stack')).toBe('shown');
+  });
+
+  it('로딩 얼굴에는 FAB 묶음 자체가 없다(무회귀)', () => {
+    render(<ExploreLandingScreen {...baseProps({ isLoading: true })} />);
+
+    expect(screen.queryByTestId('explore-fab-stack') === null).toBe(true);
   });
 });

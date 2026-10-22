@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JavaType
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertAll
@@ -141,12 +142,7 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
      * 알고 남겨 둔 불일치 — **사유가 없으면 넣지 않는다.** 고쳐져서 더 안 나오면 아래 게이트가 실패해
      * 항목을 지우게 한다(목록이 썩지 않게).
      */
-    private val knownFieldMismatches = mapOf(
-        "GET /api/v1/me/location-consent 응답 LocationConsentResponse.capabilities Capabilities: 문서에만 `localLocationUse`" to
-            "의미 미정 — 팀 결정 대기(TRIP-1474)",
-        "PUT /api/v1/me/location-consent 응답 LocationConsentResponse.capabilities Capabilities: 문서에만 `localLocationUse`" to
-            "위와 같음",
-    )
+    private val knownFieldMismatches = mapOf<String, String>()
 
     /**
      * 필드 계약 — 2xx 응답 본문과 `@RequestBody` 의 **유무·모양·속성 이름**이 openapi 스키마와 같아야 통과.
@@ -214,6 +210,43 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
             },
             { assertTrue(stale.isEmpty()) { "더 이상 안 나는 예외 — knownFieldMismatches 에서 지운다:\n  " + stale.joinToString("\n  ") } },
         )
+    }
+
+    /**
+     * 위 게이트의 양성 대조 — 예외 목록이 비면 `stale` 단언은 공허하고, 실제 스펙도 불일치가 0이라
+     * `compare()` 의 한 방향이 회귀해도 위 테스트는 초록이다. 전용 probe DTO 와 손 스키마로 두 방향·중첩을 직접 확인한다
+     * (운영 DTO 를 쓰면 정상적인 필드 추가에도 깨진다).
+     */
+    @Test
+    fun `필드 대조는 코드에만·문서에만 두 방향과 중첩 객체의 불일치를 잡는다`() {
+        val schema = mapOf(
+            "type" to "object",
+            "properties" to mapOf(
+                "a" to mapOf("type" to "string"),
+                // onlyInCode 는 일부러 뺐다 → 코드에만
+                "nested" to mapOf(
+                    "type" to "object",
+                    "properties" to mapOf(
+                        "b" to mapOf("type" to "boolean"),
+                        "bogus" to mapOf("type" to "boolean"), // → 문서에만
+                    ),
+                ),
+            ),
+        )
+        val out = mutableListOf<String>()
+        compare(mapper.constructType(Probe::class.java), schema, "자기검증", true, out, mutableSetOf())
+
+        assertEquals(
+            listOf(
+                "자기검증 Probe: 코드에만 `onlyInCode`",
+                "자기검증 Probe.nested Nested: 문서에만 `bogus`",
+            ),
+            out,
+        )
+    }
+
+    private data class Probe(val a: String, val onlyInCode: Boolean, val nested: Nested) {
+        data class Nested(val b: Boolean)
     }
 
     private fun compare(

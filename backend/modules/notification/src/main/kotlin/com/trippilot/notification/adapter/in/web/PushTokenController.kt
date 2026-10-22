@@ -6,6 +6,7 @@ import com.trippilot.notification.application.PushTokenService
 import com.trippilot.notification.domain.DevicePlatform
 import com.trippilot.notification.domain.OsPermission
 import com.trippilot.notification.domain.PushToken
+import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
@@ -35,7 +36,7 @@ import java.util.UUID
 class PushTokenController(private val service: PushTokenService) {
 
     @PostMapping
-    fun register(principal: Principal, @RequestBody request: RegisterPushTokenRequest): PushTokenResponse =
+    fun register(principal: Principal, @Valid @RequestBody request: RegisterPushTokenRequest): PushTokenResponse =
         PushTokenResponse.from(
             service.register(
                 accountId = principal.accountId(),

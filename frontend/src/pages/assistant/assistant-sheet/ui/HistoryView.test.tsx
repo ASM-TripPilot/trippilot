@@ -1,4 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
+import Svg from 'react-native-svg';
 
 import { sampleActionLogs } from '../api/assistantSamples';
 import { HistoryView, type HistoryViewProps } from './HistoryView';
@@ -15,6 +21,7 @@ function renderView(overrides: Partial<HistoryViewProps> = {}) {
     confirmingClear: false,
     clearing: false,
     onContinue: jest.fn(),
+    onClose: jest.fn(),
     onRequestClear: jest.fn(),
     onConfirmClear: jest.fn(),
     onCancelClear: jest.fn(),
@@ -77,5 +84,38 @@ describe('HistoryView (TRIP-1325)', () => {
     expect(props.onOpenSession).toHaveBeenCalledWith(
       expect.objectContaining({ tripId: 'trip-x' })
     );
+  });
+
+  // TRIP-1529 — 안내 문장은 말풍선·✦ 아바타 없이 평문. 부재는 testID 로 못 잡으니 "안내 블록 루트 안 Svg 0개"로 잰다.
+  it('안내 문장은 평문 블록이고 그 안에 ✦ 아바타(Svg)가 없다', () => {
+    renderView();
+    const intro = screen.getByTestId('assistant-history-intro');
+    expect(intro).toHaveTextContent(
+      '이번 여행에서 도우미와 한 대화·변경이에요.'
+    );
+    expect(within(intro).UNSAFE_queryAllByType(Svg)).toHaveLength(0);
+  });
+
+  it('칩 줄은 [대화 이어서]·[이력 지우기]·[닫기] 세 개이고 입력 카드·quick reply 는 없다', () => {
+    renderView();
+    expect(screen.getByTestId('assistant-history-continue')).toHaveTextContent(
+      '대화 이어서'
+    );
+    expect(screen.getByTestId('assistant-history-clear')).toHaveTextContent(
+      '이력 지우기'
+    );
+    expect(screen.getByTestId('assistant-history-close')).toHaveTextContent(
+      '닫기'
+    );
+    expect(screen.queryByTestId('assistant-input')).toBeNull();
+    expect(screen.queryAllByTestId(/^assistant-quick-reply-/)).toHaveLength(0);
+  });
+
+  it('[닫기] → onClose 1회, 이어서·지우기 요청은 부르지 않는다', () => {
+    const props = renderView();
+    fireEvent.press(screen.getByTestId('assistant-history-close'));
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+    expect(props.onContinue).not.toHaveBeenCalled();
+    expect(props.onRequestClear).not.toHaveBeenCalled();
   });
 });

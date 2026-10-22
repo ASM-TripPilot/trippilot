@@ -19,6 +19,7 @@ private class LookupContent(private val stays: List<Stay>) : AccommodationConten
 private class LookupCurated(private val stays: List<CuratedStay>) : CuratedStayPort {
     override fun byCity(city: String) = stays.filter { it.city == city }
     override fun findByHotelId(hotelId: String) = stays.firstOrNull { it.tripcomHotelId == hotelId }
+    override fun byRegionCode(regionCode: String) = emptyList<CuratedStay>()  // 이름 조회 테스트는 쓰지 않는다
 }
 
 /**

@@ -169,7 +169,7 @@ class WeatherAlertSweepIT : AbstractPostgresIntegrationTest() {
 
         val lines = sweepLogs { sweep(setOf(SweepSource.KMA_WARNING, SweepSource.AIRKOREA)).sweep(at("13:15")) }
 
-        lines shouldContain "planb.situation_sample tripId=$tripId source=kma-warning kind=WEATHER date=$day variant=RAIN severity=RISK slot=null"
+        lines shouldContain "planb.situation_sample tripId=$tripId source=kma-warning kind=WEATHER date=$day variant=RAIN severity=RISK slot=null name=null at=null"
         rowCount(tripId) shouldBe 0
         events(tripId).shouldBeEmpty()
         watches.findByTrip(tripId).shouldBeEmpty()

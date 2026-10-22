@@ -50,8 +50,11 @@ from tests.orchestrator.test_schedule_coordinator import (
 class _ExplodingProvider:
     """어셈블리 공급자가 설정 버그로 터지는 상황 — 에이전트 경계 밖 예외."""
 
-    def for_pool(self, poi_index, walk_max_km=None):
+    def for_pool(self, poi_index, walk_max_km=None, parking=None):
         raise RuntimeError("assembly provider misconfigured")
+
+    def parking_for(self, poi_index, walk_max_km):
+        return None
 
 
 def _pool():

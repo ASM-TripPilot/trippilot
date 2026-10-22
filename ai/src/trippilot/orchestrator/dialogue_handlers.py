@@ -30,7 +30,7 @@ import re
 import uuid
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time, timedelta, tzinfo
 from enum import Enum
 
@@ -46,7 +46,8 @@ from trippilot.domain.common import (
 )
 from trippilot.domain.dialogue import ArgumentKind
 from trippilot.domain.intent import DIALOGUE_INTENTS, Intent
-from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory, counts_as_food
+from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory, counts_as_food, reputation_bonus
+from trippilot.domain.theme_tags import themes_in
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.region_centers import region_center
 from trippilot.domain.transit import TransitPurpose
@@ -106,7 +107,7 @@ _UNRESOLVED_LEG = "구간 미해소 — 목적지를 일정에서 찾지 못했�
 # 스냅샷 category 는 BE 한글 정본(PlannedSlotView.category) — POI_INFO 패킷의 경계 코드를 같은 어휘로 접는다
 _CATEGORY_KO: Mapping[str, str] = {
     "SIGHT": "명소", "FOOD": "맛집", "CAFE": "카페", "NIGHT_VIEW": "야경", "NATURE": "자연", "SHOPPING": "쇼핑",
-    "CULTURE": "문화", "ACTIVITY": "액티비티",
+    "CULTURE": "문화", "ACTIVITY": "액티비티", "ART": "미술", "BAR": "술집",
 }
 _FOOD_LABELS = frozenset({PoiCategory.FOOD.value, _CATEGORY_KO[PoiCategory.FOOD.value]})
 
@@ -624,7 +625,7 @@ _NEED_TRIP_ACTIONS = ("CREATE_TRIP", "OPEN_STAY_SEARCH")
 
 def needs_trip(intent: Intent) -> bool:
     """여행이 있어야 넘길 화면이 있는 의도 — BE IntentDispatcher.NEEDS_TRIP 과 같은 집합."""
-    return intent not in (Intent.STYLE_ANALYSIS, Intent.EXPLORE_PLACES, Intent.OUT_OF_SCOPE)
+    return intent not in (Intent.STYLE_ANALYSIS, Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES, Intent.OUT_OF_SCOPE)
 
 
 def need_trip_facts(intent: Intent) -> Facts:
@@ -898,7 +899,7 @@ def _plan_free_distance(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     if None in known and finder is None:
         return ()
     mode, _ = _transport_mode(ctx)
-    sido = _trip_sido(ctx)
+    sido = _trip_area(ctx)
 
     def fn() -> dict:
         ends: list[_End] = []
@@ -1019,11 +1020,11 @@ def _place_slot(ctx: TurnContext) -> SlotView | None:
     return resolve_slot(ctx.snapshot, day=ctx.arguments.get("date"), target=said, now=ctx.now, tz=ctx.tz)
 
 
-def _trip_sido(ctx: TurnContext) -> str | None:
-    """여행 지역 중 시·도 급 이름 — 이름 찾기에서 같은 이름이 여럿일 때 좁히는 데만 쓴다."""
+def _trip_area(ctx: TurnContext) -> str | None:
+    """여행 지역의 지역 표 이름("서울"·"제주"·"강릉") — 이름 찾기에서 같은 이름이 여럿일 때 좁히는 데만 쓴다(시·도·구군 앞부분 대조)."""
     trip = ctx.snapshot.trip
     hits = (region_center(normalize(name)) for name in (trip.regions if trip is not None else ()))
-    return next((h[0] for h in hits if h is not None and h[0] in _SIDO_LEVEL), None)
+    return next((h[0] for h in hits if h is not None), None)
 
 
 def _outside_day(ctx: TurnContext) -> date:
@@ -1035,18 +1036,31 @@ def _outside_day(ctx: TurnContext) -> date:
 _HOURS_FEE = re.compile(r"영업|시간|몇\s?시|열어|열려|여는|닫|입장료|요금|가격|얼마|휴무|쉬는|쉬어|주차")
 
 
-def _intro_for(ctx: TurnContext, packet: Mapping[str, object], poi_id: str) -> str:
-    """장소 소개 한 조각(KB-5) — 소개를 물을 때만(영업시간·요금 질문이면 빈 문자열). 조인 키는 POI_INFO 행의 source_ref."""
+_INTRO_MARGIN_S, _INTRO_MIN_S = 0.2, 0.2  # 소개를 기다린 뒤 카드를 돌려줄 여유 · 이보다 적게 남으면 소개 없이
+
+
+def _fanout_left(ctx: TurnContext) -> Callable[[], float]:
+    """팬아웃 작업 첫머리에서 부른다 — 오케스트레이터와 같은 예산(min(3s, 잔여×0.4), SQL 과 같은 2.8s 상한)을 잡고, 돌려준 콜러블은
+    그 예산에서 지난 만큼 뺀 초를 준다. 작업 안의 덧붙임 조회(소개)가 작업 전체를 시한 밖으로 밀지 않게 한다."""
+    start = ctx.remaining_ms()
+    budget = min(_FANOUT_SQL_CAP_S, start * 0.4 / 1000)
+    return lambda: budget - (start - ctx.remaining_ms()) / 1000
+
+
+def _intro_for(ctx: TurnContext, packet: Mapping[str, object], poi_id: str, left: Callable[[], float]) -> str:
+    """장소 소개 한 조각(KB-5) — 소개를 물을 때만(영업시간·요금 질문이면 빈 문자열). 조인 키는 POI_INFO 행의 source_ref.
+    팬아웃 남은 시간(`left`)에서 여유를 뺀 만큼만 기다린다 — 소개가 늦어도 카드는 나간다."""
     port, aspect = ctx.ports.place_intro, ctx.arguments.get("aspect") or ""
     if port is None or _HOURS_FEE.search(aspect) or _HOURS_FEE.search(ctx.utterance):
         return ""
     data = packet.get("data") if isinstance(packet, Mapping) else None
     pois = data.get("pois", ()) if isinstance(data, Mapping) else ()
     ref = next((p.get("source_ref") for p in pois if isinstance(p, Mapping) and p.get("poi_id") == poi_id), None)
-    if not ref:
+    wait = left() - _INTRO_MARGIN_S
+    if not ref or wait < _INTRO_MIN_S:
         return ""
     try:
-        return port.intro(str(ref), aspect or "소개")
+        return port.intro(str(ref), aspect or "소개", wait_s=wait)
     except Exception:  # noqa: BLE001 — 부가 정보라 없이 간다(INV-4), 사유는 PlaceIntro 가 남긴다
         return ""
 
@@ -1062,22 +1076,25 @@ def _plan_poi_info(ctx: TurnContext) -> tuple[HandlerTask, ...]:
         on = ctx.snapshot.day_of(slot) or ctx.today
 
         def fn() -> dict:
+            left = _fanout_left(ctx)
             packet = port.fetch({"poi_ids": frozenset({PoiId(slot.poi_id)}), "on": on, "now": ctx.now}).to_dict()
-            return {**packet, "intro": _intro_for(ctx, packet, slot.poi_id)}
+            return {**packet, "intro": _intro_for(ctx, packet, slot.poi_id, left)}
 
         return (HandlerTask("poi_info", fn),)
     said, finder = ctx.arguments.get("place"), ctx.ports.place_sql
     if not said or finder is None:
         return ()
-    on, sido = _outside_day(ctx), _trip_sido(ctx)
+    on, sido = _outside_day(ctx), _trip_area(ctx)
 
     def find() -> dict:
+        left = _fanout_left(ctx)
         found = finder.find_place(said, sido, ctx.trace_id)
         if found is None:  # 없거나 여럿(체인점) — 하나를 골라 다른 곳의 영업시간을 말하지 않는다
             return {"status": "EMPTY", "reason": "place_not_found"}
         packet = port.fetch({"poi_ids": frozenset({PoiId(found.poi_id)}), "on": on, "now": ctx.now}).to_dict()
-        return {**packet, "lookup": {"poi_id": found.poi_id, "name": found.name, "category": found.category},
-                "intro": _intro_for(ctx, packet, found.poi_id)}
+        return {**packet, "lookup": {"poi_id": found.poi_id, "name": found.name, "category": found.category,
+                                     "area": " ".join(x for x in (found.sido, found.sigungu) if x)},
+                "intro": _intro_for(ctx, packet, found.poi_id, left)}
 
     return (HandlerTask("poi_info", find),)
 
@@ -1108,7 +1125,9 @@ def _assemble_poi_info(ctx: TurnContext, results: Mapping[str, TaskResult]) -> F
     fee = row.get("fee") if row else None
     # 영업시간은 이 날 기준(_plan_poi_info 와 같은 날) — 오늘이 아니면 날짜를 밝힌다
     on = (ctx.snapshot.day_of(slot) if slot is not None else _outside_day(ctx)) or ctx.today
-    rows = ((FactRow("날짜", _date_label(on)),) if on != ctx.today else ()) + (
+    # 일정 밖 장소는 어디의 그곳인지 밝힌다 — 같은 이름이 한 곳만 맞으면 여행 지역 밖이어도 돌려주므로 위치로 드러나게(DB 값)
+    area = str(lookup.get("area") or "") if slot is None else ""
+    rows = ((FactRow("날짜", _date_label(on)),) if on != ctx.today else ()) + ((FactRow("위치", area),) if area else ()) + (
         FactRow("분류", category or _UNKNOWN), FactRow("영업시간", hours or _UNKNOWN), FactRow("입장료", _fee_label(fee)))
     name = (slot.name if slot is not None else str(lookup.get("name") or "")) or (str(row["name"]) if row else _UNNAMED)
     status, notes = (FactStatus.OK, ()) if row else (FactStatus.PARTIAL, ("장소 정보 미확인 — 일정 값만 보인다",))
@@ -1309,21 +1328,29 @@ def explore_needs_region(ctx: TurnContext) -> bool:
     return not ctx.arguments.get("region") and _explore_anchor(ctx) is None
 
 
+# 문화를 고르면 미술(문화에서 갈라진 갤러리·미술관)도 함께 — 분류 선택지에는 미술이 없다(TRIP-1545)
+_EXPLORE_FAMILY: Mapping[str, tuple[str, ...]] = {PoiCategory.CULTURE.value: (PoiCategory.CULTURE.value, PoiCategory.ART.value)}
+
+
 def _explore_rank(pois: Iterable[Poi], category: str | None, theme: str | None) -> list[Poi]:
     """결정론 정렬 — 주제 맞음(밤·야경 주제면 야경·나이트라이프) → 주제 낱말이 태그·이름에 든 수 → '요즘 인기' 태그 →
     저장 수 → 별점 → 영업시간 보유 → poi_id. 숙소·표시 불가 이름은 뺀다."""
     night = bool(theme and _NIGHT.search(theme)) or category == PoiCategory.NIGHT_VIEW.value
     words = tuple(_THEME_WORD.findall(theme or ""))
+    themes = frozenset(themes_in(theme))   # "혼자 가기 좋은"·"아이랑" → 혼밥·혼술·아이동반 (태그 글자와 안 맞는 말을 잇는다)
     no_food = category is None and bool(theme and _SIGHTSEEING.search(theme))
 
+    wanted = _EXPLORE_FAMILY.get(category, (category,)) if category else None
+
     def fits(p: Poi) -> bool:
-        return (p.category is not PoiCategory.STAY and (category is None or p.category.value == category)
+        return (p.category is not PoiCategory.STAY and (wanted is None or p.category.value in wanted)
                 and (night or NIGHTLIFE_TAG not in p.tags) and _displayable(p.name) and not (no_food and counts_as_food(p)))
 
     def key(p: Poi) -> tuple:
         is_night = p.category is PoiCategory.NIGHT_VIEW or NIGHTLIFE_TAG in p.tags
-        hits = sum(1 for w in words if w in p.name or any(w in t for t in p.tags))
-        return (night and not is_night, -hits, TRENDING_TAG not in p.tags, -p.saved_count, -(p.rating or 0.0),
+        hits = sum(1 for w in words if w in p.name or any(w in t for t in p.tags)) + len(themes & set(p.tags))
+        # 평판(인기·평점높음)은 저장 수 뒤, 별점 앞 — 저장 수가 0 인 지금은 사실상 첫 기준이다. 태그가 없으면 0 이라 불이익이 없다
+        return (night and not is_night, -hits, TRENDING_TAG not in p.tags, -p.saved_count, -reputation_bonus(p.tags), -(p.rating or 0.0),
                 0 if p.open_hours else 1, str(p.poi_id))
 
     picked: list[Poi] = []
@@ -1467,6 +1494,39 @@ def edit_arguments(ctx: TurnContext) -> dict[str, str]:
     return out
 
 
+# RECOMMEND_PLACES — "골라 줘". 탐색과 같은 앵커·풀·되묻기(탐색 플랜·조립을 그대로 부른다 — 탐색 코드는 손대지 않는다)에서
+# 몇 곳만 고른다. 탐색과 다른 것은 둘뿐이다:
+# 1) 반경 결과가 있으면 그것을 쓴다. 반경 풀은 `_explore_rank` 로 요즘 인기 → 저장 수 → 별점 순이지만 NL2SQL 행의 인기 신호는
+#    '요즘 인기' 태그 하나라 고르기 순서로 약하다(2026-10-20 테스트 화면: "서울 카페 추천"이 가나다순·법인명 카페로 나왔다).
+#    반경 결과가 없을 때(지역 표에 없는 동네)만 SQL 결과를 '요즘 인기' 먼저로 다시 세워 쓴다.
+# 2) 말한 개수(없으면 3)로 자른다. 후보 카드가 아닌 답(되묻기·빈 결과·행사 문장)은 의도만 바꿔 그대로 낸다.
+_RECOMMEND_DEFAULT = 3
+
+
+def _recommend_count(ctx: TurnContext) -> int:
+    said = ctx.arguments.get("count")
+    return int(said) if said in {"1", "2", "3", "4", "5"} else _RECOMMEND_DEFAULT
+
+
+def _assemble_recommend(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts:
+    intent = Intent.RECOMMEND_PLACES
+    radius, by_sql = _value(results, "explore"), _value(results, "explore_sql")
+    if radius and radius.get("status") == "OK" and radius.get("candidates"):
+        results = {k: v for k, v in results.items() if k != "explore_sql"}
+    elif by_sql and by_sql.get("status") == "OK" and by_sql.get("candidates"):
+        ranked = sorted(by_sql["candidates"], key=lambda c: c.get("reason") != "요즘 인기")  # 안정 정렬 — 나머지는 SQL 순서
+        results = {**results, "explore_sql": TaskResult.ok("explore_sql", {**by_sql, "candidates": ranked})}
+    facts = _assemble_explore(ctx, results)
+    if facts.kind is not AnswerKind.CANDIDATES:
+        # 되묻기 문안·행사 문장(`detail.events` — 탐색의 행사 답, 의도와 무관하게 events 를 나열한다)은 탐색 것 그대로
+        keep = facts.template_text == EXPLORE_ASK_REGION_TEXT or "events" in facts.detail
+        return replace(facts, intent=intent, template_text=facts.template_text if keep else _template(intent, facts.status))
+    n = _recommend_count(ctx)
+    return replace(facts, intent=intent, places=facts.places[:n], payload={"candidates": facts.payload["candidates"][:n]},
+                   next_actions=facts.next_actions[:n], template_text=_template(intent, facts.status),
+                   detail={**facts.detail, "pick_count": n})
+
+
 # ── 표 ───────────────────────────────────────────────────────────────────────
 
 
@@ -1522,6 +1582,8 @@ HANDLERS: Mapping[Intent, Handler] = {
     Intent.STYLE_ANALYSIS: _handler(Intent.STYLE_ANALYSIS, _handoff_to(Intent.STYLE_ANALYSIS, "OPEN_STYLE")),
     Intent.EXPLORE_PLACES: _handler(Intent.EXPLORE_PLACES, _assemble_explore, _plan_explore,
                                     ask=lambda ctx: ("region", EXPLORE_ASK_REGION_TEXT) if explore_needs_region(ctx) else None),
+    Intent.RECOMMEND_PLACES: _handler(Intent.RECOMMEND_PLACES, _assemble_recommend, _plan_explore,
+                                      ask=lambda ctx: ("region", EXPLORE_ASK_REGION_TEXT) if explore_needs_region(ctx) else None),
 }
 
 if set(HANDLERS) != DIALOGUE_INTENTS:  # 의도가 늘면 기동이 멈춘다 — 조용한 빈칸 금지 (DE §2.4)

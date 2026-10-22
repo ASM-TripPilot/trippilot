@@ -113,13 +113,15 @@ def plan_chunks(
     가장 느린 청크가 벽시계를 정하므로 고정 크기 자투리(193건 → 20×9+13)가 아니라
     균형 분할(20×3+19×7)로 최대 청크를 키우지 않는다.
 
-    병렬 상한에 걸려도 청크는 chunk_max 를 넘지 않는다 — 넘치는 몫(max_parallel ×
-    chunk_max 초과분)은 싣지 않는다. 종전엔 청크를 키웠고(풀 515 → ~52건) 출력 상한에서
-    잘려 전량 폐기됐다. 정상 경로에선 호출측(ScheduleAgent)이 규칙 점수 상위
-    `capacity` 건으로 미리 줄여 보내므로, 여기 자르기는 안전망이다. 빠진 POI 는
-    호출측 rule_backfill 이 채운다.
+    병렬 상한에 걸려도 청크는 chunk_size 를 넘지 않는다 — 넘치는 몫(max_parallel ×
+    chunk_size 초과분)은 싣지 않는다. 종전엔 청크를 키웠고(풀 515 → ~52건) 출력 상한에서
+    잘려 전량 폐기됐고, 그 뒤엔 chunk_max 까지만 키웠는데 그러면 시한에서 역산한 크기가
+    무시된다(2026-10-20 개발 서버: 8.1s 시한 → 역산 5 인데 풀 250 이 10 등분돼 청크 25,
+    10/10 시한 초과 → 1일차 전부 규칙 점수). 정상 경로에선 호출측(ScheduleAgent)이 규칙
+    점수 상위 `capacity_for(시한)` 건으로 미리 줄여 보내므로, 여기 자르기는 안전망이다.
+    빠진 POI 는 호출측 rule_backfill 이 채운다.
     """
-    pois = tuple(sorted(pool.pois, key=lambda p: str(p.poi_id)))[: max_parallel * chunk_max]
+    pois = tuple(sorted(pool.pois, key=lambda p: str(p.poi_id)))[: max_parallel * min(chunk_size, chunk_max)]
     if not pois:
         return ()
     n = min(max_parallel, math.ceil(len(pois) / chunk_size))
@@ -148,9 +150,19 @@ class PreferenceScoringWorker:
 
     @property
     def capacity(self) -> int:
-        """한 번의 score() 가 LLM 에 실을 수 있는 최대 건수 — 병렬 상한 × 청크 상한."""
+        """한 번의 score() 가 LLM 에 실을 수 있는 최대 건수 — 병렬 상한 × 청크 상한(시한 무관)."""
         cfg = self._gateway.config
         return cfg.score_max_parallel * score_chunk_cap(cfg)
+
+    def capacity_for(self, timeout_sec: float | None) -> int:
+        """그 시한에 실을 건수 — 병렬 상한 × 시한에서 역산한 청크(`adaptive_chunk_size`). 호출측은 이것으로 자른다.
+
+        `capacity`(시한 무관 상한)로 자르면 풀이 병렬 상한 × 청크 상한에 꽉 차 청크가 역산값을 넘긴다 —
+        1일차 15s 시한에서 8.1s 예산 → 역산 5 인데 청크 25 가 나가 10/10 시한 초과(2026-10-20 개발 서버).
+        """
+        cfg = self._gateway.config
+        budget_sec = timeout_sec if timeout_sec is not None else cfg.timeout_sec
+        return cfg.score_max_parallel * adaptive_chunk_size(budget_sec * 1000.0, cfg)
 
     def score(
         self,

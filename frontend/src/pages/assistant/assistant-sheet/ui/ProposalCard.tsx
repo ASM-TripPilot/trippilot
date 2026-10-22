@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import type { Proposal, ProposalDiffItem } from '../api/assistantContract';
 import { slotFaceLine } from '../model/cardModel';
 import { CheckGlyph, WarningGlyph } from './AssistantSheetGlyphs';
+import { OutlineCard } from './OutlineCard';
 
 /**
  * b02 전후 비교 카드(TRIP-1324 · BR-U8-30~35). 도우미 경로의 변경은 전부 제안이다 — [적용]을 눌러야만 저장된다.
@@ -36,19 +37,23 @@ function DiffRow({
   line: string;
   checked?: boolean;
 }): ReactElement {
+  // 바뀌는 쪽("변경") 행만 면을 칠하고 체크를 단다 — 지금 쪽은 평범한 행(Figma 5026:3490)
+  const next = tone === 'next';
   return (
-    <View className="flex-row items-center gap-md py-md">
-      <View
-        className={`rounded-[6px] px-sm py-[3px] ${tone === 'now' ? 'bg-surface-strong' : 'bg-primary-pale'}`}
+    <View
+      className={`flex-row items-center gap-md px-lg py-md${next ? ' bg-primary-pale' : ''}`}
+    >
+      <Text
+        className={`w-[32px] font-noto text-label ${next ? 'font-noto-bold font-bold text-primary' : 'text-muted'}`}
       >
-        <Text
-          className={`font-noto-bold text-micro font-bold ${tone === 'now' ? 'text-muted' : 'text-primary-text'}`}
-        >
-          {badge}
-        </Text>
-      </View>
-      <Text className="flex-1 font-noto text-label text-ink">{line}</Text>
-      {checked ? <CheckGlyph /> : null}
+        {badge}
+      </Text>
+      <Text
+        className={`flex-1 text-body text-ink ${next ? 'font-noto-bold font-bold' : 'font-noto'}`}
+      >
+        {line}
+      </Text>
+      {checked ? <CheckGlyph size={20} /> : null}
     </View>
   );
 }
@@ -93,32 +98,32 @@ export function ProposalCard({
   const applicable = open && proposal.violations.length === 0;
 
   return (
-    <View testID={`assistant-proposal-${proposal.id}`} className="gap-sm">
-      <View className="rounded-card bg-surface-soft px-lg">
+    <View testID={`assistant-proposal-${proposal.id}`} className="gap-md">
+      <OutlineCard>
         {proposal.diff.map((item, index) => (
           <DiffBlock key={`${item.slotKey}-${index}`} item={item} />
         ))}
-      </View>
+      </OutlineCard>
 
       {proposal.violations.map((violation, index) => (
-        <View
+        <OutlineCard
           key={`${violation}-${index}`}
           testID={`assistant-proposal-violation-${index}`}
-          className="flex-row items-start gap-sm rounded-card border border-primary-pale bg-primary-pale px-lg py-md"
+          className="flex-row items-start gap-[10px] px-[14px] py-md"
         >
-          <WarningGlyph />
-          <Text className="flex-1 font-noto text-label text-ink">
+          <WarningGlyph size={20} color="#FF385C" />
+          <Text className="flex-1 font-noto text-body text-ink">
             {violation}
           </Text>
-        </View>
+        </OutlineCard>
       ))}
 
       {stale ? (
-        <View
+        <OutlineCard
           testID="assistant-proposal-stale"
-          className="gap-sm rounded-card border border-hairline bg-canvas px-lg py-md"
+          className="gap-sm px-[14px] py-md"
         >
-          <Text className="font-noto text-label text-ink">
+          <Text className="font-noto text-body text-ink">
             {proposal.status === 'FAILED'
               ? '적용하지 못했어요. 다시 제안할게요.'
               : '일정이 바뀌어 다시 제안할게요'}
@@ -131,7 +136,7 @@ export function ProposalCard({
           >
             <Text className="font-noto text-label text-ink">다시 제안</Text>
           </Pressable>
-        </View>
+        </OutlineCard>
       ) : null}
 
       {STATUS_TEXT[proposal.status] ? (
@@ -161,9 +166,10 @@ export function ProposalCard({
               accessibilityState={{ disabled: applying }}
               disabled={applying}
               onPress={() => onApply(proposal.id)}
-              className={`flex-1 items-center rounded-button bg-primary py-[14px]${applying ? ' opacity-40' : ''}`}
+              className={`h-[52px] flex-1 items-center justify-center rounded-button bg-primary${applying ? ' opacity-40' : ''}`}
             >
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+              {/* 킷 Button: 높이 52 · 글자 Bold 16 — 토큰에 없는 값이라 브래킷(Figma 5026:3490) */}
+              <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
                 적용
               </Text>
             </Pressable>
@@ -173,9 +179,9 @@ export function ProposalCard({
             accessibilityRole="button"
             disabled={applying}
             onPress={() => onDismiss(proposal.id)}
-            className="flex-1 items-center rounded-button border border-hairline-strong bg-canvas py-[14px]"
+            className="h-[52px] flex-1 items-center justify-center rounded-button border border-hairline-strong bg-canvas"
           >
-            <Text className="font-noto-bold text-card-title font-bold text-ink">
+            <Text className="font-noto-bold text-[16px] font-bold text-ink">
               취소
             </Text>
           </Pressable>

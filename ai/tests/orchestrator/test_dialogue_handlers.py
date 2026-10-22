@@ -33,7 +33,7 @@ from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.region_centers import region_center
 from trippilot.domain.trigger import TriggerKind
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_LENGTH, _violates
-from trippilot.llm_gateway.workers.dialogue_answer import NEED_TRIP_TEXT, fallback_answer_text
+from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEXT, NEED_TRIP_TEXT, fallback_answer_text
 from trippilot.poi_curation.adapters.pg_place_sql import PlaceRow
 from trippilot.orchestrator import dialogue_handlers as dh
 from trippilot.agents.planb.rag import _REASON_KO
@@ -1035,7 +1035,7 @@ _arguments = st.fixed_dictionaries({}, optional={
     "day": st.sampled_from(["1일차", "2일차", "둘째 날", "오늘", "x"]), "date": st.sampled_from(["오늘", "내일", "10월 18일", "x"]),
     "scope": st.sampled_from(["ALL", "REMAINING"]), "reason": st.sampled_from(["weather", "closed", "none"]),
     "region": st.sampled_from(["부산", "제주 애월", "강원도", ""]), "category": st.sampled_from(["CAFE", "NIGHT_VIEW", "FOOD"]),
-    "theme": st.sampled_from(["요즘 핫한", "야경", "분위기 좋은 바"]),
+    "theme": st.sampled_from(["요즘 핫한", "야경", "분위기 좋은 바"]), "count": st.sampled_from(["1", "3", "5", "열"]),
 })
 _outcomes = st.sampled_from(["ok", "TIMEOUT", "UNAVAILABLE"])
 
@@ -1072,7 +1072,7 @@ def test_every_handler_is_deterministic_valid_and_free_of_duration(data, intent:
                        "detail": first.to_prompt_dict()}, ensure_ascii=False, default=str).lower()
     assert not any(tok in wire for tok in _INV3_TOKENS)
     if snapshot.trip is None:
-        assert first.needs_trip is (intent not in (Intent.STYLE_ANALYSIS, Intent.EXPLORE_PLACES))
+        assert first.needs_trip is (intent not in (Intent.STYLE_ANALYSIS, Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES))
     for task in tasks:
         assert task.fn() == task.fn()  # 콜러블도 결정론 (대역이 결정론이라 그렇다 — 핸들러가 상태를 섞지 않는다)
 
@@ -1134,7 +1134,7 @@ _X_POOL = _pool(
     _xpoi("평범한 식당", PoiCategory.FOOD, saved=9), _xpoi("인기 식당", PoiCategory.FOOD, tags=("요즘 인기",)),
     _xpoi("셋째 식당", PoiCategory.FOOD, saved=5), _xpoi("인기 카페", PoiCategory.CAFE, tags=("요즘 인기",)),
     _xpoi("바다 전망 카페", PoiCategory.CAFE), _xpoi("황령산 야경", PoiCategory.NIGHT_VIEW),
-    _xpoi("루프탑 바", PoiCategory.FOOD, tags=("나이트라이프",)), _xpoi("해변 호텔", PoiCategory.STAY),
+    _xpoi("루프탑 바", PoiCategory.FOOD, tags=("술집",)), _xpoi("해변 호텔", PoiCategory.STAY),
 )
 _EXPLORE = HANDLERS[Intent.EXPLORE_PLACES]
 
@@ -1196,7 +1196,8 @@ def test_poi_info_outside_the_itinerary_finds_the_registered_place_by_name() -> 
     assert poi_info.calls[0]["poi_ids"] == frozenset({PoiId(_U["천지연폭포"])}) and poi_info.calls[0]["on"] == _ctx().today
     assert facts.status is FactStatus.OK and facts.kind is AnswerKind.INFO
     assert facts.payload["title"] == "천지연폭포"  # 이름은 DB 값 — 발화 원문("천지연 폭포")이 아니다
-    assert facts.payload["rows"] == [{"label": "분류", "value": "자연"}, {"label": "영업시간", "value": "09:00~18:00"},
+    assert facts.payload["rows"] == [{"label": "위치", "value": "제주특별자치도 서귀포시"},  # 어디의 그곳인지(DB 값)
+                                     {"label": "분류", "value": "자연"}, {"label": "영업시간", "value": "09:00~18:00"},
                                      {"label": "입장료", "value": "5,000원"}]
     assert [(a.type, a.params) for a in facts.next_actions] == [("OPEN_PLACE", {"poiId": _U["천지연폭포"]})]
     assert any("일정 밖" in n for n in facts.notes) and facts.template_text == "장소 정보를 찾아봤어요."
@@ -1227,14 +1228,16 @@ class _Intro:
     def __init__(self, text: str = "우도는 제주 동쪽의 섬이다.") -> None:
         self.text, self.calls = text, []
 
-    def intro(self, source_ref: str, query: str) -> str:
+    def intro(self, source_ref: str, query: str, *, wait_s: float) -> str:
         self.calls.append((source_ref, query))
+        self.wait_s = wait_s
         return self.text
 
 
-def _intro_run(arguments: dict, utterance: str = "") -> tuple[Facts, _Intro]:
+def _intro_run(arguments: dict, utterance: str = "", remaining_ms: int = 3000) -> tuple[Facts, _Intro]:
     intro = _Intro()
-    ctx = replace(_ctx(arguments=arguments, ports=HandlerPorts(poi_info=_RefPoiInfo(), place_intro=intro)), utterance=utterance)
+    ctx = replace(_ctx(arguments=arguments, ports=HandlerPorts(poi_info=_RefPoiInfo(), place_intro=intro),
+                       remaining_ms=remaining_ms), utterance=utterance)
     return _run(HANDLERS[Intent.GET_POI_INFO], ctx), intro
 
 
@@ -1248,6 +1251,15 @@ def test_poi_info_about_a_place_carries_a_kb5_intro_for_the_answer_only() -> Non
 def test_poi_info_hours_or_fee_question_does_not_fetch_an_intro() -> None:
     facts, intro = _intro_run({"place": "우도"}, "우도 몇 시까지 해?")
     assert intro.calls == [] and "intro" not in facts.detail
+
+
+def test_poi_info_waits_for_the_intro_only_within_the_fanout_budget() -> None:
+    # 잔여 3s → 팬아웃 예산 min(2.8, 3×0.4)=1.2s, 카드 돌려줄 여유 0.2s 를 뺀 1.0s 만 소개를 기다린다
+    _, intro = _intro_run({"place": "우도", "aspect": "어떤 곳"}, "우도 어떤 곳이야?")
+    assert intro.wait_s == pytest.approx(1.0)
+    # 잔여 0.9s → 예산 0.36s − 여유 0.2s < 하한 — 소개 없이 카드만
+    facts, intro = _intro_run({"place": "우도", "aspect": "어떤 곳"}, "우도 어떤 곳이야?", remaining_ms=900)
+    assert intro.calls == [] and facts.payload and "intro" not in facts.detail
 
 
 def test_explore_category_filters_the_pool() -> None:
@@ -1378,6 +1390,51 @@ def test_explore_sql_finds_a_district_the_region_table_does_not_know() -> None:
     assert facts.detail == {"anchor": "마포구", "anchor_kind": "region"}  # 행의 구군(DB 값)이 앵커
 
 
+# ── RECOMMEND_PLACES — 탐색과 같은 풀에서 "골라 준" 몇 곳 ──
+
+_RECOMMEND = HANDLERS[Intent.RECOMMEND_PLACES]
+
+
+def _recommend(arguments: dict, rows=None, *, utterance: str = "서울 카페 하나 추천해줘",
+               snapshot: TurnSnapshot = _EMPTY_SNAP) -> tuple[Facts, _PlaceSql, _PoolBuilder]:
+    port, builder = _PlaceSql(rows), _PoolBuilder(_X_POOL)
+    ports = HandlerPorts(poi_info=_PoiInfo(), pool_builder=builder, place_sql=port if rows is not None else None)
+    return _run(_RECOMMEND, replace(_ctx(snapshot, arguments, ports=ports), utterance=utterance)), port, builder
+
+
+def test_recommend_prefers_the_ranked_radius_pool_over_sql_rows_and_cuts_to_the_said_count() -> None:
+    """SQL 행은 인기 신호가 태그 하나라 고르기 순서로 약하다 — 반경 결과가 있으면 그것(요즘 인기 → 저장 수 순)을 쓴다."""
+    rows = [_row("가나다 카페", "카페"), _row("고센인코퍼레이티드", "카페")]
+    facts, port, builder = _recommend({"region": "부산", "theme": "요즘 핫한", "count": "1"}, rows)
+    explored, _ = _explore({"region": "부산", "theme": "요즘 핫한"})
+    assert port.calls and builder.requests  # 둘 다 돌지만
+    assert facts.intent is Intent.RECOMMEND_PLACES and facts.kind is AnswerKind.CANDIDATES
+    assert _names_of(facts) == _names_of(explored)[:1]  # 반경 순위의 첫 곳 하나
+    assert [p.name for p in facts.places] == _names_of(facts) and _types(facts) == ["OPEN_PLACE"]  # 카드·문장 재료·버튼이 같은 한 곳
+    assert facts.detail["pick_count"] == 1 and facts.template_text == "가 볼 만한 곳을 골라 봤어요."
+
+
+def test_recommend_without_a_count_picks_three_and_ignores_a_count_outside_the_enum() -> None:
+    for args in ({"region": "부산"}, {"region": "부산", "count": "열"}):
+        facts, _, _ = _recommend(args)
+        assert len(_names_of(facts)) == 3 and facts.detail["pick_count"] == 3
+
+
+def test_recommend_from_sql_rows_alone_puts_trending_first_in_sql_order() -> None:
+    rows = [_row("망원 카페 A", "카페", "마포구"), _row("망원 카페 B", "카페", "마포구", trending=True),
+            _row("망원 카페 C", "카페", "마포구")]
+    facts, _, builder = _recommend({"region": "망원동", "category": "CAFE", "count": "2"}, rows, utterance="망원동 카페 두 곳 골라줘")
+    assert builder.requests == []  # 표에 없는 동네 — 반경은 못 돈다
+    assert _names_of(facts) == ["망원 카페 B", "망원 카페 A"]
+
+
+def test_recommend_passes_non_candidate_answers_through_as_recommend() -> None:
+    asked, _, _ = _recommend({}, snapshot=_snapshot((), trip=None, status=None))
+    assert asked.intent is Intent.RECOMMEND_PLACES and asked.template_text == EXPLORE_ASK_REGION_TEXT  # 지역 되묻기 그대로
+    unknown, _, _ = _recommend({"region": "강원도"})
+    assert unknown.status is FactStatus.EMPTY and unknown.template_text == "그 조건에 맞는 곳을 아직 찾지 못했어요."
+
+
 def test_explore_sql_with_nothing_found_for_an_unknown_district_stays_empty() -> None:
     facts, _, _ = _explore_sql({"region": "망원동"}, [])
     assert facts.status is FactStatus.EMPTY and facts.detail == {}
@@ -1400,7 +1457,7 @@ def test_explore_asks_for_a_region_only_when_no_anchor_can_be_found() -> None:
     assert ask(_ctx(_snapshot((), trip=None, status=None), {"region": "강원도"})) is None  # 말했으면 묻지 않는다 — 못 찾으면 EMPTY
     assert ask(_ctx(_SNAP, ports=HandlerPorts(poi_info=_PoiInfo()))) is None  # 일정 근처
     assert ask(_ctx(_snapshot((), trip=_TRIP))) is None  # 여행 목적지
-    assert all(HANDLERS[i].ask is None for i in HANDLERS if i is not Intent.EXPLORE_PLACES)
+    assert all(HANDLERS[i].ask is None for i in HANDLERS if i not in (Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES))
 
 
 # ── EXPLORE_PLACES PBT (BR-AO-27) — 후보는 풀 안·≤5·결정론·입력 순서 무관, 숙소 0, 밤 주제가 아니면 나이트라이프 0, 종류 필터·한 종류 ≤2 ──
@@ -1415,7 +1472,7 @@ def _explore_pois(draw) -> list[Poi]:
     return [Poi(poi_id=PoiId(str(uuid.uuid5(uuid.NAMESPACE_DNS, f"pbt-{i}"))), name=draw(st.sampled_from(["감천문화마을", "흰여울 카페", "x", "루프탑 바"])) + str(i),
                 category=draw(st.sampled_from(_X_CATS)), coord=GeoPoint(35.1, 129.0), open_hours=(), avg_cost=None,
                 rating=draw(st.one_of(st.none(), st.floats(0, 5))), quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None,
-                saved_count=draw(st.integers(0, 50)), tags=tuple(draw(st.lists(st.sampled_from(["요즘 인기", "나이트라이프", "야경", "오션뷰"]), max_size=2, unique=True))))
+                saved_count=draw(st.integers(0, 50)), tags=tuple(draw(st.lists(st.sampled_from(["요즘 인기", "술집", "야경", "오션뷰"]), max_size=2, unique=True))))
             for i in range(n)]
 
 
@@ -1430,8 +1487,8 @@ def test_explore_rank_stays_inside_the_pool_and_obeys_its_filters(pois, category
     assert all(p.category is not PoiCategory.STAY for p in picked)
     night = bool(theme and dh._NIGHT.search(theme)) or category == PoiCategory.NIGHT_VIEW.value
     if not night:
-        assert all("나이트라이프" not in p.tags for p in picked)
+        assert all("술집" not in p.tags for p in picked)
     if category is not None:
-        assert all(p.category.value == category for p in picked)
+        assert all(p.category.value in dh._EXPLORE_FAMILY.get(category, (category,)) for p in picked)   # 문화는 미술 포함(TRIP-1545)
     else:
         assert all(sum(1 for q in picked if q.category is p.category) <= 2 for p in picked)

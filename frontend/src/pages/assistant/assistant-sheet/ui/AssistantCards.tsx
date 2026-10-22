@@ -13,11 +13,13 @@ import type {
   ReviewPayload,
   ScopePayload,
 } from '../api/assistantContract';
+import { candidateTarget } from '../model/cardModel';
 import { ProposalCard } from './ProposalCard';
+import { ActionRow, OutlineCard } from './OutlineCard';
 import {
   ChevronRightGlyph,
+  ExternalLinkGlyph,
   InfoGlyph,
-  RetryGlyph,
   WarningGlyph,
 } from './AssistantSheetGlyphs';
 
@@ -82,6 +84,10 @@ function LinkLine({
   );
 }
 
+// 아이콘(20) + 본문 한 줄 — 경고·안내 카드의 공통 골격. 색은 아이콘과 링크에만 둔다(TRIP-1528 공통 규칙).
+const ICON_CARD = 'flex-row items-start gap-[10px] px-[14px] py-md';
+const WARN = '#FF385C';
+
 export function ReviewCard({
   payload,
   onPressAction,
@@ -90,35 +96,36 @@ export function ReviewCard({
   onPressAction: (action: NextAction) => void;
 }): ReactElement {
   return (
-    <View testID="assistant-review-card" className="gap-sm">
-      <View className="gap-sm rounded-card bg-surface-soft px-lg py-lg">
-        <Text className="font-noto-bold text-card-title font-bold text-ink">
+    <View testID="assistant-review-card" className="gap-md">
+      <OutlineCard>
+        <Text className="px-lg py-[10px] font-noto-bold text-card-title font-bold text-ink">
           {payload.title}
         </Text>
-        {payload.summary.map((row, index) => (
-          <View key={`${row.label}-${index}`} className="flex-row gap-lg">
-            <Text className="w-[40px] font-noto text-label text-muted">
-              {row.label}
-            </Text>
-            <Text className="flex-1 font-noto text-label text-ink">
-              {row.value}
-            </Text>
-          </View>
-        ))}
-      </View>
+        <View className="h-px bg-hairline opacity-60" />
+        <View className="gap-xs px-lg py-[6px]">
+          {payload.summary.map((row, index) => (
+            <View key={`${row.label}-${index}`} className="flex-row gap-md">
+              <Text className="w-[40px] font-noto text-label text-muted">
+                {row.label}
+              </Text>
+              <Text className="flex-1 font-noto text-body text-ink">
+                {row.value}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </OutlineCard>
       {payload.problems.map((problem, index) => (
-        <View
+        <OutlineCard
           key={`${problem.slotKey ?? 'p'}-${index}`}
           testID={`assistant-review-problem-${index}`}
-          className="gap-xs rounded-card border border-primary-pale bg-primary-pale px-lg py-md"
+          className={ICON_CARD}
         >
-          <View className="flex-row items-start gap-sm">
-            <WarningGlyph />
-            <Text className="flex-1 font-noto text-label text-ink">
+          <WarningGlyph size={20} color={WARN} />
+          <View className="flex-1">
+            <Text className="font-noto text-body text-ink">
               {problem.reason}
             </Text>
-          </View>
-          <View className="pl-[26px]">
             <LinkLine
               testID={`assistant-review-fix-${index}`}
               label={problem.fixAction.label}
@@ -126,66 +133,89 @@ export function ReviewCard({
               onPress={() => onPressAction(problem.fixAction)}
             />
           </View>
-        </View>
+        </OutlineCard>
       ))}
     </View>
   );
 }
 
 export function CandidateCard({
+  message,
   payload,
   onPick,
+  onPressAction,
 }: {
+  message: AssistantMessage;
   payload: CandidatesPayload;
   onPick: (poiId: string) => void;
+  onPressAction: (action: NextAction) => void;
 }): ReactElement {
   return (
-    <View className="gap-sm">
-      {payload.candidates.map((candidate) => (
-        <Pressable
-          key={candidate.poiId}
-          testID={`assistant-candidate-${candidate.poiId}`}
-          accessibilityRole="button"
-          onPress={() => onPick(candidate.poiId)}
-          className="flex-row items-center gap-md rounded-card border border-hairline bg-canvas px-lg py-md"
-        >
-          <View className="flex-1 gap-[3px]">
-            <Text className="font-noto-bold text-card-title font-bold text-ink">
-              {candidate.name}
-            </Text>
-            <Text className="font-noto text-caption text-muted">
-              {[candidate.distanceRange, candidate.reason]
-                .filter(Boolean)
-                .join(' · ')}
-            </Text>
-          </View>
-          <ChevronRightGlyph size={18} color="#6A6A6A" />
-        </Pressable>
-      ))}
+    <View className="gap-md">
+      {payload.candidates.map((candidate) => {
+        const target = candidateTarget(message, candidate.poiId);
+        const testID = `assistant-candidate-${candidate.poiId}`;
+        // 눌러서 갈 곳이 없는 카드(NONE)는 버튼이 아니라 정보다 — 역할·› 없이 이름·부제만(INV-4).
+        const body = (
+          <OutlineCard className="flex-row items-center gap-md px-[14px] py-md">
+            <View className="flex-1 gap-[3px]">
+              <Text className="font-noto-bold text-card-title font-bold text-ink">
+                {candidate.name}
+              </Text>
+              <Text className="font-noto text-caption text-muted">
+                {[candidate.distanceRange, candidate.reason]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Text>
+            </View>
+            {target.kind === 'NONE' ? null : (
+              <ChevronRightGlyph size={20} color="#6A6A6A" />
+            )}
+          </OutlineCard>
+        );
+        if (target.kind === 'NONE') {
+          return (
+            <View key={candidate.poiId} testID={testID}>
+              {body}
+            </View>
+          );
+        }
+        return (
+          <Pressable
+            key={candidate.poiId}
+            testID={testID}
+            accessibilityRole="button"
+            onPress={() =>
+              target.kind === 'PICK'
+                ? onPick(candidate.poiId)
+                : onPressAction(target.action)
+            }
+          >
+            {body}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
 
 export function InfoCard({ payload }: { payload: InfoPayload }): ReactElement {
   return (
-    <View
-      testID="assistant-info-card"
-      className="gap-sm rounded-card border border-hairline bg-canvas px-lg py-md"
-    >
+    <OutlineCard testID="assistant-info-card" className="gap-sm px-lg py-md">
       <Text className="font-noto-bold text-card-title font-bold text-ink">
         {payload.title}
       </Text>
       {payload.rows.map((row, index) => (
-        <View key={`${row.label}-${index}`} className="flex-row gap-lg">
+        <View key={`${row.label}-${index}`} className="flex-row gap-md">
           <Text className="w-[64px] font-noto text-label text-muted">
             {row.label}
           </Text>
-          <Text className="flex-1 font-noto text-label text-ink">
+          <Text className="flex-1 font-noto text-body text-ink">
             {row.value}
           </Text>
         </View>
       ))}
-    </View>
+    </OutlineCard>
   );
 }
 
@@ -200,26 +230,35 @@ export function ScopeCard({
 }): ReactElement | null {
   if (!payload.alternative) return null;
   return (
-    <View
-      testID="assistant-scope-card"
-      className="gap-xs rounded-card border border-hairline bg-canvas px-lg py-md"
-    >
-      <Text className="font-noto-bold text-card-title font-bold text-ink">
-        {payload.alternative.title}
-      </Text>
+    <OutlineCard testID="assistant-scope-card">
       {otaAction ? (
-        <LinkLine
+        <Pressable
           testID="assistant-scope-ota"
-          label={otaAction.label}
-          tone="primary"
+          accessibilityRole="button"
           onPress={() => onPressAction(otaAction)}
-        />
+          className="flex-row items-center gap-md px-[14px] py-md"
+        >
+          <View className="flex-1 gap-[2px]">
+            <Text className="font-noto-bold text-card-title font-bold text-ink">
+              {payload.alternative.title}
+            </Text>
+            <Text className="font-noto-bold text-label font-bold text-primary-text">
+              {otaAction.label}
+            </Text>
+          </View>
+          <ExternalLinkGlyph />
+        </Pressable>
       ) : (
-        <Text className="font-noto text-caption text-muted">
-          {payload.alternative.caption}
-        </Text>
+        <View className="gap-xs px-[14px] py-md">
+          <Text className="font-noto-bold text-card-title font-bold text-ink">
+            {payload.alternative.title}
+          </Text>
+          <Text className="font-noto text-caption text-muted">
+            {payload.alternative.caption}
+          </Text>
+        </View>
       )}
-    </View>
+    </OutlineCard>
   );
 }
 
@@ -229,18 +268,15 @@ export function RefusalNotice({
   payload: RefusalPayload;
 }): ReactElement {
   return (
-    <View
-      testID="assistant-refusal"
-      className="flex-row items-start gap-sm rounded-card border border-info-border bg-info-bg px-lg py-md"
-    >
-      <InfoGlyph />
+    <OutlineCard testID="assistant-refusal" className={ICON_CARD}>
+      <InfoGlyph size={20} />
       <Text
         testID="assistant-capabilities"
-        className="flex-1 font-noto text-label text-info"
+        className="flex-1 font-noto text-body text-ink"
       >
         {payload.capabilities}
       </Text>
-    </View>
+    </OutlineCard>
   );
 }
 
@@ -257,105 +293,110 @@ export function FallbackNotice({
 }): ReactElement {
   const exit = continueAction ?? CONTINUE_ACTION;
   return (
-    <View testID="assistant-fallback" className="gap-sm">
+    <View testID="assistant-fallback" className="gap-md">
       {payload.notice || retryAction ? (
-        <View className="gap-md rounded-card border border-primary-pale bg-primary-pale px-lg py-md">
-          {payload.notice ? (
-            <View className="flex-row items-start gap-sm">
-              <WarningGlyph />
-              <Text className="flex-1 font-noto text-label text-ink">
+        <OutlineCard className={ICON_CARD}>
+          <WarningGlyph size={20} color={WARN} />
+          <View className="flex-1 gap-xs">
+            {payload.notice ? (
+              <Text className="font-noto-bold text-body font-bold text-ink">
                 {payload.notice}
               </Text>
-            </View>
-          ) : null}
-          {retryAction ? (
-            <Pressable
-              testID="assistant-fallback-retry"
-              accessibilityRole="button"
-              onPress={() => onPressAction(retryAction)}
-              className="ml-[26px] flex-row items-center gap-xs self-start rounded-button bg-primary px-lg py-sm"
-            >
-              <RetryGlyph />
-              <Text className="font-noto-bold text-label font-bold text-on-primary">
-                {retryAction.label}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
+            ) : null}
+            {retryAction ? (
+              <Pressable
+                testID="assistant-fallback-retry"
+                accessibilityRole="button"
+                onPress={() => onPressAction(retryAction)}
+                className="h-[52px] items-center justify-center rounded-button bg-primary"
+              >
+                {/* 킷 Button: 높이 52 · 글자 Bold 16 — 토큰에 없는 값이라 브래킷(Figma 5027:4816) */}
+                <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
+                  {retryAction.label}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </OutlineCard>
       ) : null}
-      {/* BR-U8-41 — 원인과 무관하게 항상 있는 출구. 서버가 준 라벨이 있으면 그것, 없으면 기본 문구. */}
-      <View className="gap-xs rounded-card border border-info-border bg-info-bg px-lg py-md">
-        <View className="flex-row items-center gap-sm">
-          <InfoGlyph />
-          <Text className="flex-1 font-noto text-label text-ink">
-            도우미 없이도 계속할 수 있어요
-          </Text>
-        </View>
-        <View className="pl-[26px]">
-          <LinkLine
-            testID="assistant-fallback-continue"
-            label={exit.label}
-            tone="info"
-            onPress={() => onPressAction(exit)}
-          />
-        </View>
-      </View>
+      {/* BR-U8-41 — 원인과 무관하게 항상 있는 출구. 서버가 준 라벨이 있으면 그것, 없으면 기본 문구.
+          다시 시도가 있는 응답 실패는 안내 카드 + 링크, 없는 솔버 불가 등은 한 줄 행 카드(Figma 5027:5106). */}
+      {retryAction ? (
+        <OutlineCard className={ICON_CARD}>
+          <InfoGlyph size={20} />
+          <View className="flex-1">
+            <Text className="font-noto-bold text-body font-bold text-ink">
+              도우미 없이도 계속할 수 있어요
+            </Text>
+            <LinkLine
+              testID="assistant-fallback-continue"
+              label={exit.label}
+              tone="info"
+              onPress={() => onPressAction(exit)}
+            />
+          </View>
+        </OutlineCard>
+      ) : (
+        <ActionRow
+          testID="assistant-fallback-continue"
+          label={exit.label}
+          onPress={() => onPressAction(exit)}
+        />
+      )}
     </View>
   );
 }
 
-const TAG_FACE: Record<
-  ActionLogTag,
-  { label: string; className: string; text: string }
+// 진행 검토(REVIEW) 행과 태그 없는 행은 배지가 없다(Figma 5027:5297). 배지는 킷 Badge 모양: px 8 py 3 · 반경 12 · Bold 11.
+const TAG_FACE: Partial<
+  Record<ActionLogTag, { label: string; className: string; text: string }>
 > = {
   FILTER: {
     label: '적용된 필터',
     className: 'bg-primary-pale',
-    text: 'text-primary-text',
+    text: 'text-primary',
   },
   CHANGE: {
     label: '반영된 변경',
-    className: 'border border-info-border bg-info-bg',
-    text: 'text-info',
+    className: 'bg-success-bg',
+    text: 'text-success',
   },
-  REVIEW: { label: '검토', className: 'bg-surface-strong', text: 'text-muted' },
 };
 
 export function ActionLogRow({
   testID,
+  id,
   payload,
 }: {
   testID: string;
+  /** 행 id — 배지 testID(`assistant-badge-${id}`)가 행 testID 접두와 겹치지 않게 따로 받는다. */
+  id: string;
   payload: ActionLogPayload;
 }): ReactElement {
-  const tag = payload.tag ? TAG_FACE[payload.tag] : null;
+  const tag = payload.tag ? TAG_FACE[payload.tag] : undefined;
   return (
-    <View
-      testID={testID}
-      className="gap-sm rounded-card border border-hairline bg-canvas px-lg py-md"
-    >
-      <Text className="font-noto-bold text-card-title font-bold text-ink">
-        {payload.what}
-      </Text>
-      {tag || payload.detail ? (
-        <View className="flex-row flex-wrap items-center gap-sm">
-          {tag ? (
-            <View className={`rounded-[6px] px-sm py-[3px] ${tag.className}`}>
-              <Text
-                className={`font-noto-bold text-micro font-bold ${tag.text}`}
-              >
-                {tag.label}
-              </Text>
-            </View>
-          ) : null}
-          {payload.detail ? (
-            <Text className="flex-1 font-noto text-caption text-muted">
-              {payload.detail}
+    <OutlineCard testID={testID} className="gap-xs px-[14px] py-md">
+      <View className="flex-row items-center gap-sm">
+        <Text className="flex-1 font-noto-bold text-body font-bold text-ink">
+          {payload.what}
+        </Text>
+        {tag ? (
+          <View
+            testID={`assistant-badge-${id}`}
+            className={`rounded-button px-sm py-[3px] ${tag.className}`}
+          >
+            <Text className={`font-noto-bold text-micro font-bold ${tag.text}`}>
+              {tag.label}
             </Text>
-          ) : null}
-        </View>
+          </View>
+        ) : null}
+      </View>
+      {payload.detail ? (
+        <Text className="font-noto text-label text-muted">
+          {payload.detail}
+        </Text>
       ) : null}
-    </View>
+    </OutlineCard>
   );
 }
 
@@ -404,8 +445,10 @@ export function MessageCard({
     case 'CANDIDATES':
       return (
         <CandidateCard
+          message={message}
           payload={payload as CandidatesPayload}
           onPick={onPickCandidate}
+          onPressAction={onPressAction}
         />
       );
     case 'INFO':
@@ -435,6 +478,7 @@ export function MessageCard({
       return (
         <ActionLogRow
           testID={`assistant-action-log-${message.id}`}
+          id={message.id}
           payload={payload as ActionLogPayload}
         />
       );

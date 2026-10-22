@@ -39,11 +39,12 @@
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import re
 from collections.abc import Callable, Mapping, Sequence
-from concurrent.futures import Executor, ThreadPoolExecutor, wait
+from concurrent.futures import Executor, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, replace
 from datetime import date, datetime, tzinfo
 
@@ -103,6 +104,8 @@ from trippilot.ports.trace_port import TracePort
 __all__ = [
     "ACK_TEXT",
     "CAPABILITIES_LITERAL",
+    "CHAT_TEXT",
+    "GREETING_TEXT",
     "CAPABILITIES_TEXT",
     "DEFAULT_DEADLINE_MS",
     "MAX_RECENT_TURNS",
@@ -143,7 +146,8 @@ _MEMORY_MIN_REMAINING_MS = 2_500  # 미만이면 결정론 압축
 # 2‴ 계획 LLM(BR-AO-28): min(cap, 잔여×share). 잔여 < 4.6s 면 부르지 않는다 — 계획이 몫(0.45R)을 다 쓰고 팬아웃이 남은 것의
 # 0.40 을 다 써도 답변 앞 잔여 ≥1.5s(답변 시도선)이려면 R ≥ 4,542ms(정수 내림 산술: 4,542 → 계획 2,043 → 2,499 → 팬아웃 999
 # → 1,500). 4,500 이면 1,485 라 늘 템플릿이다(정정본 C1). 상한 3.5s(초판 3.0s) — 2026-10-20 luna·effort none 실측에서 3.0s 는
-# 계획 호출의 6.5%(154회 중 10)가 시한에 잘렸고 3.5s 는 1.9%(624회 중 12)였다. 하한 산술은 몫(0.45R)만 쓰므로 상한과 무관하다.
+# 같은 시각 짝에서 시한 잘림이 4/78 → 2/78 이었다(같은 날 런 합 3.0s 10/154 · 3.5s 15/864 — 시각·판본이 섞인 합, 러너의 SDK
+# 단위 시한 기준). 운영 실효 시한은 min(3.5s, 0.45R) 라 분류 1.6s 턴은 ≈3.33s 다. 하한 산술은 몫(0.45R)만 쓰므로 상한과 무관하다.
 _PLAN_CAP_MS, _PLAN_SHARE, _PLAN_MIN_REMAINING_MS = 3_500, 0.45, 4_600
 _TURN_LLM_CAP = 3  # 턴당 서비스 LLM 상한(BR-AO-07·COST-U8-06) — 계획 턴(분류·계획·답변)에서 닿으면 요약을 한 번 미룬다(BR-AO-09)
 _MEMORY_CAP_MS = 2_000
@@ -170,8 +174,25 @@ _ACKS = frozenset({
 # 낱말 사이·끝의 문장부호와 웃음. normalize(NFKC)가 ㅎ·ㅋ(호환 자모)를 첫소리 자모 ᄒ·ᄏ 로 바꾸므로 둘 다 적는다.
 # "?"는 떼지 않는다 — "응?"은 수락이 아니라 되묻는 말이다.
 _CLOSER_NOISE = re.compile(r"[\s!~.,ㅎㅋᄒᄏ]+")
+# 인사 — "안녕" 한마디에 범위 밖 카드가 나가면 딱딱하다(2026-10-21 사용자). 받아 주고 여행 쪽으로 한마디 잇는다. 요청이 섞인
+# "안녕 내일 날씨는" 은 목록 밖 낱말이 있어 분류 몫 그대로다.
+_GREETS = frozenset({
+    "안녕", "안녕하세요", "안녕하세용", "안녕하십니까", "안뇽", "하이", "하이요", "헬로", "헬로우", "hello", "hi", "hey",
+    "반가워", "반가워요", "반갑습니다", "방가", "방가워", "굿모닝", "굿이브닝",
+})
 THANKS_TEXT = "천만에요! 더 궁금한 게 생기면 언제든 물어봐 주세요."
 ACK_TEXT = "알겠어요! 필요한 게 생기면 언제든 말씀해 주세요."
+# 인사·잡담 답 — 여행이 있으면 지금 여행으로, 없으면 여행 만들기로 잇는다(버튼은 `_home_action` 과 같은 갈래). LLM 없이 고정 문장이다
+# (BR-AO-26 과 같은 결정론) — 말투를 바꾸려면 여기만 고친다.
+GREETING_TEXT = {
+    True: "네, 안녕하세요~ 여행 준비는 잘 되고 있나요? 다음 장소나 날씨, 근처에 가 볼 만한 곳이 궁금하면 편하게 물어봐 주세요.",
+    False: "네, 안녕하세요~ 어디로 떠날 생각이세요? 여행을 만들면 일정이랑 날씨, 가 볼 만한 곳을 같이 챙겨 드릴게요.",
+}
+# 2‴ 계획기가 잡담(gap CHAT)으로 닫은 말 — 도구로 답할 건 없지만 범위 밖 카드 대신 말을 받아 준다.
+CHAT_TEXT = {
+    True: "저랑은 여행 이야기가 제일 잘 통해요. 다음 장소나 날씨, 근처에 가 볼 만한 곳이 궁금하면 편하게 물어봐 주세요.",
+    False: "저랑은 여행 이야기가 제일 잘 통해요. 어디로 떠날지 정해지면 여행을 만들어 보세요. 일정이랑 날씨를 같이 챙겨 드릴게요.",
+}
 OTHER_SESSIONS_HEADER = "지난 여행 기억:"  # `$memory` 에서 현재 세션 줄과 다른 세션 줄을 가르는 머리 (DE §6 `$memory`)
 
 # 게이트웨이 `default_fallback_modes` 와 같은 라벨 — LLM 을 **부르지 않고** 폴백한 턴(잔여 부족·워커 예외)에도 같은 짝을 남긴다
@@ -336,9 +357,14 @@ def closer_answer(text: str, has_trip: bool) -> DialogueAnswer | None:
     """2″ — 정규화된 발화가 맞장구·인사 낱말뿐이면 받아 주는 한마디(BR-AO-26), 아니면 None. 감사가 하나라도 있으면 감사 답.
     버튼·칩은 능력 안내와 같다."""
     words = _CLOSER_NOISE.sub(" ", text.lower().replace("thank you", "thanks")).split()
-    if not words or not all(w in _THANKS or w in _ACKS for w in words):
+    if not words or not all(w in _THANKS or w in _ACKS or w in _GREETS for w in words):
         return None
-    reply = THANKS_TEXT if any(w in _THANKS for w in words) else ACK_TEXT
+    if any(w in _THANKS for w in words):
+        reply = THANKS_TEXT
+    elif any(w in _GREETS for w in words):
+        reply = GREETING_TEXT[has_trip]
+    else:
+        reply = ACK_TEXT
     return DialogueAnswer(AnswerKind.TEXT, reply, None, (_home_action(has_trip),), None, None)
 
 
@@ -648,6 +674,9 @@ class DialogueOrchestrator:
             # 발화는 싣지 않는다 — 운영에서 이 줄 수로 오탐을 센다(정상 말이 걸리면 범위 밖 카드가 나간다)
             log.info("dialogue_injection_suspected %s", json.dumps({"event": "dialogue_injection_suspected", "trace_id": inp.trace_id}))
             return self._out_of_scope(inp, INJECTION_REASON)
+        # 0″ — 지역을 말한 장소 찾기 말이면 장소 탐색 SQL 작성을 분류와 나란히 미리 시작한다(분류 뒤에 쓰면 팬아웃 시한에 걸렸다, place_sql 註)
+        if self._ports.place_sql is not None:
+            self._ports.place_sql.prefetch(inp.utterance, inp.trace_id, inp.now, self._submit)
         trip_view = _trip_view(inp.snapshot)
         today = inp.now.astimezone(self._tz).date()
         trip_summary = _trip_summary(inp.snapshot, today)
@@ -760,6 +789,11 @@ class DialogueOrchestrator:
 
     # ── 4 팬아웃 ─────────────────────────────────────────────────────────
 
+    def _submit(self, fn: Callable[[], object]) -> Future:
+        """공유 풀에 내되 문맥을 복사해 넘긴다 — 턴 `llm_calls`(백엔드 사용량 상한의 원천)가 contextvar 카운터라, 그냥 내면 풀 스레드에서
+        부른 서비스 LLM(장소 탐색 NL2SQL)이 빠진다. 한 사본을 두 스레드가 같이 쓰면 RuntimeError 라 낼 때마다 새로 뜬다."""
+        return self._pool.submit(contextvars.copy_context().run, fn)
+
     def _fanout(self, inp: TurnInput, tasks: Sequence[HandlerTask]) -> dict[str, TaskResult]:
         """공유 풀 팬아웃 (BLM §6, `route_budget.measure_within` 선례) — 마감은 submit **전에** 고정, 미완은 cancel 뒤 TIMEOUT.
 
@@ -779,7 +813,7 @@ class DialogueOrchestrator:
         results: dict[str, TaskResult] = {}
         for task in tasks:
             try:
-                futures[task.name] = self._pool.submit(task.fn)
+                futures[task.name] = self._submit(task.fn)
             except Exception as e:  # noqa: BLE001 — 풀이 닫혔다 등: 그 작업만 SKIPPED
                 results[task.name] = self._failed_task(inp, task.name, "SKIPPED", f"submit: {type(e).__name__}")
         if futures:
@@ -875,7 +909,7 @@ class DialogueOrchestrator:
             return DialogueAnswer.from_facts(facts)
         # INV-1 — 후보 답(대안·탐색)과 탐색의 빈 결과 답이 목록 밖 장소를 권했다. 탐색 EMPTY 는 장소가 없어 "대신 ○○해변은
         # 어떠세요?"를 지어낼 자리가 가장 큰 답이다
-        closed = closed or facts.kind is AnswerKind.CANDIDATES or intent is Intent.EXPLORE_PLACES
+        closed = closed or facts.kind is AnswerKind.CANDIDATES or intent in (Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES)
         if closed and any(_foreign_place(part, known) for part in parts):
             self._fallback(inp, "llm", *_ANSWER_MODES, "place_not_in_facts")
             return DialogueAnswer.from_facts(facts)
@@ -919,6 +953,11 @@ class DialogueOrchestrator:
         if result.is_fallback or not isinstance(draft, DialoguePlanDraft):  # FallbackEvent·LlmCallRecord 는 게이트웨이가 냈다
             return self._plan_declined(inp, reason, "FALLBACK", plan_ms=plan_ms)
         if draft.refused or not draft.calls:  # 판단한 거절·도구 없음 — 의도된 결정론, 이벤트 없음
+            if not draft.refused and draft.gap == "CHAT":  # 잡담은 범위 밖 카드 대신 받아 준다(2″ 인사와 같은 결정론 문장)
+                self._log_plan(inp, "NO_TOOL", plan_ms=plan_ms, gap=draft.gap)
+                answer = DialogueAnswer(AnswerKind.TEXT, CHAT_TEXT[inp.snapshot.trip is not None], None,
+                                        (_home_action(inp.snapshot.trip is not None),), None, None)
+                return TurnOutcome("ANSWER", (), None, answer, cleared, 0, f"{reason}; plan:no_tool")
             return self._plan_declined(inp, reason, "REFUSED" if draft.refused else "NO_TOOL", plan_ms=plan_ms, gap=draft.gap)
         handlers = [HANDLERS[call.intent] for call in draft.calls]
         said = _squash(" ".join([text, *(turn.text for turn in inp.recent_turns)]))

@@ -10,15 +10,16 @@ import com.trippilot.notification.domain.NotificationToggleRepository
 import com.trippilot.notification.domain.OsPermission
 import com.trippilot.notification.domain.PushMessage
 import com.trippilot.notification.domain.PushPort
+import com.trippilot.notification.domain.PushRateLimited
 import com.trippilot.notification.domain.PushReceipt
 import com.trippilot.notification.domain.PushStatus
 import com.trippilot.notification.domain.PushToken
 import com.trippilot.notification.domain.PushTokenRepository
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.shouldNotBe
 import io.kotest.property.Arb
 import io.kotest.property.PropTestConfig
 import io.kotest.property.arbitrary.enum
@@ -96,7 +97,11 @@ class PushDispatchPropertyTest : StringSpec({
         override fun upsert(toggle: NotificationToggle) = toggle
     }
 
-    /** 토큰마다 결과를 정해 주는 발송기. 호출된 토큰 목록을 남겨 "전부에 보냈나"를 볼 수 있게 한다. */
+    /**
+     * 토큰마다 결과를 정해 주는 발송기. 호출된 토큰 목록을 남겨 "전부에 보냈나"를 볼 수 있게 한다.
+     * 사유는 **실 Expo 어댑터가 남기는 표기**를 쓴다(ExpoPushReceiptTest 가 고정) — 대역이 자기 어휘를 쓰면
+     * 지표가 실제 사유를 `OTHER` 로 접어도 여기서는 초록이다(TRIP-1534 검수에서 그렇게 가려졌다).
+     */
     class Sender(private val outcome: (String) -> PushStatus = { PushStatus.SENT }) : PushPort {
         override val deliversExternally = true
 
@@ -108,7 +113,7 @@ class PushDispatchPropertyTest : StringSpec({
         override fun send(tokens: List<String>, message: PushMessage): List<PushReceipt> {
             calls += tokens
             messages += message
-            return tokens.map { PushReceipt(it, outcome(it), if (outcome(it) == PushStatus.SENT) null else outcome(it).name) }
+            return tokens.map { PushReceipt(it, outcome(it), expoReason(outcome(it))) }
         }
     }
 
@@ -175,6 +180,20 @@ class PushDispatchPropertyTest : StringSpec({
 
         outcome shouldBe PushOutcome.RATE_LIMITED
         // 레이트리밋을 아끼는 것이 목적이므로 **부르지 않는 것**까지가 요구다.
+        sender.calls.shouldBeEmpty()
+    }
+
+    /** 일 상한은 시간 창과 따로 문다 — 한 시간에 몇 건씩 하루 종일 나가면 시간 상한만으로는 안 막힌다. */
+    "일 상한을 넘기면 지난 한 시간이 비어 있어도 푸시를 생략한다" {
+        val notifications = Notifications()
+        // 두 시간 전에 하루 상한(기본 50건)만큼 나갔다 — 시간 창에는 0건이다.
+        repeat(PushRateLimits().daily.toInt()) {
+            notifications.appended += notification().copy(pushSentAt = clock.instant().minusSeconds(2 * 3600))
+        }
+        val sender = Sender()
+
+        serviceOf(Tokens(listOf(token(deliverable = true))), sender, notifications).dispatch(notification()) shouldBe
+            PushOutcome.RATE_LIMITED
         sender.calls.shouldBeEmpty()
     }
 
@@ -295,7 +314,70 @@ class PushDispatchPropertyTest : StringSpec({
         val (id, sentAt, reason) = notifications.pushResults.single()
         id shouldBe n.notificationId
         sentAt shouldBe null
-        reason shouldNotBe null
+        reason shouldBe "DeviceNotRegistered"
+    }
+
+    /**
+     * **대표 사유는 가장 흔한 것이다**(컬럼 하나에 기기 여럿의 사유를 다 담으면 넘친다). 벤더 사유가 없는
+     * 영수증은 상태로 센다 — 그래야 "사유 없는 실패 둘 vs 사유 있는 실패 하나"에서 다수가 남는다. 죽은 토큰은
+     * 사유가 없어도 Expo 표기 `DeviceNotRegistered` 하나로 센다(원인 하나에 표기 하나).
+     * 빈 문자열이나 소수 쪽이 남으면 "왜 푸시가 안 왔나"에 엉뚱한 답을 한다.
+     */
+    "전 기기 실패면 가장 흔한 사유를 남긴다 — 벤더 사유가 없으면 상태로, 죽은 토큰은 한 표기로 센다" {
+        fun reasonFor(vararg receipts: Pair<PushStatus, String?>): String? {
+            val tokens = Tokens(receipts.map { token(deliverable = true) })
+            val notifications = Notifications()
+            val sender = object : PushPort {
+                override val deliversExternally = true
+                override fun send(tokens: List<String>, message: PushMessage) =
+                    tokens.zip(receipts) { t, (status, reason) -> PushReceipt(t, status, reason) }
+            }
+            serviceOf(tokens, sender, notifications).dispatch(notification()) shouldBe PushOutcome.FAILED
+            return notifications.pushResults.single().third
+        }
+
+        reasonFor(PushStatus.FAILED to "MessageTooBig", PushStatus.FAILED to "MessageTooBig", PushStatus.FAILED to null) shouldBe "MessageTooBig"
+        reasonFor(PushStatus.FAILED to null, PushStatus.FAILED to null, PushStatus.FAILED to "MessageTooBig") shouldBe "FAILED"
+        // 죽은 토큰은 사유가 있든 없든 한 표기로 센다 — 두 표기로 갈리면 1:1:1 동률이 돼 맨 앞의 소수가 남는다.
+        reasonFor(
+            PushStatus.FAILED to "MessageTooBig",
+            PushStatus.DEVICE_NOT_REGISTERED to "DeviceNotRegistered", PushStatus.DEVICE_NOT_REGISTERED to null,
+        ) shouldBe "DeviceNotRegistered"
+        // 소수가 맨 앞이어도 다수가 남는다 — "첫 영수증의 사유"와 구별되는 예시다.
+        reasonFor(PushStatus.FAILED to "MessageTooBig", PushStatus.DEVICE_NOT_REGISTERED to "DeviceNotRegistered", PushStatus.DEVICE_NOT_REGISTERED to "DeviceNotRegistered") shouldBe
+            "DeviceNotRegistered"
+    }
+
+    /** 계약(입력과 같은 수의 영수증)을 어긴 발송기라도 사유는 비지 않는다 — 고를 다수가 없으면 UNKNOWN 이다. */
+    "발송기가 영수증을 하나도 안 주면 사유는 UNKNOWN 이다" {
+        val notifications = Notifications()
+        val silent = object : PushPort {
+            override val deliversExternally = true
+            override fun send(tokens: List<String>, message: PushMessage) = emptyList<PushReceipt>()
+        }
+
+        serviceOf(Tokens(listOf(token(deliverable = true))), silent, notifications).dispatch(notification()) shouldBe PushOutcome.FAILED
+
+        notifications.pushResults.single().third shouldBe "UNKNOWN"
+    }
+
+    /**
+     * 푸시는 알림함 행을 **그대로** 나른다(BR-U6-12) — 본문이 비거나 탭 목적지가 빠지면, 사용자는 빈 알림을
+     * 보거나 눌러도 갈 곳이 없다. 서버 기록은 `SENT` 라 어디에도 안 드러난다.
+     */
+    "나가는 메시지는 알림의 제목·본문·탭 목적지를 그대로 싣는다" {
+        val sender = Sender()
+        val n = Notification.raise(
+            acc, NotificationKind.TRIP_DAY, "오늘의 일정", "성산일출봉부터 시작해요", clock.instant(),
+            actionType = "TRIP_ITINERARY", actionPayload = mapOf("tripId" to "t-1"),
+        )
+
+        serviceOf(Tokens(listOf(token(deliverable = true))), sender, Notifications()).dispatch(n) shouldBe PushOutcome.SENT
+
+        val message = sender.messages.single()
+        message.title shouldBe "오늘의 일정"
+        message.body shouldBe "성산일출봉부터 시작해요"
+        message.data shouldBe mapOf("actionType" to "TRIP_ITINERARY", "tripId" to "t-1")
     }
 
     "발송기가 통째로 터져도 예외를 올리지 않는다 — 알림함에는 이미 있다" {
@@ -309,7 +391,34 @@ class PushDispatchPropertyTest : StringSpec({
         val outcome = serviceOf(tokens, broken, notifications).dispatch(notification())
 
         outcome shouldBe PushOutcome.FAILED
-        notifications.pushResults.single().third shouldNotBe null
+        // 발송기 예외는 예외 종류까지 남긴다 — 벤더 사유가 없는 자리라 이것이 유일한 단서다.
+        notifications.pushResults.single().third shouldBe "PUSH_ERROR: IllegalStateException"
+    }
+
+    /**
+     * **발송량 한도(429)도 같은 실패 경로다** — 예외를 올리지 않고 FAILED 로 끝나며 컬럼 기록 형식도 같다
+     * (알림은 이미 알림함에 있다). 다른 것은 **지표 칸**뿐이다: 정본 OBS-U6-02 의 레이트리밋 칸으로 센다 —
+     * 네트워크·5xx 와 섞이면 COST-U6-04 재평가 트리거가 가리키는 한도 도달을 지표에서 못 본다.
+     */
+    "발송량 한도에 걸리면 실패로 끝나고 지표는 레이트리밋 칸으로 센다 — 다른 발송기 예외는 PUSH_ERROR" {
+        fun dispatchWith(failure: Throwable): Triple<PushOutcome, String?, String?> {
+            val registry = io.micrometer.core.instrument.simple.SimpleMeterRegistry()
+            val notifications = Notifications()
+            val broken = object : PushPort {
+                override val deliversExternally = true
+                override fun send(tokens: List<String>, message: PushMessage): List<PushReceipt> = throw failure
+            }
+            val outcome = PushDispatchService(
+                Tokens(listOf(token(deliverable = true))), notifications, NotificationToggleService(Toggles(true), clock), broken,
+                NotificationMetrics(registry, notifications), PushRateLimits(), clock,
+            ).dispatch(notification())
+            val tag = registry.find(NotificationMetrics.PUSH_DISPATCH).counters().single().id.getTag("reason")
+            return Triple(outcome, notifications.pushResults.single().third, tag)
+        }
+
+        dispatchWith(PushRateLimited()) shouldBe Triple(PushOutcome.FAILED, "PUSH_ERROR: PushRateLimited", "MessageRateExceeded")
+        dispatchWith(IllegalStateException("네트워크 없음")) shouldBe
+            Triple(PushOutcome.FAILED, "PUSH_ERROR: IllegalStateException", "PUSH_ERROR")
     }
 
     "푸시를 끈 종류는 시도조차 하지 않는다 — 인앱함에는 남는다(BR-U6-36)" {
@@ -347,4 +456,19 @@ class PushDispatchPropertyTest : StringSpec({
             }
         }
     }
+
+    /** 시간 상한이 일 상한보다 크면 시간 창이 영원히 안 물린다 — 기동 때 거부한다. 같은 값과 1 은 허용 경계다. */
+    "발송량 상한 설정은 1 ≤ 시간 ≤ 일 만 받는다" {
+        PushRateLimits(hourly = 1, daily = 1).hourly shouldBe 1
+        PushRateLimits(hourly = 50, daily = 50).hourly shouldBe 50
+        shouldThrow<IllegalArgumentException> { PushRateLimits(hourly = 0, daily = 50) }
+        shouldThrow<IllegalArgumentException> { PushRateLimits(hourly = 51, daily = 50) }
+    }
 })
+
+/** `ExpoPushAdapter.toReceipt` 의 사유 — 성공은 사유가 없고, 죽은 토큰은 Expo 오류 코드 그대로다. */
+private fun expoReason(status: PushStatus): String? = when (status) {
+    PushStatus.SENT -> null
+    PushStatus.DEVICE_NOT_REGISTERED -> "DeviceNotRegistered"
+    PushStatus.FAILED -> "MessageRateExceeded"
+}

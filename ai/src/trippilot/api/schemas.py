@@ -318,19 +318,22 @@ class ViolationSchema(BoundaryModel):
 class UnverifiedSlotSchema(BoundaryModel):
     """HC 판정에서 **제외된** 슬롯 1건 (TRIP-537) — 위반이 아니라 "판정 못 함"이다.
 
-    HC1(영업시간)·HC2(이동)는 POI 정본을 못 찾으면 그 슬롯을 건너뛴다("정보 없음은
-    막지 않는다", c2 규칙 — 그대로 유지). 그런데 스킵이 응답에 아무 흔적을 남기지
-    않아 `violations: []` 가 "전부 통과"로 읽혔다(INV-4 침묵 실패의 완곡한 형태).
-    이 목록이 "무엇을 못 봤는지"를 드러낸다 — **violations와 섞지 않는다**.
+    HC1(영업시간)·HC2(이동)는 POI 정본을 못 찾으면 그 슬롯을 건너뛰고, HC1 은 정본이 있어도
+    그 날 영업 창을 모르면 건너뛴다("정보 없음은 막지 않는다", c2 규칙 — 그대로 유지). 그런데
+    스킵이 응답에 아무 흔적을 남기지 않아 `violations: []` 가 "전부 통과"로 읽혔다(INV-4 침묵
+    실패의 완곡한 형태). 이 목록이 "무엇을 못 봤는지"를 드러낸다 — **violations와 섞지 않는다**.
 
-    `reason_code`는 **닫힌 집합**(백엔드가 분기·화면 문구에 사용):
+    `reason_code`는 **닫힌 집합**이다(새 값은 백엔드 계약 게이트가 잡는다). 백엔드는 사유로 가르지
+    않는다 — 장소 감지의 하루 점검이 어느 사유든 그 슬롯의 영업시간을 '모름'으로 읽는다(상황 감지 INV-SA-2):
     - `NOT_REGISTERED`: POI 정본(place-data)이 그 id를 안 돌려줬다 — 미등록·비ACTIVE
     - `UNMAPPABLE`: 돌려줬으나 판정에 쓸 수 없다 — `detail`이 원인 필드명
       (좌표 null·모르는 category/data_quality 등, 즉 경계 enum 드리프트가 여기로 온다)
+    - `HOURS_UNKNOWN`: 정본은 있으나 그 날 영업 창을 모른다(영업 원문 없음·해석 실패 — 둘 다 영업 창 0건)
+      — **HC1 만** 못 봤고 HC2 는 판정됐다. 같은 장소가 여러 날이면 하루라도 못 봤으면 실린다
     """
 
     poi_id: str = Field(min_length=1)
-    reason_code: Literal["NOT_REGISTERED", "UNMAPPABLE"]
+    reason_code: Literal["NOT_REGISTERED", "UNMAPPABLE", "HOURS_UNKNOWN"]
     detail: str = ""
 
 
@@ -344,9 +347,12 @@ class ValidateItineraryRequest(BoundaryModel):
 class ValidateItineraryResponse(BoundaryModel):
     """빈 목록 = 위반 없음. 상태코드는 200(위반은 정상 응답, IO-7).
 
-    `unverified_slots`(TRIP-537)는 additive — 기본 빈 리스트 = **모든 슬롯이 HC1·HC2
-    판정을 받았다**. 비어 있지 않으면 "위반 0"의 의미가 다르다: 그 슬롯들은 통과한
-    것이 아니라 검사되지 않았다. 위반 목록과 섞지 않는 이유가 그것이다.
+    `unverified_slots`(TRIP-537)는 additive — 빈 리스트 = **시각이 있는 모든 슬롯이 HC1·HC2
+    판정을 받았다**(시간 미정 슬롯은 시각 주장이 없어 검증 밖이고 여기에도 싣지 않는다). 영업 창을
+    모르는 등록 POI 가 `HOURS_UNKNOWN` 으로 실리기 전에는 이 문장이 거짓이었다 — 그 슬롯은 HC1 을
+    건너뛰고도 흔적이 없었다(원문이 있어도 해석에 실패한 곳 — 공유본 원문의 8.5%). 비어 있지 않으면
+    "위반 0"의 의미가 다르다: 그 슬롯들은 통과한 것이 아니라 검사되지 않았다. 위반 목록과 섞지 않는
+    이유가 그것이다. 무엇을 못 봤는지는 `reason_code` 가 말한다(`HOURS_UNKNOWN` 은 HC1 만).
     """
 
     violations: list[ViolationSchema] = Field(default_factory=list)
@@ -374,7 +380,7 @@ class RepairItineraryResponse(BoundaryModel):
     """`repaired=null` = 수리 불가(정상 응답, IO-7) — 오류가 아니다.
 
     `unverified_slots`는 validate와 같은 의미다(TRIP-537): 수리 결과도 그 슬롯들에
-    대해서는 HC1·HC2를 못 본 채 나온 것이라, 검증 경로에만 싣고 여기서 빼면 같은
+    대해서는 사유가 말하는 HC 를 못 본 채 나온 것이라, 검증 경로에만 싣고 여기서 빼면 같은
     침묵이 수리 경로로 되돌아온다(Plan-B는 validate 없이 repair만 부르기도 한다).
     """
 
@@ -840,7 +846,7 @@ class ReminderSlotSchema(BoundaryModel):
     """그날 일정의 장소 1건 — 문구가 말해도 되는 대상. 좌표·시각은 싣지 않는다.
 
     `category` 는 **경계 카테고리 코드**다(`FOOD`·`CAFE`·`SIGHT`·`NIGHT_VIEW`·
-    `NATURE`·`CULTURE`·`ACTIVITY`·`SHOPPING`) — 백엔드가 다른 경계에서 이미
+    `NATURE`·`CULTURE`·`ACTIVITY`·`SHOPPING`·`ART`·`BAR`) — 백엔드가 다른 경계에서 이미
     내보내는 그 값 그대로 보내면 된다. 새 어휘를 만들지 않는다. 모르는 값·빈
     문자열은 카테고리 없이 이름만 쓴 것과 같게 처리되므로 안전하다(문구 품질만
     조금 떨어진다).
@@ -1069,6 +1075,8 @@ class OpportunitySchema(BoundaryModel):
     key: str  # "event:{event_id}" | "trending:{poi_id}" — 기기 숨김의 키
     kind: Literal["EVENT_VENUE", "EVENT_NEARBY", "TRENDING"]
     event_name: str | None = None  # EVENT_* 만
+    # EVENT_* 만 — EventType 값 그대로(OTHER 는 카드가 되지 않는다). 날씨 위험 날 축제만 빼는 재료(G-SA-17)
+    event_type: Literal["FESTIVAL", "PERFORMANCE", "EXHIBITION", "POPUP"] | None = None
     start: dt.date | None = None   # EVENT_* 만 — 행사 기간(일 단위)
     end: dt.date | None = None
     poi_id: str                    # [넣어서 다시 짜기] 대상 — 등록 POI

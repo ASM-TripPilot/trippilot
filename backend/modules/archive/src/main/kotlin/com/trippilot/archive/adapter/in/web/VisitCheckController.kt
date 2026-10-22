@@ -7,6 +7,7 @@ import com.trippilot.archive.domain.CompletionSource
 import com.trippilot.archive.domain.VisitCheck
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotNull
+import org.hibernate.validator.constraints.CodePointLength
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.GetMapping
@@ -105,12 +106,14 @@ class VisitCheckController(private val service: VisitCheckService) {
  */
 /** 도착 전 건너뛰기(TRIP-1029) — 계획 슬롯 전용이라 slotKey 도 필수다(즉석 방문에는 "안 간 계획"이 없다). */
 data class SkipPlannedRequest(
-    @field:NotNull(message = "슬롯 키는 필수입니다.") val slotKey: String?,
+    @field:NotNull(message = "슬롯 키는 필수입니다.")
+    @field:CodePointLength(max = VisitCheck.SLOT_KEY_MAX, message = "슬롯 키가 너무 깁니다.")
+    val slotKey: String?,
     @field:NotNull(message = "장소는 필수입니다.") val poiId: UUID?,
 )
 
 data class ArriveRequest(
-    val slotKey: String? = null,
+    @field:CodePointLength(max = VisitCheck.SLOT_KEY_MAX, message = "슬롯 키가 너무 깁니다.") val slotKey: String? = null,
     @field:NotNull(message = "장소는 필수입니다.") val poiId: UUID?,
     @field:NotNull(message = "체크 방식은 필수입니다.") val source: CheckSource?,
 )

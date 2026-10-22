@@ -588,8 +588,9 @@ paths:
       tags: [stays]
       summary: 도시별 큐레이션 숙소(트립닷컴 Promotion Center 인기 목록)
       description: >
-        트립닷컴 제휴 Promotion Center 의 도시별 인기 목록(Hot Sellers)을 순위대로 돌려준다. 행은 반복 시드가
-        채운다(시범: 서울 15곳). 각 항목의 `stayId`(`"TRIPCOM:{트립닷컴 hotelId}"`)를 그대로
+        트립닷컴 제휴 Promotion Center 의 도시별 인기 목록(Hot Sellers, 모자라면 Top Deals)을 순위대로 돌려준다.
+        행은 반복 시드가 채운다 — 도시는 '서울'·'부산'·'제주'·'강릉'·'경주'·'인천'·'대구'·'전주'·'속초', 도시당 최대 15곳.
+        `address` 는 서울만 채워져 있고 나머지는 null 이다. 각 항목의 `stayId`(`"TRIPCOM:{트립닷컴 hotelId}"`)를 그대로
         `/stays/{stayId}/outbound` 에 넘기면 트립닷컴 호텔 상세로 간다. 상세(`/stays/{stayId}`)는 이 출처를
         모른다(404) — 목록 항목이 곧 카드다.
 
@@ -598,10 +599,12 @@ paths:
         값이 아니다(INV-U1-05). 모르는 도시는 빈 목록 200 이다.
 
 
-        ⚠ 출시 조건: 트립닷컴 제휴 계약 3.2.2·3.2.4 — 트립닷컴 이미지·홍보 콘텐츠를 자체 콘텐츠와 함께
-        노출하려면 **사전 서면 승인**이 필요하다. 승인 전에는 화면이 이 목록을 띄우지 않는다.
+        ⚠ 트립닷컴 제휴 계약 3.2.2·3.2.4 는 이미지·홍보 콘텐츠 노출에 **사전 서면 승인**을 요구한다. 회신을
+        기다리지 않고 노출하기로 했다(2026-10-21 제품 결정). 트립닷컴이 막으면 목록이 빈 배열로 바뀐다 —
+        화면은 빈 목록이면 섹션을 숨겨야 한다(요구 사항 — 이 목록을 부르는 화면은 아직 없다).
       parameters:
-        - { name: city, in: query, required: true, schema: { type: string }, example: '서울', description: 표시용 도시명 }
+        - { name: regionCode, in: query, required: false, schema: { type: string, pattern: '^([0-9]{2}|[0-9]{5})$' }, example: '26', description: '지역 카탈로그 코드 — 화면은 이것을 쓴다. 시군구·행정구 코드도 그 도시로 잡힌다(50130 서귀포 → 제주). 도 코드처럼 한 도시로 좁혀지지 않으면 빈 목록' }
+        - { name: city, in: query, required: false, schema: { type: string }, example: '부산', description: '짧은 도시명(서울·부산…). regionCode 와 둘 중 하나만 — 둘 다 오거나 둘 다 없으면 400' }
       responses:
         '200':
           description: 큐레이션 목록(순위 오름차순)
@@ -1356,7 +1359,7 @@ paths:
               type: object
               required: [slotKey, poiId]
               properties:
-                slotKey: { type: string, description: "계획 슬롯 키 {date}#{poiId} — 즉석 방문에는 '안 간 계획'이 없어 필수" }
+                slotKey: { type: string, maxLength: 100, description: "계획 슬롯 키 {date}#{poiId} — 즉석 방문에는 '안 간 계획'이 없어 필수" }
                 poiId: { type: string, format: uuid }
       responses:
         '201':
@@ -2261,7 +2264,8 @@ components:
 
     PoiCategory:
       type: string
-      enum: [명소, 맛집, 카페, 야경, 자연, 쇼핑, 문화]
+      description: 정본은 DB CHECK(poi_category_check) — 미술·술집은 V2.79(TRIP-1545)에서 추가
+      enum: [명소, 맛집, 카페, 야경, 자연, 쇼핑, 문화, 액티비티, 미술, 술집]
 
     RegionLevel:
       type: string
@@ -2371,7 +2375,7 @@ components:
       type: object
       required: [city, items]
       properties:
-        city: { type: string }
+        city: { type: string, nullable: true, description: 잡힌 도시명 — regionCode 가 어느 도시에도 안 걸리면 null }
         items:
           type: array
           items: { $ref: '#/components/schemas/CuratedStay' }
@@ -2503,28 +2507,28 @@ components:
       type: object
       required: [name, registerRoute]
       properties:
-        name: { type: string }
+        name: { type: string, maxLength: 200 }
         registerRoute: { $ref: '#/components/schemas/RegisterRoute' }
         lat: { type: number, format: double, nullable: true }
         lng: { type: number, format: double, nullable: true }
         coordConfirmed: { type: boolean, default: false }
         checkIn: { type: string, format: date, nullable: true }
         checkOut: { type: string, format: date, nullable: true }
-        externalSource: { type: string, nullable: true }
-        externalId: { type: string, nullable: true }
-        memo: { type: string, nullable: true }
+        externalSource: { type: string, nullable: true, maxLength: 40 }
+        externalId: { type: string, nullable: true, maxLength: 120 }
+        memo: { type: string, nullable: true, maxLength: 500 }
 
     EditSavedStayRequest:
       type: object
       required: [name]
       properties:
-        name: { type: string }
+        name: { type: string, maxLength: 200 }
         lat: { type: number, format: double, nullable: true }
         lng: { type: number, format: double, nullable: true }
         coordConfirmed: { type: boolean, default: false }
         checkIn: { type: string, format: date, nullable: true }
         checkOut: { type: string, format: date, nullable: true }
-        memo: { type: string, nullable: true }
+        memo: { type: string, nullable: true, maxLength: 500 }
 
     GeocodeCandidate:
       type: object
@@ -2559,7 +2563,7 @@ components:
       required: [seq, region, nights]
       properties:
         seq: { type: integer }
-        region: { type: string }
+        region: { type: string, maxLength: 60 }
         nights: { type: integer }
         regionCode:
           type: string
@@ -2632,7 +2636,7 @@ components:
       type: object
       required: [startDate, endDate, destinations]
       properties:
-        title: { type: string, nullable: true, description: 미입력 시 목적지 기반 자동생성 }
+        title: { type: string, nullable: true, maxLength: 120, description: 미입력 시 목적지 기반 자동생성 }
         startDate: { type: string, format: date }
         endDate: { type: string, format: date }
         party: { type: integer, default: 1 }
@@ -2685,7 +2689,7 @@ components:
       type: object
       required: [startDate, endDate, destinations]
       properties:
-        title: { type: string, nullable: true }
+        title: { type: string, nullable: true, maxLength: 120 }
         startDate: { type: string, format: date }
         endDate: { type: string, format: date }
         party: { type: integer, default: 1 }
@@ -2882,6 +2886,7 @@ components:
         slotKey:
           type: string
           nullable: true
+          maxLength: 100
           description: '슬롯 경계 키 "{date}#{poiId}". **비우면 즉석 방문**(계획에 없던 곳)'
         poiId: { type: string, format: uuid }
         source:
@@ -2938,7 +2943,7 @@ components:
             properties:
               eventId: { type: string, format: uuid, description: 기기가 짓는다 — 항목 식별용 }
               kind: { type: string, enum: [ARRIVE, COMPLETE] }
-              slotKey: { type: string, description: '필수 — 자동 결과는 즉석 방문을 만들지 않는다(INV-U10-5)' }
+              slotKey: { type: string, maxLength: 100, description: '필수 — 자동 결과는 즉석 방문을 만들지 않는다(INV-U10-5)' }
               poiId: { type: string, format: uuid }
               occurredAt: { type: string, format: date-time, description: 'ARRIVE = 진입 시각 · COMPLETE = 이탈 시각 또는 다음 장소 진입 시각' }
               completionSource: { type: string, nullable: true, enum: [AUTO_GEOFENCE_EXIT, AUTO_NEXT_ARRIVAL], description: COMPLETE 일 때만 }
@@ -3092,8 +3097,10 @@ components:
       type: object
       required: [items]
       description: >
-        그 날짜의 기회 — 서버 순위 그대로(행사장 → 행사장 가까이 → 요즘 인기 → 짧은 기간 → 거리) 최대 3개.
-        앱은 날짜당 1장만 그리고 같은 날짜에 날씨 위험 트리거가 ACTIVE 면 행사 카드를 뺀다(BR-SA-22 규칙 4 — 앱이 고른다).
+        그 날짜의 기회 — 서버 순위 그대로(행사장 → 행사장 가까이 → 요즘 인기 → 짧은 기간 → 거리) 최대 3개이고,
+        행사만으로 3개가 차면 마지막 자리는 요즘 인기다(있으면). 그 날 날씨 위험 트리거가 떠 있거나 [적용]으로 소비됐으면
+        서버가 축제와 유형을 모르는 행사를 뺀다 — 공연·전시·팝업과 요즘 인기는 남는다(G-SA-17).
+        앱은 날짜당 1장만 그리고 같은 날짜에 날씨 위험 트리거가 ACTIVE 면 축제·유형 모름 행사를 뺀다(BR-SA-22 규칙 4 — 앱이 고른다).
       properties:
         items:
           type: array
@@ -3114,6 +3121,13 @@ components:
             EVENT_VENUE = 기간이 겹치는 행사의 행사장 · EVENT_NEARBY = 행사장 가까이 · TRENDING = 태그 '요즘 인기'.
             앱이 이 값으로 고정 템플릿을 고른다.
         eventName: { type: string, nullable: true, description: '행사 이름 — 행사 카드만(TRENDING 은 null)' }
+        eventType:
+          type: string
+          nullable: true
+          enum: [FESTIVAL, PERFORMANCE, EXHIBITION, POPUP]
+          description: >
+            행사 유형(축제·공연·전시·팝업) — 행사 카드만이고 TRENDING 은 null 이다. 행사 카드인데 null 이면 유형을 모른다(옛 AI·모르는 값).
+            날씨 위험 날에 뺄 행사를 가르는 재료다 — 축제와 모름은 빼고 공연·전시·팝업은 남긴다. 앱 문장은 이 값으로 바뀌지 않는다.
         start: { type: string, format: date, nullable: true, description: '행사 시작일(일 단위) — 행사 카드만' }
         end: { type: string, format: date, nullable: true, description: '행사 마지막 날(일 단위) — 행사 카드만. 앱의 "M월 d일까지"' }
         poiId: { type: string, format: uuid, description: '등록 POI(INV-1) — 행사 자체는 후보가 아니다. 넣어서 다시 짜기가 이 장소를 넣는다' }
@@ -3755,7 +3769,6 @@ components:
         capabilities:
           type: object
           properties:
-            localLocationUse: { type: boolean, description: '서버가 아직 내지 않는다 — 의미 미정, 팀 결정 대기(TRIP-1474). 클라이언트는 읽지 말 것' }
             serverLocationService: { type: boolean }
             gpsTrackRetention: { type: boolean }
 
@@ -3913,8 +3926,8 @@ components:
         localAssetId:
           type: string
           maxLength: 200
-          description: 기기 로컬 자산 식별자(iOS PHAsset localIdentifier · Android MediaStore id). 기기 안에서만 뜻이 있다.
-        deviceId: { type: string, maxLength: 64 }
+          description: '기기 로컬 자산 식별자(iOS PHAsset localIdentifier · Android MediaStore id). 기기 안에서만 뜻이 있다. 길이는 UTF-16 단위(서버 @Size) — maxLength(코드 포인트)와 BMP 밖 문자에서 다르다'
+        deviceId: { type: string, maxLength: 64, description: '길이는 UTF-16 단위(서버 @Size) — maxLength(코드 포인트)와 BMP 밖 문자에서 다르다' }
         takenAt: { type: string, format: date-time, nullable: true }
         exifLat:
           type: number
@@ -3940,7 +3953,7 @@ components:
       type: object
       required: [text]
       properties:
-        text: { type: string, minLength: 1, maxLength: 2000 }
+        text: { type: string, minLength: 1, maxLength: 2000, description: '길이는 UTF-16 단위(서버 @Size) — maxLength(코드 포인트)와 BMP 밖 문자에서 다르다' }
 
     VisitPhotoList:
       type: object
@@ -4797,8 +4810,8 @@ components:
       type: object
       required: [token, platform]
       properties:
-        token: { type: string, maxLength: 255, description: Expo push token(DEC-U6-3) }
-        deviceId: { type: string, maxLength: 64, nullable: true }
+        token: { type: string, maxLength: 255, description: 'Expo push token(DEC-U6-3). 길이는 UTF-16 단위(서버 @Size) — maxLength(코드 포인트)와 BMP 밖 문자에서 다르다' }
+        deviceId: { type: string, maxLength: 64, nullable: true, description: '길이는 UTF-16 단위(서버 @Size) — maxLength(코드 포인트)와 BMP 밖 문자에서 다르다' }
         platform: { type: string, enum: [IOS, ANDROID] }
         osPermission:
           type: string

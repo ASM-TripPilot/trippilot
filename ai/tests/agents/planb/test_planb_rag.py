@@ -48,6 +48,7 @@ from trippilot.agents.planb.rag import (
     closed_set_filter,
 )
 from trippilot.llm_gateway.config import C1Config
+from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
 from trippilot.llm_gateway.gates.base import GateOutcome
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.workers.alternative_selection import AlternativeSelectionWorker
@@ -448,6 +449,24 @@ def test_pipeline_with_gateway_uses_llm_selection() -> None:
     assert result.fallback_level == 0
     assert result.notes == ()
     assert [str(p) for a in result.alternatives for p in a.poi_ids] == ["p3", "p1"]
+
+
+def test_게이트가_비운_이유는_출처_표기가_아니라_사람_문장으로_채운다() -> None:
+    """LLM 경로(fallback_level 0)는 백엔드가 이유를 그대로 화면에 낸다 — 강등일 때만 템플릿으로 바꾼다.
+
+    게이트가 시간 표현 때문에 이유를 비운 자리에 출처 표기("WEATHER/weather · llm_select_alternatives")가
+    들어가면 그 기계 문자열이 '다른 후보' 카드에 뜬다.
+    """
+    body = {"selections": [{"poiId": "p1", "reason": "관람 약 40분이면 둘러본다"},
+                           {"poiId": "p2", "reason": "실내라 비를 피한다"}]}
+    pipeline = PlanBAgent(
+        FakeEmbedding(dim=_SMALL), InMemoryVectorStore(),
+        alternative_worker=AlternativeSelectionWorker(_gateway(json.dumps(body), AlternativeSelectionGate())),
+    )
+    result = pipeline.run(_request(_pool("p1", "p2")))
+    assert result.fallback_level == 0
+    assert [a.rationale for a in result.alternatives] == ["주변 카페 후보", "실내라 비를 피한다"]
+    assert "reason_time_expr_blanked: 1건" in result.notes
 
 
 def test_pipeline_drops_llm_selection_outside_pool() -> None:

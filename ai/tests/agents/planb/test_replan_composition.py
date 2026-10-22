@@ -178,7 +178,7 @@ def test_피로면_힘든_카테고리는_후보에서_빠진다() -> None:
     """피로 → AVOID_STRENUOUS(자연·액티비티 회피) — 프롬프트에 맡기지 않고 후보에서 뺀다."""
     llm = _ScriptedLlm([_FOOD])
     _replan(llm, reasons=["fatigue"])
-    candidates = llm.compose_prompt().split("[후보 목록]")[1]
+    candidates = _offered(llm)
     assert _FOOD in candidates
     assert _MOUNTAIN not in candidates
 
@@ -201,7 +201,7 @@ def test_바꿔_뺀_곳은_후보에_없다() -> None:
     """종전 경로는 점수 강등(TRIP-964)인데 고른 곳은 점수를 안 본다 — 후보에서 뺀다."""
     llm = _ScriptedLlm([_MOUNTAIN])
     _replan(llm, rejections=[{"poi_id": _FOOD, "kind": "SWAPPED_OUT"}])
-    assert _FOOD not in llm.compose_prompt().split("[후보 목록]")[1]
+    assert _FOOD not in _offered(llm)
 
 
 _NATURE = {_MOUNTAIN, _SEED["성산일출봉"]}
@@ -215,7 +215,7 @@ def test_실내로면_원_일정의_야외도_후보에서_빠지고_교체로_�
                {"poi_id": _MOUNTAIN, "start_at": "12:00", "end_at": "14:00"}]
     body = _replan(llm, directives=["INDOOR"], current_slots=current)
 
-    candidates = llm.compose_prompt().split("[후보 목록]")[1]
+    candidates = _offered(llm)
     assert not any(n in candidates for n in _NATURE)
     assert "한라산 | 요청과 안 맞음(교체)" in llm.compose_prompt()
     assert _placed(body) == {_FOOD}, body["notes"]
@@ -240,7 +240,7 @@ def test_반대_칩을_같이_고르면_그_카테고리는_빼지_않는다() -
     """실내로 + 자연 위주 — NATURE 는 상쇄(directive_fit 과 같은 규약), 후보에 남는다."""
     llm = _ScriptedLlm([_MOUNTAIN])
     body = _replan(llm, directives=["INDOOR", "NATURE_FOCUS"])
-    assert _MOUNTAIN in llm.compose_prompt().split("[후보 목록]")[1]
+    assert _MOUNTAIN in _offered(llm)
     assert any(n.startswith("directives_conflict:") for n in body["notes"]), body["notes"]
 
 
@@ -318,7 +318,7 @@ _WITH_CLUB = (*demo_poi_seed(), Poi(
     poi_id=PoiId(_CLUB), name="테스트 클럽", category=PoiCategory.ACTIVITY,
     coord=GeoPoint(DEMO_ANCHOR.lat + 0.002, DEMO_ANCHOR.lng + 0.002), open_hours=(),
     avg_cost=None, rating=None, quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None,
-    tags=("나이트라이프", "클럽")))
+    tags=("술집", "클럽")))
 
 
 def _club_slot(body: dict) -> dict:
@@ -330,7 +330,7 @@ def test_밤에_놀기면_클럽이_후보에_오르고_밤에_놓인다() -> No
     body = _replan(llm, pois=_WITH_CLUB, directives=["NIGHTLIFE"])
 
     prompt = llm.compose_prompt()
-    assert "나이트라이프" in prompt.split("[후보 목록]")[1]  # 태그가 후보 줄에 보인다
+    assert "술집" in prompt.split("[후보 목록]")[1]  # 태그가 후보 줄에 보인다
     assert "~23:59" in prompt  # 그날 창을 23:59 까지
     club = _club_slot(body)
     assert club["start_at"] >= "20:00" and club["is_fixed"] is False, body["notes"]  # 추정 영업 20~04시
@@ -352,7 +352,7 @@ def test_비가_와도_클럽은_실외로_빠지지_않는다() -> None:
     """우천·실내로의 실외 회피는 ACTIVITY 를 뺀다 — 클럽은 ACTIVITY 지만 실내다."""
     llm = _ScriptedLlm([_CLUB])
     _replan(llm, pois=_WITH_CLUB, reasons=["weather"], directives=["NIGHTLIFE"])
-    assert _CLUB in llm.compose_prompt().split("[후보 목록]")[1]
+    assert _CLUB in _offered(llm)
 
 
 def test_말한_세부_종류가_먼저_오른다() -> None:
@@ -360,7 +360,7 @@ def test_말한_세부_종류가_먼저_오른다() -> None:
     wine = Poi(poi_id=PoiId("e0000000-0000-4000-8000-0000000000c2"), name="가까운 와인바",
                category=PoiCategory.ACTIVITY, coord=DEMO_ANCHOR, open_hours=(), avg_cost=None,
                rating=None, quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None,
-               tags=("나이트라이프", "와인바"))
+               tags=("술집", "와인바"))
     body = _replan(_ScriptedLlm([_FOOD]), pois=(*_WITH_CLUB, wine), directives=["NIGHTLIFE"],
                    free_text="클럽 가고 싶어")
     assert "nightlife_forced: 1" in body["notes"]
@@ -374,7 +374,7 @@ def test_클럽이_근처에_없으면_다른_밤_장소로_대신하고_밝힌�
     wine = Poi(poi_id=PoiId("e0000000-0000-4000-8000-0000000000c3"), name="제주 와인바",
                category=PoiCategory.ACTIVITY, coord=DEMO_ANCHOR, open_hours=(), avg_cost=None,
                rating=None, quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None,
-               tags=("나이트라이프", "와인바", "요즘 인기"))
+               tags=("술집", "와인바", "요즘 인기"))
     body = _replan(_ScriptedLlm([_FOOD]), pois=(*demo_poi_seed(), wine), directives=["NIGHTLIFE"],
                    free_text=said)
     assert f"nightlife_subtype_missing: {subtype}" in body["notes"], body["notes"]
@@ -597,3 +597,41 @@ def test_칩으로_고른_밤에_놀기는_말과_상관없이_남는다() -> No
     out = _spoken_nightlife(SimpleNamespace(directives=["NIGHTLIFE"], free_text="카페 가고 싶어"),
                             ["NIGHTLIFE"], [])
     assert out == ["NIGHTLIFE"]
+
+
+def _offered(llm: "_ScriptedLlm") -> set[str]:
+    """후보 줄(번호 | 카테고리 | 상호명 | …)의 상호명 → poi_id. 0.7.0 부터 후보 줄에 UUID 가 없다(번호화)."""
+    names = {p.name: str(p.poi_id) for p in _WITH_CLUB}
+    section = llm.compose_prompt().split("[후보 목록]")[1].split("[출력 JSON 스키마]")[0]
+    cells = (line.split("|") for line in section.splitlines())
+    return {names[c[2].strip()] for c in cells if len(c) >= 3 and c[2].strip() in names}
+
+
+class _NumberedLlm(_ScriptedLlm):
+    """0.7.0 처럼 **번호로** 답한다 — 후보 줄에서 원하는 상호명의 번호를 찾아 `{"no": n}`."""
+
+    def __init__(self, names: list[str]) -> None:
+        super().__init__(None)
+        self.names = names
+
+    def invoke(self, request: LlmRequest) -> LlmResponse:
+        if request.prompt_ref.feature != "REPLAN_COMPOSITION":
+            return super().invoke(request)
+        self.requests.append(request)
+        section = request.prompt.split("[후보 목록]")[1].split("[출력 JSON 스키마]")[0]
+        number = {c[2].strip(): int(c[0].lstrip("- ").strip())
+                  for c in (line.split("|") for line in section.splitlines() if line.startswith("- "))
+                  if len(c) >= 3}
+        text = json.dumps({"selections": [{"no": number[n], "reason": "분위기가 좋은 곳"} for n in self.names]},
+                          ensure_ascii=False)
+        return LlmResponse(raw_text=text, input_tokens=1, output_tokens=1, latency_ms=0, model_id=request.model_id)
+
+
+def test_번호로_답해도_고른_곳이_일정에_들어간다() -> None:
+    """후보 줄에 UUID 가 없다(출력 글자의 36%가 UUID 베끼기였다) — 번호로 고르고 게이트가 poi_id 로 되돌린다."""
+    llm = _NumberedLlm(["한라산", "제주 흑돼지거리"])
+    body = _replan(llm)
+    section = llm.compose_prompt().split("[후보 목록]")[1]
+    assert not any(str(p.poi_id) in section for p in demo_poi_seed())  # 후보 칸에 UUID 없음
+    assert "llm_composed: 2/2" in " ".join(body["notes"]), body["notes"]
+    assert {_MOUNTAIN, _FOOD} <= _placed(body), body["notes"]

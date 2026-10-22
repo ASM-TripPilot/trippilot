@@ -81,6 +81,7 @@ from trippilot.orchestrator.dialogue_orchestrator import (
     ACK_TEXT,
     CAPABILITIES_LITERAL,
     CAPABILITIES_TEXT,
+    GREETING_TEXT,
     INJECTION_REASON,
     THANKS_TEXT,
     DialogueAnswer,
@@ -272,6 +273,30 @@ def test_capabilities_literal_is_a_deterministic_answer_without_llm() -> None:
 
 
 # ── 2·4·5단 — 분류 → 팬아웃 → 답변 ────────────────────────────────────────
+
+
+class _LlmInFanout(_Weather):
+    """팬아웃 스레드 안에서 서비스 LLM 을 부르는 포트 — NL2SQL(장소 탐색 DIALOGUE_SQL)과 같은 꼴. 백엔드 사용량 상한이 세는
+    턴 `llm_calls` 는 contextvar 카운터라, 풀 스레드에 문맥이 안 넘어가면 이 호출이 빠진다(계획 턴은 실제 4회인데 3으로 셌다)."""
+
+    class _Inner:
+        def invoke(self, request):
+            return None
+
+    def __init__(self, calls_per_fetch: int = 1) -> None:
+        super().__init__()
+        self._llm, self._n = CountingLlm(self._Inner()), calls_per_fetch
+
+    def fetch(self, params: dict) -> InfoPacket:
+        for _ in range(self._n):
+            self._llm.invoke(None)
+        return super().fetch(params)
+
+
+def test_service_llm_calls_made_inside_fanout_threads_count_toward_the_turn() -> None:
+    b = _build(_canned(Intent.GET_WEATHER), ports=HandlerPorts(poi_info=_PoiInfo(), weather=_LlmInFanout()))
+    out = b.orch.turn(_input("오늘 날씨 어때"))
+    assert out.outcome == "ANSWER" and out.llm_calls == 3  # 분류 + 팬아웃 안 1 + 답변 (BR-AO-07·COST-U8-02)
 
 
 def test_weather_turn_classifies_fans_out_and_composes_an_info_answer() -> None:
@@ -546,7 +571,23 @@ def test_closer_the_classifier_closed_gets_a_short_reply_instead_of_the_scope_ca
     assert [a.type for a in without_trip.answer.next_actions] == ["CREATE_TRIP"]
 
 
-@pytest.mark.parametrize("utterance", ["응?", "고마워 근데 내일 날씨는", "주식 어때", "ㅋㅋ"])
+@pytest.mark.parametrize("utterance", ["안녕", "안녕하세요!", "하이~", "hello", "반가워요ㅎㅎ", "안녕 반가워", "네 안녕하세요"])
+def test_greeting_gets_a_warm_reply_that_leads_to_the_trip(utterance: str) -> None:
+    """"안녕" 한마디에 범위 밖 카드가 나가면 딱딱하다(2026-10-21) — 받아 주고 여행 쪽으로 한마디 잇는다. 여행 유무로 문장이 다르다."""
+    out = _build(_canned(None)).orch.turn(_input(utterance, turn_index=2))
+    assert out.outcome == "ANSWER" and out.answer.text == GREETING_TEXT[True] and out.frames == ()
+    assert [a.type for a in out.answer.next_actions] == ["OPEN_ITINERARY"] and out.context == DialogueContext(turn_index=2)
+    without_trip = _build(_canned(None)).orch.turn(_input(utterance, snapshot=_NO_TRIP))
+    assert without_trip.answer.text == GREETING_TEXT[False]
+    assert [a.type for a in without_trip.answer.next_actions] == ["CREATE_TRIP"]
+
+
+def test_greeting_with_thanks_is_answered_as_thanks() -> None:
+    out = _build(_canned(None)).orch.turn(_input("안녕 고마워"))
+    assert out.outcome == "ANSWER" and out.answer.text == THANKS_TEXT
+
+
+@pytest.mark.parametrize("utterance", ["응?", "고마워 근데 내일 날씨는", "주식 어때", "ㅋㅋ", "안녕 내일 날씨는"])
 def test_utterance_that_is_not_wholly_a_closer_stays_out_of_scope(utterance: str) -> None:
     out = _build(_canned(None)).orch.turn(_input(utterance))
     assert out.outcome == "OUT_OF_SCOPE" and out.answer is None
@@ -998,6 +1039,9 @@ def test_recent_turn_rejects_bad_role_and_length(role: str, text: str) -> None:
     ("다음은 해녀의집이에요. 12:00 에 가요.", True),  # Facts 의 계획 시각 복사 — 통과
     ("다음은 해녀의집이에요. 15:45에 방문하세요.", False),  # Facts 밖 시각 — 카드(12:00)와 엇갈린다 (INV-2)
     ("다음은 해녀의집이에요. 3:45pm 에 가요.", False),
+    ("다음은 해녀의집이에요. 3pm 에 가요.", False),  # 분 없는 am/pm(#1420 리뷰 C4)
+    ("다음은 해녀의집이에요. １２：００ 에 가요.", True),  # 전각이어도 Facts 의 12:00 이다
+    ("다음은 해녀의집이에요. １５：４５ 에 가요.", False),
     ("다음은 해녀의집이에요. 오후 세 시에 가요.", False),  # 대조할 수 없는 한글 시각
 ])
 def test_answer_clock_times_must_come_from_facts(text: str, kept: bool) -> None:

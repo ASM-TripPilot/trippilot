@@ -114,6 +114,8 @@ class PoiQueryService(
         if (cursor.isNullOrBlank()) return null
         return runCatching {
             val raw = String(Base64.getUrlDecoder().decode(cursor))
+            // 풀린 정렬 키가 그대로 SQL 인자로 간다 — NUL 은 요청 관문(NUL 거부)을 base64 로 지나와 PostgreSQL 에서 500 이었다(TRIP-1473).
+            require('\u0000' !in raw)
             val first = raw.indexOf(SEP)
             val last = raw.lastIndexOf(SEP)
             require(first in 1 until last)

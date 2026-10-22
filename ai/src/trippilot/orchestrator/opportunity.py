@@ -34,7 +34,7 @@ from trippilot.orchestrator.event_affinity import ATTACH_RADIUS_KM
 
 NEAR_KM = 1.0             # 남은 슬롯 ↔ 카드 장소 — 경계가 슬롯마다 이 반경으로 등록 POI 를 묻는다
 NEARBY_KM = 0.3           # 행사 좌표 ↔ '행사장 가까이' 장소 (이름이 안 맞을 때)
-MAX_OPPORTUNITIES = 3
+MAX_OPPORTUNITIES = 3     # 마지막 자리는 '요즘 인기' 몫이다(후보가 있으면) — find_opportunities
 _SHOWN_EVENT_SOURCES = ("tourapi-", "popup-")  # 공식 축제 · 수동 큐레이션 팝업 (O-SA-12)
 _VENUE_NAME_MIN = 3       # 행사장 이름 대조 최소 길이 — '공원' 같은 두 글자가 아무 주소에나 붙지 않게
 _NAME_MIN, _NAME_MAX = 2, 60  # 표시 게이트 — 실측 행사명 최대 61자
@@ -44,7 +44,7 @@ _NEARBY_FIT: Mapping[EventType, frozenset[PoiCategory]] = {
     EventType.FESTIVAL: frozenset({PoiCategory.SIGHT, PoiCategory.NATURE, PoiCategory.NIGHT_VIEW,
                                    PoiCategory.ACTIVITY, PoiCategory.CULTURE}),
     EventType.PERFORMANCE: frozenset({PoiCategory.CULTURE, PoiCategory.SIGHT}),
-    EventType.EXHIBITION: frozenset({PoiCategory.CULTURE, PoiCategory.SIGHT}),
+    EventType.EXHIBITION: frozenset({PoiCategory.CULTURE, PoiCategory.ART, PoiCategory.SIGHT}),
 }
 
 
@@ -75,7 +75,11 @@ def find_opportunities(
     planned: Collection[PoiId],
     holidays: HolidayCalendar | None = None,
 ) -> tuple[Opportunity, ...]:
-    """남은 슬롯 `(slot_key, 좌표)` 근처의 기회 ≤ 3. 입력 순서와 무관한 결정론이다."""
+    """남은 슬롯 `(slot_key, 좌표)` 근처의 기회 ≤ 3. 입력 순서와 무관한 결정론이다.
+
+    순위대로 고르되 행사만으로 3장이 차면 마지막 자리를 '요즘 인기'에 남긴다 — 앞 자리와 장소·key 가 겹치지 않는
+    가장 좋은 것(없으면 행사 그대로). 비 오는 날 축제 카드가 빠져도 카드가 남게 한다(G-SA-17, 2026-10-20 결정).
+    """
     skip = frozenset(planned)
     places: dict[PoiId, tuple[Poi, str, float]] = {}
     for poi in pois:
@@ -96,12 +100,20 @@ def find_opportunities(
 
     picked: list[Opportunity] = []
     for card in cards:  # 한 POI·한 행사 한 장 — 순위가 높은 쪽이 가져간다
-        if any(card.key == c.key or card.poi.poi_id == c.poi.poi_id for c in picked):
+        if _clashes(card, picked):
             continue
         picked.append(card)
         if len(picked) == MAX_OPPORTUNITIES:
             break
+    if len(picked) == MAX_OPPORTUNITIES and all(c.kind is not OpportunityKind.TRENDING for c in picked):
+        spare = next((c for c in cards if c.kind is OpportunityKind.TRENDING and not _clashes(c, picked[:-1])), None)
+        if spare is not None:
+            picked[-1] = spare
     return tuple(picked)
+
+
+def _clashes(card: Opportunity, picked: Iterable[Opportunity]) -> bool:
+    return any(card.key == c.key or card.poi.poi_id == c.poi.poi_id for c in picked)
 
 
 def _eligible(poi: Poi, day: date, holidays: HolidayCalendar | None) -> bool:

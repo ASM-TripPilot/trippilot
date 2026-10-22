@@ -1,9 +1,17 @@
 import fc from 'fast-check';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import Svg from 'react-native-svg';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import type {
   AssistantMessage,
   FallbackCause,
+  NextAction,
+  QuickReply,
   ReviewPayload,
 } from '../api/assistantContract';
 import { assistantSample } from '../api/assistantSamples';
@@ -113,6 +121,110 @@ describe('CandidateCard (TRIP-1323)', () => {
   });
 });
 
+// TRIP-1564 — 후보 카드 한 장의 얼굴은 그 카드의 누름이 무엇을 하느냐로 정해진다:
+// 고르기(PICK) · 장소 보기(OPEN) 는 눌리는 모양(button 역할 + ›), 둘 다 없으면 눌리는 모양이 없다(NONE).
+describe('CandidateCard · 누름의 뜻에 따른 세 얼굴', () => {
+  const reply = (poiId: string): QuickReply => ({
+    id: `qr-pick-${poiId}`,
+    label: `${poiId} 고르기`,
+    action: 'PICK_CANDIDATE',
+    params: { poiId },
+  });
+  const open = (poiId: string): NextAction => ({
+    type: 'OPEN_PLACE',
+    label: `${poiId} 장소`,
+    params: { poiId },
+  });
+  function candidatesMessage(
+    poiIds: string[],
+    parts: { quickReplies?: QuickReply[]; nextActions?: NextAction[] }
+  ): AssistantMessage {
+    return {
+      id: 'c1',
+      role: 'ASSISTANT',
+      kind: 'CANDIDATES',
+      payload: {
+        candidates: poiIds.map((poiId) => ({
+          poiId,
+          name: `이름-${poiId}`,
+          distanceRange: '630m',
+          reason: `이유-${poiId}`,
+        })),
+      },
+      nextActions: parts.nextActions ?? [],
+      quickReplies: parts.quickReplies,
+      createdAt: '',
+    };
+  }
+  const arrowCount = (poiId: string) =>
+    within(
+      screen.getByTestId(`assistant-candidate-${poiId}`)
+    ).UNSAFE_queryAllByType(Svg).length;
+  const roleOf = (poiId: string) =>
+    screen.getByTestId(`assistant-candidate-${poiId}`).props.accessibilityRole;
+
+  it('고르기 얼굴: button 역할 + › 가 있고, 누르면 poiId 를 올린다(장소 보기 핸들러는 안 부른다)', () => {
+    const message = candidatesMessage(['a'], { quickReplies: [reply('a')] });
+    const { onPickCandidate, onPressAction } = renderCard(message);
+
+    expect(roleOf('a')).toBe('button');
+    expect(arrowCount('a')).toBe(1);
+    fireEvent.press(screen.getByTestId('assistant-candidate-a'));
+
+    expect(onPickCandidate).toHaveBeenCalledTimes(1);
+    expect(onPickCandidate).toHaveBeenCalledWith('a');
+    expect(onPressAction).not.toHaveBeenCalled();
+  });
+
+  it('장소 보기 얼굴: button 역할 + › 가 있고, 누르면 그 OPEN_PLACE 행동을 빨간 행과 같은 핸들러로 올린다', () => {
+    const action = open('a');
+    const message = candidatesMessage(['a'], { nextActions: [action] });
+    const { onPickCandidate, onPressAction } = renderCard(message);
+
+    expect(roleOf('a')).toBe('button');
+    expect(arrowCount('a')).toBe(1);
+    fireEvent.press(screen.getByTestId('assistant-candidate-a'));
+
+    expect(onPressAction).toHaveBeenCalledTimes(1);
+    expect(onPressAction).toHaveBeenCalledWith(action);
+    expect(onPickCandidate).not.toHaveBeenCalled();
+  });
+
+  it('눌러서 갈 곳이 없는 얼굴: button 역할·› 가 없고 이름·부제·testID 는 그대로이며 눌러도 아무 핸들러도 안 불린다', () => {
+    const message = candidatesMessage(['a'], {});
+    const { onPickCandidate, onPressAction } = renderCard(message);
+
+    // 존재 앵커 — 카드가 실제로 그려졌고 이름·부제가 보인다
+    const card = screen.getByTestId('assistant-candidate-a');
+    expect(card).toHaveTextContent('이름-a', { exact: false });
+    expect(card).toHaveTextContent('630m · 이유-a', { exact: false });
+    // 부재 — 누를 수 있는 것이 화면에 하나도 없고 › 도 없다
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    expect(arrowCount('a')).toBe(0);
+
+    fireEvent.press(card);
+    expect(onPickCandidate).not.toHaveBeenCalled();
+    expect(onPressAction).not.toHaveBeenCalled();
+  });
+
+  it('한 메시지 안에서도 얼굴은 카드마다 정해진다(a 고르기 · b 장소 보기 · c 없음)', () => {
+    const message = candidatesMessage(['a', 'b', 'c'], {
+      quickReplies: [reply('a')],
+      nextActions: [open('b')],
+    });
+    renderCard(message);
+
+    expect(roleOf('a')).toBe('button');
+    expect(roleOf('b')).toBe('button');
+    expect(screen.getByTestId('assistant-candidate-c')).toBeOnTheScreen();
+    expect(roleOf('c')).not.toBe('button');
+    expect([arrowCount('a'), arrowCount('b'), arrowCount('c')]).toEqual([
+      1, 1, 0,
+    ]);
+    expect(screen.queryAllByRole('button')).toHaveLength(2);
+  });
+});
+
 describe('InfoCard (TRIP-1323)', () => {
   it('서버 행을 그대로 그린다(다음 장소 — 계획 시각·직전 구간 거리)', () => {
     renderCard(assistantSample('next-slot', { id: 'i1' }));
@@ -146,6 +258,16 @@ describe('RefusalNotice (TRIP-1323 · b04)', () => {
     expect(screen.getByTestId('assistant-capabilities')).toHaveTextContent(
       '제가 할 수 있는 것',
       { exact: false }
+    );
+  });
+
+  it('TRIP-1528 · 서버 문자열을 잘라 제목/본문으로 나누지 않고 한 줄 그대로 그린다(BR-U8-26)', () => {
+    const message = assistantSample('refusal', { id: 'g2' });
+    renderCard(message);
+    const full = (message.payload as { capabilities: string }).capabilities;
+    // 문자열 인자 toHaveTextContent 는 완전 일치(02a ★5) — 잘라 내면 통과하지 못한다
+    expect(screen.getByTestId('assistant-capabilities')).toHaveTextContent(
+      full
     );
   });
 });
@@ -211,5 +333,55 @@ describe('ActionLogRow (TRIP-1323 · b06 행)', () => {
       exact: false,
     });
     expect(row).toHaveTextContent('반영된 변경', { exact: false });
+    // 심판 W2 — 상세(detail) 문자열이 서버 값 그대로 그려진다
+    expect(row).toHaveTextContent('카페 모카 → 책방카페 (솔버 검증)', {
+      exact: false,
+    });
+  });
+
+  // TRIP-1528 · 01b Q10 — 배지는 `assistant-badge-${행 id}` 로 집는다(행 testID 접두와 겹치지 않는 이름 — 02a §9). 색(success 계열)은 jest 사각(6-b).
+  it.each([
+    ['CHANGE', '반영된 변경'],
+    ['FILTER', '적용된 필터'],
+  ] as const)('태그 %s 는 "%s" 배지를 그린다', (tag, label) => {
+    renderCard({
+      id: 'l2',
+      role: 'ASSISTANT',
+      kind: 'ACTION_LOG',
+      payload: { what: '오늘 14:25 · 변경', tag },
+      nextActions: [],
+      createdAt: '',
+    });
+    expect(screen.getByTestId('assistant-badge-l2')).toHaveTextContent(label);
+  });
+
+  it('진행 검토(태그 REVIEW) 행은 배지가 없고 무엇을 했는지는 그대로 보인다', () => {
+    renderCard({
+      id: 'l3',
+      role: 'ASSISTANT',
+      kind: 'ACTION_LOG',
+      payload: { what: '오늘 14:30 · 진행 검토', tag: 'REVIEW' },
+      nextActions: [],
+      createdAt: '',
+    });
+    expect(screen.getByTestId('assistant-action-log-l3')).toHaveTextContent(
+      '진행 검토',
+      { exact: false }
+    );
+    expect(screen.queryByTestId('assistant-badge-l3')).toBeNull();
+    // 옛 배지 글자 — 문자열 인자 queryByText 는 완전 일치라 `what` 안의 '검토'에는 걸리지 않는다
+    expect(screen.queryByText('검토')).toBeNull();
+  });
+
+  it('태그가 없으면 배지도 없다', () => {
+    renderCard({
+      id: 'l4',
+      role: 'ASSISTANT',
+      kind: 'ACTION_LOG',
+      payload: { what: '오늘 14:40 · 기록' },
+      nextActions: [],
+      createdAt: '',
+    });
+    expect(screen.queryByTestId('assistant-badge-l4')).toBeNull();
   });
 });

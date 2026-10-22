@@ -19,12 +19,18 @@ export function CloseGlyph({ size = 22 }: { size?: number }): ReactElement {
   );
 }
 
-export function SendArrowGlyph({ size = 20 }: { size?: number }): ReactElement {
+export function SendArrowGlyph({
+  size = 20,
+  color = '#FFFFFF',
+}: {
+  size?: number;
+  color?: string;
+}): ReactElement {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
         d="M12 19V5M5.5 11.5L12 5l6.5 6.5"
-        stroke="#FFFFFF"
+        stroke={color}
         strokeWidth={2.2}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -53,18 +59,24 @@ export function ChevronRightGlyph({
   );
 }
 
-export function WarningGlyph({ size = 18 }: { size?: number }): ReactElement {
+export function WarningGlyph({
+  size = 18,
+  color = '#C13515',
+}: {
+  size?: number;
+  color?: string;
+}): ReactElement {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
         d="M12 3.5L2.5 20h19L12 3.5Z"
-        stroke="#C13515"
+        stroke={color}
         strokeWidth={1.8}
         strokeLinejoin="round"
       />
       <Path
         d="M12 10v4.5M12 17.2v.3"
-        stroke="#C13515"
+        stroke={color}
         strokeWidth={1.8}
         strokeLinecap="round"
       />
@@ -151,6 +163,81 @@ export function ThumbGlyph({
         strokeWidth={1.7}
         strokeLinejoin="round"
         fill={fill}
+      />
+    </Svg>
+  );
+}
+
+/** 헤더 더보기(세로 ⋮) — Figma icon more-v. */
+export function MoreVGlyph({ size = 24 }: { size?: number }): ReactElement {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="#222222">
+      <Circle cx={12} cy={5} r={1.6} />
+      <Circle cx={12} cy={12} r={1.6} />
+      <Circle cx={12} cy={19} r={1.6} />
+    </Svg>
+  );
+}
+
+/** 컨텍스트 칩 아이콘(목록) — Figma icon list. */
+export function ListGlyph({ size = 16 }: { size?: number }): ReactElement {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <Path
+        d="M6 4H13.3333M6 8H13.3333M6 12H13.3333M2.66667 4H2.93333M2.66667 8H2.93333M2.66667 12H2.93333"
+        stroke="#222222"
+        strokeWidth={1.33333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** 세로 제안 칩 아이콘(답장) — Figma icon-reply. */
+export function ReplyGlyph({ size = 16 }: { size?: number }): ReactElement {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <Path
+        d="M2 12V9.33333C2 8.44928 2.35119 7.60143 2.97631 6.97631C3.60143 6.35119 4.44928 6 5.33333 6H13.3333M10.6667 3.33333L13.3333 6L10.6667 8.66667"
+        stroke="#6A6A6A"
+        strokeWidth={1.33333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** ↓ 아래로 가기 버튼 아이콘(20) — Figma icon arrowDown. */
+export function ArrowDownGlyph({ size = 20 }: { size?: number }): ReactElement {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <Path
+        d="M10 4.16667V15.8333M5 10.8333L10 15.8333L15 10.8333"
+        stroke="#222222"
+        strokeWidth={1.83333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** 외부 링크(20) — Figma icon-ext. 범위 밖 OTA 카드 우측. */
+export function ExternalLinkGlyph({
+  size = 20,
+}: {
+  size?: number;
+}): ReactElement {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <Path
+        d="M11.6667 3.33333H16.6667V8.33333M16.6667 3.33333L8.33333 11.6667M15 10.8333V15C15 15.442 14.8244 15.866 14.5118 16.1785C14.1993 16.4911 13.7754 16.6667 13.3333 16.6667H5C4.55797 16.6667 4.13405 16.4911 3.82149 16.1785C3.50893 15.866 3.33333 15.442 3.33333 15V6.66667C3.33333 6.22464 3.50893 5.80072 3.82149 5.48816C4.13405 5.17559 4.55797 5 5 5H9.16667"
+        stroke="#222222"
+        strokeWidth={1.66667}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );

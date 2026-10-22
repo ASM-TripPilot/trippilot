@@ -565,6 +565,15 @@ def test_시간표현이_든_이유는_비우고_후보는_살린다() -> None:
     assert picks[1].reason == "실내 전시라 우천에 적합합니다"
 
 
+@pytest.mark.parametrize("reason", ["매일 10:00 수문장 교대식이 열린다", "14:30 공연이 볼만하다"])
+def test_콜론_시각이_든_이유도_비운다(reason: str) -> None:
+    """`_TIME_EXPR` 는 `HH:MM` 을 통과시킨다 — KB-5 문서의 "매일 10:00 수문장 교대식"을 모델이
+    옮기면 검증 안 된 시각이 '다른 후보' 이유로 화면에 뜬다(INV-2). 도우미 장소 소개와 같은 판정이다."""
+    outcome = _apply(_raw(("p1", reason), ("p2", "실내 전시라 우천에 적합합니다")))
+    assert outcome.error is None
+    assert [p.reason for p in outcome.value] == ["", "실내 전시라 우천에 적합합니다"]
+
+
 @pytest.mark.parametrize("reason", ["실내라 좋아요, 한 시간 걸려요", "삼십 분 정도면 둘러봐요"])
 def test_한글_수사로_쓴_소요시간도_이유를_비운다(reason: str) -> None:
     """숫자 없이 쓴 소요시간도 INV-3 위반이다 (리마인드 게이트 #591 과 같은 판정)."""

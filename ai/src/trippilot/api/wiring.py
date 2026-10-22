@@ -40,8 +40,9 @@ generate 봉투 부가 필드 산출 규칙(TRIP-341 — 코드가 실제로 아
   컨텍스트(앵커·이동수단·풀)가 없다 → 기존대로 null. `distance_ranges` 는 POI→POI 구간만
   generate 와 같은 렌더로 채운다(편집 교체 뒤 거리 재산출 — 2026-10-05). 앵커가 없어 각 날
   첫 슬롯은 null, 수단은 수리의 시각 계산과 같은 기본값(PUBLIC).
-- 와이어 `preference_profile`(+ `trip_context.companion_type`)은 generate·replan 에서
-  그 요청의 페르소나다(AI-D09 — D31 "재조회한 값만"의 부분 개정). 전 축 미설정이면 종전대로
+- 와이어 `preference_profile`(+ 동행 — generate·replan 은 `trip_context.companion_type`,
+  explanations·alternatives 는 최상위 `companion_type`)은 네 경로 모두 그 요청의
+  페르소나다(AI-D09 — D31 "재조회한 값만"의 부분 개정). 전 축 미설정이면 종전대로
   주입된 `ContextStore`가 공급한다. 와이어에 사용자 식별자가 없어 principal은 trip_id 파생
   임시값이다(실 어댑터 시 백엔드 합의 필요).
 - validate/repair 와이어에는 원 문제 컨텍스트(이동수단·day window)가 없다 → 기본값
@@ -115,12 +116,13 @@ from trippilot.domain.reflection import (
 )
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
 from trippilot.assembly_engine.config import RAIN_OUTDOOR, AssemblyConfig, stay_for
-from trippilot.assembly_engine.constraints import open_hours_ok
+from trippilot.assembly_engine.constraints import hc1_unjudged, open_hours_ok
 from trippilot.assembly_engine.facade import HybridAssemblyFacade, AssemblyConflictError
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
 from trippilot.assembly_engine.repair import RepairChange
 from trippilot.assembly_engine.scorer import build_rule_score
+from trippilot.assembly_engine.parking import ParkingPlan, plan_parking
 from trippilot.assembly_engine.travel import (
     TRANSIT_SOURCE, WALKED_SOURCE, TravelEstimator, WalkFirst, haversine_km,
 )
@@ -195,6 +197,7 @@ from trippilot.llm_gateway.workers.replan_composition import (
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
+from trippilot.llm_gateway.gates.numbered_selection import NumberedSelectionGate
 from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.place_fees import load_fee_table
@@ -693,6 +696,17 @@ def _unverified(misses: Sequence[PoiMiss]) -> tuple[WiredUnverifiedSlot, ...]:
     )
 
 
+def _hours_unknown(
+    solution: ItinerarySolution, problem: ItineraryProblem, poi_index: Mapping[PoiId, Poi],
+) -> tuple[WiredUnverifiedSlot, ...]:
+    """영업 창을 몰라 HC1 을 적용하지 못한 등록 POI → 경계 보고(HOURS_UNKNOWN). 판정은 규칙 옆 `hc1_unjudged` 한 곳 —
+    검증과 같은 휴일 달력(`problem.holidays`)으로 본다."""
+    return tuple(
+        WiredUnverifiedSlot(poi_id=str(p), reason_code="HOURS_UNKNOWN")
+        for p in hc1_unjudged(solution, poi_index, problem.holidays)
+    )
+
+
 def _payload_alternative_pairs(
     payload: schemas.ItineraryPayload,
 ) -> tuple[tuple[str, str, str], ...]:
@@ -876,7 +890,12 @@ def _render_distance(estimate: TravelEstimate, mode: TransportMode) -> str:
     _, road_km = estimate.distance_km_range
     suffix = " 추정" if estimate.is_estimated else ""
     shown = {WALKED_SOURCE: TransportMode.WALK, TRANSIT_SOURCE: TransportMode.PUBLIC}.get(estimate.source, mode)
-    return f"약 {road_km:.1f}km · {_TRANSPORT_LABELS[shown]}{suffix}"
+    label = f"약 {road_km:.1f}km · {_TRANSPORT_LABELS[shown]}{suffix}"
+    if estimate.walk_km >= 0.05:
+        # 자차 주차 거점 오가는 걷기(assembly_engine/parking) — 합친 거리가 앞에 있어 하루 총거리 파서(FE legDistance,
+        # 첫 숫자)는 그대로 맞고, 괄호는 거리라 INV-3 과 무관하다. 0.0km 로 보일 꼬리는 적지 않는다
+        label += f" (주차장 도보 {estimate.walk_km:.1f}km 포함)"
+    return label
 
 
 def _distance_ranges(
@@ -1047,15 +1066,24 @@ class ChainAssemblyProvider:
         self._trace = trace
         self._cfg = config
 
-    def walker(self, walk_max_km: float | None) -> TravelEstimator:
-        """요청별 도보 상한의 추정기 — None 이면 공용 추정기(설정 기본 700m). 조립·화면 거리가 같이 쓴다."""
-        if walk_max_km is None:
+    def walker(self, walk_max_km: float | None, parking: ParkingPlan | None = None) -> TravelEstimator:
+        """요청별 도보 상한·주차 거점의 추정기 — 둘 다 없으면 공용 추정기(설정 기본 700m). 조립·화면 거리가 같이 쓴다."""
+        if walk_max_km is None and parking is None:
             return self._est
-        return TravelEstimator(replace(self._cfg, public_walk_max_km=walk_max_km))
+        cfg = self._cfg if walk_max_km is None else replace(self._cfg, public_walk_max_km=walk_max_km)
+        return TravelEstimator(cfg, parking)
+
+    def parking_for(self, poi_index: Mapping[PoiId, Poi], walk_max_km: float | None) -> ParkingPlan:
+        """자차 여행의 주차 거점 — 풀 전체를 도보 상한(없으면 설정 기본)으로 묶는다. 조립과 화면 거리가 같은 계획을 쓴다."""
+        return plan_parking(
+            (poi.coord for poi in poi_index.values()),
+            walk_max_km=walk_max_km if walk_max_km is not None else self._cfg.public_walk_max_km,
+            detour_factor=self._cfg.detour_factor,
+        )
 
     def for_pool(self, poi_index: Mapping[PoiId, Poi],
-                 walk_max_km: float | None = None) -> HybridAssemblyFacade:
-        est = self.walker(walk_max_km)
+                 walk_max_km: float | None = None, parking: ParkingPlan | None = None) -> HybridAssemblyFacade:
+        est = self.walker(walk_max_km, parking)
         stages = (
             OrToolsAssembler(poi_index, est, self._cfg),
             RuleFallbackAssembler(poi_index, est, self._cfg),
@@ -1948,7 +1976,7 @@ class WiredItineraryOrchestrator:
         solution = outcome.solution
         coords = self._coords_for(solution, outcome.slot_alternatives)
         scoring_mode, degradations = _scoring_signal(outcome)
-        walk = self._walk_first(outcome.walk_max_km)
+        walk = self._walk_first(outcome.walk_max_km, outcome.parking)
         (distance_ranges, slot_alternatives), _ = self._render_distances(
             lambda port: (
                 self._distances_for(request, solution, coords, walk(port)),
@@ -1997,9 +2025,10 @@ class WiredItineraryOrchestrator:
             solution, anchors, coords, port, _transport_from(request)
         )
 
-    def _walk_first(self, walk_max_km: float | None) -> Callable[[TravelPort], TravelPort]:
+    def _walk_first(self, walk_max_km: float | None,
+                    parking: ParkingPlan | None = None) -> Callable[[TravelPort], TravelPort]:
         """조립과 같은 추정기로 구간 수단을 정해 화면 거리를 재는 감싸개(도보 여행의 먼 구간 때문에 늘 감싼다)."""
-        walker = self._assembly_provider.walker(walk_max_km)
+        walker = self._assembly_provider.walker(walk_max_km, parking)
         return lambda port: WalkFirst(port, walker)
 
     def _render_distances(
@@ -2161,10 +2190,12 @@ class WiredItineraryOrchestrator:
         ids = frozenset(s.poi_id for day in solution.days for s in day.slots)
         # 미등록 POI는 인덱스에 없다 → HC1·HC2 미적용("정보 없음은 막지 않는다", c2 규칙).
         # 규칙은 그대로 두되 **무엇이 빠졌는지는 값으로 들고 나간다**(TRIP-537, INV-4) —
-        # 막지 않는 것과 알리지 않는 것은 다르다.
+        # 막지 않는 것과 알리지 않는 것은 다르다. 등록됐어도 그 날 영업 창을 모르면(원문 없음·해석 실패)
+        # HC1 만 미적용이다 — 같은 목록에 HOURS_UNKNOWN 으로 싣는다(장소 감지가 그 슬롯을 '확인'으로 접지 않게, INV-SA-2).
         lookup = self._poi_db.lookup_by_ids(ids)
         poi_index = {p.poi_id: p for p in lookup.pois}
-        return solution, problem, poi_index, _unverified(lookup.misses)
+        return solution, problem, poi_index, (
+            _unverified(lookup.misses) + _hours_unknown(solution, problem, poi_index))
 
     def alternatives(
         self, request: schemas.AlternativesRequest
@@ -2499,7 +2530,7 @@ class WiredItineraryOrchestrator:
         # 거리 0 으로 규칙 1위가 되어 숏리스트·LLM 선택 한 자리를 헛되이 차지한다.
         # 구성 LLM 이 있으면 대체지 선택 LLM 은 부르지 않는다(`use_llm`) — 하루는 구성이 고르고,
         # 선택 LLM 은 재계획 시한에서 매번 6s 를 타임아웃으로 태워 구성 몫을 깎았다(2026-10-14 DEV 3/3).
-        planb = self._rag.run(replace(
+        planb_request = replace(
             _replan_rag_request(
                 request, pool, persona, daily_rain, trace_id, now, notes=notes,
                 deadline_ms=max(1, _deadline_budget(meta) - (self._clock.monotonic_ms() - t0)),
@@ -2507,7 +2538,8 @@ class WiredItineraryOrchestrator:
             excluded_poi_ids=frozenset(PoiId(p) for p in request.excluded_poi_ids)
             | {b.poi_id for b in past} | avoided,
             use_llm=self._composer is None,
-        ))
+        )
+        planb = self._rag.run(planb_request)
         notes += [f"planb: {n}" for n in planb.notes]
         # 랭킹은 **LLM 경로일 때만** 넘긴다 (독스트링 마지막 단락).
         planb_rank = () if planb.is_fallback else planb.ranked_poi_ids
@@ -2555,6 +2587,7 @@ class WiredItineraryOrchestrator:
                 nearby=(*nl_near, *night), origins=tuple(p.coord for p in far),
                 window_start=nl.window_start, window_end=day_end,  # 솔버 `day_window` 와 같은 창
                 rules=_category_rule_lines(nl), ctx_out=compose_ctx, holidays=holidays,
+                planb_request=planb_request,
             )
         except Exception as e:  # 설정 버그·렌더 실패도 재계획을 죽이지 않는다 — 종전 경로로(INV-4)
             notes.append(f"llm_compose_error: {type(e).__name__}")
@@ -2771,7 +2804,10 @@ class WiredItineraryOrchestrator:
                             or fb.reason in ("in_progress", "keep_dinner", "nl_at"))))
                 for d in outcome.solution.days)))
         return self._replan_projection(
-            request, outcome, notes, resolved, unknown, retrieved=planb.retrieved,
+            request, outcome, notes, resolved, unknown,
+            # KB-5 는 구성 후보로 찾는다 — 건수도 그쪽 것이다(PlanB 는 선택 LLM 이 없으면 찾지 않는다).
+            retrieved={**planb.retrieved, "POI_DESC": len(compose_ctx[0][0].place_knowledge)}
+            if compose_ctx else planb.retrieved,
             planb_fallback=planb.is_fallback, started_ms=t0, past=past,
             composed=bool(composed),
         )
@@ -3028,6 +3064,7 @@ class WiredItineraryOrchestrator:
         rules: tuple[str, ...] = (),
         ctx_out: list | None = None,
         holidays: Mapping[date, frozenset[str]] | None = None,  # 공휴일 달력 — 진입점이 1회 조회(상황 감지 H1)
+        planb_request: PlanBRagRequest | None = None,  # 후보의 장소 지식(KB-5)을 같은 상황 질의로 찾는다
     ) -> tuple[PoiId, ...]:
         """다시 짜기 — 기존 일정·사유·요청·상황 추천을 보고 LLM 이 남은 하루의 방문 목록을 고른다.
 
@@ -3092,6 +3129,16 @@ class WiredItineraryOrchestrator:
                 return "요청과 안 맞음(교체)"
             return "제외 요청" if pid in excluded else "남은 일정"
 
+        # 후보의 장소 지식(KB-5) — 사용자 결정(2026-10-21 "실어서 써야지"). 종전엔 PlanB 가 다른 후보 집합으로
+        # 찾고 읽는 LLM 없이 버렸다. 부가 정보라 못 찾으면 없이 짠다(INV-4 — 노트는 남긴다).
+        knowledge: Mapping[str, str] = {}
+        if planb_request is not None:
+            try:
+                knowledge, note = self._rag.place_knowledge(planb_request, shortlist.pois)
+            except Exception as e:
+                knowledge, note = {}, f"place_knowledge_unavailable: {type(e).__name__}"
+            if note:
+                notes.append(f"compose: {note}")
         labels = {spec.key: spec.label for spec in self._directives}
         specs = index_of(self._directives)
         chosen = [specs[k] for k in resolved if k in specs]
@@ -3130,7 +3177,15 @@ class WiredItineraryOrchestrator:
                          for p in shortlist.pois},
             hours={p.poi_id: composition.hours_label(p, day, holidays) or ""
                    for p in shortlist.pois},
+            place_knowledge=knowledge,
         )
+        # 장소 지식 조회가 쓴 시간을 뺀 잔여 — 시한 원점은 그대로(#1102).
+        remaining = (budget.total_ms - (self._clock.monotonic_ms() - started_ms)
+                     - budget.c2_reserved_ms)
+        if remaining < _COMPOSE_MIN_MS:
+            notes.append(f"llm_compose_skipped: deadline remaining={remaining}ms")
+            self._compose_event(request.request_meta, f"deadline: remaining={remaining}ms")
+            return ()
         if ctx_out is not None:  # 1회 수리가 같은 입력·제외에서 2차를 만든다(`_repair_day`)
             ctx_out.append((inp, frozenset(excluded)))
         result = self._composer.compose(
@@ -3506,7 +3561,7 @@ class WiredItineraryOrchestrator:
         # 두 순회 모두 1차 패스로 받아 적는다 — 좌표 미상 전파 규칙이 달라 구간 집합이
         # 다르다(`_total_distance_km` 은 직전 유효점을 잇는다). 한 표를 같이 쓰면 같은
         # 구간을 두 번 실측하지 않는다 (TRIP-1179).
-        walk = self._walk_first(outcome.walk_max_km)
+        walk = self._walk_first(outcome.walk_max_km, outcome.parking)
         (distance_ranges, total_km), report = self._render_distances(
             lambda port: (
                 _distance_ranges(solution, anchors, coords, walk(port), transport),
@@ -4142,9 +4197,9 @@ def build_orchestrator(
     directive_translator = ReplanDirectiveTranslationWorker(
         GatewayFacade(llm, renderer, ReplanDirectiveTranslationGate(), c1_config, trace)
     )
-    # 다시 짜기의 하루 구성 — 출구는 대체지 선택과 같은 게이트(poiId ⊆ 후보, INV-1).
+    # 다시 짜기의 하루 구성 — 후보를 번호로 싣고, 출구가 번호를 poi_id 로 되돌린 뒤 대체지 선택과 같은 검사(INV-1).
     composer = ReplanCompositionWorker(
-        GatewayFacade(llm, renderer, AlternativeSelectionGate(), c1_config, trace)
+        GatewayFacade(llm, renderer, NumberedSelectionGate(), c1_config, trace)
     )
     # 자연어 재계획 추출 — 뽑은 주장은 배선이 등록 POI·지도·영업시간·시간창·기상청으로 검증한다.
     request_extractor = ReplanRequestExtractionWorker(

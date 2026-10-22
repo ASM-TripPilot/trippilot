@@ -198,6 +198,66 @@ assistant-history · -history-row-{messageId} · -history-clear · -history-cont
 | R19 | §9 시트 흐름은 MSW 통합 테스트 | `AssistantSheetPage.test.tsx`(node 버킷) — `setAssistantPort` 로 가짜 어댑터 주입 | HTTP 경계가 아직 없다. BE 개통 후 http 어댑터는 MSW 통합 테스트로 덮는다 |
 | R20 | G-U8-8·9 Figma | 새 프레임(정본 무변경): `b01-[1차] 도우미 · 숙소 요청 → 숙소 검색 넘기기`(4865:3615) · `b08-[✦] 진입 FAB · 홈/숙소 검색/여행 중 허브/일정 상세`(4864:2944·3054·3141·3303) — b 행 끝 | 이식(정본 교체)·DS FAB 변형 승격은 사람 판단 |
 
+> **[개정 · 2026-10-21 · U8 최소 마감 (TRIP-1512)] R표 갱신.** 위 원문 행은 보존한다.
+>
+> | R | 갱신 |
+> |---|---|
+> | R8 | **해소** — `AssistantFab` 이 키보드 will/did show·hide 를 듣고 떠 있는 동안 스스로 `null` 을 그리며 토스트 바닥 올림도 푼다(TRIP-1514, `feac21dc5`). 시트 열림 숨김은 여전히 각 페이지가 한다. 실제 겹침은 6-b 실기 |
+> | R13 | **변경** — `RESTORE_REVISION` 은 `/trips/{tripId}/itinerary/history`(h36)로 간다. tripId 가 없으면 null(TRIP-1513, `8723d2ac9`). ⚠️ **서버가 아직 `RESTORE_REVISION` 을 내지 않아** 도우미 카드의 [되돌리기] 는 실서버에서 뜨지 않는다 — BE 후속(편집 퍼사드 revisionId 반환 + 템플릿 탑재, 티켓 미발행). 현재 h36 으로 닿는 길은 이력 보기(b06)의 「일정 변경 이력 전체 보기」 행(tripId 있을 때)이다. `params.revisionId` 강조는 params 키 계약이 없어 적용하지 않았다 |
+> | R19 | **해소** — `AssistantSheetPage.integration.test.tsx`(기본 `HttpAssistantAdapter` + MSW, 8건) |
+> | R2 | **유지** — 계약 타입은 아직 손으로 옮긴 `assistantContract.ts`. openapi 에 assistant 경로가 있어 orval 전환이 가능하다(후속) |
+> | 6-b | **미수행** — 도우미 실서버 대화·제안 적용·따봉·h36 의 실화면 검증은 TRIP-1515. TRIP-1513 의 자동 육안 게이트는 시뮬레이터 시스템 다이얼로그로 실행불가였다 |
+>
+> h36 Figma 는 새 밴드 4프레임(`h36-변경 이력 · default/confirm/empty/error` 4997:3177·4876·4951·4966)이고 사람 검토 전이다(정본 무변경).
+
+> **[정정 · 2026-10-21 · TRIP-1513 철회]** 바로 위 2026-10-21 R표 개정의 **R13 행과 h36 서술을 정정한다**(원문은 보존). 변경 이력 화면(h36)은 라이브 Figma 정본에 없는 화면이다(h 밴드는 h01~h17뿐, U3 FD 의 h36 은 옛 번호 체계). 구현(`8723d2ac9`)을 revert(`19ed66df6`)했고 사용자가 Figma 새 밴드 프레임 4장을 직접 삭제했다. 따라서 **R13 은 철회 전 상태로 돌아간다 — `RESTORE_REVISION` 은 FE 에서 갈 곳이 없어 null(→ 능력 목록)이다.** 도우미 이력 보기의 「일정 변경 이력 전체 보기」 행도 없다. 변경 이력 화면을 제품에 둘지는 제품 결정이고, 결정되면 Figma 부터 그린다. 같은 개정의 6-b 행은 **실기 QA 완료(TRIP-1515, 시뮬 1대·개발 서버: 통과 21 · 실패 0 · 부분 2 · 미실행 4)** 로 읽는다 — 미실행 중 h36 항목은 화면 철회로 해당 없다.
+
+> **[개정 · 2026-10-21 · U8 도우미 시트 재디자인 (TRIP-1524 · 서브 1525~1531)]** 위 원문과 앞선 개정은 보존한다. 시트의 모양과 배치를 Figma 새 안 v3(b 밴드 행 끝, `bv3-*` 11프레임, 파일 1MTF3dtptIrbg8gld5IdO2 — 정본 b 프레임은 무변경, 정본 이식은 사람 검토 전)에 맞췄다. 기능·계약·testID 는 그대로다(`assistantContract`·port·훅 무변경).
+>
+> **① 유지** — R9 "끌어 닫기 없음"(손잡이는 장식, 닫기는 ✕·딤 탭)과 투명 모달은 그대로다. R9 의 "아래에서 올라온 패널" 서술만 아래 ②로 읽는다.
+>
+> **② 바뀐 모양** — 패널: 가장자리에 붙지 않고 좌우 12·아래(홈 인디케이터 + 12) 여백을 두고 떠 있는 사방 둥근 패널(최대 높이 72%), 손잡이 32x4. 헤더: 제목·컨텍스트 캡션 없이 ✦ 마크 + 더보기(⋮ = 이력 보기 토글) + 닫기. **새 대화·＋(첨부) 버튼은 없다**(한 여행 = 활성 세션 1개 INV-U8-01·BR-U8-17, 새 세션 API 없음, 첨부 기능 없음 — 누르면 아무 일 없는 버튼을 두지 않는다). 입력 영역: 큰 입력 카드(위 컨텍스트 칩 + 입력 + 전송 원형), 칩 라벨은 화면별 고정 문구(이 일정에 관해 질문하기 · 이 숙소에 관해 질문하기 · 이 검색 결과에 관해 질문하기)이고 **여행 문맥이 없으면(NO_CONTEXT) `내가 할 수 있는 것 보기`(= SHOW_CAPABILITIES)가 우선**이며 그 외 READY 는 누르면 입력 포커스다. quick reply 는 대화 전 세로 스택·대화 중 입력 카드 위 가로 줄이다. 키보드 모드 3종: full(키보드 없음) · compact(키보드 + 대화 전 = 제안 칩 스택 + 입력 카드만) · shrunk(키보드 + 대화 중 = 패널이 키보드 위로 줄어듦). 키보드 감지는 공용 훅 `shared/lib/useKeyboardVisible`(소비처 AssistantFab·시트). 메시지: 도우미 답은 말풍선·✦ 아바타 없는 평문, 사용자 말은 연한 우측 말풍선, 본문이 위로 넘치면(inverted 리스트 오프셋 > 40) ↓ 원형 버튼(자동 스크롤은 하지 않는다). 카드(7종·제안 카드·next action)는 공용 외곽선 껍데기 `OutlineCard`(반경 12)이고 색은 아이콘·링크에만 쓴다. 응답 실패는 평문과 카드 문구가 같으면 카드만 그리고 [다시 시도]는 풀폭 버튼, 솔버 불가는 BR-U8-41 출구(직접 편집·나중에)를 행 카드로 유지한다. 이력 보기: 안내 평문·이력 카드·이전 대화 목록(BR-U8-18 유지)·칩 줄(대화 이어서 · 이력 지우기 · 닫기=시트 닫기)이고 입력 카드는 없다. NO_CONTEXT 의 next action 행은 앞 아이콘(돋보기/플러스) 행, READY 는 링크 행이다.
+>
+> **③ 화면에 넣지 않은 기능(현재 안 되거나 결정 대기)** — 카드의 [되돌리기](서버가 `RESTORE_REVISION` 을 아직 내지 않음) · 변경 이력 화면과 「일정 변경 이력 전체 보기」 행(TRIP-1513 철회, 화면이 Figma 정본에 없음) · 대화 안 숙소 재질의 카드(DEC-U8-10) · 화면 안 AI 진입 띠(제품 결정 대기) · 응답 대기 전용 알약 바(사용자가 뺌 — 진행 줄 [대기 취소]는 기존 TurnStatusRow 그대로).
+>
+> **④ Figma 갱신 후보(코드와 갈린 곳)** — 새 대화(✎)·＋ 아이콘 제거 · 솔버 불가(`결정론 모드로 재시도` 행 없음, `나중에` 출구 유지) · 범위 밖(썸네일·카드 아래 추가 평문 없음) · 거절 카드(제목/본문 분리 없음, 서버 한 줄) · 이력 프레임(입력 카드 없음·이전 대화 목록 유지) · 여행 없음(둘째 문단·3번째 칩 `앱 둘러보기` 없음) · HOME 칩 라벨(`이 일정에 관해 질문하기`).
+>
+> **⑤ 컨텍스트 표기(BR-U8-03) 약화** — 서버가 만든 컨텍스트 문구는 화면에 보이지 않고 입력 카드 칩의 접근성 라벨(`라벨, 서버 문구`)로만 실린다. business-rules.md 정정 블록 참조 — 사용자 확인이 필요하다.
+>
+> **⑥ 소급 기록** — §2 컴포넌트: `OutlineCard`·`ActionRow`(외곽선 껍데기·행 카드), 평문 도우미 답, ↓ 버튼, `noContextActionIcon`. §8 testID 추가: `assistant-sheet-mode-full|compact|shrunk` · `assistant-sheet-mark` · `assistant-sheet-handle` · `assistant-quick-replies-stack|row` · `assistant-message-text-{id}` · `assistant-scroll-down` · `assistant-badge-{id}` · `assistant-history-intro` · `assistant-history-close` · `assistant-next-action-icon-{type}` · `assistant-footnote-{id}`. 새 대화·＋ 에 대응하는 testID 는 없다.
+>
+> **⑦ 6-b** — 시뮬레이터 실기 QA 는 TRIP-1531.
+
+> **[개정 · 2026-10-22 · U8 일정 보기 목적지 (TRIP-1566)]** §4.1 표의 `OPEN_ITINERARY` 행(`/trips/[tripId]/itinerary` 고정)을 정정한다(원문 보존). `OPEN_ITINERARY` 는 고정 라우트가 아니라 **누른 시점에 일정을 조회해 앱의 일정 진입 목적지 판정(`resolveItineraryDestination` → `itineraryDestinationHref`, `frontend/src/features/itinerary/model/planState.ts`)을 경유한다** — 홈 카드 CTA·일정 탭·완료 바와 같은 규칙이라, 확정 일정에서 도우미만 h16 으로 가던 어긋남을 없앤다. `nextActionRoute` 는 순수 함수라 이 행에 한해 이동 대신 `{kind:'itinerary', tripId}`(tripId 없으면 기존처럼 `null`)를 돌려주고, 실제 조회·이동은 시트(`AssistantSheetPage.openItinerary`)가 한다. `OPEN_ITINERARY_EDIT`·`OPEN_ITINERARY_METHOD`·`OPEN_REGENERATE` 는 상태로 목적지가 갈리지 않아 §4.1 표대로다.
+>
+> | 일정 조회 결과 | 이동 |
+> |---|---|
+> | 404(일정 없음) | `/trips/[tripId]/itinerary/method` |
+> | 생성 중(PARTIAL) | 같이 짜기면 `…/itinerary/copick/[slotKey]`, 그 밖이면 `…/itinerary/generating` |
+> | 2차 실패(FAILED) | `…/itinerary/draft` |
+> | 확정(CONFIRMED, 날짜 무관) | `/trips/[tripId]/live` |
+> | 같이 짜기 완성·미확정 | `…/itinerary/copick/complete` |
+> | 그 밖(초안) | `…/itinerary/draft` |
+>
+> **조회가 정착하기 전에는 이동하지 않는다(INV-4).** 조회 중에는 이동 없이 시트 상태 줄에 한 줄(`일정을 확인하고 있어요`, testID `assistant-itinerary-checking`)을 보이고 같은 행 재누름은 무시한다. 404 가 아닌 조회 실패(네트워크·5xx)는 draft 로 추측해 가지 않고 이동하지 않으며 상태 줄에 `일정을 불러오지 못했어요. 다시 눌러 주세요`(testID `assistant-itinerary-failed`)를 보인다 — 다시 누르면 재조회한다(자동 재시도 없음: 이 누름 조회는 `retry:false`, 요청 1회). 기다리는 사이 시트가 닫혔으면(✕) 늦은 응답은 이동하지 않는다. 적용 직후엔 일정 캐시가 무효화돼 있어 다시 조회한다. 이동 방식(`router.replace`, R9)은 그대로다.
+>
+> 근거: 목적지 표 — `frontend/src/features/itinerary/model/planState.ts` 판정 실측(01 브리프 §8, 홈·일정 탭이 같은 함수를 쓴다) · 상태 줄 문구·`retry:false`·재시도 정책·재누름 무시 — **TRIP-1566 구현 결정**(우리가 정한 것 — 다음 사이클이 요구사항 근거로 인용하면 안 된다). 같은 문서 §4 흐름 5 본문("`router.dismiss` 후 `push`")과 일정 탭 카드·완료 바(로딩 중 draft 로 이동)는 이번에 손대지 않았다 — 후자는 새 티켓 후보.
+
+> **[개정 · 2026-10-22 · U8 next action 이동 방식 (TRIP-1565)]** 위 §4 흐름 5항("이동 전에 시트를 닫는다 — `router.dismiss` 후 `push`")과 R9("`router.replace(href)` 한 번")를 **목적지에 따라 갈라 정정한다**(원문 보존). 사용자 결정(2026-10-22 — "탐광 누르고 뒤로가기 누르면 홈인데 챗봇 상태 유지돼야"): **상세·요약류 목적지는 시트를 닫지 않고 그 위에 쌓고(뒤로 = 같은 대화, BR-U8-01·17), 그 밖의 목적지는 지금처럼 시트를 닫고 자리를 교체한다.** 분류의 정본은 `nextActionRoute` 의 반환값(`kind:'route'` 의 `mode`)이고, `mode` 를 안 정한 type 은 기본 replace 다.
+>
+> | 이동 방식 | type | 뒤로 가기 |
+> |---|---|---|
+> | `router.push` (시트 위에 쌓음) | `OPEN_PLACE` · `OPEN_OTA` · `OPEN_REFLECTION` · `OPEN_TRIP_SUMMARY` · `OPEN_STYLE` | 시트가 대화·입력 초안·보기 상태 그대로 남아 있다(언마운트되지 않음) |
+> | `router.replace` (시트를 닫고 자리를 교체) | `OPEN_ITINERARY`(§4.1 TRIP-1566 블록의 조회 뒤 이동) · `OPEN_ITINERARY_EDIT` · `OPEN_ITINERARY_METHOD` · `OPEN_REGENERATE` · `OPEN_REPLAN` · `OPEN_LIVE` · `CREATE_TRIP` · `OPEN_STAY_SEARCH` | 시트가 사라진다(이동한 화면의 이전 화면으로 간다) |
+>
+> **push 갈래의 잠금.** 시트가 남으므로 이동 잠금(`closingRef`)을 세우지 않는다 — 돌아와서 ✕·카드·행이 다시 눌려야 한다. 연타 이중 push 는 공용 연타 가드(`guardPress`, 400ms 창)로 막는다. 시트가 이미 닫히는 중이거나 일정 확인 중(`checkingRef`, TRIP-1566)이면 push 갈래는 무시한다(조회가 끝난 뒤 일정 목적지 replace 가 방금 연 상세를 갈아치우지 않게).
+>
+> **상세가 뜨는 모양.** 루트 스택에서 투명 모달 뒤에 쌓이는 화면은 라이브러리(native-stack)가 모달로 승격하므로, 상세는 오른쪽에서 밀려오는 push 가 아니라 **아래에서 올라오는 모달 카드**로 보인다(실기 확인됨 — 시뮬레이터 6-b, 2026-10-22). 상세 라우트에 `presentation: 'card'` 를 선언하면 승격이 막혀 상세가 시트 밑에 깔릴 수 있다. 상세의 탭바 등 `dismissTo` 로 나가는 경로는 시트까지 함께 걷힌다(수용).
+>
+> §5(✦ FAB)는 이번에 손대지 않았다. 일정 탭 카드·완료 바 등 도우미 밖 입구도 손대지 않았다.
+>
+> 근거: 사용자 결정(티켓 TRIP-1565 「결정 확정 1」 "상세류만 복귀" · 2026-10-22) · 승격 규칙 — `@react-navigation/native-stack` `getModalRoutesKeys` 코드 읽기 + 6-b 실측 · 분류 추가분(`OPEN_ITINERARY_EDIT`·`OPEN_ITINERARY_METHOD`·`OPEN_REGENERATE` 를 replace 로 둠 — 사용자 분류에 이름이 없어 "일정을 바꾸는 흐름"으로 읽음)·잠금 설계(`guardPress` 400ms·`checkingRef` 읽기) — **TRIP-1565 구현 결정**(우리가 정한 것 — 다음 사이클이 요구사항 근거로 인용하면 안 된다).
+
 ## [개정 · 2026-10-22 · 이전 대화 더 보기 (사이클 20261021-assistant-older-messages)]
 
 > 원문 위 절들은 보존한다(append-only). 서버가 `nextBefore` 를 이미 내려주는데(`AssistantController.kt` "프론트 계약에 없던 칸") FE 계약·정본에 없어 30건 넘는 대화의 앞부분을 못 보던 드리프트의 기록. 사용자 결정 2026-10-21: 트리거는 눌러서 부르는 행 · 세션 재조회는 합치기 · Figma 시안 없이 기존 톤.

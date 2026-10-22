@@ -10,7 +10,7 @@ export { suggestNextSlotTime } from './lib/suggestNextSlotTime';
 export { timeBandLabel } from './lib/timeBandLabel';
 export { overlapAwareNotice } from './lib/overlapNotice';
 export { VIOLATION_NOTICE, violationNotice } from './lib/violationLabel';
-export { deriveVisitProgress } from './lib/visitProgress';
+export { deriveSkippedPoiIds, deriveVisitProgress } from './lib/visitProgress';
 export { arrivedLabel, visitedLabelByPoiId } from './lib/visitedLabels';
 export type { ItineraryDaysItemSlotsItem, ReplanSlotVM } from './model';
 export { ReplanSlotRow } from './ui/ReplanSlotRow';

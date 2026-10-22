@@ -5,6 +5,7 @@ import {
   CAPABILITIES_ACTION,
   displayActions,
   displayMessage,
+  noContextActionIcon,
 } from './displayActions';
 import type { NextActionContext } from './nextActionRoute';
 
@@ -28,6 +29,16 @@ describe('displayActions (TRIP-1322)', () => {
     expect(
       displayActions([act('OPEN_ITINERARY'), act('CREATE_TRIP')], ctx)
     ).toEqual([act('OPEN_ITINERARY'), act('CREATE_TRIP')]);
+  });
+
+  // TRIP-1566 — 「일정 보기」가 새 갈래(kind:itinerary)로 바뀌어도 "그릴 수 있나"의 판정은 그대로다(동기·순수).
+  it('여행 문맥이 없으면 「일정 보기」는 능력 보기로 바뀌고, 서버 params.tripId 는 이를 살리지 못한다', () => {
+    expect(
+      displayActions([act('OPEN_ITINERARY', { tripId: 'other-trip' })], {
+        tripId: null,
+        surface: 'HOME',
+      })
+    ).toEqual([CAPABILITIES_ACTION]);
   });
 
   it('모르는 type 은 SHOW_CAPABILITIES 로 바뀌고 중복은 하나로 접힌다', () => {
@@ -92,5 +103,22 @@ describe('displayMessage (TRIP-1323)', () => {
       'OPEN_ITINERARY',
       'SHOW_CAPABILITIES',
     ]);
+  });
+});
+
+// TRIP-1529 심판 보강(03b W2) — 여행 없음 아이콘 행의 글리프 선택. 모양은 jest 사각이라 선택 규칙을 값으로 잠근다.
+describe('noContextActionIcon (TRIP-1529)', () => {
+  it('숙소 탐색은 돋보기, 새 여행 만들기는 플러스', () => {
+    expect(noContextActionIcon('OPEN_STAY_SEARCH')).toBe('search');
+    expect(noContextActionIcon('CREATE_TRIP')).toBe('plus');
+  });
+
+  // 발명값: 01b 에 없는 기본값 계약 — 그 밖의 모든 type 은 플러스.
+  it.each(
+    NEXT_ACTION_TYPES.filter(
+      (type) => type !== 'OPEN_STAY_SEARCH' && type !== 'CREATE_TRIP'
+    )
+  )('그 밖의 type %s 은 기본값 플러스', (type) => {
+    expect(noContextActionIcon(type)).toBe('plus');
   });
 });
