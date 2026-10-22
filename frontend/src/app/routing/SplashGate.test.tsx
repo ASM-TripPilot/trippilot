@@ -435,41 +435,54 @@ describe.each([
 });
 
 /**
- * 허브(`trips/[tripId]/live/index`)와 ✦ 도우미 시트(`assistant/index`, TRIP-1554)만 전환이 `none`(즉시 표시)이다.
- * 허브: 허브 바가 홈 탭 바와 같은 5칸으로 시작해 모프를 혼자 재생하려면 아래 `(tabs)`(탭 바 포함)가 밀리거나 비치지 않고 허브가 즉시 그 자리를
- * 대체해야 한다(크로스페이드는 탭 바가 비쳐 이중으로 보인다). 허브로 들어가는 모든 길이 이 한 선언에 걸린다.
+ * 전환이 `none`(즉시 표시)인 라우트는 **하단 바를 자기 화면 안에 그리는 push 화면**과 ✦ 도우미 시트다(TRIP-1584 · 허브는 TRIP-1522, 도우미는 TRIP-1554).
+ * 바를 화면 안에 그리는 화면이 기본 슬라이드로 열리면 바 사본이 화면과 함께 밀려 들어와 아래 진짜 탭 바 위로 "새 바"가 겹쳐 보인다 — 페이드는 아래 탭 바가
+ * 비쳐 이중으로 보이므로 `none` 이다. 바 없는 풀스크린(상세·위저드 등)은 슬라이드 그대로다.
+ * 허브: 허브 바가 홈 탭 바와 같은 5칸으로 시작해 모프를 혼자 재생하려면 허브가 즉시 그 자리를 대체해야 한다.
  * 도우미: 시트가 아래에서 올라오지 않고 즉시 뜨게 한다 — `presentation: 'transparentModal'` 은 그대로 둔다(위 describe 가 잠근다).
  * 선언 위치가 `SplashGate` 인 이유: planb·assistant 선례, 라우트 파일 안에서 하면 `liveHubRoute.test` 의 expo-router 목이 깨진다.
- * jest 가 잠그는 것은 선언까지다(스택 목은 options 를 그리지 않는다) — 실제 전환·열림/닫힘 미끄러짐·스와이프 뒤로·탭 바와의 겹침은 6-b.
+ * jest 가 잠그는 것은 선언까지다(스택 목은 options 를 그리지 않는다) — 실제 전환·스와이프 뒤로·탭 바와의 겹침은 6-b.
+ * 새로 "바를 자기 화면 안에 그리는 라우트"를 만들면 이 목록과 `SplashGate.tsx` 의 `BAR_SCREEN_ROUTES` 에 이름을 더해야 한다 — 빠지면 슬라이드로 조용히 돌아간다(소스 스캔 가드는 두지 않는다).
  */
-describe.each([
-  ['허브', 'trips/[tripId]/live/index'],
-  ['도우미 시트', 'assistant/index'],
-])('SplashGate · %s 라우트 none 전환 선언', (_label, routeName) => {
-  it.each(['HOME', 'LOGIN'] as const)(
-    '목적지 %s 에서도 가드 밖에 선언이 하나 있고 animation 이 none 이다',
-    (destination) => {
-      mockUseBootstrapGate.mockReturnValue(gate({ destination }));
+const HUB_ROUTE = 'trips/[tripId]/live/index';
+const ASSISTANT_ROUTE = 'assistant/index';
+const NONE_ROUTES = [
+  ['허브', HUB_ROUTE],
+  ['도우미 시트', ASSISTANT_ROUTE],
+  ['기록 j01', 'trips/[tripId]/records/index'],
+  ['회고 j03', 'trips/[tripId]/records/reflection/[date]'],
+  ['요약 j04', 'trips/[tripId]/records/summary'],
+  ['숙소 검색', 'stays/index'],
+  ['장소 탐색', 'explore/places'],
+  ['여행 스타일 j05', 'records/style'],
+] as const;
 
-      render(<SplashGate />);
-      passFloor();
+describe.each(NONE_ROUTES)(
+  'SplashGate · %s 라우트 none 전환 선언',
+  (_label, routeName) => {
+    it.each(['HOME', 'LOGIN'] as const)(
+      '목적지 %s 에서도 가드 밖에 선언이 하나 있고 animation 이 none 이다',
+      (destination) => {
+        mockUseBootstrapGate.mockReturnValue(gate({ destination }));
 
-      const declared = screen
-        .UNSAFE_getAllByType(Stack.Screen)
-        .filter((node) => node.props.name === routeName);
-      expect(declared).toHaveLength(1);
-      expect(declared[0].props.options?.animation).toBe('none');
-      expect(insideProtected(declared[0])).toBe(false);
-    }
-  );
-});
+        render(<SplashGate />);
+        passFloor();
+
+        const declared = screen
+          .UNSAFE_getAllByType(Stack.Screen)
+          .filter((node) => node.props.name === routeName);
+        expect(declared).toHaveLength(1);
+        expect(declared[0].props.options?.animation).toBe('none');
+        expect(insideProtected(declared[0])).toBe(false);
+      }
+    );
+  }
+);
 
 describe('SplashGate · none 전환 범위', () => {
-  const HUB_ROUTE = 'trips/[tripId]/live/index';
-  const ASSISTANT_ROUTE = 'assistant/index';
   const PLANB_ROUTE = 'trips/[tripId]/planb/index';
 
-  it('animation 이 있는 선언은 허브·도우미 둘뿐이다 — planb 는 animation 없이 transparentModal 이고 루트 screenOptions 에도 없다', () => {
+  it('animation 이 있는 선언은 위 8곳뿐이다 — planb 는 animation 없이 transparentModal 이고 루트 screenOptions 에도 없다', () => {
     mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
 
     render(<SplashGate />);
@@ -481,7 +494,7 @@ describe('SplashGate · none 전환 범위', () => {
         .filter((node) => node.props.options?.animation !== undefined)
         .map((node) => node.props.name)
         .sort()
-    ).toEqual([ASSISTANT_ROUTE, HUB_ROUTE]);
+    ).toEqual(NONE_ROUTES.map(([, name]) => name).sort());
 
     const planb = screens.find((node) => node.props.name === PLANB_ROUTE);
     expect(planb).toBeDefined(); // 짝 앵커 — 선언이 없어서 아래 단언이 공허하게 통과하지 않게
@@ -489,7 +502,7 @@ describe('SplashGate · none 전환 범위', () => {
     expect(planb?.props.options?.presentation).toBe('transparentModal');
 
     const others = screens.filter(
-      (node) => ![HUB_ROUTE, ASSISTANT_ROUTE].includes(node.props.name)
+      (node) => !NONE_ROUTES.some(([, name]) => name === node.props.name)
     );
     expect(others.length).toBeGreaterThanOrEqual(2); // (tabs) + planb
     others.forEach((node) =>
