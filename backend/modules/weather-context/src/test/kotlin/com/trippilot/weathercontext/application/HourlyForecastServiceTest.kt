@@ -1,11 +1,9 @@
 package com.trippilot.weathercontext.application
 
-import com.trippilot.weathercontext.api.DailyWeather
 import com.trippilot.weathercontext.api.HourlyForecastUnavailable
 import com.trippilot.weathercontext.api.HourlyWeather
 import com.trippilot.weathercontext.api.Precipitation
 import com.trippilot.weathercontext.api.Sky
-import com.trippilot.weathercontext.domain.GridDay
 import com.trippilot.weathercontext.domain.GridForecast
 import com.trippilot.weathercontext.domain.GridForecastMissing
 import com.trippilot.weathercontext.domain.GridForecastPort
@@ -23,7 +21,6 @@ import org.springframework.dao.DataIntegrityViolationException
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.util.stream.Stream
@@ -47,7 +44,6 @@ class HourlyForecastServiceTest : StringSpec({
     fun grid(key: String = JEJU, baseAt: Instant = base, expiresAt: Instant = expires, pty: Int? = 1, sky: Int? = 4) = GridForecast(
         gridKey = key, baseAt = baseAt,
         hourly = mapOf(noon to GridHour(pop = 70, pty = pty, sky = sky, tmp = 18.5, wsd = 4.0)),
-        daily = mapOf(LocalDate.parse("2026-10-20") to GridDay(tmn = 11.0, tmx = 21.0)),
         fetchedAt = baseAt, expiresAt = expiresAt,
     )
 
@@ -170,7 +166,6 @@ class HourlyForecastServiceTest : StringSpec({
         }
         val got = service(CountingGrids { grid() }, GridRows()).forecastForTrigger(33.4996, 126.5312, now)!!
         got.hourly[noon] shouldBe HourlyWeather(70, Precipitation.RAIN, Sky.OVERCAST, 18.5, 4.0)
-        got.daily[LocalDate.parse("2026-10-20")] shouldBe DailyWeather(11.0, 21.0)
     }
 })
 
