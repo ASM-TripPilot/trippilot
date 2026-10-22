@@ -31,6 +31,8 @@ class PoiQueryService(
      *   "없다"가 거짓이 된다(뒷장에 있는데 안 보인다).
      * @param cursor 이전 응답의 [PoiPage.nextCursor]. 없으면 처음부터.
      * @param limit 요청 상한. 미지정·초과는 [MAX_LIMIT] 로 맞춘다.
+     * @param order `name`(기본, TRIP-1003) | `random`(TRIP-1570). random 이면 [seed] 가 필수다.
+     * @param seed 무작위 정렬 시드 — 화면이 한 진입 동안 고정해 장을 이어 받는다. 같은 seed 면 같은 순서.
      */
     fun search(
         region: String?,
@@ -38,18 +40,21 @@ class PoiQueryService(
         query: String? = null,
         cursor: String? = null,
         limit: Int? = null,
+        order: String? = null,
+        seed: String? = null,
     ): PoiPage {
+        val randomSeed = resolveSeed(order, seed)
         val codes = resolveRegion(region) ?: return PoiPage(emptyList(), null)
         val size = (limit ?: MAX_LIMIT).coerceIn(1, MAX_LIMIT)
 
         // 상한보다 **하나 더** 물어본다 — 그 하나가 오면 뒤가 있다는 뜻이다.
         // 전체 개수를 세는 것보다 싸고, 개수는 어차피 화면이 쓰지 않는다.
         val q = query?.trim().orEmpty()
-        val fetched = repo.findActive(codes, category, q, decode(cursor), size + 1)
+        val fetched = repo.findActive(codes, category, q, decode(cursor), size + 1, randomSeed)
         val items = fetched.take(size)
         // 커서 재료(관련도·정렬키)는 도메인 식으로 만든다 — DB 정렬식과 같아야 이어받기가 산다(PoiSearchOrder KDoc).
         val next = if (fetched.size > size) {
-            items.lastOrNull()?.let { encode(PoiCursor(PoiSearchOrder.rank(q, it.nameKo), PoiSearchOrder.sortKey(it.nameKo), it.poiId)) }
+            items.lastOrNull()?.let { encode(PoiCursor(PoiSearchOrder.rank(q, it.nameKo), PoiSearchOrder.key(it.nameKo, it.poiId, randomSeed), it.poiId)) }
         } else null
         return PoiPage(items, next)
     }
@@ -85,6 +90,20 @@ class PoiQueryService(
             log.warn("후보풀이 상한에 닿았습니다 — 닫힌 집합이 잘렸을 수 있습니다. region={} limit={}", region, POOL_LIMIT)
         }
         return found
+    }
+
+    /**
+     * 정렬 모드 → 무작위 시드(null = 이름순).
+     *
+     * **seed 없는 random 은 거절한다.** 이름순으로 조용히 떨어뜨리면 화면은 그것을 "무작위"로 그린다 —
+     * 사용자에게는 "섞었다는데 왜 늘 ㄱ부터냐"로만 보인다. 허용 문자를 좁히는 것은 seed 가 그대로 SQL
+     * 인자(md5 입력)로 가기 때문이다 — NUL 은 PostgreSQL 에서 500 이었다(커서의 TRIP-1473 과 같은 자리).
+     */
+    private fun resolveSeed(order: String?, seed: String?): String? = when (order?.trim()?.ifEmpty { null }) {
+        null, ORDER_NAME -> null
+        ORDER_RANDOM -> seed?.takeIf { SEED_PATTERN.matches(it) }
+            ?: throw ValidationFailed(listOf(FieldError("seed", "무작위 정렬에는 1~64자 영숫자·_·- seed 가 필요합니다.")))
+        else -> throw ValidationFailed(listOf(FieldError("order", "정렬은 name 또는 random 입니다.")))
     }
 
     /** null = 지역을 안 걸렀다. 빈 목록 = **모르는 이름**이라 결과가 없다. */
@@ -132,6 +151,10 @@ class PoiQueryService(
         /** 후보풀 상한 — 실측 전국 ACTIVE 가 1천 대라 한 지역이 여기 닿으면 데이터 쪽을 봐야 한다. */
         private const val POOL_LIMIT = 5_000
         private const val SEP = '\u001F' // 이름에 나타나지 않는 구분자
+
+        private const val ORDER_NAME = "name"
+        private const val ORDER_RANDOM = "random"
+        private val SEED_PATTERN = Regex("[A-Za-z0-9_-]{1,64}")
     }
 }
 

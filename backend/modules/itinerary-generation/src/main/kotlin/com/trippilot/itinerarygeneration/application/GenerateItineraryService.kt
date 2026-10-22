@@ -37,6 +37,7 @@ import com.trippilot.itinerarygeneration.domain.VisitRecordPort
 import com.trippilot.itinerarygeneration.domain.ScoredCandidatePoolStore
 import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.profile.api.PreferenceSnapshot
+import com.trippilot.profile.api.overriddenBy
 import com.trippilot.savedaccommodation.api.BaseAnchorFacade
 import com.trippilot.savedaccommodation.api.DayAnchorView
 import com.trippilot.trip.api.TripFacade
@@ -120,7 +121,7 @@ class GenerateItineraryService(
             prev?.let {
                 rejectionStore.record(tripId, it.days.flatMap { d -> d.slots.map { s -> s.sourcePoiId } }, RejectedPoi.Kind.REGENERATED)
             }
-            return createEmpty(tripId, ctx, planDates, prev)
+            return createEmpty(tripId, ctx, planDates)
         }
 
         // day1 조기 노출(TRIP-267 · PR #104 합의): 1차는 첫날만 짧은 시한으로 풀어 즉시 반환하고,
@@ -190,7 +191,10 @@ class GenerateItineraryService(
 
             // 영속 + 생성이벤트(TRIP-230)를 한 트랜잭션으로 — confirm()과 대칭(향후 아웃박스 relay 원자성). 발행은 인프로세스.
             tx.execute {
-                previous?.let { revisions.ensureRestorePoint(it) }
+                // 일정 쓰기 잠금(TRIP-1412) — 쓰기 트랜잭션 안에서만 잡는다(AI 호출은 위에서 끝났다). 반영·되돌리기·편집·복원·확정·
+                // 2차 마무리와 줄을 서, 그 쓰기의 읽기와 교체(trip_id 로 지우기) 사이에 이 교체가 끼어들어 한쪽이 조용히 사라지지 않게 한다.
+                // 되돌리기 지점은 잠금 뒤의 현행으로 남긴다 — AI 를 기다리는 사이 바뀌었을 수 있다.
+                itineraries.lockForTrip(tripId)?.let { revisions.ensureRestorePoint(it) }
                 // 점수 후보 풀(TRIP-969)은 **이번 생성의 파생물**이다 — 새 일정과 함께 갈아끼우고,
                 // 풀 없이 온 생성(http 미개통·폴백)은 **지운다**. 이전 생성의 풀을 남겨 두면
                 // 슬롯 교체 즉답이 지금 일정과 무관한 판단으로 답한다.
@@ -258,9 +262,11 @@ class GenerateItineraryService(
         tripId: UUID,
         ctx: TripGenerationContext,
         dates: List<LocalDate>,
-        previous: Itinerary?,
     ): Itinerary = tx.execute {
-        previous?.let { revisions.ensureRestorePoint(it) } // 전환 전 상태를 남긴다 — 진행분이 사라지지 않게
+        // 일정 쓰기 잠금(TRIP-1412)을 잡고 잠금 뒤 현행으로 전환 전 상태를 남긴다 — 진행분이 사라지지 않게.
+        // 리비전 종류(처음 vs 다시)도 같은 잠금 뒤 값으로 정한다 — 잠금 전 값과 갈리면 지점과 종류가 서로 다른 일정을 말한다.
+        val locked = itineraries.lockForTrip(tripId)
+        locked?.let { revisions.ensureRestorePoint(it) }
         // 직접 만들기엔 점수 풀이 없다(TRIP-969) — 이전 생성의 풀이 남으면 그 판단으로 즉답하게 된다.
         scoredPools.delete(tripId)
         val empty = Itinerary.create(
@@ -272,7 +278,7 @@ class GenerateItineraryService(
         events.publish(ItineraryGenerated(saved.itineraryId.toString(), tripId.toString(), saved.isFallback))
         revisions.record(
             saved, RevisionActor.USER,
-            if (previous == null) RevisionKind.BASELINE else RevisionKind.GENERATE,
+            if (locked == null) RevisionKind.BASELINE else RevisionKind.GENERATE,
             "직접 만들기로 시작",
         )
         saved
@@ -440,8 +446,8 @@ class GenerateItineraryService(
      *
      * 정본은 숙소 없는 생성을 허용한다(BR-U1-40 · BR-U1-47 · US-SCHED-11) — 계약이 그걸 막고 있었다.
      *
-     * **다목적지는 그 날의 목적지 중심을 쓴다**([RegionAnchors.destinationOn] — FE `dayRegion.ts` 와 같은
-     * 규칙). 예전엔 박수가 실려 오지 않아 모든 날이 첫 목적지로 접혔고, "서울 1박 + 인천 1박"이
+     * **다목적지는 그 날의 목적지 중심을 쓴다**([RegionAnchors.destinationOn] → trip api `destinationOn` — FE
+     * `frontend/src/entities/trip/lib/regionForDay.ts` 의 `regionForDay` 와 같은 규칙). 예전엔 박수가 실려 오지 않아 모든 날이 첫 목적지로 접혔고, "서울 1박 + 인천 1박"이
      * 서울 2박처럼 나왔다. 그 날 목적지의 좌표가 없으면 첫 목적지 중심으로 떨어진다(종전 동작).
      * 우선순위: 숙소 좌표 → 그 날의 목적지 중심 → 첫 목적지 중심.
      *
@@ -531,6 +537,7 @@ class GenerateItineraryService(
         return Itinerary.create(
             tripId, solveMode, mode, isFallback, days, clock.instant(), state, candidatesSummary,
             assemblyUnplaced + unplacedMustVisits,
+            scoring, // 안 실으면 응답 직후엔 몰라도 재조회에서 늘 "모름"이 된다(TRIP-1173)
         )
     }
 

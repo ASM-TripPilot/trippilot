@@ -7,7 +7,13 @@ import {
 import { Keyboard } from 'react-native';
 import type { StayItem } from '@/shared/api/index.schemas';
 import { stayKey } from '@/features/save-stay/index.view';
+import { stayCoverFor } from '@/test-support/placeCoverFixtures';
 import { StaySearchScreen } from './StaySearchScreen';
+import {
+  FAB_STACK_TOP,
+  getToastBottoms,
+  resetToastBottoms,
+} from '@/shared/ui/toastBottom';
 import type { StaySearchState } from '../model/staySearchState';
 import { PRICE_BUCKETS, type PriceBucketId } from '../model/priceRangeFilter';
 
@@ -75,24 +81,13 @@ describe('헤더·카드·목록 프레임 (옛 본 파일)', () => {
   ];
 
   /**
-   * ITEMS 각 항목의 `formatPrice` 기대 문자열 — 리터럴로 고정한다(계산식으로 쓰면 화면이
-   * formatPrice를 안 쓰고 제 방식으로 만들어도 통과할 수 있다, 02a §4 it 2-2).
+   * ITEMS 각 항목의 가격 문자열 — TRIP-1581 로 e02 카드에서 가격 줄이 빠졌다. 그 **부재**를 잴 때만 쓴다
+   * (2톤 bold 토막·결합 노드·'~' 어느 것도 남지 않아야 한다).
    */
-  const PRICE_TEXT_BY_EXTERNAL_ID: Record<string, string> = {
-    s3: '30,000원~',
-    s1: '10,000원~',
-    s2: '20,000원~',
-  };
-
-  /**
-   * TRIP-725 · 2톤 가격의 bold 노드 텍스트 — formatPrice 반환("30,000원~")에서 접미 "~"를 뗀 값.
-   * 카드가 이 값(bold)과 "~"(muted) 두 형제 Text 로 쪼갠다(AC-2). 단일 결합 노드 "30,000원~"은
-   * 더 이상 없어야 한다(PRICE_TEXT_BY_EXTERNAL_ID 는 그 부재 반증용으로만 남긴다).
-   */
-  const BOLD_PRICE_BY_EXTERNAL_ID: Record<string, string> = {
-    s3: '30,000원',
-    s1: '10,000원',
-    s2: '20,000원',
+  const PRICE_TEXTS_BY_EXTERNAL_ID: Record<string, string[]> = {
+    s3: ['30,000원', '30,000원~'],
+    s1: ['10,000원', '10,000원~'],
+    s2: ['20,000원', '20,000원~'],
   };
 
   /** ITEMS의 1번(서면, 10000)만 price: null로 바꾼 3건 — AC-3 전용(02a §1-4, 가운데를 비운다). */
@@ -150,8 +145,8 @@ describe('헤더·카드·목록 프레임 (옛 본 파일)', () => {
     );
   });
 
-  describe('StaySearchScreen — 카드 구성 · 가격 2톤 (AC-2)', () => {
-    it('카드마다 숙소명·지역·2톤 금액(bold+"~")·저장 하트·사진 자리가 있다', () => {
+  describe('StaySearchScreen — 카드 구성 · 가격 줄 없음 (AC-2 · TRIP-1581)', () => {
+    it('카드마다 숙소명·지역·저장 하트·사진 자리가 있고, 가격 줄은 없다', () => {
       render(<StaySearchScreen region="부산" items={ITEMS} />);
 
       ITEMS.forEach((item) => {
@@ -163,28 +158,26 @@ describe('헤더·카드·목록 프레임 (옛 본 파일)', () => {
         expect(within(card).getByText(item.name)).toBeOnTheScreen();
         expect(within(card).getByText(item.region)).toBeOnTheScreen();
 
-        // 2톤 — bold "{천단위}원" + muted "~" 두 형제 노드(AC-2). 단일 결합 노드는 없다.
-        expect(
-          within(card).getByText(BOLD_PRICE_BY_EXTERNAL_ID[item.externalId])
-        ).toBeOnTheScreen();
-        expect(within(card).getByText('~')).toBeOnTheScreen();
-        expect(
-          within(card).queryByText(PRICE_TEXT_BY_EXTERNAL_ID[item.externalId])
-        ).toBeNull();
+        // TRIP-1581 — 데이터에 가격이 없어(인기 숙소 개편) e02 카드는 가격 줄을 그리지 않는다.
+        PRICE_TEXTS_BY_EXTERNAL_ID[item.externalId].forEach((text) =>
+          expect(within(card).queryByText(text)).toBeNull()
+        );
+        expect(within(card).queryByText('~')).toBeNull();
 
         expect(
           within(card).getByTestId(`stay-card-save-${key}`)
         ).toBeOnTheScreen();
 
+        // TRIP-1588 — 사진 칸은 그 카드 자기 stayKey 의 숙소 그림(세 카드가 2·6·3번이라 바꿔 끼우면 red).
         expect(
-          within(card).getByTestId(`stay-card-photo-${key}`)
-        ).toBeOnTheScreen();
+          within(card).getByTestId(`stay-card-photo-${key}`).props.source
+        ).toEqual([stayCoverFor(key)]);
       });
     });
   });
 
-  describe('StaySearchScreen — 가격 미확인 (AC-3 · BR-U1-14)', () => {
-    it('price:null 카드가 "가격 미확인"으로 남고 목록에서 빠지지 않는다', () => {
+  describe('StaySearchScreen — 가격 없는 숙소 (AC-3 · BR-U1-14)', () => {
+    it('price:null 카드도 목록에서 빠지지 않고, "가격 미확인" 줄도 없다', () => {
       render(<StaySearchScreen region="부산" items={ITEMS_WITH_NULL} />);
 
       // 개수(=items.length)·정체성·순서를 단언 하나로 잠근다.
@@ -194,18 +187,7 @@ describe('헤더·카드·목록 프레임 (옛 본 파일)', () => {
 
       const nullItem = ITEMS_WITH_NULL[1];
       const nullCard = screen.getByTestId(`stay-card-${stayKey(nullItem)}`);
-      expect(within(nullCard).getByText('가격 미확인')).toBeOnTheScreen();
-      // 결측 카드엔 2톤 접미 "~"가 없다(2톤 분기로 새지 않는다).
-      expect(within(nullCard).queryByText('~')).toBeNull();
-
-      // 나머지 두 카드는 2톤 금액(bold+"~")이 그대로 남는다 — null 처리가 옆 카드로 안 샌다.
-      [ITEMS_WITH_NULL[0], ITEMS_WITH_NULL[2]].forEach((item) => {
-        const card = screen.getByTestId(`stay-card-${stayKey(item)}`);
-        expect(
-          within(card).getByText(BOLD_PRICE_BY_EXTERNAL_ID[item.externalId])
-        ).toBeOnTheScreen();
-        expect(within(card).getByText('~')).toBeOnTheScreen();
-      });
+      expect(within(nullCard).queryByText('가격 미확인')).toBeNull();
     });
   });
 
@@ -1258,13 +1240,6 @@ describe('5가지 상태 얼굴 (옛 .states)', () => {
     s2: '20,000원~',
   };
 
-  // TRIP-725 — 2톤 가격의 bold 노드(접미 "~" 제거). 카드가 bold+"~" 두 형제 Text 로 쪼갠다(AC-2).
-  const BOLD_PRICE_BY_EXTERNAL_ID: Record<string, string> = {
-    s3: '30,000원',
-    s1: '10,000원',
-    s2: '20,000원',
-  };
-
   /** ITEMS의 1번(서면, 10000)만 price: null로 바꾼 3건 — AC-6 전용. */
   const ITEMS_WITH_NULL: StayItem[] = ITEMS.map((item, index) =>
     index === 1 ? { ...item, price: null } : item
@@ -1433,8 +1408,8 @@ describe('5가지 상태 얼굴 (옛 .states)', () => {
     });
   });
 
-  describe('StaySearchScreen — partial에서도 가격 규칙 유지 (AC-6 · BR-U1-14)', () => {
-    it('price:null 카드가 "가격 미확인"으로 남고 목록에서 빠지지 않으며, 배너도 함께 뜬다', () => {
+  describe('StaySearchScreen — partial에서도 가격 없는 카드 유지 (AC-6 · BR-U1-14 · TRIP-1581)', () => {
+    it('price:null 카드가 목록에서 빠지지 않고(가격 줄은 없다 — TRIP-1581), 배너도 함께 뜬다', () => {
       const state: StaySearchState = { kind: 'results', degraded: true };
       render(
         <StaySearchScreen region="부산" items={ITEMS_WITH_NULL} state={state} />
@@ -1446,17 +1421,8 @@ describe('5가지 상태 얼굴 (옛 .states)', () => {
 
       const nullItem = ITEMS_WITH_NULL[1];
       const nullCard = screen.getByTestId(`stay-card-${stayKey(nullItem)}`);
-      expect(within(nullCard).getByText('가격 미확인')).toBeOnTheScreen();
+      expect(within(nullCard).queryByText('가격 미확인')).toBeNull();
       expect(within(nullCard).queryByText('~')).toBeNull();
-
-      // 나머지 두 카드는 2톤 금액(bold+"~")이 그대로 남는다 — null 처리가 옆 카드로 안 샌다.
-      [ITEMS_WITH_NULL[0], ITEMS_WITH_NULL[2]].forEach((item) => {
-        const card = screen.getByTestId(`stay-card-${stayKey(item)}`);
-        expect(
-          within(card).getByText(BOLD_PRICE_BY_EXTERNAL_ID[item.externalId])
-        ).toBeOnTheScreen();
-        expect(within(card).getByText('~')).toBeOnTheScreen();
-      });
 
       expect(
         screen.getByTestId('stay-search-partialfailure')
@@ -1586,5 +1552,66 @@ describe('하단 탭바 (옛 .tabbar)', () => {
         fireEvent.press(screen.getByTestId('shell-tabbar-tab-explore'))
       ).not.toThrow();
     });
+  });
+});
+
+// 토스트 바닥 레지스트리는 모듈 싱글턴이다 — 파일 최상위(describe 밖)에서 리셋해야 앞 테스트의 신고가 안 샌다(TRIP-1559).
+afterEach(() => resetToastBottoms());
+
+describe('e02 토스트 바닥 신고: FAB 2단 스택 (TRIP-1559 이음새 ③)', () => {
+  it('FAB 스택이 있는 숙소 검색은 그 윗변(FAB_STACK_TOP)을 신고하고 unmount 로 해제한다 (화면 안 탭바 신고와 같이 있어도 FAB 쪽이 보인다)', () => {
+    expect(getToastBottoms()).toEqual([]);
+
+    const view = render(<StaySearchScreen region="부산" items={[]} />);
+
+    expect(getToastBottoms()).toContain(FAB_STACK_TOP);
+
+    view.unmount();
+    expect(getToastBottoms()).toEqual([]);
+  });
+});
+
+// TRIP-1581 — 인기 숙소 줄 슬롯. 화면은 위젯을 모른다 — page 가 완성 노드를 넘긴다.
+describe('인기 숙소 슬롯 (TRIP-1581)', () => {
+  const { View } = jest.requireActual('react-native');
+  const slot = <View testID="curated-slot" />;
+
+  it('검색창 아래 · 건수 줄/필터 위에 그린다', () => {
+    render(
+      <StaySearchScreen
+        region="부산"
+        items={[]}
+        nameQuery=""
+        onChangeNameQuery={jest.fn()}
+        curatedStays={slot}
+      />
+    );
+    const order = screen
+      .getAllByTestId(
+        /^(stay-search-name-input|curated-slot|stay-search-header|stay-search-filter-region)$/
+      )
+      .map((node) => String(node.props.testID));
+    expect(order).toEqual([
+      'stay-search-name-input',
+      'curated-slot',
+      'stay-search-header',
+      'stay-search-filter-region',
+    ]);
+  });
+
+  it.each([
+    { kind: 'loading' as const },
+    { kind: 'error' as const },
+    { kind: 'empty' as const, degraded: false },
+  ])('목록이 $kind 얼굴이어도 슬롯은 그대로다(목록 상태와 독립)', (state) => {
+    render(
+      <StaySearchScreen
+        region="부산"
+        items={[]}
+        state={state}
+        curatedStays={slot}
+      />
+    );
+    expect(screen.getByTestId('curated-slot')).toBeOnTheScreen();
   });
 });

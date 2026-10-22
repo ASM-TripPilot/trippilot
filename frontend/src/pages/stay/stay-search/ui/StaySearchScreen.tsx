@@ -23,7 +23,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { formatPrice } from '@/entities/stay';
 import { StaySearchCard } from '@/entities/stay';
 import type { StayItem } from '@/shared/api/index.schemas';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
@@ -47,6 +46,8 @@ import {
   WarningTriangleGlyph,
 } from '@/features/stay/index.view';
 import { AppBar } from '@/shared/ui/AppBar';
+import { FAB_STACK_TOP } from '@/shared/ui/toastBottom';
+import { useToastBottom } from '@/shared/ui/useToastBottom';
 
 export interface StaySearchScreenProps {
   region: string;
@@ -107,11 +108,9 @@ export interface StaySearchScreenProps {
   /** 가격대 칩을 그릴지(TRIP-1429) — 판정(가격 있는 숙소가 있나)은 페이지 몫이고 화면은 받은 값대로 뺀다.
    * 미지정 = 그린다(기존 호출·화면 단위 테스트가 칩을 누른다). */
   showPriceFilter?: boolean;
-  /**
-   * ✦ AI 도우미 FAB 슬롯(TRIP-1321) — page 가 조립해 넣고, 시트가 열린 동안은 넣지 않는다(BR-U8-53).
-   * 있으면 2단 FAB 위(바닥 220)에 뜨고 목록 끝 여백을 ✦ 윗변(276)까지 늘린다.
-   */
-  assistantFab?: ReactNode;
+  /** 인기 숙소 줄 + 전체 보기(TRIP-1581) — 검색창 아래·건수 줄/필터 위에 그린다. 화면은 위젯을 모르므로
+   * page 가 완성 노드를 넘긴다. 목록 상태(loading·error·empty)와 독립이다. 생략 = 없음(무회귀). */
+  curatedStays?: ReactNode;
 }
 
 /** 이름·지역 부분일치로 좁힌다 — 빈 검색어는 전체를 그대로(입력 없음 ≠ 일치 없음). */
@@ -574,8 +573,9 @@ export function StaySearchScreen({
   onChangeNameQuery,
   priceBucket,
   showPriceFilter = true,
-  assistantFab,
+  curatedStays,
 }: StaySearchScreenProps): ReactElement {
+  useToastBottom(FAB_STACK_TOP); // 토스트가 FAB 스택 위로 뜬다(TRIP-1559)
   // loading·error엔 'degraded'가 없다 — `in` 좁히기로 판별 유니온을 안전하게 읽는다.
   const degraded = 'degraded' in state ? state.degraded : false;
   const showCount = state.kind !== 'loading' && state.kind !== 'error';
@@ -624,6 +624,9 @@ export function StaySearchScreen({
                   </View>
                 </View>
               ) : null}
+              {curatedStays ? (
+                <View className="pt-lg">{curatedStays}</View>
+              ) : null}
               <ListHeader
                 region={region}
                 count={visibleItems.length}
@@ -662,9 +665,10 @@ export function StaySearchScreen({
                 <StaySearchCard
                   testID={`stay-card-${key}`}
                   photoTestID={`stay-card-photo-${key}`}
+                  coverKey={key}
                   name={item.name}
                   region={item.region}
-                  priceText={formatPrice(item.price)}
+                  // 가격 줄은 그리지 않는다 — 데이터에 가격이 없다(TRIP-1581). 가격대 칩은 그대로다.
                   variant="full"
                   save={{
                     saved: savedKeys.includes(key),
@@ -682,12 +686,8 @@ export function StaySearchScreen({
           ItemSeparatorComponent={ListSeparator}
           // 2단 원형 FAB(흰 하트 absolute bottom-152 + size56 = 상단 208)·탭바(96) 오버레이가
           // 마지막 카드를 가리지 않도록 스크롤 끝 여백을 208까지 확보한다(TRIP-725, fabSpacer 대응).
-          // TRIP-1321 — ✦ 도우미 FAB 가 위에 얹히면(바닥 220 + 56) 여백도 그 윗변 276 까지.
           ListFooterComponent={
-            <View
-              testID="stay-search-list-footer"
-              className={assistantFab ? 'h-[276px]' : 'h-[208px]'}
-            />
+            <View testID="stay-search-list-footer" className="h-[208px]" />
           }
         />
 
@@ -719,7 +719,6 @@ export function StaySearchScreen({
         >
           <PlusGlyph size={24} tone="onPrimary" />
         </Pressable>
-        {assistantFab}
       </View>
     </SafeAreaView>
   );

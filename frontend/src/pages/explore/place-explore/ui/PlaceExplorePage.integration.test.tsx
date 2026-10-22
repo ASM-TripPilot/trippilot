@@ -6,14 +6,16 @@ import {
   waitFor,
   within,
 } from '@testing-library/react-native';
+import { QueryClient } from '@tanstack/react-query';
 import { BASE } from '@/test-support/apiBase';
-import { createGcZeroWrapper } from '@/test-support/queryRender';
+import { createGcZeroWrapper, createWrapper } from '@/test-support/queryRender';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { openPressGuardWindow, resetPressGuard } from '@/shared/lib/pressGuard';
 import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 import { regionPickerHref } from '@/features/explore';
+import { SERVICE_REGIONS } from '@/entities/trip';
 import { wizardOriginParams, useTripWizardStore } from '@/features/create-trip';
 import {
   captureDraftAtNextCall,
@@ -43,9 +45,14 @@ import { PlaceExplorePage } from './PlaceExplorePage';
  *  - **P-8 (TRIP-502)** 목록 끝에 닿으면 `nextCursor` 로 다음 장을 이어 받는다(무한 스크롤).
  *  - **P-9 (TRIP-687)** 라우트 `region` 이 2곳 이상이면 지역별로 `getPlaces` 를 각 1회 부르고
  *    (fan-out) 병합 결과를 한 목록에 함께 그린다 — 단일지역 경로(P-2)의 무한 스크롤은 안 탄다.
+ *  - **P-16 (TRIP-1560)** 지역을 안 고르면 전국 조회(region 없음)가 아니라 서비스 지역(서울·부산·제주)별로
+ *    조회한다 — 카테고리·검색어를 걸어도 같고, 일부·전부 실패는 배너·error 얼굴로 갈린다(AC-4·S-4 가 AC-5).
+ *  - **P-17 (TRIP-1563)** 목록은 이름순이 아니라 진입마다 새로 뽑는 시드 무작위다 — 모든 `/places` 요청이
+ *    `order=random&seed=<이번 진입의 번호표>` 를 싣고, 진입 중에는 고정(칩·검색·다시 시도·이어받기·지역 바꾸기),
+ *    재진입에는 새 번호표 + 캐시 미재사용, 3지역 병합은 지역을 번갈아 놓는다(아래 `P-17` describe).
  *  - **P-12 (AC-1)** ♥ FAB 는 담은 장소(d02, `/explore/saved-places`)로 push.
  *  - **P-13 (AC-1)** 복제 BottomTabBar 는 push·replace 가 아니라 dismissTo 로 항법한다(TRIP-1262).
- *  - **P-14 (AC-2·AC-6)** 필터 버튼이 카테고리 시트를 마운트한다(실개폐·딤은 6-b).
+ *  - **P-14 (TRIP-1562)** 검색바 ⇅ 버튼·카테고리 시트가 없다 — 어떤 조작으로도 시트가 마운트되지 않는다.
  *  - **S-1~S-12 (상태·예외)** 첫 조회 스켈레톤 · 0건 안내 · 검색어 지목과 해제 · 조회 실패의 실제
  *    재조회(INV-4) · 미로그인 담기 무요청 · 404 롤백 · 409 수렴 · 네트워크 실패 재시도 · 연타 1회 ·
  *    배너는 다음 조작 시 소멸 · 좌표 방어 · 두 조건 모두 해제(아래 `상태·예외 배선` describe).
@@ -77,6 +84,11 @@ jest.mock('@/entities/place/ui/PlaceSubtitle', () => {
     PlaceSubtitle: jest.fn((props: unknown) => actual.PlaceSubtitle(props)),
   };
 });
+
+// TRIP-1563 — 시드는 `expo-crypto` 의 randomUUID 에서 나오는데, jest 에서 실물은 undefined 를 돌려준다(네이티브 모듈 없음).
+// 호출마다 다른 유효 값(숫자·하이픈 36자)을 주는 목으로 갈아 "진입마다 다름"을 우리가 통제한 값으로 증명한다.
+const mockRandomUUID = jest.fn();
+jest.mock('expo-crypto', () => ({ randomUUID: () => mockRandomUUID() }));
 
 jest.mock('@/shared/storage', () => ({
   saveTokens: jest.fn().mockResolvedValue(undefined),
@@ -191,6 +203,25 @@ function hitsOf(method: string, pathname: string) {
   );
 }
 
+/**
+ * 지역 미지정일 때 d04 가 묻는 지역 이름 — 서비스 지역 상수(`SERVICE_REGIONS`)에서 파생한다.
+ * 빌드 환경값 `EXPO_PUBLIC_TEST_REGIONS`(부천 등)가 있으면 상수 뒤에 붙으므로 이름을 손으로 적지 않는다
+ * (jest 환경에는 그 값이 없어 지금은 서울·부산·제주 셋 — P-16 첫 케이스가 앞 셋을 앵커로 굳힌다).
+ */
+const SERVICE_REGION_NAMES = SERVICE_REGIONS.map((region) => region.name);
+/** 지역 미지정 조회 한 번(파도)이 내는 `/places` 요청 수 = 서비스 지역 수. 지역별 병렬 발사라 순서는 안 굳힌다. */
+const WAVE = SERVICE_REGION_NAMES.length;
+
+/** 나간 `/places` 요청들의 `region` 값(없으면 null). */
+function regionsOf(hits: { url: string }[]): (string | null)[] {
+  return hits.map((hit) => new URL(hit.url).searchParams.get('region'));
+}
+
+/** 한 파도의 요청이 서비스 지역 전부를 정확히 한 번씩 덮는다 — region 없는 전국 요청(null)이 섞이면 red. */
+function expectWaveCoversServiceRegions(hits: { url: string }[]): void {
+  expect([...regionsOf(hits)].sort()).toEqual([...SERVICE_REGION_NAMES].sort());
+}
+
 function cardTestIds(): string[] {
   return screen
     .getAllByTestId(/^explore-places-card-/)
@@ -204,7 +235,13 @@ beforeAll(() => {
   });
 });
 
+let uuidSeq = 0;
+
 beforeEach(() => {
+  uuidSeq = 0;
+  mockRandomUUID.mockImplementation(
+    () => `00000000-0000-4000-8000-${String((uuidSeq += 1)).padStart(12, '0')}`
+  );
   observed = [];
   savedRows = [];
   mockParams = {};
@@ -250,7 +287,15 @@ beforeEach(() => {
   );
 });
 
+/** 서버 계약(openapi /places)의 seed 규칙 — random 이면 필수이고 이 모양이어야 400 이 아니다. */
+const SEED_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
 afterEach(() => {
+  // TRIP-1563 INV-4 — 어느 테스트에서든 order 를 실은 요청은 규칙에 맞는 seed 도 실었다(시드 없는 random → 서버 400 → 목록이 비는 침묵 실패 방지).
+  hitsOf('GET', '/api/v1/places').forEach((hit) => {
+    const query = new URL(hit.url).searchParams;
+    if (query.has('order')) expect(query.get('seed')).toMatch(SEED_PATTERN);
+  });
   server.resetHandlers();
   // 연타 가드 창은 모듈 싱글턴 — 앞 테스트가 연 창이 다음 테스트로 새지 않게 닫는다(TRIP-1282).
   resetPressGuard();
@@ -274,21 +319,25 @@ describe('P-1 · 카테고리 칩은 서버를 다시 부른다 (AC-3)', () => {
 
     await renderPage();
 
-    // 앵커 — 첫 조회는 필터가 없다(Seed Q9: region 도 생략 = 전국).
+    // 앵커 — 첫 조회(지역 미지정 = 서비스 지역별 한 파도, TRIP-1560)엔 category 필터가 없다.
     const first = hitsOf('GET', '/api/v1/places');
-    expect(first).toHaveLength(1);
-    expect(new URL(first[0].url).searchParams.get('category')).toBeNull();
-    expect(new URL(first[0].url).searchParams.get('region')).toBeNull();
+    expect(first).toHaveLength(WAVE);
+    first.forEach((hit) =>
+      expect(new URL(hit.url).searchParams.get('category')).toBeNull()
+    );
 
     fireEvent.press(screen.getByTestId('explore-places-category-food'));
 
+    // 새 파도가 한 번 더 나간다(첫 파도 WAVE + 둘째 파도 WAVE). 순서는 안 굳히고 둘째 파도 전체를 본다.
     await waitFor(() =>
-      expect(hitsOf('GET', '/api/v1/places')).toHaveLength(2)
+      expect(hitsOf('GET', '/api/v1/places')).toHaveLength(2 * WAVE)
     );
     // URL.searchParams.get() 이 퍼센트 인코딩을 자동으로 되돌리므로 한글 비교가 성립한다.
     // '맛집'은 계약 enum 값 자체라 ASCII 로 바꿀 수 없다.
-    const second = hitsOf('GET', '/api/v1/places')[1];
-    expect(new URL(second.url).searchParams.get('category')).toBe('맛집');
+    const second = hitsOf('GET', '/api/v1/places').slice(WAVE);
+    second.forEach((hit) =>
+      expect(new URL(hit.url).searchParams.get('category')).toBe('맛집')
+    );
 
     // 재조회 결과가 실제로 화면에 닿았다 — URL 만 보면 "보내고 버리는" 구현도 통과한다.
     await waitFor(() =>
@@ -470,63 +519,56 @@ describe('P-13 · 복제 BottomTabBar 는 dismissTo 로 항법한다 (AC-1 · TR
 });
 
 describe('P-15 · 페이지가 다시 그려져도 마운트된 카드는 재렌더되지 않는다 (TRIP-1349)', () => {
-  it('카테고리 시트 열기(페이지 state 변경)가 카드를 다시 그리지 않는다 — 콜백 참조가 안정이다', async () => {
+  it('공백만 입력(페이지 state 변경 · 재조회 없음)이 카드를 다시 그리지 않는다 — 콜백 참조가 안정이다', async () => {
+    // TRIP-1562 — 옛 트리거(카테고리 시트 열기)가 사라져, 같은 성질의 트리거로 바꿨다: 검색어 state 는
+    // 바뀌지만(페이지 재렌더) trim 결과가 '' 그대로라 조회 키가 안 바뀐다(목록·카드 데이터 불변).
     setAccessToken('valid-access');
     await renderPage();
     const subtitle = PlaceSubtitle as unknown as jest.Mock;
     const before = subtitle.mock.calls.length;
     expect(before).toBeGreaterThan(0);
+    const fetchesBefore = hitsOf('GET', '/api/v1/places').length;
 
-    fireEvent.press(screen.getByTestId('explore-places-filter'));
+    fireEvent.changeText(screen.getByTestId('explore-places-search'), ' ');
+
+    // 페이지가 실제로 다시 그려졌다 — 입력값이 state 를 거쳐 돌아왔다(무반응이면 이 앵커가 red).
     await waitFor(() =>
-      expect(
-        screen.getByTestId('explore-places-category-sheet')
-      ).toBeOnTheScreen()
+      expect(screen.getByTestId('explore-places-search')).toHaveProp(
+        'value',
+        ' '
+      )
     );
+    // 재조회가 없었다 — 카드가 다시 그려질 "정당한" 이유(새 데이터)가 없는 상황임을 보장한다.
+    expect(hitsOf('GET', '/api/v1/places')).toHaveLength(fetchesBefore);
 
     expect(subtitle.mock.calls.length).toBe(before);
   });
 });
 
-describe('P-14 · 필터 버튼이 카테고리 시트를 연다 (AC-2 · AC-6 · 3-a)', () => {
-  it('필터 press 전에는 시트가 없고, 누르면 카테고리 시트가 마운트된다 (실개폐·딤은 6-b)', async () => {
+describe('🔴 P-14 · TRIP-1562 — 카테고리 시트는 어떤 조작으로도 열리지 않는다', () => {
+  it('검색바 ⇅ 버튼이 없고, 칩·검색을 조작해도 시트가 마운트되지 않으며 칩 선택은 그대로 동작한다', async () => {
     setAccessToken('valid-access');
-
     await renderPage();
 
-    // 닫힘 = 트리에서 없음(조건부 마운트). @gorhom/bottom-sheet 목이 통과형이라 "열림"은
-    // 마운트/언마운트로만 관측된다 — 실제 snap·딤·시트 내부는 jest 원리적 사각(6-b 실기).
+    // 시트를 여는 입구 자체가 없다.
+    expect(screen.queryByTestId('explore-places-filter')).toBeNull();
+
+    // 화면에 있는 조작을 차례로 해 본다 — 가로 칩 선택·해제, 검색어 입력.
+    fireEvent.press(screen.getByTestId('explore-places-category-food'));
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-places-category-food')).toBeSelected()
+    );
+    fireEvent.press(screen.getByTestId('explore-places-category-all'));
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-places-category-all')).toBeSelected()
+    );
+    fireEvent.changeText(screen.getByTestId('explore-places-search'), '해운대');
+
+    // 어떤 시점에도 시트·시트 칩이 트리에 없다.
     expect(screen.queryByTestId('explore-places-category-sheet')).toBeNull();
-
-    fireEvent.press(screen.getByTestId('explore-places-filter'));
-
-    await waitFor(() =>
-      expect(
-        screen.getByTestId('explore-places-category-sheet')
-      ).toBeOnTheScreen()
-    );
-  });
-
-  it('시트 카테고리 칩을 누르면 그 카테고리가 선택되고 시트가 닫힌다 (code-critic 경고-1)', async () => {
-    // 시트 칩 press → onSelect(값)+onClose 배선을 잠근다. P-14 는 마운트까지만 봤다.
-    setAccessToken('valid-access');
-    await renderPage();
-
-    fireEvent.press(screen.getByTestId('explore-places-filter'));
-    await waitFor(() =>
-      expect(
-        screen.getByTestId('explore-places-category-sheet')
-      ).toBeOnTheScreen()
-    );
-
-    // 시트 안 '맛집' 칩(헤더 칩과 -sheet- 접두로 분리)을 누른다.
-    fireEvent.press(screen.getByTestId('explore-places-sheet-category-맛집'));
-
-    // 헤더 카테고리 칩이 그 값으로 선택되고(재조회 트리거), 시트는 닫힌다(조건부 언마운트).
-    await waitFor(() =>
-      expect(screen.queryByTestId('explore-places-category-sheet')).toBeNull()
-    );
-    expect(screen.getByTestId('explore-places-category-food')).toBeSelected();
+    expect(
+      screen.queryAllByTestId(/^explore-places-sheet-category-/)
+    ).toHaveLength(0);
   });
 });
 
@@ -539,7 +581,7 @@ describe('P-7 · 게스트는 담은 목록을 아예 부르지 않는다 (01b S
 
     // 장소 목록이 왕복을 **끝냈다**면 담은 목록 요청도 이미 나갔어야 한다 — 그래서 이 0건은
     // "아직 안 나갔다"가 아니라 "안 나간다"다.
-    expect(hitsOf('GET', '/api/v1/places')).toHaveLength(1);
+    expect(hitsOf('GET', '/api/v1/places')).toHaveLength(WAVE);
     expect(hitsOf('GET', '/api/v1/saved-places')).toHaveLength(0);
 
     // 긍정 짝 — 화면은 정상으로 돌았다(목록 열람은 미로그인도 가능한 화면이다).
@@ -552,9 +594,11 @@ describe('P-7 · 게스트는 담은 목록을 아예 부르지 않는다 (01b S
   });
 });
 
-describe('P-8 · 모두 보기는 커서로 이어 받는다 (무한 스크롤 · TRIP-502)', () => {
+describe('P-8 · 지역 한 곳을 고르면 커서로 이어 받는다 (무한 스크롤 · TRIP-502 · AC-3)', () => {
   it('목록 끝에 닿으면 nextCursor 로 다음 장을 이어 받는다', async () => {
     setAccessToken('valid-access');
+    // 지역 미지정은 서비스 지역별 단발 조회라 이어받기가 없다(TRIP-1560) — 한 곳 선택 경로가 이 심판의 자리다.
+    mockParams = { region: 'jeju' };
     const PAGE2 = [makePlace('p6', '태종대', '명소', '영도구', 5)];
     // 첫 장은 nextCursor 를 주고, cursor 가 실린 요청엔 다음 장을 준다.
     server.use(
@@ -568,6 +612,8 @@ describe('P-8 · 모두 보기는 커서로 이어 받는다 (무한 스크롤 �
 
     await renderPage();
     expect(cardTestIds()).toHaveLength(5);
+    // 앵커 — 첫 장은 그 한 곳으로 정확히 1회 나갔다(다지역 파도로 새지 않는다).
+    expect(regionsOf(hitsOf('GET', '/api/v1/places'))).toEqual(['jeju']);
 
     // 목록 끝에 닿음 → 다음 장 요청. onEndReached 배선을 지우면 p6 가 안 와 red 가 된다(뮤테이션 심판).
     fireEvent(screen.getByTestId('explore-places-grid'), 'endReached');
@@ -582,6 +628,9 @@ describe('P-8 · 모두 보기는 커서로 이어 받는다 (무한 스크롤 �
     expect(new URL(hits[hits.length - 1].url).searchParams.get('cursor')).toBe(
       'CURSOR_2'
     );
+    // 이어받기 요청도 같은 한 곳이고, 단일 지역 경로엔 부분 실패 배너가 없다.
+    expect(regionsOf(hits)).toEqual(['jeju', 'jeju']);
+    expect(screen.queryByTestId('explore-places-partialfailure')).toBeNull();
   });
 });
 
@@ -616,7 +665,7 @@ describe('P-9 · 다지역이면 지역별로 조회해 한 목록에 합쳐 그
     await renderPage();
 
     // ① fan-out — 지역당 정확히 1회씩, 총 2회. 다지역인데 usePlacesInfinite 가 enabled 게이팅이
-    //    깨져 전국을 헛조회하면 3회, regions.map 이 둘째 지역을 빠뜨리면 1회가 되어 둘 다 red.
+    //    깨져 단일 조회가 하나 더 나가면 3회, regions.map 이 둘째 지역을 빠뜨리면 1회가 되어 둘 다 red.
     const hits = hitsOf('GET', '/api/v1/places');
     expect(hits).toHaveLength(2);
 
@@ -629,10 +678,11 @@ describe('P-9 · 다지역이면 지역별로 조회해 한 목록에 합쳐 그
 
     // ③ 병합 결과 — 부산 2곳 + 경주 2곳이 한 목록에 함께 뜬다(입력 순서 보존 = 부산 먼저).
     //    둘째 지역 누락 뮤턴트면 경주 카드(g1·g2)가 없어 red.
+    //    TRIP-1563: d04 는 시드를 들고 있어 지역을 번갈아 놓는다(부산1·경주1·부산2·경주2) — 지역 블록이 아니다.
     expect(cardTestIds()).toEqual([
       'explore-places-card-b1',
-      'explore-places-card-b2',
       'explore-places-card-g1',
+      'explore-places-card-b2',
       'explore-places-card-g2',
     ]);
 
@@ -763,6 +813,328 @@ describe('P-11 · 다지역 부분 실패면 degraded 배너를 얹고 다시 �
     await waitFor(() =>
       expect(hitsOf('GET', '/api/v1/places')).toHaveLength(4)
     );
+  });
+});
+
+describe('P-16 · 지역을 안 고르면 서비스 지역(서울·부산·제주)별로 조회한다 (TRIP-1560 · AC-1 · AC-4)', () => {
+  // 기본 핸들러는 region 을 안 보고 같은 5장을 주고 병합이 poiId 중복을 거른다 — 그래서 카드만 봐서는 전국
+  // 조회와 서비스 지역 조회가 구분되지 않는다. 지역별로 **다른** 장소를 주는 핸들러를 걸어(P-9 선례),
+  // 요청 URL(region)과 "세 지역 결과가 한 목록에 섞인다"를 함께 본다. region 이 없는 요청(전국 누수)은 기본 5장을 받는다 —
+  // 빈 응답이면 카드 대기 타임아웃으로 죽어 원인이 안 보이므로, 누수가 요청 수·region 단언에서 선명히 red 가 나게 한다.
+  const SEOUL: Place[] = [
+    makePlace('s1', '경복궁', '명소', '서울', 50),
+    makePlace('s2', '남산타워', '야경', '서울', 40),
+  ];
+  const BUSAN: Place[] = [makePlace('b1', '감천문화마을', '명소', '부산', 12)];
+  const JEJU: Place[] = [makePlace('j1', '성산일출봉', '명소', '제주', 60)];
+
+  /** 지역별 응답 — `failing` 에 든 지역은 500. region 없는 요청(전국 누수)은 기본 5장 — 요청 수·region 단언이 잡는다. */
+  function useRegionResponder(failing: string[] = []) {
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const region = new URL(request.url).searchParams.get('region');
+        if (region !== null && failing.includes(region))
+          return new HttpResponse(null, { status: 500 });
+        const items =
+          region === '서울'
+            ? SEOUL
+            : region === '부산'
+              ? BUSAN
+              : region === '제주'
+                ? JEJU
+                : PLACES;
+        return HttpResponse.json({ items, nextCursor: null });
+      })
+    );
+  }
+
+  it('서비스 지역 상수의 앞 셋은 서울·부산·제주다 (테스트 기대값의 앵커)', () => {
+    // 아래 케이스는 지역 이름을 SERVICE_REGIONS 에서 파생한다 — 제품 결정(3지역)이 바뀌면 여기서 먼저 red 가 난다.
+    expect(SERVICE_REGION_NAMES.slice(0, 3)).toEqual(['서울', '부산', '제주']);
+  });
+
+  it('region 이 없는 요청은 0회이고 지역마다 한 번씩 나가며, 세 지역 장소가 한 목록에 섞여 뜬다 (AC-1)', async () => {
+    setAccessToken('valid-access');
+    useRegionResponder();
+
+    await renderPage();
+
+    // ① 요청 — 지역당 정확히 1회(총 WAVE), 서울·부산·제주 각각. region 없는 전국 조회가 새면 null 이 섞여 red.
+    const hits = hitsOf('GET', '/api/v1/places');
+    expect(hits).toHaveLength(WAVE);
+    expectWaveCoversServiceRegions(hits);
+    expect(regionsOf(hits)).not.toContain(null);
+
+    // ② 결과 — 세 지역 장소가 지역을 번갈아(서울1·부산1·제주1·서울2) 한 목록에 있다(응답 도착 순서가 아니라 입력 순서 기준).
+    //    TRIP-1563: 시드가 있는 d04 는 지역 블록(s1,s2,b1,j1)이 아니라 라운드 로빈이다.
+    expect(cardTestIds()).toEqual([
+      'explore-places-card-s1',
+      'explore-places-card-b1',
+      'explore-places-card-j1',
+      'explore-places-card-s2',
+    ]);
+    // 전부 성공이면 부분 실패 배너가 없다.
+    expect(screen.queryByTestId('explore-places-partialfailure')).toBeNull();
+    expect(screen.queryByTestId('explore-places-error')).toBeNull();
+  });
+
+  it('카테고리 칩·검색어를 걸어도 그 필터를 실은 채 서비스 지역별로 나간다 (AC-1)', async () => {
+    setAccessToken('valid-access');
+    useRegionResponder();
+    await renderPage();
+
+    fireEvent.press(screen.getByTestId('explore-places-category-food'));
+    await waitFor(() =>
+      expect(hitsOf('GET', '/api/v1/places')).toHaveLength(2 * WAVE)
+    );
+    const categoryWave = hitsOf('GET', '/api/v1/places').slice(WAVE, 2 * WAVE);
+    expectWaveCoversServiceRegions(categoryWave);
+    categoryWave.forEach((hit) => {
+      const params = new URL(hit.url).searchParams;
+      expect({ category: params.get('category'), q: params.get('q') }).toEqual({
+        category: '맛집',
+        q: null,
+      });
+    });
+
+    fireEvent.changeText(screen.getByTestId('explore-places-search'), '해변');
+    await waitFor(() =>
+      expect(hitsOf('GET', '/api/v1/places')).toHaveLength(3 * WAVE)
+    );
+    const searchWave = hitsOf('GET', '/api/v1/places').slice(2 * WAVE);
+    expectWaveCoversServiceRegions(searchWave);
+    searchWave.forEach((hit) => {
+      const params = new URL(hit.url).searchParams;
+      expect({ category: params.get('category'), q: params.get('q') }).toEqual({
+        category: '맛집',
+        q: '해변',
+      });
+    });
+
+    // 어느 파도에서도 region 없는 요청이 나가지 않았다.
+    expect(regionsOf(hitsOf('GET', '/api/v1/places'))).not.toContain(null);
+  });
+
+  it('세 지역 중 한 곳만 실패하면 받은 지역 카드 위에 부분 실패 배너가 얹히고, 다시 시도가 서비스 지역 전부를 재조회한다 (AC-4)', async () => {
+    setAccessToken('valid-access');
+    useRegionResponder(['부산']);
+
+    render(<PlaceExplorePage />, { wrapper: createGcZeroWrapper() });
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('explore-places-partialfailure')
+      ).toBeOnTheScreen()
+    );
+    // 받은 두 지역(서울·제주)은 그대로 뜨고, 실패한 부산은 없다 — error 얼굴이 아니라 배너다.
+    // TRIP-1563: 살아남은 서울·제주도 번갈아 놓인다(서울1·제주1·서울2).
+    expect(cardTestIds()).toEqual([
+      'explore-places-card-s1',
+      'explore-places-card-j1',
+      'explore-places-card-s2',
+    ]);
+    expect(screen.queryByTestId('explore-places-error')).toBeNull();
+    // 앵커 — 누르기 전엔 첫 파도뿐이다(아래 증분이 재요청임을 보장).
+    expect(hitsOf('GET', '/api/v1/places')).toHaveLength(WAVE);
+
+    fireEvent.press(screen.getByTestId('explore-places-partialfailure-retry'));
+
+    // 재조회는 성공한 지역까지 포함한 전부 — 실패한 한 곳만 다시 묻는 구현이면 증분이 1 이라 red.
+    await waitFor(() =>
+      expect(hitsOf('GET', '/api/v1/places')).toHaveLength(2 * WAVE)
+    );
+    expectWaveCoversServiceRegions(hitsOf('GET', '/api/v1/places').slice(WAVE));
+  });
+});
+
+describe('P-17 · 진입마다 새 시드로 무작위 순서를 묻는다 (TRIP-1563)', () => {
+  // 개념: **시드(seed)** 는 "섞는 방법을 정하는 번호표"다. 같은 번호표면 서버가 늘 같은 순서를, 바꾸면 다른 순서를 준다.
+  // 이 describe 가 보증하는 것은 "올바른 번호표를 모든 요청에 싣는다"까지다 — 실제로 섞여 보이는지는 서버 테스트와 6-b 몫이다.
+  const queryOf = (hit: { url: string }) => new URL(hit.url).searchParams;
+  const allPlaceHits = () => hitsOf('GET', '/api/v1/places');
+
+  /** 이 요청들이 전부 order=random 과 규칙에 맞는 seed 를 실었다. */
+  function expectRandomWithSeed(hits: { url: string }[]): void {
+    expect(hits.length).toBeGreaterThan(0);
+    hits.forEach((hit) => {
+      expect(queryOf(hit).get('order')).toBe('random');
+      expect(queryOf(hit).get('seed')).toMatch(SEED_PATTERN);
+    });
+  }
+
+  /** 위에 더해 요청들이 **같은 하나의** seed 를 썼다 — 그 seed 를 돌려준다. */
+  function expectOneSharedSeed(hits: { url: string }[]): string {
+    expectRandomWithSeed(hits);
+    const seeds = new Set(hits.map((hit) => queryOf(hit).get('seed')));
+    expect([...seeds]).toHaveLength(1);
+    return [...seeds][0] as string;
+  }
+
+  it('지역이 한 곳이면 첫 조회가 order=random 과 규칙에 맞는 seed 를 싣는다 (AC-1)', async () => {
+    setAccessToken('valid-access');
+    mockParams = { region: 'jeju' };
+
+    await renderPage();
+
+    const hits = allPlaceHits();
+    expect(hits).toHaveLength(1);
+    expectRandomWithSeed(hits);
+  });
+
+  it.each<[string, Record<string, string | string[]>, number]>([
+    ['지역 미지정(서비스 지역 전부)', {}, WAVE],
+    ['지역 2곳', { region: ['부산광역시', '경주시'] }, 2],
+  ])(
+    '%s 이면 지역별 요청 전부가 같은 order=random&seed 를 싣는다 (AC-2)',
+    async (_label, routeParams, expectedRequests) => {
+      setAccessToken('valid-access');
+      mockParams = routeParams;
+
+      await renderPage();
+
+      const hits = allPlaceHits();
+      expect(hits).toHaveLength(expectedRequests);
+      expectOneSharedSeed(hits);
+    }
+  );
+
+  it.each<[string, Record<string, string>, number]>([
+    ['지역 한 곳', { region: 'jeju' }, 1],
+    ['지역 미지정', {}, WAVE],
+  ])(
+    '%s: 닫았다 다시 들어오면 새 seed 로 서버에 새로 묻는다 — 지난 진입의 캐시를 읽지 않는다 (AC-3 · AC-7)',
+    async (_label, routeParams, perEntry) => {
+      setAccessToken('valid-access');
+      mockParams = routeParams;
+      // 캐시를 오래 들고 stale 도 되지 않는 클라이언트 — gcTime 0 래퍼로는 "지난 캐시를 읽는 사고"가 안 보인다.
+      const client = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false, gcTime: Infinity, staleTime: Infinity },
+          mutations: { retry: false, gcTime: Infinity },
+        },
+      });
+      const wrapper = createWrapper(client);
+
+      const firstEntry = render(<PlaceExplorePage />, { wrapper });
+      await waitFor(() =>
+        expect(
+          screen.getAllByTestId(/^explore-places-card-/).length
+        ).toBeGreaterThan(0)
+      );
+      const firstSeed = expectOneSharedSeed(allPlaceHits());
+      expect(allPlaceHits()).toHaveLength(perEntry);
+      firstEntry.unmount();
+
+      render(<PlaceExplorePage />, { wrapper });
+
+      // 두 번째 진입은 요청이 새로 나가 누계가 정확히 2배가 된다(캐시 히트면 그대로라 여기서 시간 초과로 red).
+      await waitFor(() => expect(allPlaceHits()).toHaveLength(2 * perEntry));
+      const secondSeed = expectOneSharedSeed(allPlaceHits().slice(perEntry));
+      expect(secondSeed).not.toBe(firstSeed);
+      client.clear();
+    }
+  );
+
+  it('지역 한 곳에서 다음 장을 이어 받을 때 cursor 와 함께 첫 장과 같은 seed·order 를 싣고, 카드는 중복이 없다 (AC-4)', async () => {
+    setAccessToken('valid-access');
+    mockParams = { region: 'jeju' };
+    const PAGE2 = [makePlace('p6', '태종대', '명소', '영도구', 5)];
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const cursor = new URL(request.url).searchParams.get('cursor');
+        return cursor
+          ? HttpResponse.json({ items: PAGE2, nextCursor: null })
+          : HttpResponse.json({ items: PLACES, nextCursor: 'CURSOR_2' });
+      })
+    );
+    await renderPage();
+
+    fireEvent(screen.getByTestId('explore-places-grid'), 'endReached');
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-places-card-p6')).toBeOnTheScreen()
+    );
+
+    const hits = allPlaceHits();
+    expect(hits).toHaveLength(2);
+    expect(queryOf(hits[0]).get('cursor')).toBeNull();
+    expect(queryOf(hits[1]).get('cursor')).toBe('CURSOR_2');
+    expectOneSharedSeed(hits);
+    const cards = cardTestIds();
+    expect(cards).toHaveLength(6);
+    expect(new Set(cards).size).toBe(6);
+  });
+
+  it('지역 미지정에서 카테고리 칩·검색어를 바꿔도 새 요청 전부가 같은 seed 를 쓴다 (AC-5)', async () => {
+    setAccessToken('valid-access');
+    await renderPage();
+
+    fireEvent.press(screen.getByTestId('explore-places-category-food'));
+    await waitFor(() => expect(allPlaceHits()).toHaveLength(2 * WAVE));
+    fireEvent.changeText(screen.getByTestId('explore-places-search'), '해변');
+    await waitFor(() => expect(allPlaceHits()).toHaveLength(3 * WAVE));
+
+    // 세 파도(첫 조회 · 칩 · 검색어) 전체가 하나의 번호표를 쓴다.
+    expectOneSharedSeed(allPlaceHits());
+  });
+
+  it('부분 실패 배너의 다시 시도도 같은 seed 로 재조회한다 — 실패 후 재시도에 목록이 뒤바뀌지 않는다 (AC-5)', async () => {
+    setAccessToken('valid-access');
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const region = new URL(request.url).searchParams.get('region');
+        return region === SERVICE_REGION_NAMES[1]
+          ? new HttpResponse(null, { status: 500 })
+          : HttpResponse.json({ items: PLACES, nextCursor: null });
+      })
+    );
+    render(<PlaceExplorePage />, { wrapper: createGcZeroWrapper() });
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('explore-places-partialfailure')
+      ).toBeOnTheScreen()
+    );
+
+    fireEvent.press(screen.getByTestId('explore-places-partialfailure-retry'));
+    await waitFor(() => expect(allPlaceHits()).toHaveLength(2 * WAVE));
+
+    expectOneSharedSeed(allPlaceHits());
+  });
+
+  it('지역 한 곳에서도 칩·검색어를 바꾸면 같은 seed 를 쓴다 (AC-5)', async () => {
+    setAccessToken('valid-access');
+    mockParams = { region: 'jeju' };
+    await renderPage();
+
+    fireEvent.press(screen.getByTestId('explore-places-category-food'));
+    await waitFor(() => expect(allPlaceHits()).toHaveLength(2));
+    fireEvent.changeText(screen.getByTestId('explore-places-search'), '해변');
+    await waitFor(() => expect(allPlaceHits()).toHaveLength(3));
+
+    expectOneSharedSeed(allPlaceHits());
+  });
+
+  it('같은 화면 인스턴스에서 지역만 바뀌어도(지역 바꾸기) seed 는 그대로다 (AC-6)', async () => {
+    setAccessToken('valid-access');
+    const { rerender } = render(<PlaceExplorePage />, {
+      wrapper: createGcZeroWrapper(),
+    });
+    await waitFor(() =>
+      expect(
+        screen.getAllByTestId(/^explore-places-card-/).length
+      ).toBeGreaterThan(0)
+    );
+    const enterSeed = expectOneSharedSeed(allPlaceHits());
+    expect(allPlaceHits()).toHaveLength(WAVE);
+
+    // dismissTo 로 기존 d04 가 앞으로 당겨지며 라우트 파라미터만 바뀌는 상황 — 새 마운트가 아니다.
+    mockParams = { region: 'jeju' };
+    rerender(<PlaceExplorePage />);
+    await waitFor(() => expect(allPlaceHits()).toHaveLength(WAVE + 1));
+
+    const afterChange = allPlaceHits()[WAVE];
+    expect(queryOf(afterChange).get('region')).toBe('jeju');
+    expect(queryOf(afterChange).get('seed')).toBe(enterSeed);
+    expect(queryOf(afterChange).get('order')).toBe('random');
   });
 });
 
@@ -916,23 +1288,22 @@ describe('🔒 1093 AC-4 · 위저드 출처 d04 의 하트는 담기만 한다 
 });
 
 // ── TRIP-1023 칸 B #026 · d04 지역 칩(결정5 · Seed Q4·Q5·Q6) ─────────────────────────────────
-// 라벨은 라우트 `region` 을 배열로 편 값에서 나온다(없음 → "전국", 한 곳 → 이름, 여러 곳 → "{첫} 외 N곳").
+// 라벨은 라우트 `region` 을 배열로 편 값에서 나온다(없음 → "전체 지역", 한 곳 → 이름, 여러 곳 → "{첫} 외 N곳").
 // 칩 목적지는 어디서 왔든 같다 — 지역 선택 places(Seed Q6). 기대 URL 은 **헬퍼 출력**
 // (`regionPickerHref('places')`)으로만 적는다 — 테스트가 철자를 손으로 적으면 헬퍼·수신자 철자가 틀려도
 // green 이 된다(TRIP-985 규약). 복귀 시 다지역·`from` 파라미터 소실은 Seed Q6 가 새 티켓 후보로 넘겼다
 // (jest 가 원리적으로 못 보는 `dismissTo` 교체 — traps-explore).
 
 describe('🔴 1023-B #026 · 지역 칩 라벨은 라우트 region 에서 나온다 (AC-B5 · AC-B6 · AC-B10)', () => {
-  it('region 이 없으면(탐색 탭·홈 "장소 더 보기") 칩이 "전국" 이다', async () => {
+  it('region 이 없으면(탐색 탭·홈 "장소 더 보기") 칩이 "전체 지역" 이고 "전국" 은 없다 (TRIP-1560 AC-2)', async () => {
     await renderPage();
 
-    // 앵커 — 전국 조회였다(region 파라미터 없음).
-    expect(
-      new URL(hitsOf('GET', '/api/v1/places')[0].url).searchParams.get('region')
-    ).toBeNull();
-    expect(
-      within(screen.getByTestId('explore-places-region')).getByText('전국')
-    ).toBeOnTheScreen();
+    // 앵커 — 조회도 전국이 아니라 서비스 지역별이다(칩 문구와 실제 조회 범위가 같은 말을 한다).
+    expectWaveCoversServiceRegions(hitsOf('GET', '/api/v1/places'));
+    const chip = screen.getByTestId('explore-places-region');
+    // 긍정 앵커를 먼저 — 칩이 실제로 그려졌고 새 라벨이 떠 있다. 이게 있어야 아래 "전국 없음"이 공허하지 않다.
+    expect(within(chip).getByText('전체 지역')).toBeOnTheScreen();
+    expect(within(chip).queryByText('전국')).toBeNull();
   });
 
   it('region 이 한 곳이면 그 이름(피커가 싣는 한글 이름 그대로)이 라벨이다', async () => {
@@ -942,7 +1313,7 @@ describe('🔴 1023-B #026 · 지역 칩 라벨은 라우트 region 에서 나�
 
     const chip = screen.getByTestId('explore-places-region');
     expect(within(chip).getByText('강릉시')).toBeOnTheScreen();
-    expect(within(chip).queryByText('전국')).toBeNull();
+    expect(within(chip).queryByText('전체 지역')).toBeNull();
   });
 
   it('region 이 여러 곳(더 담기)이면 "{첫 지역} 외 N곳" 이다', async () => {
@@ -973,7 +1344,7 @@ describe('🔴 1023-B #026 · 지역 칩 라벨은 라우트 region 에서 나�
 
 describe('🔴 1023-B #026 · 칩을 누르면 어디서 왔든 지역 선택(places)으로 간다 (AC-B7 · Seed Q6)', () => {
   it.each([
-    { name: '지역 없음(전국)', region: undefined, wizard: false },
+    { name: '지역 없음(전체 지역)', region: undefined, wizard: false },
     { name: '한 곳', region: '강릉시', wizard: false },
     { name: '다지역', region: ['부산광역시', '경주시'], wizard: false },
     { name: '위저드 출처(더 담기)', region: ['부산광역시'], wizard: true },
@@ -1183,14 +1554,16 @@ describe('상태·예외 배선 (S-1~S-12)', () => {
     });
   });
 
-  describe('S-4 · 조회 실패의 재시도가 실제로 서버를 다시 부른다 (AC-7 · INV-4)', () => {
+  describe('S-4 · 조회 실패의 재시도가 실제로 서버를 다시 부른다 (AC-7 · INV-4 · TRIP-1560 AC-5)', () => {
     it('에러 안내가 뜨고, 다시 시도를 누르면 재조회해 목록이 온다', async () => {
       setAccessToken('valid-access');
+      // 지역 미지정 첫 조회는 서비스 지역별 WAVE 요청이다 — 한 곳만 실패하면 부분 실패(배너)라 error 얼굴이
+      // 안 뜬다. "전부 실패"를 만들려고 첫 파도(WAVE 번째까지)를 모두 500 으로 한다(INV-4: 전부 실패 = error).
       let attempts = 0;
       server.use(
         http.get(`${BASE}/places`, () => {
           attempts += 1;
-          return attempts === 1
+          return attempts <= WAVE
             ? new HttpResponse(null, { status: 500 })
             : HttpResponse.json({ items: PLACES, nextCursor: null });
         })
@@ -1201,13 +1574,20 @@ describe('상태·예외 배선 (S-1~S-12)', () => {
       await waitFor(() =>
         expect(screen.getByTestId('explore-places-error')).toBeOnTheScreen()
       );
-      // 빈 목록으로 위장하면 위반이다(INV-4).
+      // 빈 목록으로 위장하면 위반이다(INV-4). 배너(부분 실패)와도 섞이지 않는다.
       expect(cardTestIdsOrNone()).toEqual([]);
+      expect(screen.queryByTestId('explore-places-partialfailure')).toBeNull();
+      // 앵커 — 실패한 파도는 지역별로 정확히 WAVE 건이었다(재시도 증분을 가르는 기준선).
+      expect(hitsOf('GET', '/api/v1/places')).toHaveLength(WAVE);
 
       fireEvent.press(screen.getByTestId('explore-places-error-retry'));
 
+      // 다시 시도 = 서비스 지역 전부 재조회(새 파도 WAVE 건) — 한 곳만 다시 묻는 구현이면 red.
       await waitFor(() =>
-        expect(hitsOf('GET', '/api/v1/places')).toHaveLength(2)
+        expect(hitsOf('GET', '/api/v1/places')).toHaveLength(2 * WAVE)
+      );
+      expectWaveCoversServiceRegions(
+        hitsOf('GET', '/api/v1/places').slice(WAVE)
       );
       // 재조회 결과가 화면에 닿았다 — 히트수만 보면 "부르고 버리는" 구현도 통과한다.
       await waitFor(() => expect(cardTestIdsOrNone()).toHaveLength(5));

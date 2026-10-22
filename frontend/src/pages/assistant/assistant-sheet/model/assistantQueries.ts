@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from 'react';
 import {
+  skipToken,
   useMutation,
   useQuery,
   useQueryClient,
@@ -38,6 +40,36 @@ export function appendMessages(
 ): AssistantMessage[] {
   const seen = new Set(current.map((message) => message.id));
   return [...current, ...incoming.filter((message) => !seen.has(message.id))];
+}
+
+/**
+ * 재조회 합치기 — 새 id 는 뒤에 붙이고, 겹치는 id 는 **`proposal` 칸만** 응답값으로 바꾼다(서버가 옮긴 제안 상태 반영).
+ * 응답 `proposal` 이 없으면 캐시를 둔다. 평가·문장 등 다른 칸은 캐시 그대로(낙관 갱신 보호).
+ * 한 번 결정된 제안(PROPOSED 가 아닌 상태)은 응답의 PROPOSED 로 되돌리지 않는다 — [적용] 보다 먼저 떠난
+ * 재조회의 옛 스냅샷이 늦게 도착해 APPLIED 를 PROPOSED 로 되감던 경쟁(5-b W-2).
+ */
+function mergeReopened(
+  current: readonly AssistantMessage[],
+  incoming: readonly AssistantMessage[]
+): AssistantMessage[] {
+  const fresh = new Map(incoming.map((message) => [message.id, message]));
+  const refreshed = current.map((message) => {
+    const proposal = fresh.get(message.id)?.proposal;
+    if (!proposal) return message;
+    const decided = message.proposal && message.proposal.status !== 'PROPOSED';
+    if (decided && proposal.status === 'PROPOSED') return message;
+    return { ...message, proposal };
+  });
+  return appendMessages(refreshed, incoming);
+}
+
+/** 옛 쪽 전체를 앞에 붙인다. 이미 캐시에 있는 id 는 **기존 것**을 둔다(낙관 갱신된 평가·제안 상태를 옛 값으로 되돌리지 않는다). */
+export function prependMessages(
+  older: readonly AssistantMessage[],
+  current: readonly AssistantMessage[]
+): AssistantMessage[] {
+  const seen = new Set(current.map((message) => message.id));
+  return [...older.filter((message) => !seen.has(message.id)), ...current];
 }
 
 function appendToCache(
@@ -81,9 +113,19 @@ export function useAssistantSession(tripId: string | null) {
     queryKey: assistantKeys.session(tripId),
     queryFn: async () => {
       const response = await assistantPort().openSession({ tripId });
+      // 캐시가 이미 있으면(옛 쪽을 붙여 둔 뒤 재조회) 합친다 — 통째로 덮으면 붙인 옛 메시지와 낙관 갱신이 사라진다.
       queryClient.setQueryData<MessagesPage>(
         assistantKeys.messages(response.session.id),
-        { messages: response.messages, nextBefore: null }
+        (page) =>
+          page
+            ? {
+                ...page,
+                messages: mergeReopened(page.messages, response.messages),
+              }
+            : {
+                messages: response.messages,
+                nextBefore: response.nextBefore ?? null,
+              }
       );
       return response;
     },
@@ -99,6 +141,71 @@ export function useAssistantMessages(sessionId: string | undefined) {
     // 세션 열기가 씨를 뿌린 캐시가 정본이다 — 화면이 다시 붙을 때마다 다시 묻지 않는다.
     staleTime: Infinity,
   });
+}
+
+export type OlderStatus = 'idle' | 'loading' | 'error';
+
+/**
+ * 이전 대화 더 보기. 캐시의 `nextBefore`(서버가 준 불투명 커서)를 그대로 `before` 로 보내고, 응답은 **도착
+ * 시점의 최신 캐시** 앞에 붙인다(그 사이 온 턴 응답을 지우지 않는다). 진행 중 재호출은 ref 로 막는다 —
+ * state 는 렌더 사이에만 갱신돼 같은 틱의 두 번째 호출을 못 막는다. 실패하면 캐시는 그대로, 다시 부르면 같은 커서.
+ */
+export function useLoadOlderMessages(sessionId: string | undefined): {
+  hasMore: boolean;
+  status: OlderStatus;
+  loadOlder: () => void;
+} {
+  const queryClient = useQueryClient();
+  const key = assistantKeys.messages(sessionId ?? '');
+  // skipToken: 캐시를 구독만 하고 조회는 하지 않는다(씨는 세션 열기가 뿌린다).
+  const { data } = useQuery<MessagesPage>({
+    queryKey: key,
+    queryFn: skipToken,
+  });
+  const [status, setStatus] = useState<OlderStatus>('idle');
+  const busy = useRef(false);
+  const current = useRef(sessionId);
+  const hasMore = typeof data?.nextBefore === 'string';
+
+  // 같은 Page 인스턴스에서 세션이 바뀌면(이력 → router.replace) 진행 표식·상태를 새로 시작한다(03b N1).
+  useEffect(() => {
+    current.current = sessionId;
+    busy.current = false;
+    setStatus('idle');
+  }, [sessionId]);
+
+  function loadOlder(): void {
+    if (!sessionId || busy.current) return;
+    const before = queryClient.getQueryData<MessagesPage>(key)?.nextBefore;
+    if (typeof before !== 'string') return;
+    busy.current = true;
+    setStatus('loading');
+    assistantPort()
+      .getMessages(sessionId, { before })
+      .then(
+        (older) => {
+          // 캐시가 그새 지워졌으면(이력 지우기) 새로 심지 않는다(03b W1).
+          queryClient.setQueryData<MessagesPage>(
+            key,
+            (page) =>
+              page && {
+                messages: prependMessages(older.messages, page.messages),
+                nextBefore: older.nextBefore ?? null,
+              }
+          );
+          if (current.current === sessionId) setStatus('idle');
+        },
+        () => {
+          if (current.current === sessionId) setStatus('error');
+        }
+      )
+      .finally(() => {
+        // 세션이 바뀐 뒤 늦게 끝난 이전 요청이 새 세션의 진행 표식을 풀지 않게 한다.
+        if (current.current === sessionId) busy.current = false;
+      });
+  }
+
+  return { hasMore, status, loadOlder };
 }
 
 export function useAssistantSessions() {
@@ -240,12 +347,9 @@ export interface FeedbackVariables {
 /**
  * 답 평가 남기기·바꾸기·취소(US-ASSIST-09). 메시지 캐시의 `feedback` 을 **응답 전에** 고치고(낙관), 실패하면
  * 누르기 전 값으로 되돌린다 — 안내는 부르는 쪽 몫(침묵 실패 금지). 성공하면 서버 값(PUT 응답의 rating, 취소는
- * null)으로 다시 맞춘다 — 응답 전에 세션 재조회(`useAssistantSession` queryFn)가 같은 캐시를 통째로 덮어 낙관 값이
- * 지워져도 서버 값으로 돌아온다. 이유·의견은 캐시에 싣지 않는다(메시지 응답에 없는 칸).
+ * null)으로 다시 맞춘다. 세션 재조회(`useAssistantSession` queryFn)는 캐시에 있는 메시지를 덮지 않고 새 것만 붙이므로
+ * 낙관 값이 재조회에 지워지지 않는다. 이유·의견은 캐시에 싣지 않는다(메시지 응답에 없는 칸).
  * 같은 메시지에 요청이 겹치면 되돌릴 값이 꼬인다 — 부르는 쪽이 메시지마다 하나씩만 보낸다(`useAnswerFeedback`).
- *
- * ponytail: 재조회가 평가 저장 **전에** 읽고 평가 응답보다 **늦게** 도착하면 낡은 값이 남는다 — 다음 재조회가 고친다.
- * 실제로 보이면 세션 queryFn 이 그동안 평가가 오간 메시지의 `feedback` 을 덮지 않게 한다.
  */
 export function useMessageFeedback(sessionId: string | undefined) {
   const queryClient = useQueryClient();

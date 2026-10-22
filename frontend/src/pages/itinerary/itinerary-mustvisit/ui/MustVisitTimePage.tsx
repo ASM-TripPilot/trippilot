@@ -226,6 +226,7 @@ export function MustVisitTimePage({
       placeName={place?.nameKo ?? null}
       region={place?.region ?? null}
       imageUrl={place?.imageUrl ?? null}
+      category={place?.category}
       dayChips={dayChips}
       startOptions={startTimeOptions()}
       form={form}

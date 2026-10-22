@@ -301,9 +301,10 @@ class ItineraryProblem:
     "꼭 숙소 근처만 있지 않아도 돼, 숙소로 다시 돌아오면 되지"). 재계획은 앵커가 지금 위치라 False.
     holidays: 특일 달력(날짜 → 그 날 태그, 상황 감지 H1). 진입점이 요청당 1회 조회해 싣고, 조립·검증은
     `poi.open_windows_on` 으로만 읽는다(조립 루프는 I/O 를 타지 않는다). 기본 None = `HOLIDAY_CLOSURE_MODE=off`
-    — 공휴일 규칙 없음(기존 생성자 호출 전부 무영향). **빈 매핑은 None 이 아니다** — 모드는 켜졌는데 달력을
-    못 읽은 것이라 날짜 명시형 규칙("1월 1일 휴관")은 산다. 조립 체인의 최종 HC 검증과 validate 가 같은
-    값을 봐야 한다 — 아니면 조립이 둔 해를 검증이 거부한다.
+    — 공휴일 규칙 없음(기존 생성자 호출 전부 무영향). **빈 매핑은 None 이 아니다** — 모드는 켜졌는데 그 범위에
+    공휴일이 없거나 달력을 못 읽은 것이라 날짜 명시형 규칙("1월 1일 휴관")은 산다. 둘은 정체로만 갈린다 — 못 읽은
+    것은 `poi.UNREAD_CALENDAR` 하나이고, 판정·조립은 같게 보며 검증의 미판정 보고(`hc1_unjudged`)만 다르다(G-SA-22).
+    조립 체인의 최종 HC 검증과 validate 가 같은 값을 봐야 한다 — 아니면 조립이 둔 해를 검증이 거부한다.
     """
 
     schedule_id: ScheduleId
@@ -399,7 +400,8 @@ class ItineraryProblem:
                 if self.event_bonus is not None
                 else None
             ),
-            # 빈 매핑({})과 None 은 뜻이 다르다(달력 실패 ≠ 모드 off) — 둘을 구분해 싣는다
+            # 빈 매핑({})과 None 은 뜻이 다르다(모드 on ≠ 모드 off) — 둘을 구분해 싣는다. 빈 매핑은 그 범위에 공휴일이
+            # 없거나 달력을 못 읽은 것이고, 못 읽은 정체(`UNREAD_CALENDAR`)는 왕복하지 않는다(성공한 빈 달력으로 돌아온다)
             "holidays": (
                 {d.isoformat(): sorted(self.holidays[d]) for d in sorted(self.holidays)}
                 if self.holidays is not None

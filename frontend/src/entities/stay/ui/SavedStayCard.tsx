@@ -1,12 +1,15 @@
 import type { ReactElement, ReactNode } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+
+import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 
 /**
  * TRIP-807 · AC-4 — 저장 숙소 degrade 카드(e04 세로 · g02 시트 행 공용). props-only.
  *
  * **degrade 카드 = 계약 공백을 정직하게 비운다** — `SavedStay` 계약에 사진 URL·지역·거리·가격이
- * 없어 카드는 이름 + `subtitle` 슬롯(날짜)만 그린다(가격·거리·₩ 발명 0 · INV-1). 사진은 회색 자리.
+ * 없어 카드는 이름 + `subtitle` 슬롯(날짜)만 그린다(가격·거리·₩ 발명 0 · INV-1). 사진 칸은 `coverKey`(숙소 키)로
+ * 고른 일반 숙소 그림(`PlacePhoto` `category="숙소"`, TRIP-1588).
  *
  * 하트는 카드가 소유하지 않는다(하트 불가지) — e04 항상채움 하트·g02 선택 체크를 소비처가
  * `trailing` 슬롯으로 주입한다. 그래서 카드에 fill 토글 상태가 없고, 담김 표식은 색이 아니라
@@ -28,9 +31,11 @@ export interface SavedStayCardProps {
   selected?: boolean;
   layout: 'vertical' | 'row';
   onPress?: () => void;
-  /** 사진 URL — **row(g02) 전용**. 지정 시 <Image>(56×56 r12 cover), 미지정 시 회색 placeholder.
-   *  SavedStay 계약엔 없어(실측) 실데이터는 항상 미지정 → 회색 자리(INV-1, 값은 프리뷰만). */
+  /** 사진 URL — **row(g02) 전용**. 지정 시 그 사진(56×56 r12 cover), 미지정 시 `coverKey` 의 숙소 그림.
+   *  SavedStay 계약엔 없어(실측) 실데이터는 항상 미지정 → 숙소 그림(INV-1, 값은 프리뷰만). */
   imageUrl?: string;
+  /** 사진 칸 그림을 고르는 숙소 키 — 외부 키가 있으면 `stayKey`, 없으면 `savedStayId`(소비처가 정한다, TRIP-1588). */
+  coverKey?: string;
   /** 동네(표시용 문자열) — row 서브라인 접두 · vertical(e04) 지역줄. 값 있을 때만 렌더(degrade). */
   region?: string;
   /** 가격(표시용 문자열 "145,000원~") — row 는 단일 Text, vertical(e04)은 2톤(금액 ink + "~" muted).
@@ -84,6 +89,7 @@ export function SavedStayCard({
   layout,
   onPress,
   imageUrl,
+  coverKey,
   region,
   priceLabel,
   isBase = false,
@@ -102,20 +108,15 @@ export function SavedStayCard({
             : 'border border-hairline-strong'
         }`}
       >
-        {/* 사진 — 지정 시 <Image>, 미지정 시 회색 placeholder(계약 공백, INV-1). */}
-        {imageUrl !== undefined ? (
-          <Image
-            testID={`${testID}-photo`}
-            source={{ uri: imageUrl }}
-            resizeMode="cover"
-            className="h-[56px] w-[56px] rounded-[12px]"
-          />
-        ) : (
-          <View
-            testID={`${testID}-photo-placeholder`}
-            className="h-[56px] w-[56px] rounded-[12px] bg-surface-strong"
-          />
-        )}
+        {/* 사진 — 지정 시 그 사진, 미지정이면 숙소 그림(계약 공백, INV-1 · TRIP-1588). */}
+        <PlacePhoto
+          testID={`${testID}-photo`}
+          imageUrl={imageUrl}
+          category="숙소"
+          poiId={coverKey}
+          contentFit="cover"
+          className="h-[56px] w-[56px] rounded-[12px] bg-surface-strong"
+        />
         <View className="flex-1 gap-[2px]">
           <Text className="font-noto-bold text-card-title font-bold text-ink">
             {name}
@@ -165,8 +166,15 @@ export function SavedStayCard({
       style={cardShadow}
       className="mb-lg rounded-[12px] border border-hairline bg-canvas"
     >
-      {/* 사진 자리 — 계약에 imageUrl 없음(INV-1), 회색 placeholder + 거점 배지·trailing 오버레이. */}
+      {/* 사진 자리 — 계약에 imageUrl 없음(INV-1), 숙소 그림 바닥 레이어 + 거점 배지·trailing 오버레이(TRIP-1588). */}
       <View className="h-[178px] w-full rounded-t-[12px] bg-surface-strong">
+        <PlacePhoto
+          testID={`${testID}-photo`}
+          category="숙소"
+          poiId={coverKey}
+          contentFit="cover"
+          className="absolute inset-0 rounded-t-[12px]"
+        />
         {isBase ? (
           <View
             testID={`${testID}-base-badge`}

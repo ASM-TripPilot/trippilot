@@ -6,7 +6,7 @@
  * 모른다(FSD 경계, 조회·배선은 `pages/stay/stay-detail/ui/StayDetailPage.tsx`가 진다. 구조 가드가
  * useState·라우터·query·타 feature import 0을 잠근다). ready 가 아닌 네 얼굴(로딩·404·400·네트워크)은
  * testID 로 갈리고 모두 뒤로 버튼을 갖는다. 재시도는 네트워크 오류에만 있다(INV-4, TRIP-940 Q2).
- * ready 얼굴: 사진 URL 필드가 없어 회색 자리(INV-1)·최저가(`formatPrice` 재사용, "· 1박" 없음 Q6)·
+ * ready 얼굴: 사진 URL 필드가 없어 `coverKey`(숙소 키)로 고른 숙소 그림(INV-1 · TRIP-1588)·최저가(`formatPrice` 재사용, "· 1박" 없음 Q6)·
  * 편의시설(결측→"미확인" BR-U1-18)·미니맵·주소/전화/객실(전화 null 은 줄째 비움, TRIP-940 Q1)·
  * 제휴 고지·CTA 2종·저장 하트. **몰입 화면 = 하단 탭바 없음**(AC-14, e02 검색화면과 대비).
  *
@@ -28,6 +28,7 @@ import type { StayDetail } from '@/shared/api/index.schemas';
 import { formatPrice } from '@/entities/stay';
 import { MapView } from '@/shared/map';
 import { heartSaveLabel } from '@/shared/ui/HeartButton';
+import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { resolveAmenityIcon } from '../config/amenityIcons';
 import {
   BackChevronGlyph,
@@ -50,6 +51,8 @@ export type StayDetailState =
 export interface StayDetailScreenProps {
   /** `GET /stays/{stayId}` 조회 결과(페이지가 판정한다). */
   state: StayDetailState;
+  /** 큰 사진 칸 그림 키 — 페이지가 `stayKey(detail)` 로 준다(목록 카드와 같은 그림, TRIP-1588). */
+  coverKey?: string;
   /** 담김 여부(AC-11) — 찬 하트 + selected. */
   saved: boolean;
   /** 담기/해제 요청 중이면 하트 disabled(연타 가드). 미지정=활성. */
@@ -155,6 +158,7 @@ function AmenityChip({
 
 export function StayDetailScreen({
   state,
+  coverKey,
   saved,
   pending = false,
   onToggleSave,
@@ -218,9 +222,12 @@ export function StayDetailScreen({
   return (
     <View testID="stay-detail-root" className="flex-1 bg-canvas">
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        {/* hero — 사진 URL 필드가 계약에 없어 회색 자리(INV-1). 버튼 오버레이는 ScrollView 밖(아래). */}
-        <View
+        {/* hero — 사진 URL 필드가 계약에 없어(INV-1) coverKey 로 고른 숙소 그림(TRIP-1588). 버튼 오버레이는 ScrollView 밖(아래). */}
+        <PlacePhoto
           testID="stay-detail-hero"
+          category="숙소"
+          poiId={coverKey}
+          contentFit="cover"
           className="h-[300px] w-full bg-surface-strong"
         />
 

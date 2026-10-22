@@ -2,6 +2,7 @@ package com.trippilot.trip.api
 
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 /**
@@ -68,6 +69,23 @@ data class TripGenerationContext(
  * 첫 목적지로 접힌다("서울 1박 + 인천 1박"이 서울 2박처럼 나왔다).
  */
 data class TripDestinationRef(val name: String, val regionCode: String?, val nights: Int)
+
+/**
+ * 계획일 [date] 가 어느 목적지의 날인가 — FE `regionForDay`(같이 짜기 "그날 여행지")와 **같은 규칙**.
+ * 목적지(seq 순 — [TripGenerationContext.destinationRefs] 가 이미 그 순서다)를 박수만큼 펼치고, 박수 합을 넘는 날(체크아웃일 포함)은
+ * 마지막 목적지다. 목적지가 없으면 null.
+ *
+ * 규칙의 정본이 여기 있는 이유: 박수([TripDestinationRef.nights])의 주인이 이 모듈이고, 일정 앵커·특보 판정·회고 재료가 모두 이 규칙을
+ * 쓴다 — 갈리면 화면이 "인천"이라 적은 날에 서울 일정·서울 회고가 나온다.
+ */
+fun List<TripDestinationRef>.destinationOn(startDate: LocalDate, date: LocalDate): TripDestinationRef? {
+    var remaining = ChronoUnit.DAYS.between(startDate, date) + 1
+    for (ref in this) {
+        if (remaining <= ref.nights) return ref
+        remaining -= ref.nights
+    }
+    return lastOrNull()
+}
 
 /** 필수 방문지(고정 블록 HC3 원천). ANYTIME이면 date/start/dwellMin null. */
 data class FixedVisit(val poiId: UUID, val date: LocalDate?, val start: LocalTime?, val dwellMin: Int?)

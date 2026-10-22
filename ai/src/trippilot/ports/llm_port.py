@@ -77,6 +77,9 @@ class LlmRequest:
     # 사고 깊이 (`C1Config.effort_for`) — None 이면 벤더에 안 싣는다(모델 기본값).
     # 받는 어댑터만 쓴다(Anthropic `output_config.effort`·OpenAI responses `reasoning.effort`), 나머지는 무시.
     effort: str | None = None
+    # 벤더 쪽 웹 검색 도구를 켠다(`C1Config.web_search_features`) — 우리 파드는 밖으로 나가지 않고 벤더가 찾는다.
+    # 못 켜는 어댑터는 LlmUnsupportedError(조용히 끄면 모델이 기억으로 지어낸 값을 "찾은 값"으로 믿는다).
+    web_search: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +92,8 @@ class LlmResponse:
     # 벤더 종료 사유가 "출력 상한 도달"인가 — 잘린 JSON 을 parse_error 와 갈라 보이게 한다.
     # 후미 기본값이라 종료 사유를 모르는 어댑터·fake 는 무영향.
     truncated: bool = False
+    # 웹 검색 응답이 실제로 인용한 URL(벤더 annotation) — 웹 검색 기능의 게이트가 출처 닫힌 집합으로 쓴다.
+    citations: tuple[str, ...] = ()
 
 
 class LlmPort(Protocol):

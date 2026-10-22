@@ -108,7 +108,7 @@ class ReplanStalenessTest : StringSpec({
     }
 
     "반영된 선계산은 낡지 않는다 — 낡음은 적용 전 초안의 말이다" {
-        draft(session()).applied(at(day, "08:00")).stalenessAt(at(day.plusDays(3), "08:00"), DraftFacts(LocalTime.MIN, true)) shouldBe null
+        draft(session()).applied(at(day, "08:00"), emptyList(), emptyMap()).stalenessAt(at(day.plusDays(3), "08:00"), DraftFacts(LocalTime.MIN, true)) shouldBe null
     }
 
     "사용자 세션은 낡음 판정을 받지 않는다 — 사람이 보고 있는 화면이다" {

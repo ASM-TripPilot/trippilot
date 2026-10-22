@@ -10,7 +10,7 @@ import io.kotest.matchers.shouldBe
 import java.time.Instant
 import java.util.UUID
 
-/** 경계 매핑 — 한글 카테고리→코드(8종 전수), dataQuality 파생(FULL/PARTIAL), 거리 전달. */
+/** 경계 매핑 — 한글 카테고리→코드(10종 전수), dataQuality 파생(FULL/PARTIAL), 거리 전달. */
 class PoiReadResponseTest : StringSpec({
 
     val now = Instant.parse("2026-08-06T00:00:00Z")
@@ -20,11 +20,12 @@ class PoiReadResponseTest : StringSpec({
             3, now, now, imageUrl,
         )
 
-    "한글 카테고리 → 경계 코드 8종 전수 매핑" {
+    "한글 카테고리 → 경계 코드 10종 전수 매핑" {
         val expected = mapOf(
             PoiCategory.명소 to "SIGHT", PoiCategory.맛집 to "FOOD", PoiCategory.카페 to "CAFE",
             PoiCategory.야경 to "NIGHT_VIEW", PoiCategory.자연 to "NATURE", PoiCategory.쇼핑 to "SHOPPING",
             PoiCategory.문화 to "CULTURE", PoiCategory.액티비티 to "ACTIVITY",
+            PoiCategory.미술 to "ART", PoiCategory.술집 to "BAR",
         )
         PoiCategory.entries.forEach { cat ->
             PoiReadResponse.from(PoiWithDistance(poi(cat, null, null), null)).category shouldBe expected.getValue(cat)

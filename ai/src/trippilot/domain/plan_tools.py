@@ -26,7 +26,7 @@ from trippilot.domain.intent import DIALOGUE_INTENTS, Intent
 MAX_PLAN_CALLS = 2  # 한 턴의 도구 호출 상한 — 팬아웃 1회(한 파, 병렬), 호출끼리 결과를 주고받지 않는다
 MAX_ARG_CHARS = 40  # 인자 값 상한 — 발화에 나온 짧은 표현만(시각·연락처·주입 꼴은 게이트가 버린다)
 # 도구로 답할 수 없는 말의 가장 가까운 분류 — **관측 전용** 닫힌 집합(다음 도구 우선순위 재료, 미결 #23).
-# 화면·다음 프롬프트로 가지 않는다.
+# 화면·다음 프롬프트로 가지 않는다. 예외 하나: CHAT 은 오케스트레이터가 결정론 한마디로 답한다(#1510).
 PLAN_GAPS: tuple[str, ...] = (
     "EVENTS", "REGION_WEATHER", "PLACE_DETAIL", "TRANSPORT", "AMENITY", "BOOKING", "LODGING",
     "KNOWLEDGE", "ACCOUNT", "CHAT", "OTHER",
@@ -61,8 +61,11 @@ PLAN_TOOLS: Mapping[Intent, PlanTool] = {
     Intent.GET_POI_INFO: PlanTool("장소의 분류·영업시간·입장료·짧은 소개 — 일정 장소, 또는 정확한 이름의 등록 장소(별칭은 못 찾는다)",
                                   ("poi_info",)),
     Intent.SUGGEST_ALTERNATIVE: PlanTool("일정의 한 곳 대신 갈 근처 등록 장소 최대 5곳", ("poi_info", "pool_builder", "planb")),
-    Intent.EXPLORE_PLACES: PlanTool("지역 또는 일정 근처의 등록 장소 최대 5곳(명소·맛집·카페·야경·자연·쇼핑·문화·액티비티, "
-                                    "요즘 인기 우선) — 예약·가격·생활 시설은 없다", ("pool_builder",)),
+    Intent.EXPLORE_PLACES: PlanTool("지역·일정 근처 등록 장소 ≤5(명소·맛집·카페·야경·자연·쇼핑·문화·액티비티, 요즘 인기 "
+                                    "우선)·그 기간 축제·공연·전시 — 예약·가격 없음", ("pool_builder",)),
+    Intent.RECOMMEND_REGION: PlanTool("어느 지역으로 갈지 아직 안 정한 말에만 — 취향·바람에 맞는 가볼 지역 1~5곳과 그 성격(장소는 아니다)"),
+    Intent.RECOMMEND_PLACES: PlanTool("'추천·골라 줘'에 — 지역 또는 일정 근처 등록 장소 중 요즘 인기·저장 많은 순으로 고른 1~5곳",
+                                      ("pool_builder",)),
 }
 
 

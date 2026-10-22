@@ -12,6 +12,7 @@ import {
   ItineraryStatus,
 } from '@/shared/api/index.schemas';
 import { seoulDate } from '@/shared/lib/seoulDate';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 import {
   guardPress,
   openPressGuardWindow,
@@ -236,7 +237,7 @@ function laneError(refetch: jest.Mock): void {
 type PlacesCall = [unknown, { query?: { enabled?: boolean } } | undefined];
 type MultiCall = [
   readonly string[],
-  { category?: unknown; q?: unknown } | undefined,
+  { category?: unknown; q?: unknown; seed?: unknown } | undefined,
 ];
 
 /** 요청이 실제로 나가는 단일 지역 조회 호출만 — enabled 미지정은 켜짐(react-query 기본). */
@@ -264,6 +265,8 @@ function expectServiceRegionQuery(): void {
     expect(regions).toEqual(SERVICE_REGION_NAMES);
     expect(filters?.category ?? null).toBeNull();
     expect(filters?.q ?? '').toBe('');
+    // TRIP-1563 — 무작위 시드는 d04 만 쓴다. 홈이 seed 를 넘기면 d04 와 달리 캐시를 못 나누고 순서도 바뀐다.
+    expect(filters?.seed).toBeUndefined();
   }
   expect(enabledRegionlessPlacesCalls()).toHaveLength(0);
 }
@@ -809,6 +812,20 @@ describe('요즘 사람들이 담는 곳 — 실장소(TRIP-1209)', () => {
     expect(screen.queryByText('당일치기')).toBeNull();
     expect(screen.queryByText('1박 2일')).toBeNull();
     expect(screen.queryByText('반나절')).toBeNull();
+  });
+
+  it('레인 카드의 사진 칸은 그 장소의 category·poiId 로 고른 생성 이미지다 (사진 없는 서버 장소 — 사이클 20261022-place-category-covers)', () => {
+    render(<HomePage />);
+
+    const spot = (index: number) =>
+      screen.getByTestId(`home-spot-photo-${index}`).props.source;
+    const collection = (index: number) =>
+      screen.getByTestId(`home-collection-photo-${index}`).props.source;
+    // 인기순 rk0..rk3 = 스팟 4장, rk4..rk6 = 컬렉션 3장. 홀짝에 따라 카페/명소가 번갈아 온다.
+    expect(spot(0)).toEqual([coverFor('카페', 'rk0')]);
+    expect(spot(3)).toEqual([coverFor('명소', 'rk3')]);
+    expect(collection(1)).toEqual([coverFor('명소', 'rk5')]);
+    expect(collection(2)).toEqual([coverFor('카페', 'rk6')]);
   });
 
   it('"지금 뜨는 장소" 4장과 겹치지 않는다', () => {
@@ -1707,18 +1724,12 @@ describe('연타 관통 — 홈 쪽 반쪽', () => {
   });
 });
 
-// TRIP-1321 · US-ASSIST-01 · BR-U8-50~53 — ✦ AI 도우미 FAB. 실제 겹침·탭바 거리는 6-b 실기.
-describe('✦ 도우미 FAB (TRIP-1321)', () => {
-  function fabStyle(): Record<string, unknown> {
-    return Object.assign(
-      {},
-      ...[screen.getByTestId('assistant-fab').props.style].flat(Infinity)
-    );
-  }
-
+// TRIP-1553 · US-ASSIST-01 — ✦ AI 도우미가 우하단 FAB(TRIP-1321)에서 헤더 벨 왼쪽 버튼으로 옮겨 왔다.
+// 목적지 계산은 그대로 page 몫이다. 담은 곳 메뉴 딤이 ✦ 를 덮는지·실제 위치는 jest 사각이라 6-b 실기.
+describe('헤더 ✦ 도우미 (TRIP-1553)', () => {
   it('여행이 없으면 surface 만 싣고 도우미 시트로 1회 간다', () => {
     render(<HomePage />);
-    fireEvent.press(screen.getByTestId('assistant-fab'));
+    fireEvent.press(screen.getByTestId('home-dashboard-assistant'));
     expect(mockPush.mock.calls).toEqual([
       [{ pathname: '/assistant', params: { surface: 'HOME' } }],
     ]);
@@ -1727,7 +1738,7 @@ describe('✦ 도우미 FAB (TRIP-1321)', () => {
   it('계획 중 여행이 있으면 그 여행 id 를 싣는다', () => {
     mockUseGetTrips.mockReturnValue(tripsOk([trip({ status: 'PLANNED' })]));
     render(<HomePage />);
-    fireEvent.press(screen.getByTestId('assistant-fab'));
+    fireEvent.press(screen.getByTestId('home-dashboard-assistant'));
     expect(mockPush).toHaveBeenLastCalledWith({
       pathname: '/assistant',
       params: {
@@ -1737,20 +1748,21 @@ describe('✦ 도우미 FAB (TRIP-1321)', () => {
     });
   });
 
-  it('스택 2단 위 바닥 220 에 뜬다(fabStack 계산값)', () => {
-    render(<HomePage />);
-    expect(fabStyle()).toEqual(expect.objectContaining({ bottom: 220 }));
-  });
-
-  it('담은 곳 메뉴가 펼쳐진 동안·조회 중에는 트리에 없다(BR-U8-53)', () => {
-    render(<HomePage />);
-    fireEvent.press(screen.getByTestId('home-saved-menu-toggle'));
-    expect(screen.queryByTestId('assistant-fab')).toBeNull();
-  });
-
-  it('조회 중에는 없다(다른 FAB 와 같이 숨는다)', () => {
+  it('여행 조회 중에도 ✦ 가 있고, 누르면 여행 id 없이 도우미를 연다', () => {
     mockUseGetTrips.mockReturnValue(TRIPS_PENDING);
     render(<HomePage />);
+    fireEvent.press(screen.getByTestId('home-dashboard-assistant'));
+    expect(mockPush.mock.calls).toEqual([
+      [{ pathname: '/assistant', params: { surface: 'HOME' } }],
+    ]);
+  });
+
+  it('우하단 ✦ FAB 는 없고 ＋·♥ 두 FAB 만 남는다', () => {
+    render(<HomePage />);
+    // 짝 앵커 — 빈 렌더나 로딩 얼굴이라서 없는 것이 아님을 보인다.
+    expect(screen.getByTestId('home-create-trip-fab')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-saved-menu-toggle')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-dashboard-assistant')).toBeOnTheScreen();
     expect(screen.queryByTestId('assistant-fab')).toBeNull();
   });
 });

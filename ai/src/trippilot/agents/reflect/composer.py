@@ -5,7 +5,7 @@ LLM 시도 루프와 폴백 전환 발행은 `agent.py`의 `ReflectAgent` 가 �
 
 - `rank_key` / `finalize` : 후보 랭킹 → 위반 하드 교체 → 봉투(전 시도 실패면 고정 폴백)
 - `apply_hard_replacements` / `safe_caption` : 게이트 위반 코드별 결정론 치환
-- `bind_placeholders` : 자리표시자를 실제 값으로 — 와이어에 나가는 문구는 다 채워져 있다
+- `bind_placeholders` / `bind_share_card_copy` : 자리표시자를 실제 값으로 — 와이어에 나가는 문구는 다 채워져 있다
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ from trippilot.domain.reflection import (
     ReflectionTemplate,
     Scene,
     SceneLayout,
+    ShareCardCopy,
     TemplateCandidate,
     TemplateViolation,
     ViolationCode,
@@ -292,6 +293,54 @@ def placeholder_values(request: ReflectionRequest) -> dict[str, str]:
     return {k: v for k, v in values.items() if v}
 
 
+def _binder(request: ReflectionRequest):
+    """요청 값으로 문구를 채우는 함수 — 다 채운 문구, 못 채운 토큰이 남거나 비면 None."""
+    names = tuple(v.poi_name.strip() for v in request.visits)
+    values = placeholder_values(request)
+    same_day = request.start_date == request.end_date
+
+    def value_of(token: str) -> str:
+        poi_m = _POI_TOKEN.fullmatch(token)
+        if poi_m is not None:
+            i = int(poi_m.group(1))
+            return names[i] if i < len(names) else ""
+        return values.get(token, "")
+
+    def bind(text: str, *, tag: bool = False) -> str | None:
+        if same_day:
+            text = _DATE_RANGE.sub("{start_date}", text)
+        text = _TOKEN_JOSA.sub(
+            lambda m: m.group(1) + fit_josa(value_of(m.group(2)), m.group(3)), text)
+        missing = False
+
+        def sub(m: re.Match) -> str:
+            nonlocal missing
+            value = value_of(m.group(1))
+            if not value:
+                missing = True
+                return m.group(0)
+            return value.replace(" ", "") if tag else value
+
+        out = _PLACEHOLDER.sub(sub, text).strip()
+        return None if missing or not out.lstrip("#") else out
+
+    return bind
+
+
+def bind_share_card_copy(copy: ShareCardCopy, request: ReflectionRequest) -> ShareCardCopy | None:
+    """j06 공유 문구도 와이어에 자리표시자 없이 나간다 — 회고 카드와 같은 바인딩(TRIP-1411 이 부르기 시작했다).
+
+    캡션을 못 채우면(`{distance_km}` 등) None — 호출측이 정적 폴백으로 간다(문장을 지우면 "km" 만 남는다).
+    못 채운 해시태그는 뺀다.
+    """
+    bind = _binder(request)
+    caption = bind(copy.caption)
+    if caption is None:
+        return None
+    hashtags = tuple(t for t in (bind(t, tag=True) for t in copy.hashtags) if t)
+    return replace(copy, caption=caption, hashtags=hashtags)
+
+
 def bind_placeholders(
     template: ReflectionTemplate, request: ReflectionRequest
 ) -> ReflectionTemplate:
@@ -311,36 +360,8 @@ def bind_placeholders(
     - 해시태그는 공백을 담을 수 없어 값의 공백을 지운다(`#해운대 해수욕장` → `#해운대해수욕장`)
     - 빈 제목·빈 캡션도 같은 길로 간다 — BE 는 빈 제목 카드를 통째로 버리고, FE 는 빈 캡션 장면을 버린다
     """
-    names = tuple(v.poi_name.strip() for v in request.visits)
-    values = placeholder_values(request)
-    same_day = request.start_date == request.end_date
+    bind = _binder(request)
     valid_refs = tuple(v.ref for v in request.visits)
-
-    def value_of(token: str) -> str:
-        poi_m = _POI_TOKEN.fullmatch(token)
-        if poi_m is not None:
-            i = int(poi_m.group(1))
-            return names[i] if i < len(names) else ""
-        return values.get(token, "")
-
-    def bind(text: str, *, tag: bool = False) -> str | None:
-        """다 채운 문구, 못 채운 토큰이 남거나 비면 None."""
-        if same_day:
-            text = _DATE_RANGE.sub("{start_date}", text)
-        text = _TOKEN_JOSA.sub(
-            lambda m: m.group(1) + fit_josa(value_of(m.group(2)), m.group(3)), text)
-        missing = False
-
-        def sub(m: re.Match) -> str:
-            nonlocal missing
-            value = value_of(m.group(1))
-            if not value:
-                missing = True
-                return m.group(0)
-            return value.replace(" ", "") if tag else value
-
-        out = _PLACEHOLDER.sub(sub, text).strip()
-        return None if missing or not out.lstrip("#") else out
 
     subtitle = template.cover.subtitle
     if not _is_template_only(subtitle):

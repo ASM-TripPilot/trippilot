@@ -63,6 +63,7 @@ from trippilot.assembly_engine.constraints import open_hours_ok
 from trippilot.assembly_engine.day_focus import pick_day_focus
 from trippilot.assembly_engine.facade import AssemblyConflictError
 from trippilot.assembly_engine.fallback_assembler import explain_unplaced
+from trippilot.assembly_engine.parking import ParkingPlan
 from trippilot.assembly_engine.scorer import (
     DIRECTIVE_STEP,
     build_rule_score,
@@ -141,7 +142,11 @@ class AssemblyProvider(Protocol):
     """
 
     def for_pool(self, poi_index: Mapping[PoiId, Poi],
-                 walk_max_km: float | None = None) -> AssemblyFacade: ...
+                 walk_max_km: float | None = None, parking: ParkingPlan | None = None) -> AssemblyFacade: ...
+
+    def parking_for(self, poi_index: Mapping[PoiId, Poi], walk_max_km: float | None) -> ParkingPlan:
+        """자차 여행의 주차 거점(assembly_engine/parking) — 풀 좌표를 도보 상한으로 묶는다. 조립·화면 거리가 같은 계획을 쓴다."""
+        ...
 
 
 # ── 입출력 타입 (도메인 타입 조합 — HTTP 스키마는 경계 어댑터 소관) ──
@@ -226,8 +231,9 @@ class GenerateItineraryRequest:
     # PlanB 가산 서열을 흔들 이유가 없다.
     diversity_jitter: float = 0.0
     # 특일 달력 (상황 감지 H1) — 배선이 요청 진입점에서 1회 조회해 싣는다(조립 루프는 I/O 를 타지 않는다).
-    # 의미는 `ItineraryProblem.holidays` — None = `HOLIDAY_CLOSURE_MODE=off`(공휴일 규칙 없음), 빈 매핑 = 달력
-    # 실패(날짜 명시형만). 에이전트의 사전 판정(⓪′ 핀·한 곳 추가·차선책)도 같은 값으로 조립과 같은 그 날 창을 본다.
+    # 의미는 `ItineraryProblem.holidays` — None = `HOLIDAY_CLOSURE_MODE=off`(공휴일 규칙 없음), 빈 매핑 = 그 범위에
+    # 공휴일 없음 또는 달력 실패(`UNREAD_CALENDAR` — 어느 쪽이든 날짜 명시형만). 에이전트의 사전 판정(⓪′ 핀·한 곳 추가·
+    # 차선책)도 같은 값으로 조립과 같은 그 날 창을 본다.
     holidays: Mapping[date, frozenset[str]] | None = None
 
     def __post_init__(self) -> None:
@@ -640,12 +646,16 @@ class ScheduleAgent:
         #    OR-Tools는 anytime — 잔여 시간이 곧 최적성이고 해 자체는 나온다.
         #    체인 폴백(OR-Tools→LLM→규칙→최소)은 어셈블리가 이미 갖고 있다. 여기서
         #    재시도·재조립을 얹으면 이중 폴백이 되어 시한만 두 배로 쓴다 — 하지 않는다.
+        # 액티비티 취향이면 조금 더 걷는다(도로 1.0km, 2026-10-19 사용자) — 조립과 화면 거리가 같은 상한을 쓴다.
+        walk_max = ACTIVE_WALK_MAX_KM if PoiCategory.ACTIVITY in _wanted_categories(persona) else None
+        # 자차면 가까운 장소들은 차를 한 번 세우고 걸어서 돈다(2026-10-21 사용자) — 시간표에 들어가야 솔버가 순서를 고를 때 안다.
+        # 묶기는 잔여 시한을 재기 전에 — 그 시간도 조립 시한 안에서 쓴다
+        parking = (self._assembly_provider.parking_for(index, walk_max)
+                   if problem.transport is TransportMode.CAR else None)
         c2_ms = max(
             budget.c2_reserved_ms, budget.total_ms - (self._clock.monotonic_ms() - t0)
         )
-        # 액티비티 취향이면 조금 더 걷는다(도로 1.0km, 2026-10-19 사용자) — 조립과 화면 거리가 같은 상한을 쓴다.
-        walk_max = ACTIVE_WALK_MAX_KM if PoiCategory.ACTIVITY in _wanted_categories(persona) else None
-        assembly = self._assembly_provider.for_pool(index, walk_max_km=walk_max)
+        assembly = self._assembly_provider.for_pool(index, walk_max_km=walk_max, parking=parking)
         try:
             solution = assembly.solve(problem, c2_ms, trace_id)
         except AssemblyConflictError as e:
@@ -708,6 +718,7 @@ class ScheduleAgent:
             rule_backfill_count=backfilled,
             repair_hints=hints,
             walk_max_km=walk_max,
+            parking=parking,
         )
 
     # ── ② 선호 점수 + 규칙 점수 폴백 ────────────────────────────────
@@ -1452,6 +1463,8 @@ _CATEGORY_LABELS: Mapping[PoiCategory, str] = {
     PoiCategory.CULTURE: "문화",
     PoiCategory.ACTIVITY: "액티비티",
     PoiCategory.SHOPPING: "쇼핑",
+    PoiCategory.ART: "미술",
+    PoiCategory.BAR: "술집",
     PoiCategory.STAY: "숙소",
 }
 

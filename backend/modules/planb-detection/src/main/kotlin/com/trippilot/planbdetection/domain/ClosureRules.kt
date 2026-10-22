@@ -18,6 +18,7 @@ import java.util.UUID
  *    단 그 슬롯에 `PERMANENTLY_CLOSED` 가 떠 있는데 이번에 폐업 여부를 모르면(조회 실패·행 없음·OTHER) 내지 않는다 — 내면
  *    판정이 떠 있는 폐업을 제자리에서 영업시간 위반으로 갈아 끼운다(모름은 트리거를 바꾸지 않는다 — INV-SA-2).
  * 4. 확인 = 상태 ACTIVE ∧ 판정 OK ∧ 그 슬롯의 ACTIVE 가 `HOLIDAY` 아님 — 공휴일 휴무는 감지기가 해제하지 않는다.
+ *    OK 는 AI 가 그 장소의 영업시간을 실제로 본 것이다 — 원문이 있어도 해석하지 못했다고 답한 장소는 하루 점검이 UNKNOWN 으로 준다.
  *
  * 같은 장소를 같은 날 두 번 넣으면 slotKey(`{date}#{poiId}`)가 같다 — 대상 하나로 보고, 발견은 대상당 하나다.
  * 모름은 그 근거로 발견도 확인도 만들지 않는다(INV-SA-2) — 상태 모름(`LOST`·`UNVERIFIED`·조회 실패)은 폐업 발견·확인이 없고,
@@ -37,8 +38,10 @@ object ClosureRules {
      * @property checked 신호가 없다고 확인한 슬롯 — 그 출처가 띄운 트리거의 해제 근거다.
      * @property blind 본 슬롯이 있는데 발견도 확정 판정(상태 ACTIVE 이면서 영업시간 판정 있음)도 없다 — 감지기는 모름으로 낸다.
      *   빈 확인으로 내면 감시 상태가 '확인됨'이 된다 — AI 보류·상태 조회 실패가 조용히 정상으로 보인다(RES-SA-01).
+     * @property unknown 본 슬롯 가운데 발견이 없는데 상태(ACTIVE)·영업시간(UNKNOWN 아님) 중 하나라도 모르는 것이 있다 —
+     *   그 날은 감시 상태를 '확인'으로 남기지 않는다(G-SA-21 사용자 결정 '하나라도 모르면 확인 불가'). 발견·확인은 그대로 낸다.
      */
-    data class Verdict(val findings: List<Finding>, val checked: Set<String>, val blind: Boolean)
+    data class Verdict(val findings: List<Finding>, val checked: Set<String>, val blind: Boolean, val unknown: Boolean = false)
 
     /**
      * @param now 판정 시각 — '오늘'과 '지금'을 여행지 기준(KST)으로 정한다.
@@ -63,7 +66,10 @@ object ClosureRules {
                 group.all { status?.get(it.poiId) == PoiLifeStatus.ACTIVE && it.hours == HoursVerdict.OK }
         }.keys
         val learned = seen.any { status?.get(it.poiId) == PoiLifeStatus.ACTIVE && it.hours != HoursVerdict.UNKNOWN }
-        return Verdict(findings, checked, blind = findings.isEmpty() && seen.isNotEmpty() && !learned)
+        val unknown = targets.any { (key, group) ->
+            key !in raised && group.any { status?.get(it.poiId) != PoiLifeStatus.ACTIVE || it.hours == HoursVerdict.UNKNOWN }
+        }
+        return Verdict(findings, checked, blind = findings.isEmpty() && seen.isNotEmpty() && !learned, unknown = unknown)
     }
 
     private fun findingOf(

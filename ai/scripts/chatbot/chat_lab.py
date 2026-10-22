@@ -60,9 +60,12 @@ keep.update({
 # 장소 탐색 NL2SQL — 로컬 백엔드 DB 를 ai_user(poi_public 뷰 읽기 전용)로 읽고, DIALOGUE_SQL 을 분류와 같은 모델에 배정해 켠다.
 # LAB_PLACE_SQL=0 이면 끈다(반경 탐색만). 롤·뷰 준비는 README "장소 조회(NL2SQL)".
 # 도구 계획 단계(DIALOGUE_PLAN — 분류가 "정해진 의도 없음"으로 닫은 말을 조회 도구로)도 같은 모델로 켠다. LAB_PLAN=0 이면 끈다.
+# 인사·잡담 LLM(DIALOGUE_SMALLTALK)도 같은 모델로 켠다. LAB_SMALLTALK=0 이면 고정 문장.
 _models = keep.get("TRIPPILOT_LLM_FEATURE_MODELS", "")
 _intent_model = dict(kv.split("=", 1) for kv in _models.split(",") if "=" in kv).get("DIALOGUE_INTENT")
-for feature, flag in (("DIALOGUE_SQL", "LAB_PLACE_SQL"), ("DIALOGUE_PLAN", "LAB_PLAN")):
+# 미확인 장소 정보 웹 확인(PLACE_FACT_LOOKUP — UnknownHandlingAgent)도 같은 모델로 켠다. LAB_UNKNOWN=0 이면 끈다.
+for feature, flag in (("DIALOGUE_SQL", "LAB_PLACE_SQL"), ("DIALOGUE_PLAN", "LAB_PLAN"), ("DIALOGUE_SMALLTALK", "LAB_SMALLTALK"),
+                      ("PLACE_FACT_LOOKUP", "LAB_UNKNOWN")):
     if _intent_model and os.environ.get(flag, "1") != "0" and f"{feature}=" not in _models:
         _models = f"{_models},{feature}={_intent_model}"
 keep["TRIPPILOT_LLM_FEATURE_MODELS"] = _models

@@ -6,6 +6,7 @@ import {
 } from '@testing-library/react-native';
 import type { StayDetail } from '@/shared/api/index.schemas';
 import { formatPrice } from '@/entities/stay';
+import { stayCoverFor } from '@/test-support/placeCoverFixtures';
 import { StayDetailScreen } from './StayDetailScreen';
 
 /**
@@ -108,7 +109,7 @@ describe('얼굴·지도·정보 (옛 본 파일)', () => {
   }
 
   describe('S1 · 가격줄 — 이름·2톤 가격·지역 (AC-1 · AC-5 · BR-U1-12 · INV-3)', () => {
-    it('이름·회색 사진자리·지도자리를 그리고 "· 1박" 접미가 없다', () => {
+    it('이름·사진자리·지도자리를 그리고 "· 1박" 접미가 없다', () => {
       render(<StayDetailScreen {...baseProps()} />);
 
       expect(screen.getByText(DETAIL.name)).toBeOnTheScreen();
@@ -116,6 +117,20 @@ describe('얼굴·지도·정보 (옛 본 파일)', () => {
       expect(screen.getByTestId('stay-detail-map')).toBeOnTheScreen();
       // 최저가 = '부터 가격'만, "· 1박" 접미 미부착(Q6, e02·d01 일관).
       expect(screen.queryByText(/1박/)).toBeNull();
+    });
+
+    it('TRIP-1588 · 큰 사진 칸은 coverKey 의 숙소 그림이다 (키가 바뀌면 그림도 바뀐다)', () => {
+      const { rerender } = render(
+        <StayDetailScreen {...baseProps()} coverKey="KAKAO:13" />
+      );
+      expect(screen.getByTestId('stay-detail-hero').props.source).toEqual([
+        stayCoverFor('KAKAO:13'),
+      ]);
+
+      rerender(<StayDetailScreen {...baseProps()} coverKey="KAKAO:16" />);
+      expect(screen.getByTestId('stay-detail-hero').props.source).toEqual([
+        stayCoverFor('KAKAO:16'),
+      ]);
     });
 
     it('가격줄이 2톤(bold 원 + muted ~) 두 형제이고 결합 단일 노드가 없다', () => {

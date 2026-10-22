@@ -132,6 +132,23 @@
 | `source` | varchar(8) | `AI` \| `RULE` \| `BASIC` |
 | `generated_at` | timestamptz | |
 
+> **[개정 · 2026-10-22 · TRIP-1488] `narrative` 의 AI 단(O-U5-10).** 칸은 그대로 문장 하나다 — 카드로 바꾸지 않았다. `TripEnded` 에 규칙 요약을 먼저 저장하고(`source=RULE`),
+> 그 뒤 백그라운드에서 상대 `generate`(`kind=TRIP_SUMMARY`, 마감 없음)를 불러 성공하면 같은 행의 `narrative` 를 `cover.subtitle` 로, `source` 를 `AI` 로 바꾼다.
+> 상대 자기 폴백(`is_fallback`)·자리표시자(`{`)가 남은 부제·건너뛴 장소를 말한 카드는 쓰지 않는다(규칙 요약 유지). `highlights`·`stats` 는 늘 우리 계산이다.
+> 구현: `TripSummaryNarrator`(backend `reflection` 모듈).
+>
+> **시도 기록(V2.84)** — 아래 두 칸을 더했다(엔티티에 매핑하지 않는다 — 요약을 덮는 생성·경로 갱신이 지우지 않게).
+>
+> | 필드 | 타입 | 비고 |
+> |---|---|---|
+> | `ai_attempts` | integer NOT NULL DEFAULT 0 | AI 회고를 부르러 간 횟수 — 선점(호출 바로 앞)마다 +1(진행 중 배포·크래시로 끊긴 시도도 센다). 실을 방문이 없거나 지워진 여행은 선점 없이 상한으로 채운다 |
+> | `ai_attempted_at` | timestamptz | 마지막 선점 시각(DB 시계) |
+>
+> **다시 맡기 규칙** — 5분 스윕(단일 실행)이 `source=RULE` · `generated_at`(마지막으로 다시 짠 시각)이 7일 안 · 시도 3회 미만 · 마지막 시도에서
+> 요약 호출 상한(연결 + read 610초) + 60초가 지난 요약을 다시 맡긴다. AI 를 부르기 바로 앞에서 조건부 UPDATE 로 시도를 선점해 파드 사이 중복 호출을
+> 막는다 — 선점 조건은 `source=RULE` · 시도 3회 미만 · 다시 선점 기준이고 **7일 창은 보지 않는다**(여행 종료 이벤트로 바로 맡긴 것은 창과 무관하게 선점한다).
+> 마지막(3번째) 시도를 선점하는 순간 WARN 을 남긴다. 실행기가 받지 않은 것(넘침·종료 중)은 시도를 쓰지 않아 다음 회차에 다시 집힌다.
+
 ### 4.3 `style_analysis` (V2.32 · US-REC-09)
 
 | 필드 | 타입 | 비고 |

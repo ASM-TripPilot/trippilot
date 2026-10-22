@@ -58,3 +58,29 @@ enum class PushStatus {
     /** 그 밖의 실패. 재시도 대상이 아니라 **기록 대상**이다(BR-U6-38) — 인앱함에는 이미 있다. */
     FAILED,
 }
+
+/**
+ * 발송 서비스가 **우리 프로젝트의 발송량 한도**에 걸려 요청 자체를 거절했다(Expo HTTP 429).
+ *
+ * 다른 발송기 예외(네트워크·5xx)와 같은 경로로 처리된다 — 알림은 이미 알림함에 있다. 따로 두는 이유는
+ * **관측**이다: 정본 COST-U6-04 의 재평가 트리거("무료 티어 초과 / 레이트리밋 도달")가 가리키는 것이 바로 이
+ * 한도라, 지표의 레이트리밋 칸(OBS-U6-02)이 이것을 봐야 한다. 응용층이 벤더 웹 예외를 몰라도 되게 도메인 타입으로 올린다.
+ */
+class PushRateLimited(detail: String? = null, cause: Throwable? = null) : RuntimeException(
+    "발송 서비스의 발송량 한도에 걸렸습니다(HTTP 429)" + detail?.let { " — ${clip(it)}" }.orEmpty(),
+    cause,
+) {
+    private companion object {
+        /**
+         * 상대 응답(상태 줄 + 본문)을 싣는 상한. 본문은 상대가 정하므로 발송 실패 로그가 무한히 늘지 않게 자른다.
+         * Expo 429 본문은 `{"errors":[{"code","message"}]}` 형식이라 토큰을 되돌려 싣지 않는다.
+         */
+        const val DETAIL_MAX = 300
+
+        /** 앞에서부터 [DETAIL_MAX] 자. 경계가 서로게이트 쌍 가운데면 반쪽 문자를 남기지 않게 한 칸 덜 자른다. */
+        fun clip(detail: String): String {
+            val head = detail.take(DETAIL_MAX)
+            return if (head.length == DETAIL_MAX && head.last().isHighSurrogate()) head.dropLast(1) else head
+        }
+    }
+}

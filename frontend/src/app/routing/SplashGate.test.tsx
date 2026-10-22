@@ -435,51 +435,165 @@ describe.each([
 });
 
 /**
- * 허브(`trips/[tripId]/live/index`)로 들어갈 때만 전환이 `none`(즉시 교체)이다 — 허브 바가 홈 탭 바와 같은 5칸으로 시작해 모프를 혼자 재생하려면
- * 아래 `(tabs)`(탭 바 포함)가 밀리거나 비치지 않고 허브가 즉시 그 자리를 대체해야 한다(크로스페이드는 탭 바가 비쳐 이중으로 보인다). 허브로 들어가는 모든 길이
- * 이 한 선언에 걸린다. 선언 위치가 `SplashGate` 인 이유: planb·assistant 선례, 라우트 파일 안에서 하면 `liveHubRoute.test` 의 expo-router 목이 깨진다.
+ * 전환이 `none`(즉시 표시)인 라우트는 **하단 바를 자기 화면 안에 그리는 push 화면**과 ✦ 도우미 시트다(TRIP-1584 · 허브는 TRIP-1522, 도우미는 TRIP-1554).
+ * 바를 화면 안에 그리는 화면이 기본 슬라이드로 열리면 바 사본이 화면과 함께 밀려 들어와 아래 진짜 탭 바 위로 "새 바"가 겹쳐 보인다 — 페이드는 아래 탭 바가
+ * 비쳐 이중으로 보이므로 `none` 이다. 바 없는 풀스크린(상세·위저드 등)은 슬라이드 그대로다.
+ * 허브: 허브 바가 홈 탭 바와 같은 5칸으로 시작해 모프를 혼자 재생하려면 허브가 즉시 그 자리를 대체해야 한다.
+ * 도우미: 시트가 아래에서 올라오지 않고 즉시 뜨게 한다 — `presentation: 'transparentModal'` 은 그대로 둔다(위 describe 가 잠근다).
+ * 선언 위치가 `SplashGate` 인 이유: planb·assistant 선례, 라우트 파일 안에서 하면 `liveHubRoute.test` 의 expo-router 목이 깨진다.
  * jest 가 잠그는 것은 선언까지다(스택 목은 options 를 그리지 않는다) — 실제 전환·스와이프 뒤로·탭 바와의 겹침은 6-b.
+ * 새로 "바를 자기 화면 안에 그리는 라우트"를 만들면 이 목록과 `SplashGate.tsx` 의 `BAR_SCREEN_ROUTES` 에 이름을 더해야 한다 — 빠지면 슬라이드로 조용히 돌아간다(소스 스캔 가드는 두지 않는다).
  */
-describe('SplashGate · 허브 라우트 none 전환 선언', () => {
-  const HUB_ROUTE = 'trips/[tripId]/live/index';
+const HUB_ROUTE = 'trips/[tripId]/live/index';
+const ASSISTANT_ROUTE = 'assistant/index';
+const NONE_ROUTES = [
+  ['허브', HUB_ROUTE],
+  ['도우미 시트', ASSISTANT_ROUTE],
+  ['기록 j01', 'trips/[tripId]/records/index'],
+  ['회고 j03', 'trips/[tripId]/records/reflection/[date]'],
+  ['요약 j04', 'trips/[tripId]/records/summary'],
+  ['숙소 검색', 'stays/index'],
+  ['장소 탐색', 'explore/places'],
+  ['여행 스타일 j05', 'records/style'],
+] as const;
 
-  it.each(['HOME', 'LOGIN'] as const)(
-    '목적지 %s 에서도 가드 밖에 허브 라우트 선언이 하나 있고 animation 이 none 이다',
-    (destination) => {
-      mockUseBootstrapGate.mockReturnValue(gate({ destination }));
+describe.each(NONE_ROUTES)(
+  'SplashGate · %s 라우트 none 전환 선언',
+  (_label, routeName) => {
+    it.each(['HOME', 'LOGIN'] as const)(
+      '목적지 %s 에서도 가드 밖에 선언이 하나 있고 animation 이 none 이다',
+      (destination) => {
+        mockUseBootstrapGate.mockReturnValue(gate({ destination }));
 
+        render(<SplashGate />);
+        passFloor();
+
+        const declared = screen
+          .UNSAFE_getAllByType(Stack.Screen)
+          .filter((node) => node.props.name === routeName);
+        expect(declared).toHaveLength(1);
+        expect(declared[0].props.options?.animation).toBe('none');
+        expect(insideProtected(declared[0])).toBe(false);
+      }
+    );
+  }
+);
+
+/**
+ * TRIP-1600 — 회고(j03)·요약(j04)은 iOS 가장자리 스와이프 뒤로를 끈다(사용자 결정 2026-10-23 "스와이프를 빼라").
+ * 뒤로 가기의 단일 경로는 하단 바의 뒤로 원이다. 다른 바 화면(기록 j01·숙소 검색·장소 탐색·여행 스타일)과 허브·도우미는
+ * 이번 범위 밖이라 스와이프 선언이 없어야 한다(늘어나면 이 표를 같이 고친다). jest 는 선언까지 — 실제 제스처는 6-b.
+ */
+const NO_SWIPE_ROUTES = [
+  'trips/[tripId]/records/reflection/[date]',
+  'trips/[tripId]/records/summary',
+];
+
+describe('SplashGate · 회고·요약 스와이프 뒤로 끄기 (TRIP-1600)', () => {
+  it.each(NONE_ROUTES)(
+    '%s — 회고·요약만 gestureEnabled false 이고 나머지는 선언이 없다',
+    (_label, routeName) => {
+      // 준비 — HOME 으로 그린다.
+      mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
       render(<SplashGate />);
       passFloor();
 
-      const declared = screen
+      // 실행 — 그 라우트의 선언을 찾는다.
+      const [declared] = screen
         .UNSAFE_getAllByType(Stack.Screen)
-        .filter((node) => node.props.name === HUB_ROUTE);
-      expect(declared).toHaveLength(1);
-      expect(declared[0].props.options?.animation).toBe('none');
-      expect(insideProtected(declared[0])).toBe(false);
+        .filter((node) => node.props.name === routeName);
+
+      // 단언 — 두 라우트만 스와이프가 꺼지고, 전환 none 은 그대로다.
+      const expected = NO_SWIPE_ROUTES.includes(routeName) ? false : undefined;
+      expect(declared.props.options?.gestureEnabled).toBe(expected);
+      expect(declared.props.options?.animation).toBe('none');
     }
   );
+});
 
-  it('허브 하나만 none 이다 — 다른 선언·루트 screenOptions 에는 animation 이 없고 planb·assistant 는 그대로 transparentModal 이다', () => {
+describe('SplashGate · none 전환 범위', () => {
+  const PLANB_ROUTE = 'trips/[tripId]/planb/index';
+
+  it('animation 이 있는 선언은 위 8곳뿐이다 — planb 는 animation 없이 transparentModal 이고 루트 screenOptions 에도 없다', () => {
     mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
 
     render(<SplashGate />);
     passFloor();
 
-    const others = screen
-      .UNSAFE_getAllByType(Stack.Screen)
-      .filter((node) => node.props.name !== HUB_ROUTE);
-    expect(others.length).toBeGreaterThanOrEqual(3); // 짝 앵커 — 빈 목록이라 공허하게 통과하지 않게
+    const screens = screen.UNSAFE_getAllByType(Stack.Screen);
+    expect(
+      screens
+        .filter((node) => node.props.options?.animation !== undefined)
+        .map((node) => node.props.name)
+        .sort()
+    ).toEqual(NONE_ROUTES.map(([, name]) => name).sort());
+
+    const planb = screens.find((node) => node.props.name === PLANB_ROUTE);
+    expect(planb).toBeDefined(); // 짝 앵커 — 선언이 없어서 아래 단언이 공허하게 통과하지 않게
+    expect(planb?.props.options?.animation).toBeUndefined();
+    expect(planb?.props.options?.presentation).toBe('transparentModal');
+
+    const others = screens.filter(
+      (node) => !NONE_ROUTES.some(([, name]) => name === node.props.name)
+    );
+    expect(others.length).toBeGreaterThanOrEqual(2); // (tabs) + planb
     others.forEach((node) =>
       expect(node.props.options?.animation).toBeUndefined()
     );
-    for (const routeName of ['trips/[tripId]/planb/index', 'assistant/index'])
-      expect(
-        others.find((node) => node.props.name === routeName)?.props.options
-          ?.presentation
-      ).toBe('transparentModal');
     expect(
       screen.UNSAFE_getByType(Stack).props.screenOptions.animation
     ).toBeUndefined();
   });
+});
+
+/**
+ * TRIP-1595 — 기능 안내 라우트(`onboarding-tour`)는 HOME 가드 **안**에서 선언한다.
+ *
+ * 무엇을 보장하나: 취향 2/2 완료 뒤 게이트가 HOME 을 연 다음에 가는 화면이라 HOME 일 때만 서 있고,
+ * 로그아웃·401 로 목적지가 바뀌면 가드가 치워 준다. 미인증 딥링크로 열리는 가드 밖 파일시스템 라우트가 하나 늘지 않는다.
+ * 스와이프 뒤로를 막는 `gestureEnabled: false` 와, 전환 `animation` 을 주지 않는 것(위 "animation 선언은 8곳뿐" 가드)도 선언까지 잠근다.
+ * jest 가 잠그는 것은 선언까지다 — 실제 스택 모양은 `SplashGate.integration.test` 가, 안드로이드 하드웨어 뒤로는 뷰 테스트와 6-b 가 본다.
+ */
+describe('SplashGate · 기능 안내 라우트 선언 (TRIP-1595)', () => {
+  const TOUR_ROUTE = 'onboarding-tour';
+
+  it('S1 HOME 에서는 가드 안에 선언이 하나 있고 스와이프 뒤로가 꺼져 있으며 전환 animation 은 없다', () => {
+    // 준비
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
+
+    // 실행
+    render(<SplashGate />);
+    passFloor();
+
+    // 단언
+    const declared = screen
+      .UNSAFE_getAllByType(Stack.Screen)
+      .filter((node) => node.props.name === TOUR_ROUTE);
+    expect(declared).toHaveLength(1);
+    expect(insideProtected(declared[0])).toBe(true);
+    expect(declared[0].props.options?.gestureEnabled).toBe(false);
+    expect(declared[0].props.options?.animation).toBeUndefined();
+    expect(screen.getByTestId(`gate-route-${TOUR_ROUTE}`)).toBeOnTheScreen();
+  });
+
+  it.each([
+    ['ONBOARDING', 'gate-route-(onboarding)'],
+    ['LOGIN', 'gate-route-(auth)'],
+    ['RECONSENT', 'gate-route-reconsent'],
+    ['FORCE_UPDATE', 'gate-route-force-update'],
+  ] as const)(
+    'S2 목적지 %s 에서는 기능 안내가 마운트되지 않는다(가드 밖으로 새지 않는다)',
+    (destination, ownRoute) => {
+      // 준비
+      mockUseBootstrapGate.mockReturnValue(gate({ destination }));
+
+      // 실행
+      render(<SplashGate />);
+      passFloor();
+
+      // 단언 — 짝: 그 목적지의 자기 라우트는 서 있다(빈 스택이라 부재가 공허하게 참인 것이 아니다)
+      expect(screen.getByTestId(ownRoute)).toBeOnTheScreen();
+      expect(screen.queryByTestId(`gate-route-${TOUR_ROUTE}`)).toBeNull();
+    }
+  );
 });

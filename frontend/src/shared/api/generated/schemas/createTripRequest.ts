@@ -13,7 +13,10 @@ import type { TripDestination } from './tripDestination';
 import type { TripPreferenceSnapshot } from './tripPreferenceSnapshot';
 
 export interface CreateTripRequest {
-  /** 미입력 시 목적지 기반 자동생성 */
+  /**
+   * 미입력 시 목적지 기반 자동생성
+   * @maxLength 120
+   */
   title?: string | null;
   startDate: string;
   endDate: string;

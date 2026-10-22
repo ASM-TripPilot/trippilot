@@ -202,7 +202,10 @@ class _AssemblyProvider:
     def __init__(self, trace, sink: _Sink, *, primary: bool) -> None:
         self._trace, self._sink, self._primary = trace, sink, primary
 
-    def for_pool(self, poi_index, walk_max_km=None):
+    def parking_for(self, poi_index, walk_max_km):
+        return None
+
+    def for_pool(self, poi_index, walk_max_km=None, parking=None):
         stages = []
         if self._primary:
             stages.append(_PrimaryStage(poi_index))

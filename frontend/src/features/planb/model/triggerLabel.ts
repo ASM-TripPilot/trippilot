@@ -52,7 +52,7 @@ export const VARIANT_LABELS: Record<NonNullable<TriggerVariant>, string> = {
 export function isKnownVariant(
   variant: TriggerVariant | undefined
 ): variant is NonNullable<TriggerVariant> {
-  // 평범한 인덱싱은 'toString'·'constructor' 를 라벨로 읽는다 — 자기 키만 본다(categoryPlaceholder 선례).
+  // 평범한 인덱싱은 'toString'·'constructor' 를 라벨로 읽는다 — 자기 키만 본다(`shared/lib/placeCover` 의 `hasOwnProperty` 조회와 같은 방어).
   return (
     typeof variant === 'string' &&
     Object.prototype.hasOwnProperty.call(VARIANT_LABELS, variant)

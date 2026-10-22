@@ -12,6 +12,7 @@ import type {
 } from '../model/stayRecommend';
 import type { MapPin } from '@/shared/map';
 
+import { stayCoverFor } from '@/test-support/placeCoverFixtures';
 import { StayRecommendView } from './StayRecommendView';
 
 /**
@@ -232,6 +233,18 @@ describe('🔴 S2 · AC-2 — 카드 내용: 이름 · 평균/최대 거리 · �
 
     const card = screen.getByTestId('stay-recommend-card-0');
     expect(within(card).getByText('가격 미확인')).toBeOnTheScreen();
+  });
+});
+
+describe('TRIP-1588 · 카드 사진 칸 = savedStayId 로 고른 숙소 그림', () => {
+  it('카드마다 자기 후보의 그림이다(5·6·1번 — 바꿔 끼우면 red)', () => {
+    render(ui(makeHandlers()));
+
+    [HAEUNDAE, SEOMYEON, GWANGALLI].forEach((candidate, index) => {
+      expect(
+        screen.getByTestId(`stay-recommend-card-${index}-photo`).props.source
+      ).toEqual([stayCoverFor(candidate.savedStayId)]);
+    });
   });
 });
 

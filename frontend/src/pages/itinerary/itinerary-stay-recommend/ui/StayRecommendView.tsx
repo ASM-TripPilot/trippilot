@@ -115,6 +115,7 @@ export function StayRecommendView({
             testID={`stay-recommend-card-${index}`}
             name={candidate.name}
             imageSource={candidate.imageSource}
+            coverKey={candidate.savedStayId}
             avgLabel={`평균 ${formatDistance(candidate.avgDistanceM)}`}
             maxLabel={`최대 ${formatDistance(candidate.maxDistanceM)}`}
             subtitle={`${candidate.district} · ${candidate.priceTier}`}

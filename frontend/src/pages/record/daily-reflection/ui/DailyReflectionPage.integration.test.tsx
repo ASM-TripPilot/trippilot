@@ -47,6 +47,18 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
+// TRIP-1584 — 하단 바가 `useTripSummary`(GET /summary)를 읽는다. `onUnhandledRequest:'error'` 라 스텁(조회 중)으로 막는다.
+jest.mock('@/features/reflection/model/useTripSummary', () => ({
+  useTripSummary: () => ({
+    envelope: undefined,
+    summary: undefined,
+    source: undefined,
+    isPending: true,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
+
 // 사진 배선(TRIP-1444)은 useReflectionPhotos.test 가 본다 — 여기선 사진 요청이 가짜 서버로 새지 않게 비운다.
 jest.mock('../model/useReflectionPhotos', () => ({
   useReflectionPhotos: () => [],
@@ -1023,7 +1035,7 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
    *  - 기분만 고치는 PUT 바디는 { mood } 뿐이다 — card 를 실으면 카드가 갈아끼워진다. 한 줄도 { shortMemo } 뿐.
    *  - 선택한 기분을 다시 누르면 빈 문자열로 지운다. 한 줄을 비우면 빈 문자열(공백뿐 포함)로 지운다.
    *  - 안 바뀐 한 줄은 요청을 쏘지 않는다. 개행·제어 문자는 입력에서 걷고 상한 60 을 건다.
-   *  - 저장이 실패하면 알리고 이탈하지 않는다(INV-4) — 「확인」은 쓴 한 줄이 저장돼야 닫힌다.
+   *  - 저장이 실패하면 알리고 이탈하지 않는다(INV-4). (TRIP-1591: 하단 「확인」은 없앴다 — 한 줄은 입력을 마칠 때만 저장된다.)
    * 서버는 PUT 을 받아 mood·shortMemo 를 기억하고 목록 GET 에 돌려준다(상태 기억).
    */
   const TRIP_ID = 'trip-1372';
@@ -1253,38 +1265,6 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
     );
   });
 
-  it('쓰고 바로 「확인」을 눌러도 한 줄이 저장된 뒤에 닫힌다', async () => {
-    renderPage();
-    const input = await screen.findByTestId('reflection-daily-memo-input');
-
-    fireEvent.changeText(input, '바다가 좋았다');
-    fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
-
-    await waitFor(() => expect(router.back).toHaveBeenCalledTimes(1));
-    expect(putBodies).toEqual([{ shortMemo: '바다가 좋았다' }]);
-  });
-
-  it('한 줄 저장이 실패하면 「확인」은 닫지 않고 알린다(INV-4)', async () => {
-    putFails = true;
-    renderPage();
-    const input = await screen.findByTestId('reflection-daily-memo-input');
-
-    fireEvent.changeText(input, '바다가 좋았다');
-    fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
-
-    expect(await screen.findByText(FAILED)).toBeOnTheScreen();
-    expect(router.back).not.toHaveBeenCalled();
-  });
-
-  it('쓸 게 없으면 「확인」은 요청 없이 바로 닫는다', async () => {
-    renderPage();
-    await screen.findByTestId('reflection-daily-confirm');
-
-    fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
-
-    await waitFor(() => expect(router.back).toHaveBeenCalledTimes(1));
-    expect(putBodies).toHaveLength(0);
-  });
   // TRIP-1425 · Q-112 — 입력을 마치면 조용히 저장돼 됐는지 알 수 없었다. PUT 이 나가 성공했을 때만 공용 토스트로 알린다.
   describe('TRIP-1425 · 한 줄을 실제로 저장했을 때만 "한 줄 메모를 저장했어요"', () => {
     const TOAST = 'reflection-daily-memo-saved-toast';
@@ -1309,29 +1289,7 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
       expect(putBodies).toEqual([{ shortMemo: '바다가 좋았다' }]);
     });
 
-    it('기록이 적은 날(하단 「확인」) 쓰고 바로 「확인」을 눌러도 저장 뒤 안내가 뜨고 닫힌다 (AC-14)', async () => {
-      // 준비 — 방문 1·사진 0 = data-insufficient(하단 바의 「확인」, 02a ★12).
-      serverItem = {
-        ...BASE_REFLECTION,
-        stats: { ...BASE_REFLECTION.stats, visitCount: 1, photoCount: 0 },
-      };
-      renderPage();
-      const input = await screen.findByTestId('reflection-daily-memo-input');
-      expect(screen.queryByTestId(TOAST)).toBeNull();
-
-      // 실행
-      fireEvent.changeText(input, '바다가 좋았다');
-      fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
-
-      // 단언
-      await waitFor(() => expect(router.back).toHaveBeenCalledTimes(1));
-      expect(
-        await screen.findByTestId(TOAST, {}, TOAST_WAIT)
-      ).toHaveTextContent(COPY);
-      expect(putBodies).toEqual([{ shortMemo: '바다가 좋았다' }]);
-    });
-
-    it('입력을 마쳐 PUT 이 진행 중일 때 응답 전에 「확인」을 눌러도 PUT 은 1회이고 닫힘도 1회다 (TRIP-1497)', async () => {
+    it('입력을 마쳐 PUT 이 진행 중일 때 응답 전에 같은 글로 한 번 더 마쳐도 PUT 은 1회다 (TRIP-1497 · TRIP-1591: 「확인」은 없어져 두 번째 마침으로 잰다)', async () => {
       // 준비 — data-insufficient 날 + PUT 응답을 붙잡는다.
       serverItem = {
         ...BASE_REFLECTION,
@@ -1346,8 +1304,8 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
       fireEvent(input, 'endEditing');
       await waitFor(() => expect(putBodies).toHaveLength(1));
 
-      // 실행 — 응답 전에 「확인」.
-      fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
+      // 실행 — 응답 전에 같은 글로 한 번 더 마침.
+      fireEvent(input, 'endEditing');
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
       });
@@ -1355,16 +1313,14 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
         releasePut();
       });
 
-      // 단언 — 한 번만 나가고 한 번만 닫힌다.
-      await waitFor(() => expect(router.back).toHaveBeenCalledTimes(1));
+      // 단언 — PUT 은 한 번뿐이다.
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
       });
       expect(putBodies).toEqual([{ shortMemo: '바다가 좋았다' }]);
-      expect(router.back).toHaveBeenCalledTimes(1);
     });
 
-    it('PUT 이 진행 중인 사이 한 줄을 더 고치고 「확인」을 누르면 먼저 보낸 저장이 끝난 뒤 고친 글이 한 번 더 저장되고 닫힌다 — 새 글이 사라지지 않는다 (TRIP-1497)', async () => {
+    it('PUT 이 진행 중인 사이 한 줄을 더 고쳐 다시 마치면 먼저 보낸 저장이 끝난 뒤 고친 글이 한 번 더 저장된다 — 새 글이 사라지지 않는다 (TRIP-1497)', async () => {
       serverItem = {
         ...BASE_REFLECTION,
         stats: { ...BASE_REFLECTION.stats, visitCount: 1, photoCount: 0 },
@@ -1379,31 +1335,29 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
       await waitFor(() => expect(putBodies).toHaveLength(1));
 
       fireEvent.changeText(input, 'A글 더');
-      fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
+      fireEvent(input, 'endEditing');
       putGate = Promise.resolve();
       await act(async () => {
         releasePut();
       });
 
-      await waitFor(() => expect(router.back).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(putBodies).toHaveLength(2));
       expect(putBodies).toEqual([
         { shortMemo: 'A글' },
         { shortMemo: 'A글 더' },
       ]);
     });
 
-    it('안 바뀐 한 줄은 입력을 마치거나 「확인」을 눌러도 요청·안내가 없다 — 바뀐 글은 뜬다 (AC-15)', async () => {
+    it('안 바뀐 한 줄은 입력을 마쳐도 요청·안내가 없다 — 바뀐 글은 뜬다 (AC-15)', async () => {
       // 준비
       serverItem = { ...BASE_REFLECTION, shortMemo: '바다가 좋았다' };
       renderPage();
       const input = await screen.findByTestId('reflection-daily-memo-input');
 
-      // 실행 ① — 그대로 마침 · 같은 글(앞뒤 공백만 다름)로 마침 · 「확인」.
+      // 실행 ① — 그대로 마침 · 같은 글(앞뒤 공백만 다름)로 마침.
       fireEvent(input, 'endEditing');
       fireEvent.changeText(input, ' 바다가 좋았다 ');
       fireEvent(input, 'endEditing');
-      fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
-      await waitFor(() => expect(router.back).toHaveBeenCalledTimes(1));
       // "안 바뀜"도 Promise 로 끝난다 — 한 바퀴 흘려야 잘못 건 안내가 보인다(02a ★11).
       await act(async () => {});
 
@@ -1423,7 +1377,7 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
       expect(putBodies).toEqual([{ shortMemo: '노을도 좋았다' }]);
     });
 
-    it('저장이 실패하면 안내는 없고 실패 줄이 남으며 「확인」은 닫지 않는다 (AC-16 · INV-4)', async () => {
+    it('저장이 실패하면 안내는 없고 실패 줄이 남는다 — 화면을 닫지도 않는다 (AC-16 · INV-4)', async () => {
       // 준비
       putFails = true;
       renderPage();
@@ -1433,8 +1387,6 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
       fireEvent.changeText(input, '바다가 좋았다');
       fireEvent(input, 'endEditing');
       expect(await screen.findByText(FAILED)).toBeOnTheScreen();
-      fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
-      await waitFor(() => expect(putBodies).toHaveLength(2));
       await act(async () => {});
 
       // 단언

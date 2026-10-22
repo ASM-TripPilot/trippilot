@@ -1,5 +1,6 @@
 package com.trippilot.reflection.adapter.out.persistence
 
+import com.trippilot.reflection.domain.AiAttempt
 import com.trippilot.reflection.domain.DayHighlight
 import com.trippilot.reflection.domain.DistanceSource
 import com.trippilot.reflection.domain.ReflectionSource
@@ -19,6 +20,7 @@ import org.hibernate.type.SqlTypes
 import org.slf4j.LoggerFactory
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.stereotype.Component
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -88,6 +90,50 @@ class TripSummaryRepositoryAdapter(private val jpa: TripSummaryJpaRepository) : 
         // 영속성 컨텍스트가 그 옛 값을 돌려줘, 잠금을 기다린 사이 겹친 요청이 고친 결과를 못 보고 다시 만든다(검수 재현).
         return jpa.findById(tripId).orElse(null)?.also { em.refresh(it) }?.toDomain()
     }
+
+    // 시도 기록(V2.84)은 엔티티에 매핑하지 않는다 — 요약을 덮는 생성·경로 갱신이 지우지 않게. 쓰기 둘은 호출자의 트랜잭션을 탄다.
+    override fun claimAiAttempt(tripId: UUID, reclaimAfter: Duration, maxAttempts: Int): Int? =
+        em.createNativeQuery(
+            """
+            UPDATE trip_summary SET ai_attempts = ai_attempts + 1, ai_attempted_at = now()
+             WHERE trip_id = :tripId AND source = 'RULE' AND ai_attempts < :max
+               AND (ai_attempted_at IS NULL OR ai_attempted_at < now() - make_interval(secs => :secs))
+            RETURNING ai_attempts
+            """.trimIndent(),
+        ).setParameter("tripId", tripId).setParameter("max", maxAttempts).setParameter("secs", reclaimAfter.seconds.toDouble())
+            .resultList.firstOrNull()?.let { (it as Number).toInt() }
+
+    override fun findAiAttempt(tripId: UUID, reclaimAfter: Duration): AiAttempt? =
+        em.createNativeQuery(
+            """
+            SELECT source, ai_attempts, COALESCE(ai_attempted_at >= now() - make_interval(secs => :secs), false)
+              FROM trip_summary WHERE trip_id = :tripId
+            """.trimIndent(),
+        ).setParameter("tripId", tripId).setParameter("secs", reclaimAfter.seconds.toDouble()).resultList.firstOrNull()
+            ?.let { row ->
+                val cols = row as Array<*>
+                AiAttempt(cols[0] as String, (cols[1] as Number).toInt(), cols[2] as Boolean)
+            }
+
+    override fun retireAiAttempts(tripId: UUID, maxAttempts: Int) {
+        em.createNativeQuery("UPDATE trip_summary SET ai_attempts = GREATEST(ai_attempts, :max) WHERE trip_id = :tripId AND source = 'RULE'")
+            .setParameter("max", maxAttempts).setParameter("tripId", tripId).executeUpdate()
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    override fun findAiPending(window: Duration, reclaimAfter: Duration, maxAttempts: Int, limit: Int): List<UUID> =
+        (
+            em.createNativeQuery(
+                """
+                SELECT trip_id FROM trip_summary
+                 WHERE source = 'RULE' AND generated_at > now() - make_interval(secs => :window) AND ai_attempts < :max
+                   AND (ai_attempted_at IS NULL OR ai_attempted_at < now() - make_interval(secs => :secs))
+                 ORDER BY generated_at
+                 LIMIT :limit
+                """.trimIndent(),
+            ).setParameter("window", window.seconds.toDouble()).setParameter("max", maxAttempts)
+                .setParameter("secs", reclaimAfter.seconds.toDouble()).setParameter("limit", limit).resultList as List<Any>
+            ).map { it as? UUID ?: UUID.fromString(it.toString()) }
 
     private fun TripSummary.toEntity() = TripSummaryEntity(
         tripId, narrative, highlights.map { it.toMap() }, stats.toMap(), source.name, generatedAt,

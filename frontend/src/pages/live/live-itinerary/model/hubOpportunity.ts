@@ -26,22 +26,33 @@ const blocksEvents = (trigger: Trigger, date: string): boolean =>
   trigger.affectedDate === date;
 
 /**
- * 템플릿이 서는 항목인가 — 요즘 인기는 늘, 행사는 막히지 않았고 이름·마지막 날이 있을 때만(서버 2차 게이트가 막는
- * 결측이지만 깨진 제목을 그리지 않는다), 그 밖의 kind 는 아니다(새 서버의 새 값을 옛 앱이 받아도 남의 문장을 붙이지 않는다).
+ * 날씨 위험 날에도 남는 행사 — 실내형으로 알려진 유형(공연·전시·팝업)뿐이다. 축제와 유형을 모르는 행사(옛 서버·새 값)는
+ * 야외일 수 있어 뺀다(G-SA-17 — 모르는 것을 실내라고 단정하지 않는다).
+ */
+const indoor = (item: Opportunity): boolean =>
+  item.eventType === 'PERFORMANCE' ||
+  item.eventType === 'EXHIBITION' ||
+  item.eventType === 'POPUP';
+
+/**
+ * 템플릿이 서는 항목인가 — 요즘 인기는 늘, 행사는 막히지 않았고(날씨 위험 날엔 실내형만) 이름·마지막 날이 있을 때만(서버
+ * 2차 게이트가 막는 결측이지만 깨진 제목을 그리지 않는다), 그 밖의 kind 는 아니다(새 서버의 새 값을 옛 앱이 받아도 남의 문장을
+ * 붙이지 않는다).
  */
 function drawable(item: Opportunity, eventsBlocked: boolean): boolean {
   if (item.kind === 'TRENDING') return true;
   if (item.kind !== 'EVENT_VENUE' && item.kind !== 'EVENT_NEARBY') return false;
   return (
-    !eventsBlocked &&
+    (!eventsBlocked || indoor(item)) &&
     (item.eventName ?? '').trim() !== '' &&
     DATE_RE.test(item.end ?? '')
   );
 }
 
 /**
- * 날짜당 1장 — ① 같은 날 날씨 위험이 발화 중이면 행사 카드를 뺀다(비 오는 날 야외 축제를 권하지 않는다) ② 남은 첫
- * 항목(서버 순위) ③ 그 항목의 key 를 이 날 숨겼으면(몇 번째로 숨겼든) 없음 — 숨긴 자리를 다음 항목으로 채우지 않는다.
+ * 날짜당 1장 — ① 같은 날 날씨 위험이 발화 중이면 축제·유형 모름 행사 카드를 뺀다(비 오는 날 야외 축제를 권하지 않는다 —
+ * 공연·전시·팝업은 남는다) ② 남은 첫 항목(서버 순위) ③ 그 항목의 key 를 이 날 숨겼으면(몇 번째로 숨겼든) 없음 — 숨긴
+ * 자리를 다음 항목으로 채우지 않는다.
  * 트리거를 아직 모르면(조회 중·실패) 고르지 않는다 — 요즘 인기를 먼저 그렸다가 트리거가 오면 행사 카드로 바뀌어,
  * 누르려던 [넣어서 다시 짜기]가 손끝에서 다른 장소가 되지 않게.
  */

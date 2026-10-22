@@ -1,4 +1,8 @@
-import { otaConfirmLabel } from './affiliateNotice';
+import {
+  isOtaSource,
+  otaConfirmLabel,
+  otaDisplayName,
+} from './affiliateNotice';
 
 /**
  * TRIP-781 AC-3 · 01b — 제휴 고지의 [이동] 버튼 라벨 사전.
@@ -23,5 +27,18 @@ describe('C2 · 아는 코드는 표시명 라벨 (AC-3)', () => {
 describe('C3 · 모르는 코드는 "외부 사이트로 이동" (AC-3 · 01b 수정안)', () => {
   it.each(['LOCALDATA', 'STUB', 'BOOKING', ''])('%p → 폴백 라벨', (source) => {
     expect(otaConfirmLabel(source)).toBe('외부 사이트로 이동');
+  });
+});
+
+// TRIP-1579 — 인기 숙소(Trip.com 큐레이션)의 출처 코드. 'Trip.com' 은 받침(컴)이 있어 조사는 '으로'다.
+describe('C4 · TRIPCOM 표시명·라벨 (TRIP-1579)', () => {
+  it('TRIPCOM → 표시명 "Trip.com" · 라벨 "Trip.com으로 이동"', () => {
+    expect(otaDisplayName('TRIPCOM')).toBe('Trip.com');
+    expect(otaConfirmLabel('TRIPCOM')).toBe('Trip.com으로 이동');
+  });
+
+  it('TRIPCOM 은 예약 출처(isOtaSource)가 아니다 — 하트로 담은 인기 숙소는 예약이 아니다', () => {
+    expect(isOtaSource('TRIPCOM')).toBe(false);
+    expect(isOtaSource('NAVER')).toBe(true);
   });
 });

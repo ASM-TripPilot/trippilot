@@ -9,4 +9,9 @@
  * OpenAPI spec version: 0.1.0-draft
  */
 
-export type DeletionResponseCascadeSummary = { [key: string]: unknown };
+export type DeletionResponseCascadeSummary = {
+  /** 유예 후 파기될 데이터 범주 */
+  purgeScheduled: string[];
+  /** 법정 보존으로 남는 범주 */
+  legallyRetained: string[];
+};

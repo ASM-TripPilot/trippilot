@@ -59,6 +59,16 @@ private class ScriptedDays(private val slot: CheckedSlot, vararg script: Boolean
     }
 }
 
+/** 정해 둔 하루 점검을 차례로 낸다 — [hoursAsked] = 호출마다 영업시간을 물었는가. */
+private class QueuedDays(vararg answers: DayCheck) : ItineraryDayCheckFacade {
+    private val answers = ArrayDeque(answers.toList())
+    val hoursAsked = mutableListOf<Boolean>()
+    override fun checkDay(accountId: UUID, tripId: UUID, date: LocalDate, judgeHours: Boolean): DayCheck {
+        hoursAsked += judgeHours
+        return answers.removeFirst()
+    }
+}
+
 /** 상태 조회 대역 — 실물처럼 실패는 예외다(DB 오류). 메시지에 비밀처럼 보이는 값을 실어 로그에 새는지 본다. */
 private class FakeStatus(private val answer: Map<UUID, PoiLifeStatus> = emptyMap(), private val fail: Boolean = false) : PoiStatusFacade {
     val asked = mutableListOf<Collection<UUID>>()
@@ -262,6 +272,19 @@ class PlaceDetectorTest : StringSpec({
             .shouldBeInstanceOf<Detection.Unknown>()
     }
 
+    "같은 날 확인한 장소와 모르는 장소가 섞이면 확인은 그대로 내되 partial 이다 — 감시 상태를 '확인'으로 남기지 않는다(G-SA-21)" {
+        val both = FakeStatus(mapOf(poiA to PoiLifeStatus.ACTIVE, poiB to PoiLifeStatus.ACTIVE))
+        val mixed = DayCheck(true, listOf(checked(TOMORROW, poiA, "10:00"), checked(TOMORROW, poiB, "12:00", HoursVerdict.UNKNOWN)))
+        val judged = DayCheck(true, listOf(checked(TOMORROW, poiA, "10:00"), checked(TOMORROW, poiB, "12:00")))
+
+        val partial = detector(FakeDays(mixed), both).detect(target(TOMORROW, at(TODAY, "20:15"), SweepPhase.EVENING))
+        val full = detector(FakeDays(judged), both).detect(target(TOMORROW, at(TODAY, "20:15"), SweepPhase.EVENING))
+
+        partial.shouldBeInstanceOf<Detection.Checked>().checked shouldBe setOf("$TOMORROW#$poiA")
+        partial.partial shouldBe true
+        full.shouldBeInstanceOf<Detection.Checked>().partial shouldBe false
+    }
+
     "볼 슬롯이 없으면(빈 날) 신호·확인 없이 확인으로 낸다 — 모를 것이 없다" {
         val d = detector(FakeDays(DayCheck(true, emptyList())), FakeStatus()).detect(target(TOMORROW, at(TODAY, "20:15"), SweepPhase.EVENING))
 
@@ -305,6 +328,18 @@ class PlaceDetectorTest : StringSpec({
         repeat(7) { d.detect(target(TOMORROW, at(TODAY, "20:15"), SweepPhase.EVENING)) }
 
         days.hoursAsked shouldContainExactly listOf(true, true, true, true, true, true, false)
+    }
+
+    "AI 가 답했는데 그 날 장소를 하나도 판정하지 못했다고 해도 답이다 — 연속 보류를 0 으로 되돌리고, 그 날은 모름이다(INV-SA-2)" {
+        val withheld = DayCheck(false, listOf(checked(TOMORROW, poiA, "10:00", HoursVerdict.UNKNOWN)))
+        val unjudged = DayCheck(true, listOf(checked(TOMORROW, poiA, "10:00", HoursVerdict.UNKNOWN)), answered = true)
+        val days = QueuedDays(withheld, withheld, unjudged, withheld, withheld)
+        val d = detector(days, FakeStatus(mapOf(poiA to PoiLifeStatus.ACTIVE)))
+
+        val seen = List(5) { d.detect(target(TOMORROW, at(TODAY, "20:15"), SweepPhase.EVENING)) }
+
+        days.hoursAsked shouldContainExactly listOf(true, true, true, true, true) // 답 뒤 보류 둘 — 회로는 열리지 않는다
+        seen[2].shouldBeInstanceOf<Detection.Unknown>() // 판정 못 한 장소를 '확인'으로 접지 않는다
     }
 
     "AI 를 부르지 않은 날(보류 아님 · 영업시간 모름)은 보류로 세지도, 0 으로 되돌리지도 않는다" {

@@ -14,6 +14,7 @@ dependencies {
     implementation(project(":modules:itinerary-generation"))  // R1: 일정 요약·계획 슬롯 읽기 — ItineraryFacade · ItineraryPlanFacade
     implementation(project(":modules:place-data"))            // R1: 장소 표면(영업시간) — PoiSurfaceFacade
     implementation(project(":modules:weather-context"))       // R1: 표시용 날씨 — ContextFacade
+    implementation(project(":modules:profile"))               // R1: 계정 취향(지역 추천 재료) — PreferenceFacade
     implementation(libs.spring.boot.starter.jdbc)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)

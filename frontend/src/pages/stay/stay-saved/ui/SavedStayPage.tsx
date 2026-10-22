@@ -11,6 +11,10 @@
  * (`features/save-stay/model/savedStays`)의 `remove` 는 외부키 역인덱스라 핀·수동 숙소를 못 지워
  * 목록 화면에 부적합하다(d02 선례). 하트 해제는 그래서 이 파일이 `savedStayId` 로 직접 지운다(TRIP-1429). 게스트는 `enabled: isAuthed=false` 로 조회를 아예 안
  * 내보내고, `isGuest` 를 상태 판정보다 먼저 화면에 내려 끝나지 않는 로딩을 피한다(d02 ★1).
+ *
+ * TRIP-1583 — 인기 숙소에서 담은 숙소(`externalSource==='TRIPCOM'`)는 앱 안 상세가 없다(서버 `GET /stays/{id}` 가
+ * TRIPCOM 을 모른다). 카드 누름은 상세 대신 제휴 고지 시트 → 호텔 상세 아웃바운드(`stay-outbound`)로 가고, 시트는
+ * 화면 루트 형제다.
  */
 import { useCallback, useMemo, useState, type ReactElement } from 'react';
 import { router } from 'expo-router';
@@ -25,13 +29,14 @@ import {
 import type { NoticeBannerNotice } from '@/shared/ui/NoticeBanner';
 
 import { resolvePlaceListState } from '@/features/explore';
-import { stayKey } from '@/features/save-stay';
+import { savedStayKey } from '@/features/save-stay';
 import {
   SavedStayListScreen,
   type SavedStayCardVM,
   type SavedStayFace,
 } from './SavedStayListScreen';
 import { useSavedStays } from '@/features/trip';
+import { OtaChoiceSheet, useStayOutboundFlow } from '@/features/stay-outbound';
 
 type RemoveFailure = {
   savedStayId: string;
@@ -56,6 +61,7 @@ export function SavedStayPage(): ReactElement {
   const isAuthed = getAccessToken() !== null;
   const query = useSavedStays({ enabled: isAuthed });
   const queryClient = useQueryClient();
+  const outbound = useStayOutboundFlow();
 
   // TRIP-1429 하트 해제(결정 ⑥) — 캐시를 고치지 않고 "이번 방문에서 지운 id" 집합으로 행을 가린다(d02
   // releasedPoiIds 선례). 실패하면 그 id 하나만 집합에서 빼므로 행이 서버 순서 그대로 제자리에 돌아오고,
@@ -93,6 +99,7 @@ export function SavedStayPage(): ReactElement {
       savedStays.map((stay) => ({
         savedStayId: stay.savedStayId,
         name: stay.name,
+        coverKey: savedStayKey(stay),
       })),
     [savedStays]
   );
@@ -107,19 +114,20 @@ export function SavedStayPage(): ReactElement {
       }
       // 하트 저장분(외부키 있음)은 stayKey(=SOURCE:ID), 핀·수동(외부키 null)은 savedStayId 폴백 —
       // 폴백이 없으면 핀 숙소가 route key "null:null" 로 충돌한다(★2).
-      const stayId =
-        stay.externalSource && stay.externalId
-          ? stayKey({
-              externalSource: stay.externalSource,
-              externalId: stay.externalId,
-            })
-          : stay.savedStayId;
+      const stayId = savedStayKey(stay);
+      // 인기 숙소(TRIPCOM)는 상세 대신 제휴 시트 → 호텔 상세 아웃바운드(stayId 'TRIPCOM:{id}', TRIP-1583).
+      if (stay.externalSource === 'TRIPCOM' && stay.externalId) {
+        outbound.request({ kind: 'stay', stayId, source: 'TRIPCOM' });
+        return;
+      }
       router.push({
         pathname: '/stays/[stayId]',
         params: { stayId },
       });
     },
-    [savedStays]
+    // ponytail: request 는 렌더마다 새 함수라 이 콜백도 렌더마다 바뀐다(행 memo 가 page 재렌더 때 풀린다) —
+    // 목록이 길어 체감되면 흐름 훅의 request 를 안정 참조로 만든다.
+    [savedStays, outbound]
   );
 
   const removeSavedStay = useCallback(
@@ -162,23 +170,28 @@ export function SavedStayPage(): ReactElement {
   );
 
   return (
-    <SavedStayListScreen
-      savedStays={cards}
-      face={face}
-      isGuest={!isAuthed}
-      onPressCard={handlePressCard}
-      onPressHeart={handlePressHeart}
-      removeNotice={
-        removeFailure ? REMOVE_FAILURE_NOTICE[removeFailure.reason] : null
-      }
-      onRetryRemove={() => {
-        if (removeFailure) handlePressHeart(removeFailure.savedStayId);
-      }}
-      onPressRegister={() => router.push('/stays/register')}
-      onPressBrowse={() => router.push('/stays')}
-      onRetry={() => void query.refetch()}
-      onPressLogin={() => router.push('/(auth)/login')}
-      onBack={() => router.back()}
-    />
+    <>
+      <SavedStayListScreen
+        savedStays={cards}
+        face={face}
+        isGuest={!isAuthed}
+        onPressCard={handlePressCard}
+        onPressHeart={handlePressHeart}
+        removeNotice={
+          removeFailure ? REMOVE_FAILURE_NOTICE[removeFailure.reason] : null
+        }
+        onRetryRemove={() => {
+          if (removeFailure) handlePressHeart(removeFailure.savedStayId);
+        }}
+        onPressRegister={() => router.push('/stays/register')}
+        onPressBrowse={() => router.push('/stays')}
+        onRetry={() => void query.refetch()}
+        onPressLogin={() => router.push('/(auth)/login')}
+        onBack={() => router.back()}
+      />
+      {outbound.sheetProps !== null ? (
+        <OtaChoiceSheet {...outbound.sheetProps} />
+      ) : null}
+    </>
   );
 }

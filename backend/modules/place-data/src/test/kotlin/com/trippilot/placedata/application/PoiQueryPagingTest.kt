@@ -35,6 +35,7 @@ class PoiQueryPagingTest : StringSpec({
             query: String,
             after: PoiCursor?,
             limit: Int,
+            seed: String?,
         ): List<Poi> {
             this.limit = limit
             this.after = after

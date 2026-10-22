@@ -25,7 +25,8 @@ import {
  * 종료일이 없거나 읽을 수 없으면 옛 규칙(카드 수 = Σnights)으로 돌아간다(01b Q4). 옛 PBT
  * "행 수 = Σnights"는 이 결정과 정면으로 반대라 재작성했다 — 폴백 경로의 성질로만 남는다.
  *
- * 출력 필드는 `{ nightNumber, dateLabel, region, stayName? }` **정확히 이 넷**(INV-3 — 소요시간·거리 없음).
+ * 출력 필드는 `{ nightNumber, dateLabel, region, stayName?, savedStayId? }` **정확히 이 다섯**(INV-3 — 소요시간·거리 없음).
+ * `savedStayId` 는 숙소명과 같은 배정에서 나오고 같이 붙는다 — 배선이 썸네일 그림 키를 찾는 데 쓴다(TRIP-1588).
  *
  * 커버하지 않는 것: 원 `toBaseSections`·`toNightlyBases`의 행위(각자 `baseSections.test.ts`·
  * `baseSections.nightly.test.ts`가 잠금 — D1 "원형 불변"). Σnights > 기간(1/4가 막는 상태)의 카드
@@ -172,7 +173,13 @@ function expectNight(card: NightlyBaseCard, expected: ExpectedNight): void {
 }
 
 /** 카드 필드 화이트리스트 — duration·거리 등 계약 밖 키가 새 나오면 잡는다(INV-3). */
-const ALLOWED_KEYS = ['dateLabel', 'nightNumber', 'region', 'stayName'];
+const ALLOWED_KEYS = [
+  'dateLabel',
+  'nightNumber',
+  'region',
+  'stayName',
+  'savedStayId',
+];
 
 // ── 테스트 ────────────────────────────────────────────────────────────────────
 
@@ -198,12 +205,14 @@ describe('nightlyBaseCards — 박별 거점 카드 파생 (TRIP-672 · D1)', ()
         dateLabel: '6/10(수)',
         region: '부산',
         stayName: '해운대 오션 호텔',
+        savedStayId: 'S1',
       },
       {
         nightNumber: 2,
         dateLabel: '6/11(목)',
         region: '부산',
         stayName: '해운대 오션 호텔',
+        savedStayId: 'S1',
       },
     ]);
   });
@@ -229,12 +238,14 @@ describe('nightlyBaseCards — 박별 거점 카드 파생 (TRIP-672 · D1)', ()
         dateLabel: '6/10(수)',
         region: '부산',
         stayName: '해운대 오션 호텔',
+        savedStayId: 'S1',
       },
       {
         nightNumber: 2,
         dateLabel: '6/11(목)',
         region: '부산',
         stayName: '해운대 오션 호텔',
+        savedStayId: 'S1',
       },
       // stayName 키가 아예 없다(미배정) — toEqual 은 생략 키와 undefined 를 같게 본다.
       { nightNumber: 3, dateLabel: '6/12(금)', region: '경주' },
@@ -376,7 +387,9 @@ describe('TRIP-1010 · 카드 수 = 여행 기간, 남은 밤은 마지막 여�
 
     expect(cards).toHaveLength(2);
     expect(cards[0].stayName).toBeUndefined();
+    expect(cards[0].savedStayId).toBeUndefined();
     expect(cards[1].stayName).toBe('종로 한옥 스테이');
+    expect(cards[1].savedStayId).toBe('S1');
   });
 
   it.each([

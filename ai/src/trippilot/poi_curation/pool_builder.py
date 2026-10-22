@@ -15,7 +15,7 @@ from datetime import datetime
 from trippilot.domain.common import PoiId, TransportMode
 from trippilot.domain.llm import CandidatePool
 from trippilot.domain.poi_curation import CandidatePoolRequest
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, counts_as_food
+from trippilot.domain.poi import DataQuality, Poi, PoiCategory, counts_as_food, reputation_bonus
 from trippilot.poi_curation.config import M7Config
 
 _ALLOWED_QUALITY = frozenset({DataQuality.FULL, DataQuality.PARTIAL})
@@ -113,7 +113,7 @@ class CandidatePoolBuilder:
     @staticmethod
     def _rank_key(p) -> tuple:
         """풀 정렬 키 — ⑥ 상한 절단에서 누가 살아남는지를 정한다."""
-        return (0 if p.open_hours else 1, -p.saved_count,
+        return (0 if p.open_hours else 1, -p.saved_count, -reputation_bonus(p.tags),
                 -(p.rating or 0.0), str(p.poi_id))
 
     @staticmethod

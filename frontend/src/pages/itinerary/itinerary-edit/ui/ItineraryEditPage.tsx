@@ -423,6 +423,8 @@ export function ItineraryEditPage({
           endAt={editingSlot.endAt}
           placeSummary={{
             imageUrl: editingSlot.imageUrl ?? null,
+            poiId: editingSlot.poiId,
+            category: editingSlot.category,
             name: editingSlot.nameKo ?? '',
           }}
           onApply={(patch) => {

@@ -1,7 +1,6 @@
 package com.trippilot.app.persistence
 
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
-import com.trippilot.weathercontext.domain.GridDay
 import com.trippilot.weathercontext.domain.GridForecast
 import com.trippilot.weathercontext.domain.GridForecastRepository
 import com.trippilot.weathercontext.domain.GridHour
@@ -9,7 +8,6 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.arbitrary
-import io.kotest.property.arbitrary.boolean
 import io.kotest.property.arbitrary.choice
 import io.kotest.property.arbitrary.double
 import io.kotest.property.arbitrary.element
@@ -59,16 +57,12 @@ class GridForecastPersistenceIT : AbstractPostgresIntegrationTest() {
             // 모르는 칸이 섞인 시각 — 키를 두지 않고 저장하고, 되읽으면 null 이다
             LocalDateTime.parse("2026-10-21T00:00") to GridHour(pop = null, pty = 0, sky = null, tmp = -1.5, wsd = null),
         ),
-        daily = mapOf(
-            LocalDate.parse("2026-10-20") to GridDay(tmn = null, tmx = 21.0),
-            LocalDate.parse("2026-10-21") to GridDay(tmn = -12.0, tmx = 3.0),
-        ),
         fetchedAt = base.plusSeconds(700),
         expiresAt = expires,
     )
 
     @Test
-    fun `jsonb 왕복 — 시간별·날짜별·모르는 칸이 저장 전과 같다`() {
+    fun `jsonb 왕복 — 시간별·모르는 칸이 저장 전과 같다`() {
         val saved = forecast("901,901", pop = 60, tmp = 18.0)
 
         grids.save(saved)
@@ -80,7 +74,7 @@ class GridForecastPersistenceIT : AbstractPostgresIntegrationTest() {
      * PBT-02 왕복(nfr-requirements §8 ② — 위 예시를 생성 입력으로 일반화): 저장한 발표분은 같은 값으로 되읽힌다.
      *
      * 생성기가 반드시 담는 경계 — 오늘·내일·모레 정시와 자정 · 칸별 null(키를 두지 않는다) · PTY 0~4 · SKY 1·3·4 · 정수형 실수(18.0)·
-     * 음수(−12.0)·소수(3.2)·임의 실수 · TMN·TMX null · 빈 시간별·날짜별 · 같은 격자 덮어쓰기(격자 키 5개를 돌려 써서 앞 발표분의 칸이
+     * 음수(−12.0)·소수(3.2)·임의 실수 · 빈 시간별 · 같은 격자 덮어쓰기(격자 키 5개를 돌려 써서 앞 발표분의 칸이
      * 남지 않는지도 본다).
      *
      * **허용 편차**: `-0.0` 은 `0.0` 으로 돌아올 수 있다(jsonb 의 수는 numeric 이라 음의 0 이 없다 — 판정 임계와 무관하다).
@@ -101,9 +95,8 @@ class GridForecastPersistenceIT : AbstractPostgresIntegrationTest() {
     fun `수 타입 — 정수로 적힌 기온·실수로 적힌 강수확률도 같은 값으로 읽는다`() {
         jdbc.update(
             """
-            INSERT INTO weather_grid_forecast(grid_key, base_at, hourly, daily, fetched_at, expires_at)
-            VALUES ('902,902', ?, '{"2026-10-20T14:00":{"pop":60.0,"pty":1,"sky":4,"tmp":18,"wsd":3}}'::jsonb,
-                    '{"2026-10-20":{"tmn":-12,"tmx":21}}'::jsonb, ?, ?)
+            INSERT INTO weather_grid_forecast(grid_key, base_at, hourly, fetched_at, expires_at)
+            VALUES ('902,902', ?, '{"2026-10-20T14:00":{"pop":60.0,"pty":1,"sky":4,"tmp":18,"wsd":3}}'::jsonb, ?, ?)
             """.trimIndent(),
             Timestamp.from(base), Timestamp.from(base), Timestamp.from(expires),
         )
@@ -111,7 +104,34 @@ class GridForecastPersistenceIT : AbstractPostgresIntegrationTest() {
         val read = grids.find("902,902")!!
 
         read.hourly[LocalDateTime.parse("2026-10-20T14:00")] shouldBe GridHour(pop = 60, pty = 1, sky = 4, tmp = 18.0, wsd = 3.0)
-        read.daily[LocalDate.parse("2026-10-20")] shouldBe GridDay(tmn = -12.0, tmx = 21.0)
+    }
+
+    /** 날짜별(`daily`) 칸은 매핑하지 않는다 — 새 행은 그 칸의 기본값 `{}` 로 찬다. null 이면 롤링 창의 옛 파드가 그 행을 읽다 죽는다. */
+    @Test
+    fun `매핑하지 않는 날짜별 칸은 빈 객체로 찬다 — 옛 파드가 읽어도 죽지 않는다`() {
+        grids.save(forecast("900,900", pop = 10, tmp = 12.0))
+
+        jdbc.queryForObject("SELECT daily::text FROM weather_grid_forecast WHERE grid_key = '900,900'", String::class.java) shouldBe "{}"
+    }
+
+    /** 옛 파드가 날짜별을 채워 쓴 행을 덮으면(merge → UPDATE) 그 칸은 옛 값 그대로다 — 매핑하지 않은 칸은 UPDATE 에 들지 않는다. */
+    @Test
+    fun `옛 파드가 쓴 행을 덮어도 날짜별 칸은 옛 값 그대로 남는다`() {
+        jdbc.update(
+            """
+            INSERT INTO weather_grid_forecast(grid_key, base_at, hourly, daily, fetched_at, expires_at)
+            VALUES ('910,910', ?, '{}'::jsonb, '{"2026-10-20":{"tmn":-13.0}}'::jsonb, ?, ?)
+            """.trimIndent(),
+            Timestamp.from(base), Timestamp.from(base), Timestamp.from(expires),
+        )
+
+        val next = forecast("910,910", pop = 10, tmp = 12.0)
+
+        grids.save(next)
+
+        grids.find("910,910") shouldBe next // 시간별은 새 발표분으로 덮였다
+        jdbc.queryForObject("SELECT daily::text FROM weather_grid_forecast WHERE grid_key = '910,910'", String::class.java) shouldBe
+            """{"2026-10-20": {"tmn": -13.0}}"""
     }
 
     @Test
@@ -137,7 +157,7 @@ class GridForecastPersistenceIT : AbstractPostgresIntegrationTest() {
     fun `만료가 발표보다 이르거나 같으면 DB 가 거절한다`() {
         shouldThrow<DataIntegrityViolationException> {
             jdbc.update(
-                "INSERT INTO weather_grid_forecast(grid_key, base_at, hourly, daily, fetched_at, expires_at) VALUES ('904,904', ?, '{}'::jsonb, '{}'::jsonb, ?, ?)",
+                "INSERT INTO weather_grid_forecast(grid_key, base_at, hourly, fetched_at, expires_at) VALUES ('904,904', ?, '{}'::jsonb, ?, ?)",
                 Timestamp.from(base), Timestamp.from(base), Timestamp.from(base),
             )
         }.message!!.contains("chk_weather_grid_forecast_window") shouldBe true
@@ -176,8 +196,6 @@ private val generatedForecasts: Arb<GridForecast> = arbitrary {
         gridKey = "90${Arb.int(5, 9).bind()},90${Arb.int(5, 9).bind()}",
         baseAt = base,
         hourly = offsets.associate { today.atStartOfDay().plusHours(it.toLong()) to hours.bind() },
-        daily = (0L..2L).map { today.plusDays(it) }.filter { Arb.boolean().bind() }
-            .associateWith { GridDay(tmn = temperatures.orNull(0.3).bind(), tmx = temperatures.orNull(0.3).bind()) },
         fetchedAt = base.plus(Arb.long(0L, Duration.ofHours(3).toNanos() / 1_000).bind(), ChronoUnit.MICROS),
         expiresAt = base.plus(Duration.ofMinutes(Arb.long(1L, 600L).bind())),
     )
@@ -188,6 +206,5 @@ private fun GridForecast.unsignedZeros(): GridForecast {
     fun Double?.u() = this?.let { if (it == 0.0) 0.0 else it }
     return copy(
         hourly = hourly.mapValues { (_, h) -> h.copy(tmp = h.tmp.u(), wsd = h.wsd.u()) },
-        daily = daily.mapValues { (_, d) -> GridDay(d.tmn.u(), d.tmx.u()) },
     )
 }

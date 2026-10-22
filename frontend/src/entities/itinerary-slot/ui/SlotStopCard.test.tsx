@@ -7,6 +7,7 @@ import {
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
+import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
 
 import { ALT_LABEL } from '../config/altLabel';
 import { buildSlotKey } from '../lib/slotKey';
@@ -28,7 +29,8 @@ function isTouchable(node: ReactTestInstance): boolean {
  * 무엇을 보장하나:
  *  - 새 testID 접두 `slot-stopcard-*`(기존 4접두와 충돌 0, 02a ★9). 각 leaf 는 값 하나만 담고
  *    `toHaveTextContent(문자열)` **완전일치**로 잠근다(02a ★1·§5 — matches.js exact=true 실검증).
- *  - E1 사진 null → `SlotPhotoPlaceholder`(요소 대체) · E2 시각 null → 칩 요소 부재(빈 칩 금지) ·
+ *  - E1 사진 null·'' → 같은 사진 칸에 슬롯 카테고리·poiId 의 카테고리 생성 이미지(사이클 20261022-place-category-covers
+ *    — 옛 틴트+아이콘 `SlotPhotoPlaceholder` 는 없어졌다) · E2 시각 null → 칩 요소 부재(빈 칩 금지) ·
  *    E4 필수/고정 배지 조건부 · E5 `onPressAlt` 있을 때만 `ALT_LABEL` 링크.
  *  - AC-7 — 링크 문구는 공용 상수 `ALT_LABEL`(config)에서 온다(카드가 소비).
  *
@@ -96,13 +98,44 @@ describe('🔴 SlotStopCard · CS1 — leaf 완전일치 계약 (AC-3)', () => {
   });
 });
 
-describe('🔴 SlotStopCard · CS2 — E1 사진 null → 플레이스홀더', () => {
-  it('imageUrl 이 null 이면 사진 leaf 대신 SlotPhotoPlaceholder 를 그린다', () => {
-    const { slotKey } = renderCard({ slot: makeSlot({ imageUrl: null }) });
-    const at = id(slotKey);
+describe('🔴 SlotStopCard · CS2 — E1 사진 없음 → 카테고리 생성 이미지', () => {
+  it('서버 사진이 있으면 그 사진을 { uri } 로 그린다', () => {
+    const { slotKey } = renderCard();
 
-    expect(screen.queryByTestId(at('photo'))).toBeNull();
-    expect(screen.getByTestId(at('photoplaceholder'))).toBeOnTheScreen();
+    expect(screen.getByTestId(id(slotKey)('photo')).props.source).toEqual([
+      { uri: 'https://cdn.example.com/gwangalli.jpg' },
+    ]);
+  });
+
+  it('imageUrl 이 null 이면 같은 사진 칸에 슬롯의 카테고리(야경)·poiId(poi-gwangalli)로 고른 생성 이미지를 그린다', () => {
+    const { slotKey } = renderCard({
+      slot: makeSlot({ imageUrl: null, category: '야경' }),
+    });
+
+    // 'poi-gwangalli' 는 변형 2 → night_view-2. 자연(makeSlot 기본)·다른 변형이면 오배선이다.
+    expect(screen.getByTestId(id(slotKey)('photo')).props.source).toEqual([
+      coverFor('야경', 'poi-gwangalli'),
+    ]);
+  });
+
+  it('imageUrl 이 빈 문자열이어도 생성 이미지다 (예전엔 "사진 있음"으로 새서 회색이었다)', () => {
+    const { slotKey } = renderCard({
+      slot: makeSlot({ imageUrl: '', category: '미술' }),
+    });
+
+    expect(screen.getByTestId(id(slotKey)('photo')).props.source).toEqual([
+      coverFor('미술', 'poi-gwangalli'),
+    ]);
+  });
+
+  it('카테고리가 없는 슬롯(null)은 중립 폴백 place.webp 이다', () => {
+    const { slotKey } = renderCard({
+      slot: makeSlot({ imageUrl: null, category: null }),
+    });
+
+    expect(screen.getByTestId(id(slotKey)('photo')).props.source).toEqual([
+      FALLBACK_COVER,
+    ]);
   });
 });
 

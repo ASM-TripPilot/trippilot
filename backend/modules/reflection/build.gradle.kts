@@ -15,12 +15,14 @@ dependencies {
     implementation(project(":modules:place-data")) // R1: 방문점 좌표(거리 근사) — placedata.api
     implementation(project(":modules:profile"))  // R1: 임계 미만 미리보기의 온보딩 취향 — profile.api
     implementation(project(":modules:auth"))     // R1: 개인화 동의 게이트 — auth.api(PersonalizationConsentFacade)
+    implementation(project(":modules:change-log")) // R1: 그날 적용된 재계획(회고 재료 PLAN_B) — changelog.api(ChangeLogFacade)
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.kotlin.reflect)
     // 계측(BR-U5-31 강등 건수)만 쓴다 — 레지스트리 구현·내보내기는 app 이 갖는다.
     implementation(libs.micrometer.core)
+    implementation(libs.shedlock.spring)         // 요약 회고 다시 맡기기 스윕 단일 실행 락(@SchedulerLock, TRIP-1488)
     // 아웃박스 payload(JSON 문자열)를 읽는다. 트리로만 읽으므로 Kotlin 모듈은 필요 없다.
     implementation(libs.jackson.module.kotlin)
     implementation(libs.jackson3.module.kotlin)         // AI 경계 매퍼(Jackson 3 = SB4 기본) — 일정 경계와 같은 관례

@@ -13,7 +13,7 @@
  *    `formatBaseNightRange`(`6/11–6/12 · 1박`, en dash·미들닷, 없으면 줄 생략) + 선택 시 체크(tone
  *    primary). 동네(`region`)는 배선이 reverse-geocode 주소의 시군구 토큰(`sigunguLabel`, TRIP-1074)으로
  *    채워 내린다 — 주소 모름이면 미지정. SavedStay 계약에 price·imageUrl 이 없어(실측) 실데이터 경로는
- *    사진·가격을 **미렌더**(카드 optional 슬롯 additive, 값은 프리뷰만 — INV-1 · 계약 예정 TRIP-825).
+ *    가격을 **미렌더**하고 사진 칸은 배선이 채운 `coverKey` 의 숙소 그림이다(INV-1 · TRIP-1588 · 계약 예정 TRIP-825).
  *    거리는 표시 자체를 제거함(기준점 미정·BE 미제공, 제품 결정 2026-09-17 — Figma 프레임과 의도적 드리프트, TRIP-811 동기 대상).
  *  - **단일 선택**(★2) 선택 표식은 색 fill 이 아니라 `accessibilityState={{selected}}`다 — 색만 바꾸는
  *    구현은 jest 무심판이라(글리프 fill 함정, repo-traps) 접근성 상태로 관찰 가능하게 한다.
@@ -37,14 +37,15 @@ import type { SavedStay } from '@/shared/api/index.schemas';
 
 import { CheckGlyph, SearchGlyph } from '@/features/trip/index.view';
 
-/** 후보 = 저장 숙소 + 표시용 rich 필드(사진·동네·가격). 동네는 배선이 주소 시군구 토큰으로 채운다
+/** 후보 = 저장 숙소 + 표시용 rich 필드(사진·동네·가격·그림 키). 동네는 배선이 주소 시군구 토큰으로 채운다
  *  (TRIP-1074, 주소 모름이면 undefined). 사진·가격은 SavedStay 계약에 없어(실측) 실데이터 경로는
- *  undefined → 카드가 degrade(회색 자리·가격 줄 없음), 프리뷰만 채운다(INV-1 · 계약 예정 TRIP-825).
- *  전부 optional이라 plain SavedStay[] 도 그대로 대입된다. */
+ *  undefined → 카드가 degrade(숙소 그림·가격 줄 없음), 프리뷰만 채운다(INV-1 · 계약 예정 TRIP-825).
+ *  `coverKey` 는 배선이 `savedStayKey` 로 채운다(TRIP-1588). 전부 optional이라 plain SavedStay[] 도 그대로 대입된다. */
 export type StaySelectCandidate = SavedStay & {
   imageUrl?: string;
   region?: string;
   priceLabel?: string;
+  coverKey?: string;
 };
 
 /** TRIP-1011 — 후보를 나눠 그릴 섹션 하나(헤더 제목 + 그 섹션의 후보). */
@@ -115,7 +116,7 @@ export function StaySelectSheet({
     const dateLine = formatBaseNightRange(stay.checkIn, stay.checkOut);
     // 후보 카드를 entities degrade 카드로 위임(★16). 선택은 색이 아니라
     // accessibilityState + 우측 체크(trailing, tone primary)로 잰다(★2). 동네는 배선이 채운 값만
-    // (TRIP-1074), 사진·가격은 SavedStay 계약에 없어(실측) 실데이터는 미렌더(값은 프리뷰만 — INV-1).
+    // (TRIP-1074), 가격은 SavedStay 계약에 없어(실측) 실데이터는 미렌더, 사진 칸은 coverKey 의 숙소 그림(INV-1 · TRIP-1588).
     return (
       <SavedStayCard
         key={stay.savedStayId}
@@ -124,6 +125,7 @@ export function StaySelectSheet({
         layout="row"
         selected={selected}
         imageUrl={stay.imageUrl}
+        coverKey={stay.coverKey}
         region={stay.region}
         priceLabel={stay.priceLabel}
         subtitle={

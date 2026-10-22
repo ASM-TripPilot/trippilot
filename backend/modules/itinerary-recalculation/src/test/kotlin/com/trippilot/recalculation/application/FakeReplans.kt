@@ -31,9 +31,34 @@ internal class FakeReplans(
         return proposal
     }
 
-    override fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal, reason: String) {
+    /** 반영이 돌려줄 되돌리기 지점(TRIP-1412). 기본은 "반영 전엔 그 날이 비어 있었다". */
+    var restorePoint: ReplanProposal? = null
+
+    /** 되돌리기 호출 — (반영본, 되돌리기 지점, 사유). [revertFailWith] 로 C8 의 409(STALE)를 흉내 낸다. */
+    val reverted = mutableListOf<Triple<ReplanProposal, ReplanProposal, String>>()
+    var revertFailWith: RuntimeException? = null
+
+    /** 되돌리기가 받은 실적 읽기를 실제로 불러 본 값 — C10 이 넘기는 집합이 맞는지 본다(판정 자체는 C8 스펙). */
+    val visitedSeen = mutableListOf<Set<String>>()
+
+    /** 잠금을 잡는 순간에 끼워 넣을 일 — "잠금 전 읽기와 잠금 뒤 읽기 사이에 커밋된 쓰기"를 흉내 낸다. */
+    var onLock: () -> Unit = {}
+
+    override fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal, reason: String, afterLock: () -> Unit): ReplanProposal {
+        onLock()
+        afterLock()
         applied += proposal
         appliedReasons += reason
+        return restorePoint ?: proposal.copy(slots = emptyList())
+    }
+
+    override fun revert(
+        accountId: UUID, tripId: UUID, applied: ReplanProposal, restore: ReplanProposal, reason: String,
+        visitedSlotKeys: () -> Set<String>,
+    ) {
+        visitedSeen += visitedSlotKeys()
+        revertFailWith?.let { throw it }
+        reverted += Triple(applied, restore, reason)
     }
 
     companion object {
@@ -59,8 +84,11 @@ internal class FakeReplans(
 internal class FakeArchive(
     private val completedSlots: Set<String> = emptySet(),
     private val lastCompletedPoi: UUID? = null,
+    /** 다녀온(도착·완료) 슬롯 — 주지 않으면 완료분과 같다(완료는 도착을 거친다). */
+    private val visitedSlots: Set<String> = completedSlots,
 ) : ArchiveFacade {
     override fun getCompletedSlots(tripId: UUID) = completedSlots
+    override fun getVisitedSlots(tripId: UUID) = visitedSlots
     override fun findLastCompletedPoi(tripId: UUID) = lastCompletedPoi
     override fun isAutomationArmed(tripId: UUID, at: java.time.Instant) = false
 }

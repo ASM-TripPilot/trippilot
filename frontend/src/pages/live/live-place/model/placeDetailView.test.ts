@@ -126,6 +126,18 @@ describe('buildPlaceDetailView — 슬롯 POI → 표시용 뷰', () => {
     expect(DURATION.test(strings)).toBe(false);
   });
 
+  it('V-7b 뷰가 poiId 를 싣는다 — 생성 이미지 변형을 고르는 재료 (사이클 20261022-place-category-covers)', () => {
+    const slots = [
+      slot({ poiId: 'p1', category: '맛집' }),
+      slot({ poiId: 'p2', category: '술집', startAt: '17:00:00' }),
+    ];
+
+    expect(buildPlaceDetailView(slots, 'p2')?.poiId).toBe('p2');
+    expect(buildPlaceDetailView(slots, 'p1')?.poiId).toBe('p1');
+    // 카테고리도 그 슬롯의 값이다(다른 슬롯 값이 새지 않는다).
+    expect(buildPlaceDetailView(slots, 'p2')?.category).toBe('술집');
+  });
+
   it('V-8 운영 계약 공백 — 갤러리는 대표 사진 1장뿐, 사진 수·추천 카피·주소·입장료는 null (TRIP-755 AC-8 · G6 · INV-1)', () => {
     // 준비·실행 ① — 대표 사진 없음.
     const noPhoto = buildPlaceDetailView(

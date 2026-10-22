@@ -7,6 +7,7 @@ import {
 
 import type { SavedStay } from '@/shared/api/index.schemas';
 
+import { stayCoverFor } from '@/test-support/placeCoverFixtures';
 import { StaySelectSheet } from './StaySelectSheet';
 import { CheckGlyph } from '@/features/trip/index.view';
 
@@ -90,6 +91,39 @@ function renderSheet(
   render(<StaySelectSheet {...props} />);
   return props;
 }
+
+describe('TRIP-1588 · 후보 카드 사진 칸 = 후보의 coverKey 숙소 그림', () => {
+  const a = { ...GWANGALLI, coverKey: 'KAKAO:13' };
+  const b = { ...HAEUNDAE, coverKey: 'KAKAO:16' };
+  function expectCovers(): void {
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-stay-gwangalli-photo').props
+        .source
+    ).toEqual([stayCoverFor('KAKAO:13')]);
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-stay-haeundae-photo').props
+        .source
+    ).toEqual([stayCoverFor('KAKAO:16')]);
+  }
+
+  it('평면 목록 — 카드마다 자기 coverKey 의 그림이다 (A/B 바꿔 끼우면 red)', () => {
+    renderSheet({ candidates: [a, b] });
+
+    expectCovers();
+  });
+
+  it('섹션 목록 — 같은 규칙이다', () => {
+    renderSheet({
+      candidates: [a, b],
+      sections: [
+        { key: 'here', title: '부산 숙소', candidates: [b] },
+        { key: 'other', title: '다른 지역', candidates: [a] },
+      ],
+    });
+
+    expectCovers();
+  });
+});
 
 describe('S1 · 헤더 (AC-1)', () => {
   it('박 라벨·지역 제목과 "{날짜(요일)} 밤 · 어디서 묵을까요?" 부제를 그린다', () => {

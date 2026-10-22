@@ -340,7 +340,7 @@ def test_prompt_renders_deterministically() -> None:
     p1, ref = reg.render(_FEAT, build_share_card_copy_vars(_request()))
     p2, _ = reg.render(_FEAT, build_share_card_copy_vars(_request()))
     assert p1 == p2  # 결정론
-    assert ref.prompt_id == "prompts/share_card_copy.yaml" and ref.version == "0.1.0"
+    assert ref.prompt_id == "prompts/share_card_copy.yaml" and ref.version == "0.1.1"
     assert ref.feature == "SHARE_CARD_COPY"
     assert "부산" in p1 and "2026-08-01 ~ 2026-08-02" in p1
     assert "감천문화마을" in p1 and "해운대" in p1

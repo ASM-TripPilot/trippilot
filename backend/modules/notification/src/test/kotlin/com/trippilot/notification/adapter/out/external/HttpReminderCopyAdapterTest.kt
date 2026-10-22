@@ -2,6 +2,7 @@ package com.trippilot.notification.adapter.out.external
 
 import com.sun.net.httpserver.HttpServer
 import com.trippilot.notification.domain.NotificationKind
+import com.trippilot.notification.domain.ReminderCopy
 import com.trippilot.notification.domain.ReminderCopyRequest
 import com.trippilot.notification.domain.ReminderSlot
 import io.kotest.core.spec.style.StringSpec
@@ -173,6 +174,48 @@ class HttpReminderCopyAdapterTest : StringSpec({
             adapterAt(url).copiesFor(null, many)
 
             sent.size shouldBe 2
+            // 앞 묶음은 상한을 꽉 채운다 — 계약 게이트가 대조하는 값(`maxItems()`)이 실제로 나누는 값이어야 한다.
+            sent.map { Regex("\"schedule_key\"").findAll(it).count() } shouldBe listOf(HttpReminderCopyAdapter.maxItems(), 1)
+        }
+    }
+
+    /**
+     * **요청 메타가 실린다.** 상대는 `deadline_ms` 로 자기 마감을 정한다 — 빠지거나 0 이면 상대가 곧바로
+     * 시간 초과로 규칙 문구에 내려가고, 우리는 그것을 degraded 로 받아 늘 상수 문구가 된다.
+     */
+    "요청 메타에 요청 id·요청 시각·설정한 마감을, 항목에 종류·날짜를 싣는다" {
+        withCapturingServer(body()) { url, sent ->
+            adapterAt(url, ReminderCopyProperties(mode = "http", baseUrl = url, deadlineMs = 6_000)).copiesFor(null, items)
+
+            val sentTree = ReminderCopyConfiguration.boundaryMapper().readTree(sent.single())
+            val meta = sentTree["request_meta"]
+            val requestId = meta["request_id"].asString()
+            java.util.UUID.fromString(requestId).toString() shouldBe requestId // 정규 UUID 표기 그대로다
+            Instant.parse(meta["requested_at"].asString()) shouldBe Instant.parse("2026-08-01T00:00:00Z")
+            meta["deadline_ms"].asLong() shouldBe 6_000L
+            // 상대는 종류로 말투를, 날짜로 "오늘/내일"을 정한다 — 비면 422 거나 엉뚱한 날 이야기다.
+            sentTree["items"].map { it["kind"].asString() to it["date"].asString() } shouldBe
+                listOf("TRIP_DAY" to "2026-08-10", "TRIP_PRE" to "2026-08-09")
+        }
+    }
+
+    /** 컬럼 폭 경계는 **들어간다** — 60자 제목·200자 본문을 버리면 멀쩡한 AI 문구가 상수 문구로 떨어진다. */
+    "컬럼 폭과 같은 길이의 문구는 받고, 본문이 한 자라도 넘치면 버린다" {
+        val title = "가".repeat(60)
+        val fits = "나".repeat(200)
+        withServer(body(copies = """{"schedule_key":"키-1","title":"$title","body":"$fits"},{"schedule_key":"키-2","title":"제목","body":"${fits}다"}""")) { url ->
+            val out = adapterAt(url).copiesFor(null, items)
+
+            out.keys shouldBe setOf("키-1")
+            out["키-1"] shouldBe ReminderCopy(title, fits)
+        }
+    }
+
+    /** 읽기 타임아웃이 상대 백스톱(마감 + 5초)보다 짧으면, 상대가 정리해 보내는 응답을 우리가 먼저 끊는다. */
+    "읽기 타임아웃은 마감+5초 이상이어야 한다 — 같은 값은 허용 경계다" {
+        ReminderCopyProperties(deadlineMs = 8_000, readTimeoutMs = 13_000).readTimeoutMs shouldBe 13_000
+        io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+            ReminderCopyProperties(deadlineMs = 8_000, readTimeoutMs = 12_999)
         }
     }
 })
@@ -180,7 +223,10 @@ class HttpReminderCopyAdapterTest : StringSpec({
 private fun body(copies: String = "", degraded: Boolean = false) =
     """{"copies":[$copies],"degraded":$degraded,"fallback_mode":null}"""
 
-private fun adapterAt(baseUrl: String) = HttpReminderCopyAdapter(
+private fun adapterAt(
+    baseUrl: String,
+    properties: ReminderCopyProperties = ReminderCopyProperties(mode = "http", baseUrl = baseUrl),
+) = HttpReminderCopyAdapter(
     RestClient.builder().baseUrl(baseUrl)
         .requestFactory(
             SimpleClientHttpRequestFactory().apply {
@@ -191,7 +237,7 @@ private fun adapterAt(baseUrl: String) = HttpReminderCopyAdapter(
             it.add(0, JacksonJsonHttpMessageConverter(ReminderCopyConfiguration.boundaryMapper()))
         }
         .build(),
-    ReminderCopyProperties(mode = "http", baseUrl = baseUrl),
+    properties,
     Clock.fixed(Instant.parse("2026-08-01T00:00:00Z"), ZoneOffset.UTC),
 )
 
