@@ -37,6 +37,7 @@ from enum import Enum
 
 from trippilot.agents.edit.insert_between import SlotRef, parse_insert_place, resolve_gap
 from trippilot.agents.planb.rag import _REASON_KO, PlanBAgent, PlanBRagRequest
+from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent, UnknownTask
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import (
     BudgetLevel,
@@ -62,7 +63,6 @@ from trippilot.orchestrator.arguments import extract_kind
 from trippilot.orchestrator.intent_router import normalize
 from trippilot.orchestrator.opportunity import _displayable, shown_event
 from trippilot.orchestrator.place_intro import PlaceIntro
-from trippilot.orchestrator.unknown_handling import UnknownHandlingAgent
 from trippilot.ports.place_fact_store_port import PlaceFacts
 from trippilot.orchestrator.place_sql import PlaceSqlLookup, asks_for_places
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder, restrict_pool_to_target_role
@@ -1136,10 +1136,10 @@ def _web_facts(ctx: TurnContext, packet: Mapping[str, object], poi_id: str, plac
     fields = _unknown_asked(ctx, row) if agent is not None else ()
     if not fields:
         return {}
-    stored = agent.known(poi_id, ctx.now)
-    if stored is not None:  # 찾았거나 못 찾음이 저장돼 있다 — 못 찾음이면 종전대로 "미확인"
-        return {"web": stored.facts} if stored.facts is not None else {}
-    return {"web_pending": True} if agent.request(poi_id, place, fields, ctx.today, ctx.trace_id, ctx.now) else {}
+    out = agent.run(UnknownTask(poi_id, place, fields, ctx.today, ctx.trace_id, ctx.now))
+    if out.facts is not None:  # 저장된 값 — 이번 턴에 찾은 것이 아니다
+        return {"web": out.facts}
+    return {"web_pending": True} if out.pending else {}  # 없음(못 찾음 저장·하루 상한)이면 종전대로 "미확인"
 
 
 def _plan_poi_info(ctx: TurnContext) -> tuple[HandlerTask, ...]:

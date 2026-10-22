@@ -651,3 +651,10 @@
 - **입력**: #1579 개발 서버 확인(AI 파드 안 직접 호출 6건, 전부 의도대로) 중 취향 기반 지역 추천 답이 "…장소가 전국 평균보다 많은 편"을 세 번 되풀이 — 사용자 지적("너무 형식적")과 같은 결.
 - **무엇을 했나**: ① `_assemble_region` 사실 행을 종류 이름만으로, 비교 기준은 `detail.compared_to` 한 번 ② 답변 0.3.8 규칙 줄(지역마다 같은 문장 꼴 금지·비교 기준 한 번) ③ 측정 사례 행 모양 동기화. 행 문구만 줄인 판은 같은 꼴을 다시 베껴 버렸다.
 - **지키는 것**: 지역 고르기·와이어·BE 무변경, 다른 의도 답 무변경.
+
+## 2026-10-22 — UnknownHandlingAgent 를 agents/ 로 — 넷과 같은 자리·같은 꼴 (BR-AF-11 5종 개정)
+**Timestamp**: 2026-10-22 · 브랜치 `refactor/unknown-handling-agent-package` · **승인 대기**(같은 PR 머지 = 승인)
+- **입력**: 사용자 — "agent들은 다 한곳에다가 두자. 다른 4개의 에이전트와 동일하게 취급되게 4개가 짜여진대로 맞추어서 두자!" + 결정 2건: 진입점은 넷처럼 `run(<Task>)` 하나로 통일 · FD 의 "Agent 4종" 도 이 PR 에서 5종으로.
+- **무엇을 했나**: ① `orchestrator/unknown_handling.py` → `agents/unknown_handling/agent.py` + `__init__.py`(넷과 같은 틀 — 모듈 구성·경계 L-2/3/4/6·re-export 없음) ② `known`·`request` 두 진입점 → `run(UnknownTask) -> UnknownOutcome(facts, pending)` 하나 — 찾았음·찾는 중·없음 셋은 그대로 구분(핸들러 각주·칩이 이걸로 갈린다), 순서 판단("저장된 값 → 없으면 뒤에서")은 에이전트 몫으로 ③ `InMemoryPlaceFactStore` → `agents/adapters/memory_place_fact_store.py`(`memory_memory_store.py` 와 같은 자리) ④ 소비처 import 교체(`api/dialogue.py`·`dialogue_handlers._web_facts`) ⑤ 테스트 `tests/agents/unknown_handling/`, 폴백 문장 PBT 는 핸들러 몫이라 `tests/orchestrator/test_web_sentence.py` ⑥ 로스터 — `agents/__init__.py`·README「에이전트 5종」·BR-AF-11·미결 #8·business-logic-model §1 배치표.
+- **지키는 것**: 동작·와이어·`PLACE_FACT_LOOKUP` 배정 무변경(개발 서버는 미배정으로 꺼진 채 — 켜기는 웹 검색 과금 확인 대기, 이 PR 과 무관) · 아키텍처 테스트 L-1~L-6 그대로 통과(에이전트는 게이트웨이 워커·ports 만 import) · `submit=` 주입(테스트가 "이번 턴은 기다리지 않는다"를 보이는 손잡이) 유지.
+- **남긴 것**: `envelope.py` 는 만들지 않았다(넷 다 소비처 0 인 미완 수렴 · 산출 타입 없음 — 미결 #8 과 함께) · 형제 패키지 docstring 의 "넷 다 후속" 표기는 손대지 않았다.

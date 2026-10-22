@@ -20,6 +20,8 @@ src/trippilot/
     edit/ planb/ reflect/ schedule/     (각 유닛에서 추가 — 상호 import 금지)
                        2026-09-09 넷 다 **워커를 감싸는 객체**로 통일: `run(<Task>) -> <Outcome>`.
                        edit/ 는 최상위 모듈에서 패키지로 승격(L-2 형제 검사 대상이 된다).
+    unknown_handling/  2026-10-22 편입(#1576 의 `orchestrator/unknown_handling.py` 에서 이동) — 도우미 미확인 칸 웹 확인,
+                       같은 꼴 `run(UnknownTask) -> UnknownOutcome`. 대화형 위임 대상 5종(BR-AF-11)
   orchestrator/        ScheduleCoordinator(GENERATE_SCHEDULE 준비·위임 — 의도 파악 안 함) · InfoCollector · IntentRouter(미배선)
   providers/           (U5·U6 예약 — LLM 0회 계층)
   background/          (U6 예약 — 소싱 파이프라인·자율 트리거형, §5)

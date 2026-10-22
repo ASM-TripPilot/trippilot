@@ -1,18 +1,24 @@
-"""UnknownHandlingAgent — 먼저 답하고 뒤에서 찾기(2026-10-22 사용자 결정). 저장·중복 제거·하루 상한·실패 미저장, Pg 저장소 DML."""
+"""UnknownHandlingAgent — 먼저 답하고 뒤에서 찾기(2026-10-22 사용자 결정). `run(UnknownTask)` 하나로 찾았음·찾는 중·없음 셋이
+갈리고, 저장·중복 제거·하루 상한·실패 미저장·장애 수렴, Pg 저장소 DML. (폴백 문장이 답변 검사를 넘는다는 PBT 는 핸들러 몫 —
+`tests/orchestrator/test_web_sentence.py`)"""
 
 from __future__ import annotations
 
 import json
 from datetime import date, datetime, timedelta, timezone
 
+import pytest
+
+from trippilot.agents.adapters.memory_place_fact_store import InMemoryPlaceFactStore
 from trippilot.agents.adapters.pg_place_fact_store import PgPlaceFactStore
+from trippilot.agents.unknown_handling import agent as uh
+from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent, UnknownOutcome, UnknownTask
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm import TypedResult
-from trippilot.orchestrator import unknown_handling as uh
-from trippilot.orchestrator.unknown_handling import InMemoryPlaceFactStore, UnknownHandlingAgent
 from trippilot.ports.place_fact_store_port import FactRecord, PlaceFacts
 
 _NOW = datetime(2026, 10, 22, 6, 0, tzinfo=timezone.utc)
+_ON = date(2026, 10, 22)
 _FACTS = PlaceFacts(hours="09:00~18:00", last_entry="17:00", closed="매주 화요일", fee="3,000원",
                     source_url="https://royal.khs.go.kr/a", source_host="royal.khs.go.kr")
 
@@ -50,54 +56,74 @@ def _agent(result: TypedResult):
     return UnknownHandlingAgent(worker, store, submit=later), later, store, worker
 
 
-def test_request_returns_at_once_and_the_next_ask_sees_the_found_value() -> None:
+def _task(poi_id="p1", place="경복궁 서울 종로구", fields=("hours", "last_entry"), *, now=_NOW, trace="t") -> UnknownTask:
+    return UnknownTask(poi_id, place, tuple(fields), _ON, TraceId(trace), now)
+
+
+def test_run_says_pending_at_once_and_the_next_ask_sees_the_found_value() -> None:
     agent, later, _, worker = _agent(_ok(_FACTS))
-    assert agent.known("p1", _NOW) is None
-    assert agent.request("p1", "경복궁 서울 종로구", ("hours", "last_entry"), date(2026, 10, 22), TraceId("t"), _NOW)
+    assert agent.run(_task()) == UnknownOutcome(pending=True)
     assert worker.calls == []  # 이번 턴은 찾기를 기다리지 않는다
     later.run()
-    stored = agent.known("p1", _NOW + timedelta(minutes=1))
-    assert stored.facts == _FACTS and stored.expires_at == _NOW + uh.FOUND_TTL
-    assert agent.known("p1", _NOW + uh.FOUND_TTL + timedelta(seconds=1)) is None  # 일주일 뒤 다시 찾는다
+    assert agent.run(_task(now=_NOW + timedelta(minutes=1))) == UnknownOutcome(facts=_FACTS)
+    assert worker.calls == [("경복궁 서울 종로구", ("hours", "last_entry"), _ON)]  # 저장된 값을 돌려줬다 — 다시 찾지 않는다
+    assert agent.run(_task(now=_NOW + uh.FOUND_TTL + timedelta(seconds=1))) == UnknownOutcome(pending=True)  # 일주일 뒤 다시 찾는다
 
 
 def test_the_same_place_is_not_looked_up_twice_while_in_flight() -> None:
     agent, later, _, _ = _agent(_ok(_FACTS))
-    on = date(2026, 10, 22)
-    assert agent.request("p1", "경복궁", ("hours",), on, TraceId("a"), _NOW)
-    assert agent.request("p1", "경복궁", ("hours",), on, TraceId("b"), _NOW)  # 찾는 중 — "찾는 중"이라 답해도 맞다
+    assert agent.run(_task(trace="a")).pending
+    assert agent.run(_task(trace="b")).pending  # 찾는 중 — "찾는 중"이라 답하는 것이 맞다
     assert len(later.jobs) == 1
 
 
 def test_nothing_found_is_stored_briefly_and_a_failure_is_not_stored() -> None:
     agent, later, _, _ = _agent(_ok(None))
-    agent.request("p1", "경복궁", ("hours",), date(2026, 10, 22), TraceId("t"), _NOW)
+    agent.run(_task())
     later.run()
-    assert agent.known("p1", _NOW).facts is None  # 못 찾음 — 하루는 다시 찾지 않는다
-    assert agent.known("p1", _NOW + uh.MISS_TTL) is None
+    assert agent.run(_task()) == UnknownOutcome() and later.jobs == []  # 못 찾음 — 하루는 다시 찾지 않고 종전대로 "미확인"
+    assert agent.run(_task(now=_NOW + uh.MISS_TTL)).pending  # 하루 뒤 다시 찾는다
     failing, later2, _, _ = _agent(TypedResult(value=None, is_fallback=True, error="timeout", call_record=None))
-    failing.request("p2", "남산서울타워", ("hours",), date(2026, 10, 22), TraceId("t"), _NOW)
+    failing.run(_task("p2", "남산서울타워", ("hours",)))
     later2.run()
-    assert failing.known("p2", _NOW) is None  # 시한·형식·출처 없음은 저장하지 않는다 — 다음에 물으면 다시 찾는다
-    assert failing.request("p2", "남산서울타워", ("hours",), date(2026, 10, 22), TraceId("t2"), _NOW)  # 찾는 중 표시도 풀렸다
+    assert failing.run(_task("p2", "남산서울타워", ("hours",), trace="t2")).pending  # 시한·형식·출처 없음은 저장하지 않는다
+    assert len(later2.jobs) == 1  # 찾는 중 표시가 풀려 새로 냈다 — 다음에 물으면 다시 찾는다
 
 
 def test_daily_cap_stops_new_lookups_until_the_next_day(monkeypatch) -> None:
     monkeypatch.setattr(uh, "DAILY_CAP", 2)
-    agent, later, _, _ = _agent(_ok(_FACTS))
-    on = date(2026, 10, 22)
-    assert agent.request("a", "a", ("hours",), on, TraceId("t"), _NOW) and agent.request("b", "b", ("hours",), on, TraceId("t"), _NOW)
-    assert not agent.request("c", "c", ("hours",), on, TraceId("t"), _NOW)  # 상한 — "찾는 중"이라 말하지 않는다
-    assert agent.request("c", "c", ("hours",), on, TraceId("t"), _NOW + timedelta(days=1))
+    agent, _, _, _ = _agent(_ok(_FACTS))
+    assert agent.run(_task("a", "a", ("hours",))).pending and agent.run(_task("b", "b", ("hours",))).pending
+    assert agent.run(_task("c", "c", ("hours",))) == UnknownOutcome()  # 상한 — "찾는 중"이라 말하지 않는다
+    assert agent.run(_task("c", "c", ("hours",), now=_NOW + timedelta(days=1))).pending
 
 
-def test_a_broken_store_reads_as_unknown() -> None:
+def test_a_broken_store_reads_as_unknown_and_nothing_leaks_out() -> None:
     class _Broken(InMemoryPlaceFactStore):
         def get(self, poi_id, now):
             raise ConnectionError("db down")
 
-    agent = UnknownHandlingAgent(_Worker(_ok(_FACTS)), _Broken(), submit=_Later())
-    assert agent.known("p1", _NOW) is None
+        def put(self, record):
+            raise ConnectionError("db down")
+
+    later = _Later()
+    agent = UnknownHandlingAgent(_Worker(_ok(_FACTS)), _Broken(), submit=later)
+    assert agent.run(_task()) == UnknownOutcome(pending=True)  # 저장소 장애는 "없음"과 같다(INV-4) — 그래도 뒤에서 찾기는 낸다
+    later.run()  # 저장 실패도 밖으로 새지 않는다 — 사유만 남긴다
+    assert agent.run(_task(trace="t2")) == UnknownOutcome(pending=True)  # 찾는 중 표시가 풀려 다시 낼 수 있다
+
+
+def test_a_refused_submit_is_not_pending() -> None:
+    def refuse(fn, *args):
+        raise RuntimeError("pool closed")
+
+    agent = UnknownHandlingAgent(_Worker(_ok(_FACTS)), InMemoryPlaceFactStore(), submit=refuse)
+    assert agent.run(_task()) == UnknownOutcome()  # 못 냈으면 "찾는 중"이라 말하지 않는다
+
+
+def test_outcome_cannot_be_found_and_pending_at_once() -> None:
+    with pytest.raises(ValueError):
+        UnknownOutcome(facts=_FACTS, pending=True)
 
 
 class _Cur:
@@ -147,30 +173,3 @@ def test_pg_store_keeps_a_nothing_found_row_as_null() -> None:
     PgPlaceFactStore(lambda: conn).put(FactRecord("p1", None, _NOW, _NOW + uh.MISS_TTL))
     assert conn.log[1][1][1] is None
     assert PgPlaceFactStore(lambda: _Conn(row=("p1", None, _NOW, _NOW))).get("p1", _NOW).facts is None
-
-
-def test_pbt_any_gate_accepted_facts_make_a_fallback_sentence_that_passes_the_answer_gate() -> None:
-    """INV-4 마지막 계단 — 게이트가 통과시킨 칸이면 어떤 조합이든 결정론 문장이 답변 검사(시각·소요·연락처·주입·길이)를 넘는다."""
-    import json
-
-    from hypothesis import given, settings
-    from hypothesis import strategies as st
-
-    from trippilot.domain.llm import LlmFeature
-    from trippilot.llm_gateway.gates.place_fact import PlaceFactGate
-    from trippilot.orchestrator import dialogue_handlers as dh
-
-    values = st.one_of(st.none(), st.text(max_size=30), st.sampled_from([
-        "09:00~18:00", "9:00 - 24:00", "17:00", "매주 월요일, 화요일", "매월 마지막째 주 일요일", "연중무휴", "무료", "29000원"]))
-
-    @given(raw=st.fixed_dictionaries({f: values for f in ("hours", "last_entry", "closed", "fee")}), fee_unknown=st.booleans())
-    @settings(max_examples=300, deadline=None)
-    def check(raw: dict, fee_unknown: bool) -> None:
-        out = PlaceFactGate().apply(json.dumps(raw, ensure_ascii=False), ("https://royal.khs.go.kr/a",),
-                                    feature=LlmFeature.PLACE_FACT_LOOKUP, trace_id=TraceId("t"), now=_NOW)
-        if out.value is not None:
-            sentence = dh._web_sentence(out.value, fee_unknown)
-            if sentence:
-                dh.validate_answer_text(sentence)  # 던지면 실패
-
-    check()

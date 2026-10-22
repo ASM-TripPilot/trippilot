@@ -19,6 +19,8 @@ from datetime import datetime, timezone, tzinfo
 
 from trippilot.agents.planb.rag import PlanBAgent
 from trippilot.agents.schedule.agent import Clock
+from trippilot.agents.adapters.memory_place_fact_store import InMemoryPlaceFactStore
+from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent
 from trippilot.api import schemas
 from trippilot.domain.common import TraceId
 from trippilot.domain.freshness import ProviderKind
@@ -60,7 +62,6 @@ from trippilot.orchestrator.dialogue_orchestrator import (
 from trippilot.orchestrator.dialogue_plan import plan_tools
 from trippilot.orchestrator.intent_router import IntentRouter, IntentRouterConfig
 from trippilot.orchestrator.place_intro import PlaceIntro
-from trippilot.orchestrator.unknown_handling import InMemoryPlaceFactStore, PlaceFactStore, UnknownHandlingAgent
 from trippilot.orchestrator.place_sql import PlaceSqlLookup
 from trippilot.orchestrator.question_bank import BankEntry, bank_fingerprint
 from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql
@@ -69,6 +70,7 @@ from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.llm_port import LlmPort
 from trippilot.ports.memory_store_port import MemoryStorePort, delete_selector
+from trippilot.ports.place_fact_store_port import PlaceFactStore
 from trippilot.ports.trace_port import TracePort
 from trippilot.ports.vector_store_port import VectorStorePort
 from trippilot.providers.base import Provider
