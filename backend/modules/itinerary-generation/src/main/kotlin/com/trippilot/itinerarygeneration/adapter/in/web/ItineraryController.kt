@@ -120,6 +120,14 @@ data class ItineraryResponse(
      * 사용자에게 "왜 안 들어갔는지"를 알리는 채널이다 — 이게 없으면 조용히 사라진 것으로 보인다.
      */
     val unplacedMustVisits: List<UnplacedMustVisitResponse>,
+    /**
+     * 취향 점수를 누가 매겼나(TRIP-1173) — LLM · MIXED · RULE, 모르면 null. [solveMode] 는 조립 축이라
+     * LLM 실패를 말하지 않는다. 호출 하나의 판정은 AI 소유이고, 백엔드는 2단계 생성을 합칠 때만 같으면 그대로·
+     * 갈리면 MIXED·모름이 섞이면 null 로 접는다(`ScoringSignal.merge`).
+     */
+    val scoringMode: String?,
+    /** 밟은 강등 계단 기계 코드(예 `llm:c1_fallback`). LLM 점수 실패는 `llm:` 접두. 빈 배열 = 없음(또는 모름). */
+    val degradations: List<String>,
     val days: List<DayResponse>,
 ) {
     companion object {
@@ -134,6 +142,8 @@ data class ItineraryResponse(
             generationSessionId = generationSessionId,
             candidatesSummary = i.candidatesSummary?.let { CandidatesSummaryResponse(it.level, it.poolSize, it.shortfallCategories) },
             unplacedMustVisits = i.unplacedMustVisits.map { UnplacedMustVisitResponse(it.poiId, it.reasonCode.name, UnplacedText.of(it.reasonCode)) },
+            scoringMode = i.scoring.mode?.name,
+            degradations = i.scoring.degradations,
             days = i.days.map { d ->
                 DayResponse(d.date, d.slots.map { s -> SlotResponse.of(s, surfaces[s.sourcePoiId], i.status, surfaces) })
             },

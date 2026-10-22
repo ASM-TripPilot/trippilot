@@ -6,6 +6,8 @@ import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ErrorCode
 import com.trippilot.itinerarygeneration.domain.RejectedPoi
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
+import com.trippilot.itinerarygeneration.domain.ScoringMode
+import com.trippilot.itinerarygeneration.domain.ScoringSignal
 import io.kotest.matchers.shouldNotBe
 import com.trippilot.placedata.api.RegionCenter
 import com.trippilot.placedata.api.RegionLookupFacade
@@ -112,6 +114,7 @@ class ReplanFacadeServiceTest : StringSpec({
             ItineraryDay.of(today.plusDays(1), 1, listOf(slot(UUID.randomUUID(), "10:00", "11:00"))),
         ),
         now, GenerationState.COMPLETE,
+        scoring = ScoringSignal(ScoringMode.LLM, listOf("weather:weather_error")),
     )
 
     class Agent(val days: List<DaySchedule>, val totalDistanceKm: Double? = null) : StubScheduleAgent() {
@@ -444,6 +447,8 @@ class ReplanFacadeServiceTest : StringSpec({
         val after = repo.byTrip.getValue(trip)
         after.days[0].slots.map { it.sourcePoiId } shouldContainExactly listOf(replacement)
         after.days[1] shouldBe secondDayBefore
+        // 생성 때의 점수 신호는 그대로다 — 재계획 응답은 신호를 주지 않는다(TRIP-1173)
+        after.scoring shouldBe ScoringSignal(ScoringMode.LLM, listOf("weather:weather_error"))
     }
 
     // 반영 전에 되돌릴 지점이 없으면 "재계획 전으로" 돌아갈 수 없다(BR-U3-19).
@@ -529,6 +534,7 @@ class ReplanFacadeServiceTest : StringSpec({
         // 전 슬롯이 동결 참조를 가진다 — 남은 슬롯은 승계, 재계획이 새로 넣은 슬롯은 지금 동결(INV-U1-03).
         after.days.flatMap { it.slots }.forEach { it.poiSnapshotId shouldNotBe null }
         f.changeLogs.appended.single().sourceType shouldBe ChangeSourceType.PLAN_B // BR-U4-30 그대로
+        after.scoring shouldBe before.scoring // 동결 승계(ConfirmedSnapshots.carry)도 점수 신호를 잃지 않는다(TRIP-1173)
     }
 
     // ───── 적용 뒤 되돌리기(TRIP-1412) ───────────────────────────────────
@@ -612,7 +618,7 @@ class ReplanFacadeServiceTest : StringSpec({
         f.repo.byTrip[trip] = Itinerary.reconstitute(
             base.itineraryId, base.tripId, base.status, base.solveMode, base.generationMode, base.isFallback, base.generationState,
             listOf(ItineraryDay.of(today, 0, base.days[0].slots.take(2) + flagged), base.days[1]),
-            base.createdAt, now, base.candidatesSummary, base.unplacedMustVisits,
+            base.createdAt, now, base.candidatesSummary, base.unplacedMustVisits, base.scoring,
         )
         f.confirmed()
         val before = f.repo.byTrip.getValue(trip)
@@ -688,7 +694,7 @@ class ReplanFacadeServiceTest : StringSpec({
             applied.itineraryId, applied.tripId, applied.status, applied.solveMode, applied.generationMode, applied.isFallback,
             applied.generationState,
             listOf(ItineraryDay.of(today, 0, listOf(slot(replacement, "16:30", "17:30"))), applied.days[1]),
-            applied.createdAt, now, applied.candidatesSummary, applied.unplacedMustVisits,
+            applied.createdAt, now, applied.candidatesSummary, applied.unplacedMustVisits, applied.scoring,
         )
         f.repo.byTrip[trip] = edited
         val logsBefore = f.changeLogs.appended.size
@@ -707,7 +713,7 @@ class ReplanFacadeServiceTest : StringSpec({
         val applied = f.repo.byTrip.getValue(trip)
         f.repo.byTrip[trip] = Itinerary.reconstitute(
             UUID.randomUUID(), applied.tripId, applied.status, applied.solveMode, applied.generationMode, applied.isFallback,
-            applied.generationState, applied.days, applied.createdAt, now, applied.candidatesSummary, applied.unplacedMustVisits,
+            applied.generationState, applied.days, applied.createdAt, now, applied.candidatesSummary, applied.unplacedMustVisits, applied.scoring,
         )
 
         shouldThrow<ConflictDetected> { f.svc.revert(acc, trip, proposal, restore, REASON) { emptySet() } }.errorCode shouldBe ErrorCode.STALE
@@ -721,7 +727,7 @@ class ReplanFacadeServiceTest : StringSpec({
         val applied = f.repo.byTrip.getValue(trip)
         f.repo.byTrip[trip] = Itinerary.reconstitute(
             applied.itineraryId, applied.tripId, applied.status, applied.solveMode, applied.generationMode, applied.isFallback,
-            applied.generationState, listOf(applied.days[1]), applied.createdAt, now, applied.candidatesSummary, applied.unplacedMustVisits,
+            applied.generationState, listOf(applied.days[1]), applied.createdAt, now, applied.candidatesSummary, applied.unplacedMustVisits, applied.scoring,
         )
 
         shouldThrow<ConflictDetected> { f.svc.revert(acc, trip, proposal, restore, REASON) { emptySet() } }.errorCode shouldBe ErrorCode.STALE

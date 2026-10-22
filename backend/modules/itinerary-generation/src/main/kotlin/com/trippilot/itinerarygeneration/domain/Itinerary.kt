@@ -170,11 +170,16 @@ class Itinerary private constructor(
      * 재조회 시 보고가 사라진다(같은 유실을 endsNextDay·distanceRange 등에서 이미 겪었다).
      */
     val unplacedMustVisits: List<UnplacedMustVisit>,
+    /**
+     * 취향 점수 신호(TRIP-1173) — AI 판정을 보관하되 2단계 생성은 [ScoringSignal.merge] 로 합친 값이다. **기본값을 두지 않는다**(위 두 필드와 같은 이유 —
+     * 전이 지점에서 빠지면 편집·확정 한 번에 신호가 "모름"으로 바뀐다).
+     */
+    val scoring: ScoringSignal,
 ) {
     /** 확정 — PLANNED + 생성 완료만 가능(이미 확정이거나 생성 중이면 409). 상태 전이만(동결 없음). */
     fun confirm(now: Instant): Itinerary {
         requireConfirmable()
-        return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, generationMode, isFallback, generationState, days, createdAt, now, candidatesSummary, unplacedMustVisits)
+        return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, generationMode, isFallback, generationState, days, createdAt, now, candidatesSummary, unplacedMustVisits, scoring)
     }
 
     /**
@@ -197,7 +202,7 @@ class Itinerary private constructor(
                 },
             )
         }
-        return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, generationMode, isFallback, generationState, frozenDays, createdAt, now, candidatesSummary, unplacedMustVisits)
+        return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, generationMode, isFallback, generationState, frozenDays, createdAt, now, candidatesSummary, unplacedMustVisits, scoring)
     }
 
     /**
@@ -226,6 +231,11 @@ class Itinerary private constructor(
          * 그 결과가 곧 최종이다. 기본값을 두면 1차(day1만) 판정이 남아 사용자가 낡은 보고를 본다.
          */
         secondUnplaced: List<UnplacedMustVisit>,
+        /**
+         * 2차 호출의 점수 신호 — 1차 값과 [ScoringSignal.merge] 로 합친다. null = 2차 호출이 없었다(하루 여행이라
+         * 1차가 곧 전체) — 이때는 1차 값이 최종이다. **기본값을 두지 않는다** — 두면 2차 신호를 빠뜨려도 컴파일된다.
+         */
+        secondScoring: ScoringSignal?,
     ): Itinerary {
         if (generationState != GenerationState.PARTIAL) {
             throw ConflictDetected(message = "생성 중인 일정이 아닙니다.")
@@ -243,6 +253,7 @@ class Itinerary private constructor(
             // 미배치 보고도 같은 규칙 — 2차가 보고하면 그 값이 전 일자 기준이다.
             // 빈 목록은 "전부 배치됨"이라는 **판정**이라 1차 값으로 되돌리지 않는다.
             secondUnplaced,
+            secondScoring?.let(scoring::merge) ?: scoring,
         )
     }
 
@@ -253,7 +264,7 @@ class Itinerary private constructor(
         }
         return Itinerary(
             itineraryId, tripId, status, solveMode, generationMode, isFallback, GenerationState.FAILED, days, createdAt, now,
-            candidatesSummary, unplacedMustVisits,
+            candidatesSummary, unplacedMustVisits, scoring,
         )
     }
 
@@ -269,13 +280,15 @@ class Itinerary private constructor(
             candidatesSummary: CandidatesSummary? = null,
             /** AI 가 못 넣었다고 보고한 필수 방문지. 기본 빈 목록 = 전부 배치됨. */
             unplacedMustVisits: List<UnplacedMustVisit> = emptyList(),
+            /** AI 점수 신호(TRIP-1173). 기본 모름 — AI 를 부르지 않는 경로(직접 만들기·폴백)는 줄 값이 없다. */
+            scoring: ScoringSignal = ScoringSignal.UNKNOWN,
         ): Itinerary {
             if (days.map { it.dayOrder }.toSet().size != days.size) {
                 throw ValidationFailed(listOf(FieldError("days", "일자 순서(dayOrder)는 중복될 수 없습니다.")))
             }
             return Itinerary(
                 UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, solveMode, generationMode, isFallback, generationState,
-                days.sortedBy { it.dayOrder }, now, now, candidatesSummary, unplacedMustVisits,
+                days.sortedBy { it.dayOrder }, now, now, candidatesSummary, unplacedMustVisits, scoring,
             )
         }
 
@@ -284,10 +297,10 @@ class Itinerary private constructor(
             itineraryId: UUID, tripId: UUID, status: ItineraryStatus, solveMode: SolveMode,
             generationMode: GenerationMode, isFallback: Boolean, generationState: GenerationState, days: List<ItineraryDay>,
             createdAt: Instant, updatedAt: Instant, candidatesSummary: CandidatesSummary?,
-            unplacedMustVisits: List<UnplacedMustVisit>,
+            unplacedMustVisits: List<UnplacedMustVisit>, scoring: ScoringSignal,
         ): Itinerary = Itinerary(
             itineraryId, tripId, status, solveMode, generationMode, isFallback, generationState,
-            days.sortedBy { it.dayOrder }, createdAt, updatedAt, candidatesSummary, unplacedMustVisits,
+            days.sortedBy { it.dayOrder }, createdAt, updatedAt, candidatesSummary, unplacedMustVisits, scoring,
         )
     }
 }

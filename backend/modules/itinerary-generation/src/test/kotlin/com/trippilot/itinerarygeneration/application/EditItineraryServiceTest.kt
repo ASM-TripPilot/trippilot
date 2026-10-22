@@ -28,6 +28,8 @@ import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.RepairResult
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
+import com.trippilot.itinerarygeneration.domain.ScoringMode
+import com.trippilot.itinerarygeneration.domain.ScoringSignal
 import com.trippilot.itinerarygeneration.domain.SlotExplanations
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.SolveMode
@@ -278,7 +280,7 @@ class EditItineraryServiceTest : StringSpec({
         repo.lockedView = Itinerary.reconstitute(
             c.itineraryId, c.tripId, c.status, c.solveMode, c.generationMode, c.isFallback, c.generationState,
             c.days.map { d -> ItineraryDay.of(d.date, d.dayOrder, d.slots.map { VisitSlot.of(newer, null, it.orderIndex, it.startAt, it.endAt) }) },
-            c.createdAt, c.updatedAt, c.candidatesSummary, c.unplacedMustVisits,
+            c.createdAt, c.updatedAt, c.candidatesSummary, c.unplacedMustVisits, c.scoring,
         )
         val logs = CapturingChangeLogs()
         EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), logs, FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
@@ -305,7 +307,7 @@ class EditItineraryServiceTest : StringSpec({
     }
 
     fun Itinerary.with(id: UUID = itineraryId, state: GenerationState = generationState) = Itinerary.reconstitute(
-        id, tripId, status, solveMode, generationMode, isFallback, state, days, createdAt, updatedAt, candidatesSummary, unplacedMustVisits,
+        id, tripId, status, solveMode, generationMode, isFallback, state, days, createdAt, updatedAt, candidatesSummary, unplacedMustVisits, scoring,
     )
 
     fun editWith(repo: EditFakeItineraries, logs: CapturingChangeLogs = CapturingChangeLogs()) =
@@ -365,7 +367,7 @@ class EditItineraryServiceTest : StringSpec({
         log.appended shouldBe emptyList()
     }
 
-    "편집해도 추천 근거·후보 요약이 살아남는다(TRIP-306 회귀 가드)" {
+    "편집해도 추천 근거·후보 요약·점수 신호가 살아남는다(TRIP-306 · TRIP-1173 회귀 가드)" {
         // 편집안의 장소 중 하나에 근거를 달아두고, 편집 후에도 그 장소에 붙어 있는지 본다
         val poi = editReq.days.single().slots.first().poiId
         val base = Itinerary.reconstitute(
@@ -378,6 +380,7 @@ class EditItineraryServiceTest : StringSpec({
                 ),
             ),
             clock.instant(), clock.instant(), CandidatesSummary("LOW", 7, listOf("CAFE")), emptyList(),
+            ScoringSignal(ScoringMode.RULE, listOf("llm:c1_fallback")),
         )
         val result = repoWith(base).let { r -> EditItineraryService(trips(true), r, EditFakeAgent(), revisionSvc(FakeRevisions(), r, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS) }
             .edit(acc, tripId, editReq)
@@ -385,6 +388,8 @@ class EditItineraryServiceTest : StringSpec({
         // 장소를 옮겼다고 "왜 이 장소를 골랐는지"가 사라지면 안 된다
         result.days.single().slots.first { it.sourcePoiId == poi }.placementReason shouldBe "취향에 맞는 곳"
         result.candidatesSummary?.level shouldBe "LOW"
+        // 점수 신호도 — 편집은 AI 점수를 다시 매기지 않는다(TRIP-1173)
+        result.scoring shouldBe ScoringSignal(ScoringMode.RULE, listOf("llm:c1_fallback"))
     }
 
     "편집하면 새 배열로 교체 + 위반 없으면 hasViolation=false" {
@@ -511,7 +516,7 @@ class EditItineraryServiceTest : StringSpec({
         val interleaved = Itinerary.reconstitute(
             c.itineraryId, c.tripId, c.status, c.solveMode, c.generationMode, c.isFallback, c.generationState,
             listOf(ItineraryDay.of(day, 0, listOf(VisitSlot.of(poiA, null, 0, LocalTime.parse("15:00"), LocalTime.parse("16:00"))))),
-            c.createdAt, clock.instant(), c.candidatesSummary, c.unplacedMustVisits,
+            c.createdAt, clock.instant(), c.candidatesSummary, c.unplacedMustVisits, c.scoring,
         )
         val agent = EditFakeAgent(repairWith = { repo.replaceForTrip(tripId, interleaved); RepairResult(it, emptyList(), unrepairable = true) })
         val facade: ItineraryEditFacade =
@@ -871,7 +876,7 @@ class EditItineraryServiceTest : StringSpec({
             GenerationState.COMPLETE,
             listOf(ItineraryDay.of(day, 0, listOf(VisitSlot.of(poiA, null, 0, LocalTime.parse("09:00"), LocalTime.parse("10:00"))))),
             clock.instant(), clock.instant(), null,
-            listOf(UnplacedMustVisit(missed, UnplacedReason.WINDOW_CONFLICT)),
+            listOf(UnplacedMustVisit(missed, UnplacedReason.WINDOW_CONFLICT)), ScoringSignal.UNKNOWN,
         )
         val repo = repoWith(base)
         val result = EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)

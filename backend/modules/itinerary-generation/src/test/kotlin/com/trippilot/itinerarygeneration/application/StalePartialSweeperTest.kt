@@ -7,6 +7,7 @@ import com.trippilot.itinerarygeneration.domain.GenerationStatus
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
+import com.trippilot.itinerarygeneration.domain.ScoringSignal
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
@@ -29,7 +30,7 @@ class StalePartialSweeperTest : StringSpec({
     fun partialUpdatedAt(at: Instant): Itinerary = Itinerary.reconstitute(
         UUID.randomUUID(), UUID.randomUUID(), com.trippilot.itinerarygeneration.domain.ItineraryStatus.PLANNED,
         SolveMode.FULL_AI, GenerationMode.FULLY_AI, false, GenerationState.PARTIAL,
-        listOf(ItineraryDay.of(start, 0, emptyList())), at, at, null, emptyList(),
+        listOf(ItineraryDay.of(start, 0, emptyList())), at, at, null, emptyList(), ScoringSignal.UNKNOWN,
     )
 
     open class Repo(seed: List<Itinerary>) : ItineraryRepository {
@@ -56,7 +57,7 @@ class StalePartialSweeperTest : StringSpec({
         val edited = Itinerary.reconstitute(
             stale.itineraryId, stale.tripId, stale.status, stale.solveMode, stale.generationMode, stale.isFallback, GenerationState.PARTIAL,
             listOf(ItineraryDay.of(start, 0, listOf(com.trippilot.itinerarygeneration.domain.VisitSlot.of(editedPoi, null, 0, java.time.LocalTime.NOON, java.time.LocalTime.NOON.plusHours(1))))),
-            stale.createdAt, stale.updatedAt, null, emptyList(),
+            stale.createdAt, stale.updatedAt, null, emptyList(), ScoringSignal.UNKNOWN,
         )
         val repo = object : Repo(listOf(stale)) {
             override fun lockForTrip(tripId: UUID) = edited.also { byTrip[tripId] = it }
@@ -74,7 +75,7 @@ class StalePartialSweeperTest : StringSpec({
         val stale = partialUpdatedAt(now.minus(defaultDeadlines.staleAfter).minusSeconds(1))
         val done = Itinerary.reconstitute(
             stale.itineraryId, stale.tripId, stale.status, stale.solveMode, stale.generationMode, stale.isFallback, GenerationState.COMPLETE,
-            stale.days, stale.createdAt, stale.updatedAt, null, emptyList(),
+            stale.days, stale.createdAt, stale.updatedAt, null, emptyList(), ScoringSignal.UNKNOWN,
         )
         val repo = object : Repo(listOf(stale)) {
             override fun lockForTrip(tripId: UUID) = done.also { byTrip[tripId] = it }

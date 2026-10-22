@@ -37,6 +37,8 @@ import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.RequestMeta
+import com.trippilot.itinerarygeneration.domain.ScoringMode
+import com.trippilot.itinerarygeneration.domain.ScoringSignal
 import com.trippilot.itinerarygeneration.domain.TimeWindow
 import com.trippilot.itinerarygeneration.domain.TodayWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
@@ -168,6 +170,24 @@ private class CapturingAgent(
         explainedWith += preference to companionType
         return SlotExplanations()
     }
+}
+
+/** 호출마다 정해 둔 점수 신호를 돌려주는 대역(TRIP-1173). null 이면 그 호출은 실패한다(→ 최소 폴백). */
+private class ScoringAgent(private val now: Instant, private val perCall: List<ScoringSignal?>) : StubScheduleAgent() {
+    private var calls = 0
+    override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput {
+        val signal = perCall[calls++] ?: throw ScheduleAgentCallFailed("AI_ERROR", retryable = false, message = "점수 단계 이후 실패 재현")
+        return ScheduleAgentOutput(
+            days = input.timeWindows.map { DaySchedule(it.date, emptyList()) },
+            day1ReadyAt = null, explanations = emptyMap(),
+            solveMode = SolveMode.FULL_AI, isFallback = false,
+            freshness = FreshnessMeta(now, degraded = false),
+            scoring = signal,
+        )
+    }
+    override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+    override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
+    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput, preference: PreferenceProfile?, companionType: String?) = SlotExplanations()
 }
 
 /** ScheduleAgent(AI) 실패 재현 — INV-4 폴백 경로 검증용. */
@@ -1757,7 +1777,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         val editedMeanwhile = Itinerary.reconstitute(
             partial.itineraryId, partial.tripId, partial.status, partial.solveMode, partial.generationMode, partial.isFallback,
             GenerationState.PARTIAL, listOf(ItineraryDay.of(start, 0, listOf(VisitSlot.of(userPick, null, 0, LocalTime.parse("13:00"), LocalTime.parse("14:00"))))),
-            partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits,
+            partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits, partial.scoring,
         )
         val repo = object : FakeItineraries() {
             override fun lockForTrip(tripId: UUID) = editedMeanwhile.also { byTrip[tripId] = it }
@@ -1784,7 +1804,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         val dropped = Itinerary.reconstitute(
             partial.itineraryId, partial.tripId, partial.status, partial.solveMode, partial.generationMode, partial.isFallback,
             GenerationState.PARTIAL, listOf(ItineraryDay.of(start, 0, emptyList())),
-            partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits,
+            partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits, partial.scoring,
         )
         val repo = object : FakeItineraries() {
             override fun lockForTrip(tripId: UUID) = byTrip[tripId]?.takeIf { it.days.size == 1 } ?: dropped.also { byTrip[tripId] = it }
@@ -1814,7 +1834,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         val overlapping = Itinerary.reconstitute(
             partial.itineraryId, partial.tripId, partial.status, partial.solveMode, partial.generationMode, partial.isFallback,
             GenerationState.PARTIAL, listOf(ItineraryDay.of(start, 0, emptyList()), ItineraryDay.of(end, 1, emptyList())),
-            partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits,
+            partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits, partial.scoring,
         )
         val repo = object : FakeItineraries() {
             override fun lockForTrip(tripId: UUID) = byTrip[tripId]?.takeIf { it.generationState != GenerationState.PARTIAL || it.days.size == 2 }
@@ -1841,7 +1861,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         )
         val editedMeanwhile = Itinerary.reconstitute(
             partial.itineraryId, partial.tripId, partial.status, partial.solveMode, partial.generationMode, partial.isFallback,
-            GenerationState.COMPLETE, partial.days, partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits,
+            GenerationState.COMPLETE, partial.days, partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits, partial.scoring,
         )
         val repo = object : FakeItineraries() {
             override fun lockForTrip(tripId: UUID) = editedMeanwhile
@@ -1915,6 +1935,58 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         val slot = repo.byTrip.getValue(tripId).days.first { it.date == end }.slots.single()
         slot.sourcePoiId shouldBe materializedPoi
         slot.isFixed shouldBe false // 사용자가 고정하지 않았다 — 폴백 화면의 "변경 불가"는 거짓이었다
+    }
+
+    // ── 취향 점수 신호(TRIP-1173) — 안 실으면 응답 직후엔 보여도 재조회에서 늘 "모름"이 된다 ──
+
+    "LLM 점수에 실패한 생성은 저장된 일정에 RULE 과 llm: 코드가 남는다(1차·2차 모두)" {
+        val rule = ScoringSignal(ScoringMode.RULE, listOf("llm:c1_fallback"))
+        val repo = FakeItineraries()
+        val returned = service(ScoringAgent(now, listOf(rule, rule)), repo, start.plusDays(2)).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        returned.scoring shouldBe rule // 201 본문(PARTIAL)
+        val saved = repo.byTrip.getValue(tripId)
+        saved.generationState shouldBe GenerationState.COMPLETE
+        saved.scoring shouldBe rule
+    }
+
+    "정상 LLM 점수면 LLM — 1차만 있는 하루 여행도 그 값이 최종이다" {
+        val llm = ScoringSignal(ScoringMode.LLM, emptyList())
+        val repo = FakeItineraries()
+        service(ScoringAgent(now, listOf(llm)), repo, start).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        repo.byTrip.getValue(tripId).scoring shouldBe llm
+    }
+
+    fun partialWith(scoring: ScoringSignal): Itinerary = Itinerary.create(
+        tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+        listOf(ItineraryDay.of(start, 0, emptyList())), now, GenerationState.PARTIAL, scoring = scoring,
+    )
+
+    "2차가 실패해 최소 폴백이 되면 1차의 LLM 이 남지 않는다 — 모름으로 저하를 드러낸다(INV-4)" {
+        val repo = FakeItineraries()
+        val partial = partialWith(ScoringSignal(ScoringMode.LLM, listOf("weather:weather_error")))
+        repo.byTrip[tripId] = partial
+
+        SecondPhaseGenerator(ScoringAgent(now, listOf(null)), repo, genRevisions(repo, stubTrips), genSessions(), FakeScoredCandidatePoolStore(), NOOP_TX, clock)
+            .completeRemaining(tripId, partial.itineraryId, agentInputFor(start.plusDays(1)), isRegeneration = false)
+
+        repo.byTrip.getValue(tripId).scoring shouldBe ScoringSignal(null, listOf("weather:weather_error"))
+    }
+
+    "2차가 맡은 날이 모두 닫혀 AI 를 안 불렀으면 1차 신호가 그대로 최종이다 — 안 부른 자리의 모름을 섞지 않는다" {
+        val repo = FakeItineraries()
+        val first = ScoringSignal(ScoringMode.LLM, emptyList())
+        val partial = partialWith(first)
+        repo.byTrip[tripId] = partial
+        val agent = ScoringAgent(now, emptyList()) // 불리면 IndexOutOfBounds — 안 불려야 한다
+
+        SecondPhaseGenerator(agent, repo, genRevisions(repo, stubTrips), genSessions(), FakeScoredCandidatePoolStore(), NOOP_TX, clock)
+            .completeRemaining(tripId, partial.itineraryId, agentInputFor(start.plusDays(1)).copy(timeWindows = emptyList()), isRegeneration = false)
+
+        val saved = repo.byTrip.getValue(tripId)
+        saved.generationState shouldBe GenerationState.COMPLETE
+        saved.scoring shouldBe first
     }
 
     "재생성으로 일정이 교체됐으면 낡은 2차 결과를 버린다" {
@@ -2038,7 +2110,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         )
         val doneMeanwhile = Itinerary.reconstitute(
             partial.itineraryId, partial.tripId, partial.status, partial.solveMode, partial.generationMode, partial.isFallback,
-            GenerationState.COMPLETE, partial.days, partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits,
+            GenerationState.COMPLETE, partial.days, partial.createdAt, now, partial.candidatesSummary, partial.unplacedMustVisits, partial.scoring,
         )
         var locks = 0
         val repo = object : FakeItineraries() {

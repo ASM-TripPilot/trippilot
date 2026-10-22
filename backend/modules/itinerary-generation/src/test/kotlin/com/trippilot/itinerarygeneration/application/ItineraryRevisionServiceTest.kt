@@ -15,6 +15,8 @@ import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.NewRevision
 import com.trippilot.itinerarygeneration.domain.RevisionActor
 import com.trippilot.itinerarygeneration.domain.RevisionKind
+import com.trippilot.itinerarygeneration.domain.ScoringMode
+import com.trippilot.itinerarygeneration.domain.ScoringSignal
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlot
@@ -99,7 +101,7 @@ class ItineraryRevisionServiceTest : StringSpec({
     fun itinerary(slots: List<VisitSlot>, status: ItineraryStatus = ItineraryStatus.PLANNED, state: GenerationState = GenerationState.COMPLETE) =
         Itinerary.reconstitute(
             UUID.randomUUID(), tripId, status, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false, state,
-            listOf(ItineraryDay.of(d1, 0, slots)), now, now, null, emptyList(),
+            listOf(ItineraryDay.of(d1, 0, slots)), now, now, null, emptyList(), ScoringSignal.UNKNOWN,
         )
 
     fun service(revs: Revisions, its: Itineraries) = ItineraryRevisionService(revs, its, trips, NoopValidateAgent(), REV_NOOP_TX, clock)
@@ -124,12 +126,14 @@ class ItineraryRevisionServiceTest : StringSpec({
         val target = revs.stored.single()
         // 사용자가 편집해 상태가 달라진 뒤
         val v2 = itinerary(listOf(slot(cafe, "15:00", "16:00")))
-        its.current = Itinerary.reconstitute(v1.itineraryId, tripId, ItineraryStatus.PLANNED, v1.solveMode, GenerationMode.FULLY_AI, false, GenerationState.COMPLETE, v2.days, now, now, null, emptyList())
+        val signal = ScoringSignal(ScoringMode.RULE, listOf("llm:c1_fallback"))
+        its.current = Itinerary.reconstitute(v1.itineraryId, tripId, ItineraryStatus.PLANNED, v1.solveMode, GenerationMode.FULLY_AI, false, GenerationState.COMPLETE, v2.days, now, now, null, emptyList(), signal)
         svc.record(its.current!!, RevisionActor.USER, RevisionKind.EDIT, "수정")
 
         val restored = svc.restore(acc, tripId, target.revisionId)
 
         restored.days.single().slots.single().startAt shouldBe LocalTime.parse("10:00") // 과거 버전으로 복원
+        restored.scoring shouldBe signal // 점수 신호는 현행 그대로 — 후보 요약·미배치 보고와 같은 규칙(TRIP-1173)
         revs.stored.map { it.kind } shouldContainExactly
             listOf(RevisionKind.BASELINE, RevisionKind.EDIT, RevisionKind.RESTORE) // 과거를 지우지 않는다
         revs.stored.map { it.seq } shouldContainExactly listOf(1, 2, 3)
@@ -145,7 +149,7 @@ class ItineraryRevisionServiceTest : StringSpec({
         val target = revs.stored.single()
         // 현재는 숙소 고정 시각이 16:00 으로 바뀐 상태
         val nowFixed = itinerary(listOf(slot(hotel, "16:00", "17:00", fixed = true), slot(cafe, "20:00", "21:00", order = 1)))
-        its.current = Itinerary.reconstitute(old.itineraryId, tripId, ItineraryStatus.PLANNED, old.solveMode, GenerationMode.FULLY_AI, false, GenerationState.COMPLETE, nowFixed.days, now, now, null, emptyList())
+        its.current = Itinerary.reconstitute(old.itineraryId, tripId, ItineraryStatus.PLANNED, old.solveMode, GenerationMode.FULLY_AI, false, GenerationState.COMPLETE, nowFixed.days, now, now, null, emptyList(), ScoringSignal.UNKNOWN)
 
         val restored = svc.restore(acc, tripId, target.revisionId)
 
@@ -193,7 +197,7 @@ class ItineraryRevisionServiceTest : StringSpec({
         val moved = Itinerary.reconstitute(
             base.itineraryId, base.tripId, base.status, base.solveMode, base.generationMode, base.isFallback, base.generationState,
             listOf(ItineraryDay.of(d1, 0, listOf(slot(cafe, "12:00", "13:00")))), base.createdAt, base.updatedAt,
-            base.candidatesSummary, base.unplacedMustVisits,
+            base.candidatesSummary, base.unplacedMustVisits, base.scoring,
         )
         val repo = Itineraries(base).apply { lockedView = moved }
         val svc = service(revs, repo)
@@ -229,7 +233,7 @@ class ItineraryRevisionServiceTest : StringSpec({
         val othersTrip = UUID.randomUUID()
         val others = Itinerary.reconstitute(
             UUID.randomUUID(), othersTrip, ItineraryStatus.PLANNED, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
-            GenerationState.COMPLETE, listOf(ItineraryDay.of(d1, 0, listOf(slot(cafe, "20:00", "21:00")))), now, now, null, emptyList(),
+            GenerationState.COMPLETE, listOf(ItineraryDay.of(d1, 0, listOf(slot(cafe, "20:00", "21:00")))), now, now, null, emptyList(), ScoringSignal.UNKNOWN,
         )
         svc.record(others, RevisionActor.USER, RevisionKind.EDIT, "남의 여행")
         val foreign = revs.stored.single { it.tripId == othersTrip }
@@ -254,7 +258,7 @@ class ItineraryRevisionServiceTest : StringSpec({
                     ),
                 ),
             ),
-            now, now, null, emptyList(),
+            now, now, null, emptyList(), ScoringSignal.UNKNOWN,
         )
         val its = Itineraries(flagged)
         val down = NoopValidateAgent(failure = RuntimeException("AI 다운"))
@@ -304,7 +308,7 @@ class ItineraryRevisionServiceTest : StringSpec({
                     ),
                 ),
             ),
-            now, now, null, emptyList(),
+            now, now, null, emptyList(), ScoringSignal.UNKNOWN,
         )
         val its = Itineraries(flagged)
         val svc = ItineraryRevisionService(revs, its, trips, NoopValidateAgent(unverified = setOf(cafe)), REV_NOOP_TX, clock)

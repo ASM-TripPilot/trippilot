@@ -246,7 +246,7 @@ class ReplanRevertIT : AbstractPostgresIntegrationTest() {
                             if (d.date != date) d
                             else ItineraryDay.of(d.date, d.dayOrder, d.slots.map { s -> VisitSlot.of(s.sourcePoiId, s.poiSnapshotId, s.orderIndex, s.startAt.plusMinutes(30), s.endAt.plusMinutes(30)) })
                         },
-                        current.createdAt, clock.instant(), current.candidatesSummary, current.unplacedMustVisits,
+                        current.createdAt, clock.instant(), current.candidatesSummary, current.unplacedMustVisits, current.scoring,
                     )
                     itineraries.replaceForTrip(tripId, edited)
                     locked.countDown()

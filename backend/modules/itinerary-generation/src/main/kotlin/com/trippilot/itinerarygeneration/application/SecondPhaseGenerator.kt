@@ -205,6 +205,10 @@ class SecondPhaseGenerator(
                 // 덮여 조립·폴백이 보고한 미배치가 COMPLETE 에서 사라졌다(TRIP-1249 리뷰 실측 · 하루 여행은 ANYTIME 이
                 // 1차에 실리므로 이 보고가 유일한 M2 채널이다).
                 if (output == null) latest.unplacedMustVisits else assemblyUnplaced + output.unplacedMustVisits,
+                // 점수 신호 — 2차 호출이 없었으면(하루 여행 · 맡은 날이 모두 닫혀 부르지 않음) null 로 넘겨 1차 값을
+                // 최종으로 둔다. 안 부른 자리의 "모름"을 합치면 1차의 LLM 판정이 근거 없이 지워진다.
+                // 2차가 **실패해** 최소 폴백이 된 것은 다르다 — 그 "모름"은 합쳐야 저하가 드러난다(merge 규칙).
+                output?.scoring?.takeIf { secondInput?.timeWindows?.isNotEmpty() == true },
             )
             // 조건부 쓰기 — 위 가드를 읽은 뒤 재생성이 끼어들었으면 여기서 0행이 되어 아무것도 덮어쓰지 않는다.
             if (!itineraries.replaceIfCurrent(tripId, itineraryId, updated)) {

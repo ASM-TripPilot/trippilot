@@ -306,6 +306,7 @@ class EditItineraryService(
             // 미배치 보고도 보존한다. 사용자가 슬롯을 옮겼다고 "못 넣었던 곳"이 들어간 것은 아니다 —
             // 그 판정은 AI 가 다시 생성할 때만 바뀐다.
             current.unplacedMustVisits,
+            current.scoring, // 점수 신호도 보존 — 편집은 AI 점수를 다시 매기지 않으니 판정이 바뀔 근거가 없다
         )
     }
 

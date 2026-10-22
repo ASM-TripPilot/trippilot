@@ -8,6 +8,7 @@ import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
+import com.trippilot.itinerarygeneration.domain.ScoringSignal
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.placedata.api.FrozenPoiView
@@ -45,7 +46,7 @@ class StayRecommendationServiceTest : StringSpec({
         UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
         GenerationState.COMPLETE,
         listOf(ItineraryDay.of(d1, 0, pois.mapIndexed { i, p -> slot(p, i) })),
-        now, now, null, emptyList(),
+        now, now, null, emptyList(), ScoringSignal.UNKNOWN,
     )
 
     fun trips(owned: Boolean = true) = object : TripFacade {

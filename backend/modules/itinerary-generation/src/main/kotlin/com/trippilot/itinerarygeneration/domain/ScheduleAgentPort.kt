@@ -401,6 +401,8 @@ data class ScheduleAgentOutput(
      * **기본 null** — 이 값을 아직 주지 않는 경로(실 AI 는 TRIP-970 개통 대기)와 옛 응답이 같은 뜻이 되게.
      */
     val scoredCandidates: ScoredCandidatePool? = null,
+    /** 취향 점수 신호(TRIP-1173). **기본 모름** — generate 경로만 실값이고 repair·replan·Fake 는 주지 않는다. */
+    val scoring: ScoringSignal = ScoringSignal.UNKNOWN,
 )
 
 /**
@@ -456,6 +458,41 @@ data class CandidatesSummary(
     val poolSize: Int?,
     val shortfallCategories: List<String> = emptyList(),
 )
+
+/**
+ * 취향 점수 신호(TRIP-1173) — 점수를 LLM 이 매겼나. `solveMode` 는 조립기 축이라 늘 FULL_AI 여서
+ * LLM 실패를 가리지 못했다(FE "LLM 이 안 돈다" 오판). **호출 하나의 판정은 AI 소유** — 백엔드는 2단계 생성을
+ * 합칠 때만 [merge] 로 접고(같으면 그대로·갈리면 MIXED·모름이 섞이면 null), 강등 코드는 어댑터가 코드 모양만 통과시킨다.
+ *
+ * [mode] null = 모름(필드 없는 옛 응답 · Fake · 직접 만들기 · 최소 폴백). [degradations] 는 밟은 강등 계단
+ * `"{stage}:{사유}"` 기계 코드(예 `llm:c1_fallback`)다 — 설명 단계 강등(`explanation:…`)도 섞여 있으니
+ * "LLM 점수 실패"는 `llm:` 접두로 거른다.
+ */
+data class ScoringSignal(val mode: ScoringMode?, val degradations: List<String>) {
+    /**
+     * 두 생성 호출(1차 day1 · 2차 나머지)을 합친다. 출처가 갈리면 MIXED(일부만 LLM),
+     * **한쪽이라도 모르면 모름** — 2차가 최소 폴백으로 떨어졌는데 1차의 LLM 이 남으면 저하가 감춰진다(INV-4).
+     * 강등 코드는 순서를 지킨 합집합이고, 합쳐도 [MAX_DEGRADATIONS] 를 넘지 않는다(응답 하나의 상한을 다시 건다).
+     */
+    fun merge(second: ScoringSignal): ScoringSignal = ScoringSignal(
+        when {
+            mode == null || second.mode == null -> null
+            mode == second.mode -> mode
+            else -> ScoringMode.MIXED
+        },
+        (degradations + second.degradations).distinct().take(MAX_DEGRADATIONS),
+    )
+
+    companion object {
+        val UNKNOWN = ScoringSignal(null, emptyList())
+
+        /** 일정 하나에 싣는 강등 코드 상한. 실측 응답은 서너 개다 — 넘치면 계약이 바뀐 것이라 어댑터가 로그로 드러낸다. */
+        const val MAX_DEGRADATIONS = 16
+    }
+}
+
+/** LLM = 전 후보 LLM 점수 · MIXED = LLM + 빠진 후보 규칙 보충 · RULE = 규칙 점수만(LLM 실패 포함). */
+enum class ScoringMode { LLM, MIXED, RULE }
 
 /**
  * 표시용 방문 슬롯 — 솔버 검증 시각·순서만(INV-2). **소요시간(duration) 필드 없음(INV-3)** — 거리만([distanceRange]).
