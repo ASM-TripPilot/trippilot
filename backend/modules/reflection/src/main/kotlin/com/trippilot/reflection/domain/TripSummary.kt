@@ -1,5 +1,6 @@
 package com.trippilot.reflection.domain
 
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -77,10 +78,11 @@ interface TripSummaryRepository {
     fun exists(tripId: UUID): Boolean = find(tripId) != null
 
     /**
-     * AI 회고 시도를 **선점**한다(TRIP-1488) — 규칙 요약(`RULE`)이고 시도가 [maxAttempts] 미만이며 마지막 시도가 [staleBefore] 이전(또는 없음)일 때만
-     * 시도 수를 1 올리고 시각을 [now] 로 찍는다. 선점했으면 올린 뒤의 시도 수, 못 했으면 null. 한 문장(조건부 UPDATE)이라 파드 사이에서도 한쪽만 이긴다.
+     * AI 회고 시도를 **선점**한다(TRIP-1488) — 규칙 요약(`RULE`)이고 시도가 [maxAttempts] 미만이며 마지막 시도에서 [reclaimAfter] 가 지났을 때(또는
+     * 시도가 없을 때)만 시도 수를 1 올리고 시각을 찍는다. 선점했으면 올린 뒤의 시도 수, 못 했으면 null. 한 문장(조건부 UPDATE)이라 파드 사이에서도
+     * 한쪽만 이긴다. 시각은 **DB 시계**다 — 파드 시계가 어긋나도 "얼마나 지났나"가 한 시계로 잰다.
      */
-    fun claimAiAttempt(tripId: UUID, now: Instant, staleBefore: Instant, maxAttempts: Int): Int? =
+    fun claimAiAttempt(tripId: UUID, reclaimAfter: Duration, maxAttempts: Int): Int? =
         throw UnsupportedOperationException("요약 회고 시도 기록을 지원하지 않는 저장소입니다.")
 
     /** 더 시도할 것이 없는 여행(지워졌거나 실을 방문이 없다) — 시도 수를 [maxAttempts] 로 채워 스윕이 다시 집지 않게 한다. */
@@ -88,9 +90,9 @@ interface TripSummaryRepository {
         throw UnsupportedOperationException("요약 회고 시도 기록을 지원하지 않는 저장소입니다.")
 
     /**
-     * 스윕이 다시 맡을 여행 — 규칙 요약이고 · [generatedAfter] 뒤에 만들어졌고 · 시도가 [maxAttempts] 미만이고 · 마지막 시도가 [staleBefore] 이전(또는 없음).
-     * 오래된 것부터 [limit] 개.
+     * 스윕이 다시 맡을 여행 — 규칙 요약이고 · 마지막으로 다시 짠 지(`generated_at`) [window] 안이고 · 시도가 [maxAttempts] 미만이고 ·
+     * 마지막 시도에서 [reclaimAfter] 가 지났다(또는 시도 없음). 오래된 것부터 [limit] 개. 시각은 DB 시계다([claimAiAttempt] 와 같은 기준).
      */
-    fun findAiPending(generatedAfter: Instant, staleBefore: Instant, maxAttempts: Int, limit: Int): List<UUID> =
+    fun findAiPending(window: Duration, reclaimAfter: Duration, maxAttempts: Int, limit: Int): List<UUID> =
         throw UnsupportedOperationException("요약 회고 시도 기록을 지원하지 않는 저장소입니다.")
 }

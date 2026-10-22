@@ -19,7 +19,6 @@ import org.springframework.stereotype.Component
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionOperations
 import org.springframework.transaction.support.TransactionTemplate
-import java.time.Clock
 import java.time.Duration
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -45,8 +44,10 @@ import java.util.concurrent.atomic.AtomicInteger
  * ## 사라진 회고는 스윕이 다시 맡는다
  * 맡긴 일은 사라질 수 있다 — 대기열 넘침(여행 종료 스윕은 한 번에 200건까지 끝내고, 릴레이는 그것을 몇 초 안에 넘긴다), AI 행(호출 하나가
  * read 상한 605초+), 종료·크래시. 사용자 결정은 "만들어지기만 하면 된다"라 버려 두지 않는다: 시도는 요약 행에 남고(V2.84 `ai_attempts`·
- * `ai_attempted_at`), [sweep] 이 [SWEEP_WINDOW] 안에 만든 규칙 요약 중 시도가 [MAX_ATTEMPTS] 미만이고 마지막 시도에서 요약 호출 상한
- * ([ReflectionAgentPort.summaryCallTimeout])이 지난 것을 다시 맡긴다. 상한을 다 쓰면 WARN 이다(침묵하지 않는다).
+ * `ai_attempted_at`), [sweep] 이 마지막으로 다시 짠 지 [SWEEP_WINDOW] 안인 규칙 요약 중 시도가 [MAX_ATTEMPTS] 미만이고 마지막 시도에서
+ * [reclaimAfter] 가 지난 것을 다시 맡긴다.
+ * **선점이 시도 하나를 쓴다** — 진행 중 배포·크래시로 끊긴 시도도 한 번으로 센다. 쓰지 않는 것은 실행기가 받지 않은 경우(넘침·종료 중)뿐이다.
+ * 마지막 시도를 선점하는 순간 WARN 을 남긴다 — 그 시도가 파드와 함께 사라져도 "더 맡지 않는다"가 조용히 지나가지 않게(INV-4).
  * - **트랜잭션 밖이다**(TRIP-1463 교훈). 실적·재료 조회와 AI 호출은 각 퍼사드의 짧은 읽기 트랜잭션만 쓰고, 마지막 쓰기만 짧은
  *   트랜잭션에서 요약 잠금([TripSummaryRepository.findForUpdate])을 잡는다 — 커넥션을 AI 대기 동안 쥐지 않는다.
  *
@@ -76,7 +77,6 @@ class TripSummaryNarrator internal constructor(
     private val mapper: ObjectMapper,
     private val writes: TransactionOperations,
     private val executor: ExecutorService,
-    private val clock: Clock,
 ) {
     @Autowired
     constructor(
@@ -91,8 +91,7 @@ class TripSummaryNarrator internal constructor(
         metrics: ReflectionMetrics,
         mapper: ObjectMapper,
         transactions: PlatformTransactionManager,
-        clock: Clock,
-    ) : this(owners, trips, archive, poiSurfaces, summaries, agent, cards, materials, metrics, mapper, TransactionTemplate(transactions), newExecutor(), clock)
+    ) : this(owners, trips, archive, poiSurfaces, summaries, agent, cards, materials, metrics, mapper, TransactionTemplate(transactions), newExecutor())
 
     /** 이 파드에서 대기·실행 중인 여행. 다른 파드와의 중복은 시도 선점이 막는다. */
     private val inFlight: MutableSet<UUID> = ConcurrentHashMap.newKeySet()
@@ -102,12 +101,21 @@ class TripSummaryNarrator internal constructor(
      * 즉시 돌아온다.
      */
     fun request(tripId: UUID) {
-        if (!agent.enabled) return
+        if (submit(tripId) == Submitted.REJECTED) {
+            // 대기열이 찼거나 종료 중이다. 시도를 쓰지 않았으니 스윕이 다음 회차에 다시 맡는다 — 조용히 넘기지는 않는다(INV-4).
+            log.warn("요약 회고 실행기가 받지 않았습니다(대기열 포화·종료 중) — 스윕이 다음 회차에 다시 맡습니다. tripId={}", tripId)
+        }
+    }
+
+    private enum class Submitted { ACCEPTED, SKIPPED, REJECTED }
+
+    private fun submit(tripId: UUID): Submitted {
+        if (!agent.enabled) return Submitted.SKIPPED
         if (!inFlight.add(tripId)) {
             log.debug("이 여행의 요약 회고가 이미 대기·실행 중이라 다시 맡지 않습니다. tripId={}", tripId)
-            return
+            return Submitted.SKIPPED
         }
-        try {
+        return try {
             executor.execute {
                 try {
                     narrate(tripId)
@@ -118,16 +126,17 @@ class TripSummaryNarrator internal constructor(
                     inFlight.remove(tripId)
                 }
             }
+            Submitted.ACCEPTED
         } catch (e: RejectedExecutionException) {
             inFlight.remove(tripId)
-            // 대기열이 찼거나 종료 중이다. 규칙 요약은 이미 저장됐으니 잃는 것은 AI 문장뿐이다 — 조용히 넘기지 않는다(INV-4).
-            log.warn("요약 회고 실행기가 받지 않아 규칙 요약으로 둡니다(대기열 포화·종료 중). tripId={}", tripId)
+            Submitted.REJECTED
         }
     }
 
     /**
      * 사라진 회고를 다시 맡긴다(위 "사라진 회고" 절). 다중 파드에서 하나만 돈다(ShedLock) — 둘이 돌아도 시도 선점이 중복 호출을 막는다.
-     * 한 번에 대기열 크기만큼만 집는다 — 넘치면 어차피 거절된다(시도를 쓰지 않으므로 다음 회차에 다시 집힌다).
+     * 한 번에 대기열 크기만큼만 집는다 — 넘치면 어차피 거절된다(시도를 쓰지 않으므로 다음 회차에 다시 집힌다). 거절은 회차마다 한 줄로 모은다 —
+     * 건마다 남기면 넘칠 때 파드마다 5분에 100줄이다.
      */
     @Scheduled(
         fixedDelayString = "\${trippilot.reflection.summary-narrate-sweep-ms:300000}",
@@ -136,18 +145,27 @@ class TripSummaryNarrator internal constructor(
     @SchedulerLock(name = "trip-summary-narrate-sweep", lockAtMostFor = "PT4M", lockAtLeastFor = "PT0S")
     fun sweep() {
         if (!agent.enabled) return
-        val now = clock.instant()
-        val pending = summaries.findAiPending(now.minus(SWEEP_WINDOW), now.minus(agent.summaryCallTimeout), MAX_ATTEMPTS, WAITING)
+        val pending = summaries.findAiPending(SWEEP_WINDOW, reclaimAfter(), MAX_ATTEMPTS, WAITING)
         if (pending.isEmpty()) return
-        log.info("요약 회고를 다시 맡깁니다 {}건(시도 기록 기준 — 넘침·행·종료로 사라진 것).", pending.size)
-        pending.forEach(::request)
+        val rejected = pending.count { submit(it) == Submitted.REJECTED }
+        log.info("요약 회고를 다시 맡깁니다 {}건(시도 기록 기준 — 넘침·행·종료로 사라진 것).", pending.size - rejected)
+        if (rejected > 0) log.warn("요약 회고 실행기가 {}건을 받지 않았습니다(대기열 포화·종료 중) — 다음 회차에 다시 맡습니다.", rejected)
     }
+
+    /**
+     * 다시 선점해도 되는 때 — 마지막 시도에서 요약 호출 상한이 지나고 [RECLAIM_MARGIN] 이 더 지난 뒤. 선점 시각은 호출 **전**(실적·재료 조회 앞)이라
+     * 그 조회와 커넥션 대기만큼 실제 호출이 늦게 시작한다 — 상한에 딱 맞추면 아직 기다리는 다른 파드의 호출을 중복한다.
+     */
+    private fun reclaimAfter(): Duration = agent.summaryCallTimeout.plus(RECLAIM_MARGIN)
 
     /** AI 문장 한 번 — 시도를 선점하고, 근거를 모으고, 부르고, 쓸 수 있으면 잠근 뒤 쓴다. */
     internal fun narrate(tripId: UUID) {
-        val now = clock.instant()
-        val attempt = writes.execute { summaries.claimAiAttempt(tripId, now, now.minus(agent.summaryCallTimeout), MAX_ATTEMPTS) }
+        val attempt = writes.execute { summaries.claimAiAttempt(tripId, reclaimAfter(), MAX_ATTEMPTS) }
             ?: return outcome("NOT_CLAIMED", tripId) // 요약이 없음·이미 AI·기본 요약이거나, 다른 파드가 진행 중이거나, 상한을 다 썼다
+        if (attempt >= MAX_ATTEMPTS) {
+            // 부르기 **전에** 남긴다 — 이 시도가 파드와 함께 사라져도 "더 맡지 않는다"가 기록된다.
+            log.warn("요약 회고 마지막 시도({}/{})입니다 — 이번에도 못 붙이면 더 맡지 않고 규칙 요약으로 남깁니다. tripId={}", attempt, MAX_ATTEMPTS, tripId)
+        }
         narrateClaimed(tripId, attempt)
     }
 
@@ -181,17 +199,17 @@ class TripSummaryNarrator internal constructor(
         )
         val card = runCatching { agent.generate(input)?.let { cards.read(it.payload) } }
             .onFailure { log.warn("요약 회고 카드를 읽을 수 없어 규칙 요약으로 둡니다. tripId={}", tripId, it) }
-            .getOrNull() ?: return failed("NO_CARD", tripId, attempt)
+            .getOrNull() ?: return outcome("NO_CARD", tripId)
         // 상대 자기 폴백이면 쓰지 않는다 — 하루 회고와 다르다: 요약 문장은 우리 규칙 문장이 실적 수치를 담고 있어 상대 고정 문구보다 낫다.
-        if (mapper.readTree(card.payload).path("is_fallback").asBoolean(false)) return failed("AI_FALLBACK", tripId, attempt)
+        if (mapper.readTree(card.payload).path("is_fallback").asBoolean(false)) return outcome("AI_FALLBACK", tripId)
         // 자리표시자가 남은 부제(`{region} · {start_date}~{end_date}`)는 "서술 없음" 신호다.
-        val narrative = card.subtitle.trim().takeIf { it.isNotEmpty() && '{' !in it } ?: return failed("NO_NARRATIVE", tripId, attempt)
+        val narrative = card.subtitle.trim().takeIf { it.isNotEmpty() && '{' !in it } ?: return outcome("NO_NARRATIVE", tripId)
         val notVisited = days.flatMap { d -> d.visits.filter { it.skipped } }.mapNotNull { surfaces[it.poiId]?.nameKo }
         val offending = HallucinationGate.offendingPlaces(card.payload, notVisited, visits.map { it.poiName })
         if (offending.isNotEmpty()) {
             log.warn("요약 회고가 안 간 장소를 말해 규칙 요약으로 둡니다. tripId={} 장소={}", tripId, offending)
             metrics.hallucinationRejected(ReflectionAgentInput.KIND_TRIP_SUMMARY)
-            return failed("HALLUCINATION", tripId, attempt)
+            return outcome("HALLUCINATION", tripId)
         }
         val written = writes.execute {
             // 잠근 뒤 다시 본다 — 기다리는 사이 다른 파드가 먼저 붙였으면 덮지 않는다.
@@ -210,18 +228,10 @@ class TripSummaryNarrator internal constructor(
         outcome(outcome, tripId)
     }
 
-    /** AI 문장을 못 붙였다. 다음 스윕이 다시 맡는다 — 상한을 다 썼으면 이것이 마지막이라 WARN 이다. */
-    private fun failed(outcome: String, tripId: UUID, attempt: Int) {
-        outcome(outcome, tripId)
-        if (attempt >= MAX_ATTEMPTS) {
-            log.warn("요약 회고 시도 상한({}회)을 다 써 규칙 요약으로 남깁니다. tripId={} 마지막={}", MAX_ATTEMPTS, tripId, outcome)
-        }
-    }
-
     /**
      * 종료 — 진행 중인 호출을 [AWAIT_TERMINATION_SECONDS] 까지 기다리고 나머지는 버린다. 파드 종료 유예(660초)보다 훨씬 짧은 이유: AI 행이면
-     * 호출 하나가 605초+라 다 기다리면 배포가 그만큼 멈추는데, 버린 것은 스윕이 다시 맡는다(시작 못 한 것은 시도를 안 썼고, 진행 중이던 것은
-     * 호출 상한이 지나면 다시 선점된다). 버린 여행(대기 + 진행 중)을 남긴다. 진행 중 소켓 read 는 인터럽트로 깨지 않는다 — 데몬 스레드라
+     * 호출 하나가 605초+라 다 기다리면 배포가 그만큼 멈추는데, 버린 것 중 시도가 남은 것은 스윕이 다시 맡는다(시작 못 한 것은 시도를 안 썼고,
+     * 진행 중이던 것은 시도 하나를 쓴 채 [reclaimAfter] 가 지나면 다시 선점된다). 버린 여행(대기 + 진행 중)을 남긴다. 진행 중 소켓 read 는 인터럽트로 깨지 않는다 — 데몬 스레드라
      * 프로세스 종료를 막지 않는다.
      */
     @PreDestroy
@@ -230,7 +240,10 @@ class TripSummaryNarrator internal constructor(
         if (executor.awaitTermination(AWAIT_TERMINATION_SECONDS, TimeUnit.SECONDS)) return
         val pending = inFlight.toList()
         executor.shutdownNow()
-        log.warn("요약 회고 실행기 종료 대기({}초)를 넘겼습니다 — 대기·진행 중이던 {}건은 스윕이 다시 맡습니다. tripIds={}", AWAIT_TERMINATION_SECONDS, pending.size, pending)
+        log.warn(
+            "요약 회고 실행기 종료 대기({}초)를 넘겼습니다 — 대기·진행 중이던 {}건 가운데 시도가 남은 것은 스윕이 다시 맡습니다. tripIds={}",
+            AWAIT_TERMINATION_SECONDS, pending.size, pending,
+        )
     }
 
     internal companion object {
@@ -244,8 +257,14 @@ class TripSummaryNarrator internal constructor(
         /** 시도 상한 — 결정적으로 실패하는 여행(상대 폴백·환각)이 스윕마다 AI 를 부르지 않게. */
         const val MAX_ATTEMPTS = 3
 
-        /** 스윕이 보는 요약의 나이 — 이보다 오래된 규칙 요약은 다시 맡지 않는다(이 기능 전에 만든 요약은 배포 뒤 이 창 안의 것만 채워진다). */
+        /**
+         * 스윕이 보는 요약의 나이 — `generated_at`(**마지막으로 다시 짠 시각**: `TripEnded` 재배달·못 읽는 요약 고침이 새 시각으로 덮는다. 경로 갱신과
+         * 이 클래스의 AI 문장 쓰기는 그대로 둔다)이 이보다 오래된 규칙 요약은 다시 맡지 않는다. 이 기능 전에 만든 요약은 배포 뒤 이 창 안의 것만 채워진다.
+         */
         val SWEEP_WINDOW: Duration = Duration.ofDays(7)
+
+        /** 다시 선점 여유([reclaimAfter]) — 선점 뒤 실적·재료 조회와 커넥션 대기(Hikari 기본 30초)를 덮는다. */
+        val RECLAIM_MARGIN: Duration = Duration.ofSeconds(60)
 
         internal fun newExecutor(): ExecutorService {
             val seq = AtomicInteger()

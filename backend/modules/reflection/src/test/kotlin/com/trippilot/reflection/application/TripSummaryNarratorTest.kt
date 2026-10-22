@@ -75,26 +75,28 @@ class TripSummaryNarratorTest : StringSpec({
     )
 
     /** 저장소 대역 — 시도 선점·스윕 조회도 실 어댑터(조건부 UPDATE·SELECT)와 같은 조건으로 흉내 낸다(실 쿼리는 IT 가 본다). */
-    class Summaries(initial: TripSummary?) : TripSummaryRepository {
+    class Summaries(initial: TripSummary?, private val clock: Clock) : TripSummaryRepository {
         var stored: TripSummary? = initial
         var beforeLock: () -> Unit = {}
         var locks = 0
         var attempts = 0
         var attemptedAt: Instant? = null
-        override fun claimAiAttempt(tripId: UUID, now: Instant, staleBefore: Instant, maxAttempts: Int): Int? {
+        override fun claimAiAttempt(tripId: UUID, reclaimAfter: Duration, maxAttempts: Int): Int? {
             val s = stored ?: return null
-            if (s.source != ReflectionSource.RULE || attempts >= maxAttempts || attemptedAt?.isBefore(staleBefore) == false) return null
+            val now = clock.instant()
+            if (s.source != ReflectionSource.RULE || attempts >= maxAttempts || attemptedAt?.isBefore(now.minus(reclaimAfter)) == false) return null
             attempts++
             attemptedAt = now
             return attempts
         }
         override fun retireAiAttempts(tripId: UUID, maxAttempts: Int) { attempts = maxOf(attempts, maxAttempts) }
         var pendingQueries = 0
-        override fun findAiPending(generatedAfter: Instant, staleBefore: Instant, maxAttempts: Int, limit: Int): List<UUID> {
+        override fun findAiPending(window: Duration, reclaimAfter: Duration, maxAttempts: Int, limit: Int): List<UUID> {
             pendingQueries++
             val s = stored ?: return emptyList()
-            val due = s.source == ReflectionSource.RULE && s.generatedAt.isAfter(generatedAfter) && attempts < maxAttempts &&
-                attemptedAt?.isBefore(staleBefore) != false
+            val now = clock.instant()
+            val due = s.source == ReflectionSource.RULE && s.generatedAt.isAfter(now.minus(window)) && attempts < maxAttempts &&
+                attemptedAt?.isBefore(now.minus(reclaimAfter)) != false
             return if (due) listOf(s.tripId) else emptyList()
         }
         override fun upsert(summary: TripSummary) = summary.also { stored = it }
@@ -157,11 +159,11 @@ class TripSummaryNarratorTest : StringSpec({
         owned: OwnedTripPeriod? = OwnedTripPeriod(acc, start, end),
         trip: List<ArchiveDayView> = days,
     ): Fixture {
-        val summaries = Summaries(summary)
+        val clock = MutableClock(Instant.parse("2026-08-13T01:00:00Z"))
+        val summaries = Summaries(summary, clock)
         val agent = Agent(reply)
         val executor = HeldExecutor()
         val registry = SimpleMeterRegistry()
-        val clock = MutableClock(Instant.parse("2026-08-13T01:00:00Z"))
         val owners = object : TripOwnerFacade { override fun findOwnedPeriod(tripId: UUID) = owned }
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = null
@@ -189,7 +191,7 @@ class TripSummaryNarratorTest : StringSpec({
         val narrator = TripSummaryNarrator(
             owners, trips, archive, surfaces, summaries, agent, ReflectionCardCodec(ObjectMapper()),
             ReflectionMaterials(preferences, changeLog), ReflectionMetrics(registry), ObjectMapper(),
-            TransactionOperations.withoutTransaction(), executor, clock,
+            TransactionOperations.withoutTransaction(), executor,
         )
         return Fixture(summaries, agent, executor, registry, narrator, clock)
     }
@@ -345,7 +347,7 @@ class TripSummaryNarratorTest : StringSpec({
     "대기열이 넘쳐 버린 회고는 스윕이 다시 맡아 붙인다 — 넘침은 시도를 쓰지 않는다" {
         val f = fixture()
         f.executor.reject = true
-        f.narrator.request(tripId)
+        warns { f.narrator.request(tripId) }.single().let { ("스윕이 다음 회차에 다시 맡습니다" in it && tripId.toString() in it) shouldBe true }
         f.executor.reject = false
         f.summaries.attempts shouldBe 0
 
@@ -367,24 +369,46 @@ class TripSummaryNarratorTest : StringSpec({
         f.executor.run()
         f.agent.sent.size shouldBe 1
 
-        f.clock.now = f.clock.now.plus(Duration.ofMinutes(2)) // 마지막 시도에서 10분 넘게 지났다
+        f.clock.now = f.clock.now.plus(Duration.ofMinutes(1).plusSeconds(30)) // 호출 상한(10분)은 지났지만 여유(60초) 안이다
+        f.narrator.sweep()
+        f.executor.held.size shouldBe 0
+        f.clock.now = f.clock.now.plus(Duration.ofSeconds(31)) // 상한 + 여유를 넘었다
         f.narrator.sweep()
         f.executor.run()
         f.agent.sent.size shouldBe 2
     }
 
-    "시도 상한을 다 쓰면 더 맡지 않고 WARN 을 한 번 남긴다" {
+    "시도 상한을 다 쓰면 더 맡지 않는다 — 마지막 시도를 선점하는 순간 WARN 을 한 번 남긴다(그 시도가 파드와 사라져도 기록된다)" {
         val f = fixture(reply = { null })
         val messages = warns {
             repeat(TripSummaryNarrator.MAX_ATTEMPTS + 2) {
                 f.narrator.sweep()
                 f.executor.run()
-                f.clock.now = f.clock.now.plus(Duration.ofMinutes(11))
+                f.clock.now = f.clock.now.plus(Duration.ofMinutes(12))
             }
         }
         f.agent.sent.size shouldBe TripSummaryNarrator.MAX_ATTEMPTS
         f.summaries.stored shouldBe ruleSummary()
-        messages.filter { "상한" in it && tripId.toString() in it }.size shouldBe 1
+        messages.filter { "마지막 시도" in it && tripId.toString() in it }.size shouldBe 1
+    }
+
+    "마지막 시도가 답 없이 사라져도(배포·크래시) WARN 은 이미 남았다" {
+        val f = fixture(reply = { null })
+        f.summaries.attempts = TripSummaryNarrator.MAX_ATTEMPTS - 1
+        f.agent.reply = { error("파드가 이 호출 도중 사라졌다") } // 부르는 순간 끊긴다 — 실패 처리까지 못 간다고 본다
+        val messages = warns {
+            f.narrator.request(tripId)
+            f.executor.run()
+        }
+        messages.any { "마지막 시도(3/3)" in it && tripId.toString() in it } shouldBe true
+    }
+
+    "스윕에서 넘친 것은 한 줄로 모아 남기고 시도를 쓰지 않는다" {
+        val f = fixture()
+        f.executor.reject = true
+        val messages = warns { f.narrator.sweep() }
+        messages shouldBe listOf("요약 회고 실행기가 1건을 받지 않았습니다(대기열 포화·종료 중) — 다음 회차에 다시 맡습니다.")
+        f.summaries.attempts shouldBe 0
     }
 
     "스윕은 창보다 오래된 요약·이미 AI 인 요약을 집지 않고, 경계가 꺼져 있으면 돌지 않는다" {

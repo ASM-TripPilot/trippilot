@@ -53,8 +53,6 @@ import org.springframework.transaction.support.TransactionTemplate
         "spring.datasource.hikari.maximum-pool-size=1",
         "spring.datasource.hikari.minimum-idle=1",
         "spring.datasource.hikari.connection-timeout=2000",
-        // 스윕은 테스트가 직접 부른다 — 예약 실행이 끼면 시도 수가 흔들린다.
-        "trippilot.reflection.summary-narrate-sweep-initial-delay-ms=3600000",
     ],
 )
 class TripSummaryNarratorIT : AbstractPostgresIntegrationTest() {
@@ -197,21 +195,24 @@ class TripSummaryNarratorIT : AbstractPostgresIntegrationTest() {
         val tripId = tripWithVisits()
         summaryService.generate(tripId) // 구독자 없이 규칙 요약만 — AI 는 아직 안 맡겼다
         val tx = TransactionTemplate(txManager)
-        val now = Instant.now()
-        val stale = now.minus(Duration.ofMinutes(10))
-        fun pending() = summaries.findAiPending(now.minus(Duration.ofDays(7)), stale, 3, 100).contains(tripId)
-        fun claim(at: Instant = now) = tx.execute { summaries.claimAiAttempt(tripId, at, at.minus(Duration.ofMinutes(10)), 3) }
+        val reclaim = Duration.ofMinutes(10)
+        fun pending() = summaries.findAiPending(Duration.ofDays(7), reclaim, 3, 100).contains(tripId)
+        fun claim() = tx.execute { summaries.claimAiAttempt(tripId, reclaim, 3) }
 
         pending() shouldBe true
         claim() shouldBe 1
         claim() shouldBe null // 진행 중일 수 있는 시도 — 다른 파드도 못 가져간다
         pending() shouldBe false
-        jdbc.update("UPDATE trip_summary SET ai_attempted_at = ? WHERE trip_id = ?", java.sql.Timestamp.from(now.minus(Duration.ofMinutes(11))), tripId)
+        // 시각은 DB 시계로 찍힌다 — 앱 시계가 아니라 DB now() 기준으로 늙힌다.
+        jdbc.queryForObject("SELECT ai_attempted_at > now() - interval '1 minute' FROM trip_summary WHERE trip_id = ?", Boolean::class.java, tripId) shouldBe true
+        jdbc.update("UPDATE trip_summary SET ai_attempted_at = now() - interval '9 minutes' WHERE trip_id = ?", tripId)
+        (pending() to claim()) shouldBe (false to null) // 다시 선점 기준(10분) 안
+        jdbc.update("UPDATE trip_summary SET ai_attempted_at = now() - interval '11 minutes' WHERE trip_id = ?", tripId)
         pending() shouldBe true
         claim() shouldBe 2
         jdbc.update("UPDATE trip_summary SET ai_attempts = 3, ai_attempted_at = NULL WHERE trip_id = ?", tripId)
         (pending() to claim()) shouldBe (false to null) // 상한
-        jdbc.update("UPDATE trip_summary SET ai_attempts = 0, generated_at = ? WHERE trip_id = ?", java.sql.Timestamp.from(now.minus(Duration.ofDays(8))), tripId)
+        jdbc.update("UPDATE trip_summary SET ai_attempts = 0, generated_at = now() - interval '8 days' WHERE trip_id = ?", tripId)
         pending() shouldBe false // 창 밖
         jdbc.update("UPDATE trip_summary SET generated_at = now() WHERE trip_id = ?", tripId)
         tx.executeWithoutResult { summaries.retireAiAttempts(tripId, 3) }

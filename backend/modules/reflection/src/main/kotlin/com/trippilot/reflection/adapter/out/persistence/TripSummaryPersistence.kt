@@ -19,6 +19,7 @@ import org.hibernate.type.SqlTypes
 import org.slf4j.LoggerFactory
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.stereotype.Component
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -90,15 +91,15 @@ class TripSummaryRepositoryAdapter(private val jpa: TripSummaryJpaRepository) : 
     }
 
     // 시도 기록(V2.84)은 엔티티에 매핑하지 않는다 — 요약을 덮는 생성·경로 갱신이 지우지 않게. 쓰기 둘은 호출자의 트랜잭션을 탄다.
-    override fun claimAiAttempt(tripId: UUID, now: Instant, staleBefore: Instant, maxAttempts: Int): Int? =
+    override fun claimAiAttempt(tripId: UUID, reclaimAfter: Duration, maxAttempts: Int): Int? =
         em.createNativeQuery(
             """
-            UPDATE trip_summary SET ai_attempts = ai_attempts + 1, ai_attempted_at = :now
+            UPDATE trip_summary SET ai_attempts = ai_attempts + 1, ai_attempted_at = now()
              WHERE trip_id = :tripId AND source = 'RULE' AND ai_attempts < :max
-               AND (ai_attempted_at IS NULL OR ai_attempted_at < :staleBefore)
+               AND (ai_attempted_at IS NULL OR ai_attempted_at < now() - make_interval(secs => :secs))
             RETURNING ai_attempts
             """.trimIndent(),
-        ).setParameter("now", now).setParameter("tripId", tripId).setParameter("max", maxAttempts).setParameter("staleBefore", staleBefore)
+        ).setParameter("tripId", tripId).setParameter("max", maxAttempts).setParameter("secs", reclaimAfter.seconds.toDouble())
             .resultList.firstOrNull()?.let { (it as Number).toInt() }
 
     override fun retireAiAttempts(tripId: UUID, maxAttempts: Int) {
@@ -107,18 +108,18 @@ class TripSummaryRepositoryAdapter(private val jpa: TripSummaryJpaRepository) : 
     }
 
     @Suppress("UNCHECKED_CAST")
-    override fun findAiPending(generatedAfter: Instant, staleBefore: Instant, maxAttempts: Int, limit: Int): List<UUID> =
+    override fun findAiPending(window: Duration, reclaimAfter: Duration, maxAttempts: Int, limit: Int): List<UUID> =
         (
             em.createNativeQuery(
                 """
                 SELECT trip_id FROM trip_summary
-                 WHERE source = 'RULE' AND generated_at > :after AND ai_attempts < :max
-                   AND (ai_attempted_at IS NULL OR ai_attempted_at < :staleBefore)
+                 WHERE source = 'RULE' AND generated_at > now() - make_interval(secs => :window) AND ai_attempts < :max
+                   AND (ai_attempted_at IS NULL OR ai_attempted_at < now() - make_interval(secs => :secs))
                  ORDER BY generated_at
                  LIMIT :limit
                 """.trimIndent(),
-            ).setParameter("after", generatedAfter).setParameter("max", maxAttempts).setParameter("staleBefore", staleBefore)
-                .setParameter("limit", limit).resultList as List<Any>
+            ).setParameter("window", window.seconds.toDouble()).setParameter("max", maxAttempts)
+                .setParameter("secs", reclaimAfter.seconds.toDouble()).setParameter("limit", limit).resultList as List<Any>
             ).map { it as? UUID ?: UUID.fromString(it.toString()) }
 
     private fun TripSummary.toEntity() = TripSummaryEntity(
