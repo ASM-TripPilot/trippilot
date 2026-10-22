@@ -1,5 +1,5 @@
 import type { ExpoConfig } from 'expo/config';
-import { withEntitlementsPlist, withInfoPlist } from 'expo/config-plugins';
+import { withInfoPlist } from 'expo/config-plugins';
 
 // 소셜/지도 SDK 키는 사용자 프로비저닝 시 주입한다(스캐폴드는 placeholder).
 // 소셜(카카오/네이버)·지도 SDK config plugin 은 실 네이티브 키가 필요하므로 auth·map 유닛에서 배선한다.
@@ -220,10 +220,6 @@ const config: ExpoConfig = {
   },
 };
 
-// 푸시 entitlement(aps-environment)를 뺀다 — 서버 푸시가 꺼져 있고 번들 ID 에 Push 권한이 아직 없어
-// 프로비저닝 프로파일이 Xcode 서명에서 거부된다(TRIP-935 심사 빌드). expo-notifications 는 prebuild 가
-// 설치만 돼 있어도 자동으로 붙여서 plugins 에서 빼도 소용없다 — 결과에서 지운다.
-// 푸시를 켤 때는 ASC 에서 번들 ID 의 Push 권한을 먼저 켜고 이 래핑을 걷는다.
 // TRIP-1337 — expo-task-manager 는 설치만 돼 있어도 prebuild 가 레거시 자동 플러그인으로 붙여 UIBackgroundModes 에
 // 'fetch' 를 넣는다(우리는 백그라운드 fetch 를 쓰지 않는다). 플래그 OFF 빌드의 권한 표면을 TRIP-936 과 같게 두려고
 // 결과에서 지운다 — ON 빌드는 expo-location 플러그인이 넣는 'location' 만 남는다.
@@ -238,9 +234,6 @@ const withoutBackgroundFetch = (input: ExpoConfig): ExpoConfig =>
     return mod;
   });
 
-export default withoutBackgroundFetch(
-  withEntitlementsPlist(config, (mod) => {
-    delete mod.modResults['aps-environment'];
-    return mod;
-  })
-);
+// 푸시 entitlement(aps-environment)는 expo-notifications 플러그인이 넣는 그대로 둔다 — 1.0 은 번들 ID 에
+// Push 권한이 없어 지웠고(TRIP-935), 1.0.1 에서 권한을 켜고 되살렸다. 다시 지우면 알림만 조용히 안 온다.
+export default withoutBackgroundFetch(config);
