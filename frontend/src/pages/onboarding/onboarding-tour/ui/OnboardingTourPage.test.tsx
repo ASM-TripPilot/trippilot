@@ -8,7 +8,7 @@ import { OnboardingTourPage } from './OnboardingTourPage';
  * TRIP-1595 AC3 — 기능 안내 컨테이너 배선: `건너뛰기`(1~5장)·`시작하기`(6장) → 홈(`/`)으로 replace.
  *
  * 무엇을 보장하나:
- *  - 나가는 버튼은 `router.replace('/')` 정확히 1회이고 `push`·`back`은 0회다(스택에 투어를 남기지 않는다).
+ *  - 나가는 버튼은 `router.replace('/(tabs)')`(TRIP-1597 — `'/'` 는 잠긴 온보딩 index 로 풀린다) 정확히 1회이고 `push`·`back`은 0회다(스택에 투어를 남기지 않는다).
  *  - 연타해도 1회다(`guardPress`). 이동 직전에 `openPressGuardWindow()`를 **컨테이너가 직접** 연다 —
  *    홈 탭 바가 같은 자리에 올라오는 순간의 둘째 탭이 홈 탭을 누르지 않게 한다.
  *  - 렌더만으로는 어디로도 가지 않는다.
@@ -78,7 +78,7 @@ describe('AC3 · 건너뛰기·시작하기 → 홈으로 replace', () => {
     fireEvent.press(screen.getByTestId('onboarding-tour-skip'));
 
     // 단언
-    expect(routerMock.replace.mock.calls).toEqual([['/']]);
+    expect(routerMock.replace.mock.calls).toEqual([['/(tabs)']]);
     expect(routerMock.push).not.toHaveBeenCalled();
     expect(routerMock.back).not.toHaveBeenCalled();
   });
@@ -96,7 +96,7 @@ describe('AC3 · 건너뛰기·시작하기 → 홈으로 replace', () => {
     fireEvent.press(screen.getByTestId('onboarding-tour-start'));
 
     // 단언 2
-    expect(routerMock.replace.mock.calls).toEqual([['/']]);
+    expect(routerMock.replace.mock.calls).toEqual([['/(tabs)']]);
     expect(routerMock.push).not.toHaveBeenCalled();
     expect(routerMock.back).not.toHaveBeenCalled();
   });
