@@ -38,8 +38,10 @@ object ClosureRules {
      * @property checked 신호가 없다고 확인한 슬롯 — 그 출처가 띄운 트리거의 해제 근거다.
      * @property blind 본 슬롯이 있는데 발견도 확정 판정(상태 ACTIVE 이면서 영업시간 판정 있음)도 없다 — 감지기는 모름으로 낸다.
      *   빈 확인으로 내면 감시 상태가 '확인됨'이 된다 — AI 보류·상태 조회 실패가 조용히 정상으로 보인다(RES-SA-01).
+     * @property unknown 본 슬롯 가운데 발견이 없는데 상태(ACTIVE)·영업시간(UNKNOWN 아님) 중 하나라도 모르는 것이 있다 —
+     *   그 날은 감시 상태를 '확인'으로 남기지 않는다(G-SA-21 사용자 결정 '하나라도 모르면 확인 불가'). 발견·확인은 그대로 낸다.
      */
-    data class Verdict(val findings: List<Finding>, val checked: Set<String>, val blind: Boolean)
+    data class Verdict(val findings: List<Finding>, val checked: Set<String>, val blind: Boolean, val unknown: Boolean = false)
 
     /**
      * @param now 판정 시각 — '오늘'과 '지금'을 여행지 기준(KST)으로 정한다.
@@ -64,7 +66,10 @@ object ClosureRules {
                 group.all { status?.get(it.poiId) == PoiLifeStatus.ACTIVE && it.hours == HoursVerdict.OK }
         }.keys
         val learned = seen.any { status?.get(it.poiId) == PoiLifeStatus.ACTIVE && it.hours != HoursVerdict.UNKNOWN }
-        return Verdict(findings, checked, blind = findings.isEmpty() && seen.isNotEmpty() && !learned)
+        val unknown = targets.any { (key, group) ->
+            key !in raised && group.any { status?.get(it.poiId) != PoiLifeStatus.ACTIVE || it.hours == HoursVerdict.UNKNOWN }
+        }
+        return Verdict(findings, checked, blind = findings.isEmpty() && seen.isNotEmpty() && !learned, unknown = unknown)
     }
 
     private fun findingOf(
