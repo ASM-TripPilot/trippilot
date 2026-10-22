@@ -7,6 +7,7 @@ import {
 import { View } from 'react-native';
 
 import type { Place } from '@/entities/place/model';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 
 import { PlaceGridCard } from './PlaceGridCard';
 
@@ -19,7 +20,8 @@ import { PlaceGridCard } from './PlaceGridCard';
  *    로 잰다(글리프 fill 함정 회피, 02a ★5). 담기면 "담음" 배지가 함께 뜬다.
  *  - 🔴 pending 이면 하트 disabled(연타 가드).
  *  - 🔴 카드 press → onPressCard(place) · 하트 press → onToggleSave(place).
- *  - 🔴 `imageUrl` null 이면 사진 leaf 를 안 그린다(INV-1).
+ *  - 🔴 사진 칸 `explore-places-photo-{poiId}` 는 항상 있다 — `imageUrl` 이 있으면 그 사진, 없으면(사이클
+ *    20261022-place-category-covers) 장소의 카테고리·poiId 로 고른 카테고리 생성 이미지.
  *
  * ⚠️ grid 카드도 explore 단일 소비라 testID 하드코딩(02a ★14). d04 하트 글리프는 testID 가 없다(현행 보존).
  *
@@ -96,15 +98,27 @@ describe('🔴 PlaceGridCard (AC-M2·M4 d04)', () => {
     expect(onToggleSave).toHaveBeenCalledWith(PLACE);
   });
 
-  it('G5 · imageUrl null 이면 사진 leaf 없음 + region 없으면 부제=카테고리만(INV-1)', () => {
+  it('G5 · imageUrl null 이면 장소 카테고리(맛집)·poiId(p1)의 생성 이미지를 그리고, region 없으면 부제=카테고리만', () => {
     renderGrid({
       place: { ...PLACE, imageUrl: null, region: null },
     });
 
     const card = screen.getByTestId('explore-places-card-p1');
-    // 사진 leaf(Image role) 없음 — 회색 자리만. 부제는 region 이 없으므로 카테고리 하나.
+    // 'p1' 의 FNV-1a % 3 + 1 = 변형 2 → food-2. 다른 카테고리·변형이면 오배선이다.
+    expect(
+      within(card).getByTestId('explore-places-photo-p1').props.source
+    ).toEqual([coverFor('맛집', 'p1')]);
+    // 부제는 region 이 없으므로 카테고리 하나.
     expect(within(card).queryByText('맛집 · 부산 해운대구')).toBeNull();
     expect(within(card).getByText('맛집')).toBeTruthy();
+  });
+
+  it('G5b · imageUrl 이 있으면 그 사진을 { uri } 그대로 그린다 (서버 사진 우선)', () => {
+    renderGrid({});
+
+    expect(screen.getByTestId('explore-places-photo-p1').props.source).toEqual([
+      { uri: 'https://example.com/x.jpg' },
+    ]);
   });
 });
 

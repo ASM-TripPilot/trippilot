@@ -8,6 +8,7 @@ import {
 } from '@testing-library/react-native';
 
 import type { Place } from '@/shared/api/index.schemas';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 
 import type { PlaceListState } from '@/features/explore/index.view';
 import type { PlaceSaveNotice } from '@/features/save-place/index.view';
@@ -170,7 +171,7 @@ describe('PlaceExploreScreen — 카드 내용 (AC-1)', () => {
     expect(within(p3).getByText('카페')).toBeOnTheScreen();
   });
 
-  it('imageUrl 이 온 카드만 그 URL 로 사진을 그린다 (INV-1)', () => {
+  it('imageUrl 이 온 카드는 그 URL 로, 없는 카드는 그 장소 카테고리·poiId 의 생성 이미지로 사진 칸을 채운다', () => {
     renderScreen();
 
     const withPhoto = screen.getByTestId('explore-places-card-p2');
@@ -180,10 +181,14 @@ describe('PlaceExploreScreen — 카드 내용 (AC-1)', () => {
       uri: 'https://cdn.example.com/gwangalli.jpg',
     });
 
-    // 부정 짝 — imageUrl 이 null 이면(계약상 **정상값**, 시드가 전부 NULL 이라 이게 기본
-    // 경로다) 자리만 두고 이미지는 그리지 않는다.
-    const noPhoto = screen.getByTestId('explore-places-card-p1');
-    expect(within(noPhoto).UNSAFE_queryAllByType(Image)).toHaveLength(0);
+    // 짝 — imageUrl 이 null 이면(계약상 **정상값**, 시드가 전부 NULL 이라 이게 기본 경로다) 칸이 비지 않고
+    // 그 장소(p1·명소)의 생성 이미지가 들어온다. 칸마다 카테고리가 다르다(p3 카페 ≠ p1 명소).
+    expect(screen.getByTestId('explore-places-photo-p1').props.source).toEqual([
+      coverFor('명소', 'p1'),
+    ]);
+    expect(screen.getByTestId('explore-places-photo-p3').props.source).toEqual([
+      coverFor('카페', 'p3'),
+    ]);
   });
 });
 

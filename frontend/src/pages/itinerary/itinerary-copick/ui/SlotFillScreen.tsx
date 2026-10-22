@@ -484,6 +484,8 @@ export function SlotFillScreen({
                       nameKo={view?.nameKo}
                       tags={view?.tags}
                       imageUrl={view?.imageUrl}
+                      category={candidate.category}
+                      coverPoiId={candidate.poiId}
                       dimmed={view?.dimmed}
                       trailing={
                         <View className="h-[24px] w-[24px] items-center justify-center">

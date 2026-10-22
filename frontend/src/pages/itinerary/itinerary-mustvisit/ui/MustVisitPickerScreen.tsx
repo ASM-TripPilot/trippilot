@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { Image } from '@/shared/ui/Image';
+import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MapView, type MapPin } from '@/shared/map';
@@ -215,18 +215,16 @@ function MustVisitCard({
           {String(index + 1)}
         </Text>
       </View>
-      <View
-        testID={`itinerary-mustvisit-image-${item.sourcePoiId}`}
-        className="h-[78px] w-[78px] overflow-hidden rounded-thumb bg-surface-strong"
-      >
-        {item.imageUrl === null ? null : (
-          <Image
-            source={{ uri: item.imageUrl }}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            className="h-full w-full"
-          />
-        )}
+      <View className="h-[78px] w-[78px] overflow-hidden rounded-thumb bg-surface-strong">
+        <PlacePhoto
+          testID={`itinerary-mustvisit-image-${item.sourcePoiId}`}
+          imageUrl={item.imageUrl}
+          category={item.category}
+          poiId={item.sourcePoiId}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          className="h-full w-full"
+        />
       </View>
       <View className="flex-1 items-start gap-xs">
         {fixed ? (

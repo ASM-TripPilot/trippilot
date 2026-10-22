@@ -1,7 +1,9 @@
+import type { ComponentProps } from 'react';
 import { Text } from 'react-native';
 import { render, screen, within } from '@testing-library/react-native';
 
 import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
+import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
 
 import { SlotCandidateCard } from './SlotCandidateCard';
 
@@ -197,5 +199,87 @@ describe('🔴 SlotCandidateCard — 톤다운 additive(dimmed)', () => {
     // letter Text 의 조부모다(.parent.parent, 위 CC5 실측 근거).
     const badge = screen.getByText('D').parent?.parent;
     expect(badge?.props.className).not.toContain('bg-primary');
+  });
+});
+
+/**
+ * 사이클 20261022-place-category-covers — itinerary 구성(`showImage`)의 사진 칸. `{prefix}-image-{poiId}` testID 는
+ * 사진이 있든 없든 그대로이고, 사진이 없으면 `category` + **`coverPoiId`** 로 고른 생성 이미지를 그린다.
+ *
+ * ⚠️ 시트의 "현재" 행은 카드에 `candidate.poiId = 'current'` 라는 가짜 값을 넘긴다(testID 꼬리를 위해). 그 가짜 값으로
+ * 해시하면 현재 장소가 언제나 같은 변형('current' → 1)이 되므로, 해시에는 호출부가 명시하는 진짜 `coverPoiId` 만 쓴다.
+ * 그래서 아래 테스트는 가짜 값('current' → 변형 1)과 진짜 값('poi-b' → 변형 3)의 변형이 **다른** 조합을 쓴다.
+ */
+describe('🔴 SlotCandidateCard — 사진 칸 생성 이미지(coverPoiId·category)', () => {
+  const renderCard = (
+    over: Partial<ComponentProps<typeof SlotCandidateCard>> = {}
+  ): void => {
+    render(
+      <SlotCandidateCard
+        candidate={{ ...CAND, poiId: 'current' }}
+        testIDPrefix="itinerary-candidate"
+        distanceLabel="이동"
+        showImage
+        {...over}
+      />
+    );
+  };
+
+  it('CC7 · 사진이 없으면 category(문화)와 coverPoiId(poi-b → 변형 3)로 고른 그림이다 — candidate.poiId("current")가 아니다', () => {
+    renderCard({ imageUrl: null, category: '문화', coverPoiId: 'poi-b' });
+
+    // culture-3. 'current' 로 해시했다면 culture-1.
+    expect(
+      screen.getByTestId('itinerary-candidate-image-current').props.source
+    ).toEqual([coverFor('문화', 'poi-b')]);
+  });
+
+  it('CC8 · coverPoiId 를 안 주면 변형 1 이다 — candidate.poiId(poi-b → 변형 3)로 대신 해시하지 않는다', () => {
+    renderCard({
+      candidate: { ...CAND, poiId: 'poi-b' },
+      imageUrl: null,
+      category: '문화',
+    });
+
+    expect(
+      screen.getByTestId('itinerary-candidate-image-poi-b').props.source
+    ).toEqual([coverFor('문화')]);
+    expect(
+      screen.getByTestId('itinerary-candidate-image-poi-b').props.source
+    ).not.toEqual([coverFor('문화', 'poi-b')]);
+  });
+
+  it('CC9 · 서버 사진이 있으면 category·coverPoiId 와 무관하게 그 사진이다', () => {
+    renderCard({
+      imageUrl: 'https://img.example/c.jpg',
+      category: '문화',
+      coverPoiId: 'poi-b',
+    });
+
+    expect(
+      screen.getByTestId('itinerary-candidate-image-current').props.source
+    ).toEqual([{ uri: 'https://img.example/c.jpg' }]);
+  });
+
+  it('CC10 · 사진 ""·카테고리 없음이면 중립 폴백이고 testID 는 그대로다', () => {
+    renderCard({ imageUrl: '', coverPoiId: 'poi-b' });
+
+    expect(
+      screen.getByTestId('itinerary-candidate-image-current').props.source
+    ).toEqual([FALLBACK_COVER]);
+  });
+
+  it('CC11 · 큰 사진(imageSize 78)에서도 같은 규칙이다', () => {
+    renderCard({
+      imageUrl: null,
+      imageSize: 78,
+      category: '술집',
+      coverPoiId: 'poi-a',
+    });
+
+    // poi-a → 변형 3 → bar-3.
+    expect(
+      screen.getByTestId('itinerary-candidate-image-current').props.source
+    ).toEqual([coverFor('술집', 'poi-a')]);
   });
 });

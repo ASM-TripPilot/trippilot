@@ -139,6 +139,7 @@ export function PlaceAddRow({
       id={place.poiId}
       name={place.nameKo}
       imageUrl={place.imageUrl}
+      category={place.category}
       subtitle={
         <View className="gap-[2px]">
           <PlaceSubtitle

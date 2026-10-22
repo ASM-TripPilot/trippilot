@@ -2354,7 +2354,7 @@ components:
         imageUrl:
           type: string
           nullable: true
-          description: 대표 사진. NULL=미확보 — 서버가 기본 이미지를 지어내지 않으므로 클라가 자리만 비운다(BR-U1-06 취지)
+          description: 대표 사진. NULL=미확보 — 서버가 기본 이미지를 지어내지 않는다. 클라는 NULL·빈 문자열·공백·로드 실패면 카테고리 일러스트(번들 에셋 — 실사진이 아님)로 칸을 채운다
         tags:
           type: array
           items: { type: string }
@@ -3414,9 +3414,10 @@ components:
               rationale: { type: string, description: closed-set 근거 — 시각·소요시간 언급 없음(BR-U2-09) }
               # POI 표면(TRIP-851) — 후보 카드를 **추가 왕복 없이** 그린다. 후보마다 `GET /places/{id}`
               # 를 부르면 N+1 이라 응답에 싣는다. 정본에 없으면 전부 null 이고, 그때 화면은
-              # "이름 준비 중"·회색 썸네일로 떨어진다(값을 지어내지 않는다, BR-U1-06).
+              # "이름 준비 중"·카테고리 일러스트 썸네일(클라가 채운다 — category 가 있으면 그 카테고리 그림,
+              # 없으면 중립 그림)로 떨어진다(서버는 값을 지어내지 않는다).
               nameKo: { type: string, nullable: true }
-              category: { type: string, nullable: true, description: 경계 코드(SIGHT/FOOD/…) }
+              category: { type: string, nullable: true, description: 한글 정본(명소·맛집·카페·야경·자연·쇼핑·문화·액티비티·미술·술집) — 일정 슬롯과 같은 값. 클라가 이 값으로 사진 없는 칸의 카테고리 일러스트를 고른다 }
               tags: { type: array, items: { type: string }, description: 미확보 시 빈 배열 }
               imageUrl: { type: string, nullable: true, description: NULL = 미확보. 대표 1장 }
               # 후보 핀 좌표(TRIP-1063 · QA #044) — '후보 고르기' 지도에 A/B/C 핀을 찍는 값.

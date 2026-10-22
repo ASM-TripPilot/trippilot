@@ -13,10 +13,12 @@ export interface HomeCollectionCard {
   region: string;
   /** '당일치기'(discovery) · '부산'(collecting 지역 badge) — 좌상단 pill. 얼굴별 의미가 갈린다(TRIP-317 가정 D). */
   badge: string;
-  /** 카드 배경 사진 URI(TRIP-694). `resolveAssetSource(...).uri`로 푼 문자열, jest·웹에선 null(사진 자리 토큰 tint). */
+  /** 카드 배경 사진 URI(TRIP-694). `resolveAssetSource(...).uri`로 푼 문자열, jest·웹에선 null(사진이 없으면 카테고리 생성 이미지). */
   imageUrl?: string | null;
-  /** 실데이터 장소 id(TRIP-1209) — 목록 key 로만 쓴다(픽스처엔 없다). */
+  /** 실데이터 장소 id(TRIP-1209) — 목록 key 와 생성 이미지 변형 해시에 쓴다(픽스처엔 없다). */
   poiId?: string;
+  /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본) — `badge` 는 얼굴마다 뜻이 갈려 쓰지 않는다. 픽스처엔 없다(폴백). */
+  category?: string;
 }
 
 /** "요즘 사람들이 담는 곳" 실데이터 레인(TRIP-1209) — 섹션 독립 상태. 있으면 sections.collections 대신 이것을 그린다. */
@@ -35,10 +37,12 @@ export interface HomeSpotCard {
   title: string;
   /** '#감성카페' — 해시태그 한 줄 */
   tag: string;
-  /** 카드 배경 사진 URI(TRIP-694). jest·웹에선 null(사진 자리 토큰 tint). */
+  /** 카드 배경 사진 URI(TRIP-694). jest·웹에선 null(사진이 없으면 카테고리 생성 이미지). */
   imageUrl?: string | null;
-  /** 실데이터 장소 id(TRIP-1049) — 있을 때만 저장 하트를 그린다. 픽스처엔 없다. */
+  /** 실데이터 장소 id(TRIP-1049) — 있을 때만 저장 하트를 그린다. 생성 이미지 변형 해시에도 쓴다. 픽스처엔 없다. */
   poiId?: string;
+  /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본) — `tag` 는 해시태그라 쓰지 않는다. 픽스처엔 없다(폴백). */
+  category?: string;
 }
 
 /** "지금 뜨는 장소" 실데이터 섹션(TRIP-1049) — 섹션 독립 상태 + 저장 하트 배선. */

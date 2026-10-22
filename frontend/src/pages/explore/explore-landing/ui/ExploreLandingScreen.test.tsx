@@ -7,6 +7,8 @@ import {
   within,
 } from '@testing-library/react-native';
 
+import { coverFor } from '@/test-support/placeCoverFixtures';
+
 import {
   ExploreLandingScreen,
   type ExploreLandingScreenProps,
@@ -653,8 +655,9 @@ describe('TRIP-457 · 숙소 카드 press 분리', () => {
 });
 
 // ---------------------------------------------------------------------------
-// TRIP-496 — 장소 레인 카드가 `imageUrl` 이 있을 때 사진(<Image>)을 그리고, 없으면 회색 플레이스홀더로 둔다
-// (기본 이미지 발명 금지·INV-1). `explore-place-card-image-{poiId}` testID 가 있을 때만 <Image>.
+// TRIP-496 — 장소 레인 카드가 `imageUrl` 이 있을 때 그 사진(<Image>)을 그린다. 없으면(사이클
+// 20261022-place-category-covers) 카드의 카테고리·poiId 로 고른 카테고리 생성 이미지가 같은 칸
+// `explore-place-card-image-{poiId}` 를 채운다(회색 자리·INV-1 서술은 폐기).
 // ---------------------------------------------------------------------------
 describe('TRIP-496 · 장소 레인 카드 사진', () => {
   it('imageUrl 이 있으면 사진 <Image> 를 그린다', () => {
@@ -682,16 +685,22 @@ describe('TRIP-496 · 장소 레인 카드 사진', () => {
     ]);
   });
 
-  it('imageUrl 이 없으면 사진을 지어내지 않고 플레이스홀더로 둔다 (INV-1)', () => {
+  it('imageUrl 이 없으면 카드의 카테고리(술집)·poiId(p2)로 고른 생성 이미지가 같은 칸을 채운다', () => {
     render(
       <ExploreLandingScreen
-        {...baseProps({ placeLane: placeLane({ cards: [PLACE_CARD_B] }) })}
+        {...baseProps({
+          placeLane: placeLane({
+            cards: [{ ...PLACE_CARD_B, category: '술집' }],
+          }),
+        })}
       />
     );
 
-    // 카드 자체는 뜨되(공허 통과 방지), 사진 leaf 는 트리에 없다.
+    // 카드 자체는 뜨고(공허 통과 방지) 사진 칸은 비지 않는다. p2 는 변형 3 → bar-3.
     expect(screen.getByTestId('explore-place-card-p2')).toBeOnTheScreen();
-    expect(screen.queryByTestId('explore-place-card-image-p2')).toBeNull();
+    expect(
+      screen.getByTestId('explore-place-card-image-p2').props.source
+    ).toEqual([coverFor('술집', 'p2')]);
   });
 });
 
