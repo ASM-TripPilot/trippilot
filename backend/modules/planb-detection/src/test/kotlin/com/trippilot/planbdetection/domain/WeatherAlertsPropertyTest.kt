@@ -50,7 +50,10 @@ class WeatherAlertsPropertyTest : StringSpec({
         }
     }
 
-    /** 제외 줄은 위 생성기에서 다섯에 하나라 제 하위 권역만 뺀 줄(전제)이 200회 중 6~11회뿐이다(실측) — 같은 생성기를 제외 줄로만 돌린다(38~45회). */
+    /**
+     * 제외 줄은 위 생성기에서 다섯에 하나라 제 하위 권역만 뺀 줄(전제)이 200회 중 평균 8회뿐이고 0회인 시드도 있다(실측 — 시드 2,000개의
+     * 5~95 백분위 4~13회) — 같은 생성기를 제외 줄로만 돌린다(평균 43회 · 5~95 백분위 33~53회 · 최소 21회).
+     */
     "제외 줄 — 제 시군 전체 이름을 빼면 안 걸림, 제 하위 권역만 빼면 절대 안 걸림이 아니다(모름), 둘 다 없으면 걸림(G-SA-19)" {
         checkAll(cases.map { it.copy(area = it.area.copy(excluding = true)) }) { c ->
             val got = WeatherAlerts.match(c.area, c.place)
@@ -81,7 +84,7 @@ private val STRANGE = listOf("북동산지", "중부산간", "남부내륙", "�
 
 /**
  * 규칙 9 의 정답 — 제 시군 전체 이름을 뺐으면 안 걸림, 제 하위 권역만 뺐으면 모름, 둘 다 없으면 나열 밖이라 걸림. 섬·관서 묶음 구역은
- * 생성기의 목적지를 덮지 않으므로(아래 생성기) 제 시군의 일부가 아니다.
+ * 생성기의 목적지를 덮지 않아(아래 생성기) 나열 밖이다 — 덮는 섬(시군 전체면 안 걸림 · 일부면 걸림)은 리터럴 표와 공식 목록 대조가 본다.
  */
 private fun excludedExpected(land: List<Zone>): Match = when {
     land.any { it.kind == Kind.OWN } -> Match.MISS

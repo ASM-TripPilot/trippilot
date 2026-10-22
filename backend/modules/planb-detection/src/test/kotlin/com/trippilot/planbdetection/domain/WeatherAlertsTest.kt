@@ -18,7 +18,7 @@ import java.time.LocalDate
  * 특보 목적지 매칭 · 종류 → 변형 · 그 날의 목적지(BR-SA-16 — 순수). 기대값은 리터럴 표다.
  *
  * 매칭 규칙: 하위 구역 이름이 시군 어간으로 시작하면 그 구역 / 광역 목적지는 그 광역 줄 전체 / 바다·해상 구역은 무시 /
- * 광역 별칭(강원도↔강원특별자치도 · 전라북도↔전북특별자치도) / `(…제외)` 는 나열한 곳을 뺀 광역 전체(시군 전체 이름일 때만 그 시군이
+ * 광역 별칭(강원도↔강원특별자치도 · 전라북도↔전북특별자치도) / `(…제외)` 는 나열한 곳을 뺀 광역 전체(시군 전체를 뺐을 때만 그 시군이
  * 빠진다) / 섬·관서 묶음 구역은 닫힌 표(줄의 광역보다 먼저) / 표에 없는 최상위 이름과 도의 시군 × 산지 권역 · 도의 시군·광역시의 군 × 표에
  * 없는 하위 구역 이름 · 관서 묶음 줄 × 그 묶음의 다른 광역 목적지(이름이 안 나온 줄) · 제외 줄 × 그 하위 권역만 뺀 시군은 모름(UNSURE —
  * '특보 없음'으로 확인하지 않는다). 공식 특보구역 목록 대조는 [WeatherAlertsZoneListTest] 가 본다.
@@ -207,6 +207,7 @@ class WeatherAlertsTest : StringSpec({
         val changwon = WeatherAlerts.placeOf("48120", "창원시")!!
         val ulju = WeatherAlerts.placeOf("31710", "울주군")!!
         val uljin = WeatherAlerts.placeOf("47930", "울진군")!!
+        val gyeongbukWide = WeatherAlerts.placeOf("47", "경상북도")!!
 
         val gyeongbuk = WarningArea("경상북도", listOf("영덕", "포항", "울진평지", "울진산지", "경주동부"))
         val mountains = WarningArea("강원도", listOf("강원중부산지", "강원남부산지"))
@@ -265,9 +266,9 @@ class WeatherAlertsTest : StringSpec({
             Triple(WarningArea("전라남도", listOf("신안(흑산면제외)", "진도")), mokpo, MISS),
             Triple(WarningArea("인천", listOf("서해5도")), ongjin, HIT), // 줄 안의 섬 구역도 같은 표
             Triple(WarningArea("인천", listOf("서해5도")), ganghwa, MISS),
-            // 섬 하나를 뺀다고 시군 전체가 빠지지 않는다 — 목적지가 그 섬인지 이름으로 가릴 수 없다(규칙 9 · G-SA-19)
-            Triple(WarningArea("인천", listOf("서해5도"), excluding = true), ongjin, UNSURE),
-            Triple(WarningArea("경상북도", listOf("울릉도.독도"), excluding = true), ulleung, UNSURE), // 섬 구역 이름은 시군 전체 이름이 아니다
+            // 제외 줄의 섬 구역도 표로(규칙 9) — 시군의 일부인 섬(서해5도 = 옹진의 섬)을 빼면 본토가 남아 걸림, 시군 전체인 섬을 빼면 그 시군이 빠진다
+            Triple(WarningArea("인천", listOf("서해5도"), excluding = true), ongjin, HIT),
+            Triple(WarningArea("경상북도", listOf("울릉도.독도"), excluding = true), ulleung, MISS), // 울릉도.독도 = 울릉군 전체
             Triple(WarningArea("백령도.대청도"), ongjin, HIT), // 서해5도를 나눈 구역(2026-06-01 개편)
             Triple(WarningArea("백령도.대청도"), incheon, HIT),
             Triple(WarningArea("연평도.우도"), seohae, MISS),
@@ -357,10 +358,13 @@ class WeatherAlertsTest : StringSpec({
             Triple(WarningArea("대구", listOf("달성"), excluding = true), dalseong, MISS),
             Triple(WarningArea("인천", listOf("강화군"), excluding = true), ganghwa, MISS),
             Triple(WarningArea("제주도", listOf("제주도산지"), excluding = true), jejuCity, UNSURE), // 어간(제주)으로 시작 — 제주시의 일부일 수 있다
-            Triple(WarningArea("인천", listOf("서해5도"), excluding = true), seohae, HIT), // 섬 구역은 표로 — 서해구는 서해5도가 아니다
-            Triple(WarningArea("제주도", listOf("추자도"), excluding = true), jejuCity, UNSURE), // 그 시의 섬 구역 — 목적지가 그 섬인지 모른다
+            Triple(WarningArea("인천", listOf("서해5도"), excluding = true), seohae, HIT), // 섬 구역은 앞붙음이 아니라 표로 — 서해구는 서해5도가 아니다
+            // 시군의 일부인 섬을 빼면 본토가 남아 걸림 — 섬에만 내린 특보도 걸림(규칙 3)이라 섬을 뺀 나머지 전부가 모름이면 뒤집힌다
+            Triple(WarningArea("제주도", listOf("추자도"), excluding = true), jejuCity, HIT),
             Triple(WarningArea("제주도", listOf("추자도"), excluding = true), jeju, HIT), // 광역 목적지 — 나머지 제주가 걸린다(규칙 5)
-            Triple(WarningArea("전라남도", listOf("거문도.초도"), excluding = true), yeosu, UNSURE),
+            Triple(WarningArea("전라남도", listOf("거문도.초도"), excluding = true), yeosu, HIT),
+            Triple(WarningArea("전라남도", listOf("흑산도.홍도"), excluding = true), sinan, HIT),
+            Triple(WarningArea("경상북도", listOf("울릉도.독도"), excluding = true), gyeongbukWide, HIT), // 시군 전체인 섬은 그 시군만 — 나머지 경북
             // 관서 묶음 줄(규칙 4)도 덮는 구역을 전체 이름으로 다 뺐을 때만 안 걸림 — 구역의 일부만 뺐으면 모름
             Triple(WarningArea("경기도", listOf("강화동부"), excluding = true), ganghwa, UNSURE),
             Triple(WarningArea("경상북도", listOf("군위남부"), excluding = true), gunwi, UNSURE),
@@ -434,8 +438,8 @@ class WeatherAlertsTest : StringSpec({
 
 private fun withClue(area: WarningArea, place: Place, block: () -> Unit) = withClue("$area × $place") { block() }
 
-/** 행정구역 시드의 시군구 행 — (코드, 이름). */
-private fun seedSigungu(): List<Pair<String, String>> {
+/** 행정구역 시드의 시군구 행 — (코드, 이름). 공식 목록 대조([WeatherAlertsZoneListTest])도 섬 구역이 속한 시군의 이름을 여기서 읽는다. */
+internal fun seedSigungu(): List<Pair<String, String>> {
     val seed = repoFile("backend/app/src/main/resources/db/migration/R__seed_region_catalog.sql").readText()
     return Regex("""\('(\d{5})', '([^']+)', '\d{2}', '[^']+', 'SIGUNGU', (?:true|false)\)""").findAll(seed)
         .map { it.groupValues[1] to it.groupValues[2] }.toList()

@@ -92,6 +92,29 @@ class WeatherAlertsZoneListTest : StringSpec({
             }
         }
     }
+
+    /**
+     * 섬 구역은 시군의 일부이거나(서해5도 · 백령도.대청도 · 연평도.우도 = 옹진 · 흑산도.홍도 = 신안 · 거문도.초도 = 여수 · 추자도 = 제주시 — 목록에
+     * 그 시군의 다른 구역이 있다) 시군 전체다(울릉도.독도 = 울릉군 L1072100 — 울릉의 다른 구역이 없다). 그 섬을 뺀 그 광역의 제외 줄은 일부면
+     * 본토가 남아 그 시군에 걸리고, 전체면 그 시군이 빠진다(규칙 9). 시군 이름은 행정구역 시드에서 읽는다 — 목록에 시군 줄이 없는 섬(울릉)이 있다.
+     */
+    "섬 구역을 뺀 제외 줄은 그 섬이 시군 전체가 아니면 그 시군에 걸림, 시군 전체면 안 걸림 — 시군 전체인 섬 구역 표는 목록과 같다" {
+        val names = seedSigungu().toMap()
+        val islands = rows.filterNot { it.head }.map { it.name }.filter { it in WeatherAlerts.ISLANDS }.distinct()
+        islands.toSet() shouldBe WeatherAlerts.ISLANDS.keys // 표의 섬 구역이 전부 목록에 있다 — 아래 성질의 전제
+
+        val whole = islands.filter { island ->
+            val code = WeatherAlerts.ISLANDS.getValue(island)
+            val place = WeatherAlerts.placeOf(code, names.getValue(code))!!
+            val head = heads.single { Province.ofKmaName(it.name) in place.provinces }.name
+            val alone = rows.none { !it.head && it.name !in WeatherAlerts.ISLANDS && it.name.startsWith(place.stem!!) }
+            withClue("$head($island 제외) × ${place.stem}") {
+                WeatherAlerts.match(WarningArea(head, listOf(island), excluding = true), place) shouldBe if (alone) Match.MISS else Match.HIT
+            }
+            alone
+        }
+        WeatherAlerts.WHOLE_CITY_ISLANDS shouldBe whole.toSet()
+    }
 })
 
 /**

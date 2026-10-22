@@ -36,9 +36,10 @@ import java.time.temporal.ChronoUnit
  *    2026-10-20). 그 도의 시군 어간([CITY_STEMS])으로도 광역 이름으로도 시작하지 않는 이름(섬 구역·관서 묶음 구역·바다 아님 — 구역
  *    개편으로 생긴 낯선 이름)이 있어도 모름이다 — 다른 시군으로 읽어 '안 걸림'으로 접으면 거짓 해제다(같은 결정). 갈래는 [zoneKind] 가 가른다.
  * 9. `(…제외)` 는 나열한 구역을 뺀 그 광역 전체다 — 시군 **전체 이름**(어간 그대로 · 어간+시/군 — `경주` · `강화군`)으로 나열됐을 때만 그
- *    시군이 빠진다. 그 시군의 일부만 나열됐으면 — 어간 + 다른 꼬리(`경주동부` · `울진평지` · `보령도서`) · 그 시군의 섬 구역(섬 하나를 뺀다고
- *    시군 전체가 빠지지 않는다) — 목적지가 뺀 쪽에 있는지 이름으로 가릴 수 없어 모름이다. 개편 목록은 시군을 권역으로 나눠, 시군째 빼면
- *    나머지 권역의 특보를 '특보 없음'으로 확인한다(G-SA-19 · INV-SA-2).
+ *    시군이 빠진다. 그 시군의 하위 권역(어간 + 다른 꼬리 — `경주동부` · `울진평지` · `보령도서`)만 나열됐으면 목적지가 뺀 쪽에 있는지 이름으로
+ *    가릴 수 없어 모름이다. 개편 목록은 시군을 권역으로 나눠, 시군째 빼면 나머지 권역의 특보를 '특보 없음'으로 확인한다(G-SA-19 · INV-SA-2).
+ *    섬 구역은 앞붙음이 아니라 표([ISLANDS])로 본다 — 시군 전체인 섬([WHOLE_CITY_ISLANDS] — 울릉도.독도 = 울릉군)을 빼면 그 시군이 빠지고,
+ *    시군의 일부인 섬(서해5도 · 흑산도.홍도 · 거문도.초도 · 추자도 …)을 빼면 본토가 남아 그 시군에 걸린다.
  */
 object WeatherAlerts {
 
@@ -65,6 +66,12 @@ object WeatherAlerts {
         "울릉도.독도" to "47940", "서해5도" to "28720", "흑산도.홍도" to "12870", "거문도.초도" to "12130", "추자도" to "50110",
         "백령도.대청도" to "28720", "연평도.우도" to "28720",
     )
+
+    /**
+     * 시군 전체인 섬 구역(규칙 9) — `(…제외)` 줄에 나오면 그 시군째 빠진다. 울릉도.독도는 울릉군 전체다(공식 목록에 울릉의 다른 구역이 없다).
+     * 나머지 섬 구역은 시군의 일부라(옹진·신안·여수·제주시의 섬) 빼도 본토가 남는다. 공식 목록과 대조한다(`WeatherAlertsZoneListTest`).
+     */
+    val WHOLE_CITY_ISLANDS: Set<String> = setOf("울릉도.독도")
 
     /**
      * 관서 묶음 구역 → 행정구역 코드(시군 5자리 · 광역 2자리). 특보구역은 기상청 관서 묶음으로 나뉘고(공식 목록
@@ -309,14 +316,15 @@ object WeatherAlerts {
     private fun codeOf(zone: String): String? = tableNameOf(zone)?.let { ISLANDS[it] ?: CROSS_ZONES[it] }
 
     /**
-     * `(…제외)` 줄 × 그 광역의 목적지(규칙 9) — 나열한 이름이 목적지 시군 전체([isWhole])면 안 걸림, 그 시군의 일부(어간 + 다른 꼬리 · 그 시군의
-     * 섬 구역 — 섬은 앞붙음이 아니라 표로 본다, `서해5도` 는 서해구가 아니다)뿐이면 모름, 둘 다 아니면 나열 밖이라 걸림이다. 어간이 없는
-     * 목적지(광역 · 한 글자 구)는 나머지가 걸린다(규칙 5·7).
+     * `(…제외)` 줄 × 그 광역의 목적지(규칙 9) — 나열한 이름이 목적지 시군 전체([isWhole] · 그 시군 전체인 섬 [WHOLE_CITY_ISLANDS])면 안 걸림,
+     * 그 시군의 하위 권역(어간 + 다른 꼬리)뿐이면 모름, 둘 다 아니면 나열 밖이라 걸림이다. 섬 구역은 표로만 본다 — 시군의 일부인 섬은 빼도 본토가
+     * 남아 걸림이고, 어간 앞붙음으로 읽지 않는다(`서해5도` 는 서해구가 아니다). 어간이 없는 목적지(광역 · 한 글자 구)는 나머지가 걸린다(규칙 5·7).
      */
     private fun excludedMatch(land: List<String>, place: Place): Match {
         val stem = place.stem
         if (stem != null && land.any { isWhole(it, stem) }) return Match.MISS
-        val partial = land.any { zone -> ISLANDS[zone]?.let { place.code.startsWith(it) } ?: (stem != null && zone.startsWith(stem)) }
+        if (land.any { zone -> zone in WHOLE_CITY_ISLANDS && ISLANDS[zone]?.let { place.code.startsWith(it) } == true }) return Match.MISS
+        val partial = stem != null && land.any { it !in ISLANDS && it.startsWith(stem) }
         return if (partial) Match.UNSURE else Match.HIT
     }
 
