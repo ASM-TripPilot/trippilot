@@ -1595,8 +1595,9 @@ paths:
             둘 중 하나다(TRIP-1411). (1) 오늘의 AI 공유 문구 횟수를 모두 썼다 — `error.code` = `SHARE_CARD_DAILY_LIMIT`.
             **재시도로 풀리지 않는다**. `Retry-After` 헤더에 풀리는 시각(KST 자정)까지 남은 초가 실린다. 화면은 문구 없이
             (사용자가 직접 써서) 공유를 이어 갈 수 있다. (2) 같은 계정의 문구를 **이미 짓고 있다**(한 계정에 한 번에 하나) —
-            `error.code` = `RATE_LIMITED`, `Retry-After` = 앞 요청이 붙들 수 있는 최대(AI 연결 + 읽기 상한, 기본 24초)를 올림한 초.
-            앞 요청이 끝나면 그보다 일찍 풀린다. 이 거절은 하루 횟수를 쓰지 않는다.
+            `error.code` = `RATE_LIMITED`, `Retry-After` = 앞 요청의 정상 경로 상한(AI 연결 + 읽기, 기본 24초)을 올림한 초.
+            앞 요청이 끝나면 그보다 일찍 풀리고, 드물게 그보다 오래 걸리면 다시 온 요청이 또 거절될 뿐이다. 이 거절은 하루
+            횟수를 쓰지 않는다.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }

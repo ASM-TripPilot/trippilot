@@ -27,7 +27,7 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * **저장하지 않는다.** 카드는 기기에서 그려지고(BR-U5-46) 문구는 공유할 때마다 새로 받는다 — 저장할 사실이 없다.
  *
- * **트랜잭션을 열지 않는다.** 쓰는 것이 없고, AI 호출(최대 `readTimeoutMs`)을 기다리는 동안 DB 커넥션을 쥐지 않기 위해서다(TRIP-1463 교훈).
+ * **트랜잭션을 열지 않는다.** 쓰는 것이 없고, AI 호출(정상 경로 상한 = 연결 + 읽기, 기본 24초 — [ShareCardCopyPort.maxWaitMs])을 기다리는 동안 DB 커넥션을 쥐지 않기 위해서다(TRIP-1463 교훈).
  * 각 퍼사드가 자기 읽기 트랜잭션을 열고 닫는다.
  *
  * **늘 답이 있다**(INV-4). AI 를 못 부르거나, 못 받거나, 상대가 자기 폴백으로 답하거나, 계약을 넘거나, 안 간 곳을 말하면 [ruleCopy] 로
@@ -48,7 +48,7 @@ class ShareCardCopyService(
 ) {
     /**
      * 지금 문구를 짓고 있는 계정 — 한 계정에 한 번에 하나다. 하루 상한만으로는 같은 계정의 동시 [공유] 30번이 전부 상한을 통과해
-     * Tomcat 스레드 30개를 AI 응답까지(최대 ~21초) 붙든다.
+     * Tomcat 스레드 30개를 AI 응답까지(정상 경로 상한 = 연결 + 읽기, 기본 24초) 붙든다.
      */
     // ponytail: 파드 안에서만 센다 — 파드가 N 개면 한 계정이 최대 N 개를 동시에 짓는다. 넘치면 DB 의 계정 단위 잠금
     // (`pg_try_advisory_lock` 계열)으로 올린다 — 그러면 커넥션을 AI 응답까지 쥐게 되므로 그 비용과 같이 본다.
@@ -89,7 +89,8 @@ class ShareCardCopyService(
             events = emptyList(),
         )
         // 같은 계정이 이미 짓고 있으면 **하루 횟수를 집기 전에** 거절한다 — 두 번 누른 [공유]가 횟수를 둘 태우지 않게.
-        // `Retry-After` 는 앞 요청이 붙들 수 있는 최대(연결 + 읽기 상한)를 올림한 초다 — 그 전에 다시 오면 또 거절이다.
+        // `Retry-After` 는 앞 요청의 정상 경로 상한(연결 + 읽기 — [ShareCardCopyPort.maxWaitMs])을 올림한 초다. 드물게 그보다 오래 걸리면
+        // 다시 온 요청이 또 거절될 뿐 하루 횟수는 쓰지 않는다.
         if (!inFlight.add(accountId)) {
             throw RateLimited(
                 retryAfterSeconds = ((copier.maxWaitMs + 999) / 1000).coerceAtLeast(1),
