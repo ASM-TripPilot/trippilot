@@ -33,6 +33,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * 공유 카드 문구(TRIP-1411) — **늘 답이 있다**(INV-4)와 **안 간 곳을 말하지 않는다**(BR-U5-31)를 갈래마다 본다.
@@ -219,6 +222,14 @@ class ShareCardCopyServiceTest : StringSpec({
         copier.sent shouldBe null
     }
 
+    "태그 공백은 앱(ECMAScript \\s)이 공백으로 보는 것 전부다 — BOM(U+FEFF) 포함" {
+        // ECMAScript \s 의 원소 전부(WhiteSpace + LineTerminator).
+        val jsSpaces = "\t\n\u000B\u000C\r \u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF"
+        jsSpaces.filterNot(ShareCardCopyService::isTagSpace) shouldBe ""
+        ShareCardCopyService.normalizeTags(listOf("#\uFEFF부산\u3000여행", "\uFEFF")) shouldBe listOf("#부산여행")
+        ShareCardCopyService.ruleCopy(listOf("제주\uFEFF서귀포")).hashtags shouldBe listOf("#제주서귀포여행")
+    }
+
     "규칙 문구 — 캡션은 비고, 태그는 공백을 지워 10개까지" {
         ShareCardCopyService.ruleCopy(listOf("제주 서귀포", "부산")) shouldBe
             ShareCardCopy("", listOf("#제주서귀포여행", "#부산여행"), isFallback = true)
@@ -228,16 +239,69 @@ class ShareCardCopyServiceTest : StringSpec({
 
     "하루 상한 — AI 까지 갈 호출만 KST 날짜로 세고, 닿으면 429(SHARE_CARD_DAILY_LIMIT)·Retry-After 는 KST 자정까지" {
         val usage = Usage(limit = 2)
-        val copier = Copier(aiCopy)
-        val svc = service(copier, usage = usage)
 
-        svc.copy(acc, tripId) shouldBe aiCopy
-        svc.copy(acc, tripId) shouldBe aiCopy
-        val e = shouldThrow<RateLimited> { svc.copy(acc, tripId) }
+        service(Copier(aiCopy), usage = usage).copy(acc, tripId) shouldBe aiCopy
+        service(Copier(aiCopy), usage = usage).copy(acc, tripId) shouldBe aiCopy
+        val over = Copier(aiCopy)
+        val e = shouldThrow<RateLimited> { service(over, usage = usage).copy(acc, tripId) }
 
+        over.sent shouldBe null // 상한은 AI 를 부르기 **전에** 본다
         e.errorCode shouldBe ErrorCode.SHARE_CARD_DAILY_LIMIT
         e.retryAfterSeconds shouldBe (23 * 60 + 30) * 60L // 00:30 KST → 다음 KST 자정
         usage.claims shouldBe listOf(LocalDate.parse("2026-08-13"), LocalDate.parse("2026-08-13"))
+    }
+
+    "AI 가 실패해도 센다 — 호출은 나갔다" {
+        val usage = Usage()
+        service(Copier(null), usage = usage).copy(acc, tripId) shouldBe rule
+        service(Copier(null), usage = usage).copy(acc, tripId) shouldBe rule
+        usage.claims.size shouldBe 2
+    }
+
+    "같은 계정의 두 번째 동시 요청은 하루 횟수를 집기 전에 429(RATE_LIMITED) — 끝나면 다시 된다" {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val blocking = object : ShareCardCopyPort {
+            override val enabled = true
+            override fun copy(input: ReflectionAgentInput): ShareCardCopy {
+                entered.countDown()
+                release.await(5, TimeUnit.SECONDS)
+                return aiCopy
+            }
+        }
+        val usage = Usage()
+        val svc = service(blocking, usage = usage)
+        val pool = Executors.newSingleThreadExecutor()
+        try {
+            val first = pool.submit<ShareCardCopy> { svc.copy(acc, tripId) }
+            entered.await(5, TimeUnit.SECONDS) shouldBe true
+
+            val e = shouldThrow<RateLimited> { svc.copy(acc, tripId) }
+            e.errorCode shouldBe ErrorCode.RATE_LIMITED
+            usage.claims.size shouldBe 1 // 두 번째는 횟수를 태우지 않았다
+
+            release.countDown()
+            first.get(5, TimeUnit.SECONDS) shouldBe aiCopy
+            svc.copy(acc, tripId) shouldBe aiCopy // 끝나면 풀린다
+        } finally {
+            release.countDown()
+            pool.shutdownNow()
+        }
+    }
+
+    "AI 호출이 예외로 끝나도 진행 표시가 풀린다" {
+        var calls = 0
+        val throwing = object : ShareCardCopyPort {
+            override val enabled = true
+            override fun copy(input: ReflectionAgentInput): ShareCardCopy? {
+                calls++
+                if (calls == 1) error("어댑터가 약속을 어겼다")
+                return aiCopy
+            }
+        }
+        val svc = service(throwing)
+        shouldThrow<IllegalStateException> { svc.copy(acc, tripId) }
+        svc.copy(acc, tripId) shouldBe aiCopy
     }
 
     "AI 까지 가지 않는 호출은 세지 않는다 — 꺼짐·간 곳 없음·404·409" {

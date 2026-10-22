@@ -27,7 +27,7 @@ import java.util.UUID
  * 공유 카드 문구(TRIP-1411) — 실 MVC·실 Postgres. AI 는 꺼진 기본 모드(`rule`)라 규칙 문구가 나온다(CI 외부 호출 0회).
  *
  * 재는 것: 와이어 이름(`isFallback` — Kotlin `is` 접두가 `fallback` 으로 바뀌지 않는가) · 요약 전 409 · 타 계정 404 ·
- * 하루 상한 카운터의 실 SQL(상한·날 바뀜·계정 분리·동시 요청).
+ * 하루 상한 카운터의 실 SQL(상한·날 바뀜·늦게 온 옛 날·계정 분리·동시 요청).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ShareCardCopyApiIT : AbstractPostgresIntegrationTest() {
@@ -91,6 +91,18 @@ class ShareCardCopyApiIT : AbstractPostgresIntegrationTest() {
         usage.claim(a, d1.plusDays(1), 2) shouldBe true // 날이 바뀌면 같은 행을 1 로
         usage.claim(a, d1.plusDays(1), 2) shouldBe true
         usage.claim(a, d1.plusDays(1), 2) shouldBe false
+    }
+
+    @Test
+    fun `늦게 온 옛 날 요청은 행을 되돌리지 않는다 — 새 날의 횟수로 센다`() {
+        val a = newAccountId()
+        val d2 = LocalDate.parse("2026-08-13")
+
+        usage.claim(a, d2, 2) shouldBe true
+        usage.claim(a, d2.minusDays(1), 2) shouldBe true // 옛 날 — 새 날(d2)의 둘째로 센다
+        usage.claim(a, d2, 2) shouldBe false // 되돌렸다면 d2 가 다시 1 부터라 통과했을 것이다
+        usage.claim(a, d2.minusDays(1), 2) shouldBe false // 옛 날로 상한을 우회하지 못한다
+        usage.claim(a, d2.plusDays(1), 2) shouldBe true // 새 날은 1 부터
     }
 
     @Test

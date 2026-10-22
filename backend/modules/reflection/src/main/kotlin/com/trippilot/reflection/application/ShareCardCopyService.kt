@@ -20,6 +20,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.ZoneId
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * j06 공유 카드 문구(US-REC-13 · TRIP-1411) — 캡션 한 문단과 해시태그.
@@ -30,7 +31,8 @@ import java.util.UUID
  * 각 퍼사드가 자기 읽기 트랜잭션을 열고 닫는다.
  *
  * **늘 답이 있다**(INV-4). AI 를 못 부르거나, 못 받거나, 상대가 자기 폴백으로 답하거나, 계약을 넘거나, 안 간 곳을 말하면 [ruleCopy] 로
- * 간다 — 이 경우 `isFallback=true` 다. 사유는 로그로 남는다. 예외는 하루 상한(429)뿐이다 — AI 까지 갈 호출만 센다.
+ * 간다 — 이 경우 `isFallback=true` 다. 사유는 로그로 남는다. 예외는 429 둘뿐이다 — 같은 계정의 문구를 이미 짓고 있거나(`RATE_LIMITED`),
+ * 하루 상한에 닿았다(`SHARE_CARD_DAILY_LIMIT`, AI 까지 갈 호출만 센다).
  */
 @Service
 class ShareCardCopyService(
@@ -44,6 +46,14 @@ class ShareCardCopyService(
     private val properties: ShareCardCopyProperties,
     private val clock: Clock,
 ) {
+    /**
+     * 지금 문구를 짓고 있는 계정 — 한 계정에 한 번에 하나다. 하루 상한만으로는 같은 계정의 동시 [공유] 30번이 전부 상한을 통과해
+     * Tomcat 스레드 30개를 AI 응답까지(최대 ~21초) 붙든다.
+     */
+    // ponytail: 파드 안에서만 센다 — 파드가 N 개면 한 계정이 최대 N 개를 동시에 짓는다. 넘치면 DB 의 계정 단위 잠금
+    // (`pg_try_advisory_lock` 계열)으로 올린다 — 그러면 커넥션을 AI 응답까지 쥐게 되므로 그 비용과 같이 본다.
+    private val inFlight: MutableSet<UUID> = ConcurrentHashMap.newKeySet()
+
     fun copy(accountId: UUID, tripId: UUID): ShareCardCopy {
         val ctx = trips.findGenerationContext(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
         // 공유는 여행이 끝나 요약이 생긴 뒤다(BR-U5-48). 화면이 진입점을 막지만, 서버도 같은 규칙을 지킨다 — 진행 중 여행의 문구는
@@ -66,22 +76,28 @@ class ShareCardCopyService(
         // 목적지 태그는 그래서 상대가 거를 수 있다 — 거르면 아래 규칙 문구(목적지마다 태그)로 간다.
         val region = destinations.firstOrNull().orEmpty()
         if (!ReflectionAgentInput.callable(region, shown)) return rule
-        guardDailyLimit(accountId)
-
-        val ai = copier.copy(
-            ReflectionAgentInput(
-                kind = KIND,
-                region = region,
-                startDate = ctx.startDate,
-                endDate = ctx.endDate,
-                visits = shown,
-                personaSummary = materials.personaOf(accountId, ctx),
-                // 날씨는 비운다 — 근거가 예보뿐이다([ReflectionMaterials] KDoc). 사건도 싣지 않는다: 공개 게시글 문구에 "들르지 못한 곳"·
-                // "일정을 바꿨다"는 재료가 아니고, 싣지 않으면 변경 이력(최대 500행) 조회를 공유마다 하지 않아도 된다.
-                weatherSummary = null,
-                events = emptyList(),
-            ),
-        ) ?: return rule // 사유는 어댑터가 남겼다
+        val input = ReflectionAgentInput(
+            kind = KIND,
+            region = region,
+            startDate = ctx.startDate,
+            endDate = ctx.endDate,
+            visits = shown,
+            personaSummary = materials.personaOf(accountId, ctx),
+            // 날씨는 비운다 — 근거가 예보뿐이다([ReflectionMaterials] KDoc). 사건도 싣지 않는다: 공개 게시글 문구에 "들르지 못한 곳"·
+            // "일정을 바꿨다"는 재료가 아니고, 싣지 않으면 변경 이력(최대 500행) 조회를 공유마다 하지 않아도 된다.
+            weatherSummary = null,
+            events = emptyList(),
+        )
+        // 같은 계정이 이미 짓고 있으면 **하루 횟수를 집기 전에** 거절한다 — 두 번 누른 [공유]가 횟수를 둘 태우지 않게.
+        if (!inFlight.add(accountId)) {
+            throw RateLimited(retryAfterSeconds = 1, message = "공유 문구를 만들고 있어요. 끝나면 다시 시도해 주세요.")
+        }
+        val ai = try {
+            guardDailyLimit(accountId)
+            copier.copy(input)
+        } finally {
+            inFlight.remove(accountId)
+        } ?: return rule // 사유는 어댑터가 남겼다
         // 계약(캡션 1~150자 · 해시태그 ≤10개 · `#` 시작)은 상대 게이트가 먼저 막지만 그쪽 계약에 적혀 있지 않다 — 우리 쪽에서 다시 지킨다.
         // 캡션은 자르지 않는다(문장 중간에서 끊긴 캡션을 내리지 않는다) — 넘으면 규칙 문구다. 태그는 다듬어 앞에서 [MAX_HASHTAGS] 개.
         val caption = ai.caption.trim()
@@ -139,13 +155,19 @@ class ShareCardCopyService(
          */
         internal fun ruleCopy(destinations: List<String>): ShareCardCopy = ShareCardCopy(
             caption = "",
-            hashtags = destinations.map { "#${it.filterNot(Char::isWhitespace)}여행" }.distinct().take(MAX_HASHTAGS),
+            hashtags = destinations.map { "#${it.filterNot(::isTagSpace)}여행" }.distinct().take(MAX_HASHTAGS),
             isFallback = true,
         )
 
+        /**
+         * 태그에 들어갈 수 없는 공백 — 앱(ECMAScript `\s`)이 공백으로 보는 것을 전부 지운다. Kotlin `isWhitespace` 는 U+FEFF(BOM)를
+         * 공백으로 보지 않는다 — 남기면 계약 `^#\S+$` 를 어기는 태그가 나간다.
+         */
+        internal fun isTagSpace(c: Char): Boolean = c.isWhitespace() || c == '\uFEFF'
+
         /** AI 태그 다듬기 — 공백을 지우고, `#` 를 하나만 앞에 두고, 빈 것·중복을 빼고, 앞에서 [MAX_HASHTAGS] 개. */
         internal fun normalizeTags(tags: List<String>): List<String> = tags
-            .map { it.filterNot(Char::isWhitespace).trimStart('#') }
+            .map { it.filterNot(::isTagSpace).trimStart('#') }
             .filter(String::isNotEmpty)
             .map { "#$it" }
             .distinct()
@@ -156,7 +178,7 @@ class ShareCardCopyService(
          * 금지 이름은 뺀다**("카페"를 건너뛰고 "카페 델문도"에 갔으면 `#카페델문도` 는 정당하다).
          */
         internal fun tagLeaks(tags: List<String>, banned: List<String>, visited: List<String>): List<String> {
-            fun key(s: String) = s.filterNot(Char::isWhitespace).lowercase()
+            fun key(s: String) = s.filterNot(::isTagSpace).lowercase()
             val visitedKeys = visited.map(::key).filter(String::isNotEmpty)
             val bodies = tags.map { key(it.trimStart('#')) }
             return banned.filter { name ->

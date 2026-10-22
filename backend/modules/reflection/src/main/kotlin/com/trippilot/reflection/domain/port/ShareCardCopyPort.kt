@@ -35,6 +35,7 @@ interface ShareCardUsageRepository {
     /**
      * 그날 한 번을 **집는다** — [limit] 에 아직 안 닿았으면 1 을 더하고 true, 닿았으면 아무것도 바꾸지 않고 false.
      * 세기와 더하기가 한 문장이라 동시 요청 둘이 같은 수를 보고 함께 통과하지 못한다.
+     * 저장된 날보다 옛 [day] 는 저장된 날의 횟수로 센다 — 행을 옛 날로 되돌려 새 날의 횟수를 지우지 않는다.
      */
     fun claim(accountId: UUID, day: LocalDate, limit: Int): Boolean
 }

@@ -1584,16 +1584,18 @@ paths:
 
 
         **계정당 하루 상한**이 있다(기본 30회, KST 자정에 풀린다). AI 까지 가는 호출만 센다 — AI 가 꺼져 있거나 간 곳이 없어
-        규칙 조립으로 바로 가는 호출, 404·409 는 세지 않는다.
+        규칙 조립으로 바로 가는 호출, 404·409, 아래 동시 요청 거절은 세지 않는다. AI 가 실패해도 센다(호출은 나갔다).
+        한 계정의 문구는 **한 번에 하나**만 짓는다 — 짓는 동안 온 같은 계정의 요청은 429 `RATE_LIMITED` 다.
       responses:
         '200': { description: 문구, content: { application/json: { schema: { $ref: '#/components/schemas/ShareCardCopy' } } } }
         '404': { description: 여행 없음/타 계정 }
         '409': { description: 여행이 끝나 요약이 생기기 전(BR-U5-48) }
         '429':
           description: >
-            오늘의 AI 공유 문구 횟수를 모두 썼다(TRIP-1411) — `error.code` = `SHARE_CARD_DAILY_LIMIT`.
-            **재시도로 풀리지 않는다**. `Retry-After` 헤더에 풀리는 시각(KST 자정)까지 남은 초가 실린다.
-            일반 요청 한도(`RATE_LIMITED`)와 코드로 구분한다. 화면은 문구 없이(사용자가 직접 써서) 공유를 이어 갈 수 있다.
+            둘 중 하나다(TRIP-1411). (1) 오늘의 AI 공유 문구 횟수를 모두 썼다 — `error.code` = `SHARE_CARD_DAILY_LIMIT`.
+            **재시도로 풀리지 않는다**. `Retry-After` 헤더에 풀리는 시각(KST 자정)까지 남은 초가 실린다. 화면은 문구 없이
+            (사용자가 직접 써서) 공유를 이어 갈 수 있다. (2) 같은 계정의 문구를 **이미 짓고 있다**(한 계정에 한 번에 하나) —
+            `error.code` = `RATE_LIMITED`, `Retry-After` 1. 앞 요청이 끝나면 풀린다. 이 거절은 하루 횟수를 쓰지 않는다.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }

@@ -13,7 +13,8 @@ import java.util.UUID
  * j06 공유 카드 문구(TRIP-1411). 여행 하위 리소스. 소유 스코프(타 계정 404).
  *
  * **POST 인 이유** — 부를 때마다 새로 짓는다(AI 호출, 저장 없음). 같은 요청에 같은 답을 약속하지 않으므로 GET 으로 두면 캐시가
- * 옛 문구를 돌려줄 수 있다. 앱은 AI 를 직접 부르지 않는다(공유 카드 구조 가드가 막는다) — 그래서 서버를 거친다.
+ * 옛 문구를 돌려줄 수 있다. 앱은 AI 를 직접 부르지 않는다(`frontend/src/__tests__/photoUploadGuard.test.ts` G2 가 공유 카드 그래프의
+ * `/ai/v1` 참조를 0건으로 막는다) — 그래서 서버를 거친다.
  */
 @RestController
 @RequestMapping("/api/v1/trips/{tripId}/share-card/copy")

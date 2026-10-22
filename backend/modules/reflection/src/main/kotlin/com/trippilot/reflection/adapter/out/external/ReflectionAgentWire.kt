@@ -80,13 +80,13 @@ internal data class AiReflectionGenerateResponse(
 internal object AiReflectionPaths {
     const val GENERATE = "/ai/v1/reflection/generate"
 
+    /** j06 공유 카드 문구(TRIP-1411). 요청은 [GENERATE] 와 같은 스키마다. */
+    const val SHARE_CARD = "/ai/v1/reflection/share-card"
+
     /**
      * `nudge` 는 **여기 없다.** 상대는 열었으나 여행 전 넛지 화면이 U5 범위 밖이라 우리가 부르지
      * 않는다(G-U5-16). 부르지 않는 경로를 게이트에 넣으면 "우리가 쓰는 것"의 뜻이 흐려진다.
      */
-    /** j06 공유 카드 문구(TRIP-1411). 요청은 [GENERATE] 와 같은 스키마다. */
-    const val SHARE_CARD = "/ai/v1/reflection/share-card"
-
     val CALLED = listOf(GENERATE, SHARE_CARD)
 }
 

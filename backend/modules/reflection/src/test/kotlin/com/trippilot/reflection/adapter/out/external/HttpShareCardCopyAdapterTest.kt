@@ -35,7 +35,9 @@ class HttpShareCardCopyAdapterTest : StringSpec({
         return HttpShareCardCopyAdapter(builder.build(), ReflectionAgentProperties(mode = "http", baseUrl = "http://ai.test"), clock) to server
     }
 
-    fun input(region: String = "부산", visits: List<ReflectionVisit> = listOf(ReflectionVisit(UUID.randomUUID(), start, "해운대", "자연", 1, 2))) =
+    val poi = UUID.randomUUID()
+
+    fun input(region: String = "부산", visits: List<ReflectionVisit> = listOf(ReflectionVisit(poi, start.plusDays(1), "해운대", "자연", 1, 2))) =
         ReflectionAgentInput(
             kind = "TRIP_SUMMARY", region = region, startDate = start, endDate = start.plusDays(2),
             visits = visits, personaSummary = "여행 스타일 사진", weatherSummary = null, events = emptyList(),
@@ -46,8 +48,15 @@ class HttpShareCardCopyAdapterTest : StringSpec({
         server.expect(requestTo("http://ai.test/ai/v1/reflection/share-card"))
             .andExpect(jsonPath("$.kind").value("TRIP_SUMMARY"))
             .andExpect(jsonPath("$.region").value("부산"))
+            .andExpect(jsonPath("$.start_date").value("2026-08-01"))
             .andExpect(jsonPath("$.end_date").value("2026-08-03"))
+            .andExpect(jsonPath("$.visits[0].ref.date").value("2026-08-02")) // 방문 날짜다 — 여행 시작일이 아니다
+            .andExpect(jsonPath("$.visits[0].ref.poi_id").value(poi.toString()))
             .andExpect(jsonPath("$.visits[0].poi_name").value("해운대"))
+            .andExpect(jsonPath("$.visits[0].category").value("자연"))
+            .andExpect(jsonPath("$.visits[0].order_in_day").value(1))
+            .andExpect(jsonPath("$.visits[0].photo_count").value(2))
+            .andExpect(jsonPath("$.events.length()").value(0))
             .andExpect(jsonPath("$.persona_summary").value("여행 스타일 사진"))
             .andExpect(jsonPath("$.weather_summary").value(""))
             .andExpect(jsonPath("$.request_meta.deadline_ms").value(15_000))
