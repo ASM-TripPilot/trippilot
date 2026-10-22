@@ -213,6 +213,24 @@ describe('RecordNavBar · 입장 모프와 출발 탭 (AC-4·5·7·11)', () => {
     }
   );
 
+  // TRIP-1600 — 뒤로의 도착지가 탭이 아니면(알림함·도우미 등에서 연 기록 묶음) 5칸 탭 바로 접히는 역순 모프 없이 곧장 이동한다 —
+  // 탭 바 모양으로 접혔다가 탭 바 없는 화면으로 바뀌는 0.4초 어색함을 없앤다. 도착지가 탭이면 위 TRIP-1591 대로 역순 재생.
+  it('뒤로 · exitToTab=false(도착지가 탭이 아님): 모프 없이 누르는 즉시 1회, 시작 5칸이 나타나지 않는다', async () => {
+    // 준비 — 동작 줄이기 끔, 탭 바 위가 아닌 진입.
+    probe.setReduceMotion(false);
+    const onBack = jest.fn();
+    render(tree({ onBack, exitToTab: false }));
+    await flushOsAnswer();
+    watchMotion(Math.ceil((BAR_ENTER_DELAY_MS + BAR_ENTER_MS + 100) / 16));
+
+    // 실행 — 뒤로.
+    fireEvent.press(screen.getByTestId(IDS.back));
+
+    // 단언 — 바로 이동하고, 5칸 탭 바 사본이 그려지지 않는다.
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId(IDS.start5[0])).toBeNull();
+  });
+
   it('숨겼다 다시 나타나도(편집 모드 hidden) 입장 모프를 다시 재생하지 않고 곧장 최종 모양이다 · 토스트 바닥 신고는 보일 때만(Q7)', async () => {
     probe.setReduceMotion(false);
     expect(getToastBottoms()).toEqual([]); // 앵커 — 그리기 전엔 신고가 없다

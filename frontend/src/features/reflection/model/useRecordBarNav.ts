@@ -18,12 +18,44 @@ import { useTripSummary } from './useTripSummary';
  *
  * 요약 칸은 서버가 `ready:true` 를 줄 때만 켜진다(BR-U5-48) — 조회 중·실패·`ready:false` 는 전부 꺼짐이라 실패를 "준비됨"으로 접지 않는다(INV-4).
  * 회고 칸은 `reflectionDate` 가 있을 때만 켜진다(날짜 판정은 호출자 — 미래 일차는 안 준다). `recordsDay` 가 있으면 기록 칸이 그 날짜를 싣고 간다.
- * 뒤로는 어디서 왔든 기록 탭으로 `dismissTo` 한다(TRIP-1591 — 히스토리 유무로 갈리지 않으니 직행해도 죽은 버튼이 없다, INV-4). 5칸 탭 바 복제 화면들과 같은 `shellTabHref`.
+ * 뒤로는 기록 탭으로 `dismissTo` 한다(TRIP-1591 — 히스토리 유무로 갈리지 않으니 직행해도 죽은 버튼이 없다, INV-4). 5칸 탭 바 복제 화면들과 같은 `shellTabHref`.
+ * 단 탭이 아닌 화면(알림함·도우미·허브 등)에서 열렸으면 그 화면으로 돌아간다(TRIP-1600 — 회고·요약은 스와이프 뒤로를 꺼서 이게 유일한 길이다).
+ * "온 곳" = 스택 맨 위에서부터 연달아 쌓인 기록 3종 묶음 바로 아래 화면. 그 묶음만 `dismiss(n)` 으로 걷는다. 아래가 탭이거나 없으면 기록 탭.
  */
 
 const ROUTE_RECORDS = 'trips/[tripId]/records/index';
 const ROUTE_REFLECTION = 'trips/[tripId]/records/reflection/[date]';
 const ROUTE_SUMMARY = 'trips/[tripId]/records/summary';
+const RECORD_ROUTES: ReadonlySet<string> = new Set([
+  ROUTE_RECORDS,
+  ROUTE_REFLECTION,
+  ROUTE_SUMMARY,
+]);
+
+/** 맨 위 기록 묶음의 장 수와 그 바로 아래 화면 이름(없으면 undefined). */
+function recordBlockBelow(routes: readonly { name: string }[]): {
+  count: number;
+  below: string | undefined;
+} {
+  let count = 0;
+  while (
+    count < routes.length &&
+    RECORD_ROUTES.has(routes[routes.length - 1 - count].name)
+  )
+    count += 1;
+  return { count, below: routes[routes.length - 1 - count]?.name };
+}
+
+/** 뒤로가 탭이 아닌 "온 화면"으로 돌아가는가(아니면 기록 탭). */
+function backLeavesToNonTab({
+  count,
+  below,
+}: {
+  count: number;
+  below: string | undefined;
+}): boolean {
+  return count > 0 && below !== undefined && below !== '(tabs)';
+}
 
 export function useRecordBarNav({
   tripId,
@@ -44,8 +76,14 @@ export function useRecordBarNav({
       else router.push(href as Href);
     });
   const base = `/trips/${tripId}/records`;
+  const block = recordBlockBelow(getRoutes());
   return {
-    onBack: () => router.dismissTo(shellTabHref('records')),
+    exitToTab: !backLeavesToNonTab(block),
+    onBack: () => {
+      const now = recordBlockBelow(getRoutes());
+      if (backLeavesToNonTab(now)) router.dismiss(now.count);
+      else router.dismissTo(shellTabHref('records'));
+    },
     onPressRecords: go(
       ROUTE_RECORDS,
       recordsDay ? `${base}?day=${recordsDay}` : base
