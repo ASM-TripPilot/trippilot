@@ -1449,3 +1449,18 @@ def test_last_entry_next_to_the_place_name_is_that_places_time() -> None:
     pairs = dlg._hours_pairs({"places": [{"name": "경복궁", "hours_label": "09:00~18:00, 입장 마감 17:00"}]})
     assert not dlg._misplaced_time("경복궁의 영업시간은 09:00~18:00이고 경복궁 입장 마감은 17:00이에요.", pairs)
     assert dlg._misplaced_time("경복궁 입장 마감은 16:00이에요.", pairs)  # 없는 시각은 여전히 막는다
+
+
+def test_a_deterministic_answer_does_not_repeat_the_last_assistant_line_word_for_word() -> None:
+    """같은 넘기기·감사 문장이 연달아 나가면 같은 뜻의 다른 말로 — 버튼은 그대로(2026-10-22 "계속 같은 말만")."""
+    from trippilot.llm_gateway.workers.dialogue_answer import _ANSWER_TEXT, unrepeated
+    from trippilot.orchestrator.dialogue_orchestrator import THANKS_TEXT, _CLOSER_VARIANTS
+    from trippilot.domain.intent import Intent
+
+    style = _ANSWER_TEXT[Intent.STYLE_ANALYSIS]
+    assert unrepeated(style, []) == style  # 처음엔 원문(BE 화면 문장과 한 벌)
+    once = unrepeated(style, [style])
+    assert once != style and unrepeated(style, [style, once]) not in (style, once)
+    assert unrepeated("LLM 이 지은 문장", ["LLM 이 지은 문장"]) == "LLM 이 지은 문장"  # 표에 없는 문장은 그대로
+    assert THANKS_TEXT in _CLOSER_VARIANTS and len(_CLOSER_VARIANTS[THANKS_TEXT]) >= 2
+

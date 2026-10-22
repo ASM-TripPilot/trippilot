@@ -106,6 +106,8 @@ def _snapshot(wire: schemas.DialogueContextSnapshot) -> TurnSnapshot:
             DayView(d.date, tuple(SlotView.from_wire(s.slot_key, s.name, s.start_at, s.category) for s in d.slots))
             for d in (itinerary.days if itinerary is not None else ())
         ),
+        tastes=(tuple(wire.preference_profile.styles), tuple(wire.preference_profile.activities))
+        if wire.preference_profile is not None else None,
     )
 
 

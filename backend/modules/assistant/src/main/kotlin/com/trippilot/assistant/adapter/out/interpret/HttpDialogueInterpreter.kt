@@ -132,7 +132,15 @@ internal data class WireItinerary(val status: String, val days: List<WireDay>)
 
 internal data class WireTrip(val tripId: UUID, val regions: List<String>, val startDate: LocalDate, val endDate: LocalDate, val phase: String)
 
-internal data class WireContext(val surface: String, val trip: WireTrip?, val baseStays: List<String>, val itinerary: WireItinerary?)
+internal data class WirePreference(val styles: List<String>, val activities: List<String>)
+
+internal data class WireContext(
+    val surface: String,
+    val trip: WireTrip?,
+    val baseStays: List<String>,
+    val itinerary: WireItinerary?,
+    val preferenceProfile: WirePreference? = null,
+)
 
 internal data class WireTurn(val role: String, val text: String)
 
@@ -210,6 +218,7 @@ internal fun ContextSnapshot.toWire() = WireContext(
     itinerary = itinerary?.let { it ->
         WireItinerary(it.status, it.days.map { d -> WireDay(d.date, d.slots.map { s -> WireSlot(s.slotKey, s.name, s.startAt, s.category) }) })
     },
+    preferenceProfile = tastes?.let { WirePreference(it.styles, it.activities) },
 )
 
 internal fun WireResponse.toDomain(mapper: JsonMapper): Interpretation {

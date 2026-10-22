@@ -34,7 +34,12 @@ from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.region_centers import region_center
 from trippilot.domain.trigger import TriggerKind
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_LENGTH, _violates
-from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEXT, NEED_TRIP_TEXT, fallback_answer_text
+from trippilot.llm_gateway.workers.dialogue_answer import (
+    EXPLORE_ASK_REGION_TEXT,
+    NEED_TRIP_TEXT,
+    REGION_ASK_TASTE_TEXT,
+    fallback_answer_text,
+)
 from trippilot.poi_curation.adapters.pg_place_sql import PlaceRow
 from trippilot.orchestrator import dialogue_handlers as dh
 from trippilot.agents.planb.rag import _REASON_KO
@@ -1232,7 +1237,8 @@ def test_every_handler_is_deterministic_valid_and_free_of_duration(data, intent:
                        "detail": first.to_prompt_dict()}, ensure_ascii=False, default=str).lower()
     assert not any(tok in wire for tok in _INV3_TOKENS)
     if snapshot.trip is None:
-        assert first.needs_trip is (intent not in (Intent.STYLE_ANALYSIS, Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES))
+        assert first.needs_trip is (intent not in (Intent.STYLE_ANALYSIS, Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES,
+                                                    Intent.RECOMMEND_REGION))
     for task in tasks:
         assert task.fn() == task.fn()  # 콜러블도 결정론 (대역이 결정론이라 그렇다 — 핸들러가 상태를 섞지 않는다)
 
@@ -2437,4 +2443,32 @@ def test_recommend_cuts_event_answers_to_the_said_count_and_rewrites_the_sentenc
     assert facts.intent is Intent.RECOMMEND_PLACES and _event_names(facts) == _event_names(explored)[:1]
     assert facts.detail["pick_count"] == 1 and facts.kind is AnswerKind.TEXT and facts.payload is None
     assert _event_names(explored)[0] in facts.template_text and _event_names(explored)[1] not in facts.template_text
+
+
+# ── RECOMMEND_REGION — 취향·말한 바람 × 지역 성격표 → 가볼 지역 ──
+
+def _region(arguments: dict, tastes=None) -> Facts:
+    snap = replace(_EMPTY_SNAP, tastes=tastes)
+    return _run(HANDLERS[Intent.RECOMMEND_REGION], _ctx(snap, arguments, ports=HandlerPorts()))
+
+
+def test_region_recommendation_from_saved_tastes_names_table_regions_with_reasons_and_explore_chips() -> None:
+    from trippilot.domain.region_centers import region_center
+
+    facts = _region({"count": "2"}, tastes=(("자연",), ("테마파크",)))
+    assert facts.intent is Intent.RECOMMEND_REGION and facts.status is FactStatus.OK and facts.kind is AnswerKind.TEXT
+    names = facts.detail["regions"]
+    assert len(names) == 2 and all(region_center(n) is not None for n in names)  # 지역 표 이름만(INV-1)
+    assert [r.label for r in facts.rows] == names and all("많은 편" in r.value for r in facts.rows)
+    assert [q.label for q in facts.quick_replies] == [f"{n} 가볼 만한 곳" for n in names]  # 누르면 장소 탐색으로 이어진다
+    assert _types(facts) == ["CREATE_TRIP"] and facts.detail["basis"] == "저장된 취향" and not facts.needs_trip
+    assert all(n in facts.template_text for n in names)
+
+
+def test_region_recommendation_follows_the_said_wish_over_nothing_and_asks_when_there_is_no_basis() -> None:
+    asked = _region({})
+    assert asked.status is FactStatus.EMPTY and asked.template_text == REGION_ASK_TASTE_TEXT and asked.quick_replies
+    by_wish = _region({"theme": "역사 여행"})
+    assert by_wish.status is FactStatus.OK and by_wish.detail["basis"] == "말한 바람"
+    assert "역사 여행" not in str(by_wish.to_prompt_dict())  # 발화 원문은 사실 칸에 싣지 않는다(INV-2)
 

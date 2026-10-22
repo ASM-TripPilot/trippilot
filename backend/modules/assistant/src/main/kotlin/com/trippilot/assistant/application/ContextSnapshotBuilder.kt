@@ -4,6 +4,7 @@ import com.trippilot.assistant.domain.AssistantSurface
 import com.trippilot.assistant.domain.ContextSnapshot
 import com.trippilot.itinerarygeneration.api.ItineraryFacade
 import com.trippilot.itinerarygeneration.api.ItineraryPlanFacade
+import com.trippilot.profile.api.PreferenceFacade
 import org.springframework.stereotype.Component
 import java.time.LocalDate
 import java.util.UUID
@@ -22,10 +23,13 @@ class ContextSnapshotBuilder(
     private val itineraries: ItineraryFacade,
     private val plans: ItineraryPlanFacade,
     private val properties: AssistantProperties,
+    /** 계정 취향 — 없으면(테스트·미배선) 취향 없이 싣는다. 본인 계정 것만 읽는다(accountId). */
+    private val preferences: PreferenceFacade? = null,
 ) {
     fun build(accountId: UUID, tripId: UUID?, surface: AssistantSurface, today: LocalDate): ContextSnapshot {
+        val tastes = tastes(accountId)
         val trip = tripId?.let { tripContexts.read(accountId, it) }
-            ?: return ContextSnapshot(surface, trip = null, baseStays = emptyList(), itinerary = null)
+            ?: return ContextSnapshot(surface, trip = null, baseStays = emptyList(), itinerary = null, tastes = tastes)
         val itinerary = itineraries.findCurrent(accountId, tripId)?.let { current ->
             val days = plans.findPlanSlots(accountId, tripId).groupBy { it.date }.toSortedMap().map { (date, slots) ->
                 ContextSnapshot.DayBlock(
@@ -40,8 +44,15 @@ class ContextSnapshotBuilder(
             trip = ContextSnapshot.TripBlock(tripId, trip.destinations, trip.startDate, trip.endDate, trip.phase(today)),
             baseStays = listOfNotNull(trip.baseStayName),
             itinerary = itinerary,
+            tastes = tastes,
         )
     }
+
+    /** 지역 추천(RECOMMEND_REGION)이 쓰는 두 축만 — 나머지 축(예산·동행 등)은 싣지 않는다. 고른 게 없으면 null. */
+    private fun tastes(accountId: UUID): ContextSnapshot.Tastes? =
+        preferences?.findPreferences(accountId)
+            ?.takeIf { it.styles.isNotEmpty() || it.activities.isNotEmpty() }
+            ?.let { ContextSnapshot.Tastes(it.styles, it.activities) }
 
     /**
      * 크기도 줄인다(SEC-U8-08) — 권한과 별개로 **양**이 비용이고 지연이다. 일자 수나 하루 슬롯 수가 상한을 넘으면

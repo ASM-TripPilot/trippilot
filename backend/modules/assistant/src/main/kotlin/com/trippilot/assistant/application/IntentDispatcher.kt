@@ -76,6 +76,8 @@ class IntentDispatcher(private val cards: QueryCards, private val proposals: Pro
             // 찾지 못한다고 정직하게 말하고 할 수 있는 것으로 잇는다.
             Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES ->
                 AssistantTemplates.handoff("가 볼 만한 곳 찾기는 지금 도와드리기 어려워요. 아래 버튼에서 제가 할 수 있는 걸 확인해 보세요.", AssistantTemplates.CAPABILITIES_ACTION)
+            Intent.RECOMMEND_REGION ->
+                AssistantTemplates.handoff("취향에 맞는 지역 추천은 지금 도와드리기 어려워요. 아래 버튼에서 제가 할 수 있는 걸 확인해 보세요.", AssistantTemplates.CAPABILITIES_ACTION)
             Intent.OUT_OF_SCOPE ->
                 AssistantTemplates.outOfScope(nearStay = context.surface == AssistantSurface.STAY_SEARCH || context.surface == AssistantSurface.STAY_DETAIL)
         }
@@ -83,6 +85,6 @@ class IntentDispatcher(private val cards: QueryCards, private val proposals: Pro
 
     private companion object {
         /** 여행이 있어야 넘길 화면이 있는 의도. 스타일 분석·장소 탐색·추천·범위 밖은 여행 없이도 답한다. */
-        val NEEDS_TRIP = Intent.entries.toSet() - setOf(Intent.STYLE_ANALYSIS, Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES, Intent.OUT_OF_SCOPE)
+        val NEEDS_TRIP = Intent.entries.toSet() - setOf(Intent.STYLE_ANALYSIS, Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES, Intent.RECOMMEND_REGION, Intent.OUT_OF_SCOPE)
     }
 }
