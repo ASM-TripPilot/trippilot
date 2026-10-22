@@ -21,7 +21,7 @@ import java.time.temporal.ChronoUnit
  *    `경기도(강화, 김포)` 의 강화는 인천 강화군이다. `(…제외)` 줄은 4·9 로 본다.
  * 4. 광역이 다르면 걸리지 않는다 — 광역 별칭(강원도 ↔ 강원특별자치도 · 전라북도 ↔ 전북특별자치도)은 같은 광역이다. 다만 관서 묶음 줄
  *    (경기·충남·경북·경남)은 그 묶음에 든 다른 광역 구역([CROSS_GROUPS] — 인천 강화·옹진 · 대전 · 대구 군위 · 부산·울산)의 목적지에 모름이다
- *    — 하위 구역 없는 줄 · 그 목적지를 덮는 구역을 다 빼지 않은 `(…제외)` 줄 · 권역이나 표에 없는 이름이 낀 줄. t6 의 광역 줄이 행정
+ *    — 하위 구역 없는 줄 · 그 목적지를 덮는 구역을 전체 이름으로 다 빼지 않은 `(…제외)` 줄(9) · 권역이나 표에 없는 이름이 낀 줄. t6 의 광역 줄이 행정
  *    광역인지 관서 묶음인지 실응답 표본으로 아직 가리지 못했다 — 가리기 전에는 그 목적지를 '안 걸림'으로 확인하지 않는다(INV-SA-2).
  * 5. 광역 목적지(서울·부산·제주 등)는 그 광역 줄 전체가 걸린다. 하위 구역 없는 광역 줄은 그 광역 전체다.
  * 6. 시군 목적지는 하위 구역 이름이 **시군 어간으로 시작**하면 걸린다(`강릉` → `강릉시평지`, `경주` → `경주동부`). 정본은 '들어가면'이지만
@@ -35,7 +35,10 @@ import java.time.temporal.ChronoUnit
  *    덮는지 이름으로 가릴 수 없다(평창의 평지만 풀리고 대관령 경보가 남은 회차). 권역은 시군 표로 걸지 않고 모름으로 둔다(G-SA-16 결정
  *    2026-10-20). 그 도의 시군 어간([CITY_STEMS])으로도 광역 이름으로도 시작하지 않는 이름(섬 구역·관서 묶음 구역·바다 아님 — 구역
  *    개편으로 생긴 낯선 이름)이 있어도 모름이다 — 다른 시군으로 읽어 '안 걸림'으로 접으면 거짓 해제다(같은 결정). 갈래는 [zoneKind] 가 가른다.
- * 9. `(…제외)` 는 나열한 구역을 뺀 그 광역 전체다 — 시군 어간으로 나열됐을 때만 그 시군이 빠진다(섬 하나를 뺀다고 시군 전체가 빠지지 않는다).
+ * 9. `(…제외)` 는 나열한 구역을 뺀 그 광역 전체다 — 시군 **전체 이름**(어간 그대로 · 어간+시/군 — `경주` · `강화군`)으로 나열됐을 때만 그
+ *    시군이 빠진다. 그 시군의 일부만 나열됐으면 — 어간 + 다른 꼬리(`경주동부` · `울진평지` · `보령도서`) · 그 시군의 섬 구역(섬 하나를 뺀다고
+ *    시군 전체가 빠지지 않는다) — 목적지가 뺀 쪽에 있는지 이름으로 가릴 수 없어 모름이다. 개편 목록은 시군을 권역으로 나눠, 시군째 빼면
+ *    나머지 권역의 특보를 '특보 없음'으로 확인한다(G-SA-19 · INV-SA-2).
  */
 object WeatherAlerts {
 
@@ -222,7 +225,7 @@ object WeatherAlerts {
         if (province !in place.provinces) return crossGroupMatch(province, area, land, place)
         if (area.zones.isEmpty()) return Match.HIT
         val named = place.stem != null && land.any { it.startsWith(place.stem) }
-        if (area.excluding) return if (named) Match.MISS else Match.HIT
+        if (area.excluding) return excludedMatch(land, place)
         if (land.isEmpty()) return Match.MISS
         if (named || place.wide) return Match.HIT
         if (province.wide && land.any(province::isRegional)) return Match.HIT // 규칙 7 — 광역시의 군: 권역 줄이면 줄 전체
@@ -306,15 +309,30 @@ object WeatherAlerts {
     private fun codeOf(zone: String): String? = tableNameOf(zone)?.let { ISLANDS[it] ?: CROSS_ZONES[it] }
 
     /**
+     * `(…제외)` 줄 × 그 광역의 목적지(규칙 9) — 나열한 이름이 목적지 시군 전체([isWhole])면 안 걸림, 그 시군의 일부(어간 + 다른 꼬리 · 그 시군의
+     * 섬 구역 — 섬은 앞붙음이 아니라 표로 본다, `서해5도` 는 서해구가 아니다)뿐이면 모름, 둘 다 아니면 나열 밖이라 걸림이다. 어간이 없는
+     * 목적지(광역 · 한 글자 구)는 나머지가 걸린다(규칙 5·7).
+     */
+    private fun excludedMatch(land: List<String>, place: Place): Match {
+        val stem = place.stem
+        if (stem != null && land.any { isWhole(it, stem) }) return Match.MISS
+        val partial = land.any { zone -> ISLANDS[zone]?.let { place.code.startsWith(it) } ?: (stem != null && zone.startsWith(stem)) }
+        return if (partial) Match.UNSURE else Match.HIT
+    }
+
+    /** 시군 전체 이름인가(규칙 9) — 어간(표 이름) 그대로이거나 어간 + 시·군(`경주` · `경주시` · `강화군`). 다른 꼬리(`경주동부` · `강화동부`)는 그 일부다. */
+    private fun isWhole(zone: String, stem: String): Boolean = zone == stem || zone == stem + "시" || zone == stem + "군"
+
+    /**
      * 줄의 광역이 목적지와 다를 때(규칙 4) — 목적지가 그 줄 관서 묶음의 다른 광역 구역([CROSS_GROUPS])에 들지 않으면 안 걸림이다. 들면 이름이
-     * 나온 구역은 규칙 3 이 이미 맞췄으니, 하위 구역 없는 줄 · 덮는 구역을 다 빼지 않은 `(…제외)` 줄 · 권역이나 표에 없는 이름이 낀 줄은
-     * 모름이다 — t6 의 광역 줄이 관서 묶음이면 그 목적지에 걸린다.
+     * 나온 구역은 규칙 3 이 이미 맞췄으니, 하위 구역 없는 줄 · 덮는 구역을 전체 이름([isWhole] — 규칙 9)으로 다 빼지 않은 `(…제외)` 줄 · 권역이나
+     * 표에 없는 이름이 낀 줄은 모름이다 — t6 의 광역 줄이 관서 묶음이면 그 목적지에 걸린다.
      */
     private fun crossGroupMatch(province: Province, area: WarningArea, land: List<String>, place: Place): Match {
         val members = CROSS_GROUPS[province].orEmpty().filter { member -> codeOf(member)?.let { covers(it, place) } == true }
         val unsure = members.isNotEmpty() && when {
             area.zones.isEmpty() -> true
-            area.excluding -> !members.all { member -> land.any { tableNameOf(it) == member } }
+            area.excluding -> !members.all { member -> land.any { isWhole(it, member) } }
             else -> land.map { zoneKind(province, it) }.any { it == ZoneKind.REGIONAL || it == ZoneKind.UNKNOWN }
         }
         return if (unsure) Match.UNSURE else Match.MISS
