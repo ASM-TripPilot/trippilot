@@ -2217,3 +2217,17 @@ def test_explore_rank_stays_inside_the_pool_and_obeys_its_filters(pois, category
         assert all(p.category.value in dh._EXPLORE_FAMILY.get(category, (category,)) for p in picked)   # 문화는 미술 포함(TRIP-1545)
     else:
         assert all(sum(1 for q in picked if q.category is p.category) <= 2 for p in picked)
+
+
+def test_recommend_cuts_event_answers_to_the_said_count_and_rewrites_the_sentence() -> None:
+    """"서울 축제 하나만 추천해줘" — 탐색의 행사 답(카드 없는 문장)도 말한 개수만큼, 문장은 자른 목록으로(#1486 검증 지적)."""
+    port = _Events(_SEOUL_EVENTS)
+    ports = HandlerPorts(poi_info=_PoiInfo(), pool_builder=_PoolBuilder(_X_POOL), events=port)
+    ctx = replace(_ctx(_EMPTY_SNAP, {"region": "서울", "theme": "축제", "count": "1"}, ports=ports), utterance="서울 축제 하나만 추천해줘")
+    explored = _run(_EXPLORE, ctx)
+    facts = _run(HANDLERS[Intent.RECOMMEND_PLACES], ctx)
+    assert len(_event_names(explored)) > 1  # 탐색은 그대로 여러 건
+    assert facts.intent is Intent.RECOMMEND_PLACES and _event_names(facts) == _event_names(explored)[:1]
+    assert facts.detail["pick_count"] == 1 and facts.kind is AnswerKind.TEXT and facts.payload is None
+    assert _event_names(explored)[0] in facts.template_text and _event_names(explored)[1] not in facts.template_text
+

@@ -2008,11 +2008,15 @@ def _assemble_recommend(ctx: TurnContext, results: Mapping[str, TaskResult]) -> 
         ranked = sorted(by_sql["candidates"], key=lambda c: c.get("reason") != "요즘 인기")  # 안정 정렬 — 나머지는 SQL 순서
         results = {**results, "explore_sql": TaskResult.ok("explore_sql", {**by_sql, "candidates": ranked})}
     facts = _assemble_explore(ctx, results)
-    if facts.kind is not AnswerKind.CANDIDATES:
-        # 되묻기 문안·행사 문장(`detail.events` — 탐색의 행사 답, 의도와 무관하게 events 를 나열한다)은 탐색 것 그대로
-        keep = facts.template_text == EXPLORE_ASK_REGION_TEXT or "events" in facts.detail
-        return replace(facts, intent=intent, template_text=facts.template_text if keep else _template(intent, facts.status))
     n = _recommend_count(ctx)
+    if facts.detail.get("events"):  # 행사 답 — 행사도 말한 개수만큼("축제 하나만 추천해줘"에 5건이 나갔다), 문장은 자른 목록으로 다시
+        events = list(facts.detail["events"])[:n]
+        detail = {**facts.detail, "events": events, "pick_count": n}
+        return replace(facts, intent=intent, detail=detail,
+                       template_text=fallback_answer_text(intent, {"status": facts.status.value, "events": events}))
+    if facts.kind is not AnswerKind.CANDIDATES:  # 되묻기 문안은 탐색 것 그대로
+        keep = facts.template_text == EXPLORE_ASK_REGION_TEXT
+        return replace(facts, intent=intent, template_text=facts.template_text if keep else _template(intent, facts.status))
     return replace(facts, intent=intent, places=facts.places[:n], payload={"candidates": facts.payload["candidates"][:n]},
                    next_actions=facts.next_actions[:n], template_text=_template(intent, facts.status),
                    detail={**facts.detail, "pick_count": n})
