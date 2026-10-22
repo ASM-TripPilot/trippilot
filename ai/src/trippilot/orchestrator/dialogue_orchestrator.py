@@ -386,6 +386,17 @@ def _squash(text: str) -> str:
     return normalize(text).replace(" ", "")
 
 
+# "이 근처"·"여기 주변"·"숙소 근처" 같은 지시어는 지역 이름이 아니다 — 분류가 region 칸에 담아도(2026-10-21 실측 "근처·주변" 다섯 말
+# 40회 중 0.2.3 9회·0.2.4 5회) 핸들러에는 없는 것으로 넘긴다. 탐색은 일정 근처로 가고, 여행도 없으면 지역을 되묻는다 — 지역 표에서
+# 못 찾아 "그 지역은 아직 찾아 줄 수 없어요"로 끝나지 않게. 날씨도 같은 칸을 읽는다(일정 장소로 간다)
+_DEICTIC_REGION = re.compile(r"(?:(?:이|그|저|여기|거기|숙소|호텔|지금)\s*)?(?:근처|주변|부근|인근|가까이|여기|거기)(?:\s*(?:근처|주변|부근))?")
+
+
+def _without_deictic_region(args: Mapping[str, str]) -> dict[str, str]:
+    region = (args.get("region") or "").strip()
+    return {k: v for k, v in args.items() if k != "region"} if region and _DEICTIC_REGION.fullmatch(region) else dict(args)
+
+
 def _grounded_args(slots: Mapping[str, str], said: str) -> dict[str, str]:
     """계획 인자의 region 은 사용자가 말한 지역만(BR-AO-28) — 모델이 [여행 상황]의 여행지를 옮겨 적으면 탐색 기준이 '다음 일정 근처'에서
     '지역 중심'으로 바뀐다(제주는 끝에서 끝이 70km 다). 프롬프트 0.1.1 뒤에도 "저녁 먹을 데랑 그 다음 일정" 이 2/2 로 region "제주" 를
@@ -720,7 +731,8 @@ class DialogueOrchestrator:
         (frame,) = interp.frames
         handler = HANDLERS[frame.intent]
         ctx = TurnContext(
-            snapshot=inp.snapshot, arguments=frame.arguments, now=inp.now, tz=self._tz, trace_id=inp.trace_id,
+            snapshot=inp.snapshot, arguments=_without_deictic_region(frame.arguments), now=inp.now, tz=self._tz,
+            trace_id=inp.trace_id,
             remaining_ms=lambda: self._remaining(inp), ports=self._ports, utterance=inp.utterance,
             earlier=tuple((turn.role, turn.text) for turn in inp.recent_turns),
         )
@@ -1018,7 +1030,8 @@ class DialogueOrchestrator:
         handlers = [HANDLERS[call.intent] for call in draft.calls]
         said = _squash(" ".join([text, *(turn.text for turn in inp.recent_turns)]))
         earlier = tuple((turn.role, turn.text) for turn in inp.recent_turns)
-        ctxs = [TurnContext(snapshot=inp.snapshot, arguments=_grounded_args(call.slots, said), now=inp.now, tz=self._tz,
+        ctxs = [TurnContext(snapshot=inp.snapshot, arguments=_without_deictic_region(_grounded_args(call.slots, said)),
+                            now=inp.now, tz=self._tz,
                             trace_id=inp.trace_id, remaining_ms=lambda: self._remaining(inp), ports=self._ports,
                             earlier=earlier, heard=text)
                 for call in draft.calls]

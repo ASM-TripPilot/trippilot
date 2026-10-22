@@ -1345,6 +1345,17 @@ def test_explore_follow_up_turn_keeps_the_area_from_recent_turns_not_the_itinera
     assert out.outcome == "ANSWER" and [c["name"] for c in out.answer.payload["candidates"]] == ["흰여울 카페"]
 
 
+@pytest.mark.parametrize("region", ["이 근처", "여기", "숙소 근처", "이 주변"])
+def test_a_deictic_region_is_not_a_region_so_explore_asks_instead_of_saying_it_cannot_find_it(region: str) -> None:
+    """분류가 "이 근처"를 region 칸에 담아도 지역이 아니다 — 여행·일정이 없으면 지역을 되묻는다("그 지역은 아직…" EMPTY 가 아니다)."""
+    from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEXT
+
+    b = _build(_canned(Intent.EXPLORE_PLACES, region=region, theme="맛집"),
+               ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool()))
+    out = b.orch.turn(_input(f"{region}에 맛집 있을까", snapshot=_NO_TRIP))
+    assert out.outcome == "ARGUMENT_CLARIFY" and out.clarify.question == EXPLORE_ASK_REGION_TEXT
+
+
 def test_explore_without_any_anchor_asks_for_the_region_once_and_the_answer_runs_without_classifying() -> None:
     """앵커(지역·일정·여행 목적지)가 하나도 없으면 지역을 되묻는다(요청당 1회) — 다음 턴의 "부산"은 분류 없이 그 답이다(LLM 0)."""
     from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEXT
