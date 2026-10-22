@@ -12,12 +12,25 @@ import {
 
 import { useBootstrapGate, type BootstrapDestination } from '@/features/auth';
 import {
+  documentFileCount,
+  failFileReads,
+  failFileWrites,
+  resetFakeFs,
+} from '@/test-support/fakeExpoFileSystem';
+import {
   fakePushResponse,
   lastPushTapListener,
+  primeOsPermission,
+  type OsPermission,
 } from '@/test-support/pushOsFake';
 
+import {
+  PERMISSION_LOOKUP_WAIT_MAX_MS,
+  usePermissionCatchUp,
+} from '@/app/model/usePermissionCatchUp';
 import { OnboardingTourPage } from '@/pages/onboarding/onboarding-tour';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
+import { promptAndRegisterPush } from '@/shared/push';
 
 import { SPLASH_MIN_VISIBLE_MS, SplashGate } from './SplashGate';
 
@@ -50,6 +63,49 @@ jest.mock('@/features/auth/model/useBootstrapGate', () => ({
 jest.mock('@/shared/push', () => ({
   ...jest.requireActual('@/shared/push'),
   registerPushIfGranted: jest.fn(),
+  promptAndRegisterPush: jest.fn(() => Promise.resolve()),
+}));
+
+// TRIP-1601 — 권한 안내. 훅은 실물을 감싼 스파이다: 아래 맨 앞 beforeEach 가 기본으로 "붙잡지 않는다"로 끄고(기존 describe 들은 동기
+// advanceTimers 흐름이라 비동기 조회가 스플래시를 붙잡으면 안 맞는다), 권한 안내 describe 만 실물로 되돌린다.
+jest.mock('@/app/model/usePermissionCatchUp', () => {
+  const actual = jest.requireActual('@/app/model/usePermissionCatchUp');
+  return {
+    ...actual,
+    usePermissionCatchUp: jest.fn(actual.usePermissionCatchUp),
+  };
+});
+// OS 위치 권한 — 실물을 펼친 뒤 이 셋만 덮는다(펼치지 않으면 모듈 최상위에서 상수(Accuracy 등)를 읽는 형제 import 가 죽는다).
+const mockGetForeground = jest.fn();
+const mockRequestForeground = jest.fn();
+const mockGetBackground = jest.fn();
+jest.mock('expo-location', () => ({
+  ...jest.requireActual('expo-location'),
+  getForegroundPermissionsAsync: (...args: unknown[]) =>
+    mockGetForeground(...args),
+  requestForegroundPermissionsAsync: (...args: unknown[]) =>
+    mockRequestForeground(...args),
+  getBackgroundPermissionsAsync: (...args: unknown[]) =>
+    mockGetBackground(...args),
+}));
+// "봤음" 기록은 앱 샌드박스 파일(문서 폴더)이다 — iOS 키체인(SecureStore)은 앱을 지워도 남아 "재설치면 다시"가 성립하지 않는다(TRIP-1601 결정).
+// 파일 시스템은 메모리 대역(`fakeExpoFileSystem`, 문서 폴더 포함). SecureStore 는 일부러 **쓰기를 세는** 대역으로 남겨 두어,
+// 구현이 키체인에 기록하면 `mockVault` 가 차서 red 가 된다.
+jest.mock(
+  'expo-file-system',
+  () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('@/test-support/fakeExpoFileSystem').fakeExpoFileSystemModule
+);
+const mockVault = new Map<string, string>();
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: async (key: string) => mockVault.get(key) ?? null,
+  setItemAsync: async (key: string, value: string) => {
+    mockVault.set(key, value);
+  },
+  deleteItemAsync: async (key: string) => {
+    mockVault.delete(key);
+  },
 }));
 
 const mockUseBootstrapGate = useBootstrapGate as jest.MockedFunction<
@@ -175,16 +231,60 @@ function expectOnlyLogin(app: RouterApp): void {
   expect(router.canGoBack()).toBe(false);
 }
 
+const mockCatchUp = usePermissionCatchUp as jest.Mock;
+const realCatchUp = jest.requireActual('@/app/model/usePermissionCatchUp')
+  .usePermissionCatchUp as typeof usePermissionCatchUp;
+const mockPrompt = promptAndRegisterPush as jest.Mock;
+
+type LocationStatus = 'undetermined' | 'granted' | 'denied';
+
+function locationResponse(status: LocationStatus) {
+  return {
+    status,
+    granted: status === 'granted',
+    canAskAgain: status === 'undetermined',
+    expires: 'never',
+  };
+}
+
+/** OS 위치 권한 가짜 — 조회는 지금 상태, 요청은 미결정일 때만 `answer` 로 굳는다(실제 OS 와 같다). */
+function primeLocation(
+  initial: LocationStatus,
+  answer: LocationStatus = 'denied'
+): void {
+  let current = initial;
+  mockGetForeground.mockImplementation(async () => locationResponse(current));
+  mockRequestForeground.mockImplementation(async () => {
+    if (current === 'undetermined') current = answer;
+    return locationResponse(current);
+  });
+}
+
 beforeEach(() => {
   jest.useFakeTimers();
   gateDestination = 'HOME';
   queryClient = new QueryClient();
   mockUseBootstrapGate.mockImplementation(useFakeGate);
+  // 파일 최상위 — 모듈 싱글턴(권한 가짜·저장소·훅 스파이)이 describe 사이로 새지 않게 매 테스트 기본값으로 되돌린다.
+  // 기본 = "아무 일 없음": 위치·알림 모두 이미 결정됨, 저장소 비어 있음, 권한 안내 훅은 끔.
+  mockCatchUp.mockImplementation(() => false);
+  mockGetForeground.mockReset();
+  mockRequestForeground.mockReset();
+  primeLocation('granted');
+  mockGetBackground.mockReset();
+  mockGetBackground.mockResolvedValue(locationResponse('granted'));
+  primeOsPermission(Notifications, 'denied');
+  mockVault.clear();
+  resetFakeFs();
+  mockPrompt.mockClear();
+  (Notifications.getPermissionsAsync as jest.Mock).mockClear();
+  (Notifications.requestPermissionsAsync as jest.Mock).mockClear();
 });
 
 afterEach(() => {
   queryClient.clear();
   mockUseBootstrapGate.mockReset();
+  resetFakeFs();
   jest.useRealTimers();
 });
 
@@ -446,5 +546,612 @@ describe('기능 안내는 진짜 라우터에서 한 장만 남는다 (TRIP-159
     expect(screen.getByTestId('home-root')).toBeOnTheScreen();
     expect(screen.queryByTestId('onboarding-index')).toBeNull();
     expect(router.canGoBack()).toBe(false);
+  });
+});
+
+/**
+ * TRIP-1601 — 온보딩을 이미 마친 계정이 HOME 에 들어올 때, 위치·알림 OS 권한이 **미결정**인 것만 홈보다 먼저 안내한다(위치 → 알림).
+ *
+ * 왜 진짜 라우터인가: ① 안내 카드(온보딩 `LocationPage`·`PushPage` 재사용)의 [계속]이 HOME 가드 안 목적지로 가는지 —
+ * 하드코딩된 `(onboarding)` 그룹이나 `'/'` 로 가면 라우터가 에러 없이 무시한다(TRIP-1597). ② 안내가 스택에 한 장만 남고 홈에서 뒤로 못 돌아오는지.
+ * ③ 푸시 탭 딥링크와의 경합. 이 셋은 라우터 목으로는 안 보인다. 안내 라우트 두 개는 앱의 실제 파일(`app/permission-*.tsx`)을
+ * `@routes` 별칭으로 꽂고, `(onboarding)/index` 도 둘 다 둬서 `'/'` 가 실제처럼 겹치게 한다.
+ *
+ * 무엇을 보장하나 (AC 번호는 01b 기준):
+ *  - AC1·AC3·AC4 흐름 5종(둘 다·위치만·알림만·거부·거부 후 계속)이 각각 올바른 순서로 카드를 보이고 OS 요청/루틴을 1회씩 부르고
+ *    끝에 `(tabs)` 하나만 남긴다(뒤로 갈 곳 없음).
+ *  - AC2 이미 결정됨(허용·거부 무관)·조회 실패·모름은 아무것도 안 뜬다(사용자를 막지 않는 방향, INV-4) — 저장소에도 흔적을 안 남긴다.
+ *  - AC6 이 마운트에서 ONBOARDING 이었으면(신규 가입 직후) 안 뜬다. AC8 HOME 이 아니면 이동 0회, HOME 재진입은 다시 평가.
+ *  - AC7 최상위가 홈 탭이 아니면(푸시 탭·딥링크) 이번 실행은 건너뛴다 — 상태를 남기지 않는다.
+ *  - AC8(설치당 1회) 한 번 안내했으면 다음 실행(재마운트)에선 미결정이어도 안 뜨고, 저장소가 비면 다시 뜬다.
+ *  - AC9 조회가 하한 안에 끝나면 홈을 거쳐 이동하는 비동기 틈이 없다(동기 act 한 번에 도착). 안 끝나면 상한까지만 스플래시를 붙잡고 홈으로 간다.
+ *    LOGIN 처럼 HOME 이 아닌 목적지는 붙잡지 않는다.
+ * jest 가 못 보는 것: 홈이 한 프레임 번쩍이는지·OS 창이 카드/홈 위에 어색하게 뜨는지·실제 설치 단위 저장소 의미(6-b).
+ */
+describe('권한 안내는 진짜 라우터에서 홈보다 먼저, 한 번만 (TRIP-1601)', () => {
+  // 실제 app/ 처럼 '/' 로 풀리는 화면이 둘이고((onboarding)/index · (tabs)/index) 안내 화면은 실제 라우트 파일이다.
+  // 파일이 없는 동안(red)에도 다른 케이스가 로드 단계에서 죽지 않게 지연 require 한다.
+  function catchUpRoutes() {
+    /* eslint-disable @typescript-eslint/no-require-imports */
+    return {
+      ...ROUTES,
+      '(onboarding)/index': stub('onboarding-index'),
+      'permission-location': require('@routes/permission-location').default,
+      'permission-push': require('@routes/permission-push').default,
+    };
+    /* eslint-enable @typescript-eslint/no-require-imports */
+  }
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  }
+
+  /** 비동기 후속(조회 결과 → 상태 → 이동)을 흘린다. 멈춘 시계 아래에서도 쓴다. */
+  async function settle(): Promise<void> {
+    for (let i = 0; i < 6; i += 1) {
+      await act(async () => {});
+    }
+  }
+
+  function passFloor(): void {
+    act(() => {
+      jest.advanceTimersByTime(SPLASH_MIN_VISIBLE_MS);
+    });
+  }
+
+  /** 앱을 연다 — 마이크로태스크를 먼저 흘려 권한 조회가 하한 안에 끝나게 하고, 스플래시 하한을 넘긴 뒤 후속(이동)을 흘린다. */
+  async function openCatchUp(
+    initialUrl = '/',
+    destination: BootstrapDestination = 'HOME'
+  ): Promise<RouterApp> {
+    gateDestination = destination;
+    const app = renderRouter(catchUpRoutes(), { initialUrl });
+    await settle();
+    passFloor();
+    await settle();
+    return app;
+  }
+
+  function osState(location: LocationStatus, push: OsPermission): void {
+    primeLocation(location, 'granted');
+    primeOsPermission(Notifications, push, 'granted');
+  }
+
+  /** "봤음" 기록이 어디에도 안 남았다 — 문서 폴더에도, 키체인에도. */
+  function expectNoFlag(): void {
+    expect(documentFileCount()).toBe(0);
+    expect(mockVault.size).toBe(0);
+  }
+
+  function expectHomeOnly(app: RouterApp): void {
+    expect(rootStackNames(app)).toEqual(['(tabs)']);
+    expect(app.getPathname()).toBe('/');
+    expect(screen.getByTestId('home-root')).toBeOnTheScreen();
+    expect(router.canGoBack()).toBe(false);
+  }
+
+  beforeEach(() => {
+    mockCatchUp.mockImplementation(realCatchUp);
+  });
+
+  describe('안내 흐름 (AC1 · AC3 · AC4)', () => {
+    it('F1 둘 다 미결정: 위치 카드 → 알림 카드 → 홈. OS 요청·루틴 1회씩, 끝에 홈 하나만 남고 뒤로 못 간다', async () => {
+      // 준비
+      osState('undetermined', 'undetermined');
+
+      // 실행 1 — 앱을 연다
+      const app = await openCatchUp();
+
+      // 단언 1 — 홈보다 먼저 위치 카드. 앵커: 아직 아무 권한도 묻지 않았고 스택에 카드 하나뿐
+      expect(app.getPathname()).toBe('/permission-location');
+      expect(rootStackNames(app)).toEqual(['permission-location']);
+      expect(screen.getByTestId('onboarding-location-root')).toBeOnTheScreen();
+      expect(screen.queryByTestId('onboarding-location-later')).toBeNull(); // 건너뛰기 없음(5.1.1(iv))
+      expect(screen.queryByTestId('home-root')).toBeNull();
+      expect(mockRequestForeground).toHaveBeenCalledTimes(0);
+      expect(router.canGoBack()).toBe(false);
+
+      // 실행 2 — 위치 [계속] → OS 가 허용
+      fireEvent.press(screen.getByTestId('onboarding-location-allow'));
+      await settle();
+
+      // 단언 2 — OS 요청 1회, 알림 카드로(온보딩 그룹이 아니라 안내 라우트)
+      expect(mockRequestForeground).toHaveBeenCalledTimes(1);
+      expect(app.getPathname()).toBe('/permission-push');
+      expect(rootStackNames(app)).toEqual(['permission-push']);
+      expect(screen.getByTestId('onboarding-push-root')).toBeOnTheScreen();
+      expect(screen.queryByTestId('onboarding-push-later')).toBeNull();
+      expect(mockPrompt).toHaveBeenCalledTimes(0);
+
+      // 실행 3 — 알림 [계속] (진입 때 열린 연타 창은 닫고 누른다)
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId('onboarding-push-allow'));
+      await settle();
+
+      // 단언 3 — 루틴 1회, 홈 하나뿐
+      expect(mockPrompt).toHaveBeenCalledTimes(1);
+      expectHomeOnly(app);
+      expect(screen.queryByTestId('onboarding-index')).toBeNull();
+    });
+
+    it('F2 위치만 미결정(알림은 결정됨): 위치 카드 → 홈. 알림 루틴은 부르지 않는다', async () => {
+      osState('undetermined', 'denied');
+      const app = await openCatchUp();
+      expect(app.getPathname()).toBe('/permission-location');
+
+      fireEvent.press(screen.getByTestId('onboarding-location-allow'));
+      await settle();
+
+      expect(mockRequestForeground).toHaveBeenCalledTimes(1);
+      expectHomeOnly(app);
+      expect(mockPrompt).toHaveBeenCalledTimes(0);
+    });
+
+    it('F3 알림만 미결정(위치는 결정됨): 알림 카드가 첫 화면 → 홈. 위치는 묻지 않는다', async () => {
+      osState('granted', 'undetermined');
+      const app = await openCatchUp();
+
+      expect(app.getPathname()).toBe('/permission-push');
+      expect(rootStackNames(app)).toEqual(['permission-push']);
+      expect(mockRequestForeground).toHaveBeenCalledTimes(0);
+
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId('onboarding-push-allow'));
+      await settle();
+
+      expect(mockPrompt).toHaveBeenCalledTimes(1);
+      expect(mockRequestForeground).toHaveBeenCalledTimes(0);
+      expectHomeOnly(app);
+    });
+
+    it('F4 위치를 OS 에서 거부해도 막히지 않는다: 거부 프레임의 [계속]이 알림 카드로 간다(거부 경로 = 가드 밖 이동으로 무시되지 않는다)', async () => {
+      // 준비 — 위치 OS 창에서 거부, 알림은 미결정
+      primeLocation('undetermined', 'denied');
+      primeOsPermission(Notifications, 'undetermined', 'granted');
+      const app = await openCatchUp();
+      fireEvent.press(screen.getByTestId('onboarding-location-allow'));
+      await settle();
+
+      // 단언 1 — 거부 프레임으로 바뀌었고 아직 같은 카드(라우트)다
+      expect(mockRequestForeground).toHaveBeenCalledTimes(1);
+      expect(app.getPathname()).toBe('/permission-location');
+      expect(
+        screen.getByTestId('onboarding-location-continue')
+      ).toBeOnTheScreen();
+
+      // 실행 — 거부 프레임 [계속]
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId('onboarding-location-continue'));
+      await settle();
+
+      // 단언 2
+      expect(app.getPathname()).toBe('/permission-push');
+      expect(rootStackNames(app)).toEqual(['permission-push']);
+      expect(mockRequestForeground).toHaveBeenCalledTimes(1);
+    });
+
+    it('F5 위치만 미결정이고 거부 프레임 [계속]으로 끝내면 곧장 홈 하나만 남는다', async () => {
+      primeLocation('undetermined', 'denied');
+      primeOsPermission(Notifications, 'denied');
+      const app = await openCatchUp();
+      fireEvent.press(screen.getByTestId('onboarding-location-allow'));
+      await settle();
+      resetPressGuard();
+
+      fireEvent.press(screen.getByTestId('onboarding-location-continue'));
+      await settle();
+
+      expectHomeOnly(app);
+      expect(mockPrompt).toHaveBeenCalledTimes(0);
+    });
+  });
+
+  describe('이미 결정됨·조회 실패는 아무것도 안 뜬다 (AC2)', () => {
+    it.each([
+      ['위치 허용 · 알림 허용', 'granted', 'granted'],
+      ['위치 거부 · 알림 거부', 'denied', 'denied'],
+      ['위치 허용 · 알림 거부', 'granted', 'denied'],
+      ['위치 거부 · 알림 허용', 'denied', 'granted'],
+    ] as const)(
+      'D1 [%s]: 안내 없이 홈, 저장소 흔적도 없다',
+      async (_label, location, push) => {
+        osState(location, push);
+
+        const app = await openCatchUp();
+
+        expectHomeOnly(app);
+        expectNoFlag();
+        expect(mockRequestForeground).toHaveBeenCalledTimes(0);
+      }
+    );
+
+    it('D2 위치는 foreground 만 본다: foreground 가 허용이면 background 가 미결정이어도 위치 카드는 안 뜬다', async () => {
+      osState('granted', 'denied');
+      mockGetBackground.mockResolvedValue(locationResponse('undetermined'));
+
+      const app = await openCatchUp();
+
+      expectHomeOnly(app);
+    });
+
+    it.each([
+      [
+        '위치 조회가 throw',
+        () => {
+          osState('granted', 'denied');
+          mockGetForeground.mockRejectedValue(new Error('location api'));
+        },
+      ],
+      [
+        '위치 조회가 undefined(값을 못 읽음)',
+        () => {
+          osState('granted', 'denied');
+          mockGetForeground.mockResolvedValue(undefined);
+        },
+      ],
+      [
+        '알림 조회가 throw',
+        () => {
+          osState('granted', 'denied');
+          (Notifications.getPermissionsAsync as jest.Mock).mockRejectedValue(
+            new Error('push api')
+          );
+        },
+      ],
+    ])(
+      'D3 [%s]: 안내 없이 홈(사용자를 막지 않는 방향 — INV-4)',
+      async (_label, breakLookup) => {
+        // 준비 — 깨진 쪽이 아닌 쪽은 이미 결정됨으로 둔다(깨진 쪽만 홈으로 접히는지 보려고)
+        breakLookup();
+
+        const app = await openCatchUp();
+
+        expectHomeOnly(app);
+        expectNoFlag();
+      }
+    );
+
+    it('D4 "봤음" 기록(파일)을 읽다 실패해도 안내 없이 홈이다(알 수 없으면 묻지 않는다)', async () => {
+      osState('undetermined', 'undetermined');
+      failFileReads();
+
+      const app = await openCatchUp();
+
+      expectHomeOnly(app);
+      expectNoFlag();
+    });
+  });
+
+  describe('한 쪽만 조회 실패하면 미결정인 쪽만 안내한다 (AC2 확장)', () => {
+    it('D5a 위치 조회가 실패하고 알림이 미결정이면 알림 카드만 뜨고 [계속] 뒤 홈이다(실패한 쪽은 안 보임)', async () => {
+      // 준비
+      osState('granted', 'undetermined');
+      mockGetForeground.mockRejectedValue(new Error('location api'));
+
+      // 실행
+      const app = await openCatchUp();
+
+      // 단언 1 — 알림 카드가 첫 화면, 위치 카드는 없다
+      expect(app.getPathname()).toBe('/permission-push');
+      expect(rootStackNames(app)).toEqual(['permission-push']);
+
+      // 실행 2 — 알림 [계속]
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId('onboarding-push-allow'));
+      await settle();
+
+      // 단언 2
+      expect(mockPrompt).toHaveBeenCalledTimes(1);
+      expectHomeOnly(app);
+    });
+
+    it('D5b 알림 조회가 실패하고 위치가 미결정이면 위치 카드만 뜨고 [계속] 뒤 곧장 홈이다(알림 카드로 가지 않는다)', async () => {
+      // 준비
+      osState('undetermined', 'denied');
+      (Notifications.getPermissionsAsync as jest.Mock).mockRejectedValue(
+        new Error('push api')
+      );
+
+      // 실행
+      const app = await openCatchUp();
+      expect(app.getPathname()).toBe('/permission-location');
+      fireEvent.press(screen.getByTestId('onboarding-location-allow'));
+      await settle();
+
+      // 단언
+      expect(mockRequestForeground).toHaveBeenCalledTimes(1);
+      expectHomeOnly(app);
+      expect(mockPrompt).toHaveBeenCalledTimes(0);
+    });
+  });
+
+  describe('"봤음" 기록 쓰기가 실패해도 안내는 그대로 진행된다 (AC8 확장)', () => {
+    it('W1 기록을 쓰지 못해도(디스크 가득 등) 안내가 뜨고 끝까지 진행된다', async () => {
+      // 준비
+      osState('undetermined', 'undetermined');
+      failFileWrites();
+
+      // 실행 1
+      const app = await openCatchUp();
+
+      // 단언 1 — 기록은 못 남겼어도 안내는 뜬다
+      expect(app.getPathname()).toBe('/permission-location');
+
+      // 실행 2 — 끝까지 진행
+      fireEvent.press(screen.getByTestId('onboarding-location-allow'));
+      await settle();
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId('onboarding-push-allow'));
+      await settle();
+
+      // 단언 2
+      expectHomeOnly(app);
+    });
+  });
+
+  describe('신규 가입·HOME 이 아닌 목적지·재진입 (AC6 · AC8)', () => {
+    it('G1 이 마운트에서 ONBOARDING 이었으면(신규 가입 직후) HOME 이 돼도 안내가 뜨지 않고, 이어지는 기능 안내 이동이 그대로 된다', async () => {
+      // 준비 — 온보딩 중. 권한은 둘 다 미결정(안내가 뜰 수 있는 조건)
+      osState('undetermined', 'undetermined');
+      const app = await openCatchUp('/welcome', 'ONBOARDING');
+      expect(rootStackNames(app)).toEqual(['(onboarding)']);
+
+      // 실행 1 — 완료 응답 뒤 게이트가 HOME 을 연다(PrefStep2Page 의 순서)
+      act(() => {
+        flipGateTo('HOME');
+      });
+      await settle();
+
+      // 단언 1 — 안내로 새지 않았다(기능 안내 이동 전 틈에서 확인)
+      expect(rootStackNames(app)).toEqual(['(tabs)']);
+      expect(app.getPathname()).toBe('/');
+      expectNoFlag();
+      expect(mockRequestForeground).toHaveBeenCalledTimes(0);
+
+      // 실행 2 — 기능 안내로 replace
+      act(() => router.replace('/onboarding-tour' as never));
+      await settle();
+
+      // 단언 2
+      expect(rootStackNames(app)).toEqual(['onboarding-tour']);
+      expect(app.getPathname()).toBe('/onboarding-tour');
+    });
+
+    it.each([
+      ['LOGIN', '/login'],
+      ['RECONSENT', '/reconsent'],
+      ['FORCE_UPDATE', '/force-update'],
+    ] as const)(
+      'G2 목적지 %s 에서는 이동 0회·저장소 흔적 0 — 권한이 미결정이어도 그 목적지 화면에 머문다',
+      async (destination, path) => {
+        osState('undetermined', 'undetermined');
+
+        const app = await openCatchUp(path, destination);
+        act(() => {
+          jest.advanceTimersByTime(PERMISSION_LOOKUP_WAIT_MAX_MS * 3);
+        });
+        await settle();
+
+        expect(app.getPathname()).toBe(path);
+        expectNoFlag();
+        expect(mockRequestForeground).toHaveBeenCalledTimes(0);
+      }
+    );
+
+    it('G3 로그아웃 뒤 다시 로그인해 HOME 에 돌아오면 다시 평가한다(그 사이 권한이 미결정이 되었다면 안내가 뜬다)', async () => {
+      // 준비 — 첫 HOME: 둘 다 결정됨 → 안내 없음(앵커)
+      osState('granted', 'granted');
+      const app = await openCatchUp();
+      expectHomeOnly(app);
+
+      // 실행 1 — 로그아웃
+      act(() => {
+        flipGateTo('LOGIN');
+      });
+      await settle();
+      expect(app.getPathname()).toBe('/login');
+
+      // 실행 2 — OS 가 위치를 미결정으로 되돌렸다(설정에서 초기화 등) 뒤 다시 로그인
+      osState('undetermined', 'granted');
+      act(() => {
+        flipGateTo('HOME');
+      });
+      await settle();
+
+      // 단언
+      expect(app.getPathname()).toBe('/permission-location');
+      expect(rootStackNames(app)).toEqual(['permission-location']);
+    });
+
+    it('G4 세션 안 로그인(LOGIN → HOME)은 스플래시로 되돌아가지 않고 스택이 유지된 채 안내가 뜬다', async () => {
+      // 준비 — 로그인 화면으로 시작, 위치 조회는 아직 안 끝난다
+      osState('undetermined', 'denied');
+      const pending = deferred<ReturnType<typeof locationResponse>>();
+      const app = await openCatchUp('/login', 'LOGIN');
+      expect(app.getPathname()).toBe('/login');
+      mockGetForeground.mockImplementation(() => pending.promise);
+
+      // 실행 1 — 로그인 성공으로 HOME
+      act(() => {
+        flipGateTo('HOME');
+      });
+      await settle();
+
+      // 단언 1 — 스택이 언마운트되는 스플래시 복귀는 없다
+      expect(screen.queryByTestId('shell-splash-root')).toBeNull();
+
+      // 실행 2 — 조회가 미결정으로 끝난다
+      pending.resolve(locationResponse('undetermined'));
+      await settle();
+
+      // 단언 2
+      expect(app.getPathname()).toBe('/permission-location');
+      expect(rootStackNames(app)).toEqual(['permission-location']);
+    });
+  });
+
+  describe('딥링크·푸시 탭과의 경합 (AC7)', () => {
+    it('C1 최상위가 홈 탭이 아니면(딥링크로 설정 화면에서 시작) 이번 실행은 안내를 건너뛰고 저장소에도 안 남긴다', async () => {
+      osState('undetermined', 'undetermined');
+
+      const app = await openCatchUp('/settings');
+      await settle();
+
+      expect(app.getPathname()).toBe('/settings');
+      expect(rootStackNames(app)).not.toContain('permission-location');
+      expect(rootStackNames(app)).not.toContain('permission-push');
+      expectNoFlag();
+    });
+
+    it('C2 푸시를 눌러 앱이 켜진 실행(콜드 스타트 탭)은 그 알림 화면에 머문다 — 안내가 덮어쓰지 않는다', async () => {
+      // 준비 — OS 가 앱을 켠 탭을 들고 있고, 권한은 둘 다 미결정
+      osState('undetermined', 'undetermined');
+      (
+        Notifications.getLastNotificationResponseAsync as jest.Mock
+      ).mockResolvedValueOnce(fakePushResponse('n-cold-1601', PLAN_B_TAP));
+
+      // 실행
+      const app = await openCatchUp();
+      await settle();
+
+      // 단언 — 알림이 가리키는 곳에 있고 안내는 스택 어디에도 없다
+      expect(app.getPathname()).toBe('/trips/trip-1/planb');
+      expect(rootStackNames(app)).not.toContain('permission-location');
+      expect(rootStackNames(app)).not.toContain('permission-push');
+      expectNoFlag();
+    });
+  });
+
+  describe('설치당 한 번 (AC8)', () => {
+    it('P1 한 번 안내했으면 다음 실행(재마운트)에서는 미결정이어도 안 뜬다', async () => {
+      // 준비 — 첫 실행: 안내가 뜬다(앵커) 그리고 "봤음"이 기기 저장소에 남는다
+      osState('undetermined', 'undetermined');
+      const first = await openCatchUp();
+      expect(first.getPathname()).toBe('/permission-location');
+      expect(documentFileCount()).toBeGreaterThan(0);
+      expect(mockVault.size).toBe(0); // 키체인에는 쓰지 않는다
+
+      // 실행 — 앱을 껐다 켠다(OS 권한은 여전히 미결정: iOS "한 번만 허용" 같은 경우)
+      first.unmount();
+      resetPressGuard();
+      const second = await openCatchUp();
+      await settle();
+
+      // 단언
+      expectHomeOnly(second);
+    });
+
+    it('P2 저장소가 비어 있으면(재설치·새 기기) 다시 뜬다 — 모듈 메모리가 아니라 저장소가 기억한다', async () => {
+      // 준비
+      osState('undetermined', 'undetermined');
+      const first = await openCatchUp();
+      expect(first.getPathname()).toBe('/permission-location');
+      first.unmount();
+      resetFakeFs(); // 앱 삭제 = 샌드박스가 비워진다
+      resetPressGuard();
+
+      // 실행
+      const second = await openCatchUp();
+
+      // 단언
+      expect(second.getPathname()).toBe('/permission-location');
+    });
+  });
+
+  describe('스플래시와 조회 타이밍 (AC9)', () => {
+    it('T1 조회는 마운트 때 시작한다 — 스플래시 하한이 지나기 전에 이미 OS 에 물었고, 하한이 지나면 안내가 도착한다', async () => {
+      // 준비
+      osState('undetermined', 'undetermined');
+      gateDestination = 'HOME';
+      const app = renderRouter(catchUpRoutes(), { initialUrl: '/' });
+      await settle();
+
+      // 단언 1 — 하한 전: 위치·알림 조회가 이미 나갔고(하한 뒤에 시작하는 구현이면 0회) 화면은 아직 스플래시다
+      expect(mockGetForeground).toHaveBeenCalled();
+      expect(Notifications.getPermissionsAsync).toHaveBeenCalled();
+      expect(screen.getByTestId('shell-splash-root')).toBeOnTheScreen();
+
+      // 실행
+      passFloor();
+      await settle();
+
+      // 단언 2
+      expect(app.getPathname()).toBe('/permission-location');
+    });
+
+    it('T2 조회가 하한까지 안 끝나면 상한까지만 스플래시를 붙잡고, 그 안에 끝나면 홈 없이 안내로 간다', async () => {
+      // 준비 — 위치 조회가 붙잡혀 있다
+      osState('undetermined', 'denied');
+      const pending = deferred<ReturnType<typeof locationResponse>>();
+      mockGetForeground.mockImplementation(() => pending.promise);
+      gateDestination = 'HOME';
+      const app = renderRouter(catchUpRoutes(), { initialUrl: '/' });
+      await settle();
+
+      // 실행 1 — 하한이 지났다
+      passFloor();
+
+      // 단언 1 — 아직 스플래시, 스택(홈)은 마운트 안 됨
+      expect(screen.getByTestId('shell-splash-root')).toBeOnTheScreen();
+      expect(screen.queryByTestId('home-root')).toBeNull();
+
+      // 실행 2 — 상한 직전
+      act(() => {
+        jest.advanceTimersByTime(PERMISSION_LOOKUP_WAIT_MAX_MS - 1);
+      });
+
+      // 단언 2 — 아직 스플래시
+      expect(screen.getByTestId('shell-splash-root')).toBeOnTheScreen();
+
+      // 실행 3 — 상한 안에 조회가 끝난다
+      pending.resolve(locationResponse('undetermined'));
+      await settle();
+
+      // 단언 3 — 홈에 머물지 않고 안내
+      expect(screen.queryByTestId('shell-splash-root')).toBeNull();
+      expect(app.getPathname()).toBe('/permission-location');
+    });
+
+    it('T3 조회가 끝내 안 오면 상한에서 스플래시를 풀고 안내 없이 홈으로 간다(무한 스플래시 금지)', async () => {
+      // 준비
+      osState('undetermined', 'undetermined');
+      mockGetForeground.mockImplementation(() => new Promise(() => {}));
+      gateDestination = 'HOME';
+      const app = renderRouter(catchUpRoutes(), { initialUrl: '/' });
+      await settle();
+      passFloor();
+      act(() => {
+        jest.advanceTimersByTime(PERMISSION_LOOKUP_WAIT_MAX_MS - 1);
+      });
+      expect(screen.getByTestId('shell-splash-root')).toBeOnTheScreen();
+
+      // 실행 — 상한
+      act(() => {
+        jest.advanceTimersByTime(1);
+      });
+      await settle();
+
+      // 단언
+      expect(screen.queryByTestId('shell-splash-root')).toBeNull();
+      expectHomeOnly(app);
+      expectNoFlag();
+    });
+
+    it('T4 HOME 이 아닌 목적지(LOGIN)는 조회가 멈춰 있어도 하한 직후 바로 보인다 — 스플래시를 더 붙잡지 않는다', async () => {
+      osState('undetermined', 'undetermined');
+      mockGetForeground.mockImplementation(() => new Promise(() => {}));
+      gateDestination = 'LOGIN';
+      renderRouter(catchUpRoutes(), { initialUrl: '/login' });
+      await settle();
+
+      passFloor();
+
+      expect(screen.queryByTestId('shell-splash-root')).toBeNull();
+      expect(screen.getByTestId('login-root')).toBeOnTheScreen();
+    });
   });
 });

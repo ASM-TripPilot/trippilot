@@ -142,3 +142,50 @@ describe('🔴 TRIP-1108 AC-5 · 연타는 1회로', () => {
     expect(routerMock.replace).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * TRIP-1601 — 같은 카드를 기존 계정 HOME 진입 전 안내에서 **다른 목적지로** 재사용한다(`onNext` prop).
+ * `onNext` 가 주어지면 `계속` 은 루틴을 1회 부른 뒤(기다리지 않고) router.replace 대신 `onNext` 를 1회 부른다.
+ * 생략 시 현행(pref1 로 replace)은 위 W2~W5 가 수정 없이 지킨다(AC5).
+ */
+describe('🔴 TRIP-1601 · onNext 가 주어지면 계속은 onNext 를 쓴다', () => {
+  const onNext = jest.fn();
+  beforeEach(() => onNext.mockClear());
+
+  it('N1 "계속"을 누르는 그 순간 루틴 1회 + onNext 1회, router.replace 0회(동기)', () => {
+    render(<PushPage onNext={onNext} />);
+    expect(onNext).toHaveBeenCalledTimes(0);
+
+    fireEvent.press(screen.getByTestId('onboarding-push-allow'));
+
+    expect(mockPrompt).toHaveBeenCalledTimes(1);
+    expect(onNext).toHaveBeenCalledTimes(1);
+    expect(routerMock.replace).not.toHaveBeenCalled();
+  });
+
+  it('N2 루틴이 영원히 끝나지 않아도 onNext 는 1회 불린다(기다리지 않는다)', async () => {
+    mockPrompt.mockImplementation(() => new Promise(() => {}));
+    render(<PushPage onNext={onNext} />);
+
+    fireEvent.press(screen.getByTestId('onboarding-push-allow'));
+    await act(async () => {});
+
+    expect(mockPrompt).toHaveBeenCalledTimes(1);
+    expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it('N3 빠르게 두 번 눌러도 루틴 1회 · onNext 1회', () => {
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+    try {
+      render(<PushPage onNext={onNext} />);
+
+      fireEvent.press(screen.getByTestId('onboarding-push-allow'));
+      fireEvent.press(screen.getByTestId('onboarding-push-allow'));
+
+      expect(mockPrompt).toHaveBeenCalledTimes(1);
+      expect(onNext).toHaveBeenCalledTimes(1);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+});
