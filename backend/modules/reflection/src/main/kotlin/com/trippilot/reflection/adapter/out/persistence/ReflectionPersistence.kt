@@ -146,8 +146,9 @@ class ReflectionRepositoryAdapter(
     }
 
     /**
-     * 잠그고 **DB 에서 다시** 싣는다. 같은 트랜잭션이 잠그기 전에 이 행을 실어 뒀으면(생성이 AI 를 부르기 전에 그 하루를 먼저 본다)
-     * 잠금 질의도 영속성 컨텍스트의 옛 값을 돌려준다 — 그 사이 들어온 기분·수정본을 옛 값으로 덮게 된다.
+     * 잠그고 **DB 에서 다시** 싣는다. 같은 트랜잭션이 잠그기 전에 이 행을 실어 뒀으면(호출자가 바깥 트랜잭션 안에서 이 행을 먼저 읽어 둔 경우 —
+     * 생성·수정은 TRIP-1463 부터 잠그기 전 읽기를 트랜잭션 밖에서 한다) 잠금 질의도 영속성 컨텍스트의 옛 값을 돌려준다 — 그 사이 들어온
+     * 기분·수정본을 옛 값으로 덮게 된다.
      */
     private fun lockedFresh(tripId: UUID, dayDate: LocalDate): ReflectionEntity? =
         jpa.lockByTripIdAndDayDate(tripId, dayDate)?.also { em.refresh(it) }
