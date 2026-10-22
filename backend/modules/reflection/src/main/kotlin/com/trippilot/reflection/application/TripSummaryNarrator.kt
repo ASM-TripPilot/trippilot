@@ -120,7 +120,7 @@ class TripSummaryNarrator internal constructor(
         return try {
             executor.execute {
                 try {
-                    narrate(tripId) // 던지지 않는다 — 실패는 안에서 시도로 세고 남긴다
+                    narrate(tripId) // Exception 은 던지지 않는다(안에서 세고 남긴다) — Error 는 남긴 뒤 올린다(아래 finally 가 표시를 푼다)
                 } finally {
                     inFlight.remove(tripId)
                 }
