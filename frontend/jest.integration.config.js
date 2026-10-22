@@ -14,6 +14,9 @@ module.exports = {
   testPathIgnorePatterns: ['/node_modules/'],
   testMatch: ['**/*.integration.test.[jt]s?(x)'],
   // 비동기 대기 기본 상한(RNTL `asyncUtilTimeout`)을 5초로 — 냉캐시·CPU 경합에서 첫 테스트가 1초를 넘긴다(TRIP-1365).
+  // 테스트 하나의 상한은 비동기 대기 상한(5초)보다 커야 한다 — 같으면 대기 한 번만 늘어져도 jest 기본 5초에 먼저 걸려
+  // "Exceeded timeout of 5000 ms for a test" 로 끊긴다(CI 실측: MyTripsListPage·LiveItineraryPage, 로컬은 통과).
+  testTimeout: 20000,
   setupFilesAfterEnv: [
     ...(base.setupFilesAfterEnv ?? []),
     '<rootDir>/src/test-support/integrationSetup.ts',
