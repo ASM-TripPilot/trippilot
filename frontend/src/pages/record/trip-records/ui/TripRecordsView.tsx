@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactElement, type ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Keyboard, Pressable, Text, View } from 'react-native';
 
 import { formatDayLabel } from '@/entities/trip';
 import { formatCoPickDayHeader } from '@/features/itinerary/index.view';
@@ -112,13 +112,15 @@ const DEFAULT_NOTICE = '오늘의 동선 · 방문한 곳을 사진과 메모로
 
 // 핀 탭이 올려 두는 최상단 칸(j01 기본 배열 0 닫힘·1 peek·2 펼침) — gorhom 은 이 칸에서만 안쪽 스크롤을 허용한다.
 const TOP_SNAP = 2;
-// TRIP-1557 시트 칸 — 닫힘 칸이 **하단 바(70) 위로 핸들(28)이 나오게** 98 이상이어야 한다(안 그러면 핸들이 바 뒤로 숨어 시트를 되올릴 손잡이가
-// 사라진다 — jest 는 통과형 목이라 값을 못 본다, 6-b·코드 리뷰 몫). 셸 기본 배열은 28+하단 안전영역이라 바를 모른다 — 그래서 직접 준다.
-// 칸 번호는 그대로(0 닫힘·1 peek·2 펼침 — TOP_SNAP·`initialIndex` 가 이 번호에 걸려 있다).
+// TRIP-1557 시트 칸 — 핸들 칸(0)이 **하단 바(70) 위로 핸들(28)이 나오게** 98 이상이어야 한다(jest 는 통과형 목이라 값을 못 본다, 6-b·코드 리뷰 몫).
+// 셸 기본 배열은 28+하단 안전영역이라 바를 모른다 — 그래서 직접 준다. 칸 번호는 그대로(0 핸들·1 peek·2 펼침 — TOP_SNAP·`initialIndex` 가 이 번호에 걸려 있다).
+// TRIP-1593 — 그 아래 -1(화면 밖으로 완전히 내림)은 이 목록에 없는 상태다(`enablePanDownToClose`). 되올리는 길은 하단 바의 활성 「기록」 칸.
 const CLOSED_HANDLE_HEIGHT = 28;
 const SNAP_POINTS = [NAV_BAR_RESERVE + CLOSED_HANDLE_HEIGHT, '45%', '88%'];
 // 리스트 맨 아래 [방문 추가] 가 바에 가리지 않게 — 바 점유 + 여백 16(옛 76 은 바가 없던 때 값).
 const LIST_BOTTOM_GAP = 16;
+// 지도 로고(© NAVER)가 하단 바에 가리지 않게 — 허브 `MAP_LOGO_MARGIN` 과 같은 식. 모듈 상수여야 memo 된 MapView 가 렌더마다 깨지지 않는다.
+const MAP_LOGO_MARGIN = { bottom: NAV_BAR_RESERVE } as const;
 const noop = (): void => {};
 
 export function TripRecordsView({
@@ -151,6 +153,9 @@ export function TripRecordsView({
   // 허용한다(6-b 실측). j01 기본 배열: 0 닫힘·1 peek·2 펼침(i01 허브의 −1/0/1 과 번호가 다르다). 도착한 칸은 셸 `onSheetChange` 로
   // 추적한다(초기값 = peek 1). 요청은 id 요청형이라 같은 핀을 다시 눌러도 다시 나간다.
   const arrivedIndexRef = useRef(1);
+  // TRIP-1593 — 시트가 **향하는** 칸(이동 시작 신호 `onSheetAnimate` 의 to, 초기 peek 1). 도착 기준(arrivedIndexRef)과 섞지 않는다 — 이동 중에 「기록」 칸을
+  // 눌러도 이미 내려가는 중이면 되올려야 한다. 누르는 순간에만 읽으므로 state 가 아니라 ref.
+  const sheetTargetRef = useRef(1);
   // 올라가는 동안 마지막으로 누른 핀의 항목 index — 도착하면 스크롤로 승격하고 비운다.
   const pendingItemRef = useRef<number | undefined>(undefined);
   const [snapRequest, setSnapRequest] = useState<
@@ -228,10 +233,15 @@ export function TripRecordsView({
           if (tab) onSelectDay(tab.day);
         }}
         hideBack
+        enablePanDownToClose
+        mapLogoMargin={MAP_LOGO_MARGIN}
         snapPoints={SNAP_POINTS}
         initialIndex={1}
         // 이동 시작이 최상단이 아니면 사용자가 시트를 다른 칸으로 끌어 간 것 — 대기 요청을 버린다(나중에 손으로 펼칠 때 옛 항목으로 튀지 않게).
         onSheetAnimate={(_from, to) => {
+          sheetTargetRef.current = to;
+          // 메모 입력 중 끝까지 내리면 키보드가 남고, 키보드 중엔 하단 바가 트리에서 빠져(TRIP-1280) 되올릴 길이 없다.
+          if (to === -1) Keyboard.dismiss();
           if (to !== TOP_SNAP) pendingItemRef.current = undefined;
         }}
         onSheetChange={(index) => {
@@ -366,6 +376,11 @@ export function TripRecordsView({
         onBack={onPressBack ?? noop}
         onPressReflection={onPressReflection}
         onPressSummary={onPressSummary}
+        // TRIP-1593 — 활성 「기록」 칸: 내려가 있으면(핸들 칸 0·완전 내림 -1) 중간 칸으로 되올린다. 올라와 있으면 아무 일 없다. id 카운터는 핀 탭과 공유.
+        onPressActive={() => {
+          if (sheetTargetRef.current < 1)
+            setSnapRequest((prev) => ({ index: 1, id: (prev?.id ?? 0) + 1 }));
+        }}
       />
     </View>
   );
