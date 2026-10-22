@@ -229,6 +229,7 @@ function ExploreLanding({
       name: place.nameKo,
       region: place.region ?? '',
       imageUrl: place.imageUrl ?? null,
+      category: place.category,
     }));
 
   const items = stay.items;

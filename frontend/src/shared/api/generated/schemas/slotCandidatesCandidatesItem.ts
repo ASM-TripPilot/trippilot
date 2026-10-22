@@ -16,7 +16,7 @@ export type SlotCandidatesCandidatesItem = {
   /** closed-set 근거 — 시각·소요시간 언급 없음(BR-U2-09) */
   rationale: string;
   nameKo?: string | null;
-  /** 경계 코드(SIGHT/FOOD/…) */
+  /** 한글 정본(명소·맛집·카페·야경·자연·쇼핑·문화·액티비티·미술·술집) — 일정 슬롯과 같은 값. 클라가 이 값으로 사진 없는 칸의 카테고리 일러스트를 고른다 */
   category?: string | null;
   /** 미확보 시 빈 배열 */
   tags?: string[];

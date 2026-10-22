@@ -11,6 +11,7 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 import { useItineraryEditStore } from '@/features/edit-itinerary';
 import { buildSlotKey } from '@/entities/itinerary-slot';
@@ -2592,6 +2593,7 @@ describe('시각 조정 시트', () => {
             alternatives: [],
             tags: ['바다'],
             nameKo: '광안리',
+            category: '야경',
           },
           {
             poiId: 'poi-b',
@@ -2731,7 +2733,7 @@ describe('시각 조정 시트', () => {
   });
 
   describe('🔴 IT3b · AC-9 — 요약 행은 슬롯 이름·사진뿐이다', () => {
-    it('사진 없는 a: 이름만(배지·지역 줄 없음), 썸네일 이미지 없음', async () => {
+    it('사진 없는 a: 이름만(배지·지역 줄 없음), 썸네일 칸에는 슬롯의 카테고리(야경)·poiId(poi-a)로 고른 생성 이미지', async () => {
       renderPage();
       await openSheetFor('poi-a');
 
@@ -2739,7 +2741,10 @@ describe('시각 조정 시트', () => {
       expect(screen.getByTestId(t('place-summary'))).toHaveTextContent(
         '광안리'
       );
-      expect(screen.queryByTestId(t('place-thumb-image'))).toBeNull();
+      // poi-a 는 변형 3 → night_view-3. 편집 페이지가 시트에 category·poiId 를 실어 줘야 폴백이 아니다.
+      expect(screen.getByTestId(t('place-thumb-image')).props.source).toEqual([
+        coverFor('야경', 'poi-a'),
+      ]);
     });
 
     it('사진 있는 b: 이름 + 그 사진 URL 썸네일', async () => {

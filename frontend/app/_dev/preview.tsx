@@ -390,7 +390,7 @@ const STAY_DETAIL_PREVIEW_STATE = {
 // 가볼 곳 가로 레인(TRIP-470) — 프리뷰에서 레인을 눈으로 보기 위한 표본 카드. `as const` 밖에
 // 둬야 cards 가 readonly 튜플로 굳지 않는다(placeLane.cards 는 PlaceCardVM[] 요구).
 // 장소 가로 레인(TRIP-470) — 프리뷰 표본 카드. TRIP-703 으로 Figma d01(1672:1183) 정합상 5장.
-// `imageUrl` 미지정(=회색 자리, INV-1 — 실사진 소싱은 6-b·후속). `as const` 밖에 둬야 cards 가
+// `imageUrl`·`category` 미지정(=중립 생성 이미지 place.webp, INV-1 — 실사진 소싱은 6-b·후속). `as const` 밖에 둬야 cards 가
 // readonly 튜플로 안 굳는다(placeLane.cards 는 PlaceCardVM[] 요구).
 const EXPLORE_LANDING_PLACE_LANE = {
   error: false,
@@ -614,7 +614,7 @@ const DRAFT_PREVIEW_PHOTOS: (string | null)[] = [
 ].map((source) => Image.resolveAssetSource?.(source)?.uri ?? null); // 웹에는 이 API 가 없다(네이티브 전용) — 옵셔널 호출로 웹은 null(사진 없는 카드)
 
 // TRIP-710 d06 프리뷰 히어로 — 로컬 라이선스 에셋 재사용(assets/home/hero-view.jpg, CREDITS.md 有).
-// DRAFT_PREVIEW_PHOTOS 와 같은 패턴: jest 는 .uri 가 undefined 라 회색 자리, 실기만 사진(INV-1 안전).
+// DRAFT_PREVIEW_PHOTOS 와 같은 패턴: jest 는 .uri 가 undefined 라 생성 이미지, 실기만 사진(INV-1 안전).
 const PLACE_DETAIL_PREVIEW_IMAGE: string | null =
   Image.resolveAssetSource?.(
     require('@/shared/ui/placeholders/home/hero-view.jpg')
@@ -688,8 +688,8 @@ const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
 
 /**
  * TRIP-783 · h08 지도+시트 셸 접힘 프리뷰(Figma `4221:2448`) — 광안리 해변·황령산 전망대·
- * 부산시립미술관(필수)·웨이브온 카페 4슬롯 + 시각 칩. 미술관은 `imageUrl:null` 이라 카테고리
- * 플레이스홀더도 함께 보인다. 사진은 DRAFT 픽스처 재사용(require 자산 → jest 는 null, 실기만 썸네일
+ * 부산시립미술관(필수)·웨이브온 카페 4슬롯 + 시각 칩. 미술관은 `imageUrl:null` 이라 생성 이미지가
+ * 함께 보인다. 사진은 DRAFT 픽스처 재사용(require 자산 → jest 는 null, 실기만 썸네일
  * — preview.tsx 에 http 리터럴 0 유지). 셸이 `<MapView>` 를 소유하므로 여기선 지도 태그를 안 쓴다.
  */
 const H08_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
@@ -1138,7 +1138,7 @@ const H10_DEFAULT_CANDIDATES: SlotCandidatesCandidatesItem[] = [
     rationale: '반경 밖 (넓히면 선택 가능)',
   },
 ];
-// 사진: A·B·D 는 로컬 에셋(78 썸네일), C 는 null 로 회색 자리 엣지를 함께 본다. D(반경 밖)에 사진을
+// 사진: A·B·D 는 로컬 에셋(78 썸네일), C 는 null 로 생성 이미지 엣지를 함께 본다. D(반경 밖)에 사진을
 // 둔 건 흐림 톤다운이 사진에는 안 걸리는 차이(범위 밖 관측)를 눈으로 확인하려는 것이다.
 type H10View = {
   nameKo?: string | null;
@@ -1391,7 +1391,7 @@ const TRIP_BASE_SCREEN: TripWizardStep2ScreenProps = {
  * 왜 프리뷰가 필요한가: 실화면 딥링크로는 **시드 얼굴을 볼 수 없다.** 백엔드가 401이면 담은
  * 목록이 늘 비어 0곳 얼굴로만 떨어진다(d04·d02 프리뷰가 있는 것과 같은 이유).
  *
- * ⚠️ 썸네일 사진은 회색 자리로 보인다 — `imageUrl`이 프로덕션에서 전부 `null`이고 클라가
+ * ⚠️ 썸네일은 서버 사진이 아니라 생성 이미지로 보인다 — `imageUrl`이 프로덕션에서 전부 `null`이고 클라가
  * 외부 URL을 지어내는 것은 INV-1이 막는다(`exploreFixtures.ts` 머리말과 같은 사정).
  * 구현 실패가 아니다.
  */
@@ -1937,6 +1937,13 @@ const STAY_REGISTER_PIN_NAME_MISSING_FLOW: StayRegisterScreenProps['flow'] = {
   submitAttempted: true,
 };
 
+// ReplanSlotRow 는 사진을 `{uri}` 로만 읽는다(운영 생산자와 같은 모양) — 번들 에셋을 `{uri}` 로 풀어 준다.
+// jest 는 .uri 가 undefined 라 null(= 카테고리 생성 이미지), 실기만 번들 사진. category 는 서버 정본(한글).
+const previewPhoto = (source: number): { uri: string } | null => {
+  const uri = Image.resolveAssetSource?.(source)?.uri;
+  return uri ? { uri } : null;
+};
+
 // i06 재계획안(TRIP-751) — Figma `4314:1923` 펼침 5곳. 사진은 Figma 목업 사진(`assets/execution/CREDITS.md`,
 // 행 3·5 야경은 같은 사진). 거리는 "이 슬롯까지 오는 거리"라 행 1 은 null(커넥터는 다음 행 값을 그린다).
 // 행 1 커넥터는 Figma 가 차량 아이콘이지만 서버가 '차량'을 내지 않아 도보 기본으로 둔다(Seed Q9).
@@ -1945,8 +1952,8 @@ const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
     slotKey: 'i06-1',
     placeName: '감천문화마을',
     tone: 'visited',
-    photo: require('./assets/execution/live-gamcheon-1.jpg'),
-    category: 'SIGHT',
+    photo: previewPhoto(require('./assets/execution/live-gamcheon-1.jpg')),
+    category: '명소',
     timeLabel: '09:30 방문',
     categoryLabel: '마을 · 벽화',
     distanceRange: null,
@@ -1956,8 +1963,8 @@ const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
     slotKey: 'i06-2',
     placeName: '광안리 해변',
     tone: 'visited',
-    photo: require('./assets/execution/live-gwangalli-1.jpg'),
-    category: 'NATURE',
+    photo: previewPhoto(require('./assets/execution/live-gwangalli-1.jpg')),
+    category: '자연',
     timeLabel: '11:00 방문',
     categoryLabel: '바다 · 산책',
     distanceRange: '1.4km',
@@ -1967,8 +1974,8 @@ const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
     slotKey: 'i06-3',
     placeName: '부산시립미술관',
     tone: 'visited',
-    photo: require('./assets/execution/replan-night-1.jpg'),
-    category: 'CULTURE',
+    photo: previewPhoto(require('./assets/execution/replan-night-1.jpg')),
+    category: '미술',
     timeLabel: '13:00 도착 · 관람 중',
     categoryLabel: '미술 · 실내',
     distanceRange: '3.2km',
@@ -1978,8 +1985,8 @@ const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
     slotKey: 'i06-4',
     placeName: '전포 카페거리',
     tone: 'planned',
-    photo: require('./assets/execution/live-gamcheon-2.jpg'),
-    category: 'CAFE',
+    photo: previewPhoto(require('./assets/execution/live-gamcheon-2.jpg')),
+    category: '카페',
     timeLabel: '15:00–16:30',
     categoryLabel: '카페 · 실내',
     distanceRange: '600m',
@@ -1989,8 +1996,8 @@ const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
     slotKey: 'i06-5',
     placeName: 'F1963 복합문화공간',
     tone: 'planned',
-    photo: require('./assets/execution/replan-night-1.jpg'),
-    category: 'CULTURE',
+    photo: previewPhoto(require('./assets/execution/replan-night-1.jpg')),
+    category: '문화',
     timeLabel: '17:00–18:30',
     categoryLabel: '전시 · 실내',
     distanceRange: '1.1km',
@@ -2004,7 +2011,7 @@ const REPLAN_NOALT_PREVIEW_SLOTS: ReplanSlotVM[] = [
   {
     ...REPLAN_DRAFT_PREVIEW_SLOTS[4],
     placeName: '해운대 해변',
-    category: 'NATURE',
+    category: '자연',
     categoryLabel: '바다 · 해변',
     distanceRange: '8km',
   },
@@ -2054,6 +2061,7 @@ const SAVED_STAY_PREVIEW_CARDS: SavedStayCardVM[] = [
 // DRAFT_PREVIEW_PHOTOS 재사용 — jest 는 .uri 가 undefined 라 [] 가 되어 갤러리·"이곳의 사진"이 안
 // 그려진다(실기만 사진, 6-b). 좌표는 부산시립미술관 근사.
 const LIVE_PLACE_PREVIEW_VIEW: PlaceDetailView = {
+  poiId: 'preview-busan-museum',
   name: '부산시립미술관',
   category: '미술관 · 전시',
   tags: ['미술', '실내', '취향매칭', '비와도좋음'],
@@ -4920,7 +4928,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     // TRIP-710 — d06 장소 상세 default(Figma 1907:1083). props-only 순수 뷰라 직접 렌더한다.
     // category 는 PoiCategory enum('문화') — Figma 라벨 '미술관'·'전시'는 계약 밖(tsc 거부). 부제
     // 앞 흰 핀·미니맵 단일 핀 지도(viewOnly)·데이터 없는 4구획 부재가 jest 사각이라 이 키가 6-b
-    // 육안 대조 자리(미니맵 타일은 네이티브 재빌드 후에만 뜸). 히어로는 로컬 에셋 재사용(회색↔사진).
+    // 육안 대조 자리(미니맵 타일은 네이티브 재빌드 후에만 뜸). 히어로는 로컬 에셋 재사용(생성 이미지↔사진).
     key: 'place-detail-default',
     band: 'd',
     label: 'd06 · 장소 상세 default',
@@ -5529,7 +5537,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       <MustVisitPickerScreen
         view={{
           kind: 'listed',
-          // 사진 있는 픽스처로 대조한다 — jest 스텁은 `.uri` 가 undefined 라 회색이지만,
+          // 사진 있는 픽스처로 대조한다 — jest 스텁은 `.uri` 가 undefined 라 생성 이미지지만,
           // 실기에선 로컬 에셋이 뜬다(`DRAFT_PREVIEW_PHOTOS` 관례, INV-1 안전).
           items: MUST_VISIT_PREVIEW_ITEMS.map((item, index) => ({
             ...item,
@@ -6676,7 +6684,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   // h08 다른 후보 시트(TRIP-793) — 옛 h12 인라인 패널·h18 옵션 교체를 하나의 바텀시트로 합쳤다.
-  // 픽스처는 Figma 4298:1998·4452:1478 값이다(사진: 현재 행·p2 는 로컬 에셋, p3 는 null 로 회색 자리 엣지).
+  // 픽스처는 Figma 4298:1998·4452:1478 값이다(사진: 현재 행·p2 는 로컬 에셋, p3 는 null 로 생성 이미지 엣지).
   // 실화면 딥링크로는 볼 수 없다(생성 POST 가 만드는 tripId + slot-candidates 응답이 백엔드 없이는
   // 안 생긴다). 바텀시트 실 열림·scrim 딤·2스냅은 통과형 목 사각이라 6-b 실기가 유일한 개폐 그물.
   {

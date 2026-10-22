@@ -1,6 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Image } from '@/shared/ui/Image';
+import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { heartSaveLabel } from '@/shared/ui/HeartButton';
@@ -128,20 +128,21 @@ export function PlaceDetailScreen({
   return (
     <View testID="explore-place-detail" className="flex-1 bg-canvas">
       <ScrollView className="flex-1" contentContainerClassName="pb-[48px]">
-        {/* 갤러리 hero(풀블리드) — imageUrl NULL 이면 기본 이미지를 지어내지 않고 회색 자리
-            (BR-U1-06). 원형 버튼 3개는 ScrollView 밖에 고정해 띄운다(full-bleed 이미지 immersive). */}
+        {/* 갤러리 hero(풀블리드) — imageUrl NULL 이면 카테고리 생성 이미지(PlacePhoto).
+            원형 버튼 3개는 ScrollView 밖에 고정해 띄운다(full-bleed 이미지 immersive). */}
         <View
           testID="explore-place-hero"
           className="h-[430px] w-full overflow-hidden bg-surface-strong"
         >
-          {place.imageUrl ? (
-            <Image
-              source={{ uri: place.imageUrl }}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              className="h-full w-full"
-            />
-          ) : null}
+          <PlacePhoto
+            testID="explore-place-hero-photo"
+            imageUrl={place.imageUrl}
+            category={place.category}
+            poiId={place.poiId}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            className="h-full w-full"
+          />
           <LinearGradient
             colors={SCRIM_COLORS}
             locations={SCRIM_LOCATIONS}

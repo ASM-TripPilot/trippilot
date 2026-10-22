@@ -19,6 +19,7 @@ import type {
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 
 import { MustVisitTimePage } from './MustVisitTimePage';
 
@@ -851,5 +852,19 @@ describe('TRIP-1219 d · 저장 안 한 채 [뒤로] — 안내 없이 버려지
     ).toBeNull();
     fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-back'));
     expect(mockBack).not.toHaveBeenCalled();
+  });
+});
+
+describe('장소 요약 사진 칸 — 담은 장소의 category·poiId 가 배선된다 (사이클 20261022-place-category-covers)', () => {
+  it('사진 없는 담은 장소(명소, poi-a → 변형 3)면 그 장소의 생성 이미지를 그린다', async () => {
+    renderPage();
+    await ready();
+
+    // 담은 장소 조회는 여행 조회와 따로 도착한다 — 도착 전엔 category 가 없어 폴백이다.
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('itinerary-mustvisit-time-photo').props.source
+      ).toEqual([coverFor('명소', POI_ID)])
+    );
   });
 });

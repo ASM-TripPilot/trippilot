@@ -19,6 +19,7 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Place } from '@/shared/api/index.schemas';
 import { RecordAddVisitPage } from '@/pages/record/record-add-visit';
 import { TripRecordsPage } from '@/pages/record/trip-records';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 import { recordsHandler } from '@/test-support/tripRecordsFixtures';
 
 /**
@@ -439,13 +440,29 @@ describe('🔴 AC-5 · 후보는 GET /places 결과만, 여행 목적지로 좁�
     await renderPicker();
 
     const ids = screen
-      .getAllByTestId(/^record-add-visit-row-/)
+      // `-photo-{id}` 사진 칸 testID 도 같은 접두라 행 루트만 남긴다(사이클 20261022-place-category-covers —
+      // 사진 칸이 사진 유무와 상관없이 항상 생겨 접두 정규식이 행 수를 두 배로 센다).
+      .getAllByTestId(/^record-add-visit-row-(?!photo-)/)
       .map((node) => node.props.testID as string)
       .sort();
     expect(ids).toEqual([rowId('p1'), rowId('p2'), rowId('p3')]);
     expect(
       within(screen.getByTestId(rowId('p1'))).getByText('감천문화마을')
     ).toBeTruthy();
+  });
+});
+
+describe('후보 행 사진 칸 — 사진 없는 장소는 카테고리 생성 이미지 (사이클 20261022-place-category-covers)', () => {
+  it('P5-e: 행마다 그 장소의 category·poiId 로 고른 그림이 같은 칸(record-add-visit-row-photo-{poiId})에 선다', async () => {
+    await renderPicker();
+
+    // p1(명소·변형 2) · p2(야경·변형 3) — 이 페이지가 category 를 행 카드에 안 넘기면 둘 다 폴백이다.
+    expect(
+      screen.getByTestId('record-add-visit-row-photo-p1').props.source
+    ).toEqual([coverFor('명소', 'p1')]);
+    expect(
+      screen.getByTestId('record-add-visit-row-photo-p2').props.source
+    ).toEqual([coverFor('야경', 'p2')]);
   });
 });
 

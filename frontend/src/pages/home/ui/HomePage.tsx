@@ -209,6 +209,7 @@ export function HomePage() {
       poiId: place.poiId,
       title: place.nameKo,
       tag: `#${place.tags[0] || place.category}`,
+      category: place.category,
       imageUrl: place.imageUrl,
     })),
     onRetry: () => void places.refetch(),
@@ -226,6 +227,7 @@ export function HomePage() {
             title: place.nameKo,
             region: place.region ?? '',
             badge: place.category,
+            category: place.category,
             imageUrl: place.imageUrl,
           }))
         : [],

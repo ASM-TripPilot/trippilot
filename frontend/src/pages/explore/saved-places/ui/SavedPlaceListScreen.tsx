@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { FlatList, Image, Pressable, Text, View } from 'react-native';
+import { FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { SavedPlace } from '@/shared/api/index.schemas';
@@ -8,6 +8,7 @@ import { heartSaveLabel } from '@/shared/ui/HeartButton';
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 import { EmptyCollage } from './EmptyCollage';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import type { PlaceListState } from '@/features/explore/index.view';
@@ -160,14 +161,14 @@ function SavedPlaceRow({
       <View
         className={`h-20 w-[104px] overflow-hidden rounded-thumb bg-surface-strong${dim}`}
       >
-        {place.imageUrl ? (
-          <Image
-            testID={`explore-saved-photo-${saved.savedPlaceId}`}
-            source={{ uri: place.imageUrl }}
-            resizeMode="cover"
-            className="h-full w-full"
-          />
-        ) : null}
+        <PlacePhoto
+          testID={`explore-saved-photo-${saved.savedPlaceId}`}
+          imageUrl={place.imageUrl}
+          category={place.category}
+          poiId={place.poiId}
+          contentFit="cover"
+          className="h-full w-full"
+        />
         {badge ? (
           <View
             testID={`explore-saved-badge-${saved.savedPlaceId}`}

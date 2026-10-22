@@ -12,6 +12,7 @@ import {
   ItineraryStatus,
 } from '@/shared/api/index.schemas';
 import { seoulDate } from '@/shared/lib/seoulDate';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 import {
   guardPress,
   openPressGuardWindow,
@@ -809,6 +810,20 @@ describe('요즘 사람들이 담는 곳 — 실장소(TRIP-1209)', () => {
     expect(screen.queryByText('당일치기')).toBeNull();
     expect(screen.queryByText('1박 2일')).toBeNull();
     expect(screen.queryByText('반나절')).toBeNull();
+  });
+
+  it('레인 카드의 사진 칸은 그 장소의 category·poiId 로 고른 생성 이미지다 (사진 없는 서버 장소 — 사이클 20261022-place-category-covers)', () => {
+    render(<HomePage />);
+
+    const spot = (index: number) =>
+      screen.getByTestId(`home-spot-photo-${index}`).props.source;
+    const collection = (index: number) =>
+      screen.getByTestId(`home-collection-photo-${index}`).props.source;
+    // 인기순 rk0..rk3 = 스팟 4장, rk4..rk6 = 컬렉션 3장. 홀짝에 따라 카페/명소가 번갈아 온다.
+    expect(spot(0)).toEqual([coverFor('카페', 'rk0')]);
+    expect(spot(3)).toEqual([coverFor('명소', 'rk3')]);
+    expect(collection(1)).toEqual([coverFor('명소', 'rk5')]);
+    expect(collection(2)).toEqual([coverFor('카페', 'rk6')]);
   });
 
   it('"지금 뜨는 장소" 4장과 겹치지 않는다', () => {

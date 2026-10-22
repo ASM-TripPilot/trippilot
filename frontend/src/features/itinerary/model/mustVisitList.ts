@@ -24,6 +24,8 @@ export interface MustVisitListItem {
   /** 조인 실패면 `null` — 목록에서 빼지 않는다. */
   name: string | null;
   imageUrl: string | null;
+  /** 사진이 없을 때 고르는 생성 이미지의 카테고리 — 조인 실패면 `undefined`(중립 폴백). */
+  category?: string;
   type: MustVisitType;
   fixedDate?: string;
   fixedStart?: string;
@@ -56,6 +58,7 @@ export function joinMustVisits(input: {
       sourcePoiId: entry.sourcePoiId,
       name: place?.nameKo ?? null,
       imageUrl: place?.imageUrl ?? null,
+      category: place?.category,
       type: entry.type,
       fixedDate: entry.fixedDate ?? undefined,
       fixedStart: entry.fixedStart ?? undefined,

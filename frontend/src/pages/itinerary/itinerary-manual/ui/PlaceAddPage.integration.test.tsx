@@ -25,6 +25,7 @@ import type {
   ItineraryDaysItemSlotsItem,
   Place,
 } from '@/shared/api/index.schemas';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 
 import { PlaceAddPage } from './PlaceAddPage';
@@ -320,6 +321,20 @@ describe('🔴 P1 · AC-5 (★) — 첫 조회 URL 에 검색어 파라미터가
     //   search·q·query·keyword·nameKo 같은 검색어 키가 애초에 안 실린다(클라가 이름으로 거른다).
     const keys = [...new URL(hits[0].url).searchParams.keys()];
     expect(keys.every((k) => k === 'region' || k === 'category')).toBe(true);
+  });
+});
+
+describe('PH · 후보 행의 사진 칸 — 사진 없는 장소는 카테고리 생성 이미지 (사이클 20261022-place-category-covers)', () => {
+  it('행마다 그 장소의 category·poiId 로 고른 그림이 같은 칸(itinerary-place-card-photo-{poiId})에 선다', async () => {
+    await renderPage();
+
+    // p1(명소·변형 2) · p2(야경·변형 3) — 행이 category 를 PlaceRowCard 에 안 넘기면 둘 다 폴백이다.
+    expect(
+      screen.getByTestId('itinerary-place-card-photo-p1').props.source
+    ).toEqual([coverFor('명소', 'p1')]);
+    expect(
+      screen.getByTestId('itinerary-place-card-photo-p2').props.source
+    ).toEqual([coverFor('야경', 'p2')]);
   });
 });
 

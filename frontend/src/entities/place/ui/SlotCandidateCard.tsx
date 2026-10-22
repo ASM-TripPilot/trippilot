@@ -1,13 +1,13 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Text, View } from 'react-native';
-import { Image } from '@/shared/ui/Image';
+import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 
 import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-806 · AC-M2·M5·M6 — 슬롯 후보 카드(itinerary h08·h10 · planb i14 공용).
  *
- * 두 소비처는 접두만 다른 게 아니라 **구조가 갈린다**(02a ★6): itinerary 는 배지·회색 이미지·이름
+ * 두 소비처는 접두만 다른 게 아니라 **구조가 갈린다**(02a ★6): itinerary 는 배지·사진 칸(생성 이미지 포함)·이름
  * testID·trailing·selected 테두리에 거리 라벨 "이동", planb 는 `-slack-` leaf 가 있고 이미지·이름
  * testID·배지·trailing 이 없으며 거리 라벨 "지금 위치서". 그래서 옵셔널 슬롯으로 둘 다 재현한다.
  *
@@ -26,8 +26,8 @@ import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
  *  - `distanceTone?`(기본 'ink') — 'muted' 면 거리 leaf 를 태그줄과 같은 muted 로(h08 시트 한 줄 정합).
  *    planb·CC 는 미주입=ink 라 굵은 잉크 거리 그대로.
  *
- * TRIP-1024 additive: `imageUrl?` 를 주면 사진 자리가 그 URL 의 이미지가 된다(없거나 '' 면 회색 자리 그대로).
- * 어느 쪽이든 **같은 testID** 를 유지한다(CC1 은 회색 자리의 testID 를 단언). `imageSize?`(기본 56)는
+ * TRIP-1024 additive: `imageUrl?` 를 주면 사진 자리가 그 URL 의 이미지가 된다(없거나 '' 면 `category`·`coverPoiId` 로 고른 생성 이미지).
+ * 어느 쪽이든 **같은 testID** 를 유지한다(CC1 은 사진 칸의 testID 를 단언). `imageSize?`(기본 56)는
  * h10 이 78 로 키운다. 이름·사진은 소비처가 명시로 줄 때만 켠다 — 후보 객체의 `nameKo`·`imageUrl` 을
  * 기본으로 읽으면 실데이터를 받는 planb(i14)가 조용히 켜진다(AC-8).
  */
@@ -49,10 +49,17 @@ export interface SlotCandidateCardProps {
   namePlaceholder?: string;
   /** 이름 leaf 에 testID 를 붙일지(itin true / planb false, ★6-a). */
   showNameTestId?: boolean;
-  /** 회색 이미지 자리를 그릴지(itin true / planb false, ★6-a). */
+  /** 사진 칸(서버 사진 또는 생성 이미지)을 그릴지(itin true / planb false, ★6-a). */
   showImage?: boolean;
-  /** 사진 URL — showImage 일 때만 쓴다. null·undefined·'' 면 회색 자리. */
+  /** 사진 URL — showImage 일 때만 쓴다. null·undefined·'' 면 생성 이미지. */
   imageUrl?: string | null;
+  /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본) — 없으면 중립 폴백. */
+  category?: string | null;
+  /**
+   * 생성 이미지 변형을 해시할 진짜 poiId. `candidate.poiId` 는 시트 현재 행에서 testID 꼬리용 가짜 값('current')이라
+   * 해시에 쓰지 않는다 — 없으면 변형 1.
+   */
+  coverPoiId?: string | null;
   /** 사진 한 변(px) — h08 56(기본) · h10 78. */
   imageSize?: 56 | 78;
   /** 알파벳 배지(A/B/C…, itin) — planb 미지정. */
@@ -95,6 +102,8 @@ export function SlotCandidateCard({
   showNameTestId = false,
   showImage = false,
   imageUrl,
+  category,
+  coverPoiId,
   imageSize = 56,
   badge,
   selected = false,
@@ -142,21 +151,16 @@ export function SlotCandidateCard({
       ) : null}
 
       {showImage ? (
-        imageUrl ? (
-          <Image
-            testID={leafId('image')}
-            source={{ uri: imageUrl }}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            recyclingKey={poiId}
-            className={`${IMAGE_SIZE_CLASS[imageSize]} rounded-thumb bg-surface-soft`}
-          />
-        ) : (
-          <View
-            testID={leafId('image')}
-            className={`${IMAGE_SIZE_CLASS[imageSize]} rounded-thumb bg-surface-soft`}
-          />
-        )
+        <PlacePhoto
+          testID={leafId('image')}
+          imageUrl={imageUrl}
+          category={category}
+          poiId={coverPoiId}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          recyclingKey={poiId}
+          className={`${IMAGE_SIZE_CLASS[imageSize]} rounded-thumb bg-surface-soft`}
+        />
       ) : null}
 
       <View className="min-w-0 flex-1 gap-[3px]">

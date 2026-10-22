@@ -15,6 +15,7 @@ import type {
 } from '@/shared/api/index.schemas';
 import { RegionLevel } from '@/shared/api/index.schemas';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 import { formatPrice } from '@/entities/stay';
 import { stayKey } from '@/features/save-stay';
 import { regionPickerHref } from '@/features/explore';
@@ -331,6 +332,34 @@ describe('전국 d01 — 구획·검색·레인', () => {
 
     expect(mockPush).toHaveBeenCalledTimes(1);
     expect(String(mockPush.mock.calls[0][0])).toBe('/explore/places/poi-2');
+  });
+
+  it('사진 없는 장소 카드는 서버 장소의 category·poiId 로 고른 생성 이미지를 그린다 (페이지가 카드에 category 를 싣는다)', () => {
+    multiResult = multiOk([
+      {
+        poiId: 'p2',
+        nameKo: '광안리 야경',
+        region: '수영구',
+        category: '야경',
+        imageUrl: null,
+      },
+      {
+        poiId: 'p4',
+        nameKo: '자갈치 시장',
+        region: '중구',
+        category: '맛집',
+        imageUrl: 'https://img.example/p4.jpg',
+      },
+    ]);
+    render(<ExploreLandingPage />);
+
+    // p2 는 변형 3 → night_view-3. 사진이 있는 p4 는 그 사진 그대로.
+    expect(
+      screen.getByTestId('explore-place-card-image-p2').props.source
+    ).toEqual([coverFor('야경', 'p2')]);
+    expect(
+      screen.getByTestId('explore-place-card-image-p4').props.source
+    ).toEqual([{ uri: 'https://img.example/p4.jpg' }]);
   });
 
   it('장소 조회가 전부 실패하면 장소 레인 자리에 재시도를 그리고, 누르면 그 조회를 다시 부른다', () => {
