@@ -16,7 +16,7 @@ CI 밖 수동 실행 전용(실 API 를 부른다). few-shot·판단 순서(CoT)
   계획 단계로 못 갔을 수. 평가셋 문장을 프롬프트 예시로 옮기면 이 숫자가 무의미해진다(leak).
 - `directive`  REPLAN_DIRECTIVE_TRANSLATION(sol) — 라벨은 `measure_directive_match.POSITIVES/NEGATIVES` + 부정·혼합
   6건. 완전 일치(겹쳐 고른 지시도 오답)와 허용(정답 포함·금지 지시 없음)을 같이 낸다. 시한 3.75s(DEV 실측 시한).
-- `answer`  DIALOGUE_ANSWER — Facts 11종 + 계획 병합 3종 + 장소 탐색 5종(서울·일정 없음 4 · 일정 근처 1) + 장소 소개 3종 × 반복. 게이트 통과율·시각-장소 짝 위반(오케스트레이터 INV-2 검사와
+- `answer`  DIALOGUE_ANSWER — Facts 11종 + 계획 병합 3종 + 장소 탐색 5종(서울·일정 없음 4 · 일정 근처 1) + 장소 소개 3종 + 행사 3종 × 반복. 게이트 통과율·시각-장소 짝 위반(오케스트레이터 INV-2 검사와
   같은 함수)·지연. 문장은 끝에 전부 찍는다 — 지어낸 사실은 사람이 읽어서 본다.
 - `scoring` PREFERENCE_SCORING — `data/collected_pois.json` 해운대구 실데이터 53곳 × 페르소나 3종. 세 번째 인자는
   반복이 아니라 **청크 구성 수**다: 구성마다 poiId(uuid5)의 소금만 바꿔 워커의 `plan_chunks`(poi_id 정렬 균등 분할)가
@@ -200,6 +200,11 @@ EXPLORE_CASES = [
     ("EXPLORE_PLACES", "이 근처에 맛집 있을까"),
     ("EXPLORE_PLACES", "전주에서 사진 찍기 좋은 데 알려줘"),
     ("SUGGEST_ALTERNATIVE", "박물관 말고 바꿀 만한 다른 곳 있어?"),
+    # 행사(분류 0.2.6) — 행사 저장소가 탐색에 붙은 뒤로(#1486) 열리는지·언제인지는 탐색이다. 마지막 건은 행사일의 날씨라 날씨
+    ("EXPLORE_PLACES", "이번 주말 서울 축제 있어?"),
+    ("EXPLORE_PLACES", "불꽃축제 언제 해?"),
+    ("EXPLORE_PLACES", "다음 주에 부산에서 하는 전시 있어?"),
+    ("GET_WEATHER", "불꽃축제 하는 날 비 와?"),
 ]
 
 
@@ -230,11 +235,11 @@ SINGLE_CASES = [
     ("SUGGEST_ALTERNATIVE", "박물관 말고 다른 데 없어?"),
     ("REPLAN", "비 와서 오늘 남은 일정 다시 짜줘"),
 ]
-# 행사·축제 — 다룰 도구가 아직 없어 정답은 null(계획 단계가 gap EVENTS 로 정직하게 거절, BR-AO-29). 탐색으로 보내면 행사가 아니라
-# 장소 카드가 나간다(후보 풀에 행사가 없다). 행사 포트가 붙는 판에서 라벨이 바뀐다. 계획 측정셋과 다른 문장이다.
+# 행사·축제 — 0.2.5 까지는 다룰 도구가 없어 정답이 null 이었다(계획 단계가 gap EVENTS 로 거절, BR-AO-29). #1486 이 탐색에 행사
+# 저장소를 붙여 0.2.6 부터 탐색이 정답이다. 계획 측정셋과 다른 문장이다.
 EVENT_CASES = [
-    ("OUT_OF_SCOPE", "다음 달 부산 불꽃축제 열려?"),
-    ("OUT_OF_SCOPE", "부산에 이번 달 공연 있어?"),
+    ("EXPLORE_PLACES", "다음 달 부산 불꽃축제 열려?"),
+    ("EXPLORE_PLACES", "부산에 이번 달 공연 있어?"),
 ]
 
 
@@ -398,6 +403,20 @@ ANSWER_CASES += [
             "소개해야 한다. 전망대에서 서울 시내를 한눈에 내려다볼 수 있다.")), _SEOUL_TRIP),
 ]
 
+
+# 장소 탐색의 행사 주제(행사 저장소) — `_assemble_explore` 모양: 찾으면 카드 없는 TEXT(detail 의 period·events), 없으면 장소 + notes
+_FESTIVALS = [{"name": "서울빛초롱축제", "type": "축제", "period": "10월 20일~11월 8일", "place": "서울특별시 종로구 청계천로"},
+              {"name": "서울세계불꽃축제", "type": "축제", "period": "10월 24일", "place": "서울 영등포구 여의도한강공원"}]
+ANSWER_CASES += [
+    ("EXPLORE_PLACES", "이번 주말 서울 축제 있어?", _facts(
+        "EXPLORE_PLACES", anchor="서울", anchor_kind="region", period="10월 24일~10월 25일", events=_FESTIVALS), _SEOUL_TRIP),
+    ("EXPLORE_PLACES", "불꽃축제 언제 해?", _facts(
+        "EXPLORE_PLACES", anchor="서울", anchor_kind="region", period="10월 20일~11월 18일", events=_FESTIVALS[::-1]),
+     _SEOUL_TRIP),
+    ("EXPLORE_PLACES", "다음 주말 서울 공연 있어?", _facts(
+        "EXPLORE_PLACES", notes=["그 기간·지역에서 물은 행사를 찾지 못함"], anchor="서울", anchor_kind="region",
+        places=[_place("국립중앙박물관", "문화", reason="문화"), _place("서울숲", "자연", reason="요즘 인기")]), _SEOUL_TRIP),
+]
 
 def run_answer(prompts: Path, repeat: int) -> None:
     worker = DialogueAnswerWorker(_gateway(prompts, LlmFeature.DIALOGUE_ANSWER, DialogueAnswerGate()))

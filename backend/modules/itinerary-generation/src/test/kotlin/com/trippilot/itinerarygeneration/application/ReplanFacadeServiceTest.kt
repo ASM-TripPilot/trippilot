@@ -3,6 +3,7 @@ package com.trippilot.itinerarygeneration.application
 import com.trippilot.changelog.api.ChangeSourceType
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.ErrorCode
 import com.trippilot.itinerarygeneration.domain.RejectedPoi
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import io.kotest.matchers.shouldNotBe
@@ -63,6 +64,10 @@ private class ReplanItineraries : ItineraryRepository {
         return true
     }
     override fun findStalePartial(updatedBefore: Instant): List<Itinerary> = emptyList()
+
+    /** 잠금 순서를 보려고 남긴다 — 실 잠금(여행 단위 권고 잠금)은 `ReplanRevertIT` 가 본다. */
+    val events = mutableListOf<String>()
+    override fun lockForTrip(tripId: UUID): Itinerary? = findByTrip(tripId).firstOrNull().also { events += "lock" }
 }
 
 /**
@@ -524,6 +529,202 @@ class ReplanFacadeServiceTest : StringSpec({
         // 전 슬롯이 동결 참조를 가진다 — 남은 슬롯은 승계, 재계획이 새로 넣은 슬롯은 지금 동결(INV-U1-03).
         after.days.flatMap { it.slots }.forEach { it.poiSnapshotId shouldNotBe null }
         f.changeLogs.appended.single().sourceType shouldBe ChangeSourceType.PLAN_B // BR-U4-30 그대로
+    }
+
+    // ───── 적용 뒤 되돌리기(TRIP-1412) ───────────────────────────────────
+    // 원탭 [다시 짜기]는 초안을 보자마자 반영한다. 여행 중 일정은 대개 확정이고 범용 복원은 확정을 409 로 막아,
+    // 이 경로가 없으면 사용자는 방금 적용된 재계획을 되돌릴 수단이 없다.
+
+    /** 확정 일정 — 슬롯마다 서로 다른 동결 참조. 되돌린 뒤 **같은** 참조인지 보려면 값이 구분돼야 한다. */
+    fun Fx.confirmed(): Map<UUID, UUID> {
+        val frozenByPoi = repo.byTrip.getValue(trip).days.flatMap { it.slots }.associate { it.sourcePoiId to UUID.randomUUID() }
+        repo.byTrip[trip] = repo.byTrip.getValue(trip).confirm(frozenByPoi, now)
+        return frozenByPoi
+    }
+
+    fun Itinerary.dayView(date: LocalDate) = days.single { it.date == date }.slots.map {
+        listOf(
+            it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay, it.poiSnapshotId,
+            it.hasViolation, it.violationReason, it.distanceRange, it.placementReason,
+        )
+    }
+
+    "반영은 그 날의 반영 직전 모습을 돌려준다 — 동결 참조·위반 표시까지" {
+        val f = fixture(Agent(proposal(replacement)))
+        val frozen = f.confirmed()
+        val proposal = f.svc.propose(command())!!
+
+        val restore = f.svc.apply(acc, trip, proposal, REASON)
+
+        restore.itineraryId shouldBe f.repo.byTrip.getValue(trip).itineraryId
+        restore.date shouldBe today
+        restore.slots.map { it.poiId } shouldContainExactly listOf(morning, fixedNoon, evening)
+        restore.slots.map { it.poiSnapshotId } shouldContainExactly listOf(frozen[morning], frozen[fixedNoon], frozen[evening])
+        restore.slots.map { it.startAt } shouldContainExactly listOf(LocalTime.parse("09:00"), LocalTime.parse("12:00"), LocalTime.parse("18:00"))
+        restore.slots[1].isFixed shouldBe true
+        // 세션 jsonb 를 거쳐도 같은 값이어야 되돌릴 때 같은 모습이 된다.
+        ReplanProposal.fromMap(restore.toMap()) shouldBe restore
+    }
+
+    // AC 2 — 여행 중 확정 일정에 원탭 재계획을 적용한 뒤 되돌리면 그 날이 적용 전과 같고 상태는 CONFIRMED 그대로다.
+    "확정 일정에서 되돌리면 그 날이 반영 전과 같다 — 상태·동결 참조 그대로, 다른 날은 손대지 않는다" {
+        val f = fixture(Agent(proposal(replacement)))
+        f.confirmed()
+        val before = f.repo.byTrip.getValue(trip)
+        val proposal = f.svc.propose(command())!!
+        val restore = f.svc.apply(acc, trip, proposal, REASON)
+        val otherDayAfterApply = f.repo.byTrip.getValue(trip).dayView(today.plusDays(1))
+
+        f.svc.revert(acc, trip, proposal, restore, "재계획 되돌림 · $REASON") { emptySet() }
+
+        val after = f.repo.byTrip.getValue(trip)
+        after.status shouldBe ItineraryStatus.CONFIRMED
+        after.dayView(today) shouldBe before.dayView(today)
+        // 동결을 잇느라 날 객체는 새로 만들어진다(ConfirmedSnapshots.carry) — 값으로 본다.
+        after.dayView(today.plusDays(1)) shouldBe otherDayAfterApply
+    }
+
+    "되돌리기도 이력을 남긴다 — 사람이 한 일이라 MANUAL, 전후는 반영본과 반영 전" {
+        val f = fixture(Agent(proposal(replacement)))
+        f.confirmed()
+        val proposal = f.svc.propose(command())!!
+        val restore = f.svc.apply(acc, trip, proposal, REASON)
+
+        f.svc.revert(acc, trip, proposal, restore, "재계획 되돌림 · $REASON") { emptySet() }
+
+        f.changeLogs.appended.size shouldBe 2
+        val entry = f.changeLogs.appended.last()
+        entry.sourceType shouldBe ChangeSourceType.MANUAL
+        entry.reason shouldBe "재계획 되돌림 · $REASON"
+        entry.before.days.first().slots.map { it.poiId } shouldContainExactly listOf(replacement)
+        entry.after.days.first().slots.map { it.poiId } shouldContainExactly listOf(morning, fixedNoon, evening)
+        f.revisions.list(acc, trip, limit = 10).first().summary shouldBe "여행 중 재계획 되돌림"
+    }
+
+    // 반영 전 슬롯의 표시값 전부 — 위반 배지·사유·거리 문구·추천 이유. 하나라도 빠지면 되돌린 순간 그 값이 사라진다.
+    "되돌리면 반영 전 슬롯의 위반 표시·사유·거리·추천 이유까지 돌아온다" {
+        val f = fixture(Agent(proposal(replacement)))
+        val base = f.repo.byTrip.getValue(trip)
+        val flagged = VisitSlot.of(
+            evening, null, 2, LocalTime.parse("18:00"), LocalTime.parse("19:00"),
+            hasViolation = true, violationReason = "영업시간 밖이에요", distanceRange = "약 2.3km · 도보 추정", placementReason = "노을이 좋은 곳",
+        )
+        f.repo.byTrip[trip] = Itinerary.reconstitute(
+            base.itineraryId, base.tripId, base.status, base.solveMode, base.generationMode, base.isFallback, base.generationState,
+            listOf(ItineraryDay.of(today, 0, base.days[0].slots.take(2) + flagged), base.days[1]),
+            base.createdAt, now, base.candidatesSummary, base.unplacedMustVisits,
+        )
+        f.confirmed()
+        val before = f.repo.byTrip.getValue(trip)
+        val proposal = f.svc.propose(command(fullDay = true))!!
+        val restore = f.svc.apply(acc, trip, proposal, REASON)
+
+        f.svc.revert(acc, trip, proposal, restore, REASON) { emptySet() }
+
+        val back = f.repo.byTrip.getValue(trip).days[0].slots.single { it.sourcePoiId == evening }
+        back.hasViolation shouldBe true
+        back.violationReason shouldBe "영업시간 밖이에요"
+        back.distanceRange shouldBe "약 2.3km · 도보 추정"
+        back.placementReason shouldBe "노을이 좋은 곳"
+        f.repo.byTrip.getValue(trip).dayView(today) shouldBe before.dayView(today)
+    }
+
+    // INV-U4-04 — 재계획이 넣었고 반영 전엔 없던 곳에 다녀왔으면(도착만 해도), 되돌리는 순간 그 실적이 계획 없이 남는다.
+    "되돌리면 빠지는 곳에 다녀온 기록이 있으면 409 — 실적을 계획에서 떼지 않는다" {
+        val f = fixture(Agent(proposal(replacement)))
+        val proposal = f.svc.propose(command())!!
+        val restore = f.svc.apply(acc, trip, proposal, REASON)
+        val applied = f.repo.byTrip.getValue(trip)
+
+        shouldThrow<ConflictDetected> {
+            f.svc.revert(acc, trip, proposal, restore, REASON) { setOf("$today#$replacement") }
+        }.message shouldBe "이미 다녀온 곳이 있어 되돌릴 수 없어요."
+
+        f.repo.byTrip.getValue(trip).dayView(today) shouldBe applied.dayView(today)
+    }
+
+    // 막는 것은 되돌리면 **빠지는** 곳뿐이다. 반영 전에도 계획에 있던 곳·계획에 없는 곳·다른 날 실적은 되돌려도 계획에 남거나
+    // 애초에 이 재계획과 무관하다 — 막으면 그 여행의 되돌리기가 영영 막힌다.
+    "반영 전부터 계획에 없던 완료·되돌리면 돌아오는 곳·다른 날 실적은 막지 않는다" {
+        val f = fixture(Agent(proposal(replacement)))
+        val proposal = f.svc.propose(command())!!
+        val restore = f.svc.apply(acc, trip, proposal, REASON)
+
+        f.svc.revert(acc, trip, proposal, restore, REASON) {
+            setOf("$today#${UUID.randomUUID()}", "$today#$morning", "${today.plusDays(1)}#$replacement")
+        }
+
+        f.repo.byTrip.getValue(trip).days[0].slots.map { it.sourcePoiId } shouldContainExactly listOf(morning, fixedNoon, evening)
+    }
+
+    "반영도 같은 일정 쓰기 잠금을 잡는다 — 되돌리기와 직렬화된다" {
+        val f = fixture(Agent(proposal(replacement)))
+        val proposal = f.svc.propose(command())!!
+        f.repo.events.clear()
+
+        f.svc.apply(acc, trip, proposal, REASON)
+
+        f.repo.events shouldContainExactly listOf("lock")
+    }
+
+    "실적은 일정 쓰기 잠금을 잡은 뒤에 읽는다 — 잠금 전 체크인이 판정에 다 보이게" {
+        val f = fixture(Agent(proposal(replacement)))
+        val proposal = f.svc.propose(command())!!
+        val restore = f.svc.apply(acc, trip, proposal, REASON)
+        f.repo.events.clear()
+
+        f.svc.revert(acc, trip, proposal, restore, REASON) { emptySet<String>().also { f.repo.events += "visits" } }
+
+        f.repo.events shouldContainExactly listOf("lock", "visits")
+    }
+
+    "그 사이 그 날이 바뀌었으면 되돌리지 않는다 — STALE, 그 뒤 변경을 지우지 않는다" {
+        val f = fixture(Agent(proposal(replacement)))
+        val proposal = f.svc.propose(command())!!
+        val restore = f.svc.apply(acc, trip, proposal, REASON)
+        // 반영 뒤 사용자가 그 날 시각을 옮겼다.
+        val applied = f.repo.byTrip.getValue(trip)
+        val edited = Itinerary.reconstitute(
+            applied.itineraryId, applied.tripId, applied.status, applied.solveMode, applied.generationMode, applied.isFallback,
+            applied.generationState,
+            listOf(ItineraryDay.of(today, 0, listOf(slot(replacement, "16:30", "17:30"))), applied.days[1]),
+            applied.createdAt, now, applied.candidatesSummary, applied.unplacedMustVisits,
+        )
+        f.repo.byTrip[trip] = edited
+        val logsBefore = f.changeLogs.appended.size
+
+        shouldThrow<ConflictDetected> { f.svc.revert(acc, trip, proposal, restore, REASON) { emptySet() } }.errorCode shouldBe ErrorCode.STALE
+
+        f.repo.byTrip.getValue(trip).dayView(today) shouldBe edited.dayView(today)
+        f.changeLogs.appended.size shouldBe logsBefore
+    }
+
+    "그 사이 일정이 교체됐으면 되돌리지 않는다 — 그 날 모습이 같아도 다른 일정에 옛 날을 덮지 않는다" {
+        val f = fixture(Agent(proposal(replacement)))
+        val proposal = f.svc.propose(command())!!
+        val restore = f.svc.apply(acc, trip, proposal, REASON)
+        // 재생성으로 새 itineraryId — 그 날 슬롯은 반영본과 **같게** 둔다. 날 비교만으로는 못 거르는 경우다.
+        val applied = f.repo.byTrip.getValue(trip)
+        f.repo.byTrip[trip] = Itinerary.reconstitute(
+            UUID.randomUUID(), applied.tripId, applied.status, applied.solveMode, applied.generationMode, applied.isFallback,
+            applied.generationState, applied.days, applied.createdAt, now, applied.candidatesSummary, applied.unplacedMustVisits,
+        )
+
+        shouldThrow<ConflictDetected> { f.svc.revert(acc, trip, proposal, restore, REASON) { emptySet() } }.errorCode shouldBe ErrorCode.STALE
+        f.repo.byTrip.getValue(trip).dayView(today) shouldBe applied.dayView(today)
+    }
+
+    "그 날이 일정에서 사라졌으면 되돌리지 않는다" {
+        val f = fixture(Agent(proposal(replacement)))
+        val proposal = f.svc.propose(command())!!
+        val restore = f.svc.apply(acc, trip, proposal, REASON)
+        val applied = f.repo.byTrip.getValue(trip)
+        f.repo.byTrip[trip] = Itinerary.reconstitute(
+            applied.itineraryId, applied.tripId, applied.status, applied.solveMode, applied.generationMode, applied.isFallback,
+            applied.generationState, listOf(applied.days[1]), applied.createdAt, now, applied.candidatesSummary, applied.unplacedMustVisits,
+        )
+
+        shouldThrow<ConflictDetected> { f.svc.revert(acc, trip, proposal, restore, REASON) { emptySet() } }.errorCode shouldBe ErrorCode.STALE
     }
 
     "초안 왕복이 항등이다 — 저장했다 돌아와도 값이 새지 않는다" {

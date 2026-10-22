@@ -375,6 +375,18 @@ class PreparedReplanPolicyTest : StringSpec({
         f.replans.applied shouldBe emptyList()
     }
 
+    // 3차 검수 — 낡음 판정의 초안 사실(완료 실적·지금 일정)은 일정 쓰기 잠금을 잡은 **뒤** 다시 본다. 잠금 전 읽기만으로 정하면
+    // 그 사이 커밋된 체크인을 못 보고 다녀온 곳이 빠진 초안을 반영한다.
+    "잠금을 잡는 사이 다녀온 곳이 생겼으면 잠금 뒤 판정이 409 STALE — 반영하지 않는다" {
+        val f = Fixture(now = "07:15")
+        f.replans.proposal = FakeReplans.sampleProposal(today)
+        val s = f.prepare(f.triggers.add(f.tripId, today)).opened().also { f.solver.solveNow(f.acc, it.sessionId) }
+        f.replans.onLock = { f.completed += "$today#${UUID.randomUUID()}" } // 잠금 전 판정은 통과, 잠금 뒤에 체크인이 보인다
+
+        shouldThrow<ConflictDetected> { f.service().apply(f.acc, f.tripId, s.sessionId) }.errorCode shouldBe ErrorCode.STALE
+        f.replans.applied shouldBe emptyList()
+    }
+
     "대체돼 닫힌 선계산의 적용은 409 STALE — 일반 충돌이 아니라 낡음으로 말한다" {
         val f = Fixture(now = "07:15")
         val first = f.prepare(f.triggers.add(f.tripId, today)).opened()

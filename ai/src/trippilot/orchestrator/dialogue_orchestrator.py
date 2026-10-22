@@ -75,6 +75,7 @@ from trippilot.orchestrator.dialogue_handlers import (
     TurnContext,
     TurnSnapshot,
     edit_arguments,
+    insert_day,
     validate_answer_shape,
     validate_answer_text,
 )
@@ -385,6 +386,17 @@ def _squash(text: str) -> str:
     return normalize(text).replace(" ", "")
 
 
+# "이 근처"·"여기 주변"·"숙소 근처" 같은 지시어는 지역 이름이 아니다 — 분류가 region 칸에 담아도(2026-10-21 실측 "근처·주변" 다섯 말
+# 40회 중 0.2.3 9회·0.2.4 5회) 핸들러에는 없는 것으로 넘긴다. 탐색은 일정 근처로 가고, 여행도 없으면 지역을 되묻는다 — 지역 표에서
+# 못 찾아 "그 지역은 아직 찾아 줄 수 없어요"로 끝나지 않게. 날씨도 같은 칸을 읽는다(일정 장소로 간다)
+_DEICTIC_REGION = re.compile(r"(?:(?:이|그|저|여기|거기|숙소|호텔|지금)\s*)?(?:근처|주변|부근|인근|가까이|여기|거기)(?:\s*(?:근처|주변|부근))?")
+
+
+def _without_deictic_region(args: Mapping[str, str]) -> dict[str, str]:
+    region = (args.get("region") or "").strip()
+    return {k: v for k, v in args.items() if k != "region"} if region and _DEICTIC_REGION.fullmatch(region) else dict(args)
+
+
 def _grounded_args(slots: Mapping[str, str], said: str) -> dict[str, str]:
     """계획 인자의 region 은 사용자가 말한 지역만(BR-AO-28) — 모델이 [여행 상황]의 여행지를 옮겨 적으면 탐색 기준이 '다음 일정 근처'에서
     '지역 중심'으로 바뀐다(제주는 끝에서 끝이 70km 다). 프롬프트 0.1.1 뒤에도 "저녁 먹을 데랑 그 다음 일정" 이 2/2 로 region "제주" 를
@@ -553,6 +565,9 @@ def _prompt_names(prompt: Mapping) -> list[str]:
     """`to_prompt_dict` 모양 사실의 장소·대상·앵커 이름 — 계획 병합본은 also 부분까지(정정본 C4). 측정 러너도 이것으로 아는 이름을 만든다."""
     names = [p["name"] for p in prompt.get("places", ()) if isinstance(p, Mapping) and isinstance(p.get("name"), str)]
     names += [v for v in (prompt.get("target"), prompt.get("anchor")) if isinstance(v, str)]
+    # 행사(장소 탐색의 행사 주제) — 행사 이름·장소 주소도 사실 칸에 글자 그대로 있는 이름이다("여의도한강공원")
+    names += [v for e in prompt.get("events", ()) if isinstance(e, Mapping) for v in (e.get("name"), e.get("place"))
+              if isinstance(v, str)]
     # 장소 소개(KB-5) 글자 그대로 있는 이름은 말해도 된다 — "근정전·광화문"이 목록 밖 장소로 막히지 않게(사실 칸 원칙, ai-4e 합의)
     intro = prompt.get("intro")
     if isinstance(intro, str):
@@ -704,6 +719,11 @@ class DialogueOrchestrator:
                 return self._out_of_scope(inp, reason)
             # 3 — 필수 인자 되묻기 (요청당 1회, 기존 로직)
             interp = from_match(match, inp.context, trip_view)
+            if interp.outcome == "ARGUMENT_CLARIFY" and match.intent is Intent.EDIT_SCHEDULE and (on := insert_day(
+                    inp.utterance, inp.snapshot, inp.now.astimezone(self._tz).date(), self._ports, inp.now,
+                    remaining_ms=self._remaining(inp))) is not None:
+                # 사이 넣기는 말의 자리로 날을 푼다 — 되물으면 답 턴에 원문이 없다(PendingFrame 에 발화 칸이 없다, spec 003)
+                interp = from_match(replace(match, slots={**match.slots, "day": on.isoformat()}), inp.context, trip_view)
         if interp.outcome == "ARGUMENT_CLARIFY":
             return TurnOutcome("ARGUMENT_CLARIFY", interp.frames, interp.clarify, None, interp.context, 0, interp.reason)
         if interp.outcome == "OUT_OF_SCOPE":  # from_match 는 FALLBACK 매치에서만 — 여기로는 오지 않는다(방어)
@@ -711,7 +731,8 @@ class DialogueOrchestrator:
         (frame,) = interp.frames
         handler = HANDLERS[frame.intent]
         ctx = TurnContext(
-            snapshot=inp.snapshot, arguments=frame.arguments, now=inp.now, tz=self._tz, trace_id=inp.trace_id,
+            snapshot=inp.snapshot, arguments=_without_deictic_region(frame.arguments), now=inp.now, tz=self._tz,
+            trace_id=inp.trace_id,
             remaining_ms=lambda: self._remaining(inp), ports=self._ports, utterance=inp.utterance,
             earlier=tuple((turn.role, turn.text) for turn in inp.recent_turns),
         )
@@ -1009,7 +1030,8 @@ class DialogueOrchestrator:
         handlers = [HANDLERS[call.intent] for call in draft.calls]
         said = _squash(" ".join([text, *(turn.text for turn in inp.recent_turns)]))
         earlier = tuple((turn.role, turn.text) for turn in inp.recent_turns)
-        ctxs = [TurnContext(snapshot=inp.snapshot, arguments=_grounded_args(call.slots, said), now=inp.now, tz=self._tz,
+        ctxs = [TurnContext(snapshot=inp.snapshot, arguments=_without_deictic_region(_grounded_args(call.slots, said)),
+                            now=inp.now, tz=self._tz,
                             trace_id=inp.trace_id, remaining_ms=lambda: self._remaining(inp), ports=self._ports,
                             earlier=earlier, heard=text)
                 for call in draft.calls]

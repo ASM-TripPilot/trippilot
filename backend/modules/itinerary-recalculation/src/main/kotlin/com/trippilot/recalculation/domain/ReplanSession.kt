@@ -54,6 +54,16 @@ data class ReplanSession(
      * 기본값을 두지 않는다 — 재구성(저장소)이 값을 빠뜨리면 컴파일이 막는다(기본값이 있으면 조용히 USER 로 뒤바뀐다).
      */
     val initiatedBy: ReplanInitiator,
+    /**
+     * 반영 시점의 비교 기준(TRIP-1412) — 반영 **직전** 그 날의 슬롯 표면. 원탭 [다시 짜기]는 초안을 보자마자 반영하므로
+     * 사용자가 "무엇이 빠졌나"를 볼 수 있는 때는 반영 뒤뿐이고, 그때 원 일정은 이미 바뀌어 다시 계산할 원본이 없다.
+     * 그래서 반영하는 순간 떠서 둔다. 이 기능 이전에 반영된 세션은 null 이다(비교를 지어내지 않는다).
+     */
+    val appliedBefore: List<ReplanDiff.SlotView>?,
+    /** 되돌리기 지점(TRIP-1412) — C8 이 반영하며 돌려준 그 날의 직전 모습([com.trippilot.itinerarygeneration.api.ReplanProposal] map). */
+    val restorePoint: Map<String, Any>?,
+    /** 이 재계획을 되돌린 시각. 한 번만 된다 — 되돌린 뒤의 되돌리기는 "재계획 다시 적용"이라 그 경로(새 세션)로 간다. */
+    val revertedAt: Instant?,
 ) {
     init {
         // 근거 없는 선계산은 '왜 이 대안인가'를 잃는다 — DB CHECK(chk_replan_session_system_trigger)와 같은 규칙이다.
@@ -86,6 +96,7 @@ data class ReplanSession(
             UUID.randomUUID(), tripId, itineraryId, triggerId, scope, targetDate, fromInstant, origin,
             reasons, directives, freeText, excludedPoiIds,
             ReplanStatus.COLLECTING, null, at, null, initiatedBy,
+            appliedBefore = null, restorePoint = null, revertedAt = null,
         )
     }
 
@@ -149,10 +160,22 @@ data class ReplanSession(
         return copy(status = ReplanStatus.FAILED, closedAt = at)
     }
 
-    /** 확정 — 여기서 비로소 원 일정에 반영된다. */
-    fun applied(at: Instant): ReplanSession {
+    /**
+     * 확정 — 여기서 비로소 원 일정에 반영된다. 반영 직전의 비교 기준과 되돌리기 지점을 함께 남긴다(TRIP-1412).
+     */
+    fun applied(at: Instant, before: List<ReplanDiff.SlotView>, restorePoint: Map<String, Any>): ReplanSession {
         require(status == ReplanStatus.DRAFT) { "확정은 DRAFT 에서만 가능합니다(현재 $status)." }
-        return copy(status = ReplanStatus.APPLIED, closedAt = at)
+        return copy(status = ReplanStatus.APPLIED, closedAt = at, appliedBefore = before, restorePoint = restorePoint)
+    }
+
+    /** 되돌릴 수 있는 세션인가 — 반영됐고, 아직 안 되돌렸고, 되돌리기 지점이 있다(이 기능 이전 반영분은 없다). */
+    val isRevertible: Boolean
+        get() = status == ReplanStatus.APPLIED && revertedAt == null && restorePoint != null
+
+    /** 반영한 재계획을 되돌렸다(TRIP-1412). 상태는 APPLIED 그대로다 — 반영이 있었다는 사실은 지우지 않는다. */
+    fun reverted(at: Instant): ReplanSession {
+        require(isRevertible) { "되돌리기는 되돌리기 지점이 있는 반영 세션에 한 번만 가능합니다(현재 $status, revertedAt=$revertedAt)." }
+        return copy(revertedAt = at)
     }
 
     /** 취소는 **세션만** 닫는다(INV-U4-05). 열린 상태 어디서나 가능하다 — 산출 중 이탈도 취소다. */
