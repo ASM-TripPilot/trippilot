@@ -15,7 +15,8 @@ from concurrent.futures import Future
 from datetime import datetime
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.region_centers import region_center
+from trippilot.domain.region_centers import region_center, region_pair
+from trippilot.orchestrator.intent_router import normalize
 from trippilot.llm_gateway.workers.dialogue_sql import DialogueSqlWorker
 from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql, PlaceRow
 
@@ -37,9 +38,17 @@ _PLACE_ASK = re.compile(r"가\s?볼|갈\s?만한|갈\s?(?:데|곳)|핫한|핫플
 Submit = Callable[[Callable[[], object]], Future]
 
 
+def asks_for_places(text: str) -> bool:
+    """장소 찾기 말인가(가볼·맛집·카페·추천…) — 미리 받기와 탐색의 이어 묻기(앞 요청 찾기)가 같이 쓴다."""
+    return _PLACE_ASK.search(text) is not None
+
+
 def looks_like_place_query(utterance: str) -> bool:
-    """지역 표 이름 + 장소 찾기 말 — 분류를 기다리지 않고 SQL 작성을 미리 시작할 만한가. 탐색 핸들러도 지역을 말했을 때만 SQL 을 쓴다."""
-    return region_center(utterance) is not None and _PLACE_ASK.search(utterance) is not None
+    """지역 표 이름 + 장소 찾기 말 — 분류를 기다리지 않고 SQL 작성을 미리 시작할 만한가. 탐색 핸들러도 지역을 말했을 때만 SQL 을 쓴다.
+    두 곳 사이("홍대와 이태원 사이")는 SQL 을 쓰지 않으니(위치가 아니라 이름을 읽는다 — 너무 먼 짝도 답하지 않는다) 미리 쓰지 않는다.
+    짝 판정은 핸들러와 같게 정규화한 글로 본다."""
+    return (region_center(utterance) is not None and region_pair(normalize(utterance)) is None
+            and asks_for_places(utterance))
 
 
 class PlaceSqlLookup:

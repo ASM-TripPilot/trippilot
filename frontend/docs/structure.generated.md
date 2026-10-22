@@ -416,7 +416,7 @@
 - `src/features/explore/index.view.ts`  →  resolvePlaceListState · regionPickerHref · filterRegions · groupRegionsBySido · regionTint · useRegions · BackChevronGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · CloseGlyph · FilterSlidersGlyph · InfoGlyph · MapPinGlyph · PlusGlyph · SearchGlyph · ShareGlyph · SuitcaseGlyph · WarningTriangleGlyph
 
 ## src/features/explore/model/
-- `src/features/explore/model/mergePlaces.ts`  →  mergePlacesByPoiId
+- `src/features/explore/model/mergePlaces.ts`  →  mergePlacesByPoiId · interleavePlacesByRegion
 - `src/features/explore/model/placeListState.ts`  →  PlaceListState · resolvePlaceListState
 - `src/features/explore/model/regionPickerPurpose.ts`  →  RegionPickerPurpose · regionPickerHref
 - `src/features/explore/model/regions.ts`  →  useRegions · filterRegions · limitRegionsWhenEmpty · RegionGroup · groupRegionsBySido · regionTint
@@ -1392,6 +1392,7 @@
 - `src/shared/api/generated/schemas/getMeExportParams.ts`  →  GetMeExportParams
 - `src/shared/api/generated/schemas/getMeNotificationsParams.ts`  →  GetMeNotificationsParams
 - `src/shared/api/generated/schemas/getMeRecordsParams.ts`  →  GetMeRecordsParams
+- `src/shared/api/generated/schemas/getPlacesOrder.ts`  →  GetPlacesOrder
 - `src/shared/api/generated/schemas/getPlacesParams.ts`  →  GetPlacesParams
 - `src/shared/api/generated/schemas/getRegionsParams.ts`  →  GetRegionsParams
 - `src/shared/api/generated/schemas/getStaysBrowseOutboundParams.ts`  →  GetStaysBrowseOutboundParams
@@ -1815,4 +1816,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1161개 파일
+합계 1162개 파일

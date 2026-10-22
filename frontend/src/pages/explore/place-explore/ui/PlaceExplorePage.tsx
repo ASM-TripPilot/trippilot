@@ -21,6 +21,7 @@
 import type { ReactElement } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
+import { randomUUID } from 'expo-crypto';
 import { router, useLocalSearchParams } from 'expo-router';
 
 import type { Place, PoiCategory } from '@/shared/api/index.schemas';
@@ -44,7 +45,7 @@ import { SERVICE_REGIONS } from '@/entities/trip';
 import { PlaceExploreScreen } from './PlaceExploreScreen';
 import { useTripWizardStore } from '@/features/create-trip';
 
-// 지역 미지정이면 서버 전국 조회 대신 서비스 지역을 묻는다(TRIP-1560) — 홈·d01 과 같은 배열·순서라 응답 캐시를 나눠 쓴다.
+// 지역 미지정이면 서버 전국 조회 대신 서비스 지역을 묻는다(TRIP-1560) — 홈·d01 과 같은 배열·순서지만 d04 는 seed 가 키에 붙어 캐시는 따로다(TRIP-1563).
 const SERVICE_REGION_NAMES = SERVICE_REGIONS.map((r) => r.name);
 
 export function PlaceExplorePage(): ReactElement {
@@ -61,6 +62,9 @@ export function PlaceExplorePage(): ReactElement {
   const multiQueryRegions =
     regions.length === 0 ? SERVICE_REGION_NAMES : regions;
 
+  // 진입마다 한 번 정하는 무작위 순서 번호표(TRIP-1563) — 칩·검색·이어받기·재시도·지역 바꾸기에도 그대로다.
+  // 지연 초기값이라 마운트 때 1회만 만들고, 첫 렌더에 이미 있어야 seed 없는 random 요청이 안 나간다(INV-4).
+  const [seed] = useState(() => randomUUID());
   const [selectedCategory, setSelectedCategory] = useState<PoiCategory | null>(
     null
   );
@@ -81,12 +85,15 @@ export function PlaceExplorePage(): ReactElement {
       ...(singleRegion ? { region: singleRegion } : {}),
       ...(selectedCategory ? { category: selectedCategory } : {}),
       ...(trimmedQuery ? { q: trimmedQuery } : {}),
+      order: 'random',
+      seed,
     },
     { enabled: !isMultiRegion }
   );
   const multi = useMultiRegionPlaces(multiQueryRegions, {
     category: selectedCategory,
     q: trimmedQuery,
+    seed,
   });
   const {
     items,

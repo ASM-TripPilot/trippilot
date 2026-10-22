@@ -253,6 +253,30 @@ def _plan_turn(plan: str | Exception, utterance: str = "비 오면 근처 어디
     return out, b
 
 
+def test_plan_path_follow_up_keeps_the_previous_area_not_the_itinerary() -> None:
+    """분류가 "더알려줘"를 계획으로 보내면(실 스택에서 그랬다) 계획 경로에도 최근 대화가 가야 앞 요청(홍대·이태원 사이)을 잇는다 —
+    안 가면 일정(제주) 근처가 나왔다. 보인 곳은 뺀다(2026-10-22)."""
+    from trippilot.domain.common import GeoPoint
+    from trippilot.domain.region_centers import region_center
+
+    class _Recording(to._ExplorePool):
+        def __init__(self) -> None:
+            self.requests: list = []
+
+        def build(self, request, now):
+            self.requests.append(request)
+            return super().build(request, now)
+
+    pool = _Recording()
+    b = _plan_build(_plan_json(("EXPLORE_PLACES", {})), answer=_answer_json("흰여울 카페도 가 볼 만해요."),
+                    ports=HandlerPorts(poi_info=to._PoiInfo(), weather=to._Weather(), pool_builder=pool))
+    turns = (to.RecentTurn("USER", "홍대와 이태원 사이에 가볼만한 곳 알려줘"), to.RecentTurn("ASSISTANT", "감천문화마을이 있어요."))
+    out = b.orch.turn(to._input("더알려줘", snapshot=to._SNAP, recent_turns=turns))
+    (_, hongdae, _), (_, itaewon, _) = region_center("홍대"), region_center("이태원")
+    assert pool.requests[0].anchor == GeoPoint((hongdae.lat + itaewon.lat) / 2, (hongdae.lng + itaewon.lng) / 2)
+    assert [c["name"] for c in out.answer.payload["candidates"]] == ["흰여울 카페"]
+
+
 def _plan_events(b) -> list[FallbackEvent]:
     return [e for e in to._fallbacks(b.trace) if e.from_mode == "llm_dialogue_plan"]
 
@@ -496,6 +520,16 @@ def test_chat_gap_gets_a_friendly_line_instead_of_the_scope_card(caplog) -> None
     without_trip, _ = _plan_turn(_plan_json(gap="CHAT"), "심심해", snapshot=to._NO_TRIP)
     assert without_trip.answer.text == orch_mod.CHAT_TEXT[False]
     assert [a.type for a in without_trip.answer.next_actions] == ["CREATE_TRIP"]
+
+
+def test_chat_gap_is_written_by_the_smalltalk_llm_when_assigned() -> None:
+    reply = '{"text": "그런 날도 있죠. 남은 일정은 가볍게 가 볼까요? 다음 장소 알려 드릴까요?", "footnote": null}'
+    canned = {to._INTENT: '{"intent": null}', to._ANSWER: to._ANSWER_JSON, to._MEMORY: to._MEMORY_JSON,
+              to._PLAN: _plan_json(gap="CHAT"), LlmFeature.DIALOGUE_SMALLTALK: reply}
+    b = to._build(canned, ports=_PLAN_PORTS, with_planner=True, with_smalltalk=True)
+    out = b.orch.turn(to._input("오늘 기분이 좀 그렇네"))
+    assert out.outcome == "ANSWER" and out.answer.text == json.loads(reply)["text"] and out.frames == ()
+    assert out.reason.endswith("plan:no_tool") and out.llm_calls == 3  # 분류 + 계획 + 잡담
 
 
 def test_refused_chat_is_still_the_scope_card() -> None:

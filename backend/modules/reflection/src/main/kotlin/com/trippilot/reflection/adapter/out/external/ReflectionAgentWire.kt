@@ -38,9 +38,8 @@ internal data class AiReflectionGenerateRequest(
      * 여행 중 사건(계약 `TripEventRecordSchema[]` — `kind`·`date`·`detail` 전부 필수).
      *
      * **객체 배열이다.** 문자열 배열로 두면 실으려는 순간 `Input should be a valid dictionary` 로
-     * 422 다 — 알림 경계가 `slots` 에서 똑같이 당했다(2026-09-16). 지금은 어댑터가 **늘 빈 배열**을
-     * 보내서 원소가 없어 안 터졌을 뿐, 채우는 사람이 생기면 그때 터지는 잠복 어긋남이었다.
-     * 이름 대조 게이트는 `events` 라는 이름이 양쪽에 있어 이걸 원리적으로 못 본다.
+     * 422 다 — 알림 경계가 `slots` 에서 똑같이 당했다(2026-09-16). 이름 대조 게이트는 `events` 라는 이름이
+     * 양쪽에 있어 이걸 원리적으로 못 보므로, 원소가 실린 직렬화 모양은 어댑터 테스트가 따로 잡는다(TRIP-1463 부터 채워 보낸다).
      */
     val events: List<AiTripEventRecord>,
     val weatherSummary: String,

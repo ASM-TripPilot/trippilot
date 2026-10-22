@@ -219,6 +219,12 @@ const dayVisitHits = () =>
   hitsOf('GET', `/api/v1/trips/${TRIP_ID}/visits/days/${DAY}`);
 const regionsOf = (hits: { url: string }[]) =>
   hits.map((hit) => new URL(hit.url).searchParams.get('region'));
+/** TRIP-1563 — 무작위 시드는 d04 만 쓴다. 이 화면의 후보 조회에는 order·seed 키가 아예 없다. */
+const randomKeysOf = (hits: { url: string }[]) =>
+  hits.filter((hit) => {
+    const query = new URL(hit.url).searchParams;
+    return query.has('order') || query.has('seed');
+  });
 
 /** 그 서버처럼 region·category·q 로 거르는 장소 핸들러. */
 function placesHandler() {
@@ -390,6 +396,7 @@ describe('🔴 AC-5 · 후보는 GET /places 결과만, 여행 목적지로 좁�
     const regions = regionsOf(placeHits());
     expect(regions.length).toBeGreaterThanOrEqual(1);
     expect(regions).toEqual(regions.map(() => '부산'));
+    expect(randomKeysOf(placeHits())).toHaveLength(0);
   });
 
   it('P5-b: 목적지가 부산·경주면 지역마다 묻고 두 지역 후보를 함께 보여 준다', async () => {
@@ -414,6 +421,7 @@ describe('🔴 AC-5 · 후보는 GET /places 결과만, 여행 목적지로 좁�
       '경주',
       '부산',
     ]);
+    expect(randomKeysOf(placeHits())).toHaveLength(0);
   });
 
   it.each([

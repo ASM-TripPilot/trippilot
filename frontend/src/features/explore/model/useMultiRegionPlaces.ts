@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getPlaces } from '@/shared/api/index.hooks';
 import type { PoiCategory } from '@/shared/api/index.schemas';
 
-import { mergePlacesByPoiId } from './mergePlaces';
+import { interleavePlacesByRegion, mergePlacesByPoiId } from './mergePlaces';
 
 /**
  * 다지역 '꼭 갈 곳 더 담기'(2개 이상 지역)의 병렬 조회 훅(TRIP-687).
@@ -12,6 +12,10 @@ import { mergePlacesByPoiId } from './mergePlaces';
  * `mergePlacesByPoiId` 로 합친다 — 여행 지역 수가 적어(보통 1~3) 지역당 한 장이면 실용상 충분하다.
  * 한 지역이 실패해도 나머지는 살리고(부분 성공), 전부 실패면 throw(전부 성공/부분 실패만 통과).
  * 무한 스크롤은 포기하므로(단일지역 경로가 담당) `fetchNextPage`/`hasNextPage` 는 no-op·false 다.
+ *
+ * `filters.seed` 가 있으면(d04, TRIP-1563) 지역 요청마다 `order=random&seed` 를 싣고 `interleavePlacesByRegion`
+ * 으로 지역을 번갈아 놓는다. 없으면(홈·d01·기록 방문추가) `order`·`seed` 키 자체를 안 보내고 지역 블록 병합 그대로다.
+ * queryKey 끝의 `seed ?? null` 이 d04 진입마다 캐시를 가르고, seed 없는 호출부끼리는 계속 공유한다.
  *
  * `enabled: regions.length >= 2` — 1지역은 `usePlacesInfinite`(무한 스크롤 보존)가 맡고(d04 의 지역
  * 미지정은 서비스 지역 이름 배열을 넘겨 이 훅을 탄다 — TRIP-1560, 그래서 서비스 지역이 2곳 미만이 되면 꺼진다),
@@ -25,13 +29,20 @@ const PER_REGION_LIMIT = 200;
 
 export function useMultiRegionPlaces(
   regions: string[],
-  filters: { category?: PoiCategory | null; q?: string } = {}
+  filters: { category?: PoiCategory | null; q?: string; seed?: string } = {}
 ) {
   const category = filters.category ?? undefined;
   const q = filters.q ?? undefined;
+  const seed = filters.seed;
 
   const query = useQuery({
-    queryKey: ['/places/multi', regions, category ?? null, q ?? ''] as const,
+    queryKey: [
+      '/places/multi',
+      regions,
+      category ?? null,
+      q ?? '',
+      seed ?? null,
+    ] as const,
     queryFn: async () => {
       // 지역별 조회를 병렬로 하되 한 지역이 실패해도 나머지는 살린다(부분 성공, TRIP-691).
       // Promise.all 은 하나만 실패해도 전체를 reject 해 다른 지역 장소까지 error 로 접었다.
@@ -42,6 +53,7 @@ export function useMultiRegionPlaces(
             limit: PER_REGION_LIMIT,
             ...(category ? { category } : {}),
             ...(q ? { q } : {}),
+            ...(seed ? { order: 'random' as const, seed } : {}),
           })
         )
       );
@@ -57,7 +69,9 @@ export function useMultiRegionPlaces(
       // 여기 도달 = 최소 한 지역 성공(lists.length>0). 한 지역이라도 실패했으면 부분 실패다 —
       // degraded 는 서버 응답 필드가 아니라 이 성공/실패 개수에서 파생한다(TRIP-692, brief §맹점①).
       return {
-        items: mergePlacesByPoiId(lists),
+        items: seed
+          ? interleavePlacesByRegion(lists)
+          : mergePlacesByPoiId(lists),
         degraded: results.some((result) => result.status === 'rejected'),
       };
     },

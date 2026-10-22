@@ -66,6 +66,7 @@ export * from './geocodeCandidate';
 export * from './getMeExportParams';
 export * from './getMeNotificationsParams';
 export * from './getMeRecordsParams';
+export * from './getPlacesOrder';
 export * from './getPlacesParams';
 export * from './getRegionsParams';
 export * from './getStaysBrowseOutboundParams';

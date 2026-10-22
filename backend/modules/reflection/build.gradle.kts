@@ -15,6 +15,7 @@ dependencies {
     implementation(project(":modules:place-data")) // R1: 방문점 좌표(거리 근사) — placedata.api
     implementation(project(":modules:profile"))  // R1: 임계 미만 미리보기의 온보딩 취향 — profile.api
     implementation(project(":modules:auth"))     // R1: 개인화 동의 게이트 — auth.api(PersonalizationConsentFacade)
+    implementation(project(":modules:change-log")) // R1: 그날 적용된 재계획(회고 재료 PLAN_B) — changelog.api(ChangeLogFacade)
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)
