@@ -185,7 +185,9 @@ class SecondPhaseGenerator(
         }
 
         return tx.execute {
-            val latest = itineraries.findByTrip(tripId).firstOrNull()
+            // 일정 쓰기 잠금(TRIP-1412) — 쓰기 트랜잭션 안에서만(근거·2차 AI 호출은 위에서 끝났다). 편집·되돌리기 등과 줄을 서,
+            // 이 판정과 조건부 쓰기 사이에 다른 쓰기가 끼어 그 결과를 덮지 않게 한다. 조건부 쓰기는 재생성(새 id) 방어로 그대로 둔다.
+            val latest = itineraries.lockForTrip(tripId)
             if (latest == null || !latest.isPendingSecondPhase(itineraryId, tripId)) return@execute null
 
             val updated = latest.completeGeneration(
@@ -256,7 +258,7 @@ class SecondPhaseGenerator(
     private fun markFailed(tripId: UUID, itineraryId: UUID) {
         runCatching {
             tx.execute {
-                val current = itineraries.findByTrip(tripId).firstOrNull() ?: return@execute null
+                val current = itineraries.lockForTrip(tripId) ?: return@execute null // 일정 쓰기 잠금(TRIP-1412)
                 if (current.itineraryId != itineraryId || current.generationState != GenerationState.PARTIAL) return@execute null
                 itineraries.replaceIfCurrent(tripId, itineraryId, current.failGeneration(clock.instant()))
             }

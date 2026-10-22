@@ -304,6 +304,34 @@ class EditItineraryServiceTest : StringSpec({
         logs.appended.shouldBeEmpty()
     }
 
+    fun Itinerary.with(id: UUID = itineraryId, state: GenerationState = generationState) = Itinerary.reconstitute(
+        id, tripId, status, solveMode, generationMode, isFallback, state, days, createdAt, updatedAt, candidatesSummary, unplacedMustVisits,
+    )
+
+    fun editWith(repo: EditFakeItineraries, logs: CapturingChangeLogs = CapturingChangeLogs()) =
+        EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), logs, FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+
+    // 4차 검수 — 재검증 동안 재생성이 새 일정으로 갈아 끼웠다. 잠그기 전 일정(옛 id) 위에서 만든 값으로 덮으면 새 일정이 사라진다.
+    "재검증 동안 일정이 새 id 로 갈렸으면 편집은 409 STALE" {
+        val repo = repoWith(current())
+        repo.lockedView = repo.findByTrip(tripId).single().with(id = UUID.randomUUID())
+        val logs = CapturingChangeLogs()
+
+        shouldThrow<ConflictDetected> { editWith(repo, logs).edit(acc, tripId, editReq) }.errorCode shouldBe ErrorCode.STALE
+        logs.appended.shouldBeEmpty()
+    }
+
+    // 4차 검수 — 생성 중(PARTIAL)에 읽고 편집하는 사이 2차가 끝나 COMPLETE 가 됐다. PARTIAL 위에서 만든 값으로 덮으면
+    // 2차가 채운 일자·근거가 사라지고 상태도 PARTIAL 로 되돌아간다.
+    "재검증 동안 2차가 끝났으면(PARTIAL→COMPLETE) 편집은 409 STALE" {
+        val repo = repoWith(current().with(state = GenerationState.PARTIAL))
+        repo.lockedView = repo.findByTrip(tripId).single().with(state = GenerationState.COMPLETE)
+        val logs = CapturingChangeLogs()
+
+        shouldThrow<ConflictDetected> { editWith(repo, logs).edit(acc, tripId, editReq) }.errorCode shouldBe ErrorCode.STALE
+        logs.appended.shouldBeEmpty()
+    }
+
     "그 사이 일정이 지워졌으면 편집은 409 — 잠금 없이 밖에서 읽은 값으로 쓰지 않는다" {
         val repo = repoWith(current())
         repo.lockedView = null
