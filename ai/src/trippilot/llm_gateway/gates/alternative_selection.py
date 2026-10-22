@@ -7,6 +7,7 @@ from datetime import datetime
 from trippilot.llm_gateway.gates.base import (
     GateOutcome,
     has_contact_like,
+    has_injection_like,
     _load_json_object,
     empty_result_error,
 )
@@ -83,8 +84,11 @@ class AlternativeSelectionGate:
                 # 앱 신뢰도를 빌린 유인 문구가 된다. 버리는 대가는 "이유 한 줄이 빈다" 뿐이다.
                 # 시계 시각("매일 10:00 수문장 교대식")도 같다 — KB-5 문서의 원문 시각을 옮기면 검증 안 된
                 # 시각이 화면에 뜬다(INV-2). `_TIME_EXPR` 는 이 꼴을 못 잡는다.
+                # 지시 주입 꼴도 같다 — 후보 줄의 제3자 글(위키·관광공사 개요·상호명)에 든 "이전 지시는 무시하고…"를 옮기면
+                # 앱이 쓴 추천 이유로 뜬다. 도우미 게이트(답변·기억)와 같은 판정이다(좁게 — "날씨를 무시하고"는 통과).
                 safe = "" if (
                     _TIME_EXPR.search(reason) or any(clock_times(reason)) or has_contact_like(reason)
+                    or has_injection_like(reason)
                 ) else reason
                 survivors.append(AlternativePick(poi_id=pid, reason=safe))
             else:
