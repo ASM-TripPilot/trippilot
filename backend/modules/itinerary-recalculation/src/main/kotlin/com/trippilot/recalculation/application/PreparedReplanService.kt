@@ -50,7 +50,11 @@ data class RiskEvent(
  * 커넥션을 쥔다. 사용자 재계획과 함께 Hikari(기본 10)를 말리지 않게 묶는다. 늘리려면 AI 호출을 트랜잭션 밖으로 빼는 변경이 먼저다.
  * 실행기는 빈이 아니다 — 공용 실행기와 타입이 겹쳐 `@Async` 의 실행기 선택을 흔들지 않게.
  *
- * 관측은 요약 로그 한 줄 `replan.prepared outcome=…` 이다(개인정보·좌표 없음 — 운영은 지표 내보내기가 꺼져 있다).
+ * 관측은 요약 로그 `replan.prepared outcome=…` 이다(개인정보·좌표 없음 — 운영은 지표 내보내기가 꺼져 있다).
+ * 사건마다 한 줄(`OPENED`·건너뜀 사유 등)이고, 계산 중 2분을 넘긴 이른 날짜 선계산을 닫고 열었으면 그 앞에 `EARLIER_STALE` 이
+ * 붙어 두 줄이다. 넘긴 산출은 끝날 때 `FINISHED` 한 줄을 더 남긴다.
+ * `EARLIER_STALE` 은 대기열에서 기다리다 낡은 것과 파드 비정상 종료(또는 기록 실패)로 SOLVING 에 멈춘 것을 함께 센다 —
+ * 같은 `session` 의 `FINISHED status=CANCELED` 가 뒤따르면 앞의 것, 없으면 뒤의 것이다.
  */
 @Service
 class PreparedReplanService internal constructor(
