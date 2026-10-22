@@ -148,3 +148,26 @@ def test_데모_시드에_조인_키가_있다() -> None:
     (`backend_poi_db.py:235`).
     """
     assert all(p.source_ref for p in demo_poi_seed())
+
+
+class _DownStore(InMemoryVectorStore):
+    """벡터 저장소 장애 — 검색이 늘 터진다."""
+
+    def search(self, collection, vector, top_k, *, item_ids=None):
+        raise ConnectionError("vector db down")
+
+
+def test_장소_지식_검색이_죽으면_폴백_이벤트가_남는다() -> None:
+    """KB 검색·장소 지식 장애는 응답 notes 에만 남아 감시 집계(트레이스)에 안 보였다 — 대안은 규칙대로 나와 200 이라
+    장애가 며칠 가도 모른다. 게이트웨이 밖 강등도 FallbackEvent 로 남긴다(INV-4)."""
+    from tests.fakes.in_memory_trace import InMemoryTrace
+    from trippilot.domain.observability import FallbackEvent
+
+    trace = InMemoryTrace()
+    app = build_dev_app(llm=_PromptSpy(), model_id="test-model", trace=trace,
+                        vector_store=_DownStore(), embedding=FakeEmbedding())
+    with TestClient(app) as client:
+        assert client.post("/ai/v1/planb/alternatives", json=_body()).status_code == 200
+    rag = [e for e in trace.of_type(FallbackEvent) if e.component == "planb.rag"]
+    assert {e.reason.split(":")[0] for e in rag} >= {"retrieve_situation_error", "place_knowledge_unavailable"}, rag
+    assert all(e.trace_id == "kb5-wire" for e in rag)
