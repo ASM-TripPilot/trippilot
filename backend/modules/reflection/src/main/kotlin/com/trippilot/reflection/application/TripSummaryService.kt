@@ -44,12 +44,16 @@ class TripSummaryService(
     fun generate(tripId: UUID): TripSummary {
         // 잠근 **뒤에** 읽는다 — 경로 갱신(refreshRouteStats)과 겹치면 커밋 전 상태를 보고 덮는다. 같은 잠금을 그쪽도 잡는다.
         // 못 읽는 요약이어도 그대로 덮는다(TRIP-1476).
-        summaries.findForUpdate(tripId)
+        val current = summaries.findForUpdate(tripId)
         // **알림은 처음 만들 때만** 낸다. 요약 행을 처음 만드는 곳은 여기뿐이라, 행이 이미 있으면 이 여행의 요약은 한 번 알렸다.
         // 다시 오는 것은 사실상 `TripEnded` 재배달(at-least-once)뿐인데, 발행마다 이벤트 id 가 새로 나고 알림은 그 id 로만
         // 중복을 거르므로(`appendIfAbsent`) 다시 내면 "여행 요약이 준비됐어요"가 한 번 더 간다. 조회·경로 갱신의 고침([rebuildUnreadable])과 같은 규칙이다.
         val existed = summaries.exists(tripId)
-        val saved = summaries.upsert(build(tripId))
+        val built = build(tripId)
+        // 이미 붙은 AI 회고 문장(TRIP-1488 [TripSummaryNarrator])은 재배달로 규칙 문장에 되돌리지 않는다 — 실적·통계만 다시 짠다.
+        // 다시 짠 요약이 방문 0곳(BASIC)이면 그 문장의 근거가 사라졌으므로 기본 문장으로 간다.
+        val ai = current?.takeIf { it.source == ReflectionSource.AI && built.source == ReflectionSource.RULE }
+        val saved = summaries.upsert(ai?.let { built.copy(narrative = it.narrative, source = ReflectionSource.AI) } ?: built)
         if (!existed) events.publish(
             ReflectionReady(
                 aggregateId = tripId.toString(),

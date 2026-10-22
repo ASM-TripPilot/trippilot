@@ -246,6 +246,22 @@ class TripSummaryPropertyTest : StringSpec({
         sink.published.size shouldBe 1
     }
 
+    /** 비동기로 붙은 AI 회고 문장(TRIP-1488)이 `TripEnded` 재배달로 규칙 문장에 되돌아가면, 사용자가 본 문장이 바뀌고 AI 를 또 부른다. */
+    "재배달은 이미 붙은 AI 문장을 지키고 실적만 다시 짠다 — 방문이 사라졌으면 문장도 기본으로 간다" {
+        val poi = UUID.randomUUID()
+        val known = mapOf(poi to (33.4 to 126.5))
+        val repo = Summaries()
+        val first = serviceOf(listOf(ArchiveDayView(day0, listOf(visit(poi)))), known, Sink(), repo).generate(tripId)
+        repo.stored[tripId] = first.copy(narrative = "바다를 따라 걸었다.", source = ReflectionSource.AI)
+
+        val again = serviceOf(listOf(ArchiveDayView(day0, listOf(visit(poi, photos = 3)))), known, Sink(), repo).generate(tripId)
+        (again.narrative to again.source) shouldBe ("바다를 따라 걸었다." to ReflectionSource.AI)
+        again.stats.totalPhotos shouldBe 3
+
+        val empty = serviceOf(emptyList(), known, Sink(), repo).generate(tripId)
+        (empty.narrative to empty.source) shouldBe (TripSummaryService.BASIC_SUMMARY to ReflectionSource.BASIC)
+    }
+
     "PBT-U5-5 요약 수치에 소요시간 필드가 없다(INV-3)" {
         val forbidden = listOf("duration", "minutes", "eta", "travelTime", "dwell")
 

@@ -132,6 +132,11 @@
 | `source` | varchar(8) | `AI` \| `RULE` \| `BASIC` |
 | `generated_at` | timestamptz | |
 
+> **[개정 · 2026-10-22 · TRIP-1488] `narrative` 의 AI 단(O-U5-10).** 칸은 그대로 문장 하나다 — 카드로 바꾸지 않았다. `TripEnded` 에 규칙 요약을 먼저 저장하고(`source=RULE`),
+> 그 뒤 백그라운드에서 상대 `generate`(`kind=TRIP_SUMMARY`, 마감 없음)를 불러 성공하면 같은 행의 `narrative` 를 `cover.subtitle` 로, `source` 를 `AI` 로 바꾼다.
+> 상대 자기 폴백(`is_fallback`)·자리표시자(`{`)가 남은 부제·건너뛴 장소를 말한 카드는 쓰지 않는다(규칙 요약 유지). `highlights`·`stats` 는 늘 우리 계산이다.
+> 구현: `TripSummaryNarrator`(backend `reflection` 모듈).
+
 ### 4.3 `style_analysis` (V2.32 · US-REC-09)
 
 | 필드 | 타입 | 비고 |

@@ -50,6 +50,9 @@ data class ReflectionAgentInput(
          * 부르지도 않을 호출을 위해 취향·변경 이력을 읽지 않게(개발 서버 회고 호출의 절반이 방문 0곳인 날이었다 — TRIP-1463 댓글).
          */
         fun callable(region: String, visits: List<ReflectionVisit>): Boolean = region.isNotBlank() && visits.isNotEmpty()
+
+        /** 여행 전체 요약 회고(TRIP-1488) — 여행 기간 전부가 입력이다. 마감 없이·긴 read 상한으로 부른다(어댑터). */
+        const val KIND_TRIP_SUMMARY = "TRIP_SUMMARY"
     }
 }
 

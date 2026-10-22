@@ -34,11 +34,22 @@ data class ReflectionAgentProperties(
     val readTimeoutMs: Long = 21_000,
     /** 발신 호출에 실을 서비스 자격증명(TRIP-856). 비면 헤더를 안 싣고 호출은 그대로 나간다. */
     val serviceToken: String = "",
+    /**
+     * 여행 요약 회고(`TRIP_SUMMARY`, TRIP-1488)의 소켓 read 상한. 요약은 **마감을 싣지 않는다** — 사용자 결정 "몇 초가 걸리든
+     * 만들어지기만 하면 된다"(2026-10-20)이고, 상대는 마감이 없으면 시간 때문에 강등하지 않는다. 그때 상대 백스톱은 기본 기준값
+     * 600초 + 마진이다([AI_NO_DEADLINE_BACKSTOP_MS]) — 이보다 짧으면 상대가 아직 만드는 응답을 우리가 먼저 끊는다.
+     * 하루 회고의 [readTimeoutMs](21초)를 그대로 쓰면 요약 대부분이 시간 초과다(실측 10곳·4일 4.7~9.1초, 25곳·7일 14~27초).
+     */
+    val summaryReadTimeoutMs: Long = AI_NO_DEADLINE_BACKSTOP_MS + 5_000,
 ) {
     init {
         require(readTimeoutMs >= deadlineMs + AI_BACKSTOP_MARGIN_MS) {
             "readTimeoutMs($readTimeoutMs)는 마감+백스톱(${deadlineMs + AI_BACKSTOP_MARGIN_MS})보다 " +
                 "작을 수 없습니다 — 상대가 마감을 넘겨 정리하는 응답을 우리가 먼저 끊게 됩니다."
+        }
+        require(summaryReadTimeoutMs >= AI_NO_DEADLINE_BACKSTOP_MS) {
+            "summaryReadTimeoutMs($summaryReadTimeoutMs)는 마감 없는 요청의 상대 백스톱($AI_NO_DEADLINE_BACKSTOP_MS)보다 " +
+                "작을 수 없습니다 — 상대가 아직 만드는 요약을 우리가 먼저 끊게 됩니다."
         }
     }
 
@@ -49,5 +60,8 @@ data class ReflectionAgentProperties(
          * 줄이면 이 가드가 요구하는 여유가 과해질 뿐 깨지지는 않는다.
          */
         const val AI_BACKSTOP_MARGIN_MS = 5_000L
+
+        /** 마감 없는 요청의 상대 백스톱 = `TRIPPILOT_TIMEOUT_DEFAULT_MS`(기본 600초) + 마진(`ai/src/trippilot/api/middleware.py` `backstop_ms`). */
+        const val AI_NO_DEADLINE_BACKSTOP_MS = 600_000L + AI_BACKSTOP_MARGIN_MS
     }
 }
