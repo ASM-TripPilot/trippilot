@@ -25,9 +25,17 @@ interface ItineraryDayCheckFacade {
 /**
  * 하루 점검 결과. [judged] = false 면 AI 판정 보류(불통·5xx·시한)다 — 영업시간은 전부 [HoursVerdict.UNKNOWN] 이다
  * (domain-entities §7.1). AI 를 부르지 않은 날(AI 모드가 http 아님 · 영업시간을 빼라고 함 · 영업시간을 아는 슬롯 없음)은
- * 보류가 아니다 — 그 슬롯들은 UNKNOWN 이다. 둘을 가르는 이유: 장소 감지의 회로는 보류만 센다. 모름을 OK 로 채우지 않는다(INV-SA-2).
+ * 보류가 아니다 — 그 슬롯들은 UNKNOWN 이다. 둘을 가르는 이유: 장소 감지의 회로는 보류만 센다. 모름을 OK 로 채우지 않는다(INV-SA-2) —
+ * AI 가 답했어도 그 장소를 판정하지 못했다고 한 슬롯은 UNKNOWN 이다.
+ *
+ * [answered] = AI 를 불러 답을 받았다 — 장소 감지의 회로가 0 으로 돌아가는 근거다. 슬롯이 전부 UNKNOWN 이어도 참일 수 있다
+ * (AI 가 그 날 장소를 하나도 판정하지 못했다고 답한 날). 기본값은 종전 추론(판정 있는 슬롯이 있으면 답한 것)이라 대역이 말하지 않아도 된다.
  */
-data class DayCheck(val judged: Boolean, val slots: List<CheckedSlot>)
+data class DayCheck(
+    val judged: Boolean,
+    val slots: List<CheckedSlot>,
+    val answered: Boolean = slots.any { it.hours != HoursVerdict.UNKNOWN },
+)
 
 /**
  * 슬롯 하나의 점검값.
@@ -48,5 +56,9 @@ data class CheckedSlot(
     val hoursWarnedBefore: Boolean,
 )
 
-/** 영업시간 판정. [UNKNOWN] = AI 모드가 http 가 아님 · 영업시간을 빼라고 함 · 판정 보류 · 영업시간 원문 없음. */
+/**
+ * 영업시간 판정. [OK] 는 AI 가 그 장소의 영업시간을 실제로 보고 위반이 없다고 한 것이다.
+ * [UNKNOWN] = AI 모드가 http 가 아님 · 영업시간을 빼라고 함 · 판정 보류 · 영업시간 원문 없음 · AI 가 그 장소를 판정하지
+ * 못했다고 답함(원문 해석 실패 · 미등록 · 매핑 실패 — 검증 응답의 `unverified_slots`).
+ */
 enum class HoursVerdict { VIOLATED, OK, UNKNOWN }
