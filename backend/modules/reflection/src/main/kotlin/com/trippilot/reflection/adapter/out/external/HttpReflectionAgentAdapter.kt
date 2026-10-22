@@ -7,6 +7,7 @@ import com.trippilot.reflection.domain.port.ReflectionAgentPort
 import org.slf4j.LoggerFactory
 import org.springframework.web.client.RestClient
 import java.time.Clock
+import java.time.Duration
 import java.util.UUID
 
 /**
@@ -19,14 +20,20 @@ import java.util.UUID
  * 응답 본문의 **안쪽을 모델링하지 않는다**(DEC-U5-14). `cover` 만 읽어 제목·부제를 뽑고 나머지는 그대로
  * 카드 원문에 싣는다 — 안쪽을 타입으로 받으면 상대가 템플릿을 하나 늘릴 때마다 우리가 깨진다.
  * (원문은 매퍼를 한 번 지나 정규화된다. jsonb 가 어차피 공백·키 순서를 정규화하므로 손실이 아니다.)
+ *
+ * **여행 요약(`TRIP_SUMMARY`)은 다른 클라이언트로 부른다**(TRIP-1488) — 마감을 싣지 않고(시간 제한 없음 결정) 소켓 read 상한도
+ * 따로다([ReflectionAgentProperties.summaryReadTimeoutMs]). 하루 회고와 같은 21초로 끊으면 긴 여행의 요약은 늘 시간 초과다.
  */
 class HttpReflectionAgentAdapter(
     private val client: RestClient,
     private val properties: ReflectionAgentProperties,
     private val clock: Clock,
+    private val summaryClient: RestClient = client,
 ) : ReflectionAgentPort {
 
     override val enabled = true
+
+    override val summaryCallTimeout: Duration = Duration.ofMillis(properties.connectTimeoutMs + properties.summaryReadTimeoutMs)
 
     override fun generate(input: ReflectionAgentInput): ReflectionCard? {
         // 목적지를 모르거나 실을 방문이 없으면 부르지 않는다 — 상대가 `region` 필수·`visits` 1건 이상을 요구해 422 가 확정이다.
@@ -41,8 +48,9 @@ class HttpReflectionAgentAdapter(
     }
 
     private fun call(input: ReflectionAgentInput): ReflectionCard? {
+        val summary = input.kind == ReflectionAgentInput.KIND_TRIP_SUMMARY
         val body = AiReflectionGenerateRequest(
-            requestMeta = AiReflectionRequestMeta(UUID.randomUUID().toString(), clock.instant(), properties.deadlineMs),
+            requestMeta = AiReflectionRequestMeta(UUID.randomUUID().toString(), clock.instant(), if (summary) null else properties.deadlineMs),
             kind = input.kind,
             region = input.region,
             startDate = input.startDate,
@@ -63,7 +71,7 @@ class HttpReflectionAgentAdapter(
         // 그 컨버터가 application/json 을 가로채 역직렬화하려다 깨진다(실측: MismatchedInputException).
         //
         // 바이트 동일성은 애초에 목표가 아니다 — jsonb 가 공백·키 순서를 정규화하므로 어느 경로든 같다.
-        val node = client.post().uri(AiReflectionPaths.GENERATE).body(body)
+        val node = (if (summary) summaryClient else client).post().uri(AiReflectionPaths.GENERATE).body(body)
             .retrieve().body(JsonNode::class.java)
             ?: return null
         // 제목 검사를 여기 두지 않는다 — [ReflectionCard] 의 불변식이 이미 막고(PBT-U5-F1),

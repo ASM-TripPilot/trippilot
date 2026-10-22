@@ -13,9 +13,12 @@ import org.springframework.stereotype.Component
 @Component
 class ReflectionMetrics(private val registry: MeterRegistry) {
 
-    /** 안 간 장소를 말해 규칙 카드로 내려간 횟수. */
-    fun hallucinationRejected() {
-        registry.counter(HALLUCINATION_REJECTED).increment()
+    /**
+     * 안 간 장소를 말해 규칙 카드(요약이면 규칙 요약)로 내려간 횟수. `kind` 로 하루 회고(`DAILY`)와 여행 요약 회고(`TRIP_SUMMARY`, TRIP-1488)를
+     * 가른다 — 섞이면 한쪽 강등률이 다른 쪽 판단(그 경로의 AI 를 계속 켤지)을 오염시킨다.
+     */
+    fun hallucinationRejected(kind: String) {
+        registry.counter(HALLUCINATION_REJECTED, "kind", kind).increment()
     }
 
     companion object {

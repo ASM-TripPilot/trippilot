@@ -46,20 +46,20 @@ class ReflectionAgentConfiguration {
                 SERVICE_TOKEN_HEADER,
             )
         }
-        return HttpReflectionAgentAdapter(client(properties), properties, clock)
+        return HttpReflectionAgentAdapter(client(properties), properties, clock, client(properties, properties.summaryReadTimeoutMs))
     }
 
     /**
      * 경계 매퍼를 **메시지 컨버터에 심는다** — 기본 컨버터를 쓰면 snake_case 가 아니라 요청이 통째로
      * 422 가 된다. 이름 규칙은 계약이지 취향이 아니다.
      */
-    internal fun client(properties: ReflectionAgentProperties): RestClient =
+    internal fun client(properties: ReflectionAgentProperties, readTimeoutMs: Long = properties.readTimeoutMs): RestClient =
         RestClient.builder()
             .baseUrl(properties.baseUrl)
             .requestFactory(
                 SimpleClientHttpRequestFactory().apply {
                     setConnectTimeout(Duration.ofMillis(properties.connectTimeoutMs))
-                    setReadTimeout(Duration.ofMillis(properties.readTimeoutMs))
+                    setReadTimeout(Duration.ofMillis(readTimeoutMs))
                 },
             )
             .messageConverters { it.add(0, JacksonJsonHttpMessageConverter(ReflectionBoundaryMapper.create())) }

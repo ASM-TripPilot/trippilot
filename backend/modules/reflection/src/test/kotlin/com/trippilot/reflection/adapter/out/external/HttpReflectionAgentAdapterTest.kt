@@ -37,6 +37,14 @@ class HttpReflectionAgentAdapterTest : StringSpec({
         ReflectionAgentProperties(deadlineMs = 15_000, readTimeoutMs = 20_000) // 경계값은 통과
     }
 
+    "여행 요약의 read 상한이 마감 없는 요청의 상대 백스톱보다 작은 설정은 기동에서 거부된다" {
+        shouldThrow<IllegalArgumentException> {
+            ReflectionAgentProperties(summaryReadTimeoutMs = ReflectionAgentProperties.AI_NO_DEADLINE_BACKSTOP_MS - 1)
+        }
+        ReflectionAgentProperties(summaryReadTimeoutMs = ReflectionAgentProperties.AI_NO_DEADLINE_BACKSTOP_MS) // 경계값은 통과
+        (ReflectionAgentProperties().summaryReadTimeoutMs > ReflectionAgentProperties.AI_NO_DEADLINE_BACKSTOP_MS) shouldBe true
+    }
+
     val clock = Clock.fixed(Instant.parse("2026-08-01T00:00:00Z"), ZoneOffset.UTC)
     val day = LocalDate.parse("2026-08-01")
 
@@ -117,6 +125,36 @@ class HttpReflectionAgentAdapterTest : StringSpec({
         adapter.generate(input())
 
         server.verify()
+    }
+
+    /**
+     * 여행 요약(TRIP-1488)은 **요약용 클라이언트**로, 마감 없이 나간다 — 하루 회고와 같은 21초 클라이언트로 부르면 긴 여행의 요약은 늘 끊긴다.
+     * 두 클라이언트를 갈라 두고 어느 쪽으로 나갔는지 본다.
+     */
+    "여행 요약은 요약용 클라이언트로 마감 없이 나가고, 하루 회고는 종전 클라이언트로 나간다" {
+        fun builder() = RestClient.builder().baseUrl("http://ai.test")
+            .messageConverters { it.add(0, JacksonJsonHttpMessageConverter(ReflectionBoundaryMapper.create())) }
+        val dailyBuilder = builder()
+        val summaryBuilder = builder()
+        val daily = MockRestServiceServer.bindTo(dailyBuilder).build()
+        val summary = MockRestServiceServer.bindTo(summaryBuilder).build()
+        val adapter = HttpReflectionAgentAdapter(
+            dailyBuilder.build(), ReflectionAgentProperties(mode = "http", baseUrl = "http://ai.test"), clock, summaryBuilder.build(),
+        )
+        summary.expect(requestTo("http://ai.test/ai/v1/reflection/generate"))
+            .andExpect(jsonPath("$.kind").value("TRIP_SUMMARY"))
+            .andExpect(jsonPath("$.request_meta.deadline_ms").doesNotExist())
+            .andRespond(withSuccess(okBody, MediaType.APPLICATION_JSON))
+        daily.expect(requestTo("http://ai.test/ai/v1/reflection/generate"))
+            .andExpect(jsonPath("$.kind").value("DAILY"))
+            .andExpect(jsonPath("$.request_meta.deadline_ms").value(15000))
+            .andRespond(withSuccess(okBody, MediaType.APPLICATION_JSON))
+
+        adapter.generate(input().copy(kind = ReflectionAgentInput.KIND_TRIP_SUMMARY)) shouldNotBe null
+        adapter.generate(input()) shouldNotBe null
+
+        summary.verify()
+        daily.verify()
     }
 
     /**

@@ -279,7 +279,7 @@ class ReflectionService internal constructor(
             "회고 AI 카드가 안 간 장소를 말해 규칙 카드로 강등합니다. tripId={} date={} 장소={}",
             tripId, dayDate, offending,
         )
-        metrics.hallucinationRejected()
+        metrics.hallucinationRejected(KIND_DAILY)
         return false
     }
 

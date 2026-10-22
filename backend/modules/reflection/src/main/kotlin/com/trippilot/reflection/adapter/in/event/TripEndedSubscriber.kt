@@ -3,7 +3,9 @@ package com.trippilot.reflection.adapter.`in`.event
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.core.event.EventEnvelope
 import com.trippilot.core.event.OutboxSubscriber
+import com.trippilot.reflection.application.TripSummaryNarrator
 import com.trippilot.reflection.application.TripSummaryService
+import com.trippilot.reflection.domain.ReflectionSource
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.util.UUID
@@ -16,10 +18,14 @@ import java.util.UUID
  *
  * ⚠ 릴레이는 **구독자를 붙인 시점 이후** 이벤트만 준다 — 과거에 끝난 여행은 요약이 생기지 않는다.
  * 소급이 필요하면 `trip.ended_at` 을 훑는 별도 배치가 필요하고, 그건 이 티켓 밖이다.
+ *
+ * 규칙 요약을 저장한 **뒤에** AI 회고 문장을 맡긴다(TRIP-1488) — 이 스레드(릴레이)는 기다리지 않는다. 요약 생성이 커밋된 뒤라
+ * 실행기가 그 행을 본다.
  */
 @Component
 class TripEndedSubscriber(
     private val summaries: TripSummaryService,
+    private val narrator: TripSummaryNarrator,
     private val mapper: ObjectMapper,
 ) : OutboxSubscriber {
 
@@ -32,7 +38,9 @@ class TripEndedSubscriber(
         // 못 읽으면 예외로 올린다 — 릴레이가 재시도하고 상한에서 error 로 남긴다.
         // 조용히 건너뛰면 "요약이 왜 안 생겼나"를 영영 못 찾는다(INV-4).
         if (tripId == null) error("TripEnded payload 에서 tripId 를 읽지 못했습니다. eventId=${envelope.eventId}")
-        summaries.generate(tripId)
+        val saved = summaries.generate(tripId)
+        // 이미 AI 문장이 붙은 요약(재배달)이면 다시 부르지 않는다. 방문 0곳(BASIC)은 실을 방문이 없어 맡기지 않는다.
+        if (saved.source == ReflectionSource.RULE) narrator.request(tripId)
         log.debug("여행 종료로 요약을 만들었습니다. tripId={} eventId={}", tripId, envelope.eventId)
     }
 

@@ -556,7 +556,7 @@ class ReflectionPropertyTest : StringSpec({
         val r = svc.generateDaily(acc, tripId, day)
 
         r.source shouldNotBe ReflectionSource.AI // 규칙 카드로 내려갔다
-        registry.counter(ReflectionMetrics.HALLUCINATION_REJECTED).count() shouldBe 1.0
+        registry.counter(ReflectionMetrics.HALLUCINATION_REJECTED, "kind", "DAILY").count() shouldBe 1.0
     }
 
     /**
@@ -584,7 +584,7 @@ class ReflectionPropertyTest : StringSpec({
         val r = svc.generateDaily(acc, tripId, day)
 
         r.source shouldBe ReflectionSource.AI // 실제로 간 곳을 말하고 있다
-        registry.counter(ReflectionMetrics.HALLUCINATION_REJECTED).count() shouldBe 0.0
+        registry.counter(ReflectionMetrics.HALLUCINATION_REJECTED, "kind", "DAILY").count() shouldBe 0.0
     }
 
     "방문한 장소만 말하는 카드는 그대로 쓴다 — 대조가 늘 강등시키면 기능이 죽은 것과 같다" {
