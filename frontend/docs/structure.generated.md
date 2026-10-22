@@ -553,13 +553,13 @@
 
 ## src/features/save-stay/
 - `src/features/save-stay/index.ts`  →  useSavedStays · isOptimisticSavedStayId
-- `src/features/save-stay/index.view.ts`  →  stayKey
+- `src/features/save-stay/index.view.ts`  →  savedStayKey · stayKey
 
 ## src/features/save-stay/model/
 - `src/features/save-stay/model/buildSaveStayRequest.ts`  →  SavableStay · coordsOf · buildSaveStayRequest
 - `src/features/save-stay/model/savedStayIndex.ts`  →  findSavedStayId · optimisticSavedStayId · isOptimisticSavedStayId
 - `src/features/save-stay/model/savedStays.ts`  →  SavedStaysFailureReason · SavedStaysOutcome · useSavedStays
-- `src/features/save-stay/model/stayKey.ts`  →  stayKey
+- `src/features/save-stay/model/stayKey.ts`  →  stayKey · savedStayKey
 
 ## src/features/settings/
 - `src/features/settings/index.ts`  →  BarChartGlyph · BedGlyph · BellGlyph · ChevronLeftGlyph · ChevronRightGlyph · ContrastGlyph · DocumentGlyph · DownloadGlyph · ExternalLinkGlyph · EyeOffGlyph · GearGlyph · ListGlyph · LogoutGlyph · MUTED · MUTED_SOFT · MenuBedGlyph · PersonGlyph · PinGlyph · ShareNodesGlyph · SparkleGlyph · TrashGlyph · CARD_SHADOW
@@ -1782,7 +1782,7 @@
 - `src/test-support/nativeSocialSdkMock.ts`  →  kakaoLoginSpy · naverLoginSpy · naverInitializeSpy · kakaoLogoutSpy · kakaoLoginModule · naverLoginModule · resetNativeSocialSdkMock
 - `src/test-support/navigationThemeMock.tsx`  →  DefaultTheme · ThemeProvider
 - `src/test-support/onboardingScenarios.ts`  →  ConsentBehavior · NicknameBehavior · OnboardingScenario · ONBOARDING_SCENARIOS · OnboardingScenarioKey · setOnboardingScenario · getOnboardingScenario · resetOnboardingScenario
-- `src/test-support/placeCoverFixtures.ts`  →  CoverSlug · COVER_SLUGS · COVER · FALLBACK_COVER · SLUG_OF · UUID_V1 · UUID_V2 · UUID_V3 · VARIANT_OF · coverFor
+- `src/test-support/placeCoverFixtures.ts`  →  CoverSlug · COVER_SLUGS · COVER · FALLBACK_COVER · SLUG_OF · UUID_V1 · UUID_V2 · UUID_V3 · VARIANT_OF · STAY_COVER · STAY_VARIANT_OF · stayCoverFor · coverFor
 - `src/test-support/preventRemoveMock.ts`  →  mockNavigation · useNavigation · usePreventRemove
 - `src/test-support/pushOsFake.ts`  →  OsPermission · primeOsPermission · primeExpoToken · fakePushNotification · fakePushResponse · lastPushTapListener · primeOsLastResponse · lastPushReceiveListener
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
