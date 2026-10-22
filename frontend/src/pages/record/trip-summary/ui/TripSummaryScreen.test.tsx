@@ -102,6 +102,43 @@ describe('🔴 AC-1 · 정상(MAP) — stats·지도·날짜카드 3영역', () 
   });
 });
 
+describe('🔴 TRIP-1489 · j04 요약 문장은 일차 카드 목록의 첫 카드다 (Figma 5063:3498)', () => {
+  const NARRATIVE =
+    '3일 동안 12곳을 다녀왔어요. 바다를 따라 걸은 여행이었어요.';
+
+  it('narrative 를 주면 "이번 여행" 라벨과 문장이 카드로 그려지고, 일차 카드보다 앞이다', () => {
+    renderScreen({ narrative: NARRATIVE });
+
+    const card = screen.getByTestId('reflection-summary-narrative');
+    expect(within(card).getByText('이번 여행')).toBeOnTheScreen();
+    expect(within(card).getByText(NARRATIVE)).toBeOnTheScreen();
+
+    // 같은 부모 안에서 첫 일차 카드보다 앞에 놓인다(순서가 곧 계약).
+    const tree = JSON.stringify(screen.toJSON());
+    expect(tree.indexOf('reflection-summary-narrative')).toBeGreaterThan(-1);
+    expect(tree.indexOf('reflection-summary-narrative')).toBeLessThan(
+      tree.indexOf('reflection-summary-day-card')
+    );
+  });
+
+  it('narrative 가 없거나 공백뿐이면 카드를 그리지 않는다(빈 카드 금지)', () => {
+    renderScreen({ narrative: undefined });
+    expect(screen.queryByTestId('reflection-summary-narrative')).toBeNull();
+  });
+
+  it('공백뿐인 문장도 카드를 그리지 않는다', () => {
+    renderScreen({ narrative: '   ' });
+    expect(screen.queryByTestId('reflection-summary-narrative')).toBeNull();
+  });
+
+  it('요약 문장 카드는 누를 수 없다(목적지 없는 카드에 어포던스를 두지 않는다)', () => {
+    renderScreen({ narrative: NARRATIVE });
+    expect(
+      isTouchable(screen.getByTestId('reflection-summary-narrative'))
+    ).toBe(false);
+  });
+});
+
 describe('🔴 AC-2 · 정상(VISIT_LIST) — 위치 전무 정직 degrade (BR-U5-39)', () => {
   it('view:VISIT_LIST → 지도 부재 + 순서 방문 목록 ≥1 + 거리 셀 "—"', () => {
     renderScreen({

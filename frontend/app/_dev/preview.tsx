@@ -4424,6 +4424,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           { number: 2, lat: 35.1264, lng: 129.0403 },
           { number: 3, lat: 35.1587, lng: 129.1604 },
         ]}
+        narrative="3일 동안 12곳을 다녀왔어요. 광안리에서 송정까지 바다를 따라 걸은 여행이었어요."
         dayCards={[
           {
             key: '2026-06-11',
