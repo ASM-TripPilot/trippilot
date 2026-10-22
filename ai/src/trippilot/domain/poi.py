@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from enum import Enum
+from types import MappingProxyType
 
 from trippilot.domain.common import GeoPoint, PoiId
 
@@ -110,9 +111,12 @@ BUDDHA = "BUDDHA"
 HOLIDAY_TAGS = frozenset({PUBLIC_HOLIDAY, *SEOLLAL, *CHUSEOK, BUDDHA})
 _DATED_RULE = re.compile(r"\d{2}-\d{2}")
 
-# 날짜 → 그 날 태그 (특일 달력). None 이 아니라 **빈 매핑**이면 모드는 켜졌는데 달력을 못 읽은 것이다
-# (실패·키 미등록) — 그때도 날짜 명시형 규칙은 산다.
+# 날짜 → 그 날 태그 (특일 달력). None 이 아니라 **빈 매핑**이면 모드는 켜졌는데 그 범위에 공휴일이 없거나 달력을
+# 못 읽은 것이다(실패·키 미등록 — 그때도 날짜 명시형 규칙은 산다). 못 읽은 것은 아래 `UNREAD_CALENDAR` 하나다.
 HolidayCalendar = Mapping[date, frozenset[str]]
+# 달력을 못 읽었다 — 판정·조립에는 빈 달력과 같고(생성은 그대로 짠다) 정체(`is`)로만 가른다: 태그형 휴일 규칙이
+# 그 날을 닫는지 모르는 슬롯을 검증이 미판정으로 싣는다(`hc1_unjudged` — 상황 감지 INV-SA-2 · G-SA-22).
+UNREAD_CALENDAR: HolidayCalendar = MappingProxyType({})
 
 
 def is_holiday_rule(token: str) -> bool:

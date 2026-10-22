@@ -24,7 +24,7 @@ from trippilot.domain.itinerary import (
     ItinerarySolution,
     Violation,
 )
-from trippilot.domain.poi import HolidayCalendar, Poi, closed_by_holiday, open_windows_on
+from trippilot.domain.poi import HOLIDAY_TAGS, UNREAD_CALENDAR, HolidayCalendar, Poi, closed_by_holiday, open_windows_on
 
 
 def _min_of_day(dt) -> int:
@@ -85,12 +85,17 @@ def hc1_unjudged(solution: ItinerarySolution, poi_index: Mapping[PoiId, Poi],
     `check_hc1` 이 '정보 없음 → 미적용'으로 통과시키는 바로 그 슬롯이다(그 날 `open_windows_on` 이 None — 영업정보
     없음·원문 해석 실패). 위반이 아니라 판정 밖이라 위반 목록에 섞지 않고 따로 낸다 — 모르는 것을 '통과'로 읽게 두지
     않는다(상황 감지 INV-SA-2). 인덱스에 없는 POI 는 세지 않는다(HC1·HC2 를 둘 다 못 본 것이라 경계가 따로 낸다).
+
+    달력을 못 읽었으면(`UNREAD_CALENDAR` — 실패·키 미등록) 태그형 휴일 규칙(공휴일·명절)이 그 날을 닫는지 모른다 —
+    그런 곳은 영업 창으로 통과한 슬롯도 싣는다(G-SA-22). 이미 위반인 슬롯은 판정이다(휴일 규칙은 닫기만 한다).
     """
     out: dict[PoiId, None] = {}
     for day in solution.days:
         for slot in day.slots:
             poi = poi_index.get(slot.poi_id)
-            if poi is not None and open_windows_on(poi, slot.start_at.date(), holidays) is None:
+            if poi is not None and (open_windows_on(poi, slot.start_at.date(), holidays) is None or (
+                    holidays is UNREAD_CALENDAR and not poi.holiday_rules.isdisjoint(HOLIDAY_TAGS)
+                    and open_hours_ok(poi, slot.start_at, slot.end_at, holidays))):
                 out.setdefault(slot.poi_id)
     return list(out)
 
