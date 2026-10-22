@@ -1,11 +1,13 @@
 package com.trippilot.reflection.adapter.out.external
 
+import com.trippilot.reflection.application.ShareCardCopyProperties
 import com.trippilot.reflection.domain.port.ReflectionAgentInput
 import com.trippilot.reflection.domain.port.ShareCardCopy
 import com.trippilot.reflection.domain.port.ShareCardCopyPort
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.web.client.RestClient
@@ -56,6 +58,7 @@ class HttpShareCardCopyAdapter(
  * 클라이언트는 [ReflectionAgentConfiguration.client] 를 그대로 쓴다(경계 매퍼·타임아웃·서비스 토큰 헤더가 한 곳에 있다).
  */
 @Configuration
+@EnableConfigurationProperties(ShareCardCopyProperties::class)
 class ShareCardCopyConfiguration {
 
     @Bean

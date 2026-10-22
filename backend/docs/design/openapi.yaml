@@ -1577,13 +1577,26 @@ paths:
         부를 때마다 새로 짓고 저장하지 않는다(AI 호출). 요청 본문은 없다 — 재료(방문·취향·기간·지역)는 서버가 모은다.
 
 
-        **늘 답이 있다**(INV-4). AI 를 못 부르거나, 상대가 자기 폴백으로 답하거나, 건너뛴 장소를 말하면 규칙 문구
-        (`{목적지} 여행의 기록` · 목적지마다 `#{지역}여행`)가 `isFallback=true` 로 나간다. 캡션 150자·해시태그 10개 상한은
-        AI 쪽 게이트가 UTF-16 코드 유닛으로 먼저 막는다(앱 `validateCaption` 과 같은 단위) — 잘린 문장이 내려오지 않는다.
+        AI 를 못 부르거나, 상대가 자기 폴백으로 답하거나, 계약(캡션 1~150자)을 넘거나, 건너뛴 장소를 말하면 규칙 조립이
+        `isFallback=true` 로 나간다 — **캡션은 빈 문자열**(앱이 문장 시드를 걷어냈다, TRIP-766)이고 해시태그는 목적지마다
+        `#{지역}여행` 이다. 캡션 길이는 앱 `validateCaption` 과 같은 단위(UTF-16 코드 유닛)로 재고, 넘는 AI 캡션은 자르지 않고
+        규칙 조립으로 간다 — 잘린 문장이 내려오지 않는다.
+
+
+        **계정당 하루 상한**이 있다(기본 30회, KST 자정에 풀린다). AI 까지 가는 호출만 센다 — AI 가 꺼져 있거나 간 곳이 없어
+        규칙 조립으로 바로 가는 호출, 404·409 는 세지 않는다.
       responses:
         '200': { description: 문구, content: { application/json: { schema: { $ref: '#/components/schemas/ShareCardCopy' } } } }
         '404': { description: 여행 없음/타 계정 }
         '409': { description: 여행이 끝나 요약이 생기기 전(BR-U5-48) }
+        '429':
+          description: >
+            오늘의 AI 공유 문구 횟수를 모두 썼다(TRIP-1411) — `error.code` = `SHARE_CARD_DAILY_LIMIT`.
+            **재시도로 풀리지 않는다**. `Retry-After` 헤더에 풀리는 시각(KST 자정)까지 남은 초가 실린다.
+            일반 요청 한도(`RATE_LIMITED`)와 코드로 구분한다. 화면은 문구 없이(사용자가 직접 써서) 공유를 이어 갈 수 있다.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
   /trips/{tripId}/reflections:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -4163,13 +4176,20 @@ components:
       type: object
       required: [caption, hashtags, isFallback]
       properties:
-        caption: { type: string, description: 캡션 한 문단. 비어 있지 않다. }
+        caption:
+          type: string
+          maxLength: 150
+          description: >
+            캡션 한 문단. AI 문구(`isFallback=false`)면 1자 이상이다. 규칙 조립(`isFallback=true`)이면 **빈 문자열**이다 —
+            앱이 문장 시드를 걷어냈고(TRIP-766) 캡션은 사용자가 쓴다. 길이는 UTF-16 코드 유닛으로 잰다.
         hashtags:
           type: array
-          items: { type: string, description: '`#` 로 시작한다.' }
+          maxItems: 10
+          items: { type: string, pattern: '^#\S+$', description: '`#` 로 시작하고 공백이 없다.' }
+          description: 목적지를 모르는 규칙 조립이면 비어 있을 수 있다.
         isFallback:
           type: boolean
-          description: AI 문구가 아니라 규칙 조립이다. 그대로 써도 된다.
+          description: AI 문구가 아니라 규칙 조립이다.
 
     TripSummary:
       type: object

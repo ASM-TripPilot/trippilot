@@ -1,7 +1,9 @@
 package com.trippilot.app
 
 import com.trippilot.reflection.adapter.out.external.HttpReflectionAgentAdapter
+import com.trippilot.reflection.adapter.out.external.HttpShareCardCopyAdapter
 import com.trippilot.reflection.domain.port.ReflectionAgentPort
+import com.trippilot.reflection.domain.port.ShareCardCopyPort
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -21,11 +23,18 @@ import org.springframework.test.context.TestPropertySource
 class ReflectionAgentHttpWiringIT : AbstractPostgresIntegrationTest() {
 
     @Autowired private lateinit var agent: ReflectionAgentPort
+    @Autowired private lateinit var shareCard: ShareCardCopyPort
 
     @Test
     fun `mode=http 면 실 어댑터가 물린다`() {
         agent.shouldBeInstanceOf<HttpReflectionAgentAdapter>()
         agent.enabled shouldBe true
+    }
+
+    @Test
+    fun `같은 스위치로 공유 문구 경계도 실 어댑터가 물린다(TRIP-1411)`() {
+        shareCard.shouldBeInstanceOf<HttpShareCardCopyAdapter>()
+        shareCard.enabled shouldBe true
     }
 }
 
@@ -37,9 +46,16 @@ class ReflectionAgentHttpWiringIT : AbstractPostgresIntegrationTest() {
 class ReflectionAgentDefaultWiringIT : AbstractPostgresIntegrationTest() {
 
     @Autowired private lateinit var agent: ReflectionAgentPort
+    @Autowired private lateinit var shareCard: ShareCardCopyPort
 
     @Test
     fun `기본 모드에서는 경계가 꺼져 있다 — 규칙 카드로 간다`() {
         agent.enabled shouldBe false
+    }
+
+    @Test
+    fun `기본 모드에서는 공유 문구 경계도 꺼져 있다 — 규칙 문구로 간다(TRIP-1411)`() {
+        (shareCard is HttpShareCardCopyAdapter) shouldBe false
+        shareCard.enabled shouldBe false
     }
 }

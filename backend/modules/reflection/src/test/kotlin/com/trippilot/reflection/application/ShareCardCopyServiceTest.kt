@@ -6,6 +6,8 @@ import com.trippilot.archive.api.ArchiveVisitView
 import com.trippilot.changelog.api.AppendChangeLog
 import com.trippilot.changelog.api.ChangeLogFacade
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.ErrorCode
+import com.trippilot.core.error.RateLimited
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.placedata.api.FrozenPoiView
 import com.trippilot.placedata.api.PoiSurfaceFacade
@@ -17,6 +19,7 @@ import com.trippilot.reflection.domain.TripSummaryRepository
 import com.trippilot.reflection.domain.port.ReflectionAgentInput
 import com.trippilot.reflection.domain.port.ShareCardCopy
 import com.trippilot.reflection.domain.port.ShareCardCopyPort
+import com.trippilot.reflection.domain.port.ShareCardUsageRepository
 import com.trippilot.trip.api.TripDestinationRef
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripGenerationContext
@@ -25,8 +28,10 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
+import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneOffset
 import java.util.UUID
 
 /**
@@ -76,8 +81,20 @@ class ShareCardCopyServiceTest : StringSpec({
         override fun findTimeline(accountId: UUID, tripId: UUID, limit: Int) = emptyList<com.trippilot.changelog.api.ChangeLogEntryView>().also { reads++ }
     }
 
+    /** 집은 날을 센다 — 무엇을 셌는지(AI 까지 간 호출만)를 본다. [limit] 에 닿으면 false. */
+    class Usage(private val limit: Int = Int.MAX_VALUE) : ShareCardUsageRepository {
+        val claims = mutableListOf<LocalDate>()
+        override fun claim(accountId: UUID, day: LocalDate, limit: Int): Boolean =
+            (claims.size < minOf(limit, this.limit)).also { if (it) claims += day }
+    }
+
+    // 2026-08-13 00:30 KST = 2026-08-12 15:30 UTC — 두 날짜가 다른 시각이라 KST 로 세는지가 보인다.
+    val clock: Clock = Clock.fixed(Instant.parse("2026-08-12T15:30:00Z"), ZoneOffset.UTC)
+
     fun service(
         copier: ShareCardCopyPort,
+        usage: ShareCardUsageRepository = Usage(),
+        properties: ShareCardCopyProperties = ShareCardCopyProperties(),
         archive: ArchiveRecordFacade = CountingArchive(twoDays),
         ctx: TripGenerationContext? = context(),
         summaryExists: Boolean = true,
@@ -103,7 +120,7 @@ class ShareCardCopyServiceTest : StringSpec({
             override fun findPreferences(accountId: UUID) =
                 PreferenceSnapshot(listOf("사진"), emptyList(), emptyList(), emptyList(), null, emptyList(), false, null)
         }
-        return ShareCardCopyService(trips, archive, surfaces, summaries, ReflectionMaterials(preferences, changeLogs), copier)
+        return ShareCardCopyService(trips, archive, surfaces, summaries, ReflectionMaterials(preferences, changeLogs), copier, usage, properties, clock)
     }
 
     val aiCopy = ShareCardCopy("바다와 골목을 담은 사흘", listOf("#부산여행", "#해운대"), isFallback = false)
@@ -129,13 +146,29 @@ class ShareCardCopyServiceTest : StringSpec({
         changeLogs.reads shouldBe 0 // 사건을 싣지 않으므로 변경 이력을 읽지 않는다
     }
 
-    "AI 를 못 받으면 규칙 문구 — 비어 있지 않고 isFallback 이다" {
+    "AI 를 못 받으면 규칙 문구 — 캡션은 비우고(TRIP-766) 목적지마다 태그, isFallback" {
         val copy = service(Copier(null)).copy(acc, tripId)
 
         copy shouldBe rule
-        copy.caption shouldBe "부산·경주 여행의 기록"
+        copy.caption shouldBe ""
         copy.hashtags shouldBe listOf("#부산여행", "#경주여행")
         copy.isFallback shouldBe true
+    }
+
+    "캡션이 150자를 넘으면 자르지 않고 규칙 문구 — 150자는 통과(UTF-16 단위)" {
+        service(Copier(ShareCardCopy("가".repeat(151), listOf("#부산여행"), isFallback = false))).copy(acc, tripId) shouldBe rule
+        val exact = "가".repeat(150)
+        service(Copier(ShareCardCopy(exact, listOf("#부산여행"), isFallback = false))).copy(acc, tripId).caption shouldBe exact
+        // 이모지는 UTF-16 두 칸이다 — 75개면 150, 76개면 넘는다(앱 validateCaption 과 같은 단위).
+        service(Copier(ShareCardCopy("😀".repeat(76), emptyList(), isFallback = false))).copy(acc, tripId) shouldBe rule
+    }
+
+    "AI 해시태그를 다듬는다 — # 를 하나만 앞에, 공백·빈 것·중복을 빼고 10개까지" {
+        val tags = listOf("부산여행", "##해운대", " # 감천 문화마을 ", "#", "", "#부산여행") + (1..12).map { "#태그$it" }
+        val got = service(Copier(ShareCardCopy("바다를 담은 사흘", tags, isFallback = false))).copy(acc, tripId)
+
+        got.hashtags shouldBe listOf("#부산여행", "#해운대", "#감천문화마을") + (1..7).map { "#태그$it" }
+        got.isFallback shouldBe false
     }
 
     "상대가 자기 폴백으로 답하면 우리 규칙 문구를 쓴다 — 목적지마다 태그가 있다" {
@@ -149,6 +182,14 @@ class ShareCardCopyServiceTest : StringSpec({
     "건너뛴 장소를 말하면 규칙 문구로 간다 — 해시태그에 섞여도 잡는다(BR-U5-31)" {
         service(Copier(ShareCardCopy("바다를 담은 사흘", listOf("#부산여행", "#광안리"), isFallback = false))).copy(acc, tripId) shouldBe rule
         service(Copier(ShareCardCopy("광안리 야경까지 담은 사흘", emptyList(), isFallback = false))).copy(acc, tripId) shouldBe rule
+    }
+
+    "여러 단어 이름도 해시태그에서 잡는다 — 태그는 공백을 못 담는다(대소문자 무시)" {
+        ShareCardCopyService.tagLeaks(listOf("#부산여행", "#제주동문시장"), banned = listOf("제주 동문시장"), visited = listOf("해운대")) shouldBe
+            listOf("제주 동문시장")
+        ShareCardCopyService.tagLeaks(listOf("#seoulforest"), banned = listOf("Seoul Forest"), visited = emptyList()) shouldBe listOf("Seoul Forest")
+        // 간 곳 이름에 삼켜지는 금지 이름은 뺀다 — "카페"를 건너뛰고 "카페 델문도"에 갔으면 #카페델문도 는 정당하다.
+        ShareCardCopyService.tagLeaks(listOf("#카페델문도"), banned = listOf("카페"), visited = listOf("카페 델문도")).shouldBeEmpty()
     }
 
     "꺼져 있으면 방문을 읽지 않고 규칙 문구" {
@@ -178,9 +219,38 @@ class ShareCardCopyServiceTest : StringSpec({
         copier.sent shouldBe null
     }
 
-    "규칙 문구 — 태그는 공백을 지우고, 목적지가 없어도 캡션은 비지 않는다" {
+    "규칙 문구 — 캡션은 비고, 태그는 공백을 지워 10개까지" {
         ShareCardCopyService.ruleCopy(listOf("제주 서귀포", "부산")) shouldBe
-            ShareCardCopy("제주 서귀포·부산 여행의 기록", listOf("#제주서귀포여행", "#부산여행"), isFallback = true)
-        ShareCardCopyService.ruleCopy(emptyList()) shouldBe ShareCardCopy("여행의 기록", emptyList(), isFallback = true)
+            ShareCardCopy("", listOf("#제주서귀포여행", "#부산여행"), isFallback = true)
+        ShareCardCopyService.ruleCopy(emptyList()) shouldBe ShareCardCopy("", emptyList(), isFallback = true)
+        ShareCardCopyService.ruleCopy((1..12).map { "지역$it" }).hashtags.size shouldBe 10
+    }
+
+    "하루 상한 — AI 까지 갈 호출만 KST 날짜로 세고, 닿으면 429(SHARE_CARD_DAILY_LIMIT)·Retry-After 는 KST 자정까지" {
+        val usage = Usage(limit = 2)
+        val copier = Copier(aiCopy)
+        val svc = service(copier, usage = usage)
+
+        svc.copy(acc, tripId) shouldBe aiCopy
+        svc.copy(acc, tripId) shouldBe aiCopy
+        val e = shouldThrow<RateLimited> { svc.copy(acc, tripId) }
+
+        e.errorCode shouldBe ErrorCode.SHARE_CARD_DAILY_LIMIT
+        e.retryAfterSeconds shouldBe (23 * 60 + 30) * 60L // 00:30 KST → 다음 KST 자정
+        usage.claims shouldBe listOf(LocalDate.parse("2026-08-13"), LocalDate.parse("2026-08-13"))
+    }
+
+    "AI 까지 가지 않는 호출은 세지 않는다 — 꺼짐·간 곳 없음·404·409" {
+        val usage = Usage()
+        service(Copier(aiCopy, enabled = false), usage = usage).copy(acc, tripId)
+        service(Copier(aiCopy), usage = usage, archive = CountingArchive(emptyList())).copy(acc, tripId)
+        runCatching { service(Copier(aiCopy), usage = usage).copy(UUID.randomUUID(), tripId) }
+        runCatching { service(Copier(aiCopy), usage = usage, summaryExists = false).copy(acc, tripId) }
+        usage.claims.shouldBeEmpty()
+    }
+
+    "상한 설정은 1 이상이다 — 끄는 일은 AI 모드 스위치의 몫" {
+        shouldThrow<IllegalArgumentException> { ShareCardCopyProperties(dailyLimit = 0) }
+        ShareCardCopyProperties(dailyLimit = 1).dailyLimit shouldBe 1
     }
 })

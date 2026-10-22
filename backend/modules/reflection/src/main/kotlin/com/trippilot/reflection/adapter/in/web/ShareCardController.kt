@@ -29,6 +29,8 @@ private fun Principal.accountId(): UUID =
     runCatching { UUID.fromString(name) }.getOrElse { throw AuthenticationRequired() }
 
 /**
- * @property isFallback AI 문구가 아니라 규칙 조립이다(AI 를 못 불렀거나·상대 폴백이었거나·안 간 곳을 말했다). 그대로 써도 된다.
+ * @property caption AI 문구면 1~150자. [isFallback] 이면 빈 문자열이다(앱이 문장 시드를 걷어냈다 — TRIP-766).
+ * @property hashtags `#` 시작, 최대 10개.
+ * @property isFallback AI 문구가 아니라 규칙 조립이다(AI 를 못 불렀거나·상대 폴백이었거나·계약을 넘었거나·안 간 곳을 말했다).
  */
 data class ShareCardCopyResponse(val caption: String, val hashtags: List<String>, val isFallback: Boolean)
