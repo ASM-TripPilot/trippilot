@@ -123,10 +123,15 @@ def _eligible(poi: Poi, day: date, holidays: HolidayCalendar | None) -> bool:
             and hours_label(poi, day, holidays) is not None and _displayable(poi.name))
 
 
-def _shown(event: EventInfo, day: date) -> bool:
+def shown_event(event: EventInfo) -> bool:
+    """사용자에게 이름을 보여도 되는 행사 — 공식 축제·수동 큐레이션 팝업만(O-SA-12·LEGAL-SA-05), 좌표·유형·표시 가능한 이름.
+    도우미 장소 탐색의 행사 답도 이 규칙을 쓴다 — 네이버 검색에서 LLM 이 뽑은 행사(evx-)를 한 면에서만 숨기면 노출이 넓어진다."""
     return (event.event_type is not EventType.OTHER and event.coord is not None
-            and event.event_id.startswith(_SHOWN_EVENT_SOURCES) and event.overlaps((day,))
-            and _displayable(event.name))
+            and event.event_id.startswith(_SHOWN_EVENT_SOURCES) and _displayable(event.name))
+
+
+def _shown(event: EventInfo, day: date) -> bool:
+    return shown_event(event) and event.overlaps((day,))
 
 
 def _displayable(name: str) -> bool:

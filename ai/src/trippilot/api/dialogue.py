@@ -241,7 +241,7 @@ def build_dialogue_orchestrator(
     place_intro = PlaceIntro(embedding, kb_store) if kb_store is not None else None
     ports = HandlerPorts(poi_info=providers[ProviderKind.POI_INFO], weather=providers.get(ProviderKind.WEATHER),
                          transit=providers[ProviderKind.TRANSIT], pool_builder=pool_builder, planb=rag,
-                         place_sql=place_lookup, place_intro=place_intro)
+                         place_sql=place_lookup, place_intro=place_intro, events=providers.get(ProviderKind.EVENT))
     tools = plan_tools(ports)  # 배선된 도구 → 설명(여행 필요 꼬리표 포함) — 게이트 closed-set 과 `$tools` 가 같은 사전에서 나온다
     planner = None
     if LlmFeature.DIALOGUE_PLAN in c1_config.feature_models:  # DEC-AO-18 — 배정이 곧 켜기(env 무증가)
