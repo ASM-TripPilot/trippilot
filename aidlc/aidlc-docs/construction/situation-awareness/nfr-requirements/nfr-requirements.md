@@ -125,6 +125,8 @@ planb.situation_sweep mode= phase= trips= skipped= failed= live=[] off=[] observ
 > - **`dry-run` 표본 해석**(OBS-SA-01 · 켜기 1·3·8단계) — `dry-run` 은 행이 없어 회차마다 '지금 켜면'을 다시 센다 — 같은 위험이 매시 다시 세지고, 요약 줄의 `announced`·`pushed`·`quiet` 는 그 회차의 값이라 회차끼리 더하지 않는다. 표본 줄 `planb.situation_sample tripId= source= kind= date= variant= severity= slot=` 은 신호(양성)만 싣는다 — 모름은 요약 줄의 출처별 수(`unknown=`)로 본다. 장소 표본의 `slot` 은 `{date}#{poiId}` 이고 날씨 표본은 비어 있다. 오탐은 (`tripId`, `source`, `date`, `variant`)로 중복을 걷어 센다 — 장소는 `slot` 이 장소를 가른다(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/application/SituationSweep.kt:219-221,288-298`).
 > - **OBS-SA-02 의 빈칸** — 대기 중 2분을 넘겨 낡은 이른 날짜 SYSTEM 세션을 늦은 날짜 사건이 닫고 연 경우가 `outcome=OPENED` 로만 남는다 — 결정 28 의 '낡음으로 닫히는 비율'을 이 줄로 셀 수 없다(G-SA-23 — 6단계 전에 가르는 수단을 둔다).
 
+> **[개정 · 2026-10-22 — 구현 반영]** OBS-SA-01 표본 줄 — 슬롯 신호는 끝에 `name="장소 이름"` 과 `at=요일 HH:mm~HH:mm`(자정 넘김 `(+1)`)을 더 싣는다. 날짜 전체 신호(날씨·특보)는 `name=null at=null` 이다. 장소 id 는 환경마다 다른 무작위 값이라 이것 없이는 휴무 오탐을 영업시간 원문과 로그만으로 대조할 수 없었다 — 운영 dry-run 첫 07:15 회차(2026-10-22)에서 켰다면 9건 중 3건에 휴무 푸시가 나갈 뻔했는데(OUT_OF_HOURS 2 · CLOSED_DAY 1) 대조하지 못했다. 좌표·계정 id 는 여전히 싣지 않는다(SEC-SA-05). 사용자 결정 2026-10-22(`business-logic-model.md` §0.4) · TRIP-1569 · #1542.
+
 ## 5. 보안 (SEC-SA-\*)
 
 | ID | 요구 | 근거 |

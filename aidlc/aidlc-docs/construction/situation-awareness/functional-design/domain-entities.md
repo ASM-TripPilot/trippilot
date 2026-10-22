@@ -202,7 +202,7 @@ PK `(trip_id, source)`.
 > - `reasonCode` 는 #1410 부터 실제로 실린다 — 그 날 HC1 위반 가운데 위치가 있는 것의 `reason_code`(`ItineraryDayCheckService.kt:64-67,82`).
 > - `hoursWarnedBefore` 의 'HC1 문구'에는 2026-09-28(TRIP-1030) 이전 저장분의 꼴(`영업시간 밖`·`요일 휴무`)도 든다(`ViolationText.kt:41-50`).
 
-> **[개정 · 2026-10-22 — 구현 반영]** §7.1 — 미판정 장소(줄 번호 기준 커밋 `6b190374e` · 규칙은 `business-rules.md` BR-SA-17 개정 블록).
+> **[개정 · 2026-10-22 — 구현 반영]** §7.1 — 미판정 장소(줄 번호 기준 커밋 `45288d752`(#1539) · 규칙은 `business-rules.md` BR-SA-17 개정 블록).
 > - `hours = UNKNOWN` 의 원인에 **'AI 가 그 장소를 판정하지 못했다고 답함'**(검증 응답 `unverified_slots` 의 모든 사유 — 영업 창 모름 `HOURS_UNKNOWN`(원문 해석 실패 포함) · 미등록 `NOT_REGISTERED` · 매핑 실패 `UNMAPPABLE`)이 더해진다. `OK` 는 AI 가 그 장소의 영업시간을 실제로 보고 위반이 없다고 한 것이다(`backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/api/ItineraryDayCheckFacade.kt:59-64`).
 > - **`DayCheck.answered`**(신설) — AI 를 불러 답을 받았는가. 슬롯이 전부 `UNKNOWN` 이어도 참일 수 있다(그 날 장소를 하나도 판정하지 못했다는 답). 장소 감지의 회차 회로가 0 으로 돌아가는 근거다. `judged` 와 다르다 — `judged` 는 AI 를 부르지 않은 날도 참이고, `answered` 는 불러서 답을 받은 날에만 참이다. 기본값은 종전 추론(판정 있는 슬롯이 있으면 답한 것)이다(`:25-38`).
 > - 하루 점검은 미판정 목록까지 돌려주는 포트 메서드로 검증한다 — 그 메서드의 기본 구현은 '못 본 장소 없음'이고 실 어댑터(`HttpScheduleAgentAdapter`)만 재정의한다(`backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/domain/ScheduleAgentPort.kt:20-27`). 포트를 감싸는 데코레이터나 새 실 어댑터가 재정의를 빠뜨리면 미판정이 조용히 '확인'으로 돌아간다 — 열린 항목(검토 지적: 추상으로 두고 대역이 명시적으로 재정의하는 쪽이 안전하다).
@@ -231,7 +231,7 @@ PK `(trip_id, source)`.
 - 공개 계약 `HourlyForecastFacade { isLive(); gridKeyOf(lat, lng): String?; forecastForTrigger(lat, lng, at): PointForecast? }` — null = 모름(자료 없음 · 상한 · 낡음 · live 아님). 출처의 고장은 `HourlyForecastUnavailable` 로 던진다 — 원인 코드가 있으면 게이트웨이 거절(그 출처 전체), 없으면 시한·5xx·형식 깨짐(그 격자). `gridKeyOf` 는 회차 안 실패 격자 기억의 키다(RES-SA-02·04). `PointForecast` = 그 격자 발표분의 시각별 `POP`·`PTY`·`SKY`·`TMP`·`WSD` + 날짜별 `TMN`·`TMX` + 발표 시각. `ContextFacade` 와 분리한다(구현 대역 보호).
 - 파드당 하루 호출 상한(3,000)은 **이 격자 경로만** 센다 — 이름 경로·도우미 날씨 카드는 세지 않는다.
 
-> **[개정 · 2026-10-22 — 구현 반영]** §8.1 — 날짜별 `TMN`·`TMX` 를 더 쓰지 않는다(사용자 결정 25번 (다)의 정리 · 줄 번호 기준 커밋 `d31384535`). 기온 판정이 시간별 `TMP` 만 보게 되자 그 값을 읽는 곳이 없어졌다(`business-rules.md` BR-SA-15 개정 블록).
+> **[개정 · 2026-10-22 — 구현 반영]** §8.1 — 날짜별 `TMN`·`TMX` 를 더 쓰지 않는다(사용자 결정 25번 (다)의 정리 · 줄 번호 기준 커밋 `b9c1cb52e`(#1540)). 기온 판정이 시간별 `TMP` 만 보게 되자 그 값을 읽는 곳이 없어졌다(`business-rules.md` BR-SA-15 개정 블록).
 > - **`daily` 열** — 코드가 매핑하지 않는다(어댑터는 받지 않고, 저장·읽기에 싣지 않는다). DB 칸은 남기고 기본값 `'{}'` 만 둔다 — 확장형 마이그레이션 `V2.NN__weather_grid_forecast_daily_default.sql` 이 §16 표에 하나 더해진다(번호는 머지 직전 `origin/develop` 최댓값 + 1). NOT NULL 은 풀지 않는다 — 롤링 창의 옛 파드는 이 칸을 null 아닌 맵으로 읽는다(`backend/modules/weather-context/src/main/kotlin/com/trippilot/weathercontext/adapter/out/persistence/GridForecastPersistence.kt:17-35`).
 > - 롤링 창 동안 새 파드가 처음 만든 행은 `daily = '{}'` 이고, 옛 파드가 쓴 행을 새 파드가 덮으면(UPDATE) 그 칸에 옛 값이 남는다 — 옛 파드만 읽는 칸이라 창이 닫히면 읽는 곳이 없다.
 > - **칸 삭제(DROP COLUMN)는 후속**이다 — 이 칸을 쓰는 옛 파드가 남지 않은 다음 배포에서 한다. 추적하는 곳이 마이그레이션 머리말뿐이라 백로그 항목이 필요하다(`business-logic-model.md` §9 개정 블록).
@@ -308,7 +308,7 @@ PK `(trip_id, source)`.
 
 > **[개정 · 2026-10-20 — 사용자 결정 25~31]** §11 — 선택 필드 `eventType?` 를 더한다(사용자 결정 27번 (나) — `business-rules.md` BR-SA-22 개정 블록). 행사 카드(`EVENT_*`)의 행사 유형이다 — `FESTIVAL`(축제) · `PERFORMANCE`(공연) · `EXHIBITION`(전시) · `POPUP`(팝업). 분류 불가 `OTHER` 행사는 카드에 오르지 않는다(BR-SA-22 ②). AI 응답의 `event_type` 을 백엔드가 옮긴다. 쓰임 — 날씨 위험·반영 날 백엔드는 야외 축제(`FESTIVAL`·유형 모름)를 빼고, 앱은 날씨 위험 날 그 카드만 숨긴다. 값이 없거나 모르는 값이면 유형 모름이다.
 
-> **[개정 · 2026-10-22 — 구현 반영]** §11 — `eventType?` 의 구현(줄 번호 기준 커밋 `94a816ed7`). `TRENDING` 은 늘 null 이고, 행사 카드인데 null 이면 유형 모름(옛 AI · 모르는 값)이다. 백엔드는 모르는 `kind` 와 달리 모르는 유형 하나로 답 전체를 버리지 않는다 — 그 카드는 그대로 그릴 수 있고 날씨 위험 날 축제처럼 빠질 뿐이다(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/domain/Opportunity.kt:18-34` · `adapter/out/external/HttpOpportunityAdapter.kt:91-105`). 앱 문장(`frontend-components.md` §4.2 템플릿)은 이 값으로 바뀌지 않는다. 필드 목록·와이어는 `business-rules.md` BR-SA-22 개정 블록.
+> **[개정 · 2026-10-22 — 구현 반영]** §11 — `eventType?` 의 구현(줄 번호 기준 커밋 `df092009a`(#1541)). `TRENDING` 은 늘 null 이고, 행사 카드인데 null 이면 유형 모름(옛 AI · 모르는 값)이다. 백엔드는 모르는 `kind` 와 달리 모르는 유형 하나로 답 전체를 버리지 않는다 — 그 카드는 그대로 그릴 수 있고 날씨 위험 날 축제처럼 빠질 뿐이다(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/domain/Opportunity.kt:18-34` · `adapter/out/external/HttpOpportunityAdapter.kt:91-105`). 앱 문장(`frontend-components.md` §4.2 템플릿)은 이 값으로 바뀌지 않는다. 필드 목록·와이어는 `business-rules.md` BR-SA-22 개정 블록.
 
 ---
 
