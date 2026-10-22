@@ -435,6 +435,63 @@ def test_edit_schedule_is_a_frame_handoff_that_only_tidies_arguments() -> None:
     assert edit_arguments(_ctx(arguments={})) == {}
 
 
+class _Coords:
+    """장소 정보 공급자 대역 — 정한 좌표만 돌려준다(지역 이름으로 자리를 푸는 재료)."""
+
+    def __init__(self, coords: dict[str, GeoPoint]) -> None:
+        self.coords, self.calls = coords, 0
+
+    def fetch(self, params: dict) -> InfoPacket:
+        self.calls += 1
+        pois = [{"poi_id": pid, "lat": c.lat, "lng": c.lng} for pid, c in self.coords.items() if pid in params["poi_ids"]]
+        return InfoPacket(ProviderKind.POI_INFO, ProviderStatus.OK, {"pois": pois, "misses": []}, _fresh(params["now"]))
+
+
+def _said(ctx: TurnContext, utterance: str) -> TurnContext:
+    return replace(ctx, utterance=utterance)
+
+
+def test_edit_insert_ask_without_day_gets_the_one_day_its_position_resolves_on() -> None:
+    """날을 안 말한 사이 넣기 — 안 실으면 BE 는 여행 전에 날을 못 고른다(분류가 target 에 '한 군데'를 싣는다, 2026-10-22 실측)."""
+    said = "우도 다음에 갈 만한 곳 하나 추가해줘"
+    assert edit_arguments(_said(_ctx(arguments={"target": "한 군데"}), said)) == {"target": "한 군데", "day": _D2.isoformat()}
+    # 말한 날은 그대로(넘겨짚지 않는다), 지난 날의 자리는 싣지 않는다
+    assert edit_arguments(_said(_ctx(arguments={"day": "셋째 날"}), said)) == {"day": _D3.isoformat()}
+    assert edit_arguments(_said(_ctx(), "성산일출봉 다음에 한 군데 더 넣어줘")) == {}  # 첫째 날 = 어제
+    assert edit_arguments(_said(_ctx(), "우도 다음에 효창공원 넣어줘")) == {"day": _D2.isoformat()}  # 이름 지목도 자리는 코드
+
+
+def test_edit_insert_day_is_left_out_when_two_days_match_or_names_need_coords() -> None:
+    both = _snapshot(((_D2, (_slot("우도", "13:00", "자연", _D2), _slot("해녀의집", "15:00", _FOOD_KO, _D2))),
+                      (_D3, (_slot("우도", "10:00", "자연", _D3), _slot("한라산", "12:00", "자연", _D3)))))
+    assert edit_arguments(_said(_ctx(both), "우도 다음에 한 군데 더 넣어줘")) == {}  # 둘 다 풀린다 — 고르지 않는다
+    itaewon, hongdae = str(uuid.uuid4()), str(uuid.uuid4())
+    seoul = _snapshot(((_D3, (SlotView.from_wire(f"{_D3}#{itaewon}", "경리단길", time(11), "액티비티"),
+                              SlotView.from_wire(f"{_D3}#{hongdae}", "경의선숲길", time(15), "액티비티"))),))
+    said = "이태원에서 홍대로 넘어갈 때 한 군데 더"
+    assert edit_arguments(_said(_ctx(seoul), said)) == {}  # 이름에 지역이 없고 좌표도 없다
+    coords = _Coords({itaewon: GeoPoint(37.5385, 126.9875), hongdae: GeoPoint(37.5617, 126.9231)})
+    assert edit_arguments(_said(_ctx(seoul, ports=HandlerPorts(poi_info=coords)), said)) == {"day": _D3.isoformat()}
+    assert coords.calls == 1
+    broken = HandlerPorts(poi_info=_PoiInfo(fail=True))  # 공급자가 실패해도 FRAME 은 나간다(날만 못 싣는다)
+    assert edit_arguments(_said(_ctx(seoul, ports=broken), said)) == {}
+
+
+
+def test_edit_insert_day_asks_coords_only_when_names_fail_and_time_allows() -> None:
+    """이름으로 풀리면 조회 0회, 지역이라 좌표가 필요해도 남은 시한이 모자라면 조회하지 않는다(동기 HTTP, 2차 리뷰)."""
+    by_name = _Coords({})
+    assert edit_arguments(_said(_ctx(arguments={}, ports=HandlerPorts(poi_info=by_name)), "우도 다음에 한 군데 더 넣어줘")) == {
+        "day": _D2.isoformat()}
+    assert by_name.calls == 0
+    itaewon, hongdae = str(uuid.uuid4()), str(uuid.uuid4())
+    seoul = _snapshot(((_D3, (SlotView.from_wire(f"{_D3}#{itaewon}", "경리단길", time(11), "액티비티"),
+                              SlotView.from_wire(f"{_D3}#{hongdae}", "경의선숲길", time(15), "액티비티"))),))
+    coords = _Coords({itaewon: GeoPoint(37.5385, 126.9875), hongdae: GeoPoint(37.5617, 126.9231)})
+    late = _ctx(seoul, ports=HandlerPorts(poi_info=coords), remaining_ms=900)
+    assert edit_arguments(_said(late, "이태원에서 홍대로 넘어갈 때 한 군데 더")) == {} and coords.calls == 0
+
+
 # ── ④ 의도별 — 스냅샷 계산 ──────────────────────────────────────────────────
 
 
