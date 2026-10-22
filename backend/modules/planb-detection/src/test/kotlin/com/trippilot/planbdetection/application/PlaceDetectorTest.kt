@@ -272,6 +272,19 @@ class PlaceDetectorTest : StringSpec({
             .shouldBeInstanceOf<Detection.Unknown>()
     }
 
+    "같은 날 확인한 장소와 모르는 장소가 섞이면 확인은 그대로 내되 partial 이다 — 감시 상태를 '확인'으로 남기지 않는다(G-SA-21)" {
+        val both = FakeStatus(mapOf(poiA to PoiLifeStatus.ACTIVE, poiB to PoiLifeStatus.ACTIVE))
+        val mixed = DayCheck(true, listOf(checked(TOMORROW, poiA, "10:00"), checked(TOMORROW, poiB, "12:00", HoursVerdict.UNKNOWN)))
+        val judged = DayCheck(true, listOf(checked(TOMORROW, poiA, "10:00"), checked(TOMORROW, poiB, "12:00")))
+
+        val partial = detector(FakeDays(mixed), both).detect(target(TOMORROW, at(TODAY, "20:15"), SweepPhase.EVENING))
+        val full = detector(FakeDays(judged), both).detect(target(TOMORROW, at(TODAY, "20:15"), SweepPhase.EVENING))
+
+        partial.shouldBeInstanceOf<Detection.Checked>().checked shouldBe setOf("$TOMORROW#$poiA")
+        partial.partial shouldBe true
+        full.shouldBeInstanceOf<Detection.Checked>().partial shouldBe false
+    }
+
     "볼 슬롯이 없으면(빈 날) 신호·확인 없이 확인으로 낸다 — 모를 것이 없다" {
         val d = detector(FakeDays(DayCheck(true, emptyList())), FakeStatus()).detect(target(TOMORROW, at(TODAY, "20:15"), SweepPhase.EVENING))
 
