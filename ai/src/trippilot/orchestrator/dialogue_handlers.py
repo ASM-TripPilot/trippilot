@@ -26,6 +26,7 @@ None, 2자 미만 무시), 날짜·'N일차'·상대 날짜로 날을 좁히고,
 
 from __future__ import annotations
 
+import math
 import re
 import uuid
 from collections import Counter
@@ -49,7 +50,7 @@ from trippilot.domain.intent import DIALOGUE_INTENTS, Intent
 from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory, counts_as_food, reputation_bonus
 from trippilot.domain.theme_tags import themes_in
 from trippilot.domain.poi_curation import CandidatePoolRequest
-from trippilot.domain.region_centers import region_center
+from trippilot.domain.region_centers import bare_region, region_center, region_mentions, region_pair
 from trippilot.domain.transit import TransitPurpose
 from trippilot.domain.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, _MAX_LENGTH, _violates
@@ -58,7 +59,7 @@ from trippilot.orchestrator.arguments import extract_kind
 from trippilot.orchestrator.intent_router import normalize
 from trippilot.orchestrator.opportunity import _displayable
 from trippilot.orchestrator.place_intro import PlaceIntro
-from trippilot.orchestrator.place_sql import PlaceSqlLookup
+from trippilot.orchestrator.place_sql import PlaceSqlLookup, asks_for_places
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder, restrict_pool_to_target_role
 from trippilot.providers.base import Provider
 from trippilot.providers.transit import _format_distance_range
@@ -219,6 +220,11 @@ class TurnContext:
     remaining_ms: Callable[[], int]
     ports: HandlerPorts = field(default_factory=HandlerPorts)
     utterance: str = ""  # 사용자 발화 원문 — 장소 탐색 NL2SQL 의 재료로만 쓴다(Facts 에는 싣지 않는다, INV-2)
+    # 이번 발화 앞의 대화 (role, text) — 장소 탐색의 이어 묻기("더 알려줘")가 앞 요청의 지역을 잇고 이미 보인 곳을 빼는 데만 쓴다
+    earlier: tuple[tuple[str, str], ...] = ()
+    # 이번 발화 원문 — 이어 묻기 판정에만 쓴다. 계획 경로는 utterance 를 비우지만(NL2SQL 이 다른 도구 몫을 읽지 않게) 이건 싣는다 —
+    # 분류가 "더알려줘"를 계획으로 보내면 이어 묻기를 몰라 제주 일정 근처가 다시 나왔다(2026-10-22 실 스택)
+    heard: str = ""
 
     def __post_init__(self) -> None:
         if self.now.tzinfo is None:
@@ -1299,14 +1305,150 @@ _SIGHTSEEING = re.compile(r"가\s?볼|구경|볼거리|관광|명소|놀러|둘�
 @dataclass(frozen=True, slots=True)
 class _Anchor:
     label: str  # 사용자 문장 재료 — 지역 이름·슬롯 이름
-    kind: str  # region | itinerary
+    kind: str  # region | between | itinerary
     center: GeoPoint | None  # None = 슬롯 좌표를 콜러블 안에서 조회한다
     radius_km: float
     slot: SlotView | None = None
+    ends: tuple[tuple[str, GeoPoint], tuple[str, GeoPoint]] | None = None  # between·far — 두 곳(원 안에서도 두 곳을 잇는 선 가까이만)
+
+
+# 두 곳 사이 — 두 곳을 지름으로 하는 원(가운데·거리의 절반)에서 두 곳을 잇는 선 가까이(거리의 25%, 0.8~2km)만. 원만 쓰면 옆으로도
+# 넓어 홍대·이태원 사이에 명동·서소문·여의도(선에서 2.4~3km)가 섞였다(2026-10-22 실 스택). 반경 상한은 지역 표의 가장 넓은 반경 —
+# 넓히면 BE 반경 조회가 예산을 넘는다. 두 곳이 80km 넘게 떨어지면(서울·부산) 그 사이는 아직 찾지 못한다고 답한다 — 한 곳 반경으로
+# 바꿔 찾으면 물은 것과 다른 답이다. 같은 섬·같은 도 안의 짝(애월·성산 57km, 강릉·속초 56km)은 사이로 찾는다
+_BETWEEN_KM = (1.0, 8.0)
+_BETWEEN_BAND = (0.25, 0.8, 2.0)
+_BETWEEN_MAX_APART_KM = 80.0
+_FAR_NOTE = "두 곳이 멀어 그 사이는 아직 찾아 줄 수 없다"
+# 앞 요청을 이어서 더 달라는 말 — 요청 동사 앞이나 문장 끝의 더·또("더 알려줘"·"더알려줘"·"좀더 보여줘"·"또 없어?"·"하나만 더"),
+# 다른·딴 + 곳·거·장소…, 그 밖에, 추가로. 비교의 더("더 조용한 카페")·더워·더욱·또래는 아니다
+_MORE = re.compile(
+    r"(?:(?<![가-힣])|(?<=좀))(?:더|또)(?=\s?(?:알려|보여|있|없|추천|찾|줘|볼|가르쳐|말해|요|가\s?볼|갈|뭐|어디|구경|둘러)|\s*[?!.~]*$)"
+    r"|(?:다른|딴)\s?(?:곳|데|거|걸|장소|카페|맛집|식당|명소)|그\s?(?:밖|외)|추가로")
+# 위치를 바꿔 말한 말 — 앞 요청의 지역을 잇지 않는다(보인 곳만 뺀다). "그 근처·거기"는 앞 요청을 가리키니 아니다
+_DEIXIS = re.compile(r"(?<!그 )(?<!그)(?<!거기 )(?<!거기)(?:근처|주변)|여기|이\s?근방|지금|일정|숙소|호텔")
+
+
+def _between(text: str) -> _Anchor | None:
+    """두 곳 사이 앵커(kind between) — 너무 먼 짝은 kind far(찾지 않고 그렇다고 답한다)."""
+    pair = region_pair(normalize(text))
+    if pair is None:
+        return None
+    (a, pa), (b, pb) = pair
+    apart = haversine_km(pa, pb)
+    if apart > _BETWEEN_MAX_APART_KM:
+        return _Anchor(f"{a}·{b} 사이", "far", None, 0.0, ends=pair)
+    low, high = _BETWEEN_KM
+    return _Anchor(f"{a}·{b} 사이", "between", GeoPoint((pa.lat + pb.lat) / 2, (pa.lng + pb.lng) / 2),
+                   min(max(apart / 2, low), high), ends=pair)
+
+
+def _within_pair(said: str, pair: _Anchor) -> bool:
+    """분류가 채운 지역이 그 짝 이야기인가 — 짝 이름 하나·둘을 말했다("이태원"·"홍대와 이태원 사이")."""
+    names = {name for name, _ in pair.ends}
+    said_names = {name for _, name in region_mentions(normalize(said))}
+    return bool(said_names) and said_names <= names
+
+
+def _on_the_way(anchor: _Anchor) -> Callable[[GeoPoint], bool]:
+    """두 곳을 잇는 선분에서 띠 폭 안인가 — between 이 아니면 늘 참. 선분 위 가장 가까운 점은 평면 근사(경도에 cos 위도)로 찾는다."""
+    if anchor.ends is None:
+        return lambda p: True
+    (_, a), (_, b) = anchor.ends
+    ratio, low, high = _BETWEEN_BAND
+    band = min(max(haversine_km(a, b) * ratio, low), high)
+    k = math.cos(math.radians((a.lat + b.lat) / 2))
+    dx, dy = (b.lng - a.lng) * k, b.lat - a.lat
+
+    def near(p: GeoPoint) -> bool:
+        t = max(0.0, min(1.0, ((p.lng - a.lng) * k * dx + (p.lat - a.lat) * dy) / (dx * dx + dy * dy or 1.0)))
+        return haversine_km(p, GeoPoint(a.lat + t * dy, a.lng + t * dx / k)) <= band
+    return near
+
+
+def _follow_up(ctx: TurnContext) -> tuple[str, str, str] | None:
+    """이어 묻기("더 알려줘"·"다른 데는?")면 (지역을 가진 턴 원문, 사슬 첫 요청 뒤 도우미가 한 말, 사슬 대화 전체). 사슬 = 장소 찾기
+    말로 시작해 이어 묻기만 이어진 턴들이다(앞 턴이 날씨·거리 질문이면 이어 묻기가 아니다). 지역을 가진 턴은 그중 지역을 가장 최근에
+    말한 턴 — 지역을 새로 말한 이어 묻기("강남에도 더 있어?")면 그것, 아니면 첫 요청. 아니면 None."""
+    if _MORE.search(ctx.heard or ctx.utterance) is None:
+        return None
+    turns, holder = ctx.earlier, None
+    for i in range(len(turns) - 1, -1, -1):
+        role, text = turns[i]
+        if role != "USER":
+            continue
+        if _MORE.search(text):
+            if holder is None and region_mentions(normalize(text)):
+                holder = text
+            continue
+        if not asks_for_places(text):
+            return None
+        shown = " ".join(t for r, t in turns[i + 1:] if r == "ASSISTANT")  # 사슬 전체에서 보인 곳
+        return holder or text, shown, " ".join(t for _, t in turns[i:])
+    return None
+
+
+def _grounded(said: str, context: str) -> bool:
+    """분류가 채운 지역이 이 사슬의 대화에 근거가 있는가 — 도우미 말에서 지시어를 푼 장소("거기 근처" → 성산일출봉)도 근거다. 표 이름
+    하나("제주")는 대화에서 지역으로 말해졌어야 한다 — 앞서 물은 "제주문학관"의 제주는 아니다([여행 상황]에서 옮긴 지역을 막는다)."""
+    if said.replace(" ", "") not in context.replace(" ", ""):
+        return False
+    name = bare_region(said)
+    return name is None or any(n == name for _, n in region_mentions(normalize(context)))
+
+
+def _says_place(ctx: TurnContext, shown: str) -> bool:
+    """이번 발화가 찾을 곳을 새로 말했는가 — 표 지역(보인 장소 이름 속 지역은 아니다: "이태원 앤틱가구거리 말고 또 없어?"), 분류가 채운
+    지역이 발화에 그대로 있다("망원동엔 더 없어?"), 위치 지시어("내 일정 근처에 더"·"숙소 근처 다른 데는?")."""
+    text, said = normalize(ctx.heard or ctx.utterance), ctx.arguments.get("region")
+    squashed = shown.replace(" ", "")
+    for at, _ in region_mentions(text):
+        if "".join(text[at:].split()[:2]) not in squashed:
+            return True
+    return bool(said) and said.replace(" ", "") in text.replace(" ", "") or _DEIXIS.search(text) is not None
+
+
+def _carry(ctx: TurnContext) -> _Anchor | None:
+    """이어 묻기가 잇는 앞 요청의 지역 — 분류가 지역을 비우면 일정 근처를 찾았다(서울 홍대·이태원 사이를 묻고 "더 알려줘"에 제주 용두암
+    근처가 나왔다, 2026-10-21 테스트 화면). 앞 요청이 두 곳 사이면 그 짝(분류가 짝 밖의 지역을 대화 근거로 채웠으면 아니다), 분류가
+    대화에 근거 있는 지역을 채웠으면 그것(앞 요청을 이어 쓴 것 — "서울 전주비빔밥 맛집" 뒤의 서울), 아니면 앞 요청이 마지막에 말한 표
+    지역(이름 속 지역은 아니다 — 전주비빔밥·성수기). 지역을 새로 말했거나 앞 요청에 지역이 없으면 None(종전 앵커)."""
+    follow = _follow_up(ctx)
+    if follow is None or _says_place(ctx, follow[1]):
+        return None
+    holder, _, context = follow
+    said = ctx.arguments.get("region")
+    grounded = said if said and _grounded(said, context) else None
+    pair = _between(holder)
+    if pair is not None and (grounded is None or _within_pair(grounded, pair)):
+        return pair
+    mentions = region_mentions(normalize(holder))
+    if grounded is not None or not mentions:
+        return None
+    hit = region_center(mentions[-1][1])
+    return _Anchor(hit[0], "region", hit[1], hit[2])
+
+
+def _shown_before(ctx: TurnContext) -> Callable[[str], bool]:
+    """이어 묻기에서 이미 보인 곳인가 — 앞 요청 뒤 도우미 말에 이름이 적혔다(공백 무시). 카드로만 보인 곳은 모른다 — 최근 대화에는
+    도우미 문장만 실린다(BE recentTurns)."""
+    follow = _follow_up(ctx)
+    said = follow[1].replace(" ", "") if follow else ""
+    return lambda name: bool(said) and name.replace(" ", "") in said
 
 
 def _explore_anchor(ctx: TurnContext) -> _Anchor | None:
+    carried = _carry(ctx)
+    if carried is not None:
+        return carried
     said = ctx.arguments.get("region")
+    # 발화의 두 곳 사이 — 분류는 둘 중 한 곳만 채우기도 한다. 분류가 짝 밖의 지역을 채웠으면 그것이 이긴다("홍대 이태원 사이 말고
+    # 성수 쪽"). 계획 경로는 발화가 없어 인자로 본다
+    between = _between(ctx.utterance)
+    if between is None or said and not _within_pair(said, between):
+        between = _between(" ".join(v for v in (said, ctx.arguments.get("theme")) if v))
+    if between is not None:
+        return between
     if said:
         hit = region_center(normalize(said))
         return _Anchor(hit[0], "region", hit[1], hit[2]) if hit else None
@@ -1374,6 +1516,7 @@ def _explore_by_sql(ctx: TurnContext, anchor: _Anchor | None, category: str | No
                               ("category", _CATEGORY_KO.get(category or "", category))) if v}
     night = bool(theme and _NIGHT.search(theme)) or category == PoiCategory.NIGHT_VIEW.value
     sido = anchor.label if anchor is not None and anchor.kind == "region" and anchor.label in _SIDO_LEVEL else None
+    shown = _shown_before(ctx)  # 자르기 전에 뺀다 — 자른 다섯 곳에서 빼면 남은 행이 있어도 비었다
 
     def fn() -> dict:
         budget = min(_FANOUT_SQL_CAP_S, ctx.remaining_ms() * 0.4 / 1000)  # 팬아웃 예산(오케스트레이터 min(3s, 잔여×0.4)) 안
@@ -1382,11 +1525,12 @@ def _explore_by_sql(ctx: TurnContext, anchor: _Anchor | None, category: str | No
         rows = port.lookup(ctx.utterance, args, ctx.trace_id, ctx.now, timeout_sec=budget)
         if rows is None:
             return {"status": "UNAVAILABLE", "reason": "place_sql"}
-        picked = [r for r in rows if _displayable(r.name) and (night or not r.nightlife)
-                  and (sido is None or (r.sido or "").startswith(sido))][:MAX_CANDIDATES]
-        areas = Counter(r.sigungu for r in picked if r.sigungu).most_common(1)
+        kept = [r for r in rows if _displayable(r.name) and (night or not r.nightlife)
+                and (sido is None or (r.sido or "").startswith(sido))]
+        picked = [r for r in kept if not shown(r.name)][:MAX_CANDIDATES]
+        areas = Counter(r.sigungu for r in picked or kept if r.sigungu).most_common(1)
         label = anchor.label if anchor is not None else (areas[0][0] if areas else None)
-        return {"status": "OK", "anchor": label, "candidates": [{
+        return {"status": "OK", "anchor": label, "exhausted": bool(kept) and not picked, "candidates": [{
             "poi_id": r.poi_id, "name": r.name, "category": r.category, "distance_range": None,
             "reason": "요즘 인기" if r.trending else r.category,
         } for r in picked]}
@@ -1399,8 +1543,13 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     category, theme = ctx.arguments.get("category"), ctx.arguments.get("theme")
     # NL2SQL 은 사용자가 지역을 말했을 때만 — 일정 근처 탐색은 거리가 핵심이라 반경 풀이 맞다(뷰에 좌표가 없다)
     # 발화가 없어도(계획 경로 — 인자만 넘어온다) 인자로 SQL 을 쓴다. 발화는 보조 재료이고 지역·종류·주제는 인자가 이긴다
+    # 두 곳 사이·이어 묻기는 반경으로만 — SQL 은 위치가 아니라 이름을 읽어 '천안홍대용과학관'을 홍대로 냈다(2026-10-21 테스트 화면).
+    # 표에 없는 지역(앵커 없음)은 SQL 이 유일한 길이라 그대로 둔다
+    if anchor is not None and anchor.kind == "far":  # 너무 먼 두 곳 — 찾지 않고 그렇다고 답한다
+        return ()
     sql = (_explore_by_sql(ctx, anchor, category, theme),) if (
-        ctx.ports.place_sql is not None and ctx.ports.place_sql.writes_sql and ctx.arguments.get("region")) else ()
+        ctx.ports.place_sql is not None and ctx.ports.place_sql.writes_sql and ctx.arguments.get("region")
+        and (anchor is None or (anchor.kind == "region" and _carry(ctx) is None))) else ()
     if anchor is None or builder is None:
         return sql
 
@@ -1417,12 +1566,13 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
                                  ctx.now)
         except Exception as e:  # 풀 조립은 상태값 계약이 없다 — 여기서 수렴 (DL-5), 메시지는 싣지 않는다(키 든 URL)
             return {"status": "UNAVAILABLE", "reason": f"pool_error:{type(e).__name__}"}
+        shown, on_the_way = _shown_before(ctx), _on_the_way(anchor)
         candidates = [{
             "poi_id": str(p.poi_id), "name": p.name, "category": _CATEGORY_KO.get(p.category.value),
             # 지역 중심에서의 거리는 사용자에게 뜻이 없다 — 일정 근처일 때만 그 일정에서의 거리를 싣는다(INV-3 거리만)
             "distance_range": _km_label(haversine_km(center, p.coord)) if anchor.kind == "itinerary" else None,
             "reason": "요즘 인기" if TRENDING_TAG in p.tags else (_CATEGORY_KO.get(p.category.value) or "가 볼 만한 곳"),
-        } for p in _explore_rank(pool.pois, category, theme)]
+        } for p in _explore_rank((p for p in pool.pois if not shown(p.name) and on_the_way(p.coord)), category, theme)]
         return {"status": "OK", "candidates": candidates}
 
     return (HandlerTask("explore", fn), *sql)
@@ -1435,6 +1585,13 @@ def _assemble_explore(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Fa
     anchor = _explore_anchor(ctx)
     # NL2SQL 결과가 있으면 그것을 쓴다(지역 표에 없는 동네·구도 찾는다) — 실패·0건이면 반경 탐색 결과(INV-4)
     by_sql = _value(results, "explore_sql")
+    more = "앞에서 보여 준 곳 말고는 더 찾지 못함"  # 이어 묻기에서 남은 곳이 없다 — '그 지역은 못 찾는다'가 아니다
+    if anchor is not None and anchor.kind == "far":
+        return _text_facts(intent, FactStatus.EMPTY, home, notes=(_FAR_NOTE,),
+                           detail={"anchor": anchor.label, "anchor_kind": anchor.kind})
+    if anchor is None and by_sql and by_sql.get("exhausted") and by_sql.get("anchor"):
+        return _text_facts(intent, FactStatus.EMPTY, home, notes=(more,),
+                           detail={"anchor": by_sql["anchor"], "anchor_kind": "region"})
     if not (by_sql and by_sql.get("status") == "OK" and by_sql.get("candidates")):
         by_sql = None
     if anchor is None and by_sql is not None and by_sql.get("anchor"):
@@ -1450,9 +1607,11 @@ def _assemble_explore(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Fa
     value = by_sql or _value(results, "explore")
     if value is None or value.get("status") != "OK":
         return _text_facts(intent, FactStatus.UNAVAILABLE, home, notes=("장소 탐색 미확인",), detail=detail)
-    candidates = [c for c in value.get("candidates", ()) if isinstance(c, Mapping)][:MAX_CANDIDATES]
+    shown = _shown_before(ctx)
+    candidates = [c for c in value.get("candidates", ()) if isinstance(c, Mapping) and not shown(c["name"])][:MAX_CANDIDATES]
     if not candidates:
-        return _text_facts(intent, FactStatus.EMPTY, home, notes=("조건에 맞는 등록 장소 없음",), detail=detail)
+        notes = (more,) if _follow_up(ctx) is not None else ("조건에 맞는 등록 장소 없음",)
+        return _text_facts(intent, FactStatus.EMPTY, home, notes=notes, detail=detail)
     payload = {"candidates": [{"poiId": c["poi_id"], "name": c["name"], "distanceRange": c.get("distance_range"),
                                "reason": c["reason"]} for c in candidates]}
     places = tuple(FactPlace(c["poi_id"], c["name"], c.get("category"), distance_range=c.get("distance_range"),

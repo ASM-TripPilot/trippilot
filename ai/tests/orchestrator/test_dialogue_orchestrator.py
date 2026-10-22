@@ -1257,6 +1257,31 @@ def test_explore_empty_answer_cannot_invent_a_place_either() -> None:
 
 
 
+class _RecordingPool(_ExplorePool):
+    def __init__(self) -> None:
+        self.requests: list = []
+
+    def build(self, request, now):
+        self.requests.append(request)
+        return super().build(request, now)
+
+
+def test_explore_follow_up_turn_keeps_the_area_from_recent_turns_not_the_itinerary() -> None:
+    """"더 알려줘"에 분류가 지역을 비워도 앞 요청(홍대·이태원 사이)을 잇는다 — 일정(제주) 근처가 아니다(2026-10-21 테스트 화면).
+    이미 보인 곳은 뺀다 — 최근 대화가 핸들러까지 간다."""
+    from trippilot.domain.region_centers import region_center
+
+    answer = json.dumps({"text": "흰여울 카페도 가 볼 만해요.", "footnote": None}, ensure_ascii=False)
+    pool = _RecordingPool()
+    b = _build(_canned(Intent.EXPLORE_PLACES, answer=answer), ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=pool))
+    turns = (RecentTurn("USER", "홍대와 이태원 사이에 가볼만한 곳 알려줘"), RecentTurn("ASSISTANT", "감천문화마을이 있어요."))
+    out = b.orch.turn(_input("더 알려줘", recent_turns=turns))
+    (_, hongdae, _), (_, itaewon, _) = region_center("홍대"), region_center("이태원")
+    (request,) = pool.requests
+    assert request.anchor == GeoPoint((hongdae.lat + itaewon.lat) / 2, (hongdae.lng + itaewon.lng) / 2)
+    assert out.outcome == "ANSWER" and [c["name"] for c in out.answer.payload["candidates"]] == ["흰여울 카페"]
+
+
 def test_explore_without_any_anchor_asks_for_the_region_once_and_the_answer_runs_without_classifying() -> None:
     """앵커(지역·일정·여행 목적지)가 하나도 없으면 지역을 되묻는다(요청당 1회) — 다음 턴의 "부산"은 분류 없이 그 답이다(LLM 0)."""
     from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEXT
