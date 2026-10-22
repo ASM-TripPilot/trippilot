@@ -176,6 +176,8 @@ PK `(trip_id, source)`.
 - `checked` 는 '신호 없음'과 다르다 — 확인 근거가 있을 때만 넣는다. 날씨는 판정 시각 값이 다 있고 해제 임계 아래일 때(두 임계 사이 값은 신호도 `checked` 도 만들지 않는다 — 이력 현상이라 상태 저장이 필요 없다, BR-SA-06·15), 장소는 상태 `ACTIVE` ∧ 판정 `OK` ∧ 그 슬롯의 ACTIVE 가 `HOLIDAY` 가 아닐 때(BR-SA-17).
 - 감지기 출력의 범위(scope)는 판정이 교정한다 — 오늘 = `PARTIAL_SLOTS`, 미래일 = `FULL_DAY`(BR-SA-11).
 
+> **[개정 · 2026-10-22 — 구현 반영]** §6.3 — `Detection.Checked` 에 `partial`(기본 `false`)을 더했다(G-SA-21 · 줄 번호 기준 커밋 `43aca7f13`(#1546) · `backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/application/Detection.kt:19`). 참이면 신호·확인(해제 근거)은 그대로 쓰되 스윕이 그 출처의 감시 상태를 남기지 않는다 — 그 회차에 본 대상 가운데 모르는 것이 섞였다는 뜻이다. 지금은 장소 감지기만 쓴다(`business-rules.md` BR-SA-17 개정 블록 ⓐ). 아무것도 모를 때는 종전대로 `Unknown` 이다.
+
 ---
 
 ## 7. 장소 판정 값 — `DayCheck` · `CheckedSlot` · `HoursVerdict` · `PoiLifeStatus`

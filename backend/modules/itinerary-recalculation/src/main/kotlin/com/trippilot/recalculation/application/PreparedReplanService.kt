@@ -53,8 +53,8 @@ data class RiskEvent(
  * 관측은 요약 로그 `replan.prepared outcome=…` 이다(개인정보·좌표 없음 — 운영은 지표 내보내기가 꺼져 있다).
  * 사건마다 한 줄(`OPENED`·건너뜀 사유 등)이고, 계산 중 2분을 넘긴 이른 날짜 선계산을 닫고 열었으면 그 앞에 `EARLIER_STALE` 이
  * 붙어 두 줄이다. 넘긴 산출은 끝날 때 `FINISHED` 한 줄을 더 남긴다.
- * `EARLIER_STALE` 은 대기열에서 기다리다 낡은 것과 파드 비정상 종료(또는 기록 실패)로 SOLVING 에 멈춘 것을 함께 센다 —
- * 같은 `session` 의 `FINISHED status=CANCELED` 가 뒤따르면 앞의 것, 없으면 뒤의 것이다.
+ * `EARLIER_STALE` 은 대기열에서(또는 계산하다) 낡은 것과 파드 종료(또는 기록 실패)로 SOLVING 에 멈춘 것을 함께 센다 —
+ * 같은 `session` 의 `FINISHED` 가 뒤따르면(상태는 CANCELED, 못 읽었으면 null) 앞의 것, 없으면 뒤의 것이다(종료 대기를 넘겨 버린 대기 산출도 뒤).
  */
 @Service
 class PreparedReplanService internal constructor(

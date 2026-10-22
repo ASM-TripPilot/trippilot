@@ -9,6 +9,8 @@ import com.trippilot.itinerarygeneration.api.ItineraryFacade
 import com.trippilot.itinerarygeneration.api.ItineraryPlanFacade
 import com.trippilot.itinerarygeneration.api.ItineraryRef
 import com.trippilot.itinerarygeneration.api.PlannedPlaceView
+import com.trippilot.profile.api.PreferenceFacade
+import com.trippilot.profile.api.PreferenceSnapshot
 import com.trippilot.savedaccommodation.api.DayBaseStayView
 import com.trippilot.savedaccommodation.api.TripBaseStayFacade
 import com.trippilot.trip.api.TripDestinationRef
@@ -65,7 +67,30 @@ class ContextSnapshotBuilderTest : StringSpec({
         "tripId", "regions", "startDate", "endDate", "phase", // trip
         "status", "days", "date", "slots", // itinerary
         "slotKey", "name", "startAt", "category", // slot
+        "tastes", "styles", "activities", // 계정 취향 — 지역 추천이 쓰는 두 축만
     )
+
+    fun prefs(owner: UUID, styles: List<String>, activities: List<String>) = object : PreferenceFacade {
+        override fun findPreferences(accountId: UUID) = if (accountId == owner) {
+            PreferenceSnapshot(styles, activities, listOf("한식"), listOf("대중교통"), "여유", listOf("친구"), true, "중간")
+        } else {
+            PreferenceSnapshot(emptyList(), emptyList(), emptyList(), emptyList(), null, emptyList(), false, null)
+        }
+    }
+
+    "계정 취향은 두 축(styles·activities)만 실리고, 고른 게 없으면 싣지 않는다 — 여행이 없어도 실린다" {
+        val acc = UUID.randomUUID()
+        val b = ContextSnapshotBuilder(
+            TripContextReader(trips(acc, UUID.randomUUID(), "부산"), stays(null)), FakeTripData(acc), FakeTripData(acc), AssistantProperties(),
+            prefs(acc, listOf("자연"), listOf("카페")),
+        )
+        val mine = b.build(acc, null, AssistantSurface.HOME, today)
+        mine.tastes shouldBe com.trippilot.assistant.domain.ContextSnapshot.Tastes(listOf("자연"), listOf("카페"))
+        val wire = json.writeValueAsString(mine)
+        listOf("한식", "대중교통", "여유", "친구", "중간").forEach { wire shouldNotContain it } // 다른 축은 실을 자리가 없다
+        (keys(json.readTree(wire)) - whitelist) shouldBe emptySet()
+        b.build(UUID.randomUUID(), null, AssistantSurface.HOME, today).tastes shouldBe null // 고른 게 없다
+    }
 
     "여행·숙소·일정이 화이트리스트 필드만으로 실린다" {
         val (acc, tripId) = UUID.randomUUID() to UUID.randomUUID()

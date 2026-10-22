@@ -53,11 +53,12 @@ from trippilot.domain.common import TraceId
 from trippilot.domain.context import PermissionDeniedError
 from trippilot.domain.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent, IntentDraft, IntentMatch, MatchRoute
 from trippilot.domain.observability import FallbackEvent
+from trippilot.domain.region_centers import region_mentions
 from trippilot.llm_gateway.gates.base import has_injection_like
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, clock_spans, clock_times
 from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanDraft
 from trippilot.llm_gateway.gates.intent import NULL_INTENT
-from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker
+from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker, unrepeated
 from trippilot.llm_gateway.workers.dialogue_intent import DialogueIntentWorker
 from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
 from trippilot.llm_gateway.workers.dialogue_smalltalk import DialogueSmalltalkWorker
@@ -184,6 +185,11 @@ _GREETS = frozenset({
 })
 THANKS_TEXT = "천만에요! 더 궁금한 게 생기면 언제든 물어봐 주세요."
 ACK_TEXT = "알겠어요! 필요한 게 생기면 언제든 말씀해 주세요."
+# 감사·맞장구도 같은 말이 이어지지 않게(`unrepeated` 표에 더한다 — #1510 이 LLM 으로 돌리지 않고 남긴 자리, 2026-10-22)
+_CLOSER_VARIANTS = {
+    THANKS_TEXT: ("별말씀을요! 여행하다 궁금한 게 생기면 또 불러 주세요.", "도움이 됐다니 다행이에요. 또 필요하면 말씀해 주세요."),
+    ACK_TEXT: ("네, 알겠어요. 필요할 때 편하게 불러 주세요.", "좋아요! 궁금한 게 생기면 언제든지요."),
+}
 # 인사·잡담 답 — 여행이 있으면 지금 여행으로, 없으면 여행 만들기로 잇는다(버튼은 `_home_action` 과 같은 갈래). DIALOGUE_SMALLTALK 이
 # 배정돼 있으면 LLM 이 즉석에서 짓고(`_smalltalk`), 미배정·실패·목록 밖 장소면 이 고정 문장이다(INV-4 마지막 계단, BR-AO-26 개정 10-22).
 GREETING_TEXT = {
@@ -350,6 +356,19 @@ class TurnOutcome:
 # ── 순수 조립 ────────────────────────────────────────────────────────────────
 
 
+def _not_repeating(outcome: TurnOutcome, inp: TurnInput) -> TurnOutcome:
+    """답 문장이 직전 도우미 말과 똑같은 결정론 문장이면 같은 뜻의 다른 말로(2026-10-22 사용자 "계속 같은 말만"). 버튼·카드·칩은
+    그대로 — 문장만. 첫 턴·다른 말이면 그대로라 기존 결정론은 변하지 않는다."""
+    answer = outcome.answer
+    if answer is None:
+        return outcome
+    said = [t.text for t in inp.recent_turns if t.role == "ASSISTANT"]
+    text = unrepeated(answer.text, said)
+    if text == answer.text and answer.text in _CLOSER_VARIANTS and answer.text in said:
+        text = next((alt for alt in _CLOSER_VARIANTS[answer.text] if alt not in said), answer.text)
+    return outcome if text == answer.text else replace(outcome, answer=replace(answer, text=text))
+
+
 def capabilities_answer(has_trip: bool) -> DialogueAnswer:
     """0단계 — BE `AssistantTemplates.capabilities(hasTrip)` 이식. `quick_replies=None` 은 "시작 칩 복귀"
     (예시 빠른 답 StartQuickReplies 는 서버 발급이라 백엔드가 다시 보인다)."""
@@ -405,6 +424,23 @@ def _grounded_args(slots: Mapping[str, str], said: str) -> dict[str, str]:
     if region and _squash(region) not in said:
         return {k: v for k, v in slots.items() if k != "region"}
     return dict(slots)
+
+
+# 지역을 내치거나 바깥을 가리키는 말 — 지역 이름이 있어도 '가볼 지역 고르기'다("제주 말고", "서울 근교")
+_REGION_ELSEWHERE = re.compile(r"말고|빼고|제외|외에|근교|벗어")
+
+
+def _region_named(call: IntentDraft, heard: str) -> IntentDraft:
+    """계획이 가볼 지역 고르기(RECOMMEND_REGION)를 골랐어도 이번 말에 표 지역이 있으면 그 지역 안의 장소 탐색이다. 프롬프트 0.1.6 에
+    규칙을 적었는데도 지역 이름 + 반나절 보낼 데 꼴이 3/3 으로 지역 추천으로 갔다(2026-10-22 실측) — 말한 지역을 추천 후보로 되돌려주면
+    질문에 답하지 않은 것이다."""
+    if call.intent is not Intent.RECOMMEND_REGION or _REGION_ELSEWHERE.search(heard):
+        return call
+    named = region_mentions(heard)
+    if not named:
+        return call
+    theme = call.slots.get("theme")
+    return replace(call, intent=Intent.EXPLORE_PLACES, slots={"region": named[0][1], **({"theme": theme} if theme else {})})
 
 
 def _plannable(reason: str) -> bool:
@@ -669,6 +705,7 @@ class DialogueOrchestrator:
                 raise
             except Exception as e:  # noqa: BLE001 — DL-5: 버그도 경계 밖으로 내지 않는다(BR §5 미결 #14 A안)
                 outcome = self._crashed(inp, e)
+            outcome = _not_repeating(outcome, inp)
             self._remember(inp, current, outcome.answer.text if outcome.answer is not None else None,  # outcome 과 무관(BLM §3 註)
                            llm_calls=counter[0])
             return replace(outcome, llm_calls=counter[0])
@@ -1027,14 +1064,15 @@ class DialogueOrchestrator:
                 answer = self._smalltalk(inp, fixed, memory_lines, trip_summary)
                 return TurnOutcome("ANSWER", (), None, answer, cleared, 0, f"{reason}; plan:no_tool")
             return self._plan_declined(inp, reason, "REFUSED" if draft.refused else "NO_TOOL", plan_ms=plan_ms, gap=draft.gap)
-        handlers = [HANDLERS[call.intent] for call in draft.calls]
+        calls = [_region_named(call, text) for call in draft.calls]
+        handlers = [HANDLERS[call.intent] for call in calls]
         said = _squash(" ".join([text, *(turn.text for turn in inp.recent_turns)]))
         earlier = tuple((turn.role, turn.text) for turn in inp.recent_turns)
         ctxs = [TurnContext(snapshot=inp.snapshot, arguments=_without_deictic_region(_grounded_args(call.slots, said)),
                             now=inp.now, tz=self._tz,
                             trace_id=inp.trace_id, remaining_ms=lambda: self._remaining(inp), ports=self._ports,
-                            earlier=earlier, heard=text, solo=len(draft.calls) == 1)
-                for call in draft.calls]
+                            earlier=earlier, heard=text, solo=len(calls) == 1)
+                for call in calls]
         n = len(ctxs)
         results = self._fanout(inp, step_tasks([h.plan(ctx) for h, ctx in zip(handlers, ctxs, strict=True)]))
         facts = merge_facts([h.assemble(ctx, step_results(results, i, n))

@@ -76,6 +76,7 @@ class HttpDialogueInterpreterTest : StringSpec({
                 "PLANNED",
                 listOf(ContextSnapshot.DayBlock(LocalDate.of(2026, 11, 2), listOf(ContextSnapshot.SlotBlock("2026-11-02#p1", "카페 모카", LocalTime.of(14, 0), "CAFE")))),
             ),
+            tastes = ContextSnapshot.Tastes(listOf("자연"), listOf("카페")),
         ),
         dialogueContext = """{"pending":null,"turn_index":4,"clarify_count":0}""",
         requestedAt = Instant.parse("2026-10-14T03:00:00Z"),
@@ -294,6 +295,7 @@ class HttpDialogueInterpreterTest : StringSpec({
             wire["context"]["itinerary"] to "DialogueItinerarySchema",
             wire["context"]["itinerary"]["days"][0] to "DialogueDaySchema",
             wire["context"]["itinerary"]["days"][0]["slots"][0] to "DialogueSlotSchema",
+            wire["context"]["preference_profile"] to "PreferenceProfileSchema",
             wire["recent_turns"][0] to "DialogueTurnSchema",
         )
         checks.forEach { (node, schema) ->

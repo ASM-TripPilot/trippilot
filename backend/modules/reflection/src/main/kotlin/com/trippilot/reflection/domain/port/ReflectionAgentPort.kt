@@ -1,6 +1,7 @@
 package com.trippilot.reflection.domain.port
 
 import com.trippilot.reflection.domain.ReflectionCard
+import java.time.Duration
 import java.time.LocalDate
 import java.util.UUID
 
@@ -50,6 +51,9 @@ data class ReflectionAgentInput(
          * 부르지도 않을 호출을 위해 취향·변경 이력을 읽지 않게(개발 서버 회고 호출의 절반이 방문 0곳인 날이었다 — TRIP-1463 댓글).
          */
         fun callable(region: String, visits: List<ReflectionVisit>): Boolean = region.isNotBlank() && visits.isNotEmpty()
+
+        /** 여행 전체 요약 회고(TRIP-1488) — 여행 기간 전부가 입력이다. 마감 없이·긴 read 상한으로 부른다(어댑터). */
+        const val KIND_TRIP_SUMMARY = "TRIP_SUMMARY"
     }
 }
 
@@ -71,6 +75,15 @@ interface ReflectionAgentPort {
      * 회고 생성뿐 아니라 편집 경로도 같은 값을 치른다.
      */
     val enabled: Boolean
+
+    /**
+     * 여행 요약 회고(`TRIP_SUMMARY`) 한 번을 기다리는 상한 — 연결 상한 + 소켓 read 상한. 요약 회고 스윕(TRIP-1488)이 이만큼(+ 여유) 지나기 전에는
+     * 같은 여행을 다시 선점하지 않는다 — 다른 파드가 아직 기다리는 호출을 중복하지 않게. 경계가 꺼져 있으면 쓰이지 않는다.
+     *
+     * **총 소요의 엄밀한 상한은 아니다** — 소켓 read 상한은 바이트 사이 무응답 상한이고 DNS 조회는 들지 않는다. 총 소요를 실제로 묶는 것은 상대
+     * 백스톱(마감 없는 요청 605초 — 넘기면 상대가 504 로 끊는다)이고, read 상한(610초)이 그보다 길어 그 응답을 받는다.
+     */
+    val summaryCallTimeout: Duration get() = Duration.ZERO
 
     fun generate(input: ReflectionAgentInput): ReflectionCard?
 }

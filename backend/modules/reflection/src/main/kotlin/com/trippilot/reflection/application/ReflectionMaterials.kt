@@ -40,6 +40,10 @@ class ReflectionMaterials(
     fun regionOn(ctx: TripGenerationContext?, date: LocalDate): String =
         ctx?.destinationRefs?.destinationOn(ctx.startDate, date)?.name.orEmpty()
 
+    /** 여행 전체의 지역 — 목적지 이름을 순서대로 `·` 로 잇는다(같은 이름은 한 번). 상대 `region` 은 한 칸뿐이다. 모르면 빈 문자열. */
+    fun regionOfTrip(ctx: TripGenerationContext?): String =
+        ctx?.destinationRefs?.map { it.name.trim() }?.filter(String::isNotEmpty)?.distinct()?.joinToString("·").orEmpty()
+
     /**
      * 사용자 성향 한 줄 — **그 여행의 취향**이다: 계정 취향 위에 여행 생성 때 고른 축을 얹는다(BR-U1-38, 일정 생성과 같은 [overriddenBy]).
      * 동행은 여행에 적힌 것이 계정의 평소 동행보다 우선한다(상대 `_inline_persona` 와 같은 우선순위).
@@ -66,19 +70,29 @@ class ReflectionMaterials(
      *
      * 이력은 최신 [TIMELINE_LIMIT] 건만 본다(소유 모듈의 상한) — 상한을 채워 받으면 그보다 오래된 재계획이 빠졌을 수 있어 WARN 을 남긴다.
      */
-    fun eventsOn(accountId: UUID, tripId: UUID, date: LocalDate, skippedCount: Int): List<ReflectionEvent> {
-        val skipped = if (skippedCount > 0) listOf(ReflectionEvent(ReflectionEvent.SKIPPED, date, "계획한 곳 중 ${skippedCount}곳을 들르지 못했다")) else emptyList()
+    fun eventsOn(accountId: UUID, tripId: UUID, date: LocalDate, skippedCount: Int): List<ReflectionEvent> =
+        eventsIn(accountId, tripId, mapOf(date to skippedCount))
+
+    /**
+     * 여러 날의 사건 — [eventsOn] 을 날마다 부른 것과 같다(날짜순, 날마다 건너뜀 → 재계획). 여행 요약 회고(TRIP-1488)가 쓴다.
+     * 변경 이력은 **한 번만** 읽는다 — 날마다 읽으면 여행 하루마다 최대 [TIMELINE_LIMIT] 행씩 같은 조회가 반복된다.
+     */
+    fun eventsIn(accountId: UUID, tripId: UUID, skippedByDate: Map<LocalDate, Int>): List<ReflectionEvent> {
+        val dates = skippedByDate.keys.sorted()
         val timeline = runCatching { changeLogs.findTimeline(accountId, tripId, TIMELINE_LIMIT) }
-            .onFailure { log.warn("회고 재계획 재료를 읽지 못해 비웁니다. tripId={} date={}", tripId, date, it) }
+            .onFailure { log.warn("회고 재계획 재료를 읽지 못해 비웁니다. tripId={} date={}", tripId, dates.joinToString(","), it) }
             .getOrNull().orEmpty()
         if (timeline.size >= TIMELINE_LIMIT) {
-            log.warn("변경 이력이 조회 상한({}건)을 채웠습니다 — 더 오래된 재계획은 회고 재료에서 빠졌을 수 있습니다. tripId={} date={}", TIMELINE_LIMIT, tripId, date)
+            log.warn("변경 이력이 조회 상한({}건)을 채웠습니다 — 더 오래된 재계획은 회고 재료에서 빠졌을 수 있습니다. tripId={} date={}", TIMELINE_LIMIT, tripId, dates.joinToString(","))
         }
-        val replans = timeline
-            .filter { it.sourceType == ChangeSourceType.PLAN_B && it.before.slotsOn(date) != it.after.slotsOn(date) }
-            .sortedBy { it.at }
-            .map { ReflectionEvent(ReflectionEvent.PLAN_B, date, if (it.reason?.startsWith(AUTO_DETECTED) == true) "상황 변화를 감지해 일정을 바꿨다" else "일정을 다시 짰다") }
-        return skipped + replans
+        val replans = timeline.filter { it.sourceType == ChangeSourceType.PLAN_B }.sortedBy { it.at }
+        return dates.flatMap { date ->
+            val skippedCount = skippedByDate.getValue(date)
+            val skipped = if (skippedCount > 0) listOf(ReflectionEvent(ReflectionEvent.SKIPPED, date, "계획한 곳 중 ${skippedCount}곳을 들르지 못했다")) else emptyList()
+            skipped + replans
+                .filter { it.before.slotsOn(date) != it.after.slotsOn(date) }
+                .map { ReflectionEvent(ReflectionEvent.PLAN_B, date, if (it.reason?.startsWith(AUTO_DETECTED) == true) "상황 변화를 감지해 일정을 바꿨다" else "일정을 다시 짰다") }
+        }
     }
 
     private fun ItinerarySnapshotView.slotsOn(date: LocalDate) = days.firstOrNull { it.date == date }?.slots

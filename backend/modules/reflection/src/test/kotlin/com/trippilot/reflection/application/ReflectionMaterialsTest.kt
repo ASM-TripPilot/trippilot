@@ -181,6 +181,37 @@ class ReflectionMaterialsTest : StringSpec({
         appender.list.count { it.level == ch.qos.logback.classic.Level.WARN && it.formattedMessage.contains("조회 상한") } shouldBe 1
     }
 
+    /** 여행 요약 회고(TRIP-1488)는 여러 날을 한 번에 묻는다 — 날마다 [ReflectionMaterials.eventsOn] 을 부른 것과 같고, 이력은 한 번만 읽는다. */
+    "여러 날의 사건은 날마다 물은 것과 같고 변경 이력은 한 번만 읽는다" {
+        val a = UUID.randomUUID()
+        val b = UUID.randomUUID()
+        val entries = listOf(
+            entry(ChangeSourceType.PLAN_B, "자동 감지 · 비", "2026-08-11T04:00:00Z", snapshot(day2 to a), snapshot(day2 to b)),
+            entry(ChangeSourceType.PLAN_B, "손으로", "2026-08-10T04:00:00Z", snapshot(start to a), snapshot(start to b)),
+        )
+        val skipped = mapOf(day2 to 1, start to 0, start.plusDays(2) to 2) // 순서를 섞어 넘긴다 — 결과는 날짜순이다
+        val each = skipped.keys.sorted().flatMap { materials(preferencesOf(prefs()), changeLogOf(entries)).eventsOn(acc, tripId, it, skipped.getValue(it)) }
+        val log = changeLogOf(entries)
+
+        val all = materials(preferencesOf(prefs()), log).eventsIn(acc, tripId, skipped)
+
+        all shouldBe each
+        all shouldBe listOf(
+            ReflectionEvent(ReflectionEvent.PLAN_B, start, "일정을 다시 짰다"),
+            ReflectionEvent(ReflectionEvent.SKIPPED, day2, "계획한 곳 중 1곳을 들르지 못했다"),
+            ReflectionEvent(ReflectionEvent.PLAN_B, day2, "상황 변화를 감지해 일정을 바꿨다"),
+            ReflectionEvent(ReflectionEvent.SKIPPED, start.plusDays(2), "계획한 곳 중 2곳을 들르지 못했다"),
+        )
+        log.reads shouldBe 1
+    }
+
+    "여행 전체 지역은 목적지 이름을 순서대로 잇는다 — 같은 이름은 한 번" {
+        val m = materials(preferencesOf(prefs()), changeLogOf(emptyList()))
+        m.regionOfTrip(context()) shouldBe "서울·부산"
+        m.regionOfTrip(context().copy(destinationRefs = listOf(TripDestinationRef("부산", null, 1), TripDestinationRef(" ", null, 1), TripDestinationRef("부산", null, 1)))) shouldBe "부산"
+        m.regionOfTrip(null) shouldBe ""
+    }
+
     "변경 이력을 못 읽어도 건너뜀 사건은 남는다" {
         val broken = object : ChangeLogFacade {
             override fun append(command: AppendChangeLog) = Unit

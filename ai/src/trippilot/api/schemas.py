@@ -939,6 +939,9 @@ class DialogueContextSnapshot(BoundaryModel):
     trip: DialogueTripSchema | None = None
     base_stays: list[str] = Field(default_factory=list)
     itinerary: DialogueItinerarySchema | None = None
+    # 계정 취향(선택, 하위호환) — generate 의 `preference_profile` 과 같은 스키마·어휘. 지역 추천(RECOMMEND_REGION)만 읽는다.
+    # AI 가 먼저 배포되고 백엔드가 뒤따라 싣는다(`extra=forbid` — 구 백엔드 요청은 그대로 통과).
+    preference_profile: PreferenceProfileSchema | None = None
 
 
 class DialogueTurnSchema(BoundaryModel):

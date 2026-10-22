@@ -29,7 +29,7 @@ from trippilot.orchestrator.dialogue_handlers import HandlerPorts
 
 _INFO_HANDLERS = frozenset({
     Intent.SHOW_SCHEDULE, Intent.GET_NEXT_SLOT, Intent.GET_WEATHER, Intent.GET_DISTANCE, Intent.GET_POI_INFO,
-    Intent.SUGGEST_ALTERNATIVE, Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES,
+    Intent.SUGGEST_ALTERNATIVE, Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES, Intent.RECOMMEND_REGION,
 })
 
 
@@ -120,7 +120,7 @@ def test_classification_schemas_stay_byte_identical() -> None:
     golden = {
         "intent.yaml($intents)": ("fffa98ade2f9f39654922dd98f25477f6f32e7917d5668f8ea41db1ea478e820", tool_specs_json()),
         # 2026-10-20 갱신: GET_WEATHER.region(dialogue_only, #1475) · RECOMMEND_PLACES 추가 — intent.yaml 쪽은 그대로다
-        "dialogue_intent.yaml($intents)": ("bf750b1e8e05c482238fd1540f39d803489f96276dca49c1c781477473e6d939",
+        "dialogue_intent.yaml($intents)": ("c84121981b9a48a0cfdd4e7bf3f51f8bd2790b6e4de9776ecf82de345f3e369c",
                                            tool_specs_json(DIALOGUE_INTENTS, dialogue=True)),
     }
     for name, (sha, text) in golden.items():

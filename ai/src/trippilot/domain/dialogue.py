@@ -349,6 +349,16 @@ ARGUMENT_TABLE: dict[Intent, tuple[ArgumentSpec, ...]] = {
               "몇 곳을 골라 달라는지('하나'면 1). 말하지 않았으면 비운다",
               choices=("1", "2", "3", "4", "5"), lands_in="dialogue_handlers._assemble_recommend (자르기)"),
     ),
+    Intent.RECOMMEND_REGION: (
+        # 필수 0 — 취향은 백엔드가 대화 문맥(preference_profile)에 싣고, 말한 주제가 있으면 그것이 더 무겁다.
+        # 둘 다 없으면 핸들러가 "어떤 여행을 좋아하는지" 되묻는다(고정 문장).
+        _spec("theme", (_FT,), False,
+              "'바다 보러'·'역사 여행'·'조용히 쉬고 싶은' 같은 이번 여행의 바람",
+              lands_in="domain.region_recommend.preference_weights"),
+        _spec("count", (_EN,), False,
+              "몇 곳을 골라 달라는지('한 곳'이면 1). 말하지 않았으면 비운다",
+              choices=("1", "2", "3", "4", "5"), lands_in="dialogue_handlers._assemble_region (자르기)"),
+    ),
 }
 
 

@@ -69,6 +69,8 @@ data class CascadeSummary(
                 "VISIT_CHECK", "VISIT_PHOTO_META", "VISIT_MEMO",
                 // U5 — 회고·요약·스타일 분석
                 "REFLECTION", "TRIP_SUMMARY", "STYLE_ANALYSIS",
+                // U5 — 공유 카드 AI 문구 하루 횟수(V2.85, TRIP-1411). 계정에 묶인 사용 기록이다
+                "SHARE_CARD_COPY_USAGE",
                 // U6 — 알림함·푸시 토큰·알림 설정·앱 설정·Plan-B 민감도
                 "NOTIFICATION", "NOTIFICATION_SCHEDULE", "NOTIFICATION_TOGGLE",
                 "PUSH_TOKEN", "ACCOUNT_SETTING", "PLAN_B_SENSITIVITY",

@@ -1,0 +1,1348 @@
+{
+ "national": {
+  "ACTIVITY": 4374,
+  "ART": 28,
+  "BAR": 3,
+  "CAFE": 2111,
+  "CULTURE": 1998,
+  "FOOD": 7741,
+  "NATURE": 2576,
+  "NIGHT_VIEW": 19,
+  "SHOPPING": 2577,
+  "SIGHT": 4988
+ },
+ "prior": 200,
+ "regions": {
+  "가평": {
+   "count": {
+    "ACTIVITY": 115,
+    "CAFE": 10,
+    "CULTURE": 10,
+    "FOOD": 61,
+    "NATURE": 13,
+    "SHOPPING": 3,
+    "SIGHT": 18
+   },
+   "lift": {
+    "ACTIVITY": 2.08,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.76,
+    "CULTURE": 0.77,
+    "FOOD": 0.95,
+    "NATURE": 0.78,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.54,
+    "SIGHT": 0.69
+   },
+   "n": 230,
+   "radius_km": 15.0
+  },
+  "강남": {
+   "count": {
+    "ACTIVITY": 84,
+    "ART": 11,
+    "BAR": 1,
+    "CAFE": 86,
+    "CULTURE": 98,
+    "FOOD": 432,
+    "NATURE": 20,
+    "NIGHT_VIEW": 2,
+    "SHOPPING": 79,
+    "SIGHT": 155
+   },
+   "lift": {
+    "ACTIVITY": 0.61,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.09,
+    "CULTURE": 1.28,
+    "FOOD": 1.43,
+    "NATURE": 0.35,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.86,
+    "SIGHT": 0.87
+   },
+   "n": 968,
+   "radius_km": 8.0
+  },
+  "강릉": {
+   "count": {
+    "ACTIVITY": 45,
+    "CAFE": 71,
+    "CULTURE": 27,
+    "FOOD": 289,
+    "NATURE": 15,
+    "SHOPPING": 74,
+    "SIGHT": 45
+   },
+   "lift": {
+    "ACTIVITY": 0.62,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.42,
+    "CULTURE": 0.73,
+    "FOOD": 1.55,
+    "NATURE": 0.46,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 1.25,
+    "SIGHT": 0.57
+   },
+   "n": 566,
+   "radius_km": 10.0
+  },
+  "거제": {
+   "count": {
+    "ACTIVITY": 17,
+    "CAFE": 24,
+    "CULTURE": 11,
+    "FOOD": 61,
+    "NATURE": 34,
+    "SIGHT": 23
+   },
+   "lift": {
+    "ACTIVITY": 0.82,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.35,
+    "CULTURE": 0.93,
+    "FOOD": 1.1,
+    "NATURE": 1.48,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.54,
+    "SIGHT": 0.87
+   },
+   "n": 170,
+   "radius_km": 15.0
+  },
+  "경주": {
+   "count": {
+    "ACTIVITY": 21,
+    "CAFE": 23,
+    "CULTURE": 29,
+    "FOOD": 61,
+    "NATURE": 12,
+    "SHOPPING": 22,
+    "SIGHT": 83
+   },
+   "lift": {
+    "ACTIVITY": 0.72,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.08,
+    "CULTURE": 1.29,
+    "FOOD": 0.9,
+    "NATURE": 0.72,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.94,
+    "SIGHT": 1.42
+   },
+   "n": 251,
+   "radius_km": 10.0
+  },
+  "광안리": {
+   "count": {
+    "ACTIVITY": 50,
+    "CAFE": 29,
+    "CULTURE": 58,
+    "FOOD": 144,
+    "NATURE": 21,
+    "NIGHT_VIEW": 2,
+    "SHOPPING": 119,
+    "SIGHT": 81
+   },
+   "lift": {
+    "ACTIVITY": 0.71,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.8,
+    "CULTURE": 1.37,
+    "FOOD": 0.98,
+    "NATURE": 0.59,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 2.02,
+    "SIGHT": 0.89
+   },
+   "n": 504,
+   "radius_km": 8.0
+  },
+  "광주": {
+   "count": {
+    "ACTIVITY": 18,
+    "CAFE": 11,
+    "CULTURE": 16,
+    "FOOD": 70,
+    "NATURE": 3,
+    "SHOPPING": 4,
+    "SIGHT": 27
+   },
+   "lift": {
+    "ACTIVITY": 0.88,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.97,
+    "CULTURE": 1.18,
+    "FOOD": 1.26,
+    "NATURE": 0.66,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.69,
+    "SIGHT": 0.98
+   },
+   "n": 149,
+   "radius_km": 10.0
+  },
+  "군산": {
+   "count": {
+    "ACTIVITY": 13,
+    "CAFE": 13,
+    "CULTURE": 5,
+    "FOOD": 51,
+    "NATURE": 12,
+    "SHOPPING": 5,
+    "SIGHT": 19
+   },
+   "lift": {
+    "ACTIVITY": 0.88,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.14,
+    "CULTURE": 0.84,
+    "FOOD": 1.18,
+    "NATURE": 1.02,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.79,
+    "SIGHT": 0.95
+   },
+   "n": 118,
+   "radius_km": 10.0
+  },
+  "기장": {
+   "count": {
+    "ACTIVITY": 17,
+    "CAFE": 29,
+    "CULTURE": 15,
+    "FOOD": 81,
+    "NATURE": 18,
+    "SHOPPING": 119,
+    "SIGHT": 21
+   },
+   "lift": {
+    "ACTIVITY": 0.61,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.13,
+    "CULTURE": 0.8,
+    "FOOD": 0.95,
+    "NATURE": 0.77,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 2.84,
+    "SIGHT": 0.62
+   },
+   "n": 300,
+   "radius_km": 10.0
+  },
+  "남포": {
+   "count": {
+    "ACTIVITY": 39,
+    "CAFE": 26,
+    "CULTURE": 52,
+    "FOOD": 85,
+    "NATURE": 24,
+    "NIGHT_VIEW": 3,
+    "SHOPPING": 130,
+    "SIGHT": 88
+   },
+   "lift": {
+    "ACTIVITY": 0.67,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.81,
+    "CULTURE": 1.37,
+    "FOOD": 0.76,
+    "NATURE": 0.69,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 2.37,
+    "SIGHT": 1.03
+   },
+   "n": 447,
+   "radius_km": 8.0
+  },
+  "남해": {
+   "count": {
+    "ACTIVITY": 19,
+    "CAFE": 5,
+    "CULTURE": 10,
+    "FOOD": 22,
+    "NATURE": 20,
+    "SHOPPING": 2,
+    "SIGHT": 14
+   },
+   "lift": {
+    "ACTIVITY": 1.08,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.9,
+    "CULTURE": 1.14,
+    "FOOD": 0.94,
+    "NATURE": 1.39,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.76,
+    "SIGHT": 0.94
+   },
+   "n": 92,
+   "radius_km": 15.0
+  },
+  "단양": {
+   "count": {
+    "ACTIVITY": 38,
+    "CAFE": 5,
+    "CULTURE": 4,
+    "FOOD": 27,
+    "NATURE": 23,
+    "SHOPPING": 3,
+    "SIGHT": 19
+   },
+   "lift": {
+    "ACTIVITY": 1.35,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.82,
+    "CULTURE": 0.79,
+    "FOOD": 0.92,
+    "NATURE": 1.37,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.72,
+    "SIGHT": 0.94
+   },
+   "n": 119,
+   "radius_km": 12.0
+  },
+  "담양": {
+   "count": {
+    "ACTIVITY": 11,
+    "CAFE": 13,
+    "CULTURE": 5,
+    "FOOD": 23,
+    "NATURE": 6,
+    "SHOPPING": 1,
+    "SIGHT": 11
+   },
+   "lift": {
+    "ACTIVITY": 0.99,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.34,
+    "CULTURE": 0.99,
+    "FOOD": 1.03,
+    "NATURE": 0.97,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.78,
+    "SIGHT": 0.96
+   },
+   "n": 70,
+   "radius_km": 10.0
+  },
+  "대구": {
+   "count": {
+    "ACTIVITY": 63,
+    "CAFE": 32,
+    "CULTURE": 71,
+    "FOOD": 158,
+    "NATURE": 11,
+    "SHOPPING": 200,
+    "SIGHT": 100
+   },
+   "lift": {
+    "ACTIVITY": 0.7,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.72,
+    "CULTURE": 1.36,
+    "FOOD": 0.89,
+    "NATURE": 0.37,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 2.69,
+    "SIGHT": 0.87
+   },
+   "n": 635,
+   "radius_km": 10.0
+  },
+  "대전": {
+   "count": {
+    "ACTIVITY": 34,
+    "CAFE": 33,
+    "CULTURE": 51,
+    "FOOD": 199,
+    "NATURE": 14,
+    "SHOPPING": 226,
+    "SIGHT": 78
+   },
+   "lift": {
+    "ACTIVITY": 0.49,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.73,
+    "CULTURE": 1.05,
+    "FOOD": 1.05,
+    "NATURE": 0.41,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 3.01,
+    "SIGHT": 0.73
+   },
+   "n": 635,
+   "radius_km": 10.0
+  },
+  "명동": {
+   "count": {
+    "ACTIVITY": 132,
+    "ART": 21,
+    "BAR": 2,
+    "CAFE": 118,
+    "CULTURE": 164,
+    "FOOD": 530,
+    "NATURE": 32,
+    "NIGHT_VIEW": 2,
+    "SHOPPING": 128,
+    "SIGHT": 312
+   },
+   "lift": {
+    "ACTIVITY": 0.61,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.02,
+    "CULTURE": 1.44,
+    "FOOD": 1.22,
+    "NATURE": 0.32,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.92,
+    "SIGHT": 1.13
+   },
+   "n": 1441,
+   "radius_km": 8.0
+  },
+  "목포": {
+   "count": {
+    "ACTIVITY": 4,
+    "CAFE": 6,
+    "CULTURE": 10,
+    "FOOD": 33,
+    "NATURE": 6,
+    "SHOPPING": 3,
+    "SIGHT": 11
+   },
+   "lift": {
+    "ACTIVITY": 0.82,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.01,
+    "CULTURE": 1.22,
+    "FOOD": 1.15,
+    "NATURE": 0.96,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.85,
+    "SIGHT": 0.95
+   },
+   "n": 73,
+   "radius_km": 10.0
+  },
+  "보령": {
+   "count": {
+    "ACTIVITY": 18,
+    "CAFE": 5,
+    "CULTURE": 3,
+    "FOOD": 11,
+    "NATURE": 14,
+    "SHOPPING": 4,
+    "SIGHT": 26
+   },
+   "lift": {
+    "ACTIVITY": 1.1,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.93,
+    "CULTURE": 0.85,
+    "FOOD": 0.85,
+    "NATURE": 1.22,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.86,
+    "SIGHT": 1.2
+   },
+   "n": 81,
+   "radius_km": 12.0
+  },
+  "부산": {
+   "count": {
+    "ACTIVITY": 103,
+    "CAFE": 58,
+    "CULTURE": 111,
+    "FOOD": 239,
+    "NATURE": 53,
+    "NIGHT_VIEW": 5,
+    "SHOPPING": 210,
+    "SIGHT": 167
+   },
+   "lift": {
+    "ACTIVITY": 0.72,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.81,
+    "CULTURE": 1.46,
+    "FOOD": 0.89,
+    "NATURE": 0.65,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 2.05,
+    "SIGHT": 0.95
+   },
+   "n": 946,
+   "radius_km": 14.0
+  },
+  "서귀포": {
+   "count": {
+    "ACTIVITY": 20,
+    "CAFE": 24,
+    "CULTURE": 8,
+    "FOOD": 39,
+    "NATURE": 47,
+    "NIGHT_VIEW": 3,
+    "SHOPPING": 3,
+    "SIGHT": 20
+   },
+   "lift": {
+    "ACTIVITY": 0.88,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.37,
+    "CULTURE": 0.84,
+    "FOOD": 0.92,
+    "NATURE": 1.87,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.63,
+    "SIGHT": 0.84
+   },
+   "n": 164,
+   "radius_km": 12.0
+  },
+  "서울": {
+   "count": {
+    "ACTIVITY": 169,
+    "ART": 25,
+    "BAR": 3,
+    "CAFE": 133,
+    "CULTURE": 192,
+    "FOOD": 657,
+    "NATURE": 37,
+    "NIGHT_VIEW": 3,
+    "SHOPPING": 162,
+    "SIGHT": 380
+   },
+   "lift": {
+    "ACTIVITY": 0.62,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.95,
+    "CULTURE": 1.4,
+    "FOOD": 1.25,
+    "NATURE": 0.3,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.95,
+    "SIGHT": 1.13
+   },
+   "n": 1761,
+   "radius_km": 10.0
+  },
+  "성산": {
+   "count": {
+    "ACTIVITY": 6,
+    "CAFE": 13,
+    "CULTURE": 3,
+    "FOOD": 29,
+    "NATURE": 32,
+    "SHOPPING": 2,
+    "SIGHT": 12
+   },
+   "lift": {
+    "ACTIVITY": 0.8,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.22,
+    "CULTURE": 0.81,
+    "FOOD": 1.01,
+    "NATURE": 1.78,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.74,
+    "SIGHT": 0.89
+   },
+   "n": 97,
+   "radius_km": 8.0
+  },
+  "성수": {
+   "count": {
+    "ACTIVITY": 115,
+    "ART": 21,
+    "BAR": 1,
+    "CAFE": 103,
+    "CULTURE": 148,
+    "FOOD": 588,
+    "NATURE": 28,
+    "NIGHT_VIEW": 2,
+    "SHOPPING": 156,
+    "SIGHT": 273
+   },
+   "lift": {
+    "ACTIVITY": 0.55,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.91,
+    "CULTURE": 1.32,
+    "FOOD": 1.35,
+    "NATURE": 0.3,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 1.1,
+    "SIGHT": 1.01
+   },
+   "n": 1435,
+   "radius_km": 8.0
+  },
+  "세종": {
+   "count": {
+    "ACTIVITY": 10,
+    "CAFE": 23,
+    "CULTURE": 10,
+    "FOOD": 53,
+    "NATURE": 8,
+    "SHOPPING": 18,
+    "SIGHT": 24
+   },
+   "lift": {
+    "ACTIVITY": 0.75,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.41,
+    "CULTURE": 0.96,
+    "FOOD": 1.1,
+    "NATURE": 0.82,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 1.11,
+    "SIGHT": 0.95
+   },
+   "n": 146,
+   "radius_km": 10.0
+  },
+  "속초": {
+   "count": {
+    "ACTIVITY": 33,
+    "CAFE": 18,
+    "CULTURE": 18,
+    "FOOD": 120,
+    "NATURE": 25,
+    "SHOPPING": 18,
+    "SIGHT": 20
+   },
+   "lift": {
+    "ACTIVITY": 0.88,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.94,
+    "CULTURE": 0.97,
+    "FOOD": 1.35,
+    "NATURE": 1.01,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.85,
+    "SIGHT": 0.68
+   },
+   "n": 252,
+   "radius_km": 10.0
+  },
+  "수원": {
+   "count": {
+    "ACTIVITY": 19,
+    "CAFE": 66,
+    "CULTURE": 45,
+    "FOOD": 184,
+    "NATURE": 7,
+    "SHOPPING": 28,
+    "SIGHT": 45
+   },
+   "lift": {
+    "ACTIVITY": 0.53,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.73,
+    "CULTURE": 1.34,
+    "FOOD": 1.39,
+    "NATURE": 0.46,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.82,
+    "SIGHT": 0.74
+   },
+   "n": 394,
+   "radius_km": 8.0
+  },
+  "순천": {
+   "count": {
+    "ACTIVITY": 8,
+    "CAFE": 2,
+    "CULTURE": 9,
+    "FOOD": 28,
+    "SHOPPING": 2,
+    "SIGHT": 14
+   },
+   "lift": {
+    "ACTIVITY": 0.94,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.86,
+    "CULTURE": 1.21,
+    "FOOD": 1.12,
+    "NATURE": 0.76,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.84,
+    "SIGHT": 1.04
+   },
+   "n": 63,
+   "radius_km": 10.0
+  },
+  "안동": {
+   "count": {
+    "ACTIVITY": 4,
+    "CAFE": 3,
+    "CULTURE": 11,
+    "FOOD": 12,
+    "SHOPPING": 19,
+    "SIGHT": 20
+   },
+   "lift": {
+    "ACTIVITY": 0.83,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.88,
+    "CULTURE": 1.28,
+    "FOOD": 0.9,
+    "NATURE": 0.74,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 1.47,
+    "SIGHT": 1.14
+   },
+   "n": 69,
+   "radius_km": 10.0
+  },
+  "애월": {
+   "count": {
+    "ACTIVITY": 17,
+    "CAFE": 24,
+    "CULTURE": 2,
+    "FOOD": 34,
+    "NATURE": 14,
+    "SHOPPING": 2,
+    "SIGHT": 6
+   },
+   "lift": {
+    "ACTIVITY": 1.01,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.67,
+    "CULTURE": 0.76,
+    "FOOD": 1.06,
+    "NATURE": 1.15,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.74,
+    "SIGHT": 0.78
+   },
+   "n": 99,
+   "radius_km": 8.0
+  },
+  "양양": {
+   "count": {
+    "ACTIVITY": 20,
+    "CAFE": 8,
+    "CULTURE": 3,
+    "FOOD": 32,
+    "NATURE": 10,
+    "SHOPPING": 4,
+    "SIGHT": 14
+   },
+   "lift": {
+    "ACTIVITY": 1.1,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.03,
+    "CULTURE": 0.82,
+    "FOOD": 1.06,
+    "NATURE": 1.04,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.83,
+    "SIGHT": 0.94
+   },
+   "n": 91,
+   "radius_km": 10.0
+  },
+  "여수": {
+   "count": {
+    "ACTIVITY": 7,
+    "CAFE": 7,
+    "CULTURE": 5,
+    "FOOD": 43,
+    "NATURE": 9,
+    "SHOPPING": 4,
+    "SIGHT": 25
+   },
+   "lift": {
+    "ACTIVITY": 0.81,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.96,
+    "CULTURE": 0.89,
+    "FOOD": 1.16,
+    "NATURE": 0.97,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.8,
+    "SIGHT": 1.11
+   },
+   "n": 100,
+   "radius_km": 10.0
+  },
+  "여의도": {
+   "count": {
+    "ACTIVITY": 116,
+    "ART": 13,
+    "BAR": 2,
+    "CAFE": 53,
+    "CULTURE": 111,
+    "FOOD": 312,
+    "NATURE": 31,
+    "NIGHT_VIEW": 2,
+    "SHOPPING": 88,
+    "SIGHT": 241
+   },
+   "lift": {
+    "ACTIVITY": 0.77,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.74,
+    "CULTURE": 1.43,
+    "FOOD": 1.08,
+    "NATURE": 0.44,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.94,
+    "SIGHT": 1.26
+   },
+   "n": 969,
+   "radius_km": 8.0
+  },
+  "우도": {
+   "count": {
+    "ACTIVITY": 5,
+    "CAFE": 11,
+    "CULTURE": 2,
+    "FOOD": 24,
+    "NATURE": 27,
+    "SHOPPING": 1,
+    "SIGHT": 9
+   },
+   "lift": {
+    "ACTIVITY": 0.83,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.21,
+    "CULTURE": 0.81,
+    "FOOD": 1.01,
+    "NATURE": 1.71,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.75,
+    "SIGHT": 0.89
+   },
+   "n": 79,
+   "radius_km": 8.0
+  },
+  "울산": {
+   "count": {
+    "ACTIVITY": 33,
+    "CAFE": 13,
+    "CULTURE": 38,
+    "FOOD": 112,
+    "NATURE": 20,
+    "SHOPPING": 116,
+    "SIGHT": 57
+   },
+   "lift": {
+    "ACTIVITY": 0.68,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.62,
+    "CULTURE": 1.19,
+    "FOOD": 0.99,
+    "NATURE": 0.69,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 2.36,
+    "SIGHT": 0.85
+   },
+   "n": 389,
+   "radius_km": 12.0
+  },
+  "이태원": {
+   "count": {
+    "ACTIVITY": 147,
+    "ART": 24,
+    "BAR": 3,
+    "CAFE": 122,
+    "CULTURE": 179,
+    "FOOD": 604,
+    "NATURE": 31,
+    "NIGHT_VIEW": 2,
+    "SHOPPING": 148,
+    "SIGHT": 328
+   },
+   "lift": {
+    "ACTIVITY": 0.61,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.97,
+    "CULTURE": 1.44,
+    "FOOD": 1.26,
+    "NATURE": 0.29,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.96,
+    "SIGHT": 1.08
+   },
+   "n": 1588,
+   "radius_km": 8.0
+  },
+  "인천": {
+   "count": {
+    "ACTIVITY": 61,
+    "CAFE": 55,
+    "CULTURE": 103,
+    "FOOD": 271,
+    "NATURE": 17,
+    "SHOPPING": 208,
+    "SIGHT": 90
+   },
+   "lift": {
+    "ACTIVITY": 0.57,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.88,
+    "CULTURE": 1.55,
+    "FOOD": 1.12,
+    "NATURE": 0.37,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 2.32,
+    "SIGHT": 0.67
+   },
+   "n": 805,
+   "radius_km": 12.0
+  },
+  "잠실": {
+   "count": {
+    "ACTIVITY": 59,
+    "ART": 7,
+    "BAR": 1,
+    "CAFE": 74,
+    "CULTURE": 67,
+    "FOOD": 393,
+    "NATURE": 20,
+    "NIGHT_VIEW": 1,
+    "SHOPPING": 75,
+    "SIGHT": 114
+   },
+   "lift": {
+    "ACTIVITY": 0.55,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.11,
+    "CULTURE": 1.07,
+    "FOOD": 1.52,
+    "NATURE": 0.4,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.96,
+    "SIGHT": 0.79
+   },
+   "n": 811,
+   "radius_km": 8.0
+  },
+  "전주": {
+   "count": {
+    "ACTIVITY": 16,
+    "CAFE": 5,
+    "CULTURE": 21,
+    "FOOD": 52,
+    "NATURE": 4,
+    "SHOPPING": 4,
+    "SIGHT": 22
+   },
+   "lift": {
+    "ACTIVITY": 0.92,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.81,
+    "CULTURE": 1.47,
+    "FOOD": 1.16,
+    "NATURE": 0.74,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.74,
+    "SIGHT": 0.98
+   },
+   "n": 124,
+   "radius_km": 8.0
+  },
+  "제주": {
+   "count": {
+    "ACTIVITY": 30,
+    "CAFE": 44,
+    "CULTURE": 12,
+    "FOOD": 120,
+    "NATURE": 53,
+    "NIGHT_VIEW": 5,
+    "SHOPPING": 7,
+    "SIGHT": 53
+   },
+   "lift": {
+    "ACTIVITY": 0.73,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.43,
+    "CULTURE": 0.68,
+    "FOOD": 1.16,
+    "NATURE": 1.42,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.52,
+    "SIGHT": 0.92
+   },
+   "n": 324,
+   "radius_km": 15.0
+  },
+  "종로": {
+   "count": {
+    "ACTIVITY": 125,
+    "ART": 22,
+    "BAR": 2,
+    "CAFE": 115,
+    "CULTURE": 163,
+    "FOOD": 484,
+    "NATURE": 33,
+    "NIGHT_VIEW": 2,
+    "SHOPPING": 122,
+    "SIGHT": 314
+   },
+   "lift": {
+    "ACTIVITY": 0.6,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.04,
+    "CULTURE": 1.49,
+    "FOOD": 1.17,
+    "NATURE": 0.34,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.92,
+    "SIGHT": 1.18
+   },
+   "n": 1382,
+   "radius_km": 8.0
+  },
+  "중문": {
+   "count": {
+    "ACTIVITY": 8,
+    "CAFE": 12,
+    "CULTURE": 10,
+    "FOOD": 34,
+    "NATURE": 28,
+    "SHOPPING": 2,
+    "SIGHT": 11
+   },
+   "lift": {
+    "ACTIVITY": 0.81,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.15,
+    "CULTURE": 1.09,
+    "FOOD": 1.04,
+    "NATURE": 1.6,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.72,
+    "SIGHT": 0.85
+   },
+   "n": 105,
+   "radius_km": 8.0
+  },
+  "창원": {
+   "count": {
+    "ACTIVITY": 13,
+    "CAFE": 31,
+    "CULTURE": 20,
+    "FOOD": 62,
+    "NATURE": 20,
+    "SHOPPING": 7,
+    "SIGHT": 44
+   },
+   "lift": {
+    "ACTIVITY": 0.7,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.48,
+    "CULTURE": 1.17,
+    "FOOD": 1.04,
+    "NATURE": 1.02,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.68,
+    "SIGHT": 1.09
+   },
+   "n": 197,
+   "radius_km": 12.0
+  },
+  "천안": {
+   "count": {
+    "ACTIVITY": 24,
+    "CAFE": 29,
+    "CULTURE": 15,
+    "FOOD": 71,
+    "NATURE": 5,
+    "SHOPPING": 80,
+    "SIGHT": 20
+   },
+   "lift": {
+    "ACTIVITY": 0.78,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.27,
+    "CULTURE": 0.9,
+    "FOOD": 1.0,
+    "NATURE": 0.57,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 2.3,
+    "SIGHT": 0.69
+   },
+   "n": 244,
+   "radius_km": 10.0
+  },
+  "청주": {
+   "count": {
+    "ACTIVITY": 17,
+    "CAFE": 30,
+    "CULTURE": 21,
+    "FOOD": 103,
+    "NATURE": 7,
+    "SHOPPING": 99,
+    "SIGHT": 38
+   },
+   "lift": {
+    "ACTIVITY": 0.59,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.12,
+    "CULTURE": 0.93,
+    "FOOD": 1.07,
+    "NATURE": 0.53,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 2.36,
+    "SIGHT": 0.78
+   },
+   "n": 315,
+   "radius_km": 10.0
+  },
+  "춘천": {
+   "count": {
+    "ACTIVITY": 24,
+    "CAFE": 10,
+    "CULTURE": 23,
+    "FOOD": 81,
+    "NATURE": 6,
+    "SHOPPING": 70,
+    "SIGHT": 36
+   },
+   "lift": {
+    "ACTIVITY": 0.77,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.72,
+    "CULTURE": 1.12,
+    "FOOD": 1.06,
+    "NATURE": 0.58,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 2.04,
+    "SIGHT": 0.87
+   },
+   "n": 250,
+   "radius_km": 10.0
+  },
+  "태안": {
+   "count": {
+    "ACTIVITY": 45,
+    "CAFE": 8,
+    "CULTURE": 9,
+    "FOOD": 28,
+    "NATURE": 28,
+    "SHOPPING": 12,
+    "SIGHT": 16
+   },
+   "lift": {
+    "ACTIVITY": 1.36,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.87,
+    "CULTURE": 0.92,
+    "FOOD": 0.85,
+    "NATURE": 1.41,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.93,
+    "SIGHT": 0.82
+   },
+   "n": 146,
+   "radius_km": 15.0
+  },
+  "통영": {
+   "count": {
+    "ACTIVITY": 23,
+    "CAFE": 6,
+    "CULTURE": 6,
+    "FOOD": 47,
+    "NATURE": 18,
+    "SHOPPING": 2,
+    "SIGHT": 30
+   },
+   "lift": {
+    "ACTIVITY": 1.02,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.83,
+    "CULTURE": 0.84,
+    "FOOD": 1.09,
+    "NATURE": 1.16,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.66,
+    "SIGHT": 1.08
+   },
+   "n": 132,
+   "radius_km": 10.0
+  },
+  "파주": {
+   "count": {
+    "ACTIVITY": 41,
+    "CAFE": 64,
+    "CULTURE": 35,
+    "FOOD": 190,
+    "NATURE": 8,
+    "SHOPPING": 33,
+    "SIGHT": 26
+   },
+   "lift": {
+    "ACTIVITY": 0.75,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.68,
+    "CULTURE": 1.11,
+    "FOOD": 1.42,
+    "NATURE": 0.47,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.9,
+    "SIGHT": 0.57
+   },
+   "n": 397,
+   "radius_km": 12.0
+  },
+  "평창": {
+   "count": {
+    "ACTIVITY": 62,
+    "CAFE": 3,
+    "CULTURE": 5,
+    "FOOD": 59,
+    "NATURE": 12,
+    "SHOPPING": 1,
+    "SIGHT": 12
+   },
+   "lift": {
+    "ACTIVITY": 1.62,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.67,
+    "CULTURE": 0.75,
+    "FOOD": 1.13,
+    "NATURE": 0.91,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.59,
+    "SIGHT": 0.74
+   },
+   "n": 154,
+   "radius_km": 15.0
+  },
+  "포항": {
+   "count": {
+    "ACTIVITY": 7,
+    "CAFE": 11,
+    "CULTURE": 12,
+    "FOOD": 25,
+    "NATURE": 7,
+    "SHOPPING": 40,
+    "SIGHT": 24
+   },
+   "lift": {
+    "ACTIVITY": 0.74,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 1.04,
+    "CULTURE": 1.1,
+    "FOOD": 0.88,
+    "NATURE": 0.83,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 1.87,
+    "SIGHT": 1.0
+   },
+   "n": 126,
+   "radius_km": 12.0
+  },
+  "해운대": {
+   "count": {
+    "ACTIVITY": 40,
+    "CAFE": 26,
+    "CULTURE": 41,
+    "FOOD": 121,
+    "NATURE": 15,
+    "NIGHT_VIEW": 2,
+    "SHOPPING": 118,
+    "SIGHT": 57
+   },
+   "lift": {
+    "ACTIVITY": 0.71,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.85,
+    "CULTURE": 1.2,
+    "FOOD": 0.99,
+    "NATURE": 0.57,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 2.27,
+    "SIGHT": 0.81
+   },
+   "n": 420,
+   "radius_km": 8.0
+  },
+  "홍대": {
+   "count": {
+    "ACTIVITY": 125,
+    "ART": 17,
+    "BAR": 2,
+    "CAFE": 65,
+    "CULTURE": 137,
+    "FOOD": 323,
+    "NATURE": 34,
+    "NIGHT_VIEW": 3,
+    "SHOPPING": 97,
+    "SIGHT": 297
+   },
+   "lift": {
+    "ACTIVITY": 0.73,
+    "ART": 1.0,
+    "BAR": 1.0,
+    "CAFE": 0.78,
+    "CULTURE": 1.55,
+    "FOOD": 1.0,
+    "NATURE": 0.42,
+    "NIGHT_VIEW": 1.0,
+    "SHOPPING": 0.92,
+    "SIGHT": 1.36
+   },
+   "n": 1100,
+   "radius_km": 8.0
+  }
+ },
+ "source": "data/collected_pois.json (TOURAPI 만)"
+}
