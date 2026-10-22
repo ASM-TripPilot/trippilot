@@ -52,7 +52,7 @@ from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.kb import KbHit, KbKind
 from trippilot.domain.llm import AlternativePick, CandidatePool, ScoredPoi
 from trippilot.domain.persona import PersonaSummary
-from trippilot.domain.poi import PoiCategory, reputation_bonus
+from trippilot.domain.poi import Poi, PoiCategory, reputation_bonus
 from trippilot.domain.theme_tags import themes_in
 from trippilot.domain.trigger import TriggerParams
 from trippilot.ports.embedding_port import EmbeddingPort
@@ -500,9 +500,11 @@ class PlanBAgent:
         shortlist = _shortlist(request, persona)
         if len(shortlist.pois) < len(request.pool.pois):
             notes.append(f"llm_shortlist: {len(shortlist.pois)}/{len(request.pool.pois)}")
-        knowledge, note = fetch_place_knowledge(
+        # 선택 LLM 을 안 부르면(다시 짜기·도우미) 이 문서를 읽는 곳이 없다 — 찾지 않는다. 다시 짜기는
+        # 구성 후보로 따로 찾는다(`place_knowledge`) — 후보 집합이 달라 여기 것을 쓸 수 없다.
+        knowledge, note = (fetch_place_knowledge(
             shortlist.pois, situ_q, self._embedding, self._store, vector=situ_v
-        )
+        ) if request.use_llm else ({}, ""))
         if note:
             notes.append(note)
         return RagContext(
@@ -512,6 +514,15 @@ class PlanBAgent:
             place_knowledge=knowledge,
             shortlist=shortlist,
         )
+
+    def place_knowledge(
+        self, request: PlanBRagRequest, pois: Sequence[Poi]
+    ) -> tuple[Mapping[str, str], str]:
+        """다른 후보 집합(다시 짜기 구성 후보)의 KB-5 — 질의는 `retrieve` 와 같은 상황 질의다.
+
+        같은 문자열이라 운영 임베딩 캐시(`CachingEmbedding`)에 걸린다. 예외를 올리지 않는다(INV-4).
+        """
+        return fetch_place_knowledge(pois, _situation_query(request), self._embedding, self._store)
 
     def _safe_retrieve(
         self, fn, query: str, kb: KbKind, vector: Sequence[float] | None = None

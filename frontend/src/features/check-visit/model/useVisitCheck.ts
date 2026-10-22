@@ -43,6 +43,16 @@ export type VisitCheckOutcome =
   | { kind: 'skipped' }
   | { kind: 'failed'; reason: 'not-found' | 'conflict' | 'network' };
 
+/** TRIP-1561 — 완료→도착 사슬의 결과. `ignored` = 요청 0(연타·낙관 id)이라 안내도 없다. */
+export type ArriveAfterCompleteOutcome =
+  | { kind: 'arrived' }
+  | { kind: 'ignored' }
+  | {
+      kind: 'failed';
+      step: 'complete' | 'arrive';
+      reason: 'not-found' | 'conflict' | 'network';
+    };
+
 function classifyFailure(error: unknown): 'not-found' | 'conflict' | 'network' {
   if (isNotFound(error)) return 'not-found';
   if (isAlreadyRegistered(error)) return 'conflict';
@@ -64,6 +74,8 @@ export function useVisitCheck(deps: { tripId: string; day: string }) {
   // 낙관 레코드의 시각 자리표시자 — 서버 재조회/응답으로 대체되는 임시값(정확한 시각이 아님).
   const optimisticAt = `${deps.day}T00:00:00`;
   const arriving = useRef(new Set<string>());
+  // TRIP-1561 — 완료→도착 사슬 잠금(사슬 호출끼리만). 성공·실패 모두 finally 에서 푼다.
+  const chaining = useRef(false);
 
   /** 그 날 방문 기록 캐시를 갱신자 함수로 고친다(현재 캐시 기준 — 통짜 스냅숏 복원 금지). */
   function patchCache(update: (visits: VisitCheck[]) => VisitCheck[]): void {
@@ -185,5 +197,45 @@ export function useVisitCheck(deps: { tripId: string; day: string }) {
     }
   }
 
-  return { arrive, complete, skip };
+  /**
+   * TRIP-1561 — 앞 장소 완료 → **응답이 성공한 뒤에만** 다음 장소 도착(서버는 순서를 안 지킨다 — 책임은 클라).
+   * 완료 실패면 도착을 안 보낸다(409 는 서버 진실과 화면이 갈릴 수 있어 그날 기록을 1회 재조회한다).
+   * 도착 실패면 완료는 **남긴다**(서버가 이미 확정했고 되돌리는 API 가 없다 — arrive 가 도착 낙관만 걷는다).
+   * 사슬이 도는 동안 두 번째 호출은 요청 없이 `ignored`. 평문 async 라 호출자가 언마운트돼도 끝까지 간다.
+   */
+  async function completeThenArrive(input: {
+    completeVisitCheckId: string;
+    arrive: {
+      slotKey?: string | null;
+      poiId: string;
+      source: ArriveRequestSource;
+    };
+  }): Promise<ArriveAfterCompleteOutcome> {
+    // 낙관 id 는 서버가 모르는 레코드라 완료 요청이 404 가 난다 — 요청 0 으로 끝낸다(AC-8).
+    if (
+      chaining.current ||
+      input.completeVisitCheckId.startsWith(OPTIMISTIC_VISIT_ID_PREFIX)
+    ) {
+      return { kind: 'ignored' };
+    }
+    chaining.current = true;
+    try {
+      const completed = await complete(input.completeVisitCheckId);
+      if (completed.kind === 'failed') {
+        if (completed.reason === 'conflict') {
+          await queryClient.invalidateQueries({ queryKey: key });
+        }
+        return { kind: 'failed', step: 'complete', reason: completed.reason };
+      }
+      const arrived = await arrive(input.arrive);
+      if (arrived.kind === 'failed') {
+        return { kind: 'failed', step: 'arrive', reason: arrived.reason };
+      }
+      return { kind: 'arrived' };
+    } finally {
+      chaining.current = false;
+    }
+  }
+
+  return { arrive, complete, skip, completeThenArrive };
 }

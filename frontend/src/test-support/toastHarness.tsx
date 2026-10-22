@@ -13,7 +13,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
  *   기존 테스트까지 전부 "Cannot find module" 로 죽는다.
  * - SafeAreaProvider 는 호스트가 하단 inset 을 읽어도 throw 하지 않게 까는 것이다. `initialMetrics`
  *   없이 감싸면 jest(레이아웃 패스 없음)에서 자식이 렌더되지 않는다.
- * - 스토어는 모듈 싱글턴이라 같은 파일의 테스트 사이로 샌다 — 쓰는 파일은 **파일 최상위**(describe 밖)
+ * - 스토어(토스트 + 바닥 레지스트리)는 모듈 싱글턴이라 같은 파일의 테스트 사이로 샌다 — 쓰는 파일은 **파일 최상위**(describe 밖)
  *   `afterEach` 에서 `resetToast()` 를 부른다. 토스트 describe 안에만 걸면 그 앞의 기존 테스트가 띄운
  *   토스트가 describe 첫 테스트로 새어 거짓 green 이 된다(TRIP-990 03b 차단-1 실측).
  */
@@ -44,7 +44,21 @@ export function WithToastHost({
   );
 }
 
-/** 떠 있는 토스트와 대기 중인 자동 숨김 타이머를 지운다. */
+type ToastBottomModule = typeof import('@/shared/ui/toastBottom');
+
+function toastBottomModule(): ToastBottomModule {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('@/shared/ui/toastBottom') as ToastBottomModule;
+}
+
+/**
+ * 떠 있는 토스트와 대기 중인 자동 숨김 타이머를 지우고, 화면들이 신고해 둔 토스트 바닥 등록(TRIP-1559)도 비운다.
+ * 레지스트리도 모듈 싱글턴이라 비우지 않으면 앞 테스트가 그린 화면의 신고가 다음 테스트로 샌다. 운영 코드의 `hideToast` 는 자동 숨김
+ * 타이머에도 불려서 레지스트리를 못 비운다 — 그래서 이 묶음은 테스트 하네스에만 있다.
+ */
 export function resetToast(): void {
-  act(() => toastModule().hideToast());
+  act(() => {
+    toastModule().hideToast();
+    toastBottomModule().resetToastBottoms();
+  });
 }

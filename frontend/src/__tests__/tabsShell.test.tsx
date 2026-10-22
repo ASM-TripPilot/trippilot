@@ -2,6 +2,8 @@ import type { ReactElement } from 'react';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+import { getToastBottoms, resetToastBottoms } from '@/shared/ui/toastBottom';
+import { TAB_BAR_TOP } from '@/shared/ui/BottomTabBar';
 import { capturedTabsProps } from '@/test-support/expoRouterTabsMock';
 
 /**
@@ -91,6 +93,9 @@ function makeTabBarProps(activeIndex: number) {
   } as unknown as BottomTabBarProps;
   return { props, navigate, emit };
 }
+
+// TRIP-1559 — 토스트 바닥 레지스트리는 모듈 싱글턴이다. 파일 최상위(describe 밖)에서 리셋해야 앞 테스트의 신고가 안 샌다.
+afterEach(() => resetToastBottoms());
 
 beforeEach(() => {
   // 이전 테스트의 캡처값이 새 렌더 전에 남아있지 않도록 방어적으로 비운다.
@@ -234,5 +239,33 @@ describe('(tabs)/_layout — 화면이 탭바를 숨기면 안 그린다 (TRIP-1
     expect(
       renderTabBarFor({ tabBarStyle: { display: 'flex' } })
     ).not.toBeNull();
+  });
+});
+
+describe('(tabs)/_layout — 숨김 요청과 토스트 바닥 신고 (TRIP-1559 T5)', () => {
+  // 어댑터가 null 을 돌려 탭바가 unmount 되면 탭바가 신고해 둔 토스트 바닥도 같이 풀려야 한다 — 안 풀리면 시트가 탭바를
+  // 가린 화면(TRIP-1240)에서 토스트가 없는 탭바 높이만큼 떠 있다.
+  function adapterProps(options: Record<string, unknown>) {
+    const { props } = makeTabBarProps(2);
+    return {
+      ...props,
+      descriptors: { 'itinerary-key': { options } },
+    } as unknown as BottomTabBarProps;
+  }
+
+  it('탭바를 그리는 동안 알약 윗변을 신고하고, 숨김 요청으로 null 이 되면 해제한다', () => {
+    render(<TabsLayout />);
+    const tabBar = capturedTabsProps.current?.tabBar as (
+      props: BottomTabBarProps
+    ) => ReactElement | null;
+    expect(getToastBottoms()).toEqual([]);
+
+    const view = render(<>{tabBar(adapterProps({}))}</>);
+    expect(getToastBottoms()).toEqual([TAB_BAR_TOP]);
+
+    view.rerender(
+      <>{tabBar(adapterProps({ tabBarStyle: { display: 'none' } }))}</>
+    );
+    expect(getToastBottoms()).toEqual([]);
   });
 });

@@ -1735,6 +1735,40 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 
 ---
 
+## Functional Design 사후 개정 — U8 진입점 ✦ FAB 퇴역 (TRIP-1553)
+**Timestamp**: 2026-10-22T03:50:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 2026-10-22 실기 둘러보기 지적·티켓 TRIP-1553 「결정 확정」 그대로 인용) "홈 fab 에 어시스턴트 — 알람 오른쪽에 아이콘 놓는 걸로" / "범위 — 홈은 벨 오른쪽 헤더 아이콘, 숙소 검색·일정 상세의 ✦ FAB 는 제거(헤더로 옮기지 않음)". (자율 세션 — 이번 세션에서 새 질의 없음, 위 티켓의 사전 결정을 따름.)
+**AI Response**: `construction/u8-conversational-assistant/functional-design/business-rules.md` 끝에 `[개정 · 2026-10-22 · TRIP-1553]` 블록 1개 — BR-U8-50·51·52 퇴역(홈=헤더 벨 오른쪽 ✦ 아이콘 `home-dashboard-assistant`, 숙소 검색·일정 상세 진입 제거, 1차 진입 화면 = 홈 헤더 + 허브 하단 바 2곳, 토스트 ✦ 올림(288) 장치 삭제), BR-U8-53 정정(헤더 ✦ 는 항상 그려지고 담은 곳 메뉴 딤이 위를 덮음), PBT-U8-F1 퇴역(대상 함수 `fabStack` 삭제). 원문 삭제·수정 0줄(append 만). 같은 폴더의 `business-logic-model.md`(DEC-U8-12·G-U8-9·10)·`frontend-components.md`(§5·R7·R20)·inception `stories.md`(US-ASSIST-01)는 **이번에 손대지 않았다** — 후속 개정 대기.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 개정(구현 반영), 사이클 `20261022-trip1553-assistant-header`(부모 TRIP-1552 레인 A 첫 칸). 이전 세션들의 "audit append + [개정] 블록" 선례 절차를 따름; 승인 게이트는 티켓에 기록된 사용자 결정으로 갈음(자율 세션). `aidlc-state.md`·`docs/SCOPE.md` 무변경.
+
+---
+
+---
+
+## Functional Design 사후 개정 — U8 일정 보기 목적지 (TRIP-1566)
+**Timestamp**: 2026-10-22T07:30:00+09:00 (작업 시점)
+**User Input**: (이번 세션에서 새 질의 없음 — 자율 세션.) 사용자 지적 2026-10-22 원문(티켓 TRIP-1566 근거 절): "일정 보기 누르면 생성 일정으로 가짐". 정본 반영은 티켓 본문 「문서-구현 드리프트 주의」의 "판정 함수를 따르고 FD 표에 'resolveItineraryDestination 경유' 개정을 남긴다"에 따른 사전 선택. 열린 질문 4건은 오케스트레이터가 권고안으로 채택했다 — 사용자 발화 아님.
+**AI Response**: `construction/u8-conversational-assistant/functional-design/frontend-components.md` 끝에 `[개정 · 2026-10-22 · U8 일정 보기 목적지 (TRIP-1566)]` 블록 1개 — §4.1 `OPEN_ITINERARY` 행을 고정 경로에서 "누른 시점 일정 조회 → `resolveItineraryDestination` 경유"로 정정(조회 결과별 목적지 표, 조회 중·실패 시 이동 없음 + 상태 줄, INV-4). 원문 삭제·수정 0줄(append 만). 같은 문서 §4 흐름 5 본문과 같은 폴더의 다른 파일, `aidlc-state.md`·`docs/SCOPE.md` 는 손대지 않았다.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 개정(구현 반영), 사이클 `20261022-trip1566-open-itinerary`(부모 TRIP-1552 레인 A 일곱 번째 칸). 선례("audit append + [개정] 블록", TRIP-1553)를 따랐고 승인 게이트는 티켓의 사전 선택으로 갈음(자율 세션).
+
+---
+
+## Functional Design 사후 개정 — U8 next action 이동 방식 (TRIP-1565)
+**Timestamp**: 2026-10-22T08:30:00+09:00 (작업 시점)
+**User Input**: (이번 세션에서 새 질의 없음 — 자율 세션.) 사용자 지적 2026-10-22 원문(티켓 TRIP-1565 근거 절): "탐광 누르고 뒤로가기 누르면 홈인데 챗봇 상태 유지돼야". 티켓 「결정 확정 1」: "상세류만 복귀". 열린 질문 6건(분류 밖 EDIT/METHOD/REGENERATE 처리·날짜 없는 OPEN_REFLECTION·모달 카드 모양 수용·잠금 설계·상세 탭바 dismissTo 수용·개정 범위)은 오케스트레이터가 권고안으로 채택했다 — 사용자 발화 아님. (티켓 본문 원문은 이 기록 단계에서 직접 열람하지 못하고 오케스트레이터가 전달한 인용을 따랐다.)
+**AI Response**: `construction/u8-conversational-assistant/functional-design/frontend-components.md` 끝에 `[개정 · 2026-10-22 · U8 next action 이동 방식 (TRIP-1565)]` 블록 1개 — §4 흐름 5항("dismiss 후 push")·R9("replace 한 번")·§4.1 표를 목적지별로 갈라 정정(상세·요약류 5종 OPEN_PLACE·OPEN_OTA·OPEN_REFLECTION·OPEN_TRIP_SUMMARY·OPEN_STYLE = 시트 위 push, 그 밖 = 닫고 replace, OPEN_ITINERARY 는 TRIP-1566 블록 참조, push 갈래 잠금, 상세가 투명 모달 위라 모달 카드로 표시). 원문 삭제·수정 0줄(append 만). §5·`aidlc-state.md`·`docs/SCOPE.md` 는 손대지 않았다.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 개정(구현 반영), 사이클 `20261022-trip1565-sheet-return`(부모 TRIP-1552 레인 A 여덟 번째 칸). 선례("audit append + [개정] 블록", TRIP-1553·1566)를 따랐고 승인 게이트는 티켓의 사전 선택으로 갈음(자율 세션). 스테이지 규칙 파일(`.aidlc-rule-details/construction/…`)은 새로 로드하지 않았다.
+
+---
+
+## Functional Design 사후 개정 — U10/U4 수동 다음 도착 시 앞 장소 완료 (TRIP-1561)
+**Timestamp**: 2026-10-22T07:40:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 이 세션 2026-10-22, 그대로 인용) "도착 누르고 방문 완료 눌러서 기록하는 구조 이상하지 않나" / 결정 확정 1 — "A안 — 다음 장소 [도착] 때 앞 장소 완료, 그날 마지막 장소만 [방문 완료] 유지" / 배치 지시 — "1561 의 U4/U10 업무 규칙 개정은 사용자가 사전 선택".
+**AI Response**: `construction/u10-gps-location-automation/functional-design/business-rules.md` 끝에 `[개정 · 2026-10-22 · TRIP-1561]` 블록 1개(BR-U10-01·17 보강 읽기 · BR-U10-18 원문 유지 + 신규 BR-U10-54~57 수동 확장 — 조건 없음·출처 `MANUAL`·마지막 장소만 [방문 완료]·무장 여행 [방문 완료] 유지·체류에 이동 포함 메모 · O-U10-3 파급 메모), `…/u10-gps-location-automation/functional-design/business-logic-model.md` 끝에 블록 1개(DEC-U10-2·276·283행 좁혀 읽기), `construction/u4-in-trip-planb/functional-design/business-rules.md` 끝에 BR-U4-37 주석 블록 1개, `…/u4-in-trip-planb/functional-design/frontend-components.md` 끝에 89행 "[방문 완료]는 지우지 않는다" 정정 블록 1개, `…/u4-in-trip-planb/functional-design/business-logic-model.md` 끝에 214행 정정 블록 1개. 다섯 파일 모두 원문 삭제·수정 0줄(append 만). 출처 병기: `근거: TRIP-1561 구현 결정` — 요구사항 근거로 인용 금지.
+**Context**: CONSTRUCTION — U10/U4 Functional Design 사후 개정(구현 반영), 커밋 `79a5d5375`(TRIP-1561 FE). 사용자 사전 선택(위 원문)에 따라 audit 원문 append 후 반영(앞 개정들과 같은 절차 — 같은 PR 머지 = 승인). `aidlc-state.md`·`docs/SCOPE.md` 무변경.
+
+---
+
 ## Functional Design 사후 개정 — U1 장소 사진 칸 BR-U1-60 신설 · U3 슬롯 사진 testID 정정 (사이클 20261022-place-category-covers)
 **Timestamp**: 2026-10-22T12:17:23+09:00 (작업 시점)
 **User Input**: (사용자 원문 — 이 세션 2026-10-22, 그대로 인용) "사진 있는 경우는 그냥 그거 쓰는걸로" / "나를 인터뷰 해서 정해봐" / AskUserQuestion 답 — "사진 칸 19곳을 각각 따로 고칠까요, 아니면 \"사진 있으면 서버 사진 / 없거나 로드 실패면 카테고리 생성 이미지\"라는 판단을 공용 컴포넌트(PlacePhoto) 한 군데에 모을까요?"="한 군데로 모은다 (권고)" · "일정표의 작은 72px 칸(지금은 사진이 없으면 카테고리 색+아이콘 타일)도 PlacePhoto로 바꿔서 생성 이미지를 넣을까요?"="생성 이미지로 교체" · "서버 사진 URL이 있는데 실제로 안 열릴 때(깨진 링크·http 차단·삭제된 이미지) 자동으로 카테고리 생성 이미지로 바꿔 보여줄까요?"="생성 이미지로 갈아끼운다 (권고)" · "홈 화면의 '사진 있는 곳 먼저' 정렬(실제 사진이 있는 장소를 앞에 세움)을 어떻게 할까요?"="그대로 둔다 (권고)" · "서버가 사진 칸에 빈 문자열('')이나 공백('  ')을 내려줄 때도 \"사진 없음\"으로 보고 생성 이미지를 채울까요?"="없음으로 본다 (권고)" · "세로 전용 10장은 폐기하고 가로 3장을 세로 칸에 크롭해서 쓰는 걸로 확정할까요?"="폐기, 가로만 사용 (권고)" · "이번 변경으로 쓰이지 않게 되는 코드(홈의 옛 회색 글리프 PhotoPlaceholder, 슬롯 타일 SlotPhotoPlaceholder·categoryPlaceholder·카테고리 아이콘)는 어떻게 할까요?"="참조 0건이 된 것만 함께 삭제 (권고)" · "정본 반영은 어느 것까지 할까요? (사이클 끝 기록 단계에서 반영, 해당하는 것만 고르세요)"="(가) openapi 2338행,(나) openapi 3389~3395행,(다) BR-U1-06 오귀속 정정,(라) u3 frontend-components 223행" · "어디까지 진행할까요?"="학습은 퀴즈 대기로 미루고 지금 기록→커밋→PR".

@@ -40,8 +40,9 @@ generate 봉투 부가 필드 산출 규칙(TRIP-341 — 코드가 실제로 아
   컨텍스트(앵커·이동수단·풀)가 없다 → 기존대로 null. `distance_ranges` 는 POI→POI 구간만
   generate 와 같은 렌더로 채운다(편집 교체 뒤 거리 재산출 — 2026-10-05). 앵커가 없어 각 날
   첫 슬롯은 null, 수단은 수리의 시각 계산과 같은 기본값(PUBLIC).
-- 와이어 `preference_profile`(+ `trip_context.companion_type`)은 generate·replan 에서
-  그 요청의 페르소나다(AI-D09 — D31 "재조회한 값만"의 부분 개정). 전 축 미설정이면 종전대로
+- 와이어 `preference_profile`(+ 동행 — generate·replan 은 `trip_context.companion_type`,
+  explanations·alternatives 는 최상위 `companion_type`)은 네 경로 모두 그 요청의
+  페르소나다(AI-D09 — D31 "재조회한 값만"의 부분 개정). 전 축 미설정이면 종전대로
   주입된 `ContextStore`가 공급한다. 와이어에 사용자 식별자가 없어 principal은 trip_id 파생
   임시값이다(실 어댑터 시 백엔드 합의 필요).
 - validate/repair 와이어에는 원 문제 컨텍스트(이동수단·day window)가 없다 → 기본값
@@ -115,7 +116,7 @@ from trippilot.domain.reflection import (
 )
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
 from trippilot.assembly_engine.config import RAIN_OUTDOOR, AssemblyConfig, stay_for
-from trippilot.assembly_engine.constraints import open_hours_ok
+from trippilot.assembly_engine.constraints import hc1_unjudged, open_hours_ok
 from trippilot.assembly_engine.facade import HybridAssemblyFacade, AssemblyConflictError
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
@@ -692,6 +693,17 @@ def _unverified(misses: Sequence[PoiMiss]) -> tuple[WiredUnverifiedSlot, ...]:
             detail=m.detail,
         )
         for m in misses
+    )
+
+
+def _hours_unknown(
+    solution: ItinerarySolution, problem: ItineraryProblem, poi_index: Mapping[PoiId, Poi],
+) -> tuple[WiredUnverifiedSlot, ...]:
+    """영업 창을 몰라 HC1 을 적용하지 못한 등록 POI → 경계 보고(HOURS_UNKNOWN). 판정은 규칙 옆 `hc1_unjudged` 한 곳 —
+    검증과 같은 휴일 달력(`problem.holidays`)으로 본다."""
+    return tuple(
+        WiredUnverifiedSlot(poi_id=str(p), reason_code="HOURS_UNKNOWN")
+        for p in hc1_unjudged(solution, poi_index, problem.holidays)
     )
 
 
@@ -2178,10 +2190,12 @@ class WiredItineraryOrchestrator:
         ids = frozenset(s.poi_id for day in solution.days for s in day.slots)
         # 미등록 POI는 인덱스에 없다 → HC1·HC2 미적용("정보 없음은 막지 않는다", c2 규칙).
         # 규칙은 그대로 두되 **무엇이 빠졌는지는 값으로 들고 나간다**(TRIP-537, INV-4) —
-        # 막지 않는 것과 알리지 않는 것은 다르다.
+        # 막지 않는 것과 알리지 않는 것은 다르다. 등록됐어도 그 날 영업 창을 모르면(원문 없음·해석 실패)
+        # HC1 만 미적용이다 — 같은 목록에 HOURS_UNKNOWN 으로 싣는다(장소 감지가 그 슬롯을 '확인'으로 접지 않게, INV-SA-2).
         lookup = self._poi_db.lookup_by_ids(ids)
         poi_index = {p.poi_id: p for p in lookup.pois}
-        return solution, problem, poi_index, _unverified(lookup.misses)
+        return solution, problem, poi_index, (
+            _unverified(lookup.misses) + _hours_unknown(solution, problem, poi_index))
 
     def alternatives(
         self, request: schemas.AlternativesRequest
@@ -2516,7 +2530,7 @@ class WiredItineraryOrchestrator:
         # 거리 0 으로 규칙 1위가 되어 숏리스트·LLM 선택 한 자리를 헛되이 차지한다.
         # 구성 LLM 이 있으면 대체지 선택 LLM 은 부르지 않는다(`use_llm`) — 하루는 구성이 고르고,
         # 선택 LLM 은 재계획 시한에서 매번 6s 를 타임아웃으로 태워 구성 몫을 깎았다(2026-10-14 DEV 3/3).
-        planb = self._rag.run(replace(
+        planb_request = replace(
             _replan_rag_request(
                 request, pool, persona, daily_rain, trace_id, now, notes=notes,
                 deadline_ms=max(1, _deadline_budget(meta) - (self._clock.monotonic_ms() - t0)),
@@ -2524,7 +2538,8 @@ class WiredItineraryOrchestrator:
             excluded_poi_ids=frozenset(PoiId(p) for p in request.excluded_poi_ids)
             | {b.poi_id for b in past} | avoided,
             use_llm=self._composer is None,
-        ))
+        )
+        planb = self._rag.run(planb_request)
         notes += [f"planb: {n}" for n in planb.notes]
         # 랭킹은 **LLM 경로일 때만** 넘긴다 (독스트링 마지막 단락).
         planb_rank = () if planb.is_fallback else planb.ranked_poi_ids
@@ -2572,6 +2587,7 @@ class WiredItineraryOrchestrator:
                 nearby=(*nl_near, *night), origins=tuple(p.coord for p in far),
                 window_start=nl.window_start, window_end=day_end,  # 솔버 `day_window` 와 같은 창
                 rules=_category_rule_lines(nl), ctx_out=compose_ctx, holidays=holidays,
+                planb_request=planb_request,
             )
         except Exception as e:  # 설정 버그·렌더 실패도 재계획을 죽이지 않는다 — 종전 경로로(INV-4)
             notes.append(f"llm_compose_error: {type(e).__name__}")
@@ -2788,7 +2804,10 @@ class WiredItineraryOrchestrator:
                             or fb.reason in ("in_progress", "keep_dinner", "nl_at"))))
                 for d in outcome.solution.days)))
         return self._replan_projection(
-            request, outcome, notes, resolved, unknown, retrieved=planb.retrieved,
+            request, outcome, notes, resolved, unknown,
+            # KB-5 는 구성 후보로 찾는다 — 건수도 그쪽 것이다(PlanB 는 선택 LLM 이 없으면 찾지 않는다).
+            retrieved={**planb.retrieved, "POI_DESC": len(compose_ctx[0][0].place_knowledge)}
+            if compose_ctx else planb.retrieved,
             planb_fallback=planb.is_fallback, started_ms=t0, past=past,
             composed=bool(composed),
         )
@@ -3045,6 +3064,7 @@ class WiredItineraryOrchestrator:
         rules: tuple[str, ...] = (),
         ctx_out: list | None = None,
         holidays: Mapping[date, frozenset[str]] | None = None,  # 공휴일 달력 — 진입점이 1회 조회(상황 감지 H1)
+        planb_request: PlanBRagRequest | None = None,  # 후보의 장소 지식(KB-5)을 같은 상황 질의로 찾는다
     ) -> tuple[PoiId, ...]:
         """다시 짜기 — 기존 일정·사유·요청·상황 추천을 보고 LLM 이 남은 하루의 방문 목록을 고른다.
 
@@ -3109,6 +3129,16 @@ class WiredItineraryOrchestrator:
                 return "요청과 안 맞음(교체)"
             return "제외 요청" if pid in excluded else "남은 일정"
 
+        # 후보의 장소 지식(KB-5) — 사용자 결정(2026-10-21 "실어서 써야지"). 종전엔 PlanB 가 다른 후보 집합으로
+        # 찾고 읽는 LLM 없이 버렸다. 부가 정보라 못 찾으면 없이 짠다(INV-4 — 노트는 남긴다).
+        knowledge: Mapping[str, str] = {}
+        if planb_request is not None:
+            try:
+                knowledge, note = self._rag.place_knowledge(planb_request, shortlist.pois)
+            except Exception as e:
+                knowledge, note = {}, f"place_knowledge_unavailable: {type(e).__name__}"
+            if note:
+                notes.append(f"compose: {note}")
         labels = {spec.key: spec.label for spec in self._directives}
         specs = index_of(self._directives)
         chosen = [specs[k] for k in resolved if k in specs]
@@ -3147,7 +3177,15 @@ class WiredItineraryOrchestrator:
                          for p in shortlist.pois},
             hours={p.poi_id: composition.hours_label(p, day, holidays) or ""
                    for p in shortlist.pois},
+            place_knowledge=knowledge,
         )
+        # 장소 지식 조회가 쓴 시간을 뺀 잔여 — 시한 원점은 그대로(#1102).
+        remaining = (budget.total_ms - (self._clock.monotonic_ms() - started_ms)
+                     - budget.c2_reserved_ms)
+        if remaining < _COMPOSE_MIN_MS:
+            notes.append(f"llm_compose_skipped: deadline remaining={remaining}ms")
+            self._compose_event(request.request_meta, f"deadline: remaining={remaining}ms")
+            return ()
         if ctx_out is not None:  # 1회 수리가 같은 입력·제외에서 2차를 만든다(`_repair_day`)
             ctx_out.append((inp, frozenset(excluded)))
         result = self._composer.compose(

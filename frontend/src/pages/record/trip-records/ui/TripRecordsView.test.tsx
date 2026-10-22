@@ -5,15 +5,10 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import { DeviceEventEmitter, Dimensions, Keyboard, View } from 'react-native';
-import { isSharedValue } from 'react-native-reanimated';
-import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import { Path } from 'react-native-svg';
-import type { ReactTestInstance } from 'react-test-renderer';
+import { DeviceEventEmitter, FlatList, Keyboard, View } from 'react-native';
 
 import * as probe from '@/test-support/fabAnchorProbe';
 import { MemoInline } from '@/features/attach-visit-media/index.view';
-import { NoteGlyph } from '@/features/record';
 import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
 import type { MapCenter, MapPin } from '@/shared/map';
 import {
@@ -70,7 +65,7 @@ afterEach(() => {
  * 무엇을 보장하나:
  *  - 골격(AC-1): 셸 지도 하나가 시트 뒤에 있고 카드는 시트 안이다. 하단 탭바·옛 250px 지도 블록은 없다.
  *  - 시트 헤더(AC-12): "여행명 · N일차 · M월 D일(요일) · N곳" 한 줄. 여행명이 없으면 그 조각만 빠진다.
- *  - 일차 칩·뒤로(AC-2·3): 셸 칩(`sheet-daychip-{index}`)이 일자를, `sheet-daychip-back` 이 뒤로를 올린다.
+ *  - 일차 칩·뒤로(AC-2·3): 셸 칩(`sheet-daychip-{index}`)이 일자를, 하단 바 뒤로(`record-trip-bottom-bar-back`, TRIP-1557)가 뒤로를 올린다.
  *  - 키보드(AC-9): 카드·계획 행·[방문 추가]가 `keyboardShouldPersistTaps="handled"` 스크롤 안에 있다.
  *  - 순서(Figma 4705:2756): 헤더 → 귀속 → 안내문 → 카드 → 계획 행 → [방문 추가].
  *  - 지도 실패(AC-7): 지도 자리만 폴백 바로 바뀌고 헤더·카드·칩은 그대로다.
@@ -220,10 +215,14 @@ describe('🔴 TRIP-1085 AC-2·AC-3 · 셸 일차 칩과 뒤로', () => {
     expect(screen.queryAllByTestId(/^record-trip-day-tab-/)).toHaveLength(0);
   });
 
-  it('V4 ‹(sheet-daychip-back)를 누르면 onPressBack 이 1회 불리고, 옛 record-trip-back 은 없다', () => {
+  // TRIP-1557 — 뒤로는 좌상단 ‹(셸 `hideBack`)에서 하단 바로 옮겼다. 두 곳에 있으면 안 된다(AC-7·AC-8).
+  it('V4 하단 바 뒤로(record-trip-bottom-bar-back)를 누르면 onPressBack 이 1회 불리고, 좌상단 ‹(sheet-daychip-back)·옛 record-trip-back 은 없다', () => {
     const props = renderView();
 
-    fireEvent.press(screen.getByTestId('sheet-daychip-back'));
+    // 앵커 — 일차 칩 줄은 그대로 서 있다(‹ 만 빠졌다).
+    expect(screen.getByTestId('sheet-daychip-root')).toBeOnTheScreen();
+    expect(screen.queryByTestId('sheet-daychip-back')).toBeNull();
+    fireEvent.press(screen.getByTestId('record-trip-bottom-bar-back'));
 
     expect(props.onPressBack).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('record-trip-back')).toBeNull();
@@ -843,306 +842,204 @@ describe('빈 상태 + 그날 계획 행', () => {
   });
 });
 
-describe('「오늘의 회고」 FAB', () => {
-  // TRIP-1088 (옛 TripRecordsView.reflectionFab.test.tsx)
+describe('하단 바 — 허브식 뒤로 + 기록·회고·요약', () => {
+  // TRIP-1557 (옛 TRIP-1088 「오늘의 회고」 FAB 블록 대체 — FAB 는 사라지고 회고는 바의 한 칸이 됐다)
   /**
-   * TRIP-1088 · j01 「오늘의 회고」 FAB — 뷰 단위(V1~V8).
+   * TRIP-1557 · j01 하단 바 — 뷰 단위(D1~D8 · K1~K3). FAB 를 지우고 허브(i01)와 같은 부품(`widgets/bottom-nav-bar`)으로 바를 세운다.
    *
    * 무엇을 보장하나:
-   *  - 노출 스위치(V1): `onPressReflection` 이 오면 FAB(글자 + 흰 문서 아이콘)가 앵커 안에 서고, 없으면 둘 다 없다.
-   *  - 누름(V2) · 셸 배선(V5): FAB 는 콜백을 1회 부르고, 뷰는 시트 위치 상자(SharedValue)를 셸에 넘긴다.
-   *  - 추종(V3)·하한(V4): FAB 윗변 = max(칩 줄 하단 + 8, 시트 윗변 − 8 − 52) — Figma 4716:2946(시트 윗변 380 → 320).
-   *  - 앵커 형태(V6): 뷰 루트 직속·셸 뒤 형제, className 없이 style 로만 자리 잡는다(Animated.View).
-   *  - 무회귀(V7): 칩 줄을 뷰가 감싸도 칩 선택·뒤로가 그대로다. INV-3(V8): 소요 글자 0.
+   *  - 금지(D1): 「오늘의 회고」 FAB·앵커는 콜백을 줘도 없다.
+   *  - 구성(D2): 뒤로 + 기록·회고·요약(이 순서), 기록 칸만 활성(selected). 바는 시트 밖이고 셸보다 뒤에 그려진다(시트가 바를 덮지 않게).
+   *  - 회고 칸(D3·D4): 콜백이 오면 눌려 1회 부르고, 없으면 비활성(미래·로딩 판정은 페이지 몫 — 콜백 유무가 곧 스위치).
+   *  - 요약 칸(D5·D6): 콜백이 오면 1회, 없으면 비활성 + 낭독 값 「요약 준비 중」(조회 중·실패·미준비를 한 몸으로 — INV-4).
+   *  - 기록 칸(D7): 지금 화면이라 눌러도 어디로도 안 간다.
+   *  - 바는 늘 있다(D8): 기록 조회가 로딩·실패여도 뒤로가 살아 있다(나갈 길).
+   *  - 키보드(K1~K3): 메모 입력으로 키보드가 뜨면 바를 트리에서 뺀다(투명 처리면 보이지 않는 바가 입력 위 터치를 가로챈다).
+   *  - 뒤로(V4): 하단 바 뒤로가 onPressBack 을 부르고 좌상단 ‹ 는 없다(`hideBack`) — 위 TRIP-1085 AC-2·3 묶음.
    *
-   * ⚠️ 관측은 getAnimatedStyle + 가짜 타이머로만 — host `props.style` 은 첫 값에 굳는다(02a ★1·★2).
-   *   실제 드래그 추종·첫 프레임·가림은 6-b(S1~S6).
+   * ⚠️ 원리적 사각(6-b): 바와 시트의 실제 겹침·닫힘 칸 핸들이 바 위에 보이는지(snapPoints 첫 칸 ≥ 바 점유 70 + 핸들 28)·유리 표면·
+   *   안드로이드 키보드 시 바 오름. 통과형 시트 목은 snapPoints 를 그냥 되돌려 줘 값 단언이 구현을 베낀다(README §테스트 전략 판정 4).
+   * 3동작: 준비(콜백 주입) → 실행(render · press · 키보드 이벤트) → 단언(testID·낭독 상태·콜백 횟수).
    */
 
-  const FAB = 'record-trip-reflection-fab';
+  const BAR = 'record-trip-bottom-bar';
+  const BACK = 'record-trip-bottom-bar-back';
+  const TAB_RECORDS = 'record-trip-bottom-bar-tab-records';
+  const TAB_REFLECTION = 'record-trip-bottom-bar-tab-reflection';
+  const TAB_SUMMARY = 'record-trip-bottom-bar-tab-summary';
+  const BAR_IDS = [BAR, BACK, TAB_RECORDS, TAB_REFLECTION, TAB_SUMMARY];
 
-  const ANCHOR = 'record-trip-reflection-fab-anchor';
-
-  const OVERLAY_ROW = 'record-trip-overlay-row';
-
-  function baseProps(): TripRecordsViewProps {
-    return {
-      tripTitle: '부산 여행',
-      dayTabs: [
-        { day: '2026-06-10', label: '1일차' },
-        { day: '2026-06-11', label: '2일차' },
-        { day: '2026-06-12', label: '3일차' },
-      ],
-      activeDay: '2026-06-11',
-      onSelectDay: jest.fn(),
-      onPressBack: jest.fn(),
-      mapCenter: CENTER,
-      cards: [
-        {
-          visitCheckId: 'v-a',
-          slotKey: '2026-06-11#p1',
-          poiId: 'p1',
-          nameKo: '광안리 해변',
-          arrivedAt: '2026-06-11T14:20:00',
-          completedAt: '2026-06-11T15:20:00',
-          skippedAt: null,
-          arrivedLabel: '14:20',
-        },
-      ],
-      onPressComplete: jest.fn(),
-      onPressSkip: jest.fn(),
+  function renderWithBar(overrides: Partial<TripRecordsViewProps> = {}) {
+    return renderView({
       onPressReflection: jest.fn(),
-    };
-  }
-
-  function renderView(overrides: Partial<TripRecordsViewProps> = {}) {
-    const props = { ...baseProps(), ...overrides };
-    render(<TripRecordsView {...props} />);
-    return props;
-  }
-
-  /** 실기처럼 상태바 47 을 준다 — safeTop 을 한 번 더 더하는 구현을 드러낸다(02a ★5). */
-  function renderViewWithStatusBar(
-    overrides: Partial<TripRecordsViewProps> = {}
-  ) {
-    const props = { ...baseProps(), ...overrides };
-    render(
-      <SafeAreaInsetsContext.Provider
-        value={{ top: 47, bottom: 34, left: 0, right: 0 }}
-      >
-        <TripRecordsView {...props} />
-      </SafeAreaInsetsContext.Provider>
-    );
-    return props;
-  }
-
-  function ancestorsOf(node: ReactTestInstance): ReactTestInstance[] {
-    const out: ReactTestInstance[] = [];
-    for (let up = node.parent; up; up = up.parent) out.push(up);
-    return out;
-  }
-
-  const sheetHost = probe.sheetHost;
-  const flushFrames = probe.flushFrames;
-  const moveSheet = probe.moveSheet;
-
-  /** 칩 줄(‹ + 일차 칩)이 기기에서 잰 자리 — 하단 = y + height. */
-  function layoutOverlay(y: number, height: number): void {
-    probe.layoutOverlay(OVERLAY_ROW, { y, height, width: 200 });
-  }
-
-  const anchorStyle = () => probe.anchorStyle(ANCHOR);
-  const anchorTop = () => probe.anchorTop(ANCHOR);
-
-  function isWhite(color: unknown): boolean {
-    return /^(white|#fff|#ffffff)$/i.test(String(color));
-  }
-
-  describe('🔴 TRIP-1088 V1·V2 · FAB 노출 스위치와 누름', () => {
-    it('V1a 콜백을 주면 앵커 안에 FAB 가 서고, 글자는 정확히 「오늘의 회고」, 아이콘은 흰 NoteGlyph(선 4개)다', () => {
-      renderView();
-
-      const anchor = screen.getByTestId(ANCHOR);
-      const fab = within(anchor).getByTestId(FAB);
-      expect(fab).toHaveTextContent('오늘의 회고');
-      expect(within(fab).UNSAFE_getByType(NoteGlyph)).toBeTruthy();
-      const paths = within(fab).UNSAFE_getAllByType(Path);
-      expect(paths).toHaveLength(4);
-      // 코랄 알약 위 아이콘 — 흰색이 아니면 보이지 않는다(02a ★11).
-      expect(paths.map((path) => isWhite(path.props.stroke))).toEqual([
-        true,
-        true,
-        true,
-        true,
-      ]);
+      onPressSummary: jest.fn(),
+      ...overrides,
     });
+  }
 
-    it('V1b 콜백이 없으면 FAB 도 앵커도 없다 (뷰는 그대로 그려진다)', () => {
-      renderView({ onPressReflection: undefined });
+  describe('🔴 TRIP-1557 D1 · 「오늘의 회고」 FAB 는 없다', () => {
+    it('D1 회고·요약 콜백을 줘도 FAB·앵커·「오늘의 회고」 글자가 없다 (회고는 바의 한 칸이다)', () => {
+      renderWithBar();
 
-      expect(screen.getByTestId('record-trip-view')).toBeOnTheScreen();
-      expect(screen.queryByTestId(FAB)).toBeNull();
-      expect(screen.queryByTestId(ANCHOR)).toBeNull();
+      expect(screen.getByTestId(BAR)).toBeOnTheScreen(); // 짝 앵커 — 바는 그려졌다
+      expect(screen.queryByTestId('record-trip-reflection-fab')).toBeNull();
+      expect(
+        screen.queryByTestId('record-trip-reflection-fab-anchor')
+      ).toBeNull();
       expect(screen.queryByText('오늘의 회고')).toBeNull();
     });
-
-    it('V2 FAB 를 누르면 콜백이 1회 불린다', () => {
-      const { onPressReflection } = renderView();
-      expect(onPressReflection).toHaveBeenCalledTimes(0);
-
-      fireEvent.press(screen.getByTestId(FAB));
-
-      expect(onPressReflection).toHaveBeenCalledTimes(1);
-    });
   });
 
-  describe('🔴 TRIP-1088 V3·V4·V5 · FAB 가 시트 윗변에 붙어 따라가고, 칩 줄 아래에서 멈춘다', () => {
-    beforeEach(() => {
-      jest.useFakeTimers();
-    });
-    afterEach(() => {
-      jest.useRealTimers();
-    });
+  describe('🔴 TRIP-1557 D2 · 바의 구성', () => {
+    it('D2a 바 안 버튼이 뒤로 → 기록 → 회고 → 요약 순이고, 기록 칸만 활성(selected)이다', () => {
+      renderWithBar();
 
-    it('V5 뷰는 시트 위치 상자(SharedValue)를 셸에 넘긴다', () => {
-      renderView();
-
-      expect(isSharedValue(sheetHost().props.animatedPosition)).toBe(true);
-    });
-
-    it('V3 시트 윗변이 380 → 816 → 500 으로 움직이면 FAB 윗변이 매번 8+52 위(320 → 756 → 440)로 따라간다 (상태바 47)', () => {
-      renderViewWithStatusBar();
-      // 실기처럼 칩 줄은 safeTop 47 + 셸 pt-sm 8 = 55 에서 시작하고 높이 36(칩 h-[36px]).
-      layoutOverlay(55, 36);
-
-      moveSheet(380); // 중간 — Figma 4716:2833 시트 윗변 380, FAB y 320
-      expect(anchorTop()).toBe(320);
-
-      moveSheet(816); // 닫힘
-      expect(anchorTop()).toBe(756);
-
-      moveSheet(500); // 끄는 중간값 — 스냅이 아니어도 따라간다
-      expect(anchorTop()).toBe(440);
-    });
-
-    it('V3b 시트 위치가 들어오기 전 첫 자리는 화면 아래쪽(창 높이 − 8 − 52)이다', () => {
-      renderView();
-      flushFrames();
-
-      expect(anchorTop()).toBe(Dimensions.get('window').height - 8 - 52);
-    });
-
-    it('V4 펼침(윗변 122)에서는 칩 줄 하단 91 + 8 = 99 에서 멈추고, 칩 줄을 하단 135 로 다시 재면 143 으로 따라 내려간다', () => {
-      renderViewWithStatusBar();
-      layoutOverlay(55, 36);
-
-      moveSheet(122); // 추종값 62 는 칩 줄과 겹친다
-      expect(anchorTop()).toBe(99);
-
-      layoutOverlay(99, 36); // 시트는 그대로, 칩 줄만 다시 잰다
-      expect(anchorTop()).toBe(143);
-    });
-
-    it('V4b 재는 노드(record-trip-overlay-row)는 자기 onLayout 을 가진 칩 줄이고, 시트 밖이며, ⊘ 배지(mapCard)는 품지 않는다', () => {
-      renderView({ manualCheckin: true });
-
-      const row = screen.getByTestId(OVERLAY_ROW);
-      expect(typeof row.props.onLayout).toBe('function');
-      expect(within(row).getByTestId('sheet-daychip-root')).toBeOnTheScreen();
-      expect(isInsideSheet(row)).toBe(false);
-      // 짝 — 배지는 화면에 있지만 칩 줄 밖이다(하한이 배지 높이만큼 내려가지 않게, 02a ★7).
-      expect(screen.getByTestId('record-map-gps-off')).toBeOnTheScreen();
-      expect(within(row).queryByTestId('record-map-gps-off')).toBeNull();
-    });
-  });
-
-  describe('🔴 TRIP-1088 V6 · 앵커는 뷰 루트 직속·셸 뒤 형제, style 로만 자리 잡는다', () => {
-    it('V6 가장 가까운 host 부모가 record-trip-view 이고 셸 안이 아니며 셸보다 뒤에 그려진다 — className 없음·absolute·오른쪽 16·bottom 없음·box-none', () => {
-      renderView();
-
-      const anchor = screen.getByTestId(ANCHOR);
-      const hostParent = ancestorsOf(anchor).find(
-        (node) => typeof node.type === 'string'
-      );
-      expect(hostParent?.props.testID).toBe('record-trip-view');
+      const bar = screen.getByTestId(BAR);
       expect(
-        ancestorsOf(anchor).map((node) => node.props.testID)
-      ).not.toContain('map-sheet-shell-root');
+        within(bar)
+          .getAllByRole('button')
+          .map((node) => node.props.accessibilityLabel)
+      ).toEqual(['뒤로', '기록', '회고', '요약']);
+      expect(screen.getByTestId(TAB_RECORDS)).toBeSelected();
+      expect(screen.getByTestId(TAB_REFLECTION)).not.toBeSelected();
+      expect(screen.getByTestId(TAB_SUMMARY)).not.toBeSelected();
+      expect(screen.getByTestId(BACK)).toBeOnTheScreen();
+    });
+
+    it('D2b 바는 뷰 안·시트 밖·셸 밖에 서고 셸보다 뒤에 그려진다 (시트·지도가 바를 덮거나 바가 시트와 함께 움직이면 안 된다)', () => {
+      renderWithBar();
+
+      const bar = screen.getByTestId(BAR);
       const shellRoot = screen.getByTestId('map-sheet-shell-root');
-      expect(treeIndexOf(screen.UNSAFE_root, anchor)).toBeGreaterThan(
+      expect(
+        closestAncestor(bar, (node) => node.props.testID === 'record-trip-view')
+      ).not.toBeNull();
+      expect(isInsideSheet(bar)).toBe(false);
+      expect(closestAncestor(bar, (node) => node === shellRoot)).toBeNull();
+      expect(treeIndexOf(screen.UNSAFE_root, bar)).toBeGreaterThan(
         treeIndexOf(screen.UNSAFE_root, shellRoot)
       );
-
-      // reanimated Animated.View 의 className 은 기기에서 적용된다는 근거가 없다(02a ★6).
-      expect(anchor.props.className).toBeUndefined();
-      expect(anchor.props.pointerEvents).toBe('box-none');
-      const style = anchorStyle();
-      expect(style.position).toBe('absolute');
-      expect(style.right).toBe(16);
-      expect(style.bottom).toBeUndefined();
     });
   });
 
-  describe('🔴 TRIP-1088 V7 · 칩 줄을 뷰가 감싸도 칩 선택·뒤로는 그대로다', () => {
-    it('V7 활성 일자 칩만 선택돼 있고, 3일차 칩은 그 날짜를 1회 올리며, ‹ 는 뒤로를 1회 부른다', () => {
-      const { onSelectDay, onPressBack } = renderView();
+  describe('🔴 TRIP-1557 D3·D4 · 회고 칸 (AC-3·AC-4 의 뷰 쪽)', () => {
+    it('D3 콜백이 오면 회고 칸은 눌리고 onPressReflection 만 1회 부른다', () => {
+      const props = renderWithBar();
 
-      expect(screen.getByTestId('sheet-daychip-1')).toBeSelected();
-      expect(screen.getByTestId('sheet-daychip-0')).not.toBeSelected();
+      expect(screen.getByTestId(TAB_REFLECTION)).toBeEnabled();
+      fireEvent.press(screen.getByTestId(TAB_REFLECTION));
 
-      fireEvent.press(screen.getByTestId('sheet-daychip-2'));
-      fireEvent.press(screen.getByTestId('sheet-daychip-back'));
+      expect(props.onPressReflection).toHaveBeenCalledTimes(1);
+      expect(props.onPressSummary).not.toHaveBeenCalled();
+      expect(props.onPressBack).not.toHaveBeenCalled();
+    });
 
-      expect(onSelectDay).toHaveBeenCalledTimes(1);
-      expect(onSelectDay).toHaveBeenCalledWith('2026-06-12');
-      expect(onPressBack).toHaveBeenCalledTimes(1);
+    it('D4 콜백이 없으면(미래 일차·일정 로딩 전) 회고 칸은 비활성이고, 바의 나머지는 그대로 선다', () => {
+      const props = renderWithBar({ onPressReflection: undefined });
+
+      const tab = screen.getByTestId(TAB_REFLECTION);
+      expect(tab).toBeDisabled();
+      expect(tab.props.accessibilityState.disabled).toBe(true);
+      expect(screen.getByTestId(TAB_RECORDS)).toBeEnabled();
+      expect(screen.getByTestId(BACK)).toBeEnabled();
+
+      fireEvent.press(tab);
+
+      expect(props.onPressSummary).not.toHaveBeenCalled();
+      expect(props.onPressBack).not.toHaveBeenCalled();
     });
   });
 
-  describe('🔴 TRIP-1088 V8 · INV-3 — FAB 가 있어도 소요·체류 글자 0', () => {
-    it('V8 화면 전체 글자에 FAB 라벨은 있고 N분·N시간·소요·체류는 없다', () => {
-      renderView();
+  describe('🔴 TRIP-1557 D5·D6 · 요약 칸 (AC-5·AC-6 의 뷰 쪽, BR-U5-48 · INV-4)', () => {
+    it('D5 콜백이 오면(요약 준비됨) 요약 칸은 눌리고 onPressSummary 를 1회 부르며, 비활성 사유 낭독은 없다', () => {
+      const props = renderWithBar();
 
-      const text = renderedText(screen.UNSAFE_root);
-      expect(text).toContain('오늘의 회고');
-      expect(/(\d+\s*분|\d+\s*시간|소요|체류)/.test(text)).toBe(false);
+      const tab = screen.getByTestId(TAB_SUMMARY);
+      expect(tab).toBeEnabled();
+      expect(tab.props.accessibilityValue?.text).toBeUndefined();
+      fireEvent.press(tab);
+
+      expect(props.onPressSummary).toHaveBeenCalledTimes(1);
+      expect(props.onPressReflection).not.toHaveBeenCalled();
+    });
+
+    it('D6 콜백이 없으면(조회 중·실패·미준비) 요약 칸은 비활성이고 「요약 준비 중」으로 읽히며 눌러도 아무 콜백도 안 불린다', () => {
+      const props = renderWithBar({ onPressSummary: undefined });
+
+      const tab = screen.getByTestId(TAB_SUMMARY);
+      expect(tab).toBeDisabled();
+      expect(tab.props.accessibilityState.disabled).toBe(true);
+      expect(tab).toHaveAccessibilityValue({ text: '요약 준비 중' });
+      // 짝 — 회고 칸은 살아 있다(요약만 비활성).
+      expect(screen.getByTestId(TAB_REFLECTION)).toBeEnabled();
+
+      fireEvent.press(tab);
+
+      expect(props.onPressReflection).not.toHaveBeenCalled();
+      expect(props.onPressBack).not.toHaveBeenCalled();
     });
   });
 
-  // TRIP-1280 AC-4·AC-5 — 메모를 쓰느라 키보드가 뜨면 시트가 키보드 위로 올라와 FAB 이 시트 헤더·안내문을
-  // 덮는다. 키보드가 떠 있는 동안만 FAB 을 그리지 않는다(01b Q4). 시트 위치로 숨기지 않는다.
+  describe('🔴 TRIP-1557 D7·D8 · 기록 칸과 바의 상시성', () => {
+    it('D7 기록 칸(지금 화면)을 눌러도 어떤 콜백도 불리지 않는다', () => {
+      const props = renderWithBar();
+
+      fireEvent.press(screen.getByTestId(TAB_RECORDS));
+
+      expect(props.onPressReflection).not.toHaveBeenCalled();
+      expect(props.onPressSummary).not.toHaveBeenCalled();
+      expect(props.onPressBack).not.toHaveBeenCalled();
+      expect(screen.getByTestId(TAB_RECORDS)).toBeSelected();
+    });
+
+    it.each(['loading', 'error'] as const)(
+      'D8 기록 조회가 %s 여도 바는 서 있고 뒤로가 눌린다 (나갈 길이 없는 화면 금지)',
+      (recordsStatus) => {
+        const props = renderWithBar({ recordsStatus, cards: [], planRows: [] });
+
+        expect(screen.getByTestId(BAR)).toBeOnTheScreen();
+        fireEvent.press(screen.getByTestId(BACK));
+
+        expect(props.onPressBack).toHaveBeenCalledTimes(1);
+      }
+    );
+  });
+
+  // TRIP-1280 AC-4·AC-5(FAB → 바로 옮김) — 메모를 쓰느라 키보드가 뜨면 바를 그리지 않는다(01b Q4). 시트 위치로 숨기지 않는다.
   // 실제 시트 밀림·가림 해소는 jest 사각(6-b).
-  describe('키보드가 떠 있는 동안만 FAB 이 빠진다', () => {
-    beforeEach(() => {
-      jest.useFakeTimers();
-    });
-    afterEach(() => {
-      jest.useRealTimers();
-    });
-
-    it('K1 키보드 없이 시트를 펼쳐 FAB 이 칩 줄 아래에 멈춰도 FAB 은 그대로 있고 눌린다 (위치로 숨기지 않는다)', () => {
-      const { onPressReflection } = renderViewWithStatusBar();
-      layoutOverlay(55, 36);
-
-      moveSheet(122);
-
-      expect(screen.getByTestId(FAB)).toBeOnTheScreen();
-      // 5-b W1 — 트리에 남긴 채 애니메이션 스타일(opacity)로 위치 기준 숨김을 하는 구현도 막는다.
-      expect(anchorStyle().opacity ?? 1).toBe(1);
-      fireEvent.press(screen.getByTestId(FAB));
-      expect(onPressReflection).toHaveBeenCalledTimes(1);
-    });
-
-    it('K2 (iOS 순서) 키보드가 뜨면 FAB 이 사라지고, 내려가면 다시 나타나 눌린다', () => {
-      const { onPressReflection } = renderView();
-      expect(screen.getByTestId(FAB)).toBeOnTheScreen();
+  describe('키보드가 떠 있는 동안만 바가 빠진다', () => {
+    it('K1 (iOS 순서) 키보드가 뜨면 바 전체(뒤로·칸 3개)가 사라지고, 내려가면 다시 나타나 눌린다', () => {
+      const props = renderWithBar();
+      BAR_IDS.forEach((id) => expect(screen.getByTestId(id)).toBeOnTheScreen());
 
       emitKeyboard('keyboardWillShow');
       emitKeyboard('keyboardDidShow');
 
-      expect(screen.queryByTestId(FAB)).toBeNull();
-      expect(screen.queryByText('오늘의 회고')).toBeNull();
+      BAR_IDS.forEach((id) => expect(screen.queryByTestId(id)).toBeNull());
+      // 짝 앵커 — 뷰는 그대로다(바만 빠졌다).
+      expect(screen.getByTestId('record-trip-view')).toBeOnTheScreen();
+      expect(screen.getByTestId('record-trip-sheet-header')).toBeOnTheScreen();
 
       emitKeyboard('keyboardWillHide');
       emitKeyboard('keyboardDidHide');
 
-      expect(screen.getByTestId(FAB)).toBeOnTheScreen();
-      fireEvent.press(screen.getByTestId(FAB));
-      expect(onPressReflection).toHaveBeenCalledTimes(1);
+      BAR_IDS.forEach((id) => expect(screen.getByTestId(id)).toBeOnTheScreen());
+      fireEvent.press(screen.getByTestId(TAB_REFLECTION));
+      expect(props.onPressReflection).toHaveBeenCalledTimes(1);
     });
 
-    it('K3 (Android 순서 — Will 이벤트가 없다) Did 이벤트만으로도 사라졌다 다시 나타난다', () => {
-      renderView();
-      expect(screen.getByTestId(FAB)).toBeOnTheScreen();
+    it('K2 (Android 순서 — Will 이벤트가 없다) Did 이벤트만으로도 사라졌다 다시 나타난다', () => {
+      renderWithBar();
+      expect(screen.getByTestId(BAR)).toBeOnTheScreen();
 
       emitKeyboard('keyboardDidShow');
-      expect(screen.queryByTestId(FAB)).toBeNull();
+      expect(screen.queryByTestId(BAR)).toBeNull();
 
       emitKeyboard('keyboardDidHide');
-      expect(screen.getByTestId(FAB)).toBeOnTheScreen();
+      expect(screen.getByTestId(BAR)).toBeOnTheScreen();
     });
 
-    it('K4 화면이 사라지면 키보드 구독도 함께 푼다', () => {
+    it('K3 화면이 사라지면 키보드 구독도 함께 푼다', () => {
       // `Keyboard` 는 처음 쓰일 때 자기 몫 리스너를 단다 — 그 뒤에 기준선을 재야 한다.
       Keyboard.isVisible();
       const listenerCounts = () =>
@@ -1156,5 +1053,253 @@ describe('「오늘의 회고」 FAB', () => {
       unmount();
       expect(listenerCounts()).toEqual(before);
     });
+  });
+});
+
+/* ──────────────── TRIP-1558 · 계획 번호 + 핀 탭 → 시트 최상단으로 올림 → 도착 뒤 목록 스크롤 ────────────────
+ * 지도 핀 번호 = 그날 계획 슬롯 위치+1. 목록 항목(카드·계획 행)에 같은 번호(`planOrder`)가 실려 오고, 핀을 누르면 그 번호의
+ * 항목으로 간다. 대응 키는 핀 **배열 위치(index)가 아니라 번호(number)** — 좌표 없는 슬롯이 있으면 둘이 다르다.
+ * 시트 칸(j01 기본 배열): 0 닫힘 · 1 peek · 2 펼침(최상단). gorhom 은 가장 높은 칸에서만 안쪽 스크롤을 허용하므로(6-b 실측)
+ * 최상단(2)이 아니면 2 로 올리라 요청하고, **시트가 2 에 도착한 뒤**(onChange)에야 스크롤을 요청한다. 이미 2 면 즉시 스크롤.
+ * 목록 항목 index 는 data 위치(카드들 뒤에 계획 행들)다. 통과형 시트 목·RN FlatList 라 "요청이 나갔다"(스파이)까지만 본다 — 실제 열림·스크롤은 6-b.
+ * 목은 onAnimate(이동 시작)·onChange(도착)를 스스로 쏘지 않는다 → 테스트가 host 의 prop 을 직접 부른다(실제 순서: 시작 → 도착).
+ * 3동작: 준비(카드·계획 행·핀) → 실행(시트 이동 시작·도착 / 핀 탭) → 단언(snapToIndex·scrollToIndex 스파이 · 번호 leaf). */
+const sheetSnapSpy = () =>
+  (globalThis as Record<string, unknown>)
+    .__bottomSheetSnapToIndexSpy as jest.Mock;
+beforeEach(() => sheetSnapSpy().mockClear());
+
+describe('TripRecordsView · 계획 번호 (TRIP-1558 AC-5)', () => {
+  it('PN1 planOrder 를 가진 계획 행만 번호 leaf 가 서고, 없으면 노드가 없다', () => {
+    renderView({
+      planRows: [{ ...ROW_P3, planOrder: 3 }, ROW_P4],
+    });
+
+    expect(
+      screen.getByTestId(`record-trip-plan-order-${ROW_P3.slotKey}`)
+    ).toHaveTextContent('3');
+    // 짝 — 행은 둘 다 있고 번호 없는 쪽엔 노드가 없다.
+    expect(
+      screen.getByTestId(`record-trip-plan-row-${ROW_P4.slotKey}`)
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId(`record-trip-plan-order-${ROW_P4.slotKey}`)
+    ).toBeNull();
+  });
+});
+
+describe('TripRecordsView · 핀 탭 (TRIP-1558 AC-8·AC-9)', () => {
+  let toIndex: jest.SpyInstance;
+  const scrolls = () => toIndex.mock.calls.map(([arg]) => arg);
+
+  beforeEach(() => {
+    toIndex = jest
+      .spyOn(FlatList.prototype, 'scrollToIndex')
+      .mockImplementation(() => {});
+  });
+  afterEach(() => toIndex.mockRestore());
+
+  // 카드는 도착 순이라 계획 번호가 3·1 로 뒤섞여 온다. 2번 슬롯은 좌표가 없어 핀이 없고(핀 index ≠ number-1) 계획 행으로 남았다.
+  // 목록 data 위치: [v-a(3), v-b(1), 행(2)] = 0·1·2 — 어떤 번호의 number-1 과도 우연히 안 겹친다.
+  const CARD_A: VisitRecordCardVM = { ...DONE_CARD, planOrder: 3 };
+  const CARD_B: VisitRecordCardVM = { ...UPCOMING_CARD, planOrder: 1 };
+  const ROW_2: PlanRow = { ...ROW_P3, planOrder: 2 };
+  const GAP_PINS: MapPin[] = [
+    { number: 1, lat: 35.1532, lng: 129.1187 },
+    { number: 3, lat: 35.1555, lng: 129.1216 },
+  ];
+  const withData = (over: Partial<TripRecordsViewProps> = {}) =>
+    renderView({
+      cards: [CARD_A, CARD_B],
+      planRows: [ROW_2],
+      mapPins: GAP_PINS,
+      ...over,
+    });
+  const tapPin = (index: number) =>
+    act(() => {
+      screen.getByTestId('map-root').props.onPinTap(index);
+    });
+  const fireSheetAnimate = (from: number, to: number) =>
+    act(() => {
+      const onAnimate = probe.sheetHost().props.onAnimate as unknown;
+      if (typeof onAnimate !== 'function') {
+        throw new Error(
+          '시트(BottomSheet)에 onAnimate 가 달려 있지 않다 — 뷰가 시트 칸을 추적해야 한다'
+        );
+      }
+      (onAnimate as (f: number, t: number, fp: number, tp: number) => void)(
+        from,
+        to,
+        0,
+        0
+      );
+    });
+  /** 시트가 그 칸에 **도착해 멈췄다** — host 의 onChange 를 직접 부른다(이동 시작 onAnimate 와 다른 신호). */
+  const fireSheetSettle = (index: number) =>
+    act(() => {
+      const onChange = probe.sheetHost().props.onChange as unknown;
+      if (typeof onChange !== 'function') {
+        throw new Error('시트(BottomSheet)에 onChange 가 달려 있지 않다');
+      }
+      (onChange as (i: number, p: number, t: number) => void)(index, 0, 0);
+    });
+  /** 사용자가 손으로 시트를 옮긴 것 — 실제 순서대로 시작 뒤 도착. */
+  const dragSheet = (from: number, to: number) => {
+    fireSheetAnimate(from, to);
+    fireSheetSettle(to);
+  };
+  const snapTargets = () => sheetSnapSpy().mock.calls.map(([index]) => index);
+
+  it('PT1 핀 번호와 같은 planOrder 의 항목으로 스크롤 요청이 간다 — 핀 index(1)가 아니라 number(3) → 카드 v-a(data 0)', () => {
+    withData();
+    dragSheet(1, 2); // 사용자가 최상단(2)으로 펼쳐 둔 상태 — 올림·도착 대기 없이 즉시 스크롤하는 경로
+    expect(scrolls()).toEqual([]);
+
+    tapPin(1); // 핀 index 1 = number 3
+
+    expect(scrolls()).toHaveLength(1);
+    expect(scrolls()[0]).toEqual(expect.objectContaining({ index: 0 }));
+    expect(sheetSnapSpy()).not.toHaveBeenCalled();
+  });
+
+  it('PT1b 첫 핀(index 0 · number 1)은 두 번째 카드(data 1), 번호가 계획 행에 있으면 카드 수 뒤의 행(data 2)으로 간다', () => {
+    withData({
+      mapPins: [
+        ...GAP_PINS,
+        // 번호 2 핀은 좌표가 있는 경우 — 번호 2 항목은 계획 행이다.
+        { number: 2, lat: 35.1601, lng: 129.12 },
+      ],
+    });
+    dragSheet(1, 2);
+
+    tapPin(0);
+    tapPin(2);
+
+    expect(scrolls()).toEqual([
+      expect.objectContaining({ index: 1 }),
+      expect.objectContaining({ index: 2 }),
+    ]);
+  });
+
+  it('PT2 시트가 peek(1)이면 최상단(2)으로 올리라고만 요청하고, 도착한 뒤에야 스크롤을 정확히 1회 요청한다 — 이동 시작은 도착이 아니다', () => {
+    withData();
+    expect(sheetSnapSpy()).not.toHaveBeenCalled();
+    expect(scrolls()).toEqual([]);
+
+    tapPin(1); // 마운트 직후(peek) — number 3 → data 0
+
+    expect(snapTargets()).toEqual([2]); // peek(1)이 아니라 최상단(2)
+    expect(scrolls()).toEqual([]); // 아직 도착 전
+
+    fireSheetAnimate(1, 2); // 올라가는 중(시작 신호)
+    expect(scrolls()).toEqual([]);
+
+    fireSheetSettle(2); // 도착
+
+    expect(scrolls()).toHaveLength(1);
+    expect(scrolls()[0]).toEqual(expect.objectContaining({ index: 0 }));
+    expect(snapTargets()).toEqual([2]); // 도착 뒤에 시트 요청이 더 늘지 않는다
+  });
+
+  it('PT2b 최상단(2)이면 올림 요청 없이 즉시 스크롤하고, 닫힘(0)으로 내려 둔 뒤에는 다시 최상단(2)으로 올리라고 요청한다', () => {
+    withData();
+    dragSheet(1, 2);
+
+    tapPin(1);
+    expect(sheetSnapSpy()).not.toHaveBeenCalled();
+    expect(scrolls()).toHaveLength(1);
+
+    dragSheet(2, 0); // 사용자가 끝까지 내림
+    tapPin(1);
+    expect(snapTargets()).toEqual([2]);
+    expect(scrolls()).toHaveLength(1); // 도착 전
+
+    fireSheetSettle(2);
+    expect(scrolls()).toHaveLength(2);
+  });
+
+  it('PT3 같은 핀을 두 번 눌러도 두 번 스크롤을 요청한다(사용자가 그새 다른 곳으로 스크롤했을 수 있다)', () => {
+    withData();
+    dragSheet(1, 2);
+
+    tapPin(1);
+    tapPin(1);
+
+    expect(scrolls()).toHaveLength(2);
+  });
+
+  it('PT3b 도착 전에 다른 핀을 누르면 마지막 핀만 스크롤된다 — 도착 뒤 낡은 요청은 되살아나지 않는다', () => {
+    withData();
+
+    tapPin(1); // number 3 → data 0 — 올림 요청
+    fireSheetAnimate(1, 2); // 올라가는 중
+    tapPin(0); // number 1 → data 1 — 아직 도착 전
+    expect(scrolls()).toEqual([]);
+    expect(snapTargets().every((index) => index === 2)).toBe(true);
+
+    fireSheetSettle(2);
+
+    expect(scrolls()).toEqual([expect.objectContaining({ index: 1 })]); // 첫 핀(data 0)은 나가지 않는다
+
+    // 사용자가 내렸다가 다시 펼침 — 이미 처리한 요청이 다시 나가면 안 된다.
+    dragSheet(2, 1);
+    dragSheet(1, 2);
+    expect(scrolls()).toHaveLength(1);
+  });
+
+  it('PT4 (금지) 번호에 해당하는 항목이 없으면 시트가 최상단이 아니어도 아무 일도 안 하고 던지지 않는다 — 시트가 올라와도 스크롤은 없다', () => {
+    withData({ mapPins: [{ number: 4, lat: 35.17, lng: 129.13 }] });
+    dragSheet(1, 0);
+    expect(sheetSnapSpy()).not.toHaveBeenCalled();
+    expect(scrolls()).toEqual([]);
+
+    expect(() => tapPin(0)).not.toThrow();
+    fireSheetSettle(2);
+
+    expect(sheetSnapSpy()).not.toHaveBeenCalled();
+    expect(scrolls()).toEqual([]);
+  });
+
+  it('PT5 (금지) 기록을 아직 못 받아 목록이 비어 있어도(로딩) 핀을 눌러 던지거나 요청하지 않는다', () => {
+    withData({ cards: [], planRows: [], recordsStatus: 'loading' });
+    dragSheet(1, 0);
+
+    expect(() => tapPin(0)).not.toThrow();
+    fireSheetSettle(2);
+
+    expect(sheetSnapSpy()).not.toHaveBeenCalled();
+    expect(scrolls()).toEqual([]);
+  });
+
+  // TRIP-1558 03b 2회차 경고-2 — "대기가 살아 있는 동안" 시트가 딴 칸으로 가는 경우(PT1~5 가 못 보는 가장자리).
+  it.each([
+    ['peek(1)', 1],
+    ['닫힘(0)', 0],
+  ])(
+    'PT6 올라가는 도중 사용자가 시트를 %s 으로 끌어가면 대기 항목을 버린다 — 나중에 손으로 펼쳐도 옛 카드로 튀지 않는다',
+    (_label, away) => {
+      withData();
+      tapPin(1); // number 3 → data 0 — 올림 요청 + 대기 항목
+
+      fireSheetAnimate(2, away); // 최상단이 아닌 칸으로 이동을 시작한다
+      fireSheetSettle(away);
+      dragSheet(away, 2); // 한참 뒤 사용자가 손으로 최상단까지 올림
+      expect(scrolls()).toEqual([]); // 옛 카드(data 0)로 안 튄다
+
+      // 짝 — 버린 뒤에도 최상단에서의 새 핀 탭은 정상 동작한다.
+      tapPin(0); // number 1 → data 1
+      expect(scrolls()).toEqual([expect.objectContaining({ index: 1 })]);
+    }
+  );
+
+  it('PT7 최상단이 아닌 칸에 도착(onChange 0·1)하는 것으로는 대기 스크롤이 나가지 않는다', () => {
+    withData();
+    tapPin(1); // peek 에서 올림 요청 + 대기 항목 — 이동 시작 신호는 일부러 안 준다(PT6 의 버림 경로와 분리)
+
+    fireSheetSettle(1);
+    fireSheetSettle(0);
+
+    expect(scrolls()).toEqual([]);
+    expect(snapTargets()).toEqual([2]); // 도착 신호가 시트 요청을 더 만들지도 않는다
   });
 });

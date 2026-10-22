@@ -227,7 +227,7 @@ def test_assigned_plan_answers_an_unclassified_turn_with_registered_places_frame
     caplog.set_level(logging.INFO, logger="trippilot.api.dialogue")
     client = _client({_INTENT: '{"intent": null}', LlmFeature.DIALOGUE_PLAN: _plan_json(("EXPLORE_PLACES", {"region": "제주"})),
                       _ANSWER: _answer_json("제주에서 가 볼 만한 곳을 찾아봤어요.")}, feature_models=_PLAN_ON)
-    assert any("도우미 계획 단계 on — 도구 7종" in r.getMessage() and "미배선 도구 0종" in r.getMessage() for r in caplog.records)
+    assert any("도우미 계획 단계 on — 도구 8종" in r.getMessage() and "미배선 도구 0종" in r.getMessage() for r in caplog.records)
     res = client.post(URL, json=_body("비 오면 근처 어디 가?"))
     assert res.status_code == 200, res.text
     body = res.json()

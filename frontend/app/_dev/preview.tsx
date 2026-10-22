@@ -57,11 +57,6 @@ import {
 } from '@/pages/explore/explore-landing/ui/ExploreLandingScreen';
 import { HomeScreen } from '@/pages/home/ui/HomeScreen';
 import {
-  AssistantFab,
-  TAB_TWO_STACK,
-  assistantFabBottom,
-} from '@/features/open-assistant';
-import {
   AssistantSheetView,
   HistoryView,
   MessageCard,
@@ -2676,10 +2671,6 @@ function renderAssistantPreview(
   );
 }
 
-const ASSISTANT_FAB_PREVIEW = (
-  <AssistantFab onPress={noop} bottom={assistantFabBottom(TAB_TWO_STACK)} />
-);
-
 export const PREVIEW_STATES: PreviewState[] = [
   // ── b 밴드 · U8 AI 도우미(TRIP-1327) ──
   {
@@ -2702,6 +2693,41 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'b01 · 대체 후보',
     login: null,
     render: () => renderAssistantPreview('candidates'),
+  },
+  // TRIP-1564 — 후보 카드의 눌림 뜻 둘. 고르기(위 키) 말고 "장소 보기"(› 있음·빨간 행 없음)와 "이동 없음"(› 없음·눌러도 무반응).
+  {
+    key: 'assistant-candidate-open',
+    band: 'b',
+    label: 'b01 · 후보 카드(장소 보기)',
+    login: null,
+    render: () =>
+      renderAssistantPreview('candidates', {
+        mutate: (messages) =>
+          messages.map((message) => ({
+            ...message,
+            quickReplies: [],
+            nextActions: ['poi-bookcafe', 'poi-garden'].map((poiId) => ({
+              type: 'OPEN_PLACE',
+              label: '장소 보기',
+              params: { poiId },
+            })),
+          })),
+      }),
+  },
+  {
+    key: 'assistant-candidate-none',
+    band: 'b',
+    label: 'b01 · 후보 카드(이동 없음)',
+    login: null,
+    render: () =>
+      renderAssistantPreview('candidates', {
+        mutate: (messages) =>
+          messages.map((message) => ({
+            ...message,
+            quickReplies: [],
+            nextActions: [],
+          })),
+      }),
   },
   {
     key: 'assistant-proposal',
@@ -2829,7 +2855,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'assistant-chip-stack',
     band: 'b',
-    label: 'b01 · 제안 칩 스택(대화 전)',
+    label: 'b01 · 접힌 추천 질문 칩(대화 전)',
     login: null,
     render: () => renderAssistantPreview('greeting'),
   },
@@ -2884,71 +2910,6 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'b0x · 열기 실패',
     login: null,
     render: () => renderAssistantPreview('greeting', { state: 'OPEN_FAILED' }),
-  },
-  // ✦ FAB 위치(BR-U8-50~52) — 실제 겹침(＋84·하트152·✦220·토스트288·탭바)은 6-b 육안의 유일한 자리.
-  {
-    key: 'assistant-fab-home',
-    band: 'b',
-    label: 'b✦ · 홈 FAB 스택',
-    login: null,
-    render: () =>
-      withShellTabBar(
-        <HomeScreen
-          {...HOME_DEFAULT_PROPS}
-          spotsLane={HOME_SPOTS_LANE}
-          assistantFab={ASSISTANT_FAB_PREVIEW}
-        />
-      ),
-  },
-  {
-    key: 'assistant-fab-stay-search',
-    band: 'b',
-    label: 'b✦ · 숙소 검색 FAB 스택',
-    login: null,
-    render: () => (
-      <StaySearchScreen
-        region="부산"
-        items={STAY_SEARCH_PREVIEW_ITEMS}
-        nameQuery=""
-        onChangeNameQuery={noop}
-        onToggleSave={noop}
-        onPressSaved={noop}
-        onPressRegister={noop}
-        assistantFab={ASSISTANT_FAB_PREVIEW}
-      />
-    ),
-  },
-  {
-    key: 'assistant-fab-itinerary',
-    band: 'b',
-    label: 'b✦ · 일정 상세 지도 우상단',
-    login: null,
-    render: () => (
-      <MapSheetShell
-        center={{ lat: 35.1532, lng: 129.1188 }}
-        pins={buildDraftPins(H14_PLAN_NO_BASE_SLOTS)}
-        days={[{ label: '1일차' }, { label: '2일차' }]}
-        selectedDayIndex={0}
-        onSelectDay={noop}
-        onBack={noop}
-        mapCard={
-          <View pointerEvents="box-none" className="items-end pt-md">
-            <AssistantFab onPress={noop} />
-          </View>
-        }
-        header={
-          <SheetHeader
-            title="부산 여행"
-            dayLabel="1일차"
-            dateLabel="6월 10일(수)"
-            meta="4곳"
-          />
-        }
-        cta={[{ label: '일정 확정하기', variant: 'primary', onPress: noop }]}
-      >
-        <View />
-      </MapSheetShell>
-    ),
   },
   { key: 'splash', band: 'c', label: 'c01 · 기본', login: null },
   {
@@ -3780,6 +3741,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           {
             visitCheckId: 'r1',
             slotKey: '2026-08-21#p1',
+            planOrder: 1,
             poiId: 'p1',
             nameKo: '광안리 해변',
             arrivedAt: '2026-08-21T14:20:00',
@@ -3790,6 +3752,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           {
             visitCheckId: 'r2',
             slotKey: '2026-08-21#p2',
+            planOrder: 2,
             poiId: 'p2',
             nameKo: '부산시립미술관',
             arrivedAt: '2026-08-21T15:40:00',
@@ -3800,6 +3763,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           {
             visitCheckId: 'r3',
             slotKey: '2026-08-21#p3',
+            planOrder: 3,
             poiId: 'p3',
             nameKo: '○○ 카페',
             arrivedAt: null,
@@ -3810,6 +3774,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           {
             visitCheckId: 'r4',
             slotKey: '2026-08-21#p4',
+            planOrder: 4,
             poiId: 'p4',
             // TRIP-1086 — 긴 이름 말줄임(한 줄 `…`)·'— 건너뜀'과의 간격 육안 자리(jest 사각).
             nameKo: '건너뛴 해운대 블루라인파크 청사포 다릿돌전망대',
@@ -3863,6 +3828,51 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressComplete={noop}
         onPressSkip={noop}
         // TRIP-1072 — Figma default(5000:3227)처럼 [방문 추가] 버튼을 세운다.
+        onPressSpontaneous={noop}
+        onPressBack={noop}
+        onPressReflection={noop}
+        // TRIP-1557 하단 바 — 이 얼굴은 요약이 준비된(끝난 여행) 모습: 기록(활성)·회고·요약 모두 눌린다. 요약 준비 전(여행 중)은 아래
+        // `records-bottom-bar-ongoing` — 이 줄이 빠진 다른 j01 얼굴도 요약 칸이 흐리다.
+        onPressSummary={noop}
+      />
+    ),
+  },
+  // TRIP-1557 j01 하단 바 · 여행 중(Figma 5053:3539) — 요약 칸 흐림(`onPressSummary` 없음, 낭독 "요약 준비 중"). 6-b 확인점: 바가 시트 위에
+  // 뜨고, 시트 닫힘 칸에서 핸들이 바 위로 보이는지(snapPoints 첫 값 ≥ 98)·리스트 맨 아래 [방문 추가] 가 바에 안 가리는지·키보드가 뜨면 바가 빠지는지.
+  {
+    key: 'records-bottom-bar-ongoing',
+    band: 'j',
+    label: 'j01 · 방문 기록 하단 바 · 여행 중(요약 전)',
+    login: null,
+    render: () => (
+      <TripRecordsView
+        tripTitle="부산 여행"
+        dayTabs={[
+          { day: '2026-08-20', label: '1일차' },
+          { day: '2026-08-21', label: '2일차' },
+        ]}
+        activeDay="2026-08-21"
+        onSelectDay={noop}
+        mapCenter={{ lat: 35.1532, lng: 129.1187 }}
+        mapPins={[
+          { number: 1, lat: 35.1532, lng: 129.1187, state: 'done' },
+          { number: 2, lat: 35.1555, lng: 129.1216, state: 'upcoming' },
+        ]}
+        cards={[
+          {
+            visitCheckId: 'r1',
+            slotKey: '2026-08-21#p1',
+            planOrder: 1,
+            poiId: 'p1',
+            nameKo: '광안리 해변',
+            arrivedAt: '2026-08-21T14:20:00',
+            completedAt: '2026-08-21T15:20:00',
+            skippedAt: null,
+            arrivedLabel: '14:20',
+          },
+        ]}
+        onPressComplete={noop}
+        onPressSkip={noop}
         onPressSpontaneous={noop}
         onPressBack={noop}
         onPressReflection={noop}
@@ -4188,10 +4198,30 @@ export const PREVIEW_STATES: PreviewState[] = [
         ]}
         cards={[]}
         planRows={[
-          { slotKey: '2026-08-21#p1', poiId: 'p1', nameKo: '광안리 해변' },
-          { slotKey: '2026-08-21#p2', poiId: 'p2', nameKo: '부산시립미술관' },
-          { slotKey: '2026-08-21#p3', poiId: 'p3', nameKo: '○○ 카페' },
-          { slotKey: '2026-08-21#p4', poiId: 'p4', nameKo: '웨이브온 커피' },
+          {
+            planOrder: 1,
+            slotKey: '2026-08-21#p1',
+            poiId: 'p1',
+            nameKo: '광안리 해변',
+          },
+          {
+            planOrder: 2,
+            slotKey: '2026-08-21#p2',
+            poiId: 'p2',
+            nameKo: '부산시립미술관',
+          },
+          {
+            planOrder: 3,
+            slotKey: '2026-08-21#p3',
+            poiId: 'p3',
+            nameKo: '○○ 카페',
+          },
+          {
+            planOrder: 4,
+            slotKey: '2026-08-21#p4',
+            poiId: 'p4',
+            nameKo: '웨이브온 커피',
+          },
         ]}
         onPressPlanCheck={noop}
         onPressComplete={noop}
@@ -4608,7 +4638,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           onToggleSave={noop}
           onPressCreateTrip={noop}
           onPressSavedPlaces={noop}
-          onPressFilter={noop}
         />,
         'explore'
       ),
@@ -4632,7 +4661,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           onPressCreateTrip={noop}
           hideCreateTrip
           onPressSavedPlaces={noop}
-          onPressFilter={noop}
         />,
         'explore'
       ),
@@ -7265,6 +7293,40 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'i01 · 여행중 허브 펼침',
     login: null,
     render: () => renderLiveHubPreview(1),
+  },
+  // i01 수동 [도착] 사슬(TRIP-1561, Figma 원본 없음) — 관람 중(미술관) 뒤 예정 둘에 [도착], 관람 중 카드엔 [방문 완료]가 없다.
+  // 마지막 장소가 관람 중이면 [방문 완료]가 남고 [도착]은 없다. 실패 안내는 실패한 카드 아래 한 줄.
+  {
+    key: 'live-hub-manual-arrive',
+    band: 'i',
+    label: 'i01 · 여행중 허브 수동 [도착] (방문 완료 숨김)',
+    login: null,
+    render: () => renderLiveHubPreview(1, { onPressArrive: noop }),
+  },
+  {
+    key: 'live-hub-manual-arrive-notice',
+    band: 'i',
+    label: 'i01 · 여행중 허브 [도착] 실패 안내',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(1, {
+        onPressArrive: noop,
+        actionNotice: {
+          poiId: 'museum',
+          text: '방문 완료를 기록하지 못했어요. 다시 눌러 주세요.',
+        },
+      }),
+  },
+  {
+    key: 'live-hub-manual-last-active',
+    band: 'i',
+    label: 'i01 · 여행중 허브 마지막 장소 관람 중 (방문 완료)',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(1, {
+        slots: LIVE_HUB_PREVIEW_SLOTS.slice(0, 3),
+        onPressArrive: noop,
+      }),
   },
   // i01 수정 팝업(TRIP-1522, Figma B) — 수정 칸 활성·일정 비활성, 칸 위에 AI에게 맡기기(위)·직접 수정(아래) 알약. 처음부터 열린 채다.
   {

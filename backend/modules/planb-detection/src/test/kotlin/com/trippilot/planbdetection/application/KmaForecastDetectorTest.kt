@@ -460,7 +460,6 @@ class KmaForecastDetectorTest : StringSpec({
             PointForecast(
                 "grid", base,
                 (0L..47L).map { DAY.atStartOfDay().plusHours(it) }.filter { it.atZone(ZONE).toInstant() > base }.associateWith { edit(it, CALM) },
-                emptyMap(),
             )
 
         fun rainAt(hours: IntRange, base: Instant = BASE) =

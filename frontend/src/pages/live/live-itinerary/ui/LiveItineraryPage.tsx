@@ -24,7 +24,10 @@ import {
   useVisitMemo,
 } from '@/features/attach-visit-media';
 import { MemoSheet } from './MemoSheet';
-import { deriveVisitProgress } from '@/entities/itinerary-slot';
+import {
+  deriveSkippedPoiIds,
+  deriveVisitProgress,
+} from '@/entities/itinerary-slot';
 import { TriggerChip } from './TriggerChip';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { foldScope } from '../model/foldScope';
@@ -106,6 +109,9 @@ const PHOTO_SAVE_FAILED = '사진을 기록하지 못했어요. 다시 시도해
 
 /** 허브 메모 저장 실패 안내(INV-4) — j01 `VisitRecordCardContainer` 와 같은 문장(TRIP-1117). */
 const MEMO_SAVE_FAILED = '메모를 저장하지 못했어요. 다시 시도해 주세요.';
+// TRIP-1561 — [도착]·[방문 완료] 기록 실패 안내(INV-4).
+const COMPLETE_FAILED = '방문 완료를 기록하지 못했어요. 다시 눌러 주세요.';
+const ARRIVE_FAILED = '도착을 기록하지 못했어요. 다시 눌러 주세요.';
 
 /** TRIP-1426 저장 안내(공용 토스트) — 요청이 실제로 나가 성공했을 때만. j01 과 같은 메모 문장. */
 const MEMO_SAVED_TOAST = '메모를 저장했어요';
@@ -208,6 +214,17 @@ export function LiveItineraryPage({
     poiId: string;
     text: string;
   } | null>(null);
+  // TRIP-1561 — [도착]·[방문 완료] 실패 안내 한 줄(실패한 카드에만). 새 [도착]·[방문 완료] 누름이 지운다.
+  // arriveBusy(ref: 같은 틱 두 번째 press 도 본다) = 사슬·단독 도착이 도는 동안 모든 [도착]을 막는다 — 낙관 완료가 화면을
+  // '진행 중 없음'으로 바꿔 단독 도착 경로를 열면 완료 응답 전에 도착이 먼저 나간다. 이 잠금 덕에 훅의 연타 가드
+  // (conflict)는 여기까지 안 오므로, 훅이 돌려주는 failed 는 진짜 실패다.
+  const arriveBusy = useRef(false);
+  // 단독 [방문 완료] 연타 잠금 — 같은 틱 두 번째 누름은 둘째 complete POST(409)를 만들어 서버는 완료인데 거짓 실패 안내가 뜬다. 무시는 안내가 아니다.
+  const completeBusy = useRef(false);
+  const [actionNotice, setActionNotice] = useState<{
+    poiId: string;
+    text: string;
+  } | null>(null);
 
   const state = resolveLiveState({
     isLoading: query.isPending,
@@ -267,6 +284,10 @@ export function LiveItineraryPage({
     visits.data ?? { visits: [] },
     liveDate,
     activeSlots.map((slot) => slot.poiId)
+  );
+  // TRIP-1561 — 건너뛴 슬롯은 허브에서 '예정'으로 보인다 — [도착] 대상·"마지막 장소" 판정에서 빼려고 따로 도출한다.
+  const skippedPoiIds = new Set(
+    deriveSkippedPoiIds(visits.data ?? { visits: [] }, liveDate)
   );
   const activeVisitCheckId =
     progress.activePoiId !== null
@@ -556,6 +577,56 @@ export function LiveItineraryPage({
     }
   };
 
+  // TRIP-1561 수동 [도착] — 진행 중 슬롯이 있으면 그 완료 → 도착 사슬, 없으면 평범한 도착. 실패는 침묵하지 않는다:
+  // 완료 실패는 앞 장소 카드, 도착 실패는 도착을 시도한 카드에 안내한다(`ignored` 는 요청 0 이라 안내 없음).
+  const pressArrive = async (poiId: string) => {
+    if (arriveBusy.current) return;
+    arriveBusy.current = true;
+    setActionNotice(null);
+    const input = {
+      slotKey: buildSlotKey(activeDate, poiId),
+      poiId,
+      source: ArriveRequestSource.MANUAL,
+    };
+    const activePoiId = progress.activePoiId;
+    try {
+      if (activePoiId !== null && activeVisitCheckId !== null) {
+        const outcome = await visitCheck.completeThenArrive({
+          completeVisitCheckId: activeVisitCheckId,
+          arrive: input,
+        });
+        if (outcome.kind === 'failed') {
+          setActionNotice(
+            outcome.step === 'complete'
+              ? { poiId: activePoiId, text: COMPLETE_FAILED }
+              : { poiId, text: ARRIVE_FAILED }
+          );
+        }
+      } else {
+        const outcome = await visitCheck.arrive(input);
+        if (outcome.kind === 'failed') {
+          setActionNotice({ poiId, text: ARRIVE_FAILED });
+        }
+      }
+    } finally {
+      arriveBusy.current = false;
+    }
+  };
+  const pressComplete = async (visitCheckId: string) => {
+    if (completeBusy.current) return;
+    completeBusy.current = true;
+    const activePoiId = progress.activePoiId;
+    setActionNotice(null);
+    try {
+      const outcome = await visitCheck.complete(visitCheckId);
+      if (outcome.kind === 'failed' && activePoiId !== null) {
+        setActionNotice({ poiId: activePoiId, text: COMPLETE_FAILED });
+      }
+    } finally {
+      completeBusy.current = false;
+    }
+  };
+
   // TRIP-1070 [사진] — 누른 카드의 방문(관람 중·TRIP-1203 완료)에 메타만 POST 한다. 사진 목록은 조회하지 않는다
   // (허브엔 사진 칸이 없다 — useVisitAttachments 는 GET 을 무조건 쏘므로 부르지 않는다, F6).
   const attachPhoto = async (poiId: string) => {
@@ -724,7 +795,7 @@ export function LiveItineraryPage({
         onPressComplete={
           activeVisitCheckId !== null
             ? () => {
-                void visitCheck.complete(activeVisitCheckId);
+                void pressComplete(activeVisitCheckId);
               }
             : undefined
         }
@@ -781,15 +852,12 @@ export function LiveItineraryPage({
         // 슬롯 키가 비면 서버가 즉석 방문으로 기록하므로 반드시 싣는다. 실패는 훅이 그 레코드만 롤백한다.
         onPressArrive={
           activeDate === today && visits.data !== undefined
-            ? (poiId) => {
-                void visitCheck.arrive({
-                  slotKey: buildSlotKey(activeDate, poiId),
-                  poiId,
-                  source: ArriveRequestSource.MANUAL,
-                });
-              }
+            ? (poiId) => void pressArrive(poiId)
             : undefined
         }
+        skippedPoiIds={skippedPoiIds}
+        automationArmed={automation.state === 'ARMED'}
+        actionNotice={actionNotice}
         directionsPoiIds={directionsPoiIds}
         onPressDirections={(poiId) => void pressDirections(poiId)}
         directionsNotice={directionsNotice}

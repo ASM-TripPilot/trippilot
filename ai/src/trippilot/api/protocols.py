@@ -55,7 +55,7 @@ class UnplacedMustVisitLike(Protocol):
 
 class UnverifiedSlotLike(Protocol):
     """HC 판정에서 제외된 슬롯 1건 (TRIP-537). `reason_code`는 닫힌 집합
-    (NOT_REGISTERED | UNMAPPABLE) — 스키마 Literal이 강제한다."""
+    (NOT_REGISTERED | UNMAPPABLE | HOURS_UNKNOWN) — 스키마 Literal이 강제한다."""
 
     poi_id: str
     reason_code: str
@@ -66,8 +66,8 @@ class ValidationOutcome(Protocol):
     """검증 결과 — 위반과 **판정 못 한 슬롯**을 나눠 담는다 (TRIP-537).
 
     `Sequence[Violation]` 하나로는 "위반 0"이 통과인지 미검증인지 구분되지 않았다.
-    POI 정본을 못 찾은 슬롯은 HC1·HC2에서 제외되는데(c2 규칙 — 정보 없음은 막지
-    않는다), 그 사실이 응답에 없으면 침묵 실패다(INV-4).
+    POI 정본을 못 찾은 슬롯은 HC1·HC2에서, 영업 창을 모르는 슬롯은 HC1에서 제외되는데
+    (c2 규칙 — 정보 없음은 막지 않는다), 그 사실이 응답에 없으면 침묵 실패다(INV-4).
     """
 
     violations: Sequence[Violation]
