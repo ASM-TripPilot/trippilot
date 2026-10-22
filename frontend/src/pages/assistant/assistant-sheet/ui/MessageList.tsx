@@ -1,5 +1,11 @@
 import type { ReactElement, ReactNode } from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  Text,
+  View,
+} from 'react-native';
 
 import { SparkleGlyph } from '@/features/open-assistant';
 import type { AssistantMessage, NextAction } from '../api/assistantContract';
@@ -12,6 +18,12 @@ import { ChevronRightGlyph } from './AssistantSheetGlyphs';
  * + 답 평가 줄(`renderFeedback`, US-ASSIST-09). 문구·시각·거리는 서버 문자열 그대로 그린다(DEC-U8-6 · INV-2·3).
  */
 
+/** 목록 맨 위 "이전 대화 더 보기" 행(시안 없음 — 시트의 작은 muted 텍스트 톤). 없으면 행 자체를 그리지 않는다. */
+export interface OlderMessagesProps {
+  status: 'idle' | 'loading' | 'error';
+  onPress: () => void;
+}
+
 export interface MessageListProps {
   messages: readonly AssistantMessage[];
   onPressAction: (action: NextAction) => void;
@@ -19,6 +31,7 @@ export interface MessageListProps {
   renderCard?: (message: AssistantMessage) => ReactNode;
   /** 답 평가 줄 — 도우미의 답에만 붙인다(사용자 말·적용 기록 `ACTION_LOG` 제외, INV-U8-10). */
   renderFeedback?: (message: AssistantMessage) => ReactNode;
+  older?: OlderMessagesProps | null;
 }
 
 export function UserBubble({
@@ -123,11 +136,48 @@ function AssistantMessageBlock({
   );
 }
 
+function OlderMessagesRow({
+  status,
+  onPress,
+}: OlderMessagesProps): ReactElement {
+  const loading = status === 'loading';
+  return (
+    <Pressable
+      testID="assistant-older-more"
+      accessibilityRole="button"
+      disabled={loading}
+      onPress={onPress}
+      className="items-center gap-xs py-md"
+    >
+      {loading ? (
+        <ActivityIndicator testID="assistant-older-loading" color="#FF385C" />
+      ) : status === 'error' ? (
+        <>
+          <Text
+            testID="assistant-older-error"
+            className="font-noto text-micro text-muted"
+          >
+            이전 대화를 불러오지 못했어요
+          </Text>
+          <Text className="font-noto-bold text-label font-bold text-ink">
+            다시 시도
+          </Text>
+        </>
+      ) : (
+        <Text className="font-noto text-label text-muted">
+          이전 대화 더 보기
+        </Text>
+      )}
+    </Pressable>
+  );
+}
+
 export function MessageList({
   messages,
   onPressAction,
   renderCard,
   renderFeedback,
+  older,
 }: MessageListProps): ReactElement {
   return (
     <FlatList
@@ -137,6 +187,8 @@ export function MessageList({
       keyExtractor={(message) => message.id}
       keyboardShouldPersistTaps="handled"
       contentContainerClassName="gap-lg px-lg py-lg"
+      // inverted 라 푸터가 화면 맨 위다.
+      ListFooterComponent={older ? <OlderMessagesRow {...older} /> : null}
       renderItem={({ item }) =>
         item.role === 'USER' ? (
           <UserBubble message={item} />

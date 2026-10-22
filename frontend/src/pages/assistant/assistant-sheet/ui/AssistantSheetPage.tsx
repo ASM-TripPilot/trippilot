@@ -20,6 +20,7 @@ import {
   useAssistantSessions,
   useClearSession,
   useDismissProposal,
+  useLoadOlderMessages,
   useMarkProposal,
 } from '../model/assistantQueries';
 import { useAnswerFeedback } from '../model/useAnswerFeedback';
@@ -72,6 +73,7 @@ export function AssistantSheetPage({
   const [draft, setDraft] = useState('');
   const turn = useTurnFlow(sessionId, surface, setDraft);
   const feedback = useAnswerFeedback(sessionId);
+  const older = useLoadOlderMessages(sessionId);
   // 이력 보기(b06) — 별도 라우트가 아니라 시트 안 보기 전환(깜빡임 없이, frontend-components §1).
   const [view, setView] = useState<'CHAT' | 'HISTORY'>('CHAT');
   const [confirmingClear, setConfirmingClear] = useState(false);
@@ -274,6 +276,11 @@ export function AssistantSheetPage({
       onPressQuickReply={handleQuickReply}
       onPressCapabilities={handleCapabilities}
       onPressAction={handleAction}
+      older={
+        older.hasMore
+          ? { status: older.status, onPress: older.loadOlder }
+          : null
+      }
       onClose={handleClose}
       onRetryOpen={() => void session.refetch()}
       repliesDisabled={blocked}

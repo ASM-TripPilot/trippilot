@@ -1,12 +1,14 @@
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
+import fc from 'fast-check';
 
 import { setAssistantPort } from '../api/assistantClient';
 import type {
   FeedbackRequest,
   FeedbackResponse,
   MessagesPage,
+  OpenSessionResponse,
 } from '../api/assistantContract';
 import { AssistantApiError, type AssistantPort } from '../api/assistantPort';
 import {
@@ -17,7 +19,11 @@ import {
 import {
   appendMessages,
   assistantKeys,
+  prependMessages,
   useAssistantSession,
+  useClearSession,
+  useDismissProposal,
+  useLoadOlderMessages,
   useMessageFeedback,
   useSendTurn,
 } from './assistantQueries';
@@ -256,6 +262,7 @@ describe('답 평가 훅 (US-ASSIST-09)', () => {
               },
             ],
             quickReplies: [],
+            nextBefore: null,
           })
         ),
         putFeedback: jest.fn(
@@ -296,4 +303,465 @@ describe('답 평가 훅 (US-ASSIST-09)', () => {
       await waitFor(() => expect(feedbackIn(client, 'a1')).toBe(saved));
     }
   );
+});
+
+// ── 이전 대화 더 보기 ─────────────────────────────────────────────────────────
+// 메시지 캐시 모양 `{messages, nextBefore}` 는 그대로 두고 옛 페이지를 앞에 붙인다(useInfiniteQuery 안 씀).
+
+const m = (id: string) => userMessage(id, id);
+const idsOf = (messages: readonly { id: string }[]) =>
+  messages.map((message) => message.id);
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+function cacheOf(client: QueryClient): MessagesPage | undefined {
+  return client.getQueryData<MessagesPage>(assistantKeys.messages('s1'));
+}
+
+describe('prependMessages (이전 대화 더 보기)', () => {
+  it('옛 쪽 전체가 기존 목록 앞에 온다(오래된 것 먼저)', () => {
+    expect(idsOf(prependMessages([m('a'), m('b')], [m('c')]))).toEqual([
+      'a',
+      'b',
+      'c',
+    ]);
+  });
+
+  it('같은 id 가 겹치면 기존 것을 남기고 옛 쪽을 버린다(낙관 갱신된 값이 옛 값으로 안 돌아간다)', () => {
+    const existing = { ...m('a'), text: '기존' };
+    const older = { ...m('a'), text: '옛' };
+
+    const merged = prependMessages([older, m('b')], [existing, m('c')]);
+
+    expect(idsOf(merged)).toEqual(['b', 'a', 'c']);
+    expect(merged[1]).toBe(existing);
+  });
+
+  it('한쪽이 비어 있으면 다른 쪽 그대로', () => {
+    expect(idsOf(prependMessages([], [m('a')]))).toEqual(['a']);
+    expect(idsOf(prependMessages([m('a')], []))).toEqual(['a']);
+  });
+
+  it('PBT · 결과 id 는 유일하고, 끝은 기존 목록 그대로이며, 두 쪽의 합집합이다', () => {
+    const idsArb = fc.uniqueArray(
+      fc.constantFrom('a', 'b', 'c', 'd', 'e', 'f'),
+      { maxLength: 6 }
+    );
+    fc.assert(
+      fc.property(idsArb, idsArb, (olderIds, currentIds) => {
+        const merged = idsOf(
+          prependMessages(olderIds.map(m), currentIds.map(m))
+        );
+
+        expect(new Set(merged).size).toBe(merged.length);
+        expect(merged.slice(merged.length - currentIds.length)).toEqual(
+          currentIds
+        );
+        expect(new Set(merged)).toEqual(new Set([...olderIds, ...currentIds]));
+      })
+    );
+  });
+});
+
+describe('세션 열기가 메시지 캐시에 커서를 심는다 (AC-1·AC-5)', () => {
+  function openResponse(
+    messages: ReturnType<typeof m>[],
+    nextBefore: string | null
+  ): OpenSessionResponse {
+    return {
+      session: { id: 's1', tripId: 'trip-1', contextChip: null },
+      messages,
+      quickReplies: [],
+      nextBefore,
+    };
+  }
+
+  it('응답의 nextBefore 를 그대로 보관한다(null 하드코딩 아님)', async () => {
+    restore = setAssistantPort(
+      stubPort({
+        openSession: jest.fn(() =>
+          Promise.resolve(openResponse([m('m3'), m('m4')], 'cur-30'))
+        ),
+      })
+    );
+    const client = newClient();
+
+    const { result } = renderHook(() => useAssistantSession('trip-1'), {
+      wrapper: wrapperWith(client),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(cacheOf(client)?.nextBefore).toBe('cur-30');
+  });
+
+  // 선제 green — 현행도 null 을 심는다. 구서버(필드 부재)가 "더 없음"으로 읽히는 계약을 잠근다.
+  it('필드가 없는 구서버 응답은 null(더 없음)로 보관한다', async () => {
+    const legacy = {
+      session: { id: 's1', tripId: 'trip-1', contextChip: null },
+      messages: [m('m3')],
+      quickReplies: [],
+    } as unknown as OpenSessionResponse;
+    restore = setAssistantPort(
+      stubPort({ openSession: jest.fn(() => Promise.resolve(legacy)) })
+    );
+    const client = newClient();
+
+    const { result } = renderHook(() => useAssistantSession('trip-1'), {
+      wrapper: wrapperWith(client),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(cacheOf(client)?.nextBefore).toBeNull();
+  });
+
+  it('재조회는 붙여 둔 옛 메시지를 지우지 않고 새 id 만 뒤에 더하며, 보관 중인 커서와 기존 메시지 값을 지킨다', async () => {
+    // Arrange — 첫 열기는 [m3,m4]+'c1', 재조회는 [m3,m4,m5]+'c1'
+    const responses = [
+      openResponse([m('m3'), m('m4')], 'c1'),
+      openResponse([m('m3'), m('m4'), m('m5')], 'c1'),
+    ];
+    let call = 0;
+    const port = stubPort({
+      openSession: jest.fn(() => Promise.resolve(responses[call++])),
+      getMessages: jest.fn(() =>
+        Promise.resolve({ messages: [m('m1'), m('m2')], nextBefore: null })
+      ),
+    });
+    restore = setAssistantPort(port);
+    const client = newClient();
+    const { result } = renderHook(
+      () => ({
+        session: useAssistantSession('trip-1'),
+        older: useLoadOlderMessages('s1'),
+      }),
+      { wrapper: wrapperWith(client) }
+    );
+    await waitFor(() => expect(result.current.session.isSuccess).toBe(true));
+    await act(async () => {
+      result.current.older.loadOlder();
+    });
+    await waitFor(() => expect(cacheOf(client)?.nextBefore).toBeNull());
+    // 평가가 캐시에서만 바뀐 상태(재조회 응답엔 아직 없음)
+    client.setQueryData<MessagesPage>(assistantKeys.messages('s1'), (page) => ({
+      ...page,
+      messages: (page?.messages ?? []).map((message) =>
+        message.id === 'm4' ? { ...message, feedback: 'UP' as const } : message
+      ),
+    }));
+
+    // Act — 탭 복귀 같은 세션 재조회
+    await act(async () => {
+      await result.current.session.refetch();
+    });
+
+    // Assert
+    expect(port.openSession).toHaveBeenCalledTimes(2);
+    expect(idsOf(cacheOf(client)?.messages ?? [])).toEqual([
+      'm1',
+      'm2',
+      'm3',
+      'm4',
+      'm5',
+    ]);
+    expect(cacheOf(client)?.nextBefore).toBeNull();
+    expect(
+      cacheOf(client)?.messages.find((message) => message.id === 'm4')?.feedback
+    ).toBe('UP');
+  });
+});
+
+describe('useLoadOlderMessages (이전 대화 더 보기)', () => {
+  const olderPage: MessagesPage = {
+    messages: [m('m1'), m('m2')],
+    nextBefore: 'c0',
+  };
+
+  function setup(
+    getMessages: AssistantPort['getMessages'],
+    cache: MessagesPage = { messages: [m('m3'), m('m4')], nextBefore: 'c1' }
+  ) {
+    const port = stubPort({ getMessages });
+    restore = setAssistantPort(port);
+    const client = newClient();
+    client.setQueryData<MessagesPage>(assistantKeys.messages('s1'), cache);
+    const hook = renderHook(() => useLoadOlderMessages('s1'), {
+      wrapper: wrapperWith(client),
+    });
+    return { port, client, ...hook };
+  }
+
+  it('보관 중인 커서 그대로(limit 없이) 부르고, 받은 쪽을 앞에 붙이며 커서를 응답 값으로 바꾼다', async () => {
+    // Arrange
+    const getMessages = jest.fn(() => Promise.resolve(olderPage));
+    const { client, result } = setup(getMessages);
+    expect(result.current.hasMore).toBe(true);
+
+    // Act
+    await act(async () => {
+      result.current.loadOlder();
+    });
+
+    // Assert
+    await waitFor(() =>
+      expect(idsOf(cacheOf(client)?.messages ?? [])).toEqual([
+        'm1',
+        'm2',
+        'm3',
+        'm4',
+      ])
+    );
+    expect(getMessages).toHaveBeenCalledTimes(1);
+    expect(getMessages.mock.calls[0]).toStrictEqual(['s1', { before: 'c1' }]);
+    expect(cacheOf(client)?.nextBefore).toBe('c0');
+    expect(result.current.hasMore).toBe(true);
+    expect(result.current.status).toBe('idle');
+  });
+
+  it.each([null, undefined])(
+    '응답 nextBefore 가 %s 면 캐시는 null, 더 볼 것이 없다',
+    async (nextBefore) => {
+      const { client, result } = setup(
+        jest.fn(() => Promise.resolve({ messages: [m('m2')], nextBefore }))
+      );
+
+      await act(async () => {
+        result.current.loadOlder();
+      });
+
+      await waitFor(() => expect(result.current.hasMore).toBe(false));
+      expect(cacheOf(client)?.nextBefore).toBeNull();
+    }
+  );
+
+  it.each([null, undefined])(
+    '캐시의 nextBefore 가 %s 면 요청을 보내지 않는다',
+    async (nextBefore) => {
+      const getMessages = jest.fn(() => Promise.resolve(olderPage));
+      const { result } = setup(getMessages, {
+        messages: [m('m3')],
+        nextBefore,
+      });
+
+      await act(async () => {
+        result.current.loadOlder();
+      });
+
+      expect(result.current.hasMore).toBe(false);
+      expect(getMessages).not.toHaveBeenCalled();
+    }
+  );
+
+  it('세션이 아직 없으면(sessionId undefined) 요청을 보내지 않는다', async () => {
+    const getMessages = jest.fn(() => Promise.resolve(olderPage));
+    restore = setAssistantPort(stubPort({ getMessages }));
+    const client = newClient();
+    const { result } = renderHook(() => useLoadOlderMessages(undefined), {
+      wrapper: wrapperWith(client),
+    });
+
+    await act(async () => {
+      result.current.loadOlder();
+    });
+
+    expect(result.current.hasMore).toBe(false);
+    expect(getMessages).not.toHaveBeenCalled();
+  });
+
+  it('금지 · 진행 중에 같은 틱으로 두 번 불러도 요청은 1회(로딩 상태), 끝나면 idle', async () => {
+    const held = deferred<MessagesPage>();
+    const getMessages = jest.fn(() => held.promise);
+    const { result } = setup(getMessages);
+
+    await act(async () => {
+      result.current.loadOlder();
+      result.current.loadOlder();
+    });
+
+    expect(getMessages).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(result.current.status).toBe('loading'));
+    await act(async () => {
+      held.resolve(olderPage);
+    });
+    await waitFor(() => expect(result.current.status).toBe('idle'));
+  });
+
+  it('실패하면 error 로 두고 캐시는 그대로, 다시 부르면 같은 커서로 재요청해 성공한다', async () => {
+    // Arrange
+    const getMessages = jest
+      .fn()
+      .mockRejectedValueOnce(new AssistantApiError('SERVER'))
+      .mockResolvedValueOnce(olderPage);
+    const { client, result } = setup(getMessages);
+
+    // Act 1 — 실패
+    await act(async () => {
+      result.current.loadOlder();
+    });
+
+    // Assert 1 — 침묵하지 않고(error) 보이던 것은 그대로
+    await waitFor(() => expect(result.current.status).toBe('error'));
+    expect(idsOf(cacheOf(client)?.messages ?? [])).toEqual(['m3', 'm4']);
+    expect(cacheOf(client)?.nextBefore).toBe('c1');
+    expect(result.current.hasMore).toBe(true);
+
+    // Act 2 — 다시 시도
+    await act(async () => {
+      result.current.loadOlder();
+    });
+
+    // Assert 2
+    await waitFor(() => expect(result.current.status).toBe('idle'));
+    expect(getMessages).toHaveBeenCalledTimes(2);
+    expect(getMessages.mock.calls[1]).toStrictEqual(['s1', { before: 'c1' }]);
+    expect(idsOf(cacheOf(client)?.messages ?? [])).toEqual([
+      'm1',
+      'm2',
+      'm3',
+      'm4',
+    ]);
+  });
+
+  it('응답을 기다리는 사이 새 메시지가 캐시 뒤에 붙어도, 옛 쪽은 그 최신 캐시 앞에 붙는다(요청 시점 목록으로 덮지 않는다)', async () => {
+    // Arrange — 응답을 붙잡아 둔다
+    const held = deferred<MessagesPage>();
+    const { client, result } = setup(jest.fn(() => held.promise));
+    await act(async () => {
+      result.current.loadOlder();
+    });
+
+    // Act — 그 사이 턴 응답이 도착해 뒤에 붙고, 이어서 옛 쪽 응답이 온다
+    act(() => {
+      client.setQueryData<MessagesPage>(
+        assistantKeys.messages('s1'),
+        (page) => ({
+          ...page,
+          messages: appendMessages(page?.messages ?? [], [m('m5')]),
+        })
+      );
+    });
+    await act(async () => {
+      held.resolve(olderPage);
+    });
+
+    // Assert
+    await waitFor(() =>
+      expect(idsOf(cacheOf(client)?.messages ?? [])).toEqual([
+        'm1',
+        'm2',
+        'm3',
+        'm4',
+        'm5',
+      ])
+    );
+    expect(cacheOf(client)?.nextBefore).toBe('c0');
+  });
+});
+
+// 선제 green — 현행 코드가 이미 지키는 것을 옛 쪽 붙이기 도입 뒤에도 잠근다.
+describe('커서는 다른 캐시 갱신이 건드리지 않는다 (AC-7·AC-8 회귀)', () => {
+  const proposalMessage = assistantSample('proposal', { id: 'p-msg' });
+  const proposalId = proposalMessage.proposal?.id ?? '';
+
+  function seeded(port: Partial<AssistantPort>) {
+    restore = setAssistantPort(stubPort(port));
+    const client = newClient();
+    client.setQueryData<MessagesPage>(assistantKeys.messages('s1'), {
+      messages: [m('a'), proposalMessage],
+      nextBefore: 'c9',
+    });
+    return client;
+  }
+
+  it('턴 응답을 뒤에 붙여도 nextBefore 는 그대로', async () => {
+    const client = seeded({
+      sendTurn: jest.fn(() =>
+        Promise.resolve({ messages: [m('n1')], quickReplies: [] })
+      ),
+    });
+    const { result } = renderHook(() => useSendTurn('s1'), {
+      wrapper: wrapperWith(client),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        request: {
+          clientTurnId: 'c1',
+          input: { type: 'TEXT', text: 'x' },
+          screen: { surface: 'LIVE' },
+        },
+      });
+    });
+
+    expect(idsOf(cacheOf(client)?.messages ?? [])).toContain('n1');
+    expect(cacheOf(client)?.nextBefore).toBe('c9');
+  });
+
+  it('제안 상태 패치(취소)도 nextBefore 는 그대로', async () => {
+    const client = seeded({
+      dismissProposal: jest.fn(() =>
+        Promise.resolve({ proposal: { id: proposalId, status: 'DISMISSED' } })
+      ),
+    });
+    const { result } = renderHook(() => useDismissProposal('s1'), {
+      wrapper: wrapperWith(client),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync(proposalId);
+    });
+
+    expect(
+      cacheOf(client)?.messages.find((message) => message.id === 'p-msg')
+        ?.proposal?.status
+    ).toBe('DISMISSED');
+    expect(cacheOf(client)?.nextBefore).toBe('c9');
+  });
+
+  it('평가 낙관 패치도 nextBefore 는 그대로', async () => {
+    const client = seeded({
+      putFeedback: jest.fn(() =>
+        Promise.resolve({
+          messageId: 'p-msg',
+          rating: 'UP' as const,
+          reason: null,
+          comment: null,
+        })
+      ),
+    });
+    const { result } = renderHook(() => useMessageFeedback('s1'), {
+      wrapper: wrapperWith(client),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        messageId: 'p-msg',
+        request: { rating: 'UP', reason: null, comment: null },
+      });
+    });
+
+    expect(
+      cacheOf(client)?.messages.find((message) => message.id === 'p-msg')
+        ?.feedback
+    ).toBe('UP');
+    expect(cacheOf(client)?.nextBefore).toBe('c9');
+  });
+
+  it('이력 지우기로 메시지 캐시를 치우면 커서도 함께 사라진다', async () => {
+    const client = seeded({ clearSession: jest.fn(() => Promise.resolve()) });
+    const { result } = renderHook(() => useClearSession('trip-1'), {
+      wrapper: wrapperWith(client),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync('s1');
+    });
+
+    expect(cacheOf(client)).toBeUndefined();
+  });
 });

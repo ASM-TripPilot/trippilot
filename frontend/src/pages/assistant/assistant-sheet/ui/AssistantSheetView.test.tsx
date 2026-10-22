@@ -217,3 +217,81 @@ describe('답 평가 줄 자리 (US-ASSIST-09)', () => {
     expect(screen.queryByTestId('feedback-log-2')).toBeNull();
   });
 });
+
+describe('목록 맨 위 "이전 대화 더 보기" 행', () => {
+  const review = sampleTranscript('review').messages;
+
+  // inverted 목록: 트리 순서는 최신 → 옛 → 푸터이고, 푸터가 화면 맨 위에 그려진다(실제 위치는 6-b 실기).
+  const rowTestIds = () =>
+    screen
+      .getAllByTestId(
+        /^assistant-(?:user-bubble-|message-(?!list$)|older-more$)/
+      )
+      .map((node) => node.props.testID as string);
+
+  it('idle 이면 행이 있고(버튼·문구), 모든 메시지 행보다 뒤(= 화면 맨 위)이며, 누르면 onPress', () => {
+    // Arrange
+    const onPress = jest.fn();
+    renderView({ messages: review, older: { status: 'idle', onPress } });
+
+    // Act
+    fireEvent.press(screen.getByTestId('assistant-older-more'));
+
+    // Assert
+    const row = screen.getByTestId('assistant-older-more');
+    expect(row).toHaveTextContent('이전 대화 더 보기');
+    expect(row.props.accessibilityRole).toBe('button');
+    const ids = rowTestIds();
+    expect(ids.length).toBeGreaterThan(1);
+    expect(ids[ids.length - 1]).toBe('assistant-older-more');
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([undefined, null])(
+    'older 가 %s 면 행 자체가 없다(비활성이 아니라 부재)',
+    (older) => {
+      renderView({ older });
+
+      expect(screen.getByTestId('assistant-message-list')).toBeOnTheScreen();
+      expect(screen.queryByTestId('assistant-older-more')).toBeNull();
+      expect(screen.queryByTestId('assistant-older-loading')).toBeNull();
+      expect(screen.queryByTestId('assistant-older-error')).toBeNull();
+    }
+  );
+
+  it('loading 이면 로딩 표시로 바뀌고 다시 누를 수 없다(콜백 0회)', () => {
+    // Arrange
+    const onPress = jest.fn();
+    renderView({ older: { status: 'loading', onPress } });
+
+    // Act
+    fireEvent.press(screen.getByTestId('assistant-older-more'));
+
+    // Assert
+    expect(screen.getByTestId('assistant-older-loading')).toBeOnTheScreen();
+    expect(screen.getByTestId('assistant-older-more')).toBeDisabled();
+    expect(screen.queryByText('이전 대화 더 보기')).toBeNull();
+    expect(onPress).not.toHaveBeenCalled();
+  });
+
+  it('error 이면 같은 자리에 실패 문구 + 다시 시도가 보이고(침묵 금지), 보이던 메시지는 그대로이며, 누르면 재요청', () => {
+    // Arrange
+    const onPress = jest.fn();
+    renderView({ messages: review, older: { status: 'error', onPress } });
+
+    // Act
+    fireEvent.press(screen.getByTestId('assistant-older-more'));
+
+    // Assert
+    expect(screen.getByTestId('assistant-older-error')).toHaveTextContent(
+      '이전 대화를 불러오지 못했어요'
+    );
+    expect(screen.getByText('다시 시도')).toBeOnTheScreen();
+    expect(screen.getByTestId('assistant-older-more')).toBeEnabled();
+    expect(screen.queryByTestId('assistant-older-loading')).toBeNull();
+    expect(
+      screen.getByTestId('assistant-user-bubble-u-review')
+    ).toBeOnTheScreen();
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+});

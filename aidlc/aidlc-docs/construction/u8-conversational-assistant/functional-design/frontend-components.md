@@ -197,3 +197,12 @@ assistant-history · -history-row-{messageId} · -history-clear · -history-cont
 | R18 | §8 testID 제안값 | 확정값 추가: `assistant-sheet-root`·`-sheet-scrim`·`-sheet-loading`·`-open-failed`·`-open-retry`·`-quick-reply-capabilities`·`-info-card`·`-action-log-{id}`·`-proposal-status`·`-proposal-repropose`·`-proposal-error`·`-user-bubble-pending`·`-resend`·`-progress-slow`·`-history-empty`·`-history-session-{id}`·`-history-clear-dialog`·`-history-clear-confirm`·`-history-clear-cancel`·`-message-list` | §8 [공백] 소급 기록 |
 | R19 | §9 시트 흐름은 MSW 통합 테스트 | `AssistantSheetPage.test.tsx`(node 버킷) — `setAssistantPort` 로 가짜 어댑터 주입 | HTTP 경계가 아직 없다. BE 개통 후 http 어댑터는 MSW 통합 테스트로 덮는다 |
 | R20 | G-U8-8·9 Figma | 새 프레임(정본 무변경): `b01-[1차] 도우미 · 숙소 요청 → 숙소 검색 넘기기`(4865:3615) · `b08-[✦] 진입 FAB · 홈/숙소 검색/여행 중 허브/일정 상세`(4864:2944·3054·3141·3303) — b 행 끝 | 이식(정본 교체)·DS FAB 변형 승격은 사람 판단 |
+
+## [개정 · 2026-10-22 · 이전 대화 더 보기 (사이클 20261021-assistant-older-messages)]
+
+> 원문 위 절들은 보존한다(append-only). 서버가 `nextBefore` 를 이미 내려주는데(`AssistantController.kt` "프론트 계약에 없던 칸") FE 계약·정본에 없어 30건 넘는 대화의 앞부분을 못 보던 드리프트의 기록. 사용자 결정 2026-10-21: 트리거는 눌러서 부르는 행 · 세션 재조회는 합치기 · Figma 시안 없이 기존 톤.
+
+| # | 원문 | 구현(근거 코드) | 이유 |
+|---|---|---|---|
+| R21 | §6 `useAssistantSession` 응답 `{session, messages[], quickReplies[]}` | 응답에 **`nextBefore: string \| null`**(서버 required — 이어 연 대화에 더 오래된 메시지가 있으면 그 커서). `assistantContract.ts` `OpenSessionResponse.nextBefore`, 세션 열기가 메시지 캐시를 심을 때 `nextBefore: response.nextBefore ?? null` | `openapi.yaml` `AssistantOpenSessionResponse` 와 맞춤. 종전 `null` 하드코딩이 서버의 "더 있다"를 버렸다 |
+| R22 | §2·§3·§6 더 보기 규칙 없음 | **규칙 신설**: ① 트리거 = 목록 맨 위(inverted FlatList `ListFooterComponent`) Pressable 하나 `assistant-older-more` — `nextBefore !== null` 일 때만 존재(비활성이 아니라 부재) ② 누르면 `getMessages(sessionId, {before})`(커서는 불투명 문자열 그대로, `limit` 미지정 = 서버 기본 30) → 로딩(disabled + 스피너) → 실패는 같은 자리에 `assistant-older-error` + 「다시 시도」(기존 메시지 유지, INV-4) ③ 성공은 `prependMessages(옛 쪽, 현재)` — 옛 쪽 전체 앞, id 중복은 기존 것 유지, **응답 도착 시점의 최신 캐시**에 붙인다 · 캐시 `nextBefore` ← 응답값 ④ 진행 중 재호출 차단, 실패 뒤 재호출 허용 ⑤ 세션 재조회(`useAssistantSession` 재실행)는 캐시가 있으면 `appendMessages(기존, 첫 쪽)` 로 **합치고 기존 커서 유지** — 통째 덮지 않는다(비용: 캐시된 메시지의 제안 상태가 서버 최신값으로 갱신되지 않는다 — 후속) ⑥ 이력 지우기 뒤 도착한 늦은 응답은 캐시를 새로 만들지 않는다 · 세션이 바뀌면 상태 초기화 ⑦ 턴 진행 중에도 누를 수 있다 ⑧ 스크롤 위치 보정 코드 없음(inverted 라 옛 쪽이 리스트 끝에 붙어 구조상 유지 — 실기 확인 항목). 훅 `useLoadOlderMessages(sessionId) → {hasMore, status: idle\|loading\|error, loadOlder}`, 가짜 어댑터는 `before`/`limit`(1~100)을 서버와 같은 규칙으로 거절·자른다 | 정본 공백(US-ASSIST-05 는 "이어 보기"만). `useInfiniteQuery` 는 캐시 모양이 바뀌어 평가·제안 패치 전부에 번져 안 썼다 |

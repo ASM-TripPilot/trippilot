@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { AccessibilityInfo } from 'react-native';
+import { AccessibilityInfo, FlatList } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
@@ -11,7 +11,10 @@ import {
 } from '@testing-library/react-native';
 
 import { setAssistantPort } from '../api/assistantClient';
-import { assistantSample } from '../api/assistantSamples';
+import {
+  assistantSample,
+  sampleLongConversation,
+} from '../api/assistantSamples';
 import {
   FakeAssistantAdapter,
   type FakeAssistantOptions,
@@ -832,5 +835,162 @@ describe('AssistantSheetPage · 답 평가 (US-ASSIST-09)', () => {
         '평가를 저장하지 못했어요. 잠시 후 다시 시도해 주세요'
       )
     );
+  });
+});
+
+// ── 이전 대화 더 보기 ─────────────────────────────────────────────────────────
+// FlatList 는 첫 렌더에 10개만 그린다(jest 실측) — 옛 쪽은 데이터 끝(안 그려지는 구간)에 붙으므로
+// "옛 메시지가 위에 보인다"는 렌더가 아니라 목록 데이터 순서(UNSAFE_getByType)로 본다.
+describe('AssistantSheetPage · 이전 대화 더 보기', () => {
+  const longIds = (from: number, to: number) =>
+    Array.from({ length: to - from + 1 }, (_, i) => `long-${to - i}`);
+
+  /** 목록에 들어간 메시지 id — inverted 라 최신 → 옛 순서. */
+  function listedIds(): string[] {
+    const data = screen.UNSAFE_getByType(FlatList).props.data as {
+      id: string;
+    }[];
+    return data.map((message) => message.id);
+  }
+
+  async function renderLong() {
+    renderPage({ seedMessages: sampleLongConversation(75) });
+    return screen.findByTestId('assistant-older-more');
+  }
+
+  /** 다음 getMessages 호출 하나만 붙잡고, release() 로 원본을 실행해 응답을 흘려보낸다. */
+  function holdNextOlderPage() {
+    const original = fake.getMessages.bind(fake);
+    let release: () => void = () => undefined;
+    const spy = jest.spyOn(fake, 'getMessages').mockImplementationOnce(
+      (sessionId, opts) =>
+        new Promise((resolve, reject) => {
+          release = () => void original(sessionId, opts).then(resolve, reject);
+        })
+    );
+    return { spy, release: () => release() };
+  }
+
+  it('긴 대화(한 쪽 초과)로 열면 맨 위 행이 보이고, 짧은 대화면 행 자체가 없다', async () => {
+    // Arrange · Act — 긴 대화
+    const more = await renderLong();
+
+    // Assert
+    expect(more).toHaveTextContent('이전 대화 더 보기');
+    expect(listedIds()).toEqual(longIds(46, 75));
+  });
+
+  it('짧은 대화로 열면 행이 없다(목록은 떠 있다)', async () => {
+    renderPage();
+    await screen.findByTestId('assistant-context-chip');
+
+    expect(screen.getByTestId('assistant-message-list')).toBeOnTheScreen();
+    expect(screen.queryByTestId('assistant-older-more')).toBeNull();
+  });
+
+  it('누르면 커서 그대로 요청 → 로딩(다시 눌러도 1회) → 옛 쪽이 목록 뒤(= 화면 위)에 붙고 행은 다시 "더 보기", 끝까지 가면 행이 사라진다', async () => {
+    // Arrange
+    await renderLong();
+    const { spy, release } = holdNextOlderPage();
+
+    // Act 1 — 누른다(응답은 붙잡아 둔다)
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-older-more'));
+    });
+
+    // Assert 1 — 로딩, 비활성, 다시 눌러도 요청은 1회
+    expect(
+      await screen.findByTestId('assistant-older-loading')
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId('assistant-older-more')).toBeDisabled();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-older-more'));
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith('session-t1', {
+      before: expect.any(String),
+    });
+
+    // Act 2 — 응답이 온다
+    await act(async () => {
+      release();
+    });
+
+    // Assert 2 — 옛 30건이 뒤에 붙고(최신→옛), 행은 다시 눌러 볼 수 있다
+    await waitFor(() => expect(listedIds()).toEqual(longIds(16, 75)));
+    expect(screen.queryByTestId('assistant-older-loading')).toBeNull();
+    expect(screen.getByTestId('assistant-older-more')).toHaveTextContent(
+      '이전 대화 더 보기'
+    );
+    expect(
+      screen.getByTestId('assistant-user-bubble-long-75')
+    ).toBeOnTheScreen();
+
+    // Act 3 — 한 번 더(마지막 15건)
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-older-more'));
+    });
+
+    // Assert 3 — 전부 불러왔다: 행이 사라지고 목록은 목록 자체는 그대로 떠 있다
+    await waitFor(() => expect(listedIds()).toEqual(longIds(1, 75)));
+    expect(screen.queryByTestId('assistant-older-more')).toBeNull();
+    expect(screen.getByTestId('assistant-message-list')).toBeOnTheScreen();
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it('실패하면 같은 자리에 실패 문구 + 다시 시도(침묵 금지), 보이던 메시지는 그대로이고, 다시 시도하면 재요청해 붙는다', async () => {
+    // Arrange
+    await renderLong();
+    fake.configure({ messages: 'SERVER_ERROR' });
+
+    // Act 1 — 실패하는 요청
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-older-more'));
+    });
+
+    // Assert 1
+    expect(
+      await screen.findByTestId('assistant-older-error')
+    ).toHaveTextContent('이전 대화를 불러오지 못했어요');
+    expect(screen.getByText('다시 시도')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('assistant-user-bubble-long-75')
+    ).toBeOnTheScreen();
+    expect(listedIds()).toEqual(longIds(46, 75));
+
+    // Act 2 — 서버가 살아나고 다시 시도
+    fake.configure({ messages: 'OK' });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-older-more'));
+    });
+
+    // Assert 2
+    await waitFor(() => expect(listedIds()).toEqual(longIds(16, 75)));
+    expect(screen.queryByTestId('assistant-older-error')).toBeNull();
+    expect(fake.calls.getMessages).toBe(2);
+  });
+
+  it('턴이 진행 중이어도 행은 눌러진다', async () => {
+    // Arrange — 보낸 턴이 끝나지 않는다
+    await renderLong();
+    jest
+      .spyOn(fake, 'sendTurn')
+      .mockImplementation(() => new Promise(() => {}));
+    fireEvent.changeText(screen.getByTestId('assistant-input'), '오늘 날씨');
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-send'));
+    });
+    expect(
+      await screen.findByTestId('assistant-send-pending')
+    ).toBeOnTheScreen();
+
+    // Act
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('assistant-older-more'));
+    });
+
+    // Assert
+    await waitFor(() => expect(fake.calls.getMessages).toBe(1));
+    await waitFor(() => expect(listedIds()).toContain('long-16'));
   });
 });

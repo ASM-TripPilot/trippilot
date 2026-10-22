@@ -22,7 +22,7 @@ import {
   QuickReplyBar,
 } from './AssistantSheetChrome';
 import { RetryGlyph, WarningGlyph } from './AssistantSheetGlyphs';
-import { MessageList } from './MessageList';
+import { MessageList, type OlderMessagesProps } from './MessageList';
 
 /**
  * b01~b07 도우미 시트 순수 뷰(TRIP-1322) — props 만 받는다. 네트워크·라우터·판정 없음(판정은 page 가
@@ -55,6 +55,8 @@ export interface AssistantSheetViewProps {
   renderCard?: (message: AssistantMessage) => ReactNode;
   /** 답 평가 줄(US-ASSIST-09) — 도우미의 답 아래에만 그린다(적용 기록 제외는 목록이 가른다). */
   renderFeedback?: (message: AssistantMessage) => ReactNode;
+  /** 목록 맨 위 "이전 대화 더 보기" 행 — null·없음이면 그리지 않는다. */
+  older?: OlderMessagesProps | null;
   /** 입력창 바로 위 줄(진행 표시·대기 취소·429 안내, TRIP-1326). */
   statusRow?: ReactNode;
   /** 보내기 버튼 testID(진행 중 `assistant-send-pending`, TRIP-1326). */
@@ -112,6 +114,7 @@ export function AssistantSheetView({
   repliesDisabled = false,
   renderCard,
   renderFeedback,
+  older,
   statusRow,
   sendTestID,
   headerTrailing,
@@ -169,6 +172,7 @@ export function AssistantSheetView({
                       onPressAction={onPressAction}
                       renderCard={renderCard}
                       renderFeedback={renderFeedback}
+                      older={older}
                     />
                   </View>
                   {statusRow}
