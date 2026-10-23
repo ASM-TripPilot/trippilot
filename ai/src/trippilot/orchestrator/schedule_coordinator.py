@@ -197,6 +197,7 @@ class ScheduleCoordinator:
                     budget=request.budget,
                     transport=request.transport,
                     radius_override_km=request.radius_override_km,
+                    region_codes=request.region_codes,
                 ),
                 "anchor": request.anchor,
                 "days": request.days,
@@ -227,7 +228,8 @@ class ScheduleCoordinator:
         if summary.level == "NO_CANDIDATES":
             first_request = CandidatePoolRequest(
                 anchor=request.anchor, dates=request.days, budget=request.budget,
-                transport=request.transport, radius_override_km=request.radius_override_km)
+                transport=request.transport, radius_override_km=request.radius_override_km,
+                region_codes=request.region_codes)
             widened = widened_radius_km(first_request, self._pool_cfg)
             if widened is None:
                 why = "override" if request.radius_override_km is not None else "at_cap"
@@ -240,7 +242,8 @@ class ScheduleCoordinator:
                     {
                         "pool_request": CandidatePoolRequest(
                             anchor=request.anchor, dates=request.days, budget=request.budget,
-                            transport=request.transport, radius_override_km=widened),
+                            transport=request.transport, radius_override_km=widened,
+                            region_codes=request.region_codes),
                         "anchor": request.anchor,
                         "days": request.days,
                         "now": now,
@@ -262,6 +265,12 @@ class ScheduleCoordinator:
                     summary = candidates_report(pool, days=len(request.days), persona=persona)
                     self._degrade(steps, trace_id, now, "pool", "radius", "radius_widened",
                                   f"radius_widened:{base:g}->{widened:g}km before=0 after={summary.pool_size}")
+        # ①‴ 고른 구 안 먼저(#1628) — 받은 구 코드와 최종 풀의 구 안 비율을 남긴다. 앵커 코드는 BE 가 채우고
+        #    (`RegionAnchors.dayAnchors`) AI 는 다른 데에 남기지 않아, 끝단(앱 → BE → AI) 확인이 이 한 줄뿐이다.
+        if request.region_codes:
+            inside = sum(1 for p in pool.pois if p.region_code in request.region_codes)
+            self._observe(trace_id, now, "pool", "region", "region",
+                          f"region_first:{','.join(sorted(request.region_codes))} inside={inside}/{len(pool.pois)}")
         m7_elapsed = self._clock.monotonic_ms() - t0
         if budget.m7_ms and m7_elapsed > budget.m7_ms:
             # 풀 없이는 일정이 없으므로 풀 단계는 스킵 대상이 아니다 — 초과는 관측만 하고,

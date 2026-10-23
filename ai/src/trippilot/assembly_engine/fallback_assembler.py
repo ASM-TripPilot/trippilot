@@ -292,7 +292,16 @@ class RuleFallbackAssembler:
                      for c, n in day_cat_total.items()}
             # 하루 방문 상한 (BR-U4-47) — ② 자유 삽입만 센다. OR 의 자유 노드 합 ≤ 상한과 같은 의미
             free_left = free_visit_cap(problem, day)
-            while remaining and free_left != 0:
+            # 시도한 후보는 이 바퀴 동안 모았다가 다음 바퀴 머리에서 한 번에 뺀다 — `remaining.remove` 를 후보마다
+            # 부르면 후보 수 N 에 O(N²) 다(생성 풀 5,000곳 → 일자당 비교 750만 번, 개발 파드 1일차 1.8s). 이 루프는
+            # 바퀴 머리에서만 `remaining` 을 읽어 결과가 같다(같은 값이 겹치면 앞의 것부터 — `_without_first`).
+            tried: Counter = Counter()
+            while True:
+                if tried:
+                    remaining = _without_first(remaining, tried)
+                    tried.clear()
+                if not remaining or free_left == 0:
+                    break
                 if not gap_fill:
                     k = len(slots) - 1
                 last = slots[k] if k >= 0 else None
@@ -357,7 +366,7 @@ class RuleFallbackAssembler:
                 placed = False
                 for cand in order:
                     if not gap_fill:
-                        remaining.remove(cand)  # 실패든 성공이든 그 일자 재시도 없음
+                        tried[cand] += 1  # 실패든 성공이든 그 일자 재시도 없음
                     poi = self._pois.get(cand.poi_id)
                     if poi is None:
                         continue
@@ -397,7 +406,7 @@ class RuleFallbackAssembler:
                         if end + timedelta(minutes=to_next) > nxt.start_at:
                             continue
                     if gap_fill:
-                        remaining.remove(cand)  # 틈에 못 들어간 후보는 다음 틈에서 다시 본다
+                        tried[cand] += 1  # 틈에 못 들어간 후보는 다음 틈에서 다시 본다
                     slots.append(VisitSlot(
                         poi_id=cand.poi_id, start_at=start, end_at=end,
                         stay_min=stay, score=cand.score,
@@ -554,3 +563,15 @@ class RuleFallbackAssembler:
         if poi is None:
             return 0.0
         return self._est.estimate(here, poi.coord, problem.transport).distance_km_range[1]
+
+
+def _without_first(seq: Sequence, counts: Counter) -> list:
+    """`for c, n in counts.items(): seq.remove(c) × n` 과 같은 결과를 O(len(seq)) 로 — 같은 값은 앞의 것부터 뺀다."""
+    left = Counter(counts)
+    out = []
+    for c in seq:
+        if left[c] > 0:
+            left[c] -= 1
+        else:
+            out.append(c)
+    return out

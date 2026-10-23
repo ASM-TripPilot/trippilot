@@ -398,6 +398,13 @@
             "minimum": -180.0,
             "title": "Lng",
             "type": "number"
+          },
+          "region_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Region Codes",
+            "type": "array"
           }
         },
         "required": [

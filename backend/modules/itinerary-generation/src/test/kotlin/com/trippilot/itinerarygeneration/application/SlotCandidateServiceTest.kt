@@ -43,6 +43,7 @@ import com.trippilot.placedata.api.RegionCenter
 import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.savedaccommodation.api.BaseAnchorFacade
 import com.trippilot.savedaccommodation.api.DayAnchorView
+import com.trippilot.trip.api.TripDestinationRef
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripPeriod
 import io.kotest.assertions.throwables.shouldThrow
@@ -122,17 +123,23 @@ class SlotCandidateServiceTest : StringSpec({
     }
 
     /** 적합 판정의 수리 컨텍스트 원천 — 앵커는 숙소([stays])로만. 여행 정보가 없으면(공용 [trips]) 컨텍스트 없음이다. */
-    fun contexts(tripFacade: TripFacade = trips, stays: List<DayAnchorView> = emptyList(), prefs: PreferenceFacade = accountPrefs) = RepairContexts(
+    val noRegions = object : RegionLookupFacade {
+        override fun codesOf(regionName: String) = emptyList<String>()
+        override fun isSelectableCode(regionCode: String) = false
+        override fun centerOf(regionName: String): RegionCenter? = null
+        override fun centerOfCode(regionCode: String): RegionCenter? = null
+    }
+    fun contexts(
+        tripFacade: TripFacade = trips,
+        stays: List<DayAnchorView> = emptyList(),
+        prefs: PreferenceFacade = accountPrefs,
+        regions: RegionLookupFacade = noRegions,
+    ) = RepairContexts(
         tripFacade,
         object : BaseAnchorFacade {
             override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = stays
         },
-        object : RegionLookupFacade {
-            override fun codesOf(regionName: String) = emptyList<String>()
-            override fun isSelectableCode(regionCode: String) = false
-            override fun centerOf(regionName: String): RegionCenter? = null
-            override fun centerOfCode(regionCode: String): RegionCenter? = null
-        },
+        regions,
         prefs,
     )
 
@@ -896,5 +903,171 @@ class SlotCandidateServiceTest : StringSpec({
 
         agent.repaired shouldBe emptyList()
         lookups shouldBe 0
+    }
+
+    // ─── 찾는 중심 · 구 안 우선(2026-10-23 — 서초를 고른 같이 짜기에서 저녁이 혜화로 튀던 결함) ───
+
+    val seochoTrip = object : TripFacade {
+        override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(d1, d1)
+        override fun findGenerationContext(accountId: UUID, tripId: UUID) =
+            TripGenerationContext(d1, d1, listOf(TripDestinationRef("서초구", "11650", 1)), "혼자", null, emptyList())
+    }
+    val seocho = object : RegionLookupFacade by noRegions {
+        override fun districtCodesOf(regionCode: String) = if (regionCode == "11650") setOf("11650") else emptySet()
+        override fun centerOfCode(regionCode: String) = if (regionCode == "11650") RegionCenter(37.48, 127.03) else null
+    }
+
+    /** ground = 후보·교체 대상의 구 코드(카테고리는 전부 맛집), resolve = 반경 채움 풀(카테고리로 거른다, 부른 범위는 기록). */
+    class DistrictPool(
+        private val codeById: Map<UUID, String?>,
+        private val refill: List<GroundedPlace> = emptyList(),
+        /** 비활성(폐업) — ground 에 안 나온다. */
+        private val inactive: Set<UUID> = emptySet(),
+    ) : CandidatePoolPort {
+        val areas = mutableListOf<Area>()
+        override fun resolve(area: Area, categories: Set<String>) =
+            refill.filter { categories.isEmpty() || it.category in categories }.also { areas += area }
+        override fun ground(poiIds: List<UUID>) =
+            poiIds.filterNot { it in inactive }.map { GroundedPlace(it, "장소", 37.5, 127.0, "맛집", null, null, codeById[it]) }
+    }
+    fun place(id: UUID, category: String, distanceM: Double, code: String?) = GroundedPlace(id, "장소", 37.5, 127.0, category, null, distanceM, code)
+
+    fun spaceSvc(
+        agent: StubScheduleAgent,
+        candidates: CandidatePoolPort = pool,
+        stays: List<DayAnchorView> = emptyList(),
+        regions: RegionLookupFacade = seocho,
+    ) = SlotCandidateService(
+        seochoTrip, Repo(itinerary), agent, distinctSurfaces, candidates, FakeScoredCandidatePoolStore(), clock,
+        accountPrefs, NoHints, contexts(seochoTrip, stays, regions = regions),
+    )
+    fun centered(center: CandidateCenter?) = RequestSlotCandidates(SlotKey.of(d1, target), null, null, null, coPick = true, center = center)
+
+    "구를 고른 여행이면 구 안 후보가 앞이고, 구 밖 자리는 같은 반경의 구 안 장소(거리순)로 바꾼다 — 모자라면 구 밖이 뒤에 남는다" {
+        val (outA, inB, outC) = List(3) { UUID.randomUUID() }
+        val (inNear, inFar, outNearest, inSight) = List(4) { UUID.randomUUID() }
+        val districtPool = DistrictPool(
+            mapOf(outA to "11680", inB to "11650", outC to "30110", target to "11650"),
+            refill = listOf(
+                place(inFar, "맛집", 800.0, "11650"),
+                place(outNearest, "맛집", 100.0, "11680"), // 가장 가깝지만 구 밖
+                place(inSight, "명소", 50.0, "11650"),     // 구 안이지만 점심 자리에 명소 — 교체 대상 카테고리가 아니다
+                place(inB, "맛집", 10.0, "11650"),         // 이미 후보
+                place(inNear, "맛집", 300.0, "11650"),
+            ),
+        )
+
+        val out = spaceSvc(fixedAgent(cand(outA), cand(inB), cand(outC)), districtPool)
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        out.candidates.map { it.poiId } shouldContainExactly listOf(inB, inNear, inFar)
+        out.freshness.degraded shouldBe true // 바꿔 넣은 것은 AI 순위가 아니라 거리순이다
+        // 같은 반경(경계가 쓴 3km), 같은 중심(교체 대상)에서 찾는다 — 반경을 몰래 넓히지 않는다.
+        districtPool.areas shouldContainExactly listOf(Area.Radius(33.90, 126.90, 3_000.0))
+
+        val short = DistrictPool(mapOf(outA to "11680", inB to "11650", outC to "30110", target to "11650"), listOf(place(inNear, "맛집", 300.0, "11650")))
+        spaceSvc(fixedAgent(cand(outA), cand(inB), cand(outC)), short)
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+            .candidates.map { it.poiId } shouldContainExactly listOf(inB, inNear, outA)
+    }
+
+    "구 코드가 없는 여행(시도·옛 클라)이나 숙소·찍은 점 중심이면 순서를 건드리지 않는다" {
+        val (outA, inB) = List(2) { UUID.randomUUID() }
+        fun districtPool() = DistrictPool(mapOf(outA to "11680", inB to "11650"), listOf(place(UUID.randomUUID(), "맛집", 300.0, "11650")))
+        val expected = listOf(outA, inB)
+
+        spaceSvc(fixedAgent(cand(outA), cand(inB)), districtPool(), regions = noRegions)
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+            .candidates.map { it.poiId } shouldContainExactly expected
+        spaceSvc(fixedAgent(cand(outA), cand(inB)), districtPool(), stays = listOf(DayAnchorView(d1, 37.50, 127.02)))
+            .propose(acc, tripId, centered(CandidateCenter(CenterMode.STAY)))
+            .candidates.map { it.poiId } shouldContainExactly expected
+        spaceSvc(fixedAgent(cand(outA), cand(inB)), districtPool())
+            .propose(acc, tripId, centered(CandidateCenter(CenterMode.POINT, 37.57, 126.98)))
+            .candidates.map { it.poiId } shouldContainExactly expected
+    }
+
+    "사용자가 고른 중심으로 찾는다 — 방금 고른 곳·구 중심·숙소·찍은 점" {
+        fun centerOf(center: CandidateCenter?, coPick: Boolean = true, stays: List<DayAnchorView> = emptyList()): Pair<Double, Double> {
+            val agent = CapturingAgent()
+            spaceSvc(agent, stays = stays)
+                .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null, coPick = coPick, center = center))
+            return agent.captured!!.centerLat to agent.captured!!.centerLng
+        }
+
+        centerOf(null) shouldBe (33.10 to 126.10)                                         // 종전 규칙(같이 고르기 = 직전)
+        centerOf(CandidateCenter(CenterMode.PREVIOUS), coPick = false) shouldBe (33.10 to 126.10)
+        centerOf(CandidateCenter(CenterMode.REGION)) shouldBe (37.48 to 127.03)
+        centerOf(CandidateCenter(CenterMode.STAY), stays = listOf(DayAnchorView(d1, 37.50, 127.02))) shouldBe (37.50 to 127.02)
+        centerOf(CandidateCenter(CenterMode.POINT, 37.57, 126.98)) shouldBe (37.57 to 126.98)
+    }
+
+    "고른 중심의 재료가 없으면 다른 중심으로 바꾸지 않는다 — 숙소 없는 날 STAY·구 중심 모름은 409, 좌표 없는 POINT 는 400" {
+        shouldThrow<ConflictDetected> { spaceSvc(CapturingAgent()).propose(acc, tripId, centered(CandidateCenter(CenterMode.STAY))) }
+        shouldThrow<ConflictDetected> {
+            spaceSvc(CapturingAgent(), regions = noRegions).propose(acc, tripId, centered(CandidateCenter(CenterMode.REGION)))
+        }
+        shouldThrow<ValidationFailed> { spaceSvc(CapturingAgent()).propose(acc, tripId, centered(CandidateCenter(CenterMode.POINT, lat = 37.5))) }
+        shouldThrow<ValidationFailed> { spaceSvc(CapturingAgent()).propose(acc, tripId, centered(CandidateCenter(CenterMode.POINT, 91.0, 127.0))) }
+    }
+
+    // ─── 리뷰(2026-10-23)가 재현한 구 안 우선의 모서리 ───
+
+    "바꿔 넣은 구 안 장소가 그 시각에 안 맞으면 시각에 맞던 구 밖 후보가 남는다 — 판정 전에 자르지 않는다" {
+        val (outA, outB, inX, inY) = List(4) { UUID.randomUUID() }
+        val districtPool = DistrictPool(
+            mapOf(outA to "11680", outB to "11680", target to "11650"),
+            listOf(place(inX, "맛집", 300.0, "11650"), place(inY, "맛집", 500.0, "11650")),
+        )
+        val agent = FitAgent(proposed = listOf(outA, outB), misfit = setOf(inX))
+
+        val out = spaceSvc(agent, districtPool).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        out.candidates.map { it.poiId } shouldContainExactly listOf(inY, outA) // 개수는 원래(2)대로
+        agent.repaired.size shouldBe 3 // 2건이 맞으면 나머지(outB)는 판정하지 않는다
+    }
+
+    "교체 대상이 비활성(폐업)이면 카테고리를 몰라 채우지 않고 순서만 바꾼다 — 전 카테고리로 채우면 점심 자리에 술집이 온다" {
+        val (outA, inB) = List(2) { UUID.randomUUID() }
+        val districtPool = DistrictPool(
+            mapOf(outA to "11680", inB to "11650"),
+            listOf(place(UUID.randomUUID(), "술집", 100.0, "11650")),
+            inactive = setOf(target),
+        )
+
+        val out = spaceSvc(fixedAgent(cand(outA), cand(inB)), districtPool)
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        out.candidates.map { it.poiId } shouldContainExactly listOf(inB, outA)
+        districtPool.areas shouldBe emptyList()
+    }
+
+    "매핑에 없는 컨셉이면 채운 후보 문구에 그 컨셉을 싣지 않는다 — 그 컨셉으로 고른 게 아니다(BR-U2-09)" {
+        val (outA, inB) = List(2) { UUID.randomUUID() }
+        val districtPool = DistrictPool(mapOf(outA to "11680", target to "11650"), listOf(place(inB, "맛집", 300.0, "11650")))
+
+        val out = spaceSvc(fixedAgent(cand(outA)), districtPool).propose(acc, tripId, req("야경"))
+
+        out.candidates.single().let { (it.poiId to it.rationale) shouldBe (inB to "주변 맛집") }
+    }
+
+    "공간 재료 조회가 깨지면 REGION·STAY 는 '재료 없음' 409 로 말하지 않는다 — 기본 중심은 구 안 우선 없이 답한다" {
+        val broken = contexts(
+            object : TripFacade {
+                override fun findPeriod(accountId: UUID, tripId: UUID): TripPeriod? = null
+                override fun findGenerationContext(accountId: UUID, tripId: UUID): TripGenerationContext? = throw IllegalStateException("db down")
+            },
+        )
+        fun svc(agent: StubScheduleAgent, candidates: CandidatePoolPort = pool) = SlotCandidateService(
+            seochoTrip, Repo(itinerary), agent, distinctSurfaces, candidates, FakeScoredCandidatePoolStore(), clock, accountPrefs, NoHints, broken,
+        )
+
+        shouldThrow<IllegalStateException> { svc(CapturingAgent()).propose(acc, tripId, centered(CandidateCenter(CenterMode.STAY))) }
+        shouldThrow<IllegalStateException> { svc(CapturingAgent()).propose(acc, tripId, centered(CandidateCenter(CenterMode.REGION))) }
+
+        val (outA, inB) = List(2) { UUID.randomUUID() }
+        svc(fixedAgent(cand(outA), cand(inB)), DistrictPool(mapOf(outA to "11680", inB to "11650")))
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+            .candidates.map { it.poiId } shouldContainExactly listOf(outA, inB)
     }
 })

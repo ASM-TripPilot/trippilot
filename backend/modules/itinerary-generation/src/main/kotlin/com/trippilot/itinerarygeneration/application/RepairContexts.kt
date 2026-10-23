@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.RepairContext
+import com.trippilot.placedata.api.RegionCenter
 import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.profile.api.overriddenBy
@@ -52,6 +53,24 @@ class RepairContexts(
         return EditProposalContext(anchor, prefs.transportModes.firstOrNull { it in AI_TRANSPORT_MODES }, prefs.budgetTier)
     }
 
+    /**
+     * 슬롯 후보(같이 짜기·다른 후보)의 공간 재료 — 그 날 목적지의 **구 코드 집합**(구 안 우선 판정), 구 중심, 숙소 좌표
+     * (2026-10-23 사용자 결정: 구를 고르면 그 구 안 우선 · 찾는 중심을 사용자가 고른다). 출처는 수리·생성과 같다
+     * ([RegionAnchors.destinationOn]·[RegionAnchors.centerOf]·숙박일 거점, 체크아웃일은 전날 거점).
+     */
+    fun forSlotCandidates(accountId: UUID, tripId: UUID, date: LocalDate): SlotSpace {
+        val ctx = trips.findGenerationContext(accountId, tripId) ?: return SlotSpace.NONE
+        val destination = RegionAnchors.destinationOn(ctx.destinationRefs, ctx.startDate, date)
+        val stays = baseAnchors.findStayNightAnchors(tripId, ctx.startDate, ctx.endDate)
+        val stay = stays.firstOrNull { it.date == date }
+            ?: if (date == ctx.endDate) stays.firstOrNull { it.date == date.minusDays(1) } else null
+        return SlotSpace(
+            districtCodes = destination?.regionCode?.let { regions.districtCodesOf(it) }.orEmpty(),
+            regionCenter = destination?.let { RegionAnchors.centerOf(regions, it) },
+            stay = stay?.let { RegionCenter(it.lat, it.lng) },
+        )
+    }
+
     private companion object {
         /** 상대 `_TRANSPORT_TOKENS` 가 아는 값 중 우리 취향 어휘에 있는 것(택시·자전거는 상대가 모른다). */
         val AI_TRANSPORT_MODES = setOf("도보", "대중교통", "렌터카")
@@ -63,3 +82,17 @@ class RepairContexts(
  * [transportMode] 는 상대가 아는 수단 하나다 — 편집 경계는 목록이 아니라 한 값을 받는다.
  */
 data class EditProposalContext(val anchor: DayAnchor, val transportMode: String?, val budgetTier: String?)
+
+/**
+ * 슬롯 후보의 공간 재료. [districtCodes] 가 비어 있으면 구 단위 여행이 아니다(시도·코드 없음) — 구 안 우선을 걸지 않는다.
+ * [regionCenter]·[stay] 는 사용자가 고르는 찾는 중심의 재료다(없으면 그 선택지를 쓸 수 없다).
+ */
+data class SlotSpace(
+    val districtCodes: Set<String>,
+    val regionCenter: RegionCenter?,
+    val stay: RegionCenter?,
+) {
+    companion object {
+        val NONE = SlotSpace(emptySet(), null, null)
+    }
+}

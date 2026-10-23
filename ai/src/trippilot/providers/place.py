@@ -114,4 +114,4 @@ def _snapshot_key(request: CandidatePoolRequest) -> tuple:
     날짜 자체를 키에 넣으면 같은 여행의 다른 날 재계획이 매번 새 풀이 된다(풀은 날짜가 아니라 요일의 함수).
     """
     return (request.anchor, request.budget, request.transport, request.radius_override_km,
-            len(request.dates) > 1, frozenset(d.weekday() for d in request.dates))
+            len(request.dates) > 1, frozenset(d.weekday() for d in request.dates), request.region_codes)

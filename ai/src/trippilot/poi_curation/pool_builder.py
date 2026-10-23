@@ -8,6 +8,7 @@ INV-1 화이트리스트의 정본은 backend C7 후보풀 — 본 빌더는 AI�
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime
@@ -17,8 +18,17 @@ from trippilot.domain.llm import CandidatePool
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, counts_as_food, reputation_bonus
 from trippilot.poi_curation.config import M7Config
+from trippilot.poi_curation.sourcing.collection_gate import _haversine_m
 
 _ALLOWED_QUALITY = frozenset({DataQuality.FULL, DataQuality.PARTIAL})
+
+# 고른 시군구 안을 먼저 쓴다(2026-10-23 사용자 결정 — "서초를 골랐는데 점심은 서초, 저녁은 혜화"). 구 중심 앵커에
+# 대중교통 반경 10km 를 그대로 쓰면 서초 중심에서 종로·혜화까지 덮였다. 규칙: 구 안 전부 + 구 안에 이보다 적은 분류만
+# 구 밖에서 앵커 가까운 순으로 이 수까지 채운다 — "모자라면 이웃 구까지만".
+# ponytail: 분류당 10곳·이웃은 앵커 6km 안(구 하나 ≈ 반경 3~5km 라 맞닿은 구까지)으로 근사한다. 행정 인접표가
+# 생기면 거리 대신 그 표로 바꾼다.
+REGION_FILL_MIN = 10
+REGION_NEIGHBOR_KM = 6.0
 
 # 빈 풀 1회 확대 배율(2026-10-14 사용자 결정 — "검색 결과가 비면 자동으로 넓혀 다시 찾는다").
 # 상한은 자차 반경(`radius_km[CAR]`) — 그보다 넓히면 "주변"이 아니다.
@@ -79,6 +89,10 @@ class CandidatePoolBuilder:
         # ④ 품질 — MINIMAL 제외
         pois = [p for p in pois if p.quality in _ALLOWED_QUALITY]
 
+        # ④′ 고른 구 안 먼저 (시군구를 골랐을 때만 — 시도·코드 없음은 종전)
+        if request.region_codes:
+            pois = _region_first(pois, request.region_codes, request.anchor)
+
         # ⑤ 정렬: 영업시간 보유 우선 → 인기(saved_count desc → rating desc, None=0)
         #        → poi_id asc(tie-break)
         #
@@ -121,6 +135,28 @@ class CandidatePoolBuilder:
         if not poi.open_hours:
             return True  # 정보 없음 → 배제 안 함 (U2 checker와 동일 철학)
         return any(oh.day_of_week in travel_dows for oh in poi.open_hours)
+
+
+def _region_first(pois: list[Poi], codes: frozenset[str], anchor) -> list[Poi]:
+    """구 안 전부 + 구 안에 `REGION_FILL_MIN` 곳 미만인 분류만 구 밖(앵커 `REGION_NEIGHBOR_KM` 안)에서 가까운 순으로 채운다.
+
+    구 안이 한 곳도 없으면 그대로 돌려준다 — 백엔드가 코드를 아직 안 싣거나(옛 응답) 그 구에 적재가 없을 때 풀을
+    통째로 잃지 않는다(정보 없음 ≠ 배제). 코드를 못 정한 POI(None)는 구 밖으로 본다. 순서는 뒤 단계(⑤)가 정한다.
+    """
+    inside = [p for p in pois if p.region_code in codes]
+    if not inside:
+        return pois
+    have = Counter(p.category for p in inside)
+    near = sorted(
+        ((d, p) for p in pois if p.region_code not in codes
+         and (d := _haversine_m(anchor, p.coord)) <= REGION_NEIGHBOR_KM * 1000),
+        key=lambda dp: (dp[0], str(dp[1].poi_id)))
+    fill = []
+    for _, p in near:
+        if have[p.category] < REGION_FILL_MIN:
+            have[p.category] += 1
+            fill.append(p)
+    return inside + fill
 
 
 def _fair_cut(ranked: list[Poi], cap: int) -> list[Poi]:

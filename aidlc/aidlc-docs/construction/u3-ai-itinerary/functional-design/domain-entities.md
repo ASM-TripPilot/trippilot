@@ -109,6 +109,8 @@
 > `CONFIRMED` 동안의 슬롯 변경 거부는 `business-rules.md` BR-U3-28 본문대로 여행 시작 전에 한하고, 여행 전날 첫날 `FULL_DAY` 반영(트리거 진입·사용자 [적용])이 예외로 붙는다(BR-U3-28 개정 블록).
 > → [BR-SA-20](../../situation-awareness/functional-design/business-rules.md) · [DEC-SA-7](../../situation-awareness/functional-design/business-logic-model.md)
 
+> **[개정 · 2026-10-23 — 사용자 지시]** INV-U3-04 — 위 예외를 승인한 것으로 보고 지평 `pre-trip` 을 켠다(`business-rules.md` BR-U3-28 2026-10-23 블록).
+
 ---
 
 ## 4. 도메인 이벤트
