@@ -485,3 +485,15 @@ def test_unknown_source_keeps_the_row_but_is_warned_once_per_value(
     warned = [r.getMessage() for r in caplog.records if "모르는 POI 출처" in r.getMessage()]
     assert len(warned) == 2
     assert any("'NOT_A_REAL_SOURCE'" in w for w in warned) and any("None" in w for w in warned)
+
+
+
+def test_region_code_is_read_when_the_backend_sends_it_and_none_otherwise() -> None:
+    """PR #1621 응답의 `region_code` — 못 정한 행은 null, 옛 백엔드는 키가 없다(둘 다 None). 수집 제안 직렬화엔 안 싣는다."""
+    db, _ = _db([_row(region_code="11650"),
+                 _row(poi_id="e0000000-0000-4000-8000-000000000002", region_code=None)])
+    a, b = db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
+    assert (a.region_code, b.region_code) == ("11650", None)
+    assert "region_code" not in b.to_dict() and a.to_dict()["region_code"] == "11650"
+    (c,) = _db([_row()])[0].find_by_radius(GeoPoint(37.5, 127.0), 5.0)
+    assert c.region_code is None

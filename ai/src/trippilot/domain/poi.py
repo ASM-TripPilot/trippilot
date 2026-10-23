@@ -232,6 +232,9 @@ class Poi:
     # 휴일 규칙 (상황 감지 H1) — 휴무 원문이 말한 공휴일·명절·날짜 휴무. 런타임 적재(backend_poi_db)가 원문
     # 칸에서 읽어 채우고, 판정은 `open_windows_on` 이 달력과 함께 한다. 모드 off 면 읽어도 무력하다.
     holiday_rules: frozenset[str] = frozenset()
+    # 행정구역 표준코드(백엔드 `poi.region_code` — 시군구 5자리, 못 정한 행은 None). 런타임 적재만 채운다 —
+    # 고른 구 안을 먼저 쓰는 풀 규칙(`pool_builder._region_first`)이 읽는다.
+    region_code: str | None = None
 
     def __post_init__(self) -> None:
         if not self.poi_id:
@@ -266,6 +269,8 @@ class Poi:
         # 그대로 싣는다. 규칙은 런타임 적재만 채우므로 그 와이어·공유본 모양은 바뀌지 않는다.
         if self.holiday_rules:
             d["holiday_rules"] = sorted(self.holiday_rules)
+        if self.region_code:  # 휴일 규칙과 같은 이유 — 런타임 적재만 채우므로 수집 제안 와이어 모양은 그대로
+            d["region_code"] = self.region_code
         return d
 
     @classmethod
@@ -285,6 +290,7 @@ class Poi:
             tags=tuple(d.get("tags") or ()),  # 구 캐시 호환 (saved_count 선례)
             source_ref=d.get("source_ref"),
             holiday_rules=frozenset(d.get("holiday_rules") or ()),  # 키 없는 옛 직렬화본 = 규칙 없음
+            region_code=d.get("region_code"),
         )
 
     def to_cacheable_dict(self) -> dict:

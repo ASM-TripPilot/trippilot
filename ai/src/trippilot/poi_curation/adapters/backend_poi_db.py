@@ -281,4 +281,6 @@ class BackendPoiDb:
             # 공휴일 휴무(상황 감지 H1) — 같은 원문 칸의 휴무·영업 원문에서. 모드와 무관하게 늘 읽는다 —
             # 판정은 달력이 있을 때만(`open_windows_on`), off 면 이 값은 무력하다.
             holiday_rules=_parse_holidays(rest_raw, hours_raw),
+            # 행정구역 표준코드(PR #1621 — 응답에 늘 키가 있고 못 정한 행은 null). 옛 백엔드는 키가 없다 → None.
+            region_code=(str(row["region_code"]) if row.get("region_code") else None),
         )

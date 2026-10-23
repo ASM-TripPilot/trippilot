@@ -77,6 +77,12 @@ class DayAnchorSchema(BoundaryModel):
     date: dt.date
     lat: float = Field(ge=-90.0, le=90.0)
     lng: float = Field(ge=-180.0, le=180.0)
+    # 그날 목적지가 **시군구**면 그 구의 행정구역 표준코드(지금은 1개 — POI 코드는 백엔드 `RegionResolver` 가 행정구를
+    # 상위 시로 접어 붙여 수원 장안구 POI 도 41110 이다). 어떤 코드를 넣을지는 백엔드 `districtCodesOf` 한 곳이 정하고
+    # AI 는 POI `region_code` ∈ 이 목록만 본다. 시도·코드 없음이면 빈 목록.
+    # 비어 있지 않으면 후보 풀이 **그 구 안을 먼저** 쓰고 모자란 분류만 이웃에서 채운다(2026-10-23 사용자 결정 —
+    # "서초를 골랐는데 점심은 서초, 저녁은 혜화"). 선택 필드(하위호환) — 안 오면 종전과 같다.
+    region_codes: list[str] = Field(default_factory=list)
 
 
 # 자정을 넘는 끝의 상한 — 밤 늦게 만든 오늘을 익일 01:00 까지 연다(2026-10-19 사용자). 넉넉히 04:00.
