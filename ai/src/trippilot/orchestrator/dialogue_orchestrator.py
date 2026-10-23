@@ -488,24 +488,48 @@ _NEAR_DAY = re.compile(r"오늘|내일|모레|이번\s*주|다음\s*주|주말|�
 
 def _seasonal_weather(heard: str) -> bool:
     return bool(_SEASONAL.search(heard)) and not _NEAR_DAY.search(heard)
+# 가볼 지역을 묻는 말의 표지. 계절을 말하면서 이 표지가 없으면 지역 고르기가 아니라 그 철에 가도 되는지다 — 분류가 "장마철에 여행
+# 가도 괜찮아?"를 지역 고르기로 보내 취향을 되물었다(2026-10-23 실측). "여름에 가기 좋은 여행지"는 고르기 그대로
+_ASKS_WHERE = re.compile(r"어디|지역|여행지|도시|곳|동네|(?:만한|좋은|갈|볼|놀|쉴)\s*데")  # "갈 만한 데" — "~인데"의 데는 아니다
+# 행사 낱말 — 축제·공연·전시가 언제인지는 장소 찾기가 행사 저장소로 답한다(#1486). 시기 질문 가드에서 뺀다
+_EVENT_WORDS = re.compile(r"축제|공연|전시|행사|불꽃|콘서트|페스티벌|박람회|마켓|군항제|팝업")
 
 
 def _not_region_choice(heard: str) -> bool:
-    """가볼 지역 고르기(RECOMMEND_REGION)가 답이 아닌 말 — 시기를 묻거나, 이미 표 지역을 말했다("말고·근교"는 고르기 그대로)."""
-    return bool(_ASKS_WHEN.search(heard)) or (not _REGION_ELSEWHERE.search(heard) and bool(region_mentions(heard)))
+    """가볼 지역 고르기(RECOMMEND_REGION)가 답이 아닌 말 — 시기를 묻거나, 철을 말하며 어디를 묻지 않거나, 이미 표 지역을
+    말했다("말고·근교"는 고르기 그대로)."""
+    return (bool(_ASKS_WHEN.search(heard)) or (bool(_SEASONAL.search(heard)) and not _ASKS_WHERE.search(heard))
+            or (not _REGION_ELSEWHERE.search(heard) and bool(region_mentions(heard))))
+
+
+def _when_not_where(heard: str) -> bool:
+    """가기 좋은 시기를 묻는 말 — 장소 목록은 '언제'의 답이 아니다("해운대는 언제 가면 좋아?"가 장소 찾기로 갔다, 2026-10-23 실측).
+    행사가 언제인지는 장소 찾기가 답한다."""
+    return bool(_ASKS_WHEN.search(heard)) and not _EVENT_WORDS.search(heard)
 
 
 def _region_named(call: IntentDraft, heard: str) -> IntentDraft | None:
     """계획이 가볼 지역 고르기(RECOMMEND_REGION)를 골랐어도 이번 말에 표 지역이 있으면 그 지역 안의 장소 탐색이다. 프롬프트 0.1.6 에
     규칙을 적었는데도 지역 이름 + 반나절 보낼 데 꼴이 3/3 으로 지역 추천으로 갔다(2026-10-22 실측) — 말한 지역을 추천 후보로 되돌려주면
-    질문에 답하지 않은 것이다. 시기를 묻는 말이면 None — 지역 목록도 장소 목록도 '언제'의 답이 아니라 이 호출을 버린다."""
+    질문에 답하지 않은 것이다. 시기·철을 묻는 말이면 None — 지역 목록도 장소 목록도 답이 아니라 이 호출을 버린다."""
     if call.intent is not Intent.RECOMMEND_REGION or not _not_region_choice(heard):
         return call
-    if _ASKS_WHEN.search(heard):
+    named = [] if _REGION_ELSEWHERE.search(heard) else region_mentions(heard)
+    if _ASKS_WHEN.search(heard) or not named:
         return None
     theme = call.slots.get("theme")
-    return replace(call, intent=Intent.EXPLORE_PLACES,
-                   slots={"region": region_mentions(heard)[0][1], **({"theme": theme} if theme else {})})
+    return replace(call, intent=Intent.EXPLORE_PLACES, slots={"region": named[0][1], **({"theme": theme} if theme else {})})
+
+
+def _routed(call: IntentDraft, heard: str, *, seasonal_weather_is_knowledge: bool = False) -> IntentDraft | None:
+    """계획 호출의 결정론 라우팅 — 지역 고르기는 `_region_named`, 시기 질문의 장소 찾기·골라 주기는 버린다. 철·달의 날씨(`_seasonal_weather`)
+    도구는 여행이 없고 지식 즉답이 조립됐을 때만 버린다 — 분류 경로 되돌림 뒤 계획이 다시 날씨를 골라 "먼저 여행을 만들어"로 끝났다
+    (2026-10-23 "대구는 여름에 많이 더워?"). 남는 게 없으면 지식 즉답(BR-AO-32). 분류 경로도 같은 술어로 계획 단계에 넘긴다(`_core`)."""
+    if call.intent in (Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES) and _when_not_where(heard):
+        return None
+    if call.intent is Intent.GET_WEATHER and seasonal_weather_is_knowledge and _seasonal_weather(heard):
+        return None
+    return _region_named(call, heard)
 
 
 def _plannable(reason: str) -> bool:
@@ -898,10 +922,11 @@ class DialogueOrchestrator:
             match, reason = self._classify(inp, text, memory_lines, trip_summary, counter)
             if area_turn is not None and _takes_day_areas(area_turn, match):  # 2⁗ — 분류가 칸을 뭉개도(12/12) 확인한 해석으로 넘긴다
                 return _day_area_outcome(area_turn, match, cleared)
-            if match is not None and match.intent is Intent.RECOMMEND_REGION and _not_region_choice(text):
-                # 시기를 묻거나 지역을 이미 말했다 — 지역 고르기 핸들러는 엉뚱한 지역 목록이나 취향 되묻기를 낸다. 분류가 null 로 닫은
-                # 것처럼 계획 단계에 맡긴다(지역 안 장소면 탐색, 시기면 gap KNOWLEDGE)
-                match, reason = None, f"{NULL_INTENT}; region_recommend_rerouted"
+            if match is not None and (match.intent is Intent.RECOMMEND_REGION and _not_region_choice(text) or match.intent in (
+                    Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES) and _when_not_where(text)):
+                # 시기·철을 묻거나 지역을 이미 말했다 — 지역 고르기는 엉뚱한 지역 목록이나 취향 되묻기를, 장소 찾기는 '언제'에 장소 목록을
+                # 낸다. 분류가 null 로 닫은 것처럼 계획 단계에 맡긴다(지역 안 장소면 탐색, 시기·여행 일반 지식이면 지식 즉답)
+                match, reason = None, f"{NULL_INTENT}; routed_to_plan"
             elif (match is not None and match.intent is Intent.GET_WEATHER and inp.snapshot.trip is None
                   and self._knows_general() and _seasonal_weather(text)):
                 # 계절·달의 날씨 = 기후 경향 — 여행 없는 턴의 예보 도구는 답이 없다(BR-AO-32). 지식 즉답이 조립됐을 때만 — 아니면 종전
@@ -1233,8 +1258,9 @@ class DialogueOrchestrator:
                 self._log_plan(inp, "NO_TOOL", plan_ms=plan_ms, gap=draft.gap)
                 return TurnOutcome("ANSWER", (), None, knowledge, cleared, 0, f"{reason}; plan:knowledge")
             return self._plan_declined(inp, reason, "REFUSED" if draft.refused else "NO_TOOL", plan_ms=plan_ms, gap=draft.gap)
-        calls = [c for c in (_region_named(call, text) for call in draft.calls) if c is not None]
-        if not calls:  # 시기를 묻는 말에 지역 고르기만 골랐다 — 조회로 답할 것이 없다(일반 지식)
+        calls = [c for c in (_routed(call, text, seasonal_weather_is_knowledge=inp.snapshot.trip is None and self._knows_general())
+                                     for call in draft.calls) if c is not None]
+        if not calls:  # 시기·여행 일반 지식에 장소·지역·날씨 도구만 골랐다 — 조회로 답할 것이 없다(일반 지식)
             if (knowledge := self._knowledge(inp, memory, trip_summary)) is not None:
                 self._log_plan(inp, "NO_TOOL", plan_ms=plan_ms, gap="KNOWLEDGE")
                 return TurnOutcome("ANSWER", (), None, knowledge, cleared, 0, f"{reason}; plan:knowledge")
