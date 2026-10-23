@@ -174,6 +174,8 @@ class GenerateItineraryRequest:
     principal: Principal
     seed: int
     fixed_blocks: tuple[FixedBlock, ...] = ()
+    # 고른 시군구(+하위 행정구) 코드 — 후보 풀이 그 구 안을 먼저 쓴다(`pool_builder._region_first`). 빈 값 = 종전.
+    region_codes: frozenset[str] = frozenset()
     # 시각 없는 필수 방문 (TRIP-1249) — 고정 블록과 같은 길(요청에 실려 오는 값), 시각만 없다.
     required_visits: tuple[RequiredVisit, ...] = ()
     excluded_poi_ids: frozenset[PoiId] = frozenset()

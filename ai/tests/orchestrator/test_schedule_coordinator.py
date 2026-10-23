@@ -1130,3 +1130,30 @@ def test_pool_unavailable_is_explicit_failure(monkeypatch) -> None:
     assert outcome.solution is None
     assert "pool_unavailable" in (outcome.error or "")
     assert "RuntimeError" in outcome.error  # 사유 보존 (침묵 금지)
+
+
+# ── 고른 구 안 먼저 — 와이어 → 도메인 → 풀 (2026-10-23 사용자 결정) ─────────────
+
+
+def test_generate_wire_region_codes_reach_the_pool_and_keep_the_district_first() -> None:
+    from trippilot.api import schemas
+    from trippilot.api.wiring import KST, _domain_generate_request
+    from tests.agents.schedule.test_schedule_fixed_poi_index import _request as _wire_request
+
+    wire = _wire_request((_DAY1,), [])
+    wire["anchors"] = [{**a, "region_codes": ["11650", "11651"]} for a in wire["anchors"]]
+    domain = _domain_generate_request(schemas.GenerateItineraryRequest.model_validate(wire), KST)
+    assert domain.region_codes == frozenset({"11650", "11651"})
+
+    inside = tuple(replace(_poi(i, 0.0001 * i), region_code="11650") for i in range(1, 13))
+    outside = tuple(replace(_poi(i, 0.01), region_code="11680") for i in range(20, 23))  # 구 밖 ≈1.4km
+    ins, outs = {str(p.poi_id) for p in inside}, {str(p.poi_id) for p in outside}
+
+    orchestrator, _, sink = _build(pois=inside + outside)
+    orchestrator.generate(replace(_request(), region_codes=domain.region_codes), 20_000, _TRACE_ID, _NOW)
+    chosen = {str(c.poi_id) for c in sink.problems[0].candidates}
+    assert chosen and chosen <= ins  # 구 안 명소 12곳 ≥ 10 — 구 밖은 채우지 않는다
+
+    orchestrator, _, sink = _build(pois=inside + outside)
+    orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+    assert outs <= {str(c.poi_id) for c in sink.problems[0].candidates}  # 코드 없으면 종전대로 섞인다

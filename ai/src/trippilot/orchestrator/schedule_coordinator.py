@@ -197,6 +197,7 @@ class ScheduleCoordinator:
                     budget=request.budget,
                     transport=request.transport,
                     radius_override_km=request.radius_override_km,
+                    region_codes=request.region_codes,
                 ),
                 "anchor": request.anchor,
                 "days": request.days,
@@ -227,7 +228,8 @@ class ScheduleCoordinator:
         if summary.level == "NO_CANDIDATES":
             first_request = CandidatePoolRequest(
                 anchor=request.anchor, dates=request.days, budget=request.budget,
-                transport=request.transport, radius_override_km=request.radius_override_km)
+                transport=request.transport, radius_override_km=request.radius_override_km,
+                region_codes=request.region_codes)
             widened = widened_radius_km(first_request, self._pool_cfg)
             if widened is None:
                 why = "override" if request.radius_override_km is not None else "at_cap"
@@ -240,7 +242,8 @@ class ScheduleCoordinator:
                     {
                         "pool_request": CandidatePoolRequest(
                             anchor=request.anchor, dates=request.days, budget=request.budget,
-                            transport=request.transport, radius_override_km=widened),
+                            transport=request.transport, radius_override_km=widened,
+                            region_codes=request.region_codes),
                         "anchor": request.anchor,
                         "days": request.days,
                         "now": now,

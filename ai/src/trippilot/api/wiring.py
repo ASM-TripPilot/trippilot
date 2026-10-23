@@ -497,6 +497,7 @@ def _domain_generate_request(
     return core.GenerateItineraryRequest(
         schedule_id=ScheduleId(request.trip_id),
         anchor=GeoPoint(anchor_schema.lat, anchor_schema.lng),
+        region_codes=frozenset(anchor_schema.region_codes),
         days=days,
         day_window=day_window,
         day_windows=day_windows,

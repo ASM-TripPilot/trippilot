@@ -253,3 +253,40 @@ def test_rule_score_increases_with_saved_count() -> None:
 
     cold, hot = _poi("p", saved_count=0), _poi("p", saved_count=500)
     assert build_rule_score(hot, BudgetLevel.HIGH, None, 7) > build_rule_score(cold, BudgetLevel.HIGH, None, 7)
+
+
+# ── ④′ 고른 구 안 먼저 (2026-10-23 사용자 결정 — "서초를 골랐는데 점심은 서초, 저녁은 혜화") ──
+
+_GU = frozenset({"11650"})
+
+
+def _rpoi(pid: str, cat: PoiCategory, km_east: float, code: str | None) -> Poi:
+    """앵커에서 동쪽으로 km_east 떨어진 곳(이 위도에서 경도 1도 ≈ 88km)."""
+    return replace(_poi(pid, coord=GeoPoint(_ANCHOR.lat, _ANCHOR.lng + km_east / 88.0)),
+                   category=cat, region_code=code)
+
+
+def test_region_first_keeps_inside_and_fills_only_short_categories_from_near_neighbors() -> None:
+    inside = ([_rpoi(f"in-food-{i}", PoiCategory.FOOD, 0.5, "11650") for i in range(12)]
+              + [_rpoi("in-nature", PoiCategory.NATURE, 1.0, "11650")])
+    near = ([_rpoi(f"nb-food-{i}", PoiCategory.FOOD, 3.0, "11680") for i in range(5)]
+            + [_rpoi(f"nb-nature-{i}", PoiCategory.NATURE, 2.0 + i * 0.3, "11680") for i in range(12)])
+    far = [_rpoi("far-nature", PoiCategory.NATURE, 9.0, "11110")]  # 대중교통 반경 10km 안이지만 이웃 6km 밖
+
+    ids = {str(p.poi_id) for p in _build(inside + near + far,
+                                         _request(transport=TransportMode.PUBLIC, region_codes=_GU)).pois}
+
+    assert {f"in-food-{i}" for i in range(12)} | {"in-nature"} <= ids
+    assert not {i for i in ids if i.startswith("nb-food")}  # 구 안 식당 12곳 ≥ 10 — 채우지 않는다
+    assert {i for i in ids if i.startswith("nb-nature")} == {f"nb-nature-{i}" for i in range(9)}  # 1 + 가까운 9
+    assert "far-nature" not in ids  # 서초 중심에서 종로·혜화까지 가지 않는다
+
+
+def test_region_first_is_off_without_codes_and_when_no_poi_is_inside() -> None:
+    """코드가 없으면(시도·옛 요청) 종전 그대로, 구 안이 한 곳도 없으면(옛 백엔드 응답에 코드 없음) 풀을 잃지 않는다."""
+    pois = [_rpoi("a", PoiCategory.SIGHT, 1.0, "11680"), _rpoi("b", PoiCategory.SIGHT, 8.0, None)]
+    plain = {str(p.poi_id) for p in _build(pois, _request(transport=TransportMode.PUBLIC)).pois}
+
+    assert plain == {"a", "b"}
+    assert {str(p.poi_id) for p in _build(pois, _request(transport=TransportMode.PUBLIC,
+                                                          region_codes=_GU)).pois} == plain
