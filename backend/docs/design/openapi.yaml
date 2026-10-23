@@ -1627,9 +1627,8 @@ paths:
         재생성해도 남는다 — 초안만 갈린다.
 
 
-        ⚠ 현재 `source` 는 `RULE` 또는 `BASIC` 이다. `AI` 단은 아직 배선 전이다 — 상대 경계는
-        실재하고(`POST /ai/v1/reflection/generate`) O-U5-6 이 `http` 로 확정됐다. 규칙 카드로 먼저
-        열고 `source` 로 품질을 관측한 뒤 켠다(BR-U5-33).
+        `source` 는 `AI`·`RULE`·`BASIC` 중 하나다. 배포(개발·운영)는 AI 단을 부른다(`POST /ai/v1/reflection/generate`,
+        O-U5-6 = `http`) — AI 가 실패하거나 안 간 곳을 말하면 규칙 카드로 내려간다(BR-U5-32·33).
       responses:
         '200': { description: 생성됨, content: { application/json: { schema: { $ref: '#/components/schemas/Reflection' } } } }
         '400': { description: 여행 기간 밖 날짜 }
