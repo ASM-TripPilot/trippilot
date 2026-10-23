@@ -7,7 +7,6 @@ import com.trippilot.planbdetection.domain.WeatherAlerts.ZoneKind
 import com.trippilot.weathercontext.api.WarningArea
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
-import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 
@@ -48,14 +47,44 @@ class WeatherAlertsZoneListTest : StringSpec({
         unknown shouldBe NOT_READ_BY_NAME
     }
 
+    "도 묶음에 든 다른 광역 구역(섬 구역 · 관서 묶음 구역 표의 코드가 다른 광역)은 묶음 표와 같다 — 규칙 4 의 관서 묶음 꼴 판정이 이 표로 가린다" {
+        val fromList = groups.mapNotNull { (head, zones) ->
+            val province = Province.ofKmaName(head.name) ?: return@mapNotNull null
+            val others = zones.map { it.name }.filter { name ->
+                val code = WeatherAlerts.ISLANDS[name] ?: WeatherAlerts.CROSS_ZONES[name]
+                code != null && province !in Province.ofRegionCode(code).orEmpty()
+            }
+            others.takeIf { it.isNotEmpty() }?.let { province to it.toSet() }
+        }.toMap()
+
+        WeatherAlerts.CROSS_GROUPS shouldBe fromList
+    }
+
+    "목록의 광역시 권역(인천 · 대구)은 표와 같다 — 제 구역이 있는 군을 덮지 않는 권역만 거른다(규칙 7)" {
+        val metros = WeatherAlerts.CITY_STEMS.filter { (province, stems) -> province.wide && stems.any { it in WeatherAlerts.OWN_ZONE_GUN } }.keys
+        rows.filterNot { it.head }.map { it.name }.filter { name -> metros.any { it.isRegional(name) } }.toSet() shouldBe
+            WeatherAlerts.OWN_ZONE_METRO_REGIONS
+    }
+
+    "광역 줄 안의 섬 구역 표는 목록과 같다 — 제 행정 광역 묶음에 든 섬 구역(시군 전체인 섬은 뺀다 · 규칙 9)" {
+        val inLine = groups.flatMap { (head, zones) ->
+            val province = Province.ofKmaName(head.name) ?: return@flatMap emptyList()
+            zones.map { it.name }.filter { name -> WeatherAlerts.ISLANDS[name]?.let { province in Province.ofRegionCode(it).orEmpty() } == true }
+        }.toSet() - WeatherAlerts.WHOLE_CITY_ISLANDS
+        inLine shouldBe WeatherAlerts.LINE_ISLANDS
+    }
+
     "제 구역이 있는 광역시의 군은 목록과 같다 — 그 군 이름으로 시작하는 구역이 있는 군(규칙 7 — 그 광역의 권역이 덮지 않는다)" {
         val metroGun = WeatherAlerts.CITY_STEMS.filterKeys { it.wide }.values.flatten()
         metroGun.filter { stem -> rows.any { it.name.startsWith(stem) } }.toSet() shouldBe WeatherAlerts.OWN_ZONE_GUN
     }
 
-    "묶음 하나를 한 줄로 읽어도 모르는 이름 WARN 이 나지 않는다" {
+    "묶음 하나를 한 줄로 읽으면 WARN 은 그 묶음의 다른 광역 구역(관서 묶음 꼴)뿐이다 — 모르는 이름은 없다" {
         groups.forEach { (head, zones) ->
-            withClue(head.name) { WeatherAlerts.unknownNames(WarningArea(head.name, zones.map { it.name })).shouldBeEmpty() }
+            withClue(head.name) {
+                WeatherAlerts.unknownNames(WarningArea(head.name, zones.map { it.name })).toSet() shouldBe
+                    Province.ofKmaName(head.name)?.let { WeatherAlerts.CROSS_GROUPS[it] }.orEmpty()
+            }
         }
     }
 
