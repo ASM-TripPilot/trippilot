@@ -40,6 +40,8 @@ src/app/
 
 **온보딩 위저드 UX 규칙**: 각 단계 이전/다음 이동 가능(US-ONB-11), 약관·닉네임은 탈출구 미제공, 완료 시 `(tabs)/home` 진입.
 
+> **[개정 · 2026-10-22 · TRIP-1594]** 온보딩의 세 완료 출구 — 취향 1/2 `나중에 설정하고 시작` · 2/2 `완료` · 2/2 `나중에 설정하고 시작` — 는 홈이 아니라 **기능 안내(`onboarding-tour`, 6장: 담기·숙소·일정·여행 중·기록·도우미)** 로 `replace` 이동한다(완료 처리·게이트 HOME 대기 순서는 그대로). 기능 안내의 `건너뛰기`(1~5장)·`시작하기`(6장)가 홈으로 `replace` 한다. 완료 직후 1회만 보이며 별도 "봤음" 플래그·설정 재보기는 없다. 라우트는 `SplashGate` 의 HOME 가드 안에 선언한다. 위 "완료 시 `(tabs)/home` 진입" 문장은 원문 보존. 근거: TRIP-1594/1595 구현 결정(사용자 결정 2026-10-22) — inception stories·U0 FD 에 기능 안내 화면이 없던 정본 공백을 메운 것이므로 **요구사항 근거로 인용하지 않는다**. 화면 정본은 Figma c10 6장(`5094:3522` 외).
+
 ## 3. 홈 컴포넌트 (U0 범위)
 
 | 컴포넌트 | 책임 | 서버 연동 |
@@ -65,6 +67,8 @@ src/app/
 ## 6. testID (규약 `{feature}-{screen}-{role}`)
 
 `onboarding-login-{provider}` · `onboarding-terms-{type}` · `onboarding-terms-next` · `onboarding-age-birthdate` · `onboarding-nickname-input` · `onboarding-nickname-suggest` · `onboarding-pref-{step}-skip` · `onboarding-pref-escape` · `home-dashboard-tripcard` · `home-dashboard-emptycta` · `shell-tabbar-{tab}` (tab ∈ home·explore·itinerary·records·my) · `shell-forceupdate-store`
+
+> **[개정 · 2026-10-22 · TRIP-1594]** 기능 안내 testID 추가: `onboarding-tour-pager` · `onboarding-tour-page-{n}` · `onboarding-tour-title-{n}` · `onboarding-tour-body-{n}` · `onboarding-tour-stage-{n}` · `onboarding-tour-progress` · `onboarding-tour-skip` · `onboarding-tour-next` · `onboarding-tour-start` (n=1..6). 근거: `frontend/src/pages/onboarding/onboarding-tour/ui/OnboardingTourView.tsx`·`TourStage.tsx` 실측.
 
 ## 7. PBT 대상 (클라 순수 함수 — fast-check)
 

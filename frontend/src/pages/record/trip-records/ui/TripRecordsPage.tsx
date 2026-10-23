@@ -374,6 +374,7 @@ export function TripRecordsPage({
         onPressReflection={recordBar.onPressReflection}
         onPressSummary={recordBar.onPressSummary}
         onPressBack={recordBar.onBack}
+        backExitToTab={recordBar.exitToTab}
       />
 
       {timeResult != null ? (

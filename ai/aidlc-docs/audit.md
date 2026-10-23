@@ -652,6 +652,12 @@
 - **무엇을 했나**: ① `_assemble_region` 사실 행을 종류 이름만으로, 비교 기준은 `detail.compared_to` 한 번 ② 답변 0.3.8 규칙 줄(지역마다 같은 문장 꼴 금지·비교 기준 한 번) ③ 측정 사례 행 모양 동기화. 행 문구만 줄인 판은 같은 꼴을 다시 베껴 버렸다.
 - **지키는 것**: 지역 고르기·와이어·BE 무변경, 다른 의도 답 무변경.
 
+## 2026-10-22 — j06 공유 문구도 자리표시자를 채워 보낸다 · 공유 프롬프트 0.1.1
+**Timestamp**: 2026-10-22 · 브랜치 `fix/share-card-bind`(develop c1918bdb8 위) · **승인 대기**(같은 PR 머지 = 승인)
+- **입력**: BE 가 `/ai/v1/reflection/share-card` 를 부르기 시작했다(#1564, 응답을 그대로 앱에 넘긴다). 공유 프롬프트는 숫자를 `{visit_count}`·`{distance_km}` 로 쓰라고 하는데 채우는 쪽이 AI·BE·FE 어디에도 없었다 — 앱이 붙이면 SNS 문구에 중괄호째 나간다.
+- **무엇을 했나**: ① `composer.bind_share_card_copy` — 회고 카드와 같은 바인딩(`_binder` 로 공유, 조사 맞춤 포함). 못 채우는 캡션은 정적 폴백 + `FallbackEvent(reason=share_card_unbound_placeholder)`, 못 채운 태그는 뺀다 ② 경계(`reflection_share_card`)가 응답 전에 부른다 ③ 공유 게이트가 `#{region}여행` 을 파생으로 받는다(회고 게이트 #1408 과 같은 `_BOUND_TAG`) — 종전엔 HASHTAG_OUT 하나로 문구 전체가 폴백이었다 ④ 프롬프트 0.1.1 — 값 없는 `{distance_km}`·사진 0장의 `{photo_count}` 금지.
+- **지키는 것**: 와이어·openapi 무변경. 변이 3종(경계 바인딩 제거·`{region}` 태그 허용 제거·못 채운 캡션 통과) 전부 빨강.
+
 ## 2026-10-22 — UnknownHandlingAgent 를 agents/ 로 — 넷과 같은 자리·같은 꼴 (BR-AF-11 5종 개정)
 **Timestamp**: 2026-10-22 · 브랜치 `refactor/unknown-handling-agent-package` · **승인 대기**(같은 PR 머지 = 승인)
 - **입력**: 사용자 — "agent들은 다 한곳에다가 두자. 다른 4개의 에이전트와 동일하게 취급되게 4개가 짜여진대로 맞추어서 두자!" + 결정 2건: 진입점은 넷처럼 `run(<Task>)` 하나로 통일 · FD 의 "Agent 4종" 도 이 PR 에서 5종으로.

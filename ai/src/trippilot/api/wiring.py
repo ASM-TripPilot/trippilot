@@ -96,6 +96,7 @@ from trippilot.llm_gateway.workers.reminder_copy import (
     ReminderCopyWorker,
 )
 from trippilot.agents.reflect.agent import ReflectAgent, ReflectTask
+from trippilot.agents.reflect.composer import bind_share_card_copy
 from trippilot.llm_gateway.gates.reflection_nudge import ReflectionNudgeGate
 from trippilot.llm_gateway.gates.photo_highlight import PhotoHighlightGate
 from trippilot.llm_gateway.gates.reflection_template import ReflectionTemplateGate
@@ -4109,10 +4110,11 @@ class WiredItineraryOrchestrator:
             # 예산이 실리는 순간 여기만 기본 타임아웃으로 돈다 (`reflection_generate` 대칭)
             timeout_sec=_deadline_budget(meta) / 1000.0,
         )
-        if result.is_fallback or not result.value:
+        # 자리표시자는 응답 전에 채운다 — 못 채우는 캡션({distance_km} 등)은 정적 폴백 (회고 카드와 같은 바인딩)
+        bound = None if result.is_fallback or not result.value else bind_share_card_copy(result.value, domain_request)
+        if bound is None:
             if not result.is_fallback:
-                # 방어 분기 — 현 게이트 계약상 도달 불가(빈 캡션은 게이트가 error로 낸다).
-                # 게이트 완화 시 계측 없는 침묵 폴백이 되지 않게 여기서 발행한다.
+                # 빈 값은 방어 분기 — 현 게이트 계약상 도달 불가(빈 캡션은 게이트가 error로 낸다).
                 # 직행 패턴의 발행 주체는 경계다 — component="api.wiring" (FD §2.1 관측 규칙).
                 self._trace.emit(FallbackEvent(
                     trace_id=TraceId(meta.request_id),
@@ -4121,11 +4123,12 @@ class WiredItineraryOrchestrator:
                     stage="agent",
                     from_mode="llm_share_card",
                     to_mode="static_copy",
-                    reason="share_card_empty_value_without_fallback_flag",
+                    reason=("share_card_unbound_placeholder" if result.value
+                            else "share_card_empty_value_without_fallback_flag"),
                 ))
             return schemas.ShareCardCopyResponse(
                 **fallback_share_card_copy(domain_request).to_dict())
-        return schemas.ShareCardCopyResponse(**result.value.to_dict())
+        return schemas.ShareCardCopyResponse(**bound.to_dict())
 
     def planb_opportunities(self, request: schemas.OpportunitiesRequest) -> schemas.OpportunitiesResponse:
         """동선 근처 기회(행사·요즘 인기, LLM 0회 · 트리거 아님) — 재료 수집·판정·사영은 `api/opportunities.py`."""

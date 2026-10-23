@@ -23,11 +23,21 @@ import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
 const ONBOARDING_PURPOSE =
   '내 주변을 알면 더 잘 맞는 곳을 추천하고\n길 안내도 막힘없이 이어져요';
 
-export function LocationPage(): ReactElement {
+/**
+ * `onNext` 는 카드를 빠져나가는 모든 경로(허용 granted · 거부 프레임 계속 · 설정 복귀 재조회 granted)의 이동을 대신한다 —
+ * 기존 계정이 HOME 에 들어올 때 이 카드를 다시 쓰는 곳(TRIP-1601)이 목적지를 정한다. 생략하면 온보딩 체인(푸시 카드)이다.
+ * 하드코딩 `(onboarding)` 은 HOME 계정에겐 잠긴 그룹이라 이동이 에러 없이 무시된다(TRIP-1597) — 그래서 세 경로가 모두 이 한 함수를 지난다.
+ */
+export function LocationPage({
+  onNext,
+}: {
+  onNext?: () => void;
+}): ReactElement {
   const router = useRouter();
   const [state, setState] = useState<LocationPrepromptState>('default');
 
-  const goToPush = () => router.replace('/(onboarding)/push');
+  const goToPush = () =>
+    onNext ? onNext() : router.replace('/(onboarding)/push');
   // 즉시 넘어가는 버튼(거부 프레임 계속)은 다음 푸시 카드의 같은 자리 버튼과 겹친다 — 연타 두 번째 탭이
   // 카드를 못 본 채 건너뛰지 않게 가드로 감싼다(TRIP-1108 R6). granted 이동은 가드 창을 직접 연다 — 이미 허용된
   // 기기에선 OS 창 없이 곧장 넘어가 연타 두 번째 탭이 푸시 카드 `계속`에 떨어진다(5-b 재현).

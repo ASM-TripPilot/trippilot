@@ -5,6 +5,8 @@ import {
   within,
 } from '@testing-library/react-native';
 
+import { HeartButton } from '@/shared/ui/HeartButton';
+import { HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 import { stayCoverFor } from '@/test-support/placeCoverFixtures';
 
 import { StaySearchCard } from './StaySearchCard';
@@ -388,4 +390,37 @@ describe('🔴 SC-COVER · 사진 칸 = 숙소 키로 고른 숙소 그림 (TRIP
       screen.getByTestId('explore-stay-photo-KAKAO:16').props.source
     ).toEqual([stayCoverFor('KAKAO:16')]);
   });
+});
+
+/**
+ * TRIP-1599 — 숙소 카드 하트도 장소 하트처럼 누르면 튄다. 튐 규칙(누른 뒤 첫 담김에만·동작 줄이기면 안 튐·취소 원복)은
+ * 공용 `HeartButton`(TRIP-1125, H-1~H-11 심판)이 이미 진다 — 여기선 카드가 그 버튼을 쓰는지(배선)와 카드별 하트 크기(e02 22 · d01 18)만 본다.
+ * 튐의 실제 느낌은 실화면 몫(README 판정 4).
+ */
+describe('SC-POP · 숙소 카드 하트 = 공용 HeartButton (TRIP-1599)', () => {
+  it.each([
+    ['full', 22],
+    ['rail', 18],
+  ] as const)(
+    '%s 카드의 저장 하트는 HeartButton 이고 하트 크기는 %i 이다',
+    (variant, size) => {
+      // 준비·실행 — 저장 하트가 있는 카드를 그린다.
+      render(
+        <StaySearchCard
+          testID="card"
+          name="해운대 오션뷰"
+          region="부산 해운대구"
+          priceText="120,000원~"
+          variant={variant}
+          save={E02_SAVE}
+        />
+      );
+
+      // 단언 — 저장 하트가 공용 버튼 하나이고, 그 testID·하트 크기가 카드 것이다.
+      const buttons = screen.UNSAFE_getAllByType(HeartButton);
+      expect(buttons).toHaveLength(1);
+      expect(buttons[0].props.testID).toBe(E02_SAVE.testID);
+      expect(screen.UNSAFE_getByType(HeartOutlineGlyph).props.size).toBe(size);
+    }
+  );
 });

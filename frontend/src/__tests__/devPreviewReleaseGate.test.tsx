@@ -338,3 +338,37 @@ describe('프리뷰 · 도우미 시트 키 (TRIP-1530)', () => {
     expect(view.sampleLongConversation?.(75)).toHaveLength(75);
   });
 });
+
+// TRIP-1595 AC7 — 기능 안내 6장 프리뷰 키. 순수 뷰(`OnboardingTourView`)에 `initialPage` 로 n장을 처음부터 태운다.
+// 이 파일에 붙인 이유: 프리뷰 키 렌더 심판은 이 스모크뿐이고 키별 파일을 새로 만들지 않는다.
+// ⚠️ 진행 값만 본다 — n장 내용이 실제로 화면에 보이는지(페이저가 그 위치까지 굴러 있는지)는 jest 사각이라 키마다 앱을 재기동해 캡처한다(6-b).
+const ONBOARDING_TOUR_KEYS = [1, 2, 3, 4, 5, 6].map(
+  (page) => [page, `onboarding-tour-${page}`] as const
+);
+
+describe('프리뷰 · 기능 안내 6장 키 (TRIP-1595)', () => {
+  it('D1 장부에 onboarding-tour-1 … onboarding-tour-6 여섯 키가 모두 있다', () => {
+    const keys = previewModule.PREVIEW_STATES.map((state) => state.key);
+    expect(keys).toEqual(
+      expect.arrayContaining(ONBOARDING_TOUR_KEYS.map(([, key]) => key))
+    );
+  });
+
+  it.each(ONBOARDING_TOUR_KEYS)(
+    'D2 %i장 키로 열면 기능 안내가 그 장 진행 값으로 처음부터 그려진다',
+    (page, key) => {
+      mockSearchParams.state = key;
+      render(<DevPreview />);
+
+      expect(screen.getByTestId('dev-preview-root')).toBeOnTheScreen();
+      expect(
+        screen.getByTestId(`onboarding-tour-page-${page}`)
+      ).toBeOnTheScreen();
+      expect(
+        screen.getByTestId('onboarding-tour-progress')
+      ).toHaveAccessibilityValue({ now: page });
+      // 폴백(splash)으로 떨어지지 않았다
+      expect(screen.queryByTestId('shell-splash-root')).toBeNull();
+    }
+  );
+});

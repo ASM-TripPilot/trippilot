@@ -12,12 +12,14 @@ import { guardPress } from '@/shared/lib/pressGuard';
 import { promptAndRegisterPush } from '@/shared/push';
 import { PushPreprompt } from '@/shared/push';
 
-export function PushPage(): ReactElement {
+/** `onNext` 가 있으면 `계속` 의 이동을 대신한다(기존 계정 HOME 진입 전 안내 — TRIP-1601). 루틴을 기다리지 않는 건 그대로다. */
+export function PushPage({ onNext }: { onNext?: () => void }): ReactElement {
   const router = useRouter();
 
   const handleProceed = guardPress(() => {
     void promptAndRegisterPush();
-    router.replace('/(onboarding)/pref1');
+    if (onNext) onNext();
+    else router.replace('/(onboarding)/pref1');
   });
 
   return <PushPreprompt onProceed={handleProceed} />;

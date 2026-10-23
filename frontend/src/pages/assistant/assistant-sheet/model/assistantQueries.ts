@@ -45,6 +45,8 @@ export function appendMessages(
 /**
  * 재조회 합치기 — 새 id 는 뒤에 붙이고, 겹치는 id 는 **`proposal` 칸만** 응답값으로 바꾼다(서버가 옮긴 제안 상태 반영).
  * 응답 `proposal` 이 없으면 캐시를 둔다. 평가·문장 등 다른 칸은 캐시 그대로(낙관 갱신 보호).
+ * 한 번 결정된 제안(PROPOSED 가 아닌 상태)은 응답의 PROPOSED 로 되돌리지 않는다 — [적용] 보다 먼저 떠난
+ * 재조회의 옛 스냅샷이 늦게 도착해 APPLIED 를 PROPOSED 로 되감던 경쟁(5-b W-2).
  */
 function mergeReopened(
   current: readonly AssistantMessage[],
@@ -53,7 +55,10 @@ function mergeReopened(
   const fresh = new Map(incoming.map((message) => [message.id, message]));
   const refreshed = current.map((message) => {
     const proposal = fresh.get(message.id)?.proposal;
-    return proposal ? { ...message, proposal } : message;
+    if (!proposal) return message;
+    const decided = message.proposal && message.proposal.status !== 'PROPOSED';
+    if (decided && proposal.status === 'PROPOSED') return message;
+    return { ...message, proposal };
   });
   return appendMessages(refreshed, incoming);
 }
