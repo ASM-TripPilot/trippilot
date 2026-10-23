@@ -1864,3 +1864,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(사용자 결정 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
+
+## Functional Design·NFR Requirements 사후 개정 — situation-awareness weather_grid_forecast.daily 칸 삭제 (DE §8.1 · tech-stack 델타 3 · NFR RES-SA-13)
+**Timestamp**: 2026-10-23T13:11:00+09:00 (작업 시점)
+**User Input**: (새 사용자 결정 없음 — 자율 세션. 이 작업을 띄운 사용자 요청 원문은 "하던거 계속해".) 근거는 정본 §8.1 개정 블록의 '칸 삭제는 후속 — 이 칸을 쓰는 옛 파드가 남지 않은 다음 배포'와 코드 밖 사실 하나다 — 2026-10-23 운영 승격(배포 담당 세션 회신 — 운영 런 39896992057, V2.78→V2.85)으로 V2.81 과 그 코드가 운영까지 나갔다.
+**AI Response**: `construction/situation-awareness/` 3종에 `[개정 · 2026-10-23 — 구현 반영]` 블록 3개를 덧붙였다(원문·기존 블록 삭제·수정 0줄) — `functional-design/domain-entities.md` §8.1(칸 삭제 마침) · `nfr-requirements/tech-stack-decisions.md` 델타 3 · `nfr-requirements/nfr-requirements.md` §3(RES-SA-13). 구현은 같은 PR 의 V2.86 마이그레이션과 KDoc 두 곳·통합 시험이다(TRIP-1575).
+**Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---

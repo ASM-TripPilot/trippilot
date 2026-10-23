@@ -84,6 +84,8 @@ weather-context
 
 > **[개정 · 2026-10-22 — 구현 반영]** 델타 3 — 위 텍스트 블록의 `daily jsonb 날짜별 TMN·TMX` 는 더 쓰지 않는다(사용자 결정 25번 (다)의 정리 · 줄 번호 기준 커밋 `b9c1cb52e`(#1540) — `functional-design/domain-entities.md` §8.1 개정 블록). 어댑터는 같은 응답에서 시간별 칸만 읽고, `PointForecast` 에 하루 값이 없으며, 엔티티는 `daily` 칸을 매핑하지 않는다. 칸은 확장형 마이그레이션(`V2.NN__weather_grid_forecast_daily_default.sql` — 기본값 `'{}'`)으로 남기고, 삭제는 옛 파드가 남지 않은 다음 배포의 후속이다 — 델타 7 의 '마이그레이션 3'에 확장형 하나가 더해지고 삭제 하나가 뒤따른다.
 
+> **[개정 · 2026-10-23 — 구현 반영]** 델타 3 — `daily` 열은 V2.86 에서 지웠다(TRIP-1575 — `functional-design/domain-entities.md` §8.1 개정 블록).
+
 ### 델타 4 — 선계산 전용 실행기 (C10)
 
 ```text
