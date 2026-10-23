@@ -26,12 +26,17 @@ from trippilot.domain.llm import LlmFeature, TypedResult
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import inline
 
-# 자리표시자·역할 라벨·이력 줄 렌더러의 **한 집** — 답변·요약 워커(`$history`·`$recent_turns`)와 결정론 압축
-# (`orchestrator.dialogue_memory.compress_fallback`)이 여기 것을 import 한다. 따로 적으면 넷이 갈라진다.
+# 자리표시자·역할 라벨·이력 줄 렌더러의 **한 집** — 답변·잡담·요약 워커(`$history`·`$recent_turns`)가 여기 것을 import 한다.
+# 따로 적으면 갈라진다.
 NONE = "(없음)"
 NO_TRIP = "(여행 없음)"
 # 역할 라벨 — 백엔드 RecentTurn.role 두 값. 밖의 값은 그대로 적는다(입력 검증은 TurnInput 몫 — 여기서 죽지 않는다).
 ROLE_LABELS = {"USER": "사용자", "ASSISTANT": "도우미"}
+# 분류·답변·잡담 프롬프트의 `$history` 창 — 최근 3턴(사용자 말 3개와 그 뒤). 그보다 앞은 장기 기억(3턴마다 요약)에서 꺼내
+# `$memory` 로 싣는다(2026-10-23 사용자 결정). 자르는 것은 오케스트레이터다 — 기억이 아직 덮지 못한 턴만큼 창을 넓혀야 하는데
+# (요약이 늦거나 실패하면 그 사이 턴이 어느 프롬프트에도 없었다, 리뷰 재현) 그건 워커가 모른다. 워커는 받은 대로 렌더한다.
+# 건수가 아니라 턴으로 센다 — BE 최근 대화에는 턴 밖 노트("적용했어요.")도 섞여 한 턴이 두 건이 아니다(리뷰 재현).
+PROMPT_TURNS = 3
 # 인자표 파생 의도별 스키마 — intent.yaml·IntentRouter 와 **같은 함수**(한 표, 드리프트 차단). 도우미는 13종 + 장소 탐색
 _INTENTS = tool_specs_json(DIALOGUE_INTENTS, dialogue=True)  # 도우미만 묻는 인자(dialogue_only) 포함
 
@@ -45,6 +50,16 @@ def history_lines(recent_turns: Iterable) -> list[str]:
         if body:
             lines.append(f"- {ROLE_LABELS.get(turn.role, turn.role)}: {body}")
     return lines
+
+
+def last_turns(recent_turns: Iterable, turns: int) -> tuple:
+    """끝에서 `turns` 번째 사용자 말부터 끝까지(그 사이 도우미 답·노트 포함) — 사용자 말이 그보다 적으면 전부, 0 이하면 없음.
+    가려진 말(BE 가 text 없이 빼고 보낸다)이 있으면 한 턴 더 앞까지 겹칠 뿐이다 — 빠지는 쪽보다 안전하다."""
+    items = tuple(recent_turns)
+    if turns <= 0:
+        return ()
+    users = [i for i, t in enumerate(items) if t.role == "USER"]
+    return items[users[-turns]:] if len(users) >= turns else items
 
 
 def render_history(recent_turns: Iterable) -> str:

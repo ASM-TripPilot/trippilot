@@ -103,8 +103,8 @@ class LlmFeature(Enum):
     # 의도별 조회 결과(facts)만으로 사용자에게 보일 답변 문장을 짓는다 — 출구 게이트(길이·INV-3·연락처) +
     # 결정론 템플릿 폴백 필수(U8 DEC-U8-6 개정). 시각·순서는 facts 에 실린 스냅샷 값만 인용한다(INV-2).
     DIALOGUE_ANSWER = "DIALOGUE_ANSWER"
-    # 세션 10턴마다 최근 대화를 ≤20줄로 요약 — AI 자체 DB(ai_kb.dialogue_memory)에 저장되는 장기 기억.
-    # 실패·시한 부족이면 결정론 압축(compress_fallback)으로 전진한다(INV-4).
+    # 세션 3턴마다(답한 뒤 뒤에서) 아직 요약하지 않은 대화를 "종류: 내용" ≤20줄로 갱신 — AI 자체 DB(ai_kb.dialogue_memory)에
+    # 저장되는 장기 기억. 실패하면 이전 기억을 그대로 두고 다음 턴에 다시 한다(INV-4, 2026-10-23 개정 — 결정론 압축 폐지).
     DIALOGUE_MEMORY = "DIALOGUE_MEMORY"
     # 범위 밖 질문의 도구 계획(2‴, BR-AO-28) — 분류가 "정해진 의도 없음"으로 닫은 말에 읽기 전용 조회 도구(정보 핸들러
     # ≤2)와 인자를 고른다. 출력은 닫힌 도구 이름·문자열 인자뿐이라 장소를 만들 수 없다(INV-1) — 사용자에게 보일 문장은
@@ -121,6 +121,10 @@ class LlmFeature(Enum):
     # 2026-10-22 사용자 결정 — 먼저 답하고 뒤에서 찾아 저장, 다시 물으면 출처와 함께). 장소는 이미 등록된 곳이라 INV-1 그대로,
     # 값은 도우미 답에만 쓰고 일정 조립에는 넣지 않는다(INV-2). 출구 게이트가 형식·출처(검색이 단 인용 URL)를 본다. 배정이 곧 켜기.
     PLACE_FACT_LOOKUP = "PLACE_FACT_LOOKUP"
+    # 조회 도구로 답할 게 없는 여행 일반 지식("부산은 언제 가는 게 좋아?")을 UnknownHandlingAgent 가 LLM 일반 지식으로 이번 턴에 답한다
+    # (2026-10-23 사용자 결정 — 웹 검색 없이). 2‴ 계획이 gap KNOWLEDGE 로 닫은 말만. 가격·특정 날짜·연도는 게이트가, 등록되지 않은
+    # 장소 이름·시각은 오케스트레이터가 막고, 각주는 결정론("일반적인 정보라 다를 수 있어요"). 배정이 곧 켜기 — 미배정이면 종전 범위 밖.
+    DIALOGUE_KNOWLEDGE = "DIALOGUE_KNOWLEDGE"
 
 
 class ModelTier(Enum):

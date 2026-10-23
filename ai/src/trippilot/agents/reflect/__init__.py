@@ -12,5 +12,5 @@
 값 타입 `LlmImagePart` 를 이름으로 받지 않고 불투명 payload 로 전달하는 이유), providers
 import 금지(L-4), orchestrator import 금지(L-6).
 
-`AgentTask` 봉투 수렴은 넷 다 후속 — 라우팅 배선과 함께 (business-rules 미결 #8).
+`AgentTask` 봉투 수렴은 여섯 다 후속 — 라우팅 배선과 함께 (business-rules 미결 #8).
 """

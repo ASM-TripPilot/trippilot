@@ -44,6 +44,7 @@ from datetime import datetime
 from trippilot.llm_gateway.gates.base import GateOutcome, _load_json_object
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.edit import (
+    TRANSLATABLE_OPS,
     EditCommand,
     EditOp,
     EditTranslation,
@@ -184,6 +185,8 @@ class EditTranslationGate:
             op = EditOp(node.get("op"))
         except (ValueError, TypeError):
             raise ValueError(f"op가 EditOp 밖: {node.get('op')!r}") from None
+        if op not in TRANSLATABLE_OPS:  # 코드 전용 op(SET_DAY_AREAS) — 번역이 지어낸 재구성은 받지 않는다
+            raise ValueError(f"op가 번역 가능 op 밖: {op.value!r}")
         params, param_refs, anchor_refs = EditTranslationGate._parse_params(
             node.get("params"))
         raw_slots = node.get("affectedSlots")

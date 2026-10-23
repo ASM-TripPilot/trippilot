@@ -101,6 +101,8 @@ export interface ProposalDiffItem {
   slotKey: string;
   before?: ProposalSlotFace | null;
   after?: ProposalSlotFace | null;
+  /** 이 줄의 날(예 '1일차 · 10월 24일', 서버 문자열). 옛 서버엔 없다 — 없으면 날로 묶지 않는다. */
+  dayLabel?: string | null;
 }
 
 export interface Proposal {

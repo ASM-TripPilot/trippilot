@@ -148,6 +148,11 @@ planb.situation_sweep mode= phase= trips= skipped= failed= live=[] off=[] observ
 > - **`FINISHED status= waitMs= ageMs=`(신설)** — 산출이 끝날 때 한 줄. 기록조차 못 한 산출과 배포 종료 대기를 넘겨 시작 못 하고 버린 산출은 남기지 않는다.
 > - **판독**(켜기 6단계) — 낡음으로 닫힌 비율 = `count(EARLIER_STALE) / count(OPENED)` · '없음'으로 보인 비율 = `count(FINISHED ∧ ageMs > 120000) / count(FINISHED)` · 줄 대기는 `waitMs` 분포. `EARLIER_STALE` 의 두 갈래(기다리거나 계산하다 낡음 / 파드 종료·기록 실패로 멈춤)는 같은 `session` 의 `FINISHED` 유무로 가른다(상태는 `CANCELED` 또는 `null` — 버려진 대기 산출은 '멈춤'에 섞인다)(`functional-design/business-rules.md` BR-SA-19 개정 블록). 좌표·계정 id 는 싣지 않는다(SEC-SA-05).
 
+> **[개정 · 2026-10-23 — 구현 반영]** OBS-SA-01 — 켠 뒤 쓴 신호의 줄(TRIP-1608 · `backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/application/SituationSweep.kt`). 운영을 켠 첫 저녁(2026-10-23 20:15)에 알림 4건이 나갔다. 그런데 표본 줄이 쓰지 않은 신호만 실어, 앱에 간 휴무·영업시간 알림이 맞았는지 장소 이름·시각으로 대조할 수 없었다(운영 DB 는 로컬에서 못 본다).
+> - `on` 이면 쓴 출처의 양성 신호를 `planb.situation_live` 줄로 남긴다. 꼴은 표본 줄과 같다(tripId·source·kind·date·variant·severity·slot·name·at).
+> - 회차마다 다시 판정하므로 떠 있는 위험은 회차마다 다시 찍힌다. 새로 알린 수는 요약 줄의 `announced` 다.
+> - 표본 줄(`planb.situation_sample`)은 그대로 쓰지 않은 신호(dry-run·관찰 전용)만 싣는다.
+
 ## 5. 보안 (SEC-SA-\*)
 
 | ID | 요구 | 근거 |

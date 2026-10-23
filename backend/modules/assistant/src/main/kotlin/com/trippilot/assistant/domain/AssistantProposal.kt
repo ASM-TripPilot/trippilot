@@ -11,8 +11,18 @@ enum class ProposalStatus { PROPOSED, APPLIED, STALE, DISMISSED, EXPIRED, FAILED
 /** 비교 카드 한 칸. 시각·거리는 **검증된 값의 표시 문자열**이다(BR-U8-35). 소요시간은 없다(INV-U8-09). */
 data class ProposalSlotFace(val name: String, val startAt: String, val distanceRange: String?)
 
-/** @property change `ADDED`|`REMOVED`|`REPLACED`|`MOVED`|`RETIMED` */
-data class ProposalDiffItem(val change: String, val slotKey: String, val before: ProposalSlotFace?, val after: ProposalSlotFace?)
+/**
+ * @property change `ADDED`|`REMOVED`|`REPLACED`|`MOVED`|`RETIMED`
+ * @property dayLabel 그 줄이 놓인 날(`"1일차 · 10월 24일"`) — 여러 날을 고친 안을 앱이 날로 묶어 그린다. 이 칸 전에 저장된
+ *   제안과 여행 시작일을 모를 때는 null 이다.
+ */
+data class ProposalDiffItem(
+    val change: String,
+    val slotKey: String,
+    val before: ProposalSlotFace?,
+    val after: ProposalSlotFace?,
+    val dayLabel: String? = null,
+)
 
 /** [적용]하면 저장할 일정 — **전체 일자**다(편집이 전체 교체라서). 일정 편집 퍼사드의 입력과 같은 칸이다. */
 data class ProposalDay(val date: LocalDate, val slots: List<ProposalSlot>)

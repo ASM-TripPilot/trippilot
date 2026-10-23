@@ -36,6 +36,7 @@ from trippilot.llm_gateway.workers.edit_translation import (
 )
 from trippilot.domain.common import GeoPoint, PoiId, TraceId
 from trippilot.domain.edit import (
+    TRANSLATABLE_OPS,
     ApplyMode,
     EditCommand,
     EditOp,
@@ -263,7 +264,7 @@ def test_gate_dedups_slots_so_mode_is_not_inflated() -> None:
 def _pool_and_command(draw):
     pool = draw(candidate_pools().filter(lambda p: bool(p.poi_ids)))
     ids = sorted(pool.poi_ids, key=str)
-    op = draw(st.sampled_from(list(EditOp)))
+    op = draw(st.sampled_from(TRANSLATABLE_OPS))
     slots = draw(st.lists(st.sampled_from(ids), max_size=3, unique=True))
     return pool, op, tuple(slots)
 
@@ -280,6 +281,13 @@ def test_pbt_gate_output_is_always_closed_set_and_code_resolved(case) -> None:
     assert out.value.apply_mode is resolve_apply_mode(cmd)
     if op in {EditOp.REMOVE_SLOT, EditOp.CLEAR_DAY, EditOp.REORDER_DAY, EditOp.REPLAN} or len(slots) > 1:
         assert out.value.apply_mode is ApplyMode.CONFIRM_REQUIRED
+
+
+def test_code_only_op_from_the_translator_is_dropped() -> None:
+    """SET_DAY_AREAS 는 결정론 해석만 만든다 — 번역이 지어낸 재구성은 게이트가 버린다(spec 004 FR-007)."""
+    pool = _pool()
+    out = _apply(_raw(EditOp.SET_DAY_AREAS.value, []), pool)
+    assert out.value is None and out.error is not None
 
 
 @given(
@@ -356,15 +364,16 @@ def test_prompt_states_no_intent_reinterpretation_and_injects_op_closed_set() ->
     prompt, _ = PromptRegistry(_PROMPTS).render(_FEAT, _vars(_pool()))
     assert "의도를 다시 분류" in prompt
     assert "EDIT_SCHEDULE" in prompt
-    for op in EditOp:
+    for op in TRANSLATABLE_OPS:
         assert op.value in prompt  # 서버 주입 closed-set 목록
+    assert EditOp.SET_DAY_AREAS.value not in prompt  # 코드 전용 op 는 번역에 보이지 않는다(spec 004)
 
 
 def test_op_guide_covers_every_op_and_prompt_maps_kind_only_requests() -> None:
     """종류만 말한 추가·교체가 ADD_SLOT·REPLACE_SLOT 으로 이어지게 뜻·자리를 싣는다."""
     from trippilot.llm_gateway.workers.edit_translation import _OP_GUIDE
 
-    assert set(_OP_GUIDE) == set(EditOp)
+    assert set(_OP_GUIDE) == set(TRANSLATABLE_OPS)
     prompt, _ = PromptRegistry(_PROMPTS).render(_FEAT, _vars(_pool()))
     assert "카페 하나 추가해줘" in prompt and "후보 목록 안에서 고르는 것은 지어내기가 아닙니다" in prompt
     assert "- ADD_SLOT: 후보 1곳을 그 날에 추가" in prompt

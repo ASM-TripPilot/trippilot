@@ -671,8 +671,8 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         override fun ground(poiIds: List<UUID>) =
             poiIds.filter { it in known }.map { GroundedPlace(it, "곳", 33.0, 126.0, "카페", null, null) }
     }
-    fun appliedBody(slotPoi: UUID) = """
-        {"status":"APPLIED","apply_mode":"AUTO_APPLY","command":{"op":"REPLACE_SLOT","params":{},"affected_slots":[]},
+    fun appliedBody(slotPoi: UUID, command: String = """{"op":"REPLACE_SLOT","params":{},"affected_slots":[]}""") = """
+        {"status":"APPLIED","apply_mode":"AUTO_APPLY","command":$command,
          "itinerary":{"days":[{"date":"2026-08-01","slots":[
            {"poi_id":"$slotPoi","start_at":"10:30:00","end_at":"11:30:00","distance_range":"약 630m · 도보 추정"}]}],
           "explanations":{},"solve_mode":"OR_TOOLS","is_fallback":false},
@@ -708,6 +708,17 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         slot.startAt shouldBe LocalTime.of(10, 30) // 상대 조립이 낸 시각(INV-2)
         slot.distanceRange shouldBe "약 630m · 도보 추정"
         server.verify()
+    }
+
+    /** 상대가 발화를 무엇으로 읽었나 — 카드가 "1일차는 종로…"로 되읽는다. 열린 맵이라 문자열이 아닌 값은 옮기지 않는다. */
+    "편집 제안 — 상대가 해석한 명령을 되울림으로 싣는다(문자열이 아닌 값·UUID 가 아닌 장소는 버린다)" {
+        val (adapter, server) = fixture(groundingPool(newPoi))
+        val echoed = """{"op":"SET_DAY_AREAS","params":{"2026-08-01":"종로","2026-08-02":"강남구","radius_m":800},"affected_slots":["$poi","슬롯"]}"""
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/edit"))
+            .andRespond(withSuccess(appliedBody(newPoi, echoed), MediaType.APPLICATION_JSON))
+
+        adapter.proposeEdit(editInput(utterance = "1일차는 종로 2일차는 강남구쪽으로 바꿔줘")).command shouldBe
+            EditCommand("SET_DAY_AREAS", mapOf("2026-08-01" to "종로", "2026-08-02" to "강남구"), listOf(poi))
     }
 
     "편집 제안 — 구조화 교체는 command 로 싣는다(발화 없음)" {

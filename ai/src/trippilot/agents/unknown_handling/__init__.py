@@ -12,5 +12,5 @@
 경계 (BR-AF-10): 형제 agents import 금지(L-2 — 어댑터도 형제다, 저장소는 포트 타입으로 주입받는다), LlmPort 직접 import
 금지(L-3 — 웹 검색은 게이트웨이 워커 `PlaceFactLookupWorker` 경유만), providers import 금지(L-4), orchestrator import 금지(L-6).
 
-`AgentTask` 봉투 수렴은 다섯 다 후속(business-rules 미결 #8).
+`AgentTask` 봉투 수렴은 여섯 다 후속(business-rules 미결 #8).
 """
