@@ -195,6 +195,9 @@ class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
         // **키 이름을 못 박는다.** snake_case 전략이 빠지거나 필드명이 바뀌면 `sourceRef` 로 나가고,
         // 상대의 content_id 조인은 예외 없이 **0건 매칭**이 된다 — 조용히 틀리는 쪽이다.
         ingested["source_ref"].asText() shouldBe "E2E-126508"
+        // 구 코드도 같은 이유로 키를 못 박는다 — `regionCode` 로 나가면 상대의 "구 안 우선"이 조용히 꺼진다.
+        // 값은 주소로 붙이는데 이 문서에는 주소가 없어 null 이다(키는 늘 나간다).
+        ingested.has("region_code") shouldBe true
 
         // 같은 문서를 다시 넣어도 늘지 않는다 — 수집은 매일 돈다.
         val (_, second) = call(HttpMethod.POST, "/internal/pois/proposals", token, doc)
