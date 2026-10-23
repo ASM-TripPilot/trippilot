@@ -40,7 +40,7 @@ class WeatherAlertsPropertyTest : StringSpec({
             val metroGun = c.place.provinces.single().wide
             val ownZone = metroGun && c.place.stem in OWN_ZONE_GUN // 공식 목록에 제 구역이 있는 광역시의 군 — 목록의 권역이 덮지 않는다
             val expected = when {
-                c.area.excluding -> excludedExpected(land)
+                c.area.excluding -> excludedExpected(land, c.place)
                 land.isEmpty() -> Match.MISS
                 named -> Match.HIT
                 // 광역시의 군 — 권역 줄이면 줄 전체(표 밖 권역 · 제 구역이 없는 군의 목록 권역)
@@ -59,13 +59,13 @@ class WeatherAlertsPropertyTest : StringSpec({
      * 제외 줄은 위 생성기에서 다섯에 하나라 제 하위 권역만 뺀 줄(전제)이 200회 중 평균 8회뿐이고 0회인 시드도 있다(실측 — 시드 2,000개의
      * 5~95 백분위 4~13회) — 같은 생성기를 제외 줄로만 돌린다(평균 43회 · 5~95 백분위 33~53회 · 최소 21회).
      */
-    "제외 줄 — 제 시군 전체 이름을 빼면 안 걸림, 제 하위 권역만 빼면 절대 안 걸림이 아니다(모름), 둘 다 없으면 걸림(G-SA-19)" {
+    "제외 줄 — 제 시군 전체 이름이나 하위 권역 전부를 빼면 안 걸림, 하위 권역 일부만 빼면 절대 안 걸림이 아니다(모름), 둘 다 없으면 걸림(G-SA-19·24)" {
         checkAll(cases.map { it.copy(area = it.area.copy(excluding = true)) }) { c ->
             val got = WeatherAlerts.match(c.area, c.place)
             val land = c.zones.filter { it.kind != Kind.SEA }
             withClue("${c.area} × ${c.place}") {
-                got shouldBe excludedExpected(land)
-                if (land.none { it.kind == Kind.OWN } && land.any { it.kind == Kind.PART }) got shouldNotBe Match.MISS
+                got shouldBe excludedExpected(land, c.place)
+                if (land.none { it.kind == Kind.OWN } && land.any { it.kind == Kind.PART } && !allParts(land, c.place)) got shouldNotBe Match.MISS
             }
         }
     }
@@ -101,11 +101,18 @@ private val LISTED_REGIONS = mapOf(Province.INCHEON to listOf("인천", "인천�
  * 생성기의 목적지를 덮지 않아(아래 생성기) 나열 밖이다 — 덮는 섬(시군 전체면 안 걸림 · 일부면 걸림)과 시군 전체를 뺐어도 광역 줄 안의 그
  * 시군 섬이 남는 경우(모름 — [WeatherAlerts.LINE_ISLANDS])는 리터럴 표와 공식 목록 대조가 본다.
  */
-private fun excludedExpected(land: List<Zone>): Match = when {
+private fun excludedExpected(land: List<Zone>, place: Place): Match = when {
     land.any { it.kind == Kind.OWN } -> Match.MISS
+    allParts(land, place) -> Match.MISS // 하위 권역을 전부 뺐다 — 시군 전체(G-SA-24)
     land.any { it.kind == Kind.PART } -> Match.UNSURE
     else -> Match.HIT
 }
+
+/** 나열이 그 시군의 공식 하위 권역을 전부 담는가 — 오라클은 공식 목록에서 읽는다(구현 표 `CITY_PARTS` 를 다시 부르지 않는다). */
+private fun allParts(land: List<Zone>, place: Place): Boolean =
+    OFFICIAL_PARTS[place.provinces.single()]?.get(place.stem)?.let { parts -> land.map { it.name }.containsAll(parts) } == true
+
+private val OFFICIAL_PARTS = officialCityParts()
 
 /**
  * 광역 하나(도 · 군이 있는 광역시) · 그 광역의 시군·군 목적지 하나 · 그 광역 줄(하위 구역 1~4 · 다섯에 하나는 제외 줄). 목적지 코드는

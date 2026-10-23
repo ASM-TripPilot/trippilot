@@ -79,6 +79,21 @@ class WeatherAlertsZoneListTest : StringSpec({
         metroGun.filter { stem -> rows.any { it.name.startsWith(stem) } }.toSet() shouldBe WeatherAlerts.OWN_ZONE_GUN
     }
 
+    "시군 하위 권역 표는 목록과 같고, 하위 권역을 전부 뺀 제외 줄은 그 시군에 안 걸림이다 — 40개 시군 · 88개(규칙 9 · G-SA-24)" {
+        val fromList = officialCityParts()
+        fromList.values.sumOf { cities -> cities.values.sumOf { it.size } } shouldBe 88
+        WeatherAlerts.CITY_PARTS shouldBe fromList
+        fromList.forEach { (province, cities) ->
+            val head = heads.single { Province.ofKmaName(it.name) == province }.name
+            cities.forEach { (city, parts) ->
+                val place = Place("00000", setOf(province), city, wide = false, label = city)
+                withClue("$head(${parts.joinToString()} 제외) × $city") {
+                    WeatherAlerts.match(WarningArea(head, parts.toList(), excluding = true), place) shouldBe Match.MISS
+                }
+            }
+        }
+    }
+
     "묶음 하나를 한 줄로 읽으면 WARN 은 그 묶음의 다른 광역 구역(관서 묶음 꼴)뿐이다 — 모르는 이름은 없다" {
         groups.forEach { (head, zones) ->
             withClue(head.name) {
@@ -145,12 +160,23 @@ class WeatherAlertsZoneListTest : StringSpec({
 private val NOT_READ_BY_NAME = listOf("서귀포시(산지 제외)", "서귀포시서부", "서귀포시남부", "서귀포시동부", "서귀포시중산간")
 
 /** 공식 목록의 육상 구역 한 줄 — [group] 은 코드 앞 네 자리(관서 묶음), [head] 는 묶음 머리(코드 끝 `0000`). */
-private data class OfficialZone(val code: String, val name: String) {
+internal data class OfficialZone(val code: String, val name: String) {
     val group: String = code.take(4)
     val head: Boolean = code.endsWith("0000")
 }
 
-private fun officialZones(): List<OfficialZone> =
+internal fun officialZones(): List<OfficialZone> =
     object {}.javaClass.getResource("/public-data/kma_warning_zones_20260601.csv")!!.readText().lines().drop(1).filter { it.isNotBlank() }
         .map { line -> line.split(',').let { (_, code, name) -> OfficialZone(code, name) } }
         .filter { it.code.startsWith("L") }
+
+/** 공식 목록의 시군 하위 권역 — 광역 → 시군 어간 → 잎 구역(시군 줄 `00` 아래 줄). 이름으로 맞추는 시군([WeatherAlerts.CITY_STEMS])만 본다. */
+internal fun officialCityParts(): Map<Province, Map<String, Set<String>>> {
+    val rows = officialZones()
+    val heads = rows.filter { it.head }
+    return rows.filterNot { it.head || it.code.endsWith("00") }.mapNotNull { zone ->
+        val province = Province.ofKmaName(heads.single { it.group == zone.group }.name) ?: return@mapNotNull null
+        val city = rows.single { it.code == zone.code.take(6) + "00" }.name
+        if (city in WeatherAlerts.CITY_STEMS[province].orEmpty()) Triple(province, city, zone.name) else null
+    }.groupBy { it.first }.mapValues { (_, parts) -> parts.groupBy({ it.second }, { it.third }).mapValues { it.value.toSet() } }
+}
