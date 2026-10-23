@@ -657,3 +657,16 @@
 - **입력**: BE 가 `/ai/v1/reflection/share-card` 를 부르기 시작했다(#1564, 응답을 그대로 앱에 넘긴다). 공유 프롬프트는 숫자를 `{visit_count}`·`{distance_km}` 로 쓰라고 하는데 채우는 쪽이 AI·BE·FE 어디에도 없었다 — 앱이 붙이면 SNS 문구에 중괄호째 나간다.
 - **무엇을 했나**: ① `composer.bind_share_card_copy` — 회고 카드와 같은 바인딩(`_binder` 로 공유, 조사 맞춤 포함). 못 채우는 캡션은 정적 폴백 + `FallbackEvent(reason=share_card_unbound_placeholder)`, 못 채운 태그는 뺀다 ② 경계(`reflection_share_card`)가 응답 전에 부른다 ③ 공유 게이트가 `#{region}여행` 을 파생으로 받는다(회고 게이트 #1408 과 같은 `_BOUND_TAG`) — 종전엔 HASHTAG_OUT 하나로 문구 전체가 폴백이었다 ④ 프롬프트 0.1.1 — 값 없는 `{distance_km}`·사진 0장의 `{photo_count}` 금지.
 - **지키는 것**: 와이어·openapi 무변경. 변이 3종(경계 바인딩 제거·`{region}` 태그 허용 제거·못 채운 캡션 통과) 전부 빨강.
+
+## 2026-10-22 — UnknownHandlingAgent 를 agents/ 로 — 넷과 같은 자리·같은 꼴 (BR-AF-11 5종 개정)
+**Timestamp**: 2026-10-22 · 브랜치 `refactor/unknown-handling-agent-package` · **승인 대기**(같은 PR 머지 = 승인)
+- **입력**: 사용자 — "agent들은 다 한곳에다가 두자. 다른 4개의 에이전트와 동일하게 취급되게 4개가 짜여진대로 맞추어서 두자!" + 결정 2건: 진입점은 넷처럼 `run(<Task>)` 하나로 통일 · FD 의 "Agent 4종" 도 이 PR 에서 5종으로.
+- **무엇을 했나**: ① `orchestrator/unknown_handling.py` → `agents/unknown_handling/agent.py` + `__init__.py`(넷과 같은 틀 — 모듈 구성·경계 L-2/3/4/6·re-export 없음) ② `known`·`request` 두 진입점 → `run(UnknownTask) -> UnknownOutcome(facts, pending)` 하나 — 찾았음·찾는 중·없음 셋은 그대로 구분(핸들러 각주·칩이 이걸로 갈린다), 순서 판단("저장된 값 → 없으면 뒤에서")은 에이전트 몫으로 ③ `InMemoryPlaceFactStore` → `agents/adapters/memory_place_fact_store.py`(`memory_memory_store.py` 와 같은 자리) ④ 소비처 import 교체(`api/dialogue.py`·`dialogue_handlers._web_facts`) ⑤ 테스트 `tests/agents/unknown_handling/`, 폴백 문장 PBT 는 핸들러 몫이라 `tests/orchestrator/test_web_sentence.py` ⑥ 로스터 — `agents/__init__.py`·README「에이전트 5종」·`ai/claude.md`·BR-AF-11(`ROUTING_TABLE` 행은 아니고 GET_POI_INFO 핸들러가 부르는 보조 위임이지만 발화로 기동되므로 Background 가 아니라 이 범주의 다섯째)·미결 #8·business-logic-model §1 배치표·assistant-dialogue FD 미결 #3 의 "4종" 표기(미결 #8 을 가리키는 줄). ⑦ 저장소 구현 2종 계약 테스트는 `tests/agents/adapters/test_place_fact_stores.py`(`test_memory_stores.py` 선례).
+- **지키는 것**: 동작·와이어·`PLACE_FACT_LOOKUP` 배정 무변경(개발 서버는 미배정으로 꺼진 채 — 켜기는 웹 검색 과금 확인 대기, 이 PR 과 무관) · 아키텍처 테스트 L-1~L-6 그대로 통과(에이전트는 게이트웨이 워커·ports 만 import) · `submit=` 주입(테스트가 "이번 턴은 기다리지 않는다"를 보이는 손잡이) 유지.
+- **남긴 것**: `envelope.py` 는 만들지 않았다(넷 다 소비처 0 인 미완 수렴 · 산출 타입 없음 — 미결 #8 과 함께) · 형제 패키지 docstring 의 "넷 다 후속" 표기는 손대지 않았다 · 로거 이름은 모듈 경로를 따라 `trippilot.agents.unknown_handling.agent` 가 된다(메시지 텍스트·스레드 이름은 그대로) · 메모리 저장소는 Pg 의 쓰기 때 만료 정리를 거울하지 않는다(docstring 에 적음).
+
+## 2026-10-23 — 시기를 묻는 말이 지역 추천으로 가던 회귀 (BR-AO-31 개정)
+**Timestamp**: 2026-10-23 · 브랜치 `fix/assistant-region-timing-questions` · **승인 대기**(같은 PR 머지 = 승인)
+- **입력**: 지식형 추천 설계 중인 세션이 "부산 여행은 언제 가는 게 좋아?"의 경로를 물었다. develop 프롬프트로 실측(luna, ×3): 분류가 그 말을 3/3 RECOMMEND_REGION 으로(#1579 의 회귀), "몇 월"·"좋은 시기" 꼴도 대부분 같은 쪽. 분류 경로엔 지역 이름 가드가 없어 지역 고르기 핸들러가 엉뚱한 지역 목록이나 취향 되묻기를 냈다. 계획 단계는 12회 중 10회 gap KNOWLEDGE.
+- **무엇을 했나**: `_not_region_choice`(시기를 묻거나 표 지역을 말함) — 분류가 지역 고르기를 고르면 null 처럼 계획 단계로, 계획이 고르면 시기 질문은 호출을 버리고 남는 게 없으면 gap KNOWLEDGE. 프롬프트 판 무변경(분류 null 과 같은 흐름이라).
+- **지키는 것**: gap 라벨 KNOWLEDGE 와 뜻 무변경(그 라벨을 받을 쪽은 다른 세션이 사용자와 정한다).

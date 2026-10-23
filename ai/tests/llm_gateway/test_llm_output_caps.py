@@ -158,6 +158,7 @@ def test_effort_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         LlmFeature.DIALOGUE_SQL: "none",  # 팬아웃 안(≤3s)의 짧은 변환
         LlmFeature.DIALOGUE_SMALLTALK: "none",  # 답변과 같은 자리(≤3.5s)
         LlmFeature.PLACE_FACT_LOOKUP: "low",  # 턴 밖(뒤에서) — 검색 결과에서 값 셋을 고른다
+        LlmFeature.PREFERENCE_SCORING: "none",  # 닫힌 목록에 점수만 — 사고 없이 묶음 p50 2.46 → 1.73s, 쌍 정합 같음(2026-10-23)
     }.get(feature)
     assert [r.effort for r in llm.requests] == [expected]
 
@@ -190,18 +191,19 @@ def test_effort_survives_timeout_retry() -> None:
 
 
 def test_default_chunk_cap_fits_scoring_output_budget() -> None:
-    """기본 설정에서 청크 상한 × 건당 추정 ≤ PREFERENCE_SCORING 출력 상한 — 실측 실패 구간(32건~) 밖."""
+    """기본 설정에서 청크 상한 × 건당 추정 + 사고 몫 ≤ PREFERENCE_SCORING 출력 상한 — 잘려서 폐기되는 구간 밖."""
+    from trippilot.llm_gateway.workers.preference import SCORE_THINKING_RESERVE_TOKENS
     cap = score_chunk_cap(_CFG)
-    assert cap <= 29  # 실측: 29건 9/10 성공, 32건 1/10
+    assert cap * SCORE_TOKENS_PER_ITEM + SCORE_THINKING_RESERVE_TOKENS <= _CFG.max_tokens_for(LlmFeature.PREFERENCE_SCORING)
     assert cap >= _CFG.score_chunk_min
 
 
 def test_scoring_cap_leaves_room_for_thinking_without_growing_the_chunk() -> None:
     """출력 상한을 올린 이유는 사고 토큰(fable)이지 청크를 키우려는 게 아니다 — 2026-10-13 DEV 45회 중 3회가
-    정확히 1024 에서 잘렸다. 청크는 종전 25 그대로, 청크 기대 출력 + 사고 몫 ≤ 상한."""
+    정확히 1024 에서 잘렸다. 번호 출력(0.4.0)은 건당 16 이라 역산 64 — 상한은 chunk_max 40 이 정한다."""
     from trippilot.llm_gateway.workers.preference import SCORE_THINKING_RESERVE_TOKENS
     cap_tokens = _CFG.max_tokens_for(LlmFeature.PREFERENCE_SCORING)
-    assert score_chunk_cap(_CFG) == 25
+    assert score_chunk_cap(_CFG) == _CFG.score_chunk_max
     assert score_chunk_cap(_CFG) * SCORE_TOKENS_PER_ITEM + SCORE_THINKING_RESERVE_TOKENS <= cap_tokens
     # 상한을 1024 로 되돌리는 설정이 와도 청크 0·폭증 없이 절반 몫만 뺀다
     small = C1Config(model_ids=_CFG.model_ids,

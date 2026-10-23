@@ -19,8 +19,9 @@ import java.time.LocalDate
  *
  * 매칭 규칙: 하위 구역 이름이 시군 어간으로 시작하면 그 구역 / 광역 목적지는 그 광역 줄 전체 / 바다·해상 구역은 무시 /
  * 광역 별칭(강원도↔강원특별자치도 · 전라북도↔전북특별자치도) / `(…제외)` 는 나열한 곳을 뺀 광역 전체(시군 전체를 뺐을 때만 그 시군이
- * 빠진다) / 섬·관서 묶음 구역은 닫힌 표(줄의 광역보다 먼저) / 표에 없는 최상위 이름과 도의 시군 × 산지 권역 · 도의 시군·광역시의 군 × 표에
- * 없는 하위 구역 이름 · 관서 묶음 줄 × 그 묶음의 다른 광역 목적지(이름이 안 나온 줄) · 제외 줄 × 그 하위 권역만 뺀 시군은 모름(UNSURE —
+ * 빠진다) / 섬·관서 묶음 구역은 닫힌 표(줄의 광역보다 먼저) / 다른 광역 줄은 안 걸림(t6 는 행정 광역 줄 — 관서 묶음 꼴의 흔적이 보이면 종전대로) /
+ * 표에 없는 최상위 이름과 도의 시군 × 산지 권역 · 도의 시군·광역시의 군 × 표에 없는 하위 구역 이름 · 제외 줄 × 그 하위 권역만 뺀 시군 · 제외 줄 ×
+ * 시군 전체를 뺐어도 광역 줄 안의 그 시군 섬이 남는 시군 · 관서 묶음 꼴 줄 × 그 묶음의 다른 광역 목적지는 모름(UNSURE —
  * '특보 없음'으로 확인하지 않는다). 공식 특보구역 목록 대조는 [WeatherAlertsZoneListTest] 가 본다.
  */
 class WeatherAlertsTest : StringSpec({
@@ -158,8 +159,11 @@ class WeatherAlertsTest : StringSpec({
             listOf("북동산지")
         WeatherAlerts.unknownNames(WarningArea("경상북도", listOf("북동산지"), excluding = true)) shouldBe listOf("북동산지")
         WeatherAlerts.unknownNames(WarningArea("부산", listOf("동해안권", "부산동부"))) shouldBe listOf("동해안권") // 군(기장)이 있는 광역시
-        WeatherAlerts.unknownNames(WarningArea("경기도", listOf("강화", "백령도.대청도", "김포"))) shouldBe emptyList() // 관서 묶음 · 섬 구역
-        WeatherAlerts.unknownNames(WarningArea("경기도", listOf("강화군", "옹진군"))) shouldBe emptyList() // 접미가 붙은 관서 묶음 구역
+        // 제 광역 줄 밖에 나온 표 이름 — 실응답에서는 늘 제 광역 줄에 나왔다(관서 묶음 꼴 = t6 형식 변화 · G-SA-18)
+        WeatherAlerts.unknownNames(WarningArea("경기도", listOf("강화", "백령도.대청도", "김포"))) shouldBe listOf("강화", "백령도.대청도")
+        WeatherAlerts.unknownNames(WarningArea("경기도", listOf("강화군", "옹진군"))) shouldBe listOf("강화군", "옹진군") // 접미가 붙어도
+        WeatherAlerts.unknownNames(WarningArea("인천", listOf("강화", "옹진", "인천영종"))) shouldBe emptyList() // 제 광역 줄 — 실응답 꼴
+        WeatherAlerts.unknownNames(WarningArea("전라남도", listOf("흑산도.홍도", "목포"))) shouldBe emptyList() // 제 광역의 섬
         WeatherAlerts.unknownNames(WarningArea("서울", listOf("도심권"))) shouldBe emptyList() // 줄 전체로만 맞춘다
         WeatherAlerts.unknownNames(WarningArea("제주도", listOf("서귀포시동부"))) shouldBe emptyList()
         WeatherAlerts.unknownNames(WarningArea("동해중부먼바다")) shouldBe emptyList()
@@ -208,6 +212,10 @@ class WeatherAlertsTest : StringSpec({
         val ulju = WeatherAlerts.placeOf("31710", "울주군")!!
         val uljin = WeatherAlerts.placeOf("47930", "울진군")!!
         val gyeongbukWide = WeatherAlerts.placeOf("47", "경상북도")!!
+        val boryeong = WeatherAlerts.placeOf("44180", "보령시")!!
+        val geumsan = WeatherAlerts.placeOf("44710", "금산군")!!
+        val taean = WeatherAlerts.placeOf("44825", "태안군")!!
+        val yeoju = WeatherAlerts.placeOf("41670", "여주시")!!
 
         val gyeongbuk = WarningArea("경상북도", listOf("영덕", "포항", "울진평지", "울진산지", "경주동부"))
         val mountains = WarningArea("강원도", listOf("강원중부산지", "강원남부산지"))
@@ -295,22 +303,26 @@ class WeatherAlertsTest : StringSpec({
             Triple(WarningArea("경기도", listOf("강화군", "김포")), ganghwa, HIT),
             Triple(WarningArea("경기도", listOf("옹진군")), ongjin, HIT),
             Triple(WarningArea("경상북도", listOf("군위군")), gunwi, HIT),
-            // 규칙 4 — 관서 묶음 줄은 그 묶음의 다른 광역 목적지에, 그 구역 이름이 안 나오면 모름(t6 의 광역 줄이 관서 묶음인지 아직 모른다)
-            Triple(WarningArea("경상남도"), haeundae, UNSURE), // 하위 구역 없는 줄
-            Triple(WarningArea("경상남도"), ulju, UNSURE),
-            Triple(WarningArea("충청남도"), yuseong, UNSURE),
-            Triple(WarningArea("경상북도"), gunwi, UNSURE),
-            Triple(WarningArea("경기도"), incheon, UNSURE), // 광역 목적지 — 강화·옹진이 든다
-            Triple(WarningArea("경상북도"), dalseong, MISS), // 묶음의 구역(군위)이 덮지 않는 목적지
+            // 규칙 4 — t6 의 광역 줄은 행정 광역이다(G-SA-18 — 실응답 2026-10-16~22: 강화·옹진은 `인천(…)`, 군위는 `대구(군위)`, 대전·울산은
+            // 제 줄). 관서 묶음 줄(경기·충남·경북·경남)도 그 묶음의 다른 광역 목적지에 안 걸린다 — 다만 그 꼴의 흔적(그 묶음의 다른 광역 구역 이름 ·
+            // 낯선 이름)이 보이면 G-SA-18 전 규칙대로 모름이다
+            Triple(WarningArea("경상남도"), haeundae, MISS), // 하위 구역 없는 줄
+            Triple(WarningArea("경상남도"), ulju, MISS),
+            Triple(WarningArea("충청남도"), yuseong, MISS),
+            Triple(WarningArea("경상북도"), gunwi, MISS),
+            Triple(WarningArea("경기도"), incheon, MISS), // 광역 목적지
+            Triple(WarningArea("경상북도"), dalseong, MISS),
             Triple(WarningArea("경기도", listOf("가평")), yeonsu, MISS),
             Triple(WarningArea("경상남도"), pohang, MISS), // 묶음 밖 광역
-            Triple(WarningArea("경상남도", listOf("거제"), excluding = true), ulju, UNSURE), // 덮는 구역을 빼지 않은 제외 줄
-            Triple(WarningArea("경기도", listOf("가평"), excluding = true), ganghwa, UNSURE),
-            Triple(WarningArea("경기도", listOf("강화군"), excluding = true), ganghwa, MISS), // 덮는 구역을 다 뺐다
-            Triple(WarningArea("경기도", listOf("옹진"), excluding = true), ongjin, UNSURE), // 옹진의 섬 구역(서해5도 …)이 남는다
+            Triple(WarningArea("경상남도", listOf("거제"), excluding = true), ulju, MISS),
+            Triple(WarningArea("경기도", listOf("가평"), excluding = true), ganghwa, MISS),
+            Triple(WarningArea("경기도", listOf("강화군"), excluding = true), ganghwa, MISS),
+            Triple(WarningArea("경기도", listOf("옹진"), excluding = true), ongjin, UNSURE), // 관서 묶음 꼴 — 옹진의 섬 구역(서해5도 …)이 남는다
             Triple(WarningArea("경상남도", listOf("부산동부", "부산중부", "부산서부"), excluding = true), haeundae, MISS),
-            Triple(WarningArea("경기도", listOf("가평", "교동도")), ganghwa, UNSURE), // 표에 없는 이름이 낀 줄
-            Triple(WarningArea("경상북도", listOf("경북북동산지")), gunwi, UNSURE), // 권역이 낀 줄
+            Triple(WarningArea("경기도", listOf("가평", "교동도")), ganghwa, UNSURE), // 낯선 이름이 낀 묶음 줄 — 관서 묶음 꼴일 수 있다(교동도는 강화군 교동면)
+            Triple(WarningArea("경상남도", listOf("부산동부"), excluding = true), ulju, UNSURE), // 관서 묶음 꼴 제외 줄 — 울산 권역은 빼지 않았다
+            Triple(WarningArea("경상남도", listOf("부산동부"), excluding = true), haeundae, UNSURE), // 부산중부·서부가 남는다
+            Triple(WarningArea("경상북도", listOf("경북북동산지")), gunwi, MISS), // 권역이 낀 줄도 다른 광역(대구)이다
             Triple(WarningArea("경기도", listOf("가평", "양평")), ganghwa, MISS), // 아는 이름뿐 — 그 구역이 아니다
             // 규칙 7 — 광역시의 군은 어간으로, 권역 줄(부산동부)이면 줄 전체
             Triple(WarningArea("인천", listOf("옹진")), ganghwa, MISS),
@@ -339,7 +351,12 @@ class WeatherAlertsTest : StringSpec({
             Triple(WarningArea("부산", listOf("동해안권")), gijang, UNSURE),
             Triple(WarningArea("부산", listOf("동해안권"), excluding = true), gijang, HIT), // 제외 줄은 그대로
             Triple(WarningArea("대구", listOf("달성북부")), dalseong, HIT),
-            Triple(WarningArea("대구", listOf("대구중부")), dalseong, HIT), // 권역 줄 — 줄 전체
+            Triple(WarningArea("대구", listOf("대구중부")), dalseong, MISS), // 제 구역(달성 · 달성북부 · 달성남부)이 있는 군 — 권역이 덮지 않는다
+            Triple(WarningArea("대구", listOf("대구중부")), gunwi, MISS),
+            Triple(WarningArea("인천", listOf("인천", "인천영종")), ganghwa, MISS), // `인천`(L1110100)도 그 광역의 권역이다
+            Triple(WarningArea("인천", listOf("인천영종", "교동권")), ganghwa, UNSURE), // 낯선 이름은 그대로 모름
+            Triple(WarningArea("인천", listOf("인천서부권")), ganghwa, HIT), // 표 밖 권역 — 범위를 모르니 규칙 7 그대로 줄 전체
+            Triple(WarningArea("대구", listOf("인천영종")), dalseong, UNSURE), // 남의 광역 권역 이름은 거르지 않는다(낯선 이름)
             Triple(WarningArea("대구", listOf("군위", "남부권")), dalseong, UNSURE),
             Triple(WarningArea("인천", listOf("옹진", "서해5도")), ganghwa, MISS), // 다른 군·섬 구역뿐
             // 규칙 9 — 제외 줄은 시군 전체 이름(어간 · 어간+시/군)일 때만 그 시군을 뺀다. 개편 목록은 시군을 권역으로 나눴다 — 하위 권역만
@@ -363,12 +380,50 @@ class WeatherAlertsTest : StringSpec({
             Triple(WarningArea("제주도", listOf("추자도"), excluding = true), jejuCity, HIT),
             Triple(WarningArea("제주도", listOf("추자도"), excluding = true), jeju, HIT), // 광역 목적지 — 나머지 제주가 걸린다(규칙 5)
             Triple(WarningArea("전라남도", listOf("거문도.초도"), excluding = true), yeosu, HIT),
+            // 거꾸로 시군 전체 이름을 빼도 광역 줄 안의 그 시군 섬(거문도.초도 = 여수)은 남는다 — 모름(실응답: 섬이 `전라남도(…)` 안에 나온다)
+            Triple(WarningArea("전라남도", listOf("여수"), excluding = true), yeosu, UNSURE),
+            Triple(WarningArea("전라남도", listOf("여수", "거문도.초도"), excluding = true), yeosu, MISS),
+            Triple(WarningArea("전라남도", listOf("여수"), excluding = true), mokpo, HIT),
+            Triple(WarningArea("전라남도", listOf("신안군"), excluding = true), sinan, UNSURE), // 흑산도.홍도(= 신안)가 남는다
+            Triple(WarningArea("전라남도", listOf("신안군", "흑산도.홍도"), excluding = true), sinan, MISS),
+            Triple(WarningArea("제주도", listOf("제주시"), excluding = true), jejuCity, UNSURE), // 추자도(= 제주시)가 남는다
+            Triple(WarningArea("인천", listOf("옹진"), excluding = true), ongjin, MISS), // 서해5도는 제 줄로 나온다 — 인천 줄의 섬이 아니다
             Triple(WarningArea("전라남도", listOf("흑산도.홍도"), excluding = true), sinan, HIT),
             Triple(WarningArea("경상북도", listOf("울릉도.독도"), excluding = true), gyeongbukWide, HIT), // 시군 전체인 섬은 그 시군만 — 나머지 경북
-            // 관서 묶음 줄(규칙 4)도 덮는 구역을 전체 이름으로 다 뺐을 때만 안 걸림 — 구역의 일부만 뺐으면 모름
+            // 관서 묶음 꼴 제외 줄(제 광역 밖 이름을 뺀다) — 덮는 구역을 전체 이름으로 다 뺐을 때만 안 걸림(규칙 4) · 제 광역 줄이면 규칙 9 그대로다
             Triple(WarningArea("경기도", listOf("강화동부"), excluding = true), ganghwa, UNSURE),
             Triple(WarningArea("경상북도", listOf("군위남부"), excluding = true), gunwi, UNSURE),
-            Triple(WarningArea("경상북도", listOf("군위군"), excluding = true), gunwi, MISS),
+            Triple(WarningArea("인천", listOf("강화동부"), excluding = true), ganghwa, UNSURE),
+            Triple(WarningArea("대구", listOf("군위남부"), excluding = true), gunwi, UNSURE),
+            // 실응답 줄(2026-10-16~22 특보 통보문 — weather-context `public-data/kma_t6_wrn_msg_20261016_20261022.txt`)
+            Triple(WarningArea("인천", listOf("옹진"), excluding = true), ganghwa, HIT),
+            Triple(WarningArea("인천", listOf("강화"), excluding = true), ganghwa, MISS),
+            Triple(WarningArea("대구", listOf("군위")), gunwi, HIT),
+            Triple(WarningArea("인천", listOf("옹진", "인천영종")), ganghwa, MISS), // 제 구역이 있는 군 — 영종 강풍경보로 강화를 경보하지 않는다
+            Triple(WarningArea("인천", listOf("옹진", "인천영종")), ongjin, HIT),
+            Triple(WarningArea("인천", listOf("옹진", "인천영종")), yeonsu, HIT), // 광역시의 구 — 줄 전체(규칙 7)
+            Triple(WarningArea("인천", listOf("강화", "인천남부", "인천북부")), ongjin, MISS),
+            Triple(WarningArea("인천", listOf("강화", "인천남부", "인천북부")), ganghwa, HIT),
+            Triple(WarningArea("인천", listOf("강화", "인천북부")), ongjin, MISS),
+            Triple(WarningArea("충청남도", listOf("금산"), excluding = true), geumsan, MISS),
+            Triple(WarningArea("충청남도", listOf("금산"), excluding = true), cheonan, HIT),
+            Triple(WarningArea("충청남도", listOf("금산"), excluding = true), daejeon, MISS), // 대전은 제 줄로 나온다(G-SA-18)
+            Triple(WarningArea("충청남도", listOf("태안", "당진", "서산", "서천", "보령(도서제외)", "보령도서", "홍성서부")), boryeong, HIT),
+            Triple(WarningArea("충청남도", listOf("태안", "당진", "서산", "서천", "보령(도서제외)", "보령도서", "홍성서부")), taean, HIT),
+            Triple(WarningArea("충청남도", listOf("태안", "당진", "서산", "서천", "보령(도서제외)", "보령도서", "홍성서부")), cheonan, MISS),
+            Triple(WarningArea("충청남도", listOf("태안", "당진", "서산", "서천", "보령(도서제외)", "보령도서", "홍성서부")), daejeon, MISS),
+            Triple(WarningArea("전라남도", listOf("흑산도.홍도")), sinan, HIT), // 섬 구역이 광역 줄 안에도 나온다(규칙 3)
+            Triple(WarningArea("전라남도", listOf("흑산도.홍도")), mokpo, MISS),
+            Triple(WarningArea("전라남도", listOf("신안(흑산면제외)", "무안북부")), sinan, HIT),
+            Triple(WarningArea("서해5도", listOf("백령도.대청도")), ongjin, HIT),
+            Triple(WarningArea("서해5도", listOf("연평도.우도")), ganghwa, MISS),
+            Triple(WarningArea("서울", listOf("서울동남권"), excluding = true), seoul, HIT),
+            Triple(WarningArea("경기도", listOf("하남", "이천", "광주", "여주동남부", "여주서부", "양평동부", "양평서부"), excluding = true), gimpo, HIT),
+            // 여주는 하위 권역 둘(여주동남부·여주서부)을 다 뺐다 — 시 전체가 빠졌지만 이름으로는 가리지 않아 모름이다(G-SA-24 와 함께 본다)
+            Triple(WarningArea("경기도", listOf("하남", "이천", "광주", "여주동남부", "여주서부", "양평동부", "양평서부"), excluding = true), yeoju, UNSURE),
+            Triple(WarningArea("경기도", listOf("하남", "이천", "광주", "여주동남부", "여주서부", "양평동부", "양평서부"), excluding = true), ganghwa, MISS),
+            Triple(WarningArea("제주도", listOf("서귀포시남부", "서귀포시중산간"), excluding = true), seogwipo, UNSURE),
+            Triple(WarningArea("제주도", listOf("서귀포시남부", "서귀포시중산간"), excluding = true), jejuCity, HIT),
         ).forEach { (area, place, expected) ->
             withClue(area, place) { WeatherAlerts.match(area, place) shouldBe expected }
         }

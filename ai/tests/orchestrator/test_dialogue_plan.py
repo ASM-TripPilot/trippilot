@@ -654,6 +654,29 @@ def test_region_recommend_for_an_utterance_that_already_names_a_region_becomes_e
     assert named(call, "서울 근교로 갈 만한 데") is call
     explore = IntentDraft(Intent.EXPLORE_PLACES, {"region": "경주"}, None)
     assert named(explore, "경주에서 반나절") is explore
+    assert named(call, "부산 여행은 언제 가는 게 좋아?") is None  # 시기 — 지역도 장소도 답이 아니다
+    assert named(call, "단풍 보러 가기 좋은 시기가 언제야") is None
+    assert named(call, "언제든 훌쩍 떠나기 좋은 여행지") is call  # '언제든'은 시기를 묻는 말이 아니다
+
+
+def test_when_to_go_question_never_reaches_region_recommend_and_ends_as_knowledge(caplog) -> None:
+    """"부산 여행은 언제 가는 게 좋아?"를 분류가 3/3 지역 고르기로 보냈다(2026-10-23 실측, #1579 의 회귀) — 분류가 골라도 계획 단계에
+    맡기고, 계획이 지역 고르기만 골라도 버려 gap KNOWLEDGE 범위 밖 카드(#1579 이전 동작)로 닫는다."""
+    caplog.set_level(logging.INFO, logger=orch_mod.__name__)
+    out, b = _plan_turn(_plan_json(("RECOMMEND_REGION", {"theme": "부산 여행"})), "부산 여행은 언제 가는 게 좋아?",
+                        intent_step=to._intent_json(Intent.RECOMMEND_REGION, theme="부산 여행"))
+    assert "DIALOGUE_PLAN" in b.llm.features() and out.outcome == "OUT_OF_SCOPE" and NULL_INTENT in out.reason
+    (log,) = _plan_logs(caplog)
+    assert (log["decision"], log["gap"]) == ("NO_TOOL", "KNOWLEDGE")
+
+
+def test_region_recommend_with_a_named_region_from_the_classifier_goes_to_the_planner() -> None:
+    """분류 경로에도 지역 이름 가드 — 지역을 말했으면 계획 단계가 그 지역 탐색으로 답한다(지역 고르기 핸들러를 돌리지 않는다)."""
+    out, b = _plan_turn(_plan_json(("EXPLORE_PLACES", {"region": "부산"})), "부산 여행 가볼 데 추천해줘",
+                        intent_step=to._intent_json(Intent.RECOMMEND_REGION, theme="부산 여행"),
+                        answer=_answer_json("감천문화마을을 찾아봤어요."))
+    assert "DIALOGUE_PLAN" in b.llm.features() and out.outcome == "ANSWER" and out.reason.endswith("plan:EXPLORE_PLACES")
+
 
 # 13 — 턴당 LLM 3회: 요약은 한 번만 미루고, 연속이면 결정론 압축 (C9)
 

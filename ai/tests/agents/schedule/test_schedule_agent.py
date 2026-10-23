@@ -1074,7 +1074,7 @@ def test_c1_partial_보충_청크에도_취향이_실린다() -> None:
 
     def backfilled(persona) -> dict[str, float]:
         orchestrator, _, sink = _build(
-            score_llm=_ChunkFailLlm(sorted_ids[0]), pois=pois, store_value=persona,
+            score_llm=_ChunkFailLlm(by_id[sorted_ids[0]].name), pois=pois, store_value=persona,  # 첫 청크만 실패
             renderer=PromptRegistry(_PROMPTS_DIR))
         outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
         assert any(d.reason.startswith("c1_partial") for d in outcome.degradations)

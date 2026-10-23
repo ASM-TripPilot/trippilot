@@ -1,8 +1,8 @@
 """PlaceFactStore + PlaceFacts·FactRecord — 도우미 미확인 칸 웹 확인 결과의 콘센트 (UnknownHandlingAgent, 2026-10-22).
 
-게이트(`llm_gateway/gates/place_fact.py`)·`agents/adapters/pg_place_fact_store.py`·`orchestrator/unknown_handling.py` 가 같은
-타입을 쓰는데 어댑터는 orchestrator 를 import 할 수 없다(L-6, `tests/test_architecture.py`) — `memory_store_port.py` 선례대로
-포트 모듈 안에 둔다. stdlib 만. 구현 2종: Pg(운영, ai_kb.place_fact_cache) · `orchestrator.unknown_handling.InMemoryPlaceFactStore`.
+게이트(`llm_gateway/gates/place_fact.py`)·`agents/adapters/pg_place_fact_store.py`·`agents/unknown_handling/agent.py` 가 같은
+타입을 쓰는데 어댑터와 에이전트는 agents/ 의 형제라 서로 import 할 수 없다(L-2, `tests/test_architecture.py`) — `memory_store_port.py` 선례대로
+포트 모듈 안에 둔다. stdlib 만. 구현 2종: Pg(운영, ai_kb.place_fact_cache) · `agents/adapters/memory_place_fact_store.py` 의 InMemoryPlaceFactStore(로컬·테스트).
 """
 
 from __future__ import annotations

@@ -25,6 +25,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.agents.planb.rag import Alternative, PlanBRagRequest, PlanBRagResult
+from trippilot.agents.unknown_handling.agent import UnknownOutcome
 from trippilot.domain.common import GeoPoint, PoiId, TraceId
 from trippilot.domain.event import EventInfo, EventType
 from trippilot.domain.freshness import FreshnessMeta, InfoPacket, ProviderKind, ProviderStatus
@@ -824,17 +825,16 @@ def test_poi_info_unknown_hours_keep_the_provider_wording_and_free_is_free() -> 
 
 
 class _Unknown:
-    """UnknownHandlingAgent 대역 — 저장된 결과를 돌려주고 뒤에서 찾기 요청을 기록한다."""
+    """UnknownHandlingAgent 대역 — 저장된 결과가 있으면 그것, 없으면 뒤에서 찾기 요청을 기록하고 받아 준 만큼 "찾는 중"."""
 
     def __init__(self, stored=None, *, accept: bool = True) -> None:
         self.stored, self.accept, self.requests = stored, accept, []
 
-    def known(self, poi_id, now):
-        return self.stored
-
-    def request(self, poi_id, place, fields, on, trace_id, now):
-        self.requests.append((poi_id, place, tuple(fields)))
-        return self.accept
+    def run(self, task):
+        if self.stored is not None:
+            return UnknownOutcome(facts=self.stored.facts)
+        self.requests.append((task.poi_id, task.place, tuple(task.fields)))
+        return UnknownOutcome(pending=self.accept)
 
 
 _WEB = PlaceFacts(hours="08:30~17:30", last_entry="17:00", closed="연중무휴", fee=None,

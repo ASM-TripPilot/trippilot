@@ -28,7 +28,7 @@ import pytest
 
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver
-from trippilot.llm_gateway.gates.scoring import ClosedSetGate
+from trippilot.llm_gateway.gates.numbered_selection import NumberedScoringGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.preference import (
@@ -108,13 +108,14 @@ def _worker(llm, cfg: C1Config | None = None) -> tuple[PreferenceScoringWorker, 
     cfg = cfg or _cfg()
     trace = InMemoryTrace()
     gateway = GatewayFacade(
-        llm, PromptRegistry(_PROMPTS_DIR), ClosedSetGate(), cfg, trace
+        llm, PromptRegistry(_PROMPTS_DIR), NumberedScoringGate(), cfg, trace
     )
     return PreferenceScoringWorker(gateway), trace
 
 
 def _echo_response(request: LlmRequest, ids: list[str]) -> LlmResponse:
-    text = json.dumps({"scores": [{"poiId": x, "score": 0.5} for x in ids]})
+    # 프롬프트 0.4.0 — 후보 줄은 번호라 `{"no": n}` 으로 답한다(게이트 `NumberedScoringGate` 가 poi_id 로 되돌린다)
+    text = json.dumps({"scores": [{"no": x, "score": 0.5} for x in ids]})
     return LlmResponse(
         raw_text=text,
         input_tokens=1,
@@ -148,7 +149,7 @@ class _BlockOnPoiLlm(_EchoScoresLlm):
 
     def invoke(self, request: LlmRequest) -> LlmResponse:
         ids = _CANDIDATE_LINE.findall(request.prompt)
-        if self._poison in ids:
+        if self._poison in request.prompt:  # 후보 줄은 번호 — 상호명(장소-{pid})에 pid 가 남아 있다
             # 마감(초 단위)보다 훨씬 길게 붙잡는다 — 테스트가 끝나면 release로 즉시 해제
             self._release.wait(timeout=15.0)
             response = _echo_response(request, ids)
@@ -168,7 +169,7 @@ class _DelayOnPoiLlm(_EchoScoresLlm):
 
     def invoke(self, request: LlmRequest) -> LlmResponse:
         ids = _CANDIDATE_LINE.findall(request.prompt)
-        if self._poison in ids:
+        if self._poison in request.prompt:  # 후보 줄은 번호 — 상호명(장소-{pid})에 pid 가 남아 있다
             time.sleep(self._delay_sec)
         return _echo_response(request, ids)
 
@@ -187,7 +188,7 @@ def _value_ids(result) -> list[str]:
         (10_000, 10),   # (10000/2 − 3000) ÷ 200
         (8_000, 5),     # (8000/2 − 3000) ÷ 200 = 5 — 딱 chunk_min 경계
         (4_000, 5),     # 음수 → chunk_min 클램프
-        (100_000, 25),  # 대예산 → 출력 상한 역산 캡(1024 ÷ 40) — chunk_max 40 보다 작다
+        (100_000, 40),  # 대예산 → chunk_max 40 (번호 출력은 건당 16 이라 상한 역산 64 가 더 크다)
     ],
 )
 def test_adaptive_chunk_size_formula(budget_ms: int, expected_c: int) -> None:

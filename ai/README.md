@@ -175,7 +175,7 @@ Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소
 
 ---
 
-## 에이전트 4종
+## 에이전트 5종
 
 ### ScheduleAgent — 일정 생성 비서
 
@@ -206,6 +206,13 @@ Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소
 - **패턴**: 의도 해석 → 검증 → 반영
 - **흐름**: 편집 의도 해석 → 엔티티 해소 → 어셈블리 검증 → 반영 모드 결정
 - **할당 Tool**: `llm.parse_intent`, `m7.resolve_entity`, `m7.get_candidates`, `assembly.validate`, `assembly.repair`
+
+### UnknownHandlingAgent — 미확인 정보 확인 비서
+
+- **패턴**: 먼저 답하고 뒤에서 찾기 (저장소 조회 → 없으면 뒤에서 웹 검색 → 다음 질문에 출처와 함께). 2026-10-22 편입 — 넷과 같은 꼴, `agents/` 한곳
+- **흐름**: 도우미가 등록 장소의 영업시간·휴무일·입장료를 "미확인"으로 답하게 될 때 → 저장된 웹 확인 값이 있으면 그것(`facts`) → 없으면 뒤에서 벤더 웹 검색을 내고 이번 턴은 "찾아보는 중"(`pending`) → 결과는 출처 있는 값만 저장(찾음 7일·못 찾음 1일), 장소별 중복 제거·프로세스당 하루 상한
+- **코드**: `agents/unknown_handling/agent.py` — `UnknownHandlingAgent.run(UnknownTask) → UnknownOutcome`. 도우미 핸들러(`orchestrator/dialogue_handlers.py`)가 부른다. 저장소는 `agents/adapters/{pg,memory}_place_fact_store.py`(ai_kb `place_fact_cache` / 프로세스 메모리), 타입 정본은 `ports/place_fact_store_port.py`
+- **할당 Tool**: `PlaceFactLookupWorker`(feature `PLACE_FACT_LOOKUP`, 벤더 웹 검색) **(1개만)** — 배정이 있을 때만 켜진다(없으면 카드는 "미확인" 그대로). INV-1: 새 장소를 고르지 않는다 · INV-2: 값은 답에만 쓰고 일정 조립에 넣지 않는다
 
 ---
 

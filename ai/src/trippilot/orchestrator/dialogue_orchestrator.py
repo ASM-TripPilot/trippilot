@@ -428,19 +428,27 @@ def _grounded_args(slots: Mapping[str, str], said: str) -> dict[str, str]:
 
 # 지역을 내치거나 바깥을 가리키는 말 — 지역 이름이 있어도 '가볼 지역 고르기'다("제주 말고", "서울 근교")
 _REGION_ELSEWHERE = re.compile(r"말고|빼고|제외|외에|근교|벗어")
+# 언제·몇 월·좋은 계절을 묻는 말 — '어디로'가 아니라 '언제'다. 분류가 "부산 여행은 언제 가는 게 좋아?"를 3/3 지역 고르기로 보냈다
+# (2026-10-23 실측, #1579 의 회귀 — 그 전엔 계획 단계 gap KNOWLEDGE). "언제든 갈 만한 데"는 시기를 묻는 말이 아니다
+_ASKS_WHEN = re.compile(r"언제(?!든|라도|나)|몇\s*월|어느\s*(?:계절|달|시기|때)|(?:좋은|적당한|알맞은)\s*(?:계절|시기|때|달)")
 
 
-def _region_named(call: IntentDraft, heard: str) -> IntentDraft:
+def _not_region_choice(heard: str) -> bool:
+    """가볼 지역 고르기(RECOMMEND_REGION)가 답이 아닌 말 — 시기를 묻거나, 이미 표 지역을 말했다("말고·근교"는 고르기 그대로)."""
+    return bool(_ASKS_WHEN.search(heard)) or (not _REGION_ELSEWHERE.search(heard) and bool(region_mentions(heard)))
+
+
+def _region_named(call: IntentDraft, heard: str) -> IntentDraft | None:
     """계획이 가볼 지역 고르기(RECOMMEND_REGION)를 골랐어도 이번 말에 표 지역이 있으면 그 지역 안의 장소 탐색이다. 프롬프트 0.1.6 에
     규칙을 적었는데도 지역 이름 + 반나절 보낼 데 꼴이 3/3 으로 지역 추천으로 갔다(2026-10-22 실측) — 말한 지역을 추천 후보로 되돌려주면
-    질문에 답하지 않은 것이다."""
-    if call.intent is not Intent.RECOMMEND_REGION or _REGION_ELSEWHERE.search(heard):
+    질문에 답하지 않은 것이다. 시기를 묻는 말이면 None — 지역 목록도 장소 목록도 '언제'의 답이 아니라 이 호출을 버린다."""
+    if call.intent is not Intent.RECOMMEND_REGION or not _not_region_choice(heard):
         return call
-    named = region_mentions(heard)
-    if not named:
-        return call
+    if _ASKS_WHEN.search(heard):
+        return None
     theme = call.slots.get("theme")
-    return replace(call, intent=Intent.EXPLORE_PLACES, slots={"region": named[0][1], **({"theme": theme} if theme else {})})
+    return replace(call, intent=Intent.EXPLORE_PLACES,
+                   slots={"region": region_mentions(heard)[0][1], **({"theme": theme} if theme else {})})
 
 
 def _plannable(reason: str) -> bool:
@@ -744,6 +752,10 @@ class DialogueOrchestrator:
         if interp is None:
             # 2 — LLM 직접 분류 (+ 2′ 섀도 submit)
             match, reason = self._classify(inp, text, memory_lines, trip_summary, counter)
+            if match is not None and match.intent is Intent.RECOMMEND_REGION and _not_region_choice(text):
+                # 시기를 묻거나 지역을 이미 말했다 — 지역 고르기 핸들러는 엉뚱한 지역 목록이나 취향 되묻기를 낸다. 분류가 null 로 닫은
+                # 것처럼 계획 단계에 맡긴다(지역 안 장소면 탐색, 시기면 gap KNOWLEDGE)
+                match, reason = None, f"{NULL_INTENT}; region_recommend_rerouted"
             if match is None:
                 reason = reason or "intent_fallback"
                 closer = closer_answer(text, inp.snapshot.trip is not None) if _judged_nothing(reason) else None
@@ -1064,7 +1076,9 @@ class DialogueOrchestrator:
                 answer = self._smalltalk(inp, fixed, memory_lines, trip_summary)
                 return TurnOutcome("ANSWER", (), None, answer, cleared, 0, f"{reason}; plan:no_tool")
             return self._plan_declined(inp, reason, "REFUSED" if draft.refused else "NO_TOOL", plan_ms=plan_ms, gap=draft.gap)
-        calls = [_region_named(call, text) for call in draft.calls]
+        calls = [c for c in (_region_named(call, text) for call in draft.calls) if c is not None]
+        if not calls:  # 시기를 묻는 말에 지역 고르기만 골랐다 — 조회로 답할 것이 없다(일반 지식)
+            return self._plan_declined(inp, reason, "NO_TOOL", plan_ms=plan_ms, gap="KNOWLEDGE")
         handlers = [HANDLERS[call.intent] for call in calls]
         said = _squash(" ".join([text, *(turn.text for turn in inp.recent_turns)]))
         earlier = tuple((turn.role, turn.text) for turn in inp.recent_turns)

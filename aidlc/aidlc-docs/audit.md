@@ -1848,3 +1848,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **User Input**: (사용자 원문 — 세션 2026-10-22, 그대로 인용) "아니야 모든 기능 설명한 한번의 온보딩에서 다 처리하자 애니메이션도 좀 넣어보고" / "저대로 해서 develop에 브랜치 만들어서 티켓 만들고 진행 ㄱㄱ 하는데2/6 숙소에 가격정보는 빼고" / AskUserQuestion 답 — "취향 단계에서 '나중에 설정하고 시작'(일괄 건너뛰기)을 눌러 온보딩을 끝낸 사람도 기능 안내를 보게 할까요?"="둘 다 본다 (Recommended)" · "U0 설계 문서(frontend-components §2 '완료 시 홈 진입', §6 testID 목록)에 기능 안내 화면이 없습니다. 사이클 끝 [기록]에서 정본에 반영할까요?"="반영한다 (Recommended)".
 **AI Response**: `construction/u0-foundation/functional-design/frontend-components.md` §2 「온보딩 위저드 UX 규칙」 아래와 §6 testID 목록 아래에 `[개정 · 2026-10-22 · TRIP-1594]` 블록 각 1개 insert — 세 완료 출구가 기능 안내(`onboarding-tour`, 6장)로 가고 거기서 홈으로 간다(1회, 플래그 없음), 기능 안내 testID 9종. 원문 수정 0줄.
 **Context**: CONSTRUCTION — Functional Design 사후 개정(구현 반영, FE TRIP-1595, 사이클 20261022-trip1594-c10-tour-s1 [기록]). scribe 가 (B) 절차상 원문 부재로 미반영한 것을 오케가 원문과 함께 적용. `aidlc-state.md` 무변경.
+
+## Functional Design·NFR Requirements 사후 개정 — situation-awareness 특보 실응답 표본 반영 (G-SA-18 해소 · BR-SA-16 · §10 · BLM §5·§6.2·§6.3·§7·§9 · NFR §3·§7 · tech-stack §4)
+**Timestamp**: 2026-10-23T12:33:00+09:00 (작업 시점)
+**User Input**: (새 사용자 결정 없음 — 자율 세션. 이 작업을 띄운 사용자 요청 원문은 "하던거 계속해".) 근거는 정본 G-SA-18 처리 칸('t6 실응답 표본으로 판정한다 — 관서 묶음이면 걸림, 행정 광역이면 안 걸림으로 좁힌다')과 코드 밖 사실 둘이다 — 기상청 특보 통보문 2026-10-16~22 발표 73건(서로 다른 t6 71개, 공공데이터포털 `getWthrWrnMsg` 실조회) · 적대적 검토의 표본 × 행정구역 시드 284곳 대조(갈리는 칸 13 · 새 거짓 '특보 없음' 0).
+**AI Response**: `construction/situation-awareness/` 4종에 `[개정 · 2026-10-22 — 구현 반영]` 블록 10개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). `functional-design/business-rules.md` — BR-SA-16(t6 광역 줄은 행정 광역 · 관서 묶음 꼴의 흔적이 보이면 종전대로 모름과 WARN · 제 구역이 있는 광역시의 군은 목록의 권역만으로 걸지 않음 · 광역 줄 안의 섬이 남는 제외 줄은 모름 · 표본 사실) · §10(PBT-SA-09 생성기·오라클); `functional-design/business-logic-model.md` — §5 · §6.2 · §6.3 · §7 · §9(G-SA-18 해소 · G-SA-24 실례 둘 · G-SA-20 덧붙임); `nfr-requirements/nfr-requirements.md` — §3(RES-SA-01) · §7(8단계); `nfr-requirements/tech-stack-decisions.md` §4(t6 표본 몫 마침). 구현은 같은 PR 의 코드 커밋이다(TRIP-1590 — `WeatherAlerts` · `KmaWarningDetector` · 실응답 t6 71개 파서 회귀 · 공식 목록 대조 3종). 코드는 적대적 검토(3갈래 + 반박 — 확정 10 · 사소 10 · 반박 1)를 거쳐 고쳤고, 변이 15종이 모두 빨강이었다.
+**Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
