@@ -49,5 +49,5 @@ class PlaceDataCandidatePool(
         repo.findActiveByIds(poiIds).map { it.grounded(null) }
 
     private fun Poi.grounded(distanceM: Double?) =
-        GroundedPlace(poiId, nameKo, lat, lng, category.name, region, distanceM)
+        GroundedPlace(poiId, nameKo, lat, lng, category.name, region, distanceM, regionCode)
 }
