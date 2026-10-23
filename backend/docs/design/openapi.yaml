@@ -1192,9 +1192,9 @@ paths:
         content: { application/json: { schema: { $ref: '#/components/schemas/SlotCandidatesRequest' } } }
       responses:
         '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/SlotCandidates' } } } }
-        '400': { description: 슬롯 키 형식 오류 }
+        '400': { description: '슬롯 키 형식 오류 · 반경 상한 초과 · `center.mode=POINT` 인데 lat·lng 없음/범위 밖 · 모르는 `center.mode`' }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음/해당 슬롯 없음/장소 좌표 없음 }
-        '409': { description: '여행 시작 전의 확정 일정(시작 뒤에는 허용 — 편집과 같은 잠금, TRIP-999) · 아직 생성 중인 일자(이미 만들어진 일자는 허용 — TRIP-1000) · 같은 날 같은 장소가 둘이라 슬롯 특정 불가' }
+        '409': { description: '여행 시작 전의 확정 일정(시작 뒤에는 허용 — 편집과 같은 잠금, TRIP-999) · 아직 생성 중인 일자(이미 만들어진 일자는 허용 — TRIP-1000) · 같은 날 같은 장소가 둘이라 슬롯 특정 불가 · 고른 중심의 재료 없음(`REGION` 구 중심을 모름 · `STAY` 그 날 숙소 없음 — 다른 중심으로 바꾸지 않는다)' }
   /trips/{tripId}/visits:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -3475,6 +3475,23 @@ components:
 
             **직전 poiId 를 보내지 않는다** — 경로만 선언하면 서버가 일정에서 직전 슬롯을 읽는다
             (`excludePoiIds` 를 받지 않는 것과 같은 이유: 클라가 준 식별자를 믿으면 그쪽 누락이 그대로 샌다).
+        center:
+          type: object
+          nullable: true
+          required: [mode]
+          description: >
+            찾는 중심 — 같이 짜기에서 사용자가 고른다(2026-10-23). 생략하면 `coPick` 규칙 그대로다.
+            `PREVIOUS` 방금 고른 곳(첫 칸이면 교체 대상) · `REGION` 그 날 목적지(구) 중심 · `STAY` 그 날 숙소
+            (체크아웃일은 전날 숙소) · `POINT` 지도에서 찍은 점(`lat`·`lng` 필수, 없거나 범위 밖이면 400).
+            `REGION`·`STAY` 의 재료가 없으면(숙소 없는 날 등) 다른 중심으로 바꾸지 않고 409 다.
+
+            **구 안 우선** — 여행 목적지가 구·시군이면(시도 아님) 결과를 같은 반경 안에서 그 구 안 장소부터
+            채우고, 모자랄 때만 구 밖이 뒤에 남는다(바꿔 넣으면 `degraded=true`). `STAY`·`POINT` 는 사용자가
+            그 자리를 고른 것이라 구 안 우선을 걸지 않는다.
+          properties:
+            mode: { type: string, enum: [PREVIOUS, REGION, STAY, POINT] }
+            lat: { type: number, format: double, nullable: true, minimum: -90, maximum: 90 }
+            lng: { type: number, format: double, nullable: true, minimum: -180, maximum: 180 }
     SlotCandidates:
       type: object
       required: [candidates, radiusMUsed, degraded]

@@ -26,8 +26,9 @@ import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesEmptyReason
 import com.trippilot.placedata.api.Area
+import com.trippilot.placedata.api.GroundedPlace
+import com.trippilot.placedata.api.RegionCenter
 import com.trippilot.placedata.api.PoiSurfaceFacade
-import com.trippilot.placedata.api.PoiSurfaceView
 import com.trippilot.profile.api.overriddenBy
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.profile.api.PreferenceFacade
@@ -56,7 +57,29 @@ data class RequestSlotCandidates(
      * (제외 목록을 서버가 만드는 것과 같은 이유: 클라가 준 식별자를 믿으면 그쪽 누락이 그대로 샌다).
      */
     val coPick: Boolean = false,
+    /** 찾는 중심을 사용자가 골랐는가(2026-10-23). null 이면 위 [coPick] 규칙 그대로다. */
+    val center: CandidateCenter? = null,
 )
+
+/**
+ * 찾는 중심 — 같이 짜기에서 사용자가 고른다(2026-10-23 사용자 결정: 방금 고른 곳 · 고른 지역(구) 중심 · 숙소 · 지도에서 찍기).
+ * [lat]·[lng] 는 [CenterMode.POINT] 에서만 쓰고 그때는 필수다. 나머지 좌표는 클라가 보내지 않는다 — 서버가 일정·여행에서 읽는다.
+ */
+data class CandidateCenter(val mode: CenterMode, val lat: Double? = null, val lng: Double? = null)
+
+enum class CenterMode {
+    /** 방금 고른 곳(직전 슬롯). 첫 칸이면 교체 대상. */
+    PREVIOUS,
+
+    /** 그 날 목적지(구) 중심. */
+    REGION,
+
+    /** 그 날 숙소(체크아웃일은 전날 숙소). */
+    STAY,
+
+    /** 지도에서 찍은 점. */
+    POINT,
+}
 
 /**
  * 슬롯 후보 제안(TRIP-311 · DEC-U3-5).
@@ -97,6 +120,14 @@ class SlotCandidateService(
         if (request.radiusM != null && request.radiusM > MAX_RADIUS_M) {
             throw ValidationFailed(listOf(FieldError("radiusM", "탐색 반경은 ${MAX_RADIUS_M / 1000}km 이하입니다.")))
         }
+        val point = request.center?.takeIf { it.mode == CenterMode.POINT }?.let { c ->
+            val lat = c.lat
+            val lng = c.lng
+            if (lat == null || lng == null || lat !in -90.0..90.0 || lng !in -180.0..180.0) {
+                throw ValidationFailed(listOf(FieldError("center", "지도에서 찍은 위치(lat·lng)가 필요합니다.")))
+            }
+            RegionCenter(lat, lng)
+        }
 
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
         val itinerary = itineraries.findByTrip(tripId).firstOrNull() ?: throw ResourceNotFound("생성된 일정이 없습니다.")
@@ -135,15 +166,29 @@ class SlotCandidateService(
         // 오가는 것으로 재현됐다(2026-10-05). 후보 거리 문구도 같은 중심에서 나오므로 함께 고쳐진다.
         //
         // 시간대·카테고리 다양성은 여기서 보정하지 않는다 — 상대 랭킹의 몫이다(결정 1 단서).
-        val previousPoiId = if (request.coPick) day.slots.getOrNull(index - 1)?.sourcePoiId else null
-        val surfaces = poiSurfaces.findSurfaces(listOfNotNull(previousPoiId, targetPoiId))
-        // 정본에 없으면(하드 삭제) 좌표를 지어내지 않는다. 다만 **직전** 슬롯이 사라진 것은 이 요청의
-        // 잘못이 아니라, 교체 대상으로 물러서고 그 사실을 로그로 남긴다(조용히 틀리지 않게).
-        val center = previousPoiId?.let { prev ->
-            surfaces[prev] ?: null.also {
-                log.warn("직전 슬롯 장소가 정본에 없어 교체 대상을 중심으로 씁니다. tripId={} previousPoiId={}", tripId, prev)
-            }
-        } ?: surfaces[targetPoiId] ?: throw ResourceNotFound("장소 좌표를 찾을 수 없습니다.")
+        //
+        // 사용자가 중심을 고르면(2026-10-23) 그걸 쓴다 — 고른 재료가 없으면(숙소 없는 날) 조용히 다른 중심으로 바꾸지 않고 409.
+        val mode = request.center?.mode
+        // 지연 조회 — 후보 0건·중심이 직전/교체 대상이면 DB 를 더 읽지 않는다. 조회 실패를 여기서 삼키지 않는다 —
+        // REGION·STAY 에서 "숙소가 없다"(409)로 바뀌면 사유가 거짓이 된다. 구 안 우선만 아래에서 물러선다.
+        val space by lazy { repairContexts.forSlotCandidates(accountId, tripId, date) }
+        fun slotCenter(): RegionCenter {
+            val previousPoiId = if (mode == CenterMode.PREVIOUS || (mode == null && request.coPick)) day.slots.getOrNull(index - 1)?.sourcePoiId else null
+            val surfaces = poiSurfaces.findSurfaces(listOfNotNull(previousPoiId, targetPoiId))
+            // 정본에 없으면(하드 삭제) 좌표를 지어내지 않는다. 다만 **직전** 슬롯이 사라진 것은 이 요청의
+            // 잘못이 아니라, 교체 대상으로 물러서고 그 사실을 로그로 남긴다(조용히 틀리지 않게).
+            val surface = previousPoiId?.let { prev ->
+                surfaces[prev] ?: null.also {
+                    log.warn("직전 슬롯 장소가 정본에 없어 교체 대상을 중심으로 씁니다. tripId={} previousPoiId={}", tripId, prev)
+                }
+            } ?: surfaces[targetPoiId] ?: throw ResourceNotFound("장소 좌표를 찾을 수 없습니다.")
+            return RegionCenter(surface.lat, surface.lng)
+        }
+        val center = point ?: when (mode) {
+            CenterMode.REGION -> space.regionCenter ?: throw ConflictDetected(message = "고른 지역의 중심을 찾을 수 없습니다. 다른 기준을 골라 주세요.")
+            CenterMode.STAY -> space.stay ?: throw ConflictDetected(message = "이 날은 숙소가 없습니다. 다른 기준을 골라 주세요.")
+            else -> slotCenter()
+        }
 
         // 이미 일정에 있는 장소는 제외한다(BR-U3-24). **클라이언트가 아니라 서버가 유도한다** —
         // 클라가 보내는 목록을 믿으면 누락분이 그대로 재추천된다.
@@ -204,14 +249,27 @@ class SlotCandidateService(
         }
 
         // 어느 갈래(즉답·AI·풀 채움)로 골랐든 반환 직전 **한 곳**에서 슬롯 시각 적합 판정을 거친다.
-        return keepFitting(chooseCandidates(request, answered, center, inItinerary, targetPoiId, tripId), itinerary, date, index, accountId, tripId, request.slotKey)
+        val chosen = chooseCandidates(request, answered, center, inItinerary, targetPoiId, tripId)
+        // 구 안 우선은 중심을 서버가 정할 때만 건다 — 숙소·찍은 점은 사용자가 그 자리를 고른 것이라 구 밖이어도 그 근처가 답이다.
+        val placed = if (chosen.candidates.isEmpty() || point != null || mode == CenterMode.STAY) {
+            chosen
+        } else {
+            val districtCodes = runCatching { space.districtCodes }.getOrElse { e ->
+                log.warn("슬롯 후보 공간 재료(구) 조회 실패 — 구 안 우선 없이 답합니다. tripId={}", tripId, e)
+                emptySet()
+            }
+            inDistrictFirst(chosen, districtCodes, center, request.concept, inItinerary, targetPoiId)
+        }
+        // 구 안 우선은 대체 후보를 **뒤에 덧붙여** 넘기고, 개수는 판정 뒤에 원래대로 자른다 — 먼저 자르면 시각에 맞던 후보가
+        // 판정 전에 사라진다.
+        return keepFitting(placed, itinerary, date, index, accountId, tripId, request.slotKey, limit = chosen.candidates.size)
     }
 
     /** closed-set 재확인 → 컨셉 필터·풀 채움. [answered] 는 즉답이거나 AI 응답이다. */
     private fun chooseCandidates(
         request: RequestSlotCandidates,
         answered: SlotCandidatesOutput,
-        center: PoiSurfaceView,
+        center: RegionCenter,
         inItinerary: List<UUID>,
         targetPoiId: UUID,
         tripId: UUID,
@@ -277,6 +335,8 @@ class SlotCandidateService(
         accountId: UUID,
         tripId: UUID,
         slotKey: String,
+        /** 남길 최대 개수 — 앞에서부터 이만큼 맞으면 나머지는 판정하지 않는다(판정 1회 = AI repair 1회). */
+        limit: Int,
     ): SlotCandidatesOutput {
         if (out.candidates.isEmpty()) return out
         // 저장 경로(attemptRepair)와 같은 규칙 — 앵커는 첫 구간이 바뀐 날만 싣고, 장소 하나 교체에서 그런 날은 첫 칸 교체의 그날뿐이다.
@@ -289,25 +349,32 @@ class SlotCandidateService(
                 .map { d -> EditDay(d.date, d.slots.map { EditSlot(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }) },
         )
         var unjudged = false
-        val fit = out.candidates.filter { c ->
-            if (unjudged) return@filter true
+        var misfit = 0
+        val fit = mutableListOf<SlotCandidate>()
+        for (c in out.candidates) {
+            if (fit.size == limit) break
+            if (unjudged) {
+                fit += c
+                continue
+            }
             val swapped = current.copy(
                 days = current.days.map { d -> d.copy(slots = d.slots.mapIndexed { i, s -> if (i == index) s.copy(poiId = c.poiId) else s }) },
             )
-            try {
+            val fits = try {
                 !scheduleAgent.repair(swapped.toOutput(itinerary.solveMode, itinerary.isFallback, clock.instant()), emptyList(), context).unrepairable
             } catch (e: Exception) {
                 log.warn("슬롯 후보 적합 판정(repair) 실패 — 이 후보부터 판정 없이 남깁니다. tripId={} slotKey={} poiId={}", tripId, slotKey, c.poiId, e)
                 unjudged = true
                 true
             }
+            if (fits) fit += c else misfit++
         }
         if (fit.isEmpty()) {
             log.warn("슬롯 후보 {}건이 전부 그 슬롯 시각에 맞지 않습니다 — 원래 목록을 그대로 줍니다. tripId={} slotKey={}", out.candidates.size, tripId, slotKey)
-            return out
+            return out.copy(candidates = out.candidates.take(limit))
         }
-        if (fit.size != out.candidates.size) {
-            log.info("슬롯 시각에 맞지 않는 후보 {}건을 뺐습니다. tripId={} slotKey={}", out.candidates.size - fit.size, tripId, slotKey)
+        if (misfit > 0) {
+            log.info("슬롯 시각에 맞지 않는 후보 {}건을 뺐습니다. tripId={} slotKey={}", misfit, tripId, slotKey)
         }
         return out.copy(candidates = fit)
     }
@@ -322,7 +389,7 @@ class SlotCandidateService(
     private fun poolRefill(
         concept: String?,
         categories: Set<String>,
-        center: PoiSurfaceView,
+        center: RegionCenter,
         inItinerary: List<UUID>,
         targetPoiId: UUID,
         base: SlotCandidatesOutput,
@@ -342,16 +409,7 @@ class SlotCandidateService(
             found = nearby.filterNot { it.poiId in excluded }
         }
         return base.copy(
-            candidates = found.take(MAX_STORED_CANDIDATES).map {
-                SlotCandidate(
-                    poiId = it.poiId,
-                    // 거리만 — 소요시간은 어떤 이유로도 내보내지 않는다(INV-3).
-                    distanceRange = it.distanceM?.let { m -> "약 ${"%.1f".format(Locale.ROOT, m / 1000)}km" }
-                        ?: "거리 미확인",
-                    // 필터를 통과한 카테고리라 이 문구는 참이다(BR-U2-09 — 시각·소요시간 언급 없음).
-                    rationale = concept?.let { c -> "$c 컨셉에 맞는 ${it.category}" } ?: "주변 ${it.category}",
-                )
-            },
+            candidates = found.take(MAX_STORED_CANDIDATES).map { it.toSlotCandidate(concept) },
             radiusMUsed = radius,
             freshness = FreshnessMeta(clock.instant(), degraded = true),
             emptyReason = when {
@@ -359,6 +417,54 @@ class SlotCandidateService(
                 nearby.isEmpty() -> SlotCandidatesEmptyReason.NO_NEARBY
                 else -> SlotCandidatesEmptyReason.ALL_IN_ITINERARY
             },
+        )
+    }
+
+    /** 풀에서 바로 꺼낸 후보. */
+    private fun GroundedPlace.toSlotCandidate(concept: String?) = SlotCandidate(
+        poiId = poiId,
+        // 거리만 — 소요시간은 어떤 이유로도 내보내지 않는다(INV-3).
+        distanceRange = distanceM?.let { m -> "약 ${"%.1f".format(Locale.ROOT, m / 1000)}km" } ?: "거리 미확인",
+        // 필터를 통과한 카테고리라 이 문구는 참이다(BR-U2-09 — 시각·소요시간 언급 없음).
+        rationale = concept?.let { c -> "$c 컨셉에 맞는 $category" } ?: "주변 $category",
+    )
+
+    /**
+     * 구 안 우선(2026-10-23 사용자 결정 "구 안 우선, 모자라면 이웃 구") — 서초를 고른 여행의 같이 짜기에서 점심은 서초,
+     * 저녁은 혜화로 튀었다(직전 장소 중심 + 넓힌 반경이 구 경계를 모른다). 어느 갈래의 결과든 **같은 반경 안에서**
+     * 구 안 후보 → 그 반경의 구 안 장소(거리순, 구 밖 개수만큼) → 구 밖 후보 순으로 **덧붙여** 돌려준다. 개수는 호출측이
+     * 적합 판정 뒤에 원래대로 자른다 — 구 안이 모자라거나 시각에 안 맞을 때만 구 밖이 남는다.
+     * 바꿔 넣은 것은 AI 순위가 아니라 거리순이라 degraded 로 표시한다(INV-4).
+     * ponytail: "이웃 구"는 행정 인접이 아니라 "구 밖이지만 요청 반경 안" — 인접 표가 생기면 그걸로 좁힌다.
+     */
+    private fun inDistrictFirst(
+        out: SlotCandidatesOutput,
+        districtCodes: Set<String>,
+        center: RegionCenter,
+        concept: String?,
+        inItinerary: List<UUID>,
+        targetPoiId: UUID,
+    ): SlotCandidatesOutput {
+        if (districtCodes.isEmpty()) return out
+        fun inDistrict(code: String?) = code != null && code in districtCodes
+        val grounded = candidatePool.ground(out.candidates.map { it.poiId } + targetPoiId).associateBy { it.poiId }
+        val (inside, outside) = out.candidates.partition { inDistrict(grounded[it.poiId]?.regionCode) }
+        if (outside.isEmpty()) return out
+        // 컨셉이 없으면 교체 대상과 같은 카테고리 — 점심 자리에 명소가 끼지 않게(즉답의 "같은 카테고리 예비"와 같은 판단).
+        // 교체 대상이 비활성(폐업 — 바로 그래서 바꾸는 중일 수 있다)이면 카테고리를 몰라 채우지 않고 순서만 바꾼다.
+        val conceptSet = ConceptCategories.of(concept)
+        val categories = conceptSet ?: grounded[targetPoiId]?.let { setOf(it.category) } ?: return out.copy(candidates = inside + outside)
+        val taken = inside.map { it.poiId }.toSet() + inItinerary + targetPoiId
+        val refill = candidatePool
+            .resolve(Area.Radius(center.lat, center.lng, out.radiusMUsed.toDouble()), categories)
+            .filter { inDistrict(it.regionCode) && it.poiId !in taken }
+            .sortedBy { it.distanceM ?: Double.MAX_VALUE }
+            .take(outside.size)
+            .map { it.toSlotCandidate(concept.takeIf { conceptSet != null }) } // 매핑 없는 컨셉으로 고른 게 아니다 — 문구에 싣지 않는다(BR-U2-09)
+        if (refill.isEmpty()) return out.copy(candidates = inside + outside)
+        return out.copy(
+            candidates = inside + refill + outside,
+            freshness = FreshnessMeta(clock.instant(), degraded = true),
         )
     }
 
@@ -376,7 +482,7 @@ class SlotCandidateService(
         pool: ScoredCandidatePool,
         targetPoiId: UUID,
         radiusM: Int?,
-        center: PoiSurfaceView,
+        center: RegionCenter,
         inItinerary: List<UUID>,
     ): SlotCandidatesOutput? {
         val category = pool.candidates.firstOrNull { it.poiId == targetPoiId }?.category ?: return null

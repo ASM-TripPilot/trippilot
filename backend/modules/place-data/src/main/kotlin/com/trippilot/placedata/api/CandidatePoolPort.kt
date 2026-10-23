@@ -23,6 +23,8 @@ data class GroundedPlace(
     val category: String,
     val region: String?,
     val distanceM: Double?,
+    /** 행정구역 표준코드(시군구 5자리, TRIP-359) — 구를 고른 여행의 "구 안" 판정([RegionLookupFacade.districtCodesOf])에 쓴다. */
+    val regionCode: String? = null,
 )
 
 /** 후보 조회 범위 — 지역명 또는 (중심, 반경m). */

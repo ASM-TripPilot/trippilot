@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.adapter.`in`.web
 
+import com.trippilot.itinerarygeneration.application.CandidateCenter
 import com.trippilot.itinerarygeneration.application.RequestSlotCandidates
 import com.trippilot.itinerarygeneration.application.SlotCandidateService
 import com.trippilot.itinerarygeneration.domain.SlotCandidate
@@ -78,8 +79,13 @@ data class SlotCandidatesRequest(
      * 그 직전 POI 는 서버가 일정에서 읽는다(클라가 보내지 않는다 — `excludePoiIds` 를 안 받는 것과 같은 이유).
      */
     val coPick: Boolean = false,
+    /**
+     * 찾는 중심(같이 짜기에서 사용자가 고름). 생략하면 [coPick] 규칙 그대로다. `POINT` 만 `lat`·`lng` 를 받는다 —
+     * 직전 장소·구 중심·숙소 좌표는 서버가 읽는다([coPick] 이 직전 POI 를 안 받는 것과 같은 이유).
+     */
+    val center: CandidateCenter? = null,
 ) {
-    fun toCommand() = RequestSlotCandidates(slotKey, radiusM, concept, reason, coPick)
+    fun toCommand() = RequestSlotCandidates(slotKey, radiusM, concept, reason, coPick, center)
 }
 
 /**
