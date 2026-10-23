@@ -17,9 +17,9 @@ import random
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone, tzinfo
 
+from trippilot.agents.adapters.memory_place_fact_store import InMemoryPlaceFactStore
 from trippilot.agents.planb.rag import PlanBAgent
 from trippilot.agents.schedule.agent import Clock
-from trippilot.agents.adapters.memory_place_fact_store import InMemoryPlaceFactStore
 from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent
 from trippilot.api import schemas
 from trippilot.domain.common import TraceId

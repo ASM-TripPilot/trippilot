@@ -1136,7 +1136,7 @@ def _web_facts(ctx: TurnContext, packet: Mapping[str, object], poi_id: str, plac
     fields = _unknown_asked(ctx, row) if agent is not None else ()
     if not fields:
         return {}
-    out = agent.run(UnknownTask(poi_id, place, fields, ctx.today, ctx.trace_id, ctx.now))
+    out = agent.run(UnknownTask(poi_id=poi_id, place=place, fields=fields, on=ctx.today, trace_id=ctx.trace_id, now=ctx.now))
     if out.facts is not None:  # 저장된 값 — 이번 턴에 찾은 것이 아니다
         return {"web": out.facts}
     return {"web_pending": True} if out.pending else {}  # 없음(못 찾음 저장·하루 상한)이면 종전대로 "미확인"

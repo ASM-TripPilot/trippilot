@@ -34,6 +34,7 @@ TripPilot AI is an **independent Python AI service** that generates, replans, an
 - **PlanBAgent**: contingency handling (RAG pattern, 3 KBs + pgvector) — `agents/planb/rag.py` `PlanBRagPipeline.run(PlanBRagRequest)`
 - **ReflectAgent**: reflection generation — `agents/reflect/agent.py` `ReflectAgent.run(ReflectTask)`; text and vision (Phase 2) share one entry via `ReflectTask.vision`
 - **EditAgent**: itinerary editing (translate → validate → confirm gate → retime → assembly validate) — `agents/edit/agent.py` `EditAgent.run(EditTask) -> EditOutcome`
+- **UnknownHandlingAgent**: place facts the card shows as "unknown" (hours · closed days · fee) found by vendor web search *after* answering — `agents/unknown_handling/agent.py` `UnknownHandlingAgent.run(UnknownTask) -> UnknownOutcome(facts, pending)`; the GET_POI_INFO dialogue handler calls it (not a `ROUTING_TABLE` row), the lookup runs in the background and the result is stored (ai_kb `place_fact_cache`) for the next ask. Moved here from `orchestrator/` on 2026-10-22 to match the other four
 
 > **All four agents are objects that wrap their gateway workers** (2026-09-09): constructor DI, one
 > `run(<Task>) -> <Outcome>` entry, no exceptions across the boundary (DL-5). The literal
@@ -95,7 +96,7 @@ branch therefore cannot fire on any path.
   2026-08-25; count with `grep -rc --include="*.py" "@given" ai/tests`). Earlier "19"/"52"
   figures were stale.
 - **Test layout mirrors `src/trippilot/`**: put a test in the folder of the package it mainly
-  exercises — `tests/<package>/` (agents by agent: `tests/agents/<schedule|planb|reflect|edit>/`);
+  exercises — `tests/<package>/` (agents by agent: `tests/agents/<schedule|planb|reflect|edit|unknown_handling>/`);
   tests of `ai/scripts` go in `tests/scripts/`. `fakes/`·`fixtures/`·`generators/` and
   `test_architecture.py` stay at the root.
 - LangChain: **declared but not used** — no dependency in `pyproject.toml`, zero

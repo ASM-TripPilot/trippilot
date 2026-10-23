@@ -1,21 +1,19 @@
 """UnknownHandlingAgent — 먼저 답하고 뒤에서 찾기(2026-10-22 사용자 결정). `run(UnknownTask)` 하나로 찾았음·찾는 중·없음 셋이
-갈리고, 저장·중복 제거·하루 상한·실패 미저장·장애 수렴, Pg 저장소 DML. (폴백 문장이 답변 검사를 넘는다는 PBT 는 핸들러 몫 —
-`tests/orchestrator/test_web_sentence.py`)"""
+갈리고, 저장·중복 제거·하루 상한·실패 미저장·장애 수렴. (저장소 구현 2종의 계약은 `tests/agents/adapters/test_place_fact_stores.py`,
+폴백 문장이 답변 검사를 넘는다는 PBT 는 핸들러 몫 — `tests/orchestrator/test_web_sentence.py`)"""
 
 from __future__ import annotations
 
-import json
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
 from trippilot.agents.adapters.memory_place_fact_store import InMemoryPlaceFactStore
-from trippilot.agents.adapters.pg_place_fact_store import PgPlaceFactStore
 from trippilot.agents.unknown_handling import agent as uh
 from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent, UnknownOutcome, UnknownTask
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm import TypedResult
-from trippilot.ports.place_fact_store_port import FactRecord, PlaceFacts
+from trippilot.ports.place_fact_store_port import PlaceFacts
 
 _NOW = datetime(2026, 10, 22, 6, 0, tzinfo=timezone.utc)
 _ON = date(2026, 10, 22)
@@ -57,7 +55,7 @@ def _agent(result: TypedResult):
 
 
 def _task(poi_id="p1", place="경복궁 서울 종로구", fields=("hours", "last_entry"), *, now=_NOW, trace="t") -> UnknownTask:
-    return UnknownTask(poi_id, place, tuple(fields), _ON, TraceId(trace), now)
+    return UnknownTask(poi_id=poi_id, place=place, fields=tuple(fields), on=_ON, trace_id=TraceId(trace), now=now)
 
 
 def test_run_says_pending_at_once_and_the_next_ask_sees_the_found_value() -> None:
@@ -67,7 +65,9 @@ def test_run_says_pending_at_once_and_the_next_ask_sees_the_found_value() -> Non
     later.run()
     assert agent.run(_task(now=_NOW + timedelta(minutes=1))) == UnknownOutcome(facts=_FACTS)
     assert worker.calls == [("경복궁 서울 종로구", ("hours", "last_entry"), _ON)]  # 저장된 값을 돌려줬다 — 다시 찾지 않는다
-    assert agent.run(_task(now=_NOW + uh.FOUND_TTL + timedelta(seconds=1))) == UnknownOutcome(pending=True)  # 일주일 뒤 다시 찾는다
+    assert agent.run(_task(now=_NOW + uh.FOUND_TTL - timedelta(seconds=1))) == UnknownOutcome(facts=_FACTS)  # 일주일 안에는 그대로
+    assert agent.run(_task(now=_NOW + uh.FOUND_TTL)) == UnknownOutcome(pending=True)  # 일주일이 되면 다시 찾는다
+    assert len(later.jobs) == 1  # 새로 냈다
 
 
 def test_the_same_place_is_not_looked_up_twice_while_in_flight() -> None:
@@ -110,66 +110,22 @@ def test_a_broken_store_reads_as_unknown_and_nothing_leaks_out() -> None:
     agent = UnknownHandlingAgent(_Worker(_ok(_FACTS)), _Broken(), submit=later)
     assert agent.run(_task()) == UnknownOutcome(pending=True)  # 저장소 장애는 "없음"과 같다(INV-4) — 그래도 뒤에서 찾기는 낸다
     later.run()  # 저장 실패도 밖으로 새지 않는다 — 사유만 남긴다
-    assert agent.run(_task(trace="t2")) == UnknownOutcome(pending=True)  # 찾는 중 표시가 풀려 다시 낼 수 있다
+    assert agent.run(_task(trace="t2")) == UnknownOutcome(pending=True) and len(later.jobs) == 1  # 찾는 중 표시가 풀려 새로 냈다
 
 
-def test_a_refused_submit_is_not_pending() -> None:
-    def refuse(fn, *args):
-        raise RuntimeError("pool closed")
+def test_a_refused_submit_is_not_pending_and_does_not_leave_the_place_in_flight() -> None:
+    later, refusals = _Later(), [RuntimeError("pool closed")]
 
-    agent = UnknownHandlingAgent(_Worker(_ok(_FACTS)), InMemoryPlaceFactStore(), submit=refuse)
+    def flaky(fn, *args):
+        if refusals:
+            raise refusals.pop()
+        later(fn, *args)
+
+    agent = UnknownHandlingAgent(_Worker(_ok(_FACTS)), InMemoryPlaceFactStore(), submit=flaky)
     assert agent.run(_task()) == UnknownOutcome()  # 못 냈으면 "찾는 중"이라 말하지 않는다
+    assert agent.run(_task(trace="t2")) == UnknownOutcome(pending=True) and len(later.jobs) == 1  # 찾는 중 표시를 되돌렸다 — 다음엔 낸다
 
 
 def test_outcome_cannot_be_found_and_pending_at_once() -> None:
     with pytest.raises(ValueError):
         UnknownOutcome(facts=_FACTS, pending=True)
-
-
-class _Cur:
-    def __init__(self, conn) -> None:
-        self.conn = conn
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
-
-    def execute(self, sql, params):
-        self.conn.log.append((" ".join(sql.split()), params))
-
-    def fetchone(self):
-        return self.conn.row
-
-
-class _Conn:
-    def __init__(self, row=None) -> None:
-        self.log, self.row = [], row
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
-
-    def cursor(self):
-        return _Cur(self)
-
-
-def test_pg_store_writes_only_dml_and_reads_back_the_same_facts() -> None:
-    conn = _Conn()
-    PgPlaceFactStore(lambda: conn).put(FactRecord("p1", _FACTS, _NOW, _NOW + uh.FOUND_TTL))
-    (delete, _), (insert, params) = conn.log
-    assert delete.startswith("DELETE FROM place_fact_cache WHERE expires_at <=") and "ON CONFLICT (poi_id)" in insert
-    doc = json.loads(params[1])
-    read = _Conn(row=("p1", doc, _NOW, _NOW + uh.FOUND_TTL))
-    assert PgPlaceFactStore(lambda: read).get("p1", _NOW).facts == _FACTS
-    assert "expires_at > %s" in read.log[0][0]  # 만료 행은 없는 것과 같다
-
-
-def test_pg_store_keeps_a_nothing_found_row_as_null() -> None:
-    conn = _Conn()
-    PgPlaceFactStore(lambda: conn).put(FactRecord("p1", None, _NOW, _NOW + uh.MISS_TTL))
-    assert conn.log[1][1][1] is None
-    assert PgPlaceFactStore(lambda: _Conn(row=("p1", None, _NOW, _NOW))).get("p1", _NOW).facts is None

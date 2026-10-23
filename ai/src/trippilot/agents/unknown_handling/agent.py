@@ -86,7 +86,8 @@ class UnknownHandlingAgent:
         self._lock = threading.Lock()
 
     def run(self, task: UnknownTask) -> UnknownOutcome:
-        """저장된 값이 있으면 그것, 없으면 뒤에서 찾기를 내고 "찾는 중". 이번 턴은 기다리지 않는다."""
+        """저장된 값이 있으면 그것, 없으면 뒤에서 찾기를 내고 "찾는 중". 이번 턴은 기다리지 않는다.
+        예외를 던지지 않는다 (INV-4 · DL-5 — 저장소·제출 실패는 "없음"으로 수렴)."""
         stored = self._known(task.poi_id, task.now)
         if stored is not None:  # 찾았거나 못 찾음이 저장돼 있다 — 못 찾음이면 하루는 다시 찾지 않는다
             return UnknownOutcome(facts=stored.facts)
