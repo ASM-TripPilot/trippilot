@@ -9,7 +9,9 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from collections import Counter
+from hypothesis import strategies as st
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 
 from hypothesis import given, settings
@@ -193,3 +195,31 @@ def test_fallback_fixed_blocks_mirror_placed_slots(setup) -> None:
         for fb in problem.fixed_blocks:
             if (fb.poi_id, fb.window.start, fb.window.end) in placed:
                 assert fb in day.fixed_blocks
+
+
+from trippilot.assembly_engine.fallback_assembler import _without_first  # noqa: E402
+
+
+# ── 시도한 후보 빼기 — `list.remove` 를 차례로 부른 것과 같은 결과 (2026-10-23) ──
+# 그리디가 후보마다 `remaining.remove` 를 불러 생성 풀 5,000곳에서 O(N²)(개발 파드 1일차 1.8s)였다. 바퀴마다 모아
+# 한 번에 빼는 `_without_first` 로 바꿨다 — 같은 값이 겹치면 앞의 것부터 빼는 의미까지 같아야 결과가 같다.
+
+
+@dataclass(frozen=True)
+class _V:
+    """같은 값(v)이어도 꼬리표(tag)로 어느 것이 빠졌는지 가려낸다 — 꼬리표는 비교·해시에 안 낀다."""
+
+    v: int
+    tag: int = field(compare=False)
+
+
+@given(values=st.lists(st.integers(0, 4), max_size=30), picks=st.lists(st.integers(0, 4), max_size=30))
+def test_without_first_matches_repeated_list_remove(values, picks) -> None:
+    seq = [_V(v, i) for i, v in enumerate(values)]
+    expected = list(seq)
+    counts: Counter = Counter()
+    for p in picks:
+        if _V(p, -1) in expected:
+            expected.remove(_V(p, -1))  # 같은 값 중 앞의 것이 빠진다
+            counts[_V(p, -1)] += 1
+    assert [x.tag for x in _without_first(seq, counts)] == [x.tag for x in expected]
