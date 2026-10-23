@@ -79,6 +79,9 @@
 > 여행 전날 첫날 `FULL_DAY` 반영(트리거 진입·사용자 [적용])은 확정 잠금의 예외다. 그 밖의 여행 전 확정 일정 변경 거부는 그대로다. 지평 `pre-trip` 은 이 개정이 승인된 뒤에만 켠다. 확정 일정은 복원이 409 라(`backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/ItineraryRevisionService.kt:130-131`) 이 반영은 되돌릴 수 없다.
 > → [BR-SA-20 · O-SA-6](../../situation-awareness/functional-design/business-rules.md) · [DEC-SA-7](../../situation-awareness/functional-design/business-logic-model.md)
 
+> **[개정 · 2026-10-23 — 사용자 지시]** BR-U3-28 — 위 개정(여행 전날 첫날 반영 예외)을 승인한 것으로 보고 지평 `pre-trip` 을 켠다. 사용자 원문 "꺼둔거 다 켜. 다 잘 돌아가게끔 만들란 말이야!!!"(다른 세션 경유).
+> → [situation-awareness BLM §0.4 2026-10-23 블록](../../situation-awareness/functional-design/business-logic-model.md)
+
 ## 7. 편집 이력 (DEC-U3-1)
 
 | ID | 규칙 |

@@ -53,11 +53,12 @@ class SituationSweepWiringTest : StringSpec({
     }
 
     /**
-     * 특보·대기질은 관찰 전용 목록에 든 채 출발한다(BR-SA-04) — 목록에서 빼는 커밋이 '켜기'다. application.yml 은 경합 파일이라 오편집·
-     * 충돌 해소 실수로 목록이 줄면 실측 전에 쓰기·푸시가 조용히 켜진다. 켜기 커밋은 이 단언을 함께 바꾼다(의도한 마찰).
+     * 특보·대기질은 관찰 전용 목록에 든 채 출발했고(BR-SA-04) 목록에서 빼는 커밋이 '켜기'였다 — 2026-10-23 둘 다 뺐다. application.yml 은
+     * 경합 파일이라 오편집·충돌 해소 실수로 목록이 바뀌면 쓰기·푸시가 조용히 꺼지거나 켜진다 — 키를 지우면 코드 기본값(관찰 전용 둘)으로
+     * 돌아간다. 목록을 바꾸는 커밋은 이 단언을 함께 바꾼다(의도한 마찰). 빈 값이 빈 집합으로 묶이는 것은 `SituationSweepPropertiesTest` 가 본다.
      */
-    "운영 yml 의 관찰 전용 목록은 특보·대기질이다 — 켜기 커밋만 이 단언을 바꾼다" {
-        resolve("trippilot.planb.situation-sweep.observe-only", emptyMap()) shouldBe "kma-warning,airkorea"
+    "운영 yml 의 관찰 전용 목록은 비어 있다 — 특보·대기질도 쓰기·푸시한다(목록을 바꾸는 커밋만 이 단언을 바꾼다)" {
+        resolve("trippilot.planb.situation-sweep.observe-only", emptyMap()) shouldBe ""
     }
 
     "compose 가 backend 서비스에 네 스위치를 넘긴다 — 모드·지평은 값을 보장하는 꼴(빈 값 금지)" {
