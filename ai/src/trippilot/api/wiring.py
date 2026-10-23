@@ -719,6 +719,20 @@ def _payload_alternative_pairs(
     )
 
 
+# BE `visit_slot.placement_reason` 칸 상한(`BoundedText.PLACEMENT_REASON_MAX`) — 재계획 경로는 BE 가 자르지 않는다.
+_PLACEMENT_REASON_MAX = 500
+
+
+def _pick_reasons(picks) -> dict[PoiId, str]:
+    """구성 LLM 이 고른 곳 → 이유. 게이트가 비운 이유(시간 표현·연락처 꼴)는 뺀다 — 빈 이유로 원래 이유를 덮지 않게.
+    같은 곳이 두 번이면 첫 이유(고른 순서와 같다)."""
+    out: dict[PoiId, str] = {}
+    for pick in picks:
+        if pick.reason.strip():
+            out.setdefault(pick.poi_id, pick.reason.strip())
+    return out
+
+
 def _keyed_explanations(
     solution: ItinerarySolution, explanations: tuple[PoiExplanation, ...]
 ) -> dict[str, str]:
@@ -2623,6 +2637,7 @@ class WiredItineraryOrchestrator:
         # 사용자 지시(2026-10-14)로 재계획에 한해 "솔버 LLM 2차는 실패 시에만"(2026-08-23)을 개정한다.
         active = tuple(b for b in blocks if b not in past)
         compose_ctx: list = []  # 1차 구성의 (입력, 제외) — 1회 수리가 쓴다
+        why: dict[PoiId, str] = {}  # 구성·수리 LLM 이 고른 곳의 이유 → 슬롯 추천 이유
         try:
             # 상황 추천 = PlanB 순서. 선택 LLM 을 안 불렀으면 규칙 랭킹(우천·저장 장소·거리)이 참고로 간다.
             composed = tuple(v.poi_id for v in earlier) if earlier is not None else self._compose_day(
@@ -2632,7 +2647,7 @@ class WiredItineraryOrchestrator:
                 trace_id=trace_id, now=now, started_ms=t0, budget=budget,
                 nearby=(*nl_near, *night), origins=tuple(p.coord for p in far),
                 window_start=nl.window_start, window_end=day_end,  # 솔버 `day_window` 와 같은 창
-                rules=_category_rule_lines(nl), ctx_out=compose_ctx, holidays=holidays,
+                rules=_category_rule_lines(nl), ctx_out=compose_ctx, why_out=why, holidays=holidays,
                 planb_request=planb_request,
             )
         except Exception as e:  # 설정 버그·렌더 실패도 재계획을 죽이지 않는다 — 종전 경로로(INV-4)
@@ -2823,7 +2838,7 @@ class WiredItineraryOrchestrator:
                         request, outcome, composed, missed, task, compose_ctx[0] if compose_ctx else None,
                         # 더 늦게까지의 원 일정 남은 방문도 이름으로 집은 곳처럼 수리가 갈아 끼우지 않는다
                         nl, (*nl_ids, *kept), night, add_one, cat_of, notes, t0=t0, budget=budget,
-                        trace_id=trace_id, now=now, past=past)
+                        trace_id=trace_id, now=now, past=past, why_out=why)
                 except Exception as e:  # 수리는 덤이다 — 실패해도 1차 해 그대로(INV-4: 밝힌다)
                     notes.append(f"llm_repair_error: {type(e).__name__}")
                     self._repair_event(meta, f"error: {type(e).__name__}: {e}")
@@ -2861,7 +2876,7 @@ class WiredItineraryOrchestrator:
             retrieved={**planb.retrieved, "POI_DESC": len(compose_ctx[0][0].place_knowledge)}
             if compose_ctx else planb.retrieved,
             planb_fallback=planb.is_fallback, started_ms=t0, past=past,
-            composed=bool(composed),
+            composed=bool(composed), reasons=why,
         )
 
     def _rag_events(self, meta: schemas.RequestMetaSchema, notes) -> None:
@@ -2961,6 +2976,7 @@ class WiredItineraryOrchestrator:
     def _repair_day(
         self, request, outcome, composed, missed, task, ctx, nl, nl_ids, night, add_one, cat_of, notes,
         *, t0: int, budget, trace_id: TraceId, now: datetime, past: tuple[FixedBlock, ...] = (),
+        why_out: dict[PoiId, str] | None = None,
     ):
         """다시 짜기 1회 수리 — 솔버가 뺀 곳의 까닭을 붙여 구성 LLM 에 **한 번** 되묻고, 지금 해의 빈 틈에 그대로
         들어가는 후보에서만 고르게 해 다시 푼다. (최종 결과, 최종 구성 목록) — 의심스러우면 1차 그대로.
@@ -3060,6 +3076,8 @@ class WiredItineraryOrchestrator:
             subs = [p for p in subs if p in ok_set]
         notes.append(f"llm_repair: picked={len(subs)}/{len(result.value)} pool={len(cands.pois)} "
                      f"gaps={len(gaps_used)} drop={len(drop)}")
+        if why_out is not None:
+            why_out.update({p: r for p, r in _pick_reasons(result.value).items() if p in subs})
         if not subs:
             return outcome, composed
         left = budget.total_ms - (self._clock.monotonic_ms() - t0)
@@ -3127,6 +3145,7 @@ class WiredItineraryOrchestrator:
         window_end: datetime | None = None,
         rules: tuple[str, ...] = (),
         ctx_out: list | None = None,
+        why_out: dict[PoiId, str] | None = None,  # 고른 곳의 이유(게이트가 시간 표현을 비운 뒤) — 슬롯 추천 이유
         holidays: Mapping[date, frozenset[str]] | None = None,  # 공휴일 달력 — 진입점이 1회 조회(상황 감지 H1)
         planb_request: PlanBRagRequest | None = None,  # 후보의 장소 지식(KB-5)을 같은 상황 질의로 찾는다
     ) -> tuple[PoiId, ...]:
@@ -3260,6 +3279,8 @@ class WiredItineraryOrchestrator:
             notes.append(f"llm_compose_fallback: {result.error}")
             return ()
         picks = tuple(dict.fromkeys(pick.poi_id for pick in result.value))
+        if why_out is not None:
+            why_out.update(_pick_reasons(result.value))
         # 남은 일정을 몇 곳 그대로 골랐나 — "다시 짰는데 안 바뀌었다"를 로그로 가른다.
         remaining_ids = {PoiId(s.poi_id) for s in slots if status(s) == "남은 일정"}
         notes.append(f"llm_composed: {min(len(picks), limit)}/{len(picks)} "
@@ -3570,6 +3591,7 @@ class WiredItineraryOrchestrator:
         past: tuple[FixedBlock, ...] = (),
         composed: bool = False,
         end_day: bool = False,
+        reasons: Mapping[PoiId, str] | None = None,
     ) -> schemas.ReplanResponse:
         """`GenerationOutcome` → `ReplanResponse`. **예외로 올리지 않는다** (IO-7).
 
@@ -3647,8 +3669,13 @@ class WiredItineraryOrchestrator:
         )
         if report is not None and report.estimated:
             notes.append(f"distance_estimated:{report.estimated}/{report.total}")
+        # 슬롯 추천 이유 — BE 는 이 칸으로 그날 슬롯의 이유를 **통째로 바꾼다**(빈 칸 = 이유 없음). 안 바뀐 곳은
+        # 원래 이유를 되싣고, 구성 LLM 이 고른 곳은 그 이유로(같은 곳을 다시 골랐으면 새 이유). 상한은 BE 칸(500자).
+        why = {PoiId(s.poi_id): s.placement_reason for s in request.current_slots if s.placement_reason}
+        why |= reasons or {}
         envelope = _envelope(
             solution,
+            tuple(PoiExplanation(pid, text[:_PLACEMENT_REASON_MAX]) for pid, text in why.items()),
             distance_ranges=distance_ranges,
             candidates_summary=outcome.candidates_summary,
         )
