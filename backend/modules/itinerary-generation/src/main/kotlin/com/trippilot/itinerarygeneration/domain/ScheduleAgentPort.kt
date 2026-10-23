@@ -333,8 +333,8 @@ data class TripContext(
 /**
  * day별 공간 앵커(등록 숙소 해석 결과 = trip_base_day).
  *
- * [regionCodes] — 그날 목적지가 **시군구**면 그 구 + 선택 불가 하위 행정구 코드(수원시 41110 → 41111·41113…), 시도·코드
- * 없음이면 빈 목록. AI 가 후보 풀을 그 구 안 먼저로 짓는다(2026-10-23 사용자 결정 — "서초를 골랐는데 점심은 서초,
+ * [regionCodes] — 그날 목적지가 **시군구**면 그 구 코드(`RegionLookupFacade.districtCodesOf`, 지금은 1개 — POI 코드가
+ * 행정구를 상위 시로 접어 붙인다), 시도·코드 없음이면 빈 목록. AI 가 후보 풀을 그 구 안 먼저로 짓는다(2026-10-23 사용자 결정 — "서초를 골랐는데 점심은 서초,
  * 저녁은 혜화"). 와이어 키는 AI `DayAnchorSchema.region_codes` 와 정확히 같아야 한다(`AiBoundaryOpenApiTest`) —
  * 지금은 늘 빈 목록이고, 채우는 것은 `RegionAnchors.dayAnchors` 후속이다.
  */
