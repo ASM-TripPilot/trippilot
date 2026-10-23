@@ -18,7 +18,7 @@ CI 밖 수동 실행 전용(실 API 를 부른다). few-shot·판단 순서(CoT)
   6건. 완전 일치(겹쳐 고른 지시도 오답)와 허용(정답 포함·금지 지시 없음)을 같이 낸다. 시한 3.75s(DEV 실측 시한).
 - `answer`  DIALOGUE_ANSWER — Facts 11종 + 계획 병합 3종 + 장소 탐색 5종(서울·일정 없음 4 · 일정 근처 1) + 장소 소개 3종 + 행사 3종 × 반복. 게이트 통과율·시각-장소 짝 위반(오케스트레이터 INV-2 검사와
   같은 함수)·지연. 문장은 끝에 전부 찍는다 — 지어낸 사실은 사람이 읽어서 본다.
-- `scoring` PREFERENCE_SCORING — `data/collected_pois.json` 해운대구 실데이터 53곳 × 페르소나 3종. 세 번째 인자는
+- `scoring` PREFERENCE_SCORING — `data/collected_pois.json` 해운대구 실데이터 52곳(부산광안대교는 2026-10 공유본에서 수영구 "광안대교"가 돼 빠졌다) × 페르소나 3종. 세 번째 인자는
   반복이 아니라 **청크 구성 수**다: 구성마다 poiId(uuid5)의 소금만 바꿔 워커의 `plan_chunks`(poi_id 정렬 균등 분할)가
   다른 묶음을 만들게 한다. 청크는 서로를 못 보고 따로 채점되므로, 같은 장소가 묶음에 따라 점수가 흔들리는지(POI별
   표준편차 평균·구성 간 스피어만)와 페르소나마다 미리 정한 명백한 상·하위 쌍의 순서 정합을 잰다. 프롬프트에 예시를
@@ -77,11 +77,10 @@ from trippilot.domain.poi import DataQuality, Poi, PoiCategory  # noqa: E402
 from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter  # noqa: E402
 from trippilot.llm_gateway.config import C1Config  # noqa: E402
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate  # noqa: E402
-from trippilot.llm_gateway.gates.numbered_selection import NumberedSelectionGate  # noqa: E402
+from trippilot.llm_gateway.gates.numbered_selection import NumberedScoringGate, NumberedSelectionGate  # noqa: E402
 from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerGate  # noqa: E402
 from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanGate  # noqa: E402
 from trippilot.llm_gateway.gates.intent import IntentGate  # noqa: E402
-from trippilot.llm_gateway.gates.scoring import ClosedSetGate  # noqa: E402
 from trippilot.llm_gateway.gateway import GatewayFacade  # noqa: E402
 from trippilot.llm_gateway.prompts import PromptRegistry  # noqa: E402
 from trippilot.llm_gateway.workers.alternative_selection import AlternativeSelectionInput, AlternativeSelectionWorker  # noqa: E402,E501
@@ -528,7 +527,7 @@ _SCORE_REGION = "해운대구"
 _SCORE_NAMES = (
     "해운대 동백섬", "장산 (부산 국가지질공원)", "해운대 그린레일웨이 (미포~송정 구간)", "미포항", "해운대 수목원",
     "장산산림욕장", "해운대해수욕장",
-    "달맞이동산", "동백공원", "부산광안대교", "씨라이프부산아쿠아리움", "해운대리버크루즈", "해운대온천센터", "옥천사",
+    "달맞이동산", "동백공원", "씨라이프부산아쿠아리움", "해운대리버크루즈", "해운대온천센터", "옥천사",
     "해리단길",
     "문탠로드", "센텀시티 아이스링크", "송정서핑학교", "멜트", "오버플로우", "펫낫", "해운대블루라인파크 청사포정거장",
     "청사포 기찻길", "더베이101", "부산엑스더스카이",
@@ -607,7 +606,7 @@ def _avg(xs) -> float | None:
 
 def run_scoring(prompts: Path, compositions: int) -> None:
     assert compositions >= 2, "청크 구성이 2가지 이상이라야 흔들림을 잰다"
-    gw = _gateway(prompts, LlmFeature.PREFERENCE_SCORING, ClosedSetGate(), model=SCORE_MODEL)
+    gw = _gateway(prompts, LlmFeature.PREFERENCE_SCORING, NumberedScoringGate(), model=SCORE_MODEL)
     cfg = gw.config
     # 워커와 같은 분할 — 단계 예산 → 청크 크기(adaptive_chunk_size) → poi_id 정렬 균등 분할(plan_chunks)
     size = adaptive_chunk_size(SCORE_TIMEOUT * 1000.0, cfg)

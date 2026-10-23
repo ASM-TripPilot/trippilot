@@ -35,15 +35,14 @@ from trippilot.domain.llm import CandidatePool, LlmFeature, ScoredPoi, TypedResu
 from trippilot.domain.observability import ScoreChunkEvent
 from trippilot.domain.persona import PersonaSummary
 from trippilot.llm_gateway.config import C1Config
+from trippilot.llm_gateway.gates.numbered_selection import numbered
 
 _COMPONENT = "c1.worker.preference"
 
-# 점수 1건의 출력 토큰 추정 — 출력 스키마 `{"scores":[{"poiId":"<uuid>","score":0.0}]}`
-# 의 항목 하나: uuid 36자(hex·하이픈이라 BPE 가 잘게 쪼갠다) ≈ 22 + 키·따옴표·구두점·
-# 점수 ≈ 12 → ≈ 34. 실측(출력 상한 1024): 29건 청크 출력 960~1023 = 건당 33~35.3,
-# 32건부터 잘림(1/10 성공). GPT-5 계열은 reasoning 토큰도 같은 상한에서 빠지므로
-# 실측 상단에 여유를 얹어 40 으로 잡는다 → 상한 1024 에서 청크 상한 25.
-SCORE_TOKENS_PER_ITEM = 40
+# 점수 1건의 출력 토큰 추정 — 출력 스키마 `{"scores":[{"no":1,"score":0.0}]}` 의 항목 하나
+# ≈ 12(번호 1~2자리·키·구두점·점수). 0.3.0 까지는 UUID 36자를 베껴 건당 34~35 실측이었다(상한 1024
+# 에서 32건부터 잘림). GPT-5 계열은 reasoning 토큰도 같은 상한에서 빠지므로 여유를 얹어 16.
+SCORE_TOKENS_PER_ITEM = 16
 # 출력 상한 중 사고 토큰 몫 — 사고를 끌 수 없는 모델(claude-fable-5-1)은 사고 토큰도 같은 상한에서 쓴다.
 # 상한에서 이 몫을 빼고 청크를 역산하므로 상한을 올려도 청크가 같이 커지지 않는다(커지면 청크 지연이
 # 늘어 시한 초과가 는다). 상한이 이 몫의 두 배보다 작으면 상한의 절반만 뺀다(청크 0 방지).
@@ -82,13 +81,14 @@ def adaptive_chunk_size(stage_budget_ms: float, cfg: C1Config) -> int:
 
 
 def build_prompt_vars(pool: CandidatePool, persona: PersonaSummary) -> dict[str, str]:
-    """프롬프트 변수 문자열화 — 결정론(poi_id 정렬), 좌표 미포함 (G181, PROMPT-P1).
+    """프롬프트 변수 문자열화 — 결정론(poi_id 정렬 = 번호), 좌표 미포함 (G181, PROMPT-P1).
 
-    후보는 poi_id·카테고리·상호명만 — Poi의 coord·avg_cost 등은 넣지 않는다.
+    후보는 번호·카테고리·상호명만 — Poi의 coord·avg_cost 등은 넣지 않는다.
     """
+    # 번호(1부터) — 게이트 `NumberedScoringGate` 가 같은 `numbered(pool)` 순서로 poi_id 를 되살린다(프롬프트 0.4.0).
     candidates = "\n".join(
-        f"- {p.poi_id} | {p.category.value} | {inline(p.name)}"
-        for p in sorted(pool.pois, key=lambda p: str(p.poi_id))
+        f"- {i} | {p.category.value} | {inline(p.name)}"
+        for i, p in enumerate(numbered(pool), start=1)
     )
     return {
         "taste_tags": ", ".join(t.value for t in persona.taste_tags) or "미설정",
