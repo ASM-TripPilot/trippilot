@@ -28,7 +28,7 @@ from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver
 from trippilot.llm_gateway.gates.base import GateOutcome
 from trippilot.llm_gateway.gates.explanation import ExplanationGate
-from trippilot.llm_gateway.gates.scoring import ClosedSetGate
+from trippilot.llm_gateway.gates.numbered_selection import NumberedScoringGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.explanation import ExplanationWorker
@@ -264,7 +264,7 @@ def _build(
     gateway = GatewayFacade(
         score_llm if score_llm is not None else FakeLlm(_scores_json("p1", "p2", "p3")),
         renderer if renderer is not None else _Renderer(),
-        score_gate if score_gate is not None else ClosedSetGate(),
+        score_gate if score_gate is not None else NumberedScoringGate(),
         _C1CFG,
         trace,
     )
@@ -1008,16 +1008,20 @@ _CANDIDATE_LINE = re.compile(r"^- (\S+) \|", re.MULTILINE)
 
 
 class _ChunkFailLlm:
-    """특정 poi_id가 후보에 실린 청크만 실패, 나머지 청크는 후보 전원 점수 응답."""
+    """특정 상호명이 후보에 실린 청크만 실패, 나머지 청크는 후보 전원 점수 응답.
 
-    def __init__(self, poison: str) -> None:
-        self._poison = poison
+    프롬프트 0.4.0 부터 후보 줄은 `- 번호 | 분류 | 상호명` 이라 poi_id 는 프롬프트에 없다 — 상호명으로 청크를 가른다.
+    """
+
+    def __init__(self, poison_name: str) -> None:
+        self._poison = poison_name
 
     def invoke(self, request: LlmRequest) -> LlmResponse:
-        ids = _CANDIDATE_LINE.findall(request.prompt)
-        if self._poison in ids:
+        ids = _CANDIDATE_LINE.findall(request.prompt)  # 번호
+        names = [line.split(" | ")[-1] for line in request.prompt.splitlines() if line.startswith("- ")]
+        if self._poison in names:
             raise RuntimeError("chunk down (fake)")
-        text = json.dumps({"scores": [{"poiId": x, "score": 0.5} for x in ids]})
+        text = json.dumps({"scores": [{"no": x, "score": 0.5} for x in ids]})
         return LlmResponse(
             raw_text=text, input_tokens=1, output_tokens=1, latency_ms=1,
             model_id=request.model_id,
@@ -1033,7 +1037,7 @@ def test_partial_chunk_failure_backfills_failed_chunk_with_rule_scores() -> None
     pois = tuple(_poi(i, 0.0001 * i) for i in range(1, 41))  # 풀 40건 → 2청크
     sorted_ids = sorted(str(p.poi_id) for p in pois)
     orchestrator, trace, sink = _build(
-        score_llm=_ChunkFailLlm(sorted_ids[0]),  # 첫 청크(정렬 앞 20건)만 실패
+        score_llm=_ChunkFailLlm(min(pois, key=lambda p: str(p.poi_id)).name),  # 첫 청크(정렬 앞 20건)만 실패
         pois=pois,
         renderer=PromptRegistry(_PROMPTS_DIR),   # 프롬프트에 후보가 실려야 청크 구분 가능
     )

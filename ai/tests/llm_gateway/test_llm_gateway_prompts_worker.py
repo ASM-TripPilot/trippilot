@@ -60,8 +60,8 @@ def test_preference_scoring_yaml_loads_with_semver() -> None:
         LlmFeature.PREFERENCE_SCORING, build_prompt_vars_empty()
     )
     assert ref.prompt_id == "prompts/preference_scoring.yaml"
-    assert ref.version == "0.3.0" and ref.feature == "PREFERENCE_SCORING"
-    assert "poiId" in prompt  # 출력 스키마 안내 포함
+    assert ref.version == "0.4.0" and ref.feature == "PREFERENCE_SCORING"
+    assert '"no"' in prompt and "poiId" not in prompt  # 출력 스키마 안내 — 번호로 답한다(0.4.0)
     # TRIP-374: 출력 스키마에 reason 없음 — 프롬프트는 reason 미출력을 지시
     assert '"reason"' not in prompt
     assert "reason 필드는 출력하지 마세요" in prompt
@@ -118,8 +118,10 @@ def test_prompt_p1_deterministic_complete_and_coordinate_free(
         LlmFeature.PREFERENCE_SCORING, build_prompt_vars(pool, _PERSONA)
     )
     assert p1 == p2  # 결정론 (같은 입력 → 같은 프롬프트)
+    lines = variables["candidates"].splitlines() if pool.pois else []
+    assert len(lines) == len(pool.pois)  # 후보 누락 금지 — 0.4.0 은 UUID 대신 번호(1부터)를 싣는다
+    assert [line.split(" | ")[0] for line in lines] == [f"- {i}" for i in range(1, len(pool.pois) + 1)]
     for poi in pool.pois:
-        assert str(poi.poi_id) in p1  # 후보 누락 금지
         # 좌표 미포함 (G181) — lat/lng 문자열이 프롬프트에 나타나면 안 됨
         assert str(poi.coord.lat) not in p1
         assert str(poi.coord.lng) not in p1

@@ -32,7 +32,7 @@ from hypothesis import strategies as st
 
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver
-from trippilot.llm_gateway.gates.scoring import ClosedSetGate
+from trippilot.llm_gateway.gates.numbered_selection import NumberedScoringGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.preference import (
@@ -101,13 +101,14 @@ def _worker(llm, cfg: C1Config | None = None) -> tuple[PreferenceScoringWorker, 
     cfg = cfg or C1Config(model_ids={ModelTier.LIGHT: "m-l", ModelTier.HEAVY: "m-h"})
     trace = InMemoryTrace()
     gateway = GatewayFacade(
-        llm, PromptRegistry(_PROMPTS_DIR), ClosedSetGate(), cfg, trace
+        llm, PromptRegistry(_PROMPTS_DIR), NumberedScoringGate(), cfg, trace
     )
     return PreferenceScoringWorker(gateway), trace
 
 
 def _echo_response(request: LlmRequest, ids: list[str]) -> LlmResponse:
-    text = json.dumps({"scores": [{"poiId": x, "score": 0.5} for x in ids]})
+    # 프롬프트 0.4.0 — 후보 줄은 번호라 `{"no": n}` 으로 답한다(게이트 `NumberedScoringGate` 가 poi_id 로 되돌린다)
+    text = json.dumps({"scores": [{"no": x, "score": 0.5} for x in ids]})
     return LlmResponse(
         raw_text=text,
         input_tokens=1,
@@ -137,7 +138,7 @@ class _FailOnPoiLlm(_EchoScoresLlm):
 
     def invoke(self, request: LlmRequest) -> LlmResponse:
         ids = _CANDIDATE_LINE.findall(request.prompt)
-        if self._poison in ids:
+        if self._poison in request.prompt:  # 후보 줄은 번호 — 상호명(장소-{pid})에 pid 가 남아 있다
             raise RuntimeError("chunk down (fake)")
         return _echo_response(request, ids)
 

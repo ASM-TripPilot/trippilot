@@ -265,6 +265,11 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
             # 12회 중 2회 시간 초과 → 고정 폴백, 목록 밖 사진 참조 2회. none 은 12/12 성공 3.5~5.5s(재시도 1회 9.1s),
             # 사진 장면이 자기 장소 이름을 부르는 비율은 둘 다 100%. 여행 요약도 4.7~9.1s.
             LlmFeature.REFLECTION_TEMPLATE: "none",
+            # 취향 점수 — 닫힌 목록에 0~1 점수만 붙이는 일이라 사고가 품질을 올리지 않았다. 2026-10-23 sol·해운대 52곳·
+            # 페르소나 3·묶음 5·60회 나란히: 기본 추론(미지정) p50 2.46s·출력 120 토큰 → none p50 1.73s·p90 2.64s·출력 59
+            # (항목 12 × 5, 사고 0), 명백한 상·하위 쌍 정합 1.0·게이트 100% 둘 다. 1일차 점수 단계(가장 느린 묶음)가 ≈6.4s →
+            # ≈3s 다. none 은 GPT 값 — Claude 로 재배정하면 low 로(REFLECTION_TEMPLATE 와 같은 함정).
+            LlmFeature.PREFERENCE_SCORING: "none",
             LlmFeature.REMINDER_COPY: "low",
             LlmFeature.ALTERNATIVE_SELECTION: "low",
             # 같은 재계획 시한(25s) 안에서 PlanB 다음에 돈다 — 대체지 선택과 같은 이유
