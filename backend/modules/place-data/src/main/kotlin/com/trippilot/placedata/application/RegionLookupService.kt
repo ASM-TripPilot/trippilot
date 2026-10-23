@@ -25,15 +25,9 @@ class RegionLookupService(
             if (lat != null && lng != null) RegionCenter(lat, lng) else null
         }
 
-    override fun districtCodesOf(regionCode: String): Set<String> {
-        val region = catalog.findByCode(regionCode) ?: return emptySet()
-        if (region.level != RegionLevel.SIGUNGU) return emptySet()
-        if (!regionCode.endsWith("0")) return setOf(regionCode) // 하위 행정구가 붙는 일반시는 끝자리 0 이다(41110 수원시)
-        val prefix = regionCode.dropLast(1)
-        return catalog.find(null, RegionLevel.SIGUNGU)
-            .filter { it.regionCode == regionCode || (it.regionCode.startsWith(prefix) && !it.selectable && it.sidoCode == region.sidoCode) }
-            .mapTo(sortedSetOf()) { it.regionCode }
-    }
+    // findByCode 는 커버리지(전 POI 집계)를 세지 않는다 — 후보 요청마다 불리는 자리라 find() 를 쓰지 않는다.
+    override fun districtCodesOf(regionCode: String): Set<String> =
+        catalog.findByCode(regionCode)?.takeIf { it.level == RegionLevel.SIGUNGU }?.let { setOf(it.regionCode) }.orEmpty()
 
     override fun centerOf(regionName: String): RegionCenter? =
         catalog.findExact(regionName).firstNotNullOfOrNull { r ->

@@ -169,13 +169,9 @@ class SlotCandidateService(
         //
         // 사용자가 중심을 고르면(2026-10-23) 그걸 쓴다 — 고른 재료가 없으면(숙소 없는 날) 조용히 다른 중심으로 바꾸지 않고 409.
         val mode = request.center?.mode
-        // 지연 조회 — 후보 0건·중심이 직전/교체 대상이면 DB 를 더 읽지 않는다.
-        val space by lazy {
-            runCatching { repairContexts.forSlotCandidates(accountId, tripId, date) }.getOrElse { e ->
-                log.warn("슬롯 후보 공간 재료(구·숙소) 조회 실패 — 구 안 우선 없이 답합니다. tripId={}", tripId, e)
-                SlotSpace.NONE
-            }
-        }
+        // 지연 조회 — 후보 0건·중심이 직전/교체 대상이면 DB 를 더 읽지 않는다. 조회 실패를 여기서 삼키지 않는다 —
+        // REGION·STAY 에서 "숙소가 없다"(409)로 바뀌면 사유가 거짓이 된다. 구 안 우선만 아래에서 물러선다.
+        val space by lazy { repairContexts.forSlotCandidates(accountId, tripId, date) }
         fun slotCenter(): RegionCenter {
             val previousPoiId = if (mode == CenterMode.PREVIOUS || (mode == null && request.coPick)) day.slots.getOrNull(index - 1)?.sourcePoiId else null
             val surfaces = poiSurfaces.findSurfaces(listOfNotNull(previousPoiId, targetPoiId))
@@ -255,9 +251,18 @@ class SlotCandidateService(
         // 어느 갈래(즉답·AI·풀 채움)로 골랐든 반환 직전 **한 곳**에서 슬롯 시각 적합 판정을 거친다.
         val chosen = chooseCandidates(request, answered, center, inItinerary, targetPoiId, tripId)
         // 구 안 우선은 중심을 서버가 정할 때만 건다 — 숙소·찍은 점은 사용자가 그 자리를 고른 것이라 구 밖이어도 그 근처가 답이다.
-        val placed = if (chosen.candidates.isEmpty() || point != null || mode == CenterMode.STAY) chosen
-        else inDistrictFirst(chosen, space.districtCodes, center, request.concept, inItinerary, targetPoiId)
-        return keepFitting(placed, itinerary, date, index, accountId, tripId, request.slotKey)
+        val placed = if (chosen.candidates.isEmpty() || point != null || mode == CenterMode.STAY) {
+            chosen
+        } else {
+            val districtCodes = runCatching { space.districtCodes }.getOrElse { e ->
+                log.warn("슬롯 후보 공간 재료(구) 조회 실패 — 구 안 우선 없이 답합니다. tripId={}", tripId, e)
+                emptySet()
+            }
+            inDistrictFirst(chosen, districtCodes, center, request.concept, inItinerary, targetPoiId)
+        }
+        // 구 안 우선은 대체 후보를 **뒤에 덧붙여** 넘기고, 개수는 판정 뒤에 원래대로 자른다 — 먼저 자르면 시각에 맞던 후보가
+        // 판정 전에 사라진다.
+        return keepFitting(placed, itinerary, date, index, accountId, tripId, request.slotKey, limit = chosen.candidates.size)
     }
 
     /** closed-set 재확인 → 컨셉 필터·풀 채움. [answered] 는 즉답이거나 AI 응답이다. */
@@ -330,6 +335,8 @@ class SlotCandidateService(
         accountId: UUID,
         tripId: UUID,
         slotKey: String,
+        /** 남길 최대 개수 — 앞에서부터 이만큼 맞으면 나머지는 판정하지 않는다(판정 1회 = AI repair 1회). */
+        limit: Int,
     ): SlotCandidatesOutput {
         if (out.candidates.isEmpty()) return out
         // 저장 경로(attemptRepair)와 같은 규칙 — 앵커는 첫 구간이 바뀐 날만 싣고, 장소 하나 교체에서 그런 날은 첫 칸 교체의 그날뿐이다.
@@ -342,25 +349,32 @@ class SlotCandidateService(
                 .map { d -> EditDay(d.date, d.slots.map { EditSlot(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }) },
         )
         var unjudged = false
-        val fit = out.candidates.filter { c ->
-            if (unjudged) return@filter true
+        var misfit = 0
+        val fit = mutableListOf<SlotCandidate>()
+        for (c in out.candidates) {
+            if (fit.size == limit) break
+            if (unjudged) {
+                fit += c
+                continue
+            }
             val swapped = current.copy(
                 days = current.days.map { d -> d.copy(slots = d.slots.mapIndexed { i, s -> if (i == index) s.copy(poiId = c.poiId) else s }) },
             )
-            try {
+            val fits = try {
                 !scheduleAgent.repair(swapped.toOutput(itinerary.solveMode, itinerary.isFallback, clock.instant()), emptyList(), context).unrepairable
             } catch (e: Exception) {
                 log.warn("슬롯 후보 적합 판정(repair) 실패 — 이 후보부터 판정 없이 남깁니다. tripId={} slotKey={} poiId={}", tripId, slotKey, c.poiId, e)
                 unjudged = true
                 true
             }
+            if (fits) fit += c else misfit++
         }
         if (fit.isEmpty()) {
             log.warn("슬롯 후보 {}건이 전부 그 슬롯 시각에 맞지 않습니다 — 원래 목록을 그대로 줍니다. tripId={} slotKey={}", out.candidates.size, tripId, slotKey)
-            return out
+            return out.copy(candidates = out.candidates.take(limit))
         }
-        if (fit.size != out.candidates.size) {
-            log.info("슬롯 시각에 맞지 않는 후보 {}건을 뺐습니다. tripId={} slotKey={}", out.candidates.size - fit.size, tripId, slotKey)
+        if (misfit > 0) {
+            log.info("슬롯 시각에 맞지 않는 후보 {}건을 뺐습니다. tripId={} slotKey={}", misfit, tripId, slotKey)
         }
         return out.copy(candidates = fit)
     }
@@ -418,8 +432,9 @@ class SlotCandidateService(
     /**
      * 구 안 우선(2026-10-23 사용자 결정 "구 안 우선, 모자라면 이웃 구") — 서초를 고른 여행의 같이 짜기에서 점심은 서초,
      * 저녁은 혜화로 튀었다(직전 장소 중심 + 넓힌 반경이 구 경계를 모른다). 어느 갈래의 결과든 **같은 반경 안에서**
-     * 구 안 후보를 앞에 두고, 구 밖 후보 자리는 그 반경의 구 안 장소(거리순)로 바꾼다. 구 안이 모자랄 때만 구 밖이 남는다.
-     * 개수는 원래 결과와 같다. 바꿔 넣은 것은 AI 순위가 아니라 거리순이라 degraded 로 표시한다(INV-4).
+     * 구 안 후보 → 그 반경의 구 안 장소(거리순, 구 밖 개수만큼) → 구 밖 후보 순으로 **덧붙여** 돌려준다. 개수는 호출측이
+     * 적합 판정 뒤에 원래대로 자른다 — 구 안이 모자라거나 시각에 안 맞을 때만 구 밖이 남는다.
+     * 바꿔 넣은 것은 AI 순위가 아니라 거리순이라 degraded 로 표시한다(INV-4).
      * ponytail: "이웃 구"는 행정 인접이 아니라 "구 밖이지만 요청 반경 안" — 인접 표가 생기면 그걸로 좁힌다.
      */
     private fun inDistrictFirst(
@@ -436,17 +451,19 @@ class SlotCandidateService(
         val (inside, outside) = out.candidates.partition { inDistrict(grounded[it.poiId]?.regionCode) }
         if (outside.isEmpty()) return out
         // 컨셉이 없으면 교체 대상과 같은 카테고리 — 점심 자리에 명소가 끼지 않게(즉답의 "같은 카테고리 예비"와 같은 판단).
-        val categories = ConceptCategories.of(concept) ?: setOfNotNull(grounded[targetPoiId]?.category)
+        // 교체 대상이 비활성(폐업 — 바로 그래서 바꾸는 중일 수 있다)이면 카테고리를 몰라 채우지 않고 순서만 바꾼다.
+        val conceptSet = ConceptCategories.of(concept)
+        val categories = conceptSet ?: grounded[targetPoiId]?.let { setOf(it.category) } ?: return out.copy(candidates = inside + outside)
         val taken = inside.map { it.poiId }.toSet() + inItinerary + targetPoiId
         val refill = candidatePool
             .resolve(Area.Radius(center.lat, center.lng, out.radiusMUsed.toDouble()), categories)
             .filter { inDistrict(it.regionCode) && it.poiId !in taken }
             .sortedBy { it.distanceM ?: Double.MAX_VALUE }
             .take(outside.size)
-            .map { it.toSlotCandidate(concept) }
+            .map { it.toSlotCandidate(concept.takeIf { conceptSet != null }) } // 매핑 없는 컨셉으로 고른 게 아니다 — 문구에 싣지 않는다(BR-U2-09)
         if (refill.isEmpty()) return out.copy(candidates = inside + outside)
         return out.copy(
-            candidates = (inside + refill + outside).take(out.candidates.size),
+            candidates = inside + refill + outside,
             freshness = FreshnessMeta(clock.instant(), degraded = true),
         )
     }

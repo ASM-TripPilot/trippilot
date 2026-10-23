@@ -918,11 +918,17 @@ class SlotCandidateServiceTest : StringSpec({
     }
 
     /** ground = 후보·교체 대상의 구 코드(카테고리는 전부 맛집), resolve = 반경 채움 풀(카테고리로 거른다, 부른 범위는 기록). */
-    class DistrictPool(private val codeById: Map<UUID, String?>, private val refill: List<GroundedPlace> = emptyList()) : CandidatePoolPort {
+    class DistrictPool(
+        private val codeById: Map<UUID, String?>,
+        private val refill: List<GroundedPlace> = emptyList(),
+        /** 비활성(폐업) — ground 에 안 나온다. */
+        private val inactive: Set<UUID> = emptySet(),
+    ) : CandidatePoolPort {
         val areas = mutableListOf<Area>()
         override fun resolve(area: Area, categories: Set<String>) =
             refill.filter { categories.isEmpty() || it.category in categories }.also { areas += area }
-        override fun ground(poiIds: List<UUID>) = poiIds.map { GroundedPlace(it, "장소", 37.5, 127.0, "맛집", null, null, codeById[it]) }
+        override fun ground(poiIds: List<UUID>) =
+            poiIds.filterNot { it in inactive }.map { GroundedPlace(it, "장소", 37.5, 127.0, "맛집", null, null, codeById[it]) }
     }
     fun place(id: UUID, category: String, distanceM: Double, code: String?) = GroundedPlace(id, "장소", 37.5, 127.0, category, null, distanceM, code)
 
@@ -1003,5 +1009,65 @@ class SlotCandidateServiceTest : StringSpec({
         }
         shouldThrow<ValidationFailed> { spaceSvc(CapturingAgent()).propose(acc, tripId, centered(CandidateCenter(CenterMode.POINT, lat = 37.5))) }
         shouldThrow<ValidationFailed> { spaceSvc(CapturingAgent()).propose(acc, tripId, centered(CandidateCenter(CenterMode.POINT, 91.0, 127.0))) }
+    }
+
+    // ─── 리뷰(2026-10-23)가 재현한 구 안 우선의 모서리 ───
+
+    "바꿔 넣은 구 안 장소가 그 시각에 안 맞으면 시각에 맞던 구 밖 후보가 남는다 — 판정 전에 자르지 않는다" {
+        val (outA, outB, inX, inY) = List(4) { UUID.randomUUID() }
+        val districtPool = DistrictPool(
+            mapOf(outA to "11680", outB to "11680", target to "11650"),
+            listOf(place(inX, "맛집", 300.0, "11650"), place(inY, "맛집", 500.0, "11650")),
+        )
+        val agent = FitAgent(proposed = listOf(outA, outB), misfit = setOf(inX))
+
+        val out = spaceSvc(agent, districtPool).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        out.candidates.map { it.poiId } shouldContainExactly listOf(inY, outA) // 개수는 원래(2)대로
+        agent.repaired.size shouldBe 3 // 2건이 맞으면 나머지(outB)는 판정하지 않는다
+    }
+
+    "교체 대상이 비활성(폐업)이면 카테고리를 몰라 채우지 않고 순서만 바꾼다 — 전 카테고리로 채우면 점심 자리에 술집이 온다" {
+        val (outA, inB) = List(2) { UUID.randomUUID() }
+        val districtPool = DistrictPool(
+            mapOf(outA to "11680", inB to "11650"),
+            listOf(place(UUID.randomUUID(), "술집", 100.0, "11650")),
+            inactive = setOf(target),
+        )
+
+        val out = spaceSvc(fixedAgent(cand(outA), cand(inB)), districtPool)
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        out.candidates.map { it.poiId } shouldContainExactly listOf(inB, outA)
+        districtPool.areas shouldBe emptyList()
+    }
+
+    "매핑에 없는 컨셉이면 채운 후보 문구에 그 컨셉을 싣지 않는다 — 그 컨셉으로 고른 게 아니다(BR-U2-09)" {
+        val (outA, inB) = List(2) { UUID.randomUUID() }
+        val districtPool = DistrictPool(mapOf(outA to "11680", target to "11650"), listOf(place(inB, "맛집", 300.0, "11650")))
+
+        val out = spaceSvc(fixedAgent(cand(outA)), districtPool).propose(acc, tripId, req("야경"))
+
+        out.candidates.single().let { (it.poiId to it.rationale) shouldBe (inB to "주변 맛집") }
+    }
+
+    "공간 재료 조회가 깨지면 REGION·STAY 는 '재료 없음' 409 로 말하지 않는다 — 기본 중심은 구 안 우선 없이 답한다" {
+        val broken = contexts(
+            object : TripFacade {
+                override fun findPeriod(accountId: UUID, tripId: UUID): TripPeriod? = null
+                override fun findGenerationContext(accountId: UUID, tripId: UUID): TripGenerationContext? = throw IllegalStateException("db down")
+            },
+        )
+        fun svc(agent: StubScheduleAgent, candidates: CandidatePoolPort = pool) = SlotCandidateService(
+            seochoTrip, Repo(itinerary), agent, distinctSurfaces, candidates, FakeScoredCandidatePoolStore(), clock, accountPrefs, NoHints, broken,
+        )
+
+        shouldThrow<IllegalStateException> { svc(CapturingAgent()).propose(acc, tripId, centered(CandidateCenter(CenterMode.STAY))) }
+        shouldThrow<IllegalStateException> { svc(CapturingAgent()).propose(acc, tripId, centered(CandidateCenter(CenterMode.REGION))) }
+
+        val (outA, inB) = List(2) { UUID.randomUUID() }
+        svc(fixedAgent(cand(outA), cand(inB)), DistrictPool(mapOf(outA to "11680", inB to "11650")))
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+            .candidates.map { it.poiId } shouldContainExactly listOf(outA, inB)
     }
 })
