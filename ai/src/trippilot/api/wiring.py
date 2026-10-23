@@ -3571,7 +3571,11 @@ class WiredItineraryOrchestrator:
             return self._replan_empty(
                 "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved, params)
 
-        coords = self._coords_for(solution, outcome.slot_alternatives)
+        try:
+            coords = self._coords_for(solution, outcome.slot_alternatives)
+        except Exception as e:  # 표시용 재조회 — END_DAY 는 장소 DB 가 죽어도 여기까지 온다(풀 불필요)
+            notes.append(f"coords_lookup_degraded: {type(e).__name__}")
+            coords = {}
         anchors = {request.target_date: GeoPoint(request.anchor.lat, request.anchor.lng)}
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
