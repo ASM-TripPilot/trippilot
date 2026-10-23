@@ -255,6 +255,10 @@ ARGUMENT_TABLE: dict[Intent, tuple[ArgumentSpec, ...]] = {
               "어디로 옮길지. 워커가 현재 슬롯 기준점(afterPoiId·beforePoiId)으로 번역한다 — "
               "기준이 없으면 옮기지 않고 거부한다(예전 '비면 맨 앞' 기본값은 '더 늦게'를 앞으로 당겼다)",
               lands_in="EditCommand.params.afterPoiId|beforePoiId"),
+        # 날마다 동네("1일차는 종로 2일차는 강남으로", spec 004) — 분류가 아니라 **결정론 해석 확인**이 채운다
+        # (`orchestrator/edit_day_areas.py`). 분류는 이 말을 한 곳 바꾸기 칸에 뭉갠다(2026-10-22 실측 12/12) — 묻지 않는다.
+        _spec("day_areas", (_FT,), False, "날마다 동네 — \"2026-10-24=종로;2026-10-25=강남구\"",
+              lands_in="EditCommand.params(SET_DAY_AREAS)", asked_by_router=False),
     ),
     Intent.GET_NEXT_SLOT: (
         # AI 처리 경로 없음(백엔드 DB 조회). 기준점("이거 끝나고")은 inline_context·context_refs 가

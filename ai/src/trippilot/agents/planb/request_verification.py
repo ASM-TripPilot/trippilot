@@ -139,11 +139,17 @@ def _area_key(area: str) -> str:
     return key[:-1] if len(key) > 2 and key.endswith("동") else key
 
 
+def known_area_key(area: str) -> str | None:
+    """말 안에 든 가장 긴 표 이름(`KNOWN_AREAS` 키) — 없으면 None. "강남구쪽" → "강남"."""
+    key = _area_key(area)
+    return max((k for k in KNOWN_AREAS if k in key), key=len, default=None)
+
+
 def area_center(area: str, registered: Sequence[Poi], anchor: GeoPoint) -> tuple[GeoPoint | None, str]:
     """지역 이름 → (중심, 노트 꼬리). 표(`KNOWN_AREAS`)가 먼저 — 여행지에서 `NAME_SEARCH_RADIUS_KM` 안일 때만
     (서울 마포 "성산동" ↔ 제주 "성산"). 없거나 멀면 이름에 그 말이 든 등록 POI 좌표의 중앙값(`AREA_MIN_MATCHES` 이상)."""
     key = _area_key(area)
-    known = max((k for k in KNOWN_AREAS if k in key), key=len, default=None)
+    known = known_area_key(area)
     if known is not None and haversine_km(anchor, KNOWN_AREAS[known]) <= NAME_SEARCH_RADIUS_KM:
         return KNOWN_AREAS[known], "table"
     if len(key) >= _MIN_NAME_CHARS:

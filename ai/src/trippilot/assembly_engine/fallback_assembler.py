@@ -529,7 +529,7 @@ class RuleFallbackAssembler:
         """
         remaining = [c for c in ranked if c.poi_id not in used]
         if problem.day_focus:  # 날마다 다른 동네(생성) — OR `_solve_day` 와 같은 규칙
-            remaining = list(focus_candidates(remaining, self._pois, problem.day_focus.get(day)))
+            remaining = list(focus_candidates(remaining, self._pois, problem.day_focus.get(day), strict=problem.day_focus_strict))
         rain = problem.daily_rain_prob
         pop = rain.get(day) if rain is not None else None
         rainy = pop is not None and pop >= self._cfg.rain_threshold_pct

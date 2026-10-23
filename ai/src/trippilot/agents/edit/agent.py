@@ -5,7 +5,8 @@
 검증·변형 함수 모음이라, "에이전트인데 LLM 을 안 부르는" 모양이었다.
 
 ```
-EditTask ─▶ ①a 사이 넣기   "A에서 B로 갈 때 한 군데 더" — 자리·후보를 코드가 고른다(LLM 0회, insert_between.py)
+EditTask ─▶ ①b 날마다 동네  "1일차는 종로 2일차는 강남으로" — 그 날들을 그 동네로 다시 짠다(LLM 0회, day_area.py · 재구성 콘센트)
+         ─▶ ①a 사이 넣기   "A에서 B로 갈 때 한 군데 더" — 자리·후보를 코드가 고른다(LLM 0회, insert_between.py)
          ─▶ ① 명령 확보    자연어 → 번역 워커(게이트 검증 포함) / 구조화 → 그대로
          ─▶ ② 동등 검증    validate_command (INV-1 — 게이트와 같은 규칙)
          ─▶ ③ 확인 게이트  파괴적 편집은 confirm 전에는 반영하지 않는다
@@ -39,6 +40,14 @@ from trippilot.agents.edit.commands import (
     RetimeContext,
     edited_solution,
     validate_command,
+)
+from trippilot.agents.edit.day_area import (
+    DayArea,
+    DayAreaIssue,
+    as_params,
+    from_params,
+    parse_day_areas,
+    resolve_day_areas,
 )
 from trippilot.agents.edit.insert_between import (
     MAX_TRIES,
@@ -125,10 +134,25 @@ class EditTask:
     # 사이 넣기 구간 풀 콘센트 — (중심, 반경 km) → 경계가 같은 요구표·공급자로 모은 그 날 풀(INV-1).
     # 에이전트는 자리를 코드로 풀었을 때만 한 번 부른다. None(미배선)·빈 풀이면 받은 기본 풀(pool)에서만 고른다
     segment_pool: Callable[[GeoPoint, float], CandidatePool] | None = None
+    # 날마다 동네 재구성 콘센트(spec 004 FR-005) — (날, 동네) 짝 → 바뀐 날만 갈아 끼운 해 또는 사유. 경계가 같은 요구표·PlaceProvider 로
+    # 동네 풀을 모으고 ScheduleAgent 로 그 날들을 한 번에 푼다(INV-1·2). 에이전트는 말·명령을 확인했을 때만 한 번 부른다. None = 미배선
+    rebuild_days: Callable[[tuple[DayArea, ...]], RebuiltDays | str] | None = None
 
     def __post_init__(self) -> None:
         if (self.utterance is None) == (self.command is None):
             raise ValueError("utterance와 command 중 정확히 하나여야 한다")
+
+
+@dataclass(frozen=True, slots=True)
+class RebuiltDays:
+    """재구성 콘센트 결과 — 바뀐 날만 갈아 끼운 **전체** 해(손 안 댄 날은 그대로)와 ⑤ 검증 재료."""
+
+    solution: ItinerarySolution
+    areas: Mapping[date, str]  # 날 → 풀린 동네 이름(표 이름 또는 말한 이름) — 명령 params·카드 문장
+    pois: Mapping[PoiId, Poi]  # 새로 들어온 곳까지 — ⑤ 검증이 영업시간·좌표를 본다
+    notes: tuple[str, ...] = ()  # 관측 코드(풀이 모드·강등·동네 풀 추가 수집) — 이름은 싣지 않는다
+    # 풀이 밖에 두고 그 시각 그대로 되실은 지난 곳(여행 당일, 지금 있는 곳보다 앞선 곳) — ⑤ 는 이것을 재지 않는다
+    history: frozenset[PoiId] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,17 +222,26 @@ class EditAgent:
         problem_builder: ProblemBuilder,
         *,
         tz: timezone,
+        known_areas: tuple[str, ...] = (),
     ) -> None:
         self._translator = translation_worker
         self._assembly_provider = assembly_provider
         self._estimator = estimator
         self._problem_for = problem_builder
         self._tz = tz
+        # 날마다 동네 해석의 동네 표(planb `KNOWN_AREAS` 키 — 형제 import 금지 L-2 라 경계가 넘긴다). 대화 확인과 같은 표다
+        self._known_areas = known_areas
 
     # ── 공개 API ────────────────────────────────────────────────────
 
     def run(self, task: EditTask) -> EditOutcome:
         """재료 → 편집 결과. 예외를 던지지 않는다 (INV-4 · DL-5)."""
+        # ①b 날마다 동네 — 말(결정론 해석)이나 구조화 명령이 날·동네를 정했으면 그 날들을 다시 짠다. 아니면 종전 길
+        areas = self._day_areas(task)
+        if isinstance(areas, str):
+            return self._day_area_out(task, (), EditOutcome(status=EditStatus.REJECTED, reason=areas))
+        if areas is not None:
+            return self._rebuild(task, areas)
         ask = parse_insert_ask(task.utterance) if task.utterance is not None else None
         unresolved: str | None = None
         # ①a 사이 넣기 — 자리를 코드가 다 풀면 LLM 0회. 못 풀면 번역기(①)로 넘어간다
@@ -313,6 +346,83 @@ class EditAgent:
             status=EditStatus.APPLIED,
             command=command, apply_mode=apply_mode, solution=mutated,
         )
+
+    # ── ①b 날마다 동네 ──────────────────────────────────────────────
+
+    def _day_areas(self, task: EditTask) -> tuple[DayArea, ...] | str | None:
+        """말·명령 → 확인된 (날, 동네) 짝, 확인 실패 사유(`day_area: …`), 이 꼴이 아니면 None.
+
+        날은 대화와 같은 셈(여행 첫날 + N − 1)이고, 여행 밖·지난 날·같은 날 두 번이면 넘겨짚지 않고 사유다(spec 004 FR-002)."""
+        days = [d.date for d in task.solution.days]
+        today = task.now.astimezone(self._tz).date()
+        if task.command is not None:
+            if task.command.op is not EditOp.SET_DAY_AREAS:
+                return None
+            pairs = from_params(task.command.params)
+            if pairs is None:
+                return "day_area: bad_params"
+            bad = next((p for p in pairs if p.day not in days or p.day < today), None)
+            return f"day_area: {'past_day' if bad and bad.day in days else 'day_out_of_trip'}({bad.day})" if bad else pairs
+        clauses = parse_day_areas(task.utterance or "", self._known_areas)
+        if clauses is None:
+            return None
+        got = resolve_day_areas(clauses, days, today)
+        return f"day_area: {got.code}({got.said})" if isinstance(got, DayAreaIssue) else got
+
+    def _rebuild(self, task: EditTask, pairs: tuple[DayArea, ...]) -> EditOutcome:
+        """③ 확인 게이트 → 재구성 콘센트(조립이 시각·순서를 푼다) → ⑤ 바뀐 날만 요청 수단으로 검증(INV-2). 실패는 사유를 단다(INV-4)."""
+        command = EditCommand(EditOp.SET_DAY_AREAS, as_params(pairs), ())
+        apply_mode = resolve_apply_mode(command)
+        if apply_mode is ApplyMode.CONFIRM_REQUIRED and not task.confirm:
+            return self._day_area_out(task, pairs, EditOutcome(status=EditStatus.CONFIRM_REQUIRED, command=command,
+                                                              apply_mode=apply_mode, reason="날 재구성 — confirm=true로 재호출 시 반영"))
+        if task.rebuild_days is None:
+            return self._day_area_out(task, pairs, EditOutcome(status=EditStatus.REJECTED, command=command,
+                                                              apply_mode=apply_mode, reason="day_area: not_wired"))
+        t0 = time.monotonic()
+        try:
+            got = task.rebuild_days(pairs)
+        except Exception as e:  # 콘센트 결함도 경계 밖으로 던지지 않는다(DL-5)
+            got = f"rebuild_error: {type(e).__name__}"
+        ms = int((time.monotonic() - t0) * 1000)
+        if isinstance(got, str):
+            return self._day_area_out(task, pairs, EditOutcome(status=EditStatus.REJECTED, command=command,
+                                                              apply_mode=apply_mode, reason=f"day_area: {got}"), ms=ms)
+        changed = {p.day for p in pairs}
+        after = {s.poi_id for d in got.solution.days if d.date in changed for s in d.slots}
+        before = {s.poi_id for d in task.solution.days if d.date in changed for s in d.slots}
+        removed = tuple(s.poi_id for d in task.solution.days if d.date in changed for s in d.slots if s.poi_id not in after)
+        command = EditCommand(EditOp.SET_DAY_AREAS, {p.day.isoformat(): got.areas.get(p.day, p.area) for p in pairs},
+                              removed)
+        # ⑤ 바뀐 날만 · 요청 수단으로 — `_apply` 와 같은 이유(손 안 댄 날은 이 편집이 만든 시각이 아니다)
+        index = {**{p.poi_id: p for p in task.pool.pois}, **dict(task.poi_index), **dict(got.pois)}
+        checked = replace(self._problem_for(got.solution), transport=task.transport, days=tuple(sorted(changed)))
+        # 콘센트가 풀이 밖에 두고 되실은 지난 곳은 이 편집이 만든 시각이 아니라 검증에서 뺀다 — 그 곳의 예약 블록도 같이(남기면 HC3 가
+        # 없는 슬롯을 찾는다). 지금 있는 곳(가장 최근의 곳)은 풀이 안에 고정돼 '거기 → 첫 새 방문'이 재진다(2026-10-23 2차 리뷰)
+        done = got.history
+        checked = replace(checked, fixed_blocks=tuple(fb for fb in checked.fixed_blocks if fb.poi_id not in done))
+        edited = replace(got.solution, days=tuple(replace(d, slots=tuple(s for s in d.slots if s.poi_id not in done),
+                                                          fixed_blocks=tuple(fb for fb in d.fixed_blocks if fb.poi_id not in done))
+                                                  for d in got.solution.days if d.date in changed))
+        violations = tuple(self._assembly_provider.for_pool(index).validate(edited, checked, task.deadline_ms, task.trace_id))
+        if violations:
+            out = EditOutcome(status=EditStatus.REJECTED, command=command, apply_mode=apply_mode, violations=violations,
+                              reason="편집 결과가 하드 제약을 위반 — 반영하지 않음")
+        else:
+            out = EditOutcome(status=EditStatus.APPLIED, command=command, apply_mode=apply_mode, solution=got.solution)
+        return self._day_area_out(task, pairs, out, ms=ms, removed=len(removed), added=len(after - before),
+                                  codes=sorted({v.code for v in violations}), notes=list(got.notes))
+
+    @staticmethod
+    def _day_area_out(task: EditTask, pairs: tuple[DayArea, ...], out: EditOutcome, **extra) -> EditOutcome:
+        """관측 한 줄 — 발화·장소 이름은 싣지 않는다(FR-008)."""
+        _log.info("edit_day_area %s", json.dumps({
+            "trace_id": str(task.trace_id), "days": len(pairs), "source": "command" if task.command else "utterance",
+            "outcome": out.status.value,
+            # 사유는 코드만 — 괄호 안(말한 날·동네)은 싣지 않는다
+            "reason": out.reason.split("(", 1)[0] if out.reason and out.status is not EditStatus.APPLIED else None, **extra,
+        }, ensure_ascii=False))
+        return out
 
     # ── ①a 사이 넣기 ────────────────────────────────────────────────
 

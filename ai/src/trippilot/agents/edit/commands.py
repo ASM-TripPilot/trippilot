@@ -146,6 +146,8 @@ def apply_command(
         if sorted(command.affected_slots, key=str) != sorted(order, key=str):
             raise EditRejected("REORDER_DAY는 그 날 슬롯 전체의 순열이어야 함")
         return tuple(command.affected_slots)
+    if op is EditOp.SET_DAY_AREAS:  # 하루 순서 변형이 아니다 — 에이전트 ①b(재구성 콘센트)만 맡는다(spec 004)
+        raise EditRejected("SET_DAY_AREAS는 날 재구성 경로(①b)로만 — 순서 변형 대상 아님")
     # REPLAN — 편집이 아니라 재생성 (1단계 범위 밖, TRIP-431 코멘트)
     raise EditRejected("REPLAN은 편집 경계 밖 — 일정 재생성(generate)을 호출하라")
 
