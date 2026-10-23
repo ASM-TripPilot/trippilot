@@ -98,6 +98,13 @@
 
 > **[개정 · 2026-10-23 — 구현 반영]** RES-SA-13 — 위 블록의 `weather_grid_forecast.daily` 칸 삭제(후속)를 마쳤다 — V2.86(TRIP-1575). V2.81 과 그 코드가 운영까지 나가 이 칸을 아는 옛 파드가 없는 뒤의 2단계라 롤링 창에 무해하다.
 
+> **[개정 · 2026-10-23 — 구현 반영]** 대기질 장애 때 마지막 발표분(TRIP-1607 · `backend/modules/weather-context/src/main/kotlin/com/trippilot/weathercontext/application/WeatherAlertService.kt`).
+> - 에어코리아 읽기 시한 실패가 48시간 19회차 중 8이었다(TRIP-1576 — 코드 결함 아님, 재요청 금지 RES-SA-03).
+> - 장애(시한·5xx·형식)면 18시간 안에 받은 마지막 발표분으로 답하고, 그 값을 20분 유지한다. 재요청이 아니다 — 다음 회차에 다시 묻는다(COST-SA-05 그대로).
+> - 아침 첫 조회가 실패해도 어제 17시 발표분(약 14시간 전)의 '오늘' 예보로 답한다.
+> - 게이트웨이 거절(키·한도)은 설정 문제라 그대로 모름이다. 재기동 직후의 첫 실패도 기억이 없어 모름이다.
+> - 장애 빈도는 요약 줄 `unknown` 이 아니라 어댑터 WARN 줄로 센다.
+
 ## 4. 관측 (OBS-SA-\*)
 
 **원천은 로그다** — EKS 에서 OTLP·OTel 이 꺼져 있어(`deploy/eks/chart/templates/backend.yaml:91-99`) 카운터는 운영에서 보이지 않는다. 컨테이너 로그는 dev 스택에서 켜져 있고 보존 90일이다(`infra/terraform/environments/dev.tfvars:11-12`).

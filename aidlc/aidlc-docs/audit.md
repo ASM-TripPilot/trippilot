@@ -1880,3 +1880,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(사용자 지시 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
+
+## NFR Requirements 사후 개정 — situation-awareness 대기질 장애 때 마지막 발표분 (NFR §3)
+**Timestamp**: 2026-10-23T18:05:00+09:00 (작업 시점)
+**User Input**: (새 사용자 결정 없음 — 사용자 지시 "꺼둔거 다 켜. 다 잘 돌아가게끔 만들란 말이야!!!"(다른 세션 경유)의 '잘 돌아가게' 몫. 근거는 TRIP-1576 실측 — 읽기 시한 실패 48시간 19회차 중 8.)
+**AI Response**: `construction/situation-awareness/nfr-requirements/nfr-requirements.md` §3 끝에 `[개정 · 2026-10-23 — 구현 반영]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 구현은 같은 PR 의 `backend/modules/weather-context/src/main/kotlin/com/trippilot/weathercontext/application/WeatherAlertService.kt`(장애면 18시간 안의 마지막 발표분 · 20분 유지 · 거절은 그대로 모름)와 시험 2건.
+**Context**: CONSTRUCTION — situation-awareness NFR Requirements 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
