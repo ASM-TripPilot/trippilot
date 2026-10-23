@@ -2,9 +2,11 @@ package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.placedata.api.RegionCenter
 import com.trippilot.placedata.api.RegionLookupFacade
+import com.trippilot.savedaccommodation.api.DayAnchorView
 import com.trippilot.trip.api.TripDestinationRef
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import java.time.LocalDate
 
 /**
  * 목적지 코드로 앵커를 잡는다(TRIP-859 후속).
@@ -77,6 +79,31 @@ class RegionCodeAnchorTest : StringSpec({
         val center = anchorCenter(ambiguous, TripDestinationRef("중구", "99999", 0))
 
         center shouldBe RegionCenter(SEOUL_LAT, SEOUL_LNG)
+    }
+
+    /**
+     * 앵커가 그 날 목적지의 구 코드를 싣는다(2026-10-23 구 안 우선 — "서초를 골랐는데 저녁이 혜화"). 숙소 앵커여도
+     * 그 날 고른 구는 목적지다. 시도(서울)는 구를 가리지 않으므로 빈 목록이다.
+     */
+    "앵커는 그 날 목적지의 구 코드를 싣는다 — 숙소 앵커여도, 체크아웃일은 마지막 목적지, 시도는 빈 목록" {
+        val regions = object : RegionLookupFacade by ambiguous {
+            override fun districtCodesOf(regionCode: String) = if (regionCode.length == 5) setOf(regionCode) else emptySet()
+            override fun centerOfCode(regionCode: String) = RegionCenter(BUSAN_LAT, BUSAN_LNG)
+        }
+        val d1 = LocalDate.parse("2026-11-01")
+
+        val anchors = RegionAnchors.dayAnchors(
+            regions, d1, d1.plusDays(3),
+            listOf(DayAnchorView(d1, 37.48, 127.03)),
+            listOf(TripDestinationRef("서초구", "11650", 1), TripDestinationRef("중구", "26170", 1), TripDestinationRef("서울", "11", 1)),
+        )
+
+        anchors.map { it.date to it.regionCodes } shouldBe listOf(
+            d1 to listOf("11650"),            // 숙소 앵커
+            d1.plusDays(1) to listOf("26170"),
+            d1.plusDays(2) to emptyList(),    // 시도
+            d1.plusDays(3) to emptyList(),    // 체크아웃일 = 마지막 목적지(시도)
+        )
     }
 })
 
