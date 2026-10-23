@@ -14,7 +14,7 @@
 | BR-AF-08 | `llm.parse_intent`(INTENT)는 **Orchestrator 전용**, `llm.translate_edit`(EDIT_TRANSLATION)는 **EditAgent 전속** — 도구·feature 겹침 0 유지 | v2 도구 배타 |
 | BR-AF-09 | 임베딩 차원 1024 고정 (`EmbeddingPort.dim`) — 반환 벡터 길이 ≠ dim은 위반. FakeEmbedding은 결정론(같은 텍스트 → 같은 벡터) | AI-D06, D37 |
 | BR-AF-10 | agents는 c1·c2·m7을 조립할 수 있는 유일한 상위 계층 — 하위 계층의 agents(·orchestrator·providers·background) import 금지, agents 형제 간 상호 import 금지, agents의 LlmPort 직접 import 금지, agents의 orchestrator import 금지 (L-1~L-6) | 계층 규칙 |
-| BR-AF-11 | "Agent 4종" 제한은 라우팅 테이블의 대화형 위임 대상에 한정(2026-10-22 `UnknownHandlingAgent` 편입으로 **5종** — `ROUTING_TABLE` 행은 아니고 GET_POI_INFO 핸들러가 부르는 보조 위임이지만, 발화로 기동되므로 Background 가 아니라 이 범주다. 전속 도구 `PLACE_FACT_LOOKUP` 웹 검색, 겹침 0, `agents/unknown_handling/`) — Background(자율 트리거형)는 별도 범주: 라우팅 밖, 봉투 재사용(priority=BACKGROUND), INV-1은 소싱 게이트로, 사용자 표시 시각 생성 금지 | v2 §1 재해석 |
+| BR-AF-11 | "Agent 4종" 제한은 라우팅 테이블의 대화형 위임 대상에 한정(2026-10-22 `UnknownHandlingAgent` 편입으로 **5종** — `ROUTING_TABLE` 행은 아니고 GET_POI_INFO 핸들러가 부르는 보조 위임이지만, 발화로 기동되므로 Background 가 아니라 이 범주다. 전속 도구 `PLACE_FACT_LOOKUP` 웹 검색, 겹침 0, `agents/unknown_handling/`. **[개정 · 2026-10-23]** 같은 에이전트의 둘째 일 — 2‴ 계획이 gap KNOWLEDGE 로 닫은 여행 일반 지식을 `DIALOGUE_KNOWLEDGE` 로 이번 턴에 답한다(`run(KnowledgeTask)`, assistant-orchestrator BR-AO-32 — 에이전트 수는 그대로)) — Background(자율 트리거형)는 별도 범주: 라우팅 밖, 봉투 재사용(priority=BACKGROUND), INV-1은 소싱 게이트로, 사용자 표시 시각 생성 금지 | v2 §1 재해석 |
 | BR-AF-12 | 봉투·신선도 타입 전부 `from_dict(to_dict(x)) == x` — dict 필드는 JSON 원시 타입만, datetime은 tz-aware만 | U5-P10 |
 | BR-AF-13 | 대형 데이터는 참조로 — 후보 풀은 `InfoBundle.pool_ref`(세션 캐시 키)만, inline_context는 휘발 데이터 한정 (위반은 리뷰 반려) | DL-2, D31 |
 

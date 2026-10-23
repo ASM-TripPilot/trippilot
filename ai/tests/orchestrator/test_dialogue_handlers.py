@@ -25,7 +25,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.agents.planb.rag import Alternative, PlanBRagRequest, PlanBRagResult
-from trippilot.agents.unknown_handling.agent import UnknownOutcome
+from trippilot.agents.unknown_handling.agent import KnowledgeTask, UnknownOutcome
 from trippilot.domain.common import GeoPoint, PoiId, TraceId
 from trippilot.domain.event import EventInfo, EventType
 from trippilot.domain.freshness import FreshnessMeta, InfoPacket, ProviderKind, ProviderStatus
@@ -827,10 +827,14 @@ def test_poi_info_unknown_hours_keep_the_provider_wording_and_free_is_free() -> 
 class _Unknown:
     """UnknownHandlingAgent 대역 — 저장된 결과가 있으면 그것, 없으면 뒤에서 찾기 요청을 기록하고 받아 준 만큼 "찾는 중"."""
 
+    knows_general = False  # 실물과 같이 — 지식 워커가 없는 조립(장소 사실 웹 확인만)
+
     def __init__(self, stored=None, *, accept: bool = True) -> None:
         self.stored, self.accept, self.requests = stored, accept, []
 
     def run(self, task):
+        if isinstance(task, KnowledgeTask):  # 실물 분기 그대로 — 지식 워커가 없으면 없음
+            return UnknownOutcome()
         if self.stored is not None:
             return UnknownOutcome(facts=self.stored.facts)
         self.requests.append((task.poi_id, task.place, tuple(task.fields)))

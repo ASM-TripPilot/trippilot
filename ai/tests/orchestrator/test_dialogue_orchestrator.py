@@ -31,6 +31,7 @@ import random
 import threading
 import uuid
 from concurrent.futures import Executor, Future
+from dataclasses import replace
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -97,6 +98,9 @@ from trippilot.orchestrator.dialogue_orchestrator import (
 from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanGate
 from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
 from trippilot.llm_gateway.workers.dialogue_smalltalk import DialogueSmalltalkWorker
+from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent
+from trippilot.llm_gateway.gates.dialogue_knowledge import DialogueKnowledgeGate
+from trippilot.llm_gateway.workers.dialogue_knowledge import DialogueKnowledgeWorker
 from trippilot.domain.plan_tools import plan_tool_specs_json
 from trippilot.orchestrator.dialogue_plan import plan_tools
 from trippilot.orchestrator.intent_eval import is_refusal
@@ -212,7 +216,8 @@ def _build(by_feature: dict, *, clock: FakeClock | None = None, store=None, port
            shadow: ShadowIntentProbe | None = None, shadow_meta: dict | None = None, confident_intent=None,
            advance: dict[LlmFeature, int] | None = None, intent_worker=None,
            pool: Executor | None = None, with_planner: bool = False, planner=None, wrap=None,
-           with_smalltalk: bool = False, embedding=None, memory_pool: Executor | None = None) -> SimpleNamespace:
+           with_smalltalk: bool = False, embedding=None, memory_pool: Executor | None = None,
+           with_knowledge: bool = False) -> SimpleNamespace:
     """`with_planner` — 2‴ 계획 워커를 운영과 같은 길(노출 도구 = 배선된 포트, 같은 counted LLM)로 붙인다. `planner` 는 대역을 직접 넣을 때,
     `wrap` 은 LLM 응답을 손볼 때(절단 등) — 셋 다 없으면 종전 조립과 바이트 단위로 같다. 뒤에서 도는 요약은 기본으로 같은 스레드에서
     바로 돈다(`_InlineExecutor`) — turn() 이 돌아올 때 저장까지 끝나 있다."""
@@ -231,6 +236,8 @@ def _build(by_feature: dict, *, clock: FakeClock | None = None, store=None, port
         tools = plan_tools(ports)
         planner = DialoguePlanWorker(gw(DialoguePlanGate(frozenset(tools))), plan_tool_specs_json(tools))
     smalltalk = DialogueSmalltalkWorker(gw(DialogueAnswerGate())) if with_smalltalk else None  # 답변 게이트 그대로
+    if with_knowledge:  # 일반 지식 즉답 — 운영과 같은 길(같은 counted LLM, 장소 사실 웹 확인은 미배정)
+        ports = replace(ports, unknown=UnknownHandlingAgent(None, None, knowledge=DialogueKnowledgeWorker(gw(DialogueKnowledgeGate()))))
     orch = DialogueOrchestrator(
         intent_worker=intent_worker if intent_worker is not None else DialogueIntentWorker(gw(IntentGate())),
         answer_worker=DialogueAnswerWorker(gw(DialogueAnswerGate())),
