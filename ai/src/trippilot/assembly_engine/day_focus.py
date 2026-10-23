@@ -47,10 +47,12 @@ def pick_day_focus(candidates: Sequence[ScoredPoi], index: Mapping[PoiId, Poi],
 
 
 def focus_candidates(candidates: Sequence[ScoredPoi], index: Mapping[PoiId, Poi],
-                     center: GeoPoint | None) -> Sequence[ScoredPoi]:
-    """그날 자유 후보를 동네 반경 안으로. 중심이 없거나 안쪽이 `FOCUS_MIN` 미만이면 그대로."""
+                     center: GeoPoint | None, *, strict: bool = False) -> Sequence[ScoredPoi]:
+    """그날 자유 후보를 동네 반경 안으로. 중심이 없거나 안쪽이 `FOCUS_MIN` 미만이면 그대로.
+
+    `strict`(사용자가 말한 동네, 편집 ①b)면 적어도 반경 안만 — 말한 동네를 조용히 넓히지 않는다(INV-4, spec 004 FR-006)."""
     if center is None:
         return candidates
     near = tuple(c for c in candidates
                  if c.poi_id in index and haversine_km(index[c.poi_id].coord, center) <= FOCUS_KM)
-    return near if len(near) >= FOCUS_MIN else candidates
+    return near if strict or len(near) >= FOCUS_MIN else candidates

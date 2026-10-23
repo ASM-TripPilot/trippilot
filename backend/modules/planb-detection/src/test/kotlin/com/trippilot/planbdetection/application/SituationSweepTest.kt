@@ -353,6 +353,34 @@ class SituationSweepTest : StringSpec({
         )
     }
 
+    "on 은 쓴 출처의 신호를 live 줄로 남긴다 — 장소 이름·계획 시각을 실어 앱에 간 휴무 알림을 로그로 대조한다, 표본 줄은 안 쓴 신호만" {
+        val world = World()
+        val tripId = world.trip()
+        val place = FakeDetector(SweepSource.PLACE, kind = TriggerKind.CLOSURE, answer = { t ->
+            Detection.Checked(
+                emptySet(),
+                listOf(
+                    DetectionSignal(
+                        kind = TriggerKind.CLOSURE, affectedDate = t.date, slotKey = t.slots.first().slotKey, payload = emptyMap(),
+                        reason = "‘성산일출봉’은 정기 휴무일로 나와요", scope = TriggerScope.PARTIAL_SLOTS, variant = TriggerVariant.CLOSED_DAY,
+                    ),
+                ),
+            )
+        })
+
+        val lines = sweepLogs {
+            world.sweep(props(), listOf(place), StepClock(at("12:15"))).sweep(at("12:15"))
+        }
+
+        val slotKey = place.calls.single().slots.first().slotKey
+        lines.filter { it.startsWith("planb.situation_live") } shouldBe listOf(
+            "planb.situation_live tripId=$tripId source=place kind=CLOSURE date=$DAY variant=CLOSED_DAY severity=RISK " +
+                "slot=$slotKey name=\"성산일출봉\" at=화 18:00~19:00",
+        )
+        lines.filter { it.startsWith("planb.situation_sample") }.shouldBeEmpty()
+        world.rows(tripId).single().variant shouldBe TriggerVariant.CLOSED_DAY
+    }
+
     "일부 모름(partial)인 출처는 감시 상태를 남기지 않는다 — 다 확인한 출처만 남긴다(G-SA-21)" {
         val world = World()
         world.trip()

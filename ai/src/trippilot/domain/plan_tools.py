@@ -26,7 +26,8 @@ from trippilot.domain.intent import DIALOGUE_INTENTS, Intent
 MAX_PLAN_CALLS = 2  # 한 턴의 도구 호출 상한 — 팬아웃 1회(한 파, 병렬), 호출끼리 결과를 주고받지 않는다
 MAX_ARG_CHARS = 40  # 인자 값 상한 — 발화에 나온 짧은 표현만(시각·연락처·주입 꼴은 게이트가 버린다)
 # 도구로 답할 수 없는 말의 가장 가까운 분류 — **관측 전용** 닫힌 집합(다음 도구 우선순위 재료, 미결 #23).
-# 화면·다음 프롬프트로 가지 않는다. 예외 하나: CHAT 은 오케스트레이터가 결정론 한마디로 답한다(#1510).
+# 화면·다음 프롬프트로 가지 않는다. 예외 둘: CHAT 은 오케스트레이터가 결정론 한마디로 답하고(#1510), 정보성 gap(KNOWLEDGE·LODGING·
+# BOOKING·TRANSPORT·OTHER — `dialogue_orchestrator._KNOWLEDGE_GAPS`)은 UnknownHandlingAgent 가 일반 지식으로 답한다(BR-AO-32).
 PLAN_GAPS: tuple[str, ...] = (
     "EVENTS", "REGION_WEATHER", "PLACE_DETAIL", "TRANSPORT", "AMENITY", "BOOKING", "LODGING",
     "KNOWLEDGE", "ACCOUNT", "CHAT", "OTHER",

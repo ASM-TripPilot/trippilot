@@ -12,7 +12,7 @@ import itertools
 from dataclasses import fields
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from trippilot.domain.intent import Intent, IntentDraft
@@ -222,7 +222,6 @@ from trippilot.domain.observability import FallbackEvent, GateDropEvent, LlmCall
 from trippilot.llm_gateway.gates.intent import NULL_INTENT  # noqa: E402
 from trippilot.orchestrator import dialogue_orchestrator as orch_mod  # noqa: E402
 from trippilot.orchestrator.dialogue_interpreter import DialogueContext  # noqa: E402
-from trippilot.orchestrator.dialogue_memory import DialogueMemory, expires_at_for  # noqa: E402
 from trippilot.orchestrator.dialogue_handlers import NEXT_ACTION_TYPES  # noqa: E402
 from trippilot.ports.llm_port import LlmResponse  # noqa: E402
 
@@ -678,33 +677,15 @@ def test_region_recommend_with_a_named_region_from_the_classifier_goes_to_the_pl
     assert "DIALOGUE_PLAN" in b.llm.features() and out.outcome == "ANSWER" and out.reason.endswith("plan:EXPLORE_PLACES")
 
 
-# 13 — 턴당 LLM 3회: 요약은 한 번만 미루고, 연속이면 결정론 압축 (C9)
+# 13 — 계획 턴(서비스 LLM 3회)도 요약은 답한 뒤 뒤에서 — llm_calls 밖이라 미루거나 압축하지 않는다(2026-10-23, 종전 C9 폐지)
 
 
-def test_plan_turn_on_the_first_summary_turn_defers_memory_without_writing() -> None:
+def test_plan_turn_summarizes_after_the_reply_without_counting_it() -> None:
     b = _plan_build(_PLAN_EXPLORE, answer=_answer_json("감천문화마을을 찾아봤어요."))
     out = b.orch.turn(to._input("비 오면 근처 어디 가?", turn_index=10, recent_turns=to._TURNS))
-    assert out.llm_calls == 3 and "DIALOGUE_MEMORY" not in b.llm.features() and b.store.get("s-1") is None
-    assert ("memory", "llm_dialogue_memory", "deferred") in to._modes(b.trace)
-    assert any(e.reason == "turn_llm_cap(3)" for e in to._fallbacks(b.trace))
-
-
-def test_plan_turn_again_on_the_next_turn_compresses_instead_of_deferring_twice() -> None:
-    store = to.InMemoryDialogueMemoryStore(now=lambda: to._NOW)
-    store.put(DialogueMemory("s-1", to._ACCOUNT, "trip-1", ("- 이전 요약",), 0, to._NOW, expires_at_for(to._NOW)))
-    b = _plan_build(_PLAN_EXPLORE, answer=_answer_json("감천문화마을을 찾아봤어요."), store=store)
-    b.orch.turn(to._input("비 오면 근처 어디 가?", turn_index=11, recent_turns=to._TURNS))
-    mem = store.get("s-1")
-    assert "DIALOGUE_MEMORY" not in b.llm.features() and mem.summarized_turn_index == 11  # 가장 오래된 턴이 창 밖으로 밀리기 전에 저장
-    assert ("memory", "llm_dialogue_memory", "deterministic_compress") in to._modes(b.trace)
-
-
-def test_plan_turn_whose_answer_skips_the_llm_still_summarizes_with_the_llm() -> None:
-    """답변이 의도된 결정론(여행 없음 안내)이라 LLM 2회면 상한에 안 닿는다 — 잔여 ≥2.5s 면 요약 LLM 이 돈다. 턴 합계는 여전히 3회."""
-    b = _plan_build(_plan_json(("GET_WEATHER", {"date": "오늘"})))
-    out = b.orch.turn(to._input("비 오면 근처 어디 가?", snapshot=to._NO_TRIP, turn_index=10, recent_turns=to._TURNS))
-    assert b.llm.features() == ["DIALOGUE_INTENT", "DIALOGUE_PLAN", "DIALOGUE_MEMORY"] and out.llm_calls == 3
+    assert out.llm_calls == 3 and b.llm.features()[-1] == "DIALOGUE_MEMORY"
     assert b.store.get("s-1").summarized_turn_index == 10
+    assert not any(m[0] == "memory" for m in to._modes(b.trace))  # 미룸·압축 이벤트 없음
 
 
 # 15 · 16 · 18 — 결정론 · fail-closed · 로그에 원문 없음
@@ -835,6 +816,29 @@ def test_plan_turn_honours_the_budget_wherever_time_goes(intent_ms: int, plan_ms
         assert any(e.reason.startswith("budget_exhausted") for e in _plan_events(b))
 
 
+@settings(max_examples=80, deadline=None)
+@given(intent_ms=st.integers(0, 6_000), plan_ms=st.integers(0, 4_000), knowledge_ms=st.integers(0, 4_000),
+       deadline=st.integers(2_000, 12_000))
+@example(intent_ms=0, plan_ms=3_700, knowledge_ms=0, deadline=5_000)  # 계획 뒤 잔여 1.3s — 지식을 부르지 않아야 한다
+def test_knowledge_turn_honours_the_budget_wherever_time_goes(intent_ms: int, plan_ms: int, knowledge_ms: int, deadline: int) -> None:
+    """AO-P5 의 지식 축 — 지식 LLM 은 잔여 ≥1.5s 일 때만, 시한은 min(3.5s, 잔여 − 0.4s)(답변과 같은 자리). 어디서 시간을 써도 응답은
+    deadline 안이다."""
+    started = 1_000
+    reply = json.dumps({"text": _KNOW, "footnote": None}, ensure_ascii=False)
+    canned = {to._INTENT: '{"intent": null}', to._ANSWER: to._ANSWER_JSON, to._MEMORY: to._MEMORY_JSON,
+              to._PLAN: _plan_json(gap="KNOWLEDGE"), LlmFeature.DIALOGUE_KNOWLEDGE: reply}
+    b = to._build(canned, clock=FakeClock(start_ms=started), ports=_PLAN_PORTS, with_planner=True, with_knowledge=True,
+                  advance={to._INTENT: intent_ms, to._PLAN: plan_ms, LlmFeature.DIALOGUE_KNOWLEDGE: knowledge_ms})
+    out = b.orch.turn(to._input(_WHEN, deadline_ms=deadline, started_ms=started))
+    assert out.outcome in {"ANSWER", "OUT_OF_SCOPE"}
+    for req, at in zip(b.llm.requests, b.advancing.at_ms, strict=True):
+        remaining_then = deadline - (at - started)
+        assert req.timeout_sec * 1000 <= remaining_then + 1e-6
+        if req.prompt_ref.feature == "DIALOGUE_KNOWLEDGE":
+            assert remaining_then >= 1_500
+            assert 0 < req.timeout_sec * 1000 <= min(3_500, remaining_then - 400) + 1e-6
+
+
 # ── AO-P21 — 인자는 프로세스 밖으로 원문 그대로 나가지 않는다 (PBT) ──────────────────
 
 _HANGUL = st.text(alphabet="가나다라마바사아자차카타파하거너더러머버", min_size=6, max_size=9)
@@ -866,3 +870,294 @@ def test_argument_values_never_reach_a_port_verbatim(marker: str, pick: list[int
     assert marker not in sent
     if "GET_POI_INFO" in out.reason.rsplit("plan:", 1)[-1]:  # 게이트가 살린 장소 정보는 포트를 실제로 불렀다(pick 으로 걸면 시각 도구 드롭에 거짓 빨강)
         assert poi.calls
+
+
+# 19 — 일반 지식 즉답(gap KNOWLEDGE → UnknownHandlingAgent, BR-AO-32, 2026-10-23 사용자 결정)
+
+_WHEN = "부산 여행은 언제 가는 게 좋아?"
+_KNOW = "부산은 보통 봄 4~5월과 가을 9~10월이 걷기 좋고 바다 바람도 선선해요. 한여름에는 바닷가가 많이 붐비는 편이에요. 여행 날짜가 정해지면 그때 날씨를 확인해 드릴게요."
+
+
+def _knowledge_turn(text: str | None | Exception, *, plan: str | None = None, utterance: str = _WHEN, snapshot=None,
+                    turn_index: int = 0, recent_turns=(), **kw):
+    """`kw` 는 조립(`_build`)으로, 스냅샷·턴 번호·최근 대화는 입력(`_input`)으로 간다."""
+    reply = text if isinstance(text, Exception) else json.dumps({"text": text, "footnote": None}, ensure_ascii=False)
+    canned = {to._INTENT: '{"intent": null}', to._ANSWER: to._ANSWER_JSON, to._MEMORY: to._MEMORY_JSON,
+              to._PLAN: plan if plan is not None else _plan_json(gap="KNOWLEDGE"), LlmFeature.DIALOGUE_KNOWLEDGE: reply}
+    b = to._build(canned, ports=_PLAN_PORTS, with_planner=True, with_knowledge=True, **kw)
+    inp = to._input(utterance, snapshot=snapshot if snapshot is not None else to._SNAP, turn_index=turn_index,
+                    recent_turns=recent_turns)
+    return b.orch.turn(inp), b
+
+
+def _knowledge_events(b) -> list[tuple[str, str, str]]:
+    return [m for m in to._modes(b.trace) if m[1] == "llm_dialogue_knowledge"]
+
+
+def test_knowledge_gap_is_answered_from_general_knowledge_with_a_fixed_footnote(caplog) -> None:
+    """"언제 가면 좋아?"는 우리가 모르는 것 — 조회 도구로 답할 게 없으면 범위 밖 카드 대신 LLM 일반 지식으로 이번 턴에 답한다(사용자 결정
+    2026-10-23). 각주는 결정론, 버튼은 잡담과 같은 홈 갈래, 서비스 LLM 은 분류 + 계획 + 지식 = 3."""
+    caplog.set_level(logging.INFO, logger=orch_mod.__name__)
+    out, b = _knowledge_turn(_KNOW)
+    assert out.outcome == "ANSWER" and out.frames == () and out.answer.text == _KNOW
+    assert out.answer.footnote == orch_mod.KNOWLEDGE_FOOTNOTE and out.reason.endswith("plan:knowledge")
+    assert orch_mod.KNOWLEDGE_FOOTNOTE == "일반적인 여행 정보라 시기나 상황에 따라 다를 수 있어요."  # 사용자 결정 문구 — 결정론
+    assert [a.type for a in out.answer.next_actions] == ["OPEN_ITINERARY"] and out.answer.payload is None
+    assert out.llm_calls == 3 and _knowledge_events(b) == []
+    (log,) = _plan_logs(caplog)
+    assert (log["decision"], log["gap"]) == ("NO_TOOL", "KNOWLEDGE")
+    knowledge_prompt = next(r.prompt for r in b.llm.requests if r.prompt_ref.feature == "DIALOGUE_KNOWLEDGE")
+    assert _WHEN in knowledge_prompt and "여행 제주" in knowledge_prompt  # $utterance · $trip
+
+
+def test_a_timing_question_the_planner_sent_to_region_recommend_is_answered_as_knowledge_too(caplog) -> None:
+    """계획이 지역 고르기만 골라 버려진 경우(gap KNOWLEDGE 를 코드가 정한 자리, #1609)도 같은 지식 답이다 — 계획 로그도 그 gap 으로."""
+    caplog.set_level(logging.INFO, logger=orch_mod.__name__)
+    out, _ = _knowledge_turn(_KNOW, plan=_plan_json(("RECOMMEND_REGION", {"theme": "부산 여행"})))
+    assert out.outcome == "ANSWER" and out.answer.footnote == orch_mod.KNOWLEDGE_FOOTNOTE
+    (log,) = _plan_logs(caplog)
+    assert (log["decision"], log["gap"]) == ("NO_TOOL", "KNOWLEDGE")
+
+
+@pytest.mark.parametrize(("gap", "answered"), [
+    ("KNOWLEDGE", True), ("LODGING", True), ("BOOKING", True), ("TRANSPORT", True), ("OTHER", True),
+    ("AMENITY", False), ("EVENTS", False), ("PLACE_DETAIL", False), ("REGION_WEATHER", False), ("ACCOUNT", False),
+])
+def test_which_plan_gaps_the_knowledge_answer_takes(gap: str, answered: bool) -> None:
+    """정보성 gap(숙소 잡기 좋은 동네·예약이 필요한지·교통 수단 고르기·그 밖의 여행 팁)은 지식 답, 장소·실시간에 묶인 gap 과 계정은 종전
+    범위 밖 카드 — 지식 LLM 도 부르지 않는다(2026-10-23 사용자 지시 "관광 관련은 범위 밖을 최대한 안 나게")."""
+    out, b = _knowledge_turn(_KNOW, plan=_plan_json(gap=gap))
+    assert (out.outcome == "ANSWER") is answered and ("DIALOGUE_KNOWLEDGE" in b.llm.features()) is answered
+
+
+def test_knowledge_prompt_gets_the_window_and_memory_and_a_trip_less_turn_gets_create_trip() -> None:
+    """지식 프롬프트에는 창 안 최근 대화와 기억 줄이 실리고(기억의 선호·제약을 답에 맞춘다), 여행 없는 턴의 버튼은 여행 만들기다."""
+    from trippilot.agents.adapters.memory_memory_store import InMemoryDialogueMemoryStore
+
+    store = InMemoryDialogueMemoryStore(now=lambda: to._NOW)
+    to._remembered(store, "s-1", to._ACCOUNT, ("제약: 아이와 함께라 많이 걷기 힘들다",))
+    out, b = _knowledge_turn(_KNOW, store=store, snapshot=to._NO_TRIP, turn_index=4, recent_turns=to._TURNS)
+    assert out.outcome == "ANSWER" and [a.type for a in out.answer.next_actions] == ["CREATE_TRIP"]
+    prompt = next(r.prompt for r in b.llm.requests if r.prompt_ref.feature == "DIALOGUE_KNOWLEDGE")
+    assert "제약: 아이와 함께라 많이 걷기 힘들다" in prompt and "비 오면 실내로 가고 싶어" in prompt
+
+
+def test_knowledge_may_name_a_place_in_the_itinerary() -> None:
+    """스냅샷 일정의 장소는 아는 이름이다 — 지어낸 게 아니다."""
+    import uuid as _uuid
+
+    slot = to.SlotView.from_wire(f"{to._D1.isoformat()}#{_uuid.uuid5(_uuid.NAMESPACE_DNS, '협재해수욕장')}", "협재해수욕장",
+                                 to.time(14, 0), "자연")
+    snap = to.TurnSnapshot("ITINERARY", to._TRIP, ("숙소",), "PLANNED", (to.DayView(to._D1, (slot,)),))
+    out, _ = _knowledge_turn("협재해수욕장은 한여름이 가장 붐벼요. 초가을이 한적한 편이에요.", snapshot=snap,
+                             utterance="제주 바다는 언제가 한적해?")
+    assert out.outcome == "ANSWER"
+
+
+def test_knowledge_the_model_declines_is_the_old_scope_card_without_an_event() -> None:
+    out, b = _knowledge_turn(None, utterance="내일 환율 얼마야?")
+    assert out.outcome == "OUT_OF_SCOPE" and out.reason.endswith("plan:no_tool") and _knowledge_events(b) == []
+    assert "DIALOGUE_KNOWLEDGE" in b.llm.features()
+
+
+@pytest.mark.parametrize(("text", "event"), [
+    ("부산은 봄이 좋아요. 입장료는 보통 3,000원이에요.", "gate_dropped_all"),  # 가격 — 게이트
+    ("부산은 10월 3일 불꽃축제 때가 좋아요.", "gate_dropped_all"),  # 특정 날짜 — 게이트
+    ("부산은 가을이 좋아요. 감천문화마을이 특히 예뻐요.", "place_not_in_facts"),  # 등록되지 않은 장소 이름 — 오케스트레이터
+    ("부산은 가을이 좋아요. 09:00 쯤 출발하면 한산해요.", "time_not_in_facts"),  # 지어낸 시각 — 오케스트레이터
+    ("부산은 가을이 좋아요. 오후 세 시쯤 가면 한적해요.", "time_not_in_facts"),  # 한글 시각도(INV-2)
+    (RuntimeError("vendor down"), "llm_error"),
+])
+def test_knowledge_with_a_specific_value_or_an_unknown_place_falls_back_to_the_scope_card(text, event: str) -> None:
+    out, b = _knowledge_turn(text)
+    assert out.outcome == "OUT_OF_SCOPE" and out.reason.endswith("plan:no_tool")
+    (reported,) = _knowledge_events(b)
+    assert reported[2] == "out_of_scope"
+    assert any(event in (e.reason or "") for e in to._fallbacks(b.trace) if e.from_mode == "llm_dialogue_knowledge")
+
+
+def test_refused_or_unwired_knowledge_keeps_the_scope_card() -> None:
+    refused, b = _knowledge_turn(_KNOW, plan=_plan_json(refused=True, gap="KNOWLEDGE"))
+    assert refused.outcome == "OUT_OF_SCOPE" and "DIALOGUE_KNOWLEDGE" not in b.llm.features()
+    unwired, b2 = _plan_turn(_plan_json(gap="KNOWLEDGE"), _WHEN)  # 미배정 — 종전과 같다(이벤트 없음)
+    assert unwired.outcome == "OUT_OF_SCOPE" and _knowledge_events(b2) == []
+
+
+def test_knowledge_without_budget_left_is_skipped_with_an_event() -> None:
+    reply = json.dumps({"text": _KNOW, "footnote": None}, ensure_ascii=False)
+    canned = {to._INTENT: '{"intent": null}', to._ANSWER: to._ANSWER_JSON, to._MEMORY: to._MEMORY_JSON,
+              to._PLAN: _plan_json(gap="KNOWLEDGE"), LlmFeature.DIALOGUE_KNOWLEDGE: reply}
+    b = to._build(canned, ports=_PLAN_PORTS, with_planner=True, with_knowledge=True,
+                  advance={to._INTENT: 2_000, to._PLAN: 6_000})
+    out = b.orch.turn(to._input(_WHEN))
+    assert out.outcome == "OUT_OF_SCOPE" and "DIALOGUE_KNOWLEDGE" not in b.llm.features()
+    assert any(e.reason.startswith("budget_exhausted") for e in to._fallbacks(b.trace) if e.from_mode == "llm_dialogue_knowledge")
+
+
+@settings(max_examples=60, deadline=None)
+@given(raw=st.one_of(st.text(max_size=200), st.just('{"text": null}'),
+                     st.text(max_size=160).map(lambda t: json.dumps({"text": t, "footnote": None}, ensure_ascii=False))))
+def test_any_knowledge_output_is_a_safe_answer_or_the_scope_card(raw: str) -> None:
+    """어떤 LLM 출력이 와도 예외 없이 — 지식 답이면 게이트(길이·시간 표현·연락처·주입)·가격·특정 날짜·연도·등록되지 않은 장소를 다 지난
+    문장이고 각주는 결정론, 아니면 종전 범위 밖 카드다(INV-4)."""
+    canned = {to._INTENT: '{"intent": null}', to._ANSWER: to._ANSWER_JSON, to._MEMORY: to._MEMORY_JSON,
+              to._PLAN: _plan_json(gap="KNOWLEDGE"), LlmFeature.DIALOGUE_KNOWLEDGE: raw}
+    b = to._build(canned, ports=_PLAN_PORTS, with_planner=True, with_knowledge=True)
+    out = b.orch.turn(to._input(_WHEN))
+    assert out.outcome in {"ANSWER", "OUT_OF_SCOPE"}
+    # 예외 없이 — turn() 은 버그도 범위 밖으로 삼키므로(`_crashed`) 결과 모양만으로는 못 본다. 그 보고가 없어야 한다
+    assert "orchestrator_error" not in (out.reason or "")
+    assert not any(e.from_mode == "dialogue_orchestrator" for e in to._fallbacks(b.trace))
+    if out.outcome == "ANSWER":
+        from trippilot.llm_gateway.gates.dialogue_knowledge import has_specific_value
+        text = out.answer.text
+        assert out.answer.footnote == orch_mod.KNOWLEDGE_FOOTNOTE and not has_specific_value(text)
+        assert to._TIME_EXPR.search(text) is None and not to.has_contact_like(text)
+        known = tuple(orch_mod._squash(s.name) for _, s in to._SNAP.slots() if s.name)  # 오케스트레이터와 같은 아는 이름
+        assert not orch_mod._knowledge_foreign_place(text, known, (orch_mod._squash(_WHEN),))
+
+
+def test_knowledge_may_repeat_a_place_the_user_named_but_not_invent_one() -> None:
+    """사용자가 이번 말에 한 이름을 되받는 것은 지어낸 게 아니다("전주 한옥마을 갈 때 옷차림" → 답에 "한옥마을", 2026-10-23 실측 1/15 가
+    이것으로 범위 밖이 됐다). 말하지 않은 장소는 여전히 막는다."""
+    told = "한옥마을은 걸을 일이 많아 편한 신발이 좋아요. 봄가을엔 겉옷도 챙기세요."
+    out, b = _knowledge_turn(told, utterance="전주 한옥마을 갈 때 옷차림 팁 있어?")
+    assert out.outcome == "ANSWER" and out.answer.text == told and _knowledge_events(b) == []
+    out2, b2 = _knowledge_turn("전주는 가을이 좋아요. 남부시장도 꼭 들러 보세요.", utterance="전주 한옥마을 갈 때 옷차림 팁 있어?")
+    assert out2.outcome == "OUT_OF_SCOPE" and any("place_not_in_facts" in (e.reason or "") for e in to._fallbacks(b2.trace))
+
+
+@pytest.mark.parametrize("told", [
+    "강원도 단풍은 보통 10월 중순이 절정이에요. 설악산 같은 국립공원은 주말에 많이 붐벼요.",
+    "현금은 조금 챙기면 좋아요. 전통시장이나 야시장은 카드가 안 되는 곳도 있어요.",
+    "한옥마을은 주민이 사는 곳이라 조용히 둘러보는 게 좋아요.",
+])
+def test_knowledge_may_use_general_nouns_that_look_like_place_names(told: str) -> None:
+    """국립공원·전통시장·한옥마을은 장소 이름이 아니라 일반명사다 — 프롬프트가 허용한 성격·예절·팁의 말이라 막으면 정상 답이 범위 밖
+    카드가 됐다(2026-10-23 리뷰 재현)."""
+    out, b = _knowledge_turn(told, utterance="여행 갈 때 알아 두면 좋은 거 있어?")
+    assert out.outcome == "ANSWER" and out.answer.text == told and _knowledge_events(b) == []
+
+
+def test_knowledge_may_name_a_place_the_user_said_earlier_or_its_full_name() -> None:
+    """앞 턴에 사용자가 한 곳을 "거기"로 이어 묻거나("다음 달에 전주 한옥마을 가 보려고" → "거기 갈 때 옷차림 팁 있어?"), 말한 이름을 정식
+    명칭으로 늘린 꼴("해운대" → "해운대해수욕장")은 지어낸 게 아니다. 발화 "부산" 한 낱말이 "부산시민공원"을 통과시키던 접두 대조는 막았다."""
+    earlier = (to.RecentTurn("USER", "다음 달에 전주 한옥마을 가 보려고"), to.RecentTurn("ASSISTANT", "좋아요! 날짜가 정해지면 알려 주세요."))
+    reply = json.dumps({"text": "전주한옥마을은 걸을 일이 많아 편한 신발이 좋아요.", "footnote": None}, ensure_ascii=False)
+    canned = {to._INTENT: '{"intent": null}', to._ANSWER: to._ANSWER_JSON, to._MEMORY: to._MEMORY_JSON,
+              to._PLAN: _plan_json(gap="KNOWLEDGE"), LlmFeature.DIALOGUE_KNOWLEDGE: reply}
+    b = to._build(canned, ports=_PLAN_PORTS, with_planner=True, with_knowledge=True)
+    assert b.orch.turn(to._input("거기 갈 때 옷차림 팁 있어?", recent_turns=earlier)).outcome == "ANSWER"
+    full, _ = _knowledge_turn("해운대해수욕장은 한여름에 가장 붐벼요. 봄가을이 한적해요.", utterance="해운대는 언제 가면 좋아?")
+    assert full.outcome == "ANSWER"
+    bare, b2 = _knowledge_turn("부산시민공원이 걷기 좋아요.", utterance="부산")
+    assert bare.outcome == "OUT_OF_SCOPE" and any("place_not_in_facts" in (e.reason or "") for e in to._fallbacks(b2.trace))
+
+
+def test_a_knowledge_worker_exception_falls_back_with_an_event() -> None:
+    """지식 워커가 게이트웨이에 닿기 전에 던지면(프롬프트 변수 누락 등) 범위 밖 카드 + 이벤트 — 모른다고 닫음처럼 조용히 넘어가지 않는다."""
+    class _Boom:
+        def answer(self, *args, **kwargs):
+            raise ValueError("template variable missing")
+
+    from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent
+
+    ports = _replace(_PLAN_PORTS, unknown=UnknownHandlingAgent(None, None, knowledge=_Boom()))
+    canned = {to._INTENT: '{"intent": null}', to._ANSWER: to._ANSWER_JSON, to._MEMORY: to._MEMORY_JSON,
+              to._PLAN: _plan_json(gap="KNOWLEDGE")}
+    b = to._build(canned, ports=ports, with_planner=True)
+    out = b.orch.turn(to._input(_WHEN))
+    assert out.outcome == "OUT_OF_SCOPE"
+    assert [e.reason for e in to._fallbacks(b.trace) if e.from_mode == "llm_dialogue_knowledge"] == ["knowledge_error: ValueError"]
+
+
+@pytest.mark.parametrize("gap", ["KNOWLEDGE", "CHAT"])
+def test_unassigned_knowledge_or_smalltalk_never_waits_for_recall(gap: str) -> None:
+    """지식·잡담 LLM 이 미배정이면 기억을 쓰지 않는다 — 꺼내기를 기다리지도(≤0.3s), 그 시한 이벤트를 남기지도 않는다(2026-10-23 리뷰 재현).
+    직전 리뷰가 계획 LLM 앞의 대기를 걷어낸 것과 같은 성질."""
+    import threading
+
+    from tests.fakes.fake_embedding import FakeEmbedding
+    from trippilot.agents.adapters.memory_memory_store import InMemoryDialogueMemoryStore
+
+    gate = threading.Event()
+
+    class _SlowEmbedding(FakeEmbedding):
+        def embed(self, text: str):
+            gate.wait(5)
+            return super().embed(text)
+
+    store = InMemoryDialogueMemoryStore(now=lambda: to._NOW)
+    to._remembered(store, "s-1", to._ACCOUNT, ("선호: 조용한 카페",))
+    canned = {to._INTENT: '{"intent": null}', to._ANSWER: to._ANSWER_JSON, to._MEMORY: to._MEMORY_JSON,
+              to._PLAN: _plan_json(gap=gap)}
+    b = to._build(canned, store=store, ports=_PLAN_PORTS, with_planner=True, embedding=_SlowEmbedding())
+    try:
+        b.orch.turn(to._input(_WHEN, recent_turns=to._TURNS))
+    finally:
+        gate.set()
+    assert not any(m[1] == "vector_recall" for m in to._modes(b.trace))
+
+
+@pytest.mark.parametrize(("intent", "utterance"), [
+    (Intent.GET_WEATHER, "10월 3일 부산 날씨 어때?"),  # 달이 있어도 날짜를 말하면 예보 질문 — 날씨 도구 그대로
+    (Intent.GET_NEXT_SLOT, "여름에 다음 갈 곳 어디야?"),  # 날씨 의도가 아니면 계절 낱말이 있어도 그대로
+])
+def test_the_seasonal_reroute_only_takes_climate_questions_of_the_weather_intent(intent: Intent, utterance: str) -> None:
+    canned = {to._INTENT: to._intent_json(intent), to._ANSWER: to._ANSWER_JSON, to._MEMORY: to._MEMORY_JSON,
+              to._PLAN: _plan_json(gap="KNOWLEDGE"), LlmFeature.DIALOGUE_KNOWLEDGE: json.dumps({"text": _KNOW, "footnote": None})}
+    b = to._build(canned, ports=_PLAN_PORTS, with_planner=True, with_knowledge=True)
+    out = b.orch.turn(to._input(utterance, snapshot=to._NO_TRIP))
+    assert "seasonal_weather_rerouted" not in (out.reason or "") and "DIALOGUE_PLAN" not in b.llm.features()
+
+
+def test_place_fact_lookup_alone_does_not_answer_general_knowledge() -> None:
+    """장소 사실 웹 확인(PLACE_FACT_LOOKUP)만 배정된 조립 — 에이전트는 있지만 지식 워커가 없다. gap KNOWLEDGE 는 종전 범위 밖, 계절 날씨
+    되돌림도 하지 않는다(운영의 두 번 배포 사이 구간이 바로 이 조립이다)."""
+    from trippilot.agents.adapters.memory_place_fact_store import InMemoryPlaceFactStore
+    from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent
+
+    ports = _replace(_PLAN_PORTS, unknown=UnknownHandlingAgent(object(), InMemoryPlaceFactStore()))
+    canned = {to._INTENT: '{"intent": null}', to._ANSWER: to._ANSWER_JSON, to._MEMORY: to._MEMORY_JSON,
+              to._PLAN: _plan_json(gap="KNOWLEDGE")}
+    b = to._build(canned, ports=ports, with_planner=True)
+    assert b.orch.turn(to._input(_WHEN)).outcome == "OUT_OF_SCOPE" and "DIALOGUE_KNOWLEDGE" not in b.llm.features()
+    weather = {**canned, to._INTENT: to._intent_json(Intent.GET_WEATHER, date="몇 월")}
+    b2 = to._build(weather, ports=ports, with_planner=True)
+    out = b2.orch.turn(to._input("제주도는 몇 월에 가야 덜 붐벼?", snapshot=to._NO_TRIP))
+    assert out.frames[0].intent is Intent.GET_WEATHER and "DIALOGUE_PLAN" not in b2.llm.features()
+
+
+def test_a_seasonal_weather_question_keeps_the_old_weather_answer_when_knowledge_is_not_assigned() -> None:
+    """지식 즉답(또는 계획)이 조립되지 않았으면 계절 날씨 되돌림을 하지 않는다 — 범위 밖 카드보다 종전 날씨 답("먼저 여행을 만들어")이
+    낫다. 미배정이면 종전과 같다(두 번 배포 사이 구간, 2026-10-23 리뷰 재현)."""
+    canned = {to._INTENT: to._intent_json(Intent.GET_WEATHER, date="몇 월"), to._ANSWER: to._ANSWER_JSON,
+              to._MEMORY: to._MEMORY_JSON, to._PLAN: _plan_json(gap="KNOWLEDGE")}
+    for kw in ({"with_planner": True}, {}):
+        b = to._build(canned, ports=_PLAN_PORTS, **kw)
+        out = b.orch.turn(to._input("제주도는 몇 월에 가야 덜 붐벼?", snapshot=to._NO_TRIP))
+        assert out.frames[0].intent is Intent.GET_WEATHER and "seasonal_weather_rerouted" not in (out.reason or "")
+        assert "DIALOGUE_PLAN" not in b.llm.features()
+
+
+@pytest.mark.parametrize(("utterance", "seasonal"), [
+    ("대구는 여름에 많이 더워?", True), ("제주도는 몇 월에 가야 덜 붐벼?", True), ("10월 부산 날씨 어때?", True),
+    ("부산 내일 날씨 어때?", False), ("오늘 비 와?", False), ("이번 주말 날씨", False), ("날씨 어때?", False),
+])
+def test_seasonal_weather_is_a_climate_question_not_a_forecast(utterance: str, seasonal: bool) -> None:
+    assert orch_mod._seasonal_weather(utterance) is seasonal
+
+
+def test_a_seasonal_weather_question_without_a_trip_goes_to_the_planner_and_is_answered_as_knowledge() -> None:
+    """분류가 "제주도는 몇 월에 가야 덜 붐벼?"를 날씨 의도로 골랐다(신뢰도 0.32, 2026-10-23 실측) — 여행 없는 턴의 예보 도구는 "먼저 여행을
+    만들어"만 낸다. 가까운 날을 말하지 않은 계절·달 질문은 계획 단계(→ gap KNOWLEDGE → 지식 답)에 맡긴다. 여행이 있으면 종전대로."""
+    reply = json.dumps({"text": "제주는 보통 11월과 2~3월이 비교적 한적한 편이에요.", "footnote": None}, ensure_ascii=False)
+    canned = {to._INTENT: to._intent_json(Intent.GET_WEATHER, date="몇 월"), to._ANSWER: to._ANSWER_JSON,
+              to._MEMORY: to._MEMORY_JSON, to._PLAN: _plan_json(gap="KNOWLEDGE"), LlmFeature.DIALOGUE_KNOWLEDGE: reply}
+    b = to._build(canned, ports=_PLAN_PORTS, with_planner=True, with_knowledge=True)
+    out = b.orch.turn(to._input("제주도는 몇 월에 가야 덜 붐벼?", snapshot=to._NO_TRIP))
+    assert out.outcome == "ANSWER" and out.answer.footnote == orch_mod.KNOWLEDGE_FOOTNOTE
+    assert "seasonal_weather_rerouted" in out.reason and "DIALOGUE_PLAN" in b.llm.features()
+    with_trip = to._build(canned, ports=_PLAN_PORTS, with_planner=True, with_knowledge=True)
+    kept = with_trip.orch.turn(to._input("제주도는 몇 월에 가야 덜 붐벼?"))  # 여행이 있는 턴 — 날씨 의도 그대로
+    assert "DIALOGUE_PLAN" not in with_trip.llm.features() and kept.frames[0].intent is Intent.GET_WEATHER

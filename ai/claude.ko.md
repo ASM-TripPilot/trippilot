@@ -34,10 +34,12 @@ TripPilot AI는 LLM + 최적화 어셈블리 하이브리드 아키텍처로 여
 - **PlanBAgent**: 변수 대응 (RAG 패턴, KB 3종 + pgvector) — `agents/planb/rag.py` `PlanBRagPipeline.run(PlanBRagRequest)`
 - **ReflectAgent**: 회고 생성 — `agents/reflect/agent.py` `ReflectAgent.run(ReflectTask)`. 텍스트·vision(Phase 2)이 `ReflectTask.vision` 유무로 한 진입점
 - **EditAgent**: 일정 편집 (번역 → 검증 → 확인 게이트 → 재타이밍 → 어셈블리 검증) — `agents/edit/agent.py` `EditAgent.run(EditTask) -> EditOutcome`
+- **UnknownHandlingAgent**: 카드에 "미확인"인 장소 사실(영업시간·휴무일·입장료)을 답한 **뒤에** 벤더 웹 검색으로 찾는다 — `agents/unknown_handling/agent.py` `UnknownHandlingAgent.run(UnknownTask) -> UnknownOutcome(facts, pending)`. 도우미 GET_POI_INFO 핸들러가 부른다(`ROUTING_TABLE` 행 아님), 결과는 ai_kb `place_fact_cache` 에 저장해 다음 물음에 쓴다. 둘째 일(2026-10-23): 여행 일반 지식을 이번 턴에 답한다 — `run(KnowledgeTask) -> UnknownOutcome(answer)`(feature `DIALOGUE_KNOWLEDGE`, 웹 검색 없음)
+- **RecommendationAgent**: 도우미 추천 의도 둘의 고르기(어느 후보 묶음·순서·몇 곳 / 어느 지역과 근거) — `agents/recommendation/agent.py` `RecommendationAgent.run(RecommendTask) -> RecommendOutcome`. LLM 0, 재료는 도우미 핸들러가 모으고 답(Facts)도 핸들러가 짓는다. 2026-10-23 편입(사용자 결정)
 
-> **네 에이전트 모두 게이트웨이 워커를 감싸는 객체다** (2026-09-09): 생성자 주입, `run(<Task>) -> <Outcome>`
+> **여섯 에이전트 모두 게이트웨이 워커를 감싸는 객체다** (2026-09-09 — RecommendationAgent 는 감쌀 워커 없이 고르기만): 생성자 주입, `run(<Task>) -> <Outcome>`
 > 단일 진입, 경계 밖으로 예외를 던지지 않는다(DL-5). 문자 그대로의 `Agent.handle(AgentTask) -> AgentResult`
-> 봉투는 넷 다 아직 미구현 — IntentRouter 배선과 함께 온다(business-rules 미결 #8).
+> 봉투는 여섯 다 아직 미구현 — IntentRouter 배선과 함께 온다(business-rules 미결 #8).
 > 단, **판단 없는 단발 변환은 경계→워커 직행이 정식 패턴**(`reflection_nudge` — u6-reflect FD §2.1, 2026-09-09).
 
 **정보원** (v2 — `orchestrator/info_collector.py` + `providers/`):
@@ -90,7 +92,7 @@ OR-Tools (1차 결정론) → LLM (2차 창의적 제안) → 규칙 폴백 (최
   세려면 `grep -rc --include="*.py" "@given" ai/tests`. 종전 "19"·"52"·"170개/41개" 표기는
   모두 스테일이었다.
 - **테스트 폴더는 `src/trippilot/` 를 따라간다**: 주로 시험하는 패키지 폴더 `tests/<패키지>/` 에 둔다
-  (에이전트는 `tests/agents/<schedule|planb|reflect|edit>/`). `ai/scripts` 를 시험하는 것은 `tests/scripts/`.
+  (에이전트는 `tests/agents/<schedule|planb|reflect|edit|unknown_handling|recommendation>/`). `ai/scripts` 를 시험하는 것은 `tests/scripts/`.
   `fakes/`·`fixtures/`·`generators/` 와 `test_architecture.py` 는 루트에 둔다.
 - LangChain: **선언만 있고 쓰지 않는다** — `pyproject.toml`에 의존성이 없고 `src/`에
   import 0건. RAG는 psycopg + pgvector로 직접 구현했다 (철회 기록은 TRIP-522).

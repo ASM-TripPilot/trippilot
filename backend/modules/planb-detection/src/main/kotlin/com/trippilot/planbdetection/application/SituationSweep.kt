@@ -221,6 +221,8 @@ class SituationSweep(
             // 판정에 드는 관측 = 켰을 때 쓰는 출처(목록 안 ∧ 관찰 전용 아님). 쓰지 않는 결과(관찰 전용 · dry-run 전부)는 표본 줄로.
             val (judged, unjudged) = observations.partition { writes(it.source) }
             sample(trip, if (props.mode == SweepMode.ON) unjudged else observations, slots)
+            // 켠 뒤 쓴 출처의 신호도 같은 꼴로 남긴다 — 앱에 간 알림을 장소 이름·시각으로 대조할 재료(운영은 DB 를 못 본다).
+            if (props.mode == SweepMode.ON) sample(trip, judged, slots, LIVE_LINE)
             val writeAt = round.now()
             if (!round.scope.writable(writeAt)) { // 감지하는 사이 20:58 을 넘겼다 — 쓰지 않는다(dry-run 도 켰을 때와 같은 수를 센다)
                 round.skipped.incrementAndGet()
@@ -289,18 +291,19 @@ class SituationSweep(
     }
 
     /**
-     * 쓰지 않은 신호의 표본 줄 — dry-run·관찰 전용으로 휴무 오탐·광역 특보를 재는 재료(OBS-SA-01). 좌표·계정 id 는 싣지 않는다.
+     * 신호의 표본 줄 — 쓰지 않은 신호(dry-run·관찰 전용)는 [SAMPLE_LINE], 켠 뒤 쓴 출처의 신호는 [LIVE_LINE] 으로 같은 꼴이다.
+     * 휴무 오탐·광역 특보를 재는 재료(OBS-SA-01)이고, 켠 뒤에는 앱에 간 알림의 대조 재료다. 좌표·계정 id 는 싣지 않는다.
      * 슬롯 신호는 장소 이름과 계획 시각(요일 포함)을 싣는다 — 장소 id 는 환경마다 다른 무작위 값이라, 이것 없이는 영업시간 원문과
      * 로그만으로 대조할 수 없다(운영 dry-run 첫 아침 표본 3건이 그랬다). 날짜 전체 신호는 둘 다 null 이다.
      */
-    private fun sample(trip: WatchedTrip, observed: List<Observation>, slots: List<PlannedSlotView>) {
+    private fun sample(trip: WatchedTrip, observed: List<Observation>, slots: List<PlannedSlotView>, line: String = SAMPLE_LINE) {
         val byKey = slots.associateBy { it.slotKey }
         for (o in observed) {
             val checked = o.detection as? Detection.Checked ?: continue
             for (s in checked.signals) {
                 val slot = s.slotKey?.let(byKey::get)
                 log.info(
-                    "planb.situation_sample tripId={} source={} kind={} date={} variant={} severity={} slot={} name={} at={}",
+                    "$line tripId={} source={} kind={} date={} variant={} severity={} slot={} name={} at={}",
                     trip.tripId, o.source, s.kind, s.affectedDate, s.variant, s.severity, s.slotKey,
                     slot?.nameKo?.let { "\"${it.replace('"', '\'')}\"" }, slot?.let(::plannedAt),
                 )
@@ -416,6 +419,12 @@ class SituationSweep(
         private val IN_FLIGHT_GRACE: Duration = Duration.ofSeconds(90)
 
         private const val CIRCUIT_OPEN = "circuit-open"
+
+        /** 쓰지 않은 신호(dry-run·관찰 전용)의 표본 줄 머리. */
+        private const val SAMPLE_LINE = "planb.situation_sample"
+
+        /** 켠 뒤 쓴 출처 신호의 줄 머리 — 회차마다 다시 판정하니 떠 있는 위험은 회차마다 다시 찍힌다. */
+        private const val LIVE_LINE = "planb.situation_live"
 
         /** 스윕 대상 일정 상태 — 일정 모듈이 문자열로 넘긴다(`ItineraryRef.status`). */
         private const val CONFIRMED = "CONFIRMED"

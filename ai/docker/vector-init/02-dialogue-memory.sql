@@ -15,3 +15,12 @@ CREATE TABLE IF NOT EXISTS public.dialogue_memory (
 );
 CREATE INDEX IF NOT EXISTS ix_dialogue_memory_account ON public.dialogue_memory (account_ref, updated_at DESC);
 CREATE INDEX IF NOT EXISTS ix_dialogue_memory_trip ON public.dialogue_memory (trip_id);
+-- 기억 줄 벡터(2026-10-23 — 이번 말과 관련된 기억 줄만 꺼낸다, BR-AO-09 개정). 행은 dialogue_memory 를 따라 지워진다(ON DELETE CASCADE)
+-- — 이력 지우기·여행 삭제·계정 삭제 3호출과 TTL 정리가 이 표에도 그대로 걸린다(BR-AO-10). 기존 볼륨에는 이 문장만 수동 적용.
+CREATE TABLE IF NOT EXISTS public.dialogue_memory_vectors (
+  session_id text NOT NULL REFERENCES public.dialogue_memory (session_id) ON DELETE CASCADE,
+  line       text NOT NULL,                 -- 그 세션 summary 의 한 줄 그대로
+  model      text NOT NULL,                 -- 임베딩 모델 id — 바뀌면 옛 벡터는 검색에 안 걸리고 다음 요약 때 다시 만든다
+  embedding  vector(1024) NOT NULL,
+  PRIMARY KEY (session_id, line)
+);

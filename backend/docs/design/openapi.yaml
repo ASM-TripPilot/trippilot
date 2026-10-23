@@ -4630,6 +4630,7 @@ components:
               slotKey: { type: string }
               before: { nullable: true, allOf: [{ $ref: '#/components/schemas/AssistantProposalSlotFace' }] }
               after: { nullable: true, allOf: [{ $ref: '#/components/schemas/AssistantProposalSlotFace' }] }
+              dayLabel: { type: string, nullable: true, example: '1일차 · 10월 24일', description: '그 줄이 놓인 날 — 여러 날을 고친 안을 날로 묶어 그린다. 이 칸 전에 저장된 제안은 null' }
         violations: { type: array, items: { type: string }, description: '비어 있지 않으면 적용할 수 없다(BR-U8-31)' }
         applyHint: { type: string, nullable: true, enum: [AUTO_APPLY, CONFIRM_REQUIRED, null], description: '표시 힌트일 뿐이다' }
     AssistantProposalSlotFace:

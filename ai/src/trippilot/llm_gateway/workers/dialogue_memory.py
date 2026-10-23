@@ -1,12 +1,11 @@
-"""DialogueMemoryWorker — 세션 기억 요약 ≤20줄, 경량 티어 (assistant-orchestrator FD DE §2.6·§6, BR-AO-09).
+"""DialogueMemoryWorker — 세션 기억 요약 ≤20줄("종류: 내용"), 경량 티어 (assistant-orchestrator FD DE §2.6·§6, BR-AO-09).
 
-오케스트레이터가 10턴마다 부른다: 이전 요약 + 최근 턴 → 갱신된 요약 줄. 발화 원문은 벤더 호출 본문에만
-실리고(SEC-U8-06 이 허용하는 두 곳 중 하나) 저장되는 것은 산출 줄이다 — 그래서 프롬프트 규칙이 "원문 인용
+오케스트레이터가 3턴마다 답한 뒤 뒤에서 부른다: 이전 기억 + 아직 요약하지 않은 턴 → 갱신된 줄. 발화 원문은 벤더 호출
+본문에만 실리고(SEC-U8-06 이 허용하는 두 곳 중 하나) 저장되는 것은 산출 줄이다 — 그래서 프롬프트 규칙이 "원문 인용
 금지"다.
 
-실패·게이트 드롭이면 폴백 TypedResult 를 그대로 반환한다 (BR-U4-09). 결정론 압축
-(`orchestrator.dialogue_memory.compress_fallback`)의 실행은 오케스트레이터 몫이고, 이 워커는 신호만 낸다.
-시한은 호출측 잔여를 `timeout_sec` 로 관통한다 (DL-4) — 기본값을 두지 않아 잔여 없이 부르는 길을 막는다.
+실패·게이트 드롭이면 폴백 TypedResult 를 그대로 반환한다 (BR-U4-09). 그때 이전 기억을 그대로 두고 다음 턴에 다시
+부르는 것은 오케스트레이터 몫이고, 이 워커는 신호만 낸다. 시한은 호출측이 `timeout_sec` 로 정한다 — 기본값을 두지 않는다.
 """
 
 from __future__ import annotations

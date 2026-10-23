@@ -107,7 +107,9 @@ def test_schema_omits_arguments_nobody_asks_for() -> None:
             else:
                 omitted += 1
                 assert spec.name not in props, f"{intent.value}.{spec.name} 를 묻고 있다"
-    assert omitted == 10  # 표 40칸 중 10칸(안 묻는 9 + 도우미 전용 1) — 줄면 근거를 확인하고 이 수를 고칠 것
+    # 표 41칸 중 11칸(안 묻는 10 + 도우미 전용 1) — 줄면 근거를 확인하고 이 수를 고칠 것.
+    # 10번째 안 묻는 칸은 EDIT_SCHEDULE.day_areas(spec 004) — 분류가 아니라 결정론 해석 확인이 채운다
+    assert omitted == 11
 
 
 def test_paraphrase_prompt_loads_with_semver_and_meaning_preservation_rule() -> None:

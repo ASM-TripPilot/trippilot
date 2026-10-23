@@ -54,13 +54,17 @@ internal object RegionAnchors {
         // 목적지 중심은 목적지마다 한 번만 조회한다 — 날짜마다 부르면 같은 값을 계획일 수만큼 다시 읽는다.
         val centers = destinations.associateWith { centerOf(regions, it) }
         val first = destinations.firstNotNullOfOrNull { centers[it] }
+        // 그 날 목적지의 구 코드(구 안 우선, 2026-10-23) — 앵커가 숙소여도 그 날 고른 구는 목적지다. 시도·코드 없음이면 빈 목록.
+        val codes = destinations.associateWith { ref -> ref.regionCode?.let { regions.districtCodesOf(it).sorted() }.orEmpty() }
         return generateSequence(startDate) { it.plusDays(1) }.takeWhile { !it.isAfter(endDate) }.mapNotNull { d ->
             val stay = byDate[d] ?: if (d == endDate) byDate[d.minusDays(1)] else null // 체크아웃일만 전날 거점
-            val center = destinationOn(destinations, startDate, d)?.let { centers[it] } ?: first
+            val destination = destinationOn(destinations, startDate, d)
+            val center = destination?.let { centers[it] } ?: first
+            val dayCodes = destination?.let { codes[it] }.orEmpty()
             when {
-                stay != null -> DayAnchor(d, stay.lat, stay.lng)
+                stay != null -> DayAnchor(d, stay.lat, stay.lng, dayCodes)
                 // 목적지 좌표조차 없으면 그 날은 앵커 없이 둔다 — 지어낸 좌표를 보내지 않는다.
-                center != null -> DayAnchor(d, center.lat, center.lng)
+                center != null -> DayAnchor(d, center.lat, center.lng, dayCodes)
                 else -> null
             }
         }.toList()

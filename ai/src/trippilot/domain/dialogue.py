@@ -255,6 +255,10 @@ ARGUMENT_TABLE: dict[Intent, tuple[ArgumentSpec, ...]] = {
               "어디로 옮길지. 워커가 현재 슬롯 기준점(afterPoiId·beforePoiId)으로 번역한다 — "
               "기준이 없으면 옮기지 않고 거부한다(예전 '비면 맨 앞' 기본값은 '더 늦게'를 앞으로 당겼다)",
               lands_in="EditCommand.params.afterPoiId|beforePoiId"),
+        # 날마다 동네("1일차는 종로 2일차는 강남으로", spec 004) — 분류가 아니라 **결정론 해석 확인**이 채운다
+        # (`orchestrator/edit_day_areas.py`). 분류는 이 말을 한 곳 바꾸기 칸에 뭉갠다(2026-10-22 실측 12/12) — 묻지 않는다.
+        _spec("day_areas", (_FT,), False, "날마다 동네 — \"2026-10-24=종로;2026-10-25=강남구\"",
+              lands_in="EditCommand.params(SET_DAY_AREAS)", asked_by_router=False),
     ),
     Intent.GET_NEXT_SLOT: (
         # AI 처리 경로 없음(백엔드 DB 조회). 기준점("이거 끝나고")은 inline_context·context_refs 가
@@ -347,17 +351,17 @@ ARGUMENT_TABLE: dict[Intent, tuple[ArgumentSpec, ...]] = {
               lands_in="dialogue_handlers._explore_rank (태그 정렬)"),
         _spec("count", (_EN,), False,
               "몇 곳을 골라 달라는지('하나'면 1). 말하지 않았으면 비운다",
-              choices=("1", "2", "3", "4", "5"), lands_in="dialogue_handlers._assemble_recommend (자르기)"),
+              choices=("1", "2", "3", "4", "5"), lands_in="agents.recommendation.agent.RecommendTask.count (개수)"),
     ),
     Intent.RECOMMEND_REGION: (
         # 필수 0 — 취향은 백엔드가 대화 문맥(preference_profile)에 싣고, 말한 주제가 있으면 그것이 더 무겁다.
         # 둘 다 없으면 핸들러가 "어떤 여행을 좋아하는지" 되묻는다(고정 문장).
         _spec("theme", (_FT,), False,
               "'바다 보러'·'역사 여행'·'조용히 쉬고 싶은' 같은 이번 여행의 바람",
-              lands_in="domain.region_recommend.preference_weights"),
+              lands_in="agents.recommendation.agent.RecommendTask.theme"),
         _spec("count", (_EN,), False,
               "몇 곳을 골라 달라는지('한 곳'이면 1). 말하지 않았으면 비운다",
-              choices=("1", "2", "3", "4", "5"), lands_in="dialogue_handlers._assemble_region (자르기)"),
+              choices=("1", "2", "3", "4", "5"), lands_in="agents.recommendation.agent.RecommendTask.count (개수)"),
     ),
 }
 

@@ -99,8 +99,9 @@ ROUTING_TABLE: dict[Intent, RoutingEntry] = {
     Intent.GET_DISTANCE: RoutingEntry(None, RoutingMode.FAST_PATH),  # TransitProvider, 거리만 (INV-3)
     Intent.GET_POI_INFO: RoutingEntry(None, RoutingMode.FAST_PATH),  # PlaceProvider
     Intent.EXPLORE_PLACES: RoutingEntry(None, RoutingMode.FAST_PATH),  # 등록 POI 반경 풀 (도우미 전용)
-    Intent.RECOMMEND_PLACES: RoutingEntry(None, RoutingMode.FAST_PATH),  # 같은 풀에서 고른 몇 곳 (도우미 전용)
-    Intent.RECOMMEND_REGION: RoutingEntry(None, RoutingMode.FAST_PATH),  # 지역 성격표 × 취향 (도우미 전용, LLM 0)
+    # 추천 둘 — 고르기는 RecommendationAgent(2026-10-23 사용자 결정), 재료는 도우미 핸들러가 모은다(도우미 전용, LLM 0)
+    Intent.RECOMMEND_PLACES: RoutingEntry("RecommendationAgent", RoutingMode.DELEGATE),  # 같은 풀에서 고른 몇 곳
+    Intent.RECOMMEND_REGION: RoutingEntry("RecommendationAgent", RoutingMode.DELEGATE),  # 지역 성격표 × 취향
     Intent.OUT_OF_SCOPE: RoutingEntry(None, RoutingMode.FALLBACK),
 }
 
