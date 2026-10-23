@@ -117,6 +117,7 @@ from trippilot.domain.reflection import (
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
 from trippilot.assembly_engine.config import RAIN_OUTDOOR, AssemblyConfig, stay_for
 from trippilot.assembly_engine.constraints import hc1_unjudged, open_hours_ok
+from trippilot.assembly_engine.day_focus import FOCUS_MIN
 from trippilot.assembly_engine.facade import HybridAssemblyFacade, AssemblyConflictError
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
@@ -159,7 +160,8 @@ from trippilot.domain.poi import (
     NIGHTLIFE_TAG, DataQuality, Poi, PoiCategory, PoiSource, counts_as_food,
 )
 from trippilot.domain.travel import TravelEstimate
-from trippilot.agents.edit.agent import EditAgent, EditOutcome, EditTask
+from trippilot.agents.edit.agent import EditAgent, EditOutcome, EditTask, RebuiltDays
+from trippilot.agents.edit.day_area import DayArea
 from trippilot.agents.edit.commands import EditStatus
 from trippilot.agents.planb import composition
 from trippilot.agents.planb import request_verification as nl_verify
@@ -1443,6 +1445,9 @@ _NEAR_KEYS = frozenset({"NEARBY", "LESS_MOVE"})
 _NIGHT_KEYS = frozenset({"NIGHTLIFE"})
 # "강남에서 놀고 싶어" — 그 지역 중심 둘레 후보 반경. 동네 하나(걸어서 이어지는 거리)다.
 _AREA_POOL_KM = 3.0
+# 편집 날 재구성(spec 004) — 동네 반경 안 후보가 이보다 적으면 하루를 못 채운다(사유). 동네 풀을 더 모을 만한 남은 시한
+_DAY_AREA_MIN = 6
+_DAY_AREA_FETCH_MIN_MS = 2_000
 _NIGHTLIFE_KEEP = 6  # 구성 후보에 올리는 나이트라이프 수(가까운 순)
 # 나이트라이프 세부 태그(수집 계약 — tags=["나이트라이프", 세부]). 말에 있는데 근처에 없으면 노트로 밝힌다.
 _NIGHTLIFE_SUBTYPES = ("클럽", "칵테일바", "와인바", "라운지바", "비어가든", "스피크이지", "혼술바")
@@ -3947,6 +3952,7 @@ class WiredItineraryOrchestrator:
         """
         meta = request.request_meta
         now = _tz_aware(meta.requested_at, self._tz)
+        t0 = self._clock.monotonic_ms()  # 날 재구성이 남은 시한을 잰다(기본 풀 수집 시간까지 뺀다)
         # 편집은 확인 게이트·재타이밍이 따로 있어 미검증 목록을 소비하지 않는다
         solution, _, poi_index, _ = self._reconstruct(
             request.itinerary, meta,
@@ -4007,6 +4013,8 @@ class WiredItineraryOrchestrator:
             # 사이 넣기 구간 풀 — 같은 요구표·공급자로 그 날만 한 번 더 모은다(INV-1). 에이전트가 자리를 코드로 풀었을 때만 부른다
             segment_pool=lambda center, km: self._pool_from(self._info.collect(Intent.EDIT_SCHEDULE, {"pool_request": replace(
                 pool_request, anchor=center, radius_override_km=km, dates=(request.target_date,)), "now": now}), now),
+            # 날마다 동네 — 그 날들을 동네 풀로 ScheduleAgent 가 다시 푼다(spec 004). 에이전트가 날·동네를 확인했을 때만 부른다
+            rebuild_days=lambda pairs: self._rebuild_days(request, solution, pool, poi_index, pool_request, transport, now, t0, pairs),
         ))
         return self._edit_response(outcome)
 
@@ -4045,6 +4053,148 @@ class WiredItineraryOrchestrator:
             ],
             reason=outcome.reason,
         )
+
+    def _rebuild_days(
+        self, request: schemas.EditItineraryRequest, solution: ItinerarySolution, pool: CandidatePool,
+        poi_index: Mapping[PoiId, Poi], pool_request: CandidatePoolRequest, transport: TransportMode, now: datetime,
+        t0: int, pairs: tuple[DayArea, ...],
+    ) -> RebuiltDays | str:
+        """날마다 동네 재구성 콘센트(spec 004 FR-005) — (날, 동네) → 그 날들만 다시 푼 전체 해, 아니면 사유.
+
+        동네 중심은 다시 짜기와 같은 `area_center`(표 먼저, 없으면 받은 풀 안 이름 중앙값 — 50km 등록 POI 조회는 편집 시한에 무겁다).
+        후보는 그 중심 3km — 받은 기본 풀에서 먼저, 모자라면 같은 요구표·PlaceProvider 로 그 중심 풀을 한 번 더(INV-1, 사이 넣기
+        `segment_pool` 과 같은 길). 그 날들을 ScheduleAgent 로 **한 번에** 푼다 — 날마다 중심(명시·엄격), 창 = 원 슬롯 범위, 예약 =
+        고정 블록, 동네 안 원 슬롯 = 시각 없는 필수 방문(바뀌는 양을 줄인다). 방문 수 상한은 없다 — 원 슬롯 수로 묶으면 동네 안은 이동이 짧아
+        하루에 빈 시간이 남고 점심이 빠졌다(2026-10-23 실측, spec 004 FR-005). 시각·순서는 조립 값(INV-2)."""
+        deadline = _deadline_budget(request.request_meta)
+        registered = tuple({p.poi_id: p for p in (*pool.pois, *poi_index.values())}.values())
+        centers: dict[date, GeoPoint] = {}
+        names: dict[date, str] = {}
+        for pair in pairs:
+            hit = self._day_area_center(pair.area, registered, pool_request.anchor)
+            if isinstance(hit, str):
+                return hit
+            centers[pair.day], names[pair.day] = hit
+        by_day = {d.date: d for d in solution.days}
+        changed = sorted(centers)
+        # 손 안 댄 날의 장소는 후보에서 뺀다 — 같은 곳을 두 번 가게 하지 않는다
+        others = frozenset(s.poi_id for d in solution.days if d.date not in centers for s in d.slots)
+        found: dict[PoiId, Poi] = {p.poi_id: p for p in pool.pois if p.poi_id not in others}
+
+        def near(day: date) -> list[Poi]:
+            return [p for p in found.values() if haversine_km(p.coord, centers[day]) <= _AREA_POOL_KM]
+
+        for day in changed:
+            if len(near(day)) < FOCUS_MIN and deadline - (self._clock.monotonic_ms() - t0) >= _DAY_AREA_FETCH_MIN_MS:
+                extra = self._pool_from(self._info.collect(Intent.EDIT_SCHEDULE, {"pool_request": replace(
+                    pool_request, anchor=centers[day], radius_override_km=_AREA_POOL_KM, dates=(day,)), "now": now}), now)
+                found.update({p.poi_id: p for p in extra.pois if p.poi_id not in others})
+            if len(near(day)) < _DAY_AREA_MIN:
+                return f"pool_thin({names[day]}:{len(near(day))})"
+        local_now = now.astimezone(self._tz)
+        floor = (local_now + timedelta(minutes=1)).replace(second=0, microsecond=0)
+        fixed: list[FixedBlock] = []
+        keep: list[RequiredVisit] = []
+        windows: dict[date, TimeWindow] = {}
+        # 여행 당일 — 지난 곳은 기록이다. 가장 최근의 곳(진행 중이면 그곳, 아니면 마지막으로 끝난 곳)만 그 시각에 고정해 풀이에 넣는다:
+        # 사용자가 지금 있는 곳이라 '거기 → 첫 새 방문' 이동을 조립이 재고 ⑤ 도 잰다(빼면 갈 수 없는 첫 방문이 나갔다, 2026-10-23 2차 리뷰).
+        # 그보다 앞선 곳은 풀이 밖에 두고 그 시각 그대로 되싣는다(지난 간격을 지금 추정으로 다시 재면 다녀온 하루가 통째로 실패한다)
+        history: dict[date, tuple[VisitSlot, ...]] = {}
+        reserved = {d.date: {fb.poi_id for fb in d.fixed_blocks} for d in solution.days}  # 원래 예약 — 응답의 is_fixed 는 이것만
+        for day in changed:
+            d = by_day.get(day)
+            slots = d.slots if d is not None else ()
+            today = day == local_now.date()
+            past = [s for s in slots if today and s.end_at <= now]
+            current = [s for s in slots if today and s.start_at <= now < s.end_at] or past[-1:]
+            history[day] = tuple(s for s in past if s not in current)
+            gone_ids = {s.poi_id for s in history[day]}
+            fixed.extend(fb for fb in (d.fixed_blocks if d is not None else ()) if fb.poi_id not in gone_ids)
+            pinned = set(reserved.get(day, ())) - gone_ids
+            for s in current:
+                if s.poi_id not in pinned:
+                    fixed.append(FixedBlock(poi_id=s.poi_id, window=TimeWindow(start=s.start_at, end=s.end_at),
+                                            reason="edit_started"))
+                    pinned.add(s.poi_id)
+            live = [s for s in slots if s.poi_id not in gone_ids]
+            start = min((s.start_at for s in live), default=datetime.combine(day, clock_time(10), tzinfo=self._tz))
+            end = max((s.end_at for s in slots), default=datetime.combine(day, clock_time(18), tzinfo=self._tz))
+            if today:  # 지금부터 쓴다 — 다음 원 슬롯까지 비워 두지 않는다(저녁 예약 하나 남은 날이 빈 날로 거절됐다)
+                start = min([floor, *(s.start_at for s in current)])
+            if end - max(start, floor if today else start) < timedelta(minutes=60):
+                return f"no_time_left({names[day]})"
+            windows[day] = TimeWindow(start=start, end=end)
+            for s in live:  # 동네 안 원 슬롯은 남긴다 — 시각은 조립이 다시 정한다
+                p = poi_index.get(s.poi_id) or found.get(s.poi_id)
+                if s.poi_id not in pinned and p is not None and haversine_km(p.coord, centers[day]) <= _AREA_POOL_KM:
+                    keep.append(RequiredVisit(poi_id=s.poi_id, day=day, dwell_min=s.stay_min, reason="day_area_keep",
+                                              priority=False))
+        own = {fb.poi_id for fb in fixed} | {rv.poi_id for rv in keep}
+        gone = frozenset(s.poi_id for h in history.values() for s in h)
+        area_pois = {pid: p for pid, p in found.items()
+                     if pid not in gone and any(haversine_km(p.coord, c) <= _AREA_POOL_KM for c in centers.values())}
+        area_pois.update({pid: poi_index[pid] for pid in own if pid in poi_index})
+        area_pool = CandidatePool(poi_ids=frozenset(area_pois), pois=tuple(area_pois.values()), generated_at=now)
+        domain_request = core.GenerateItineraryRequest(
+            schedule_id=ScheduleId(request.trip_id), anchor=pool_request.anchor, days=tuple(changed),
+            day_window=windows[changed[0]], day_windows=windows, budget=pool_request.budget, transport=transport,
+            persona_ref=ResourceRef(kind="persona", ref_id=request.trip_id, owner_id=request.trip_id),
+            principal=Principal(user_id=request.trip_id), seed=_seed_from(request.trip_id),
+            fixed_blocks=tuple(fixed), required_visits=tuple(keep), excluded_poi_ids=others | gone,
+            include_explanations=False,
+            not_before=floor if local_now.date() in centers else None,
+            ignore_anchor_distance=True, family_demote=True, day_focus=centers,
+            holidays=self._holidays.between(changed[0], changed[-1]),  # 편집 ⑤ 검증과 같은 달력 — 풀이와 검증이 같은 날 창을 본다
+        )
+        left = max(0, deadline - (self._clock.monotonic_ms() - t0))
+        outcome = self._schedule_agent.run(core.ScheduleTask(
+            request=domain_request, pool=area_pool, persona=None, daily_rain=None, event_bonus=None,
+            candidates_summary=core.candidates_report(area_pool, days=len(changed), persona=None),
+            budget=core.allocate(left, core.OrchestratorConfig()), started_ms=self._clock.monotonic_ms(),
+            trace_id=TraceId(request.request_meta.request_id), now=now,
+        ))
+        if outcome.solution is None:
+            return f"solve_failed({outcome.error})"
+        new_days = {d.date: d for d in outcome.solution.days}
+        if any(d not in new_days for d in changed):
+            return "solve_failed(missing_day)"
+        pinned = {fb.poi_id for fb in fixed}
+        # 예약·진행 중인 곳이 풀이에서 빠졌으면(그 날 휴무 등) 조용히 지우지 않는다(INV-4)
+        placed = {(d, s.poi_id) for d in changed for s in new_days[d].slots}
+        lost = [fb for fb in fixed if (fb.window.start.astimezone(self._tz).date(), fb.poi_id) not in placed]
+        if lost:
+            return f"fixed_dropped({len(lost)})"
+        # 예약 말고 방문이 하나도 없는 날 — 동네로 다시 짠 것이 아니다(INV-4). 동네 안 원 슬롯만 남은 날은 정상(이미 그 동네)
+        empty = [names[d] for d in changed if all(s.poi_id in pinned for s in new_days[d].slots)]
+        if empty:
+            return f"empty_day({','.join(empty)})"
+        # 응답의 is_fixed 는 그 날 고정 블록 — 원래 예약만 남긴다. 조립이 고정으로 둔 '동네 안 원 슬롯(필수 방문)'·'진행 중인 곳'이
+        # 예약으로 저장되면 다음 편집이 막힌다(2026-10-23 리뷰). 끝난 곳은 그 시각 그대로 되싣는다
+        original_fixed = {d.date: d.fixed_blocks for d in solution.days}
+        rebuilt = {}
+        for day in changed:
+            slots = tuple(sorted((*new_days[day].slots, *history.get(day, ())), key=lambda x: x.start_at))
+            here = {x.poi_id for x in slots}
+            rebuilt[day] = replace(new_days[day], slots=slots, fixed_blocks=tuple(
+                fb for fb in original_fixed.get(day, ()) if fb.poi_id in here))
+        merged = replace(solution, days=tuple(rebuilt.get(d.date, d) for d in solution.days))
+        notes = (f"solve:{outcome.solution.solve_mode.value}", f"degraded:{len(outcome.degradations)}",
+                 f"history:{len(gone)}")
+        return RebuiltDays(solution=merged, areas=names, pois={**area_pois, **{s.poi_id: poi_index[s.poi_id]
+                                                                              for h in history.values() for s in h
+                                                                              if s.poi_id in poi_index}}, notes=notes,
+                           history=frozenset(gone))
+
+    @staticmethod
+    def _day_area_center(area: str, registered: Sequence[Poi], anchor: GeoPoint) -> tuple[GeoPoint, str] | str:
+        """동네 말 → (중심, 보일 이름) 또는 사유. "홍대로"·"마포구"처럼 끝 글자가 조사·행정 단위일 수 있어 뗀 꼴도 본다."""
+        how = "unknown"
+        for form in dict.fromkeys((area, area[:-1] if len(area) > 2 and area[-1] in "로구" else area)):
+            center, how = nl_verify.area_center(form, registered, anchor)
+            if center is not None:
+                key = nl_verify.known_area_key(form) if how == "table" else None
+                return center, (key if key and area in (f"{key}로", f"{key}으로") else form if key is None else area)
+        return f"area_{'far' if how == 'far' else 'unknown'}({area})"
 
     def reflection_generate(
         self, request: schemas.ReflectionGenerateRequest
@@ -4324,6 +4474,7 @@ def build_orchestrator(
         estimator,
         lambda solution: _problem_for(solution, tz, holidays),  # 편집 검증도 같은 휴일 규칙(요청당 1회)
         tz=tz,
+        known_areas=tuple(nl_verify.KNOWN_AREAS),  # 날마다 동네 해석 — 대화 확인과 같은 동네 표(spec 004)
     )
     # Reflect 경계 (TRIP-429) — 워커별 게이트 페어링은 위 explainer·edit와 동형
     # ReflectAgent — 템플릿 워커를 감싼다. 하이라이트 워커도 주입한다:

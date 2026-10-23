@@ -415,6 +415,60 @@ def test_edit_insert_ask_with_only_a_position_skips_the_day_question() -> None:
     assert asked.outcome == "ARGUMENT_CLARIFY"  # 일정에 없는 이름 — 종전대로 묻는다
 
 
+_BEFORE_TRIP = datetime(2026, 10, 16, 10, 0, tzinfo=_KST)
+_DAY_AREAS_SAID = "지금 짜여진 일정 변경하고 싶은데, 1일차는 애월 2일차는 성산쪽으로 일정을 바꾸어줘"
+
+
+def test_day_areas_said_are_checked_and_framed_even_when_the_classifier_garbles_them() -> None:
+    """spec 004 — 분류가 두 날 요청을 한 곳 바꾸기 칸에 뭉갠다(2026-10-22 실측 12/12: target·replacement·position).
+    같은 해석기로 확인한 인자만 넘긴다 — 뭉갠 칸은 버린다."""
+    b = _build(_canned(Intent.EDIT_SCHEDULE, target="애월", replacement="성산", position="2일차"))
+    out = b.orch.turn(_input(_DAY_AREAS_SAID, now=_BEFORE_TRIP))
+    assert out.outcome == "FRAME" and out.clarify is None
+    assert out.frames[0].intent is Intent.EDIT_SCHEDULE
+    assert out.frames[0].arguments == {"day": _D1.isoformat(),
+                                       "day_areas": f"{_D1.isoformat()}=애월;{_D2.isoformat()}=성산"}
+    assert out.reason == "day_area_verified" and out.context.pending is None
+
+
+def test_day_areas_correct_another_classification() -> None:
+    b = _build(_canned(Intent.REGENERATE))
+    out = b.orch.turn(_input("1일차는 애월 쪽으로, 2일차는 성산 쪽으로 다시 짜줘", now=_BEFORE_TRIP))
+    assert out.outcome == "FRAME" and out.frames[0].intent is Intent.EDIT_SCHEDULE
+    assert out.reason == "day_area_verified:classified=REGENERATE"
+
+
+def test_day_area_on_a_past_day_asks_with_complete_command_options() -> None:
+    """여행 중(둘째 날) 1일차 — 넘겨짚지 않고 묻는다. 보기는 완결된 명령문이고 보류를 남기지 않는다(답 턴에 원문이 없다)."""
+    b = _build(_canned(Intent.EDIT_SCHEDULE, day="1일차"))
+    out = b.orch.turn(_input("1일차는 애월 쪽으로 바꿔줘"))
+    assert out.outcome == "ARGUMENT_CLARIFY" and out.clarify.argument == "day_areas"
+    assert out.clarify.options == ("2일차는 애월 쪽으로 바꿔줘",)
+    assert out.context.pending is None
+
+
+def test_day_areas_leave_a_replan_classification_to_its_own_road() -> None:
+    """다시 짜기(REPLAN)는 상황·날씨를 보는 제 길이 있다 — 날마다 동네로 고치지 않는다(팀 결정 'replan 은 날씨를 본다')."""
+    out = _build(_canned(Intent.REPLAN)).orch.turn(_input("오늘은 애월 쪽으로 다시 짜줘"))
+    assert out.frames and out.frames[0].intent is Intent.REPLAN
+
+
+def test_an_area_said_only_with_a_tail_needs_an_edit_classification() -> None:
+    """표에 없는 이름을 '쪽'으로만 동네라 한 말은 분류가 편집일 때만 맡는다 — 다른 의도를 이길 근거가 약하다(2026-10-23 리뷰)."""
+    said = "1일차는 만장굴 쪽으로 바꿔줘"
+    other = _build(_canned(Intent.REGENERATE)).orch.turn(_input(said, now=_BEFORE_TRIP))
+    assert not (other.outcome == "FRAME" and "day_areas" in other.frames[0].arguments)
+    edit = _build(_canned(Intent.EDIT_SCHEDULE, target="만장굴")).orch.turn(_input(said, now=_BEFORE_TRIP))
+    assert edit.outcome == "FRAME" and edit.frames[0].arguments == {"day": _D1.isoformat(),
+                                                                    "day_areas": f"{_D1.isoformat()}=만장굴"}
+
+
+def test_a_complete_day_area_command_is_a_new_request_not_a_pending_answer() -> None:
+    b = _build(_canned(Intent.EDIT_SCHEDULE))
+    out = b.orch.turn(_input("2일차는 성산 쪽으로 바꿔줘", context=_asked_distance()))
+    assert out.outcome == "FRAME" and out.frames[0].arguments["day_areas"] == f"{_D2.isoformat()}=성산"
+
+
 @settings(max_examples=40, deadline=None)
 @given(day=st.one_of(st.none(), st.sampled_from(["둘째 날", "1일차", "언젠가", "2026-10-19"])),
        target=st.one_of(st.none(), st.text(min_size=1, max_size=12)), with_trip=st.booleans())

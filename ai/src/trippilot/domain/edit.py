@@ -24,12 +24,17 @@ class EditOp(Enum):
     REORDER_DAY = "REORDER_DAY"
     CLEAR_DAY = "CLEAR_DAY"
     REPLAN = "REPLAN"
+    # 날마다 동네를 정해 그 날을 다시 짠다(spec 004) — params {ISO 날짜: 동네}. **코드 전용**: 대화·편집 에이전트의 결정론
+    # 해석(`agents/edit/day_area.py`)만 만들고, 번역 LLM 은 고를 수 없다(`TRANSLATABLE_OPS` 밖).
+    SET_DAY_AREAS = "SET_DAY_AREAS"
 
 
 # 파괴적 편집 = 확인 필수 대상 (business-rules.md §6)
 DESTRUCTIVE_OPS = frozenset(
-    {EditOp.REMOVE_SLOT, EditOp.CLEAR_DAY, EditOp.REORDER_DAY, EditOp.REPLAN}
+    {EditOp.REMOVE_SLOT, EditOp.CLEAR_DAY, EditOp.REORDER_DAY, EditOp.REPLAN, EditOp.SET_DAY_AREAS}
 )
+# 번역 LLM 이 낼 수 있는 op — 안내표(`_OP_GUIDE`)와 게이트 ① 이 이것만 본다
+TRANSLATABLE_OPS = tuple(op for op in EditOp if op is not EditOp.SET_DAY_AREAS)
 
 
 class ApplyMode(Enum):

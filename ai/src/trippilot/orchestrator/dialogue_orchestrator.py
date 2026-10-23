@@ -83,6 +83,7 @@ from trippilot.orchestrator.dialogue_handlers import (
     validate_answer_shape,
     validate_answer_text,
 )
+from trippilot.orchestrator.edit_day_areas import DayAreaTurn, check_day_areas
 from trippilot.orchestrator.dialogue_interpreter import (
     Clarify,
     DialogueContext,
@@ -375,6 +376,30 @@ class TurnOutcome:
 
 
 # ── 순수 조립 ────────────────────────────────────────────────────────────────
+
+
+def _takes_day_areas(turn: DayAreaTurn, match: IntentMatch | None) -> bool:
+    """확인한 날마다 동네로 넘겨도 되나 — 분류가 편집이면 맡는다. 다시 짜기(REPLAN)는 상황·날씨를 보는 제 길이 있어 고치지 않는다
+    (팀 결정 'replan 은 날씨를 본다'). 그 밖의 분류는 모든 동네가 표 이름일 때만 고친다 — 꼬리로만 동네라고 한 말은 분류 판단을 이길
+    근거가 약하다(2026-10-23 리뷰: '내일 완전히 다시 짜줘'·'오늘 추천 좀 해줘'를 가로챘다)."""
+    if match is not None and match.intent is Intent.EDIT_SCHEDULE:
+        return True
+    if match is not None and match.intent is Intent.REPLAN:
+        return False
+    return turn.table_only
+
+
+def _day_area_outcome(turn: DayAreaTurn, match: IntentMatch | None, cleared: DialogueContext) -> TurnOutcome:
+    """확인한 날마다 동네 → FRAME(확인된 인자) 또는 되묻기(보기 = 완결된 명령문, 보류 없음). 분류가 무엇이었는지는 사유에 남긴다."""
+    agreed = match is not None and match.intent is Intent.EDIT_SCHEDULE
+    reason = f"day_area_{turn.code}" + ("" if agreed else f":classified={match.intent.value if match else 'none'}")
+    confidence = match.confidence if agreed and match is not None else 0.9
+    if turn.arguments is not None:
+        return TurnOutcome("FRAME", (Frame(Intent.EDIT_SCHEDULE, turn.arguments, (), confidence, MatchRoute.LLM_DIRECT.value),),
+                           None, None, cleared, 0, reason)
+    frame = Frame(Intent.EDIT_SCHEDULE, {}, ("day_areas",), confidence, MatchRoute.LLM_DIRECT.value)
+    return TurnOutcome("ARGUMENT_CLARIFY", (frame,), Clarify(0, "day_areas", turn.question or "", turn.options or None),
+                       None, cleared, 0, reason)
 
 
 def _not_repeating(outcome: TurnOutcome, inp: TurnInput) -> TurnOutcome:
@@ -864,11 +889,15 @@ class DialogueOrchestrator:
         memory_lines = context_lines(current)  # 분류엔 이 대화를 잇는 줄(요약·결정·미해결)만 — 사실 줄은 꺼내기가 끝난 뒤 답변에
         # 1 — 보류 되묻기의 답 (LLM 0). 답이 아니면 보류를 버리고 새 요청으로 (BR-DLG-24)
         interp = None
-        if inp.context.pending is not None:
+        # 날마다 동네(spec 004) — 편집 에이전트와 같은 해석기로 말을 확인한다(LLM 0). 날·동네를 다 말한 완결된 말이면 보류의 답이 아니다
+        area_turn = check_day_areas(inp.utterance, inp.snapshot, today)
+        if inp.context.pending is not None and area_turn is None:
             interp = answer_pending(inp.utterance, inp.context, trip_view, self._confident_intent)
         if interp is None:
             # 2 — LLM 직접 분류 (+ 2′ 섀도 submit)
             match, reason = self._classify(inp, text, memory_lines, trip_summary, counter)
+            if area_turn is not None and _takes_day_areas(area_turn, match):  # 2⁗ — 분류가 칸을 뭉개도(12/12) 확인한 해석으로 넘긴다
+                return _day_area_outcome(area_turn, match, cleared)
             if match is not None and match.intent is Intent.RECOMMEND_REGION and _not_region_choice(text):
                 # 시기를 묻거나 지역을 이미 말했다 — 지역 고르기 핸들러는 엉뚱한 지역 목록이나 취향 되묻기를 낸다. 분류가 null 로 닫은
                 # 것처럼 계획 단계에 맡긴다(지역 안 장소면 탐색, 시기면 gap KNOWLEDGE)

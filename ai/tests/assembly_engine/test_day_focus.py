@@ -62,3 +62,12 @@ def test_그날_후보는_그_동네_근처만_모자라면_좁히지_않는다(
     assert all(haversine_km(index[c.poi_id].coord, _CITY_HALL) <= FOCUS_KM for c in near_hall)
     assert focus_candidates(cands, index, _GANGNAM) == cands  # 강남 근처 5곳 — 하루를 못 채운다
     assert focus_candidates(cands, index, None) == cands
+
+
+def test_사용자가_말한_동네는_모자라도_넓히지_않는다() -> None:
+    """편집 ①b(spec 004) — "2일차는 강남 쪽으로"는 강남 근처가 적어도 그 안에서만 고른다. 넓히면 다른 동네가 섞인다(INV-4)."""
+    rows = _cluster("c", _CITY_HALL, 40, 0.9) + _cluster("g", _GANGNAM, 5, 0.7)
+    index, cands = _split(rows)
+    strict = focus_candidates(cands, index, _GANGNAM, strict=True)
+    assert {str(c.poi_id)[0] for c in strict} == {"g"}  # 5곳뿐이어도 강남만
+    assert all(haversine_km(index[c.poi_id].coord, _GANGNAM) <= FOCUS_KM for c in strict)
