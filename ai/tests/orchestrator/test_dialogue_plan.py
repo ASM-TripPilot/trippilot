@@ -222,7 +222,6 @@ from trippilot.domain.observability import FallbackEvent, GateDropEvent, LlmCall
 from trippilot.llm_gateway.gates.intent import NULL_INTENT  # noqa: E402
 from trippilot.orchestrator import dialogue_orchestrator as orch_mod  # noqa: E402
 from trippilot.orchestrator.dialogue_interpreter import DialogueContext  # noqa: E402
-from trippilot.orchestrator.dialogue_memory import DialogueMemory, expires_at_for  # noqa: E402
 from trippilot.orchestrator.dialogue_handlers import NEXT_ACTION_TYPES  # noqa: E402
 from trippilot.ports.llm_port import LlmResponse  # noqa: E402
 
@@ -678,33 +677,15 @@ def test_region_recommend_with_a_named_region_from_the_classifier_goes_to_the_pl
     assert "DIALOGUE_PLAN" in b.llm.features() and out.outcome == "ANSWER" and out.reason.endswith("plan:EXPLORE_PLACES")
 
 
-# 13 — 턴당 LLM 3회: 요약은 한 번만 미루고, 연속이면 결정론 압축 (C9)
+# 13 — 계획 턴(서비스 LLM 3회)도 요약은 답한 뒤 뒤에서 — llm_calls 밖이라 미루거나 압축하지 않는다(2026-10-23, 종전 C9 폐지)
 
 
-def test_plan_turn_on_the_first_summary_turn_defers_memory_without_writing() -> None:
+def test_plan_turn_summarizes_after_the_reply_without_counting_it() -> None:
     b = _plan_build(_PLAN_EXPLORE, answer=_answer_json("감천문화마을을 찾아봤어요."))
     out = b.orch.turn(to._input("비 오면 근처 어디 가?", turn_index=10, recent_turns=to._TURNS))
-    assert out.llm_calls == 3 and "DIALOGUE_MEMORY" not in b.llm.features() and b.store.get("s-1") is None
-    assert ("memory", "llm_dialogue_memory", "deferred") in to._modes(b.trace)
-    assert any(e.reason == "turn_llm_cap(3)" for e in to._fallbacks(b.trace))
-
-
-def test_plan_turn_again_on_the_next_turn_compresses_instead_of_deferring_twice() -> None:
-    store = to.InMemoryDialogueMemoryStore(now=lambda: to._NOW)
-    store.put(DialogueMemory("s-1", to._ACCOUNT, "trip-1", ("- 이전 요약",), 0, to._NOW, expires_at_for(to._NOW)))
-    b = _plan_build(_PLAN_EXPLORE, answer=_answer_json("감천문화마을을 찾아봤어요."), store=store)
-    b.orch.turn(to._input("비 오면 근처 어디 가?", turn_index=11, recent_turns=to._TURNS))
-    mem = store.get("s-1")
-    assert "DIALOGUE_MEMORY" not in b.llm.features() and mem.summarized_turn_index == 11  # 가장 오래된 턴이 창 밖으로 밀리기 전에 저장
-    assert ("memory", "llm_dialogue_memory", "deterministic_compress") in to._modes(b.trace)
-
-
-def test_plan_turn_whose_answer_skips_the_llm_still_summarizes_with_the_llm() -> None:
-    """답변이 의도된 결정론(여행 없음 안내)이라 LLM 2회면 상한에 안 닿는다 — 잔여 ≥2.5s 면 요약 LLM 이 돈다. 턴 합계는 여전히 3회."""
-    b = _plan_build(_plan_json(("GET_WEATHER", {"date": "오늘"})))
-    out = b.orch.turn(to._input("비 오면 근처 어디 가?", snapshot=to._NO_TRIP, turn_index=10, recent_turns=to._TURNS))
-    assert b.llm.features() == ["DIALOGUE_INTENT", "DIALOGUE_PLAN", "DIALOGUE_MEMORY"] and out.llm_calls == 3
+    assert out.llm_calls == 3 and b.llm.features()[-1] == "DIALOGUE_MEMORY"
     assert b.store.get("s-1").summarized_turn_index == 10
+    assert not any(m[0] == "memory" for m in to._modes(b.trace))  # 미룸·압축 이벤트 없음
 
 
 # 15 · 16 · 18 — 결정론 · fail-closed · 로그에 원문 없음

@@ -139,9 +139,9 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # 같은 곳 — 답변 문장을 못 만들면(게이트 드롭·시한 부족) 의도별 결정론 템플릿
             # (workers/dialogue_answer.fallback_answer_text, T003) 문장으로 보낸다.
             LlmFeature.DIALOGUE_ANSWER: ("llm_dialogue_answer", "template_text"),
-            # 같은 곳 — 요약 실패면 최근 턴을 줄로 잘라 붙이는 결정론 압축
-            # (orchestrator/dialogue_memory.compress_fallback, T007)으로 전진하고 다음 턴에 다시 시도한다.
-            LlmFeature.DIALOGUE_MEMORY: ("llm_dialogue_memory", "deterministic_compress"),
+            # 같은 곳 — 요약 실패면 이전 기억을 그대로 두고 다음 턴에 다시 요약한다(2026-10-23 — 대화 원문 조각을 저장하던
+            # 결정론 압축은 없앴다, FD 미결 #10 B안). 요약은 답한 뒤 뒤에서 돌아 턴 응답과 무관하다.
+            LlmFeature.DIALOGUE_MEMORY: ("llm_dialogue_memory", "kept_previous"),
             # 같은 곳 2‴ — 계획 실패(시한·벤더·깨진 출력·전량 드롭)면 계획 없이 종전 범위 밖(BE SCOPE 카드)으로 수렴한다.
             # 도구 없음·거절(calls=[]·refused)은 성공·0건이라 이 짝이 나가지 않는다(의도된 결정론, BR-AO-28).
             LlmFeature.DIALOGUE_PLAN: ("llm_dialogue_plan", "out_of_scope"),

@@ -72,6 +72,7 @@
 | **DEC-AO-16** | **리터럴 "내가 할 수 있는 것 보기"는 파이프라인 0단계에서 결정론 처리**(LLM 0회) | FE 상시 칩이 서버 발급 SHOW_CAPABILITIES quick reply 가 없을 때 이 문자열을 TEXT 턴으로 보낸다(fe-assistant). LLM 에 묻는 것은 비용·오분류 위험만 있다. TurnOutcome 불변식과의 정합은 미결 #19 |
 | **DEC-AO-17** | **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** **2‴ 도구 계획** — 분류가 판단해서 닫은 말에 `DIALOGUE_PLAN` 1회로 읽기 전용 조회 도구(정보 핸들러 7종) ≤2 와 인자를 고르고, 팬아웃 1회 → `merge_facts` → 기존 답변 단계로 **프레임 없는 ANSWER**. 도구 없음·거절·실패·시한 부족은 종전 OUT_OF_SCOPE(BR-AO-28) | 사용자 결정 ⑦("정해진 의도에서 벗어난다고 아무 일도 안 하면 안 된다"). 기각: (a) 분류 프롬프트에 합침 — 범위 안 정확도·지연에 직접 닿아 측정이 섞인다(재평가 조건 미결 #24) (b) 벤더 tool-use·ReAct — 호출 수·시한이 열리고 9s 산술이 안 닫힌다 (c) Provider 직접 도구 — LLM 이 좌표·POI id 를 만들어야 해 INV-1 이 깨진다 (d) 규칙 플래너 — 조건부·복합 말을 못 푼다 (e) 도구 없음에 AI 고정 안내 — 화면 문장 한 벌(DEC-AO-14·BR-AO-06)을 어기고 숙소 화면의 STAY_SEARCH 를 잃는다 |
 | **DEC-AO-18** | **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** **켜기 = 배정** — `DIALOGUE_PLAN` 이 기능별 모델(`TRIPPILOT_LLM_FEATURE_MODELS`)에 있으면 계획 워커를 조립하고, 없으면 조립하지 않는다(env 키 무증가) | 미배정 첫 런에 OPENAI_MODEL(terra)로 3s 시한 헛호출이 나지 않는다 · 기능 부재 ≠ 강등(이벤트 없이 종전대로) · 끄기는 배정 항목 손편집(미결 #25) **[개정 · 2026-10-20 · 두 질문은 계획으로]** 분류 0.2.4 부터 "종전대로"는 두 가지를 같이 묻는 말에는 성립하지 않는다 — 0.2.3 은 그 말을 의도 하나로 잡아 절반만 답했고, 0.2.4 는 null 로 닫아 계획 단계로 넘기므로 미배정 환경에서는 SCOPE 카드가 된다. 그래서 0.2.4 는 대상마다 배정(§13 2런)이 끝난 뒤에 머지한다 |
+| **DEC-AO-19** | **[신설 · 2026-10-23 · 장기 기억 꺼내기]** **과거 대화는 프롬프트에서 빠지고, 장기 기억에 담았다가 필요할 때 꺼낸다**(사용자 결정, AskUserQuestion "요약·사실만 저장"). 분류·답변·잡담 프롬프트의 `$history` 는 최근 3턴(사용자 말 3개와 그 뒤) + 기억이 아직 덮지 못한 턴. 그보다 앞은 3턴마다 답한 뒤 뒤에서 요약한 "종류: 내용" 줄(요약·선호·제약·결정·거절·미해결)로만 남고, "요약" 줄은 늘·나머지 사실 줄은 이번 말과 가까운 것만(임베딩 검색) 싣는다 | 원문은 여전히 저장하지 않는다(DEC-AO-15·BR-AO-09 유지 — 저장물은 요약 줄과 그 임베딩, 둘 다 파생물). 턴 응답 지연 0(요약은 뒤에서, 꺼내기는 분류와 나란히). 매 턴 프롬프트 ≈20건·≤61줄 기억이 기억이 따라잡은 턴이면 3턴·≤8줄(분류는 이 대화를 잇는 줄)로 준다. 앱 화면의 대화 기록(BE 소유)은 그대로 · 실패하면 이전 기억 그대로 (결정론 압축 폐지 — 미결 #10 B안) |
 
 ---
 
@@ -89,7 +90,9 @@ ai/
       dialogue_orchestrator.py    (신규) DialogueOrchestrator.turn(TurnInput) -> TurnOutcome · TurnInput/TurnOutcome/DialogueAnswer/
                                          시한 모듈 상수(§4) · 파이프라인 §3 · 시한 배분 §4 · 팬아웃 §6
       dialogue_handlers.py        (신규) HANDLERS(13종 — [개정 · 2026-10-19] 탐색 포함 14종) · Handler.plan/assemble · resolve_slot · Facts · 템플릿 문구(BE 이식) — §5
-      dialogue_memory.py          (신규) due · compress_fallback · expires_at_for — §8 ($memory 조립은 dialogue_orchestrator._memory_lines)
+      dialogue_memory.py          (신규) due · ~~compress_fallback~~ · expires_at_for — §8 ($memory 조립은 dialogue_orchestrator._memory_lines)
+                                         **[개정 · 2026-10-23]** due(3턴) · material · gist_lines · kept_lines · expires_at_for — 꺼낸 줄 조립은
+                                         dialogue_orchestrator._recalled_lines, 줄 벡터는 MemoryStorePort.advance/search(DE §2.6·§4)
       shadow_probe.py             (신규) ShadowIntentProbe · ShadowCountingLlm · TaggedTrace · ShadowRecord — §9
       dialogue_interpreter.py     (기존 — 로직 무변경) _answer·_from_match 공개 승격(미결 #17) · CountingLlm 은 off 경로에 그대로
       intent_router.py            (기존 — 무변경) 섀도 전용 인스턴스로 한 번 더 조립
@@ -162,8 +165,10 @@ BE AssistantTurnService ──POST /ai/v1/dialogue/interpret──▶ api/dialog
  5  DIALOGUE_ANSWER(LLM ≤1, timeout §4; 잔여 <1.5s 면 호출 자체 생략) → DialogueAnswerGate
       ├ 통과 ─▶ DialogueAnswer.from_facts(facts, text=llm_text)           (LLM 문장 — LlmCallRecord 성공)
       └ 실패·생략 ─▶ DialogueAnswer.from_facts(facts, text=None)          (템플릿 — FallbackEvent 짝은 LLM 을 시도했거나 시도해야 했던 턴만; Facts UNAVAILABLE 직행·needTrip·사실 없는 Facts 직행(2026-10-19)은 의도된 결정론, 답변 단계 FallbackEvent 없음 — 팬아웃 실패는 4단이 작업별로 냈다)
- 6  메모리: session_id 있고 due(turn_index − summarized_turn_index ≥ 10) 이면 잔여 ≥2.5s → DIALOGUE_MEMORY(LLM 1, ≤2.0s) → put
-      └ 잔여 부족·LLM 실패·게이트 실패 ─▶ compress_fallback(결정론) → put + FallbackEvent(stage="memory") · 잔여 ≤0 ─▶ 압축·put 없이 건너뛴다(due 유지) + FallbackEvent(stage="memory")
+ 6  메모리 [개정 2026-10-23 · DEC-AO-19]: session_id 있고 due(turn_index − summarized_turn_index ≥ 3) 이면 행이 없을 때 빈 행을 put(답하기 전)
+      → 답한 뒤 뒤에서 DIALOGUE_MEMORY(LLM 1, 8.0s, llm_calls 밖) → 줄 임베딩 → advance(있는 행만·커질 때만 + 줄 벡터)
+      └ LLM 실패·게이트 실패 ─▶ 이전 기억 그대로 + FallbackEvent(llm_dialogue_memory→kept_previous), 다음 턴에 다시 (결정론 압축 폐지)
+      (종전: due ≥10 ∧ 잔여 ≥2.5s 면 턴 안에서 LLM ≤2.0s, 아니면 compress_fallback, 잔여 ≤0 이면 건너뜀)
  7  TurnOutcome(outcome, frames ≤1, clarify, answer, context, llm_calls=서비스 호출 수, reason) → 사영 → 응답
                                                                 ▼
 BE answer(): ANSWER → 검증(text ≤2000 · TYPES · kind · quick reply 서버 id qr-ai-{8자}-{i} 발급 · CANDIDATES poiId 정본 대조) → NewMessage 저장
@@ -173,6 +178,7 @@ BE answer(): ANSWER → 검증(text ≤2000 · TYPES · kind · quick reply 서�
 | 단계 | 하는 일 | LLM | 실패·시한 시 | DE |
 |---|---|---|---|---|
 | 0 | `normalize(utterance) == "내가 할 수 있는 것 보기"` 이면 BE `capabilities(hasTrip)` 문구를 이식한 결정론 ANSWER(TEXT) | 0 | 없음(순수) | §2.3 |
+| 0‴ | **[신설 · 2026-10-23 · DEC-AO-19]** 기억 꺼내기를 분류와 나란히 낸다: 발화 임베딩 1회 → 이 세션·같은 계정 기억 줄 검색(`MemoryStorePort.search`) → 이 세션 "요약" 줄 + 점수 ≥0.45 사실 줄 ≤6 — 이 대화 줄을 먼저 검색해 칸을 채우고 남은 칸만 지난 여행 줄(헤더 아래). 0.2.0 이전 표지 없는 줄은 벡터가 없어 다시 요약될 때까지 종전처럼 싣는다. **분류(2)의 `$memory` 는 이 대화를 잇는 줄 — "요약"·"결정"·"미해결"과 옛 표지 없는 줄**(꺼내기를 기다리지 않는다 — "아까 그 카페"를 풀 이름이 결정 줄에 있다), 답변(5)·잡담(2″·2‴ CHAT)의 `$memory` 가 꺼낸 줄이다. 임베딩 미배선이면 종전 줄(현재 세션 전부 + 지난 여행 최신 2) — 기능 부재 ≠ 강등 | 0 | 검색 실패 → 종전 줄 + `FallbackEvent(memory, vector_recall→recent_sessions)` · 답변 단계까지 안 끝났으면 0.3s 만 기다리고 이 세션 줄 + `FallbackEvent(memory, vector_recall→current_session)` | §2.6·§6 |
 | 1 | 보류 프레임이 있으면 **그 인자 종류의 추출기 하나만** 돌려 채운다(assistant-dialogue BR-DLG-22 그대로) | 0 | 못 채우면 보류를 버리고 2 로 — 같은 질문을 다시 하지 않는다(BR-DLG-23) | §1 재사용 |
 | 2 | `$utterance`·`$intents`(=`tool_specs_json()`)·`$history`·`$memory`·`$trip` 로 분류 1회. 산출을 `IntentMatch(match_route=LLM_DIRECT, confidence=draft.confidence or 0.5)` 로 조립 | 1 | 게이트가 산출을 받아들이지 못한 전부(`{"intent": null}` — 불확실·주입·역할변경·유해 —, closed-set 밖 라벨, 깨진 JSON, 슬롯 모양, 절단) → **OUT_OF_SCOPE + `not_classifiable` 표지**(intent_eval 이 거절로 센다); 시한·벤더 예외·비지원은 인프라 실패라 **표지 없이** OUT_OF_SCOPE(장애를 거절로 세면 정확도가 부풀려진다 — `_refusal_reason`). **[개정 · 2026-10-19]** 분류가 null·범위 밖 라벨로 닫았고(깨진 출력·절단은 아니다) 발화가 맞장구·인사 낱말뿐이면 범위 밖 카드 대신 결정론 ANSWER(BR-AO-26) | §2.2 |
 | 2′ | 분류 결과를 알게 된 직후 `ShadowIntentProbe.submit` — 샘플링(rng) 통과 ∧ in-flight <4 일 때만 스레드에 넘기고 **응답 경로는 계속 간다** | 0(서비스) | 포화·샘플 밖은 `intent_shadow_skipped` 1줄. 섀도 실패는 응답에 영향 0 | §2.7 |
@@ -180,11 +186,13 @@ BE answer(): ANSWER → 검증(text ≤2000 · TYPES · kind · quick reply 서�
 | 3 | 기존 `from_match` — `missing` 계산, 비면 `ArgumentClarify`(고정 문안). EDIT_SCHEDULE 은 인자 해소(day/target)만 하고 `FRAME` | 0 | `clarify_count ≥1` 이면 되묻지 않고 결정론 폴백(BR-DLG-33) | §2.2 |
 | 4 | `plan` → 팬아웃 → `assemble`. 여행이 없는데 여행이 필요한 의도면 플랜 없이 `needTrip` Facts | 0 | Provider/PlanB 실패·TIMEOUT 은 `TaskResult.status` 로 들어오고 `assemble` 이 `notes`·`FactStatus.PARTIAL` 로 적는다 — 있는 것만 조립 | §2.4·§2.5 |
 | 5 | `$facts`(JSON inline)·`$style` 로 문장 1회 → 게이트(≤400자·줄 ≤6·`_TIME_EXPR`·연락처) | ≤1 | 실패·잔여 <1.5s → `Facts.template_text`(BE 템플릿 이식). **kind·payload·next_actions·quick_replies 는 LLM 결과와 무관하게 Facts 값** | §2.3·§2.5 |
-| 6 | 10턴마다 20줄 요약 → `put`(upsert + expires 연장 + 만료 행 정리) | ≤1 | `compress_fallback` 로 전진, 다음 턴에 LLM 이 다시 시도해 덮어쓴다. `session_id` 없으면 단계 전체 생략. 읽기 실패는 2 단계에서 "메모리 없이 진행" | §2.6·§4 |
-| 7 | 응답 조립. `llm_calls` = 2+5+6 의 서비스 호출 수(실패 호출 포함, 기존 규칙) — 섀도 제외 | — | 경계 예외 금지(DL-5) — 수렴값은 미결 #14 | §2.2·§3 |
+| 6 | ~~10턴마다 20줄 요약 → `put`(upsert + expires 연장 + 만료 행 정리)~~ **[개정 · 2026-10-23 · DEC-AO-19]** 3턴마다 — 행이 없으면 답하기 전에 빈 행 `put`, **답한 뒤 뒤에서** 아직 요약하지 않은 턴 + 이번 턴을 "종류: 내용" ≤20줄로 요약 → 줄 임베딩(표지를 뗀 본문) → `advance`(있는 행만·`summarized_turn_index` 가 커질 때만 + expires 연장 + 만료 행 정리 + 줄 벡터 맞춤). 같은 세션 요약은 프로세스당 하나만 | ≤1(턴 밖) | ~~`compress_fallback` 로 전진, 다음 턴에 LLM 이 다시 시도해 덮어쓴다.~~ 실패는 이전 기억 그대로, 다음 턴에 다시(원문 조각을 저장하지 않는다). 그사이 지워진 대화는 `advance` 가 0행이라 되살리지 않는다. `session_id` 없으면 단계 전체 생략. 읽기 실패는 2 단계에서 "메모리 없이 진행"하고 **그 턴은 요약하지 않는다**(빈 기억에서 다시 쓰면 이전 줄을 잃는다) | §2.6·§4 |
+| 7 | 응답 조립. `llm_calls` = 2+5+6 의 서비스 호출 수(실패 호출 포함, 기존 규칙) — 섀도 제외 **[개정 · 2026-10-23]** 6(요약)은 턴 밖이라 빠진다(BR-AO-07) | — | 경계 예외 금지(DL-5) — 수렴값은 미결 #14 | §2.2·§3 |
 
-메모리 단계(6)는 outcome 과 무관하게 돈다 — OUT_OF_SCOPE·ARGUMENT_CLARIFY 턴도 `recent_turns` 가 쌓이므로 due 가 되면 요약한다. 단 시한이
-먼저다: 잔여가 2.5s 미만이면 결정론 압축이고, 그마저 잔여 ≤0 이면 압축·`put` 도 하지 않고 이번 턴은 건너뛴다(다음 턴 due 가 유지된다 — `summarized_turn_index` 가 안 올라가므로; 건너뛴 사실은 `FallbackEvent(stage="memory")` 로 남긴다 — BR-AO-09·브리프 §2.2).
+메모리 단계(6)는 outcome 과 무관하게 돈다 — OUT_OF_SCOPE·ARGUMENT_CLARIFY 턴도 `recent_turns` 가 쌓이므로 due 가 되면 요약한다. ~~단 시한이
+먼저다: 잔여가 2.5s 미만이면 결정론 압축이고, 그마저 잔여 ≤0 이면 압축·`put` 도 하지 않고 이번 턴은 건너뛴다(다음 턴 due 가 유지된다 — `summarized_turn_index` 가 안 올라가므로; 건너뛴 사실은 `FallbackEvent(stage="memory")` 로 남긴다 — BR-AO-09·브리프 §2.2).~~
+**[개정 · 2026-10-23 · DEC-AO-19]** 요약은 응답이 나간 뒤 뒤에서 돌아 턴 시한과 무관하다 — 시한 때문에 미루거나 압축하는 갈래가 없어졌다.
+`$history` 는 최근 3턴 + 기억이 아직 덮지 못한 턴 전부라(오케스트레이터 `_window`), 요약이 늦거나 연달아 실패해도 그 사이 턴이 어느 프롬프트에서도 빠지지 않는다(BE 창 20건이 상한).
 
 ---
 
@@ -199,11 +207,12 @@ wall-clock 직접 호출 금지(기존 규칙), 시계는 주입(`FakeClock` 으
 | 계획 LLM(2‴) | **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** ~~`min(3.0s, 잔여×0.45)`~~ `min(3.5s, 잔여×0.45)` — **잔여 ≥4.6s 일 때만** 부른다 **[개정 · 2026-10-20 · 계획 상한]** 상한 3.0 → **3.5s**(로컬 측정 러너 실측 — 개발 서버 실 트래픽이 아직 없어 아래 "DEV 20턴" 규칙 대신. 같은 시각 짝 3.0s 4/78 → 3.5s 2/78 시한 잘림, 같은 날 런 합 3.0s 10/154·3.5s 15/864(시각·판본이 섞인 합). 러너는 고정 시한·SDK 단위 시한이다 — 벽시계로 다시 세면 3.0s 14/154 → 3.5s 13/624. 운영 시한은 `min(3.5s, 0.45R)` 이라 상한은 계획 진입 잔여 R ≥ 7,778ms(9s 시한에서 분류 약 1.2s 이하)일 때만 걸린다 — 분류 1.6s 턴은 ≈3.33s(종전 3.0s), 같은 런 벽시계 기준 추정 잘림 3.5% → 2.6%. 상한이 걸리는 턴의 최악 팬아웃·답변 몫은 −200/−300ms 다. 몫 0.45 그대로라 하한 산술·비율 사슬 무변경. 배포 뒤 DEV 계획 턴 20회 이상에서 DIALOGUE_PLAN 시한 폴백률·plan_ms p90 을 본다(아래 실측 개정 규칙)) | effort none(사고 끔 — 2026-10-20 실측 p50 1.36s·p90 2.28s) · max_tokens 1024 · 재시도 없음. 팬아웃은 호출이 2건이어도 1회(`min(3.0s, 잔여×0.4)`) |
 | 팬아웃(4) | `min(3.0s, 잔여×0.4)` | **submit 전에** 마감을 고정하고 `wait(timeout)`, pending `cancel` → `TIMEOUT` 상태값 → PARTIAL. 파가 둘이면 같은 예산을 나눠 쓴다(1파 끝난 잔여가 2파 상한) |
 | 답변 LLM(5) | `min(3.5s, 잔여−0.4s)` (초판 2.5s); **잔여 <1.5s 면 호출하지 않고 템플릿** | effort ~~low~~ **none**(**[개정 · 2026-10-20 · 분류·답변 사고 끔]** DE §2.10) · max_tokens 512. 0.4s 는 게이트·사영·직렬화 몫 |
-| 메모리 LLM(6) | **잔여 ≥2.5s 일 때만**, 상한 2.0s | 아니면 `compress_fallback`(결정론). 요약은 응답 품질과 무관하므로 가장 뒤·가장 먼저 양보 |
+| 메모리 LLM(6) | ~~**잔여 ≥2.5s 일 때만**, 상한 2.0s~~ **[개정 · 2026-10-23]** 응답과 **무관**(답한 뒤 뒤에서) — 상한 8.0s | ~~아니면 `compress_fallback`(결정론). 요약은 응답 품질과 무관하므로 가장 뒤·가장 먼저 양보~~ 전용 풀 2(팬아웃 풀과 따로 — 느린 요약이 턴 팬아웃 스레드를 쥐지 않게) |
+| 기억 꺼내기(0‴) | **[신설 · 2026-10-23]** 분류와 나란히(공유 팬아웃 풀) — 답변·잡담 직전 아직이면 **0.3s 만** 기다린다 | 임베딩 1회(KURE, 캐시 정확일치) + 계정 행 조인 검색. 보통 분류(≥1s) 동안 끝나 대기 0 |
 | 섀도(2′) | 응답과 **무관**(백그라운드) — 자기 상한 = `IntentRouter` 기본 10s/호출 | 풀 2 · in-flight ≤4. 응답 경로가 섀도를 기다리는 일은 없다 |
 
 중앙값 경로 산술(실측 부품값으로): 분류 ~1.8s(평가셋 평균 1,787ms) + 팬아웃 ≤3.0s + 답변 ~2s + 사영 ≈ 7s < 9s. 꼬리에서 분류 2.5s·팬아웃
-3.0s·답변 2.5s 를 전부 쓰면 8.0s + 0.4s 여유로 9s 안이고, 메모리는 그 경우 결정론 압축이다.
+3.0s·답변 2.5s 를 전부 쓰면 8.0s + 0.4s 여유로 9s 안이고, ~~메모리는 그 경우 결정론 압축이다~~ 메모리는 응답 뒤에 돈다(2026-10-23).
 
 **[개정 · 2026-10-18 · 실측]** 실 모델(gpt-5.6-luna, 분류 프롬프트 ≈2,000토큰·답변 ≈720토큰) 20턴: 끝난 턴 기준 분류 p50 1.6s·p90 1.9s·
 최대 2.3s, 답변 p50 1.6s·p90 2.4s — 2.5s 상한에서 분류 20턴 중 1턴(→ 범위 밖 카드 + BE 거절 스트릭)·답변 17턴 중 2턴(→ 템플릿)이 잘렸다
@@ -303,20 +312,22 @@ facts = handler.assemble(ctx, results)                    # 순수 — 이름(na
 | 분류(2) | `{"intent": null}` · 게이트 전량 드롭 · LLM 실패·시한 | `TurnOutcome(OUT_OF_SCOPE, reason=거절 표지)` → BE SCOPE 카드 | `FallbackEvent(stage="llm", from="llm_dialogue_intent", to="out_of_scope")` — 게이트웨이가 낸다; 게이트웨이를 **부르지 못한** 잔여 0·워커 예외는 오케스트레이터가 같은 짝을 낸다(`_classify`) · reason 에 `not_classifiable`/`intent_not_routable`/`timeout`/`intent_error` |
 | 팬아웃(4) | Provider UNAVAILABLE·TIMEOUT · PlanB 후보 0 · 좌표 없음(params None) | 있는 것만 `Facts(status=PARTIAL, notes=…)`; 전부 없으면 `UNAVAILABLE` → 템플릿 | `TaskResult.status` → `Facts.notes`(사용자 문장 재료) + OK 아닌 작업마다 `FallbackEvent(stage="fanout", from=작업명, to=TIMEOUT\|UNAVAILABLE\|SKIPPED, reason=예외 타입까지)` 1건 — Provider 장애가 운영자에게 보이는 유일한 자리 |
 | 답변(5) | 게이트 실패(길이·줄·`_TIME_EXPR`·연락처·빈 문장) · LLM 실패 · 잔여 <1.5s | `DialogueAnswer.from_facts(facts, text=None)` = `Facts.template_text` | `FallbackEvent(from="llm_dialogue_answer", to="template_text")` + `GateDropEvent` |
-| 요약(6) | 게이트 실패(~~빈 결과~~ 전부 드롭·상한 초과 — LLM 이 비운 배열은 실패가 아니라 이전 요약 유지·원문 조각 줄 삭제·`dialogue_memory_empty` 건수 로그, 2026-10-19) · LLM 실패 · 잔여 <2.5s · 잔여 ≤0 | `compress_fallback(recent_turns, previous)` → `put`; 잔여 ≤0 이면 압축·`put` 없이 건너뛴다(due 유지) | `FallbackEvent(stage="memory", from="llm_dialogue_memory", to="deterministic_compress")`(건너뛴 턴도 같은 stage 로 1건) |
+| 요약(6) | 게이트 실패(~~빈 결과~~ 전부 드롭·상한 초과 — LLM 이 비운 배열은 실패가 아니라 이전 요약 유지·원문 조각 줄 삭제·`dialogue_memory_empty` 건수 로그, 2026-10-19) · LLM 실패 · ~~잔여 <2.5s · 잔여 ≤0~~ 시한(8.0s) · 모양 위반(`DialogueMemory` post-init) | ~~`compress_fallback(recent_turns, previous)` → `put`; 잔여 ≤0 이면 압축·`put` 없이 건너뛴다(due 유지)~~ **[개정 · 2026-10-23]** 이전 기억 그대로(`advance` 없음 → due 유지, 다음 턴에 다시) | `FallbackEvent(from="llm_dialogue_memory", to="kept_previous")` — 게이트웨이(stage llm) 또는 오케스트레이터(stage memory, 모양 위반·예외) |
+| 줄 임베딩(6) | **[신설 · 2026-10-23]** 임베딩 예외 | 요약은 그대로 저장, 그 줄 벡터는 다음 요약 때 다시(그동안 꺼내기에 안 걸린다) | `FallbackEvent(memory, line_vectors→summary_only)` |
+| 꺼내기(0‴) | **[신설 · 2026-10-23]** 임베딩·검색 예외 / 답변 때까지 안 끝남 | 종전 줄(현재 세션 전부 + 지난 여행 최신 2) / 이 세션 줄 | `FallbackEvent(memory, vector_recall→recent_sessions \| current_session)` |
 | 메모리 읽기(2) | 스토어 예외 | 메모리 없이 진행(`$memory="(없음)"`) | WARN 1줄(`account_ref` 미포함) |
-| 메모리 쓰기(6) | 스토어 예외 | 이번 턴 포기, 다음 턴 due 유지(`summarized_turn_index` 불변) | `FallbackEvent(stage="memory")` |
+| 메모리 쓰기(6) | 스토어 예외(답하기 전 빈 행 `put` → `skipped` / 뒤의 `advance` → `kept_previous`) | 이번 턴 포기, 다음 턴 due 유지(`summarized_turn_index` 불변) | `FallbackEvent(stage="memory")` |
 | 메모리 DSN 부재 | `TRIPPILOT_VECTOR_DB_URL` 없음 | `InMemoryDialogueMemoryStore`(프로세스 로컬 — 워커 2 × 파드라 "기억"은 성립하지 않는다) | **기동 WARN "도우미 메모리 미설정"**(ai-wiring 표식 토큰 `미설정`) |
 | 섀도(2′) | 포화 · 샘플 밖 · 라우터 예외 | 응답 영향 0 | `intent_shadow_skipped {"trace_id","why"}` 1줄 — 세는 쪽이 분모를 안다 |
 | 계획(2‴) | **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 잔여 <4.6s · 워커 예외(프롬프트 미등록 포함) | 종전 `OUT_OF_SCOPE`(reason `…; plan:skipped`·`plan:fallback`) | 오케스트레이터 `FallbackEvent(llm, llm_dialogue_plan→out_of_scope, budget_exhausted·plan_error)` |
 | 계획(2‴) | 시한·벤더·비지원·비JSON·스키마 위반·절단·입력 호출 전량 드롭 | 종전 `OUT_OF_SCOPE`(`plan:fallback`) | 게이트웨이 FallbackEvent + `LlmCallRecord(success=False)` (전량 드롭은 GateDropEvent 도) |
 | 계획(2‴) | 도구 없음(`calls=[]`)·거절(`refused`) — **의도된 결정론** | 종전 `OUT_OF_SCOPE`(`plan:no_tool`·`plan:refused`) | 이벤트 없음 · `LlmCallRecord(success)` · `dialogue_plan` 로그(NO_TOOL+gap / REFUSED) |
 | 계획(2‴) | 일부 호출·칸 드롭 / 도구 작업 실패 | 남은 호출로 답 / 그 부분은 PARTIAL·UNAVAILABLE 로 병합 | GateDropEvent / 작업별 `FallbackEvent(stage=fanout, from=[i.]작업명)` |
-| 요약(6) — 계획 턴 | 턴 서비스 LLM 3회 · 첫 차례 / 연속 차례 | 미룸(put 없음) / 결정론 압축 | `FallbackEvent(memory, …deferred 또는 deterministic_compress, turn_llm_cap(3))` |
+| ~~요약(6) — 계획 턴~~ | ~~턴 서비스 LLM 3회 · 첫 차례 / 연속 차례~~ | ~~미룸(put 없음) / 결정론 압축~~ | ~~`FallbackEvent(memory, …deferred 또는 deterministic_compress, turn_llm_cap(3))`~~ — **폐지(2026-10-23)**: 요약이 턴 밖이라 턴 LLM 수와 무관하다 |
 | 경계(7) | 오케스트레이터 자체 예외(버그) | 미결 #14 — 두 안 병기(BR §5) | — |
 
 침묵 실패가 없는지 보는 방법은 한 가지다: **LLM 을 시도했거나 시도해야 했던(재료는 있는데 잔여 부족 포함) 턴의 `template_text` 응답과
-`compress_fallback` 쓰기·잔여 ≤0 건너뛰기에는 `FallbackEvent` 가 짝으로 있다**(AO-P5 가 시한 소진 경로에서 이것을 함께 단언한다).
+~~`compress_fallback` 쓰기·잔여 ≤0 건너뛰기~~ 요약 실패(이전 기억 그대로)·꺼내기 실패에는 `FallbackEvent` 가 짝으로 있다**(AO-P5 가 시한 소진 경로에서 이것을 함께 단언한다).
 **의도된 결정론은 폴백이 아니다** — 0단계 능력 안내(BR-AO-18)·`needTrip`(BR-AO-23)·`Facts.status = UNAVAILABLE` 템플릿 직행·사실(rows·places·notes·detail) 없는 `Facts` 직행(BR-AO-25, 2026-10-19)·맞장구·인사 답(BR-AO-26, 2026-10-19 — 분류 단계 이벤트는 분류가 낸 그대로)에는
 답변 단계 `FallbackEvent` 가 없다(팬아웃 실패는 `_fanout` 이 작업별 `FallbackEvent(stage="fanout")` 로 이미 보고했다); `recent_turns` 가
 비어 LLM 을 부르지 않는 압축도 같다. 둘을 가르지 않으면 정상 경로를 폴백으로 오보한다. 문장의 출처를 타입에 두던 `text_source` 와
@@ -325,6 +336,40 @@ facts = handler.assemble(ctx, results)                    # 순수 — 이름(na
 ---
 
 ## 8. 메모리 요약 흐름 (장기 기억)
+
+**[개정 · 2026-10-23 · DEC-AO-19 — 과거 대화는 사라지고 필요할 때 꺼낸다]** 아래 종전 흐름(10턴·턴 안 요약·결정론 압축·지난 여행 최신 2)은 이렇게 바뀌었다.
+
+```
+turn 진입 ─▶ get(session_id) + recent_for_account(…, limit=2)                 # 둘 다 실패 허용 — get 실패면 이 턴은 요약하지 않는다
+0‴ 분류와 나란히 ─▶ embed(발화) → search(이 세션 + 같은 계정, model=임베딩 id, top_k)  # 실패·임베딩 없음 → 종전 줄
+          분류 $memory = 요약·결정·미해결(+옛 표지 없는) 줄 · 답변/잡담 $memory = "요약" 줄 + 점수 ≥0.45 사실 줄 ≤6(이 대화 먼저, 남은 칸만 "지난 여행 기억:" 아래)
+          $history = 최근 3턴 + 기억이 덮지 못한 턴(분류·답변·잡담) / 4건(계획)
+… 분류·답변 …
+turn 말미 ─▶ due(turn_index, summarized, every=3)? ─아니오─▶ 끝
+                     │예 (이 프로세스에서 같은 세션 요약이 돌고 있으면 끝)
+                     ▼
+          행 없음 → put(빈 행, summarized=0)                                   # 답하기 전 — 뒤의 저장이 지워진 대화를 되살리지 않게
+          ─▶ 응답 ─▶ (뒤에서) DIALOGUE_MEMORY($previous_summary, $recent_turns=아직 요약하지 않은 턴 + 이번 턴, $trip; 8.0s)
+                     ├ 줄("종류: 내용", "요약" ≤2) ─▶ embed_batch(표지 뗀 본문) ─▶ advance(memory, vectors, model)
+                     ├ 빈 배열 ─▶ kept_lines(이전 줄) ─▶ advance                  # 새로 기억할 것 없음 · 옛 원문 조각은 여기서 지운다
+                     └ 실패 ─▶ 아무것도 쓰지 않는다(이전 기억 그대로, due 유지) + FallbackEvent(→kept_previous)
+          advance = UPDATE(있는 행만, summarized 가 커질 때만) + 만료 행 정리 + 줄 벡터 맞춤(요약에 없는 줄 삭제·준 줄 upsert) — 0행이면 false
+```
+
+- **창과 주기가 같은 수다** — `SUMMARY_EVERY_TURNS = PROMPT_TURNS`(3). 창은 턴으로 센다(BE 최근 대화에는 턴 밖 노트 "적용했어요."가 섞여
+  한 턴이 두 건이 아니다 — 건수로 자르면 가장 오래된 미요약 사용자 말이 재료에서 빠진 채 요약 완료로 적혔다, 리뷰 재현). 요약이 늦거나
+  실패하면 창이 기억이 덮지 못한 턴만큼 넓어진다(BE 창 20건 = 10턴이 상한).
+- **답 문장이 없는 턴**(FRAME·범위 밖 — 문장은 BE 가 짓는다)이 요약 차례면 그 턴은 빼고 앞 턴까지 요약한다(다음 차례가 BE 창의 그 턴
+  메시지로 담는다). 되묻기 턴은 그 질문이 도우미 말이다.
+- **쓰기마다 요약에 없는 줄의 벡터는 지운다**(임베딩이 실패해도) · 계정·여행은 행을 만들 때 값을 지킨다(`COALESCE` — 여행 삭제 직후
+  trip 없는 스냅샷 턴이 trip_id 를 비우면 `?trip_id=` 파기가 놓쳤다) · 임베딩이 미배선(`UnwiredEmbedding`)이면 없음으로 읽는다.
+- **꺼내기 하한 0.45 · 최대 6줄**은 KURE-v1 실측(기억 줄 12 × 질문 12, 2026-10-23): 관련 줄 최저 0.51·중앙 0.62, 무관 줄 중앙 0.44·p90 0.52,
+  "고마워"의 최고 0.41. 무관 줄이 몇 줄 섞이는 쪽을 골랐다(횟집 질문의 알레르기 줄이 0.51). 운영 `dialogue_memory_recall` 로그(건수·최고 점수만)로
+  다시 잰다.
+- **저장물은 여전히 파생물이다** — 요약 줄과 그 임베딩(`dialogue_memory_vectors`). 벡터 행은 FK `ON DELETE CASCADE` 로 기억 행을 따라
+  지워져 파기 3호출·TTL 이 그대로 걸린다(BR-AO-10). 대화 원문 조각을 저장하던 결정론 압축은 없앴다(미결 #10 B안).
+
+종전(2026-10-17 ~ 10-22):
 
 ```
 turn 진입 ─▶ get(session_id) + recent_for_account(account_ref, exclude=session_id, limit=2)   # 둘 다 실패 허용(없이 진행)

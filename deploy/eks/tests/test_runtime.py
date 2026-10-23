@@ -317,12 +317,21 @@ class SecretTests(unittest.TestCase):
         compose = Path(__file__).resolve().parents[3] / "ai" / "docker" / "vector-init" / "02-dialogue-memory.sql"
         eks, local = statements(bootstrap), statements(compose)
         grants = {stmt for stmt in eks if stmt.startswith("GRANT")}
-        self.assertEqual(grants, {"GRANT SELECT, INSERT, UPDATE, DELETE ON public.dialogue_memory TO ai_user"})
+        self.assertEqual(grants, {"GRANT SELECT, INSERT, UPDATE, DELETE ON public.dialogue_memory TO ai_user",
+                                  "GRANT SELECT, INSERT, UPDATE, DELETE ON public.dialogue_memory_vectors TO ai_user"})
         self.assertEqual(eks - grants, local)
         self.assertEqual({stmt.split(" (")[0] for stmt in local}, {
             "CREATE TABLE IF NOT EXISTS public.dialogue_memory",
             "CREATE INDEX IF NOT EXISTS ix_dialogue_memory_account ON public.dialogue_memory",
-            "CREATE INDEX IF NOT EXISTS ix_dialogue_memory_trip ON public.dialogue_memory"})
+            "CREATE INDEX IF NOT EXISTS ix_dialogue_memory_trip ON public.dialogue_memory",
+            # 기억 줄 벡터(2026-10-23) — 기억 행을 따라 지워진다. 그래야 파기 3호출·TTL 이 벡터에도 걸린다(BR-AO-10)
+            "CREATE TABLE IF NOT EXISTS public.dialogue_memory_vectors"})
+        (vectors,) = [stmt for stmt in local if "dialogue_memory_vectors" in stmt]
+        self.assertIn("REFERENCES public.dialogue_memory (session_id) ON DELETE CASCADE", vectors)
+        # 벡터 표는 기억 표 뒤에 만든다 — 앞이면 FK 대상이 없어 initdb·bootstrap 이 멈춘다
+        sql = bootstrap.read_text(encoding="utf-8")
+        self.assertLess(sql.index("CREATE TABLE IF NOT EXISTS public.dialogue_memory ("),
+                        sql.index("CREATE TABLE IF NOT EXISTS public.dialogue_memory_vectors"))
 
     def test_place_fact_cache_ddl_is_identical_in_both_canons(self):
         """`place_fact_cache`(UnknownHandlingAgent 저장소)도 dialogue_memory 와 같은 두 정본 규칙 — 갈리면 로컬에서 통과한 DML 이
