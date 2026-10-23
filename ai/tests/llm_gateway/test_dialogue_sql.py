@@ -184,7 +184,7 @@ class _Conn:
 def test_executor_wraps_read_only_with_timeout_and_cap_and_returns_only_display_fields() -> None:
     conn = _Conn([[("b",), ("a",), ("b",)],
                   [("a", "경복궁", "명소", "서울특별시", "종로구", ["요즘 인기", "역사관광지"], True),
-                   ("b", "클럽 X", "야경", "서울특별시", "마포구", ["나이트라이프"], False)]])
+                   ("b", "클럽 X", "야경", "서울특별시", "마포구", ["술집"], False)]])
     rows = PgPlaceSql(lambda: conn).run(_OK[0])
     statements = [s for s, _ in conn.log]
     assert statements[0] == "SET TRANSACTION READ ONLY"
@@ -205,8 +205,8 @@ class _OneQueryConn(_Conn):
     """find_by_name 용 — fetchall 한 번."""
 
 
-def _hit(pid: str, sido: str) -> tuple:
-    return (pid, "광장시장", "쇼핑", sido, "종로구", [], True)
+def _hit(pid: str, sido: str, sigungu: str = "종로구", rich: bool = True) -> tuple:
+    return (pid, "광장시장", "쇼핑", sido, sigungu, [], rich)
 
 
 @pytest.mark.parametrize("hits,sido,expected", [
@@ -214,6 +214,12 @@ def _hit(pid: str, sido: str) -> tuple:
     ([_hit("a", "서울특별시"), _hit("b", "부산광역시")], "서울", "a"),  # 여럿이면 여행 시·도로 좁힌다
     ([_hit("a", "서울특별시"), _hit("b", "서울특별시")], "서울", None),  # 그래도 여럿(체인점) — 고르지 않는다
     ([_hit("a", "서울특별시"), _hit("b", "부산광역시")], None, None),  # 좁힐 지역이 없으면 고르지 않는다
+    # 같은 이름 사업자 등록 사이에서 정보 충실(rich)한 곳이 하나뿐이면 그곳 — "경복궁"(서울 9곳 중 관광지 하나만 rich)
+    ([_hit("a", "서울특별시"), _hit("b", "서울특별시", rich=False), _hit("c", "서울특별시", rich=False)], "서울", "a"),
+    ([_hit("a", "서울특별시"), _hit("b", "서울특별시", rich=False)], None, "a"),  # 여행이 없어도
+    ([_hit("a", "서울특별시"), _hit("b", "부산광역시", rich=False)], "제주", "a"),  # 다른 지역 여행 중에 물어도
+    ([_hit("a", "서울특별시", rich=False), _hit("b", "서울특별시", rich=False)], "서울", None),  # 다 빈약하면 고르지 않는다
+    ([_hit("a", "서울특별시", rich=False), _hit("b", "서울특별시", rich=False), _hit("c", "부산광역시")], "서울", None),
     ([], "서울", None),
 ])
 def test_find_by_name_is_exact_and_never_guesses_among_many(hits, sido, expected) -> None:
@@ -241,3 +247,12 @@ def test_executor_puts_rich_places_before_bare_registrations_but_keeps_model_ord
 
 def test_rich_column_is_allowed_in_place_selects() -> None:
     assert check_select("SELECT poi_id FROM poi_public WHERE category = '카페' ORDER BY saved_count DESC, rich DESC LIMIT 20") is None
+
+
+
+def test_find_by_name_narrows_by_a_city_inside_a_province_too() -> None:
+    # 강릉 여행 — 시·도("강원특별자치도")가 아니라 구·군("강릉시")이 지역 표 이름으로 시작한다
+    conn = _OneQueryConn([[_hit("a", "강원특별자치도", "강릉시"), _hit("b", "강원특별자치도", "속초시")]])
+    found = PgPlaceSql(lambda: conn).find_by_name("광장시장", "강릉")
+    assert found is not None and found.poi_id == "a"
+    assert "sigungu LIKE %(area)s" in conn.log[2][0] and conn.log[2][1]["area"] == "강릉%"

@@ -1,5 +1,6 @@
 package com.trippilot.reflection.adapter.out.external
 
+import com.trippilot.reflection.domain.port.ReflectionAgentInput
 import java.time.Instant
 import java.time.LocalDate
 import tools.jackson.databind.JsonNode
@@ -38,9 +39,8 @@ internal data class AiReflectionGenerateRequest(
      * 여행 중 사건(계약 `TripEventRecordSchema[]` — `kind`·`date`·`detail` 전부 필수).
      *
      * **객체 배열이다.** 문자열 배열로 두면 실으려는 순간 `Input should be a valid dictionary` 로
-     * 422 다 — 알림 경계가 `slots` 에서 똑같이 당했다(2026-09-16). 지금은 어댑터가 **늘 빈 배열**을
-     * 보내서 원소가 없어 안 터졌을 뿐, 채우는 사람이 생기면 그때 터지는 잠복 어긋남이었다.
-     * 이름 대조 게이트는 `events` 라는 이름이 양쪽에 있어 이걸 원리적으로 못 본다.
+     * 422 다 — 알림 경계가 `slots` 에서 똑같이 당했다(2026-09-16). 이름 대조 게이트는 `events` 라는 이름이
+     * 양쪽에 있어 이걸 원리적으로 못 보므로, 원소가 실린 직렬화 모양은 어댑터 테스트가 따로 잡는다(TRIP-1463 부터 채워 보낸다).
      */
     val events: List<AiTripEventRecord>,
     val weatherSummary: String,
@@ -80,12 +80,47 @@ internal data class AiReflectionGenerateResponse(
 internal object AiReflectionPaths {
     const val GENERATE = "/ai/v1/reflection/generate"
 
+    /** j06 공유 카드 문구(TRIP-1411). 요청은 [GENERATE] 와 같은 스키마다. */
+    const val SHARE_CARD = "/ai/v1/reflection/share-card"
+
     /**
      * `nudge` 는 **여기 없다.** 상대는 열었으나 여행 전 넛지 화면이 U5 범위 밖이라 우리가 부르지
      * 않는다(G-U5-16). 부르지 않는 경로를 게이트에 넣으면 "우리가 쓰는 것"의 뜻이 흐려진다.
      */
-    val CALLED = listOf(GENERATE)
+    val CALLED = listOf(GENERATE, SHARE_CARD)
 }
+
+/**
+ * 회고 재료 → 상대 요청 본문. 공유 카드 경계([HttpShareCardCopyAdapter])가 쓴다.
+ *
+ * [HttpReflectionAgentAdapter] 도 같은 본문을 손으로 짠다 — 그쪽을 이 함수로 옮기는 일은 열린 PR #1559(TRIP-1488)가 같은 줄을
+ * 고치고 있어 이 PR 에서 하지 않았다(충돌 회피). 둘 다 같은 와이어 타입을 채우므로 키는 갈라질 수 없다 — 갈라질 수 있는 것은 값을 옮기는
+ * 방식뿐이고, 그것은 두 어댑터 테스트가 각자 본다.
+ */
+internal fun ReflectionAgentInput.toWireRequest(requestId: String, requestedAt: Instant, deadlineMs: Long?) = AiReflectionGenerateRequest(
+    requestMeta = AiReflectionRequestMeta(requestId, requestedAt, deadlineMs),
+    kind = kind,
+    region = region,
+    startDate = startDate,
+    endDate = endDate,
+    visits = visits.map {
+        AiReflectionVisit(
+            ref = AiReflectionVisitRef(it.date, it.poiId.toString()),
+            poiName = it.poiName, category = it.category,
+            orderInDay = it.orderInDay, photoCount = it.photoCount,
+        )
+    },
+    personaSummary = personaSummary.orEmpty(),
+    events = events.map { AiTripEventRecord(it.kind, it.date, it.detail) },
+    weatherSummary = weatherSummary.orEmpty(),
+)
+
+/** 공유 카드 문구 응답(계약 `ShareCardCopyResponse` — `hashtags` 는 선택이라 비면 빈 목록). */
+internal data class AiShareCardCopyResponse(
+    val caption: String,
+    val hashtags: List<String> = emptyList(),
+    val isFallback: Boolean,
+)
 
 /**
  * 경계 매퍼 — 상대는 snake_case 다. Jackson 3(`tools.jackson`)을 쓴다: 일정 경계와 같은 관례이고

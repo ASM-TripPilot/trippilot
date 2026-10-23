@@ -13,16 +13,18 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+import time
+from datetime import date, datetime, timedelta, timezone
 
 from trippilot.domain.common import GeoPoint
-from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
+from trippilot.domain.freshness import FreshnessMeta, InfoPacket, ProviderKind, ProviderStatus
 from trippilot.domain.intent import ROUTABLE_INTENTS, Intent
 from trippilot.orchestrator.info_collector import (
     INFO_REQUIREMENTS,
     InfoCollector,
     UnknownIntentError,
 )
+from trippilot.ports.weather_port import DayWeather
 from trippilot.providers.weather import WeatherProvider
 
 _ANCHOR = GeoPoint(35.1587, 129.1604)
@@ -45,6 +47,29 @@ class _FakePort:
 class _FailingPort:
     def daily_forecast(self, coord, days):
         raise TimeoutError("kma down")
+
+
+def test_daily_detail_rides_along_as_json_without_unknown_cells() -> None:
+    """상세는 선택 능력 — 있으면 날짜별 dict 로 싣고 None 칸은 뺀다, 포트가 없으면 빈 dict(키는 항상 있다)."""
+    class _Detailed(_FakePort):
+        def daily_detail(self, coord, days):
+            return {_D1: DayWeather(sky=4, pty=1, tmn=9, tmx=None)}
+
+    packet = WeatherProvider(_Detailed({_D1: 80})).fetch(_PARAMS)
+    assert packet.data["detail"] == {"2026-08-20": {"sky": 4, "pty": 1, "tmn": 9}}
+    assert WeatherProvider(_FakePort({_D1: 80})).fetch(_PARAMS).data["detail"] == {}
+
+
+def test_daily_detail_failure_keeps_rain_and_leaves_a_warning(caplog) -> None:
+    class _DetailBroken(_FakePort):
+        def daily_detail(self, coord, days):
+            raise TimeoutError("kma detail down")
+
+    with caplog.at_level("WARNING", logger="trippilot.providers.weather"):
+        packet = WeatherProvider(_DetailBroken({_D1: 10})).fetch(_PARAMS)
+    assert packet.status is ProviderStatus.OK and packet.data["daily"] == {"2026-08-20": 10}
+    assert packet.data["detail"] == {}
+    assert any("daily_detail" in r.getMessage() and "kma detail down" in r.getMessage() for r in caplog.records)
 
 
 # ── ① Provider 성공 ──────────────────────────────────────────────────
@@ -245,6 +270,61 @@ def test_place_provider_empty_pool_is_no_candidates_with_ref() -> None:
     assert provider.resolve(packet.data["pool_ref"]) is not None
 
 
+class _CountingBuilder(_FakeBuilder):
+    def __init__(self, pool=None) -> None:
+        super().__init__(pool)
+        self.calls = 0
+
+    def build(self, request, now):
+        self.calls += 1
+        return super().build(request, now)
+
+
+def test_place_provider_reuses_snapshot_for_same_conditions_within_ttl() -> None:
+    """같은 조건(앵커·요일·예산·수단·반경)은 TTL 안에서 한 번만 짓는다 — 재생성·다시 짜기가 후보 조회 2s 를
+    다시 내지 않는다. 날짜가 달라도 요일이 같으면 같은 풀, 반경(넓혀 다시)·요일이 다르면 새 풀, TTL 이 지나면 새 풀."""
+    builder = _CountingBuilder()
+    provider = PlaceProvider(builder, ttl_sec=600)
+    first = provider.fetch({"pool_request": _POOL_REQUEST, "now": _NOW})
+    same_dow = CandidatePoolRequest(anchor=_ANCHOR, dates=(_D1 + timedelta(days=7),),
+                                    budget=BudgetLevel.MID, transport=TransportMode.PUBLIC)
+    second = provider.fetch({"pool_request": same_dow, "now": _NOW + timedelta(seconds=599)})
+
+    assert builder.calls == 1
+    assert (first.freshness.cache_hit, second.freshness.cache_hit) == (False, True)
+    assert second.freshness.source == "M7_CACHE" and second.freshness.fetched_at == _NOW
+    assert provider.resolve(first.data["pool_ref"]) is provider.resolve(second.data["pool_ref"])
+
+    widened = CandidatePoolRequest(anchor=_ANCHOR, dates=(_D1,), budget=BudgetLevel.MID,
+                                   transport=TransportMode.PUBLIC, radius_override_km=15.0)
+    provider.fetch({"pool_request": widened, "now": _NOW})
+    provider.fetch({"pool_request": CandidatePoolRequest(anchor=_ANCHOR, dates=(_D2,), budget=BudgetLevel.MID,
+                                                         transport=TransportMode.PUBLIC), "now": _NOW})
+    assert builder.calls == 3
+    expired = provider.fetch({"pool_request": _POOL_REQUEST, "now": _NOW + timedelta(seconds=600)})
+    assert builder.calls == 4 and expired.freshness.cache_hit is False
+
+
+def test_place_provider_build_failure_is_not_cached() -> None:
+    """실패는 스냅샷에 남지 않는다 — 다음 요청이 다시 짓는다(캐시가 장애를 고착하면 INV-4 의 반대 오염)."""
+    class _FlakyBuilder(_FakeBuilder):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls = 0
+
+        def build(self, request, now):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("db down")
+            return super().build(request, now)
+
+    builder = _FlakyBuilder()
+    provider = PlaceProvider(builder)
+    assert "pool_ref" not in provider.fetch({"pool_request": _POOL_REQUEST, "now": _NOW}).data
+    assert provider.fetch({"pool_request": _POOL_REQUEST, "now": _NOW}).status is ProviderStatus.OK
+    assert builder.calls == 2
+
+
 def test_place_provider_build_failure_has_no_ref() -> None:
     provider = PlaceProvider(_FakeBuilder(error=RuntimeError("db down")))
     packet = provider.fetch({"pool_request": _POOL_REQUEST, "now": _NOW})
@@ -305,3 +385,66 @@ def test_collector_resolve_pool_delegates_to_place_provider() -> None:
 
     assert collector.resolve_pool(packet.data["pool_ref"]) is pool
     assert InfoCollector({}).resolve_pool("아무-키") is None  # PLACE 미등록
+
+
+# ── ⑥ 동시 수집 — 2026-10-21 개발 서버: 직렬 합 2.4~5.2s 가 1일차 15s 시한을 먹어 점수 묶음이 시한 초과했다 ──
+
+
+class _SlowProvider:
+    """지정한 시간만큼 걸리는 제공자 — 예외를 주면 그대로 새어 나간다."""
+
+    def __init__(self, kind: ProviderKind, seconds: float, error: Exception | None = None) -> None:
+        self._kind, self._seconds, self._error = kind, seconds, error
+
+    def fetch(self, params: dict) -> InfoPacket:
+        time.sleep(self._seconds)
+        if self._error is not None:
+            raise self._error
+        return InfoPacket(provider=self._kind, status=ProviderStatus.OK, data={},
+                          freshness=FreshnessMeta(source="FAKE", fetched_at=_NOW, cache_hit=False, ttl_sec=60, stale=False))
+
+
+_GEN_KINDS = INFO_REQUIREMENTS[Intent.GENERATE_SCHEDULE]
+
+
+def _slow_collector(seconds: float, overrides: dict | None = None) -> InfoCollector:
+    overrides = overrides or {}
+    return InfoCollector({k: overrides.get(k, _SlowProvider(k, seconds)) for k in _GEN_KINDS})
+
+
+def test_collector_calls_providers_concurrently_and_keeps_table_order() -> None:
+    started = time.monotonic()
+    packets = _slow_collector(0.3).collect(Intent.GENERATE_SCHEDULE, _PARAMS)
+    elapsed = time.monotonic() - started
+
+    assert tuple(packets) == _GEN_KINDS                       # 묶음 순서 = 요구표 순서(도착 순서 아님)
+    assert all(p.status is ProviderStatus.OK for p in packets.values())
+    assert elapsed < 0.3 * len(_GEN_KINDS) * 0.75             # 직렬 합(1.2s)보다 뚜렷이 짧다
+
+
+def test_permission_denied_still_pierces_when_other_providers_succeed() -> None:
+    denied = _SlowProvider(_GEN_KINDS[1], 0.0, PermissionDeniedError("남의 ref"))
+
+    with pytest.raises(PermissionDeniedError):
+        _slow_collector(0.05, {_GEN_KINDS[1]: denied}).collect(Intent.GENERATE_SCHEDULE, _PARAMS)
+
+
+def test_leaked_exception_in_one_provider_keeps_the_others() -> None:
+    broken = _SlowProvider(_GEN_KINDS[0], 0.0, RuntimeError("boom"))
+
+    packets = _slow_collector(0.0, {_GEN_KINDS[0]: broken}).collect(Intent.GENERATE_SCHEDULE, _PARAMS)
+
+    assert packets[_GEN_KINDS[0]].status is ProviderStatus.UNAVAILABLE
+    assert "boom" in packets[_GEN_KINDS[0]].data["reason"]
+    assert all(packets[k].status is ProviderStatus.OK for k in _GEN_KINDS[1:])
+
+
+def test_collector_logs_one_timing_line_per_provider(caplog) -> None:
+    with caplog.at_level("INFO", logger="trippilot.orchestrator.info_collector"):
+        _slow_collector(0.0).collect(Intent.GENERATE_SCHEDULE, _PARAMS)
+
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("provider_timing")]
+    # 제공자마다 정확히 한 줄 — ms 값은 시계라 0 으로 못 박지 않는다(CI 러너에서 sleep(0) 도 1ms 가 나왔다, 2026-10-22 두 번).
+    assert sorted(line.split(" ms=")[0] for line in lines) == sorted(f"provider_timing kind={k.name}" for k in _GEN_KINDS)
+    assert all(line.split(" ms=")[1].isdigit() for line in lines)
+

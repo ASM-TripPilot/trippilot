@@ -318,7 +318,7 @@ _WITH_CLUB = (*demo_poi_seed(), Poi(
     poi_id=PoiId(_CLUB), name="테스트 클럽", category=PoiCategory.ACTIVITY,
     coord=GeoPoint(DEMO_ANCHOR.lat + 0.002, DEMO_ANCHOR.lng + 0.002), open_hours=(),
     avg_cost=None, rating=None, quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None,
-    tags=("나이트라이프", "클럽")))
+    tags=("술집", "클럽")))
 
 
 def _club_slot(body: dict) -> dict:
@@ -330,7 +330,7 @@ def test_밤에_놀기면_클럽이_후보에_오르고_밤에_놓인다() -> No
     body = _replan(llm, pois=_WITH_CLUB, directives=["NIGHTLIFE"])
 
     prompt = llm.compose_prompt()
-    assert "나이트라이프" in prompt.split("[후보 목록]")[1]  # 태그가 후보 줄에 보인다
+    assert "술집" in prompt.split("[후보 목록]")[1]  # 태그가 후보 줄에 보인다
     assert "~23:59" in prompt  # 그날 창을 23:59 까지
     club = _club_slot(body)
     assert club["start_at"] >= "20:00" and club["is_fixed"] is False, body["notes"]  # 추정 영업 20~04시
@@ -360,7 +360,7 @@ def test_말한_세부_종류가_먼저_오른다() -> None:
     wine = Poi(poi_id=PoiId("e0000000-0000-4000-8000-0000000000c2"), name="가까운 와인바",
                category=PoiCategory.ACTIVITY, coord=DEMO_ANCHOR, open_hours=(), avg_cost=None,
                rating=None, quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None,
-               tags=("나이트라이프", "와인바"))
+               tags=("술집", "와인바"))
     body = _replan(_ScriptedLlm([_FOOD]), pois=(*_WITH_CLUB, wine), directives=["NIGHTLIFE"],
                    free_text="클럽 가고 싶어")
     assert "nightlife_forced: 1" in body["notes"]
@@ -374,7 +374,7 @@ def test_클럽이_근처에_없으면_다른_밤_장소로_대신하고_밝힌�
     wine = Poi(poi_id=PoiId("e0000000-0000-4000-8000-0000000000c3"), name="제주 와인바",
                category=PoiCategory.ACTIVITY, coord=DEMO_ANCHOR, open_hours=(), avg_cost=None,
                rating=None, quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None,
-               tags=("나이트라이프", "와인바", "요즘 인기"))
+               tags=("술집", "와인바", "요즘 인기"))
     body = _replan(_ScriptedLlm([_FOOD]), pois=(*demo_poi_seed(), wine), directives=["NIGHTLIFE"],
                    free_text=said)
     assert f"nightlife_subtype_missing: {subtype}" in body["notes"], body["notes"]

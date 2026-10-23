@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import type { ImageSourcePropType } from 'react-native';
 
 // 홈 "발견·영감 피드" 프레젠테이션 화면의 prop 계약(TRIP-316 · 라이브 Figma 2091:1357).
@@ -14,10 +13,12 @@ export interface HomeCollectionCard {
   region: string;
   /** '당일치기'(discovery) · '부산'(collecting 지역 badge) — 좌상단 pill. 얼굴별 의미가 갈린다(TRIP-317 가정 D). */
   badge: string;
-  /** 카드 배경 사진 URI(TRIP-694). `resolveAssetSource(...).uri`로 푼 문자열, jest·웹에선 null(사진 자리 토큰 tint). */
+  /** 카드 배경 사진 URI(TRIP-694). `resolveAssetSource(...).uri`로 푼 문자열, jest·웹에선 null(사진이 없으면 카테고리 생성 이미지). */
   imageUrl?: string | null;
-  /** 실데이터 장소 id(TRIP-1209) — 목록 key 로만 쓴다(픽스처엔 없다). */
+  /** 실데이터 장소 id(TRIP-1209) — 목록 key 와 생성 이미지 변형 해시에 쓴다(픽스처엔 없다). */
   poiId?: string;
+  /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본) — `badge` 는 얼굴마다 뜻이 갈려 쓰지 않는다. 픽스처엔 없다(폴백). */
+  category?: string;
 }
 
 /** "요즘 사람들이 담는 곳" 실데이터 레인(TRIP-1209) — 섹션 독립 상태. 있으면 sections.collections 대신 이것을 그린다. */
@@ -36,10 +37,12 @@ export interface HomeSpotCard {
   title: string;
   /** '#감성카페' — 해시태그 한 줄 */
   tag: string;
-  /** 카드 배경 사진 URI(TRIP-694). jest·웹에선 null(사진 자리 토큰 tint). */
+  /** 카드 배경 사진 URI(TRIP-694). jest·웹에선 null(사진이 없으면 카테고리 생성 이미지). */
   imageUrl?: string | null;
-  /** 실데이터 장소 id(TRIP-1049) — 있을 때만 저장 하트를 그린다. 픽스처엔 없다. */
+  /** 실데이터 장소 id(TRIP-1049) — 있을 때만 저장 하트를 그린다. 생성 이미지 변형 해시에도 쓴다. 픽스처엔 없다. */
   poiId?: string;
+  /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본) — `tag` 는 해시태그라 쓰지 않는다. 픽스처엔 없다(폴백). */
+  category?: string;
 }
 
 /** "지금 뜨는 장소" 실데이터 섹션(TRIP-1049) — 섹션 독립 상태 + 저장 하트 배선. */
@@ -252,9 +255,6 @@ export interface HomeScreenProps {
   onPressHeroCity?: (regionCode: string) => void;
   /** 인사 헤더 종 press → 알림함(TRIP-939). 라우팅은 `(tabs)/index.tsx` 가 진다. */
   onPressBell?: () => void;
-  /**
-   * ✦ AI 도우미 FAB 슬롯(TRIP-1321) — page 가 `AssistantFab` 을 조립해 넣는다. 화면은 다른 FAB 와 같은
-   * 조건(로딩 아님)에서, 담은 곳 메뉴가 펼쳐지지 않은 동안만 그린다(BR-U8-53). 미지정이면 없음.
-   */
-  assistantFab?: ReactNode;
+  /** 인사 헤더 ✦ press → 도우미 시트(TRIP-1553). 라우팅(`assistantHref`)은 page 가 진다. */
+  onPressAssistant?: () => void;
 }

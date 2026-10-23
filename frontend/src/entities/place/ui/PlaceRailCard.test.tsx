@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react-native';
 
 import type { PlaceCardVM } from '@/entities/place/model';
+import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
 
 import { PlaceRailCard } from './PlaceRailCard';
 
@@ -10,8 +11,8 @@ import { PlaceRailCard } from './PlaceRailCard';
  *
  * 무엇을 보장하나(현행 소비처가 쓰던 testID·표시를 그대로 재현):
  *  - 🔴 루트 testID `explore-place-card-{poiId}` · 이름 · 지역.
- *  - 🔴 사진은 `imageUrl` 있을 때만 `explore-place-card-image-{poiId}`, 없으면 회색 자리(기본 이미지
- *    발명 금지 · INV-1). d01 무수정 `ExploreLandingScreen.placePhoto.test.tsx` 가 이 있음/없음을 심판한다.
+ *  - 🔴 사진 칸 `explore-place-card-image-{poiId}` 는 항상 있다 — `imageUrl` 이 있으면 그 사진, 없으면(사이클
+ *    20261022-place-category-covers) 카드의 카테고리·poiId 로 고른 카테고리 생성 이미지.
  *  - 🔴 카드 press → `onPress(poiId)`.
  *
  * testID 접두는 소비처가 `testIDPrefix` 로 주입한다(기본 `explore-place-card` = d01, d05 는
@@ -33,20 +34,39 @@ describe('🔴 PlaceRailCard (AC-M2·M4 d01·d05)', () => {
     render(<PlaceRailCard card={VM} onPress={onPress} />);
 
     expect(screen.getByTestId('explore-place-card-p1')).toBeTruthy();
-    expect(screen.getByTestId('explore-place-card-image-p1')).toBeTruthy();
+    // 서버 사진이 있으면 카테고리와 무관하게 그 사진 그대로(호출부 기존 동작 불변).
+    expect(
+      screen.getByTestId('explore-place-card-image-p1').props.source
+    ).toEqual([{ uri: 'https://example.com/gamcheon.jpg' }]);
     expect(screen.getByText('감천문화마을')).toBeTruthy();
     expect(screen.getByText('부산 사하구')).toBeTruthy();
   });
 
-  it('R2 · 이미지 없으면 사진 leaf 를 안 만든다(회색 자리 · INV-1)', () => {
+  it('R2 · 이미지 없으면 그 카드의 카테고리(술집)·poiId(p1) 로 고른 생성 이미지를 그린다', () => {
     const onPress = jest.fn();
     render(
-      <PlaceRailCard card={{ ...VM, imageUrl: null }} onPress={onPress} />
+      <PlaceRailCard
+        card={{ ...VM, imageUrl: null, category: '술집' }}
+        onPress={onPress}
+      />
     );
 
     expect(screen.getByTestId('explore-place-card-p1')).toBeTruthy();
-    expect(screen.queryByTestId('explore-place-card-image-p1')).toBeNull();
+    // 'p1' 의 FNV-1a % 3 + 1 = 변형 2 → bar-2. 맛집(food-2)이 나오면 카테고리를 엉뚱하게 넘긴 것이다.
+    expect(
+      screen.getByTestId('explore-place-card-image-p1').props.source
+    ).toEqual([coverFor('술집', 'p1')]);
     expect(screen.getByText('감천문화마을')).toBeTruthy();
+  });
+
+  it('R2b · 카드에 카테고리가 없으면(옛 호출부) 중립 폴백 place.webp 이다', () => {
+    render(
+      <PlaceRailCard card={{ ...VM, imageUrl: null }} onPress={jest.fn()} />
+    );
+
+    expect(
+      screen.getByTestId('explore-place-card-image-p1').props.source
+    ).toEqual([FALLBACK_COVER]);
   });
 
   it('R3 · 카드 press → onPress(poiId)', () => {

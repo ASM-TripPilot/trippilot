@@ -11,6 +11,7 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import type {
   EditItineraryRequest,
@@ -2498,6 +2499,7 @@ describe('후보 카드 이름·태그·사진', () => {
         distanceRange: '420m',
         rationale: '가장 가까운 교회',
         nameKo: '남부산교회',
+        category: '카페',
         tags: ['교회', '야외'],
         imageUrl: X_IMG,
       },
@@ -2506,6 +2508,7 @@ describe('후보 카드 이름·태그·사진', () => {
         distanceRange: '1.1km',
         rationale: '조용한 곳',
         nameKo: null,
+        category: '맛집',
         tags: [],
         imageUrl: null,
       },
@@ -2514,6 +2517,7 @@ describe('후보 카드 이름·태그·사진', () => {
         distanceRange: '2.4km',
         rationale: '바다 옆 사찰',
         nameKo: '해동용궁사',
+        category: '자연',
         tags: ['사찰'],
         imageUrl: '',
       },
@@ -2590,17 +2594,20 @@ describe('후보 카드 이름·태그·사진', () => {
       expect(tags).toHaveTextContent(/야외/);
     });
 
-    it('F2 · AC-4·Q1·비주얼(a) — 사진 있으면 그 URL 이 source, null·빈 문자열이면 source 없는 회색 자리', async () => {
+    it('F2 · AC-4·Q1·비주얼(a) — 사진 있으면 그 URL 이 source, null·빈 문자열이면 그 후보의 카테고리·poiId 로 고른 생성 이미지', async () => {
       await renderAndPickConcept();
 
       expect(
         screen.getByTestId('itinerary-candidate-image-X').props.source
       ).toEqual([{ uri: X_IMG }]);
-      // 회색 자리도 testID 는 유지된다(존재) — 그리고 이미지 source 는 없다(부재).
-      for (const id of [RAW_ID, 'Z']) {
-        const leaf = screen.getByTestId(`itinerary-candidate-image-${id}`);
-        expect(leaf.props.source).toBeUndefined();
-      }
+      // 같은 testID 의 칸이 비지 않는다 — 후보마다 자기 카테고리·poiId 다
+      // (RAW_ID → 맛집·변형 2, Z → 자연·변형 1). 후보의 category·진짜 poiId 를 카드까지 안 내리면 폴백이다.
+      expect(
+        screen.getByTestId(`itinerary-candidate-image-${RAW_ID}`).props.source
+      ).toEqual([coverFor('맛집', RAW_ID)]);
+      expect(
+        screen.getByTestId('itinerary-candidate-image-Z').props.source
+      ).toEqual([coverFor('자연', 'Z')]);
     });
 
     it('F3 · AC-6·INV-1 — nameKo null 이면 플레이스홀더, poiId 원문은 화면 어디에도 없다', async () => {

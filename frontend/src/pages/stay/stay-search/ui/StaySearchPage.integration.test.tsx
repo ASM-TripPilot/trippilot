@@ -11,7 +11,11 @@ import { BASE } from '@/test-support/apiBase';
 import { createGcZeroWrapper } from '@/test-support/queryRender';
 import { server } from '@/mocks/server';
 import { StaySearchPage } from './StaySearchPage';
-import type { StayItem, SavedStay } from '@/shared/api/index.schemas';
+import type {
+  CuratedStay,
+  StayItem,
+  SavedStay,
+} from '@/shared/api/index.schemas';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { regionPickerHref } from '@/features/explore';
 import {
@@ -20,6 +24,7 @@ import {
   getAccessToken,
 } from '@/shared/api/tokenManager';
 import { PRICE_BUCKETS, type PriceBucketId } from '../model/priceRangeFilter';
+import * as Linking from 'expo-linking';
 
 /**
  * e02 숙소 검색 — StaySearchPage 배선 통합 테스트(msw 로 실제 나간 요청을 본다).
@@ -72,6 +77,12 @@ jest.mock('expo-router', () => ({
     back: (...args: unknown[]) => mockBack(...args),
     setParams: (...args: unknown[]) => mockSetParams(...args),
   },
+}));
+
+// TRIP-1581 — 인기 숙소·전체 보기는 제휴 시트를 거쳐 브라우저로 연다(실제 열기는 목).
+jest.mock('expo-linking', () => ({
+  openURL: jest.fn().mockResolvedValue(true),
+  canOpenURL: jest.fn().mockResolvedValue(true),
 }));
 
 /** 옛 `.integration`·`.states` 의 목은 router 가 없어 어떤 항법이든 TypeError 였다 — 그 그물을 단언으로 옮긴다. */
@@ -488,35 +499,15 @@ describe('2단 FAB 목적지 (옛 .fab)', () => {
     });
   });
 
-  // TRIP-1321 · US-ASSIST-01 · BR-U8-50~53 — ✦ 도우미 FAB(스택 맨 위 220). 실제 겹침은 6-b 실기.
-  describe('✦ 도우미 FAB (TRIP-1321)', () => {
-    it('누르면 surface=STAY_SEARCH 만 싣고 도우미 시트로 간다', async () => {
+  // TRIP-1553 — 숙소 검색의 ✦ 도우미 FAB(TRIP-1321)는 헤더로 옮기지 않고 없앴다(사용자 결정 2026-10-22).
+  // 목록 끝 여백이 2단 FAB 윗변으로 돌아오는 것·토스트 바닥은 className 이라 6-b 실기 몫이다.
+  describe('✦ 도우미 FAB 는 없다 (TRIP-1553)', () => {
+    it('2단 FAB 는 뜨는데 ✦ 는 없다', async () => {
       render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
-      fireEvent.press(await screen.findByTestId('assistant-fab'));
-      expect(mockPush).toHaveBeenCalledWith({
-        pathname: '/assistant',
-        params: { surface: 'STAY_SEARCH' },
-      });
-    });
 
-    it('바닥 220(2단 스택 위)에 뜨고, 목록 끝 여백이 ✦ 윗변(276)까지 늘어난다', async () => {
-      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
-      const style = Object.assign(
-        {},
-        ...[(await screen.findByTestId('assistant-fab')).props.style].flat(
-          Infinity
-        )
-      );
-      expect(style).toEqual(expect.objectContaining({ bottom: 220 }));
-      expect(
-        String(screen.getByTestId('stay-search-list-footer').props.className)
-      ).toContain('h-[276px]');
-    });
-
-    it('필터 시트·가격대 시트가 열린 동안은 트리에 없다(BR-U8-53)', async () => {
-      render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
-      await screen.findByTestId('assistant-fab');
-      fireEvent.press(screen.getByTestId('stay-search-filter-more'));
+      // 짝 앵커 — FAB 층이 그려진 뒤에도 ✦ 만 없음을 보인다.
+      expect(await screen.findByTestId('stay-search-fab-saved')).toBeTruthy();
+      expect(screen.getByTestId('stay-search-fab-register')).toBeTruthy();
       expect(screen.queryByTestId('assistant-fab')).toBeNull();
     });
   });
@@ -2011,5 +2002,115 @@ describe('연타 관통 — 한 페이지 안에서 드러난 요소', () => {
     fireEvent.press(screen.getByTestId('shell-tabbar-tab-records'));
 
     expect(mockDismissTo.mock.calls).toEqual([['/records']]);
+  });
+});
+
+// TRIP-1581 — 검색창 아래 인기 숙소 줄 + 「Trip.com에서 전체 숙소 보기」(항상). 목록 상태와 독립이다.
+describe('인기 숙소 줄 · 전체 보기 (TRIP-1581)', () => {
+  const CURATED: CuratedStay = {
+    rank: 1,
+    stayId: 'TRIPCOM:123',
+    name: '해운대 오션 호텔',
+    address: null,
+    imageUrl: 'https://ak-d.tripcdn.com/images/a.jpg',
+  };
+  const LIST_ITEM: StayItem = {
+    externalSource: 'NAVER',
+    externalId: 's1',
+    name: '해운대 그랜드 호텔',
+    lat: 35.1587,
+    lng: 129.1604,
+    region: '해운대',
+    amenities: [],
+    stayType: 'HOTEL',
+    price: null,
+  };
+  let curatedQueries: string[] = [];
+  const mockOpenURL = Linking.openURL as jest.Mock;
+
+  function serve(curated: CuratedStay[], listOk = true): void {
+    server.use(
+      http.get(`${BASE}/stays/search`, () =>
+        listOk
+          ? HttpResponse.json({
+              items: [LIST_ITEM],
+              degraded: false,
+              filterZeroReasons: [],
+            })
+          : HttpResponse.json({ message: 'boom' }, { status: 500 })
+      ),
+      http.get(`${BASE}/stays/curated`, ({ request }) => {
+        curatedQueries.push(new URL(request.url).search);
+        return HttpResponse.json({ city: '부산', items: curated });
+      }),
+      http.get(`${BASE}/me/settings`, () =>
+        HttpResponse.json({ affiliateNoticeDismissed: false })
+      ),
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([]))
+    );
+  }
+
+  beforeEach(() => {
+    curatedQueries = [];
+    mockOpenURL.mockClear();
+    setAccessToken('valid-access');
+  });
+
+  function renderPage(): void {
+    render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
+  }
+
+  it('URL 의 지역 코드로 인기 숙소를 묻고 줄을 그린다 · 전체 보기는 시트를 거쳐 지역 이름·코드로 연다', async () => {
+    mockSearchParams = { region: '부산', regionCode: '26' };
+    serve([CURATED]);
+    renderPage();
+
+    expect(
+      await screen.findByTestId('curated-stay-card-123')
+    ).toBeOnTheScreen();
+    // TRIP-1603 — 부산(26)은 짧은 도시 이름을 알아 city 로 묻는다(운영 서버는 regionCode 를 못 받는다).
+    expect(curatedQueries).toEqual([`?city=${encodeURIComponent('부산')}`]);
+    expect(screen.getByText('인기 숙소')).toBeOnTheScreen();
+    // 목록 카드도 그대로 온다(인기 숙소 줄과 독립).
+    expect(await screen.findByTestId('stay-card-NAVER:s1')).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId('curated-stay-browse-all'));
+    await screen.findByTestId('stay-ota-sheet');
+    // 시트는 목록(스크롤) 밖 화면 루트 형제다.
+    expect(
+      within(screen.getByTestId('stay-search-list')).queryByTestId(
+        'stay-ota-sheet'
+      )
+    ).toBeNull();
+    fireEvent.press(screen.getByTestId('stay-ota-confirm'));
+
+    await waitFor(() =>
+      expect(mockOpenURL).toHaveBeenCalledWith(
+        `${BASE}/stays/browse/outbound?region=${encodeURIComponent('부산')}&regionCode=26`
+      )
+    );
+  });
+
+  it('인기 숙소가 비면 줄·제목은 없고 전체 보기만 남는다', async () => {
+    mockSearchParams = { region: '부산', regionCode: '26' };
+    serve([]);
+    renderPage();
+
+    await waitFor(() => expect(curatedQueries).toHaveLength(1));
+    expect(await screen.findByTestId('stay-card-NAVER:s1')).toBeOnTheScreen();
+    expect(screen.queryByTestId('stay-search-curated-row')).toBeNull();
+    expect(screen.queryByText('인기 숙소')).toBeNull();
+    expect(screen.getByTestId('curated-stay-browse-all')).toBeOnTheScreen();
+  });
+
+  it('지역 코드가 없으면 인기 숙소를 묻지 않고 전체 보기만, 목록 오류 얼굴도 그대로다', async () => {
+    mockSearchParams = { region: '부산' };
+    serve([CURATED], false);
+    renderPage();
+
+    expect(await screen.findByTestId('stay-search-error')).toBeOnTheScreen();
+    expect(screen.getByTestId('curated-stay-browse-all')).toBeOnTheScreen();
+    expect(curatedQueries).toHaveLength(0);
+    expect(screen.queryByTestId('curated-stay-card-123')).toBeNull();
   });
 });

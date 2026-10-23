@@ -5,6 +5,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 import { closestScrollView, stubScrollTo } from '@/test-support/sheetTree';
 
 import {
@@ -876,5 +877,36 @@ describe('TRIP-1507 · 시각 시트 하단 여백 = 16 + 하단 안전 영역',
   });
   it('Provider 없음(jest 기본) → 16 그대로', () => {
     expect(paddingBottomWith(null)).toBe(16);
+  });
+});
+
+describe('장소 요약 사진 칸 (사이클 20261022-place-category-covers · 64×64)', () => {
+  it('서버 사진이 있으면 그 사진, 없으면 category·sourcePoiId 로 고른 생성 이미지가 같은 칸(itinerary-mustvisit-time-photo)에 선다', () => {
+    const { rerender } = renderScreen({
+      sourcePoiId: 'poi-b',
+      category: '맛집',
+      imageUrl: null,
+    });
+    // poi-b 는 변형 3 → food-3. 폴백이면 category 를 안 읽은 것이다.
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-photo').props.source
+    ).toEqual([coverFor('맛집', 'poi-b')]);
+
+    rerender(
+      <MustVisitTimeScreen
+        sourcePoiId="poi-b"
+        placeName="부산시립미술관"
+        region="부산진구"
+        imageUrl="https://img.example.com/b.jpg"
+        category="맛집"
+        dayChips={DAY_CHIPS}
+        startOptions={START_OPTIONS}
+        startAnchor={START_ANCHOR}
+        form={FORM}
+      />
+    );
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-photo').props.source
+    ).toEqual([{ uri: 'https://img.example.com/b.jpg' }]);
   });
 });

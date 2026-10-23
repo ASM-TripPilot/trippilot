@@ -453,6 +453,16 @@ export const handlers = [
    */
   http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])),
 
+  // TRIP-1581 — 인기 숙소 줄(`widgets/curated-stays`)이 e02 등 여러 page 에 붙어, 로그인 상태면 인기 숙소·제휴 고지
+  // 설정을 묻는다. `/saved-stays` 와 같은 이유(통합 버킷 onUnhandledRequest:'error')로 무해한 기본값을 둔다 —
+  // 인기 숙소 없음(줄 숨김) · 고지 다시 보기(시트를 거친다). 얼굴별 응답은 `server.use(...)`로 덮는다.
+  http.get(`${BASE}/stays/curated`, () =>
+    HttpResponse.json({ city: null, items: [] })
+  ),
+  http.get(`${BASE}/me/settings`, () =>
+    HttpResponse.json({ affiliateNoticeDismissed: false })
+  ),
+
   // 상황 감지 FE-C — 허브가 active 얼굴마다 묻는 기회 조회의 기본값은 빈 목록(서버의 꺼짐·범위 밖과 같다 = 카드 없음).
   // 카드가 필요한 테스트는 `server.use(...)` 로 덮는다.
   http.get(`${BASE}/trips/:tripId/opportunities`, () =>

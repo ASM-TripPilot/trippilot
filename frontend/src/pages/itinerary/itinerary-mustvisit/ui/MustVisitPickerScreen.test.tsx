@@ -6,6 +6,7 @@ import {
 } from '@testing-library/react-native';
 
 import type { MapPin } from '@/shared/map';
+import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
 
 import {
   MUST_VISIT_NAME_PLACEHOLDER,
@@ -204,6 +205,30 @@ describe('C18 · 무회귀 — 조인 실패 항목을 숨기지 않는다 (INV-
     const name = screen.getByTestId('itinerary-mustvisit-name-poi-z');
     expect(name).toHaveTextContent(MUST_VISIT_NAME_PLACEHOLDER);
     expect(name).not.toHaveTextContent(/poi-z/);
+  });
+});
+
+describe('C18b · 사진 칸 — 서버 사진 우선, 없으면 카테고리 생성 이미지 (사이클 20261022-place-category-covers)', () => {
+  it('사진이 있는 카드는 그 사진, 없는 카드는 항목의 category·sourcePoiId 로 고른 그림, 조인 실패 카드는 중립 폴백이다', () => {
+    const withCategory = item({
+      sourcePoiId: 'poi-b',
+      name: '해운대 블루라인파크',
+      category: '카페',
+    });
+    render(
+      <MustVisitPickerScreen
+        view={listed([FIXED_A, withCategory, UNJOINED_Z])}
+      />
+    );
+
+    const sourceOf = (poiId: string) =>
+      screen.getByTestId(`itinerary-mustvisit-image-${poiId}`).props.source;
+    expect(sourceOf('poi-a')).toEqual([
+      { uri: 'https://img.example.com/a.jpg' },
+    ]);
+    // poi-b 는 변형 3 → cafe-3. 항목에 category 가 안 실리면(조인 실패 poi-z) 폴백 — 이름·사진·카테고리가 같이 없다.
+    expect(sourceOf('poi-b')).toEqual([coverFor('카페', 'poi-b')]);
+    expect(sourceOf('poi-z')).toEqual([FALLBACK_COVER]);
   });
 });
 

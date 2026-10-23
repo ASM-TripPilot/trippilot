@@ -227,7 +227,7 @@ def test_assigned_plan_answers_an_unclassified_turn_with_registered_places_frame
     caplog.set_level(logging.INFO, logger="trippilot.api.dialogue")
     client = _client({_INTENT: '{"intent": null}', LlmFeature.DIALOGUE_PLAN: _plan_json(("EXPLORE_PLACES", {"region": "제주"})),
                       _ANSWER: _answer_json("제주에서 가 볼 만한 곳을 찾아봤어요.")}, feature_models=_PLAN_ON)
-    assert any("도우미 계획 단계 on — 도구 7종" in r.getMessage() and "미배선 도구 0종" in r.getMessage() for r in caplog.records)
+    assert any("도우미 계획 단계 on — 도구 9종" in r.getMessage() and "미배선 도구 0종" in r.getMessage() for r in caplog.records)
     res = client.post(URL, json=_body("비 오면 근처 어디 가?"))
     assert res.status_code == 200, res.text
     body = res.json()
@@ -368,3 +368,14 @@ def test_shadow_rate_zero_only_logs_a_skip(caplog: pytest.LogCaptureFixture) -> 
         (line,) = _shadow_records(caplog, "intent_shadow_skipped ")
         assert json.loads(line.removeprefix("intent_shadow_skipped "))["why"] == "sampled_out"
         assert _shadow_records(caplog, "intent_shadow {") == []
+
+
+def test_context_preference_profile_reaches_the_turn_snapshot_as_tastes_and_is_optional() -> None:
+    """계정 취향(선택) — 지역 추천 재료. 구 백엔드(칸 없음)는 None 으로 그대로 통과한다(BR-AO-24 와 같은 하위호환)."""
+    from trippilot.api import schemas
+    from trippilot.api.dialogue import _snapshot
+
+    with_tastes = schemas.DialogueContextSnapshot.model_validate(
+        {"surface": "HOME", "preference_profile": {"styles": ["자연"], "activities": ["카페"]}})
+    assert _snapshot(with_tastes).tastes == (("자연",), ("카페",))
+    assert _snapshot(schemas.DialogueContextSnapshot.model_validate({"surface": "HOME"})).tastes is None

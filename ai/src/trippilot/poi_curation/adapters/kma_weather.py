@@ -37,9 +37,12 @@ from datetime import date, datetime, timedelta, timezone
 
 from trippilot.domain.common import GeoPoint
 from trippilot.poi_curation.sourcing.tourapi import HttpGetJson
-from trippilot.ports.weather_port import WeatherError
+from trippilot.ports.weather_port import DayWeather, WeatherError
 
 _KST = timezone(timedelta(hours=9))
+# 단기예보 코드표(활용가이드) — 밖의 값은 스킵한다(지어내지 않는다)
+_SKY_CODES = frozenset({1, 3, 4})          # 맑음·구름많음·흐림
+_PTY_CODES = frozenset({0, 1, 2, 3, 4})    # 없음·비·비/눈·눈·소나기
 # 같은 「단기예보 조회서비스 2.0」을 두 곳이 서비스한다. 경로와 응답 JSON 계층은 같고
 # **키 파라미터 이름과 키 종류만 다르다**(2026-10-02·10-05 실호출 대조).
 _PORTAL_BASE = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0"
@@ -258,6 +261,53 @@ class KmaWeatherAdapter:
             return {}
         return dict(self._pop_slots(self._fetch_body(coord), days))
 
+    def daily_detail(
+        self, coord: GeoPoint, days: Sequence[date]
+    ) -> Mapping[date, DayWeather]:
+        """날짜별 하늘·강수 형태·기온 요약(`DailyWeatherDetailPort`) — 같은 1회 호출의 다른 접기.
+
+        규칙은 `DayWeather` docstring 이 정본이다. 요청 날짜만, 한 칸도 못 채운 날은 키 없음.
+        """
+        if not days:
+            return {}
+        sky_votes: dict[date, dict[int, int]] = {}
+        pty: dict[date, int] = {}
+        tmn: dict[date, int] = {}
+        tmx: dict[date, int] = {}
+        tmp: dict[date, list[int]] = {}
+        for category, slot, raw in self._slots(self._fetch_body(coord), days):
+            day = slot.date()
+            try:
+                value = int(round(float(raw)))
+            except (TypeError, ValueError):
+                continue  # 비수치 표기 — 지어내지 않고 스킵
+            if category == "SKY":
+                if value in _SKY_CODES and 6 <= slot.hour <= 21:
+                    votes = sky_votes.setdefault(day, {})
+                    votes[value] = votes.get(value, 0) + 1
+            elif category == "PTY":
+                if value in _PTY_CODES:
+                    pty[day] = max(pty.get(day, 0), value)
+            elif category == "TMN":
+                tmn[day] = value
+            elif category == "TMX":
+                tmx[day] = value
+            elif category == "TMP":
+                tmp.setdefault(day, []).append(value)
+        out: dict[date, DayWeather] = {}
+        for day in set(sky_votes) | set(pty) | set(tmn) | set(tmx) | set(tmp):
+            votes = sky_votes.get(day)
+            # 최다값, 동률은 더 흐린(큰) 코드 — 하루를 밝게 지어내지 않는다
+            sky = max(votes, key=lambda c: (votes[c], c)) if votes else None
+            temps = tmp.get(day, [])
+            out[day] = DayWeather(
+                sky=sky,
+                pty=pty.get(day),
+                tmn=tmn.get(day, min(temps) if temps else None),
+                tmx=tmx.get(day, max(temps) if temps else None),
+            )
+        return out
+
     def _pop_slots(
         self, body: object, days: Sequence[date]
     ) -> tuple[tuple[datetime, int], ...]:
@@ -266,27 +316,40 @@ class KmaWeatherAdapter:
         `daily_forecast`·`hourly_forecast` 가 **같은 파싱을 공유**한다 — 규칙을 두
         곳에 복사하면 한쪽만 고쳐져 값이 갈린다(안티패턴 로그 §전수 이관).
         """
-        wanted = {d.strftime("%Y%m%d"): d for d in days}
         slots: list[tuple[datetime, int]] = []
-        for item in self._items(body):
-            if item.get("category") != "POP":
-                continue
-            day = wanted.get(str(item.get("fcstDate", "")))
-            if day is None:
+        for category, slot, raw in self._slots(body, days):
+            if category != "POP":
                 continue
             try:
-                pop = int(str(item.get("fcstValue")))
+                pop = int(raw)
             except (TypeError, ValueError):
                 continue  # 비정수 표기 — 지어내지 않고 스킵
             if not 0 <= pop <= 100:
                 continue  # 범위 밖 값 — 도메인 불변식(0~100)을 지키는 쪽으로 스킵
+            slots.append((slot, pop))
+        return tuple(slots)
+
+    def _slots(
+        self, body: object, days: Sequence[date]
+    ) -> tuple[tuple[str, datetime, str], ...]:
+        """응답 → (카테고리, 슬롯 시각, 값 원문) 목록. 요청 날짜만, 시각 표기 이상은 스킵.
+
+        값 해석(정수·범위)은 카테고리마다 달라 호출측(`_pop_slots`·`daily_detail`)이 한다.
+        """
+        wanted = {d.strftime("%Y%m%d"): d for d in days}
+        slots: list[tuple[str, datetime, str]] = []
+        for item in self._items(body):
+            day = wanted.get(str(item.get("fcstDate", "")))
+            if day is None:
+                continue
             raw = str(item.get("fcstTime", ""))
             if len(raw) != 4 or not raw.isdigit():
                 continue  # 시각 표기 이상 — 슬롯을 지어내지 않는다
             slots.append((
+                str(item.get("category", "")),
                 datetime(day.year, day.month, day.day,
                          int(raw[:2]) % 24, int(raw[2:]), tzinfo=_KST),
-                pop,
+                str(item.get("fcstValue")),
             ))
         return tuple(slots)
 

@@ -66,8 +66,10 @@ export interface SlotCandidateSheetRow {
   nameKo?: string | null;
   /** 미확보면 undefined → 태그줄 생략 · 있으면 첫 태그만 `#`. */
   tags?: string[];
-  /** 없거나 '' 면 회색 사진 자리(TRIP-1024). */
+  /** 없거나 '' 면 `category` 로 고른 생성 이미지(TRIP-1024). */
   imageUrl?: string | null;
+  /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본). */
+  category?: string | null;
 }
 
 export interface SlotCandidateSheetProps {
@@ -275,6 +277,8 @@ export function SlotCandidateSheet({
               tags={current.tags}
               showImage
               imageUrl={current.imageUrl}
+              category={current.category}
+              coverPoiId={current.poiId}
               showRationale={false}
               distanceTone="muted"
               trailing={
@@ -369,6 +373,8 @@ export function SlotCandidateSheet({
                     tags={candidate.tags}
                     showImage
                     imageUrl={candidate.imageUrl}
+                    category={candidate.category}
+                    coverPoiId={candidate.poiId}
                     showNameTestId
                     showRationale={false}
                     distanceTone="muted"

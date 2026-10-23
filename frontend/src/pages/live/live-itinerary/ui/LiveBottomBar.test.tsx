@@ -45,7 +45,7 @@ import {
   BAR_ENTER_MS,
   BAR_EXIT_MS,
   barMorphFrame,
-} from '../model/barMorph';
+} from '@/widgets/bottom-nav-bar';
 import { LiveBottomBar, type LiveBottomBarProps } from './LiveBottomBar';
 
 /**

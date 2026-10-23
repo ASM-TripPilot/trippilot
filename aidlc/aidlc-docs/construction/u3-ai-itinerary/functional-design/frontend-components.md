@@ -231,6 +231,8 @@ itinerary-draft-retry                  다시 시도 버튼
 
 근거: `_workspace/20260809-trip297-itinerary-draft/02a_test-design_spec.md` §3.1(게이트①-1 승인 테스트가 이 이름들을 직접 집는다) — 요구사항 근거가 아니라 게이트①에서 확정한 구현 결정. 다음 사이클이 요구사항 근거로 인용하지 말 것.
 
+> **[정정 · 2026-10-22 · 장소 사진 칸 일러스트]** 위 목록의 `itinerary-draft-slot-image-{slotKey}   사진 (imageUrl 있을 때만)` 은 낡았다. ① 이 testID 는 현 코드에 없다 — 슬롯 카드는 `entities/itinerary-slot` 의 `SlotStopCard`(사진 칸 testID `slot-stopcard-photo-{slotKey}`), 재계획 행 `ReplanSlotRow`(`planb-draft-slot-photo-{slotKey}`)로 옮겨졌다. ② 사진 칸은 이제 **항상 그려진다** — 서버 사진이 있으면 그 사진, 없거나(null·빈 문자열·공백) 로드가 실패하면 카테고리 일러스트(`shared/ui/PlacePhoto`)다(`business-rules`·U1 BR-U1-60). 근거: 코드 실측 `SlotStopCard.tsx` 의 `PlacePhoto`(`testID={fieldId('photo')}`)·`ReplanSlotRow.tsx`. 원문 수정 0줄(append 만).
+
 **[구현 결정 · TRIP-297, 2026-08-10] 발명값 3건 — 정본에 근거가 없어 이 사이클이 직접 정한 값. 요구사항 근거로 인용 금지.**
 
 1. **성격 축 라벨 미구현(시간 축만)** — Figma·티켓 모두 "시간대 + 성격"(예: `오전 · 활동`) 라벨을 보여 주지만, 성격 축(활동·식사·전시·숙소 등)을 `PoiCategory` 7종에 매핑하는 정본이 없다. 이 사이클은 시간 축(`오전`/`점심`/`오후`/`저녁`, `timeBandLabel`)만 구현하고 성격 축은 뺐다 — 근거: `_workspace/20260809-trip297-itinerary-draft/01b_ouroboros_seed.md` D4, TRIP-295가 이미 같은 이유로 범위 밖으로 남긴 자리.

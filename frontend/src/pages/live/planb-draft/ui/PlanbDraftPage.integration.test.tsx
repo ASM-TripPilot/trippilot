@@ -11,6 +11,7 @@ import type { Itinerary, ReplanDiff } from '@/shared/api/index.schemas';
 
 import { seoulDate } from '@/shared/lib/seoulDate';
 
+import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
 import {
   mockExits,
   mockNavigation,
@@ -552,20 +553,32 @@ describe('🔴 D1b · TRIP-1044 — 행의 이름·사진은 일정 캐시가 �
     ]);
   });
 
-  it('imageUrl 이 온 행만 사진을 그리고 나머지는 자리표시를 그린다', () => {
+  it('imageUrl 이 온 행은 그 사진을, 나머지는 응답의 category·poiId 로 고른 생성 이미지를 같은 칸에 그린다', () => {
+    // 준비 — p1 은 사진(+카테고리), p3 미술·p2 술집, px 는 카테고리 없음.
+    const withSurface = (poiId: string) => {
+      if (poiId === 'p1')
+        return { imageUrl: 'https://example.test/a.jpg', category: '맛집' };
+      if (poiId === 'p3') return { category: '미술' };
+      if (poiId === 'p2') return { category: '술집' };
+      return {};
+    };
     renderDraft({
       ...READY_DIFF,
-      after: READY_DIFF.after.map((slot) =>
-        slot.slotKey === key('p1')
-          ? { ...slot, imageUrl: 'https://example.test/a.jpg' }
-          : slot
-      ),
+      after: READY_DIFF.after.map((slot) => ({
+        ...slot,
+        ...withSurface(slot.slotKey.split('#')[1]),
+      })),
     });
 
-    expect(screen.getAllByTestId(/^planb-draft-slot-photo-/)).toHaveLength(1);
-    expect(
-      screen.getAllByTestId(/^planb-draft-slot-photoplaceholder-/)
-    ).toHaveLength(3);
+    const sourceOf = (poiId: string) =>
+      screen.getByTestId(`planb-draft-slot-photo-${key(poiId)}`).props.source;
+    expect(screen.getAllByTestId(/^planb-draft-slot-photo-/)).toHaveLength(4);
+    // p1: 서버 사진이 카테고리를 이긴다(맛집 그림이 아니다).
+    expect(sourceOf('p1')).toEqual([{ uri: 'https://example.test/a.jpg' }]);
+    // p3(미술, 변형 1)·p2(술집, 변형 3) — 행마다 자기 카테고리·자기 poiId. px 는 카테고리 없음 → 폴백.
+    expect(sourceOf('p3')).toEqual([coverFor('미술', 'p3')]);
+    expect(sourceOf('p2')).toEqual([coverFor('술집', 'p2')]);
+    expect(sourceOf('px')).toEqual([FALLBACK_COVER]);
   });
 
   // 5-b 경고-1 — 값이 비었을 때 가는 길. 빠지는 곳 이름이 before 에도 없으면 장소 ID·캐시 이름이 아니라 폴백 문구.
@@ -585,8 +598,8 @@ describe('🔴 D1b · TRIP-1044 — 행의 이름·사진은 일정 캐시가 �
   });
 
   // 5-b 참고-1 — 사진도 이름과 같은 규칙(응답에 없으면 캐시 사진으로 채우지 않는다).
-  it('응답에 imageUrl 이 없으면 캐시에 사진이 있어도 사진을 그리지 않는다', () => {
-    // 준비 — 캐시의 모든 슬롯에 사진이 있다. 응답(READY_DIFF)에는 imageUrl 이 하나도 없다.
+  it('응답에 imageUrl 이 없으면 캐시에 사진이 있어도 그 사진을 그리지 않고 생성 이미지(폴백)를 그린다', () => {
+    // 준비 — 캐시의 모든 슬롯에 사진이 있다. 응답(READY_DIFF)에는 imageUrl 도 category 도 하나도 없다.
     mockItinerary = {
       ...DRAFT_ITINERARY,
       days: DRAFT_ITINERARY.days.map((day) => ({
@@ -602,14 +615,14 @@ describe('🔴 D1b · TRIP-1044 — 행의 이름·사진은 일정 캐시가 �
 
     renderPage();
 
-    expect(screen.queryAllByTestId(/^planb-draft-slot-photo-/)).toHaveLength(0);
-    expect(
-      screen.getAllByTestId(/^planb-draft-slot-photoplaceholder-/)
-    ).toHaveLength(4);
+    const rows = screen.getAllByTestId(/^planb-draft-slot-photo-/);
+    expect(rows).toHaveLength(4);
+    // 캐시 사진 URL 이 어느 칸에도 안 새고, 카테고리가 없으니 모두 중립 폴백이다.
+    rows.forEach((row) => expect(row.props.source).toEqual([FALLBACK_COVER]));
   });
 
-  // 5-b 경고-2 — 카테고리는 사진 없는 행의 자리표시 타일 색(틴트)을 정한다. null 이면 회색 기본 타일.
-  it('사진 없는 행의 자리표시 타일 색은 응답의 category 가 정한다(맛집 → primary-pale, null → surface-soft)', () => {
+  // 5-b 경고-2 — 카테고리는 사진 없는 행의 그림을 정한다. null 이면 중립 폴백 그림.
+  it('사진 없는 행의 그림은 응답의 category 가 정한다(맛집 → food, 없음 → place.webp)', () => {
     renderDraft({
       ...READY_DIFF,
       after: READY_DIFF.after.map((slot) =>
@@ -617,13 +630,11 @@ describe('🔴 D1b · TRIP-1044 — 행의 이름·사진은 일정 캐시가 �
       ),
     });
 
-    const tile = (poiId: string) =>
-      String(
-        screen.getByTestId(`planb-draft-slot-photoplaceholder-${key(poiId)}`)
-          .props.className
-      );
-    expect(tile('p1')).toContain('bg-primary-pale');
-    expect(tile('p3')).toContain('bg-surface-soft');
+    const sourceOf = (poiId: string) =>
+      screen.getByTestId(`planb-draft-slot-photo-${key(poiId)}`).props.source;
+    // p1 은 변형 2 → food-2.
+    expect(sourceOf('p1')).toEqual([coverFor('맛집', 'p1')]);
+    expect(sourceOf('p3')).toEqual([FALLBACK_COVER]);
   });
 });
 

@@ -15,7 +15,13 @@ import type {
   HomeSpotsLane,
 } from '../model/homeTypes';
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/features/home';
+import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
 import { HomeScreen } from './HomeScreen';
+import {
+  FAB_STACK_TOP,
+  getToastBottoms,
+  resetToastBottoms,
+} from '@/shared/ui/toastBottom';
 
 /**
  * AC-1~AC-8 — 홈 default 재정합(구 "여행 상태 대시보드" → 신 "발견·영감 피드",
@@ -76,6 +82,8 @@ const WIRED_CTA_TEST_IDS = [
   // TRIP-939 AC-9 — 종이 알림함(/notifications)으로 배선돼 버튼 집합에 든다. role 은 콜백 유무가 아니라
   // 구조로 굳힌다(이 집합 테스트는 콜백 없이 렌더 — 검색바·FAB 선례, 02a ★D4).
   'home-dashboard-bell',
+  // TRIP-1553 — 헤더 ✦ 도우미(벨 왼쪽 — 벨이 오른쪽 끝)도 같은 방식이다. 콜백 없이 렌더해도 구조로 버튼.
+  'home-dashboard-assistant',
   // TRIP-1432 — 히어로 3도시 카드(서울·부산·제주)는 탐색 탭으로 가는 버튼이다. 매거진(a02) 진입이던
   // page0 도 서울 카드가 됐다. 카드에 도시 코드가 있으면 구조로 버튼이다(콜백 없이 렌더해도).
   'home-magazine-hero',
@@ -840,6 +848,7 @@ const PLANNING_WIRED_CTA_TEST_IDS = [
   'home-search-bar',
   'home-trip-hero',
   'home-dashboard-bell', // TRIP-939 AC-9 — 모든 얼굴 공용 인사 헤더의 종(구조 role)
+  'home-dashboard-assistant', // TRIP-1553 — 같은 헤더의 ✦ 도우미(구조 role)
   // TRIP-696 — home-spots-more 제거: 계획 중 본문이 컬렉션 1섹션이라 스팟 섹션(및 그 더보기 버튼)이
   // 사라진다.
   // TRIP-1432 Q4 — 여행 카드 뒤 도시 카드 3장도 discovery 와 같은 버튼이다.
@@ -872,6 +881,7 @@ const POST_TRIP_WIRED_CTA_TEST_IDS = [
   'home-search-bar',
   'home-trip-hero',
   'home-dashboard-bell',
+  'home-dashboard-assistant', // TRIP-1553 — 헤더 ✦ 도우미
   'home-hero-slide-1', // TRIP-1432 Q4 — 도시 카드
   'home-hero-slide-2',
   'home-hero-slide-3',
@@ -1091,6 +1101,107 @@ describe('🔴 TRIP-939 AC-9 · B-5 · 모든 얼굴에서 종은 버튼, 빨간
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// TRIP-1553 — 홈 우하단 ✦ FAB 가 헤더(벨 왼쪽) ✦ 버튼으로 옮겨 왔다. 화면은 `onPressAssistant` 만 부르고
+// 목적지(`assistantHref`)는 page 몫이다(HomePage.test 가 잰다). "벨 왼쪽" 위치·✦ 색·글리프 모양은 생김새라
+// jest 가 보지 않는다(README 판정 4) — figma-build 새 프레임 + 6-b 실화면. 로딩 얼굴도 같은 헤더라 ✦ 가 뜬다(01b 가정 2).
+describe('🔴 TRIP-1553 · 헤더 ✦ 도우미', () => {
+  it.each([
+    ['discovery', HOME_DEFAULT_PROPS],
+    ['planning', { ...HOME_DEFAULT_PROPS, phase: PLANNING_PHASE }],
+    ['traveling', { ...HOME_DEFAULT_PROPS, phase: TRAVELING_PHASE }],
+    ['postTrip', { ...HOME_DEFAULT_PROPS, phase: POST_TRIP_PHASE }],
+    ['loading', HOME_LOADING_PROPS],
+  ])('%s 얼굴 — ✦ 는 접근성 이름 "AI 도우미" 인 버튼이다', (_face, props) => {
+    // 준비·실행: 콜백 없이 그린다(role 이 구조로 굳었는지 보려고).
+    render(<HomeScreen {...props} />);
+
+    // 단언: 이름·역할로 찾아도 그 testID 하나다(이름은 완전 일치), 이웃 종도 같은 헤더에 있다(앵커).
+    const assistant = screen.getByRole('button', { name: 'AI 도우미' });
+    expect(assistant.props.testID).toBe('home-dashboard-assistant');
+    expect(assistant).toHaveAccessibleName('AI 도우미');
+    expect(screen.getByTestId('home-dashboard-bell')).toBeOnTheScreen();
+  });
+
+  it('✦ 를 누르면 onPressAssistant 만 1회 부르고 종·다른 콜백은 부르지 않는다', () => {
+    // 준비
+    const onPressAssistant = jest.fn();
+    const onPressBell = jest.fn();
+    const onPressCreateTrip = jest.fn();
+    const onPressSearch = jest.fn();
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        onPressAssistant={onPressAssistant}
+        onPressBell={onPressBell}
+        onPressCreateTrip={onPressCreateTrip}
+        onPressSearch={onPressSearch}
+      />
+    );
+
+    // 실행
+    fireEvent.press(screen.getByTestId('home-dashboard-assistant'));
+
+    // 단언
+    expect(onPressAssistant).toHaveBeenCalledTimes(1);
+    expect(onPressBell).not.toHaveBeenCalled();
+    expect(onPressCreateTrip).not.toHaveBeenCalled();
+    expect(onPressSearch).not.toHaveBeenCalled();
+  });
+
+  it('종을 누르면 onPressBell 만 1회 — 이웃 ✦ 콜백은 부르지 않는다', () => {
+    // 준비: 앵커(✦ 존재)를 먼저 — 없으면 "0회" 단언이 공허하게 참이다.
+    const onPressAssistant = jest.fn();
+    const onPressBell = jest.fn();
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        onPressAssistant={onPressAssistant}
+        onPressBell={onPressBell}
+      />
+    );
+    expect(screen.getByTestId('home-dashboard-assistant')).toBeOnTheScreen();
+
+    // 실행
+    fireEvent.press(screen.getByTestId('home-dashboard-bell'));
+
+    // 단언
+    expect(onPressBell).toHaveBeenCalledTimes(1);
+    expect(onPressAssistant).not.toHaveBeenCalled();
+  });
+
+  // 5-b W1 — 배관이 얼굴마다 따로 꽂혀(PhaseBody → PostTripBody → GreetingHeader) 여행 후 얼굴만 빠져도 위 케이스들은 green 이다.
+  // 여행 중(traveling)은 kind 가 planning 이라 같은 PlanningBody 길이고 HomePage.test 가 실제 push 까지 눌러 본다.
+  it('postTrip 얼굴에서도 ✦ 를 누르면 onPressAssistant 가 1회 불린다', () => {
+    // 준비: 앵커 — postTrip 얼굴이 실제로 그려졌고(여행 히어로) ✦ 가 있다.
+    const onPressAssistant = jest.fn();
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        phase={POST_TRIP_PHASE}
+        onPressAssistant={onPressAssistant}
+      />
+    );
+    expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
+
+    // 실행
+    fireEvent.press(screen.getByTestId('home-dashboard-assistant'));
+
+    // 단언
+    expect(onPressAssistant).toHaveBeenCalledTimes(1);
+  });
+
+  it('✦ 는 스크롤 중 숨는 FAB 층(home-fab-layer) 밖의 헤더에 있다', () => {
+    // 준비·실행
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
+
+    // 단언: 층은 있고(앵커) ✦ 는 그 안에 없지만 화면에는 있다.
+    const layer = screen.getByTestId('home-fab-layer');
+    expect(within(layer).queryByTestId('home-dashboard-assistant')).toBeNull();
+    expect(screen.getByTestId('home-dashboard-assistant')).toBeOnTheScreen();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // TRIP-694 AC-2 · TRIP-696 AC-696-2 · TRIP-698 AC-6 · TRIP-1432 — 히어로 캐러셀 페이지 수. 진짜 앵커는
 // **페이지 컨테이너**다 — 도트는 정적 View 라 위조 가능(traps-home). discovery 는 도시 3장, 여행 얼굴은
 // 여행 카드 + 도시 3장이다.
@@ -1292,5 +1403,103 @@ describe('지금 뜨는 장소 — 저장 하트·카드 접근성 라벨', () =
     );
     expect(buttonIds).not.toContain('home-spot-card-0');
     expect(buttonIds).not.toContain('home-spot-card-1');
+  });
+});
+
+/**
+ * 사이클 20261022-place-category-covers — 홈 장소 카드(요즘 담는 곳 컬렉션 230×300 · 지금 뜨는 스팟 166)의 사진 칸.
+ * 옛 `HomeScreen.noPhoto.test.tsx`("사진 없음 → 글리프 placeholder")를 이 파일로 합치며 뒤집었다 — 사진이 없으면
+ * 회색 + 글리프가 아니라 카드의 카테고리·poiId 로 고른 생성 이미지가 칸을 채운다(스크림·글씨는 그 위, 가독성은 6-b).
+ *
+ * 카테고리는 카드의 **`category` 필드**에서 온다 — `badge`(컬렉션 좌상단 pill 의 표시 글자: 픽스처는 '당일치기')와 다른 값이다.
+ */
+describe('홈 카드 사진 칸 · 생성 이미지', () => {
+  it('스팟 카드 — 사진 있으면 그 사진, 없으면 category·poiId 의 생성 이미지, 정보가 없는 카드(픽스처)는 중립 폴백', () => {
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        spotsLane={{
+          status: 'ready',
+          onRetry: jest.fn(),
+          cards: [
+            {
+              poiId: 'p2',
+              title: '야경 스팟',
+              tag: '#a',
+              imageUrl: null,
+              category: '야경',
+            },
+            {
+              poiId: 'p1',
+              title: '사진 있음',
+              tag: '#b',
+              imageUrl: 'https://x/1.jpg',
+              category: '맛집',
+            },
+            { title: '픽스처형', tag: '#c' },
+          ],
+        }}
+      />
+    );
+
+    const photo = (index: number) =>
+      screen.getByTestId(`home-spot-photo-${index}`).props.source;
+    // p2 는 변형 3 → night_view-3.
+    expect(photo(0)).toEqual([coverFor('야경', 'p2')]);
+    expect(photo(1)).toEqual([{ uri: 'https://x/1.jpg' }]);
+    expect(photo(2)).toEqual([FALLBACK_COVER]);
+  });
+
+  it('컬렉션 카드 — 사진 없으면 category(미술)·poiId(p1)의 생성 이미지다 (배지 글자 "당일치기" 가 아니라 category 필드)', () => {
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        collectionsLane={{
+          status: 'ready',
+          onRetry: jest.fn(),
+          cards: [
+            {
+              poiId: 'p1',
+              title: '미술관',
+              region: '서울',
+              badge: '당일치기',
+              category: '미술',
+            },
+            {
+              poiId: 'p2',
+              title: '사진 있음',
+              region: '서울',
+              badge: '명소',
+              category: '명소',
+              imageUrl: 'https://x/2.jpg',
+            },
+          ],
+        }}
+      />
+    );
+
+    // p1 은 변형 2 → art-2.
+    expect(screen.getByTestId('home-collection-photo-0').props.source).toEqual([
+      coverFor('미술', 'p1'),
+    ]);
+    expect(screen.getByTestId('home-collection-photo-1').props.source).toEqual([
+      { uri: 'https://x/2.jpg' },
+    ]);
+  });
+});
+
+// 토스트 바닥 레지스트리는 모듈 싱글턴이다 — 파일 최상위(describe 밖)에서 리셋해야 앞 테스트의 신고가 안 샌다(TRIP-1559).
+afterEach(() => resetToastBottoms());
+
+describe('HomeScreen — 토스트 바닥 신고: FAB 2단 스택 (TRIP-1559 이음새 ③)', () => {
+  it('FAB 스택이 있는 홈은 그 윗변(FAB_STACK_TOP)을 신고하고 unmount 로 해제한다 — 토스트가 FAB 를 가로질러 가리지 않게', () => {
+    expect(getToastBottoms()).toEqual([]);
+
+    const view = render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
+
+    expect(getToastBottoms()).toContain(FAB_STACK_TOP);
+
+    view.unmount();
+    expect(getToastBottoms()).toEqual([]);
   });
 });

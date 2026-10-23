@@ -11,13 +11,18 @@ intent별 **정보 요구표**를 보고 등록된 Provider들을 호출해 Info
   (오케스트레이터의 "미배선 = 기능 부재" 선례와 동일).
 - 대형 데이터(후보 풀)는 packet에 참조 키만 온다(DL-2) — 실체는
   `resolve_pool`로 PLACE Provider에서 꺼낸다.
-- 병렬 수집은 후속 — 현재 순차 호출 (Provider 3종이지만 전부 in-memory/단건 API).
+- **동시에 부른다**(2026-10-21) — 제공자들은 서로 독립이라(후보 조회·날씨 HTTP·페르소나 HTTP·행사) 합이
+  아니라 가장 느린 하나만큼 걸린다. 종전 순차 호출은 개발 서버에서 합 2.4~5.2s 가 1일차 15s 시한을 먹어
+  점수 단계에 4.7~5.2s 만 남겼고, 묶음 일부가 시한을 넘겼다. 제공자별 소요는 `provider_timing` 로그 한 줄.
 - TRANSIT Provider는 v2 타입(TransitRequest)으로 직접 호출 (TRIP-423).
 """
 
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 
 from trippilot.domain.common import GeoPoint, PoiId, TransportMode
@@ -27,6 +32,8 @@ from trippilot.domain.intent import Intent
 from trippilot.domain.llm import CandidatePool
 from trippilot.domain.transit import TransitPurpose, TransitRequest
 from trippilot.providers.base import Provider
+
+_log = logging.getLogger(__name__)
 
 # 정보 요구표 (agent-structure-v2 §3) — intent → 수집할 Provider 목록.
 #
@@ -223,23 +230,40 @@ class InfoCollector:
             raise UnknownIntentError(intent) from None
         if only is not None:
             kinds = tuple(k for k in kinds if k in only)
-        packets: dict[ProviderKind, InfoPacket] = {}
-        for kind in kinds:
-            provider = self._providers.get(kind)
-            if provider is None:  # 미등록 = 기능 부재 — 패킷 자체를 만들지 않는다
-                continue
-            try:
-                packets[kind] = self._call_provider(kind, provider, params)
-            except PermissionDeniedError:
-                raise  # 보안 — 상태값 수렴 금지 (모듈 docstring)
-            except Exception as e:  # Provider 계약 위반 — 수집은 계속 (INV-4)
-                packets[kind] = InfoPacket(
-                    provider=kind,
-                    status=ProviderStatus.UNAVAILABLE,
-                    data={"reason": f"{type(e).__name__}: {e}"},
-                    freshness=None,
-                )
+        # 미등록 = 기능 부재 — 패킷 자체를 만들지 않는다
+        targets = [(k, p) for k in kinds if (p := self._providers.get(k)) is not None]
+        if not targets:
+            return {}
+        # 요청마다 작은 풀 — 제공자 수(≤5)만큼의 스레드라 공유 풀을 둘 이유가 없고, with 가 끝나면 전부 끝난 뒤다.
+        # 묶음 순서는 요구표 순서 그대로(도착 순서 아님) — 호출측·테스트가 순서를 읽는다.
+        with ThreadPoolExecutor(max_workers=len(targets), thread_name_prefix="info-collect") as pool:
+            futures = [(k, pool.submit(self._timed_call, k, p, params)) for k, p in targets]
+            packets: dict[ProviderKind, InfoPacket] = {}
+            denied: PermissionDeniedError | None = None
+            for kind, future in futures:
+                try:
+                    packets[kind] = future.result()
+                except PermissionDeniedError as e:
+                    # 보안 — 상태값 수렴 금지 (모듈 docstring). 나머지 결과를 다 받은 뒤 올린다(스레드를 남기지 않게).
+                    denied = denied or e
+                except Exception as e:  # Provider 계약 위반 — 수집은 계속 (INV-4)
+                    packets[kind] = InfoPacket(
+                        provider=kind,
+                        status=ProviderStatus.UNAVAILABLE,
+                        data={"reason": f"{type(e).__name__}: {e}"},
+                        freshness=None,
+                    )
+        if denied is not None:
+            raise denied
         return packets
+
+    def _timed_call(self, kind: ProviderKind, provider: Provider, params: dict) -> InfoPacket:
+        """제공자 한 번 호출 + 소요 로그 — 개발 서버에서 어느 제공자가 시한을 먹는지 보는 유일한 자리."""
+        started = time.monotonic()
+        try:
+            return self._call_provider(kind, provider, params)
+        finally:
+            _log.info("provider_timing kind=%s ms=%d", kind.name, int((time.monotonic() - started) * 1000))
 
     def _call_provider(
         self, kind: ProviderKind, provider: Provider, params: dict

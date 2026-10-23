@@ -6,6 +6,7 @@ import {
 } from '@testing-library/react-native';
 
 import { TripWizardHeader } from '@/widgets/trip-wizard-header';
+import { stayCoverFor } from '@/test-support/placeCoverFixtures';
 
 import {
   TripWizardStep2Screen,
@@ -379,12 +380,13 @@ const CARDS_C2: NightlyBaseCardVM[] = [
     imageUrl: 'https://example.test/haeundae.jpg',
     locationLabel: '해운대',
   },
-  // 배정됐지만 값 없음 → 현행 2줄 유지(additive 가 기존 카드를 안 건드린다).
+  // 배정됐지만 값 없음 → 썸네일은 coverKey 의 숙소 그림(TRIP-1588), 위치 줄은 없다.
   {
     nightNumber: 2,
     dateLabel: '6/11(목)',
     region: '부산',
     stayName: '광안리 뷰 호텔',
+    coverKey: 'KAKAO:16',
   },
   // ★ 미배정(stayName 없음) + 값 있음 → imageUrl 유무 무관 "숙소 미정"(리치 렌더 금지).
   {
@@ -409,20 +411,24 @@ describe('썸네일·위치 줄 조건부 렌더 (AC-C2)', () => {
     expect(card1).not.toHaveTextContent(/숙소 미정/);
   });
 
-  it('배정된 밤 + 값 있음 — 썸네일(trip-base-night-thumb-1)이 그 카드에 뜬다', () => {
+  it('배정된 밤 + 값 있음 — 썸네일(trip-base-night-thumb-1)이 그 사진이다', () => {
     renderScreen({ cards: CARDS_C2 });
 
-    // 크기·radius 는 jest 사각(6-b) — 여기선 "imageUrl 이 있으면 썸네일 요소가 존재"만 잠근다.
-    expect(screen.getByTestId('trip-base-night-thumb-1')).toBeOnTheScreen();
+    // 크기·radius 는 jest 사각(6-b) — 서버 사진이 있으면 숙소 그림보다 그 사진이 먼저다.
+    expect(screen.getByTestId('trip-base-night-thumb-1').props.source).toEqual([
+      { uri: 'https://example.test/haeundae.jpg' },
+    ]);
   });
 
-  it('배정된 밤 + 값 없음 — 현행 2줄 유지(썸네일·위치 줄 없음, 숙소명은 그대로)', () => {
+  it('TRIP-1588 · 배정된 밤 + 사진 없음 — 썸네일은 coverKey 의 숙소 그림, 위치 줄은 없다', () => {
     renderScreen({ cards: CARDS_C2 });
 
     const card2 = screen.getByTestId('trip-base-night-card-2');
     expect(card2).toHaveTextContent(/광안리 뷰 호텔/);
-    // additive 가 값 없는 카드에 썸네일을 만들면 안 된다(뮤턴트: imageUrl 무관 항상 렌더 → red).
-    expect(screen.queryByTestId('trip-base-night-thumb-2')).toBeNull();
+    // 사용자 결정(사진 없는 칸은 전부 채운다) — 옛 "값 없으면 썸네일 없음"을 뒤집었다.
+    expect(screen.getByTestId('trip-base-night-thumb-2').props.source).toEqual([
+      stayCoverFor('KAKAO:16'),
+    ]);
     expect(card2).not.toHaveTextContent(/숙소 미정/);
   });
 

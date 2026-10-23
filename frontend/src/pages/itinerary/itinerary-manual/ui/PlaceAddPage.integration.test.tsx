@@ -25,6 +25,7 @@ import type {
   ItineraryDaysItemSlotsItem,
   Place,
 } from '@/shared/api/index.schemas';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 
 import { PlaceAddPage } from './PlaceAddPage';
@@ -320,6 +321,20 @@ describe('🔴 P1 · AC-5 (★) — 첫 조회 URL 에 검색어 파라미터가
     //   search·q·query·keyword·nameKo 같은 검색어 키가 애초에 안 실린다(클라가 이름으로 거른다).
     const keys = [...new URL(hits[0].url).searchParams.keys()];
     expect(keys.every((k) => k === 'region' || k === 'category')).toBe(true);
+  });
+});
+
+describe('PH · 후보 행의 사진 칸 — 사진 없는 장소는 카테고리 생성 이미지 (사이클 20261022-place-category-covers)', () => {
+  it('행마다 그 장소의 category·poiId 로 고른 그림이 같은 칸(itinerary-place-card-photo-{poiId})에 선다', async () => {
+    await renderPage();
+
+    // p1(명소·변형 2) · p2(야경·변형 3) — 행이 category 를 PlaceRowCard 에 안 넘기면 둘 다 폴백이다.
+    expect(
+      screen.getByTestId('itinerary-place-card-photo-p1').props.source
+    ).toEqual([coverFor('명소', 'p1')]);
+    expect(
+      screen.getByTestId('itinerary-place-card-photo-p2').props.source
+    ).toEqual([coverFor('야경', 'p2')]);
   });
 });
 
@@ -660,8 +675,8 @@ describe('🔴 D · TRIP-1115 — 라우트 date 가 있으면 그 날에 끼워
   });
 });
 
-describe('🔴 A2 · TRIP-798 — 칩 6종·순서 + 전시→문화 (라벨≠전송값)', () => {
-  it('A2a · 칩이 전체/맛집/명소/카페/전시/야경 6종·이 순서로 렌더된다', async () => {
+describe('🔴 A2 · TRIP-798 — 칩 8종·순서 + 전시→문화 (라벨≠전송값)', () => {
+  it('A2a · 칩이 전체/맛집/명소/카페/전시/미술/야경/술집 8종·이 순서로 렌더된다', async () => {
     await renderPage();
 
     // 노드가 아니라 testID 문자열 배열로 사영한 뒤 비교(785 노드배열 toEqual SIGABRT 회피).
@@ -674,7 +689,9 @@ describe('🔴 A2 · TRIP-798 — 칩 6종·순서 + 전시→문화 (라벨≠�
       'itinerary-place-category-명소',
       'itinerary-place-category-카페',
       'itinerary-place-category-전시',
+      'itinerary-place-category-미술',
       'itinerary-place-category-야경',
+      'itinerary-place-category-술집',
     ]);
   });
 

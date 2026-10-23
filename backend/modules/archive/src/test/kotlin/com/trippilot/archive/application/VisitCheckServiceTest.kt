@@ -10,6 +10,7 @@ import com.trippilot.trip.api.TripPeriod
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
 import java.time.Clock
 import java.time.Instant
@@ -119,6 +120,22 @@ class VisitCheckServiceTest : StringSpec({
 
         svc.getCompletedSlots(tripId) shouldContainExactly listOf(otherSlot)
         arrivedOnly.isCompleted shouldBe false
+    }
+
+    // TRIP-1412 — 재계획 되돌리기가 떼면 안 되는 슬롯. 도착만 한 기록도 고아가 된다.
+    "다녀온 슬롯은 도착·완료 — 건너뛴 것과 즉석 방문은 빠진다" {
+        val visits = Visits()
+        val svc = service(visits)
+        svc.arrive(acc, tripId, slot, poi, CheckSource.MANUAL)
+        val doneSlot = "$day#${UUID.randomUUID()}"
+        val done = svc.arrive(acc, tripId, doneSlot, UUID.randomUUID(), CheckSource.MANUAL)
+        svc.complete(acc, tripId, done.visitCheckId)
+        val skippedSlot = "$day#${UUID.randomUUID()}"
+        val skipped = svc.arrive(acc, tripId, skippedSlot, UUID.randomUUID(), CheckSource.MANUAL)
+        svc.skip(acc, tripId, skipped.visitCheckId)
+        svc.arrive(acc, tripId, null, UUID.randomUUID(), CheckSource.MANUAL)
+
+        svc.getVisitedSlots(tripId) shouldContainExactlyInAnyOrder listOf(slot, doneSlot)
     }
 
     "마지막 완료 방문지는 완료 시각이 가장 늦은 것 — 기준점 사다리 3단 입력" {

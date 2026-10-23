@@ -54,6 +54,7 @@ from trippilot.llm_gateway.gates.base import (
 # 고쳐져 조용히 갈라진다(TRIP-558이 해시태그 등급을 옮길 때 겪은 자리). 여기서는
 # 재사용만 하고 그쪽 동작은 건드리지 않는다.
 from trippilot.llm_gateway.gates.reflection_template import (
+    _BOUND_TAG,
     _PLACEHOLDER,
     _TIME_EXPR,
     _tag_allowed,
@@ -245,7 +246,8 @@ def _judge(
     sources = _tag_sources(ctx)
     for i, tag in enumerate(hashtags):
         violations.extend(_text_violations(tag, f"hashtags[{i}]"))
-        if sources and not _tag_allowed(tag, sources):
+        # `#{region}여행` 은 파생이다 — 경계가 응답 전에 채운다(회고 게이트와 같은 규칙)
+        if sources and not (_BOUND_TAG.search(tag) or _tag_allowed(tag, sources)):
             violations.append(
                 f"HASHTAG_OUT: hashtags[{i}] 지역·방문지·브랜드 파생 아님 ({tag})")
     return tuple(violations)

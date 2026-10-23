@@ -392,7 +392,7 @@ describe('TRIP-220 AC-10 · 장소 계약 앵커 (A-4, 선제 green)', () => {
    * 보는 테스트(B-10·B-11)도 아무 말을 하지 않는다.** 그 사각지대를 여기서 메운다
    * (같은 파일 A-1·A-3 앵커와 같은 취지 · 01b Seed Q5).
    */
-  it('/places의 쿼리 파라미터가 region·category 정확히 둘뿐이다', () => {
+  it('/places의 쿼리 파라미터가 정확히 이 일곱 개뿐이다', () => {
     const source = readOpenapiSource();
     const block = extractPathBlock(source, '/places');
     const paramNames = extractParamNames(block);
@@ -402,8 +402,17 @@ describe('TRIP-220 AC-10 · 장소 계약 앵커 (A-4, 선제 green)', () => {
     expect(paramNames.length).toBeGreaterThan(0);
 
     // 완전 일치(순서 포함). TRIP-503 에서 목록 계약이 늘었다 — 상한·지점·서버검색이 붙었다.
+    // TRIP-1570 에서 order·seed(시드 기반 무작위 정렬)가 limit 과 cursor 사이에 붙어 일곱 개가 됐다.
     // 이 단정을 유지하는 이유는 그대로다: 파라미터가 조용히 하나 더 늘면 즉시 red 여야 한다.
-    expect(paramNames).toEqual(['region', 'category', 'q', 'limit', 'cursor']);
+    expect(paramNames).toEqual([
+      'region',
+      'category',
+      'q',
+      'limit',
+      'order',
+      'seed',
+      'cursor',
+    ]);
   });
 
   it('Place가 tags를 required로 요구하고 imageUrl은 선택으로 남는다', () => {
@@ -508,7 +517,7 @@ describe('TRIP-294 AC-2 · AC-3 · 일정 스키마 required·enum·INV-3 (A-6, 
    * `(MINIMAL,false)`(BR-U2-03)는 대응 PBT `PBT-U2-B2`가 **backend 소유**로 명시돼 있다.
    * 프론트는 형태(필드가 있다/필수다/값 목록이 이것뿐이다)까지만 잠근다(01b Seed 확정 3).
    */
-  it('Itinerary가 필수 8필드·후보요약 1필드·day 2필드·slot 8필드를 요구하고 duration 계열 키가 0건이다', () => {
+  it('Itinerary가 필수 10필드·후보요약 1필드·day 2필드·slot 8필드를 요구하고 duration 계열 키가 0건이다', () => {
     const source = readOpenapiSource();
     const block = extractSchemaBlock(source, 'Itinerary');
 
@@ -539,8 +548,10 @@ describe('TRIP-294 AC-2 · AC-3 · 일정 스키마 required·enum·INV-3 (A-6, 
     // `required: [poiId, reasonCode, message]` 가 **2번째 자리**로 들어왔다(계약 M2).
     // 이 배열이 비어 있다는 것이 "필수 방문지를 전부 배치했다"는 뜻이라, 세 필드는 **빠질 수 없다** —
     // `message` 가 없으면 사용자는 왜 빠졌는지 못 듣고 장소가 조용히 사라진 것으로 보인다.
+    //
+    // ⚠️ **2026-10-22** — TRIP-1173(backend)이 취향 점수 신호 `scoringMode`(nullable)·`degradations` 를 required 로 더했다 — 키는 늘 실리고 모르면 null·빈 배열이다.
     expect(extractRequiredLines(block)).toEqual([
-      'required: [itineraryId, tripId, status, solveMode, generationMode, isFallback, generationState, days]',
+      'required: [itineraryId, tripId, status, solveMode, generationMode, isFallback, generationState, scoringMode, degradations, days]',
       'required: [poiId, reasonCode, message]',
       'required: [level]',
       'required: [date, slots]',
@@ -562,6 +573,8 @@ describe('TRIP-294 AC-2 · AC-3 · 일정 스키마 required·enum·INV-3 (A-6, 
       'enum: [FULLY_AI, CO_PLAN, MANUAL]',
       'enum: [PARTIAL, COMPLETE, FAILED]',
       'enum: [OUT_OF_RANGE, WINDOW_CONFLICT, NO_FEASIBLE_SLOT, UNKNOWN]',
+      // TRIP-1173 — 취향 점수 출처. solveMode(조립 축)가 말하지 않는 LLM 실패를 RULE 로 드러낸다.
+      'enum: [LLM, MIXED, RULE]',
     ]);
 
     // 부정(INV-3) — duration 계열이 **필드로** 선언된 자리. 걸린 것을 모아 실패 diff에 어떤

@@ -113,6 +113,7 @@ describe('C1 · AC-2 — 담은 장소와 조인해 이름·사진이 채워진�
         sourcePoiId: 'poi-a',
         name: '부산시립미술관',
         imageUrl: 'https://img.example.com/a.jpg',
+        category: '명소',
         type: 'FIXED',
         fixedDate: '2026-06-11',
         fixedStart: '13:00',
@@ -122,6 +123,7 @@ describe('C1 · AC-2 — 담은 장소와 조인해 이름·사진이 채워진�
         sourcePoiId: 'poi-b',
         name: '해운대 블루라인파크',
         imageUrl: null,
+        category: '명소',
         type: 'ANYTIME',
       },
       {
@@ -129,6 +131,7 @@ describe('C1 · AC-2 — 담은 장소와 조인해 이름·사진이 채워진�
         sourcePoiId: 'poi-c',
         name: '감천문화마을',
         imageUrl: 'https://img.example.com/c.jpg',
+        category: '명소',
         type: 'ANYTIME',
       },
     ]);
@@ -153,6 +156,34 @@ describe('C1 · AC-2 — 담은 장소와 조인해 이름·사진이 채워진�
 
     expect(items.map((item) => item.sourcePoiId)).toEqual(['poi-a', 'poi-b']);
     expect(items.map((item) => item.name)).toEqual(['전포', '광안리']);
+  });
+});
+
+describe('C1c · 사이클 20261022-place-category-covers — 항목이 담은 장소의 카테고리를 나른다', () => {
+  it('각 항목은 자기 장소의 category 를 갖고, 조인 실패 항목은 category 가 없다 (사진 칸이 카테고리 생성 이미지를 고를 재료)', () => {
+    // 준비 — 장소마다 카테고리가 다르다(전부 같으면 하드코딩 구현도 통과한다).
+    const withCategory = (poiId: string, category: Place['category']) => {
+      const base = savedPlace(poiId, `장소-${poiId}`, null);
+      return { ...base, place: { ...base.place, category } };
+    };
+
+    const items = joinMustVisits({
+      mustVisits: [
+        mustVisit({ sourcePoiId: 'poi-a' }),
+        mustVisit({ sourcePoiId: 'poi-b' }),
+        mustVisit({ sourcePoiId: 'poi-z' }),
+      ],
+      savedPlaces: [
+        withCategory('poi-a', '술집'),
+        withCategory('poi-b', '카페'),
+      ],
+    });
+
+    expect(items.map((item) => item.category)).toEqual([
+      '술집',
+      '카페',
+      undefined,
+    ]);
   });
 });
 
@@ -289,6 +320,7 @@ describe('C6 · AC-9 · INV-3 — dwellMin 이 화면 층으로 넘어갈 통로
     // 단언 — 키 목록 **완전 일치**. 표시 금지를 "글자 찾기"가 아니라 자료형 경계로 잠근다:
     // 화면이 받을 수 없는 값은 화면이 그릴 수 없다. `dwellMin` 은 솔버 입력이지 표시값이 아니다.
     expect(Object.keys(items[0]).sort()).toEqual([
+      'category',
       'fixedDate',
       'fixedStart',
       'imageUrl',

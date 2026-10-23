@@ -15,7 +15,10 @@ export type AutoVisitBatchEventsItem = {
   /** 기기가 짓는다 — 항목 식별용 */
   eventId: string;
   kind: AutoVisitBatchEventsItemKind;
-  /** 필수 — 자동 결과는 즉석 방문을 만들지 않는다(INV-U10-5) */
+  /**
+   * 필수 — 자동 결과는 즉석 방문을 만들지 않는다(INV-U10-5)
+   * @maxLength 100
+   */
   slotKey: string;
   poiId: string;
   /** ARRIVE = 진입 시각 · COMPLETE = 이탈 시각 또는 다음 장소 진입 시각 */

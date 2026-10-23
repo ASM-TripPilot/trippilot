@@ -1,9 +1,13 @@
+import { StyleSheet } from 'react-native';
 import {
+  act,
   fireEvent,
   render,
   screen,
   within,
 } from '@testing-library/react-native';
+
+import { coverFor, stayCoverFor } from '@/test-support/placeCoverFixtures';
 
 import {
   ExploreLandingScreen,
@@ -11,6 +15,11 @@ import {
   type PlaceCardVM,
   type StayCardVM,
 } from './ExploreLandingScreen';
+import {
+  FAB_STACK_TOP,
+  getToastBottoms,
+  resetToastBottoms,
+} from '@/shared/ui/toastBottom';
 
 /**
  * d01 탐색 랜딩(순수 화면) 단위 테스트 — 옛 `.parity`·`.regionFilter`·`.placeSave`·`.loading`·
@@ -645,9 +654,33 @@ describe('TRIP-457 · 숙소 카드 press 분리', () => {
   });
 });
 
+// TRIP-1588 — 숙소 레인 카드 사진 칸 = 그 카드 `key`(stayKey)로 고른 숙소 그림. 두 카드(6번·3번)를 섞어
+// 키를 바꿔 끼우는 오배선을 잡는다. 하트 오버레이 testID 는 그대로다.
+describe('TRIP-1588 · 숙소 레인 카드 사진 칸', () => {
+  it('카드마다 자기 key 의 숙소 그림(explore-stay-photo-{key})이고 하트는 그대로 있다', () => {
+    const cardB: StayCardVM = { ...STAY_CARD, key: 'NAVER:s2', name: 'B' };
+    render(
+      <ExploreLandingScreen
+        {...baseProps({ stayLane: stayLane({ cards: [STAY_CARD, cardB] }) })}
+      />
+    );
+
+    expect(
+      screen.getByTestId(`explore-stay-photo-${STAY_CARD.key}`).props.source
+    ).toEqual([stayCoverFor(STAY_CARD.key)]);
+    expect(
+      screen.getByTestId('explore-stay-photo-NAVER:s2').props.source
+    ).toEqual([stayCoverFor('NAVER:s2')]);
+    expect(
+      screen.getByTestId(`explore-stay-save-${STAY_CARD.key}`)
+    ).toBeOnTheScreen();
+  });
+});
+
 // ---------------------------------------------------------------------------
-// TRIP-496 — 장소 레인 카드가 `imageUrl` 이 있을 때 사진(<Image>)을 그리고, 없으면 회색 플레이스홀더로 둔다
-// (기본 이미지 발명 금지·INV-1). `explore-place-card-image-{poiId}` testID 가 있을 때만 <Image>.
+// TRIP-496 — 장소 레인 카드가 `imageUrl` 이 있을 때 그 사진(<Image>)을 그린다. 없으면(사이클
+// 20261022-place-category-covers) 카드의 카테고리·poiId 로 고른 카테고리 생성 이미지가 같은 칸
+// `explore-place-card-image-{poiId}` 를 채운다(회색 자리·INV-1 서술은 폐기).
 // ---------------------------------------------------------------------------
 describe('TRIP-496 · 장소 레인 카드 사진', () => {
   it('imageUrl 이 있으면 사진 <Image> 를 그린다', () => {
@@ -675,16 +708,22 @@ describe('TRIP-496 · 장소 레인 카드 사진', () => {
     ]);
   });
 
-  it('imageUrl 이 없으면 사진을 지어내지 않고 플레이스홀더로 둔다 (INV-1)', () => {
+  it('imageUrl 이 없으면 카드의 카테고리(술집)·poiId(p2)로 고른 생성 이미지가 같은 칸을 채운다', () => {
     render(
       <ExploreLandingScreen
-        {...baseProps({ placeLane: placeLane({ cards: [PLACE_CARD_B] }) })}
+        {...baseProps({
+          placeLane: placeLane({
+            cards: [{ ...PLACE_CARD_B, category: '술집' }],
+          }),
+        })}
       />
     );
 
-    // 카드 자체는 뜨되(공허 통과 방지), 사진 leaf 는 트리에 없다.
+    // 카드 자체는 뜨고(공허 통과 방지) 사진 칸은 비지 않는다. p2 는 변형 3 → bar-3.
     expect(screen.getByTestId('explore-place-card-p2')).toBeOnTheScreen();
-    expect(screen.queryByTestId('explore-place-card-image-p2')).toBeNull();
+    expect(
+      screen.getByTestId('explore-place-card-image-p2').props.source
+    ).toEqual([coverFor('술집', 'p2')]);
   });
 });
 
@@ -720,5 +759,145 @@ describe('TRIP-1048 · 장소 레인 카드 폭', () => {
       expect(tokens).toContain('w-[160px]');
       expect(tokens).not.toContain('w-full');
     }
+  });
+});
+
+// 토스트 바닥 레지스트리는 모듈 싱글턴이다 — 파일 최상위(describe 밖)에서 리셋해야 앞 테스트의 신고가 안 샌다(TRIP-1559).
+afterEach(() => resetToastBottoms());
+
+describe('TRIP-1559 · d01 토스트 바닥 신고: FAB 2단 스택 (이음새 ③)', () => {
+  it('FAB 스택이 있는 탐색 랜딩은 그 윗변(FAB_STACK_TOP)을 신고하고 unmount 로 해제한다', () => {
+    expect(getToastBottoms()).toEqual([]);
+
+    const view = render(<ExploreLandingScreen {...baseProps()} />);
+
+    expect(getToastBottoms()).toContain(FAB_STACK_TOP);
+
+    view.unmount();
+    expect(getToastBottoms()).toEqual([]);
+  });
+});
+
+// TRIP-1555 — 세로 스크롤하는 동안 FAB 숨김(홈 TRIP-1435 Q-023 결정 1=A 를 탐색 랜딩에도).
+// 훅 자체(디바운스·keepVisible 파생·정리)는 `useScrollHide.test.ts` 가 맡는다 — 여기는 "이 화면이 훅을 바깥
+// 세로 ScrollView 와 FAB 래퍼에 제대로 이었는가"만 본다. 가로 레인 비영향은 jest 로 못 잰다(`fireEvent.scroll`
+// 이 조상 onScroll 로 올라간다) → 6-b. pointerEvents·opacity 는 보이는 모양이 아니라 터치 통과 계약 + 숨김 자체(02a ★5).
+describe('스크롤하는 동안 FAB 숨김', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  // pointerEvents 와 opacity 가 같은 편을 들 때만 'hidden'/'shown' — 어긋나면 'mixed'(유령 FAB·터치 삼킴).
+  function fabVisibility(testID: string): 'hidden' | 'shown' | 'mixed' {
+    const { pointerEvents, style } = screen.getByTestId(testID).props;
+    const opacity = StyleSheet.flatten(style)?.opacity ?? 1;
+    if (pointerEvents === 'none' && opacity === 0) return 'hidden';
+    if (pointerEvents !== 'none' && opacity === 1) return 'shown';
+    return 'mixed';
+  }
+  const scrollDown = () =>
+    fireEvent.scroll(screen.getByTestId('explore-landing-scroll'), {
+      nativeEvent: { contentOffset: { y: 120 } },
+    });
+
+  it('FAB 묶음은 바깥 세로 스크롤 안에서 ♥·＋ 를 모두 감싸고, 처음엔 보인다(앵커)', () => {
+    render(<ExploreLandingScreen {...baseProps()} />);
+
+    const stack = screen.getByTestId('explore-fab-stack');
+    expect(within(stack).getByTestId('explore-saved-menu-toggle')).toBeTruthy();
+    expect(within(stack).getByTestId('explore-create-trip-fab')).toBeTruthy();
+    // 세로 컨테이너(가로 레인이 아니라) 가 testID 를 가졌는지 — 레인이 그 안에 있다.
+    expect(
+      within(screen.getByTestId('explore-landing-scroll')).getByTestId(
+        'explore-lane-place'
+      )
+    ).toBeTruthy();
+    expect(fabVisibility('explore-fab-stack')).toBe('shown');
+  });
+
+  it('스크롤하면 숨고 터치를 막지 않으며, 멈춘 지 250ms 뒤에 다시 보인다', () => {
+    render(<ExploreLandingScreen {...baseProps()} />);
+
+    scrollDown();
+    expect(fabVisibility('explore-fab-stack')).toBe('hidden');
+
+    act(() => jest.advanceTimersByTime(249));
+    expect(fabVisibility('explore-fab-stack')).toBe('hidden');
+
+    act(() => jest.advanceTimersByTime(1));
+    expect(fabVisibility('explore-fab-stack')).toBe('shown');
+  });
+
+  it('담은 곳 메뉴가 열려 있으면 스크롤해도 숨기지 않는다', () => {
+    render(
+      <ExploreLandingScreen
+        {...baseProps({ savedMenu: savedMenu({ open: true }) })}
+      />
+    );
+    // 앵커 — 미니 FAB 둘이 실제로 펼쳐져 있다.
+    expect(screen.getByTestId('explore-saved-places-fab')).toBeTruthy();
+    expect(screen.getByTestId('explore-saved-stays-fab')).toBeTruthy();
+
+    scrollDown();
+
+    expect(fabVisibility('explore-fab-stack')).toBe('shown');
+  });
+
+  it('로딩 얼굴에는 FAB 묶음 자체가 없다(무회귀)', () => {
+    render(<ExploreLandingScreen {...baseProps({ isLoading: true })} />);
+
+    expect(screen.queryByTestId('explore-fab-stack') === null).toBe(true);
+  });
+});
+
+// TRIP-1580 — 인기 숙소 레인 슬롯. 화면은 위젯을 모른다(순수 뷰) — page 가 완성 노드를 넘긴다.
+describe('TRIP-1580 · 인기 숙소 레인 슬롯(curatedStayLane)', () => {
+  const { View } = jest.requireActual('react-native');
+  const slot = <View testID="curated-slot" />;
+
+  it('C1 · 슬롯이 있으면 숙소 레인 몸통이 슬롯으로 바뀌고 제목은 "인기 숙소", 모두 보기는 그대로다', () => {
+    const onSeeAll = jest.fn();
+    render(
+      <ExploreLandingScreen
+        {...baseProps({
+          regionFilter: { label: '부산', onClear: jest.fn() },
+          stayLane: stayLane({ cards: [STAY_CARD], onSeeAll }),
+          curatedStayLane: slot,
+        })}
+      />
+    );
+    const lane = screen.getByTestId('explore-lane-stay');
+    expect(within(lane).getByTestId('curated-slot')).toBeOnTheScreen();
+    expect(within(lane).getByText('인기 숙소')).toBeOnTheScreen();
+    expect(screen.queryByText('부산 숙소')).toBeNull();
+    expect(
+      screen.queryByTestId(`explore-stay-card-${STAY_CARD.key}`)
+    ).toBeNull();
+    fireEvent.press(screen.getByTestId('explore-lane-stay-seeall'));
+    expect(onSeeAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('C2 · 숙소 조회가 실패여도 슬롯이 있으면 재시도 대신 슬롯을 그린다', () => {
+    render(
+      <ExploreLandingScreen
+        {...baseProps({
+          stayLane: stayLane({ error: true }),
+          curatedStayLane: slot,
+        })}
+      />
+    );
+    expect(screen.getByTestId('curated-slot')).toBeOnTheScreen();
+    expect(screen.queryByTestId('explore-lane-stay-retry')).toBeNull();
+  });
+
+  it('C3 · 로딩 얼굴이면 슬롯이 있어도 스켈레톤이다', () => {
+    render(
+      <ExploreLandingScreen
+        {...baseProps({ isLoading: true, curatedStayLane: slot })}
+      />
+    );
+    expect(screen.queryByTestId('curated-slot')).toBeNull();
+    expect(
+      screen.getByTestId('explore-landing-skeleton-stay-0')
+    ).toBeOnTheScreen();
   });
 });

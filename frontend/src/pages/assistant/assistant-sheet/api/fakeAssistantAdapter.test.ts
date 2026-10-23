@@ -5,6 +5,7 @@ import type {
   FeedbackRequest,
   SendTurnRequest,
 } from './assistantContract';
+import { sampleLongConversation } from './assistantSamples';
 import {
   FakeAssistantAdapter,
   fakeWithHistory,
@@ -380,5 +381,135 @@ describe('FakeAssistantAdapter · 답 평가 (US-ASSIST-09)', () => {
 
     expect([put.code, del.code]).toEqual(['SERVER', 'SERVER']);
     expect(await storedFeedback(fake, sessionId, answerId)).toBe('UP');
+  });
+});
+
+describe('FakeAssistantAdapter · 메시지 페이지 (이전 대화 더 보기, 서버 계약 거울)', () => {
+  const ids = (messages: AssistantMessage[]) => messages.map((m) => m.id);
+  const longIds = (from: number, to: number) =>
+    Array.from({ length: to - from + 1 }, (_, i) => `long-${from + i}`);
+
+  async function openedLong(count = 75) {
+    const fake = new FakeAssistantAdapter({
+      seedMessages: sampleLongConversation(count),
+    });
+    const opened = await fake.openSession({ tripId: 'trip-1' });
+    return { fake, opened, sessionId: opened.session.id };
+  }
+
+  it('열면 가장 최근 30건(오래된 것 먼저)과 더 있다는 커서를 준다', async () => {
+    const { opened } = await openedLong();
+
+    expect(ids(opened.messages)).toEqual(longIds(46, 75));
+    expect(typeof opened.nextBefore).toBe('string');
+  });
+
+  it.each([
+    { count: 1, hasMore: false },
+    { count: 30, hasMore: false },
+    { count: 31, hasMore: true },
+  ])(
+    '$count건이면 nextBefore 가 있는가 = $hasMore (딱 한 쪽이면 커서가 없다)',
+    async ({ count, hasMore }) => {
+      const { opened, fake, sessionId } = await openedLong(count);
+
+      const page = await fake.getMessages(sessionId);
+
+      expect(opened.nextBefore !== null).toBe(hasMore);
+      expect(page.nextBefore !== null).toBe(hasMore);
+    }
+  );
+
+  it('커서를 그대로 이어 넘기면 옛 쪽이 차례로 오고, 이으면 빠짐·겹침 없이 1…75 가 한 번씩이다', async () => {
+    // Arrange
+    const { fake, opened, sessionId } = await openedLong();
+
+    // Act
+    const second = await fake.getMessages(sessionId, {
+      before: opened.nextBefore ?? '',
+    });
+    const third = await fake.getMessages(sessionId, {
+      before: second.nextBefore ?? '',
+    });
+
+    // Assert
+    expect(ids(second.messages)).toEqual(longIds(16, 45));
+    expect(typeof second.nextBefore).toBe('string');
+    expect(ids(third.messages)).toEqual(longIds(1, 15));
+    expect(third.nextBefore).toBeNull();
+    expect(
+      ids([...third.messages, ...second.messages, ...opened.messages])
+    ).toEqual(longIds(1, 75));
+  });
+
+  it('옵션 없는 조회도 최근 30건, limit 은 쪽 크기를 바꾼다', async () => {
+    const { fake, opened, sessionId } = await openedLong();
+
+    const plain = await fake.getMessages(sessionId);
+    const ten = await fake.getMessages(sessionId, { limit: 10 });
+    const before = ten.nextBefore ?? '';
+    const prevTen = await fake.getMessages(sessionId, { before, limit: 10 });
+
+    expect(ids(plain.messages)).toEqual(longIds(46, 75));
+    expect(plain.nextBefore).toBe(opened.nextBefore);
+    expect(ids(ten.messages)).toEqual(longIds(66, 75));
+    expect(typeof ten.nextBefore).toBe('string');
+    expect(ids(prevTen.messages)).toEqual(longIds(56, 65));
+  });
+
+  it('금지 · 거울이 실물보다 관대하지 않다 — limit 범위 밖·깨진 커서는 서버처럼 거절한다', async () => {
+    const { fake, sessionId } = await openedLong();
+
+    const calls = [
+      () => fake.getMessages(sessionId, { limit: 0 }),
+      () => fake.getMessages(sessionId, { limit: 101 }),
+      () => fake.getMessages(sessionId, { before: 'zzz' }),
+    ];
+    for (const call of calls) {
+      expect((await rejection(call())).code).toBe('SERVER');
+    }
+  });
+
+  it('호출 수를 세고, messages: SERVER_ERROR 면 before 유무와 상관없이 5xx 이며 되돌리면 다시 된다', async () => {
+    const { fake, opened, sessionId } = await openedLong();
+    expect(fake.calls.getMessages).toBe(0);
+
+    fake.configure({ messages: 'SERVER_ERROR' });
+    const plain = await rejection(fake.getMessages(sessionId));
+    const older = await rejection(
+      fake.getMessages(sessionId, { before: opened.nextBefore ?? '' })
+    );
+    fake.configure({ messages: 'OK' });
+    const again = await fake.getMessages(sessionId, {
+      before: opened.nextBefore ?? '',
+    });
+
+    expect([plain.code, older.code]).toEqual(['SERVER', 'SERVER']);
+    expect(ids(again.messages)).toEqual(longIds(16, 45));
+    expect(fake.calls.getMessages).toBe(3);
+  });
+
+  it('턴이 이어져도 쪽이 어긋나지 않는다 — 새 메시지는 최근 쪽 끝에 붙고, 이은 전체는 중복 없이 연속이다', async () => {
+    // Arrange
+    const { fake, sessionId } = await openedLong();
+
+    // Act
+    const reply = await fake.sendTurn(sessionId, textTurn('t-long', '날씨'));
+    const first = await fake.getMessages(sessionId);
+    const second = await fake.getMessages(sessionId, {
+      before: first.nextBefore ?? '',
+    });
+    const third = await fake.getMessages(sessionId, {
+      before: second.nextBefore ?? '',
+    });
+
+    // Assert
+    expect(ids(first.messages).slice(-reply.messages.length)).toEqual(
+      ids(reply.messages)
+    );
+    expect(
+      ids([...third.messages, ...second.messages, ...first.messages])
+    ).toEqual([...longIds(1, 75), ...ids(reply.messages)]);
+    expect(third.nextBefore).toBeNull();
   });
 });

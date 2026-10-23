@@ -64,7 +64,7 @@ _GENERIC_PREFIX = ("국립", "시립", "도립", "구립", "군립", "한국", "
 # ('자갈치 양곱창 골목'이 '자갈치 크루즈'를, '닭한마리 골목'이 DDP 를 눌렀다).
 _PAREN = re.compile(r"\([^)]*\)|\[[^\]]*\]")
 _PUNCT = re.compile(r"[\s&·,.\-_'\"!?/:]+")
-_EATERY = frozenset((PoiCategory.FOOD, PoiCategory.CAFE))
+_EATERY = frozenset((PoiCategory.FOOD, PoiCategory.CAFE, PoiCategory.BAR))   # 술집은 맛집이었던 곳 — 계열에서 같이 뺀다(TRIP-1545)
 
 
 def normalize_name(name: str) -> str:

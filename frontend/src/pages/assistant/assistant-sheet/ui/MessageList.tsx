@@ -1,6 +1,12 @@
 import { useRef, useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  Text,
+  View,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { PlusGlyph, SearchGlyph } from '@/shared/ui/glyphs';
@@ -9,6 +15,7 @@ import type {
   FallbackPayload,
   NextAction,
 } from '../api/assistantContract';
+import { candidateConsumedActions } from '../model/cardModel';
 import { noContextActionIcon } from '../model/displayActions';
 import { cardConsumes } from './AssistantCards';
 import { ArrowDownGlyph } from './AssistantSheetGlyphs';
@@ -20,6 +27,12 @@ import { ActionRow } from './OutlineCard';
  * + 답 평가 줄(`renderFeedback`, US-ASSIST-09). 문구·시각·거리는 서버 문자열 그대로 그린다(DEC-U8-6 · INV-2·3).
  */
 
+/** 목록 맨 위 "이전 대화 더 보기" 행(시안 없음 — 시트의 작은 muted 텍스트 톤). 없으면 행 자체를 그리지 않는다. */
+export interface OlderMessagesProps {
+  status: 'idle' | 'loading' | 'error';
+  onPress: () => void;
+}
+
 export interface MessageListProps {
   messages: readonly AssistantMessage[];
   onPressAction: (action: NextAction) => void;
@@ -29,6 +42,7 @@ export interface MessageListProps {
   renderFeedback?: (message: AssistantMessage) => ReactNode;
   /** 여행 없음(NO_CONTEXT) — next action 을 앞 아이콘이 있는 아이콘 행으로 그린다. 기본 false(링크 행). */
   noContext?: boolean;
+  older?: OlderMessagesProps | null;
 }
 
 export function UserBubble({
@@ -93,9 +107,12 @@ function AssistantMessageBlock({
   noContext: boolean;
 }): ReactElement {
   // 카드가 스스로 그린 행동(외부 위임 링크·폴백 다시 시도/계속)은 버튼 줄에서 뺀다.
+  // 후보 카드는 눌러서 장소로 가는 카드(OPEN 얼굴)면 그 후보의 `OPEN_PLACE` 행만 뺀다(TRIP-1564).
   const consumed = cardConsumes(message);
+  const consumedActions = candidateConsumedActions(message);
   const buttons = message.nextActions.filter(
-    (action) => !consumed.includes(action.type)
+    (action) =>
+      !consumed.includes(action.type) && !consumedActions.includes(action)
   );
   // "적용 전까지 일정은 그대로" 류 각주는 제안이 아직 열려 있을 때만 맞다 — 적용·취소·만료 뒤엔 숨긴다.
   const proposalSettled =
@@ -142,6 +159,42 @@ function AssistantMessageBlock({
   );
 }
 
+function OlderMessagesRow({
+  status,
+  onPress,
+}: OlderMessagesProps): ReactElement {
+  const loading = status === 'loading';
+  return (
+    <Pressable
+      testID="assistant-older-more"
+      accessibilityRole="button"
+      disabled={loading}
+      onPress={onPress}
+      className="items-center gap-xs py-md"
+    >
+      {loading ? (
+        <ActivityIndicator testID="assistant-older-loading" color="#FF385C" />
+      ) : status === 'error' ? (
+        <>
+          <Text
+            testID="assistant-older-error"
+            className="font-noto text-micro text-muted"
+          >
+            이전 대화를 불러오지 못했어요
+          </Text>
+          <Text className="font-noto-bold text-label font-bold text-ink">
+            다시 시도
+          </Text>
+        </>
+      ) : (
+        <Text className="font-noto text-label text-muted">
+          이전 대화 더 보기
+        </Text>
+      )}
+    </Pressable>
+  );
+}
+
 // inverted 목록의 scroll offset 0 = 맨 아래(최신). 이만큼 넘게 위로 올라오면 ↓ 버튼을 띄운다.
 const SCROLL_DOWN_THRESHOLD = 40;
 
@@ -150,6 +203,7 @@ export function MessageList({
   onPressAction,
   renderCard,
   renderFeedback,
+  older,
   noContext = false,
 }: MessageListProps): ReactElement {
   const listRef = useRef<FlatList<AssistantMessage>>(null);
@@ -164,6 +218,8 @@ export function MessageList({
         keyExtractor={(message) => message.id}
         keyboardShouldPersistTaps="handled"
         contentContainerClassName="gap-md px-lg py-lg"
+        // inverted 라 푸터가 화면 맨 위다.
+        ListFooterComponent={older ? <OlderMessagesRow {...older} /> : null}
         scrollEventThrottle={16}
         onScroll={(event) =>
           setAway(event.nativeEvent.contentOffset.y > SCROLL_DOWN_THRESHOLD)

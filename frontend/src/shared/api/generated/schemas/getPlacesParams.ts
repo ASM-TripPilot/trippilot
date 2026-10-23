@@ -8,6 +8,7 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { GetPlacesOrder } from './getPlacesOrder';
 import type { PoiCategory } from './poiCategory';
 
 export type GetPlacesParams = {
@@ -26,6 +27,15 @@ export type GetPlacesParams = {
    * @maximum 200
    */
   limit?: number;
+  /**
+   * 정렬 방식(TRIP-1570). `name`(기본) = 위 이름순·관련도순 그대로. `random` = 시드 기반 무작위 — 둘째 정렬 축이 이름 대신 `md5(seed || poiId)` 가 된다. q 가 있으면 관련도 축(정확 > 접두 > 부분)은 여전히 첫 축이라 무작위는 같은 관련도 안에서만 섞인다. 모르는 값은 400.
+   */
+  order?: GetPlacesOrder;
+  /**
+   * `order=random` 의 시드 — **그때는 필수다**(없거나 형식이 깨지면 400. 이름순으로 조용히 떨어뜨리면 화면이 그것을 "섞었다"고 그린다). 같은 seed 로 받은 `nextCursor` 만 이어 쓴다 — seed 를 바꾸면 처음부터 받는다. `order=name` 이면 무시한다.
+   * @pattern ^[A-Za-z0-9_-]{1,64}$
+   */
+  seed?: string;
   /**
    * 이전 응답의 `nextCursor`. 불투명 문자열이라 값의 모양에 기대지 않는다. offset 이 아닌 **지점 기준**이라, 이어 받는 사이에 장소가 추가돼도 행이 중복·누락되지 않는다. 형식이 깨진 값은 400 이다(조용히 처음으로 되돌리면 목록이 리셋된 이유를 알 수 없다).
    */

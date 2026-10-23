@@ -22,6 +22,9 @@ class TravelEstimate:
     internal_minutes: int  # 내부용 — 화면·public 직렬화에 절대 노출 금지 (INV-3)
     is_estimated: bool
     source: str
+    # 운전 구간에 붙은 걷는 꼬리(도로 km) — 자차 여행의 주차 거점 오가기(assembly_engine/parking). 거리 범위에 이미 들어
+    # 있고, 화면 문구가 "(주차장 도보 0.4km 포함)"으로 따로 보여 준다. 시간이 아니라 거리라 INV-3 과 무관하다.
+    walk_km: float = 0.0
 
     def __post_init__(self) -> None:
         low, high = self.distance_km_range
@@ -31,6 +34,8 @@ class TravelEstimate:
             raise ValueError(f"거리 범위 역전: low={low} > high={high}")
         if self.internal_minutes < 0:
             raise ValueError(f"internal_minutes 음수: {self.internal_minutes}")
+        if self.walk_km < 0:
+            raise ValueError(f"walk_km 음수: {self.walk_km}")
 
     # ── 내부/전체 직렬화 (저장·전송용, internal_minutes 포함) ──
     def to_dict(self) -> dict:
@@ -39,6 +44,7 @@ class TravelEstimate:
             "internal_minutes": self.internal_minutes,
             "is_estimated": self.is_estimated,
             "source": self.source,
+            "walk_km": self.walk_km,
         }
 
     @classmethod
@@ -49,6 +55,7 @@ class TravelEstimate:
             internal_minutes=d["internal_minutes"],
             is_estimated=d["is_estimated"],
             source=d["source"],
+            walk_km=d.get("walk_km", 0.0),
         )
 
     # ── 공개 직렬화 (화면·API용) — INV-3: internal_minutes 제외, 거리만 ──

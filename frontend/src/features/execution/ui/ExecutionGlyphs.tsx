@@ -22,21 +22,32 @@ const PRIMARY_TEXT = '#C13515';
 type GlyphProps = { size?: number };
 type TintGlyphProps = GlyphProps & { color?: string };
 
-// TRIP-746 · i01 허브 레일 상태 점 3종(Figma 4125:3957 rail) — 크기가 상태마다 다르다(18·16·12).
-// 완료=success 원 + 흰 테두리 + 흰 체크.
-export function RailDoneGlyph({ size = 18 }: GlyphProps) {
+// TRIP-746 · i01 허브 레일 상태 점 3종(Figma 4125:3957 rail) — 크기가 상태마다 다르다(22·16·12 — 완료는 TRIP-1558 에서 18 → 22, TRIP-1592 에서 26).
+// 완료=success 원 + 흰 테두리 + 흰 체크. TRIP-1592 — 체크가 원에서 차지하는 비율이 커 보인다는 사용자 지적: 원만 키우고 체크는 화면에서 그대로다.
+// 체크는 22 크기일 때의 배율(22/18)을 그대로 쓰도록 도화지(viewBox)를 `DONE_VIEW` 로 넓히고, 체크 path 를 `DONE_PAD` 만큼 안쪽으로 옮겼다(원 반지름만 같은 만큼 늘어난다).
+const DONE_UNIT = 22 / 18; // 22 크기에서 도화지 한 칸이 그리는 화면 픽셀 — 이 배율을 크기와 무관하게 지킨다.
+const DONE_SIZE = 26;
+const DONE_VIEW = DONE_SIZE / DONE_UNIT; // ≈ 21.27
+const DONE_PAD = (DONE_VIEW - 18) / 2; // ≈ 1.64
+export function RailDoneGlyph({ size = DONE_SIZE }: GlyphProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 18 18" fill="none">
+    <Svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${DONE_VIEW} ${DONE_VIEW}`}
+      fill="none"
+    >
       <Circle
-        cx={9}
-        cy={9}
-        r={8}
+        cx={DONE_VIEW / 2}
+        cy={DONE_VIEW / 2}
+        r={8 + DONE_PAD}
         fill={SUCCESS}
         stroke={WHITE}
         strokeWidth={2}
       />
       <Path
         d="M12.67 6.25L7.63 11.29L5.33 9"
+        transform={`translate(${DONE_PAD} ${DONE_PAD})`}
         stroke={WHITE}
         strokeWidth={3}
         strokeLinecap="round"

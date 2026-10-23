@@ -13,6 +13,7 @@ import { createGcZeroWrapper } from '@/test-support/queryRender';
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type {
+  CuratedStay,
   Place,
   SavedPlace,
   SavedStay,
@@ -45,9 +46,11 @@ jest.mock('@/shared/storage', () => ({
 }));
 
 const mockPush = jest.fn();
+// 지역 필터(TRIP-1580 인기 숙소 레인)만 region 을 싣는다 — 나머지 describe 는 빈 params 그대로.
+let mockParams: { region?: string } = {};
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
-  useLocalSearchParams: () => ({}),
+  useLocalSearchParams: () => mockParams,
 }));
 
 jest.mock('@/features/stay/model/useStaySearch', () => ({
@@ -93,6 +96,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  mockParams = {};
   observedHits = [];
   mockPush.mockClear();
   clearAccessToken();
@@ -518,7 +522,12 @@ describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
     제주: [lanePlace('j0', '50110', false)],
   };
 
-  let placesQueries: { region: string | null; limit: string | null }[] = [];
+  let placesQueries: {
+    region: string | null;
+    limit: string | null;
+    order: string | null;
+    seed: string | null;
+  }[] = [];
 
   /** 지역별로 응답한다. `failing` 에 든 지역은 500. */
   function servePlaces(failing: string[] = []): void {
@@ -526,7 +535,12 @@ describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
       http.get(`${BASE}/places`, ({ request }) => {
         const url = new URL(request.url);
         const region = url.searchParams.get('region');
-        placesQueries.push({ region, limit: url.searchParams.get('limit') });
+        placesQueries.push({
+          region,
+          limit: url.searchParams.get('limit'),
+          order: url.searchParams.get('order'),
+          seed: url.searchParams.get('seed'),
+        });
         if (region !== null && failing.includes(region)) {
           return new HttpResponse(null, { status: 500 });
         }
@@ -561,6 +575,10 @@ describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
       ['부산', '서울', '제주'].sort()
     );
     expect(placesQueries.every((q) => q.limit === '200')).toBe(true);
+    // TRIP-1563 — 무작위 시드는 d04 만 쓴다: d01 은 order·seed 를 안 보내 홈과 같은 이름순·같은 캐시를 유지한다.
+    expect(
+      placesQueries.every((q) => q.order === null && q.seed === null)
+    ).toBe(true);
     for (const id of ['s0', 's1', 's2', 's3', 's4', 's5', 's6']) {
       expect(screen.getByTestId(`explore-place-card-${id}`)).toBeOnTheScreen();
     }
@@ -597,5 +615,101 @@ describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
       WAIT
     );
     expect(screen.queryByTestId('explore-lane-place-empty')).toBeNull();
+  });
+});
+
+// TRIP-1580 — 지역 필터 d01 은 숙소 레인을 인기 숙소 레인으로 바꾼다(성공해서 카드가 있을 때만).
+describe('TRIP-1580 · 지역 필터 숙소 레인 → 인기 숙소', () => {
+  const LOCAL: StayItem = {
+    externalSource: 'NAVER',
+    externalId: 's1',
+    name: '해운대 그랜드 호텔',
+    lat: 35.1587,
+    lng: 129.1604,
+    region: '해운대',
+    address: '부산광역시 해운대구 해운대해변로 296',
+    amenities: [],
+    stayType: 'HOTEL',
+    price: null,
+  };
+  const LOCAL_CARD = `explore-stay-card-${stayKey(LOCAL)}`;
+  const CURATED: CuratedStay = {
+    rank: 1,
+    stayId: 'TRIPCOM:123',
+    name: '해운대 오션 호텔',
+    address: null,
+    imageUrl: 'https://ak-d.tripcdn.com/images/a.jpg',
+  };
+  let curatedQueries: string[] = [];
+
+  function serve(items: CuratedStay[]): void {
+    server.use(
+      http.get(`${BASE}/stays/curated`, ({ request }) => {
+        curatedQueries.push(new URL(request.url).search);
+        return HttpResponse.json({ city: '부산', items });
+      }),
+      http.get(`${BASE}/me/settings`, () =>
+        HttpResponse.json({ affiliateNoticeDismissed: false })
+      ),
+      http.get(`${BASE}/saved-places`, () => HttpResponse.json([])),
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: [], nextCursor: null })
+      )
+    );
+  }
+
+  beforeEach(() => {
+    curatedQueries = [];
+    mockUseStaySearch.mockReturnValue(stayResults([LOCAL]));
+    setAccessToken('valid-access');
+  });
+
+  it('인기 숙소가 오면 레인이 인기 숙소 카드로 바뀌고(지역 코드로 조회), 카드 누름은 화면 루트의 제휴 시트를 연다', async () => {
+    mockParams = { region: 'busan' };
+    serve([CURATED]);
+    renderPage();
+
+    const lane = screen.getByTestId('explore-lane-stay');
+    expect(
+      await within(lane).findByTestId('curated-stay-card-123', {}, WAIT)
+    ).toBeOnTheScreen();
+    expect(curatedQueries).toEqual(['?regionCode=busan']);
+    expect(screen.queryByTestId(LOCAL_CARD)).toBeNull();
+    expect(screen.getByText('인기 숙소')).toBeOnTheScreen();
+    // 레인은 카드만 — 전체 보기 버튼은 없고 '모두 보기'는 그대로 e02 로 간다.
+    expect(screen.queryByTestId('curated-stay-browse-all')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('curated-stay-card-123'));
+    const sheet = await screen.findByTestId('stay-ota-sheet');
+    // 시트는 스크롤 내용 밖(화면 루트 형제)이다.
+    expect(
+      within(screen.getByTestId('explore-landing-scroll')).queryByTestId(
+        'stay-ota-sheet'
+      )
+    ).toBeNull();
+    expect(sheet).toBeOnTheScreen();
+  });
+
+  it('인기 숙소가 비면 지금의 숙소 레인 그대로다', async () => {
+    mockParams = { region: 'busan' };
+    serve([]);
+    renderPage();
+
+    await waitFor(() => expect(curatedQueries).toHaveLength(1), WAIT);
+    // 지금의 숙소 레인(LOCALDATA 조회)도 비동기로 온다 — 도착을 기다린 뒤 단언한다(CI 느린 러너에서 경합).
+    expect(await screen.findByTestId(LOCAL_CARD, {}, WAIT)).toBeOnTheScreen();
+    await act(async () => {});
+    expect(screen.queryByTestId('curated-stays-row')).toBeNull();
+    expect(screen.queryByText('인기 숙소')).toBeNull();
+  });
+
+  it('지역 필터가 없으면(전국) 인기 숙소를 묻지 않고 지금의 레인 그대로다', async () => {
+    serve([CURATED]);
+    renderPage();
+
+    expect(await screen.findByTestId(LOCAL_CARD, {}, WAIT)).toBeOnTheScreen();
+    await act(async () => {});
+    expect(curatedQueries).toHaveLength(0);
+    expect(screen.queryByTestId('curated-stay-card-123')).toBeNull();
   });
 });

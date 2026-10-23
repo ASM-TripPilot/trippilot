@@ -97,3 +97,27 @@ describe('AC-1 · buildSaveStayRequest — 정확히 7키로 조립한다', () =
     });
   });
 });
+
+/**
+ * TRIP-1578 — 인기 숙소(Trip.com 큐레이션)는 좌표가 없다. 좌표 없는 입력은 lat/lng 키를 **아예** 싣지 않고
+ * (키 부재와 null 전송은 서버에 다른 뜻) 좌표 미확정(coordConfirmed:false)으로 담는다.
+ */
+describe('TRIP-1578 · 좌표 없는 숙소 — lat/lng 키 없음 + coordConfirmed:false', () => {
+  it('정확히 5키이고 좌표 키가 없다', () => {
+    const req = buildSaveStayRequest({
+      externalSource: 'TRIPCOM',
+      externalId: '123',
+      name: '롯데호텔 서울',
+    });
+
+    expect(req).toEqual({
+      name: '롯데호텔 서울',
+      registerRoute: 'MAP_SEARCH',
+      coordConfirmed: false,
+      externalSource: 'TRIPCOM',
+      externalId: '123',
+    });
+    expect('lat' in req).toBe(false);
+    expect('lng' in req).toBe(false);
+  });
+});

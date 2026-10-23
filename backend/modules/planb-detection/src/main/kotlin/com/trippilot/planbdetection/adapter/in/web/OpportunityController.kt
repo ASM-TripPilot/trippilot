@@ -3,6 +3,7 @@ package com.trippilot.planbdetection.adapter.`in`.web
 import com.trippilot.core.error.AuthenticationRequired
 import com.trippilot.planbdetection.application.OpportunityService
 import com.trippilot.planbdetection.domain.Opportunity
+import com.trippilot.planbdetection.domain.OpportunityEventType
 import com.trippilot.planbdetection.domain.OpportunityKind
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.web.bind.annotation.GetMapping
@@ -40,6 +41,7 @@ data class OpportunityResponse(
     val key: String,
     val kind: OpportunityKind,
     val eventName: String?,
+    val eventType: OpportunityEventType?,
     val start: LocalDate?,
     val end: LocalDate?,
     val poiId: UUID,
@@ -49,7 +51,7 @@ data class OpportunityResponse(
 ) {
     companion object {
         fun from(o: Opportunity) = OpportunityResponse(
-            o.key, o.kind, o.eventName, o.start, o.end, o.poiId, o.poiName, o.nearSlotKey, o.distanceLabel,
+            o.key, o.kind, o.eventName, o.eventType, o.start, o.end, o.poiId, o.poiName, o.nearSlotKey, o.distanceLabel,
         )
     }
 }

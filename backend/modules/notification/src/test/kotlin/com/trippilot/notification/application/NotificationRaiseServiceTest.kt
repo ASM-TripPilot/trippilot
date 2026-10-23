@@ -148,19 +148,22 @@ class NotificationRaiseServiceTest : StringSpec({
             )
             override fun upsert(toggle: NotificationToggle) = toggle
         }
+        val registry = io.micrometer.core.instrument.simple.SimpleMeterRegistry()
         val notifications = Notifications()
         val sender = Sender()
         val toggleService = NotificationToggleService(off, clock)
         val svc = NotificationRaiseService(
             notifications, toggleService,
             PushDispatchService(Tokens(), notifications, toggleService, sender, testMetrics(notifications), PushRateLimits(), clock),
-            trips, testMetrics(notifications), clock,
+            trips, NotificationMetrics(registry, notifications), clock,
         )
 
         raise(svc, UUID.randomUUID())
 
         notifications.stored.size shouldBe 0
         sender.calls shouldBe 0
+        // 적재 자체를 안 하는 억제다 — 지표에 안 남으면 "왜 알림함에 없나"에 답할 근거가 없다(OBS-U6-03).
+        registry.counter(NotificationMetrics.SUPPRESSED, "reason", "IN_APP_OFF").count() shouldBe 1.0
     }
 
     "삭제된 여행의 소유자는 없다 — 회고 알림이 갈 곳이 없다" {

@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Mapping, Protocol, Sequence
 
@@ -47,3 +48,32 @@ class HourlyWeatherPort(Protocol):
     def hourly_forecast(
         self, coord: GeoPoint, days: Sequence[date]
     ) -> Mapping[datetime, int]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class DayWeather:
+    """하루 날씨 요약 — 기상청 단기예보 코드 **그대로**(해석은 소비측).
+
+    sky: 하늘 상태 코드(1 맑음·3 구름많음·4 흐림) — 그 날 낮 슬롯(06~21시)의 최다값, 동률이면 더 흐린 쪽.
+    pty: 강수 형태 코드(0 없음·1 비·2 비/눈·3 눈·4 소나기) — 그 날 슬롯 중 가장 큰 코드(한 번이라도 오면 그 형태).
+    tmn/tmx: 최저·최고 기온(℃, 정수 반올림) — TMN/TMX 카테고리, 없으면 시간별 TMP 의 최소·최대.
+    모르는 칸은 None — 지어내지 않는다.
+    """
+
+    sky: int | None
+    pty: int | None
+    tmn: int | None
+    tmx: int | None
+
+
+class DailyWeatherDetailPort(Protocol):
+    """하늘·강수 형태·기온 — **선택 능력**(`hasattr` 로 확인, `HourlyWeatherPort` 와 같은 방식).
+
+    왜 필요한가: 도우미 "오늘 날씨" 가 강수확률 하나만 말했다(사용자 2026-10-21). 단기예보 응답에는
+    SKY·PTY·TMP·TMN·TMX 가 같은 1회 호출에 이미 실려 있어, 접기 전 값을 날짜별로 요약만 하면 된다.
+    `daily_forecast` 와 같은 규약 — 아는 날짜만 담는 부분 매핑.
+    """
+
+    def daily_detail(
+        self, coord: GeoPoint, days: Sequence[date]
+    ) -> Mapping[date, DayWeather]: ...

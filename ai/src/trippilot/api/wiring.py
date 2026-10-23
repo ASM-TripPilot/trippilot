@@ -40,8 +40,9 @@ generate 봉투 부가 필드 산출 규칙(TRIP-341 — 코드가 실제로 아
   컨텍스트(앵커·이동수단·풀)가 없다 → 기존대로 null. `distance_ranges` 는 POI→POI 구간만
   generate 와 같은 렌더로 채운다(편집 교체 뒤 거리 재산출 — 2026-10-05). 앵커가 없어 각 날
   첫 슬롯은 null, 수단은 수리의 시각 계산과 같은 기본값(PUBLIC).
-- 와이어 `preference_profile`(+ `trip_context.companion_type`)은 generate·replan 에서
-  그 요청의 페르소나다(AI-D09 — D31 "재조회한 값만"의 부분 개정). 전 축 미설정이면 종전대로
+- 와이어 `preference_profile`(+ 동행 — generate·replan 은 `trip_context.companion_type`,
+  explanations·alternatives 는 최상위 `companion_type`)은 네 경로 모두 그 요청의
+  페르소나다(AI-D09 — D31 "재조회한 값만"의 부분 개정). 전 축 미설정이면 종전대로
   주입된 `ContextStore`가 공급한다. 와이어에 사용자 식별자가 없어 principal은 trip_id 파생
   임시값이다(실 어댑터 시 백엔드 합의 필요).
 - validate/repair 와이어에는 원 문제 컨텍스트(이동수단·day window)가 없다 → 기본값
@@ -95,6 +96,7 @@ from trippilot.llm_gateway.workers.reminder_copy import (
     ReminderCopyWorker,
 )
 from trippilot.agents.reflect.agent import ReflectAgent, ReflectTask
+from trippilot.agents.reflect.composer import bind_share_card_copy
 from trippilot.llm_gateway.gates.reflection_nudge import ReflectionNudgeGate
 from trippilot.llm_gateway.gates.photo_highlight import PhotoHighlightGate
 from trippilot.llm_gateway.gates.reflection_template import ReflectionTemplateGate
@@ -115,12 +117,13 @@ from trippilot.domain.reflection import (
 )
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
 from trippilot.assembly_engine.config import RAIN_OUTDOOR, AssemblyConfig, stay_for
-from trippilot.assembly_engine.constraints import open_hours_ok
+from trippilot.assembly_engine.constraints import hc1_unjudged, open_hours_ok
 from trippilot.assembly_engine.facade import HybridAssemblyFacade, AssemblyConflictError
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
 from trippilot.assembly_engine.repair import RepairChange
 from trippilot.assembly_engine.scorer import build_rule_score
+from trippilot.assembly_engine.parking import ParkingPlan, plan_parking
 from trippilot.assembly_engine.travel import (
     TRANSIT_SOURCE, WALKED_SOURCE, TravelEstimator, WalkFirst, haversine_km,
 )
@@ -694,6 +697,19 @@ def _unverified(misses: Sequence[PoiMiss]) -> tuple[WiredUnverifiedSlot, ...]:
     )
 
 
+def _hours_unknown(
+    solution: ItinerarySolution, problem: ItineraryProblem, poi_index: Mapping[PoiId, Poi],
+) -> tuple[WiredUnverifiedSlot, ...]:
+    """영업 창을 몰라 HC1 을 적용하지 못한 등록 POI → 경계 보고(HOURS_UNKNOWN). 판정은 규칙 옆 `hc1_unjudged` 한 곳 —
+    검증과 같은 휴일 달력(`problem.holidays`)으로 본다. 주간 영업 창이 있는데 실렸으면 특일 달력을 못 읽어 태그형 휴일
+    규칙을 판정하지 못한 갈래뿐이다(G-SA-22) — `detail` 표지로 원문 없음·해석 실패(빈 문자열)와 운영에서 가른다."""
+    return tuple(
+        WiredUnverifiedSlot(poi_id=str(p), reason_code="HOURS_UNKNOWN",
+                            detail="holiday_calendar_unread" if poi_index[p].open_hours else "")
+        for p in hc1_unjudged(solution, poi_index, problem.holidays)
+    )
+
+
 def _payload_alternative_pairs(
     payload: schemas.ItineraryPayload,
 ) -> tuple[tuple[str, str, str], ...]:
@@ -877,7 +893,12 @@ def _render_distance(estimate: TravelEstimate, mode: TransportMode) -> str:
     _, road_km = estimate.distance_km_range
     suffix = " 추정" if estimate.is_estimated else ""
     shown = {WALKED_SOURCE: TransportMode.WALK, TRANSIT_SOURCE: TransportMode.PUBLIC}.get(estimate.source, mode)
-    return f"약 {road_km:.1f}km · {_TRANSPORT_LABELS[shown]}{suffix}"
+    label = f"약 {road_km:.1f}km · {_TRANSPORT_LABELS[shown]}{suffix}"
+    if estimate.walk_km >= 0.05:
+        # 자차 주차 거점 오가는 걷기(assembly_engine/parking) — 합친 거리가 앞에 있어 하루 총거리 파서(FE legDistance,
+        # 첫 숫자)는 그대로 맞고, 괄호는 거리라 INV-3 과 무관하다. 0.0km 로 보일 꼬리는 적지 않는다
+        label += f" (주차장 도보 {estimate.walk_km:.1f}km 포함)"
+    return label
 
 
 def _distance_ranges(
@@ -1048,15 +1069,24 @@ class ChainAssemblyProvider:
         self._trace = trace
         self._cfg = config
 
-    def walker(self, walk_max_km: float | None) -> TravelEstimator:
-        """요청별 도보 상한의 추정기 — None 이면 공용 추정기(설정 기본 700m). 조립·화면 거리가 같이 쓴다."""
-        if walk_max_km is None:
+    def walker(self, walk_max_km: float | None, parking: ParkingPlan | None = None) -> TravelEstimator:
+        """요청별 도보 상한·주차 거점의 추정기 — 둘 다 없으면 공용 추정기(설정 기본 700m). 조립·화면 거리가 같이 쓴다."""
+        if walk_max_km is None and parking is None:
             return self._est
-        return TravelEstimator(replace(self._cfg, public_walk_max_km=walk_max_km))
+        cfg = self._cfg if walk_max_km is None else replace(self._cfg, public_walk_max_km=walk_max_km)
+        return TravelEstimator(cfg, parking)
+
+    def parking_for(self, poi_index: Mapping[PoiId, Poi], walk_max_km: float | None) -> ParkingPlan:
+        """자차 여행의 주차 거점 — 풀 전체를 도보 상한(없으면 설정 기본)으로 묶는다. 조립과 화면 거리가 같은 계획을 쓴다."""
+        return plan_parking(
+            (poi.coord for poi in poi_index.values()),
+            walk_max_km=walk_max_km if walk_max_km is not None else self._cfg.public_walk_max_km,
+            detour_factor=self._cfg.detour_factor,
+        )
 
     def for_pool(self, poi_index: Mapping[PoiId, Poi],
-                 walk_max_km: float | None = None) -> HybridAssemblyFacade:
-        est = self.walker(walk_max_km)
+                 walk_max_km: float | None = None, parking: ParkingPlan | None = None) -> HybridAssemblyFacade:
+        est = self.walker(walk_max_km, parking)
         stages = (
             OrToolsAssembler(poi_index, est, self._cfg),
             RuleFallbackAssembler(poi_index, est, self._cfg),
@@ -1398,6 +1428,10 @@ _COMPOSE_MAX_MS = 18_000
 # 1회 수리 2차 구성의 후보 수 — 빈 틈에 그대로 드는 곳 중 그 틈 앞 장소에서 가까운 순. 고를 것은 틈 수(1~3)뿐이라
 # 1차(40곳)만큼 줄 이유가 없고, 짧을수록 2차 호출이 빨라 시한(25s) 안에 든다.
 _REPAIR_SHORTLIST = 20
+# PlanB 노트 중 **장애**를 뜻하는 머리 — 이벤트로도 남긴다(`_rag_events`). 일부러 끈 것(`alternative_llm_skipped`)·상한
+# 노트(`llm_shortlist`·`place_knowledge_truncated`)는 장애가 아니라 빼고, LLM 실패는 게이트웨이가 이미 낸다.
+_RAG_DEGRADED = ("pipeline_error", "embed_batch_degraded", "retrieve_situation_error", "retrieve_persona_error",
+                 "place_knowledge_unavailable")
 
 
 def _persona_line(persona: PersonaSummary | None) -> str:
@@ -1949,7 +1983,7 @@ class WiredItineraryOrchestrator:
         solution = outcome.solution
         coords = self._coords_for(solution, outcome.slot_alternatives)
         scoring_mode, degradations = _scoring_signal(outcome)
-        walk = self._walk_first(outcome.walk_max_km)
+        walk = self._walk_first(outcome.walk_max_km, outcome.parking)
         (distance_ranges, slot_alternatives), _ = self._render_distances(
             lambda port: (
                 self._distances_for(request, solution, coords, walk(port)),
@@ -1998,9 +2032,10 @@ class WiredItineraryOrchestrator:
             solution, anchors, coords, port, _transport_from(request)
         )
 
-    def _walk_first(self, walk_max_km: float | None) -> Callable[[TravelPort], TravelPort]:
+    def _walk_first(self, walk_max_km: float | None,
+                    parking: ParkingPlan | None = None) -> Callable[[TravelPort], TravelPort]:
         """조립과 같은 추정기로 구간 수단을 정해 화면 거리를 재는 감싸개(도보 여행의 먼 구간 때문에 늘 감싼다)."""
-        walker = self._assembly_provider.walker(walk_max_km)
+        walker = self._assembly_provider.walker(walk_max_km, parking)
         return lambda port: WalkFirst(port, walker)
 
     def _render_distances(
@@ -2162,10 +2197,12 @@ class WiredItineraryOrchestrator:
         ids = frozenset(s.poi_id for day in solution.days for s in day.slots)
         # 미등록 POI는 인덱스에 없다 → HC1·HC2 미적용("정보 없음은 막지 않는다", c2 규칙).
         # 규칙은 그대로 두되 **무엇이 빠졌는지는 값으로 들고 나간다**(TRIP-537, INV-4) —
-        # 막지 않는 것과 알리지 않는 것은 다르다.
+        # 막지 않는 것과 알리지 않는 것은 다르다. 등록됐어도 그 날 영업 창을 모르면(원문 없음·해석 실패)
+        # HC1 만 미적용이다 — 같은 목록에 HOURS_UNKNOWN 으로 싣는다(장소 감지가 그 슬롯을 '확인'으로 접지 않게, INV-SA-2).
         lookup = self._poi_db.lookup_by_ids(ids)
         poi_index = {p.poi_id: p for p in lookup.pois}
-        return solution, problem, poi_index, _unverified(lookup.misses)
+        return solution, problem, poi_index, (
+            _unverified(lookup.misses) + _hours_unknown(solution, problem, poi_index))
 
     def alternatives(
         self, request: schemas.AlternativesRequest
@@ -2257,6 +2294,7 @@ class WiredItineraryOrchestrator:
                     c for c in request.categories if c not in ignored_categories),
             )
         )
+        self._rag_events(request.request_meta, result.notes)
         return schemas.AlternativesResponse(
             alternatives=[
                 schemas.AlternativeSchema(
@@ -2387,7 +2425,8 @@ class WiredItineraryOrchestrator:
                     radius_pool = self._pool_from(packets, now)
                     notes.append(f"pool_widened: {base:g}->{widened:g}km, before=0, after={len(radius_pool.pois)}")
         pool = self._with_current_slots(radius_pool, request, now, notes)
-        if not pool.pois:
+        # END_DAY 는 새 방문이 없어 후보가 필요 없다 — 풀이 비어도(장소 조회 실패) 잠금만으로 하루를 끝낸다.
+        if not pool.pois and "END_DAY" not in resolved:
             return self._replan_empty("NO_CANDIDATE", notes, resolved, unknown)
 
         persona = (_inline_persona(request.preference_profile, request.trip_context.companion_type)
@@ -2500,7 +2539,7 @@ class WiredItineraryOrchestrator:
         # 거리 0 으로 규칙 1위가 되어 숏리스트·LLM 선택 한 자리를 헛되이 차지한다.
         # 구성 LLM 이 있으면 대체지 선택 LLM 은 부르지 않는다(`use_llm`) — 하루는 구성이 고르고,
         # 선택 LLM 은 재계획 시한에서 매번 6s 를 타임아웃으로 태워 구성 몫을 깎았다(2026-10-14 DEV 3/3).
-        planb = self._rag.run(replace(
+        planb_request = replace(
             _replan_rag_request(
                 request, pool, persona, daily_rain, trace_id, now, notes=notes,
                 deadline_ms=max(1, _deadline_budget(meta) - (self._clock.monotonic_ms() - t0)),
@@ -2508,7 +2547,9 @@ class WiredItineraryOrchestrator:
             excluded_poi_ids=frozenset(PoiId(p) for p in request.excluded_poi_ids)
             | {b.poi_id for b in past} | avoided,
             use_llm=self._composer is None,
-        ))
+        )
+        planb = self._rag.run(planb_request)
+        self._rag_events(meta, planb.notes)
         notes += [f"planb: {n}" for n in planb.notes]
         # 랭킹은 **LLM 경로일 때만** 넘긴다 (독스트링 마지막 단락).
         planb_rank = () if planb.is_fallback else planb.ranked_poi_ids
@@ -2556,6 +2597,7 @@ class WiredItineraryOrchestrator:
                 nearby=(*nl_near, *night), origins=tuple(p.coord for p in far),
                 window_start=nl.window_start, window_end=day_end,  # 솔버 `day_window` 와 같은 창
                 rules=_category_rule_lines(nl), ctx_out=compose_ctx, holidays=holidays,
+                planb_request=planb_request,
             )
         except Exception as e:  # 설정 버그·렌더 실패도 재계획을 죽이지 않는다 — 종전 경로로(INV-4)
             notes.append(f"llm_compose_error: {type(e).__name__}")
@@ -2772,10 +2814,25 @@ class WiredItineraryOrchestrator:
                             or fb.reason in ("in_progress", "keep_dinner", "nl_at"))))
                 for d in outcome.solution.days)))
         return self._replan_projection(
-            request, outcome, notes, resolved, unknown, retrieved=planb.retrieved,
+            request, outcome, notes, resolved, unknown,
+            # KB-5 는 구성 후보로 찾는다 — 건수도 그쪽 것이다(PlanB 는 선택 LLM 이 없으면 찾지 않는다).
+            retrieved={**planb.retrieved, "POI_DESC": len(compose_ctx[0][0].place_knowledge)}
+            if compose_ctx else planb.retrieved,
             planb_fallback=planb.is_fallback, started_ms=t0, past=past,
             composed=bool(composed),
         )
+
+    def _rag_events(self, meta: schemas.RequestMetaSchema, notes) -> None:
+        """PlanB 의 검색·장소 지식 장애를 이벤트로 — 대안은 규칙대로 나와 200 이라 notes 만으론 감시 집계에 안 보인다(INV-4).
+        LLM 실패는 게이트웨이가 이미 낸다 — 여기는 그 밖(임베딩·벡터 저장소·파이프라인 예외)만."""
+        for note in notes:
+            if note.startswith(_RAG_DEGRADED):
+                self._trace.emit(FallbackEvent(
+                    trace_id=TraceId(meta.request_id),
+                    occurred_at=_tz_aware(meta.requested_at, self._tz),
+                    component="planb.rag", stage="agent",
+                    from_mode="planb_rag", to_mode="without_knowledge", reason=note[:300],
+                ))
 
     def _compose_event(self, meta: schemas.RequestMetaSchema, reason: str) -> None:
         """구성을 못 탄 사실을 이벤트로 — 노트만 남기면 트레이스 집계에서 안 보인다(INV-4)."""
@@ -3029,6 +3086,7 @@ class WiredItineraryOrchestrator:
         rules: tuple[str, ...] = (),
         ctx_out: list | None = None,
         holidays: Mapping[date, frozenset[str]] | None = None,  # 공휴일 달력 — 진입점이 1회 조회(상황 감지 H1)
+        planb_request: PlanBRagRequest | None = None,  # 후보의 장소 지식(KB-5)을 같은 상황 질의로 찾는다
     ) -> tuple[PoiId, ...]:
         """다시 짜기 — 기존 일정·사유·요청·상황 추천을 보고 LLM 이 남은 하루의 방문 목록을 고른다.
 
@@ -3093,6 +3151,17 @@ class WiredItineraryOrchestrator:
                 return "요청과 안 맞음(교체)"
             return "제외 요청" if pid in excluded else "남은 일정"
 
+        # 후보의 장소 지식(KB-5) — 사용자 결정(2026-10-21 "실어서 써야지"). 종전엔 PlanB 가 다른 후보 집합으로
+        # 찾고 읽는 LLM 없이 버렸다. 부가 정보라 못 찾으면 없이 짠다(INV-4 — 노트는 남긴다).
+        knowledge: Mapping[str, str] = {}
+        if planb_request is not None:
+            try:
+                knowledge, note = self._rag.place_knowledge(planb_request, shortlist.pois)
+            except Exception as e:
+                knowledge, note = {}, f"place_knowledge_unavailable: {type(e).__name__}"
+            if note:
+                notes.append(f"compose: {note}")
+                self._rag_events(request.request_meta, (note,))
         labels = {spec.key: spec.label for spec in self._directives}
         specs = index_of(self._directives)
         chosen = [specs[k] for k in resolved if k in specs]
@@ -3131,7 +3200,15 @@ class WiredItineraryOrchestrator:
                          for p in shortlist.pois},
             hours={p.poi_id: composition.hours_label(p, day, holidays) or ""
                    for p in shortlist.pois},
+            place_knowledge=knowledge,
         )
+        # 장소 지식 조회가 쓴 시간을 뺀 잔여 — 시한 원점은 그대로(#1102).
+        remaining = (budget.total_ms - (self._clock.monotonic_ms() - started_ms)
+                     - budget.c2_reserved_ms)
+        if remaining < _COMPOSE_MIN_MS:
+            notes.append(f"llm_compose_skipped: deadline remaining={remaining}ms")
+            self._compose_event(request.request_meta, f"deadline: remaining={remaining}ms")
+            return ()
         if ctx_out is not None:  # 1회 수리가 같은 입력·제외에서 2차를 만든다(`_repair_day`)
             ctx_out.append((inp, frozenset(excluded)))
         result = self._composer.compose(
@@ -3507,7 +3584,7 @@ class WiredItineraryOrchestrator:
         # 두 순회 모두 1차 패스로 받아 적는다 — 좌표 미상 전파 규칙이 달라 구간 집합이
         # 다르다(`_total_distance_km` 은 직전 유효점을 잇는다). 한 표를 같이 쓰면 같은
         # 구간을 두 번 실측하지 않는다 (TRIP-1179).
-        walk = self._walk_first(outcome.walk_max_km)
+        walk = self._walk_first(outcome.walk_max_km, outcome.parking)
         (distance_ranges, total_km), report = self._render_distances(
             lambda port: (
                 _distance_ranges(solution, anchors, coords, walk(port), transport),
@@ -3803,7 +3880,7 @@ class WiredItineraryOrchestrator:
         packets = self._info.collect(
             Intent.EDIT_SCHEDULE,
             {
-                "pool_request": CandidatePoolRequest(
+                "pool_request": (pool_request := CandidatePoolRequest(
                     anchor=GeoPoint(request.anchor.lat, request.anchor.lng),
                     dates=tuple(
                         sorted({d.date for d in request.itinerary.days})
@@ -3811,7 +3888,7 @@ class WiredItineraryOrchestrator:
                     budget=_token_or(
                         _BUDGET_TOKENS, request.budget_level, BudgetLevel.MID),
                     transport=transport,
-                ),
+                )),
                 "now": now,
             },
         )
@@ -3846,6 +3923,9 @@ class WiredItineraryOrchestrator:
             utterance=request.utterance,
             command=command,
             confirm=request.confirm,
+            # 사이 넣기 구간 풀 — 같은 요구표·공급자로 그 날만 한 번 더 모은다(INV-1). 에이전트가 자리를 코드로 풀었을 때만 부른다
+            segment_pool=lambda center, km: self._pool_from(self._info.collect(Intent.EDIT_SCHEDULE, {"pool_request": replace(
+                pool_request, anchor=center, radius_override_km=km, dates=(request.target_date,)), "now": now}), now),
         ))
         return self._edit_response(outcome)
 
@@ -4030,10 +4110,11 @@ class WiredItineraryOrchestrator:
             # 예산이 실리는 순간 여기만 기본 타임아웃으로 돈다 (`reflection_generate` 대칭)
             timeout_sec=_deadline_budget(meta) / 1000.0,
         )
-        if result.is_fallback or not result.value:
+        # 자리표시자는 응답 전에 채운다 — 못 채우는 캡션({distance_km} 등)은 정적 폴백 (회고 카드와 같은 바인딩)
+        bound = None if result.is_fallback or not result.value else bind_share_card_copy(result.value, domain_request)
+        if bound is None:
             if not result.is_fallback:
-                # 방어 분기 — 현 게이트 계약상 도달 불가(빈 캡션은 게이트가 error로 낸다).
-                # 게이트 완화 시 계측 없는 침묵 폴백이 되지 않게 여기서 발행한다.
+                # 빈 값은 방어 분기 — 현 게이트 계약상 도달 불가(빈 캡션은 게이트가 error로 낸다).
                 # 직행 패턴의 발행 주체는 경계다 — component="api.wiring" (FD §2.1 관측 규칙).
                 self._trace.emit(FallbackEvent(
                     trace_id=TraceId(meta.request_id),
@@ -4042,11 +4123,12 @@ class WiredItineraryOrchestrator:
                     stage="agent",
                     from_mode="llm_share_card",
                     to_mode="static_copy",
-                    reason="share_card_empty_value_without_fallback_flag",
+                    reason=("share_card_unbound_placeholder" if result.value
+                            else "share_card_empty_value_without_fallback_flag"),
                 ))
             return schemas.ShareCardCopyResponse(
                 **fallback_share_card_copy(domain_request).to_dict())
-        return schemas.ShareCardCopyResponse(**result.value.to_dict())
+        return schemas.ShareCardCopyResponse(**bound.to_dict())
 
     def planb_opportunities(self, request: schemas.OpportunitiesRequest) -> schemas.OpportunitiesResponse:
         """동선 근처 기회(행사·요즘 인기, LLM 0회 · 트리거 아님) — 재료 수집·판정·사영은 `api/opportunities.py`."""
@@ -4082,6 +4164,7 @@ def build_orchestrator(
     bank_vectors: BankVectors | None = None,
     memory_store: MemoryStorePort | None = None,
     place_sql: PgPlaceSql | None = None,  # 도우미 장소 조회(NL2SQL) 실행기 — DSN 은 main.py, 켜기는 DIALOGUE_SQL 배정
+    place_fact_store: object | None = None,  # 미확인 칸 웹 확인 저장소(PlaceFactStore) — DSN 은 main.py, 켜기는 PLACE_FACT_LOOKUP 배정
     dialogue_orchestrator_enabled: bool = False,  # 도우미 턴을 AI 안에서 끝낸다(ANSWER) — env 해석은 main.py
     shadow_rate: float = 1.0,  # 3단 라우터 섀도 표본율 (DEV 1.0 · 운영 0.2)
     shadow_rng: random.Random | None = None,  # 테스트 결정론용, None 이면 SystemRandom
@@ -4265,7 +4348,7 @@ def build_orchestrator(
         embedding=embedding if embedding is not None else UnwiredEmbedding(), bank_store=bank_store,
         bank_ready=lambda: bank_index.indexed, bank=bank, confident_intent=router.confident_intent,
         providers=providers, pool_builder=pool_builder, rag=rag, memory_store=memory_store, clock=clock, tz=tz,
-        shadow_rate=shadow_rate, shadow_rng=shadow_rng, place_sql=place_sql,
+        shadow_rate=shadow_rate, shadow_rng=shadow_rng, place_sql=place_sql, place_fact_store=place_fact_store,
         kb_store=vector_store if vector_store is not None else None,
     ) if dialogue_orchestrator_enabled else None
     return WiredItineraryOrchestrator(
@@ -4465,6 +4548,7 @@ def build_dev_app(
     bank_vectors: BankVectors | None = None,
     memory_store: MemoryStorePort | None = None,  # 도우미 장기 기억 스토어 — None 이면 InMemory
     place_sql: PgPlaceSql | None = None,  # 도우미 장소 조회(NL2SQL) 실행기 — None 이면 장소 탐색은 반경 풀만
+    place_fact_store: object | None = None,  # 미확인 칸 웹 확인 저장소 — None 이면 InMemory(켜기는 PLACE_FACT_LOOKUP 배정)
     dialogue_orchestrator_enabled: bool = False,  # 도우미 턴을 AI 안에서 끝낸다 — env 해석은 main.py, 기본 off(종전 해석 경로)
     shadow_rate: float = 1.0,
     shadow_rng: random.Random | None = None,
@@ -4526,6 +4610,7 @@ def build_dev_app(
         bank_vectors=bank_vectors,
         memory_store=memory_store,
         place_sql=place_sql,
+        place_fact_store=place_fact_store,
         dialogue_orchestrator_enabled=dialogue_orchestrator_enabled,
         shadow_rate=shadow_rate,
         shadow_rng=shadow_rng,

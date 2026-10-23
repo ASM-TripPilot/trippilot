@@ -8,6 +8,7 @@ import {
 } from '@testing-library/react-native';
 
 import type { Place } from '@/shared/api/index.schemas';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 
 import type { PlaceListState } from '@/features/explore/index.view';
 import type { PlaceSaveNotice } from '@/features/save-place/index.view';
@@ -15,6 +16,11 @@ import {
   PlaceExploreScreen,
   type PlaceExploreScreenProps,
 } from './PlaceExploreScreen';
+import {
+  FAB_STACK_TOP,
+  getToastBottoms,
+  resetToastBottoms,
+} from '@/shared/ui/toastBottom';
 
 /**
  * AC-1 · AC-2 · AC-3 · AC-4 · AC-5 · AC-6 · AC-G1 · AC-G2 · AC-V1(01b Seed) —
@@ -25,14 +31,14 @@ import {
  * 2단(♥ 담은장소 · ＋ 여행만들기)을 그린다(TRIP-708 로 CtaBar → FAB 로 교체). 받은 순서를
  * 그대로 그리고(정렬·검색은 페이지가 끝내서 넘긴다), 담김 여부는 `savedPoiIds` 하나에서만
  * 파생하며, **계약에 판정 재료가 없는 컨트롤은 그리지 않는다**(01b Seed §2). BottomTabBar·
- * 카테고리 시트는 화면이 아니라 페이지가 그린다(화면 순수성 — `PlaceExplorePage.*.integration`).
+ * 카테고리는 가로 칩 줄로만 고른다(검색바 ⇅·카테고리 시트는 TRIP-1562 로 삭제).
  * 소스 층(INV-3 조건부 렌더 · 토큰 · 층 경계)을 보던 `placeExploreStructure`
  * 는 TRIP-1145 로 지웠다 — 이 파일은 렌더 결과만 본다.
  *
  * 한 파일로 합친 기록(TRIP-1147): 옛 `PlaceExploreScreen.states.test.tsx`(다섯 얼굴·실패 배너·대기
  * 하트) · `.region.test.tsx`(지역 칩, TRIP-1023 칸 B) · `.cardtap.test.tsx`(카드 press 버블링, TRIP-456)
  * 를 각자의 바깥 describe 로 옮겼다. 픽스처·렌더 헬퍼는 관점마다 값이 달라(예: "누를 수 있는 것
- * 23개"는 카드 5장 픽스처를 전제로 센 값) 그 describe 안에 두고 이름을 갈랐다. 소요시간 글자 0건
+ * 22개"는 카드 5장 픽스처를 전제로 센 값) 그 describe 안에 두고 이름을 갈랐다. 소요시간 글자 0건
  * 테스트(INV-3) 둘은 README 판정 4 하위 규칙(시간·거리 재료가 없는 화면)으로 지웠다.
  *
  * ★ 카드 안 단언은 예외 없이 `within(card)` 로 스코프한다. 카테고리 칩 라벨('카페'·'명소'·
@@ -99,6 +105,9 @@ const CATEGORY_CHIPS: { code: string; label: string }[] = [
   { code: 'nature', label: '자연' },
   { code: 'shopping', label: '쇼핑' },
   { code: 'culture', label: '문화' },
+  { code: 'activity', label: '액티비티' },
+  { code: 'art', label: '미술' },
+  { code: 'bar', label: '술집' },
 ];
 
 /** 콜백 4개는 별도로 들고 반환한다 — props 객체로 묶으면 `.mock` 타입이 사라진다. */
@@ -162,7 +171,7 @@ describe('PlaceExploreScreen — 카드 내용 (AC-1)', () => {
     expect(within(p3).getByText('카페')).toBeOnTheScreen();
   });
 
-  it('imageUrl 이 온 카드만 그 URL 로 사진을 그린다 (INV-1)', () => {
+  it('imageUrl 이 온 카드는 그 URL 로, 없는 카드는 그 장소 카테고리·poiId 의 생성 이미지로 사진 칸을 채운다', () => {
     renderScreen();
 
     const withPhoto = screen.getByTestId('explore-places-card-p2');
@@ -172,10 +181,14 @@ describe('PlaceExploreScreen — 카드 내용 (AC-1)', () => {
       uri: 'https://cdn.example.com/gwangalli.jpg',
     });
 
-    // 부정 짝 — imageUrl 이 null 이면(계약상 **정상값**, 시드가 전부 NULL 이라 이게 기본
-    // 경로다) 자리만 두고 이미지는 그리지 않는다.
-    const noPhoto = screen.getByTestId('explore-places-card-p1');
-    expect(within(noPhoto).UNSAFE_queryAllByType(Image)).toHaveLength(0);
+    // 짝 — imageUrl 이 null 이면(계약상 **정상값**, 시드가 전부 NULL 이라 이게 기본 경로다) 칸이 비지 않고
+    // 그 장소(p1·명소)의 생성 이미지가 들어온다. 칸마다 카테고리가 다르다(p3 카페 ≠ p1 명소).
+    expect(screen.getByTestId('explore-places-photo-p1').props.source).toEqual([
+      coverFor('명소', 'p1'),
+    ]);
+    expect(screen.getByTestId('explore-places-photo-p3').props.source).toEqual([
+      coverFor('카페', 'p3'),
+    ]);
   });
 });
 
@@ -204,7 +217,7 @@ describe('PlaceExploreScreen — 담김 표기 (AC-2)', () => {
 });
 
 describe('PlaceExploreScreen — 카테고리 칩 (AC-3)', () => {
-  it('"전체" + 계약 enum 7종 = 8개가 나열되고, 선택된 칩만 활성이다', () => {
+  it('"전체" + 계약 enum 10종 = 11개가 나열되고, 선택된 칩만 활성이다', () => {
     renderScreen({ selectedCategory: '맛집' });
 
     expect(
@@ -239,17 +252,11 @@ describe('PlaceExploreScreen — 카테고리 칩 (AC-3)', () => {
 });
 
 describe('🔴 TRIP-1019 #025 · 정렬 줄은 그리지 않는다 (결정 7 · u1 F-2 · TRIP-989 D15 후속)', () => {
-  it('"요즘 담긴 순" 칩과 "정렬" 라벨이 모두 없고, 검색바 필터 버튼·카테고리 칩은 남는다', () => {
+  it('"요즘 담긴 순" 칩과 "정렬" 라벨이 모두 없고, 카테고리 칩은 남는다', () => {
     renderScreen();
 
     // 남는 것 먼저(긍정 앵커) — 화면이 통째로 안 그려져도 아래 "없음" 단언이 초록이 되는 것을 막는다.
-    // 필터 버튼(카테고리 시트)은 정렬과 다른 기능이라 그대로다.
     expect(screen.getByTestId('explore-places-root')).toBeOnTheScreen();
-    expect(screen.getByTestId('explore-places-filter')).toBeOnTheScreen();
-    // 카테고리 시트를 여는 버튼이라 접근성 이름도 '카테고리'다(TRIP-1440 Q-047).
-    expect(screen.getByLabelText('카테고리')).toBe(
-      screen.getByTestId('explore-places-filter')
-    );
     expect(screen.getByTestId('explore-places-category-all')).toBeOnTheScreen();
 
     // 없애는 것 — 선택지가 하나뿐인 칩은 고를 게 없어 "누를 수 있어 보이는 가짜"가 된다(결정 7).
@@ -311,14 +318,19 @@ describe('PlaceExploreScreen — 우하단 FAB 2단 (AC-1 · 01b Seed 3-a)', () 
   });
 });
 
-describe('PlaceExploreScreen — 검색 필터 버튼 (AC-2 · 01b Seed 3-a)', () => {
-  it('검색바 우측 필터 버튼을 누르면 onPressFilter 를 올린다 (시트 열림은 페이지·6-b)', () => {
-    const onPressFilter = jest.fn();
-    renderScreen({ onPressFilter });
+// TRIP-1562 — 검색바 오른쪽 ⇅ 버튼(카테고리 시트를 열던 것)을 지웠다. 시트 칩과 가로 칩 줄이 같은
+// 목록(전체 + 카테고리 전부)이라 같은 기능 두 벌이었고, ⇅ 모양이 정렬로 읽혔다.
+describe('🔴 TRIP-1562 · 검색바에 ⇅(카테고리) 버튼이 없다', () => {
+  it('검색 입력·가로 카테고리 칩은 있고, 검색바 오른쪽 버튼은 없다', () => {
+    renderScreen();
 
-    // 필터 버튼은 콜백만 올린다 — 카테고리 시트의 실제 열림·딤은 페이지 소유이고 6-b 다.
-    fireEvent.press(screen.getByTestId('explore-places-filter'));
-    expect(onPressFilter).toHaveBeenCalledTimes(1);
+    // 긍정 앵커 — 검색바와 칩 줄이 실제로 그려진 화면이다(통째 미렌더로 "없음"이 초록이 되는 것 방지).
+    expect(screen.getByTestId('explore-places-search')).toBeOnTheScreen();
+    expect(screen.getByTestId('explore-places-category-all')).toBeOnTheScreen();
+
+    // 없애는 것 — testID 로도, 접근성 이름('카테고리')으로도 남지 않는다.
+    expect(screen.queryByTestId('explore-places-filter')).toBeNull();
+    expect(screen.queryByLabelText('카테고리')).toBeNull();
   });
 });
 
@@ -337,7 +349,7 @@ describe('PlaceExploreScreen — 검색바 (AC-8 입력 경로)', () => {
 });
 
 // ── 다섯 얼굴 · 담기 실패 배너 · 대기 하트 (옛 `PlaceExploreScreen.states.test.tsx`) ───────────────
-// AC-4~AC-13 · AC-G7(01b Seed Q3·Q5·Q7·Q8·Q9·Q10) + TRIP-708 새 default 렌더(누를 수 있는 것 23개 —
+// AC-4~AC-13 · AC-G7(01b Seed Q3·Q5·Q7·Q8·Q9·Q10) + TRIP-708 새 default 렌더(누를 수 있는 것 22개 —
 // TRIP-1020 카드 버튼화·TRIP-1023 지역 칩 반영) + TRIP-1019 #027(조건 모두 해제) + TRIP-1026(＋ 숨김).
 // `state` 판별 유니온 하나로 화면이 얼굴을 그리고(판정은 페이지 몫), 0건을 만든 조건을 문구에
 // 지목하며, 담기 실패가 화면에 드러나고(INV-4), 응답 대기 중인 하트는 눌리지 않는다.
@@ -352,8 +364,8 @@ describe('다섯 얼굴 · 실패 배너 · 대기 하트', () => {
     makePlace('p5', '자갈치 시장', '맛집', '중구', 21),
   ];
 
-  /** 카테고리 칩 code(전체 + PoiCategory 7종 선언 순) — 누를 수 있는 것 완전일치 목록의 재료.
-   * `PlaceExploreScreen.tsx`의 `CATEGORY_CODES`/`CATEGORY_CHIPS`와 같은 값이라 8개가 안 바뀐다. */
+  /** 카테고리 칩 code(전체 + PoiCategory 10종 선언 순) — 누를 수 있는 것 완전일치 목록의 재료.
+   * `PlaceExploreScreen.tsx`의 `CATEGORY_CODES`/`CATEGORY_CHIPS`와 같은 값이라 11개가 안 바뀐다. */
   const CATEGORY_CODES = [
     'all',
     'attraction',
@@ -363,6 +375,9 @@ describe('다섯 얼굴 · 실패 배너 · 대기 하트', () => {
     'nature',
     'shopping',
     'culture',
+    'activity',
+    'art',
+    'bar',
   ];
 
   /** 위 본 파일의 렌더 헬퍼(`renderScreen`)와 **완전히 같은 8개 prop** 만 넘긴다 — 새 prop 은 하나도 안 준다.
@@ -689,8 +704,8 @@ describe('다섯 얼굴 · 실패 배너 · 대기 하트', () => {
     });
   });
 
-  describe('PlaceExploreScreen — 새 default 렌더 · 누를 수 있는 것 23개 (AC-1 · AC-2 · AC-3 · TRIP-1020 AC-B4 · TRIP-1023 AC-B5)', () => {
-    it('새 콜백을 하나도 안 넘겨도 FAB 2개·필터·지역 칩이 뜨고, 누를 수 있는 것은 정확히 23개다', () => {
+  describe('PlaceExploreScreen — 새 default 렌더 · 누를 수 있는 것 22개 (AC-1 · AC-3 · TRIP-1020 AC-B4 · TRIP-1023 AC-B5 · TRIP-1562)', () => {
+    it('새 콜백을 하나도 안 넘겨도 FAB 2개·지역 칩이 뜨고, 누를 수 있는 것은 정확히 22개다', () => {
       renderAsFrozenHelper();
 
       // ① 카드는 그대로 5장이고, ② 상태 안내·배너는 하나도 안 나온다.
@@ -698,11 +713,12 @@ describe('다섯 얼굴 · 실패 배너 · 대기 하트', () => {
       expect(visibleNotices()).toEqual([]);
       expect(screen.queryByTestId('explore-places-saveerror')).toBeNull();
 
-      // ③ 누를 수 있는 것 = 뒤로(1) + 칩 8 + 카드 5 + 하트 5 + ♥FAB + ＋FAB + 필터 + 지역 칩 = 23
+      // ③ 누를 수 있는 것 = 뒤로(1) + 카테고리 칩 + 카드 5 + 하트 5 + ♥FAB + ＋FAB + 지역 칩
+      //    (TRIP-1562 가 검색바 ⇅ 필터 버튼을 지워 하나 줄었다 — 남아 있으면 이 목록이 red.)
       //    (TRIP-1020 이전 17 — 카드 루트가 role=button 이 되어 5장이 더해졌다. TRIP-1023 칸 B 가
-      //    상시 지역 칩을 더했다 — 이 헬퍼는 regionNames 를 안 넘기므로 칩은 "전국" 으로 뜬다).
-      //    renderAsFrozenHelper 는 onPressSavedPlaces·onPressFilter 를 **안 넘긴다** — 그래도
-      //    두 FAB·필터가 떠야 한다(콜백 옵셔널·무동작 허용, Figma 상시 노출). 이 완전일치 목록은
+      //    상시 지역 칩을 더했다 — 이 헬퍼는 regionNames 를 안 넘기므로 칩은 "전체 지역" 으로 뜬다).
+      //    renderAsFrozenHelper 는 onPressSavedPlaces 를 **안 넘긴다** — 그래도
+      //    두 FAB 가 떠야 한다(콜백 옵셔널·무동작 허용, Figma 상시 노출). 이 완전일치 목록은
       //    FAB 하나라도 빠지면(뮤테이션) 어긋나 red 다 — 현 15 에서 CTA(-1)·FAB(+2)·필터(+1)로
       //    직접 델타를 세어 확정. BottomTabBar 는 페이지가 그려 여기 개수에 안 든다.
       expect(
@@ -722,7 +738,6 @@ describe('다섯 얼굴 · 실패 배너 · 대기 하트', () => {
           ),
           'explore-places-saved-fab',
           'explore-places-create-fab',
-          'explore-places-filter',
           'explore-places-region',
         ].sort()
       );
@@ -772,9 +787,9 @@ describe('다섯 얼굴 · 실패 배너 · 대기 하트', () => {
   // ── TRIP-1026 · 위저드에서 들어온 d04 는 ＋ FAB 를 그리지 않는다 (결정 1 = 숨김) ─────────────
   // 숨김 입력은 **새 옵셔널 prop `hideCreateTrip`** 이다. "onPressCreateTrip 미지정 = 숨김"으로 얹지
   // 않는다 — 형제 d05(`DestinationDetailScreen`)는 미지정을 "그리되 no-op"으로 잠가 두었다(AC-5).
-  // 미지정(= false) 경로는 위 두 describe(23개·상태 무관 ＋ 상시)가 그대로 지킨다.
+  // 미지정(= false) 경로는 위 두 describe(22개·상태 무관 ＋ 상시)가 그대로 지킨다.
   describe('🔴 1026 · hideCreateTrip 이면 ＋ FAB 만 빠진다 (AC-1 · AC-5)', () => {
-    it('누를 수 있는 것은 23개에서 ＋ 하나만 빠진 22개다 — ♥·필터·칩·카드·하트·지역 칩은 그대로', () => {
+    it('누를 수 있는 것은 22개에서 ＋ 하나만 빠진 21개다 — ♥·칩·카드·하트·지역 칩은 그대로', () => {
       renderWired({ hideCreateTrip: true });
 
       // 앵커 — 목록 얼굴이 실제로 그려졌다(카드 5장).
@@ -797,7 +812,6 @@ describe('다섯 얼굴 · 실패 배너 · 대기 하트', () => {
             (id) => `explore-places-save-${id}`
           ),
           'explore-places-saved-fab',
-          'explore-places-filter',
           // TRIP-1023 칸 B — 위저드 출처여도 지역 칩은 남는다(Seed Q6 · 상시).
           'explore-places-region',
         ].sort()
@@ -904,7 +918,7 @@ describe('다섯 얼굴 · 실패 배너 · 대기 하트', () => {
 
 // ── 지역 칩 (옛 `PlaceExploreScreen.region.test.tsx`, TRIP-1023 칸 B #026 · 결정5 · Seed Q4·Q5·Q6) ───
 // 상시 지역 칩(`explore-places-region`)의 라벨은 `regionNames` prop(페이지가 라우트 `region` 을 배열로
-// 편 것)에서 나오고(없음 "전국" · 한 곳 그 이름 · 여러 곳 "{첫 지역} 외 N곳"), 누르면 빈 상태의 "다른
+// 편 것)에서 나오고(없음 "전체 지역" · 한 곳 그 이름 · 여러 곳 "{첫 지역} 외 N곳"), 누르면 빈 상태의 "다른
 // 지역 보기"와 같은 콜백(`onPressChangeRegion`)을 올린다.
 // ★ 라벨은 칩 서브트리 안에서 `getByText(문자열)`(완전일치)로 잰다 — 카드 부제에 같은 지명이 또 있다.
 // ★ 칩 자리(카테고리 칩 줄 바로 아래)는 호스트 트리 순서와 "가장 가까운 스크롤 조상"으로 잰다.
@@ -945,7 +959,6 @@ describe('지역 칩', () => {
       onPressCreateTrip: jest.fn(),
       onPressChangeRegion: jest.fn(),
       onPressSavedPlaces: jest.fn(),
-      onPressFilter: jest.fn(),
       onBack: jest.fn(),
     };
     render(
@@ -966,18 +979,20 @@ describe('지역 칩', () => {
   }
 
   describe('🔴 1023-B #026 · 지역 칩 라벨 (AC-B5 · AC-B6 · AC-B10)', () => {
-    it('regionNames 를 안 넘기면(탐색 탭·홈 진입 = 지역 없음) 칩이 "전국" 이다', () => {
+    it('regionNames 를 안 넘기면(탐색 탭·홈 진입 = 지역 없음) 칩이 "전체 지역" 이고 "전국" 은 없다 (TRIP-1560 AC-2)', () => {
       renderRegionScreen();
 
-      expect(within(regionChip()).getByText('전국')).toBeOnTheScreen();
+      // 긍정 앵커를 먼저 — 새 라벨이 실제로 그려졌다. 이게 있어야 "전국 없음"이 공허하지 않다.
+      expect(within(regionChip()).getByText('전체 지역')).toBeOnTheScreen();
+      expect(within(regionChip()).queryByText('전국')).toBeNull();
     });
 
-    it('한 곳이면 그 이름이 라벨이고 "전국" 은 없다', () => {
+    it('한 곳이면 그 이름이 라벨이고 "전체 지역" 은 없다', () => {
       renderRegionScreen({ regionNames: ['강릉시'] });
 
       // 긍정 앵커를 먼저 — 칩이 실제로 그려졌고 라벨이 지역 이름이다.
       expect(within(regionChip()).getByText('강릉시')).toBeOnTheScreen();
-      expect(within(regionChip()).queryByText('전국')).toBeNull();
+      expect(within(regionChip()).queryByText('전체 지역')).toBeNull();
     });
 
     it('여러 곳이면 "{첫 지역} 외 N곳" 이다 (Seed Q5 — 칩 한 줄 폭을 지킨다)', () => {
@@ -1003,7 +1018,6 @@ describe('지역 칩', () => {
       expect(handlers.onPressChangeRegion).toHaveBeenCalledTimes(1);
       expect(handlers.onPressCreateTrip).not.toHaveBeenCalled();
       expect(handlers.onPressSavedPlaces).not.toHaveBeenCalled();
-      expect(handlers.onPressFilter).not.toHaveBeenCalled();
       expect(handlers.onSelectCategory).not.toHaveBeenCalled();
       expect(handlers.onBack).not.toHaveBeenCalled();
     });
@@ -1170,5 +1184,20 @@ describe('카드 press 버블링', () => {
       expect(onToggleSave).not.toHaveBeenCalled();
       expect(onPressCard).not.toHaveBeenCalled();
     });
+  });
+});
+
+// 토스트 바닥 레지스트리는 모듈 싱글턴이다 — 파일 최상위(describe 밖)에서 리셋해야 앞 테스트의 신고가 안 샌다(TRIP-1559).
+afterEach(() => resetToastBottoms());
+
+describe('PlaceExploreScreen — 토스트 바닥 신고: FAB 2단 스택 (TRIP-1559 이음새 ③)', () => {
+  it('FAB 스택이 있는 장소 탐색은 그 윗변(FAB_STACK_TOP)을 신고하고 unmount 로 해제한다', () => {
+    expect(getToastBottoms()).toEqual([]);
+
+    renderScreen();
+    expect(getToastBottoms()).toContain(FAB_STACK_TOP);
+
+    screen.unmount();
+    expect(getToastBottoms()).toEqual([]);
   });
 });

@@ -55,6 +55,8 @@ class ComposeDayInput:
     # 비면 `$repair` 가 빈 문자열이라 1차 프롬프트는 0.5.0 과 바이트 동일하다.
     unplaced: tuple[str, ...] = ()
     gaps: tuple[str, ...] = ()
+    # KB-5 장소 지식 `{source_ref: 문서}` — 있는 후보만 줄 끝에 붙는다(0.8.0). 대체지 선택과 같은 키·같은 문서.
+    place_knowledge: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.max_visits < 1:
@@ -70,6 +72,7 @@ def build_compose_vars(pool: CandidatePool, inp: ComposeDayInput) -> dict[str, s
     candidates = "\n".join(
         f"- {n} | {_category_label(p)} | {inline(p.name)}"
         f" | {_km(inp.distance_km.get(p.poi_id))} | {inline(inp.hours.get(p.poi_id, '정보 없음'))}"
+        + _doc(inp.place_knowledge.get(p.source_ref or "", ""))
         for n, p in enumerate(numbered(pool), 1)
     )
     schedule = "\n".join(
@@ -97,6 +100,12 @@ def build_compose_vars(pool: CandidatePool, inp: ComposeDayInput) -> dict[str, s
             " 빈 시간의 앞 장소(맨 앞 빈 시간이면 뒤 장소)에서 잰 값)\n"
             + _bullets(inp.gaps, "(없음)") + "\n\n"),
     }
+
+
+def _doc(text: str) -> str:
+    """설명이 없는 후보는 칸을 만들지 않는다 — 빈 칸을 "부적합"으로 읽지 않게(대체지 선택과 같다).
+    문서는 제3자 글이라 한 줄로 누른다(줄바꿈이 후보 목록의 다음 줄을 흉내 내지 못하게)."""
+    return f" | {inline(text)}" if text else ""
 
 
 def _km(value: float | None) -> str:

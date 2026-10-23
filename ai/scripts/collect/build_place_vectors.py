@@ -17,6 +17,11 @@
 실행 (로컬 스택의 임베딩 컨테이너 = 배포 이미지):
     cd ai && uv pip install sentence-transformers && \
         TRIPPILOT_EMBEDDING_BASE_URL=http://localhost:8100 uv run python scripts/collect/build_place_vectors.py
+
+**증분이 기본이다**(2026-10-22 — 관광공사 개요를 모이는 대로 나눠 올린다). 이미 있는 벡터 파일에서 본문 지문이 같은 조각은
+그대로 쓰고 **파일에 적힌 순서도 그대로** 앞에 둔 뒤, 새·바뀐 조각만 계산해 뒤에 붙인다. 본체를 나눠 쓰므로
+(`chunking.F16_SHARD_CHUNKS`) 앞쪽 몫 파일이 바이트까지 같아 git 이 다시 저장하지 않는다. 게이트는 새로 계산한 조각의
+표본으로 본다. 모델 리비전이 바뀌었거나 `--full` 이면 전량을 다시 계산한다.
 """
 
 from __future__ import annotations
@@ -35,10 +40,14 @@ sys.path.insert(0, str(_AI_ROOT / "scripts" / "intent"))
 
 from build_bank_vectors import _hf_revision  # noqa: E402 — 리비전 기록 한 벌
 from embedding_ab_gate import COSINE_FLOOR, TOP_K  # noqa: E402 — 게이트 상수 한 벌
-from trippilot.poi_curation.chunking import chunk_corpus, dump_chunk_vectors, vectors_path  # noqa: E402
+from trippilot.poi_curation.chunking import (  # noqa: E402
+    chunk_corpus, dump_chunk_vectors, load_chunk_vectors, text_hash, vectors_path,
+)
 
 # 코퍼스는 인자로 고른다(기본 위키) — 관광공사 개요: `build_place_vectors.py data/place_corpus_overview.jsonl.gz`
-_CORPUS = _AI_ROOT / (sys.argv[1] if len(sys.argv) > 1 else "data/place_corpus_wiki.jsonl.gz")
+_ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
+_CORPUS = _AI_ROOT / (_ARGS[0] if _ARGS else "data/place_corpus_wiki.jsonl.gz")
+_FULL = "--full" in sys.argv
 _MODEL = "nlpai-lab/KURE-v1"
 _GATE_SAMPLE = 400  # 게이트는 표본으로 — 원본 fp32 경로로 전량을 두 번 돌릴 이유가 없다
 _GATE_QUERIES = ("WEATHER 날씨 악화 상황", "WEATHER 날씨 악화 상황 비 와서 실내로", "CLOSURE 휴무·폐점 상황",
@@ -48,6 +57,17 @@ _GATE_QUERIES = ("WEATHER 날씨 악화 상황", "WEATHER 날씨 악화 상황 �
 def _cos(a, b) -> float:
     dot = sum(x * y for x, y in zip(a, b))
     return dot / ((sum(x * x for x in a) ** 0.5) * (sum(y * y for y in b) ** 0.5))
+
+
+def incremental_order(docs, previous):
+    """(그대로 쓸 조각 — 이전 파일 순서, 새로 계산할 조각 — 코퍼스 순서). 지문이 같은 조각만 재사용한다."""
+    if previous is None:
+        return [], list(docs)
+    by_id = {d.doc_id: d for d in docs}
+    keep = [by_id[i] for i in previous.ids()
+            if i in by_id and previous.hash_of(i) == text_hash(by_id[i].text)]
+    kept = {d.doc_id for d in keep}
+    return keep, [d for d in docs if d.doc_id not in kept]
 
 
 def main() -> int:
@@ -64,13 +84,22 @@ def main() -> int:
     image = http_embedding(SystemExit, lambda t: UrllibJsonClient(timeout_sec=t), timeout_sec=180.0)
     with gzip.open(_CORPUS, "rt", encoding="utf-8") as f:
         docs = chunk_corpus(json.loads(line) for line in f if line.strip())
-    texts = [d.text for d in docs]
+    out = vectors_path(_CORPUS)
+    revision = _hf_revision(_MODEL)
+    previous = None if _FULL else load_chunk_vectors(out)
+    if previous is not None and (previous.model != _MODEL or _previous_revision(out) != revision):
+        previous = None  # 다른 모델·리비전의 벡터는 섞지 않는다 — 전량 다시
+    keep, todo = incremental_order(docs, previous)
+    if not todo:
+        print(f"조각 {len(docs)}개 모두 기존 벡터와 지문이 같다 — 할 일 없음")
+        return 0
+    texts = [d.text for d in todo]
     serving = SentenceTransformer(_MODEL, device="cpu")
     serving[0].auto_model.half().float()  # 서빙 이미지: 구운 fp16 가중치 → fp32 연산(ai/embedding/app.py)
     vectors = serving.encode(texts, normalize_embeddings=True, batch_size=64, show_progress_bar=True)
 
     # BR-MLO-05 — 다른 엔진(원본 fp32 가중치) 벡터와 같은 공간인가 (표본)
-    idx = sorted(random.Random(20261018).sample(range(len(docs)), min(_GATE_SAMPLE, len(docs))))
+    idx = sorted(random.Random(20261018).sample(range(len(todo)), min(_GATE_SAMPLE, len(todo))))
     ref = []
     for i in range(0, len(idx), 32):
         ref.extend(image.embed_batch([texts[j] for j in idx[i:i + 32]]))
@@ -85,16 +114,23 @@ def main() -> int:
     if min_cos < COSINE_FLOOR or rank_diff:
         raise SystemExit(f"BR-MLO-05 미달 — 코사인 최소 {min_cos:.6f}, top-{TOP_K} 불일치 {rank_diff}")
 
-    out = vectors_path(_CORPUS)
-    dump_chunk_vectors(out, docs, _MODEL, [tuple(float(x) for x in v) for v in vectors], provenance={
+    ordered = [*keep, *todo]
+    all_vectors = [*(previous.vector(d.doc_id) for d in keep), *(tuple(float(x) for x in v) for v in vectors)]
+    dump_chunk_vectors(out, ordered, _MODEL, all_vectors, provenance={
         "engine": "sentence-transformers fp16 가중치 → fp32 연산, normalize (ai/embedding/app.py 기본 백엔드)",
-        "model_revision": _hf_revision(_MODEL),
-        "gate": f"BR-MLO-05 vs 서빙 이미지(표본 {len(idx)}): 코사인 최소 {min_cos:.6f}, "
+        "model_revision": revision,
+        "gate": f"BR-MLO-05 vs 서빙 이미지(새 조각 표본 {len(idx)}): 코사인 최소 {min_cos:.6f}, "
                 f"top-{TOP_K} 불일치 0/{len(_GATE_QUERIES)}",
+        "incremental": f"재사용 {len(keep)} · 새로 계산 {len(todo)}",
     })
-    print(f"조각 {len(docs)}개 → {out.relative_to(_AI_ROOT)} ({out.stat().st_size // 1024}KB) · "
+    print(f"조각 {len(ordered)}개(재사용 {len(keep)} · 새로 {len(todo)}) → {out.relative_to(_AI_ROOT)} · "
           f"게이트 코사인 최소 {min_cos:.6f}, top-{TOP_K} 불일치 0")
     return 0
+
+
+def _previous_revision(out) -> str | None:
+    head = json.loads(gzip.decompress(out.read_bytes()))
+    return (head.get("provenance") or {}).get("model_revision")
 
 
 if __name__ == "__main__":

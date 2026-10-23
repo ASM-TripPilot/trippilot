@@ -29,7 +29,7 @@ beforeEach(() => (SavedStayCard as unknown as jest.Mock).mockClear());
 describe('TRIP-1363 · SavedStayListScreen FlatList', () => {
   it('L1 · 100곳이어도 전부 마운트하지 않는다(가상화)', () => {
     render(<SavedStayListScreen savedStays={stays(100)} />);
-    const mounted = screen.getAllByTestId(/^saved-stay-card-ss-/).length;
+    const mounted = screen.getAllByTestId(/^saved-stay-card-ss-\d+$/).length;
     expect(mounted).toBeGreaterThan(0);
     expect(mounted).toBeLessThan(100);
     expect(screen.getByTestId('saved-stay-register')).toBeTruthy();
@@ -60,6 +60,6 @@ describe('TRIP-1363 · SavedStayListScreen FlatList', () => {
       />
     );
     expect(screen.getByText('바뀐 이름')).toBeTruthy();
-    expect(screen.getAllByTestId(/^saved-stay-card-ss-/)).toHaveLength(3);
+    expect(screen.getAllByTestId(/^saved-stay-card-ss-\d+$/)).toHaveLength(3);
   });
 });

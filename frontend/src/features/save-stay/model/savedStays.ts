@@ -8,9 +8,13 @@ import {
   postSavedStays,
   useGetSavedStays,
 } from '@/shared/api/index.hooks';
-import type { SavedStay, StayItem } from '@/shared/api/index.schemas';
+import type { SavedStay } from '@/shared/api/index.schemas';
 
-import { buildSaveStayRequest } from './buildSaveStayRequest';
+import {
+  buildSaveStayRequest,
+  coordsOf,
+  type SavableStay,
+} from './buildSaveStayRequest';
 import { findSavedStayId, optimisticSavedStayId } from './savedStayIndex';
 import { stayKey } from './stayKey';
 
@@ -79,7 +83,7 @@ export function useSavedStays(deps: { isAuthed: boolean }) {
   // 같은 숙소 담기가 진행 중이면 새 요청 없이 그 결과를 기다린다: 즉시 끝나면 화면의 pending이
   // 첫 요청 도중에 풀린다. 진행 중이 아니면 렌더 사본(isSaved)이 아니라 지금 캐시를 읽고,
   // 낙관 행도 담김으로 친다(findSavedStayId는 낙관 행에 null이라 여기 못 쓴다).
-  async function save(item: StayItem): Promise<SavedStaysOutcome> {
+  async function save(item: SavableStay): Promise<SavedStaysOutcome> {
     if (!deps.isAuthed) {
       return { kind: 'failed', reason: 'unauthenticated' };
     }
@@ -108,7 +112,7 @@ export function useSavedStays(deps: { isAuthed: boolean }) {
   }
 
   async function postSave(
-    item: StayItem,
+    item: SavableStay,
     previous: SavedStay[] | undefined
   ): Promise<SavedStaysOutcome> {
     const now = new Date().toISOString();
@@ -123,8 +127,8 @@ export function useSavedStays(deps: { isAuthed: boolean }) {
         registerRoute: 'MAP_SEARCH',
         externalSource: item.externalSource,
         externalId: item.externalId,
-        lat: item.lat,
-        lng: item.lng,
+        // 좌표 없는 숙소(인기 숙소)는 키 자체를 안 둔다 — 요청 본문과 같은 규칙(TRIP-1578).
+        ...coordsOf(item),
         createdAt: now,
         updatedAt: now,
       },
@@ -145,7 +149,7 @@ export function useSavedStays(deps: { isAuthed: boolean }) {
     }
   }
 
-  async function remove(item: StayItem): Promise<SavedStaysOutcome> {
+  async function remove(item: SavableStay): Promise<SavedStaysOutcome> {
     if (!deps.isAuthed) {
       return { kind: 'failed', reason: 'unauthenticated' };
     }

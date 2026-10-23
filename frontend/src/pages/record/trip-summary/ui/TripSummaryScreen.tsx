@@ -3,11 +3,11 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MapView, type MapCenter, type MapPin } from '@/shared/map';
-import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
+import { RecordNavBar } from '@/widgets/bottom-nav-bar';
 
 import {
-  BackArrowGlyph,
   LocationOffGlyph,
+  type RecordBarNav,
 } from '@/features/reflection/index.view';
 import { CountUpText } from './CountUpText';
 import { DayCardReveal } from './DayCardReveal';
@@ -59,17 +59,16 @@ export interface TripSummaryScreenProps {
   mapCenter?: MapCenter;
   mapPins?: MapPin[];
   dayCards: DayCardVM[];
+  /** TRIP-1489 · 여행 전체 요약 문장(`summary.narrative`) — 일차 카드 목록의 첫 카드. 비었으면 카드를 그리지 않는다. */
+  narrative?: string;
   orderedVisits: OrderedVisit[];
   shareEnabled: boolean;
   /** TRIP-939 — 미주입이면 [공유]를 그리지 않는다(공유 카드 미장전 시 페이지가 넘기지 않음). */
   onShare?: () => void;
-  onBack: () => void;
-  /** TRIP-764 — 하단 탭바 라우팅(옵셔널, j03 동형). 미주입이면 탭 press 는 no-op. */
-  onPressTab?: (key: ShellTabKey) => void;
+  /** TRIP-1584 — 하단 바(기록·회고·요약)의 칸 이동 콜백 묶음(헤더 ‹ 와 5칸 탭바를 대신한다). 미주입이면 바를 그리지 않는다(프리뷰·무회귀 테스트). */
+  recordBar?: RecordBarNav;
   /** TRIP-987 — 여행 이름. 미주입(여행 조회 전·실패)이면 줄을 그리지 않는다. */
   tripTitle?: string;
-  /** TRIP-987 — [방문 기록 보기](j01). 미주입이면 버튼을 그리지 않는다. */
-  onPressRecords?: () => void;
   /** TRIP-987 — 여행 기간 전체 일차의 회고 진입(j03). 비었으면 칩 줄을 그리지 않는다. */
   dayReflections?: DayReflectionVM[];
   onPressDayReflection?: (day: number) => void;
@@ -101,6 +100,21 @@ function StatCell({
   );
 }
 
+/** TRIP-1489 · Figma j04(5063:3498) — 일차 카드와 같은 윤곽의 글 카드. 목적지가 없어 누를 수 없다. */
+function NarrativeCard({ text }: { text: string }): ReactElement {
+  return (
+    <View
+      testID="reflection-summary-narrative"
+      className="w-full gap-[4px] rounded-card border border-hairline bg-canvas p-[14px]"
+    >
+      <Text className="font-noto-bold text-card-title font-bold text-ink">
+        이번 여행
+      </Text>
+      <Text className="text-label text-muted">{text}</Text>
+    </View>
+  );
+}
+
 export function TripSummaryScreen({
   stats,
   distanceSourceLabel,
@@ -108,13 +122,12 @@ export function TripSummaryScreen({
   mapCenter,
   mapPins,
   dayCards,
+  narrative,
   orderedVisits,
   shareEnabled,
   onShare,
-  onBack,
-  onPressTab,
+  recordBar,
   tripTitle,
-  onPressRecords,
   dayReflections = [],
   onPressDayReflection,
 }: TripSummaryScreenProps): ReactElement {
@@ -124,19 +137,13 @@ export function TripSummaryScreen({
     onShare?.();
   };
   const hasMap = mapCenter !== undefined && (mapPins?.length ?? 0) > 0;
+  const narrativeText = narrative?.trim() ?? '';
+  const narrativeOffset = narrativeText ? 1 : 0;
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }} className="bg-canvas">
-      {/* 헤더 — 뒤로 · 제목 · 공유(코랄, ready 로 활성) */}
-      <View className="w-full flex-row items-center bg-canvas pb-[12px] pl-[12px] pr-lg pt-[4px]">
-        <Pressable
-          testID="reflection-summary-back"
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          onPress={onBack}
-          className="pr-[4px]"
-        >
-          <BackArrowGlyph size={24} />
-        </Pressable>
+      {/* 헤더 — 제목 · 공유(코랄, ready 로 활성). TRIP-1584: ‹ 는 하단 바 뒤로로 옮겼다. */}
+      <View className="w-full flex-row items-center bg-canvas px-lg pb-[12px] pt-[4px]">
         <Text className="font-noto-bold text-[18px] font-bold text-ink">
           여행 요약
         </Text>
@@ -162,7 +169,7 @@ export function TripSummaryScreen({
 
       <ScrollView
         className="flex-1"
-        // pb-[120px] — 하단 탭바(96px 오버레이) 위로 콘텐츠가 가리지 않게 여백을 둔다(j03 default 동형).
+        // pb-[120px] — 하단 바(오버레이) 위로 콘텐츠가 가리지 않게 여백을 둔다(j03 default 동형).
         contentContainerClassName="gap-md px-lg pb-[120px] pt-[8px]"
       >
         {tripTitle ? (
@@ -217,8 +224,14 @@ export function TripSummaryScreen({
               </Text>
             )}
 
+            {narrativeText ? (
+              <DayCardReveal index={0}>
+                <NarrativeCard text={narrativeText} />
+              </DayCardReveal>
+            ) : null}
+
             {dayCards.map((card, index) => (
-              <DayCardReveal key={card.key} index={index}>
+              <DayCardReveal key={card.key} index={index + narrativeOffset}>
                 <DayHighlightCard
                   dayLabel={card.dayLabel}
                   visitCountLabel={card.visitCountLabel}
@@ -291,22 +304,16 @@ export function TripSummaryScreen({
             ))}
           </View>
         ) : null}
-        {onPressRecords ? (
-          <Pressable
-            testID="reflection-summary-records"
-            accessibilityRole="button"
-            onPress={onPressRecords}
-            className="h-12 w-full items-center justify-center rounded-button border border-hairline-strong bg-canvas"
-          >
-            <Text className="font-noto-bold text-card-title font-bold text-ink">
-              방문 기록 보기
-            </Text>
-          </Pressable>
-        ) : null}
       </ScrollView>
 
-      {/* 하단 탭바(기록 활성) — 전 얼굴 공통 오버레이(absolute bottom-0, j03 동형). */}
-      <BottomTabBar activeKey="records" onPressTab={onPressTab ?? (() => {})} />
+      {/* 하단 바(요약 활성) — 전 얼굴 공통 오버레이(absolute, j03 동형). */}
+      {recordBar ? (
+        <RecordNavBar
+          testIDPrefix="reflection-summary-bottom-bar"
+          active="summary"
+          {...recordBar}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }

@@ -3,6 +3,7 @@
 export type * from './api/assistantContract';
 export {
   sampleActionLogs,
+  sampleLongConversation,
   sampleTranscript,
   type AssistantScenario,
 } from './api/assistantSamples';

@@ -6,7 +6,7 @@ import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
 /**
  * TRIP-335 · 후보 카드(h12 시트·h18 화면 공용) → TRIP-806 으로 entities/place 카드에 위임.
  *
- * 표면(배지·회색 사진자리·"이름 준비 중"·rationale·distance leaf·"이동" 라벨)은 이제 공용
+ * 표면(배지·사진자리·"이름 준비 중"·rationale·distance leaf·"이동" 라벨)은 이제 공용
  * `entities/place/ui/SlotCandidateCard` 가 그린다 — 여기선 itinerary 구성(showImage·showNameTestId·
  * 배지·거리 라벨 "이동")을 주입하는 얇은 위임만 한다. testID·표시는 그대로다(회귀 0).
  * 오른쪽 컨트롤(선택 버튼/라디오)은 소비처가 `trailing` 으로 넣는다.
@@ -25,8 +25,11 @@ export interface SlotCandidateCardProps {
   /** TRIP-795 h10 표시 픽스처(계약엔 없어 프롭 전용) — 미전달이면 기존 렌더 불변. */
   nameKo?: string | null;
   tags?: string[];
-  /** TRIP-1024 사진 URL — 없거나 '' 면 회색 자리. h10 사진은 78(Figma `3849:2272`). */
+  /** TRIP-1024 사진 URL — 없거나 '' 면 생성 이미지. h10 사진은 78(Figma `3849:2272`). */
   imageUrl?: string | null;
+  /** 사진이 없을 때 고르는 생성 이미지의 카테고리·진짜 poiId(해시용) — 그대로 관통. */
+  category?: string | null;
+  coverPoiId?: string | null;
   dimmed?: boolean;
 }
 
@@ -38,6 +41,8 @@ export function SlotCandidateCard({
   nameKo,
   tags,
   imageUrl,
+  category,
+  coverPoiId,
   dimmed,
 }: SlotCandidateCardProps): ReactElement {
   return (
@@ -48,6 +53,8 @@ export function SlotCandidateCard({
       showNameTestId
       showImage
       imageUrl={imageUrl}
+      category={category}
+      coverPoiId={coverPoiId}
       imageSize={78}
       badge={badge}
       selected={selected}

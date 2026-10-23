@@ -8,7 +8,7 @@
 #   한 곳으로 갔고, 후보는 지금 위치 기준이라 하루가 그대로 을지로였다. 코드가 그 지역 이름이 든 등록 장소들로 중심을 잡는다.
 # semver는 반드시 따옴표.
 feature: REPLAN_REQUEST_EXTRACTION
-version: "0.4.0"
+version: "0.4.1"
 template: |
   여행 중 일정을 다시 짜 달라는 사용자의 말에서 아래 정보를 뽑으세요.
 
@@ -24,7 +24,7 @@ template: |
   - 비가 온다는 말이 있으면 weather "rain", 맑다는 말이면 "clear", 없으면 null
   - 장소 **종류**를 몇 곳으로 정하거나 그 종류로만 달라고 하면 categories·only 에 넣으세요. 종류 코드:
     FOOD(맛집·식당·밥) CAFE(카페·디저트) SIGHT(명소·관광지) NIGHT_VIEW(야경) NATURE(자연·해변·숲·산)
-    CULTURE(박물관·미술관·전시) ACTIVITY(체험·액티비티) SHOPPING(쇼핑·시장)
+    CULTURE(박물관·유적·전시) ART(미술관·갤러리) ACTIVITY(체험·액티비티) SHOPPING(쇼핑·시장) BAR(술집·바·펍)
     - "카페는 두 군데만" → categories [{"category":"CAFE","count":2}], only false (다른 종류는 그대로 둔다)
     - "카페로만 추천해줘" → categories [{"category":"CAFE","count":null}], only true
     - "카페 두 군데만 추천해줘"처럼 하루를 그 종류로만 채워 달라는 뜻이면 count 2 와 only true 를 같이
