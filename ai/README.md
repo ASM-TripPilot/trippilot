@@ -213,6 +213,7 @@ Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소
 - **흐름**: 도우미가 등록 장소의 영업시간·휴무일·입장료를 "미확인"으로 답하게 될 때 → 저장된 웹 확인 값이 있으면 그것(`facts`) → 없으면 뒤에서 벤더 웹 검색을 내고 이번 턴은 "찾아보는 중"(`pending`) → 결과는 출처 있는 값만 저장(찾음 7일·못 찾음 1일), 장소별 중복 제거·프로세스당 하루 상한
 - **코드**: `agents/unknown_handling/agent.py` — `UnknownHandlingAgent.run(UnknownTask) → UnknownOutcome`. 도우미 핸들러(`orchestrator/dialogue_handlers.py`)가 부른다. 저장소는 `agents/adapters/{pg,memory}_place_fact_store.py`(ai_kb `place_fact_cache` / 프로세스 메모리), 타입 정본은 `ports/place_fact_store_port.py`
 - **할당 Tool**: `PlaceFactLookupWorker`(feature `PLACE_FACT_LOOKUP`, 벤더 웹 검색) **(1개만)** — 배정이 있을 때만 켜진다(없으면 카드는 "미확인" 그대로). INV-1: 새 장소를 고르지 않는다 · INV-2: 값은 답에만 쓰고 일정 조립에 넣지 않는다
+- **둘째 일 (2026-10-23)**: 조회 도구로 답할 게 없는 여행 일반 지식("부산은 언제 가는 게 좋아?")과 정보성 질문(숙소 잡기 좋은 동네·예약이 필요한지·교통 수단 고르기 — 계획 gap KNOWLEDGE·LODGING·BOOKING·TRANSPORT·OTHER)을 `DialogueKnowledgeWorker`(feature `DIALOGUE_KNOWLEDGE`)로 이번 턴에 답한다 — `run(KnowledgeTask) → UnknownOutcome(answer)`, 웹 검색 없음, 가격·특정 날짜·연도·거리·노선 번호·등록되지 않은 장소 이름은 막는다, 대신 해 달라는 일(예약·결제·표 끊기)은 모른다고 닫는다
 
 ---
 

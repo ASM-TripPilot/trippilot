@@ -121,6 +121,10 @@ class LlmFeature(Enum):
     # 2026-10-22 사용자 결정 — 먼저 답하고 뒤에서 찾아 저장, 다시 물으면 출처와 함께). 장소는 이미 등록된 곳이라 INV-1 그대로,
     # 값은 도우미 답에만 쓰고 일정 조립에는 넣지 않는다(INV-2). 출구 게이트가 형식·출처(검색이 단 인용 URL)를 본다. 배정이 곧 켜기.
     PLACE_FACT_LOOKUP = "PLACE_FACT_LOOKUP"
+    # 조회 도구로 답할 게 없는 여행 일반 지식("부산은 언제 가는 게 좋아?")을 UnknownHandlingAgent 가 LLM 일반 지식으로 이번 턴에 답한다
+    # (2026-10-23 사용자 결정 — 웹 검색 없이). 2‴ 계획이 gap KNOWLEDGE 로 닫은 말만. 가격·특정 날짜·연도는 게이트가, 등록되지 않은
+    # 장소 이름·시각은 오케스트레이터가 막고, 각주는 결정론("일반적인 정보라 다를 수 있어요"). 배정이 곧 켜기 — 미배정이면 종전 범위 밖.
+    DIALOGUE_KNOWLEDGE = "DIALOGUE_KNOWLEDGE"
 
 
 class ModelTier(Enum):

@@ -51,6 +51,7 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime, tzinfo
 
 from trippilot.agents.schedule.agent import Clock
+from trippilot.agents.unknown_handling.agent import KnowledgeTask
 from trippilot.domain.common import TraceId
 from trippilot.domain.context import PermissionDeniedError
 from trippilot.domain.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent, IntentDraft, IntentMatch, MatchRoute
@@ -206,6 +207,8 @@ GREETING_TEXT = {
     False: "네, 안녕하세요~ 어디로 떠날 생각이세요? 여행을 만들면 일정이랑 날씨, 가 볼 만한 곳을 같이 챙겨 드릴게요.",
 }
 # 2‴ 계획기가 잡담(gap CHAT)으로 닫은 말 — 도구로 답할 건 없지만 범위 밖 카드 대신 말을 받아 준다.
+# 2‴ gap KNOWLEDGE 의 지식 답 각주(BR-AO-32) — 결정론. LLM 일반 지식이라 맞는지 확인한 사람이 없다(사용자 결정 2026-10-23).
+KNOWLEDGE_FOOTNOTE = "일반적인 여행 정보라 시기나 상황에 따라 다를 수 있어요."
 CHAT_TEXT = {
     True: "저랑은 여행 이야기가 제일 잘 통해요. 다음 장소나 날씨, 근처에 가 볼 만한 곳이 궁금하면 편하게 물어봐 주세요.",
     False: "저랑은 여행 이야기가 제일 잘 통해요. 어디로 떠날지 정해지면 여행을 만들어 보세요. 일정이랑 날씨를 같이 챙겨 드릴게요.",
@@ -218,6 +221,13 @@ _ANSWER_MODES = ("llm_dialogue_answer", "template_text")
 _MEMORY_MODES = ("llm_dialogue_memory", "kept_previous")
 _PLAN_MODES = ("llm_dialogue_plan", "out_of_scope")
 _SMALLTALK_MODES = ("llm_dialogue_smalltalk", "fixed_text")
+_KNOWLEDGE_MODES = ("llm_dialogue_knowledge", "out_of_scope")
+# 2‴ 계획이 도구 없이 닫은 말 중 지식 즉답(BR-AO-32)이 받는 gap — 정보성이면 일반 지식으로 답하고, 대신 해 달라는 일(예약·결제·표 끊기·
+# 호출·번역)과 실시간 값은 지식 LLM 이 {"text": null} 로 닫아 종전 범위 밖 카드다. 장소·실시간에 묶인 gap(AMENITY·EVENTS·PLACE_DETAIL·
+# REGION_WEATHER)과 ACCOUNT 는 넣지 않는다 — 일반 지식으로는 틀린 답이 된다. CHAT 은 잡담 경로다. 사용자 지시(2026-10-23, 다른 세션 경유)
+# "관광 관련한 거에서는 out of scope 를 최대한 안 나게" — 관광 90문장 실측 범위 밖 15 중 KNOWLEDGE 7·LODGING 6·BOOKING 2, 이 브랜치 19문장
+# 실측에서 "지하철 탈 때 팁"(TRANSPORT)·"아이랑 여행할 때 조심할 점"(OTHER)
+_KNOWLEDGE_GAPS = frozenset({"KNOWLEDGE", "LODGING", "BOOKING", "TRANSPORT", "OTHER"})
 # 인프라 실패 접두(게이트웨이 `_invoke` 의 사유 + 호출 예외) — 모델이 판단해서 거절한 것이 아니라 거절 표지를 붙이지 않는다
 _INFRA_PREFIXES = ("timeout", "llm_error", "unsupported", "intent_error")
 
@@ -444,6 +454,17 @@ _REGION_ELSEWHERE = re.compile(r"말고|빼고|제외|외에|근교|벗어")
 _ASKS_WHEN = re.compile(r"언제(?!든|라도|나)|몇\s*월|어느\s*(?:계절|달|시기|때)|(?:좋은|적당한|알맞은)\s*(?:계절|시기|때|달)")
 
 
+# 계절·달의 날씨를 묻는 말 — 예보가 아니라 기후 경향이다("대구는 여름에 많이 더워?"·"제주도는 몇 월에 가야 덜 붐벼?"). 분류가 날씨 의도로
+# 골랐고(신뢰도 0.32) 날씨 도구는 여행 날 예보만 알아 여행이 없으면 "먼저 여행을 만들어"로 끝났다(2026-10-23 실측) — 가까운 날을 말하지
+# 않았으면 계획 단계에 맡긴다(시기·기후는 gap KNOWLEDGE → 일반 지식 즉답, BR-AO-32). 여행이 있는 턴은 종전대로(그 날 예보가 답일 수 있다)
+_SEASONAL = re.compile(r"봄|여름|가을|겨울|장마|성수기|비수기|\d{1,2}\s*월|몇\s*월|계절|시기")
+_NEAR_DAY = re.compile(r"오늘|내일|모레|이번\s*주|다음\s*주|주말|지금|당일|\d{1,2}\s*일")
+
+
+def _seasonal_weather(heard: str) -> bool:
+    return bool(_SEASONAL.search(heard)) and not _NEAR_DAY.search(heard)
+
+
 def _not_region_choice(heard: str) -> bool:
     """가볼 지역 고르기(RECOMMEND_REGION)가 답이 아닌 말 — 시기를 묻거나, 이미 표 지역을 말했다("말고·근교"는 고르기 그대로)."""
     return bool(_ASKS_WHEN.search(heard)) or (not _REGION_ELSEWHERE.search(heard) and bool(region_mentions(heard)))
@@ -643,7 +664,16 @@ def _out_of_order(text: str, pairs: tuple[tuple[str | None, str], ...]) -> bool:
 # 한글 낱말의 앞부분이 "이름 + 장소 접미(시장·공원·박물관…)" 꼴인데(뒤의 조사는 그래서 상관없다) 아는 이름 어디에도 겹치지 않으면 밖이다.
 # '거리'는 접미에서 뺐다 — "볼거리가 많아요"가 걸린다.
 # ponytail: 접미 없는 고유명("서울숲"·"성심당")과 동네 이름("성수동")은 못 본다 — 막으려면 등록 POI 이름 사전 대조가 필요하다.
-_PLACE_LIKE = re.compile(r"[가-힣]{1,20}?(?:시장|공원|타워|해수욕장|박물관|미술관|전망대|폭포|오름|성당|궁|해변|마을|카페|호텔|랜드|파크|브루어리)")
+_PLACE_SUFFIX = r"(?:시장|공원|타워|해수욕장|박물관|미술관|전망대|폭포|오름|성당|궁|해변|마을|카페|호텔|랜드|파크|브루어리)"
+_PLACE_LIKE = re.compile(r"[가-힣]{1,20}?" + _PLACE_SUFFIX)
+_PLACE_SUFFIX_END = re.compile(_PLACE_SUFFIX + r"$")
+# 지식 답(BR-AO-32)만 — 수식어 + 장소 접미 꼴의 일반명사는 장소 이름이 아니다("전통시장은 현금을"·"국립공원은 주말에"·"한옥마을은 주민이
+# 사는 곳"). 프롬프트가 허용한 "그 지역이 무엇으로 알려졌는지·예절과 팁"의 말인데 막아 정상 답이 범위 밖 카드가 됐다(2026-10-23 리뷰 재현).
+# ponytail: 수식어 목록은 닫히지 않는다 — 새 일반명사가 막히면 여기에 더한다(목록 밖 일반명사는 종전처럼 범위 밖 + 이벤트)
+_GENERIC_PLACE = re.compile(
+    r"(?:전통|재래|야|수산|어|농수산물|새벽|국립|도립|군립|시립|구립|도시|근린|생태|수목|체육|호수|강변|해상|해안|놀이|테마|워터|키즈|"
+    r"한옥|벽화|민속|어촌|산골|시골|농촌|몽돌|모래|자갈|오션뷰|루프탑|감성|대형|동네|브런치|디저트|베이커리|애견|북|수제|특급|부티크|"
+    r"비즈니스|전망|고|왕|역사|자연사|과학|미술)" + _PLACE_SUFFIX)
 
 
 def _prompt_names(prompt: Mapping) -> list[str]:
@@ -674,6 +704,26 @@ def _foreign_place(text: str, known: Sequence[str]) -> bool:
         m = _PLACE_LIKE.match(word)
         if m and not any(word.startswith(k) or m.group(0) in k for k in known):
             return True
+    return False
+
+
+def _knowledge_foreign_place(text: str, slot_names: Sequence[str], said: Sequence[str]) -> bool:
+    """지식 답(BR-AO-32)의 장소 검사 — 사실 칸이 없어 아는 이름은 스냅샷 슬롯 이름(`slot_names`, `_foreign_place` 와 같은 대조)과 사용자가
+    이미 한 말(`said` — 이번 말·창 안 최근 대화·꺼낸 기억 줄, 공백 뗀 글)이다. 한 말은 **부분 문자열로만** 본다 — 접두 대조면 발화 "부산"이
+    "부산시민공원"을 통과시켰다. 말한 이름을 정식 명칭으로 늘린 꼴("해운대" → "해운대해수욕장")은 아는 이름이고, 일반명사(`_GENERIC_PLACE`)는
+    장소 이름이 아니다. 앞 턴·기억에서 말한 곳을 "거기"로 이어 물으면 그 이름은 지어낸 게 아니다(2026-10-23 리뷰 재현).
+    ponytail: 등록 이름 대조는 없다 — 말하지 않은 고유 이름은 등록돼 있어도 막는다(프롬프트가 금지한 꼴, `place_sql.find_place` 로 넓힐 수 있다)."""
+    for word in re.findall(r"[가-힣]+", text):
+        m = _PLACE_LIKE.match(word)
+        if m is None or _GENERIC_PLACE.fullmatch(m.group(0)):
+            continue
+        name = m.group(0)
+        stem = _PLACE_SUFFIX_END.sub("", name)
+        if any(word.startswith(k) or name in k for k in slot_names):
+            continue
+        if any(name in t or (len(stem) >= 2 and stem in t) for t in said):
+            continue
+        return True
     return False
 
 
@@ -823,12 +873,17 @@ class DialogueOrchestrator:
                 # 시기를 묻거나 지역을 이미 말했다 — 지역 고르기 핸들러는 엉뚱한 지역 목록이나 취향 되묻기를 낸다. 분류가 null 로 닫은
                 # 것처럼 계획 단계에 맡긴다(지역 안 장소면 탐색, 시기면 gap KNOWLEDGE)
                 match, reason = None, f"{NULL_INTENT}; region_recommend_rerouted"
+            elif (match is not None and match.intent is Intent.GET_WEATHER and inp.snapshot.trip is None
+                  and self._knows_general() and _seasonal_weather(text)):
+                # 계절·달의 날씨 = 기후 경향 — 여행 없는 턴의 예보 도구는 답이 없다(BR-AO-32). 지식 즉답이 조립됐을 때만 — 아니면 종전
+                # 날씨 답("먼저 여행을 만들어")이 범위 밖 카드보다 낫다(미배정이면 종전과 같다, 2026-10-23 리뷰 재현)
+                match, reason = None, f"{NULL_INTENT}; seasonal_weather_rerouted"
             if match is None:
                 reason = reason or "intent_fallback"
                 closer = closer_answer(text, inp.snapshot.trip is not None) if _judged_nothing(reason) else None
                 if closer is not None:  # 2″ — 할 일이 없는 말에 범위 밖 카드를 내지 않는다(BR-AO-26)
                     if closer.text == GREETING_TEXT[inp.snapshot.trip is not None]:  # 인사만 LLM 으로 — 감사·맞장구는 고정 한 줄로 충분하다
-                        closer = self._smalltalk(inp, closer, memory(), trip_summary)
+                        closer = self._smalltalk(inp, closer, memory, trip_summary)
                     return TurnOutcome("ANSWER", (), None, closer, cleared, 0, reason)
                 if self._planner is not None and _plannable(reason):  # 2‴ — 정해진 의도 밖이라도 조회로 도울 수 있으면 돕는다(BR-AO-28)
                     return self._plan_turn(inp, text, memory, trip_summary, cleared, reason)
@@ -1066,18 +1121,20 @@ class DialogueOrchestrator:
     # ── 2″·2‴ 인사·잡담 (BR-AO-26 개정 2026-10-22) ─────────────────────
 
     def _smalltalk(
-        self, inp: TurnInput, fixed: DialogueAnswer, memory_lines: Sequence[str], trip_summary: str,
+        self, inp: TurnInput, fixed: DialogueAnswer, memory: Callable[[], Sequence[str]], trip_summary: str,
     ) -> DialogueAnswer:
         """인사·잡담 한마디를 LLM 이 즉석에서 — 사실 없이 말을 받아 주고 여행 쪽 질문으로 끝낸다. 미배정이면 `fixed` 그대로(이벤트 없음 —
         의도된 결정론). 시한 부족·실패·게이트 드롭·목록 밖 장소(INV-1 — 사실이 없으니 스냅샷 장소 말고는 전부 지어낸 것)면 `fixed`
-        + FallbackEvent 짝(INV-4). 버튼·칩은 `fixed` 의 것 그대로 — LLM 은 문장만 쓴다."""
+        + FallbackEvent 짝(INV-4). 버튼·칩은 `fixed` 의 것 그대로 — LLM 은 문장만 쓴다. `memory` 는 미배정·시한 부족을 지난 뒤에만
+        부른다 — 꺼내기를 기다리는 것(≤0.3s)도 그 시한 이벤트도 기억을 쓰는 자리에서만(2026-10-23 리뷰 재현)."""
         if self._smalltalk_worker is None:
             return fixed
         remaining = self._remaining(inp)
         if remaining < _ANSWER_MIN_REMAINING_MS:
             self._fallback(inp, "llm", *_SMALLTALK_MODES, f"budget_exhausted(remaining_ms={remaining})")
             return fixed
-        timeout_ms = min(_ANSWER_CAP_MS, remaining - _ANSWER_RESERVE_MS)
+        memory_lines = memory()
+        timeout_ms = min(_ANSWER_CAP_MS, self._remaining(inp) - _ANSWER_RESERVE_MS)  # 꺼내기를 기다린 만큼 다시 잰다
         try:
             result = self._smalltalk_worker.compose(
                 inp.utterance, inp.recent_turns, memory_lines, trip_summary, inp.trace_id, inp.now, timeout_sec=timeout_ms / 1000,
@@ -1140,11 +1197,18 @@ class DialogueOrchestrator:
                 self._log_plan(inp, "NO_TOOL", plan_ms=plan_ms, gap=draft.gap)
                 fixed = DialogueAnswer(AnswerKind.TEXT, CHAT_TEXT[inp.snapshot.trip is not None], None,
                                        (_home_action(inp.snapshot.trip is not None),), None, None)
-                answer = self._smalltalk(inp, fixed, memory(), trip_summary)  # 기억은 쓰는 자리에서만 기다린다 — 계획 LLM 앞이 아니다
+                answer = self._smalltalk(inp, fixed, memory, trip_summary)  # 기억은 쓰는 자리에서만 기다린다 — 계획 LLM 앞이 아니다
                 return TurnOutcome("ANSWER", (), None, answer, cleared, 0, f"{reason}; plan:no_tool")
+            if not draft.refused and draft.gap in _KNOWLEDGE_GAPS and (
+                    knowledge := self._knowledge(inp, memory, trip_summary)) is not None:  # 일반 지식 즉답(BR-AO-32)
+                self._log_plan(inp, "NO_TOOL", plan_ms=plan_ms, gap=draft.gap)
+                return TurnOutcome("ANSWER", (), None, knowledge, cleared, 0, f"{reason}; plan:knowledge")
             return self._plan_declined(inp, reason, "REFUSED" if draft.refused else "NO_TOOL", plan_ms=plan_ms, gap=draft.gap)
         calls = [c for c in (_region_named(call, text) for call in draft.calls) if c is not None]
         if not calls:  # 시기를 묻는 말에 지역 고르기만 골랐다 — 조회로 답할 것이 없다(일반 지식)
+            if (knowledge := self._knowledge(inp, memory, trip_summary)) is not None:
+                self._log_plan(inp, "NO_TOOL", plan_ms=plan_ms, gap="KNOWLEDGE")
+                return TurnOutcome("ANSWER", (), None, knowledge, cleared, 0, f"{reason}; plan:knowledge")
             return self._plan_declined(inp, reason, "NO_TOOL", plan_ms=plan_ms, gap="KNOWLEDGE")
         handlers = [HANDLERS[call.intent] for call in calls]
         said = _squash(" ".join([text, *(turn.text for turn in inp.recent_turns)]))
@@ -1164,6 +1228,51 @@ class DialogueOrchestrator:
                        task_status={name: r.status for name, r in results.items()})
         return TurnOutcome("ANSWER", (), None, answer, cleared, 0,
                            f"{reason}; plan:{'+'.join(call.intent.value for call in draft.calls)}")
+
+    def _knows_general(self) -> bool:
+        """지식 즉답이 닿는가 — 계획 단계(gap KNOWLEDGE 를 내는 자리)와 지식 워커가 둘 다 조립됐다."""
+        return self._planner is not None and self._ports.unknown is not None and self._ports.unknown.knows_general
+
+    def _knowledge(self, inp: TurnInput, memory: Callable[[], Sequence[str]], trip_summary: str) -> DialogueAnswer | None:
+        """2‴ gap KNOWLEDGE — 조회 도구로 답할 게 없는 여행 일반 지식을 UnknownHandlingAgent 가 LLM 일반 지식으로 이번 턴에 답한다
+        (BR-AO-32, 사용자 결정 2026-10-23). 각주는 결정론, 버튼은 잡담과 같은 홈 갈래. 미배선이면 None(종전 범위 밖 — 이벤트 없음),
+        모른다고 닫았으면 None(판단 — 이벤트 없음). 시한 부족·워커 실패는 게이트웨이·여기서 이벤트, 지어낸 시각·등록되지 않은 장소
+        이름(INV-1 — 사실이 없으니 스냅샷 장소 말고는 전부 지어낸 것)·모양 위반도 None + 이벤트(INV-4). `memory` 는 미배선·시한
+        부족을 지난 뒤에만 부른다(`_smalltalk` 와 같다)."""
+        agent = self._ports.unknown
+        if agent is None or not agent.knows_general:
+            return None
+        remaining = self._remaining(inp)
+        if remaining < _ANSWER_MIN_REMAINING_MS:
+            self._fallback(inp, "llm", *_KNOWLEDGE_MODES, f"budget_exhausted(remaining_ms={remaining})")
+            return None
+        memory_lines = tuple(memory())
+        task = KnowledgeTask(inp.utterance, inp.recent_turns, memory_lines, trip_summary, inp.trace_id, inp.now,
+                             timeout_sec=min(_ANSWER_CAP_MS, self._remaining(inp) - _ANSWER_RESERVE_MS) / 1000)
+        outcome = agent.run(task)
+        if outcome.error is not None:  # 게이트웨이에 닿기 전 워커 예외 — 게이트웨이가 보고하지 못했다
+            self._fallback(inp, "llm", *_KNOWLEDGE_MODES, f"knowledge_error: {outcome.error}")
+            return None
+        text = outcome.answer
+        if text is None:  # 모른다고 닫음·게이트 드롭·시한 — 실패면 게이트웨이가 FallbackEvent 를 냈다
+            return None
+        # 아는 이름 = 스냅샷 장소 + 사용자가 이미 한 말(이번 말·창 안 최근 대화·꺼낸 기억 — "전주 한옥마을 갈 때 옷차림"·"거기 언제 가면
+        # 좋아?" 처럼 되받는 것은 지어낸 게 아니다)
+        slot_names = tuple(k for k in (_squash(s.name) for _, s in inp.snapshot.slots() if s.name) if k)
+        said = tuple(k for k in (_squash(t) for t in (inp.utterance, *(turn.text for turn in inp.recent_turns), *memory_lines)) if k)
+        times, unverifiable = clock_times(text)
+        if times or unverifiable:  # 사실이 없는 자리 — 시각은 전부 지어낸 것(INV-2)
+            self._fallback(inp, "llm", *_KNOWLEDGE_MODES, "time_not_in_facts")
+            return None
+        if _knowledge_foreign_place(text, slot_names, said):
+            self._fallback(inp, "llm", *_KNOWLEDGE_MODES, "place_not_in_facts")
+            return None
+        try:
+            return DialogueAnswer(AnswerKind.TEXT, text, None, (_home_action(inp.snapshot.trip is not None),), None,
+                                  KNOWLEDGE_FOOTNOTE)
+        except ValueError as e:  # 게이트와 같은 검사 — 어긋나면 종전 범위 밖
+            self._fallback(inp, "llm", *_KNOWLEDGE_MODES, f"answer_shape: {e}")
+            return None
 
     def _plan_declined(self, inp: TurnInput, reason: str, decision: str, *, plan_ms: int | None = None,
                        gap: str | None = None) -> TurnOutcome:

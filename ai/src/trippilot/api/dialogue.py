@@ -29,6 +29,7 @@ from trippilot.domain.llm import LlmFeature
 from trippilot.domain.plan_tools import PLAN_TOOLS, plan_tool_specs_json
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerGate
+from trippilot.llm_gateway.gates.dialogue_knowledge import DialogueKnowledgeGate
 from trippilot.llm_gateway.gates.dialogue_memory import DialogueMemoryGate
 from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanGate
 from trippilot.llm_gateway.gates.dialogue_sql import DialogueSqlGate
@@ -39,6 +40,7 @@ from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker
 from trippilot.llm_gateway.workers.dialogue_intent import DialogueIntentWorker
+from trippilot.llm_gateway.workers.dialogue_knowledge import DialogueKnowledgeWorker
 from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
 from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
 from trippilot.llm_gateway.workers.dialogue_smalltalk import DialogueSmalltalkWorker
@@ -250,13 +252,24 @@ def build_dialogue_orchestrator(
     place_intro = PlaceIntro(embedding, kb_store) if kb_store is not None else None
     # 미확인 칸 웹 확인(UnknownHandlingAgent) — PLACE_FACT_LOOKUP 배정이 곧 켜기. 조회는 턴 밖(뒤에서)이라 서비스 카운터(`counted`)가
     # 아니라 `llm` 으로 부른다(턴 llm_calls 에 들지 않는다 — 대신 프로세스당 하루 상한, unknown_handling 註)
+    # 일반 지식 즉답(BR-AO-32, 2026-10-23) — 같은 에이전트의 둘째 일. DIALOGUE_KNOWLEDGE 배정이 곧 켜기, 턴 안 서비스 호출이라 `counted`
+    lookup_on = LlmFeature.PLACE_FACT_LOOKUP in c1_config.feature_models
+    knowledge_on = LlmFeature.DIALOGUE_KNOWLEDGE in c1_config.feature_models
     unknown = None
-    if LlmFeature.PLACE_FACT_LOOKUP in c1_config.feature_models:
-        unknown = UnknownHandlingAgent(PlaceFactLookupWorker(GatewayFacade(llm, renderer, PlaceFactGate(), c1_config, trace)),
-                                       place_fact_store if place_fact_store is not None else InMemoryPlaceFactStore())
+    if lookup_on or knowledge_on:
+        unknown = UnknownHandlingAgent(
+            PlaceFactLookupWorker(GatewayFacade(llm, renderer, PlaceFactGate(), c1_config, trace)) if lookup_on else None,
+            (place_fact_store if place_fact_store is not None else InMemoryPlaceFactStore()) if lookup_on else None,
+            knowledge=(DialogueKnowledgeWorker(GatewayFacade(counted, renderer, DialogueKnowledgeGate(), c1_config, trace))
+                       if knowledge_on else None))
+    if lookup_on:
         log.info("도우미 미확인 정보 웹 확인 on — 저장소 %s", "ai_kb" if place_fact_store is not None else "프로세스 메모리")
     else:
         log.info("도우미 미확인 정보 웹 확인 off — PLACE_FACT_LOOKUP 미배정이라 미배선(카드는 \"미확인\" 그대로)")
+    if knowledge_on:
+        log.info("도우미 일반 지식 즉답 on")
+    else:
+        log.info("도우미 일반 지식 즉답 off — DIALOGUE_KNOWLEDGE 미배정이라 미배선(일반 지식 질문은 SCOPE 카드)")
     ports = HandlerPorts(poi_info=providers[ProviderKind.POI_INFO], weather=providers.get(ProviderKind.WEATHER),
                          transit=providers[ProviderKind.TRANSIT], pool_builder=pool_builder, planb=rag,
                          place_sql=place_lookup, place_intro=place_intro, events=providers.get(ProviderKind.EVENT),

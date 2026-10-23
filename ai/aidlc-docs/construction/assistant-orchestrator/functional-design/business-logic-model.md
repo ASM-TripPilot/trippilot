@@ -322,6 +322,7 @@ facts = handler.assemble(ctx, results)                    # 순수 — 이름(na
 | 계획(2‴) | **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 잔여 <4.6s · 워커 예외(프롬프트 미등록 포함) | 종전 `OUT_OF_SCOPE`(reason `…; plan:skipped`·`plan:fallback`) | 오케스트레이터 `FallbackEvent(llm, llm_dialogue_plan→out_of_scope, budget_exhausted·plan_error)` |
 | 계획(2‴) | 시한·벤더·비지원·비JSON·스키마 위반·절단·입력 호출 전량 드롭 | 종전 `OUT_OF_SCOPE`(`plan:fallback`) | 게이트웨이 FallbackEvent + `LlmCallRecord(success=False)` (전량 드롭은 GateDropEvent 도) |
 | 계획(2‴) | 도구 없음(`calls=[]`)·거절(`refused`) — **의도된 결정론** | 종전 `OUT_OF_SCOPE`(`plan:no_tool`·`plan:refused`) | 이벤트 없음 · `LlmCallRecord(success)` · `dialogue_plan` 로그(NO_TOOL+gap / REFUSED) |
+| 계획(2‴) — 정보성 gap(KNOWLEDGE·LODGING·BOOKING·TRANSPORT·OTHER) **[신설 · 2026-10-23 · BR-AO-32]** | 지식 답 시한 부족(R <1.5s) · 벤더·시한·깨진 출력 · 가격·특정 날짜·연도·거리·노선 번호(게이트) · 등록되지 않은 장소 이름·새 시각·모양 위반(오케스트레이터) · 게이트웨이에 닿기 전 워커 예외(`knowledge_error`) | 종전 `OUT_OF_SCOPE`(`plan:no_tool`) | `FallbackEvent(llm, llm_dialogue_knowledge→out_of_scope)` — 게이트웨이 또는 오케스트레이터(`budget_exhausted`·`place_not_in_facts`·`time_not_in_facts`·`answer_shape`). 모른다고 닫음(`text=null`)·미배정은 이벤트 없음 |
 | 계획(2‴) | 일부 호출·칸 드롭 / 도구 작업 실패 | 남은 호출로 답 / 그 부분은 PARTIAL·UNAVAILABLE 로 병합 | GateDropEvent / 작업별 `FallbackEvent(stage=fanout, from=[i.]작업명)` |
 | ~~요약(6) — 계획 턴~~ | ~~턴 서비스 LLM 3회 · 첫 차례 / 연속 차례~~ | ~~미룸(put 없음) / 결정론 압축~~ | ~~`FallbackEvent(memory, …deferred 또는 deterministic_compress, turn_llm_cap(3))`~~ — **폐지(2026-10-23)**: 요약이 턴 밖이라 턴 LLM 수와 무관하다 |
 | 경계(7) | 오케스트레이터 자체 예외(버그) | 미결 #14 — 두 안 병기(BR §5) | — |

@@ -241,6 +241,33 @@ def test_assigned_plan_answers_an_unclassified_turn_with_registered_places_frame
     assert not any(tok in json.dumps(body, ensure_ascii=False) for tok in _FORBIDDEN_TOKENS)  # INV-3
 
 
+_KNOWLEDGE_ON = {LlmFeature.DIALOGUE_PLAN: "m-fake", LlmFeature.DIALOGUE_KNOWLEDGE: "m-fake"}
+_WHEN = "부산 여행은 언제 가는 게 좋아?"
+
+
+def test_assigned_knowledge_answers_a_general_question_counted_and_says_so_at_startup(caplog) -> None:
+    """DIALOGUE_KNOWLEDGE 배정이 곧 켜기(BR-AO-32) — 실조립에서 gap KNOWLEDGE 턴이 지식 답이 되고, 지식 호출은 턴 서비스 호출이라
+    llm_calls 에 든다(분류 + 계획 + 지식 = 3). 기동 로그 한 줄이 배포 smoke 의 켜짐 표식이다."""
+    caplog.set_level(logging.INFO, logger="trippilot.api.dialogue")
+    text = "부산은 보통 봄과 가을이 걷기 좋아요. 여행 날짜가 정해지면 날씨를 확인해 드릴게요."
+    client = _client({_INTENT: '{"intent": null}', LlmFeature.DIALOGUE_PLAN: _plan_json(gap="KNOWLEDGE"),
+                      LlmFeature.DIALOGUE_KNOWLEDGE: _answer_json(text)}, feature_models=_KNOWLEDGE_ON)
+    assert any(r.getMessage() == "도우미 일반 지식 즉답 on" for r in caplog.records)
+    res = client.post(URL, json=_body(_WHEN))
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert set(body) == _KEYS and body["outcome"] == "ANSWER" and body["frames"] == [] and body["llm_calls"] == 3
+    assert body["answer"]["text"] == text and body["answer"]["footnote"] == "일반적인 여행 정보라 시기나 상황에 따라 다를 수 있어요."
+
+
+def test_unassigned_knowledge_is_not_wired_and_says_so_at_startup(caplog) -> None:
+    caplog.set_level(logging.INFO, logger="trippilot.api.dialogue")
+    client = _client({_INTENT: '{"intent": null}', LlmFeature.DIALOGUE_PLAN: _plan_json(gap="KNOWLEDGE")}, feature_models=_PLAN_ON)
+    assert any(r.getMessage().startswith("도우미 일반 지식 즉답 off") and "미배선" in r.getMessage() for r in caplog.records)
+    body = client.post(URL, json=_body(_WHEN)).json()
+    assert body["outcome"] == "OUT_OF_SCOPE" and body["llm_calls"] == 2  # 종전 범위 밖 — 지식 LLM 을 부르지 않는다
+
+
 def test_assigned_plan_with_no_tool_keeps_the_legacy_scope_card() -> None:
     client = _client({_INTENT: '{"intent": null}', LlmFeature.DIALOGUE_PLAN: _plan_json(gap="KNOWLEDGE")},
                      feature_models=_PLAN_ON)

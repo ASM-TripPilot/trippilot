@@ -7,6 +7,7 @@ base.py의 Agent Protocol + 에이전트 5종 — 다섯 다 **워커를 감싸�
   reflect/ `ReflectAgent.run(ReflectTask) -> ReflectionTemplate` — 회고 템플릿 (텍스트·vision)
   schedule/`ScheduleAgent.run(ScheduleTask) -> GenerationOutcome` — 일정 생성 (오케스트레이터 위임)
   unknown_handling/ `UnknownHandlingAgent.run(UnknownTask) -> UnknownOutcome` — 도우미 미확인 칸 웹 확인 (먼저 답하고 뒤에서 찾기)
+                     · 일반 지식 즉답 (`KnowledgeTask`, 2026-10-23)
 `handle(AgentTask) -> AgentResult` 봉투 수렴은 다섯 다 후속(business-rules 미결 #8).
 경계: 형제 상호 import 금지(L-2), LlmPort 직접 import 금지(L-3, 게이트웨이 경유만),
 providers import 금지(L-4), orchestrator import 금지(L-6 — 재료는 봉투로만).
