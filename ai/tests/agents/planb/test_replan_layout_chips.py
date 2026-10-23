@@ -178,3 +178,113 @@ def test_저녁_식당이_점심에도_있으면_자리표는_저녁_자리다()
     _, seen = _replan(directives=["EARLIER", "KEEP_DINNER"], reasons=["none"], current_slots=slots)
 
     assert [str(v.poi_id) for v in seen["agent"][0].required_visits] == [_HALLA, _PORK]
+
+
+# ── 더 늦게까지 (EXTEND_DAY) ──────────────────────────────────────────
+# 운영 2026-10-23(trace 7064f252): "저녁 늦게까지 더 일정 추가로 만들어줘"가 "저녁" 한 낱말로 SHORTER_DAY
+# ("저녁 전에 마무리")·KEEP_DINNER 에 붙어 원 일정 4곳 중 1곳만 남았다(광안리 탈락). 임베딩 결과는 가짜로
+# 그때 그대로 재현한다 — 해시 fake 임베딩은 의미 유사도가 없다.
+
+_EXTEND_TEXT = "저녁 늦게까지 더 일정 추가로 만들어줘"
+_FOUR = [_slot(_HALLA, "10:00", "12:00"), _slot(_PORK, "12:30", "13:30"),
+         _slot(_SEED["월정리 카페거리"], "15:00", "16:00"), _slot(_SEED["성산일출봉"], "17:00", "18:30")]
+
+
+def _embedding_says(monkeypatch, *keys: str) -> None:
+    import trippilot.api.wiring as wiring
+    from tests.api.test_api_replan_wired import _DIRECTIVES
+
+    specs = tuple(s for s in _DIRECTIVES if s.key in keys)
+    monkeypatch.setattr(wiring, "match_free_text", lambda *a, **k: specs)
+
+
+def test_더_늦게까지는_일찍_마무리로_읽지_않는다(monkeypatch) -> None:
+    _embedding_says(monkeypatch, "SHORTER_DAY", "KEEP_DINNER")
+    body, _ = _replan(free_text=_EXTEND_TEXT, reasons=["none"], current_slots=_FOUR)
+
+    assert "EXTEND_DAY" in body["resolved_directives"], body["notes"]
+    assert "SHORTER_DAY" not in body["resolved_directives"], body["notes"]
+    assert any(n.startswith("free_text_extend: ") and "SHORTER_DAY" in n for n in body["notes"]), body["notes"]
+
+
+def test_더_늦게까지는_원_일정을_전부_두고_상한_없이_더한다(monkeypatch) -> None:
+    _embedding_says(monkeypatch, "SHORTER_DAY", "KEEP_DINNER")
+    # 피로는 평소 방문 상한(남은 수 − 1)을 건다 — "더 늦게까지"가 그것도 푼다
+    body, seen = _replan(free_text=_EXTEND_TEXT, reasons=["fatigue"], current_slots=_FOUR)
+
+    req = seen["agent"][0]
+    kept = {str(v.poi_id): v for v in req.required_visits}
+    assert set(kept) == {s["poi_id"] for s in _FOUR}, body["notes"]
+    assert all(v.priority for v in kept.values())
+    assert kept[_HALLA].dwell_min == 120  # 체류도 원 일정 그대로
+    assert req.max_visits_per_day is None, body["notes"]
+    assert req.day_window.end.strftime("%H:%M") == "23:59"
+    assert req.end_near is None
+    assert not any(n.startswith("shorter_day") for n in body["notes"]), body["notes"]
+    # 이번 재계획 한정 — 고정으로 내면 BE 가 잠가 다음 다시 짜기에서 못 바꾼다
+    assert all(s["is_fixed"] is False for s in _placed(body)), _placed(body)
+
+
+def test_일찍_마무리는_종전대로다(monkeypatch) -> None:
+    _embedding_says(monkeypatch, "SHORTER_DAY")
+    body, _ = _replan(free_text="일찍 마무리하고 싶어", reasons=["none"], current_slots=_FOUR)
+
+    assert body["resolved_directives"] == ["SHORTER_DAY"], body["notes"]
+    assert any(n.startswith("shorter_day: ") for n in body["notes"]), body["notes"]
+    assert not any(n.startswith("free_text_extend") for n in body["notes"]), body["notes"]
+
+
+def test_칩으로_고른_일찍_마무리는_자유_입력이_못_뒤집는다(monkeypatch) -> None:
+    _embedding_says(monkeypatch)
+    body, seen = _replan(directives=["SHORTER_DAY"], free_text=_EXTEND_TEXT, reasons=["none"],
+                         current_slots=_FOUR)
+
+    assert "SHORTER_DAY" in body["resolved_directives"]
+    assert "extend_day_ignored: SHORTER_DAY" in body["notes"], body["notes"]
+    assert any(n.startswith("shorter_day: ") for n in body["notes"]), body["notes"]
+    assert not any(v.reason == "extend_keep" for v in seen["agent"][0].required_visits)
+
+
+def test_늘려_달라는_말만_잡는다() -> None:
+    from trippilot.api.wiring import _EXTEND
+
+    for said in (_EXTEND_TEXT, "저녁늦게까지 더 일정 추가로 만들어달라", "더 늦게까지 놀고 싶어",
+                 "일정 더 추가해줘", "광안리 끝나고 더 가볼 곳", "밤까지 더 돌자"):
+        assert _EXTEND.search(said), said
+    for said in ("더 가까운 데로", "저녁은 그대로", "추가 요금 없는 곳", "카페 하나 더 추가해줘",
+                 "카페 일정 추가해줘", "늦게까지 여는 카페 추가해줘", "어제 늦게까지 놀아서 피곤해",
+                 "일찍 마무리하고 싶어", "저녁 전에 마무리"):
+        assert not _EXTEND.search(said), said
+
+
+def test_더_늦게까지는_구성이_원_일정을_빼도_전부_되싣는다() -> None:
+    """구성 LLM 경로 — 구성이 새 곳만 골라도 원 일정 남은 방문은 맨 앞 우선 필수 방문으로 든다."""
+    from fastapi.testclient import TestClient
+
+    from trippilot.api.wiring import StaticPoiDb, build_dev_app
+    from tests.agents.planb.test_replan_nl_category import _NEAR, _MixComposer
+    from tests.api.test_api_replan_wired import _DIRECTIVES, _body
+
+    app = build_dev_app(directives=_DIRECTIVES, poi_db=StaticPoiDb(demo_poi_seed() + _NEAR))
+    orch = app.state.orchestrator
+    originals = {s["poi_id"] for s in _FOUR}
+    orch._composer = _MixComposer(lambda p: str(p.poi_id) not in originals)
+    real, seen = orch._schedule_agent, []
+
+    class _Spy:
+        def run(self, task):
+            seen.append(task.request)
+            return real.run(task)
+
+    orch._schedule_agent = _Spy()
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.post("/ai/v1/planb/replan", json=_body(
+            free_text=_EXTEND_TEXT, reasons=["none"], current_slots=_FOUR))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    req = seen[0]
+    reasons = {str(v.poi_id): v.reason for v in req.required_visits}
+    assert {p for p, why in reasons.items() if why == "extend_keep"} == originals, body["notes"]
+    assert any(why == "llm_compose" for why in reasons.values()), body["notes"]  # 새 방문도 더했다
+    assert [str(v.poi_id) for v in req.required_visits][:4] == [s["poi_id"] for s in _FOUR]
+    assert all(s["is_fixed"] is False for s in _placed(body))
