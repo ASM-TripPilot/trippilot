@@ -17,19 +17,24 @@ import java.time.temporal.ChronoUnit
  *    해제가 된다(anti-patterns — 모르는 어휘는 크게 실패시킨다). 감지기가 그 이름을 WARN 으로 드러낸다.
  * 3. 섬 구역([ISLANDS])과 관서 묶음 구역([CROSS_ZONES])은 닫힌 표의 행정구역 코드로 그 시군(광역 코드면 그 광역)과 그 광역 목적지에만
  *    걸린다 — 목적지 이름 앞붙음으로 맞추지 않는다(`서해5도` 는 서해구가 아니라 옹진이다). 관서 묶음 구역은 접미가 붙어도 그 구역이다
- *    (`강화군` · `군위군`). 하위 구역에 나오면 줄의 광역과 무관하게 4 보다 먼저 본다 — 특보구역은 기상청 관서 묶음으로 나뉘어
- *    `경기도(강화, 김포)` 의 강화는 인천 강화군이다. `(…제외)` 줄은 4·9 로 본다.
- * 4. 광역이 다르면 걸리지 않는다 — 광역 별칭(강원도 ↔ 강원특별자치도 · 전라북도 ↔ 전북특별자치도)은 같은 광역이다. 다만 관서 묶음 줄
- *    (경기·충남·경북·경남)은 그 묶음에 든 다른 광역 구역([CROSS_GROUPS] — 인천 강화·옹진 · 대전 · 대구 군위 · 부산·울산)의 목적지에 모름이다
- *    — 하위 구역 없는 줄 · 그 목적지를 덮는 구역을 전체 이름으로 다 빼지 않은 `(…제외)` 줄(9) · 권역이나 표에 없는 이름이 낀 줄. t6 의 광역 줄이 행정
- *    광역인지 관서 묶음인지 실응답 표본으로 아직 가리지 못했다 — 가리기 전에는 그 목적지를 '안 걸림'으로 확인하지 않는다(INV-SA-2).
+ *    (`강화군` · `군위군`). 하위 구역에 나오면 줄의 광역과 무관하게 4 보다 먼저 본다 — 실응답에서는 늘 제 광역 줄에 나왔고(`인천(강화)` ·
+ *    `대구(군위)` — 4), 관서 묶음 줄로 나오면(`경기도(강화, 김포)` — t6 형식 변화) 그 시군에 걸고 감지기가 WARN 한다([unknownNames]).
+ *    `(…제외)` 줄은 4·9 로 본다.
+ * 4. 광역이 다르면 걸리지 않는다 — 광역 별칭(강원도 ↔ 강원특별자치도 · 전라북도 ↔ 전북특별자치도)은 같은 광역이다. t6 의 광역 줄은
+ *    행정 광역이다 — 특보구역 목록은 관서 묶음(경기 묶음의 인천 강화·옹진 · 충남 묶음의 대전 · 경북 묶음의 대구 군위 · 경남 묶음의 부산·울산)이지만
+ *    실응답(2026-10-16~22 특보 통보문 73건)에서 강화·옹진은 `인천(…)`(`인천(옹진 제외)`), 군위는 `대구(군위)`, 대전·울산·세종은 제 줄로
+ *    나왔다. 그래서 관서 묶음 줄이 그 묶음의 다른 광역 목적지를 덮지 않는다(G-SA-18). 다만 관서 묶음 줄이 그 꼴의 흔적 — 그 묶음의 다른 광역
+ *    구역 이름([CROSS_GROUPS] · `경기도(강화동부 제외)`)이나 표에 없는 이름 — 을 보이면 형식이 바뀐 것일 수 있어, 그 묶음 구역이 덮는 목적지는
+ *    G-SA-18 전 규칙대로 본다: 덮는 구역을 전체 이름으로 다 뺀 제외 줄만 안 걸림이고, 권역·낯선 이름이 낀 줄과 다 빼지 않은 제외 줄은
+ *    모름이다(INV-SA-2).
  * 5. 광역 목적지(서울·부산·제주 등)는 그 광역 줄 전체가 걸린다. 하위 구역 없는 광역 줄은 그 광역 전체다.
  * 6. 시군 목적지는 하위 구역 이름이 **시군 어간으로 시작**하면 걸린다(`강릉` → `강릉시평지`, `경주` → `경주동부`). 정본은 '들어가면'이지만
  *    시작으로 좁힌다 — `남양주` 에 `양주` 가 들어 있어 양주 여행이 남양주 특보에 걸린다.
  * 7. 특별·광역시와 제주의 시·구(해운대구·서귀포시 …)는 광역 목적지처럼 그 광역 줄 전체로 맞춘다 — 그 광역의 구역 이름(`부산동부` ·
  *    `제주도남부`)에 시·구 이름이 없어 6 으로는 영영 걸리지 않는다(광역 목적지 규칙의 근거와 같다). 과잉 경보는 관찰 전용 출발이 잰다(BR-SA-04).
  *    광역시의 **군**(강화·옹진·기장 …)은 6 으로 맞춘다 — 구역 이름에 군 이름이 나온다(`인천(강화)`). 다만 그 줄에 광역 이름으로 시작하는
- *    권역(`부산동부`)이 있으면 그 군이 들었을 수 있어 줄 전체로 맞춘다(7 의 근거와 같다). 그 광역의 군 어간([CITY_STEMS])·광역 이름·표
+ *    권역(`부산동부`)이 있으면 그 군이 들었을 수 있어 줄 전체로 맞춘다(7 의 근거와 같다) — 제 구역이 있는 군([OWN_ZONE_GUN] — 강화·옹진·
+ *    군위·달성)은 빼고: 그 광역의 권역(`인천영종` · `대구중부`)은 그 군을 덮지 않는다. 그 광역의 군 어간([CITY_STEMS])·광역 이름·표
  *    (규칙 3)·바다 어디에도 안 드는 이름이 있으면 모름이다 — 8 의 낯선 이름과 같다(G-SA-16 결정 2026-10-20).
  * 8. 도의 시군은 6 으로 안 걸려도 그 줄에 광역 이름으로 시작하는 권역(`강원중부산지` · `경북북동산지`)이 있으면 모름이다 — 그 권역이 시군을
  *    덮는지 이름으로 가릴 수 없다(평창의 평지만 풀리고 대관령 경보가 남은 회차). 권역은 시군 표로 걸지 않고 모름으로 둔다(G-SA-16 결정
@@ -39,7 +44,8 @@ import java.time.temporal.ChronoUnit
  *    시군이 빠진다. 그 시군의 하위 권역(어간 + 다른 꼬리 — `경주동부` · `울진평지` · `보령도서`)만 나열됐으면 목적지가 뺀 쪽에 있는지 이름으로
  *    가릴 수 없어 모름이다. 개편 목록은 시군을 권역으로 나눠, 시군째 빼면 나머지 권역의 특보를 '특보 없음'으로 확인한다(G-SA-19 · INV-SA-2).
  *    섬 구역은 앞붙음이 아니라 표([ISLANDS])로 본다 — 시군 전체인 섬([WHOLE_CITY_ISLANDS] — 울릉도.독도 = 울릉군)을 빼면 그 시군이 빠지고,
- *    시군의 일부인 섬(서해5도 · 흑산도.홍도 · 거문도.초도 · 추자도 …)을 빼면 본토가 남아 그 시군에 걸린다.
+ *    시군의 일부인 섬(서해5도 · 흑산도.홍도 · 거문도.초도 · 추자도 …)을 빼면 본토가 남아 그 시군에 걸린다. 거꾸로 시군 전체 이름을 뺐어도
+ *    그 시군의 섬이 광역 줄 안의 하위 구역이면([LINE_ISLANDS] — `전라남도(여수 제외)` 의 거문도.초도) 그 섬이 남아 모름이다.
  */
 object WeatherAlerts {
 
@@ -58,7 +64,8 @@ object WeatherAlerts {
     )
 
     /**
-     * 섬 구역(광역 줄 밖에 따로 나온다) → 그 섬이 속한 시군 코드. 닫힌 표다 — 여기 없는 최상위 이름은 모름이다(규칙 2).
+     * 섬 구역 → 그 섬이 속한 시군 코드. 최상위 줄로(서해5도 · 울릉도.독도), 광역 줄 안으로([LINE_ISLANDS]), `서해5도(…)` 안으로(백령도.대청도 ·
+     * 연평도.우도) 나온다(실응답 2026-10-16~22). 닫힌 표다 — 여기 없는 최상위 이름은 모름이다(규칙 2).
      * 울릉도.독도 = 울릉군 · 서해5도 = 옹진군 · 흑산도.홍도 = 신안군 · 거문도.초도 = 여수시 · 추자도 = 제주시 ·
      * 백령도.대청도 · 연평도.우도 = 옹진군(서해5도를 나눈 구역 — 2026-06-01 특보구역 개편, 연평도.우도의 우도는 제주 우도가 아니다).
      */
@@ -66,6 +73,14 @@ object WeatherAlerts {
         "울릉도.독도" to "47940", "서해5도" to "28720", "흑산도.홍도" to "12870", "거문도.초도" to "12130", "추자도" to "50110",
         "백령도.대청도" to "28720", "연평도.우도" to "28720",
     )
+
+    /**
+     * 광역 줄 안에 하위 구역으로 나오는 섬 구역(규칙 9) — 실응답(2026-10-16~22 특보 통보문)에서 `전라남도(흑산도.홍도)` ·
+     * `전라남도(…, 거문도.초도, …)` · `제주도(…, 추자도, …)` 로 나왔다(서해5도 · 울릉도.독도는 제 줄이다). 그 광역의 `(…제외)` 줄은 나열하지
+     * 않은 이 섬을 덮으므로, 시군 전체 이름을 빼도(`전라남도(여수 제외)`) 그 시군의 이 섬(거문도.초도 = 여수)은 특보 중이다 — 그 시군은
+     * 안 걸림이 아니라 모름이다(INV-SA-2 · G-SA-18).
+     */
+    val LINE_ISLANDS: Set<String> = setOf("흑산도.홍도", "거문도.초도", "추자도")
 
     /**
      * 시군 전체인 섬 구역(규칙 9) — `(…제외)` 줄에 나오면 그 시군째 빠진다. 울릉도.독도는 울릉군 전체다(공식 목록에 울릉의 다른 구역이 없다).
@@ -76,8 +91,9 @@ object WeatherAlerts {
     /**
      * 관서 묶음 구역 → 행정구역 코드(시군 5자리 · 광역 2자리). 특보구역은 기상청 관서 묶음으로 나뉘고(공식 목록
      * `기상청_기상특보구역정보_20260601`) 그 묶음이 행정 광역과 다른 하위 구역이 있다 — 경기 묶음의 인천 강화·옹진, 경북 묶음의 대구 군위,
-     * 충남 묶음의 대전, 경남 묶음의 부산·울산 권역. t6 의 광역 줄이 관서 묶음을 따르면 `경기도(강화, 김포)` · `경상북도(군위)` 로 나온다 —
-     * 섬 구역처럼 줄의 광역과 무관하게 이 코드로 맞춘다(규칙 3). 닫힌 표다 — 특보구역이 개편되면 공식 목록과 다시 대조한다
+     * 충남 묶음의 대전, 경남 묶음의 부산·울산 권역. 실응답 t6 에서는 늘 제 광역 줄(`인천(강화)` · `대구(군위)`)에 나왔다(규칙 4). 묶음 줄
+     * (`경기도(강화, 김포)`)로 나오면 t6 형식 변화라 감지기가 WARN 하고, 섬 구역처럼 줄의 광역과 무관하게 이 코드로 맞춘다(규칙 3). 닫힌 표다 —
+     * 특보구역이 개편되면 공식 목록과 다시 대조한다
      * (`WeatherAlertsZoneListTest`).
      */
     val CROSS_ZONES: Map<String, String> = mapOf(
@@ -87,7 +103,8 @@ object WeatherAlerts {
 
     /**
      * 관서 묶음 → 그 묶음에 든 다른 광역 구역의 표 이름([CROSS_ZONES] · 서해5도와 그것을 나눈 [ISLANDS]) — 공식 목록에서 묶음 머리 아래
-     * 행정 광역이 다른 구역이다(`WeatherAlertsZoneListTest` 가 목록과 대조한다). 규칙 4 의 모름이 이 표로 가린다.
+     * 행정 광역이 다른 구역이다(`WeatherAlertsZoneListTest` 가 목록과 대조한다). t6 가 관서 묶음 꼴로 보일 때만 규칙 4 의 모름을 가린다
+     * ([otherProvinceMatch] · G-SA-18).
      */
     val CROSS_GROUPS: Map<Province, Set<String>> = mapOf(
         Province.GYEONGGI to setOf("강화", "옹진", "서해5도", "백령도.대청도", "연평도.우도"),
@@ -220,6 +237,20 @@ object WeatherAlerts {
         return Place(code, provinces, stem, province.wide && !isGun(province, code), if (province.wide) province.label else stem ?: province.label)
     }
 
+    /**
+     * 제 구역이 있는 광역시의 군 — 공식 목록에 그 군 이름으로 시작하는 구역이 있다(강화 · 옹진 · 군위 · 달성 — `기상청_기상특보구역정보_20260601`).
+     * 그 광역의 권역 가운데 목록에 있는 것([OWN_ZONE_METRO_REGIONS])은 이 군을 덮지 않으니 그것만으로는 걸지 않는다(규칙 7) — 실응답
+     * `인천(옹진, 인천영종)`(2026-10-16~22 강풍경보)이 강화를 경보하면 과잉이다. 제 구역이 없는 군(기장 · 울주)은 그 광역의 권역 안에 든다.
+     * `WeatherAlertsZoneListTest` 가 목록과 대조한다.
+     */
+    val OWN_ZONE_GUN: Set<String> = setOf("강화", "옹진", "군위", "달성")
+
+    /**
+     * [OWN_ZONE_GUN] 을 덮지 않는 그 광역의 권역 — 공식 목록의 인천 묶음(`인천` L1110100 · 인천영종 · 인천남부 · 인천북부)과 대구중부(L1140100).
+     * 정확히 이 이름만 거른다 — 표 밖의 광역 이름 권역은 범위를 모르니 규칙 7 그대로 줄 전체다(개편으로 생기면 목록 대조가 실패한다).
+     */
+    val OWN_ZONE_METRO_REGIONS: Set<String> = setOf("인천", "인천영종", "인천남부", "인천북부", "대구중부")
+
     /** 이 특보 구역이 이 목적지에 걸리는가(위 규칙 1~9). */
     fun match(area: WarningArea, place: Place): Match {
         val name = area.name.trim()
@@ -229,15 +260,18 @@ object WeatherAlerts {
         val land = area.zones.map { it.trim() }.filterNot(::isSea)
         // 규칙 3 — 섬·관서 묶음 구역은 줄의 광역보다 먼저 표의 코드로 본다(`경기도(강화, 김포)` 의 강화는 인천 강화군이다)
         if (!area.excluding && land.any { zone -> codeOf(zone)?.let { covers(it, place) } == true }) return Match.HIT
-        if (province !in place.provinces) return crossGroupMatch(province, area, land, place)
+        if (province !in place.provinces) return otherProvinceMatch(province, area, land, place) // 규칙 4
         if (area.zones.isEmpty()) return Match.HIT
         val named = place.stem != null && land.any { it.startsWith(place.stem) }
         if (area.excluding) return excludedMatch(land, place)
         if (land.isEmpty()) return Match.MISS
         if (named || place.wide) return Match.HIT
-        if (province.wide && land.any(province::isRegional)) return Match.HIT // 규칙 7 — 광역시의 군: 권역 줄이면 줄 전체
+        // 제 구역이 있는 광역시의 군 — 그 군을 덮지 않는 목록의 권역은 거른다(정확히 일치 · 표 밖 권역은 규칙 7 그대로)
+        val ownZone = province.wide && place.stem in OWN_ZONE_GUN
+        val rest = if (ownZone) land.filterNot { province.isRegional(it) && it in OWN_ZONE_METRO_REGIONS } else land
+        if (province.wide && rest.any(province::isRegional)) return Match.HIT // 규칙 7 — 광역시의 군: 권역 줄이면 줄 전체
         // 규칙 7·8 — 광역 권역(도의 시군)이나 표에 없는 이름이 하나라도 있으면 그 구역이 목적지를 덮는지 가릴 수 없다
-        val kinds = land.map { zoneKind(province, it) }
+        val kinds = rest.map { zoneKind(province, it) }
         return if (ZoneKind.REGIONAL in kinds || ZoneKind.UNKNOWN in kinds) Match.UNSURE else Match.MISS
     }
 
@@ -267,12 +301,17 @@ object WeatherAlerts {
     /**
      * 표로 가릴 수 없는 구역 이름 — 모르는 최상위 이름(규칙 2)과 이름으로 맞추는 줄(도 · 군이 있는 광역시 — [CITY_STEMS] 의 광역)의 모르는
      * 하위 구역(규칙 7·8). 구역 개편·t6 형식 변화의 신호라 감지기가 바뀔 때 WARN 으로 드러낸다(고칠 곳은 광역·섬 구역·관서 묶음 구역·시군
-     * 어간 표다). 줄 전체로만 맞추는 광역(서울·광주·대전·세종·제주) 줄의 하위 구역은 보지 않는다(규칙 5·7).
+     * 어간 표다). 줄 전체로만 맞추는 광역(서울·광주·대전·세종·제주) 줄의 하위 구역은 보지 않는다(규칙 5·7). 제 광역 줄 밖에 나온 표 이름
+     * (줄의 광역과 그 코드의 행정 광역이 다른 섬·관서 묶음 구역 — `경기도(강화)` · `경기도(서해5도)`)도 싣는다 — 실응답에서는 늘 제 광역 줄에
+     * 나왔으니(규칙 3·4) 나오면 t6 형식 변화다.
      */
     fun unknownNames(area: WarningArea): List<String> {
         if (!isKnownArea(area)) return listOf(area.name.trim())
-        val province = Province.ofKmaName(area.name)?.takeIf { it in CITY_STEMS } ?: return emptyList()
-        return area.zones.filter { zoneKind(province, it) == ZoneKind.UNKNOWN }.map { it.trim() }
+        val province = Province.ofKmaName(area.name) ?: return emptyList()
+        val zones = area.zones.map { it.trim() }
+        val strange = if (province in CITY_STEMS) zones.filter { zoneKind(province, it) == ZoneKind.UNKNOWN } else emptyList()
+        val misplaced = zones.filter { zone -> codeOf(zone)?.let { province !in Province.ofRegionCode(it).orEmpty() } == true }
+        return strange + misplaced
     }
 
     /**
@@ -316,13 +355,17 @@ object WeatherAlerts {
     private fun codeOf(zone: String): String? = tableNameOf(zone)?.let { ISLANDS[it] ?: CROSS_ZONES[it] }
 
     /**
-     * `(…제외)` 줄 × 그 광역의 목적지(규칙 9) — 나열한 이름이 목적지 시군 전체([isWhole] · 그 시군 전체인 섬 [WHOLE_CITY_ISLANDS])면 안 걸림,
+     * `(…제외)` 줄 × 그 광역의 목적지(규칙 9) — 나열한 이름이 목적지 시군 전체([isWhole] · 그 시군 전체인 섬 [WHOLE_CITY_ISLANDS])면 안 걸림
+     * (다만 시군 전체 이름을 뺐어도 광역 줄 안의 그 시군 섬([LINE_ISLANDS])이 나열 밖이면 그 섬이 남아 모름 — `전라남도(여수 제외)` × 여수),
      * 그 시군의 하위 권역(어간 + 다른 꼬리)뿐이면 모름, 둘 다 아니면 나열 밖이라 걸림이다. 섬 구역은 표로만 본다 — 시군의 일부인 섬은 빼도 본토가
      * 남아 걸림이고, 어간 앞붙음으로 읽지 않는다(`서해5도` 는 서해구가 아니다). 어간이 없는 목적지(광역 · 한 글자 구)는 나머지가 걸린다(규칙 5·7).
      */
     private fun excludedMatch(land: List<String>, place: Place): Match {
         val stem = place.stem
-        if (stem != null && land.any { isWhole(it, stem) }) return Match.MISS
+        if (stem != null && land.any { isWhole(it, stem) }) {
+            val islandLeft = LINE_ISLANDS.any { island -> island !in land && ISLANDS[island]?.let { place.code.startsWith(it) } == true }
+            return if (islandLeft) Match.UNSURE else Match.MISS
+        }
         if (land.any { zone -> zone in WHOLE_CITY_ISLANDS && ISLANDS[zone]?.let { place.code.startsWith(it) } == true }) return Match.MISS
         val partial = stem != null && land.any { it !in ISLANDS && it.startsWith(stem) }
         return if (partial) Match.UNSURE else Match.HIT
@@ -332,17 +375,20 @@ object WeatherAlerts {
     private fun isWhole(zone: String, stem: String): Boolean = zone == stem || zone == stem + "시" || zone == stem + "군"
 
     /**
-     * 줄의 광역이 목적지와 다를 때(규칙 4) — 목적지가 그 줄 관서 묶음의 다른 광역 구역([CROSS_GROUPS])에 들지 않으면 안 걸림이다. 들면 이름이
-     * 나온 구역은 규칙 3 이 이미 맞췄으니, 하위 구역 없는 줄 · 덮는 구역을 전체 이름([isWhole] — 규칙 9)으로 다 빼지 않은 `(…제외)` 줄 · 권역이나
-     * 표에 없는 이름이 낀 줄은 모름이다 — t6 의 광역 줄이 관서 묶음이면 그 목적지에 걸린다.
+     * 줄의 광역이 목적지와 다를 때(규칙 4) — t6 는 행정 광역 줄이라 안 걸림이다(G-SA-18). 다만 관서 묶음 줄이 그 꼴의 흔적 — 그 묶음의 다른
+     * 광역 구역 이름([CROSS_GROUPS])이나 표에 없는 이름 — 을 보이면, 그 묶음 구역이 덮는 목적지는 G-SA-18 전 규칙대로 본다: 덮는 구역을 전체
+     * 이름([isWhole])으로 다 뺀 제외 줄이면 안 걸림, 다 빼지 않은 제외 줄과 권역·낯선 이름이 낀 줄은 모름. 나열된 덮는 구역은 규칙 3 이 이미
+     * 걸었다. 실응답 표본(2026-10-16~22)에는 이런 줄이 없다 — 나오면 감지기가 WARN 한다([unknownNames]).
      */
-    private fun crossGroupMatch(province: Province, area: WarningArea, land: List<String>, place: Place): Match {
-        val members = CROSS_GROUPS[province].orEmpty().filter { member -> codeOf(member)?.let { covers(it, place) } == true }
-        val unsure = members.isNotEmpty() && when {
-            area.zones.isEmpty() -> true
-            area.excluding -> !members.all { member -> land.any { isWhole(it, member) } }
-            else -> land.map { zoneKind(province, it) }.any { it == ZoneKind.REGIONAL || it == ZoneKind.UNKNOWN }
-        }
+    private fun otherProvinceMatch(province: Province, area: WarningArea, land: List<String>, place: Place): Match {
+        val group = CROSS_GROUPS[province].orEmpty()
+        val members = group.filter { member -> codeOf(member)?.let { covers(it, place) } == true }
+        if (members.isEmpty()) return Match.MISS
+        val kinds = land.map { zoneKind(province, it) }
+        val groupForm = land.any { tableNameOf(it) in group } || ZoneKind.UNKNOWN in kinds
+        if (!groupForm) return Match.MISS // 행정 광역 줄(G-SA-18)
+        val unsure = if (area.excluding) !members.all { member -> land.any { isWhole(it, member) } }
+            else ZoneKind.REGIONAL in kinds || ZoneKind.UNKNOWN in kinds
         return if (unsure) Match.UNSURE else Match.MISS
     }
 
