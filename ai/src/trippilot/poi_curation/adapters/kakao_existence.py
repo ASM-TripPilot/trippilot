@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from typing import Protocol
 
 from trippilot.ports.place_existence_port import (
@@ -47,6 +48,8 @@ class HttpGetJson(Protocol):
 # 300m 는 p99 를 넉넉히 덮는다 — 좁히면 좌표가 조금 어긋난 멀쩡한 가게를
 # "없음"으로 찍는다. 배제 정책과 함께 쓰이므로 오탐 쪽으로 보수적이어야 한다.
 _RADIUS_M = 300
+# 동시 호출일 때 마감을 다시 보는 간격 — 결과를 기다리다 이만큼마다 깨어 시계를 본다.
+_POLL_MS = 20
 
 
 class KakaoExistenceAdapter:
@@ -67,6 +70,7 @@ class KakaoExistenceAdapter:
         max_calls: int,
         monotonic_ms: Callable[[], int],
         radius_m: int = _RADIUS_M,
+        workers: int = 1,
     ) -> None:
         self._http = http
         self._headers = {"Authorization": f"KakaoAK {rest_api_key}"}
@@ -76,12 +80,18 @@ class KakaoExistenceAdapter:
         # 코드베이스 관례는 ClockPort.monotonic_ms (assembly_engine/facade.py).
         self._monotonic_ms = monotonic_ms
         self._radius_m = radius_m
+        # 동시 호출 수 — 1 이면 한 건씩 차례로(종전). 생성 경로 배선(main.py)은 여럿을 쓴다:
+        # 키워드검색 1건 ≈60ms(2026-10-23 개발 파드 p50 58·p90 81ms)라 차례로는 마감 1.5s 안에 상위 50곳 중
+        # 25곳 안팎만 묻고, 진행 중 호출 1건(HTTP 타임아웃 1s)만큼 마감을 넘겼다. 동시 8건이면 20건 0.19s.
+        self._workers = max(1, workers)
         self.calls_used = 0
 
     def verify(
         self, queries: tuple[ExistenceQuery, ...], *, deadline_ms: int
     ) -> tuple[ExistenceVerdict, ...]:
         started = self._monotonic_ms()
+        if self._workers > 1:
+            return self._verify_concurrently(queries, deadline_ms, started)
         # 요청 1건 = 예산 1벌 (위 주석). **지역 변수다** — 인스턴스 하나를 요청 간 공유하고
         # (main.py 조립) `/generate` 는 sync def 라 스레드풀에서 동시에 돈다. 인스턴스
         # 카운터를 요청마다 0 으로 되돌리면 끼어든 요청이 남의 사용량을 지워 상한을 넘긴다
@@ -105,6 +115,43 @@ class KakaoExistenceAdapter:
             out.append(self._verify_one(q))
         self.calls_used = used  # 관측용 — 마지막으로 끝난 verify() 의 사용량
         return tuple(out)
+
+    def _verify_concurrently(
+        self, queries: tuple[ExistenceQuery, ...], deadline_ms: int, started: int
+    ) -> tuple[ExistenceVerdict, ...]:
+        """상한(`max_calls`)까지 동시에 묻고 **마감에 바로 돌아온다** — 진행 중인 호출을 기다리지 않는다.
+
+        개수·순서 보존은 차례 판과 같다. 마감까지 못 받은 것은 `deadline_exceeded`, 상한 밖은
+        `call_budget_exhausted`. 시작 전인 호출은 취소하고, 진행 중인 것은 HTTP 타임아웃에 저절로 끝난다
+        (결과는 버린다). 시계는 주입된 단조 시계로만 본다 — 차례 판과 같은 시계 계약.
+        """
+        asked = queries[: max(0, self._max_calls)]
+        got: dict[int, ExistenceVerdict] = {}
+        used = 0
+        if asked and deadline_ms > 0:
+            pool = ThreadPoolExecutor(max_workers=min(self._workers, len(asked)))
+            futures = {pool.submit(self._verify_one, q): i for i, q in enumerate(asked)}
+            pending = set(futures)
+            try:
+                while pending:
+                    left = deadline_ms - (self._monotonic_ms() - started)
+                    if left <= 0:
+                        break
+                    done, pending = wait(pending, timeout=min(left, _POLL_MS) / 1000,
+                                         return_when=FIRST_COMPLETED)
+                    for f in done:
+                        got[futures[f]] = f.result()  # _verify_one 은 던지지 않는다(DL-5)
+            finally:
+                pool.shutdown(wait=False, cancel_futures=True)
+            used = sum(1 for f in futures if not f.cancelled())
+        self.calls_used = used
+        return tuple(
+            got.get(i) or ExistenceVerdict(q.poi_id, ExistenceStatus.UNVERIFIED, reason="deadline_exceeded")
+            for i, q in enumerate(asked)
+        ) + tuple(
+            ExistenceVerdict(q.poi_id, ExistenceStatus.UNVERIFIED, reason="call_budget_exhausted")
+            for q in queries[len(asked):]
+        )
 
     def _verify_one(self, q: ExistenceQuery) -> ExistenceVerdict:
         try:
