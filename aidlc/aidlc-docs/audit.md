@@ -1895,3 +1895,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U8 FD·NFR 국소 개정, 승인 대기(같은 PR 머지 = 승인). `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
+
+## NFR Requirements 사후 개정 — situation-awareness 켠 뒤 쓴 신호의 줄 (NFR §4 OBS-SA-01)
+**Timestamp**: 2026-10-23T22:30:00+09:00 (작업 시점)
+**User Input**: (새 사용자 결정 없음 — 사용자 지시 "꺼둔거 다 켜. 다 잘 돌아가게끔 만들란 말이야!!!"(다른 세션 경유)의 '잘 돌아가게' 몫. 근거는 운영 첫 on 저녁 회차 판독 — 켠 뒤에는 앱에 간 알림을 로그로 대조할 재료가 없었다.)
+**AI Response**: `construction/situation-awareness/nfr-requirements/nfr-requirements.md` §4 끝에 `[개정 · 2026-10-23 — 구현 반영]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 구현은 같은 PR 의 `backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/application/SituationSweep.kt`(on 이면 쓴 출처 신호를 `planb.situation_live` 줄로)와 시험 1건.
+**Context**: CONSTRUCTION — situation-awareness NFR Requirements 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
