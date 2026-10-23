@@ -6,7 +6,7 @@
 
 - `plan` 은 `HandlerTask(name, fn)` 을 돌려준다. Provider·PlanBAgent·풀 조립 호출은 전부 `fn` 콜러블 안에 있고,
   `fn` 은 **호출측이 `TurnContext.ports` 로 주입한 인스턴스**만 쓴다 — 이 모듈은 ports·providers·agents 의 타입을
-  import 하되 인스턴스를 만들지 않는다. 좌표가 먼저 필요한 작업(날씨·거리·대안)은 콜러블 안에서 `PoiInfo` 조회 뒤
+  import 하되 인스턴스를 만들지 않는다(예외 하나 — `HandlerPorts.recommend` 기본값, 상태·IO 없는 고르기 에이전트). 좌표가 먼저 필요한 작업(날씨·거리·대안)은 콜러블 안에서 `PoiInfo` 조회 뒤
   이어 간다. DE §2.4 의 "파(wave) ≤ 2" 는 그래서 이 모양에서는 **콜러블 안의 순차**로 접힌다(파 사이 결과 전달을
   오케스트레이터가 할 필요가 없다).
 - `assemble` 은 **순수**다 — 같은 `ctx`·같은 `results` 면 같은 `Facts`(BR-AO-16). 결과는 작업 `name` 으로만 읽어 도착
@@ -37,6 +37,7 @@ from enum import Enum
 
 from trippilot.agents.edit.insert_between import SlotRef, parse_insert_place, resolve_gap
 from trippilot.agents.planb.rag import _REASON_KO, PlanBAgent, PlanBRagRequest
+from trippilot.agents.recommendation.agent import PLACES, REGIONS, RecommendationAgent, RecommendTask
 from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent, UnknownTask
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import (
@@ -54,7 +55,6 @@ from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory, 
 from trippilot.domain.theme_tags import themes_in
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.region_centers import bare_region, plain_region, region_area, region_center, region_mentions, region_pair
-from trippilot.domain.region_recommend import preference_weights, recommend_regions
 from trippilot.domain.transit import TransitPurpose
 from trippilot.domain.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, _MAX_LENGTH, _violates, clock_times
@@ -204,7 +204,8 @@ class TurnSnapshot:
 
 @dataclass(frozen=True, slots=True)
 class HandlerPorts:
-    """오케스트레이터가 주입하는 실행자 — 핸들러 모듈은 어느 것도 만들지 않는다. None = 미배선(기능 부재)."""
+    """오케스트레이터가 주입하는 실행자 — 핸들러 모듈은 어느 것도 만들지 않는다. None = 미배선(기능 부재).
+    예외 하나: `recommend` 는 상태·LLM·IO 가 없는 고르기 에이전트라 기본으로 하나 만들고 None 이 없다(늘 배선, 2026-10-23)."""
 
     poi_info: Provider | None = None  # PoiInfoProvider.fetch({poi_ids, on, now})
     weather: Provider | None = None  # WeatherProvider.fetch({anchor, days, now})
@@ -215,6 +216,8 @@ class HandlerPorts:
     place_intro: PlaceIntro | None = None  # 장소 소개 한 조각(KB-5) — 벡터 스토어가 배선됐을 때만
     events: Provider | None = None  # EventProvider.fetch({anchor, days, now}) — 행사 저장소가 배선됐을 때만(장소 탐색의 행사 주제)
     unknown: UnknownHandlingAgent | None = None  # 미확인 칸 웹 확인(뒤에서) — PLACE_FACT_LOOKUP 배정이 있을 때만
+    # 추천의 고르기 판단(장소 몇 곳·가볼 지역) — 재료가 전부 과제로 오는 LLM 0 에이전트라 늘 있다(2026-10-23 사용자 결정)
+    recommend: RecommendationAgent = field(default_factory=RecommendationAgent)
 
 
 @dataclass(frozen=True, slots=True)
@@ -2109,29 +2112,34 @@ def _slot_coords(ports: HandlerPorts, now: datetime, poi_ids: list[str]) -> dict
 
 
 # RECOMMEND_PLACES — "골라 줘". 탐색과 같은 앵커·풀·되묻기(탐색 플랜·조립을 그대로 부른다 — 탐색 코드는 손대지 않는다)에서
-# 몇 곳만 고른다. 탐색과 다른 것은 둘뿐이다:
-# 1) 반경 결과가 있으면 그것을 쓴다. 반경 풀은 `_explore_rank` 로 요즘 인기 → 저장 수 → 별점 순이지만 NL2SQL 행의 인기 신호는
-#    '요즘 인기' 태그 하나라 고르기 순서로 약하다(2026-10-20 테스트 화면: "서울 카페 추천"이 가나다순·법인명 카페로 나왔다).
-#    반경 결과가 없을 때(지역 표에 없는 동네)만 SQL 결과를 '요즘 인기' 먼저로 다시 세워 쓴다.
-# 2) 말한 개수(없으면 3)로 자른다. 후보 카드가 아닌 답(되묻기·빈 결과·행사 문장)은 의도만 바꿔 그대로 낸다.
-_RECOMMEND_DEFAULT = 3
+# 몇 곳만 고른다. 어느 후보 묶음을 어떤 순서로 몇 곳 쓸지는 RecommendationAgent 가 정하고(반경 풀 먼저, 없으면 NL2SQL 행을
+# '요즘 인기' 먼저로 — 그 까닭은 에이전트 註), 여기서는 그 고르기로 탐색 조립을 돌린 뒤 말한 개수로 카드·버튼을 함께 자른다.
+# 후보 카드가 아닌 답(되묻기·빈 결과·행사 문장)은 의도만 바꿔 그대로 낸다.
+def _candidates_if_ok(packet: Mapping | None) -> tuple[Mapping, ...]:
+    return tuple(packet["candidates"]) if packet and packet.get("status") == "OK" and packet.get("candidates") else ()
 
 
-def _recommend_count(ctx: TurnContext) -> int:
-    said = ctx.arguments.get("count")
-    return int(said) if said in {"1", "2", "3", "4", "5"} else _RECOMMEND_DEFAULT
+def _picked(outcome):
+    """에이전트 고르기가 예외로 끝났으면 턴 실패로 올린다 — 오케스트레이터 `_crashed` 가 범위 밖 + 이벤트로 보고한다(고르기가 핸들러에
+    있던 때와 같은 갈래). "고를 것 없음"으로 받으면 고르지 않은 순서로 추천하거나 "맞는 지역 없음"으로 답해 보고가 사라졌다(2026-10-23 리뷰)."""
+    if outcome.error is not None:
+        raise RuntimeError(f"recommendation_error: {outcome.error}")
+    return outcome
 
 
 def _assemble_recommend(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts:
     intent = Intent.RECOMMEND_PLACES
     radius, by_sql = _value(results, "explore"), _value(results, "explore_sql")
-    if radius and radius.get("status") == "OK" and radius.get("candidates"):
+    radius_candidates = _candidates_if_ok(radius)  # 반경이 있으면 SQL 행은 보지도 않는다 — 고르기가 핸들러에 있던 때와 같다
+    pick = _picked(ctx.ports.recommend.run(RecommendTask(
+        PLACES, ctx.arguments.get("count"), radius=radius_candidates,
+        sql=() if radius_candidates else _candidates_if_ok(by_sql))))
+    if pick.source == "radius":
         results = {k: v for k, v in results.items() if k != "explore_sql"}
-    elif by_sql and by_sql.get("status") == "OK" and by_sql.get("candidates"):
-        ranked = sorted(by_sql["candidates"], key=lambda c: c.get("reason") != "요즘 인기")  # 안정 정렬 — 나머지는 SQL 순서
-        results = {**results, "explore_sql": TaskResult.ok("explore_sql", {**by_sql, "candidates": ranked})}
+    elif pick.source == "sql":
+        results = {**results, "explore_sql": TaskResult.ok("explore_sql", {**by_sql, "candidates": list(pick.candidates)})}
     facts = _assemble_explore(ctx, results)
-    n = _recommend_count(ctx)
+    n = pick.count
     if facts.detail.get("events"):  # 행사 답 — 행사도 말한 개수만큼("축제 하나만 추천해줘"에 5건이 나갔다), 문장은 자른 목록으로 다시
         events = list(facts.detail["events"])[:n]
         detail = {**facts.detail, "events": events, "pick_count": n}
@@ -2146,7 +2154,7 @@ def _assemble_recommend(ctx: TurnContext, results: Mapping[str, TaskResult]) -> 
                    detail={**facts.detail, "pick_count": n})
 
 
-# RECOMMEND_REGION — 취향(대화 문맥의 계정 취향)·말한 바람 × 지역 성격표 → 가볼 지역 몇 곳 (`domain.region_recommend`, LLM 0).
+# RECOMMEND_REGION — 취향(대화 문맥의 계정 취향)·말한 바람 × 지역 성격표 → 가볼 지역 몇 곳 (고르기는 RecommendationAgent, LLM 0).
 # 지역은 지역 표 이름만(INV-1). 장소가 아니라 카드·장소 보기 버튼이 없다 — 문장(TEXT) + 지역마다 "○○ 가볼 만한 곳" 빠른 답
 # (누르면 그 말이 다음 발화로 가서 장소 탐색으로 이어진다) + 여행 만들기. 취향도 바람도 없으면 고정 문장으로 묻는다.
 # 2026-10-22 사용자: "내 취향 기반해서 가볼 지역 추천해달라고 했는데 그것도 안 해주네" — 여행 스타일 넘기기로 끝났다.
@@ -2156,19 +2164,16 @@ _REGION_ASK_REPLIES = ("바다 보러 갈 지역 추천해줘", "맛집 많은 �
 def _assemble_region(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts:
     intent = Intent.RECOMMEND_REGION
     styles, activities = ctx.snapshot.tastes or ((), ())
-    theme = ctx.arguments.get("theme")
-    weights = preference_weights(styles, activities, theme)
-    if not weights:  # 고를 근거가 없다 — 묻는다 (사실 없음 → LLM 없이 이 문장 그대로, BR-AO-25)
+    pick = _picked(ctx.ports.recommend.run(RecommendTask(REGIONS, ctx.arguments.get("count"), styles=tuple(styles),
+                                                         activities=tuple(activities), theme=ctx.arguments.get("theme"))))
+    if pick.ask_taste:  # 고를 근거가 없다 — 묻는다 (사실 없음 → LLM 없이 이 문장 그대로, BR-AO-25)
         return Facts(intent, FactStatus.EMPTY, AnswerKind.TEXT, rows=(), places=(), notes=(), payload=None,
                      next_actions=(_action("CREATE_TRIP"),),
                      quick_replies=tuple(QuickReplyDraft(t, "SEND_TEXT") for t in _REGION_ASK_REPLIES),
                      template_text=REGION_ASK_TASTE_TEXT)
-    said = ctx.arguments.get("count")
-    n = int(said) if said in {"1", "2", "3", "4", "5"} else _RECOMMEND_DEFAULT
-    picks = recommend_regions(weights, n)
+    picks = pick.regions
     # 근거 — 발화 원문(theme)은 싣지 않는다(INV-2: Facts 시각 허용 집합). 무엇을 기준으로 골랐는지만
-    basis = "말한 바람과 취향" if theme and (styles or activities) else ("말한 바람" if theme else "저장된 취향")
-    detail = {"basis": basis, "pick_count": n}
+    detail = {"basis": pick.basis, "pick_count": pick.count}
     if not picks:
         return _text_facts(intent, FactStatus.EMPTY, (_action("CREATE_TRIP"),),
                            notes=("성격표에서 그 취향에 맞는 지역을 고르지 못함",), detail=detail)

@@ -175,7 +175,7 @@ Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소
 
 ---
 
-## 에이전트 5종
+## 에이전트 6종
 
 ### ScheduleAgent — 일정 생성 비서
 
@@ -214,6 +214,13 @@ Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소
 - **코드**: `agents/unknown_handling/agent.py` — `UnknownHandlingAgent.run(UnknownTask) → UnknownOutcome`. 도우미 핸들러(`orchestrator/dialogue_handlers.py`)가 부른다. 저장소는 `agents/adapters/{pg,memory}_place_fact_store.py`(ai_kb `place_fact_cache` / 프로세스 메모리), 타입 정본은 `ports/place_fact_store_port.py`
 - **할당 Tool**: `PlaceFactLookupWorker`(feature `PLACE_FACT_LOOKUP`, 벤더 웹 검색) **(1개만)** — 배정이 있을 때만 켜진다(없으면 카드는 "미확인" 그대로). INV-1: 새 장소를 고르지 않는다 · INV-2: 값은 답에만 쓰고 일정 조립에 넣지 않는다
 - **둘째 일 (2026-10-23)**: 조회 도구로 답할 게 없는 여행 일반 지식("부산은 언제 가는 게 좋아?")과 정보성 질문(숙소 잡기 좋은 동네·예약이 필요한지·교통 수단 고르기 — 계획 gap KNOWLEDGE·LODGING·BOOKING·TRANSPORT·OTHER)을 `DialogueKnowledgeWorker`(feature `DIALOGUE_KNOWLEDGE`)로 이번 턴에 답한다 — `run(KnowledgeTask) → UnknownOutcome(answer)`, 웹 검색 없음, 가격·특정 날짜·연도·거리·노선 번호·등록되지 않은 장소 이름은 막는다, 대신 해 달라는 일(예약·결제·표 끊기)은 모른다고 닫는다
+
+### RecommendationAgent — 추천 비서
+
+- **패턴**: 고르기 판단 (LLM 0). 2026-10-23 편입 — 사용자 결정 "추천 관련한 것은 recommendation agent 가 처리"
+- **흐름**: 도우미 "골라 줘"(RECOMMEND_PLACES) — 핸들러가 모은 후보 중 반경 풀 먼저(없으면 NL2SQL 행을 '요즘 인기' 먼저로), 말한 개수(없으면 3) · "어디로 갈까"(RECOMMEND_REGION) — 취향 두 축 + 말한 바람 × 지역 성격표로 몇 곳과 근거, 근거가 없으면 되묻기
+- **코드**: `agents/recommendation/agent.py` — `RecommendationAgent.run(RecommendTask) → RecommendOutcome`. 도우미 핸들러(`orchestrator/dialogue_handlers.py`)가 재료를 모아 부르고 답 꼴(Facts — 카드·버튼·템플릿)을 짓는다. `ROUTING_TABLE` 의 두 행이 이 에이전트로 DELEGATE
+- **할당 Tool**: 없음 — `domain/region_recommend`(성격표·가중표, 순수 함수)만 쓴다. INV-1: 후보·지역은 닫힌 집합(등록 POI·지역 표) 안에서만 고른다
 
 ---
 
