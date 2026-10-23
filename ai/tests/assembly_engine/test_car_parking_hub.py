@@ -157,3 +157,34 @@ def test_화면_감싸개는_운전_구간만_거점_사이로_실측하고_걷�
 def test_화면_감싸개는_걷는_구간에_실경로를_부르지_않는다() -> None:
     port = _Port()
     assert WalkFirst(port, EST).estimate(A, B, C).source == WALKED_SOURCE and port.calls == []
+
+
+
+def test_걷는_상한이_0이면_묶지_않고_터지지도_않는다() -> None:
+    plan = plan_parking([H, A, B], walk_max_km=0.0, detour_factor=1.3)
+    assert all(plan.hub_of(p) == p for p in (H, A, B)) and plan.walk_clusters == 0
+
+
+def test_여러_지역을_묶은_풀의_북쪽_끝에서도_반경_안_쌍을_놓치지_않는다() -> None:
+    """평균 위도로 경도 칸을 잡으면 북쪽 끝에서 칸이 좁아져 반경 안 쌍이 두 칸 떨어진다 — 그 자리에 쌍을 일부러 놓는다."""
+    import math
+    radius = 0.7 / 1.3
+    south = [GeoPoint(33.0 + i * 1e-4, 126.5) for i in range(40)]  # 평균 위도를 남쪽으로 끌어내린다(제주 쪽 다수)
+    lat_n = 38.0
+    mean = (sum(p.lat for p in south) + 2 * lat_n) / (len(south) + 2)
+    old_cell = (radius / 111.195) / math.cos(math.radians(mean))         # 평균 위도 기준 경도 칸(도)
+    sep = 0.99 * radius / (111.195 * math.cos(math.radians(lat_n)))      # 반경 안(99%) 동서 간격(도)
+    assert sep > old_cell  # 칸보다 넓다 — 옛 격자에서는 두 칸 떨어질 수 있는 자리
+    lng0 = (math.floor(128.0 / old_cell) + 0.98) * old_cell            # 칸 끝자락에서 시작해 두 칸 너머로
+    a, b = GeoPoint(lat_n, lng0), GeoPoint(lat_n, lng0 + sep)
+    assert math.floor(b.lng / old_cell) - math.floor(a.lng / old_cell) == 2
+    plan = plan_parking([*south, a, b], walk_max_km=0.7, detour_factor=1.3)
+    assert plan.hub_of(a) == plan.hub_of(b)
+
+
+def test_자가용_문구는_가장_긴_경우에도_백엔드_60자_칸_안이다() -> None:
+    """BE `visit_slot.distance_range` 는 varchar(60) 이고 넘으면 자른다(BoundedText.clamp) — 꼬리를 붙여도 넉넉히 안이다.
+    국내 최장 운전(999.9km 로 잡음) + 걷는 꼬리 최대(양 끝 각 1.0km 상한 → 2.0km)."""
+    worst = TravelEstimate((999.9, 999.9), 600, True, PARKED_SOURCE, walk_km=2.0)
+    label = _render_distance(worst, C)
+    assert label == "약 999.9km · 자가용 추정 (주차장 도보 2.0km 포함)" and len(label) <= 60

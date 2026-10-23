@@ -323,7 +323,8 @@ class KmaWarningDetectorTest : StringSpec({
     }
 
     /**
-     * 광역시의 군(강화·옹진)은 구역 이름에 제 이름이 나온다 — 다른 군만 적힌 줄에 걸지 않는다. 권역 이름(부산동부)만 있으면 줄 전체다.
+     * 광역시의 군(강화·옹진)은 구역 이름에 제 이름이 나온다 — 다른 군만 적힌 줄에 걸지 않는다. 권역 이름(부산동부)만 있으면 줄 전체다 — 제 구역이
+     * 있는 군(강화·옹진·군위·달성)은 목록의 권역(인천영종 · 대구중부 …)만으로는 걸지 않는다.
      * 군 어간·광역 이름·표 어디에도 안 드는 이름(구역 개편 — `동해안권`)이 끼면 그 군을 덮는지 모른다 — 도의 시군과 같다(G-SA-16 결정).
      */
     "광역시의 군은 제 이름이 없는 군 구역 줄에 걸리지 않는다 — 권역 줄(부산동부)이면 걸리고, 표에 없는 이름이 끼면 모름" {
@@ -342,9 +343,10 @@ class KmaWarningDetectorTest : StringSpec({
 
     /**
      * 특보구역은 기상청 관서 묶음으로 나뉘어 묶음과 행정 광역이 다른 구역이 있다 — 경기 묶음 줄의 `강화` 는 인천 강화군이다. 광역이 다르다고
-     * '안 걸림'으로 접으면 거짓 해제다(INV-SA-2). 그 도의 다른 목적지에는 아는 이름이라 확인이다(모름·WARN 이 아니다).
+     * '안 걸림'으로 접으면 거짓 해제다(INV-SA-2). 그 도의 다른 목적지에는 아는 이름이라 확인이다. 실응답에서 관서 묶음 구역은 늘 제 광역 줄에
+     * 나왔으니(G-SA-18) 묶음 줄에 나오면 t6 형식 변화라 감지기마다 WARN 이 한 번 난다.
      */
-    "관서 묶음 구역은 줄의 광역과 무관하게 그 시군에 걸린다 — 그 도의 다른 목적지는 확인" {
+    "관서 묶음 구역은 줄의 광역과 무관하게 그 시군에 걸린다 — 그 도의 다른 목적지는 확인, 형식 변화 WARN" {
         val ganghwa = FakeTripDestinations().put(tripId, DAY, DAY.plusDays(1), TripDestinationRef("강화군", "28710", 1))
         val gimpo = FakeTripDestinations().put(tripId, DAY, DAY.plusDays(1), TripDestinationRef("김포시", "41570", 1))
         val day = target(tripId, slot("해변", "자연", "14:00", "15:00"))
@@ -354,7 +356,8 @@ class KmaWarningDetectorTest : StringSpec({
             (KmaWarningDetector(line(), ganghwa).detect(day) as Detection.Checked).signals.single().variant shouldBe TriggerVariant.WIND
             KmaWarningDetector(line(), gimpo).detect(day) shouldBe Detection.Checked(setOf(null), emptyList())
         }
-        warns.shouldBeEmpty()
+        warns.size shouldBe 2 // 감지기 둘 — 파드마다 한 번
+        warns.forEach { it shouldContain "강화" }
     }
 
     /**
@@ -371,6 +374,10 @@ class KmaWarningDetectorTest : StringSpec({
         }
         warns.shouldBeEmpty()
         KmaWarningDetector(except("경주"), gyeongju).detect(day) shouldBe Detection.Checked(setOf(null), emptyList())
+        // 시군 전체 이름을 뺐어도 광역 줄 안의 그 시군 섬(거문도.초도 = 여수)이 남으면 모름이다(LINE_ISLANDS)
+        val yeosu = FakeTripDestinations().put(tripId, DAY, DAY.plusDays(1), TripDestinationRef("여수시", "12130", 1))
+        KmaWarningDetector(warned(gale(WarningArea("전라남도", listOf("여수"), excluding = true))), yeosu).detect(day) shouldBe
+            Detection.Unknown("unattributed-zone")
         (KmaWarningDetector(except("경주동부"), pohangTrip()).detect(day) as Detection.Checked).signals.single().variant shouldBe
             TriggerVariant.WIND
     }

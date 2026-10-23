@@ -184,3 +184,5 @@ itinerary-recalculation  application/PreparedReplanService.kt
 - **법무 확인 묶음**(LEGAL-SA-02).
 
 > **[개정 · 2026-10-22 — 구현 반영]** §4 — 위 '실응답 표본 수집'의 `LIVE_KMA=1` 격자 왕복에서 'TMN·TMX 실재'는 더 확인할 것이 없다 — 판정이 하루 값을 쓰지 않는다(델타 3 개정 블록). 특보구역은 공식 개편 목록 대조를 마쳤고(`functional-design/business-rules.md` BR-SA-16 개정 블록), t6 실응답 표본에 남은 몫은 광역 줄의 단위·제외 줄의 하위 권역 판정이다(G-SA-18·19 — `functional-design/business-logic-model.md` §9 개정 블록). 'dry-run 실측'의 AI 검증 지연(`detectorMs{place}` p95)은 시한 3s·백스톱 8s 경로에서 다시 잰다 — 'AI 검증 실측 20.1s'는 그 전 값이다(`nfr-requirements.md` §1 개정 블록).
+
+> **[개정 · 2026-10-22 — 구현 반영]** §4 — t6 실응답 표본 몫을 마쳤다. 기상청 특보 통보문(`getWthrWrnMsg` — 조회는 6일 전까지) 2026-10-16~22 의 t6 71개로 광역 줄의 단위(G-SA-18 — 행정 광역)를 정했다. 표본은 `backend/modules/weather-context/src/test/resources/public-data/kma_t6_wrn_msg_20261016_20261022.txt` 에 두었다(TRIP-1590). G-SA-19 는 #1571 로 이미 닫혔다. 남은 것은 G-SA-24 · G-SA-20 의 정본 결정이다.

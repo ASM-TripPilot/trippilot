@@ -13,7 +13,10 @@ from datetime import datetime, timezone
 from trippilot.domain.common import GeoPoint, PoiId, TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
-from trippilot.llm_gateway.gates.numbered_selection import NumberedSelectionGate, numbered
+from trippilot.domain.persona import PersonaSummary
+from trippilot.domain.common import BudgetLevel
+from trippilot.llm_gateway.gates.numbered_selection import NumberedScoringGate, NumberedSelectionGate, numbered
+from trippilot.llm_gateway.workers.preference import build_prompt_vars
 
 _NOW = datetime(2026, 10, 21, tzinfo=timezone.utc)
 _IDS = ("c-uuid-3", "a-uuid-1", "b-uuid-2")  # 정렬하면 a, b, c
@@ -56,3 +59,32 @@ def test_모양이_틀리면_종전과_같은_파싱_실패() -> None:
     out = NumberedSelectionGate().apply("not json", _pool(), feature=LlmFeature.REPLAN_COMPOSITION,
                                         trace_id=TraceId("t"), now=_NOW)
     assert out.value == () and out.error.startswith("parse_error")
+
+
+# ── PREFERENCE_SCORING (프롬프트 0.4.0) — 같은 번호 규칙, 안쪽은 ClosedSetGate ──
+
+
+def _score(scores: list[dict]):
+    return NumberedScoringGate().apply(json.dumps({"scores": scores}, ensure_ascii=False), _pool(),
+                                       feature=LlmFeature.PREFERENCE_SCORING, trace_id=TraceId("t"), now=_NOW)
+
+
+def test_점수_프롬프트는_번호로_싣고_게이트가_같은_순서로_되돌린다() -> None:
+    persona = PersonaSummary(taste_tags=(), companion=None, budget=BudgetLevel.MID)
+    lines = build_prompt_vars(_pool(), persona)["candidates"].splitlines()
+    assert lines == ["- 1 | SIGHT | a-uuid-1", "- 2 | SIGHT | b-uuid-2", "- 3 | SIGHT | c-uuid-3"]
+    out = _score([{"no": 2, "score": 0.9}, {"no": "1", "score": 0.1}, {"no": 3, "score": 1.7}])
+    assert out.error is None
+    assert [(str(p.poi_id), p.score) for p in out.value] == [("b-uuid-2", 0.9), ("a-uuid-1", 0.1), ("c-uuid-3", 1.0)]
+
+
+def test_점수_목록_밖_번호는_그것만_버린다() -> None:
+    out = _score([{"no": 9, "score": 0.5}, {"no": 2, "score": 0.4}])
+    assert [str(p.poi_id) for p in out.value] == ["b-uuid-2"]
+    assert out.drop_event is not None and out.drop_event.dropped_count == 1
+
+
+def test_점수를_poiId_로_답해도_통과한다() -> None:
+    """옛 판(0.3.0)·테스트 가짜는 poiId 로 답한다 — 같은 게이트가 받는다."""
+    out = _score([{"poiId": "c-uuid-3", "score": 0.3}])
+    assert [str(p.poi_id) for p in out.value] == ["c-uuid-3"] and out.error is None

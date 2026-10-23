@@ -2,16 +2,19 @@ package com.trippilot.weathercontext.adapter.out.external
 
 import com.trippilot.weathercontext.api.ActiveWarning
 import com.trippilot.weathercontext.api.WarningArea
+import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 
 /**
  * 특보현황 `t6`(발효 중 특보) 문장 읽기 — BR-SA-16 "응답 형식은 실응답 표본으로 고정한다".
  *
  * 표본 둘: 실응답 `"o 없 음"`(2026-10-19 12:00 발표 — 공백 변주가 실재한다)과 weather.go.kr 특보 발효현황 문장
  * (2026-10-18 22:40 — `o 강풍주의보 : 경상북도(영덕, 포항, 울진평지, 울진산지, 경주동부), 울산, 울릉도.독도` ·
- * `o 호우주의보 : 경상남도(사천)`). 못 읽는 문장은 null 이다 — '특보 없음'으로 접지 않는다(INV-SA-2).
+ * `o 호우주의보 : 경상남도(사천)`). 못 읽는 문장은 null 이다 — '특보 없음'으로 접지 않는다(INV-SA-2). 특보 통보문의 t6 71개(2026-10-16~22)는
+ * 맨 아래 시험이 본다.
  */
 class KmaWarningTextTest : StringSpec({
 
@@ -112,4 +115,33 @@ class KmaWarningTextTest : StringSpec({
             "o 강풍주의보 : 울산\r\no 없 음",
         ).forEach { KmaWarningText.parse(it) shouldBe null }
     }
+
+    /**
+     * 실응답 표본 — 기상청 특보 통보문(`getWthrWrnMsg` · stnId 108) 2026-10-16~22 발표의 서로 다른 t6 71개(2026-06-01 특보구역 개편 뒤 문장 —
+     * `public-data/kma_t6_wrn_msg_20261016_20261022.txt`). 하위 구역 이름 안의 괄호(`보령(도서제외)` · `군산옥도면(어청도 제외)`)가 실제로
+     * 쓰인다 — 이름째 남아야 하고, 제외 줄은 마지막 하위 구역이 `제외` 로 끝날 때뿐이다. 이름 안의 '제외'를 줄의 제외로 읽으면 줄의 뜻이 뒤집혀
+     * 나열된 곳이 '특보 없음'이 된다(INV-SA-2).
+     */
+    "실응답 t6 71개는 전부 읽힌다 — 이름 안의 괄호는 이름째, 제외 줄은 실제 제외 줄 여섯뿐이다" {
+        val samples = realT6Samples()
+        samples.size shouldBe 71
+        val areas = samples.flatMap { (release, t6) ->
+            val parsed = KmaWarningText.parse(t6)
+            withClue(release) { parsed shouldNotBe null }
+            parsed!!.flatMap { it.areas }
+        }
+        areas.filter { it.excluding }.map { "${it.name}(${it.zones.joinToString(", ")} 제외)" }.toSet() shouldBe setOf(
+            "충청남도(금산 제외)", "인천(옹진 제외)", "인천(강화 제외)", "서울(서울동남권 제외)",
+            "경기도(하남, 이천, 광주, 여주동남부, 여주서부, 양평동부, 양평서부 제외)", "제주도(서귀포시남부, 서귀포시중산간 제외)",
+        )
+        areas.flatMap { it.zones }.filter { '(' in it }.toSet() shouldBe setOf(
+            "보령(도서제외)", "신안(흑산면제외)", "영광(낙월면 제외)", "완도(여서도 제외)", "부안(위도면 제외)", "군산(옥도면 제외)",
+            "군산옥도면(어청도 제외)",
+        )
+    }
 })
+
+/** 실응답 t6 표본 — `### 발표시각/순번` 머리 아래가 t6 원문이다(그 앞의 `#` 줄은 설명). */
+private fun realT6Samples(): List<Pair<String, String>> =
+    object {}.javaClass.getResource("/public-data/kma_t6_wrn_msg_20261016_20261022.txt")!!.readText().split("\n### ").drop(1)
+        .map { block -> block.substringBefore('\n') to block.substringAfter('\n').trimEnd() }

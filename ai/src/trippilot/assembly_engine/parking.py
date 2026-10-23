@@ -58,11 +58,15 @@ def plan_parking(points: Iterable[GeoPoint], *, walk_max_km: float, detour_facto
     radius = walk_max_km / detour_factor
     hard = WALK_HARD_MAX_KM / detour_factor
     ordered = sorted(set(points), key=lambda p: (p.lat, p.lng))
+    if radius <= 0:  # 걷는 상한 0(설정이 허용한다) — 묶을 것이 없다. 격자 칸이 0 이 되어 나누기가 터지기 전에 혼자씩 둔다
+        return ParkingPlan({p: p for p in ordered})
     if not ordered:
         return ParkingPlan({})
     lat_cell = radius / 111.195
-    mean_lat = sum(p.lat for p in ordered) / len(ordered)
-    lng_cell = lat_cell / max(math.cos(math.radians(mean_lat)), 0.2)
+    # 경도 칸은 **가장 높은 위도**에서 반경 한 칸이 되게 잡는다 — 경도 1도가 가장 짧은 곳이 기준이어야 어디서든 3×3 이 반경을
+    # 덮는다. 평균 위도로 잡으면 여러 지역을 묶은 풀(서울+제주)의 북쪽 끝에서 반경 안 쌍이 두 칸 떨어져 놓친다(Codex 리뷰 10-23)
+    widest = max(abs(p.lat) for p in ordered)
+    lng_cell = lat_cell / max(math.cos(math.radians(widest)), 0.2)
     cells: dict[tuple[int, int], list[GeoPoint]] = {}
 
     def cell(p: GeoPoint) -> tuple[int, int]:

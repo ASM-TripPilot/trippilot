@@ -82,7 +82,6 @@ from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver, ContextStore
 from trippilot.llm_gateway.gates.explanation import ExplanationGate
 from trippilot.llm_gateway.gates.reminder_copy import ReminderCopyGate
-from trippilot.llm_gateway.gates.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.alternative_explanation import (
@@ -198,7 +197,7 @@ from trippilot.llm_gateway.workers.replan_composition import (
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
-from trippilot.llm_gateway.gates.numbered_selection import NumberedSelectionGate
+from trippilot.llm_gateway.gates.numbered_selection import NumberedScoringGate, NumberedSelectionGate
 from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.place_fees import load_fee_table
@@ -4278,7 +4277,7 @@ def build_orchestrator(
         # 폴백은 캐시하지 않으므로 UnwiredLlm·강등 경로 동작은 기존과 동일.
         CachingScoringWorker(
             PreferenceScoringWorker(
-                GatewayFacade(llm, renderer, ClosedSetGate(), c1_config, trace)
+                GatewayFacade(llm, renderer, NumberedScoringGate(), c1_config, trace)
             )
         ),
         provider,
