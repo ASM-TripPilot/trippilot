@@ -21,16 +21,25 @@ class TripAggregatePortAdapter(
     private val itineraries: ItineraryFacade,
 ) : TripAggregatePort {
 
-    override fun countsOf(accountId: UUID, trips: List<TripDateRange>): Map<UUID, TripCounts> =
-        trips.associate { trip ->
+    override fun countsOf(accountId: UUID, trips: List<TripDateRange>): Map<UUID, TripCounts> {
+        // 생성 진행 여부는 목록 전체를 한 번에 묻는다 — 여행마다 물으면 목록 길이만큼 조회가 는다
+        val running = itineraries.runningGenerationTripIds(accountId, trips.map { it.tripId })
+        return trips.associate { trip ->
+            // 소유·존재 검증은 퍼사드가 하고, 일정이 없거나 남의 여행이면 null 이 온다.
+            val itinerary = itineraries.findCurrent(accountId, trip.tripId)
             trip.tripId to TripCounts(
                 // 배정은 날짜별로 오므로 같은 숙소가 여러 번 나온다 — 숙소 **수**는 중복을 뺀 값이다.
                 baseCount = bases.findBaseStays(trip.tripId, trip.startDate, trip.endDate)
                     .map { it.savedStayId }
                     .distinct()
                     .size,
-                // 일정이 없으면 0 이다. 소유·존재 검증은 퍼사드가 하고, 남의 여행이면 null 이 온다.
-                itineraryDayCount = itineraries.findCurrent(accountId, trip.tripId)?.dates?.size ?: 0,
+                itineraryDayCount = itinerary?.dates?.size ?: 0,
+                itineraryStatus = itinerary?.status,
+                itineraryGenerationState = itinerary?.generationState,
+                itineraryGenerationMode = itinerary?.generationMode,
+                // 일정 조회(상세)와 같은 뜻 — 일정이 아직 없는 첫 생성 중에는 상세도 404 라 false 로 둔다
+                itineraryGenerating = itinerary != null && trip.tripId in running,
             )
         }
+    }
 }

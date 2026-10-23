@@ -35,8 +35,21 @@ data class TripDateRange(val tripId: UUID, val startDate: LocalDate, val endDate
  *   한 숙소가 사흘을 덮어도 1이다. 0 이면 화면이 `숙소 미등록` 칩을 그린다.
  * @property itineraryDayCount 일정이 **있는 일수**. 0 = 아직 생성되지 않음.
  *   시간이 아니라 개수다 — 소요시간은 어디에도 싣지 않는다(INV-3).
+ * @property itineraryStatus 현재 일정의 확정 상태(PLANNED | CONFIRMED). 일정이 없으면 null.
+ *   개수는 아니지만 같은 자리에 둔다 — 앱 목록이 이 값 하나를 알려고 여행마다 일정을 따로 불러
+ *   개발 서버가 429 를 냈다(10-14). 같은 이유로 아래 세 칸도 일정 조회 응답과 같은 값을 싣는다.
+ * @property itineraryGenerationState PARTIAL | COMPLETE | FAILED. 일정이 없으면 null.
+ * @property itineraryGenerationMode FULLY_AI | CO_PLAN | MANUAL. 일정이 없으면 null.
+ * @property itineraryGenerating 진행 중 생성 세션이 있는가(다시 만들기 중이면 위 상태는 옛 일정의 값이다).
  */
-data class TripCounts(val baseCount: Int, val itineraryDayCount: Int) {
+data class TripCounts(
+    val baseCount: Int,
+    val itineraryDayCount: Int,
+    val itineraryStatus: String? = null,
+    val itineraryGenerationState: String? = null,
+    val itineraryGenerationMode: String? = null,
+    val itineraryGenerating: Boolean = false,
+) {
     companion object {
         /** 아무것도 없는 여행. 새로 만든 직후가 이 값이다. */
         val NONE = TripCounts(baseCount = 0, itineraryDayCount = 0)

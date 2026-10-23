@@ -136,6 +136,9 @@ interface GenerationSessionRepository {
     /** 진행 중 세션(RUNNING·DAY1_READY). 중복 생성을 막고 폴링 대상을 찾는 데 쓴다. */
     fun findRunningByTrip(tripId: UUID): GenerationSession?
 
+    /** 이 계정의 [tripIds] 가운데 진행 중 세션이 있는 여행 id — 여행 목록이 한 번의 조회로 묻는다. */
+    fun findRunningTripIds(accountId: UUID, tripIds: Collection<UUID>): Set<UUID>
+
     /**
      * 이 **계정**에 진행 중인 세션(TRIP-403). 여러 건이면 가장 최근 것.
      *
