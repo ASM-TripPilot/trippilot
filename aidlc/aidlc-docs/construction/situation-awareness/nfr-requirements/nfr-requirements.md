@@ -220,6 +220,8 @@ planb.situation_sweep mode= phase= trips= skipped= failed= live=[] off=[] observ
 
 > **[개정 · 2026-10-22 — 구현 반영]** 8단계 갱신 — 특보를 `observe-only` 에서 빼기 전에 정할 것에서 G-SA-18 이 빠진다(실응답 표본 — t6 광역 줄은 행정 광역 · TRIP-1590 · `functional-design/business-rules.md` BR-SA-16 개정 블록). 남은 것은 G-SA-24 · G-SA-20 과 대기질의 에어코리아 모름 비율이다.
 
+> **[개정 · 2026-10-23 — 사용자 결정]** 8단계 갱신 — 특보 쪽 정본 결정은 남지 않는다(G-SA-24 · G-SA-20 해소 — `functional-design/business-logic-model.md` §0.4 · §9 개정 블록). 남은 것은 대기질의 에어코리아 모름 비율과 `observe-only` 에서 빼는 커밋이다.
+
 ## 8. PBT (blocking · 확장 Partial 모드)
 
 `functional-design/business-rules.md` 의 **PBT-SA-01~22**(전부 blocking)를 그대로 승계한다. NFR 성질이 큰 것은 PBT-SA-04(푸시 상한 · 회차당 사건 ≤ 1) · 07(밤 창 경계) · 17(선계산 구독자 멱등 · 상한 · BUSY 는 세션 0) · 18(같은 여행 10분 1회)이다 — 실행 패턴의 실패 모드를 이 넷과 스윕 단위 테스트가 보므로 NFR Design 을 두지 않는다(계획 Q10=A). 확장 규칙과의 대응:
