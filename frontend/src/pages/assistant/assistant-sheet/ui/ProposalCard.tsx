@@ -14,6 +14,9 @@ import { OutlineCard } from './OutlineCard';
  * - 시각·거리는 diff 문자열 그대로(`slotFaceLine`), 이동은 거리만(BR-U8-35 · INV-3).
  * - 적용 중이면 [적용]을 막는다 — 이중 적용의 최종 차단은 서버 상태기계(INV-U8-08), 페이지 ref 잠금이 그 앞.
  * - STALE·EXPIRED·FAILED 면 버튼 대신 낡음 안내 + [다시 제안](같은 요청을 다시 보낸다).
+ * - 줄에 `dayLabel` 이 오면(여러 날을 통째로 바꾼 안 등) 날마다 머리 줄 + 카드 한 장으로 끊는다 — 한 날 안이어도
+ *   라벨이 오면 그 날 머리 줄이 붙는다. 라벨이 하나도 없으면(옛 서버) 예전처럼 카드 한 장.
+ *   빠지는 곳은 "빠짐"(지금 줄을 흐리게), 새로 넣는 곳은 "추가".
  */
 
 export interface ProposalCardProps {
@@ -31,17 +34,20 @@ function DiffRow({
   tone,
   line,
   checked,
+  dimmed,
 }: {
   badge: string;
   tone: 'now' | 'next';
   line: string;
   checked?: boolean;
+  dimmed?: boolean;
 }): ReactElement {
   // 바뀌는 쪽("변경") 행만 면을 칠하고 체크를 단다 — 지금 쪽은 평범한 행(Figma 5026:3490)
+  // 빠지는 곳은 흐리게 — 재계획 초안의 빠지는 곳(ReplanDraftView)과 같은 opacity-45
   const next = tone === 'next';
   return (
     <View
-      className={`flex-row items-center gap-md px-lg py-md${next ? ' bg-primary-pale' : ''}`}
+      className={`flex-row items-center gap-md px-lg py-md${next ? ' bg-primary-pale' : ''}${dimmed ? ' opacity-45' : ''}`}
     >
       <Text
         className={`w-[32px] font-noto text-label ${next ? 'font-noto-bold font-bold text-primary' : 'text-muted'}`}
@@ -59,15 +65,21 @@ function DiffRow({
 }
 
 function DiffBlock({ item }: { item: ProposalDiffItem }): ReactElement {
+  const removed = item.change === 'REMOVED';
   return (
     <View>
       {item.before ? (
-        <DiffRow badge="지금" tone="now" line={slotFaceLine(item.before)} />
+        <DiffRow
+          badge={removed ? '빠짐' : '지금'}
+          tone="now"
+          line={slotFaceLine(item.before)}
+          dimmed={removed}
+        />
       ) : null}
       {item.before && item.after ? <View className="h-px bg-hairline" /> : null}
       {item.after ? (
         <DiffRow
-          badge="변경"
+          badge={item.change === 'ADDED' ? '추가' : '변경'}
           tone="next"
           line={slotFaceLine(item.after)}
           checked
@@ -75,6 +87,33 @@ function DiffBlock({ item }: { item: ProposalDiffItem }): ReactElement {
       ) : null}
     </View>
   );
+}
+
+function DiffCard({ items }: { items: ProposalDiffItem[] }): ReactElement {
+  return (
+    <OutlineCard>
+      {items.map((item, index) => (
+        <DiffBlock key={`${item.slotKey}-${index}`} item={item} />
+      ))}
+    </OutlineCard>
+  );
+}
+
+/**
+ * 받은 순서 그대로, `dayLabel` 이 바뀌는 자리에서만 끊는다 — 같은 날이 떨어져 와도 합치지 않는다(앱이 줄 순서를
+ * 바꾸지 않는다, INV-2). 빈 문자열·null 은 라벨 없음.
+ */
+function dayRuns(
+  diff: ProposalDiffItem[]
+): { label: string | null; items: ProposalDiffItem[] }[] {
+  const runs: { label: string | null; items: ProposalDiffItem[] }[] = [];
+  for (const item of diff) {
+    const label = item.dayLabel || null;
+    const last = runs[runs.length - 1];
+    if (last && last.label === label) last.items.push(item);
+    else runs.push({ label, items: [item] });
+  }
+  return runs;
 }
 
 const STATUS_TEXT: Partial<Record<Proposal['status'], string>> = {
@@ -99,11 +138,27 @@ export function ProposalCard({
 
   return (
     <View testID={`assistant-proposal-${proposal.id}`} className="gap-md">
-      <OutlineCard>
-        {proposal.diff.map((item, index) => (
-          <DiffBlock key={`${item.slotKey}-${index}`} item={item} />
-        ))}
-      </OutlineCard>
+      {proposal.diff.some((item) => item.dayLabel) ? (
+        dayRuns(proposal.diff).map((run, runIndex) =>
+          run.label ? (
+            <View
+              key={runIndex}
+              // n 은 묶음 순번이다 — 몇째 날이 아니다(같은 날이 떨어져 오면 새 번호)
+              testID={`assistant-proposal-day-${runIndex}`}
+              className="gap-xs"
+            >
+              <Text className="font-noto-bold text-label font-bold text-muted">
+                {run.label}
+              </Text>
+              <DiffCard items={run.items} />
+            </View>
+          ) : (
+            <DiffCard key={runIndex} items={run.items} />
+          )
+        )
+      ) : (
+        <DiffCard items={proposal.diff} />
+      )}
 
       {proposal.violations.map((violation, index) => (
         <OutlineCard
