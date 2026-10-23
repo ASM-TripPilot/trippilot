@@ -328,6 +328,8 @@ class SecretTests(unittest.TestCase):
             "CREATE TABLE IF NOT EXISTS public.dialogue_memory_vectors"})
         (vectors,) = [stmt for stmt in local if "dialogue_memory_vectors" in stmt]
         self.assertIn("REFERENCES public.dialogue_memory (session_id) ON DELETE CASCADE", vectors)
+        # 어댑터 advance 의 `ON CONFLICT (session_id, line)` 대상 — 키가 없거나 바뀌면 운영 저장이 매번 롤백된다(어댑터 테스트는 SQL 문자열만 본다)
+        self.assertIn("PRIMARY KEY (session_id, line)", vectors)
         # 벡터 표는 기억 표 뒤에 만든다 — 앞이면 FK 대상이 없어 initdb·bootstrap 이 멈춘다
         sql = bootstrap.read_text(encoding="utf-8")
         self.assertLess(sql.index("CREATE TABLE IF NOT EXISTS public.dialogue_memory ("),

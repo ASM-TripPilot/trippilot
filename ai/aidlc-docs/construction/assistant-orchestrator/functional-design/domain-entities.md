@@ -361,9 +361,9 @@ MemoryStorePort (Protocol):                       # ports/memory_store_port.py
 - 포트 구현은 예외를 던질 수 있다(psycopg). **삼키는 것은 오케스트레이터 몫** — 읽기 실패는 "메모리 없이 진행", 쓰기 실패는
   `FallbackEvent(stage="memory")` + 다음 턴 재시도(BR-AO-09). 경계(`DELETE/GET`)에서는 예외가 500 으로 나가 백엔드가 재시도한다
   (purge 경로가 그것을 원한다 — DATA-U8-02).
-- `due(turn_index: int, summarized_turn_index: int, every: int = 10) -> bool` = `turn_index − summarized_turn_index ≥ every`(기억이 없으면
+- (종전 — 아래 2026-10-23 판이 대신한다) `due(turn_index: int, summarized_turn_index: int, every: int = 10) -> bool` = `turn_index − summarized_turn_index ≥ every`(기억이 없으면
   호출측이 `summarized_turn_index=0` 을 넘긴다).
-- `compress_fallback(recent_turns, previous: Sequence[str] = (), *, max_lines=20, line_chars=120) -> tuple[str, ...]` — **결정론**: `previous` 뒤에
+- (종전 — 2026-10-23 없앴다) `compress_fallback(recent_turns, previous: Sequence[str] = (), *, max_lines=20, line_chars=120) -> tuple[str, ...]` — **결정론**: `previous` 뒤에
   최근 턴을 `"- 사용자: …"`/`"- 도우미: …"` 줄로 붙이되 줄을 `line_chars` 로 자르고 뒤에서부터 `max_lines` 만 남긴다. 멱등(두 번 적용 =
   한 번). **이 산출이 발화 조각을 담는 점은 미결 #10**(SEC-U8-06 과의 관계).
 - `_memory_lines(current, others) -> tuple[str, ...]`(`dialogue_orchestrator`) — `$memory` 재료(줄 목록; 워커가 `inline()`·join). 현재 세션 줄들 + 헤더 `지난 여행 기억:` + 다른 세션(≤2) 줄들, 각 줄 `inline()`,
@@ -387,13 +387,13 @@ MemoryStorePort (Protocol) +=
       # + vectors 를 주면 그 세션 줄 벡터를 새 요약에 맞춘다(요약에 없는 줄 삭제·준 줄 upsert). vectors 를 주면 model 필수
   def search(self, vector, *, session_id: str, account_ref: str | None, model: str, top_k: int) -> tuple[MemoryHit, ...]
       # 이 세션 + 같은 계정 다른 세션 줄 중 가까운 top_k(점수 내림차순, 동점 session_id·줄). 만료·다른 model·요약에 없는 줄 제외
-  put(memory)  — 그대로(upsert). 오케스트레이터는 답하기 전에 빈 행을 만들 때만 쓴다
+  put(memory)  — 그대로(upsert). 오케스트레이터는 요약 차례에 행이 없을 때 턴 시작에 빈 행을 만들 때만 쓴다
 ```
 
 - `orchestrator/dialogue_memory.py`: `due(…, every=SUMMARY_EVERY_TURNS)` — **3**(= `PROMPT_TURNS`, 프롬프트 창의 턴 수) · `material(recent_turns,
   turn_index, summarized)` — 아직 요약하지 않은 지난 턴(끝에서 (turn − summarized − 1)번째 사용자 말부터 — `last_turns`, 턴 밖 노트가 섞여도 안 빠진다) · `gist_lines(memory)` — "요약" 줄(주입 꼴 제외) ·
   `kept_lines(previous)` — 비운 배열일 때 남길 이전 줄(게이트 술어·옛 원문 조각 제외, 멱등). **`compress_fallback` 은 없앴다**(미결 #10 B안).
-- `dialogue_orchestrator._recalled_lines(current, session_id, hits)` — 꺼낸 `$memory`: "요약" 줄 + 점수 ≥0.45 사실 줄 ≤6(이 대화 먼저, 다른 세션은
+- `dialogue_orchestrator._recalled_lines(current, others, mine, theirs)`(mine = 이 세션 검색, theirs = 같은 계정 검색) — 꺼낸 `$memory`: "요약" 줄 + 점수 ≥0.45 사실 줄 ≤6(이 대화 먼저, 다른 세션은
   헤더 아래). `_memory_lines(current, others)` 는 임베딩이 없거나 꺼내기가 실패했을 때의 줄로 남는다.
 - 오케스트레이터 생성자 += `embedding: EmbeddingPort | None`(조립은 질문뱅크·KB-5 와 같은 임베딩) · `memory_pool: Executor | None`(뒤의 요약 —
   기본 전용 풀 2, 테스트는 같은 스레드 실행기).
@@ -702,7 +702,7 @@ AI 메모리가 생기지 않으니 지울 것도 없다.
 | **INV-1** | 의도 라벨은 `Intent` enum — `IntentGate` 가 `DIALOGUE_INTENT` 산출을 closed-set 으로 검사(벤더 아님). 후보(`CANDIDATES`)는 `PlanBAgent` 가 **반경 풀**(`CandidatePool`) 안에서만 고르고 일정 전부를 `excluded` 로 뺀다; `Facts.places` 는 배치 조회·풀에서 온 닫힌 목록이다. **LLM 문장 안의 장소명은 검사하지 못한다** — 그러나 그 문장은 선택·저장을 일으키지 않으므로 INV-1(후보 선택) 위반이 아니라 "보이는 문장 오염"이고, 수용된 blast radius 다(메모리 노트 prompt-injection-blast-radius, 재제안 금지) **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 계획 LLM 이 내는 것은 닫힌 도구 이름과 문자열 인자뿐 — 장소를 만들 수 없다. 후보는 등록 POI 반경 풀 안에서만, 문장은 목록 밖 장소 검사를 강제로 거치고 BE 가 poiId·OPEN_PLACE 를 정본 대조한다. |
 | **INV-2** | 사용자에게 보이는 시각은 **스냅샷 `start_at`**(백엔드가 저장·검증한 값)만, 순서는 스냅샷 순서만. `PlanBRagResult.alternatives` 에는 시각 필드가 없다. LLM 은 `$facts` 밖 시각을 만들지 않도록 프롬프트 규칙 + `_TIME_EXPR` 게이트 + **Facts 대조(2026-10-18 — 문장 시각 ⊆ Facts, 장소에 붙은 시각은 그 장소의 값, BR §6 ③; 이름 없이 떠 있는 슬롯 시각끼리는 스냅샷 순서를 따른다, BR §6 ⑨)**가 막는다(`N시`·`오전/오후 N시` 매치 → 드롭 → 템플릿; `HH:MM` 은 Facts 복사만 — 프롬프트 규칙, BR-AO-05). `EDIT_SCHEDULE` 을 1단계에서 FRAME 으로 두는 이유도 이것이다 — 스냅샷에 `end_at`·`is_fixed` 가 없어 AI 가 시각을 지어내야 EditTask 가 만들어진다 **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 계획 스키마에 시각 칸이 없고 시각 꼴 인자는 게이트가 버린다. 핸들러는 원문 인자를 Facts 에 싣지 않는다. 병합 답의 시각은 also 까지 Facts 와 대조하고, 카드 종류와 관계없이 시각을 문장마다 그 문장의 이름에 귀속시킨다(`_unpaired_time` — 2026-10-20 #1420 리뷰로 정정본 C5 의 엄격 모드를 교체). 시각을 내는 도구(일정·다음 일정·장소 정보)는 계획당 1건이다. |
 | **INV-3** | 거리만 — `TransitInfo.to_public_dict`(`distance_range`), `FactPlace.distance_range`. 소요시간 필드·문장 없음: 스키마 필드명 게이트 + `_TIME_EXPR` 출구 게이트 + AO-P2 **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 계획 경로도 거리 문자열뿐 — 답변 게이트 무변경. |
-| **INV-4** | 계단 전부 결정론 수렴(BLM §7): 분류 실패 → OUT_OF_SCOPE(거절 표지 사유), 답변 실패 → `template_text`, 메모리 실패 → `compress_fallback`, Provider 실패 → 있는 것만 + `notes`, PlanB 실패 → TEXT 안내. 모두 `FallbackEvent`/`notes` 로 보고하고 침묵하지 않는다. 섀도 실패는 응답에 영향 없이 skip 로그 **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 계획의 모든 갈래가 종전 범위 밖·템플릿·needTrip 으로 수렴하고 폴백에는 이벤트 짝(BLM §7). 병합본도 post-init 을 통과해 Facts 만으로 항상 답이 만들어진다. |
+| **INV-4** | 계단 전부 결정론 수렴(BLM §7): 분류 실패 → OUT_OF_SCOPE(거절 표지 사유), 답변 실패 → `template_text`, 메모리 실패 → ~~`compress_fallback`~~ 이전 기억 그대로(`kept_previous`, 2026-10-23), Provider 실패 → 있는 것만 + `notes`, PlanB 실패 → TEXT 안내. 모두 `FallbackEvent`/`notes` 로 보고하고 침묵하지 않는다. 섀도 실패는 응답에 영향 없이 skip 로그 **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 계획의 모든 갈래가 종전 범위 밖·템플릿·needTrip 으로 수렴하고 폴백에는 이벤트 짝(BLM §7). 병합본도 post-init 을 통과해 Facts 만으로 항상 답이 만들어진다. |
 | **DL-3** | 분류 1회(`DIALOGUE_INTENT`). Handler·PlanB 는 프레임의 intent 를 재해석하지 않는다; 섀도는 **관측 전용**으로 서비스 판정에 영향 0 **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 계획은 분류가 판단해서 닫은 턴에만 — 분류가 고른 의도는 덮지 않고, 계획은 프레임을 만들지 않는다. |
 | **DL-4** | 모든 하위 호출에 잔여 시한을 `timeout_sec` 로 내린다(BLM §4). 잔여 ≤0 이면 호출하지 않고 폴백 |
 | **DL-5** | 오케스트레이터 경계에서 예외 금지 — 수렴값은 미결 #14 (두 안 병기) |

@@ -758,6 +758,7 @@ class DialogueOrchestrator:
         inp = replace(inp, recent_turns=tuple(t for t in inp.recent_turns if not has_injection_like(t.text)))
         with llm_call_counter() as counter:
             current, others, read = self._load_memory(inp)
+            writable = read and self._open_row(inp, current)
             # 프롬프트·핸들러는 창만 본다 — 요약 재료(`_remember`)는 BE 가 보낸 전부에서 고른다
             windowed = replace(inp, recent_turns=self._window(inp, current, read))
             try:
@@ -767,7 +768,7 @@ class DialogueOrchestrator:
             except Exception as e:  # noqa: BLE001 — DL-5: 버그도 경계 밖으로 내지 않는다(BR §5 미결 #14 A안)
                 outcome = self._crashed(inp, e)
             outcome = _not_repeating(outcome, windowed)
-            if read:  # 기억을 못 읽은 턴은 요약을 내지 않는다 — 없는 줄 알고 빈 기억에서 다시 쓰면 이전 줄을 잃는다(다음 차례에)
+            if writable:  # 기억을 못 읽은 턴은 요약을 내지 않는다 — 없는 줄 알고 빈 기억에서 다시 쓰면 이전 줄을 잃는다(다음 차례에)
                 said = (outcome.answer.text if outcome.answer is not None
                         else outcome.clarify.question if outcome.clarify is not None else None)
                 self._remember(inp, current, said)  # outcome 과 무관(BLM §3 註)
@@ -1206,6 +1207,20 @@ class DialogueOrchestrator:
                 log.warning("지난 여행 기억 읽기 실패(%s) — 현재 세션 기억만 (trace_id=%s)", type(e).__name__, inp.trace_id)
         return current, others, read
 
+    def _open_row(self, inp: TurnInput, current: DialogueMemory | None) -> bool:
+        """요약 차례인데 행이 없으면 **턴 시작에** 빈 행부터 만든다 — 뒤의 저장(`advance`)은 있는 행만 고치므로 턴 도중·뒤의 요약 중에 온
+        이력 지우기를 되살리지 않는다(BR-AO-10). 답한 뒤에 만들면 분류 LLM 을 기다리는 사이 온 지우기가 0행으로 끝나고 그 뒤 빈 행이
+        대화를 되살렸다(2026-10-23 리뷰 재현). 못 만들면 이 턴은 요약하지 않는다(False) — 다음 턴이 다시 차례다."""
+        if self._store is None or not inp.session_id or current is not None or not due(inp.context.turn_index, 0):
+            return True
+        trip_id = inp.snapshot.trip.trip_id if inp.snapshot.trip is not None else None
+        try:
+            self._store.put(DialogueMemory(inp.session_id, inp.account_ref, trip_id, (), 0, inp.now, expires_at_for(inp.now)))
+        except Exception as e:  # noqa: BLE001 — 기억은 응답과 무관하다: 턴을 막지 않는다
+            self._fallback(inp, "memory", _MEMORY_MODES[0], "skipped", f"memory_error: {type(e).__name__}")
+            return False
+        return True
+
     def _recall(
         self, inp: TurnInput, current: DialogueMemory | None, others: tuple[DialogueMemory, ...],
     ) -> Callable[[], tuple[str, ...]]:
@@ -1256,9 +1271,8 @@ class DialogueOrchestrator:
         return lines
 
     def _remember(self, inp: TurnInput, current: DialogueMemory | None, answer_text: str | None = None) -> None:
-        """6 — 요약 차례(3턴)면 답한 **뒤에** 뒤에서 요약한다: 턴 시한·`llm_calls` 밖(BR-AO-07·09 개정 2026-10-23). 행이 없으면 답하기
-        **전에** 빈 행부터 만든다 — 뒤의 저장(`advance`)은 있는 행만 고치므로 그사이 지워진 대화를 되살리지 않는다(BR-AO-10).
-        이 프로세스에서 같은 세션 요약이 아직 돌면 내지 않는다 — 다음 턴이 다시 차례다(재료는 BE 최근 창 20건 안에 남아 있다).
+        """6 — 요약 차례(3턴)면 답한 **뒤에** 뒤에서 요약한다: 턴 시한·`llm_calls` 밖(BR-AO-07·09 개정 2026-10-23). 행이 없던 세션의
+        빈 행은 턴 시작에 이미 만들었다(`_open_row`) — 뒤의 저장(`advance`)은 있는 행만 고친다(BR-AO-10). 이 프로세스에서 같은 세션 요약이 아직 돌면 내지 않는다 — 다음 턴이 다시 차례다(재료는 BE 최근 창 20건 안에 남아 있다).
         `answer_text` 는 이 턴 도우미 말(답 문장 또는 되묻기 질문) — 없으면(FRAME·범위 밖: 문장은 BE 가 짓는다) 이 턴은 빼고 앞 턴까지만
         요약해 다음 차례가 BE 창의 그 턴 메시지로 담는다(되묻기·제안 문장이 요약에 끝내 안 들어가던 길, 2026-10-23 리뷰 재현)."""
         if self._store is None or not inp.session_id:
@@ -1272,8 +1286,6 @@ class DialogueOrchestrator:
             self._summarizing.add(inp.session_id)
         try:
             trip_id = inp.snapshot.trip.trip_id if inp.snapshot.trip is not None else None
-            if current is None:
-                self._store.put(DialogueMemory(inp.session_id, inp.account_ref, trip_id, (), 0, inp.now, expires_at_for(inp.now)))
             # 재료 = 아직 요약하지 않은 지난 턴 + 이번 턴(발화·도우미 말) — 이번 턴을 빼고 이 턴 번호를 적으면 이번 턴이 장기 기억에서
             # 영영 빠진다(2026-10-18 리뷰 재현). 0′ 에서 거절한 발화도 요약 차례면 여기로 온다 — 지난 턴과 같은 거름
             upto, this_turn = inp.context.turn_index, ()

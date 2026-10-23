@@ -26,8 +26,8 @@ from trippilot.domain.llm import LlmFeature, TypedResult
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import inline
 
-# 자리표시자·역할 라벨·이력 줄 렌더러의 **한 집** — 답변·요약 워커(`$history`·`$recent_turns`)와 결정론 압축
-# (`orchestrator.dialogue_memory.compress_fallback`)이 여기 것을 import 한다. 따로 적으면 넷이 갈라진다.
+# 자리표시자·역할 라벨·이력 줄 렌더러의 **한 집** — 답변·잡담·요약 워커(`$history`·`$recent_turns`)가 여기 것을 import 한다.
+# 따로 적으면 갈라진다.
 NONE = "(없음)"
 NO_TRIP = "(여행 없음)"
 # 역할 라벨 — 백엔드 RecentTurn.role 두 값. 밖의 값은 그대로 적는다(입력 검증은 TurnInput 몫 — 여기서 죽지 않는다).
