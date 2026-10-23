@@ -6,6 +6,8 @@ import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.itinerarygeneration.domain.GenerationMode
+import com.trippilot.itinerarygeneration.domain.GenerationSession
+import com.trippilot.itinerarygeneration.domain.GenerationSessionRepository
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
@@ -46,6 +48,7 @@ class TripListCountsIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var accessTokenIssuer: AccessTokenIssuer
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var itineraries: ItineraryRepository
+    @Autowired private lateinit var sessions: GenerationSessionRepository
 
     private val json = ObjectMapper()
     private val now = Instant.parse("2026-07-26T00:00:00Z")
@@ -176,6 +179,23 @@ class TripListCountsIT : AbstractPostgresIntegrationTest() {
         card["itineraryGenerationState"].asText() shouldBe detail["generationState"].asText()
         card["itineraryGenerationMode"].asText() shouldBe detail["generationMode"].asText()
         card["itineraryGenerating"].asBoolean() shouldBe !detail["generationSessionId"].isNull
+    }
+
+    @Test
+    fun `진행 중 생성 세션이 있으면 카드가 생성 중이다 — 목록 전체를 한 번에 묻고 남의 세션은 섞이지 않는다`() {
+        val me = accounts.save(Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, now))
+        val token = accessTokenIssuer.issue(me.id.value.toString()).value
+        val busy = newTrip(token)
+        val idle = newTrip(token)
+        giveItinerary(busy, "2026-08-01")
+        giveItinerary(idle, "2026-08-01")
+        sessions.save(GenerationSession.start(me.id.value, UUID.fromString(busy), GenerationMode.FULLY_AI, now))
+
+        val cards = call(HttpMethod.GET, "/api/v1/trips", token).second.associateBy { it["tripId"].asText() }
+        cards.getValue(busy)["itineraryGenerating"].asBoolean() shouldBe true
+        cards.getValue(idle)["itineraryGenerating"].asBoolean() shouldBe false
+        // 상세 일정 조회와 같은 뜻이다
+        call(HttpMethod.GET, "/api/v1/trips/$busy/itinerary", token).second["generationSessionId"].isNull shouldBe false
     }
 
     @Test
