@@ -404,6 +404,36 @@ def test_클럽이_후보에_없으면_지어내지_않고_밝힌다() -> None:
     assert "~23:59" not in llm.compose_prompt()  # 갈 곳이 없으면 창도 안 넓힌다
 
 
+# 운영 2026-10-23 22:50(부산): "저녁 늦게까지 더 일정 추가해줘" → 남은 방문 0곳, 구성이 고른 1곳은 추정 영업(~23:00)에
+# 막혀 못 놓였고, 늦게 여는 술집·야경은 프리필터가 잘라 `NO_FEASIBLE_SLOT`("대안을 찾지 못했어요")이었다.
+_EXTEND_SAID = "저녁 늦게까지 더 일정 추가해줘"
+_LATE = {"from_instant": "2026-09-21T22:50:00+09:00",
+         "request_meta": {"request_id": "late", "requested_at": "2026-09-21T22:50:00+09:00",
+                          "deadline_ms": 25000}}
+
+
+def test_밤_늦게_더_늦게까지면_늦게_여는_곳을_하나는_넣는다() -> None:
+    body = _replan(_ScriptedLlm([_FOOD]), pois=_WITH_CLUB, free_text=_EXTEND_SAID, **_LATE)
+    assert body["empty_reason"] is None, body["notes"]
+    assert _club_slot(body)["start_at"] >= "22:50", body["notes"]
+
+
+def test_밤_늦게는_벌써_닫은_야경을_건너뛴다() -> None:
+    """가장 가까운 야경이 22시에 닫으면 그곳을 넣어도 또 대안 없음이다 — 그 시각에 여는 곳으로."""
+    shut = Poi(poi_id=PoiId("e0000000-0000-4000-8000-0000000000c9"), name="일찍 닫는 전망대",
+               category=PoiCategory.NIGHT_VIEW, coord=DEMO_ANCHOR,
+               open_hours=tuple(OpenHour(day_of_week=d, open_min=18 * 60, close_min=22 * 60) for d in range(7)),
+               avg_cost=None, rating=None, quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None)
+    body = _replan(_ScriptedLlm([_FOOD]), pois=(*_WITH_CLUB, shut), free_text=_EXTEND_SAID, **_LATE)
+    assert body["empty_reason"] is None, body["notes"]
+    assert _club_slot(body)["start_at"] >= "22:50", body["notes"]
+
+
+def test_낮의_더_늦게까지는_술집을_억지로_넣지_않는다() -> None:
+    body = _replan(_ScriptedLlm([_FOOD]), pois=_WITH_CLUB, free_text=_EXTEND_SAID)
+    assert "nightlife_forced: 1" not in body["notes"], body["notes"]
+
+
 # ── ⑤ 시한 ──────────────────────────────────────────────────────────
 
 

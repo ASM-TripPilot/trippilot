@@ -157,7 +157,7 @@ from trippilot.domain.itinerary import (
 from trippilot.domain.llm import CandidatePool, ModelTier, PoiExplanation
 from trippilot.domain.persona import PersonaSummary
 from trippilot.domain.poi import (
-    NIGHTLIFE_TAG, DataQuality, Poi, PoiCategory, PoiSource, counts_as_food,
+    NIGHTLIFE_TAG, DataQuality, Poi, PoiCategory, PoiSource, counts_as_food, open_windows_on,
 )
 from trippilot.domain.travel import TravelEstimate
 from trippilot.agents.edit.agent import EditAgent, EditOutcome, EditTask, RebuiltDays
@@ -1454,6 +1454,7 @@ _NIGHTLIFE_SUBTYPES = ("클럽", "칵테일바", "와인바", "라운지바", "�
 # 그날 창을 23:59 까지 넓힌다 — 클럽·바 추정 영업(20:00~04:00) 중 그날 안쪽. 자정을 넘기지 않는 이유: OR 모델이
 # 창 끝을 하루 안의 분으로 읽어(`_mod`) 자정을 넘는 창이면 자유 방문이 전부 놓일 수 없게 된다(로컬 재현).
 _NIGHT_END = timedelta(hours=23, minutes=59)
+_EXTEND_LATE_HOUR = 21  # 이 시각 넘은 "더 늦게까지"는 늦게 여는 곳을 하나 넣는다(`_nightlife_candidates` late)
 
 # SOLVER 지시 중 배선된 것 — 여행 속도로 집행한다. "여유 있게"는 느긋하게(`Pace.SLOW`, 체류
 # ×1.4), "더 채워서"는 알차게(`Pace.PACKED`, 체류 ×0.9). 체류가 바뀌면 같은 창에 들어가는 방문
@@ -1738,21 +1739,35 @@ def _spoken_nightlife(request: schemas.ReplanRequest, resolved: list[str], notes
 
 def _nightlife_candidates(
     resolved: Sequence[str], pool: CandidatePool, request: schemas.ReplanRequest,
-    skip: Collection[PoiId], anchor: GeoPoint, notes: list[str],
+    skip: Collection[PoiId], anchor: GeoPoint, notes: list[str], *, late: datetime | None = None,
 ) -> tuple[PoiId, ...]:
     """"밤에 놀기" 지시면 태그 붙은 곳(클럽·바)을 가까운 순으로 — 구성 후보에 올리고 한 곳은 넣는다.
 
     "클럽"을 말해도 종전엔 아무 효과가 없었다(2026-10-14 DEV d3c6b39a: 지시 사전에 없음 → 미해석 → 규칙
     점수만, 후보 데이터에 클럽 0곳). 경계 8종에 칸이 없어 카테고리 가산으로는 못 집는다 — 태그로 집는다.
     후보에 하나도 없으면 지어내지 않고 밝힌다(INV-1·INV-4).
+
+    `late` — 밤 9시 넘어 "더 늦게까지"(EXTEND_DAY): 그 시각엔 추정 영업(~23시) 곳은 못 들어가 하루가 통째로
+    "대안 없음"이었다(운영 2026-10-23 22:50 부산, 프리필터가 술집·야경을 잘랐다). 늦게 여는 곳 — 술집 태그와
+    야경(추정 16~02시) — 을 같은 규칙으로 집는다. `late` 는 그 요청 시각이고, 영업시간을 아는 곳은 그 뒤 30분 넘게
+    여는 곳만 든다(가장 가까운 야경이 22시에 닫으면 억지로 넣어도 또 대안 없음이다).
     """
-    if not any(k in _NIGHT_KEYS for k in resolved):
+    if late is None and not any(k in _NIGHT_KEYS for k in resolved):
         return ()
+
+    def open_late(p: Poi) -> bool:
+        if late is None:
+            return True
+        hours = open_windows_on(p, late.date())
+        at = late.hour * 60 + late.minute + 30
+        return hours is None or any(oh.open_min <= at <= oh.close_min for oh in hours)
+
     excluded = set(request.excluded_poi_ids)
     text = (request.free_text or "").replace(" ", "")  # "칵테일 바" 도 칵테일바로
     # 말에 세부 종류(클럽·와인바·칵테일바…)가 있으면 그 종류를 먼저 — "클럽"에 와인바만 오르지 않게.
     found = sorted((p for p in pool.pois
-                    if NIGHTLIFE_TAG in p.tags and p.poi_id not in skip and p.poi_id not in excluded),
+                    if (NIGHTLIFE_TAG in p.tags or (late and p.category is PoiCategory.NIGHT_VIEW))
+                    and p.poi_id not in skip and p.poi_id not in excluded and open_late(p)),
                    key=lambda p: (not any(t != NIGHTLIFE_TAG and t in text for t in p.tags),
                                   haversine_km(anchor, p.coord), str(p.poi_id)))
     if not found:
@@ -2632,11 +2647,17 @@ class WiredItineraryOrchestrator:
         budget = core.allocate(_deadline_budget(meta), core.OrchestratorConfig())
         # 밤에 놀기 — 태그 붙은 클럽·바를 후보에 올리고, 그날 창을 23:59 까지 넓힌다(사용자가 끝 시각을
         # 말했으면 그 말이 이긴다). 넓힌 창은 이 요청에서만 — 클럽·바 말고는 추정 영업 07~23시가 막는다.
-        night = _nightlife_candidates(resolved, pool, request, held, anchor, notes)
+        late = extend and not_before.hour >= _EXTEND_LATE_HOUR
+        night = _nightlife_candidates(resolved, pool, request, held, anchor, notes,
+                                      late=not_before if late else None)
         window_end = datetime.combine(window.date, window.end, tzinfo=self._tz)
         night_end = max(window_end, datetime.combine(window.date, datetime.min.time(),
                                                      tzinfo=self._tz) + _NIGHT_END)
         day_end = nl.window_end or (night_end if night or extend else window_end)  # 더 늦게까지도 같은 창
+        # 밤 늦은 "더 늦게까지"의 밤 장소 체류 — 기본(술집 90·클럽 120분)이면 23:59 창에 안 들어간다. 남은 시간에
+        # 맞춰 줄이고(이동 몫 20분, 바닥 30분) 우선으로 둔다. 그 밖엔 None = 카테고리 기본.
+        late_dwell = (max(30, min(90, int((day_end - not_before).total_seconds() // 60) - 20))
+                      if late and night else None)
         # ── 다시 짜기 — 남은 하루의 방문 목록을 LLM 이 고른다 ─────────────
         # 고른 곳은 시각 없는 필수 방문, 하루 상한은 `고정 + 고른 수` — 그날은 고른 곳만 들어가고
         # 시각·순서는 어셈블리가 정한다(INV-2). 실패·시한 부족이면 () 라 종전 경로 그대로(INV-4).
@@ -2767,13 +2788,14 @@ class WiredItineraryOrchestrator:
                 # 구성 결과 안에도 이름으로 집은 곳이 있다(맨 앞에 고정) — 그곳과, 사용자가 수를 정한 종류의
                 # 곳("카페는 한 곳만")만 우선 가중. 수를 맞춘 곳이 같은 무게면 솔버가 시간 부족에 그걸 뺐다
                 # (운영 2026-10-15: 카페 1곳을 구성에 넣었는데 최종 0곳).
-                kept.get(p) or RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
-                              reason="nl_request" if p in nl_ids else "llm_compose",
-                              priority=p in nl_ids or p in counted) for p in composed) + tuple(
+                kept.get(p) or RequiredVisit(
+                    poi_id=p, day=request.target_date, dwell_min=late_dwell if p in night else None,
+                    reason="nl_request" if p in nl_ids else "llm_compose",
+                    priority=p in nl_ids or p in counted or (late and p in night)) for p in composed) + tuple(
                 RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
                               reason="nl_request", priority=True) for p in nl_extra) + tuple(
                 # 구성 없이 점수 경로로 가도 "클럽"을 말했으면 한 곳은 넣는다
-                RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
+                RequiredVisit(poi_id=p, day=request.target_date, dwell_min=late_dwell,
                               reason="nightlife_request", priority=True)
                 for p in (night[:1] if night and not composed else ())),
             end_near=_end_near(request, resolved, notes),  # 숙소 근처에서 끝내기
@@ -2822,7 +2844,7 @@ class WiredItineraryOrchestrator:
                         request=replace(domain_request, required_visits=tuple(kept.values()) + tuple(
                             RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
                                           reason="nl_request", priority=True) for p in nl_ids) + tuple(
-                            RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
+                            RequiredVisit(poi_id=p, day=request.target_date, dwell_min=late_dwell,
                                           reason="nightlife_request", priority=True)
                             for p in night[:1]),
                                         max_visits_per_day=visit_cap,
