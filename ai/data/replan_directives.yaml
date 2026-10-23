@@ -22,7 +22,7 @@
 # 상호명 기억으로 지어낸다 — KB-3 초안 41건 중 28건을 뺀 것이 정확히 그 이유다
 # (`planb_situation_kb.yaml` 헤더 기준 (2)).
 #
-# **SOLVER 는 RELAX·FILL_MORE(Pace.SLOW·PACKED)·EARLIER·KEEP_DINNER 가 배선됐다.** 나머지는 A-4 예정 — 그 키가 오면
+# **SOLVER 는 RELAX·FILL_MORE(Pace.SLOW·PACKED)·EARLIER·KEEP_DINNER·SHORTER_DAY·END_DAY·EXTEND_DAY 가 배선됐다.** 나머지는 A-4 예정 — 그 키가 오면
 # 사전이 인식은 하되 아무 효과가 없다 — 그 사실을 `unwired: true` 로 드러낸다. 정본이 "동작 중"으로
 # 서술하는 미배선을 만들지 않기 위해서다(TRIP-529 계열).
 #
@@ -191,6 +191,14 @@ directives:
     # 배선됨(2026-10-19) — 새 방문 없이 하루를 끝낸다. 다녀온 곳·진행 중·사용자 잠금만 든 하루를 낸다
     # (솔버·LLM 을 안 부른다, `_replan_end_day`). "근처 한 곳 더"는 SHORTER_DAY 다.
     aliases: [전부 취소, 다 취소해줘, 남은 일정 취소, 오늘 일정 끝, 오늘은 여기까지 할래]
+
+  - key: EXTEND_DAY
+    label: 더 늦게까지
+    enforced_by: SOLVER
+    # 배선됨(2026-10-23) — SHORTER_DAY 의 반대. 원 일정의 남은 방문을 장소·체류 그대로 필수 방문으로 두고, 방문
+    # 상한 없이 그날 창을 23:59 까지 넓혀 새 방문을 더한다(`_remaining_visits`). "저녁 늦게까지 더"가 "저녁"
+    # 한 낱말로 SHORTER_DAY("저녁 전에 마무리")에 붙어 광안리가 빠졌다(운영 2026-10-23) — 결정론 가드 `_EXTEND` 도 있다.
+    aliases: [저녁 늦게까지 더, 더 늦게까지 놀고 싶어, 일정 더 추가해줘, 끝나고 더 가볼 곳, 밤까지 더 돌자]
 
   - key: KEEP_DINNER
     label: 저녁은 그대로
