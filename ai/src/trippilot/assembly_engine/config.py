@@ -137,6 +137,13 @@ class AssemblyConfig:
     # 2.0 근거(TRIP-1160 실 덤프 39건 × 2회 재생): 해 없음 0·HC 위반 0·반복 동일 39/39.
     # det 1.0 대비 5/39 건 점수가 높다(점수합 +0.08~1.29), 3.0 은 3/39 건만 더 오른다.
     or_tools_det_limit: float = 2.0
+    # **하루짜리 문제**의 결정론 한도 — 사용자가 기다리는 호출이 하루짜리다(생성 1차 = 첫날만·시한 15s, 다시 짜기 =
+    # 그날). 여러 날(생성 2차, 뒤에서 60s)은 위 2.0 그대로. 2026-10-23 개발 파드(2코어 상한·1.0 요청)에서 실제 생성
+    # 12건(서울 4·부산 2·제주·강릉·경주·전주·서울 2박3일·부산 1박2일)이 솔버에 넘긴 문제를 가로채 다시 풀었다:
+    # 하루짜리 10건은 1.0 과 2.0 이 같은 일정(1건은 점수 같은 재배열), 여러 날 2건 중 1건(부산 1박2일)만 1.0 이 한
+    # 곳 덜 넣었다(점수 −1.35). 하루 솔버 5.0 → 3.1s. 고정 픽스처 3건도 같은 일정·3.0~5.7 → 1.7~2.8s.
+    # 위 백스톱 규칙(≥ det × 3.5s)은 이 값에도 그대로 성립한다.
+    or_tools_det_limit_single_day: float = 1.0
     # 재정렬(B 단계, TRIP-1178)의 일자당 벽시계 백스톱 — **일자 몫과 무관한 고정값**이다(남은
     # 몫으로 줄이면 몫 경계에서 같은 입력이 부하에 따라 다른 순서가 된다). 대가로 일자 몫을 B
     # 소요만큼 넘길 수 있고, 최악(부하)은 이 값의 두 배다(경로 완성 풀이·본 풀이가 각자 이 한도).
@@ -252,8 +259,8 @@ class AssemblyConfig:
                      "llm_stage_timeout_ms", "local_search_min_remaining_ms", "buffer_min"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} 음수 불가")
-        if self.or_tools_det_limit <= 0:
-            raise ValueError("or_tools_det_limit 양수 필요")
+        if self.or_tools_det_limit <= 0 or self.or_tools_det_limit_single_day <= 0:
+            raise ValueError("or_tools_det_limit·or_tools_det_limit_single_day 양수 필요")
         if self.detour_factor <= 0:
             raise ValueError("detour_factor 양수 필요")
         if not 0 <= self.public_walk_max_km < WALK_HARD_MAX_KM:
