@@ -177,6 +177,20 @@ class EditProposalServiceTest : StringSpec({
         repo.writes shouldBe 0
     }
 
+    /** 카드가 "1일차는 종로…"로 되읽는 값이다 — 못 읽는 항목을 넘기면 없는 날·빈 동네를 말하게 된다. */
+    "날마다 동네 — 상대가 SET_DAY_AREAS 로 읽었으면 그 해석을 넘기고, 못 읽는 항목은 버린다" {
+        fun areasOf(command: EditCommand?) =
+            service(Agent { replacing(a, fresh)(it).copy(command = command) }).propose(acc, tripId, d1, utter, 5_000)
+                .shouldBeInstanceOf<EditProposal.Proposed>().dayAreas
+
+        // 날짜가 아닌 키 · 일정에 없는 날은 버린다
+        areasOf(EditCommand("SET_DAY_AREAS", mapOf("2026-08-11" to "강남구", "2026-08-10" to "종로", "모레" to "성수", "2026-08-12" to "홍대"), listOf(a))) shouldBe
+            mapOf(d1 to "종로", d2 to "강남구")
+        areasOf(EditCommand("SET_DAY_AREAS", mapOf("2026-08-10" to " "), emptyList())) shouldBe emptyMap() // 빈 동네
+        areasOf(EditCommand("REPLACE_SLOT", mapOf("2026-08-10" to "종로"), emptyList())) shouldBe emptyMap() // 다른 명령
+        areasOf(null) shouldBe emptyMap()
+    }
+
     "앵커는 고치려는 그 날의 것이다 — 다른 날 숙소에 후보 풀을 매달지 않는다" {
         val agent = Agent { EditProposalOutput(EditProposalStatus.NOT_UNDERSTOOD, null, emptyList(), null, null) }
 

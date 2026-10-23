@@ -99,6 +99,23 @@ class ProposalCardsTest : StringSpec({
         card.llmCalls shouldBe 1
     }
 
+    "날마다 동네로 다시 짠 안 — 카드가 상대의 해석을 날짜순으로 되읽고(없으면 종전 문장), 비교 줄마다 몇째 날인지 단다" {
+        // 첫날에 책방카페가 들어오고 둘째 날 카페 모카가 빠졌다 — 두 날이 함께 바뀐 안
+        val byArea = listOf(ProposedDay(d1, listOf(proposedSlot(book, "10:00"))), ProposedDay(d2, listOf(proposedSlot(beach, "16:00"))))
+        val editing = FakeEditing().apply { proposal = { EditProposal.Proposed(base(), byArea, "AUTO_APPLY", dayAreas = mapOf(d2 to "강남구", d1 to "종로")) } }
+
+        val card = cards(data(), editing).edit(ctx(utterance = "1일차는 종로 2일차는 강남구쪽으로 일정을 바꾸어줘"))
+
+        card.text shouldBe "1일차는 종로, 2일차는 강남구 쪽으로 다시 짠 안이에요. 적용하면 다시 검증한 뒤 반영해요."
+        card.proposal!!.diff.map { it.dayLabel to it.slotKey } shouldContainExactly listOf("1일차 · 11월 1일" to "$d1#$book", "2일차 · 11월 2일" to "$d2#$moca")
+
+        editing.proposal = { EditProposal.Proposed(base(), replaced(), null) }
+        val plain = cards(data(), editing).edit(ctx(pick))
+
+        plain.text shouldBe "이렇게 바꾸면 돼요. 적용하면 다시 검증한 뒤 반영해요."
+        plain.proposal!!.diff.single().dayLabel shouldBe "2일차 · 11월 2일"
+    }
+
     "고칠 날 — 상대가 뽑은 날짜·N일차·가리킨 장소 순이고, 받은 날을 못 읽으면 넘겨짚지 않는다" {
         fun dateFor(arguments: Map<String, String>, inTrip: Boolean = false): LocalDate? {
             val editing = FakeEditing()
