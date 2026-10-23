@@ -115,6 +115,29 @@ class WeatherAlertServiceTest : StringSpec({
         port.calls.get() shouldBe 2
     }
 
+    /** 장애면 마지막 발표분 — 아침 첫 조회가 실패해도 어제 17시 발표분의 '오늘'로 답한다(TRIP-1576 · 읽기 시한 실패 48시간 19회차 중 8). */
+    "대기질 장애면 18시간 안의 마지막 발표분으로 답하고 20분은 다시 묻지 않는다" {
+        val port = FakeAir().answer { forecastAt("17:00", TODAY to SEOUL_GOOD, TOMORROW to SEOUL_BAD) }
+        val service = WeatherAlertService(providerOf(FakeWarnings()), providerOf(port))
+        service.airGrades(TODAY, kst("2026-10-19T20:40"))
+        port.answer { throw WeatherLookupFailed("에어코리아 대기질 조회 실패(시한)") }
+
+        service.airGrades(TOMORROW, kst("2026-10-20T07:15")) shouldBe AlertRead.Ok(SEOUL_BAD)
+        service.airGrades(TOMORROW, kst("2026-10-20T07:34")) shouldBe AlertRead.Ok(SEOUL_BAD)
+        port.calls.get() shouldBe 2
+        service.airGrades(TOMORROW, kst("2026-10-20T11:00")) shouldBe AlertRead.Unknown("unavailable") // 17시 + 18시간
+        port.calls.get() shouldBe 3
+    }
+
+    "대기질 게이트웨이 거절은 마지막 발표분으로 덮지 않는다 — 키·한도는 설정 문제다" {
+        val port = FakeAir().answer { forecastAt("17:00", TODAY to SEOUL_GOOD, TOMORROW to SEOUL_BAD) }
+        val service = WeatherAlertService(providerOf(FakeWarnings()), providerOf(port))
+        service.airGrades(TODAY, kst("2026-10-19T20:40"))
+        port.answer { throw WeatherGatewayRefused("HTTP_429") }
+
+        service.airGrades(TOMORROW, kst("2026-10-20T07:15")) shouldBe AlertRead.Unknown("gateway:HTTP_429")
+    }
+
     /** 여행 단위 병렬(2)이라 회차 첫머리에 두 여행이 함께 묻는다 — 원천은 한 번만 부른다(COST-SA-03 회차당 1콜). */
     "동시에 처음 물어도 원천은 한 번 부른다" {
         val entered = CountDownLatch(1)
