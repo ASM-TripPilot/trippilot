@@ -132,6 +132,14 @@ def same_family(a: Poi, b: Poi) -> bool:
     return _related(_Sig.of(a), _Sig.of(b))
 
 
+def same_place(a: Poi, b: Poi) -> bool:
+    """출처·카테고리만 다른 **한 장소**인가(④ — 정규화 이름이 같고 200m 안). 단지 안 다른 명소와 달리
+    강등이 아니라 하나만 남긴다: 강등은 점수만 낮춰 하루에 빈 시간이 남으면 솔버가 둘째도 넣는다
+    (운영 10-23 부산 1일차 광안리해수욕장 야경·자연 연달아)."""
+    na, nb = normalize_name(a.name), normalize_name(b.name)
+    return len(na) >= 2 and na == nb and haversine_km(a.coord, b.coord) <= _SAME_NAME_KM
+
+
 def family_followers(
     anchors: Sequence[Poi], ranked: Sequence[Poi]
 ) -> dict[PoiId, PoiId]:
