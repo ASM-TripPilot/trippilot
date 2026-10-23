@@ -1073,7 +1073,7 @@ def run_plan(prompts: Path, repeat: int) -> None:
         draft = None if r.is_fallback else r.value
         # 런타임처럼 지역 이름이 있는 지역 고르기는 탐색으로 바꿔 센다(`orch._region_named`) — 핸들러에 닿는 것을 잰다
         calls = [(c.intent.value, dict(c.slots)) for c in (orch._region_named(c, case["utterance"]) for c in draft.calls)
-                 ] if draft is not None else []
+                 if c is not None] if draft is not None else []
         return dict(case=case, tid=f"plan-ab-{i}", ok=draft is not None, calls=calls, refused=bool(draft and draft.refused),
                     gap=draft.gap if draft is not None else None, err=r.error, wall=wall, **_usage(r))
 
