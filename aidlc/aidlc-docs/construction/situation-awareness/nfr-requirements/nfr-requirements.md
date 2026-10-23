@@ -96,6 +96,8 @@
 
 > **[개정 · 2026-10-22 — 구현 반영]** RES-SA-01(특보 실응답 표본 · TRIP-1590) — 모름 목록의 '관서 묶음 줄 × 그 묶음의 다른 광역 목적지'(위 블록)는 그 줄이 관서 묶음 꼴의 흔적을 보일 때로 좁아진다(t6 는 행정 광역 줄 — G-SA-18). '시군 전체 이름을 뺐어도 광역 줄 안의 그 시군 섬이 남는 제외 줄'(`전라남도(여수 제외)` × 여수)을 더한다(`functional-design/business-rules.md` BR-SA-16 개정 블록).
 
+> **[개정 · 2026-10-23 — 구현 반영]** RES-SA-13 — 위 블록의 `weather_grid_forecast.daily` 칸 삭제(후속)를 마쳤다 — V2.86(TRIP-1575). V2.81 과 그 코드가 운영까지 나가 이 칸을 아는 옛 파드가 없는 뒤의 2단계라 롤링 창에 무해하다.
+
 ## 4. 관측 (OBS-SA-\*)
 
 **원천은 로그다** — EKS 에서 OTLP·OTel 이 꺼져 있어(`deploy/eks/chart/templates/backend.yaml:91-99`) 카운터는 운영에서 보이지 않는다. 컨테이너 로그는 dev 스택에서 켜져 있고 보존 90일이다(`infra/terraform/environments/dev.tfvars:11-12`).
@@ -219,6 +221,8 @@ planb.situation_sweep mode= phase= trips= skipped= failed= live=[] off=[] observ
 > - **9단계 운영 — 켰다**(2026-10-21 · 배포 런 39585752292 — 운영 `PLANB_SITUATION_SWEEP=dry-run` 을 쓴 같은 런 · `HOLIDAY_CLOSURE_MODE=on`). 31번 (가)의 조건인 개발 서버 첫 실제 조회(10-21 07:15 장소 점검)가 경고 없이 지났다(코드 밖 사실). #1572 가 운영에 실린 뒤로는 운영 특일 조회가 실패한 회차의 검증이 태그형 규칙 장소를 미판정으로 싣는다(RES-SA-10 개정 블록).
 
 > **[개정 · 2026-10-22 — 구현 반영]** 8단계 갱신 — 특보를 `observe-only` 에서 빼기 전에 정할 것에서 G-SA-18 이 빠진다(실응답 표본 — t6 광역 줄은 행정 광역 · TRIP-1590 · `functional-design/business-rules.md` BR-SA-16 개정 블록). 남은 것은 G-SA-24 · G-SA-20 과 대기질의 에어코리아 모름 비율이다.
+
+> **[개정 · 2026-10-23 — 사용자 결정]** 8단계 갱신 — 특보 쪽 정본 결정은 남지 않는다(G-SA-24 · G-SA-20 해소 — `functional-design/business-logic-model.md` §0.4 · §9 개정 블록). 남은 것은 대기질의 에어코리아 모름 비율과 `observe-only` 에서 빼는 커밋이다.
 
 ## 8. PBT (blocking · 확장 Partial 모드)
 

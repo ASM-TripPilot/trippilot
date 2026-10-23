@@ -1856,3 +1856,19 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
+
+## Functional Design·NFR Requirements 사후 개정 — situation-awareness 사용자 결정 2건(2026-10-23) · G-SA-24 구현 반영 (G-SA-24·20 해소 · §0.4 · §9 · BR-SA-16 · §10 · NFR §7)
+**Timestamp**: 2026-10-23T13:00:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 상황 감지 세션 2026-10-23 질문에 고른 선택지 그대로) 하위 권역을 뺀 특보 제외 줄: "전부 뺐으면 안 걸림 · 일부만 뺐으면 확인 불가 (Recommended)" / 제주의 시·서울의 구 매칭: "지금 그대로 — 광역 줄 전체로 맞춘다 (Recommended)". 이 작업을 띄운 사용자 요청 원문은 "하던거 계속해".
+**AI Response**: `construction/situation-awareness/` 3종에 블록 5개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). `functional-design/business-logic-model.md` — §0.4(사용자 답 2건 표) · §9(G-SA-24·20 해소 — 특보 쪽 정본 결정은 남지 않는다); `functional-design/business-rules.md` — BR-SA-16(시군 권역 표 `CITY_PARTS` 40개 시군 · 88개 · 규칙 9 — 전부 뺐으면 안 걸림) · §10(PBT-SA-09 오라클); `nfr-requirements/nfr-requirements.md` §7(8단계). 구현은 같은 PR 의 코드 커밋이다(TRIP-1604 — `WeatherAlerts.CITY_PARTS` · 공식 목록 대조 · PBT 오라클은 공식 목록에서 읽음 · 변이 3종 빨강).
+**Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(사용자 결정 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design·NFR Requirements 사후 개정 — situation-awareness weather_grid_forecast.daily 칸 삭제 (DE §8.1 · tech-stack 델타 3 · NFR RES-SA-13)
+**Timestamp**: 2026-10-23T13:11:00+09:00 (작업 시점)
+**User Input**: (새 사용자 결정 없음 — 자율 세션. 이 작업을 띄운 사용자 요청 원문은 "하던거 계속해".) 근거는 정본 §8.1 개정 블록의 '칸 삭제는 후속 — 이 칸을 쓰는 옛 파드가 남지 않은 다음 배포'와 코드 밖 사실 하나다 — 2026-10-23 운영 승격(배포 담당 세션 회신 — 운영 런 39896992057, V2.78→V2.85)으로 V2.81 과 그 코드가 운영까지 나갔다.
+**AI Response**: `construction/situation-awareness/` 3종에 `[개정 · 2026-10-23 — 구현 반영]` 블록 3개를 덧붙였다(원문·기존 블록 삭제·수정 0줄) — `functional-design/domain-entities.md` §8.1(칸 삭제 마침) · `nfr-requirements/tech-stack-decisions.md` 델타 3 · `nfr-requirements/nfr-requirements.md` §3(RES-SA-13). 구현은 같은 PR 의 V2.86 마이그레이션과 KDoc 두 곳·통합 시험이다(TRIP-1575).
+**Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---

@@ -239,6 +239,9 @@ PK `(trip_id, source)`.
 > - **칸 삭제(DROP COLUMN)는 후속**이다 — 이 칸을 쓰는 옛 파드가 남지 않은 다음 배포에서 한다. 추적하는 곳이 마이그레이션 머리말뿐이라 백로그 항목이 필요하다(`business-logic-model.md` §9 개정 블록).
 > - **`PointForecast`** = 그 격자 발표분의 시각별 `POP`·`PTY`·`SKY`·`TMP`·`WSD` + 발표 시각이다 — 위 공개 계약 줄의 '+ 날짜별 `TMN`·`TMX`'는 없다(`backend/modules/weather-context/src/main/kotlin/com/trippilot/weathercontext/api/HourlyForecastFacade.kt:39-50`).
 
+> **[개정 · 2026-10-23 — 구현 반영]** §8.1 — 위 블록의 '칸 삭제(DROP COLUMN)는 후속'을 마쳤다. V2.81 과 그 코드가 운영까지 나간 뒤(2026-10-23 운영 승격)
+> V2.86 이 `daily` 열을 지운다(TRIP-1575 · `backend/app/src/main/resources/db/migration/V2.86__weather_grid_forecast_drop_daily.sql`). 열 표의 `daily` 행은 더 없다 — 이 칸을 아는 파드가 없어 롤링 창에도 무해하다.
+
 ### 8.2 경보 읽기값 (저장 없음)
 
 `WeatherAlertFacade { isLive(); warnings(at): AlertRead<List<ActiveWarning>>; airGrades(date, at): AlertRead<Map<AirRegion, AirGrade>> }`, `AlertRead = Ok(value) | Unknown(cause)`.
