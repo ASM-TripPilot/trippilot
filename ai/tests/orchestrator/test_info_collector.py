@@ -13,6 +13,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import time
 from datetime import date, datetime, timedelta, timezone
 
@@ -303,6 +305,15 @@ def test_place_provider_reuses_snapshot_for_same_conditions_within_ttl() -> None
     assert builder.calls == 3
     expired = provider.fetch({"pool_request": _POOL_REQUEST, "now": _NOW + timedelta(seconds=600)})
     assert builder.calls == 4 and expired.freshness.cache_hit is False
+
+
+def test_place_provider_snapshot_is_keyed_by_region_codes() -> None:
+    """고른 구가 다르면 다른 풀이다 — 같은 앵커·요일이어도 구 안 먼저 규칙이 다른 결과를 낸다."""
+    builder = _CountingBuilder()
+    provider = PlaceProvider(builder)
+    provider.fetch({"pool_request": _POOL_REQUEST, "now": _NOW})
+    provider.fetch({"pool_request": replace(_POOL_REQUEST, region_codes=frozenset({"11650"})), "now": _NOW})
+    assert builder.calls == 2
 
 
 def test_place_provider_build_failure_is_not_cached() -> None:

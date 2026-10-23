@@ -124,6 +124,12 @@ data class PoiReadResponse(
     val savedCount: Long,
     val dataQuality: String,     // FULL/PARTIAL
     val distanceM: Double?,      // 반경 조회 시 중심 거리(INV-3: 거리 OK)
+    /**
+     * 행정구역 표준코드(`poi.region_code`, 시군구 5자리 — TRIP-359). 주소로 못 붙인 곳은 null.
+     * 구(시군구)를 고른 여행에서 AI 가 **그 구 안 장소를 먼저** 고르는 데 쓴다(2026-10-23 사용자 결정 — 서초를
+     * 골랐는데 저녁이 혜화로 나왔다). 상대는 없으면 종전대로 읽으므로 이쪽이 먼저 나가도 된다.
+     */
+    val regionCode: String? = null,
 ) {
     companion object {
         fun from(pd: PoiWithDistance): PoiReadResponse {
@@ -143,6 +149,7 @@ data class PoiReadResponse(
                 savedCount = p.savedCount,
                 dataQuality = if (p.isDataFull()) "FULL" else "PARTIAL",
                 distanceM = pd.distanceM,
+                regionCode = p.regionCode,
             )
         }
 

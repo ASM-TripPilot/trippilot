@@ -20,6 +20,8 @@ class CandidatePoolRequest:
     budget: BudgetLevel
     transport: TransportMode
     radius_override_km: float | None = None
+    # 고른 시군구(+하위 행정구) 코드 — 비어 있지 않으면 그 구 안을 먼저 쓴다(`pool_builder._region_first`).
+    region_codes: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         if not self.dates:
@@ -34,6 +36,7 @@ class CandidatePoolRequest:
             "budget": self.budget.value,
             "transport": self.transport.value,
             "radius_override_km": self.radius_override_km,
+            "region_codes": sorted(self.region_codes),
         }
 
     @classmethod
@@ -44,6 +47,7 @@ class CandidatePoolRequest:
             budget=BudgetLevel(d["budget"]),
             transport=TransportMode(d["transport"]),
             radius_override_km=d.get("radius_override_km"),
+            region_codes=frozenset(d.get("region_codes") or ()),
         )
 
 

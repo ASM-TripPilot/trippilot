@@ -26,7 +26,9 @@ import java.time.ZoneId
  *   메모리**라 복제본·재기동마다 따로 묻는다 — 조회 1번 = HTTP 1건이고 회차(07:15~20:40)에 닿는 발표가 05·11·17시 셋이라 성공 경로는
  *   파드당 하루 3건 + 재기동마다 1건(+ 발표가 늦은 시간당 1건)이다.
  * - **실패는 기억하지 않는다**(게이트웨이 거절·장애 — COST-SA-05 다음 회차에 다시 묻는다). 한 회차 안의 반복 호출을 막는 것은
- *   감지기의 회차 기억이다.
+ *   감지기의 회차 기억이다. 단 대기질 **장애**(시한·5xx·형식)면 [AIR_STALE_LIMIT] 안에 받은 마지막 발표분으로 답하고 20분은 다시
+ *   묻지 않는다 — 읽기 시한 실패가 48시간 19회차 중 8이었고(TRIP-1576), 모름은 위험을 놓친다. 게이트웨이 거절(키·한도)은 설정
+ *   문제라 그대로 모름이다. 장애는 어댑터 WARN 줄로 보인다.
  * - 처음 묻는 두 여행이 겹쳐도(여행 단위 병렬) 원천은 한 번만 부른다.
  *
  * live 는 설정값이 아니라 포트 빈 유무로 정한다 — 실 기상청 모드(`WEATHER_MODE=kma`)에만 빈이 있다.
@@ -64,7 +66,10 @@ class WeatherAlertService(
                     is AlertRead.Ok -> read.value.also {
                         airMemo = AirMemo(searchDate, it, maxOf(it.issuedAt.plus(AIR_NEXT_RELEASE), at.plus(MIN_HOLD)))
                     }
-                    is AlertRead.Unknown -> return read
+                    is AlertRead.Unknown -> airMemo?.forecast
+                        ?.takeIf { read.cause == UNAVAILABLE && at < it.issuedAt.plus(AIR_STALE_LIMIT) }
+                        ?.also { airMemo = AirMemo(searchDate, it, at.plus(MIN_HOLD)) }
+                        ?: return read
                 }
         }
         return forecast.byDate[date]?.let { AlertRead.Ok(it) } ?: AlertRead.Unknown(AlertRead.NO_FORECAST)
@@ -92,6 +97,9 @@ class WeatherAlertService(
 
         /** 옛 발표분을 다시 받아도 이만큼은 기억한다 — 한 회차 안에서 여행마다 다시 부르지 않게. */
         private val MIN_HOLD: Duration = Duration.ofMinutes(20)
+
+        /** 장애 때 마지막 발표분을 쓰는 한계 — 아침 첫 조회가 실패해도 어제 17시 발표분(약 14시간)의 '오늘'로 답한다. */
+        private val AIR_STALE_LIMIT: Duration = Duration.ofHours(18)
 
         private const val OFF = "off"
         private const val UNAVAILABLE = "unavailable"

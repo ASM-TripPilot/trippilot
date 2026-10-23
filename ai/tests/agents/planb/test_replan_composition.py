@@ -115,6 +115,22 @@ def test_구성_LLM이_고른_곳만_그날에_들어간다() -> None:
     assert "PREFERENCE_SCORING" not in llm.features()
 
 
+def test_고른_이유가_그_슬롯의_추천_이유로_나간다() -> None:
+    """백엔드는 `explanations["날짜#장소"]` 를 슬롯 추천 이유로 저장한다 — 비워 보내면 다시 짠 날의 이유가 전부 빈다
+    (운영 10-23 부산 2일차: 구성 LLM 이 KB-5 설명을 읽고 고른 7곳 모두 이유 없음)."""
+    body = _replan(_ScriptedLlm([_FOOD, _MOUNTAIN]))
+    assert body["itinerary"]["explanations"] == {
+        f"2026-09-21#{_FOOD}": "분위기가 좋은 곳", f"2026-09-21#{_MOUNTAIN}": "분위기가 좋은 곳"}, body["notes"]
+
+
+def test_그대로_둔_곳은_원래_추천_이유를_잃지_않는다() -> None:
+    """백엔드는 응답에 이유가 없는 슬롯을 빈 이유로 덮는다 — 다시 짜기에서 안 바뀐 곳도 원래 이유를 되싣는다."""
+    kept = {"poi_id": _FOOD, "start_at": "12:00", "end_at": "13:00", "is_fixed": True,
+            "placement_reason": "#흑돼지 #제주맛집"}
+    body = _replan(_ScriptedLlm(None), current_slots=[kept])
+    assert body["itinerary"]["explanations"].get(f"2026-09-21#{_FOOD}") == "#흑돼지 #제주맛집", body["notes"]
+
+
 def test_고른_곳은_고정으로_나가지_않는다() -> None:
     """필수 방문은 배치되면 고정으로 사영되지만, LLM 이 고른 곳은 사용자가 고정한 곳이 아니다."""
     body = _replan(_ScriptedLlm([_FOOD, _MOUNTAIN]))

@@ -45,7 +45,7 @@ from datetime import date, datetime, timedelta
 from typing import Collection, Iterable, Mapping, Protocol, Sequence
 
 from trippilot.agents.schedule.budget import DeadlineBudget, OrchestratorConfig
-from trippilot.agents.schedule.family import family_followers, related_to_any
+from trippilot.agents.schedule.family import family_followers, related_to_any, same_place
 from trippilot.agents.schedule.outcome import (
     MAX_SLOT_ALTERNATIVES,
     CandidatesReport,
@@ -174,6 +174,8 @@ class GenerateItineraryRequest:
     principal: Principal
     seed: int
     fixed_blocks: tuple[FixedBlock, ...] = ()
+    # 고른 시군구(+하위 행정구) 코드 — 후보 풀이 그 구 안을 먼저 쓴다(`pool_builder._region_first`). 빈 값 = 종전.
+    region_codes: frozenset[str] = frozenset()
     # 시각 없는 필수 방문 (TRIP-1249) — 고정 블록과 같은 길(요청에 실려 오는 값), 시각만 없다.
     required_visits: tuple[RequiredVisit, ...] = ()
     excluded_poi_ids: frozenset[PoiId] = frozenset()
@@ -1023,16 +1025,18 @@ class ScheduleAgent:
             and c.poi_id not in request.excluded_poi_ids
         )[: self._cfg.family_demote_top_n]
         followers = family_followers(anchors, ranked)
+        # 대표와 한 장소인 계열원(출처만 다른 쌍둥이)은 강등이 아니라 뺀다 — `same_place` 참고.
+        twins = frozenset(f for f, lead in followers.items() if same_place(index[f], index[lead]))
         self._observe(
             trace_id, now, "family", "family_demote", "family_demote",
-            f"family_demoted:{len(followers)}/families={len(set(followers.values()))}"
-            f"/anchors={len(anchors)}",
+            f"family_demoted:{len(followers) - len(twins)}/families={len(set(followers.values()))}"
+            f"/anchors={len(anchors)}" + (f"/twins_dropped={len(twins)}" if twins else ""),
         )
         return tuple(
             replace(c, score=demoted_score(c.score, factor=self._cfg.existence_demote_factor,
                                            penalty=self._cfg.existence_demote_penalty))
             if c.poi_id in followers else c
-            for c in candidates
+            for c in candidates if c.poi_id not in twins
         ), anchors
 
     def _lookup_family_anchors(

@@ -497,6 +497,7 @@ def _domain_generate_request(
     return core.GenerateItineraryRequest(
         schedule_id=ScheduleId(request.trip_id),
         anchor=GeoPoint(anchor_schema.lat, anchor_schema.lng),
+        region_codes=frozenset(anchor_schema.region_codes),
         days=days,
         day_window=day_window,
         day_windows=day_windows,
@@ -717,6 +718,20 @@ def _payload_alternative_pairs(
         (day.date.isoformat(), slot.poi_id, alt.poi_id)
         for day in payload.days for slot in day.slots for alt in slot.alternatives
     )
+
+
+# BE `visit_slot.placement_reason` 칸 상한(`BoundedText.PLACEMENT_REASON_MAX`) — 재계획 경로는 BE 가 자르지 않는다.
+_PLACEMENT_REASON_MAX = 500
+
+
+def _pick_reasons(picks) -> dict[PoiId, str]:
+    """구성 LLM 이 고른 곳 → 이유. 게이트가 비운 이유(시간 표현·연락처 꼴)는 뺀다 — 빈 이유로 원래 이유를 덮지 않게.
+    같은 곳이 두 번이면 첫 이유(고른 순서와 같다)."""
+    out: dict[PoiId, str] = {}
+    for pick in picks:
+        if pick.reason.strip():
+            out.setdefault(pick.poi_id, pick.reason.strip())
+    return out
 
 
 def _keyed_explanations(
@@ -1221,7 +1236,8 @@ def _visit_cap(request: schemas.ReplanRequest, resolved: Sequence[str],
 #   END_NEAR_STAY 마지막 방문지를 숙소 가까이(`ItineraryProblem.end_near`)
 #   SHORTER_DAY   일찍 마무리 — 새 방문은 한 곳만, 숙소가 있으면 그 쪽에서 끝낸다
 #   END_DAY       오늘은 여기까지 — 새 방문 없이 하루를 끝낸다(`_replan_end_day`)
-_LAYOUT_KEYS = frozenset({"EARLIER", "KEEP_DINNER", "END_NEAR_STAY", "SHORTER_DAY", "END_DAY"})
+#   EXTEND_DAY    더 늦게까지 — 남은 방문은 그대로 필수 방문, 상한 없이 창을 23:59 까지 넓혀 더한다(`_remaining_visits`)
+_LAYOUT_KEYS = frozenset({"EARLIER", "KEEP_DINNER", "END_NEAR_STAY", "SHORTER_DAY", "END_DAY", "EXTEND_DAY"})
 
 # 저녁 식사창 — 조립의 식사 소프트 항과 같은 창(17~20시)이다. 창이 둘이면 "저녁"이 두 뜻이 된다.
 _DINNER_WINDOW_MIN = AssemblyConfig().dinner_window_min
@@ -1343,6 +1359,20 @@ def _earlier_visits(
     # 방문이 전부 저녁 뒤로 밀린다.
     held = {b.poi_id for b in blocks if b.reason != "keep_dinner"}
     dinner = {b.poi_id: b.window.start.time() for b in blocks if b.reason == "keep_dinner"}
+    out = _remaining_visits(request, held, dinner, not_before, "earlier_retime")
+    notes.append(f"earlier_retime: {len(out)}")
+    return out
+
+
+def _remaining_visits(
+    request: schemas.ReplanRequest, held: set[PoiId], dinner: Mapping[PoiId, clock_time],
+    not_before: datetime | None, reason: str, *, priority: bool = False,
+) -> tuple[RequiredVisit, ...]:
+    """원 일정의 남은 방문 → 장소·체류 그대로 필수 방문(시각은 조립이 정한다, INV-2). EARLIER·EXTEND_DAY 공용.
+
+    `held`(잠금·지난 곳)·제외 요청·하한 전에 끝난 슬롯은 넣지 않는다. `dinner` 는 잠근 저녁 식당의 원 시각 —
+    그 시각의 슬롯만 자리표로 든다(`_earlier_visits`).
+    """
     excluded = {PoiId(p) for p in request.excluded_poi_ids}
     out: list[RequiredVisit] = []
     for s in sorted(request.current_slots,
@@ -1360,8 +1390,7 @@ def _earlier_visits(
             dwell = (s.end_at.hour * 60 + s.end_at.minute) - (s.start_at.hour * 60 + s.start_at.minute)
         out.append(RequiredVisit(poi_id=pid, day=request.target_date,
                                  dwell_min=dwell if dwell and dwell > 0 else None,
-                                 reason="earlier_retime"))
-    notes.append(f"earlier_retime: {len(out)}")
+                                 reason=reason, priority=priority))
     return tuple(out)
 
 
@@ -1387,6 +1416,18 @@ def _end_near(request: schemas.ReplanRequest, resolved: Sequence[str],
 # (예: "안 가본 곳") 번역 LLM 이 한 번 더 도는 비용뿐이다. 그래서 노트도 "의심"이다.
 _NEGATION = re.compile(
     r"말고|말자|그만(?!큼)|빼고|빼\s*줘|빼(?=\s|$)|싫|없이|제외|가지\s*[마말]|안\s*[가갈갔]|별로")
+
+# "더 늦게까지"(EXTEND_DAY) — 임베딩 없이도 잡는 결정론 가드. "저녁 늦게까지 더 일정 추가로"가 "저녁" 한 낱말로
+# SHORTER_DAY("저녁 전에 마무리")에 붙어 원 일정 4곳 중 1곳만 남았다(운영 2026-10-23, trace 7064f252). 새 별칭은
+# 배포 뒤 KB 적재(`scripts/load_kb.py`)가 돌아야 임베딩에 들어가므로 그 전에도 막는다. 좁게 둔다 — "늦게까지 여는
+# 카페"(영업시간)·"어제 늦게까지 놀아서"(지난 일)·"카페 하나 더 추가"(ADD_CAFE)는 안 잡는다(테스트로 고정).
+_LATE = r"(?:늦게|밤)\s*까지(?!\s*(?:여는|하는|영업|열))"
+_EXTEND = re.compile(
+    rf"더\s*{_LATE}|{_LATE}[^.?!]*?(?:더|추가|놀자|놀고\s*싶|있고\s*싶|돌자)"
+    r"|끝나고\s*(?:나서\s*)?더|(?:^|더\s*)일정\s*(?:을|도)?\s*(?:더\s*)?(?:추가|늘려)")
+# "더 늦게까지"와 반대 방향 — 가드가 잡으면 자유 입력 매칭분에서 뺀다(칩은 사용자 선택이라 그대로).
+# KEEP_DINNER 는 남긴다: 원 일정 저녁 식당을 원 시각에 잠글 뿐이라 "원 일정은 두고 더한다"와 같은 방향이다.
+_EXTEND_OPPOSITE = frozenset({"SHORTER_DAY", "END_DAY", "END_NEAR_STAY"})
 
 def _exact_alias(text: str, specs: Sequence[DirectiveSpec]) -> tuple[DirectiveSpec, ...]:
     """공백을 눌러 사전 표현과 **정확히** 같은 지시. 부정문에서만 쓰는 결정론 경로."""
@@ -2456,6 +2497,17 @@ class WiredItineraryOrchestrator:
         # 방문을 줄이는 상한도, 회피 카테고리 제외도 타지 않는다(사용자가 "시간만"이라 했다).
         earlier = _earlier_visits(request, resolved, blocks, not_before, notes,
                                   ineffective=frozenset(d.key for d in self._directives if d.unwired))
+        # 더 늦게까지 — 원 일정의 남은 방문(잠금 아닌 것)을 장소·체류 그대로 우선 필수 방문으로 두고, 상한 없이 창을
+        # 넓혀 새 방문을 더한다. 시간만 당기기(장소 그대로)·칩으로 고른 일찍 마무리가 오면 그쪽이 이긴다(노트).
+        kept: dict[PoiId, RequiredVisit] = {}
+        rival = "EARLIER" if earlier is not None else "SHORTER_DAY" if "SHORTER_DAY" in resolved else None
+        extend = "EXTEND_DAY" in resolved and rival is None
+        if "EXTEND_DAY" in resolved and rival:
+            notes.append(f"extend_day_ignored: {rival}")
+        elif extend:
+            kept = {v.poi_id: v for v in _remaining_visits(
+                request, {b.poi_id for b in blocks}, {}, not_before, "extend_keep", priority=True)}
+            notes.append(f"extend_day: kept {len(kept)}")
         # 피할 카테고리(야외 피하기·실내로·힘든 건 빼고, 사유 암시 포함)는 **후보에서 뺀다** — 점수 감점만
         # 두면 원 일정의 야외 공원이 그대로 남았다(2026-10-14 DEV "실내로" 3건). 원 일정의 그 곳도
         # 고정·다녀온 곳이 아니면 교체 대상이다. 반대 칩을 같이 고른 카테고리는 빼지 않는다(상쇄 규약,
@@ -2507,7 +2559,7 @@ class WiredItineraryOrchestrator:
             avoid = avoid | RAIN_OUTDOOR  # 말이 아니라 기상청이 확인한 비다
         drop = avoid - prefer
         held = ({b.poi_id for b in blocks} | {v.poi_id for v in earlier or ()}
-                | {p.poi_id for p in nl.visit})
+                | {p.poi_id for p in nl.visit} | set(kept))
         # "밤에 놀기"를 말했으면 클럽·바(ACTIVITY 태그)는 실외 회피(우천·실내로)에 걸리지 않는다 — 실내다.
         night_asked = any(k in _NIGHT_KEYS for k in resolved)
         avoided = frozenset(p.poi_id for p in pool.pois if p.category in drop and p.poi_id not in held
@@ -2563,7 +2615,7 @@ class WiredItineraryOrchestrator:
             if dropped:
                 notes.append(f"planb_rank_trimmed: add_one dropped={dropped}")
 
-        visit_cap = None if earlier is not None else _visit_cap(request, resolved, past, not_before)
+        visit_cap = None if earlier is not None or extend else _visit_cap(request, resolved, past, not_before)
         if "SHORTER_DAY" in resolved and earlier is None:
             # 일찍 마무리 — 진행 중·잠금은 그대로, 새 방문은 한 곳만(사용자 결정 2026-10-19). 상한은 잠금까지
             # 세는 값이라(`free_visit_cap`) 솔버에 들어가는 잠금 수 + 1 이다.
@@ -2579,13 +2631,14 @@ class WiredItineraryOrchestrator:
         window_end = datetime.combine(window.date, window.end, tzinfo=self._tz)
         night_end = max(window_end, datetime.combine(window.date, datetime.min.time(),
                                                      tzinfo=self._tz) + _NIGHT_END)
-        day_end = nl.window_end or (night_end if night else window_end)
+        day_end = nl.window_end or (night_end if night or extend else window_end)  # 더 늦게까지도 같은 창
         # ── 다시 짜기 — 남은 하루의 방문 목록을 LLM 이 고른다 ─────────────
         # 고른 곳은 시각 없는 필수 방문, 하루 상한은 `고정 + 고른 수` — 그날은 고른 곳만 들어가고
         # 시각·순서는 어셈블리가 정한다(INV-2). 실패·시한 부족이면 () 라 종전 경로 그대로(INV-4).
         # 사용자 지시(2026-10-14)로 재계획에 한해 "솔버 LLM 2차는 실패 시에만"(2026-08-23)을 개정한다.
         active = tuple(b for b in blocks if b not in past)
         compose_ctx: list = []  # 1차 구성의 (입력, 제외) — 1회 수리가 쓴다
+        why: dict[PoiId, str] = {}  # 구성·수리 LLM 이 고른 곳의 이유 → 슬롯 추천 이유
         try:
             # 상황 추천 = PlanB 순서. 선택 LLM 을 안 불렀으면 규칙 랭킹(우천·저장 장소·거리)이 참고로 간다.
             composed = tuple(v.poi_id for v in earlier) if earlier is not None else self._compose_day(
@@ -2595,7 +2648,7 @@ class WiredItineraryOrchestrator:
                 trace_id=trace_id, now=now, started_ms=t0, budget=budget,
                 nearby=(*nl_near, *night), origins=tuple(p.coord for p in far),
                 window_start=nl.window_start, window_end=day_end,  # 솔버 `day_window` 와 같은 창
-                rules=_category_rule_lines(nl), ctx_out=compose_ctx, holidays=holidays,
+                rules=_category_rule_lines(nl), ctx_out=compose_ctx, why_out=why, holidays=holidays,
                 planb_request=planb_request,
             )
         except Exception as e:  # 설정 버그·렌더 실패도 재계획을 죽이지 않는다 — 종전 경로로(INV-4)
@@ -2637,6 +2690,8 @@ class WiredItineraryOrchestrator:
                 fill=fill, keep=nl_ids)
             notes.append(f"nl_category_applied: {before}->{len(composed)}")
             notes += short
+        if composed and kept:  # 더 늦게까지 — 구성이 원 일정을 덜 골랐어도 남은 방문은 맨 앞에 다 둔다
+            composed = tuple(dict.fromkeys((*kept, *composed)))
         cat_of = {p.poi_id: p.category for p in pool.pois}
         counted = frozenset() if earlier is not None else frozenset(
             p for p in composed if cat_of.get(p) in dict(nl.counts))
@@ -2663,7 +2718,8 @@ class WiredItineraryOrchestrator:
         # 시간만 당기기(earlier)는 장소를 안 바꾼다는 요청이라 더하지 않는다.
         nl_extra = () if earlier is not None else tuple(
             p.poi_id for p in nl.visit
-            if p.poi_id not in set(composed) and p.poi_id not in {b.poi_id for b in blocks})
+            if p.poi_id not in set(composed) and p.poi_id not in {b.poi_id for b in blocks}
+            and p.poi_id not in kept)
         domain_request = core.GenerateItineraryRequest(
             schedule_id=ScheduleId(request.trip_id),
             anchor=anchor,
@@ -2700,11 +2756,13 @@ class WiredItineraryOrchestrator:
                  if composed or earlier is not None else visit_cap),
                 nl_extra),
             not_before=not_before,
-            required_visits=earlier if earlier is not None else tuple(
+            # 더 늦게까지(`kept`) — 원 일정 남은 방문은 원 체류·우선 가중 그대로. 구성이 없으면 그것만 필수로 두고
+            # 상한 없는 점수 경로가 새 방문을 더한다.
+            required_visits=earlier if earlier is not None else (() if composed else tuple(kept.values())) + tuple(
                 # 구성 결과 안에도 이름으로 집은 곳이 있다(맨 앞에 고정) — 그곳과, 사용자가 수를 정한 종류의
                 # 곳("카페는 한 곳만")만 우선 가중. 수를 맞춘 곳이 같은 무게면 솔버가 시간 부족에 그걸 뺐다
                 # (운영 2026-10-15: 카페 1곳을 구성에 넣었는데 최종 0곳).
-                RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
+                kept.get(p) or RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
                               reason="nl_request" if p in nl_ids else "llm_compose",
                               priority=p in nl_ids or p in counted) for p in composed) + tuple(
                 RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
@@ -2756,7 +2814,7 @@ class WiredItineraryOrchestrator:
                 self._compose_event(meta, f"composed_unplaced: rerun={rerun} remaining={left}ms")
                 if rerun:
                     outcome = self._schedule_agent.run(core.ScheduleTask(
-                        request=replace(domain_request, required_visits=tuple(
+                        request=replace(domain_request, required_visits=tuple(kept.values()) + tuple(
                             RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
                                           reason="nl_request", priority=True) for p in nl_ids) + tuple(
                             RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
@@ -2779,8 +2837,9 @@ class WiredItineraryOrchestrator:
                 try:
                     outcome, composed = self._repair_day(
                         request, outcome, composed, missed, task, compose_ctx[0] if compose_ctx else None,
-                        nl, nl_ids, night, add_one, cat_of, notes, t0=t0, budget=budget,
-                        trace_id=trace_id, now=now, past=past)
+                        # 더 늦게까지의 원 일정 남은 방문도 이름으로 집은 곳처럼 수리가 갈아 끼우지 않는다
+                        nl, (*nl_ids, *kept), night, add_one, cat_of, notes, t0=t0, budget=budget,
+                        trace_id=trace_id, now=now, past=past, why_out=why)
                 except Exception as e:  # 수리는 덤이다 — 실패해도 1차 해 그대로(INV-4: 밝힌다)
                     notes.append(f"llm_repair_error: {type(e).__name__}")
                     self._repair_event(meta, f"error: {type(e).__name__}: {e}")
@@ -2805,7 +2864,7 @@ class WiredItineraryOrchestrator:
             # 재계획 한정)은 사용자가 고정한 곳이 아니다 — 고정으로 내면 BE 가 잠가서 다음 다시 짜기·교체에서 못
             # 바꾼다. 그 표시만 걷는다(시각·순서는 그대로). **최종 해에서 한 번** — 다시 풀기(위) 앞에서 걷던
             # 동안 다시 푼 해는 같은 블록이 다시 실려 이름으로 집은 곳·클럽·진행 중이 고정으로 나갔다.
-            picked = set(composed_r1) | set(composed) | set(nl_ids) | set(night)
+            picked = set(composed_r1) | set(composed) | set(nl_ids) | set(night) | set(kept)
             outcome = replace(outcome, solution=replace(outcome.solution, days=tuple(
                 replace(d, fixed_blocks=tuple(
                     fb for fb in d.fixed_blocks
@@ -2818,7 +2877,7 @@ class WiredItineraryOrchestrator:
             retrieved={**planb.retrieved, "POI_DESC": len(compose_ctx[0][0].place_knowledge)}
             if compose_ctx else planb.retrieved,
             planb_fallback=planb.is_fallback, started_ms=t0, past=past,
-            composed=bool(composed),
+            composed=bool(composed), reasons=why,
         )
 
     def _rag_events(self, meta: schemas.RequestMetaSchema, notes) -> None:
@@ -2918,6 +2977,7 @@ class WiredItineraryOrchestrator:
     def _repair_day(
         self, request, outcome, composed, missed, task, ctx, nl, nl_ids, night, add_one, cat_of, notes,
         *, t0: int, budget, trace_id: TraceId, now: datetime, past: tuple[FixedBlock, ...] = (),
+        why_out: dict[PoiId, str] | None = None,
     ):
         """다시 짜기 1회 수리 — 솔버가 뺀 곳의 까닭을 붙여 구성 LLM 에 **한 번** 되묻고, 지금 해의 빈 틈에 그대로
         들어가는 후보에서만 고르게 해 다시 푼다. (최종 결과, 최종 구성 목록) — 의심스러우면 1차 그대로.
@@ -3017,6 +3077,8 @@ class WiredItineraryOrchestrator:
             subs = [p for p in subs if p in ok_set]
         notes.append(f"llm_repair: picked={len(subs)}/{len(result.value)} pool={len(cands.pois)} "
                      f"gaps={len(gaps_used)} drop={len(drop)}")
+        if why_out is not None:
+            why_out.update({p: r for p, r in _pick_reasons(result.value).items() if p in subs})
         if not subs:
             return outcome, composed
         left = budget.total_ms - (self._clock.monotonic_ms() - t0)
@@ -3084,6 +3146,7 @@ class WiredItineraryOrchestrator:
         window_end: datetime | None = None,
         rules: tuple[str, ...] = (),
         ctx_out: list | None = None,
+        why_out: dict[PoiId, str] | None = None,  # 고른 곳의 이유(게이트가 시간 표현을 비운 뒤) — 슬롯 추천 이유
         holidays: Mapping[date, frozenset[str]] | None = None,  # 공휴일 달력 — 진입점이 1회 조회(상황 감지 H1)
         planb_request: PlanBRagRequest | None = None,  # 후보의 장소 지식(KB-5)을 같은 상황 질의로 찾는다
     ) -> tuple[PoiId, ...]:
@@ -3217,6 +3280,8 @@ class WiredItineraryOrchestrator:
             notes.append(f"llm_compose_fallback: {result.error}")
             return ()
         picks = tuple(dict.fromkeys(pick.poi_id for pick in result.value))
+        if why_out is not None:
+            why_out.update(_pick_reasons(result.value))
         # 남은 일정을 몇 곳 그대로 골랐나 — "다시 짰는데 안 바뀌었다"를 로그로 가른다.
         remaining_ids = {PoiId(s.poi_id) for s in slots if status(s) == "남은 일정"}
         notes.append(f"llm_composed: {min(len(picks), limit)}/{len(picks)} "
@@ -3276,6 +3341,13 @@ class WiredItineraryOrchestrator:
                     notes.append(f"free_text_match_degraded: {type(e).__name__}")
             else:
                 notes.append("free_text_match_unavailable")  # 벡터 미주입
+            if not _NEGATION.search(request.free_text) and _EXTEND.search(request.free_text):
+                # "더 늦게까지" — 반대 방향(일찍 마무리·하루 끝·숙소 쪽 마무리)이 자유 입력에서 붙었으면 뺀다.
+                extend, _ = resolve_chips(["EXTEND_DAY"], self._directives)
+                dropped = sorted(s.key for s in matched if s.key in _EXTEND_OPPOSITE)
+                matched = (*(s for s in matched if s.key not in _EXTEND_OPPOSITE and s.key != "EXTEND_DAY"),
+                           *extend)
+                notes.append(f"free_text_extend: dropped={','.join(dropped) or '-'}")
             if not matched:
                 matched = self._translate_free_text(
                     request.free_text, notes, trace_id=trace_id, now=now,
@@ -3520,6 +3592,7 @@ class WiredItineraryOrchestrator:
         past: tuple[FixedBlock, ...] = (),
         composed: bool = False,
         end_day: bool = False,
+        reasons: Mapping[PoiId, str] | None = None,
     ) -> schemas.ReplanResponse:
         """`GenerationOutcome` → `ReplanResponse`. **예외로 올리지 않는다** (IO-7).
 
@@ -3597,8 +3670,13 @@ class WiredItineraryOrchestrator:
         )
         if report is not None and report.estimated:
             notes.append(f"distance_estimated:{report.estimated}/{report.total}")
+        # 슬롯 추천 이유 — BE 는 이 칸으로 그날 슬롯의 이유를 **통째로 바꾼다**(빈 칸 = 이유 없음). 안 바뀐 곳은
+        # 원래 이유를 되싣고, 구성 LLM 이 고른 곳은 그 이유로(같은 곳을 다시 골랐으면 새 이유). 상한은 BE 칸(500자).
+        why = {PoiId(s.poi_id): s.placement_reason for s in request.current_slots if s.placement_reason}
+        why |= reasons or {}
         envelope = _envelope(
             solution,
+            tuple(PoiExplanation(pid, text[:_PLACEMENT_REASON_MAX]) for pid, text in why.items()),
             distance_ranges=distance_ranges,
             candidates_summary=outcome.candidates_summary,
         )

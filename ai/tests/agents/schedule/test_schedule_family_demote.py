@@ -10,7 +10,8 @@ QA 6회차: '황령산 전망대'(1일차) + '황령산'(2일차), 서울 '남�
   ② 점수순 스타 — 사슬로 번지지 않는다, 고정 블록·앞 일자 배치분이 대표
      (단 식당 대표에 붙은 비식당 쌍둥이는 별칭 대표로 남아 제 단지 이웃을 누른다 — TRIP-1228 리뷰)
   ③ 강등이 **배치를 바꾼다** — 남산 3곳 같은 날, 황령산 다른 날(excluded 경유·풀 밖 조회)
-  ④ 강등이지 배제가 아니다 — 후보 집합·순서·개수 불변, 대표 점수 불변, > 0 유지 (INV-1)
+  ④ 강등이지 배제가 아니다 — 후보 순서 불변, 대표 점수 불변, > 0 유지 (INV-1).
+     단 이름까지 같은 200m 안(출처만 다른 한 장소)은 뺀다 — 강등으로는 하루에 둘 다 들어갔다(10-23 부산)
   ⑤ 다른 강등과 겹칠 때의 합성 규칙
   ⑥ generate 에만 — 플래그 off(replan)면 점수가 한 글자도 안 바뀐다
   ⑦ 조회 실패는 그 축만 건너뛰고 관측 / 결정론 / 상위 N 한정
@@ -38,6 +39,7 @@ from trippilot.agents.schedule.family import (
     family_followers,
     normalize_name,
     same_family,
+    same_place,
 )
 from trippilot.domain.common import GeoPoint, PoiId, Rejection, RejectionKind
 from trippilot.domain.itinerary import FixedBlock, TimeWindow
@@ -420,8 +422,33 @@ def test_동문재래시장_쇼핑과_맛집이_한_일정에_하나만_남는�
 
     assert set(_placed(outcome)) & {"dm", "df"} == {"dm"}
     fed = _fed(sink)
-    assert fed["df"] == demoted_score(0.9, factor=_F, penalty=_P)
+    assert "df" not in fed  # 한 장소의 다른 출처 행이라 강등이 아니라 뺀다(`same_place`)
     assert fed["dm"] == 0.95 and fed["f2"] == 0.8  # 대표 · 이름 다른 같은 건물 식당은 그대로
+
+
+_GWANG = (
+    # 운영은 야경(카카오)·자연(관광공사)이었다 — 이 퍼사드는 야경을 낮 창에 안 놓아 낮 카테고리로 같은 꼴을 만든다
+    _named("gv", "광안리해수욕장", category=PoiCategory.SIGHT),
+    _named("gn", "광안리해수욕장", category=PoiCategory.NATURE),  # 같은 좌표
+    _named("o1", "경복궁", north_m=900),
+    _named("o2", "덕수궁", east_m=900),
+)
+_GWANG_SCORES = {"gv": 0.9, "gn": 0.85, "o1": 0.7, "o2": 0.7}
+
+
+def test_출처만_다른_같은_장소는_강등이_아니라_후보에서_뺀다() -> None:
+    """운영 10-23 부산 1일차 — 광안리해수욕장 야경(카카오)·자연(관광공사) 같은 좌표 두 행이 18:29·19:29 연달아.
+
+    강등은 점수만 낮춰서 하루에 빈 시간이 남으면 솔버가 둘째도 넣는다(계열 강등이 돈 실행이었다 —
+    `family_demoted:39`). 이름까지 같은 200m 안(④)은 단지 안 다른 명소가 아니라 한 장소라 한 번만 둔다.
+    """
+    pool = _pool(_GWANG)
+    agent, trace, sink = _agent(_GWANG_SCORES)
+    outcome = agent.run(_task(pool, request=_gen_request(end_hour=21)))
+
+    assert set(_placed(outcome)) & {"gv", "gn"} == {"gv"}
+    assert "gn" not in _fed(sink) and _fed(sink)["gv"] == 0.9
+    assert any("twins_dropped=1" in str(e) for e in trace.events), trace.events
 
 
 _HWANG = (
@@ -548,7 +575,7 @@ def _scored_scene(draw):
 
 @given(_scored_scene())
 @settings(max_examples=40, deadline=None)
-def test_후보_집합_순서_개수는_그대로고_점수는_양수를_유지한다(scene) -> None:
+def test_후보는_같은_장소_쌍둥이만_빠지고_순서와_양수_점수를_유지한다(scene) -> None:
     pois, scores = scene
     pool = _pool(pois)
     rounded = {k: round(v, 2) for k, v in scores.items()}
@@ -558,8 +585,14 @@ def test_후보_집합_순서_개수는_그대로고_점수는_양수를_유지�
     on_agent.run(_task(pool, request=_gen_request()))
 
     before, after = off.problems[0].candidates, on.problems[0].candidates
-    assert [c.poi_id for c in after] == [c.poi_id for c in before]  # INV-1
-    for b, a in zip(before, after):
+    kept = {c.poi_id for c in after}
+    assert [c.poi_id for c in after] == [c.poi_id for c in before if c.poi_id in kept]  # INV-1 — 줄기만 한다
+    by = {p.poi_id: p for p in pois}
+    for gone in (c for c in before if c.poi_id not in kept):  # 빠진 것은 남은 후보와 한 장소인 것뿐
+        assert any(same_place(by[gone.poi_id], by[k.poi_id]) and k.score >= gone.score for k in after)
+    now = {c.poi_id: c for c in after}
+    for b in (c for c in before if c.poi_id in kept):
+        a = now[b.poi_id]
         assert a.score in (b.score, demoted_score(b.score, factor=_F, penalty=_P))
         assert (a.score > 0) == (b.score > 0)
     # 최고점 후보는 언제나 대표다
