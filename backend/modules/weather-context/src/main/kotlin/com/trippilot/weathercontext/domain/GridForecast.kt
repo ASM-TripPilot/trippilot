@@ -7,7 +7,7 @@ import java.time.LocalDateTime
  * 한 격자의 한 발표분 — 시간별 예보 캐시(weather_grid_forecast · domain-entities §8.1). 격자당 1행(덮어쓰기)이다.
  *
  * [hourly] 키는 KST 정시(오늘·내일 — 자정을 넘긴 내일 슬롯 몫으로 모레까지)다. 날짜별 최저·최고(TMN·TMX)는 받지 않는다 — 기온 판정이
- * 시간별 TMP 만 본다(G-SA-15 결정 2026-10-20 — `weather_grid_forecast.daily` 칸은 매핑하지 않는다).
+ * 시간별 TMP 만 본다(G-SA-15 결정 2026-10-20 — `weather_grid_forecast.daily` 칸은 V2.86 에서 지웠다).
  * 값은 **원천 코드 그대로**(PTY 0~4 · SKY 1·3·4)이고 어댑터가 읽을 때 걸렀다 — 숫자가 아니거나 모르는 코드면 그 칸은 null 이다
  * (지어내지 않는다). 뜻으로 옮기는 것은 공개 계약 쪽이다.
  *
