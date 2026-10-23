@@ -1,19 +1,8 @@
-// ✦ AI 도우미 진입(FAB + 스택 배치 계산 + 시트 라우트) 공개 API — 진입 화면 4곳(home·stay-search·
-// itinerary-plan·live)과 도우미 시트 page 가 쓴다. 네트워크 없음(프리뷰도 이 index 를 물어도 된다).
-export {
-  ASSISTANT_FAB_SIZE,
-  FAB_STACK_GAP,
-  TAB_FAB_BASE,
-  TAB_TWO_STACK,
-  assistantFabBottom,
-  stackTop,
-  toastBottomWith,
-  type FabStack,
-} from './model/fabStack';
+// ✦ AI 도우미 진입(시트 라우트 + 글리프) 공개 API — 홈 헤더 ✦ 버튼·허브 하단 바 챗봇 칸이 쓰는 목적지·아이콘과
+// 도우미 시트 page 가 쓴다. 네트워크 없음(프리뷰도 이 index 를 물어도 된다).
 export {
   assistantHref,
   type AssistantHref,
   type AssistantSurface,
 } from './model/assistantHref';
-export { AssistantFab, type AssistantFabProps } from './ui/AssistantFab';
 export { ChatBubbleGlyph, SparkleGlyph } from './ui/AssistantGlyphs';

@@ -171,6 +171,15 @@ export interface MapSheetShellProps<T = unknown> {
   mapLogoMargin?: MapViewProps['logoMargin'];
   /** TRIP-1535 — `<MapView showMyLocation>` 으로 그대로 흘린다. 미전달=현행. */
   showMyLocation?: boolean;
+  /** TRIP-1558 — 핀 탭(`pins` 배열 위치)을 `<MapView onPinTap>` 으로 그대로 흘린다. 미전달=현행. */
+  onPinTap?: (index: number) => void;
+  /** TRIP-1558 — `id` 가 **바뀔 때마다** 본문을 스크롤하라고 요청한다(`snapRequest` 와 같은 구조). `y` = 기본 경로 `scrollTo`, `index` =
+   *  list 경로 `scrollToIndex`. 미전달=요청 없음. */
+  scrollRequest?: { id: number; y: number } | { id: number; index: number };
+  /** TRIP-1558 6-b — 시트가 어느 칸에 **도착해 멈췄다**는 알림(`<BottomSheet onChange>` 의 index). `onSheetAnimate`(이동 시작)와 다르다 —
+   *  gorhom 은 가장 높은 칸에서만 안쪽 스크롤을 허용하므로, 소비처는 이 도착 알림 뒤에 스크롤을 요청한다. 셸이 자기 칸 추적에 쓰는 것과
+   *  별개로 소비처에도 흘린다. 미전달=미부착. */
+  onSheetChange?: (index: number) => void;
 }
 
 export function MapSheetShell<T = unknown>({
@@ -207,6 +216,9 @@ export function MapSheetShell<T = unknown>({
   snapRequest,
   mapLogoMargin,
   showMyLocation,
+  onPinTap,
+  scrollRequest,
+  onSheetChange,
 }: MapSheetShellProps<T>): ReactElement {
   // 지도 로드 실패(TRIP-919). 폴백 중엔 MapView 가 트리에서 빠지므로, 재시도로 이 값을 풀면 MapView 가
   // 새 인스턴스로 다시 마운트돼 실패 알림(notifiedRef)도 처음부터 다시 돈다 — 별도 key 가 필요 없다.
@@ -238,6 +250,52 @@ export function MapSheetShell<T = unknown>({
     seenSnapRequestId.current = snapRequest.id;
     sheetRef.current?.snapToIndex(snapRequest.index);
   }, [snapRequest]);
+  // TRIP-1558 — 스크롤 요청도 같은 id 규칙(첫 렌더·같은 id 는 조용). y → 기본 경로 스크롤러, index → list 경로.
+  const scrollRef = useRef<ComponentRef<typeof BottomSheetScrollView>>(null);
+  const listRef = useRef<ComponentRef<typeof BottomSheetFlatList>>(null);
+  const seenScrollRequestId = useRef(scrollRequest?.id);
+  const retriedRef = useRef(false);
+  // 대기 중인 재시도 타이머 — 새 요청·언마운트 때 지워야 옛 핀의 재시도가 새 핀 스크롤을 덮지 않는다.
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined
+  );
+  useEffect(() => () => clearTimeout(retryTimerRef.current), []);
+  useEffect(() => {
+    if (
+      scrollRequest === undefined ||
+      seenScrollRequestId.current === scrollRequest.id
+    )
+      return;
+    seenScrollRequestId.current = scrollRequest.id;
+    retriedRef.current = false;
+    clearTimeout(retryTimerRef.current);
+    if ('y' in scrollRequest) {
+      scrollRef.current?.scrollTo({ y: scrollRequest.y, animated: true });
+    } else {
+      listRef.current?.scrollToIndex({
+        index: scrollRequest.index,
+        animated: true,
+      });
+    }
+  }, [scrollRequest]);
+  // 가상화 리스트가 아직 안 그린 칸이면 RN 이 실패를 알린다 — 평균 높이로 근처까지 먼저 가고, 그려진 뒤 한 번만 다시 시도한다
+  // (다시 실패해도 더 안 한다 — 시트는 열렸으니 손으로 스크롤할 수 있다).
+  const handleScrollToIndexFailed = useCallback(
+    (info: { index: number; averageItemLength: number }) => {
+      if (retriedRef.current) return;
+      retriedRef.current = true;
+      listRef.current?.scrollToOffset({
+        offset: info.averageItemLength * info.index,
+        animated: true,
+      });
+      retryTimerRef.current = setTimeout(
+        () =>
+          listRef.current?.scrollToIndex({ index: info.index, animated: true }),
+        100
+      );
+    },
+    []
+  );
   // "0번 = 닫힘" 은 기본 배열에서만 참 — 직접 준 배열(i05 ['40%','88%'])의 0번은 열린 시트다.
   const sheetClosed = snapPoints === undefined && snapIndex === 0;
   // 태그 밖 상수 — `<MapView>` 태그 안 viewOnly 앞에 `>` 가 들어가면 위 태그 정규식이 잘린다.
@@ -296,6 +354,7 @@ export function MapSheetShell<T = unknown>({
               actualRoute={actualRoute}
               logoMargin={mapLogoMargin}
               showMyLocation={showMyLocation}
+              onPinTap={onPinTap}
               onLoadFailed={handleMapLoadFailed}
             />
           ))}
@@ -350,7 +409,10 @@ export function MapSheetShell<T = unknown>({
         // 키보드가 내려가면 키보드 전 칸으로 돌아온다(TRIP-1014 #076, 기본 'none' 은 올라간 채 남는다).
         keyboardBlurBehavior="restore"
         topInset={topInset}
-        onChange={setSnapIndex}
+        onChange={(index) => {
+          setSnapIndex(index);
+          onSheetChange?.(index);
+        }}
         onAnimate={onSheetAnimate}
         animatedPosition={animatedPosition}
         enableContentPanningGesture={contentPanning}
@@ -358,6 +420,8 @@ export function MapSheetShell<T = unknown>({
       >
         {list ? (
           <BottomSheetFlatList
+            ref={listRef}
+            onScrollToIndexFailed={handleScrollToIndexFailed}
             data={list.data}
             renderItem={list.renderItem}
             keyExtractor={list.keyExtractor}
@@ -383,6 +447,7 @@ export function MapSheetShell<T = unknown>({
           </View>
         ) : (
           <BottomSheetScrollView
+            ref={scrollRef}
             onScrollBeginDrag={onSheetScrollBeginDrag}
             contentContainerStyle={
               hasCta

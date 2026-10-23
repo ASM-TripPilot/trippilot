@@ -17,7 +17,7 @@ import type {
   QuickReply,
 } from '../api/assistantContract';
 import { useKeyboardVisible } from '@/shared/lib/useKeyboardVisible';
-import { contextChipLabel } from '../model/sheetModel';
+import { contextChipLabel, splitQuickReplies } from '../model/sheetModel';
 import type { SheetState } from '../model/resolveSheetState';
 import {
   AssistantSheetHeader,
@@ -25,7 +25,7 @@ import {
   QuickReplyBar,
 } from './AssistantSheetChrome';
 import { RetryGlyph, WarningGlyph } from './AssistantSheetGlyphs';
-import { MessageList } from './MessageList';
+import { MessageList, type OlderMessagesProps } from './MessageList';
 
 /**
  * b01~b07 도우미 시트 순수 뷰(TRIP-1322) — props 만 받는다. 네트워크·라우터·판정 없음(판정은 page 가
@@ -60,6 +60,8 @@ export interface AssistantSheetViewProps {
   renderCard?: (message: AssistantMessage) => ReactNode;
   /** 답 평가 줄(US-ASSIST-09) — 도우미의 답 아래에만 그린다(적용 기록 제외는 목록이 가른다). */
   renderFeedback?: (message: AssistantMessage) => ReactNode;
+  /** 목록 맨 위 "이전 대화 더 보기" 행 — null·없음이면 그리지 않는다. */
+  older?: OlderMessagesProps | null;
   /** 입력창 바로 위 줄(진행 표시·대기 취소·429 안내, TRIP-1326). */
   statusRow?: ReactNode;
   /** 보내기 버튼 testID(진행 중 `assistant-send-pending`, TRIP-1326). */
@@ -130,6 +132,7 @@ export function AssistantSheetView({
   repliesDisabled = false,
   renderCard,
   renderFeedback,
+  older,
   statusRow,
   sendTestID,
   headerTrailing,
@@ -158,9 +161,14 @@ export function AssistantSheetView({
     accessibilityLabel: contextChip
       ? `${chipLabel}, ${contextChip}`
       : chipLabel,
-    // 능력 보기(SHOW_CAPABILITIES)는 여행 없음(NO_CONTEXT)일 때만 — 그 외 READY 는 surface 와 무관하게 입력 포커스.
-    capabilities: state === 'NO_CONTEXT',
   };
+  // READY: 일반 질문형은 칩 안 펼침, 카드 위 줄엔 응답 보기만. NO_CONTEXT: 칩 = 능력 보기, 서버 quick reply 는 줄 그대로.
+  const noContext = state === 'NO_CONTEXT';
+  const { suggestions, choices } = splitQuickReplies(quickReplies);
+  const lineReplies = noContext
+    ? // 입력 칩이 이미 '능력 보기' — 서버가 준 SHOW_CAPABILITIES 칩도 중복이라 렌더 목록에서만 뺀다.
+      quickReplies.filter((r) => r.action !== 'SHOW_CAPABILITIES')
+    : choices;
 
   return (
     <View testID="assistant-sheet-root" className="flex-1">
@@ -231,24 +239,15 @@ export function AssistantSheetView({
                 renderCard={renderCard}
                 renderFeedback={renderFeedback}
                 noContext={state === 'NO_CONTEXT'}
+                older={older}
               />
             </View>
           ) : null}
           {showChat ? statusRow : null}
-          {showChat ? (
+          {showChat && lineReplies.length > 0 ? (
             <QuickReplyBar
-              // NO_CONTEXT 는 입력 칩이 이미 '능력 보기' — 서버가 준 SHOW_CAPABILITIES 칩도 중복이라 렌더 목록에서만 뺀다.
-              replies={
-                state === 'NO_CONTEXT'
-                  ? quickReplies.filter((r) => r.action !== 'SHOW_CAPABILITIES')
-                  : quickReplies
-              }
-              // NO_CONTEXT 는 입력 칩이 이미 '능력 보기' — 상시 칩은 중복이라 숨긴다.
-              showCapabilitiesChip={
-                showCapabilitiesChip && state !== 'NO_CONTEXT'
-              }
+              replies={lineReplies}
               onPick={onPressQuickReply}
-              onPressCapabilities={onPressCapabilities}
               disabled={repliesDisabled}
               stacked={!hasConversation}
             />
@@ -262,6 +261,16 @@ export function AssistantSheetView({
                 canSend={canSend}
                 sendTestID={sendTestID}
                 chip={chip}
+                suggestions={
+                  noContext
+                    ? undefined
+                    : {
+                        replies: suggestions,
+                        showCapabilitiesChip,
+                        onPick: onPressQuickReply,
+                        disabled: repliesDisabled,
+                      }
+                }
                 onPressCapabilities={onPressCapabilities}
               />
             </View>

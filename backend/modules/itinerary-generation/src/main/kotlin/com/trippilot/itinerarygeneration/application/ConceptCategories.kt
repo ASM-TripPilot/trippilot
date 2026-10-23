@@ -16,7 +16,8 @@ object ConceptCategories {
     private val MAP: Map<String, Set<String>> = mapOf(
         "식사" to setOf("맛집"),
         "카페" to setOf("카페"),
-        "전시·문화" to setOf("문화"),
+        // 미술(갤러리·미술관)은 문화에서 갈라진 곳이라 같이 싣는다(TRIP-1545) — 빼면 전시 슬롯에서 갤러리가 사라진다.
+        "전시·문화" to setOf("문화", "미술"),
         // '야외·산책'은 자연만 — 명소·야경 불포함(사용자 확정 2026-10-01, TRIP-1065 '미확인' 해소).
         "야외·산책" to setOf("자연"),
         "쇼핑" to setOf("쇼핑"),

@@ -440,6 +440,19 @@ def _memory_store():
         lambda: psycopg.connect(url, connect_timeout=3, options="-c statement_timeout=2000"))
 
 
+def _place_fact_store():
+    """`TRIPPILOT_VECTOR_DB_URL` 설정 시 미확인 칸 웹 확인 저장소(`ai_kb.place_fact_cache`) — 파드가 둘이라 다시 물은 턴이 다른 파드에
+    가도 찾은 값을 본다. 미설정 = None(도우미 조립부가 InMemory 로 대신). 켜기는 `PLACE_FACT_LOOKUP` 배정이다."""
+    url = _env("TRIPPILOT_VECTOR_DB_URL")
+    if url is None:
+        return None
+    import psycopg
+
+    from trippilot.agents.adapters.pg_place_fact_store import PgPlaceFactStore
+
+    return PgPlaceFactStore(lambda: psycopg.connect(url, connect_timeout=3, options="-c statement_timeout=2000"))
+
+
 def _place_sql():
     """`TRIPPILOT_PLACE_DB_URL` 설정 시 도우미 장소 조회(NL2SQL) 실행기 — ai_user 로 trippilot DB 의 `poi_public` 뷰만 읽는다.
 
@@ -842,7 +855,7 @@ def build_app_from_env() -> FastAPI:
     hours, place_ids = _place_hours(), _place_ids()
     vector_store, embedding = _vector_rag()
     # 도우미 오케스트레이터 설정은 LLM 분기 전에 읽는다 — 오타는 fake 조립에서도 기동 실패여야 한다.
-    memory_store, place_sql = _memory_store(), _place_sql()
+    memory_store, place_sql, place_fact_store = _memory_store(), _place_sql(), _place_fact_store()
     dialogue_on, shadow_rate = _dialogue_orchestrator_enabled(), _dialogue_shadow_rate()
     holidays = _holiday_source()  # 오타는 fake 조립에서도 기동 실패 — 위 도우미 설정과 같은 자리
     provider = _env("TRIPPILOT_LLM_PROVIDER")
@@ -854,7 +867,7 @@ def build_app_from_env() -> FastAPI:
                              hours=hours, place_ids=place_ids,
                              bank=_intent_bank(), bank_embedding=_bank_embedding(),
                              bank_vectors=_bank_vectors(),
-                             memory_store=memory_store, place_sql=place_sql,
+                             memory_store=memory_store, place_sql=place_sql, place_fact_store=place_fact_store,
                              dialogue_orchestrator_enabled=dialogue_on, shadow_rate=shadow_rate,
                              holidays=holidays)
     if provider == "openai":
@@ -891,7 +904,7 @@ def build_app_from_env() -> FastAPI:
                          directives=_replan_directives(),
                          bank=_intent_bank(), bank_embedding=_bank_embedding(),
                          bank_vectors=_bank_vectors(),
-                         memory_store=memory_store, place_sql=place_sql,
+                         memory_store=memory_store, place_sql=place_sql, place_fact_store=place_fact_store,
                          dialogue_orchestrator_enabled=dialogue_on, shadow_rate=shadow_rate,
                          holidays=holidays)
 

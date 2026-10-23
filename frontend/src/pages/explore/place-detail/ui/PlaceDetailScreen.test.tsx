@@ -6,6 +6,7 @@ import {
 } from '@testing-library/react-native';
 
 import type { Place } from '@/shared/api/index.schemas';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 
 import { PlaceDetailScreen } from './PlaceDetailScreen';
 
@@ -118,6 +119,44 @@ describe('🔴 AC-2 · 미니맵 실 MapView (단일 핀 · viewOnly · center/p
     expect(markers[0].props.latitude).toBe(place.lat);
     expect(markers[0].props.longitude).toBe(place.lng);
     expect(within(map).getByTestId('map-marker-pin-1')).toBeTruthy();
+  });
+});
+
+describe('🔴 히어로 사진 칸 (사이클 20261022-place-category-covers · 402×430 전폭)', () => {
+  it('서버 사진이 있으면 그 사진이 히어로(explore-place-hero-photo)를 채운다', () => {
+    render(
+      <PlaceDetailScreen
+        place={makePlace({ imageUrl: 'https://cdn.example.com/hero.jpg' })}
+        saved={false}
+      />
+    );
+
+    expect(
+      within(screen.getByTestId('explore-place-hero')).getByTestId(
+        'explore-place-hero-photo'
+      ).props.source
+    ).toEqual([{ uri: 'https://cdn.example.com/hero.jpg' }]);
+  });
+
+  it('사진이 없으면(null·빈 문자열) 그 장소의 카테고리·poiId 로 고른 생성 이미지가 히어로를 채운다', () => {
+    const { rerender } = render(
+      <PlaceDetailScreen place={makePlace()} saved={false} />
+    );
+    // 기본 makePlace: p1·문화 → 변형 2 → culture-2.
+    expect(screen.getByTestId('explore-place-hero-photo').props.source).toEqual(
+      [coverFor('문화', 'p1')]
+    );
+
+    // 다른 장소(p2·술집 → 변형 3 → bar-3), 이번엔 imageUrl 이 빈 문자열.
+    rerender(
+      <PlaceDetailScreen
+        place={makePlace({ poiId: 'p2', category: '술집', imageUrl: '' })}
+        saved={false}
+      />
+    );
+    expect(screen.getByTestId('explore-place-hero-photo').props.source).toEqual(
+      [coverFor('술집', 'p2')]
+    );
   });
 });
 

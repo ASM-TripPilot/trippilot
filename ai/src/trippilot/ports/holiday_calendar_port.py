@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Protocol
 
-from trippilot.domain.poi import HolidayCalendar
+from trippilot.domain.poi import UNREAD_CALENDAR, HolidayCalendar
 
 
 class HolidayCalendarPort(Protocol):
@@ -30,6 +30,8 @@ class HolidaySource:
     """off(기본) → None: 공휴일 규칙 없음, 달력 조회 0회(종전과 같다).
 
     on → 달력 매핑. 달력이 없거나(키 미등록) 실패하면 **빈 매핑** — 날짜 명시형 규칙("1월 1일 휴관")만 산다.
+    그 빈 매핑은 `UNREAD_CALENDAR` 다 — 성공한 빈 달력과 갈라, 검증이 태그형 규칙을 못 본 슬롯을 미판정으로 싣는다
+    (G-SA-22). 생성·재계획은 빈 매핑으로 읽어 종전대로 짠다.
     정기 규칙(요일 휴무) 판정은 모드와 무관하게 그대로다.
     """
 
@@ -40,4 +42,4 @@ class HolidaySource:
         if not self.enabled:
             return None
         got = self.calendar.holidays_between(start, end) if self.calendar is not None else None
-        return got if got is not None else {}
+        return got if got is not None else UNREAD_CALENDAR

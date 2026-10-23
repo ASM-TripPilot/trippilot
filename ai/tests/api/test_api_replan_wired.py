@@ -511,6 +511,19 @@ def test_남길_곳이_없으면_빈_일정으로_위장하지_않는다() -> No
     assert "end_day_nothing_kept" in body["notes"], body["notes"]
 
 
+def test_하루_끝내기는_후보_풀이_비어도_된다() -> None:
+    """END_DAY 는 새 방문이 없어 후보가 필요 없다 — 풀이 비었다고 "후보 없음"으로 끝내면 안 된다.
+
+    운영에서 풀이 비는 길은 장소 조회 실패(DB 시한 초과)다. 여기선 시드 반경 밖 앵커 + 미등록 POI 로 같은
+    상태(반경 풀 0 + 원 일정 합류 0)를 만든다(Codex 리뷰 지적 2026-10-22, 재현 확인).
+    """
+    fresh = [{**s, "poi_id": f"f0000000-0000-4000-8000-00000000000{i}"} for i, s in enumerate((_PAST, _NOW, _LATER), 1)]
+    body = _in_trip(directives=["END_DAY"], anchor={"lat": 37.5665, "lng": 126.9780}, current_slots=fresh).json()
+    assert body["empty_reason"] is None, body["notes"]
+    assert [p for p, _ in _slots(body)] == [fresh[0]["poi_id"], fresh[1]["poi_id"]], body["notes"]
+    assert "end_day: kept 2 dropped 1" in body["notes"], body["notes"]
+
+
 def test_일찍_마무리는_진행_중_뒤에_한_곳만_더하고_숙소_쪽에서_끝낸다() -> None:
     app = build_dev_app(directives=_DIRECTIVES)
     orchestrator = app.state.orchestrator

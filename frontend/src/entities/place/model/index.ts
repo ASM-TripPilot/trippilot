@@ -8,11 +8,13 @@ export type { Place, SavedPlace } from '@/shared/api/index.schemas';
 
 /**
  * 레인 카드 경량 뷰모델 — 화면이 아는 최소 필드(ExploreLandingScreen 로컬 정의에서 이관).
- * `imageUrl` 은 옵셔널(없으면 회색 자리, 기본 이미지를 지어내지 않는다 · INV-1).
+ * `imageUrl` 은 옵셔널(없으면 `category` 로 고른 생성 이미지 — `PlacePhoto`).
  */
 export interface PlaceCardVM {
   poiId: string;
   name: string;
   region: string;
   imageUrl?: string | null;
+  /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본). 없으면 중립 폴백. */
+  category?: string | null;
 }

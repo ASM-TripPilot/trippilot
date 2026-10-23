@@ -12,6 +12,16 @@ const OTA_NAMES: ReadonlyMap<string, string> = new Map([
   ['AGODA', '아고다'],
 ]);
 
+// TRIP-1579 — 인기 숙소·전체 보기(Trip.com 제휴)는 시트 표시명만 더한다. 예약 출처 판정(`isOtaSource`)엔
+// 넣지 않는다 — 하트로 담은 인기 숙소가 내 숙소에서 '예약 사이트'·'예약번호 미입력' 으로 보이면 거짓이다.
+const DISPLAY_NAMES: ReadonlyMap<string, string> = new Map([
+  ...OTA_NAMES,
+  ['TRIPCOM', 'Trip.com'],
+]);
+
+// 받침 있는 표시명 — 조사가 '으로'다('Trip.com' = 닷컴).
+const TAKES_EURO: ReadonlySet<string> = new Set(['TRIPCOM']);
+
 /** 사전에 있는 OTA 코드인가 — 등록 숙소 출처 라벨(TRIP-1017)이 사전을 복제하지 않고 이것을 쓴다. */
 export function isOtaSource(
   externalSource: string | null | undefined
@@ -21,10 +31,11 @@ export function isOtaSource(
 
 /** 옵션 행 표시명(TRIP-988 · BR-U1-31) — 모르는 코드는 "외부 사이트". */
 export function otaDisplayName(externalSource: string): string {
-  return OTA_NAMES.get(externalSource) ?? '외부 사이트';
+  return DISPLAY_NAMES.get(externalSource) ?? '외부 사이트';
 }
 
-// 조사 '로'는 받침 없는 이름에만 맞다 — 받침 있는 OTA 를 사전에 넣을 때 '으로' 분기를 함께 둔다.
+// 조사 '로'는 받침 없는 이름에만 맞다 — 받침 있는 OTA 는 `TAKES_EURO` 에 함께 넣는다.
 export function otaConfirmLabel(externalSource: string): string {
-  return `${otaDisplayName(externalSource)}로 이동`;
+  const particle = TAKES_EURO.has(externalSource) ? '으로' : '로';
+  return `${otaDisplayName(externalSource)}${particle} 이동`;
 }

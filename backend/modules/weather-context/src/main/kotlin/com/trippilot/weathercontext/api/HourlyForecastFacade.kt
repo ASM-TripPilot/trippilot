@@ -1,7 +1,6 @@
 package com.trippilot.weathercontext.api
 
 import java.time.Instant
-import java.time.LocalDate
 import java.time.LocalDateTime
 
 /**
@@ -41,14 +40,13 @@ interface HourlyForecastFacade {
  * 한 격자의 한 발표분(api-safe). [hourly] 키는 **KST 정시**(오늘·내일 — 자정을 넘긴 내일 슬롯 몫으로 모레까지)이고 응답에 없던
  * 시각은 키가 없다.
  * 칸이 null 이면 그 값을 모른다(숫자가 아니었거나 범위 밖) — 지어내지 않는다.
+ * 날짜별 최저·최고(TMN·TMX)는 싣지 않는다 — 발표분에 따라 실렸다 빠졌다 해 기온 판정은 시간별 TMP 만 본다(G-SA-15 결정 2026-10-20).
  */
 data class PointForecast(
     val gridKey: String,
     /** 발표 시각 — 이 시각 이전의 예보는 없다(판정 시각은 이 뒤만 본다). */
     val baseAt: Instant,
     val hourly: Map<LocalDateTime, HourlyWeather>,
-    /** 날짜별 최저·최고 기온(TMN·TMX) — 응답에 있을 때만. */
-    val daily: Map<LocalDate, DailyWeather>,
 )
 
 /** 한 정시의 예보 — POP(강수확률 %) · PTY(강수형태) · SKY(하늘상태) · TMP(기온 ℃) · WSD(풍속 m/s). */
@@ -59,8 +57,6 @@ data class HourlyWeather(
     val tmp: Double?,
     val wsd: Double?,
 )
-
-data class DailyWeather(val tmn: Double?, val tmx: Double?)
 
 /** 단기예보 강수형태(PTY 0~4). 초단기 전용 코드(5~7)는 여기 없다 — 받으면 모름(null)이다. */
 enum class Precipitation { NONE, RAIN, RAIN_SNOW, SNOW, SHOWER }

@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { Image } from '@/shared/ui/Image';
+import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetView,
@@ -43,12 +43,15 @@ const RANGE_ERROR = '종료 시각은 시작보다 늦어야 해요';
 
 /**
  * 장소 요약 행 데이터(TRIP-787) — 편집기(h04)만 넘긴다.
- * `badgeLabel`은 화면이 파생하지 않고 문자열 그대로 받는다(seed Q3). `imageUrl` null 이면 썸네일 이미지 미렌더.
+ * `badgeLabel`은 화면이 파생하지 않고 문자열 그대로 받는다(seed Q3). `imageUrl` null 이면 `category`·`poiId` 로 고른 생성 이미지.
  * `badgeLabel`·`region` 은 없으면 배지·둘째 줄을 그리지 않는다(TRIP-927 — 슬롯 계약에 region·필수 방문지
  * 신호가 없어 편집 화면은 안 넘긴다. 없는 사실을 "필수 · 꼭 갈 곳"으로 지어내지 않는다).
  */
 export interface TimeSheetPlaceSummary {
   imageUrl: string | null;
+  /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본)·변형을 해시할 poiId. */
+  poiId?: string;
+  category?: string | null;
   name: string;
   badgeLabel?: string;
   region?: string;
@@ -182,15 +185,15 @@ export function TimeSheet({
             className="w-full flex-row items-center gap-md rounded-button bg-surface-soft p-md"
           >
             <View className="h-[48px] w-[48px] overflow-hidden rounded-thumb bg-surface-strong">
-              {placeSummary.imageUrl === null ? null : (
-                <Image
-                  testID={`${testIDPrefix}-place-thumb-image`}
-                  source={{ uri: placeSummary.imageUrl }}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
-                  className="h-full w-full"
-                />
-              )}
+              <PlacePhoto
+                testID={`${testIDPrefix}-place-thumb-image`}
+                imageUrl={placeSummary.imageUrl}
+                category={placeSummary.category}
+                poiId={placeSummary.poiId}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                className="h-full w-full"
+              />
             </View>
             <View className="flex-1 gap-[6px]">
               <View className="flex-row items-center gap-sm">

@@ -779,3 +779,67 @@ describe('TRIP-1041 5-b 경고-2 · 다른 훅 인스턴스의 임시 행도 담
     expect(hitCount('POST /api/v1/saved-stays')).toBe(1);
   });
 });
+
+/**
+ * TRIP-1578 — 인기 숙소(좌표 없는 `{ externalSource, externalId, name }`)도 같은 훅으로 담는다.
+ * 나간 본문과 낙관 행 둘 다 lat/lng 키가 없고, 본문은 coordConfirmed:false 다(좌표를 지어내지 않는다).
+ */
+describe('TRIP-1578 · 좌표 없는 숙소 담기 — 본문·낙관 행에 lat/lng 없음 (I14)', () => {
+  it('POST 본문에 lat/lng 키가 없고 coordConfirmed:false 이며, 응답 전 낙관 행에도 좌표 키가 없다', async () => {
+    setAccessToken('valid-access');
+    const gate = createGate();
+    let body: Record<string, unknown> | undefined;
+    server.use(
+      http.post(`${BASE}/saved-stays`, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        await gate.opened;
+        return HttpResponse.json(
+          {
+            ...SAVED_B,
+            savedStayId: NEW_SAVED_ID,
+            externalSource: 'TRIPCOM',
+            externalId: '123',
+          },
+          { status: 201 }
+        );
+      })
+    );
+    const curated = {
+      externalSource: 'TRIPCOM',
+      externalId: '123',
+      name: '롯데호텔 서울',
+    };
+    const { result } = await renderProbeReady();
+
+    let pending!: Promise<SavedStaysOutcome>;
+    await act(async () => {
+      pending = result.current.saved.save(curated);
+    });
+    await waitFor(() => expect(body).toBeDefined());
+    await flushNotifications();
+
+    // 단언 ① — 본문: 좌표 키 없음 + 좌표 미확정.
+    expect(body).toEqual({
+      name: '롯데호텔 서울',
+      registerRoute: 'MAP_SEARCH',
+      coordConfirmed: false,
+      externalSource: 'TRIPCOM',
+      externalId: '123',
+    });
+    // 단언 ② — 낙관 행: 담김으로 보이고, 좌표 키가 없다.
+    expect(result.current.saved.isSaved('TRIPCOM:123')).toBe(true);
+    const row = (result.current.savedList.data ?? []).find(
+      (entry) => entry.externalId === '123'
+    );
+    expect(row).toBeDefined();
+    expect(row && 'lat' in row).toBe(false);
+    expect(row && 'lng' in row).toBe(false);
+
+    gate.release();
+    let outcome!: SavedStaysOutcome;
+    await act(async () => {
+      outcome = await pending;
+    });
+    expect(outcome).toEqual({ kind: 'saved' });
+  });
+});

@@ -10,7 +10,8 @@
      (items 키 없음·null·빈 목록·totalCount 와 행 수 불일치는 실패).
   ④ 실패(XML 30 본문·HTTP 401·비정상 코드·형식 깨짐) → None + WARN 은 상태가 바뀔 때 1번, 키는 어디에도 안 남는다.
   ⑤ 성공한 달만 캐시 — 24시간 TTL(임시공휴일 지정 반영), 실패는 다음 호출이 다시 묻는다.
-  ⑥ 모드 출처 `HolidaySource` — off 면 None·조회 0회, on 이면 달력(없거나 실패면 빈 매핑 = 날짜 명시형만).
+  ⑥ 모드 출처 `HolidaySource` — off 면 None·조회 0회, on 이면 달력(없거나 실패면 빈 매핑 = 날짜 명시형만). 못 읽은
+     빈 매핑은 `UNREAD_CALENDAR` 하나라 성공한 빈 달력과 갈린다 — 검증이 태그형 규칙을 못 본 곳을 미판정으로 싣는다.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from pathlib import Path
 
 import pytest
 
+from trippilot.domain.poi import UNREAD_CALENDAR
 from trippilot.poi_curation.adapters.kasi_holiday_calendar import KasiHolidayCalendarAdapter
 from trippilot.ports.holiday_calendar_port import HolidaySource
 
@@ -273,3 +275,10 @@ def test_모드_on_이면_달력이고_없거나_실패면_빈_매핑이다() ->
     assert HolidaySource(enabled=True, calendar=_SpyCalendar(None)).between(
         date(2026, 10, 9), date(2026, 10, 9)) == {}
     assert HolidaySource(enabled=True, calendar=None).between(date(2026, 10, 9), date(2026, 10, 9)) == {}
+    # 못 읽은 것(실패·키 미등록)은 `UNREAD_CALENDAR` 하나다 — 성공한 빈 달력(그 범위에 공휴일 없음)은 아니다(G-SA-22)
+    assert HolidaySource(enabled=True, calendar=_SpyCalendar(None)).between(
+        date(2026, 10, 9), date(2026, 10, 9)) is UNREAD_CALENDAR
+    assert HolidaySource(enabled=True, calendar=None).between(
+        date(2026, 10, 9), date(2026, 10, 9)) is UNREAD_CALENDAR
+    assert HolidaySource(enabled=True, calendar=_SpyCalendar({})).between(
+        date(2026, 10, 9), date(2026, 10, 9)) is not UNREAD_CALENDAR

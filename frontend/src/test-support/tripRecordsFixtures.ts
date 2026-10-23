@@ -136,3 +136,15 @@ export function recordsHandler(
 ) {
   return http.get(`${BASE}/trips/:tripId/records`, () => reply());
 }
+
+/**
+ * TRIP-1557 — j01 하단 바의 「요약」 칸이 `GET /trips/{tripId}/summary` 를 조회한다. `onUnhandledRequest:'error'` 통합 버킷에서
+ * `TripRecordsPage` 를 마운트하는 파일은 이 핸들러가 없으면 준비 단계에서 죽는다 — 기본은 여행 중(`ready:false`, 서버는 404 가 아니라
+ * 200 으로 준다). 준비됨·지연·실패를 보려면 `reply` 를 준다.
+ */
+export function summaryHandler(
+  reply: () => Response | Promise<Response> = () =>
+    HttpResponse.json({ ready: false })
+) {
+  return http.get(`${BASE}/trips/:tripId/summary`, () => reply());
+}

@@ -11,6 +11,8 @@ import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.UnplacedReason
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
+import com.trippilot.itinerarygeneration.domain.ScoringMode
+import com.trippilot.itinerarygeneration.domain.ScoringSignal
 import com.trippilot.itinerarygeneration.application.BoundedText
 import com.trippilot.itinerarygeneration.domain.SlotAlternative
 import com.trippilot.itinerarygeneration.domain.SlotCandidate
@@ -23,6 +25,7 @@ import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.TimeWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.SolveMode
+import com.trippilot.itinerarygeneration.domain.ValidationResult
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import com.trippilot.placedata.api.GroundedPlace
@@ -63,7 +66,7 @@ internal data class AiScheduleResponse(
     /**
      * 취향 점수를 누가 매겼나 — `LLM`·`MIXED`(LLM + 규칙 보충)·`RULE`, 모르면 null. `solveMode` 는 조립기
      * 이름이라 늘 OR_TOOLS 여서 LLM 실패를 가리지 못했다(FE "LLM 이 안 돈다" 오판). **기본값** — 옛 AI
-     * 응답도 같은 뜻. 저장·노출은 TRIP-1173 몫이고, 여기 필드는 계약 게이트(키 정확 일치) 때문에 먼저 실린다.
+     * 응답도 같은 뜻. 도메인 [ScoringSignal] 로 매핑해 일정에 저장·노출한다(TRIP-1173).
      */
     val scoringMode: String? = null,
     /** 밟은 강등 계단 코드 `"{stage}:{사유 접두}"`(예 `llm:c1_fallback`) — 문장·시각 없음. */
@@ -150,7 +153,41 @@ internal fun AiScheduleResponse.toDomain(receivedAt: Instant): ScheduleAgentOutp
     // 점수 후보 풀(TRIP-969)은 **와이어에 아직 없다** — AI 짝 티켓(TRIP-970)이 계약에 필드를 열면
     // 여기서 매핑한다. 그때까지 http 모드는 null(= 저장 안 함)이고 슬롯 교체는 종전 경로 그대로다.
     scoredCandidates = null,
+    scoring = ScoringSignal(scoringMode.toScoringMode(), degradations.toDegradationCodes()),
 )
+
+/**
+ * `scoring_mode` → 도메인. **모르는 값은 null(모름)로 접는다** — `solve_mode` 처럼 예외를 던지면 정상 200
+ * 일정이 통째로 최소 폴백으로 강등된다. 이 신호는 표시 보조라 그만한 값이 없다(`candidates_summary` 와 같은 판단).
+ */
+private fun String?.toScoringMode(): ScoringMode? = this?.let { raw ->
+    runCatching { ScoringMode.valueOf(raw.uppercase()) }.getOrElse {
+        wireLog.warn("알 수 없는 scoring_mode — 모름(null)으로 접습니다. scoringMode={}", raw)
+        null
+    }
+}
+
+/**
+ * 강등 코드 거름. 이 값은 **공개 API 로 그대로 나간다** — 계약은 `"{stage}:{사유 접두}"` 기계 코드만 싣는다고
+ * 하지만, AI 는 사유 문자열의 첫 `:` 앞을 자르는 방식이라 사유가 자유 문장이면 문장째 온다. 그래서
+ * 코드 모양([DEGRADATION_CODE])이 아닌 것은 버리고(로그로 드러낸다) 개수도 [ScoringSignal.MAX_DEGRADATIONS] 로 막는다.
+ */
+private fun List<String>.toDegradationCodes(): List<String> {
+    val (matched, rejected) = partition { DEGRADATION_CODE.matches(it) }
+    if (rejected.isNotEmpty()) wireLog.warn("코드 모양이 아닌 강등 항목 {}건을 버립니다.", rejected.size)
+    // 상한은 **중복을 걷은 뒤** 센다 — 먼저 세면 중복 때문에 버린 적 없는 코드를 "버렸다"고 로그에 남긴다.
+    val codes = matched.distinct()
+    if (codes.size > ScoringSignal.MAX_DEGRADATIONS) {
+        wireLog.warn(
+            "강등 코드가 상한({})을 넘어 {}건을 버립니다.",
+            ScoringSignal.MAX_DEGRADATIONS, codes.size - ScoringSignal.MAX_DEGRADATIONS,
+        )
+    }
+    return codes.take(ScoringSignal.MAX_DEGRADATIONS)
+}
+
+/** `stage:reason` — 소문자·숫자·밑줄, 콜론 하나, 전체 64자 이내(예 `llm:c1_fallback`, `request:transport_unknown`). */
+private val DEGRADATION_CODE = Regex("(?=.{3,64}$)[a-z0-9_]+:[a-z0-9_]+")
 
 /**
  * 차선책 → 도메인(TRIP-873). **한 건이 틀렸다고 나머지를 잃지 않는다.**
@@ -237,7 +274,20 @@ private fun JsonNode?.toCandidatesSummary(): CandidatesSummary? {
  */
 internal data class AiValidateRequest(val itinerary: AiSchedulePayload, val requestMeta: AiRequestMeta)
 
-internal data class AiValidateResponse(val violations: List<AiViolation> = emptyList())
+/**
+ * [unverifiedSlots] — 상대가 판정하지 못한 장소(위반이 아니다). **기본 빈 목록** — 이 필드가 없는 옛 AI 응답도 같은 뜻이 되게 한다.
+ * 장소 감지의 하루 점검만 읽는다(INV-SA-2) — 편집·되돌리기 재검증은 위반만 쓴다.
+ */
+internal data class AiValidateResponse(
+    val violations: List<AiViolation> = emptyList(),
+    val unverifiedSlots: List<AiUnverifiedSlot> = emptyList(),
+)
+
+/**
+ * 판정 못 함 1건(AI `UnverifiedSlotSchema`) — `reason_code` 는 닫힌 집합(`NOT_REGISTERED`·`UNMAPPABLE`·`HOURS_UNKNOWN`)이지만
+ * **문자열로 받는다**: 우리는 사유로 가르지 않고(어느 것이든 못 봤다) 모르는 사유 하나로 응답 전체를 잃지 않게. 어휘는 계약 게이트가 잡는다.
+ */
+internal data class AiUnverifiedSlot(val poiId: String, val reasonCode: String, val detail: String = "")
 
 /**
  * `POST /ai/v1/itinerary/explanations` — 일정 본문을 그대로 되돌려 보내고 근거만 받는다.
@@ -305,6 +355,16 @@ internal data class AiRequestMeta(val requestId: String, val requestedAt: Instan
 
 internal fun AiViolation.toDomain(): Violation =
     Violation(code, dayIndex, slotIndex, detail.takeIf { it.isNotBlank() }, slotRef, reasonCode)
+
+internal fun AiValidateResponse.toDomain(): ValidationResult =
+    ValidationResult(violations.map { it.toDomain() }, unverifiedSlots.mapNotNull { it.poiUuid() }.toSet())
+
+/** 판정 못 한 장소 id — UUID 가 아니면 슬롯에 붙일 수 없어 그 한 건만 버리고 드러낸다(미배치 보고와 같은 처리). */
+private fun AiUnverifiedSlot.poiUuid(): UUID? {
+    val id = runCatching { UUID.fromString(poiId) }.getOrNull()
+    if (id == null) wireLog.warn("미판정 보고의 poi_id 가 UUID 가 아닙니다 — 그 한 건만 버립니다. poiId={} reasonCode={}", poiId, reasonCode)
+    return id
+}
 
 /** 도메인 산출물 → 상대 본문. 왕복 형태가 같아(생성 응답 = 검증 요청) 그대로 되돌려 보낸다. */
 internal fun ScheduleAgentOutput.toWire(): AiSchedulePayload = AiSchedulePayload(

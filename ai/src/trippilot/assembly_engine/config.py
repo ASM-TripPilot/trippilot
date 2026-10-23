@@ -42,6 +42,8 @@ STAY_DEFAULT_MIN: dict[PoiCategory, int] = {
     PoiCategory.NIGHT_VIEW: 60,
     PoiCategory.NATURE: 90,
     PoiCategory.CULTURE: 90,
+    PoiCategory.ART: 75,       # 갤러리·미술관 — 문화(90)보다 짧다: 박물관·유적이 빠지고 전시 한두 곳을 도는 체류
+    PoiCategory.BAR: 90,       # 술집 — 한 곳에서 한 잔·한 끼 이어 머무는 시간
     PoiCategory.ACTIVITY: 120,
     PoiCategory.SHOPPING: 60,
     PoiCategory.STAY: 30,
@@ -93,15 +95,15 @@ def stay_for(category: PoiCategory, pace: "Pace | None") -> int:
     return max(_STAY_FLOOR_MIN, base * num // den)
 
 
-# TRIP-383 — 날씨 보정의 실외/실내 판정표 (경계 카테고리 8종 기준).
+# TRIP-383 — 날씨 보정의 실외/실내 판정표 (경계 카테고리 10종 기준).
 # 실외: 자연·야경·액티비티 — 강수에 체험이 직접 훼손되는 축.
-# 실내: 문화(박물관류)·카페·쇼핑 — 강수 대피처로 기능하는 축.
+# 실내: 문화(박물관류)·미술·카페·쇼핑·술집 — 강수 대피처로 기능하는 축.
 # FOOD·SIGHT·STAY는 중립 — 실내외 혼재(식당/명소)라 어느 쪽으로도 밀지 않는다.
 RAIN_OUTDOOR: frozenset[PoiCategory] = frozenset(
     {PoiCategory.NATURE, PoiCategory.NIGHT_VIEW, PoiCategory.ACTIVITY}
 )
 RAIN_INDOOR: frozenset[PoiCategory] = frozenset(
-    {PoiCategory.CULTURE, PoiCategory.CAFE, PoiCategory.SHOPPING}
+    {PoiCategory.CULTURE, PoiCategory.ART, PoiCategory.CAFE, PoiCategory.SHOPPING, PoiCategory.BAR}
 )
 
 # 재계획 "숙소 근처에서 끝내기"(`ItineraryProblem.end_near`) — 마지막 방문지 → 숙소 도로 km 당
@@ -152,6 +154,7 @@ class AssemblyConfig:
     # 종전 기준은 직선 700m(#1414)라 도로 0.9km 가 "도보"로 보였고, "도보가 빠르면 도보" 규칙도 있었다.
     # 활동형 사용자는 올려도 되지만 **1.1km 이상은 도보 금지**(`WALK_HARD_MAX_KM`, 아래 검증).
     # ODsay 는 직선 700m 이내를 -98 로 거절한다 — 그 사이(도로 0.7~0.91km)는 추정기의 대중교통 추정이 맡는다.
+    # 자차 여행도 같은 값으로 주차 거점을 묶는다(assembly_engine/parking, 2026-10-21 사용자 "대중교통과 같게").
     public_walk_max_km: float = 0.7
     # 도보 여행이라도 이 거리(도로 km) 이상은 대중교통으로 가고, 시각도 대중교통 추정으로 잡는다(2026-10-20 사용자:
     # "아무리 도보를 선택했어도 1.5km 이상이면 대중교통 태우게 해"). 3km 를 70분 걸어 하루에 두세 곳만 들어갔다.

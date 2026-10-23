@@ -9,6 +9,7 @@ import type { ReactElement } from 'react';
 
 import type { Itinerary, VisitCheckList } from '@/shared/api/index.schemas';
 
+import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
 import {
   mockExits,
   mockNavigation,
@@ -2016,6 +2017,38 @@ describe('🔴 TRIP-1419 · AC-2·AC-4 — 완료 행 시각은 서버 실제 �
     times.forEach((node) =>
       expect(node).not.toHaveTextContent(/\d+\s*분|\d+\s*시간|소요|경과/)
     );
+  });
+});
+
+// 장소 카테고리 생성 이미지(20261022-place-category-covers · 5-b 경고-3) — 이 페이지가 슬롯의 category 를 뷰모델에 실어
+// 보내야 완료 행 사진 칸이 그 카테고리 그림이 된다. 반대편 PlanbDraftPage 케이스와 같은 모양이다.
+// 3동작: 준비(p1 맛집·p2 술집, 사진 없음 — 두 poiId 는 변형이 서로 다르다) → 실행(렌더) → 단언(칸마다 자기 그림).
+describe('🔴 장소 카테고리 생성 이미지 — 완료 행 사진 칸은 그 슬롯의 category·poiId 에 맞는 그림이다', () => {
+  it('p1(맛집)·p2(술집)는 각자 카테고리·poiId 로 고른 그림이다(중립 폴백이 아니다)', () => {
+    const categoryOf: Record<string, string> = { p1: '맛집', p2: '술집' };
+    mockItinerary = {
+      data: {
+        ...ITINERARY,
+        days: ITINERARY.days.map((day) => ({
+          ...day,
+          slots: day.slots.map((s) => ({
+            ...s,
+            category: categoryOf[s.poiId] ?? null,
+          })),
+        })),
+      } as unknown as Itinerary,
+      isPending: false,
+    };
+
+    renderPage();
+
+    const sourceOf = (poiId: string) =>
+      screen.getByTestId(`planb-draft-slot-photo-${DAY}#${poiId}`).props.source;
+    expect(screen.getAllByTestId(/^planb-draft-slot-photo-/)).toHaveLength(2);
+    // p1 은 변형 2 → food-2, p2 는 변형 3 → bar-3. 카테고리를 버리면(null) 둘 다 FALLBACK 이라 red.
+    expect(sourceOf('p1')).toEqual([coverFor('맛집', 'p1')]);
+    expect(sourceOf('p2')).toEqual([coverFor('술집', 'p2')]);
+    expect(sourceOf('p1')).not.toEqual([FALLBACK_COVER]);
   });
 });
 

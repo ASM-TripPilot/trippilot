@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 import { closestScrollView, stubScrollTo } from '@/test-support/sheetTree';
 
 import { TimeSheet, type TimeSheetPlaceSummary } from './TimeSheet';
@@ -493,15 +494,30 @@ describe('🔴 widgets/time-sheet · 편집기 형태(title+placeSummary) — �
     expect(screen.getByText('부산 부산진구 · 꼭 갈 곳')).toBeOnTheScreen();
   });
 
-  it('CH2b · imageUrl null 이면 이름·지역은 남고 썸네일 이미지만 빠진다 (AC-2)', () => {
-    renderH04({ ...FIXTURE, imageUrl: null });
+  it('CH2b · imageUrl null 이면 이름·지역은 그대로, 썸네일 칸에는 장소의 카테고리·poiId 로 고른 생성 이미지가 선다 (AC-2)', () => {
+    renderH04({
+      ...FIXTURE,
+      imageUrl: null,
+      poiId: 'poi-b',
+      category: '미술',
+    });
 
     // 행 자체와 텍스트는 그대로.
     expect(screen.getByTestId(hid('place-summary'))).toBeOnTheScreen();
     expect(screen.getByText('광안리 해변')).toBeOnTheScreen();
     expect(screen.getByText('부산 부산진구 · 꼭 갈 곳')).toBeOnTheScreen();
-    // 이미지만 미렌더(자리 컨테이너만) — 부재는 queryBy* 로.
-    expect(screen.queryByTestId(hid('place-thumb-image'))).toBeNull();
+    // poi-b 는 변형 3 → art-3. 서버 사진이 있는 CH2 는 그 사진이다(아래 단언 짝).
+    expect(screen.getByTestId(hid('place-thumb-image')).props.source).toEqual([
+      coverFor('미술', 'poi-b'),
+    ]);
+  });
+
+  it('CH2c · 서버 사진이 있으면 카테고리와 무관하게 그 사진이다', () => {
+    renderH04({ ...FIXTURE, poiId: 'poi-b', category: '미술' });
+
+    expect(screen.getByTestId(hid('place-thumb-image')).props.source).toEqual([
+      { uri: 'https://example.com/gwangalli.jpg' },
+    ]);
   });
 
   it('CH3 · 시작/종료 2탭 세그 — 하나만 selected, 종료 press 로 전환 (AC-3)', () => {

@@ -2,3 +2,4 @@
 export * from './index.view';
 
 export { useTripSummary } from './model/useTripSummary';
+export { useRecordBarNav } from './model/useRecordBarNav';

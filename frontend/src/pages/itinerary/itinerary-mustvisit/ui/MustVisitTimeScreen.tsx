@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { useContext, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { Image } from '@/shared/ui/Image';
+import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import {
   SafeAreaInsetsContext,
   SafeAreaView,
@@ -76,6 +76,8 @@ export interface MustVisitTimeScreenProps {
   placeName: string | null;
   region?: string | null;
   imageUrl?: string | null;
+  /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본). */
+  category?: string | null;
   dayChips: { date: string; label: string }[];
   /** 시·분 두 열 값(`startTimeOptions()`). 화면은 받은 목록을 그대로 그린다. */
   startOptions: ReturnType<typeof startTimeOptions>;
@@ -155,6 +157,7 @@ export function MustVisitTimeScreen({
   placeName,
   region,
   imageUrl,
+  category,
   dayChips,
   startOptions,
   form,
@@ -212,14 +215,15 @@ export function MustVisitTimeScreen({
               className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas py-md pl-md pr-[14px]"
             >
               <View className="h-[64px] w-[64px] overflow-hidden rounded-thumb bg-surface-strong">
-                {imageUrl == null ? null : (
-                  <Image
-                    source={{ uri: imageUrl }}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    className="h-full w-full"
-                  />
-                )}
+                <PlacePhoto
+                  testID="itinerary-mustvisit-time-photo"
+                  imageUrl={imageUrl}
+                  category={category}
+                  poiId={sourcePoiId}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  className="h-full w-full"
+                />
               </View>
               <View className="flex-1 items-start gap-xs">
                 {/* '고정' 은 토글이 켜졌을 때만 사실이다 — 꺼짐은 ANYTIME(BR-U1-48). */}

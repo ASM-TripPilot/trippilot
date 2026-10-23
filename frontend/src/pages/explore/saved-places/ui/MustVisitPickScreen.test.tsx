@@ -6,6 +6,7 @@ import {
 } from '@testing-library/react-native';
 
 import type { Place, SavedPlace } from '@/shared/api/index.schemas';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 
 import {
   MustVisitPickScreen,
@@ -567,5 +568,41 @@ describe('🔴 CS-15 · 완료 실패 배너 (TRIP-1093 AC-11 · 01b Q3)', () =>
     // 앵커 — 결과 얼굴의 완료 버튼은 떴다(공허 통과 방지).
     expect(screen.getByTestId('mustvisit-pick-complete')).toBeOnTheScreen();
     expect(screen.queryAllByTestId(COMPLETE_ERROR).length).toBe(0);
+  });
+});
+
+describe('CS-17 · 사진 칸 (사이클 20261022-place-category-covers)', () => {
+  it('서버 사진이 있으면 그 사진, 없으면 그 장소의 카테고리·poiId 로 고른 생성 이미지가 같은 칸(mustvisit-pick-photo-{poiId})에 선다', () => {
+    const saved = (
+      savedPlaceId: string,
+      poiId: string,
+      overrides: Partial<Place>
+    ): SavedPlace => ({
+      savedPlaceId,
+      savedAt: '2026-08-01T01:00:00.000Z',
+      place: makePlace(poiId, overrides),
+    });
+    renderScreen({
+      savedPlaces: [
+        saved('sp-a', 'p2', { category: '술집', imageUrl: null }),
+        saved('sp-b', 'p4', {
+          category: '자연',
+          imageUrl: 'https://cdn.example.com/p4.jpg',
+        }),
+        saved('sp-c', 'p1', { category: '명소', imageUrl: '' }),
+      ],
+    });
+
+    // p2 는 변형 3 → bar-3 (명소·맛집 등 다른 카테고리면 오배선).
+    expect(screen.getByTestId('mustvisit-pick-photo-p2').props.source).toEqual([
+      coverFor('술집', 'p2'),
+    ]);
+    expect(screen.getByTestId('mustvisit-pick-photo-p4').props.source).toEqual([
+      { uri: 'https://cdn.example.com/p4.jpg' },
+    ]);
+    // 빈 문자열 URL 도 "사진 없음" — p1 은 변형 2 → sight-2.
+    expect(screen.getByTestId('mustvisit-pick-photo-p1').props.source).toEqual([
+      coverFor('명소', 'p1'),
+    ]);
   });
 });

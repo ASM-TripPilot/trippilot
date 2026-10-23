@@ -1,6 +1,7 @@
 package com.trippilot.reflection.adapter.out.external
 
 import com.trippilot.reflection.domain.port.ReflectionAgentInput
+import com.trippilot.reflection.domain.port.ReflectionEvent
 import com.trippilot.reflection.domain.port.ReflectionVisit
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
@@ -36,6 +37,14 @@ class HttpReflectionAgentAdapterTest : StringSpec({
         ReflectionAgentProperties(deadlineMs = 15_000, readTimeoutMs = 20_000) // 경계값은 통과
     }
 
+    "여행 요약의 read 상한이 마감 없는 요청의 상대 백스톱보다 작은 설정은 기동에서 거부된다" {
+        shouldThrow<IllegalArgumentException> {
+            ReflectionAgentProperties(summaryReadTimeoutMs = ReflectionAgentProperties.AI_NO_DEADLINE_BACKSTOP_MS - 1)
+        }
+        ReflectionAgentProperties(summaryReadTimeoutMs = ReflectionAgentProperties.AI_NO_DEADLINE_BACKSTOP_MS) // 경계값은 통과
+        (ReflectionAgentProperties().summaryReadTimeoutMs > ReflectionAgentProperties.AI_NO_DEADLINE_BACKSTOP_MS) shouldBe true
+    }
+
     val clock = Clock.fixed(Instant.parse("2026-08-01T00:00:00Z"), ZoneOffset.UTC)
     val day = LocalDate.parse("2026-08-01")
 
@@ -68,10 +77,14 @@ class HttpReflectionAgentAdapterTest : StringSpec({
         return HttpReflectionAgentAdapter(builder.build(), properties, clock) to server
     }
 
-    fun input(region: String = "제주") = ReflectionAgentInput(
+    fun input(
+        region: String = "제주",
+        visits: List<ReflectionVisit> = listOf(ReflectionVisit(UUID.randomUUID(), day, "성산일출봉", "자연", 1, 2)),
+        events: List<ReflectionEvent> = emptyList(),
+        personaSummary: String? = null,
+    ) = ReflectionAgentInput(
         kind = "DAILY", region = region, startDate = day, endDate = day,
-        visits = listOf(ReflectionVisit(UUID.randomUUID(), day, "성산일출봉", "자연", 1, 2)),
-        personaSummary = null, weatherSummary = null,
+        visits = visits, personaSummary = personaSummary, weatherSummary = null, events = events,
     )
 
     val okBody = """
@@ -115,6 +128,36 @@ class HttpReflectionAgentAdapterTest : StringSpec({
     }
 
     /**
+     * 여행 요약(TRIP-1488)은 **요약용 클라이언트**로, 마감 없이 나간다 — 하루 회고와 같은 21초 클라이언트로 부르면 긴 여행의 요약은 늘 끊긴다.
+     * 두 클라이언트를 갈라 두고 어느 쪽으로 나갔는지 본다.
+     */
+    "여행 요약은 요약용 클라이언트로 마감 없이 나가고, 하루 회고는 종전 클라이언트로 나간다" {
+        fun builder() = RestClient.builder().baseUrl("http://ai.test")
+            .messageConverters { it.add(0, JacksonJsonHttpMessageConverter(ReflectionBoundaryMapper.create())) }
+        val dailyBuilder = builder()
+        val summaryBuilder = builder()
+        val daily = MockRestServiceServer.bindTo(dailyBuilder).build()
+        val summary = MockRestServiceServer.bindTo(summaryBuilder).build()
+        val adapter = HttpReflectionAgentAdapter(
+            dailyBuilder.build(), ReflectionAgentProperties(mode = "http", baseUrl = "http://ai.test"), clock, summaryBuilder.build(),
+        )
+        summary.expect(requestTo("http://ai.test/ai/v1/reflection/generate"))
+            .andExpect(jsonPath("$.kind").value("TRIP_SUMMARY"))
+            .andExpect(jsonPath("$.request_meta.deadline_ms").doesNotExist())
+            .andRespond(withSuccess(okBody, MediaType.APPLICATION_JSON))
+        daily.expect(requestTo("http://ai.test/ai/v1/reflection/generate"))
+            .andExpect(jsonPath("$.kind").value("DAILY"))
+            .andExpect(jsonPath("$.request_meta.deadline_ms").value(15000))
+            .andRespond(withSuccess(okBody, MediaType.APPLICATION_JSON))
+
+        adapter.generate(input().copy(kind = ReflectionAgentInput.KIND_TRIP_SUMMARY)) shouldNotBe null
+        adapter.generate(input()) shouldNotBe null
+
+        summary.verify()
+        daily.verify()
+    }
+
+    /**
      * **목적지를 모르면 호출 자체를 안 한다.** 상대가 `region` 을 필수로 요구해 422 가 확정이라,
      * 빈 값을 보내 거절당하느니 아끼고 규칙 카드로 간다. 목 서버에 기대 요청을 걸지 않았으므로
      * 무언가 나가면 그 자리에서 깨진다.
@@ -132,6 +175,51 @@ class HttpReflectionAgentAdapterTest : StringSpec({
 
         // 값이 아니라 **호출 수**를 본다 — null 만 보면 "부르고 실패했다"와 구분되지 않는다.
         counter.calls shouldBe 0
+    }
+
+    /** 상대가 `visits` 를 1건 이상 요구한다(minItems 1) — 0건이면 422 가 확정이라 부르지 않는다(TRIP-1463 댓글: 개발 서버 4건 중 2건). */
+    "실을 방문이 없으면 부르지 않고 null 이다" {
+        val counter = CallCounter()
+        val builder = RestClient.builder().baseUrl("http://ai.test").requestInterceptor(counter)
+            .messageConverters { it.add(0, JacksonJsonHttpMessageConverter(ReflectionBoundaryMapper.create())) }
+        MockRestServiceServer.bindTo(builder).build()
+        val adapter = HttpReflectionAgentAdapter(
+            builder.build(), ReflectionAgentProperties(mode = "http", baseUrl = "http://ai.test"), clock,
+        )
+
+        adapter.generate(input(visits = emptyList())) shouldBe null
+
+        counter.calls shouldBe 0
+    }
+
+    /**
+     * 사건은 **객체 배열**로, 성향은 그 문자열 그대로 나간다(계약 `TripEventRecordSchema` — kind·date·detail 전부 필수).
+     * 이름 대조 게이트는 `events` 라는 이름만 보므로 원소 모양은 여기서 잰다 — 문자열 배열이면 상대가 422 로 거절한다.
+     */
+    "사건·성향이 계약 모양으로 실린다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/reflection/generate"))
+            .andExpect(jsonPath("$.events.length()").value(2))
+            .andExpect(jsonPath("$.events[0].kind").value("SKIPPED"))
+            .andExpect(jsonPath("$.events[0].date").value("2026-08-01"))
+            .andExpect(jsonPath("$.events[0].detail").value("계획한 곳 중 1곳을 들르지 못했다"))
+            .andExpect(jsonPath("$.events[1].kind").value("PLAN_B"))
+            .andExpect(jsonPath("$.events[1].detail").value("상황 변화를 감지해 일정을 바꿨다"))
+            .andExpect(jsonPath("$.persona_summary").value("여행 스타일 미식"))
+            .andExpect(jsonPath("$.weather_summary").value(""))
+            .andRespond(withSuccess(okBody, MediaType.APPLICATION_JSON))
+
+        adapter.generate(
+            input(
+                events = listOf(
+                    ReflectionEvent(ReflectionEvent.SKIPPED, day, "계획한 곳 중 1곳을 들르지 못했다"),
+                    ReflectionEvent(ReflectionEvent.PLAN_B, day, "상황 변화를 감지해 일정을 바꿨다"),
+                ),
+                personaSummary = "여행 스타일 미식",
+            ),
+        ) shouldNotBe null
+
+        server.verify()
     }
 
     "상대가 5xx 면 null 이다 — 예외가 새면 폴백이 무력화된다" {

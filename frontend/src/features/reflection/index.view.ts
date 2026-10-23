@@ -12,6 +12,8 @@ export {
   validateHashtags,
 } from './model/shareCard';
 export type { ShareCardVM, ShareFormat } from './model/shareCard';
+export { pickReflectionDate } from './model/recordBarNav';
+export type { RecordBarNav } from './model/recordBarNav';
 export { summaryStats } from './model/summaryStats';
 export type { SummaryStatCells } from './model/summaryStats';
 export {

@@ -1,5 +1,8 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.domain.GenerationState
+import org.springframework.transaction.support.TransactionTemplate
+import org.springframework.transaction.PlatformTransactionManager
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
@@ -27,7 +30,10 @@ class StalePartialSweeper(
     private val sessions: GenerationSessionService,
     private val clock: Clock,
     private val deadlines: ScheduleDeadlineProperties,
+    transactionManager: PlatformTransactionManager,
 ) {
+    private val tx = TransactionTemplate(transactionManager)
+
     @Scheduled(fixedDelayString = "\${trippilot.itinerary.stale-partial-sweep-ms:60000}")
     fun sweep() {
         val stale = itineraries.findStalePartial(clock.instant().minus(deadlines.staleAfter))
@@ -35,11 +41,18 @@ class StalePartialSweeper(
         var swept = 0
         stale.forEach { itinerary ->
             runCatching {
-                if (itineraries.replaceIfCurrent(itinerary.tripId, itinerary.itineraryId, itinerary.failGeneration(clock.instant()))) {
-                    // 진행 상태 세션도 함께 닫는다 — 안 닫으면 일정은 FAILED 인데 화면은 계속 "생성 중"으로 보인다.
-                    sessions.failRunning(itinerary.tripId)
-                    swept++
-                }
+                // 여행마다 짧은 트랜잭션에서 일정 쓰기 잠금(TRIP-1412)을 잡고 **잠금 뒤 현행**을 FAILED 로 내린다 — 목록을 읽은 뒤
+                // 그 사이 편집됐으면 옛 값(`itinerary`)으로 덮어 그 편집을 지우지 않는다. 그 사이 끝났거나 갈렸으면 건너뛴다 —
+                // 잠금 뒤 현행이 PARTIAL 이 아니면 `failGeneration` 이 던져 정상인 일정이 "정리 실패" 경고로 남는다.
+                val failed = tx.execute {
+                    val current = itineraries.lockForTrip(itinerary.tripId)
+                    current != null && current.itineraryId == itinerary.itineraryId && current.generationState == GenerationState.PARTIAL &&
+                        itineraries.replaceIfCurrent(itinerary.tripId, itinerary.itineraryId, current.failGeneration(clock.instant())).also {
+                            // 진행 상태 세션도 함께 닫는다 — 안 닫으면 일정은 FAILED 인데 화면은 계속 "생성 중"으로 보인다.
+                            if (it) sessions.failRunning(itinerary.tripId)
+                        }
+                } == true
+                if (failed) swept++
             }.onFailure { log.warn("중단된 생성 정리 실패 — tripId={}", itinerary.tripId, it) }
         }
         if (swept > 0) log.warn("중단된 2차 생성 {}건을 FAILED 로 정리했습니다(확정·편집 잠금 해제).", swept)

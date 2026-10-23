@@ -274,6 +274,8 @@ export interface OpenSessionResponse {
   session: AssistantSession;
   messages: AssistantMessage[];
   quickReplies: QuickReply[];
+  /** 이어 연 대화에 더 오래된 메시지가 있으면 그 커서(불투명 — 앱이 해석하지 않는다), 없으면 null. */
+  nextBefore: string | null;
 }
 
 export interface AssistantSessionSummary {

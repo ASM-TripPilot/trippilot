@@ -54,6 +54,10 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             LlmFeature.DIALOGUE_PLAN: ModelTier.LIGHT,
             # 장소 탐색 NL2SQL — 짧은 SELECT 한 문장, 같은 9s 안의 팬아웃 작업이라 LIGHT
             LlmFeature.DIALOGUE_SQL: ModelTier.LIGHT,
+            # 인사·잡담 한마디 — 답변과 같은 급·같은 9s 안이라 LIGHT. 배정(feature_models)이 곧 켜기, 로컬 모델 전환도 배정으로
+            LlmFeature.DIALOGUE_SMALLTALK: ModelTier.LIGHT,
+            # 미확인 장소 정보 웹 확인 — 턴 밖(뒤에서) 도는 짧은 추출이라 LIGHT. 검색 자체가 7~12s 다(2026-10-22 실측 luna 8.8s·sol 6.9~11.1s)
+            LlmFeature.PLACE_FACT_LOOKUP: ModelTier.LIGHT,
             LlmFeature.EXPLANATION: ModelTier.HEAVY,
             # 차선책 근거 문장 — 설명(EXPLANATION)과 같은 급의 취향 그라운딩 문장 (TRIP-887)
             LlmFeature.ALTERNATIVE_EXPLANATION: ModelTier.HEAVY,
@@ -144,6 +148,10 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # 같은 곳 — SQL 을 못 만들면(시한·깨진 출력·허용 목록 탈락) 종전 반경 탐색(지역 중심 표 + 결정론 정렬)으로 내려간다.
             # "장소 조회로 답할 말이 아님"(sql=null)은 성공·0건이라 이 짝이 나가지 않는다.
             LlmFeature.DIALOGUE_SQL: ("llm_dialogue_sql", "explore_radius"),
+            # 같은 곳 2″·2‴ — 잡담 문장을 못 만들면(게이트 드롭·시한·목록 밖 장소) 인사·잡담 고정 문장(GREETING_TEXT·CHAT_TEXT)
+            LlmFeature.DIALOGUE_SMALLTALK: ("llm_dialogue_smalltalk", "fixed_text"),
+            # 같은 곳(뒤에서) — 못 찾으면(시한·형식·출처 없음) 저장하지 않고 카드는 "미확인" 그대로다. 다음에 물으면 다시 찾는다.
+            LlmFeature.PLACE_FACT_LOOKUP: ("llm_place_fact_lookup", "unknown_kept"),
             # intent_router `_vote` — 유사질문이 없으면 투표를 접고 3차(LLM 직접
             # 분류)로 **승급**한다. 규칙으로 내려가는 강등이 아니다.
             LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
@@ -222,6 +230,10 @@ def default_feature_max_tokens() -> Mapping[LlmFeature, int]:
             LlmFeature.DIALOGUE_PLAN: 1024,
             # SELECT 한 문장(≤800자) JSON — 사고를 끄므로(none) 출력 자체만 든다
             LlmFeature.DIALOGUE_SQL: 512,
+            # 잡담 1~3문장 JSON — 답변과 같은 상한
+            LlmFeature.DIALOGUE_SMALLTALK: 512,
+            # 칸 셋 JSON — 검색 뒤 사고 토큰이 상한에 든다(실측 800 으로 잘림 없음)
+            LlmFeature.PLACE_FACT_LOOKUP: 1024,
         }
     )
 
@@ -266,9 +278,10 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
             # (assistant-orchestrator FD domain-entities §2.10 · BLM 시한표). 분류·답변은 사고를 끈다(none) — 2026-10-20
             # luna·같은 시각 A/B(동시 2, 분류 0.2.3 고정·effort 만): 분류 238회 p50 1.53 → 1.24s·p90 2.51 → 1.93s, 평가셋 판단 오답은
             # 같다(2·2). 단 effort 만 끄면 행사 말을 탐색·장소 정보로 몰아(행사 null 50 → 0%, 두 질문은 40 → 40% 그대로) 분류 0.2.4 와
-            # 같이 간다(0.2.4+none 두 질문 90%·행사 100% — prompts/dialogue_intent.yaml 머리). 답변 27회(단일 사실 9사례): 폴백 3 → 2건
+            # 같이 간다(0.2.4+none 두 질문 90%·행사 null 100%, #1475 뒤 재측정 50% — prompts/dialogue_intent.yaml 머리). 답변 27회(단일 사실 9사례): 폴백 3 → 2건
             # (시한 3 → 1·게이트 드롭 0 → 1)·p90 3.50 → 2.34s(low 쪽은 시한 3건이 p90 자리라 3.5s 상한 값)·짝 위반 0·여는 말·되묻기·
-            # 엉뚱한 마무리 0(답변 담당 세션 원문 검수). 요약은 턴 밖 시한이라 그대로 둔다. none 은 GPT 값이다 — Claude 로 재배정하면 low 로
+            # 엉뚱한 마무리 0(답변 담당 세션 원문 검수) — 10-21 병합 답 포함 22사례 ×3 재측정에서는 지연 차이가 없었다(p90 low 1.87 · none
+            # 2.42s, 시한 0 · 1, 출력 토큰 같음 — low 도 사고를 거의 쓰지 않는다). 요약은 턴 밖 시한이라 그대로 둔다. none 은 GPT 값이다 — Claude 로 재배정하면 low 로
             LlmFeature.DIALOGUE_INTENT: "none",
             LlmFeature.DIALOGUE_ANSWER: "none",
             LlmFeature.DIALOGUE_MEMORY: "low",
@@ -279,6 +292,10 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
             LlmFeature.DIALOGUE_PLAN: "none",
             # 팬아웃 안(≤3s)의 짧은 변환이라 사고를 끈다 — luna 는 minimal 을 400 으로 거부하고 none 을 받는다(DIALOGUE_PLAN 실측)
             LlmFeature.DIALOGUE_SQL: "none",
+            # 잡담 — 답변과 같은 자리(≤3.5s), 사고 없이
+            LlmFeature.DIALOGUE_SMALLTALK: "none",
+            # 검색 결과에서 값 셋을 고르는 일 — 사고는 짧게(검색 도구는 none 에서도 돈다고 확신 못 해 low)
+            LlmFeature.PLACE_FACT_LOOKUP: "low",
         }
     )
 
@@ -334,6 +351,8 @@ class C1Config:
     )
     # 사고 깊이 — 기능별 지정만, 공용 값 없음(`effort_for`, 미지정 = 모델 기본값).
     feature_effort: Mapping[LlmFeature, str] = field(default_factory=default_feature_effort)
+    # 벤더 웹 검색 도구를 켜는 기능 — 게이트의 닫힌 집합이 후보 풀 대신 응답의 인용 URL 이 된다(`GatewayFacade.call`).
+    web_search_features: frozenset[LlmFeature] = frozenset({LlmFeature.PLACE_FACT_LOOKUP})
     # PREFERENCE_SCORING 병렬 청킹 (TRIP-378) — 청크 크기는 고정 상수가 아니라
     # 단계 예산에서 유도한다 (TRIP-380 적응형 공식, workers/preference.py
     # adaptive_chunk_size). 종전 score_chunk_size=20 상수는 공식이 대체 — 예산

@@ -32,7 +32,7 @@ class ReplanSessionTest : StringSpec({
         drafted.draft shouldBe mapOf("days" to emptyList<Any>())
         drafted.closedAt shouldBe null // 아직 열려 있다 — 사용자가 고르는 중
 
-        val applied = drafted.applied(t1)
+        val applied = drafted.applied(t1, emptyList(), emptyMap())
         applied.status shouldBe ReplanStatus.APPLIED
         applied.closedAt shouldBe t1
         applied.isOpen shouldBe false
@@ -59,12 +59,28 @@ class ReplanSessionTest : StringSpec({
     }
 
     "끝난 세션은 더 전이하지 않는다" {
-        val applied = collecting().solving().drafted(emptyMap()).applied(t1)
+        val applied = collecting().solving().drafted(emptyMap()).applied(t1, emptyList(), emptyMap())
         shouldThrow<IllegalArgumentException> { applied.canceled(t1) }
         shouldThrow<IllegalArgumentException> { applied.failed(t1) }
         shouldThrow<IllegalArgumentException> { collecting().canceled(t1).canceled(t1) }
         shouldThrow<IllegalArgumentException> { collecting().solving().drafted(emptyMap()).drafted(emptyMap()) }
-        shouldThrow<IllegalArgumentException> { collecting().applied(t1) } // 제안 없이 확정 금지
+        shouldThrow<IllegalArgumentException> { collecting().applied(t1, emptyList(), emptyMap()) } // 제안 없이 확정 금지
+    }
+
+    // TRIP-1412 — DB CHECK(chk_replan_session_reverted)와 같은 규칙: 되돌리기는 지점이 있는 반영 세션에 한 번만.
+    "되돌리기는 되돌리기 지점이 있는 반영 세션에 한 번만 — 상태는 APPLIED 그대로" {
+        val point = mapOf<String, Any>("date" to "2026-08-11")
+        val applied = collecting().solving().drafted(emptyMap()).applied(t1, emptyList(), point)
+        applied.isRevertible shouldBe true
+
+        val reverted = applied.reverted(t1)
+        reverted.status shouldBe ReplanStatus.APPLIED
+        reverted.revertedAt shouldBe t1
+        reverted.isRevertible shouldBe false
+        shouldThrow<IllegalArgumentException> { reverted.reverted(t1) }
+        // 지점 없는 반영(이 기능 이전) · 반영 전 세션은 되돌릴 수 없다
+        shouldThrow<IllegalArgumentException> { applied.copy(restorePoint = null).reverted(t1) }
+        shouldThrow<IllegalArgumentException> { collecting().solving().drafted(emptyMap()).reverted(t1) }
     }
 
     "isOpen 은 COLLECTING·SOLVING·DRAFT — DB 부분 유니크 인덱스와 같은 집합이어야 한다" {
@@ -74,7 +90,7 @@ class ReplanSessionTest : StringSpec({
         collecting().canceled(t1).isOpen shouldBe false
         collecting().solving().noSolution(t1).isOpen shouldBe false
         collecting().solving().failed(t1).isOpen shouldBe false
-        collecting().solving().drafted(emptyMap()).applied(t1).isOpen shouldBe false
+        collecting().solving().drafted(emptyMap()).applied(t1, emptyList(), emptyMap()).isOpen shouldBe false
     }
 
     "닫힌 세션에는 닫힌 시각이 있고 열린 세션에는 없다 — DB CHECK 와 같은 규칙" {
@@ -84,7 +100,7 @@ class ReplanSessionTest : StringSpec({
 
         listOf(
             collecting().canceled(t1), collecting().failed(t1),
-            collecting().solving().noSolution(t1), collecting().solving().drafted(emptyMap()).applied(t1),
+            collecting().solving().noSolution(t1), collecting().solving().drafted(emptyMap()).applied(t1, emptyList(), emptyMap()),
         ).forEach { it.closedAt shouldBe t1 }
     }
 

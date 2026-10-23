@@ -1,6 +1,6 @@
 import { Fragment, type ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { Image } from '@/shared/ui/Image';
+import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { StateNotice } from '@/shared/ui/StateNotice';
@@ -60,10 +60,12 @@ export interface NightlyBaseCardVM {
   dateLabel: string;
   region: string;
   stayName?: string;
-  /** TRIP-740 — 배정 밤 썸네일 URI(값 있을 때만 48×48 렌더). 프로덕션은 계약 공백이라 항상 미제공
-   *  (현행 2줄), 프리뷰 픽스처로만 채운다(INV-1). 프리뷰는 로컬 에셋 resolve URI(string) 또는
+  /** TRIP-740 — 배정 밤 썸네일 URI. 프로덕션은 계약 공백이라 항상 미제공이고, 그러면 48×48 썸네일에
+   *  `coverKey` 의 숙소 그림이 들어간다(TRIP-1588). 프리뷰는 로컬 에셋 resolve URI(string) 또는
    *  jest 스텁의 null 이 온다 — 모델 `NightlyBaseCard` 엔 없는, 화면 VM 전용 필드다. */
   imageUrl?: string | null;
+  /** TRIP-1588 — 배정 밤 썸네일 그림 키. 배선이 그 밤 숙소의 `savedStayKey` 로 채운다(화면 VM 전용). */
+  coverKey?: string;
   /** TRIP-740 — 위치·거리 줄(예: "해운대 · 350m"). 거리이지 duration 이 아니라 INV-3 무관.
    *  imageUrl 과 동형으로 프로덕션 미제공, 픽스처로만 채운다. */
   locationLabel?: string;
@@ -93,7 +95,8 @@ export interface TripWizardStep2ScreenProps {
 }
 
 /** 박별 거점 카드 한 행 — 탭하면 그 밤 번호로 오픈 신호를 낸다. 메타 한 줄(박·날짜·지역)과
- * 숙소명(없으면 "숙소 미정") 줄, 우측 셰브런. 배정된 밤에는 48×48 썸네일과 위치·거리 줄이 붙는다.
+ * 숙소명(없으면 "숙소 미정") 줄, 우측 셰브런. 배정된 밤에는 48×48 썸네일(사진 없으면 숙소 그림 — TRIP-1588)과
+ * 위치·거리 줄(값 있을 때만)이 붙는다.
  * 카드 크롬(그림자·radius·구분선)은 이 행이 아니라 감싸는 단일 카드 컨테이너가 소유한다. */
 function NightCard({
   card,
@@ -103,7 +106,8 @@ function NightCard({
   onPressCard: (nightNumber: number) => void;
 }): ReactElement {
   // 리치 블록(썸네일+위치 줄)은 배정된 밤에만 그린다 — stayName 게이트로만 분기한다. imageUrl·
-  // locationLabel 로 분기하면 미배정 밤에 리치가 새어 나온다(★6 불변식). 값은 각각 truthy 일 때만(★5).
+  // locationLabel 로 분기하면 미배정 밤에 리치가 새어 나온다(★6 불변식). 썸네일은 배정 밤이면 항상
+  // (사진 없으면 숙소 그림, TRIP-1588), 위치 줄은 값이 truthy 일 때만(★5).
   const assigned = Boolean(card.stayName);
   return (
     <Pressable
@@ -116,11 +120,13 @@ function NightCard({
         {`${card.nightNumber}번째 밤 · ${card.dateLabel} · ${card.region}`}
       </Text>
       <View className="w-full flex-row items-center gap-md">
-        {assigned && card.imageUrl ? (
+        {assigned ? (
           <View className="h-[48px] w-[48px] overflow-hidden rounded-thumb bg-surface-strong">
-            <Image
+            <PlacePhoto
               testID={`trip-base-night-thumb-${card.nightNumber}`}
-              source={{ uri: card.imageUrl }}
+              imageUrl={card.imageUrl}
+              category="숙소"
+              poiId={card.coverKey}
               contentFit="cover"
               cachePolicy="memory-disk"
               className="h-full w-full"

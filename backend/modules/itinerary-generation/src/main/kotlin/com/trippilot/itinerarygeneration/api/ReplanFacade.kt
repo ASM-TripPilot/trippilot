@@ -30,8 +30,27 @@ interface ReplanFacade {
      * 만들고, [reason] 은 세션의 사유·지시어를 아는 C10 이 조립해 넘긴다 — 각자 가진 것만 낸다.
      *
      * @param reason 왜 바꿨는지 한 줄(BR-U4-31). **비워서 넘기지 않는다** — 이력의 존재 이유가 이 칸이다.
+     * @param afterLock 일정 쓰기 잠금을 잡은 **뒤**, 쓰기 전에 부른다 — C10 이 반영 직전 비교 기준을 같은 잠금 아래에서 뜬다(TRIP-1412).
+     *   잠금 전에 뜨면 그 사이 커밋된 쓰기(확정·편집)가 기준과 되돌리기 지점을 서로 다른 일정으로 만든다.
+     * @return 반영 **직전**의 그 날(되돌리기 지점, TRIP-1412). 슬롯마다 동결 참조([ReplanSlot.poiSnapshotId])를 싣는다 —
+     *   [revert] 에 그대로 돌려주면 그 날이 이 모습으로 돌아간다. C10 이 세션에 보관한다(일정 쪽에는 그 날만의 지점이 없다).
      */
-    fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal, reason: String)
+    fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal, reason: String, afterLock: () -> Unit = {}): ReplanProposal
+
+    /**
+     * 반영한 재계획 하나를 되돌린다(TRIP-1412) — [applied] 의 날을 [restore](반영 직전, [apply] 의 반환값)로 되돌린다.
+     * **확정 일정에서도** 된다 — 범용 복원(`ItineraryRevisionService.restore`)은 확정 일정을 409 로 막고, 여는 대신 이 전용 경로를 둔다.
+     * 상태(확정)와 동결은 유지한다 — 반영 직전의 동결 참조를 그대로 다시 단다.
+     *
+     * 그 사이 그 날이 바뀌었으면(편집·다른 재계획) 409 `STALE` 이다 — 덮으면 그 뒤의 변경이 조용히 사라진다.
+     *
+     * @param visitedSlotKeys 다녀온 슬롯 키(도착·완료 — 실적은 C10 이 안다). **일정 쓰기 잠금을 잡은 뒤에** 부른다 —
+     *   재계획이 넣었다가 되돌리면 빠질 곳에 다녀온 기록이 있으면 409(INV-U4-04 · 실적이 계획 없이 남는다).
+     */
+    fun revert(
+        accountId: UUID, tripId: UUID, applied: ReplanProposal, restore: ReplanProposal, reason: String,
+        visitedSlotKeys: () -> Set<String>,
+    )
 }
 
 /**
@@ -120,6 +139,11 @@ data class ReplanSlot(
     val hasViolation: Boolean,
     /** 위반 사유 — [hasViolation] 이 true 일 때만 값이 있다(도메인과 같은 규약). */
     val violationReason: String?,
+    /**
+     * 확정 동결 참조(INV-U1-03) — **되돌리기 지점**([ReplanFacade.apply] 의 반환)만 싣는다. AI 초안은 언제나 null 이다.
+     * 되돌린 날이 반영 전과 같은 스냅숏을 가리키게 하는 값이다 — 없으면 빠졌던 장소가 지금 값으로 새로 동결된다.
+     */
+    val poiSnapshotId: UUID? = null,
 ) {
     fun toMap(): Map<String, Any> = buildMap {
         put("poiId", poiId.toString())
@@ -131,6 +155,7 @@ data class ReplanSlot(
         placementReason?.let { put("placementReason", it) }
         put("hasViolation", hasViolation)
         violationReason?.let { put("violationReason", it) }
+        poiSnapshotId?.let { put("poiSnapshotId", it.toString()) }
     }
 
     companion object {
@@ -145,6 +170,7 @@ data class ReplanSlot(
             // 필드가 없던 시절의 세션 초안(jsonb)도 읽혀야 한다 — 그 시절 값은 "표시 없음"이 사실이다.
             hasViolation = raw["hasViolation"] as? Boolean ?: false,
             violationReason = raw["violationReason"] as? String,
+            poiSnapshotId = (raw["poiSnapshotId"] as? String)?.let(UUID::fromString),
         )
     }
 }

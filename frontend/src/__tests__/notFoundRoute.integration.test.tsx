@@ -49,6 +49,10 @@ jest.mock('@/app/model/useAccountBoundaryReset', () => ({
 jest.mock('@/app/model/usePushRouting', () => ({
   usePushRouting: jest.fn(),
 }));
+// 권한 안내(TRIP-1601)도 끈다 — 진짜 훅은 조회가 비동기라 첫 마운트에서 스플래시를 붙잡고, 이 파일은 동기 advanceTimers 로 흐른다.
+jest.mock('@/app/model/usePermissionCatchUp', () => ({
+  usePermissionCatchUp: jest.fn(() => false),
+}));
 // 배럴은 실물을 먼저 펼친 뒤 덮는다(재수출이 늘어도 형제 export 가 undefined 가 되지 않게).
 jest.mock('@/shared/push', () => ({
   ...jest.requireActual('@/shared/push'),

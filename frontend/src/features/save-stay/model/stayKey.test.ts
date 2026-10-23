@@ -1,4 +1,4 @@
-import { stayKey } from './stayKey';
+import { savedStayKey, stayKey } from './stayKey';
 
 /**
  * AC-6 · Q1(01b Seed) — stayKey 단일 출처.
@@ -34,4 +34,30 @@ describe('stayKey — 공급자:외부ID 합성 (AC-6)', () => {
     expect(keys).toEqual(['NAVER:x', 'YANOLJA:x']);
     expect(keys[0]).not.toBe(keys[1]);
   });
+});
+
+describe('savedStayKey — 저장한 숙소의 키 (TRIP-1588)', () => {
+  it('외부 키가 둘 다 있으면 검색 목록과 같은 stayKey 형식이다 (인기 숙소 하트 = TRIPCOM)', () => {
+    expect(
+      savedStayKey({
+        savedStayId: 'ss-1',
+        externalSource: 'TRIPCOM',
+        externalId: '123',
+      })
+    ).toBe('TRIPCOM:123');
+  });
+
+  it.each([
+    ['둘 다 null', null, null],
+    ['source 만', 'KAKAO', null],
+    ['id 만', null, '99'],
+    ['키 없음', undefined, undefined],
+  ])(
+    '외부 키가 %s 이면 savedStayId 로 돌아간다 ("null:null" 충돌 금지)',
+    (_, externalSource, externalId) => {
+      expect(
+        savedStayKey({ savedStayId: 'ss-7', externalSource, externalId })
+      ).toBe('ss-7');
+    }
+  );
 });

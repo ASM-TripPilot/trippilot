@@ -54,6 +54,33 @@ class ExpoPushUrgencyTest : StringSpec({
         expectWire(PushUrgency.PASSIVE, "passive", "normal")
     }
 
+    /** 긴급도만 맞고 내용이 비면 빈 알림이 울린다 — 제목·본문·탭 목적지도 기기마다 그대로 실린다. */
+    "제목·본문·탭 목적지가 기기마다 그대로 실린다" {
+        val (adapter, server) = fixture()
+        val tokens = listOf("ExponentPushToken[a]", "ExponentPushToken[b]")
+        val expect = server.expect(requestTo("http://expo.test/--/api/v2/push/send"))
+            .andExpect(jsonPath("$.length()").value(tokens.size))
+        tokens.forEachIndexed { i, token ->
+            expect.andExpect(jsonPath("$[$i].to").value(token))
+                .andExpect(jsonPath("$[$i].title").value("오늘의 일정"))
+                .andExpect(jsonPath("$[$i].body").value("성산일출봉부터 시작해요"))
+                .andExpect(jsonPath("$[$i].data.actionType").value("TRIP_ITINERARY"))
+                .andExpect(jsonPath("$[$i].data.tripId").value("t-1"))
+        }
+        expect.andRespond(withSuccess("""{"data":[{"status":"ok"},{"status":"ok"}]}""", MediaType.APPLICATION_JSON))
+
+        adapter.send(
+            tokens,
+            PushMessage(
+                "오늘의 일정", "성산일출봉부터 시작해요",
+                data = mapOf("actionType" to "TRIP_ITINERARY", "tripId" to "t-1"),
+                urgency = PushUrgency.ACTIVE,
+            ),
+        )
+
+        server.verify()
+    }
+
     // ── 종류 → 긴급도 배정 ────────────────────────────────────────────
     /**
      * **시각이 곧 내용인 것만** 집중 모드를 뚫는다. 남발하면 사용자가 앱 단위로 그 권한을 꺼 버려

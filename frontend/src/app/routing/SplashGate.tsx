@@ -3,6 +3,7 @@ import { InteractionManager } from 'react-native';
 import { Stack } from 'expo-router';
 
 import { useAccountBoundaryReset } from '@/app/model/useAccountBoundaryReset';
+import { usePermissionCatchUp } from '@/app/model/usePermissionCatchUp';
 import { usePushRouting } from '@/app/model/usePushRouting';
 import { useBootstrapGate } from '@/features/auth';
 import { SplashScreen } from '@/features/auth';
@@ -15,6 +16,30 @@ export const SPLASH_MIN_VISIBLE_MS = 1300;
 
 /** HOME 진입 뒤 푸시 토큰 재등록까지 미루는 시간(ms) — exp.host 외부 호출이 홈 첫 요청들과 경쟁하지 않게 한다(TRIP-1362). */
 export const PUSH_REGISTER_DELAY_MS = 2500;
+
+/**
+ * 하단 바를 **자기 화면 안에** 그리는 push 화면(허브 제외 — 허브는 아래에 따로 선언) — TRIP-1584.
+ * 이런 화면이 기본 슬라이드로 열리면 바 사본이 화면과 함께 밀려 들어와 아래 `(tabs)` 의 진짜 탭 바 위로 "새 바"가 겹쳐 보인다.
+ * 페이드는 진짜 탭 바가 비쳐 이중으로 보이므로 `none`(즉시 교체)이다. 바 없는 풀스크린(상세·위저드 등)은 슬라이드 그대로 둔다.
+ * 바를 화면 안에 그리는 새 라우트를 만들면 여기에 이름을 더한다 — 빠지면 슬라이드로 조용히 돌아간다(스캔 가드 없음).
+ */
+const BAR_SCREEN_ROUTES = [
+  'stays/index',
+  'explore/places',
+  'records/style',
+  'trips/[tripId]/records/index',
+  'trips/[tripId]/records/reflection/[date]',
+  'trips/[tripId]/records/summary',
+] as const;
+
+/**
+ * 회고(j03)·요약(j04)은 iOS 가장자리 스와이프 뒤로를 끈다 — 뒤로 가기의 단일 경로는 하단 바의 뒤로 원이다(TRIP-1600,
+ * 사용자 결정 2026-10-23). 스와이프는 바 모프 없이 화면만 밀어내 하단 바와 어긋난다. 다른 바 화면은 범위 밖이라 그대로다.
+ */
+const NO_SWIPE_ROUTES: ReadonlySet<string> = new Set([
+  'trips/[tripId]/records/reflection/[date]',
+  'trips/[tripId]/records/summary',
+]);
 
 /**
  * 부트스트랩 게이트 컨테이너(D1 A안, 루트 셸에 마운트). useBootstrapGate 를 구독해
@@ -60,8 +85,11 @@ export function SplashGate() {
     };
   }, [destination]);
 
-  const drawn = phase !== 'loading' && destination !== null && floorElapsed;
+  const ready = phase !== 'loading' && destination !== null && floorElapsed;
   // 훅이라 조기 반환 위에서 부른다(렌더마다 훅 개수가 같아야 한다).
+  // 기존 계정 HOME 진입 전 미결정 권한 안내(TRIP-1601) — 조회가 안 끝났으면 첫 화면만 최대 1초 더 스플래시를 붙잡는다.
+  const holdSplash = usePermissionCatchUp(ready, destination);
+  const drawn = ready && !holdSplash;
   useAccountBoundaryReset(drawn, destination);
   usePushRouting(drawn, destination);
 
@@ -85,6 +113,22 @@ export function SplashGate() {
       </Stack.Protected>
       <Stack.Protected guard={destination === 'HOME'}>
         <Stack.Screen name="(tabs)" />
+        {/* c10 기능 안내(TRIP-1595) — 취향 2/2 완료가 HOME 을 연 뒤 replace 로 오는 화면이라 HOME 가드 안이다(로그아웃·401 이면 가드가 치운다).
+            스와이프 뒤로를 끈다(진입·퇴장 모두 replace 라 아래에 돌아갈 화면도 없다). animation 은 주지 않는다. */}
+        <Stack.Screen
+          name="onboarding-tour"
+          options={{ gestureEnabled: false }}
+        />
+        {/* 기존 계정 HOME 진입 전 권한 안내(TRIP-1601) — usePermissionCatchUp 이 replace 로 보내고 카드가 '/(tabs)' 로 replace 해 나간다.
+            투어와 같은 이유로 HOME 가드 안·스와이프 뒤로 끔·animation 없음. */}
+        <Stack.Screen
+          name="permission-location"
+          options={{ gestureEnabled: false }}
+        />
+        <Stack.Screen
+          name="permission-push"
+          options={{ gestureEnabled: false }}
+        />
       </Stack.Protected>
       {/* i04 재계획 요청 시트 — 허브 위에 겹쳐 띄운다(TRIP-750 D1). trips 라우트는 어떤 가드에도
           속하지 않으므로 선언도 가드 밖에 둔다. */}
@@ -93,17 +137,30 @@ export function SplashGate() {
         options={{ presentation: 'transparentModal' }}
       />
       {/* i01 여행 중 허브(TRIP-1522) — 전환 없이 즉시 교체한다: 허브 하단 바가 홈 탭 바와 같은 5칸 모양으로 시작해 4단계 모프를 스스로
-          재생하므로, 기본 슬라이드나 fade 는 아래 (tabs) 의 탭 바를 비치게 해 5칸이 이중으로 보인다. 앱 전체 전환·다른 라우트는 그대로(허브 하나만).
+          재생하므로, 기본 슬라이드나 fade 는 아래 (tabs) 의 탭 바를 비치게 해 5칸이 이중으로 보인다. 바를 화면 안에 그리는 다른 push 화면도 같은 이유로 none 이다(위 BAR_SCREEN_ROUTES).
           가드 밖 선언은 planb 와 같은 이유다. */}
       <Stack.Screen
         name="trips/[tripId]/live/index"
         options={{ animation: 'none' }}
       />
+      {/* 바를 화면 안에 그리는 push 화면(TRIP-1584) — 위 BAR_SCREEN_ROUTES 주해. 가드 밖 선언은 허브·planb 와 같은 이유다. */}
+      {BAR_SCREEN_ROUTES.map((name) => (
+        <Stack.Screen
+          key={name}
+          name={name}
+          options={
+            NO_SWIPE_ROUTES.has(name)
+              ? { animation: 'none', gestureEnabled: false }
+              : { animation: 'none' }
+          }
+        />
+      ))}
       {/* ✦ AI 도우미 시트(TRIP-1322 · DEC-U8-13) — 진입 화면 위 투명 모달. (tabs) 밖이라 탭바가 가려진다.
-          미인증 딥링크는 가드에 안 걸리지만 세션 생성 401 이면 시트가 스스로 닫힌다. */}
+          미인증 딥링크는 가드에 안 걸리지만 세션 생성 401 이면 시트가 스스로 닫힌다.
+          TRIP-1554 — 아래에서 올라오는 모달 전환 없이 그 자리에 바로 뜨고 닫힌다(사용자 결정 "화면에서 바로 나오게", 페이드 아님). */}
       <Stack.Screen
         name="assistant/index"
-        options={{ presentation: 'transparentModal' }}
+        options={{ presentation: 'transparentModal', animation: 'none' }}
       />
     </Stack>
   );

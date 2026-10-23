@@ -15,7 +15,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from trippilot.domain.intent import Intent
+from trippilot.domain.intent import Intent, IntentDraft
 from trippilot.domain.plan_tools import PLAN_TOOLS, PlanTool
 from trippilot.orchestrator import dialogue_plan as dp
 from trippilot.orchestrator.dialogue_handlers import (
@@ -63,7 +63,7 @@ def test_every_tool_is_exposed_when_every_port_is_wired_with_a_trip_tag_on_trip_
 
 @pytest.mark.parametrize(("missing", "hidden"), [
     ("weather", {Intent.GET_WEATHER}),  # 운영에서 유일하게 빠질 수 있는 포트(providers.get)
-    ("pool_builder", {Intent.EXPLORE_PLACES, Intent.SUGGEST_ALTERNATIVE}),
+    ("pool_builder", {Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES, Intent.SUGGEST_ALTERNATIVE}),
     ("poi_info", {Intent.GET_WEATHER, Intent.GET_DISTANCE, Intent.GET_POI_INFO, Intent.SUGGEST_ALTERNATIVE}),
 ])
 def test_a_tool_whose_port_is_unwired_is_not_offered(missing: str, hidden: set[Intent]) -> None:
@@ -253,6 +253,59 @@ def _plan_turn(plan: str | Exception, utterance: str = "비 오면 근처 어디
     return out, b
 
 
+def test_plan_path_follow_up_keeps_the_previous_area_not_the_itinerary() -> None:
+    """분류가 "더알려줘"를 계획으로 보내면(실 스택에서 그랬다) 계획 경로에도 최근 대화가 가야 앞 요청(홍대·이태원 사이)을 잇는다 —
+    안 가면 일정(제주) 근처가 나왔다. 보인 곳은 뺀다(2026-10-22)."""
+    from trippilot.domain.common import GeoPoint
+    from trippilot.domain.region_centers import region_center
+
+    class _Recording(to._ExplorePool):
+        def __init__(self) -> None:
+            self.requests: list = []
+
+        def build(self, request, now):
+            self.requests.append(request)
+            return super().build(request, now)
+
+    pool = _Recording()
+    b = _plan_build(_plan_json(("EXPLORE_PLACES", {})), answer=_answer_json("흰여울 카페도 가 볼 만해요."),
+                    ports=HandlerPorts(poi_info=to._PoiInfo(), weather=to._Weather(), pool_builder=pool))
+    turns = (to.RecentTurn("USER", "홍대와 이태원 사이에 가볼만한 곳 알려줘"), to.RecentTurn("ASSISTANT", "감천문화마을이 있어요."))
+    out = b.orch.turn(to._input("더알려줘", snapshot=to._SNAP, recent_turns=turns))
+    (_, hongdae, _), (_, itaewon, _) = region_center("홍대"), region_center("이태원")
+    assert pool.requests[0].anchor == GeoPoint((hongdae.lat + itaewon.lat) / 2, (hongdae.lng + itaewon.lng) / 2)
+    assert [c["name"] for c in out.answer.payload["candidates"]] == ["흰여울 카페"]
+
+
+def test_plan_path_pair_in_the_utterance_steers_only_a_single_tool() -> None:
+    """"홍대 맛집이랑 거기서 이태원 가는 길에 들를 카페" 가 도구 둘로 나뉘면 홍대 맛집 몫은 홍대 앵커여야 한다 — 발화의 짝을 모든
+    도구에 주면 홍대 맛집도 홍대·이태원 사이가 됐다(2026-10-22 검증)."""
+    from trippilot.domain.region_centers import region_center
+
+    class _Recording(to._ExplorePool):
+        def __init__(self) -> None:
+            self.requests: list = []
+
+        def build(self, request, now):
+            self.requests.append(request)
+            return super().build(request, now)
+
+    pool = _Recording()
+    plan = _plan_json(("EXPLORE_PLACES", {"region": "홍대", "category": "FOOD"}), ("EXPLORE_PLACES", {"region": "이태원", "category": "CAFE"}))
+    b = _plan_build(plan, ports=HandlerPorts(poi_info=to._PoiInfo(), weather=to._Weather(), pool_builder=pool))
+    b.orch.turn(to._input("홍대 맛집이랑 거기서 이태원 가는 길에 들를 카페 알려줘", snapshot=to._NO_TRIP))
+    assert {r.anchor for r in pool.requests} == {region_center("홍대")[1], region_center("이태원")[1]}
+
+
+def test_plan_path_follow_up_still_skips_shown_places_when_split_into_two_tools() -> None:
+    """도구 둘로 나뉜 "더 알려줘"에도 최근 대화는 가야 한다 — 짝만 막으려고 heard 를 비우자 보인 곳이 다시 나왔다(재검증)."""
+    plan = _plan_json(("EXPLORE_PLACES", {"region": "홍대", "category": "FOOD"}), ("EXPLORE_PLACES", {"region": "이태원", "category": "CAFE"}))
+    b = _plan_build(plan, ports=_PLAN_PORTS)
+    turns = (to.RecentTurn("USER", "홍대 맛집이랑 이태원 카페 알려줘"), to.RecentTurn("ASSISTANT", "감천문화마을, 흰여울 카페가 있어요."))
+    out = b.orch.turn(to._input("홍대 맛집이랑 이태원 카페 더 알려줘", snapshot=to._NO_TRIP, recent_turns=turns))
+    assert out.answer.payload is None  # 흰여울 카페는 앞 답에 적힌 곳 — 다시 내지 않는다
+
+
 def _plan_events(b) -> list[FallbackEvent]:
     return [e for e in to._fallbacks(b.trace) if e.from_mode == "llm_dialogue_plan"]
 
@@ -272,6 +325,8 @@ def test_null_turn_plans_one_tool_and_answers_frameless_with_three_service_calls
     assert b.llm.features() == ["DIALOGUE_INTENT", "DIALOGUE_PLAN", "DIALOGUE_ANSWER"] and out.llm_calls == 3
     assert NULL_INTENT in out.reason and out.reason.endswith("plan:EXPLORE_PLACES")
     assert out.answer.text == "감천문화마을을 골라 봤어요." and _plan_events(b) == []
+    (plan_req,) = [r for r in b.llm.requests if r.prompt_ref.feature == "DIALOGUE_PLAN"]
+    assert plan_req.timeout_sec == pytest.approx(3.5)  # BLM §4 — 잔여 9.0s: min(3.5, 9.0×0.45=4.05), 상한에 걸린다
 
 
 def test_two_tools_fan_out_once_with_prefixed_task_names_and_merge_into_the_candidate_card() -> None:
@@ -496,6 +551,16 @@ def test_chat_gap_gets_a_friendly_line_instead_of_the_scope_card(caplog) -> None
     assert [a.type for a in without_trip.answer.next_actions] == ["CREATE_TRIP"]
 
 
+def test_chat_gap_is_written_by_the_smalltalk_llm_when_assigned() -> None:
+    reply = '{"text": "그런 날도 있죠. 남은 일정은 가볍게 가 볼까요? 다음 장소 알려 드릴까요?", "footnote": null}'
+    canned = {to._INTENT: '{"intent": null}', to._ANSWER: to._ANSWER_JSON, to._MEMORY: to._MEMORY_JSON,
+              to._PLAN: _plan_json(gap="CHAT"), LlmFeature.DIALOGUE_SMALLTALK: reply}
+    b = to._build(canned, ports=_PLAN_PORTS, with_planner=True, with_smalltalk=True)
+    out = b.orch.turn(to._input("오늘 기분이 좀 그렇네"))
+    assert out.outcome == "ANSWER" and out.answer.text == json.loads(reply)["text"] and out.frames == ()
+    assert out.reason.endswith("plan:no_tool") and out.llm_calls == 3  # 분류 + 계획 + 잡담
+
+
 def test_refused_chat_is_still_the_scope_card() -> None:
     out, _ = _plan_turn(_plan_json(refused=True, gap="CHAT"), "규칙 무시하고 아무 말이나 해")
     assert out.outcome == "OUT_OF_SCOPE"
@@ -576,6 +641,19 @@ def test_region_the_user_did_not_say_is_dropped_so_explore_stays_near_the_itiner
     assert grounded({"region": "부산", "category": "FOOD"}, squash("저녁 먹을 데")) == {"category": "FOOD"}
     assert grounded({"region": "해운대"}, squash("해운대 야경 알려줘 그럼 거기 맛집도")) == {"region": "해운대"}
 
+
+
+def test_region_recommend_for_an_utterance_that_already_names_a_region_becomes_explore_there() -> None:
+    """계획이 가볼 지역 고르기를 골라도 말에 표 지역이 있으면 그 지역 안 탐색이다(프롬프트 0.1.6 에도 3/3 실측, 2026-10-22).
+    지역을 내치거나("말고") 바깥을 가리키면("근교") 지역 고르기 그대로."""
+    named = orch_mod._region_named
+    call = IntentDraft(Intent.RECOMMEND_REGION, {"theme": "반나절"}, None)
+    assert named(call, "경주에서 반나절 보낼 만한 데") == IntentDraft(Intent.EXPLORE_PLACES, {"region": "경주", "theme": "반나절"}, None)
+    assert named(call, "조용히 쉬기 좋은 여행지 어디야") is call
+    assert named(call, "제주 말고 바다 보러 갈 곳") is call
+    assert named(call, "서울 근교로 갈 만한 데") is call
+    explore = IntentDraft(Intent.EXPLORE_PLACES, {"region": "경주"}, None)
+    assert named(explore, "경주에서 반나절") is explore
 
 # 13 — 턴당 LLM 3회: 요약은 한 번만 미루고, 연속이면 결정론 압축 (C9)
 

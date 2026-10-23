@@ -15,7 +15,7 @@ import zlib
 
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import BudgetLevel, GeoPoint
-from trippilot.domain.poi import TRENDING_TAG, Poi, PoiCategory
+from trippilot.domain.poi import TRENDING_TAG, Poi, PoiCategory, reputation_bonus
 
 # 축은 "그 카테고리가 일정의 주 목적지가 되는 정도" — 명소 최상, 식음은 중간,
 # 쇼핑은 보조, STAY는 앵커라 0(선택 대상 아님). PoiCategory 전 값 커버 필수(직접 조회).
@@ -31,6 +31,8 @@ CATEGORY_WEIGHT: dict[PoiCategory, float] = {
     PoiCategory.NATURE: 0.9,
     PoiCategory.FOOD: 0.8,
     PoiCategory.CULTURE: 0.8,
+    PoiCategory.ART: 0.8,    # 문화에서 갈라진 갤러리·미술관 — 문화와 같은 축
+    PoiCategory.BAR: 0.6,    # 술집 — 주 목적지가 아니라 저녁·밤의 곁가지(카페와 같은 단)
     PoiCategory.CAFE: 0.6,
     PoiCategory.SHOPPING: 0.5,
     PoiCategory.STAY: 0.0,
@@ -60,11 +62,13 @@ _FEE_CEILING: dict[BudgetLevel, dict[PoiCategory, int]] = {
     BudgetLevel.LOW: {
         PoiCategory.NATURE: 5_000,
         PoiCategory.CULTURE: 7_000,
+        PoiCategory.ART: 7_000,
         PoiCategory.SIGHT: 9_500,
     },
     BudgetLevel.MID: {
         PoiCategory.NATURE: 8_000,
         PoiCategory.CULTURE: 13_250,
+        PoiCategory.ART: 13_250,
         PoiCategory.SIGHT: 15_000,
     },
     BudgetLevel.HIGH: {},
@@ -214,7 +218,7 @@ def build_rule_score(
         dist_penalty = min(haversine_km(anchor, poi.coord) * 0.02, 0.5)
     # 시드 기반 미세 tie-break (crc32 — 파이썬 hash와 달리 실행 간 안정)
     jitter = (zlib.crc32(f"{seed}:{poi.poi_id}".encode()) % 1000) / 1e7
-    return (CATEGORY_WEIGHT[poi.category] + popularity_norm
+    return (CATEGORY_WEIGHT[poi.category] + popularity_norm + reputation_bonus(poi.tags)
             + admission_fit(fee_won, poi.category, budget)
             + directive_fit(poi.category, prefer, avoid)
             + taste_fit(poi.category, taste)

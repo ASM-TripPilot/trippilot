@@ -5,8 +5,8 @@ import com.trippilot.placedata.api.RegionCenter
 import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.savedaccommodation.api.DayAnchorView
 import com.trippilot.trip.api.TripDestinationRef
+import com.trippilot.trip.api.destinationOn
 import java.time.LocalDate
-import java.time.temporal.ChronoUnit
 
 /**
  * 목적지 하나에서 앵커 좌표를 고르는 규칙(TRIP-859 후속).
@@ -31,18 +31,12 @@ internal object RegionAnchors {
         ref.regionCode?.let { regions.centerOfCode(it) } ?: regions.centerOf(ref.name)
 
     /**
-     * 계획일 [date] 가 어느 목적지의 날인가 — FE `dayRegion.ts`(같이 짜기 "그날 여행지")와 **같은 규칙**.
+     * 계획일 [date] 가 어느 목적지의 날인가 — FE `frontend/src/entities/trip/lib/regionForDay.ts`(`regionForDay`)와 **같은 규칙**. 본문은 trip api `destinationOn` 에 있다.
      * [refs](seq 순)를 박수만큼 펼치고, 박수 합을 넘는 날(체크아웃일 포함)은 마지막 목적지다.
      * 두 규칙이 갈리면 화면이 "인천"이라 적은 날에 서울 일정이 나온다. 목적지가 없으면 null.
      */
-    fun destinationOn(refs: List<TripDestinationRef>, startDate: LocalDate, date: LocalDate): TripDestinationRef? {
-        var remaining = ChronoUnit.DAYS.between(startDate, date) + 1
-        for (ref in refs) {
-            if (remaining <= ref.nights) return ref
-            remaining -= ref.nights
-        }
-        return refs.lastOrNull()
-    }
+    fun destinationOn(refs: List<TripDestinationRef>, startDate: LocalDate, date: LocalDate): TripDestinationRef? =
+        refs.destinationOn(startDate, date) // 규칙 정본은 trip api(박수의 주인) — 사본을 두지 않는다
 
     /**
      * 계획일별 공간 앵커 — 우선순위: 숙소 좌표(체크아웃일은 전날 거점) → 그 날의 목적지 중심 → 첫 목적지 중심.

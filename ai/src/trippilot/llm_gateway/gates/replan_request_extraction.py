@@ -57,7 +57,7 @@ _HHMM = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
 _MAX_PLACES = 5
 _MAX_NAME = 40
 # 경계 카테고리 8종(`domain.poi.PoiCategory` 의 STAY 제외) — 게이트는 도메인을 몰라 문자열로 둔다.
-_CATEGORIES = frozenset({"FOOD", "CAFE", "SIGHT", "NIGHT_VIEW", "NATURE", "CULTURE", "ACTIVITY", "SHOPPING"})
+_CATEGORIES = frozenset({"FOOD", "CAFE", "SIGHT", "NIGHT_VIEW", "NATURE", "CULTURE", "ACTIVITY", "SHOPPING", "ART", "BAR"})
 _MAX_CATEGORIES = 4
 _MAX_COUNT = 8  # 재계획 하루 방문 상한과 같은 급
 _MAX_AREA = 20

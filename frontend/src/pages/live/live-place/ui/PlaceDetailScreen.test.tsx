@@ -6,6 +6,7 @@ import {
 } from '@testing-library/react-native';
 
 import { BackArrowGlyph, ShareGlyph } from '@/features/execution/index.view';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 
 import type { PlaceDetailView } from '../model/placeDetailView';
 import { PlaceDetailScreen } from './PlaceDetailScreen';
@@ -31,6 +32,7 @@ import { PlaceDetailScreen } from './PlaceDetailScreen';
 const DURATION = /(\d+\s*분|\d+\s*시간|소요)/;
 
 const view = (over: Partial<PlaceDetailView> = {}): PlaceDetailView => ({
+  poiId: 'poi-a',
   name: '광안리 해수욕장',
   category: '해변',
   tags: ['해변', '포토스팟'],
@@ -212,13 +214,47 @@ describe('PlaceDetailScreen (i10)', () => {
       '1 / 42'
     );
 
-    // ② 운영 기본(사진 없음·사진 수 없음) — 회색 히어로만 남고 갤러리·칩은 없다(INV-1).
+    // 사진이 있을 땐 생성 이미지 히어로가 없다(갤러리가 히어로를 채운다).
+    expect(screen.queryByTestId('execution-place-hero-photo')).toBeNull();
+
+    // ② 운영 기본(사진 없음·사진 수 없음) — 갤러리·칩은 없고 히어로는 그 장소의 생성 이미지 1장이다.
     rerender(
-      <PlaceDetailScreen view={view({ galleryUrls: [], photoTotal: null })} />
+      <PlaceDetailScreen
+        view={view({ galleryUrls: [], photoTotal: null, category: '야경' })}
+      />
     );
     expect(screen.getByTestId('execution-place-hero')).toBeTruthy();
     expect(screen.queryByTestId('execution-place-gallery')).toBeNull();
     expect(screen.queryByTestId('execution-place-photo-count')).toBeNull();
+    // poi-a 는 변형 3 → night_view-3. 한글 정본이 아닌 카테고리('해변')는 폴백이라 일부러 야경으로 준다.
+    expect(
+      within(screen.getByTestId('execution-place-hero')).getByTestId(
+        'execution-place-hero-photo'
+      ).props.source
+    ).toEqual([coverFor('야경', 'poi-a')]);
+  });
+
+  it('S8b 갤러리 사진 한 장이 로드에 실패하면 그 칸만 생성 이미지로 갈아끼운다 (결정 4)', () => {
+    render(
+      <PlaceDetailScreen
+        view={view({
+          poiId: 'poi-b',
+          category: '맛집',
+          galleryUrls: PHOTOS.slice(0, 3),
+          photoTotal: 42,
+        })}
+      />
+    );
+    const item = (index: number) =>
+      screen.getByTestId(`execution-place-gallery-${index}`);
+    expect(item(1).props.source).toEqual([{ uri: PHOTOS[1] }]);
+
+    fireEvent(item(1), 'error', { nativeEvent: { error: 'load failed' } });
+
+    // poi-b 는 변형 3 → food-3. 실패한 1번 칸만 바뀌고 0·2번 사진은 그대로다.
+    expect(item(1).props.source).toEqual([coverFor('맛집', 'poi-b')]);
+    expect(item(0).props.source).toEqual([{ uri: PHOTOS[0] }]);
+    expect(item(2).props.source).toEqual([{ uri: PHOTOS[2] }]);
   });
 
   it('S9 부제 — 흰 핀 + category 한 줄로 바뀌고, 태그를 " · "로 이은 옛 부제 줄은 없다 (AC-2)', () => {

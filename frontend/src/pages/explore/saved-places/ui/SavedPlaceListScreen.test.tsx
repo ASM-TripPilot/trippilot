@@ -10,6 +10,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 
 import { optimisticSavedPlaceId } from '@/features/save-place/index.view';
+import { coverFor } from '@/test-support/placeCoverFixtures';
 import {
   SavedPlaceListScreen,
   type SavedPlaceListScreenProps,
@@ -230,14 +231,22 @@ describe('T-3 · 태그 칩은 첫 1개만 (01b Seed Q10)', () => {
 });
 
 describe('T-4 · 썸네일 (A-4 · 계약 imageUrl nullable)', () => {
-  it('imageUrl 이 있으면 사진을, 없으면 자리표시자만 두고 행은 유지한다', () => {
+  it('imageUrl 이 있으면 그 사진을, 없으면 그 장소의 카테고리·poiId 로 고른 생성 이미지를 같은 칸에 두고 행은 유지한다', () => {
     renderScreen();
 
-    // 긍정 — 계약이 준 값이 있으면 실제로 그린다.
-    expect(screen.getByTestId('explore-saved-photo-sp-2')).toBeOnTheScreen();
+    // 긍정 — 계약이 준 값이 있으면 그 사진 그대로.
+    expect(screen.getByTestId('explore-saved-photo-sp-2').props.source).toEqual(
+      [{ uri: 'https://cdn.example.com/p2.jpg' }]
+    );
 
-    // 부정 짝 — NULL 이면 사진 노드가 아예 없다(클라가 URL 을 지어내면 INV-1 위반이다).
-    expect(screen.queryByTestId('explore-saved-photo-sp-1')).toBeNull();
+    // 짝 — NULL 이면 칸이 비지 않고 그 장소의 생성 이미지가 들어온다. 행마다 자기 카테고리·poiId 다
+    // (sp-1 은 p1·명소 → 변형 2, sp-3 은 p3·카페 → 변형 1).
+    expect(screen.getByTestId('explore-saved-photo-sp-1').props.source).toEqual(
+      [coverFor('명소', 'p1')]
+    );
+    expect(screen.getByTestId('explore-saved-photo-sp-3').props.source).toEqual(
+      [coverFor('카페', 'p3')]
+    );
     expect(screen.getByTestId('explore-saved-item-sp-1')).toBeOnTheScreen();
   });
 });

@@ -1,4 +1,4 @@
-import type { StayItem } from '@/shared/api/index.schemas';
+import type { SavedStay, StayItem } from '@/shared/api/index.schemas';
 
 /**
  * 숙소 항목의 단일 식별 출처(AC-6 · 01b Seed Q1). `StayItem`에 계약상 `stayId`가 없어
@@ -13,4 +13,20 @@ export function stayKey(
   item: Pick<StayItem, 'externalSource' | 'externalId'>
 ): string {
   return `${item.externalSource}:${item.externalId}`;
+}
+
+/**
+ * 저장한 숙소의 키 — 외부 키(`externalSource`·`externalId`)가 둘 다 있으면 `stayKey` 와 같은 값(검색 목록과
+ * 같은 숙소로 본다), 없으면(핀·직접 등록) `savedStayId`. 폴백이 없으면 그런 숙소들이 `"null:null"` 로 겹친다.
+ * e04 상세 라우트 id 와 숙소 사진 칸 그림 키(TRIP-1588)가 이것 하나에서 나온다.
+ */
+export function savedStayKey(
+  stay: Pick<SavedStay, 'savedStayId' | 'externalSource' | 'externalId'>
+): string {
+  return stay.externalSource && stay.externalId
+    ? stayKey({
+        externalSource: stay.externalSource,
+        externalId: stay.externalId,
+      })
+    : stay.savedStayId;
 }

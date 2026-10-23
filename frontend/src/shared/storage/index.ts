@@ -70,3 +70,4 @@ export async function hasStoredToken(): Promise<boolean> {
 export { readIdSet, writeIdSet } from './idSet';
 export { getInstallId } from './installId';
 export { readStringValue, writeStringValue } from './stringValue';
+export { readInstallFlag, writeInstallFlag } from './installFlag';

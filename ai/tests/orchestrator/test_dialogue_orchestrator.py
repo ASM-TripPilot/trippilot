@@ -92,6 +92,7 @@ from trippilot.orchestrator.dialogue_orchestrator import (
 )
 from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanGate
 from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
+from trippilot.llm_gateway.workers.dialogue_smalltalk import DialogueSmalltalkWorker
 from trippilot.domain.plan_tools import plan_tool_specs_json
 from trippilot.orchestrator.dialogue_plan import plan_tools
 from trippilot.orchestrator.intent_eval import is_refusal
@@ -112,6 +113,7 @@ _U = {n: str(uuid.uuid5(uuid.NAMESPACE_DNS, n)) for n in ("성산일출봉", "�
 _COORD = {n: GeoPoint(33.4 + i * 0.01, 126.5 + i * 0.01) for i, n in enumerate(_U)}
 _INTENT, _ANSWER, _MEMORY = LlmFeature.DIALOGUE_INTENT, LlmFeature.DIALOGUE_ANSWER, LlmFeature.DIALOGUE_MEMORY
 _PLAN = LlmFeature.DIALOGUE_PLAN
+_SMALLTALK = LlmFeature.DIALOGUE_SMALLTALK
 
 
 def _slot(name: str, hhmm: str, category: str, on: date) -> SlotView:
@@ -205,7 +207,8 @@ _PORTS = HandlerPorts(poi_info=_PoiInfo(), weather=_Weather())
 def _build(by_feature: dict, *, clock: FakeClock | None = None, store=None, ports: HandlerPorts = _PORTS,
            shadow: ShadowIntentProbe | None = None, shadow_meta: dict | None = None, confident_intent=None,
            advance: dict[LlmFeature, int] | None = None, intent_worker=None,
-           pool: Executor | None = None, with_planner: bool = False, planner=None, wrap=None) -> SimpleNamespace:
+           pool: Executor | None = None, with_planner: bool = False, planner=None, wrap=None,
+           with_smalltalk: bool = False) -> SimpleNamespace:
     """`with_planner` — 2‴ 계획 워커를 운영과 같은 길(노출 도구 = 배선된 포트, 같은 counted LLM)로 붙인다. `planner` 는 대역을 직접 넣을 때,
     `wrap` 은 LLM 응답을 손볼 때(절단 등) — 셋 다 없으면 종전 조립과 바이트 단위로 같다."""
     llm = FeatureRoutingLlm(by_feature)
@@ -222,12 +225,14 @@ def _build(by_feature: dict, *, clock: FakeClock | None = None, store=None, port
     if with_planner:
         tools = plan_tools(ports)
         planner = DialoguePlanWorker(gw(DialoguePlanGate(frozenset(tools))), plan_tool_specs_json(tools))
+    smalltalk = DialogueSmalltalkWorker(gw(DialogueAnswerGate())) if with_smalltalk else None  # 답변 게이트 그대로
     orch = DialogueOrchestrator(
         intent_worker=intent_worker if intent_worker is not None else DialogueIntentWorker(gw(IntentGate())),
         answer_worker=DialogueAnswerWorker(gw(DialogueAnswerGate())),
         memory_worker=DialogueMemoryWorker(gw(DialogueMemoryGate())),
         memory_store=store, ports=ports, clock=clock, trace=trace, tz=_KST,
         shadow=shadow, shadow_meta=shadow_meta, confident_intent=confident_intent, pool=pool, planner=planner,
+        smalltalk=smalltalk,
     )
     return SimpleNamespace(orch=orch, llm=llm, trace=trace, store=store, clock=clock, advancing=advancing)
 
@@ -273,6 +278,30 @@ def test_capabilities_literal_is_a_deterministic_answer_without_llm() -> None:
 
 
 # ── 2·4·5단 — 분류 → 팬아웃 → 답변 ────────────────────────────────────────
+
+
+class _LlmInFanout(_Weather):
+    """팬아웃 스레드 안에서 서비스 LLM 을 부르는 포트 — NL2SQL(장소 탐색 DIALOGUE_SQL)과 같은 꼴. 백엔드 사용량 상한이 세는
+    턴 `llm_calls` 는 contextvar 카운터라, 풀 스레드에 문맥이 안 넘어가면 이 호출이 빠진다(계획 턴은 실제 4회인데 3으로 셌다)."""
+
+    class _Inner:
+        def invoke(self, request):
+            return None
+
+    def __init__(self, calls_per_fetch: int = 1) -> None:
+        super().__init__()
+        self._llm, self._n = CountingLlm(self._Inner()), calls_per_fetch
+
+    def fetch(self, params: dict) -> InfoPacket:
+        for _ in range(self._n):
+            self._llm.invoke(None)
+        return super().fetch(params)
+
+
+def test_service_llm_calls_made_inside_fanout_threads_count_toward_the_turn() -> None:
+    b = _build(_canned(Intent.GET_WEATHER), ports=HandlerPorts(poi_info=_PoiInfo(), weather=_LlmInFanout()))
+    out = b.orch.turn(_input("오늘 날씨 어때"))
+    assert out.outcome == "ANSWER" and out.llm_calls == 3  # 분류 + 팬아웃 안 1 + 답변 (BR-AO-07·COST-U8-02)
 
 
 def test_weather_turn_classifies_fans_out_and_composes_an_info_answer() -> None:
@@ -361,6 +390,17 @@ def test_edit_schedule_is_a_frame_with_tidied_day_and_no_answer() -> None:
     assert frame.intent is Intent.EDIT_SCHEDULE and frame.missing == ()
     assert frame.arguments == {"day": _D2.isoformat(), "target": "카페"}  # day 만 ISO 로 (BE targetDate 가 읽는 꼴)
     assert out.llm_calls == 1 and b.llm.features() == ["DIALOGUE_INTENT"]
+
+
+def test_edit_insert_ask_with_only_a_position_skips_the_day_question() -> None:
+    """분류가 자리만 준 사이 넣기 — 되물으면 답 턴엔 원문이 없어 편집이 "알아듣지 못했어요"로 끝난다(PendingFrame 에 발화 칸이 없다).
+    말의 자리가 한 날에만 풀리면 그 날로 FRAME 을 낸다(2026-10-22 실측: 여행 중 "경리단길 다음에 갈 만한 곳 하나"가 되묻기로 갔다)."""
+    b = _build(_canned(Intent.EDIT_SCHEDULE, position="우도 다음"))
+    out = b.orch.turn(_input("우도 다음에 갈 만한 곳 하나 추가해줘"))
+    assert out.outcome == "FRAME" and out.clarify is None
+    assert out.frames[0].arguments == {"position": "우도 다음", "day": _D2.isoformat()}
+    asked = _build(_canned(Intent.EDIT_SCHEDULE, position="한라산 다음")).orch.turn(_input("한라산 다음에 한 군데 더"))
+    assert asked.outcome == "ARGUMENT_CLARIFY"  # 일정에 없는 이름 — 종전대로 묻는다
 
 
 @settings(max_examples=40, deadline=None)
@@ -556,6 +596,47 @@ def test_greeting_gets_a_warm_reply_that_leads_to_the_trip(utterance: str) -> No
     without_trip = _build(_canned(None)).orch.turn(_input(utterance, snapshot=_NO_TRIP))
     assert without_trip.answer.text == GREETING_TEXT[False]
     assert [a.type for a in without_trip.answer.next_actions] == ["CREATE_TRIP"]
+
+
+_SMALLTALK_JSON = '{"text": "네, 안녕하세요~ 반가워요! 오늘 여행은 어떠세요? 다음 장소나 날씨가 궁금하면 물어봐 주세요.", "footnote": null}'
+
+
+def _smalltalk_build(reply: str | Exception = _SMALLTALK_JSON):
+    return _build({**_canned(None), _SMALLTALK: reply}, with_smalltalk=True)
+
+
+def test_greeting_is_written_by_the_smalltalk_llm_when_assigned() -> None:
+    """DIALOGUE_SMALLTALK 배정 = 켜기(2026-10-22 결정 1번) — 인사 문장은 LLM 이 즉석에서, 버튼·프레임·맥락은 고정 문장 때와 같다."""
+    b = _smalltalk_build()
+    out = b.orch.turn(_input("안녕", turn_index=2))
+    assert out.outcome == "ANSWER" and out.frames == () and out.answer.text == json.loads(_SMALLTALK_JSON)["text"]
+    assert [a.type for a in out.answer.next_actions] == ["OPEN_ITINERARY"] and out.answer.quick_replies is None
+    assert out.llm_calls == 2 and out.context == DialogueContext(turn_index=2)  # 분류 1 + 잡담 1
+    assert [e for e in _fallbacks(b.trace) if e.from_mode == "llm_dialogue_smalltalk"] == []
+    (req,) = [r for r in b.llm.requests if r.prompt_ref.feature == _SMALLTALK.value]
+    assert "안녕" in req.prompt and "[확인된 사실]" not in req.prompt  # 사실 없는 프롬프트 — 답변 프롬프트가 아니다
+
+
+@pytest.mark.parametrize(("reply", "reason"), [
+    (RuntimeError("vendor down"), None),  # 게이트웨이가 폴백 이벤트를 낸다
+    ('{"text": "해운대해수욕장 가 보세요! 다음 장소 알려 드릴까요?", "footnote": null}', "place_not_in_facts"),  # INV-1 — 사실 없는 자리의 장소는 지어낸 것
+    ('{"text": "안녕하세요~ 14:00 에 출발하면 좋겠어요.", "footnote": null}', "time_not_in_facts"),  # INV-2
+])
+def test_smalltalk_failure_or_invented_fact_falls_back_to_the_fixed_line(reply, reason) -> None:
+    b = _smalltalk_build(reply)
+    out = b.orch.turn(_input("안녕하세요"))
+    assert out.outcome == "ANSWER" and out.answer.text == GREETING_TEXT[True]
+    events = [e for e in _fallbacks(b.trace) if e.from_mode == "llm_dialogue_smalltalk"]
+    assert len(events) == 1 and events[0].to_mode == "fixed_text"
+    if reason is not None:
+        assert events[0].reason == reason
+
+
+def test_thanks_and_acks_stay_fixed_even_with_the_smalltalk_llm() -> None:
+    b = _smalltalk_build()
+    assert b.orch.turn(_input("고마워")).answer.text == THANKS_TEXT
+    assert b.orch.turn(_input("응")).answer.text == ACK_TEXT
+    assert not [r for r in b.llm.requests if r.prompt_ref.feature == _SMALLTALK.value]
 
 
 def test_greeting_with_thanks_is_answered_as_thanks() -> None:
@@ -1015,6 +1096,9 @@ def test_recent_turn_rejects_bad_role_and_length(role: str, text: str) -> None:
     ("다음은 해녀의집이에요. 12:00 에 가요.", True),  # Facts 의 계획 시각 복사 — 통과
     ("다음은 해녀의집이에요. 15:45에 방문하세요.", False),  # Facts 밖 시각 — 카드(12:00)와 엇갈린다 (INV-2)
     ("다음은 해녀의집이에요. 3:45pm 에 가요.", False),
+    ("다음은 해녀의집이에요. 3pm 에 가요.", False),  # 분 없는 am/pm(#1420 리뷰 C4)
+    ("다음은 해녀의집이에요. １２：００ 에 가요.", True),  # 전각이어도 Facts 의 12:00 이다
+    ("다음은 해녀의집이에요. １５：４５ 에 가요.", False),
     ("다음은 해녀의집이에요. 오후 세 시에 가요.", False),  # 대조할 수 없는 한글 시각
 ])
 def test_answer_clock_times_must_come_from_facts(text: str, kept: bool) -> None:
@@ -1208,13 +1292,19 @@ def test_explore_turn_answers_with_registered_places_without_a_trip() -> None:
     assert {x.type for x in a.next_actions} == {"OPEN_PLACE"} and _fallbacks(b.trace) == []
 
 
+def _explore_fallback(out) -> str:
+    """탐색 폴백 문장 — 안내 뒤에 카드 이름(이어 묻기가 보인 곳을 빼는 재료). 이름은 카드에 있는 것뿐이다(INV-1)."""
+    names = [c["name"] for c in out.answer.payload["candidates"]]
+    return "가 볼 만한 곳을 찾아봤어요. " + ", ".join(names) + "."
+
+
 @pytest.mark.parametrize("text", [
     "부산이라면 해동용궁사 말고 송도해수욕장도 좋아요.",  # 풀 밖 장소 — 접미 '해수욕장'
     "감천문화마을과 함께 국제시장에도 들러 보세요.",  # 하나는 풀, 하나는 밖 — 조사 '에도' 앞의 '국제시장'
 ])
 def test_explore_answer_naming_a_place_outside_the_pool_falls_back_to_the_template(text: str) -> None:
     out, b = _explore_turn(text)
-    assert out.answer.text == "가 볼 만한 곳을 찾아봤어요." and out.answer.kind is AnswerKind.CANDIDATES  # 카드는 그대로
+    assert out.answer.text == _explore_fallback(out) and out.answer.kind is AnswerKind.CANDIDATES  # 카드는 그대로
     assert ("llm", "llm_dialogue_answer", "template_text") in _modes(b.trace)
     assert any(e.reason == "place_not_in_facts" for e in _fallbacks(b.trace))
 
@@ -1228,6 +1318,42 @@ def test_explore_empty_answer_cannot_invent_a_place_either() -> None:
     assert out.answer.text == "그 조건에 맞는 곳을 아직 찾지 못했어요." and out.answer.kind is AnswerKind.TEXT
     assert any(e.reason == "place_not_in_facts" for e in _fallbacks(b.trace))
 
+
+
+class _RecordingPool(_ExplorePool):
+    def __init__(self) -> None:
+        self.requests: list = []
+
+    def build(self, request, now):
+        self.requests.append(request)
+        return super().build(request, now)
+
+
+def test_explore_follow_up_turn_keeps_the_area_from_recent_turns_not_the_itinerary() -> None:
+    """"더 알려줘"에 분류가 지역을 비워도 앞 요청(홍대·이태원 사이)을 잇는다 — 일정(제주) 근처가 아니다(2026-10-21 테스트 화면).
+    이미 보인 곳은 뺀다 — 최근 대화가 핸들러까지 간다."""
+    from trippilot.domain.region_centers import region_center
+
+    answer = json.dumps({"text": "흰여울 카페도 가 볼 만해요.", "footnote": None}, ensure_ascii=False)
+    pool = _RecordingPool()
+    b = _build(_canned(Intent.EXPLORE_PLACES, answer=answer), ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=pool))
+    turns = (RecentTurn("USER", "홍대와 이태원 사이에 가볼만한 곳 알려줘"), RecentTurn("ASSISTANT", "감천문화마을이 있어요."))
+    out = b.orch.turn(_input("더 알려줘", recent_turns=turns))
+    (_, hongdae, _), (_, itaewon, _) = region_center("홍대"), region_center("이태원")
+    (request,) = pool.requests
+    assert request.anchor == GeoPoint((hongdae.lat + itaewon.lat) / 2, (hongdae.lng + itaewon.lng) / 2)
+    assert out.outcome == "ANSWER" and [c["name"] for c in out.answer.payload["candidates"]] == ["흰여울 카페"]
+
+
+@pytest.mark.parametrize("region", ["이 근처", "여기", "숙소 근처", "이 주변"])
+def test_a_deictic_region_is_not_a_region_so_explore_asks_instead_of_saying_it_cannot_find_it(region: str) -> None:
+    """분류가 "이 근처"를 region 칸에 담아도 지역이 아니다 — 여행·일정이 없으면 지역을 되묻는다("그 지역은 아직…" EMPTY 가 아니다)."""
+    from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEXT
+
+    b = _build(_canned(Intent.EXPLORE_PLACES, region=region, theme="맛집"),
+               ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool()))
+    out = b.orch.turn(_input(f"{region}에 맛집 있을까", snapshot=_NO_TRIP))
+    assert out.outcome == "ARGUMENT_CLARIFY" and out.clarify.question == EXPLORE_ASK_REGION_TEXT
 
 
 def test_explore_without_any_anchor_asks_for_the_region_once_and_the_answer_runs_without_classifying() -> None:
@@ -1271,7 +1397,7 @@ def test_explore_theme_times_are_not_facts() -> None:
     b = _build(_canned(Intent.EXPLORE_PLACES, answer=answer, region="부산", theme="22:00 이후 야경"),
                ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool()))
     out = b.orch.turn(_input("부산 22:00 이후 야경", snapshot=_NO_TRIP))
-    assert out.answer.text == "가 볼 만한 곳을 찾아봤어요."
+    assert out.answer.text == _explore_fallback(out)
     assert any(e.reason == "time_not_in_facts" for e in _fallbacks(b.trace))
 
 
@@ -1303,3 +1429,38 @@ def test_names_in_a_kb5_intro_count_as_known_so_the_answer_may_say_them() -> Non
 
     names = _prompt_names({"places": [{"name": "경복궁"}], "target": "경복궁", "intro": "경복궁에는 근정전과 경회루가 있고 광화문이 정문이다. 창덕궁과 함께 꼽힌다."})
     assert "창덕궁" in names and "경복궁" in names
+
+
+def test_event_names_and_places_in_the_facts_are_known_names() -> None:
+    """행사 주제 탐색 답(TEXT) — 행사 이름·장소 주소도 사실 칸에 글자 그대로 있는 이름이다(닫힌 답의 장소 검사가 막지 않게)."""
+    from trippilot.orchestrator.dialogue_orchestrator import _foreign_place, _prompt_names, _squash
+
+    facts = {"anchor": "서울", "events": [{"name": "서울세계불꽃축제", "period": "10월 24일", "place": "여의도한강공원"}]}
+    assert _prompt_names(facts) == ["서울", "서울세계불꽃축제", "여의도한강공원"]
+    assert not _foreign_place("이번 주말 여의도한강공원에서 서울세계불꽃축제가 열려요.", tuple(map(_squash, _prompt_names(facts))))
+    assert _foreign_place("근처 한강시민공원도 좋아요.", tuple(map(_squash, _prompt_names(facts))))  # 사실 밖 이름은 그대로 걸린다
+
+
+def test_last_entry_next_to_the_place_name_is_that_places_time() -> None:
+    """웹 확인 입장 마감(17:00)이 장소 이름 곁에 와도 그 장소의 시각이다 — hours_label 에 실리므로 짝 검사가 받는다(2026-10-22
+    테스트 화면: "경복궁의 입장 마감은 17:00"이 time_not_in_facts 로 떨어지던 것)."""
+    from trippilot.orchestrator import dialogue_orchestrator as dlg
+
+    pairs = dlg._hours_pairs({"places": [{"name": "경복궁", "hours_label": "09:00~18:00, 입장 마감 17:00"}]})
+    assert not dlg._misplaced_time("경복궁의 영업시간은 09:00~18:00이고 경복궁 입장 마감은 17:00이에요.", pairs)
+    assert dlg._misplaced_time("경복궁 입장 마감은 16:00이에요.", pairs)  # 없는 시각은 여전히 막는다
+
+
+def test_a_deterministic_answer_does_not_repeat_the_last_assistant_line_word_for_word() -> None:
+    """같은 넘기기·감사 문장이 연달아 나가면 같은 뜻의 다른 말로 — 버튼은 그대로(2026-10-22 "계속 같은 말만")."""
+    from trippilot.llm_gateway.workers.dialogue_answer import _ANSWER_TEXT, unrepeated
+    from trippilot.orchestrator.dialogue_orchestrator import THANKS_TEXT, _CLOSER_VARIANTS
+    from trippilot.domain.intent import Intent
+
+    style = _ANSWER_TEXT[Intent.STYLE_ANALYSIS]
+    assert unrepeated(style, []) == style  # 처음엔 원문(BE 화면 문장과 한 벌)
+    once = unrepeated(style, [style])
+    assert once != style and unrepeated(style, [style, once]) not in (style, once)
+    assert unrepeated("LLM 이 지은 문장", ["LLM 이 지은 문장"]) == "LLM 이 지은 문장"  # 표에 없는 문장은 그대로
+    assert THANKS_TEXT in _CLOSER_VARIANTS and len(_CLOSER_VARIANTS[THANKS_TEXT]) >= 2
+

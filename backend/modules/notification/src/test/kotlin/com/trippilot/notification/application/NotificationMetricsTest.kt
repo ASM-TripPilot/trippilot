@@ -73,7 +73,7 @@ class NotificationMetricsTest : StringSpec({
      * 갈라져 수집기를 망가뜨린다 — 어떤 문자열이 와도 태그 값은 닫힌 집합 안이어야 한다.
      */
     "어떤 실패 사유 문자열이 와도 태그는 닫힌 집합 안이다" {
-        val allowed = setOf("none", "OTHER", "PUSH_ERROR", "DEVICE_NOT_REGISTERED", "FAILED", "SENT", "UNKNOWN")
+        val allowed = setOf("none", "OTHER", "PUSH_ERROR", "DeviceNotRegistered", "MessageRateExceeded", "FAILED", "UNKNOWN")
 
         checkAll(Arb.string()) { raw ->
             val (metrics, registry) = fixture()
@@ -84,6 +84,31 @@ class NotificationMetricsTest : StringSpec({
                 .filter { it.key == "reason" }
                 .map { it.value }
             tags.forEach { allowed.contains(it) shouldBe true }
+        }
+    }
+
+    /**
+     * 닫힌 집합 안에 있는 것만으로는 부족하다 — **어느 칸으로 접히는지**가 맞아야 한다. 발송기 예외가
+     * `OTHER` 로 접히거나 아는 사유가 `PUSH_ERROR` 로 읽히면 대시보드가 원인을 거꾸로 가리킨다.
+     */
+    "실패 사유는 정해진 칸으로 접힌다 — 발송기 예외는 PUSH_ERROR, 아는 사유는 그대로, 나머지는 OTHER" {
+        val expected = mapOf(
+            null to "none",
+            "PUSH_ERROR: IllegalStateException" to "PUSH_ERROR",
+            // 실 Expo 어댑터가 남기는 표기(`ExpoPushAdapter` · ExpoPushReceiptTest 가 고정) — 정본 OBS-U6-02 의 사유 이름이다.
+            "DeviceNotRegistered" to "DeviceNotRegistered",
+            // 정본의 '레이트리밋' 칸 — Expo 티켓의 기기별 발송 속도 초과 오류 코드다.
+            "MessageRateExceeded" to "MessageRateExceeded",
+            // 죽은 토큰은 표기 하나다 — 상태 이름은 reasonOf 가 Expo 표기로 접어 여기까지 오지 않는다.
+            "DEVICE_NOT_REGISTERED" to "OTHER",
+            "UNKNOWN" to "UNKNOWN",
+            "MessageTooBig" to "OTHER",
+        )
+        expected.forEach { (raw, tag) ->
+            val (metrics, registry) = fixture()
+            metrics.pushDispatched(PushOutcome.FAILED, reason = raw, deliversExternally = true)
+
+            registry.find(NotificationMetrics.PUSH_DISPATCH).counters().single().id.getTag("reason") shouldBe tag
         }
     }
 })

@@ -109,7 +109,7 @@ def apply_command(
         target = _target_poi(command)
         if target in order:
             raise EditRejected(f"{target}는 이미 그 날 일정에 있음")
-        return tuple(order) + (target,)
+        return _insert_at(order, target, command)
     if op is EditOp.REPLACE_SLOT:
         if len(command.affected_slots) != 1:
             raise EditRejected("REPLACE_SLOT은 대상 슬롯 정확히 1개")
@@ -150,6 +150,28 @@ def apply_command(
     raise EditRejected("REPLAN은 편집 경계 밖 — 일정 재생성(generate)을 호출하라")
 
 
+def _insert_at(order: list[PoiId], target: PoiId, command: EditCommand) -> tuple[PoiId, ...]:
+    """ADD 의 자리 — 기준점(MOVE 와 같은 판정 `is_anchor_param_key`) 0개면 맨 끝(종전), 1개면 그 슬롯 뒤·앞,
+    2개면 afterPoiId·beforePoiId 가 **지금 이웃**일 때만 그 사이. 그 밖은 거부 — 검증(게이트·validate_command)이
+    받은 기준점을 여기서 버리면 "사이에 넣기"가 끝에 붙고 '반영됨'으로 나간다(INV-4)."""
+    keys = [k for k in command.params if is_anchor_param_key(k)]
+    if not keys:
+        return tuple(order) + (target,)
+    anchors = {k.lower().startswith("after"): command.params[k] for k in keys}
+    if len(anchors) != len(keys):  # afterPoiId 와 after_poi_id 처럼 같은 쪽이 둘
+        raise EditRejected("추가 기준이 같은 쪽에 둘 — afterPoiId·beforePoiId 를 하나씩만")
+    idx: dict[bool, int] = {}
+    for is_after, raw in anchors.items():
+        anchor = PoiId(raw) if isinstance(raw, str) else None
+        if anchor not in order:
+            raise EditRejected(f"추가 기준 {raw!r}가 그 날 일정에 없음")
+        idx[is_after] = order.index(anchor) + (1 if is_after else 0)
+    if len(set(idx.values())) != 1:
+        raise EditRejected("afterPoiId 와 beforePoiId 가 지금 이웃이 아님 — 그 사이에 넣을 수 없음")
+    at = next(iter(idx.values()))
+    return tuple(order[:at]) + (target,) + tuple(order[at:])
+
+
 def _target_poi(command: EditCommand) -> PoiId:
     raw = command.params.get("targetPoiId")
     if not isinstance(raw, str) or not raw:
@@ -165,10 +187,12 @@ class RetimeContext:
     stay_min: dict  # PoiId → int (기존 슬롯의 체류 보존; 신규는 중앙값/기본)
     estimator: object  # TravelEstimator — estimate(a, b, mode).internal_minutes
     transport: TransportMode
+    not_before: datetime | None = None  # 새로 넣는 곳의 시작 하한 — 여행 당일 사이 넣기가 지금보다 앞에 두지 않게
 
 
 def retime_day(
-    day: DaySolution, new_order: tuple[PoiId, ...], ctx: RetimeContext, tz: timezone
+    day: DaySolution, new_order: tuple[PoiId, ...], ctx: RetimeContext, tz: timezone,
+    *, keep_earlier: bool = False,
 ) -> DaySolution:
     """새 순서 → 결정론 재타이밍. 체류시간 보존, 이동은 추정 걷기.
 
@@ -203,6 +227,7 @@ def retime_day(
             gap = ctx.estimator.estimate(a, b, ctx.transport).internal_minutes
             cursor = cursor + timedelta(minutes=gap)
         window = fixed_by_id.get(poi_id)
+        old = old_by_id.get(poi_id)
         if window is not None:
             if slots and slots[-1].start_at > window.start:
                 raise EditRejected(
@@ -210,9 +235,11 @@ def retime_day(
                     f"앞 슬롯이 이미 지남 — 그 순서로는 배치 불가")
             start, end = window.start, window.end
         else:
-            start = cursor
-            end = cursor + timedelta(minutes=ctx.stay_min.get(poi_id, default_stay))
-        old = old_by_id.get(poi_id)
+            # keep_earlier(기준점 있는 추가): 있던 슬롯은 원래 시각보다 앞당기지 않는다 — 끼운 곳이 미는 시간은 빈 시간이 먼저 받는다
+            start = max(cursor, old.start_at) if keep_earlier and old is not None else cursor
+            if old is None and ctx.not_before is not None:
+                start = max(start, ctx.not_before)
+            end = start + timedelta(minutes=ctx.stay_min.get(poi_id, default_stay))
         slots.append(VisitSlot(
             poi_id=poi_id,
             start_at=start,
@@ -237,7 +264,9 @@ def edited_solution(
     for i, day in enumerate(solution.days):
         if day.date == target_date:
             new_order = apply_command(day, command)
-            new_day = retime_day(day, new_order, ctx, tz)
+            # 기준점 있는 추가만 — 끝 추가(기준 없음)는 종전대로 하루를 다시 흘린다(저녁 늦게 HC1·HC4 거부가 늘지 않게)
+            anchored_add = command.op is EditOp.ADD_SLOT and any(is_anchor_param_key(k) for k in command.params)
+            new_day = retime_day(day, new_order, ctx, tz, keep_earlier=anchored_add)
             days = solution.days[:i] + (new_day,) + solution.days[i + 1:]
             return replace(solution, days=days)
     raise EditRejected(f"대상 일자 {target_date.isoformat()}가 일정에 없음")

@@ -1,6 +1,14 @@
 package com.trippilot.recalculation.application
 
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
+import com.trippilot.itinerarygeneration.api.ReplanCommand
+import com.trippilot.itinerarygeneration.api.ReplanFacade
+import com.trippilot.recalculation.domain.OriginKind
 import com.trippilot.recalculation.domain.ReplanInitiator
+import com.trippilot.recalculation.domain.ReplanOrigin
+import com.trippilot.recalculation.domain.ReplanScope
 import com.trippilot.recalculation.domain.ReplanSession
 import com.trippilot.recalculation.domain.ReplanSessionRepository
 import com.trippilot.recalculation.domain.ReplanStatus
@@ -8,12 +16,28 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import org.slf4j.LoggerFactory
 import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.dao.DataIntegrityViolationException
 import java.time.Duration
 import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
+
+/** 선계산 서비스 로거의 줄(포맷된 문장) — 산출 끝 요약처럼 실행기 안에서 남긴 줄도 잡힌다(대역 실행기는 호출 스레드에서 돈다). */
+private fun preparedLogs(block: () -> Unit): List<String> {
+    val logger = LoggerFactory.getLogger(PreparedReplanService::class.java) as Logger
+    val appender = ListAppender<ILoggingEvent>().apply { start() }
+    logger.addAppender(appender)
+    try {
+        block()
+    } finally {
+        logger.detachAppender(appender)
+    }
+    return appender.list.map { it.formattedMessage }
+}
+
+private fun outcomes(lines: List<String>) = lines.map { it.substringAfter("outcome=").substringBefore(' ') }
 
 /**
  * 선계산 실행(BR-SA-18 ①③) — 거름·실행 자리·전용 실행기·실패 경로.
@@ -185,5 +209,120 @@ class PreparedReplanServiceTest : StringSpec({
 
         f.sessions.system().single().status shouldBe ReplanStatus.FAILED
         f.replans.commands shouldBe emptyList()
+    }
+
+    // ── 요약 줄 — 결정 28 의 다시 볼 조건을 잰다(G-SA-23) ────────────────────────────
+
+    // 결정 28 은 대기 포함 2분 낡음을 그대로 두고 '오늘 우선'의 예외로 적었다 — 계산 중 2분을 넘긴 이른 날짜 선계산은 늦은 날짜 사건이
+    // 닫는다. 그 닫힘이 OPENED 로만 남으면 '낡음으로 닫히는 비율'을 셀 수 없어 2분을 계산 시작부터 잴지((가)) 정할 수 없다.
+    "계산 중 2분을 넘긴 이른 날짜 선계산을 늦은 날짜 사건이 닫고 열면 EARLIER_STALE 로 따로 남는다 — OPENED 는 그대로 한 줄" {
+        val f = RecalcFixture(today, "07:15")
+        val svc = f.prepared(ParkedExecutor()) // 산출이 줄에서 기다린다 — 오늘 선계산은 SOLVING 에 머문다
+        svc.onRisk(f.riskEvent(today), f.clock.now)
+        val waiting = f.sessions.system().single()
+        f.clock.advance(Duration.ofMinutes(3))
+        val tomorrows = f.riskEvent(today.plusDays(1))
+
+        val lines = preparedLogs { svc.onRisk(tomorrows, f.clock.now) }
+
+        val opened = f.sessions.openOf(f.tripId).single()
+        lines shouldContainExactly listOf(
+            "replan.prepared outcome=EARLIER_STALE tripId=${f.tripId} triggerId=${tomorrows.triggerId} session=${waiting.sessionId} date=2026-08-11",
+            "replan.prepared outcome=OPENED tripId=${f.tripId} triggerId=${tomorrows.triggerId} session=${opened.sessionId} date=2026-08-12",
+        )
+        f.sessions.stored.getValue(waiting.sessionId).status shouldBe ReplanStatus.CANCELED // 닫기 규칙은 그대로다
+    }
+
+    // 그 예외만 센다 — 섞이면 비율이 부푼다. 저녁마다 오늘 초안(첫 변경 시각이 지남)이 내일 사건에 닫히는 것은 사실로 낡은 정상 닫힘이다.
+    "EARLIER_STALE 은 그 예외만이다 — 2분 안(건너뜀)·같은 날 갈아 끼우기·지난 날·초안의 사실로 낡은 이른 날짜는 아니다" {
+        val tomorrow = today.plusDays(1)
+
+        // 2분 안 — 결정 28 의 동작 그대로 건너뛴다(오늘 우선)
+        RecalcFixture(today, "07:15").run {
+            val svc = prepared(ParkedExecutor())
+            svc.onRisk(riskEvent(today), clock.now)
+            clock.advance(Duration.ofMinutes(1))
+            outcomes(preparedLogs { svc.onRisk(riskEvent(tomorrow), clock.now) }) shouldContainExactly listOf("EARLIER_OPEN")
+        }
+        // 같은 날 — 계산 중 2분을 넘겼어도 낡아서 닫는 것이 아니다(같은 날·늦은 날은 늘 갈아 끼운다)
+        RecalcFixture(today, "07:15").run {
+            val svc = prepared(ParkedExecutor())
+            svc.onRisk(riskEvent(tomorrow), clock.now)
+            clock.advance(Duration.ofMinutes(3))
+            outcomes(preparedLogs { svc.onRisk(riskEvent(tomorrow), clock.now) }) shouldContainExactly listOf("OPENED")
+        }
+        // 지난 날 — 산출 중에 멈춘 어제 선계산(EXPIRED)
+        RecalcFixture(today, "07:15").run {
+            val yesterday = today.minusDays(1)
+            sessions.save(
+                ReplanSession.start(
+                    tripId, UUID.randomUUID(), UUID.randomUUID(), ReplanScope.FULL_DAY, yesterday, kst(yesterday, "20:15"),
+                    ReplanOrigin(OriginKind.STAY_ANCHOR, null, null), listOf("WEATHER"), emptyList(), null, emptyList(), kst(yesterday, "20:15"),
+                    initiatedBy = ReplanInitiator.SYSTEM,
+                ).solving(),
+            )
+            outcomes(preparedLogs { prepared(ParkedExecutor()).onRisk(riskEvent(today), clock.now) }) shouldContainExactly listOf("OPENED")
+        }
+        // 초안의 사실로 낡음 — 초안이 바꾸는 첫 슬롯(14:00)이 지났다(EXPIRED)
+        RecalcFixture(today, "07:15").run {
+            replans.proposal = FakeReplans.sampleProposal(today)
+            prepared().onRisk(riskEvent(today), clock.now) // 그 자리에서 초안까지
+            clock.now = kst(today, "20:15")
+            outcomes(preparedLogs { prepared(ParkedExecutor()).onRisk(riskEvent(tomorrow), clock.now) }) shouldContainExactly listOf("OPENED")
+        }
+    }
+
+    // 결정 28 의 다른 얼굴 — 2분은 세션 생성부터라 줄에서 기다린 시간이 든다. 줄에서 2분을 넘긴 선계산은 그동안 '없음'으로 보여 늦게
+    // 누른 사용자는 직접 요청 화면(i04)으로 간다(BR-SA-23). 산출 끝에 결과와 세션 나이를 남겨야 그 수와 실패 수를 같은 요약에서 센다.
+    "산출이 끝나면 FINISHED 로 결과 상태와 세션 나이(산출 시작·끝)를 남긴다 — 2분을 넘겨 끝난 것과 실패를 센다" {
+        val f = RecalcFixture(today, "07:15")
+        f.replans.proposal = FakeReplans.sampleProposal(today)
+        val slow = object : ReplanFacade by f.replans { // 산출 한 번에 40초
+            override fun propose(command: ReplanCommand) = f.replans.propose(command).also { f.clock.advance(Duration.ofSeconds(40)) }
+        }
+        val parked = ParkedExecutor()
+        val svc = PreparedReplanService(
+            f.service(), f.repository, ReplanSolver(f.sessions, f.archive, slow, NOOP_TX, f.clock),
+            ReplanProperties(f.horizon, ReplanProperties.Prepared(PreparedMode.ON)), f.clock, parked,
+        )
+        val first = f.riskEvent(today)
+        val second = f.riskEvent(today, tripId = f.trips.add(today.minusDays(1), today.plusDays(1)))
+        svc.onRisk(first, f.clock.now)
+        svc.onRisk(second, f.clock.now)
+        val (a, b) = f.sessions.system()
+        f.clock.advance(Duration.ofMinutes(2)) // 일꾼이 다른 산출을 하는 동안 둘 다 줄에서 기다렸다
+
+        val lines = preparedLogs {
+            parked.parked.removeFirst().run() // 대기 2분 + 산출 40초 → 초안
+            f.replans.failWith = IllegalStateException("AI 불통")
+            parked.parked.removeFirst().run() // 대기 2분 40초 → 실패(FAILED 로 닫힌다)
+        }
+
+        lines shouldContainExactly listOf(
+            "replan.prepared outcome=FINISHED status=DRAFT waitMs=120000 ageMs=160000 " +
+                "tripId=${first.tripId} triggerId=${first.triggerId} session=${a.sessionId} date=2026-08-11",
+            "replan.prepared outcome=FINISHED status=FAILED waitMs=160000 ageMs=160000 " +
+                "tripId=${second.tripId} triggerId=${second.triggerId} session=${b.sessionId} date=2026-08-11",
+        )
+    }
+
+    // 요약 한 줄을 위한 조회가 산출 실패처럼 보이면 안 된다 — '기록하지 못했다'는 ERROR 는 화면이 2분 뒤 낡음을 본다는 뜻이다.
+    "끝 요약의 상태 조회가 실패해도 기록된 산출은 그대로이고 FINISHED 는 status=null 로 남는다" {
+        val f = RecalcFixture(today, "07:15")
+        f.replans.proposal = FakeReplans.sampleProposal(today)
+        val real = f.sessions
+        f.repository = object : ReplanSessionRepository by real {
+            override fun findById(sessionId: UUID) = throw DataAccessResourceFailureException("커넥션 없음") // 산출(솔버)은 실물 저장소를 쓴다
+        }
+        val event = f.riskEvent(today)
+
+        val lines = preparedLogs { f.prepared().onRisk(event, f.clock.now) }
+
+        val s = f.sessions.system().single()
+        s.status shouldBe ReplanStatus.DRAFT
+        lines shouldContainExactly listOf(
+            "replan.prepared outcome=FINISHED status=null waitMs=0 ageMs=0 tripId=${f.tripId} triggerId=${event.triggerId} session=${s.sessionId} date=2026-08-11",
+            "replan.prepared outcome=OPENED tripId=${f.tripId} triggerId=${event.triggerId} session=${s.sessionId} date=2026-08-11",
+        )
     }
 })

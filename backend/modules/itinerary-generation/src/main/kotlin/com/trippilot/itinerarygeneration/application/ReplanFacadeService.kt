@@ -5,6 +5,7 @@ import com.trippilot.changelog.api.ChangeLogEntryView
 import com.trippilot.changelog.api.ChangeLogFacade
 import com.trippilot.changelog.api.ChangeSourceType
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.api.ReplanCommand
 import com.trippilot.itinerarygeneration.api.ReplanFacade
@@ -31,6 +32,7 @@ import com.trippilot.itinerarygeneration.domain.SavedPlaceRef
 import com.trippilot.placedata.api.PoiSnapshotFacade
 import com.trippilot.placedata.api.SavedPlaceLookupFacade
 import com.trippilot.profile.api.PreferenceFacade
+import com.trippilot.profile.api.overriddenBy
 import com.trippilot.savedaccommodation.api.BaseAnchorFacade
 import com.trippilot.savedaccommodation.api.DayAnchorView
 import com.trippilot.trip.api.TripFacade
@@ -230,8 +232,11 @@ class ReplanFacadeService(
      * 되돌릴 지점을 먼저 남긴다(BR-U3-19) — 반영 후에 남기면 그 시점으로 못 돌아간다.
      */
     @Transactional
-    override fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal, reason: String) {
-        val current = ownedItinerary(accountId, tripId)
+    override fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal, reason: String, afterLock: () -> Unit): ReplanProposal {
+        // 일정 쓰기 잠금을 잡고 읽는다 — 같은 여행의 되돌리기·편집·복원·확정과 직렬화한다(TRIP-1412). 잠금 뒤의 읽기라 그 전 커밋이 다 보인다.
+        trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
+        val current = itineraries.lockForTrip(tripId) ?: throw ResourceNotFound("일정이 없습니다.")
+        afterLock()
         if (current.itineraryId != proposal.itineraryId) {
             // 그 사이 재생성으로 일정이 교체됐다 — 낡은 초안을 덮어쓰면 방금 만든 일정이 사라진다.
             throw ConflictDetected(message = "그 사이 일정이 바뀌었습니다. 다시 재계획해 주세요.")
@@ -244,11 +249,57 @@ class ReplanFacadeService(
 
         // 초안의 날짜가 일정에 없으면 **아무 일도 일어나지 않는다** — 조용히 통과시키면 바뀐 것 없이
         // "재계획 반영" 리비전만 쌓이고 사용자는 반영됐다고 믿는다.
-        if (current.days.none { it.date == proposal.date }) {
-            throw ConflictDetected(message = "그 사이 일정이 바뀌었습니다. 다시 재계획해 주세요.")
+        val day = current.days.firstOrNull { it.date == proposal.date }
+            ?: throw ConflictDetected(message = "그 사이 일정이 바뀌었습니다. 다시 재계획해 주세요.")
+        replaceDay(accountId, current, proposal.date, proposal.slots, RevisionActor.AI, "여행 중 재계획 반영", ChangeSourceType.PLAN_B, reason)
+        // 되돌리기 지점(TRIP-1412) — 이 날의 반영 직전 모습. 리비전 스냅숏으로는 안 된다: 동결 참조·위반 표시가 없어
+        // (`SlotSnapshot`) 확정 일정을 되돌리면 동결이 새 값으로 바뀌고 배지가 사라진다. 그래서 반영하는 이쪽이 직접 떠서 돌려준다.
+        return ReplanProposal(current.itineraryId, proposal.date, day.slots.map { it.toRestoreSlot() })
+    }
+
+    /**
+     * 반영한 재계획 하나를 되돌린다(TRIP-1412). 범용 복원과 달리 **그 날만**, **확정 일정에서도** 쓴다 —
+     * 상태는 그대로 두고 동결은 반영 직전 참조를 다시 단다([ReplanSlot.poiSnapshotId] → [ConfirmedSnapshots.carry] 가 잇는다).
+     *
+     * 그 날이 반영 결과([applied]) 그대로일 때만 쓴다 — 그 뒤 편집·다른 재계획이 있었으면 되돌리기는 그 변경까지
+     * 지운다. 판정은 (장소, 시각, 고정, 자정 넘김)의 순서열로 한다 — 그 날에 사용자가 보는 값 전부다.
+     *
+     * **일정 쓰기 잠금을 잡고 판정한다.** 일정을 쓰는 경로 전부(반영·편집·복원·확정·생성·2차 마무리·중단 정리)가 같은 잠금을 잡아
+     * 직렬화되고, 잠금 전에 커밋된 쓰기는 잠금 뒤 읽기에 보여 위 판정이 걸러 낸다([ItineraryRepository.lockForTrip]).
+     */
+    @Transactional
+    override fun revert(
+        accountId: UUID, tripId: UUID, applied: ReplanProposal, restore: ReplanProposal, reason: String,
+        visitedSlotKeys: () -> Set<String>,
+    ) {
+        trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
+        val current = itineraries.lockForTrip(tripId)
+        val day = current?.days?.firstOrNull { it.date == restore.date }
+        if (current == null || current.itineraryId != restore.itineraryId || day == null ||
+            day.slots.map { SlotKey(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) } !=
+            applied.slots.map { SlotKey(it.poiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }
+        ) {
+            throw ConflictDetected(message = "그 사이 일정이 바뀌어 되돌릴 수 없어요.", errorCode = ErrorCode.STALE)
         }
+        // INV-U4-04 — 되돌리면 **빠지는** 슬롯(재계획이 넣었고 반영 전엔 없던 곳)에 다녀온 기록이 있으면 그 실적이 계획 없이 남는다.
+        // 반영 전에도 있던 곳·다른 날은 되돌려도 계획에 남으니 막지 않는다. 실적은 잠근 뒤에 읽는다(그 전 체크인이 다 보이게).
+        // 체크인은 일정 쓰기 잠금을 잡지 않아, 이 트랜잭션 **도중** 커밋된 체크인은 못 본다 — 창은 이 읽기부터 커밋까지(밀리초)다.
+        val dropped = applied.slots.map { "${restore.date}#${it.poiId}" }.toSet() - restore.slots.map { "${restore.date}#${it.poiId}" }.toSet()
+        if (visitedSlotKeys().any { it in dropped }) {
+            throw ConflictDetected(message = "이미 다녀온 곳이 있어 되돌릴 수 없어요.")
+        }
+        // 주체는 사용자다 — 되돌리기를 누른 것은 사람이고, AI 산출이 아니다. 이력 축도 수동(BR-U4-30 MANUAL)이다.
+        replaceDay(accountId, current, restore.date, restore.slots, RevisionActor.USER, "여행 중 재계획 되돌림", ChangeSourceType.MANUAL, reason)
+    }
+
+    /** 반영·되돌리기 공통 — 그 날만 갈아끼우고, 동결을 잇고, 리비전과 변경 이력을 같은 트랜잭션에 남긴다. */
+    @Suppress("LongParameterList")
+    private fun replaceDay(
+        accountId: UUID, current: Itinerary, date: LocalDate, slots: List<ReplanSlot>,
+        actor: RevisionActor, revisionSummary: String, sourceType: ChangeSourceType, reason: String,
+    ) {
         val replaced = current.days.map { day ->
-            if (day.date != proposal.date) day else ItineraryDay.of(day.date, day.dayOrder, proposal.slots.toSlots())
+            if (day.date != date) day else ItineraryDay.of(day.date, day.dayOrder, slots.toSlots())
         }
         val next = Itinerary.reconstitute(
             itineraryId = current.itineraryId, tripId = current.tripId, status = current.status,
@@ -256,18 +307,19 @@ class ReplanFacadeService(
             generationState = current.generationState, days = replaced,
             createdAt = current.createdAt, updatedAt = clock.instant(),
             candidatesSummary = current.candidatesSummary, unplacedMustVisits = current.unplacedMustVisits,
+            scoring = current.scoring,
         )
         // 확정 일정이면 동결을 잇는다(INV-U1-03) — 유지 슬롯은 참조 승계, 새 슬롯은 지금 동결.
         val frozen = ConfirmedSnapshots.carry(next, current) { poiId -> poiSnapshots.freeze(poiId)?.poiSnapshotId }
-        val saved = itineraries.replaceForTrip(tripId, frozen)
-        revisions.record(saved, RevisionActor.AI, RevisionKind.EDIT, "여행 중 재계획 반영")
+        val saved = itineraries.replaceForTrip(current.tripId, frozen)
+        revisions.record(saved, actor, RevisionKind.EDIT, revisionSummary)
         // BR-U4-30 — 확정 시 이력 1행. **같은 트랜잭션**이라 일정만 바뀌고 이력이 빠지는 상태가 없다.
         // 리비전(되돌리기용 전체 스냅숏)과 역할이 다르다: 이쪽은 "무엇을 왜 바꿨나"를 사람이 읽는 기록이다.
         changeLogs.append(
             AppendChangeLog(
-                tripId = tripId,
+                tripId = current.tripId,
                 actor = accountId.toString(),
-                sourceType = ChangeSourceType.PLAN_B,
+                sourceType = sourceType,
                 reason = reason,
                 before = current.toChangeLogSnapshot(),
                 after = saved.toChangeLogSnapshot(),
@@ -275,9 +327,18 @@ class ReplanFacadeService(
         )
     }
 
+    /** 되돌리기 판정의 비교 단위 — 그 날 사용자가 보는 값(장소·시각·고정·자정 넘김). */
+    private data class SlotKey(val poiId: UUID, val startAt: LocalTime, val endAt: LocalTime, val isFixed: Boolean, val endsNextDay: Boolean)
+
+    private fun VisitSlot.toRestoreSlot() = ReplanSlot(
+        poiId = sourcePoiId, startAt = startAt, endAt = endAt, isFixed = isFixed, endsNextDay = endsNextDay,
+        distanceRange = distanceRange, placementReason = placementReason,
+        hasViolation = hasViolation, violationReason = violationReason, poiSnapshotId = poiSnapshotId,
+    )
+
     private fun List<ReplanSlot>.toSlots(): List<VisitSlot> = mapIndexed { i, s ->
         VisitSlot.of(
-            sourcePoiId = s.poiId, poiSnapshotId = null, orderIndex = i,
+            sourcePoiId = s.poiId, poiSnapshotId = s.poiSnapshotId, orderIndex = i,
             startAt = s.startAt, endAt = s.endAt, isFixed = s.isFixed, endsNextDay = s.endsNextDay,
             distanceRange = s.distanceRange, placementReason = s.placementReason,
             hasViolation = s.hasViolation, violationReason = s.violationReason,

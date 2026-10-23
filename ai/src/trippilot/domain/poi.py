@@ -11,25 +11,53 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from enum import Enum
+from types import MappingProxyType
 
 from trippilot.domain.common import GeoPoint, PoiId
 
 
-# 밤에 노는 곳(댄스 클럽·칵테일바·와인바·재즈바·루프탑바) — 경계 8종엔 칸이 없어 ACTIVITY 에 태그로 싣는다
+# 밤에 노는 곳(댄스 클럽·칵테일바·와인바·재즈바·루프탑바·이자카야·호프) — 경계 8종엔 칸이 없어 태그로 싣는다
 # (2026-10-15 사용자 결정 "클럽·바를 수집해 액티비티로"). 다시 짜기 "밤에 놀기" 지시와 추정 영업시간이 이 태그를 본다.
-NIGHTLIFE_TAG = "나이트라이프"
+# 2026-10-21: 이름을 `나이트라이프` 에서 `술집` 으로 바꿨다(TRIP-1537) — 정식 카테고리 승격(후속) 때 같은 이름을 쓴다.
+NIGHTLIFE_TAG = "술집"
 # 웹 검색으로 "요즘 많이 가는 곳"이라 확인한 장소(`data/curated_popular_places.json`, 항목마다 근거 URL).
 # 규칙 점수의 인기 항 바닥을 올린다(`scorer._popularity_norm`) — 인앱 저장 수가 아직 전부 0이라 대역이다.
 TRENDING_TAG = "요즘 인기"
+# 지도 앱 평판에서 뽑은 파생 태그(2026-10-21, TRIP-1537) — 원자료는 서버에 올리지 않고 구간만 싣는다.
+# `인기1`~`인기5`: 리뷰 수 구간(100·190·330·570·1,100건 경계), `평점높음`: 별점 4.8 이상이고 리뷰 100건 이상.
+# 태그가 없는 곳은 "나쁘다"가 아니라 "모른다"다 — 중립으로 둔다(`reputation_bonus`).
+POPULARITY_TAG_PREFIX = "인기"
+HIGH_RATING_TAG = "평점높음"
+
+
+def popularity_grade(tags: tuple[str, ...]) -> int | None:
+    """`인기1`~`인기5` 태그의 등급(1~5). 없으면 None — 모른다."""
+    for t in tags:
+        if t.startswith(POPULARITY_TAG_PREFIX) and t[len(POPULARITY_TAG_PREFIX):] in ("1", "2", "3", "4", "5"):
+            return int(t[len(POPULARITY_TAG_PREFIX):])
+    return None
+
+
+# 지도 앱 평판 태그(`인기1`~`인기5`·`평점높음`) 보정 — 작게 둔다. 범위 -0.06 ~ +0.10(폭 0.16)이라 같은 카테고리 안의 순서를
+# 주로 가르고, 카테고리 가중 한 단(0.1) 차이는 등급이 가장 벌어질 때만 뒤집는다. 태그가 없으면 0(중립) — 모르는 곳을 깎지 않는다(TRIP-1537).
+REPUTATION_STEP = 0.03     # 인기 등급 한 단 — 3등급이 기준선
+HIGH_RATING_BONUS = 0.04
+
+
+def reputation_bonus(tags: tuple[str, ...]) -> float:
+    """인기 등급과 높은 평점 태그 → -0.06 ~ +0.10. 태그가 하나도 없으면 0.0."""
+    grade = popularity_grade(tags)
+    bonus = 0.0 if grade is None else (grade - 3) * REPUTATION_STEP
+    return bonus + (HIGH_RATING_BONUS if HIGH_RATING_TAG in tags else 0.0)
 
 
 class PoiCategory(Enum):
-    """경계 카테고리 8종 + 내부 전용 STAY (TRIP-281).
+    """경계 카테고리 10종 + 내부 전용 STAY (TRIP-281, 미술·술집 신설 TRIP-1545).
 
-    앞 8종은 백엔드 `/internal/pois` read 포트가 내보내는 경계 코드와 값·집합이 동일하다
+    앞 10종은 백엔드 `/internal/pois` read 포트가 내보내는 경계 코드와 값·집합이 동일하다
     (`backend/.../placedata/domain/Poi.kt` 한글 정본 ↔ `PoiInternalController.boundaryCode()`:
     명소=SIGHT · 맛집=FOOD · 카페=CAFE · 야경=NIGHT_VIEW · 자연=NATURE · 쇼핑=SHOPPING ·
-    문화=CULTURE · 액티비티=ACTIVITY).
+    문화=CULTURE · 액티비티=ACTIVITY · 미술=ART · 술집=BAR).
 
     한↔영 매핑은 **백엔드 리버스 read 포트(BE-5)가 이미 수행**해 영문 코드로 내보내므로
     이 모듈에는 매핑이 필요 없다. 다만 한글 값을 그대로 받는 다른 경계(예: DB 직접 조회·
@@ -44,7 +72,11 @@ class PoiCategory(Enum):
     CULTURE = "CULTURE"
     ACTIVITY = "ACTIVITY"
     SHOPPING = "SHOPPING"
-    # 내부 전용(숙소 앵커·체류시간 계산). 경계 카테고리 8종에 포함되지 않으며
+    # 2026-10-21 신설(TRIP-1545): 문화에서 갤러리·미술관을, 액티비티·맛집에서 술집을 분리했다. 데이터는 그동안
+    # 태그(`갤러리`·`술집`)로 실려 왔고, 승격 뒤에도 `술집` 태그(NIGHTLIFE_TAG)는 그대로 둔다 — 밤 시간대 규칙이 본다.
+    ART = "ART"
+    BAR = "BAR"
+    # 내부 전용(숙소 앵커·체류시간 계산). 경계 카테고리 10종에 포함되지 않으며
     # `/internal/pois` 응답에 등장하지 않는다 (PR #104 회신).
     STAY = "STAY"
 
@@ -79,9 +111,12 @@ BUDDHA = "BUDDHA"
 HOLIDAY_TAGS = frozenset({PUBLIC_HOLIDAY, *SEOLLAL, *CHUSEOK, BUDDHA})
 _DATED_RULE = re.compile(r"\d{2}-\d{2}")
 
-# 날짜 → 그 날 태그 (특일 달력). None 이 아니라 **빈 매핑**이면 모드는 켜졌는데 달력을 못 읽은 것이다
-# (실패·키 미등록) — 그때도 날짜 명시형 규칙은 산다.
+# 날짜 → 그 날 태그 (특일 달력). None 이 아니라 **빈 매핑**이면 모드는 켜졌는데 그 범위에 공휴일이 없거나 달력을
+# 못 읽은 것이다(실패·키 미등록 — 그때도 날짜 명시형 규칙은 산다). 못 읽은 것은 아래 `UNREAD_CALENDAR` 하나다.
 HolidayCalendar = Mapping[date, frozenset[str]]
+# 달력을 못 읽었다 — 판정·조립에는 빈 달력과 같고(생성은 그대로 짠다) 정체(`is`)로만 가른다: 태그형 휴일 규칙이
+# 그 날을 닫는지 모르는 슬롯을 검증이 미판정으로 싣는다(`hc1_unjudged` — 상황 감지 INV-SA-2 · G-SA-22).
+UNREAD_CALENDAR: HolidayCalendar = MappingProxyType({})
 
 
 def is_holiday_rule(token: str) -> bool:

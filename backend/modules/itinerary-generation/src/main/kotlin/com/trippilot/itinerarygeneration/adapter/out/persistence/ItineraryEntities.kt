@@ -34,6 +34,10 @@ class ItineraryEntity(
     // 미배치 필수 방문지 보고(계약 M2). 빈 배열 = 전부 배치됨.
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "unplaced_must_visits") var unplacedMustVisits: List<Map<String, Any>>,
+    // 취향 점수 신호(V2.83 · TRIP-1173). null = 모름. 강등 코드는 문자열 배열(빈 배열 = 강등 없음 또는 모름).
+    @Column(name = "scoring_mode") var scoringMode: String?,
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "degradations") var degradations: List<String>,
 )
 
 /** itinerary_day(V2.7). 일자별. */
@@ -71,6 +75,15 @@ class VisitSlotEntity(
 
 interface ItineraryJpaRepository : JpaRepository<ItineraryEntity, UUID> {
     fun findByTripId(tripId: UUID): List<ItineraryEntity>
+
+    /**
+     * 트랜잭션 범위 권고 잠금(TRIP-1412) — 일정 쓰기를 여행 단위로 줄 세운다. 행 잠금(`FOR UPDATE`)을 쓰지 않는 이유: 교체
+     * (`replaceForTrip`)가 같은 PK 로 지우고 다시 넣어, 그 뒤에서 기다린 READ COMMITTED 의 `FOR UPDATE` 가 0행을 본다
+     * (쓰기가 셋이면 재질의도 0행이었다 — 2·3차 검수 재현). 권고 잠금은 행과 무관한 키라 그런 일이 없다.
+     * FROM 절 형태인 이유는 `GenerationSessionJpaRepository.advisoryXactLock` 주석과 같다.
+     */
+    @Query(value = "SELECT 1 FROM pg_advisory_xact_lock(:namespace, :key)", nativeQuery = true)
+    fun advisoryXactLock(@Param("namespace") namespace: Int, @Param("key") key: Int): Int
 
     // 여행 일정 교체용 — itinerary 삭제 시 day/slot은 DB FK ON DELETE CASCADE로 함께 제거.
     @Modifying(clearAutomatically = true)

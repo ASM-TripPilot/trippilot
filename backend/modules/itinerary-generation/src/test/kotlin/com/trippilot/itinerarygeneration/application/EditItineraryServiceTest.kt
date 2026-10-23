@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.application
 
+import io.kotest.matchers.collections.shouldBeEmpty
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ErrorCode
@@ -27,11 +28,14 @@ import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.RepairResult
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
+import com.trippilot.itinerarygeneration.domain.ScoringMode
+import com.trippilot.itinerarygeneration.domain.ScoringSignal
 import com.trippilot.itinerarygeneration.domain.SlotExplanations
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.UnplacedReason
+import com.trippilot.itinerarygeneration.domain.ValidationResult
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.DayAnchor
@@ -77,6 +81,9 @@ private class EditFakeItineraries : ItineraryRepository {
     }
     override fun findStalePartial(updatedBefore: java.time.Instant): List<Itinerary> = emptyList()
 
+    /** 잠금 뒤에 보이는 일정 — 다르게 두면 "재검증 동안 커밋된 쓰기"를 흉내 낸다. 기본은 같은 값. */
+    var lockedView: Itinerary? = null
+    override fun lockForTrip(tripId: UUID) = lockedView ?: findByTrip(tripId).firstOrNull()
 }
 
 private val NOOP_TX = object : PlatformTransactionManager {
@@ -93,6 +100,7 @@ private class EditFakeAgent(
     private val violations: List<Violation> = emptyList(),
     private val failure: RuntimeException? = null, // AI 장애 재현
     private val repairWith: (ScheduleAgentOutput) -> RepairResult = { RepairResult(it, emptyList(), unrepairable = true) },
+    private val unverified: Set<UUID> = emptySet(), // AI 가 판정하지 못했다고 답한 장소(검증 응답 unverified_slots)
 ) : StubScheduleAgent() {
     var validateCalls = 0
     var repairCalls = 0
@@ -101,6 +109,7 @@ private class EditFakeAgent(
         validateCalls++
         return failure?.let { throw it } ?: violations
     }
+    override fun validateWithUnverified(solution: ScheduleAgentOutput) = ValidationResult(validate(solution), unverified)
     var lastContext: RepairContext? = null
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult {
         repairCalls++
@@ -262,6 +271,82 @@ class EditItineraryServiceTest : StringSpec({
         edited.snapshot.days.single().slots.map { it.poiId } shouldBe editReq.days.single().slots.map { it.poiId }
     }
 
+    // TRIP-1412 — 쓰기 직전 재읽기가 일정 쓰기 잠금을 잡고 읽는다. 재검증(외부 호출) 동안 커밋된 쓰기가 그 재읽기에 보여야
+    // 변경 이력의 "전"이 실제로 덮은 일정이 된다.
+    "쓰기 직전 재읽기는 잠금 뒤 일정이다 — 이력의 전이 그 사이 커밋된 일정이다" {
+        val repo = repoWith(current())
+        val newer = UUID.randomUUID()
+        val c = repo.findByTrip(tripId).single()
+        repo.lockedView = Itinerary.reconstitute(
+            c.itineraryId, c.tripId, c.status, c.solveMode, c.generationMode, c.isFallback, c.generationState,
+            c.days.map { d -> ItineraryDay.of(d.date, d.dayOrder, d.slots.map { VisitSlot.of(newer, null, it.orderIndex, it.startAt, it.endAt) }) },
+            c.createdAt, c.updatedAt, c.candidatesSummary, c.unplacedMustVisits, c.scoring,
+        )
+        val logs = CapturingChangeLogs()
+        EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), logs, FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+            .edit(acc, tripId, editReq.copy(reason = "실내로"))
+
+        logs.appended.single().before.days.single().slots.map { it.poiId } shouldBe listOf(newer)
+    }
+
+    // 3차 검수 재현 — 재검증(외부 호출) 동안 확정이 커밋됐는데, 쓰는 값은 잠그기 전 PLANNED 일정 위에서 만들어졌다.
+    // 그대로 쓰면 확정이 PLANNED 로 풀리고 동결 참조만 남는다. 잠금 뒤 읽기와 상태가 다르면 409 로 물러난다.
+    "재검증 동안 확정됐으면 편집은 409 STALE — 확정을 PLANNED 로 덮지 않는다" {
+        val repo = repoWith(current())
+        val planned = repo.findByTrip(tripId).single()
+        val confirmed = planned.confirm(planned.days.flatMap { it.slots }.associate { it.sourcePoiId to UUID.randomUUID() }, clock.instant())
+        repo.lockedView = confirmed
+        val logs = CapturingChangeLogs()
+
+        shouldThrow<ConflictDetected> {
+            EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), logs, FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+                .edit(acc, tripId, editReq)
+        }.errorCode shouldBe ErrorCode.STALE
+        repo.store.single().status shouldBe ItineraryStatus.PLANNED // 쓰지 않았다(대역의 저장본은 그대로)
+        logs.appended.shouldBeEmpty()
+    }
+
+    fun Itinerary.with(id: UUID = itineraryId, state: GenerationState = generationState) = Itinerary.reconstitute(
+        id, tripId, status, solveMode, generationMode, isFallback, state, days, createdAt, updatedAt, candidatesSummary, unplacedMustVisits, scoring,
+    )
+
+    fun editWith(repo: EditFakeItineraries, logs: CapturingChangeLogs = CapturingChangeLogs()) =
+        EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), logs, FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+
+    // 4차 검수 — 재검증 동안 재생성이 새 일정으로 갈아 끼웠다. 잠그기 전 일정(옛 id) 위에서 만든 값으로 덮으면 새 일정이 사라진다.
+    "재검증 동안 일정이 새 id 로 갈렸으면 편집은 409 STALE" {
+        val repo = repoWith(current())
+        repo.lockedView = repo.findByTrip(tripId).single().with(id = UUID.randomUUID())
+        val logs = CapturingChangeLogs()
+
+        shouldThrow<ConflictDetected> { editWith(repo, logs).edit(acc, tripId, editReq) }.errorCode shouldBe ErrorCode.STALE
+        logs.appended.shouldBeEmpty()
+    }
+
+    // 4차 검수 — 생성 중(PARTIAL)에 읽고 편집하는 사이 2차가 끝나 COMPLETE 가 됐다. PARTIAL 위에서 만든 값으로 덮으면
+    // 2차가 채운 일자·근거가 사라지고 상태도 PARTIAL 로 되돌아간다.
+    "재검증 동안 2차가 끝났으면(PARTIAL→COMPLETE) 편집은 409 STALE" {
+        val repo = repoWith(current().with(state = GenerationState.PARTIAL))
+        repo.lockedView = repo.findByTrip(tripId).single().with(state = GenerationState.COMPLETE)
+        val logs = CapturingChangeLogs()
+
+        shouldThrow<ConflictDetected> { editWith(repo, logs).edit(acc, tripId, editReq) }.errorCode shouldBe ErrorCode.STALE
+        logs.appended.shouldBeEmpty()
+    }
+
+    "그 사이 일정이 지워졌으면 편집은 409 — 잠금 없이 밖에서 읽은 값으로 쓰지 않는다" {
+        val repo = repoWith(current())
+        repo.lockedView = null
+        val emptyAfterLock = object : ItineraryRepository by repo {
+            override fun lockForTrip(tripId: UUID): Itinerary? = null
+        }
+
+        shouldThrow<ConflictDetected> {
+            EditItineraryService(trips(true), emptyAfterLock, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+                .edit(acc, tripId, editReq)
+        }.errorCode shouldBe ErrorCode.STALE
+    }
+
     "사유가 없으면 기본 문구로 남는다(summary 는 표시 문구라 비울 수 없다)" {
         val repo = repoWith(current())
         val log = FakeRevisions()
@@ -282,7 +367,7 @@ class EditItineraryServiceTest : StringSpec({
         log.appended shouldBe emptyList()
     }
 
-    "편집해도 추천 근거·후보 요약이 살아남는다(TRIP-306 회귀 가드)" {
+    "편집해도 추천 근거·후보 요약·점수 신호가 살아남는다(TRIP-306 · TRIP-1173 회귀 가드)" {
         // 편집안의 장소 중 하나에 근거를 달아두고, 편집 후에도 그 장소에 붙어 있는지 본다
         val poi = editReq.days.single().slots.first().poiId
         val base = Itinerary.reconstitute(
@@ -295,6 +380,7 @@ class EditItineraryServiceTest : StringSpec({
                 ),
             ),
             clock.instant(), clock.instant(), CandidatesSummary("LOW", 7, listOf("CAFE")), emptyList(),
+            ScoringSignal(ScoringMode.RULE, listOf("llm:c1_fallback")),
         )
         val result = repoWith(base).let { r -> EditItineraryService(trips(true), r, EditFakeAgent(), revisionSvc(FakeRevisions(), r, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS) }
             .edit(acc, tripId, editReq)
@@ -302,6 +388,8 @@ class EditItineraryServiceTest : StringSpec({
         // 장소를 옮겼다고 "왜 이 장소를 골랐는지"가 사라지면 안 된다
         result.days.single().slots.first { it.sourcePoiId == poi }.placementReason shouldBe "취향에 맞는 곳"
         result.candidatesSummary?.level shouldBe "LOW"
+        // 점수 신호도 — 편집은 AI 점수를 다시 매기지 않는다(TRIP-1173)
+        result.scoring shouldBe ScoringSignal(ScoringMode.RULE, listOf("llm:c1_fallback"))
     }
 
     "편집하면 새 배열로 교체 + 위반 없으면 hasViolation=false" {
@@ -422,10 +510,13 @@ class EditItineraryServiceTest : StringSpec({
      */
     "저장 조건은 재검증 도중에 끼어든 편집을 본다 — 처음 읽은 일정으로 판정하지 않는다" {
         val repo = repoWith(current())
-        // 재검증(수리)이 도는 사이 다른 편집이 시각을 바꿔 커밋했다
-        val interleaved = Itinerary.create(
-            tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
-            listOf(ItineraryDay.of(day, 0, listOf(VisitSlot.of(poiA, null, 0, LocalTime.parse("15:00"), LocalTime.parse("16:00"))))), clock.instant(),
+        // 재검증(수리)이 도는 사이 다른 편집이 시각을 바꿔 커밋했다. 편집은 일정 id 를 잇는다 — id 가 갈리는 교체(재생성)는
+        // 그보다 앞선 id 대조가 먼저 409 로 막는다(TRIP-1412 3차 검수 — 아래 "재검증 동안 확정됐으면").
+        val c = repo.findByTrip(tripId).single()
+        val interleaved = Itinerary.reconstitute(
+            c.itineraryId, c.tripId, c.status, c.solveMode, c.generationMode, c.isFallback, c.generationState,
+            listOf(ItineraryDay.of(day, 0, listOf(VisitSlot.of(poiA, null, 0, LocalTime.parse("15:00"), LocalTime.parse("16:00"))))),
+            c.createdAt, clock.instant(), c.candidatesSummary, c.unplacedMustVisits, c.scoring,
         )
         val agent = EditFakeAgent(repairWith = { repo.replaceForTrip(tripId, interleaved); RepairResult(it, emptyList(), unrepairable = true) })
         val facade: ItineraryEditFacade =
@@ -500,6 +591,23 @@ class EditItineraryServiceTest : StringSpec({
         result.judged shouldBe false
         result.hasViolation shouldBe false // 직전 표시를 이은 값일 뿐이다 — 이것만 보면 깨끗해 보인다
         repo.findByTrip(tripId).single().days.single().slots.map { it.sourcePoiId } shouldBe listOf(poiB, poiA) // 저장은 됐다
+    }
+
+    // 미판정 목록은 장소 감지의 하루 점검만 읽는다(INV-SA-2). 편집 표면에 새면 영업 원문을 해석 못 한 장소(공유본 원문의 8.5%)마다
+    // 저장 결과가 '보류'나 위반 배지로 바뀐다 — 편집은 종전대로 위반만으로 표시·판정 여부를 정한다.
+    "AI 가 판정하지 못했다고 답한 장소가 있어도 편집 표면은 그대로다 — 위반 표시·판정 여부는 위반만 본다" {
+        val repo = repoWith(current())
+        val agent = EditFakeAgent(unverified = setOf(poiA, poiB))
+        val facade: ItineraryEditFacade =
+            EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+
+        val result = facade.edit(acc, tripId, facadeDays, null, ItineraryEditSource.ASSISTANT)
+
+        agent.validateCalls shouldBe 1 // 재검증이 실제로 돌았다 — 미판정 목록을 받은 채로
+        result.judged shouldBe true
+        result.hasViolation shouldBe false
+        repo.findByTrip(tripId).single().days.single().slots.map { it.hasViolation to it.violationReason } shouldBe
+            listOf(false to null, false to null)
     }
 
     // REST 는 요청 DTO 가 500자를 막는다. 퍼사드가 안 막으면 여행 중 편집에서 변경 이력 칸(varchar 500)이 넘쳐
@@ -768,7 +876,7 @@ class EditItineraryServiceTest : StringSpec({
             GenerationState.COMPLETE,
             listOf(ItineraryDay.of(day, 0, listOf(VisitSlot.of(poiA, null, 0, LocalTime.parse("09:00"), LocalTime.parse("10:00"))))),
             clock.instant(), clock.instant(), null,
-            listOf(UnplacedMustVisit(missed, UnplacedReason.WINDOW_CONFLICT)),
+            listOf(UnplacedMustVisit(missed, UnplacedReason.WINDOW_CONFLICT)), ScoringSignal.UNKNOWN,
         )
         val repo = repoWith(base)
         val result = EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)

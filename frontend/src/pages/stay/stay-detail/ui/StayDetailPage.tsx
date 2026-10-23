@@ -8,18 +8,14 @@
  * (운영 QueryClient 기본 3회 → 약 7초 로딩 방지, AC-13). 재시도는 error 얼굴의 버튼이 맡는다.
  * 저장 하트는 `useSavedStays`(TRIP-417 토글 훅) 하나가 소유하고, 미인증은 요청 없이
  * 로그인으로 보낸다(BR-U1-03·55, 죽은 버튼 회피). "외부에서 예약하기"는 제휴 시트(BR-U1-30) →
- * [이동] 서버 아웃바운드(`openStayOutbound`, TRIP-1167).
+ * [이동] 서버 아웃바운드(TRIP-1167).
  *
- * TRIP-781(l07): 시트의 열림·error 얼굴·"다시 보지 않기" 체크는 전부 이 층이 쥔다(시트는 제어 컴포넌트).
- * 저장값이 켜져 있으면 시트 없이 바로 이동하고, 그 이동이 실패하면 error 얼굴 시트를 새로 연다(BR-U1-55).
- * 저장값을 아직 못 받았거나 조회가 실패하면 고지 쪽으로 쓰러진다(시트를 띄운다).
- *
- * TRIP-778: 저장처는 서버 `/me/settings.affiliateNoticeDismissed`(계정 단위, BR-U6-33)다. l05 토글과 같은
- * 쿼리 키를 읽으므로 한쪽의 변경을 다른 쪽이 그대로 본다. 게스트는 조회도 캐시 판독도 하지 않고 체크박스도 숨긴다(D9).
+ * TRIP-781·778 의 제휴 흐름(시트 열림·error 얼굴·"다시 보지 않기"·`/me/settings` 저장값)은 TRIP-1579 로
+ * `features/stay-outbound` 의 `useStayOutboundFlow` 가 쥔다 — 인기 숙소 카드·전체 보기와 같은 흐름을 쓴다.
  */
 import type { ReactElement } from 'react';
 import { useState } from 'react';
-import { useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -27,18 +23,12 @@ import { Share } from 'react-native';
 
 import { isNotFound } from '@/shared/api';
 import { getAccessToken } from '@/shared/api';
-import {
-  getGetMeSettingsQueryKey,
-  useGetMeSettings,
-  usePatchMeSettings,
-} from '@/shared/api/index.hooks';
 import { useGetStaysStayId } from '@/shared/api/index.hooks';
-import type { AccountSettings, StayDetail } from '@/shared/api/index.schemas';
+import type { StayDetail } from '@/shared/api/index.schemas';
 
 import { useSavedStays } from '@/features/save-stay';
-import { openStayOutbound, stayOutboundMode } from '../model/stayOutbound';
 import { stayKey } from '@/features/save-stay';
-import { OtaChoiceSheet } from './OtaChoiceSheet';
+import { OtaChoiceSheet, useStayOutboundFlow } from '@/features/stay-outbound';
 import { StayDetailScreen, type StayDetailState } from './StayDetailScreen';
 
 /** 조회 결과 → 화면 얼굴. 404 만 notFound, 400 은 invalid, 응답 없음(네트워크)·5xx 는 error(INV-4). */
@@ -82,41 +72,7 @@ export function StayDetailPage(): ReactElement {
   const { isSaved, save, remove } = useSavedStays({ isAuthed });
 
   const [pending, setPending] = useState(false);
-  const [otaOpen, setOtaOpen] = useState(false);
-  const [outboundError, setOutboundError] = useState(false);
-  const [dontShowAgain, setDontShowAgain] = useState(false);
-  // 응답 전·조회 실패·게스트 = false(고지 쪽으로 닫힌 실패, BR-U1-30). 꺼진 쿼리도 캐시 값은
-  // 돌려주므로(이전 계정의 true가 남을 수 있다) 게스트는 캐시를 아예 읽지 않는다(D9).
-  const queryClient = useQueryClient();
-  const settingsKey = getGetMeSettingsQueryKey();
-  const accountSettings = useGetMeSettings({ query: { enabled: isAuthed } });
-  const noticeDismissed =
-    isAuthed && (accountSettings.data?.affiliateNoticeDismissed ?? false);
-  const patchSettings = usePatchMeSettings<
-    void,
-    { previous?: AccountSettings }
-  >({
-    mutation: {
-      // 누른 순간 캐시에 반영한다 — 같은 화면에서 다시 눌러도 시트가 안 뜬다(781 I23).
-      onMutate: () => {
-        const previous = queryClient.getQueryData<AccountSettings>(settingsKey);
-        queryClient.setQueryData<AccountSettings>(settingsKey, {
-          affiliateNoticeDismissed: true,
-        });
-        return { previous };
-      },
-      onSuccess: (data) => queryClient.setQueryData(settingsKey, data),
-      // 저장 실패 = 낙관값을 먼저 걷어낸다(재조회까지 실패해도 true가 남지 않게) → 서버 값 재조회.
-      // 이전 값이 없으면 false — 다음에 시트가 다시 뜬다(고지 쪽).
-      onError: (_error, _variables, context) => {
-        queryClient.setQueryData<AccountSettings>(
-          settingsKey,
-          context?.previous ?? { affiliateNoticeDismissed: false }
-        );
-        void queryClient.invalidateQueries({ queryKey: settingsKey });
-      },
-    },
-  });
+  const outbound = useStayOutboundFlow();
 
   const saved = item !== null && isSaved(stayKey(item));
 
@@ -133,46 +89,25 @@ export function StayDetailPage(): ReactElement {
     }
   }
 
-  // 서버 아웃바운드로 연다(TRIP-1167). 성공하면 시트를 닫고, 실패하면 시트를 error 얼굴로 연다 — 생략
-  // 경로(시트가 닫혀 있던 때)도 같다. 침묵 금지(BR-U1-55).
-  async function runOutbound(): Promise<void> {
+  // 아웃바운드 stayId 는 라우트 값 그대로(TRIP-1167) — 가격 칸은 상세 응답 값으로 그린다.
+  function handlePressBook(): void {
     if (item === null) {
       return;
     }
-    const result = await openStayOutbound(stayId, () => {});
-    const failed = result === 'failed';
-    setOutboundError(failed);
-    setOtaOpen(failed);
-  }
-
-  function handlePressBook(): void {
-    if (noticeDismissed) {
-      void runOutbound();
-      return;
-    }
-    // 시트를 열 때마다 체크는 해제·default 얼굴에서 시작한다(01b).
-    setDontShowAgain(false);
-    setOutboundError(false);
-    setOtaOpen(true);
-  }
-
-  // [이동] — 체크돼 있으면 누른 순간 저장한다(이동 결과와 무관, 01b Q4). 보낸 필드만 바뀐다.
-  function handleConfirmOutbound(): void {
-    if (dontShowAgain) {
-      patchSettings.mutate({ data: { affiliateNoticeDismissed: true } });
-    }
-    void runOutbound();
-  }
-
-  function handleCancelOutbound(): void {
-    setOtaOpen(false);
-    setOutboundError(false);
+    outbound.request({
+      kind: 'stay',
+      stayId,
+      source: item.externalSource,
+      showPrice: true,
+      price: item.price,
+    });
   }
 
   return (
     <>
       <StayDetailScreen
         state={state}
+        coverKey={item === null ? undefined : stayKey(item)}
         saved={saved}
         pending={pending}
         onToggleSave={() => void handleToggleSave()}
@@ -196,19 +131,8 @@ export function StayDetailPage(): ReactElement {
             });
         }}
       />
-      {otaOpen && item !== null ? (
-        <OtaChoiceSheet
-          item={item}
-          variant={outboundError ? 'error' : 'default'}
-          dontShowAgain={dontShowAgain}
-          onToggleDontShowAgain={() => setDontShowAgain((on) => !on)}
-          showDontShowAgain={isAuthed}
-          // 이동 방식이 시트 얼굴(수수료 고지 유무)을 정한다 — 지금은 늘 제휴(TRIP-1167).
-          outbound={stayOutboundMode()}
-          onCancel={handleCancelOutbound}
-          onConfirm={handleConfirmOutbound}
-          onRetry={() => void runOutbound()}
-        />
+      {outbound.sheetProps !== null ? (
+        <OtaChoiceSheet {...outbound.sheetProps} />
       ) : null}
     </>
   );

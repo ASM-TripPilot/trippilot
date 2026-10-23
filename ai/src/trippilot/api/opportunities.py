@@ -118,6 +118,7 @@ def _wire(o: Opportunity) -> schemas.OpportunitySchema:
         key=o.key,
         kind=o.kind.value,
         event_name=o.event.name if o.event is not None else None,
+        event_type=o.event.event_type.value if o.event is not None else None,
         start=o.event.start if o.event is not None else None,
         end=o.event.end if o.event is not None else None,
         poi_id=str(o.poi.poi_id),

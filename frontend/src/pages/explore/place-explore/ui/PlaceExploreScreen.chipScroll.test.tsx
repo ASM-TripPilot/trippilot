@@ -9,7 +9,8 @@ import {
 import { PlaceExploreScreen } from './PlaceExploreScreen';
 
 /**
- * TRIP-1221(b) · 카테고리 시트로 고른 칩이 화면 밖이면 칩 줄이 그 칩까지 스크롤한다.
+ * TRIP-1221(b) · 고른 칩이 화면 밖이면 칩 줄이 그 칩까지 스크롤한다(그 칩을 고르던 카테고리 시트는
+ * TRIP-1562 로 지웠다 — 선택값이 바깥에서 바뀌는 경우를 위해 동작은 남긴다).
  * 0건 안내는 검색어·카테고리가 둘 다 걸렸을 때 숨은 필터도 말한다.
  */
 function ui(selectedCategory: '쇼핑' | null, extra = {}) {

@@ -17,6 +17,7 @@ import com.trippilot.itinerarygeneration.adapter.out.external.AiReplanRequest
 import com.trippilot.itinerarygeneration.adapter.out.external.AiReplanResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiReplanSlot
 import com.trippilot.itinerarygeneration.adapter.out.external.AiRepairRequest
+import com.trippilot.itinerarygeneration.adapter.out.external.AiRepairResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiRequestMeta
 import com.trippilot.itinerarygeneration.adapter.out.external.AiTimeWindow
 import com.trippilot.itinerarygeneration.adapter.out.external.AiSavedPlace
@@ -25,6 +26,8 @@ import com.trippilot.itinerarygeneration.adapter.out.external.AiSlot
 import com.trippilot.itinerarygeneration.adapter.out.external.AiSlotAlternative
 import com.trippilot.itinerarygeneration.adapter.out.external.AiTrigger
 import com.trippilot.itinerarygeneration.adapter.out.external.AiUnplacedMustVisit
+import com.trippilot.itinerarygeneration.adapter.out.external.AiUnverifiedSlot
+import com.trippilot.itinerarygeneration.adapter.out.external.AiValidateResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiViolation
 import com.trippilot.itinerarygeneration.adapter.out.external.HttpScheduleAgentAdapter
 import com.trippilot.testsupport.ContractShape
@@ -244,6 +247,31 @@ class AiBoundaryOpenApiTest : StringSpec({
         val spec = requireNotNull(schemas["ViolationSchema"]?.get("properties")?.get("reason_code")) { "reason_code 없음" }
         val values = spec["anyOf"]?.flatMap { it["enum"]?.map { v -> v.asString() }.orEmpty() }.orEmpty()
         values.sorted() shouldContainExactly listOf("CLOSED_DAY", "HOLIDAY", "OUT_OF_HOURS")
+    }
+
+    /**
+     * validate 응답은 미판정 목록(`unverified_slots`)까지 읽는다 — 장소 감지의 하루 점검이 그 장소의 영업시간을 '모름'으로
+     * 둔다(INV-SA-2). 상대가 개명하면 기본값(빈 목록)이 조용히 이겨 판정 못 한 장소가 다시 '확인'으로 접힌다.
+     */
+    "validate 응답 키가 계약과 정확히 일치한다 — 미판정 목록 포함(상황 감지 INV-SA-2)" {
+        wireKeys(sampleValidateResponse) shouldContainExactly props("ValidateItineraryResponse")
+        wireKeys(sampleValidateResponse.unverifiedSlots.single()) shouldContainExactly props("UnverifiedSlotSchema")
+        mismatches(sampleValidateResponse, "ValidateItineraryResponse") shouldContainExactly emptyList()
+    }
+
+    /**
+     * 미판정 사유 어휘. 우리는 사유로 가르지 않는다(어느 것이든 그 장소의 영업시간을 못 봤다) — 그래도 잠그는 이유는 새 사유가
+     * '영업시간은 봤다'는 뜻일 수 있어서다. 상대가 하나를 더하면 여기서 깨지고, 그 사유를 어떻게 읽을지 판단이 기록에 남는다.
+     */
+    "미판정 사유 어휘가 계약 enum 과 같다" {
+        val spec = requireNotNull(schemas["UnverifiedSlotSchema"]?.get("properties")?.get("reason_code")) { "reason_code 없음" }
+        spec["enum"].map { it.asString() }.sorted() shouldContainExactly listOf("HOURS_UNKNOWN", "NOT_REGISTERED", "UNMAPPABLE")
+    }
+
+    /** repair 응답의 미판정 목록은 **읽지 않는다** — 하루 점검은 validate 만 부른다. 안 읽는 키를 명시적으로 빼고 정확히 맞춘다. */
+    "repair 응답 키가 계약과 일치한다 — 안 읽는 미판정 목록은 명시적으로 뺀다" {
+        val notRead = listOf("unverified_slots")
+        (wireKeys(sampleRepairResponse) + notRead).sorted() shouldContainExactly props("RepairItineraryResponse")
     }
 
     /**
@@ -500,3 +528,11 @@ private val sampleReplanResponse = AiReplanResponse(
     unknownDirectives = listOf("뭐시기"),
     retrieved = mapOf("kb1" to 3),
 )
+
+/** 모든 필드를 채운다 — 비운 칸은 직렬화에서 빠져 "그 필드를 안 읽는다"가 통과해 버린다. */
+private val sampleValidateResponse = AiValidateResponse(
+    violations = listOf(sampleViolation),
+    unverifiedSlots = listOf(AiUnverifiedSlot(UUID.randomUUID().toString(), "HOURS_UNKNOWN", "영업 창 모름")),
+)
+
+private val sampleRepairResponse = AiRepairResponse(samplePayload, listOf("2번째 슬롯을 30분 뒤로"))

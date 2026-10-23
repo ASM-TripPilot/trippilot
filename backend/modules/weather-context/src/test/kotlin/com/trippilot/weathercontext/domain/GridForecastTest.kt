@@ -11,7 +11,7 @@ class GridForecastTest : StringSpec({
 
     val base = Instant.parse("2026-10-19T23:00:00Z")
 
-    fun grid(expiresAt: Instant) = GridForecast("53,38", base, emptyMap(), emptyMap(), base, expiresAt)
+    fun grid(expiresAt: Instant) = GridForecast("53,38", base, emptyMap(), base, expiresAt)
 
     "만료가 발표보다 늦지 않으면 만들 수 없다" {
         shouldThrow<IllegalArgumentException> { grid(base) }

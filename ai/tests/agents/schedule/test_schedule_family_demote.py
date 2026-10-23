@@ -208,7 +208,7 @@ def test_이름이_다른_같은_건물_식당은_여전히_계열이_아니다(
 
 # 이름과 "음식 골목 이름인가" — 기대값을 구현의 정규식이 아니라 리터럴로 둔다
 _SAME_NAMES = (("동문재래시장", False), ("국제시장 먹자골목", True))
-_EATERY_CATS = frozenset({PoiCategory.FOOD, PoiCategory.CAFE})
+_EATERY_CATS = frozenset({PoiCategory.FOOD, PoiCategory.CAFE, PoiCategory.BAR})
 
 
 # `_named` 의 1m 는 실거리 1.0018m 라 200 은 경계(200.35m)에 걸쳐 뺀다

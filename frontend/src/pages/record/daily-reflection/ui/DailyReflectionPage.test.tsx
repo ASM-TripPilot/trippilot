@@ -17,7 +17,13 @@ import type {
   ReflectionStats,
 } from '@/shared/api/index.schemas';
 import { useGetTripsTripId } from '@/shared/api/index.hooks';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { seoulDate } from '@/shared/lib/seoulDate';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
+import {
+  flushOsAnswer,
+  holdReduceMotionOn,
+} from '@/test-support/barMotionProbe';
 
 import { DailyReflectionPage } from './DailyReflectionPage';
 
@@ -27,7 +33,7 @@ import { DailyReflectionPage } from './DailyReflectionPage';
  * `DailyReflectionPage.integration.test.tsx`(msw)가 정본이다 — 옛 hookMock 의 「회고 카드」·「공유 배선 없음」
  * 묶음과 「얼굴」의 AC-4 ①③·AC-6·7·8 은 뮤테이션 확인 뒤 지웠다(TRIP-1354). 여기는 훅 목이어야 한 렌더로 박을 수 있는
  * 관점만 남는다: 서버 stats 별 얼굴 표, 미치환 템플릿, pending 크롬, 마운트당 한 번 생성, 지도 자리 사유,
- * 오늘 칩, ‹ 폴백, 탭바 dismissTo.
+ * 오늘 칩, 뒤로 폴백(하단 바 뒤로 — TRIP-1584 에서 헤더 ‹ 를 대체), 하단 바 기록 칸.
  *
  *  - `useDailyReflection`: 빈 jest.fn(각 테스트가 mockReturnValue 로 답을 정한다).
  *  - 위치 권한(`expo-location`): 기본은 값 없음(undefined) → 페이지가 "모름"으로 둔다. 지도 사유 묶음만 granted/denied 를 정한다.
@@ -53,6 +59,18 @@ jest.mock('../model/useReflectionPhotos', () => ({
   useReflectionPhotos: jest.fn(() => []),
 }));
 
+// TRIP-1584 — 하단 바가 `useTripSummary` 를 읽는다. 이 파일엔 QueryClient 가 없어 스텁(조회 중)으로 막는다.
+jest.mock('@/features/reflection/model/useTripSummary', () => ({
+  useTripSummary: jest.fn(() => ({
+    envelope: undefined,
+    summary: undefined,
+    source: undefined,
+    isPending: true,
+    isError: false,
+    refetch: jest.fn(),
+  })),
+}));
+
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTripsTripId: jest.fn(),
 }));
@@ -65,6 +83,7 @@ jest.mock('expo-location', () => ({
 }));
 
 const PAST_TODAY = '2026-09-26';
+const BAR = 'reflection-daily-bottom-bar';
 /** 소요시간 표기 탐지기(INV-3) — reflectionStructure G6 과 같은 식. */
 const DURATION_TEXT = /(소요|\d+\s*분|\d+\s*시간)/;
 function card(subtitle: string): ReflectionCard {
@@ -363,7 +382,7 @@ describe('얼굴 — 레코드 없음 ≠ 활동 없음, 생성 조건', () => {
   });
 
   describe('AC-4 · 조회·생성 중에는 pending — empty 로 접지 않는다 (INV-4)', () => {
-    it('pending 은 본문만 바꾼다 — 헤더 "편집"·일차 탭·탭바는 남고 하단 CTA 는 없으며, 안내 글자가 비지 않았다 (Q2)', () => {
+    it('pending 은 본문만 바꾼다 — 헤더 "편집"·일차 탭·하단 바는 남고 하단 CTA 는 없으며, 안내 글자가 비지 않았다 (Q2)', () => {
       arrange({ reflection: undefined });
 
       render(page(PAST_TODAY));
@@ -374,7 +393,7 @@ describe('얼굴 — 레코드 없음 ≠ 활동 없음, 생성 조건', () => {
       expect(
         screen.getByTestId('reflection-daily-day-tab-1')
       ).toBeOnTheScreen();
-      expect(screen.getByTestId('shell-tabbar-root')).toBeOnTheScreen();
+      expect(screen.getByTestId(BAR)).toBeOnTheScreen();
       expect(screen.queryByTestId('reflection-daily-compose')).toBeNull();
       expect(screen.queryByTestId('reflection-daily-confirm')).toBeNull();
     });
@@ -939,17 +958,15 @@ describe('"오늘" 칩·지난 날 문구 — KST 실제 오늘', () => {
   });
 });
 
-describe('‹ 와 「확인」 — 히스토리 없으면 기록 탭', () => {
+describe('바 뒤로(기록 탭)와 error 얼굴 「다시 시도」', () => {
   // TRIP-1119 (옛 DailyReflectionPage.back.test.tsx)
   /**
-   * TRIP-1119 · j03 오늘의 회고 — 페이지가 ‹ 와 「확인」을 어디로 보내나.
+   * TRIP-1119 · j03 오늘의 회고 — 페이지가 뒤로를 어디로 보내나. (TRIP-1591: 하단 「확인」은 없앴다 — 나가는 길은 바 뒤로 하나.)
    *
    * 무엇을 보장하나:
-   *  - AC1: 히스토리가 있으면(`canGoBack()`=true) ‹ 는 `router.back()` 1회.
-   *  - AC2: 히스토리가 없으면(푸시 딥링크 콜드 스타트) ‹ 는 기록 탭 `replace('/(tabs)/records')` 1회 —
-   *    아무것도 안 부르면 침묵 실패(INV-4). error 얼굴에서도 ‹ 는 재시도가 아니라 나가기다.
-   *  - AC6(결정 1): data 얼굴 「확인」도 같은 폴백. 히스토리가 있으면 예전처럼 back, error 얼굴의
-   *    "다시 시도"는 이동 없이 재조회 그대로(경계).
+   *  - AC1(TRIP-1591): 바 뒤로는 히스토리 유무와 무관하게 기록 탭으로 `dismissTo` 1회 — 이전 화면(back)이 아니다.
+   *    error 얼굴에서도 재시도가 아니라 나가기다.
+   *  - AC6: error 얼굴의 "다시 시도"는 히스토리가 없어도 이동 없이 재조회 그대로(경계).
    *
    * 훅 2개와 expo-router 만 목하고 화면은 실물로 태운다(`.faces.test.tsx` 동형).
    * ★ `jest.clearAllMocks()` 는 `mockReturnValue` 를 지우지 않는다 — 그래서 모든 케이스가 `arrange` 에서
@@ -959,8 +976,6 @@ describe('‹ 와 「확인」 — 히스토리 없으면 기록 탭', () => {
   const TRIP_ID = 'trip-1119';
 
   const DAY = '2026-09-24';
-
-  const RECORDS_TAB = '/(tabs)/records';
 
   type PageFace =
     'default' | 'data-insufficient' | 'empty' | 'error' | 'pending';
@@ -1032,82 +1047,37 @@ describe('‹ 와 「확인」 — 히스토리 없으면 기록 탭', () => {
     jest.clearAllMocks();
   });
 
-  const LEAVE_FACES: PageFace[] = [
-    'default',
-    'data-insufficient',
-    'empty',
-    'pending',
-  ];
+  // TRIP-1591 — 바 뒤로는 히스토리와 무관하게 기록 탭으로 걷어낸다(실제 스택 결과는 recordBarStack). 「확인」(아래 AC6)은 그대로 이전 화면이다.
+  describe('AC1 · 바 뒤로는 히스토리가 있든 없든 기록 탭으로 dismissTo 한다 (TRIP-1591)', () => {
+    beforeEach(holdReduceMotionOn); // 동작 줄이기 켜짐 — 바 뒤로가 모션 없이 즉시 이동한다(모션은 RecordNavBar 테스트가 잰다)
 
-  describe('AC1 · 히스토리가 있으면 ‹ 는 이전 화면으로 돌아간다', () => {
-    it.each(LEAVE_FACES)(
-      '%s: canGoBack()=true 에서 ‹ → router.back() 1회, replace 0회',
-      (face) => {
-        arrange(face, true);
+    // 히스토리 값(두 번째 칸)은 일부러 섞었다 — 어느 얼굴이든 어느 쪽 값이든 같은 길이어야 한다. error 얼굴은 재시도가 아니라 나가기다.
+    it.each<[PageFace, boolean]>([
+      ['default', true],
+      ['data-insufficient', false],
+      ['empty', true],
+      ['pending', false],
+      ['error', true],
+    ])(
+      '%s (canGoBack=%s): 바 뒤로 → dismissTo(기록 탭) 1회, back·replace·재조회 0회',
+      async (face, history) => {
+        const refetch = arrange(face, history);
         renderPage();
+        await flushOsAnswer();
 
-        fireEvent.press(screen.getByTestId('reflection-daily-back'));
+        fireEvent.press(screen.getByTestId(`${BAR}-back`));
 
-        expect(router.back).toHaveBeenCalledTimes(1);
+        expect(router.dismissTo).toHaveBeenCalledTimes(1);
+        expect(router.dismissTo).toHaveBeenCalledWith(shellTabHref('records'));
+        expect(router.back).not.toHaveBeenCalled();
         expect(router.replace).not.toHaveBeenCalled();
+        expect(refetch).not.toHaveBeenCalled();
       }
     );
   });
 
-  describe('AC2 · 히스토리가 없으면 ‹ 는 기록 탭으로 간다 (INV-4 · 딥링크 콜드 스타트)', () => {
-    it.each(LEAVE_FACES)(
-      "%s: canGoBack()=false 에서 ‹ → replace('/(tabs)/records') 1회, back 0회",
-      (face) => {
-        arrange(face, false);
-        renderPage();
-
-        fireEvent.press(screen.getByTestId('reflection-daily-back'));
-
-        expect(router.replace).toHaveBeenCalledTimes(1);
-        expect(router.replace).toHaveBeenCalledWith(RECORDS_TAB);
-        expect(router.back).not.toHaveBeenCalled();
-      }
-    );
-
-    it('error 얼굴에서도 ‹ 는 재시도가 아니라 기록 탭으로 나간다', () => {
-      const refetch = arrange('error', false);
-      renderPage();
-
-      fireEvent.press(screen.getByTestId('reflection-daily-back'));
-
-      expect(router.replace).toHaveBeenCalledWith(RECORDS_TAB);
-      expect(refetch).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('AC6 · data 얼굴 「확인」도 같은 폴백을 탄다 (결정 1)', () => {
-    it.each<PageFace>(['default', 'data-insufficient'])(
-      "%s: 히스토리 없이 「확인」 → replace('/(tabs)/records') 1회, back 0회",
-      (face) => {
-        arrange(face, false);
-        renderPage();
-
-        fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
-
-        expect(router.replace).toHaveBeenCalledTimes(1);
-        expect(router.replace).toHaveBeenCalledWith(RECORDS_TAB);
-        expect(router.back).not.toHaveBeenCalled();
-      }
-    );
-
-    it.each<PageFace>(['default', 'data-insufficient'])(
-      '%s: 히스토리가 있으면 「확인」 → back 1회, replace 0회 (무회귀)',
-      (face) => {
-        arrange(face, true);
-        renderPage();
-
-        fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
-
-        expect(router.back).toHaveBeenCalledTimes(1);
-        expect(router.replace).not.toHaveBeenCalled();
-      }
-    );
-
+  // TRIP-1591 — data 얼굴 「확인」은 없앴다(화면 테스트가 부재를 잠근다). 남은 CTA 는 error 얼굴 「다시 시도」뿐이다.
+  describe('AC6 · error 얼굴 「다시 시도」는 이동이 아니라 재조회다', () => {
     it('error 얼굴 "다시 시도"는 히스토리가 없어도 이동 없이 재조회 1회다 (경계)', () => {
       const refetch = arrange('error', false);
       renderPage();
@@ -1121,17 +1091,14 @@ describe('‹ 와 「확인」 — 히스토리 없으면 기록 탭', () => {
   });
 });
 
-describe('🔴 TRIP-1262 · 복제 탭바는 dismissTo 로 탭에 간다 (QA F3)', () => {
-  /**
-   * 무엇을 보장하나: 회고 화면(스택 화면)의 탭바로 탭을 누르면 `router.dismissTo(탭 경로)` 1회 —
-   * replace 면 이 화면만 (tabs) 로 바뀌고 아래 스택이 남는다.
-   * 준비: data 얼굴 훅 응답 → 실행: 홈·탐색 탭 press → 단언: dismissTo 인자 순서, replace·push 0회.
-   */
+describe('🔴 TRIP-1584 · 5칸 복제 탭바(옛 TRIP-1262 dismissTo) 대신 3칸 바 — 기록 칸은 이 날짜를 싣고 간다', () => {
+  // 문맥 없는 이 테스트에선 스택에 j01 이 없다고 보므로 push — dismissTo 선택은 recordBarStack 이 잰다.
   beforeEach(() => {
     jest.clearAllMocks();
+    resetPressGuard();
   });
 
-  it('홈·탐색 탭 press → dismissTo(/(tabs)) · dismissTo(/explore), replace 0회', () => {
+  it('탭바는 없고, 기록 칸 press → push(/trips/{id}/records?day={date}) 1회', () => {
     (useGetTripsTripId as jest.Mock).mockReturnValue({
       data: {
         tripId: 'trip-1262',
@@ -1157,15 +1124,14 @@ describe('🔴 TRIP-1262 · 복제 탭바는 dismissTo 로 탭에 간다 (QA F3)
         today={PAST_TODAY}
       />
     );
+    expect(screen.queryByTestId('shell-tabbar-root')).toBeNull();
 
-    fireEvent.press(screen.getByTestId('shell-tabbar-tab-home'));
-    fireEvent.press(screen.getByTestId('shell-tabbar-tab-explore'));
+    fireEvent.press(screen.getByTestId(`${BAR}-tab-records`));
 
-    expect((router.dismissTo as jest.Mock).mock.calls).toEqual([
-      ['/(tabs)'],
-      ['/explore'],
+    expect((router.push as jest.Mock).mock.calls).toEqual([
+      ['/trips/trip-1262/records?day=2026-09-24'],
     ]);
+    expect(router.dismissTo).not.toHaveBeenCalled();
     expect(router.replace).not.toHaveBeenCalled();
-    expect(router.push).not.toHaveBeenCalled();
   });
 });

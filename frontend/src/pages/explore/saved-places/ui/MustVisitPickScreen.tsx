@@ -1,10 +1,11 @@
 import { Fragment, memo, useMemo, type ReactElement } from 'react';
-import { FlatList, Image, Pressable, Text, View } from 'react-native';
+import { FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { PlaceListState } from '@/features/explore/index.view';
 import type { SavedPlace } from '@/shared/api/index.schemas';
 import { EmptyCollage } from './EmptyCollage';
+import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {
@@ -143,13 +144,14 @@ const PickRow = memo(function PickRow({
       )}
 
       <View className="h-20 w-[104px] overflow-hidden rounded-thumb bg-surface-strong">
-        {place.imageUrl ? (
-          <Image
-            source={{ uri: place.imageUrl }}
-            resizeMode="cover"
-            className="h-full w-full"
-          />
-        ) : null}
+        <PlacePhoto
+          testID={`mustvisit-pick-photo-${place.poiId}`}
+          imageUrl={place.imageUrl}
+          category={place.category}
+          poiId={place.poiId}
+          contentFit="cover"
+          className="h-full w-full"
+        />
       </View>
 
       <View className="flex-1 gap-xs">
