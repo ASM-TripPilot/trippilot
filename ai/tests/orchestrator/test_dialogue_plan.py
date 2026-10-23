@@ -658,6 +658,28 @@ def test_region_recommend_for_an_utterance_that_already_names_a_region_becomes_e
     assert named(call, "언제든 훌쩍 떠나기 좋은 여행지") is call  # '언제든'은 시기를 묻는 말이 아니다
 
 
+def test_routing_drops_place_tools_for_when_to_go_and_region_choice_for_a_season_question() -> None:
+    """시기 질문의 장소 찾기·골라 주기는 버린다(행사가 언제인지는 남긴다), 철을 말하며 어디를 묻지 않는 지역 고르기도 버린다(2026-10-23 관광 질문
+    측정 — "해운대는 언제 가면 좋아?" 장소 목록, "장마철에 여행 가도 괜찮아?" 취향 되묻기)."""
+    routed = orch_mod._routed
+    explore = IntentDraft(Intent.EXPLORE_PLACES, {"region": "해운대"}, None)
+    assert routed(explore, "해운대는 언제 가면 좋아?") is None
+    assert routed(IntentDraft(Intent.RECOMMEND_PLACES, {}, None), "단풍 구경 몇 월이 좋아?") is None
+    assert routed(explore, "이번 주말 불꽃축제 언제 해?") is explore  # 행사 — 행사 저장소가 답한다
+    assert routed(explore, "해운대 맛집 알려줘") is explore
+    region = IntentDraft(Intent.RECOMMEND_REGION, {"theme": "장마철"}, None)
+    assert routed(region, "장마철에 여행 가도 괜찮아?") is None  # 철을 말하며 어디를 묻지 않는다
+    assert routed(region, "장마철에 가기 좋은 여행지 어디야?") is region
+    assert routed(region, "나한테 맞는 여행 추천해줘") is region  # 철을 말하지 않으면 '어디' 표지 없어도 고르기
+    assert orch_mod._not_region_choice("장마철에 여행 가도 괜찮아?") and not orch_mod._not_region_choice("이번 휴가 어디로 갈지 골라줘")
+
+
+def test_when_to_go_explore_from_the_classifier_goes_to_the_planner() -> None:
+    """분류가 장소 찾기를 골라도 가기 좋은 시기를 물으면 계획 단계에 맡기고, 계획이 다시 장소 찾기를 고르면 버려 gap KNOWLEDGE 로 닫는다."""
+    out, b = _plan_turn(_plan_json(("EXPLORE_PLACES", {"region": "해운대"})), "해운대는 언제 가면 좋아?",
+                        intent_step=to._intent_json(Intent.EXPLORE_PLACES, region="해운대"))
+    assert "DIALOGUE_PLAN" in b.llm.features() and out.outcome == "OUT_OF_SCOPE" and NULL_INTENT in out.reason
+
 def test_when_to_go_question_never_reaches_region_recommend_and_ends_as_knowledge(caplog) -> None:
     """"부산 여행은 언제 가는 게 좋아?"를 분류가 3/3 지역 고르기로 보냈다(2026-10-23 실측, #1579 의 회귀) — 분류가 골라도 계획 단계에
     맡기고, 계획이 지역 고르기만 골라도 버려 gap KNOWLEDGE 범위 밖 카드(#1579 이전 동작)로 닫는다."""
@@ -1161,3 +1183,17 @@ def test_a_seasonal_weather_question_without_a_trip_goes_to_the_planner_and_is_a
     with_trip = to._build(canned, ports=_PLAN_PORTS, with_planner=True, with_knowledge=True)
     kept = with_trip.orch.turn(to._input("제주도는 몇 월에 가야 덜 붐벼?"))  # 여행이 있는 턴 — 날씨 의도 그대로
     assert "DIALOGUE_PLAN" not in with_trip.llm.features() and kept.frames[0].intent is Intent.GET_WEATHER
+
+
+def test_travel_knowledge_routed_off_place_region_and_weather_tools_is_answered_from_general_knowledge() -> None:
+    """라우팅이 버린 도구 자리가 지식 즉답으로 닿는다(2026-10-23 사용자 "관광 관련은 범위 밖을 최대한 안 나게") — 시기의 장소 찾기,
+    철을 말하며 어디를 묻지 않는 지역 고르기, 여행 없는 철·달 날씨. 여행이 있으면 날씨 도구는 그대로(그 날 예보가 답일 수 있다)."""
+    cases = (("해운대는 언제 가면 좋아?", ("EXPLORE_PLACES", {"region": "해운대"})),
+             ("장마철에 여행 가도 괜찮아?", ("RECOMMEND_REGION", {"theme": "장마철"})),
+             ("대구는 여름에 많이 더워?", ("GET_WEATHER", {"region": "대구"})))
+    for utterance, call in cases:
+        out, _ = _knowledge_turn(_KNOW, plan=_plan_json(call), utterance=utterance, snapshot=to._NO_TRIP)
+        assert out.outcome == "ANSWER" and out.answer.footnote == orch_mod.KNOWLEDGE_FOOTNOTE, utterance
+    out, _ = _knowledge_turn(_KNOW, plan=_plan_json(("GET_WEATHER", {"region": "대구"})), utterance="대구는 여름에 많이 더워?")
+    assert not out.reason.endswith("plan:knowledge")  # 여행이 있는 턴 — 날씨 도구가 돈다
+

@@ -99,7 +99,7 @@ def _classify(worker: DialogueIntentWorker, utterance: str = _UTTERANCE, **kw):
 def test_prompt_loads_with_semver_and_carries_every_section() -> None:
     prompt, ref = PromptRegistry(_PROMPTS).render(_FEAT, _vars())
     assert (ref.prompt_id, ref.version, ref.feature) == (
-        "prompts/dialogue_intent.yaml", "0.2.7", "DIALOGUE_INTENT")
+        "prompts/dialogue_intent.yaml", "0.2.8", "DIALOGUE_INTENT")
     assert _UTTERANCE in prompt
     assert "- 사용자: 내일 경복궁 가는 날 날씨 어때?" in prompt
     assert "- 도우미: 내일 서울은 강수확률 20%예요." in prompt
