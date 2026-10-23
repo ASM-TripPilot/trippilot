@@ -522,7 +522,10 @@ class OrToolsAssembler:
         # 지연을 묶는 백스톱으로만 남는다. **결정론은 벽시계 몫 ≥ det 소요일 때만**이다 —
         # 일자 몫(잔여 ÷ 일수)이 작거나 CPU 가 모자라 백스톱이 먼저 걸리면 깨지고, 아래
         # 경고가 그걸 남긴다(config `or_tools_limit_ms` 주석의 실측).
-        det_cap = self._cfg.or_tools_det_limit if det_limit is None else det_limit
+        # 하루짜리 문제는 낮은 한도 — 사용자가 기다리는 호출이다(config `or_tools_det_limit_single_day` 실측)
+        base_det = (self._cfg.or_tools_det_limit_single_day if len(problem.days) == 1
+                    else self._cfg.or_tools_det_limit)
+        det_cap = base_det if det_limit is None else det_limit
         wall_cap_s = min(cap, budget_ms) / 1000.0
         cp_solver.parameters.max_deterministic_time = det_cap
         cp_solver.parameters.max_time_in_seconds = wall_cap_s

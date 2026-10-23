@@ -18,13 +18,15 @@ U3 FD §4 PBT 표에는 아직 이 포트의 항이 없다(신규 — TRIP-683).
 새어나오지 않는가"를 먼저·더 넓게 증명한다. 실측 근거상 폐업은 2.7%, 이름 미검출
 노이즈는 12.3% — 장애를 "없음"으로 읽으면 멀쩡한 POI 가 대량 배제된다.
 
-실 HTTP 호출 0건 (D37) — 전송은 FakeHttpGetJson, 시계는 FakeClock 논리 시계.
+실 HTTP 호출 0건 (D37) — 전송은 FakeHttpGetJson, 시계는 FakeClock 논리 시계. 동시 판(workers>1) 절만 마감을
+실제로 넘겨 봐야 해서 실 단조 시계와 짧은 sleep 을 쓴다(0.2~1s).
 """
 
 from __future__ import annotations
 
 import inspect
 import math
+import time
 
 import pytest
 from hypothesis import given, settings
@@ -590,3 +592,59 @@ def test_concurrent_verify_does_not_reset_another_requests_budget() -> None:
 
     assert len(http.calls) == 2
     assert [v.reason for v in out[2:]] == [_BUDGET_REASON] * 2
+
+
+# ── 동시 호출(workers>1) — 생성 경로 배선이 쓰는 판 (2026-10-23) ─────────────
+#
+# 차례로 묻던 판은 1건 ≈60ms 라 마감 1.5s 안에 상위 50곳 중 절반만 확인하고, 진행 중 호출 1건만큼 마감을
+# 넘겼다. 동시 판의 약속은 셋 — 개수·순서 보존(EXIST-P1 과 같다) · 마감에 진행 중 호출을 기다리지 않고
+# 돌아온다 · 상한(max_calls) 밖은 묻지 않는다.
+
+
+class _NameHttp:
+    """상호명으로 응답을 고르는 가짜(동시 호출이라 도착 순서가 아니라 질의로 고른다). `slow` 는 그만큼 잔다."""
+
+    def __init__(self, found: set[str], slow: dict[str, float] | None = None) -> None:
+        self._found = found
+        self._slow = slow or {}
+        self.asked: list[str] = []
+
+    def get_json(self, url, headers, params):
+        self.asked.append(params["query"])
+        time.sleep(self._slow.get(params["query"], 0.0))
+        return {"documents": [{"place_name": params["query"]}] if params["query"] in self._found else []}
+
+
+def _real_ms() -> int:
+    return int(time.monotonic() * 1000)
+
+
+def test_concurrent_keeps_count_and_order() -> None:
+    qs = tuple(_q(f"p{i}", name=f"가게{i}") for i in range(20))
+    http = _NameHttp(found={f"가게{i}" for i in range(0, 20, 3)})
+    out = KakaoExistenceAdapter(http, _KEY, max_calls=100, monotonic_ms=_real_ms, workers=8).verify(
+        qs, deadline_ms=5_000)
+    assert [v.poi_id for v in out] == [q.poi_id for q in qs]
+    assert [v.status for v in out] == [
+        ExistenceStatus.FOUND if i % 3 == 0 else ExistenceStatus.NOT_FOUND for i in range(20)]
+
+
+def test_concurrent_returns_at_deadline_without_waiting_for_slow_calls() -> None:
+    """느린 2건(1s)이 끝나기를 기다리지 않는다 — 마감 0.2s 에 돌아오고 그 둘만 확인 못 함."""
+    qs = tuple(_q(f"p{i}", name=f"가게{i}") for i in range(10))
+    http = _NameHttp(found=set(), slow={"가게3": 1.0, "가게7": 1.0})
+    t = time.monotonic()
+    out = KakaoExistenceAdapter(http, _KEY, max_calls=100, monotonic_ms=_real_ms, workers=8).verify(
+        qs, deadline_ms=200)
+    assert time.monotonic() - t < 0.6
+    assert {v.poi_id for v in out if v.reason == _DEADLINE_REASON} == {PoiId("p3"), PoiId("p7")}
+    assert all(v.status is ExistenceStatus.NOT_FOUND for v in out if v.poi_id not in {PoiId("p3"), PoiId("p7")})
+
+
+def test_concurrent_respects_call_budget() -> None:
+    qs = tuple(_q(f"p{i}", name=f"가게{i}") for i in range(12))
+    http = _NameHttp(found=set())
+    a = KakaoExistenceAdapter(http, _KEY, max_calls=5, monotonic_ms=_real_ms, workers=8)
+    out = a.verify(qs, deadline_ms=5_000)
+    assert len(http.asked) == 5 and a.calls_used == 5
+    assert [v.reason for v in out[5:]] == [_BUDGET_REASON] * 7

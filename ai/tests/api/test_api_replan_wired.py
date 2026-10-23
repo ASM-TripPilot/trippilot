@@ -524,6 +524,23 @@ def test_하루_끝내기는_후보_풀이_비어도_된다() -> None:
     assert "end_day: kept 2 dropped 1" in body["notes"], body["notes"]
 
 
+def test_하루_끝내기는_장소_DB_가_죽어도_500_이_아니다() -> None:
+    """풀이 비는 실제 길은 장소 DB 장애다 — 그때 END_DAY 가 사영의 좌표 재조회에서 500 으로 터지면
+    "후보 없음"(종전)보다 나쁘다. 표시용 좌표가 없으면 거리 없이 내고 노트로 밝힌다(INV-4 침묵 금지)."""
+    app = build_dev_app(directives=_DIRECTIVES)
+
+    class _DownDb:
+        def find_by_ids(self, ids):
+            raise TimeoutError("db down")
+
+    object.__setattr__(app.state.orchestrator, "_poi_db", _DownDb())
+    response = _in_trip(app, directives=["END_DAY"], anchor={"lat": 37.5665, "lng": 126.9780})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [p for p, _ in _slots(body)] == [_PAST["poi_id"], _NOW["poi_id"]], body["notes"]
+    assert "coords_lookup_degraded: TimeoutError" in body["notes"], body["notes"]
+
+
 def test_일찍_마무리는_진행_중_뒤에_한_곳만_더하고_숙소_쪽에서_끝낸다() -> None:
     app = build_dev_app(directives=_DIRECTIVES)
     orchestrator = app.state.orchestrator

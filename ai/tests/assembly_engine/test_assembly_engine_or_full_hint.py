@@ -251,7 +251,7 @@ def _small_setups(draw):
 
 
 _EXACT = AssemblyConfig(or_tools_limit_ms=20_000, or_tools_min_ms=50,
-                        or_tools_det_limit=50.0)
+                        or_tools_det_limit=50.0, or_tools_det_limit_single_day=50.0)
 
 
 def _day1_objective(problem, index, *, cut: bool):
@@ -333,12 +333,30 @@ def test_window_start_pin_first_visit_is_not_cut_off() -> None:
 
 def test_det_limit_is_a_validated_config_field() -> None:
     cfg = AssemblyConfig()
-    assert cfg.or_tools_det_limit == 2.0
+    assert (cfg.or_tools_det_limit, cfg.or_tools_det_limit_single_day) == (2.0, 1.0)
     # 벽시계 백스톱은 운영 CPU 몫(requests 0.5)에서도 결정론 한도보다 늦게 걸려야 한다 —
     # 실측 wall/det 최대 2.92초(amd64·0.5 CPU) → 여유 포함 det 1당 3.5초.
-    assert cfg.or_tools_limit_ms >= cfg.or_tools_det_limit * 3500
+    assert cfg.or_tools_limit_ms >= max(cfg.or_tools_det_limit, cfg.or_tools_det_limit_single_day) * 3500
     with pytest.raises(ValueError):
         AssemblyConfig(or_tools_det_limit=0.0)
+    with pytest.raises(ValueError):
+        AssemblyConfig(or_tools_det_limit_single_day=0.0)
+
+
+def test_single_day_problem_uses_the_lower_det_limit_and_multi_day_keeps_the_higher() -> None:
+    """사용자가 기다리는 호출(하루짜리)만 낮은 결정론 한도로 푼다 — 여러 날은 그대로(2026-10-23 실측, config 주석)."""
+    problem, index = _load_fixture("seoul_a")
+    cfg = AssemblyConfig(or_tools_limit_ms=30_000)
+    asm = OrToolsAssembler(index, TravelEstimator(cfg), cfg)
+    two_days = replace(problem, days=(problem.days[0], problem.days[0] + timedelta(days=1)))
+
+    with _solves() as one:
+        asm.solve(problem, remaining_ms=60_000)
+    with _solves() as two:
+        asm.solve(two_days, remaining_ms=60_000)
+
+    assert {r.det for r in _main(one)} == {cfg.or_tools_det_limit_single_day}
+    assert {r.det for r in _main(two)} == {cfg.or_tools_det_limit}
 
 
 # ── ⑥ TRIP-907 몰아 재시도 — 결정론 한도를 키워서 돈다 ────────────
@@ -354,7 +372,7 @@ def test_spare_retry_runs_with_a_larger_deterministic_limit() -> None:
     완전 힌트가 깨지는 드문 경우(경로 완성 실패)뿐이고, 이 재시도가 그 안전장치다.
     """
     problem, index = _load_fixture("seoul_a")
-    cfg = AssemblyConfig(or_tools_limit_ms=7000, or_tools_det_limit=0.1)
+    cfg = AssemblyConfig(or_tools_limit_ms=7000, or_tools_det_limit=0.1, or_tools_det_limit_single_day=0.1)
     asm = OrToolsAssembler(index, TravelEstimator(cfg), cfg)
 
     with patch.object(OrToolsAssembler, "_hint_path", lambda *a, **k: None), \
@@ -409,7 +427,8 @@ def test_wall_backstop_cutting_before_det_limit_is_logged(caplog) -> None:
     상한과 같게 둬 몰아 재시도는 돌지 않는다.
     """
     problem, index = _load_fixture("seoul_a")
-    cfg = AssemblyConfig(or_tools_limit_ms=300, or_tools_min_ms=50, or_tools_det_limit=50.0)
+    cfg = AssemblyConfig(or_tools_limit_ms=300, or_tools_min_ms=50, or_tools_det_limit=50.0,
+                         or_tools_det_limit_single_day=50.0)
     asm = OrToolsAssembler(index, TravelEstimator(cfg), cfg)
 
     with caplog.at_level("WARNING", logger=_LOGGER):
