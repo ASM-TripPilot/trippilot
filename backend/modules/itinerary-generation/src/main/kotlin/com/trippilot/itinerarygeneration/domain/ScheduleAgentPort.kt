@@ -134,6 +134,8 @@ enum class EditProposalStatus {
 /**
  * [itinerary] 는 [EditProposalStatus.PROPOSED] 일 때만 있고, 시각·순서·거리는 전부 상대 조립이 검증한 값이다(INV-2).
  * [applyMode] 는 상대의 판단(`AUTO_APPLY`|`CONFIRM_REQUIRED`)을 그대로 옮긴 **표시 힌트**다 — 저장 여부를 정하지 않는다.
+ * [command] 는 상대가 발화를 **무엇으로 읽었나**의 되울림이다([EditProposalStatus.PROPOSED] 일 때만) — 카드가 그 해석을
+ * 되읽어 줄 때 쓴다(날마다 동네 `SET_DAY_AREAS`). 문자열이 아닌 값·UUID 가 아닌 장소는 어댑터가 버린다.
  */
 data class EditProposalOutput(
     val status: EditProposalStatus,
@@ -141,6 +143,7 @@ data class EditProposalOutput(
     val violations: List<Violation>,
     val reason: String?,
     val applyMode: String?,
+    val command: EditCommand? = null,
 )
 
 /** 재계획 범위(DEC-U4-3) — ai `ReplanScope` 어휘를 그대로 쓴다. */

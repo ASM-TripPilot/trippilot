@@ -5,6 +5,7 @@ import com.trippilot.itinerarygeneration.domain.CandidatesSummary
 import tools.jackson.databind.JsonNode
 import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.DaySchedule
+import com.trippilot.itinerarygeneration.domain.EditCommand
 import com.trippilot.itinerarygeneration.application.SlotKey
 import com.trippilot.itinerarygeneration.application.ConceptCategories
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
@@ -540,9 +541,19 @@ internal data class AiEditCommand(
 )
 
 /**
+ * 응답의 되울림 → 도메인 명령. `params` 는 계약상 열린 맵이라 **문자열 값만** 옮긴다 — 읽는 곳(날마다 동네)은 문자열이고,
+ * 수·목록을 문자열로 바꿔 싣는 것은 지어내기다. UUID 가 아닌 장소도 버린다.
+ */
+internal fun AiEditCommand.toDomain(): EditCommand = EditCommand(
+    op,
+    params.mapNotNull { (key, value) -> (value as? String)?.let { key to it } }.toMap(),
+    affectedSlots.mapNotNull { runCatching { UUID.fromString(it) }.getOrNull() },
+)
+
+/**
  * 계약 `EditItineraryResponse`. `status` 는 `APPLIED`|`CONFIRM_REQUIRED`|`REJECTED`|`TRANSLATION_FAILED` 이고
- * `itinerary` 는 `APPLIED` 일 때만 온다. `command` 는 상대가 해석한 명령의 되울림이라 읽지 않는다 —
- * 키는 계약 게이트(정확 일치) 때문에 받는다.
+ * `itinerary` 는 `APPLIED` 일 때만 온다. `command` 는 상대가 해석한 명령의 되울림이다 — `APPLIED` 일 때만 읽어
+ * 카드가 해석을 되읽게 한다(날마다 동네). 키는 계약 게이트(정확 일치) 때문에도 받는다.
  */
 internal data class AiEditResponse(
     val status: String,
