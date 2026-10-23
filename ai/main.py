@@ -235,6 +235,9 @@ def _place_existence():
         # 이 한 줄이 소스 빌드 컨테이너 기동을 막았다).
         max_calls=int(_env("EXISTENCE_MAX_CALLS") or "60"),
         monotonic_ms=lambda: int(time.monotonic() * 1000),
+        # 동시 8건 — 차례로 묻던 때는 1건 ≈60ms 라 마감 1.5s 안에 상위 50곳 중 절반만 확인하고 마감을 1s 까지
+        # 넘겼다(2026-10-23 개발·운영 생성 로그: 점수 끝 → 솔버 시작 2.9~4.4s). 동시 8건은 20건 0.19s, 429 없음.
+        workers=8,
     )
 
 
