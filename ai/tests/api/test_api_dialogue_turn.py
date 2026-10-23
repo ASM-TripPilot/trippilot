@@ -27,16 +27,19 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.fakes.fake_clock import FakeClock
+from tests.fakes.fake_embedding import FakeEmbedding
 from tests.fakes.fake_llm import FeatureRoutingLlm
 from tests.fakes.in_memory_poi import InMemoryPoi
 from trippilot.api import dialogue as projection
 from trippilot.api import schemas
+from trippilot.agents.adapters.memory_memory_store import InMemoryDialogueMemoryStore
 from trippilot.api.wiring import build_dev_app
 from trippilot.domain.common import GeoPoint
 from trippilot.domain.llm import LlmFeature
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.orchestrator.dialogue_orchestrator import TurnOutcome, capabilities_answer
 from trippilot.orchestrator.dialogue_interpreter import DialogueContext
+from trippilot.orchestrator.dialogue_memory import DialogueMemory, expires_at_for
 
 URL = "/ai/v1/dialogue/interpret"
 _KST = timezone(timedelta(hours=9))
@@ -275,6 +278,25 @@ def test_disabled_orchestrator_keeps_the_legacy_frame_path() -> None:
     assert body["frames"][0]["intent"] == "GET_WEATHER" and body["frames"][0]["match_route"] == "LLM_DIRECT"
     assert body["llm_calls"] == 1
     assert set(body) == {"outcome", "frames", "clarify", "dialogue_context", "llm_calls", "answer"}
+
+
+def test_assembly_hands_the_embedding_to_the_orchestrator_so_memory_is_recalled() -> None:
+    """조립이 임베딩을 오케스트레이터에 넘긴다 — 빠지면 꺼내기가 조용히 꺼지고 지난 기억 줄이 전부 실린다(2026-10-23 리뷰).
+    이번 말과 무관한 줄이 답변 프롬프트에 없으면 꺼내기가 돈 것이다."""
+    emb, now = FakeEmbedding(), datetime.fromisoformat(_NOW)
+    store = InMemoryDialogueMemoryStore(now=lambda: now)
+    earlier = now - timedelta(days=1)
+    store.put(DialogueMemory("s-1", _ACCOUNT, "trip-1", (), 0, earlier, expires_at_for(earlier)))
+    lines = ("선호: 비 오는 날 실내 전시", "결정: 저녁은 흑돼지")
+    assert store.advance(DialogueMemory("s-1", _ACCOUNT, "trip-1", lines, 3, earlier, expires_at_for(earlier)),
+                         {line: emb.embed(line.split(": ", 1)[1]) for line in lines}, model=emb.model_id)
+    llm = FeatureRoutingLlm({_INTENT: _intent_json("GET_WEATHER"), _ANSWER: _answer_json("오늘은 비가 와요. 실내로 가요.")})
+    app = build_dev_app(llm=llm, model_id="m-fake", poi_db=InMemoryPoi(_SCHEDULED + _ALTS), weather=_Weather(),
+                        dialogue_orchestrator_enabled=True, shadow_rate=0.0, embedding=emb, memory_store=store, bank=())
+    res = TestClient(app).post(URL, json=_body("비 오는 날 실내 전시", dialogue_context={"turn_index": 4}))
+    assert res.status_code == 200 and res.json()["outcome"] == "ANSWER", res.text
+    (answer,) = [r for r in llm.requests if r.prompt_ref.feature == _ANSWER.value]
+    assert "선호: 비 오는 날 실내 전시" in answer.prompt and "흑돼지" not in answer.prompt
 
 
 def test_default_build_dev_app_is_off() -> None:

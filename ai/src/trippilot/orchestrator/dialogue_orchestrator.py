@@ -18,7 +18,8 @@
 3  필수 인자가 비면 ARGUMENT_CLARIFY (`from_match` 재사용 — 고정 문안·보기, 요청당 1회)
 4  `HANDLERS[intent].plan(ctx)` → 공유 풀 팬아웃(submit 전 마감 고정 → wait → cancel → 상태값) → `assemble` → `Facts` (BR-AO-12)
 5  `DIALOGUE_ANSWER` ≤1회 → `DialogueAnswerGate`; 실패·잔여 <1.5s 면 `Facts.template_text` (BR-AO-04·06)
-6  세션 기억: due ∧ 잔여 ≥2.5s → `DIALOGUE_MEMORY`; 아니면 `compress_fallback`; 잔여 ≤0 이면 미룬다 (BR-AO-09)
+0‴ 이번 말과 관련된 기억 꺼내기(임베딩 → 이 세션, 그다음 같은 계정 기억 줄 검색)를 분류와 나란히 — 분류엔 이 대화를 잇는 줄, 답변·잡담엔 꺼낸 줄 (BR-AO-09)
+6  세션 기억: 3턴마다 답한 뒤 **뒤에서** `DIALOGUE_MEMORY` → 줄 임베딩 → `advance`(턴 시한·`llm_calls` 밖); 실패는 이전 기억 그대로 (BR-AO-09)
 7  `TurnOutcome` — `llm_calls` 는 서비스 경로 호출만(섀도 제외, BR-AO-07)
 
 ## 지키는 것
@@ -43,6 +44,7 @@ import contextvars
 import json
 import logging
 import re
+import threading
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Executor, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, replace
@@ -59,7 +61,7 @@ from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, clock_spa
 from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanDraft
 from trippilot.llm_gateway.gates.intent import NULL_INTENT
 from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker, unrepeated
-from trippilot.llm_gateway.workers.dialogue_intent import DialogueIntentWorker
+from trippilot.llm_gateway.workers.dialogue_intent import PROMPT_TURNS, DialogueIntentWorker, last_turns
 from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
 from trippilot.llm_gateway.workers.dialogue_smalltalk import DialogueSmalltalkWorker
 from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
@@ -91,17 +93,21 @@ from trippilot.orchestrator.dialogue_interpreter import (
     llm_call_counter,
 )
 from trippilot.orchestrator.dialogue_memory import (
-    SUMMARY_EVERY_TURNS,
     DialogueMemory,
     MemoryStorePort,
-    compress_fallback,
+    context_lines,
     due,
     expires_at_for,
-    is_turn_fragment,
+    gist_lines,
+    kept_lines,
+    legacy_lines,
+    material,
 )
 from trippilot.orchestrator.dialogue_plan import has_facts, merge_facts, step_results, step_tasks
 from trippilot.orchestrator.intent_router import normalize
 from trippilot.orchestrator.shadow_probe import ShadowIntentProbe
+from trippilot.ports.embedding_port import EmbeddingPort
+from trippilot.ports.memory_store_port import SUMMARY_MAX_LINES, MemoryHit, split_kind
 from trippilot.ports.trace_port import TracePort
 
 __all__ = [
@@ -145,18 +151,21 @@ _FANOUT_CAP_MS, _FANOUT_SHARE = 3_000, 0.40  # 팬아웃 예산
 _ANSWER_CAP_MS = 3_500  # 같은 실측 p50 1.6s·p90 2.4s, 2.5s 에서 17턴 중 2턴이 템플릿으로 떨어졌다
 _ANSWER_RESERVE_MS = 400  # 게이트·사영·직렬화 몫
 _ANSWER_MIN_REMAINING_MS = 1_500  # 미만이면 답변 LLM 을 부르지 않고 템플릿 (> _ANSWER_RESERVE_MS — 아니면 시한이 0 이하)
-_MEMORY_MIN_REMAINING_MS = 2_500  # 미만이면 결정론 압축
 # 2‴ 계획 LLM(BR-AO-28): min(cap, 잔여×share). 잔여 < 4.6s 면 부르지 않는다 — 계획이 몫(0.45R)을 다 쓰고 팬아웃이 남은 것의
 # 0.40 을 다 써도 답변 앞 잔여 ≥1.5s(답변 시도선)이려면 R ≥ 4,542ms(정수 내림 산술: 4,542 → 계획 2,043 → 2,499 → 팬아웃 999
 # → 1,500). 4,500 이면 1,485 라 늘 템플릿이다(정정본 C1). 상한 3.5s(초판 3.0s) — 2026-10-20 luna·effort none 실측에서 3.0s 는
 # 같은 시각 짝에서 시한 잘림이 4/78 → 2/78 이었다(같은 날 런 합 3.0s 10/154 · 3.5s 15/864 — 시각·판본이 섞인 합, 러너의 SDK
 # 단위 시한 기준). 운영 실효 시한은 min(3.5s, 0.45R) 라 분류 1.6s 턴은 ≈3.33s 다. 하한 산술은 몫(0.45R)만 쓰므로 상한과 무관하다.
 _PLAN_CAP_MS, _PLAN_SHARE, _PLAN_MIN_REMAINING_MS = 3_500, 0.45, 4_600
-_TURN_LLM_CAP = 3  # 턴당 서비스 LLM 상한(BR-AO-07·COST-U8-06) — 계획 턴(분류·계획·답변)에서 닿으면 요약을 한 번 미룬다(BR-AO-09)
-_MEMORY_CAP_MS = 2_000
 _HEALTHY_STATUSES = frozenset({"OK", "LOW"})  # 작업 값의 status 중 강등이 아닌 것 (ProviderStatus OK·LOW)
 _REASON_CODE = re.compile(r"[a-z_]{1,40}(?::[A-Za-z_]{1,60})?")  # 이벤트 사유는 코드만 — 예외 메시지(키 든 URL)는 싣지 않는다
-_OTHER_SESSIONS_LIMIT = 2  # "지난 여행 기억" — 같은 계정의 다른 세션 ≤2
+_OTHER_SESSIONS_LIMIT = 2  # "지난 여행 기억" — 같은 계정의 다른 세션 ≤2 (임베딩이 없거나 꺼내기가 실패했을 때의 종전 줄)
+# 0‴ 기억 꺼내기(BR-AO-09 개정 2026-10-23) — 이번 말을 임베딩해 이 세션·같은 계정 기억 줄 중 가까운 사실 줄 ≤6(점수 ≥0.45).
+# 하한은 KURE-v1 실측(기억 줄 12 × 질문 12, 2026-10-23): 관련 줄 최저 0.51·중앙 0.62, 무관 줄 중앙 0.44·p90 0.52, "고마워"의 최고 0.41.
+# 무관 줄이 몇 줄 섞이는 쪽을 고른다 — 관련 사실(먹지 못하는 음식)을 놓치는 쪽이 더 나쁘다(횟집 질문에 알레르기 줄 0.51).
+_RECALL_TOP_K, _RECALL_MIN_SCORE = 6, 0.45
+_RECALL_WAIT_MS = 300  # 답변 단계에 꺼내기가 아직이면 이만큼만 기다리고 이 세션 줄로 간다 — 보통은 분류(≥1s) 동안 끝나 있다
+_MEMORY_TIMEOUT_S = 8.0  # 뒤에서 도는 요약 LLM 시한 — 턴 시한 밖이다(응답은 이미 나갔다)
 
 # 0단계 — FE 상시 칩이 서버 발급 SHOW_CAPABILITIES 가 없을 때 이 문자열을 TEXT 턴으로 보낸다(BR-AO-18).
 # 문장은 BE `AssistantTemplates.capabilities(hasTrip)` 그대로(DEC-U8-6: 화면 문장은 한 벌).
@@ -206,7 +215,7 @@ OTHER_SESSIONS_HEADER = "지난 여행 기억:"  # `$memory` 에서 현재 세�
 # 게이트웨이 `default_fallback_modes` 와 같은 라벨 — LLM 을 **부르지 않고** 폴백한 턴(잔여 부족·워커 예외)에도 같은 짝을 남긴다
 _INTENT_MODES = ("llm_dialogue_intent", "out_of_scope")
 _ANSWER_MODES = ("llm_dialogue_answer", "template_text")
-_MEMORY_MODES = ("llm_dialogue_memory", "deterministic_compress")
+_MEMORY_MODES = ("llm_dialogue_memory", "kept_previous")
 _PLAN_MODES = ("llm_dialogue_plan", "out_of_scope")
 _SMALLTALK_MODES = ("llm_dialogue_smalltalk", "fixed_text")
 # 인프라 실패 접두(게이트웨이 `_invoke` 의 사유 + 호출 예외) — 모델이 판단해서 거절한 것이 아니라 거절 표지를 붙이지 않는다
@@ -216,6 +225,8 @@ _INFRA_PREFIXES = ("timeout", "llm_error", "unsupported", "intent_error")
 # 32: 시한을 넘긴 작업도 소켓 시한(BackendPoiDb 10s·기상청 4s)까지 스레드를 쥔다 — 8 이면 느린 작업 8개가 다음 턴들을
 # 풀 대기만으로 TIMEOUT 시켰다(2026-10-18 리뷰 재현). 프로세스당 I/O 대기 스레드라 값싸다.
 _DLG_POOL = ThreadPoolExecutor(32, thread_name_prefix="dialogue")
+# 뒤에서 도는 기억 요약 — 팬아웃 풀과 따로 둔다(요약 LLM 이 느려도 턴 팬아웃 스레드를 쥐지 않게, 섀도 풀 선례). 세션당 하나만 돈다.
+_MEMORY_POOL = ThreadPoolExecutor(2, thread_name_prefix="dialogue-memory")
 
 
 # ── 입력 (DE §2.1) ───────────────────────────────────────────────────────────
@@ -484,13 +495,43 @@ def _trip_summary(snapshot: TurnSnapshot, today: date) -> str:
 
 
 def _memory_lines(current: DialogueMemory | None, others: Sequence[DialogueMemory]) -> tuple[str, ...]:
-    """`$memory` 재료 — 현재 세션 줄들 + 헤더 + 다른 세션(≤2) 줄들 (DE §6 `$memory`). 줄의 `inline()` 은 워커가 한다.
+    """꺼내기 없는 `$memory` — 현재 세션 줄 전부 + 헤더 + 다른 세션(≤2) 줄 전부 (DE §6 `$memory`). 임베딩이 배선되지 않았거나
+    꺼내기가 실패했을 때 쓴다(2026-10-23 전의 모양 그대로). 줄의 `inline()` 은 워커가 한다.
     지시 주입 꼴 줄은 싣지 않는다 — 기억 게이트가 이제 막지만 그 전에 저장된 줄(TTL 90일)이 남아 있을 수 있다."""
     lines = [line for line in current.summary if not has_injection_like(line)] if current is not None else []
     other_lines = [line for m in others for line in m.summary if not has_injection_like(line)]
     if other_lines:
         lines += [OTHER_SESSIONS_HEADER, *other_lines]
     return tuple(lines)
+
+
+def _recalled_lines(
+    current: DialogueMemory | None, others: Sequence[DialogueMemory], mine: Sequence[MemoryHit], theirs: Sequence[MemoryHit],
+) -> tuple[str, ...]:
+    """꺼낸 기억 → `$memory`: 이 세션 "요약" 줄(늘) + 점수 하한을 넘은 사실 줄 ≤`_RECALL_TOP_K` — **이 대화 줄이 먼저 칸을 채우고**
+    남은 칸만 지난 여행 줄(헤더 아래)로 채운다(계정 전체를 한 번에 세우면 지난 여행 무관 줄이 이 대화의 관련 줄을 밀어냈다,
+    2026-10-23 리뷰 재현). 0.2.0 이전 표지 없는 줄은 벡터가 없어 꺼내기에 안 걸리므로 다시 요약될 때까지 종전처럼 싣는다(이 대화 줄
+    전부·지난 여행 최신 2의 줄 — 칸 수와 따로). 같은 줄은 한 번만, 지시 주입 꼴은 싣지 않는다(`_memory_lines` 와 같은 거름)."""
+    picked: list[str] = []
+    seen = set(gist_lines(current))
+
+    def take(hits: Sequence[MemoryHit]) -> list[str]:
+        got: list[str] = []
+        for hit in hits:
+            if len(picked) + len(got) >= _RECALL_TOP_K:
+                break
+            if hit.score < _RECALL_MIN_SCORE or hit.line in seen or has_injection_like(hit.line):
+                continue
+            seen.add(hit.line)
+            got.append(hit.line)
+        return got
+
+    picked += (mine_lines := take(mine))
+    their_lines = take(theirs)
+    old_mine = [line for line in legacy_lines(current) if line not in seen]
+    old_theirs = [line for m in others for line in legacy_lines(m) if line not in seen]
+    theirs_all = [*their_lines, *old_theirs]
+    return (*gist_lines(current), *mine_lines, *old_mine, *((OTHER_SESSIONS_HEADER, *theirs_all) if theirs_all else ()))
 
 
 def _slot_times(value: object) -> tuple[tuple[str | None, str], ...]:
@@ -664,6 +705,8 @@ class DialogueOrchestrator:
     없으면 짧은 답은 답으로 읽는다(라우터가 임베딩 장애 때 하는 것과 같은 태도).
     `shadow_meta` 는 `intent_shadow` 로그의 측정 조건(bank_sha·임계·프롬프트 판본) — 배선이 채운다.
     `planner` 는 2‴ 계획 워커 — 배정(`DIALOGUE_PLAN`)이 있을 때만 조립부가 넣는다(배정이 곧 켜기, DEC-AO-18).
+    `embedding` 은 기억 꺼내기(0‴)와 기억 줄 임베딩(6) — 없으면 종전처럼 기억 줄 전부를 싣는다(기능 부재는 강등이 아니다).
+    `memory_pool` 은 뒤에서 도는 요약의 풀 — 테스트는 같은 스레드에서 바로 도는 실행기를 넣는다.
     """
 
     def __init__(
@@ -683,6 +726,8 @@ class DialogueOrchestrator:
         pool: Executor | None = None,
         planner: DialoguePlanWorker | None = None,
         smalltalk: DialogueSmalltalkWorker | None = None,
+        embedding: EmbeddingPort | None = None,
+        memory_pool: Executor | None = None,
     ) -> None:
         self._intent = intent_worker
         self._smalltalk_worker = smalltalk
@@ -698,6 +743,12 @@ class DialogueOrchestrator:
         self._confident_intent = confident_intent if confident_intent is not None else (lambda _text: None)
         self._pool = pool if pool is not None else _DLG_POOL
         self._planner = planner  # 2‴ — None 이면 계획 단계 없음(DIALOGUE_PLAN 미배정, DEC-AO-18): 종전과 바이트 단위로 같다
+        # wiring 은 임베딩이 없으면 늘 터지는 `UnwiredEmbedding`(model_id "unwired")을 넣는다 — 그대로 쓰면 기억이 있는 턴·요약마다 폴백
+        # 이벤트가 났다(2026-10-23 리뷰 재현). 없음으로 읽어 종전 줄로 간다 — 기능 부재는 강등이 아니다
+        self._embedding = embedding if embedding is not None and embedding.model_id != "unwired" else None
+        self._memory_pool = memory_pool if memory_pool is not None else _MEMORY_POOL
+        self._summarizing: set[str] = set()  # 이 프로세스에서 뒤의 요약이 돌고 있는 session_id — 같은 세션은 하나만
+        self._summarizing_lock = threading.Lock()
 
     # ── 턴 ───────────────────────────────────────────────────────────────
 
@@ -706,17 +757,30 @@ class DialogueOrchestrator:
         # 지난 턴 중 지시 주입 꼴은 어느 프롬프트(분류·답변·기억 요약)에도 다시 싣지 않는다 — 그 턴은 이미 범위 밖으로 끝났다
         inp = replace(inp, recent_turns=tuple(t for t in inp.recent_turns if not has_injection_like(t.text)))
         with llm_call_counter() as counter:
-            current, others = self._load_memory(inp)
+            current, others, read = self._load_memory(inp)
+            writable = read and self._open_row(inp, current)
+            # 프롬프트·핸들러는 창만 본다 — 요약 재료(`_remember`)는 BE 가 보낸 전부에서 고른다
+            windowed = replace(inp, recent_turns=self._window(inp, current, read))
             try:
-                outcome = self._core(inp, current, others, counter)
+                outcome = self._core(windowed, current, others, counter)
             except PermissionDeniedError:
                 raise
             except Exception as e:  # noqa: BLE001 — DL-5: 버그도 경계 밖으로 내지 않는다(BR §5 미결 #14 A안)
                 outcome = self._crashed(inp, e)
-            outcome = _not_repeating(outcome, inp)
-            self._remember(inp, current, outcome.answer.text if outcome.answer is not None else None,  # outcome 과 무관(BLM §3 註)
-                           llm_calls=counter[0])
+            outcome = _not_repeating(outcome, windowed)
+            if writable:  # 기억을 못 읽은 턴은 요약을 내지 않는다 — 없는 줄 알고 빈 기억에서 다시 쓰면 이전 줄을 잃는다(다음 차례에)
+                said = (outcome.answer.text if outcome.answer is not None
+                        else outcome.clarify.question if outcome.clarify is not None else None)
+                self._remember(inp, current, said)  # outcome 과 무관(BLM §3 註)
             return replace(outcome, llm_calls=counter[0])
+
+    def _window(self, inp: TurnInput, current: DialogueMemory | None, read: bool) -> tuple[RecentTurn, ...]:
+        """프롬프트에 싣는 최근 대화 — 최근 3턴(`PROMPT_TURNS`) + 기억이 아직 덮지 못한 턴 전부(요약이 늦거나 실패해도 그 사이 턴이
+        어느 프롬프트에서도 빠지지 않게, 2026-10-23 리뷰 재현). 기억 단계가 없거나 못 읽었으면 BE 가 보낸 전부(종전 그대로)."""
+        if self._store is None or not inp.session_id or not read:
+            return inp.recent_turns
+        summarized = current.summarized_turn_index if current is not None else 0
+        return last_turns(inp.recent_turns, max(PROMPT_TURNS, inp.context.turn_index - 1 - summarized))
 
     def _core(
         self,
@@ -741,10 +805,13 @@ class DialogueOrchestrator:
         # 0″ — 지역을 말한 장소 찾기 말이면 장소 탐색 SQL 작성을 분류와 나란히 미리 시작한다(분류 뒤에 쓰면 팬아웃 시한에 걸렸다, place_sql 註)
         if self._ports.place_sql is not None:
             self._ports.place_sql.prefetch(inp.utterance, inp.trace_id, inp.now, self._submit)
+        # 0‴ — 이번 말과 관련된 기억 꺼내기도 분류와 나란히 시작한다. 분류에는 이 대화를 잇는 줄만 싣고(꺼내기를 기다리지 않는다),
+        # 답변·잡담에 꺼낸 줄을 싣는다 — 과거 대화는 프롬프트 창(최근 3턴)에서 빠지고 필요할 때 기억에서 꺼낸다(BR-AO-09 개정 2026-10-23)
+        memory = self._recall(inp, current, others)
         trip_view = _trip_view(inp.snapshot)
         today = inp.now.astimezone(self._tz).date()
         trip_summary = _trip_summary(inp.snapshot, today)
-        memory_lines = _memory_lines(current, others)
+        memory_lines = context_lines(current)  # 분류엔 이 대화를 잇는 줄(요약·결정·미해결)만 — 사실 줄은 꺼내기가 끝난 뒤 답변에
         # 1 — 보류 되묻기의 답 (LLM 0). 답이 아니면 보류를 버리고 새 요청으로 (BR-DLG-24)
         interp = None
         if inp.context.pending is not None:
@@ -761,10 +828,10 @@ class DialogueOrchestrator:
                 closer = closer_answer(text, inp.snapshot.trip is not None) if _judged_nothing(reason) else None
                 if closer is not None:  # 2″ — 할 일이 없는 말에 범위 밖 카드를 내지 않는다(BR-AO-26)
                     if closer.text == GREETING_TEXT[inp.snapshot.trip is not None]:  # 인사만 LLM 으로 — 감사·맞장구는 고정 한 줄로 충분하다
-                        closer = self._smalltalk(inp, closer, memory_lines, trip_summary)
+                        closer = self._smalltalk(inp, closer, memory(), trip_summary)
                     return TurnOutcome("ANSWER", (), None, closer, cleared, 0, reason)
                 if self._planner is not None and _plannable(reason):  # 2‴ — 정해진 의도 밖이라도 조회로 도울 수 있으면 돕는다(BR-AO-28)
-                    return self._plan_turn(inp, text, memory_lines, trip_summary, cleared, reason)
+                    return self._plan_turn(inp, text, memory, trip_summary, cleared, reason)
                 return self._out_of_scope(inp, reason)
             # 3 — 필수 인자 되묻기 (요청당 1회, 기존 로직)
             interp = from_match(match, inp.context, trip_view)
@@ -800,7 +867,7 @@ class DialogueOrchestrator:
         results = self._fanout(inp, handler.plan(ctx))
         facts = handler.assemble(ctx, results)
         # 5 — 답변 문장
-        answer = self._compose(inp, frame.intent, facts, memory_lines, trip_summary)
+        answer = self._compose(inp, frame.intent, facts, memory(), trip_summary)
         return TurnOutcome("ANSWER", (frame,), None, answer, cleared, 0, interp.reason)
 
     # ── 2 분류 · 2′ 섀도 ─────────────────────────────────────────────────
@@ -1041,7 +1108,7 @@ class DialogueOrchestrator:
         self,
         inp: TurnInput,
         text: str,
-        memory_lines: Sequence[str],
+        memory: Callable[[], tuple[str, ...]],
         trip_summary: str,
         cleared: DialogueContext,
         reason: str,
@@ -1073,7 +1140,7 @@ class DialogueOrchestrator:
                 self._log_plan(inp, "NO_TOOL", plan_ms=plan_ms, gap=draft.gap)
                 fixed = DialogueAnswer(AnswerKind.TEXT, CHAT_TEXT[inp.snapshot.trip is not None], None,
                                        (_home_action(inp.snapshot.trip is not None),), None, None)
-                answer = self._smalltalk(inp, fixed, memory_lines, trip_summary)
+                answer = self._smalltalk(inp, fixed, memory(), trip_summary)  # 기억은 쓰는 자리에서만 기다린다 — 계획 LLM 앞이 아니다
                 return TurnOutcome("ANSWER", (), None, answer, cleared, 0, f"{reason}; plan:no_tool")
             return self._plan_declined(inp, reason, "REFUSED" if draft.refused else "NO_TOOL", plan_ms=plan_ms, gap=draft.gap)
         calls = [c for c in (_region_named(call, text) for call in draft.calls) if c is not None]
@@ -1091,7 +1158,7 @@ class DialogueOrchestrator:
         results = self._fanout(inp, step_tasks([h.plan(ctx) for h, ctx in zip(handlers, ctxs, strict=True)]))
         facts = merge_facts([h.assemble(ctx, step_results(results, i, n))
                              for i, (h, ctx) in enumerate(zip(handlers, ctxs, strict=True))])
-        answer = self._compose(inp, facts.intent, facts, memory_lines, trip_summary, closed=True)
+        answer = self._compose(inp, facts.intent, facts, memory(), trip_summary, closed=True)
         self._log_plan(inp, "TOOLS", calls=draft.calls, arg_keys=[sorted(ctx.arguments) for ctx in ctxs], primary=facts.intent,
                        plan_ms=plan_ms,
                        task_status={name: r.status for name, r in results.items()})
@@ -1117,17 +1184,20 @@ class DialogueOrchestrator:
             "task_status": dict(task_status or {}),
         }, ensure_ascii=False))
 
-    # ── 6 메모리 ─────────────────────────────────────────────────────────
+    # ── 0‴·6 메모리 ──────────────────────────────────────────────────────
 
-    def _load_memory(self, inp: TurnInput) -> tuple[DialogueMemory | None, tuple[DialogueMemory, ...]]:
-        """턴 시작에 현재 세션 기억 + 같은 계정의 다른 세션 ≤2. 읽기 실패는 "기억 없이 진행"(BR-AO-09) — WARN 1줄."""
+    def _load_memory(self, inp: TurnInput) -> tuple[DialogueMemory | None, tuple[DialogueMemory, ...], bool]:
+        """턴 시작에 현재 세션 기억 + 같은 계정의 다른 세션 ≤2(꺼내기가 없을 때의 줄). 읽기 실패는 "기억 없이 진행"(BR-AO-09) —
+        WARN 1줄. 셋째 값은 현재 세션을 읽었는가 — 못 읽은 턴은 요약을 내지 않는다(`turn`)."""
         if self._store is None or not inp.session_id:
-            return None, ()
+            return None, (), True
         current: DialogueMemory | None = None
         others: tuple[DialogueMemory, ...] = ()
+        read = True
         try:
             current = self._store.get(inp.session_id)
         except Exception as e:  # noqa: BLE001
+            read = False
             log.warning("도우미 기억 읽기 실패(%s) — 기억 없이 진행 (trace_id=%s)", type(e).__name__, inp.trace_id)
         if inp.account_ref:
             try:
@@ -1135,98 +1205,157 @@ class DialogueOrchestrator:
                     inp.account_ref, exclude_session=inp.session_id, limit=_OTHER_SESSIONS_LIMIT))
             except Exception as e:  # noqa: BLE001
                 log.warning("지난 여행 기억 읽기 실패(%s) — 현재 세션 기억만 (trace_id=%s)", type(e).__name__, inp.trace_id)
-        return current, others
+        return current, others, read
 
-    def _remember(
-        self, inp: TurnInput, current: DialogueMemory | None, answer_text: str | None = None, *, llm_calls: int = 0,
-    ) -> None:
+    def _open_row(self, inp: TurnInput, current: DialogueMemory | None) -> bool:
+        """요약 차례인데 행이 없으면 **턴 시작에** 빈 행부터 만든다 — 뒤의 저장(`advance`)은 있는 행만 고치므로 턴 도중·뒤의 요약 중에 온
+        이력 지우기를 되살리지 않는다(BR-AO-10). 답한 뒤에 만들면 분류 LLM 을 기다리는 사이 온 지우기가 0행으로 끝나고 그 뒤 빈 행이
+        대화를 되살렸다(2026-10-23 리뷰 재현). 못 만들면 이 턴은 요약하지 않는다(False) — 다음 턴이 다시 차례다."""
+        if self._store is None or not inp.session_id or current is not None or not due(inp.context.turn_index, 0):
+            return True
+        trip_id = inp.snapshot.trip.trip_id if inp.snapshot.trip is not None else None
+        try:
+            self._store.put(DialogueMemory(inp.session_id, inp.account_ref, trip_id, (), 0, inp.now, expires_at_for(inp.now)))
+        except Exception as e:  # noqa: BLE001 — 기억은 응답과 무관하다: 턴을 막지 않는다
+            self._fallback(inp, "memory", _MEMORY_MODES[0], "skipped", f"memory_error: {type(e).__name__}")
+            return False
+        return True
+
+    def _recall(
+        self, inp: TurnInput, current: DialogueMemory | None, others: tuple[DialogueMemory, ...],
+    ) -> Callable[[], tuple[str, ...]]:
+        """0‴ — 답변·잡담의 `$memory` 를 돌려줄 함수. 임베딩이 있으면 이번 말과 가까운 기억 줄을 풀에서 미리 찾는다(분류와 나란히):
+        이 세션 "요약" 줄 + 사실 줄 ≤6(`_recalled_lines`). 임베딩이 없으면 종전 줄(현재 세션 전부 + 지난 여행 최신 2) — 기능 부재는
+        강등이 아니다. 찾기 실패는 종전 줄 + 이벤트, 답변 때까지 안 끝났으면 이 세션 줄 + 이벤트(INV-4)."""
+        fallback = _memory_lines(current, others)
+        if self._embedding is None or self._store is None or not inp.session_id or (current is None and not others):
+            return lambda: fallback  # 꺼낼 기억이 없다 — 임베딩을 부르지 않는다
+        future = self._submit(lambda: self._search_memory(inp, current, others, fallback))
+        got: list[tuple[str, ...]] = []
+
+        def lines() -> tuple[str, ...]:
+            if not got:
+                try:
+                    got.append(future.result(timeout=_RECALL_WAIT_MS / 1000))
+                except Exception:  # noqa: BLE001 — 시한뿐이다(찾기 안의 예외는 `_search_memory` 가 이미 삼켰다)
+                    self._fallback(inp, "memory", "vector_recall", "current_session", f"recall_timeout({_RECALL_WAIT_MS}ms)")
+                    got.append(_memory_lines(current, ()))
+            return got[0]
+
+        return lines
+
+    def _search_memory(
+        self, inp: TurnInput, current: DialogueMemory | None, others: tuple[DialogueMemory, ...], fallback: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        """(풀에서) 이번 말 임베딩 → 이 세션 줄 검색, 그다음 같은 계정 줄 검색 → `$memory` 줄. 임베딩·DB 장애는 종전 줄 + 이벤트."""
+        extra = len(gist_lines(current))  # 이 세션 "요약" 줄도 걸릴 수 있어(늘 싣는 줄이라 건너뛴다) 그만큼 더 받는다
+        try:
+            vector = self._embedding.embed(inp.utterance)
+            model = self._embedding.model_id
+            mine = self._store.search(vector, session_id=inp.session_id, account_ref=None, model=model,
+                                      top_k=_RECALL_TOP_K + extra)
+            theirs = () if not inp.account_ref else tuple(
+                h for h in self._store.search(vector, session_id=inp.session_id, account_ref=inp.account_ref, model=model,
+                                              top_k=_RECALL_TOP_K + extra + SUMMARY_MAX_LINES)  # 이 세션 줄을 빼고도 칸이 남게
+                if h.session_id != inp.session_id)
+        except Exception as e:  # noqa: BLE001 — 기억은 참고 자료다: 못 찾으면 종전 줄로 답한다
+            self._fallback(inp, "memory", "vector_recall", "recent_sessions", f"recall_error: {type(e).__name__}")
+            return fallback
+        lines = _recalled_lines(current, others, mine, theirs)
+        best = max((h.score for h in (*mine, *theirs)), default=None)
+        # 하한 튜닝 재료 — 건수·최고 점수만(줄 내용·account_ref 없음)
+        log.info("dialogue_memory_recall %s", json.dumps({
+            "event": "dialogue_memory_recall", "trace_id": inp.trace_id, "hits": len(mine) + len(theirs),
+            "kept": sum(line != OTHER_SESSIONS_HEADER for line in lines) - extra,
+            "top": round(best, 3) if best is not None else None}))
+        return lines
+
+    def _remember(self, inp: TurnInput, current: DialogueMemory | None, answer_text: str | None = None) -> None:
+        """6 — 요약 차례(3턴)면 답한 **뒤에** 뒤에서 요약한다: 턴 시한·`llm_calls` 밖(BR-AO-07·09 개정 2026-10-23). 행이 없던 세션의
+        빈 행은 턴 시작에 이미 만들었다(`_open_row`) — 뒤의 저장(`advance`)은 있는 행만 고친다(BR-AO-10). 이 프로세스에서 같은 세션 요약이 아직 돌면 내지 않는다 — 다음 턴이 다시 차례다(재료는 BE 최근 창 20건 안에 남아 있다).
+        `answer_text` 는 이 턴 도우미 말(답 문장 또는 되묻기 질문) — 없으면(FRAME·범위 밖: 문장은 BE 가 짓는다) 이 턴은 빼고 앞 턴까지만
+        요약해 다음 차례가 BE 창의 그 턴 메시지로 담는다(되묻기·제안 문장이 요약에 끝내 안 들어가던 길, 2026-10-23 리뷰 재현)."""
         if self._store is None or not inp.session_id:
             return
         summarized = current.summarized_turn_index if current is not None else 0
-        if not due(inp.context.turn_index, summarized, every=SUMMARY_EVERY_TURNS):
+        if not due(inp.context.turn_index, summarized):
             return
+        with self._summarizing_lock:
+            if inp.session_id in self._summarizing:
+                return
+            self._summarizing.add(inp.session_id)
         try:
-            self._summarize_and_put(inp, current, answer_text, llm_calls=llm_calls, summarized=summarized)
-        except Exception as e:  # noqa: BLE001 — 기억은 응답 품질과 무관하다: 어떤 실패도 턴을 막지 않는다
-            self._fallback(inp, "memory", _MEMORY_MODES[0], "skipped", f"memory_error: {type(e).__name__}: {e}")
+            trip_id = inp.snapshot.trip.trip_id if inp.snapshot.trip is not None else None
+            # 재료 = 아직 요약하지 않은 지난 턴 + 이번 턴(발화·도우미 말) — 이번 턴을 빼고 이 턴 번호를 적으면 이번 턴이 장기 기억에서
+            # 영영 빠진다(2026-10-18 리뷰 재현). 0′ 에서 거절한 발화도 요약 차례면 여기로 온다 — 지난 턴과 같은 거름
+            upto, this_turn = inp.context.turn_index, ()
+            if answer_text is None:
+                upto -= 1
+            else:
+                this_turn = tuple(RecentTurn(role, text[:RECENT_TURN_CHARS])
+                                  for role, text in (("USER", inp.utterance.strip()), ("ASSISTANT", answer_text.strip()))
+                                  if text and not has_injection_like(text))
+            turns = material(inp.recent_turns, inp.context.turn_index, summarized) + this_turn
+            trip_summary = _trip_summary(inp.snapshot, inp.now.astimezone(self._tz).date())
+            # 빈 문맥에서 돌린다 — 턴 `llm_calls` 카운터(contextvar)가 뒤의 요약을 세지 않게(같은 스레드에서 바로 도는 실행기도 같다)
+            self._memory_pool.submit(contextvars.Context().run, self._summarize_later, inp, current, trip_id, turns, trip_summary,
+                                     upto)
+        except Exception as e:  # noqa: BLE001 — 기억은 응답과 무관하다: 어떤 실패도 턴을 막지 않는다
+            self._done_summarizing(inp.session_id)
+            self._fallback(inp, "memory", _MEMORY_MODES[0], "skipped", f"memory_error: {type(e).__name__}")
 
-    def _summarize_and_put(
-        self, inp: TurnInput, current: DialogueMemory | None, answer_text: str | None = None, *,
-        llm_calls: int = 0, summarized: int = 0,
+    def _summarize_later(
+        self, inp: TurnInput, current: DialogueMemory | None, trip_id: str | None, turns: tuple[RecentTurn, ...],
+        trip_summary: str, upto: int,
     ) -> None:
-        """BLM §8 — 잔여 ≥2.5s 면 LLM 요약, 미만이면 결정론 압축, ≤0 이면 압축·put 없이 미룬다(due 유지). 실패는 전부 압축.
-        이번 턴이 서비스 LLM 을 이미 3회 썼으면(계획 턴) 첫 차례는 미루고, 이미 한 번 미룬 차례면 결정론 압축이다(BR-AO-09 C9)."""
-        remaining = self._remaining(inp)
-        # 예전에 저장된 지시문 꼴 줄은 요약에 넘기지 않는다 — 이번 갱신으로 저장본에서도 빠진다(`_memory_lines` 와 같은 거름)
-        previous = tuple(line for line in current.summary if not has_injection_like(line)) if current is not None else ()
-        if remaining <= 0:
-            self._fallback(inp, "memory", _MEMORY_MODES[0], "deferred", f"budget_exhausted(remaining_ms={remaining})")
-            return
-        # 이번 턴(발화·답)도 재료에 넣는다 — summarized_turn_index 를 이번 턴으로 적으면서 백엔드가 싣는 recent_turns(이번 발화
-        # **앞** 메시지)만 요약하면 이번 턴이 장기 기억에서 영영 빠진다(2026-10-18 리뷰 재현).
-        turns = inp.recent_turns + tuple(
-            RecentTurn(role, text[:RECENT_TURN_CHARS])
-            for role, text in (("USER", inp.utterance.strip()), ("ASSISTANT", (answer_text or "").strip()))
-            if text and not has_injection_like(text))  # 0′ 에서 거절한 발화도 요약 차례면 여기로 온다 — 지난 턴과 같은 거름
-        capped = bool(turns) and llm_calls >= _TURN_LLM_CAP
-        if capped and inp.context.turn_index - summarized <= SUMMARY_EVERY_TURNS:
-            # 첫 요약 차례 — 미룬다(due 유지). 다음 턴의 최근 창(10턴)이 이 턴을 겹쳐 담는다. 두 번 미루면 가장 오래된 미요약 턴이
-            # 창 밖으로 밀려 장기 기억에서 빠진다 — 그래서 미룸은 한 번뿐이다(정정본 C9)
-            self._fallback(inp, "memory", _MEMORY_MODES[0], "deferred", f"turn_llm_cap({_TURN_LLM_CAP})")
-            return
-        today = inp.now.astimezone(self._tz).date()
-        if not turns:  # 재료 없이 LLM 을 부르지 않는다 — 의도된 결정론, 폴백 아님 (BR-AO-25)
-            lines = compress_fallback((), previous)
-        elif capped:  # 이미 한 번 미룬 차례 — LLM 4회째를 부르지 않고 결정론 압축으로 저장한다
-            lines = compress_fallback(turns, previous)
-            self._fallback(inp, "memory", *_MEMORY_MODES, f"turn_llm_cap({_TURN_LLM_CAP})")
-        elif remaining >= _MEMORY_MIN_REMAINING_MS:
-            lines = self._summarize(inp, previous, turns, _trip_summary(inp.snapshot, today), remaining)
-        else:
-            lines = compress_fallback(turns, previous)
-            self._fallback(inp, "memory", *_MEMORY_MODES, f"budget_short(remaining_ms={remaining})")
-        trip_id = inp.snapshot.trip.trip_id if inp.snapshot.trip is not None else None
+        """(뒤에서) 요약 LLM → 줄 임베딩 → `advance`. 실패는 이전 기억 그대로 + 이벤트, 다음 턴에 다시 — 대화 원문 조각으로
+        저장하지 않는다(FD 미결 #10 B안, 2026-10-23). 위로 던질 곳이 없어 모든 예외를 이벤트로 끝낸다."""
         try:
-            record = DialogueMemory(
-                inp.session_id, inp.account_ref, trip_id, lines, inp.context.turn_index, inp.now, expires_at_for(inp.now))
-        except ValueError as e:  # LLM 줄이 상한을 어겼다(줄 안 줄바꿈 등 — 게이트가 못 본 것) — 결정론 압축으로
-            self._fallback(inp, "memory", *_MEMORY_MODES, f"memory_shape: {e}")
-            record = DialogueMemory(
-                inp.session_id, inp.account_ref, trip_id, compress_fallback(turns, previous), inp.context.turn_index,
-                inp.now, expires_at_for(inp.now))
-        try:
-            self._store.put(record)
-        except Exception as e:  # noqa: BLE001 — 이번 턴 포기, summarized_turn_index 불변 → 다음 턴 due 유지
-            self._fallback(inp, "memory", _MEMORY_MODES[0], "skipped", f"store_put_failed: {type(e).__name__}")
-
-    def _summarize(
-        self,
-        inp: TurnInput,
-        previous: tuple[str, ...],
-        turns: tuple[RecentTurn, ...],
-        trip_summary: str,
-        remaining: int,
-    ) -> tuple[str, ...]:
-        timeout_ms = min(_MEMORY_CAP_MS, remaining)
-        try:
-            result = self._memory.summarize(
-                previous, turns, trip_summary, inp.trace_id, inp.now, timeout_sec=timeout_ms / 1000,
-            )
+            # 예전에 저장된 지시문 꼴 줄은 요약에 넘기지 않는다 — 이번 갱신으로 저장본에서도 빠진다(`_memory_lines` 와 같은 거름)
+            previous = tuple(line for line in current.summary if not has_injection_like(line)) if current is not None else ()
+            if not turns:  # 재료 없이 LLM 을 부르지 않는다 — 의도된 결정론, 폴백 아님 (BR-AO-25)
+                lines = kept_lines(previous)
+            else:
+                result = self._memory.summarize(previous, turns, trip_summary, inp.trace_id, inp.now,
+                                                timeout_sec=_MEMORY_TIMEOUT_S)
+                if result.is_fallback:  # 파싱 실패·전부 드롭·시한 — FallbackEvent(llm_dialogue_memory→kept_previous)는 게이트웨이가 냈다
+                    return
+                lines = tuple(result.value) if result.value else self._kept(inp, previous)
+            record = DialogueMemory(inp.session_id, inp.account_ref, trip_id, lines, upto, inp.now,
+                                    expires_at_for(inp.now))  # 게이트가 못 본 모양 위반(줄 안 줄바꿈 등)은 ValueError → 아래 이벤트
+            vectors = self._line_vectors(inp, lines)
+            saved = self._store.advance(record, vectors, model=self._embedding.model_id if vectors is not None else None)
+            log.info("dialogue_memory_saved %s", json.dumps({
+                "event": "dialogue_memory_saved", "trace_id": inp.trace_id, "lines": len(lines),
+                "vectors": len(vectors) if vectors is not None else None, "saved": saved}))  # saved=false — 그사이 지워졌다·더 새 요약이 있다
         except Exception as e:  # noqa: BLE001
-            self._fallback(inp, "memory", *_MEMORY_MODES, f"memory_error: {type(e).__name__}: {e}")
-            return compress_fallback(turns, previous)
-        if result.is_fallback:  # FallbackEvent 는 게이트웨이가 냈다 (파싱 실패·전부 드롭 = 실패)
-            return compress_fallback(turns, previous)
-        if result.value:
-            return tuple(result.value)
-        # 비운 배열 = 새로 기억할 것 없음 → 이전 요약은 두되 앞선 압축이 남긴 원문 조각 줄은 지운다(BR-AO-09). 이전 줄도
-        # 압축과 같은 술어로 다시 거른다 — #1314 이전 압축이 남긴 연락처·소요시간 줄이 술어 없이 되살지 않게(2026-10-19 리뷰).
-        # 폴백이 아니라서 이벤트가 없다 — 모델이 늘 비우는 고장이 보이도록 건수만 한 줄 남긴다(내용·account_ref 없음).
-        kept = tuple(line for line in compress_fallback((), previous) if not is_turn_fragment(line))
+            self._fallback(inp, "memory", *_MEMORY_MODES, f"memory_error: {type(e).__name__}")
+        finally:
+            self._done_summarizing(inp.session_id)
+
+    def _line_vectors(self, inp: TurnInput, lines: tuple[str, ...]) -> dict[str, tuple[float, ...]] | None:
+        """줄 → 임베딩(종류 표지를 뗀 본문). 임베딩이 없으면 None(벡터는 손대지 않는다). 실패도 None + 이벤트 — 요약은 그대로
+        저장하고, 그 줄은 다음 요약 때 다시 임베딩한다(그동안 꺼내기에 안 걸린다)."""
+        if self._embedding is None:
+            return None
+        try:
+            return dict(zip(lines, self._embedding.embed_batch([split_kind(line)[1] for line in lines]), strict=True))
+        except Exception as e:  # noqa: BLE001
+            self._fallback(inp, "memory", "line_vectors", "summary_only", f"embedding_error: {type(e).__name__}")
+            return None
+
+    def _kept(self, inp: TurnInput, previous: tuple[str, ...]) -> tuple[str, ...]:
+        """요약 LLM 이 비운 배열 = 새로 기억할 것 없음 → 이전 줄은 두되 옛 압축의 원문 조각·술어 위반 줄은 지운다(BR-AO-09). 폴백이 아니라
+        이벤트가 없다 — 모델이 늘 비우는 고장이 보이도록 건수만 한 줄 남긴다(내용·account_ref 없음)."""
+        kept = kept_lines(previous)
         log.info("dialogue_memory_empty %s", json.dumps({
             "event": "dialogue_memory_empty", "trace_id": inp.trace_id, "kept_lines": len(kept),
             "dropped_lines": len(previous) - len(kept)}))
         return kept
+
+    def _done_summarizing(self, session_id: str) -> None:
+        with self._summarizing_lock:
+            self._summarizing.discard(session_id)
 
     # ── 공통 ─────────────────────────────────────────────────────────────
 

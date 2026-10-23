@@ -316,10 +316,10 @@ _EXPECTED_MODES = {
     # 자연어 재계획 추출 — 실패면 추출 없이(칩·지시·구성은 원문을 읽는다)
     LlmFeature.REPLAN_REQUEST_EXTRACTION: ("llm_request_extract", "no_extraction"),
     # 도우미 오케스트레이터(assistant-orchestrator FD domain-entities §2.10) — 분류 실패는
-    # OUT_OF_SCOPE 로 수렴, 답변 실패는 결정론 템플릿 문장, 요약 실패는 결정론 압축(최근 턴 줄 자르기)
+    # OUT_OF_SCOPE 로 수렴, 답변 실패는 결정론 템플릿 문장, 요약 실패는 이전 기억 그대로(2026-10-23 — 압축 폐지)
     LlmFeature.DIALOGUE_INTENT: ("llm_dialogue_intent", "out_of_scope"),
     LlmFeature.DIALOGUE_ANSWER: ("llm_dialogue_answer", "template_text"),
-    LlmFeature.DIALOGUE_MEMORY: ("llm_dialogue_memory", "deterministic_compress"),
+    LlmFeature.DIALOGUE_MEMORY: ("llm_dialogue_memory", "kept_previous"),
     # 범위 밖 질문의 도구 계획(2‴) — 실패·시한 부족이면 종전 범위 밖(BE SCOPE 카드)으로 수렴
     LlmFeature.DIALOGUE_PLAN: ("llm_dialogue_plan", "out_of_scope"),
     # 장소 탐색 NL2SQL — 실패·검사 탈락이면 종전 반경 탐색

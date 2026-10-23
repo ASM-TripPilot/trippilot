@@ -220,7 +220,8 @@ def build_dialogue_orchestrator(
     kb_store: VectorStorePort | None = None,
     place_fact_store: PlaceFactStore | None = None,
 ) -> DialogueOrchestrator:
-    """서비스 워커 3종(`counted` 공유 — 백엔드 사용량 상한의 원천) + 섀도 전용 3단 라우터 + 핸들러 포트를 묶는다.
+    """서비스 워커(분류·답변 — `counted` 공유, 백엔드 사용량 상한의 원천) + 뒤에서 도는 기억 요약(`llm`) + 섀도 전용 3단 라우터 +
+    핸들러 포트를 묶는다.
 
     섀도 라우터는 같은 `IntentRouter` 클래스·같은 뱅크 스토어(읽기 전용)를 LLM 카운터(인스턴스, contextvar 아님)·트레이스
     표지(`c1.gateway.shadow`)만 바꿔 한 번 더 조립한다 — 서비스 `llm_calls` 에 섀도 호출이 섞이지 않는다(BR-AO-07).
@@ -284,8 +285,10 @@ def build_dialogue_orchestrator(
         # 분류는 기존 IntentGate(closed-set) 재사용 — 프롬프트만 다르다(dialogue_intent.yaml, BR-AO-14)
         intent_worker=DialogueIntentWorker(GatewayFacade(counted, renderer, IntentGate(), c1_config, trace)),
         answer_worker=DialogueAnswerWorker(GatewayFacade(counted, renderer, DialogueAnswerGate(), c1_config, trace)),
-        memory_worker=DialogueMemoryWorker(GatewayFacade(counted, renderer, DialogueMemoryGate(), c1_config, trace)),
+        # 요약은 답한 뒤 뒤에서 돈다(BR-AO-09 개정 2026-10-23) — 턴 llm_calls·사용량 상한 밖이라 서비스 카운터(`counted`)가 아니라 `llm`
+        memory_worker=DialogueMemoryWorker(GatewayFacade(llm, renderer, DialogueMemoryGate(), c1_config, trace)),
         memory_store=memory_store,
+        embedding=embedding,  # 기억 꺼내기·줄 임베딩 — 질문뱅크·KB-5 와 같은 임베딩(같은 모델 id 가 벡터 행에 적힌다)
         ports=ports,
         planner=planner,
         smalltalk=smalltalk,

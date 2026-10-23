@@ -63,6 +63,16 @@ CREATE TABLE IF NOT EXISTS public.dialogue_memory (
 CREATE INDEX IF NOT EXISTS ix_dialogue_memory_account ON public.dialogue_memory (account_ref, updated_at DESC);
 CREATE INDEX IF NOT EXISTS ix_dialogue_memory_trip ON public.dialogue_memory (trip_id);
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.dialogue_memory TO ai_user;
+-- Line embeddings of that memory (2026-10-23 — recall only the lines related to the utterance). Rows follow
+-- dialogue_memory (ON DELETE CASCADE), so the three backend deletes and the TTL purge reach them too.
+CREATE TABLE IF NOT EXISTS public.dialogue_memory_vectors (
+  session_id text NOT NULL REFERENCES public.dialogue_memory (session_id) ON DELETE CASCADE,
+  line       text NOT NULL,                 -- one line of that session's summary, verbatim
+  model      text NOT NULL,                 -- embedding model id; a new model leaves old vectors unmatched until the next summary
+  embedding  vector(1024) NOT NULL,
+  PRIMARY KEY (session_id, line)
+);
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.dialogue_memory_vectors TO ai_user;
 -- Assistant unknown-fact web lookups (UnknownHandlingAgent, 2026-10-22). DDL canon is shared with
 -- ai/docker/vector-init/03-place-fact-cache.sql (deploy/eks/tests compares them); the adapter does DML only.
 CREATE TABLE IF NOT EXISTS public.place_fact_cache (

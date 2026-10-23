@@ -87,5 +87,7 @@ SQL
 - 섀도 비율 기본 1.0(개발 서버와 같음)이라 턴마다 배경 LLM 이 1~2회 더 돈다. 끄려면 `LAB_SHADOW_RATE=0 uv run python scripts/chatbot/chat_lab.py`.
 - 도는 코드는 **켠 체크아웃의 것**이다. develop 최신을 보려면 pull 하고 켠다.
 - 대화 메모리는 로컬 vectordb(`ai_kb.dialogue_memory`)에 세션 단위로 남는다. `새 대화`·자동 실행은 끝날 때 지운다.
+  줄마다 임베딩(`dialogue_memory_vectors`, 2026-10-23)도 같이 남고 같이 지워진다. 그 전에 만든 볼륨이면 `docker/vector-init/02-dialogue-memory.sql` 을
+  `ai-vectordb` 에 한 번 다시 적용한다(멱등) — 표가 없으면 요약 저장이 실패해 기억이 쌓이지 않는다(이벤트 `kept_previous`).
 - 한 사람이 한 번에 한 턴씩 보내는 전제다 — 타임라인을 시각으로 묶는다.
 - `Address already in use` 가 나면 이미 켜져 있다. 끄고 다시 켠다(포트 8790 화면 · 8791 AI 앱).

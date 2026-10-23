@@ -1888,3 +1888,10 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — situation-awareness NFR Requirements 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
+## Functional Design·NFR Requirements 사후 개정 — U8 대화 기억 (DEC-U8-4·5 · DEC-U8-8·11 · NFR COST-U8-06 · DATA-U8-07)
+**Timestamp**: 2026-10-23T19:00:00+09:00 (작업 시점)
+**User Input**: "그리고 챗봇에서 과거에 얘기했던것들은 그냥 사라지고 장기 메모리에 담고 필요할때 꺼내오는 느낌으로 가는게 좋을거 같애" + 결정(AskUserQuestion): 요약·사실만 저장하고 관련 기억만 벡터로 꺼낸다(원문 저장 안 함 유지).
+**AI Response**: ai 유닛 FD `assistant-orchestrator` DEC-AO-19 에 맞춰 U8 문서 넷에 개정 블록을 덧붙였다(원문 보존) — `functional-design/business-logic-model.md` DEC-U8-4·5(요약 3턴마다 답한 뒤 뒤에서·실패면 이전 기억 그대로·줄 임베딩 표가 기억 행을 따라 지워진다)·DEC-U8-8·11(요약은 턴 밖), `nfr-requirements/nfr-requirements.md` COST-U8-06(턴 안 LLM 수·프롬프트 크기)·DATA-U8-07(줄 벡터도 같은 파기 경로). 근거·실측은 ai 유닛 FD BLM §8.
+**Context**: CONSTRUCTION — U8 FD·NFR 국소 개정, 승인 대기(같은 PR 머지 = 승인). `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
