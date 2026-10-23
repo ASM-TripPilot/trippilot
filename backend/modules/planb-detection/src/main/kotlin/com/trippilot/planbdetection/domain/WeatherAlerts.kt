@@ -43,6 +43,7 @@ import java.time.temporal.ChronoUnit
  * 9. `(…제외)` 는 나열한 구역을 뺀 그 광역 전체다 — 시군 **전체 이름**(어간 그대로 · 어간+시/군 — `경주` · `강화군`)으로 나열됐을 때만 그
  *    시군이 빠진다. 그 시군의 하위 권역(어간 + 다른 꼬리 — `경주동부` · `울진평지` · `보령도서`)만 나열됐으면 목적지가 뺀 쪽에 있는지 이름으로
  *    가릴 수 없어 모름이다. 개편 목록은 시군을 권역으로 나눠, 시군째 빼면 나머지 권역의 특보를 '특보 없음'으로 확인한다(G-SA-19 · INV-SA-2).
+ *    그 시군의 하위 권역을 전부 나열했으면([CITY_PARTS] — `여주동남부, 여주서부`) 시군 전체를 뺀 것이라 안 걸림이다(G-SA-24 결정 2026-10-23).
  *    섬 구역은 앞붙음이 아니라 표([ISLANDS])로 본다 — 시군 전체인 섬([WHOLE_CITY_ISLANDS] — 울릉도.독도 = 울릉군)을 빼면 그 시군이 빠지고,
  *    시군의 일부인 섬(서해5도 · 흑산도.홍도 · 거문도.초도 · 추자도 …)을 빼면 본토가 남아 그 시군에 걸린다. 거꾸로 시군 전체 이름을 뺐어도
  *    그 시군의 섬이 광역 줄 안의 하위 구역이면([LINE_ISLANDS] — `전라남도(여수 제외)` 의 거문도.초도) 그 섬이 남아 모름이다.
@@ -149,6 +150,41 @@ object WeatherAlerts {
         Province.DAEGU to setOf("달성", "군위"),
         Province.INCHEON to setOf("강화", "옹진"),
         Province.ULSAN to setOf("울주"),
+    )
+
+    /**
+     * 시군별 하위 권역(잎 구역) — 공식 목록에서 시군 줄(코드 끝 `00`) 아래 나뉜 구역이다(40개 시군 · 88개 — `기상청_기상특보구역정보_20260601`).
+     * t6 는 잎 구역만 싣는다. `(…제외)` 줄이 그 시군의 잎 구역을 전부 나열했으면 시군 전체를 뺀 것이라 안 걸림이다(규칙 9 · G-SA-24 결정
+     * 2026-10-23 — 일부만 뺐으면 종전대로 모름). 이름으로 맞추는 시군([CITY_STEMS])만 둔다 — 제주의 시는 산지·추자도가 따로라 잎을 다 빼도
+     * 시 전체가 아니다. `WeatherAlertsZoneListTest` 가 목록과 대조한다.
+     */
+    val CITY_PARTS: Map<Province, Map<String, Set<String>>> = mapOf(
+        Province.GYEONGGI to mapOf(
+            "파주" to setOf("파주동북부", "파주서북부", "파주남부"), "용인" to setOf("용인동북부", "용인서북부", "용인남부"),
+            "여주" to setOf("여주동남부", "여주서부"), "양평" to setOf("양평동부", "양평서부"),
+        ),
+        Province.GANGWON to listOf("동해", "삼척", "속초", "고성", "양양", "평창", "강릉", "정선", "홍천", "양구", "인제")
+            .associateWith { setOf(it + "평지", it + "산지") },
+        Province.CHUNGNAM to mapOf("보령" to setOf("보령(도서제외)", "보령도서"), "홍성" to setOf("홍성동부", "홍성서부")),
+        Province.CHUNGBUK to mapOf("청주" to setOf("청주동부", "청주서부")),
+        Province.JEONNAM to mapOf(
+            "영광" to setOf("영광(낙월면 제외)", "영광낙월면"), "나주" to setOf("나주동남부", "나주서북부"), "곡성" to setOf("곡성북부", "곡성남부"),
+            "구례" to setOf("구례평지", "구례산간"), "고흥" to setOf("고흥북부", "고흥남부"), "해남" to setOf("해남북부", "해남남부"),
+            "완도" to setOf("완도(여서도 제외)", "완도여서도"), "무안" to setOf("무안북부", "무안남부"),
+        ),
+        Province.JEONBUK to mapOf(
+            "부안" to setOf("부안(위도면 제외)", "부안위도면"), "군산" to setOf("군산(옥도면 제외)", "군산옥도면(어청도 제외)", "군산어청도"),
+        ),
+        Province.GYEONGBUK to mapOf(
+            "김천" to setOf("김천북부", "김천남부"), "안동" to setOf("안동북부", "안동동남부", "안동서부"), "영양" to setOf("영양평지", "영양산지"),
+            "봉화" to setOf("봉화평지", "봉화산지"), "울진" to setOf("울진평지", "울진산지"),
+            "경주" to setOf("경주중북부", "경주동부", "경주남부", "경주서부"),
+        ),
+        Province.GYEONGNAM to mapOf(
+            "하동" to setOf("하동북부", "하동남부"), "산청" to setOf("산청북부", "산청서남부", "산청동남부"), "함양" to setOf("함양중부", "함양서북부"),
+            "거창" to setOf("거창북부", "거창남부"), "합천" to setOf("합천서북부", "합천중부", "합천남부"),
+        ),
+        Province.DAEGU to mapOf("달성" to setOf("달성북부", "달성남부")),
     )
 
     /** 하위 구역 이름의 갈래(규칙 7·8) — 매칭과 감지기 WARN 이 같은 판정을 쓴다(특보구역 공식 목록 대조도 이 판정으로 한다). */
@@ -263,7 +299,7 @@ object WeatherAlerts {
         if (province !in place.provinces) return otherProvinceMatch(province, area, land, place) // 규칙 4
         if (area.zones.isEmpty()) return Match.HIT
         val named = place.stem != null && land.any { it.startsWith(place.stem) }
-        if (area.excluding) return excludedMatch(land, place)
+        if (area.excluding) return excludedMatch(province, land, place)
         if (land.isEmpty()) return Match.MISS
         if (named || place.wide) return Match.HIT
         // 제 구역이 있는 광역시의 군 — 그 군을 덮지 않는 목록의 권역은 거른다(정확히 일치 · 표 밖 권역은 규칙 7 그대로)
@@ -357,12 +393,14 @@ object WeatherAlerts {
     /**
      * `(…제외)` 줄 × 그 광역의 목적지(규칙 9) — 나열한 이름이 목적지 시군 전체([isWhole] · 그 시군 전체인 섬 [WHOLE_CITY_ISLANDS])면 안 걸림
      * (다만 시군 전체 이름을 뺐어도 광역 줄 안의 그 시군 섬([LINE_ISLANDS])이 나열 밖이면 그 섬이 남아 모름 — `전라남도(여수 제외)` × 여수),
+     * 그 시군의 하위 권역을 전부 나열한 것도 시군 전체다([CITY_PARTS] · G-SA-24),
      * 그 시군의 하위 권역(어간 + 다른 꼬리)뿐이면 모름, 둘 다 아니면 나열 밖이라 걸림이다. 섬 구역은 표로만 본다 — 시군의 일부인 섬은 빼도 본토가
      * 남아 걸림이고, 어간 앞붙음으로 읽지 않는다(`서해5도` 는 서해구가 아니다). 어간이 없는 목적지(광역 · 한 글자 구)는 나머지가 걸린다(규칙 5·7).
      */
-    private fun excludedMatch(land: List<String>, place: Place): Match {
+    private fun excludedMatch(province: Province, land: List<String>, place: Place): Match {
         val stem = place.stem
-        if (stem != null && land.any { isWhole(it, stem) }) {
+        val allParts = stem != null && CITY_PARTS[province]?.get(stem)?.let { land.containsAll(it) } == true // 하위 권역을 전부 뺐다(G-SA-24)
+        if (stem != null && (allParts || land.any { isWhole(it, stem) })) {
             val islandLeft = LINE_ISLANDS.any { island -> island !in land && ISLANDS[island]?.let { place.code.startsWith(it) } == true }
             return if (islandLeft) Match.UNSURE else Match.MISS
         }
