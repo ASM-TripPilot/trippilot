@@ -3077,8 +3077,6 @@ class WiredItineraryOrchestrator:
             subs = [p for p in subs if p in ok_set]
         notes.append(f"llm_repair: picked={len(subs)}/{len(result.value)} pool={len(cands.pois)} "
                      f"gaps={len(gaps_used)} drop={len(drop)}")
-        if why_out is not None:
-            why_out.update({p: r for p, r in _pick_reasons(result.value).items() if p in subs})
         if not subs:
             return outcome, composed
         left = budget.total_ms - (self._clock.monotonic_ms() - t0)
@@ -3107,6 +3105,8 @@ class WiredItineraryOrchestrator:
                      + (f"first rejected={why_not}" if why_not else "second"))
         if why_not:
             return outcome, composed
+        if why_out is not None:  # 채택된 수리의 이유만 — 기각된 2차의 이유가 1차 일정에 붙지 않게(Codex 리뷰 10-23)
+            why_out.update({p: r for p, r in _pick_reasons(result.value).items() if p in subs})
         return retry, (*kept, *subs)
 
     def _repair_event(self, meta: schemas.RequestMetaSchema, reason: str) -> None:
