@@ -22,6 +22,9 @@ src/trippilot/
                        edit/ 는 최상위 모듈에서 패키지로 승격(L-2 형제 검사 대상이 된다).
     unknown_handling/  2026-10-22 편입(#1576 의 `orchestrator/unknown_handling.py` 에서 이동) — 도우미 미확인 칸 웹 확인,
                        같은 꼴 `run(UnknownTask) -> UnknownOutcome`. 라우팅 테이블 행이 아니라 GET_POI_INFO 핸들러의 보조 위임(BR-AF-11 5종)
+    recommendation/    2026-10-23 편입(사용자 결정 "추천 관련한 것은 recommendation agent 가") — 도우미 추천 둘의 고르기 판단,
+                       같은 꼴 `run(RecommendTask) -> RecommendOutcome`, LLM 0. `ROUTING_TABLE` RECOMMEND_PLACES·RECOMMEND_REGION 의
+                       DELEGATE 대상, 재료(후보 묶음·취향)는 도우미 핸들러가 모아 넘기고 답 꼴(Facts)도 핸들러가 짓는다(BR-AF-11 6종)
   orchestrator/        ScheduleCoordinator(GENERATE_SCHEDULE 준비·위임 — 의도 파악 안 함) · InfoCollector · IntentRouter(미배선)
   providers/           (U5·U6 예약 — LLM 0회 계층)
   background/          (U6 예약 — 소싱 파이프라인·자율 트리거형, §5)

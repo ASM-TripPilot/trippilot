@@ -1310,6 +1310,23 @@ def test_old_unlabeled_lines_are_shown_as_before_until_resummarized() -> None:
     assert _recalled_lines(current, (old,), (), ()) == ("사용자는 카페를 선호한다", "지난 여행 기억:", "지난 여행은 부산이었다")
 
 
+def test_a_failed_recommendation_choice_is_reported_as_a_turn_failure() -> None:
+    """RecommendationAgent 고르기가 예외로 끝나면 핸들러가 턴 실패로 올리고 오케스트레이터가 범위 밖 + 이벤트로 보고한다 — 고르기가 핸들러에
+    있던 때와 같은 갈래(2026-10-23 리뷰: 에이전트가 삼키면 "맞는 지역 없음" 답이 보고 없이 나갔다)."""
+    from dataclasses import replace as _replace
+
+    from trippilot.agents.recommendation.agent import RecommendOutcome
+
+    class _Broken:
+        def run(self, task):
+            return RecommendOutcome(error="KeyError")
+
+    b = _build(_canned(Intent.RECOMMEND_REGION), ports=_replace(_PORTS, recommend=_Broken()))
+    out = b.orch.turn(_input("내 취향에 맞는 가볼 지역 추천해줘", snapshot=_NO_TRIP))
+    assert out.outcome == "OUT_OF_SCOPE" and "recommendation_error: KeyError" in out.reason
+    assert ("orchestrator", "dialogue_orchestrator", "out_of_scope") in _modes(b.trace)
+
+
 # ── 5단 — 어떤 LLM 산출에도 유효한 답 (AO-P1·P2) ─────────────────────────
 
 

@@ -1597,10 +1597,14 @@ def _recommend(arguments: dict, rows=None, *, utterance: str = "서울 카페 �
 
 
 def test_recommend_prefers_the_ranked_radius_pool_over_sql_rows_and_cuts_to_the_said_count() -> None:
-    """SQL 행은 인기 신호가 태그 하나라 고르기 순서로 약하다 — 반경 결과가 있으면 그것(요즘 인기 → 저장 수 순)을 쓴다."""
-    rows = [_row("가나다 카페", "카페"), _row("고센인코퍼레이티드", "카페")]
+    """SQL 행은 인기 신호가 태그 하나라 고르기 순서로 약하다 — 반경 결과가 있으면 그것(요즘 인기 → 저장 수 순)을 쓴다. 행은 앵커(부산) 안이라
+    탐색이면 SQL 행이 먼저 나온다 — 그래야 반경과 SQL 이 실제로 겨룬다(앵커 밖 행이면 거르기에서 0건이 돼 공회전했다, 2026-10-23 리뷰)."""
+    rows = [_row("가나다 카페", "카페", "해운대구", sido="부산광역시"), _row("고센인코퍼레이티드", "카페", "해운대구", sido="부산광역시")]
     facts, port, builder = _recommend({"region": "부산", "theme": "요즘 핫한", "count": "1"}, rows)
     explored, _ = _explore({"region": "부산", "theme": "요즘 핫한"})
+    explored_sql, _, _ = _explore_sql({"region": "부산", "theme": "요즘 핫한"}, rows, utterance="부산 요즘 핫한 곳")
+    assert _names_of(explored_sql)[:2] == ["가나다 카페", "고센인코퍼레이티드"]  # 전제 — 탐색은 SQL 행을 쓴다
+    assert not {"가나다 카페", "고센인코퍼레이티드"} & set(_names_of(facts))  # 추천은 반경 순위
     assert port.calls and builder.requests  # 둘 다 돌지만
     assert facts.intent is Intent.RECOMMEND_PLACES and facts.kind is AnswerKind.CANDIDATES
     assert _names_of(facts) == _names_of(explored)[:1]  # 반경 순위의 첫 곳 하나
@@ -2449,6 +2453,71 @@ def test_recommend_cuts_event_answers_to_the_said_count_and_rewrites_the_sentenc
     assert _event_names(explored)[0] in facts.template_text and _event_names(explored)[1] not in facts.template_text
 
 
+class _SpyRecommend:
+    """RecommendationAgent 대역 — 과제를 적고, 실물 결과를 `shape` 로 손봐 돌려준다(핸들러가 에이전트 결정을 그대로 따르는지 본다)."""
+
+    def __init__(self, shape=lambda out: out) -> None:
+        from trippilot.agents.recommendation.agent import RecommendationAgent
+
+        self._real, self._shape, self.tasks = RecommendationAgent(), shape, []
+
+    def run(self, task):
+        self.tasks.append(task)
+        return self._shape(self._real.run(task))
+
+
+def test_the_place_handler_follows_the_agents_choice_and_hands_it_the_material() -> None:
+    """핸들러는 재료를 모아 에이전트에 넘기고 그 고르기(묶음·순서·개수)를 그대로 따른다 — 에이전트를 건너뛰고 옛 인라인 고르기로 되돌려도
+    초록이던 이관을 고정한다(2026-10-23 리뷰)."""
+    from trippilot.agents.recommendation.agent import PLACES
+
+    spy = _SpyRecommend(lambda out: replace(out, candidates=tuple(reversed(out.candidates)), count=1))
+    rows = [_row("망원 카페 A", "카페", "마포구"), _row("망원 카페 B", "카페", "마포구", trending=True),
+            _row("망원 카페 C", "카페", "마포구")]
+    port, builder = _PlaceSql(rows), _PoolBuilder(_X_POOL)
+    ports = HandlerPorts(poi_info=_PoiInfo(), pool_builder=builder, place_sql=port, recommend=spy)
+    ctx = replace(_ctx(_EMPTY_SNAP, {"region": "망원동", "category": "CAFE", "count": "3"}, ports=ports), utterance="망원동 카페 골라줘")
+    facts = _run(_RECOMMEND, ctx)
+    (task,) = spy.tasks
+    assert task.kind == PLACES and task.count == "3" and task.radius == () and [c["name"] for c in task.sql] == ["망원 카페 A", "망원 카페 B", "망원 카페 C"]
+    assert _names_of(facts) == ["망원 카페 C"] and facts.detail["pick_count"] == 1  # 에이전트가 뒤집고 하나로 — 그대로
+    # 반경 결과가 있으면 SQL 행은 넘기지도 않는다 — 고르기가 핸들러에 있던 때처럼 SQL 묶음을 건드리지 않는다(모양이 이상해도 반경으로 답한다)
+    spy2 = _SpyRecommend()
+    busan = [_row("가나다 카페", "카페", "해운대구", sido="부산광역시")]
+    ports2 = HandlerPorts(poi_info=_PoiInfo(), pool_builder=_PoolBuilder(_X_POOL), place_sql=_PlaceSql(busan), recommend=spy2)
+    _run(_RECOMMEND, replace(_ctx(_EMPTY_SNAP, {"region": "부산"}, ports=ports2), utterance="부산 카페 골라줘"))
+    (task2,) = spy2.tasks
+    assert task2.radius and task2.sql == ()
+
+
+def test_the_region_handler_follows_the_agents_choice_and_hands_it_the_tastes() -> None:
+    from trippilot.agents.recommendation.agent import REGIONS
+
+    spy = _SpyRecommend(lambda out: replace(out, basis="에이전트가 정한 근거"))
+    snap = replace(_EMPTY_SNAP, tastes=(("자연",), ("테마파크",)))
+    facts = _run(HANDLERS[Intent.RECOMMEND_REGION], _ctx(snap, {"count": "2", "theme": "바다"}, ports=HandlerPorts(recommend=spy)))
+    (task,) = spy.tasks
+    assert (task.kind, task.count, task.styles, task.activities, task.theme) == (REGIONS, "2", ("자연",), ("테마파크",), "바다")
+    assert facts.detail["basis"] == "에이전트가 정한 근거" and facts.detail["regions"] == [r.name for r in spy._real.run(task).regions]
+    asked = _run(HANDLERS[Intent.RECOMMEND_REGION],
+                 _ctx(snap, {}, ports=HandlerPorts(recommend=_SpyRecommend(lambda out: replace(out, regions=(), basis=None, ask_taste=True)))))
+    assert asked.template_text == REGION_ASK_TASTE_TEXT  # 에이전트가 되묻자고 하면 되묻는다
+
+
+@pytest.mark.parametrize("intent", [Intent.RECOMMEND_PLACES, Intent.RECOMMEND_REGION])
+def test_a_failed_choice_is_a_turn_failure_not_an_empty_answer(intent: Intent) -> None:
+    """에이전트 고르기가 예외로 끝나면(`error`) 턴 실패로 올린다 — 오케스트레이터 `_crashed` 가 범위 밖 + 이벤트로 보고한다. "고를 것 없음"
+    으로 받으면 고르지 않은 SQL 순서로 추천하거나 "맞는 지역 없음"으로 답해 보고가 사라졌다(2026-10-23 리뷰 재현)."""
+    from trippilot.agents.recommendation.agent import RecommendOutcome
+
+    broken = _SpyRecommend(lambda out: RecommendOutcome(error="KeyError"))
+    snap = replace(_EMPTY_SNAP, tastes=(("자연",), ()))
+    ctx = replace(_ctx(snap, {"region": "부산", "count": "2"}, ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=_PoolBuilder(_X_POOL),
+                                                                                  recommend=broken)), utterance="골라줘")
+    with pytest.raises(RuntimeError, match="recommendation_error: KeyError"):
+        _run(HANDLERS[intent], ctx)
+
+
 # ── RECOMMEND_REGION — 취향·말한 바람 × 지역 성격표 → 가볼 지역 ──
 
 def _region(arguments: dict, tastes=None) -> Facts:
@@ -2467,6 +2536,7 @@ def test_region_recommendation_from_saved_tastes_names_table_regions_with_reason
     assert facts.detail["compared_to"] == "전국 평균"  # 비교 기준은 한 번(행마다 실으면 답이 베낀다)
     assert [q.label for q in facts.quick_replies] == [f"{n} 가볼 만한 곳" for n in names]  # 누르면 장소 탐색으로 이어진다
     assert _types(facts) == ["CREATE_TRIP"] and facts.detail["basis"] == "저장된 취향" and not facts.needs_trip
+    assert facts.detail["pick_count"] == 2  # 답변 프롬프트가 "pick_count 곳"을 소개한다 — 말한 개수
     assert all(n in facts.template_text for n in names)
 
 
