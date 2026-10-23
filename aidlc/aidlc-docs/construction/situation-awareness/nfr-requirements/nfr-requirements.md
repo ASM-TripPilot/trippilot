@@ -224,6 +224,11 @@ planb.situation_sweep mode= phase= trips= skipped= failed= live=[] off=[] observ
 
 > **[개정 · 2026-10-23 — 사용자 결정]** 8단계 갱신 — 특보 쪽 정본 결정은 남지 않는다(G-SA-24 · G-SA-20 해소 — `functional-design/business-logic-model.md` §0.4 · §9 개정 블록). 남은 것은 대기질의 에어코리아 모름 비율과 `observe-only` 에서 빼는 커밋이다.
 
+> **[개정 · 2026-10-23 — 사용자 지시]** 4~8단계를 지시 하나로 진행한다(`functional-design/business-logic-model.md` §0.4 2026-10-23 사용자 지시 블록).
+> - 4단계 '`ACCOUNT_IDS` 비움'(전원) · 6단계(운영 선계산) · 7단계(`pre-trip`) · 8단계(특보·대기질 관찰 전용 해제)를 이번에 한다. 5단계는 7단계에 든다(`pre-trip` 이 진행 중 여행의 내일도 본다).
+> - 카나리·실기기 푸시 1회 왕복은 건너뛴다 — 대신 운영 첫 `on` 회차의 요약 줄 · WARN · 트리거 · 알림 · 선계산 줄을 바로 판독한다(OBS-SA-02).
+> - 4단계 선행 중 FE-A·B·C 스토어 반영과 iOS 푸시(FE-D — 번들 ID Push 권한 · APNs 키)는 남는다. 그 전에는 옛 앱이 OS 알림·알림함만 받고 탭 라우팅이 없다. `minSupportedVersion` 상향도 새 빌드 뒤로 미룬다(O-SA-7).
+
 ## 8. PBT (blocking · 확장 Partial 모드)
 
 `functional-design/business-rules.md` 의 **PBT-SA-01~22**(전부 blocking)를 그대로 승계한다. NFR 성질이 큰 것은 PBT-SA-04(푸시 상한 · 회차당 사건 ≤ 1) · 07(밤 창 경계) · 17(선계산 구독자 멱등 · 상한 · BUSY 는 세션 0) · 18(같은 여행 10분 1회)이다 — 실행 패턴의 실패 모드를 이 넷과 스윕 단위 테스트가 보므로 NFR Design 을 두지 않는다(계획 Q10=A). 확장 규칙과의 대응:

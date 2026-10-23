@@ -1872,3 +1872,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
+
+## Functional Design·NFR Requirements 사후 개정 — situation-awareness 운영 전원·선계산·지평 pre-trip·특보·대기질 관찰 전용 해제 (BLM §0.4 · NFR §7 · U3 BR-U3-28·INV-U3-04)
+**Timestamp**: 2026-10-23T17:50:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 — 다른 세션이 받은 지시를 그 세션이 상황 감지 세션에 전달) "꺼둔거 다 켜. 다 잘 돌아가게끔 만들란 말이야!!!"
+**AI Response**: 블록 4개를 덧붙였다(원문·기존 블록 삭제·수정 0줄) — `construction/situation-awareness/functional-design/business-logic-model.md` §0.4 · `nfr-requirements/nfr-requirements.md` §7 · `construction/u3-ai-itinerary/functional-design/business-rules.md` BR-U3-28 · `domain-entities.md` INV-U3-04(O-SA-6 승인으로 본다). 구현은 같은 PR 의 `backend/app/src/main/resources/application.yml` `observe-only: ""`(특보·대기질도 쓰기·푸시)와 그 단언(`SituationSweepWiringTest`). 운영 스위치(전원 on · 선계산 on · 지평 pre-trip)는 배포 입력 `runtime_switches` 로 배포 담당 세션이 쓴다(코드 밖). `minSupportedVersion` 상향(O-SA-7)은 새 스토어 빌드 뒤로 미뤘다.
+**Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(사용자 지시 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
