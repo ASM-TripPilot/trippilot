@@ -1149,10 +1149,13 @@ def test_generate_wire_region_codes_reach_the_pool_and_keep_the_district_first()
     outside = tuple(replace(_poi(i, 0.01), region_code="11680") for i in range(20, 23))  # 구 밖 ≈1.4km
     ins, outs = {str(p.poi_id) for p in inside}, {str(p.poi_id) for p in outside}
 
-    orchestrator, _, sink = _build(pois=inside + outside)
+    orchestrator, trace, sink = _build(pois=inside + outside)
     orchestrator.generate(replace(_request(), region_codes=domain.region_codes), 20_000, _TRACE_ID, _NOW)
     chosen = {str(c.poi_id) for c in sink.problems[0].candidates}
     assert chosen and chosen <= ins  # 구 안 명소 12곳 ≥ 10 — 구 밖은 채우지 않는다
+    # 끝단 확인이 이 한 줄뿐이라(앵커 코드는 BE 가 채운다) 받은 코드와 구 안 비율을 남긴다
+    assert any(e.reason == "region_first:11650,11651 inside=12/12"
+               for e in trace.events if getattr(e, "stage", None) == "pool")
 
     orchestrator, _, sink = _build(pois=inside + outside)
     orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)

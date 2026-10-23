@@ -265,6 +265,12 @@ class ScheduleCoordinator:
                     summary = candidates_report(pool, days=len(request.days), persona=persona)
                     self._degrade(steps, trace_id, now, "pool", "radius", "radius_widened",
                                   f"radius_widened:{base:g}->{widened:g}km before=0 after={summary.pool_size}")
+        # ①‴ 고른 구 안 먼저(#1628) — 받은 구 코드와 최종 풀의 구 안 비율을 남긴다. 앵커 코드는 BE 가 채우고
+        #    (`RegionAnchors.dayAnchors`) AI 는 다른 데에 남기지 않아, 끝단(앱 → BE → AI) 확인이 이 한 줄뿐이다.
+        if request.region_codes:
+            inside = sum(1 for p in pool.pois if p.region_code in request.region_codes)
+            self._observe(trace_id, now, "pool", "region", "region",
+                          f"region_first:{','.join(sorted(request.region_codes))} inside={inside}/{len(pool.pois)}")
         m7_elapsed = self._clock.monotonic_ms() - t0
         if budget.m7_ms and m7_elapsed > budget.m7_ms:
             # 풀 없이는 일정이 없으므로 풀 단계는 스킵 대상이 아니다 — 초과는 관측만 하고,
