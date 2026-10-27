@@ -19,6 +19,10 @@ web-build/
 *.key
 *.mobileprovision
 
+# jest 변환 캐시·ESLint 캐시 (CI 는 actions/cache 로 복원 — TRIP-1613)
+.jest-cache/
+.eslintcache
+
 # Metro
 .metro-health-check*
 
