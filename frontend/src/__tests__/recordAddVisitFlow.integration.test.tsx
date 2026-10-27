@@ -490,8 +490,11 @@ describe('🔴 AC-6 · 검색은 서버 q 로, 0건이면 안내', () => {
         )
       ).toBe(true)
     );
-    await waitFor(() => expect(screen.queryByTestId(rowId('p1'))).toBeNull());
-    expect(screen.getByTestId(rowId('p2'))).toBeOnTheScreen();
+    // 디바운스 뒤 키가 바뀌면 옛 목록이 내려간 로딩 창이 잠깐 있다 — p1 이 사라진 직후가 아니라 p2 도착까지 기다린다(TRIP-1617).
+    await waitFor(() => {
+      expect(screen.queryByTestId(rowId('p1'))).toBeNull();
+      expect(screen.getByTestId(rowId('p2'))).toBeOnTheScreen();
+    });
   });
 
   it('P6-b: 결과가 있으면 안내가 없고, 0건이 되면 "검색 결과가 없어요" 가 뜬다', async () => {
