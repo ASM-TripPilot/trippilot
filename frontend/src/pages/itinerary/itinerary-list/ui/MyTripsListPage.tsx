@@ -91,11 +91,23 @@ export function MyTripsListPage(): ReactElement {
   // 조용한 무한 재시도 금지, INV-4). 상한은 두지 않는다(openapi — 멈춘 생성은 서버가 FAILED 로 닫는다).
   // 카드 컨테이너는 같은 캐시 키를 구독만 하므로 거기엔 걸지 않는다(폴링 결정을 한 곳에 모은다 — 같은 키의
   // 관찰자 타이머는 쿼리 상태가 바뀔 때마다 함께 다시 맞춰져 요청 수가 겹치지는 않는다).
+  //
+  // TRIP-1614 · 이 목록이 보일 때(`focused`)만 묻는다 — 다른 탭이나 위에 쌓인 화면 뒤에서는 멈춘다(OS 백그라운드는
+  // AppProviders 의 focusManager 가 맡는다). state 로 읽는다: TanStack 의 관찰자는 옵션이 다시 들어올
+  // 때(setOptions)와 쿼리 상태가 바뀔 때만 간격을 다시 계산하고, 이미 무장된 타이머는 이 함수를 다시 부르지 않는다.
+  // state 는 값이 바뀌면 반드시 리렌더 → 옵션 재주입으로 타이머를 다시 맞추는 보장이 있다. ref 는 이 보장이 없어
+  // 다른 리렌더(이 페이지는 blur 정리의 setSeen 등)에 우연히 기대게 된다 — 그래서 ref 로 바꿔도 테스트는 못 가르니
+  // (code-critic M2b) 리뷰 계약으로 지킨다.
+  // 복귀 때 즉시 재조회를 따로 넣지 않는다 — 30초 넘게 비웠으면 아래 탭 복귀 재조회(stale:true)가 1건 내고,
+  // 그 미만이면 데이터가 신선해 폴링 간격(2~5초) 뒤 첫 요청이 나간다.
+  // TRIP-1286 — 목록이 보이는 동안만 판정. 첫 렌더는 안 보임으로 시작해 포커스 effect 가 켠다.
+  const [focused, setFocused] = useState(false);
   const itineraries = useQueries({
     queries: list.map((trip) =>
       getGetTripsTripIdItineraryQueryOptions(trip.tripId, {
         query: {
           refetchInterval: (query) =>
+            focused &&
             query.state.status !== 'error' &&
             (query.state.data?.generationState === 'PARTIAL' ||
               isGenerationRunning(query.state.data))
@@ -109,8 +121,6 @@ export function MyTripsListPage(): ReactElement {
   const [shown, setShown] = useState<Trip | null>(null);
   // TRIP-1241 — 닫음. shown 을 비우면 seen state 가 옛 값이라 pick 이 다시 계산돼 재표시되므로 별도 플래그로 든다.
   const [barDismissed, setBarDismissed] = useState(false);
-  // TRIP-1286 — 목록이 보이는 동안만 판정. 첫 렌더는 안 보임으로 시작해 포커스 effect 가 켠다.
-  const [focused, setFocused] = useState(false);
   // TRIP-1428 — 이 마운트에서 seen 에 쓴(쓰려 한) 값. 다시 읽은 값에 합친다.
   const seenWrittenRef = useRef<readonly string[]>([]);
   const largeText = isLargeText(useWindowDimensions().fontScale);

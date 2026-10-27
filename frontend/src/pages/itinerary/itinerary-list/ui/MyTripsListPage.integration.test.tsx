@@ -328,6 +328,24 @@ async function settle(): Promise<void> {
   await act(() => new Promise((r) => setTimeout(r, 30)));
 }
 
+/** 탭을 떠난다(blur) — 등록된 포커스 콜백의 정리 함수를 부른다. 돌아올 때까지 포커스 콜백은 없는 셈이다. */
+function leaveTab(): void {
+  act(() => {
+    for (const [effect, cleanup] of [...mockFocus]) {
+      if (typeof cleanup === 'function') cleanup();
+      mockFocus.set(effect, undefined);
+    }
+  });
+}
+/** 탭으로 돌아온다 — 포커스 콜백을 다시 실행한다. */
+function returnToTab(): void {
+  act(() => {
+    for (const effect of [...mockFocus.keys()]) {
+      mockFocus.set(effect, effect());
+    }
+  });
+}
+
 /** 그 카드의 ⋯ → '삭제' 까지 눌러 다이얼로그를 연다. */
 async function openDialogFor(tripId: string): Promise<ReactTestInstance> {
   fireEvent.press(await screen.findByTestId(`my-trip-menu-${tripId}`));
@@ -1218,6 +1236,83 @@ describe('생성 중 여행은 목록이 스스로 다시 묻는다 — 폴링·
       );
     });
   });
+
+  // TRIP-1614 · 일정 탭은 다른 탭으로 가거나 위에 화면이 쌓여도 언마운트되지 않아, 보이지 않는 동안에도
+  // 폴링이 계속 나가던 문제 — 포커스를 잃으면 멈추고, 돌아오면 이어서 묻는다. 운영 전역 staleTime(30초)과
+  // 같게 렌더해야 한다: 기본 0이면 복귀 때 늘 "낡음"이라 부재 길이와 무관하게 1건이 나가 운영과 다른 그림을 고정한다.
+  describe('🔴 화면이 보이지 않는 동안엔 묻지 않고, 돌아오면 이어서 묻는다', () => {
+    const STALE_30S = { staleTime: 30_000 };
+
+    /** 생성 중 A·확정 B 로 열고, 포커스 중 폴링이 실제로 도는 것까지 확인한다(아래 "0건"이 우연이 아니게 하는 앵커). */
+    async function openAndPollOnce(): Promise<void> {
+      script = { [A]: running(A), [B]: confirmed(B) };
+      renderPage(undefined, STALE_30S);
+      await advance(100);
+      expect(count(itinPath(A))).toBe(1);
+      await advance(POLL + 100);
+      expect(count(itinPath(A))).toBe(2);
+    }
+
+    it('탭을 떠나 2분을 보내면 생성 중 A 도 확정 B 도 일정을 한 번도 안 묻는다', async () => {
+      // 준비 — 포커스 중엔 A 가 2초마다 묻는다(앵커). 떠나기 직전 요청 수를 기준선으로 든다.
+      await openAndPollOnce();
+      const baseA = count(itinPath(A));
+      const baseB = count(itinPath(B));
+
+      // 실행 — 탭을 떠나 가짜 시계로 120초를 보낸다(2초 간격 15회 + 5초 간격이 모두 지나가는 길이).
+      leaveTab();
+      await advance(120_000);
+
+      // 단언 — 떠난 뒤 요청이 0건. 폴링이 도는 쪽(A)과 원래 안 도는 쪽(B) 모두 그대로다.
+      expect(count(itinPath(A))).toBe(baseA);
+      expect(count(itinPath(B))).toBe(baseB);
+    });
+
+    it('2분 만에 돌아오면 A 를 정확히 1번 따라잡고, 그다음 간격마다 다시 묻는다', async () => {
+      // 준비 — 포커스 중 폴링을 확인하고 탭을 떠나 2분을 보낸다. 데이터는 마지막 응답 뒤 30초를 넘겨 "낡음"이 된다.
+      await openAndPollOnce();
+      leaveTab();
+      await advance(120_000);
+      const beforeReturn = count(itinPath(A));
+
+      // 실행 ① — 돌아온다(복귀 재조회가 나갈 시간만 준다 · 폴링 간격 2초보다 한참 짧다).
+      returnToTab();
+      await advance(100);
+
+      // 단언 ① — 낡은 A 를 정확히 1번 다시 물었다(기존 탭 복귀 재조회 · INV-4 따라잡기).
+      expect(count(itinPath(A))).toBe(beforeReturn + 1);
+
+      // 실행 ② — 폴링 간격 하나가 지난다.
+      await advance(POLL + 100);
+
+      // 단언 ② — 폴링이 다시 돌아 한 건 더. 두 건이 아니다(중복 타이머 없음).
+      expect(count(itinPath(A))).toBe(beforeReturn + 2);
+    });
+
+    it('10초만 떠났다 오면 복귀 재조회 없이, 폴링 간격 뒤 첫 요청이 나간다', async () => {
+      // 준비 — 포커스 중 폴링을 확인하고 탭을 떠나 10초를 보낸다. 마지막 응답이 아직 신선하다(30초 미만).
+      await openAndPollOnce();
+      const baseA = count(itinPath(A));
+      leaveTab();
+      await advance(10_000);
+
+      // 떠난 동안엔 0건(AC1 의 짧은 변형).
+      expect(count(itinPath(A))).toBe(baseA);
+
+      // 실행 ① — 돌아온다.
+      returnToTab();
+      await advance(100);
+
+      // 단언 ① — 신선하므로 복귀 직후엔 묻지 않는다(결정 D1: 즉시 재조회 추가 안 함).
+      expect(count(itinPath(A))).toBe(baseA);
+
+      // 실행 ② — 폴링 간격 하나가 지난다.
+      await advance(POLL + 100);
+
+      // 단언 ② — 타이머가 이어져 첫 요청이 정확히 1번.
+      expect(count(itinPath(A))).toBe(baseA + 1);
+    });
+  });
 });
 
 // TRIP-1271 · 결정 1=A — 생성 중인 여행도 지울 수 있다(US-TRIP-10 개정의 "생성 중 ⋯ 숨김"을 뒤집는다).
@@ -1339,24 +1434,6 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
     script[id] = value;
     await act(async () => {
       gates.get(id)?.();
-    });
-  }
-
-  /** 탭을 떠난다(blur) — 등록된 포커스 콜백의 정리 함수를 부른다. */
-  function leaveTab(): void {
-    act(() => {
-      for (const [effect, cleanup] of [...mockFocus]) {
-        if (typeof cleanup === 'function') cleanup();
-        mockFocus.set(effect, undefined);
-      }
-    });
-  }
-  /** 탭으로 돌아온다 — 포커스 콜백을 다시 실행한다. */
-  function returnToTab(): void {
-    act(() => {
-      for (const effect of [...mockFocus.keys()]) {
-        mockFocus.set(effect, effect());
-      }
     });
   }
 
