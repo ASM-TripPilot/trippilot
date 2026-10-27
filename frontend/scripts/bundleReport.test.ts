@@ -119,8 +119,8 @@ function smeOf(
   return {
     results: [
       {
-        bundleName:
-          '_expo/static/js/ios/index-ea111833cd9f424effb272f1ff11618d.js',
+        // 실제 해시(32-hex)를 쓰면 socialSdkSecrets 의 키 리터럴 스캔에 걸린다.
+        bundleName: '_expo/static/js/ios/index-<hash>.js',
         totalBytes,
         mappedBytes: totalBytes - 286657,
         unmappedBytes: 286657,
