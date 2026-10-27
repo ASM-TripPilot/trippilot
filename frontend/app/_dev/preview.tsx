@@ -6409,6 +6409,16 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => <MyTripsListScreen mode="empty" onPressCreateTrip={noop} />,
   },
+  {
+    key: 'h06-my-trips-error',
+    band: 'h',
+    label:
+      'h06 · 내 여행 조회 실패(TRIP-1615, Figma 프레임 없음 — 알림함 선례)',
+    login: null,
+    render: () => (
+      <MyTripsListScreen mode="error" onPressCreateTrip={noop} onRetry={noop} />
+    ),
+  },
   // h06 삭제 메뉴·삭제 확인(TRIP-1055, Figma 4682:2573·4682:3206) — Figma 와 같은 작성중(부산)+완성 2카드.
   // 작성중 카드만 ⋯ 를 받는다. 메뉴 위치·그림자·딤 덮임·중앙 정렬은 jest 사각(6-b 대조 자리).
   {

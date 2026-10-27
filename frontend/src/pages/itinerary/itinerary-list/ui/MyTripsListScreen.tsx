@@ -2,6 +2,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
@@ -13,9 +14,9 @@ import {
 } from '@/features/itinerary/index.view';
 
 /**
- * TRIP-468 · h37 "내 여행" 목록 화면 — 순수 프레젠테이션(3얼굴: list·empty·loading).
+ * TRIP-468 · h37 "내 여행" 목록 화면 — 순수 프레젠테이션(4얼굴: list·empty·loading·error).
  *
- * 판정(조회·정렬·empty/loading 가름)은 페이지(`MyTripsListPage`)가 진다 — 이 화면은 `mode` 와
+ * 판정(조회·정렬·empty/loading/error 가름)은 페이지(`MyTripsListPage`)가 진다 — 이 화면은 `mode` 와
  * 완성된 카드(`cards`)를 받아 앱바 "내 여행" + 정렬 줄 + 얼굴만 그린다. TRIP-1122 · 정렬 줄은 현재 기준
  * (`sortKey`) 라벨을 띄운 누름 대상이고, 누르면 `onPressSort` — 시트는 페이지가 연다.
  *
@@ -23,6 +24,10 @@ import {
  * `itinerary-tab-empty`·`itinerary-tab-create-trip` 를 계승한다. TRIP-788 로 아이콘 슬롯을 `icon`
  * (하드코딩 핑크 원)에서 `illustration`(회색 원+캘린더) 슬롯으로 옮겨 StateNotice 무수정으로 핑크 원을
  * 우회한다(stay·explore 소비처 회귀 방지). 부제는 `\n` 으로 2줄을 강제한다.
+ *
+ * TRIP-1615 · error 는 조회 실패(INV-4) — empty 와 같은 `StateNotice` 틀에 알림함·저장 숙소와 같은 연핑크 원
+ * 경고 아이콘 + [다시 시도] 하나. Figma 에 h06 오류 프레임이 없어 코드 선례를 따랐다. 재시도 중 얼굴은
+ * 페이지가 정한다(데이터 없는 refetch 는 pending 으로 돌아가 loading 이 대신한다) — 이 화면엔 재시도 중 상태가 없다.
  */
 
 const APPBAR_TITLE = '내 여행';
@@ -35,14 +40,19 @@ const EMPTY_TITLE = '아직 만든 여행이 없어요';
 const EMPTY_DESCRIPTION =
   '여행을 만들면 확정·작성중 상태를\n여기서 한눈에 볼 수 있어요';
 const EMPTY_CTA_LABEL = '여행 만들기';
+const ERROR_TITLE = '여행을 불러올 수 없어요';
+const ERROR_DESCRIPTION = '잠시 후 다시 시도해 주세요';
+const ERROR_RETRY_LABEL = '다시 시도';
 
-export type MyTripsListMode = 'list' | 'empty' | 'loading';
+export type MyTripsListMode = 'list' | 'empty' | 'loading' | 'error';
 
 export interface MyTripsListScreenProps {
   mode: MyTripsListMode;
   /** list 모드에서 그릴 카드들(페이지가 TripCardContainer 배열로 조립해 내린다). */
   cards?: ReactNode;
   onPressCreateTrip: () => void;
+  /** error 모드의 [다시 시도]. */
+  onRetry?: () => void;
   /** 현재 정렬 기준(라벨). 기본 최신순. */
   sortKey?: MyTripsSortKey;
   onPressSort?: () => void;
@@ -98,6 +108,7 @@ export function MyTripsListScreen({
   mode,
   cards,
   onPressCreateTrip,
+  onRetry,
   sortKey = 'recent',
   onPressSort,
   listHeader,
@@ -134,6 +145,23 @@ export function MyTripsListScreen({
                   label: EMPTY_CTA_LABEL,
                   variant: 'filled',
                   onPress: onPressCreateTrip,
+                },
+              ]}
+            />
+          </View>
+        ) : mode === 'error' ? (
+          <View className="flex-1 items-center justify-center px-lg">
+            <StateNotice
+              testID="itinerary-tab-error"
+              icon={<WarningTriangleGlyph size={32} color="primary" />}
+              title={ERROR_TITLE}
+              description={ERROR_DESCRIPTION}
+              actions={[
+                {
+                  testID: 'itinerary-tab-retry',
+                  label: ERROR_RETRY_LABEL,
+                  variant: 'filled',
+                  onPress: onRetry,
                 },
               ]}
             />
