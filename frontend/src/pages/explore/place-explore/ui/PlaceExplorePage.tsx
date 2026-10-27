@@ -27,6 +27,10 @@ import { router, useLocalSearchParams } from 'expo-router';
 import type { Place, PoiCategory } from '@/shared/api/index.schemas';
 import { getAccessToken } from '@/shared/api';
 import { guardPress } from '@/shared/lib/pressGuard';
+import {
+  SEARCH_DEBOUNCE_MS,
+  useDebouncedValue,
+} from '@/shared/lib/useDebouncedValue';
 import { BottomTabBar, shellTabHref } from '@/shared/ui/BottomTabBar';
 
 import { resolvePlaceListState } from '@/features/explore';
@@ -77,7 +81,8 @@ export function PlaceExplorePage(): ReactElement {
 
   // 검색은 서버가 한다(q) — 클라 필터는 "받아온 페이지 안에서만" 검색이라 결과가 조용히 빠진다
   // (TRIP-502 선행 조건). 무한 스크롤은 nextCursor 로 이어 받는다(첫 장만 받고 스크롤에 따라 추가).
-  const trimmedQuery = searchText.trim();
+  // 입력칸은 즉시 보이되 서버 조회 키·hasQuery 는 300ms 멈춘 값으로 민다(TRIP-1617) — 같은 출처여야 안내 얼굴이 안 깜빡인다.
+  const trimmedQuery = useDebouncedValue(searchText.trim(), SEARCH_DEBOUNCE_MS);
   // 두 훅 모두 무조건 호출하고 enabled 로 게이팅한다(훅 규칙) — 다지역이면 단발 조회를 꺼
   // 헛조회를 막고, 단일/0지역이면 병합 조회를 끈다.
   const infinite = usePlacesInfinite(

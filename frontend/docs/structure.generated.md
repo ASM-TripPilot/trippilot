@@ -1651,6 +1651,7 @@
 - `src/shared/lib/seoulDate.ts`  →  seoulDate · seoulTime · seoulInstant
 - `src/shared/lib/sheetHandle.ts`  →  SHEET_HANDLE_INDICATOR_STYLE
 - `src/shared/lib/useDeadlineFlag.ts`  →  useDeadlineFlag
+- `src/shared/lib/useDebouncedValue.ts`  →  SEARCH_DEBOUNCE_MS · useDebouncedValue
 - `src/shared/lib/useElapsedFlag.ts`  →  useElapsedFlag
 - `src/shared/lib/useKeyboardVisible.ts`  →  useKeyboardVisible
 - `src/shared/lib/useQueryDataUpdateCount.ts`  →  useQueryDataUpdateCount
@@ -1873,4 +1874,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1197개 파일
+합계 1198개 파일

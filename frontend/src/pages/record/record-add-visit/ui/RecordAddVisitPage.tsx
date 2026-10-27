@@ -22,6 +22,10 @@ import {
 } from '@/shared/api/index.hooks';
 import { ArriveRequestSource } from '@/shared/api/index.schemas';
 import type { Place, PoiCategory } from '@/shared/api/index.schemas';
+import {
+  SEARCH_DEBOUNCE_MS,
+  useDebouncedValue,
+} from '@/shared/lib/useDebouncedValue';
 
 // 그날 좌표 핀도 후보도 없을 때 지도 중심 — 서울 시청(PlaceAddPage 선례).
 const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };
@@ -63,7 +67,8 @@ export function RecordAddVisitPage({
   // 동기 가드 — 같은 틱 연타도 두 번째 요청을 못 내게 state 가 아니라 ref 로 쥔다.
   const picking = useRef(false);
 
-  const trimmedQuery = searchText.trim();
+  // 입력칸은 즉시, 서버 조회 키는 300ms 멈춘 값(TRIP-1617).
+  const trimmedQuery = useDebouncedValue(searchText.trim(), SEARCH_DEBOUNCE_MS);
   const trip = useGetTripsTripId(tripId, { query: { retry: false } });
   const regions = (trip.data?.destinations ?? []).map((dest) => dest.region);
   const isMultiRegion = regions.length >= 2;

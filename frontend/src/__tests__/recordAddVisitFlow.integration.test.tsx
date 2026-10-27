@@ -394,9 +394,8 @@ describe('🔴 AC-5 · 후보는 GET /places 결과만, 여행 목적지로 좁�
     await screen.findByTestId(rowId('p1'));
 
     // 단언 ② — 나간 장소 요청은 전부 region=부산.
-    const regions = regionsOf(placeHits());
-    expect(regions.length).toBeGreaterThanOrEqual(1);
-    expect(regions).toEqual(regions.map(() => '부산'));
+    // 정확값 — 목적지 1곳이면 후보 조회는 정확히 1건이다(TRIP-1617: 관측해 잠갔다. 중복 호출이 끼면 red).
+    expect(regionsOf(placeHits())).toEqual(['부산']);
     expect(randomKeysOf(placeHits())).toHaveLength(0);
   });
 
@@ -444,9 +443,8 @@ describe('🔴 AC-5 · 후보는 GET /places 결과만, 여행 목적지로 좁�
 
     // 앵커 — 경주 장소까지 보인다(지역으로 안 좁혔다).
     expect(await screen.findByTestId(rowId('g1'))).toBeOnTheScreen();
-    const regions = regionsOf(placeHits());
-    expect(regions.length).toBeGreaterThanOrEqual(1);
-    expect(regions).toEqual(regions.map(() => null));
+    // 정확값 — region 없는 조회가 정확히 1건(TRIP-1617: 관측해 잠갔다).
+    expect(regionsOf(placeHits())).toEqual([null]);
   });
 
   it('P5-d: 행은 서버가 준 후보 그대로이고, 각 행에 장소 이름이 있다', async () => {
@@ -508,6 +506,134 @@ describe('🔴 AC-6 · 검색은 서버 q 로, 0건이면 안내', () => {
     expect(
       await screen.findByTestId('record-add-visit-empty')
     ).toHaveTextContent(EMPTY_COPY);
+  });
+});
+
+describe('🔴 TRIP-1617 · 검색은 300ms 멈춰야 묻고, 옛 검색어 요청은 실제로 끊긴다', () => {
+  // 개념: **디바운스**는 "입력이 멈춘 뒤 N ms 가 지나야 반영"하는 기법이다. 서버 키(q)만 늦추고 입력칸 글자는 즉시 보인다.
+  // 지역 수 환산 — 이 화면은 d04 의 "지역 미지정=서비스 3지역"이 아니라 여행 목적지 수가 곧 한 파도의 요청 수다(1곳=1건, 2곳=2건).
+  const STEPS = ['감', '감천', '감천문화', '감천문화마', '감천문화마을'];
+  const FINAL = '감천문화마을';
+  const qOf = (hit: { url: string }) => new URL(hit.url).searchParams.get('q');
+  const search = () => screen.getByTestId('record-add-visit-search');
+  /** 후보 행 testID 들(`-photo-{id}` 사진 칸은 같은 접두라 뺀다). */
+  const rowIds = () =>
+    screen
+      .queryAllByTestId(/^record-add-visit-row-(?!photo-)/)
+      .map((node) => node.props.testID as string);
+
+  /** 키 입력 간격(실제 타이핑은 100ms 안팎)으로 글자를 하나씩 늘려 입력한다 — 디바운스 없는 구현은 글자마다 요청이 나간다. */
+  async function typeSteps(steps: string[]): Promise<void> {
+    for (const text of steps) {
+      fireEvent.changeText(search(), text);
+      await flush(60);
+    }
+  }
+
+  function serveTwoRegionTrip(): void {
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () =>
+        HttpResponse.json(
+          tripJson([
+            { seq: 1, region: '부산', nights: 1 },
+            { seq: 2, region: '경주', nights: 1 },
+          ])
+        )
+      )
+    );
+  }
+
+  // 느린 서버 케이스의 문 — 실패해도 끝에 연다(붙잡힌 응답이 남으면 jest 가 안 끝난다).
+  let releaseSlow: () => void = () => {};
+  afterEach(() => releaseSlow());
+
+  it('AC4-a · 목적지 2곳에서 5글자를 연달아 쳐도 새 요청은 최종 검색어로 지역당 1건, 모두 2건뿐이다', async () => {
+    serveTwoRegionTrip();
+    render(<RecordAddVisitPage tripId={TRIP_ID} day={DAY} />, {
+      wrapper: wrapperFor(makeClient()),
+    });
+    await screen.findByTestId(rowId('g1'));
+    const before = placeHits().length;
+    // 앵커 — 첫 조회 한 파도 = 목적지 수.
+    expect(before).toBe(2);
+
+    await typeSteps(STEPS);
+
+    await waitFor(() => expect(rowIds()).toEqual([rowId('p1')]));
+    // 최종 파도 도착 뒤에도 300ms+ 더 흘려 늦게 나오는 요청까지 센다 — 안 흘리면 "더는 없다"가 공허하다.
+    await flush(400);
+    const fresh = placeHits().slice(before);
+    expect(regionsOf(fresh).sort()).toEqual(['경주', '부산']);
+    // 중간 글자('감'·'감천'…) 요청은 한 건도 없다 — 새 요청 전부가 최종 검색어다.
+    fresh.forEach((hit) => expect(qOf(hit)).toBe(FINAL));
+  });
+
+  it('AC4-b · 목적지 1곳(단일 지역 경로)에서도 5글자를 연달아 쳐도 새 요청은 최종 검색어 1건뿐이다', async () => {
+    await renderPicker();
+    const before = placeHits().length;
+    expect(before).toBe(1);
+
+    await typeSteps(STEPS);
+
+    await waitFor(() => expect(rowIds()).toEqual([rowId('p1')]));
+    await flush(400);
+    const fresh = placeHits().slice(before);
+    expect(regionsOf(fresh)).toEqual(['부산']);
+    expect(qOf(fresh[0])).toBe(FINAL);
+  });
+
+  it('AC4-c · 목적지 2곳 느린 서버에서 검색어를 바꾸면 옛 요청 2건이 끊기고, "검색 결과가 없어요" 는 중간에 뜨지 않으며 최종 결과 행이 그려진다', async () => {
+    serveTwoRegionTrip();
+    render(<RecordAddVisitPage tripId={TRIP_ID} day={DAY} />, {
+      wrapper: wrapperFor(makeClient()),
+    });
+    await screen.findByTestId(rowId('g1'));
+    // 신호 관측은 서버 쪽에서 한다 — 앱이 보낸 요청의 AbortSignal 이 끊겼는지를 msw 가 `request.signal` 로 안다
+    // (훅 내부 스파이가 아니라 네트워크 경계 기준이라 "신호를 읽지 않아 안 끊기는" 회귀가 그대로 보인다).
+    const seen: { q: string | null; signal: AbortSignal }[] = [];
+    const gate = new Promise<void>((resolve) => {
+      releaseSlow = resolve;
+    });
+    server.use(
+      http.get(`${BASE}/places`, async ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        const q = params.get('q');
+        const region = params.get('region');
+        seen.push({ q, signal: request.signal });
+        if (q === '감') await gate; // '감' 만 느리다 — '감천' 은 즉시 답한다
+        const items = PLACES.filter(
+          (p) =>
+            (region === null || p.region === region) &&
+            (!q || p.nameKo.includes(q))
+        );
+        return HttpResponse.json({ items, nextCursor: null });
+      })
+    );
+    const seenOf = (q: string) => seen.filter((entry) => entry.q === q);
+
+    fireEvent.changeText(search(), '감');
+    // 디바운스가 지난 뒤 '감' 이 지역마다 출발했고 서버가 붙잡고 있다(앵커 — 없으면 아래 aborted 가 공허하다).
+    await waitFor(() => expect(seenOf('감')).toHaveLength(2));
+    seenOf('감').forEach((entry) => expect(entry.signal.aborted).toBe(false));
+    // 조회 중에는 빈 안내를 안 띄운다(깜빡임) — 후보가 비어 있어도 성공 전이라 아니다.
+    expect(screen.queryByTestId('record-add-visit-empty')).toBeNull();
+
+    fireEvent.changeText(search(), '감천');
+    await waitFor(() => expect(rowIds()).toEqual([rowId('p1')]));
+
+    // 옛 요청 2건 모두 끊김 · 새 요청은 안 끊김 · 호출 수 정확값(재시도·중복 없음).
+    expect(seenOf('감')).toHaveLength(2);
+    seenOf('감').forEach((entry) => expect(entry.signal.aborted).toBe(true));
+    expect(seenOf('감천')).toHaveLength(2);
+    seenOf('감천').forEach((entry) => expect(entry.signal.aborted).toBe(false));
+    expect(screen.queryByTestId('record-add-visit-empty')).toBeNull();
+
+    // 붙잡힌 옛 응답이 뒤늦게 풀려도 화면은 그대로다 — 끊긴 요청의 뒤늦은 결과가 새 결과를 덮지 않는다.
+    releaseSlow();
+    await flush(100);
+    expect(rowIds()).toEqual([rowId('p1')]);
+    expect(screen.queryByTestId('record-add-visit-empty')).toBeNull();
+    expect(seenOf('감')).toHaveLength(2);
   });
 });
 

@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -50,6 +51,8 @@ import { PlaceExplorePage } from './PlaceExplorePage';
  *  - **P-17 (TRIP-1563)** 목록은 이름순이 아니라 진입마다 새로 뽑는 시드 무작위다 — 모든 `/places` 요청이
  *    `order=random&seed=<이번 진입의 번호표>` 를 싣고, 진입 중에는 고정(칩·검색·다시 시도·이어받기·지역 바꾸기),
  *    재진입에는 새 번호표 + 캐시 미재사용, 3지역 병합은 지역을 번갈아 놓는다(아래 `P-17` describe).
+ *  - **P-18 (TRIP-1617)** 검색어는 300ms 멈춰야 서버 키가 바뀐다 — 5글자 연속 입력이 지역당 1건(총 WAVE건)이고, 입력칸 글자는
+ *    즉시 보이며, 느린 서버에선 옛 검색어 요청이 실제로 끊기되 오류 얼굴은 뜨지 않고, 0건 검색어를 지우는 창에도 얼굴이 안 깜빡인다.
  *  - **P-12 (AC-1)** ♥ FAB 는 담은 장소(d02, `/explore/saved-places`)로 push.
  *  - **P-13 (AC-1)** 복제 BottomTabBar 는 push·replace 가 아니라 dismissTo 로 항법한다(TRIP-1262).
  *  - **P-14 (TRIP-1562)** 검색바 ⇅ 버튼·카테고리 시트가 없다 — 어떤 조작으로도 시트가 마운트되지 않는다.
@@ -390,8 +393,9 @@ describe('P-3 · 검색은 서버가 한다 (q) — 로드된 페이지 한정�
     await waitFor(() =>
       expect(cardTestIds()).toEqual(['explore-places-card-p2'])
     );
+    // 정확값 — 첫 조회 한 파도 + '해변' 한 파도(TRIP-1617: 디바운스가 있어도 한 번에 통째로 넣은 검색어는 한 파도다).
     const hits = hitsOf('GET', '/api/v1/places');
-    expect(hits.length).toBeGreaterThanOrEqual(2);
+    expect(hits).toHaveLength(2 * WAVE);
     expect(new URL(hits[hits.length - 1].url).searchParams.get('q')).toBe(
       '해변'
     );
@@ -1143,6 +1147,168 @@ describe('P-17 · 진입마다 새 시드로 무작위 순서를 묻는다 (TRIP
 // 없다(아래 1026 AC-1). push 가 불리는 **그 순간** 드래프트가 스토어 초기값인지 잰다.
 afterEach(resetWizardDraft);
 
+describe('P-18 · 검색은 300ms 멈춰야 서버를 부른다 — 글자마다 부르지 않는다 (TRIP-1617)', () => {
+  // 개념: **디바운스**는 "입력이 멈춘 뒤 N ms 가 지나야 반영"하는 기법이다. 서버 키(q)만 늦추고 입력칸 글자는 즉시 보인다.
+  // 실시간 타이머를 쓴다(이 파일 관례 — msw·TanStack 알림이 실제 비동기라 가짜 시계와 섞으면 멈춘다).
+  const STEPS = ['감', '감천', '감천문화', '감천문화마', '감천문화마을'];
+  const FINAL = '감천문화마을';
+  const qOf = (hit: { url: string }) => new URL(hit.url).searchParams.get('q');
+  const sleep = (ms: number) =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, ms));
+    });
+
+  /** 키 입력 간격(실제 타이핑은 100ms 안팎)으로 글자를 하나씩 늘려 입력한다 — 이 간격이면 디바운스 없는 구현은 글자마다 요청이 나간다. */
+  async function typeSteps(steps: string[]) {
+    for (const text of steps) {
+      fireEvent.changeText(screen.getByTestId('explore-places-search'), text);
+      await sleep(60);
+    }
+  }
+
+  // 느린 서버 케이스의 문 — 실패해도 끝에 연다(붙잡힌 응답이 남으면 jest 가 안 끝난다).
+  let slowGate = createGate();
+  beforeEach(() => {
+    slowGate = createGate();
+  });
+  afterEach(() => {
+    slowGate.release();
+  });
+
+  it('AC1 · 지역 미지정에서 5글자를 연달아 쳐도 새 요청은 최종 검색어 한 파도(지역당 1건)뿐이다', async () => {
+    setAccessToken('valid-access');
+    await renderPage();
+    const before = hitsOf('GET', '/api/v1/places').length;
+    // 앵커 — 첫 조회 한 파도.
+    expect(before).toBe(WAVE);
+
+    await typeSteps(STEPS);
+
+    await waitFor(() =>
+      expect(cardTestIds()).toEqual(['explore-places-card-p1'])
+    );
+    // 최종 파도 도착 뒤에도 300ms+ 더 흘려 늦게 나오는 요청까지 센다 — 안 흘리면 "더는 없다"가 공허하다.
+    await sleep(400);
+    const fresh = hitsOf('GET', '/api/v1/places').slice(before);
+    expect(fresh).toHaveLength(WAVE);
+    expectWaveCoversServiceRegions(fresh);
+    // 중간 글자('감'·'감천'…) 요청은 한 건도 없다 — 새 요청 전부가 최종 검색어다.
+    fresh.forEach((hit) => expect(qOf(hit)).toBe(FINAL));
+  });
+
+  it('AC1 · 지역 한 곳(단일 지역 경로)에서도 5글자를 연달아 쳐도 새 요청은 최종 검색어 1건뿐이다', async () => {
+    setAccessToken('valid-access');
+    mockParams = { region: 'jeju' };
+    await renderPage();
+    const before = hitsOf('GET', '/api/v1/places').length;
+    expect(before).toBe(1);
+
+    await typeSteps(STEPS);
+
+    await waitFor(() =>
+      expect(cardTestIds()).toEqual(['explore-places-card-p1'])
+    );
+    await sleep(400);
+    const fresh = hitsOf('GET', '/api/v1/places').slice(before);
+    expect(fresh).toHaveLength(1);
+    expect(qOf(fresh[0])).toBe(FINAL);
+  });
+
+  it('AC6 · 입력칸 글자는 바로 보이고, 300ms 가 지나기 전엔 새 요청이 없다가 지나면 최종 검색어 한 파도가 나간다', async () => {
+    setAccessToken('valid-access');
+    await renderPage();
+    const before = hitsOf('GET', '/api/v1/places').length;
+
+    fireEvent.changeText(screen.getByTestId('explore-places-search'), '해변');
+
+    // 입력칸은 즉시 — 서버 키만 늦춘다.
+    expect(screen.getByTestId('explore-places-search')).toHaveProp(
+      'value',
+      '해변'
+    );
+    // 디바운스 창 안(80ms < 300ms)이라 아직 새 요청이 없다.
+    await sleep(80);
+    expect(hitsOf('GET', '/api/v1/places')).toHaveLength(before);
+
+    // 창이 지나면 요청은 사라지지 않고 나간다(디바운스가 요청을 삼키는 구현 방지).
+    await waitFor(() =>
+      expect(hitsOf('GET', '/api/v1/places')).toHaveLength(before + WAVE)
+    );
+    await waitFor(() =>
+      expect(cardTestIds()).toEqual(['explore-places-card-p2'])
+    );
+  });
+
+  it('AC2·AC3 · 느린 서버에서 검색어를 바꾸면 옛 검색어 요청이 전부 끊기고, 오류 얼굴·부분 실패 배너는 한 번도 안 뜬다', async () => {
+    setAccessToken('valid-access');
+    await renderPage();
+    // 신호 관측은 서버 쪽에서 한다 — 앱이 보낸 요청의 AbortSignal 이 끊겼는지를 msw 가 `request.signal` 로 안다
+    // (훅 내부 스파이가 아니라 네트워크 경계 기준이라 "신호를 읽지 않아 안 끊기는" 회귀가 그대로 보인다).
+    const seen: { q: string | null; signal: AbortSignal }[] = [];
+    server.use(
+      http.get(`${BASE}/places`, async ({ request }) => {
+        const q = new URL(request.url).searchParams.get('q');
+        seen.push({ q, signal: request.signal });
+        if (q === '해') await slowGate.opened; // '해' 만 느리다 — '해변' 은 즉시 답한다
+        const items = q ? PLACES.filter((p) => p.nameKo.includes(q)) : PLACES;
+        return HttpResponse.json({ items, nextCursor: null });
+      })
+    );
+    const seenOf = (q: string) => seen.filter((entry) => entry.q === q);
+
+    fireEvent.changeText(screen.getByTestId('explore-places-search'), '해');
+    // 디바운스가 지난 뒤 '해' 한 파도가 출발했고, 서버가 붙잡고 있다(앵커 — 없으면 아래 aborted 가 공허하다).
+    await waitFor(() => expect(seenOf('해')).toHaveLength(WAVE));
+    expect(screen.getByTestId('explore-places-loading')).toBeOnTheScreen();
+    seenOf('해').forEach((entry) => expect(entry.signal.aborted).toBe(false));
+
+    fireEvent.changeText(screen.getByTestId('explore-places-search'), '해변');
+    await waitFor(() =>
+      expect(cardTestIds()).toEqual(['explore-places-card-p2'])
+    );
+
+    // 옛 요청 전부 끊김 · 새 요청은 안 끊김 · 호출 수 정확값(재시도·중복 없음).
+    expect(seenOf('해')).toHaveLength(WAVE);
+    seenOf('해').forEach((entry) => expect(entry.signal.aborted).toBe(true));
+    expect(seenOf('해변')).toHaveLength(WAVE);
+    seenOf('해변').forEach((entry) => expect(entry.signal.aborted).toBe(false));
+    expect(screen.queryByTestId('explore-places-error')).toBeNull();
+    expect(screen.queryByTestId('explore-places-partialfailure')).toBeNull();
+
+    // 붙잡힌 옛 응답이 뒤늦게 풀려도 얼굴은 그대로다 — 끊긴 요청의 뒤늦은 결과가 새 결과를 덮거나 오류로 새지 않는다.
+    slowGate.release();
+    await sleep(100);
+    expect(screen.queryByTestId('explore-places-error')).toBeNull();
+    expect(screen.queryByTestId('explore-places-partialfailure')).toBeNull();
+    expect(cardTestIds()).toEqual(['explore-places-card-p2']);
+    expect(seenOf('해')).toHaveLength(WAVE);
+  });
+
+  it('D1 · 0건 검색어를 입력칸에서 지우는 300ms 창에도 "조건이 걸린 0건" 얼굴이 그대로이고 "담긴 장소가 없어요" 로 바뀌지 않는다', async () => {
+    setAccessToken('valid-access');
+    await renderPage();
+    fireEvent.changeText(
+      screen.getByTestId('explore-places-search'),
+      '없는이름'
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-places-filterzero')).toBeOnTheScreen()
+    );
+
+    fireEvent.changeText(screen.getByTestId('explore-places-search'), '');
+
+    // 지운 바로 그 렌더 — 입력칸은 비었는데(즉시) 화면 얼굴은 아직 직전 서버 키 기준이다.
+    // 검색어 유무 판정이 입력값을 보면 여기서 "담긴 장소가 없어요"(empty)가 깜빡이고, 키는 안 바뀌었는데 목록 판정만 바뀐 거짓 얼굴이 된다.
+    expect(screen.getByTestId('explore-places-search')).toHaveProp('value', '');
+    expect(screen.queryByTestId('explore-places-empty')).toBeNull();
+    expect(screen.getByTestId('explore-places-filterzero')).toBeOnTheScreen();
+
+    // 창이 지나면 전체 목록으로 돌아온다.
+    await waitFor(() => expect(cardTestIds()).toHaveLength(5));
+    expect(screen.queryByTestId('explore-places-empty')).toBeNull();
+  });
+});
+
 describe('🔴 1012-B1 · d04 ＋ FAB 는 직전 드래프트를 비우고 위저드로 간다', () => {
   it('push 시점의 드래프트가 새 여행의 초기값이고, push 는 step1 로 1회다', async () => {
     leavePreviousTripDraft();
@@ -1489,8 +1655,9 @@ describe('상태·예외 배선 (S-1~S-12)', () => {
 
       // 해제 수단이 실제로 조건을 지운다 — 문구만 있고 버튼이 아무 일도 안 하면 no-op 컨트롤이다.
       await waitFor(() => expect(cardTestIdsOrNone()).toHaveLength(5));
-      // 검색·해제는 서버가 한다(q) — 각각 새 요청이 나간다(초기 + 검색 + 해제, 로드된 페이지 한정 아님).
-      expect(hitsOf('GET', '/api/v1/places').length).toBeGreaterThanOrEqual(2);
+      // 검색·해제는 서버가 한다(q) — 각각 새 한 파도가 나간다(초기 + 검색 + 해제, 로드된 페이지 한정 아님).
+      // 정확값 3 파도(TRIP-1617) — 이 래퍼가 gcTime 0 이라 키를 되돌려도 캐시 없이 다시 묻는다(실앱은 캐시 히트라 더 적다).
+      expect(hitsOf('GET', '/api/v1/places')).toHaveLength(3 * WAVE);
     });
   });
 

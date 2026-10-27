@@ -1,12 +1,14 @@
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { http, HttpResponse } from 'msw';
 
 import { server } from '@/mocks/server';
 import { BASE } from '@/test-support/apiBase';
-import { createWrapper } from '@/test-support/queryRender';
+import { createGate } from '@/test-support/mswHookHarness';
+import { createGcZeroWrapper, createWrapper } from '@/test-support/queryRender';
 import { clearAccessToken } from '@/shared/api/tokenManager';
+import * as placesApi from '@/shared/api/generated/places/places';
 import type { Place } from '@/shared/api/index.schemas';
 
 import { useRegions } from './regions';
@@ -200,5 +202,149 @@ describe('useMultiRegionPlaces · seed (TRIP-1563)', () => {
     await mount({ seed: 'B' }); // d04 진입 2 — 진입 1 의 순서를 읽으면 안 된다
     expect(placeUrls).toHaveLength(9);
     client.clear();
+  });
+});
+
+/**
+ * TRIP-1617 · `useMultiRegionPlaces` 의 취소 계약 (같은 integration 파일에 붙였다 — 이 폴더의 유일한 통합 버킷).
+ *
+ * 무엇을 보장하나: ① 지역별 `getPlaces` 호출이 두 번째 인자로 `AbortSignal` 을 받는다(M2). ② 검색어(키)가 바뀌면
+ * 옛 키의 호출 전부가 `aborted` 가 되고 새 키의 호출은 아니다(M1). ③ 그 취소가 오류 얼굴(`isError`)로 새지 않고,
+ * 늦게 풀린 옛 응답이 새 결과를 덮지도 않는다(M3 — INV-4: 이 훅은 "전부 실패면 throw"라 취소가 새면 오류 얼굴이 뜬다).
+ *
+ * 개념: **AbortSignal** 은 "그만해" 깃발이다. 요청에 달아 두면 깃발이 올라갈 때(`aborted === true`) 요청이 끊긴다.
+ * TanStack Query 는 `queryFn({ signal })` 로 깃발을 주고, 그 깃발을 **읽은** 쿼리만 키가 바뀔 때 실제로 끊는다 —
+ * 읽지 않으면(`queryFn: async () =>`) 요청은 끝까지 가므로 타입도 린트도 못 잡는다. 이 describe 가 유일한 그물이다.
+ *
+ * 스파이 대상은 원 모듈(`generated/places/places`)이다 — 훅은 `index.hooks` 배럴의 `export *` 로 가져오지만,
+ * 배럴은 원 모듈의 속성을 getter 로 다시 내보내 호출 때마다 원 모듈에서 읽으므로 원 모듈 스파이가 잡힌다(1회 실행으로 확인).
+ */
+describe('useMultiRegionPlaces · 키가 바뀌면 이전 요청을 끊는다 (TRIP-1617)', () => {
+  const PAIR = ['서울', '부산'];
+
+  function place(poiId: string, region: string): Place {
+    return {
+      poiId,
+      nameKo: poiId,
+      category: '명소',
+      lat: 35.1587,
+      lng: 129.1604,
+      region,
+      openingHours: null,
+      imageUrl: null,
+      tags: [],
+      savedCount: 0,
+      dataStatus: 'ACTIVE',
+    };
+  }
+
+  // 호출을 그대로 통과시키는 스파이 — 실제 요청도 나가고, 넘긴 인자(params, signal)를 기록한다.
+  let getPlacesSpy: jest.SpyInstance;
+  // 느린 서버의 문 — 실패한 케이스도 끝에 반드시 연다(붙잡힌 응답이 남으면 jest 가 안 끝난다).
+  let gate = createGate();
+  beforeEach(() => {
+    getPlacesSpy = jest.spyOn(placesApi, 'getPlaces');
+    gate = createGate();
+  });
+  afterEach(() => {
+    gate.release();
+    getPlacesSpy.mockRestore();
+  });
+
+  /** 그 검색어(q)로 나간 호출의 두 번째 인자(신호)들. */
+  const signalsOf = (q: string): (AbortSignal | undefined)[] =>
+    getPlacesSpy.mock.calls
+      .filter(([params]) => params?.q === q)
+      .map(([, signal]) => signal);
+
+  /** q='a' 만 문 뒤에서 붙잡는 서버 — 나머지 q 는 즉시 답한다. 응답은 `{q}-{지역}` 한 곳씩. */
+  function holdSlowQuery() {
+    server.use(
+      http.get(`${BASE}/places`, async ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        const q = params.get('q');
+        const region = params.get('region') ?? '';
+        if (q === 'a') await gate.opened;
+        return HttpResponse.json({
+          items: [place(`${q}-${region}`, region)],
+          nextCursor: null,
+        });
+      })
+    );
+  }
+
+  /** 'a' 를 느린 서버에 던져 두 건이 출발한 걸 확인한 뒤 'ab' 로 바꾸고, 'ab' 결과가 도착할 때까지 기다린다. */
+  async function switchWhileSlow() {
+    holdSlowQuery();
+    const isErrorFrames: boolean[] = [];
+    const hook = renderHook(
+      ({ q }: { q: string }) => {
+        const out = useMultiRegionPlaces(PAIR, { q });
+        isErrorFrames.push(out.isError);
+        return out;
+      },
+      { wrapper: createGcZeroWrapper(), initialProps: { q: 'a' } }
+    );
+    // 앵커 — 'a' 가 지역마다 한 건씩 출발했고, 아직 아무도 끊지 않았다(없으면 아래 aborted 단언이 공허하다).
+    await waitFor(() => expect(signalsOf('a')).toHaveLength(PAIR.length));
+
+    hook.rerender({ q: 'ab' });
+    await waitFor(() => expect(hook.result.current.isPending).toBe(false));
+    return { ...hook, isErrorFrames };
+  }
+
+  it('M2 · 지역마다 나간 호출이 모두 신호(AbortSignal)를 달고 나간다', async () => {
+    holdSlowQuery(); // q='x' 는 문과 무관하게 즉시 답한다
+
+    const { result } = renderHook(
+      () => useMultiRegionPlaces(PAIR, { q: 'x' }),
+      {
+        wrapper: createGcZeroWrapper(),
+      }
+    );
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+
+    // 앵커 — 호출이 실제로 지역 수만큼 있었다(스파이가 안 걸렸으면 0건이라 아래 every 가 공허하다).
+    expect(getPlacesSpy).toHaveBeenCalledTimes(PAIR.length);
+    getPlacesSpy.mock.calls.forEach(([, signal]) => {
+      expect(signal).toBeInstanceOf(AbortSignal);
+    });
+  });
+
+  it('M1 · 검색어가 바뀌면 옛 검색어의 호출 둘이 모두 aborted 이고 새 검색어의 호출은 아니다', async () => {
+    const { result } = await switchWhileSlow();
+
+    const oldSignals = signalsOf('a');
+    const newSignals = signalsOf('ab');
+    // 호출 수 정확값 — 지역당 정확히 한 건씩(옛 2 + 새 2). 재시도·중복 호출이 끼면 red.
+    expect(oldSignals).toHaveLength(PAIR.length);
+    expect(newSignals).toHaveLength(PAIR.length);
+    oldSignals.forEach((signal) => expect(signal?.aborted).toBe(true));
+    newSignals.forEach((signal) => expect(signal?.aborted).toBe(false));
+    // 새 결과가 실제로 화면용 목록에 닿았다 — "끊기만 하고 새로 안 묻는" 구현이 아니다.
+    expect(result.current.items.map((item) => item.poiId).sort()).toEqual([
+      'ab-부산',
+      'ab-서울',
+    ]);
+  });
+
+  it('M3 · 취소 구간 내내 isError 는 한 번도 true 가 아니고, 늦게 풀린 옛 응답이 새 결과를 덮지 않는다', async () => {
+    const { result, isErrorFrames } = await switchWhileSlow();
+
+    // 붙잡혀 있던 옛 응답을 이제 푼다 — 끊긴 요청의 뒤늦은 결과가 새 키 결과를 건드리면 안 된다.
+    gate.release();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+
+    // 앵커 — 프레임이 실제로 여럿 쌓였다(렌더가 없었다면 every 가 공허하다).
+    expect(isErrorFrames.length).toBeGreaterThan(1);
+    expect(isErrorFrames).not.toContain(true);
+    expect(result.current.isError).toBe(false);
+    expect(result.current.degraded).toBe(false);
+    expect(result.current.items.map((item) => item.poiId).sort()).toEqual([
+      'ab-부산',
+      'ab-서울',
+    ]);
   });
 });
