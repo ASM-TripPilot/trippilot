@@ -18,6 +18,10 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # actions: write = 아래 옛 캐시 정리(gh cache delete). permissions 를 적으면 나머지가 none 이 되므로 checkout 용 contents: read 를 함께 둔다.
+    permissions:
+      contents: read
+      actions: write
     defaults:
       run:
         working-directory: frontend
@@ -35,14 +39,16 @@ jobs:
       # jest 변환 캐시·ESLint 캐시 복원(TRIP-1613). 저장 키는 run 마다 달라(run_id·run_attempt) 매번 새로 저장되고,
       # 복원은 restore-keys 접두로 같은 설정 해시의 가장 최근 것을 고른다 — 키를 해시만으로 두면 정확 키 적중 시
       # 저장을 건너뛰어 캐시가 첫 저장 시점에 동결된다. lock·babel·jest 설정이 바뀌면 접두가 달라 옛 캐시를 안 쓴다.
+      # 키 접두를 한 번만 계산해 restore·save·정리가 같은 값을 쓴다.
+      - id: cache-key
+        run: echo "prefix=fe-lint-jest-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml', 'frontend/babel.config.js', 'frontend/jest*.config.js') }}-" >> "$GITHUB_OUTPUT"
       - uses: actions/cache/restore@v4
         with:
           path: |
             frontend/.jest-cache
             frontend/.eslintcache
-          key: fe-lint-jest-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml', 'frontend/babel.config.js', 'frontend/jest*.config.js') }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: |
-            fe-lint-jest-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml', 'frontend/babel.config.js', 'frontend/jest*.config.js') }}-
+          key: ${{ steps.cache-key.outputs.prefix }}${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ${{ steps.cache-key.outputs.prefix }}
       - run: pnpm lint
       # 포맷 게이트: 로컬 verify-gates 의 `pnpm format` 이 신고 밖 파일을 다시 쓰지 않도록 미포맷 파일이 있으면 실패.
       - run: pnpm format:check
@@ -68,7 +74,22 @@ jobs:
           path: |
             frontend/.jest-cache
             frontend/.eslintcache
-          key: fe-lint-jest-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml', 'frontend/babel.config.js', 'frontend/jest*.config.js') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ${{ steps.cache-key.outputs.prefix }}${{ github.run_id }}-${{ github.run_attempt }}
+      # 방금 저장한 것만 남기고 develop 의 옛 fe-lint-jest 엔트리를 지운다 — restore 는 최신 하나만 쓰므로 나머지는 죽은 용량이다
+      # (엔트리당 ~43MB, 리포 캐시 10GB 한도 초과 상태). 새 엔트리가 목록에 안 보이면(저장 실패 등) 아무것도 지우지 않는다.
+      - name: prune old lint/jest caches
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        # 정리는 부가 작업이다 — 실패(gh 일시 오류·이미 지워진 id)가 test 잡을 red 로 만들어 image 배포를 막으면 안 된다.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP: ${{ steps.cache-key.outputs.prefix }}${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          caches=$(gh cache list --repo "$GITHUB_REPOSITORY" --ref refs/heads/develop --key fe-lint-jest- --limit 100 --json id,key)
+          if ! echo "$caches" | jq -e --arg k "$KEEP" 'any(.key == $k)' > /dev/null; then
+            echo "새 캐시($KEEP)가 목록에 없어 정리를 건너뜀"; exit 0
+          fi
+          echo "$caches" | jq -r --arg k "$KEEP" '.[] | select(.key != $k) | .id' | xargs -r -n1 gh cache delete --repo "$GITHUB_REPOSITORY"
 
   # 운영 번들 리포트(TRIP-1612): `test` 와 병렬(needs 없음 — 크리티컬 패스 밖). PR 에서만 돈다(push 와 겹쳐 artifact 가 2번 생기지 않게).
   # 실패 조건은 스크립트 종료코드뿐이다 — 1 = 번들에 app/_dev 검출, 2 = export·소스맵·s-m-e 도구 오류.
