@@ -3,10 +3,11 @@
 **개발 프리뷰 전용 의도다.** `app/_dev/preview.tsx` 의 i01 여행중 허브(`live-hub-*`) 픽스처가
 done 카드 사진 칸과, i06 재계획안(`planb-replan-draft`·`planb-noalt`) 행 사진 칸, i07 일정 편집(`planb-manual-normal`) 카드 사진 칸을 채우는 데만 쓴다 — 실앱 허브는 사진 조회 계약이 없어 사진 칸을 그리지 않는다(G6).
 
-**다만 그 의도를 기계적으로 막는 것은 없다.** `_dev/preview` 는 expo-router 라우트이고
-expo-router 는 `_` 접두 경로를 라우트에서 제외하지 않는다. 따라서 릴리스 빌드에서도 딥링크
-`trippilot://_dev/preview?state=…` 로 이 화면이 열리고, `require` 된 에셋이라 여섯 파일은 릴리스
-번들에 무조건 실린다(`assets/itinerary/CREDITS.md` 와 같은 사정).
+**그 의도는 빌드가 막는다(TRIP-1347).** `_dev/preview` 는 expo-router 라우트이고 expo-router 는
+`_` 접두 경로를 라우트에서 제외하지 않지만, `metro.config.js` 가 `NODE_ENV=production` 에서
+`app/_dev` 를 blockList 로 제외한다. 그래서 운영 번들에는 이 화면도, `require` 된 여섯 파일도 실리지
+않고 개발 번들에만 들어간다(`assets/itinerary/CREDITS.md` 와 같은 사정, `pnpm bundle:report` 가
+CI 에서 0건 단언 — TRIP-1612).
 
 | 파일 | 출처 | 라이선스 |
 |---|---|---|
@@ -22,6 +23,6 @@ expo-router 는 `_` 접두 경로를 라우트에서 제외하지 않는다. 따
 - 여섯 장 모두 **디자이너가 Figma 목업에 넣은 사진**을 내려받은 것이다(2026-09-23, TRIP-746·TRIP-751·TRIP-753).
   원저작자와 이용 조건을 확인하지 못했다.
 - 그래서 **프로덕션 화면에서는 import 하지 않는다.**
-- **릴리스 전에 할 일**: 라이선스가 분명한 사진으로 갈아치우거나, `_dev` 라우트를 릴리스
-  빌드에서 제외해야 한다.
+- **라이선스는 여전히 미확인이다**: 운영 번들에는 안 실리지만 리포 에셋이라, 라이선스가 분명한
+  사진으로 갈아치우거나 `_dev` 제외가 풀리는 일이 없는지 계속 확인해야 한다.
 - 원본은 1280px 였다. 표시 크기가 약 143×88 이라 긴 변 480px 로 줄여 넣었다.
