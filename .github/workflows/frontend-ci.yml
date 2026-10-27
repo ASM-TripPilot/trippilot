@@ -50,6 +50,39 @@ jobs:
       # pnpm test = test:node(--experimental-vm-modules) && test:integration(MSW 버킷)
       - run: pnpm test
 
+  # 운영 번들 리포트(TRIP-1612): `test` 와 병렬(needs 없음 — 크리티컬 패스 밖). PR 에서만 돈다(push 와 겹쳐 artifact 가 2번 생기지 않게).
+  # 실패 조건은 스크립트 종료코드뿐이다 — 1 = 번들에 app/_dev 검출, 2 = export·소스맵·s-m-e 도구 오류.
+  bundle-report:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.13.1 # test 잡과 동기
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm bundle:report
+      # 실패해도(summary.txt 가 있을 때만) 한 줄 요약을 잡 화면 맨 위 요약란($GITHUB_STEP_SUMMARY)에 덧붙인다.
+      - name: step summary
+        if: always()
+        run: '[ ! -f dist/bundle-report/summary.txt ] || cat dist/bundle-report/summary.txt >> "$GITHUB_STEP_SUMMARY"'
+      # artifact = 잡이 끝난 뒤에도 내려받는 파일 묶음. 소스맵(22MB)은 올리지 않고 리포트만.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bundle-report
+          path: frontend/dist/bundle-report/
+          retention-days: 14
+
   image:
     needs: test # 테스트 통과해야 이미지 빌드
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'

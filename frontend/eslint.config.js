@@ -325,7 +325,15 @@ module.exports = defineConfig([
   expoConfig,
   {
     // .claude/** = 에이전트·스킬 문서와 스크립트. 앱 소스 아님 → 린트 제외.
-    ignores: ['dist/*', '.expo/*', 'ios/*', 'android/*', 'web/*', '.claude/**'],
+    ignores: [
+      'dist/*',
+      '.expo/*',
+      'ios/*',
+      'android/*',
+      'web/*',
+      '.claude/**',
+      '_workspace/**', // gitignore 된 로컬 사이클 산출물(render.js 등) — pre-push lint 를 막았다
+    ],
   },
   {
     files: ['src/**/*.{ts,tsx}', ROUTE_FILES],
