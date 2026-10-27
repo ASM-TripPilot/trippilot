@@ -13,11 +13,6 @@ export {
 } from './api/assistantPort';
 export { assistantPort, setAssistantPort } from './api/assistantClient';
 export {
-  FakeAssistantAdapter,
-  fakeWithHistory,
-  type FakeAssistantOptions,
-} from './api/fakeAssistantAdapter';
-export {
   assistantKeys,
   useApplyProposal,
   useAssistantMessages,

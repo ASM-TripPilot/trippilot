@@ -4,7 +4,7 @@
  *
  * 하는 일: `expo export`(NODE_ENV=production, --no-bytecode, 소스맵 포함)를 임시 폴더에 돌려
  * JS 바이트·에셋 바이트·상위 20 모듈을 `dist/bundle-report/{report.json,report.md,summary.txt}` 로 쓰고,
- * 원본 소스맵 `sources` 에 금지 경로(`app/_dev`)가 있으면 실패한다.
+ * 원본 소스맵 `sources` 에 금지 경로(`app/_dev`·`src/mocks`·`src/test-support`·`__fixtures__`·`*.test.*`·assistant fake)가 있으면 실패한다.
  * 종료코드: 0 통과 · 1 금지 경로 검출 · 2 도구 오류(export 실패·맵 0/복수·빈 sources·에셋 0개·s-m-e 실패·예기치 못한 예외).
  *
  * 사용: `node scripts/bundle-report.cjs [--project <frontend 디렉토리>]`
@@ -16,8 +16,16 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-// 금지 경로 목록 — metro.config.js blockList 와 같은 꼴(비앵커, 구분자 [\\/]). M-67 이 여기에 패턴만 더한다.
-const FORBIDDEN_PATTERNS = [/app[\\/]_dev[\\/]/];
+// 금지 경로 목록 — metro.config.js 운영 blockList 와 짝이다(막는 쪽 / 번들에 섞였는지 확인하는 쪽, TRIP-1616).
+// 소스맵 sources 는 프로젝트 루트 기준 '/src/...' 꼴이라 루트 앵커 대신 `/src|app/` 로 시작을 박는다.
+// 앵커가 없으면 node_modules 속 `__fixtures__`·`*.test.js` 를 오검출한다(실제 번들에 실리는 정상 파일).
+const FORBIDDEN_PATTERNS = [
+  /app[\\/]_dev[\\/]/,
+  /^[\\/]src[\\/](mocks|test-support)[\\/]/,
+  /^[\\/](src|app)[\\/](.*[\\/])?__fixtures__[\\/]/,
+  /^[\\/](src|app)[\\/].*\.test\.[jt]sx?$/,
+  /assistant-sheet[\\/]api[\\/](fakeAssistantAdapter|assistantSamples)\.ts$/,
+];
 
 // s-m-e 가 files 에 섞는 모듈 아닌 항목: [unmapped]·[no source]·[EOLs] … 대괄호로 "통째로" 감싼 키만.
 // ([tripId] 가 든 실경로 `/app/trips/[tripId]/…` 는 앞뒤가 있어 걸리지 않는다.)
@@ -35,19 +43,19 @@ function findForbiddenSources(sources, patterns = FORBIDDEN_PATTERNS) {
 function judgeSourceMap(sources, patterns) {
   if (!Array.isArray(sources) || sources.length === 0) {
     return {
-      devPaths: [],
+      forbiddenPaths: [],
       toolError: '소스맵 sources 가 비었거나 배열이 아니다',
     };
   }
   return {
-    devPaths: findForbiddenSources(sources, patterns),
+    forbiddenPaths: findForbiddenSources(sources, patterns),
     toolError: null,
   };
 }
 
-// _dev 검출(1)이 도구 오류(2)보다 우선 — 판정은 s-m-e 와 무관하게 끝났다.
-function decideExitCode({ devPaths, toolError }) {
-  if (devPaths.length > 0) return 1;
+// 금지 경로 검출(1)이 도구 오류(2)보다 우선 — 판정은 s-m-e 와 무관하게 끝났다.
+function decideExitCode({ forbiddenPaths, toolError }) {
+  if (forbiddenPaths.length > 0) return 1;
   return toolError ? 2 : 0;
 }
 
@@ -87,7 +95,7 @@ function buildReport({ sme, sources, assetSizes }) {
     totalAssetBytes: sumAssetBytes(assetSizes),
     topModules,
     excluded,
-    devPaths: findForbiddenSources(sources),
+    forbiddenPaths: findForbiddenSources(sources),
   };
 }
 
@@ -97,7 +105,7 @@ function formatMB(bytes) {
 }
 
 function renderSummaryLine(report) {
-  return `iOS JS ${formatMB(report.totalJsBytes)}MB · assets ${formatMB(report.totalAssetBytes)}MB · _dev ${report.devPaths.length}건 (--no-bytecode)`;
+  return `iOS JS ${formatMB(report.totalJsBytes)}MB · assets ${formatMB(report.totalAssetBytes)}MB · 금지 경로 ${report.forbiddenPaths.length}건 (--no-bytecode)`;
 }
 
 function renderMarkdown(report) {
@@ -106,9 +114,9 @@ function renderMarkdown(report) {
   lines.push(
     `- JS: ${formatMB(report.totalJsBytes)}MB`,
     `- 에셋: ${formatMB(report.totalAssetBytes)}MB`,
-    `- _dev ${report.devPaths.length}건`
+    `- 금지 경로 ${report.forbiddenPaths.length}건`
   );
-  report.devPaths.forEach((p) => lines.push(`  - ${p}`));
+  report.forbiddenPaths.forEach((p) => lines.push(`  - ${p}`));
   lines.push('', '## 상위 모듈', '', '| # | module | bytes |', '|---|---|---|');
   report.topModules.forEach((m, i) =>
     lines.push(`| ${i + 1} | ${m.path} | ${formatMB(m.bytes)}MB |`)
@@ -172,7 +180,7 @@ function main() {
   fs.mkdirSync(outDir, { recursive: true });
   const exportDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bundle-export-'));
 
-  let devPaths = [];
+  let forbiddenPaths = [];
   let toolError = null;
   try {
     run(
@@ -206,7 +214,7 @@ function main() {
 
     const sources = JSON.parse(fs.readFileSync(mapFile, 'utf8')).sources;
     const verdict = judgeSourceMap(sources);
-    devPaths = verdict.devPaths;
+    forbiddenPaths = verdict.forbiddenPaths;
     if (verdict.toolError) throw new Error(verdict.toolError);
 
     const smeJson = path.join(exportDir, 'sme.json');
@@ -250,9 +258,9 @@ function main() {
     fs.rmSync(exportDir, { recursive: true, force: true });
   }
 
-  devPaths.forEach((p) => process.stderr.write(`_dev 검출: ${p}\n`));
+  forbiddenPaths.forEach((p) => process.stderr.write(`금지 경로 검출: ${p}\n`));
   if (toolError) process.stderr.write(`도구 오류: ${toolError}\n`);
-  process.exit(decideExitCode({ devPaths, toolError }));
+  process.exit(decideExitCode({ forbiddenPaths, toolError }));
 }
 
 module.exports = {
@@ -270,7 +278,7 @@ module.exports = {
   main,
 };
 
-// main 안에서 예기치 못하게 던진 예외(fs 쓰기 실패 등)가 node 기본 exit 1("_dev 검출")로 새지 않게 한다.
+// main 안에서 예기치 못하게 던진 예외(fs 쓰기 실패 등)가 node 기본 exit 1("금지 경로 검출")로 새지 않게 한다.
 if (require.main === module) {
   try {
     main();

@@ -202,8 +202,9 @@ const deepZones = [
 // ── 출시·보안 금지(TRIP-1145 — 소스 스캔에서 옮겨 왔다) ────────────────────────────────
 // ⚠️ flat config 는 같은 규칙을 거는 블록이 여럿이면 뒤 블록 옵션이 앞 블록을 **통째로 덮는다**(합쳐지지
 //    않는다). 그래서 예외 파일(StateNotice·캡처 어댑터) 블록은 아래 공통 목록을 펼쳐 다시 선언한다.
-// ⚠️ no-restricted-imports 는 정적 import·export-from 만 본다 — require()·import() 는 사각이다(받아들인
-//    잔여). 덕분에 shared/photo 의 호출 시점 require 와 shareCapture 의 동적 import() 는 그대로 허용된다.
+// ⚠️ no-restricted-imports 는 정적 import·export-from 만 본다 — require()·import() 는 린트 사각이다. 단 목·
+//    test-support·_dev·__fixtures__·*.test.* 를 끌어오는 경우는 운영 번들 Metro blockList(metro.config.js, TRIP-1616)가
+//    `expo export` 실패로 막는다. 덕분에 shared/photo 의 호출 시점 require 와 shareCapture 의 동적 import() 는 그대로 허용된다.
 const TEST_IGNORES = [
   'src/**/*.test.{ts,tsx}',
   'src/**/__tests__/**',

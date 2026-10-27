@@ -5,8 +5,10 @@
 /**
  * TRIP-1612 · 운영 번들 리포트 스크립트(`scripts/bundle-report.cjs`)의 순수 함수 계약.
  *
- * 무엇을 보장하나: 번들에 `app/_dev` 가 있는지 판정하는 규칙(공허 통과 금지 포함), s-m-e 결과 집계(가짜 항목
+ * 무엇을 보장하나: 번들에 금지 경로(`app/_dev` + TRIP-1616 이 더한 `src/mocks`·`src/test-support`·`__fixtures__`·
+ * `*.test.*`·도우미 가짜 어댑터/샘플)가 있는지 판정하는 규칙(공허 통과 금지 포함), s-m-e 결과 집계(가짜 항목
  * 분리·상위 20), 종료코드(0/1/2), MB 포맷, 리포트 JSON 스키마, 한 줄 요약·MD 고정 문구.
+ * TRIP-1616 에서 결과 키·문구를 `devPaths`/`_dev N건` → `forbiddenPaths`/`금지 경로 N건` 으로 일반화했다.
  * 실제 `expo export`·s-m-e 실행·CI·문서 정정은 jest 대상이 아니다(실행 확인 — 02a §7).
  *
  * 테스트가 `.ts` 인 이유: jest testMatch 가 `.cjs` 를 줍지 않아서다. 스크립트는 `jest.requireActual` 로 읽는다.
@@ -36,15 +38,15 @@ type Report = {
   totalAssetBytes: number;
   topModules: Mod[];
   excluded: Fake[];
-  devPaths: string[];
+  forbiddenPaths: string[];
 };
-type Verdict = { devPaths: string[]; toolError: string | null };
+type Verdict = { forbiddenPaths: string[]; toolError: string | null };
 type Lib = {
   FORBIDDEN_PATTERNS: RegExp[];
   findForbiddenSources: (sources: string[], patterns?: RegExp[]) => string[];
   judgeSourceMap: (sources: unknown, patterns?: RegExp[]) => Verdict;
   decideExitCode: (v: {
-    devPaths: string[];
+    forbiddenPaths: string[];
     toolError: string | null;
   }) => 0 | 1 | 2;
   summarizeSme: (sme: unknown) => {
@@ -220,29 +222,97 @@ describe('findForbiddenSources · FORBIDDEN_PATTERNS (AC2)', () => {
     ).toEqual([both]);
   });
 
-  it('T7 기본 패턴 목록은 _dev 하나뿐인 RegExp 배열', () => {
-    expect(lib.FORBIDDEN_PATTERNS).toHaveLength(1);
-    expect(lib.FORBIDDEN_PATTERNS[0]).toBeInstanceOf(RegExp);
-    expect(lib.FORBIDDEN_PATTERNS[0].test('/app/_dev/x')).toBe(true);
+  it('T7 기본 패턴 목록은 RegExp 배열이고 _dev 패턴이 그 안에 있다', () => {
+    expect(lib.FORBIDDEN_PATTERNS.length).toBeGreaterThanOrEqual(1);
+    lib.FORBIDDEN_PATTERNS.forEach((pattern) =>
+      expect(pattern).toBeInstanceOf(RegExp)
+    );
+    expect(lib.FORBIDDEN_PATTERNS.some((p) => p.test('/app/_dev/x'))).toBe(
+      true
+    );
+  });
+});
+
+// TRIP-1616 — 테스트·프리뷰 전용 파일이 운영 소스맵에 섞이면 잡는 패턴들(AC1-b·c). 소스맵 경로는 프로젝트 루트 기준 `/src/…` 꼴이다.
+describe('FORBIDDEN_PATTERNS 확장 — 테스트·프리뷰 전용 경로', () => {
+  it.each([
+    [
+      '도우미 가짜 어댑터',
+      '/src/pages/assistant/assistant-sheet/api/fakeAssistantAdapter.ts',
+    ],
+    [
+      '도우미 샘플 데이터',
+      '/src/pages/assistant/assistant-sheet/api/assistantSamples.ts',
+    ],
+    ['홈 프리뷰 픽스처 폴더', '/src/pages/home/model/__fixtures__/x.ts'],
+    [
+      '단계별 홈 픽스처 파일',
+      '/src/pages/home/model/__fixtures__/homePhaseFixtures.ts',
+    ],
+    ['src/mocks', '/src/mocks/server.ts'],
+    ['src/test-support', '/src/test-support/freezeDate.ts'],
+    ['src 아래 단위 테스트', '/src/pages/home/ui/HomeScreen.test.tsx'],
+    ['src 아래 통합 테스트', '/src/a/b.integration.test.tsx'],
+    ['app 아래 테스트', '/app/(tabs)/index.test.tsx'],
+    ['윈도 구분자 src\\mocks', '\\src\\mocks\\server.ts'],
+    [
+      '윈도 구분자 __fixtures__',
+      '\\src\\pages\\home\\model\\__fixtures__\\x.ts',
+    ],
+  ])('잡는다 — %s', (_name, source) => {
+    expect(lib.findForbiddenSources(['/index.ts', source])).toEqual([source]);
+  });
+
+  it.each([
+    ['운영 홈 기본값 파일', '/src/pages/home/model/homeFixtures.ts'],
+    [
+      '운영 매거진 데이터(이름만 Fixtures)',
+      '/src/pages/magazine/model/magazineFixtures.ts',
+    ],
+    [
+      '도우미 계약 파일',
+      '/src/pages/assistant/assistant-sheet/api/assistantContract.ts',
+    ],
+    [
+      '도우미 포트 파일',
+      '/src/pages/assistant/assistant-sheet/api/assistantPort.ts',
+    ],
+    ['node_modules 속 __fixtures__', '/node_modules/pkg/__fixtures__/a.js'],
+    ['node_modules 속 .test. 파일', '/node_modules/pkg/x.test.js'],
+    ['접두만 같은 폴더 src/mocksmith', '/src/mocksmith/a.ts'],
+    ['접두만 같은 폴더 src/test-supporter', '/src/test-supporter/a.ts'],
+    ['__fixtures__ 와 이름만 비슷한 폴더', '/src/a/__fixtures__x/b.ts'],
+    ['.test. 가 아닌 파일명 latest', '/src/pages/home/model/latest.tsx'],
+    ['.test. 가 아닌 파일명 b.testing', '/src/a/b.testing.ts'],
+    ['실제 라우트 파일', '/app/(tabs)/_layout.tsx'],
+  ])('잡지 않는다 — %s', (_name, source) => {
+    expect(lib.findForbiddenSources(['/index.ts', source])).toEqual([]);
+  });
+
+  it('새 금지 경로가 섞인 소스맵은 exit 1 이고 그 경로가 forbiddenPaths 에 담긴다', () => {
+    const leaked = '/src/test-support/freezeDate.ts';
+    const verdict = lib.judgeSourceMap([...CLEAN_SOURCES, leaked]);
+    expect(verdict.forbiddenPaths).toEqual([leaked]);
+    expect(lib.decideExitCode(verdict)).toBe(1);
   });
 });
 
 describe('judgeSourceMap · decideExitCode (AC2 종료코드)', () => {
   it('T8 정상(비어 있지 않고 _dev 없음) → 오류 없음, exit 0', () => {
     const verdict = lib.judgeSourceMap(CLEAN_SOURCES);
-    expect(verdict).toEqual({ devPaths: [], toolError: null });
+    expect(verdict).toEqual({ forbiddenPaths: [], toolError: null });
     expect(lib.decideExitCode(verdict)).toBe(0);
   });
 
   it('T9 _dev 가 섞이면 그 경로를 담고 exit 1', () => {
     const verdict = lib.judgeSourceMap([...CLEAN_SOURCES, DEV_SOURCES[0]]);
-    expect(verdict.devPaths).toEqual([DEV_SOURCES[0]]);
+    expect(verdict.forbiddenPaths).toEqual([DEV_SOURCES[0]]);
     expect(lib.decideExitCode(verdict)).toBe(1);
   });
 
   it('T10 빈 sources 는 통과가 아니라 도구 오류 — exit 2 (공허 통과 금지)', () => {
     const verdict = lib.judgeSourceMap([]);
-    expect(verdict.devPaths).toEqual([]);
+    expect(verdict.forbiddenPaths).toEqual([]);
     expect(typeof verdict.toolError).toBe('string');
     expect((verdict.toolError as string).length).toBeGreaterThan(0);
     expect(lib.decideExitCode(verdict)).toBe(2);
@@ -257,12 +327,12 @@ describe('judgeSourceMap · decideExitCode (AC2 종료코드)', () => {
   });
 
   it.each([
-    ['아무 일 없음', { devPaths: [], toolError: null }, 0],
-    ['_dev 검출', { devPaths: ['/app/_dev/a.ts'], toolError: null }, 1],
-    ['도구 오류', { devPaths: [], toolError: 'export failed' }, 2],
+    ['아무 일 없음', { forbiddenPaths: [], toolError: null }, 0],
+    ['_dev 검출', { forbiddenPaths: ['/app/_dev/a.ts'], toolError: null }, 1],
+    ['도구 오류', { forbiddenPaths: [], toolError: 'export failed' }, 2],
     [
       '둘 다면 판정이 끝난 _dev 검출(1)이 우선',
-      { devPaths: ['/app/_dev/a.ts'], toolError: 's-m-e failed' },
+      { forbiddenPaths: ['/app/_dev/a.ts'], toolError: 's-m-e failed' },
       1,
     ],
   ])('T12 decideExitCode — %s', (_name, input, expected) => {
@@ -270,8 +340,11 @@ describe('judgeSourceMap · decideExitCode (AC2 종료코드)', () => {
   });
 
   describe('T13 속성', () => {
-    // 세그먼트에 `_` 가 없으니 어떻게 이어 붙여도 `app/_dev/` 가 생길 수 없다.
-    const segment = fc.stringMatching(/^[a-z0-9]{1,8}$/);
+    // 세그먼트에 `_`·`.`·`-` 가 없으니 어떻게 이어 붙여도 `app/_dev/`·`__fixtures__/`·`.test.`·`test-support/` 가 생길 수 없다.
+    // 남는 우연은 `src/mocks/` 뿐이라(TRIP-1616 추가 패턴) `mocks` 세그먼트만 걸러 확률 0 으로 만든다.
+    const segment = fc
+      .stringMatching(/^[a-z0-9]{1,8}$/)
+      .filter((name) => name !== 'mocks');
     const safePath = fc
       .array(segment, { minLength: 1, maxLength: 5 })
       .map((parts) => `/${parts.join('/')}`);
@@ -285,16 +358,22 @@ describe('judgeSourceMap · decideExitCode (AC2 종료코드)', () => {
       );
     });
 
-    it('거기에 /app/_dev/… 하나를 어디에 끼워도 항상 exit 1 이고 끼운 경로가 devPaths', () => {
+    it('거기에 금지 경로 하나(/app/_dev/…·/src/mocks/…·/src/test-support/…)를 어디에 끼워도 항상 exit 1 이고 끼운 경로가 forbiddenPaths', () => {
       fc.assert(
-        fc.property(safeSources, segment, fc.nat(), (sources, name, at) => {
-          const dev = `/app/_dev/${name}.tsx`;
-          const mixed = [...sources];
-          mixed.splice(at % (mixed.length + 1), 0, dev);
-          const verdict = lib.judgeSourceMap(mixed);
-          expect(verdict.devPaths).toEqual([dev]);
-          expect(lib.decideExitCode(verdict)).toBe(1);
-        })
+        fc.property(
+          safeSources,
+          segment,
+          fc.constantFrom('app/_dev', 'src/mocks', 'src/test-support'),
+          fc.nat(),
+          (sources, name, folder, at) => {
+            const leaked = `/${folder}/${name}.tsx`;
+            const mixed = [...sources];
+            mixed.splice(at % (mixed.length + 1), 0, leaked);
+            const verdict = lib.judgeSourceMap(mixed);
+            expect(verdict.forbiddenPaths).toEqual([leaked]);
+            expect(lib.decideExitCode(verdict)).toBe(1);
+          }
+        )
       );
     });
   });
@@ -406,12 +485,12 @@ describe('buildReport (AC1 JSON 스키마)', () => {
       totalAssetBytes: 6_500_000,
       topModules: REAL_MODULES,
       excluded: REAL_FAKES,
-      devPaths: [],
+      forbiddenPaths: [],
     });
     expect(Object.keys(report).sort()).toEqual(
       [
         'bytecode',
-        'devPaths',
+        'forbiddenPaths',
         'excluded',
         'platform',
         'topModules',
@@ -422,12 +501,12 @@ describe('buildReport (AC1 JSON 스키마)', () => {
     expect(JSON.parse(JSON.stringify(report))).toEqual(report);
   });
 
-  it('T25 devPaths 는 s-m-e 가 아니라 원본 sources 에서 구한다', () => {
+  it('T25 forbiddenPaths 는 s-m-e 가 아니라 원본 sources 에서 구한다', () => {
     const report = lib.buildReport({
       ...input,
       sources: [...CLEAN_SOURCES, '/app/_dev/preview.tsx'],
     });
-    expect(report.devPaths).toEqual(['/app/_dev/preview.tsx']);
+    expect(report.forbiddenPaths).toEqual(['/app/_dev/preview.tsx']);
     expect(report.topModules).toEqual(REAL_MODULES);
   });
 });
@@ -448,14 +527,14 @@ describe('renderSummaryLine · renderMarkdown (AC1·AC4 문구)', () => {
 
   it('T26 한 줄 요약은 고정 문구 · 개행 없음', () => {
     expect(lib.renderSummaryLine(clean())).toBe(
-      'iOS JS 6.33MB · assets 6.50MB · _dev 0건 (--no-bytecode)'
+      'iOS JS 6.33MB · assets 6.50MB · 금지 경로 0건 (--no-bytecode)'
     );
     const thirteen = Array.from(
       { length: 13 },
       (_, i) => `/app/_dev/assets/${i}.jpg`
     );
     const line = lib.renderSummaryLine(dirty(thirteen));
-    expect(line).toContain('_dev 13건');
+    expect(line).toContain('금지 경로 13건');
     expect(line).not.toContain('\n');
   });
 
@@ -496,13 +575,13 @@ describe('renderSummaryLine · renderMarkdown (AC1·AC4 문구)', () => {
     expect(md).toContain(lib.formatMB(286657));
   });
 
-  it('T31 총 JS·에셋 MB 와 _dev 0건/N건 줄(N건이면 경로도)', () => {
+  it('T31 총 JS·에셋 MB 와 금지 경로 0건/N건 줄(N건이면 경로도)', () => {
     const cleanMd = lib.renderMarkdown(clean());
     expect(cleanMd).toContain('6.33');
     expect(cleanMd).toContain('6.50');
-    expect(cleanMd).toContain('_dev 0건');
+    expect(cleanMd).toContain('금지 경로 0건');
     const dirtyMd = lib.renderMarkdown(dirty(DEV_SOURCES));
-    expect(dirtyMd).toContain('_dev 2건');
+    expect(dirtyMd).toContain('금지 경로 2건');
     DEV_SOURCES.forEach((p) => expect(dirtyMd).toContain(p));
   });
 });

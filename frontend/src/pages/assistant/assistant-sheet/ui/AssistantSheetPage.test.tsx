@@ -28,6 +28,7 @@ import {
   type FakeAssistantOptions,
 } from '../api/fakeAssistantAdapter';
 import { AssistantSheetPage } from './AssistantSheetPage';
+import * as sheetPublicApi from '../index';
 
 /**
  * TRIP-1322 — 시트 page 배선(가짜 서버 주입). 서버 HTTP 가 없어 MSW 대신 `setAssistantPort` 로
@@ -1640,5 +1641,27 @@ describe('AssistantSheetPage · 이동 방식 (TRIP-1565)', () => {
 
     expect(mockReplace.mock.calls).toEqual([['/stays']]);
     expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+// TRIP-1616 — 운영이 닿는 진입점(index.ts)이 가짜 서버(FakeAssistantAdapter·fakeWithHistory)를 다시 내보내면,
+// 그 파일과 샘플 데이터(합 약 23KB)가 운영 번들에 도로 실린다. bundle:report 의 명시 패턴이 CI 에서 잡는 것과 같은 일을
+// 로컬 jest 에서 바로 빨갛게 하는 짝이다. 가짜 서버는 테스트가 깊은 경로(../api/fakeAssistantAdapter)로 직접 부른다.
+describe('도우미 시트 공개 API — 운영 진입점은 가짜 서버를 내보내지 않는다', () => {
+  it('index 의 값 export 에 FakeAssistantAdapter·fakeWithHistory 가 없고, 운영 값(assistantPort·AssistantSheetPage)은 그대로 있다', () => {
+    // 준비·실행: index 가 런타임으로 내보내는 이름들(타입 export 는 런타임에 없다).
+    const names = Object.keys(sheetPublicApi);
+
+    // 단언: 앵커(운영 값 존재) 먼저 — 빈 로드를 "없음"으로 통과시키지 않는다.
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'AssistantSheetPage',
+        'assistantPort',
+        'setAssistantPort',
+        'useSendTurn',
+      ])
+    );
+    expect(names).not.toContain('FakeAssistantAdapter');
+    expect(names).not.toContain('fakeWithHistory');
   });
 });
