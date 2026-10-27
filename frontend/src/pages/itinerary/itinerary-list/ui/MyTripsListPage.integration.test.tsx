@@ -790,6 +790,152 @@ describe('🔴 TRIP-1055 AC-10 · 다이얼로그 구조 (Figma 4682:3206)', () 
   });
 });
 
+// TRIP-1615 · `GET /trips` 조회 실패가 "아직 만든 여행이 없어요"로 접히던 문제(INV-4). 클라이언트 재시도 0 이라
+// 실패 응답 1개 = 실패 1회다(앱 전역은 자동 재시도 3회 ≈7초 뒤 — jest 사각, 6-b).
+// *(개념 — 응답 큐)* 요청이 올 때마다 줄 맨 앞 응답을 꺼내 돌려준다. 줄이 비면 평소 응답('ok')이다.
+describe('TRIP-1615 · GET /trips 조회 실패 — "여행 없음"으로 접지 않고 오류 얼굴 + 다시 시도', () => {
+  const ERROR = 'itinerary-tab-error';
+  const RETRY = 'itinerary-tab-retry';
+  const EMPTY = 'itinerary-tab-empty';
+  const TRIPS_GET = 'GET /api/v1/trips';
+
+  type TripsReply = 'ok' | 500 | 'network';
+  let tripsReplies: TripsReply[] = [];
+
+  beforeEach(() => {
+    tripsReplies = [];
+    // 바깥 beforeEach 의 평소 핸들러 위에 얹는다(server.use 는 앞에 끼운다) — 파일 최상위 afterEach 가 걷는다.
+    server.use(
+      http.get(`${BASE}/trips`, () => {
+        const reply = tripsReplies.shift() ?? 'ok';
+        if (reply === 'network') return HttpResponse.error();
+        if (reply === 500) {
+          return HttpResponse.json(
+            { error: { code: 'INTERNAL', message: '서버 오류' } },
+            { status: 500 }
+          );
+        }
+        return HttpResponse.json(serverTrips);
+      })
+    );
+  });
+
+  function client(): QueryClient {
+    if (!lastClient) throw new Error('renderPage 를 먼저 불러야 한다');
+    return lastClient;
+  }
+
+  it.each<[string, TripsReply]>([
+    ['서버 오류(500)', 500],
+    ['네트워크 실패', 'network'],
+  ])(
+    '첫 조회가 %s 이면 오류 얼굴과 다시 시도가 보이고 empty·여행 만들기·정렬 줄·카드는 없다',
+    async (_label, reply) => {
+      // 준비
+      tripsReplies = [reply];
+
+      // 실행
+      renderPage();
+
+      // 단언 — 오류 얼굴이 먼저 도착해야 "empty 없음"이 의미가 있다(스켈레톤 단계에선 뭐든 없다, 02a ★1).
+      const face = await screen.findByTestId(ERROR);
+      expect(
+        within(face).getByText('여행을 불러올 수 없어요')
+      ).toBeOnTheScreen();
+      expect(
+        within(face).getByText('잠시 후 다시 시도해 주세요')
+      ).toBeOnTheScreen();
+      expect(
+        within(screen.getByTestId(RETRY)).getByText('다시 시도')
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId(EMPTY)).toBeNull();
+      expect(screen.queryByTestId('itinerary-tab-create-trip')).toBeNull();
+      expect(screen.queryByTestId('my-trips-sort')).toBeNull();
+      expect(screen.queryAllByTestId(/^my-trip-card-/)).toHaveLength(0);
+    }
+  );
+
+  it('다시 시도를 누르면 목록을 한 번 더 받아 카드가 나타나고 오류 얼굴은 사라진다', async () => {
+    // 준비 — 첫 GET 만 실패(줄이 비면 평소 응답). 오류 얼굴이 뜬 상태가 출발점이다(앵커).
+    tripsReplies = [500, 'ok'];
+    renderPage();
+    await screen.findByTestId(ERROR);
+    expect(count(TRIPS_GET)).toBe(1);
+
+    // 실행
+    fireEvent.press(screen.getByTestId(RETRY));
+
+    // 단언 — 카드가 뜨고 오류 얼굴·버튼이 사라진다. 요청은 정확히 1번 늘었다(재시도 중 얼굴은 안 본다).
+    expect(await screen.findByTestId(`my-trip-card-${A}`)).toBeOnTheScreen();
+    expect(screen.getByTestId(`my-trip-card-${B}`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+    expect(screen.queryByTestId(RETRY)).toBeNull();
+    await settle();
+    expect(count(TRIPS_GET)).toBe(2);
+  });
+
+  it('다시 시도도 실패하면 오류 얼굴로 돌아오고 빈 얼굴로 접히지 않는다', async () => {
+    // 준비 — 두 번 다 실패.
+    tripsReplies = [500, 500];
+    renderPage();
+    await screen.findByTestId(ERROR);
+
+    // 실행 — 누르고, 두 번째 500 응답이 실제로 돌아올 때까지 기다린다. 누른 직후엔 옛 오류 얼굴이 아직
+    // 화면에 있어서 바로 단언하면 버튼이 아무것도 안 해도 통과한다(02a ★3).
+    fireEvent.press(screen.getByTestId(RETRY));
+    await waitFor(() =>
+      expect(responses.filter((r) => r === `${TRIPS_GET} 500`)).toHaveLength(2)
+    );
+    await settle();
+
+    // 단언
+    expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+    expect(screen.queryByTestId(EMPTY)).toBeNull();
+    expect(screen.queryAllByTestId(/^my-trip-card-/)).toHaveLength(0);
+    expect(count(TRIPS_GET)).toBe(2);
+  });
+
+  it('목록을 이미 받은 뒤 재조회가 실패해도 카드는 그대로고 오류 얼굴은 없다 — 판정은 "데이터가 없다"', async () => {
+    // 준비 — 첫 GET 성공(카드가 뜬다), 다음 GET 은 500.
+    tripsReplies = ['ok', 500];
+    renderPage();
+    await screen.findByTestId(`my-trip-card-${A}`);
+
+    // 실행 — 외부 무효화(삭제 성공·푸시 등이 하는 일)로 재조회를 일으킨다.
+    await act(async () => {
+      await client().invalidateQueries({ queryKey: getGetTripsQueryKey() });
+    });
+
+    // 단언 ① — 앵커: 재조회가 실제로 실패했고(error) 받아 둔 데이터는 남았다(02a ★4·★5).
+    expect(count(TRIPS_GET)).toBe(2);
+    expect(client().getQueryState(getGetTripsQueryKey())?.status).toBe('error');
+    expect(client().getQueryData(getGetTripsQueryKey())).toHaveLength(2);
+    await settle();
+
+    // 단언 ② — 그 위에서 화면은 목록을 유지한다.
+    expect(screen.getByTestId(`my-trip-card-${A}`)).toBeOnTheScreen();
+    expect(screen.getByTestId(`my-trip-card-${B}`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+    expect(screen.queryByTestId(RETRY)).toBeNull();
+    expect(screen.queryByTestId(EMPTY)).toBeNull();
+  });
+
+  it('서버가 준 진짜 0건은 오류가 아니라 빈 얼굴이다 (선제 green)', async () => {
+    // 준비
+    serverTrips = [];
+
+    // 실행
+    renderPage();
+
+    // 단언
+    expect(await screen.findByTestId(EMPTY)).toBeOnTheScreen();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+    expect(screen.queryByTestId(RETRY)).toBeNull();
+    expect(count(TRIPS_GET)).toBe(1);
+  });
+});
+
 // TRIP-1271 · 생성이 끝났는데 카드가 "AI가 일정을 짜는 중"으로 남던 문제 — 목록이 일정을 스스로 다시 묻는다.
 // 생성이 도는 여행(PARTIAL 이거나 세션 있음)만 2초마다 묻고, 탭으로 돌아오면 전부 다시 묻는다(01b 결정 2).
 describe('생성 중 여행은 목록이 스스로 다시 묻는다 — 폴링·탭 복귀 재조회', () => {
