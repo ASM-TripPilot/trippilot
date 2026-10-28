@@ -1,5 +1,7 @@
 import type { ReactTestInstance } from 'react-test-renderer';
 import { act, render, screen } from '@testing-library/react-native';
+
+import { answerReduceMotionSynchronously } from '@/test-support/animatedProbe';
 import { Stack } from 'expo-router';
 
 import { useGenerationWatch } from '@/app/model/useGenerationWatch';
@@ -111,6 +113,8 @@ beforeEach(() => {
   // 앞 케이스가 스플래시를 붙잡게 바꿔 둔 반환값이 새지 않게 — 기본은 "붙잡지 않는다".
   mockCatchUp.mockReset();
   mockCatchUp.mockReturnValue(false);
+  // TRIP-1624 — 스플래시의 "동작 줄이기" 답을 effect 안에서 동기로 받는다(비동기 답이 act 밖에서 상태를 바꾸는 경고 제거).
+  answerReduceMotionSynchronously(false);
 });
 
 function passFloor(): void {

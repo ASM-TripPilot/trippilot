@@ -14,6 +14,7 @@ import {
   publishGateDestination,
   resetGateDestination,
 } from '@/features/auth/model/gateDestination';
+import { SPLASH_GATE_STUB_ROUTES } from '@/test-support/splashGateRoutes';
 import NotFoundRoute from '@routes/+not-found';
 
 /**
@@ -77,6 +78,7 @@ function stub(testID: string) {
 // 똑같이 맞는 경로는 앞 키가 이긴다 — (tabs) 를 앞에 두면 옛 버그의 HOME 증상은 숨지만 ONBOARDING 쪽이 대신
 // 막혀 스위트 전체로는 여전히 red 다. 고친 코드는 그룹을 명시해 동점이 없으므로 순서와 무관하다.
 const ROUTES = {
+  ...SPLASH_GATE_STUB_ROUTES,
   _layout: SplashGate,
   '(auth)/_layout': () => <Stack />,
   '(auth)/login': stub('login-root'),

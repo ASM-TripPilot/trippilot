@@ -23,6 +23,7 @@ import {
   primeOsPermission,
   type OsPermission,
 } from '@/test-support/pushOsFake';
+import { SPLASH_GATE_STUB_ROUTES } from '@/test-support/splashGateRoutes';
 
 import {
   PERMISSION_LOOKUP_WAIT_MAX_MS,
@@ -166,6 +167,7 @@ function stub(testID: string) {
 // 실제 app/ 처럼 '/' 로 풀리는 화면이 둘이다((onboarding)/index · (tabs)/index) — TRIP-1628. 이 줄을 빼면 HOME 중 `replace('/')` 가
 // 홈에 도착하는 거짓 green 이 생겨(TRIP-1597) 'TRIP-1628' describe 의 카나리가 red 가 된다.
 const ROUTES = {
+  ...SPLASH_GATE_STUB_ROUTES,
   _layout: RootLayout,
   '(auth)/_layout': () => <Stack screenOptions={{ headerShown: false }} />,
   '(auth)/login': stub('login-root'),

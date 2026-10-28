@@ -2,6 +2,8 @@ import type { ComponentType } from 'react';
 import { FlatList } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+import { answerReduceMotionSynchronously } from '@/test-support/animatedProbe';
+
 /**
  * TRIP-939 AC-10 — 개발 프리뷰(`/_dev/preview`)는 운영 빌드에서 열리지 않는다(심사 2.1).
  *
@@ -95,6 +97,8 @@ beforeEach(() => {
   previousDev = runtime.__DEV__;
   mockNavigate.mockClear();
   delete mockSearchParams.state;
+  // TRIP-1624 — 스플래시의 "동작 줄이기" 답을 effect 안에서 동기로 받는다(비동기 답이 act 밖에서 상태를 바꾸는 경고 제거).
+  answerReduceMotionSynchronously(false);
 });
 
 afterEach(() => {

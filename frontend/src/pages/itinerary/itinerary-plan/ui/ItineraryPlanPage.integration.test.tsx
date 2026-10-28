@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw';
 import type { QueryClient } from '@tanstack/react-query';
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -243,6 +244,9 @@ describe('확정 CTA·재조회 배선', () => {
   });
 
   afterEach(async () => {
+    // TRIP-1624 — 화면부터 내린다. RNTL 자동 정리는 바깥 afterEach 라 이 훅보다 **늦어서**, 그 사이 핸들러 해제·캐시 비우기로
+    // 마운트된 화면이 다시 조회하면 핸들러 없는 요청(미처리 경고)이 나갔다. cleanup 은 두 번 불려도 무해하다(이 파일의 같은 afterEach 전부).
+    cleanup();
     // 테스트 격리 — 인플라이트 쿼리를 취소하고 캐시를 비운다. 재조회하는 케이스(I5a/I5b 409)가
     // 발화한 invalidateQueries 재조회가 테스트 경계를 넘어 **늦게 도착**하면, 공유 카운터
     // itineraryGetCalls 를 다음 테스트의 beforeEach 리셋 뒤 한 번 더 올려 "재조회 0" 단언
@@ -697,6 +701,7 @@ describe('확정 셸(h16) 얼굴', () => {
   });
 
   afterEach(() => {
+    cleanup();
     server.resetHandlers();
     act(() => {
       clearAccessToken();
@@ -888,6 +893,7 @@ describe('확정 셸(h16) 얼굴', () => {
 
   describe('🔴 TRIP-1237 a — 알림에서 연 확정 일정은 오늘 일차로 열리고 뒤로가기는 알림함이다', () => {
     afterEach(() => {
+      cleanup();
       jest.useRealTimers();
     });
 
@@ -1117,6 +1123,7 @@ describe('탈출구 — 뒤로·일정 만들기', () => {
   });
 
   afterEach(() => {
+    cleanup();
     server.resetHandlers();
     act(() => {
       clearAccessToken();
@@ -1321,6 +1328,7 @@ describe('확정 예방 잠금(PARTIAL)', () => {
 
   // 옛 파일 라우터 목엔 `canGoBack` 이 없었다 — 페이지가 부르면 TypeError 로 red 였던 그물을 잇는다(02a ★).
   afterEach(() => {
+    cleanup();
     expect(mockCanGoBack).not.toHaveBeenCalled();
   });
 
@@ -1366,6 +1374,7 @@ describe('확정 예방 잠금(PARTIAL)', () => {
   });
 
   afterEach(() => {
+    cleanup();
     server.resetHandlers();
     act(() => {
       clearAccessToken();
@@ -1475,6 +1484,7 @@ describe('지도 실패 폴백', () => {
   });
 
   afterEach(() => {
+    cleanup();
     server.resetHandlers();
     act(() => {
       clearAccessToken();
@@ -1573,6 +1583,7 @@ describe('연타 가드 — 저장 직후 일정 수정 관통 차단', () => {
   });
 
   afterEach(async () => {
+    cleanup();
     clock.mockRestore();
     releaseConfirm?.();
     await activeClient?.cancelQueries();
@@ -1771,6 +1782,7 @@ describe('완성 셸(h14) 얼굴', () => {
   });
 
   afterEach(() => {
+    cleanup();
     server.resetHandlers();
     act(() => {
       clearAccessToken();
@@ -2115,6 +2127,7 @@ describe('삭제된 여행 안내', () => {
   });
 
   afterEach(async () => {
+    cleanup();
     // 테스트 격리 — 인플라이트 조회 취소 + 캐시 비우기(늦게 도착한 응답이 다음 테스트로 새지 않게).
     await activeClient?.cancelQueries();
     activeClient?.clear();
@@ -2383,6 +2396,7 @@ describe('넣지 못한 꼭 갈 곳 블록', () => {
   });
 
   afterEach(() => {
+    cleanup();
     resetPressGuard();
     server.resetHandlers();
     act(() => {
@@ -2572,6 +2586,7 @@ describe('위반 슬롯 경고 표식', () => {
   });
 
   afterEach(() => {
+    cleanup();
     server.resetHandlers();
     act(() => {
       clearAccessToken();
@@ -2820,6 +2835,7 @@ describe('빈 일차 지도 중심', () => {
   });
 
   afterEach(async () => {
+    cleanup();
     // 늦은 응답이 다음 테스트로 새지 않게 — 조회를 끊고 캐시를 비운 뒤, 붙잡아 둔 거점 응답을 푼다(02a ★5).
     await activeClient?.cancelQueries();
     activeClient?.clear();
@@ -3046,6 +3062,7 @@ describe('같은 날 같은 장소 두 번', () => {
   });
 
   afterEach(async () => {
+    cleanup();
     await activeClient?.cancelQueries();
     activeClient?.clear();
     activeClient = null;
@@ -3160,6 +3177,7 @@ describe('TRIP-1428 · 확정 성공은 완료 배너 seen 에 그 여행을 남
   });
 
   afterEach(() => {
+    cleanup();
     // 단언이 문을 열기 전에 실패해도 붙잡힌 요청을 남기지 않는다(안 풀면 jest 가 red 대신 멈춘다).
     openConfirm?.();
     server.resetHandlers();
