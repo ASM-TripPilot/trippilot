@@ -8,6 +8,7 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { SavedStay } from '@/shared/api/index.schemas';
 
 import { useStayAddresses } from './useStayAddresses';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-1011(#036 · 01b Q1) — 저장 숙소 좌표마다 기존 `/stays/reverse-geocode`로 주소를 받아
@@ -113,9 +114,9 @@ afterEach(() => {
 afterAll(() => server.close());
 
 function createWrapper() {
-  const client = new QueryClient({
+  const client = newTestQueryClient({
     // retry:false — 503 이 곧바로 실패로 떨어지게. gcTime:0 — 타이머가 프로세스를 붙잡지 않게(리포 관례).
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    gcTime: 0,
   });
   function Wrapper({ children }: { children: ReactNode }) {
     return (
@@ -284,9 +285,7 @@ describe('TRIP-1028 H2 · 받은 주소는 세션 동안 기억한다 — 전역
   it('받은 뒤 언마운트하고 하루가 지나 다시 써도 같은 좌표는 다시 묻지 않고, 새 좌표만 묻는다', async () => {
     // 래퍼 기본값 gcTime:0 은 "캐시를 바로 지운다"는 뜻이다. 그런데도 살아남아야 한다 = 이 조회가
     // 자기 옵션으로 수명을 들고 있다(앱 전역 QueryClient 기본값에 기대지 않는다, AC-6).
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
 
     const first = renderHook(() => useStayAddresses([JW]), {
       wrapper: wrapperFor(client),

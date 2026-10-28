@@ -1,6 +1,6 @@
 import type { ComponentType, ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import {
   fireEvent,
   render,
@@ -12,6 +12,7 @@ import { server } from '@/mocks/server';
 import type { PreferenceView, Trip } from '@/shared/api/index.schemas';
 import { useTripWizardStore } from '@/features/create-trip';
 import { TripNewStep1Page } from '@/pages/trip/trip-new-step1';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * g01 여행 만들기 1/4(`TripNewStep1Page`) 통합 테스트 공용 하네스(TRIP-1353).
@@ -134,12 +135,7 @@ export function wizardStep1Harness({
   }
 
   function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { retry: false, gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     return function Wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>

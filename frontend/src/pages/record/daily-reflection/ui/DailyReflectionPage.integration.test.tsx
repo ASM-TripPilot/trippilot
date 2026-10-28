@@ -28,6 +28,7 @@ import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 import { router } from 'expo-router';
 
 import { DailyReflectionPage } from './DailyReflectionPage';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * j03 오늘의 회고 — 실제 페이지·훅 + msw(가짜 서버) + 실 QueryClient 로 보는 사용자 흐름. 관점마다 describe 하나:
@@ -259,16 +260,11 @@ describe('생성 — 레코드가 없는 지난 날·오늘은 한 번 만들어
   });
 
   /**
-   * 쿼리 gcTime 은 기본(5분) 그대로 — 이탈 뒤에도 목록 캐시가 남아야 AC-3 을 가를 수 있다(02a ★2).
-   * 뮤테이션 gcTime 만 0 — `client.clear()` 는 뮤테이션 gc 타이머를 안 지워 jest 가 끝나지 않는다.
+   * gcTime 은 팩토리 기본(Infinity) — 이탈 뒤에도 목록 캐시가 남아야 AC-3 을 가를 수 있다(02a ★2).
+   * Infinity 라 뮤테이션 gc 타이머도 없다 — 옛 뮤테이션 gcTime 0 이 막던 "jest 가 끝나지 않는 것"을 같은 방식으로 막는다.
    */
   function newClient(): QueryClient {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false },
-        mutations: { retry: false, gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient();
     clients.push(client);
     return client;
   }
@@ -784,12 +780,7 @@ describe('저장 — 직접 쓴 회고를 저장한 뒤 같은 화면', () => {
   });
 
   function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     function Wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -1143,12 +1134,7 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
   });
 
   function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     function Wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>

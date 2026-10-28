@@ -7,9 +7,12 @@ import {
   waitFor,
   within,
 } from '@testing-library/react-native';
-import { QueryClient } from '@tanstack/react-query';
 import { BASE } from '@/test-support/apiBase';
-import { createGcZeroWrapper, createWrapper } from '@/test-support/queryRender';
+import {
+  createGcZeroWrapper,
+  createWrapper,
+  newTestQueryClient,
+} from '@/test-support/queryRender';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
@@ -1011,12 +1014,7 @@ describe('P-17 · 진입마다 새 시드로 무작위 순서를 묻는다 (TRIP
       setAccessToken('valid-access');
       mockParams = routeParams;
       // 캐시를 오래 들고 stale 도 되지 않는 클라이언트 — gcTime 0 래퍼로는 "지난 캐시를 읽는 사고"가 안 보인다.
-      const client = new QueryClient({
-        defaultOptions: {
-          queries: { retry: false, gcTime: Infinity, staleTime: Infinity },
-          mutations: { retry: false, gcTime: Infinity },
-        },
-      });
+      const client = newTestQueryClient({ staleTime: Infinity });
       const wrapper = createWrapper(client);
 
       const firstEntry = render(<PlaceExplorePage />, { wrapper });

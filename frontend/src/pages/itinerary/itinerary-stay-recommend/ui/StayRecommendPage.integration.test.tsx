@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -24,6 +24,7 @@ import type {
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 import { StayRecommendPage } from './StayRecommendPage';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-800 · h15 페이지 배선 — **완료조건 "거점 지정 후 h14 복귀 통합 테스트"** + 무데이터 얼굴(AC-10·11·12).
@@ -222,12 +223,7 @@ afterAll(() => server.close());
 
 /** `retry:false`·`gcTime:0` — 실패 즉시, 잔존 타이머 방지(h14 선례). */
 function renderPage(recommendations?: StayRecommendView) {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { retry: false },
-    },
-  });
+  const client = newTestQueryClient({ gcTime: 0 });
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>

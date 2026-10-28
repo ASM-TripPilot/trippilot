@@ -37,6 +37,7 @@ import {
 } from '@/test-support/wizardDraftFixture';
 
 import { SavedPlacesPage } from './SavedPlacesPage';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * d02 담은 장소 페이지(`SavedPlacesPage`)의 **배선** 통합 테스트 — 진짜 react-query + msw 가짜 서버.
@@ -101,13 +102,10 @@ function hitsOf(method: string, pathname: string) {
 }
 
 function createWrapper() {
-  const client = new QueryClient({
-    defaultOptions: {
-      // gcTime: 0 — 기본값이 만드는 타이머가 테스트 종료 후에도 살아남아 Node 프로세스를
-      // 붙잡는다. **mutations 쪽도 반드시 0** 이다(빼면 이 버킷이 300초 매달린다, 리포 실측).
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
+  const client = newTestQueryClient({
+    // gcTime: 0 — 기본값이 만드는 타이머가 테스트 종료 후에도 살아남아 Node 프로세스를
+    // 붙잡는다. **mutations 쪽도 반드시 0** 이다(빼면 이 버킷이 300초 매달린다, 리포 실측).
+    gcTime: 0,
   });
   function Wrapper({ children }: { children: ReactNode }) {
     return (
@@ -1568,12 +1566,7 @@ describe('select › 위저드', () => {
   async function arrangeFallbackLiftedWithHiddenPicks(): Promise<void> {
     let rows: SavedPlace[] = SEOUL_QA;
     server.use(http.get(`${BASE}/saved-places`, () => HttpResponse.json(rows)));
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     mockParams.mode = 'select';
     mockParams.region = ['서울특별시'];
     setAccessToken('valid-access');
@@ -1776,12 +1769,7 @@ describe('select › 위저드', () => {
       server.use(
         http.get(`${BASE}/saved-places`, () => HttpResponse.json(rows))
       );
-      const client = new QueryClient({
-        defaultOptions: {
-          queries: { retry: false, gcTime: 0 },
-          mutations: { gcTime: 0 },
-        },
-      });
+      const client = newTestQueryClient({ gcTime: 0 });
       mockParams.mode = 'select';
       setAccessToken('valid-access');
       render(
@@ -2872,12 +2860,7 @@ describe('select › 여행', () => {
     mockParams.mode = 'select';
     mockParams.tripId = TRIP_ID;
     setAccessToken('valid-access');
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     function Wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>{children}</QueryClientProvider>

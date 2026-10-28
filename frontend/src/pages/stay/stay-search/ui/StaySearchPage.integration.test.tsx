@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import {
   render,
   screen,
@@ -8,7 +8,10 @@ import {
   within,
 } from '@testing-library/react-native';
 import { BASE } from '@/test-support/apiBase';
-import { createGcZeroWrapper } from '@/test-support/queryRender';
+import {
+  createGcZeroWrapper,
+  newTestQueryClient,
+} from '@/test-support/queryRender';
 import { server } from '@/mocks/server';
 import { StaySearchPage } from './StaySearchPage';
 import type {
@@ -1751,9 +1754,7 @@ describe('🔴 TRIP-1262 · 복제 탭바는 dismissTo 로 탭에 간다 (QA F3)
       ),
       http.get(`${BASE}/saved-stays`, () => HttpResponse.json([]))
     );
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
 
     render(
       <QueryClientProvider client={client}>
@@ -1823,9 +1824,7 @@ describe('동명 구 · URL 의 시도로 다른 시도 숙소를 거른다 (F3 
   });
 
   function renderPage(): void {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     render(
       <QueryClientProvider client={client}>
         <StaySearchPage />
@@ -1925,9 +1924,7 @@ describe('연타 관통 — 한 페이지 안에서 드러난 요소', () => {
   });
 
   async function renderSettled(): Promise<void> {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     render(
       <QueryClientProvider client={client}>
         <StaySearchPage />

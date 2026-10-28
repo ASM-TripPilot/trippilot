@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Pressable, Text } from 'react-native';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { router, Stack, Tabs, useLocalSearchParams } from 'expo-router';
 import {
   act,
@@ -14,6 +14,7 @@ import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import MustVisitListRoute from '@routes/trips/[tripId]/itinerary/must-visits/index';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-1263 (QA F5) · 생성 화면 아래 스택이 `(tabs)` 뿐이라, 뒤로(스와이프·하드웨어)가 앱바 ‹ 와 같은 곳에 닿는다.
@@ -80,15 +81,7 @@ function GeneratingProbe() {
 
 /** 앱 루트 — 쿼리 캐시를 한 번만 만들어 스택 전체가 공유한다(실물 페이지가 조회 훅을 쓴다). */
 function RootLayout(): ReactNode {
-  const [client] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: { retry: false, gcTime: 0 },
-          mutations: { gcTime: 0 },
-        },
-      })
-  );
+  const [client] = useState(() => newTestQueryClient({ gcTime: 0 }));
   return (
     <QueryClientProvider client={client}>
       <Stack />

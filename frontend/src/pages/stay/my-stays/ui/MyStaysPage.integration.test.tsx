@@ -190,7 +190,7 @@ describe('화면 캡처 스텁 — 행 VM·콜백 배선 (옛 본 파일)', () =
   }
 
   function renderPage() {
-    const client = new QueryClient();
+    const client = newTestQueryClient();
     render(
       <QueryClientProvider client={client}>
         <MyStaysPage />

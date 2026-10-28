@@ -1,3 +1,4 @@
+import { newTestQueryClient } from '@/test-support/queryRender';
 // GET 훅과 손수 API 계층을 딥 경로 목으로 치환한다 — 목이 얕으면(배럴·usePersonalization) 실 배선이
 // 안 돌아 게이트가 공허해진다. getGetMePersonalizationQueryKey 는 무효화 키 원천이라 목에서도 실제 키를
 // 그대로 돌려준다(reflection.ts L70-72 실측 = ['/me/personalization']).
@@ -18,7 +19,7 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
 }));
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import {
   fireEvent,
   render,
@@ -79,7 +80,7 @@ const TERMS: TermsVersion[] = [
 ];
 
 function renderPage() {
-  const client = new QueryClient();
+  const client = newTestQueryClient();
   const invalidateSpy = jest.spyOn(client, 'invalidateQueries');
   render(
     <QueryClientProvider client={client}>

@@ -32,6 +32,7 @@ import {
   userMessage,
 } from '../api/assistantSamples';
 import { AssistantSheetPage } from './AssistantSheetPage';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-1514 · 도우미 시트 — **기본 어댑터(HttpAssistantAdapter) + MSW** 통합 테스트(U8 FD frontend-components R19).
@@ -438,7 +439,7 @@ describe('도우미 시트 · 이력 (TRIP-1514 AC-2)', () => {
         }
       )
     );
-    client = new QueryClient();
+    client = newTestQueryClient();
 
     const page = await assistantPort().getMessages(SESSION.id, {
       before: 'cursor-1',

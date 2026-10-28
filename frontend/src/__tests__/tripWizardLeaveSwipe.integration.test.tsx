@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Text } from 'react-native';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { router, Stack, Tabs } from 'expo-router';
 import {
   act,
@@ -17,6 +17,7 @@ import { clearAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import TripWizardLayout from '@routes/trips/new/_layout';
 import TripWizardStep1Route from '@routes/trips/new/step1';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-1272 (QA B-16) · 위저드 1/4 에서 iOS 가장자리 스와이프·Android 하드웨어 뒤로도 ‹ 와 같이 이탈 확인을 거친다.
@@ -88,15 +89,7 @@ function BoundaryProbe(): null {
 
 /** 앱 루트 — 쿼리 캐시를 한 번만 만들어 스택 전체가 공유한다(실물 페이지·이탈 다이얼로그가 쿼리 클라이언트를 쓴다). */
 function RootLayout(): ReactNode {
-  const [client] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: { retry: false, gcTime: 0 },
-          mutations: { retry: false, gcTime: 0 },
-        },
-      })
-  );
+  const [client] = useState(() => newTestQueryClient({ gcTime: 0 }));
   return (
     <QueryClientProvider client={client}>
       <BoundaryProbe />

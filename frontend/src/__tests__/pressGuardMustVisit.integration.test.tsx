@@ -20,6 +20,7 @@ import {
   MustVisitListPage,
   MustVisitTimePage,
 } from '@/pages/itinerary/itinerary-mustvisit';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-1013 #042 — 시각 지정 '저장' 연타의 두 번째 탭이, 저장 성공으로 되돌아간 필수 방문지
@@ -107,12 +108,7 @@ afterEach(() => {
 afterAll(() => server.close());
 
 function newClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
-  });
+  return newTestQueryClient({ gcTime: 0 });
 }
 
 /**

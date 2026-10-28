@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -22,6 +22,7 @@ import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { coverFor } from '@/test-support/placeCoverFixtures';
 
 import { MustVisitTimePage } from './MustVisitTimePage';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * h07 배선을 **실 HTTP 로** 태우는 심판 — 이 칸의 급소다(AC-4 · AC-5 · AC-6 · AC-7 · D1 · D8).
@@ -190,12 +191,7 @@ afterEach(() => {
 afterAll(() => server.close());
 
 function renderPage() {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
-  });
+  const client = newTestQueryClient({ gcTime: 0 });
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>

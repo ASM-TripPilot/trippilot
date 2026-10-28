@@ -24,6 +24,7 @@ import {
   recordsHandler,
   summaryHandler,
 } from '@/test-support/tripRecordsFixtures';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * 🔴 TRIP-1072 · AC-5~12·AC-14 — j01 [방문 추가] 장소 피커(즉석 방문 = 계획에 없던 곳의 도착 기록).
@@ -295,12 +296,7 @@ afterEach(() => {
 afterAll(() => server.close());
 
 function makeClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
-  });
+  return newTestQueryClient({ gcTime: 0 });
 }
 
 function wrapperFor(client: QueryClient) {
@@ -897,12 +893,7 @@ async function renderPickerWithCachedItinerary(
   server.use(
     http.get(`${BASE}/trips/:tripId/itinerary`, () => HttpResponse.json(data))
   );
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: Infinity },
-      mutations: { gcTime: 0 },
-    },
-  });
+  const client = newTestQueryClient();
   client.setQueryData(getGetTripsTripIdItineraryQueryKey(TRIP_ID), data);
   render(<RecordAddVisitPage tripId={TRIP_ID} day={DAY} />, {
     wrapper: wrapperFor(client),

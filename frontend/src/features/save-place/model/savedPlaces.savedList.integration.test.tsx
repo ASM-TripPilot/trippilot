@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -8,6 +8,7 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 
 import { useSavedPlaces } from './savedPlaces';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * 01b Seed Q1 — `useSavedPlaces` 가 **담은 목록 원본과 조회 상태**를 함께 준다.
@@ -91,12 +92,7 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
 function createWrapper() {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
-  });
+  const client = newTestQueryClient({ gcTime: 0 });
   return function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>

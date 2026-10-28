@@ -3,7 +3,6 @@ import { http, HttpResponse } from 'msw';
 import {
   defaultScheduler,
   notifyManager,
-  QueryClient,
   QueryClientProvider,
 } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
@@ -17,6 +16,7 @@ import { flushNotifications } from '@/test-support/flushNotifications';
 
 import { optimisticSavedStayId } from './savedStayIndex';
 import { useSavedStays, type SavedStaysOutcome } from './savedStays';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-417 AC-1·AC-2·AC-4·AC-5·AC-6·AC-7 — 숙소 저장 하트 토글 훅의 서버 상태.
@@ -158,13 +158,10 @@ afterAll(() => {
 });
 
 function createWrapper() {
-  const client = new QueryClient({
-    defaultOptions: {
-      // gcTime:0 — 기본값 타이머가 종료 후에도 살아남아 Node 프로세스를 붙잡는다. mutations도 0
-      // (기본 5분, 빼면 이 버킷이 매달린다 — TRIP-203 실측).
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
+  const client = newTestQueryClient({
+    // gcTime:0 — 기본값 타이머가 종료 후에도 살아남아 Node 프로세스를 붙잡는다. mutations도 0
+    // (기본 5분, 빼면 이 버킷이 매달린다 — TRIP-203 실측).
+    gcTime: 0,
   });
   function Wrapper({ children }: { children: ReactNode }) {
     return (
