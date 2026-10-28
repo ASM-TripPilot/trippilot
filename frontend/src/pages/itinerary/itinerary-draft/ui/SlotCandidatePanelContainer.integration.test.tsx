@@ -134,6 +134,8 @@ describe('후보 조회·선택·교체 배선', () => {
       generationMode: 'FULLY_AI',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days,
     };
   }
@@ -454,6 +456,8 @@ describe('조회 중·실패·지연', () => {
       generationMode: 'FULLY_AI',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days: [
         {
           date: DAY1,
@@ -898,6 +902,8 @@ describe('후보 이름·태그·사진', () => {
       generationMode: 'FULLY_AI',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days: [
         {
           date: DAY1,
@@ -1234,6 +1240,8 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       generationMode: 'FULLY_AI',
       generationState,
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days: [
         {
           date: DAY1,

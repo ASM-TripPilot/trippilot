@@ -195,6 +195,8 @@ function itinerary(): Itinerary {
     generationMode: 'CO_PLAN',
     generationState: 'COMPLETE',
     isFallback: false,
+    scoringMode: null,
+    degradations: [],
     days,
   };
 }

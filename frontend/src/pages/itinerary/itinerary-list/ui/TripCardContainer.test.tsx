@@ -75,6 +75,8 @@ function itin(
     solveMode: 'FULL_AI',
     generationMode: 'FULLY_AI',
     isFallback: false,
+    scoringMode: null,
+    degradations: [],
     generationState,
     days: [],
   };
@@ -467,6 +469,8 @@ describe('여행 중 배지 — 오늘이 기간 안인가', () => {
       solveMode: 'FULL_AI',
       generationMode: 'FULLY_AI',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       generationState,
       days: [],
     };
@@ -642,6 +646,8 @@ describe('⋯ 삭제 진입점', () => {
       solveMode: 'FULL_AI',
       generationMode: 'FULLY_AI',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       generationState,
       generationSessionId,
       days: [],

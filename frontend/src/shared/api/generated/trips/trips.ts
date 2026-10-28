@@ -5323,7 +5323,7 @@ export function useGetTripsTripIdReplanSessionsSessionId<
 }
 
 /**
- * **일정이 바뀌는 유일한 지점**이다(INV-U4-05) — 그 전까지 `itinerary`·`visit_slot` 은 진입 전과 같다. 대상 일자만 교체하고 나머지 일자는 손대지 않으며, 되돌릴 지점을 먼저 남긴다(BR-U3-19). 완료·시각 고정 슬롯은 산출 단계에서 이미 잠겨 있어 그대로 남는다(INV-U4-04). 반영 후 세션은 `APPLIED` 로 닫히고 `ItineraryRecalculated` 가 나간다.
+ * **일정이 바뀌는 유일한 지점**이다(INV-U4-05) — 그 전까지 `itinerary`·`visit_slot` 은 진입 전과 같다. 대상 일자만 교체하고 나머지 일자는 손대지 않으며, 되돌릴 지점을 먼저 남긴다(BR-U3-19). 완료·시각 고정 슬롯은 산출 단계에서 이미 잠겨 있어 그대로 남는다(INV-U4-04). 반영 후 세션은 `APPLIED` 로 닫히고 `ItineraryRecalculated` 가 나간다. 반영 순간 그 날의 직전 모습을 세션에 떠 둔다 — 반영 뒤 비교(`…/diff`)와 되돌리기(`…/revert`)가 그것을 쓴다(TRIP-1412).
  * @summary 재계획 확정(i18) — 초안을 일정에 반영한다
  */
 export const postTripsTripIdReplanSessionsSessionIdApply = (
@@ -5406,6 +5406,93 @@ export const usePostTripsTripIdReplanSessionsSessionIdApply = <
 > => {
   return useMutation(
     getPostTripsTripIdReplanSessionsSessionIdApplyMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * 원탭 [다시 짜기]가 반영한 그 날을 **반영 직전 모습으로** 돌린다. **확정(`CONFIRMED`) 일정에서도** 된다 — 상태는 그대로이고 확정 동결(poi_snapshot)은 반영 직전 참조를 다시 단다. 범용 되돌리기 (`/itinerary/revisions/{revisionId}/restore`)는 확정 일정을 409 로 막는다 — 그 대신 이 재계획 하나만 되돌리는 경로다. 다른 날은 손대지 않는다. 한 번만 된다 — 세션은 `APPLIED` 그대로이고 `revertedAt` 이 찍힌다. 변경 이력 1행(`MANUAL`, 사유 `재계획 되돌림 · …`)과 일정 리비전이 남는다.
+ * @summary 반영한 재계획 되돌리기 — 그 날을 반영 직전으로(TRIP-1412)
+ */
+export const postTripsTripIdReplanSessionsSessionIdRevert = (
+  tripId: string,
+  sessionId: string,
+  signal?: AbortSignal
+) => {
+  return customInstance<ReplanSession>({
+    url: `/trips/${tripId}/replan-sessions/${sessionId}/revert`,
+    method: 'POST',
+    signal,
+  });
+};
+
+export const getPostTripsTripIdReplanSessionsSessionIdRevertMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdRevert>>,
+    TError,
+    { tripId: string; sessionId: string },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdRevert>>,
+  TError,
+  { tripId: string; sessionId: string },
+  TContext
+> => {
+  const mutationKey = ['postTripsTripIdReplanSessionsSessionIdRevert'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdRevert>>,
+    { tripId: string; sessionId: string }
+  > = (props) => {
+    const { tripId, sessionId } = props ?? {};
+
+    return postTripsTripIdReplanSessionsSessionIdRevert(tripId, sessionId);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostTripsTripIdReplanSessionsSessionIdRevertMutationResult =
+  NonNullable<
+    Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdRevert>>
+  >;
+
+export type PostTripsTripIdReplanSessionsSessionIdRevertMutationError = void;
+
+/**
+ * @summary 반영한 재계획 되돌리기 — 그 날을 반영 직전으로(TRIP-1412)
+ */
+export const usePostTripsTripIdReplanSessionsSessionIdRevert = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdRevert>>,
+      TError,
+      { tripId: string; sessionId: string },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdRevert>>,
+  TError,
+  { tripId: string; sessionId: string },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdReplanSessionsSessionIdRevertMutationOptions(options),
     queryClient
   );
 };

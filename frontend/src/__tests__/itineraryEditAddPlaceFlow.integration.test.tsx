@@ -183,6 +183,8 @@ function envelope(days: ItineraryDaysItem[]): Itinerary {
     solveMode: 'MINIMAL',
     generationMode: 'MANUAL',
     isFallback: false,
+    scoringMode: null,
+    degradations: [],
     generationState: 'COMPLETE',
     days,
   };

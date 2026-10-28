@@ -12,6 +12,7 @@ import type { ItineraryCandidatesSummary } from './itineraryCandidatesSummary';
 import type { ItineraryDaysItem } from './itineraryDaysItem';
 import type { ItineraryGenerationMode } from './itineraryGenerationMode';
 import type { ItineraryGenerationState } from './itineraryGenerationState';
+import type { ItineraryScoringMode } from './itineraryScoringMode';
 import type { ItinerarySolveMode } from './itinerarySolveMode';
 import type { ItineraryStatus } from './itineraryStatus';
 import type { ItineraryUnplacedMustVisitsItem } from './itineraryUnplacedMustVisitsItem';
@@ -33,5 +34,9 @@ export interface Itinerary {
   unplacedMustVisits?: ItineraryUnplacedMustVisitsItem[];
   /** 후보 충분성(BR-U2-05). **판정은 AI 소유** — 백엔드는 값을 그대로 전달하고 재계산·검증하지 않는다. AI 가 값을 주지 않거나 형태가 다르면 null. `level` 은 **열거로 고정하지 않는다** — 백엔드가 통과시키는 값이므로 AI 어휘(예: OK · LOW · NO_CANDIDATES)가 그대로 나갈 수 있다. `poolSize` 는 AI 가 주지 않으면 없다(0 으로 채우지 않는다 — 0 은 "후보 0건"이라는 판정이다). */
   candidatesSummary?: ItineraryCandidatesSummary;
+  /** 취향 점수를 누가 매겼나(TRIP-1173) — LLM(전 후보 LLM 점수) · MIXED(LLM + 규칙 보충, 또는 2단계 생성의 두 호출이 갈림) · RULE(규칙 점수만 — LLM 실패 포함). **null = 모름**(직접 만들기 · 최소 폴백 · 2단계 중 한 호출이 폴백 · 이 필드 이전에 만든 일정). solveMode 는 조립 축이라 LLM 실패를 말하지 않는다. 호출 하나의 판정은 AI 소유 — 백엔드는 2단계 생성을 합칠 때만 같으면 그대로·갈리면 MIXED·모름이 섞이면 null 로 접고, 강등 코드는 코드 모양만 통과시킨다. **생성 시점 판정** — 편집·되돌리기·재계획 반영으로 바뀌지 않는다. 키는 늘 있다(required) — 모르면 값이 null 이다. */
+  scoringMode: ItineraryScoringMode;
+  /** 밟은 강등 계단 기계 코드 `"{stage}:{reason}"`(예 `llm:c1_fallback`, `explanation:explanation_fallback`). **LLM 점수 실패는 `llm:` 접두로 거른다** — 설명·차선책 단계 강등도 섞여 있다. 빈 배열 = 강등 없음(또는 모름). 코드 모양(소문자·숫자·밑줄, 64자 이내)이 아닌 항목은 서버가 버린다 — 문장·시각은 나가지 않는다. 최대 16개(2단계 생성을 합쳐도). **생성 시점 판정** — 편집·되돌리기·재계획 반영으로 바뀌지 않는다. */
+  degradations: string[];
   days: ItineraryDaysItem[];
 }

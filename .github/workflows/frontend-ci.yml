@@ -1,14 +1,15 @@
 name: frontend-ci
 
+# openapi.yaml = orval 입력(TRIP-1621) — 백엔드 전용 PR 이 스펙만 바꿔도 아래 codegen 드리프트 게이트가 돌아야 한다.
 on:
   # push 는 develop·main 에서만 — 기능 브랜치는 pull_request 로만 돈다(TRIP-1622). 둘 다 열어 두면 같은 커밋이
   # push run(브랜치 트리) + PR run(develop 머지 트리)으로 두 번 돌았다(2026-10-22~28 최근 100 run 중 33건 중복). 남기는 쪽이
   # PR run 인 이유: 머지 후 실제를 보는 건 그쪽이다. PR 없이 push 만 한 브랜치는 CI 가 안 돈다 → PR 을 열거나 수동 실행.
   push:
     branches: [develop, main]
-    paths: ['frontend/**', '.github/workflows/frontend-ci.yml']
+    paths: ['frontend/**', '.github/workflows/frontend-ci.yml', 'backend/docs/design/openapi.yaml']
   pull_request:
-    paths: ['frontend/**', '.github/workflows/frontend-ci.yml']
+    paths: ['frontend/**', '.github/workflows/frontend-ci.yml', 'backend/docs/design/openapi.yaml']
   workflow_dispatch:
 
 # 같은 브랜치/PR의 이전 실행은 취소 (중복 실행 낭비 완화)
@@ -54,6 +55,18 @@ jobs:
             frontend/.eslintcache
           key: ${{ steps.cache-key.outputs.prefix }}${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: ${{ steps.cache-key.outputs.prefix }}
+      # codegen 드리프트 게이트(TRIP-1621): openapi.yaml 에서 다시 만든 생성물이 커밋본과 다르면 실패 — 스펙만 고치고
+      # `pnpm codegen` 을 안 돌린 PR 을 잡는다. `git diff` 가 아니라 `git status --porcelain` 인 이유: 새 스키마 파일은
+      # untracked 라 `git diff --exit-code` 에 안 보인다. 로컬 재현: 커밋한 뒤 frontend/ 에서 `pnpm codegen` → 같은 git status 가 비어야 한다.
+      - name: codegen drift gate
+        run: |
+          pnpm codegen
+          drift=$(git status --porcelain -- src/shared/api/generated)
+          if [ -n "$drift" ]; then
+            echo "::error::openapi.yaml 과 생성물이 어긋났다 — frontend/ 에서 pnpm codegen 후 structure-index --write(아래 구조 지도 게이트)까지 돌려 함께 커밋하라"
+            echo "$drift"
+            exit 1
+          fi
       - run: pnpm lint
       # 포맷 게이트: 로컬 verify-gates 의 `pnpm format` 이 신고 밖 파일을 다시 쓰지 않도록 미포맷 파일이 있으면 실패.
       - run: pnpm format:check
