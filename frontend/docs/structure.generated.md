@@ -200,7 +200,9 @@
 - `src/app/index.ts`  →  AppProviders · SplashGate
 
 ## src/app/model/
+- `src/app/model/generationWatch.ts`  →  GENERATION_COMPLETE_MESSAGE · GENERATION_FAILED_MESSAGE · GENERATION_COMPLETE_TOAST_ID · GENERATION_FAILED_TOAST_ID · tripIdFromItineraryKey · detectGenerationTransition · isGenerationScreenOf · shouldSkipToast
 - `src/app/model/useAccountBoundaryReset.ts`  →  useAccountBoundaryReset
+- `src/app/model/useGenerationWatch.ts`  →  useGenerationWatch
 - `src/app/model/usePermissionCatchUp.ts`  →  PERMISSION_LOOKUP_WAIT_MAX_MS · usePermissionCatchUp
 - `src/app/model/usePushRouting.ts`  →  usePushRouting
 
@@ -1750,7 +1752,7 @@
 - `src/shared/ui/SheetShell.tsx`  →  SheetApply · SheetShellProps · SheetShell
 - `src/shared/ui/Skeleton.tsx`  →  SkeletonProps · Skeleton
 - `src/shared/ui/StateNotice.tsx`  →  StateNoticeAction · StateNoticeProps · StateNotice
-- `src/shared/ui/Toast.tsx`  →  TOAST_VISIBLE_MS · showToast · hideToast · ToastHost
+- `src/shared/ui/Toast.tsx`  →  TOAST_VISIBLE_MS · TOAST_ACTION_VISIBLE_MS · showToast · hideToast · ToastHost
 - `src/shared/ui/ToastGlyphs.tsx`  →  ToastSuccessGlyph
 - `src/shared/ui/Toggle.tsx`  →  ToggleProps · Toggle
 - `src/shared/ui/WheelPicker.tsx`  →  WHEEL_CELL_HEIGHT · WheelPickerProps · WheelPicker
@@ -1877,4 +1879,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1198개 파일
+합계 1201개 파일

@@ -32,8 +32,6 @@ import {
   type MyTripsSortKey,
 } from '../model/myTripsOrder';
 import {
-  pollIntervalMs,
-  isGenerationRunning,
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary';
@@ -86,31 +84,21 @@ export function MyTripsListPage(): ReactElement {
   const list = trips.data ?? [];
 
   // 새 훅은 전부 아래 일찍 return 들보다 위(훅 호출 순서 규칙).
-  // TRIP-1271 · 생성이 도는 여행(PARTIAL 이거나 세션 있음)만 2초마다 다시 묻는다 — 탭 화면은 내려가지 않아
-  // 다시 물을 계기가 없었다. 조회 실패면 멈춘다(재조회 실패에도 직전 data 가 남으므로 error 를 먼저 본다 —
-  // 조용한 무한 재시도 금지, INV-4). 상한은 두지 않는다(openapi — 멈춘 생성은 서버가 FAILED 로 닫는다).
-  // 카드 컨테이너는 같은 캐시 키를 구독만 하므로 거기엔 걸지 않는다(폴링 결정을 한 곳에 모은다 — 같은 키의
-  // 관찰자 타이머는 쿼리 상태가 바뀔 때마다 함께 다시 맞춰져 요청 수가 겹치지는 않는다).
+  // TRIP-1618 · 생성 중 일정의 폴링은 이 페이지가 아니라 앱 셸(`useGenerationWatch`)이 한다 — 아래 `useQueries` 는 그 칸을
+  // 읽기만 한다(셸이 같은 캐시 칸을 갱신하면 카드·배너가 저절로 바뀐다). 예전엔 여기서 2초 간격으로 물었다(TRIP-1271) —
+  // 탭 화면은 내려가지 않아 다시 물을 계기가 없었기 때문이고, TRIP-1614 가 보일 때만 묻도록 줄였다.
+  // `focused` 는 폴링이 아니라 완료 배너 판정(TRIP-1286)이 계속 쓴다 — 목록이 보이는 동안만 판정, 첫 렌더는 안 보임으로 시작해
+  // 포커스 effect 가 켠다.
+  const [focused, setFocused] = useState(false);
   const itineraries = useQueries({
     queries: list.map((trip) =>
-      getGetTripsTripIdItineraryQueryOptions(trip.tripId, {
-        query: {
-          refetchInterval: (query) =>
-            query.state.status !== 'error' &&
-            (query.state.data?.generationState === 'PARTIAL' ||
-              isGenerationRunning(query.state.data))
-              ? pollIntervalMs(query.state.dataUpdateCount)
-              : false,
-        },
-      })
+      getGetTripsTripIdItineraryQueryOptions(trip.tripId)
     ),
   });
   const [seen, setSeen] = useState<readonly string[] | null>(null);
   const [shown, setShown] = useState<Trip | null>(null);
   // TRIP-1241 — 닫음. shown 을 비우면 seen state 가 옛 값이라 pick 이 다시 계산돼 재표시되므로 별도 플래그로 든다.
   const [barDismissed, setBarDismissed] = useState(false);
-  // TRIP-1286 — 목록이 보이는 동안만 판정. 첫 렌더는 안 보임으로 시작해 포커스 effect 가 켠다.
-  const [focused, setFocused] = useState(false);
   // TRIP-1428 — 이 마운트에서 seen 에 쓴(쓰려 한) 값. 다시 읽은 값에 합친다.
   const seenWrittenRef = useRef<readonly string[]>([]);
   const largeText = isLargeText(useWindowDimensions().fontScale);

@@ -48,11 +48,15 @@ import { readIdSet, writeIdSet } from '@/shared/storage';
  *
  * TRIP-1271 · 맨 아래 두 describe — 생성 중 여행 폴링·탭 복귀 재조회(가짜 타이머)와 생성 중 카드 삭제. 탭 복귀는
  * `expo-router` 목의 `useFocusEffect` 를 테스트가 `refocus()` 로 다시 부르는 것으로 흉내 낸다.
+ * TRIP-1618 · 생성 중 폴링은 이 페이지의 몫이 아니라 앱 셸 훅(`useGenerationWatch`)의 몫으로 옮겼다. 그래서 폴링으로 카드가 바뀌는 케이스는
+ * 셸 훅 프로브(`ShellProbe`)를 페이지 옆에 함께 그려서 보고, 페이지 단독 렌더에서는 폴링이 없다는 것(AC4①)을 따로 잰다.
  *
  * ⚠️ 딤이 화면 전체를 실제로 덮는지·가운데 오는지·뒤 터치를 막는지는 jest 사각(repo-traps 오버레이 절) — 6-b.
  */
 
 const mockPush = jest.fn();
+/** TRIP-1618 — 셸 훅 프로브가 읽는 현재 경로. 이 페이지는 일정 탭이므로 기본 `/itinerary` 다(그 경로에선 토스트를 생략한다). */
+let mockPathname = '/itinerary';
 // TRIP-1240 — 정렬 시트가 열려 있는 동안 탭바를 숨기려고 페이지가 탭 화면 옵션을 바꾼다(`setOptions`).
 const mockSetOptions = jest.fn();
 /**
@@ -70,6 +74,9 @@ jest.mock('expo-router', () => {
       navigate: jest.fn(),
     }),
     useNavigation: () => ({ setOptions: mockSetOptions }),
+    // TRIP-1618 — 셸 훅 프로브(`ShellProbe`)가 읽는 둘: 현재 경로와 명령형 이동.
+    usePathname: () => mockPathname,
+    router: { push: mockPush },
     // TRIP-1271 — 실물(expo-router 6 build/useFocusEffect.js)처럼 포커스 상태로 마운트되면 즉시, 콜백이
     // 바뀌면 정리 후 다시 부른다. 탭 복귀는 테스트의 refocus() 가 흉내 낸다.
     useFocusEffect: (effect: () => void | (() => void)) => {
@@ -211,6 +218,7 @@ beforeEach(() => {
   gateThen = 204;
   mockPush.mockClear();
   mockSetOptions.mockClear();
+  mockPathname = '/itinerary';
   mockSeen = [];
   (readIdSet as jest.Mock)
     .mockReset()
@@ -292,8 +300,12 @@ function renderPage(
     trips: Trip[];
     itineraries: Record<string, Itinerary>;
   },
-  /** `staleTime` — 기본 0(앱 기본값). 탭 복귀가 "낡은 것만" 다시 묻는지 볼 때만 올린다(TRIP-1348). */
-  options?: { staleTime?: number }
+  /**
+   * `staleTime` — 기본 0(앱 기본값). 탭 복귀가 "낡은 것만" 다시 묻는지 볼 때만 올린다(TRIP-1348).
+   * `shell` — 앱 셸 감시 훅(`useGenerationWatch`)을 페이지 옆에 함께 그린다(TRIP-1618). 셸이 붙으면 새 관찰자가 낡은 칸을 마운트 즉시
+   * 한 번 더 받으므로 요청 수를 세는 케이스는 `staleTime: 30_000` 과 함께 쓴다.
+   */
+  options?: { staleTime?: number; shell?: boolean }
 ) {
   const client = new QueryClient({
     defaultOptions: {
@@ -320,12 +332,51 @@ function renderPage(
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
   }
-  return render(<MyTripsListPage />, { wrapper: Wrapper });
+  return render(
+    <>
+      {options?.shell ? <ShellProbe /> : null}
+      <MyTripsListPage />
+    </>,
+    { wrapper: Wrapper }
+  );
+}
+
+/**
+ * TRIP-1618 — 앱 셸(`SplashGate`)이 부르는 훅을 페이지 옆에서 부르는 프로브. 훅 모듈은 이미 있다 — 아래 `require` 와 두 번째 eslint-disable 은
+ * 층 규칙(pages 는 app 을 import 하지 못한다)이 이 테스트 전용 역방향 참조를 막기 때문에 둔다. `require` 형태는 훅이 없던 red 단계의
+ * 흔적이다(그때는 모듈이 없어 이 파일 전체가 import 실패로 죽는 걸 피하려 함수 안에서 늦게 불렀다).
+ */
+function ShellProbe(): null {
+  // 테스트 전용 역방향 참조 — 셸 일원화(AC4)는 페이지와 셸 훅을 함께 그려야만 단언된다. 프로덕션 pages 는 app 을 import 하지 않는다.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports, import/no-restricted-paths
+  const { useGenerationWatch } = require('@/app/model/useGenerationWatch') as {
+    useGenerationWatch: (drawn: boolean, destination: 'HOME') => void;
+  };
+  useGenerationWatch(true, 'HOME');
+  return null;
 }
 
 /** 요청이 출발할 시간을 준다(02a §5-C 실측 — 30ms 한 번이면 DELETE 가 이미 잡힌다). */
 async function settle(): Promise<void> {
   await act(() => new Promise((r) => setTimeout(r, 30)));
+}
+
+/** 탭을 떠난다(blur) — 등록된 포커스 콜백의 정리 함수를 부른다. 돌아올 때까지 포커스 콜백은 없는 셈이다. */
+function leaveTab(): void {
+  act(() => {
+    for (const [effect, cleanup] of [...mockFocus]) {
+      if (typeof cleanup === 'function') cleanup();
+      mockFocus.set(effect, undefined);
+    }
+  });
+}
+/** 탭으로 돌아온다 — 포커스 콜백을 다시 실행한다. */
+function returnToTab(): void {
+  act(() => {
+    for (const effect of [...mockFocus.keys()]) {
+      mockFocus.set(effect, effect());
+    }
+  });
 }
 
 /** 그 카드의 ⋯ → '삭제' 까지 눌러 다이얼로그를 연다. */
@@ -938,7 +989,9 @@ describe('TRIP-1615 · GET /trips 조회 실패 — "여행 없음"으로 접지
 
 // TRIP-1271 · 생성이 끝났는데 카드가 "AI가 일정을 짜는 중"으로 남던 문제 — 목록이 일정을 스스로 다시 묻는다.
 // 생성이 도는 여행(PARTIAL 이거나 세션 있음)만 2초마다 묻고, 탭으로 돌아오면 전부 다시 묻는다(01b 결정 2).
-describe('생성 중 여행은 목록이 스스로 다시 묻는다 — 폴링·탭 복귀 재조회', () => {
+// TRIP-1618 · 생성 중 일정을 2초마다 다시 묻는 일은 앱 셸 훅이 한다 — 이 describe 의 폴링 케이스는 셸 프로브(`shell: true`)를 함께 그려서 본다.
+// 탭 복귀 재조회(AC-5·TRIP-1348)는 페이지 몫으로 남아 있어 페이지 단독 렌더 그대로다.
+describe('생성 중 여행 — 셸 감시(폴링)와 페이지의 탭 복귀 재조회', () => {
   const POLL = DRAFT_POLL_INTERVAL_MS;
   const D = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
   const TRIP_D = trip(D, '여수 여행', '2026-08-30T00:00:00Z');
@@ -1003,9 +1056,15 @@ describe('생성 중 여행은 목록이 스스로 다시 묻는다 — 폴링·
     });
   }
 
+  /** 셸 감시를 함께 그리는 옵션 — staleTime 30초는 운영 전역과 같고, 셸의 새 관찰자가 첫 응답을 곧바로 다시 받지 않게 한다. */
+  const WITH_SHELL = { shell: true, staleTime: 30_000 };
+
   /** 렌더 + 첫 조회 왕복 — 100ms 는 폴링 간격(2초)보다 한참 짧다. */
-  async function load(): Promise<void> {
-    renderPage();
+  async function load(options?: {
+    staleTime?: number;
+    shell?: boolean;
+  }): Promise<void> {
+    renderPage(undefined, options);
     await advance(100);
   }
 
@@ -1026,7 +1085,7 @@ describe('생성 중 여행은 목록이 스스로 다시 묻는다 — 폴링·
     });
   }
 
-  describe('🔴 AC-1·2 · 생성이 끝나면 화면을 떠나지 않아도 카드가 바뀌고, 그 뒤엔 더 묻지 않는다', () => {
+  describe('🔴 AC-1·2 · (셸 감시와 함께) 생성이 끝나면 화면을 떠나지 않아도 카드가 바뀌고, 그 뒤엔 더 묻지 않는다', () => {
     it.each<[string, Itinerary, string, boolean]>([
       ['완료(COMPLETE + PLANNED)', draft(A), '추천안 준비 중', true],
       [
@@ -1039,9 +1098,9 @@ describe('생성 중 여행은 목록이 스스로 다시 묻는다 — 폴링·
     ])(
       '%s 로 끝나면 낡은 "짜는 중"이 끝난 얼굴로 바뀐다',
       async (_label, terminal, faceText, hasResume) => {
-        // 준비 — A 는 생성 중. 첫 조회 1번에 "짜는 중" 얼굴(앵커).
+        // 준비 — A 는 생성 중. 첫 조회 1번에 "짜는 중" 얼굴(앵커). 셸 훅 프로브가 옆에서 같은 칸을 감시한다.
         script = { [A]: running(A), [B]: confirmed(B) };
-        await load();
+        await load(WITH_SHELL);
         expect(screen.getByTestId(`my-trip-extra-${A}`)).toHaveTextContent(
           RUNNING_TEXT
         );
@@ -1180,11 +1239,11 @@ describe('생성 중 여행은 목록이 스스로 다시 묻는다 — 폴링·
     });
   });
 
-  describe('🔴 AC-6 · 폴링 중 조회가 실패하면 낡은 "짜는 중"을 내리고 폴링을 멈춘다 (INV-4)', () => {
+  describe('🔴 AC-6 · (셸 감시와 함께) 폴링 중 조회가 실패하면 낡은 "짜는 중"을 내리고 폴링을 멈춘다 (INV-4)', () => {
     it('500 → "모름" 얼굴 · 이후 간격이 지나도 다시 묻지 않음 · 탭 복귀 때 다시 묻는다', async () => {
       // 준비 — A 는 생성 중(앵커).
       script = { [A]: running(A), [B]: confirmed(B) };
-      await load();
+      await load(WITH_SHELL);
       expect(screen.getByTestId(`my-trip-extra-${A}`)).toHaveTextContent(
         RUNNING_TEXT
       );
@@ -1206,8 +1265,9 @@ describe('생성 중 여행은 목록이 스스로 다시 묻는다 — 폴링·
       // 단언 ② — 조용한 무한 재시도가 없다.
       expect(count(itinPath(A))).toBe(2);
 
-      // 실행 ③ — 서버가 회복했고, 사용자가 탭으로 돌아온다.
+      // 실행 ③ — 서버가 회복했고, 30초가 흘러 마지막 응답이 낡았고(운영 staleTime), 사용자가 탭으로 돌아온다.
       script[A] = draft(A);
+      await advance(30_000);
       refocus();
       await advance(100);
 
@@ -1216,6 +1276,69 @@ describe('생성 중 여행은 목록이 스스로 다시 묻는다 — 폴링·
       expect(screen.getByTestId(`my-trip-extra-${A}`)).toHaveTextContent(
         '추천안 준비 중'
       );
+    });
+  });
+
+  // TRIP-1618 AC4 · TRIP-1614 가 "탭이 보일 때만" 으로 줄였던 폴링은 이제 셸 몫이다. 페이지는 타이머를 두지 않고, 셸은 탭 포커스를 모른다 —
+  // 그래서 옛 "떠나면 0건 / 돌아오면 따라잡기" 케이스(T1~T3)는 반대로 뒤집혔다(떠나도 셸은 계속 묻는다). 복귀 재조회는 AC-5·TRIP-1348 이 그대로 지킨다.
+  describe('🔴 TRIP-1618 AC4 · 폴링은 페이지가 아니라 셸이 한다', () => {
+    const STALE_30S = { staleTime: 30_000 };
+
+    it('AC4① 페이지만 렌더하면(셸 없음) 생성 중 A 가 있어도 간격 세 번 동안 일정 GET 이 늘지 않는다', async () => {
+      // 준비 — 생성 중 A·확정 B. 첫 조회 1번씩(앵커).
+      script = { [A]: running(A), [B]: confirmed(B) };
+      renderPage(undefined, STALE_30S);
+      await advance(100);
+      expect(count(itinPath(A))).toBe(1);
+      expect(screen.getByTestId(`my-trip-extra-${A}`)).toHaveTextContent(
+        RUNNING_TEXT
+      );
+
+      // 실행 — 폴링 간격 세 번이 지난다.
+      await advance(POLL * 3 + 100);
+
+      // 단언 — 페이지는 스스로 묻지 않는다.
+      expect(count(itinPath(A))).toBe(1);
+      expect(count(itinPath(B))).toBe(1);
+    });
+
+    it('AC4② 셸과 함께 렌더하면 간격 하나마다 A 의 일정 GET 은 정확히 1건씩이다 (이중 폴링 없음)', async () => {
+      // 준비 — 셸 프로브 + 페이지. 첫 조회 1번(앵커).
+      script = { [A]: running(A), [B]: confirmed(B) };
+      await load(WITH_SHELL);
+      expect(count(itinPath(A))).toBe(1);
+
+      // 실행 ① — 간격 하나.
+      await advance(POLL + 100);
+
+      // 단언 ① — 페이지 관찰자 + 셸 관찰자가 같은 칸을 물어도 한 건이다.
+      expect(count(itinPath(A))).toBe(2);
+
+      // 실행 ② — 간격 하나 더.
+      await advance(POLL);
+
+      // 단언 ② — 또 한 건. 확정 B 는 처음부터 묻지 않는다.
+      expect(count(itinPath(A))).toBe(3);
+      expect(count(itinPath(B))).toBe(1);
+    });
+
+    it('AC4③ 일정 탭을 떠나 다른 탭에 있어도 셸은 계속 묻는다 (TRIP-1614 T1 의 뒤집기)', async () => {
+      // 준비 — 셸 + 페이지, 포커스 중 폴링이 도는 것까지 확인(앵커). 이후 홈 탭에 있다고 보고 경로를 '/' 로 둔다.
+      script = { [A]: running(A), [B]: confirmed(B) };
+      await load(WITH_SHELL);
+      await advance(POLL + 100);
+      expect(count(itinPath(A))).toBe(2);
+      const baseA = count(itinPath(A));
+      const baseB = count(itinPath(B));
+
+      // 실행 — 탭을 떠난다(blur). 간격 세 번이 지난다.
+      mockPathname = '/';
+      leaveTab();
+      await advance(POLL * 3 + 300);
+
+      // 단언 — 떠난 뒤에도 A 는 간격마다 한 건씩 늘고, 원래 안 묻던 B 는 그대로다.
+      expect(count(itinPath(A))).toBe(baseA + 3);
+      expect(count(itinPath(B))).toBe(baseB);
     });
   });
 });
@@ -1339,24 +1462,6 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
     script[id] = value;
     await act(async () => {
       gates.get(id)?.();
-    });
-  }
-
-  /** 탭을 떠난다(blur) — 등록된 포커스 콜백의 정리 함수를 부른다. */
-  function leaveTab(): void {
-    act(() => {
-      for (const [effect, cleanup] of [...mockFocus]) {
-        if (typeof cleanup === 'function') cleanup();
-        mockFocus.set(effect, undefined);
-      }
-    });
-  }
-  /** 탭으로 돌아온다 — 포커스 콜백을 다시 실행한다. */
-  function returnToTab(): void {
-    act(() => {
-      for (const effect of [...mockFocus.keys()]) {
-        mockFocus.set(effect, effect());
-      }
     });
   }
 

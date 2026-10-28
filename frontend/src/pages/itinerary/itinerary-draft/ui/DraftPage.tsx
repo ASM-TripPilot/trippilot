@@ -166,6 +166,10 @@ export function DraftPage({
       // 일어난다. 실측(프로브): 이 줄이 없으면 폴링은 정확히 30회에서 멈추는데 배너가 영영
       // 안 뜬다. `'all'` 은 응답마다(=`dataUpdatedAt` 이 바뀔 때마다) 다시 그리게 한다.
       notifyOnChangeProps: 'all',
+      // TRIP-1614 · 화면 포커스 게이트를 걸지 않는다 — 생성을 지켜보는 화면이라 돌아왔을 때 최신이 곧바로 필요하다.
+      // 수동 편집·완성 일정을 위에 쌓는 경로(router.push)가 있어 그동안은 뒤에서 계속 묻지만, 상한(DRAFT_POLL_MAX_COUNT=30 →
+      // 2초 15회 + 5초 15회 ≈ 105초)이 있어 무한하지 않다. 앱 셸의 감시(`useGenerationWatch`, TRIP-1618)는 이 여행의 이 화면이
+      // 최상단인 동안 묻지 않는다(양보) — 위에 다른 화면이 쌓이면 셸이 이어받는다.
       refetchInterval: (query) =>
         shouldKeepPollingDraft({
           generationState: query.state.data?.generationState,

@@ -66,6 +66,11 @@ jest.mock('@/shared/push', () => ({
   promptAndRegisterPush: jest.fn(() => Promise.resolve()),
 }));
 
+// 생성 완료 감지(TRIP-1618)는 useGenerationWatch.integration.test 가 본다 — 이 파일의 라우터·캐시 흐름과 섞이지 않게 끈다.
+jest.mock('@/app/model/useGenerationWatch', () => ({
+  useGenerationWatch: jest.fn(),
+}));
+
 // TRIP-1601 — 권한 안내. 훅은 실물을 감싼 스파이다: 아래 맨 앞 beforeEach 가 기본으로 "붙잡지 않는다"로 끄고(기존 describe 들은 동기
 // advanceTimers 흐름이라 비동기 조회가 스플래시를 붙잡으면 안 맞는다), 권한 안내 describe 만 실물로 되돌린다.
 jest.mock('@/app/model/usePermissionCatchUp', () => {

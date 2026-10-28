@@ -1,8 +1,20 @@
 import { View } from 'react-native';
-import { act, render, screen, within } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
-import { TOAST_VISIBLE_MS, ToastHost, hideToast, showToast } from './Toast';
+import {
+  TOAST_ACTION_VISIBLE_MS,
+  TOAST_VISIBLE_MS,
+  ToastHost,
+  hideToast,
+  showToast,
+} from './Toast';
 import * as toastBottom from './toastBottom';
 
 /**
@@ -217,5 +229,156 @@ describe('🔴 T6·T7 · 바닥은 순수 함수의 출력으로 정한다 (TRIP
 
     expect(toastBottom.getToastBottoms()).toEqual([70]);
     expect(lastArgs()).toEqual([[70], 0]);
+  });
+});
+
+/**
+ * TRIP-1618 · T8~T12 — 토스트 계약 확장: 옵셔널 "액션 버튼"(`action`)과 오류 톤(`tone`).
+ *
+ * *(개념)* 액션 = 토스트 오른쪽의 텍스트 버튼("보기"). 누르면 소비처가 넘긴 `onPress` 를 부르고 토스트는 사라진다.
+ * 지금까지 토스트는 `pointerEvents="none"`(터치가 그냥 통과)이었다 — 버튼을 받으려면 컨테이너는 `box-none`(자기는 통과, 자식만 터치 수신)이어야 한다.
+ *
+ * 무엇을 보장하나:
+ *  - T8 `action` 이 없으면 옛 토스트와 똑같다(버튼 없음·성공 체크·터치 통과·표시 시간 그대로).
+ *  - T9 `action` 이 있으면 `{testID}-action` 버튼이 라벨과 함께 보이고 컨테이너가 `box-none` 이 된다.
+ *  - T10 누르면 `onPress` 가 정확히 1번 불리고 토스트가 사라지며 타이머가 남지 않는다 — 한 렌더 안의 연타도 1번이다.
+ *  - T11 액션 토스트는 읽고 누를 시간이 있도록 더 오래(`TOAST_ACTION_VISIBLE_MS`) 떠 있다.
+ *  - T12 `tone:'error'` 면 성공 체크 대신 오류 아이콘이다.
+ *
+ * jest 가 못 보는 것: 버튼 아래 영역의 터치가 실제로 아래 화면에 통과하는지·버튼이 눌리는지(실측: RNTL 의 `fireEvent.press` 는
+ * 부모 `pointerEvents="none"` 을 무시한다) — 그래서 컨테이너의 `pointerEvents` 값을 단언하고, 실제 터치는 6-b 실기가 본다.
+ * 모양(Figma NoticeBar 4464:1583/1598)도 6-b.
+ */
+
+function showWithAction(
+  testID: string,
+  onPress: () => void,
+  extra: { tone?: 'success' | 'error' } = {}
+): void {
+  act(() =>
+    showToast({
+      message: 'A 문구',
+      testID,
+      action: { label: '보기', onPress },
+      ...extra,
+    })
+  );
+}
+
+describe('🔴 T8 · action 이 없으면 옛 토스트와 같다 (AC6①)', () => {
+  it('버튼이 없고, 성공 체크만 있고, 터치는 통과(none)하며, 표시 시간은 그대로다', () => {
+    renderHost();
+    expect(screen.queryByTestId('toast-a')).toBeNull();
+
+    show('A 문구', 'toast-a');
+
+    expect(screen.getByTestId('toast-a')).toBeOnTheScreen();
+    expect(screen.queryByTestId('toast-a-action')).toBeNull();
+    expect(screen.getByTestId('toast-a-success-icon')).toBeOnTheScreen();
+    expect(screen.queryByTestId('toast-a-error-icon')).toBeNull();
+    expect(screen.getByTestId('toast-a')).toHaveProp('pointerEvents', 'none');
+
+    advance(TOAST_VISIBLE_MS);
+    expect(screen.queryByTestId('toast-a')).toBeNull();
+  });
+});
+
+describe('🔴 T9 · action 이 있으면 버튼이 라벨과 보인다 (AC6②)', () => {
+  it('{testID}-action 버튼에 라벨이 있고, 컨테이너는 자식 터치만 받는다(box-none)', () => {
+    renderHost();
+    expect(screen.queryByTestId('toast-a-action')).toBeNull();
+
+    showWithAction('toast-a', jest.fn());
+
+    const button = screen.getByTestId('toast-a-action');
+    expect(within(button).getByText('보기')).toBeOnTheScreen();
+    expect(screen.getByTestId('toast-a')).toHaveProp(
+      'pointerEvents',
+      'box-none'
+    );
+    // 본문 문구도 그대로 보인다.
+    expect(
+      within(screen.getByTestId('toast-a')).getByText('A 문구')
+    ).toBeOnTheScreen();
+  });
+});
+
+describe('🔴 T10 · 누르면 onPress 1번 + 사라진다 (AC6②)', () => {
+  it('누르면 onPress 를 1번 부르고 토스트가 사라지며 타이머가 남지 않는다', () => {
+    const onPress = jest.fn();
+    renderHost();
+    showWithAction('toast-a', onPress);
+    expect(onPress).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('toast-a-action'));
+
+    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId(PROBE_ROOT)).toBeOnTheScreen();
+    expect(screen.queryByTestId('toast-a')).toBeNull();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('한 렌더 안에서 두 번 눌러도 onPress 는 1번이다 (연타)', () => {
+    const onPress = jest.fn();
+    renderHost();
+    showWithAction('toast-a', onPress);
+    const button = screen.getByTestId('toast-a-action');
+
+    // 한 act 로 묶는다 — 순서대로 누르면 첫 누름이 버튼을 지워 잠금이 없어도 1번으로 보인다(02a ★3).
+    act(() => {
+      fireEvent.press(button);
+      fireEvent.press(button);
+    });
+
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('🔴 T11 · 액션 토스트는 더 오래 떠 있다 (AC6④)', () => {
+  it('TOAST_ACTION_VISIBLE_MS 는 TOAST_VISIBLE_MS 보다 길고, 그 시간 직전까지 보이다가 사라진다', () => {
+    expect(TOAST_ACTION_VISIBLE_MS).toBeGreaterThan(TOAST_VISIBLE_MS);
+    renderHost();
+    showWithAction('toast-a', jest.fn());
+
+    // 일반 토스트가 사라지는 시간이 지나도 아직 보인다.
+    advance(TOAST_VISIBLE_MS);
+    expect(screen.getByTestId('toast-a')).toBeOnTheScreen();
+
+    advance(TOAST_ACTION_VISIBLE_MS - TOAST_VISIBLE_MS - 1);
+    expect(screen.getByTestId('toast-a')).toBeOnTheScreen();
+
+    advance(1);
+    expect(screen.queryByTestId('toast-a')).toBeNull();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('액션 토스트를 일반 토스트가 교체하면 시간이 TOAST_VISIBLE_MS 로 돌아온다', () => {
+    renderHost();
+    showWithAction('toast-a', jest.fn());
+
+    show('B 문구', 'toast-b');
+
+    advance(TOAST_VISIBLE_MS - 1);
+    expect(screen.getByTestId('toast-b')).toBeOnTheScreen();
+    advance(1);
+    expect(screen.queryByTestId('toast-b')).toBeNull();
+  });
+});
+
+describe('🔴 T12 · 오류 톤 (AC6③)', () => {
+  it("tone:'error' 면 오류 아이콘만, 생략하거나 'success' 면 성공 체크만 그린다", () => {
+    renderHost();
+
+    showWithAction('toast-e', jest.fn(), { tone: 'error' });
+    expect(screen.getByTestId('toast-e-error-icon')).toBeOnTheScreen();
+    expect(screen.queryByTestId('toast-e-success-icon')).toBeNull();
+
+    showWithAction('toast-s', jest.fn(), { tone: 'success' });
+    expect(screen.getByTestId('toast-s-success-icon')).toBeOnTheScreen();
+    expect(screen.queryByTestId('toast-s-error-icon')).toBeNull();
+
+    showWithAction('toast-d', jest.fn());
+    expect(screen.getByTestId('toast-d-success-icon')).toBeOnTheScreen();
+    expect(screen.queryByTestId('toast-d-error-icon')).toBeNull();
   });
 });
