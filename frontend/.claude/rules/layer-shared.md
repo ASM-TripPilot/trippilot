@@ -119,6 +119,8 @@ paths:
 | `src/shared/lib/useElapsedFlag.test.ts` | 경계·꺼진 렌더 false·`restartKey` 리셋 |
 | `src/shared/lib/useScrollHide.ts` | `useScrollHide(keepVisible?, settleMs=250)` → `{hidden, onScroll}`(TRIP-1555). 세로 스크롤 중 FAB 숨김 공용 훅 — 홈·탐색 랜딩(`explore-fab-stack`)·장소 탐색 d04(`explore-places-fab-stack`)가 쓴다. **`hidden` 만 반환**(FAB 묶음은 `pointerEvents={hidden?'none':'box-none'}`+`opacity`, 페이드 없음). **가로 레인은 안 숨긴다** — `onScroll` 을 바깥 세로 컨테이너 한 곳에만 건다(jest 는 `fireEvent.scroll` 이 조상 `onScroll` 을 호출해 가로/세로를 못 가른다 → 6-b). `scrollEventThrottle={16}` 은 jest 가 안 본다(지워도 green — 03b W1, 6-b 긴 끌기로 확인) |
 | `src/shared/lib/useScrollHide.test.ts` | 디바운스 경계(249/250ms)·`keepVisible` 파생·언마운트 정리 |
+| `src/shared/lib/useDebouncedValue.ts` | `useDebouncedValue(value, ms)` + `SEARCH_DEBOUNCE_MS=300`(TRIP-1617). PlaceAddPage 인라인 디바운스(TRIP-1348)를 옮긴 공용 훅 — 장소 검색 세 화면이 쓴다. 화면 테스트 입력 간격(60ms)으로는 300ms 와 100ms 를 가르지 못한다(03b N1) — 300 값은 훅 단위 테스트만 잠근다 |
+| `src/shared/lib/useDebouncedValue.test.ts` | 경계(299/300ms)·연속 변경 마지막만·초기값 즉시·언마운트 정리·상수 300 |
 
 ### `src/shared/lib/pressGuard.ts` — 연타 관통 공용 가드
 

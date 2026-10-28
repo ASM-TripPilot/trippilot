@@ -43,18 +43,22 @@ export function useMultiRegionPlaces(
       q ?? '',
       seed ?? null,
     ] as const,
-    queryFn: async () => {
+    // signal: 키가 바뀌거나 언마운트되면 TanStack Query 가 이 요청을 끊는 신호 — getPlaces 에 넘겨야 실제로 끊긴다(TRIP-1617).
+    queryFn: async ({ signal }) => {
       // 지역별 조회를 병렬로 하되 한 지역이 실패해도 나머지는 살린다(부분 성공, TRIP-691).
       // Promise.all 은 하나만 실패해도 전체를 reject 해 다른 지역 장소까지 error 로 접었다.
       const results = await Promise.allSettled(
         regions.map((region) =>
-          getPlaces({
-            region,
-            limit: PER_REGION_LIMIT,
-            ...(category ? { category } : {}),
-            ...(q ? { q } : {}),
-            ...(seed ? { order: 'random' as const, seed } : {}),
-          })
+          getPlaces(
+            {
+              region,
+              limit: PER_REGION_LIMIT,
+              ...(category ? { category } : {}),
+              ...(q ? { q } : {}),
+              ...(seed ? { order: 'random' as const, seed } : {}),
+            },
+            signal
+          )
         )
       );
       const lists = results.flatMap((result) =>
