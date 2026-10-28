@@ -34,6 +34,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.HexFormat
 import java.util.UUID
 
@@ -93,11 +94,12 @@ class ProposalCards(
 
     private fun proposed(ctx: DispatchContext, tripId: UUID, result: EditProposal.Proposed): NewMessage {
         val names = names(ctx, tripId, (result.baseDays + result.days).flatMap { it.slots }.map { it.poiId }.toSet())
-        val diff = diff(result.baseDays, result.days) { names[it] ?: UNNAMED }
+        val start = ctx.trip?.startDate
+        val diff = diff(result.baseDays, result.days, start) { names[it] ?: UNNAMED }
         if (diff.isEmpty()) return AssistantTemplates.handoff("바꿀 것이 없어요. 일정이 이미 그렇게 되어 있어요.", viewItinerary)
         return NewMessage(
             role = MessageRole.ASSISTANT, kind = MessageKind.PROPOSAL,
-            text = "이렇게 바꾸면 돼요. 적용하면 다시 검증한 뒤 반영해요.",
+            text = "${start?.let { areas(result.dayAreas, it) } ?: "이렇게 바꾸면 돼요."} 적용하면 다시 검증한 뒤 반영해요.",
             nextActions = listOf(viewItinerary), outcome = "FRAME",
             footnote = "* 적용 전까지 일정은 그대로 · 최종 시각·이동은 검증값",
             proposal = NewProposal(
@@ -256,14 +258,29 @@ class ProposalCards(
 
         private fun dateOf(slotKey: String): LocalDate? = runCatching { LocalDate.parse(slotKey.substringBefore('#')) }.getOrNull()
 
+        /** 여행 시작일이 1일차다. */
+        private fun dayNumber(start: LocalDate, date: LocalDate) = ChronoUnit.DAYS.between(start, date) + 1
+
+        /**
+         * 날마다 동네로 다시 짠 안 — 상대의 해석을 날짜순으로 되읽는다("1일차는 종로, 2일차는 강남구 쪽으로 다시 짠 안이에요.").
+         * 동네는 상대가 정리해 준 표기 그대로다. '일차'의 '차'는 받침이 없어 주제 조사는 늘 '는'이다. 해석이 없으면 null.
+         */
+        private fun areas(dayAreas: Map<LocalDate, String>, start: LocalDate): String? {
+            if (dayAreas.isEmpty()) return null
+            return dayAreas.entries.sortedBy { it.key }
+                .joinToString(", ", postfix = " 쪽으로 다시 짠 안이에요.") { (date, area) -> "${dayNumber(start, date)}일차는 $area" }
+        }
+
         /**
          * 전후 비교(`b02`). 하루 안에서 장소로 견준다 — 같은 날 같은 장소는 한 번뿐이다(편집 규칙).
          * 빠진 수와 들어온 수가 같으면 자리 순서대로 짝지어 **교체**로 읽고, 다르면 따로 **삭제**·**추가**다.
          * 남은 장소는 순서가 바뀌었으면 **이동**, 시각만 바뀌었으면 **시각 변경**이다.
+         * 줄마다 그 날(`1일차 · 10월 24일`)을 단다 — 여러 날을 고친 안을 앱이 날로 묶는다. [start] 를 모르면 비운다.
          */
-        internal fun diff(before: List<ProposedDay>, after: List<ProposedDay>, name: (UUID) -> String): List<ProposalDiffItem> {
+        internal fun diff(before: List<ProposedDay>, after: List<ProposedDay>, start: LocalDate? = null, name: (UUID) -> String): List<ProposalDiffItem> {
             fun face(slot: ProposedSlot) = ProposalSlotFace(name(slot.poiId), slot.startAt.format(TIME), slot.distanceRange)
             return (before.map { it.date } + after.map { it.date }).distinct().sorted().flatMap { date ->
+                val day = start?.let { "${dayNumber(it, date)}일차 · ${date.format(DATE)}" }
                 val old = before.firstOrNull { it.date == date }?.slots.orEmpty()
                 val new = after.firstOrNull { it.date == date }?.slots.orEmpty()
                 val removed = old.filter { o -> new.none { it.poiId == o.poiId } }
@@ -283,7 +300,7 @@ class ProposalCards(
                             add(ProposalDiffItem(if (reordered) "MOVED" else "RETIMED", "$date#${o.poiId}", face(o), face(n)))
                         }
                     }
-                }
+                }.map { it.copy(dayLabel = day) }
             }
         }
     }

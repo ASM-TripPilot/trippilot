@@ -2,6 +2,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import { act, render, screen } from '@testing-library/react-native';
 import { Stack } from 'expo-router';
 
+import { useGenerationWatch } from '@/app/model/useGenerationWatch';
 import { usePermissionCatchUp } from '@/app/model/usePermissionCatchUp';
 import { useBootstrapGate } from '@/features/auth';
 import {
@@ -51,6 +52,10 @@ jest.mock('@/app/model/useAccountBoundaryReset', () => ({
 jest.mock('@/app/model/usePushRouting', () => ({
   usePushRouting: jest.fn(),
 }));
+// 생성 완료 감지(TRIP-1618)는 useGenerationWatch.integration.test 가 본다 — 여기선 QueryClient·라우터 문맥이 없어 끈다.
+jest.mock('@/app/model/useGenerationWatch', () => ({
+  useGenerationWatch: jest.fn(),
+}));
 // 권한 안내(TRIP-1601)는 아래 마지막 describe(선언·스플래시 유지 배선)와 SplashGate.integration.test(진짜 라우터)가 본다 — 나머지 케이스는 끈다.
 // 진짜 훅은 조회가 비동기라 첫 마운트에서 스플래시를 붙잡는데(TRIP-1601 P5), 이 파일의 동기 advanceTimers 흐름과 맞지 않고 router 목에 없는 API 를 부를 수 있다.
 jest.mock('@/app/model/usePermissionCatchUp', () => ({
@@ -83,6 +88,7 @@ const mockUseBootstrapGate = useBootstrapGate as jest.MockedFunction<
 >;
 const mockRegisterIfGranted = registerPushIfGranted as jest.Mock;
 const mockCatchUp = usePermissionCatchUp as jest.Mock;
+const mockGenerationWatch = useGenerationWatch as jest.Mock;
 
 type GateState = ReturnType<typeof useBootstrapGate>;
 
@@ -717,5 +723,72 @@ describe('SplashGate · 권한 안내 라우트 선언·스플래시 유지 (TRI
     // 단언 2
     expect(screen.queryByTestId('shell-splash-root')).toBeNull();
     expect(screen.getByTestId('gate-route-(tabs)')).toBeOnTheScreen();
+  });
+});
+
+/**
+ * TRIP-1618 — 앱 셸 생성 완료 감지 훅의 **SplashGate 쪽 배선**(훅 `useGenerationWatch` 는 목 — 동작은 useGenerationWatch.integration.test 가 본다).
+ *
+ * 무엇을 보장하나: 훅에 `(drawn, destination)` 을 넘긴다 — 스플래시가 걷히기 전(하한 전·부트스트랩 미결)에는 `drawn=false`,
+ * 그려지면 `drawn=true` 와 목적지 그대로. 훅 안에서 `HOME` 이 아니면 감시하지 않으므로 목적지를 가공 없이 넘기는 것이 계약이다.
+ * jest 가 못 보는 것: 실제 스택에서 경로가 바뀔 때 훅이 다시 그려지는지.
+ */
+describe('SplashGate · 생성 완료 감지 훅 배선 (TRIP-1618)', () => {
+  it('G1 하한 전에는 (false, HOME), 하한이 지나 그려지면 (true, HOME) 을 넘긴다', () => {
+    // 준비
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
+
+    // 실행 1 — 마운트 직후(하한 전)
+    render(<SplashGate />);
+
+    // 단언 1
+    expect(mockGenerationWatch).toHaveBeenLastCalledWith(false, 'HOME');
+
+    // 실행 2
+    passFloor();
+
+    // 단언 2
+    expect(mockGenerationWatch).toHaveBeenLastCalledWith(true, 'HOME');
+  });
+
+  it('G2 부트스트랩이 아직 결정 전(loading)이면 하한이 지나도 (false, null) 이다', () => {
+    mockUseBootstrapGate.mockReturnValue(
+      gate({ phase: 'loading', destination: null })
+    );
+
+    render(<SplashGate />);
+    passFloor();
+
+    expect(mockGenerationWatch).toHaveBeenLastCalledWith(false, null);
+  });
+
+  it('G3 로그인 목적지는 가공 없이 그대로 넘긴다(HOME 판정은 훅 안의 몫)', () => {
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'LOGIN' }));
+
+    render(<SplashGate />);
+    passFloor();
+
+    expect(mockGenerationWatch).toHaveBeenLastCalledWith(true, 'LOGIN');
+  });
+
+  it('G4 권한 안내가 스플래시를 붙잡는 동안(ready 는 true, 스플래시는 아직)에는 (false, HOME) 이다', () => {
+    // 준비 — 하한은 지났지만 권한 안내 훅이 스플래시를 붙잡는다(`ready` 와 `drawn` 이 갈리는 유일한 순간)
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
+    mockCatchUp.mockReturnValue(true);
+
+    // 실행 1
+    const view = render(<SplashGate />);
+    passFloor();
+
+    // 단언 1 — 앵커: 붙잡힌 채라 스플래시가 보이고, 감시 훅에는 아직 false 가 간다
+    expect(screen.getByTestId('shell-splash-root')).toBeOnTheScreen();
+    expect(mockGenerationWatch).toHaveBeenLastCalledWith(false, 'HOME');
+
+    // 실행 2 — 훅이 풀어 준다
+    mockCatchUp.mockReturnValue(false);
+    view.rerender(<SplashGate />);
+
+    // 단언 2 — 그려지는 순간 true 로 바뀐다
+    expect(mockGenerationWatch).toHaveBeenLastCalledWith(true, 'HOME');
   });
 });

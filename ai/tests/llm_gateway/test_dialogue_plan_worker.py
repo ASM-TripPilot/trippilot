@@ -94,7 +94,7 @@ def test_empty_inputs_get_the_shared_none_markers() -> None:
 def test_prompt_has_no_memory_section_and_renders_deterministically() -> None:
     registry = PromptRegistry(_PROMPTS)
     prompt, ref = registry.render(_FEAT, _vars())
-    assert (ref.prompt_id, ref.version, ref.feature) == ("prompts/dialogue_plan.yaml", "0.1.6", "DIALOGUE_PLAN")
+    assert (ref.prompt_id, ref.version, ref.feature) == ("prompts/dialogue_plan.yaml", "0.1.7", "DIALOGUE_PLAN")
     assert "[기억]" not in prompt and "$" not in prompt
     assert prompt == registry.render(_FEAT, _vars())[0]
     assert set(re.findall(r"\$(\w+)", _template())) == {"tools", "history", "trip", "utterance"}
@@ -125,7 +125,7 @@ _EXAMPLE = re.compile(r'^- (?:최근 대화 "(?P<history>[^"]*)" · )?발화 "(?
 def _examples() -> list[re.Match]:
     prompt, _ = PromptRegistry(_PROMPTS).render(_FEAT, _vars())
     found = list(_EXAMPLE.finditer(prompt))
-    assert len(found) == 9  # 0.1.2 — 일정 밖 장소 입장료 예시 1건 · 0.1.3 — 말한 지역 날씨 예시 1건 · 0.1.5 — 행사 탐색 예시 1건
+    assert len(found) == 10  # 0.1.2 — 일정 밖 장소 입장료 예시 1건 · 0.1.3 — 말한 지역 날씨 예시 1건 · 0.1.5 — 행사 탐색 예시 1건 · 0.1.7 — 여행 일반 지식 gap 예시 1건
     return found
 
 

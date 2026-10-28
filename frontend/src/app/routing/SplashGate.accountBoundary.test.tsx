@@ -47,6 +47,10 @@ jest.mock('expo-router', () => ({
   useNavigationContainerRef: () => mockNavigationRef,
 }));
 
+// 생성 완료 감지(TRIP-1618)는 useGenerationWatch.integration.test 가 본다 — 여기선 QueryClient·라우터 문맥이 없어 끈다.
+jest.mock('@/app/model/useGenerationWatch', () => ({
+  useGenerationWatch: jest.fn(),
+}));
 // 권한 안내(TRIP-1601)는 SplashGate.test(선언·스플래시 유지)와 SplashGate.integration.test(진짜 라우터)가 본다 — 여기선 끈다.
 // 진짜 훅은 조회가 비동기라 첫 마운트에서 스플래시를 붙잡는데, 이 파일은 동기 advanceTimers 흐름이고 router 목에 없는 API 를 부를 수 있다.
 jest.mock('@/app/model/usePermissionCatchUp', () => ({

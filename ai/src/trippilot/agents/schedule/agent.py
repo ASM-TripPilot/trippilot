@@ -213,6 +213,8 @@ class GenerateItineraryRequest:
     late_night_by_taste: bool = False
     # 여러 날을 날마다 다른 동네로(생성 — `day_focus`). 재계획은 하루라 의미가 없다.
     spread_days: bool = False
+    # 사용자가 날마다 말한 동네 중심(편집 ①b "1일차는 종로", spec 004) — 있으면 `spread_days` 대신 이것이고, 반경 안으로만 좁힌다(엄격)
+    day_focus: Mapping[date, GeoPoint] | None = None
     # 거절 이력 (TRIP-964) — 백엔드가 여행 단위로 누적해 싣는다. `pace`·지시와 같은 길이다
     # (Provider 수집물이 아니라 요청에 실려 오는 값). generate·replan 양쪽에 실린다 —
     # 다시 짜는 경로가 replan 이고, 처음부터 다시 만드는 경로가 generate 이기 때문이다.
@@ -602,7 +604,8 @@ class ScheduleAgent:
                           f"late_night_by_taste:{len(candidates)}")
 
         # ③″ 날마다 다른 동네(생성) — 점수가 다 정해진 뒤라야 취향이 실린 서열로 고른다. 지터 전 원점수다.
-        day_focus = pick_day_focus(candidates, index, request.days) if request.spread_days else {}
+        day_focus = (dict(request.day_focus) if request.day_focus else
+                     pick_day_focus(candidates, index, request.days) if request.spread_days else {})
         if day_focus:
             self._observe(trace_id, now, "area", "day_focus", "day_focus", "day_focus:" + ",".join(
                 f"{d:%m-%d}={c.lat:.4f}/{c.lng:.4f}" for d, c in day_focus.items()))
@@ -640,6 +643,7 @@ class ScheduleAgent:
             ignore_anchor_distance=request.ignore_anchor_distance,
             holidays=request.holidays,
             day_focus=day_focus or None,
+            day_focus_strict=bool(request.day_focus),
         )
 
         # ④ 어셈블리 solve — 잔여 **전부**를 받는다 (고정 슬라이스 아님, TRIP-376).

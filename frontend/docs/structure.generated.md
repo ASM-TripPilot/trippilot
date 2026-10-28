@@ -200,7 +200,9 @@
 - `src/app/index.ts`  →  AppProviders · SplashGate
 
 ## src/app/model/
+- `src/app/model/generationWatch.ts`  →  GENERATION_COMPLETE_MESSAGE · GENERATION_FAILED_MESSAGE · GENERATION_COMPLETE_TOAST_ID · GENERATION_FAILED_TOAST_ID · tripIdFromItineraryKey · detectGenerationTransition · isGenerationScreenOf · shouldSkipToast
 - `src/app/model/useAccountBoundaryReset.ts`  →  useAccountBoundaryReset
+- `src/app/model/useGenerationWatch.ts`  →  useGenerationWatch
 - `src/app/model/usePermissionCatchUp.ts`  →  PERMISSION_LOOKUP_WAIT_MAX_MS · usePermissionCatchUp
 - `src/app/model/usePushRouting.ts`  →  usePushRouting
 
@@ -632,7 +634,7 @@
 - `src/pages/assistant/assistant-sheet/api/httpAssistantAdapter.ts`  →  toAssistantError · HttpAssistantAdapter
 
 ## src/pages/assistant/assistant-sheet/
-- `src/pages/assistant/assistant-sheet/index.ts`  →  AssistantSheetPage · type AssistantSheetPageProps · AssistantApiError · isAssistantApiError · type AssistantErrorCode · type AssistantPort · assistantPort · setAssistantPort · FakeAssistantAdapter · fakeWithHistory · type FakeAssistantOptions · assistantKeys · useApplyProposal · useAssistantMessages · useAssistantSession · useAssistantSessions · useClearSession · useDismissProposal · useSendTurn
+- `src/pages/assistant/assistant-sheet/index.ts`  →  AssistantSheetPage · type AssistantSheetPageProps · AssistantApiError · isAssistantApiError · type AssistantErrorCode · type AssistantPort · assistantPort · setAssistantPort · assistantKeys · useApplyProposal · useAssistantMessages · useAssistantSession · useAssistantSessions · useClearSession · useDismissProposal · useSendTurn
 - `src/pages/assistant/assistant-sheet/index.view.ts`  →  sampleActionLogs · sampleLongConversation · sampleTranscript · type AssistantScenario · AssistantSheetView · type AssistantSheetViewProps · MessageCard · TurnStatusRow · HistoryView · displayMessage · currentQuickReplies · needsCapabilitiesChip
 
 ## src/pages/assistant/assistant-sheet/model/
@@ -759,8 +761,11 @@
 ## src/pages/home/lib/
 - `src/pages/home/lib/formatCountBadge.ts`  →  formatCountBadge
 
+## src/pages/home/model/__fixtures__/
+- `src/pages/home/model/__fixtures__/homePhaseFixtures.ts`  →  HOME_LOADING_PROPS · HOME_PLANNING_PROPS · HOME_TRAVELING_PROPS · HOME_POST_TRIP_PROPS
+
 ## src/pages/home/model/
-- `src/pages/home/model/homeFixtures.ts`  →  HOME_DEFAULT_PROPS · HOME_LOADING_PROPS · HOME_PLANNING_PROPS · HOME_TRAVELING_PROPS · HOME_POST_TRIP_PROPS
+- `src/pages/home/model/homeFixtures.ts`  →  HOME_DEFAULT_PROPS
 - `src/pages/home/model/homePhase.ts`  →  HomeTripInput · ResolveHomePhaseInput · formatDday · resolveHomePhase · HomeItineraryTarget · applyItineraryTarget
 - `src/pages/home/model/homeTypes.ts`  →  HomeCollectionCard · HomeCollectionsLane · HomeSpotCard · HomeSpotsLane · HomeMagazineHero · HomeSections · TripHeroData · PastTrip · HomeSoftNote · HomePhase · HomeScreenProps
 
@@ -1651,6 +1656,7 @@
 - `src/shared/lib/seoulDate.ts`  →  seoulDate · seoulTime · seoulInstant
 - `src/shared/lib/sheetHandle.ts`  →  SHEET_HANDLE_INDICATOR_STYLE
 - `src/shared/lib/useDeadlineFlag.ts`  →  useDeadlineFlag
+- `src/shared/lib/useDebouncedValue.ts`  →  SEARCH_DEBOUNCE_MS · useDebouncedValue
 - `src/shared/lib/useElapsedFlag.ts`  →  useElapsedFlag
 - `src/shared/lib/useKeyboardVisible.ts`  →  useKeyboardVisible
 - `src/shared/lib/useQueryDataUpdateCount.ts`  →  useQueryDataUpdateCount
@@ -1746,7 +1752,7 @@
 - `src/shared/ui/SheetShell.tsx`  →  SheetApply · SheetShellProps · SheetShell
 - `src/shared/ui/Skeleton.tsx`  →  SkeletonProps · Skeleton
 - `src/shared/ui/StateNotice.tsx`  →  StateNoticeAction · StateNoticeProps · StateNotice
-- `src/shared/ui/Toast.tsx`  →  TOAST_VISIBLE_MS · showToast · hideToast · ToastHost
+- `src/shared/ui/Toast.tsx`  →  TOAST_VISIBLE_MS · TOAST_ACTION_VISIBLE_MS · showToast · hideToast · ToastHost
 - `src/shared/ui/ToastGlyphs.tsx`  →  ToastSuccessGlyph
 - `src/shared/ui/Toggle.tsx`  →  ToggleProps · Toggle
 - `src/shared/ui/WheelPicker.tsx`  →  WHEEL_CELL_HEIGHT · WheelPickerProps · WheelPicker
@@ -1873,4 +1879,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1197개 파일
+합계 1201개 파일

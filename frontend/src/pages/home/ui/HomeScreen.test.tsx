@@ -8,7 +8,10 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import { HOME_DEFAULT_PROPS, HOME_LOADING_PROPS } from '../model/homeFixtures';
+import * as homeFixtures from '../model/homeFixtures';
+import { HOME_DEFAULT_PROPS } from '../model/homeFixtures';
+import * as phaseFixtures from '../model/__fixtures__/homePhaseFixtures';
+import { HOME_LOADING_PROPS } from '../model/__fixtures__/homePhaseFixtures';
 import type {
   HomePhase,
   HomeSpotCard,
@@ -1501,5 +1504,56 @@ describe('HomeScreen — 토스트 바닥 신고: FAB 2단 스택 (TRIP-1559 이
 
     view.unmount();
     expect(getToastBottoms()).toEqual([]);
+  });
+});
+
+// TRIP-1616 — 단계별 홈 상수(로딩·계획 중·여행 중·여행 후)는 프리뷰·테스트 전용이라 `__fixtures__` 로 옮겼다.
+// 운영 번들은 `__fixtures__` 를 metro blockList 로 막으므로, 운영 파일(homeFixtures)에 이 상수가 되돌아오면
+// 운영 export 가 깨진다 — 그 전에 여기서 먼저 빨개지게 한다.
+describe('홈 상수 배치 — 운영 기본값과 프리뷰 전용 상수를 파일로 가른다', () => {
+  it('운영 파일(homeFixtures)이 런타임으로 내보내는 것은 HOME_DEFAULT_PROPS 하나뿐이다', () => {
+    // 준비·실행: 모듈이 값으로 내보내는 이름 목록(타입은 런타임에 없다).
+    const exported = Object.keys(homeFixtures);
+
+    // 단언: 하나뿐 + 그 하나가 실제 값이다(빈 모듈 공허 통과 방지).
+    expect(exported).toEqual(['HOME_DEFAULT_PROPS']);
+    expect(homeFixtures.HOME_DEFAULT_PROPS.hero.length).toBeGreaterThan(0);
+  });
+
+  it('단계별 4상수는 프리뷰 전용 파일에 있고, hero·sections 는 운영 기본값과 같은 참조에서 파생한다', () => {
+    // 준비
+    const {
+      HOME_LOADING_PROPS: loading,
+      HOME_PLANNING_PROPS: planning,
+      HOME_TRAVELING_PROPS: traveling,
+      HOME_POST_TRIP_PROPS: postTrip,
+    } = phaseFixtures;
+
+    // 단언: 4개 모두 있고(앵커), 기저(hero)는 운영 기본값과 같은 배열이다 — 값만 복사한 사본이면 기본값이 바뀔 때 따로 논다.
+    expect(planning.phase?.kind).toBe('planning');
+    expect(traveling.phase?.kind).toBe('planning');
+    expect(postTrip.phase?.kind).toBe('postTrip');
+    [loading, planning, traveling, postTrip].forEach((props) => {
+      expect(props.hero).toBe(HOME_DEFAULT_PROPS.hero);
+    });
+    // 로딩만 sections 가 스켈레톤이고, 나머지 셋은 운영 기본 sections 그대로다.
+    expect(loading.sections).toEqual({ kind: 'loading' });
+    [planning, traveling, postTrip].forEach((props) => {
+      expect(props.sections).toBe(HOME_DEFAULT_PROPS.sections);
+    });
+  });
+
+  it('여행 후 얼굴의 추천 카드는 운영 기본 컬렉션 3장과 같다(파생이 끊기면 red)', () => {
+    // 준비: 운영 기본 sections 는 ready 여야 컬렉션이 있다 — 아니면 조용히 비교하지 말고 여기서 실패한다.
+    const base = HOME_DEFAULT_PROPS.sections;
+    if (base.kind !== 'ready')
+      throw new Error('기본 sections 가 ready 가 아니다');
+
+    // 실행·단언
+    const phase = phaseFixtures.HOME_POST_TRIP_PROPS.phase;
+    expect(phase?.kind).toBe('postTrip');
+    if (phase?.kind !== 'postTrip') return;
+    expect(phase.recommendations).toHaveLength(3);
+    expect(phase.recommendations).toEqual(base.collections);
   });
 });

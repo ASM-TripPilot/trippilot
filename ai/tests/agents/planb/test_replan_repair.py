@@ -108,6 +108,8 @@ def test_빠진_까닭과_빈_시간을_실어_한_번_되묻고_대신할_곳�
     assert any(n.startswith("llm_repair: picked=1/1") for n in body["notes"]), body["notes"]
     assert any(n.endswith("kept=second") for n in body["notes"]), body["notes"]
     assert not any(s["is_fixed"] for d in body["itinerary"]["days"] for s in d["slots"])
+    # 채택된 수리가 넣은 곳도 고른 이유가 슬롯 추천 이유로 나간다(#1623 — 채택 뒤에만 담는다)
+    assert set(body["itinerary"]["explanations"]) == {"2026-09-21#rA", "2026-09-21#rC"}, body["notes"]
 
 
 def test_수리_LLM이_실패하면_1차_일정_그대로다() -> None:

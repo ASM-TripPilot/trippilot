@@ -58,6 +58,8 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             LlmFeature.DIALOGUE_SMALLTALK: ModelTier.LIGHT,
             # 미확인 장소 정보 웹 확인 — 턴 밖(뒤에서) 도는 짧은 추출이라 LIGHT. 검색 자체가 7~12s 다(2026-10-22 실측 luna 8.8s·sol 6.9~11.1s)
             LlmFeature.PLACE_FACT_LOOKUP: ModelTier.LIGHT,
+            # 일반 지식 즉답 — 답변과 같은 자리(2‴ 계획 뒤, 9s 안)라 LIGHT. 배정(feature_models)이 곧 켜기
+            LlmFeature.DIALOGUE_KNOWLEDGE: ModelTier.LIGHT,
             LlmFeature.EXPLANATION: ModelTier.HEAVY,
             # 차선책 근거 문장 — 설명(EXPLANATION)과 같은 급의 취향 그라운딩 문장 (TRIP-887)
             LlmFeature.ALTERNATIVE_EXPLANATION: ModelTier.HEAVY,
@@ -139,9 +141,9 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # 같은 곳 — 답변 문장을 못 만들면(게이트 드롭·시한 부족) 의도별 결정론 템플릿
             # (workers/dialogue_answer.fallback_answer_text, T003) 문장으로 보낸다.
             LlmFeature.DIALOGUE_ANSWER: ("llm_dialogue_answer", "template_text"),
-            # 같은 곳 — 요약 실패면 최근 턴을 줄로 잘라 붙이는 결정론 압축
-            # (orchestrator/dialogue_memory.compress_fallback, T007)으로 전진하고 다음 턴에 다시 시도한다.
-            LlmFeature.DIALOGUE_MEMORY: ("llm_dialogue_memory", "deterministic_compress"),
+            # 같은 곳 — 요약 실패면 이전 기억을 그대로 두고 다음 턴에 다시 요약한다(2026-10-23 — 대화 원문 조각을 저장하던
+            # 결정론 압축은 없앴다, FD 미결 #10 B안). 요약은 답한 뒤 뒤에서 돌아 턴 응답과 무관하다.
+            LlmFeature.DIALOGUE_MEMORY: ("llm_dialogue_memory", "kept_previous"),
             # 같은 곳 2‴ — 계획 실패(시한·벤더·깨진 출력·전량 드롭)면 계획 없이 종전 범위 밖(BE SCOPE 카드)으로 수렴한다.
             # 도구 없음·거절(calls=[]·refused)은 성공·0건이라 이 짝이 나가지 않는다(의도된 결정론, BR-AO-28).
             LlmFeature.DIALOGUE_PLAN: ("llm_dialogue_plan", "out_of_scope"),
@@ -152,6 +154,9 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             LlmFeature.DIALOGUE_SMALLTALK: ("llm_dialogue_smalltalk", "fixed_text"),
             # 같은 곳(뒤에서) — 못 찾으면(시한·형식·출처 없음) 저장하지 않고 카드는 "미확인" 그대로다. 다음에 물으면 다시 찾는다.
             LlmFeature.PLACE_FACT_LOOKUP: ("llm_place_fact_lookup", "unknown_kept"),
+            # 같은 곳 2‴ gap KNOWLEDGE — 지식 답을 못 만들면(시한·벤더·깨진 출력·가격·날짜·연도) 종전 범위 밖(BE SCOPE 카드).
+            # 모델이 모른다고 닫은 것(text=null)은 성공·0건이라 이 짝이 나가지 않는다.
+            LlmFeature.DIALOGUE_KNOWLEDGE: ("llm_dialogue_knowledge", "out_of_scope"),
             # intent_router `_vote` — 유사질문이 없으면 투표를 접고 3차(LLM 직접
             # 분류)로 **승급**한다. 규칙으로 내려가는 강등이 아니다.
             LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
@@ -234,6 +239,8 @@ def default_feature_max_tokens() -> Mapping[LlmFeature, int]:
             LlmFeature.DIALOGUE_SMALLTALK: 512,
             # 칸 셋 JSON — 검색 뒤 사고 토큰이 상한에 든다(실측 800 으로 잘림 없음)
             LlmFeature.PLACE_FACT_LOOKUP: 1024,
+            # 지식 답 2~4문장 JSON — 답변과 같은 상한
+            LlmFeature.DIALOGUE_KNOWLEDGE: 512,
         }
     )
 
@@ -301,6 +308,8 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
             LlmFeature.DIALOGUE_SMALLTALK: "none",
             # 검색 결과에서 값 셋을 고르는 일 — 사고는 짧게(검색 도구는 none 에서도 돈다고 확신 못 해 low)
             LlmFeature.PLACE_FACT_LOOKUP: "low",
+            # 지식 답 — 답변과 같은 자리(≤3.5s), 사고 없이
+            LlmFeature.DIALOGUE_KNOWLEDGE: "none",
         }
     )
 

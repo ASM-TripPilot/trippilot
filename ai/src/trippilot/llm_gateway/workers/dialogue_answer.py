@@ -162,7 +162,7 @@ def build_dialogue_answer_vars(
         # default=str: date·Decimal 같은 값은 그 문자열 표기가 곧 사실의 올바른 렌더다
         "facts": inline(json.dumps(facts, ensure_ascii=False, sort_keys=True, default=str)),
         "utterance": inline(utterance) or NONE,
-        "history": render_history(recent_turns),  # 분류 워커와 같은 줄 — 사전·렌더러는 그쪽 한 곳
+        "history": render_history(recent_turns),  # 분류 워커와 같은 줄·같은 창 — 사전·렌더러는 그쪽 한 곳
         "memory": _lines(memory_lines, NONE),
         "trip": inline(trip_summary) or NO_TRIP,
         "style": inline(style),

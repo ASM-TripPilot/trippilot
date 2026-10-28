@@ -185,13 +185,16 @@ def test_handler_owned_argument_is_not_asked_even_though_it_lands() -> None:
     """받을 칸이 **있는데도** 묻지 않는 자리 — `lands_in is None` 과 이유가 다르다.
 
     `EDIT_SCHEDULE.op` 은 `EditCommand.op` 로 들어가지만 정하는 주인이 핸들러다.
-    지금 표에서 이 사유로 빠지는 것은 이 하나뿐이다.
+    `EDIT_SCHEDULE.day_areas`(spec 004)는 분류가 아니라 결정론 해석 확인이 채운다 — 분류는 두 날 요청을 한 곳 바꾸기 칸에 뭉갰다.
+    지금 표에서 이 사유로 빠지는 것은 이 둘뿐이다.
     """
-    op = next(s for s in specs_of(Intent.EDIT_SCHEDULE) if s.name == "op")
-    assert op.lands_in and not op.asked_by_router and not op.asked()
+    owned = {s.name: s for s in specs_of(Intent.EDIT_SCHEDULE) if s.name in ("op", "day_areas")}
+    assert set(owned) == {"op", "day_areas"}
+    for spec in owned.values():
+        assert spec.lands_in and not spec.asked_by_router and not spec.asked()
     others = [
         (i, s) for i in ROUTABLE_INTENTS for s in specs_of(i)
-        if not s.asked_by_router and s is not op
+        if not s.asked_by_router and s not in owned.values()
     ]
     assert others == []  # 늘어나면 근거를 여기 적고 이 단언을 고칠 것
 

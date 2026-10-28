@@ -237,6 +237,27 @@ REGION_CASES = [
     ("STYLE_ANALYSIS", "지금까지 다닌 걸로 보면 내 여행 스타일이 어때?"),
     ("EXPLORE_PLACES", "속초에서 가볼 만한 데 있어?"),
 ]
+# 여행 일반 지식(dialogue_intent 0.2.8) — 시기·계절·꽃·단풍, 교통수단 고르기·이용권, 준비물·주의할 점, 일정 길이, 숙소 잡을 동네,
+# 예약이 필요한지. 0.2.7 은 이들을 날씨·거리·장소 찾기·장소 정보로 억지로 보내 다른 질문에 답했다(2026-10-23 관광 질문 측정). 정답은
+# null(계획 단계 → gap KNOWLEDGE → 지식 즉답). 뒤 여섯은 음성 — 도구가 답이 되는 관광 질문은 그대로 도구로
+KNOWLEDGE_CASES = [
+    ("OUT_OF_SCOPE", "부산 여행은 언제 가는 게 좋아?"),
+    ("OUT_OF_SCOPE", "설악산 단풍은 언제 절정이야?"),
+    ("OUT_OF_SCOPE", "경주 벚꽃 언제 펴?"),
+    ("OUT_OF_SCOPE", "제주는 렌터카 꼭 빌려야 해?"),
+    ("OUT_OF_SCOPE", "전주 한옥마을은 차 없이 다닐 만해?"),
+    ("OUT_OF_SCOPE", "부산 지하철 하루 이용권 있어?"),
+    ("OUT_OF_SCOPE", "제주 여행 갈 때 뭐 챙겨야 해?"),
+    ("OUT_OF_SCOPE", "겨울 강원도 여행 주의할 점 있어?"),
+    ("OUT_OF_SCOPE", "경주는 며칠이면 충분해?"),
+    ("OUT_OF_SCOPE", "제주는 숙소를 어디에 잡는 게 좋아?"),
+    ("GET_WEATHER", "내일 부산 비 와?"),
+    ("EXPLORE_PLACES", "진해 군항제 언제 해?"),
+    ("EXPLORE_PLACES", "부산 가면 뭐 먹어야 돼?"),
+    ("GET_POI_INFO", "경복궁 입장료 얼마야?"),
+    ("GET_DISTANCE", "해운대에서 광안리까지 걸어갈 만해?"),
+    ("GET_POI_INFO", "불국사는 어떤 곳이야?"),
+]
 SINGLE_CASES = [
     ("GET_NEXT_SLOT", "다음 일정 어디고 몇 시야"),
     ("GET_POI_INFO", "해녀의집 몇 시에 열고 입장료 얼마야"),
@@ -264,6 +285,7 @@ def run_intent(prompts: Path, repeat: int) -> None:
     cases += [(label, u, [], "event") for label, u in EVENT_CASES]
     cases += [(label, u, [], "recommend") for label, u in RECOMMEND_CASES]
     cases += [(label, u, [], "region") for label, u in REGION_CASES]
+    cases += [(label, u, [], "knowledge") for label, u in KNOWLEDGE_CASES]
 
     def one(item):
         i, (label, utt, history, kind) = item
@@ -294,13 +316,13 @@ def run_intent(prompts: Path, repeat: int) -> None:
     print(json.dumps(dict(prompts=str(prompts), model=MODEL, n=len(rows), eval_acc=acc("eval"),
                           context_acc=acc("context"), accept_acc=acc("accept"), explore_acc=acc("explore"),
                           compound_acc=acc("compound"), single_acc=acc("single"), event_acc=acc("event"),
-                          late_null=late_null, recommend_acc=acc("recommend"), region_acc=acc("region"), **_timing(rows)),
+                          late_null=late_null, recommend_acc=acc("recommend"), region_acc=acc("region"), knowledge_acc=acc("knowledge"), **_timing(rows)),
                      ensure_ascii=False))
     for r in rows:
         if not r["ok"]:
             print(f"  ✗ {r['label']:<20} got={r['got']!s:<20} {r['utt']}  ({r['err'] or ''})")
     for r in rows[: len(cases)]:
-        if r["kind"] in ("context", "accept", "explore", "compound", "single", "event", "recommend", "region"):
+        if r["kind"] in ("context", "accept", "explore", "compound", "single", "event", "recommend", "region", "knowledge"):
             print(f"  · {r['utt']} → {r['got']} {r['slots']}")
 
 
@@ -1071,8 +1093,8 @@ def run_plan(prompts: Path, repeat: int) -> None:
                         timeout_sec=PLAN_TIMEOUT)
         wall = int((time.monotonic() - t0) * 1000)
         draft = None if r.is_fallback else r.value
-        # 런타임처럼 지역 이름이 있는 지역 고르기는 탐색으로 바꿔 센다(`orch._region_named`) — 핸들러에 닿는 것을 잰다
-        calls = [(c.intent.value, dict(c.slots)) for c in (orch._region_named(c, case["utterance"]) for c in draft.calls)
+        # 런타임처럼 결정론 라우팅(`orch._routed` — 지역 이름이 있는 지역 고르기는 탐색, 시기 질문의 장소 도구는 버림)을 거쳐 센다 — 핸들러에 닿는 것을 잰다
+        calls = [(c.intent.value, dict(c.slots)) for c in (orch._routed(c, case["utterance"]) for c in draft.calls)
                  if c is not None] if draft is not None else []
         return dict(case=case, tid=f"plan-ab-{i}", ok=draft is not None, calls=calls, refused=bool(draft and draft.refused),
                     gap=draft.gap if draft is not None else None, err=r.error, wall=wall, **_usage(r))

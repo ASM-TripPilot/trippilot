@@ -5,11 +5,11 @@ import {
   within,
 } from '@testing-library/react-native';
 
+import { HOME_DEFAULT_PROPS } from '../model/homeFixtures';
 import {
-  HOME_DEFAULT_PROPS,
   HOME_LOADING_PROPS,
   HOME_TRAVELING_PROPS,
-} from '../model/homeFixtures';
+} from '../model/__fixtures__/homePhaseFixtures';
 import type { HomeSpotCard, HomeSpotsLane } from '../model/homeTypes';
 import { HomeScreen } from './HomeScreen';
 

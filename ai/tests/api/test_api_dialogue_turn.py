@@ -27,16 +27,19 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.fakes.fake_clock import FakeClock
+from tests.fakes.fake_embedding import FakeEmbedding
 from tests.fakes.fake_llm import FeatureRoutingLlm
 from tests.fakes.in_memory_poi import InMemoryPoi
 from trippilot.api import dialogue as projection
 from trippilot.api import schemas
+from trippilot.agents.adapters.memory_memory_store import InMemoryDialogueMemoryStore
 from trippilot.api.wiring import build_dev_app
 from trippilot.domain.common import GeoPoint
 from trippilot.domain.llm import LlmFeature
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.orchestrator.dialogue_orchestrator import TurnOutcome, capabilities_answer
 from trippilot.orchestrator.dialogue_interpreter import DialogueContext
+from trippilot.orchestrator.dialogue_memory import DialogueMemory, expires_at_for
 
 URL = "/ai/v1/dialogue/interpret"
 _KST = timezone(timedelta(hours=9))
@@ -238,6 +241,33 @@ def test_assigned_plan_answers_an_unclassified_turn_with_registered_places_frame
     assert not any(tok in json.dumps(body, ensure_ascii=False) for tok in _FORBIDDEN_TOKENS)  # INV-3
 
 
+_KNOWLEDGE_ON = {LlmFeature.DIALOGUE_PLAN: "m-fake", LlmFeature.DIALOGUE_KNOWLEDGE: "m-fake"}
+_WHEN = "부산 여행은 언제 가는 게 좋아?"
+
+
+def test_assigned_knowledge_answers_a_general_question_counted_and_says_so_at_startup(caplog) -> None:
+    """DIALOGUE_KNOWLEDGE 배정이 곧 켜기(BR-AO-32) — 실조립에서 gap KNOWLEDGE 턴이 지식 답이 되고, 지식 호출은 턴 서비스 호출이라
+    llm_calls 에 든다(분류 + 계획 + 지식 = 3). 기동 로그 한 줄이 배포 smoke 의 켜짐 표식이다."""
+    caplog.set_level(logging.INFO, logger="trippilot.api.dialogue")
+    text = "부산은 보통 봄과 가을이 걷기 좋아요. 여행 날짜가 정해지면 날씨를 확인해 드릴게요."
+    client = _client({_INTENT: '{"intent": null}', LlmFeature.DIALOGUE_PLAN: _plan_json(gap="KNOWLEDGE"),
+                      LlmFeature.DIALOGUE_KNOWLEDGE: _answer_json(text)}, feature_models=_KNOWLEDGE_ON)
+    assert any(r.getMessage() == "도우미 일반 지식 즉답 on" for r in caplog.records)
+    res = client.post(URL, json=_body(_WHEN))
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert set(body) == _KEYS and body["outcome"] == "ANSWER" and body["frames"] == [] and body["llm_calls"] == 3
+    assert body["answer"]["text"] == text and body["answer"]["footnote"] == "일반적인 여행 정보라 시기나 상황에 따라 다를 수 있어요."
+
+
+def test_unassigned_knowledge_is_not_wired_and_says_so_at_startup(caplog) -> None:
+    caplog.set_level(logging.INFO, logger="trippilot.api.dialogue")
+    client = _client({_INTENT: '{"intent": null}', LlmFeature.DIALOGUE_PLAN: _plan_json(gap="KNOWLEDGE")}, feature_models=_PLAN_ON)
+    assert any(r.getMessage().startswith("도우미 일반 지식 즉답 off") and "미배선" in r.getMessage() for r in caplog.records)
+    body = client.post(URL, json=_body(_WHEN)).json()
+    assert body["outcome"] == "OUT_OF_SCOPE" and body["llm_calls"] == 2  # 종전 범위 밖 — 지식 LLM 을 부르지 않는다
+
+
 def test_assigned_plan_with_no_tool_keeps_the_legacy_scope_card() -> None:
     client = _client({_INTENT: '{"intent": null}', LlmFeature.DIALOGUE_PLAN: _plan_json(gap="KNOWLEDGE")},
                      feature_models=_PLAN_ON)
@@ -275,6 +305,25 @@ def test_disabled_orchestrator_keeps_the_legacy_frame_path() -> None:
     assert body["frames"][0]["intent"] == "GET_WEATHER" and body["frames"][0]["match_route"] == "LLM_DIRECT"
     assert body["llm_calls"] == 1
     assert set(body) == {"outcome", "frames", "clarify", "dialogue_context", "llm_calls", "answer"}
+
+
+def test_assembly_hands_the_embedding_to_the_orchestrator_so_memory_is_recalled() -> None:
+    """조립이 임베딩을 오케스트레이터에 넘긴다 — 빠지면 꺼내기가 조용히 꺼지고 지난 기억 줄이 전부 실린다(2026-10-23 리뷰).
+    이번 말과 무관한 줄이 답변 프롬프트에 없으면 꺼내기가 돈 것이다."""
+    emb, now = FakeEmbedding(), datetime.fromisoformat(_NOW)
+    store = InMemoryDialogueMemoryStore(now=lambda: now)
+    earlier = now - timedelta(days=1)
+    store.put(DialogueMemory("s-1", _ACCOUNT, "trip-1", (), 0, earlier, expires_at_for(earlier)))
+    lines = ("선호: 비 오는 날 실내 전시", "결정: 저녁은 흑돼지")
+    assert store.advance(DialogueMemory("s-1", _ACCOUNT, "trip-1", lines, 3, earlier, expires_at_for(earlier)),
+                         {line: emb.embed(line.split(": ", 1)[1]) for line in lines}, model=emb.model_id)
+    llm = FeatureRoutingLlm({_INTENT: _intent_json("GET_WEATHER"), _ANSWER: _answer_json("오늘은 비가 와요. 실내로 가요.")})
+    app = build_dev_app(llm=llm, model_id="m-fake", poi_db=InMemoryPoi(_SCHEDULED + _ALTS), weather=_Weather(),
+                        dialogue_orchestrator_enabled=True, shadow_rate=0.0, embedding=emb, memory_store=store, bank=())
+    res = TestClient(app).post(URL, json=_body("비 오는 날 실내 전시", dialogue_context={"turn_index": 4}))
+    assert res.status_code == 200 and res.json()["outcome"] == "ANSWER", res.text
+    (answer,) = [r for r in llm.requests if r.prompt_ref.feature == _ANSWER.value]
+    assert "선호: 비 오는 날 실내 전시" in answer.prompt and "흑돼지" not in answer.prompt
 
 
 def test_default_build_dev_app_is_off() -> None:

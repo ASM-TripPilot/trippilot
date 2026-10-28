@@ -182,6 +182,7 @@ AgentTask(
 복합 intent(예: "일정 바꾸고 회고도 써줘")는 Execution Plan에서 step 1개에 EditAgent+ReflectAgent 병렬 배치 — 기존 규칙 그대로.
 
 > **[개정 · 2026-10-17 · assistant-orchestrator FD] 도우미 대화 경로의 실제 처리자.** `GET_NEXT_SLOT`·`SHOW_SCHEDULE` 의 "DB 조회"는 **요청 `context` 스냅샷 계산**이다(일정은 backend 가 요청에 싣는 스냅샷으로만 온다 — AI 에 BE DB 직접 접근 경로가 없고 열린 길은 `/internal/pois` 둘뿐). `GET_POI_INFO`·`GET_WEATHER`·`GET_DISTANCE` 의 "에이전트 직접"은 **Provider**(신규 `PoiInfoProvider` = `POST /internal/pois/batch-get` 배치 조회 · Weather · Transit)다 — 표의 `WeatherAgent`·`TransitAgent`·`PlaceScoutAgent` 는 클래스가 없다. `SUGGEST_ALTERNATIVE` 는 `PlanBAgent.run(use_llm=False)` 인프로세스, `EDIT_SCHEDULE` 은 1단계에서 backend 제안 경로(`FRAME`)로 넘긴다. 처리자 표의 정본은 `orchestrator/dialogue_handlers.py::HANDLERS`(의도별 `plan`·`assemble`). 왜: 라우팅 유일 기준(표)은 유지하되 처리자 이름을 실물에 맞춘다. 상세 `ai/aidlc-docs/construction/assistant-orchestrator/functional-design/`.
+> **[개정 · 2026-10-23 · RecommendationAgent]** 도우미 분류 전용 의도 `RECOMMEND_PLACES`·`RECOMMEND_REGION` 은 `RecommendationAgent`(Delegate)가 처리자다 — 정본 `domain/intent.py::ROUTING_TABLE` 두 행. 고르기 판단만 에이전트에 있고 재료 수집·답 꼴은 도우미 핸들러다(agent-foundation BR-AF-11 6종). `EXPLORE_PLACES` 는 핸들러가 직접 처리한다. `UnknownHandlingAgent` 는 이 표의 행이 아니다 — GET_POI_INFO 핸들러의 보조 위임과 계획의 정보성 gap 자리(BR-AO-32)에서 부른다.
 >
 > **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** (해석 실패 / OUT_OF_SCOPE) 행 — 분류가 판단해서 닫은 말은 Fallback 전에 2‴ 계획 단계가 위 표의 정보 의도 7종(SHOW_SCHEDULE·GET_NEXT_SLOT·GET_WEATHER·GET_DISTANCE·GET_POI_INFO·SUGGEST_ALTERNATIVE·EXPLORE_PLACES)의 핸들러를 **도구**로 ≤2 고른다(assistant-orchestrator BR-AO-28). 도구 없음·거절·실패면 종전 Fallback.
 

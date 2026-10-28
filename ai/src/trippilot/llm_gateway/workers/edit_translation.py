@@ -22,7 +22,7 @@ from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.gates.edit_translation import EditTranslationContext
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import PoiId, TraceId
-from trippilot.domain.edit import EditOp
+from trippilot.domain.edit import TRANSLATABLE_OPS, EditOp
 from trippilot.domain.llm import CandidatePool, LlmFeature, TypedResult
 from trippilot.domain.poi import Poi
 
@@ -103,7 +103,7 @@ def build_edit_translation_vars(
         "utterance": inp.utterance.strip() or "(발화 없음)",
         "target_date": inp.target_date or "미지정",
         # 편집 op closed-set을 서버가 주입 (정본 §2.4) — enum 순서라 결정론
-        "edit_ops": "\n".join(f"- {op.value}: {_OP_GUIDE[op]}" for op in EditOp),
+        "edit_ops": "\n".join(f"- {op.value}: {_OP_GUIDE[op]}" for op in TRANSLATABLE_OPS),
         "slots": "\n".join(slot_lines) or "(슬롯 없음)",
         "candidates": "\n".join(candidate_lines) or "(후보 없음)",
     }

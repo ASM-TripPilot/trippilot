@@ -27,7 +27,7 @@ def build_dialogue_smalltalk_vars(
     memory = [line for line in (inline(x) for x in memory_lines) if line]
     return {
         "utterance": inline(utterance) or NONE,
-        "history": render_history(recent_turns),
+        "history": render_history(recent_turns),  # 분류·답변과 같은 창
         "memory": "\n".join(f"- {m}" for m in memory) or NONE,
         "trip": inline(trip_summary) or NO_TRIP,
     }

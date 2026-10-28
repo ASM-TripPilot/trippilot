@@ -20,6 +20,8 @@ graph TB
         PA["PlanBRagPipeline<br/>(planb/rag.py · run)"]
         RA["ReflectAgent<br/>(reflect/agent.py · run)"]
         EA["EditAgent<br/>(edit/agent.py · run)"]
+        UA["UnknownHandlingAgent<br/>(unknown_handling/agent.py · run)"]
+        RCA["RecommendationAgent<br/>(recommendation/agent.py · run, LLM 0)"]
     end
 
     subgraph Providers["providers/ (Provider Protocol · base.py)"]
@@ -86,6 +88,7 @@ graph TB
     PA --> GF
     RA --> GF
     EA --> GF
+    UA --> GF
 
     IO --> IC
     IC --> Providers

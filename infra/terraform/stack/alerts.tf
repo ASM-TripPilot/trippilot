@@ -84,6 +84,25 @@ resource "aws_cloudwatch_log_metric_filter" "refresh_reuse" {
   }
 }
 
+# LLM 호출 실패 — "조용한 실패"를 잡는다. LLM 이 죽어도 게이트웨이는 규칙 폴백(INV-4)으로 200 을 주고 파드도 멀쩡해서
+# 5xx·재시작 알람이 하나도 안 울린다(2026-10-28 운영: Azure 키 401 로 24h 호출 383건 성공 0, 알람 0). AI 가 호출마다
+# 남기는 `llm_cost {"…", "model_id": "…", "success": false, …}` 줄에서 센다.
+# **클라우드 모델만 센다(모델명이 c·g 로 시작 = claude·gpt, 괄호·| 는 이 필터가 못 받는다)** — 알림 문구용 자체 모델(local-*)은 Bedrock 콜드스타트로 62% 가 정상적으로 실패한다
+# (ModelNotReady·연결 끊김 → 백엔드 고정 문구로 대체). 섞으면 평시에도 울린다. 운영 네임스페이스·ai 컨테이너만.
+resource "aws_cloudwatch_log_metric_filter" "llm_call_failed" {
+  count = local.alerts_count
+
+  name           = "${local.name}-llm-call-failed"
+  log_group_name = aws_cloudwatch_log_group.container_insights["application"].name
+  pattern        = "{ ($.kubernetes.namespace_name = \"trippilot\") && ($.kubernetes.container_name = \"ai\") && ($.log = %model_id\\W+[cg]\\S+\\W+success\\W+false%) }"
+
+  metric_transformation {
+    name      = "LlmCallFailed"
+    namespace = local.alerts_namespace
+    value     = "1"
+  }
+}
+
 resource "aws_cloudwatch_metric_alarm" "gateway_5xx" {
   count = local.alerts_count
 
@@ -115,6 +134,25 @@ resource "aws_cloudwatch_metric_alarm" "refresh_reuse" {
   threshold           = 1
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alerts[0].arn]
+}
+
+# 문턱은 어림값이다 — 일정 한 건이 취향 점수 호출을 여러 개(청크 병렬) 내서 한 건이 3~8번 실패로 셀 수 있다. 하루 호출이 400~500건
+# (건당 ~18/시간)이라 30분에 10건이면 "대부분 실패"에 가깝다. 시끄러우면 숫자만 올린다.
+resource "aws_cloudwatch_metric_alarm" "llm_call_failed" {
+  count = local.alerts_count
+
+  alarm_name          = "${local.name}-llm-call-failed"
+  alarm_description   = "LLM(claude·gpt) 호출이 30분 동안 10건 이상 실패했다. 서비스는 규칙 폴백으로 돌지만 AI 품질이 빠진다 — ai 로그의 FallbackEvent reason(401 키·400 파라미터·429 한도·크레딧)부터 본다."
+  namespace           = local.alerts_namespace
+  metric_name         = aws_cloudwatch_log_metric_filter.llm_call_failed[0].metric_transformation[0].name
+  statistic           = "Sum"
+  period              = 1800
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 10
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts[0].arn]
+  ok_actions          = [aws_sns_topic.alerts[0].arn]
 }
 
 # ── 파드·노드 ────────────────────────────────────────────────────────────────────

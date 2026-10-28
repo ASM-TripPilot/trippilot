@@ -652,12 +652,13 @@ def test_delegate_handlers_name_real_agent_classes() -> None:
     import importlib
 
     delegated = {e.handler for e in ROUTING_TABLE.values() if e.mode is RoutingMode.DELEGATE}
-    assert delegated == {"ScheduleAgent", "PlanBAgent", "ReflectAgent", "EditAgent"}
+    assert delegated == {"ScheduleAgent", "PlanBAgent", "ReflectAgent", "EditAgent", "RecommendationAgent"}
     modules = {
         "ScheduleAgent": "trippilot.agents.schedule.agent",
         "PlanBAgent": "trippilot.agents.planb.rag",
         "ReflectAgent": "trippilot.agents.reflect.agent",
         "EditAgent": "trippilot.agents.edit.agent",
+        "RecommendationAgent": "trippilot.agents.recommendation.agent",  # 도우미 추천 둘(2026-10-23)
     }
     for name in delegated:
         assert isinstance(getattr(importlib.import_module(modules[name]), name), type), name
