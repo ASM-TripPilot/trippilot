@@ -46,8 +46,15 @@ sealed interface EditProposal {
      *   낡음 판정(INV-U8-04)의 지문은 **반드시 이것으로** 만든다. 호출측이 일정을 따로 다시 읽으면 그 사이의
      *   편집이 기준에 섞여, 적용이 남의 편집을 조용히 덮어쓴다.
      * @property applyHint 상대의 판단(`AUTO_APPLY`|`CONFIRM_REQUIRED`) — **표시 힌트일 뿐**이다(DEC-U8-2).
+     * @property dayAreas 상대가 날마다 동네를 정해 다시 짠 안이면 그 해석(날짜 → 동네, 상대가 정리한 표기 그대로) —
+     *   카드가 "1일차는 종로…"로 되읽는다. 날짜로 못 읽거나 일정에 없는 날·빈 동네는 싣지 않는다. 다른 편집이면 빈다.
      */
-    data class Proposed(val baseDays: List<ProposedDay>, val days: List<ProposedDay>, val applyHint: String?) : EditProposal
+    data class Proposed(
+        val baseDays: List<ProposedDay>,
+        val days: List<ProposedDay>,
+        val applyHint: String?,
+        val dayAreas: Map<LocalDate, String> = emptyMap(),
+    ) : EditProposal
 
     /**
      * 해가 없다 — 하드 제약 위반([violations])이거나 편집 규칙에 걸렸다(고정 슬롯·후보 풀 밖 등, 이때 목록은 빈다).

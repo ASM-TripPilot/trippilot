@@ -101,7 +101,7 @@
 | `kind` | varchar(16) | 1차 `EDIT`만 |
 | `base_fingerprint` | varchar(64) | 제안을 만든 시점 일정의 내용 지문(슬롯 열 해시) — 낡음 판정(INV-U8-04) |
 | `after` | jsonb | `EditItinerary` 모양 — 전체 일자·슬롯. 시각은 **ai 조립이 검증해 돌려준 값만**(INV-2) |
-| `diff` | jsonb | 카드용 항목 목록 `[{change: ADDED\|REMOVED\|REPLACED\|MOVED\|RETIMED, slotKey, before{name,startAt,distanceRange}?, after{...}?}]` |
+| `diff` | jsonb | 카드용 항목 목록 `[{change: ADDED\|REMOVED\|REPLACED\|MOVED\|RETIMED, slotKey, before{name,startAt,distanceRange}?, after{...}?, dayLabel?}]` — `dayLabel`(2026-10-23, "1일차 · 10월 24일")은 여러 날을 바꾼 제안을 앱이 날로 묶는 데 쓴다(옛 저장분은 없음) |
 | `violations` | jsonb | ai 응답 위반 목록(사유 문구). 비어 있지 않으면 적용 불가(BR-U8-31) |
 | `apply_hint` | varchar(16)? | ai `apply_mode` 그대로(`AUTO_APPLY`\|`CONFIRM_REQUIRED`) — **표시 힌트일 뿐**(DEC-U8-2) |
 | `status` | varchar(16) | §3.5 상태기계 |

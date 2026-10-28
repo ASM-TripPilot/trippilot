@@ -372,3 +372,34 @@ describe('프리뷰 · 기능 안내 6장 키 (TRIP-1595)', () => {
     }
   );
 });
+
+// TRIP-1616 — 홈 프리뷰 4키 렌더. 위 스모크는 홈 키를 그리지 않아서, 단계별 홈 상수(로딩·계획 중·여행 중·여행 후)를
+// 프리뷰 전용 파일(`pages/home/model/__fixtures__`)로 옮겨도 프리뷰가 같은 화면을 그리는지는 이 표가 잠근다.
+// 표식은 HomeScreen 이 그리는 testID/배지 문구다. 이동 전에도 green(보존 심판)이고, 이동 뒤 import 가 끊기면 red 가 된다.
+const HOME_PHASE_KEYS = [
+  ['home-loading', 'home-spots-skeleton', null],
+  ['home-planning', 'home-trip-hero-badge', /계획 중/],
+  ['home-traveling', 'home-trip-hero-badge', /여행 중/],
+  ['home-post-trip', 'home-trip-hero-badge', /여행 완료/],
+] as const;
+
+describe('프리뷰 · 홈 단계별 4키', () => {
+  it.each(HOME_PHASE_KEYS)(
+    '%s 키로 열면 홈이 그 단계 표식(%s)으로 그려진다',
+    (key, testID, badgeText) => {
+      // 준비: 딥링크로 키를 조준한다.
+      mockSearchParams.state = key;
+
+      // 실행
+      render(<DevPreview />);
+
+      // 단언: 프리뷰 본체 + 단계 표식, 그리고 splash 폴백이 아니다.
+      expect(screen.getByTestId('dev-preview-root')).toBeOnTheScreen();
+      expect(screen.getByTestId(testID)).toBeOnTheScreen();
+      if (badgeText) {
+        expect(screen.getByTestId(testID)).toHaveTextContent(badgeText);
+      }
+      expect(screen.queryByTestId('shell-splash-root')).toBeNull();
+    }
+  );
+});

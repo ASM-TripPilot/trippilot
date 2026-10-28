@@ -57,7 +57,7 @@
 
 | 타입 | 필드 | 불변식 |
 |---|---|---|
-| `EditOp` | Enum: `ADD_SLOT / REMOVE_SLOT / MOVE_SLOT / REPLACE_SLOT / REORDER_DAY / CLEAR_DAY / REPLAN` | `DESTRUCTIVE = {REMOVE_SLOT, CLEAR_DAY, REORDER_DAY, REPLAN}` |
+| `EditOp` | Enum: `ADD_SLOT / REMOVE_SLOT / MOVE_SLOT / REPLACE_SLOT / REORDER_DAY / CLEAR_DAY / REPLAN / SET_DAY_AREAS` | `DESTRUCTIVE = {REMOVE_SLOT, CLEAR_DAY, REORDER_DAY, REPLAN, SET_DAY_AREAS}` · `SET_DAY_AREAS`(2026-10-23, spec 004)는 **코드 전용** — params `{ISO 날짜: 동네}`, 번역 LLM 은 고를 수 없다(`TRANSLATABLE_OPS`) |
 | `EditCommand` | `op: EditOp, params: dict, affected_slots: tuple[PoiId,...]` | destructive or `len(affected_slots)>1` → CONFIRM_REQUIRED |
 | `ApplyMode` | Enum: `AUTO_APPLY / CONFIRM_REQUIRED` | — |
 | `Dispatch` | `intent: str, slots: dict, agent: AgentKind, apply_mode: ApplyMode` | 라우터 실패 → `Dispatch.default_fallback()` |

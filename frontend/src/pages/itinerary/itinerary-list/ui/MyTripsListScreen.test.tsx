@@ -109,6 +109,56 @@ describe('🟢 AC-1 · loading·empty 에는 정렬 줄이 없다 (선제 green 
   });
 });
 
+// TRIP-1615 · 조회 실패 얼굴(INV-4) — 판정(조회 실패인가)은 페이지가 지고, 이 화면은 mode 를 받아 그릴 뿐이다.
+describe('🔴 TRIP-1615 AC-6 · error 모드 — 오류 얼굴 + 다시 시도', () => {
+  it('제목·본문·[다시 시도]가 있고, 정렬 줄·empty·여행 만들기·스켈레톤은 없다', () => {
+    // 준비·실행
+    render(
+      <MyTripsListScreen
+        mode="error"
+        sortKey="title"
+        onPressSort={noop}
+        onPressCreateTrip={noop}
+        onRetry={noop}
+      />
+    );
+
+    // 단언 — 문구는 완전 일치(getByText 문자열 = 정확히 같은 글자).
+    const face = screen.getByTestId('itinerary-tab-error');
+    expect(within(face).getByText('여행을 불러올 수 없어요')).toBeOnTheScreen();
+    expect(
+      within(face).getByText('잠시 후 다시 시도해 주세요')
+    ).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('itinerary-tab-retry')).getByText('다시 시도')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('my-trips-sort')).toBeNull();
+    expect(screen.queryByTestId('itinerary-tab-empty')).toBeNull();
+    expect(screen.queryByTestId('itinerary-tab-create-trip')).toBeNull();
+    expect(screen.queryByTestId('my-trip-skeleton-1')).toBeNull();
+  });
+
+  it('[다시 시도]를 누르면 onRetry 1회 — 여행 만들기 콜백은 0회', () => {
+    // 준비
+    const onRetry = jest.fn();
+    const onPressCreateTrip = jest.fn();
+    render(
+      <MyTripsListScreen
+        mode="error"
+        onPressCreateTrip={onPressCreateTrip}
+        onRetry={onRetry}
+      />
+    );
+
+    // 실행
+    fireEvent.press(screen.getByTestId('itinerary-tab-retry'));
+
+    // 단언
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onPressCreateTrip).not.toHaveBeenCalled();
+  });
+});
+
 // TRIP-1297 — 목록 머리 통로. 큰 글자에서 페이지가 완료 배너를 여기 넣는다(정렬 줄 아래, 첫 카드 위, 스크롤과 함께 올라감).
 describe('🔴 listHeader · 목록 스크롤의 첫 자식', () => {
   const CARDS = [

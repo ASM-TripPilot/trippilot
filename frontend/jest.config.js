@@ -24,6 +24,9 @@ const expoPreset = require('jest-expo/jest-preset');
 /** @type {import('jest').Config} */
 module.exports = {
   preset: 'jest-expo',
+  // 변환 캐시를 리포 안에 둔다 — CI 가 actions/cache 로 이 폴더를 run 사이에 이어 받는다(TRIP-1613).
+  // 통합 설정(jest.integration.config.js)은 `...base` 로 이 값을 물려받는다.
+  cacheDirectory: '<rootDir>/.jest-cache',
   // 이 설정(node 버킷)은 --experimental-vm-modules 아래 돈다(코드의 `await import()` 와 eslintReleaseRules 의
   // ESLint 설정 로드가 필요 — TRIP-1350 실측: flag 없이는 50건 이상 `dynamic import callback` 로 죽는다).
   // MSW 통합테스트(.integration.test)는 그 flag 아래서 ESM 이 안 떠서

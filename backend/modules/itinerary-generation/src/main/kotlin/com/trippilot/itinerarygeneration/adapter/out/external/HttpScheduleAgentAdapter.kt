@@ -316,7 +316,7 @@ class HttpScheduleAgentAdapter(
                 if (added.isNotEmpty() && candidatePool.ground(added).size < added.size) {
                     throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 편집 응답에 정본에 없는 장소가 있습니다(INV-1).")
                 }
-                EditProposalOutput(EditProposalStatus.PROPOSED, proposed, emptyList(), null, res.applyMode)
+                EditProposalOutput(EditProposalStatus.PROPOSED, proposed, emptyList(), null, res.applyMode, res.command?.toDomain())
             }
             "REJECTED" ->
                 EditProposalOutput(EditProposalStatus.REJECTED, null, res.violations.map { it.toDomain() }, res.reason, res.applyMode)

@@ -3,6 +3,7 @@ import { InteractionManager } from 'react-native';
 import { Stack } from 'expo-router';
 
 import { useAccountBoundaryReset } from '@/app/model/useAccountBoundaryReset';
+import { useGenerationWatch } from '@/app/model/useGenerationWatch';
 import { usePermissionCatchUp } from '@/app/model/usePermissionCatchUp';
 import { usePushRouting } from '@/app/model/usePushRouting';
 import { useBootstrapGate } from '@/features/auth';
@@ -92,6 +93,7 @@ export function SplashGate() {
   const drawn = ready && !holdSplash;
   useAccountBoundaryReset(drawn, destination);
   usePushRouting(drawn, destination);
+  useGenerationWatch(drawn, destination);
 
   if (!drawn) {
     return <SplashScreen />;

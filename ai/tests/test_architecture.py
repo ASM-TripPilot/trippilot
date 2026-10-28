@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import sys
 from pathlib import Path
 
@@ -165,17 +166,31 @@ def test_yaml_only_imported_in_llm_gateway_prompts() -> None:
     assert not offenders, f"llm_gateway/prompts.py 밖에서 yaml import: {offenders}"
 
 
-def _internal_imports(path: Path) -> set[str]:
-    """trippilot.* 내부 import 전체 (Import·ImportFrom 절대 import 모두)."""
-    tree = ast.parse(path.read_text(encoding="utf-8"))
+def _internal_imports(path: Path, source: str | None = None) -> set[str]:
+    """trippilot.* 내부 import 전체 — 절대 import 와, 파일 위치로 절대 이름을 푼 상대 import(`from ..x import y`). 상대 경로로
+    형제 에이전트·orchestrator·providers 를 끌어와도 L-2·L-4·L-6 을 빠져나가지 못한다(종전엔 절대 import 만 봤다, 2026-10-23 리뷰 재현)."""
+    tree = ast.parse(source if source is not None else path.read_text(encoding="utf-8"))
+    package = ".".join(("trippilot", *path.relative_to(_SRC).parent.parts))
     modules: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             modules.update(a.name for a in node.names)
         elif isinstance(node, ast.ImportFrom):
-            if node.level == 0 and node.module:
-                modules.add(node.module)
+            if node.level == 0:
+                if node.module:
+                    modules.add(node.module)
+            else:  # `from .. import unknown_handling` 처럼 이름 쪽이 모듈일 수 있어 둘 다 담는다
+                base = importlib.util.resolve_name("." * node.level + (node.module or ""), package)
+                modules.add(base)
+                modules.update(f"{base}.{a.name}" for a in node.names)
     return {m for m in modules if m.startswith("trippilot")}
+
+
+def test_relative_imports_resolve_to_absolute_names_for_the_layer_rules() -> None:
+    """상대 import 도 그 파일 자리에서 절대 이름으로 풀려 같은 규칙에 걸린다."""
+    probe = _SRC / "agents" / "recommendation" / "agent.py"
+    got = _internal_imports(probe, "from ..unknown_handling.agent import UnknownTask\nfrom ... import orchestrator\nfrom . import agent\n")
+    assert {"trippilot.agents.unknown_handling.agent", "trippilot.orchestrator", "trippilot.agents.recommendation"} <= got
 
 
 _AGENT_LAYER_PREFIXES = (

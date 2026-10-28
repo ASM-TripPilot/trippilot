@@ -7,7 +7,7 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "lint": "eslint .",
+    "lint": "eslint . --cache --cache-location .eslintcache --cache-strategy content",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "tsc": "tsc --noEmit",
@@ -15,7 +15,8 @@
     "test:node": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:integration": "jest --config jest.integration.config.js",
     "codegen": "orval --config ./orval.config.ts && prettier --write \"src/shared/api/generated/**/*.ts\"",
-    "fsd": "steiger ./src --fail-on-warnings"
+    "fsd": "steiger ./src --fail-on-warnings",
+    "bundle:report": "node scripts/bundle-report.cjs"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
@@ -72,6 +73,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@babel/plugin-transform-react-jsx": "7.29.7",
     "@feature-sliced/steiger-plugin": "0.8.0",
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "~29.5.14",
@@ -79,6 +81,7 @@
     "@types/react": "~19.1.0",
     "@types/react-test-renderer": "^19.1.0",
     "babel-plugin-react-compiler": "^1.0.0",
+    "babel-preset-expo": "~54.0.12",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "eslint-import-resolver-typescript": "^4.4.5",
@@ -89,6 +92,7 @@
     "orval": "^8.22.0",
     "prettier": "^3.9.5",
     "react-test-renderer": "19.1.0",
+    "source-map-explorer": "2.5.3",
     "steiger": "0.7.0",
     "tailwindcss": "3.4.17",
     "typescript": "~5.9.2"

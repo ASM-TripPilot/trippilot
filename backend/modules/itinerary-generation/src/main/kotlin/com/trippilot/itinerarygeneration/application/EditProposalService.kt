@@ -172,6 +172,7 @@ class EditProposalService(
                 ProposedDay(d.date, d.slots.map { ProposedSlot(it.poiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay, it.distanceRange) })
             },
             applyHint = applyMode,
+            dayAreas = command.dayAreas(base.days.map { it.date }.toSet()),
         )
         EditProposalStatus.REJECTED -> {
             log.info("편집 제안 거절 — reason={} 위반={}건 tripId={}", reason, violations.size, tripId)
@@ -188,6 +189,17 @@ class EditProposalService(
             )
         }
         EditProposalStatus.NOT_UNDERSTOOD -> EditProposal.NotUnderstood
+    }
+
+    /**
+     * 상대가 날마다 동네를 정해 다시 짰다면(`SET_DAY_AREAS` — params 가 `{"2026-10-24": "종로", …}`) 그 해석. 카드가 그대로 되읽는
+     * 값이라 **못 읽는 항목은 버린다** — 날짜가 아닌 키, 일정에 없는 날(몇째 날인지 말할 수 없다), 빈 동네.
+     */
+    private fun EditCommand?.dayAreas(itineraryDates: Set<LocalDate>): Map<LocalDate, String> {
+        if (this == null || op != "SET_DAY_AREAS") return emptyMap()
+        return params.mapNotNull { (key, area) ->
+            runCatching { LocalDate.parse(key) }.getOrNull()?.takeIf { it in itineraryDates && area.isNotBlank() }?.let { it to area }
+        }.toMap()
     }
 
     /** 저장된 일정 → 상대에 보낼 본문. 편집 재검증과 같은 사영이다(시각·순서·고정만 — 거리는 상대가 다시 낸다). */

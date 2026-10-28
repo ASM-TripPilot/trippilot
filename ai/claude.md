@@ -34,11 +34,12 @@ TripPilot AI is an **independent Python AI service** that generates, replans, an
 - **PlanBAgent**: contingency handling (RAG pattern, 3 KBs + pgvector) — `agents/planb/rag.py` `PlanBRagPipeline.run(PlanBRagRequest)`
 - **ReflectAgent**: reflection generation — `agents/reflect/agent.py` `ReflectAgent.run(ReflectTask)`; text and vision (Phase 2) share one entry via `ReflectTask.vision`
 - **EditAgent**: itinerary editing (translate → validate → confirm gate → retime → assembly validate) — `agents/edit/agent.py` `EditAgent.run(EditTask) -> EditOutcome`
-- **UnknownHandlingAgent**: place facts the card shows as "unknown" (hours · closed days · fee) found by vendor web search *after* answering — `agents/unknown_handling/agent.py` `UnknownHandlingAgent.run(UnknownTask) -> UnknownOutcome(facts, pending)`; the GET_POI_INFO dialogue handler calls it (not a `ROUTING_TABLE` row), the lookup runs in the background and the result is stored (ai_kb `place_fact_cache`) for the next ask. Moved here from `orchestrator/` on 2026-10-22 to match the other four
+- **UnknownHandlingAgent**: place facts the card shows as "unknown" (hours · closed days · fee) found by vendor web search *after* answering — `agents/unknown_handling/agent.py` `UnknownHandlingAgent.run(UnknownTask) -> UnknownOutcome(facts, pending)`; the GET_POI_INFO dialogue handler calls it (not a `ROUTING_TABLE` row), the lookup runs in the background and the result is stored (ai_kb `place_fact_cache`) for the next ask. Moved here from `orchestrator/` on 2026-10-22 to match the other four. Second job (2026-10-23): general travel knowledge answered this turn — `run(KnowledgeTask) -> UnknownOutcome(answer)` (feature `DIALOGUE_KNOWLEDGE`, no web search)
+- **RecommendationAgent**: the choosing behind the assistant's two recommendation intents (which candidate set, what order, how many places · which regions and why) — `agents/recommendation/agent.py` `RecommendationAgent.run(RecommendTask) -> RecommendOutcome`; LLM 0, the dialogue handlers gather the material and build the answer (Facts). Added 2026-10-23 (user decision)
 
-> **All four agents are objects that wrap their gateway workers** (2026-09-09): constructor DI, one
+> **All six agents are objects that wrap their gateway workers** (2026-09-09; RecommendationAgent wraps none — it only chooses): constructor DI, one
 > `run(<Task>) -> <Outcome>` entry, no exceptions across the boundary (DL-5). The literal
-> `Agent.handle(AgentTask) -> AgentResult` envelope is still unimplemented for all four —
+> `Agent.handle(AgentTask) -> AgentResult` envelope is still unimplemented for all six —
 > it lands with IntentRouter wiring (business-rules 미결 #8).
 > One codified exception: **judgment-free single-shot transforms are wired boundary→worker directly**
 > (`reflection_nudge` — u6-reflect FD §2.1, decided 2026-09-09).
@@ -96,7 +97,7 @@ branch therefore cannot fire on any path.
   2026-08-25; count with `grep -rc --include="*.py" "@given" ai/tests`). Earlier "19"/"52"
   figures were stale.
 - **Test layout mirrors `src/trippilot/`**: put a test in the folder of the package it mainly
-  exercises — `tests/<package>/` (agents by agent: `tests/agents/<schedule|planb|reflect|edit|unknown_handling>/`);
+  exercises — `tests/<package>/` (agents by agent: `tests/agents/<schedule|planb|reflect|edit|unknown_handling|recommendation>/`);
   tests of `ai/scripts` go in `tests/scripts/`. `fakes/`·`fixtures/`·`generators/` and
   `test_architecture.py` stay at the root.
 - LangChain: **declared but not used** — no dependency in `pyproject.toml`, zero

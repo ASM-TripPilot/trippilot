@@ -129,3 +129,71 @@ def test_a_refused_submit_is_not_pending_and_does_not_leave_the_place_in_flight(
 def test_outcome_cannot_be_found_and_pending_at_once() -> None:
     with pytest.raises(ValueError):
         UnknownOutcome(facts=_FACTS, pending=True)
+
+
+# ── 일반 지식 즉답 (KnowledgeTask, BR-AO-32 · 2026-10-23 사용자 결정) ─────────────────────────────
+
+
+class _Knowing:
+    """지식 워커 대역 — 게이트웨이처럼 TypedResult 를 돌려준다(던지게도 할 수 있다)."""
+
+    def __init__(self, result: TypedResult | Exception) -> None:
+        self.result, self.calls = result, []
+
+    def answer(self, utterance, recent_turns, memory_lines, trip_summary, trace_id, now, *, timeout_sec):
+        self.calls.append((utterance, tuple(memory_lines), trip_summary, timeout_sec))
+        if isinstance(self.result, Exception):
+            raise self.result
+        return self.result
+
+
+def _ask(question: str = "부산은 언제 가는 게 좋아?") -> uh.KnowledgeTask:
+    return uh.KnowledgeTask(question, (), ("제약: 아이와 함께라 많이 걷기 힘들다",), "여행 부산", TraceId("k"), _NOW, timeout_sec=3.0)
+
+
+def test_knowledge_is_answered_this_turn_without_touching_the_place_fact_side() -> None:
+    from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerDraft
+
+    knowing = _Knowing(_ok(DialogueAnswerDraft("부산은 보통 봄과 가을이 걷기 좋아요.")))
+    agent = UnknownHandlingAgent(None, None, knowledge=knowing)
+    assert agent.knows_general is True
+    assert agent.run(_ask()) == UnknownOutcome(answer="부산은 보통 봄과 가을이 걷기 좋아요.")
+    assert knowing.calls == [("부산은 언제 가는 게 좋아?", ("제약: 아이와 함께라 많이 걷기 힘들다",), "여행 부산", 3.0)]
+    assert agent.run(_task()) == UnknownOutcome()  # 장소 사실 웹 확인은 미배선 — 종전 "미확인"
+
+
+@pytest.mark.parametrize("result", [
+    _ok(None),  # 모른다고 닫음(text=null) — 판단, 실패 아님
+    TypedResult(value=None, is_fallback=True, error="gate_dropped_all", call_record=None),  # 가격·날짜·연도 등 — 게이트웨이가 보고했다
+])
+def test_knowledge_declined_or_failed_is_nothing(result) -> None:
+    agent = UnknownHandlingAgent(None, None, knowledge=_Knowing(result))
+    assert agent.run(_ask()) == UnknownOutcome()
+
+
+def test_a_knowledge_worker_exception_is_nothing_with_its_reason() -> None:
+    """게이트웨이를 부르지 못한 실패(프롬프트 변수 누락 등)는 던지지 않고 없음 — 단 사유를 싣는다. 게이트웨이가 보고하지 못했으니 호출측이
+    이벤트를 낸다(모른다고 닫음과 가르지 못하면 침묵 실패였다, 2026-10-23 리뷰 재현)."""
+    agent = UnknownHandlingAgent(None, None, knowledge=_Knowing(ValueError("template variable missing")))
+    assert agent.run(_ask()) == UnknownOutcome(error="ValueError")
+
+
+def test_without_the_knowledge_worker_the_agent_does_not_know_general_things() -> None:
+    agent, _, _, worker = _agent(_ok(_FACTS))
+    assert agent.knows_general is False and agent.run(_ask()) == UnknownOutcome() and worker.calls == []
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"facts": _FACTS, "pending": True}, {"facts": _FACTS, "answer": "a"}, {"pending": True, "answer": "a"}, {"answer": "  "},
+    {"answer": "a", "error": "ValueError"}, {"pending": True, "error": "ValueError"},
+])
+def test_outcome_shapes_cannot_lie_to_each_other(kwargs: dict) -> None:
+    with pytest.raises(ValueError):
+        UnknownOutcome(**kwargs)
+
+
+@pytest.mark.parametrize("over", [{"question": "  "}, {"timeout_sec": 0.0}])
+def test_knowledge_task_rejects_an_empty_question_or_no_time(over: dict) -> None:
+    base = dict(question="언제 가?", history=(), memory_lines=(), trip_summary="", trace_id=TraceId("k"), now=_NOW, timeout_sec=1.0)
+    with pytest.raises(ValueError):
+        uh.KnowledgeTask(**{**base, **over})

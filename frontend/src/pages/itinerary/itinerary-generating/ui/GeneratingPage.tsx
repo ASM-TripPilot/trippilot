@@ -383,6 +383,9 @@ function ReplanGeneration({
         // 생성 훅의 기본 enabled 는 빈 문자열도 통과시킨다 — 세션을 받기 전엔 묻지 않는다.
         // 상한에 닿으면 끈다 — 폴링도, 포커스 복귀 재조회(실패 얼굴 뒤 늦은 DRAFT 를 몰래 반영)도 멈춘다.
         enabled: sessionId !== null && !overCap,
+        // TRIP-1614 · 화면 포커스 게이트를 걸지 않는다 — 재계획 세션을 지켜보는 화면이라 복귀 시 최신이 곧바로 필요하고,
+        // 위에 쌓는 화면이 없는 최상단 대기 화면이며 위 overCap 상한이 있다. (이 폴링은 재계획 세션 것이고, 일정 쿼리의
+        // 셸 감시 `useGenerationWatch`(TRIP-1618)와는 별개다.)
         refetchInterval: (query) => {
           // 오류로 떨어지면 선다 — 옛 SOLVING 이 남아 서버가 죽어 있는 동안 영구 폴링하지 않게(TRIP-1348 선례).
           if (query.state.status === 'error') return false;

@@ -29,6 +29,13 @@ import anthropic
 from trippilot.ports.llm_port import LlmRequest, LlmResponse, LlmTimeoutError, LlmUnsupportedError
 
 
+# 기능별 effort 표(`default_feature_effort`)에는 GPT(responses `reasoning.effort`)만 받는 값이 섞여 있다 —
+# `none`(사고 끄기)·`minimal`. Anthropic `output_config.effort` 는 low|medium|high|xhigh|max 만 받고
+# 나머지는 400 이다(2026-10-29 운영 실측: Opus 5.5 로 돌리자 PREFERENCE_SCORING 20/20 이 400 → 규칙 폴백).
+# Claude 5.5 는 사고를 끌 수 없어 low 가 가장 가까운 값이다.
+_EFFORT_FLOOR = {"none": "low", "minimal": "low"}
+
+
 def _content(request: LlmRequest):
     """messages content 조립 — 이미지 없으면 종전과 **같은 문자열**을 준다
     (기존 텍스트 호출의 와이어 모양 불변 — openai 어댑터 _responses_input과 동형).
@@ -64,7 +71,8 @@ class AnthropicAdapter:
         if request.web_search:  # Claude 서버 도구는 아직 안 붙였다 — 조용히 끄면 기억으로 지어낸 값이 "찾은 값"이 된다
             raise LlmUnsupportedError("AnthropicAdapter 는 웹 검색 도구를 아직 싣지 않는다")
         # effort 는 지정됐을 때만 — haiku-4-5 처럼 파라미터째 거부하는 모델이 있다.
-        extra = {"output_config": {"effort": request.effort}} if request.effort else {}
+        effort = _EFFORT_FLOOR.get(request.effort, request.effort) if request.effort else None
+        extra = {"output_config": {"effort": effort}} if effort else {}
         started = time.monotonic()
         try:
             resp = self._client.messages.create(

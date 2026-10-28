@@ -16,16 +16,20 @@
   ④′ 지시 주입·프롬프트 골격 꼴(`has_injection_like`) — 기억은 다음 턴마다 `$memory` 로 되돌아가 한 번 굳으면 매 턴 다시 주입된다
   ⑤ 중복(첫 등장 유지)
   ⑥ 개수 상한 `_MAX_LINES` — 초과분도 드롭으로 계측
+  ⑦ 종류 표지 — "종류: 내용" 꼴이고 종류가 닫힌 6종(`MEMORY_KINDS`) 안이어야 한다. 통과 줄은 "종류: 내용" 한 꼴로 맞춘다
+     (2026-10-23 — "요약" 줄은 늘 싣고 나머지는 관련된 것만 꺼내므로 종류가 곧 쓰임새다)
+  ⑧ "요약" 줄은 `_MAX_GIST_LINES` 까지 — 늘 실리는 줄이라 길어지면 매 턴 토큰이 는다
 **전부 드롭 = 실패, 비운 배열 = 성공·0건** (TRIP-260 #5 의 추출 계열 쪽, 2026-10-19 개정): 게이트가 줄을 다 버렸으면
-오케스트레이터가 결정론 압축(compress_fallback)으로 전진한다(INV-4). LLM 이 비운 배열은 "새로 기억할 것 없음"이라는
-프롬프트 규칙의 답이라 실패가 아니다 — 처음엔 실패로 봐 압축이 대화 원문 조각을 저장했다(배포 스모크 3/3). 0줄 성공은
-오케스트레이터가 `dialogue_memory_empty` 건수 로그로 센다.
+오케스트레이터는 이전 기억을 그대로 두고 다음 턴에 다시 요약한다(INV-4 — 2026-10-23 부터 결정론 압축은 없다). LLM 이 비운
+배열은 "새로 기억할 것 없음"이라는 프롬프트 규칙의 답이라 실패가 아니다 — 처음엔 실패로 봐 압축이 대화 원문 조각을
+저장했다(배포 스모크 3/3). 0줄 성공은 오케스트레이터가 `dialogue_memory_empty` 건수 로그로 센다.
 
 "error 있으면 value 비움" 불변식은 base.GateOutcome 이 강제한다.
 """
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from trippilot.domain.common import TraceId
@@ -39,16 +43,19 @@ from trippilot.llm_gateway.gates.base import (
     has_injection_like,
 )
 from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
+from trippilot.ports.memory_store_port import GIST_KIND, split_kind
 
 # 요약 상한 (FD DE §2.6 — ≤20줄 · 줄 ≤120자). 프롬프트의 "최대 20줄"·"120자 이내"와 같은 값(테스트가 고정).
 # ponytail: 오케스트레이터 config(summary_max_lines·summary_line_chars)와 같은 값을 따로 둔다 —
 # 게이트는 raw_text 만 받아 설정을 모른다(paraphrase 선례). 갈라지면 공유 상수로 승격.
 _MAX_LINES = 20
 _MAX_LINE_CHARS = 120
+_MAX_GIST_LINES = 2  # 프롬프트 "요약 … 최대 2줄"과 같은 값
+_BULLET = re.compile(r"^\s*[-*•·]\s+")
 
 
 class DialogueMemoryGate:
-    """DIALOGUE_MEMORY 출구 게이트 — {"lines": [str]} → tuple[str, ...]."""
+    """DIALOGUE_MEMORY 출구 게이트 — {"lines": ["종류: 내용"]} → tuple[str, ...]."""
 
     def apply(
         self,
@@ -67,20 +74,26 @@ class DialogueMemoryGate:
             return GateOutcome(value=(), drop_event=None, error=f"parse_error: {e}")
 
         survivors: list[str] = []
-        dropped_count = 0
+        dropped_count = gists = 0
         for item in items:
-            line = item.strip() if isinstance(item, str) else ""
+            # 앞의 목록 기호는 뗀다 — [이전 요약]이 "- 선호: …" 꼴로 렌더돼 모델이 그 꼴째 옮기면 표지가 안 읽혀 줄을 다 버렸다(리뷰 재현)
+            raw = _BULLET.sub("", item).strip() if isinstance(item, str) else ""
+            kind, body = split_kind(raw)
+            line = f"{kind}: {body}"
             if (
-                not line  # ①
+                not raw  # ①
+                or kind is None  # ⑦
                 or len(line) > _MAX_LINE_CHARS  # ②
                 or _TIME_EXPR.search(line) is not None  # ③ (INV-3·INV-2)
                 or has_contact_like(line)  # ④
                 or has_injection_like(line)  # ④′
                 or line in survivors  # ⑤
                 or len(survivors) >= _MAX_LINES  # ⑥
+                or (kind == GIST_KIND and gists >= _MAX_GIST_LINES)  # ⑧
             ):
                 dropped_count += 1
                 continue
+            gists += kind == GIST_KIND
             survivors.append(line)
 
         drop_event = (

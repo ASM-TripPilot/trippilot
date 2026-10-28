@@ -333,6 +333,8 @@ class ItineraryProblem:
     holidays: Mapping[date, frozenset[str]] | None = None  # 특일 달력 — None = 모드 off (상황 감지 H1)
     # 날마다의 동네 중심(생성, `assembly_engine.day_focus`) — 그날 자유 후보를 그 근처로. 없는 날은 종전대로.
     day_focus: Mapping[date, GeoPoint] | None = None
+    # 사용자가 말한 동네(편집 ①b, spec 004) — 반경 안이 적어도 넓히지 않는다. 생성이 고른 중심은 False(종전: 적으면 안 좁힘)
+    day_focus_strict: bool = False
 
     def window_on(self, day: date) -> TimeWindow:
         """그 날의 창 — 일자별 창이 있으면 그것, 없으면 공용 창의 시각을 그 날짜에 얹는다."""
@@ -387,6 +389,8 @@ class ItineraryProblem:
                 {d.isoformat(): self.day_focus[d].to_dict() for d in sorted(self.day_focus)}
                 if self.day_focus is not None else None
             ),
+            # 켜졌을 때만 싣는다 — 생성 경로의 덤프는 바이트 그대로
+            **({"day_focus_strict": True} if self.day_focus_strict else {}),
             # date 키는 JSON 원시 타입이 아니다 → 정렬된 ISO 키 (결정론적 직렬화)
             "daily_rain_prob": (
                 {d.isoformat(): self.daily_rain_prob[d]
@@ -458,6 +462,7 @@ class ItineraryProblem:
                 {date.fromisoformat(k): GeoPoint.from_dict(v) for k, v in d["day_focus"].items()}
                 if d.get("day_focus") is not None else None
             ),
+            day_focus_strict=d.get("day_focus_strict", False),
             holidays=(
                 {date.fromisoformat(k): frozenset(v) for k, v in d["holidays"].items()}
                 if d.get("holidays") is not None else None

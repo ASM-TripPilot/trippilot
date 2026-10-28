@@ -49,6 +49,10 @@ jest.mock('@/app/model/useAccountBoundaryReset', () => ({
 jest.mock('@/app/model/usePushRouting', () => ({
   usePushRouting: jest.fn(),
 }));
+// 생성 완료 감지(TRIP-1618)는 useGenerationWatch.integration.test 가 본다 — 여기선 QueryClient·라우터 문맥이 없어 끈다.
+jest.mock('@/app/model/useGenerationWatch', () => ({
+  useGenerationWatch: jest.fn(),
+}));
 // 권한 안내(TRIP-1601)도 끈다 — 진짜 훅은 조회가 비동기라 첫 마운트에서 스플래시를 붙잡고, 이 파일은 동기 advanceTimers 로 흐른다.
 jest.mock('@/app/model/usePermissionCatchUp', () => ({
   usePermissionCatchUp: jest.fn(() => false),

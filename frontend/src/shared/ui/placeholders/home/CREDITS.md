@@ -20,7 +20,7 @@ a02 매거진이 사진 자리를 채우는 데 쓴다(홈 히어로는 TRIP-143
 - 라이선스 이슈는 없지만 **생성 그라디언트라 실사진 충실도는 없다.** "피그마 실행 중 착각"
   완료조건의 사진 부분은 실사진으로 갈아끼우는 **후속 티켓**에서 완성된다(TRIP-694는 Image
   배선 + 자리채움까지).
-- `_dev/preview`는 릴리스 빌드에서도 딥링크로 열리고 `require`된 에셋은 번들에 실린다(h11
-  `itinerary/CREDITS.md`와 같은 도달성). 다만 이 9장은 라이선스 무관이라 릴리스 차단 사유는
-  아니다 — 실사진으로 바꿀 때 이 파일도 갱신할 것.
+- 이 9장은 `_dev/preview`가 `require`하는데, 운영 번들(`NODE_ENV=production`)에서는 `metro.config.js`
+  blockList 가 `app/_dev` 를 제외해 번들에 실리지 않는다(TRIP-1347, `pnpm bundle:report` 가 CI 에서 0건 단언).
+  개발 번들에만 들어간다. 어차피 라이선스 무관이라 릴리스 차단 사유는 아니다 — 실사진으로 바꿀 때 이 파일도 갱신할 것.
 - 재생성: 이 폴더(옛 `src/assets/home`, TRIP-1161 이동) 생성 스크립트는 TRIP-694 사이클 원장(`_workspace/20260917-trip694-home-default`)에 기록.

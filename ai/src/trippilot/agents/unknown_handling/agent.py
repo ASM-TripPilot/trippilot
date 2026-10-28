@@ -13,7 +13,13 @@
 UnknownTask ─▶ ① 저장된 결과 조회   찾음 → facts / 못 찾음(하루 보관) → 없음 / 저장소 장애 → 없는 것으로 보고 ② (INV-4)
             ─▶ ② 뒤에서 찾기 제출   냈거나 이미 찾는 중 → pending / 하루 상한·제출 실패 → 없음 (이번 턴은 기다리지 않는다)
             ─▶ (뒤에서) 워커 lookup → 출처 있는 값만 저장(찾음 7일·못 찾음 1일) · 시한·형식·출처 없음은 저장하지 않고 다음에 다시 찾는다
+KnowledgeTask ─▶ 지식 워커 answer(이번 턴, 웹 검색 없음) → answer / 모른다고 닫음·실패·미배선 → 없음
 ```
+
+**일반 지식 즉답**(2026-10-23 사용자 결정 — "이런 건 우리가 모르는 거니까 unknown handling agent 로"): "부산은 언제 가는 게 좋아?"처럼
+조회 도구로 답할 게 없는 여행 일반 지식을 LLM 일반 지식으로 **이번 턴에** 답한다(`KnowledgeTask`). 장소 사실 확인과 달리 기다릴 만큼
+짧고(~2s) 저장하지 않는다. 가격·특정 날짜·연도는 출구 게이트가 막고, 등록되지 않은 장소 이름·시각은 호출측(오케스트레이터)이
+스냅샷과 대조해 막는다.
 
 지키는 것:
 - 장소는 이미 등록된 곳(poi_id)이다 — 새 장소를 고르지 않는다(INV-1). 값은 도우미 답에만 쓰고 일정 조립에는 넣지 않는다(INV-2).
@@ -32,6 +38,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from trippilot.domain.common import TraceId
+from trippilot.llm_gateway.workers.dialogue_knowledge import DialogueKnowledgeWorker
 from trippilot.llm_gateway.workers.place_fact_lookup import PlaceFactLookupWorker
 from trippilot.ports.place_fact_store_port import FactRecord, PlaceFacts, PlaceFactStore
 
@@ -59,39 +66,95 @@ class UnknownTask:
 
 
 @dataclass(frozen=True, slots=True)
+class KnowledgeTask:
+    """경계 → 일반 지식 즉답 재료 봉투 — 2‴ 계획이 gap KNOWLEDGE 로 닫은 말 하나.
+
+    - `history`: 최근 대화 창(`.role`·`.text` — 오케스트레이터 `RecentTurn` 모양, 오케스트레이터가 자른 그대로 싣는다)
+    - `memory_lines`: 꺼낸 기억 줄(`$memory`) · `trip_summary`: 여행 상황 한 줄(`$trip`)
+    - `timeout_sec`: 오케스트레이터가 턴 잔여에서 내린 시한(DL-4) — 에이전트는 시계를 갖지 않는다
+    """
+
+    question: str
+    history: tuple
+    memory_lines: tuple[str, ...]
+    trip_summary: str
+    trace_id: TraceId
+    now: datetime
+    timeout_sec: float
+
+    def __post_init__(self) -> None:
+        if not self.question.strip():
+            raise ValueError("question 이 비었다")
+        if self.timeout_sec <= 0:
+            raise ValueError(f"timeout_sec > 0: {self.timeout_sec}")
+
+
+@dataclass(frozen=True, slots=True)
 class UnknownOutcome:
-    """`run()` 의 결과 — 셋 중 하나이고 서로 거짓말하지 못한다(핸들러가 각주·칩을 이걸로 가른다).
+    """`run()` 의 결과 — 넷 중 하나이고 서로 거짓말하지 못한다(핸들러가 각주·칩을 이걸로 가른다).
 
     - 찾았음: `facts` 있음 — 저장된 값이다, 이번 턴에 찾은 것이 아니다
     - 찾는 중: `facts` 없음 · `pending` — 이번 턴에 냈거나 이미 돌고 있다 → "찾아보는 중" 각주와 [다시 묻기] 칩
-    - 없음:   `facts` 없음 · `pending` 아님 — 못 찾음이 저장돼 있거나 하루 상한·제출 실패 → 종전대로 "미확인"
+    - 지식 답: `answer` 있음 — `KnowledgeTask` 에만, 게이트를 지난 문장(각주는 호출측이 결정론으로)
+    - 없음:   전부 비었다 — 못 찾음이 저장돼 있거나 하루 상한·제출 실패·모른다고 닫음·미배선 → 종전대로("미확인"·범위 밖).
+              `error` 는 없음의 사유 하나 — 지식 워커가 게이트웨이에 닿기 전에 던진 예외(프롬프트 변수 누락 등)의 타입 이름. 게이트웨이가
+              보고하지 못한 실패라 호출측이 FallbackEvent 를 낸다(INV-4 — 모른다고 닫음과 가르지 못하면 침묵 실패다, 2026-10-23 리뷰 재현)
     """
 
     facts: PlaceFacts | None = None
     pending: bool = False
+    answer: str | None = None
+    error: str | None = None
 
     def __post_init__(self) -> None:
-        if self.facts is not None and self.pending:
-            raise ValueError("찾은 값이 있으면 찾는 중일 수 없다")
+        if (self.facts is not None) + self.pending + (self.answer is not None) + (self.error is not None) > 1:
+            raise ValueError("찾았음·찾는 중·지식 답·실패 사유는 동시에 설 수 없다")
+        if self.answer is not None and not self.answer.strip():
+            raise ValueError("빈 지식 답")
 
 
 class UnknownHandlingAgent:
-    def __init__(self, worker: PlaceFactLookupWorker, store: PlaceFactStore, *,
+    """`worker`(장소 사실 웹 확인, PLACE_FACT_LOOKUP)·`knowledge`(일반 지식 즉답, DIALOGUE_KNOWLEDGE)는 각자 배정이 곧 켜기라 둘 다
+    없을 수 있다 — 없는 쪽 일은 "없음"으로 답한다(기능 부재는 강등이 아니다). `knows_general` 은 호출측이 지식 답을 시도할지 가르는 창."""
+
+    def __init__(self, worker: PlaceFactLookupWorker | None, store: PlaceFactStore | None, *,
+                 knowledge: DialogueKnowledgeWorker | None = None,
                  submit: Callable[..., object] | None = None) -> None:
-        self._worker, self._store = worker, store
+        self._worker, self._store, self._knowledge = worker, store, knowledge
+        self.knows_general = knowledge is not None
         self._pool = ThreadPoolExecutor(MAX_INFLIGHT, thread_name_prefix="unknown-handling") if submit is None else None
         self._submit = submit or self._pool.submit  # type: ignore[union-attr]
         self._inflight: set[str] = set()
         self._spent: tuple[date, int] = (date.min, 0)
         self._lock = threading.Lock()
 
-    def run(self, task: UnknownTask) -> UnknownOutcome:
-        """저장된 값이 있으면 그것, 없으면 뒤에서 찾기를 내고 "찾는 중". 이번 턴은 기다리지 않는다.
-        예외를 던지지 않는다 (INV-4 · DL-5 — 저장소·제출 실패는 "없음"으로 수렴)."""
+    def run(self, task: UnknownTask | KnowledgeTask) -> UnknownOutcome:
+        """장소 사실: 저장된 값이 있으면 그것, 없으면 뒤에서 찾기를 내고 "찾는 중"(이번 턴은 기다리지 않는다). 일반 지식: 이번 턴에
+        답하거나 없음. 예외를 던지지 않는다 (INV-4 · DL-5 — 저장소·제출·워커 실패는 "없음"으로 수렴)."""
+        if isinstance(task, KnowledgeTask):
+            return self._answer(task)
+        if self._worker is None or self._store is None:  # 장소 사실 웹 확인 미배선(지식만 켜진 조립) — 종전 "미확인"
+            return UnknownOutcome()
         stored = self._known(task.poi_id, task.now)
         if stored is not None:  # 찾았거나 못 찾음이 저장돼 있다 — 못 찾음이면 하루는 다시 찾지 않는다
             return UnknownOutcome(facts=stored.facts)
         return UnknownOutcome(pending=self._request(task))
+
+    def _answer(self, task: KnowledgeTask) -> UnknownOutcome:
+        """일반 지식 즉답 — 게이트를 지난 문장이면 answer, 모른다고 닫았거나 실패면 없음. 실패의 FallbackEvent 는 게이트웨이가 냈다
+        (워커 예외만 `error` 에 싣는다 — 게이트웨이를 부르지 못한 것이라 호출측이 이벤트를 낸다)."""
+        if self._knowledge is None:
+            return UnknownOutcome()
+        try:
+            result = self._knowledge.answer(task.question, task.history, task.memory_lines, task.trip_summary,
+                                            task.trace_id, task.now, timeout_sec=task.timeout_sec)
+        except Exception as e:  # noqa: BLE001 — 프롬프트 미등록 ValueError 는 게이트웨이 render 가 호출보다 먼저 던진다
+            log.warning("unknown_handling knowledge_error trace=%s error=%s", task.trace_id, type(e).__name__)
+            return UnknownOutcome(error=type(e).__name__)
+        draft = result.value
+        if result.is_fallback or draft is None:
+            return UnknownOutcome()
+        return UnknownOutcome(answer=draft.text)
 
     def _known(self, poi_id: str, now: datetime) -> FactRecord | None:
         """저장된 결과(만료 전). 저장소 장애는 없는 것과 같다 — 카드는 종전대로 "미확인"(INV-4)."""
