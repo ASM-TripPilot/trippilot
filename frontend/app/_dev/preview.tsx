@@ -16,13 +16,13 @@ import {
   type SocialLoginScreenProps,
 } from '@/pages/auth/login/ui/SocialLoginScreen';
 import { SplashScreen } from '@/features/auth/index.view';
+import { HOME_DEFAULT_PROPS } from '@/pages/home/model/homeFixtures';
 import {
-  HOME_DEFAULT_PROPS,
   HOME_LOADING_PROPS,
   HOME_PLANNING_PROPS,
   HOME_POST_TRIP_PROPS,
   HOME_TRAVELING_PROPS,
-} from '@/pages/home/model/homeFixtures';
+} from '@/pages/home/model/__fixtures__/homePhaseFixtures';
 import type { HomeSpotsLane } from '@/pages/home/model/homeTypes';
 import {
   PREVIEW_PLACES,

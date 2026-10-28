@@ -632,7 +632,7 @@
 - `src/pages/assistant/assistant-sheet/api/httpAssistantAdapter.ts`  →  toAssistantError · HttpAssistantAdapter
 
 ## src/pages/assistant/assistant-sheet/
-- `src/pages/assistant/assistant-sheet/index.ts`  →  AssistantSheetPage · type AssistantSheetPageProps · AssistantApiError · isAssistantApiError · type AssistantErrorCode · type AssistantPort · assistantPort · setAssistantPort · FakeAssistantAdapter · fakeWithHistory · type FakeAssistantOptions · assistantKeys · useApplyProposal · useAssistantMessages · useAssistantSession · useAssistantSessions · useClearSession · useDismissProposal · useSendTurn
+- `src/pages/assistant/assistant-sheet/index.ts`  →  AssistantSheetPage · type AssistantSheetPageProps · AssistantApiError · isAssistantApiError · type AssistantErrorCode · type AssistantPort · assistantPort · setAssistantPort · assistantKeys · useApplyProposal · useAssistantMessages · useAssistantSession · useAssistantSessions · useClearSession · useDismissProposal · useSendTurn
 - `src/pages/assistant/assistant-sheet/index.view.ts`  →  sampleActionLogs · sampleLongConversation · sampleTranscript · type AssistantScenario · AssistantSheetView · type AssistantSheetViewProps · MessageCard · TurnStatusRow · HistoryView · displayMessage · currentQuickReplies · needsCapabilitiesChip
 
 ## src/pages/assistant/assistant-sheet/model/
@@ -759,8 +759,11 @@
 ## src/pages/home/lib/
 - `src/pages/home/lib/formatCountBadge.ts`  →  formatCountBadge
 
+## src/pages/home/model/__fixtures__/
+- `src/pages/home/model/__fixtures__/homePhaseFixtures.ts`  →  HOME_LOADING_PROPS · HOME_PLANNING_PROPS · HOME_TRAVELING_PROPS · HOME_POST_TRIP_PROPS
+
 ## src/pages/home/model/
-- `src/pages/home/model/homeFixtures.ts`  →  HOME_DEFAULT_PROPS · HOME_LOADING_PROPS · HOME_PLANNING_PROPS · HOME_TRAVELING_PROPS · HOME_POST_TRIP_PROPS
+- `src/pages/home/model/homeFixtures.ts`  →  HOME_DEFAULT_PROPS
 - `src/pages/home/model/homePhase.ts`  →  HomeTripInput · ResolveHomePhaseInput · formatDday · resolveHomePhase · HomeItineraryTarget · applyItineraryTarget
 - `src/pages/home/model/homeTypes.ts`  →  HomeCollectionCard · HomeCollectionsLane · HomeSpotCard · HomeSpotsLane · HomeMagazineHero · HomeSections · TripHeroData · PastTrip · HomeSoftNote · HomePhase · HomeScreenProps
 
@@ -1873,4 +1876,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1197개 파일
+합계 1198개 파일
