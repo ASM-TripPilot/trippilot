@@ -1802,6 +1802,7 @@
 - `src/test-support/fakePreventRemoveNavigator.tsx`  →  MockNavAction · MockPreventCallback · mockExits · mockRemove · mockNavigation · useNavigation · usePreventRemove · resetFakeNavigator
 - `src/test-support/fitBandAsserts.ts`  →  NativeRegion · LatLng · expectPinsInBand · expectHeightLimited
 - `src/test-support/flushNotifications.ts`  →  flushNotifications
+- `src/test-support/fontScale.ts`  →  FONT_SCALE_MATRIX · setFontScale · describeAtFontScales
 - `src/test-support/freezeDate.ts`  →  REAL_TIMER_APIS · freezeDate
 - `src/test-support/integrationSetup.ts`  →  (export 없음)
 - `src/test-support/itineraryFixtures.ts`  →  TRIP_ID · DAY1 · DAY2 · DAY3 · trip · slot · day · itinerary · daysOf · threeStopSlots · threeStopDays · oneStopDay · planTrip · twoDayItinerary · busanPoi · busanHotel · busanFourPois · busanTrip
@@ -1884,4 +1885,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1206개 파일
+합계 1207개 파일

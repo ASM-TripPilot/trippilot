@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { Dimensions, ScrollView } from 'react-native';
+import { ScrollView } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -24,6 +24,7 @@ import type { Itinerary, Trip } from '@/shared/api/index.schemas';
 import { MyTripsListPage } from '@/pages/itinerary/itinerary-list';
 import * as fontScaleModule from '@/shared/lib/fontScale';
 import { readIdSet, writeIdSet } from '@/shared/storage';
+import { describeAtFontScales, setFontScale } from '@/test-support/fontScale';
 
 /**
  * TRIP-1055 · 작성중 여행 삭제 — ⋯ → '삭제' → 확인 다이얼로그 → `DELETE /trips/{tripId}` 흐름을 실제로
@@ -1469,12 +1470,6 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
     });
   }
 
-  // 글자 배율 — jest 의 RN 목 기본은 1 이 아니라 2(= 큰 글자)라 운영 기본값 1 로 이 describe 를 고정한다.
-  const BASE_WINDOW = Dimensions.get('window');
-  function setFontScale(fontScale: number): void {
-    const window = { ...BASE_WINDOW, fontScale };
-    Dimensions.set({ window, screen: window });
-  }
   let isLargeTextSpy: jest.SpyInstance | null = null;
 
   beforeEach(() => {
@@ -1483,10 +1478,8 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
   });
   afterEach(() => {
     gates.forEach((open) => open()); // 붙잡힌 응답을 남기지 않는다 — 안 풀면 jest 가 red 대신 멈춘다.
-    // 아직 마운트된 화면이 배율 변화를 듣는다 — act 밖에서 바꾸면 경고가 쏟아진다.
-    act(() => {
-      Dimensions.set({ window: BASE_WINDOW, screen: BASE_WINDOW });
-    });
+    // 아직 마운트된 화면이 배율 변화를 듣는다 — 헬퍼의 setFontScale 이 act 로 감싼다.
+    setFontScale(1);
     isLargeTextSpy?.mockRestore();
     isLargeTextSpy = null;
   });
@@ -1749,6 +1742,45 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
       expect(isLargeTextSpy).toHaveBeenCalledWith(3.571);
       const root = screen.getByTestId('itinerary-tab-root');
       expect(within(root).queryByTestId('generation-done-bar')).toBeNull();
+    });
+  });
+
+  // TRIP-1629 — 배율 매트릭스(1·1.353·1.786·3.571). 동작만 본다: 어느 배율에서도 배너 글자·카드가 그려지고 보기·✕ 가 동작한다.
+  // 배너가 목록 안/밖 어디에 놓이는지(생김새)는 위 배율 분기 테스트가 맡고, 잘림·겹침은 실화면 캡처(6-b)가 맡는다.
+  describeAtFontScales('완료 배너 · 배율 매트릭스 (TRIP-1629)', () => {
+    const serveBannerForB = () =>
+      serve([TA, TC, TB], {
+        'trip-a': done('trip-a'),
+        'trip-b': done('trip-b'),
+        'trip-c': planned('trip-c'),
+      });
+
+    it('M4 배너 글자와 카드 3장이 그려지고 "보기"를 누르면 확정 여행으로 한 번 간다', async () => {
+      serveBannerForB();
+      renderPage();
+
+      expect(
+        await screen.findByTestId('generation-done-bar')
+      ).toBeOnTheScreen();
+      expect(barText()).toHaveTextContent('부산 여행 일정이 완성됐어요');
+      for (const tripId of ['trip-a', 'trip-b', 'trip-c']) {
+        expect(screen.getByTestId(`my-trip-card-${tripId}`)).toBeOnTheScreen();
+      }
+      fireEvent.press(screen.getByTestId('generation-done-bar-view'));
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(String(mockPush.mock.calls[0][0])).toBe('/trips/trip-b/live');
+    });
+
+    it('M5 ✕ 를 누르면 배너만 걷히고 카드는 그대로다', async () => {
+      serveBannerForB();
+      renderPage();
+
+      fireEvent.press(await screen.findByTestId('generation-done-bar-close'));
+      await settle();
+
+      expect(bar()).toBeNull();
+      expect(screen.getByTestId('my-trip-card-trip-b')).toBeOnTheScreen();
     });
   });
 

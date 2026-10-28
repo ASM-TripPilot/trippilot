@@ -90,7 +90,7 @@ export function StayRecommendCard({
       accessibilityState={{ selected }}
       onPress={onPress}
       style={cardShadow}
-      className={`h-[100px] w-full flex-row items-center gap-md rounded-[12px] bg-canvas py-md pl-md pr-[14px] ${
+      className={`min-h-[100px] w-full flex-row items-center gap-md rounded-[12px] bg-canvas py-md pl-md pr-[14px] ${
         selected ? 'border-[1.5px] border-primary' : 'border border-hairline'
       }`}
     >
