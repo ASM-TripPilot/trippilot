@@ -162,8 +162,9 @@ function stub(testID: string) {
   };
 }
 
-// SplashGate 가 선언하는 화면 7개 + 가드 밖 화면(settings·trips·explore/places — 위저드 진입점 중 하나). (onboarding) 은 index 를 두지 않는다 —
-// '/' 가 (tabs)/index 와 겹치면 키 순서로 승부가 갈린다.
+// SplashGate 가 선언하는 화면 7개 + 가드 밖 화면(settings·trips·explore/places — 위저드 진입점 중 하나).
+// 실제 app/ 처럼 '/' 로 풀리는 화면이 둘이다((onboarding)/index · (tabs)/index) — TRIP-1628. 이 줄을 빼면 HOME 중 `replace('/')` 가
+// 홈에 도착하는 거짓 green 이 생겨(TRIP-1597) 'TRIP-1628' describe 의 카나리가 red 가 된다.
 const ROUTES = {
   _layout: RootLayout,
   '(auth)/_layout': () => <Stack screenOptions={{ headerShown: false }} />,
@@ -171,6 +172,7 @@ const ROUTES = {
   '(onboarding)/_layout': () => (
     <Stack screenOptions={{ headerShown: false }} />
   ),
+  '(onboarding)/index': stub('onboarding-index'),
   '(onboarding)/welcome': Empty,
   'onboarding-tour': stub('tour-root'),
   '(tabs)/_layout': () => <Tabs screenOptions={{ headerShown: false }} />,
@@ -510,12 +512,11 @@ describe('푸시 탭은 진짜 라우터에서 알림함과 같은 곳으로 간
 // 선제 green 가능: 라우트 파일만 있어도 expo-router 가 자동 등록하므로 SplashGate 에 선언이 없어도 이동은 된다 —
 // 이 케이스가 지키는 것은 "선언을 ONBOARDING 가드 안에 두면 HOME 이 된 뒤 이동이 안 먹는다" 같은 잘못된 위치다.
 describe('기능 안내는 진짜 라우터에서 한 장만 남는다 (TRIP-1595 · TRIP-1597)', () => {
-  // TRIP-1597 — 실제 app/ 에는 '/' 로 풀리는 화면이 둘이다((onboarding)/index · (tabs)/index). 위 ROUTES 는 그 겹침을
-  // 일부러 빼 두어 투어의 '/' 이동이 배포 빌드에서 조용히 무시되는 것을 못 봤다 — 이 케이스는 실제처럼 둘 다 두고,
-  // 투어 자리에 진짜 페이지를 꽂아 건너뛰기를 누른다(라우터를 직접 부르면 페이지가 쓰는 목적지를 안 본다).
+  // TRIP-1597 — 실제 app/ 에는 '/' 로 풀리는 화면이 둘이다((onboarding)/index · (tabs)/index). 옛 ROUTES 는 그 겹침을 빼 두어
+  // 투어의 '/' 이동이 배포 빌드에서 조용히 무시되는 것을 못 봤다(TRIP-1628 부터 공유 ROUTES 가 둘 다 둔다).
+  // 이 케이스는 투어 자리에 진짜 페이지를 꽂아 건너뛰기를 누른다(라우터를 직접 부르면 페이지가 쓰는 목적지를 안 본다).
   const REAL_ROUTES = {
     ...ROUTES,
-    '(onboarding)/index': stub('onboarding-index'),
     'onboarding-tour': OnboardingTourPage,
   };
 
@@ -555,12 +556,81 @@ describe('기능 안내는 진짜 라우터에서 한 장만 남는다 (TRIP-159
 });
 
 /**
+ * TRIP-1628 — 루트 `'/'` 는 가드가 정한다 (M-38 ROUTES 누락 카나리 + M-26 재동의 `replace('/')` 도착).
+ *
+ * 배경: 실제 app/ 에는 `'/'` 로 풀리는 화면이 둘이다((onboarding)/index · (tabs)/index). 라우터는 이름순으로 하나를 고르고((onboarding) < (tabs)),
+ * 그 화면이 현재 목적지의 가드 안이 아니면 이동은 **throw 도 경고도 없이 사라진다**(조용한 무시). 그래서 "던지지 않는다"만 단언하면 빈 통과고,
+ * 반드시 pathname·스택·화면 testID 로 본다. `ReconsentPage` 의 `router.replace('/')` 도착은 `ReconsentPage.test` 가 목 라우터라 못 보므로 여기서 본다.
+ *
+ * 무엇을 보장하나:
+ *  - 카나리(M-38): HOME 에서 설정 화면 위 `replace('/')` 는 무시된다 — 공유 ROUTES 에서 `(onboarding)/index` 를 빼면 홈으로 도착해 red.
+ *  - 재동의(M-26): RECONSENT 중 `replace('/')` 는 **아무 일도 안 한다**(화면은 `/reconsent` 그대로). 게이트가 HOME/ONBOARDING/LOGIN 으로 뒤집히는
+ *    순간에야 가드 전환이 화면을 각각 홈·온보딩 index·로그인으로 옮긴다. 즉 `replace('/')` 는 장식이고 도착은 전환이 만든다.
+ * 못 보는 것: 서버 왕복으로 게이트가 실제 뒤집히는 부분(가짜 게이트로 대신 — `useBootstrapGate.test` 몫)·네이티브 전환 애니메이션.
+ */
+describe("루트 '/' 해석은 진짜 라우터에서 가드를 따른다 (TRIP-1628)", () => {
+  it("카나리: HOME 에서 설정 화면 위 replace('/') 는 이동 없이 무시된다 — 던지지도 홈으로 가지도 않는다", () => {
+    // 준비 — 홈 탭 위에 설정. 앵커: 지금 설정이 보인다.
+    const app = openSignedIn(['/settings']);
+    expect(rootStackNames(app)).toEqual(['(tabs)', 'settings/index']);
+    expect(app.getPathname()).toBe('/settings');
+
+    // 실행 — '/' 는 (onboarding)/index 로 풀리는데 HOME 에서는 그 그룹이 잠겨 있다.
+    expect(() => act(() => router.replace('/'))).not.toThrow();
+
+    // 단언 — 던지지 않는 것만으론 부족하다(조용한 무시). 설정 화면이 그대로여야 한다.
+    expect(app.getPathname()).toBe('/settings');
+    expect(rootStackNames(app)).toEqual(['(tabs)', 'settings/index']);
+    expect(screen.getByTestId('settings-root')).toBeOnTheScreen();
+  });
+
+  describe("재동의 중 replace('/') 는 무시되고, 게이트가 뒤집힐 때 전환이 화면을 옮긴다", () => {
+    it.each<[BootstrapDestination, string[], string, string, string | null]>([
+      ['HOME', ['(tabs)'], '/', 'home-root', 'onboarding-index'],
+      ['ONBOARDING', ['(onboarding)'], '/', 'onboarding-index', 'home-root'],
+      ['LOGIN', ['(auth)'], '/login', 'login-root', 'home-root'],
+    ])(
+      '재동의 → %s: replace 직후엔 그대로, 뒤집은 뒤에 도착한다',
+      (destination, stack, pathname, shown, absent) => {
+        // 준비 — 재동의 게이트로 앱을 열고 스플래시 하한을 넘긴다. 앵커: 재동의 화면 하나.
+        gateDestination = 'RECONSENT';
+        const app = renderRouter(ROUTES, { initialUrl: '/reconsent' });
+        act(() => {
+          jest.advanceTimersByTime(SPLASH_MIN_VISIBLE_MS);
+        });
+        expect(app.getPathname()).toBe('/reconsent');
+        expect(rootStackNames(app)).toEqual(['reconsent']);
+
+        // 실행 1 — 동의 직후 ReconsentPage 가 하는 그 호출.
+        expect(() => act(() => router.replace('/'))).not.toThrow();
+
+        // 단언 1 — 아직 아무 일도 없었다(이동은 조용히 무시). 이걸 먼저 못 박아야 "replace 가 일한다"는 오해가 안 생긴다.
+        expect(app.getPathname()).toBe('/reconsent');
+        expect(rootStackNames(app)).toEqual(['reconsent']);
+
+        // 실행 2 — 서버 재조회가 끝나 게이트가 뒤집힌다(act 로 감싸야 구독한 SplashGate 의 재렌더가 반영된다).
+        act(() => {
+          flipGateTo(destination);
+        });
+
+        // 단언 2 — 가드 전환이 화면을 옮겼다. 재동의는 스택에서 사라지고 뒤로 갈 곳이 없다.
+        expect(rootStackNames(app)).toEqual(stack);
+        expect(app.getPathname()).toBe(pathname);
+        expect(screen.getByTestId(shown)).toBeOnTheScreen();
+        if (absent) expect(screen.queryByTestId(absent)).toBeNull();
+        expect(router.canGoBack()).toBe(false);
+      }
+    );
+  });
+});
+
+/**
  * TRIP-1601 — 온보딩을 이미 마친 계정이 HOME 에 들어올 때, 위치·알림 OS 권한이 **미결정**인 것만 홈보다 먼저 안내한다(위치 → 알림).
  *
  * 왜 진짜 라우터인가: ① 안내 카드(온보딩 `LocationPage`·`PushPage` 재사용)의 [계속]이 HOME 가드 안 목적지로 가는지 —
  * 하드코딩된 `(onboarding)` 그룹이나 `'/'` 로 가면 라우터가 에러 없이 무시한다(TRIP-1597). ② 안내가 스택에 한 장만 남고 홈에서 뒤로 못 돌아오는지.
  * ③ 푸시 탭 딥링크와의 경합. 이 셋은 라우터 목으로는 안 보인다. 안내 라우트 두 개는 앱의 실제 파일(`app/permission-*.tsx`)을
- * `@routes` 별칭으로 꽂고, `(onboarding)/index` 도 둘 다 둬서 `'/'` 가 실제처럼 겹치게 한다.
+ * `@routes` 별칭으로 꽂는다. `'/'` 가 실제처럼 겹치는 것은 공유 ROUTES 가 `(onboarding)/index` 를 두기 때문이다(TRIP-1628).
  *
  * 무엇을 보장하나 (AC 번호는 01b 기준):
  *  - AC1·AC3·AC4 흐름 5종(둘 다·위치만·알림만·거부·거부 후 계속)이 각각 올바른 순서로 카드를 보이고 OS 요청/루틴을 1회씩 부르고
@@ -574,13 +644,12 @@ describe('기능 안내는 진짜 라우터에서 한 장만 남는다 (TRIP-159
  * jest 가 못 보는 것: 홈이 한 프레임 번쩍이는지·OS 창이 카드/홈 위에 어색하게 뜨는지·실제 설치 단위 저장소 의미(6-b).
  */
 describe('권한 안내는 진짜 라우터에서 홈보다 먼저, 한 번만 (TRIP-1601)', () => {
-  // 실제 app/ 처럼 '/' 로 풀리는 화면이 둘이고((onboarding)/index · (tabs)/index) 안내 화면은 실제 라우트 파일이다.
+  // '/' 로 풀리는 화면이 둘인 것은 공유 ROUTES 가 이미 둔다((onboarding)/index · (tabs)/index) — 여기선 안내 화면 둘만 실제 라우트 파일로 더한다.
   // 파일이 없는 동안(red)에도 다른 케이스가 로드 단계에서 죽지 않게 지연 require 한다.
   function catchUpRoutes() {
     /* eslint-disable @typescript-eslint/no-require-imports */
     return {
       ...ROUTES,
-      '(onboarding)/index': stub('onboarding-index'),
       'permission-location': require('@routes/permission-location').default,
       'permission-push': require('@routes/permission-push').default,
     };
