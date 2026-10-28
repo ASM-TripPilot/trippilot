@@ -322,6 +322,24 @@ const DEAD_HANDLER = [
   },
 ];
 
+// worklet 기본 매개변수 금지(TRIP-1522·1627) — 첫 문장이 'worklet' 지시자인 함수의 매개변수 기본값은 UI 스레드에서
+// 기본값 평가가 클로저 복원보다 먼저라 ReferenceError 로 죽는다. jest 는 JS 스레드라 못 잡고 실기에서만 터진다.
+// 매개변수 직속 기본값(`w = 1`)과 구조분해 매개변수 안 기본값(`{ w = 1 }`)을 둘 다 본다. 본문 안 중첩 함수는 안 본다.
+const WORKLET_DEFAULT_PARAM_MESSAGE =
+  'worklet 함수의 매개변수 기본값 금지(TRIP-1522) — UI 스레드에서 ReferenceError. `x?: T` 로 받고 본문에서 `x ?? 값` 으로 채운다.';
+const WORKLET_DEFAULT_PARAM_GATE = [
+  {
+    selector:
+      ":function[body.body.0.directive='worklet'] > AssignmentPattern.params",
+    message: WORKLET_DEFAULT_PARAM_MESSAGE,
+  },
+  {
+    selector:
+      ":function[body.body.0.directive='worklet'] > :matches(ObjectPattern, ArrayPattern).params AssignmentPattern",
+    message: WORKLET_DEFAULT_PARAM_MESSAGE,
+  },
+];
+
 module.exports = defineConfig([
   expoConfig,
   {
@@ -443,19 +461,36 @@ module.exports = defineConfig([
     // JSX 가 없는 .ts 는 태그 검사가 필요 없고 별칭(import·재수출)만 막으면 된다.
     files: ['src/**/*.ts', 'app/**/*.ts'],
     ignores: [...TEST_IGNORES, ROUTE_DEV],
-    rules: { 'no-restricted-syntax': ['error', ...DELETE_DIALOG_ALIAS_GATE] },
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...DELETE_DIALOG_ALIAS_GATE,
+        ...WORKLET_DEFAULT_PARAM_GATE,
+      ],
+    },
   },
   {
     files: ['src/**/*.tsx', 'app/**/*.tsx'],
     ignores: [...TEST_IGNORES, ROUTE_DEV],
-    rules: { 'no-restricted-syntax': ['error', ...DELETE_DIALOG_GATE] },
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...DELETE_DIALOG_GATE,
+        ...WORKLET_DEFAULT_PARAM_GATE,
+      ],
+    },
   },
   {
     // 빈 핸들러 금지는 pages·라우트만(원 스캔 범위). 같은 규칙이라 삭제 게이트를 펼쳐 함께 선언한다(위 ⚠️).
     files: ['src/pages/**/*.tsx', 'app/**/*.tsx'],
     ignores: [...TEST_IGNORES, ROUTE_DEV],
     rules: {
-      'no-restricted-syntax': ['error', ...DELETE_DIALOG_GATE, ...DEAD_HANDLER],
+      'no-restricted-syntax': [
+        'error',
+        ...DELETE_DIALOG_GATE,
+        ...DEAD_HANDLER,
+        ...WORKLET_DEFAULT_PARAM_GATE,
+      ],
     },
   },
   {
