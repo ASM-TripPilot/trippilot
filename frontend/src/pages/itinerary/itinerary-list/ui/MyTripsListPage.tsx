@@ -47,11 +47,15 @@ import { TripCardContainer } from './TripCardContainer';
 
 /**
  * TRIP-468 · h37 "내 여행" 목록 배선 — `useGetTrips` → 최신순 정렬 → 카드마다
- * `<TripCardContainer>` 렌더, empty/loading 판정. `MyTripsListScreen` 에 mode·카드를 내린다.
+ * `<TripCardContainer>` 렌더, loading/error/empty 판정. `MyTripsListScreen` 에 mode·카드를 내린다.
  *
  * **이 목록이 다중 여행의 유일한 진입점**이다 — 예전엔 첫 여행(`trips.data[0]`) 하나로만
  * 리다이렉트해 둘째 이후 여행이 이 탭에서 영영 접근 불가였다(핵심 결함, AC-1). 이제 리다이렉트하지
  * 않고 모든 여행을 카드로 나열한다.
+ *
+ * TRIP-1615 · 조회가 실패했고 받아 둔 목록이 없으면 error 얼굴 + [다시 시도](INV-4) — 예전엔 isError 를 안 봐서 실패가
+ * empty("아직 만든 여행이 없어요")로 접혔다. 데이터가 있는 재조회 실패는 목록을 그대로 둔다. 데이터 없는 오류에서
+ * refetch 하면 쿼리가 pending 으로 돌아가므로 재시도 중엔 loading 얼굴이 대신한다(별도 재시도 중 상태를 두지 않는다).
  *
  * TRIP-1122 · 정렬 기준(최신순·출발일순·이름순)과 정렬 시트 열림을 페이지가 쥔다 — 시트는 열릴 때만 그린다.
  * 고른 기준은 기기에 한 줄 남기고(`itinerary.myTrips.sort`), 마운트 때 한 번 읽는다: 읽기 전엔 최신순, 오면 그
@@ -227,6 +231,18 @@ export function MyTripsListPage(): ReactElement {
   if (trips.isPending) {
     return (
       <MyTripsListScreen mode="loading" onPressCreateTrip={onPressCreateTrip} />
+    );
+  }
+
+  if (trips.isError && !trips.data) {
+    return (
+      <MyTripsListScreen
+        mode="error"
+        onPressCreateTrip={onPressCreateTrip}
+        onRetry={() => {
+          trips.refetch();
+        }}
+      />
     );
   }
 
