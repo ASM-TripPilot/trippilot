@@ -101,9 +101,10 @@ export function SlotFillPage({
   const queryClient = useQueryClient();
   // PARTIAL 인 동안만 2초(15회 뒤 5초, pollIntervalMs)마다 다시 부르고 COMPLETE·FAILED 에서 멈춘다(함수형 refetchInterval — 매 응답
   // 뒤 다음 간격을 정한다). 상한은 두지 않는다 — 짧은 상한은 반쪽 일정에서 조용히 멈춘다(openapi).
-  // TRIP-1614 · 일정 탭(MyTripsListPage)과 달리 화면 포커스 게이트를 걸지 않는다 — 생성을 지켜보는 화면이라 복귀 시
-  // 최신이 곧바로 필요하다. 장소 검색 등을 위에 쌓는 경로(router.push)가 있어 그동안 뒤에서 계속 묻고, 상한이 없어
-  // 서버가 FAILED 로 닫을 때까지(약 11분) 이어질 수 있다. 게이트 확대가 필요하면 새 티켓.
+  // TRIP-1614 · 화면 포커스 게이트를 걸지 않는다 — 생성을 지켜보는 화면이라 복귀 시 최신이 곧바로 필요하다. 장소 검색 등을
+  // 위에 쌓는 경로(router.push)가 있어 그동안 뒤에서 계속 묻고, 상한이 없어 서버가 FAILED 로 닫을 때까지(약 11분) 이어질 수
+  // 있다. 게이트 확대가 필요하면 새 티켓. 앱 셸의 감시(`useGenerationWatch`, TRIP-1618)는 이 여행의 이 화면이 최상단인
+  // 동안 묻지 않는다(양보) — 위에 다른 화면이 쌓이면 셸이 이어받는다.
   const itinerary = useGetTripsTripIdItinerary(tripId, {
     query: {
       refetchInterval: (query) =>

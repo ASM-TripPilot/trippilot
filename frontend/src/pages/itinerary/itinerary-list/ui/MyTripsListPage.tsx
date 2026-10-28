@@ -32,8 +32,6 @@ import {
   type MyTripsSortKey,
 } from '../model/myTripsOrder';
 import {
-  pollIntervalMs,
-  isGenerationRunning,
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary';
@@ -86,35 +84,15 @@ export function MyTripsListPage(): ReactElement {
   const list = trips.data ?? [];
 
   // 새 훅은 전부 아래 일찍 return 들보다 위(훅 호출 순서 규칙).
-  // TRIP-1271 · 생성이 도는 여행(PARTIAL 이거나 세션 있음)만 2초마다 다시 묻는다 — 탭 화면은 내려가지 않아
-  // 다시 물을 계기가 없었다. 조회 실패면 멈춘다(재조회 실패에도 직전 data 가 남으므로 error 를 먼저 본다 —
-  // 조용한 무한 재시도 금지, INV-4). 상한은 두지 않는다(openapi — 멈춘 생성은 서버가 FAILED 로 닫는다).
-  // 카드 컨테이너는 같은 캐시 키를 구독만 하므로 거기엔 걸지 않는다(폴링 결정을 한 곳에 모은다 — 같은 키의
-  // 관찰자 타이머는 쿼리 상태가 바뀔 때마다 함께 다시 맞춰져 요청 수가 겹치지는 않는다).
-  //
-  // TRIP-1614 · 이 목록이 보일 때(`focused`)만 묻는다 — 다른 탭이나 위에 쌓인 화면 뒤에서는 멈춘다(OS 백그라운드는
-  // AppProviders 의 focusManager 가 맡는다). state 로 읽는다: TanStack 의 관찰자는 옵션이 다시 들어올
-  // 때(setOptions)와 쿼리 상태가 바뀔 때만 간격을 다시 계산하고, 이미 무장된 타이머는 이 함수를 다시 부르지 않는다.
-  // state 는 값이 바뀌면 반드시 리렌더 → 옵션 재주입으로 타이머를 다시 맞추는 보장이 있다. ref 는 이 보장이 없어
-  // 다른 리렌더(이 페이지는 blur 정리의 setSeen 등)에 우연히 기대게 된다 — 그래서 ref 로 바꿔도 테스트는 못 가르니
-  // (code-critic M2b) 리뷰 계약으로 지킨다.
-  // 복귀 때 즉시 재조회를 따로 넣지 않는다 — 30초 넘게 비웠으면 아래 탭 복귀 재조회(stale:true)가 1건 내고,
-  // 그 미만이면 데이터가 신선해 폴링 간격(2~5초) 뒤 첫 요청이 나간다.
-  // TRIP-1286 — 목록이 보이는 동안만 판정. 첫 렌더는 안 보임으로 시작해 포커스 effect 가 켠다.
+  // TRIP-1618 · 생성 중 일정의 폴링은 이 페이지가 아니라 앱 셸(`useGenerationWatch`)이 한다 — 아래 `useQueries` 는 그 칸을
+  // 읽기만 한다(셸이 같은 캐시 칸을 갱신하면 카드·배너가 저절로 바뀐다). 예전엔 여기서 2초 간격으로 물었다(TRIP-1271) —
+  // 탭 화면은 내려가지 않아 다시 물을 계기가 없었기 때문이고, TRIP-1614 가 보일 때만 묻도록 줄였다.
+  // `focused` 는 폴링이 아니라 완료 배너 판정(TRIP-1286)이 계속 쓴다 — 목록이 보이는 동안만 판정, 첫 렌더는 안 보임으로 시작해
+  // 포커스 effect 가 켠다.
   const [focused, setFocused] = useState(false);
   const itineraries = useQueries({
     queries: list.map((trip) =>
-      getGetTripsTripIdItineraryQueryOptions(trip.tripId, {
-        query: {
-          refetchInterval: (query) =>
-            focused &&
-            query.state.status !== 'error' &&
-            (query.state.data?.generationState === 'PARTIAL' ||
-              isGenerationRunning(query.state.data))
-              ? pollIntervalMs(query.state.dataUpdateCount)
-              : false,
-        },
-      })
+      getGetTripsTripIdItineraryQueryOptions(trip.tripId)
     ),
   });
   const [seen, setSeen] = useState<readonly string[] | null>(null);

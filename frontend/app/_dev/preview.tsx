@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Image,
   Pressable,
@@ -99,6 +99,7 @@ import type { UnplacedMustVisitRow } from '@/features/itinerary/model/unplacedMu
 import type { StayRecommendView as StayRecommendViewModel } from '@/pages/itinerary/itinerary-stay-recommend/model/stayRecommend';
 import { CoPickStepper } from '@/pages/itinerary/itinerary-copick/ui/CoPickStepper';
 import { GenerationDoneBar } from '@/pages/itinerary/itinerary-list/ui/GenerationDoneBar';
+import { showToast } from '@/shared/ui/Toast';
 import { DistanceConnector } from '@/widgets/map-sheet-shell';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell';
 import type { GenerationProgressCell } from '@/widgets/map-sheet-shell';
@@ -501,6 +502,40 @@ function LoginPreview(props: LoginState) {
 // Figma 밴드 분류(first-cut 9) + 프레임·코드 둘 다 없는 발명 화면용 '기타'(TRIP-641).
 // 파트 2 네비가 이 값으로 166개 상태를 그룹핑한다 — figma-structure.md 밴드 표가 근거.
 type Band = 'a' | 'b' | 'c' | 'd' | 'e' | 'g' | 'h' | 'i' | 'j' | 'l' | '기타';
+
+/**
+ * 생성 완료·실패 토스트(TRIP-1618) — 루트의 `ToastHost` 가 그리므로 이 화면은 마운트 때 `showToast` 만 부른다. 액션 토스트는 6초
+ * (`TOAST_ACTION_VISIBLE_MS`) 뒤 사라지니 모양을 오래 보려면 "다시 띄우기"를 누른다. "보기"는 프리뷰라 아무 데도 안 간다.
+ */
+function GenerationToastPreview({
+  kind,
+}: {
+  kind: 'complete' | 'failed';
+}): ReactElement {
+  const [shots, setShots] = useState(0);
+  useEffect(() => {
+    const complete = kind === 'complete';
+    showToast({
+      message: complete ? '일정이 완성됐어요' : '일정을 만들지 못했어요',
+      testID: complete
+        ? 'generation-complete-toast'
+        : 'generation-failed-toast',
+      tone: complete ? 'success' : 'error',
+      action: { label: '보기', onPress: noop },
+    });
+  }, [kind, shots]);
+  return (
+    <View className="flex-1 items-center justify-center bg-white">
+      <Pressable
+        testID="preview-generation-toast-replay"
+        accessibilityRole="button"
+        onPress={() => setShots((n) => n + 1)}
+      >
+        <Text>다시 띄우기</Text>
+      </Pressable>
+    </View>
+  );
+}
 
 interface PreviewState {
   key: string;
@@ -6364,6 +6399,20 @@ export const PREVIEW_STATES: PreviewState[] = [
         <GenerationDoneBar tripName="서귀포시 여행" onPressView={noop} />
       </View>
     ),
+  },
+  {
+    key: 'h-generation-complete-toast',
+    band: 'h',
+    label: 'h · 생성 완료 토스트(보기)',
+    login: null,
+    render: () => <GenerationToastPreview kind="complete" />,
+  },
+  {
+    key: 'h-generation-failed-toast',
+    band: 'h',
+    label: 'h · 생성 실패 토스트(오류 톤)',
+    login: null,
+    render: () => <GenerationToastPreview kind="failed" />,
   },
   // TRIP-1297 · 큰 글자 가지 — 페이지가 isLargeText 일 때 고르는 배치(목록 스크롤 맨 위 · inline)를 손 조립한다.
   // inline 은 prop 이라 OS 배율과 무관하게 이 모양을 그린다. 꺾임·높이는 content_size 를 키우고 냉시작해 본다.
