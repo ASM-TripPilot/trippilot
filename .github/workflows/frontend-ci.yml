@@ -21,12 +21,25 @@ env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/trippilot-frontend
 
 jobs:
+  # 게이트를 네 갈래로 나눠 러너 4대에서 병렬로 돈다(TRIP-1620) — 정적 검사(checks) · node 버킷 · 통합 버킷 2샤드.
+  # 한 갈래라도 실패하면 이 잡이 실패한다(= 워크플로 red, image 도 안 돈다). 고정비(checkout·setup·install·복원)는 갈래마다 반복된다.
+  # 샤드 수는 2 — 통합 버킷(≈244s)을 반으로 나누면 node 버킷(≈186s)과 비슷해진다. 더 쪼개도 벽시계는 node 갈래에 묶인다.
   test:
+    name: test (${{ matrix.part }}${{ matrix.shard && format(' {0}', matrix.shard) || '' }})
     runs-on: ubuntu-latest
-    # actions: write = 아래 옛 캐시 정리(gh cache delete). permissions 를 적으면 나머지가 none 이 되므로 checkout 용 contents: read 를 함께 둔다.
-    permissions:
-      contents: read
-      actions: write
+    strategy:
+      matrix:
+        include:
+          - part: checks
+          - part: node
+          - part: integration
+            shard: 1/2
+          - part: integration
+            shard: 2/2
+    # 모든 갈래의 값이 같다 — cache-save 잡이 접두로 저장 키를 만들고, 갈래 수로 조각이 다 왔는지 센다.
+    outputs:
+      cache-prefix: ${{ steps.cache-key.outputs.prefix }}
+      cache-parts: ${{ strategy.job-total }}
     defaults:
       run:
         working-directory: frontend
@@ -45,7 +58,7 @@ jobs:
       # jest 변환 캐시·ESLint 캐시 복원(TRIP-1613). 저장 키는 run 마다 달라(run_id·run_attempt) 매번 새로 저장되고,
       # 복원은 restore-keys 접두로 같은 설정 해시의 가장 최근 것을 고른다 — 키를 해시만으로 두면 정확 키 적중 시
       # 저장을 건너뛰어 캐시가 첫 저장 시점에 동결된다. lock·babel·jest 설정이 바뀌면 접두가 달라 옛 캐시를 안 쓴다.
-      # 키 접두를 한 번만 계산해 restore·save·정리가 같은 값을 쓴다.
+      # 키 접두를 한 번만 계산해 restore·save·정리가 같은 값을 쓴다. 갈래마다 같은 캐시 하나를 통째로 복원한다.
       - id: cache-key
         run: echo "prefix=fe-lint-jest-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml', 'frontend/babel.config.js', 'frontend/jest*.config.js') }}-" >> "$GITHUB_OUTPUT"
       - uses: actions/cache/restore@v5
@@ -59,6 +72,7 @@ jobs:
       # `pnpm codegen` 을 안 돌린 PR 을 잡는다. `git diff` 가 아니라 `git status --porcelain` 인 이유: 새 스키마 파일은
       # untracked 라 `git diff --exit-code` 에 안 보인다. 로컬 재현: 커밋한 뒤 frontend/ 에서 `pnpm codegen` → 같은 git status 가 비어야 한다.
       - name: codegen drift gate
+        if: matrix.part == 'checks'
         run: |
           pnpm codegen
           drift=$(git status --porcelain -- src/shared/api/generated)
@@ -67,47 +81,101 @@ jobs:
             echo "$drift"
             exit 1
           fi
-      - run: pnpm lint
+      - if: matrix.part == 'checks'
+        run: pnpm lint
       # 포맷 게이트: 로컬 verify-gates 의 `pnpm format` 이 신고 밖 파일을 다시 쓰지 않도록 미포맷 파일이 있으면 실패.
-      - run: pnpm format:check
-      - run: pnpm tsc
+      - if: matrix.part == 'checks'
+        run: pnpm format:check
+      - if: matrix.part == 'checks'
+        run: pnpm tsc
       # FSD 구조 게이트(TRIP-1158): 공식 린터 Steiger 가 폴더·슬라이스 배치를 본다. 설정(steiger.config.ts)은
       # cwd 기준으로만 찾으므로 working-directory(frontend)에서 돈다. 진단 1건이라도 있으면 실패(--fail-on-warnings).
-      - run: pnpm fsd
+      - if: matrix.part == 'checks'
+        run: pnpm fsd
       # 구조 인벤토리 게이트: --write 재생성 결과가 커밋본과 다르면(=파일 추가·삭제·export 변경 후
       # --write 미실행) 드리프트로 실패. --check 는 손-프로즈가 죽은 경로를 가리키는 '유령'을 잡는다.
       # (볼트가 없는 CI 에선 '개념 유령' 검사는 스크립트가 자동으로 건너뛴다.)
       - name: structure map drift gate
+        if: matrix.part == 'checks'
         run: |
           node .claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs --write
           git diff --exit-code docs/structure.generated.md
           node .claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs --check
-      # pnpm test = test:node(--experimental-vm-modules) && test:integration(MSW 버킷)
-      - run: pnpm test
-      # 저장은 develop push 의 green run 에서만 — PR 이 저장한 캐시는 그 PR scope 에 묶여 거의 안 읽히고, 리포 캐시가
-      # 이미 10GB 한도 위라 run 마다 쌓으면 다른 잡(docker·java) 캐시가 밀린다. PR 은 develop 캐시를 복원만 한다.
-      - uses: actions/cache/save@v5
+      # node 버킷(--experimental-vm-modules)과 MSW 통합 버킷은 flag 가 달라 한 jest 로 못 합친다 — 갈래를 나눠 돈다.
+      - if: matrix.part == 'node'
+        run: pnpm test:node
+      # --shard=i/n: jest 가 테스트 파일을 경로 해시로 n 등분해 i 번째 몫만 돈다.
+      - if: matrix.part == 'integration'
+        run: pnpm test:integration --shard=${{ matrix.shard }}
+      # 저장은 develop push 의 green run 에서 cache-save 잡이 한 번만 한다(키 경합 방지). 여기선 갈래마다 자기 캐시를
+      # tar 로 묶어 넘긴다 — tar 인 이유: upload-artifact 는 점(.)으로 시작하는 폴더를 기본 제외하고, 폴더 하나만
+      # 올리면 그 폴더 이름이 사라진다. 통째로 넘기는 이유: 이번 run 에서 다시 안 쓴(적중한) 파일도 다음 캐시에 남아야 한다.
+      # 운반은 부가 작업이라 실패해도 게이트(=image 배포)를 막지 않는다 — 조각이 빠지면 cache-save 가 저장을 건너뛴다.
+      - name: pack cache part
         if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        continue-on-error: true
+        run: tar -cf "$RUNNER_TEMP/cache-${{ strategy.job-index }}.tar" ${{ matrix.part == 'checks' && '.eslintcache' || '.jest-cache' }}
+      - uses: actions/upload-artifact@v6
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        continue-on-error: true
+        with:
+          name: fe-cache-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/cache-${{ strategy.job-index }}.tar
+          retention-days: 1
+          # "Re-run all jobs" 때 같은 이름이 이미 있으면 충돌로 실패한다 — 덮어쓴다.
+          overwrite: true
+
+  # 갈래들의 캐시 조각을 합쳐 한 번만 저장하고 옛 엔트리를 정리한다(TRIP-1613 저장·정리를 TRIP-1620 에서 이리 옮김).
+  # needs: test 라 갈래가 전부 green 일 때만 돈다. node·통합 설정은 jest 변환 캐시 폴더가 서로 달라(config id 별)
+  # 한 갈래 것만 저장하면 다른 버킷의 캐시가 빠진다 — 그래서 합친다.
+  cache-save:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    # actions: write = 옛 캐시 정리(gh cache delete). checkout 이 없어 contents 권한은 필요 없다.
+    permissions:
+      actions: write
+    env:
+      KEY: ${{ needs.test.outputs.cache-prefix }}${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          pattern: fe-cache-*
+          path: ${{ runner.temp }}/parts
+          merge-multiple: true
+      # 조각이 갈래 수만큼 다 왔을 때만 합친다 — 하나라도 빠진 캐시를 저장하면 아래 정리가 온전한 옛 캐시를 지운다.
+      # 같은 이름 파일이 여러 조각에 있으면(haste-map 등 — 갈래마다 복원본을 함께 싣는다) 수정 시각이 새것을 남긴다.
+      - id: merge
+        run: |
+          n=$(find "$RUNNER_TEMP/parts" -name 'cache-*.tar' 2>/dev/null | wc -l)
+          if [ "$n" -ne "${{ needs.test.outputs.cache-parts }}" ]; then
+            echo "캐시 조각 $n/${{ needs.test.outputs.cache-parts }} — 저장·정리를 건너뜀"; exit 0
+          fi
+          mkdir -p frontend
+          for t in "$RUNNER_TEMP"/parts/*.tar; do tar -xf "$t" -C frontend --keep-newer-files; done
+          echo "complete=true" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/save@v5
+        if: steps.merge.outputs.complete == 'true'
         with:
           path: |
             frontend/.jest-cache
             frontend/.eslintcache
-          key: ${{ steps.cache-key.outputs.prefix }}${{ github.run_id }}-${{ github.run_attempt }}
+          key: ${{ env.KEY }}
       # 방금 저장한 것만 남기고 develop 의 옛 fe-lint-jest 엔트리를 지운다 — restore 는 최신 하나만 쓰므로 나머지는 죽은 용량이다
       # (엔트리당 ~43MB, 리포 캐시 10GB 한도 초과 상태). 새 엔트리가 목록에 안 보이면(저장 실패 등) 아무것도 지우지 않는다.
       - name: prune old lint/jest caches
-        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-        # 정리는 부가 작업이다 — 실패(gh 일시 오류·이미 지워진 id)가 test 잡을 red 로 만들어 image 배포를 막으면 안 된다.
+        if: steps.merge.outputs.complete == 'true'
+        # 정리는 부가 작업이다 — 실패(gh 일시 오류·이미 지워진 id)가 잡을 red 로 만들면 안 된다.
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-          KEEP: ${{ steps.cache-key.outputs.prefix }}${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           caches=$(gh cache list --repo "$GITHUB_REPOSITORY" --ref refs/heads/develop --key fe-lint-jest- --limit 100 --json id,key)
-          if ! echo "$caches" | jq -e --arg k "$KEEP" 'any(.key == $k)' > /dev/null; then
-            echo "새 캐시($KEEP)가 목록에 없어 정리를 건너뜀"; exit 0
+          if ! echo "$caches" | jq -e --arg k "$KEY" 'any(.key == $k)' > /dev/null; then
+            echo "새 캐시($KEY)가 목록에 없어 정리를 건너뜀"; exit 0
           fi
-          echo "$caches" | jq -r --arg k "$KEEP" '.[] | select(.key != $k) | .id' | xargs -r -n1 gh cache delete --repo "$GITHUB_REPOSITORY"
+          echo "$caches" | jq -r --arg k "$KEY" '.[] | select(.key != $k) | .id' | xargs -r -n1 gh cache delete --repo "$GITHUB_REPOSITORY"
 
   # 운영 번들 리포트(TRIP-1612): `test` 와 병렬(needs 없음 — 크리티컬 패스 밖). PR 에서만 돈다(push 와 겹쳐 artifact 가 2번 생기지 않게).
   # 실패 조건은 스크립트 종료코드뿐이다 — 1 = 번들에 금지 경로 검출(app/_dev·src/mocks·src/test-support·__fixtures__·*.test.*·assistant fake —
