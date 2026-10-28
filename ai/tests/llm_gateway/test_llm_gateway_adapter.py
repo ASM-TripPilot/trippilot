@@ -79,6 +79,23 @@ def test_effort_goes_out_as_output_config() -> None:
     assert client.kwargs["output_config"] == {"effort": "low"}
 
 
+def test_gpt_only_effort_values_are_floored_to_low() -> None:
+    """`none`·`minimal` 은 GPT 전용 — Anthropic 은 400 으로 거부한다(운영 PREFERENCE_SCORING 20/20 폴백)."""
+    for gpt_only in ("none", "minimal"):
+        client = RecordingClient()
+        AnthropicAdapter(client).invoke(replace(_REQUEST, effort=gpt_only))
+
+        assert client.kwargs["output_config"] == {"effort": "low"}
+
+
+def test_anthropic_native_effort_values_pass_through() -> None:
+    for native in ("low", "medium", "high", "xhigh", "max"):
+        client = RecordingClient()
+        AnthropicAdapter(client).invoke(replace(_REQUEST, effort=native))
+
+        assert client.kwargs["output_config"] == {"effort": native}
+
+
 def test_response_mapping_and_multi_block_join() -> None:
     client = RecordingClient(
         blocks=[
