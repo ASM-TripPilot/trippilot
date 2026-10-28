@@ -1,7 +1,11 @@
 name: frontend-ci
 
 on:
+  # push 는 develop·main 에서만 — 기능 브랜치는 pull_request 로만 돈다(TRIP-1622). 둘 다 열어 두면 같은 커밋이
+  # push run(브랜치 트리) + PR run(develop 머지 트리)으로 두 번 돌았다(2026-10-22~28 최근 100 run 중 33건 중복). 남기는 쪽이
+  # PR run 인 이유: 머지 후 실제를 보는 건 그쪽이다. PR 없이 push 만 한 브랜치는 CI 가 안 돈다 → PR 을 열거나 수동 실행.
   push:
+    branches: [develop, main]
     paths: ['frontend/**', '.github/workflows/frontend-ci.yml']
   pull_request:
     paths: ['frontend/**', '.github/workflows/frontend-ci.yml']
@@ -92,7 +96,8 @@ jobs:
           echo "$caches" | jq -r --arg k "$KEEP" '.[] | select(.key != $k) | .id' | xargs -r -n1 gh cache delete --repo "$GITHUB_REPOSITORY"
 
   # 운영 번들 리포트(TRIP-1612): `test` 와 병렬(needs 없음 — 크리티컬 패스 밖). PR 에서만 돈다(push 와 겹쳐 artifact 가 2번 생기지 않게).
-  # 실패 조건은 스크립트 종료코드뿐이다 — 1 = 번들에 app/_dev 검출, 2 = export·소스맵·s-m-e 도구 오류.
+  # 실패 조건은 스크립트 종료코드뿐이다 — 1 = 번들에 금지 경로 검출(app/_dev·src/mocks·src/test-support·__fixtures__·*.test.*·assistant fake —
+  # scripts/bundle-report.cjs FORBIDDEN_PATTERNS, TRIP-1616), 2 = export·소스맵·s-m-e 도구 오류.
   bundle-report:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
