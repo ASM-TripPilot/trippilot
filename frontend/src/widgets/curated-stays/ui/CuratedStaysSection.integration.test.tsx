@@ -21,6 +21,7 @@ import {
   useCuratedStaysController,
   type CuratedStaysProps,
 } from './CuratedStaysSection';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * TRIP-1579 — 인기 숙소 줄 + Trip.com 전체 보기 + 제휴 시트를 한 덩어리로 조립한 위젯.
@@ -44,10 +45,13 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
-const mockPush = jest.fn();
-jest.mock('expo-router', () => ({
-  router: { push: (...args: unknown[]) => mockPush(...args) },
-}));
+const { push: mockPush } = routerSpies;
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    router: ['push'],
+  })
+);
 
 jest.mock('expo-linking', () => ({
   openURL: jest.fn().mockResolvedValue(true),

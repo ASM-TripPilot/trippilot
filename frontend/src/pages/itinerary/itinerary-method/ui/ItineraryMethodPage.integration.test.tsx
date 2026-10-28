@@ -15,6 +15,7 @@ import { retryUnlessNotFound } from '@/shared/api';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 import { ItineraryMethodPage } from './ItineraryMethodPage';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * TRIP-986 #063 · BR-U3-18 — 일정이 없는 새 여행(GET itinerary 404)에서 "AI와 같이 짜기"를 눌러도
@@ -48,10 +49,13 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
-const mockPush = jest.fn();
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn() }),
-}));
+const { push: mockPush } = routerSpies;
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back'],
+  })
+);
 
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = '22222222-2222-2222-2222-222222222222';

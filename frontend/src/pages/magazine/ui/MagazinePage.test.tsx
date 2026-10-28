@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { MagazinePage } from './MagazinePage';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * TRIP-700 a02 매거진 목록 페이지 컨테이너 배선(옛 `__tests__/magazineRoute.test` — 라우트 `app/magazine.tsx` 는 `<MagazinePage />`
@@ -13,12 +14,13 @@ import { MagazinePage } from './MagazinePage';
  *    이동**하는지는 컨테이너가 상태를 소유해야 성립하므로 여기서 잠근다(칩 필터=시각 전용, 01b Q4).
  */
 
-const mockBack = jest.fn();
-const mockPush = jest.fn();
-jest.mock('expo-router', () => ({
-  // 화살표 안에서 호출 시점에 읽어 hoist 함정 회피(tabsHomeRoute 선례).
-  useRouter: () => ({ back: mockBack, push: mockPush }),
-}));
+const { back: mockBack, push: mockPush } = routerSpies;
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'back'],
+  })
+);
 
 beforeEach(() => {
   mockBack.mockClear();

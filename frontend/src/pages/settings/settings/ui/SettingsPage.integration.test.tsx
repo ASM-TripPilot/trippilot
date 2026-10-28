@@ -37,6 +37,7 @@ import {
 import { clearTokens, getTokens, saveTokens } from '@/shared/storage';
 import { registerPushToken } from '@/shared/push';
 import { primeExpoToken, primeOsPermission } from '@/test-support/pushOsFake';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * l05 설정 — SettingsPage 배선 통합 테스트(msw 로 실제 나간 요청을 본다).
@@ -78,15 +79,13 @@ jest.mock('expo-secure-store', () => {
 
 // SettingsPage 는 누르는 순간 require('expo-router').router 를 읽는다(loadRouter) — 싱글턴 형태 목.
 // 옛 3개 목은 모두 push·replace·back 셋을 줬다(넓어지지 않음).
-const mockPush = jest.fn();
-const mockReplace = jest.fn();
-jest.mock('expo-router', () => ({
-  router: {
-    push: (...args: unknown[]) => mockPush(...args),
-    replace: (...args: unknown[]) => mockReplace(...args),
-    back: jest.fn(),
-  },
-}));
+const { push: mockPush, replace: mockReplace } = routerSpies;
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    router: ['push', 'replace', 'back'],
+  })
+);
 
 jest.mock('expo-linking', () => ({
   openURL: jest.fn().mockResolvedValue(true),

@@ -7,16 +7,13 @@ jest.mock('@/shared/api', () => ({
 
 // 라우터 — useRouter()·router 싱글턴 두 형태가 **같은 fn** 을 공유한다(02a ★1: 구현 선택 자유).
 // ⚠️ useLocalSearchParams 는 일부러 넣지 않는다(02a ★2) — termsType 은 라우트가 읽어 prop 으로 내린다.
-jest.mock('expo-router', () => {
-  const push = jest.fn();
-  const replace = jest.fn();
-  const back = jest.fn();
-  return {
-    __esModule: true,
-    useRouter: () => ({ push, replace, back }),
-    router: { push, replace, back },
-  };
-});
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back'],
+    router: ['push', 'replace', 'back'],
+  })
+);
 
 import { QueryClientProvider } from '@tanstack/react-query';
 import {

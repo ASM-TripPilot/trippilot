@@ -35,16 +35,13 @@ jest.mock('@/shared/push', () => ({
   registerPushIfGranted: jest.fn(() => Promise.resolve()),
 }));
 
-jest.mock('expo-router', () => {
-  const replace = jest.fn();
-  const push = jest.fn();
-  const back = jest.fn();
-  return {
-    __esModule: true,
-    useRouter: () => ({ replace, push, back }),
-    router: { replace, push, back },
-  };
-});
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back'],
+    router: ['push', 'replace', 'back'],
+  })
+);
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const routerMock = require('expo-router').router as {

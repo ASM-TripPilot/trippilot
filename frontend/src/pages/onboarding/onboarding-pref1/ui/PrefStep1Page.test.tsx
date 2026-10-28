@@ -33,16 +33,13 @@ import { PrefStep1Page } from './PrefStep1Page';
  * 3동작: 준비(reset+렌더) → 실행(탭) → 단언(화면 반영/스토어 값/라우터 호출).
  */
 
-jest.mock('expo-router', () => {
-  const replace = jest.fn();
-  const push = jest.fn();
-  const back = jest.fn();
-  return {
-    __esModule: true,
-    useRouter: () => ({ replace, push, back }),
-    router: { replace, push, back },
-  };
-});
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back'],
+    router: ['push', 'replace', 'back'],
+  })
+);
 
 // TRIP-1595 D3 — 1/2·2/2 의 모든 완료 출구는 홈('/')이 아니라 기능 안내로 간다.
 const TOUR_ROUTE = '/onboarding-tour';

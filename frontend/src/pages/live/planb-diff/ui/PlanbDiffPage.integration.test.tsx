@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
 import { PlanbDiffPage } from './PlanbDiffPage';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * TRIP-441 · AC-1·2·3·4 — planb-diff 배선을 **확정/취소/성공전이/실패/pending** 으로 태우는 심판.
@@ -41,12 +42,14 @@ const mockCancelMutate = jest.fn(
   }
 );
 
-const mockPush = jest.fn();
-const mockReplace = jest.fn();
-const mockNavigate = jest.fn();
-const mockBack = jest.fn();
+const {
+  push: mockPush,
+  replace: mockReplace,
+  navigate: mockNavigate,
+  back: mockBack,
+  dismissTo: mockDismissTo,
+} = routerSpies;
 // TRIP-1418 — 확정 성공의 허브 복귀(replace → dismissTo, 스택의 원래 허브로).
-const mockDismissTo = jest.fn();
 
 jest.mock('@/features/apply-replan/model/useApplyReplan', () => ({
   useApplyReplan: () => ({
@@ -66,22 +69,13 @@ jest.mock('../model/useCancelReplan', () => ({
   }),
 }));
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({
-    push: mockPush,
-    replace: mockReplace,
-    navigate: mockNavigate,
-    back: mockBack,
-    dismissTo: mockDismissTo,
-  }),
-  router: {
-    push: mockPush,
-    replace: mockReplace,
-    navigate: mockNavigate,
-    back: mockBack,
-    dismissTo: mockDismissTo,
-  },
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back', 'dismissTo', 'navigate'],
+    router: ['push', 'replace', 'back', 'dismissTo', 'navigate'],
+  })
+);
 
 const TRIP_ID = 't1';
 const SESSION_ID = 's1';

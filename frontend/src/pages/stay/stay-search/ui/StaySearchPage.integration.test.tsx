@@ -28,6 +28,7 @@ import {
 } from '@/shared/api/tokenManager';
 import { PRICE_BUCKETS, type PriceBucketId } from '../model/priceRangeFilter';
 import * as Linking from 'expo-linking';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * e02 숙소 검색 — StaySearchPage 배선 통합 테스트(msw 로 실제 나간 요청을 본다).
@@ -65,22 +66,21 @@ let mockSearchParams: {
   amenity?: string | string[];
   stayType?: string | string[];
 } = {};
-const mockPush = jest.fn();
-const mockReplace = jest.fn();
-const mockDismissTo = jest.fn();
-const mockBack = jest.fn();
-const mockSetParams = jest.fn();
+const {
+  push: mockPush,
+  replace: mockReplace,
+  dismissTo: mockDismissTo,
+  back: mockBack,
+  setParams: mockSetParams,
+} = routerSpies;
 
-jest.mock('expo-router', () => ({
-  useLocalSearchParams: () => ({ ...mockSearchParams }),
-  router: {
-    push: (...args: unknown[]) => mockPush(...args),
-    replace: (...args: unknown[]) => mockReplace(...args),
-    dismissTo: (...args: unknown[]) => mockDismissTo(...args),
-    back: (...args: unknown[]) => mockBack(...args),
-    setParams: (...args: unknown[]) => mockSetParams(...args),
-  },
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    router: ['push', 'replace', 'back', 'dismissTo', 'setParams'],
+    params: () => ({ ...mockSearchParams }),
+  })
+);
 
 // TRIP-1581 — 인기 숙소·전체 보기는 제휴 시트를 거쳐 브라우저로 연다(실제 열기는 목).
 jest.mock('expo-linking', () => ({

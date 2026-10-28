@@ -38,6 +38,7 @@ import {
 
 import { SavedPlacesPage } from './SavedPlacesPage';
 import { newTestQueryClient } from '@/test-support/queryRender';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * d02 담은 장소 페이지(`SavedPlacesPage`)의 **배선** 통합 테스트 — 진짜 react-query + msw 가짜 서버.
@@ -69,24 +70,20 @@ jest.mock('@/shared/storage', () => ({
 }));
 
 // jest.mock 팩토리는 파일 맨 위로 끌어올려져 바깥 변수를 못 본다 — `mock` 접두 변수만 예외다.
-// push·back 은 화살표로 감싸 **호출 시점에** 목을 찾는다(즉시 읽으면 hoist 시점의 undefined 가 박힌다,
-// TRIP-221 ★16). 구현이 `router` 객체를 쓰든 `useRouter()` 를 쓰든 같은 목에 모인다.
-const mockPush = jest.fn();
-const mockBack = jest.fn();
+// push·back 은 공용 목 기록장(`routerSpies`)의 별칭이다 — 구현이 `router` 객체를 쓰든 `useRouter()` 를 쓰든
+// 같은 함수에 모인다(옛 인라인 목의 화살표 감싸기 — TRIP-221 ★16 — 는 필요 없어졌다).
+const { push: mockPush, back: mockBack } = routerSpies;
 // 주소 파라미터 창구 — 테스트가 갈아 끼우고, 목은 호출 시점에 읽는다(최상위 afterEach 가 비운다).
 let mockParams: Record<string, string | string[] | undefined> = {};
 
-jest.mock('expo-router', () => ({
-  router: {
-    push: (href: unknown) => mockPush(href),
-    back: () => mockBack(),
-  },
-  useRouter: () => ({
-    push: (href: unknown) => mockPush(href),
-    back: () => mockBack(),
-  }),
-  useLocalSearchParams: () => ({ ...mockParams }),
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'back'],
+    router: ['push', 'back'],
+    params: () => ({ ...mockParams }),
+  })
+);
 
 const BASE = 'http://localhost:8080/api/v1';
 

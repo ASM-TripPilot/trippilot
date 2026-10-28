@@ -29,6 +29,7 @@ import {
   wizardDraftData,
 } from '@/test-support/wizardDraftFixture';
 import { HomePage } from '@/pages/home';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * 홈 page — 여행 목록으로 얼굴(discovery·planning·로딩)을 고르고, 지배 여행의 일정 상태로 카드 CTA
@@ -42,16 +43,17 @@ import { HomePage } from '@/pages/home';
  * 잰다 — 이 파일은 일정 훅을 목하므로 최상위에서 불러도 모른다.
  */
 
-const mockPush = jest.fn();
-const mockReplace = jest.fn();
-const mockNavigate = jest.fn();
-jest.mock('expo-router', () => ({
-  useRouter: () => ({
-    push: mockPush,
-    replace: mockReplace,
-    navigate: mockNavigate,
-  }),
-}));
+const {
+  push: mockPush,
+  replace: mockReplace,
+  navigate: mockNavigate,
+} = routerSpies;
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'navigate'],
+  })
+);
 
 const mockUseGetTrips = jest.fn();
 const mockUseItinerary = jest.fn();

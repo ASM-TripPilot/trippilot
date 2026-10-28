@@ -6,6 +6,7 @@ import { regionPickerHref } from '@/features/explore/index.view';
 import type * as TripWizardStoreModule from '@/features/create-trip/model/tripWizardStore';
 
 import { RegionPickerPage } from './RegionPickerPage';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * TRIP-597 — e00·d1b 지역 선택 배선(표면 A 드릴다운). 페이지는 전체 카탈로그를 화면에 내리고
@@ -28,9 +29,11 @@ import { RegionPickerPage } from './RegionPickerPage';
  * 선례). 스위치를 빼면 아래쪽 케이스가 전부 red 다(실측 — 목이 실물을 대신한 채 green 이 되지 않는다).
  */
 
-const mockPush = jest.fn();
-const mockBack = jest.fn();
-const mockDismissTo = jest.fn();
+const {
+  push: mockPush,
+  back: mockBack,
+  dismissTo: mockDismissTo,
+} = routerSpies;
 const mockRefetch = jest.fn();
 const mockAddDestination = jest.fn();
 let mockParams: { purpose?: string; tab?: string } = {};
@@ -44,14 +47,13 @@ let mockRegionsResult: {
   refetch: jest.Mock;
 };
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({
-    push: mockPush,
-    back: mockBack,
-    dismissTo: mockDismissTo,
-  }),
-  useLocalSearchParams: () => ({ ...mockParams }),
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'back', 'dismissTo'],
+    params: () => ({ ...mockParams }),
+  })
+);
 
 jest.mock('@/features/explore/model/regions', () => ({
   ...jest.requireActual('@/features/explore/model/regions'),

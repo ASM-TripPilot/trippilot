@@ -21,6 +21,7 @@ import {
   MustVisitTimePage,
 } from '@/pages/itinerary/itinerary-mustvisit';
 import { newTestQueryClient } from '@/test-support/queryRender';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * TRIP-1013 #042 — 시각 지정 '저장' 연타의 두 번째 탭이, 저장 성공으로 되돌아간 필수 방문지
@@ -35,12 +36,14 @@ import { newTestQueryClient } from '@/test-support/queryRender';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
-const mockPush = jest.fn();
-const mockBack = jest.fn();
+const { push: mockPush, back: mockBack } = routerSpies;
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: mockBack, replace: jest.fn() }),
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back'],
+  })
+);
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));

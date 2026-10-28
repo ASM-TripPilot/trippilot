@@ -28,16 +28,13 @@ import { TripNewStep2Page } from './TripNewStep2Page';
  * ⚠️ 시트 실개폐·딤은 `@gorhom/bottom-sheet` 통과형 목이라 jest 사각 — 6-b 실기 전용.
  */
 
-jest.mock('expo-router', () => {
-  const push = jest.fn();
-  const back = jest.fn();
-  const replace = jest.fn();
-  return {
-    __esModule: true,
-    useRouter: () => ({ push, back, replace }),
-    router: { push, back, replace },
-  };
-});
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back'],
+    router: ['push', 'replace', 'back'],
+  })
+);
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const routerMock = require('expo-router').router as {

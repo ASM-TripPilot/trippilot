@@ -17,16 +17,13 @@ jest.mock('expo-linking', () => ({
 }));
 
 // 라우터 — 헤더 back 등 배선이 있어도 죽지 않게 고정 스텁으로 둔다.
-jest.mock('expo-router', () => {
-  const replace = jest.fn();
-  const push = jest.fn();
-  const back = jest.fn();
-  return {
-    __esModule: true,
-    useRouter: () => ({ replace, push, back }),
-    router: { replace, push, back },
-  };
-});
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back'],
+    router: ['push', 'replace', 'back'],
+  })
+);
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {

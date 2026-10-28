@@ -22,6 +22,7 @@ import { resetPressGuard } from '@/shared/lib/pressGuard';
 
 import { MustVisitListPage } from './MustVisitListPage';
 import { newTestQueryClient } from '@/test-support/queryRender';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * h02(구 h05) 배선을 **실 HTTP 로** 태우는 심판(AC-1 · AC-2 · AC-3 · AC-8 · AC-M1 · D3).
@@ -61,20 +62,20 @@ jest.mock('@/shared/storage', () => ({
 
 // jest.mock 팩토리는 파일 맨 위로 끌어올려지므로 바깥 변수를 못 본다 — 이름이 `mock` 으로
 // 시작하는 변수만 예외다(리포 확립 규칙).
-const mockPush = jest.fn();
-const mockBack = jest.fn();
-const mockReplace = jest.fn();
+const {
+  push: mockPush,
+  back: mockBack,
+  replace: mockReplace,
+  dismissTo: mockDismissTo,
+} = routerSpies;
 // TRIP-1263 — 생성 화면 진입이 스택을 먼저 걷는다. 목에 없으면 "dismissTo is not a function" 거짓 red.
-const mockDismissTo = jest.fn();
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({
-    push: mockPush,
-    back: mockBack,
-    replace: mockReplace,
-    dismissTo: mockDismissTo,
-  }),
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back', 'dismissTo'],
+  })
+);
 
 // 지도를 관찰 마커로 바꾼다 — 이 파일의 관심사는 **좌표가 조회에서 지도까지 흐르는가**이지
 // 지도 자체가 아니다. 실물 지도를 태우는 심판은 `MustVisitPickerScreen.map.test.tsx`(AC-6)다.

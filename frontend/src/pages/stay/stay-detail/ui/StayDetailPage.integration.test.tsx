@@ -24,6 +24,7 @@ import { getGetMeSettingsQueryKey } from '@/shared/api/index.hooks';
 import { formatPrice } from '@/entities/stay';
 import { stayCoverFor } from '@/test-support/placeCoverFixtures';
 import { StayDetailPage } from './StayDetailPage';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * TRIP-457 AC-2·8·9·10·11 (배선) — e03 상세 페이지가 params 데이터·제휴 시트·이동·저장에
@@ -68,18 +69,16 @@ jest.mock('@/shared/storage', () => ({
 
 // 호이스팅 예외 — 이름이 mock 으로 시작해야 한다(기존 통합테스트 관례).
 let mockSearchParams: { stayId?: string; item?: string } = {};
-const mockPush = jest.fn();
-const mockBack = jest.fn();
+const { push: mockPush, back: mockBack } = routerSpies;
 
-jest.mock('expo-router', () => ({
-  useLocalSearchParams: () => ({ ...mockSearchParams }),
-  useRouter: () => ({ push: mockPush, back: mockBack, replace: jest.fn() }),
-  router: {
-    push: (...args: unknown[]) => mockPush(...args),
-    back: (...args: unknown[]) => mockBack(...args),
-    replace: jest.fn(),
-  },
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back'],
+    router: ['push', 'replace', 'back'],
+    params: () => ({ ...mockSearchParams }),
+  })
+);
 
 jest.mock('expo-linking', () => ({
   openURL: jest.fn().mockResolvedValue(true),

@@ -41,15 +41,12 @@ import { DailyReflectionPage } from './DailyReflectionPage';
  *    `mockReturnValue` 는 남긴다 — 앞 describe 의 답이 뒤 describe 로 새지 않게 `mockReset()` 으로 지운다.
  */
 
-jest.mock('expo-router', () => ({
-  router: {
-    push: jest.fn(),
-    replace: jest.fn(),
-    dismissTo: jest.fn(),
-    canGoBack: jest.fn(() => true),
-    back: jest.fn(),
-  },
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    router: ['push', 'replace', 'back', 'dismissTo', 'canGoBack'],
+  })
+);
 
 jest.mock('../model/useDailyReflection', () => ({
   useDailyReflection: jest.fn(),
