@@ -811,17 +811,6 @@
    "collected_at": "2026-09-15T07:42:43.250752+09:00"
   },
   {
-   "event_id": "evx-c9eb75140bea5e12",
-   "name": "축산인 한마음대회",
-   "event_type": "OTHER",
-   "start": "2026-10-22",
-   "end": "2026-10-22",
-   "coord": null,
-   "address": null,
-   "region": "충북",
-   "collected_at": "2026-09-15T07:42:43.250752+09:00"
-  },
-  {
    "event_id": "evx-45eae129f75b27e5",
    "name": "영주사과축제",
    "event_type": "FESTIVAL",
@@ -914,17 +903,6 @@
    },
    "address": "강원특별자치도 삼척시 도계읍 소달길 54-30",
    "region": "강원",
-   "collected_at": "2026-09-19T06:48:23.921146+09:00"
-  },
-  {
-   "event_id": "evx-9092f54555ef3975",
-   "name": "제107회 전국체육대회",
-   "event_type": "OTHER",
-   "start": "2026-10-16",
-   "end": "2026-10-22",
-   "coord": null,
-   "address": "제주특별자치도",
-   "region": "제주",
    "collected_at": "2026-09-19T06:48:23.921146+09:00"
   },
   {
@@ -2355,17 +2333,6 @@
    },
    "address": "충북 청주시 상당구 문의면 청남대길 646",
    "region": "충북",
-   "collected_at": "2026-10-12T08:06:24.225174+09:00"
-  },
-  {
-   "event_id": "evx-2ef8c3e64987054d",
-   "name": "2026 김광석과...",
-   "event_type": "PERFORMANCE",
-   "start": "2026-10-22",
-   "end": "2026-10-22",
-   "coord": null,
-   "address": null,
-   "region": "충남",
    "collected_at": "2026-10-12T08:06:24.225174+09:00"
   },
   {
@@ -5814,17 +5781,6 @@
    "collected_at": "2026-10-22T07:40:20.155296+09:00"
   },
   {
-   "event_id": "evx-a02639fa88a837d8",
-   "name": "제35회 전국무용제 본선경연",
-   "event_type": "PERFORMANCE",
-   "start": "2026-10-06",
-   "end": "2026-10-22",
-   "coord": null,
-   "address": null,
-   "region": "서울",
-   "collected_at": "2026-10-22T07:40:20.155296+09:00"
-  },
-  {
    "event_id": "evx-78411a5e149dbc8d",
    "name": "새로운 달",
    "event_type": "EXHIBITION",
@@ -6683,6 +6639,48 @@
    "address": "전북특별자치도 순창군 순창읍 장류로 55",
    "region": "전북",
    "collected_at": "2026-10-29T08:31:46.552519+09:00"
+  },
+  {
+   "event_id": "tourapi-2613615",
+   "name": "영주 사과축제",
+   "event_type": "FESTIVAL",
+   "start": "2026-10-30",
+   "end": "2026-11-01",
+   "coord": {
+    "lat": 36.9940416559,
+    "lng": 128.6784324924
+   },
+   "address": "영주시 부석면 북지리 360-4",
+   "region": "경북",
+   "collected_at": "2026-10-30T08:36:21.055875+09:00"
+  },
+  {
+   "event_id": "tourapi-3035607",
+   "name": "광화문 마켓",
+   "event_type": "FESTIVAL",
+   "start": "2026-12-11",
+   "end": "2027-01-10",
+   "coord": {
+    "lat": 37.5716249337,
+    "lng": 126.9767679222
+   },
+   "address": "서울특별시 종로구 세종대로 지하172 (세종로)",
+   "region": "서울",
+   "collected_at": "2026-10-30T08:36:21.055875+09:00"
+  },
+  {
+   "event_id": "tourapi-3524290",
+   "name": "하숙동 1번지",
+   "event_type": "FESTIVAL",
+   "start": "2026-11-06",
+   "end": "2026-11-08",
+   "coord": {
+    "lat": 36.4521815731,
+    "lng": 127.1231838902
+   },
+   "address": "충청남도 공주시 당간지주길 21 (반죽동)",
+   "region": "충남",
+   "collected_at": "2026-10-30T08:36:21.055875+09:00"
   }
  ],
  "coverage": {
