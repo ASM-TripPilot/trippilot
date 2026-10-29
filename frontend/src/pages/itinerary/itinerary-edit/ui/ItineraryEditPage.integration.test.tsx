@@ -213,6 +213,8 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       generationMode: 'FULLY_AI',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days,
     };
   }
@@ -861,6 +863,8 @@ describe('완료 슬롯 잠금 실연동', () => {
       generationMode: 'FULLY_AI',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days,
     };
   }
@@ -1126,6 +1130,8 @@ describe('드래그 실배선', () => {
       generationMode: 'FULLY_AI',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days: [{ date: DAY, slots }],
     };
   }
@@ -1346,6 +1352,8 @@ describe('여행 중 직접 수정(i07)', () => {
       generationMode: 'FULLY_AI',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days: [{ date: DAY, slots: SLOTS }],
     };
   }
@@ -1752,6 +1760,8 @@ describe('저장 뒤 위반 요약 게이트', () => {
       generationMode: 'FULLY_AI',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days: [{ date: DAY1, slots }],
     };
   }
@@ -2141,6 +2151,8 @@ describe('저장 성공 뒤 토스트·복귀', () => {
       generationMode: 'FULLY_AI',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days: [{ date: DAY1, slots }],
     };
   }
@@ -2618,6 +2630,8 @@ describe('시각 조정 시트', () => {
       generationMode: 'FULLY_AI',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days,
     };
   }
@@ -2987,6 +3001,8 @@ describe('미지정 슬롯 저장 제외 안내', () => {
       generationMode: 'FULLY_AI',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days,
     };
   }
@@ -3014,6 +3030,8 @@ describe('미지정 슬롯 저장 제외 안내', () => {
       generationMode: 'FULLY_AI',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days,
     };
   }
@@ -3037,6 +3055,8 @@ describe('미지정 슬롯 저장 제외 안내', () => {
       generationMode: 'FULLY_AI',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days,
     };
   }

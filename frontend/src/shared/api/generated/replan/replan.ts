@@ -52,8 +52,10 @@ const withQueryKey = <T extends object, K>(
  *
  * 아직 초안이 없으면(`COLLECTING`·`SOLVING`·대안 없음) **404 가 아니라 `ready=false`** 다. 404 로 두면 "세션이 없다"와 "산출 중"이 같은 응답이 되어 화면이 로딩(`i12`)을 그릴지 오류를 그릴지 정하지 못한다.
  *
+ * **반영된(`APPLIED`) 세션도 비교를 준다**(TRIP-1412) — 원탭 [다시 짜기]는 초안을 보자마자 반영하므로 "무엇이 빠졌나"를 볼 수 있는 때가 반영 뒤뿐이다. `before` 는 반영 순간 떠 둔 그 날의 원 일정이고, `after` 는 반영된 초안이다 — 반영 직전 화면이 보였을 비교와 같다. 되돌린 뒤에도 같은 비교를 준다(무엇을 되돌렸는지). 이 기능 이전에 반영된 세션은 기준이 남지 않아 `ready=false` 다. 취소·실패·대안 없음도 `ready=false`.
+ *
  * ⚠ **소요시간 필드가 없다**(INV-3) — 전후 스냅숏은 시각과 순서만 다룬다. `returnTimeDeltaMinutes` 는 이동 소요가 아니라 **복귀 시각이 밀린 정도**다.
- * @summary 확정 전 전후 비교(i18)
+ * @summary 전후 비교(i18) — 확정 전, 그리고 반영 뒤 빠진 곳(TRIP-1412)
  */
 export const getTripsTripIdReplanSessionsSessionIdDiff = (
   tripId: string,
@@ -196,7 +198,7 @@ export function useGetTripsTripIdReplanSessionsSessionIdDiff<
   queryKey: DataTag<QueryKey, TData, TError>;
 };
 /**
- * @summary 확정 전 전후 비교(i18)
+ * @summary 전후 비교(i18) — 확정 전, 그리고 반영 뒤 빠진 곳(TRIP-1412)
  */
 
 export function useGetTripsTripIdReplanSessionsSessionIdDiff<

@@ -84,6 +84,8 @@ function withExistingItinerary(): void {
     generationMode: 'FULLY_AI',
     generationState: 'COMPLETE',
     isFallback: false,
+    scoringMode: null,
+    degradations: [],
     days: [
       {
         date: '2026-06-10',
@@ -371,6 +373,8 @@ describe('이 여행이 생성 중일 때 — 완전 AI·같이 짜기 확인', 
       generationState,
       generationSessionId,
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days: [
         {
           date: '2026-06-10',
@@ -650,6 +654,8 @@ describe('거점 숙소 다시 고르기 링크', () => {
         generationMode: 'FULLY_AI',
         generationState: 'COMPLETE',
         isFallback: false,
+        scoringMode: null,
+        degradations: [],
         days: [{ date: '2026-06-10', slots: [] }],
       };
       render(<ItineraryMethodPage tripId={TRIP_ID} />);

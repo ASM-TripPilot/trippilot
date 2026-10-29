@@ -168,6 +168,8 @@ describe('컨셉·후보·확정 순회 배선', () => {
       generationMode: 'CO_PLAN',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days,
     };
   }
@@ -849,6 +851,8 @@ describe('진행 줄 여행지 접두·지도', () => {
       generationMode: 'CO_PLAN',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days,
     };
   }
@@ -1539,6 +1543,8 @@ describe('후보 기본 선택', () => {
       generationMode: 'CO_PLAN',
       generationState,
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days,
     };
   }
@@ -2169,6 +2175,8 @@ describe('‹ 떠나기 확인', () => {
       generationMode: 'CO_PLAN',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days: [
         {
           date: DAY1,
@@ -2470,6 +2478,8 @@ describe('후보 카드 이름·태그·사진', () => {
       generationMode: 'CO_PLAN',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days: [
         {
           date: DAY1,
@@ -2727,6 +2737,8 @@ describe('진행줄·스텝퍼 배선', () => {
       generationMode: 'CO_PLAN',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days,
     };
   }
@@ -2922,6 +2934,8 @@ describe('PARTIAL 폴링·확정 잠금·조회 실패', () => {
       generationMode: 'CO_PLAN',
       generationState: state,
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days: state === 'COMPLETE' ? [day1, day2] : [day1],
     };
   }

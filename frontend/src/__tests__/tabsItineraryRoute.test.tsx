@@ -173,6 +173,8 @@ function itin(
     solveMode: 'FULL_AI',
     generationMode: 'FULLY_AI',
     isFallback: false,
+    scoringMode: null,
+    degradations: [],
     generationState,
     days: slotCounts.map((count, i) => ({
       date: `2026-06-1${i}`,

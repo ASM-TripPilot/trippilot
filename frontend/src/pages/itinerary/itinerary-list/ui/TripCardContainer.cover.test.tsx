@@ -50,6 +50,8 @@ const confirmed = {
     solveMode: 'FULL_AI',
     generationMode: 'FULLY_AI',
     isFallback: false,
+    scoringMode: null,
+    degradations: [],
     generationState: 'COMPLETE',
     days: [],
   } as Itinerary,

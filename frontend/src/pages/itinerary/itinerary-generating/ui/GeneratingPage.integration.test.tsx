@@ -157,6 +157,8 @@ describe('다른 여행 생성 중(409) 안내', () => {
       generationState: 'PARTIAL',
       generationSessionId,
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days: [
         {
           date: '2026-06-10',
@@ -857,6 +859,8 @@ describe('생성 성공 → 홈 일정 캐시', () => {
       generationMode: 'FULLY_AI',
       generationState: 'PARTIAL',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days: [
         {
           date: '2026-06-10',
@@ -1052,6 +1056,8 @@ describe('관찰 모드(mode 없음)', () => {
       generationMode: 'FULLY_AI',
       generationState,
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days: [
         {
           date: '2026-06-10',

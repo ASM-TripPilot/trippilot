@@ -124,6 +124,8 @@ const ITINERARY_ENVELOPE = {
   solveMode: 'MINIMAL',
   generationMode: 'MANUAL',
   isFallback: false,
+  scoringMode: null,
+  degradations: [],
   generationState: 'COMPLETE',
 };
 

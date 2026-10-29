@@ -328,6 +328,8 @@ describe('CO_PLAN 씨앗 — 첫 비고정 슬롯 착지', () => {
     generationMode: 'CO_PLAN',
     generationState: 'PARTIAL',
     isFallback: false,
+    scoringMode: null,
+    degradations: [],
     days: [
       {
         date: '2026-06-10',
@@ -518,6 +520,8 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
       generationMode,
       generationState: 'PARTIAL',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days: [{ date: '2026-06-10', slots }],
     } as Itinerary;
   }

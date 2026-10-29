@@ -189,6 +189,8 @@ describe('저장하고 확정하기', () => {
       generationMode: 'MANUAL',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days: [
         { date: DAY, slots: [slot('a', '09:00:00'), slot('b', '11:00:00')] },
       ],
@@ -581,6 +583,8 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       generationMode: 'MANUAL',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days: [{ date: DAY, slots }],
     };
   }
@@ -1248,6 +1252,8 @@ describe('빈 일정으로 시작 — POST 성공 뒤 헤더·일차 칩', () =>
     generationMode: 'MANUAL',
     generationState: 'COMPLETE',
     isFallback: false,
+    scoringMode: null,
+    degradations: [],
     days: [
       { date: '2026-10-20', slots: [] },
       { date: '2026-10-21', slots: [] },
@@ -1441,6 +1447,8 @@ describe('새로 짜기(startFresh) — 옛 일정 비우기', () => {
       generationMode: 'FULLY_AI',
       generationState: 'COMPLETE',
       isFallback: true,
+      scoringMode: null,
+      degradations: [],
       days: [{ date: DAY1, slots: [slot('old')] }],
     };
   }
@@ -1455,6 +1463,8 @@ describe('새로 짜기(startFresh) — 옛 일정 비우기', () => {
       generationMode: 'MANUAL',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days: [
         { date: DAY1, slots },
         { date: DAY2, slots: [] },
@@ -1858,6 +1868,8 @@ describe('저장 뒤 위반 요약 게이트', () => {
       generationMode: 'MANUAL',
       generationState: 'COMPLETE',
       isFallback: false,
+      scoringMode: null,
+      degradations: [],
       days: [
         {
           date: DAY,
@@ -2299,6 +2311,8 @@ describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMo
     solveMode: 'MINIMAL',
     generationMode: 'MANUAL',
     isFallback: false,
+    scoringMode: null,
+    degradations: [],
     generationState: 'COMPLETE',
     days: [{ date: '2026-06-10', slots: [] }],
   };

@@ -85,6 +85,8 @@ function itinerary(poiIds: string[]): Itinerary {
     generationMode: 'FULLY_AI',
     generationState: 'COMPLETE',
     isFallback: false,
+    scoringMode: null,
+    degradations: [],
     days: [
       {
         date: DAY,
