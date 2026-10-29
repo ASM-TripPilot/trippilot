@@ -3,7 +3,11 @@ import * as SecureStore from 'expo-secure-store';
 import { ScrollView } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -293,6 +297,11 @@ afterEach(() => {
 });
 
 afterAll(() => server.close());
+
+// TRIP-1638 — onlineManager 는 모듈 싱글턴이다. 오프라인 케이스가 어떻게 끝나든 다음 케이스는 온라인으로 시작한다(describe 안이 아니라 파일 최상위).
+afterEach(() => {
+  onlineManager.setOnline(true);
+});
 
 /** 마지막으로 렌더한 페이지의 QueryClient — 떠나 있는 사이 캐시가 바뀐 상황을 만들 때만 쓴다(TRIP-1352). */
 let lastClient: QueryClient | null = null;
@@ -987,6 +996,199 @@ describe('TRIP-1615 · GET /trips 조회 실패 — "여행 없음"으로 접지
     expect(screen.queryByTestId(ERROR)).toBeNull();
     expect(screen.queryByTestId(RETRY)).toBeNull();
     expect(count(TRIPS_GET)).toBe(1);
+  });
+});
+
+// TRIP-1638 · 오프라인으로 처음 켜면(캐시 없음) 요청이 나가지도 않은 채 `pending + paused` 가 되어 스켈레톤이 영원히 남던 문제(INV-4).
+// 오프라인 지원이 아니라 정직한 표시다 — "인터넷에 연결되어 있지 않아요" 얼굴(버튼 없음, 복귀는 자동)이고, 캐시가 있으면 목록 그대로다.
+// *(개념 — paused)* 상태 두 축: status=데이터를 받아 봤나(pending), fetchStatus=요청이 지금 어떤가(paused=보류). 오프라인 첫 조회는 그 조합이다.
+// `renderPage` 의 QueryClient 는 retry:false 라 "NetInfo 가 늦게 알려 요청이 한 번 실패한 뒤 paused" 레이스는 재현할 수 없다 — 렌더 전에
+// `setOnline(false)` 를 부르는 직접 경로만 본다(레이스는 jest 사각, 6-b).
+describe('TRIP-1638 · 오프라인 콜드스타트 — 스켈레톤 대신 오프라인 얼굴, 복귀하면 자동으로 채워진다', () => {
+  const OFFLINE = 'itinerary-tab-offline';
+  const TITLE_OFFLINE = '인터넷에 연결되어 있지 않아요';
+  const DESC_OFFLINE = '연결되면 자동으로 불러올게요';
+  const TRIPS_GET = 'GET /api/v1/trips';
+  const SKELETON = 'my-trip-skeleton-1';
+
+  /** 'gate' 면 테스트가 열 때까지 `GET /trips` 응답을 붙잡는다(온라인 느림 = fetching 상태를 만든다). */
+  let tripsGate: (() => void)[] = [];
+  let tripsReplies: ('ok' | 500 | 'gate')[] = [];
+
+  beforeEach(() => {
+    tripsGate = [];
+    tripsReplies = [];
+    server.use(
+      http.get(`${BASE}/trips`, async () => {
+        const reply = tripsReplies.shift() ?? 'ok';
+        if (reply === 500) {
+          return HttpResponse.json(
+            { error: { code: 'INTERNAL', message: '서버 오류' } },
+            { status: 500 }
+          );
+        }
+        if (reply === 'gate') {
+          await new Promise<void>((resolve) => tripsGate.push(resolve));
+        }
+        return HttpResponse.json(serverTrips);
+      })
+    );
+  });
+
+  // 단언이 문을 열기 전에 실패해도 붙잡힌 요청을 남기지 않는다 — 안 풀면 jest 가 red 대신 멈춘다.
+  afterEach(() => {
+    const waiting = tripsGate;
+    tripsGate = [];
+    waiting.forEach((open) => open());
+  });
+
+  function client(): QueryClient {
+    if (!lastClient) throw new Error('renderPage 를 먼저 불러야 한다');
+    return lastClient;
+  }
+
+  /** 지금 여행 목록 쿼리의 두 축 — 오프라인 콜드의 증거("요청이 아예 안 나갔다"는 히트 0 과 짝). */
+  function tripsAxes(): { status?: string; fetchStatus?: string } {
+    const state = client().getQueryState(getGetTripsQueryKey());
+    return { status: state?.status, fetchStatus: state?.fetchStatus };
+  }
+
+  /** 오프라인으로 만든 뒤 그린다. 앞 케이스의 오프라인이 새지 않았음을 먼저 확인한다(02a ★1). */
+  function goOffline(): void {
+    expect(onlineManager.isOnline()).toBe(true);
+    onlineManager.setOnline(false);
+  }
+
+  it('M1 오프라인으로 처음 켜면 스켈레톤 대신 오프라인 얼굴이 뜨고, 요청은 한 번도 안 나간다', async () => {
+    // 준비
+    goOffline();
+
+    // 실행
+    renderPage();
+
+    // 단언 — 얼굴이 먼저 도착해야 아래 "없음" 단언이 의미가 있다(02a ★4).
+    const face = await screen.findByTestId(OFFLINE);
+    expect(within(face).getByText(TITLE_OFFLINE)).toBeOnTheScreen();
+    expect(within(face).getByText(DESC_OFFLINE)).toBeOnTheScreen();
+    // 화면 틀(제목 "내 여행")은 그대로고 얼굴은 그 안에 앉는다.
+    expect(
+      within(screen.getByTestId('itinerary-tab-root')).getByTestId(OFFLINE)
+    ).toBeOnTheScreen();
+    // 보류 요청에 refetch 는 무동작이다 — 버튼을 두면 "눌렀는데 아무 일도 없는" 새 침묵 실패(D4).
+    expect(within(face).queryAllByRole('button')).toHaveLength(0);
+    expect(screen.queryByTestId(SKELETON)).toBeNull();
+    expect(screen.queryByTestId('itinerary-tab-error')).toBeNull();
+    expect(screen.queryByTestId('itinerary-tab-empty')).toBeNull();
+    expect(screen.queryByTestId('itinerary-tab-create-trip')).toBeNull();
+    expect(screen.queryByTestId('my-trips-sort')).toBeNull();
+    expect(screen.queryAllByTestId(/^my-trip-card-/)).toHaveLength(0);
+    // 증거 — 요청이 안 나갔고(보류), 데이터는 못 받았다.
+    expect(count(TRIPS_GET)).toBe(0);
+    expect(tripsAxes()).toEqual({ status: 'pending', fetchStatus: 'paused' });
+  });
+
+  it('M2 온라인으로 돌아오면 사용자가 아무것도 안 해도 목록이 채워지고 오프라인 얼굴은 사라진다', async () => {
+    // 준비 — 오프라인 얼굴이 떠 있는 상태가 출발점(앵커).
+    goOffline();
+    renderPage();
+    await screen.findByTestId(OFFLINE);
+    expect(count(TRIPS_GET)).toBe(0);
+
+    // 실행 — 입력 없이 연결만 돌아온다.
+    act(() => {
+      onlineManager.setOnline(true);
+    });
+
+    // 단언 — 복귀 후 화면 갱신은 비동기라 카드가 보일 때까지 기다린다(02a ★6).
+    expect(await screen.findByTestId(`my-trip-card-${A}`)).toBeOnTheScreen();
+    expect(screen.getByTestId(`my-trip-card-${B}`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(OFFLINE)).toBeNull();
+    await settle();
+    expect(count(TRIPS_GET)).toBe(1);
+  });
+
+  it('M3 (선제 green) 받아 둔 목록이 있으면 오프라인이어도 목록 그대로 — 오프라인 얼굴은 없다', async () => {
+    // 준비 — 다른 탭이 이미 받아 둔 여행 목록. 상태는 success + paused(데이터 있음 + 보류).
+    goOffline();
+
+    // 실행
+    renderPage({ trips: [TRIP_A, TRIP_B], itineraries: { [B]: CONFIRMED_B } });
+
+    // 단언
+    expect(await screen.findByTestId(`my-trip-card-${A}`)).toBeOnTheScreen();
+    expect(screen.getByTestId(`my-trip-card-${B}`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(OFFLINE)).toBeNull();
+    // 앵커 — "데이터가 있고 보류 중"이라는 바로 그 상태를 시험했다.
+    await settle();
+    expect(tripsAxes()).toEqual({ status: 'success', fetchStatus: 'paused' });
+    expect(count(TRIPS_GET)).toBe(0);
+  });
+
+  it('M4 (선제 green) 온라인에서 응답이 느린 것은 오프라인이 아니다 — 스켈레톤이 정상이고 얼굴은 없다', async () => {
+    // 준비 — 응답을 붙잡아 fetching 상태를 만든다.
+    tripsReplies = ['gate'];
+
+    // 실행
+    renderPage();
+    await waitFor(() => expect(count(TRIPS_GET)).toBe(1));
+
+    // 단언 — 요청이 나가는 중이다(앵커: fetching ≠ paused).
+    expect(tripsAxes()).toEqual({ status: 'pending', fetchStatus: 'fetching' });
+    expect(screen.getByTestId(SKELETON)).toBeOnTheScreen();
+    expect(screen.queryByTestId(OFFLINE)).toBeNull();
+
+    // 실행 — 응답이 오면 목록으로 바뀐다.
+    act(() => {
+      tripsGate.forEach((open) => open());
+    });
+    expect(await screen.findByTestId(`my-trip-card-${A}`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(OFFLINE)).toBeNull();
+  });
+
+  it('M5 (선제 green) 온라인 500 은 오프라인 얼굴이 아니라 기존 오류 얼굴이다', async () => {
+    // 준비
+    tripsReplies = [500];
+
+    // 실행
+    renderPage();
+
+    // 단언 — 오류 얼굴은 버튼이 하나(다시 시도)다: 같은 쿼리로 M1 의 "버튼 0" 이 항상 0 이 아님을 대조한다(02a ★5).
+    const error = await screen.findByTestId('itinerary-tab-error');
+    expect(within(error).queryAllByRole('button')).toHaveLength(1);
+    expect(screen.queryByTestId(OFFLINE)).toBeNull();
+  });
+
+  it('M6 오류 얼굴이 떠 있다가 오프라인에서 다시 시도를 눌러도 오류 얼굴이 아니라 오프라인 얼굴이 이긴다 — 요청은 늘지 않는다', async () => {
+    // 준비 — 온라인 500 으로 오류 얼굴(앵커: 히트 1).
+    tripsReplies = [500];
+    renderPage();
+    await screen.findByTestId('itinerary-tab-error');
+    expect(count(TRIPS_GET)).toBe(1);
+
+    // 실행 — 연결이 끊긴 채 다시 시도. 데이터 없는 쿼리의 refetch 는 status 를 pending 으로 되돌려 isError 가 거짓이 된다.
+    act(() => {
+      onlineManager.setOnline(false);
+    });
+    fireEvent.press(screen.getByTestId('itinerary-tab-retry'));
+
+    // 단언 — 판독이 오류 분기보다 앞이어야 보인다(02a ★7).
+    const face = await screen.findByTestId(OFFLINE);
+    expect(within(face).getByText(TITLE_OFFLINE)).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-tab-error')).toBeNull();
+    expect(screen.queryByTestId('itinerary-tab-retry')).toBeNull();
+    await settle();
+    expect(count(TRIPS_GET)).toBe(1);
+
+    // 실행 — 연결 복귀.
+    act(() => {
+      onlineManager.setOnline(true);
+    });
+
+    // 단언 — 보류돼 있던 재시도가 나가 목록이 채워진다.
+    expect(await screen.findByTestId(`my-trip-card-${A}`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(OFFLINE)).toBeNull();
+    await settle();
+    expect(count(TRIPS_GET)).toBe(2);
   });
 });
 
