@@ -4,6 +4,7 @@ import type { SocialProvider } from '@/shared/api';
 
 import type { AuthorizeResult } from '../model/useSocialLogin';
 import type { OAuthProviderConfig } from '../config/oauthConfig';
+import { assertOAuthStateMatches, generateOAuthState } from './oauthState';
 
 /**
  * 실 소셜 OAuth 인가(명령형 PKCE). makeAuthorize 가 토글 off + clientId 존재일 때 `await import` 로만
@@ -15,7 +16,8 @@ import type { OAuthProviderConfig } from '../config/oauthConfig';
  * TRIP-172 결함 C), promptAsync 가 로그인 창을 띄워 authorizationCode 를 받는다. config.requiresState
  * 인 provider(naver)는 state 를 직접 생성해 싣는다 — 실 라이브러리는 state 를 안 주면 스스로
  * 만들지만(PKCE.generateRandom), 그 자동 생성에 기대지 않고 명시 전달해 CSRF 방어가 항상
- * 켜져 있음을 보장한다. 서버 교환에 필요한 3필드(authorizationCode·codeVerifier·redirectUri)만
+ * 켜져 있음을 보장한다(웹 구글·카카오도 requiresState — TRIP-1649). 돌아온 state 는 라이브러리 검사와
+ * 별개로 직접 대조해 불일치·부재면 success-code 를 내지 않고 던진다. 서버 교환에 필요한 3필드(authorizationCode·codeVerifier·redirectUri)만
  * 정규화해 넘기고 어떤 client secret 도 담지 않는다(SEC-AUTH). PKCE 가 꺼진 provider 는 실 라이브러리가
  * codeVerifier 를 만들지 않으므로(usePKCE:false 면 ensureCodeIsSetupAsync 를 건너뜀), 빈 문자열
  * 대신 별도 불투명 토큰으로 채운다 — 백엔드 SocialLoginRequest.codeVerifier 가 @NotBlank 라 빈
@@ -31,19 +33,23 @@ export async function realAuthorize(
     config.redirectUri ||
     makeRedirectUri({ scheme: 'trippilot', path: `oauth/${provider}` });
 
+  const state = config.requiresState ? generateOAuthState() : undefined;
   const request = new AuthRequest({
     clientId: config.clientId,
     scopes: config.scopes,
     redirectUri,
     responseType: ResponseType.Code,
     usePKCE: config.usePKCE ?? true,
-    ...(config.requiresState ? { state: generateOpaqueToken() } : {}),
+    ...(state ? { state } : {}),
   });
 
   const result = await request.promptAsync(config.discovery);
 
   switch (result.type) {
     case 'success':
+      if (state) {
+        assertOAuthStateMatches(state, result.params.state);
+      }
       return {
         type: 'success-code',
         authorizationCode: result.params.code,
@@ -61,7 +67,7 @@ export async function realAuthorize(
   }
 }
 
-/** CSRF state 값 · PKCE 미사용 provider 의 codeVerifier 대체값으로 쓰는 불투명 랜덤 토큰. */
+/** PKCE 미사용 provider 의 codeVerifier 대체값으로 쓰는 불투명 랜덤 토큰(state 는 oauthState.ts). */
 function generateOpaqueToken(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
 }

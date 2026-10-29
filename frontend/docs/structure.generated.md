@@ -69,6 +69,11 @@
 
 ## app/
 - `app/notifications.tsx`  →  (export 없음)
+
+## app/oauth/
+- `app/oauth/[provider].tsx`  →  (export 없음)
+
+## app/
 - `app/onboarding-tour.tsx`  →  (export 없음)
 - `app/permission-location.tsx`  →  (export 없음)
 - `app/permission-push.tsx`  →  (export 없음)
@@ -169,6 +174,7 @@
 - `src/__tests__/manualRouteFreshPassthrough.test.tsx`  →  (export 없음)
 - `src/__tests__/nicknameMyPageSync.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/notFoundRoute.integration.test.tsx`  →  (export 없음)
+- `src/__tests__/oauthRedirectRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingEntryGuard.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingEntryGuard.test.tsx`  →  (export 없음)
 - `src/__tests__/openapiContract.test.ts`  →  (export 없음)
@@ -677,8 +683,11 @@
 - `src/pages/auth/login/lib/appleAuthorize.tsx`  →  appleAuthorize · isAppleSignInAvailable · AppleSignInButton
 - `src/pages/auth/login/lib/isNaverLoginAvailable.ts`  →  isNaverLoginAvailable
 - `src/pages/auth/login/lib/kakaoAuthorize.ts`  →  kakaoAuthorize
+- `src/pages/auth/login/lib/kakaoAuthorize.web.ts`  →  kakaoAuthorize
 - `src/pages/auth/login/lib/makeAuthorize.ts`  →  makeAuthorize
 - `src/pages/auth/login/lib/naverAuthorize.ts`  →  naverAuthorize
+- `src/pages/auth/login/lib/naverAuthorize.web.ts`  →  naverAuthorize
+- `src/pages/auth/login/lib/oauthState.ts`  →  generateOAuthState · assertOAuthStateMatches
 - `src/pages/auth/login/lib/realAuthorize.ts`  →  realAuthorize
 
 ## src/pages/auth/login/model/__fixtures__/
@@ -691,6 +700,16 @@
 ## src/pages/auth/login/ui/
 - `src/pages/auth/login/ui/LoginPage.tsx`  →  LoginPage
 - `src/pages/auth/login/ui/SocialLoginScreen.tsx`  →  SocialLoginScreenProps · SocialLoginScreen
+
+## src/pages/auth/oauth-redirect/
+- `src/pages/auth/oauth-redirect/index.ts`  →  OAuthRedirectPage
+
+## src/pages/auth/oauth-redirect/lib/
+- `src/pages/auth/oauth-redirect/lib/completeAuthSession.ts`  →  completeAuthSession
+- `src/pages/auth/oauth-redirect/lib/completeAuthSession.web.ts`  →  completeAuthSession
+
+## src/pages/auth/oauth-redirect/ui/
+- `src/pages/auth/oauth-redirect/ui/OAuthRedirectPage.tsx`  →  OAuthRedirectPage
 
 ## src/pages/auth/reconsent/
 - `src/pages/auth/reconsent/index.ts`  →  ReconsentPage
@@ -1899,4 +1918,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1221개 파일
+합계 1230개 파일

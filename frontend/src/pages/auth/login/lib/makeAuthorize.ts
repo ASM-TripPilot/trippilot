@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 import type { SocialProvider } from '@/shared/api';
 
 import type { Authorize, AuthorizeResult } from '../model/useSocialLogin';
@@ -96,7 +98,12 @@ function resolveRoute(provider: SocialProvider): Route {
   if (provider === 'apple') {
     return 'apple';
   }
-  if (provider === 'kakao' && process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY) {
+  // 웹은 카카오 SDK 가 없다 — 네이티브 앱 키가 같은 .env 로 들어와 있어도 브라우저 OAuth 로 간다(TRIP-1649).
+  if (
+    provider === 'kakao' &&
+    Platform.OS !== 'web' &&
+    process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY
+  ) {
     return 'kakao-sdk';
   }
   if (provider === 'naver') {
