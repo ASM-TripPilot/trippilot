@@ -24,6 +24,7 @@
 - `app/(onboarding)/pref1.tsx`  →  (export 없음)
 - `app/(onboarding)/pref2.tsx`  →  (export 없음)
 - `app/(onboarding)/push.tsx`  →  (export 없음)
+- `app/(onboarding)/push.web.tsx`  →  (export 없음)
 - `app/(onboarding)/terms.tsx`  →  (export 없음)
 
 ## app/(tabs)/
@@ -68,9 +69,15 @@
 
 ## app/
 - `app/notifications.tsx`  →  (export 없음)
+
+## app/oauth/
+- `app/oauth/[provider].tsx`  →  (export 없음)
+
+## app/
 - `app/onboarding-tour.tsx`  →  (export 없음)
 - `app/permission-location.tsx`  →  (export 없음)
 - `app/permission-push.tsx`  →  (export 없음)
+- `app/permission-push.web.tsx`  →  (export 없음)
 - `app/reconsent.tsx`  →  (export 없음)
 
 ## app/records/
@@ -167,6 +174,7 @@
 - `src/__tests__/manualRouteFreshPassthrough.test.tsx`  →  (export 없음)
 - `src/__tests__/nicknameMyPageSync.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/notFoundRoute.integration.test.tsx`  →  (export 없음)
+- `src/__tests__/oauthRedirectRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingEntryGuard.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingEntryGuard.test.tsx`  →  (export 없음)
 - `src/__tests__/openapiContract.test.ts`  →  (export 없음)
@@ -190,6 +198,7 @@
 - `src/__tests__/tripNightsPeriodOrder.test.tsx`  →  (export 없음)
 - `src/__tests__/tripWizardEntryReset.test.tsx`  →  (export 없음)
 - `src/__tests__/tripWizardLeaveSwipe.integration.test.tsx`  →  (export 없음)
+- `src/__tests__/webOnlyRoutes.test.tsx`  →  (export 없음)
 
 ## src/app/entrypoint/
 - `src/app/entrypoint/AppProviders.tsx`  →  AppProviders
@@ -582,6 +591,7 @@
 
 ## src/features/share-trip-card/model/
 - `src/features/share-trip-card/model/shareCapture.ts`  →  SaveShareCardResult · ShareShareCardResult · isShareCaptureArmed · saveShareCardImage · shareShareCardImage
+- `src/features/share-trip-card/model/shareCapture.web.ts`  →  isShareCaptureArmed · saveShareCardImage · shareShareCardImage
 - `src/features/share-trip-card/model/shareCaptureNative.ts`  →  captureRef · requestPermissionsAsync · saveToLibraryAsync · shareAsync
 
 ## src/features/stay-outbound/
@@ -673,8 +683,11 @@
 - `src/pages/auth/login/lib/appleAuthorize.tsx`  →  appleAuthorize · isAppleSignInAvailable · AppleSignInButton
 - `src/pages/auth/login/lib/isNaverLoginAvailable.ts`  →  isNaverLoginAvailable
 - `src/pages/auth/login/lib/kakaoAuthorize.ts`  →  kakaoAuthorize
+- `src/pages/auth/login/lib/kakaoAuthorize.web.ts`  →  kakaoAuthorize
 - `src/pages/auth/login/lib/makeAuthorize.ts`  →  makeAuthorize
 - `src/pages/auth/login/lib/naverAuthorize.ts`  →  naverAuthorize
+- `src/pages/auth/login/lib/naverAuthorize.web.ts`  →  naverAuthorize
+- `src/pages/auth/login/lib/oauthState.ts`  →  generateOAuthState · assertOAuthStateMatches
 - `src/pages/auth/login/lib/realAuthorize.ts`  →  realAuthorize
 
 ## src/pages/auth/login/model/__fixtures__/
@@ -687,6 +700,16 @@
 ## src/pages/auth/login/ui/
 - `src/pages/auth/login/ui/LoginPage.tsx`  →  LoginPage
 - `src/pages/auth/login/ui/SocialLoginScreen.tsx`  →  SocialLoginScreenProps · SocialLoginScreen
+
+## src/pages/auth/oauth-redirect/
+- `src/pages/auth/oauth-redirect/index.ts`  →  OAuthRedirectPage
+
+## src/pages/auth/oauth-redirect/lib/
+- `src/pages/auth/oauth-redirect/lib/completeAuthSession.ts`  →  completeAuthSession
+- `src/pages/auth/oauth-redirect/lib/completeAuthSession.web.ts`  →  completeAuthSession
+
+## src/pages/auth/oauth-redirect/ui/
+- `src/pages/auth/oauth-redirect/ui/OAuthRedirectPage.tsx`  →  OAuthRedirectPage
 
 ## src/pages/auth/reconsent/
 - `src/pages/auth/reconsent/index.ts`  →  ReconsentPage
@@ -1682,6 +1705,7 @@
 - `src/shared/location/automation/engine.ts`  →  EngineDeps · EngineReason · EngineStatus · ArmingCallInput · setContext · evaluate · handleGeofence · handleLocations · handleWake · flushQueue · uploadPendingRoutes · markExplainerAsked · clearNotice · wipeAutomation
 - `src/shared/location/automation/expoFs.ts`  →  createExpoFs
 - `src/shared/location/automation/flag.ts`  →  isLocationAutomationEnabled
+- `src/shared/location/automation/flag.web.ts`  →  isLocationAutomationEnabled
 - `src/shared/location/automation/httpSink.ts`  →  createHttpAutomationSink
 - `src/shared/location/automation/native.ts`  →  GEOFENCE_TASK · ROUTE_TASK · NativeAdapters · nativeAdapters
 - `src/shared/location/automation/noticeCopy.ts`  →  AutomationNoticeCopy · automationNoticeCopy · tripDateRangeLabel
@@ -1720,12 +1744,16 @@
 
 ## src/shared/photo/
 - `src/shared/photo/index.ts`  →  PhotoAssetMeta · PhotoPickResult · pickPhotoAsset · resolvePhotoUri
+- `src/shared/photo/index.web.ts`  →  pickPhotoAsset · resolvePhotoUri
 
 ## src/shared/push/
 - `src/shared/push/PushGlyphs.tsx`  →  PushBellHero
 - `src/shared/push/PushPreprompt.tsx`  →  PushPrepromptProps · PushPreprompt
+- `src/shared/push/index.support.ts`  →  isPushSupported
+- `src/shared/push/index.support.web.ts`  →  isPushSupported
 - `src/shared/push/index.ts`  →  getPushPermission · type PushPermissionStatus · requestPushPermission · registerPushToken · unregisterDeviceToken · toServerOsPermission · isDeviceNotRegistered · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken · installForegroundPresentation · onPushReceived · onPushTapped · takeLaunchPushTap · type PushEvent
 - `src/shared/push/index.view.ts`  →  PushPreprompt
+- `src/shared/push/index.web.ts`  →  getPushPermission · requestPushPermission · registerPushToken · unregisterDeviceToken · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken · toServerOsPermission · isDeviceNotRegistered · installForegroundPresentation · onPushReceived · onPushTapped · takeLaunchPushTap · PushPreprompt
 - `src/shared/push/permissions.ts`  →  PushPermissionStatus · getPushPermission
 - `src/shared/push/pushColors.ts`  →  PUSH_ICON_COLORS
 - `src/shared/push/receive.ts`  →  PushEvent · installForegroundPresentation · onPushReceived · onPushTapped · takeLaunchPushTap
@@ -1737,6 +1765,8 @@
 - `src/shared/storage/index.ts`  →  PUSH_REGISTERED_KEY · TokenBundle · saveTokens · getTokens · clearTokens · hasStoredToken · readIdSet · writeIdSet · getInstallId · readStringValue · writeStringValue · readInstallFlag · writeInstallFlag
 - `src/shared/storage/installFlag.ts`  →  readInstallFlag · writeInstallFlag
 - `src/shared/storage/installId.ts`  →  getInstallId
+- `src/shared/storage/secureKv.ts`  →  getSecureItem · setSecureItem · deleteSecureItem
+- `src/shared/storage/secureKv.web.ts`  →  getSecureItem · setSecureItem · deleteSecureItem
 - `src/shared/storage/stringValue.ts`  →  readStringValue · writeStringValue
 
 ## src/shared/ui/
@@ -1793,13 +1823,14 @@
 - `src/test-support/editDragList.ts`  →  EDIT_LIST · editListData · moveItem · fireEditDragEnd · hoverOverDeleteZone · fireEditDropOnZone · fireEditDragBegin
 - `src/test-support/envSandbox.ts`  →  sandboxEnv
 - `src/test-support/expoAppleAuthenticationMock.tsx`  →  appleSignInAsyncSpy · appleIsAvailableAsyncSpy · expoAppleAuthenticationModule · resetExpoAppleAuthenticationMock
-- `src/test-support/expoAuthSessionMock.ts`  →  promptAsyncSpy · authRequestConstructorSpy · makeRedirectUriSpy · expoAuthSessionModule · expoWebBrowserModule · expoCryptoModule · setPromptResult · setCodeVerifier · resetExpoAuthSessionMock
+- `src/test-support/expoAuthSessionMock.ts`  →  MockPromptResult · promptAsyncSpy · authRequestConstructorSpy · makeRedirectUriSpy · expoAuthSessionModule · expoWebBrowserModule · expoCryptoModule · setPromptResult · setCodeVerifier · resetExpoAuthSessionMock
 - `src/test-support/expoRouterMock.ts`  →  RouterMember · routerSpies · createExpoRouterMock · useRouter · router · useLocalSearchParams
 - `src/test-support/expoRouterRedirectMock.tsx`  →  Redirect · Stack
 - `src/test-support/expoRouterStackMock.tsx`  →  Stack
 - `src/test-support/expoRouterTabsMock.tsx`  →  capturedTabsProps · Tabs · useRouter
 - `src/test-support/fabAnchorProbe.ts`  →  FRAME_MS · sheetHost · sheetPosition · flushFrames · moveSheet · layoutOverlay · anchorStyle · anchorTop
 - `src/test-support/fakeExpoFileSystem.ts`  →  fakeExpoFileSystemModule · resetFakeFs · seedCacheFile · cacheFilesIn · cacheFileCount · failFileWrites · documentFileCount · failFileReads
+- `src/test-support/fakeLocalStorage.ts`  →  FakeStorage · createFakeStorage · defineLocalStorage · installFakeLocalStorage · removeLocalStorage
 - `src/test-support/fakePreventRemoveNavigator.tsx`  →  MockNavAction · MockPreventCallback · mockExits · mockRemove · mockNavigation · useNavigation · usePreventRemove · resetFakeNavigator
 - `src/test-support/fitBandAsserts.ts`  →  NativeRegion · LatLng · expectPinsInBand · expectHeightLimited
 - `src/test-support/flushNotifications.ts`  →  flushNotifications
@@ -1887,4 +1918,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1209개 파일
+합계 1230개 파일

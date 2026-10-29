@@ -24,6 +24,8 @@ export interface SettingsInput {
   locationConsent?: boolean;
   /** 개인화 동의(reason !== CONSENT_MISSING). true 일 때만 `사용 중`(D3). */
   personalizationOn?: boolean;
+  /** 이 플랫폼에 푸시가 있는가(TRIP-1648). 생략=true. false(웹)면 알림 행이 `ready:false` 라 "알림" 그룹째 빠진다. */
+  pushAvailable?: boolean;
 }
 
 export interface SettingsRowChip {
@@ -104,7 +106,13 @@ export function buildSettingsSections(input: SettingsInput): SettingsGroupVM[] {
     {
       key: 'notifications',
       label: '알림',
-      rows: [{ key: 'notifications', label: '알림 설정', ready: true }],
+      rows: [
+        {
+          key: 'notifications',
+          label: '알림 설정',
+          ready: input.pushAvailable ?? true,
+        },
+      ],
     },
     {
       key: 'affiliate',
