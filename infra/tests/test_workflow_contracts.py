@@ -264,5 +264,14 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertLess(names.index('Put the dev workloads to sleep'), names.index('Deployment summary'))
 
 
+    def test_dev_chart_never_wants_zero_replicas_because_the_wake_step_raises_every_zero_to_one(self):
+        """깨우기 스텝은 복제본 0 인 디플로이먼트를 전부 1 로 올린다. 개발 차트가 의도적으로 0 을 요구하게 되면 이 스텝이 그 0 을
+        조용히 뒤집는다(helm 도 되돌려 주지 않는다) — 그날은 스텝과 이 테스트를 같이 고친다."""
+        values = yaml.safe_load((ROOT / 'deploy/eks/chart/values-dev-target.yaml').read_text())
+        for component in ('backend', 'ai', 'gateway', 'embedding'):
+            with self.subTest(component=component):
+                self.assertGreaterEqual(values[component]['replicas'], 1)
+
+
 if __name__ == '__main__':
     unittest.main()

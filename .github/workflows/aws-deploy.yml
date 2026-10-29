@@ -317,6 +317,7 @@ jobs:
             --target "$DEPLOY_TARGET" --run-id "$DEPLOY_RUN_ID"
       # 개발 파드를 0 으로 내려 둔 뒤의 배포: helm 3 의 3-way 병합은 차트 값이 그대로(1→1)면 직접 내린 0 을 되돌리지 않는다 —
       # --wait 도 파드가 없으니 통과하고 스모크에서야 터진다. 그래서 0 인 디플로이먼트만 먼저 1 로 올린다(복제본 수의 정본은 차트).
+      # 전제: 개발 차트의 복제본은 항상 1 이상이다(values-dev-target.yaml) — 계약 테스트가 지킨다.
       - name: Wake sleeping dev workloads
         if: steps.config.outputs.deploy_application == 'true' && steps.config.outputs.target == 'dev'
         run: |
