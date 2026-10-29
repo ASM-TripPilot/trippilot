@@ -30,13 +30,14 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
         with:
-          version: 11.13.1 # 로컬 개발환경과 동기 (package.json에 packageManager 필드 없음)
-      - uses: actions/setup-node@v4
+          # pnpm 버전의 정본은 frontend/package.json 의 packageManager 한 곳. uses 단계엔 working-directory 가 안 먹어 루트 기준 경로.
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version-file: frontend/.nvmrc
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
@@ -46,7 +47,7 @@ jobs:
       # 키 접두를 한 번만 계산해 restore·save·정리가 같은 값을 쓴다.
       - id: cache-key
         run: echo "prefix=fe-lint-jest-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml', 'frontend/babel.config.js', 'frontend/jest*.config.js') }}-" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v5
         with:
           path: |
             frontend/.jest-cache
@@ -72,7 +73,7 @@ jobs:
       - run: pnpm test
       # 저장은 develop push 의 green run 에서만 — PR 이 저장한 캐시는 그 PR scope 에 묶여 거의 안 읽히고, 리포 캐시가
       # 이미 10GB 한도 위라 run 마다 쌓으면 다른 잡(docker·java) 캐시가 밀린다. PR 은 develop 캐시를 복원만 한다.
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v5
         if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
         with:
           path: |
@@ -106,13 +107,13 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
         with:
-          version: 11.13.1 # test 잡과 동기
-      - uses: actions/setup-node@v4
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version-file: frontend/.nvmrc
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
@@ -122,7 +123,7 @@ jobs:
         if: always()
         run: '[ ! -f dist/bundle-report/summary.txt ] || cat dist/bundle-report/summary.txt >> "$GITHUB_STEP_SUMMARY"'
       # artifact = 잡이 끝난 뒤에도 내려받는 파일 묶음. 소스맵(22MB)은 올리지 않고 리포트만.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: bundle-report
@@ -137,21 +138,21 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3 # gha 캐시 export 위해 docker-container 드라이버 필요
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4 # gha 캐시 export 위해 docker-container 드라이버 필요
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/metadata-action@v5
+      - uses: docker/metadata-action@v6
         id: meta
         with:
           images: ${{ env.IMAGE }}
           tags: |
             type=raw,value=develop
             type=sha,format=short
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: ./frontend
           push: true
