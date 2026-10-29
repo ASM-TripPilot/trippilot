@@ -136,20 +136,22 @@ resource "aws_cloudwatch_metric_alarm" "refresh_reuse" {
   alarm_actions       = [aws_sns_topic.alerts[0].arn]
 }
 
-# 문턱은 어림값이다 — 일정 한 건이 취향 점수 호출을 여러 개(청크 병렬) 내서 한 건이 3~8번 실패로 셀 수 있다. 하루 호출이 400~500건
-# (건당 ~18/시간)이라 30분에 10건이면 "대부분 실패"에 가깝다. 시끄러우면 숫자만 올린다.
+# 문턱 5건/30분. 2026-10-28 장애 24h 로그 실측: 실패한 요청 70건·실패 호출 383건, **요청 1건당 실패 호출은 중앙값 2건**(최대 20).
+# 일정 생성은 취향 점수를 청크 병렬로 불러 한 건이 터지면 중앙값 10건이 실패한다 — 5건이면 일정 1건으로 바로 울린다.
+# 도우미(분류·SQL·답변)만 죽으면 요청당 2건뿐이라 10건 문턱은 요청 5건쯤 터져야 울려 사용자가 적을 때 놓쳤다(TRIP-1632).
+# 평소 실패 기준선(Opus 시한 타임아웃·분류 불가)은 아직 모른다 — 시끄러우면 숫자를 올리거나, 호출 수 지표를 더해 실패 비율(50% 이상 + 최소 N건)로 바꾼다.
 resource "aws_cloudwatch_metric_alarm" "llm_call_failed" {
   count = local.alerts_count
 
   alarm_name          = "${local.name}-llm-call-failed"
-  alarm_description   = "LLM(claude·gpt) 호출이 30분 동안 10건 이상 실패했다. 서비스는 규칙 폴백으로 돌지만 AI 품질이 빠진다 — ai 로그의 FallbackEvent reason(401 키·400 파라미터·429 한도·크레딧)부터 본다."
+  alarm_description   = "LLM(claude·gpt) 호출이 30분 동안 5건 이상 실패했다. 서비스는 규칙 폴백으로 돌지만 AI 품질이 빠진다 — ai 로그의 FallbackEvent reason(401 키·400 파라미터·429 한도·크레딧)부터 본다."
   namespace           = local.alerts_namespace
   metric_name         = aws_cloudwatch_log_metric_filter.llm_call_failed[0].metric_transformation[0].name
   statistic           = "Sum"
   period              = 1800
   evaluation_periods  = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
-  threshold           = 10
+  threshold           = 5
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alerts[0].arn]
   ok_actions          = [aws_sns_topic.alerts[0].arn]
