@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor } from '@testing-library/react-native';
 
+import { CenterPinPicker } from './CenterPinPicker';
 import { buildFitRegion } from './fitRegion';
 import type { MapCenter, MapPin } from './MapView';
 import type { NaverMapsApi } from './naverMapsLoader';
@@ -25,6 +26,29 @@ jest.mock('./naverMapsLoader', () => ({
   getNaverMapsLoader: () => mockLoader,
 }));
 
+// TRIP-1652 — 내 위치는 `expo-location` 으로 조회·감시한다. 진짜 가장자리(모듈)를 가짜로 바꿔 껍데기 이음부를 본다.
+// 팩토리는 호출 시점에 `mockLocation` 을 읽는다(호이스트된 팩토리가 실행될 땐 const 가 아직 초기화 전이다).
+const mockLocation = {
+  getForegroundPermissionsAsync: jest.fn(),
+  requestForegroundPermissionsAsync: jest.fn(),
+  getCurrentPositionAsync: jest.fn(),
+  watchPositionAsync: jest.fn(),
+};
+jest.mock('expo-location', () => ({
+  getForegroundPermissionsAsync: (...args: unknown[]) =>
+    mockLocation.getForegroundPermissionsAsync(...args),
+  requestForegroundPermissionsAsync: (...args: unknown[]) =>
+    mockLocation.requestForegroundPermissionsAsync(...args),
+  getCurrentPositionAsync: (...args: unknown[]) =>
+    mockLocation.getCurrentPositionAsync(...args),
+  watchPositionAsync: (...args: unknown[]) =>
+    mockLocation.watchPositionAsync(...args),
+}));
+
+// `CenterPinPicker` 는 `./MapView`(jest 에선 네이티브)를 쓴다. 이 파일 안에서만 그것을 웹 대체 파일로 갈아 끼워
+// 「CenterPinPicker + 웹 MapView」 통합을 본다(위 직접 import 는 영향 없음 — 웹 파일은 './MapView' 를 타입으로만 가져온다).
+jest.mock('./MapView', () => require('./MapView.web'));
+
 // no-dynamic-env-var(eslint-plugin-expo) 회피 — 선언과 대입을 분리한다(네이티브 MapView.test.tsx 선례).
 const CLIENT_ID_KEY = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
 let ORIGINAL_CLIENT_ID: string | undefined;
@@ -39,6 +63,7 @@ beforeEach(() => {
   mockLoader.onAuthFailure.mockReset();
   mockLoader.load.mockImplementation(NEVER);
   mockLoader.onAuthFailure.mockImplementation(() => () => {});
+  Object.values(mockLocation).forEach((fn) => fn.mockReset());
 });
 
 afterEach(() => {
@@ -193,6 +218,13 @@ class FakeLatLng {
     public latValue: number,
     public lngValue: number
   ) {}
+  // 진짜 LatLng 는 좌표를 lat()/lng() 메서드로 읽는다 — getCenter() 결과를 읽는 코드가 이걸 써야 한다.
+  lat() {
+    return this.latValue;
+  }
+  lng() {
+    return this.lngValue;
+  }
 }
 class FakeBounds {
   constructor(
@@ -206,6 +238,7 @@ class FakeNaverMap {
   setOptions = jest.fn();
   autoResize = jest.fn();
   destroy = jest.fn();
+  getCenter = jest.fn(() => new FakeLatLng(0, 0));
   constructor(
     public element: unknown,
     public options: Record<string, unknown>
@@ -215,6 +248,9 @@ class FakeOverlay {
   map: unknown;
   setMap = jest.fn((map: unknown) => {
     this.map = map;
+  });
+  setPosition = jest.fn((position: unknown) => {
+    this.options.position = position;
   });
   constructor(public options: Record<string, unknown>) {
     this.map = options.map ?? null;
@@ -226,6 +262,7 @@ function makeFakeNaver() {
     maps: [] as FakeNaverMap[],
     markers: [] as FakeOverlay[],
     circles: [] as FakeOverlay[],
+    polylines: [] as FakeOverlay[],
     listeners: [] as { target: unknown; name: string; handler: () => void }[],
   };
   const maps = {
@@ -253,6 +290,12 @@ function makeFakeNaver() {
       constructor(options: Record<string, unknown>) {
         super(options);
         made.circles.push(this);
+      }
+    },
+    Polyline: class extends FakeOverlay {
+      constructor(options: Record<string, unknown>) {
+        super(options);
+        made.polylines.push(this);
       }
     },
     Event: {
@@ -518,5 +561,367 @@ describe('성공 경로 — 지도가 만들어진 뒤 인증 실패 통지(INV-
     expect(made.markers[1].map).toBeNull();
     expect(made.markers[2].map).toBeNull();
     expect(map.destroy).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * TRIP-1652 (W6) — 웹 `MapView` 껍데기 이음부: 경로선·카메라 idle·내 위치가 **컴포넌트 입구(prop)에서 지도(가짜 naver)까지**
+ * 이어지는지. AC-1~6, AC-8~10. (W5 1차 리뷰의 교훈 — 컨트롤러 단위 테스트만 있으면 껍데기가 prop 을 안 넘겨도 green 이다.)
+ *
+ * 초심자용 — 위 「성공 경로」와 같은 준비(로더=가짜, `createNodeMock`=가짜 div, 컨트롤러=진짜)에 더해:
+ * - 위치는 `expo-location` 모듈을 가짜로 바꿔 "권한 상태"와 "위치가 바뀌었다는 호출"을 흉내 낸다(`mockLocation`).
+ * - `CenterPinPicker` 통합은 파일 위쪽 `jest.mock('./MapView', …)` 로 picker 가 웹 `MapView` 를 쓰게 한 것이다.
+ *   `made.maps.length === 1`(가짜 네이버 지도가 실제로 생김)이 "네이티브 MapView 가 아니라 웹이 선택됐다"의 증거다.
+ * 단언은 값(경로 좌표 열·색 구분·개수·idle 로 올라온 {lat,lng}·marker 좌표)이고 prop 전달 여부가 아니다.
+ */
+type FakeMade = ReturnType<typeof makeFakeNaver>['made'];
+const liveLines = (made: FakeMade) =>
+  made.polylines.filter((p) => p.map !== null);
+const linePath = (line: FakeOverlay) =>
+  (line.options.path as FakeLatLng[]).map((p) => ({
+    lat: p.latValue,
+    lng: p.lngValue,
+  }));
+const dashed = (line: FakeOverlay) =>
+  line.options.strokeStyle !== undefined &&
+  line.options.strokeStyle !== 'solid';
+const idleListeners = (made: FakeMade) =>
+  made.listeners.filter((l) => l.name === 'idle');
+const flushMicrotasks = async () => {
+  for (let i = 0; i < 12; i += 1) await Promise.resolve();
+};
+const PIN_COORDS = PINS.map((p) => ({ lat: p.lat, lng: p.lng }));
+const ROUTE_A = [
+  { lat: 33.511, lng: 126.521 },
+  { lat: 33.512, lng: 126.522 },
+];
+const ROUTE_B = [
+  { lat: 33.531, lng: 126.541 },
+  { lat: 33.532, lng: 126.542 },
+];
+
+describe('이음부 — 경로선(AC-1·2·3·4)', () => {
+  it('핀 3개를 주면 흰 케이싱 + primary 선이 핀 좌표 순서로 그려지고, 값이 같은 재렌더는 선을 안 건드리며, 핀이 바뀌면 다시 그린다', async () => {
+    const { rerender, made } = await renderLoaded(
+      <MapView center={CENTER} pins={PINS} />
+    );
+
+    const lines = liveLines(made);
+    expect(lines).toHaveLength(2);
+    expect(lines.map(linePath)).toEqual([PIN_COORDS, PIN_COORDS]);
+    expect(lines[0].options.strokeColor).toBe('#FFFFFF');
+    expect(lines[1].options.strokeColor).toBe('#FF385C');
+    expect(lines.every((l) => l.map === made.maps[0])).toBe(true);
+
+    rerender(<MapView center={CENTER} pins={PINS.map((p) => ({ ...p }))} />);
+    expect(made.polylines).toHaveLength(2);
+    lines.forEach((l) => expect(l.setMap).not.toHaveBeenCalled());
+
+    rerender(
+      <MapView
+        center={CENTER}
+        pins={PINS.map((p, i) => (i === 2 ? { ...p, lat: 33.6 } : p))}
+      />
+    );
+    lines.forEach((l) => expect(l.map).toBeNull());
+    expect(liveLines(made).map(linePath)).toEqual([
+      [...PIN_COORDS.slice(0, 2), { lat: 33.6, lng: PINS[2].lng }],
+      [...PIN_COORDS.slice(0, 2), { lat: 33.6, lng: PINS[2].lng }],
+    ]);
+  });
+
+  it('connectPins={false} 면 선이 없고(핀은 그대로), 다시 켜면 생긴다', async () => {
+    const { rerender, made } = await renderLoaded(
+      <MapView center={CENTER} pins={PINS} connectPins={false} />
+    );
+    expect(made.markers).toHaveLength(3);
+    expect(liveLines(made)).toHaveLength(0);
+
+    rerender(<MapView center={CENTER} pins={PINS} connectPins />);
+
+    expect(liveLines(made)).toHaveLength(2);
+  });
+
+  it('actualRoute 를 주면 세그먼트마다 점선이 그려지고 계획선은 한 줄로 낮아진다', async () => {
+    const { made } = await renderLoaded(
+      <MapView
+        center={CENTER}
+        pins={PINS}
+        actualRoute={[ROUTE_A, [{ lat: 1, lng: 1 }], ROUTE_B]}
+      />
+    );
+
+    const lines = liveLines(made);
+    const routes = lines.filter(dashed);
+    const plans = lines.filter((l) => !dashed(l));
+    expect(routes.map(linePath)).toEqual([ROUTE_A, ROUTE_B]);
+    expect(plans).toHaveLength(1);
+    expect(linePath(plans[0])).toEqual(PIN_COORDS);
+    expect(plans[0].options.strokeColor).toBe('#9AA1AB');
+  });
+
+  it.each([[true], [{ durationMs: 650, delayMs: 300 }]])(
+    'drawPathOnMount=%j 를 줘도 애니메이션 없이 선과 핀 전부가 곧바로 생기고, 선 옵션에 시간 필드가 없다',
+    async (drawPathOnMount) => {
+      const { made } = await renderLoaded(
+        <MapView
+          center={CENTER}
+          pins={PINS}
+          drawPathOnMount={drawPathOnMount}
+        />
+      );
+
+      expect(made.markers).toHaveLength(PINS.length);
+      expect(liveLines(made)).toHaveLength(2);
+      for (const line of made.polylines) {
+        expect(Object.keys(line.options).join(' ')).not.toMatch(
+          /duration|delay|minute|eta|time/i
+        );
+      }
+    }
+  );
+});
+
+describe('이음부 — onCameraIdle(AC-5)', () => {
+  it('주면 지도가 멈출 때마다 getCenter 의 위도·경도가 {lat,lng} 로 올라오고, 부모가 새 콜백을 넘기면 새 콜백만 불린다', async () => {
+    const stale = jest.fn();
+    const fresh = jest.fn();
+    const { rerender, made } = await renderLoaded(
+      <MapView center={CENTER} onCameraIdle={stale} />
+    );
+    const map = made.maps[0];
+    // 앵커 — 리스너는 지도에 하나, 아직 아무 콜백도 안 불렸다.
+    expect(idleListeners(made)).toHaveLength(1);
+    expect(idleListeners(made)[0].target).toBe(map);
+    expect(stale).not.toHaveBeenCalled();
+
+    map.getCenter.mockReturnValue(new FakeLatLng(33.25, 126.75));
+    idleListeners(made)[0].handler();
+    expect(stale).toHaveBeenLastCalledWith({ lat: 33.25, lng: 126.75 });
+
+    rerender(<MapView center={CENTER} onCameraIdle={fresh} />);
+    expect(idleListeners(made)).toHaveLength(1);
+    map.getCenter.mockReturnValue(new FakeLatLng(34.5, 127.5));
+    idleListeners(made)[0].handler();
+
+    expect(fresh).toHaveBeenCalledTimes(1);
+    expect(fresh).toHaveBeenLastCalledWith({ lat: 34.5, lng: 127.5 });
+    expect(stale).toHaveBeenCalledTimes(1);
+  });
+
+  it('안 주면 idle 리스너를 붙이지 않는다(마커 click 리스너는 정상)', async () => {
+    const { made } = await renderLoaded(
+      <MapView center={CENTER} pins={PINS} onPinTap={jest.fn()} />
+    );
+
+    expect(made.listeners.filter((l) => l.name === 'click')).toHaveLength(3);
+    expect(idleListeners(made)).toHaveLength(0);
+  });
+
+  it('언마운트한 뒤, 또는 인증 실패로 실패 표면이 된 뒤 늦게 발화해도 콜백은 불리지 않는다', async () => {
+    let notify: () => void = () => {};
+    mockLoader.onAuthFailure.mockImplementation((cb: () => void) => {
+      notify = cb;
+      return () => {};
+    });
+    const onCameraIdle = jest.fn();
+    const failedRun = await renderLoaded(
+      <MapView center={CENTER} onCameraIdle={onCameraIdle} />
+    );
+    const failedHandler = idleListeners(failedRun.made)[0].handler;
+    act(() => notify());
+    expect(screen.getByTestId('map-failure')).toBeTruthy();
+    failedHandler();
+    expect(onCameraIdle).not.toHaveBeenCalled();
+    failedRun.unmount();
+
+    mockLoader.onAuthFailure.mockImplementation(() => () => {});
+    const unmounted = await renderLoaded(
+      <MapView center={CENTER} onCameraIdle={onCameraIdle} />
+    );
+    const handler = idleListeners(unmounted.made)[0].handler;
+    unmounted.unmount();
+    handler();
+
+    expect(onCameraIdle).not.toHaveBeenCalled();
+  });
+});
+
+describe('이음부 — CenterPinPicker + 웹 MapView(AC-6)', () => {
+  it('마운트 때 center 를 한 번만 포획하고, 지도가 멈추면 그 중심이 onPick({lat,lng}) 로 올라간다', async () => {
+    const onPick = jest.fn();
+    const { rerender, made } = await renderLoaded(
+      <CenterPinPicker center={CENTER} onPick={onPick} />
+    );
+
+    // 웹 MapView 가 골라졌다 — 가짜 네이버 지도가 생겼고 네이티브 목 지도(map-native)는 없다.
+    expect(made.maps).toHaveLength(1);
+    expect(screen.queryByTestId('map-native')).toBeNull();
+    expect(screen.getByTestId('center-pin-picker')).toBeTruthy();
+    expect(screen.getByTestId('map-center-pin')).toBeTruthy();
+    expect(screen.queryByTestId('map-failure')).toBeNull();
+    const map = made.maps[0];
+    expect((map.options.center as FakeLatLng).latValue).toBeCloseTo(
+      CENTER.lat,
+      9
+    );
+    expect(onPick).not.toHaveBeenCalled();
+
+    // center prop 이 바뀌어도 지도를 되돌리지 않는다(되먹임 방지).
+    rerender(
+      <CenterPinPicker center={{ lat: 35, lng: 129 }} onPick={onPick} />
+    );
+    expect(map.setCenter).not.toHaveBeenCalled();
+    expect(made.maps).toHaveLength(1);
+
+    // 첫 멈춤도 그대로 올라가고, 두 번째 멈춤은 새 좌표(위도≠경도라 축이 바뀌면 잡힌다).
+    map.getCenter.mockReturnValue(new FakeLatLng(33.5, 126.5));
+    idleListeners(made)[0].handler();
+    expect(onPick).toHaveBeenLastCalledWith({ lat: 33.5, lng: 126.5 });
+    map.getCenter.mockReturnValue(new FakeLatLng(33.6, 126.7));
+    idleListeners(made)[0].handler();
+    expect(onPick).toHaveBeenCalledTimes(2);
+    expect(onPick).toHaveBeenLastCalledWith({ lat: 33.6, lng: 126.7 });
+  });
+});
+
+describe('이음부 — 내 위치(AC-8·9·10)', () => {
+  type Pos = { coords: { latitude: number; longitude: number } };
+  function armWatch() {
+    const subscription = { remove: jest.fn() };
+    const state: { emit: (p: Pos) => void } = { emit: () => {} };
+    mockLocation.watchPositionAsync.mockImplementation(
+      async (_options: unknown, callback: (p: Pos) => void) => {
+        state.emit = callback;
+        return subscription;
+      }
+    );
+    return { subscription, state };
+  }
+  const here = (lat: number, lng: number): Pos => ({
+    coords: { latitude: lat, longitude: lng },
+  });
+  const noAsk = () => {
+    expect(
+      mockLocation.requestForegroundPermissionsAsync
+    ).not.toHaveBeenCalled();
+    expect(mockLocation.getCurrentPositionAsync).not.toHaveBeenCalled();
+  };
+
+  it('권한이 granted 면 위치가 오는 대로 점 1개가 옮겨 다니고, 끄거나 언마운트하면 점이 걷히고 감시가 끊긴다', async () => {
+    mockLocation.getForegroundPermissionsAsync.mockResolvedValue({
+      status: 'granted',
+    });
+    const { subscription, state } = armWatch();
+    const { rerender, unmount, made } = await renderLoaded(
+      <MapView center={CENTER} showMyLocation />
+    );
+    await waitFor(() =>
+      expect(mockLocation.watchPositionAsync).toHaveBeenCalledTimes(1)
+    );
+    // 앵커 — 감시는 시작됐지만 위치가 아직 안 와 점이 없다.
+    expect(made.markers).toHaveLength(0);
+
+    state.emit(here(33.3, 126.4));
+    state.emit(here(33.31, 126.41));
+
+    expect(made.markers).toHaveLength(1);
+    const dot = made.markers[0];
+    expect((dot.options.position as FakeLatLng).latValue).toBeCloseTo(33.31, 9);
+    expect((dot.options.position as FakeLatLng).lngValue).toBeCloseTo(
+      126.41,
+      9
+    );
+    expect(dot.map).toBe(made.maps[0]);
+    noAsk();
+
+    rerender(<MapView center={CENTER} showMyLocation={false} />);
+    expect(dot.map).toBeNull();
+    expect(subscription.remove).toHaveBeenCalledTimes(1);
+
+    rerender(<MapView center={CENTER} showMyLocation />);
+    await waitFor(() =>
+      expect(mockLocation.watchPositionAsync).toHaveBeenCalledTimes(2)
+    );
+    state.emit(here(33.4, 126.5));
+    const second = made.markers[made.markers.length - 1];
+    expect(second.map).toBe(made.maps[0]);
+
+    unmount();
+    expect(second.map).toBeNull();
+    expect(subscription.remove).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['denied', 'undetermined'])(
+    '권한이 %s 면 점도 감시도 없고, 묻지 않으며, 지도는 정상이다(실패 표면·onLoadFailed 없음)',
+    async (status) => {
+      mockLocation.getForegroundPermissionsAsync.mockResolvedValue({ status });
+      const onLoadFailed = jest.fn();
+      const { made } = await renderLoaded(
+        <MapView
+          center={CENTER}
+          pins={PINS}
+          showMyLocation
+          onLoadFailed={onLoadFailed}
+        />
+      );
+      await waitFor(() =>
+        expect(
+          mockLocation.getForegroundPermissionsAsync
+        ).toHaveBeenCalledTimes(1)
+      );
+      await flushMicrotasks();
+
+      expect(mockLocation.watchPositionAsync).not.toHaveBeenCalled();
+      noAsk();
+      expect(made.markers).toHaveLength(PINS.length);
+      expect(screen.queryByTestId('map-failure')).toBeNull();
+      expect(onLoadFailed).not.toHaveBeenCalled();
+    }
+  );
+
+  it('권한 조회가 동기로 던지거나 거부돼도 점 없이 지도는 정상이고 실패 표면으로 가지 않는다', async () => {
+    mockLocation.getForegroundPermissionsAsync.mockImplementation(() => {
+      throw new Error('no permissions api');
+    });
+    const first = await renderLoaded(
+      <MapView center={CENTER} pins={PINS} showMyLocation />
+    );
+    await flushMicrotasks();
+    expect(mockLocation.getForegroundPermissionsAsync).toHaveBeenCalledTimes(1);
+    expect(first.made.markers).toHaveLength(PINS.length);
+    expect(screen.queryByTestId('map-failure')).toBeNull();
+    first.unmount();
+
+    mockLocation.getForegroundPermissionsAsync.mockReset();
+    mockLocation.getForegroundPermissionsAsync.mockRejectedValue(
+      new Error('x')
+    );
+    const second = await renderLoaded(
+      <MapView center={CENTER} pins={PINS} showMyLocation />
+    );
+    await flushMicrotasks();
+
+    expect(mockLocation.getForegroundPermissionsAsync).toHaveBeenCalledTimes(1);
+    expect(second.made.markers).toHaveLength(PINS.length);
+    expect(screen.queryByTestId('map-failure')).toBeNull();
+    noAsk();
+  });
+
+  it('showMyLocation 을 안 주면 권한 조회도 없다 — 켠 지도에서는 조회한다(짝)', async () => {
+    mockLocation.getForegroundPermissionsAsync.mockResolvedValue({
+      status: 'denied',
+    });
+    const off = await renderLoaded(<MapView center={CENTER} pins={PINS} />);
+    await flushMicrotasks();
+    expect(mockLocation.getForegroundPermissionsAsync).not.toHaveBeenCalled();
+    off.unmount();
+
+    await renderLoaded(<MapView center={CENTER} showMyLocation />);
+    await waitFor(() =>
+      expect(mockLocation.getForegroundPermissionsAsync).toHaveBeenCalledTimes(
+        1
+      )
+    );
   });
 });

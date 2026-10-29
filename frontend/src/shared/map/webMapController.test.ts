@@ -21,6 +21,13 @@ class FakeLatLng {
     public latValue: number,
     public lngValue: number
   ) {}
+  // 진짜 naver.maps.LatLng 는 좌표를 lat()/lng() 메서드로 읽는다(getCenter() 결과를 읽는 쪽이 이걸 써야 한다).
+  lat() {
+    return this.latValue;
+  }
+  lng() {
+    return this.lngValue;
+  }
 }
 class FakePoint {
   constructor(
@@ -41,6 +48,7 @@ class FakeMap {
   setOptions = jest.fn();
   autoResize = jest.fn();
   destroy = jest.fn();
+  getCenter = jest.fn(() => new FakeLatLng(0, 0));
   constructor(
     public element: unknown,
     public options: Record<string, unknown>
@@ -50,6 +58,9 @@ class FakeMarker {
   map: FakeMap | null;
   setMap = jest.fn((map: FakeMap | null) => {
     this.map = map;
+  });
+  setPosition = jest.fn((position: FakeLatLng) => {
+    this.options.position = position;
   });
   constructor(
     public options: {
@@ -77,6 +88,16 @@ class FakeCircle {
   }
 }
 
+class FakePolyline {
+  map: FakeMap | null;
+  setMap = jest.fn((map: FakeMap | null) => {
+    this.map = map;
+  });
+  constructor(public options: Record<string, unknown>) {
+    this.map = (options.map as FakeMap | undefined) ?? null;
+  }
+}
+
 interface Listener {
   target: unknown;
   name: string;
@@ -88,6 +109,7 @@ function makeNaver() {
     maps: [] as FakeMap[],
     markers: [] as FakeMarker[],
     circles: [] as FakeCircle[],
+    polylines: [] as FakePolyline[],
     listeners: [] as Listener[],
   };
   const maps = {
@@ -110,6 +132,12 @@ function makeNaver() {
       constructor(options: FakeCircle['options']) {
         super(options);
         made.circles.push(this);
+      }
+    },
+    Polyline: class extends FakePolyline {
+      constructor(options: Record<string, unknown>) {
+        super(options);
+        made.polylines.push(this);
       }
     },
     Event: {
@@ -778,5 +806,584 @@ describe('refit() — 맞춤이 꺼진 뒤엔 옛 영역으로 되돌리지 않�
 
     expect(map.autoResize).toHaveBeenCalledTimes(2);
     expect(map.fitBounds).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * TRIP-1652 (W6) — 경로선(Polyline)·카메라 idle·내 위치 점. AC-1~5, AC-8~10.
+ *
+ * 초심자용 — 새 개념 셋.
+ * - `Polyline`: 점들을 이은 선을 지도에 그리는 네이버 JS 클래스. 가짜는 만들 때 받은 옵션(`path`=LatLng 배열,
+ *   `strokeColor`·`strokeWeight`·`strokeStyle`)을 기록하고, 테스트는 그 **값**을 읽는다.
+ * - `idle` 이벤트: 지도가 움직이다 멈추면 발화. 가짜 `Event.addListener` 가 리스너를 모아 두므로 테스트가 꺼내 직접 부른다.
+ * - 위치 포트(`location`): 컨트롤러가 위치 권한 조회·감시를 맡길 곳(DI). 진짜는 `expo-location`, 여기선 가짜가
+ *   "권한 상태"와 "위치가 바뀌었다는 호출"을 흉내 내고, 묻는 함수(request·getCurrentPosition)가 불렸는지도 센다.
+ * 단언은 모두 값(경로 좌표 열·색·굵기 대소·개수·marker 좌표)이고 prop 전달 여부가 아니다.
+ */
+const SOLID_OR_UNSET = (style: unknown) =>
+  style === undefined || style === 'solid';
+const live = (made: ReturnType<typeof makeNaver>['made']) =>
+  made.polylines.filter((p) => p.map !== null);
+const pathOf = (line: FakePolyline) =>
+  (line.options.path as FakeLatLng[]).map((p) => ({
+    lat: p.latValue,
+    lng: p.lngValue,
+  }));
+const isDashed = (line: FakePolyline) =>
+  !SOLID_OR_UNSET(line.options.strokeStyle);
+const plansOf = (made: ReturnType<typeof makeNaver>['made']) =>
+  live(made).filter((l) => !isDashed(l));
+const dashedOf = (made: ReturnType<typeof makeNaver>['made']) =>
+  live(made).filter(isDashed);
+const PIN_COLORS = {
+  primary: '#FF385C',
+  white: '#FFFFFF',
+  mutedSoft: '#9AA1AB',
+};
+
+const LINE_PINS: MapPin[] = [
+  { number: 1, lat: 33.51, lng: 126.52, kind: 'visited' },
+  { number: 2, lat: 33.52, lng: 126.53, kind: 'planned' },
+  { number: 3, lat: 33.53, lng: 126.54 },
+  { number: 4, lat: 33.54, lng: 126.55, kind: 'stay' },
+  { number: 5, lat: 33.55, lng: 126.56, kind: 'visited' },
+];
+const LINE_COORDS = [
+  { lat: 33.51, lng: 126.52 },
+  { lat: 33.53, lng: 126.54 },
+  { lat: 33.55, lng: 126.56 },
+];
+const SEG_A = [
+  { lat: 33.511, lng: 126.521 },
+  { lat: 33.512, lng: 126.522 },
+];
+const SEG_B = [
+  { lat: 33.531, lng: 126.541 },
+  { lat: 33.532, lng: 126.542 },
+  { lat: 33.533, lng: 126.543 },
+];
+
+describe('AC-1 — 계획 연결선: 흰 케이싱 아래 + primary 위, 같은 좌표(visited·무-kind 핀만)', () => {
+  it('핀 5개(visited·planned·무-kind·stay·visited) → 선 2개, 둘 다 연결 대상 3곳의 좌표를 배열 순서로 잇는다', () => {
+    const { controller, made } = setup();
+    // 앵커 — update 전엔 선이 없다.
+    expect(made.polylines).toHaveLength(0);
+
+    controller.update({ center: CENTER, pins: LINE_PINS });
+
+    const lines = live(made);
+    expect(lines).toHaveLength(2);
+    const [casing, route] = lines;
+    expect(lines.every((l) => l.map === made.maps[0])).toBe(true);
+    expect(pathOf(casing)).toEqual(LINE_COORDS);
+    expect(pathOf(route)).toEqual(LINE_COORDS);
+    // 케이싱(흰)이 먼저 만들어져 아래에 깔리고, primary 선보다 굵어 가장자리가 흰 테두리로 보인다.
+    expect(casing.options.strokeColor).toBe(PIN_COLORS.white);
+    expect(route.options.strokeColor).toBe(PIN_COLORS.primary);
+    expect(casing.options.strokeWeight as number).toBeGreaterThan(
+      route.options.strokeWeight as number
+    );
+    expect(isDashed(casing) || isDashed(route)).toBe(false);
+  });
+
+  it('선 옵션에 소요시간류 필드가 없다(INV-3) — drawPathOnMount 형 값은 컨트롤러가 받지도 않는다', () => {
+    const { controller, made } = setup();
+
+    controller.update({ center: CENTER, pins: LINE_PINS });
+
+    // 앵커 — 선이 실제로 만들어졌다(선이 없으면 아래 반복이 공허하게 통과한다).
+    expect(made.polylines.length).toBeGreaterThan(0);
+    for (const line of made.polylines) {
+      expect(Object.keys(line.options).join(' ')).not.toMatch(
+        /duration|minute|eta|time/i
+      );
+    }
+  });
+});
+
+describe('AC-2 — 선이 없는 경우와 값 기준 갱신', () => {
+  it('connectPins:false · 연결 핀 1개 · 핀 없음이면 선이 0개다', () => {
+    const { controller, made } = setup();
+
+    controller.update({ center: CENTER, pins: LINE_PINS, connectPins: false });
+    expect(made.polylines).toHaveLength(0);
+
+    controller.update({ center: CENTER, pins: [LINE_PINS[0], LINE_PINS[1]] });
+    expect(made.polylines).toHaveLength(0);
+
+    controller.update({ center: CENTER });
+    expect(made.polylines).toHaveLength(0);
+
+    // 짝 — 연결 조건을 갖추면 같은 컨트롤러에서 선이 생긴다(위 단언이 "선 기능 자체가 없어서" 공허하게 통과하지 않게).
+    controller.update({ center: CENTER, pins: LINE_PINS });
+    expect(live(made)).toHaveLength(2);
+  });
+
+  it('값이 같은 재update 는 선을 다시 만들지도 지우지도 않고, 핀이 바뀌면 옛 선을 걷고 새로 그린다', () => {
+    const { controller, made } = setup();
+    controller.update({ center: CENTER, pins: LINE_PINS });
+    const first = [...made.polylines];
+
+    controller.update({
+      center: CENTER,
+      pins: LINE_PINS.map((p) => ({ ...p })),
+    });
+
+    expect(made.polylines).toHaveLength(2);
+    first.forEach((l) => expect(l.setMap).not.toHaveBeenCalled());
+
+    controller.update({
+      center: CENTER,
+      pins: LINE_PINS.map((p) => (p.number === 5 ? { ...p, lat: 33.6 } : p)),
+    });
+
+    first.forEach((l) => expect(l.map).toBeNull());
+    const now = live(made);
+    expect(now).toHaveLength(2);
+    expect(pathOf(now[1])).toEqual([
+      ...LINE_COORDS.slice(0, 2),
+      { lat: 33.6, lng: 126.56 },
+    ]);
+  });
+
+  it('선이 사라지는 쪽으로 바뀌면(연결 끔) 옛 선만 걷히고 새 선은 안 생긴다 — 마커는 그대로', () => {
+    const { controller, made } = setup();
+    controller.update({ center: CENTER, pins: LINE_PINS });
+    const markersBefore = made.markers.length;
+
+    controller.update({ center: CENTER, pins: LINE_PINS, connectPins: false });
+
+    expect(live(made)).toHaveLength(0);
+    expect(made.polylines).toHaveLength(2);
+    expect(made.markers).toHaveLength(markersBefore);
+  });
+});
+
+describe('AC-3 — 실제 경로: 세그먼트마다 점선 1개, 계획선은 흐리고 얇게(케이싱 없음)', () => {
+  const route = [SEG_A, [{ lat: 1, lng: 1 }], SEG_B];
+
+  it('점 2개 미만 세그먼트는 빼고 나머지를 이어 붙이지 않고 각자 그린다 — 점선·primary', () => {
+    const { controller, made } = setup();
+
+    controller.update({ center: CENTER, pins: LINE_PINS, actualRoute: route });
+
+    const dashed = dashedOf(made);
+    expect(dashed).toHaveLength(2);
+    expect(pathOf(dashed[0])).toEqual(SEG_A);
+    expect(pathOf(dashed[1])).toEqual(SEG_B);
+    dashed.forEach((l) => {
+      expect(l.options.strokeColor).toBe(PIN_COLORS.primary);
+      expect(l.map).toBe(made.maps[0]);
+    });
+  });
+
+  it('계획선은 muted-soft 한 줄로 낮아진다 — 흰 케이싱이 없고 평소 primary 선보다 얇다', () => {
+    const { controller, made } = setup();
+    controller.update({ center: CENTER, pins: LINE_PINS });
+    const normalWeight = plansOf(made)[1].options.strokeWeight as number;
+
+    controller.update({ center: CENTER, pins: LINE_PINS, actualRoute: route });
+
+    const plans = plansOf(made);
+    expect(plans).toHaveLength(1);
+    expect(pathOf(plans[0])).toEqual(LINE_COORDS);
+    expect(plans[0].options.strokeColor).toBe(PIN_COLORS.mutedSoft);
+    expect(plans[0].options.strokeWeight as number).toBeLessThan(normalWeight);
+    expect(
+      live(made).some((l) => l.options.strokeColor === PIN_COLORS.white)
+    ).toBe(false);
+  });
+
+  it('실제 경로가 사라지면 점선을 걷고 계획선이 평소 2겹으로 돌아온다', () => {
+    const { controller, made } = setup();
+    controller.update({ center: CENTER, pins: LINE_PINS, actualRoute: route });
+
+    controller.update({ center: CENTER, pins: LINE_PINS, actualRoute: [] });
+
+    expect(dashedOf(made)).toHaveLength(0);
+    const plans = plansOf(made);
+    expect(plans).toHaveLength(2);
+    expect(plans[0].options.strokeColor).toBe(PIN_COLORS.white);
+    expect(plans[1].options.strokeColor).toBe(PIN_COLORS.primary);
+  });
+
+  it('연결선을 끄면 계획선은 없고 점선만 남는다', () => {
+    const { controller, made } = setup();
+
+    controller.update({
+      center: CENTER,
+      pins: LINE_PINS,
+      connectPins: false,
+      actualRoute: [SEG_A],
+    });
+
+    expect(plansOf(made)).toHaveLength(0);
+    expect(dashedOf(made)).toHaveLength(1);
+  });
+});
+
+describe('선 정리 — destroy', () => {
+  it('destroy 는 모든 선을 지도에서 걷고, 이후 update 는 새 선을 만들지 않는다', () => {
+    const { controller, made } = setup();
+    controller.update({
+      center: CENTER,
+      pins: LINE_PINS,
+      actualRoute: [SEG_A],
+    });
+    // 앵커 — 정리 전엔 선이 붙어 있다.
+    expect(live(made).length).toBeGreaterThan(0);
+
+    controller.destroy();
+    controller.update({
+      center: CENTER,
+      pins: LINE_PINS,
+      actualRoute: [SEG_B],
+    });
+
+    expect(live(made)).toHaveLength(0);
+    expect(made.polylines.length).toBeLessThanOrEqual(2);
+  });
+
+  it('선의 setMap(null) 이 던져도 destroy 는 안 던지고 마커·지도 정리는 이어진다', () => {
+    const { controller, made } = setup();
+    controller.update({ center: CENTER, pins: LINE_PINS });
+    made.polylines[0].setMap.mockImplementation(() => {
+      throw new Error('naver internal: capitalize of null');
+    });
+    const map = made.maps[0];
+
+    expect(() => controller.destroy()).not.toThrow();
+
+    expect(made.polylines[1].map).toBeNull();
+    made.markers.forEach((m) => expect(m.map).toBeNull());
+    expect(map.destroy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AC-5 — onCameraIdle: 줄 때만 idle 을 듣고, 멈춘 중심을 {lat,lng} 로 올린다', () => {
+  function withIdle() {
+    const { naver, made } = makeNaver();
+    const onCameraIdle = jest.fn();
+    const controller = createWebMapController({
+      naver,
+      element: {} as unknown as HTMLElement,
+      onPinTap: jest.fn(),
+      onCameraIdle,
+    });
+    return { controller, made, onCameraIdle };
+  }
+  const idleListeners = (made: ReturnType<typeof makeNaver>['made']) =>
+    made.listeners.filter((l) => l.name === 'idle');
+
+  it('지도에 idle 리스너가 1개 붙고, 몇 번 update 해도 늘지 않는다; 발화하면 getCenter 의 위도·경도가 순서대로 올라온다', () => {
+    const { controller, made, onCameraIdle } = withIdle();
+    expect(idleListeners(made)).toHaveLength(0);
+
+    controller.update({ center: CENTER });
+    controller.update({ center: CENTER, pins: FIT_PINS });
+    controller.update({ center: { lat: 35, lng: 129 } });
+
+    const [listener] = idleListeners(made);
+    expect(idleListeners(made)).toHaveLength(1);
+    expect(listener.target).toBe(made.maps[0]);
+    expect(onCameraIdle).not.toHaveBeenCalled();
+
+    made.maps[0].getCenter.mockReturnValue(new FakeLatLng(33.25, 126.75));
+    listener.handler();
+    made.maps[0].getCenter.mockReturnValue(new FakeLatLng(34.5, 127.5));
+    listener.handler();
+
+    expect(onCameraIdle).toHaveBeenCalledTimes(2);
+    expect(onCameraIdle).toHaveBeenNthCalledWith(1, {
+      lat: 33.25,
+      lng: 126.75,
+    });
+    expect(onCameraIdle).toHaveBeenNthCalledWith(2, { lat: 34.5, lng: 127.5 });
+  });
+
+  it('콜백을 안 주면 idle 리스너를 아예 붙이지 않는다(옵트인)', () => {
+    const { controller, made } = setup();
+
+    controller.update({ center: CENTER, pins: FIT_PINS });
+
+    // 앵커 — 지도·마커 리스너는 정상으로 붙었고(click) idle 만 없다.
+    expect(made.maps).toHaveLength(1);
+    expect(made.listeners.filter((l) => l.name === 'click')).toHaveLength(
+      FIT_PINS.length
+    );
+    expect(idleListeners(made)).toHaveLength(0);
+  });
+
+  it('destroy 뒤에 늦게 발화해도 콜백은 불리지 않는다', () => {
+    const { controller, made, onCameraIdle } = withIdle();
+    controller.update({ center: CENTER });
+    const [listener] = idleListeners(made);
+
+    controller.destroy();
+    listener.handler();
+
+    expect(onCameraIdle).not.toHaveBeenCalled();
+  });
+});
+
+describe('내 위치 점 — 권한은 조회만, granted 일 때만 감시하고 점 마커 1개', () => {
+  type Pos = { coords: { latitude: number; longitude: number } };
+  const flush = async () => {
+    for (let i = 0; i < 12; i += 1) await Promise.resolve();
+  };
+
+  function makeLocation(status = 'granted') {
+    const subscriptions: { remove: jest.Mock }[] = [];
+    const callbacks: ((position: Pos) => void)[] = [];
+    const port = {
+      getForegroundPermissionsAsync: jest.fn(async () => ({ status })),
+      // 묻는 함수 — 호출되면 안 된다(BR-U10-53). 있는데 불리지 않는 것을 센다.
+      requestForegroundPermissionsAsync: jest.fn(),
+      getCurrentPositionAsync: jest.fn(),
+      watchPositionAsync: jest.fn(
+        async (_options: unknown, callback: (position: Pos) => void) => {
+          const subscription = { remove: jest.fn() };
+          subscriptions.push(subscription);
+          callbacks.push(callback);
+          return subscription;
+        }
+      ),
+    };
+    const emit = (lat: number, lng: number, which = callbacks.length - 1) =>
+      callbacks[which]({ coords: { latitude: lat, longitude: lng } });
+    return { port, subscriptions, emit };
+  }
+
+  function setupLocation(location?: ReturnType<typeof makeLocation>['port']) {
+    const { naver, made } = makeNaver();
+    const controller = createWebMapController({
+      naver,
+      element: {} as unknown as HTMLElement,
+      onPinTap: jest.fn(),
+      location,
+    });
+    return { controller, made };
+  }
+  const posOf = (marker: FakeMarker) => ({
+    lat: marker.options.position.latValue,
+    lng: marker.options.position.lngValue,
+  });
+  const noAsk = (port: ReturnType<typeof makeLocation>['port']) => {
+    expect(port.requestForegroundPermissionsAsync).not.toHaveBeenCalled();
+    expect(port.getCurrentPositionAsync).not.toHaveBeenCalled();
+  };
+
+  it('AC-8 granted: 첫 위치가 오기 전엔 점이 없고, 오면 그 좌표에 1개; 위치가 바뀌면 같은 마커가 옮겨 간다', async () => {
+    const loc = makeLocation();
+    const { controller, made } = setupLocation(loc.port);
+
+    controller.update({ center: CENTER, showMyLocation: true });
+    await flush();
+
+    // 앵커 — 감시는 시작됐지만 위치가 아직 안 와 점이 없다.
+    expect(loc.port.watchPositionAsync).toHaveBeenCalledTimes(1);
+    expect(made.markers).toHaveLength(0);
+
+    loc.emit(33.3, 126.4);
+    expect(made.markers).toHaveLength(1);
+    const dot = made.markers[0];
+    expect(dot.map).toBe(made.maps[0]);
+    expect(posOf(dot)).toEqual({ lat: 33.3, lng: 126.4 });
+
+    loc.emit(33.31, 126.41);
+    expect(made.markers).toHaveLength(1);
+    expect(dot.map).toBe(made.maps[0]);
+    expect(posOf(dot)).toEqual({ lat: 33.31, lng: 126.41 });
+    noAsk(loc.port);
+  });
+
+  it('점 마커에는 보이는 글자가 없다(INV-3 — 분·시간을 그릴 자리가 없다)', async () => {
+    const loc = makeLocation();
+    const { controller, made } = setupLocation(loc.port);
+    controller.update({ center: CENTER, showMyLocation: true });
+    await flush();
+
+    loc.emit(33.3, 126.4);
+
+    const html = made.markers[0].options.icon.content;
+    expect(html.replace(/<[^>]*>/g, '').trim()).toBe('');
+  });
+
+  it('같은 true 로 update 를 거듭해도 권한 조회·감시는 1번이다', async () => {
+    const loc = makeLocation();
+    const { controller } = setupLocation(loc.port);
+
+    controller.update({ center: CENTER, showMyLocation: true });
+    controller.update({ center: CENTER, showMyLocation: true });
+    await flush();
+    controller.update({ center: CENTER, showMyLocation: true });
+    await flush();
+
+    expect(loc.port.getForegroundPermissionsAsync).toHaveBeenCalledTimes(1);
+    expect(loc.port.watchPositionAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC-8 false 로 바뀌면 점을 걷고 감시를 끊는다; 끊은 뒤 늦게 온 위치는 점을 되살리지 않고, 다시 true 면 새로 시작한다', async () => {
+    const loc = makeLocation();
+    const { controller, made } = setupLocation(loc.port);
+    controller.update({ center: CENTER, showMyLocation: true });
+    await flush();
+    loc.emit(33.3, 126.4);
+    const dot = made.markers[0];
+    expect(loc.subscriptions[0].remove).not.toHaveBeenCalled();
+
+    controller.update({ center: CENTER, showMyLocation: false });
+
+    expect(dot.map).toBeNull();
+    expect(loc.subscriptions[0].remove).toHaveBeenCalledTimes(1);
+    loc.emit(33.4, 126.5, 0);
+    expect(dot.map).toBeNull();
+    expect(made.markers).toHaveLength(1);
+
+    controller.update({ center: CENTER, showMyLocation: true });
+    await flush();
+    expect(loc.port.watchPositionAsync).toHaveBeenCalledTimes(2);
+    loc.emit(33.5, 126.6);
+    expect(made.markers.filter((m) => m.map !== null)).toHaveLength(1);
+  });
+
+  it('AC-8 destroy: 점을 걷고 감시를 끊는다 — 권한 조회가 끝나기 전이면 감시를 시작하지 않고, 감시 시작이 끝나기 전이면 끝나는 즉시 끊는다', async () => {
+    const loc = makeLocation();
+    const { controller, made } = setupLocation(loc.port);
+    controller.update({ center: CENTER, showMyLocation: true });
+    await flush();
+    loc.emit(33.3, 126.4);
+    controller.destroy();
+    expect(made.markers[0].map).toBeNull();
+    expect(loc.subscriptions[0].remove).toHaveBeenCalledTimes(1);
+
+    // 권한 조회가 아직 안 끝난 채 destroy.
+    let resolvePermission: (v: { status: string }) => void = () => {};
+    const slowPermission = makeLocation();
+    slowPermission.port.getForegroundPermissionsAsync.mockImplementation(
+      () => new Promise((resolve) => (resolvePermission = resolve))
+    );
+    const a = setupLocation(slowPermission.port);
+    a.controller.update({ center: CENTER, showMyLocation: true });
+    a.controller.destroy();
+    resolvePermission({ status: 'granted' });
+    await flush();
+    expect(slowPermission.port.watchPositionAsync).not.toHaveBeenCalled();
+
+    // 감시 시작이 아직 안 끝난 채 destroy.
+    let resolveWatch: (s: { remove: jest.Mock }) => void = () => {};
+    const lateSub = { remove: jest.fn() };
+    const slowWatch = makeLocation();
+    slowWatch.port.watchPositionAsync.mockImplementation(
+      () => new Promise((resolve) => (resolveWatch = resolve))
+    );
+    const b = setupLocation(slowWatch.port);
+    b.controller.update({ center: CENTER, showMyLocation: true });
+    await flush();
+    b.controller.destroy();
+    expect(lateSub.remove).not.toHaveBeenCalled();
+    resolveWatch(lateSub);
+    await flush();
+    expect(lateSub.remove).toHaveBeenCalledTimes(1);
+    expect(b.made.markers).toHaveLength(0);
+  });
+
+  it.each(['denied', 'undetermined'])(
+    'AC-9 권한이 %s 면 감시도 점도 없고, 묻지도 않는다(안내 없이 조용히)',
+    async (status) => {
+      const loc = makeLocation(status);
+      const { controller, made } = setupLocation(loc.port);
+
+      expect(() =>
+        controller.update({
+          center: CENTER,
+          pins: FIT_PINS,
+          showMyLocation: true,
+        })
+      ).not.toThrow();
+      await flush();
+
+      expect(loc.port.getForegroundPermissionsAsync).toHaveBeenCalledTimes(1);
+      expect(loc.port.watchPositionAsync).not.toHaveBeenCalled();
+      noAsk(loc.port);
+      // 지도·핀은 정상.
+      expect(made.maps).toHaveLength(1);
+      expect(made.markers).toHaveLength(FIT_PINS.length);
+    }
+  );
+
+  it('AC-9 권한 조회가 거부·동기 예외, 감시 시작이 거부돼도 안 던지고(미처리 거부 없음) 점 없이 지도는 정상이다', async () => {
+    const cases: ((port: ReturnType<typeof makeLocation>['port']) => void)[] = [
+      (port) =>
+        port.getForegroundPermissionsAsync.mockRejectedValue(new Error('x')),
+      (port) =>
+        port.getForegroundPermissionsAsync.mockImplementation(() => {
+          throw new Error('no permissions api');
+        }),
+      (port) => port.watchPositionAsync.mockRejectedValue(new Error('x')),
+    ];
+    for (const arrange of cases) {
+      const loc = makeLocation();
+      arrange(loc.port);
+      const { controller, made } = setupLocation(loc.port);
+
+      expect(() =>
+        controller.update({
+          center: CENTER,
+          pins: FIT_PINS,
+          showMyLocation: true,
+        })
+      ).not.toThrow();
+      await flush();
+
+      // 앵커 — 실패 경로까지 실제로 갔다(조회는 항상 1번, 감시는 granted 였던 경우에만 시도).
+      expect(loc.port.getForegroundPermissionsAsync).toHaveBeenCalledTimes(1);
+      expect(made.maps).toHaveLength(1);
+      expect(made.markers).toHaveLength(FIT_PINS.length);
+      noAsk(loc.port);
+    }
+  });
+
+  it('AC-10 showMyLocation 을 안 주거나 false 면 권한 조회도 없다; 위치 포트를 안 꽂아도 true 가 던지지 않는다', async () => {
+    const loc = makeLocation();
+    const { controller } = setupLocation(loc.port);
+
+    controller.update({ center: CENTER });
+    controller.update({ center: CENTER, showMyLocation: false });
+    await flush();
+
+    expect(loc.port.getForegroundPermissionsAsync).not.toHaveBeenCalled();
+    expect(loc.port.watchPositionAsync).not.toHaveBeenCalled();
+    // 짝 — 켜면 같은 컨트롤러·같은 포트가 조회한다(위 "0회"가 포트 배선 끊김 때문에 공허하게 통과하지 않게).
+    controller.update({ center: CENTER, showMyLocation: true });
+    await flush();
+    expect(loc.port.getForegroundPermissionsAsync).toHaveBeenCalledTimes(1);
+
+    const bare = setupLocation(undefined);
+    expect(() =>
+      bare.controller.update({ center: CENTER, showMyLocation: true })
+    ).not.toThrow();
+    await flush();
+    expect(bare.made.markers).toHaveLength(0);
+  });
+
+  it('정리 호출(점 setMap(null)·감시 remove)이 던져도 destroy 는 안 던지고 지도 정리는 이어진다', async () => {
+    const loc = makeLocation();
+    const { controller, made } = setupLocation(loc.port);
+    controller.update({ center: CENTER, showMyLocation: true });
+    await flush();
+    loc.emit(33.3, 126.4);
+    made.markers[0].setMap.mockImplementation(() => {
+      throw new Error('naver internal');
+    });
+    loc.subscriptions[0].remove.mockImplementation(() => {
+      throw new Error('geolocation internal');
+    });
+    const map = made.maps[0];
+
+    expect(() => controller.destroy()).not.toThrow();
+
+    expect(loc.subscriptions[0].remove).toHaveBeenCalledTimes(1);
+    expect(map.destroy).toHaveBeenCalledTimes(1);
   });
 });

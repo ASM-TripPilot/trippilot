@@ -10,7 +10,11 @@ export type NaverBounds = object;
 export interface NaverOverlay {
   setMap(map: NaverMap | null): void;
 }
+export interface NaverMarker extends NaverOverlay {
+  setPosition(position: NaverLatLng): void;
+}
 export interface NaverMap {
+  getCenter(): { lat(): number; lng(): number };
   fitBounds(bounds: NaverBounds): void;
   setCenter(center: NaverLatLng): void;
   setOptions(options: Record<string, unknown>): void;
@@ -30,8 +34,10 @@ export interface NaverMapsApi {
       position: NaverLatLng;
       map: NaverMap;
       icon: { content: string; anchor: NaverPoint };
-    }) => NaverOverlay;
+      clickable?: boolean;
+    }) => NaverMarker;
     Circle: new (options: Record<string, unknown>) => NaverOverlay;
+    Polyline: new (options: Record<string, unknown>) => NaverOverlay;
     Event: {
       addListener(target: unknown, name: string, handler: () => void): unknown;
     };

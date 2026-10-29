@@ -28,6 +28,7 @@ import { buildCircleRegion, buildFitRegion } from './fitRegion';
 import type { FitBand } from './fitRegion';
 import { DRAW_PATH_DURATION_MS, DrawnPathOverlay } from './DrawnPathOverlay';
 import { MapFailure } from './MapFailure';
+import { buildPathLines } from './pathLines';
 import {
   DONE_CHECK,
   DROP_LARGE_SIZE,
@@ -585,14 +586,16 @@ function MapViewImpl({
   // 연결선은 **방문(visited) 구간만** + **현행 무-kind 호출부 전부** 잇는다(TRIP-768). `kind===undefined`
   // 를 반드시 포함해야 h·i 밴드 물방울 지도(전부 kind 미전달)의 선이 안 지워진다(무회귀). j 밴드는
   // 모든 핀이 kind 를 가지므로 결과는 visited-only 다(planned·stay 는 선 밖).
-  const lineCoords = (pins ?? [])
-    .filter((pin) => pin.kind === undefined || pin.kind === 'visited')
-    .map((pin) => ({ latitude: pin.lat, longitude: pin.lng }));
-  const showPath = connectPins !== false && lineCoords.length >= 2;
+  const lines = buildPathLines({ pins, connectPins, actualRoute });
+  const lineCoords = (lines.plan ?? []).map((p) => ({
+    latitude: p.lat,
+    longitude: p.lng,
+  }));
+  const showPath = lines.plan !== null;
   // TRIP-1342 — 실제 경로(세그먼트별). 점 2개 미만 세그먼트는 SDK 가 거부하므로 뺀다. 세그먼트끼리 잇지 않는다
   // (BR-U10-37). 켜졌을 때만 계획 연결선을 muted-soft 얇게 낮춘다(BR-U10-41 — 계획 흐림·실제 점선).
-  const routeSegments = (actualRoute ?? []).filter((seg) => seg.length >= 2);
-  const actualOn = routeSegments.length > 0;
+  const routeSegments = lines.segments;
+  const actualOn = lines.planDimmed;
   // TRIP-1385 — 그려지기는 일반 경로선(실제 경로 꺼짐)에만 건다.
   const drawOpts: { durationMs?: number; delayMs?: number } | null =
     drawPathOnMount === true

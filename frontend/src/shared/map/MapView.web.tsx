@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { memo, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
+import * as Location from 'expo-location';
 
 // 값 import 금지 — Metro 웹에서 './MapView' 는 이 파일 자신이다(순환). 타입만 가져온다.
 import type { MapViewProps } from './MapView';
@@ -12,8 +13,9 @@ import type { WebMapController } from './webMapController';
 
 /**
  * 웹 지도(네이버 지도 JS v3). Metro 가 웹에서 `./MapView` 를 이 파일로 고른다 — 네이티브 SDK(`@mj-studio/…`)를
- * 웹 번들에 싣지 않는다. 이번 범위는 표시·카메라·번호 마커·탭·영역 맞춤·실패 표면이고, 경로선·내 위치·카메라 콜백
- * (`connectPins`·`drawPathOnMount`·`actualRoute`·`onCameraIdle`·`onTapMap`·`showMyLocation` 등)은 받아서 무시한다.
+ * 웹 번들에 싣지 않는다. 범위는 표시·카메라·번호 마커·탭·영역 맞춤·실패 표면·경로선(`connectPins`·`actualRoute`)·
+ * 카메라 멈춤(`onCameraIdle`)·내 위치 점(`showMyLocation`, 권한 조회만)이고, `drawPathOnMount`(웹은 즉시 완성)·
+ * `onTapMap` 등 나머지는 받아서 무시한다.
  */
 function MapViewImpl({
   center,
@@ -24,6 +26,10 @@ function MapViewImpl({
   radiusCircle,
   fitPins,
   fitBand,
+  connectPins,
+  actualRoute,
+  showMyLocation,
+  onCameraIdle,
 }: MapViewProps): ReactElement {
   const clientId = process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID;
   const hasKey = Boolean(clientId);
@@ -66,6 +72,12 @@ function MapViewImpl({
   useEffect(() => {
     onPinTapRef.current = onPinTap;
   });
+  // idle 리스너는 컨트롤러 생성 때 한 번만 붙으므로 콜백은 ref 로 최신을 읽는다. prop 이 없던 채 생성되면 붙지 않는다.
+  const onCameraIdleRef = useRef(onCameraIdle);
+  useEffect(() => {
+    onCameraIdleRef.current = onCameraIdle;
+  });
+  const hasCameraIdle = onCameraIdle !== undefined;
   // 실패로 돌아선 뒤엔 컨트롤러가 cleanup 으로 정리되기 전이라도 망가진 지도에 닿지 않게 한다(refit 용).
   const failedRef = useRef(failed);
   useEffect(() => {
@@ -79,6 +91,10 @@ function MapViewImpl({
       naver,
       element,
       onPinTap: (index) => onPinTapRef.current?.(index),
+      onCameraIdle: hasCameraIdle
+        ? (c) => onCameraIdleRef.current?.(c)
+        : undefined,
+      location: Location,
     });
     controllerRef.current = controller;
     // 컨테이너 크기가 잡히거나 바뀌면 지도 크기를 다시 재고 재맞춤한다(첫 관측은 생성 직후 한 번 불린다).
@@ -94,7 +110,7 @@ function MapViewImpl({
       controller.destroy();
       controllerRef.current = null;
     };
-  }, [naver, element]);
+  }, [naver, element, hasCameraIdle]);
 
   // 컨트롤러가 입력을 값으로 비교하므로 렌더마다 불러도 바뀐 것만 지도에 닿는다. 생성 effect 뒤에 선언해야 한다.
   useEffect(() => {
@@ -106,6 +122,9 @@ function MapViewImpl({
       fitPins,
       fitBand,
       radiusCircle,
+      connectPins,
+      actualRoute,
+      showMyLocation,
     });
   });
 

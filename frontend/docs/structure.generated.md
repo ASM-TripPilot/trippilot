@@ -1718,10 +1718,11 @@
 - `src/shared/map/MapView.web.tsx`  →  MapView
 - `src/shared/map/fitRegion.ts`  →  FitBand · buildFitRegion · buildCircleRegion
 - `src/shared/map/index.ts`  →  MapView · CenterPinPicker · buildNaverPlaceAppUrl · buildNaverPlaceWebUrl · canOpenNaverPlace · openNaverPlace
-- `src/shared/map/naverMapsLoader.ts`  →  NaverLatLng · NaverPoint · NaverBounds · NaverOverlay · NaverMap · NaverMapsApi · LoaderScript · LoaderDoc · LoaderWin · NaverMapsLoader · createNaverMapsLoader · getNaverMapsLoader
+- `src/shared/map/naverMapsLoader.ts`  →  NaverLatLng · NaverPoint · NaverBounds · NaverOverlay · NaverMarker · NaverMap · NaverMapsApi · LoaderScript · LoaderDoc · LoaderWin · NaverMapsLoader · createNaverMapsLoader · getNaverMapsLoader
 - `src/shared/map/naverPlaceLink.ts`  →  NaverPlaceTarget · canOpenNaverPlace · buildNaverPlaceAppUrl · buildNaverPlaceWebUrl · openNaverPlace
+- `src/shared/map/pathLines.ts`  →  PathLines · buildPathLines
 - `src/shared/map/pinShapes.ts`  →  PIN_PRIMARY · PIN_SUCCESS · PIN_MUTED_SOFT · PIN_WHITE · TEARDROP_LARGE · TEARDROP_SMALL · DONE_CHECK · STAY_PIN · DROP_LARGE_SIZE · DROP_SMALL_SIZE · RECORD_DIMS
-- `src/shared/map/webMapController.ts`  →  WebMapInput · WebMapController · createWebMapController
+- `src/shared/map/webMapController.ts`  →  WebMapInput · WebLocationPort · WebMapController · createWebMapController
 - `src/shared/map/webMapOptions.ts`  →  WEB_INITIAL_ZOOM · regionToCorners · buildMapOptions
 - `src/shared/map/webMarkerHtml.ts`  →  WebMarker · buildWebMarker
 
@@ -1894,4 +1895,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1216개 파일
+합계 1217개 파일
