@@ -226,6 +226,25 @@ function TripsLoadError({
   );
 }
 
+// ── 오프라인 콜드스타트 안내(TRIP-1638) — TripsLoadError 와 같은 슬롯·모양, 버튼만 없다(보류 요청에 다시 시도는 무동작).
+// Figma 프레임 없음 — 코드 선례. 연결이 돌아오면 쿼리가 스스로 재개해 page 가 이 안내를 끈다.
+function TripsOfflineNotice(): ReactElement {
+  return (
+    <View
+      testID="home-trips-offline"
+      className="mx-lg mb-[14px] items-center gap-sm rounded-card bg-surface-soft px-lg py-2xl"
+    >
+      <WarningTriangleGlyph size={28} tone="primary" />
+      <Text className="font-noto-bold text-label font-bold text-ink">
+        인터넷에 연결되어 있지 않아요
+      </Text>
+      <Text className="font-noto text-label text-muted">
+        연결되면 자동으로 불러올게요
+      </Text>
+    </View>
+  );
+}
+
 // ── magazineHero(영감 카드) ─────────────────────────────────────────────
 // TRIP-694: 히어로 하트 제거(AC-1) · 생성 사진 Image 배선(AC-5) · discovery/planning 캐러셀
 // 페이지로 재사용하기 위한 옵셔널 testID(기본 home-magazine-hero, 캐러셀 슬라이드는 다른 값)·
@@ -1021,6 +1040,7 @@ function DiscoveryBody({
   spotsLane,
   collectionsLane,
   tripsError,
+  tripsOffline,
   onPressSpotsMore,
   onPressSearch,
   onPressHeroCity,
@@ -1032,6 +1052,7 @@ function DiscoveryBody({
   spotsLane?: HomeSpotsLane;
   collectionsLane?: HomeCollectionsLane;
   tripsError?: HomeScreenProps['tripsError'];
+  tripsOffline?: boolean;
   onPressSpotsMore?: () => void;
   onPressSearch?: () => void;
   onPressHeroCity?: (regionCode: string) => void;
@@ -1053,6 +1074,7 @@ function DiscoveryBody({
           retrying={tripsError.retrying}
         />
       ) : null}
+      {tripsOffline ? <TripsOfflineNotice /> : null}
       {/* TRIP-699 — 로딩이면 히어로는 캐러셀이 아니라 통짜 스켈레톤(390×470, Figma 2174:2307). */}
       {sections.kind === 'loading' ? (
         <Skeleton
@@ -1278,6 +1300,7 @@ function PhaseBody({
   spotsLane,
   collectionsLane,
   tripsError,
+  tripsOffline,
   phase,
   onPressSpotsMore,
   onPressPastTripsMore,
@@ -1295,6 +1318,7 @@ function PhaseBody({
         spotsLane={spotsLane}
         collectionsLane={collectionsLane}
         tripsError={tripsError}
+        tripsOffline={tripsOffline}
         onPressSpotsMore={onPressSpotsMore}
         onPressSearch={onPressSearch}
         onPressHeroCity={onPressHeroCity}
@@ -1344,6 +1368,7 @@ export function HomeScreen({
   spotsLane,
   collectionsLane,
   tripsError,
+  tripsOffline,
   phase,
   onPressCreateTrip,
   onPressSavedPlaces,
@@ -1382,6 +1407,7 @@ export function HomeScreen({
             spotsLane={spotsLane}
             collectionsLane={collectionsLane}
             tripsError={tripsError}
+            tripsOffline={tripsOffline}
             phase={phase}
             onPressSpotsMore={onPressSpotsMore}
             onPressPastTripsMore={onPressPastTripsMore}
