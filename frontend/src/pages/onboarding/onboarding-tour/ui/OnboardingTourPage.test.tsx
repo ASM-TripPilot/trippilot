@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { openPressGuardWindow, resetPressGuard } from '@/shared/lib/pressGuard';
+import { answerReduceMotionSynchronously } from '@/test-support/animatedProbe';
 
 import { OnboardingTourPage } from './OnboardingTourPage';
 
@@ -53,6 +54,8 @@ const FROZEN_NOW = 1_790_000_000_000;
 // 모듈 싱글턴(연타 창·호출 기록)은 파일 최상위에서 리셋한다.
 beforeEach(() => {
   resetPressGuard();
+  // TRIP-1624 — "동작 줄이기" 답을 effect 안에서 동기로 받는다(비동기 답이 act 밖에서 상태를 바꾸는 경고 제거).
+  answerReduceMotionSynchronously(false);
   routerMock.replace.mockClear();
   routerMock.push.mockClear();
   routerMock.back.mockClear();

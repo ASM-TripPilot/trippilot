@@ -8,7 +8,10 @@ import {
 } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
-import { useAnimatedProbe } from '@/test-support/animatedProbe';
+import {
+  answerReduceMotionSynchronously,
+  useAnimatedProbe,
+} from '@/test-support/animatedProbe';
 import {
   flushOsAnswer,
   holdReduceMotionOn,
@@ -93,6 +96,10 @@ function baseProps(
     ...over,
   };
 }
+
+// 모션을 보지 않는 케이스는 "동작 줄이기 켜짐"을 동기로 답한다(TRIP-1624) — 꺼짐이면 카운트업 Animated 가 실제 타이머로 돌아 틱마다
+// act 밖에서 상태를 바꾼다. 모션 케이스(아래 'TRIP-1386 · 모션')는 `probe.setReduceMotion` 으로 스스로 정한다.
+beforeEach(() => answerReduceMotionSynchronously(true));
 
 function renderScreen(over: Partial<TripSummaryScreenProps> = {}) {
   const props = baseProps(over);

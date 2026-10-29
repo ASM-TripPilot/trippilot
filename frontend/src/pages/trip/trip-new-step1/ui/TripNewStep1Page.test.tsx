@@ -160,7 +160,8 @@ beforeEach(() => {
 afterEach(() => {
   clearAccessToken();
   mockStubScreen = false;
-  useTripWizardStore.getState().reset();
+  // TRIP-1624 — 화면이 아직 마운트돼 있는 때(RNTL 정리는 이 훅 뒤)라 reset 이 구독자를 갱신한다 → act 로 감싼다.
+  act(() => useTripWizardStore.getState().reset());
 });
 
 /**
@@ -214,7 +215,7 @@ describe('스토어 → 요약 행 도출 배선', () => {
   });
 
   afterEach(() => {
-    useTripWizardStore.getState().reset();
+    act(() => useTripWizardStore.getState().reset());
   });
 
   describe('진입 직후 — 빈 스토어면 플레이스홀더 + 게이트 닫힘 (맹점①)', () => {

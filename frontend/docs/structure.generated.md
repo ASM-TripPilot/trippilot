@@ -1786,7 +1786,7 @@
 - `src/shared/ui/useToastBottom.ts`  →  useToastBottom
 
 ## src/test-support/
-- `src/test-support/animatedProbe.ts`  →  AnimatedProbe · useAnimatedProbe · hostNodes
+- `src/test-support/animatedProbe.ts`  →  AnimatedProbe · useAnimatedProbe · hostNodes · answerReduceMotionSynchronously
 - `src/test-support/apiBase.ts`  →  BASE
 - `src/test-support/barMotionProbe.ts`  →  BAR_ROOT · SCHEDULE · START_HOME · START_EXPLORE · START_RECORDS · START_MY · START_CELLS · FINAL_IDS · START5_IDS · NEW_CELLS · BarIds · HUB_IDS · withBarIds · visibleIds · frameSample · MotionWatch · watchMotion · joinWatches · advance · moved · structureSteady · lastSample · firstSeen · firstGone · staysOnceSeen · staysOnceGone · deferOsAnswer · flushOsAnswer · holdReduceMotionOn · layoutStyle · hiddenSpacingClasses · RowReading · readRow · setWindowWidth · SlotEffect · slotEffect · rootScale · isMounted · scheduleVisibleCenter · InteractionGate · useInteractionGate
 - `src/test-support/basesFakeServer.ts`  →  basesStay · STAY_A · STAY_B · basesAssignment · basesTrip · NETWORK_WAIT · assignNight · sheetClosed · settle · BasesFakeInit · createBasesFakeServer
@@ -1822,6 +1822,7 @@
 - `src/test-support/queryRender.tsx`  →  newTestQueryClient · createWrapper · createGcZeroWrapper · renderWithQueryClient · settle
 - `src/test-support/settingsHandlers.ts`  →  API_BASE · SettingsBodies · settingsHandlers · createNetworkTracker
 - `src/test-support/sheetTree.ts`  →  closestAncestor · isInsideSheet · sheetScrollOf · treeIndexOf · renderedText · closestScrollView · stubScrollTo · fireChipLayout
+- `src/test-support/splashGateRoutes.tsx`  →  SPLASH_GATE_STUB_ROUTES
 - `src/test-support/storageMock.ts`  →  saveTokens · getTokens · clearTokens · hasStoredToken
 - `src/test-support/toastHarness.tsx`  →  WithToastHost · resetToast
 - `src/test-support/tripRecordsFixtures.ts`  →  DaySlotFixture · daySlot · daySlotAt · tripItinerary · completedVisitOn · actualVisit · tripRecord · recordsHandler · summaryHandler
@@ -1883,4 +1884,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1205개 파일
+합계 1206개 파일

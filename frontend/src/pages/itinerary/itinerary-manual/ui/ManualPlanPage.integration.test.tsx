@@ -253,7 +253,7 @@ describe('저장하고 확정하기', () => {
     server.resetHandlers();
     clearAccessToken();
     resetToast();
-    useTripWizardStore.getState().reset();
+    act(() => useTripWizardStore.getState().reset());
   });
 
   function renderPage() {
@@ -1290,7 +1290,7 @@ describe('빈 일정으로 시작 — POST 성공 뒤 헤더·일차 칩', () =>
   afterEach(() => {
     server.resetHandlers();
     clearAccessToken();
-    useItineraryEditStore.getState().reset();
+    act(() => useItineraryEditStore.getState().reset());
   });
 
   function renderPage() {
@@ -1556,7 +1556,7 @@ describe('새로 짜기(startFresh) — 옛 일정 비우기', () => {
   afterEach(() => {
     server.resetHandlers();
     clearAccessToken();
-    useItineraryEditStore.getState().reset();
+    act(() => useItineraryEditStore.getState().reset());
   });
 
   function renderPage(props: { startFresh?: boolean } = {}) {
@@ -1940,7 +1940,7 @@ describe('저장 뒤 위반 요약 게이트', () => {
     resetToast();
     server.resetHandlers();
     clearAccessToken();
-    useTripWizardStore.getState().reset();
+    act(() => useTripWizardStore.getState().reset());
   });
 
   function renderPage() {
@@ -2367,7 +2367,7 @@ describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMo
     openGet?.(); // 붙잡힌 응답을 남기지 않는다.
     server.resetHandlers();
     clearAccessToken();
-    useItineraryEditStore.getState().reset();
+    act(() => useItineraryEditStore.getState().reset());
   });
 
   function renderPage(props: { startFresh?: boolean } = {}) {

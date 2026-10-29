@@ -19,6 +19,7 @@ import type {
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
+import { answerReduceMotionSynchronously } from '@/test-support/animatedProbe';
 import {
   flushOsAnswer,
   holdReduceMotionOn,
@@ -166,6 +167,8 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 beforeEach(() => {
   setAccessToken('a');
   mockShareArmed.value = false;
+  // TRIP-1624 — 카운트업 숫자가 실제 타이머로 돌며 틱마다 act 밖에서 상태를 바꾸지 않게 "동작 줄이기 켜짐"을 동기로 답한다.
+  answerReduceMotionSynchronously(true);
 });
 // 칸 이동은 연타 가드(모듈 전역 400ms 창)를 지난다 — 앞 테스트의 누름이 뒤 테스트를 막지 않게 파일 최상위에서 닫는다.
 afterEach(() => {

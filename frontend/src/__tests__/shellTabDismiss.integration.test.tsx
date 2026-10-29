@@ -128,6 +128,9 @@ describe('TRIP-1559 T3 · 탭 바 위에 스택 화면이 올라오면 탭 바 �
     '(tabs)/_layout': TabsLayout,
     '(tabs)/index': Empty,
     '(tabs)/explore': Empty,
+    '(tabs)/itinerary': Empty,
+    '(tabs)/records': Empty,
+    '(tabs)/my': Empty,
     h16: StackScreenWithBar,
   };
 

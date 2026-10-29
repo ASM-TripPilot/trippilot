@@ -106,7 +106,7 @@ beforeEach(() => {
 afterEach(() => {
   clearAccessToken();
   resetToast();
-  useTripWizardStore.getState().reset();
+  act(() => useTripWizardStore.getState().reset());
   server.resetHandlers();
 });
 
@@ -727,7 +727,7 @@ describe('기간 편집 시트 (W-1~W-5)', () => {
 
   afterEach(() => {
     server.resetHandlers();
-    useTripWizardStore.getState().reset();
+    act(() => useTripWizardStore.getState().reset());
   });
 
   describe('W-1 · 기간 행 탭이 시트를 연다', () => {
@@ -1033,8 +1033,11 @@ describe('동행 편집 시트 (C-1~C-6)', () => {
       renderPage();
 
       // 시트 열기 전 store 를 선상태로 만든다.
-      useTripWizardStore.getState().setParty(3);
-      useTripWizardStore.getState().selectCompanion('가족');
+      // TRIP-1624 — 페이지가 마운트된 뒤에 스토어를 바꾸니 act 로 감싼다.
+      act(() => {
+        useTripWizardStore.getState().setParty(3);
+        useTripWizardStore.getState().selectCompanion('가족');
+      });
 
       await openSheet('companion');
 
@@ -1109,8 +1112,11 @@ describe('동행 편집 시트 (C-1~C-6)', () => {
 
     it('C-6b · 연인 2명에서 친구를 고르면 2명 그대로 · − 잠김 · + 살아 있음, + 로 3명이 되면 − 가 풀린다', async () => {
       renderPage();
-      useTripWizardStore.getState().setParty(2);
-      useTripWizardStore.getState().selectCompanion('연인');
+      // TRIP-1624 — 페이지가 마운트된 뒤에 스토어를 바꾸니 act 로 감싼다.
+      act(() => {
+        useTripWizardStore.getState().setParty(2);
+        useTripWizardStore.getState().selectCompanion('연인');
+      });
       await openSheet('companion');
 
       fireEvent.press(screen.getByTestId(chip('friend')));
@@ -1139,8 +1145,11 @@ describe('동행 편집 시트 (C-1~C-6)', () => {
       'C-6c · %s — 칩을 고르면 2명, 적용하면 store 2',
       async (_label, fromType, fromParty, toCode, toType) => {
         renderPage();
-        useTripWizardStore.getState().setParty(fromParty);
-        useTripWizardStore.getState().selectCompanion(fromType);
+        // TRIP-1624 — 페이지가 마운트된 뒤에 스토어를 바꾸니 act 로 감싼다.
+        act(() => {
+          useTripWizardStore.getState().setParty(fromParty);
+          useTripWizardStore.getState().selectCompanion(fromType);
+        });
         await openSheet('companion');
 
         fireEvent.press(screen.getByTestId(chip(toCode)));

@@ -2,11 +2,14 @@ import { render, screen } from '@testing-library/react-native';
 
 import { AccessibilityInfo } from 'react-native';
 
+import { answerReduceMotionSynchronously } from '@/test-support/animatedProbe';
+
 import { SplashScreen } from './SplashScreen';
 
 const reduceSpy = jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled');
 
-beforeEach(() => reduceSpy.mockResolvedValue(false));
+// TRIP-1624 — 답을 effect 안에서 동기로 받아 render 의 act 가 감싼다(비동기 답은 act 밖 상태 변경 경고를 낸다).
+beforeEach(() => answerReduceMotionSynchronously(false));
 
 describe('c01-splash — 부트스트랩 스플래시 (AC-SHELL-01-10 · AC-ONB-01-11)', () => {
   it('로고·워드마크·슬로건·진행 인디케이터를 몰입형으로 렌더한다', () => {
