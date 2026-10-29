@@ -79,7 +79,7 @@ export function MyTripsSortSheet({
                 accessibilityRole="radio"
                 accessibilityState={{ selected: isSelected }}
                 onPress={() => onSelect(key)}
-                className="h-[56px] w-full flex-row items-center justify-between"
+                className="min-h-[56px] w-full flex-row items-center justify-between"
               >
                 <View className="gap-xs">
                   <Text

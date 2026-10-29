@@ -4,10 +4,10 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import { Dimensions } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot/model';
+import { describeAtFontScales, setFontScale } from '@/test-support/fontScale';
 
 import { ChevronRightGlyph, MemoGlyph, PhotoGlyph } from './SlotGlyphs';
 import { SlotProgressCard } from './SlotProgressCard';
@@ -57,19 +57,11 @@ const id = (role: string) => `execution-live-slot-${role}-${KEY}`;
 const PHOTOS = [{ uri: 'file:///a.jpg' }, { uri: 'file:///b.jpg' }];
 const MEMO = '골목마다 알록달록한 벽화. 전망대에서 인증샷 남겼다.';
 
-// TRIP-1270 — 글자 배율(fontScale). jest 의 RN 목은 기본값이 1 이 아니라 2 라서, 고정하지 않으면 이 파일 전부가
-// 큰 글자 가지를 그린다(02a ★1). 모듈 싱글턴(Dimensions)이므로 고정·복원은 describe 밖 최상위에 둔다.
-const BASE_WINDOW = Dimensions.get('window');
-
-/** 렌더 **전에** 부른다 — useWindowDimensions·PixelRatio.getFontScale 둘 다 이 값을 읽는다(02a ★2). */
-function setFontScale(fontScale: number): void {
-  const window = { ...BASE_WINDOW, fontScale };
-  Dimensions.set({ window, screen: window });
-}
-
+// TRIP-1270 — 글자 배율(fontScale). 전역 기본은 fontScalePreload.cjs 가 1 로 고정하고(TRIP-1629), 이 파일은 헬퍼
+// (test-support/fontScale)로 렌더 **전에** 바꾼다 — useWindowDimensions·PixelRatio.getFontScale 둘 다 이 값을 읽는다(02a ★2).
 beforeEach(() => setFontScale(1));
 
-afterEach(() => Dimensions.set({ window: BASE_WINDOW, screen: BASE_WINDOW }));
+afterEach(() => setFontScale(1));
 
 describe('SlotProgressCard · done (AC-3)', () => {
   it('C1 이름·chevron·"09:30"+"방문"·사진 2장·후기를 그린다', () => {
@@ -1342,6 +1334,65 @@ function renderHead(state: 'done' | 'upcoming') {
     />
   );
 }
+
+// TRIP-1629 — 배율 매트릭스(1·1.353·1.786·3.571). 동작만 본다: 어느 배율에서도 글자·testID 가 그려지고 눌린 콜백이 나간다.
+// 잘림·겹침은 jest 가 레이아웃을 못 재서 단언하지 않는다 — 실화면 캡처(6-b)가 맡는다(README §테스트 전략 판정 4).
+describeAtFontScales('SlotProgressCard · 배율 매트릭스 (TRIP-1629)', () => {
+  it('M1 done — 이름·방문 시각·"방문" 글자가 그려진다', () => {
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="done"
+        visitedLabel="09:30"
+      />
+    );
+
+    expect(screen.getByTestId(id('name'))).toHaveTextContent('감천문화마을');
+    expect(screen.getByTestId(id('visit-time'))).toHaveTextContent('09:30');
+    expect(screen.getByTestId(id('visit-label'))).toHaveTextContent('방문');
+  });
+
+  it('M2 active — 상태줄 글자가 그려지고 [방문 완료]를 누르면 콜백이 1회 나간다', () => {
+    const onPressComplete = jest.fn();
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="active"
+        visitedLabel="12:52"
+        onPressComplete={onPressComplete}
+      />
+    );
+
+    expect(screen.getByTestId(id('time'))).toHaveTextContent(
+      '12:52 도착 · 지금 방문 중'
+    );
+    fireEvent.press(screen.getByTestId('execution-arrive-complete'));
+
+    expect(onPressComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('M3 upcoming — "예정"·도착 예정 글자가 그려지고 [도착]을 누르면 콜백이 1회 나간다', () => {
+    const onPressArrive = jest.fn();
+    render(
+      <SlotProgressCard
+        slot={mkSlot({ startAt: '15:00:00', openingHours: '11:00 - 22:00' })}
+        date={DATE}
+        state="upcoming"
+        onPressArrive={onPressArrive}
+      />
+    );
+
+    expect(screen.getByTestId(id('status'))).toHaveTextContent('예정');
+    expect(screen.getByTestId(id('time'))).toHaveTextContent(
+      '15:00 도착 예정 · 11:00–22:00 영업'
+    );
+    fireEvent.press(screen.getByTestId(id('arrive')));
+
+    expect(onPressArrive).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('SlotProgressCard · 큰 글자 — 머리 줄 배율 분기 (TRIP-1270 AC-5)', () => {
   it.each([1, 1.49])(

@@ -42,6 +42,7 @@ module.exports = {
   setupFiles: [
     ...expoPreset.setupFiles,
     '<rootDir>/src/test-support/animatedPreload.cjs',
+    '<rootDir>/src/test-support/fontScalePreload.cjs',
   ],
   transform: {
     // 프리셋의 babel transform 키(\.[jt]sx?$)는 .mjs 를 못 잡는다. MSW 의존 트리는
