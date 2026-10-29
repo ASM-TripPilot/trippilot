@@ -59,6 +59,11 @@ spring:
 # dev=application-local.yml(gitignore), prod=Secrets Manager→env. token/user-info-uri 는 비밀 아님(제공자 고정값).
 # 값 미주입 시 빈 문자열 → 해당 제공자 로그인 시도 시에만 실패(기동엔 영향 없음).
 trippilot:
+  # 웹 클라이언트(브라우저) 허용 출처 — CORS(TRIP-1655). 쉼표 구분, 출처 그대로(`https://host`, 끝 `/` 없이).
+  # 비면 CORS 응답을 내지 않는다(웹 이전과 동일). `*` 는 기동 거부 — 허용 출처를 열어 두지 않는다(SECURITY 기준선).
+  # 같은 값을 구글 웹 로그인 redirect 허용 목록으로도 쓴다(`social.google-web.redirect-origins`, TRIP-1656).
+  web:
+    cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:}
   # 아웃박스 배달 경로(TRIP-1469). none = 폴링이 구독자에게 직접 배달(종전·운영 기본). kafka = 폴링은 브로커로 넘기고
   # 소비자가 배달한다(로컬 `docker compose --profile kafka` 전용 — 배포에는 브로커가 없다).
   # ⚠ kafka → none 으로 되돌리면 토픽에 남은 미소비 이벤트는 배달되지 않는다(행은 송신 때 발행 표시). 되돌리기 전에
