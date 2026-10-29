@@ -21,7 +21,7 @@ import { useRecordsCalendar } from '../model/useRecordsCalendar';
 import { RecordsCalendarScreen } from './RecordsCalendarScreen';
 import { useTripWizardStore } from '@/features/create-trip';
 import { buildMonthGrid, shiftMonth } from '@/shared/lib/monthGrid';
-import { seoulDate } from '@/shared/lib/seoulDate';
+import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 /**
@@ -52,7 +52,9 @@ export function RecordsCalendarPage(): ReactElement {
     ),
   });
 
-  const today = seoulDate(new Date());
+  // 오늘(KST) — 상태로 들어 자정을 넘기면 바뀐다(TRIP-1639 · TRIP-1364 선례). 렌더 중 `seoulDate(new Date())` 는 마운트에 굳는다.
+  const today = useSeoulToday();
+  // 보고 있는 달은 사용자 탐색 상태라 첫 렌더의 오늘에서만 정한다 — 자정을 넘겨도 넘기지 않는다(TRIP-1639 D3).
   const [yearMonth, setYearMonth] = useState(today.slice(0, 7));
 
   // INV-4 · trips=[] 는 로딩·에러에서도 나온다 — isError·isPending 을 빈 상태보다 먼저 갈라

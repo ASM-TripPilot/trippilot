@@ -2030,6 +2030,60 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
     });
   });
 
+  // TRIP-1639
+  describe('🔴 일정 탭을 연 채 자정(KST)을 넘기면 "여행 중" 고정·배지가 새 날로 바뀐다', () => {
+    // 여행 중이던 O(가장 옛 갱신)와 먼 미래 N(최신 갱신), 둘 다 확정. 자정 전엔 O 가 맨 위로 고정되고, 자정 뒤엔 최신순이라 N 이 위다.
+    const OVERNIGHT = mk('O', 'O 여행', {
+      startDate: '2026-10-11',
+      endDate: '2026-10-13',
+      updatedAt: '2026-07-01T00:00:00.000Z',
+    });
+    const LATER = mk('N', 'N 여행', {
+      startDate: '2099-06-10',
+      endDate: '2099-06-13',
+      updatedAt: '2026-09-20T00:00:00.000Z',
+    });
+
+    /** 가짜 시계를 ms 만큼 흘리고 그 사이 요청·응답(msw→axios→TanStack) 약속을 함께 푼다. */
+    async function advance(ms: number): Promise<void> {
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(ms);
+      });
+    }
+
+    it('10-13 23:59 에 "여행 중"으로 맨 위에 고정된 여행이 61초 뒤(10-14)엔 고정이 풀려 아래로 내려가고 배지가 "여행 중"이 아니며, 일정은 다시 받지 않는다', async () => {
+      // 준비 — KST 2026-10-13 23:59:00 (= UTC 14:59). 완료 배너는 관심 밖이라 seen 읽기를 막아 끈다.
+      (readIdSet as jest.Mock).mockImplementation(() => new Promise(() => {}));
+      jest.useFakeTimers({ now: new Date('2026-10-13T14:59:00Z') });
+      try {
+        serve([OVERNIGHT, LATER], { O: done('O'), N: done('N') });
+        renderPage();
+        await advance(100);
+
+        // 앵커 — 자정 전: O 가 "여행 중"으로 맨 위에 고정이다(이게 서야 아래 "바뀜"이 의미를 갖는다).
+        expect(screen.getByTestId('my-trip-badge-O')).toHaveTextContent(
+          '여행 중'
+        );
+        expect(cardOrder()).toEqual(['my-trip-card-O', 'my-trip-card-N']);
+        const itinFetchesBefore = count('GET /api/v1/trips/O/itinerary');
+
+        // 실행 — 자정을 넘긴다.
+        await advance(61_000);
+
+        // 단언 ① 오늘이 10-14 가 되어 O 는 종료 — 고정이 풀려 최신순(N 먼저)으로 돌아간다.
+        expect(cardOrder()).toEqual(['my-trip-card-N', 'my-trip-card-O']);
+        // 단언 ② 배지도 "여행 중"에서 바뀐다(배지 문구 자체는 이 테스트의 관심 밖).
+        expect(screen.getByTestId('my-trip-badge-O')).not.toHaveTextContent(
+          '여행 중'
+        );
+        // 단언 ③ AC2 — 오늘이 바뀌어도 일정 조회 키는 오늘과 무관해 다시 받지 않는다.
+        expect(count('GET /api/v1/trips/O/itinerary')).toBe(itinFetchesBefore);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
+
   describe('정렬 시트와 저장된 기준', () => {
     // 기준마다 순서가 전부 다른 세 건 — 최신순 Y X Z · 출발일순 Z X Y · 이름순 Y Z X. 시계는 흉내 내지 않는다(지난 = 2022).
     const Y = mk('Y', '강릉 여행', {
