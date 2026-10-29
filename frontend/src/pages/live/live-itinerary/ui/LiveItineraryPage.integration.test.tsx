@@ -8,6 +8,7 @@ import { AccessibilityInfo, Linking } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -610,6 +611,9 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
         HttpResponse.json({ legalConsent: true })
       );
     afterEach(() => {
+      // TRIP-1634 — 화면부터 내린다. RNTL 자동 정리는 바깥 afterEach 라 이 리셋보다 늦어서, 그 사이 늦은 재렌더가 떨어지면
+      // 목이 가짜 객체→실제 훅으로 바뀌어 같은 컴포넌트의 훅 개수가 달라진다(React "order of Hooks" 경고, CI 간헐).
+      cleanup();
       mockAutomation = null;
       mockAutomationLater.mockClear();
       mockAutomationEnable.mockClear();
@@ -6054,6 +6058,7 @@ describe('방문 체크', () => {
       screen.queryByTestId(`execution-live-slot-visit-time-${TODAY}#${poiId}`);
 
     afterEach(() => {
+      cleanup(); // TRIP-1634 — 위 U10 afterEach 와 같은 이유
       mockAutomation = null;
     });
 
