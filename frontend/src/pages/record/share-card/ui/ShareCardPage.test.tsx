@@ -27,9 +27,12 @@ import { ShareCardPage } from './ShareCardPage';
  * 3동작: 준비(요약·여행 조회 결과 주입) → 실행(페이지 렌더·버튼 press) → 단언(안내/화면·라우터 호출).
  */
 
-jest.mock('expo-router', () => ({
-  router: { push: jest.fn(), canGoBack: jest.fn(() => true), back: jest.fn() },
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    router: ['push', 'back', 'canGoBack'],
+  })
+);
 
 jest.mock('@/features/reflection/model/useTripSummary', () => ({
   useTripSummary: jest.fn(),

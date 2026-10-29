@@ -34,15 +34,13 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
-jest.mock('expo-router', () => {
-  const replace = jest.fn();
-  const push = jest.fn();
-  return {
-    __esModule: true,
-    useRouter: () => ({ replace, push, back: jest.fn() }),
-    router: { replace, push, back: jest.fn() },
-  };
-});
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back'],
+    router: ['push', 'replace', 'back'],
+  })
+);
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const routerMock = require('expo-router').router as {

@@ -50,9 +50,12 @@ jest.mock('expo-linking', () => ({
   openSettings: (...args: unknown[]) => mockOpenSettings(...args),
 }));
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ back: jest.fn(), push: jest.fn(), replace: jest.fn() }),
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back'],
+  })
+);
 
 // 통합 버킷의 기다림 상한(5초, integrationSetup)과 테스트 상한이 같으면 기다리던 화면이 끝내 안 올 때 "시간 초과"만
 // 남고 무엇을 못 찾았는지가 사라진다 — 테스트 상한을 넉넉히 둬 기다림의 실패 메시지가 먼저 나오게 한다.

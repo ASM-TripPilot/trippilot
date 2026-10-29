@@ -17,6 +17,7 @@ import { server } from '@/mocks/server';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 import { StayRegisterPage } from './StayRegisterPage';
 import type { MapCenter } from '@/shared/map';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * e05 숙소 등록 — StayRegisterPage 배선 통합 테스트.
@@ -46,12 +47,14 @@ jest.mock('@/shared/storage', () => ({
 
 // jest.mock 팩토리는 파일 맨 위로 끌어올려지므로 바깥 변수를 못 본다 — 이름이 `mock`으로
 // 시작하는 변수만 예외다.
-const mockBack = jest.fn();
-const mockPush = jest.fn();
+const { back: mockBack, push: mockPush } = routerSpies;
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ back: mockBack, push: mockPush }),
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'back'],
+  })
+);
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));

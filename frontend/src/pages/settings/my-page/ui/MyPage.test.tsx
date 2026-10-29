@@ -41,6 +41,7 @@ import {
   BookmarkGlyph,
   HeartGlyph,
 } from '@/features/settings/ui/SettingsGlyphs';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * l03 마이 — MyPage 배선을 생성 훅 목으로 보는 node 버킷 테스트(msw 없음).
@@ -57,11 +58,13 @@ import {
  *    문자열이라 페이지가 거기에 소요시간을 지어 넣는 길이 실재하고, 그 결함을 잡는 것은 이 it 뿐이다(실측).
  */
 
-const mockPush = jest.fn();
-const mockReplace = jest.fn();
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, replace: mockReplace }),
-}));
+const { push: mockPush, replace: mockReplace } = routerSpies;
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace'],
+  })
+);
 
 jest.mock('@/shared/api/generated/account/account', () => ({
   useGetMe: jest.fn(),

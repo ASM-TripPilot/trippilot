@@ -65,9 +65,12 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
-jest.mock('expo-router', () => ({
-  router: { push: jest.fn(), back: jest.fn() },
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    router: ['push', 'back'],
+  })
+);
 
 // 테스트 상한을 `waitFor` 상한(5초, integrationSetup)보다 길게 — 같으면 red 가 단언 내용 대신
 // "Exceeded timeout" 으로만 보인다. green 은 나타나는 즉시 끝나 느려지지 않는다.

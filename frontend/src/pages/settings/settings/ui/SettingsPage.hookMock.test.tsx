@@ -44,6 +44,7 @@ import {
   unregisterStoredPushToken,
 } from '@/shared/push';
 import { newTestQueryClient } from '@/test-support/queryRender';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * l05 설정 — SettingsPage 배선을 생성 훅 목으로 보는 node 버킷 테스트.
@@ -93,11 +94,14 @@ jest.mock('expo-constants', () => ({
   },
 }));
 // 옛 `.nav` 모양 — SettingsPage 는 누르는 순간 require('expo-router').router 를 읽는다(loadRouter).
-// 메서드는 화살표로 감싸 **불릴 때** 목을 읽는다(팩토리가 먼저 돌아도 mockPush 가 살아 있다).
-const mockPush = jest.fn();
-jest.mock('expo-router', () => ({
-  router: { push: (...args: unknown[]) => mockPush(...args), back: jest.fn() },
-}));
+// mockPush 는 공용 목 기록장(`routerSpies`)의 별칭이다.
+const { push: mockPush } = routerSpies;
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    router: ['push', 'back'],
+  })
+);
 // TRIP-1422 — 내보내기 파일 공유의 네이티브 경계 셋만 바꾼다(페이지·실행 함수·어댑터 파일은 진짜다).
 //  ① 'expo' 는 "이 빌드에 모듈이 있나" 조회만 가로챈다 — jest-expo 는 ExpoSharing 을 늘 "있다"고 답해서(실측)
 //     모듈 없는 빌드는 이 집합에 이름을 넣어야만 재현된다. 나머지 export 는 진짜를 그대로 비춘다(Proxy).

@@ -32,6 +32,7 @@ import {
 import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
 
 import { PlaceExplorePage } from './PlaceExplorePage';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * AC-3 · AC-4 · AC-5 · AC-6 · AC-7 · AC-8 (+ 01b Seed Q1·Q3·Q9) — d04 배선.
@@ -106,12 +107,14 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
-const mockPush = jest.fn();
+const {
+  push: mockPush,
+  replace: mockReplace,
+  dismissTo: mockDismissTo,
+  back: mockBack,
+} = routerSpies;
 // TRIP-708: replace 도 같은 지연-참조 목으로 준다 — 탭바가 replace 를 쓰지 않음을 P-13 이 관찰한다.
-const mockReplace = jest.fn();
 // TRIP-1262: 복제 탭바는 replace 가 아니라 dismissTo 로 항법한다 — 같은 지연-참조 목(P-13 이 관찰).
-const mockDismissTo = jest.fn();
-const mockBack = jest.fn();
 // region 은 '더 담기'가 여행지 여러 곳을 같은 키로 반복해 실으면 배열이 된다(expo-router 규약) —
 // P-9(다지역)를 위해 배열도 허용한다(단일지역 케이스 P-2 는 string 그대로 유효).
 // TRIP-1026: 위저드 출처 파라미터(`wizardOriginParams()`)도 같은 창구로 싣는다 — 키 이름을 테스트가
@@ -120,27 +123,19 @@ let mockParams: Record<string, string | string[] | undefined> = {};
 
 // 정적 `router` 싱글턴과 `useRouter()` 훅을 **둘 다** 같은 목으로 준다 — 배선이 어느 쪽을
 // 쓰든 이 파일의 단언은 같다(리포에 두 선례가 공존한다: StaySearchPage vs TripNewStep1Page).
-// ★ `router.push` 는 화살표로 한 겹 감싸 **지연 참조**한다. `jest.mock` 팩토리는 hoist 되어
-// `const mockPush` 선언보다 먼저 도는데, `router: { push: mockPush }` 처럼 즉시 읽으면 그
-// 시점의 undefined 가 박혀 `router.push is not a function` 이 난다(실측). `useRouter` 쪽이
-// 멀쩡한 것은 호출 시점에야 읽기 때문이다 — 리포 선례가 전부 훅 형태라 이 함정이 숨어 있었다.
-jest.mock('expo-router', () => ({
-  router: {
-    push: (href: string) => mockPush(href),
-    replace: (href: string) => mockReplace(href),
-    dismissTo: (href: string) => mockDismissTo(href),
-    // TRIP-1026 AC-4 가 뒤로 버튼까지 누른다 — 없으면 `router.back is not a function` 으로 죽는다.
-    back: () => mockBack(),
-  },
-  // TRIP-1093: 위저드 출처 ♥ 가 뒤로 간다 — 구현이 훅 쪽 back 을 골라도 같은 mockBack 에 모인다.
-  useRouter: () => ({
-    push: mockPush,
-    replace: mockReplace,
-    dismissTo: mockDismissTo,
-    back: mockBack,
-  }),
-  useLocalSearchParams: () => ({ ...mockParams }),
-}));
+// ★ 훅·명령형 호출은 공용 목의 기록장(`routerSpies`)에 쌓인다 — `mockPush` 등은 그 별칭이다. 옛 인라인 목은
+// `router: { push: mockPush }` 처럼 팩토리가 즉시 읽으면 hoist 때문에 undefined 가 박혀 화살표로 감싸야 했지만(실측),
+// 이제 팩토리는 핸들을 읽지 않는다.
+// TRIP-1026 AC-4 가 뒤로 버튼까지 누른다 — 없으면 `router.back is not a function` 으로 죽는다.
+// TRIP-1093: 위저드 출처 ♥ 가 뒤로 간다 — 구현이 훅 쪽 back 을 골라도 같은 mockBack 에 모인다.
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back', 'dismissTo'],
+    router: ['push', 'replace', 'back', 'dismissTo'],
+    params: () => ({ ...mockParams }),
+  })
+);
 
 /** authWiring.integration.test.ts:59 와 같은 값(리포 관례). */
 

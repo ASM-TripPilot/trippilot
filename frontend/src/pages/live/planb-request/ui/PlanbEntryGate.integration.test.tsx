@@ -24,6 +24,7 @@ import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 
 import { PlanbEntryGate } from './PlanbEntryGate';
 import { newTestQueryClient } from '@/test-support/queryRender';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * 상황 감지 FE-B · frontend-components §3.2·§6·§9·§11 · BR-SA-23 — 진입 게이트 통합(실 HTTP = MSW).
@@ -52,19 +53,18 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
-const mockReplace = jest.fn();
-const mockDismissTo = jest.fn();
-const mockPush = jest.fn();
-const mockBack = jest.fn();
-jest.mock('expo-router', () => ({
-  useRouter: () => ({
-    replace: (...args: unknown[]) => mockReplace(...args),
-    dismissTo: (...args: unknown[]) => mockDismissTo(...args),
-    push: (...args: unknown[]) => mockPush(...args),
-    back: (...args: unknown[]) => mockBack(...args),
-    canGoBack: () => true,
-  }),
-}));
+const {
+  replace: mockReplace,
+  dismissTo: mockDismissTo,
+  push: mockPush,
+  back: mockBack,
+} = routerSpies;
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back', 'dismissTo', 'canGoBack'],
+  })
+);
 
 jest.mock('../model/useReplanGpsOrigin', () => ({
   useReplanGpsOrigin: () => () => Promise.resolve(undefined),

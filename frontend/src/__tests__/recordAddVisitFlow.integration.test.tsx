@@ -56,17 +56,15 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
-// router 와 useRouter() 가 같은 객체 — 구현이 어느 쪽을 써도 같은 jest.fn 에 기록된다. canGoBack 은 true
+// router 와 useRouter() 가 같은 jest.fn(공용 목 기록장)에 기록된다 — 구현이 어느 쪽을 써도 관측된다. canGoBack 은 true
 // (back 을 canGoBack 으로 감싸는 구현도 back 호출이 관측되게).
-jest.mock('expo-router', () => {
-  const router = {
-    canGoBack: jest.fn(() => true),
-    back: jest.fn(),
-    replace: jest.fn(),
-    push: jest.fn(),
-  };
-  return { router, useRouter: () => router };
-});
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back', 'canGoBack'],
+    router: ['push', 'replace', 'back', 'canGoBack'],
+  })
+);
 
 // j01 이 마운트에 위치 권한을 조회한다 — 허용으로 두어 일반 모드.
 jest.mock('expo-location', () => ({

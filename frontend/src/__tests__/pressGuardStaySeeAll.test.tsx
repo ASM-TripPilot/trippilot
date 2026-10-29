@@ -5,6 +5,7 @@ import { RegionLevel } from '@/shared/api/index.schemas';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { StaySearchPage } from '@/pages/stay/stay-search';
 import ExploreRoute from '@routes/(tabs)/explore';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * TRIP-1013 #012 — 탐색 d01 숙소 '모두 보기' 연타의 두 번째 탭이 숙소 검색 첫 카드를
@@ -18,24 +19,17 @@ import ExploreRoute from '@routes/(tabs)/explore';
  * 넘기면 판정이 흔들린다(02a ★4). "창 밖"은 `resetPressGuard()`로 만든다.
  */
 
-const mockPush = jest.fn();
-const mockReplace = jest.fn();
+const { push: mockPush, replace: mockReplace } = routerSpies;
 let mockParams: Record<string, string> = {};
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({
-    push: mockPush,
-    replace: mockReplace,
-    setParams: jest.fn(),
-  }),
-  useLocalSearchParams: () => ({ ...mockParams }),
-  router: {
-    push: (...args: unknown[]) => mockPush(...args),
-    replace: (...args: unknown[]) => mockReplace(...args),
-    back: jest.fn(),
-    setParams: jest.fn(),
-  },
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'setParams'],
+    router: ['push', 'replace', 'back', 'setParams'],
+    params: () => ({ ...mockParams }),
+  })
+);
 
 const mockItemA: StayItem = {
   externalSource: 'NAVER',

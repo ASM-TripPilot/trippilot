@@ -65,14 +65,12 @@ jest.mock('../model/useReflectionPhotos', () => ({
   useReflectionPhotos: () => [],
 }));
 
-jest.mock('expo-router', () => ({
-  router: {
-    push: jest.fn(),
-    replace: jest.fn(),
-    canGoBack: jest.fn(() => true),
-    back: jest.fn(),
-  },
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    router: ['push', 'replace', 'back', 'canGoBack'],
+  })
+);
 
 const BASE = 'http://localhost:8080/api/v1';
 const DAY = '2026-09-24';

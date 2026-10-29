@@ -50,16 +50,13 @@ jest.mock('expo-linking', () => ({
 
 // 라우터 — replace/push/back 을 팩토리 클로저에 두고 router 로 함께 내보내 참조를 고정한다
 // (NicknamePage.integration.test.tsx 선례). useRouter() 는 매번 같은 replace 를 돌려준다.
-jest.mock('expo-router', () => {
-  const replace = jest.fn();
-  const push = jest.fn();
-  const back = jest.fn();
-  return {
-    __esModule: true,
-    useRouter: () => ({ replace, push, back }),
-    router: { replace, push, back },
-  };
-});
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back'],
+    router: ['push', 'replace', 'back'],
+  })
+);
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const routerMock = require('expo-router').router as {

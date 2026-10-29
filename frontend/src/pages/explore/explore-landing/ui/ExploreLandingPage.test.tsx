@@ -28,6 +28,7 @@ import {
   wizardDraftData,
 } from '@/test-support/wizardDraftFixture';
 import { ExploreLandingPage } from '@/pages/explore/explore-landing';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * 탐색 d01 랜딩 page — 숙소·장소 조회를 물어 카드 VM 을 조립하고 항법 콜백을 순수 화면
@@ -38,13 +39,15 @@ import { ExploreLandingPage } from '@/pages/explore/explore-landing';
  * 단위라 목은 맨 위 한 벌이고 describe 마다 반환값만 바꾼다(팩토리가 읽는 변수는 `mock` 으로 시작).
  */
 
-const mockPush = jest.fn();
-const mockSetParams = jest.fn();
+const { push: mockPush, setParams: mockSetParams } = routerSpies;
 let mockParams: { region?: string } = {};
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, setParams: mockSetParams }),
-  useLocalSearchParams: () => ({ ...mockParams }),
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'setParams'],
+    params: () => ({ ...mockParams }),
+  })
+);
 
 let mockRegionsResult: {
   data: Region[] | undefined;

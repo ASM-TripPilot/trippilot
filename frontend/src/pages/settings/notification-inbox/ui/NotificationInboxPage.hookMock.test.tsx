@@ -1,4 +1,5 @@
 import { newTestQueryClient } from '@/test-support/queryRender';
+import { routerSpies } from '@/test-support/expoRouterMock';
 // 부분 목 — 조회 훅만 가짜로 바꾸고 나머지(읽음 POST 함수·쿼리 키·생성 뮤테이션 훅)는 실물을 둔다.
 // 전체 자동 목이면 '모두 읽음' 배선이 생성 훅을 쓰는 순간 그 훅이 undefined 를 돌려줘 렌더가 죽는다(TRIP-773).
 jest.mock('@/shared/api/generated/notification/notification', () => ({
@@ -36,13 +37,13 @@ import { NotificationInboxPage } from './NotificationInboxPage';
  * `router.push` 목은 "불렸다·이 인자로·N회"까지 — 실제 화면 이동과 planb 모달 모양은 6-b 실기 몫.
  */
 
-const mockPush = jest.fn();
-jest.mock('expo-router', () => ({
-  router: {
-    push: (...args: unknown[]) => mockPush(...args),
-    back: jest.fn(),
-  },
-}));
+const { push: mockPush } = routerSpies;
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    router: ['push', 'back'],
+  })
+);
 
 function renderPage(ui: ReactElement = <NotificationInboxPage />): void {
   const client = newTestQueryClient();

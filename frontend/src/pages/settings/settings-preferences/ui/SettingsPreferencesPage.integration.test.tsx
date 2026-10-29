@@ -17,6 +17,7 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { PreferenceView } from '@/shared/api/index.schemas';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 import { SettingsPreferencesPage } from './SettingsPreferencesPage';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * l05 취향 전체 수정 — SettingsPreferencesPage(스스로 조회·저장하는 컨테이너) 통합 테스트.
@@ -29,12 +30,14 @@ import { SettingsPreferencesPage } from './SettingsPreferencesPage';
  *  - 옛 `.baseline` 은 QueryClientProvider 없이 그린다 — 스위치가 켜져 있어야만 유효한 전제다.
  */
 
-const mockBack = jest.fn();
-const mockPush = jest.fn();
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ back: mockBack, push: mockPush }),
-  router: { back: mockBack, push: mockPush },
-}));
+const { back: mockBack, push: mockPush } = routerSpies;
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'back'],
+    router: ['push', 'back'],
+  })
+);
 
 // 팩토리가 참조하려면 이름이 `mock` 으로 시작해야 한다(호이스팅 예외).
 let mockFakePreferences = false;

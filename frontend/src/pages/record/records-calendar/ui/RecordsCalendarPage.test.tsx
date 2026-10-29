@@ -22,6 +22,7 @@ import {
   resetWizardDraft,
   wizardDraftData,
 } from '@/test-support/wizardDraftFixture';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * TRIP-575 · 기록 탭 허브 페이지 배선(항법). 옛 `__tests__/tabsRecordsRoute.test` — 라우트 `(tabs)/records.tsx` 는 이 페이지를
@@ -43,10 +44,13 @@ import {
  * 3동작 뼈대: 준비=trips 목 + push 스파이 → 실행=render/press → 단언=push 인자·라벨 전이.
  */
 
-const mockPush = jest.fn();
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush }),
-}));
+const { push: mockPush } = routerSpies;
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push'],
+  })
+);
 
 const mockUseGetTrips = jest.fn();
 const mockItineraryOptions = jest.fn();

@@ -23,6 +23,7 @@ import { newTestQueryClient } from '@/test-support/queryRender';
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * l04 등록 숙소 — MyStaysPage 배선 통합 테스트.
@@ -39,13 +40,14 @@ import { WithToastHost, resetToast } from '@/test-support/toastHarness';
  *    어떤 구현에도 통과했다(TRIP-1076). 거점을 안 쓴다는 사실은 실 화면 관점 AC-6 이 msw 로 나간 쓰기 요청 0건으로 본다.
  */
 
-const mockPush = jest.fn();
-const mockBack = jest.fn();
-const mockReplace = jest.fn();
+const { push: mockPush, back: mockBack, replace: mockReplace } = routerSpies;
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: mockBack, replace: mockReplace }),
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back'],
+  })
+);
 
 // 토큰 저장소 — 기기 저장소를 건드리지 않게 배럴만 바꾼다(StayDetailPage 통합 선례).
 jest.mock('@/shared/storage', () => ({

@@ -23,6 +23,7 @@ import { coverFor } from '@/test-support/placeCoverFixtures';
 
 import { MustVisitTimePage } from './MustVisitTimePage';
 import { newTestQueryClient } from '@/test-support/queryRender';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * h07 배선을 **실 HTTP 로** 태우는 심판 — 이 칸의 급소다(AC-4 · AC-5 · AC-6 · AC-7 · D1 · D8).
@@ -57,12 +58,14 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
-const mockPush = jest.fn();
-const mockBack = jest.fn();
+const { push: mockPush, back: mockBack } = routerSpies;
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: mockBack, replace: jest.fn() }),
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back'],
+  })
+);
 
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = '11111111-1111-1111-1111-111111111111';

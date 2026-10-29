@@ -43,14 +43,13 @@ jest.mock('@/shared/storage', () => ({
 
 // expo-router 는 라우터 컨텍스트 없이 replace 만 관찰하면 되므로 목킹.
 // useRouter().replace 와 router.replace 가 같은 fn 을 공유 → 컨테이너가 무엇을 쓰든 관찰된다.
-jest.mock('expo-router', () => {
-  const replace = jest.fn();
-  return {
-    __esModule: true,
-    useRouter: () => ({ replace, push: jest.fn(), back: jest.fn() }),
-    router: { replace, push: jest.fn(), back: jest.fn() },
-  };
-});
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back'],
+    router: ['push', 'replace', 'back'],
+  })
+);
 
 /**
  * ★ makeAuthorize 목은 파일 전체에 걸린다(jest.mock 은 맨 위로 끌어올려진다) — 그래서 갈래를 describe

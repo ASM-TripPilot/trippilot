@@ -33,6 +33,7 @@ import {
 } from '../api/assistantSamples';
 import { AssistantSheetPage } from './AssistantSheetPage';
 import { newTestQueryClient } from '@/test-support/queryRender';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * TRIP-1514 · 도우미 시트 — **기본 어댑터(HttpAssistantAdapter) + MSW** 통합 테스트(U8 FD frontend-components R19).
@@ -66,17 +67,13 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
-const mockBack = jest.fn();
-const mockReplace = jest.fn();
-const mockPush = jest.fn();
-jest.mock('expo-router', () => ({
-  useRouter: () => ({
-    back: mockBack,
-    replace: mockReplace,
-    push: mockPush,
-    canGoBack: () => true,
-  }),
-}));
+const { back: mockBack, replace: mockReplace, push: mockPush } = routerSpies;
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back', 'canGoBack'],
+  })
+);
 
 // 턴 id 는 호출마다 달라야 "같은 id 재시도 / 새 id" 를 가를 수 있다.
 let mockUuid = 0;

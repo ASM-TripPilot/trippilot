@@ -1794,6 +1794,7 @@
 - `src/test-support/envSandbox.ts`  →  sandboxEnv
 - `src/test-support/expoAppleAuthenticationMock.tsx`  →  appleSignInAsyncSpy · appleIsAvailableAsyncSpy · expoAppleAuthenticationModule · resetExpoAppleAuthenticationMock
 - `src/test-support/expoAuthSessionMock.ts`  →  promptAsyncSpy · authRequestConstructorSpy · makeRedirectUriSpy · expoAuthSessionModule · expoWebBrowserModule · expoCryptoModule · setPromptResult · setCodeVerifier · resetExpoAuthSessionMock
+- `src/test-support/expoRouterMock.ts`  →  RouterMember · routerSpies · createExpoRouterMock · useRouter · router · useLocalSearchParams
 - `src/test-support/expoRouterRedirectMock.tsx`  →  Redirect · Stack
 - `src/test-support/expoRouterStackMock.tsx`  →  Stack
 - `src/test-support/expoRouterTabsMock.tsx`  →  capturedTabsProps · Tabs · useRouter
@@ -1886,4 +1887,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1208개 파일
+합계 1209개 파일

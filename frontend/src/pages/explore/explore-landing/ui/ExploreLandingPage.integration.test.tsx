@@ -23,6 +23,7 @@ import { stayKey } from '@/features/save-stay';
 import { useStaySearch } from '@/features/stay';
 import { SAVE_FAILURE_NOTICE } from '@/features/save-place';
 import { ExploreLandingPage } from '@/pages/explore/explore-landing';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * 탐색 d01 page 의 담기 하트 — 실제 담기 훅 + msw 로 나간 요청을 센다.
@@ -45,13 +46,16 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
-const mockPush = jest.fn();
+const { push: mockPush } = routerSpies;
 // 지역 필터(TRIP-1580 인기 숙소 레인)만 region 을 싣는다 — 나머지 describe 는 빈 params 그대로.
 let mockParams: { region?: string } = {};
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush }),
-  useLocalSearchParams: () => mockParams,
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push'],
+    params: () => mockParams,
+  })
+);
 
 jest.mock('@/features/stay/model/useStaySearch', () => ({
   useStaySearch: jest.fn(),
