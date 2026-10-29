@@ -9,3 +9,4 @@
 | [branch.md](branch.md) | main + develop 브랜치 전략, 네이밍 규칙 | 브랜치 만들 때 |
 | [commit.md](commit.md) | Conventional Commits | 커밋할 때 |
 | [pull-request.md](pull-request.md) | PR 규칙, squash merge, 리뷰 단계 정책 | PR 올릴 때 |
+| [prod-deploy-rules.md](prod-deploy-rules.md) | 운영 배포는 열차(주 1회·앱 릴리스일)와 핫픽스만, 개발 서버 켜고 끄기, 롤백 | 배포할 때 |
