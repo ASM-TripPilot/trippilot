@@ -6634,6 +6634,23 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // l04 조회 실패(TRIP-1637) — Figma 프레임 없음, 알림함·내 여행 오류 얼굴 선례. 재시도 중 비활성은 retrying.
+  {
+    key: 'my-stays-error',
+    band: 'l',
+    label: 'l04 · 등록 숙소 조회 실패(TRIP-1637, Figma 프레임 없음 — 선례)',
+    login: null,
+    render: () => (
+      <MyStaysScreen
+        rows={[]}
+        isEmpty={false}
+        loadFailed
+        onRetry={noop}
+        onPressExplore={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
   // l02 알림 설정 default(1600:2388) — 6행×푸시·인앱 2열(COMMUNITY 숨김)·
   // 상단 정보 배너·하단 SYSTEM 줄. 토글
   // 빨강/회색·thumb 위치·정보 배너 틴트는 jest 사각이라 이 키가 육안 대조 자리다.
