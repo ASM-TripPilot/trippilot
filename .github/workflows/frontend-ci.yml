@@ -145,7 +145,9 @@ jobs:
           path: ${{ runner.temp }}/parts
           merge-multiple: true
       # 조각이 갈래 수만큼 다 왔을 때만 합친다 — 하나라도 빠진 캐시를 저장하면 아래 정리가 온전한 옛 캐시를 지운다.
-      # 같은 이름 파일이 여러 조각에 있으면(haste-map 등 — 갈래마다 복원본을 함께 싣는다) 수정 시각이 새것을 남긴다.
+      # 같은 이름 파일이 여러 조각에 있으면(갈래마다 같은 옛 캐시를 복원해 함께 싣는다) 나중 조각이 덮어쓴다 — jest 변환 캐시는
+      # 파일명이 내용 해시라 같은 이름 = 같은 내용이고, haste-map 류도 어느 갈래 것이든 유효하다. --keep-newer-files 는 겹친 파일마다
+      # 종료코드 2 로 끝나 이 잡을 red 로 만들었다(TRIP-1633).
       - id: merge
         run: |
           n=$(find "$RUNNER_TEMP/parts" -name 'cache-*.tar' 2>/dev/null | wc -l)
@@ -153,7 +155,7 @@ jobs:
             echo "캐시 조각 $n/${{ needs.test.outputs.cache-parts }} — 저장·정리를 건너뜀"; exit 0
           fi
           mkdir -p frontend
-          for t in "$RUNNER_TEMP"/parts/*.tar; do tar -xf "$t" -C frontend --keep-newer-files; done
+          for t in "$RUNNER_TEMP"/parts/*.tar; do tar -xf "$t" -C frontend; done
           echo "complete=true" >> "$GITHUB_OUTPUT"
       - uses: actions/cache/save@v5
         if: steps.merge.outputs.complete == 'true'
