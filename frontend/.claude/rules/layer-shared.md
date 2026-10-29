@@ -74,7 +74,7 @@ paths:
 
 ### `src/shared/map/` — 네이버 네이티브 지도 래퍼
 
-**화면이 아니다** — 지도 렌더 표면. `@mj-studio/react-native-naver-map` 래핑, 공급자 중립 이름 `MapView`라 공급자를 바꿔도 소비처는 무변경이다. 네이티브 뷰라 RN 터치 파이프라인 안에 있다(오버레이 터치 무흡수는 실기 미검증 — `repo-traps.md` 지도 절). 렌더 함정(커스텀 마커 `collapsable={false}`·번호는 SVG)은 `traps-map.md`.
+**화면이 아니다** — 지도 렌더 표면. `@mj-studio/react-native-naver-map` 래핑, 공급자 중립 이름 `MapView`라 공급자를 바꿔도 소비처는 무변경이다. 네이티브 뷰라 RN 터치 파이프라인 안에 있다(오버레이 터치 무흡수는 실기 미검증 — `repo-traps.md` 지도 절). 렌더 함정(커스텀 마커 `collapsable={false}`·번호는 SVG)은 `traps-map.md`. **웹은 `MapView.web.tsx`(+ 로더·컨트롤러 부품)가 대신한다 — 네이티브 SDK 를 싣지 않는 별도 구현이라 같은 계약을 두 번 지킨다**(TRIP-1651).
 
 | 파일 | 역할 |
 |---|---|
@@ -84,6 +84,13 @@ paths:
 | `src/shared/map/MapView.test.tsx` | 실 `MapView` + `__mocks__/@mj-studio/react-native-naver-map.tsx`(prop-기록형 목)를 태우는 코어 테스트. 핀 번호는 SVG Text라 `toHaveTextContent`가 아니라 `UNSAFE_queryAllByProps({content})`로 본다. done 체크 색은 래퍼 `<Svg>` 선언값만 읽는 사각이 있다(안쪽 `Path` stroke는 못 봄) |
 | `src/shared/map/MapView.fitRadius.test.tsx` | `radiusCircle` region 우선순위(반경 3종이 영역 안에 들어옴·반경 커지면 폭 증가·원 없으면 camera 그대로) — 오케 선작성 심판(TRIP-1043 수정 루프 1). `onLayout` 재맞춤 자체는 목이 이벤트를 안 불러 무심판. |
 | `src/shared/map/index.ts` | 배럴 — `MapView`·타입들·`CenterPinPicker` |
+| `src/shared/map/MapView.web.tsx` | **웹 대체 `MapView`**(TRIP-1651) — Metro 가 웹에서만 `./MapView` 자리에 고른다. 같은 prop 계약(`MapViewProps`)이고 껍데기는 얇다: 키 있으면 `getNaverMapsLoader().load` + `onAuthFailure` 구독 → 둘 중 하나라도 실패면 `MapFailure`(+`onLoadFailed` 1회, `notifiedRef`), 성공이면 `webMapController` 를 만들어 렌더마다 `update(입력)`. **`./MapView`·`@mj-studio/…` 를 값으로 import 하지 않는다**(타입만 `import type`) — 값 import 는 웹에서 자기 자신을 부르는 순환이고 `tsc` 가 못 잡는다. 번들 검증은 CI web export gate 의 `RNCNaver` grep. 실패 상태(`failed`)면 `update` effect·`ResizeObserver` 의 `refit` 을 건너뛴다(망가진 네이버 객체를 더 만지면 throw). 미구현(W6 몫): `drawnPath`·`showMyLocation`·`logoMargin` 등 경로선·내 위치 |
+| `src/shared/map/naverMapsLoader.ts` | 웹 전용 — 네이버 JS v3 스크립트 로더 `createNaverMapsLoader(doc, win)`(DI 라 가짜 document 로 테스트)·`getNaverMapsLoader()`(모듈 싱글턴)·`NaverMapsApi` **손 선언**(`@types/navermaps` 없음). 한 번만 받고, 실패(`onerror`·onload 인데 `naver.maps` 없음)면 태그 제거 + 진행 중 약속 비움 → 다시 `load` 하면 재시도. 인증 실패 전역 콜백 `window.navermap_authFailure` 는 스크립트를 붙이기 **전에** 설치하고 `authFailed` 를 쥐어 늦은 구독자도 즉시 통지. URL 파라미터 `ncpKeyId` 는 키 종류 미판별(TRIP-1645 URL 등록 뒤 지도가 안 뜨면 첫 의심) |
+| `src/shared/map/webMapController.ts` | 웹 전용 — 입력(`center`·`pins`·`fitPins`·`fitBand`·`radiusCircle`·`viewOnly`) → 네이버 `Map`·`Marker`·`Circle` 호출. `update` 를 렌더마다 받아도 내부 값 키(JSON) 4개로 비교해 바뀐 것만 반영(사용자가 끌어 둔 지도를 안 되돌린다). 클릭 핸들러는 배열 **위치**(`index`)를 닫는다. `destroy()` 는 정리 호출을 항목별 `attempt`(try/catch)로 부르고 절대 안 던진다 — 삼킨 오류는 로그도 없다. `refit()` 은 영역이 없어도 `autoResize()` 는 부른다 |
+| `src/shared/map/webMarkerHtml.ts` | 웹 전용 — 핀 → 마커 SVG 문자열(네이버 마커 아이콘은 HTML). 네이티브와 같은 `pinShapes` 상수. 번호는 `<text>`, done 체크·stay·candidate 는 `data-marker` 로 식별, 기준점은 아래 꼭짓점. `escapeText` 는 아직 무테스트(`label` 이 한 글자 letter 인 동안만 안전) |
+| `src/shared/map/webMapOptions.ts` | 웹 전용 — `regionToCorners`(RN `Region`→남서/북동 모서리)·`buildMapOptions`(`viewOnly`→`draggable`·`pinchZoom`·`scrollWheel`·`keyboardShortcuts` 4개)·`WEB_INITIAL_ZOOM` |
+| `src/shared/map/pinShapes.ts` | 핀 색·path·치수 상수 — 네이티브 `MapView.tsx` 에서 옮겨 네이티브·웹이 공유(모양 정본 한 곳) |
+| `src/shared/map/MapFailure.tsx` | 지도 실패 표면(`map-root` > `map-failure` > `map-failure-message`) — 네이티브·웹 공유, 문구 동일(INV-4) |
 
 ### `src/shared/api/generated/` — orval 생성물
 

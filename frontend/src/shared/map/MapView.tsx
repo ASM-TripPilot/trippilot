@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { ImageSourcePropType } from 'react-native';
-import { AppState, StyleSheet, Text, View } from 'react-native';
+import { AppState, StyleSheet, View } from 'react-native';
 import * as Location from 'expo-location';
 import Svg, {
   Circle,
@@ -27,6 +27,20 @@ import type {
 import { buildCircleRegion, buildFitRegion } from './fitRegion';
 import type { FitBand } from './fitRegion';
 import { DRAW_PATH_DURATION_MS, DrawnPathOverlay } from './DrawnPathOverlay';
+import { MapFailure } from './MapFailure';
+import {
+  DONE_CHECK,
+  DROP_LARGE_SIZE,
+  DROP_SMALL_SIZE,
+  PIN_MUTED_SOFT,
+  PIN_PRIMARY,
+  PIN_SUCCESS,
+  PIN_WHITE,
+  RECORD_DIMS,
+  STAY_PIN,
+  TEARDROP_LARGE,
+  TEARDROP_SMALL,
+} from './pinShapes';
 
 /**
  * 공급자 중립 지도 래퍼(TRIP-863 S1). 카카오 WebView 브리지를 네이버 네이티브 지도로
@@ -145,23 +159,6 @@ export interface MapViewProps {
 /** 네이버 초기 줌. ponytail: 카카오 기본 level 3 에 대응하는 대략값, 정확 캘리브레이션은 실기(6-b). */
 const INITIAL_ZOOM = 14;
 
-/** 색·모양은 마커 래스터에서 안전하게 잡히도록 전부 SVG 로 그린다 — NativeWind className 은 네이버
- * SDK 가 자식 뷰를 화면 밖에서 마커 이미지로 스냅샷할 때 적용이 보장되지 않고(초록 링·흰 실루엣),
- * SVG stroke/fill 은 애초에 className 을 못 받는다(shared/map 관례). 색은 tailwind 팔레트 raw hex —
- * S7 팔레트 부분집합 가드는 TRIP-864 로 삭제됐고 재도입하지 않았다(TRIP-745 Q3). */
-const PIN_PRIMARY = '#FF385C'; // primary — current·기본 물방울
-const PIN_SUCCESS = '#0E9384'; // success — done 물방울
-const PIN_MUTED_SOFT = '#9AA1AB'; // muted-soft — upcoming 테두리·번호
-const PIN_WHITE = '#FFFFFF'; // on-primary·canvas — 흰 테두리·흰 번호·흰 체크
-
-/** Figma 4125:3958 물방울 벡터 1:1. 큰 것(current·기본)은 35×45.5, 작은 것(upcoming·done)은 28×36. */
-const TEARDROP_LARGE =
-  'M17.5 1.25C8.5 1.25 1.25 8.125 1.25 16.875C1.25 27.5 17.5 43.75 17.5 43.75C17.5 43.75 33.75 27.5 33.75 16.875C33.75 8.125 26.5 1.25 17.5 1.25Z';
-const TEARDROP_SMALL =
-  'M14 1C6.8 1 1 6.5 1 13.5C1 22 14 35 14 35C14 35 27 22 27 13.5C27 6.5 21.2 1 14 1Z';
-/** done 흰 체크(✓). Figma imgStateDone 의 벡터. */
-const DONE_CHECK = 'M9.3 13.8L12.4 16.9L18.4 10.2';
-
 /**
  * 물방울 핀 한 개(상태별). current·기본 = 분홍 채움 + 흰 번호, upcoming = 흰 채움 + 회색 테두리·회색
  * 번호, done = 초록 채움 + 흰 체크(번호 없음). 번호·체크는 전부 SVG 여야 iOS 마커 래스터(UIImage
@@ -265,28 +262,13 @@ function PinTeardrop({
   );
 }
 
-/** stay 마커 몸통 — 아래로 뾰족한 라운드 사각(Figma 5000:3227 침대 마커). 좌표는 아래 꼭짓점(17,39). */
-const STAY_PIN =
-  'M11 2 H23 A9 9 0 0 1 32 11 V21 A9 9 0 0 1 23 30 H21 L17 39 L13 30 H11 A9 9 0 0 1 2 21 V11 A9 9 0 0 1 11 2 Z';
-
-/** 기록 마커족 치수·앵커(kind 별). 앵커는 좌표가 마커의 어디를 가리키나 — 6-b 조정 knob. */
-const RECORD_DIMS: Record<
-  MapPinKind,
-  { width: number; height: number; anchor: { x: number; y: number } }
-> = {
-  visited: { width: 48, height: 48, anchor: { x: 0.5, y: 0.5 } },
-  planned: { width: 32, height: 32, anchor: { x: 0.5, y: 0.5 } },
-  stay: { width: 34, height: 42, anchor: { x: 0.5, y: 1 } },
-  candidate: { width: 28, height: 36, anchor: { x: 0.5, y: 1 } },
-};
-
 /**
  * TRIP-1349 — 마커 anchor·래퍼 style 은 모듈 상수다. 인라인 객체는 렌더마다 새 참조라 네이티브 마커에
  * 매번 "바뀐 prop"으로 보인다.
  */
 const DROP_ANCHOR = { x: 0.5, y: 1 } as const;
-const DROP_WRAP_LARGE_STYLE = { width: 35, height: 46 } as const;
-const DROP_WRAP_SMALL_STYLE = { width: 28, height: 36 } as const;
+const DROP_WRAP_LARGE_STYLE = DROP_LARGE_SIZE;
+const DROP_WRAP_SMALL_STYLE = DROP_SMALL_SIZE;
 const RECORD_WRAP_STYLE: Record<
   MapPinKind,
   {
@@ -598,23 +580,7 @@ function MapViewImpl({
   // TRIP-1385 — 경로가 닿은 핀 수(null=전부). 그려지기가 끝나면 null 이라 이후 좌표가 바뀌어도 핀이 숨지 않는다.
   const [revealCount, setRevealCount] = useState<number | null>(1);
 
-  if (!hasKey) {
-    return (
-      <View testID="map-root" className="flex-1">
-        <View
-          testID="map-failure"
-          className="flex-1 items-center justify-center bg-canvas px-2xl"
-        >
-          <Text
-            testID="map-failure-message"
-            className="font-noto text-body text-muted text-center"
-          >
-            지도를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
-          </Text>
-        </View>
-      </View>
-    );
-  }
+  if (!hasKey) return <MapFailure />;
 
   // 연결선은 **방문(visited) 구간만** + **현행 무-kind 호출부 전부** 잇는다(TRIP-768). `kind===undefined`
   // 를 반드시 포함해야 h·i 밴드 물방울 지도(전부 kind 미전달)의 선이 안 지워진다(무회귀). j 밴드는
