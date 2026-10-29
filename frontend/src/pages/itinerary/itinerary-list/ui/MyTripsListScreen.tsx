@@ -28,6 +28,10 @@ import {
  * TRIP-1615 · error 는 조회 실패(INV-4) — empty 와 같은 `StateNotice` 틀에 알림함·저장 숙소와 같은 연핑크 원
  * 경고 아이콘 + [다시 시도] 하나. Figma 에 h06 오류 프레임이 없어 코드 선례를 따랐다. 재시도 중 얼굴은
  * 페이지가 정한다(데이터 없는 refetch 는 pending 으로 돌아가 loading 이 대신한다) — 이 화면엔 재시도 중 상태가 없다.
+ *
+ * TRIP-1638 · offline 은 오프라인으로 처음 켜 받아 둔 목록이 없을 때(요청이 보류됨) — 스켈레톤이 끝나지 않는 걸 막는다(INV-4).
+ * error 와 같은 틀이되 **버튼이 없다**: 보류 요청에 다시 시도는 무동작이라 눌러도 아무 일 없는 새 침묵 실패가 된다.
+ * 연결이 돌아오면 쿼리가 스스로 재개해 목록으로 바뀐다. Figma 프레임 없음 — error 얼굴 코드 선례.
  */
 
 const APPBAR_TITLE = '내 여행';
@@ -43,8 +47,11 @@ const EMPTY_CTA_LABEL = '여행 만들기';
 const ERROR_TITLE = '여행을 불러올 수 없어요';
 const ERROR_DESCRIPTION = '잠시 후 다시 시도해 주세요';
 const ERROR_RETRY_LABEL = '다시 시도';
+const OFFLINE_TITLE = '인터넷에 연결되어 있지 않아요';
+const OFFLINE_DESCRIPTION = '연결되면 자동으로 불러올게요';
 
-export type MyTripsListMode = 'list' | 'empty' | 'loading' | 'error';
+export type MyTripsListMode =
+  'list' | 'empty' | 'loading' | 'error' | 'offline';
 
 export interface MyTripsListScreenProps {
   mode: MyTripsListMode;
@@ -164,6 +171,16 @@ export function MyTripsListScreen({
                   onPress: onRetry,
                 },
               ]}
+            />
+          </View>
+        ) : mode === 'offline' ? (
+          <View className="flex-1 items-center justify-center px-lg">
+            <StateNotice
+              testID="itinerary-tab-offline"
+              icon={<WarningTriangleGlyph size={32} color="primary" />}
+              title={OFFLINE_TITLE}
+              description={OFFLINE_DESCRIPTION}
+              actions={[]}
             />
           </View>
         ) : mode === 'loading' ? (

@@ -17,7 +17,7 @@ import {
   useDeleteTripsTripId,
   useGetTrips,
 } from '@/shared/api/index.hooks';
-import { isNotFound } from '@/shared/api';
+import { isNotFound, isOfflineWaiting } from '@/shared/api';
 import { isLargeText } from '@/shared/lib/fontScale';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { readStringValue, writeStringValue } from '@/shared/storage';
@@ -54,6 +54,10 @@ import { TripCardContainer } from './TripCardContainer';
  * TRIP-1615 · 조회가 실패했고 받아 둔 목록이 없으면 error 얼굴 + [다시 시도](INV-4) — 예전엔 isError 를 안 봐서 실패가
  * empty("아직 만든 여행이 없어요")로 접혔다. 데이터가 있는 재조회 실패는 목록을 그대로 둔다. 데이터 없는 오류에서
  * refetch 하면 쿼리가 pending 으로 돌아가므로 재시도 중엔 loading 얼굴이 대신한다(별도 재시도 중 상태를 두지 않는다).
+ *
+ * TRIP-1638 · 오프라인으로 처음 켜면(받아 둔 목록 없음) 요청이 보류된 채 isPending 이라 스켈레톤이 끝나지 않았다 — 그 상태를
+ * `isOfflineWaiting` 으로 골라 offline 얼굴(버튼 없음)을 loading 보다 먼저 판정한다. 데이터 없는 오류 뒤 오프라인 재시도도
+ * pending+paused 로 돌아오므로 같은 분기가 받는다.
  *
  * TRIP-1122 · 정렬 기준(최신순·출발일순·이름순)과 정렬 시트 열림을 페이지가 쥔다 — 시트는 열릴 때만 그린다.
  * 고른 기준은 기기에 한 줄 남기고(`itinerary.myTrips.sort`), 마운트 때 한 번 읽는다: 읽기 전엔 최신순, 오면 그
@@ -215,6 +219,12 @@ export function MyTripsListPage(): ReactElement {
     useTripWizardStore.getState().reset();
     router.push('/trips/new/step1');
   };
+
+  if (isOfflineWaiting(trips)) {
+    return (
+      <MyTripsListScreen mode="offline" onPressCreateTrip={onPressCreateTrip} />
+    );
+  }
 
   if (trips.isPending) {
     return (
