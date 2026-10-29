@@ -59,6 +59,22 @@ def settings(values: Mapping[str, str]) -> dict:
     llm_feature_models = (values.get('LLM_FEATURE_MODELS_INPUT') or '').strip(' ')
     if llm_feature_models:
         require(rf'{_FEATURE_MODEL}(?: *, *{_FEATURE_MODEL})*', llm_feature_models, 'LLM_FEATURE_MODELS_INPUT')
+    # 운영 배포 규칙(TRIP-1659): 운영 서버는 열차(주 1회·앱 릴리스일)와 핫픽스 때만 만진다. 사람이 지키기만 하면 되던 규칙이
+    # 안 지켜졌으므로 선언 없는 운영 apply 는 AWS 자격 증명을 받기 전에 여기서 거절한다. 인프라만 바꾸는 apply 도 운영 변경이다.
+    # 값은 GITHUB_OUTPUT 한 줄로 나가므로 줄바꿈·제어 문자를 받지 않는다(DEPLOY_REASON 이 자유 문장이라 특히).
+    deploy_kind, deploy_ref, deploy_reason = 'none', '', ''
+    if target == 'prod' and mode == 'apply':
+        deploy_kind = require(r'release|hotfix', values.get('DEPLOY_KIND', ''), 'DEPLOY_KIND (release or hotfix)')
+        if deploy_kind == 'hotfix':
+            deploy_ref = require(r'TRIP-[0-9]+', values.get('DEPLOY_REF', ''), 'DEPLOY_REF (a hotfix needs its Jira key)')
+            deploy_reason = require(r'[^\x00-\x1f\x7f]{3,200}', (values.get('DEPLOY_REASON') or '').strip(),
+                                    'DEPLOY_REASON (a hotfix needs a one-line reason)')
+        else:
+            deploy_ref = require(r'[A-Za-z0-9][A-Za-z0-9._-]{0,39}', values.get('DEPLOY_REF', ''),
+                                 'DEPLOY_REF (a release needs a name such as the app version)')
+    # 개발 대상은 검증이 끝나면 파드를 0 으로 내린다(TRIP-1659) — 노드 1대를 돌려준다. 워크플로 입력의 기본값은 true 다. 값 없이 API 로 직접 부른 경우만 끈 것으로 본다(모르는 채 재우지는 않는다).
+    dev_sleep = target == 'dev' and deploy and require(
+        r'true|false', values.get('DEV_SLEEP_AFTER') or 'false', 'DEV_SLEEP_AFTER') == 'true'
     certificate, hostname = values.get('PROD_ACM_CERTIFICATE_ARN', ''), values.get('PROD_API_HOSTNAME', '')
     if target == 'dev':
         if mode != 'apply':
@@ -88,6 +104,10 @@ def settings(values: Mapping[str, str]) -> dict:
         'push_mode': push_mode,
         'dialogue_orchestrator': dialogue_orchestrator,
         'llm_feature_models': llm_feature_models,
+        'deploy_kind': deploy_kind,
+        'deploy_ref': deploy_ref,
+        'deploy_reason': deploy_reason,
+        'dev_sleep': dev_sleep,
         'certificate_arn': certificate,
         'hostname': hostname,
     }

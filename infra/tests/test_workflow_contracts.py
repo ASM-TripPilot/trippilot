@@ -1,3 +1,4 @@
+import importlib.util
 from pathlib import Path
 import unittest
 import yaml
@@ -201,6 +202,76 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn('verify_backend_shutdown', gate['on']['workflow_call']['inputs'])
         shutdown = next(s for s in gate['jobs']['validate']['steps'] if s.get('name') == 'Verify backend shutdown configuration')
         self.assertEqual(shutdown['if'], 'inputs.verify_backend_shutdown')
+
+
+    # ── 운영 배포 규칙(TRIP-1659) ──
+    def test_production_deploys_must_declare_release_or_hotfix(self):
+        value = workflow('aws-deploy.yml')
+        inputs = value['on']['workflow_dispatch']['inputs']
+        self.assertEqual(inputs['deploy_kind']['options'], ['none', 'release', 'hotfix'])
+        self.assertEqual(inputs['deploy_kind']['default'], 'none')  # 기본값 그대로 눌러서는 운영에 나가지 않는다
+        self.assertEqual(inputs['dev_sleep_after']['default'], 'true')  # 깜빡해도 비용이 새지 않는 쪽이 기본
+        env = value['jobs']['deploy']['env']
+        for name, source in (('DEPLOY_KIND', 'deploy_kind'), ('DEPLOY_REF', 'deploy_ref'),
+                             ('DEPLOY_REASON', 'deploy_reason'), ('DEV_SLEEP_AFTER', 'dev_sleep_after')):
+            self.assertEqual(env[name], '${{ inputs.%s }}' % source)
+
+    def test_release_gate_runs_after_the_declaration_check_and_before_any_aws_credentials(self):
+        job = workflow('aws-deploy.yml')['jobs']['deploy']
+        steps = job['steps']
+        names = [s.get('name', '') for s in steps]
+        gate_index = names.index('Require a validated dev run for production releases')
+        credentials = next(i for i, s in enumerate(steps) if str(s.get('uses', '')).startswith('aws-actions/configure-aws-credentials'))
+        self.assertLess(names.index('Validate environment and branch before AWS access'), gate_index)
+        self.assertLess(gate_index, credentials)
+        gate_step = steps[gate_index]
+        self.assertIn("steps.config.outputs.target == 'prod'", gate_step['if'])
+        # 선언 검사와 같은 조건(운영 apply) — 앱 배포 여부로 좁히면 인프라만의 release apply 가 검증 없이 나간다
+        self.assertIn("steps.config.outputs.mode == 'apply'", gate_step['if'])
+        self.assertNotIn('deploy_application', gate_step['if'])
+        self.assertEqual(gate_step['env']['DEPLOY_KIND'], '${{ steps.config.outputs.deploy_kind }}')  # 검증된 값만 쓴다
+        self.assertEqual(gate_step['run'], 'python3 infra/scripts/deploy_gate.py')
+        self.assertEqual(job['permissions'], {'contents': 'read', 'id-token': 'write', 'actions': 'read'})  # 쓰기 권한은 늘리지 않는다
+
+    def test_run_name_matches_what_the_gate_looks_for(self):
+        run_name = workflow('aws-deploy.yml')['run-name']
+        rendered = (run_name.replace('${{ inputs.target }}', 'dev').replace('${{ inputs.mode }}', 'apply')
+                    .replace('${{ inputs.deploy_application }}', 'true').replace('${{ inputs.deploy_kind }}', 'none'))
+        self.assertNotIn('${{', rendered)
+        module = Path(__file__).resolve().parents[1] / 'scripts' / 'deploy_gate.py'
+        spec = importlib.util.spec_from_file_location('deploy_gate_contract', module)
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        self.assertTrue(rendered.startswith(gate.DEV_TITLE))
+        self.assertIn('kind=', rendered)  # 런 목록에서 어떤 선언으로 나갔는지 보인다
+
+    def test_dev_workloads_wake_before_helm_and_sleep_only_after_everything_succeeded(self):
+        steps = workflow('aws-deploy.yml')['jobs']['deploy']['steps']
+        names = [s.get('name', '') for s in steps]
+        wake_index = names.index('Wake sleeping dev workloads')
+        self.assertLess(wake_index, names.index('Deploy and wait for healthy workloads'))
+        wake = steps[wake_index]
+        self.assertIn("steps.config.outputs.target == 'dev'", wake['if'])
+        self.assertIn('-n "$NAMESPACE"', wake['run'])
+        self.assertIn('--replicas=1', wake['run'])
+        self.assertIn('embedding', wake['run'])  # 임베딩을 끈 배포는 임베딩을 올리지 않는다
+        sleep = steps[names.index('Put the dev workloads to sleep')]
+        self.assertTrue(sleep['if'].startswith('success()'))  # 실패하면 원인을 보려고 켜 둔다
+        self.assertIn("steps.config.outputs.dev_sleep == 'true'", sleep['if'])
+        self.assertIn("steps.config.outputs.target == 'dev'", sleep['if'])  # 운영 네임스페이스를 0 으로 만들 수 없게 이중 가드
+        self.assertIn('-n "$NAMESPACE"', sleep['run'])  # 네임스페이스는 대상이 정한 값만 — 하드코딩 금지
+        self.assertIn('--replicas=0', sleep['run'])
+        self.assertLess(names.index('Load the POI shared document into the backend'), names.index('Put the dev workloads to sleep'))
+        self.assertLess(names.index('Put the dev workloads to sleep'), names.index('Deployment summary'))
+
+
+    def test_dev_chart_never_wants_zero_replicas_because_the_wake_step_raises_every_zero_to_one(self):
+        """깨우기 스텝은 복제본 0 인 디플로이먼트를 전부 1 로 올린다. 개발 차트가 의도적으로 0 을 요구하게 되면 이 스텝이 그 0 을
+        조용히 뒤집는다(helm 도 되돌려 주지 않는다) — 그날은 스텝과 이 테스트를 같이 고친다."""
+        values = yaml.safe_load((ROOT / 'deploy/eks/chart/values-dev-target.yaml').read_text())
+        for component in ('backend', 'ai', 'gateway', 'embedding'):
+            with self.subTest(component=component):
+                self.assertGreaterEqual(values[component]['replicas'], 1)
 
 
 if __name__ == '__main__':
