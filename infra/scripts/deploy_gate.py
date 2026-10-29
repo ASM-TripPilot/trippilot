@@ -44,9 +44,13 @@ def validated_sha(runs: Iterable[Mapping], now: datetime, same_tree: Callable[[s
     return None
 
 
-def fetch_runs(repo: str) -> list[dict]:
+def fetch_runs(repo: str, since: datetime) -> list[dict]:
+    """윈도(72시간) 안의 성공한 develop 런만 서버에서 거른다. 개발 배포가 하루 17번 나간 날(10/22)도 있어서 "최근 N개"로
+    읽으면 윈도 안의 유효한 런이 한도 밖으로 밀릴 수 있다 — 시간 조건으로 걸고 한 번에 100개(API 상한)까지 읽는다."""
     out = subprocess.run(
-        ['gh', 'api', f'repos/{repo}/actions/workflows/aws-deploy.yml/runs?branch=develop&status=success&per_page=50'],
+        ['gh', 'api', '-X', 'GET', f'repos/{repo}/actions/workflows/aws-deploy.yml/runs',
+         '-f', 'branch=develop', '-f', 'status=success', '-f', 'per_page=100',
+         '-f', f'created=>={since.strftime("%Y-%m-%dT%H:%M:%SZ")}'],
         check=True, capture_output=True, text=True).stdout
     return json.loads(out)['workflow_runs']
 
@@ -58,13 +62,13 @@ def same_tree(sha: str) -> bool:
     return subprocess.run(['git', 'diff', '--quiet', sha, 'HEAD', '--', '.', ':!.github']).returncode == 0
 
 
-def run_gate(env: Mapping[str, str], runs_source: Callable[[str], list[dict]], tree_check: Callable[[str], bool],
+def run_gate(env: Mapping[str, str], runs_source: Callable[[str, datetime], list[dict]], tree_check: Callable[[str], bool],
              now: datetime) -> tuple[int, str]:
     """(종료 코드, 메시지). 열차(release)만 검사하고 핫픽스·그 밖에는 통과."""
     kind = env.get('DEPLOY_KIND', '')
     if kind != 'release':
         return 0, f'gate skipped (deploy_kind={kind or "none"})'
-    sha = validated_sha(runs_source(env['GITHUB_REPOSITORY']), now, tree_check)
+    sha = validated_sha(runs_source(env['GITHUB_REPOSITORY'], now - WINDOW), now, tree_check)
     if sha is None:
         return 1, ('A release needs the same code to have passed a dev-target deploy within '
                    f'{int(WINDOW.total_seconds() // 3600)} hours: run this workflow with target=dev (app deploy) from develop first, '

@@ -59,7 +59,7 @@ class ValidatedShaTests(unittest.TestCase):
 
 
 class RunGateTests(unittest.TestCase):
-    def never(self, repo):
+    def never(self, repo, since):
         raise AssertionError('the run list must not be read')
 
     def test_hotfix_and_undeclared_skip_the_dev_check(self):
@@ -71,14 +71,14 @@ class RunGateTests(unittest.TestCase):
 
     def test_release_passes_with_a_validated_dev_run(self):
         env = {'DEPLOY_KIND': 'release', 'GITHUB_REPOSITORY': 'org/repo'}
-        code, message = gate.run_gate(env, lambda repo: [run('abc', 3)] if repo == 'org/repo' else [], lambda sha: True, NOW)
+        code, message = gate.run_gate(env, lambda repo, since: [run('abc', 3)] if repo == 'org/repo' else [], lambda sha: True, NOW)
         self.assertEqual((code, message), (0, 'dev-validated commit: abc'))
 
     def test_release_is_refused_without_one(self):
         env = {'DEPLOY_KIND': 'release', 'GITHUB_REPOSITORY': 'org/repo'}
         for runs, tree in (([], True), ([run('abc', 3)], False), ([run('abc', 99)], True)):
             with self.subTest(runs=len(runs), tree=tree):
-                code, message = gate.run_gate(env, lambda repo: runs, lambda sha: tree, NOW)
+                code, message = gate.run_gate(env, lambda repo, since: runs, lambda sha: tree, NOW)
                 self.assertEqual(code, 1)
                 self.assertIn('target=dev', message)
                 self.assertIn('hotfix', message)
@@ -110,19 +110,28 @@ class GitAndGithubAdapterTests(unittest.TestCase):
         with patch.object(gate.subprocess, 'run', lambda args, **kw: next(answers)):
             self.assertFalse(gate.same_tree('abc'))  # diff 가 에러 — 검증 안 된 것으로 본다
 
-    def test_fetch_runs_asks_for_successful_develop_runs_of_the_deploy_workflow(self):
+    def test_fetch_runs_filters_by_time_on_the_server_instead_of_taking_the_latest_n(self):
         seen = {}
 
         def fake(args, **kwargs):
             seen['args'] = args
             return self.completed(0, json.dumps({'workflow_runs': [run('abc', 1)]}))
         with patch.object(gate.subprocess, 'run', fake):
-            runs = gate.fetch_runs('org/repo')
+            runs = gate.fetch_runs('org/repo', NOW - gate.WINDOW)
         self.assertEqual(runs[0]['head_sha'], 'abc')
-        url = seen['args'][2]
-        self.assertIn('repos/org/repo/actions/workflows/aws-deploy.yml/runs', url)
-        self.assertIn('branch=develop', url)
-        self.assertIn('status=success', url)
+        args = seen['args']
+        self.assertIn('repos/org/repo/actions/workflows/aws-deploy.yml/runs', args)
+        for expected in ('branch=develop', 'status=success', 'per_page=100', 'created=>=2026-10-27T12:00:00Z'):
+            self.assertIn(expected, args)
+
+    def test_run_gate_asks_only_for_runs_inside_the_window(self):
+        asked = {}
+
+        def source(repo, since):
+            asked['since'] = since
+            return []
+        gate.run_gate({'DEPLOY_KIND': 'release', 'GITHUB_REPOSITORY': 'org/repo'}, source, lambda sha: True, NOW)
+        self.assertEqual(asked['since'], NOW - gate.WINDOW)
 
 
 class MainTests(unittest.TestCase):
@@ -132,7 +141,7 @@ class MainTests(unittest.TestCase):
             out.touch()
             values = {**env, 'GITHUB_OUTPUT': str(out)}
             with patch.dict(gate.os.environ, values, clear=True), \
-                    patch.object(gate, 'fetch_runs', lambda repo: list(runs)), \
+                    patch.object(gate, 'fetch_runs', lambda repo, since: list(runs)), \
                     patch.object(gate, 'same_tree', lambda sha: tree), \
                     patch('sys.stdout', new_callable=io.StringIO) as stdout, patch('sys.stderr', new_callable=io.StringIO) as stderr:
                 with self.assertRaises(SystemExit) as exit_info:
@@ -159,7 +168,7 @@ class MainTests(unittest.TestCase):
         self.assertIn('dev_validated_sha=\n', output)
 
     def test_github_or_git_errors_fail_closed(self):
-        def boom(repo):
+        def boom(repo, since):
             raise subprocess.CalledProcessError(1, ['gh'])
         with tempfile.TemporaryDirectory() as tmp:
             env = {'DEPLOY_KIND': 'release', 'GITHUB_REPOSITORY': 'org/repo', 'GITHUB_OUTPUT': str(Path(tmp, 'o'))}
