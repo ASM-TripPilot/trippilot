@@ -95,10 +95,15 @@ export function assignNight(nightNumber: number, savedStayId: string): void {
   fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
 }
 
-/** 지정이 끝나 시트가 닫힐 때까지 기다린다. */
+/**
+ * 지정이 끝나 시트가 닫힐 때까지 기다린다.
+ * `.toBeNull()` 이 아니라 `.not.toBeOnTheScreen()` — 시트가 열려 있는 동안 실패 때마다 `toBeNull` 은 받은 요소(fiber 그래프)를
+ * 통째로 문자열로 만들어 폴링 한 번이 수백 ms CPU 를 쓴다. 이 매처는 요소 하나만 찍고, 요소가 없으면(null) 곧바로 통과한다.
+ */
 export async function sheetClosed(): Promise<void> {
   await waitFor(
-    () => expect(screen.queryByTestId('trip-base-staysheet')).toBeNull(),
+    () =>
+      expect(screen.queryByTestId('trip-base-staysheet')).not.toBeOnTheScreen(),
     NETWORK_WAIT
   );
 }

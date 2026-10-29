@@ -1312,10 +1312,7 @@ describe('편집 모드 (TRIP-1082)', () => {
       assignNight(1, 'stay-b');
 
       await screen.findByTestId('trip-base-error', {}, NETWORK_WAIT);
-      await waitFor(
-        () => expect(screen.queryByTestId('trip-base-staysheet')).toBeNull(),
-        NETWORK_WAIT
-      );
+      await sheetClosed();
       await settle();
       expect(screen.queryByTestId('trip-base-staysheet')).toBeNull();
       expect(screen.getByTestId('trip-base-error-retry')).toBeOnTheScreen();
