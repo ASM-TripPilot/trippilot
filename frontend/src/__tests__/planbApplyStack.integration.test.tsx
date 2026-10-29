@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Pressable, Text } from 'react-native';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { router, Stack } from 'expo-router';
 import {
   act,
@@ -16,6 +16,7 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { liveItinerary, liveSlot } from '@/test-support/liveHubFixtures';
 import PlanbDraftRoute from '@routes/trips/[tripId]/planb/draft';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-1418 (QA Q-106) · 재계획안 [적용하기] 뒤 허브가 스택에 **한 장**만 남는가.
@@ -89,15 +90,7 @@ function HubProbe() {
 
 /** 앱 루트 — 쿼리 캐시를 한 번만 만들어 스택 전체가 공유한다(실물 재계획안이 조회 훅을 쓴다). */
 function RootLayout(): ReactNode {
-  const [client] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: { retry: false, gcTime: 0 },
-          mutations: { gcTime: 0 },
-        },
-      })
-  );
+  const [client] = useState(() => newTestQueryClient({ gcTime: 0 }));
   return (
     <QueryClientProvider client={client}>
       <Stack screenOptions={{ headerShown: false }} />

@@ -21,6 +21,7 @@ import { flushNotifications } from '@/test-support/flushNotifications';
 
 import { optimisticSavedPlaceId } from './savedPlaceIndex';
 import { useSavedPlaces, type SavedPlacesOutcome } from './savedPlaces';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-220 AC-4 · AC-5 · AC-6 · AC-7 · AC-8 (+ 01b Seed Q2) — 담기 토글 훅의 서버 상태.
@@ -164,14 +165,11 @@ afterAll(() => {
 let lastClient: QueryClient;
 
 function createWrapper() {
-  const client = new QueryClient({
-    defaultOptions: {
-      // gcTime: 0 — 기본값이 만드는 타이머가 테스트 종료 후에도 살아남아 Node 프로세스를
-      // 붙잡는다. **mutations 쪽도 반드시 0으로 둔다**: mutation 기본 gcTime 은 5분이고,
-      // 빼면 이 버킷이 300초 매달린다(TRIP-203 실측).
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
+  const client = newTestQueryClient({
+    // gcTime: 0 — 기본값이 만드는 타이머가 테스트 종료 후에도 살아남아 Node 프로세스를
+    // 붙잡는다. **mutations 쪽도 반드시 0으로 둔다**: mutation 기본 gcTime 은 5분이고,
+    // 빼면 이 버킷이 300초 매달린다(TRIP-203 실측).
+    gcTime: 0,
   });
   lastClient = client;
   function Wrapper({ children }: { children: ReactNode }) {

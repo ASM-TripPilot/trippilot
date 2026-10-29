@@ -1,5 +1,5 @@
 import * as Linking from 'expo-linking';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import {
   fireEvent,
   render,
@@ -43,6 +43,7 @@ import {
   requestPushPermission,
   unregisterStoredPushToken,
 } from '@/shared/push';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * l05 설정 — SettingsPage 배선을 생성 훅 목으로 보는 node 버킷 테스트.
@@ -233,7 +234,7 @@ describe('삭제 게이트·상태기·닉네임·내보내기 (옛 .test)', () 
    */
   function renderPage() {
     return render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={newTestQueryClient()}>
         <SettingsPage />
       </QueryClientProvider>
     );
@@ -890,7 +891,7 @@ describe('삭제 게이트·상태기·닉네임·내보내기 (옛 .test)', () 
   describe('🔴 S3 · 닉네임 저장 성공 토스트 (#027)', () => {
     function renderPageWithToast() {
       return render(
-        <QueryClientProvider client={new QueryClient()}>
+        <QueryClientProvider client={newTestQueryClient()}>
           <WithToastHost>
             <SettingsPage />
           </WithToastHost>
@@ -999,7 +1000,7 @@ describe('삭제 게이트·상태기·닉네임·내보내기 (옛 .test)', () 
 
     function renderPageWithToast() {
       return render(
-        <QueryClientProvider client={new QueryClient()}>
+        <QueryClientProvider client={newTestQueryClient()}>
           <WithToastHost>
             <SettingsPage />
           </WithToastHost>
@@ -1258,7 +1259,7 @@ describe('삭제 게이트·상태기·닉네임·내보내기 (옛 .test)', () 
 
     function renderPageWithToast() {
       return render(
-        <QueryClientProvider client={new QueryClient()}>
+        <QueryClientProvider client={newTestQueryClient()}>
           <WithToastHost>
             <SettingsPage />
           </WithToastHost>
@@ -1524,7 +1525,7 @@ describe('OSM 출처 링크 (옛 .attribution)', () => {
 
   function renderPage() {
     return render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={newTestQueryClient()}>
         <SettingsPage />
       </QueryClientProvider>
     );
@@ -1620,7 +1621,7 @@ describe('진입 라우트 (옛 .nav)', () => {
    */
   function renderPage() {
     return render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={newTestQueryClient()}>
         <SettingsPage />
       </QueryClientProvider>
     );
@@ -1815,7 +1816,7 @@ describe('삭제·철회 ↔ 푸시 토큰 (옛 .push)', () => {
 
   function renderPage() {
     return render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={newTestQueryClient()}>
         <SettingsPage />
       </QueryClientProvider>
     );
@@ -1921,7 +1922,7 @@ describe('버전 줄 출처 (옛 .version)', () => {
 
   function renderPage() {
     return render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={newTestQueryClient()}>
         <SettingsPage />
       </QueryClientProvider>
     );

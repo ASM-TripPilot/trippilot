@@ -11,6 +11,7 @@ import { createGate } from '@/test-support/mswHookHarness';
 import { flushNotifications } from '@/test-support/flushNotifications';
 
 import { useSavedVisitMemos, useVisitMemo } from './useVisitMemo';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-1203 · 방문 여러 개의 메모 세션 저장본을 한 번에 읽는 훅(`useSavedVisitMemos`).
@@ -87,9 +88,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 beforeEach(() => {
-  client = new QueryClient({
-    defaultOptions: { queries: { retry: false, retryDelay: 0 } },
-  });
+  client = newTestQueryClient();
   mockRequest.mockClear();
   mockPut.mockReset().mockResolvedValue({ text: 'ok' });
   mockGetRecords.mockReset().mockResolvedValue(record([]));

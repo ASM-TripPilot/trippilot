@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Share } from 'react-native';
 import * as Linking from 'expo-linking';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import {
   fireEvent,
   render,
@@ -19,6 +19,7 @@ import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 
 import { PlaceDetailPage } from './PlaceDetailPage';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-1372(TRIP-824 단건 조회) · d06 장소 상세 배선(페이지 층).
@@ -144,12 +145,7 @@ afterAll(() => server.close());
 
 // 빈 QueryClient 로 그린다 — 앞 화면 캐시가 없는 딥링크 진입 그대로.
 function renderDetail(poiId: string): void {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
-  });
+  const client = newTestQueryClient({ gcTime: 0 });
   function wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>

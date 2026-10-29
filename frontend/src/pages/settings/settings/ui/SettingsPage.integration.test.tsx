@@ -844,7 +844,7 @@ describe('로그아웃 순서 · 게이트 대기 (옛 .logout)', () => {
     await clearTokens();
     await saveTokens({ accessToken: 'access-A', refreshToken: 'refresh-A' });
     setAccessToken('access-A');
-    queryClient = new QueryClient();
+    queryClient = newTestQueryClient();
     queryClient.setQueryData(CACHED_KEY, { nickname: '이전계정' });
 
     // 렌더가 역참조하는 조회 2훅만 프라임한다(nav.test 선례).
@@ -1119,7 +1119,7 @@ describe('로그아웃 → 이 기기 푸시 토큰 해제 (옛 .pushLogout)', (
 
   function renderPage() {
     return render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={newTestQueryClient()}>
         <SettingsPage />
       </QueryClientProvider>
     );

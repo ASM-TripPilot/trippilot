@@ -1,11 +1,14 @@
 import { http, HttpResponse } from 'msw';
-import { QueryClient } from '@tanstack/react-query';
 import { act, screen, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import type { PreferenceView } from '@/shared/api/index.schemas';
 import { BASE } from '@/test-support/apiBase';
-import { renderWithQueryClient, settle } from '@/test-support/queryRender';
+import {
+  renderWithQueryClient,
+  settle,
+  newTestQueryClient,
+} from '@/test-support/queryRender';
 import OnboardingIndex from '@routes/(onboarding)/index';
 
 /**
@@ -345,11 +348,7 @@ describe('진입 판정 — 응답 도착 전엔 아무것도 안 하고, 이번
 
   it('30초 캐시(앱 전역 staleTime)에 남은 옛 응답이 아니라 다시 마운트한 뒤 받은 응답으로 보낸다', async () => {
     // 준비 — 앱과 같은 staleTime 을 가진 클라이언트를 두 마운트가 공유한다(02a ★3).
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, staleTime: 30_000, gcTime: Infinity },
-      },
-    });
+    const client = newTestQueryClient({ staleTime: 30_000 });
     serve({ consents: [] });
     const first = renderWithQueryClient(<OnboardingIndex />, client);
     // 앵커 — 1차 마운트는 그때 서버 상태(약관 0건)대로 terms 로 갔다.

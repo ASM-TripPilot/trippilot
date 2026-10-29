@@ -6,6 +6,7 @@ import {
   rememberSpontaneousName,
   useSpontaneousNames,
 } from './spontaneousNames';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * 🔴 TRIP-1072 · AC-11 · 01b E5 — 즉석 방문 이름 세션 캐시(poiId → nameKo, 여행별).
@@ -18,9 +19,7 @@ import {
  */
 
 function makeClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  });
+  return newTestQueryClient({ gcTime: 0 });
 }
 
 /** 마운트 직후 작업(훅이 스스로 부르는 조회 등)이 끝나게 흘린다 — 실제로 j01 은 고르기 한참 전에 떠 있다. */

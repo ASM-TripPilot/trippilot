@@ -1,3 +1,4 @@
+import { newTestQueryClient } from '@/test-support/queryRender';
 // 부분 목 — 조회 훅만 가짜로 바꾸고 나머지(읽음 POST 함수·쿼리 키·생성 뮤테이션 훅)는 실물을 둔다.
 // 전체 자동 목이면 '모두 읽음' 배선이 생성 훅을 쓰는 순간 그 훅이 undefined 를 돌려줘 렌더가 죽는다(TRIP-773).
 jest.mock('@/shared/api/generated/notification/notification', () => ({
@@ -6,7 +7,7 @@ jest.mock('@/shared/api/generated/notification/notification', () => ({
 }));
 
 import type { ReactElement } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import {
   fireEvent,
   render,
@@ -44,9 +45,7 @@ jest.mock('expo-router', () => ({
 }));
 
 function renderPage(ui: ReactElement = <NotificationInboxPage />): void {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const client = newTestQueryClient();
   render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 

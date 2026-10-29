@@ -55,6 +55,7 @@ import {
 import { tripRecordsTrip } from '@/test-support/tripRecordsTrip';
 
 import { TripRecordsPage } from './TripRecordsPage';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * j01 방문 기록 페이지 — 실 페이지 + 실제 HTTP(msw) 로 본 사용자 관측 결과. 관점마다 describe 하나(옛 파일 하나).
@@ -143,9 +144,7 @@ jest.mock('@/shared/storage/installId', () => {
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = 't1';
 function wrapper({ children }: { children: ReactNode }) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  });
+  const client = newTestQueryClient({ gcTime: 0 });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 // 위치 권한 seam — 기본은 값 없음(undefined). 권한을 정하는 묶음이 beforeEach 에서 mockResolvedValue 로 정하고, 최상위 afterEach 가 되돌린다.
@@ -2484,9 +2483,7 @@ describe('메모 저장 실패 안내·세션 캐시 시드', () => {
   let memoBodies: unknown[] = [];
 
   function newClient() {
-    return new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    return newTestQueryClient({ gcTime: 0 });
   }
 
   // TRIP-1426 — 루트 토스트 호스트를 함께 그린다(없으면 저장 안내 부재 단언이 공짜 green).
@@ -3555,9 +3552,7 @@ describe('하단 바 배선 — 회고 칸(j03)·요약 칸(j04)', () => {
 
   /** 요약 조회 결과를 캐시에서 읽으려고 클라이언트를 직접 쥔다(요약 칸은 비활성 ↔ 활성만 보여, 실패가 가라앉았는지 화면으론 못 가린다). */
   function renderWithClient(today: string) {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     function Wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>{children}</QueryClientProvider>

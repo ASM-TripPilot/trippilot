@@ -12,7 +12,10 @@ import {
   within,
 } from '@testing-library/react-native';
 import { BASE } from '@/test-support/apiBase';
-import { createGcZeroWrapper } from '@/test-support/queryRender';
+import {
+  createGcZeroWrapper,
+  newTestQueryClient,
+} from '@/test-support/queryRender';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
@@ -819,9 +822,7 @@ describe('G2 · 캐시가 남은 게스트 (TRIP-778 D9 · 5-b 경고-1)', () =>
     // 준비: 세션 만료(토큰만 지워짐 — beforeEach 의 clearAccessToken) + 캐시는 그대로인 상태.
     // gcTime: Infinity — 관찰자가 붙기 전에 캐시가 수거되지 않게(앱 기본 5분과 같은 효과).
     installSettingsServer();
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
-    });
+    const client = newTestQueryClient();
     client.setQueryData(getGetMeSettingsQueryKey(), {
       affiliateNoticeDismissed: true,
     });

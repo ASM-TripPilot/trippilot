@@ -12,7 +12,11 @@ import type { Trigger, TriggerList } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { BASE } from '@/test-support/apiBase';
 import { createGate } from '@/test-support/mswHookHarness';
-import { createWrapper, settle } from '@/test-support/queryRender';
+import {
+  createWrapper,
+  settle,
+  newTestQueryClient,
+} from '@/test-support/queryRender';
 
 import { useApplyReplan } from './useApplyReplan';
 
@@ -85,12 +89,7 @@ let triggerGets: number;
 let client: QueryClient;
 
 function appLikeClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: Infinity, staleTime: 30_000 },
-      mutations: { retry: false, gcTime: Infinity },
-    },
-  });
+  return newTestQueryClient({ staleTime: 30_000 });
 }
 
 function ids(list: TriggerList | undefined): string[] | undefined {

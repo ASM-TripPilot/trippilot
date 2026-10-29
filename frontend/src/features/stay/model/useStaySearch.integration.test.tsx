@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { getStaysSearch } from '@/shared/api/index.hooks';
 import { useStaySearch } from './useStaySearch';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-179 AC-4 · AC-5 — 생성 클라이언트가 나가는 실제 요청(인증·baseURL·배열 직렬화) +
@@ -137,13 +138,11 @@ describe('AC-5 · useStaySearch가 생성 클라이언트 경로를 경유한다
   /** useBootstrapGate.test.tsx:53 의 것을 복제한다(그 함수는 그 파일 로컬이고 공용 헬퍼가
    * 아니다) — 사용처가 둘뿐이라 이번 칸에서 공용 헬퍼로 승격시키지 않는다(선행 투자 회피). */
   function createWrapper() {
-    const client = new QueryClient({
-      defaultOptions: {
-        // gcTime: 0 — 기본값(5분)이 만드는 타이머가 테스트 종료 후에도 살아남아 Node
-        // 프로세스를 300초 붙잡는다(게이트①-2 보정 W-2, 03b 실측). 검증력·테스트 의미
-        // 변화는 없는 위생 수정이다.
-        queries: { retry: false, gcTime: 0 },
-      },
+    const client = newTestQueryClient({
+      // gcTime: 0 — 기본값(5분)이 만드는 타이머가 테스트 종료 후에도 살아남아 Node
+      // 프로세스를 300초 붙잡는다(게이트①-2 보정 W-2, 03b 실측). 검증력·테스트 의미
+      // 변화는 없는 위생 수정이다.
+      gcTime: 0,
     });
     function Wrapper({ children }: { children: ReactNode }) {
       return (

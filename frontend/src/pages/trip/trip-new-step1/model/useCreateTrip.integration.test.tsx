@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -18,6 +18,7 @@ import {
 } from './createTripRequest';
 import { useCreateTrip } from './useCreateTrip';
 import { usePreferencePrefill } from './usePreferencePrefill';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-203 AC-2 (+ TRIP-207 AC-2 · AC-3 갱신) — 여행 생성 훅이 성공 경로를 끝까지 잇는다.
@@ -159,14 +160,11 @@ afterEach(() => {
 afterAll(() => server.close());
 
 function createWrapper() {
-  const client = new QueryClient({
-    defaultOptions: {
-      // gcTime: 0 — 기본값이 만드는 타이머가 테스트 종료 후에도 살아남아 Node 프로세스를
-      // 붙잡는다. **mutations 쪽도 반드시 0으로 둔다**: mutation 기본 gcTime 은 5분이고,
-      // 빼면 이 버킷이 300초 매달린다(02a ★3 실측 — 2분 타임아웃 → 0.5초 종료).
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
+  const client = newTestQueryClient({
+    // gcTime: 0 — 기본값이 만드는 타이머가 테스트 종료 후에도 살아남아 Node 프로세스를
+    // 붙잡는다. **mutations 쪽도 반드시 0으로 둔다**: mutation 기본 gcTime 은 5분이고,
+    // 빼면 이 버킷이 300초 매달린다(02a ★3 실측 — 2분 타임아웃 → 0.5초 종료).
+    gcTime: 0,
   });
   function Wrapper({ children }: { children: ReactNode }) {
     return (

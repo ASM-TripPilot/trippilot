@@ -1,3 +1,4 @@
+import { newTestQueryClient } from '@/test-support/queryRender';
 jest.mock('@/shared/api/generated/location/location');
 
 // OS 권한 seam — expo-location 을 통째로 가짜로 바꿔 "페이지가 이걸 부르는가/몇 번/무엇으로 미러하나"
@@ -150,7 +151,7 @@ function primeMutation(
  */
 function renderPage() {
   return render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={newTestQueryClient()}>
       <LocationConsentPage />
     </QueryClientProvider>
   );

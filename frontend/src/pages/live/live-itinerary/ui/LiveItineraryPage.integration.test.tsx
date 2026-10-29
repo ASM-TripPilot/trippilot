@@ -70,6 +70,7 @@ import {
 import { encodePolyline } from '@/shared/location/automation/polyline';
 
 import { LiveItineraryPage } from './LiveItineraryPage';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * i01 허브(LiveItineraryPage) 통합 테스트 — 실 페이지 + 실제 HTTP(MSW). 관점 9개를 바깥 describe 9개로 나눈다
@@ -392,9 +393,7 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
     );
 
   function wrapper({ children }: { children: ReactNode }) {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
+    const client = newTestQueryClient();
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
@@ -1070,9 +1069,7 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
                 : new HttpResponse(null, { status: tripResponse });
             })
           );
-          const client = new QueryClient({
-            defaultOptions: { queries: { retry: false } },
-          });
+          const client = newTestQueryClient();
           render(
             <QueryClientProvider client={client}>
               <LiveItineraryPage tripId={TRIP_ID} today={TODAY} />
@@ -1260,9 +1257,7 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
             tripHandler(),
             visitsHandler()
           );
-          const client = new QueryClient({
-            defaultOptions: { queries: { retry: false } },
-          });
+          const client = newTestQueryClient();
           render(
             <QueryClientProvider client={client}>
               <LiveItineraryPage tripId={TRIP_ID} today={TODAY} />
@@ -1824,12 +1819,7 @@ describe('i08 변경 반영 시트', () => {
   ];
   const postHits = () => observedHits.filter((hit) => hit.startsWith('POST '));
   function wrapper({ children }: { children: ReactNode }) {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
@@ -1966,13 +1956,9 @@ describe('i08 변경 반영 시트', () => {
     seeded: { sessionId: string; diff: ReplanDiff } | null
   ): Promise<QueryClient> {
     server.use(itineraryHandler(), ...restHandlers());
-    const client = new QueryClient({
+    const client = newTestQueryClient({
       // gcTime 을 끄지 않는다(Infinity) — 0 이면 관찰자 없는 심어 둔 diff 가 일정 로딩 중에 지워져,
       // 시트가 뜨는 시점에는 캐시가 비어 있다. 실제 앱의 기본 gcTime 은 5분이라 이 가정이 맞다.
-      defaultOptions: {
-        queries: { retry: false, gcTime: Infinity },
-        mutations: { gcTime: 0 },
-      },
     });
     if (seeded) {
       client.setQueryData(
@@ -2080,12 +2066,7 @@ describe('i08 변경 반영 시트', () => {
         }),
         ...restHandlers()
       );
-      const client = new QueryClient({
-        defaultOptions: {
-          queries: { retry: false, gcTime: Infinity },
-          mutations: { gcTime: 0 },
-        },
-      });
+      const client = newTestQueryClient();
       client.setQueryData(
         getGetTripsTripIdReplanSessionsSessionIdDiffQueryKey(
           TRIP_ID,
@@ -2302,12 +2283,7 @@ describe('i08 변경 반영 시트', () => {
           HttpResponse.json({ triggers: [] })
         )
       );
-      const client = new QueryClient({
-        defaultOptions: {
-          queries: { retry: false, gcTime: Infinity },
-          mutations: { gcTime: 0 },
-        },
-      });
+      const client = newTestQueryClient();
       render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
         wrapper: ({ children }: { children: ReactNode }) => (
           <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -2535,9 +2511,7 @@ describe('메모 시트', () => {
     memoGate = Promise.resolve();
     releaseMemo = () => {};
     visitsResponse = () => [visit('v1', 'p1', null)];
-    client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    client = newTestQueryClient({ gcTime: 0 });
     // 옛 목 값 — 이 관점은 뒤로가기 히스토리가 없는 것으로 돌았다.
     mockCanGoBack.mockReturnValue(false);
     server.use(
@@ -3280,9 +3254,7 @@ describe('관람 중 카드 [사진]·[메모]', () => {
     photoBodies = [];
     photoStatus = 201;
     consentResponse = () => HttpResponse.json(consent(true, true));
-    client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    client = newTestQueryClient({ gcTime: 0 });
     // 옛 목 값 — 이 관점은 뒤로가기 히스토리가 없는 것으로 돌았다.
     mockCanGoBack.mockReturnValue(false);
     mockPick.mockReset().mockResolvedValue({
@@ -3675,9 +3647,7 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
     memoStatus = 200;
     memoGate = Promise.resolve();
     releaseMemo = () => {};
-    client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    client = newTestQueryClient({ gcTime: 0 });
     mockCanGoBack.mockReturnValue(false);
     mockPick.mockReset().mockResolvedValue({
       kind: 'picked',
@@ -4582,12 +4552,7 @@ describe('i03 위험 상세 시트', () => {
     return qs ? `${obj.pathname ?? ''}?${qs}` : (obj.pathname ?? '');
   }
   function wrapper({ children }: { children: ReactNode }) {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
@@ -4919,12 +4884,7 @@ describe('i02 트리거 표면', () => {
     triggersHandler(list),
   ];
   function wrapper({ children }: { children: ReactNode }) {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
@@ -5037,12 +4997,7 @@ describe('i02 트리거 표면', () => {
 
     it('I-T8 숨긴 뒤 같은 트리거로 재조회되면 숨긴 채, 다른 triggerId(trg-2)가 오면 알약이 다시 뜬다 (D3 · 5-b 경고-1)', async () => {
       server.use(...baseHandlers({ triggers: [mkTrigger()] }));
-      const client = new QueryClient({
-        defaultOptions: {
-          queries: { retry: false, gcTime: 0 },
-          mutations: { gcTime: 0 },
-        },
-      });
+      const client = newTestQueryClient({ gcTime: 0 });
       const refetchTriggers = () =>
         act(() =>
           client.invalidateQueries({
@@ -5274,9 +5229,7 @@ describe('방문 체크', () => {
   }
   beforeEach(() => {
     arriveBodies = [];
-    client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    client = newTestQueryClient({ gcTime: 0 });
     mockGetForeground.mockResolvedValue({ status: 'granted', granted: true });
     mockRequestForeground.mockResolvedValue({
       status: 'granted',
@@ -7503,12 +7456,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
   });
 
   function wrapper({ children }: { children: ReactNode }) {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
@@ -7650,12 +7598,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
       ...liveHubHandlers({ itinerary: itinerary() }),
       opportunitiesHandler({ [TODAY]: [VENUE, TRENDING] })
     );
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     const refetchTriggers = (next: Trigger[]) => {
       serverTriggers = next;
       return act(() =>
@@ -7926,12 +7869,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
       ...liveHubHandlers({ itinerary: itinerary() }),
       opportunitiesHandler({ [TODAY]: [VENUE, TRENDING] })
     );
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     /** 트리거 목록을 다시 받는다(포그라운드 복귀·푸시 수신 무효화와 같다). */
     const refetchTriggers = (next: Trigger[]) => {
       serverTriggers = next;
@@ -8031,12 +7969,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
       ...liveHubHandlers({ itinerary: itinerary() }),
       opportunitiesHandler(byDate)
     );
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     render(
       <QueryClientProvider client={client}>
         <LiveItineraryPage tripId={TRIP_ID} today={TODAY} />

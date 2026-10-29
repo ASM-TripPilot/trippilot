@@ -3,7 +3,6 @@ import { http, HttpResponse } from 'msw';
 import {
   defaultScheduler,
   notifyManager,
-  QueryClient,
   QueryClientProvider,
 } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
@@ -16,6 +15,7 @@ import { flushNotifications } from '@/test-support/flushNotifications';
 
 import { deriveVisitStatus } from './visitStatus';
 import { useVisitCheck, type VisitCheckOutcome } from './useVisitCheck';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-565 · AC-1·AC-2·AC-5·skip — record 소관 방문 체크 훅의 낙관적 갱신 + 레코드 단위 롤백.
@@ -108,12 +108,7 @@ afterAll(() => {
 });
 
 function createWrapper() {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
-  });
+  const client = newTestQueryClient({ gcTime: 0 });
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>

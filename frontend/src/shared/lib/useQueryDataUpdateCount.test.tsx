@@ -1,8 +1,9 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
 import { useQueryDataUpdateCount } from './useQueryDataUpdateCount';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * `useQueryDataUpdateCount` — 캐시 속 쿼리의 `dataUpdateCount` 를 **구독으로** 읽는다(TRIP-1364).
@@ -12,9 +13,7 @@ import { useQueryDataUpdateCount } from './useQueryDataUpdateCount';
 const KEY = ['itinerary', 't1'] as const;
 
 function setup() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { gcTime: Infinity, retry: false } },
-  });
+  const client = newTestQueryClient();
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );

@@ -3,6 +3,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { getGetTripsQueryOptions } from '@/shared/api/index.hooks';
 
 import { prefetchTrips } from './prefetchTrips';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 // 생성 API 계층(axios)을 안 타도록 옵션 팩토리만 목으로 — 키는 실물과 같은 모양(['/trips'])으로 둔다.
 jest.mock('@/shared/api/index.hooks', () => ({
@@ -15,7 +16,7 @@ describe('prefetchTrips — 홈 GET /trips 미리 받기 (TRIP-1362)', () => {
   it('홈 useGetTrips() 와 같은 옵션(키·queryFn)으로 캐시를 채운다', async () => {
     const queryFn = jest.fn().mockResolvedValue([{ id: 't1' }]);
     mockOptions.mockReturnValue({ queryKey: ['/trips'], queryFn });
-    const client = new QueryClient();
+    const client = newTestQueryClient();
 
     prefetchTrips(client);
     await client.getQueryCache().find({ queryKey: ['/trips'] })?.promise;
