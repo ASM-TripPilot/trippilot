@@ -24,6 +24,7 @@
 - `app/(onboarding)/pref1.tsx`  →  (export 없음)
 - `app/(onboarding)/pref2.tsx`  →  (export 없음)
 - `app/(onboarding)/push.tsx`  →  (export 없음)
+- `app/(onboarding)/push.web.tsx`  →  (export 없음)
 - `app/(onboarding)/terms.tsx`  →  (export 없음)
 
 ## app/(tabs)/
@@ -71,6 +72,7 @@
 - `app/onboarding-tour.tsx`  →  (export 없음)
 - `app/permission-location.tsx`  →  (export 없음)
 - `app/permission-push.tsx`  →  (export 없음)
+- `app/permission-push.web.tsx`  →  (export 없음)
 - `app/reconsent.tsx`  →  (export 없음)
 
 ## app/records/
@@ -190,6 +192,7 @@
 - `src/__tests__/tripNightsPeriodOrder.test.tsx`  →  (export 없음)
 - `src/__tests__/tripWizardEntryReset.test.tsx`  →  (export 없음)
 - `src/__tests__/tripWizardLeaveSwipe.integration.test.tsx`  →  (export 없음)
+- `src/__tests__/webOnlyRoutes.test.tsx`  →  (export 없음)
 
 ## src/app/entrypoint/
 - `src/app/entrypoint/AppProviders.tsx`  →  AppProviders
@@ -582,6 +585,7 @@
 
 ## src/features/share-trip-card/model/
 - `src/features/share-trip-card/model/shareCapture.ts`  →  SaveShareCardResult · ShareShareCardResult · isShareCaptureArmed · saveShareCardImage · shareShareCardImage
+- `src/features/share-trip-card/model/shareCapture.web.ts`  →  isShareCaptureArmed · saveShareCardImage · shareShareCardImage
 - `src/features/share-trip-card/model/shareCaptureNative.ts`  →  captureRef · requestPermissionsAsync · saveToLibraryAsync · shareAsync
 
 ## src/features/stay-outbound/
@@ -1682,6 +1686,7 @@
 - `src/shared/location/automation/engine.ts`  →  EngineDeps · EngineReason · EngineStatus · ArmingCallInput · setContext · evaluate · handleGeofence · handleLocations · handleWake · flushQueue · uploadPendingRoutes · markExplainerAsked · clearNotice · wipeAutomation
 - `src/shared/location/automation/expoFs.ts`  →  createExpoFs
 - `src/shared/location/automation/flag.ts`  →  isLocationAutomationEnabled
+- `src/shared/location/automation/flag.web.ts`  →  isLocationAutomationEnabled
 - `src/shared/location/automation/httpSink.ts`  →  createHttpAutomationSink
 - `src/shared/location/automation/native.ts`  →  GEOFENCE_TASK · ROUTE_TASK · NativeAdapters · nativeAdapters
 - `src/shared/location/automation/noticeCopy.ts`  →  AutomationNoticeCopy · automationNoticeCopy · tripDateRangeLabel
@@ -1720,12 +1725,16 @@
 
 ## src/shared/photo/
 - `src/shared/photo/index.ts`  →  PhotoAssetMeta · PhotoPickResult · pickPhotoAsset · resolvePhotoUri
+- `src/shared/photo/index.web.ts`  →  pickPhotoAsset · resolvePhotoUri
 
 ## src/shared/push/
 - `src/shared/push/PushGlyphs.tsx`  →  PushBellHero
 - `src/shared/push/PushPreprompt.tsx`  →  PushPrepromptProps · PushPreprompt
+- `src/shared/push/index.support.ts`  →  isPushSupported
+- `src/shared/push/index.support.web.ts`  →  isPushSupported
 - `src/shared/push/index.ts`  →  getPushPermission · type PushPermissionStatus · requestPushPermission · registerPushToken · unregisterDeviceToken · toServerOsPermission · isDeviceNotRegistered · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken · installForegroundPresentation · onPushReceived · onPushTapped · takeLaunchPushTap · type PushEvent
 - `src/shared/push/index.view.ts`  →  PushPreprompt
+- `src/shared/push/index.web.ts`  →  getPushPermission · requestPushPermission · registerPushToken · unregisterDeviceToken · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken · toServerOsPermission · isDeviceNotRegistered · installForegroundPresentation · onPushReceived · onPushTapped · takeLaunchPushTap · PushPreprompt
 - `src/shared/push/permissions.ts`  →  PushPermissionStatus · getPushPermission
 - `src/shared/push/pushColors.ts`  →  PUSH_ICON_COLORS
 - `src/shared/push/receive.ts`  →  PushEvent · installForegroundPresentation · onPushReceived · onPushTapped · takeLaunchPushTap
@@ -1890,4 +1899,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1212개 파일
+합계 1221개 파일
