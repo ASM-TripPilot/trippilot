@@ -1,0 +1,155 @@
+name: frontend-web-deploy
+
+# 웹 버전 배포(TRIP-1654) — `expo export --platform web` 의 정적 파일을 S3 에 올리고 CloudFront 캐시를 무효화한다.
+# 인프라(버킷·배포·인증서·IAM 역할)는 사람이 콘솔로 만든다(TRIP-1644) — 이 워크플로는 그 결과값(리포 변수)을 읽기만 한다.
+#
+# 트리거 = main push + 수동 실행. 운영 웹은 운영 서버(api-dev)를 보므로 서버 승격(main)과 같은 박자로 나간다 —
+# develop 머지마다 운영 웹이 바뀌면 운영 서버에 아직 없는 API 를 부르는 번들이 먼저 나간다(server-split: develop=dev-api,
+# main=api-dev). 개발 서버 확인용 웹 배포는 따로 두지 않는다(필요해지면 별도 버킷·변수로 연다).
+on:
+  push:
+    branches: [main]
+    paths: ['frontend/**', '.github/workflows/frontend-web-deploy.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 배포는 겹치지 않게 줄 세운다(취소하지 않는다 — 반쯤 올라간 sync 를 끊으면 html 과 자산이 어긋날 수 있다).
+concurrency:
+  group: frontend-web-deploy
+  cancel-in-progress: false
+
+jobs:
+  # 1) 빌드 — GitHub Environment `web` 의 변수 5개(공개값)로 번들을 만든다. AWS 권한이 없다.
+  #    빌드와 업로드를 잡으로 나누는 이유: 잡에 environment 를 걸면 OIDC 토큰의 sub 가 `environment:web` 이 되어
+  #    배포 역할 신뢰 정책(TRIP-1644 7단계 — `ref:refs/heads/main|develop`)과 맞지 않는다. 업로드 잡은 environment 없이
+  #    브랜치 sub 로 역할을 맡는다.
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: web
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL }}
+      EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ vars.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
+      EXPO_PUBLIC_KAKAO_CLIENT_ID: ${{ vars.EXPO_PUBLIC_KAKAO_CLIENT_ID }}
+      EXPO_PUBLIC_NAVER_CLIENT_ID: ${{ vars.EXPO_PUBLIC_NAVER_CLIENT_ID }}
+      EXPO_PUBLIC_NAVER_MAP_CLIENT_ID: ${{ vars.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID }}
+    steps:
+      # 변수가 비면 조용히 빈 값으로 굽지 않는다 — API 주소가 빠진 번들은 뜨기만 하고 모든 요청이 실패한다(INV-4 취지).
+      - name: require web build variables
+        run: |
+          missing=()
+          for name in EXPO_PUBLIC_API_BASE_URL EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID EXPO_PUBLIC_KAKAO_CLIENT_ID \
+                      EXPO_PUBLIC_NAVER_CLIENT_ID EXPO_PUBLIC_NAVER_MAP_CLIENT_ID; do
+            value="${!name}"; [ -n "${value//[[:space:]]/}" ] || missing+=("$name")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error title=web 변수 누락::GitHub Environment 'web' 에 비어 있는 변수: ${missing[*]} (TRIP-1645 F)"
+            exit 1
+          fi
+          case "$EXPO_PUBLIC_API_BASE_URL" in
+            https://*) ;;
+            *) echo "::error title=API 주소::EXPO_PUBLIC_API_BASE_URL 은 https 여야 한다(웹은 https 페이지라 http API 는 혼합 콘텐츠로 막힌다)"; exit 1 ;;
+          esac
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # 시크릿류 EXPO_PUBLIC_ 이 이 잡 env 에 끼어들면 번들 소스에 그대로 박힌다(H2 "넣지 말 것"). 잡 env 는 위 5개뿐이지만,
+      # 누가 env 를 늘릴 때를 대비해 export 직전에 이름으로 한 번 더 막는다.
+      - name: refuse secret-like public env
+        run: |
+          leaked=$(env | cut -d= -f1 | grep -E '^EXPO_PUBLIC_.*(SECRET|PRIVATE|TOKEN)' || true)
+          if [ -n "$leaked" ]; then
+            echo "::error title=공개 env 에 시크릿::웹 번들에 박히는 변수에 시크릿류 이름이 있다: $leaked"
+            exit 1
+          fi
+      - run: pnpm expo export --platform web --output-dir dist
+      # 산출물 시크릿 가드. 값은 이 잡이 모르므로(시크릿은 vars 에 없다) 흔적으로 본다:
+      # - `NAVER_CLIENT_SECRET` 문자열(코드가 아직 그 env 를 읽거나 이름이 남은 경우 — W4/TRIP-1650 이 끊는다)
+      # - 구글 client secret 접두 `GOCSPX-`(웹 클라이언트 시크릿이 실수로 공개 env 로 들어간 경우)
+      - name: guard secrets in bundle
+        run: |
+          hits=$(grep -rlE 'NAVER_CLIENT_SECRET|GOCSPX-' dist || true)
+          if [ -n "$hits" ]; then
+            echo "::error title=번들에 시크릿 흔적::$hits"
+            exit 1
+          fi
+          test -f dist/index.html || { echo "::error title=산출물::dist/index.html 이 없다"; exit 1; }
+      - uses: actions/upload-artifact@v6
+        with:
+          name: web-dist
+          path: frontend/dist/
+          retention-days: 7
+
+  # 2) 업로드 — OIDC 로 웹 배포 전용 최소 권한 역할(S3 3종 + 무효화)을 맡는다. aws-deploy 역할은 쓰지 않는다.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      WEB_DEPLOY_ROLE_ARN: ${{ vars.WEB_DEPLOY_ROLE_ARN }}
+      WEB_S3_BUCKET: ${{ vars.WEB_S3_BUCKET }}
+      WEB_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.WEB_CLOUDFRONT_DISTRIBUTION_ID }}
+      WEB_HOSTNAME: ${{ vars.WEB_HOSTNAME }}
+    steps:
+      - name: require deploy variables
+        run: |
+          missing=()
+          for name in WEB_DEPLOY_ROLE_ARN WEB_S3_BUCKET WEB_CLOUDFRONT_DISTRIBUTION_ID WEB_HOSTNAME; do
+            value="${!name}"; [ -n "${value//[[:space:]]/}" ] || missing+=("$name")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error title=배포 변수 누락::리포 변수가 비어 있다: ${missing[*]} (TRIP-1644 9단계)"
+            exit 1
+          fi
+      - uses: actions/download-artifact@v7
+        with:
+          name: web-dist
+          path: dist
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ env.WEB_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: trippilot-web-${{ github.run_id }}
+      # 순서가 계약이다: 해시 자산 먼저 → html → 옛 자산 정리. html 이 먼저 바뀌면 아직 없는 번들을 가리키는 순간이 생긴다.
+      # - `_expo/static/**`·`assets/**` 는 파일명에 해시가 있어 내용이 바뀌면 이름이 바뀐다 → 1년 immutable.
+      # - 그 밖(index.html·favicon·metadata 등)은 이름이 고정이라 no-cache — 새 배포가 바로 보인다.
+      - name: upload hashed assets (immutable)
+        run: |
+          for dir in _expo assets; do
+            [ -d "dist/$dir" ] || continue
+            aws s3 sync "dist/$dir" "s3://$WEB_S3_BUCKET/$dir" \
+              --cache-control "public, max-age=31536000, immutable" --only-show-errors
+          done
+      - name: upload html and other files (no-cache)
+        run: |
+          aws s3 sync dist "s3://$WEB_S3_BUCKET" --delete \
+            --exclude "_expo/*" --exclude "assets/*" \
+            --cache-control "no-cache" --only-show-errors
+      - name: remove stale hashed assets
+        run: |
+          for dir in _expo assets; do
+            [ -d "dist/$dir" ] || continue
+            aws s3 sync "dist/$dir" "s3://$WEB_S3_BUCKET/$dir" --delete \
+              --cache-control "public, max-age=31536000, immutable" --only-show-errors
+          done
+      - name: invalidate CloudFront
+        run: |
+          id=$(aws cloudfront create-invalidation --distribution-id "$WEB_CLOUDFRONT_DISTRIBUTION_ID" \
+            --paths "/*" --query 'Invalidation.Id' --output text)
+          echo "무효화 $id — https://$WEB_HOSTNAME" >> "$GITHUB_STEP_SUMMARY"
