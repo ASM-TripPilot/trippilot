@@ -44,6 +44,8 @@ module.exports = {
     '<rootDir>/src/test-support/animatedPreload.cjs',
     '<rootDir>/src/test-support/fontScalePreload.cjs',
   ],
+  // react-query gc 타이머가 워커를 붙잡지 않게 unref 한다(TRIP-1630). 통합 설정은 `...base.setupFilesAfterEnv` 로 물려받는다.
+  setupFilesAfterEnv: ['<rootDir>/src/test-support/queryTimersUnref.ts'],
   transform: {
     // 프리셋의 babel transform 키(\.[jt]sx?$)는 .mjs 를 못 잡는다. MSW 의존 트리는
     // .mjs(ESM) 로 배포되므로 .mjs 도 babel 로 트랜스폼하도록 규칙을 더한다.
