@@ -76,6 +76,16 @@ trippilot:
       client-secret: ${GOOGLE_CLIENT_SECRET:}
       token-uri: https://oauth2.googleapis.com/token
       user-info-uri: https://openidconnect.googleapis.com/v1/userinfo
+    # 구글 **웹** 클라이언트(웹 애플리케이션 유형 — TRIP-1656). 위 google 은 iOS 공개 클라이언트라 시크릿이 없고, 웹에서
+    # 발급된 code 를 그 ID 로 교환하면 구글이 거절한다. redirectUri 가 아래 허용 웹 출처 + `/oauth/google` 과 정확히
+    # 같을 때만 이 클라이언트로 교환한다(열린 redirect 금지). 허용 출처는 CORS 목록과 같은 env 를 쓴다(웹 출처는 하나다).
+    # 비면 웹 교환은 401 로 실패한다(기동 무영향).
+    google-web:
+      client-id: ${GOOGLE_WEB_CLIENT_ID:}
+      client-secret: ${GOOGLE_WEB_CLIENT_SECRET:}   # 시크릿 — 평문 커밋 금지(SECURITY-12)
+      token-uri: https://oauth2.googleapis.com/token
+      user-info-uri: https://openidconnect.googleapis.com/v1/userinfo
+      redirect-origins: ${CORS_ALLOWED_ORIGINS:}
     kakao:
       client-id: ${KAKAO_CLIENT_ID:}
       client-secret: ${KAKAO_CLIENT_SECRET:}

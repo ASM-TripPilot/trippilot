@@ -155,6 +155,9 @@ services:
       # 미설정이면 빈 값 → 소셜 로그인 시도 시에만 실패(기동 무영향). 값은 .env.example 참고.
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      # 구글 웹 클라이언트(TRIP-1656) — 웹 redirect(CORS_ALLOWED_ORIGINS 출처 + /oauth/google)의 code 교환용.
+      GOOGLE_WEB_CLIENT_ID: ${GOOGLE_WEB_CLIENT_ID:-}
+      GOOGLE_WEB_CLIENT_SECRET: ${GOOGLE_WEB_CLIENT_SECRET:-}
       KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID:-}
       KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET:-}
       # 카카오 SDK 토큰의 발급 앱 대조(TRIP-1317). 비면 대조하지 않는다.
