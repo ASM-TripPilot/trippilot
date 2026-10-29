@@ -321,6 +321,33 @@ describe('TRIP-935 AC-2 · expo-router 사이트맵 끔', () => {
   });
 });
 
+// TRIP-1646 — 웹 출시본 설정. 'single' 이 아니면(static) export 가 경로마다 HTML 을 만들어 CloudFront 의 "모든 경로 →
+// index.html" 규칙과 어긋나고, 템플릿이 Expo 치환 자리를 잃으면 제목·언어가 기본값(Expo App·en)으로 조용히 바뀐다.
+// 빌드는 둘 다 성공한다. PC 폭 고정·확대 금지 같은 생김새는 웹 육안 몫이라 여기서 굳히지 않는다.
+describe('TRIP-1646 · 웹 export 설정', () => {
+  it('웹은 metro 번들러로 index.html 하나짜리 SPA(output single)를 만들고, 파비콘 원본 파일이 실재한다', () => {
+    expect(config.web?.bundler).toBe('metro');
+    expect(config.web?.output).toBe('single');
+    const favicon = config.web?.favicon;
+    expect(favicon).toBeDefined();
+    expect(fs.existsSync(path.join(ROOT, favicon ?? ''))).toBe(true);
+  });
+
+  it('package.json 에 웹 개발 서버 스크립트가 있고, 웹 템플릿(public/index.html)이 Expo 치환 자리(제목·언어)와 #root 를 갖는다', () => {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')
+    ) as { scripts: Record<string, string> };
+    expect(pkg.scripts.web).toBe('expo start --web');
+
+    // Expo 는 public/index.html 이 있으면 기본 템플릿 대신 이것을 쓰고, %WEB_TITLE%·%LANG_ISO_CODE% 를 설정값으로 바꾼다.
+    const html = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8');
+    expect(html).toContain('%WEB_TITLE%');
+    expect(html).toContain('%LANG_ISO_CODE%');
+    expect(html).toContain('<div id="root"></div>');
+    expect(config.web?.lang).toBe('ko');
+  });
+});
+
 // TRIP-1070 AC-14 — 사진 앨범 권한 문구. 두 플러그인이 같은 Info.plist 키(NSPhotoLibraryUsageDescription)를
 // 쓰므로 문구가 다르면 나중 플러그인이 이긴다 — 같은 문자열이어야 어느 쪽이 이겨도 같다.
 // 옵션 키는 설치된 패키지 d.ts 실측(plugin/build/withImagePicker.d.ts · withMediaLibrary.d.ts).
