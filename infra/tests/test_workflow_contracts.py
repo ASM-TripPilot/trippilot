@@ -258,6 +258,7 @@ class WorkflowContractTests(unittest.TestCase):
         sleep = steps[names.index('Put the dev workloads to sleep')]
         self.assertTrue(sleep['if'].startswith('success()'))  # 실패하면 원인을 보려고 켜 둔다
         self.assertIn("steps.config.outputs.dev_sleep == 'true'", sleep['if'])
+        self.assertIn("steps.config.outputs.target == 'dev'", sleep['if'])  # 운영 네임스페이스를 0 으로 만들 수 없게 이중 가드
         self.assertIn('-n "$NAMESPACE"', sleep['run'])  # 네임스페이스는 대상이 정한 값만 — 하드코딩 금지
         self.assertIn('--replicas=0', sleep['run'])
         self.assertLess(names.index('Load the POI shared document into the backend'), names.index('Put the dev workloads to sleep'))

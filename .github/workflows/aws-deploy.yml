@@ -376,8 +376,9 @@ jobs:
           if [ "$POI_CLOSE_MISSING_DRY_RUN" = true ]; then poi_args+=(--close-missing-dry-run); fi
           python3 deploy/eks/runtime.py load-pois --target "$DEPLOY_TARGET" "${poi_args[@]}"
       # 개발 서버는 검증 때만 켠다(TRIP-1659). 실패하면 원인을 보려고 켜 둔다. 임베딩 5Gi 가 메모리 큰 노드 1대를 잡고 있었다.
+      # 한 네임스페이스의 모든 디플로이먼트를 0 으로 만드는 명령이라 dev_sleep(운영이면 항상 false)에 더해 target=dev 를 한 번 더 묻는다.
       - name: Put the dev workloads to sleep
-        if: success() && steps.config.outputs.deploy_application == 'true' && steps.config.outputs.dev_sleep == 'true'
+        if: success() && steps.config.outputs.target == 'dev' && steps.config.outputs.deploy_application == 'true' && steps.config.outputs.dev_sleep == 'true'
         run: kubectl -n "$NAMESPACE" scale deploy --all --replicas=0
       - name: Deployment summary
         if: success()
