@@ -23,6 +23,7 @@ AFFILIATE_MODE TRIPCOM_ALLIANCE_ID TRIPCOM_SID TRIPCOM_AD_ID
 ITINERARY_GENERATION_DAILY_LIMIT ITINERARY_GENERATION_LIMIT_EXEMPT_ACCOUNT_IDS SHARE_CARD_DAILY_LIMIT
 KAKAO_APP_ID ASSISTANT_INTERPRET_MODE LOCATION_AUTOMATION_ENABLED PUBLIC_DATA_API_KEY
 PLANB_SITUATION_SWEEP PLANB_SITUATION_HORIZON PLANB_SITUATION_SWEEP_ACCOUNT_IDS PLANB_PREPARED_REPLAN
+GOOGLE_WEB_CLIENT_ID GOOGLE_WEB_CLIENT_SECRET CORS_ALLOWED_ORIGINS
 """.split())
 AI_KEYS = frozenset("""
 TRIPPILOT_LLM_PROVIDER OPENAI_API_KEY OPENAI_BASE_URL OPENAI_MODEL OPENAI_API
@@ -272,6 +273,10 @@ def validate_groups(groups):
             "GOOGLE_CLIENT_SECRET must stay empty: the Google client is a public (iOS) client, "
             "so sending a secret makes Google reject the exchange with invalid_client"
         )
+    # 웹 허용 출처(TRIP-1655). 백엔드는 와일드카드를 받으면 기동을 거부한다 — 파드가 뜨다 죽기 전에 여기서 막는다.
+    # 비어 있거나 키가 없으면 CORS 가 꺼진 것이다(웹만 막히고 앱은 무영향).
+    if "*" in backend.get("CORS_ALLOWED_ORIGINS", ""):
+        raise ValueError("CORS_ALLOWED_ORIGINS must list origins one by one; a wildcard (*) is refused by the backend")
     # 생성 상한 2종(TRIP-1314)·공유 문구 하루 상한(TRIP-1411)은 없으면 백엔드 기본(10·예외 없음·30)이다. **있는데 틀리면**
     # 백엔드가 기동에서 죽는다(빈 상한·0·UUID 오타) — 파드가 뜨다 죽기 전에 여기서 막는다.
     for name in ("ITINERARY_GENERATION_DAILY_LIMIT", "SHARE_CARD_DAILY_LIMIT"):

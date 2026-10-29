@@ -9,6 +9,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 @ConfigurationProperties(prefix = "trippilot.social")
 data class SocialProviderProperties(
     val google: ProviderConfig = ProviderConfig(),
+    /** 구글 웹 애플리케이션 클라이언트(TRIP-1656) — `google` 은 iOS 공개 클라이언트다. 선택 규칙은 `GoogleOAuthClient`. */
+    val googleWeb: ProviderConfig = ProviderConfig(),
     val kakao: ProviderConfig = ProviderConfig(),
     val naver: ProviderConfig = ProviderConfig(),
     val apple: ProviderConfig = ProviderConfig(),
@@ -44,6 +46,11 @@ data class SocialProviderProperties(
          * 매 요청 ES256 으로 서명하는 데만 쓴다. 평문 커밋 금지(SECURITY-12) — env 로만 들어온다.
          */
         val privateKey: String = "",
+        /**
+         * code 교환을 이 클라이언트로 받을 웹 출처(쉼표 구분 — 현재 구글 웹만, TRIP-1656). redirectUri 가
+         * `<출처>/oauth/<제공자>` 와 정확히 같을 때만 이 클라이언트로 교환한다. 시크릿이 아니다.
+         */
+        val redirectOrigins: String = "",
     ) {
         /**
          * data class 기본 toString 은 모든 필드를 싣는다 — 설정 객체가 로그·예외 메시지에 한 번만 찍혀도
@@ -52,7 +59,7 @@ data class SocialProviderProperties(
         override fun toString(): String =
             "ProviderConfig(clientId=$clientId, clientSecret=${mask(clientSecret)}, tokenUri=$tokenUri, " +
                 "userInfoUri=$userInfoUri, appId=$appId, tokenInfoUri=$tokenInfoUri, jwksUri=$jwksUri, issuer=$issuer, revokeUri=$revokeUri, " +
-                "teamId=$teamId, keyId=$keyId, privateKey=${mask(privateKey)})"
+                "teamId=$teamId, keyId=$keyId, privateKey=${mask(privateKey)}, redirectOrigins=$redirectOrigins)"
 
         private fun mask(secret: String): String = if (secret.isEmpty()) "(없음)" else "(설정됨)"
     }

@@ -155,12 +155,17 @@ services:
       # 미설정이면 빈 값 → 소셜 로그인 시도 시에만 실패(기동 무영향). 값은 .env.example 참고.
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      # 구글 웹 클라이언트(TRIP-1656) — 웹 redirect(CORS_ALLOWED_ORIGINS 출처 + /oauth/google)의 code 교환용.
+      GOOGLE_WEB_CLIENT_ID: ${GOOGLE_WEB_CLIENT_ID:-}
+      GOOGLE_WEB_CLIENT_SECRET: ${GOOGLE_WEB_CLIENT_SECRET:-}
       KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID:-}
       KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET:-}
       # 카카오 SDK 토큰의 발급 앱 대조(TRIP-1317). 비면 대조하지 않는다.
       KAKAO_APP_ID: ${KAKAO_APP_ID:-}
       NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
+      # 웹 클라이언트 허용 출처(CORS, TRIP-1655) — 쉼표 구분. 비면 CORS 응답 없음(웹 이전과 동일).
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
       # 제휴 아웃바운드(C5) — fallback = 웹검색(수수료 없음) · tripcom = 트립닷컴 딥링크(수수료 추적).
       # tripcom 은 세 값이 전부 있어야 기동한다. trip_sub3(AD_ID)가 **귀속의 열쇠**다(probe 실측
       # 2026-10-01) — 빠지면 사용자는 정상 이동하는데 수수료만 조용히 사라진다.
