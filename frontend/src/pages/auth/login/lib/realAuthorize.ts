@@ -24,6 +24,12 @@ import { assertOAuthStateMatches, generateOAuthState } from './oauthState';
  * 문자열을 보내면 400 으로 즉사한다(결함 C). redirectUri 는 env 값을 우선 쓰고, 미설정 시 앱
  * 스킴에서 파생한다(D1). 사용자 취소/닫힘은 cancel/dismiss 로, 그 외 실패는 조용히 넘기지 않고
  * throw 한다(INV-4).
+ *
+ * config.responseType 이 'token'(웹 네이버 implicit, TRIP-1650)이면 인가 코드 대신 access_token 을 받아
+ * `success-token` 으로 정규화한다. PKCE 가 없어 state 가 유일한 CSRF 방어이므로 requiresState 설정과
+ * 무관하게 항상 싣고 대조한다. 라이브러리가 `error` 로 분류한 결과(state 불일치 포함)는 params 에 토큰이
+ * 들어 있어도 쓰지 않는다 — 예외는 동의 거부(access_denied)를 취소로 돌려주는 것뿐이다.
+ * 거절 메시지에는 params·토큰·돌려받은 state 를 싣지 않는다(콘솔·오류 수집으로 흐른다).
  */
 export async function realAuthorize(
   provider: SocialProvider,
@@ -33,12 +39,14 @@ export async function realAuthorize(
     config.redirectUri ||
     makeRedirectUri({ scheme: 'trippilot', path: `oauth/${provider}` });
 
-  const state = config.requiresState ? generateOAuthState() : undefined;
+  const isToken = config.responseType === 'token';
+  const state =
+    config.requiresState || isToken ? generateOAuthState() : undefined;
   const request = new AuthRequest({
     clientId: config.clientId,
     scopes: config.scopes,
     redirectUri,
-    responseType: ResponseType.Code,
+    responseType: isToken ? ResponseType.Token : ResponseType.Code,
     usePKCE: config.usePKCE ?? true,
     ...(state ? { state } : {}),
   });
@@ -50,6 +58,15 @@ export async function realAuthorize(
       if (state) {
         assertOAuthStateMatches(state, result.params.state);
       }
+      if (isToken) {
+        const accessToken = result.params.access_token;
+        if (!accessToken) {
+          throw new Error(
+            '소셜 로그인 인가 실패: 응답에 access_token 이 없습니다.'
+          );
+        }
+        return { type: 'success-token', accessToken };
+      }
       return {
         type: 'success-code',
         authorizationCode: result.params.code,
@@ -60,6 +77,13 @@ export async function realAuthorize(
       return { type: 'dismiss' };
     case 'cancel':
       return { type: 'cancel' };
+    case 'error':
+      if (isToken && result.params?.error === 'access_denied') {
+        return { type: 'cancel' };
+      }
+      throw new Error(
+        "소셜 로그인 인가 실패: promptAsync 가 'error' 를 반환했습니다."
+      );
     default:
       throw new Error(
         `소셜 로그인 인가 실패: promptAsync 가 '${result.type}' 를 반환했습니다.`

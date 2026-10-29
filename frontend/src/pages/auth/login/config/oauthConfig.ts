@@ -9,7 +9,8 @@ import type { SocialProvider } from '@/shared/api';
  * 되게 두고, discovery(authorize/token 엔드포인트 주소록)는 정적 하드코딩한다 — 네트워크 의존
  * 0 으로 테스트를 결정론으로 유지하기 위함이다(D3). clientId 가 비면 그 사실을 빈 문자열로
  * 드러내고, 실 시도 여부는 호출부(makeAuthorize)가 판단한다(빈 값 실 OAuth 금지 · INV-4).
- * google·kakao 만 채워진다. 웹(Platform.OS==='web', TRIP-1649)은 같은 팝업 OAuth 를 쓰되 클라이언트·redirect·state 가 iOS 와 다르다 — webOverride. apple(네이티브 SDK)·naver(서버가 code 경로를 닫아 SDK 토큰 경로뿐, TRIP-1371)는 빈 슬롯이다.
+ * google·kakao 만 채워진다. 웹(Platform.OS==='web', TRIP-1649)은 같은 팝업 OAuth 를 쓰되 클라이언트·redirect·state 가 iOS 와 다르다 — webOverride. apple(네이티브 SDK)은 빈 슬롯이고,
+ * naver 는 iOS 에서 빈 슬롯이다(서버가 code 경로를 닫아 SDK 토큰 경로뿐, TRIP-1371). 웹에서만 implicit(`responseType:'token'`) 팝업 슬롯이 채워진다(TRIP-1650 · webNaverConfig).
  */
 export interface OAuthDiscovery {
   authorizationEndpoint: string;
@@ -24,6 +25,8 @@ export interface OAuthProviderConfig {
   // realAuthorize.ts 가 이 값으로 AuthRequest 를 구성한다. 선택 필드 — 빈 슬롯 provider(apple·naver)는 채우지 않는다.
   usePKCE?: boolean;
   requiresState?: boolean;
+  // 'token' = implicit(토큰이 redirect 의 `#` 뒤로 바로 옴, 웹 네이버). 비우면 'code'. 'token' 이면 realAuthorize 가 state 를 항상 싣는다.
+  responseType?: 'code' | 'token';
 }
 
 const GOOGLE_DISCOVERY: OAuthDiscovery = {
@@ -35,6 +38,12 @@ const GOOGLE_DISCOVERY: OAuthDiscovery = {
 const KAKAO_DISCOVERY: OAuthDiscovery = {
   authorizationEndpoint: 'https://kauth.kakao.com/oauth/authorize',
   tokenEndpoint: 'https://kauth.kakao.com/oauth/token',
+};
+
+// 네이버 웹은 implicit 이라 tokenEndpoint 를 부르지 않는다 — 타입을 채우는 값일 뿐이다.
+const NAVER_DISCOVERY: OAuthDiscovery = {
+  authorizationEndpoint: 'https://nid.naver.com/oauth2.0/authorize',
+  tokenEndpoint: 'https://nid.naver.com/oauth2.0/token',
 };
 
 const DEFAULT_GOOGLE_SCOPES = ['openid', 'profile', 'email'];
@@ -60,7 +69,26 @@ function webRedirectUri(provider: SocialProvider): string {
   return `${origin}/oauth/${provider}`;
 }
 
+/**
+ * 웹 네이버: PKCE 없는 implicit — 앱이 만든 state 가 유일한 CSRF 방어라 requiresState 를 켠다.
+ * client secret 은 읽지 않는다(웹 번들에 실리면 안 된다 — naverAuthorize.ts 1파일만 읽는다).
+ */
+function webNaverConfig(): OAuthProviderConfig {
+  return {
+    clientId: process.env.EXPO_PUBLIC_NAVER_CLIENT_ID ?? '',
+    redirectUri: webRedirectUri('naver'),
+    scopes: [],
+    discovery: NAVER_DISCOVERY,
+    usePKCE: false,
+    requiresState: true,
+    responseType: 'token',
+  };
+}
+
 export function getOAuthConfig(provider: SocialProvider): OAuthProviderConfig {
+  if (provider === 'naver' && Platform.OS === 'web') {
+    return webNaverConfig();
+  }
   const config = nativeOAuthConfig(provider);
   if (
     Platform.OS !== 'web' ||
