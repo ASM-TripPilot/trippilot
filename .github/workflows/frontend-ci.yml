@@ -92,6 +92,12 @@ jobs:
       # cwd 기준으로만 찾으므로 working-directory(frontend)에서 돈다. 진단 1건이라도 있으면 실패(--fail-on-warnings).
       - if: matrix.part == 'checks'
         run: pnpm fsd
+      # 웹 번들 게이트(TRIP-1646): 웹(react-native-web) 출시본이 만들어지는지 본다. 네이티브 전용 모듈을 웹 대체 파일
+      # (*.web.ts) 없이 정적 import 하면 iOS·jest 는 green 인데 웹 export 만 깨진다 — 여기서 PR 을 빨갛게 만든다.
+      # 결과물은 버린다(배포는 따로). 운영 번들 규칙(metro.config.js blockList)도 같이 탄다(export 는 NODE_ENV=production).
+      - name: web export gate
+        if: matrix.part == 'checks'
+        run: pnpm exec expo export --platform web --output-dir "$RUNNER_TEMP/web-export"
       # 구조 인벤토리 게이트: --write 재생성 결과가 커밋본과 다르면(=파일 추가·삭제·export 변경 후
       # --write 미실행) 드리프트로 실패. --check 는 손-프로즈가 죽은 경로를 가리키는 '유령'을 잡는다.
       # (볼트가 없는 CI 에선 '개념 유령' 검사는 스크립트가 자동으로 건너뛴다.)
