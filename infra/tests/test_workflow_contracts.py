@@ -226,6 +226,9 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertLess(gate_index, credentials)
         gate_step = steps[gate_index]
         self.assertIn("steps.config.outputs.target == 'prod'", gate_step['if'])
+        # 선언 검사와 같은 조건(운영 apply) — 앱 배포 여부로 좁히면 인프라만의 release apply 가 검증 없이 나간다
+        self.assertIn("steps.config.outputs.mode == 'apply'", gate_step['if'])
+        self.assertNotIn('deploy_application', gate_step['if'])
         self.assertEqual(gate_step['env']['DEPLOY_KIND'], '${{ steps.config.outputs.deploy_kind }}')  # 검증된 값만 쓴다
         self.assertEqual(gate_step['run'], 'python3 infra/scripts/deploy_gate.py')
         self.assertEqual(job['permissions'], {'contents': 'read', 'id-token': 'write', 'actions': 'read'})  # 쓰기 권한은 늘리지 않는다

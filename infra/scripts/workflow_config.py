@@ -72,7 +72,7 @@ def settings(values: Mapping[str, str]) -> dict:
         else:
             deploy_ref = require(r'[A-Za-z0-9][A-Za-z0-9._-]{0,39}', values.get('DEPLOY_REF', ''),
                                  'DEPLOY_REF (a release needs a name such as the app version)')
-    # 개발 대상은 검증이 끝나면 파드를 0 으로 내린다(TRIP-1659) — 노드 1대를 돌려준다. 입력이 비면 끈 것으로 본다(켜 두는 쪽이 비용이 새는 쪽).
+    # 개발 대상은 검증이 끝나면 파드를 0 으로 내린다(TRIP-1659) — 노드 1대를 돌려준다. 워크플로 입력의 기본값은 true 다. 값 없이 API 로 직접 부른 경우만 끈 것으로 본다(모르는 채 재우지는 않는다).
     dev_sleep = target == 'dev' and deploy and require(
         r'true|false', values.get('DEV_SLEEP_AFTER') or 'false', 'DEV_SLEEP_AFTER') == 'true'
     certificate, hostname = values.get('PROD_ACM_CERTIFICATE_ARN', ''), values.get('PROD_API_HOSTNAME', '')

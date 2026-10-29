@@ -147,8 +147,10 @@ jobs:
         run: python3 infra/scripts/workflow_config.py
       # 운영은 열차·핫픽스만(TRIP-1659). 선언 형식은 위 스텝(workflow_config)이 이미 봤고, 여기서는 열차가 개발 서버에서
       # 검증된 코드인지 본다. 핫픽스는 검증이 사후라 통과. AWS 자격 증명 전에 끝나므로 실패해도 클라우드를 건드리지 않는다.
+      # 조건은 선언 검사(workflow_config)와 같은 "운영 apply" — deploy_application=false 인 인프라만의 apply 도 운영 변경이라
+      # 앱 배포 여부로 좁히면 release 선언만으로 검증 없이 Terraform 이 나간다(#1678 검수).
       - name: Require a validated dev run for production releases
-        if: steps.config.outputs.target == 'prod' && steps.config.outputs.deploy_application == 'true'
+        if: steps.config.outputs.target == 'prod' && steps.config.outputs.mode == 'apply'
         env:
           GH_TOKEN: ${{ github.token }}
           DEPLOY_KIND: ${{ steps.config.outputs.deploy_kind }}
