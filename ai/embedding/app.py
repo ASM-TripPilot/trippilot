@@ -277,6 +277,68 @@ def _encode(texts: list[str]) -> list[list[float]]:
     return [[float(x) for x in v] for v in vectors]
 
 
+# ## 인젝션 그림자 분류 (2026-10-30 — ai/docs/security/injection-classifier-shadow.md)
+#
+# 도우미 입구 정규식을 통과한 말을 AI 가 **응답 경로 밖에서** 보내면 점수만 돌려준다(임계·로그는 AI 몫). 이미지에 구운
+# int8 ONNX(Horizon-Labs/prompt-injection-guard-small)를 쓴다 — 원본 fp32 와 판정이 같고 10배 빠르다(맥 p50 25ms).
+# `INJECTION_GUARD_DIR` 이 비면 읽지도 않고 엔드포인트는 404 — AI 가 그 404 를 한 번 보고 스스로 끈다. 이 분류기가
+# 망가져도 `/embed` 는 영향이 없어야 해서 로드 실패는 기동을 막지 않고 요청에 503 으로만 드러난다.
+INJECTION_GUARD_DIR = os.environ.get("INJECTION_GUARD_DIR") or ""
+INJECTION_GUARD_MODEL = "Horizon-Labs/prompt-injection-guard-small"
+INJECTION_GUARD_THREADS = int(os.environ.get("INJECTION_GUARD_THREADS") or "1")  # 임베딩 몫 코어를 뺏지 않게
+INJECTION_GUARD_MAX_TEXTS = 8
+_guard = None
+_guard_lock = threading.Lock()
+
+
+def _load_guard():
+    """(토크나이저, 세션, 인젝션 라벨 번호, 입력 이름) — 처음 부를 때 한 번 읽는다."""
+    global _guard
+    with _guard_lock:
+        if _guard is not None:
+            return _guard
+        import onnxruntime as ort
+        from transformers import AutoConfig, AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(INJECTION_GUARD_DIR)
+        labels = AutoConfig.from_pretrained(INJECTION_GUARD_DIR).id2label
+        injection = next(int(i) for i, label in labels.items() if str(label).upper() == "INJECTION")
+        options = ort.SessionOptions()
+        options.intra_op_num_threads = INJECTION_GUARD_THREADS
+        options.inter_op_num_threads = 1
+        session = ort.InferenceSession(
+            os.path.join(INJECTION_GUARD_DIR, "onnx", "model_quantized.onnx"), options,
+            providers=["CPUExecutionProvider"])
+        _guard = (tokenizer, session, injection, [i.name for i in session.get_inputs()])
+        logger.info("인젝션 그림자 분류기 로드 완료: %s", INJECTION_GUARD_MODEL)
+        return _guard
+
+
+def _injection_scores(texts: list[str]) -> list[float]:
+    """텍스트마다 인젝션 확률(softmax) — 한 건씩 돈다(길이 정렬·패딩이 필요 없는 짧은 발화뿐이다)."""
+    import numpy as np
+
+    tokenizer, session, injection, names = _load_guard()
+    scores = []
+    for text in texts:
+        encoded = tokenizer(text, return_tensors="np", truncation=True, max_length=512)
+        logits = session.run(None, {n: encoded[n].astype(np.int64) for n in names if n in encoded})[0][0]
+        exp = np.exp(logits - logits.max())
+        scores.append(float(exp[injection] / exp.sum()))
+    return scores
+
+
+class InjectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    texts: list[str] = Field(min_length=1, max_length=INJECTION_GUARD_MAX_TEXTS)
+
+
+class InjectionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    scores: list[float]
+    model: str
+
+
 class EmbedRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     texts: list[str] = Field(min_length=1)
@@ -318,6 +380,11 @@ def _warm() -> None:
                 _load()
         except Exception:  # noqa: BLE001 — 기동을 막지 않는다
             logger.exception("모델 워밍 실패 — 첫 요청에서 다시 시도한다")
+        if INJECTION_GUARD_DIR:
+            try:
+                _injection_scores(["워밍업"])
+            except Exception:  # noqa: BLE001 — 그림자 분류기가 죽어도 임베딩은 산다
+                logger.exception("인젝션 그림자 분류기 워밍 실패 — 요청은 503")
 
     threading.Thread(target=_run, name="embedding-warmup", daemon=True).start()
 
@@ -386,3 +453,16 @@ def embed(request: EmbedRequest) -> EmbedResponse:
         dim=EXPECTED_DIM,
         model=MODEL_NAME,
     )
+
+
+@app.post("/classify/injection", response_model=InjectionResponse)
+def classify_injection(request: InjectionRequest) -> InjectionResponse:
+    """도우미 입구 그림자 분류 — 점수만. 판정·로그·임계는 AI 가 한다(발화를 여기서 남기지 않는다)."""
+    if not INJECTION_GUARD_DIR:
+        raise HTTPException(404, "injection guard off — INJECTION_GUARD_DIR 미설정")
+    try:
+        scores = _injection_scores([text[:2000] for text in request.texts])
+    except Exception as error:  # noqa: BLE001 — 그림자: 실패는 상태값이다
+        logger.exception("인젝션 그림자 분류 실패")
+        raise HTTPException(503, f"injection guard unavailable: {type(error).__name__}") from error
+    return InjectionResponse(scores=scores, model=INJECTION_GUARD_MODEL)

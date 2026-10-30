@@ -456,6 +456,17 @@ def _place_fact_store():
     return PgPlaceFactStore(lambda: psycopg.connect(url, connect_timeout=3, options="-c statement_timeout=2000"))
 
 
+def _injection_shadow():
+    """임베딩이 별도 컨테이너(http)면 도우미 0′ 인젝션 그림자를 그 서비스로 보낸다 — 판정값만 로그, 응답 무영향.
+    분류기를 켤지는 임베딩 파드 env(INJECTION_GUARD_DIR, 개발 차트만)가 정한다 — 안 켰으면 첫 404 에 스스로 끈다."""
+    base = _env("TRIPPILOT_EMBEDDING_BASE_URL")
+    if _env("TRIPPILOT_EMBEDDING_PROVIDER") != "http" or base is None:
+        return None
+    from trippilot.llm_gateway.adapters.http_injection_shadow import HttpInjectionShadow
+
+    return HttpInjectionShadow(base)
+
+
 def _place_sql():
     """`TRIPPILOT_PLACE_DB_URL` 설정 시 도우미 장소 조회(NL2SQL) 실행기 — ai_user 로 trippilot DB 의 `poi_public` 뷰만 읽는다.
 
@@ -859,6 +870,7 @@ def build_app_from_env() -> FastAPI:
     vector_store, embedding = _vector_rag()
     # 도우미 오케스트레이터 설정은 LLM 분기 전에 읽는다 — 오타는 fake 조립에서도 기동 실패여야 한다.
     memory_store, place_sql, place_fact_store = _memory_store(), _place_sql(), _place_fact_store()
+    injection_shadow = _injection_shadow()
     dialogue_on, shadow_rate = _dialogue_orchestrator_enabled(), _dialogue_shadow_rate()
     holidays = _holiday_source()  # 오타는 fake 조립에서도 기동 실패 — 위 도우미 설정과 같은 자리
     provider = _env("TRIPPILOT_LLM_PROVIDER")
@@ -871,6 +883,7 @@ def build_app_from_env() -> FastAPI:
                              bank=_intent_bank(), bank_embedding=_bank_embedding(),
                              bank_vectors=_bank_vectors(),
                              memory_store=memory_store, place_sql=place_sql, place_fact_store=place_fact_store,
+                             injection_shadow=injection_shadow,
                              dialogue_orchestrator_enabled=dialogue_on, shadow_rate=shadow_rate,
                              holidays=holidays)
     if provider == "openai":
@@ -908,6 +921,7 @@ def build_app_from_env() -> FastAPI:
                          bank=_intent_bank(), bank_embedding=_bank_embedding(),
                          bank_vectors=_bank_vectors(),
                          memory_store=memory_store, place_sql=place_sql, place_fact_store=place_fact_store,
+                         injection_shadow=injection_shadow,
                          dialogue_orchestrator_enabled=dialogue_on, shadow_rate=shadow_rate,
                          holidays=holidays)
 

@@ -436,6 +436,16 @@ class DevTargetValuesTests(unittest.TestCase):
         self.assertNotIn("PodDisruptionBudget", kinds)
         self.assertNotIn("HorizontalPodAutoscaler", kinds)
 
+    def test_injection_guard_is_on_only_for_the_dev_target(self):
+        """인젝션 그림자 분류기는 개발 서버에서만 먼저 켠다(2026-10-30) — 운영 임베딩 파드는 그 모델을 읽지 않는다."""
+        for environment, expected in (("dev-target", True), ("dev", False), ("prd", False)):
+            deployments = {item["metadata"]["name"]: item for item in render(environment, embedding=True)
+                           if item["kind"] == "Deployment"}
+            env = {e["name"]: e for e in deployments["embedding"]["spec"]["template"]["spec"]["containers"][0]["env"]}
+            self.assertEqual("INJECTION_GUARD_DIR" in env, expected, environment)
+            if expected:
+                self.assertEqual(env["INJECTION_GUARD_DIR"]["value"], "/models/injection-guard")
+
 
 if __name__ == "__main__":
     unittest.main()

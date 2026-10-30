@@ -49,6 +49,7 @@ from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Executor, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, replace
 from datetime import date, datetime, tzinfo
+from typing import Protocol
 
 from trippilot.agents.schedule.agent import Clock
 from trippilot.agents.unknown_handling.agent import KnowledgeTask
@@ -58,6 +59,13 @@ from trippilot.domain.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent, 
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.region_centers import region_mentions
 from trippilot.llm_gateway.gates.base import has_injection_like
+
+
+class InjectionShadow(Protocol):
+    """0′ 정규식을 통과한 말의 인젝션 그림자 분류(응답 무영향) — 던지지 않고 기다리지 않는 계약.
+    구현: `llm_gateway/adapters/http_injection_shadow.HttpInjectionShadow`(ai/docs/security/injection-classifier-shadow.md)."""
+
+    def submit(self, text: str, trace_id: str) -> None: ...
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, clock_spans, clock_times
 from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanDraft
 from trippilot.llm_gateway.gates.intent import NULL_INTENT
@@ -838,8 +846,10 @@ class DialogueOrchestrator:
         smalltalk: DialogueSmalltalkWorker | None = None,
         embedding: EmbeddingPort | None = None,
         memory_pool: Executor | None = None,
+        injection_shadow: InjectionShadow | None = None,
     ) -> None:
         self._intent = intent_worker
+        self._injection_shadow = injection_shadow
         self._smalltalk_worker = smalltalk
         self._answer = answer_worker
         self._memory = memory_worker
@@ -912,6 +922,12 @@ class DialogueOrchestrator:
             # 발화는 싣지 않는다 — 운영에서 이 줄 수로 오탐을 센다(정상 말이 걸리면 범위 밖 카드가 나간다)
             log.info("dialogue_injection_suspected %s", json.dumps({"event": "dialogue_injection_suspected", "trace_id": inp.trace_id}))
             return self._out_of_scope(inp, INJECTION_REASON)
+        # 0′ 그림자 — 정규식을 통과한 말만 소형 분류기에 뒤에서 보낸다(판정값만 로그, 응답 무영향). 울린 비율 = 오탐 상한
+        if self._injection_shadow is not None:
+            try:
+                self._injection_shadow.submit(text, inp.trace_id)
+            except Exception as e:  # noqa: BLE001 — 계약상 던지지 않지만 응답 경로는 어떤 경우에도 계속 간다
+                log.warning("injection shadow submit 실패(%s) — 응답 영향 없음 (trace_id=%s)", type(e).__name__, inp.trace_id)
         # 0″ — 지역을 말한 장소 찾기 말이면 장소 탐색 SQL 작성을 분류와 나란히 미리 시작한다(분류 뒤에 쓰면 팬아웃 시한에 걸렸다, place_sql 註)
         if self._ports.place_sql is not None:
             self._ports.place_sql.prefetch(inp.utterance, inp.trace_id, inp.now, self._submit)
