@@ -547,6 +547,14 @@ def test_candidate_line_is_unchanged_without_tags() -> None:
     assert lines == ["- p1 | CAFE | 을지로 카페"]
 
 
+def test_candidate_line_never_carries_reputation_tags() -> None:
+    """`인기N`·`평점높음`은 백엔드가 공개 면에서 숨기는 평판 파생 태그다(TRIP-1537) — 후보 줄에 실으면 모델의 이유가
+    "별점이 높아요"로 화면에 나간다. 다른 세분류·`요즘 인기`(근거 URL 이 있는 공개 태그)는 그대로 둔다."""
+    lines = _candidate_lines((_tagged("p1", "을지로 국밥", PoiCategory.FOOD, ("한식", "인기5", "평점높음", "요즘 인기", "인기6")),))
+
+    assert lines == ["- p1 | FOOD·한식·요즘 인기·인기6 | 을지로 국밥"]
+
+
 # ── INV-3 — reason 의 시간 표현 (KB-5 장소 문서가 붙은 뒤로 새 경로) ──────────
 
 
