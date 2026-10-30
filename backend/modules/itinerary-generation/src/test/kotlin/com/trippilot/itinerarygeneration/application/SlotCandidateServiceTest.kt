@@ -1070,4 +1070,26 @@ class SlotCandidateServiceTest : StringSpec({
             .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
             .candidates.map { it.poiId } shouldContainExactly listOf(outA, inB)
     }
+
+    "코드 없는 옛 여행의 동명이지역(중구)이면 REGION 은 다른 도시 중심을 추측하지 않고 409 — 하나뿐인 이름이면 이름으로 찾는다" {
+        fun legacyTrip(name: String) = object : TripFacade {
+            override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(d1, d1)
+            override fun findGenerationContext(accountId: UUID, tripId: UUID) =
+                TripGenerationContext(d1, d1, listOf(TripDestinationRef(name, null, 1)), "혼자", null, emptyList())
+        }
+        val byName = object : RegionLookupFacade by noRegions {
+            override fun codesOf(regionName: String) = if (regionName == "중구") listOf("11140", "26110") else listOf("11650")
+            override fun centerOf(regionName: String) = RegionCenter(37.56, 126.99) // 이름 첫 일치 — 서울 중구
+        }
+        fun svc(name: String, agent: CapturingAgent) = SlotCandidateService(
+            legacyTrip(name), Repo(itinerary), agent, distinctSurfaces, pool, FakeScoredCandidatePoolStore(), clock,
+            accountPrefs, NoHints, contexts(legacyTrip(name), regions = byName),
+        )
+
+        shouldThrow<ConflictDetected> { svc("중구", CapturingAgent()).propose(acc, tripId, centered(CandidateCenter(CenterMode.REGION))) }
+
+        val agent = CapturingAgent()
+        svc("서초구", agent).propose(acc, tripId, centered(CandidateCenter(CenterMode.REGION)))
+        (agent.captured!!.centerLat to agent.captured!!.centerLng) shouldBe (37.56 to 126.99)
+    }
 })
