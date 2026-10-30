@@ -167,6 +167,7 @@ from trippilot.agents.planb import composition
 from trippilot.agents.planb import request_verification as nl_verify
 from trippilot.agents.planb.rag import PlanBAgent, PlanBRagRequest, SavedPlace
 from trippilot.agents.schedule.agent import ScheduleAgent, trim_planb_rank_for_add_one
+from trippilot.agents.schedule.family import normalize_name, same_place
 from trippilot.agents.planb.directives import (
     DirectiveSpec,
     index_of,
@@ -724,6 +725,25 @@ def _payload_alternative_pairs(
 
 # BE `visit_slot.placement_reason` 칸 상한(`BoundedText.PLACEMENT_REASON_MAX`) — 재계획 경로는 BE 가 자르지 않는다.
 _PLACEMENT_REASON_MAX = 500
+
+
+def _one_per_place(pool: CandidatePool, prefer: frozenset[PoiId], notes: list[str]) -> CandidatePool:
+    """출처만 다른 같은 장소(이름까지 같은 200m 안, `family.same_place`)는 풀에 하나만 — 원 일정에 있는 쪽을 남긴다.
+    생성은 계열 강등 단계가 쌍둥이를 빼지만(#1624) 다시 짜기는 그 단계가 꺼져 있어 구성 LLM·솔버가 둘 다 고를 수 있었다.
+    풀이 수천 곳이라 정규화 이름이 같은 것끼리만 견준다."""
+    kept: dict[str, list[Poi]] = {}
+    drop: set[PoiId] = set()
+    for p in sorted(pool.pois, key=lambda p: (p.poi_id not in prefer, str(p.poi_id))):
+        same = kept.setdefault(normalize_name(p.name), [])
+        if any(same_place(p, q) for q in same):
+            drop.add(p.poi_id)
+        else:
+            same.append(p)
+    if not drop:
+        return pool
+    notes.append(f"same_place_dropped: {len(drop)}")
+    pois = tuple(p for p in pool.pois if p.poi_id not in drop)
+    return replace(pool, poi_ids=frozenset(p.poi_id for p in pois), pois=pois)
 
 
 def _pick_reasons(picks) -> dict[PoiId, str]:
@@ -3517,6 +3537,17 @@ class WiredItineraryOrchestrator:
         return tuple(table[k] for k in result.value.keys if k in table)[:MAX_DIRECTIVES]
 
     def _with_current_slots(
+        self,
+        pool: CandidatePool,
+        request: schemas.ReplanRequest,
+        now: datetime,
+        notes: list[str],
+    ) -> CandidatePool:
+        """원 일정 합류 + 같은 장소는 하나만(`_one_per_place`) — 다시 짜기 풀이 모두 이 길로 온다."""
+        return _one_per_place(self._join_current_slots(pool, request, now, notes),
+                              frozenset(PoiId(s.poi_id) for s in request.current_slots), notes)
+
+    def _join_current_slots(
         self,
         pool: CandidatePool,
         request: schemas.ReplanRequest,

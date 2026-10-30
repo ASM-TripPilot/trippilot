@@ -105,6 +105,29 @@ def _placed(body: dict) -> set[str]:
 # ── ① 고른 곳만 들어간다 ───────────────────────────────────────────────
 
 
+_HALLA = next(p for p in demo_poi_seed() if p.name == "한라산")
+_TWIN = "e0000000-0000-4000-8000-0000000000f1"  # 같은 이름·같은 좌표, 다른 출처·카테고리 행
+_WITH_TWIN = (*demo_poi_seed(), Poi(
+    PoiId(_TWIN), _HALLA.name, PoiCategory.SIGHT, _HALLA.coord, _HALLA.open_hours, None, None,
+    DataQuality.FULL, PoiSource.SEED, None))
+
+
+def test_출처만_다른_같은_장소는_다시_짜기_후보에_하나만_오른다() -> None:
+    """생성은 계열 강등 단계가 쌍둥이를 빼지만(#1624) 다시 짜기는 그 단계가 꺼져 있다 — 구성이 둘 다 고르면
+    같은 곳을 두 번 간다(10-23 부산 1일차 광안리해수욕장 야경·자연). 원 일정에 있는 쪽을 남긴다."""
+    llm = _ScriptedLlm([_MOUNTAIN, _TWIN])
+    body = _replan(llm, pois=_WITH_TWIN)
+    assert _placed(body) & {_MOUNTAIN, _TWIN} == {_MOUNTAIN}, body["notes"]
+    assert "same_place_dropped: 1" in body["notes"], body["notes"]
+    section = llm.compose_prompt().split("[후보 목록]")[1].split("[출력 JSON 스키마]")[0]
+    assert sum(1 for line in section.splitlines() if f"| {_HALLA.name} |" in line) == 1  # 후보 줄에도 하나만
+
+    kept = {"poi_id": _TWIN, "start_at": "10:00", "end_at": "11:30", "is_fixed": False}
+    llm = _ScriptedLlm([_MOUNTAIN, _TWIN])
+    body = _replan(llm, pois=_WITH_TWIN, current_slots=[kept])
+    assert _placed(body) & {_MOUNTAIN, _TWIN} == {_TWIN}, body["notes"]
+
+
 def test_구성_LLM이_고른_곳만_그날에_들어간다() -> None:
     llm = _ScriptedLlm([_FOOD, _MOUNTAIN])
     body = _replan(llm)
