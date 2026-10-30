@@ -1,0 +1,99 @@
+# KB-5 장소 설명 A/B — '다른 후보'(ALTERNATIVE_SELECTION)에 붙는 설명을 두 팔로 나란히 재서 판정 모델이 비교한다
+# (`ai/scripts/measure/measure_kb5_overview.py ab`). 기본은 '진짜 문서만'(full) 대 '대체 문서 추가'(fallback) — 대체 문서
+# (`TRIPPILOT_KB5_FALLBACK`, #1707)를 켜는 조건이다(KB-5 담당 세션 합의 10-30: 같은 입력끼리 흔들림 ≈12:7 보다 확실히 이길 것).
+#
+# 유료다 — 24상황 × 반복 × (선택 2 + 판정 1). 기본(opus 선택·sonnet 판정·반복 2)이 셈으로 ≈6달러. 키는 운영과 다른 워크스페이스의
+# `ANTHROPIC_COLLECT_API_KEY`(월 한도 하드 캡)만 쓴다 — 운영 키를 측정에 쓰면 크레딧을 나눠 운영이 멈출 수 있다(10-14 사고).
+# 공개 리포라 workflow_dispatch 만 둔다(pull_request 금지). 질의 임베딩은 개발과 같은 임베딩 이미지를 서비스로 띄운다 —
+# 장소 설명 벡터는 리포의 미리 계산본이고 질의만 서버가 임베딩한다(운영 조회 `fetch_place_knowledge` 그대로).
+# 판정 출력은 평가에만 쓴다(학습 금지, 2026-09-08 팀 결정).
+name: ai-kb5-ab
+
+on:
+  workflow_dispatch:
+    inputs:
+      arms:
+        description: '비교할 두 팔(왼쪽 오른쪽) — full fallback 이 대체 문서 켜기 조건. 그 밖은 measure_kb5_overview.py 의 VARIANTS'
+        required: false
+        default: 'full fallback'
+        type: string
+      repeat:
+        description: '상황마다 반복 수'
+        required: false
+        default: '2'
+        type: string
+      select_model:
+        description: '고르는 모델 — 운영 ALTERNATIVE_SELECTION 과 같게(#1692 기준 opus)'
+        required: false
+        default: claude-opus-5-5
+        type: choice
+        options: [claude-opus-5-5, claude-sonnet-5-5, claude-haiku-5-5]
+      judge_model:
+        description: '판정 모델 — 고르는 모델과 다른 것'
+        required: false
+        default: claude-sonnet-5-5
+        type: choice
+        options: [claude-sonnet-5-5, claude-opus-5-5]
+
+permissions:
+  contents: read
+
+concurrency: ai-kb5-ab
+
+jobs:
+  ab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read   # 임베딩 이미지(GHCR) 받기
+    services:
+      embedding:
+        image: ghcr.io/asm-trippilot/trippilot-embedding:develop
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        ports:
+          - 8100:8100
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: 임베딩 서버 대기
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:8100/model >/dev/null && { echo "임베딩 서버 응답"; exit 0; }
+            sleep 2
+          done
+          echo "::error::임베딩 서버가 뜨지 않음 — LLM 을 부르기 전에 멈춘다"; exit 1
+
+      - name: A/B
+        working-directory: ai
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_COLLECT_API_KEY }}
+          TRIPPILOT_EMBEDDING_BASE_URL: http://localhost:8100
+          EVAL_SELECT_MODEL: ${{ inputs.select_model }}
+          EVAL_JUDGE_MODEL: ${{ inputs.judge_model }}
+          EVAL_WORKERS: '2'
+          # 입력은 env 로만 — run 본문에 `${{ inputs.* }}` 를 바로 넣으면 셸 주입 경로가 된다
+          ARMS: ${{ inputs.arms }}
+          REPEAT: ${{ inputs.repeat }}
+        run: |
+          set -o pipefail
+          [ -n "$ANTHROPIC_API_KEY" ] || { echo "::error::ANTHROPIC_COLLECT_API_KEY 미등록 — 수집 전용 워크스페이스 키가 필요하다"; exit 1; }
+          read -r left right <<< "$ARMS"
+          [ -n "$left" ] && [ -n "$right" ] || { echo "::error::arms 는 두 팔이다(예: full fallback)"; exit 1; }
+          uv run python scripts/measure/measure_kb5_overview.py ab "$left" "$right" "$REPEAT" 2>&1 | tee "$RUNNER_TEMP/kb5-ab.txt"
+          { echo '```'; head -c 60000 "$RUNNER_TEMP/kb5-ab.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 결과 보존
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: kb5-ab
+          path: ${{ runner.temp }}/kb5-ab.txt
+          if-no-files-found: warn
+          retention-days: 30
