@@ -131,6 +131,15 @@ def test_segment_pool_covers_what_the_base_pool_misses(caplog) -> None:
     assert _insert_log(caplog)["pool_source"] == "base"
 
 
+def test_place_from_the_segment_pool_gets_its_distance() -> None:
+    """기본 풀(부산)에 없는 곳을 구간 풀에서 넣어도 거리가 실린다 — 좌표는 에이전트 ⑤ 가 본 장소(구간 풀까지)라 다시 조회하지 않는다.
+    BE 카드 diff 의 ADDED 줄이 그리는 값이다. 첫 슬롯은 출발점을 몰라 null."""
+    body = _post(_body(utterance=_SAID, anchor=(35.1577, 129.0596)))
+    assert body["status"] == "APPLIED" and _ids(body)[2] == str(GONGDEOK_CAFE.poi_id)
+    distances = [s["distance_range"] for s in body["itinerary"]["days"][0]["slots"]]
+    assert distances[0] is None and all(distances[1:]), distances  # 넣은 곳과 그 다음 곳까지
+
+
 # ── 실패는 사유 있는 상태값 (INV-4) ───────────────────────────────────────
 
 

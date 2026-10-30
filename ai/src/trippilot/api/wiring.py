@@ -4134,10 +4134,10 @@ class WiredItineraryOrchestrator:
             # 날마다 동네 — 그 날들을 동네 풀로 ScheduleAgent 가 다시 푼다(spec 004). 에이전트가 날·동네를 확인했을 때만 부른다
             rebuild_days=lambda pairs: self._rebuild_days(request, solution, pool, poi_index, pool_request, transport, now, t0, pairs),
         ))
-        return self._edit_response(outcome)
+        return self._edit_response(outcome, self._edit_distances(request, outcome, transport, t0))
 
     def _edit_response(
-        self, outcome: EditOutcome
+        self, outcome: EditOutcome, distance_ranges: Mapping[str, str] | None = None
     ) -> schemas.EditItineraryResponse:
         """EditOutcome → 와이어. 상태값 사영뿐 — 판단은 이미 에이전트가 끝냈다."""
         command_schema = None
@@ -4156,7 +4156,7 @@ class WiredItineraryOrchestrator:
             return schemas.EditItineraryResponse(
                 status=outcome.status.value, command=command_schema,
                 apply_mode=apply_mode,
-                itinerary=to_payload(_envelope(outcome.solution)),
+                itinerary=to_payload(_envelope(outcome.solution, distance_ranges=distance_ranges)),
             )
         return schemas.EditItineraryResponse(
             status=outcome.status.value, command=command_schema,
@@ -4171,6 +4171,37 @@ class WiredItineraryOrchestrator:
             ],
             reason=outcome.reason,
         )
+
+    def _edit_distances(
+        self, request: schemas.EditItineraryRequest, outcome: EditOutcome, transport: TransportMode, started_ms: int,
+    ) -> dict[str, str] | None:
+        """APPLIED 일정의 **바뀐 날** 구간 거리 — 생성·repair 와 같은 렌더·시한 회계(`_render_distances`·`_walk_first`). 그 밖 상태는 None.
+
+        바뀐 날 = 날마다 동네(①b)는 다시 짠 날들(명령 params 의 날짜), 그 밖은 편집한 날. 각 날 첫 슬롯은 null 이다 — 편집 요청의 anchor 는
+        후보 풀 중심이지 그 날 출발점이 아니다(교체 제안은 새 장소로 옮겨 온다). 좌표는 에이전트 ⑤ 검증이 본 장소(`outcome.pois`)라 다시
+        조회하지 않는다. 실경로는 남은 시한 안(≤1.5s)에서만 재고 예산이 없으면 부르지 않는다 — 못 잰 구간은 '… 추정'(생성과 같은 규칙, 사유는
+        FallbackEvent). 렌더가 터지면 거리 없이 내고 사유를 남긴다(INV-4) — 표시용이라 편집을 막지 않는다. 거리만, 소요 시간 0(INV-3).
+        """
+        if outcome.solution is None:  # APPLIED 만(불변식: APPLIED ⇔ solution)
+            return None
+        try:
+            command = outcome.command
+            days = ({date.fromisoformat(k) for k in command.params}
+                    if command is not None and command.op is EditOp.SET_DAY_AREAS else {request.target_date})
+            # 손 안 댄 날은 재지 않고 비워 둔다 — BE 제안 카드 diff 는 바뀐 슬롯만 그리고, 다시 재면 실경로 일일 한도(ODsay)만 쓴다
+            edited = replace(outcome.solution, days=tuple(d for d in outcome.solution.days if d.date in days))
+            coords = {pid: p.coord for pid, p in outcome.pois.items()}
+            walk = self._walk_first(None)  # 편집 재타이밍·⑤ 검증과 같은 공용 추정기(기본 도보 상한·주차 계획 없음)
+            (ranges,), _ = self._render_distances(
+                lambda port: (_distance_ranges(edited, {}, coords, walk(port), transport),),
+                request.request_meta, started_ms,
+            )
+        except Exception as e:  # 예외 문장은 싣지 않는다 — 실경로 오류 문장에 요청 주소(서비스 키)가 섞일 수 있다
+            _logger.warning("edit_distance %s", json.dumps({
+                "trace_id": request.request_meta.request_id, "outcome": "omitted",
+                "reason": f"render_error: {type(e).__name__}"}, ensure_ascii=False))
+            return None
+        return ranges
 
     def _rebuild_days(
         self, request: schemas.EditItineraryRequest, solution: ItinerarySolution, pool: CandidatePool,
