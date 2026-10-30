@@ -2661,7 +2661,9 @@ components:
 
     Trip:
       type: object
-      required: [tripId, title, startDate, endDate, party, preferenceSnapshot, destinations, status, createdAt, updatedAt, baseCount, itineraryDayCount, itineraryStatus, itineraryGenerationState, itineraryGenerationMode, itineraryGenerating]
+      # 일정 상태 네 칸은 required 에 넣지 않는다 — 서버는 늘 싣지만(일정 없으면 null/false), 앱 픽스처가 아직 모르는 칸이라 required 면
+      # codegen 이 필수 속성으로 만들어 앱 테스트 픽스처 수십 곳이 깨진다. 앱 전환(frontend 하네스) 때 required 로 올린다.
+      required: [tripId, title, startDate, endDate, party, preferenceSnapshot, destinations, status, createdAt, updatedAt, baseCount, itineraryDayCount]
       properties:
         tripId: { type: string, format: uuid }
         title: { type: string }
