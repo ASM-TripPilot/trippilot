@@ -51,6 +51,7 @@ generate 봉투 부가 필드 산출 규칙(TRIP-341 — 코드가 실제로 아
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import pathlib
@@ -58,7 +59,7 @@ import os
 import random
 import re
 import time
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 import zlib
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
@@ -771,6 +772,52 @@ def _keyed_explanations(
             continue  # 배치되지 않은 POI의 설명은 표시 대상이 아니다
         keyed[f"{placed_on.isoformat()}#{exp.poi_id}"] = exp.text
     return keyed
+
+
+# 여러 날 `/explanations` 를 날마다 나란히 부르는 풀 — 프로세스에 하나(요청마다 만들지 않는다, `route_budget._POOL`·
+# `_NL_POOL` 선례). 이 크기가 프로세스 전체 EXPLANATION 동시 호출 상한이다(벤더 동시 호출 폭주 방지 — 점수 청크
+# `score_max_parallel` 10·실경로 8 과 같은 자릿수). 8 이면 한 주(7일) 여행 한 건이 줄 서지 않고 한 번에 돈다 —
+# 더 길거나 요청이 겹치면 남은 날은 줄을 서고, 시한 안에 못 끝난 날은 실패로 센다(`explanation_partial`).
+_EXPLAIN_DAY_WORKERS = 8
+_EXPLAIN_POOL = ThreadPoolExecutor(max_workers=_EXPLAIN_DAY_WORKERS, thread_name_prefix="explain-day")
+
+
+def _explain_days(
+    explainer: ExplanationWorker,
+    pool: CandidatePool,
+    chunks: Sequence[tuple[PoiId, ...]],
+    persona: PersonaSummary,
+    trace_id: TraceId,
+    now: datetime,
+    *,
+    budget_ms: int,
+) -> list[tuple[PoiExplanation, ...] | str]:
+    """날 묶음마다 설명 — 묶음 순서대로 (설명 | 실패 사유). 사유 어휘는 종전 한 번 호출 그대로다.
+
+    하루짜리는 이 스레드에서 한 번 부른다(종전 그대로). 여러 날은 풀에서 나란히 돌고 묶음마다 같은 예산을
+    받으므로 시한은 합이 아니라 최댓값이다 — 줄 서서 늦게 시작한 날이 그 시한을 넘기지 않게 기다림도 같은
+    예산에서 끊는다(못 끝난 날은 `deadline:` 사유, 줄 선 것은 취소하고 도는 것은 결과를 버린다 —
+    `route_budget.measure_within` 선례).
+    """
+    def one(chunk: tuple[PoiId, ...]) -> tuple[PoiExplanation, ...] | str:
+        try:
+            result = explainer.explain(
+                pool, chunk, persona, trace_id, now, timeout_sec=budget_ms / 1000.0)
+        except Exception as e:  # 설정 버그 등 — 그 묶음은 설명 없음으로 정직 보고
+            return f"explain_error: {type(e).__name__}: {e}"
+        if result.is_fallback or not result.value:
+            return f"explanation_fallback: {result.error}"
+        return result.value
+
+    if len(chunks) == 1:
+        return [one(chunks[0])]
+    # 문맥을 복사해 넘긴다 — 요청 단위 contextvar 계측(도우미 턴 `llm_calls` 등)이 풀 스레드에서도 잡히게. 사본은
+    # 낼 때마다 새로 뜬다(한 사본을 두 스레드가 같이 쓰면 RuntimeError — 도우미 `_submit` 선례).
+    futures = [_EXPLAIN_POOL.submit(contextvars.copy_context().run, one, c) for c in chunks]
+    done, _ = wait(futures, timeout=budget_ms / 1000.0)
+    for f in futures:
+        f.cancel()  # 끝난 것·도는 것에는 효과가 없다 — 줄 선 것만 빠진다
+    return [f.result() if f in done else f"deadline:budget={budget_ms}ms" for f in futures]
 
 
 def _envelope(
@@ -3890,6 +3937,8 @@ class WiredItineraryOrchestrator:
 
         설명은 부가 정보라 실패도 200 + 빈 맵 + 사유다(침묵 금지). 페르소나는
         generate와 같은 trip_id 파생 참조(D31)로 해석 — 소유 검증 규칙 재사용.
+        여러 날이면 날마다 한 번씩 나란히 부른다(`_explain_days`) — 일부 날만 실패하면 성공한 날 이유 +
+        `explanation_partial` 사유(is_fallback=False)이고, 전부 실패해야 빈 맵이다.
         """
         meta = request.request_meta
         now = _tz_aware(meta.requested_at, self._tz)
@@ -3921,39 +3970,44 @@ class WiredItineraryOrchestrator:
             Principal(user_id=owner),
             ResourceRef(kind="persona", ref_id=request.trip_id, owner_id=owner),
         )
+        # 날 단위 묶음 — 같은 POI 는 처음 나온 날에서 한 번(종전 중복 제거 그대로). 여행 전체를 한 번에 보내면 일정이
+        # 길수록 출력이 상한(EXPLANATION 4096 — 끌 수 없는 사고 토큰도 그 안이다)을 넘어 잘리고, 잘린 JSON 은 통째로
+        # 버려져 그 여행은 이유가 0건이었다(운영 ai.log 2026-10-29~30: 30건 중 4건이 ~35s 에 `truncated: parse_error`).
+        # 하루 ≤ 8~10곳(속도 배율 실측 09~21시 7~9슬롯 — assembly_engine/config.py) × 슬롯당 ≈ 75 토큰(poiId UUID
+        # 베끼기 ≈ 30 — 점수 워커 실측 건당 34~35 — + 태그 5개, 추정) ≈ 750 토큰이라 상한 안에 사고 몫이 3,000 남짓 남는다.
         seen: set[PoiId] = set()
-        ordered = tuple(
-            slot.poi_id
-            for day in solution.days for slot in day.slots
-            if pool.contains(slot.poi_id)
-            and not (slot.poi_id in seen or seen.add(slot.poi_id))
-        )
+        chunks: list[tuple[PoiId, ...]] = []
+        for day in solution.days:
+            chunk = tuple(
+                slot.poi_id for slot in day.slots
+                if pool.contains(slot.poi_id)
+                and not (slot.poi_id in seen or seen.add(slot.poi_id))
+            )
+            if chunk:
+                chunks.append(chunk)
         budget_ms = _deadline_budget(meta)
         t0 = self._clock.monotonic_ms()
-        try:
-            result = self._explainer.explain(
-                pool, ordered, persona, trace_id, now,
-                timeout_sec=budget_ms / 1000.0,
-            )
-        except Exception as e:  # 설정 버그 등 — 설명 없음으로 정직 보고
+        outcomes = _explain_days(
+            self._explainer, pool, chunks, persona, trace_id, now, budget_ms=budget_ms)
+        failed = [o for o in outcomes if isinstance(o, str)]
+        if len(failed) == len(outcomes):  # 전부 실패 — 종전처럼 빈 맵 + 사유(하루짜리는 사유도 종전 문자열 그대로)
             return schemas.ExplanationsResponse(
                 explanations={}, is_fallback=True,
-                reason=f"explain_error: {type(e).__name__}: {e}",
-                alternatives_reason=alt_skipped)
-        if result.is_fallback or not result.value:
-            return schemas.ExplanationsResponse(
-                explanations={}, is_fallback=True,
-                reason=f"explanation_fallback: {result.error}",
+                reason=failed[0] if len(failed) == 1
+                else f"explanation_fallback: 실패 {len(failed)}/{len(outcomes)} — {failed[0]}",
                 alternatives_reason=alt_skipped)
         keyed = _keyed_explanations(
-            solution, tuple(x for x in result.value if pool.contains(x.poi_id)))
-        # 차선책 문장은 두 번째 호출 — 첫 호출이 실패하면 시도하지 않고(위 사유), 성공했으면
+            solution, tuple(x for o in outcomes if not isinstance(o, str)
+                            for x in o if pool.contains(x.poi_id)))
+        # 차선책 문장은 두 번째 호출 — 날 묶음이 전부 실패하면 시도하지 않고(위 사유), 성공했으면
         # **잔여 예산**만 준다(DL-2 — 두 호출의 합이 deadline 을 넘지 않게, 에이전트 ⑥′ 와 동형).
         alt_keyed, alt_reason = self._alternative_explanations(
             pool, alt_pairs, persona, trace_id, now,
             remaining_ms=budget_ms - (self._clock.monotonic_ms() - t0))
         return schemas.ExplanationsResponse(
-            explanations=dict(keyed), is_fallback=False, reason=None,
+            explanations=dict(keyed), is_fallback=False,
+            # 일부 날만 실패 — 성공한 날 이유는 싣고 실패는 사유로 남긴다(INV-4 침묵 금지)
+            reason=f"explanation_partial: 실패 {len(failed)}/{len(outcomes)} — {failed[0]}" if failed else None,
             alternative_explanations=alt_keyed, alternatives_reason=alt_reason)
 
     def _alternative_explanations(
