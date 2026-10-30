@@ -964,6 +964,52 @@ def test_knowledge_prompt_gets_the_window_and_memory_and_a_trip_less_turn_gets_c
     assert "제약: 아이와 함께라 많이 걷기 힘들다" in prompt and "비 오면 실내로 가고 싶어" in prompt
 
 
+class _Registry:
+    """장소 DB 이름 찾기 대역(`PlaceSqlLookup.find_place`) — 등록된 이름만 행을 돌려주고, 물은 이름·지역을 적는다."""
+
+    def __init__(self, *names: str) -> None:
+        self.names, self.calls = set(names), []
+
+    def find_place(self, name, area, trace_id):
+        self.calls.append((name, area))
+        return object() if name in self.names else None
+
+    def prefetch(self, utterance, trace_id, now, submit) -> None:  # 실물은 DIALOGUE_SQL 미배정이면 아무것도 안 한다 — 그 꼴
+        return None
+
+
+def _registry_turn(text: str, registry, **kw):
+    reply = json.dumps({"text": text, "footnote": None}, ensure_ascii=False)
+    canned = {to._INTENT: '{"intent": null}', to._ANSWER: to._ANSWER_JSON, to._MEMORY: to._MEMORY_JSON,
+              to._PLAN: _plan_json(gap="KNOWLEDGE"), LlmFeature.DIALOGUE_KNOWLEDGE: reply}
+    b = to._build(canned, ports=_replace(_PLAN_PORTS, place_sql=registry), with_planner=True, with_knowledge=True, **kw)
+    return b.orch.turn(to._input("서울은 봄에 어디가 예뻐?")), b
+
+
+def test_knowledge_may_name_a_registered_place_the_user_did_not_say() -> None:
+    """말하지 않은 장소 이름도 장소 DB 에 등록돼 있으면 통과 — 사용자 결정(2026-10-30 "등록된 장소면 허용"). 등록되지 않은 곳은 종전처럼
+    범위 밖 + 이벤트. 같은 이름은 한 번만 찾고, 여행 지역으로 좁힌다."""
+    told = "서울은 봄에 경복궁 산책이 좋아요. 경복궁은 꽃이 필 무렵 특히 예뻐요."
+    registry = _Registry("경복궁")
+    out, b = _registry_turn(told, registry)
+    assert out.outcome == "ANSWER" and out.answer.text == told and _knowledge_events(b) == []
+    assert registry.calls == [("경복궁", "제주")]  # 같은 이름은 한 번 · 스냅샷 여행 지역
+    blocked, b2 = _registry_turn("서울은 봄에 가상정원궁이 예뻐요.", _Registry("경복궁"))
+    assert blocked.outcome == "OUT_OF_SCOPE" and any("place_not_in_facts" in (e.reason or "") for e in to._fallbacks(b2.trace))
+
+
+def test_knowledge_names_are_not_looked_up_past_three_or_without_time() -> None:
+    """한 답에 모르는 이름이 넷 이상이면 찾지 않고 막는다(지어냈을 공산), 잔여가 이름 찾기 시한만큼 없으면 찾지 않고 막는다(deadline)."""
+    many = "서울은 봄에 경복궁·창덕궁·덕수궁·창경궁이 다 예뻐요."
+    registry = _Registry("경복궁", "창덕궁", "덕수궁", "창경궁")
+    out, _ = _registry_turn(many, registry)
+    assert out.outcome == "OUT_OF_SCOPE" and registry.calls == []
+    late = _Registry("경복궁")
+    out2, _ = _registry_turn("서울은 봄에 경복궁 산책이 좋아요.", late, advance={to._INTENT: 2_000, to._PLAN: 3_000,
+                                                                     LlmFeature.DIALOGUE_KNOWLEDGE: 2_500})
+    assert out2.outcome == "OUT_OF_SCOPE" and late.calls == []
+
+
 def test_knowledge_may_name_a_place_in_the_itinerary() -> None:
     """스냅샷 일정의 장소는 아는 이름이다 — 지어낸 게 아니다."""
     import uuid as _uuid
@@ -1036,7 +1082,7 @@ def test_any_knowledge_output_is_a_safe_answer_or_the_scope_card(raw: str) -> No
         assert out.answer.footnote == orch_mod.KNOWLEDGE_FOOTNOTE and not has_specific_value(text)
         assert to._TIME_EXPR.search(text) is None and not to.has_contact_like(text)
         known = tuple(orch_mod._squash(s.name) for _, s in to._SNAP.slots() if s.name)  # 오케스트레이터와 같은 아는 이름
-        assert not orch_mod._knowledge_foreign_place(text, known, (orch_mod._squash(_WHEN),))
+        assert not orch_mod._knowledge_unknown_places(text, known, (orch_mod._squash(_WHEN),))  # 장소 DB 미배선 — 모르는 이름은 없어야
 
 
 def test_knowledge_may_repeat_a_place_the_user_named_but_not_invent_one() -> None:
