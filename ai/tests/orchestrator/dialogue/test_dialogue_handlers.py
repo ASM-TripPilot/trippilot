@@ -2589,3 +2589,35 @@ def test_region_recommendation_follows_the_said_wish_over_nothing_and_asks_when_
     assert by_wish.status is FactStatus.OK and by_wish.detail["basis"] == "말한 바람"
     assert "역사 여행" not in str(by_wish.to_prompt_dict())  # 발화 원문은 사실 칸에 싣지 않는다(INV-2)
 
+
+
+
+@pytest.mark.parametrize(("theme", "names"), [
+    ("치맥 대축제", {"치맥"}), ("대박람회", set()), ("신년 대공연", set()), ("상시전시", set()), ("기획 전시", set()),
+    ("젓갈 축제", {"젓갈"}), ("행운 축제", {"행운"}), ("풋볼 축제", {"풋볼"}),
+    ("새로운 축제", set()), ("가볼 축제", set()), ("놀러갈 축제", set()), ("유명한 축제", set()), ("즐거운 공연", set()),
+])
+def test_event_names_skip_size_and_form_prefixes_and_keep_nouns_ending_like_modifiers(theme: str, names: set[str]) -> None:
+    """'대축제'의 '대'가 한 글자 이름이 돼 행사가 있어도 "못 찾음"이었고, 끝 글자만 본 관형형 거름이 젓갈·행운을 버려 아무 축제나
+    나열했다(#1486 리뷰 잔여)."""
+    assert dh._event_names(theme, "서울")[0] == frozenset(names)
+
+
+@pytest.mark.parametrize(("utterance", "first", "last"), [
+    ("오늘 밤 말고 다음 주 공연 있어?", date(2026, 10, 26), date(2026, 11, 1)),  # 뺀 기간은 묻는 기간이 아니다
+    ("오늘 서울 도착했는데 이번 주에 하는 축제", date(2026, 10, 22), date(2026, 10, 25)),  # 앞 마디의 '오늘'은 사정이다
+    ("오늘이나 내일 축제", date(2026, 10, 22), date(2026, 10, 23)),  # 한 마디에 둘이면 둘 다
+    ("제주 말고 부산 축제 있어?", date(2026, 10, 22), date(2026, 11, 20)),  # 기간이 없으면 30일
+])
+def test_event_days_read_the_asked_clause_not_what_was_excluded(utterance: str, first: date, last: date) -> None:
+    days = dh._event_days("축제", utterance, date(2026, 10, 22))
+    assert (days[0], days[-1]) == (first, last)
+
+
+def test_schedule_anchor_coordinate_is_looked_up_once_for_events_and_places() -> None:
+    """일정 근처 앵커는 좌표를 POI_INFO 로 찾는다 — 행사·탐색 두 작업이 따로 찾던 것을 한 번으로(#1486 리뷰 잔여)."""
+    poi_info = _PoiInfo()
+    ports = HandlerPorts(poi_info=poi_info, pool_builder=_PoolBuilder(_X_POOL), events=_Events(_SEOUL_EVENTS, ProviderStatus.OK))
+    _run(_EXPLORE, replace(_ctx(_SNAP, {"theme": "축제"}, ports=ports), utterance="근처에 축제 있어?"))
+    anchor_lookups = [c for c in poi_info.calls if len(c["poi_ids"]) == 1]
+    assert len(anchor_lookups) == 1, poi_info.calls

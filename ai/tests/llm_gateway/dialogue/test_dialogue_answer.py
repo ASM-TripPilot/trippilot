@@ -573,3 +573,18 @@ def test_clock_times_normalises_numeric_forms_and_flags_korean_clock_words() -> 
                   "세 시장 골목", "한 시간 반", "세 시대에 걸친", "한 시인의 집",
                   "노래한 시 한 수", "한 시(詩)", "한시 대회", "한 시도로 기획", "세 시나리오"):  # 위키 대조에서 나온 오탐
         assert clock_times(plain) == (frozenset(), False), plain
+
+
+@pytest.mark.parametrize(("text", "times"), [
+    ("오후 3:00에 가요", {"15:00"}), ("저녁 7:30 예약", {"19:30"}), ("밤 9:00 이후", {"21:00"}), ("밤 1:30까지", {"01:30"}),
+    ("오전 12:30", {"00:30"}), ("낮 12:30 점심", {"12:30"}), ("낮 2:00", {"14:00"}), ("오전 9:00", {"09:00"}),
+    ("15.00에 가요", {"15:00"}), ("19.30부터", {"19:30"}), ("오후 3.00 시작", {"15:00"}),
+])
+def test_clock_times_fold_korean_day_words_and_dotted_clocks(text: str, times: set[str]) -> None:
+    """"오후 3:00"을 03:00 으로 읽어 맞는 답이 템플릿으로 떨어졌고, "15.00"은 시각으로 안 읽혀 Facts 밖 시각이 지나갔다(리뷰 잔여)."""
+    assert clock_times(text) == (frozenset(times), False)
+
+
+@pytest.mark.parametrize("text", ["10.30 개막", "10.30에 개막해요", "1.20km 떨어져", "평점 4.50", "3.50달러", "2.25배", "버전 0.3.8"])
+def test_dotted_numbers_that_are_dates_or_measures_are_not_clock_times(text: str) -> None:
+    assert clock_times(text)[0] == frozenset(), text

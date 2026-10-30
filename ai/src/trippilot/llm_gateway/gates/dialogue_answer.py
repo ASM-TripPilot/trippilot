@@ -83,17 +83,40 @@ _UNVERIFIABLE_CLOCK = re.compile(
 )
 
 
+# 한글 때 말 + 숫자 시각 — "오후 3:00"은 15:00 이다(종전 03:00 으로 읽어 맞는 답이 템플릿으로 떨어졌다, #1486 리뷰 잔여).
+# 밤 1~5시는 새벽이다("밤 1시"), 오전·새벽·아침·밤의 12시는 0시다
+_KO_MERIDIEM = re.compile(r"(오전|오후|새벽|아침|낮|저녁|밤)\s*$")
+# 점 구분 "15.00"(INV-2 — 종전엔 시각으로 안 읽혀 Facts 밖 시각이 지나갔다). 12시 이하는 날짜("10.30 개막")와 섞여 한글 때 말이
+# 앞에 있을 때만 시각이다. 거리·배수·금액 단위가 붙으면 아니다
+_DOT_CLOCK = re.compile(r"(?<![\d.:])(?P<h>[01]?\d|2[0-3])\.(?P<m>[0-5]\d)(?![\d.])(?!\s?(?:km|㎞|m|미터|킬로|배|%|점|달러|원|만|억))")
+
+
+def _with_meridiem(hour: int, before: str) -> int:
+    word = _KO_MERIDIEM.search(before)
+    if word is None:
+        return hour
+    if word[1] in ("오후", "저녁") or (word[1] == "낮" and hour <= 5) or (word[1] == "밤" and 6 <= hour <= 11):
+        return hour + 12 if hour < 12 else hour
+    return 0 if hour == 12 and word[1] != "낮" else hour
+
+
 def clock_spans(text: str) -> list[tuple[int, int, str]]:
-    """문장 속 숫자 꼴 시계 시각의 (시작, 끝, 정규화 `HH:MM`) — am/pm 은 24시로 접는다."""
+    """문장 속 숫자 꼴 시계 시각의 (시작, 끝, 정규화 `HH:MM`) — am/pm·앞의 한글 때 말(오후·저녁·밤…)은 24시로 접는다."""
     spans = []
-    for m in _CLOCK.finditer(text.translate(_HALF_WIDTH)):
+    plain = text.translate(_HALF_WIDTH)
+    for m in _CLOCK.finditer(plain):
         if m.group("h12"):
             hour, minute, meridiem = m.group("h12"), "00", m.group("ap12")
         else:
             hour, minute, meridiem = m.group("h"), m.group("m"), (m.group("ap") or "").strip()
-        h = int(hour) % 12 + (12 if meridiem.lower().startswith("p") else 0) if meridiem else int(hour)
+        h = int(hour) % 12 + (12 if meridiem.lower().startswith("p") else 0) if meridiem else \
+            _with_meridiem(int(hour), plain[max(0, m.start() - 4):m.start()])
         spans.append((m.start(), m.end(), f"{h:02d}:{minute}"))
-    return spans
+    for m in _DOT_CLOCK.finditer(plain):
+        before = plain[max(0, m.start() - 4):m.start()]
+        if int(m["h"]) >= 13 or _KO_MERIDIEM.search(before):
+            spans.append((m.start(), m.end(), f"{_with_meridiem(int(m['h']), before):02d}:{m['m']}"))
+    return sorted(spans)
 
 
 def clock_times(text: str) -> tuple[frozenset[str], bool]:

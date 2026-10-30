@@ -84,6 +84,7 @@ from trippilot.orchestrator.dialogue_interpreter import (
 from trippilot.orchestrator.dialogue_memory import MEMORY_TTL_DAYS, DialogueMemory, expires_at_for
 from trippilot.orchestrator.dialogue_orchestrator import (
     ACK_TEXT,
+    LAUGH_TEXT,
     RETRY_TEXT,
     CAPABILITIES_LITERAL,
     CAPABILITIES_TEXT,
@@ -746,7 +747,23 @@ def test_greeting_with_thanks_is_answered_as_thanks() -> None:
     assert out.outcome == "ANSWER" and out.answer.text == THANKS_TEXT
 
 
-@pytest.mark.parametrize("utterance", ["응?", "고마워 근데 내일 날씨는", "주식 어때", "ㅋㅋ", "안녕 내일 날씨는"])
+@pytest.mark.parametrize(("utterance", "llm_calls"), [
+    ("ㅋㅋ", 1), ("ㅋㅋㅋㅋ", 1), ("ㅎㅎ", 1), ("...", 1),  # 분류가 먼저 돈다(맞장구와 같다)
+    ("👍", 0), ("😂😂", 0), ("👍🏻", 0),  # 정리하면 빈 말 — 분류할 낱말이 없다
+    ("❤️", 1),  # 정리가 변이 선택자(U+FE0F)를 남겨 분류는 돈다
+])
+def test_laughter_or_emoji_alone_gets_a_short_reply_instead_of_the_scope_card(utterance: str, llm_calls: int) -> None:
+    """웃음·이모지만 보낸 말은 낱말이 하나도 안 남아 "도와드리기 어려워요"로 끝났다(BR-AO-26 개정 2026-10-30) — 계획 LLM 없이 한마디."""
+    out = _build(_canned(None)).orch.turn(_input(utterance, turn_index=3))
+    assert out.outcome == "ANSWER" and out.frames == () and out.answer.text == LAUGH_TEXT and out.llm_calls == llm_calls
+    assert [a.type for a in out.answer.next_actions] == ["OPEN_ITINERARY"]
+
+
+def test_emoji_beside_thanks_is_noise() -> None:
+    assert _build(_canned(None)).orch.turn(_input("👍 고마워")).answer.text == THANKS_TEXT
+
+
+@pytest.mark.parametrize("utterance", ["응?", "고마워 근데 내일 날씨는", "주식 어때", "ㅋㅋ?", "😂 내일 날씨는", "안녕 내일 날씨는"])
 def test_utterance_that_is_not_wholly_a_closer_stays_out_of_scope(utterance: str) -> None:
     out = _build(_canned(None)).orch.turn(_input(utterance))
     assert out.outcome == "OUT_OF_SCOPE" and out.answer is None

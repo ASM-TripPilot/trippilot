@@ -74,3 +74,18 @@ def test_mentions_are_regions_said_not_names_that_contain_one() -> None:
     assert [n for _, n in region_mentions("부산 사람들이 자주 가는 제주 맛집")] == ["부산", "제주"]  # 말한 순서
     assert [n for _, n in region_mentions("홍대입구역에서 서귀포시까지")] == ["홍대", "서귀포"]
     assert [n for _, n in region_mentions("서울엔 요즘 핫한 곳 어디야? 부산에선 강릉에서는")] == ["서울", "부산", "강릉"]  # 겹친 조사
+
+
+@pytest.mark.parametrize("text", ["제주랑 부산 사이에서 여행지 고민 중이야 가볼 만한 곳", "제주랑 부산 사이에서 어디 갈지 고민 중이야",
+                                  "홍대랑 이태원 사이에서 고민 중인데 어디가 더 재밌어?", "강릉이랑 속초 사이에서 아직 결정 못 했어"])
+def test_choosing_between_two_places_is_not_a_place_between(text: str) -> None:
+    assert region_pair(text) is None
+
+
+def test_asking_for_a_pick_between_two_places_is_still_between() -> None:
+    assert [n for n, _ in region_pair("홍대랑 이태원 사이에서 맛집 골라 줘")] == ["홍대", "이태원"]
+
+
+@pytest.mark.parametrize("text", ["홍대 보고나서 이태원 가는 길에", "홍대 먹고 나서 이태원 가는 길에", "홍대 다음에 이태원 가는 길에"])
+def test_route_departure_markers_include_after_and_next(text: str) -> None:
+    assert [n for n, _ in region_pair(text)] == ["홍대", "이태원"]

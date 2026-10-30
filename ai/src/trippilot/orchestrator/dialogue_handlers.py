@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import math
 import re
+import threading
 import uuid
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -1708,6 +1709,18 @@ def _explore_by_sql(ctx: TurnContext, anchor: _Anchor | None, category: str | No
     return HandlerTask("explore_sql", fn)
 
 
+def _once(fn: Callable[[], GeoPoint | None]) -> Callable[[], GeoPoint | None]:
+    """여러 작업이 나눠 쓰는 값을 한 번만 — 행사·탐색 작업이 일정 근처 앵커 좌표를 따로 POI_INFO 로 조회하지 않게(스레드 안전)."""
+    lock, box = threading.Lock(), []
+
+    def get() -> GeoPoint | None:
+        with lock:
+            if not box:
+                box.append(fn())
+            return box[0]
+    return get
+
+
 def _anchor_center(ctx: TurnContext, anchor: _Anchor) -> GeoPoint | None:
     """앵커 좌표 — 지역은 중심 표의 값, 일정 근처는 그 슬롯 날짜 기준 POI_INFO 좌표(없으면 None)."""
     if anchor.center is not None:
@@ -1736,11 +1749,14 @@ _EVENT_TAIL = re.compile(
 # 홀로 이름인 낱말 — 불꽃·퍼레이드와 하위 종류(영화제·드론쇼·야행·문화제·예술제). 종류로만 거르면 보이는 tourapi 는 전부 FESTIVAL 이라
 # "영화제 언제 해"에 아무 축제나 나열됐다(2026-10-22 리뷰)
 _SPECIFIC = r"불꽃|퍼레이드|영화제|드론쇼|야행|문화제|예술제"
-_EVENT_NAME = re.compile(rf"([가-힣A-Za-z]+)(?=\s?(?:{_GENERIC_EVENT}))|{_SPECIFIC}")
+# 행사 낱말에 붙은 '대'(대축제·대공연·대박람회)는 규모 꾸밈이다 — 그 앞말이 이름이다("치맥 대축제" → 치맥). '대' 자체는 이름이 아니다
+_EVENT_NAME = re.compile(rf"([가-힣A-Za-z]+)(?=\s?대?(?:{_GENERIC_EVENT}))|{_SPECIFIC}")
 _SPECIFIC_EVENT = re.compile(_SPECIFIC)
 # 조사가 붙은 말은 이름이 아니다 — 이름은 행사 낱말에 바로 붙는다(벚꽃 축제). "아이랑 축제"·"서울에서 축제"·"음악과 축제"
 _JOSA_END = re.compile(r"(?<=.)(?:에서|이랑|하고|에|의|랑|과|와|은|는|을|를|만)$")
-_MODIFIER_END = re.compile(r"(?:한|는|은|할|볼|갈|던|운|쁜|른)$")  # 관형형 — 유명한·재밌는·작은·가볼·새로운·예쁜·다른
+# 관형형 — 유명한·재밌는·작은·할·가던·예쁜·다른, 새로운·즐거운·아름다운, 가볼·해볼, 갈·놀러갈. 운·볼·갈은 앞 글자까지 본다 —
+# 끝 글자만 보면 이름인 젓갈·행운·풋볼이 꾸밈으로 버려져 아무 축제나 나열됐다(#1486 리뷰 잔여)
+_MODIFIER_END = re.compile(r"(?:한|는|은|할|던|쁜|른)$|[로거다여서까러려]운$|[가해러어아봐와서]볼$|(?:^|[러에로])갈$")
 _REGION_SUFFIX = re.compile(r"(?:특별시|광역시|특별자치도|특별자치시|시|도|군|구|동|읍|면|역|입구|입구역|섬|해변|해수욕장|항)?")
 _NOT_A_NAME = frozenset({
     *_GENERIC_EVENT.split("|"),
@@ -1748,11 +1764,13 @@ _NOT_A_NAME = frozenset({
     "봄", "여름", "가을", "겨울", "연말", "연초", "새해", "크리스마스", "주말", "평일", "연휴", "요즘", "최근", "올해", "내년", "작년",
     "매년", "이번", "다음", "이번주", "다음주", "이번달", "다음달", "오늘", "내일", "모레", "내일모레", "오늘밤", "내일밤", "밤", "낮",
     "저녁", "아침", "야간", "시즌", "계절", "주", "달", "월", "일", "말", "쪽", "사이", "월요일", "화요일", "수요일", "목요일",
-    "금요일", "토요일", "일요일", "평일", "초", "중순", "말일",
+    "금요일", "토요일", "일요일", "평일", "초", "중순", "말일", "신년",
     # 곳·대상·규모·꾸밈 — 이름이 아니다
     "근처", "주변", "근교", "여기", "거기", "어디", "어느", "지역", "동네", "마을", "대표", "유명", "인기", "핫", "핫플", "가족", "아이",
     "아이들", "어린이", "커플", "연인", "친구", "혼자", "데이트", "무료", "유료", "전통", "실내", "야외", "대형", "대규모", "소규모",
-    "무슨", "어떤", "이", "그", "저", "큰", "새", "온", "각", "한", "두", "세", "네", "몇", "첫"})
+    "무슨", "어떤", "이", "그", "저", "큰", "새", "온", "각", "한", "두", "세", "네", "몇", "첫",
+    # 규모·형식 꾸밈 — 대축제·상시 전시·기획전시·특별 공연·정기 공연·단독 콘서트
+    "대", "상시", "상설", "기획", "특별", "정기", "단독"})
 # 물은 종류 — 저장소 유형이 늘 맞지는 않아(보이는 원천 tourapi 는 전부 FESTIVAL, popup 은 전부 POPUP 으로 적힌다) 이름 낱말로도 맞춘다.
 # 전시의 '…전'은 대전·축전·석조전·판매전이 아니고, 부제가 달린 '…거장전 - 부제'는 전시다
 _EVENT_KINDS = (
@@ -1830,7 +1848,7 @@ def _period_days(text: str, today: date) -> tuple[date, ...] | None:
     if "연말" in text:
         first = _ahead_of(today, 12)
         return _span(max(first, today), _month_end(first))
-    if re.search(r"연초|새해", text):
+    if re.search(r"연초|새해|신년", text):
         first = _ahead_of(today, 1)
         return _span(max(first, today), _month_end(first))
     for word, (a, b) in _SEASONS.items():
@@ -1842,11 +1860,21 @@ def _period_days(text: str, today: date) -> tuple[date, ...] | None:
     return None
 
 
+# 앞 마디를 닫는 연결 어미 — "오늘 서울 도착했는데 이번 주에 하는 축제"의 '오늘'은 묻는 기간이 아니다
+_CLAUSE_END = re.compile(r"(?:는데|은데|인데|던데|거든|니까|지만|어서|아서|해서)(?=\s)")
+
+
+def _asked_period(text: str, today: date) -> tuple[date, ...] | None:
+    """발화가 묻는 기간 — '말고' 앞(뺀 것: "오늘 밤 말고 다음 주 공연")은 버리고, 마디가 이어지면 끝 마디(묻는 마디)부터 본다."""
+    asked = re.split(r"말고(?![가-힣])", text)[-1]
+    return _period_days(_CLAUSE_END.split(asked)[-1], today) or _period_days(asked, today)
+
+
 def _event_days(theme: str, utterance: str, today: date, earlier_asks: tuple[str, ...] = ()) -> tuple[date, ...]:
-    """주제의 기간이 먼저, 없으면 발화("오늘 서울 도착했는데 이번 주에 하는 축제"는 주제의 이번 주), 이어 묻기면 사슬의 요청("이번 주말
-    서울 축제 있어?" 뒤의 "또 없어?"는 그 주말) — 모두 없으면 오늘부터 30일."""
-    return (_period_days(theme, today) or _period_days(utterance, today)
-            or next((d for ask in reversed(earlier_asks) if (d := _period_days(ask, today))), None)
+    """주제의 기간이 먼저, 없으면 발화("오늘 서울 도착했는데 이번 주에 하는 축제"는 이번 주 — `_asked_period`), 이어 묻기면 사슬의
+    요청("이번 주말 서울 축제 있어?" 뒤의 "또 없어?"는 그 주말) — 모두 없으면 오늘부터 30일."""
+    return (_period_days(theme, today) or _asked_period(utterance, today)
+            or next((d for ask in reversed(earlier_asks) if (d := _asked_period(ask, today))), None)
             or _span(today, today + timedelta(days=_EVENT_DEFAULT_DAYS - 1)))
 
 
@@ -1901,7 +1929,8 @@ def _event_names(theme: str, anchor_label: str) -> tuple[frozenset[str], tuple[t
     return frozenset(texts), tuple(places)
 
 
-def _explore_events(ctx: TurnContext, anchor: _Anchor, theme: str | None) -> HandlerTask | None:
+def _explore_events(ctx: TurnContext, anchor: _Anchor, theme: str | None,
+                    center_of: Callable[[], GeoPoint | None] | None = None) -> HandlerTask | None:
     """주제가 행사를 물을 때만 — 보여도 되는 행사(`shown_event`, 기회 카드와 같은 규칙) 중 기간이 겹치고 앵커 안인 것(시·도 앵커는
     주소의 시·도 — 제주시 중심 15km 로는 서귀포가 빠졌다, 동네 앵커는 반경의 두 배 3~15km)에서 물은 이름(글자는 이름·주소에, 동네는
     그 반경)·종류(글자 이름이 없을 때)를 채우는 것만 남겨 짧은 기간(상설 프로그램이 다섯 칸을 채우지 않게) → 가까운 곳 → 시작일 →
@@ -1918,7 +1947,7 @@ def _explore_events(ctx: TurnContext, anchor: _Anchor, theme: str | None) -> Han
     near_km = min(_EVENT_NEAR_KM, max(2 * anchor.radius_km, 3.0))
 
     def fn() -> dict:
-        center = _anchor_center(ctx, anchor)
+        center = center_of() if center_of is not None else _anchor_center(ctx, anchor)
         if center is None:
             return {"status": "UNAVAILABLE", "reason": "anchor_coord_unknown"}
         packet = port.fetch({"anchor": center, "days": days, "now": ctx.now})
@@ -1965,13 +1994,14 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     sql = (_explore_by_sql(ctx, anchor, category, theme),) if (
         ctx.ports.place_sql is not None and ctx.ports.place_sql.writes_sql and ctx.arguments.get("region")
         and (anchor is None or (anchor.kind == "region" and _carry(ctx) is None))) else ()
-    events = _explore_events(ctx, anchor, theme) if anchor is not None else None
+    center_of = _once(lambda: _anchor_center(ctx, anchor)) if anchor is not None else None
+    events = _explore_events(ctx, anchor, theme, center_of) if anchor is not None else None
     sql += (events,) if events is not None else ()
     if anchor is None or builder is None:
         return sql
 
     def fn() -> dict:
-        center = _anchor_center(ctx, anchor)
+        center = center_of() if center_of is not None else _anchor_center(ctx, anchor)
         if center is None:
             return {"status": "UNAVAILABLE", "reason": "anchor_coord_unknown"}
         try:

@@ -44,6 +44,7 @@ import contextvars
 import json
 import logging
 import re
+import unicodedata
 import threading
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Executor, Future, ThreadPoolExecutor, wait
@@ -206,10 +207,13 @@ _GREETS = frozenset({
 })
 THANKS_TEXT = "천만에요! 더 궁금한 게 생기면 언제든 물어봐 주세요."
 ACK_TEXT = "알겠어요! 필요한 게 생기면 언제든 말씀해 주세요."
+# 웃음·이모지만 보낸 말("ㅋㅋ"·"👍"·"😂") — 낱말이 하나도 안 남아 "도와드리기 어려워요"(범위 밖 카드)로 끝났다(10-19 리뷰 한계)
+LAUGH_TEXT = "네, 더 궁금한 게 생기면 언제든 물어봐 주세요!"
 # 감사·맞장구도 같은 말이 이어지지 않게(`unrepeated` 표에 더한다 — #1510 이 LLM 으로 돌리지 않고 남긴 자리, 2026-10-22)
 _CLOSER_VARIANTS = {
     THANKS_TEXT: ("별말씀을요! 여행하다 궁금한 게 생기면 또 불러 주세요.", "도움이 됐다니 다행이에요. 또 필요하면 말씀해 주세요."),
     ACK_TEXT: ("네, 알겠어요. 필요할 때 편하게 불러 주세요.", "좋아요! 궁금한 게 생기면 언제든지요."),
+    LAUGH_TEXT: ("좋아요! 여행하다 궁금한 게 생기면 불러 주세요.", "네! 필요할 때 언제든 말씀해 주세요."),
 }
 # 인사·잡담 답 — 여행이 있으면 지금 여행으로, 없으면 여행 만들기로 잇는다(버튼은 `_home_action` 과 같은 갈래). DIALOGUE_SMALLTALK 이
 # 배정돼 있으면 LLM 이 즉석에서 짓고(`_smalltalk`), 미배정·실패·목록 밖 장소면 이 고정 문장이다(INV-4 마지막 계단, BR-AO-26 개정 10-22).
@@ -436,11 +440,19 @@ def capabilities_answer(has_trip: bool) -> DialogueAnswer:
     return DialogueAnswer(AnswerKind.TEXT, CAPABILITIES_TEXT, None, (_home_action(has_trip),), None, None)
 
 
+def _emoji_only(word: str) -> bool:
+    """이모지·기호 글자만(👍·😂·❤️ — 변이 선택자·ZWJ·피부색 포함). 정리가 이모지를 지우고 남긴 변이 선택자("❤️" → U+FE0F)도 같다."""
+    return bool(word) and {unicodedata.category(c) for c in word} <= {"So", "Sk", "Mn", "Cf"}
+
+
 def closer_answer(text: str, has_trip: bool) -> DialogueAnswer | None:
     """2″ — 정규화된 발화가 맞장구·인사 낱말뿐이면 받아 주는 한마디(BR-AO-26), 아니면 None. 감사가 하나라도 있으면 감사 답.
     버튼·칩은 능력 안내와 같다."""
-    words = _CLOSER_NOISE.sub(" ", text.lower().replace("thank you", "thanks")).split()
-    if not words or not all(w in _THANKS or w in _ACKS or w in _GREETS for w in words):
+    words = [w for w in _CLOSER_NOISE.sub(" ", text.lower().replace("thank you", "thanks")).split() if not _emoji_only(w)]
+    if not words:  # 웃음·이모지만 — 되묻는 "?"가 섞이지 않았을 때
+        return DialogueAnswer(AnswerKind.TEXT, LAUGH_TEXT, None, (_home_action(has_trip),), None, None) \
+            if text.strip() and "?" not in text else None
+    if not all(w in _THANKS or w in _ACKS or w in _GREETS for w in words):
         return None
     if any(w in _THANKS for w in words):
         reply = THANKS_TEXT
@@ -933,6 +945,11 @@ class DialogueOrchestrator:
         if text == CAPABILITIES_LITERAL:
             return TurnOutcome("ANSWER", (), None, capabilities_answer(inp.snapshot.trip is not None), cleared, 0)
         if not text:
+            # 이모지만 보낸 말("👍") — 정리(`normalize`)가 이모지를 지워 빈 말이 된다. 분류할 낱말이 없으니 바로 한마디(BR-AO-26 개정
+            # 2026-10-30), 정말 빈 말만 범위 밖이다
+            closer = closer_answer(inp.utterance, inp.snapshot.trip is not None)
+            if closer is not None:
+                return TurnOutcome("ANSWER", (), None, closer, cleared, 0, "emoji_only")
             return self._out_of_scope(inp, "empty_utterance")
         # 0′ — 지시 무시·프롬프트 유출·역할 바꾸기 꼴은 분류 LLM 에 보내지 않는다. "다음 장소 알려줘. 그리고 규칙 무시하고 …"처럼
         # 정상 요청에 붙으면 분류는 GET_NEXT_SLOT 을 고르고 답변 LLM 이 그 지시를 받는다 — 판단해서 거절한 것이라 거절 표지를 단다
