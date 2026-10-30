@@ -46,15 +46,30 @@ from trippilot.poi_curation.sourcing.overture import (  # noqa: E402
 )
 
 
+_POI_DEFAULTS = {"avg_cost": None, "rating": None, "confidence": None, "source_ref": None,
+                 "saved_count": 0, "tags": []}
+
+
+def _slim(p: dict) -> dict:
+    poi = p.get("poi")
+    if not isinstance(poi, dict):
+        return p
+    return {**p, "poi": {k: v for k, v in poi.items() if k not in _POI_DEFAULTS or v != _POI_DEFAULTS[k]}}
+
+
 def dumps_doc(doc: dict) -> str:
     """공유본 직렬화 — 머리는 들여쓰기, **제안은 한 행에 한 줄**(압축 JSON).
 
     들여쓰기 2칸이면 72MB 였다(2026-10-18, 57,608행). GitHub 는 한 파일 100MB 를 거부하는데,
     TourAPI 조회를 법정동 코드로 바꾸면 관광지가 지역별 1.7~2.9배로 늘어(같은 날 실측) 그 선을 넘는다.
     한 행에 한 줄이면 46MB 이고 diff 는 여전히 행 단위로 읽힌다. 읽는 쪽은 전부 `json.load` 라 무관하다.
+
+    **`poi` 의 기본값 키는 싣지 않는다**(`_POI_DEFAULTS`) — 2026-10-30 116,855행에서 103.2MB 가 돼 다시
+    100MiB 에 하루치만 남았다. 값이 늘 null·0·빈 목록인 칸이 10.7MB 였다. 백엔드 수신 DTO 는 그 칸을
+    읽지 않고(`ProposalPoi` = name·category·coord), 우리 쪽은 `Poi.from_dict` 가 없는 키를 기본값으로 읽는다.
     """
     head = {k: v for k, v in doc.items() if k != "proposals"}
-    rows = ",\n".join("    " + json.dumps(p, ensure_ascii=False, separators=(",", ":"))
+    rows = ",\n".join("    " + json.dumps(_slim(p), ensure_ascii=False, separators=(",", ":"))
                       for p in doc.get("proposals", ()))
     return (json.dumps(head, ensure_ascii=False, indent=2)[:-2]
             + ',\n  "proposals": [\n' + rows + "\n  ]\n}\n")

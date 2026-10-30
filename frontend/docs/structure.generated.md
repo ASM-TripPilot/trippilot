@@ -1627,6 +1627,9 @@
 - `src/shared/api/generated/schemas/triggerWatch.ts`  →  TriggerWatch
 - `src/shared/api/generated/schemas/trip.ts`  →  Trip
 - `src/shared/api/generated/schemas/tripDestination.ts`  →  TripDestination
+- `src/shared/api/generated/schemas/tripItineraryGenerationMode.ts`  →  TripItineraryGenerationMode
+- `src/shared/api/generated/schemas/tripItineraryGenerationState.ts`  →  TripItineraryGenerationState
+- `src/shared/api/generated/schemas/tripItineraryStatus.ts`  →  TripItineraryStatus
 - `src/shared/api/generated/schemas/tripPreferenceSnapshot.ts`  →  TripPreferenceSnapshot
 - `src/shared/api/generated/schemas/tripRecord.ts`  →  TripRecord
 - `src/shared/api/generated/schemas/tripRecordDay.ts`  →  TripRecordDay
@@ -1929,4 +1932,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1239개 파일
+합계 1242개 파일

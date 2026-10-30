@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "collec
 
 import merge_pois_docs as M  # noqa: E402
 from collect_pois import load_closed_refs  # noqa: E402
+from trippilot.domain.poi import Poi  # noqa: E402
 from merge_pois_docs import (  # noqa: E402
     drop_closed,
     drop_non_travel,
@@ -567,9 +568,23 @@ def test_거울의_첫_토큰은_백엔드와_같이_자른다() -> None:
 def test_공유본은_한_행에_한_줄이고_되읽으면_같다() -> None:
     doc = merge([_keyed_doc("TOURAPI", "1", "2")], allow_mixed=True)
     text = M.dumps_doc(doc)
-    assert json.loads(text) == doc
+    back = json.loads(text)
+    # `poi` 의 기본값 키만 빠지고(100MiB 한도, 2026-10-30) 나머지는 그대로, 도메인으로 읽으면 같다
+    assert {**back, "proposals": None} == {**doc, "proposals": None}
+    for o, n in zip(doc["proposals"], back["proposals"], strict=True):
+        assert {k: v for k, v in o.items() if k != "poi"} == {k: v for k, v in n.items() if k != "poi"}
+        assert Poi.from_dict(n["poi"]) == Poi.from_dict(o["poi"])
     assert sum(ln.lstrip().startswith('{"provisional_id"') for ln in text.splitlines()) == 2
     assert json.loads(M.dumps_doc({**doc, "proposals": []}))["proposals"] == []
+
+
+def test_공유본은_poi_기본값_키를_싣지_않고_값이_있으면_싣는다() -> None:
+    p = {"provisional_id": "x", "poi": {"name": "a", "avg_cost": None, "rating": None, "confidence": None,
+                                        "source_ref": None, "saved_count": 0, "tags": []}}
+    assert M._slim(p)["poi"] == {"name": "a"}
+    kept = {"name": "a", "avg_cost": 5000, "rating": 4.1, "saved_count": 3, "tags": ["한식"], "source_ref": "9"}
+    assert M._slim({"poi": kept})["poi"] == kept
+    assert M._slim({"provisional_id": "x"}) == {"provisional_id": "x"}   # poi 없는 행은 그대로
 
 
 # ── 머지 전 게이트 — 백엔드가 시도를 못 정하는 행은 격리 (TRIP-1475) ──────

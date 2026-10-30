@@ -2,12 +2,14 @@
 
 증명하는 것 (실 DB 0 — Pg 는 fake connection):
   ① InMemory 계약 — put/get 왕복 · 같은 poi_id 는 upsert · 만료 행은 없는 것과 같다(`expires_at > now`, 경계 포함) · 못 찾음(facts None) 행도 저장
-  ② Pg — 쓰기 때 만료 행 정리 + upsert(ON CONFLICT (poi_id)) · 읽기는 만료 전 것만 · 못 찾음 행은 facts NULL · 호출마다 connect · DDL 없음
+  ② Pg — 쓰기 때 만료 행 정리 + upsert(ON CONFLICT (poi_id)) · 읽기는 만료 전 것만 · 찾아본 칸(searched)도 왕복 — 못 찾음 행은
+     {searched} 만, 2026-10-30 전 행(NULL·searched 없음)은 찾아본 칸 모름(빈 값) · 호출마다 connect · DDL 없음
 """
 
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 from trippilot.agents.adapters.memory_place_fact_store import InMemoryPlaceFactStore
@@ -63,19 +65,24 @@ class _Conn:
         return _Cur(self)
 
 
-def test_pg_store_writes_only_dml_and_reads_back_the_same_facts() -> None:
-    conn = _Conn()
-    PgPlaceFactStore(lambda: conn).put(FactRecord("p1", _FACTS, _NOW, _NOW + _WEEK))
+def test_pg_store_writes_only_dml_and_reads_back_the_same_record() -> None:
+    conn, record = _Conn(), FactRecord("p1", _FACTS, _NOW, _NOW + _WEEK, ("hours", "last_entry"))
+    PgPlaceFactStore(lambda: conn).put(record)
     (delete, _), (insert, params) = conn.log
     assert delete.startswith("DELETE FROM place_fact_cache WHERE expires_at <=") and "ON CONFLICT (poi_id)" in insert
     doc = json.loads(params[1])
     read = _Conn(row=("p1", doc, _NOW, _NOW + _WEEK))
-    assert PgPlaceFactStore(lambda: read).get("p1", _NOW).facts == _FACTS
+    assert PgPlaceFactStore(lambda: read).get("p1", _NOW) == record  # 찾아본 칸까지 그대로
     assert "expires_at > %s" in read.log[0][0]  # 만료 행은 없는 것과 같다
+    old = {k: v for k, v in doc.items() if k != "searched"}  # 2026-10-30 전 행 — 찾아본 칸을 몰라 빈 값(값 있는 칸은 에이전트가 안다)
+    assert PgPlaceFactStore(lambda: _Conn(row=("p1", old, _NOW, _NOW + _WEEK))).get("p1", _NOW) == replace(record, searched=())
 
 
-def test_pg_store_keeps_a_nothing_found_row_as_null() -> None:
-    conn = _Conn()
-    PgPlaceFactStore(lambda: conn).put(FactRecord("p1", None, _NOW, _NOW + _DAY))
-    assert conn.log[1][1][1] is None
-    assert PgPlaceFactStore(lambda: _Conn(row=("p1", None, _NOW, _NOW))).get("p1", _NOW).facts is None
+def test_pg_store_keeps_what_a_miss_looked_up_and_reads_an_old_null_row_as_a_miss() -> None:
+    conn, miss = _Conn(), FactRecord("p1", None, _NOW, _NOW + _DAY, ("fee",))
+    PgPlaceFactStore(lambda: conn).put(miss)
+    doc = json.loads(conn.log[1][1][1])
+    assert doc == {"searched": ["fee"]}  # 출처 있는 값이 없어도 찾아본 칸은 남긴다 — 안 찾아본 칸 물음까지 하루 막지 않게
+    assert PgPlaceFactStore(lambda: _Conn(row=("p1", doc, _NOW, _NOW + _DAY))).get("p1", _NOW) == miss
+    old = PgPlaceFactStore(lambda: _Conn(row=("p1", None, _NOW, _NOW + _DAY))).get("p1", _NOW)  # 2026-10-30 전 못 찾음 행
+    assert old.facts is None and old.searched == ()

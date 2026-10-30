@@ -1,9 +1,11 @@
 """UnknownHandlingAgent — 먼저 답하고 뒤에서 찾기(2026-10-22 사용자 결정). `run(UnknownTask)` 하나로 찾았음·찾는 중·없음 셋이
-갈리고, 저장·중복 제거·하루 상한·실패 미저장·장애 수렴. (저장소 구현 2종의 계약은 `tests/agents/adapters/test_place_fact_stores.py`,
+갈리고, 저장·중복 제거·하루 상한·실패 미저장·장애 수렴 · 물은 칸을 다 찾아본 기록만 답이 된다(안 찾아본 칸이면 저장된 칸까지 다시 찾는다,
+2026-10-30). (저장소 구현 2종의 계약은 `tests/agents/adapters/test_place_fact_stores.py`,
 폴백 문장이 답변 검사를 넘는다는 PBT 는 핸들러 몫 — `tests/orchestrator/test_web_sentence.py`)"""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
@@ -13,7 +15,7 @@ from trippilot.agents.unknown_handling import agent as uh
 from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent, UnknownOutcome, UnknownTask
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm import TypedResult
-from trippilot.ports.place_fact_store_port import PlaceFacts
+from trippilot.ports.place_fact_store_port import FIELDS, FactRecord, PlaceFacts
 
 _NOW = datetime(2026, 10, 22, 6, 0, tzinfo=timezone.utc)
 _ON = date(2026, 10, 22)
@@ -89,6 +91,61 @@ def test_nothing_found_is_stored_briefly_and_a_failure_is_not_stored() -> None:
     later2.run()
     assert failing.run(_task("p2", "남산서울타워", ("hours",), trace="t2")).pending  # 시한·형식·출처 없음은 저장하지 않는다
     assert len(later2.jobs) == 1  # 찾는 중 표시가 풀려 새로 냈다 — 다음에 물으면 다시 찾는다
+
+
+class _AskedOnly:
+    """[찾을 칸]만 찾는 워커 — 실 모델처럼 물은 칸만 채운다(2026-10-30 Codex 리뷰 재현). `values` 에 없는 칸은 웹에도 없다."""
+
+    def __init__(self, **values: str) -> None:
+        self.values, self.calls = values, []
+
+    def lookup(self, place, fields, on, trace_id, now, *, timeout_sec, retry_timeout_sec=None):
+        self.calls.append(fields)
+        found = {f: self.values.get(f) if f in fields else None for f in FIELDS}
+        return _ok(PlaceFacts(**found, source_url=_FACTS.source_url, source_host=_FACTS.source_host) if any(found.values()) else None)
+
+
+def _asking(worker: _AskedOnly, store=None):
+    later = _Later()
+    return UnknownHandlingAgent(worker, store or InMemoryPlaceFactStore(), submit=later), later
+
+
+def test_a_record_that_did_not_look_up_the_asked_field_looks_again_with_the_stored_ones() -> None:
+    """영업시간만 찾은 기록이 입장료 물음에 그대로 나가 일주일 "미확인"이었다(2026-10-30 Codex 리뷰 재현) — 물은 칸을 다 찾아본 기록만
+    답이 된다. 다시 찾을 때는 저장된 칸까지 함께 찾아 한 기록으로 덮는다(출처 칸이 하나라 두 조회의 값을 섞지 않는다)."""
+    worker = _AskedOnly(hours="09:00~18:00", last_entry="17:00", fee="3,000원")
+    agent, later = _asking(worker)
+    agent.run(_task())  # 영업시간 먼저
+    later.run()
+    soon = _NOW + timedelta(minutes=1)
+    assert agent.run(_task(fields=("fee",), now=soon)) == UnknownOutcome(pending=True)  # 입장료는 찾아본 적이 없다
+    later.run()
+    assert worker.calls == [("hours", "last_entry"), ("hours", "last_entry", "fee")]
+    found = agent.run(_task(fields=("fee",), now=soon)).facts
+    assert (found.hours, found.last_entry, found.fee) == ("09:00~18:00", "17:00", "3,000원")
+    assert agent.run(_task(now=soon)).facts == found and len(worker.calls) == 2  # 영업시간도 그 기록으로 — 다시 찾지 않는다
+
+
+def test_a_miss_holds_back_only_the_fields_it_looked_up() -> None:
+    worker = _AskedOnly(hours="09:00~18:00")  # 입장료는 웹에도 없다
+    agent, later = _asking(worker)
+    agent.run(_task(fields=("fee",)))
+    later.run()  # 입장료 못 찾음 — 하루 보관
+    assert agent.run(_task(fields=("fee",), trace="t2")) == UnknownOutcome() and later.jobs == []
+    assert agent.run(_task(trace="t3")) == UnknownOutcome(pending=True)  # 영업시간은 찾아본 적이 없다 — 입장료 못 찾음이 막지 않는다
+    later.run()
+    assert worker.calls == [("fee",), ("hours", "last_entry", "fee")]
+    # 찾은 기록 안의 빈 칸(입장 마감·입장료)도 찾아본 칸이다 — 기록이 살아 있는 동안 영업시간·입장료 물음 모두 다시 찾지 않는다
+    assert agent.run(_task(now=_NOW + uh.FOUND_TTL - timedelta(seconds=1))).facts.hours == "09:00~18:00"
+    assert agent.run(_task(fields=("fee",), trace="t4")).facts.fee is None and later.jobs == []
+
+
+def test_an_old_record_without_looked_up_fields_counts_only_its_values() -> None:
+    store = InMemoryPlaceFactStore()
+    store.put(FactRecord("p1", replace(_FACTS, fee=None), _NOW, _NOW + uh.FOUND_TTL))  # 2026-10-30 전 행 — searched 없음
+    agent, later = _asking(_AskedOnly(fee="3,000원"), store)
+    assert agent.run(_task()).facts.hours == "09:00~18:00" and later.jobs == []  # 값이 있는 칸은 찾아본 칸이다
+    assert agent.run(_task(fields=("fee",))) == UnknownOutcome(pending=True)  # 값 없는 칸은 찾아봤는지 몰라 다시 찾는다
 
 
 def test_daily_cap_stops_new_lookups_until_the_next_day(monkeypatch) -> None:

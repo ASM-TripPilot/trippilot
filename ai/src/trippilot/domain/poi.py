@@ -44,6 +44,12 @@ REPUTATION_STEP = 0.03     # 인기 등급 한 단 — 3등급이 기준선
 HIGH_RATING_BONUS = 0.04
 
 
+def public_tags(tags: tuple[str, ...]) -> tuple[str, ...]:
+    """사용자에게 보일 수 있는 태그 — 평판 파생 태그(`인기1`~`인기5`·`평점높음`)를 뺀다. 백엔드 `PublicTags` 와 같은 규칙이다
+    (TRIP-1537: 저장·점수에는 쓰되 화면·도우미에는 내보내지 않는다)."""
+    return tuple(t for t in tags if popularity_grade((t,)) is None and t != HIGH_RATING_TAG)
+
+
 def reputation_bonus(tags: tuple[str, ...]) -> float:
     """인기 등급과 높은 평점 태그 → -0.06 ~ +0.10. 태그가 하나도 없으면 0.0."""
     grade = popularity_grade(tags)
@@ -281,12 +287,12 @@ class Poi:
             category=PoiCategory(d["category"]),
             coord=GeoPoint.from_dict(d["coord"]),
             open_hours=tuple(OpenHour.from_dict(x) for x in d["open_hours"]),
-            avg_cost=d["avg_cost"],
-            rating=d["rating"],
+            avg_cost=d.get("avg_cost"),  # 공유본은 기본값 키를 생략한다(merge_pois_docs.dumps_doc)
+            rating=d.get("rating"),
             saved_count=d.get("saved_count", 0),  # 구 캐시 호환
             quality=DataQuality(d["quality"]),
             source=PoiSource(d["source"]),
-            confidence=d["confidence"],
+            confidence=d.get("confidence"),
             tags=tuple(d.get("tags") or ()),  # 구 캐시 호환 (saved_count 선례)
             source_ref=d.get("source_ref"),
             holiday_rules=frozenset(d.get("holiday_rules") or ()),  # 키 없는 옛 직렬화본 = 규칙 없음
