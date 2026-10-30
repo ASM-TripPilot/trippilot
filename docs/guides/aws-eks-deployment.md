@@ -60,7 +60,7 @@ EKS 배포 대상은 Spring Boot backend, FastAPI AI, 선택형 임베딩이다.
 | `DEV_TARGET_ACM_CERTIFICATE_ARN` | DEV 스택의 개발 대상(`target=dev`) 인증서 — 운영 값과 같거나 비면 개발 배포를 거절한다 |
 | `DEV_TARGET_API_HOSTNAME` | 개발 대상 주소, 예: `dev-api.trippilot.co.kr` |
 
-**배포 대상(2026-10-15)**: DEV 스택 안에 두 서버가 있다. `target=prod`(네임스페이스 `trippilot`, 출시 앱이 보는 서버)는 **main 에서만**, `target=dev`(네임스페이스 `trippilot-dev`, 개발 DB `trippilot-dev-target`, `dev-api`)는 **develop 에서만** 배포된다. 개발 대상은 Terraform 을 건드리지 않고 임베딩·실제 푸시가 늘 꺼진다. GitHub Environment `dev` 의 배포 브랜치 규칙에 `main`·`develop` 둘 다 있어야 한다.
+**배포 대상(2026-10-15)**: DEV 스택 안에 두 서버가 있다. `target=prod`(네임스페이스 `trippilot`, 출시 앱이 보는 서버)는 **main 에서만**, `target=dev`(네임스페이스 `trippilot-dev`, 개발 DB `trippilot-dev-target`, `dev-api`)는 **develop 에서만** 배포된다. 개발 대상은 Terraform 을 건드리지 않고, 실제 푸시는 늘 꺼지며 임베딩은 입력(`embedding_enabled`)을 따른다(#1286). GitHub Environment `dev` 의 배포 브랜치 규칙에 `main`·`develop` 둘 다 있어야 한다.
 
 **전환 순서(2026-10-15, 한 번)**: 이 규칙(#1263)을 develop 에 머지하면 develop 으로는 운영 배포가 막히고, main 의 옛 워크플로에는 `target` 이 없어 **승격 전까지 운영 배포 경로가 없다.** 그래서 ① #1263 머지 → ② develop→main 승격(머지 커밋) → ③ Environment `dev` 브랜치 규칙에 `main` 추가 → ④ main 에서 `target=prod` 첫 배포를 연달아 한다. 그 사이를 `DEPLOY_BRANCH` 로 메우지 않는다(운영 대상에는 먹지도 않는다).
 
@@ -127,7 +127,7 @@ Pod 로그는 클러스터 접근 없이 CloudWatch Logs 에서 본다. `amazon-
 
 앱 코드를 되돌리려면 배포 브랜치에 revert commit을 만든 뒤 수동 배포한다. 인프라 변경과 DB migration은 Helm rollback으로 되돌아가지 않는다. 런타임 Secret(`trippilot-ai` 등 — 비밀값 동기화 단계가 Helm 밖에서 쓴다)도 되돌아가지 않는다. destructive DB migration은 별도 복구 계획·백업을 준비한다. PRD RDS는 삭제 보호가 켜져 있고, 전체 destroy나 state 삭제 workflow는 제공하지 않는다.
 
-NLB·RDS·Redis 준비, EKS 노드 생성, 임베딩 모델 빌드는 첫 실행에서 오래 걸릴 수 있다. 테스트 환경이라도 EKS·NAT·RDS 등은 생성 후 계속 과금된다. 임베딩 활성화 시 Pod당 약 5GiB 이상의 메모리를 확보해야 한다. AI KB 테이블 생성과 외부 데이터/벡터 적재는 별개이며 실제 KB 내용은 프로젝트의 기존 AI 데이터 적재 절차를 적용한다.
+NLB·RDS·Redis 준비, EKS 노드 생성, 임베딩 모델 빌드는 첫 실행에서 오래 걸릴 수 있다. 테스트 환경이라도 EKS·NAT·RDS 등은 생성 후 계속 과금된다. 임베딩 활성화 시 Pod당 약 5GiB 이상의 메모리를 확보해야 한다. AI KB 벡터 적재는 배포가 한다 — 임베딩이 켜진 배포는 끝에서 `load-kb` Job(`deploy/eks/runtime_kb.py`)이 같은 AI 이미지의 `scripts/load_kb.py` 로 멱등 적재한다. KB 데이터(이미지의 `data/`)가 바뀌면 재배포만 하면 되고, 확인은 배포 로그의 `load_kb` 요약 줄("총 N건 (dim=1024, provider=http, 멱등 upsert)")이다.
 
 ## 코드 위치와 로컬 검증
 
