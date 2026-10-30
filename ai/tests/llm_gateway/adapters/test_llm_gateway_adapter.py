@@ -96,6 +96,29 @@ def test_anthropic_native_effort_values_pass_through() -> None:
         assert client.kwargs["output_config"] == {"effort": native}
 
 
+def test_haiku_4_drops_effort_even_when_the_table_sets_one() -> None:
+    """haiku-4-5 는 effort 를 **파라미터째** 거부한다 — 값을 낮추는 것으로는 안 된다."""
+    for effort in ("none", "minimal", "low", "medium", "high", "xhigh", "max"):
+        client = RecordingClient()
+        AnthropicAdapter(client).invoke(
+            replace(_REQUEST, model_id="claude-haiku-4-5", effort=effort)
+        )
+
+        assert "output_config" not in client.kwargs, effort
+
+
+def test_haiku_5_5_keeps_effort() -> None:
+    """5.5 세대는 effort 를 받는다(운영 파드 실호출) — 가드가 세대 접두로 좁혀 있는지 못박는다.
+
+    접두를 `claude-haiku-` 로 넓히면 이 기능들의 effort 가 조용히 빠져 기본 사고로 돈다.
+    """
+    client = RecordingClient()
+    AnthropicAdapter(client).invoke(
+        replace(_REQUEST, model_id="claude-haiku-5-5", effort="low")
+    )
+
+    assert client.kwargs["output_config"] == {"effort": "low"}
+
 def test_response_mapping_and_multi_block_join() -> None:
     client = RecordingClient(
         blocks=[

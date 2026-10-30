@@ -35,6 +35,13 @@ from trippilot.ports.llm_port import LlmRequest, LlmResponse, LlmTimeoutError
 # Claude 5.5 는 사고를 끌 수 없어 low 가 가장 가까운 값이다.
 _EFFORT_FLOOR = {"none": "low", "minimal": "low"}
 
+# effort 를 파라미터째 거부하는 모델 — 보내면 400 이라 **아예 빼야** 한다.
+# `_EFFORT_FLOOR` 로 값을 낮추는 것으로는 안 된다(low 도 거부한다).
+# **세대로 좁힌다(haiku-4)** — 5.5 세대는 받는다(2026-10-30 운영 파드 실호출: haiku-5-5 effort low
+# 가 400 없이 통과). 접두를 `claude-haiku-` 로 넓히면 5.5 의 effort 까지 조용히 빠져 기본(더 깊은)
+# 사고로 돈다 — 저비용 티어가 비싸고 느려지는 방향의 침묵 변화다.
+_EFFORT_UNSUPPORTED = ("claude-haiku-4",)
+
 # 서버 쪽 웹 검색 도구(anthropic SDK 0.120.2 — `anthropic.types.web_search_tool_20250305_param`).
 # OpenAI responses 표면과 같은 자리(2026-10-30, PLACE_FACT_LOOKUP 벤더 폴백용 — .env.example 의
 # "되살리려면 어댑터에 web_search 서버 도구를 붙이거나" 메모).
@@ -100,6 +107,8 @@ class AnthropicAdapter:
     def invoke(self, request: LlmRequest) -> LlmResponse:
         # effort 는 지정됐을 때만 — haiku-4-5 처럼 파라미터째 거부하는 모델이 있다.
         effort = _EFFORT_FLOOR.get(request.effort, request.effort) if request.effort else None
+        if effort and request.model_id.startswith(_EFFORT_UNSUPPORTED):
+            effort = None  # 표의 값보다 모델의 수용 여부가 우선 — 보내면 전 호출이 400 이다
         extra = {"output_config": {"effort": effort}} if effort else {}
         if request.web_search:  # 벤더 쪽 검색 도구 — 2026-10-30, OpenAI responses 표면과 같은 자리
             extra["tools"] = [_WEB_SEARCH_TOOL]
