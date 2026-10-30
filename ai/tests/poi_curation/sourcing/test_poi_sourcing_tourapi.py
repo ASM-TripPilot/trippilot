@@ -246,6 +246,18 @@ def test_parse_open_hours_detached_check_in_label_keeps_window() -> None:
     assert hours == tuple(OpenHour(d, 420, 1080) for d in range(7))
 
 
+@pytest.mark.parametrize(
+    "hours_raw",
+    [
+        "입실 안내는 홈페이지를 참고 09:00~18:00",   # 라벨이 시각 앞 10자 넘게 떨어졌다
+        "당일 입실 불가\n09:00~18:00",              # 라벨과 시각 사이에서 줄이 바뀐다
+    ],
+)
+def test_parse_open_hours_check_in_label_before_but_not_naming_the_time_keeps_window(hours_raw) -> None:
+    """라벨이 시각 **앞**에 있어도 10자 안·같은 줄이 아니면 그 시각의 이름이 아니다 — 만든 예(공유본엔 이 꼴 0건)."""
+    assert parse_open_hours(hours_raw, "연중무휴") == tuple(OpenHour(d, 540, 1080) for d in range(7))
+
+
 def test_parse_open_hours_always_open_park_ignores_campsite_section() -> None:
     """`상시 개방` 갈래는 시각을 읽지 않는다 — 공원 안 야영장 구역의 입실 시각이 공원 창을 지우지 않는다(평사리공원)."""
     hours = parse_open_hours("[공원]- 상시 개방[야영장]- 입실 14:00- 퇴실 11:00", "연중무휴")

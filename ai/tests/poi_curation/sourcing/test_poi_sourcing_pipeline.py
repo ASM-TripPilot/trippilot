@@ -209,6 +209,48 @@ def test_collect_unmapped_category_dropped_before_gate() -> None:
     assert result.stats.passed == 0 and result.stats.gate_drops == {}
 
 
+def test_매핑_불가_레코드는_상세를_부르지_않는다() -> None:
+    """어차피 드롭할 레코드에 상세 1콜을 쓰지 않는다 — 매핑 불가는 기제안 색인에도 안 올라 순회마다 불렸다."""
+    http = FakeTourApiHttp(
+        pages={("28", 1): envelope([
+            list_item("900", "가반나야영장", contenttypeid="28",
+                      cat1="A03", cat2="A0302", cat3="A03021700"),   # 야영장 — 매핑 불가
+            list_item("901", "용인엑스파크공원", contenttypeid="28",
+                      cat1="A03", cat2="A0302", cat3="A03021200"),
+        ], 2)},
+        intros={cid: envelope([intro_item(cid, "28", "09:00~18:00", "연중무휴")], 1)
+                for cid in ("900", "901")},
+    )
+    result = collect(_adapter(http), area_code="39", content_types=["28"], max_calls=500)
+    detail_ids = [p["contentId"] for url, p in http.calls if url.endswith("/detailIntro2")]
+    assert detail_ids == ["901"]
+    assert result.stats.category_unmapped == 1 and result.stats.passed == 1
+    assert result.stats.http_calls == 2                  # 목록 1 + 상세 1
+
+
+def test_옛_분류가_빈_레포츠_항목의_새_분류를_센다() -> None:
+    """야영장 드롭(cat3 A03021700)은 옛 코드라 새로·고쳐 온 항목(옛 cat 이 빈다)에 안 걸린다 — 그 항목이
+    실제로 싣는 새 분류를 수집 통계로 센다(외부 호출 0). 코드값은 계수 확인용이다 — 야영장이 싣는 값은 이 계측이 찾는다."""
+    http = FakeTourApiHttp(pages={
+        ("28", 1): envelope([
+            list_item("910", "솔밭캠프장", contenttypeid="28", cat1="", cat2="", cat3="",
+                      lcls1="AC", lcls2="AC01"),
+            list_item("911", "파인힐캠프", contenttypeid="28", cat1="", cat2="", cat3="",
+                      lcls1="AC", lcls2="AC01"),
+            list_item("912", "용인엑스파크공원", contenttypeid="28", cat1="", cat2="", cat3="",
+                      lcls1="LS", lcls2="LS01", lcls3="LS010100"),   # 소분류는 묶는다 — 중분류까지
+            list_item("913", "노랑카라반&고카트", contenttypeid="28",   # 옛 코드가 있다 — 안 센다
+                      cat1="A03", cat2="A0302", cat3="A03021200", lcls1="LS", lcls2="LS01"),
+        ], 4),
+        ("12", 1): envelope([   # 레포츠 밖 — 안 센다
+            list_item("914", "성산일출봉", cat1="", cat2="", cat3="", lcls1="NA", lcls2="NA01"),
+        ], 1),
+    })
+    result = collect(_adapter(http), area_code="39", content_types=["28", "12"], max_calls=500)
+    assert result.stats.leports_lcls == {"AC/AC01": 2, "LS/LS01": 1}
+    assert result.stats.to_dict()["leports_lcls"] == {"AC/AC01": 2, "LS/LS01": 1}
+
+
 def test_collect_address_missing_dropped_before_gate() -> None:
     """TRIP-535 — addr1 빈 레코드는 제안하지 않는다 (provenance.address가 백엔드
     행정구역 해석의 유일 입력 — 실측: 익선동 한옥거리 1건이 backend-ci 적색)."""

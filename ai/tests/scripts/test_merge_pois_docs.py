@@ -504,7 +504,8 @@ def test_큐레이션_목록은_항목마다_근거가_있다() -> None:
 
 
 # ── 레포츠 캠핑장 소급 제거 (2026-10-30) ───────────────────────────────────
-# 수집은 cat3 야영장을 드롭하지만 공유본 행엔 벤더 분류 코드가 없다 — 이름으로 소급한다. 이름은 전부 공유본 실물.
+# 수집의 cat3 야영장 드롭은 옛 코드 전용이라 지금 수집엔 거의 안 걸리고, 공유본 행엔 벤더 분류 코드가 없다 — 이 이름
+# 규칙이 실제 방어선이다. 이름은 전부 공유본 실물.
 def _camp(name: str, *, source: str = "TOURAPI", kind: str | None = "28", category: str = "ACTIVITY") -> dict:
     p = _keyed_doc(source, name)["proposals"][0]
     p["poi"]["name"], p["poi"]["category"] = name, category
@@ -515,7 +516,7 @@ def _camp(name: str, *, source: str = "TOURAPI", kind: str | None = "28", catego
 
 @pytest.mark.parametrize("name", [
     "가반나야영장", "월악산국립공원 용하야영장", "수주팔봉 야영지", "포천글램핑앤카라반", "숲내음펜션", "노르딕민박",
-    "캠핑포유 펜션&캠핑", "메타피아 오래 캠핑장＆카라반",   # 묶인 상호 — 양쪽 다 숙영지
+    "캠핑포유 펜션&캠핑", "메타피아 오래 캠핑장＆카라반",   # 묶인 상호 — 양쪽 다 숙영지(전각 ＆ 도 구분자다)
     "A&J오토캠핑장",                                    # 한 글자 조각은 상호의 일부
 ])
 def test_레포츠로_들어온_숙영지는_빠진다(name: str) -> None:
@@ -535,7 +536,11 @@ def test_레포츠로_들어온_숙영지는_빠진다(name: str) -> None:
     ("영인산자연휴양림 스카이어드벤처 (영인산 짚라인)", "TOURAPI", "28", "ACTIVITY"),
     ("바라산자연휴양림", "TOURAPI", "28", "ACTIVITY"),
     ("노랑카라반&고카트", "TOURAPI", "28", "ACTIVITY"),
+    ("노랑카라반＆고카트", "TOURAPI", "28", "ACTIVITY"),   # 전각 ＆ — 만든 예(공유본 전각 묶음 2곳은 양쪽 다 숙영지)
     ("용인엑스파크공원", "TOURAPI", "28", "ACTIVITY"),
+    # 타입·카테고리 중 하나만 어긋나도 남는다 — 공유본엔 없는 조합이라 이름만 빌렸다(만든 예)
+    ("국립김천숲속야영장", "TOURAPI", "12", "ACTIVITY"),
+    ("가반나야영장", "TOURAPI", "28", "FOOD"),
 ])
 def test_숙영지가_아니거나_레포츠_TourAPI_가_아니면_남는다(name, source, kind, category) -> None:
     props = [_camp(name, source=source, kind=kind, category=category)]

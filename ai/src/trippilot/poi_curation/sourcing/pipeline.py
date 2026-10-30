@@ -18,6 +18,7 @@ POI 정본은 backend C7 단일 소유(PR #76) — 정본 등록 후에만 close
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -114,6 +115,10 @@ class CollectStats:
     # 원문 칸을 다시 파싱한 값 ≠ 수집 판정 — 200자 절단·중복 병합(영업시간과 원문의 출처가
     # 갈림). 런타임은 원문 칸만 읽으므로 이 건들은 수집과 다른 영업시간으로 쓰인다
     raw_reparse_mismatch: int = 0
+    # 옛 분류(cat)가 빈 레포츠(28) 항목의 새 분류 `lclsSystm1/lclsSystm2` → 건수. 야영장 드롭
+    # (`mapping._CAMPING_CAT3`)은 옛 코드라 새로·고쳐 온 항목에 안 걸린다 — 그 항목들이 실제로 싣는
+    # 새 분류를 찾아 같은 자리에서 드롭하려고 센다(외부 호출 0)
+    leports_lcls: dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -132,6 +137,7 @@ class CollectStats:
             "completed_kinds": list(self.completed_kinds),
             "rest_unparsed": self.rest_unparsed,
             "raw_reparse_mismatch": self.raw_reparse_mismatch,
+            "leports_lcls": dict(self.leports_lcls),
         }
 
 
@@ -260,6 +266,8 @@ def collect(
                     skipped_unchanged += 1
                     continue  # 기제안·변경 없음 — 상세 호출도 안 나감 (쿼터 절약의 본체)
                 listed.append(record)
+                if map_category(record.kind, record.category_codes) is None:
+                    continue  # 아래 매핑에서 드롭된다 — 상세를 안 부른다(색인에 안 올라 순회마다 불렸다)
                 if not kind_budget.take():
                     continue  # 남은 항목은 영업시간 없이 산출 ("정보 없음 ≠ 배제")
                 try:
@@ -283,7 +291,11 @@ def collect(
     candidates: list[SourcingCandidate] = []
     unmapped = 0
     address_missing = 0
+    leports_lcls: dict[str, int] = {}
     for record in listed:
+        if record.kind == "28" and not any(re.fullmatch(r"A\d+", c) for c in record.category_codes):
+            key = "/".join(record.category_codes[:2]) or "없음"   # 옛 cat 이 비면 lclsSystm1~3 만 남는다
+            leports_lcls[key] = leports_lcls.get(key, 0) + 1
         category = map_category(record.kind, record.category_codes)
         if category is None:
             unmapped += 1
@@ -365,6 +377,7 @@ def collect(
         completed_kinds=completed_kinds,
         rest_unparsed=rest_unparsed,
         raw_reparse_mismatch=raw_reparse_mismatch,
+        leports_lcls=leports_lcls,
     )
     logger.info("수집 완료: %s", stats.to_dict())
     return CollectResult(
@@ -615,6 +628,7 @@ def to_multi_output_document(
         "rest_unparsed": 0, "raw_reparse_mismatch": 0,
     }
     gate_drops: dict[str, int] = {}
+    leports_lcls: dict[str, int] = {}
     budget_exhausted = False
     proposals: list[dict] = []
     cpyrht: dict[str, str] = {}
@@ -637,6 +651,8 @@ def to_multi_output_document(
         totals["raw_reparse_mismatch"] += s.raw_reparse_mismatch
         for reason, count in s.gate_drops.items():
             gate_drops[reason] = gate_drops.get(reason, 0) + count
+        for code, count in s.leports_lcls.items():
+            leports_lcls[code] = leports_lcls.get(code, 0) + count
         budget_exhausted = budget_exhausted or s.budget_exhausted
         area_doc = to_output_document(
             r, area_code=area, content_types=content_types,
@@ -653,6 +669,7 @@ def to_multi_output_document(
         "stats": {
             **totals,
             "gate_drops": gate_drops,
+            "leports_lcls": leports_lcls,
             "budget_exhausted": budget_exhausted,
             "per_area": per_area,
         },

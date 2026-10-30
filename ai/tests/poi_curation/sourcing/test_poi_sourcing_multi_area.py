@@ -259,6 +259,21 @@ def test_multi_output_document_sums_raw_column_counters() -> None:
     assert doc["stats"]["raw_reparse_mismatch"] == 0
 
 
+def test_multi_output_document_sums_leports_lcls() -> None:
+    """옛 분류가 빈 레포츠 항목의 새 분류 계수도 지역 합산된다 — 잡 서머리는 합산 stats 만 찍는다."""
+    def camp(cid: str) -> dict:
+        return list_item(cid, "캠프", contenttypeid="28", cat1="", cat2="", cat3="", lcls1="AC", lcls2="AC01")
+    http = FakeTourApiHttp(pages={
+        ("1", "28", 1): envelope([camp("720")], 1),
+        ("39", "28", 1): envelope([camp("721")], 1),
+    })
+    result = collect_areas(_adapter(http), area_codes=["1", "39"],
+                           content_types=["28"], max_calls=10)
+    doc = to_multi_output_document(result, area_codes=["1", "39"],
+                                   content_types=["28"], collected_at=_NOW)
+    assert doc["stats"]["leports_lcls"] == {"AC/AC01": 2}
+
+
 def test_seen_refs_는_지역_합집합이다() -> None:
     """지역별 seen_refs 를 합친다 — 스킵한 것 포함 (TRIP-1248). 산출 문서엔 통과분만 실린다."""
     http = FakeTourApiHttp(pages={
