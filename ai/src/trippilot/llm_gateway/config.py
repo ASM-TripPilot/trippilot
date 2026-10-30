@@ -367,6 +367,16 @@ class C1Config:
     feature_effort: Mapping[LlmFeature, str] = field(default_factory=default_feature_effort)
     # 벤더 웹 검색 도구를 켜는 기능 — 게이트의 닫힌 집합이 후보 풀 대신 응답의 인용 URL 이 된다(`GatewayFacade.call`).
     web_search_features: frozenset[LlmFeature] = frozenset({LlmFeature.PLACE_FACT_LOOKUP})
+    # **벤더 폴백** 재시도 기능(2026-10-30) — `retry_models`의 재시도 트리거를 이 기능들만
+    # timeout 뿐 아니라 unsupported·벤더 예외(llm_error)까지로 넓힌다. 09-12 "재시도는
+    # timeout 전용" 팀 결정(gateway.py·.env.example AI_LLM_RETRY_MODELS 주석)은 그대로 두고
+    # — 벤더 오류는 사유가 갈려 덮으면 안 보인다는 그 결정은 다른 기능 전부에 여전히 적용된다 —
+    # 여기 명시된 기능만 예외다. PLACE_FACT_LOOKUP 이 기본인 이유: 1차(GPT responses)가 구독 키
+    # 401 같은 **벤더 자체 장애**로 죽어도(2026-10-29 Azure 사고가 그 모양이었다) 2차(Claude, 웹
+    # 검색 서버 도구 보유)로 넘어가야 "미확인" 그대로보다 사용자에게 낫다 — timeout만 보면 그 401을
+    # 영영 못 잡는다. 응답은 받았는데 게이트가 드롭한 경우(outcome.error)는 이 집합과 무관 —
+    # 그 쪽은 `GatewayFacade.call`의 다른 분기(§5·6)라 재시도가 아니라 바로 기능별 폴백이다.
+    vendor_failover_features: frozenset[LlmFeature] = frozenset({LlmFeature.PLACE_FACT_LOOKUP})
     # PREFERENCE_SCORING 병렬 청킹 (TRIP-378) — 청크 크기는 고정 상수가 아니라
     # 단계 예산에서 유도한다 (TRIP-380 적응형 공식, workers/preference.py
     # adaptive_chunk_size). 종전 score_chunk_size=20 상수는 공식이 대체 — 예산

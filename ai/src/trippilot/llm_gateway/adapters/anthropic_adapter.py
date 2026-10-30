@@ -26,7 +26,7 @@ import time
 
 import anthropic
 
-from trippilot.ports.llm_port import LlmRequest, LlmResponse, LlmTimeoutError, LlmUnsupportedError
+from trippilot.ports.llm_port import LlmRequest, LlmResponse, LlmTimeoutError
 
 
 # 기능별 effort 표(`default_feature_effort`)에는 GPT(responses `reasoning.effort`)만 받는 값이 섞여 있다 —
@@ -34,6 +34,36 @@ from trippilot.ports.llm_port import LlmRequest, LlmResponse, LlmTimeoutError, L
 # 나머지는 400 이다(2026-10-29 운영 실측: Opus 5.5 로 돌리자 PREFERENCE_SCORING 20/20 이 400 → 규칙 폴백).
 # Claude 5.5 는 사고를 끌 수 없어 low 가 가장 가까운 값이다.
 _EFFORT_FLOOR = {"none": "low", "minimal": "low"}
+
+# 서버 쪽 웹 검색 도구(anthropic SDK 0.120.2 — `anthropic.types.web_search_tool_20250305_param`).
+# OpenAI responses 표면과 같은 자리(2026-10-30, PLACE_FACT_LOOKUP 벤더 폴백용 — .env.example 의
+# "되살리려면 어댑터에 web_search 서버 도구를 붙이거나" 메모).
+_WEB_SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search"}
+
+
+def _citations(resp) -> tuple[str, ...]:
+    """검색이 실제로 본·단 URL — 본문 인용(TextBlock.citations) 먼저, 그다음 검색 도구 결과
+    블록(web_search_tool_result)의 목록. 순서 유지·중복 제거 — openai_adapter._citations 와 동형
+    (게이트가 받는 `LlmResponse.citations` 는 벤더 무관 평평한 URL 튜플이어야 한다)."""
+    cited: list[str] = []
+    seen: list[str] = []
+    for block in getattr(resp, "content", None) or ():
+        block_type = getattr(block, "type", None)
+        if block_type == "text":
+            for citation in getattr(block, "citations", None) or ():
+                url = getattr(citation, "url", None)
+                if url:
+                    cited.append(url)
+        elif block_type == "web_search_tool_result":
+            for result in getattr(block, "content", None) or ():
+                url = getattr(result, "url", None)
+                if url:
+                    seen.append(url)
+    urls: list[str] = []
+    for url in (*cited, *seen):
+        if url not in urls:
+            urls.append(url)
+    return tuple(urls)
 
 
 def _content(request: LlmRequest):
@@ -68,11 +98,11 @@ class AnthropicAdapter:
         self._client = client
 
     def invoke(self, request: LlmRequest) -> LlmResponse:
-        if request.web_search:  # Claude 서버 도구는 아직 안 붙였다 — 조용히 끄면 기억으로 지어낸 값이 "찾은 값"이 된다
-            raise LlmUnsupportedError("AnthropicAdapter 는 웹 검색 도구를 아직 싣지 않는다")
         # effort 는 지정됐을 때만 — haiku-4-5 처럼 파라미터째 거부하는 모델이 있다.
         effort = _EFFORT_FLOOR.get(request.effort, request.effort) if request.effort else None
         extra = {"output_config": {"effort": effort}} if effort else {}
+        if request.web_search:  # 벤더 쪽 검색 도구 — 2026-10-30, OpenAI responses 표면과 같은 자리
+            extra["tools"] = [_WEB_SEARCH_TOOL]
         started = time.monotonic()
         try:
             resp = self._client.messages.create(
@@ -98,4 +128,5 @@ class AnthropicAdapter:
             latency_ms=latency_ms,
             model_id=resp.model,
             truncated=getattr(resp, "stop_reason", None) == "max_tokens",
+            citations=_citations(resp) if request.web_search else (),
         )
