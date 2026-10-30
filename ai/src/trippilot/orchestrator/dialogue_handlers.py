@@ -929,7 +929,9 @@ def _known_end(ctx: TurnContext, said: str) -> _End | None:
     slot = resolve_slot(ctx.snapshot, day=None, target=said, now=ctx.now, tz=ctx.tz)
     if slot is not None and slot.poi_id:
         return _End(slot.name or _UNNAMED, slot.poi_id)
-    hit = region_center(normalize(said))
+    # 표 이름 뒤에 다른 낱말이 붙은 것(세종문화회관·인천공항·서울대)은 지역이 아니다 — 등록 장소 찾기로 넘긴다
+    named = " ".join(name for _, name in region_mentions(normalize(said)))
+    hit = region_center(named) if named else None
     return _End(hit[0], None, hit[1]) if hit else None
 
 
@@ -1772,8 +1774,8 @@ def _ahead_of(today: date, month: int, day: int = 1) -> date | None:
     for year in (today.year, today.year + 1):
         try:
             d = date(year, month, day)
-        except ValueError:
-            return None
+        except ValueError:  # 윤일 — 올해에 없으면 내년을 본다
+            continue
         if d >= today or (day == 1 and _month_end(d) >= today):
             return d
     return None

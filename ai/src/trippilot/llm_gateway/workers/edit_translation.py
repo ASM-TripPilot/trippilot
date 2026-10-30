@@ -100,7 +100,7 @@ def build_edit_translation_vars(
         for p in sorted(kept, key=lambda p: str(p.poi_id))
     ]
     return {
-        "utterance": inp.utterance.strip() or "(발화 없음)",
+        "utterance": inline(inp.utterance).strip() or "(발화 없음)",
         "target_date": inp.target_date or "미지정",
         # 편집 op closed-set을 서버가 주입 (정본 §2.4) — enum 순서라 결정론
         "edit_ops": "\n".join(f"- {op.value}: {_OP_GUIDE[op]}" for op in TRANSLATABLE_OPS),

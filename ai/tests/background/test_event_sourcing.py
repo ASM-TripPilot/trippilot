@@ -120,6 +120,30 @@ def test_store_roundtrip_and_period_query(tmp_path) -> None:
     assert reloaded.coverage("부산") is not None and reloaded.coverage("서울") is None
 
 
+def test_failed_save_leaves_the_previous_store_intact(tmp_path, monkeypatch) -> None:
+    """임시 파일에 쓰다 죽어도 누적본은 그대로 — 제자리 덮어쓰기는 반쯤 쓴 JSON 을 남겼다(2026-10-30 Codex 리뷰)."""
+    from pathlib import Path
+
+    path = tmp_path / "events.json"
+    store = JsonEventStore(path)
+    store.upsert("부산", (_event("불꽃축제", _TODAY, _TODAY + timedelta(days=2)),), _NOW)
+    store.save()
+    before = path.read_text(encoding="utf-8")
+
+    real = Path.write_text
+
+    def boom(self, data, *args, **kwargs):  # 반쯤 쓰고 죽는다
+        real(self, data[: len(data) // 2], *args, **kwargs)
+        raise OSError("disk full")
+
+    store.pointer = 7
+    monkeypatch.setattr(Path, "write_text", boom)
+    with pytest.raises(OSError):
+        store.save()
+    monkeypatch.undo()
+    assert path.read_text(encoding="utf-8") == before and JsonEventStore(path).pointer != 7
+
+
 def test_store_dedup_by_normalized_name_and_period(tmp_path) -> None:
     store = JsonEventStore(tmp_path / "events.json")
     store.upsert("부산", (_event("부산 불꽃축제", _TODAY, _TODAY),), _NOW)

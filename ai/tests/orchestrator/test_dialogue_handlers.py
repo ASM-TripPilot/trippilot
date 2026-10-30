@@ -795,9 +795,24 @@ def test_distance_to_a_registered_place_outside_the_itinerary_finds_it_by_exact_
     assert transit.calls[0]["destination"] == _COORD["천지연폭포"] and facts.detail["destination"] == "천지연폭포"
 
 
+@pytest.mark.parametrize("name", ["세종문화회관", "인천공항", "서울대공원"])
+def test_a_place_name_containing_a_region_name_is_looked_up_not_taken_as_that_region(name: str) -> None:
+    """표 이름 뒤에 다른 낱말이 붙으면 지역이 아니다 — "세종문화회관"이 세종시 중심(124km 밖)이 되던 것(2026-10-30 Codex 리뷰)."""
+    found = [PlaceRow(_U["천지연폭포"], name, "문화", "서울특별시", "종로구", False, False)]
+    facts, transit, finder = _free_distance({"origin": "우도", "destination": name}, found)
+    assert finder.calls == [("find", name, "제주")] and facts.detail["destination"] == name
+    assert transit.calls[0]["destination"] == _COORD["천지연폭포"]
+
+
 def test_distance_with_an_unknown_end_stays_empty_and_never_calls_transit() -> None:
     facts, transit, _ = _free_distance({"origin": "우도", "destination": "롯데월드"}, [])
     assert transit.calls == [] and facts.status is FactStatus.EMPTY
+
+
+def test_leap_day_looks_at_next_year_when_this_year_has_none() -> None:
+    """2월 29일 — 올해에 없으면 내년을 본다(첫 ValueError 에서 그만두면 기본 30일 창이 됐다). 없는 날은 그대로 None."""
+    assert dh._ahead_of(date(2027, 12, 1), 2, 29) == date(2028, 2, 29)
+    assert dh._ahead_of(date(2026, 10, 30), 2, 29) is None and dh._ahead_of(date(2026, 10, 30), 2, 30) is None
 
 
 def test_distance_origin_matching_the_previous_slot_is_accepted() -> None:

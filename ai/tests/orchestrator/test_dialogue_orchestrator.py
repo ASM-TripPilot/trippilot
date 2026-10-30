@@ -1364,6 +1364,15 @@ def test_old_unlabeled_lines_are_shown_as_before_until_resummarized() -> None:
     assert _recalled_lines(current, (old,), (), ()) == ("사용자는 카페를 선호한다", "지난 여행 기억:", "지난 여행은 부산이었다")
 
 
+def test_memory_without_recall_also_drops_old_turn_fragments() -> None:
+    """꺼내기가 없거나 실패한 폴백도 옛 압축의 원문 조각을 싣지 않는다 — 꺼내기 경로와 같은 규칙(2026-10-30 Codex 리뷰)."""
+    from trippilot.orchestrator.dialogue_orchestrator import _memory_lines
+
+    current = DialogueMemory("s-1", _ACCOUNT, "trip-1", ("사용자는 카페를 선호한다", "- 사용자: 안녕"), 10, _NOW, expires_at_for(_NOW))
+    old = DialogueMemory("s-0", _ACCOUNT, "trip-0", ("- 도우미: 부산 어때요", "지난 여행은 부산이었다"), 20, _NOW, expires_at_for(_NOW))
+    assert _memory_lines(current, (old,)) == ("사용자는 카페를 선호한다", "지난 여행 기억:", "지난 여행은 부산이었다")
+
+
 def test_a_failed_recommendation_choice_is_reported_as_a_turn_failure() -> None:
     """RecommendationAgent 고르기가 예외로 끝나면 핸들러가 턴 실패로 올리고 오케스트레이터가 범위 밖 + 이벤트로 보고한다 — 고르기가 핸들러에
     있던 때와 같은 갈래(2026-10-23 리뷰: 에이전트가 삼키면 "맞는 지역 없음" 답이 보고 없이 나갔다)."""
