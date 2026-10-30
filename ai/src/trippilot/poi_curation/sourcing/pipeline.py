@@ -145,6 +145,8 @@ class CollectResult:
     # 산출 문서는 통과분만, 색인은 통과분만 누적해서 "벤더 목록에서 사라진 것"을 가려낼
     # 기록이 어디에도 없었다. stats 에는 넣지 않는다(1.8만 개 id 는 통계가 아니다).
     seen_refs: frozenset[str] = frozenset()
+    # 목록에서 본 행의 공공누리 유형 — 스킵한 행도 포함. 산출 문서 최상위에 실려 병합이 공유본 행에 붙인다.
+    cpyrht_by_ref: Mapping[str, str] = field(default_factory=dict)
 
 
 class _CallBudget:
@@ -206,6 +208,7 @@ def collect(
     detail_failures = 0
     skipped_unchanged = 0
     seen_refs: set[str] = set()
+    cpyrht_by_ref: dict[str, str] = {}
     resumed_from: dict[str, int] = {}
     cursors: dict[tuple[str, str], KindCursor] = dict(prior.cursors)
 
@@ -250,6 +253,8 @@ def collect(
                 if not record.source_ref:
                     continue  # 식별자 없는 레코드는 상세 조회·병합 불가 — 목록에서 제외
                 seen_refs.add(record.source_ref)   # 스킵 판정 전 — 본 것은 전부
+                if record.cpyrht:
+                    cpyrht_by_ref[record.source_ref] = record.cpyrht
                 known = prior.proposed.get(record.source_ref)
                 if known is not None and known == record.modified_at:
                     skipped_unchanged += 1
@@ -370,6 +375,7 @@ def collect(
         next_state=CollectState(cursors=cursors, proposed=proposed,
                                 next_area=prior.next_area),
         seen_refs=frozenset(seen_refs),
+        cpyrht_by_ref=cpyrht_by_ref,
     )
 
 
@@ -403,6 +409,8 @@ def to_output_document(
         "area_code": area_code,
         "content_types": list(content_types),
         "stats": result.stats.to_dict(),
+        # 공공누리 유형 — 제안 행만이 아니라 목록에서 본 행 전부(병합이 공유본 기존 행에도 붙인다)
+        **({"cpyrht_by_ref": dict(result.cpyrht_by_ref)} if result.cpyrht_by_ref else {}),
         "proposals": [
             {
                 "provisional_id": str(p.poi.poi_id),  # 정본 ID는 백엔드가 부여
@@ -609,6 +617,7 @@ def to_multi_output_document(
     gate_drops: dict[str, int] = {}
     budget_exhausted = False
     proposals: list[dict] = []
+    cpyrht: dict[str, str] = {}
     for area, r in result.area_results:
         s = r.stats
         per_area[area] = {
@@ -634,6 +643,7 @@ def to_multi_output_document(
             collected_at=collected_at,
         )
         proposals.extend(area_doc["proposals"])
+        cpyrht.update(r.cpyrht_by_ref)
     return {
         "schema_version": SCHEMA_VERSION,
         "source": SOURCE_NAME,
@@ -646,5 +656,6 @@ def to_multi_output_document(
             "budget_exhausted": budget_exhausted,
             "per_area": per_area,
         },
+        **({"cpyrht_by_ref": cpyrht} if cpyrht else {}),
         "proposals": proposals,
     }

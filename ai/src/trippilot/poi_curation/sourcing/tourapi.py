@@ -379,6 +379,7 @@ class TourApiAdapter:
             ),
             image_url=cls._https(cls._opt_str(item.get("firstimage"))),
             modified_at=cls._opt_str(item.get("modifiedtime")),
+            cpyrht=cls._opt_str(item.get("cpyrhtDivCd")),
         )
 
     @staticmethod

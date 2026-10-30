@@ -119,6 +119,15 @@ def merge(docs: list[dict], *, allow_mixed: bool = False) -> dict:
             if t not in types:
                 types.append(t)
     proposals = {ref: vs[-1] for ref, vs in by_ref.items()}
+    # 공공누리 유형(cpyrhtDivCd, `Type1`·`Type3`…) — 수집 실행은 목록에서 **본** 행 전부의 값을 따로 싣는다
+    # (변경 없음으로 상세를 건너뛴 행 포함). 그래서 이미 있는 행도 지역 순회가 한 바퀴 돌면 채워진다
+    # (KB-5 장소 지식 요청, 2026-10-30 — 변경금지 Type3 를 따로 다룰지 판단할 근거).
+    cpyrht = 0
+    for d in docs:
+        for cid, v in (d.get("cpyrht_by_ref") or {}).items():
+            if (p := proposals.get(("TOURAPI", cid))) is not None:
+                p["provenance"]["cpyrht_div_cd"] = v
+                cpyrht += 1
     return {
         "schema_version": docs[-1]["schema_version"],
         # 섞였으면 **항목별 source 가 정본**이다 — 최상위 하나만 읽으면 틀린다는 것을
@@ -128,7 +137,8 @@ def merge(docs: list[dict], *, allow_mixed: bool = False) -> dict:
         "collected_at": docs[-1]["collected_at"],
         "area_codes": sorted(areas, key=int),
         "content_types": sorted(types, key=int),
-        "stats": {"merged_runs": len(docs), "unique_proposals": len(proposals)},
+        # cpyrht_applied: 이번 병합이 공공누리 유형을 붙인 행 수 — 0 이 이어지면 목록 응답에 그 칸이 없는 것이다
+        "stats": {"merged_runs": len(docs), "unique_proposals": len(proposals), "cpyrht_applied": cpyrht},
         "merged_from": [
             {
                 "collected_at": d["collected_at"],
