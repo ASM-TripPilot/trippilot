@@ -25,8 +25,8 @@ class _Worker:
     def __init__(self, result: TypedResult) -> None:
         self.result, self.calls = result, []
 
-    def lookup(self, place, fields, on, trace_id, now, *, timeout_sec):
-        self.calls.append((place, fields, on))
+    def lookup(self, place, fields, on, trace_id, now, *, timeout_sec, retry_timeout_sec=None):
+        self.calls.append((place, fields, on, timeout_sec, retry_timeout_sec))
         return self.result
 
 
@@ -64,7 +64,8 @@ def test_run_says_pending_at_once_and_the_next_ask_sees_the_found_value() -> Non
     assert worker.calls == []  # 이번 턴은 찾기를 기다리지 않는다
     later.run()
     assert agent.run(_task(now=_NOW + timedelta(minutes=1))) == UnknownOutcome(facts=_FACTS)
-    assert worker.calls == [("경복궁 서울 종로구", ("hours", "last_entry"), _ON)]  # 저장된 값을 돌려줬다 — 다시 찾지 않는다
+    # 저장된 값을 돌려줬다 — 다시 찾지 않는다. retry_timeout_sec 도 같은 예산(LOOKUP_TIMEOUT_S)으로 넘어갔다(2026-10-30 벤더 폴백).
+    assert worker.calls == [("경복궁 서울 종로구", ("hours", "last_entry"), _ON, uh.LOOKUP_TIMEOUT_S, uh.LOOKUP_TIMEOUT_S)]
     assert agent.run(_task(now=_NOW + uh.FOUND_TTL - timedelta(seconds=1))) == UnknownOutcome(facts=_FACTS)  # 일주일 안에는 그대로
     assert agent.run(_task(now=_NOW + uh.FOUND_TTL)) == UnknownOutcome(pending=True)  # 일주일이 되면 다시 찾는다
     assert len(later.jobs) == 1  # 새로 냈다
