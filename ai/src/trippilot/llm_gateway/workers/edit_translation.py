@@ -21,7 +21,7 @@ from datetime import datetime
 # 줄바꿈이 남으면 우리 프롬프트 골격을 위조한다 (inline() docstring 에 실측).
 from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.gates.edit_translation import EditTranslationContext
-from trippilot.llm_gateway.gates.reminder_copy import _display_form, _without_names
+from trippilot.llm_gateway.gates.reminder_copy import _display_form
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.edit import TRANSLATABLE_OPS, EditOp
@@ -88,11 +88,21 @@ def _named_beyond_cap(over: list[Poi], utterance: str, slot_names: list[str]) ->
     이름은 낱말 처음에서 시작해야 하고, 이름에 없는 띄어쓰기를 건너 맞추지 않는다 — 발화를 통째로 정규화하던 동안
     이웃 낱말이 붙어 "내일 카페"가 '내일카페'와, "먹고 카페"가 '고카페'와 맞았다. 그래서 "효창 공원"도 '효창공원'과
     안 맞는다: 꼴이 "내일 카페"와 같아 하나만 살릴 수 없고, 놓치면 상한 렌더 그대로지만 오탐은 번역을 그 후보로 끈다.
-    맞추기 전에 지금 슬롯 이름을 발화에서 지운다(긴 것부터 — 알림 게이트와 같은 `_without_names`): 슬롯을 가리킨 말
-    ("경의선숲길공원 빼줘")에 그 이름의 일부('경의선숲길')나 출처만 다른 쌍둥이(같은 이름 — 공유본에 200m 안 짝이
-    1,230쌍)가 실리면 번역이 후보 쪽 id 를 집을 수 있다(그러면 게이트가 명령을 버린다)."""
-    said = _without_names(_spoken(utterance), {f for name in slot_names for f in _forms(name)})
-    return [p for p in over if any(f in said for f in _forms(p.name))][:_NAMED_EXTRA]
+    맞추기 전에 지금 슬롯 이름을 발화에서 지운다(긴 것부터): 슬롯을 가리킨 말("경의선숲길공원 빼줘")에 그 이름의
+    일부('경의선숲길')가 실리면 번역이 후보 쪽 id 를 집을 수 있다(그러면 게이트가 명령을 버린다). 지운 자리는 공백이 아닌
+    표지로 메운다 — 공백이면 "경복궁돌담길"이 '돌담길' 낱말 처음을 새로 만든다. 출처만 다른 쌍둥이(공백만 다른 꼴 포함 —
+    '여의도한강공원'·'여의도 한강공원', 공유본 200m 안 251쌍)는 표시형 정규화가 같으면 뺀다. 단 슬롯 이름으로 시작하는 더
+    긴 이름("경동시장 평양냉면")은 원래 발화에 들어 있으면 싣는다 — 지우기만 하면 뒤쪽 '평양냉면'(다른 가게)만 남는다."""
+    spoken = _spoken(utterance)
+    slot_forms = {f for name in slot_names for f in _forms(name)}
+    said = spoken
+    for f in sorted(slot_forms, key=len, reverse=True):
+        said = said.replace(f, " \0")
+    taken = {_norm(_display_form(name)) for name in slot_names}
+    return [p for p in over
+            if _norm(_display_form(p.name)) not in taken
+            and any(f in said or (f in spoken and any(f.startswith(s) for s in slot_forms)) for f in _forms(p.name))
+            ][:_NAMED_EXTRA]
 
 
 @dataclass(frozen=True, slots=True)

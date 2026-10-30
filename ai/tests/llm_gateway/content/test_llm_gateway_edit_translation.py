@@ -568,6 +568,38 @@ def test_candidate_inside_a_current_slot_name_stays_out() -> None:
     assert lines("경의선숲길공원 다음에 경의선숲길 넣어줘") == [*_CAPPED, "- N-044 | NATURE | 경의선숲길"]
 
 
+def _named_lines(names: list[str], utterance: str, slot_name: str) -> list[str]:
+    slot = _poi("S-1", slot_name)  # 풀 밖 현재 슬롯 — 이름은 호출측 정보에서 온다
+    return build_edit_translation_vars(
+        _ranked_pool(names),
+        EditTranslationInput(utterance=utterance, target_date="2026-10-22",
+                             current_slots=(PoiId("S-1"),), slot_pois={PoiId("S-1"): slot}),
+    )["candidates"].splitlines()
+
+
+def test_spacing_twin_of_a_current_slot_stays_out() -> None:
+    """공백만 다른 쌍둥이('여의도한강공원' 슬롯 · '여의도 한강공원' 후보)도 슬롯을 가리킨 말에 실리지 않는다 — 슬롯 이름 지우기만으로는
+    공백 꼴이 남아 실렸다(검증자 재현, 공유본 200m 안 251쌍)."""
+    names = list(_PARKS)
+    names[44] = "여의도 한강공원"
+    assert _named_lines(names, "여의도 한강공원 빼줘", "여의도한강공원") == _CAPPED
+
+
+def test_longer_name_starting_with_a_slot_name_is_kept() -> None:
+    """슬롯 이름으로 시작하는 더 긴 이름("경동시장 평양냉면")은 싣는다 — 슬롯 이름을 지우기만 하면 뒤쪽 '평양냉면'(다른 가게)만 남았다."""
+    names = list(_PARKS)
+    names[44], names[46] = "경동시장 평양냉면", "평양냉면"
+    lines = _named_lines(names, "경동시장 평양냉면 넣어줘", "경동시장")
+    assert "- N-044 | NATURE | 경동시장 평양냉면" in lines
+
+
+def test_erased_slot_name_does_not_open_a_new_word_start() -> None:
+    """지운 슬롯 이름 자리는 공백이 아니다 — "경복궁돌담길 따라"에서 '경복궁'을 공백으로 지우면 '돌담길'이 낱말 처음이 돼 실렸다."""
+    names = list(_PARKS)
+    names[44] = "돌담길"
+    assert _named_lines(names, "경복궁돌담길 따라 걷는 거 넣어줘", "경복궁") == _CAPPED
+
+
 def test_named_extras_are_capped_in_pool_rank_order() -> None:
     """따로 싣는 수에도 상한 — 같은 이름이 여럿이어도 프롬프트가 불지 않는다. 풀 순위 앞부터."""
     from trippilot.llm_gateway.workers.edit_translation import _NAMED_EXTRA
