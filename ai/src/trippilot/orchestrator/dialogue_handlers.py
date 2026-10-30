@@ -2207,20 +2207,40 @@ class Handler:
     ask: Callable[[TurnContext], tuple[str, str] | None] | None = None
 
 
+_ITINERARY_SCREENS = frozenset({"OPEN_ITINERARY", "OPEN_ITINERARY_METHOD"})
+
+
+def _no_itinerary_buttons(facts: Facts) -> Facts:
+    """여행 없이 조회한 답 — 일정 화면 버튼은 갈 곳이 없어 여행 만들기로 바꾼다(겹치면 하나)."""
+    if not any(a.type in _ITINERARY_SCREENS for a in facts.next_actions):
+        return facts
+    swapped = tuple(_action("CREATE_TRIP") if a.type in _ITINERARY_SCREENS else a for a in facts.next_actions)
+    return replace(facts, next_actions=tuple({a.type: a for a in swapped}.values()))
+
+
 def _handler(
     intent: Intent,
     assemble: Callable[[TurnContext, Mapping[str, TaskResult]], Facts],
     plan: Callable[[TurnContext], tuple[HandlerTask, ...]] = _plan_nothing,
     *, handoff_frame: bool = False, ask: Callable[[TurnContext], tuple[str, str] | None] | None = None,
+    free_when: Callable[[TurnContext], bool] | None = None,
 ) -> Handler:
-    """여행 필수 의도는 여행이 없을 때 플랜 없이 needTrip Facts 로 끝낸다 (BLM §3 4단) — 핸들러마다 따로 적지 않는다."""
+    """여행 필수 의도는 여행이 없을 때 플랜 없이 needTrip Facts 로 끝낸다 (BLM §3 4단) — 핸들러마다 따로 적지 않는다.
+    `free_when` 이 참이면 여행 없이도 조회한다 — 이름을 댄 장소·지역·두 곳은 일정 없이 찾는 갈래가 있다(#1466·#1475·일정 밖 구간).
+    가드가 그 갈래를 막아 여행을 만들기 전에 묻는 "경복궁 입장료"·"부산 날씨"가 "먼저 여행을 만들어"로 끝났다(2026-10-23 개발 서버)."""
     guarded = needs_trip(intent)
 
+    def blocked(ctx: TurnContext) -> bool:
+        return guarded and ctx.snapshot.trip is None and not (free_when is not None and free_when(ctx))
+
     def plan_(ctx: TurnContext) -> tuple[HandlerTask, ...]:
-        return () if guarded and ctx.snapshot.trip is None else plan(ctx)
+        return () if blocked(ctx) else plan(ctx)
 
     def assemble_(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts:
-        return need_trip_facts(intent) if guarded and ctx.snapshot.trip is None else assemble(ctx, results)
+        if blocked(ctx):
+            return need_trip_facts(intent)
+        facts = assemble(ctx, results)
+        return _no_itinerary_buttons(facts) if guarded and ctx.snapshot.trip is None else facts
 
     return Handler(intent, plan_, assemble_, handoff_frame, ask)
 
@@ -2229,9 +2249,12 @@ def _handler(
 HANDLERS: Mapping[Intent, Handler] = {
     Intent.SHOW_SCHEDULE: _handler(Intent.SHOW_SCHEDULE, _assemble_show_schedule),
     Intent.GET_NEXT_SLOT: _handler(Intent.GET_NEXT_SLOT, _assemble_next_slot),
-    Intent.GET_WEATHER: _handler(Intent.GET_WEATHER, _assemble_weather, _plan_weather),
-    Intent.GET_DISTANCE: _handler(Intent.GET_DISTANCE, _assemble_distance, _plan_distance),
-    Intent.GET_POI_INFO: _handler(Intent.GET_POI_INFO, _assemble_poi_info, _plan_poi_info),
+    Intent.GET_WEATHER: _handler(Intent.GET_WEATHER, _assemble_weather, _plan_weather,
+                                 free_when=lambda ctx: bool(ctx.arguments.get("region"))),
+    Intent.GET_DISTANCE: _handler(Intent.GET_DISTANCE, _assemble_distance, _plan_distance,
+                                  free_when=lambda ctx: bool(ctx.arguments.get("origin") and ctx.arguments.get("destination"))),
+    Intent.GET_POI_INFO: _handler(Intent.GET_POI_INFO, _assemble_poi_info, _plan_poi_info,
+                                  free_when=lambda ctx: bool(ctx.arguments.get("place"))),
     Intent.SUGGEST_ALTERNATIVE: _handler(Intent.SUGGEST_ALTERNATIVE, _assemble_alternatives, _plan_alternatives),
     Intent.EDIT_SCHEDULE: _handler(Intent.EDIT_SCHEDULE, _handoff_to(Intent.EDIT_SCHEDULE, "OPEN_ITINERARY_EDIT"),
                                    handoff_frame=True),
