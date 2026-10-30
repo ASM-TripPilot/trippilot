@@ -672,7 +672,7 @@ def test_out_of_pool_required_poi_joins_the_index_only() -> None:
     from trippilot.llm_gateway.gateway import GatewayFacade
     from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
     from tests.agents.schedule.test_schedule_agent import _pool
-    from tests.orchestrator.test_schedule_coordinator import (
+    from tests.orchestrator.schedule.test_schedule_coordinator import (
         _DAY1, _NOW, _TRACE_ID, _AssemblyProvider, _Renderer, _Sink, _request as req,
     )
 

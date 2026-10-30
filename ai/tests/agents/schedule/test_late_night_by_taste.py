@@ -23,7 +23,7 @@ from trippilot.domain.llm import CandidatePool
 from trippilot.domain.poi import NIGHTLIFE_TAG, DataQuality, Poi, PoiCategory, PoiSource
 
 from tests.agents.schedule.test_schedule_agent import _agent, _persona, _task
-from tests.orchestrator.test_schedule_coordinator import _ANCHOR, _DAY1, _KST, _NOW, _request
+from tests.orchestrator.schedule.test_schedule_coordinator import _ANCHOR, _DAY1, _KST, _NOW, _request
 
 
 def _p(pid: str, category: PoiCategory, k: int, tags: tuple[str, ...] = ()) -> Poi:
