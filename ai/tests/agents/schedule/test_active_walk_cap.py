@@ -14,7 +14,7 @@ from trippilot.assembly_engine.travel import WALKED_SOURCE, TravelEstimator, Wal
 from trippilot.domain.common import GeoPoint, TransportMode
 
 from tests.agents.schedule.test_schedule_agent import _agent, _persona, _pool, _task
-from tests.orchestrator.test_schedule_coordinator import _AssemblyProvider, _Sink
+from tests.orchestrator.schedule.test_schedule_coordinator import _AssemblyProvider, _Sink
 
 P = TransportMode.PUBLIC
 _CFG = AssemblyConfig()

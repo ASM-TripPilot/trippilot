@@ -69,7 +69,7 @@ from tests.fakes.fake_clock import FakeClock  # noqa: E402
 from tests.fakes.fake_llm import FakeLlm  # noqa: E402
 from tests.fakes.in_memory_poi import InMemoryPoi  # noqa: E402
 from tests.fakes.in_memory_trace import InMemoryTrace  # noqa: E402
-from tests.orchestrator.test_schedule_coordinator import (  # noqa: E402
+from tests.orchestrator.schedule.test_schedule_coordinator import (  # noqa: E402
     _C1CFG,
     _NOW,
     _PERSONA,

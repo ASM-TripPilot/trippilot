@@ -50,7 +50,7 @@ from tests.fakes.in_memory_trace import InMemoryTrace
 from tests.fakes.in_memory_vector_store import InMemoryVectorStore
 from tests.api.test_api_replan_wired import _DIRECTIVES, _body
 from tests.agents.planb.test_replan_via_planb import _agent, _case, _placed, _task
-from tests.orchestrator.test_schedule_coordinator import _C1CFG, _AssemblyProvider, _Renderer, _Sink
+from tests.orchestrator.schedule.test_schedule_coordinator import _C1CFG, _AssemblyProvider, _Renderer, _Sink
 
 
 # ── ① LLM 점수에도 지시가 붙는다 ─────────────────────────────────────────

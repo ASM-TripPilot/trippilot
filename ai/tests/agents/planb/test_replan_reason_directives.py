@@ -43,7 +43,7 @@ from tests.fakes.in_memory_poi import InMemoryPoi
 from tests.fakes.in_memory_trace import InMemoryTrace
 from tests.api.test_api_replan_wired import _DIRECTIVES, _body
 from tests.agents.schedule.test_schedule_agent import _task
-from tests.orchestrator.test_schedule_coordinator import (
+from tests.orchestrator.schedule.test_schedule_coordinator import (
     _ANCHOR,
     _C1CFG,
     _KST,

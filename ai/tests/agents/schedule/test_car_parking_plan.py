@@ -16,7 +16,7 @@ from trippilot.domain.common import TransportMode
 
 from tests.agents.schedule.test_schedule_agent import _agent, _pool, _request, _task
 from tests.fakes.in_memory_trace import InMemoryTrace
-from tests.orchestrator.test_schedule_coordinator import _AssemblyProvider, _Sink
+from tests.orchestrator.schedule.test_schedule_coordinator import _AssemblyProvider, _Sink
 
 
 class _Recording(_AssemblyProvider):
