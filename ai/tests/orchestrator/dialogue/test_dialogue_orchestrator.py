@@ -84,6 +84,7 @@ from trippilot.orchestrator.dialogue_interpreter import (
 from trippilot.orchestrator.dialogue_memory import MEMORY_TTL_DAYS, DialogueMemory, expires_at_for
 from trippilot.orchestrator.dialogue_orchestrator import (
     ACK_TEXT,
+    RETRY_TEXT,
     CAPABILITIES_LITERAL,
     CAPABILITIES_TEXT,
     GREETING_TEXT,
@@ -534,10 +535,12 @@ def test_null_intent_is_out_of_scope_with_a_refusal_marker_and_no_frames() -> No
     assert out.llm_calls == 1 and out.context == DialogueContext(turn_index=7)
 
 
-def test_llm_infrastructure_failure_is_out_of_scope_without_a_refusal_marker() -> None:
+def test_llm_infrastructure_failure_is_a_retry_answer_without_a_refusal_marker() -> None:
+    """시한·벤더 실패는 범위 밖 카드("도와드리기 어려워요")가 아니라 [다시 시도](미결 #14·#22 B안, 2026-10-30)."""
     b = _build({_INTENT: RuntimeError("vendor down")})
     out = b.orch.turn(_input())
-    assert out.outcome == "OUT_OF_SCOPE" and "llm_error" in out.reason
+    assert out.outcome == "ANSWER" and out.answer.text == RETRY_TEXT and "llm_error" in out.reason
+    assert [a.type for a in out.answer.next_actions] == ["RETRY_TURN", "CONTINUE_WITHOUT_ASSISTANT"]
     assert not is_refusal(_as_match(out.reason))  # 장애를 거절로 세면 정확도가 부풀려진다 (intent_eval)
     assert out.llm_calls == 1  # 실패한 호출도 센다 — 비용은 났다
 
@@ -548,11 +551,11 @@ def test_out_of_scope_label_from_the_gate_is_not_routable() -> None:
     assert out.outcome == "OUT_OF_SCOPE" and "intent_not_routable" in out.reason and is_refusal(_as_match(out.reason))
 
 
-def test_exhausted_budget_before_classification_is_out_of_scope_without_calling_the_llm() -> None:
+def test_exhausted_budget_before_classification_is_a_retry_answer_without_calling_the_llm() -> None:
     clock = FakeClock(start_ms=10_000)
     b = _build(_canned(Intent.GET_WEATHER), clock=clock)
     out = b.orch.turn(_input(deadline_ms=1_000, started_ms=0))  # 경계 진입 뒤 10s 지났다
-    assert out.outcome == "OUT_OF_SCOPE" and out.reason.startswith("timeout") and b.llm.requests == []
+    assert out.outcome == "ANSWER" and out.answer.text == RETRY_TEXT and out.reason.startswith("timeout") and b.llm.requests == []
     assert out.llm_calls == 0
     # 게이트웨이를 부르지 않은 폴백은 게이트웨이가 낼 수 없다 — 오케스트레이터가 같은 짝을 낸다(INV-4, BLM §7 분류 행)
     assert _modes(b.trace) == [("llm", "llm_dialogue_intent", "out_of_scope")]
@@ -564,10 +567,10 @@ class _BoomIntentWorker:
         raise RuntimeError("worker exploded")
 
 
-def test_intent_worker_exception_is_out_of_scope_with_a_fallback_event() -> None:
+def test_intent_worker_exception_is_a_retry_answer_with_a_fallback_event() -> None:
     b = _build(_canned(Intent.GET_WEATHER), intent_worker=_BoomIntentWorker())
     out = b.orch.turn(_input())
-    assert out.outcome == "OUT_OF_SCOPE" and out.reason.startswith("intent_error: RuntimeError")
+    assert out.outcome == "ANSWER" and out.answer.text == RETRY_TEXT and out.reason.startswith("intent_error: RuntimeError")
     assert not is_refusal(_as_match(out.reason))  # 인프라 실패 — 거절 표지 없음
     assert _modes(b.trace) == [("llm", "llm_dialogue_intent", "out_of_scope")]
 
@@ -749,10 +752,10 @@ def test_utterance_that_is_not_wholly_a_closer_stays_out_of_scope(utterance: str
     assert out.outcome == "OUT_OF_SCOPE" and out.answer is None
 
 
-def test_closer_on_an_infrastructure_failure_stays_out_of_scope() -> None:
-    """시한·벤더 실패는 판단이 아니다 — 제안 뒤의 "응"에 아무 일 없이 "알겠어요"로 답하면 수락을 삼킨다."""
+def test_closer_on_an_infrastructure_failure_is_a_retry_not_an_ack() -> None:
+    """시한·벤더 실패는 판단이 아니다 — 제안 뒤의 "응"에 아무 일 없이 "알겠어요"로 답하면 수락을 삼킨다. 다시 시도(마지막 발화 재전송)다."""
     out = _build({_INTENT: RuntimeError("vendor down")}).orch.turn(_input("응"))
-    assert out.outcome == "OUT_OF_SCOPE" and not is_refusal(_as_match(out.reason))
+    assert out.outcome == "ANSWER" and out.answer.text == RETRY_TEXT and not is_refusal(_as_match(out.reason))
 
 
 def test_closer_on_an_out_of_scope_label_is_answered_like_a_null_intent() -> None:
@@ -1419,8 +1422,9 @@ def test_a_failed_recommendation_choice_is_reported_as_a_turn_failure() -> None:
 
     b = _build(_canned(Intent.RECOMMEND_REGION), ports=_replace(_PORTS, recommend=_Broken()))
     out = b.orch.turn(_input("내 취향에 맞는 가볼 지역 추천해줘", snapshot=_NO_TRIP))
-    assert out.outcome == "OUT_OF_SCOPE" and "recommendation_error: KeyError" in out.reason
-    assert ("orchestrator", "dialogue_orchestrator", "out_of_scope") in _modes(b.trace)
+    # 분류(LLM)를 부른 뒤의 턴 실패 — 다시 시도로 수렴(미결 #14 B안), 보고는 그대로
+    assert out.outcome == "ANSWER" and out.answer.text == RETRY_TEXT and "recommendation_error: KeyError" in out.reason
+    assert ("orchestrator", "dialogue_orchestrator", "retry_turn") in _modes(b.trace)
 
 
 # ── 5단 — 어떤 LLM 산출에도 유효한 답 (AO-P1·P2) ─────────────────────────
@@ -1928,3 +1932,12 @@ def test_a_deterministic_answer_does_not_repeat_the_last_assistant_line_word_for
     assert unrepeated("LLM 이 지은 문장", ["LLM 이 지은 문장"]) == "LLM 이 지은 문장"  # 표에 없는 문장은 그대로
     assert THANKS_TEXT in _CLOSER_VARIANTS and len(_CLOSER_VARIANTS[THANKS_TEXT]) >= 2
 
+
+
+def test_a_crash_before_any_llm_call_stays_out_of_scope(monkeypatch) -> None:
+    """분류 전 버그는 종전대로 범위 밖(미결 #14 B안의 앞 갈래) — 다시 보내도 같은 곳에서 터진다."""
+    b = _build(_canned(Intent.GET_WEATHER))
+    monkeypatch.setattr(b.orch, "_classify", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    out = b.orch.turn(_input())
+    assert out.outcome == "OUT_OF_SCOPE" and out.reason.startswith("orchestrator_error: RuntimeError")
+    assert ("orchestrator", "dialogue_orchestrator", "out_of_scope") in _modes(b.trace)
