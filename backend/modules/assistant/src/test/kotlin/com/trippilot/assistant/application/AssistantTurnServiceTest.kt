@@ -1190,13 +1190,15 @@ class AssistantTurnServiceTest : StringSpec({
 
     /**
      * 편집 되묻기 대역 — [asks] 의 말이면 날을 되묻고(상대 보류 프레임에는 원문 칸이 없다), 그 밖의 말은 상대처럼 그 되묻기의 답으로 읽어
-     * `CLARIFY_ANSWER` 프레임(물은 날만 채운 인자)을 돌려준다. [other] 가 답하면 그것이 먼저다.
+     * `CLARIFY_ANSWER` 프레임(물은 날만 채운 인자)을 돌려준다 — 상대도 문장 어디서든 날을 주워 새 명령까지 답으로 읽는다. [other] 가 답하면 그것이 먼저다.
      */
-    fun askingDay(asks: Set<String> = setOf("카페 하나 빼줘"), other: (InterpretRequest) -> Interpretation? = { null }) = Interpreter { r ->
+    fun askingDay(
+        asks: Set<String> = setOf("카페 하나 빼줘"), options: List<String> = listOf("1일차", "2일차"), other: (InterpretRequest) -> Interpretation? = { null },
+    ) = Interpreter { r ->
         other(r) ?: if (r.utterance in asks) {
             Interpretation(
                 InterpretOutcome.ARGUMENT_CLARIFY, listOf(IntentFrame(Intent.EDIT_SCHEDULE, emptyMap(), "LLM_DIRECT")),
-                Clarify("day", "며칠째 일정을 바꿀까요?", listOf("1일차", "2일차")), r.dialogueContext, 1,
+                Clarify("day", "며칠째 일정을 바꿀까요?", options), r.dialogueContext, 1,
             )
         } else {
             Interpretation(InterpretOutcome.FRAME, listOf(IntentFrame(Intent.EDIT_SCHEDULE, mapOf("day" to "$today"), "CLARIFY_ANSWER")), null, r.dialogueContext, 0)
@@ -1289,6 +1291,46 @@ class AssistantTurnServiceTest : StringSpec({
         w.say(s, "1일차")
 
         w.editing.proposed.map { it.request } shouldContainExactly listOf("1일차", "첫째 날", "1일차", "1일차").map { EditProposalRequest.Utterance(it) }
+    }
+
+    /**
+     * 되묻기에 **새 명령**으로 답하면 옛 요청을 붙이지 않는다. 상대는 문장 어디서든 날을 주워("아니 2일차 경복궁 빼줘"의 '2일차') 그 말도 이
+     * 되묻기의 답(`CLARIFY_ANSWER`)으로 읽는다 — 붙이면 서로 다른 두 편집이 한 말로 가고 '아니'로 물린 옛 요청까지 되살아났다(리뷰 재현).
+     * 끝말(…줘)이 없는 짧은 명령("2일차 박물관 추가")도 새 명령이다. 날 한마디(조사·'일정'이 붙어도)로 답했을 때만 붙인다.
+     */
+    "되묻기에 새 명령으로 답하면 옛 요청을 붙이지 않는다 — 날 한마디로 답했을 때만 붙는다" {
+        val w = world(interpreter = askingDay())
+        val s = w.session()
+        w.offerBookCafe()
+
+        listOf("아니 2일차 경복궁 빼줘", "2일차에 박물관 하나 추가해줘", "2일차 일정 보여줘", "2일차 박물관 추가", "둘째 날이요", "2일차예요", "2일차 일정", "토요일").forEach {
+            w.say(s, "카페 하나 빼줘").messages[1].kind shouldBe MessageKind.CLARIFY
+            w.say(s, it)
+        }
+
+        w.editing.proposed.map { it.request } shouldContainExactly listOf(
+            "아니 2일차 경복궁 빼줘", "2일차에 박물관 하나 추가해줘", "2일차 일정 보여줘", "2일차 박물관 추가",
+            "둘째 날이요 카페 하나 빼줘", "2일차예요 카페 하나 빼줘", "2일차 일정 카페 하나 빼줘", "토요일 카페 하나 빼줘",
+        ).map { EditProposalRequest.Utterance(it) }
+    }
+
+    /**
+     * 상대가 낸 보기는 그대로 맨 답이다 — 보기 꼴이 날 한마디 표에 없어도(눌러도, 그대로 쳐도) 붙인다. 지금 상대 보기는 'N일차'라 표에도
+     * 있지만, 보기 꼴이 바뀌어도(날짜를 함께 적는 등) 되묻기에 답하는 주된 길인 보기 누르기는 그대로 붙어야 한다.
+     */
+    "되묻기의 보기 그대로 답하면 보기 꼴과 상관없이 붙는다" {
+        val w = world(interpreter = askingDay(options = listOf("10월 13일 (화)", "10월 14일 (수)")))
+        val s = w.session()
+        w.offerBookCafe()
+
+        w.press(s, w.say(s, "카페 하나 빼줘").quickReplies.first().id)
+        w.say(s, "카페 하나 빼줘")
+        w.say(s, "10월 14일 (수)")
+
+        w.editing.proposed.map { it.request } shouldContainExactly listOf(
+            EditProposalRequest.Utterance("10월 13일 (화) 카페 하나 빼줘"),
+            EditProposalRequest.Utterance("10월 14일 (수) 카페 하나 빼줘"),
+        )
     }
 
     /**
