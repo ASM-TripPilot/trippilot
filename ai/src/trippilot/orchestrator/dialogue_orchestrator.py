@@ -101,6 +101,7 @@ from trippilot.orchestrator.dialogue_memory import (
     due,
     expires_at_for,
     gist_lines,
+    is_turn_fragment,
     kept_lines,
     legacy_lines,
     material,
@@ -573,8 +574,11 @@ def _memory_lines(current: DialogueMemory | None, others: Sequence[DialogueMemor
     """꺼내기 없는 `$memory` — 현재 세션 줄 전부 + 헤더 + 다른 세션(≤2) 줄 전부 (DE §6 `$memory`). 임베딩이 배선되지 않았거나
     꺼내기가 실패했을 때 쓴다(2026-10-23 전의 모양 그대로). 줄의 `inline()` 은 워커가 한다.
     지시 주입 꼴 줄은 싣지 않는다 — 기억 게이트가 이제 막지만 그 전에 저장된 줄(TTL 90일)이 남아 있을 수 있다."""
-    lines = [line for line in current.summary if not has_injection_like(line)] if current is not None else []
-    other_lines = [line for m in others for line in m.summary if not has_injection_like(line)]
+    def keep(line: str) -> bool:  # 옛 압축의 원문 조각도 뺀다 — 꺼내기 경로(`_recalled_lines`)와 같은 규칙
+        return not is_turn_fragment(line) and not has_injection_like(line)
+
+    lines = [line for line in current.summary if keep(line)] if current is not None else []
+    other_lines = [line for m in others for line in m.summary if keep(line)]
     if other_lines:
         lines += [OTHER_SESSIONS_HEADER, *other_lines]
     return tuple(lines)
