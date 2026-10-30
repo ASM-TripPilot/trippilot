@@ -28,7 +28,7 @@ import json
 import logging
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from statistics import median
 from typing import Protocol
@@ -171,6 +171,8 @@ class EditOutcome:
     solution: ItinerarySolution | None = None
     violations: tuple[Violation, ...] = ()
     reason: str | None = None
+    # ⑤ 검증이 본 장소(APPLIED 에만) — 경계가 응답 구간 거리를 같은 좌표로 잰다(구간·동네 풀까지, 다시 조회하지 않는다)
+    pois: Mapping[PoiId, Poi] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         applied = self.status is EditStatus.APPLIED
@@ -344,7 +346,7 @@ class EditAgent:
             )
         return EditOutcome(
             status=EditStatus.APPLIED,
-            command=command, apply_mode=apply_mode, solution=mutated,
+            command=command, apply_mode=apply_mode, solution=mutated, pois=merged_index,
         )
 
     # ── ①b 날마다 동네 ──────────────────────────────────────────────
@@ -409,7 +411,8 @@ class EditAgent:
             out = EditOutcome(status=EditStatus.REJECTED, command=command, apply_mode=apply_mode, violations=violations,
                               reason="편집 결과가 하드 제약을 위반 — 반영하지 않음")
         else:
-            out = EditOutcome(status=EditStatus.APPLIED, command=command, apply_mode=apply_mode, solution=got.solution)
+            out = EditOutcome(status=EditStatus.APPLIED, command=command, apply_mode=apply_mode, solution=got.solution,
+                              pois=index)
         return self._day_area_out(task, pairs, out, ms=ms, removed=len(removed), added=len(after - before),
                                   codes=sorted({v.code for v in violations}), notes=list(got.notes))
 
