@@ -21,6 +21,7 @@ import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.trip.api.TripFacade
+import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripPeriod
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
@@ -104,7 +105,7 @@ class ItineraryRevisionServiceTest : StringSpec({
             listOf(ItineraryDay.of(d1, 0, slots)), now, now, null, emptyList(), ScoringSignal.UNKNOWN,
         )
 
-    fun service(revs: Revisions, its: Itineraries) = ItineraryRevisionService(revs, its, trips, NoopValidateAgent(), REV_NOOP_TX, clock)
+    fun service(revs: Revisions, its: Itineraries) = ItineraryRevisionService(revs, its, trips, NoopValidateAgent(), REV_NOOP_TX, clock, modesOnlyRepairContexts(trips))
 
     "seq 는 1부터 단조 증가한다(INV-U3-06)" {
         val revs = Revisions()
@@ -262,7 +263,7 @@ class ItineraryRevisionServiceTest : StringSpec({
         )
         val its = Itineraries(flagged)
         val down = NoopValidateAgent(failure = RuntimeException("AI 다운"))
-        val svc = ItineraryRevisionService(revs, its, trips, down, REV_NOOP_TX, clock)
+        val svc = ItineraryRevisionService(revs, its, trips, down, REV_NOOP_TX, clock, modesOnlyRepairContexts(trips))
         svc.record(flagged, RevisionActor.AI, RevisionKind.BASELINE, "처음")
 
         val restored = svc.restore(acc, tripId, revs.stored.single().revisionId)
@@ -280,7 +281,7 @@ class ItineraryRevisionServiceTest : StringSpec({
         val its = Itineraries(v1)
         // 복원 결과를 재검증했더니 위반이 나온 상황 — 현행 고정 시각과 과거 배치의 조합은 솔버가 만든 적 없다.
         val agent = NoopValidateAgent(listOf(Violation("TRAVEL_TIME", 0, 0, "이동이 빠듯해요")))
-        val svc = ItineraryRevisionService(revs, its, trips, agent, REV_NOOP_TX, clock)
+        val svc = ItineraryRevisionService(revs, its, trips, agent, REV_NOOP_TX, clock, modesOnlyRepairContexts(trips))
         svc.record(v1, RevisionActor.AI, RevisionKind.BASELINE, "처음")
 
         val restored = svc.restore(acc, tripId, revs.stored.single().revisionId)
@@ -288,6 +289,24 @@ class ItineraryRevisionServiceTest : StringSpec({
         val s0 = restored.days.single().slots.single()
         s0.hasViolation shouldBe true
         s0.violationReason shouldBe "앞 장소에서 이동할 시간이 빠듯해요" // 타입 번역(TRIP-1030)
+    }
+
+    "되돌린 결과도 그 여행의 취향 수단으로 재검증한다 — 편집과 같은 출처(대중교통으로 재면 자차 여행이 HC2 로 표시된다)" {
+        val revs = Revisions()
+        val v1 = itinerary(listOf(slot(cafe, "10:00", "11:00")))
+        val its = Itineraries(v1)
+        val agent = NoopValidateAgent()
+        val withContext = object : TripFacade {
+            override fun findPeriod(accountId: UUID, tripId: UUID) = trips.findPeriod(accountId, tripId)
+            override fun findGenerationContext(accountId: UUID, tripId: UUID) =
+                TripGenerationContext(d1, d1, emptyList(), null, null, emptyList())
+        }
+        val svc = ItineraryRevisionService(revs, its, trips, agent, REV_NOOP_TX, clock, modesOnlyRepairContexts(withContext, listOf("택시", "렌터카")))
+        svc.record(v1, RevisionActor.AI, RevisionKind.BASELINE, "처음")
+
+        svc.restore(acc, tripId, revs.stored.single().revisionId)
+
+        agent.lastTransportModes shouldBe listOf("택시", "렌터카") // 목록 그대로 — 상대가 아는 첫 값을 고른다
     }
 
     // 미판정 목록은 장소 감지의 하루 점검만 읽는다(INV-SA-2) — 되돌리기는 종전대로 위반만 본다. 보류로 읽으면 직전 배지가
@@ -311,7 +330,7 @@ class ItineraryRevisionServiceTest : StringSpec({
             now, now, null, emptyList(), ScoringSignal.UNKNOWN,
         )
         val its = Itineraries(flagged)
-        val svc = ItineraryRevisionService(revs, its, trips, NoopValidateAgent(unverified = setOf(cafe)), REV_NOOP_TX, clock)
+        val svc = ItineraryRevisionService(revs, its, trips, NoopValidateAgent(unverified = setOf(cafe)), REV_NOOP_TX, clock, modesOnlyRepairContexts(trips))
         svc.record(flagged, RevisionActor.AI, RevisionKind.BASELINE, "처음")
 
         val s0 = svc.restore(acc, tripId, revs.stored.single().revisionId).days.single().slots.single()

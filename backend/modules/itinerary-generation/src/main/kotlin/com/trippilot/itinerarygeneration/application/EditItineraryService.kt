@@ -75,7 +75,7 @@ class EditItineraryService(
     transactionManager: PlatformTransactionManager,
     private val rejections: RejectionStore,
     private val clock: Clock,
-    /** 수리 요청의 앵커·수단(2026-10-05) — generate 와 같은 출처. */
+    /** 수리 요청의 앵커·수단(2026-10-05)과 재검증의 수단(2026-10-30) — generate 와 같은 출처. */
     private val repairContexts: RepairContexts,
 ) : ItineraryEditFacade {
     private val tx = TransactionTemplate(transactionManager)
@@ -142,7 +142,8 @@ class EditItineraryService(
         val verdict = when (repair) {
             is RepairAttempt.Used -> Revalidation.Judged(emptyList()) // 상대가 재검증을 통과시킨 값만 온다(INV-2)
             RepairAttempt.Failed -> Revalidation.Withheld // AI 불통 — 같은 상대를 validate 로 한 번 더 기다리지 않는다
-            RepairAttempt.Skipped, RepairAttempt.Rejected -> Revalidation.attempt(scheduleAgent, output, tripId)
+            // 수리와 같은 출처의 수단으로 잰다 — 비우면 대중교통이라 자차 여행의 시각만 바꾼 편집·[적용]이 HC2 로 표시됐다
+            RepairAttempt.Skipped, RepairAttempt.Rejected -> Revalidation.attempt(scheduleAgent, output, tripId, repairContexts.transportModes(accountId, tripId))
         }
         val flagged = reshape(current, edit, verdict, (repair as? RepairAttempt.Used)?.days)
         ViolationText.warnUnattached(verdict.violations(), flagged.days, tripId)

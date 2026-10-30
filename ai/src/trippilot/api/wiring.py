@@ -413,7 +413,7 @@ def _request_findings(request: schemas.GenerateItineraryRequest) -> list[str]:
 
 
 def _transport_of(tokens: list[str]) -> TransportMode:
-    """첫 인식 토큰 → 수단, 없으면 PUBLIC. generate·repair 가 같은 규칙을 쓴다."""
+    """첫 인식 토큰 → 수단, 없으면 PUBLIC. generate·validate·repair 가 같은 규칙을 쓴다."""
     for text in tokens:
         mode = _TRANSPORT_TOKENS.get(text.strip().upper())
         if mode is not None:
@@ -1108,7 +1108,7 @@ def _problem_for(solution: ItinerarySolution, tz: timezone,
       휴일 규칙을 본다. 출처가 없거나 모드 off 면 None(공휴일 규칙 없음).
 
     - transport=PUBLIC · day_window=당일 00:00~23:59: 와이어에 원값이 없다(간극 —
-      HC2·HC4 판정이 원 요청과 다를 수 있음 — repair 는 `transport_modes` 가 오면 덮어쓴다). 자정 초과 슬롯은 HC4로 표시될 수 있다
+      HC2·HC4 판정이 원 요청과 다를 수 있음 — validate·repair 는 `transport_modes` 가 오면 덮어쓴다). 자정 초과 슬롯은 HC4로 표시될 수 있다
       (HC4 정본도 "시작일 창 귀속"이라 방향은 같다).
     - candidates=(): validate/repair는 POI를 재선택하지 않는다 — HC 판정에 미사용.
     - fixed_blocks: 와이어 `is_fixed` 슬롯을 그대로 승격 — repair가 이를 고정(HC3)한다.
@@ -2272,6 +2272,8 @@ class WiredItineraryOrchestrator:
             request.itinerary, request.request_meta,
             untimed="skip",  # 미정 슬롯은 시각 주장이 없다 — 배치분만 검증
         )
+        # 수단은 선택 필드(2026-10-30) — repair 와 같은 칸·규칙. 없으면 종전(PUBLIC).
+        problem = replace(problem, transport=_transport_of(request.transport_modes))
         facade = self._assembly_provider.for_pool(poi_index)
         return WiredValidateOutcome(
             violations=tuple(facade.validate(

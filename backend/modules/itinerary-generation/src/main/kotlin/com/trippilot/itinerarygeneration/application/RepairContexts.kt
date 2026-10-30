@@ -8,6 +8,7 @@ import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.profile.api.overriddenBy
 import com.trippilot.savedaccommodation.api.BaseAnchorFacade
 import com.trippilot.trip.api.TripFacade
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.time.LocalDate
 import java.util.UUID
@@ -37,6 +38,17 @@ class RepairContexts(
         }
         return RepairContext(anchors, preferences.findPreferences(accountId).overriddenBy(ctx.preferenceSnapshot).transportModes)
     }
+
+    /**
+     * 재검증(validate)에 실을 수단(2026-10-30) — [of] 와 **같은 출처**의 취향 `transport_modes`. 앵커는 안 싣는다(상대 HC2 는
+     * 앵커→첫 슬롯 구간을 재지 않는다). 조회가 깨지면 빈 목록 = 종전 재검증(상대 기본 대중교통)으로 내려간다 — 수리 컨텍스트처럼
+     * 보탬이라, 우리 쪽 조회 장애를 재검증 실패(판정 보류)로 바꾸지 않는다.
+     */
+    fun transportModes(accountId: UUID, tripId: UUID): List<String> =
+        runCatching { of(accountId, tripId, emptySet()).transportModes }.getOrElse { e ->
+            log.warn("재검증 수단 조회 실패 — 수단 없이(대중교통) 재검증합니다. tripId={}", tripId, e)
+            emptyList()
+        }
 
     /**
      * 편집 제안(U8)에 실을 컨텍스트 — 수리와 **같은 출처**에서 그 날 하나만 뽑는다. 상대는 이 앵커에 후보 풀을
@@ -78,6 +90,7 @@ class RepairContexts(
     private companion object {
         /** 상대 `_TRANSPORT_TOKENS` 가 아는 값 중 우리 취향 어휘에 있는 것(택시·자전거는 상대가 모른다). */
         val AI_TRANSPORT_MODES = setOf("도보", "대중교통", "렌터카")
+        val log = LoggerFactory.getLogger(RepairContexts::class.java)
     }
 }
 

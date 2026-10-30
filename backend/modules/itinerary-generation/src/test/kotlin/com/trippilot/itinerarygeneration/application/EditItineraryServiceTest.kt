@@ -110,6 +110,11 @@ private class EditFakeAgent(
         return failure?.let { throw it } ?: violations
     }
     override fun validateWithUnverified(solution: ScheduleAgentOutput) = ValidationResult(validate(solution), unverified)
+    var lastTransportModes: List<String>? = null // 재검증에 실린 수단(null = 수단 칸으로 불린 적 없음)
+    override fun validateWithUnverified(solution: ScheduleAgentOutput, transportModes: List<String>): ValidationResult {
+        lastTransportModes = transportModes
+        return validateWithUnverified(solution)
+    }
     var lastContext: RepairContext? = null
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult {
         repairCalls++
@@ -191,7 +196,7 @@ class EditItineraryServiceTest : StringSpec({
             override fun findPeriod(accountId: UUID, tripId: UUID) =
                 TripPeriod(LocalDate.parse("2026-08-01"), LocalDate.parse("2026-08-01"))
             override fun findGenerationContext(accountId: UUID, tripId: UUID) = null
-        }, NoopValidateAgent(), tx, clock)
+        }, NoopValidateAgent(), tx, clock, NO_CONTEXTS)
 
     val clock = Clock.fixed(Instant.parse("2026-08-06T00:00:00Z"), ZoneOffset.UTC)
     val acc = UUID.randomUUID()
@@ -1127,5 +1132,39 @@ class EditItineraryServiceTest : StringSpec({
             saved.days.single().slots.map { it.sourcePoiId } shouldBe order
             saved.days.single().slots.all { it.distanceRange != null || it.orderIndex == 0 } shouldBe true
         }
+    }
+
+    // ───── 재검증의 수단 (validate 수단 칸, 2026-10-30) ─────────────────────
+
+    "재검증도 그 여행의 취향 수단으로 잰다 — 시각만 바꾼 편집·수리 불가로 떨어진 편집 둘 다(자차 여행의 HC2 오표시)" {
+        val (a, b, c, d) = List(4) { UUID.randomUUID() }
+        val contexts = repairContexts(tripCtx(TripDestinationRef("제주", null, 1)), modes = listOf("택시", "렌터카"))
+        for (edit in listOf(editDays(listOf(a, b), listOf(c, d)), editDays(listOf(b, a), listOf(c, d)))) {
+            val repo = repoWith(twoDays(a, b, c, d))
+            val agent = EditFakeAgent() // 수리는 기본 수리 불가 — 장소가 바뀐 편집도 재검증으로 떨어진다
+            EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, contexts)
+                .edit(acc, tripId, edit)
+
+            agent.validateCalls shouldBe 1
+            agent.lastTransportModes shouldBe listOf("택시", "렌터카") // 목록 그대로 — 상대가 아는 첫 값을 고른다(수리와 같다)
+        }
+    }
+
+    "재검증 수단 조회가 깨지면 수단 없이(대중교통) 재검증한다 — 판정 보류로 섞지 않는다" {
+        val (a, b, c, d) = List(4) { UUID.randomUUID() }
+        val repo = repoWith(twoDays(a, b, c, d))
+        val agent = EditFakeAgent(listOf(Violation("TRAVEL_TIME", 0, 1, null)))
+        val broken = RepairContexts(
+            object : TripFacade {
+                override fun findPeriod(accountId: UUID, tripId: UUID): TripPeriod? = null
+                override fun findGenerationContext(accountId: UUID, tripId: UUID): TripGenerationContext? = throw IllegalStateException("db down")
+            },
+            NO_ANCHORS, NO_REGIONS, NO_PREFS,
+        )
+        val saved = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, broken)
+            .edit(acc, tripId, editDays(listOf(a, b), listOf(c, d)))
+
+        agent.lastTransportModes shouldBe emptyList()
+        saved.days.first().slots[1].hasViolation shouldBe true // 판정됐다 — 보류(직전 표시 유지)였다면 꺼져 있다
     }
 })

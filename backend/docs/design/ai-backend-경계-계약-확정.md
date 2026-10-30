@@ -125,6 +125,8 @@ validate/repair 와이어에 **원 이동수단·day window 가 없어** AI 가 
 
 > **[개정 · 2026-10-05] repair 는 컨텍스트를 받는다(additive, 선택).** `RepairItineraryRequest` 에 generate 와 같은 스키마의 `anchors`(DayAnchorSchema[])·`time_windows`(TimeWindowSchema[])·`transport_modes`(취향 어휘 목록, 첫 인식 토큰 — 번역표 `_TRANSPORT_TOKENS`)가 붙었다. 수단은 수리의 시각 계산(HC2)과 거리 표기 모두에 쓰인다 — **repair 의 CAR HC2 오탐은 해소**. 앵커가 있는 날은 첫 구간 거리를 앵커→첫 장소로 채우고, 그 날 창도 있으면 첫 비고정 슬롯 시작을 `창 시작 + 앵커 이동` 이상으로 민다(generate 와 같은 규칙, 앞으로만). 창은 **출발 시각으로만** 쓰이고 HC4 판정 창은 종전(당일 00:00~23:59)이다. 백엔드는 편집 교체 수리에서 **첫 장소가 바뀐 날만** 앵커(generate 와 같은 출처 `RegionAnchors.dayAnchors`)와 기본 창(09:00~21:00)을 싣고, 수단은 계정 취향 그대로다. 셋 다 비면 종전 동작. **validate 는 그대로**(HC2 는 앵커→첫 슬롯 구간을 보지 않는다 — 필요 없음), validate 의 CAR HC2 오탐·자정 HC4 는 여전히 이 절의 한계다.
 
+> **[개정 · 2026-10-30] validate 도 수단을 받는다(additive, 선택).** `ValidateItineraryRequest` 에 repair 와 같은 이름·어휘의 `transport_modes`(첫 인식 토큰)가 붙었다 — 상대는 HC2 를 그 수단으로 잰다. **validate 의 CAR HC2 오탐은 해소.** 백엔드는 편집 재검증(시각만 바꾼 편집·수리 불가로 떨어진 편집 — 도우미 [적용] 포함)과 되돌리기 재검증에 수리와 같은 출처(`RepairContexts`)의 그 여행 취향 수단을 싣는다. 하루 점검은 HC1 만 읽어 싣지 않는다. 비면 종전(PUBLIC). 앵커·창은 validate 에 없다(위 이유 그대로) — 자정 HC4 와 생성의 요청별 도보 상한(액티비티 취향 1.0km)은 여전히 이 절의 한계다.
+
 ### M5. `/internal/pois` 서비스 간 인증 — **2라운드**
 
 1라운드는 양쪽 시드가 정렬돼 있어 AI 가 백엔드 리버스 read 를 호출할 필요가 없다. 2라운드(실 POI 데이터)에는 사용자 JWT 가 아닌 서비스 토큰이 필요하다. 방식(고정 토큰 env 공유 / 내부망 무인증 등)은 2라운드 착수 전에 정한다.

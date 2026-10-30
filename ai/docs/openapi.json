@@ -2991,6 +2991,13 @@
           },
           "request_meta": {
             "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "transport_modes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Transport Modes",
+            "type": "array"
           }
         },
         "required": [

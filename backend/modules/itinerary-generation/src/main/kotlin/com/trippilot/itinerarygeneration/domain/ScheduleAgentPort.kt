@@ -26,6 +26,14 @@ interface ScheduleAgentPort {
     fun validateWithUnverified(solution: ScheduleAgentOutput): ValidationResult =
         ValidationResult(validate(solution), emptySet())
 
+    /**
+     * 그 여행의 이동수단([transportModes] — 수리 컨텍스트와 같은 취향 목록)을 함께 싣는 재검증(2026-10-30). 상대가 HC2(이동 시간)를
+     * 그 수단으로 잰다 — 비우면 대중교통이라 자차 여행의 편집·되돌리기 재검증이 HC2 를 잘못 표시했다.
+     * 기본 구현은 수단을 버린다 — 대역(Fake·테스트)이 1인자만 구현해도 되게. 실 어댑터는 재정의한다.
+     */
+    fun validateWithUnverified(solution: ScheduleAgentOutput, transportModes: List<String>): ValidationResult =
+        validateWithUnverified(solution)
+
     fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult
 
     /**

@@ -22,6 +22,13 @@ internal class NoopValidateAgent(
     override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput = error("사용하지 않음")
     override fun validate(solution: ScheduleAgentOutput): List<Violation> = failure?.let { throw it } ?: violations
     override fun validateWithUnverified(solution: ScheduleAgentOutput) = ValidationResult(validate(solution), unverified)
+
+    /** 마지막 재검증에 실린 수단(null = 수단 칸으로 불린 적 없음). */
+    var lastTransportModes: List<String>? = null
+    override fun validateWithUnverified(solution: ScheduleAgentOutput, transportModes: List<String>): ValidationResult {
+        lastTransportModes = transportModes
+        return validateWithUnverified(solution)
+    }
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
     override fun explanations(tripId: UUID, solution: ScheduleAgentOutput, preference: PreferenceProfile?, companionType: String?): SlotExplanations = SlotExplanations()
 }

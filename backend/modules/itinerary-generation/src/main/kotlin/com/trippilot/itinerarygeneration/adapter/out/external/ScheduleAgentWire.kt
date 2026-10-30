@@ -272,8 +272,14 @@ private fun JsonNode?.toCandidatesSummary(): CandidatesSummary? {
 /**
  * `POST /ai/v1/itinerary/validate` 요청. 상대는 산출물 전체를 다시 받아 검사한다 —
  * 우리가 슬롯만 보내면 상대가 날짜 맥락을 잃어 위치 인덱스를 계산할 수 없다.
+ * [transportModes] — 상대 선택 필드(2026-10-30), repair 와 같은 이름·어휘(첫 인식 값). 상대가 HC2(이동 시간)를 이 수단으로 잰다.
+ * 비면 종전 동작(대중교통) — 자차 여행의 편집·되돌리기 재검증이 HC2 를 잘못 표시하던 자리다.
  */
-internal data class AiValidateRequest(val itinerary: AiSchedulePayload, val requestMeta: AiRequestMeta)
+internal data class AiValidateRequest(
+    val itinerary: AiSchedulePayload,
+    val requestMeta: AiRequestMeta,
+    val transportModes: List<String> = emptyList(),
+)
 
 /**
  * [unverifiedSlots] — 상대가 판정하지 못한 장소(위반이 아니다). **기본 빈 목록** — 이 필드가 없는 옛 AI 응답도 같은 뜻이 되게 한다.

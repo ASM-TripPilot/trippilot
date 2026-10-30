@@ -101,9 +101,13 @@ class HttpScheduleAgentAdapter(
 
     /** 같은 호출 — 상대가 판정하지 못한 장소(`unverified_slots`)까지 돌려준다. */
     override fun validateWithUnverified(solution: ScheduleAgentOutput): ValidationResult =
+        validateWithUnverified(solution, emptyList())
+
+    /** 수단을 싣는다 — repair 와 같은 `transport_modes`(목록 그대로, 상대가 아는 첫 값을 고른다). 비면 상대 기본(대중교통). */
+    override fun validateWithUnverified(solution: ScheduleAgentOutput, transportModes: List<String>): ValidationResult =
         post(
             VALIDATE_PATH,
-            AiValidateRequest(solution.toWire(), requestMeta(VALIDATE_DEADLINE_MS)),
+            AiValidateRequest(solution.toWire(), requestMeta(VALIDATE_DEADLINE_MS), transportModes),
             AiValidateResponse::class.java,
             scheduleAgentBoundedRestClient,
         ).toDomain()

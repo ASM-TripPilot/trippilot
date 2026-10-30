@@ -57,6 +57,7 @@ class ItineraryDayCheckService(
         // 영업시간을 아는 슬롯이 없으면 부르지 않는다 — 결과가 어차피 전부 UNKNOWN 이다(validate 1회 ≈ 20초를 아낀다).
         val ask = judgeHours && aiMode.equals(HTTP, ignoreCase = true) &&
             day.slots.any { surface[it.sourcePoiId]?.openingHoursKnown == true }
+        // 수단은 싣지 않는다 — 여기는 HC1(영업시간)만 읽고, 수단이 바꾸는 것은 HC2 뿐이다(조회 1회를 아낀다).
         val verdict = if (ask) Revalidation.attempt(scheduleAgent, outputOf(itinerary, day), tripId) else null
         // 하루만 보냈으니 그 날은 0번 날이다. 위치가 없거나 영업시간이 아닌 위반은 여기서 빠진다.
         // 슬롯 → HC1 하위 코드(없으면 null). 감지기가 하위 코드로 변형을 가른다(BR-SA-17).
