@@ -364,3 +364,23 @@ def test_unreadable_position_with_a_cue_is_not_appended() -> None:
 def test_neighbourhood_station_resolves_to_its_neighbourhood() -> None:
     body = _post(_body(utterance="홍대입구역 가기 전에 카페 하나 넣어줘"))
     assert body["status"] == "APPLIED" and _ids(body)[2] == str(GONGDEOK_CAFE.poi_id), body
+
+
+# ── 여행 당일 편집 — 지난 곳은 그 시각 그대로 ─────────────────────────────
+
+
+def test_trip_day_button_edits_keep_visited_slots_and_flow_the_rest_from_now() -> None:
+    """앱 교체 버튼(REPLACE)·빼기·끝 추가가 하루를 첫 슬롯부터 다시 흘려 다녀온 곳의 시각까지 바꿨다(develop 부터). BE 의 UTC(…Z) 지금을
+    현지 분 올림으로 — 그 전에 시작한 곳은 그대로, 뒤만 지금부터 다시 흘린다. 지난 예약(경복궁)도 ⑤ 검증(HC3)을 막지 않는다."""
+    visited = [{**_SLOTS[0], "is_fixed": True}, _SLOTS[1]]  # 09:00 예약 · 11:00~12:30 — 13:10 엔 둘 다 끝났다
+    for command in ({"op": "REPLACE_SLOT", "params": {"targetPoiId": str(HYOCHANG.poi_id)},
+                     "affected_slots": [str(YEONNAM.poi_id)]},
+                    {"op": "REMOVE_SLOT", "params": {}, "affected_slots": [str(YEONNAM.poi_id)]},
+                    {"op": "ADD_SLOT", "params": {"targetPoiId": str(HYOCHANG.poi_id)}, "affected_slots": []}):
+        body = _body(command=command, at=f"{_DAY}T04:10:37Z")  # = 13:10:37 KST
+        body = _post({**body, "itinerary": {**body["itinerary"], "days": [{"date": _DAY, "slots": [*visited, *_SLOTS[2:]]}]}})
+        assert body["status"] == "APPLIED", (command["op"], body)
+        slots = body["itinerary"]["days"][0]["slots"]
+        assert [(s["poi_id"], s["start_at"], s["end_at"], s["is_fixed"]) for s in slots[:2]] == [
+            (s["poi_id"], s["start_at"], s["end_at"], s["is_fixed"]) for s in visited], command["op"]
+        assert all(s["start_at"] >= "13:11:00" for s in slots[2:]), (command["op"], slots)

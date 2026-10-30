@@ -286,7 +286,8 @@ class EditAgent:
                stay: Mapping[PoiId, int] | None = None, problem: ItineraryProblem | None = None) -> EditOutcome:
         """② 검증 → ③ 확인 게이트 → ④ 변형·재타이밍 → ⑤ 어셈블리 검증. 세 진입(번역·사이 넣기·이름 지목 자리 채우기)이 같은 길이다.
 
-        기준점 있는 추가의 여행 당일 규칙(지난 자리 거부·지금 이후 시작)은 여기 한 곳에 건다 — 번역이 기준점을 채워 온 추가도 같은 규칙을 탄다."""
+        기준점 있는 추가의 여행 당일 규칙(지난 자리 거부·지금 이후 시작)은 여기 한 곳에 건다 — 번역이 기준점을 채워 온 추가도 같은 규칙을 탄다.
+        여행 당일 편집은 무엇이든 지금 전에 시작한 슬롯을 그 시각에 두고 그 뒤만 지금 이후로 다시 흘린다(`_floor`)."""
         current_ids = frozenset(
             s.poi_id for day in task.solution.days for s in day.slots)
         # 대상 일자의 예약(is_fixed) 슬롯 — 편집 대상 불가·재타이밍 닻 (TRIP-526)
@@ -312,8 +313,9 @@ class EditAgent:
             # ④ 시퀀스 변형 + 결정론 재타이밍
             target_day = next((d for d in task.solution.days if d.date == task.target_date), None)
             target_day_slots = target_day.slots if target_day is not None else ()
-            floor = self._floor(task) if command.op is EditOp.ADD_SLOT and _anchored(command) else None
-            if floor is not None and target_day is not None and _next_started(target_day, command, task.now):
+            floor = self._floor(task)  # 여행 당일이면 지금 — 이미 시작한 슬롯은 닻, 나머지는 지금 이후(④)·⑤ 검증 범위
+            if (floor is not None and target_day is not None and command.op is EditOp.ADD_SLOT and _anchored(command)
+                    and _next_started(target_day, command, task.now)):
                 raise EditRejected("past_gap — 넣을 자리 바로 뒤 일정이 이미 시작했다(지난 일정을 미래로 밀게 된다)")
             ctx = RetimeContext(
                 coords={pid: p.coord for pid, p in merged_index.items()},
@@ -337,6 +339,13 @@ class EditAgent:
         facade = self._assembly_provider.for_pool(merged_index)
         checked = replace(problem or self._problem_for(mutated), transport=task.transport, days=(task.target_date,))
         edited_day = replace(mutated, days=tuple(d for d in mutated.days if d.date == task.target_date))
+        if floor is not None:
+            # 여행 당일 — 닻 내린 지난 곳 중 가장 최근 곳(지금 있는 곳)부터 잰다: '거기 → 다음 일정' 이동은 재고, 그보다 앞선 곳은 이 편집이
+            # 만든 시각이 아니라 예약 블록째 뺀다. 지난 간격을 지금 추정기로 다시 재면 다녀온 하루가 통째로 막힌다(①b `RebuiltDays.history` 와 같은 태도)
+            done = frozenset([s.poi_id for d in edited_day.days for s in d.slots if s.start_at < floor][:-1])
+            checked = replace(checked, fixed_blocks=tuple(fb for fb in checked.fixed_blocks if fb.poi_id not in done))
+            edited_day = replace(edited_day, days=tuple(replace(d, slots=tuple(s for s in d.slots if s.poi_id not in done))
+                                                        for d in edited_day.days))
         violations = tuple(facade.validate(edited_day, checked, task.deadline_ms, task.trace_id))
         if violations:
             return EditOutcome(
@@ -490,7 +499,8 @@ class EditAgent:
         return self._rejected(task, ask, f"all_rejected(tried={len(rejects)})", {**log, "rejects": rejects})
 
     def _floor(self, task: EditTask) -> datetime | None:
-        """여행 당일이면 지금(현지 시각, 분 올림) — 끼운 곳을 지금보다 앞에 두지 않는다. 다른 날은 하한 없음.
+        """여행 당일이면 지금(현지 시각, 분 올림) — 이보다 먼저 시작한 슬롯은 그 시각 그대로 두고, 다시 흘리는 곳·끼운 곳은 이보다 앞에
+        두지 않는다. 다른 날은 None(종전대로 그 날을 다시 흘린다).
 
         BE 는 requested_at 을 UTC(…Z)로 보낸다 — 그 객체를 그대로 하한으로 쓰면 슬롯 시각이 UTC 벽시계로 사영되고 HC1·HC4 도 그 시·분으로
         판정한다(2026-10-22 리뷰 재현: 13:10 이 04:10 으로). 분 올림은 조립 `not_before_floor`·재계획 하한과 같은 규칙이다."""
