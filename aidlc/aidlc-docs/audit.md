@@ -1916,3 +1916,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(기록 정리), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
+
+## Functional Design 사후 개정 — U5 공유 카드 서버 AI 문구 경로 (frontend-components §7)
+**Timestamp**: 2026-10-30T12:21:09+09:00 (작업 시점)
+**User Input**: (사용자 원문) "정본 반영 해줘" — 같은 사이클(앱 세션, 공유 카드 서버 문구 구현) 설계 단계 3-a 에서 사용자가 고른 정본 반영 항목 ④-1 의 승인이다.
+**AI Response**: `construction/u5-records-reflection/functional-design/frontend-components.md` §7 폼 검증 표 바로 아래에 `[개정 · 2026-10-30]` 블록 1개를 덧붙였다(원문 표·기존 줄 삭제·수정 0줄). 내용: 공유 카드 얼굴이 처음 그려질 때 `POST /trips/{tripId}/share-card/copy` 를 1회 호출 · 응답 처리(`isFallback`·빈 해시태그 대체) · 429 두 갈래(`SHARE_CARD_DAILY_LIMIT` 재시도 없음 / `RATE_LIMITED` `Retry-After` 뒤 1회) · 그 밖 실패의 조용한 대체 · 고친 해시태그 보존. 근거를 외부 사실(openapi `ShareCardCopy`)과 우리가 정한 구현 결정(호출 시점·재시도 규칙·고친 값 보존·한도 안내 문구)으로 갈라 적었다. 코드 변경 없음(구현은 별도 PR #1685).
+**Context**: CONSTRUCTION — U5 Functional Design 사후 개정(구현 반영). 사용자 승인("정본 반영 해줘") 뒤 같은 PR 머지로 확정(#1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
