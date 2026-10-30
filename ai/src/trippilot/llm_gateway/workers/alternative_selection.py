@@ -22,7 +22,7 @@ from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature, TypedResult
-from trippilot.domain.poi import Poi
+from trippilot.domain.poi import Poi, public_tags
 from trippilot.llm_gateway.workers.reminder_copy import _CATEGORY_LABELS
 
 
@@ -63,8 +63,11 @@ def _category_label(poi: Poi) -> str:
     우천 판정표가 FOOD·SIGHT 를 중립으로 두는 근거가 "실내외 혼재"인데
     (`assembly_engine/config.py`), 그 혼재를 푸는 것이 세분류다 — 명소 3,942곳에
     섞인 `유적지/사적지`(야외)와 `박물관`(실내)이 여기서 갈린다.
+
+    평판 파생 태그(`인기N`·`평점높음`)는 싣지 않는다(`public_tags`) — 모델이 쓴 이유는 화면에 그대로 나가는데("별점이 높아요"),
+    백엔드는 그 태그를 공개 면에서 숨긴다. 평판은 이미 규칙 랭킹이 점수로 쓴다(`reputation_bonus`).
     """
-    return "·".join((poi.category.value, *poi.tags))
+    return "·".join((poi.category.value, *public_tags(poi.tags)))
 
 
 def _candidate_line(poi: Poi, knowledge: Mapping[str, str]) -> str:
