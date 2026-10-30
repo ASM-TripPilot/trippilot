@@ -671,7 +671,8 @@ class ExplanationsRequest(BoundaryModel):
 
 class ExplanationsResponse(BoundaryModel):
     """slot_key(BR-U2-04: "날짜#poi_id") → 추천 이유 해시태그(공백 구분, 최대 5개 — 예 `"#뷰맛집 #혼자여행"`).
-    실패는 빈 맵 + 사유(침묵 금지).
+    실패는 빈 맵 + 사유(침묵 금지). 여러 날은 날마다 따로 설명해, 일부 날만 실패하면 성공한 날 이유 +
+    `reason="explanation_partial: …"` 이고 `is_fallback=false` 다(전부 실패해야 빈 맵).
 
     `alternative_explanations`(TRIP-887, additive): 요청 payload 의 슬롯별 차선책
     (`slots[].alternatives[]`)에 대한 "이 자리 대신 골라도 좋은 이유" 1문장 — 키는

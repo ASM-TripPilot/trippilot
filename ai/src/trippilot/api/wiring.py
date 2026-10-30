@@ -58,6 +58,7 @@ import pathlib
 import os
 import random
 import re
+import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 import zlib
@@ -774,12 +775,11 @@ def _keyed_explanations(
     return keyed
 
 
-# 여러 날 `/explanations` 를 날마다 나란히 부르는 풀 — 프로세스에 하나(요청마다 만들지 않는다, `route_budget._POOL`·
-# `_NL_POOL` 선례). 이 크기가 프로세스 전체 EXPLANATION 동시 호출 상한이다(벤더 동시 호출 폭주 방지 — 점수 청크
-# `score_max_parallel` 10·실경로 8 과 같은 자릿수). 8 이면 한 주(7일) 여행 한 건이 줄 서지 않고 한 번에 돈다 —
-# 더 길거나 요청이 겹치면 남은 날은 줄을 서고, 시한 안에 못 끝난 날은 실패로 센다(`explanation_partial`).
+# 여러 날 `/explanations` 의 **요청 하나당** 날 묶음 동시 상한 — 풀은 요청마다 따로 둔다(취향 점수 청크
+# `PreferenceScoringWorker` 선례). 프로세스 공용 FIFO 풀이면 긴 여행 한 건이 뒤 요청의 날을 줄 세우고, 백엔드가
+# 읽기 시한으로 포기한 요청도 남은 날을 끝까지 돌며 자리를 쥔다(반박 리뷰 재현). 8 이면 한 주(7일) 여행이 한 번에
+# 돈다 — 더 긴 여행만 제 안에서 줄을 서고, 시한 안에 못 끝난 날은 실패로 센다(`explanation_partial`).
 _EXPLAIN_DAY_WORKERS = 8
-_EXPLAIN_POOL = ThreadPoolExecutor(max_workers=_EXPLAIN_DAY_WORKERS, thread_name_prefix="explain-day")
 
 
 def _explain_days(
@@ -813,10 +813,15 @@ def _explain_days(
         return [one(chunks[0])]
     # 문맥을 복사해 넘긴다 — 요청 단위 contextvar 계측(도우미 턴 `llm_calls` 등)이 풀 스레드에서도 잡히게. 사본은
     # 낼 때마다 새로 뜬다(한 사본을 두 스레드가 같이 쓰면 RuntimeError — 도우미 `_submit` 선례).
-    futures = [_EXPLAIN_POOL.submit(contextvars.copy_context().run, one, c) for c in chunks]
-    done, _ = wait(futures, timeout=budget_ms / 1000.0)
-    for f in futures:
-        f.cancel()  # 끝난 것·도는 것에는 효과가 없다 — 줄 선 것만 빠진다
+    # with(=shutdown(wait=True)) 금지 — 시한 넘긴 날을 기다리면 벽시계 보장이 깨진다(점수 청크 선례).
+    executor = ThreadPoolExecutor(
+        max_workers=min(len(chunks), _EXPLAIN_DAY_WORKERS), thread_name_prefix="explain-day")
+    try:
+        futures = [executor.submit(contextvars.copy_context().run, one, c) for c in chunks]
+        # 기다림은 플랫폼 상한 안으로 — 스키마는 deadline_ms 의 gt=0 만 봐서 아주 큰 값이면 wait 가 OverflowError(500)
+        done, _ = wait(futures, timeout=min(budget_ms / 1000.0, threading.TIMEOUT_MAX))
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)  # 줄 선 날은 빠지고, 도는 날은 결과를 버린다
     return [f.result() if f in done else f"deadline:budget={budget_ms}ms" for f in futures]
 
 
@@ -3990,6 +3995,11 @@ class WiredItineraryOrchestrator:
         outcomes = _explain_days(
             self._explainer, pool, chunks, persona, trace_id, now, budget_ms=budget_ms)
         failed = [o for o in outcomes if isinstance(o, str)]
+        if failed and len(outcomes) > 1:
+            # 백엔드는 is_fallback=true 일 때만 사유를 로그한다 — 부분 실패·시한에 끊긴 날은 여기서 남긴다(INV-4)
+            _logger.info("explanation_partial %s", json.dumps({
+                "trace_id": str(trace_id), "failed": len(failed), "days": len(outcomes), "first": failed[0],
+            }, ensure_ascii=False))
         if len(failed) == len(outcomes):  # 전부 실패 — 종전처럼 빈 맵 + 사유(하루짜리는 사유도 종전 문자열 그대로)
             return schemas.ExplanationsResponse(
                 explanations={}, is_fallback=True,
