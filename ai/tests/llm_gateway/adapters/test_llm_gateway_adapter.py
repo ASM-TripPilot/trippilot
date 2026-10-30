@@ -119,6 +119,21 @@ def test_haiku_5_5_keeps_effort() -> None:
 
     assert client.kwargs["output_config"] == {"effort": "low"}
 
+
+def test_effort_none_or_unset_turns_thinking_off_only_where_the_model_can() -> None:
+    """표의 `none`(사고 끔)·미지정은 haiku-5 에서 thinking disabled 로 나간다 — effort low 만으로는 적응형 사고가 켜져 도우미
+    답변이 상한 512 를 사고로 다 썼고(2026-10-30 개발 4/4), 미지정이면 기본(더 깊은) 사고로 돈다. 표가 low 이상을 고른 기능은
+    그대로. sonnet·opus 5.5 는 disabled 를 400 으로 거부하므로 보내지 않는다."""
+    for model, effort, off in (("claude-haiku-5-5", "none", True), ("claude-haiku-5-5", None, True),
+                               ("claude-haiku-5-5", "low", False), ("claude-sonnet-5-5", "none", False),
+                               ("claude-sonnet-5-5", None, False), ("claude-opus-5-5", "none", False),
+                               ("claude-haiku-4-5", "none", False), ("claude-haiku-4-5", None, False)):
+        client = RecordingClient()
+        AnthropicAdapter(client).invoke(replace(_REQUEST, model_id=model, effort=effort))
+
+        assert (client.kwargs.get("thinking") == {"type": "disabled"}) is off, (model, effort)
+
+
 def test_response_mapping_and_multi_block_join() -> None:
     client = RecordingClient(
         blocks=[

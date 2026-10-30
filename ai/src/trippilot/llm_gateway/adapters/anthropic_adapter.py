@@ -32,8 +32,16 @@ from trippilot.ports.llm_port import LlmRequest, LlmResponse, LlmTimeoutError
 # 기능별 effort 표(`default_feature_effort`)에는 GPT(responses `reasoning.effort`)만 받는 값이 섞여 있다 —
 # `none`(사고 끄기)·`minimal`. Anthropic `output_config.effort` 는 low|medium|high|xhigh|max 만 받고
 # 나머지는 400 이다(2026-10-29 운영 실측: Opus 5.5 로 돌리자 PREFERENCE_SCORING 20/20 이 400 → 규칙 폴백).
-# Claude 5.5 는 사고를 끌 수 없어 low 가 가장 가까운 값이다.
+# opus·sonnet 5.5 는 사고를 끌 수 없어 low 가 가장 가까운 값이다(haiku-5 는 끈다 — 아래 `_THINKING_OFF`).
 _EFFORT_FLOOR = {"none": "low", "minimal": "low"}
+
+# 사고를 실제로 끌 수 있는 모델 — haiku-5 는 `thinking: {"type": "disabled"}` 를 받는다(2026-10-30 개발 파드 실호출).
+# effort 가 `none`(사고 끔)이거나 표에 없을 때 끈다. 안 끄면 effort low 로도 적응형 사고가 켜져, 정보가 빈 "찾는 중" 사실
+# 묶음에서 도우미 답변이 사고로 상한 512 를 다 쓰고 본문이 비었다(4/4 → 결정론 문장 폴백, 끄면 4/4 정상·1.4~1.7s).
+# 표에 없는 기능은 haiku-4-5(사고 없는 모델) 시절 사고 없이 돌던 것들이라 그 상태로 되돌린다 — haiku-5 는 effort 를
+# 안 보내면 기본(더 깊은) 사고로 돈다. 표가 low 이상을 고른 기능은 그 값대로 둔다(명시한 선택).
+# sonnet-5-5 는 disabled 를 400 으로 거부하고("between_tools" 를 쓰라 한다) opus-5-5 는 끌 수 없어(400) 둘은 종전대로다.
+_THINKING_OFF = ("claude-haiku-5",)
 
 # effort 를 파라미터째 거부하는 모델 — 보내면 400 이라 **아예 빼야** 한다.
 # `_EFFORT_FLOOR` 로 값을 낮추는 것으로는 안 된다(low 도 거부한다).
@@ -110,6 +118,8 @@ class AnthropicAdapter:
         if effort and request.model_id.startswith(_EFFORT_UNSUPPORTED):
             effort = None  # 표의 값보다 모델의 수용 여부가 우선 — 보내면 전 호출이 400 이다
         extra = {"output_config": {"effort": effort}} if effort else {}
+        if request.effort in (None, "none") and request.model_id.startswith(_THINKING_OFF):
+            extra["thinking"] = {"type": "disabled"}  # 표의 `none`·미지정은 "사고 없이" — 끌 수 있는 모델은 정말 끈다
         if request.web_search:  # 벤더 쪽 검색 도구 — 2026-10-30, OpenAI responses 표면과 같은 자리
             extra["tools"] = [_WEB_SEARCH_TOOL]
         started = time.monotonic()
