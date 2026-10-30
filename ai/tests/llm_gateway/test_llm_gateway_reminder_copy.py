@@ -52,6 +52,31 @@ def test_forbidden_place_in_title_is_dropped() -> None:
     assert out.value is None and out.drop_event is not None
 
 
+@pytest.mark.parametrize("body", [
+    "오후 3시에 성산일출봉에서 해돋이를 즐겨 보세요",
+    "15:00 성산일출봉에서 멋진 풍경을 감상해 보세요",
+    "3시쯤 성산일출봉에 올라 바다를 내려다보세요",
+    "아침 9시 성산일출봉에서 하루를 시작해 보세요",
+    "세 시에 성산일출봉에 올라 바다를 내려다보세요",
+    "정오에 성산일출봉에서 바다를 내려다보세요",
+])
+def test_invented_clock_time_is_dropped(body: str) -> None:
+    """프롬프트는 시각을 주지 않는다 — 문구 속 시각은 지어낸 것(INV-2). 10-23 재현 때 넷 다 통과했다."""
+    out = _apply({"title": "오늘의 제주", "body": body, "places": ["성산일출봉"]})
+    assert out.value is None and out.drop_event is not None
+
+
+@pytest.mark.parametrize(("allowed", "body"), [
+    (("24시 감자탕",), "24시 감자탕에서 든든하게 하루를 마무리해 보세요"),
+    (("동문시장",), "동문시장에서 제주 먹거리를 골라 맛보는 하루예요"),
+    (("성산일출봉",), "성산일출봉에서 시원한 바다 풍경을 즐겨 보세요"),
+])
+def test_clock_like_text_inside_place_names_or_words_passes(allowed: tuple[str, ...], body: str) -> None:
+    ctx = ReminderCopyContext(allowed=allowed, forbidden=())
+    out = _apply({"title": "오늘의 여행", "body": body, "places": [allowed[0]]}, ctx)
+    assert out.value is not None, out.error
+
+
 def test_valid_copy_passes() -> None:
     out = _apply({"title": "오늘의 제주", "body": "성산일출봉에서 시작하는 하루예요", "places": ["성산일출봉"]})
     assert out.error is None
