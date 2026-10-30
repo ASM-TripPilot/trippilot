@@ -201,7 +201,12 @@ def main(argv: list[str]) -> int:
     # 밤 장소는 식당·카페 행과 병합하지 않는다 — 바는 대개 일반음식점(경양식)으로 인허가가 나 있어
     # 같은 주소·상호로 병합되면 밤 장소 표지 없이 FOOD 로 남는다(실측: 광안리 표류·베이스먼트).
     # 같은 가게가 FOOD 행과 밤 장소 행 둘로 있게 되는 것은 감수한다(#1315 사보타지와 같다).
-    others = [p for p in shared if p.get("source") != SOURCE_NAME]
+    # 후보 3km 안의 행만 게이트에 넣는다 — 게이트 3단은 시도 안 kept 를 선형 탐색해(제곱) 공유본 11.7만 행 전부를
+    # 넣으면 한 시간을 넘겼다(2026-10-30). 병합 조건(같은 이름 50m·같은 주소 키)은 3km 밖과 겹칠 수 없다.
+    # ponytail: 후보×공유본 전수 거리 계산, 후보가 수천이 되면 격자 색인으로
+    others = [p for p in shared if p.get("source") != SOURCE_NAME and any(
+        math.hypot((p["poi"]["coord"]["lat"] - c.lat) * 111_000,
+                   (p["poi"]["coord"]["lng"] - c.lng) * 88_000) < 3000 for c in cands)]
     no_food = [p for p in others if p["poi"]["category"] not in ("FOOD", "CAFE")]
     passed: list = []
     merged = 0
