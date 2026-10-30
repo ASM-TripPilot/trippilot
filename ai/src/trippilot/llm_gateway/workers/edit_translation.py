@@ -21,7 +21,7 @@ from datetime import datetime
 # 줄바꿈이 남으면 우리 프롬프트 골격을 위조한다 (inline() docstring 에 실측).
 from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.gates.edit_translation import EditTranslationContext
-from trippilot.llm_gateway.gates.reminder_copy import _display_form
+from trippilot.llm_gateway.gates.reminder_copy import _display_form, _without_names
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.edit import TRANSLATABLE_OPS, EditOp
@@ -71,16 +71,28 @@ def _norm(text: str) -> str:
     return _NAME_NOISE.sub("", text).lower()
 
 
-def _named_beyond_cap(over: list[Poi], utterance: str, slot_names: list[str]) -> list[Poi]:
-    """상한 밖 후보 중 발화에 이름(표시형)이 든 곳 — 풀 순위 앞 `_NAMED_EXTRA` 곳.
+def _spoken(text: str) -> str:
+    """낱말(공백·구두점으로 가른 것)마다 앞에 한 칸을 띄워 이은 꼴 — `' 이름'` 이 들어 있으면 낱말 처음에서 시작한다."""
+    return "".join(f" {w}" for w in _NAME_NOISE.split(text.lower()) if w)
 
-    현재 슬롯과 이름이 같은 곳(출처만 다른 쌍둥이 — 공유본에 200m 안 같은 이름 짝이 1,230쌍)은 뺀다: 슬롯을 가리킨
-    말("도두봉 빼줘")에 같은 이름이 두 목록에 뜨면 번역이 후보 쪽 id 를 집을 수 있다(그러면 게이트가 명령을 버린다)."""
-    said = _norm(utterance)
-    taken = {_norm(_display_form(name)) for name in slot_names}
-    named = [p for p in over if len(key := _norm(_display_form(p.name))) >= _MIN_NAME_CHARS
-             and key in said and key not in taken]
-    return named[:_NAMED_EXTRA]
+
+def _forms(name: str) -> tuple[str, ...]:
+    """이름이 발화에 나올 꼴 — 표시형을 이름의 띄어쓰기 그대로, 또는 다 붙여서. 두 글자 이하는 이름으로 보지 않는다."""
+    shown = _display_form(name)
+    return (_spoken(shown), " " + _norm(shown)) if len(_norm(shown)) >= _MIN_NAME_CHARS else ()
+
+
+def _named_beyond_cap(over: list[Poi], utterance: str, slot_names: list[str]) -> list[Poi]:
+    """상한 밖 후보 중 발화에 이름(표시형)을 댄 곳 — 풀 순위 앞 `_NAMED_EXTRA` 곳.
+
+    이름은 낱말 처음에서 시작해야 하고, 이름에 없는 띄어쓰기를 건너 맞추지 않는다 — 발화를 통째로 정규화하던 동안
+    이웃 낱말이 붙어 "내일 카페"가 '내일카페'와, "먹고 카페"가 '고카페'와 맞았다. 그래서 "효창 공원"도 '효창공원'과
+    안 맞는다: 꼴이 "내일 카페"와 같아 하나만 살릴 수 없고, 놓치면 상한 렌더 그대로지만 오탐은 번역을 그 후보로 끈다.
+    맞추기 전에 지금 슬롯 이름을 발화에서 지운다(긴 것부터 — 알림 게이트와 같은 `_without_names`): 슬롯을 가리킨 말
+    ("경의선숲길공원 빼줘")에 그 이름의 일부('경의선숲길')나 출처만 다른 쌍둥이(같은 이름 — 공유본에 200m 안 짝이
+    1,230쌍)가 실리면 번역이 후보 쪽 id 를 집을 수 있다(그러면 게이트가 명령을 버린다)."""
+    said = _without_names(_spoken(utterance), {f for name in slot_names for f in _forms(name)})
+    return [p for p in over if any(f in said for f in _forms(p.name))][:_NAMED_EXTRA]
 
 
 @dataclass(frozen=True, slots=True)
