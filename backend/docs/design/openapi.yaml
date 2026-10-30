@@ -44,6 +44,9 @@ paths:
         신규 (provider, sub)=가입(즉시 ACTIVE, 연령확인 필수)·기존=로그인.
         **네이버는 이 경로로 받지 않는다(501)** — 네이버는 PKCE 를 지원하지 않아 가로챈 code 를
         막을 수단이 없다(TRIP-1317). 네이버는 `/auth/social/naver/token`(SDK 토큰)으로 보낸다.
+        **구글은 `redirectUri` 로 클라이언트를 고른다**(TRIP-1656) — 앱 커스텀 스킴이면 iOS 클라이언트,
+        http(s) 면 서버 허용 웹 출처 + `/oauth/google` 과 정확히 같을 때만 웹 클라이언트로 교환한다.
+        목록 밖 http(s) redirect 와 웹 클라이언트 미설정은 교환 없이 401 이다(요청 스키마는 그대로).
       security: []
       parameters:
         - name: provider

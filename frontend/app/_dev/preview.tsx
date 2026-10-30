@@ -3821,6 +3821,20 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
+    key: 'map-default-mylocation',
+    band: '기타',
+    label: '기타 · 지도 내 위치(map-default 변형)',
+    login: null,
+    // TRIP-1652 — 웹 지도 내 위치 점(권한이 이미 허용된 브라우저에서만 뜬다 — 묻지 않는다, BR-U10-53). 육안용.
+    render: () => (
+      <MapView
+        center={{ lat: 37.5665, lng: 126.978 }}
+        pins={MAP_STATE_PREVIEW_PINS}
+        showMyLocation
+      />
+    ),
+  },
+  {
     key: 'records-default',
     band: 'j',
     label: 'j01 · 방문 기록 default',

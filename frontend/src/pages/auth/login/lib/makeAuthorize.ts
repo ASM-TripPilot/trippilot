@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 import type { SocialProvider } from '@/shared/api';
 
 import type { Authorize, AuthorizeResult } from '../model/useSocialLogin';
@@ -15,7 +17,8 @@ import { isNaverLoginAvailable } from './isNaverLoginAvailable';
  *  - apple — 항상 네이티브 SDK 어댑터(appleAuthorize, TRIP-932). env 게이트가 없다 — 버튼 노출을
  *    컨테이너가 isAvailableAsync 로 이미 거른다(Android 는 버튼 자체가 없다).
  *  - kakao — EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY 가 있으면 네이티브 SDK 어댑터(kakaoAuthorize)로.
- *  - naver — EXPO_PUBLIC_NAVER_URL_SCHEME 이 있으면 네이티브 SDK 어댑터(naverAuthorize)로.
+ *  - naver — iOS: EXPO_PUBLIC_NAVER_URL_SCHEME 이 있으면 네이티브 SDK 어댑터(naverAuthorize)로.
+ *    웹: EXPO_PUBLIC_NAVER_CLIENT_ID 가 있으면 implicit 팝업(realAuthorize · responseType 'token', TRIP-1650).
  *    (naver SDK 필수 파라미터인 consumerSecret 자체는 naverAuthorize.ts 안에서만 env 로 읽는다
  *    — AC-8′ 가 "시크릿 env 참조는 어댑터 파일 1개에만" 을 소스 스캔으로 잠그므로, 이 게이트는
  *    일부러 시크릿이 아닌 EXPO_PUBLIC_NAVER_URL_SCHEME 로 잡는다.)
@@ -48,9 +51,10 @@ export function makeAuthorize(provider: SocialProvider): Authorize {
       case 'naver-unavailable':
         // 훅이 AUTHORIZE_FAILED 배너로 드러낸다(INV-4 — 침묵 금지). 서버엔 아무것도 나가지 않는다.
         throw new Error(
-          '네이버 로그인 미설정: EXPO_PUBLIC_NAVER_URL_SCHEME 이 비어 SDK 로그인을 쓸 수 없습니다.'
+          '네이버 로그인 미설정: iOS 는 EXPO_PUBLIC_NAVER_URL_SCHEME, 웹은 EXPO_PUBLIC_NAVER_CLIENT_ID 가 비어 로그인할 수 없습니다.'
         );
-      case 'browser': {
+      case 'browser':
+      case 'naver-web': {
         const config = getOAuthConfig(provider);
         if (!config.clientId) {
           throw new Error(
@@ -86,6 +90,7 @@ type Route =
   | 'apple'
   | 'kakao-sdk'
   | 'naver-sdk'
+  | 'naver-web'
   | 'naver-unavailable'
   | 'browser';
 
@@ -96,12 +101,20 @@ function resolveRoute(provider: SocialProvider): Route {
   if (provider === 'apple') {
     return 'apple';
   }
-  if (provider === 'kakao' && process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY) {
+  // 웹은 카카오 SDK 가 없다 — 네이티브 앱 키가 같은 .env 로 들어와 있어도 브라우저 OAuth 로 간다(TRIP-1649).
+  if (
+    provider === 'kakao' &&
+    Platform.OS !== 'web' &&
+    process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY
+  ) {
     return 'kakao-sdk';
   }
   if (provider === 'naver') {
     // 버튼 노출 판정(LoginPage)과 같은 함수 — 숨겨진 버튼이 어떻게든 불렸을 때의 방어선이 이 갈래다.
-    return isNaverLoginAvailable() ? 'naver-sdk' : 'naver-unavailable';
+    if (!isNaverLoginAvailable()) {
+      return 'naver-unavailable';
+    }
+    return Platform.OS === 'web' ? 'naver-web' : 'naver-sdk';
   }
   return 'browser';
 }

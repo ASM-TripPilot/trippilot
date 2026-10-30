@@ -340,11 +340,14 @@ class ChartTests(unittest.TestCase):
                          "LOCATION_AUTOMATION_ENABLED",
                          # Plan-B 상황 감시 4종(situation-awareness §7) — 빠지면 시크릿에 on 을 넣어도 스윕이 기본 off 로 돈다.
                          "PLANB_SITUATION_SWEEP", "PLANB_SITUATION_HORIZON", "PLANB_SITUATION_SWEEP_ACCOUNT_IDS",
-                         "PLANB_PREPARED_REPLAN"):
+                         "PLANB_PREPARED_REPLAN",
+                         # 웹 출시 3종(TRIP-1657) — 빠지면 시크릿에 넣어도 CORS·구글 웹 로그인이 꺼진 채 돈다.
+                         "GOOGLE_WEB_CLIENT_ID", "GOOGLE_WEB_CLIENT_SECRET", "CORS_ALLOWED_ORIGINS"):
                 ref = env[name]["valueFrom"]["secretKeyRef"]
                 self.assertEqual(ref["name"], "trippilot-backend")
                 self.assertEqual(ref["key"], name)
                 self.assertTrue(ref["optional"])
+                self.assertNotIn("value", env[name])  # 값은 시크릿 참조로만 — 렌더된 매니페스트에 평문이 없다
 
 
     def test_backend_calls_the_ai_opportunity_path_by_fixed_env(self):

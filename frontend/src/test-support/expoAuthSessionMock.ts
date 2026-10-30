@@ -13,8 +13,13 @@
  * 이 파일은 실 패키지를 import 하지 않으므로 tsc 가 미설치 모듈을 만나지 않는다(정적 import 부재).
  */
 
-type MockPromptResult =
+/**
+ * `error` 는 실 라이브러리가 "응답에 error 파라미터가 있거나 state 가 어긋난" 경우에 내는 결과다(TRIP-1650) —
+ * 이때도 `params` 에는 돌아온 값(access_token 포함)이 그대로 들어 있어, 앱이 이 결과의 토큰을 쓰면 안 된다는 것을 테스트가 재현할 수 있다.
+ */
+export type MockPromptResult =
   | { type: 'success'; params: Record<string, string> }
+  | { type: 'error'; params: Record<string, string> }
   | { type: 'cancel' }
   | { type: 'dismiss' };
 
@@ -69,7 +74,7 @@ class MockAuthRequest {
 export const expoAuthSessionModule = {
   AuthRequest: MockAuthRequest,
   makeRedirectUri: makeRedirectUriSpy,
-  ResponseType: { Code: 'code' },
+  ResponseType: { Code: 'code', Token: 'token' },
 };
 
 /** jest.mock('expo-web-browser', …) 용. maybeCompleteAuthSession 등 네이티브 진입점 흉내. */
@@ -88,7 +93,7 @@ export const expoCryptoModule = {
   CryptoEncoding: { BASE64URL: 'base64url', BASE64: 'base64' },
 };
 
-/** 다음 promptAsync 결과를 주입한다(success/cancel/dismiss). */
+/** 다음 promptAsync 결과를 주입한다(success/error/cancel/dismiss). */
 export function setPromptResult(result: MockPromptResult): void {
   currentPromptResult = result;
 }
