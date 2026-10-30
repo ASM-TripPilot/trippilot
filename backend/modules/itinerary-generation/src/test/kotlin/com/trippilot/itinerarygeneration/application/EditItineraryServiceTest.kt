@@ -55,6 +55,7 @@ import io.kotest.property.Arb
 import io.kotest.property.arbitrary.shuffle
 import io.kotest.property.checkAll
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
@@ -1148,6 +1149,15 @@ class EditItineraryServiceTest : StringSpec({
             agent.validateCalls shouldBe 1
             agent.lastTransportModes shouldBe listOf("택시", "렌터카") // 목록 그대로 — 상대가 아는 첫 값을 고른다(수리와 같다)
         }
+    }
+
+    "도보·대중교통 여행은 재검증에 수단을 싣지 않는다 — 상대가 자차로 풀 때만 싣는다(도보로 재면 대중교통으로 짠 재계획 날·짧게 붙인 간격이 새로 HC2 다)" {
+        val trip = tripCtx(TripDestinationRef("제주", null, 1))
+        for (modes in listOf(listOf("도보"), listOf("도보", "대중교통"), listOf("도보", "렌터카"), listOf("대중교통", "렌터카"), listOf("택시", "자전거"))) {
+            withClue(modes) { repairContexts(trip, modes = modes).transportModes(acc, tripId) shouldBe emptyList() }
+        }
+        // 아는 첫 값이 렌터카면 목록 그대로 — 뒤에 도보가 있어도 상대는 자차로 푼다
+        repairContexts(trip, modes = listOf("택시", "렌터카", "도보")).transportModes(acc, tripId) shouldBe listOf("택시", "렌터카", "도보")
     }
 
     "재검증 수단 조회가 깨지면 수단 없이(대중교통) 재검증한다 — 판정 보류로 섞지 않는다" {

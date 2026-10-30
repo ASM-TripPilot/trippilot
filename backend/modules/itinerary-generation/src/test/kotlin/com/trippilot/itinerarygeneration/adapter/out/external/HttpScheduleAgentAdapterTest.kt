@@ -656,11 +656,11 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         server.verify()
     }
 
-    "validate — 수단이 없으면 빈 목록(상대 종전 동작 — 대중교통)" {
+    "validate — 수단이 없으면 키를 싣지 않는다(상대 종전 동작 — 대중교통. 수단 칸을 모르는 옛 상대도 422 를 내지 않는다)" {
         val (adapter, server) = fixture()
         repeat(2) {
             server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate"))
-                .andExpect(jsonPath("$.transport_modes").isEmpty)
+                .andExpect(jsonPath("$.transport_modes").doesNotExist())
                 .andRespond(withSuccess("""{"violations":[]}""", MediaType.APPLICATION_JSON))
         }
 
