@@ -116,7 +116,7 @@ def test_prompt_renders_deterministically_with_the_rules() -> None:
     variables = build_dialogue_knowledge_vars("부산은 언제 가?", (_Turn("USER", "안녕"),), ("제약: 아이 동반",), "여행 부산")
     p1, ref = reg.render(_FEAT, variables)
     assert p1 == reg.render(_FEAT, variables)[0]
-    assert ref.prompt_id == "prompts/dialogue_knowledge.yaml" and ref.version == "0.1.0"
+    assert ref.prompt_id == "prompts/dialogue_knowledge.yaml" and ref.version == "0.1.1"
     for rule in ("특정 날짜(○월 ○일)·연도·가격", "고유 이름은 쓰지 마세요", '{"text": null}', "해요체", "번역",
                  "무언가를 대신 해 달라는 요청(예약·결제·표 끊기·택시 호출)", "노선 번호·출구 번호",
                  "사람 수·시간 길이를 우리말 수로 쓰지 마세요", '("두 분이"·"이 분께"·"이 시간에는"·"한 시간")'):
