@@ -240,6 +240,7 @@ class TurnContext:
     # 분류가 "더알려줘"를 계획으로 보내면 이어 묻기를 몰라 제주 일정 근처가 다시 나왔다(2026-10-22 실 스택)
     heard: str = ""
     solo: bool = True  # 이 발화가 이 핸들러 몫뿐인가 — 계획 경로가 도구 둘 이상으로 나누면 False(발화의 두 곳 사이는 도구 하나일 때만)
+    shown: frozenset[str] = frozenset()  # 이어 묻기 사슬에서 카드로 보인 poi_id(`DialogueContext.shown`) — 이어 묻기면 다시 내지 않는다
 
     def __post_init__(self) -> None:
         if self.now.tzinfo is None:
@@ -1582,12 +1583,18 @@ def _carry(ctx: TurnContext) -> _Anchor | None:
     return _Anchor(hit[0], "region", hit[1], hit[2])
 
 
-def _shown_before(ctx: TurnContext) -> Callable[[str], bool]:
-    """이어 묻기에서 이미 보인 곳인가 — 앞 요청 뒤 도우미 말에 이름이 적혔다(공백 무시). 카드로만 보인 곳은 모른다 — 최근 대화에는
-    도우미 문장만 실린다(BE recentTurns)."""
+def _shown_before(ctx: TurnContext) -> Callable[..., bool]:
+    """이어 묻기에서 이미 보인 곳인가 — 앞 요청 뒤 도우미 말에 이름이 적혔거나(공백 무시), 카드로 보였다(`ctx.shown` — 최근 대화에는
+    도우미 문장만 실려 카드로만 보인 곳은 몰랐다, 2026-10-30)."""
     follow = _follow_up(ctx)
     said = follow[1].replace(" ", "") if follow else ""
-    return lambda name: bool(said) and name.replace(" ", "") in said
+    ids = ctx.shown if follow else frozenset()
+    return lambda name, poi_id=None: bool(said) and name.replace(" ", "") in said or poi_id is not None and str(poi_id) in ids
+
+
+def asks_more(text: str) -> bool:
+    """이어 묻기 말인가("더 알려줘"·"다른 데는?") — 오케스트레이터가 보인 곳 목록을 이을지(이어 묻기) 새로 시작할지 가른다."""
+    return _MORE.search(text) is not None
 
 
 def _explore_anchor(ctx: TurnContext) -> _Anchor | None:
@@ -1704,7 +1711,7 @@ def _explore_by_sql(ctx: TurnContext, anchor: _Anchor | None, category: str | No
         if rows is None:
             return {"status": "UNAVAILABLE", "reason": "place_sql"}
         kept = [r for r in rows if _displayable(r.name) and (night or not r.nightlife) and in_area(r)]
-        picked = [r for r in kept if not shown(r.name)][:MAX_CANDIDATES]
+        picked = [r for r in kept if not shown(r.name, r.poi_id)][:MAX_CANDIDATES]
         areas = Counter(r.sigungu for r in picked or kept if r.sigungu).most_common(1)
         label = anchor.label if anchor is not None else (areas[0][0] if areas else None)
         return {"status": "OK", "anchor": label, "exhausted": bool(kept) and not picked, "candidates": [{
@@ -2047,7 +2054,7 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
         shown, (on_the_way, inner) = _shown_before(ctx), _on_the_way(anchor)
         at = {p.poi_id: on_the_way(p.coord) for p in pool.pois}
         # 두 곳 사이면 가운데가 먼저, 양 끝은 모자랄 때만 — 한 번에 순위를 매겨 종류 상한(_PER_CATEGORY)이 전체에 걸리게
-        ranked = _explore_rank((p for p in pool.pois if not shown(p.name) and at[p.poi_id] is not None), category, theme,
+        ranked = _explore_rank((p for p in pool.pois if not shown(p.name, p.poi_id) and at[p.poi_id] is not None), category, theme,
                                _night_heard(ctx), ahead=lambda p: inner(at[p.poi_id]))
         candidates = [{
             "poi_id": str(p.poi_id), "name": p.name, "category": _CATEGORY_KO.get(p.category.value),
@@ -2100,7 +2107,8 @@ def _assemble_explore(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Fa
     if value is None or value.get("status") != "OK":
         return _text_facts(intent, FactStatus.UNAVAILABLE, home, notes=("장소 탐색 미확인", *asked), detail=detail)
     shown = _shown_before(ctx)
-    candidates = [c for c in value.get("candidates", ()) if isinstance(c, Mapping) and not shown(c["name"])][:MAX_CANDIDATES]
+    candidates = [c for c in value.get("candidates", ()) if isinstance(c, Mapping)
+                  and not shown(c["name"], c.get("poi_id"))][:MAX_CANDIDATES]
     if not candidates:
         notes = (more,) if _follow_up(ctx) is not None else ("조건에 맞는 등록 장소 없음",)
         return _text_facts(intent, FactStatus.EMPTY, home, notes=(*notes, *asked), detail=detail)

@@ -1830,6 +1830,27 @@ def test_explore_follow_up_turn_keeps_the_area_from_recent_turns_not_the_itinera
     assert out.outcome == "ANSWER" and [c["name"] for c in out.answer.payload["candidates"]] == ["흰여울 카페"]
 
 
+def test_follow_up_turn_leaves_out_cards_the_sentence_did_not_name() -> None:
+    """문장에 이름이 없던 카드도 "더 알려줘"가 다시 내지 않는다 — 보인 poi_id 를 맥락이 싣는다(2026-10-30). 사슬이 끝나면 비운다."""
+    first, _ = _explore_turn("부산에서 요즘 뜨는 곳을 골라 봤어요.")
+    ids = tuple(c["poiId"] for c in first.answer.payload["candidates"])
+    assert ids and first.context.shown == ids
+    turns = (RecentTurn("USER", "부산 요즘 핫한 곳 알려줘"), RecentTurn("ASSISTANT", first.answer.text))
+
+    def more(context: DialogueContext):
+        answer = json.dumps({"text": "더 찾아봤어요.", "footnote": None}, ensure_ascii=False)
+        b = _build(_canned(Intent.EXPLORE_PLACES, answer=answer),
+                   ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool()))
+        out = b.orch.turn(_input("더 알려줘", context=context, recent_turns=turns, snapshot=_NO_TRIP))
+        return out, {c["poiId"] for c in (out.answer.payload or {}).get("candidates", ())}
+
+    out, cards = more(first.context)
+    assert not cards & set(ids) and out.context.shown == ids  # 이어 묻기 — 목록을 잇는다
+    assert more(DialogueContext())[1] == set(ids)  # 맥락이 없으면 이름 빼기뿐이라 같은 곳이 다시 나온다
+    weather = _build(_canned()).orch.turn(_input(context=out.context))
+    assert weather.context.shown == ()  # 새 말 — 사슬 밖에서 보인 곳은 빼지 않는다
+
+
 @pytest.mark.parametrize("region", ["이 근처", "여기", "숙소 근처", "이 주변"])
 def test_a_deictic_region_is_not_a_region_so_explore_asks_instead_of_saying_it_cannot_find_it(region: str) -> None:
     """분류가 "이 근처"를 region 칸에 담아도 지역이 아니다 — 여행·일정이 없으면 지역을 되묻는다("그 지역은 아직…" EMPTY 가 아니다)."""
