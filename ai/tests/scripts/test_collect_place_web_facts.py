@@ -133,7 +133,7 @@ def test_a_place_whose_facts_say_it_closed_is_closed_not_found() -> None:
 
 def test_a_malformed_response_is_an_error_for_that_place_only() -> None:
     res, _ = _lookup(_Resp('{"found": true, "facts": [{"text": "바 좌석", "url": "u1"}]}', usage=False))
-    assert res["status"] == "error" and res["error"].startswith("parse:")
+    assert res["status"] == "error" and not res.get("fatal") and not res.get("transient")  # 그곳만 오류 — 배치는 이어 간다
 
 
 def test_one_backoff_episode_raises_the_step_once_however_many_workers_hit_it() -> None:

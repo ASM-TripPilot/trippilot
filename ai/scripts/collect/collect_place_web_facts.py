@@ -50,7 +50,14 @@ from trippilot.poi_curation.place_fallback import WEB_FACTS_PER_DOC as MAX_FACTS
 
 _POIS = _AI / "data" / "collected_pois.json"
 _HAS_DOC = (_AI / "data" / "place_corpus_overview.jsonl.gz", _AI / "data" / "place_corpus_wiki.jsonl.gz")
-MODEL = os.environ.get("WEB_FACTS_MODEL", "gpt-5.6-sol")  # 2026-10-23 인용 대조를 잰 모델
+# 벤더 — openai(Responses `web_search`, 2026-10-23 인용 대조를 잰 경로) · claude(서버 도구 `web_search_20250305`, 10-24 부터 멘토
+# Azure 키가 401 이라 이쪽으로 이어 받는다 — 도우미 미확인 칸 웹 확인 PLACE_FACT_LOOKUP 이 10-30 같은 도구로 옮긴 것과 같다)
+VENDOR = os.environ.get("WEB_FACTS_VENDOR", "openai")
+MODEL = os.environ.get("WEB_FACTS_MODEL", "claude-sonnet-5-5" if VENDOR == "claude" else "gpt-5.6-sol")
+# 지출 셈(달러) — 100만 토큰당 입력·출력, 검색 1회. 모르면 **높게** 잡는다(상한이 늦게 걸리지 않게). claude 검색은 1,000회당 10달러
+PRICE_IN, PRICE_OUT, PRICE_SEARCH = (float(os.environ.get(f"WEB_FACTS_PRICE_{k}", d)) for k, d in
+                                     (("IN", "3"), ("OUT", "15"), ("SEARCH", "0.01")))
+MAX_SEARCHES = 1  # claude — 한 곳에 검색 1회(검색 1회 0.01달러가 비용을 지배한다 — 키·시크릿 세션 10-30)
 MAX_FACT_CHARS, MAX_TRANSIENT, MAX_RATE_LIMITED, MAX_ERRORS_IN_ROW = 60, 6, 8, 20
 _CAT_KO = {"SIGHT": "명소", "NATURE": "자연", "CULTURE": "문화", "FOOD": "음식점", "CAFE": "카페", "SHOPPING": "쇼핑",
            "ACTIVITY": "액티비티", "BAR": "술집", "ART": "미술관·갤러리", "NIGHT_VIEW": "야경 명소"}
@@ -134,6 +141,7 @@ def targets(proposals: list[dict], has_doc: set[str]) -> list[dict]:
 
 
 def _citations(resp) -> list[str]:
+    """OpenAI Responses — 본문 주석(annotations) 먼저, 그다음 검색 도구가 본 출처."""
     seen, cited = [], []
     for item in getattr(resp, "output", None) or ():
         action = getattr(item, "action", None)
@@ -146,6 +154,57 @@ def _citations(resp) -> list[str]:
         if isinstance(u, str) and u and u not in out:
             out.append(u)
     return out
+
+
+def _claude_citations(resp) -> list[str]:
+    """Claude — 본문 인용(TextBlock.citations) 먼저, 그다음 검색 도구 결과 목록(`anthropic_adapter._citations` 와 같은 순서)."""
+    cited, seen = [], []
+    for block in getattr(resp, "content", None) or ():
+        kind = getattr(block, "type", None)
+        if kind == "text":
+            cited += [getattr(c, "url", None) for c in getattr(block, "citations", None) or ()]
+        elif kind == "web_search_tool_result":
+            seen += [getattr(r, "url", None) for r in getattr(block, "content", None) or () if not isinstance(r, str)]
+    out: list[str] = []
+    for u in (*cited, *seen):
+        if isinstance(u, str) and u and u not in out:
+            out.append(u)
+    return out
+
+
+def ask_openai(client, prompt: str) -> tuple[str, list[str], int, int, int]:
+    """→ (답 글, 인용 URL, 입력 토큰, 출력 토큰, 검색 수). 검색 수는 Responses 가 따로 세지 않아 0 — 토큰에 결과가 든다."""
+    resp = client.responses.create(model=MODEL, tools=[{"type": "web_search"}], include=["web_search_call.action.sources"],
+                                   reasoning={"effort": "low"}, input=prompt, max_output_tokens=3000, timeout=120)
+    return resp.output_text or "", _citations(resp), resp.usage.input_tokens, resp.usage.output_tokens, 0
+
+
+def ask_claude(client, prompt: str) -> tuple[str, list[str], int, int, int]:
+    resp = client.messages.create(model=MODEL, max_tokens=1500, timeout=120, messages=[{"role": "user", "content": prompt}],
+                                  tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": MAX_SEARCHES}])
+    text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
+    searches = getattr(getattr(resp.usage, "server_tool_use", None), "web_search_requests", 0) or 0
+    return text, _claude_citations(resp), resp.usage.input_tokens, resp.usage.output_tokens, searches
+
+
+def cost_usd(input_tokens: int, output_tokens: int, searches: int) -> float:
+    return input_tokens / 1e6 * PRICE_IN + output_tokens / 1e6 * PRICE_OUT + searches * PRICE_SEARCH
+
+
+class _Budget:
+    """총 지출 상한 — 운영과 같은 크레딧이면 운영 몫을 남긴다(2026-10-30 사용자 결정: 충전되는 200달러 크레딧 안에서만)."""
+
+    def __init__(self, usd: float | None) -> None:
+        self._lock, self.left = threading.Lock(), usd
+
+    def charge(self, usd: float) -> None:
+        with self._lock:
+            if self.left is not None:
+                self.left -= usd
+
+    @property
+    def exhausted(self) -> bool:
+        return self.left is not None and self.left <= 0
 
 
 class _Backoff:
@@ -195,25 +254,24 @@ def _retry_after(e: Exception) -> float | None:
         return None
 
 
-def lookup(client, t: dict, backoff: _Backoff) -> dict:
-    refusals = 0
+def lookup(client, t: dict, backoff: _Backoff, ask=ask_openai) -> dict:
+    refusals, spent = 0, 0.0
     for _ in range(MAX_TRANSIENT):
         backoff.wait()
         t0 = time.monotonic()
         try:
-            resp = client.responses.create(model=MODEL, tools=[{"type": "web_search"}], include=["web_search_call.action.sources"],
-                                           reasoning={"effort": "low"}, input=PROMPT % (t["name"], t["kind"], t["address"]),
-                                           max_output_tokens=3000, timeout=120)
+            text, cites, tokens_in, tokens_out, searches = ask(client, PROMPT % (t["name"], t["kind"], t["address"]))
         except Exception as e:  # noqa: BLE001 — 수집 배치: 사유를 남기고 이어 간다
-            if getattr(e, "status_code", None) in (401, 403):
+            # 인증 거절·크레딧 바닥은 다음 곳도 똑같다 — 멈춘다(크레딧은 운영과 같을 수 있어 더 부르면 안 된다)
+            if getattr(e, "status_code", None) in (401, 403) or "credit balance" in str(e).lower():
                 return {"status": "error", "fatal": True, "error": f"{type(e).__name__}: {str(e)[:160]}"}
             if _transient(e):
                 backoff.hit(_retry_after(e), rate_limited=getattr(e, "status_code", None) == 429)
                 continue
             return {"status": "error", "error": f"{type(e).__name__}: {str(e)[:160]}"}
         backoff.ok()
+        spent += cost_usd(tokens_in, tokens_out, searches)
         try:
-            text = resp.output_text or ""
             try:
                 parsed = json.loads(text[text.index("{"): text.rindex("}") + 1])
             except ValueError:
@@ -221,33 +279,41 @@ def lookup(client, t: dict, backoff: _Backoff) -> dict:
                     refusals += 1
                     continue
                 status = "refused" if _REFUSAL.match(text) else "error"  # 두 번 거절이면 그 곳의 답이다 — 다시 묻지 않는다
-                return {"status": status, "error": f"json: {text[:120]}", "ms": int((time.monotonic() - t0) * 1000)}
+                return {"status": status, "error": f"json: {text[:120]}", "ms": int((time.monotonic() - t0) * 1000),
+                        "cost": round(spent, 5)}
             facts = [{"text": _one_line(f.get("text")), "url": str(f.get("url") or ""), "date": str(f.get("date") or "")[:7] or None}
                      for f in (parsed.get("facts") or []) if isinstance(f, dict)]
             status = "found" if parsed.get("found") and facts else "not_found"
             if status == "found" and any(_CLOSED.search(f["text"]) for f in facts):
                 status = "closed"
-            return {"status": status, "facts": facts, "citations": _citations(resp), "ms": int((time.monotonic() - t0) * 1000),
-                    "tokens": [resp.usage.input_tokens, resp.usage.output_tokens]}
-        except Exception as e:  # noqa: BLE001 — 응답 모양이 다를 때(usage 없음·facts 가 문자열 등) 그곳만 오류로
-            return {"status": "error", "error": f"parse: {type(e).__name__}: {str(e)[:120]}"}
+            return {"status": status, "facts": facts, "citations": cites, "ms": int((time.monotonic() - t0) * 1000),
+                    "tokens": [tokens_in, tokens_out], "searches": searches, "cost": round(spent, 5)}
+        except Exception as e:  # noqa: BLE001 — 응답 모양이 다를 때(facts 가 문자열 등) 그곳만 오류로
+            return {"status": "error", "error": f"parse: {type(e).__name__}: {str(e)[:120]}", "cost": round(spent, 5)}
     return {"status": "error", "transient": True, "error": f"transient: {MAX_TRANSIENT}회 물러났다 다시 해도 실패"}
 
 
-def run(state: Path, limit: int | None, workers: int, only: set[str] | None = None, rpm: float = 6.0) -> None:
-    import openai
-
+def run(state: Path, limit: int | None, workers: int, only: set[str] | None = None, rpm: float = 6.0,
+        budget_usd: float | None = None) -> None:
     proposals = json.loads(_POIS.read_text(encoding="utf-8"))["proposals"]
     has_doc = {r["poi_ref"] for p in _HAS_DOC if p.exists() for r in _rows(p) if r.get("sections")}
     done = {rec["ref"] for rec in records(state_files(state)) if rec.get("status") in FINAL}
     todo = [t for t in targets(proposals, has_doc) if t["ref"] not in done and (only is None or t["ref"] in only)]
     todo = todo[:limit] if limit is not None else todo
-    print(f"대상 {len(todo)} (이미 받음 {len(done)}) · 모델 {MODEL} · 일꾼 {workers} · 분당 {rpm}", flush=True)
+    print(f"대상 {len(todo)} (이미 받음 {len(done)}) · {VENDOR} {MODEL} · 일꾼 {workers} · 분당 {rpm} · 상한 {budget_usd} 달러",
+          flush=True)
     if state.exists() and state.stat().st_size and not state.read_bytes().endswith(b"\n"):
         with state.open("a", encoding="utf-8") as f:  # 끊긴 실행의 반쪽 줄 뒤에 이어 쓰지 않게
             f.write("\n")
-    client = openai.OpenAI(api_key=os.environ.get("WEB_FACTS_API_KEY") or None, max_retries=0, timeout=120)
-    backoff, lock = _Backoff(rpm), threading.Lock()
+    if VENDOR == "claude":
+        import anthropic
+
+        client, ask = anthropic.Anthropic(api_key=os.environ.get("WEB_FACTS_API_KEY") or None, max_retries=0, timeout=120), ask_claude
+    else:
+        import openai
+
+        client, ask = openai.OpenAI(api_key=os.environ.get("WEB_FACTS_API_KEY") or None, max_retries=0, timeout=120), ask_openai
+    backoff, lock, budget = _Backoff(rpm), threading.Lock(), _Budget(budget_usd)
     stats = dict.fromkeys((*FINAL, "error"), 0)
     stop: list[str] = []
     errors_in_row, transient_in_row = [0], [0]
@@ -255,15 +321,19 @@ def run(state: Path, limit: int | None, workers: int, only: set[str] | None = No
     def work(t: dict) -> None:
         if stop:
             return
+        if budget.exhausted:
+            stop.append(f"지출 상한 {budget_usd} 달러에 닿아 멈춤")
+            return
         if transient_in_row[0] >= workers * 2:  # 한참 계속 망 장애 — 10분 쉬고 다시(그곳들은 다음 실행이 다시 받는다)
             time.sleep(600)
             transient_in_row[0] = 0
         try:
-            res = lookup(client, t, backoff)
+            res = lookup(client, t, backoff, ask)
         except Exception as e:  # noqa: BLE001 — 한 곳의 버그가 배치를 죽이지 않게
             res = {"status": "error", "error": f"{type(e).__name__}: {str(e)[:160]}"}
         rec = {"ref": t["ref"], "source": t["source"], "name": t["name"], "model": MODEL,
                "at": datetime.now(timezone.utc).isoformat(timespec="seconds"), **res}
+        budget.charge(res.get("cost", 0.0))
         with lock:
             with state.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
@@ -283,7 +353,8 @@ def run(state: Path, limit: int | None, workers: int, only: set[str] | None = No
 
     with cf.ThreadPoolExecutor(workers) as ex:
         list(ex.map(work, todo))
-    print("끝", stats, stop[0] if stop else "", flush=True)
+    left = "" if budget.left is None else f"· 남은 상한 {budget.left:.2f} 달러"
+    print("끝", stats, left, stop[0] if stop else "", flush=True)
 
 
 def _url_key(url: str) -> str:
@@ -351,10 +422,11 @@ def main() -> None:
     ap.add_argument("--max", type=int)
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--rpm", type=float, default=6.0, help="분당 요청 시작 수 상한 — 운영과 같은 키면 앱 몫을 남긴다")
+    ap.add_argument("--budget-usd", type=float, help="이번 실행의 총 지출 상한(달러, 단가 WEB_FACTS_PRICE_* 로 셈) — 닿으면 멈춘다")
     ap.add_argument("--refs", type=Path, help="이 파일(한 줄에 content_id 하나)에 있는 곳만 — 측정용 숏리스트를 먼저 받을 때")
     a = ap.parse_args()
     only = set(a.refs.read_text(encoding="utf-8").split()) if a.refs else None
-    run(a.state, a.max, a.workers, only, a.rpm) if a.mode == "run" else build(a.state, a.out)
+    run(a.state, a.max, a.workers, only, a.rpm, a.budget_usd) if a.mode == "run" else build(a.state, a.out)
 
 
 if __name__ == "__main__":

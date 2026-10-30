@@ -883,7 +883,10 @@ def _shortlist(request: "PlanBRagRequest", persona_hits: Sequence[KbHit]) -> Can
         _saved_refs(request.saved_places, persona_hits), pool, available, request.reason, request.user_request)
     keep = set(ranked[:LLM_SHORTLIST]) | {
         str(p) for p in request.current_slot_ids if p not in excluded}
-    pois = tuple(p for p in pool.pois if str(p.poi_id) in keep)
+    # 규칙 랭킹 순서로 둔다 — KB-5 대체 문서가 이 순서로 상한(MAX_DOCS)까지 붙는다(풀 순서면 인기·영업시간 순이라 가까운 곳이 빠졌다,
+    # #1707 리뷰). 프롬프트는 워커가 poi_id 로 다시 정렬하고 게이트는 집합으로 교차해 이 순서와 무관하다
+    rank = {r: i for i, r in enumerate(ranked)}
+    pois = tuple(sorted((p for p in pool.pois if str(p.poi_id) in keep), key=lambda p: rank.get(str(p.poi_id), len(rank))))
     return replace(pool, poi_ids=frozenset(p.poi_id for p in pois), pois=pois)
 
 

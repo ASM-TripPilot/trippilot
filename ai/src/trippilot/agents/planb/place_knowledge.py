@@ -152,7 +152,7 @@ def fetch_place_knowledge(
         )
     except Exception as e:  # 임베딩·스토어 장애 — 진짜 문서 없이(대체 문서만) 진행한다
         _logger.warning("place_knowledge degraded: %s: %s", type(e).__name__, e)
-        return _fill({}, pois, extra), f"place_knowledge_unavailable: {type(e).__name__}"
+        return _fill({}, pois, extra)[0], f"place_knowledge_unavailable: {type(e).__name__}"
 
     # 키는 `poi_ref`(= source_ref)다. `doc_id` 는 출처별 접두사가 붙어 있어 후보와
     # 직접 안 맞는다 — 한 장소에 여러 출처의 문서가 생길 수 있기 때문이다.
@@ -175,20 +175,28 @@ def fetch_place_knowledge(
     truncated = distinct > len(out)
     note = (f"place_knowledge_truncated: {len(out)}곳 채택 / {distinct}곳 이상 해당 "
             f"(상한 {MAX_DOCS} · 나머지는 문서 없이 간다)") if truncated else ""
-    return _fill(out, pois, extra), note
+    filled, left_out = _fill(out, pois, extra)
+    return filled, note or _fallback_note(left_out)
 
 
-def _fill(out: dict[str, str], pois: Sequence[Poi], extra: Mapping[str, str]) -> PlaceKnowledge:
-    """진짜 문서가 없는 자리에 대체 문서 — 숏리스트 순서대로, 진짜 문서와 합쳐 `MAX_DOCS` 까지."""
-    filled = PlaceKnowledge(out)
+def _fill(out: dict[str, str], pois: Sequence[Poi], extra: Mapping[str, str]) -> tuple[PlaceKnowledge, int]:
+    """진짜 문서가 없는 자리에 대체 문서 — 숏리스트 순서대로, 진짜 문서와 합쳐 `MAX_DOCS` 까지. 반환: (문서, 상한에 밀린 대체 문서 수)."""
+    filled, left_out = PlaceKnowledge(out), 0
     for p in pois:
         ref = p.source_ref or ""
+        if not ref or ref in filled or not extra.get(ref):
+            continue
         if len(filled) >= MAX_DOCS:
-            break
-        if ref and ref not in filled and extra.get(ref):
-            filled[ref] = _clip(extra[ref])
-            filled.fallback += 1
-    return filled
+            left_out += 1
+            continue
+        filled[ref] = _clip(extra[ref])
+        filled.fallback += 1
+    return filled, left_out
+
+
+def _fallback_note(left_out: int) -> str:
+    """상한에 밀린 대체 문서도 보이게 — 조용한 축소 금지(INV-4, 진짜 문서의 `place_knowledge_truncated` 와 같은 표지)."""
+    return f"place_knowledge_truncated: 대체 문서 {left_out}곳은 상한 {MAX_DOCS} 에 걸려 문서 없이 간다" if left_out else ""
 
 
 def attach(poi: Poi, knowledge: Mapping[str, str]) -> str:
