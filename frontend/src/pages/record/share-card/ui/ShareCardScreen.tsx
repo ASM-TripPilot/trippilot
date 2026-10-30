@@ -8,6 +8,7 @@ import { FormatSegment } from './FormatSegment';
 import { BackArrowGlyph } from '@/features/reflection/index.view';
 import { DownloadGlyph, ShareGlyph } from './ShareCardGlyphs';
 import { ShareCardPreview } from './ShareCardPreview';
+import { Skeleton } from '@/shared/ui/Skeleton';
 import {
   CAPTION_MAX_LENGTH,
   HASHTAG_MAX_COUNT,
@@ -25,7 +26,7 @@ import {
 
 /**
  * TRIP-574 · j06 공유 카드 화면(VM·formats 주입, 포맷·해시태그 편집·결과 안내는 로컬 상태).
- * 조회·조립은 `pages/record/share-card` 가 진다(이 파일은 `@/shared/*` 값 import 0 — 프리뷰 격리 렌더 안전).
+ * 조회·조립은 `pages/record/share-card` 가 진다(이 파일은 `@/shared/api` 값 import 0 — 프리뷰 격리 렌더 안전).
  *
  * 무엇을 보장하나(승인 계약):
  *  - AC-1(정상 렌더): 제목·포맷 세그(3셀)·프리뷰 프레임·캡션·저장/공유 버튼이 그려진다.
@@ -50,12 +51,18 @@ const RESULT_TEXT: Record<ShareResult, string> = {
 };
 const HASHTAG_COUNT_ERROR = `해시태그는 ${HASHTAG_MAX_COUNT}개까지 넣을 수 있어요`;
 const HASHTAG_LENGTH_ERROR = `${CAPTION_MAX_LENGTH}자까지 쓸 수 있어요`;
+const COPY_LIMIT_NOTICE =
+  '오늘은 추천 문구를 모두 받았어요. 직접 편집해 쓸 수 있어요';
 
 export interface ShareCardScreenProps {
   card: ShareCardVM;
   formats: ShareFormat[];
   caption: string;
   hashtagText: string;
+  /** 서버 문구를 기다리는 중 — 캡션 자리에 Skeleton(TRIP-1605). 생략하면 기다리지 않는 것. */
+  copyPending?: boolean;
+  /** 서버 문구의 하루 상한에 닿았다 — 캡션 자리에 한 줄 안내. 생략하면 없음. */
+  copyLimitReached?: boolean;
   onBack: () => void;
 }
 
@@ -64,12 +71,16 @@ export function ShareCardScreen({
   formats,
   caption,
   hashtagText,
+  copyPending = false,
+  copyLimitReached = false,
   onBack,
 }: ShareCardScreenProps): ReactElement {
   const [selectedFormatId, setSelectedFormatId] = useState<ShareFormat['id']>(
     formats[0]?.id ?? 'story'
   );
-  const [hashtags, setHashtags] = useState(hashtagText);
+  // 사용자가 [완료]로 고친 값. null 이면 prop 을 그대로 보인다(서버 문구가 늦게 도착해도 따라간다 — useState 초기값은 첫 렌더에만 읽힌다).
+  const [editedHashtags, setEditedHashtags] = useState<string | null>(null);
+  const hashtags = editedHashtags ?? hashtagText;
   const [draft, setDraft] = useState<string | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [result, setResult] = useState<ShareResult | null>(null);
@@ -109,7 +120,7 @@ export function ShareCardScreen({
       setDraftError(HASHTAG_LENGTH_ERROR);
       return;
     }
-    setHashtags(draft);
+    setEditedHashtags(draft);
     setDraft(null);
     setDraftError(null);
   };
@@ -190,9 +201,30 @@ export function ShareCardScreen({
               </Pressable>
             )}
           </View>
-          <Text className="font-noto text-body text-ink">{caption}</Text>
+          <Text
+            testID="reflection-share-caption-text"
+            className="font-noto text-body text-ink"
+          >
+            {caption}
+          </Text>
+          {copyPending ? (
+            <Skeleton className="h-[18px] w-3/4 rounded-button bg-surface-soft" />
+          ) : null}
+          {copyLimitReached ? (
+            <Text
+              testID="reflection-share-copy-limit"
+              className="font-noto text-label text-muted"
+            >
+              {COPY_LIMIT_NOTICE}
+            </Text>
+          ) : null}
           {draft === null ? (
-            <Text className="font-noto text-body text-link">{hashtags}</Text>
+            <Text
+              testID="reflection-share-hashtags"
+              className="font-noto text-body text-link"
+            >
+              {hashtags}
+            </Text>
           ) : (
             <View className="gap-sm">
               <TextInput
