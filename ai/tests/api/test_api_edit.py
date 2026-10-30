@@ -472,6 +472,21 @@ def test_applied_fills_distance_on_the_edited_day_only() -> None:
     assert "duration" not in response.text.lower() and "분" not in edited["slots"][1]["distance_range"]
 
 
+@pytest.mark.parametrize(("transport_mode", "label", "mode"), [
+    ("대중교통", "대중교통", "PUBLIC"), ("렌터카", "자가용", "CAR"),
+])
+def test_edited_day_distance_follows_the_requested_transport(transport_mode, label, mode) -> None:  # noqa: ANN001
+    """화면 거리도 요청 수단으로 잰다 — repair 가 늘 '대중교통' 이름표를 내던 회귀(#983)와 같은 길을 막는다."""
+    route = _Route()
+    body = _body(command=_MOVE)
+    body["transport_mode"] = transport_mode
+    with _routed(_chain(route)) as client:
+        data = _post(client, body).json()
+    assert data["status"] == "APPLIED", data
+    assert data["itinerary"]["days"][0]["slots"][1]["distance_range"] == f"약 1.2km · {label}"
+    assert [leg[2].name for leg in route.legs] == [mode]
+
+
 def test_no_budget_left_skips_the_route_api_and_says_so() -> None:
     """편집 시한 안에서만 잰다 — 남은 예산이 없으면 실경로를 부르지 않고 추정으로 채운다(생성과 같은 규칙). 사유는 FallbackEvent."""
     route, trace = _Route(), InMemoryTrace()
