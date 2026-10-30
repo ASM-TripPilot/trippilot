@@ -1942,6 +1942,20 @@ def _inline_persona(
     return persona
 
 
+def _persona_gap(
+    profile: schemas.PreferenceProfileSchema | None, inline: PersonaSummary | None,
+) -> str | None:
+    """실린 취향을 못 쓴 까닭 — `_inline_persona` 의 None 두 갈래를 가른다. 썼으면 None.
+
+    필드 없음(옛 백엔드이거나 백엔드가 못 실었다)은 `persona_inline_absent`, 왔는데 전 축 미설정은
+    `persona_unset`. 내려간 종전 재조회는 운영에선 고정 요약(`StaticPersonaStore`)인데 정상 값처럼
+    보여서 이 표지가 없으면 흔적이 없다(INV-4).
+    """
+    if inline is not None:
+        return None
+    return "persona_inline_absent" if profile is None else "persona_unset"
+
+
 class WiredItineraryOrchestrator:
     """실 오케스트레이터·C2 퍼사드를 API Protocol 모양으로 감싸는 경계 어댑터."""
 
@@ -2393,6 +2407,8 @@ class WiredItineraryOrchestrator:
             target = request.target_poi_id or next(iter(request.affected_reasons), None)
             pool, role_notes = restrict_pool_to_target_role(
                 pool, target, frozenset(PoiId(p) for p in request.excluded_poi_ids))
+        inline = _inline_persona(request.preference_profile, request.companion_type)
+        gap = _persona_gap(request.preference_profile, inline)
         result = self._rag.run(
             PlanBRagRequest(
                 trigger=TriggerParams(
@@ -2418,8 +2434,7 @@ class WiredItineraryOrchestrator:
                 # 야외를 안 내리면 화면과 모순된다. 실값은 정도를 더하는 데만 쓴다.
                 rain_prob_by_date=self._rain_from(packets, dates, now),
                 # 그 여행의 취향이 실려 오면 그것이 이 요청의 페르소나다 — 없으면 종전 재조회(하위호환).
-                persona=(_inline_persona(request.preference_profile, request.companion_type)
-                         or self._persona_from(packets)),
+                persona=inline or self._persona_from(packets),
                 saved_places=tuple(
                     SavedPlace(poi_id=sp.poi_id, name=sp.name) for sp in request.saved_places
                 ),
@@ -2441,7 +2456,7 @@ class WiredItineraryOrchestrator:
             fallback_level=result.fallback_level,
             notes=list(result.notes) + role_notes + (
                 [f"categories_ignored:{','.join(ignored_categories)}"]
-                if ignored_categories else []),
+                if ignored_categories else []) + ([gap] if gap else []),
             retrieved=dict(result.retrieved),
             dropped_out_of_pool=list(result.dropped_out_of_pool),
             empty_reason=result.empty_reason,
@@ -3971,7 +3986,12 @@ class WiredItineraryOrchestrator:
             poi_ids=frozenset(p.poi_id for p in pois), pois=pois, generated_at=now)
         owner = f"trip:{request.trip_id}"
         # 그 여행의 취향이 실려 오면 그것으로 설명한다 — 없으면 종전 재조회(하위호환).
-        persona = _inline_persona(request.preference_profile, request.companion_type) or self._resolver.resolve(
+        inline = _inline_persona(request.preference_profile, request.companion_type)
+        if gap := _persona_gap(request.preference_profile, inline):
+            # 응답에 notes 칸이 없어 로그로 드러낸다 — WARN 은 필드 없음만(미설정은 취향을 안 넣은 사용자라 정상)
+            _logger.log(logging.WARNING if request.preference_profile is None else logging.INFO,
+                        "explanations %s trace_id=%s trip_id=%s", gap, trace_id, request.trip_id)
+        persona = inline or self._resolver.resolve(
             Principal(user_id=owner),
             ResourceRef(kind="persona", ref_id=request.trip_id, owner_id=owner),
         )

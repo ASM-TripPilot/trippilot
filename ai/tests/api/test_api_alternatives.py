@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from tests.fakes.fake_embedding import FakeEmbedding
@@ -351,6 +352,22 @@ def test_inline_preference_profile_becomes_the_persona() -> None:
     assert inline.taste_tags == (TasteTag.FOOD,) and inline.companion is CompanionType.SOLO
     assert "취향 FOOD" in _join_persona((), (), inline)        # 프롬프트 페르소나 줄
     assert legacy == mark  # 없으면 종전 재조회분 — 주입한 ContextStore 의 값 그대로
+
+
+@pytest.mark.parametrize(("extra", "gap"), [
+    ({}, "persona_inline_absent"),                         # 필드 없음 — 옛 백엔드이거나 백엔드가 못 실었다
+    ({"preference_profile": {}}, "persona_unset"),         # 필드는 왔는데 전 축 미설정 — 취향을 안 넣은 사용자
+    ({"preference_profile": {"styles": ["미식"]}}, None),  # 실린 취향을 썼다 — 남길 것이 없다
+])
+def test_persona_fallback_is_visible_in_notes(extra: dict, gap: str | None) -> None:
+    """실린 취향을 못 써 종전 재조회로 내려가면 notes 에 그 사실이 남는다(침묵 금지).
+
+    운영은 재조회 저장소를 꽂지 않아 내려가면 곧 고정 요약인데, PERSONA 패킷은 status OK 라
+    notes·fallback 어디에도 흔적이 없었다. 백엔드는 notes 를 로그로 남긴다.
+    """
+    with TestClient(build_dev_app(), raise_server_exceptions=False) as client:
+        notes = _post(client, trip_id="trip-gap", **extra).json()["notes"]
+    assert [n for n in notes if n in ("persona_inline_absent", "persona_unset")] == ([gap] if gap else [])
 
 
 # ── ⑧ 시간 단위 날씨 — 지나간 비에 반응하지 않는다 ───────────────────
