@@ -28,13 +28,17 @@ _SIDO = {"서울특별시": "서울", "부산광역시": "부산", "대구광역
          "충청남도": "충남", "전북특별자치도": "전북", "전라북도": "전북", "전라남도": "전남", "전남광주통합특별시": "전남광주",
          "경상북도": "경북", "경상남도": "경남", "제주특별자치도": "제주"}
 _GU = re.compile(r"^[가-힣]+(?:시|군|구)$")
-_UNIT = re.compile(r"^[가-힣][가-힣0-9]*(?:읍|면|동|가|리)$")  # '101동'·'A동' 은 건물 동 번호다
+# 행정 단위 이름 — 짧은 한글 + 읍·면·동·리, 또는 동·가 번호(성수동2가·종로1가·역삼1동). '101동'·'A동'(건물 동 번호)·'이조숯불냉면'·
+# '하늘다리'(도로명 뒤에 붙은 상호)는 아니다 — 길이를 묶고, 아래 `area` 는 시군구 바로 다음 낱말 하나만 본다
+_UNIT = re.compile(r"^(?:[가-힣]{1,4}(?:읍|면|동|리)|[가-힣]{1,4}\d{1,2}(?:동|가)|[가-힣]{1,4}동\d{1,2}가)$")
 _PAREN = re.compile(r"\(([^(),]+?)(?:,[^)]*)?\)")
 _TAG = re.compile(r"<[^>]+>")
 _PHONEISH = re.compile(r"\d{2,4}\s?[-)]\s?\d{3,4}\s?-\s?\d{4}|☎|전화|문의")
 _TIMEISH = re.compile(r"\d{1,2}\s?:\s?\d{2}|\d+\s?시간|\d+\s?분|\d+\s?시(?![간대])")  # 시각·소요 — 칸에 섞여 들어온다(INV-2·3)
-_PRICEISH = re.compile(r"\d[\d,]*\s?원|\d{3,}")  # '8,000원' 과 단위 없는 '아메리카노 4500'
+_PRICEISH = re.compile(r"\d[\d,.]*\s?(?:만|천)?\s?원|원대|\d{3,}")  # '8,000원'·'1만5천원'·'만원대'와 단위 없는 '아메리카노 4500'
 _FLAG_EMPTY = frozenset({"", "0", "-", "없음", "없습니다", "해당없음", "미정", "문의", "불가능여부확인", "확인필요"})
+# 품목이 아니라 입점 형태·자리표시인 값 — '복합쇼핑몰(백화점, 마트…)'이 단일 매장 264곳에 판매 품목처럼 붙었다(#1707 리뷰)
+_NOT_ITEMS = re.compile(r"^복합쇼핑몰|이용\s?가격|^가격$")
 INTRO_FIELDS = (("firstmenu", "대표메뉴"), ("treatmenu", "메뉴"), ("saleitem", "판매"))
 CARD_MAX_CHARS = 220
 
@@ -51,7 +55,9 @@ def _unit(word: str) -> bool:
 def area(address: str, region: str) -> str:
     """'서울특별시 송파구 백제고분로 265, 1층 (삼전동)' → '서울 송파구 삼전동'. 모르는 칸은 뺀다.
 
-    시군구는 주소에서 먼저 읽는다(공유본 region 칸이 주소와 다른 곳이 있다). 세종은 시군구가 없다 — 주소 둘째 낱말은 길 이름이다."""
+    시군구는 주소에서 먼저 읽는다(공유본 region 칸이 주소와 다른 곳이 있다). 세종은 시군구가 없다 — 주소 둘째 낱말은 길 이름이다.
+    동네는 괄호 속 동(도로명 주소)이나 시군구 **바로 다음** 낱말(지번 주소)만 — 그 뒤까지 훑으면 도로명·번지 뒤에 붙은 상호를
+    동네로 읽었다(카드 9곳, #1707 리뷰)."""
     words = address.split()
     sido = _SIDO.get(words[0], "") if words else ""
     rest = words[1:] if sido else words
@@ -59,8 +65,23 @@ def area(address: str, region: str) -> str:
     if not gu and _GU.match(region or "") and sido != "세종":
         gu = [region]
     paren = next((m.group(1).strip() for m in _PAREN.finditer(address) if _unit(m.group(1).strip())), "")
-    unit = paren or next((w for w in rest[len(gu):len(gu) + 3] if _unit(w)), "")
+    after = rest[len(gu)] if len(rest) > len(gu) else ""
+    unit = paren or (after if _unit(after) else "")
     return " ".join(x for x in (sido, *gu, unit) if x)
+
+
+def _items(value: str) -> list[str]:
+    """괄호 **밖**의 구분자로만 쪼갠다 — '잔치국수(온/냉)'가 '잔치국수(온.'으로 깨졌다(#1707 리뷰)."""
+    items, depth, cur = [], 0, ""
+    for ch in value:
+        depth += (ch == "(") - (ch == ")")
+        if ch in "/,·" and depth <= 0:
+            items.append(cur.strip())
+            cur = ""
+        else:
+            cur += ch
+    items.append(cur.strip())
+    return list(dict.fromkeys(i for i in items if i))
 
 
 def intro_facts(detail: Mapping[str, object]) -> list[str]:
@@ -68,9 +89,9 @@ def intro_facts(detail: Mapping[str, object]) -> list[str]:
     for field, label in INTRO_FIELDS:
         value = _clean(detail.get(field))
         if value and value not in _FLAG_EMPTY and not _PHONEISH.search(value) and not _TIMEISH.search(value) \
-                and not _PRICEISH.search(value):
-            items = list(dict.fromkeys(i.strip() for i in re.split(r"\s*[/,·]\s*", value) if i.strip()))[:3]
-            out.append(f"{label} {'·'.join(items)}")
+                and not _PRICEISH.search(value) and not _NOT_ITEMS.search(value) and value.count("(") == value.count(")"):
+            items = _items(value)
+            out.append(f"{label} {'·'.join(items[:3])}" + (" 등" if len(items) > 3 else ""))
     parking = next((_clean(detail.get(k)) for k in ("parkingfood", "parking", "parkingculture", "parkingshopping",
                                                      "parkingleports") if _clean(detail.get(k))), "")
     if parking.startswith("가능") or parking in ("주차가능", "있음"):

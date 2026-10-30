@@ -63,10 +63,20 @@ _CAT_KO = {"SIGHT": "명소", "NATURE": "자연", "CULTURE": "문화", "FOOD": "
            "ACTIVITY": "액티비티", "BAR": "술집", "ART": "미술관·갤러리", "NIGHT_VIEW": "야경 명소"}
 # 영업시간·가격·전화 — 받지 않는다(날마다 바뀌고, 시각은 INV-2). 시각·소요·연락처·주입은 소개 게이트(`clean_intro`)가 한 번 더 본다.
 # '무료 주차'·'오픈 주방'은 시설 사실이라 막지 않는다 — 시각과 붙은 '오픈'만 영업시간이다.
+# 때에 묶인 운영(주말에만·저녁에는·매월 2·7일)과 하루 몇 개 한정도 영업 정보다 — 날마다 바뀌고 화면에서 확정값처럼 읽힌다(#1707 리뷰 19건)
 _BANNED = re.compile(r"영업\s?(?:시간|일)|휴무|정기\s?휴|마감|브레이크\s?타임|라스트\s?오더|\d+\s?시\s?(?:에\s?)?오픈|오픈\s?시간|"
-                     r"\d[\d,]*\s?원|전화|예약\s?문의|☎|\d{2,4}-\d{3,4}-\d{4}")
-_EVAL = re.compile(r"맛있|맛집으로 유명|친절|최고|추천(?!\s?메뉴)|강추|인기가? 많|분위기가? 좋|가성비가? 좋|훌륭|만족")
-_CLOSED = re.compile(r"폐업|폐점|영업\s?(?:을\s?)?종료|문을\s?닫")
+                     r"(?:평일|주말|오전|오후|저녁|점심|아침|새벽)(?:에는|에만|엔)|(?:평일|주말)\s?(?:점심|저녁|아침|오전|오후)|"
+                     r"(?:점심|저녁|아침)(?:에|엔)(?=\s|$)|요일|매월|매주|\d+\s?~\s?\d+\s?월|하루\s?\d+|"
+                     r"\d[\d,.]*\s?(?:만|천)?\s?원|원대|무료로|유료|전화|예약\s?문의|☎|\d{2,4}-\d{3,4}-\d{4}")
+_EVAL = re.compile(r"맛있|맛집|친절|최고|추천(?!\s?메뉴)|강추|인기|분위기가? 좋|가성비가? 좋|훌륭|만족|깔끔|좋은|넉넉|신선한|대기가|"
+                   r"줄을\s?서|유명한")
+# 그 장소가 문을 닫았다는 말만 — "폐업한 정미소를 개조한 카페"·"오후에는 문을 닫고 정리한다"는 옛 용도·하루 일과다(#1707 리뷰)
+_CLOSED = re.compile(r"(?:영업|운영)(?:을|이)?\s?(?:종료|중단)(?:했|하였|되었|됐|한|된)|폐업\s?(?:했|하였|상태)|폐점\s?(?:했|하였)|"
+                     r"폐관\s?(?:했|하였)|휴업\s?(?:중|했)|문을?\s?닫았")
+# 후보 줄의 종류만 되풀이하는 사실 — '한식 음식점이다'·'카페로 분류된 매장'(#1707 리뷰: 4칸 중 하나를 정보 없이 차지했다)
+_KIND_ONLY = re.compile(r"(?:으로|로)\s?(?:등록|분류)(?:된|되어)|^(?:(?:한식|중식|일식|양식|분식|중국|일본|이탈리안|퓨전|해산물|"
+                        r"고기|베이커리|디저트|브런치)\s?)?(?:음식점|식당|중식당|일식당|한식당|양식당|전문점|레스토랑|카페|중국집|주점|"
+                        r"술집|매장|가게)(?:이다|입니다|이에요)?\.?$")
 FINAL = ("found", "closed", "not_found", "refused")  # 이 상태면 다시 묻지 않는다
 
 PROMPT = """당신은 여행 앱의 장소 정보 정리 담당입니다. 웹 검색으로 아래 [장소]를 찾아, 웹 페이지에 적힌 사실만 JSON 하나로 답하세요.
@@ -121,10 +131,14 @@ def records(files: list[Path]):
 def targets(proposals: list[dict], has_doc: set[str]) -> list[dict]:
     """문서 없는 곳 먼저, 그 안에서는 관광지가 많은 시군구 먼저(후보 숏리스트에 자주 오르는 곳 — 며칠 걸리는 배치라 순서가 곧 효과다),
     같은 시군구 안에서는 해시 순. 이미 개요·위키가 있는 곳은 맨 뒤 — 진짜 문서가 있으니 웹 사실은 보탤 뿐이다."""
-    density: dict[str, int] = {}
+    def where(p: dict) -> tuple[str, str]:  # (시·도, 시군구) — 시군구 이름만이면 여러 도시의 중구·동구·고성군이 합쳐진다(#1707 리뷰)
+        words = str((p.get("provenance") or {}).get("address") or "").split()
+        return (words[0] if words else "", p.get("region") or "")
+
+    density: dict[tuple[str, str], int] = {}
     for p in proposals:
         if p.get("source") == "TOURAPI" and (p.get("poi") or {}).get("category") in ("SIGHT", "CULTURE", "NATURE"):
-            density[p.get("region") or ""] = density.get(p.get("region") or "", 0) + 1
+            density[where(p)] = density.get(where(p), 0) + 1
     seen, out = set(), []
     for p in proposals:
         poi = p.get("poi") or {}
@@ -135,7 +149,7 @@ def targets(proposals: list[dict], has_doc: set[str]) -> list[dict]:
         tier = 1 if ref in has_doc else 0
         out.append({"ref": ref, "source": p.get("source"), "name": _one_line(poi.get("name")),
                     "kind": _CAT_KO.get(poi.get("category"), "장소"), "address": _one_line((p.get("provenance") or {}).get("address")),
-                    "tier": tier, "dense": density.get(p.get("region") or "", 0), "h": hashlib.sha1(ref.encode()).hexdigest()})
+                    "tier": tier, "dense": density.get(where(p), 0), "h": hashlib.sha1(ref.encode()).hexdigest()})
     out.sort(key=lambda t: (t["tier"], -t["dense"], t["h"]))
     return out
 
@@ -218,12 +232,17 @@ class _Backoff:
         self.rate_limited = 0  # 한도(429) 물러남 사태 수
 
     def wait(self) -> None:
-        while (left := self._until - time.monotonic()) > 0:
-            time.sleep(min(left, 5.0))
-        with self._lock:
-            now = time.monotonic()
-            start, self._next = max(now, self._next), max(now, self._next) + self._gap
-        time.sleep(max(0.0, start - now))
+        """물러남이 끝난 뒤 간격 슬롯을 잡고, 슬롯까지 자는 사이 새 물러남이 시작됐으면 다시 기다린다 — 슬롯을 먼저 잡은 일꾼이
+        뒤에 온 429(Retry-After)를 무시하고 나가던 것(#1707 리뷰)."""
+        while True:
+            while (left := self._until - time.monotonic()) > 0:
+                time.sleep(min(left, 5.0))
+            with self._lock:
+                now = time.monotonic()
+                start, self._next = max(now, self._next), max(now, self._next) + self._gap
+            time.sleep(max(0.0, start - now))
+            if time.monotonic() >= self._until:
+                return
 
     def hit(self, retry_after: float | None = None, *, rate_limited: bool = False) -> None:
         with self._lock:
@@ -236,6 +255,7 @@ class _Backoff:
     def ok(self) -> None:
         with self._lock:
             self._step = max(self._step - 1, 0)
+            self.rate_limited = 0  # 멈춤 조건은 **이어진** 한도 사태 — 며칠 배치에서 떨어진 사태가 쌓여 멈추지 않게
 
 
 _REFUSAL = re.compile(r"^\s*(?:I['’]?m sorry|I can(?:no|['’])?t|Sorry|죄송)", re.I)
@@ -369,21 +389,28 @@ def clean_facts(rec: dict) -> list[dict]:
         text, url = f.get("text") or "", f.get("url") or ""
         if _url_key(url) not in cites or not (4 <= len(text) <= MAX_FACT_CHARS):
             continue
-        if _BANNED.search(text) or _EVAL.search(text) or has_contact_like(text) or has_injection_like(text) \
-                or clean_intro(text) != text:  # 진짜 문서·소개와 같은 게이트(시각·소요·연락처·주입)
+        if _BANNED.search(text) or _EVAL.search(text) or _KIND_ONLY.search(text) or has_contact_like(text) \
+                or has_injection_like(text) or clean_intro(text) != text:  # 진짜 문서·소개와 같은 게이트(시각·소요·연락처·주입)
             continue
         key = re.sub(r"\s", "", text)
         if key in seen:
             continue
         seen.add(key)
         date = f.get("date") or ""
-        if re.fullmatch(r"(19\d\d|200\d|201\d)-\d\d", date):  # 2020년 이전 글 — 지금과 다를 수 있다
+        year = re.match(r"\s*(\d{4})", date)
+        if year and int(year[1]) < 2020:  # 2020년 이전 글 — 지금과 다를 수 있다('2019.05'·'2019년 5월'도)
             continue
         out.append({"text": text.rstrip(". "), "url": url, "host": (urlparse(url).hostname or "").removeprefix("www."),
                     **({"date": date} if date else {})})
         if len(out) == MAX_FACTS:
             break
     return out
+
+
+def closed_now(rec: dict) -> bool:
+    """폐업으로 읽히는가 — 저장된 status 와 **지금의** `_CLOSED` 둘 다 본다(정규식이 생기기 전·바뀌기 전에 받은 found 기록이
+    빌드마다 문서가 되던 것, #1707 리뷰: 몬스터살롱 '현재 영업을 종료한 음식점이다')."""
+    return rec.get("status") == "closed" or any(_CLOSED.search(f.get("text") or "") for f in rec.get("facts") or ())
 
 
 def merge(recs) -> dict[str, dict]:
@@ -403,14 +430,14 @@ def build(state: Path, out: Path) -> None:
     n, tmp = 0, out.with_suffix(".tmp")
     with gzip.open(tmp, "wt", encoding="utf-8") as f:
         for ref, rec in sorted(latest.items()):
-            facts = clean_facts(rec) if rec["status"] == "found" else []
+            facts = clean_facts(rec) if rec["status"] == "found" and not closed_now(rec) else []
             if not facts:
                 continue
             f.write(json.dumps({"poi_ref": ref, "title": rec["name"], "source": "web", "fetched_at": rec["at"][:10],
                                 "model": rec["model"], "facts": facts}, ensure_ascii=False) + "\n")
             n += 1
     os.replace(tmp, out)
-    closed = sum(r["status"] == "closed" for r in latest.values())
+    closed = sum(closed_now(r) for r in latest.values())
     print(f"웹 사실 문서 {n}곳 / 받은 {len(latest)}곳(폐업으로 읽힘 {closed}) → {out}")
 
 

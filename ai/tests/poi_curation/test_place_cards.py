@@ -30,7 +30,7 @@ def test_intro_drops_unknown_flags_phones_prices_and_markup() -> None:
     detail = {"firstmenu": "고기국수<br>", "treatmenu": "돔베고기 / 멸치국수 / 물만두 / 비빔국수", "kidsfacility": "0",
               "reservationfood": "전화 예약 (064-123-4567)", "parkingfood": "가능", "packing": "가능", "saleitem": "8,000원",
               "chkpet": "불가"}
-    assert intro_facts(detail) == ["대표메뉴 고기국수", "메뉴 돔베고기·멸치국수·물만두", "주차 가능", "포장 가능"]
+    assert intro_facts(detail) == ["대표메뉴 고기국수", "메뉴 돔베고기·멸치국수·물만두 등", "주차 가능", "포장 가능"]
 
 
 @pytest.mark.parametrize("detail", [{"packing": "포장 불가능"}, {"packing": "불가"}, {"firstmenu": "3시까지 판매"},
@@ -62,3 +62,23 @@ def test_card_never_carries_clock_times_prices_or_phones_and_respects_the_cap() 
     text = card_text(_p(detail=detail))
     assert len(text) <= CARD_MAX_CHARS
     assert not re.search(r"\d{1,2}:\d{2}|\d{2,4}-\d{3,4}-\d{4}|\d[\d,]*원", text)
+
+
+@pytest.mark.parametrize(("address", "region", "want"), [
+    ("제주특별자치도 서귀포시 산방로 141 원앤온리", "서귀포시", "제주 서귀포시"),  # 도로명 뒤 상호는 동네가 아니다
+    ("인천광역시 연수구 인권로 26 하늘다리 한정식", "연수구", "인천 연수구"),
+    ("전북특별자치도 남원시 향단로 18 이조숯불냉면", "남원시", "전북 남원시"),
+    ("서울특별시 성동구 성수동2가 289-1", "성동구", "서울 성동구 성수동2가"),
+])
+def test_area_reads_only_the_unit_right_after_the_district(address, region, want) -> None:
+    assert area(address, region) == want
+
+
+def test_menu_items_split_outside_parentheses_and_say_when_cut() -> None:
+    assert intro_facts({"treatmenu": "잔치국수(온/냉) / 비빔국수 / 수육 / 전"}) == ["메뉴 잔치국수(온/냉)·비빔국수·수육 등"]
+
+
+@pytest.mark.parametrize("detail", [{"saleitem": "복합쇼핑몰(백화점, 마트, 편의점, 아울렛 등)"}, {"treatmenu": "물회 1만5천원 / 회덮밥 9천원"},
+                                    {"firstmenu": "성인 이용 가격"}, {"treatmenu": "만원대 정식"}])
+def test_placeholders_store_formats_and_prices_with_units_are_not_items(detail) -> None:
+    assert intro_facts(detail) == []

@@ -142,3 +142,21 @@ def test_warm_reads_the_table_in_the_background_only_when_switched_on(monkeypatc
     monkeypatch.setenv(place_fallback.SWITCH, "off")
     place_fallback.warm()
     assert calls == [1]
+
+
+def test_real_and_fallback_share_one_cap_and_left_out_fallbacks_are_noted(monkeypatch) -> None:
+    """합계 상한(KB-5 담당 조건) — 진짜 1 + 대체 1 = 2 에서 멈추고, 상한에 밀린 대체 문서는 노트로 보인다(INV-4)."""
+    monkeypatch.setattr(pk, "MAX_DOCS", 2)
+    embedding, store = _store(make_doc("overview", "r-real", "수원 화성은 경기도 수원시에 있는 성곽이다."))
+    pois = [_poi("p0", "r-real"), *(_poi(f"p{i}", f"r{i}") for i in range(1, 4))]
+    got, note = fetch_place_knowledge(pois, "우천", embedding, store, fallback={f"r{i}": f"대표메뉴 {i}." for i in range(1, 4)})
+    assert list(got) == ["r-real", "r1"] and got.fallback == 1
+    assert note == "place_knowledge_truncated: 대체 문서 2곳은 상한 2 에 걸려 문서 없이 간다"
+
+
+def test_place_intro_gives_the_local_document_when_all_intro_slots_are_busy(monkeypatch) -> None:
+    monkeypatch.setattr(place_fallback, "fallback_docs", lambda: {"r1": "대표메뉴 국밥."})
+    intro = PlaceIntro(object(), object())
+    for _ in range(pi.INTRO_MAX_INFLIGHT):
+        assert intro._slots.acquire(blocking=False)
+    assert intro.intro("r1", "소개") == "대표메뉴 국밥."

@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 _SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "collect" / "collect_place_web_facts.py"
 spec = importlib.util.spec_from_file_location("collect_place_web_facts_under_test", _SCRIPT)
 c = importlib.util.module_from_spec(spec)
@@ -143,3 +145,40 @@ def test_one_backoff_episode_raises_the_step_once_however_many_workers_hit_it() 
     assert b._step == 1 and b.rate_limited == 1
     b.hit(retry_after=5000)
     assert b._until - __import__("time").monotonic() > 4000  # Retry-After 가 더 길면 그것을 따른다
+
+
+@pytest.mark.parametrize("text", ["후르츠산도는 주말에만 판매한다", "저녁에는 비치 펍으로 운영된다", "평일 점심은 김치찜 반상",
+                                  "매월 2·7·12일에 열린다", "김밥은 하루 25줄만 판매한다", "가브리살이 인기 메뉴다", "깔끔한 실내다",
+                                  "한식 음식점이다", "카페로 분류된 매장", "일식당으로 등록된 곳", "물회 1만5천원"])
+def test_time_bound_operations_praise_kind_only_and_unit_prices_are_dropped(text) -> None:
+    assert c.clean_facts(_rec((text, "u1", None))) == []
+
+
+def test_pre_2020_posts_are_dropped_in_any_date_shape() -> None:
+    shapes = ("2019.05", "2019년 5", "2019", "2018/03")
+    assert c.clean_facts(_rec(*[(f"사실 {i}", "u1", d) for i, d in enumerate(shapes)])) == []
+
+
+@pytest.mark.parametrize(("text", "closed"), [
+    ("현재 영업을 종료한 음식점이다", True), ("영업이 종료되었다", True), ("운영을 종료했다", True), ("2024년 폐관했다", True),
+    ("현재 휴업 중이다", True), ("문 닫았다", True),
+    ("폐업한 정미소를 개조한 카페", False), ("폐점한 은행 건물을 리모델링했다", False), ("오후에는 문을 닫고 내부를 정리한다", False),
+])
+def test_closed_means_the_place_itself_stopped_not_its_former_use(text, closed) -> None:
+    assert c.closed_now({"status": "found", "facts": [{"text": text}]}) is closed
+
+
+def test_build_rechecks_closure_on_old_found_records(tmp_path) -> None:
+    rec = {"ref": "1", "status": "found", "at": "2026-10-23T01:00:00", "name": "가게", "model": "m", "citations": ["u1"],
+           "facts": [{"text": "현재 영업을 종료한 음식점이다", "url": "u1"}, {"text": "버거를 판매했다", "url": "u1"}]}
+    (tmp_path / "state.jsonl").write_text(__import__("json").dumps(rec, ensure_ascii=False) + "\n", encoding="utf-8")
+    out = tmp_path / "facts.jsonl.gz"
+    c.build(tmp_path, out)
+    assert __import__("gzip").open(out, "rt").read() == ""
+
+
+def test_rate_limit_stop_counts_only_consecutive_episodes() -> None:
+    b = c._Backoff()
+    b.hit(rate_limited=True)
+    b.ok()
+    assert b.rate_limited == 0
