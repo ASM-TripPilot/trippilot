@@ -19,7 +19,7 @@ from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.itinerary import VisitSlot
 from trippilot.domain.llm import CandidatePool
-from trippilot.domain.poi import NIGHTLIFE_TAG, HolidayCalendar, Poi, PoiCategory, open_windows_on
+from trippilot.domain.poi import NIGHTLIFE_TAG, HolidayCalendar, Poi, PoiCategory, hours_label, open_windows_on  # noqa: F401 — hours_label 은 재export(미결 #16)
 
 # 카테고리마다 점수 상위 몇 곳을 후보로 줄까 — 맛집·카페·명소가 고루 보여야 식사창을 채운다.
 PER_CATEGORY = 6
@@ -103,27 +103,6 @@ def recent_change_lines(change_log, names: "dict[PoiId, str]") -> tuple[str, ...
 
 def date_label(when: datetime) -> str:
     return f"{when:%Y-%m-%d} ({_WEEKDAYS[when.weekday()]})"
-
-
-def hours_label(poi: Poi, on: date | int, holidays: HolidayCalendar | None = None) -> str | None:
-    """그날 영업시간 문구. 휴무가 **증명**되면 None — 판정은 HC1 과 같은 `open_windows_on`(정보 없음은 막지 않는다).
-
-    `on` 이 날짜면 공휴일 휴무까지 본다(상황 감지 H1 — `holidays` None = 모드 off 면 요일 판정과 같다). 요일(int)만
-    넘기는 호출(`request_verification` — 이름으로 집은 곳의 사전 확인)은 종전 요일 판정 그대로다.
-    """
-    if isinstance(on, date):
-        ranges = open_windows_on(poi, on, holidays)
-    else:
-        ranges = tuple(h for h in poi.open_hours if h.day_of_week == on) if poi.open_hours else None
-    if ranges is None:
-        return "밤 영업(추정 20:00~04:00)" if NIGHTLIFE_TAG in poi.tags else "영업시간 정보 없음"
-    if not ranges:
-        return None
-    return ", ".join(f"{_hm(h.open_min)}~{_hm(h.close_min)}" for h in ranges)
-
-
-def _hm(minutes: int) -> str:
-    return f"{minutes // 60:02d}:{minutes % 60:02d}"
 
 
 def max_visits(start: datetime, end: datetime, cap: int | None) -> int:
