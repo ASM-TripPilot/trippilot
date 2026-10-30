@@ -72,6 +72,29 @@ def test_fetch_page_empty_items_string_variant() -> None:
     assert page.records == () and page.total_count == 0
 
 
+def _bare(body: dict) -> dict:
+    return {"response": {"header": {"resultCode": "0000", "resultMsg": "OK"}, "body": body}}
+
+
+@pytest.mark.parametrize("body", [{}, {"items": None, "totalCount": 0}, {"items": "", "totalCount": None}])
+def test_fetch_page_malformed_items_or_count_is_a_failure_not_an_empty_success(body: dict) -> None:
+    """items·totalCount 가 형식 밖인 성공 응답을 빈 페이지로 읽으면 그 종류가 완주로 적힌다 — 실패로 올려 커서를 남긴다
+    (2026-10-30 Codex 리뷰)."""
+    with pytest.raises(SourcingError):
+        _adapter(FakeTourApiHttp(pages={("12", 1): _bare(body)})).fetch_page("39", "12", 1, 100)
+
+
+def test_fetch_page_numeric_string_count_is_read() -> None:
+    page = _adapter(FakeTourApiHttp(pages={("12", 1): _bare({"items": "", "totalCount": "0"})})).fetch_page("39", "12", 1, 100)
+    assert page.records == () and page.total_count == 0
+
+
+def test_fetch_detail_without_items_is_a_failure_so_it_is_asked_again() -> None:
+    """상세가 빈 성공이면 영업시간 빈칸이 기제안 색인에 굳는다 — 실패면 색인을 미뤄 다음 실행이 다시 묻는다."""
+    with pytest.raises(SourcingError):
+        _adapter(FakeTourApiHttp(intros={"7": _bare({})})).fetch_detail("7", "12")
+
+
 def test_fetch_page_error_code_raises_sourcing_error() -> None:
     http = FakeTourApiHttp(pages={("12", 1): error_envelope()})
     with pytest.raises(SourcingError):

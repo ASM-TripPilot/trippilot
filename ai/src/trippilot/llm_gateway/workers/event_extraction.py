@@ -62,6 +62,7 @@ class EventExtractionWorker:
             snippets_text=variables["snippets"],
             period_start=period_start,
             period_end=period_end,
+            region=region,
         )
         return self._gateway.call(
             LlmFeature.EVENT_EXTRACTION,
