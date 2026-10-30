@@ -212,6 +212,44 @@ def test_collect_region_glue(tmp_path) -> None:
     assert found[0].coord == GeoPoint(35.1532, 129.1186)  # 지역 검색 좌표 부여됨
 
 
+@pytest.mark.parametrize("fail_all", [False, True])
+def test_collect_region_skips_a_failing_query_but_stops_when_all_fail(tmp_path, fail_all: bool) -> None:
+    """검색 하나의 일시 오류(타임아웃)는 그 쿼리만 건너뛴다 — 그날 배치 전체가 죽고 앞 지역 추출분까지 버려지던 것(2026-10-30
+    Codex 리뷰). 전부 실패면 일시 오류가 아니므로 종전처럼 올린다."""
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts" / "collect"))
+    from collect_events import collect_region
+
+    class _FlakyHttp:
+        failed = 0
+
+        def get_json(self, url, headers, params):
+            if url.endswith("/local"):
+                return {"items": []}
+            if fail_all or not self.failed:
+                self.failed += 1
+                raise TimeoutError("read timed out")
+            return {"items": [{"title": "부산 불꽃축제 개최", "description": "8월 22일 광안리"}]}
+
+    class _FakeWorker:
+        def extract(self, region, period_start, period_end, snippets, trace_id, now, *, timeout_sec=None):
+            class _R:
+                value = ()
+                is_fallback = False
+                error = None
+            return _R()
+
+    client = NaverSearchClient(_FlakyHttp(), "i", "s", max_calls=30)
+    run = lambda: collect_region("부산", client=client, worker=_FakeWorker(),
+                                 store=JsonEventStore(tmp_path / "events.json"), today=_TODAY, now=_NOW)
+    if fail_all:
+        with pytest.raises(TimeoutError):
+            run()
+    else:
+        assert run()["snippets"] == 1
+
+
 def test_collect_region_geocodes_via_address_fallback(tmp_path) -> None:
     """행사명 질의 실패 → 주소 폴백 질의로 좌표 확보 (첫 배치 실측 1/4 대응)."""
     import sys

@@ -226,14 +226,16 @@ class TourApiAdapter:
         )
         records = tuple(
             self._to_record(item, kind)
-            for item in self._items(body)
+            for item in self._strict_items(body, "areaBasedList2")
             if isinstance(item, dict)
         )
         total = body.get("totalCount")
-        return SourcedPage(
-            records=records,
-            total_count=total if isinstance(total, int) else len(records),
-        )
+        if isinstance(total, str) and total.isdigit():
+            total = int(total)
+        if not isinstance(total, int):
+            # 건수를 모르면 레코드 수로 대신 세지 않는다 — 0건이면 그 종류가 완주로 적힌다(2026-10-30 Codex 리뷰)
+            raise SourcingError(f"areaBasedList2 totalCount 형식 밖: {total!r}")
+        return SourcedPage(records=records, total_count=total)
 
     def search_festivals(
         self, open_from: str, page_no: int, rows: int
@@ -268,7 +270,7 @@ class TourApiAdapter:
                 "contentTypeId": kind,
             },
         )
-        items = self._items(body)
+        items = self._strict_items(body, "detailIntro2")
         first = items[0] if items and isinstance(items[0], dict) else {}
         # 타입별 첫 응답을 그대로 남긴다 — HTTP 추가 0건(이미 받은 것을 적을 뿐).
         # 리포에 **실 응답 기록이 없어서** 이 엔드포인트가 실제로 무엇을 주는지
@@ -360,6 +362,15 @@ class TourApiAdapter:
         if isinstance(item, list):
             return item
         return [item] if isinstance(item, dict) else []
+
+    @classmethod
+    def _strict_items(cls, body: dict, endpoint: str) -> list:
+        """`_items` + 형식 밖 `items`(빈 목록 변주 "" 도 객체도 아님)는 실패 — 빈 성공으로 읽으면 목록은 그 종류를 완주로,
+        상세는 영업시간 빈칸을 기제안 색인에 굳힌다(`pipeline` 색인 주석). 실패면 커서·색인이 남아 다음 실행이 다시 묻는다."""
+        items = body.get("items")
+        if items != "" and not isinstance(items, dict):
+            raise SourcingError(f"{endpoint} items 형식 밖: {type(items).__name__}")
+        return cls._items(body)
 
     @classmethod
     def _to_record(cls, item: dict, kind: str) -> SourcedPlaceRecord:

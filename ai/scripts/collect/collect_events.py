@@ -270,12 +270,26 @@ def collect_region(
 ) -> dict:
     """지역 1곳 수집 — 통계 dict 반환. CallBudgetExceeded는 위로 전파(포인터 미전진)."""
     pairs: list[tuple[str, str]] = []
-    for kind, query in _queries(region, today):
-        for item in client.search(kind, query):
+    queries = _queries(region, today)
+    errors: list[Exception] = []
+    for kind, query in queries:
+        try:
+            items = client.search(kind, query)
+        except CallBudgetExceeded:
+            raise
+        except Exception as e:
+            # 일시 오류(429·5xx·타임아웃) 하나가 그날 배치 전체를 날리면 안 된다 — 이 쿼리만 건너뛴다(지오코딩과 같은 규칙).
+            # 앞 지역에서 이미 추출한 결과도 저장은 루프 뒤라 함께 사라졌다(2026-10-30 Codex 리뷰)
+            errors.append(e)
+            print(f"::warning::[events] {region} 검색 실패({type(e).__name__}: {e}) — 이 쿼리만 건너뜀", file=sys.stderr)
+            continue
+        for item in items:
             pair = (strip_tags(item.get("title", "")),
                     strip_tags(item.get("description", "")))
             if pair[0] and pair not in pairs:
                 pairs.append(pair)
+    if errors and len(errors) == len(queries):
+        raise errors[-1]  # 전부 실패면 일시 오류가 아니다(키·네트워크) — 종전처럼 배치를 멈춰 드러낸다
     raw_pairs = len(pairs)
     # **캡 안에 무엇을 넣을지**를 정한다. 도착 순서대로 자르면 뒤쪽 쿼리가 가져온
     # 결과가 통째로 버려지고, 그 80칸의 절반은 날짜 없는 스니펫이 차지한다(실측

@@ -100,6 +100,24 @@ def test_gate_name_check_absorbs_spacing_and_requires_all_tokens() -> None:
     assert out2.value == () and out2.drop_event.dropped_count == 1
 
 
+def test_gate_name_tokens_must_come_from_one_snippet() -> None:
+    """두 스니펫의 토큰을 섞은 이름은 지어낸 것 — 「광안리」(첫 줄)+「재즈 공연」(둘째 줄)이 통과하던 것(2026-10-30 Codex 리뷰)."""
+    raw = json.dumps({"events": [_event(name="광안리 재즈 공연")]})
+    out = EventExtractionGate().apply(raw, _CTX, feature=_FEAT, trace_id=_TID, now=_NOW)
+    assert out.value == () and out.drop_event.dropped_count == 1
+
+
+def test_gate_query_region_prefix_may_come_from_another_snippet() -> None:
+    """질의 지역명은 예외 — 모델이 「불꽃축제」 앞에 질의 지역 「부산」을 붙여도 지어낸 것이 아니다(그 지역은 다른 줄에 있다)."""
+    snippets = (("불꽃축제 개최 안내", "10월 24일 광안리 일원"), ("부산 소식", "이번 주 행사 모음"))
+    text = build_event_extraction_vars("부산", *_PERIOD, snippets)["snippets"]
+    raw = json.dumps({"events": [_event(name="부산 불꽃축제")]})
+    with_region = EventExtractionContext(snippets_text=text, period_start=_PERIOD[0], period_end=_PERIOD[1], region="부산")
+    assert len(EventExtractionGate().apply(raw, with_region, feature=_FEAT, trace_id=_TID, now=_NOW).value) == 1
+    no_region = EventExtractionContext(snippets_text=text, period_start=_PERIOD[0], period_end=_PERIOD[1])
+    assert EventExtractionGate().apply(raw, no_region, feature=_FEAT, trace_id=_TID, now=_NOW).value == ()
+
+
 def test_gate_partial_period_overlap_survives() -> None:
     # 하루라도 겹치면 생존: 기간 끝(10-27)에 시작하는 행사
     raw = json.dumps({"events": [
