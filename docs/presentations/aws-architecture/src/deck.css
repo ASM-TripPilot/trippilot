@@ -1,0 +1,207 @@
+/* ==========================================================================
+   TripPilot 인프라 덱 공용 스타일
+   - 1920x1080 고정 아트보드를 창 크기에 맞춰 통째로 스케일한다(PPT 방식).
+     그래서 어떤 화면에서도 슬라이드 안 스크롤·넘침이 생기지 않는다.
+   - 테마: body.theme-ticket(대학생 소개) / body.theme-report(심사 제출)
+   - 폰트 2종: Pretendard(본문·제목) + IBM Plex Mono(라벨·코드)
+   ========================================================================== */
+
+:root {
+  --paper: #F4EEE3;
+  --paper-2: #EDE4D3;
+  --ink: #14213D;
+  --ink-2: #3C4763;
+  --muted: #6B6F7A;
+  --orange: #E8622C;
+  --orange-soft: #FBE2D5;
+  --teal: #1F8A84;
+  --teal-soft: #D7ECE9;
+  --sand: #E6D5B8;
+  --line: rgba(20, 33, 61, .14);
+  --danger: #C2362B;
+
+  --font-sans: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --dur-fast: 180ms;
+  --dur: 520ms;
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #0E1526; }
+body { font-family: var(--font-sans); color: var(--ink); -webkit-font-smoothing: antialiased; word-break: keep-all; }
+
+/* ── 무대: 1920x1080 아트보드를 가운데 놓고 JS 가 scale 을 정한다 ── */
+.deck { position: fixed; left: 50%; top: 50%; width: 1920px; height: 1080px; transform-origin: 0 0; }
+.slide {
+  position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: hidden;
+  background: var(--paper); opacity: 0; visibility: hidden;
+  transition: opacity var(--dur) var(--ease-out), visibility 0s linear var(--dur);
+}
+.slide.active { opacity: 1; visibility: visible; transition: opacity var(--dur) var(--ease-out), visibility 0s; }
+
+/* 종이 결 — 아주 옅은 노이즈 */
+.slide::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .35; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .55  0 0 0 0 .5  0 0 0 0 .42  0 0 0 .18 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* 진입 애니메이션: 활성 슬라이드의 .rv 요소가 순서대로 떠오른다 */
+.rv { opacity: 0; transform: translateY(18px); transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out); }
+.slide.active .rv { opacity: 1; transform: none; }
+.slide.active .rv.d1 { transition-delay: 80ms; }
+.slide.active .rv.d2 { transition-delay: 160ms; }
+.slide.active .rv.d3 { transition-delay: 240ms; }
+.slide.active .rv.d4 { transition-delay: 320ms; }
+.slide.active .rv.d5 { transition-delay: 400ms; }
+.slide.active .rv.d6 { transition-delay: 480ms; }
+
+/* ── 공통 크롬: 상단 라벨 · 슬라이드 번호 · 하단 진행바 ── */
+.chrome { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+.chrome .brand { position: absolute; left: 96px; top: 52px; font: 600 17px/1 var(--font-mono); letter-spacing: .14em; color: var(--ink-2); text-transform: uppercase; }
+.chrome .brand b { color: var(--orange); }
+.chrome .count { position: absolute; right: 96px; top: 52px; font: 600 17px/1 var(--font-mono); letter-spacing: .12em; color: var(--ink-2); }
+.progress { position: fixed; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(255,255,255,.08); z-index: 20; }
+.progress i { display: block; height: 100%; width: 0; background: var(--orange); transition: width var(--dur) var(--ease-out); }
+.hint { position: fixed; right: 18px; bottom: 14px; z-index: 20; font: 500 12px/1 var(--font-mono); color: rgba(255,255,255,.55); letter-spacing: .04em; transition: opacity 600ms; }
+.hint.gone { opacity: 0; }
+
+/* ── 본문 레이아웃 ── */
+.pad { position: absolute; left: 96px; right: 96px; top: 130px; bottom: 90px; display: flex; flex-direction: column; }
+.kicker { font: 600 20px/1 var(--font-mono); letter-spacing: .16em; color: var(--orange); text-transform: uppercase; margin-bottom: 22px; }
+h1.title { font-size: 104px; line-height: 1.08; font-weight: 850; letter-spacing: -.035em; }
+h2 { font-size: 64px; line-height: 1.16; font-weight: 820; letter-spacing: -.03em; }
+h3 { font-size: 34px; line-height: 1.25; font-weight: 780; letter-spacing: -.02em; }
+.lead { font-size: 33px; line-height: 1.6; color: var(--ink-2); font-weight: 450; margin-top: 26px; max-width: 1280px; }
+p, li { font-size: 29px; line-height: 1.6; }
+
+/* 제목은 위에 고정하고, 남는 높이 안에서 본문 묶음을 세로 가운데에 둔다 */
+.pad > h2 { margin-bottom: 44px; }
+.pad > h2 + * { margin-top: auto !important; }
+.pad > :last-child { margin-bottom: auto; }
+.small { font-size: 23px; line-height: 1.55; color: var(--muted); }
+.mono { font-family: var(--font-mono); }
+em.hl { font-style: normal; background: linear-gradient(transparent 58%, var(--orange-soft) 58%); padding: 0 2px; }
+strong { font-weight: 760; }
+
+.row { display: flex; gap: 48px; }
+.col { flex: 1; min-width: 0; }
+.grow { flex: 1; min-height: 0; }
+.mt-s { margin-top: 18px; } .mt { margin-top: 36px; } .mt-l { margin-top: 56px; }
+
+/* 티켓 카드 — 점선 절취선이 들어간 탑승권 모양 */
+.ticket {
+  position: relative; background: #FFFDF8; color: var(--ink); border-radius: 18px; padding: 38px 40px 36px;
+  box-shadow: 0 1px 0 rgba(20,33,61,.06), 0 18px 40px -24px rgba(20,33,61,.35);
+}
+.ticket::before, .ticket::after { content: ""; position: absolute; top: 54px; width: 28px; height: 28px; border-radius: 50%; background: var(--paper); }
+.ticket::before { left: -14px; } .ticket::after { right: -14px; }
+.ticket .tag { font: 600 17px/1 var(--font-mono); letter-spacing: .14em; color: var(--muted); text-transform: uppercase; }
+.ticket h3 { margin-top: 34px; font-size: 37px; }
+.ticket p { font-size: 27px; line-height: 1.55; color: var(--ink-2); margin-top: 12px; }
+.ticket.orange { background: var(--orange); color: #fff; } .ticket.orange p, .ticket.orange .tag { color: rgba(255,255,255,.9); }
+.ticket.teal { background: var(--teal); color: #fff; } .ticket.teal p, .ticket.teal .tag { color: rgba(255,255,255,.9); }
+.ticket.ink { background: var(--ink); color: #fff; } .ticket.ink p, .ticket.ink .tag { color: rgba(255,255,255,.8); }
+.ticket .perf { position: absolute; left: 24px; right: 24px; top: 68px; border-top: 2px dashed rgba(20,33,61,.16); }
+.ticket.orange .perf, .ticket.teal .perf, .ticket.ink .perf { border-color: rgba(255,255,255,.32); }
+
+/* 번호 단계 */
+.steps { list-style: none; display: flex; flex-direction: column; gap: 24px; }
+.steps li { display: grid; grid-template-columns: 58px 1fr; gap: 22px; align-items: start; font-size: 29px; line-height: 1.5; }
+.steps li .n { width: 56px; height: 56px; border-radius: 50%; background: var(--orange); color: #fff; font: 700 25px/56px var(--font-mono); text-align: center; }
+.steps li b { font-weight: 780; }
+.steps li .sub { display: block; font-size: 24px; color: var(--muted); margin-top: 2px; }
+
+/* 알약 태그 */
+.pills { display: flex; flex-wrap: wrap; gap: 12px; }
+.pill { font-size: 23px; padding: 10px 20px; border-radius: 999px; background: #FFFDF8; border: 1.5px solid var(--line); font-weight: 600; }
+.pill.o { background: var(--orange-soft); border-color: transparent; color: #9A3A12; }
+.pill.t { background: var(--teal-soft); border-color: transparent; color: #135C57; }
+
+/* 솔직 박스 */
+.aside { border-left: 6px solid var(--orange); background: rgba(255,253,248,.88); padding: 26px 32px; border-radius: 0 14px 14px 0; }
+.aside .who { font: 600 18px/1 var(--font-mono); letter-spacing: .12em; color: var(--orange); text-transform: uppercase; margin-bottom: 12px; }
+.aside p { font-size: 28px; line-height: 1.6; color: var(--ink-2); }
+
+/* 이미지 */
+.fig { position: absolute; }
+.fig img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fig.fade-left { -webkit-mask: linear-gradient(90deg, transparent 0, #000 22%); mask: linear-gradient(90deg, transparent 0, #000 22%); }
+.fig.soft { -webkit-mask: linear-gradient(90deg, transparent 0, #000 16%), linear-gradient(180deg, transparent 0, #000 9%, #000 91%, transparent 100%);
+  -webkit-mask-composite: source-in; mask: linear-gradient(90deg, transparent 0, #000 16%), linear-gradient(180deg, transparent 0, #000 9%, #000 91%, transparent 100%); mask-composite: intersect; }
+
+/* 다이어그램 확대 보기 */
+.zoomable { cursor: zoom-in; }
+.lightbox { position: fixed; inset: 0; z-index: 50; background: rgba(14,21,38,.94); display: none; overflow: auto; cursor: zoom-out; }
+.lightbox.open { display: block; }
+.lightbox img { display: block; width: max(100vw, 2600px); max-width: none; margin: 0 auto; background: #fff; }
+
+/* 표 */
+table.t { width: 100%; border-collapse: collapse; font-size: 27px; }
+table.t th { text-align: left; font: 600 17px/1.2 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 0 18px 14px; border-bottom: 2px solid var(--ink); }
+table.t td { padding: 24px 18px; border-bottom: 1.5px solid var(--line); vertical-align: top; line-height: 1.45; }
+table.t td:first-child { font-weight: 760; white-space: nowrap; }
+
+/* 큰 숫자 */
+.stat .num { font: 800 92px/1 var(--font-sans); letter-spacing: -.04em; color: var(--orange); }
+.stat .num small { font-size: 40px; margin-left: 4px; }
+.stat .lbl { font-size: 23px; line-height: 1.45; color: var(--ink-2); margin-top: 10px; }
+
+/* 근거 표시(심사 덱) */
+.ev { display: inline-block; font: 500 15px/1.3 var(--font-mono); color: #5C6476; background: rgba(20,33,61,.06); border-radius: 6px; padding: 5px 10px; margin-top: 14px; }
+
+/* 섹션 오프너 */
+.opener .big { font: 800 300px/0.82 var(--font-sans); letter-spacing: -.06em; color: var(--orange); }
+
+/* ===================== 테마: 대학생 소개(티켓) ===================== */
+body.theme-ticket .slide.dark { background: var(--ink); color: #F4EEE3; }
+body.theme-ticket .slide.dark .chrome .brand, body.theme-ticket .slide.dark .chrome .count { color: rgba(244,238,227,.7); }
+body.theme-ticket .slide.dark .lead, body.theme-ticket .slide.dark .small { color: rgba(244,238,227,.78); }
+body.theme-ticket .slide.dark::before { opacity: .12; mix-blend-mode: screen; }
+body.theme-ticket .slide.dark .ticket::before, body.theme-ticket .slide.dark .ticket::after { background: var(--ink); }
+
+/* ===================== 테마: 심사 제출(리포트) ===================== */
+body.theme-report .slide { background: #FBFAF7; }
+body.theme-report .slide::before { opacity: .18; }
+body.theme-report .chrome .brand { color: var(--ink); }
+body.theme-report .chrome::after { content: ""; position: absolute; left: 96px; right: 96px; top: 86px; border-top: 1.5px solid var(--ink); }
+body.theme-report h2 { font-size: 56px; }
+body.theme-report .slide.dark { background: var(--ink); color: #F7F4EE; }
+body.theme-report .slide.dark .chrome .brand, body.theme-report .slide.dark .chrome .count { color: rgba(247,244,238,.75); }
+body.theme-report .slide.dark .chrome::after { border-color: rgba(247,244,238,.4); }
+body.theme-report .slide.dark .lead { color: rgba(247,244,238,.8); }
+
+.pt { border-top: 3px solid var(--ink); padding-top: 22px; }
+.pt .no { font: 700 18px/1 var(--font-mono); letter-spacing: .12em; color: var(--orange); }
+.pt h3 { margin-top: 14px; font-size: 32px; }
+.pt p { font-size: 23px; line-height: 1.55; color: var(--ink-2); margin-top: 10px; }
+.pt ul { list-style: none; margin-top: 12px; }
+.pt li { font-size: 22.5px; line-height: 1.5; color: var(--ink-2); padding-left: 22px; position: relative; margin-top: 8px; }
+.pt li::before { content: ""; position: absolute; left: 0; top: .62em; width: 9px; height: 9px; background: var(--teal); border-radius: 2px; }
+
+.check { list-style: none; }
+.check li { position: relative; padding-left: 44px; font-size: 25px; line-height: 1.5; margin-top: 16px; }
+.check li::before { content: "✓"; position: absolute; left: 0; top: .18em; width: 28px; height: 28px; border-radius: 7px; background: var(--teal); color: #fff;
+  font: 800 18px/28px var(--font-sans); text-align: center; }
+
+/* ── 접근성 · 모션 ── */
+:focus-visible { outline: 3px solid var(--orange); outline-offset: 4px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+@media (prefers-reduced-motion: reduce) {
+  .slide, .rv, .progress i { transition: none !important; }
+  .rv { opacity: 1; transform: none; }
+}
+
+/* ── 인쇄(PDF): 한 슬라이드 = 한 쪽 ── */
+@page { size: 1920px 1080px; margin: 0; }
+@media print {
+  html, body { overflow: visible; height: auto; background: none; }
+  .deck { position: static; transform: none !important; width: 1920px; height: auto; }
+  .slide { position: relative; opacity: 1; visibility: visible; transition: none; page-break-after: always; break-after: page; }
+  .rv { opacity: 1; transform: none; transition: none; }
+  .progress, .hint, .lightbox { display: none !important; }
+  /* 노이즈 필터·블렌드는 PDF에서 쪽마다 래스터화돼 용량이 수십 MB로 커진다 */
+  .slide::before { display: none; }
+  .fig[style*="multiply"] { display: none !important; }
+}
