@@ -281,12 +281,12 @@ class Poi:
             category=PoiCategory(d["category"]),
             coord=GeoPoint.from_dict(d["coord"]),
             open_hours=tuple(OpenHour.from_dict(x) for x in d["open_hours"]),
-            avg_cost=d["avg_cost"],
-            rating=d["rating"],
+            avg_cost=d.get("avg_cost"),  # 공유본은 기본값 키를 생략한다(merge_pois_docs.dumps_doc)
+            rating=d.get("rating"),
             saved_count=d.get("saved_count", 0),  # 구 캐시 호환
             quality=DataQuality(d["quality"]),
             source=PoiSource(d["source"]),
-            confidence=d["confidence"],
+            confidence=d.get("confidence"),
             tags=tuple(d.get("tags") or ()),  # 구 캐시 호환 (saved_count 선례)
             source_ref=d.get("source_ref"),
             holiday_rules=frozenset(d.get("holiday_rules") or ()),  # 키 없는 옛 직렬화본 = 규칙 없음
