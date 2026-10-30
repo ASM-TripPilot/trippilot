@@ -906,20 +906,6 @@
    "collected_at": "2026-09-19T06:48:23.921146+09:00"
   },
   {
-   "event_id": "evx-6bf968b41ac61122",
-   "name": "제25회 서울억새축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-17",
-   "end": "2026-10-23",
-   "coord": {
-    "lat": 37.56825003712418,
-    "lng": 126.89724365713197
-   },
-   "address": "서울월드컵공원 하늘공원 일대",
-   "region": "서울",
-   "collected_at": "2026-09-19T06:48:23.921146+09:00"
-  },
-  {
    "event_id": "tourapi-588175",
    "name": "포항국제불빛축제",
    "event_type": "FESTIVAL",
@@ -1192,20 +1178,6 @@
    "coord": null,
    "address": null,
    "region": "전북",
-   "collected_at": "2026-09-29T08:53:49.296791+09:00"
-  },
-  {
-   "event_id": "evx-8150ea03359eeba3",
-   "name": "2026 작은영화관 기획전",
-   "event_type": "OTHER",
-   "start": "2026-10-13",
-   "end": "2026-10-23",
-   "coord": {
-    "lat": 35.27239135372666,
-    "lng": 126.50756715198447
-   },
-   "address": "영광작은영화관",
-   "region": "전남",
    "collected_at": "2026-09-29T08:53:49.296791+09:00"
   },
   {
@@ -2025,17 +1997,6 @@
    "collected_at": "2026-10-21T07:46:03.381070+09:00"
   },
   {
-   "event_id": "evx-500c3d3b076f8daa",
-   "name": "2026 미래혁신기술박람회 컨퍼런스",
-   "event_type": "OTHER",
-   "start": "2026-10-21",
-   "end": "2026-10-23",
-   "coord": null,
-   "address": null,
-   "region": "대구",
-   "collected_at": "2026-10-07T08:12:36.022575+09:00"
-  },
-  {
    "event_id": "evx-7c2ec53070e6f38b",
    "name": "쿤스트 페스티벌 [성남]",
    "event_type": "FESTIVAL",
@@ -2176,17 +2137,6 @@
    "address": "인천광역시 제물포구 송현동",
    "region": "인천",
    "collected_at": "2026-10-21T07:46:03.381070+09:00"
-  },
-  {
-   "event_id": "evx-c94da9ed9054efb5",
-   "name": "제25회 대구 학생동아리 한마당",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-13",
-   "end": "2026-10-23",
-   "coord": null,
-   "address": null,
-   "region": "대구",
-   "collected_at": "2026-10-10T08:26:32.962824+09:00"
   },
   {
    "event_id": "tourapi-3552019",
@@ -2414,20 +2364,6 @@
    "collected_at": "2026-10-13T10:35:36.808410+09:00"
   },
   {
-   "event_id": "evx-ee97eee10796dd46",
-   "name": "2026 국제종자박람회",
-   "event_type": "EXHIBITION",
-   "start": "2026-10-21",
-   "end": "2026-10-23",
-   "coord": {
-    "lat": 35.8554639100616,
-    "lng": 126.907678619334
-   },
-   "address": "전북 김제 민간육종연구단지 일원",
-   "region": "전북",
-   "collected_at": "2026-10-13T10:35:36.808410+09:00"
-  },
-  {
    "event_id": "tourapi-2860545",
    "name": "보물찾기 축제 - 금괴를 찾아라!",
    "event_type": "FESTIVAL",
@@ -2468,17 +2404,6 @@
    "address": "대전광역시 유성구 온천로 89 (봉명동)",
    "region": "대전",
    "collected_at": "2026-10-21T07:46:03.381070+09:00"
-  },
-  {
-   "event_id": "evx-978f814e79202c9f",
-   "name": "비원도서관 프랑스 자수 전시회",
-   "event_type": "EXHIBITION",
-   "start": "2026-10-21",
-   "end": "2026-10-23",
-   "coord": null,
-   "address": null,
-   "region": "대구",
-   "collected_at": "2026-10-14T08:24:00.985346+09:00"
   },
   {
    "event_id": "evx-8548cca65cf7c191",
@@ -3397,20 +3322,6 @@
     "lng": 128.8950411936
    },
    "address": "강원특별자치도 강릉시 단오장길 1 (노암동)",
-   "region": "강원",
-   "collected_at": "2026-10-18T23:15:44.118779+09:00"
-  },
-  {
-   "event_id": "tourapi-4116994",
-   "name": "K-Drone Festival",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-19",
-   "end": "2026-10-23",
-   "coord": {
-    "lat": 37.7793177794,
-    "lng": 128.8970786519
-   },
-   "address": "강원특별자치도 강릉시 수리골길 102 (포남동)",
    "region": "강원",
    "collected_at": "2026-10-18T23:15:44.118779+09:00"
   },
@@ -5418,20 +5329,6 @@
    "collected_at": "2026-10-21T07:35:15.820364+09:00"
   },
   {
-   "event_id": "evx-26b7a999e7d1696a",
-   "name": "제18회 한국국제냉난방공조전(HARFKO 2026)",
-   "event_type": "EXHIBITION",
-   "start": "2026-10-21",
-   "end": "2026-10-23",
-   "coord": {
-    "lat": 37.668434616398,
-    "lng": 126.746017389532
-   },
-   "address": "경기도 고양시 킨텍스 제1전시장 4, 5홀",
-   "region": "경기",
-   "collected_at": "2026-10-21T07:35:15.820364+09:00"
-  },
-  {
    "event_id": "evx-e80660ff8245e50a",
    "name": "제31회 정선 민둥산 은빛억새축제",
    "event_type": "FESTIVAL",
@@ -6098,34 +5995,6 @@
    "collected_at": "2026-10-23T07:41:21.580425+09:00"
   },
   {
-   "event_id": "evx-4d0db85d71c2a238",
-   "name": "2026 유네스코 창의도시 청주 국제공예포럼",
-   "event_type": "OTHER",
-   "start": "2026-10-23",
-   "end": "2026-10-23",
-   "coord": {
-    "lat": 36.64294066756085,
-    "lng": 127.47265661320039
-   },
-   "address": "유네스코 국제기록유산센터",
-   "region": "충북",
-   "collected_at": "2026-10-23T07:41:21.580425+09:00"
-  },
-  {
-   "event_id": "evx-66b1318bd9683855",
-   "name": "청주시 사직1동 한마음 축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-23",
-   "end": "2026-10-23",
-   "coord": {
-    "lat": 36.640188867986566,
-    "lng": 127.4811492283089
-   },
-   "address": "사직1동 행정복지센터",
-   "region": "충북",
-   "collected_at": "2026-10-23T07:41:21.580425+09:00"
-  },
-  {
    "event_id": "evx-e1239776d62ecffe",
    "name": "2026 임실 도자기축제",
    "event_type": "FESTIVAL",
@@ -6681,6 +6550,48 @@
    "address": "충청남도 공주시 당간지주길 21 (반죽동)",
    "region": "충남",
    "collected_at": "2026-10-30T08:36:21.055875+09:00"
+  },
+  {
+   "event_id": "tourapi-3553639",
+   "name": "동명커피산책",
+   "event_type": "FESTIVAL",
+   "start": "2026-10-31",
+   "end": "2026-11-01",
+   "coord": {
+    "lat": 35.1482942929,
+    "lng": 126.9224510104
+   },
+   "address": "전남광주통합특별시 동구 제봉로110번길 4 (장동)",
+   "region": "전남",
+   "collected_at": "2026-10-31T08:12:30.873103+09:00"
+  },
+  {
+   "event_id": "tourapi-506627",
+   "name": "최남단 방어 축제",
+   "event_type": "FESTIVAL",
+   "start": "2026-11-19",
+   "end": "2026-11-22",
+   "coord": {
+    "lat": 33.2144983016,
+    "lng": 126.2520492078
+   },
+   "address": "제주특별자치도 서귀포시 대정읍 최남단해안로 66",
+   "region": "제주",
+   "collected_at": "2026-10-31T08:12:30.873103+09:00"
+  },
+  {
+   "event_id": "tourapi-2867420",
+   "name": "지중해마을 문화축제",
+   "event_type": "FESTIVAL",
+   "start": "2026-10-31",
+   "end": "2026-10-31",
+   "coord": {
+    "lat": 36.7972007851,
+    "lng": 127.0613856875
+   },
+   "address": "충청남도 아산시 탕정면 탕정면로22번길 15-18",
+   "region": "충남",
+   "collected_at": "2026-10-31T08:12:30.873103+09:00"
   }
  ],
  "coverage": {
