@@ -84,15 +84,18 @@ _UNVERIFIABLE_CLOCK = re.compile(
 
 
 # 한글 때 말 + 숫자 시각 — "오후 3:00"은 15:00 이다(종전 03:00 으로 읽어 맞는 답이 템플릿으로 떨어졌다, #1486 리뷰 잔여).
-# 밤 1~5시는 새벽이다("밤 1시"), 오전·새벽·아침·밤의 12시는 0시다. 끼니 나열("점심·저녁 11:30~21:00")의 때 말은 그 시각을 꾸미지
-# 않는다 — 앞이 나열 부호면 접지 않는다(#1713 반박 리뷰). 점 구분("15.00")은 읽지 않는다 — 장소 이름('EL(이엘)16.52')·면적·수온
-# 같은 수치를 시각으로 읽어 맞는 답을 버렸다(같은 리뷰). 프롬프트가 Facts 의 `HH:MM` 을 그대로 쓰게 한다
-_KO_MERIDIEM = re.compile(r"(?<![·/,])(?<![·/,]\s)(오전|오후|새벽|아침|낮|저녁|밤)\s*$")
+# 밤 1~5시는 새벽이다("밤 1시"), 오전·새벽·아침·밤의 12시는 0시다. 점 구분("15.00")은 읽지 않는다 — 장소 이름('EL(이엘)16.52')·
+# 면적·수온 같은 수치를 시각으로 읽어 맞는 답을 버렸다(#1713 반박 리뷰). 프롬프트가 Facts 의 `HH:MM` 을 그대로 쓰게 한다.
+# 때 말은 **홀로 선 낱말**만 — 이름 끝의 때 말('달밤 9:00'·'수수한저녁 11:30')을 접으면 지어낸 9:00 이 Facts 21:00 으로 통과했다(INV-2,
+# #1713 재리뷰). 끼니·때 나열("점심·저녁 11:30~21:00"·"점심과 저녁"·"오전/오후")의 뒤 때 말은 그 시각을 꾸미지 않는다 — 앞이 다른 때
+# 말 + 나열 부호·조사일 때만 거른다. 부호만 보면 "11:00 오픈, 오후 9:00 마감"의 진짜 오후까지 접지 않았다(같은 재리뷰)
+_KO_MERIDIEM = re.compile(r"(?<![가-힣])(오전|오후|새벽|아침|낮|저녁|밤)\s*$")
+_DAY_WORD_LIST = re.compile(r"(?:아침|점심|저녁|오전|오후|낮|밤|새벽|브런치)\s*(?:[·ㆍ・‧∙/,，]|과|와|및|이랑|랑|하고|또는)\s*$")
 
 
 def _with_meridiem(hour: int, before: str) -> int:
     word = _KO_MERIDIEM.search(before)
-    if word is None:
+    if word is None or _DAY_WORD_LIST.search(before, 0, word.start()):
         return hour
     if word[1] in ("오후", "저녁") or (word[1] == "낮" and hour <= 5) or (word[1] == "밤" and 6 <= hour <= 11):
         return hour + 12 if hour < 12 else hour
@@ -109,7 +112,7 @@ def clock_spans(text: str) -> list[tuple[int, int, str]]:
         else:
             hour, minute, meridiem = m.group("h"), m.group("m"), (m.group("ap") or "").strip()
         h = int(hour) % 12 + (12 if meridiem.lower().startswith("p") else 0) if meridiem else \
-            _with_meridiem(int(hour), plain[max(0, m.start() - 6):m.start()])
+            _with_meridiem(int(hour), plain[max(0, m.start() - 12):m.start()])
         spans.append((m.start(), m.end(), f"{h:02d}:{minute}"))
     return spans
 

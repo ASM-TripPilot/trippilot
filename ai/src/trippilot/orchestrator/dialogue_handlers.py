@@ -1751,7 +1751,7 @@ _EVENT_TAIL = re.compile(
 _SPECIFIC = r"불꽃|퍼레이드|영화제|드론쇼|야행|문화제|예술제"
 # 행사 낱말 앞의 규모·형식 꾸밈('대'축제·단독 콘서트·정기 공연·기획 전시·특별 공연·신년 음악회)은 그 앞말이 이름이다("치맥 대축제" → 치맥,
 # "아이유 단독 콘서트" → 아이유). 꾸밈 자체는 이름이 아니다(`_NOT_A_NAME`) — 꾸밈만 있으면 종류로 거른다
-_FORM = r"(?:대|단독|정기|기획|특별|신년)"
+_FORM = r"(?:대(?!전)|단독|정기|기획|특별|신년)"  # 대(?!전) — "대전시 축제"는 대+전시가 아니다(#1713 재리뷰)
 _EVENT_NAME = re.compile(rf"([가-힣A-Za-z]+)(?=\s?(?:{_FORM}\s?)?(?:{_GENERIC_EVENT}))|{_SPECIFIC}")
 _SPECIFIC_EVENT = re.compile(_SPECIFIC)
 # 조사가 붙은 말은 이름이 아니다 — 이름은 행사 낱말에 바로 붙는다(벚꽃 축제). "아이랑 축제"·"서울에서 축제"·"음악과 축제"
@@ -1817,7 +1817,12 @@ def _ahead_of(today: date, month: int, day: int = 1) -> date | None:
 
 def _period_days(text: str, today: date) -> tuple[date, ...] | None:
     """기간 낱말 → 날짜들, 없으면 None(낱말 몇 개만 — 달력 파서는 두지 않는다). 띄어쓰기는 이번·다음 + 주·주말·달 에만 너그럽다 —
-    공백을 다 지우면 "내 일정"이 내일, "제주 말고"가 주말이 됐다."""
+    공백을 다 지우면 "내 일정"이 내일, "제주 말고"가 주말이 됐다. 날짜 말이 먼저, 없으면 명절·계절 말."""
+    return _dated_days(text, today) or _festive_days(text, today)
+
+
+def _dated_days(text: str, today: date) -> tuple[date, ...] | None:
+    """날짜 말 — 주말·M월 D일·오늘·내일·모레·이번/다음 주·달·N월."""
     wd = today.weekday()
     sat = today + timedelta(days=(5 - wd) % 7)  # 다가오는 토요일(오늘이 토요일이면 오늘, 일요일이면 다음 주)
     if re.search(r"다음\s?주\s?주말|다음\s?주말", text):
@@ -1846,6 +1851,11 @@ def _period_days(text: str, today: date) -> tuple[date, ...] | None:
     if m and 1 <= int(m[1]) <= 12:
         first = _ahead_of(today, int(m[1]))
         return _span(max(first, today), _month_end(first)) if first else None
+    return None
+
+
+def _festive_days(text: str, today: date) -> tuple[date, ...] | None:
+    """명절·계절 말 — 크리스마스·연말·연초·새해·신년·봄~겨울. 날짜 말보다 약하다: 행사를 꾸미는 말로 자주 온다("가을 축제")."""
     if "크리스마스" in text:
         d = _ahead_of(today, 12, 24)
         return (d, d + timedelta(days=1)) if d else None
@@ -1868,14 +1878,24 @@ def _period_days(text: str, today: date) -> tuple[date, ...] | None:
 _CLAUSE_END = re.compile(r"(?:는데|은데|인데|던데|거든|니까|지만|어서|아서|해서)(?=\s)")
 
 
+# '말고' 바로 앞이 이 낱말이면 그 앞 낱말까지가 뺀 날이다 — "오늘 밤 말고"·"다음 주 말고"
+_DATE_TAIL = frozenset({"밤", "낮", "저녁", "아침", "점심", "주", "달"})
+
+
 def _asked_period(text: str, today: date) -> tuple[date, ...] | None:
-    """발화가 묻는 기간 — '말고' 뒤에 기간이 있으면 그것("오늘 밤 말고 다음 주 공연"), 마디가 이어지면 행사 낱말이 든 마지막 마디부터
-    ("오늘 서울 도착했는데 이번 주에 하는 축제"). 둘 다 없으면 발화 전체 — '말고'는 대개 기간이 아니라 지역·종류를 뺀다("이번 주말에
-    축제 말고 공연", "크리스마스에 뮤지컬 말고 콘서트" — 뒤만 읽으면 기간이 30일로 바뀌었다, #1713 반박 리뷰)."""
-    after = re.split(r"말고(?![가-힣])", text)[-1]
+    """발화가 묻는 기간. '말고' 뒤가 먼저 — 그 안에서는 **묻는 마디(마지막)**("오늘 불꽃축제 봤는데 내일도 해?" → 내일), 다음은 행사
+    낱말이 든 앞 마디("오늘 서울 도착했는데 이번 주에 하는 축제"는 뒤 마디가 이미 답한다), 그 뒤가 '말고' 앞 — '말고'는 대개 기간이
+    아니라 지역·종류를 뺀다("이번 주말에 축제 말고 공연" → 이번 주말, #1713 반박 리뷰). '말고' 바로 앞이 날이면 그 날은 뺀 것이라
+    쓰지 않는다("이번 주말 말고 크리스마스 공연" → 크리스마스). **날짜 말이 명절·계절 말을 이긴다** — "다음 주에 경주 가는데 가을 축제
+    있어?"는 다음 주다(꾸밈으로 쓴 계절 말이 방문 날을 덮었다, #1713 재리뷰).
+    ponytail: 묻는 마디가 예매 기한이면("다음 주 축제 보고 싶은데 오늘 예매해야 해?") 그 날을 읽는다 — 예매는 범위 밖이 대부분이다."""
+    *head, after = re.split(r"말고(?![가-힣])", text)
+    words = "말고".join(head).split()
+    tail = " ".join(words[-2:] if words and words[-1] in _DATE_TAIL else words[-1:])
+    before = () if not words or _period_days(tail, today) else ("말고".join(head),)
     clauses = _CLAUSE_END.split(after)
-    asking = next((c for c in reversed(clauses) if _EVENT_WORD.search(c)), clauses[-1])
-    return _period_days(asking, today) or _period_days(after, today) or _period_days(text, today)
+    parts = (clauses[-1], *(c for c in reversed(clauses[:-1]) if _EVENT_WORD.search(c)), after, *before)
+    return next((d for find in (_dated_days, _festive_days) for part in parts if (d := find(part, today))), None)
 
 
 def _event_days(theme: str, utterance: str, today: date, earlier_asks: tuple[str, ...] = ()) -> tuple[date, ...]:

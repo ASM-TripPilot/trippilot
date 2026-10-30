@@ -2606,6 +2606,12 @@ def test_event_names_skip_size_and_form_prefixes_and_keep_nouns_ending_like_modi
     assert dh._event_names(theme, "서울")[0] == frozenset(names)
 
 
+@pytest.mark.parametrize("theme", ["가을철 대전시 축제", "충청권 대전시 행사"])
+def test_daejeon_city_is_not_the_form_prefix_and_an_exhibition(theme: str) -> None:
+    """'대전시'를 꾸밈 '대' + '전시'로 읽어 앞말('가을철')이 이름이 됐다 — 대전 행사에 거짓 "못 찾음"(#1713 재리뷰)."""
+    assert dh._event_names(theme, "대전")[0] == frozenset()
+
+
 @pytest.mark.parametrize(("utterance", "first", "last"), [
     ("오늘 밤 말고 다음 주 공연 있어?", date(2026, 10, 26), date(2026, 11, 1)),  # 뺀 기간은 묻는 기간이 아니다
     ("오늘 서울 도착했는데 이번 주에 하는 축제", date(2026, 10, 22), date(2026, 10, 25)),  # 앞 마디의 '오늘'은 사정이다
@@ -2615,6 +2621,22 @@ def test_event_names_skip_size_and_form_prefixes_and_keep_nouns_ending_like_modi
     ("이번 주말에 축제 말고 공연 있어?", date(2026, 10, 24), date(2026, 10, 25)),
     ("크리스마스에 뮤지컬 말고 콘서트", date(2026, 12, 24), date(2026, 12, 25)),
     ("이번 주말에 부산 가는데 해운대 말고 광안리 쪽 축제 있어?", date(2026, 10, 24), date(2026, 10, 25)),
+    # #1713 재리뷰 — 묻는 마디(마지막)가 먼저: 행사 낱말은 앞 마디(지난 일)에만 있고 묻는 날은 뒤 마디에 있다
+    ("오늘 불꽃축제 봤는데 내일도 해?", date(2026, 10, 23), date(2026, 10, 23)),
+    ("오늘 전시 보고 왔는데 주말에도 해?", date(2026, 10, 24), date(2026, 10, 25)),
+    ("이번 주에 공연 봤는데 다음 주에도 해?", date(2026, 10, 26), date(2026, 11, 1)),
+    ("이번 달에 전시 봤는데 다음 달에도 해?", date(2026, 11, 1), date(2026, 11, 30)),
+    ("이번 주말에 축제 가려는데 다음 주말에도 해?", date(2026, 10, 31), date(2026, 11, 1)),
+    ("내일 콘서트 가는데 모레도 해?", date(2026, 10, 24), date(2026, 10, 24)),
+    ("오늘 공연은 매진이지만 내일도 해?", date(2026, 10, 23), date(2026, 10, 23)),
+    ("오늘 팝업 다녀왔거든 주말에도 열어?", date(2026, 10, 24), date(2026, 10, 25)),
+    # 같은 재리뷰 — 날짜 말이 명절·계절 말을 이긴다(꾸밈으로 쓴 '가을 축제'·'크리스마스 분위기'가 방문 날을 덮었다)
+    ("다음 주에 경주 가는데 가을 축제 있어?", date(2026, 10, 26), date(2026, 11, 1)),
+    ("내일 제주 가는데 가을 억새 축제 해?", date(2026, 10, 23), date(2026, 10, 23)),
+    ("12월 5일에 서울 가는데 크리스마스 공연 있어?", date(2026, 12, 5), date(2026, 12, 5)),
+    ("주말에 서울 가는데 크리스마스 마켓 같은 행사 있어?", date(2026, 10, 24), date(2026, 10, 25)),
+    ("이번 주말에 축제 말고 크리스마스 분위기 나는 공연 있어?", date(2026, 10, 24), date(2026, 10, 25)),
+    ("이번 주말 말고 크리스마스 공연 있어?", date(2026, 12, 24), date(2026, 12, 25)),  # '말고'로 뺀 날은 쓰지 않는다
 ])
 def test_event_days_read_the_asked_clause_not_what_was_excluded(utterance: str, first: date, last: date) -> None:
     days = dh._event_days("축제", utterance, date(2026, 10, 22))

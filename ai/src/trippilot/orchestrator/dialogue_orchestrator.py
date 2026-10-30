@@ -208,12 +208,13 @@ _GREETS = frozenset({
 THANKS_TEXT = "천만에요! 더 궁금한 게 생기면 언제든 물어봐 주세요."
 ACK_TEXT = "알겠어요! 필요한 게 생기면 언제든 말씀해 주세요."
 # 웃음·이모지만 보낸 말("ㅋㅋ"·"👍"·"😂") — 낱말이 하나도 안 남아 "도와드리기 어려워요"(범위 밖 카드)로 끝났다(10-19 리뷰 한계)
-LAUGH_TEXT = "네, 더 궁금한 게 생기면 언제든 물어봐 주세요!"
+# '네,'·'좋아요!' 머리는 빼다 — 제안 뒤의 모호한 이모지(😊·❤️)에 동의처럼 들려 수락을 삼킨 것처럼 보였다(#1713 재리뷰)
+LAUGH_TEXT = "더 궁금한 게 생기면 언제든 물어봐 주세요!"
 # 감사·맞장구도 같은 말이 이어지지 않게(`unrepeated` 표에 더한다 — #1510 이 LLM 으로 돌리지 않고 남긴 자리, 2026-10-22)
 _CLOSER_VARIANTS = {
     THANKS_TEXT: ("별말씀을요! 여행하다 궁금한 게 생기면 또 불러 주세요.", "도움이 됐다니 다행이에요. 또 필요하면 말씀해 주세요."),
     ACK_TEXT: ("네, 알겠어요. 필요할 때 편하게 불러 주세요.", "좋아요! 궁금한 게 생기면 언제든지요."),
-    LAUGH_TEXT: ("좋아요! 여행하다 궁금한 게 생기면 불러 주세요.", "네! 필요할 때 언제든 말씀해 주세요."),
+    LAUGH_TEXT: ("여행하다 궁금한 게 생기면 불러 주세요.", "필요할 때 언제든 말씀해 주세요."),
 }
 # 인사·잡담 답 — 여행이 있으면 지금 여행으로, 없으면 여행 만들기로 잇는다(버튼은 `_home_action` 과 같은 갈래). DIALOGUE_SMALLTALK 이
 # 배정돼 있으면 LLM 이 즉석에서 짓고(`_smalltalk`), 미배정·실패·목록 밖 장소면 이 고정 문장이다(INV-4 마지막 계단, BR-AO-26 개정 10-22).
@@ -440,13 +441,17 @@ def capabilities_answer(has_trip: bool) -> DialogueAnswer:
     return DialogueAnswer(AnswerKind.TEXT, CAPABILITIES_TEXT, None, (_home_action(has_trip),), None, None)
 
 
-_ACCEPT_MARKS = frozenset("👍👌⭕🙆🆗✅♀♂")  # 수락 이모지(성별 기호는 🙆‍♀️ 의 ZWJ 꼴)
+_ACCEPT_MARKS = frozenset("👍👌⭕🙆🆗✅🙏✔☑💯")  # 수락 이모지 — 😊·😍·❤️·👏 는 반응일 수 있어 한마디로 닫는다(#1713 재리뷰)
+_GENDER_SIGNS = frozenset("♀♂")  # 🙆‍♀️ 의 ZWJ 꼴 성별 기호 — 홀로 오면 수락이 아니다
 
 
 def _accepts_proposal(inp: "TurnInput") -> bool:
-    """이모지만 보낸 말이 수락 이모지뿐이고, 직전 도우미 말이 물음(제안·되묻기)으로 끝났는가 — 그러면 "응"과 같다(#1713 반박 리뷰)."""
-    marks = {c for c in inp.utterance if unicodedata.category(c) == "So"}
-    if not marks or not marks <= _ACCEPT_MARKS or normalize(inp.utterance):
+    """이모지만 보낸 말이 수락 이모지뿐이고, 직전 도우미 말이 제안 물음으로 끝났는가 — 그러면 "응"과 같다(#1713 반박 리뷰).
+    보류 되묻기 뒤는 아니다 — 되묻기는 값(장소·날·일정)을 물어 "응"이 그대로 그 값이 됐다(#1713 재리뷰)."""
+    marks = {c for c in inp.utterance if unicodedata.category(c) == "So"} - _GENDER_SIGNS
+    # 이모지만 보낸 말인가는 낱말마다 본다 — 정리(`normalize`)는 변이 선택자(U+FE0F)를 남겨 키보드가 보내는 완전형 🙆‍♀️·⭕️ 가 빠졌다
+    if inp.context.pending is not None or not marks or not marks <= _ACCEPT_MARKS \
+            or not all(_emoji_only(w) for w in inp.utterance.split()):
         return False
     last = next((t.text for t in reversed(inp.recent_turns) if t.role == "ASSISTANT"), "")
     return last.rstrip().endswith("?")
@@ -682,6 +687,16 @@ def _slot_times(value: object) -> tuple[tuple[str | None, str], ...]:
 _SEGMENT = re.compile(r"[,，·/;→\n]|\s그리고\s")
 
 
+def _segments(text: str) -> list[tuple[str, list[tuple[int, int, str]]]]:
+    """구획(쉼표·줄 등)마다 (구획 글, 그 안의 시각 — 구획 안 위치). 시각은 **원문 전체로** 읽는다 — 구획을 먼저 자르면 "점심·저녁
+    11:30"의 나열 부호가 잘려 나가 저녁 11:30(23:30)이 됐다(#1713 재리뷰). 구획은 이름 귀속에만 쓴다."""
+    spans, out, start = clock_spans(text), [], 0
+    for end, nxt in [*((m.start(), m.end()) for m in _SEGMENT.finditer(text)), (len(text), len(text))]:
+        out.append((text[start:end], [(s - start, e - start, hm) for s, e, hm in spans if start <= s and e <= end]))
+        start = nxt
+    return out
+
+
 def _hours_pairs(value: object) -> tuple[tuple[str | None, str], ...]:
     """Facts 안의 (장소 이름, 영업시간 시각) 짝 — `{"name", "hours_label"}` 를 가진 dict 전부(장소 정보의 places). "해녀의집은 18:00까지
     열어요"처럼 이름 붙은 영업시간을 그 장소의 시각으로 받는다(C5 ⓒ). 짝 검사(`_misplaced_time`·`_unpaired_time`)에만 쓴다 — 순서
@@ -702,8 +717,7 @@ def _hours_pairs(value: object) -> tuple[tuple[str | None, str], ...]:
 def _misplaced_time(text: str, pairs: tuple[tuple[str | None, str], ...]) -> bool:
     """구획(쉼표·줄 등) 안에서 시각에 가장 가까운 장소 이름이 Facts 에서 그 시각과 짝이 아니면 참. 이름이 없으면 판정하지 않는다."""
     names = sorted({name for name, _ in pairs if name}, key=len, reverse=True)
-    for segment in _SEGMENT.split(text):
-        times = clock_spans(segment)
+    for segment, times in _segments(text):
         if not times:
             continue
         spots: list[tuple[int, int, str]] = []
@@ -755,10 +769,10 @@ def _out_of_order(text: str, pairs: tuple[tuple[str | None, str], ...]) -> bool:
     names = [name for name, _ in pairs if name]
     order = [hm for _, hm in pairs]
     at = 0
-    for segment in _SEGMENT.split(text):
+    for segment, times in _segments(text):
         if any(name in segment for name in names):
             continue  # 이름에 붙은 시각 — 짝 검사 몫
-        for _, _, hm in clock_spans(segment):
+        for _, _, hm in times:
             if hm not in order:
                 continue  # 영업시간처럼 슬롯이 아닌 Facts 시각
             nxt = next((i for i in range(at, len(order)) if order[i] == hm), None)
