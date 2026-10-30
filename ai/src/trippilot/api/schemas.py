@@ -349,6 +349,10 @@ class ValidateItineraryRequest(BoundaryModel):
 
     itinerary: ItineraryPayload
     request_meta: RequestMetaSchema
+    # 수단(2026-10-30) — additive optional, repair 의 `transport_modes` 와 **같은 이름·목록·번역표**(첫 인식 토큰).
+    # HC2(이동 시간)를 이 수단으로 잰다 — 종전엔 칸이 없어 대중교통으로 재 자차 여행의 편집 재검증이 HC2 를 잘못 표시했다.
+    # 없으면 종전 동작(PUBLIC).
+    transport_modes: list[str] = Field(default_factory=list)
 
 
 class ValidateItineraryResponse(BoundaryModel):

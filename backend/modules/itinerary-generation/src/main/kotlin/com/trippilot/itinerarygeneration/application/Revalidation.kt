@@ -37,9 +37,10 @@ internal sealed interface Revalidation {
         /**
          * 재검증을 시도하고 실패는 [Withheld] 로 접는다. 침묵 금지(INV-4) — 실패는 반드시 로그로 드러낸다.
          * 외부 호출이라 **트랜잭션 밖**에서 부른다(DB 커넥션을 물지 않게, generate 와 동일).
+         * [transportModes] = 그 여행의 이동수단([RepairContexts.transportModes]) — 상대가 HC2 를 그 수단으로 잰다. 비우면 대중교통.
          */
-        fun attempt(agent: ScheduleAgentPort, output: ScheduleAgentOutput, tripId: UUID): Revalidation =
-            runCatching { agent.validateWithUnverified(output).let { Judged(it.violations, it.unverifiedPoiIds) } }
+        fun attempt(agent: ScheduleAgentPort, output: ScheduleAgentOutput, tripId: UUID, transportModes: List<String> = emptyList()): Revalidation =
+            runCatching { agent.validateWithUnverified(output, transportModes).let { Judged(it.violations, it.unverifiedPoiIds) } }
                 .getOrElse { e ->
                     log.warn(
                         "일정 재검증 실패 — 직전 위반 표시를 유지한 채 진행합니다(판정 보류). tripId={}",
