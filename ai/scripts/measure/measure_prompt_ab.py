@@ -114,17 +114,32 @@ class _NullTrace:
         pass
 
 
-def _gateway(prompts: Path, feature: LlmFeature, gate, model: str = MODEL) -> GatewayFacade:
-    # SDK 재시도 0 — 운영 어댑터와 같은 정책이라야 지연이 왜곡되지 않는다(TRIP-381)
-    if model.startswith("claude"):  # 운영이 Claude 일 때(10-30 기준 전 기능 claude-opus-5-5) — 운영과 같은 어댑터
+def _llm(model: str):
+    """운영(`main.py`)과 같은 어댑터 — SDK 재시도 0(TRIP-381) + 총시간 시한 `DeadlineTransport`.
+
+    SDK timeout 은 바이트 간격 기준이라 총시간을 못 막는다 — 시한 초과율을 재는 러너가 운영과 다른
+    전송을 쓰면 '운영에선 잘리는 호출'이 여기선 늦게라도 성공으로 센다. 벤더는 모델 이름으로 고른다
+    (운영이 Claude 일 때 — 10-30 기준 전 기능 claude-opus-5-5).
+    """
+    # ponytail: 예열 호출은 두지 않는다 — 워커마다 부수효과(드롭 수집)가 있어 버릴 호출을 끼우기 어렵다.
+    # 연결 수립이 끼는 첫 회 지연은 반복 수로 희석해 읽는다. 첫 회를 빼야 하는 측정이 생기면 그때 `_run` 에.
+    from trippilot.llm_gateway.adapters.deadline_http import DeadlineTransport
+
+    if model.startswith("claude"):
         import anthropic
 
         from trippilot.llm_gateway.adapters.anthropic_adapter import AnthropicAdapter
-        llm = AnthropicAdapter(anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"], max_retries=0))
-    else:
-        llm = OpenAIAdapter(openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"], max_retries=0), api="responses")
+        return AnthropicAdapter(anthropic.Anthropic(
+            api_key=os.environ["ANTHROPIC_API_KEY"], max_retries=0,
+            http_client=anthropic.DefaultHttpxClient(transport=DeadlineTransport())))
+    return OpenAIAdapter(openai.OpenAI(
+        api_key=os.environ["OPENAI_API_KEY"], max_retries=0,
+        http_client=openai.DefaultHttpxClient(transport=DeadlineTransport())), api="responses")
+
+
+def _gateway(prompts: Path, feature: LlmFeature, gate, model: str = MODEL) -> GatewayFacade:
     cfg = C1Config(model_ids={t: model for t in ModelTier}, feature_models={feature: model})
-    return GatewayFacade(llm, PromptRegistry(prompts), gate, cfg, _NullTrace())
+    return GatewayFacade(_llm(model), PromptRegistry(prompts), gate, cfg, _NullTrace())
 
 
 def _run(fn, cases):
@@ -1089,7 +1104,7 @@ def _risky(value: str) -> bool:
 def run_plan(prompts: Path, repeat: int) -> None:
     tools = dplan.plan_tools(HandlerPorts(poi_info=_ANY_PORT, weather=_ANY_PORT, transit=_ANY_PORT, pool_builder=_ANY_PORT,
                                           planb=_ANY_PORT))  # 운영 배선(포트 전부)과 같은 노출
-    llm = OpenAIAdapter(openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"], max_retries=0), api="responses")
+    llm = _llm(MODEL)
     cfg = C1Config(model_ids={t: MODEL for t in ModelTier}, feature_models={LlmFeature.DIALOGUE_PLAN: MODEL})
     trace = _DropTrace()
     worker = DialoguePlanWorker(GatewayFacade(llm, PromptRegistry(prompts), DialoguePlanGate(frozenset(tools)), cfg, trace),
