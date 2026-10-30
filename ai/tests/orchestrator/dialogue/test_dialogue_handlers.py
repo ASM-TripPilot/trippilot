@@ -2596,6 +2596,9 @@ def test_region_recommendation_follows_the_said_wish_over_nothing_and_asks_when_
     ("치맥 대축제", {"치맥"}), ("대박람회", set()), ("신년 대공연", set()), ("상시전시", set()), ("기획 전시", set()),
     ("젓갈 축제", {"젓갈"}), ("행운 축제", {"행운"}), ("풋볼 축제", {"풋볼"}),
     ("새로운 축제", set()), ("가볼 축제", set()), ("놀러갈 축제", set()), ("유명한 축제", set()), ("즐거운 공연", set()),
+    # #1713 반박 리뷰 — 홀로 쓴 '볼'·흔한 관형형은 꾸밈, 꾸밈 앞의 고유 이름은 이름, '상설'은 이름
+    ("볼 공연", set()), ("아이랑 볼 공연", set()), ("놀라운 공연", set()), ("같이갈 축제", set()), ("함께볼 전시", set()),
+    ("아이유 단독 콘서트", {"아이유"}), ("상설 전시", {"상설"}), ("강경젓갈 축제", {"강경젓갈"}), ("핸드볼 축제", {"핸드볼"}),
 ])
 def test_event_names_skip_size_and_form_prefixes_and_keep_nouns_ending_like_modifiers(theme: str, names: set[str]) -> None:
     """'대축제'의 '대'가 한 글자 이름이 돼 행사가 있어도 "못 찾음"이었고, 끝 글자만 본 관형형 거름이 젓갈·행운을 버려 아무 축제나
@@ -2608,6 +2611,10 @@ def test_event_names_skip_size_and_form_prefixes_and_keep_nouns_ending_like_modi
     ("오늘 서울 도착했는데 이번 주에 하는 축제", date(2026, 10, 22), date(2026, 10, 25)),  # 앞 마디의 '오늘'은 사정이다
     ("오늘이나 내일 축제", date(2026, 10, 22), date(2026, 10, 23)),  # 한 마디에 둘이면 둘 다
     ("제주 말고 부산 축제 있어?", date(2026, 10, 22), date(2026, 11, 20)),  # 기간이 없으면 30일
+    # #1713 반박 리뷰 — '말고'는 대개 지역·종류를 뺀다: 뒤에 기간이 없으면 발화 전체의 기간
+    ("이번 주말에 축제 말고 공연 있어?", date(2026, 10, 24), date(2026, 10, 25)),
+    ("크리스마스에 뮤지컬 말고 콘서트", date(2026, 12, 24), date(2026, 12, 25)),
+    ("이번 주말에 부산 가는데 해운대 말고 광안리 쪽 축제 있어?", date(2026, 10, 24), date(2026, 10, 25)),
 ])
 def test_event_days_read_the_asked_clause_not_what_was_excluded(utterance: str, first: date, last: date) -> None:
     days = dh._event_days("축제", utterance, date(2026, 10, 22))

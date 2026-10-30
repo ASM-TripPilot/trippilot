@@ -82,10 +82,20 @@ def test_choosing_between_two_places_is_not_a_place_between(text: str) -> None:
     assert region_pair(text) is None
 
 
-def test_asking_for_a_pick_between_two_places_is_still_between() -> None:
-    assert [n for n, _ in region_pair("홍대랑 이태원 사이에서 맛집 골라 줘")] == ["홍대", "이태원"]
+@pytest.mark.parametrize("text", ["홍대랑 이태원 사이에서 맛집 골라 줘", "홍대랑 이태원 사이에서 친구랑 만나기로 결정했어 카페 추천해줘",
+                                  "홍대랑 이태원 사이에서 만날 곳 정하자"])
+def test_asking_for_a_pick_or_a_meeting_point_between_two_places_is_still_between(text: str) -> None:
+    """만남·요청 말을 넘어 '결정·정하'를 보면 가운데를 찾는 말을 고르기로 읽었다(#1713 반박 리뷰)."""
+    assert [n for n, _ in region_pair(text)] == ["홍대", "이태원"]
 
 
 @pytest.mark.parametrize("text", ["홍대 보고나서 이태원 가는 길에", "홍대 먹고 나서 이태원 가는 길에", "홍대 다음에 이태원 가는 길에"])
 def test_route_departure_markers_include_after_and_next(text: str) -> None:
     assert [n for n, _ in region_pair(text)] == ["홍대", "이태원"]
+
+
+@pytest.mark.parametrize("text", ["홍대는 다음에 가고 이태원 가는 길에 카페 추천", "홍대는 다음에 갈게 이태원 가는 길에 맛집 알려줘",
+                                  "홍대 가는 건 다음에 하고 이태원 가는 길에 카페"])
+def test_putting_a_place_off_for_next_time_is_not_a_departure(text: str) -> None:
+    """'다음에'는 두 이름 사이 글의 끝일 때만 순서다 — 가운데면 미룸이다(#1713 반박 리뷰)."""
+    assert region_pair(text) is None

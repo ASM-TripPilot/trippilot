@@ -1958,3 +1958,12 @@ def test_a_crash_before_any_llm_call_stays_out_of_scope(monkeypatch) -> None:
     out = b.orch.turn(_input())
     assert out.outcome == "OUT_OF_SCOPE" and out.reason.startswith("orchestrator_error: RuntimeError")
     assert ("orchestrator", "dialogue_orchestrator", "out_of_scope") in _modes(b.trace)
+
+
+def test_acceptance_emoji_after_a_proposal_is_read_as_yes() -> None:
+    """제안 뒤의 "👍" 는 수락이다 — 웃음 한마디로 닫으면 수락이 묻힌다(#1713 반박 리뷰). "응"으로 분류를 탄다."""
+    b = _build(_canned(Intent.GET_WEATHER))
+    turns = (RecentTurn("ASSISTANT", "다음은 15:00 카페 모카예요! 가기 전에 날씨도 확인해 드릴까요?"),)
+    out = b.orch.turn(replace(_input("👍"), recent_turns=turns))
+    assert out.answer is None or out.answer.text != LAUGH_TEXT
+    assert out.llm_calls >= 1 and any("응" in r.prompt for r in b.llm.requests)

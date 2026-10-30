@@ -1749,14 +1749,18 @@ _EVENT_TAIL = re.compile(
 # 홀로 이름인 낱말 — 불꽃·퍼레이드와 하위 종류(영화제·드론쇼·야행·문화제·예술제). 종류로만 거르면 보이는 tourapi 는 전부 FESTIVAL 이라
 # "영화제 언제 해"에 아무 축제나 나열됐다(2026-10-22 리뷰)
 _SPECIFIC = r"불꽃|퍼레이드|영화제|드론쇼|야행|문화제|예술제"
-# 행사 낱말에 붙은 '대'(대축제·대공연·대박람회)는 규모 꾸밈이다 — 그 앞말이 이름이다("치맥 대축제" → 치맥). '대' 자체는 이름이 아니다
-_EVENT_NAME = re.compile(rf"([가-힣A-Za-z]+)(?=\s?대?(?:{_GENERIC_EVENT}))|{_SPECIFIC}")
+# 행사 낱말 앞의 규모·형식 꾸밈('대'축제·단독 콘서트·정기 공연·기획 전시·특별 공연·신년 음악회)은 그 앞말이 이름이다("치맥 대축제" → 치맥,
+# "아이유 단독 콘서트" → 아이유). 꾸밈 자체는 이름이 아니다(`_NOT_A_NAME`) — 꾸밈만 있으면 종류로 거른다
+_FORM = r"(?:대|단독|정기|기획|특별|신년)"
+_EVENT_NAME = re.compile(rf"([가-힣A-Za-z]+)(?=\s?(?:{_FORM}\s?)?(?:{_GENERIC_EVENT}))|{_SPECIFIC}")
 _SPECIFIC_EVENT = re.compile(_SPECIFIC)
 # 조사가 붙은 말은 이름이 아니다 — 이름은 행사 낱말에 바로 붙는다(벚꽃 축제). "아이랑 축제"·"서울에서 축제"·"음악과 축제"
 _JOSA_END = re.compile(r"(?<=.)(?:에서|이랑|하고|에|의|랑|과|와|은|는|을|를|만)$")
-# 관형형 — 유명한·재밌는·작은·할·가던·예쁜·다른, 새로운·즐거운·아름다운, 가볼·해볼, 갈·놀러갈. 운·볼·갈은 앞 글자까지 본다 —
-# 끝 글자만 보면 이름인 젓갈·행운·풋볼이 꾸밈으로 버려져 아무 축제나 나열됐다(#1486 리뷰 잔여)
-_MODIFIER_END = re.compile(r"(?:한|는|은|할|던|쁜|른)$|[로거다여서까러려]운$|[가해러어아봐와서]볼$|(?:^|[러에로])갈$")
+# 관형형 — 유명한·재밌는·작은·할·볼·갈·가던·새로운·예쁜·다른. 끝 글자로 넓게 거르고(꾸밈이면 종류로 가는 안전한 쪽), 그 끝 글자로
+# 끝나는 **이름**만 예외로 둔다 — 앞 글자 허용 목록으로 좁혔더니 놀라운·같이갈·함께볼 같은 흔한 꾸밈이 이름이 돼 거짓 "못 찾음"이었다
+# (#1713 반박 리뷰 48건). 예외가 모자라면 종전처럼 종류 나열이다
+_MODIFIER_END = re.compile(r"(?:한|는|은|할|볼|갈|던|운|쁜|른)$")
+_NOUN_LIKE_MODIFIER = ("젓갈", "자갈", "행운", "풋볼", "핸드볼", "스노우볼", "드래곤볼")
 _REGION_SUFFIX = re.compile(r"(?:특별시|광역시|특별자치도|특별자치시|시|도|군|구|동|읍|면|역|입구|입구역|섬|해변|해수욕장|항)?")
 _NOT_A_NAME = frozenset({
     *_GENERIC_EVENT.split("|"),
@@ -1770,7 +1774,7 @@ _NOT_A_NAME = frozenset({
     "아이들", "어린이", "커플", "연인", "친구", "혼자", "데이트", "무료", "유료", "전통", "실내", "야외", "대형", "대규모", "소규모",
     "무슨", "어떤", "이", "그", "저", "큰", "새", "온", "각", "한", "두", "세", "네", "몇", "첫",
     # 규모·형식 꾸밈 — 대축제·상시 전시·기획전시·특별 공연·정기 공연·단독 콘서트
-    "대", "상시", "상설", "기획", "특별", "정기", "단독"})
+    "대", "상시", "기획", "특별", "정기", "단독"})  # '상설'은 이름이다 — "상설 전시"는 상설전을 묻는다(#1713 리뷰)
 # 물은 종류 — 저장소 유형이 늘 맞지는 않아(보이는 원천 tourapi 는 전부 FESTIVAL, popup 은 전부 POPUP 으로 적힌다) 이름 낱말로도 맞춘다.
 # 전시의 '…전'은 대전·축전·석조전·판매전이 아니고, 부제가 달린 '…거장전 - 부제'는 전시다
 _EVENT_KINDS = (
@@ -1865,9 +1869,13 @@ _CLAUSE_END = re.compile(r"(?:는데|은데|인데|던데|거든|니까|지만|�
 
 
 def _asked_period(text: str, today: date) -> tuple[date, ...] | None:
-    """발화가 묻는 기간 — '말고' 앞(뺀 것: "오늘 밤 말고 다음 주 공연")은 버리고, 마디가 이어지면 끝 마디(묻는 마디)부터 본다."""
-    asked = re.split(r"말고(?![가-힣])", text)[-1]
-    return _period_days(_CLAUSE_END.split(asked)[-1], today) or _period_days(asked, today)
+    """발화가 묻는 기간 — '말고' 뒤에 기간이 있으면 그것("오늘 밤 말고 다음 주 공연"), 마디가 이어지면 행사 낱말이 든 마지막 마디부터
+    ("오늘 서울 도착했는데 이번 주에 하는 축제"). 둘 다 없으면 발화 전체 — '말고'는 대개 기간이 아니라 지역·종류를 뺀다("이번 주말에
+    축제 말고 공연", "크리스마스에 뮤지컬 말고 콘서트" — 뒤만 읽으면 기간이 30일로 바뀌었다, #1713 반박 리뷰)."""
+    after = re.split(r"말고(?![가-힣])", text)[-1]
+    clauses = _CLAUSE_END.split(after)
+    asking = next((c for c in reversed(clauses) if _EVENT_WORD.search(c)), clauses[-1])
+    return _period_days(asking, today) or _period_days(after, today) or _period_days(text, today)
 
 
 def _event_days(theme: str, utterance: str, today: date, earlier_asks: tuple[str, ...] = ()) -> tuple[date, ...]:
@@ -1924,7 +1932,7 @@ def _event_names(theme: str, anchor_label: str) -> tuple[frozenset[str], tuple[t
             if hit[0] != anchor_label:
                 places.append((hit[1], min(_EVENT_NEAR_KM, max(2 * hit[2], 3.0))))
             continue
-        if bare == word and word not in _NOT_A_NAME and not _MODIFIER_END.search(word):
+        if bare == word and word not in _NOT_A_NAME and (not _MODIFIER_END.search(word) or word.endswith(_NOUN_LIKE_MODIFIER)):
             texts.add(word.casefold() if len(word) > 1 else "\0")  # "\0" 은 어떤 이름에도 들지 않는다
     return frozenset(texts), tuple(places)
 

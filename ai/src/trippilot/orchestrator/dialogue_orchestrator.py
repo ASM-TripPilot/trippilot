@@ -440,6 +440,18 @@ def capabilities_answer(has_trip: bool) -> DialogueAnswer:
     return DialogueAnswer(AnswerKind.TEXT, CAPABILITIES_TEXT, None, (_home_action(has_trip),), None, None)
 
 
+_ACCEPT_MARKS = frozenset("👍👌⭕🙆🆗✅♀♂")  # 수락 이모지(성별 기호는 🙆‍♀️ 의 ZWJ 꼴)
+
+
+def _accepts_proposal(inp: "TurnInput") -> bool:
+    """이모지만 보낸 말이 수락 이모지뿐이고, 직전 도우미 말이 물음(제안·되묻기)으로 끝났는가 — 그러면 "응"과 같다(#1713 반박 리뷰)."""
+    marks = {c for c in inp.utterance if unicodedata.category(c) == "So"}
+    if not marks or not marks <= _ACCEPT_MARKS or normalize(inp.utterance):
+        return False
+    last = next((t.text for t in reversed(inp.recent_turns) if t.role == "ASSISTANT"), "")
+    return last.rstrip().endswith("?")
+
+
 def _emoji_only(word: str) -> bool:
     """이모지·기호 글자만(👍·😂·❤️ — 변이 선택자·ZWJ·피부색 포함). 정리가 이모지를 지우고 남긴 변이 선택자("❤️" → U+FE0F)도 같다."""
     return bool(word) and {unicodedata.category(c) for c in word} <= {"So", "Sk", "Mn", "Cf"}
@@ -940,6 +952,8 @@ class DialogueOrchestrator:
         counter: list[int],
     ) -> TurnOutcome:
         cleared = DialogueContext(turn_index=inp.context.turn_index)  # 보류는 이 턴으로 끝났다 — 턴 번호는 백엔드 몫
+        if _accepts_proposal(inp):  # 제안 뒤의 "👍" — 수락이다. "응"으로 분류를 탄다(분류 먼저, BR-AO-26 — 웃음 한마디로 닫으면 수락이 묻힌다)
+            inp = replace(inp, utterance="응")
         text = normalize(inp.utterance)
         # 0 — 리터럴 능력 안내 (BR-AO-18): 분류 LLM 에 보내지 않는다
         if text == CAPABILITIES_LITERAL:
