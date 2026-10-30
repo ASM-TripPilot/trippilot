@@ -1928,7 +1928,7 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 ## Functional Design 사후 개정 — situation-awareness 판단 기록 (BR-SA-07·08 · BLM §4.3·§10)
 **Timestamp**: 2026-10-30T14:30:00+09:00 (작업 시점)
 **User Input**: (사용자 원문) "뭐를 하라고?? 결정이 필요한것들은 웬만해서는 다 진행하는 방향으로 하자"
-**AI Response**: 열려 있던 판단을 추천안으로 닫고 블록 4개를 덧붙였다(원문·기존 블록 삭제·수정 0줄) — `functional-design/business-rules.md` BR-SA-07(만료 기준을 코드의 '끝 시각'에 맞춤) · BR-SA-08(폐업 승격은 제자리 갱신만 — 시도했다가 블로킹 PBT T-D1-P1·P4 약화가 필요해 두었다) · `functional-design/business-logic-model.md` §4.3(만료 기준 정정) · §10(O-SA-6 유지·O-SA-13 관찰·FE-A 잔상 수용·작은 후속 보류 기록). `TriggerLifecycleTest` 에 현재 동작을 고정하는 시험 2건을 더했다. 운영 코드 변경은 없다. TRIP-1675.
+**AI Response**: 열려 있던 판단을 추천안으로 닫고 블록 4개를 덧붙였다(원문·기존 블록 삭제·수정 0줄) — `functional-design/business-rules.md` BR-SA-07(만료 기준을 코드의 '끝 시각'에 맞춤) · BR-SA-08(폐업 승격은 제자리 갱신만 — 시도했다가 블로킹 PBT T-D1-P1·P4 약화가 필요해 두었다) · `functional-design/business-logic-model.md` §4.3(만료 기준 정정) · §10(O-SA-6 유지·O-SA-13 관찰·FE-A 잔상 수용·작은 후속 보류 기록). `TriggerLifecycleTest` 에 현재 동작을 고정하는 시험 2건을 더했다. 운영 코드 변경은 없다. 또 #1689 가 NFR §7 판독 기록에 쓴 요일 표기('평일 12:00~19:00')를 실제 값(화~토, `day_of_week` 월=0)으로 정정했다. TRIP-1675.
 **Context**: CONSTRUCTION — situation-awareness Functional Design 사후 개정(판단 기록), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
