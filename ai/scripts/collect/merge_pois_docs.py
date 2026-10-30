@@ -34,6 +34,7 @@ from collect_localdata import _MIGRATION, load_regions  # noqa: E402  (같은 �
 from collect_pois import load_closed_refs  # noqa: E402  (같은 디렉토리)
 from trippilot.domain.poi import TRENDING_TAG  # noqa: E402
 from trippilot.poi_curation.sourcing.mapping import (  # noqa: E402
+    _JOINED,
     non_travel_reason,
     parse_opening_hours_raw,
 )
@@ -443,6 +444,44 @@ def drop_bad_nightlife(proposals: list[dict]) -> int:
     return n
 
 
+# 1박 숙영지 이름. 어휘는 요금 수집의 1박 표지(`collect_place_fees._OVERNIGHT`)에서 `휴양림` 만 뺐다 — 요금으로는
+# 휴양림 요금이 대개 숙박비라 맞지만, 장소로는 자연휴양림이 낮 방문지다(관광지 cat3 A01010600 은 NATURE). 공유본
+# 레포츠에서 `휴양림` 으로만 걸리는 9곳에 `영인산자연휴양림 스카이어드벤처 (영인산 짚라인)` 과 일일 개장
+# 09:00~18:00 휴양림 둘이 있었다(2026-10-30 — 걸린 1,633곳 중 `캠핑장`·`야영장`·`글램핑` 꼴이 아닌 107곳과 다른
+# 업종 낱말이 섞인 이름을 눈으로 봤다).
+_CAMPING = re.compile(r"캠핑|야영|글램핑|오토캠|카라반|펜션|민박")
+
+
+# 한 상호에 두 곳이 묶인 표기는 전부 숙영지일 때만 뺀다 — `노랑카라반&고카트` 의 고카트(10:00~19:30)는 낮 방문지다.
+# 구분자는 `mapping.is_franchise` 의 `_JOINED` 를 같이 쓰고, 전각 `＆` 도 묶음으로 본다(`메타피아 오래 캠핑장＆카라반`).
+# 한 글자 조각은 상호의 일부라 안 본다(`A&J오토캠핑장`).
+def _is_camping(p: dict) -> bool:
+    poi = p.get("poi") or {}
+    name = (poi.get("name") or "").replace("＆", "&")
+    parts = [s for s in (x.strip() for x in _JOINED.split(name)) if len(s) > 1]
+    return (p.get("source") == "TOURAPI" and (p.get("provenance") or {}).get("content_type_id") == "28"
+            and poi.get("category") == "ACTIVITY" and bool(parts) and all(_CAMPING.search(s) for s in parts))
+
+
+def drop_camping(proposals: list[dict]) -> int:
+    """레포츠(TourAPI 28)로 들어온 캠핑장·야영장·글램핑·펜션을 뺀다. 지운 건수를 돌려준다.
+
+    **지금은 이것이 실제로 걸리는 방어선이다** — 수집의 cat3 야영장 드롭(`mapping._CAMPING_CAT3`)은 옛 분류 코드
+    전용이라, 새로·고쳐 온 항목(옛 cat 이 비어 온다)에도, 벤더 분류 코드가 제안 문서에 안 남는 이미 들어간 행에도
+    안 닿는다. 그래서 이름으로 가른다 — 일일 병합이 그날 수집분까지 같이 거른다. `drop_non_travel` 과 같은
+    자리·같은 이유의 소급이다. 외부 호출 0.
+
+    **출처·타입·카테고리를 다 본다** — 이름만 보면 LOCALDATA 의 캠핑장 안 식당(시설 이름으로 인허가를 낸다 —
+    `collection_gate` 3단 주석)·음식점 `캠핑7`·쇼핑 `고릴라캠핑 송도점`·문화시설 `잉카마야박물관&캠핑장` 이 빠진다.
+    비여행지 사유(`non_travel_reason`)에 넣지 않는 이유도 같다 — 그쪽은 모든 출처의 수집 게이트가 쓰고, 국립공원
+    야영장을 그 규칙의 생존자로 고정해 둔다(`test_non_travel_gate`).
+    """
+    kept = [p for p in proposals if not _is_camping(p)]
+    n = len(proposals) - len(kept)
+    proposals[:] = kept
+    return n
+
+
 def drop_closed(proposals: list[dict], closed_refs: frozenset[tuple[str, str]]) -> int:
     """폐업 확인된 제안을 뺀다. 지운 건수를 돌려준다.
 
@@ -511,6 +550,11 @@ def retro_drops(out: dict, ref_by_id: dict[int, tuple[str, str]] | None = None,
         print(f"[merge] 나이트라이프 규칙 제거 — {bad_night}건", file=sys.stderr)
         out["stats"]["unique_proposals"] = len(out["proposals"])
         out["stats"]["bad_nightlife_dropped"] = out["stats"].get("bad_nightlife_dropped", 0) + bad_night
+    # 레포츠 캠핑장 소급 — 같은 규약.
+    if (camping := drop_camping(out["proposals"])):
+        print(f"[merge] 레포츠 캠핑장·숙영지 제거 — {camping}건", file=sys.stderr)
+        out["stats"]["unique_proposals"] = len(out["proposals"])
+        out["stats"]["camping_dropped"] = out["stats"].get("camping_dropped", 0) + camping
     # LLM 판정 소급 — 기준을 조이면(프롬프트 판본 상승) 적재된 행에도 소급된다.
     if (rejected := drop_rejected_verdicts(out["proposals"])):
         print(f"[merge] 판정 reject 제거 — {rejected}건", file=sys.stderr)

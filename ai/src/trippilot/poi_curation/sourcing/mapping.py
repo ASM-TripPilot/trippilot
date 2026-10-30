@@ -23,11 +23,19 @@ from trippilot.domain.poi import OpenHour, PoiCategory
 #                 A0203(체험관광지) → ACTIVITY · A0207/A0208(축제·공연행사) → CULTURE
 #               cat1 A03(레포츠) → ACTIVITY · A04(쇼핑) → SHOPPING · A05(음식) → FOOD
 #   14 문화시설: CULTURE
-#   28 레포츠:   ACTIVITY
+#   28 레포츠:   ACTIVITY, 단 cat3 A03021700(야영장,오토캠핑장) → None (12 의 A03 도 같다)
 #   38 쇼핑:     SHOPPING
 #   39 음식점:   FOOD, 단 cat3 A05020900(카페/전통찻집) → CAFE
 # 그 외(15 축제공연행사·25 여행코스·32 숙박 등) → None(매핑 불가 — 드롭+카운트).
 _CAFE_CAT3 = "A05020900"
+# 야영장은 낮 방문지가 아니라 1박 숙영지다 — ACTIVITY 로 두면 낮 슬롯에 들어가고 입실·퇴실 시각이 영업창으로
+# 읽혔다. 백엔드 PoiCategory 에 STAY 가 없어(모르는 코드는 null) 32 숙박과 같은 길로 드롭한다.
+# **옛 코드 전용 방어선이라 지금 수집엔 거의 안 걸린다** — 이 코드를 단 항목은 변경이 없으면 기제안 색인이
+# 건너뛰고, 새로·고쳐 온 항목은 옛 cat 이 비어 온다(공유본 2026-10-30: 10-20 뒤 상세를 받은 캠핑 이름 751곳이
+# 전부 빈 태그 — 옛 `A0302` 도 새 `LS01~04` 도 안 실려 왔다). 그 항목들이 싣는 새 분류는 수집 통계
+# `leports_lcls` 가 센다 — 확인되면 여기서 같이 드롭한다. 그때까지 실제 방어선은 병합의 이름 규칙이다
+# (`scripts/collect/merge_pois_docs.drop_camping`).
+_CAMPING_CAT3 = "A03021700"
 
 _KIND_DIRECT: dict[str, PoiCategory] = {
     "14": PoiCategory.CULTURE,
@@ -81,6 +89,8 @@ def _lcls(codes: tuple[str, ...]) -> tuple[str | None, str | None]:
 
 def map_category(kind: str, category_codes: tuple[str, ...]) -> PoiCategory | None:
     """TourAPI 분류 → PoiCategory. 매핑 불가 None (호출측이 드롭+카운트)."""
+    if _CAMPING_CAT3 in category_codes:
+        return None   # 야영장·오토캠핑장 — 위 상수 주석
     lcls1, lcls2 = _lcls(category_codes)
     if kind == "39":
         cafe = _CAFE_CAT3 in category_codes or lcls2 == _CAFE_LCLS2
@@ -447,6 +457,11 @@ _REST_PERIOD = re.compile(r"[~∼～〜]|부터|까지")
 _NOT_OPEN_SEGMENT = re.compile(
     r"준비\s*시간|휴게|브레이크|점심\s*시간|마감|주문|라스트\s*오더|정비|청소|"
     r"\d+\s*항차|\d+\s*회차|대관|예약|상담|입실|퇴실")
+# 숙박 입실·퇴실 시각 — 위 라벨 검사는 시각 3회 이상 경로에만 있어, 시각 2회 원문 `- 입실 13:00- 퇴실 12:00` 이
+# 13:00~익일 12:00 영업으로 읽혔다(공유본 985곳 — 972곳이 익일까지 가는 창, 949곳이 레포츠). 라벨이 **시각 바로
+# 앞**일 때만 본다 — 실물 간격은 없음·공백·`시간 `·` 오후 `·`(토요일) ` 처럼 10자 안이고 줄을 넘지 않는다.
+# 떨어진 라벨(`07:00~18:00※ 당일사용은 당일 입실 후 당일 퇴실`)은 그 시각의 이름이 아니다.
+_CHECK_IN_OUT_TIME = re.compile(rf"(?:입실|퇴실)[^\d<\n]{{0,10}}{_TIME_RE.pattern}")
 # 시설·구역이 여럿이면 **어느 것이 이 장소의 시간인지 모른다** — 통째로 포기한다.
 # 실물: `[사우나] 06:00~21:00 [아쿠아나] 실내 10:00~18:00 야외 12:00~17:00`
 _SECTION_HEAD = re.compile(r"\[[^\]]{1,20}\]")
@@ -652,6 +667,7 @@ def parse_open_hours(hours_raw: str | None, rest_raw: str | None) -> tuple[OpenH
     - hours_raw에서 HH:MM이 **정확히 2회** 등장할 때만 개점~폐점으로 읽는다
       (계절별 시간 등 3회 이상은 어느 창이 맞는지 확정 불가 → 포기).
     - 폐점 ≤ 개점이면 자정 초과 영업으로 보고 +24h (OpenHour 계약).
+    - 그 두 시각이 숙박 입실·퇴실 시각(`- 입실 13:00- 퇴실 12:00`)이면 포기 — `_CHECK_IN_OUT_TIME`.
     - rest_raw 해석은 `_parse_rest_days` — 요일을 못 읽고 무휴·비정기 휴일·점포별 상이도 아닌
       글("동절기 휴장"·"공연 별로 상이함")이면 어느 날 닫는지 모른다 → 전체 포기.
     - 영업 원문 안의 명시 휴무 절(`매주 월요일 휴관`)도 닫는다 — `_hours_rest_days`, 모든 갈래에 같이.
@@ -665,6 +681,8 @@ def parse_open_hours(hours_raw: str | None, rest_raw: str | None) -> tuple[OpenH
     else:
         times = _TIME_RE.findall(hours_raw)
         if len(times) == 2:
+            if _CHECK_IN_OUT_TIME.search(hours_raw):
+                return ()   # 숙박 입실·퇴실 시각이지 영업 창이 아니다 — 위 정규식 주석
             open_min = int(times[0][0]) * 60 + int(times[0][1])
             close_min = int(times[1][0]) * 60 + int(times[1][1])
             if close_min <= open_min:

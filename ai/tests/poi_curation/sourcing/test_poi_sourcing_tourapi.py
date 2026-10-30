@@ -195,7 +195,9 @@ def test_fetch_detail_kind_28_carries_nothing() -> None:
         ("12", ("A02", "A0201", "A02010100"), PoiCategory.SIGHT),
         ("12", ("A02", "A0206", "A02060300"), PoiCategory.CULTURE),
         ("12", ("A02", "A0203", "A02030100"), PoiCategory.ACTIVITY),
-        ("12", ("A03", "A0302", "A03021700"), PoiCategory.ACTIVITY),
+        ("12", ("A03", "A0302", "A03021200"), PoiCategory.ACTIVITY),
+        ("28", ("A03", "A0302", "A03021700"), None),  # 야영장,오토캠핑장 — 1박 숙영지(32 숙박과 같은 길)
+        ("12", ("A03", "A0302", "A03021700"), None),  # 관광지로 와도 같다
         ("25", ("C01", "C0112", "C01120001"), None),  # 여행코스 — 매핑 불가
         ("32", ("B02", "B0201", "B02010100"), None),  # 숙박 — 경계 8종 밖(STAY는 내부 전용)
         ("12", (), None),                              # 분류 코드 부재
@@ -220,6 +222,69 @@ def test_parse_open_hours_weekly_rest_day_excluded() -> None:
 def test_parse_open_hours_past_midnight() -> None:
     hours = parse_open_hours("18:00~02:00", None)
     assert hours[0].open_min == 1080 and hours[0].close_min == 26 * 60
+
+
+# ── 숙박 입실·퇴실 시각은 영업 창이 아니다 — 시각 2회 경로 (공유본 985곳이 창으로 읽혔다) ──
+@pytest.mark.parametrize(
+    "hours_raw",
+    [
+        "- 입실 13:00- 퇴실 12:00",                     # 가반나야영장 — 13:00~익일 12:00 영업으로 읽혔다
+        "입실 오후 3:00 ~ 퇴실 오후 12:00",              # 더헤븐 리조트
+        "[숙박]<br>\n- 입실14:00<br>\n- 퇴실 11:00",
+        "[숙박시설]- 입실시간 15:00- 퇴실시간 11:00",
+        "- 입실(토요일) 15:00- 퇴실(일요일) 11:00",      # 학생해양수련원
+        "- 입실 09:00- 퇴실 15:00",                     # 따봉캠핑장 — 같은 날 창이어도 영업시간이 아니다
+    ],
+)
+def test_parse_open_hours_check_in_out_times_are_not_a_window(hours_raw) -> None:
+    assert parse_open_hours(hours_raw, "연중무휴") == ()
+
+
+def test_parse_open_hours_detached_check_in_label_keeps_window() -> None:
+    """라벨이 시각의 이름일 때만 포기한다 — 함허동천야영장 원문의 당일사용 꼬리."""
+    hours = parse_open_hours("07:00~18:00※ 당일사용은 당일 입실 후 당일 퇴실", "연중무휴")
+    assert hours == tuple(OpenHour(d, 420, 1080) for d in range(7))
+
+
+@pytest.mark.parametrize(
+    "hours_raw",
+    [
+        "입실 안내는 홈페이지를 참고 09:00~18:00",   # 라벨이 시각 앞 10자 넘게 떨어졌다
+        "당일 입실 불가\n09:00~18:00",              # 라벨과 시각 사이에서 줄이 바뀐다
+    ],
+)
+def test_parse_open_hours_check_in_label_before_but_not_naming_the_time_keeps_window(hours_raw) -> None:
+    """라벨이 시각 **앞**에 있어도 10자 안·같은 줄이 아니면 그 시각의 이름이 아니다 — 만든 예(공유본엔 이 꼴 0건)."""
+    assert parse_open_hours(hours_raw, "연중무휴") == tuple(OpenHour(d, 540, 1080) for d in range(7))
+
+
+def test_parse_open_hours_always_open_park_ignores_campsite_section() -> None:
+    """`상시 개방` 갈래는 시각을 읽지 않는다 — 공원 안 야영장 구역의 입실 시각이 공원 창을 지우지 않는다(평사리공원)."""
+    hours = parse_open_hours("[공원]- 상시 개방[야영장]- 입실 14:00- 퇴실 11:00", "연중무휴")
+    assert hours == tuple(OpenHour(d, 0, 1440) for d in range(7))
+
+
+_HHMM = st.builds("{}:{:02d}".format, st.integers(0, 23), st.integers(0, 59))
+_CHECK_GAP = st.sampled_from(["", " ", "시간 ", "시간 : ", " 오후 ", "(토요일) "])   # 실물에 나온 라벨~시각 간격
+_REST_OK = st.sampled_from([None, "연중무휴", "매주 월요일"])
+
+
+@settings(deadline=None)
+@given(a=_HHMM, b=_HHMM, gap=_CHECK_GAP, label=st.sampled_from(["입실", "퇴실"]),
+       both=st.booleans(), rest=_REST_OK)
+def test_pbt_labelled_check_in_out_time_never_becomes_a_window(a, b, gap, label, both, rest) -> None:
+    """시각 2회 중 하나라도 입실·퇴실 라벨이 바로 앞에 붙으면 어떤 시각·휴무로도 창을 만들지 않는다."""
+    raw = f"- 입실{gap}{a}- 퇴실{gap}{b}" if both else f"{a}~ {label}{gap}{b}"
+    assert parse_open_hours(raw, rest) == ()
+
+
+@settings(deadline=None)
+@given(a=_HHMM, b=_HHMM, label=st.sampled_from(["입실", "퇴실"]), sep=st.sampled_from(["<br>", "※ ", " / "]),
+       rest=_REST_OK)
+def test_pbt_detached_check_in_out_label_changes_nothing(a, b, label, sep, rest) -> None:
+    """시각에 붙지 않은 라벨은 판정을 바꾸지 않는다 — 같은 두 시각을 라벨 없이 읽은 것과 같다."""
+    plain = f"{a}~{b}"
+    assert parse_open_hours(f"{plain}{sep}당일 {label} 안내", rest) == parse_open_hours(plain, rest)
 
 
 @pytest.mark.parametrize(
