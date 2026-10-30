@@ -371,9 +371,9 @@ class C1Config:
     # timeout 뿐 아니라 unsupported·벤더 예외(llm_error)까지로 넓힌다. 09-12 "재시도는
     # timeout 전용" 팀 결정(gateway.py·.env.example AI_LLM_RETRY_MODELS 주석)은 그대로 두고
     # — 벤더 오류는 사유가 갈려 덮으면 안 보인다는 그 결정은 다른 기능 전부에 여전히 적용된다 —
-    # 여기 명시된 기능만 예외다. PLACE_FACT_LOOKUP 이 기본인 이유: 1차(GPT responses)가 구독 키
-    # 401 같은 **벤더 자체 장애**로 죽어도(2026-10-29 Azure 사고가 그 모양이었다) 2차(Claude, 웹
-    # 검색 서버 도구 보유)로 넘어가야 "미확인" 그대로보다 사용자에게 낫다 — timeout만 보면 그 401을
+    # 여기 명시된 기능만 예외다. PLACE_FACT_LOOKUP 이 기본인 이유: 1차가 구독 키 401·과부하 같은
+    # **벤더 자체 장애**로 죽어도(2026-10-29 Azure 사고가 그 모양이었다) 2차(다른 모델, 웹 검색
+    # 서버 도구 보유)로 넘어가야 "미확인" 그대로보다 사용자에게 낫다 — timeout만 보면 그 401을
     # 영영 못 잡는다. 응답은 받았는데 게이트가 드롭한 경우(outcome.error)는 이 집합과 무관 —
     # 그 쪽은 `GatewayFacade.call`의 다른 분기(§5·6)라 재시도가 아니라 바로 기능별 폴백이다.
     vendor_failover_features: frozenset[LlmFeature] = frozenset({LlmFeature.PLACE_FACT_LOOKUP})
