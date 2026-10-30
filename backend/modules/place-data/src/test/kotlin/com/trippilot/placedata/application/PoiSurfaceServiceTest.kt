@@ -50,6 +50,19 @@ class PoiSurfaceServiceTest : StringSpec({
         return PoiSurfaceService(repo, NoSnapshots()) to pois.toList()
     }
 
+    "일정 화면 사진은 썸네일이 있으면 썸네일, 없으면 원본이다" {
+        fun withImage(thumb: String?) = Poi.reconstitute(
+            UUID.randomUUID(), "광안리", 35.15, 129.12, PoiCategory.명소, "수영구", null,
+            DataStatus.ACTIVE, PoiSource.TOURAPI, 0, clock.instant(), clock.instant(),
+            imageUrl = "https://tong.visitkorea.or.kr/a.jpg", imageThumbUrl = thumb,
+        )
+        val (svc, stored) = service(withImage("https://img.example.net/a.webp"), withImage(null))
+
+        val urls = stored.map { svc.findSurfaces(listOf(it.poiId)).values.single().imageUrl }
+
+        urls shouldBe listOf("https://img.example.net/a.webp", "https://tong.visitkorea.or.kr/a.jpg")
+    }
+
     /**
      * 화면은 한글을 쓰고 AI 경계는 코드를 쓴다. **둘 다 실어야** 한쪽을 위해 다른 쪽을 포기하지 않는다.
      */
