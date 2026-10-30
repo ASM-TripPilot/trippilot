@@ -578,9 +578,15 @@ def _trip_days(snapshot: TurnSnapshot) -> tuple[date, date] | None:
 
 
 def _split_day(text: str, snapshot: TurnSnapshot, today: date) -> tuple[date | None, str]:
-    """'둘째 날 카페' → (둘째 날, '카페'). 날 표현이 없거나 못 읽으면 (None, 원문)."""
+    """'둘째 날 카페' → (둘째 날, '카페'). 날 표현이 없거나 못 읽으면 (None, 원문).
+    말에 든 일정 장소 이름이 떼어 낼 날 말을 품으면('월요일커피'·'화요일의정원'·'내일의커피') 날로 쓰지 않는다 — 원문 그대로 이름으로
+    대조한다(요일을 읽게 된 뒤 이름 속 요일을 떼어 엉뚱한 날·엉뚱한 곳으로 좁혔다). 그 이름을 **말했을 때만**이다 — 일정 어딘가에
+    '내일의커피'가 있다고 '내일 점심'의 '내일'까지 꺼지면 오늘 점심이 나온다."""
     span = extract_kind(text, ArgumentKind.ORDINAL) or extract_kind(text, ArgumentKind.DATE)
-    if span is None:
+    said = normalize(text).replace(" ", "")
+    if span is None or any(
+            s.name and span in normalize(s.name) and normalize(s.name).replace(" ", "") in said
+            for _, s in snapshot.slots()):
         return None, text
     on = resolve_day(span, snapshot, today)
     if on is None:

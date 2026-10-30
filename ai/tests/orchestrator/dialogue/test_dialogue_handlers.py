@@ -373,6 +373,39 @@ def test_resolve_day_reads_a_weekday_only_when_the_trip_has_exactly_one() -> Non
     assert resolve_day("수요일", long_trip, _D2) == date(2026, 10, 21)
 
 
+def _wd_slot(on: date, name: str, hhmm: str, category: str) -> SlotView:
+    h, m = hhmm.split(":")
+    return SlotView.from_wire(f"{on.isoformat()}#{uuid.uuid5(uuid.NAMESPACE_DNS, 'wd-' + name)}", name, time(int(h), int(m)), category)
+
+
+# 여행 10-18(일)~10-20(화) — 요일이 모두 하나씩이라 '월요일'·'화요일'은 둘째·셋째 날로 읽힌다. 이름에 다른 날 요일이 든 곳을 둔다
+_WD_NAMED = _snapshot((
+    (_D1, (_wd_slot(_D1, "성산일출봉", "09:00", "명소"), _wd_slot(_D1, "월요일커피", "11:00", "카페"))),
+    (_D2, (_wd_slot(_D2, "우도", "09:00", "자연"), _wd_slot(_D2, "화요일의정원", "11:00", "자연"),
+           _wd_slot(_D2, "해녀의집", "12:00", _FOOD_KO), _wd_slot(_D2, "커피빈", "15:00", "카페"))),
+    (_D3, (_wd_slot(_D3, "제주민속촌", "10:00", "문화"), _wd_slot(_D3, "내일의커피", "11:00", "카페"))),
+))
+
+
+def test_place_name_with_a_weekday_inside_is_not_cut_as_a_day() -> None:
+    """요일을 읽게 된 뒤(미결 #29) '월요일커피'의 '월요일'을 날로 떼어 둘째 날의 '커피'(커피빈)를 골랐고, '화요일의정원'은 셋째 날로
+    좁혀 못 찾았다 — 말에 든 일정 장소 이름이 날 말을 품으면 날로 떼지 않고 원문 그대로 이름으로 대조한다."""
+    for name, on, prev in (("월요일커피", _D1, "성산일출봉"), ("화요일의정원", _D2, "우도")):
+        slot = _resolve(name, snapshot=_WD_NAMED)
+        assert slot is not None and slot.name == name, (name, slot)
+        ctx = _ctx(_WD_NAMED, {"destination": name, "place": name, "target": name})
+        place, alt, leg = dh._place_slot(ctx), dh._alt_target(ctx), dh._distance_leg(ctx)
+        assert place is not None and place.name == name and alt is not None and alt.name == name, (name, place, alt)
+        assert leg is not None and (leg[0], leg[1].name, leg[2].name) == (on, prev, name), (name, leg)
+
+
+def test_day_word_inside_a_slot_name_still_cuts_when_that_name_is_not_said() -> None:
+    """이름 가드는 그 이름을 말했을 때만 — 일정에 '내일의커피'가 있다고 '내일 점심'의 '내일'을 안 떼면 끼니 경로가 오늘 점심을 고른다."""
+    now = datetime(2026, 10, 18, 10, 0, tzinfo=_KST)  # 첫날(일) 아침 — '내일'은 둘째 날
+    assert _resolve("내일 점심", snapshot=_WD_NAMED, now=now).name == "해녀의집"
+    assert _resolve("내일의커피", snapshot=_WD_NAMED, now=now).name == "내일의커피"
+
+
 @settings(max_examples=200, deadline=None)
 @given(target=st.one_of(st.none(), st.text(max_size=30)), day=st.one_of(st.none(), st.text(max_size=12)))
 def test_resolve_slot_never_raises_and_only_returns_snapshot_slots(target: str | None, day: str | None) -> None:
