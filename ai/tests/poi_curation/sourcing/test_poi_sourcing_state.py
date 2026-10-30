@@ -246,3 +246,20 @@ def test_pbt_skipped_items_absent_from_output_and_calls(pairs) -> None:
     s = result.stats
     assert s.passed + sum(s.gate_drops.values()) + s.merged \
         + s.category_unmapped + s.address_missing == s.listed
+
+
+# ── 공공누리 유형 — 스킵한 행 것도 산출 문서 최상위에 싣는다 (KB-5 요청, 2026-10-30) ──────
+def test_공공누리_유형은_스킵한_행까지_목록에서_본_전부를_싣는다() -> None:
+    from datetime import UTC, datetime
+
+    from trippilot.poi_curation.sourcing.pipeline import to_output_document
+    http = FakeTourApiHttp(pages={("12", 1): envelope(
+        [list_item("100", "성산일출봉", cpyrht="Type1"), list_item("101", "만장굴", cpyrht="Type3"),
+         list_item("102", "협재", cpyrht="")], 3)})
+    result = collect(_adapter(http), area_code="39", content_types=["12"],
+                     max_calls=500, state=CollectState(proposed={"100": _MTIME}))
+    assert result.stats.skipped_unchanged == 1
+    assert result.cpyrht_by_ref == {"100": "Type1", "101": "Type3"}   # 빈 값은 싣지 않는다
+    doc = to_output_document(result, area_code="39", content_types=["12"], collected_at=datetime.now(UTC))
+    assert doc["cpyrht_by_ref"] == {"100": "Type1", "101": "Type3"}
+    assert all("cpyrht_div_cd" not in p["provenance"] for p in doc["proposals"])   # 행에는 병합이 붙인다

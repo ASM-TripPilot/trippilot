@@ -147,7 +147,7 @@ def test_later_collection_wins_on_same_content_id() -> None:
              "proposals": [_prop("x", None, name="새것")]}
     out = merge([newer, older])   # 입력 순서와 무관하게 수집 시각이 이긴다
     assert out["proposals"][0]["poi"]["name"] == "새것"
-    assert out["stats"] == {"merged_runs": 2, "unique_proposals": 1}
+    assert out["stats"] == {"merged_runs": 2, "unique_proposals": 1, "cpyrht_applied": 0}
 
 
 # ── 관광 무관 소급 제거 (2026-09-26) ────────────────────────────
@@ -876,3 +876,15 @@ def test_색인에서는_TourAPI_격리분만_지운다(tmp_path: Path) -> None:
     assert M.forget_quarantined(st_path, [{"source": "LOCALDATA", "content_id": "7"},
                                           {"source": "TOURAPI", "content_id": "8"}]) == 1
     assert json.loads(st_path.read_text(encoding="utf-8"))["proposed"] == {"7": "a"}
+
+
+# ── 공공누리 유형 — 실행이 목록에서 본 값을 기존 행에도 붙인다 (KB-5 요청, 2026-10-30) ──────
+def test_병합은_실행의_공공누리_유형을_기존_행에도_붙이고_없는_행은_만들지_않는다() -> None:
+    shared = _keyed_doc("TOURAPI", "1", "2")
+    run = {**_keyed_doc("TOURAPI"), "collected_at": "2099-01-01T00:00:00+00:00",
+           "cpyrht_by_ref": {"1": "Type3", "999": "Type1"}}
+    out = merge([shared, run], allow_mixed=True)
+    prov = {p["provenance"]["content_id"]: p["provenance"] for p in out["proposals"]}
+    assert prov["1"]["cpyrht_div_cd"] == "Type3"
+    assert "cpyrht_div_cd" not in prov["2"]
+    assert "999" not in prov and "cpyrht_by_ref" not in out   # 공유본 머리에는 싣지 않는다
