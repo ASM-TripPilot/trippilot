@@ -19,6 +19,8 @@ const AI_BOUND_REQUESTS: readonly RegExp[] = [
   // 도우미 턴(해석 AI, 서버 턴 상한 13초 — 15초를 넘기면 화면이 slow 를 띄우고 끊는 건 [대기 취소]) · 제안 적용(편집 재검증)
   /^POST \/assistant\/sessions\/[^/]+\/turns$/,
   /^POST \/assistant\/proposals\/[^/]+\/apply$/,
+  // 공유 카드 문구(서버 상한 24초 — 앱만 15초에 끊으면 하루 횟수만 쓰이고 다음 요청이 429 RATE_LIMITED 를 만난다)
+  /^POST \/trips\/[^/]+\/share-card\/copy$/,
 ];
 
 function isAiBound(config: AxiosRequestConfig): boolean {
