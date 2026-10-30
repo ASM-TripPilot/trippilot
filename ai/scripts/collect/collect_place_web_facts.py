@@ -54,10 +54,16 @@ _HAS_DOC = (_AI / "data" / "place_corpus_overview.jsonl.gz", _AI / "data" / "pla
 # Azure 키가 401 이라 이쪽으로 이어 받는다 — 도우미 미확인 칸 웹 확인 PLACE_FACT_LOOKUP 이 10-30 같은 도구로 옮긴 것과 같다)
 VENDOR = os.environ.get("WEB_FACTS_VENDOR", "openai")
 MODEL = os.environ.get("WEB_FACTS_MODEL", "claude-sonnet-5-5" if VENDOR == "claude" else "gpt-5.6-sol")
-# 지출 셈(달러) — 100만 토큰당 입력·출력, 검색 1회. 모르면 **높게** 잡는다(상한이 늦게 걸리지 않게). claude 검색은 1,000회당 10달러
+# 지출 셈(달러) — 100만 토큰당 입력·출력, 검색 1회. 표에 없는 모델은 **높게** 잡는다(상한이 늦게 걸리지 않게). claude 검색은
+# 1,000회당 10달러. 표는 2026-10-30 공식 가격표 — haiku 는 10만 토큰 이하 프롬프트 값(한 곳 프롬프트는 검색 결과까지 ≈1.7만)
+_PRICES = {"claude-sonnet-5-5": ("2", "10"), "claude-haiku-5-5": ("0.10", "0.50")}
 PRICE_IN, PRICE_OUT, PRICE_SEARCH = (float(os.environ.get(f"WEB_FACTS_PRICE_{k}", d)) for k, d in
-                                     (("IN", "3"), ("OUT", "15"), ("SEARCH", "0.01")))
-MAX_SEARCHES = 1  # claude — 한 곳에 검색 1회(검색 1회 0.01달러가 비용을 지배한다 — 키·시크릿 세션 10-30)
+                                     zip(("IN", "OUT", "SEARCH"), (*_PRICES.get(MODEL, ("3", "15")), "0.01")))
+# claude 검색 도구 판 — 20250305 는 결과 본문이 다 입력으로 들어간다(sonnet 곳당 입력 ≈1.7만이 비용의 74%, 키·시크릿 세션 10-30).
+# 20260209 이상은 동적 필터링(모델이 코드로 결과를 걸러 필요한 것만 넣는다 — 코드 실행은 따로 과금하지 않는다, 절감률은 미공개)
+SEARCH_TOOL = os.environ.get("WEB_FACTS_SEARCH_TOOL", "web_search_20250305")
+MAX_SEARCHES = 1  # claude — 한 곳에 검색 1회(검색을 늘리면 결과 본문만큼 입력도 같이 는다)
+MAX_PAUSES = 2  # 동적 필터링 턴이 `pause_turn` 으로 멈추면 받은 그대로 되돌려 잇는 횟수
 MAX_FACT_CHARS, MAX_TRANSIENT, MAX_RATE_LIMITED, MAX_ERRORS_IN_ROW = 60, 6, 8, 20
 _CAT_KO = {"SIGHT": "명소", "NATURE": "자연", "CULTURE": "문화", "FOOD": "음식점", "CAFE": "카페", "SHOPPING": "쇼핑",
            "ACTIVITY": "액티비티", "BAR": "술집", "ART": "미술관·갤러리", "NIGHT_VIEW": "야경 명소"}
@@ -194,11 +200,22 @@ def ask_openai(client, prompt: str) -> tuple[str, list[str], int, int, int]:
 
 
 def ask_claude(client, prompt: str) -> tuple[str, list[str], int, int, int]:
-    resp = client.messages.create(model=MODEL, max_tokens=1500, timeout=120, messages=[{"role": "user", "content": prompt}],
-                                  tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": MAX_SEARCHES}])
+    """동적 필터링 판은 코드 실행을 거쳐 턴이 `pause_turn` 으로 멈출 수 있다 — 받은 내용 그대로 되돌려 잇는다(문서 규약). 토큰·검색
+    수는 이은 응답을 모두 더하고 인용도 모두에서 모은다. haiku-5 는 effort 없이 부르면 깊은 적응형 사고로 돌아 끈다(운영 어댑터
+    `_THINKING_OFF` 와 같은 판단 — sonnet-5-5 는 끄기를 400 으로 거부해 그대로 둔다). 상한 4,000 은 코드를 쓸 몫이다."""
+    messages, tokens_in, tokens_out, searches, cites = [{"role": "user", "content": prompt}], 0, 0, 0, []
+    extra = {"thinking": {"type": "disabled"}} if MODEL.startswith("claude-haiku-5") else {}
+    for _ in range(MAX_PAUSES + 1):
+        resp = client.messages.create(model=MODEL, max_tokens=4000, timeout=120, messages=messages, **extra,
+                                      tools=[{"type": SEARCH_TOOL, "name": "web_search", "max_uses": MAX_SEARCHES}])
+        tokens_in, tokens_out = tokens_in + resp.usage.input_tokens, tokens_out + resp.usage.output_tokens
+        searches += getattr(getattr(resp.usage, "server_tool_use", None), "web_search_requests", 0) or 0
+        cites += [u for u in _claude_citations(resp) if u not in cites]
+        if resp.stop_reason != "pause_turn":
+            break
+        messages = [*messages, {"role": "assistant", "content": resp.content}]
     text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
-    searches = getattr(getattr(resp.usage, "server_tool_use", None), "web_search_requests", 0) or 0
-    return text, _claude_citations(resp), resp.usage.input_tokens, resp.usage.output_tokens, searches
+    return text, cites, tokens_in, tokens_out, searches
 
 
 def cost_usd(input_tokens: int, output_tokens: int, searches: int) -> float:
@@ -320,7 +337,8 @@ def run(state: Path, limit: int | None, workers: int, only: set[str] | None = No
     done = {rec["ref"] for rec in records(state_files(state)) if rec.get("status") in FINAL}
     todo = [t for t in targets(proposals, has_doc) if t["ref"] not in done and (only is None or t["ref"] in only)]
     todo = todo[:limit] if limit is not None else todo
-    print(f"대상 {len(todo)} (이미 받음 {len(done)}) · {VENDOR} {MODEL} · 일꾼 {workers} · 분당 {rpm} · 상한 {budget_usd} 달러",
+    tool = f" {SEARCH_TOOL}" if VENDOR == "claude" else ""
+    print(f"대상 {len(todo)} (이미 받음 {len(done)}) · {VENDOR} {MODEL}{tool} · 일꾼 {workers} · 분당 {rpm} · 상한 {budget_usd} 달러",
           flush=True)
     if state.exists() and state.stat().st_size and not state.read_bytes().endswith(b"\n"):
         with state.open("a", encoding="utf-8") as f:  # 끊긴 실행의 반쪽 줄 뒤에 이어 쓰지 않게
@@ -352,6 +370,7 @@ def run(state: Path, limit: int | None, workers: int, only: set[str] | None = No
         except Exception as e:  # noqa: BLE001 — 한 곳의 버그가 배치를 죽이지 않게
             res = {"status": "error", "error": f"{type(e).__name__}: {str(e)[:160]}"}
         rec = {"ref": t["ref"], "source": t["source"], "name": t["name"], "model": MODEL,
+               **({"tool": SEARCH_TOOL} if VENDOR == "claude" else {}),
                "at": datetime.now(timezone.utc).isoformat(timespec="seconds"), **res}
         budget.charge(res.get("cost", 0.0))
         with lock:
