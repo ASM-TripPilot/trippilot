@@ -1,7 +1,7 @@
 """여행 당일 편집 — 지금 전에 시작한 슬롯은 그 시각 그대로(닻), 그 뒤만 다시 흘린다 (agents/edit/agent.py `_apply` · commands.retime_day).
 
 교체(앱 교체 버튼 REPLACE)·빼기(REMOVE)·끝 추가(ADD)가 하루를 첫 슬롯부터 다시 흘려, 이미 다녀온 곳의 시각까지 바꿔 저장했다(develop 부터).
-검증기는 가짜(위반 없음 + 무엇을 쟀는지 적는다)이고 재타이밍·추정기는 진짜다. 경계 관통(BE 의 UTC requested_at)은
+검증기는 가짜(위반 없음 + 무엇을 쟀는지 적는다 — `checks` 면 실제 HC1~4)이고 재타이밍·추정기는 진짜다. 경계 관통(BE 의 UTC requested_at)은
 `tests/api/test_api_edit_insert_between.py` 가 본다.
 """
 
@@ -18,7 +18,7 @@ from trippilot.agents.edit.agent import EditAgent, EditTask
 from trippilot.agents.edit.commands import EditStatus
 from trippilot.api.wiring import _problem_for
 from trippilot.assembly_engine.config import AssemblyConfig
-from trippilot.assembly_engine.constraints import check_all
+from trippilot.assembly_engine.constraints import check_all, check_hc2
 from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TraceId, TransportMode
 from trippilot.domain.edit import EditCommand, EditOp
@@ -59,19 +59,20 @@ def _solution(*days: DaySolution) -> ItinerarySolution:
 
 
 class _Facade:
-    """위반 없음 — 무엇을 쟀는지만 적는다(⑤ 가 지금 있는 곳 → 다음 일정을 재는지 본다)."""
+    """위반 없음 — 무엇을 쟀는지만 적는다(⑤ 가 지금 있는 곳 → 다음 일정을 재는지 본다). `checks` 면 실제 HC1~4 로 잰다."""
 
-    def __init__(self) -> None:
+    def __init__(self, checks: bool = False) -> None:
         self.seen: list[tuple[ItinerarySolution, object]] = []
+        self.checks = checks
 
     def validate(self, solution, problem, deadline_ms, trace_id=None):
         self.seen.append((solution, problem))
-        return ()
+        return tuple(check_all(solution, problem, _PLACES, _EST)) if self.checks else ()
 
 
 class _Provider:
-    def __init__(self) -> None:
-        self.facade = _Facade()
+    def __init__(self, checks: bool = False) -> None:
+        self.facade = _Facade(checks)
 
     def for_pool(self, poi_index):
         return self.facade
@@ -82,8 +83,8 @@ class _NoTranslator:
         raise AssertionError("구조화 진입은 번역기를 부르지 않는다")
 
 
-def _run(solution: ItinerarySolution, command: EditCommand, now: datetime, *, target: date = D):
-    provider = _Provider()
+def _run(solution: ItinerarySolution, command: EditCommand, now: datetime, *, target: date = D, checks: bool = False):
+    provider = _Provider(checks)
     agent = EditAgent(_NoTranslator(), provider, _EST, lambda s: _problem_for(s, KST), tz=KST)
     pool = CandidatePool(poi_ids=frozenset({PoiId("n0"), PoiId("n1")}), pois=(_PLACES["n0"], _PLACES["n1"]),
                          generated_at=now)
@@ -106,6 +107,10 @@ _ADD_END = EditCommand(EditOp.ADD_SLOT, {"targetPoiId": "n1"}, ())
 
 def _at(h: int, m: int, s: int = 0) -> datetime:
     return datetime(2026, 10, 21, h, m, s, tzinfo=KST)
+
+
+def _travel(a: str, b: str) -> timedelta:
+    return timedelta(minutes=_EST.estimate(_PLACES[a].coord, _PLACES[b].coord, TransportMode.PUBLIC).internal_minutes)
 
 
 # ── 속성: 지난 곳은 그대로, 나머지는 지금 이후 ────────────────────────────
@@ -143,10 +148,25 @@ def test_trip_day_edit_never_moves_what_already_started(plan: list, data) -> Non
         else:
             assert s.start_at >= now  # 다시 흘린 곳·새로 넣은 곳은 지금 이후
     assert all(a.end_at <= b.start_at for a, b in zip(edited.slots, edited.slots[1:]))
-    # ⑤ 는 지금 있는 곳(가장 최근에 시작한 곳)부터 잰다 — '거기 → 다음 일정' 이동은 재고, 그보다 앞선 곳은 이 편집이 만든 시각이 아니다
+    # 지금 있는 곳(가장 최근에 시작한 곳)을 빼거나 바꿔도 사용자는 거기 있었다 — 다음 곳은 거기서 지금(끝났으면 끝난 시각) 떠나 닿는 시각 이후다
+    here = started[-1] if started else None
+    gone = here is not None and here.poi_id in command.affected_slots  # 빼기·교체 — 추가는 대상 슬롯이 없다
+    after = [s for s in edited.slots if s.poi_id not in kept]
+    if gone and after:
+        assert after[0].start_at >= min(here.end_at, local) + _travel(here.poi_id, after[0].poi_id)
+    # ⑤ 는 지금 있는 곳(가장 최근에 시작한 곳)부터 잰다 — '거기 → 다음 일정' 이동은 재고, 그보다 앞선 곳은 이 편집이 만든 시각이 아니다.
+    # 그 곳을 뺐거나 바꿨으면 지금(분 올림)까지만, 끝났으면 끝까지 머문 곳으로 앞에 세워 잰다 — 재타이밍과 같은 모델이라 HC2 는 늘 통과한다
     order = [s.poi_id for s in edited.slots]
     anchored = [p for p in order if p in kept]
-    assert [s.poi_id for s in facade.seen[-1][0].days[0].slots] == order[max(len(anchored) - 1, 0):]
+    checked, problem = facade.seen[-1]
+    view = checked.days[0].slots
+    if gone and after:
+        floor = local.replace(second=0) + timedelta(minutes=1 if local.second else 0)
+        assert [s.poi_id for s in view] == [here.poi_id, *order[len(anchored):]]
+        assert (view[0].start_at, view[0].end_at) == (here.start_at, min(here.end_at, floor))
+    else:
+        assert [s.poi_id for s in view] == order[max(len(anchored) - 1, 0):]
+    assert check_hc2(checked, _PLACES, _EST, problem) == []
 
 
 # ── 기존과 같은 경우 ─────────────────────────────────────────────────────
@@ -186,14 +206,40 @@ def test_removing_a_visited_slot_is_still_applied() -> None:
     assert s3.poi_id == "s3" and s3.start_at >= _at(12, 40)
 
 
-def test_replacing_the_place_you_are_at_starts_the_new_one_from_now() -> None:
-    """지금 있는 곳(진행 중)을 바꾸면 새 곳은 지금(분 올림)부터 — 앞서 다녀온 곳은 그대로다."""
+def test_replacing_the_place_you_are_at_starts_the_new_one_once_you_get_there() -> None:
+    """지금 있는 곳(진행 중)을 바꾸면 거기서 지금(분 올림) 떠나 새 곳에 닿는 시각부터다 — 앞서 다녀온 곳은 그대로다.
+    그 앞 닻(다녀온 곳)에서 커서를 흘리면 지금 있는 곳 → 새 곳 이동(27분)이 0분이 돼 지금 바로(12:41) 시작한다(2026-10-30 리뷰 재현)."""
     day = _day(D, [60, 60, 90, 60], [30, 30, 30, 30])  # 09:00 · 10:30 · 12:00~13:30(진행 중) · 14:00
-    out, _ = _run(_solution(day), _replace(2), _at(12, 40, 20))
+    out, facade = _run(_solution(day), _replace(2), _at(12, 40, 20), checks=True)
     assert out.status is EditStatus.APPLIED, out.reason
     s0, s1, new, s3 = out.solution.days[0].slots
     assert (s0, s1) == day.slots[:2]
-    assert (new.poi_id, new.start_at) == ("n0", _at(12, 41)) and s3.start_at >= new.end_at
+    assert (new.poi_id, new.start_at) == ("n0", _at(12, 41) + _travel("s2", "n0")) and s3.start_at >= new.end_at
+    checked, _ = facade.seen[-1]  # ⑤ 는 지금 있는 곳(지금까지 머문 것으로) → 새 곳 이동을 잰다
+    assert [(s.poi_id, s.end_at) for s in checked.days[0].slots[:2]] == [("s2", _at(12, 41)), ("n0", new.end_at)]
+
+
+@pytest.mark.parametrize(("now", "left_at"), [(_at(12, 40, 20), _at(12, 41)), (_at(13, 5), _at(13, 0))],
+                         ids=["in_progress", "just_ended"])
+def test_removing_the_place_you_are_at_flows_the_next_from_there(now: datetime, left_at: datetime) -> None:
+    """지금 있는 곳을 빼도 사용자는 거기 있었다 — 다음 곳은 거기서 떠나 닿는 시각부터다. 진행 중이면 지금(분 올림), 이미 끝났으면 끝난 시각에
+    떠난다(그 곳을 남겨 둔 편집과 같은 모델). 그 앞 닻에서 재면 지금 바로 시작한다(진행 중 12:41, 끝남 13:05)."""
+    day = _day(D, [60, 60, 60, 60], [30, 30, 30, 30])  # 09:00 · 10:30 · 12:00~13:00 · 13:30
+    out, facade = _run(_solution(day), _remove(2), now, checks=True)
+    assert out.status is EditStatus.APPLIED, out.reason
+    s0, s1, s3 = out.solution.days[0].slots
+    assert (s0, s1) == day.slots[:2]
+    assert s3.start_at == left_at + _travel("s2", "s3")
+    assert [(s.poi_id, s.end_at) for s in facade.seen[-1][0].days[0].slots] == [("s2", left_at), ("s3", s3.end_at)]
+
+
+def test_leaving_the_place_you_are_at_cannot_make_a_reservation_you_cannot_reach() -> None:
+    """지금 있는 곳을 빼고 바로 뒤 예약으로 가는 이동도 ⑤ 가 잰다 — 못 닿으면 HC2 로 거부한다(사유 있는 REJECTED).
+    그 앞 닻(다녀온 곳) → 예약을 재면 통과한다."""
+    day = _day(D, [60, 60, 45, 60], [30, 30, 5, 30], fixed=frozenset({3}))  # 12:00~12:45(진행 중) → 12:50 예약(이동 22분)
+    out, _ = _run(_solution(day), _remove(2), _at(12, 40), checks=True)
+    assert out.status is EditStatus.REJECTED
+    assert [(v.code, v.slot_ref) for v in out.violations] == [("HC2", "s3")]
 
 
 def test_replacing_an_older_visited_slot_is_refused_by_time_order_not_raised() -> None:

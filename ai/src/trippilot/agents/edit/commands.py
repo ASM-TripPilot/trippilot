@@ -208,6 +208,8 @@ def retime_day(
     앞 슬롯의 **시작**이 예약 시각을 지나면 시간순 슬롯 자체가 성립하지 않아 거부.
     `ctx.not_before`(여행 당일 지금)가 있으면 그보다 먼저 시작한 슬롯도 예약처럼 닻이고, 나머지는 그보다 앞에 두지
     않는다 — 지난 일정을 다시 흘리지도, 아직 안 간 곳을 지난 시각으로 당기지도 않는다. 없으면 종전대로 하루를 다시 흘린다.
+    지금 있는 곳(가장 최근에 시작한 곳)을 빼거나 바꿔도 사용자는 거기 있었다 — 그 뒤 첫 곳은 거기서 지금(끝났으면 끝난 시각)
+    떠나 닿는 시각 이후다. 그 곳 좌표를 모르면 지금 하한만 본다(재계획 앵커가 없을 때와 같다 — `anchor_minutes`).
     인접 구간 한쪽이라도 좌표가 없으면 거부(TRIP-525) — check_hc2 는 좌표 없음을
     건너뛰므로(c2 규칙 "정보 없음은 막지 않는다") 여기서 0분을 지어내면 검증 도장을
     달고 나간다. 예약 슬롯도 예외 없음. 그 날 슬롯이 하나뿐이면 인접이 없어 통과.
@@ -223,6 +225,9 @@ def retime_day(
     old_by_id = {s.poi_id: s for s in day.slots}
     fixed_by_id = {fb.poi_id: fb.window for fb in day.fixed_blocks}
     started = frozenset(s.poi_id for s in day.slots if ctx.not_before is not None and s.start_at < ctx.not_before)
+    # 빼거나 바꾼 지금 있는 곳 — 그 앞 닻에서 커서를 흘리면 거기 → 다음 곳 이동이 0분이 된다: 지금 바로 도착한 해(2026-10-30 리뷰 재현)
+    here = next((s for s in reversed(day.slots) if s.poi_id in started), None)
+    left = here if here is not None and here.poi_id not in new_order else None
     slots = []
     prev: PoiId | None = None
     for poi_id in new_order:
@@ -234,6 +239,12 @@ def retime_day(
                     f"이동시간을 산출할 수 없어 편집 불가")
             gap = ctx.estimator.estimate(a, b, ctx.transport).internal_minutes
             cursor = cursor + timedelta(minutes=gap)
+        if left is not None and poi_id not in started:  # 지금 있는 곳을 떠나 처음 가는 곳
+            a, b = ctx.coords.get(left.poi_id), ctx.coords.get(poi_id)
+            if a is not None and b is not None:
+                cursor = max(cursor, min(left.end_at, ctx.not_before)
+                             + timedelta(minutes=ctx.estimator.estimate(a, b, ctx.transport).internal_minutes))
+            left = None
         window = fixed_by_id.get(poi_id)
         old = old_by_id.get(poi_id)
         if window is None and poi_id in started:  # 여행 당일 이미 시작한 곳 — 예약처럼 원 시각 그대로
@@ -274,7 +285,8 @@ def edited_solution(
     for i, day in enumerate(solution.days):
         if day.date == target_date:
             new_order = apply_command(day, command)
-            # 기준점 있는 추가만 — 끝 추가(기준 없음)는 종전대로 하루를 다시 흘린다(저녁 늦게 HC1·HC4 거부가 늘지 않게)
+            # 기준점 있는 추가만 — 끝 추가(기준 없음)는 종전대로 하루를 다시 흘린다(저녁 늦게 HC1·HC4 거부가 늘지 않게). 여행 당일은
+            # 어느 편집이든 지금 전에 시작한 곳은 닻이고 그 뒤만 지금 이후로 흘린다(`retime_day`)
             anchored_add = command.op is EditOp.ADD_SLOT and any(is_anchor_param_key(k) for k in command.params)
             new_day = retime_day(day, new_order, ctx, tz, keep_earlier=anchored_add)
             days = solution.days[:i] + (new_day,) + solution.days[i + 1:]

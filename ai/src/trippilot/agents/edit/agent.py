@@ -342,6 +342,13 @@ class EditAgent:
         if floor is not None:
             # 여행 당일 — 닻 내린 지난 곳 중 가장 최근 곳(지금 있는 곳)부터 잰다: '거기 → 다음 일정' 이동은 재고, 그보다 앞선 곳은 이 편집이
             # 만든 시각이 아니라 예약 블록째 뺀다. 지난 간격을 지금 추정기로 다시 재면 다녀온 하루가 통째로 막힌다(①b `RebuiltDays.history` 와 같은 태도)
+            # 지금 있는 곳을 뺐거나 바꿨어도 거기서 떠나는 이동은 잰다 — 지금(끝났으면 끝)까지 머문 곳으로 앞에 세운다(`retime_day` 와 같은 모델)
+            here = next((s for s in reversed(target_day_slots) if s.start_at < floor), None)
+            if (here is not None and all(s.poi_id != here.poi_id for d in edited_day.days for s in d.slots)
+                    and any(s.start_at >= floor for d in edited_day.days for s in d.slots)):
+                stayed = replace(here, end_at=min(here.end_at, floor))
+                edited_day = replace(edited_day, days=tuple(
+                    replace(d, slots=tuple(sorted((*d.slots, stayed), key=lambda s: s.start_at))) for d in edited_day.days))
             done = frozenset([s.poi_id for d in edited_day.days for s in d.slots if s.start_at < floor][:-1])
             checked = replace(checked, fixed_blocks=tuple(fb for fb in checked.fixed_blocks if fb.poi_id not in done))
             edited_day = replace(edited_day, days=tuple(replace(d, slots=tuple(s for s in d.slots if s.poi_id not in done))
