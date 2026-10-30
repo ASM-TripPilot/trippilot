@@ -36,18 +36,21 @@ _SEED = {p.name: str(p.poi_id) for p in demo_poi_seed()}
 _FOOD, _MOUNTAIN, _CAFE = _SEED["제주 흑돼지거리"], _SEED["한라산"], _SEED["월정리 카페거리"]
 
 
+_TAGS = "#분위기 #산책 #사진명소 #현지맛 #여유"
+
+
 class _ScriptedLlm:
     """구성 프롬프트에만 대본을 답하고, 나머지 기능은 파싱 실패(폴백)."""
 
-    def __init__(self, picks: list[str] | None) -> None:
-        self.picks = picks
+    def __init__(self, picks: list[str] | None, reason: str = _TAGS) -> None:
+        self.picks, self.reason = picks, reason
         self.requests: list[LlmRequest] = []
 
     def invoke(self, request: LlmRequest) -> LlmResponse:
         self.requests.append(request)
         if request.prompt_ref.feature == "REPLAN_COMPOSITION" and self.picks is not None:
             text = json.dumps({"selections": [
-                {"poiId": p, "reason": "분위기가 좋은 곳"} for p in self.picks]})
+                {"poiId": p, "reason": self.reason} for p in self.picks]})
         else:
             text = "not json"
         return LlmResponse(raw_text=text, input_tokens=1, output_tokens=1,
@@ -120,7 +123,20 @@ def test_고른_이유가_그_슬롯의_추천_이유로_나간다() -> None:
     (운영 10-23 부산 2일차: 구성 LLM 이 KB-5 설명을 읽고 고른 7곳 모두 이유 없음)."""
     body = _replan(_ScriptedLlm([_FOOD, _MOUNTAIN]))
     assert body["itinerary"]["explanations"] == {
-        f"2026-09-21#{_FOOD}": "분위기가 좋은 곳", f"2026-09-21#{_MOUNTAIN}": "분위기가 좋은 곳"}, body["notes"]
+        f"2026-09-21#{_FOOD}": _TAGS, f"2026-09-21#{_MOUNTAIN}": _TAGS}, body["notes"]
+
+
+def test_이유는_해시태그_5개로만_나가고_문장이면_원래_이유를_덮지_않는다() -> None:
+    """생성 쪽 추천 이유와 같은 형식(해시태그 5개, `hashtag_line`) — 10-23 사용자 결정. 형식이 아닌 태그는 빼고 5개로 자른다.
+    태그가 하나도 안 남으면(문장으로 답함) 그 곳은 원래 이유를 그대로 둔다."""
+    kept = {"poi_id": _FOOD, "start_at": "12:00", "end_at": "13:00", "is_fixed": False,
+            "placement_reason": "#흑돼지 #제주맛집"}
+    mixed = _replan(_ScriptedLlm([_FOOD, _MOUNTAIN], "#바다뷰 산책 좋은 곳 #오름 #열두글자가넘는긴태그요 #풍경 #사진 #여유 #한적"),
+                    current_slots=[kept])
+    assert mixed["itinerary"]["explanations"][f"2026-09-21#{_MOUNTAIN}"] == "#바다뷰 #오름 #풍경 #사진 #여유", mixed["notes"]
+    sentence = _replan(_ScriptedLlm([_FOOD, _MOUNTAIN], "분위기가 좋은 곳"), current_slots=[kept])
+    assert sentence["itinerary"]["explanations"].get(f"2026-09-21#{_FOOD}") == "#흑돼지 #제주맛집", sentence["notes"]
+    assert f"2026-09-21#{_MOUNTAIN}" not in sentence["itinerary"]["explanations"], sentence["notes"]
 
 
 def test_그대로_둔_곳은_원래_추천_이유를_잃지_않는다() -> None:

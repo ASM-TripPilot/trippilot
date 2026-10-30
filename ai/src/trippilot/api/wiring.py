@@ -80,7 +80,7 @@ from trippilot.api.route_budget import (
 from trippilot.llm_gateway.adapters.backend_persona import _to_summary as _persona_to_summary
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver, ContextStore
-from trippilot.llm_gateway.gates.explanation import ExplanationGate
+from trippilot.llm_gateway.gates.explanation import ExplanationGate, hashtag_line
 from trippilot.llm_gateway.gates.reminder_copy import ReminderCopyGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
@@ -727,12 +727,13 @@ _PLACEMENT_REASON_MAX = 500
 
 
 def _pick_reasons(picks) -> dict[PoiId, str]:
-    """구성 LLM 이 고른 곳 → 이유. 게이트가 비운 이유(시간 표현·연락처 꼴)는 뺀다 — 빈 이유로 원래 이유를 덮지 않게.
+    """구성 LLM 이 고른 곳 → 추천 이유(해시태그 5개 — 생성 EXPLANATION 과 같은 `hashtag_line` 규칙, 10-23 사용자 결정).
+    태그가 하나도 안 남은 이유(게이트가 비운 것·문장으로 답한 것)는 뺀다 — 빈 이유로 원래 이유를 덮지 않게.
     같은 곳이 두 번이면 첫 이유(고른 순서와 같다)."""
     out: dict[PoiId, str] = {}
     for pick in picks:
-        if pick.reason.strip():
-            out.setdefault(pick.poi_id, pick.reason.strip())
+        if line := hashtag_line(pick.reason.split()):
+            out.setdefault(pick.poi_id, line)
     return out
 
 
