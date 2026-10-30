@@ -87,7 +87,12 @@ class Poi private constructor(
     val sourceRef: String? = null,
     /** 지번·도로명 주소(TRIP-1062 · 1003 F). 미확보=null — 지어내지 않는다. */
     val address: String? = null,
+    /** 560px WebP 썸네일(CDN). 미생성 null — 그때 화면에는 원본 [imageUrl] 을 준다. 배치(poi_thumbs.py)가 채운다. */
+    val imageThumbUrl: String? = null,
 ) {
+    /** 화면에 내려줄 사진 — 썸네일이 있으면 그것, 없으면 원본. 저장·수집은 항상 [imageUrl] 만 본다. */
+    val displayImageUrl: String? get() = imageThumbUrl ?: imageUrl
+
     companion object {
         /**
          * 수집·정규화 결과로 POI 생성. 좌표는 non-null 타입이라 여기 도달=INV-U1-02 통과(게이트가 선판정).
@@ -131,7 +136,9 @@ class Poi private constructor(
             region: String?, openingHours: String?, now: Instant,
             tags: List<String> = emptyList(), imageUrl: String? = null, regionCode: String? = null,
             address: String? = null,
-        ): Poi = Poi(
+        ): Poi {
+            val image = imageUrl ?: existing.imageUrl
+            return Poi(
             existing.poiId, nameKo, lat, lng, category, region,
             // 못 정했으면 **기존 값을 지킨다**. 벤더가 이번에 주소를 안 준 것과 "지역을 모른다"는 다르다 —
             // null 로 덮으면 한 번 붙은 코드가 다음 수집에 떨어져 나가고 커버리지가 조용히 줄어든다.
@@ -145,13 +152,16 @@ class Poi private constructor(
             existing.source, existing.savedCount, existing.createdAt, now,
             // 새로 받은 이미지가 있으면 갱신, 없으면 기존 값을 지키다 — 벤더가 이번에 안 준 것과
             // "이미지가 없다"는 다르다. null 로 덮으면 한 번 받은 이미지가 다음 수집에 사라진다.
-            imageUrl ?: existing.imageUrl,
+            image,
             // 태그는 갱신한다 — 벤더가 분류를 고치는 일이 있고, 표시용이라 최신이 맞다.
             tags.ifEmpty { existing.tags },
             existing.sourceRef,
             // 주소도 이미지와 같은 규칙 — 벤더가 이번에 안 준 것과 "주소가 없다"는 다르다.
             address ?: existing.address,
-        )
+            // 썸네일은 **그 원본에서 만든 것일 때만** 지킨다 — 원본이 바뀌었는데 옛 썸네일이 남으면 다른 사진이 나간다.
+            imageThumbUrl = existing.imageThumbUrl.takeIf { image == existing.imageUrl },
+            )
+        }
 
         @Suppress("LongParameterList")
         fun reconstitute(
@@ -159,9 +169,10 @@ class Poi private constructor(
             openingHours: String?, dataStatus: DataStatus, source: PoiSource, savedCount: Long,
             createdAt: Instant, updatedAt: Instant, imageUrl: String? = null, tags: List<String> = emptyList(),
             sourceRef: String? = null, regionCode: String? = null, address: String? = null,
+            imageThumbUrl: String? = null,
         ): Poi = Poi(
             poiId, nameKo, lat, lng, category, region, regionCode, openingHours, dataStatus, source, savedCount,
-            createdAt, updatedAt, imageUrl, tags, sourceRef, address,
+            createdAt, updatedAt, imageUrl, tags, sourceRef, address, imageThumbUrl,
         )
     }
 }
