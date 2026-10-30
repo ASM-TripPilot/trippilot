@@ -172,7 +172,7 @@ def main(argv: list[str]) -> int:
         if tags is None:
             stat["나이트라이프 제외"] += 1
             continue
-        if (why := non_travel_reason(name)):
+        if (why := non_travel_reason(name, kind)):
             stat[f"비여행지:{why}"] += 1
             continue
         addr = resolve_address(doc.get("road_address_name") or doc.get("address_name"), regions,

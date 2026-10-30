@@ -42,7 +42,7 @@ from trippilot.poi_curation.sourcing.collection_gate import (
     GateReport,
     SourcingCandidate,
 )
-from trippilot.poi_curation.sourcing.mapping import _NON_TRAVEL, non_travel_reason
+from trippilot.poi_curation.sourcing.mapping import _NON_TRAVEL, is_franchise, non_travel_reason
 
 from tests.generators.geo import coord_pairs_apart, geo_points
 from tests.generators.poi_curation import (
@@ -533,3 +533,48 @@ def test_리뷰_후_조인_규칙_회귀(name: str, expected: str | None) -> Non
 )
 def test_단지_관리주체와_공공안전(name: str, expected: str | None) -> None:
     assert non_travel_reason(name) == expected
+
+
+# ── 소매 체인·몰 안 매장·가 볼 만한 체인 지점 (사용자 결정 2026-10-23) ─────────────
+# "다이소 같은 건 다 빼고, 광장마켓 스타벅스·경주 기와 스타벅스 같은 건 남겨". 쇼핑 행에만 거는 규칙이다.
+@pytest.mark.parametrize(
+    "name,category,expected",
+    [
+        # 실측 — 공유본 쇼핑 행
+        ("다이소 강릉내곡점", "SHOPPING", "chain_store"),
+        ("다이소 (Daiso)", "SHOPPING", "chain_store"),
+        ("올리브영 홈플러스 청주점", "SHOPPING", "chain_store"),
+        ("롯데하이마트 메가스토어 울산점", "SHOPPING", "chain_store"),
+        ("LG전자 베스트샵 단계점", "SHOPPING", "chain_store"),
+        ("갤럭시 롯데백화점 강남점", "SHOPPING", "shop_in_mall"),
+        ("내셔널지오그래픽 롯데 프리미엄아울렛 이천점", "SHOPPING", "shop_in_mall"),
+        ("구찌 현대백화점 울산점", "SHOPPING", "shop_in_mall"),
+        ("블랙야크 현대백화점천호점", "SHOPPING", "chain_store"),
+        # 백화점·아울렛 자체는 남긴다 — 앞에 운영사 말뿐이면 매장이 아니라 그곳이다
+        ("신세계백화점 센텀시티점", "SHOPPING", None),
+        ("롯데 프리미엄아울렛 이천점", "SHOPPING", None),
+        ("신세계사이먼 프리미엄 아울렛 여주점", "SHOPPING", None),
+        # 브랜드 뒤에 공백·괄호·끝이 와야 한다 — 낱말 겹침
+        ("게스트하우스 강릉점", "SHOPPING", None),
+        # 쇼핑이 아니면 안 건다 — 몰 안 식당·놀거리·도서관, 이름이 겹치는 명소
+        ("을밀대 롯데백화점잠실점", "FOOD", None),
+        ("별마당도서관 스타필드 수원점", "CULTURE", None),
+        ("디스커버리 네이처스케이프 동탄점", "SIGHT", None),
+        ("다이소 강릉내곡점", None, None),
+        # 가 볼 만한 체인 지점 — 체인 규칙보다 먼저 남긴다
+        ("스타벅스 경주대릉원점", "CAFE", None),
+        ("스타벅스 광장마켓점", "CAFE", None),
+        ("스타벅스 더북한강R점", "CAFE", None),
+        ("올리브영N 성수", "SHOPPING", None),
+        ("스타벅스 강남역점", "CAFE", "franchise"),
+        ("스타벅스 HD현대R&D센터", "CAFE", "franchise"),   # 로마자 사이 & 는 묶음이 아니다
+    ],
+)
+def test_소매_체인과_가볼만한_지점(name: str, category: str | None, expected: str | None) -> None:
+    assert non_travel_reason(name, category) == expected
+
+
+def test_가볼만한_지점은_식당_체인_판정도_비켜간다() -> None:
+    """LOCALDATA 수집기는 `is_franchise` 를 직접 부른다 — 거기서도 남아야 한다."""
+    assert not is_franchise("스타벅스 대구종로고택점")
+    assert is_franchise("스타벅스 대구동성로점")
