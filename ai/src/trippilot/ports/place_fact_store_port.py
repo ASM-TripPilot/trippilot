@@ -31,12 +31,14 @@ class PlaceFacts:
 
 @dataclass(frozen=True, slots=True)
 class FactRecord:
-    """한 장소의 조회 결과 — `facts` None 은 "찾아봤지만 출처 있는 값이 없음"."""
+    """한 장소의 조회 결과 — `facts` None 은 "찾아봤지만 출처 있는 값이 없음". `searched` 는 그 조회가 찾은 칸(값이 없던 칸도) —
+    저장된 기록이 물은 칸을 다 찾아봤는지 가른다(2026-10-30: 영업시간만 찾은 기록이 입장료 물음을 일주일 막았다). 그 전 행은 빈 값."""
 
     poi_id: str
     facts: PlaceFacts | None
     fetched_at: datetime
     expires_at: datetime
+    searched: tuple[str, ...] = ()
 
 
 class PlaceFactStore(Protocol):

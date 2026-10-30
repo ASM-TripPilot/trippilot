@@ -19,11 +19,12 @@ from trippilot.ports.place_fact_store_port import FIELDS, FactRecord, PlaceFacts
 _TABLE = "place_fact_cache"
 
 
-def _facts(raw: object) -> PlaceFacts | None:
-    if raw is None:
-        return None
-    data = json.loads(raw) if isinstance(raw, str) else raw
-    return PlaceFacts(**{f: data.get(f) for f in FIELDS}, source_url=data["source_url"], source_host=data["source_host"])
+def _record(row: tuple) -> FactRecord:
+    """`facts` 칸: 찾음 {칸·출처·searched} · 못 찾음 {searched} 만 · 2026-10-30 전 못 찾음 행은 NULL(찾아본 칸 모름 = 빈 값)."""
+    data = (json.loads(row[1]) if isinstance(row[1], str) else row[1]) or {}
+    facts = PlaceFacts(**{f: data.get(f) for f in FIELDS}, source_url=data["source_url"],
+                       source_host=data["source_host"]) if "source_url" in data else None
+    return FactRecord(row[0], facts, row[2], row[3], tuple(data.get("searched", ())))
 
 
 class PgPlaceFactStore:
@@ -37,12 +38,12 @@ class PgPlaceFactStore:
             cur.execute(f"SELECT poi_id, facts, fetched_at, expires_at FROM {_TABLE} WHERE poi_id = %s AND expires_at > %s",
                         (poi_id, now))
             row = cur.fetchone()
-        return FactRecord(row[0], _facts(row[1]), row[2], row[3]) if row else None
+        return _record(row) if row else None
 
     def put(self, record: FactRecord) -> None:
         f = record.facts
-        doc = None if f is None else json.dumps({**{k: getattr(f, k) for k in FIELDS}, "source_url": f.source_url,
-                                                 "source_host": f.source_host}, ensure_ascii=False)
+        found = {} if f is None else {**{k: getattr(f, k) for k in FIELDS}, "source_url": f.source_url, "source_host": f.source_host}
+        doc = json.dumps({**found, "searched": list(record.searched)}, ensure_ascii=False)
         with self._connect() as conn, conn.cursor() as cur:
             cur.execute(f"DELETE FROM {_TABLE} WHERE expires_at <= %s", (record.fetched_at,))
             cur.execute(
