@@ -24,5 +24,7 @@ gateway:
   replicas: 1
 embedding:
   replicas: 1
+  # 인젝션 그림자 분류기 — 개발 서버에서 먼저 울린 비율(= 오탐 상한)을 본다(2026-10-30, 운영은 그 뒤)
+  injectionGuard: true
 podDisruptionBudget:
   enabled: false

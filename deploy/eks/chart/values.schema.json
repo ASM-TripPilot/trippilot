@@ -247,6 +247,9 @@
         },
         "enabled": {
           "type": "boolean"
+        },
+        "injectionGuard": {
+          "type": "boolean"
         }
       }
     },

@@ -4450,6 +4450,7 @@ def build_orchestrator(
     memory_store: MemoryStorePort | None = None,
     place_sql: PgPlaceSql | None = None,  # 도우미 장소 조회(NL2SQL) 실행기 — DSN 은 main.py, 켜기는 DIALOGUE_SQL 배정
     place_fact_store: object | None = None,  # 미확인 칸 웹 확인 저장소(PlaceFactStore) — DSN 은 main.py, 켜기는 PLACE_FACT_LOOKUP 배정
+    injection_shadow: object | None = None,  # 도우미 0′ 인젝션 그림자(InjectionShadow) — 주소는 main.py, 판정값만 로그
     dialogue_orchestrator_enabled: bool = False,  # 도우미 턴을 AI 안에서 끝낸다(ANSWER) — env 해석은 main.py
     shadow_rate: float = 1.0,  # 3단 라우터 섀도 표본율 (DEV 1.0 · 운영 0.2)
     shadow_rng: random.Random | None = None,  # 테스트 결정론용, None 이면 SystemRandom
@@ -4635,6 +4636,7 @@ def build_orchestrator(
         bank_ready=lambda: bank_index.indexed, bank=bank, confident_intent=router.confident_intent,
         providers=providers, pool_builder=pool_builder, rag=rag, memory_store=memory_store, clock=clock, tz=tz,
         shadow_rate=shadow_rate, shadow_rng=shadow_rng, place_sql=place_sql, place_fact_store=place_fact_store,
+        injection_shadow=injection_shadow,
         kb_store=vector_store if vector_store is not None else None,
     ) if dialogue_orchestrator_enabled else None
     return WiredItineraryOrchestrator(
@@ -4835,6 +4837,7 @@ def build_dev_app(
     memory_store: MemoryStorePort | None = None,  # 도우미 장기 기억 스토어 — None 이면 InMemory
     place_sql: PgPlaceSql | None = None,  # 도우미 장소 조회(NL2SQL) 실행기 — None 이면 장소 탐색은 반경 풀만
     place_fact_store: object | None = None,  # 미확인 칸 웹 확인 저장소 — None 이면 InMemory(켜기는 PLACE_FACT_LOOKUP 배정)
+    injection_shadow: object | None = None,  # 도우미 0′ 인젝션 그림자 — None 이면 없음(판정값만 로그, 응답 무영향)
     dialogue_orchestrator_enabled: bool = False,  # 도우미 턴을 AI 안에서 끝낸다 — env 해석은 main.py, 기본 off(종전 해석 경로)
     shadow_rate: float = 1.0,
     shadow_rng: random.Random | None = None,
@@ -4897,6 +4900,7 @@ def build_dev_app(
         memory_store=memory_store,
         place_sql=place_sql,
         place_fact_store=place_fact_store,
+        injection_shadow=injection_shadow,
         dialogue_orchestrator_enabled=dialogue_orchestrator_enabled,
         shadow_rate=shadow_rate,
         shadow_rng=shadow_rng,
