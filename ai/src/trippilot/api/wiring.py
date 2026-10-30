@@ -167,6 +167,7 @@ from trippilot.agents.edit.day_area import DayArea
 from trippilot.agents.edit.commands import EditStatus
 from trippilot.agents.planb import composition
 from trippilot.agents.planb import request_verification as nl_verify
+from trippilot.agents.planb.place_knowledge import kb5_counts
 from trippilot.agents.planb.rag import PlanBAgent, PlanBRagRequest, SavedPlace
 from trippilot.agents.schedule.agent import ScheduleAgent, trim_planb_rank_for_add_one
 from trippilot.agents.schedule.family import normalize_name, same_place
@@ -2974,7 +2975,7 @@ class WiredItineraryOrchestrator:
         return self._replan_projection(
             request, outcome, notes, resolved, unknown,
             # KB-5 는 구성 후보로 찾는다 — 건수도 그쪽 것이다(PlanB 는 선택 LLM 이 없으면 찾지 않는다).
-            retrieved={**planb.retrieved, "POI_DESC": len(compose_ctx[0][0].place_knowledge)}
+            retrieved={**planb.retrieved, **kb5_counts(compose_ctx[0][0].place_knowledge)}
             if compose_ctx else planb.retrieved,
             planb_fallback=planb.is_fallback, started_ms=t0, past=past,
             composed=bool(composed), reasons=why,
