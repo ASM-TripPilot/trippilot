@@ -323,8 +323,11 @@ services:
       # 붙이고 .env 에는 **프로필 이름만** 적는다(AWS_PROFILE). 비어 있으면 boto3 가 자격을
       # 못 찾아 매 호출이 폴백으로 떨어진다(기동은 성공 — 위 FEATURE_MODELS 통로와 같은
       # 종류의 침묵). EKS 는 Pod Identity 가 대신하므로 여기(로컬 compose)만의 통로다.
+      # 자격 파일 이름은 AI_AWS_CREDENTIALS_FILE 로 고른다(기본 credentials). Innovation Sandbox 키 갱신은
+      # ~/.aws/credentials·config 를 **통째로** 새로 써서 거기 둔 Bedrock 프로필이 세 번 사라졌다(10-14·10-18·10-30)
+      # → 갱신이 건드리지 않는 별도 파일(예: trippilot-bedrock.credentials)에 두고 그 이름을 적는다.
       AWS_PROFILE: ${AWS_PROFILE:-}
-      AWS_SHARED_CREDENTIALS_FILE: /run/aws/credentials
+      AWS_SHARED_CREDENTIALS_FILE: /run/aws/${AI_AWS_CREDENTIALS_FILE:-credentials}
       AWS_CONFIG_FILE: /run/aws/config
       # LLM 요청당 비용 집계(#486)의 단가표 경로. **이 통로가 없어서** 컨테이너에서
       # 집계가 통째로 꺼져 있었다 — load_prices 가 None 을 돌려주면 llm_cost 로그 자체가

@@ -1022,6 +1022,18 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         out.emptyReason shouldBe SlotCandidatesEmptyReason.ALL_IN_ITINERARY
     }
 
+    "AI 파이프라인 장애(pipeline_error)는 '주변에 없다'가 아니다 — 미도달처럼 로컬 후보풀로 폴백한다" {
+        val (adapter, server) = fixture(poolOf(place(nearPoi, 33.46, 126.56)))
+        server.expect(requestTo("http://ai.test/ai/v1/planb/alternatives"))
+            .andRespond(withSuccess(altBody(2, "", emptyReason = "pipeline_error"), MediaType.APPLICATION_JSON))
+
+        val out = adapter.proposeSlotCandidates(candidatesInput())
+
+        out.candidates.map { it.poiId } shouldBe listOf(nearPoi)
+        out.freshness.degraded shouldBe true
+        out.emptyReason shouldBe null
+    }
+
     "반경 컷으로 0건이 되면 10km 로 한 번 넓혀 재컷한다 — 실사용 반경을 그대로 알린다" {
         // AI 는 ~8.1km 후보를 줬고 요청 반경은 3km — 컷 후 0건 → 10km 재컷에 걸린다.
         val (adapter, server) = fixture(poolOf(place(farPoi, 33.51, 126.61)))

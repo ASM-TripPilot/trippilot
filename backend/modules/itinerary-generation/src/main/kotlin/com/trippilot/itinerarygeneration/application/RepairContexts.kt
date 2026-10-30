@@ -66,7 +66,11 @@ class RepairContexts(
             ?: if (date == ctx.endDate) stays.firstOrNull { it.date == date.minusDays(1) } else null
         return SlotSpace(
             districtCodes = destination?.regionCode?.let { regions.districtCodesOf(it) }.orEmpty(),
-            regionCenter = destination?.let { RegionAnchors.centerOf(regions, it) },
+            // 코드 없는 옛 여행이 동명이지역(중구·동구·고성군…)이면 이름 첫 일치가 다른 도시 중심을 집는다 — 생성 앵커는 앵커를
+            // 잃지 않으려 그 길을 남겼지만(RegionAnchors), 여기는 사용자가 "고른 구 중심"이라 추측하지 않고 없음(409)으로 둔다.
+            regionCenter = destination
+                ?.takeIf { it.regionCode != null || regions.codesOf(it.name).size <= 1 }
+                ?.let { RegionAnchors.centerOf(regions, it) },
             stay = stay?.let { RegionCenter(it.lat, it.lng) },
         )
     }

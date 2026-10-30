@@ -218,6 +218,7 @@ TRIPPILOT_BACKEND_BASE_URL: ${SERVICE_AUTH_TOKEN:+http://backend:8080}
 | `fallback_level=1`, `rationale="MANUAL/none · rule_ranking"` | `degraded=true`, rationale **템플릿으로 교체**, **거리 오름차순 재정렬** |
 | `fallback_level=2`, `alternatives=[]`, `empty_reason="no_candidates"` | 빈 목록 + `degraded=true`, **`emptyReason=ALL_IN_ITINERARY`** (§3) |
 | 반경 컷으로 0건이 됨 (AI 는 후보를 줬다) | 빈 목록 + **`emptyReason=NO_NEARBY`**, `radiusMUsed=10000` |
+| `empty_reason="pipeline_error"` (AI 쪽 KB·DB 장애) | **미도달과 같게 로컬 후보풀 폴백**(`degraded=true`) — "주변에 없다"(NO_NEARBY)가 아니라 "확인 못 했다"다 (2026-10-30) |
 | AI 가 모르는 `empty_reason` 문자열 | `NO_NEARBY` 로 떨어뜨리고 원문 WARN — 침묵 금지 |
 | `poi_ids` 중 1건이 `ground()` 미통과 | 그 건만 제외, 나머지 유지 |
 | 반경 컷 | `radiusM=3000` 인데 AI 가 8km 밖 후보를 줌 → 잘림 / 컷 결과 0건 → 10km 재컷 후 `radiusMUsed=10000` |

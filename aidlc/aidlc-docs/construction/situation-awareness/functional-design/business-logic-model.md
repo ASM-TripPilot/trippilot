@@ -719,6 +719,20 @@ G-SA 는 이 확장 전체에서 한 줄로 번호를 쓴다. 이 표가 본체�
 > - **G-SA-20** — 제주의 시·서울의 구는 그 광역 줄 전체로 맞추는 현행을 유지한다. 과잉 경보는 감수한다(제주·서울은 면적이 작고 권역 ↔ 구 표를 둘 필요가 없다). 특보를 켠 뒤 과잉 경보가 실제로 잦으면 다시 본다. 코드 변경은 없다.
 > - 이로써 특보를 관찰 전용에서 빼기 전(NFR §7 8단계)에 정할 정본 결정은 남지 않는다 — 남은 것은 대기질의 에어코리아 모름 비율이다.
 
+> **[개정 · 2026-10-30 — 구현 반영]** §9 해소 기록 — 코드로는 닫혔는데 이 절에 해소 줄이 없던 9건이다(지적 전수 점검 · origin/develop 1f5600380 · TRIP-1660).
+>
+> | ID | 해소 근거(코드) |
+> |---|---|
+> | G-SA-1 | 감시 상태 표면 — `backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/application/TriggerService.kt` `watch()`(출처별 마지막 확인 · 신선 창 · 없거나 낡으면 `UNKNOWN`) · `V2.73` `plan_b_watch` · 앱 라벨 `frontend/src/features/planb/config/watchLabels.ts`(`확인 불가`). 사용자에게 보이는 것은 FE-B 스토어 빌드 뒤 |
+> | G-SA-2 | 같은 여행 Plan-B 푸시 10분 1회 — `backend/modules/notification/src/main/kotlin/com/trippilot/notification/adapter/in/event/DomainNotificationSubscribers.kt`(`PushPolicy.OncePer("PLAN_B#…", 10분)`) |
+> | G-SA-3 | 하루 상한은 코드값 2·5·10 유지(O-SA-9) — `backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/domain/PlanBTrigger.kt` `Sensitivity` · `backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/domain/TriggerLifecycle.kt`(사건의 대표만 푸시). U4 `nfr-design/nfr-design-patterns.md` 의 1·3·6 은 블록 없이 남아 있다 |
+> | G-SA-4 | 서버 스윕 — `backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/application/SituationSweep.kt`(매시 :15 07~20시 + 20:40 · ShedLock `planb-situation-scan`) · `backend/app/src/main/resources/application.yml` cron |
+> | G-SA-6 | 여행 전 반영 가드 — `backend/modules/itinerary-recalculation/src/main/kotlin/com/trippilot/recalculation/application/ReplanSessionService.kt` `apply()`(오늘 < 시작이면 전날 창 조건을 모두 만족할 때만) · 진입 `resolveEntry()`. O-SA-6 승인은 §0.4 2026-10-23 블록 |
+> | G-SA-9 | 루트 `CLAUDE.md` 가 모듈별 호출 경로 상수를 나열한다(#1422) |
+> | G-SA-10 | 전제가 사라졌다 — 술집이 실내 카테고리 `BAR` 로 분리됐다(TRIP-1545 · `ai/src/trippilot/domain/poi.py` · V2.79). BE 실외 집합(`backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/domain/WeatherHazards.kt`)은 그대로 |
+> | G-SA-13 | 트리거 닫기 — 소비는 `backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/adapter/in/event/ReplanAppliedSubscriber.kt`(재계획 적용 사건의 triggerId·날짜 → `TriggerService.consume`), 만료는 `backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/domain/TriggerLifecycle.kt` `close()`(대상 슬롯이 지남) |
+> | G-SA-14 | 임계는 권고안대로 코드 상수 — `backend/modules/planb-detection/src/main/kotlin/com/trippilot/planbdetection/domain/WeatherHazards.kt`(`RAIN_POP` 60/50 등). BR-U2-15 의 '설정값'은 필요해질 때 |
+
 ---
 
 ## 10. 미결 (O-SA-\*)
@@ -747,6 +761,23 @@ O-SA-2~15 는 **초안 기본값 채택(2026-10-19 사용자 지시 "하던거 �
 > - 배선(#1379) — 저장소 시크릿 → 배포가 backend·ai 런타임 시크릿에 쓰고(저장값과 다를 때만 · 비면 저장값 유지) 파드 env 로 싣는다(`deploy/eks/runtime_secrets.py:17-35,393-397` · `.github/workflows/aws-deploy.yml:256` · `deploy/eks/chart/templates/backend.yaml:105` · `deploy/eks/chart/templates/ai.yaml:79`). 개발·운영 시크릿 반영은 2026-10-19 배포에서 확인됐다(배포 로그 `public data key written: backend, ai` — 코드 밖 사실).
 > - 읽는 쪽은 비면 `WEATHER_API` 로 대신한다 — 백엔드 특보·대기질(`backend/app/src/main/resources/application.yml:176` · `WeatherAlertConfiguration.kt:28`), AI 특일 달력(`ai/main.py:481-483`). 기동 줄에는 키를 읽은 env 이름만 남는다(`nfr-requirements.md` SEC-SA-03 개정 블록).
 > - 특보·대기질은 여전히 관찰 전용이다 — 켜기는 `nfr-requirements.md` §7 8단계(요약 줄·실응답 표본 확인 뒤 `observe-only` 에서 빼는 커밋).
+
+> **[개정 · 2026-10-30 — 기록 정리]** §10 상태 칸 — O-SA-2~15 는 2026-10-19 사용자 '추천대로'로 확정됐다(`aidlc/aidlc-docs/audit.md` 'O-SA-2~15 추천안 확정' · `aidlc-state.md`). 표의 '정본 승인 때 확인'은 이 블록으로 갈음한다(TRIP-1660).
+> - 그 뒤 바뀐 것:
+>   - O-SA-6 은 승인했고 `pre-trip` 을 켰다(§0.4 2026-10-23 블록).
+>   - O-SA-7 은 새 스토어 빌드 뒤로 미뤘다(같은 블록). 빌드 전에 올리면 아직 없는 버전으로 강제 업데이트가 된다.
+> - 코드 대응:
+>   - O-SA-2·4·5: `WeatherHazards`
+>   - O-SA-3: `AirQualityDetector`
+>   - O-SA-8: `frontend/app.config.ts` — iOS `aps-environment` 삭제를 유지하므로 Android 만 푸시
+>   - O-SA-9: `PlanBTrigger.Sensitivity`
+>   - O-SA-10: `ReplanSessionService` — `TRIP_DAILY_CAP` 3 · `GLOBAL_DAILY_CAP` 100
+>   - O-SA-11: `TriggerLifecycle` — 연일 반복은 조용히
+>   - O-SA-12: `ai/src/trippilot/orchestrator/opportunity.py` `_SHOWN_EVENT_SOURCES` — `evx-` 제외
+>   - O-SA-15: 확장 폴더
+> - 남은 것:
+>   - O-SA-13 — 넓혀 읽은 휴무를 주의로 강등할지. 파서는 일부러 넓혀 읽는다(`ai/src/trippilot/poi_curation/sourcing/mapping.py` `_parse_rest_days`, TRIP-1230). 생성은 그 요일을 피하므로 오탐은 사용자가 손댄 슬롯에서만 생긴다. 켠 뒤 `planb.situation_live` 줄에 CLOSED_DAY 표본이 나오면 원문과 대조해 정한다.
+>   - O-SA-14 — 토글 행 분포를 실측한 뒤 정한다.
 
 **번호 없이 설계 안에서 닫는 것**: 해제 임계 수치(관측 후 조정) · 특보 t6 형식과 에어코리아 권역 표(실응답 표본으로 고정 — 추정 → 실측) · 병렬도·예산(dry-run p95) · 감시 상태 신선도 창(날씨 2시간·장소 14시간).
 

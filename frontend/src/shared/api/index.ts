@@ -419,6 +419,7 @@ export { isNotFound, retryUnlessNotFound } from './isNotFound';
 export {
   isGenerationDailyLimit,
   isRateLimited,
+  isShareCardDailyLimit,
   retryAfterSeconds,
 } from './isRateLimited';
 export {

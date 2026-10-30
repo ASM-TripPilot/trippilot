@@ -125,6 +125,13 @@ describe('🔴 AC-1 · 정상 렌더 — 카드·세그·버튼·캡션', () => 
       screen.getByTestId('reflection-share-preview-frame')
     ).toBeOnTheScreen();
     expect(screen.getByText(props.caption)).toBeOnTheScreen();
+    // TRIP-1605 — 캡션 줄·해시태그 줄은 페이지 통합 테스트가 문구를 정확히 읽는 자리라 testID 를 가진다.
+    expect(
+      screen.getByTestId('reflection-share-caption-text')
+    ).toHaveTextContent(props.caption);
+    expect(screen.getByTestId('reflection-share-hashtags')).toHaveTextContent(
+      props.hashtagText
+    );
     // TRIP-939 — 캡처 미장전(기본)이라 저장/공유 버튼은 그리지 않는다.
     expect(screen.queryByTestId('reflection-share-save')).toBeNull();
     expect(screen.queryByTestId('reflection-share-export')).toBeNull();

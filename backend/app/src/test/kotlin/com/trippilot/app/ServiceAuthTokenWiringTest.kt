@@ -43,16 +43,18 @@ class ServiceAuthTokenWiringTest : StringSpec({
     }
 
     /**
-     * **한 시크릿이 네 자리에 이어져 있다.** 갈라 두면 둘 중 하나만 세팅된 절반 설정이 생기고,
+     * **한 시크릿이 여섯 자리에 이어져 있다.** 갈라 두면 둘 중 하나만 세팅된 절반 설정이 생기고,
      * 그때 증상은 **한쪽 방향만 401** 이라 원인이 안 보인다. 하나라도 끊기면 여기서 깨진다.
      */
-    "한 환경변수가 수신·발신 네 자리를 모두 채운다" {
+    "한 환경변수가 수신·발신 여섯 자리를 모두 채운다" {
         val env = mapOf<String, Any>("SERVICE_AUTH_TOKEN" to "한값")
         listOf(
             "trippilot.service-auth.token",          // 수신(/internal/**)
             "trippilot.ai.schedule.service-token",   // 발신 — 일정 생성·검증·수리·근거·슬롯 후보
             "trippilot.ai.reflection.service-token", // 발신 — 회고
             "trippilot.ai.reminder-copy.service-token", // 발신 — 리마인드 문구
+            "trippilot.ai.opportunity.service-token",   // 발신 — 기회 카드
+            "trippilot.assistant.interpret.service-token", // 발신 — 도우미 해석
         ).forEach { key -> resolve(key, env) shouldBe "한값" }
     }
 

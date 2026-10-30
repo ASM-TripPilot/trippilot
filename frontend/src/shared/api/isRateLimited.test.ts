@@ -3,6 +3,7 @@ import { AxiosError } from 'axios';
 import {
   isGenerationDailyLimit,
   isRateLimited,
+  isShareCardDailyLimit,
   retryAfterSeconds,
 } from './isRateLimited';
 
@@ -101,5 +102,49 @@ describe('일일 한도는 429 + GENERATION_DAILY_LIMIT 일 때만 (TRIP-1368)',
     ).toBe(false);
     expect(isGenerationDailyLimit(new Error('boom'))).toBe(false);
     expect(isGenerationDailyLimit(undefined)).toBe(false);
+  });
+});
+
+// TRIP-1605 — 공유 카드 문구 POST 의 429 는 두 갈래다. 상태 코드는 같고 `error.code` 로만 갈린다:
+// SHARE_CARD_DAILY_LIMIT(오늘 횟수 소진, 재시도 무의미) / RATE_LIMITED(지금 짓는 중, 몇 초 뒤 풀림).
+describe('공유 카드 일일 한도는 429 + SHARE_CARD_DAILY_LIMIT 일 때만 (TRIP-1605)', () => {
+  const body = (code?: string) => ({ error: code ? { code } : {} });
+
+  it('429 + SHARE_CARD_DAILY_LIMIT 은 true 다 (긍정 앵커)', () => {
+    expect(
+      isShareCardDailyLimit(httpError(429, {}, body('SHARE_CARD_DAILY_LIMIT')))
+    ).toBe(true);
+  });
+
+  it('429 + RATE_LIMITED·GENERATION_DAILY_LIMIT·모르는 코드·코드 없음·바디 없음은 false 다', () => {
+    expect(
+      isShareCardDailyLimit(httpError(429, {}, body('RATE_LIMITED')))
+    ).toBe(false);
+    expect(
+      isShareCardDailyLimit(httpError(429, {}, body('GENERATION_DAILY_LIMIT')))
+    ).toBe(false);
+    expect(isShareCardDailyLimit(httpError(429, {}, body('X')))).toBe(false);
+    expect(isShareCardDailyLimit(httpError(429, {}, body()))).toBe(false);
+    expect(isShareCardDailyLimit(httpError(429, {}, {}))).toBe(false);
+    expect(isShareCardDailyLimit(httpError(429, {}, undefined))).toBe(false);
+    expect(isShareCardDailyLimit(httpError(429, {}, 'oops'))).toBe(false);
+    expect(isShareCardDailyLimit(httpError(429, {}, null))).toBe(false);
+  });
+
+  it('상태가 429 가 아니면 코드가 같아도 false 다 · axios 오류가 아닌 것도 false', () => {
+    expect(
+      isShareCardDailyLimit(httpError(409, {}, body('SHARE_CARD_DAILY_LIMIT')))
+    ).toBe(false);
+    expect(
+      isShareCardDailyLimit(httpError(500, {}, body('SHARE_CARD_DAILY_LIMIT')))
+    ).toBe(false);
+    expect(isShareCardDailyLimit(new Error('boom'))).toBe(false);
+    expect(isShareCardDailyLimit(undefined)).toBe(false);
+  });
+
+  it('두 한도는 서로를 삼키지 않는다 — 생성 한도 판별기는 공유 카드 코드를 모른다', () => {
+    expect(
+      isGenerationDailyLimit(httpError(429, {}, body('SHARE_CARD_DAILY_LIMIT')))
+    ).toBe(false);
   });
 });

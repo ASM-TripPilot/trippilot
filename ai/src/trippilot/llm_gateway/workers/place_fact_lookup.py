@@ -33,7 +33,11 @@ class PlaceFactLookupWorker:
         self._gateway = gateway
 
     def lookup(self, place: str, fields: Sequence[str], on: date, trace_id: TraceId, now: datetime,
-               *, timeout_sec: float) -> TypedResult:
+               *, timeout_sec: float, retry_timeout_sec: float | None = None) -> TypedResult:
+        """`retry_timeout_sec` 는 1차(GPT) 가 벤더 장애·unsupported·timeout 으로 죽었을 때 2차
+        (`C1Config.retry_models[PLACE_FACT_LOOKUP]`, 보통 Claude)로 한 번 더 부르는 예산 —
+        PLACE_FACT_LOOKUP 이 `C1Config.vendor_failover_features` 기본 멤버라 게이트웨이가 timeout
+        만이 아니라 벤더 예외도 트리거로 본다(gateway.py `call` 참조). None 이면 종전처럼 1회."""
         return self._gateway.call(
             LlmFeature.PLACE_FACT_LOOKUP,
             build_place_fact_vars(place, fields, on),
@@ -41,4 +45,5 @@ class PlaceFactLookupWorker:
             trace_id,
             now,
             timeout_sec=timeout_sec,
+            retry_timeout_sec=retry_timeout_sec,
         )

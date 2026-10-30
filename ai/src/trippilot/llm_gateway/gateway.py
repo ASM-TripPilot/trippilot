@@ -111,6 +111,10 @@ class GatewayFacade:
         하나라도 없으면 종전 그대로 1회 시도 후 폴백 신호다. 재시도의 실패 기록·
         모델 전환 이벤트는 실제 모델명을 싣는다(TRIP-260 #4 — 지어낸 실체 금지).
 
+        feature 가 `C1Config.vendor_failover_features` 에도 있으면 트리거가 timeout 뿐 아니라
+        unsupported·벤더 예외(llm_error)까지 넓어진다(2026-10-30, PLACE_FACT_LOOKUP 벤더 폴백 —
+        config.py 그 필드 주석). 그 집합에 없는 기능은 09-12 결정 그대로 timeout 전용이다.
+
         images는 멀티모달 feature 전용 후미 기본값 (TRIP-595, FD §6.1 A안) —
         기존 텍스트 호출은 전부 무영향이고, 강등은 "같은 파이프라인, images만 비움"으로
         표현된다. 이미지도 게이트웨이를 지나야 계측(LlmCallRecord)이 빠지지 않는다.
@@ -147,7 +151,8 @@ class GatewayFacade:
         )
         retry_model = self._cfg.retry_models.get(feature)
         if (
-            response is None and reason.startswith("timeout")
+            response is None
+            and (reason.startswith("timeout") or feature in self._cfg.vendor_failover_features)
             and retry_model is not None and retry_timeout_sec
         ):
             # 2단 폴백 — 1차 실패는 기록으로, 모델 전환은 이벤트로 남기고 한 번 더.

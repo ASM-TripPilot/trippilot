@@ -108,8 +108,15 @@ class KmaWeatherAdapter(
         val (nx, ny) = KmaGrid.of(center.lat, center.lng)
         val base = baseTimeAt(at)
 
-        val root = runCatching { call(nx, ny, base) }
-            .getOrElse { throw WeatherLookupFailed("기상청 단기예보 호출에 실패했습니다. grid=$nx,$ny", it) }
+        // 원인 예외를 매달지 않고 종류만 싣는다 — 연결·시한 실패 메시지에 요청 주소(질의의 서비스 키)가 실리고, 서비스가
+        // 이 예외를 스택째 WARN 으로 찍는다(SEC-SA-03 · 격자 경로 `exchange` 와 같다).
+        val root = try {
+            call(nx, ny, base)
+        } catch (e: WeatherLookupFailed) {
+            throw e
+        } catch (e: Exception) {
+            throw WeatherLookupFailed("기상청 단기예보 호출에 실패했습니다(${e.javaClass.simpleName}). grid=$nx,$ny")
+        }
 
         val code = root.at("/response/header/resultCode").asString()
         if (code != OK_CODE) {

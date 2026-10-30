@@ -12,7 +12,9 @@ import com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
 import com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices
 import com.trippilot.changelog.api.ChangeLogFacade
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.springframework.boot.autoconfigure.SpringBootApplication
+import java.io.File
 
 /**
  * TRIP-150 — 모듈 경계 규칙 게이트(R1·R4·R5). CI(`./gradlew build`)에서 위반 시 빌드 실패.
@@ -25,22 +27,22 @@ class ArchitectureRulesTest {
         .withImportOption(ImportOption.DoNotIncludeTests())
         .importPackages("com.trippilot")
 
+    /**
+     * 기능 모듈 루트 패키지 — R1·R5 세 규칙이 이 한 목록을 쓴다. 규칙마다 손 목록을 따로 두던 동안
+     * assistant 는 셋 모두에서, affiliatelink·recalculation·planbdetection·weathercontext 는 R5 에서 빠져
+     * 경계 위반이 빌드를 통과했다. 아래 마지막 테스트가 이 목록을 `backend/modules` 와 대조한다.
+     */
+    private val modules = listOf(
+        "accommodationsearch", "affiliatelink", "archive", "assistant", "auth", "changelog",
+        "itinerarygeneration", "moderation", "notification", "placedata", "planbdetection",
+        "profile", "recalculation", "reflection", "savedaccommodation", "trip", "weathercontext",
+    )
+    private val modulePackages = modules.map { "com.trippilot.$it.." }.toTypedArray()
+
     @Test
     fun `R5-1 common은 상위 계층(app·modules)에 의존하지 않는다`() {
         noClasses().that().resideInAnyPackage("com.trippilot.core..", "com.trippilot.security..")
-            .should().dependOnClassesThat().resideInAnyPackage(
-                "com.trippilot.app..",
-                "com.trippilot.auth..", "com.trippilot.profile..", "com.trippilot.moderation..",
-                "com.trippilot.accommodationsearch..",
-                "com.trippilot.savedaccommodation..",
-                "com.trippilot.trip..",
-                "com.trippilot.placedata..",
-                "com.trippilot.itinerarygeneration..",
-                "com.trippilot.changelog..",
-                "com.trippilot.archive..",
-                "com.trippilot.reflection..",
-                "com.trippilot.notification..",
-            )
+            .should().dependOnClassesThat().resideInAnyPackage("com.trippilot.app..", *modulePackages)
             .because("R5: 의존 방향 app→modules→common, 역방향 금지")
             .allowEmptyShould(true)
             .check(importedClasses)
@@ -48,17 +50,7 @@ class ArchitectureRulesTest {
 
     @Test
     fun `R5-2 modules는 app에 의존하지 않는다`() {
-        noClasses().that().resideInAnyPackage(
-            "com.trippilot.auth..", "com.trippilot.profile..", "com.trippilot.moderation..",
-            "com.trippilot.accommodationsearch..",
-            "com.trippilot.savedaccommodation..",
-            "com.trippilot.trip..",
-            "com.trippilot.placedata..",
-            "com.trippilot.itinerarygeneration..",
-            "com.trippilot.changelog..",
-            "com.trippilot.archive..",
-            "com.trippilot.notification..",
-        )
+        noClasses().that().resideInAnyPackage(*modulePackages)
             .should().dependOnClassesThat().resideInAPackage("com.trippilot.app..")
             .because("R5: app 만 조립. 모듈은 app 을 모른다")
             .allowEmptyShould(true)
@@ -99,12 +91,20 @@ class ArchitectureRulesTest {
 
     @Test
     fun `R1 모듈 간 상호작용은 api 로만 (내부 직접참조 금지)`() {
-        slices().matching("com.trippilot.(auth|profile|moderation|accommodationsearch|savedaccommodation|trip|placedata|itinerarygeneration|changelog|recalculation|planbdetection|weathercontext|archive|reflection|notification|affiliatelink)..")
+        slices().matching("com.trippilot.(${modules.joinToString("|")})..")
             .should().notDependOnEachOther()
             // 다른 모듈의 api 퍼사드 의존은 허용(architecture.md). 내부(domain·application·adapter) 참조만 금지.
             .ignoreDependency(resideInAnyPackage("com.trippilot.."), resideInAPackage("..api.."))
             .because("R1: 모듈은 서로의 내부에 의존 금지 — api 퍼사드/이벤트로만")
             .allowEmptyShould(true)
             .check(importedClasses)
+    }
+
+    @Test
+    fun `모듈 목록은 backend-modules 의 루트 패키지와 같다`() {
+        val actual = File("../modules").listFiles().orEmpty()
+            .flatMap { File(it, "src/main/kotlin/com/trippilot").list().orEmpty().toList() }
+            .sorted()
+        assertEquals(actual, modules.sorted(), "새 모듈을 만들었으면 위 modules 목록에 더한다 — 빠지면 경계 규칙이 그 모듈을 안 본다")
     }
 }

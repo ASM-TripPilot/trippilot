@@ -79,6 +79,7 @@ from trippilot.llm_gateway.config import C1Config  # noqa: E402
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate  # noqa: E402
 from trippilot.llm_gateway.gates.numbered_selection import NumberedScoringGate, NumberedSelectionGate  # noqa: E402
 from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerGate  # noqa: E402
+from trippilot.llm_gateway.gates.explanation import HASHTAG_COUNT, hashtag_line  # noqa: E402
 from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanGate  # noqa: E402
 from trippilot.llm_gateway.gates.intent import IntentGate  # noqa: E402
 from trippilot.llm_gateway.gateway import GatewayFacade  # noqa: E402
@@ -115,7 +116,13 @@ class _NullTrace:
 
 def _gateway(prompts: Path, feature: LlmFeature, gate, model: str = MODEL) -> GatewayFacade:
     # SDK 재시도 0 — 운영 어댑터와 같은 정책이라야 지연이 왜곡되지 않는다(TRIP-381)
-    llm = OpenAIAdapter(openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"], max_retries=0), api="responses")
+    if model.startswith("claude"):  # 운영이 Claude 일 때(10-30 기준 전 기능 claude-opus-5-5) — 운영과 같은 어댑터
+        import anthropic
+
+        from trippilot.llm_gateway.adapters.anthropic_adapter import AnthropicAdapter
+        llm = AnthropicAdapter(anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"], max_retries=0))
+    else:
+        llm = OpenAIAdapter(openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"], max_retries=0), api="responses")
     cfg = C1Config(model_ids={t: model for t in ModelTier}, feature_models={feature: model})
     return GatewayFacade(llm, PromptRegistry(prompts), gate, cfg, _NullTrace())
 
@@ -981,6 +988,9 @@ def run_composition(prompts: Path, repeat: int) -> None:
                           over_limit=sum(1 for r in rows if r["n"] > r["limit"]),
                           hours_bad=sum(r["hours_bad"] for r in rows),
                           meta_reasons=f'{sum(r["meta"] for r in rows)}/{sum(len(r["reasons"]) for r in rows)}',
+                          # 0.9.0 — 이유가 슬롯 추천 이유(해시태그 5개)로 나간다: 생성과 같은 규칙으로 걸러 5개가 남은 비율
+                          hashtag5=f'{sum(len(hashtag_line(x.split()).split()) == HASHTAG_COUNT for r in rows for x in r["reasons"])}'
+                                   f'/{sum(len(r["reasons"]) for r in rows)}',
                           per_case={k: f"{a}/{b}" for k, (a, b) in per.items()}, **_timing(rows)),
                      ensure_ascii=False))
     for r in sorted(rows, key=lambda r: r["name"]):

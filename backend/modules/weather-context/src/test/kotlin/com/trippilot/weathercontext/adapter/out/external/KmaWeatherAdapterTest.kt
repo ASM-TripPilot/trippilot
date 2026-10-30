@@ -7,7 +7,9 @@ import com.trippilot.weathercontext.domain.WeatherLookupFailed
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.web.client.RestClient
 import java.net.InetSocketAddress
@@ -61,6 +63,28 @@ class KmaWeatherAdapterTest : StringSpec({
             shouldThrow<WeatherLookupFailed> { adapterAt(url, jeju).fetch("모르는곳", AT) }
             hits.size shouldBe 0
         }
+    }
+
+    /**
+     * 서비스 키가 질의 문자열에 실린다 — 연결 실패 예외의 메시지·원인에 요청 주소가 남으면, 서비스가 스택째 찍는 WARN 으로
+     * 키가 샌다(SEC-SA-03). 격자 경로와 같이 원인 **종류**만 싣고 원인 예외를 매달지 않는다.
+     */
+    "연결 실패 예외에 요청 주소·키가 실리지 않는다" {
+        val dead = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).also { it.start() }
+        val url = "http://127.0.0.1:${dead.address.port}"
+        dead.stop(0) // 닫힌 포트 — 연결 거부
+
+        val adapter = KmaWeatherAdapter(
+            jeju,
+            RestClient.builder().baseUrl(url).build(),
+            KmaWeatherProperties(mode = "kma", baseUrl = url, serviceKey = "SECRET+KEY=="),
+        )
+        val e = shouldThrow<WeatherLookupFailed> { adapter.fetch("제주", AT) }
+
+        e.cause.shouldBeNull()
+        e.message!! shouldNotContain "serviceKey"
+        e.message!! shouldNotContain "SECRET"
+        e.message!! shouldNotContain "127.0.0.1"
     }
 
     "정상 코드가 아니면 실패다 — 200 이어도 본문이 거절일 수 있다" {

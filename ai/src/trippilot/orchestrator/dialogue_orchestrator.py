@@ -101,6 +101,7 @@ from trippilot.orchestrator.dialogue_memory import (
     due,
     expires_at_for,
     gist_lines,
+    is_turn_fragment,
     kept_lines,
     legacy_lines,
     material,
@@ -223,6 +224,11 @@ _MEMORY_MODES = ("llm_dialogue_memory", "kept_previous")
 _PLAN_MODES = ("llm_dialogue_plan", "out_of_scope")
 _SMALLTALK_MODES = ("llm_dialogue_smalltalk", "fixed_text")
 _KNOWLEDGE_MODES = ("llm_dialogue_knowledge", "out_of_scope")
+# 지식 답의 말하지 않은 장소 이름은 장소 DB 에 등록돼 있으면 통과(사용자 결정 2026-10-30 "등록된 장소면 허용") — 이름 찾기(LLM 없는
+# 매개변수 SQL, 문장 시한 1.5s)를 한 답에 셋까지만. 넷 이상이면 지어냈을 공산이 커 찾지 않고 막는다. 한 번 찾기 전마다 잔여가
+# 문장 시한 + 여유만큼 있어야 한다(없으면 종전처럼 막는다 — 응답이 deadline 을 넘지 않게)
+_REGISTERED_LOOKUP_MAX = 3
+_REGISTERED_MIN_REMAINING_MS = 1_700
 # 2‴ 계획이 도구 없이 닫은 말 중 지식 즉답(BR-AO-32)이 받는 gap — 정보성이면 일반 지식으로 답하고, 대신 해 달라는 일(예약·결제·표 끊기·
 # 호출·번역)과 실시간 값은 지식 LLM 이 {"text": null} 로 닫아 종전 범위 밖 카드다. 장소·실시간에 묶인 gap(AMENITY·EVENTS·PLACE_DETAIL·
 # REGION_WEATHER)과 ACCOUNT 는 넣지 않는다 — 일반 지식으로는 틀린 답이 된다. CHAT 은 잡담 경로다. 사용자 지시(2026-10-23, 다른 세션 경유)
@@ -568,8 +574,11 @@ def _memory_lines(current: DialogueMemory | None, others: Sequence[DialogueMemor
     """꺼내기 없는 `$memory` — 현재 세션 줄 전부 + 헤더 + 다른 세션(≤2) 줄 전부 (DE §6 `$memory`). 임베딩이 배선되지 않았거나
     꺼내기가 실패했을 때 쓴다(2026-10-23 전의 모양 그대로). 줄의 `inline()` 은 워커가 한다.
     지시 주입 꼴 줄은 싣지 않는다 — 기억 게이트가 이제 막지만 그 전에 저장된 줄(TTL 90일)이 남아 있을 수 있다."""
-    lines = [line for line in current.summary if not has_injection_like(line)] if current is not None else []
-    other_lines = [line for m in others for line in m.summary if not has_injection_like(line)]
+    def keep(line: str) -> bool:  # 옛 압축의 원문 조각도 뺀다 — 꺼내기 경로(`_recalled_lines`)와 같은 규칙
+        return not is_turn_fragment(line) and not has_injection_like(line)
+
+    lines = [line for line in current.summary if keep(line)] if current is not None else []
+    other_lines = [line for m in others for line in m.summary if keep(line)]
     if other_lines:
         lines += [OTHER_SESSIONS_HEADER, *other_lines]
     return tuple(lines)
@@ -756,12 +765,13 @@ def _foreign_place(text: str, known: Sequence[str]) -> bool:
     return False
 
 
-def _knowledge_foreign_place(text: str, slot_names: Sequence[str], said: Sequence[str]) -> bool:
-    """지식 답(BR-AO-32)의 장소 검사 — 사실 칸이 없어 아는 이름은 스냅샷 슬롯 이름(`slot_names`, `_foreign_place` 와 같은 대조)과 사용자가
-    이미 한 말(`said` — 이번 말·창 안 최근 대화·꺼낸 기억 줄, 공백 뗀 글)이다. 한 말은 **부분 문자열로만** 본다 — 접두 대조면 발화 "부산"이
-    "부산시민공원"을 통과시켰다. 말한 이름을 정식 명칭으로 늘린 꼴("해운대" → "해운대해수욕장")은 아는 이름이고, 일반명사(`_GENERIC_PLACE`)는
-    장소 이름이 아니다. 앞 턴·기억에서 말한 곳을 "거기"로 이어 물으면 그 이름은 지어낸 게 아니다(2026-10-23 리뷰 재현).
-    ponytail: 등록 이름 대조는 없다 — 말하지 않은 고유 이름은 등록돼 있어도 막는다(프롬프트가 금지한 꼴, `place_sql.find_place` 로 넓힐 수 있다)."""
+def _knowledge_unknown_places(text: str, slot_names: Sequence[str], said: Sequence[str]) -> list[str]:
+    """지식 답(BR-AO-32)에서 아는 이름이 아닌 장소 이름(`_PLACE_LIKE` 꼴, 나온 순서·중복 없이) — 아는 이름은 스냅샷 슬롯 이름(`slot_names`,
+    `_foreign_place` 와 같은 대조)과 사용자가 이미 한 말(`said` — 이번 말·창 안 최근 대화·꺼낸 기억 줄, 공백 뗀 글)이다. 한 말은 **부분
+    문자열로만** 본다 — 접두 대조면 발화 "부산"이 "부산시민공원"을 통과시켰다. 말한 이름을 정식 명칭으로 늘린 꼴("해운대" →
+    "해운대해수욕장")은 아는 이름이고, 일반명사(`_GENERIC_PLACE`)는 장소 이름이 아니다. 앞 턴·기억에서 말한 곳을 "거기"로 이어 물으면 그
+    이름은 지어낸 게 아니다(2026-10-23 리뷰 재현). 여기 남은 이름은 호출측이 장소 DB 에 등록돼 있는지 본다(`_registered`)."""
+    unknown: list[str] = []
     for word in re.findall(r"[가-힣]+", text):
         m = _PLACE_LIKE.match(word)
         if m is None or _GENERIC_PLACE.fullmatch(m.group(0)):
@@ -772,8 +782,9 @@ def _knowledge_foreign_place(text: str, slot_names: Sequence[str], said: Sequenc
             continue
         if any(name in t or (len(stem) >= 2 and stem in t) for t in said):
             continue
-        return True
-    return False
+        if name not in unknown:
+            unknown.append(name)
+    return unknown
 
 
 def _refusal_reason(error: str) -> str:
@@ -1284,6 +1295,21 @@ class DialogueOrchestrator:
         return TurnOutcome("ANSWER", (), None, answer, cleared, 0,
                            f"{reason}; plan:{'+'.join(call.intent.value for call in draft.calls)}")
 
+    def _registered(self, inp: TurnInput, names: Sequence[str]) -> bool:
+        """말하지 않은 장소 이름이 모두 장소 DB 에 등록된 곳인가 — 이름 찾기(`place_sql.find_place`, 공백 뗀 완전 일치). 장소 DB 미배선·
+        이름 넷 이상·잔여 부족이면 False(종전처럼 막는다). DB 오류는 `find_place` 가 None 으로 접는다(INV-4 — 막는 쪽)."""
+        lookup = self._ports.place_sql
+        if lookup is None or len(names) > _REGISTERED_LOOKUP_MAX:
+            return False
+        trip = inp.snapshot.trip
+        area = trip.regions[0] if trip is not None and trip.regions else None  # 같은 이름이 여럿이면 여행 지역으로 좁힌다
+        for name in names:
+            if self._remaining(inp) < _REGISTERED_MIN_REMAINING_MS:
+                return False
+            if lookup.find_place(name, area, inp.trace_id) is None:
+                return False
+        return True
+
     def _knows_general(self) -> bool:
         """지식 즉답이 닿는가 — 계획 단계(gap KNOWLEDGE 를 내는 자리)와 지식 워커가 둘 다 조립됐다."""
         return self._planner is not None and self._ports.unknown is not None and self._ports.unknown.knows_general
@@ -1319,7 +1345,8 @@ class DialogueOrchestrator:
         if times or unverifiable:  # 사실이 없는 자리 — 시각은 전부 지어낸 것(INV-2)
             self._fallback(inp, "llm", *_KNOWLEDGE_MODES, "time_not_in_facts")
             return None
-        if _knowledge_foreign_place(text, slot_names, said):
+        unknown = _knowledge_unknown_places(text, slot_names, said)
+        if unknown and not self._registered(inp, unknown):
             self._fallback(inp, "llm", *_KNOWLEDGE_MODES, "place_not_in_facts")
             return None
         try:

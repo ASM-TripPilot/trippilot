@@ -80,7 +80,7 @@ from trippilot.api.route_budget import (
 from trippilot.llm_gateway.adapters.backend_persona import _to_summary as _persona_to_summary
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver, ContextStore
-from trippilot.llm_gateway.gates.explanation import ExplanationGate
+from trippilot.llm_gateway.gates.explanation import ExplanationGate, hashtag_line
 from trippilot.llm_gateway.gates.reminder_copy import ReminderCopyGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
@@ -167,6 +167,7 @@ from trippilot.agents.planb import composition
 from trippilot.agents.planb import request_verification as nl_verify
 from trippilot.agents.planb.rag import PlanBAgent, PlanBRagRequest, SavedPlace
 from trippilot.agents.schedule.agent import ScheduleAgent, trim_planb_rank_for_add_one
+from trippilot.agents.schedule.family import normalize_name, same_place
 from trippilot.agents.planb.directives import (
     DirectiveSpec,
     index_of,
@@ -726,13 +727,33 @@ def _payload_alternative_pairs(
 _PLACEMENT_REASON_MAX = 500
 
 
+def _one_per_place(pool: CandidatePool, prefer: frozenset[PoiId], notes: list[str]) -> CandidatePool:
+    """출처만 다른 같은 장소(이름까지 같은 200m 안, `family.same_place`)는 풀에 하나만 — 원 일정에 있는 쪽을 남긴다.
+    생성은 계열 강등 단계가 쌍둥이를 빼지만(#1624) 다시 짜기는 그 단계가 꺼져 있어 구성 LLM·솔버가 둘 다 고를 수 있었다.
+    풀이 수천 곳이라 정규화 이름이 같은 것끼리만 견준다."""
+    kept: dict[str, list[Poi]] = {}
+    drop: set[PoiId] = set()
+    for p in sorted(pool.pois, key=lambda p: (p.poi_id not in prefer, str(p.poi_id))):
+        same = kept.setdefault(normalize_name(p.name), [])
+        if any(same_place(p, q) for q in same):
+            drop.add(p.poi_id)
+        else:
+            same.append(p)
+    if not drop:
+        return pool
+    notes.append(f"same_place_dropped: {len(drop)}")
+    pois = tuple(p for p in pool.pois if p.poi_id not in drop)
+    return replace(pool, poi_ids=frozenset(p.poi_id for p in pois), pois=pois)
+
+
 def _pick_reasons(picks) -> dict[PoiId, str]:
-    """구성 LLM 이 고른 곳 → 이유. 게이트가 비운 이유(시간 표현·연락처 꼴)는 뺀다 — 빈 이유로 원래 이유를 덮지 않게.
+    """구성 LLM 이 고른 곳 → 추천 이유(해시태그 5개 — 생성 EXPLANATION 과 같은 `hashtag_line` 규칙, 10-23 사용자 결정).
+    태그가 하나도 안 남은 이유(게이트가 비운 것·문장으로 답한 것)는 뺀다 — 빈 이유로 원래 이유를 덮지 않게.
     같은 곳이 두 번이면 첫 이유(고른 순서와 같다)."""
     out: dict[PoiId, str] = {}
     for pick in picks:
-        if pick.reason.strip():
-            out.setdefault(pick.poi_id, pick.reason.strip())
+        if line := hashtag_line(pick.reason.split()):
+            out.setdefault(pick.poi_id, line)
     return out
 
 
@@ -3516,6 +3537,17 @@ class WiredItineraryOrchestrator:
         return tuple(table[k] for k in result.value.keys if k in table)[:MAX_DIRECTIVES]
 
     def _with_current_slots(
+        self,
+        pool: CandidatePool,
+        request: schemas.ReplanRequest,
+        now: datetime,
+        notes: list[str],
+    ) -> CandidatePool:
+        """원 일정 합류 + 같은 장소는 하나만(`_one_per_place`) — 다시 짜기 풀이 모두 이 길로 온다."""
+        return _one_per_place(self._join_current_slots(pool, request, now, notes),
+                              frozenset(PoiId(s.poi_id) for s in request.current_slots), notes)
+
+    def _join_current_slots(
         self,
         pool: CandidatePool,
         request: schemas.ReplanRequest,

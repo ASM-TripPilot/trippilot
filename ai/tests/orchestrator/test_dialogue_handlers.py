@@ -383,7 +383,7 @@ def test_needs_trip_excludes_style_and_out_of_scope() -> None:
 
 @pytest.mark.parametrize("intent", sorted(ROUTABLE_INTENTS - {Intent.STYLE_ANALYSIS}, key=lambda i: i.value))
 def test_without_trip_every_trip_intent_plans_nothing_and_answers_need_trip(intent: Intent) -> None:
-    ctx = _ctx(_snapshot((), trip=None, status=None), {"target": "x", "destination": "x", "place": "x"})
+    ctx = _ctx(_snapshot((), trip=None, status=None), {"target": "x", "destination": "x"})  # 이름 댄 장소·지역·두 곳 없음
     handler = HANDLERS[intent]
     assert handler.plan(ctx) == ()
     facts = handler.assemble(ctx, {})
@@ -393,6 +393,19 @@ def test_without_trip_every_trip_intent_plans_nothing_and_answers_need_trip(inte
     assert facts.template_text == NEED_TRIP_TEXT
     assert facts.quick_replies == ()
 
+
+@pytest.mark.parametrize("intent, args", [
+    (Intent.GET_POI_INFO, {"place": "경복궁"}),
+    (Intent.GET_WEATHER, {"region": "부산"}),
+    (Intent.GET_DISTANCE, {"origin": "해운대", "destination": "광안리"}),
+])
+def test_without_trip_a_named_place_region_or_two_ends_is_still_looked_up(intent: Intent, args: dict) -> None:
+    """여행을 만들기 전에 묻는 "경복궁 입장료"·"부산 날씨"·"해운대에서 광안리" — 일정 없이 찾는 갈래가 있으니 "먼저 여행을 만들어"로
+    끝내지 않는다(2026-10-23 개발 서버). 화면 넘기기 집합(`needs_trip`, BE 와 짝)은 그대로."""
+    assert needs_trip(intent)
+    facts = HANDLERS[intent].assemble(_ctx(_snapshot((), trip=None, status=None), args), {})
+    assert not facts.needs_trip and facts != need_trip_facts(intent)
+    assert not {"OPEN_ITINERARY", "OPEN_ITINERARY_METHOD"} & set(_types(facts))  # 일정 화면은 갈 곳이 없다 — 여행 만들기로
 
 def test_style_analysis_answers_without_a_trip() -> None:
     facts = _run(HANDLERS[Intent.STYLE_ANALYSIS], _ctx(_snapshot((), trip=None, status=None)))
@@ -782,9 +795,24 @@ def test_distance_to_a_registered_place_outside_the_itinerary_finds_it_by_exact_
     assert transit.calls[0]["destination"] == _COORD["천지연폭포"] and facts.detail["destination"] == "천지연폭포"
 
 
+@pytest.mark.parametrize("name", ["세종문화회관", "인천공항", "서울대공원"])
+def test_a_place_name_containing_a_region_name_is_looked_up_not_taken_as_that_region(name: str) -> None:
+    """표 이름 뒤에 다른 낱말이 붙으면 지역이 아니다 — "세종문화회관"이 세종시 중심(124km 밖)이 되던 것(2026-10-30 Codex 리뷰)."""
+    found = [PlaceRow(_U["천지연폭포"], name, "문화", "서울특별시", "종로구", False, False)]
+    facts, transit, finder = _free_distance({"origin": "우도", "destination": name}, found)
+    assert finder.calls == [("find", name, "제주")] and facts.detail["destination"] == name
+    assert transit.calls[0]["destination"] == _COORD["천지연폭포"]
+
+
 def test_distance_with_an_unknown_end_stays_empty_and_never_calls_transit() -> None:
     facts, transit, _ = _free_distance({"origin": "우도", "destination": "롯데월드"}, [])
     assert transit.calls == [] and facts.status is FactStatus.EMPTY
+
+
+def test_leap_day_looks_at_next_year_when_this_year_has_none() -> None:
+    """2월 29일 — 올해에 없으면 내년을 본다(첫 ValueError 에서 그만두면 기본 30일 창이 됐다). 없는 날은 그대로 None."""
+    assert dh._ahead_of(date(2027, 12, 1), 2, 29) == date(2028, 2, 29)
+    assert dh._ahead_of(date(2026, 10, 30), 2, 29) is None and dh._ahead_of(date(2026, 10, 30), 2, 30) is None
 
 
 def test_distance_origin_matching_the_previous_slot_is_accepted() -> None:
@@ -1241,8 +1269,13 @@ def test_every_handler_is_deterministic_valid_and_free_of_duration(data, intent:
                        "detail": first.to_prompt_dict()}, ensure_ascii=False, default=str).lower()
     assert not any(tok in wire for tok in _INV3_TOKENS)
     if snapshot.trip is None:
+        # 이름 댄 장소·지역·두 곳은 여행 없이 조회한다(2026-10-23) — 그때 일정 화면 버튼은 여행 만들기로
+        named = {Intent.GET_POI_INFO: bool(arguments.get("place")), Intent.GET_WEATHER: bool(arguments.get("region")),
+                 Intent.GET_DISTANCE: bool(arguments.get("origin") and arguments.get("destination"))}.get(intent, False)
         assert first.needs_trip is (intent not in (Intent.STYLE_ANALYSIS, Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES,
-                                                    Intent.RECOMMEND_REGION))
+                                                    Intent.RECOMMEND_REGION) and not named)
+        if named:
+            assert not {"OPEN_ITINERARY", "OPEN_ITINERARY_METHOD"} & {a.type for a in first.next_actions}
     for task in tasks:
         assert task.fn() == task.fn()  # 콜러블도 결정론 (대역이 결정론이라 그렇다 — 핸들러가 상태를 섞지 않는다)
 

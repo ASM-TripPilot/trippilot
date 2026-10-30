@@ -239,4 +239,32 @@ describe('🔴 G2 · 공유 카드 서버 이미지 생성·저장 심볼 0 + �
     // 어댑터도 스캔에 들어왔다(0개면 캡처 코드가 G2 사각에 있다).
     expect(adapterFiles.length).toBeGreaterThan(0);
   });
+
+  // TRIP-1605 — j06 가 서버 AI 문구(캡션·해시태그 글자만)를 받는다. 이미지가 아니라 글이지만 BR-U5-46 가드의 사정거리 안에
+  // 있어야 한다. 새 호출 파일이 어디에 생길지 미리 알 수 없어(훅이냐 페이지냐) 목록에 이름을 박지 않고, 서버 문구 타입
+  // (`ShareCardCopy`, 생성 훅·함수 이름에도 들어 있다)을 참조하는 프로덕션 파일을 성질로 찾아 같은 금칙을 건다.
+  // 왜 tsc·ESLint·렌더로 못 잡나: 금칙어는 문자열 안 어디에 있어도 타입·린트·렌더가 모른다.
+  it('서버 문구(ShareCardCopy)를 참조하는 프로덕션 파일도 금칙 8종 0건 — 1개 이상 존재(생성물·테스트 제외)', () => {
+    const copyFiles = [ROOT, ROUTES]
+      .flatMap(listSourceFiles)
+      .map((full) => path.relative(ROOT, full).split(path.sep).join('/'))
+      .filter(
+        (rel) =>
+          !rel.split('/').some((seg) => TEST_ONLY_DIRS.includes(seg)) &&
+          !rel.startsWith('shared/api/generated/')
+      )
+      .map((rel) => ({ file: rel, source: readOne(rel) }))
+      .filter(({ source }) => /ShareCardCopy/.test(source));
+
+    // 긍정 짝 — 호출 파일이 실제로 있다(0개면 문구 코드가 이 가드 사각에 있거나 아직 안 만들어졌다).
+    expect(copyFiles.length).toBeGreaterThan(0);
+
+    const offenders = copyFiles
+      .filter(({ source }) => firstForbidden(SHARE_FORBIDDEN, source) !== null)
+      .map(({ file, source }) => ({
+        file,
+        token: firstForbidden(SHARE_FORBIDDEN, source),
+      }));
+    expect(offenders).toEqual([]);
+  });
 });
