@@ -218,6 +218,28 @@ def test_explanations_use_inline_preference_profile(monkeypatch: pytest.MonkeyPa
     assert legacy == mark  # 없으면 종전 재조회 — 주입한 ContextStore 의 값 그대로
 
 
+@pytest.mark.parametrize(("extra", "logged"), [
+    ({}, ("WARNING", "persona_inline_absent")),               # 필드 없음 — 옛 백엔드이거나 백엔드가 못 실었다
+    ({"preference_profile": {}}, ("INFO", "persona_unset")),  # 전 축 미설정 — 취향을 안 넣은 사용자라 정상
+    ({"preference_profile": {"styles": ["미식"]}}, None),     # 실린 취향을 썼다 — 남길 것이 없다
+])
+def test_explanations_log_when_inline_persona_is_not_used(
+    spy: SpyExplainer, caplog: pytest.LogCaptureFixture, extra: dict, logged: tuple[str, str] | None,
+) -> None:
+    """실린 취향을 못 써 종전 재조회(운영은 고정 요약)로 내려간 사실을 로그로 드러낸다 — 응답에 notes 칸이 없다.
+
+    WARN 은 필드가 없을 때만이다. 미설정까지 WARN 이면 취향을 안 넣은 사용자마다 경고가 쌓여 소음이 된다.
+    """
+    body = {**_explanations_body(str(_SEED[0].poi_id)), **extra}
+    with caplog.at_level("INFO", logger="trippilot.wiring"):
+        with TestClient(build_dev_app(), raise_server_exceptions=False) as client:
+            assert client.post("/ai/v1/itinerary/explanations", json=body).status_code == 200
+    lines = [(r.levelname, r.getMessage()) for r in caplog.records
+             if r.getMessage().startswith("explanations persona_")]
+    assert lines == ([(logged[0], f"explanations {logged[1]} trace_id=trip479-exp trip_id=trip479")]
+                     if logged else [])
+
+
 # ── ⑦ 차선책 문장 (TRIP-887) — 두 번째 호출, 배치 슬롯 설명과 독립 ──────
 
 
