@@ -22,6 +22,7 @@ from hypothesis import strategies as st
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "collect"))
 
 import merge_pois_docs as M  # noqa: E402
+from collect_place_fees import _OVERNIGHT  # noqa: E402
 from collect_pois import load_closed_refs  # noqa: E402
 from trippilot.domain.poi import Poi  # noqa: E402
 from merge_pois_docs import (  # noqa: E402
@@ -500,6 +501,80 @@ def test_큐레이션_목록은_항목마다_근거가_있다() -> None:
     """이름은 사람이 웹에서 골랐다 — 근거 없는 항목은 '인기'라는 주장의 출처가 없다."""
     seed = json.loads((_DATA / "curated_popular_places.json").read_text(encoding="utf-8"))
     assert all(s["evidence"] in seed["evidence"] for s in seed["places"])
+
+
+# ── 레포츠 캠핑장 소급 제거 (2026-10-30) ───────────────────────────────────
+# 수집은 cat3 야영장을 드롭하지만 공유본 행엔 벤더 분류 코드가 없다 — 이름으로 소급한다. 이름은 전부 공유본 실물.
+def _camp(name: str, *, source: str = "TOURAPI", kind: str | None = "28", category: str = "ACTIVITY") -> dict:
+    p = _keyed_doc(source, name)["proposals"][0]
+    p["poi"]["name"], p["poi"]["category"] = name, category
+    if kind is not None:
+        p["provenance"]["content_type_id"] = kind
+    return p
+
+
+@pytest.mark.parametrize("name", [
+    "가반나야영장", "월악산국립공원 용하야영장", "수주팔봉 야영지", "포천글램핑앤카라반", "숲내음펜션", "노르딕민박",
+    "캠핑포유 펜션&캠핑", "메타피아 오래 캠핑장＆카라반",   # 묶인 상호 — 양쪽 다 숙영지
+    "A&J오토캠핑장",                                    # 한 글자 조각은 상호의 일부
+])
+def test_레포츠로_들어온_숙영지는_빠진다(name: str) -> None:
+    props = [_camp(name)]
+    assert M.drop_camping(props) == 1 and props == []
+
+
+@pytest.mark.parametrize(("name", "source", "kind", "category"), [
+    # 레포츠 TourAPI 가 아니면 이름이 캠핑이어도 남는다 — 캠핑장 안 식당은 시설 이름으로 인허가를 낸다
+    ("칡소폭포 캠핑장(식당)", "LOCALDATA", None, "FOOD"),
+    ("높은터캠핑식당", "LOCALDATA", None, "FOOD"),
+    ("잉카마야박물관&캠핑장", "TOURAPI", "14", "CULTURE"),
+    ("캠핑7", "TOURAPI", "39", "FOOD"),
+    ("고릴라캠핑 송도점", "TOURAPI", "38", "SHOPPING"),
+    ("국립김천숲속야영장", "TOURAPI", "12", "NATURE"),   # 일일 개장이 있는 관광지 — 규칙 밖
+    # 레포츠지만 낮 방문지 — `휴양림` 은 어휘에서 뺐고, 묶인 상호는 전부 숙영지일 때만 뺀다
+    ("영인산자연휴양림 스카이어드벤처 (영인산 짚라인)", "TOURAPI", "28", "ACTIVITY"),
+    ("바라산자연휴양림", "TOURAPI", "28", "ACTIVITY"),
+    ("노랑카라반&고카트", "TOURAPI", "28", "ACTIVITY"),
+    ("용인엑스파크공원", "TOURAPI", "28", "ACTIVITY"),
+])
+def test_숙영지가_아니거나_레포츠_TourAPI_가_아니면_남는다(name, source, kind, category) -> None:
+    props = [_camp(name, source=source, kind=kind, category=category)]
+    assert M.drop_camping(props) == 0 and len(props) == 1
+
+
+def test_어휘는_요금_수집의_1박_표지에서_휴양림만_뺐다() -> None:
+    """한쪽에만 낱말을 더하면 '1박 요금이라 안 읽은 곳'과 '숙영지라 뺀 곳'이 조용히 갈라진다 — 여기서 걸린다."""
+    assert set(M._CAMPING.pattern.split("|")) == set(_OVERNIGHT.pattern.split("|")) - {"휴양림"}
+
+
+def test_main이_캠핑장_제거를_stats에_남기고_축소_가드에_센다(tmp_path: Path) -> None:
+    """축소 가드는 `retro_dropped_existing` 을 빼고 비교한다 — 공유본에 있던 캠핑장이 거기 들어가야 배치가 안 빨개진다."""
+    shared = _keyed_doc("TOURAPI", "1")
+    shared["proposals"].append(_camp("가반나야영장"))
+    path = tmp_path / "shared.json"
+    path.write_text(json.dumps(shared, ensure_ascii=False), encoding="utf-8")
+    assert M.main(["-o", str(path), str(path)]) == 0
+    stats = json.loads(path.read_text(encoding="utf-8"))["stats"]
+    assert (stats["camping_dropped"], stats["retro_dropped_existing"], stats["unique_proposals"]) == (1, 1, 1)
+    assert M.main(["-o", str(path), str(path)]) == 0     # 다시 돌리면 뺄 것이 없다
+    assert "camping_dropped" not in json.loads(path.read_text(encoding="utf-8"))["stats"]
+
+
+@settings(max_examples=150, deadline=None)
+@given(rows=st.lists(st.tuples(
+    st.sampled_from(["TOURAPI", "LOCALDATA", "OVERTURE", "KAKAO_LOCAL"]),
+    st.sampled_from([None, "12", "14", "28", "38", "39"]),
+    st.sampled_from(["ACTIVITY", "FOOD", "NATURE", "CULTURE"]),
+    st.text(alphabet="캠핑야영장글램카라반펜션민박오토휴양림고트&, ", min_size=1, max_size=12),
+), max_size=12))
+def test_pbt_레포츠_TourAPI_ACTIVITY_밖은_어떤_이름도_안_빠지고_두_번째는_무동작(rows) -> None:
+    props = [_camp(n, source=s, kind=k, category=c) for s, k, c, n in rows]
+    others = [p for p in props if (p["source"], p["provenance"].get("content_type_id"), p["poi"]["category"])
+              != ("TOURAPI", "28", "ACTIVITY")]
+    n = M.drop_camping(props)
+    assert n == len(rows) - len(props)
+    assert all(any(q is p for q in props) for p in others)
+    assert M.drop_camping(props) == 0
 
 
 # ── 주소 시도 약칭 → 정식 이름 (2026-10-19) ─────────────────────────────
