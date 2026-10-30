@@ -78,6 +78,21 @@ def test_retrieved_POI_DESC는_구성_후보에_붙은_설명_수다() -> None:
     assert body["retrieved"]["POI_DESC"] == 1, body["retrieved"]
 
 
+def test_대체_문서는_POI_DESC_에_섞이지_않고_따로_세어진다(monkeypatch) -> None:
+    """KB-5 대체 문서(2026-10-23, 기본 꺼짐)를 켜면 구성 후보에 붙지만, POI_DESC 는 진짜 문서 수 그대로다 — 배선이
+    `PlaceKnowledge` 를 감싸 대체 문서 수를 잃으면 여기가 빨개진다(KB-5 담당 세션 리뷰 ①)."""
+    from trippilot.poi_curation import place_fallback
+
+    others = {str(p.source_ref): "대표메뉴 정식. 주차 가능." for p in demo_poi_seed() if str(p.poi_id) != _FOOD}
+    monkeypatch.setenv(place_fallback.SWITCH, "on")
+    monkeypatch.setattr(place_fallback, "fallback_docs", lambda: others)
+    body, llm, _ = _replan_with_docs()
+    candidates = llm.compose_prompt().split("[후보 목록]")[1].split("[출력 JSON 스키마]")[0]
+    fallback_lines = sum(ln.endswith("| 대표메뉴 정식. 주차 가능.") for ln in candidates.splitlines())
+    assert fallback_lines
+    assert body["retrieved"]["POI_DESC"] == 1 and body["retrieved"]["POI_DESC_FALLBACK"] == fallback_lines, body["retrieved"]
+
+
 def test_후보_줄의_장소_설명은_한_줄로_눌린다() -> None:
     """설명은 제3자 글이다 — 줄바꿈이 살아 있으면 프롬프트 골격(후보 목록의 다음 줄)을 흉내 낼 수 있다."""
     poi = Poi(poi_id=PoiId("p1"), name="수원 화성", category=PoiCategory.SIGHT,

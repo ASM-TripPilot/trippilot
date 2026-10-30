@@ -19,6 +19,7 @@ import gzip
 import json
 import logging
 import os
+import threading
 from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
@@ -69,6 +70,12 @@ def fallback_docs() -> Mapping[str, str]:
         log.warning("kb5 fallback web facts unavailable after %d: %s: %s", web, type(e).__name__, e)
     log.info("kb5 fallback loaded cards=%d web=%d", len(cards), web)
     return out
+
+
+def warm() -> None:
+    """켜져 있으면 기동 때 백그라운드로 표를 읽어 둔다 — 첫 요청이 파일 읽기(약 0.15초)를 떠안지 않게. 꺼져 있으면 읽지 않는다."""
+    if enabled():
+        threading.Thread(target=fallback_docs, name="kb5-fallback", daemon=True).start()
 
 
 def doc(source_ref: str) -> str:

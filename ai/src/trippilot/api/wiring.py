@@ -205,6 +205,7 @@ from trippilot.domain.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
 from trippilot.llm_gateway.gates.numbered_selection import NumberedScoringGate, NumberedSelectionGate
 from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
+from trippilot.poi_curation import place_fallback
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.place_fees import load_fee_table
 from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql
@@ -4554,6 +4555,7 @@ def build_orchestrator(
         alternative_worker=AlternativeSelectionWorker(GatewayFacade(
             llm, renderer, AlternativeSelectionGate(), c1_config, trace)),
     )
+    place_fallback.warm()  # KB-5 대체 문서 표(켜져 있을 때만) — 첫 대안 요청이 파일 읽기를 떠안지 않게
     if weather is not None:
         providers[ProviderKind.WEATHER] = WeatherProvider(weather)
     # Transit Provider — travel_port 주입 여부 무관하게 항상 등록 (TRIP-432,

@@ -66,7 +66,9 @@ class PlaceIntro:
 
     def intro(self, source_ref: str, query: str, *, wait_s: float = INTRO_WAIT_S) -> str:
         """장소 하나(조인 키 = TourAPI contentid)의 소개 — 없거나 스토어 장애·`wait_s` 초과면 빈 문자열(부가 정보라 없이 간다,
-        INV-4). 시한을 넘긴 조회는 뒤에서 끝까지 돌고 버려진다. 대체 문서가 켜져 있으면 그 자리에 대체 문서 — 로컬 표라 기다리지 않는다."""
+        INV-4). 시한을 넘긴 조회는 뒤에서 끝까지 돌고 버려진다. 대체 문서가 켜져 있으면 그 자리에 대체 문서 — 로컬 표라 기다리지 않는다.
+        바쁠 때·시한을 넘겼을 때는 진짜 문서(위키·개요)가 있는 곳도 대체 문서를 받는다 — 진짜 문서가 있는지 알려면 그 조회를 기다려야
+        해서다. 빈 소개보다 낫다는 판단이다(대체 문서도 같은 게이트를 지난 사실만이다)."""
         if not self._slots.acquire(blocking=False):
             log.info("place_intro skip reason=busy")
             return clean_intro(place_fallback.doc(source_ref))

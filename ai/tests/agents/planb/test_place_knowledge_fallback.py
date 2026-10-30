@@ -129,3 +129,16 @@ def test_place_intro_falls_back_to_the_local_document_when_the_store_is_slow(mon
         assert PlaceIntro(object(), object()).intro("r1", "소개", wait_s=0.05) == "대표메뉴 국밥."  # 소개 게이트도 지난다
     finally:
         gate.set()
+
+
+def test_warm_reads_the_table_in_the_background_only_when_switched_on(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(place_fallback, "fallback_docs", lambda: calls.append(1) or {})
+    place_fallback.warm()
+    for t in threading.enumerate():
+        if t.name == "kb5-fallback":
+            t.join(2)
+    assert calls == [1]
+    monkeypatch.setenv(place_fallback.SWITCH, "off")
+    place_fallback.warm()
+    assert calls == [1]
