@@ -262,12 +262,20 @@ def test_pbt_gate_accepts_every_constraint_satisfying_answer(text: str, footnote
 # ── 프롬프트 (③) ────────────────────────────────────────────
 
 
+@pytest.mark.parametrize("name", ["dialogue_answer", "dialogue_smalltalk", "dialogue_knowledge"])
+def test_the_dialogue_prompts_ask_for_korean_only(name: str) -> None:
+    """도우미 LLM 답 세 갈래(답변·잡담·지식)가 같은 규칙 줄을 싣는다 — 개발 서버 지식 답에 "해양活动"처럼 중국어 한자가 섞였다
+    (2026-10-23). 사용자 결정 "프롬프트 규칙만"(게이트는 그대로 — 답을 버리면 범위 밖이 는다)."""
+    text = (_PROMPTS / f"{name}.yaml").read_text(encoding="utf-8")
+    assert "한국어(한글)로만 쓰세요. 한자·중국어·일본어 글자를 섞지 마세요" in text
+
+
 def test_prompt_renders_deterministically_with_ref() -> None:
     reg = PromptRegistry(_PROMPTS)
     p1, ref = reg.render(_FEAT, _vars())
     p2, _ = reg.render(_FEAT, _vars())
     assert p1 == p2  # 결정론
-    assert ref.prompt_id == "prompts/dialogue_answer.yaml" and ref.version == "0.3.8"
+    assert ref.prompt_id == "prompts/dialogue_answer.yaml" and ref.version == "0.3.9"
     assert ref.feature == "DIALOGUE_ANSWER"
     dynamic = p1.rsplit("[문체]", 1)[1]  # 턴마다 바뀌는 칸만 — 고정부 예시에도 GET_WEATHER·최대 강수확률이 있다
     assert "GET_WEATHER" in dynamic and "최대 강수확률" in dynamic
