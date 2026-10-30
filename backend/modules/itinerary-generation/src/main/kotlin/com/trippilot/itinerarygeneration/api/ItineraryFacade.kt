@@ -17,6 +17,16 @@ import java.util.UUID
 interface ItineraryFacade {
     /** 소유 여행의 현재 일정 요약. 없거나 삭제·타 계정이면 null(호출 측이 404 존재 은닉으로 매핑). */
     fun findCurrent(accountId: UUID, tripId: UUID): ItineraryRef?
+
+    /**
+     * 주어진 여행들 가운데 **생성이 진행 중인** 여행 id(이 계정 것만) — 여행 목록 카드(BR-U6-22)가 **한 번에** 묻는다.
+     * [findCurrent] 에 싣지 않은 이유: 그 함수는 상황 감지 순회·재계획·도우미도 부르는데 그쪽은 이 값이 필요 없다 —
+     * 실으면 부르는 곳마다 세션 조회가 하나씩 는다(Codex 리뷰 2026-10-23). 다시 만들기 중에는 일정의 `generationState` 가
+     * 옛 일정의 COMPLETE 로 남아 있어 진행 여부는 이것으로만 안다.
+     *
+     * 기본 구현은 빈 집합이다 — 테스트 대역들이 구현하지 않아도 되게. 실 구현은 [ItineraryReadFacade] 하나다.
+     */
+    fun runningGenerationTripIds(accountId: UUID, tripIds: Collection<UUID>): Set<UUID> = emptySet()
 }
 
 /**
@@ -30,4 +40,5 @@ data class ItineraryRef(
     val generationState: String, // PARTIAL | COMPLETE | FAILED
     val dates: List<LocalDate>,
     val slotKeys: List<String>,
+    val generationMode: String? = null, // FULLY_AI | CO_PLAN | MANUAL — 여행 카드가 눌렀을 때 갈 화면을 고른다
 )
