@@ -270,7 +270,65 @@ _FRANCHISE = re.compile(
     r"|더리터|카페베네(?!치)|드롭탑|세라젬",
     re.IGNORECASE,
 )
-_JOINED = re.compile(r"[&,]")   # 한 상호에 두 가게가 묶인 표기
+# 한 상호에 두 가게가 묶인 표기. 로마자 사이 `&` 는 낱말 안이다 — `스타벅스 HD현대R&D센터` 가 `D센터` 조각에
+# 살아남아 공유본에 남았다(2026-10-23).
+_JOINED = re.compile(r",|(?<![A-Za-z])&|&(?![A-Za-z])")
+
+
+# ── 이름: 체인이지만 지점 자체가 가 볼 곳인 매장 — 체인 규칙보다 먼저 본다 ─────────────
+# 사용자 결정 2026-10-23("광장마켓에 있는 스타벅스나 경주의 기와로 된 스타벅스 같은 거는 남겨").
+# 지점마다 웹 근거가 있다(`data/curated_popular_places.json` evidence) — 여기엔 이름 조각만 둔다.
+# 공백을 지우고 소문자로 비교한다(카카오 `스타벅스 더북한강R점`·`올리브영N 성수`).
+_DISTINCTIVE_BRANCHES = (
+    "스타벅스경주대릉원", "스타벅스광장마켓", "스타벅스경동1960", "스타벅스대구종로고택",
+    "스타벅스환구단", "스타벅스더북한강", "스타벅스더양평",
+    "올리브영n성수",
+)
+
+
+def is_distinctive_branch(name: str | None) -> bool:
+    n = re.sub(r"\s", "", name or "").lower()
+    return any(k in n for k in _DISTINCTIVE_BRANCHES)
+
+
+# ── 이름: 어디에나 있는 소매 체인 지점 (사용자 결정 2026-10-23 "다이소 같은 건 다 빼") ─────
+# TourAPI 쇼핑(38)이 법정동 이관 뒤 브랜드 매장을 대량으로 싣는다 — 공유본 106,541 중 올리브영 229·
+# 롯데하이마트 104·노브랜드 67·다이소 27(+Overture 3). 목록은 공유본 쇼핑 행의 `<브랜드> <지점>점` 꼴을
+# 브랜드별로 세어 **전수 눈검사**해 고정했다(음식 체인 규칙과 같은 방식 — 범주어가 아니라 브랜드명만).
+# **브랜드가 이름 맨 앞이고 뒤에 공백·괄호·끝이 올 때만** 본다 — `게스트하우스`(게스)·`폴더 커피`(폴더)
+# 같은 낱말 겹침을 막는다. 그래서 `폴더`·`비너스`·`웰메이드` 처럼 흔한 낱말 상호는 아예 안 적었다.
+_RETAIL_CHAIN = re.compile(
+    r"^(?:다이소|Daiso|올리브영|Olive\s*Young|(?:롯데)?하이마트|노브랜드|LG전자\s*베스트샵|삼성\s*디지털\s*프라자"
+    r"|전자랜드(?:\s*파워센터)?|아트박스|다비치안경|정관장|유니클로|UNIQLO|스파오|탑텐|에잇세컨즈"
+    r"|나이키(?:\s*골프|\s*키즈)?|Nike|아디다스|뉴발란스(?:\s*키즈)?|노스페이스(?:\s*화이트라벨)?|라이프워크"
+    r"|디스커버리|코오롱스포츠|블랙야크|네파(?:\s*키즈)?|K2|데상트|엄브로|아식스|언더아머|스케쳐스|크록스|반스"
+    r"|게스|MLB|지오다노|로엠|미쏘|후아유|지오지아|슈펜|슈퍼드라이|라코스테|내셔널지오그래픽|원더플레이스"
+    r"|ABC\s*마트(?:\s*(?:ST|GS|SP))?|슈마커(?:\s*플러스)?|금강제화|엠픽|로이드|미니골드|골든듀|구구스"
+    r"|아리따움|이니스프리|네이처리퍼블릭|토니모리|미샤|홀리카\s*홀리카|렌즈미|오렌즈"
+    r"|골프존마켓|골프프렌드\s*골때려골프|골프파트너앤코스모|미즈노|에메필|세라워크|버터샵|세컨페이스"
+    r"|핫트랙스|교보문고|세이브존|메가마트)"
+    r"(?:(?:\s+\S+){0,2}점|\s*\([^)]*\))?$",
+    re.IGNORECASE,
+)
+
+
+# ── 이름: 백화점·아울렛·몰 안의 브랜드 매장 ───────────────────────────────
+# `골든듀 롯데백화점 강남점`·`나이키 롯데프리미엄아울렛 이천점` — 가 볼 곳은 백화점이지 그 안의 매장이
+# 아니다. 브랜드가 수백 개라 목록으로는 못 따라간다(공유본 쇼핑 체인 접두 244개 중 대부분이 이 꼴).
+# **백화점·아울렛 자체(`신세계백화점 센텀시티점`·`롯데프리미엄아울렛 기흥점`)는 남긴다** — 그 앞에
+# 운영사 말(`롯데`·`프리미엄`)만 있으면 매장이 아니라 그 백화점이다.
+_MALL = re.compile(r"백화점|아울렛|스타필드|롯데몰|AK\s*플라자|아이파크몰")
+_MALL_OPERATOR = re.compile(r"^(?:롯데|현대|신세계|신세계사이먼|갤러리아|현대시티|NC|AK|모다|뉴코아|더현대|프리미엄)$")
+
+
+def _shop_in_mall(name: str) -> bool:
+    if not name.endswith("점"):
+        return False
+    toks = name.split()
+    for i in range(1, len(toks)):
+        if _MALL.search(toks[i]):
+            return any(not _MALL_OPERATOR.match(t) for t in toks[:i])
+    return False
 
 
 def is_franchise(name: str) -> bool:
@@ -278,21 +336,22 @@ def is_franchise(name: str) -> bool:
 
     `무창포 먹거리식당&자담치킨` 은 체인이 곁다리인 지역 식당이라 지켜야 하고,
     `미스터피자&비비큐치킨밸리점` 은 양쪽 다 체인이라 지킬 지역 식당이 없다. 그래서
-    묶음을 쪼개 **전부 체인일 때만** 뺀다.
+    묶음을 쪼개 **전부 체인일 때만** 뺀다. 가 볼 만한 지점(`is_distinctive_branch`)은 남긴다.
     """
     n = (name or "").strip()
-    if not n:
+    if not n or is_distinctive_branch(n):
         return False
     parts = [p for p in (s.strip() for s in _JOINED.split(n)) if p]
     # 구분자만 있는 이름(`&`)은 조각이 0개다 — `all([])` 은 참이라 체인으로 빠졌다(PBT 반례).
     return bool(parts) and all(_FRANCHISE.search(p) is not None for p in parts)
 
 
-def non_travel_reason(name: str | None) -> str | None:
+def non_travel_reason(name: str | None, category: PoiCategory | str | None = None) -> str | None:
     """이름만으로 여행지가 아님이 확실하면 그 사유, 아니면 None.
 
     None 은 "여행지다"가 아니라 **"이름으로는 모른다"** 다. 판정은 보수적이다 —
-    의심스러우면 통과시키고, 확실한 것만 떨어뜨린다.
+    의심스러우면 통과시키고, 확실한 것만 떨어뜨린다. `category` 는 쇼핑 행 전용 규칙
+    (`chain_store`·`shop_in_mall`)에만 쓴다 — 안 주면 그 둘은 걸리지 않는다.
     """
     if not name:
         return None
@@ -300,9 +359,19 @@ def non_travel_reason(name: str | None) -> str | None:
     for reason, rx in _NON_TRAVEL:
         if rx.search(n):
             return reason
+    if is_distinctive_branch(n):
+        return None
     # 전국 체인은 정규식 하나로 안 끝난다(묶인 상호를 쪼개 본다) — 별도 함수로 둔다.
     if is_franchise(n):
         return "franchise"
+    # 소매 체인·몰 안 매장은 **쇼핑 행에만** — 몰 안 식당(`을밀대 롯데백화점잠실점`)·놀거리(`볼베어파크
+    # 롯데몰 은평점`)·`별마당도서관 스타필드 수원점` 은 끼니·갈 곳이고, `디스커버리 네이처스케이프`(명소)·
+    # 맨 `교보문고`(문화) 도 이름만으로는 갈린다(공유본 실측 2026-10-23, 쇼핑 밖 오탐 106건 → 0).
+    if getattr(category, "value", category) == "SHOPPING":
+        if _RETAIL_CHAIN.search(n):
+            return "chain_store"
+        if _shop_in_mall(n):
+            return "shop_in_mall"
     return None
 
 

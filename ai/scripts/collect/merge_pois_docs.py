@@ -190,7 +190,7 @@ def drop_non_travel(proposals: list[dict]) -> dict[str, int]:
     dropped: dict[str, int] = {}
     for p in proposals:
         name = (p.get("poi") or {}).get("name") or ""
-        if (reason := non_travel_reason(name)) is not None:
+        if (reason := non_travel_reason(name, (p.get("poi") or {}).get("category"))) is not None:
             dropped[reason] = dropped.get(reason, 0) + 1
             continue
         kept.append(p)

@@ -2,6 +2,21 @@
  "_doc": "웹 큐레이션이 공유본의 기존 행과 맞춘 것 — 병합이 `요즘 인기` 태그를 붙인다(mark_trending).",
  "refs": [
   {
+   "source": "LOCALDATA",
+   "content_id": "3010000-101-2018-00207",
+   "query": "을지로브이"
+  },
+  {
+   "source": "LOCALDATA",
+   "content_id": "3010000-101-2021-00232",
+   "query": "인현골방"
+  },
+  {
+   "source": "LOCALDATA",
+   "content_id": "3010000-101-2024-00054",
+   "query": "을지FM"
+  },
+  {
    "source": "OVERTURE",
    "content_id": "2f667446-b7d7-4f99-995c-91b1d2c148e6",
    "query": "하늘공원 상암"
@@ -33,8 +48,28 @@
   },
   {
    "source": "TOURAPI",
+   "content_id": "126078",
+   "query": "광안리해수욕장"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "126081",
+   "query": "해운대해수욕장"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "126207",
+   "query": "첨성대"
+  },
+  {
+   "source": "TOURAPI",
    "content_id": "126214",
    "query": "대릉원"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "126438",
+   "query": "천지연폭포"
   },
   {
    "source": "TOURAPI",
@@ -48,8 +83,23 @@
   },
   {
    "source": "TOURAPI",
+   "content_id": "126498",
+   "query": "롯데월드 어드벤처"
+  },
+  {
+   "source": "TOURAPI",
    "content_id": "126537",
    "query": "북촌한옥마을"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "126665",
+   "query": "서귀포잠수함"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "126799",
+   "query": "민락수변공원"
   },
   {
    "source": "TOURAPI",
@@ -63,13 +113,53 @@
   },
   {
    "source": "TOURAPI",
+   "content_id": "127722",
+   "query": "안목해변"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "1277679",
+   "query": "부산타워"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "127951",
+   "query": "하슬라아트월드"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "127975",
+   "query": "경포호"
+  },
+  {
+   "source": "TOURAPI",
    "content_id": "128290",
    "query": "황령산 봉수대"
   },
   {
    "source": "TOURAPI",
+   "content_id": "128611",
+   "query": "서울숲"
+  },
+  {
+   "source": "TOURAPI",
    "content_id": "128627",
    "query": "이월드"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "128727",
+   "query": "사근진해변"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "129784",
+   "query": "오죽헌"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "130071",
+   "query": "서울시립미술관"
   },
   {
    "source": "TOURAPI",
@@ -83,13 +173,28 @@
   },
   {
    "source": "TOURAPI",
+   "content_id": "1874105",
+   "query": "응봉산 팔각정"
+  },
+  {
+   "source": "TOURAPI",
    "content_id": "1934593",
    "query": "국립현대미술관 서울관"
   },
   {
    "source": "TOURAPI",
+   "content_id": "1997221",
+   "query": "감천문화마을"
+  },
+  {
+   "source": "TOURAPI",
    "content_id": "229912",
    "query": "씨라이프 부산아쿠아리움"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "2350092",
+   "query": "더베이101"
   },
   {
    "source": "TOURAPI",
@@ -113,8 +218,18 @@
   },
   {
    "source": "TOURAPI",
+   "content_id": "2492348",
+   "query": "서울스카이 전망대"
+  },
+  {
+   "source": "TOURAPI",
    "content_id": "2507822",
    "query": "별마당도서관"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "2606204",
+   "query": "장림포구"
   },
   {
    "source": "TOURAPI",
@@ -123,8 +238,53 @@
   },
   {
    "source": "TOURAPI",
+   "content_id": "2650046",
+   "query": "익선동 한옥거리"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "2668973",
+   "query": "부산 엑스더스카이"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "2672393",
+   "query": "해운대 블루라인파크 청사포정거장"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "2684712",
+   "query": "흰여울문화마을"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "2714241",
+   "query": "아르떼뮤지엄 제주"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "2727468",
+   "query": "스카이라인루지 부산"
+  },
+  {
+   "source": "TOURAPI",
    "content_id": "2756657",
    "query": "아르떼수성랜드"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "2783306",
+   "query": "해리단길"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "2863615",
+   "query": "청굴물"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "2931892",
+   "query": "빛의 벙커 제주"
   },
   {
    "source": "TOURAPI",
@@ -138,8 +298,38 @@
   },
   {
    "source": "TOURAPI",
+   "content_id": "3410658",
+   "query": "아르떼뮤지엄 부산"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "4027167",
+   "query": "더현대 서울"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "650997",
+   "query": "명동난타극장"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "741109",
+   "query": "카멜리아힐"
+  },
+  {
+   "source": "TOURAPI",
    "content_id": "879234",
    "query": "새연교"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "970052",
+   "query": "세빛섬"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "970138",
+   "query": "반포한강공원"
   }
  ]
 }
