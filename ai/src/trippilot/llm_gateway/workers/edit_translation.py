@@ -12,6 +12,7 @@ context_refs 재조회(D31)는 봉투 프로토콜상 EditAgent가 이미 수행
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -20,6 +21,7 @@ from datetime import datetime
 # 줄바꿈이 남으면 우리 프롬프트 골격을 위조한다 (inline() docstring 에 실측).
 from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.gates.edit_translation import EditTranslationContext
+from trippilot.llm_gateway.gates.reminder_copy import _display_form
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.edit import TRANSLATABLE_OPS, EditOp
@@ -47,9 +49,60 @@ _OP_GUIDE: dict[EditOp, str] = {
 # 후보는 카테고리마다 풀 순위(영업시간 보유 → 인기) 앞에서 이만큼만 싣는다. 풀은 앵커
 # 반경 전량이라 큰 지역에선 1,300곳·74k자였고(2026-10-14 실측), 번역이 쓰는 건 그중
 # 한 곳이다. 상한 이하인 풀은 렌더가 그대로다(테스트 고정).
-# ponytail: 카테고리당 고정 상한 — 이름으로 찾는 요청("성심당 넣어줘")이 상한 밖 후보를
-# 가리키면 놓친다. 그런 실패가 보이면 발화의 이름과 맞는 후보를 상한과 별개로 싣는다.
 _CANDIDATES_PER_CATEGORY = 40
+# 상한 밖이라도 발화에 이름이 든 후보는 따로 싣는다 — 상한만 두던 동안 이름으로 찾는 요청("효창공원을 경리단길
+# 끝나고 넣어줘")은 그곳이 상한 밖이면 번역 불가였다. 풀 안에서만 고르니 INV-1 은 그대로(게이트·validate_command
+# 무변경)고, 그런 이름이 없으면 렌더는 바이트까지 같다(테스트 고정). 따로 싣는 수는 풀 순위 앞 이만큼 — 한 말이
+# 집는 곳은 한두 곳인데 같은 이름이 한 시군구에 여럿이라(공유본 최대 4곳 '돌하르방식당', 2026-10-30 측정) 그 묶음은
+# 담고, 줄당 ≈57자(위 74k자/1,300곳)라 5줄이 ≈290자다.
+# ponytail: 풀 밖(기본 풀 5,000곳 절단)은 여전히 못 싣는다 — 등록 장소 이름 조회(대화의
+# `PlaceSqlLookup.find_place` 와 같은 길)나 구간 풀(`EditTask.segment_pool`) 합류가 필요하고, 그때는
+# validate_command 의 풀 소속 검사(INV-1)도 합친 풀로 봐야 한다.
+_NAMED_EXTRA = 5
+# 이름 대조 — planb `request_verification.normalize`·편집 `insert_between._norm` 과 같은 꼴(하위 계층이라 agents 를
+# import 못 한다 L-1 — 고치면 셋 다). 이름은 표시형(괄호 부기·뒤 로마자를 뗀 것, 알림 게이트와 같은 규칙)으로 본다 —
+# 공유본 이름의 7.2%가 다르다("성불사(울릉)"·"자이소 JAISO"). 두 글자 이하는 흔한 말이 상호라(공유본 5.0%:
+# "카페"·"정원"·"하루"·"숲") 발화에 우연히 든다 — 세 글자("마라도"·"쇠소깍")부터 본다.
+_NAME_NOISE = re.compile(r"[\s\-·.,'\"()\[\]]+")
+_MIN_NAME_CHARS = 3
+
+
+def _norm(text: str) -> str:
+    return _NAME_NOISE.sub("", text).lower()
+
+
+def _spoken(text: str) -> str:
+    """낱말(공백·구두점으로 가른 것)마다 앞에 한 칸을 띄워 이은 꼴 — `' 이름'` 이 들어 있으면 낱말 처음에서 시작한다."""
+    return "".join(f" {w}" for w in _NAME_NOISE.split(text.lower()) if w)
+
+
+def _forms(name: str) -> tuple[str, ...]:
+    """이름이 발화에 나올 꼴 — 표시형을 이름의 띄어쓰기 그대로, 또는 다 붙여서. 두 글자 이하는 이름으로 보지 않는다."""
+    shown = _display_form(name)
+    return (_spoken(shown), " " + _norm(shown)) if len(_norm(shown)) >= _MIN_NAME_CHARS else ()
+
+
+def _named_beyond_cap(over: list[Poi], utterance: str, slot_names: list[str]) -> list[Poi]:
+    """상한 밖 후보 중 발화에 이름(표시형)을 댄 곳 — 풀 순위 앞 `_NAMED_EXTRA` 곳.
+
+    이름은 낱말 처음에서 시작해야 하고, 이름에 없는 띄어쓰기를 건너 맞추지 않는다 — 발화를 통째로 정규화하던 동안
+    이웃 낱말이 붙어 "내일 카페"가 '내일카페'와, "먹고 카페"가 '고카페'와 맞았다. 그래서 "효창 공원"도 '효창공원'과
+    안 맞는다: 꼴이 "내일 카페"와 같아 하나만 살릴 수 없고, 놓치면 상한 렌더 그대로지만 오탐은 번역을 그 후보로 끈다.
+    맞추기 전에 지금 슬롯 이름을 발화에서 지운다(긴 것부터): 슬롯을 가리킨 말("경의선숲길공원 빼줘")에 그 이름의
+    일부('경의선숲길')가 실리면 번역이 후보 쪽 id 를 집을 수 있다(그러면 게이트가 명령을 버린다). 지운 자리는 공백이 아닌
+    표지로 메운다 — 공백이면 "경복궁돌담길"이 '돌담길' 낱말 처음을 새로 만든다. 출처만 다른 쌍둥이(공백만 다른 꼴 포함 —
+    '여의도한강공원'·'여의도 한강공원', 공유본 200m 안 251쌍)는 표시형 정규화가 같으면 뺀다. 단 슬롯 이름으로 시작하는 더
+    긴 이름("경동시장 평양냉면")은 원래 발화에 들어 있으면 싣는다 — 지우기만 하면 뒤쪽 '평양냉면'(다른 가게)만 남는다."""
+    spoken = _spoken(utterance)
+    slot_forms = {f for name in slot_names for f in _forms(name)}
+    said = spoken
+    for f in sorted(slot_forms, key=len, reverse=True):
+        said = said.replace(f, " \0")
+    taken = {_norm(_display_form(name)) for name in slot_names}
+    return [p for p in over
+            if _norm(_display_form(p.name)) not in taken
+            and any(f in said or (f in spoken and any(f.startswith(s) for s in slot_forms)) for f in _forms(p.name))
+            ][:_NAMED_EXTRA]
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +140,7 @@ def build_edit_translation_vars(
         )
     in_use = set(inp.current_slots)
     kept: list[Poi] = []
+    over: list[Poi] = []
     per_category: dict = {}
     for p in pool.pois:  # 풀 순서 = 순위
         if p.poi_id in in_use:
@@ -95,6 +149,9 @@ def build_edit_translation_vars(
         if n < _CANDIDATES_PER_CATEGORY:
             per_category[p.category] = n + 1
             kept.append(p)
+        else:
+            over.append(p)
+    kept += _named_beyond_cap(over, inp.utterance, [by_id[pid].name for pid in inp.current_slots if pid in by_id])
     candidate_lines = [
         f"- {p.poi_id} | {p.category.value} | {inline(p.name)}"
         for p in sorted(kept, key=lambda p: str(p.poi_id))

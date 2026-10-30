@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -434,6 +435,206 @@ def test_candidates_capped_per_category_by_pool_rank() -> None:
     top = _CANDIDATES_PER_CATEGORY * 3 - 1
     assert f"CAFE-{top:03d}" in ids and f"CAFE-{top - _CANDIDATES_PER_CATEGORY + 1:03d}" in ids
     assert f"CAFE-{top - _CANDIDATES_PER_CATEGORY:03d}" not in ids and "CAFE-000" not in ids
+
+
+# ── 이름 지목 후보 — 상한 밖이어도 발화에 이름이 들면 싣는다 ──────────────
+
+# 한 카테고리 50곳(목록 순서 = 풀 순위) — 상한(40) 밖이 41~50번째. 이름 길이가 같아 서로의 부분 문자열이 아니다
+_PARKS = [f"근린공원{i:02d}" for i in range(50)]
+# 이름 지목이 없을 때의 렌더 — 순위 앞 40곳, poi_id 정렬(리터럴로 고정: 구현 식을 되쓰지 않는다)
+_CAPPED = [f"- N-{i:03d} | NATURE | 근린공원{i:02d}" for i in range(40)]
+
+
+def _ranked_pool(names: list[str]) -> CandidatePool:
+    pois = tuple(
+        Poi(poi_id=PoiId(f"N-{i:03d}"), name=name, category=PoiCategory.NATURE,
+            coord=GeoPoint(37.54, 126.96), open_hours=(), avg_cost=None, rating=None,
+            quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None)
+        for i, name in enumerate(names)
+    )
+    return CandidatePool(poi_ids=frozenset(p.poi_id for p in pois), pois=pois,
+                         generated_at=_NOW)
+
+
+def _candidate_lines(pool: CandidatePool, utterance: str, current: tuple[str, ...] = ()) -> list[str]:
+    return build_edit_translation_vars(
+        pool, EditTranslationInput(utterance=utterance, target_date="2026-10-22",
+                                   current_slots=tuple(PoiId(x) for x in current)),
+    )["candidates"].splitlines()
+
+
+def test_named_candidate_beyond_cap_is_rendered() -> None:
+    """이름으로 콕 집은 곳은 상한 밖이어도 실린다 — 상한만 두던 동안 "효창공원을 경리단길 끝나고"는 그곳이 상한
+    밖이면 번역 불가였다. 상한 밖 나머지(41~50번째)는 그대로 빠진다."""
+    from trippilot.llm_gateway.workers.edit_translation import _CANDIDATES_PER_CATEGORY
+
+    assert _CANDIDATES_PER_CATEGORY == 40  # 전제 — 45번째가 상한 밖이다
+    names = list(_PARKS)
+    names[44] = "효창공원"  # 45번째
+    lines = _candidate_lines(_ranked_pool(names), "효창공원을 경리단길 끝나고 넣어줘")
+    assert lines == [*_CAPPED, "- N-044 | NATURE | 효창공원"]
+
+
+def test_render_is_byte_identical_without_a_named_candidate_beyond_cap() -> None:
+    """발화에 상한 밖 이름이 없으면 렌더는 이름 대조 전과 바이트까지 같다 — 종류만 말한 말·상한 안 이름·풀 밖 이름·빈 발화."""
+    pool = _ranked_pool(_PARKS)
+    for utterance in ("카페 하나 추가해줘", "근린공원03 빼줘", "효창공원 넣어줘", ""):
+        rendered = build_edit_translation_vars(
+            pool, EditTranslationInput(utterance=utterance, target_date="d", current_slots=()))["candidates"]
+        assert rendered == "\n".join(_CAPPED), utterance
+
+
+def test_short_names_do_not_ride_along_by_accident() -> None:
+    """두 글자 이하 상호("하루"·"정원")는 흔한 말이라 발화에 우연히 든다 — 세 글자("쇠소깍")부터 이름으로 본다."""
+    names = list(_PARKS)
+    names[44], names[45], names[46] = "하루", "정원", "쇠소깍"
+    lines = _candidate_lines(_ranked_pool(names), "하루 마지막에 정원 같은 데 말고 쇠소깍 넣어줘")
+    assert lines == [*_CAPPED, "- N-046 | NATURE | 쇠소깍"]
+
+
+def test_named_candidate_matches_by_display_form() -> None:
+    """괄호 부기·뒤 로마자는 말에 안 붙는다 — "성불사(울릉)"·"자이소 JAISO" 를 "성불사"·"자이소"로 대도 실린다.
+    줄에는 원래 이름이 그대로 간다."""
+    names = list(_PARKS)
+    names[41], names[47] = "성불사(울릉)", "자이소 JAISO"
+    lines = _candidate_lines(_ranked_pool(names), "성불사 들렀다가 자이소 가는 걸로 넣어줘")
+    assert lines == [*_CAPPED, "- N-041 | NATURE | 성불사(울릉)", "- N-047 | NATURE | 자이소 JAISO"]
+
+
+@pytest.mark.parametrize(("utterance", "name"), [
+    ("내일 카페 하나 넣어줘", "내일카페"),  # 두 낱말이 붙어 이름이 된다
+    ("점심 일정 하나 미뤄줘", "하나미"),  # 낱말 + 다음 낱말 첫 글자
+    ("점심 먹고 카페 가는 걸로", "고카페"),  # 낱말 중간에서 시작
+    ("3일 차로 옮겨줘", "일차로"),
+])
+def test_neighbouring_words_do_not_glue_into_a_name(utterance: str, name: str) -> None:
+    """이웃 낱말이 붙어 우연히 이름이 되지 않는다 — 발화를 통째로 정규화하면 공백이 다 지워져 '내일 카페'가 상호
+    '내일카페'와 맞았다(번역에 '이름을 댄 곳'처럼 실려 오답을 부른다). 이름은 낱말 처음에서 시작해야 하고, 이름에 없는
+    띄어쓰기를 건너 맞추지 않는다 — 그래서 '효창 공원'도 '효창공원'과 안 맞는다: 꼴이 '내일 카페'와 같아 하나만 살릴 수
+    없고, 놓치면 이름 대조 전과 같지만(상한 렌더) 오탐은 명령을 망친다."""
+    names = list(_PARKS)
+    names[44] = name
+    assert _candidate_lines(_ranked_pool(names), utterance) == _CAPPED
+
+
+def test_name_spaces_may_be_dropped_and_punctuation_splits_words() -> None:
+    """이름의 띄어쓰기는 그대로 써도 붙여 써도 맞고("사라오름 전망대"·"사라오름전망대"), 쉼표로 붙인 목록은 낱말마다
+    본다("쇠소깍,정방폭포")."""
+    names = list(_PARKS)
+    names[41], names[43], names[45] = "사라오름 전망대", "쇠소깍", "정방폭포"
+    expected = [*_CAPPED, "- N-041 | NATURE | 사라오름 전망대", "- N-043 | NATURE | 쇠소깍",
+                "- N-045 | NATURE | 정방폭포"]
+    for utterance in ("사라오름 전망대 다음에 쇠소깍,정방폭포 넣어줘", "사라오름전망대 다음에 쇠소깍,정방폭포 넣어줘"):
+        assert _candidate_lines(_ranked_pool(names), utterance) == expected, utterance
+
+
+def test_named_current_slot_stays_out_of_candidates() -> None:
+    """현재 슬롯은 이름을 대도 후보에 다시 싣지 않는다 — 두 목록이 겹치지 않는다(이미 있는 곳을 또 넣는 제안 차단)."""
+    names = list(_PARKS)
+    names[44] = "효창공원"
+    lines = _candidate_lines(_ranked_pool(names), "효창공원을 맨 앞으로", current=("N-044",))
+    assert lines == _CAPPED
+
+
+def test_named_twin_of_a_current_slot_stays_out() -> None:
+    """현재 슬롯과 이름이 같은 다른 id(출처만 다른 쌍둥이)는 슬롯을 가리킨 말에 따라 실리지 않는다 — 같은 이름이 두
+    목록에 뜨면 번역이 후보 쪽 id 를 집을 수 있다. 같은 말의 다른 이름은 그대로 실린다."""
+    names = list(_PARKS)
+    names[44], names[46] = "도두봉", "효창공원"
+    slot = _poi("S-1", "도두봉")  # 풀 밖 현재 슬롯 — 이름은 호출측 정보에서 온다
+    rendered = build_edit_translation_vars(
+        _ranked_pool(names),
+        EditTranslationInput(utterance="도두봉 다음에 효창공원 넣어줘", target_date="2026-10-22",
+                             current_slots=(PoiId("S-1"),), slot_pois={PoiId("S-1"): slot}),
+    )["candidates"]
+    assert rendered.splitlines() == [*_CAPPED, "- N-046 | NATURE | 효창공원"]
+
+
+def test_candidate_inside_a_current_slot_name_stays_out() -> None:
+    """지금 슬롯 이름의 일부인 후보는 그 슬롯을 가리킨 말에 따라 실리지 않는다 — '경의선숲길공원 빼줘'에 '경의선숲길'이
+    실리면 번역이 REMOVE·MOVE 에 후보 id 를 골라 게이트가 명령을 버린다. 그 후보를 따로 대면 그대로 실린다."""
+    names = list(_PARKS)
+    names[44] = "경의선숲길"
+    slot = _poi("S-1", "경의선숲길공원")  # 풀 밖 현재 슬롯 — 이름은 호출측 정보에서 온다
+
+    def lines(utterance: str) -> list[str]:
+        return build_edit_translation_vars(
+            _ranked_pool(names),
+            EditTranslationInput(utterance=utterance, target_date="2026-10-22",
+                                 current_slots=(PoiId("S-1"),), slot_pois={PoiId("S-1"): slot}),
+        )["candidates"].splitlines()
+
+    assert lines("경의선숲길공원 빼줘") == _CAPPED
+    assert lines("경의선숲길공원 다음에 경의선숲길 넣어줘") == [*_CAPPED, "- N-044 | NATURE | 경의선숲길"]
+
+
+def _named_lines(names: list[str], utterance: str, slot_name: str) -> list[str]:
+    slot = _poi("S-1", slot_name)  # 풀 밖 현재 슬롯 — 이름은 호출측 정보에서 온다
+    return build_edit_translation_vars(
+        _ranked_pool(names),
+        EditTranslationInput(utterance=utterance, target_date="2026-10-22",
+                             current_slots=(PoiId("S-1"),), slot_pois={PoiId("S-1"): slot}),
+    )["candidates"].splitlines()
+
+
+def test_spacing_twin_of_a_current_slot_stays_out() -> None:
+    """공백만 다른 쌍둥이('여의도한강공원' 슬롯 · '여의도 한강공원' 후보)도 슬롯을 가리킨 말에 실리지 않는다 — 슬롯 이름 지우기만으로는
+    공백 꼴이 남아 실렸다(검증자 재현, 공유본 200m 안 251쌍)."""
+    names = list(_PARKS)
+    names[44] = "여의도 한강공원"
+    assert _named_lines(names, "여의도 한강공원 빼줘", "여의도한강공원") == _CAPPED
+
+
+def test_longer_name_starting_with_a_slot_name_is_kept() -> None:
+    """슬롯 이름으로 시작하는 더 긴 이름("경동시장 평양냉면")은 싣는다 — 슬롯 이름을 지우기만 하면 뒤쪽 '평양냉면'(다른 가게)만 남았다."""
+    names = list(_PARKS)
+    names[44], names[46] = "경동시장 평양냉면", "평양냉면"
+    lines = _named_lines(names, "경동시장 평양냉면 넣어줘", "경동시장")
+    assert "- N-044 | NATURE | 경동시장 평양냉면" in lines
+
+
+def test_erased_slot_name_does_not_open_a_new_word_start() -> None:
+    """지운 슬롯 이름 자리는 공백이 아니다 — "경복궁돌담길 따라"에서 '경복궁'을 공백으로 지우면 '돌담길'이 낱말 처음이 돼 실렸다."""
+    names = list(_PARKS)
+    names[44] = "돌담길"
+    assert _named_lines(names, "경복궁돌담길 따라 걷는 거 넣어줘", "경복궁") == _CAPPED
+
+
+def test_named_extras_are_capped_in_pool_rank_order() -> None:
+    """따로 싣는 수에도 상한 — 같은 이름이 여럿이어도 프롬프트가 불지 않는다. 풀 순위 앞부터."""
+    from trippilot.llm_gateway.workers.edit_translation import _NAMED_EXTRA
+
+    assert _NAMED_EXTRA == 5
+    names = [*_PARKS[:40], *["중앙공원"] * 10]
+    lines = _candidate_lines(_ranked_pool(names), "중앙공원 넣어줘")
+    assert lines == [*_CAPPED, *(f"- N-{i:03d} | NATURE | 중앙공원" for i in range(40, 45))]
+
+
+def test_named_extra_takes_its_place_in_the_poi_id_order() -> None:
+    """따로 실린 곳도 렌더 전체의 poi_id 정렬에 든다 — 상한 목록 뒤에 따로 붙이지 않는다. 그 id 가 상한 안 id 들보다
+    앞이면 맨 앞에 온다."""
+    names = list(_PARKS)
+    names[44] = "효창공원"  # 45번째 — 상한 밖
+    pois = tuple(replace(p, poi_id=PoiId("A-044")) if p.name == "효창공원" else p
+                 for p in _ranked_pool(names).pois)
+    pool = CandidatePool(poi_ids=frozenset(p.poi_id for p in pois), pois=pois, generated_at=_NOW)
+    assert _candidate_lines(pool, "효창공원 넣어줘") == ["- A-044 | NATURE | 효창공원", *_CAPPED]
+
+
+# 상한 경계 쪽으로 치우쳐 뽑는다 — 상한 밖 이름이 `_NAMED_EXTRA` 를 넘는 말이 자주 나와야 그 상한을 시험한다
+@given(st.lists(st.integers(35, 49), max_size=14), st.sampled_from(("", " 넣어줘", "을 맨 앞으로", " 빼고")))
+def test_pbt_named_extras_are_pool_members_named_in_the_utterance(picks: list[int], tail: str) -> None:
+    """실린 후보는 늘 풀 안(INV-1)이고 상한 렌더는 그대로 남는다. 더해지는 것은 발화에 이름이 든 상한 밖 곳뿐 —
+    풀 순위 앞 `_NAMED_EXTRA` 곳까지."""
+    from trippilot.llm_gateway.workers.edit_translation import _NAMED_EXTRA
+
+    pool = _ranked_pool(_PARKS)
+    lines = _candidate_lines(pool, " ".join(_PARKS[i] for i in picks) + tail)
+    ids = [line[2:].split(" | ")[0] for line in lines]
+    assert all(pool.contains(PoiId(x)) for x in ids)
+    assert lines[:40] == _CAPPED
+    beyond = sorted({i for i in picks if i >= 40})
+    assert ids[40:] == [f"N-{i:03d}" for i in beyond[:_NAMED_EXTRA]]
 
 
 def test_build_vars_renders_slot_outside_pool_from_caller_info() -> None:
