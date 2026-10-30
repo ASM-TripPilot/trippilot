@@ -2589,3 +2589,64 @@ def test_region_recommendation_follows_the_said_wish_over_nothing_and_asks_when_
     assert by_wish.status is FactStatus.OK and by_wish.detail["basis"] == "말한 바람"
     assert "역사 여행" not in str(by_wish.to_prompt_dict())  # 발화 원문은 사실 칸에 싣지 않는다(INV-2)
 
+
+
+
+@pytest.mark.parametrize(("theme", "names"), [
+    ("치맥 대축제", {"치맥"}), ("대박람회", set()), ("신년 대공연", set()), ("상시전시", set()), ("기획 전시", set()),
+    ("젓갈 축제", {"젓갈"}), ("행운 축제", {"행운"}), ("풋볼 축제", {"풋볼"}),
+    ("새로운 축제", set()), ("가볼 축제", set()), ("놀러갈 축제", set()), ("유명한 축제", set()), ("즐거운 공연", set()),
+    # #1713 반박 리뷰 — 홀로 쓴 '볼'·흔한 관형형은 꾸밈, 꾸밈 앞의 고유 이름은 이름, '상설'은 이름
+    ("볼 공연", set()), ("아이랑 볼 공연", set()), ("놀라운 공연", set()), ("같이갈 축제", set()), ("함께볼 전시", set()),
+    ("아이유 단독 콘서트", {"아이유"}), ("상설 전시", {"상설"}), ("강경젓갈 축제", {"강경젓갈"}), ("핸드볼 축제", {"핸드볼"}),
+])
+def test_event_names_skip_size_and_form_prefixes_and_keep_nouns_ending_like_modifiers(theme: str, names: set[str]) -> None:
+    """'대축제'의 '대'가 한 글자 이름이 돼 행사가 있어도 "못 찾음"이었고, 끝 글자만 본 관형형 거름이 젓갈·행운을 버려 아무 축제나
+    나열했다(#1486 리뷰 잔여)."""
+    assert dh._event_names(theme, "서울")[0] == frozenset(names)
+
+
+@pytest.mark.parametrize("theme", ["가을철 대전시 축제", "충청권 대전시 행사"])
+def test_daejeon_city_is_not_the_form_prefix_and_an_exhibition(theme: str) -> None:
+    """'대전시'를 꾸밈 '대' + '전시'로 읽어 앞말('가을철')이 이름이 됐다 — 대전 행사에 거짓 "못 찾음"(#1713 재리뷰)."""
+    assert dh._event_names(theme, "대전")[0] == frozenset()
+
+
+@pytest.mark.parametrize(("utterance", "first", "last"), [
+    ("오늘 밤 말고 다음 주 공연 있어?", date(2026, 10, 26), date(2026, 11, 1)),  # 뺀 기간은 묻는 기간이 아니다
+    ("오늘 서울 도착했는데 이번 주에 하는 축제", date(2026, 10, 22), date(2026, 10, 25)),  # 앞 마디의 '오늘'은 사정이다
+    ("오늘이나 내일 축제", date(2026, 10, 22), date(2026, 10, 23)),  # 한 마디에 둘이면 둘 다
+    ("제주 말고 부산 축제 있어?", date(2026, 10, 22), date(2026, 11, 20)),  # 기간이 없으면 30일
+    # #1713 반박 리뷰 — '말고'는 대개 지역·종류를 뺀다: 뒤에 기간이 없으면 발화 전체의 기간
+    ("이번 주말에 축제 말고 공연 있어?", date(2026, 10, 24), date(2026, 10, 25)),
+    ("크리스마스에 뮤지컬 말고 콘서트", date(2026, 12, 24), date(2026, 12, 25)),
+    ("이번 주말에 부산 가는데 해운대 말고 광안리 쪽 축제 있어?", date(2026, 10, 24), date(2026, 10, 25)),
+    # #1713 재리뷰 — 묻는 마디(마지막)가 먼저: 행사 낱말은 앞 마디(지난 일)에만 있고 묻는 날은 뒤 마디에 있다
+    ("오늘 불꽃축제 봤는데 내일도 해?", date(2026, 10, 23), date(2026, 10, 23)),
+    ("오늘 전시 보고 왔는데 주말에도 해?", date(2026, 10, 24), date(2026, 10, 25)),
+    ("이번 주에 공연 봤는데 다음 주에도 해?", date(2026, 10, 26), date(2026, 11, 1)),
+    ("이번 달에 전시 봤는데 다음 달에도 해?", date(2026, 11, 1), date(2026, 11, 30)),
+    ("이번 주말에 축제 가려는데 다음 주말에도 해?", date(2026, 10, 31), date(2026, 11, 1)),
+    ("내일 콘서트 가는데 모레도 해?", date(2026, 10, 24), date(2026, 10, 24)),
+    ("오늘 공연은 매진이지만 내일도 해?", date(2026, 10, 23), date(2026, 10, 23)),
+    ("오늘 팝업 다녀왔거든 주말에도 열어?", date(2026, 10, 24), date(2026, 10, 25)),
+    # 같은 재리뷰 — 날짜 말이 명절·계절 말을 이긴다(꾸밈으로 쓴 '가을 축제'·'크리스마스 분위기'가 방문 날을 덮었다)
+    ("다음 주에 경주 가는데 가을 축제 있어?", date(2026, 10, 26), date(2026, 11, 1)),
+    ("내일 제주 가는데 가을 억새 축제 해?", date(2026, 10, 23), date(2026, 10, 23)),
+    ("12월 5일에 서울 가는데 크리스마스 공연 있어?", date(2026, 12, 5), date(2026, 12, 5)),
+    ("주말에 서울 가는데 크리스마스 마켓 같은 행사 있어?", date(2026, 10, 24), date(2026, 10, 25)),
+    ("이번 주말에 축제 말고 크리스마스 분위기 나는 공연 있어?", date(2026, 10, 24), date(2026, 10, 25)),
+    ("이번 주말 말고 크리스마스 공연 있어?", date(2026, 12, 24), date(2026, 12, 25)),  # '말고'로 뺀 날은 쓰지 않는다
+])
+def test_event_days_read_the_asked_clause_not_what_was_excluded(utterance: str, first: date, last: date) -> None:
+    days = dh._event_days("축제", utterance, date(2026, 10, 22))
+    assert (days[0], days[-1]) == (first, last)
+
+
+def test_schedule_anchor_coordinate_is_looked_up_once_for_events_and_places() -> None:
+    """일정 근처 앵커는 좌표를 POI_INFO 로 찾는다 — 행사·탐색 두 작업이 따로 찾던 것을 한 번으로(#1486 리뷰 잔여)."""
+    poi_info = _PoiInfo()
+    ports = HandlerPorts(poi_info=poi_info, pool_builder=_PoolBuilder(_X_POOL), events=_Events(_SEOUL_EVENTS, ProviderStatus.OK))
+    _run(_EXPLORE, replace(_ctx(_SNAP, {"theme": "축제"}, ports=ports), utterance="근처에 축제 있어?"))
+    anchor_lookups = [c for c in poi_info.calls if len(c["poi_ids"]) == 1]
+    assert len(anchor_lookups) == 1, poi_info.calls

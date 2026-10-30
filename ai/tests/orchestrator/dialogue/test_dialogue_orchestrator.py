@@ -84,6 +84,7 @@ from trippilot.orchestrator.dialogue_interpreter import (
 from trippilot.orchestrator.dialogue_memory import MEMORY_TTL_DAYS, DialogueMemory, expires_at_for
 from trippilot.orchestrator.dialogue_orchestrator import (
     ACK_TEXT,
+    LAUGH_TEXT,
     RETRY_TEXT,
     CAPABILITIES_LITERAL,
     CAPABILITIES_TEXT,
@@ -746,7 +747,23 @@ def test_greeting_with_thanks_is_answered_as_thanks() -> None:
     assert out.outcome == "ANSWER" and out.answer.text == THANKS_TEXT
 
 
-@pytest.mark.parametrize("utterance", ["응?", "고마워 근데 내일 날씨는", "주식 어때", "ㅋㅋ", "안녕 내일 날씨는"])
+@pytest.mark.parametrize(("utterance", "llm_calls"), [
+    ("ㅋㅋ", 1), ("ㅋㅋㅋㅋ", 1), ("ㅎㅎ", 1), ("...", 1),  # 분류가 먼저 돈다(맞장구와 같다)
+    ("👍", 0), ("😂😂", 0), ("👍🏻", 0),  # 정리하면 빈 말 — 분류할 낱말이 없다
+    ("❤️", 1),  # 정리가 변이 선택자(U+FE0F)를 남겨 분류는 돈다
+])
+def test_laughter_or_emoji_alone_gets_a_short_reply_instead_of_the_scope_card(utterance: str, llm_calls: int) -> None:
+    """웃음·이모지만 보낸 말은 낱말이 하나도 안 남아 "도와드리기 어려워요"로 끝났다(BR-AO-26 개정 2026-10-30) — 계획 LLM 없이 한마디."""
+    out = _build(_canned(None)).orch.turn(_input(utterance, turn_index=3))
+    assert out.outcome == "ANSWER" and out.frames == () and out.answer.text == LAUGH_TEXT and out.llm_calls == llm_calls
+    assert [a.type for a in out.answer.next_actions] == ["OPEN_ITINERARY"]
+
+
+def test_emoji_beside_thanks_is_noise() -> None:
+    assert _build(_canned(None)).orch.turn(_input("👍 고마워")).answer.text == THANKS_TEXT
+
+
+@pytest.mark.parametrize("utterance", ["응?", "고마워 근데 내일 날씨는", "주식 어때", "ㅋㅋ?", "😂 내일 날씨는", "안녕 내일 날씨는"])
 def test_utterance_that_is_not_wholly_a_closer_stays_out_of_scope(utterance: str) -> None:
     out = _build(_canned(None)).orch.turn(_input(utterance))
     assert out.outcome == "OUT_OF_SCOPE" and out.answer is None
@@ -1919,6 +1936,17 @@ def test_last_entry_next_to_the_place_name_is_that_places_time() -> None:
     assert dlg._misplaced_time("경복궁 입장 마감은 16:00이에요.", pairs)  # 없는 시각은 여전히 막는다
 
 
+@pytest.mark.parametrize("text", ["점심·저녁 11:30~21:00 영업하는 해녀의집이에요.", "점심, 저녁 11:30~21:00 모두 해녀의집에서 드실 수 있어요.",
+                                  "점심/저녁 11:30~21:00 해녀의집에서 식사할 수 있어요."])
+def test_meal_list_hours_are_read_from_the_whole_sentence_before_cutting_segments(text: str) -> None:
+    """짝·순서 검사는 쉼표·가운뎃점으로 구획을 먼저 잘라 시각을 읽었다 — 잘린 "저녁 11:30"은 나열 부호를 잃고 23:30 이 돼 맞는 답이
+    템플릿으로 떨어졌다(#1713 재리뷰). 시각은 원문 전체로 읽고 구획은 이름 귀속에만 쓴다."""
+    from trippilot.orchestrator import dialogue_orchestrator as dlg
+
+    assert not dlg._misplaced_time(text, dlg._hours_pairs({"places": [{"name": "해녀의집", "hours_label": "11:30~21:00"}]}))
+    assert dlg._out_of_order("점심·저녁 11:30 다음에 09:00 이에요.", (("우도", "09:00"), ("해녀의집", "11:30")))  # 같은 까닭으로 놓쳤다
+
+
 def test_a_deterministic_answer_does_not_repeat_the_last_assistant_line_word_for_word() -> None:
     """같은 넘기기·감사 문장이 연달아 나가면 같은 뜻의 다른 말로 — 버튼은 그대로(2026-10-22 "계속 같은 말만")."""
     from trippilot.llm_gateway.workers.dialogue_answer import _ANSWER_TEXT, unrepeated
@@ -1941,3 +1969,33 @@ def test_a_crash_before_any_llm_call_stays_out_of_scope(monkeypatch) -> None:
     out = b.orch.turn(_input())
     assert out.outcome == "OUT_OF_SCOPE" and out.reason.startswith("orchestrator_error: RuntimeError")
     assert ("orchestrator", "dialogue_orchestrator", "out_of_scope") in _modes(b.trace)
+
+
+@pytest.mark.parametrize("emoji", ["👍", "🙏", "💯", "👍🙏", "✔️", "🙆\u200d♀️", "🙆🏻\u200d♂️", "⭕️"])
+def test_acceptance_emoji_after_a_proposal_is_read_as_yes(emoji: str) -> None:
+    """제안 뒤의 수락 이모지는 수락이다 — 웃음 한마디로 닫으면 수락이 묻힌다(#1713 반박 리뷰). "응"으로 분류를 탄다. 키보드가 보내는
+    완전형(변이 선택자·ZWJ·피부색)과 목록 밖 수락 이모지(🙏·💯)가 한마디로 닫혔다(#1713 재리뷰)."""
+    b = _build(_canned(Intent.GET_WEATHER))
+    turns = (RecentTurn("ASSISTANT", "다음은 15:00 카페 모카예요! 가기 전에 날씨도 확인해 드릴까요?"),)
+    out = b.orch.turn(replace(_input(emoji), recent_turns=turns))
+    assert out.answer is None or out.answer.text != LAUGH_TEXT
+    (intent,) = [r for r in b.llm.requests if r.prompt_ref.feature == "DIALOGUE_INTENT"]
+    assert intent.prompt.split("[사용자 발화]", 1)[1].split()[0] == "응"  # 발화 줄 — 프롬프트 예시의 "응"은 세지 않는다
+
+
+@pytest.mark.parametrize("emoji", ["♀", "😂", "😊"])
+def test_a_reaction_emoji_after_a_proposal_gets_the_short_reply(emoji: str) -> None:
+    """성별 기호 홀로·웃음·반응 이모지는 수락이 아니다 — 한마디로 닫는다(분류 0회)."""
+    b = _build(_canned(Intent.GET_WEATHER))
+    turns = (RecentTurn("ASSISTANT", "가기 전에 날씨도 확인해 드릴까요?"),)
+    out = b.orch.turn(replace(_input(emoji), recent_turns=turns))
+    assert out.answer.text == LAUGH_TEXT and out.llm_calls == 0
+
+
+def test_acceptance_emoji_is_not_the_answer_to_a_pending_question() -> None:
+    """되묻기는 값(장소·날·일정)을 묻는다 — 거기에 온 "👍"를 "응"으로 바꾸면 그대로 그 값이 됐다(destination "응", #1713 재리뷰).
+    수락은 보류 없는 제안 물음 뒤에만 — 되묻기 뒤면 종전대로 이모지 한마디."""
+    b = _build(_canned(Intent.GET_WEATHER))
+    turns = (RecentTurn("ASSISTANT", "어디까지 거리를 알려 드릴까요?"),)
+    out = b.orch.turn(_input("👍", context=_asked_distance(), recent_turns=turns))
+    assert out.frames == () and out.answer.text == LAUGH_TEXT and out.llm_calls == 0
