@@ -221,7 +221,6 @@
     {"query": "스타벅스 광장마켓점", "name": "스타벅스 광장마켓", "sido": "서울", "kind": "CAFE", "evidence": "starbucks_gwangjang"},
     {"query": "스타벅스 경동1960점", "name": "스타벅스 경동1960", "sido": "서울", "kind": "CAFE", "evidence": "starbucks_gyeongdong"},
     {"query": "스타벅스 대구종로고택점", "name": "스타벅스 대구종로고택", "sido": "대구", "kind": "CAFE", "evidence": "starbucks_heritage5"},
-    {"query": "스타벅스 문경새재점", "name": "스타벅스 문경새재", "sido": "경북", "kind": "CAFE", "evidence": "starbucks_heritage5"},
     {"query": "스타벅스 환구단점", "name": "스타벅스 환구단", "sido": "서울", "kind": "CAFE", "evidence": "starbucks_heritage5"},
     {"query": "스타벅스 더북한강R점", "name": "스타벅스 더북한강", "sido": "경기", "kind": "CAFE", "evidence": "starbucks_heritage5"},
     {"query": "스타벅스 더양평DTR점", "name": "스타벅스 더양평", "sido": "경기", "kind": "CAFE", "evidence": "starbucks_yangpyeong"},
