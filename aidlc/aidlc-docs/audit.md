@@ -1903,3 +1903,16 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — situation-awareness NFR Requirements 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
+
+## Functional Design·NFR Requirements 사후 개정 — situation-awareness 정본 기록 정리 (BLM §9·§10 · BR §11 · NFR §7)
+**Timestamp**: 2026-10-30T12:30:00+09:00 (작업 시점)
+**User Input**: (사용자 원문) "지적받은것중에 처리 안한거 있는지 다 확인해봐바!! 모든 세션들에게 다 뒤져보라고해!"
+**AI Response**: 정본 전수 대조(origin/develop 1f5600380). 블록 4개를 덧붙였다(원문·기존 블록 삭제·수정 0줄).
+- `functional-design/business-logic-model.md` §9: 코드로 닫혔는데 해소 줄이 없던 G-SA-1·2·3·4·6·9·10·13·14
+- `functional-design/business-logic-model.md` §10: O-SA-2~15 확정 기록 · 남은 O-SA-13·14
+- `functional-design/business-rules.md` §11: 같은 기록을 가리키는 줄
+- `nfr-requirements/nfr-requirements.md` §7: 켜는 순서 판독값(코드 밖 사실)
+코드 변경 없음(TRIP-1660).
+**Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(기록 정리), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
