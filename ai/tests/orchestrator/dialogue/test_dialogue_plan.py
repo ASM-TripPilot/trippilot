@@ -305,6 +305,19 @@ def test_plan_path_follow_up_still_skips_shown_places_when_split_into_two_tools(
     assert out.answer.payload is None  # 흰여울 카페는 앞 답에 적힌 곳 — 다시 내지 않는다
 
 
+def test_plan_path_follow_up_leaves_out_cards_carried_in_the_context() -> None:
+    """계획 경로의 "더 알려줘"도 맥락에 실린 카드 id 로 뺀다 — 앞 답 문장이 이름을 적지 않았어도(2026-10-30)."""
+    plan = _plan_json(("EXPLORE_PLACES", {"region": "홍대", "category": "FOOD"}), ("EXPLORE_PLACES", {"region": "이태원", "category": "CAFE"}))
+    turns = (to.RecentTurn("USER", "홍대 맛집이랑 이태원 카페 알려줘"), to.RecentTurn("ASSISTANT", "두 동네에서 골라 봤어요."))
+
+    def more(context: to.DialogueContext):
+        b = _plan_build(plan, ports=_PLAN_PORTS)
+        return b.orch.turn(to._input("홍대 맛집이랑 이태원 카페 더 알려줘", snapshot=to._NO_TRIP, recent_turns=turns, context=context))
+
+    ids = tuple(c["poiId"] for c in more(to.DialogueContext()).answer.payload["candidates"])
+    assert ids and more(to.DialogueContext(shown=ids)).answer.payload is None
+
+
 def _plan_events(b) -> list[FallbackEvent]:
     return [e for e in to._fallbacks(b.trace) if e.from_mode == "llm_dialogue_plan"]
 

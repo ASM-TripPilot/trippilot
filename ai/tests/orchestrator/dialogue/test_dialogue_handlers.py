@@ -1747,10 +1747,11 @@ _SHOWN = "인기 식당, 인기 카페가 있어요. 궁금한 곳을 눌러서 
 
 
 def _follow(utterance: str, earlier: tuple, arguments: dict | None = None, *, rows=None,
-            snapshot: TurnSnapshot = _SNAP, pool: CandidatePool = _X_POOL) -> tuple[Facts, _PlaceSql, _PoolBuilder]:
+            snapshot: TurnSnapshot = _SNAP, pool: CandidatePool = _X_POOL,
+            shown: frozenset[str] = frozenset()) -> tuple[Facts, _PlaceSql, _PoolBuilder]:
     port, builder = _PlaceSql(rows), _PoolBuilder(pool)
     ctx = replace(_ctx(snapshot, arguments, ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=builder, place_sql=port)),
-                  utterance=utterance, earlier=earlier)
+                  utterance=utterance, earlier=earlier, shown=shown)
     return _run(_EXPLORE, ctx), port, builder
 
 
@@ -1781,6 +1782,37 @@ def test_explore_follow_up_skips_places_named_by_the_previous_fallback_sentence(
     earlier = (("USER", "부산 해운대 가볼 만한 곳"), ("ASSISTANT", first.template_text))
     facts, _, _ = _follow("더 알려줘", earlier)
     assert _names_of(first) and not set(_names_of(first)) & set(_names_of(facts))
+
+
+def _ids_of(facts: Facts) -> set[str]:
+    return {c["poiId"] for c in (facts.payload or {}).get("candidates", ())}
+
+
+def test_explore_follow_up_leaves_out_places_shown_only_as_cards() -> None:
+    # 도우미 문장이 이름 없이 닫힌 턴("골라 봤어요")의 카드는 이름 빼기로 몰라 "더 알려줘"에 같은 곳이 다시 나왔다 — 카드 id 는
+    # 맥락(`DialogueContext.shown`)이 싣는다(2026-10-30)
+    first, _ = _explore({"region": "부산 해운대", "theme": "가볼 만한"})
+    earlier = (("USER", "부산 해운대 가볼 만한 곳"), ("ASSISTANT", "가 볼 만한 곳을 골라 봤어요."))
+    again, _, _ = _follow("더 알려줘", earlier)
+    assert _ids_of(first) & _ids_of(again)  # 이름만으로는 다시 나온다
+    facts, _, _ = _follow("더 알려줘", earlier, shown=frozenset(_ids_of(first)))
+    assert _ids_of(facts) and not _ids_of(first) & _ids_of(facts)
+
+
+def test_explore_sql_follow_up_leaves_out_rows_shown_only_as_cards() -> None:
+    rows = [_row("망원한강공원", sigungu="마포구"), _row("망리단길", sigungu="마포구")]
+    earlier = (("USER", "망원동 산책할 곳"), ("ASSISTANT", "산책할 곳을 골라 봤어요."))
+    facts, port, _ = _follow("더 알려줘", earlier, {"region": "망원동"}, rows=rows, snapshot=_EMPTY_SNAP,
+                             shown=frozenset({"s-망원한강공원"}))
+    assert port.calls and _names_of(facts) == ["망리단길"]
+
+
+def test_a_new_explore_request_does_not_leave_out_cards_from_before() -> None:
+    # 보인 곳 빼기는 이어 묻기 사슬 안에서만 — 새로 물으면 같은 곳이 다시 나와도 된다(이름 빼기와 같은 범위)
+    first, _ = _explore({"region": "부산 해운대", "theme": "가볼 만한"})
+    facts, _, _ = _follow("부산 해운대 가볼 만한 곳", (), {"region": "부산 해운대", "theme": "가볼 만한"}, snapshot=_EMPTY_SNAP,
+                          shown=frozenset(_ids_of(first)))
+    assert _ids_of(facts) == _ids_of(first)
 
 
 def test_explore_follow_up_keeps_looking_for_night_places_when_the_request_asked_for_a_bar() -> None:

@@ -78,6 +78,7 @@ from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
 from trippilot.orchestrator.dialogue_handlers import (
     HANDLERS,
     AnswerKind,
+    asks_more,
     FactStatus,
     Facts,
     HandlerPorts,
@@ -94,6 +95,7 @@ from trippilot.orchestrator.dialogue_handlers import (
 )
 from trippilot.orchestrator.edit_day_areas import DayAreaTurn, check_day_areas
 from trippilot.orchestrator.dialogue_interpreter import (
+    SHOWN_MAX,
     Clarify,
     DialogueContext,
     Frame,
@@ -420,6 +422,21 @@ def _day_area_outcome(turn: DayAreaTurn, match: IntentMatch | None, cleared: Dia
     frame = Frame(Intent.EDIT_SCHEDULE, {}, ("day_areas",), confidence, MatchRoute.LLM_DIRECT.value)
     return TurnOutcome("ARGUMENT_CLARIFY", (frame,), Clarify(0, "day_areas", turn.question or "", turn.options or None),
                        None, cleared, 0, reason)
+
+
+def _remember_shown(outcome: TurnOutcome, inp: TurnInput) -> TurnOutcome:
+    """이번 답의 카드(후보 payload·장소 보기 버튼)에 보인 poi_id 를 맥락에 싣는다 — 이어 묻기면 사슬 것에 잇고, 새 말이면 새로 시작한다
+    (사슬 밖에서 보인 곳은 빼지 않는다 — 이름 빼기와 같은 범위, BR-AO-27 개정 2026-10-30)."""
+    answer = outcome.answer
+    new: list[str] = []
+    if answer is not None:
+        for c in (answer.payload or {}).get("candidates") or ():
+            if isinstance(c, Mapping) and c.get("poiId"):
+                new.append(str(c["poiId"]))
+        new += [str(a.params["poiId"]) for a in answer.next_actions if a.type == "OPEN_PLACE" and a.params.get("poiId")]
+    kept = inp.context.shown if asks_more(inp.utterance) else ()
+    shown = tuple(dict.fromkeys((*kept, *new)))[-SHOWN_MAX:]
+    return outcome if shown == outcome.context.shown else replace(outcome, context=replace(outcome.context, shown=shown))
 
 
 def _not_repeating(outcome: TurnOutcome, inp: TurnInput) -> TurnOutcome:
@@ -943,7 +960,7 @@ class DialogueOrchestrator:
                 raise
             except Exception as e:  # noqa: BLE001 — DL-5: 버그도 경계 밖으로 내지 않는다(BR §5 미결 #14 B안)
                 outcome = self._crashed(inp, e, classified=counter[0] > 0)  # LLM 을 한 번이라도 불렀으면 분류는 지났다
-            outcome = _not_repeating(outcome, windowed)
+            outcome = _remember_shown(_not_repeating(outcome, windowed), inp)
             if writable:  # 기억을 못 읽은 턴은 요약을 내지 않는다 — 없는 줄 알고 빈 기억에서 다시 쓰면 이전 줄을 잃는다(다음 차례에)
                 said = (outcome.answer.text if outcome.answer is not None
                         else outcome.clarify.question if outcome.clarify is not None else None)
@@ -1049,7 +1066,7 @@ class DialogueOrchestrator:
             snapshot=inp.snapshot, arguments=_without_deictic_region(frame.arguments), now=inp.now, tz=self._tz,
             trace_id=inp.trace_id,
             remaining_ms=lambda: self._remaining(inp), ports=self._ports, utterance=inp.utterance,
-            earlier=tuple((turn.role, turn.text) for turn in inp.recent_turns),
+            earlier=tuple((turn.role, turn.text) for turn in inp.recent_turns), shown=frozenset(inp.context.shown),
         )
         if handler.handoff_frame:  # EDIT_SCHEDULE — 1단계 FRAME (BR-AO-17): 인자만 정리하고 BE 제안 경로로
             tidy = replace(frame, arguments=edit_arguments(ctx))
@@ -1363,7 +1380,7 @@ class DialogueOrchestrator:
         ctxs = [TurnContext(snapshot=inp.snapshot, arguments=_without_deictic_region(_grounded_args(call.slots, said)),
                             now=inp.now, tz=self._tz,
                             trace_id=inp.trace_id, remaining_ms=lambda: self._remaining(inp), ports=self._ports,
-                            earlier=earlier, heard=text, solo=len(calls) == 1)
+                            earlier=earlier, heard=text, solo=len(calls) == 1, shown=frozenset(inp.context.shown))
                 for call in calls]
         n = len(ctxs)
         results = self._fanout(inp, step_tasks([h.plan(ctx) for h, ctx in zip(handlers, ctxs, strict=True)]))

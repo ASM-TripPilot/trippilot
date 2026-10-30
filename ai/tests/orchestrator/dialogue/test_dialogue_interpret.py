@@ -14,6 +14,7 @@ import json
 import math
 import threading
 import time
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -39,6 +40,7 @@ from trippilot.orchestrator.dialogue_interpreter import (
     CountingLlm,
     DialogueContext,
     DialogueInterpreter,
+    SHOWN_MAX,
     PendingFrame,
     TripView,
 )
@@ -149,6 +151,16 @@ def test_asked_field_outside_the_table_skips_extractors() -> None:
 def test_context_round_trips() -> None:
     ctx = _asked_distance()
     assert DialogueContext.from_dict(json.loads(json.dumps(ctx.to_dict()))) == ctx
+    shown = replace(ctx, shown=("p-1", "p-2"))
+    assert DialogueContext.from_dict(json.loads(json.dumps(shown.to_dict()))) == shown
+    assert "shown" not in ctx.to_dict()  # 보인 곳이 없으면 종전 직렬형 그대로(백엔드 저장분과 같은 모양)
+
+
+def test_shown_ids_keep_only_the_latest_strings() -> None:
+    raw = [*(f"p-{i}" for i in range(SHOWN_MAX + 5)), 3, None, "", "x" * 100]
+    shown = DialogueContext.from_dict({"turn_index": 1, "shown": raw}).shown
+    assert len(shown) == SHOWN_MAX and shown[-1] == "x" * 64 and "p-0" not in shown
+    assert DialogueContext.from_dict({"pending": {"intent": "NOPE"}, "shown": ["p-1"]}).shown == ("p-1",)  # 보류가 깨져도 남는다
 
 
 def test_broken_context_is_dropped_not_fatal() -> None:
@@ -187,10 +199,11 @@ _json = st.recursive(
 @given(pending=_json | st.fixed_dictionaries({}, optional={
            **{k: _json for k in _PENDING_OK},
            "intent": st.sampled_from(sorted(i.value for i in ROUTABLE_INTENTS)) | _json}),
-       turn=_json, clarify=_json)
-def test_any_json_context_recovers_without_raising(pending, turn, clarify) -> None:
+       turn=_json, clarify=_json, shown=_json | st.lists(_json, max_size=40))
+def test_any_json_context_recovers_without_raising(pending, turn, clarify, shown) -> None:
     """백엔드가 반송하는 상태는 아무 JSON 이나 될 수 있다 — 읽기는 절대 예외를 내지 않는다(INV-4)."""
-    ctx = DialogueContext.from_dict({"pending": pending, "turn_index": turn, "clarify_count": clarify})
+    ctx = DialogueContext.from_dict({"pending": pending, "turn_index": turn, "clarify_count": clarify, "shown": shown})
+    assert len(ctx.shown) <= SHOWN_MAX and all(isinstance(x, str) and 0 < len(x) <= 64 for x in ctx.shown)
     if ctx.pending is not None:
         assert isinstance(ctx.pending.asked, str)
         assert all(isinstance(k, str) and isinstance(v, str) for k, v in ctx.pending.arguments.items())
