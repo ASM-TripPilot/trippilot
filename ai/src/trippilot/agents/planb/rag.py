@@ -37,7 +37,7 @@ from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from types import MappingProxyType
 
-from trippilot.agents.planb.place_knowledge import fetch_place_knowledge
+from trippilot.agents.planb.place_knowledge import fetch_place_knowledge, kb5_counts
 from trippilot.agents.planb.kb_retrieval import (
     DEFAULT_TOP_K,
     retrieve_persona,
@@ -318,10 +318,11 @@ class RagContext:
         # 0 은 "찾았는데 없었다"로 읽히고, 사실은 "찾지 않는다"다.
         # POI_DESC = 장소 지식이 붙은 후보 수(KB-5). 이것 없이는 운영에서 KB-5 가 비었는지(적재 전·장애) 볼 길이
         # 없었다(2026-10-18 청킹). 백엔드는 이 맵을 키 그대로 로그에 남긴다(`Map<String, Int>`).
+        # 대체 문서(2026-10-23)는 섞지 않는다 — 붙었으면 POI_DESC_FALLBACK 으로 따로(`kb5_counts`).
         return {
             KbKind.PERSONA.value: len(self.persona),
             KbKind.SITUATION.value: len(self.situation),
-            KbKind.POI_DESC.value: len(self.place_knowledge),
+            **kb5_counts(self.place_knowledge),
         }
 
 
@@ -882,7 +883,10 @@ def _shortlist(request: "PlanBRagRequest", persona_hits: Sequence[KbHit]) -> Can
         _saved_refs(request.saved_places, persona_hits), pool, available, request.reason, request.user_request)
     keep = set(ranked[:LLM_SHORTLIST]) | {
         str(p) for p in request.current_slot_ids if p not in excluded}
-    pois = tuple(p for p in pool.pois if str(p.poi_id) in keep)
+    # 규칙 랭킹 순서로 둔다 — KB-5 대체 문서가 이 순서로 상한(MAX_DOCS)까지 붙는다(풀 순서면 인기·영업시간 순이라 가까운 곳이 빠졌다,
+    # #1707 리뷰). 프롬프트는 워커가 poi_id 로 다시 정렬하고 게이트는 집합으로 교차해 이 순서와 무관하다
+    rank = {r: i for i, r in enumerate(ranked)}
+    pois = tuple(sorted((p for p in pool.pois if str(p.poi_id) in keep), key=lambda p: rank.get(str(p.poi_id), len(rank))))
     return replace(pool, poi_ids=frozenset(p.poi_id for p in pois), pois=pois)
 
 

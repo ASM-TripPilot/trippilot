@@ -62,9 +62,10 @@ from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEX
 from trippilot.orchestrator.arguments import extract_kind
 from trippilot.orchestrator.intent_router import normalize
 from trippilot.orchestrator.opportunity import _displayable, shown_event
-from trippilot.orchestrator.place_intro import PlaceIntro
+from trippilot.orchestrator.place_intro import PlaceIntro, clean_intro
 from trippilot.ports.place_fact_store_port import PlaceFacts
 from trippilot.orchestrator.place_sql import PlaceSqlLookup, asks_for_places
+from trippilot.poi_curation import place_fallback
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder, restrict_pool_to_target_role
 from trippilot.providers.base import Provider
 from trippilot.providers.transit import _format_distance_range
@@ -1097,14 +1098,16 @@ def _intro_for(ctx: TurnContext, packet: Mapping[str, object], poi_id: str, left
     """장소 소개 한 조각(KB-5) — 소개를 물을 때만(영업시간·요금 질문이면 빈 문자열). 조인 키는 POI_INFO 행의 source_ref.
     팬아웃 남은 시간(`left`)에서 여유를 뺀 만큼만 기다린다 — 소개가 늦어도 카드는 나간다."""
     port, aspect = ctx.ports.place_intro, ctx.arguments.get("aspect") or ""
-    if port is None or _HOURS_FEE.search(aspect) or _HOURS_FEE.search(ctx.utterance):
+    if _HOURS_FEE.search(aspect) or _HOURS_FEE.search(ctx.utterance):
         return ""
     data = packet.get("data") if isinstance(packet, Mapping) else None
     pois = data.get("pois", ()) if isinstance(data, Mapping) else ()
     ref = next((p.get("source_ref") for p in pois if isinstance(p, Mapping) and p.get("poi_id") == poi_id), None)
     wait = left() - _INTRO_MARGIN_S
-    if not ref or wait < _INTRO_MIN_S:
+    if not ref:
         return ""
+    if port is None or wait < _INTRO_MIN_S:  # KB-5 를 못 기다리면 로컬 대체 문서(켜져 있을 때만 — 꺼져 있으면 빈 문자열, 종전과 같다)
+        return clean_intro(place_fallback.doc(str(ref)))
     try:
         return port.intro(str(ref), aspect or "소개", wait_s=wait)
     except Exception:  # noqa: BLE001 — 부가 정보라 없이 간다(INV-4), 사유는 PlaceIntro 가 남긴다
