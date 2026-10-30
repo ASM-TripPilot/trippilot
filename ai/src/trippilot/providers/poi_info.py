@@ -25,26 +25,9 @@ from trippilot.domain.freshness import (
     ProviderKind,
     ProviderStatus,
 )
-from trippilot.domain.poi import NIGHTLIFE_TAG, Poi
+from trippilot.domain.poi import Poi, hours_label
 from trippilot.poi_curation.place_fees import EMPTY, FeeTable
 from trippilot.ports.poi_db_port import PoiDbPort
-
-
-# ponytail: `agents/planb/composition.hours_label` 의 사본 — providers 는 agents 를 import 하지
-# 않는다(providers/__init__ 규칙). 두 집이 갈라지면 테스트(⑥ PBT)가 잡는다. 함수의 집을
-# domain 으로 옮기는 일은 FD 미결 #16.
-def hours_label(poi: Poi, weekday: int) -> str | None:
-    """그날 영업시간 문구. 휴무가 **증명**되면 None — 정보 없음은 막지 않는다 (HC1 과 같은 판정)."""
-    if not poi.open_hours:
-        return "밤 영업(추정 20:00~04:00)" if NIGHTLIFE_TAG in poi.tags else "영업시간 정보 없음"
-    ranges = [h for h in poi.open_hours if h.day_of_week == weekday]
-    if not ranges:
-        return None
-    return ", ".join(f"{_hm(h.open_min)}~{_hm(h.close_min)}" for h in ranges)
-
-
-def _hm(minutes: int) -> str:
-    return f"{minutes // 60:02d}:{minutes % 60:02d}"
 
 
 class PoiInfoProvider:

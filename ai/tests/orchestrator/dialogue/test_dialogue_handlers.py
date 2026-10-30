@@ -362,7 +362,15 @@ def test_resolve_day_relative_and_absolute_forms() -> None:
     assert resolve_day("둘째 날", _SNAP, today) == _D2
     assert resolve_day("세 번째 날", _SNAP, today) == _D3
     assert resolve_day("1일차", _SNAP, today) == _D1
-    assert resolve_day("토요일", _SNAP, today) is None  # 요일은 해석하지 않는다 — 넘겨짚기 금지
+    assert resolve_day("토요일", _SNAP, today) is None  # 여행(10-18 일 ~ 10-20 화)에 토요일이 없다
+
+
+def test_resolve_day_reads_a_weekday_only_when_the_trip_has_exactly_one() -> None:
+    """미결 #29 A안 — "월요일에 쉬어?"가 일정 안 장소도 못 풀어 EMPTY 였다. 그 요일이 여행에 하나면 그날, 둘 이상이면 넘겨짚지 않는다."""
+    assert resolve_day("일요일", _SNAP, _D2) == _D1 and resolve_day("월요일에 쉬어?", _SNAP, _D2) == _D2
+    long_trip = _snapshot((), trip=replace(_TRIP, start_date=date(2026, 10, 18), end_date=date(2026, 10, 26)))
+    assert resolve_day("일요일", long_trip, _D2) is None  # 10-18·10-25 — 어느 일요일인지 모른다
+    assert resolve_day("수요일", long_trip, _D2) == date(2026, 10, 21)
 
 
 @settings(max_examples=200, deadline=None)

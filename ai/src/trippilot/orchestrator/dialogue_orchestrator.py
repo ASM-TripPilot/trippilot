@@ -25,7 +25,7 @@
 ## 지키는 것
 
 - **예외는 경계 밖으로 나가지 않는다**(DL-5, BR-AO-22) — 외부 호출은 전부 상태값으로 수렴하고, 자체 버그는
-  `OUT_OF_SCOPE(reason="orchestrator_error: …")` 로 수렴한다(BR §5 미결 #14 A안). `PermissionDeniedError` 만
+  분류 전이면 `OUT_OF_SCOPE(reason="orchestrator_error: …")`, 분류 뒤면 다시 시도 ANSWER 로 수렴한다(BR §5 미결 #14 B안). `PermissionDeniedError` 만
   관통한다(fail-closed, TRIP-333 — `InfoCollector` 와 같은 예외 1건).
 - **시계는 주입**(`Clock.monotonic_ms`) — 잔여 = `deadline_ms − (now_ms − started_ms)`, 모든 하위 호출에 `timeout_sec` 로
   내리고 잔여 ≤0 이면 부르지 않는다(DL-4, BR-AO-01).
@@ -115,6 +115,7 @@ from trippilot.orchestrator.dialogue_memory import (
     material,
 )
 from trippilot.orchestrator.dialogue_plan import has_facts, merge_facts, step_results, step_tasks
+from trippilot.orchestrator.intent_eval import _REFUSAL_MARKERS
 from trippilot.orchestrator.intent_router import normalize
 from trippilot.orchestrator.shadow_probe import ShadowIntentProbe
 from trippilot.ports.embedding_port import EmbeddingPort
@@ -554,6 +555,23 @@ def _plannable(reason: str) -> bool:
     return _judged_nothing(reason) or _CLOSED_SET_REASON in reason
 
 
+# 다시 시도 — 분류 뒤 버그·분류와 계획의 인프라 실패(시한·벤더)에 범위 밖 카드("도와드리기 어려워요")를 내지 않는다(BR §5 미결 #14·#22
+# B안, 2026-10-30 "결정은 추천안으로 진행"). 운영 Opus 전환 뒤 분류 시한 초과가 실사용 8건 중 3건이었다(10-28~30 CloudWatch). 문장·버튼은
+# BE `AssistantTemplates.fallback(AI_UNAVAILABLE)` 그대로(DEC-U8-6 — 화면 문장은 한 벌), FE RETRY_TURN 은 마지막 발화를 다시 보낸다.
+RETRY_TEXT = "지금 도우미가 응답하지 못했어요."
+
+
+def retry_answer() -> DialogueAnswer:
+    return DialogueAnswer(AnswerKind.TEXT, RETRY_TEXT, None,
+                          (NextAction("RETRY_TURN", "다시 시도"), NextAction("CONTINUE_WITHOUT_ASSISTANT", "도우미 없이 계속")), None, None)
+
+
+def _infra_failure(reason: str) -> bool:
+    """분류가 판단하지 못한 것이 아니라 **부르지 못했다**(시한·벤더 예외·잔여 0) — 판단한 거절은 표지(`intent_eval._REFUSAL_MARKERS`)를
+    단다(`_refusal_reason`). 표지 없는 폴백만 다시 시도할 일이다."""
+    return not any(marker in reason for marker in _REFUSAL_MARKERS)
+
+
 def _home_action(has_trip: bool) -> NextAction:
     return NextAction("OPEN_ITINERARY", "일정 보기") if has_trip else NextAction("CREATE_TRIP", "여행 만들기")
 
@@ -885,8 +903,8 @@ class DialogueOrchestrator:
                 outcome = self._core(windowed, current, others, counter)
             except PermissionDeniedError:
                 raise
-            except Exception as e:  # noqa: BLE001 — DL-5: 버그도 경계 밖으로 내지 않는다(BR §5 미결 #14 A안)
-                outcome = self._crashed(inp, e)
+            except Exception as e:  # noqa: BLE001 — DL-5: 버그도 경계 밖으로 내지 않는다(BR §5 미결 #14 B안)
+                outcome = self._crashed(inp, e, classified=counter[0] > 0)  # LLM 을 한 번이라도 불렀으면 분류는 지났다
             outcome = _not_repeating(outcome, windowed)
             if writable:  # 기억을 못 읽은 턴은 요약을 내지 않는다 — 없는 줄 알고 빈 기억에서 다시 쓰면 이전 줄을 잃는다(다음 차례에)
                 said = (outcome.answer.text if outcome.answer is not None
@@ -968,7 +986,7 @@ class DialogueOrchestrator:
                     return TurnOutcome("ANSWER", (), None, closer, cleared, 0, reason)
                 if self._planner is not None and _plannable(reason):  # 2‴ — 정해진 의도 밖이라도 조회로 도울 수 있으면 돕는다(BR-AO-28)
                     return self._plan_turn(inp, text, memory, trip_summary, cleared, reason)
-                return self._out_of_scope(inp, reason)
+                return self._retry(inp, reason) if _infra_failure(reason) else self._out_of_scope(inp, reason)
             # 3 — 필수 인자 되묻기 (요청당 1회, 기존 로직)
             interp = from_match(match, inp.context, trip_view)
             if interp.outcome == "ARGUMENT_CLARIFY" and match.intent is Intent.EDIT_SCHEDULE and (on := insert_day(
@@ -1260,7 +1278,7 @@ class DialogueOrchestrator:
         remaining = self._remaining(inp)
         if remaining < _PLAN_MIN_REMAINING_MS:
             self._fallback(inp, "llm", *_PLAN_MODES, f"budget_exhausted(remaining_ms={remaining})")
-            return self._plan_declined(inp, reason, "SKIPPED")
+            return self._plan_declined(inp, reason, "SKIPPED", retry=True)
         timeout_ms = min(_PLAN_CAP_MS, int(remaining * _PLAN_SHARE))
         started = self._clock.monotonic_ms()
         try:
@@ -1268,11 +1286,13 @@ class DialogueOrchestrator:
                                         timeout_sec=timeout_ms / 1000)
         except Exception as e:  # noqa: BLE001 — 프롬프트 미등록 ValueError 는 게이트웨이 render 가 호출보다 먼저 던진다
             self._fallback(inp, "llm", *_PLAN_MODES, f"plan_error: {type(e).__name__}")
-            return self._plan_declined(inp, reason, "FALLBACK")
+            return self._plan_declined(inp, reason, "FALLBACK", retry=True)
         plan_ms = self._clock.monotonic_ms() - started
         draft = result.value
         if result.is_fallback or not isinstance(draft, DialoguePlanDraft):  # FallbackEvent·LlmCallRecord 는 게이트웨이가 냈다
-            return self._plan_declined(inp, reason, "FALLBACK", plan_ms=plan_ms)
+            # 시한·벤더 실패만 다시 시도 — 깨진 JSON·전량 드롭은 분류와 같이 판단 실패라 종전 범위 밖(`_refusal_reason` 과 같은 경계)
+            return self._plan_declined(inp, reason, "FALLBACK", plan_ms=plan_ms,
+                                       retry=(result.error or "").startswith(_INFRA_PREFIXES))
         if draft.refused or not draft.calls:  # 판단한 거절·도구 없음 — 의도된 결정론, 이벤트 없음
             if not draft.refused and draft.gap == "CHAT":  # 잡담은 범위 밖 카드 대신 받아 준다(2″ 인사와 같은 결정론 문장)
                 self._log_plan(inp, "NO_TOOL", plan_ms=plan_ms, gap=draft.gap)
@@ -1373,10 +1393,12 @@ class DialogueOrchestrator:
             return None
 
     def _plan_declined(self, inp: TurnInput, reason: str, decision: str, *, plan_ms: int | None = None,
-                       gap: str | None = None) -> TurnOutcome:
-        """계획이 답을 만들지 않았다 — 종전 범위 밖. 분류 사유를 앞에 그대로 둬 거절 표지(`not_classifiable`)를 잃지 않는다."""
+                       gap: str | None = None, retry: bool = False) -> TurnOutcome:
+        """계획이 답을 만들지 않았다 — 거절·도구 없음·깨진 출력은 종전 범위 밖, 인프라 실패(시한 부족·시한·벤더·예외)는 다시 시도
+        (미결 #22 B안). 분류 사유를 앞에 그대로 둬 거절 표지(`not_classifiable`)를 잃지 않는다."""
         self._log_plan(inp, decision, plan_ms=plan_ms, gap=gap)
-        return self._out_of_scope(inp, f"{reason}; plan:{decision.lower()}")
+        full = f"{reason}; plan:{decision.lower()}"
+        return self._retry(inp, full) if retry else self._out_of_scope(inp, full)
 
     def _log_plan(self, inp: TurnInput, decision: str, *, calls=(), arg_keys: Sequence[Sequence[str]] | None = None,
                   primary: Intent | None = None,
@@ -1572,13 +1594,17 @@ class DialogueOrchestrator:
     def _out_of_scope(self, inp: TurnInput, reason: str) -> TurnOutcome:
         return TurnOutcome("OUT_OF_SCOPE", (), None, None, DialogueContext(turn_index=inp.context.turn_index), 0, reason)
 
-    def _crashed(self, inp: TurnInput, e: Exception) -> TurnOutcome:
-        """오케스트레이터 자체 예외(버그) — OUT_OF_SCOPE 로 수렴하고 보고한다(미결 #14 A안). 로그에 발화는 없다."""
-        log.error("dialogue turn 실패 — OUT_OF_SCOPE 로 수렴 (trace_id=%s, %s)", inp.trace_id, type(e).__name__,
-                  exc_info=True)
+    def _retry(self, inp: TurnInput, reason: str) -> TurnOutcome:
+        return TurnOutcome("ANSWER", (), None, retry_answer(), DialogueContext(turn_index=inp.context.turn_index), 0, reason)
+
+    def _crashed(self, inp: TurnInput, e: Exception, *, classified: bool) -> TurnOutcome:
+        """오케스트레이터 자체 예외(버그) — 분류(LLM)를 부른 뒤면 다시 시도, 그 전이면 OUT_OF_SCOPE 로 수렴하고 보고한다(미결 #14 B안).
+        로그에 발화는 없다."""
+        to = "retry_turn" if classified else "out_of_scope"
+        log.error("dialogue turn 실패 — %s 로 수렴 (trace_id=%s, %s)", to, inp.trace_id, type(e).__name__, exc_info=True)
         reason = f"orchestrator_error: {type(e).__name__}: {e}"
-        self._fallback(inp, "orchestrator", "dialogue_orchestrator", "out_of_scope", reason)
-        return self._out_of_scope(inp, reason)
+        self._fallback(inp, "orchestrator", "dialogue_orchestrator", to, reason)
+        return self._retry(inp, reason) if classified else self._out_of_scope(inp, reason)
 
     def _fallback(self, inp: TurnInput, stage: str, from_mode: str, to_mode: str, reason: str) -> None:
         """INV-4 — 폴백은 보고와 짝이다. 계측 실패는 비즈니스 실패가 아니다(TracePort 계약)."""

@@ -525,7 +525,8 @@ def _ordinal(text: str) -> int | None:
 
 def resolve_day(text: str, snapshot: TurnSnapshot, today: date) -> date | None:
     """날 표현 → 날짜. ISO · 상대('오늘'·'내일') · 'M월 D일' · 'M/D' · 순번('2일차'·'둘째 날'·'세 번째 날'·맨 숫자) ·
-    '마지막 날'. 요일·'다음 달 N일' 은 해석하지 않는다(None) — 넘겨짚지 않는다(BE ProposalCards.targetDate 와 같은 태도)."""
+    '마지막 날' · 요일(여행 기간 안에 그 요일이 **하나뿐일 때만** — 둘 이상이면 None, BR §5 미결 #29 A안 2026-10-30). '다음 달 N일'
+    은 해석하지 않는다(None) — 넘겨짚지 않는다(BE ProposalCards.targetDate 와 같은 태도)."""
     t = normalize(text)
     if not t:
         return None
@@ -548,8 +549,16 @@ def resolve_day(text: str, snapshot: TurnSnapshot, today: date) -> date | None:
     first, last = trip_days
     if "마지막" in t or "막날" in t:
         return last
+    wd = _WEEKDAY_WORD.search(t)
+    if wd:  # "토요일에 쉬어?" — 여행 안의 그 요일이 하나면 그날(영업시간도 그날 기준), 둘 이상이면 어느 날인지 모른다
+        days = [first + timedelta(days=i) for i in range((last - first).days + 1)
+                if (first + timedelta(days=i)).weekday() == "월화수목금토일".index(wd[1])]
+        return days[0] if len(days) == 1 else None
     n = _ordinal(t)
     return first + timedelta(days=n - 1) if n is not None and n >= 1 else None
+
+
+_WEEKDAY_WORD = re.compile(r"([월화수목금토일])요일")
 
 
 def _safe_date(y: int, m: int, d: int) -> date | None:

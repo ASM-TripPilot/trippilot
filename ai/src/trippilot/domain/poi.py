@@ -378,3 +378,26 @@ class SourcedPoi:
             source_url=d["source_url"],
             raw_confidence=d["raw_confidence"],
         )
+
+
+# 그날 영업시간 문구 — 다시 짜기 구성·이름으로 집은 곳 확인·기회 카드·도우미 장소 정보(PoiInfoProvider)가 같은 함수를 쓴다.
+# agents 와 providers 가 각자 사본을 두던 것을 여기로 모았다(assistant-orchestrator FD 미결 #16 A안, 2026-10-30).
+def hours_label(poi: Poi, on: date | int, holidays: HolidayCalendar | None = None) -> str | None:
+    """그날 영업시간 문구. 휴무가 **증명**되면 None — 판정은 HC1 과 같은 `open_windows_on`(정보 없음은 막지 않는다).
+
+    `on` 이 날짜면 공휴일 휴무까지 본다(상황 감지 H1 — `holidays` None = 모드 off 면 요일 판정과 같다). 요일(int)만
+    넘기는 호출(`request_verification` — 이름으로 집은 곳의 사전 확인)은 종전 요일 판정 그대로다.
+    """
+    if isinstance(on, date):
+        ranges = open_windows_on(poi, on, holidays)
+    else:
+        ranges = tuple(h for h in poi.open_hours if h.day_of_week == on) if poi.open_hours else None
+    if ranges is None:
+        return "밤 영업(추정 20:00~04:00)" if NIGHTLIFE_TAG in poi.tags else "영업시간 정보 없음"
+    if not ranges:
+        return None
+    return ", ".join(f"{_hm(h.open_min)}~{_hm(h.close_min)}" for h in ranges)
+
+
+def _hm(minutes: int) -> str:
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
