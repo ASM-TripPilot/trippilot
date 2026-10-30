@@ -77,7 +77,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.dialogue_memory_vectors TO ai_use
 -- ai/docker/vector-init/03-place-fact-cache.sql (deploy/eks/tests compares them); the adapter does DML only.
 CREATE TABLE IF NOT EXISTS public.place_fact_cache (
   poi_id     text PRIMARY KEY,       -- registered POI id (backend poi.poi_id)
-  facts      jsonb,                  -- {hours,last_entry,closed,fee,source_url,source_host} | null = looked up, nothing sourced
+  facts      jsonb,                  -- {hours,last_entry,closed,fee,source_url,source_host,searched=fields looked up} | {searched} only = looked up, nothing sourced (null before 2026-10-30)
   fetched_at timestamptz NOT NULL,
   expires_at timestamptz NOT NULL    -- found +7d | not found +1d
 );

@@ -838,7 +838,8 @@ def test_poi_info_unknown_hours_keep_the_provider_wording_and_free_is_free() -> 
 
 
 class _Unknown:
-    """UnknownHandlingAgent 대역 — 저장된 결과가 있으면 그것, 없으면 뒤에서 찾기 요청을 기록하고 받아 준 만큼 "찾는 중"."""
+    """UnknownHandlingAgent 대역 — 저장된 결과가 있으면 그것, 없으면 뒤에서 찾기 요청을 기록하고 받아 준 만큼 "찾는 중".
+    실물은 물은 칸을 다 찾아본 기록만 답으로 쓴다(`test_unknown_handling.py`) — 여기 넣는 기록은 그 조건을 맞춘 실물 모양이다."""
 
     knows_general = False  # 실물과 같이 — 지식 워커가 없는 조립(장소 사실 웹 확인만)
 
@@ -875,7 +876,7 @@ def test_poi_info_unknown_hours_start_a_web_lookup_and_answer_that_it_is_on_the_
 
 
 def test_poi_info_shows_a_stored_web_value_with_its_source() -> None:
-    agent = _Unknown(FactRecord(_U["우도"], _WEB, _NOW, _NOW + timedelta(days=7)))
+    agent = _Unknown(FactRecord(_U["우도"], _WEB, _NOW, _NOW + timedelta(days=7), ("hours", "last_entry")))
     facts = _unknown_run("우도 몇 시까지 해?", agent)
     assert agent.requests == [] and facts.quick_replies == ()
     assert facts.payload["rows"] == [{"label": "분류", "value": "자연"}, {"label": "영업시간", "value": "08:30~17:30"},
@@ -890,7 +891,7 @@ def test_poi_info_shows_a_stored_web_value_with_its_source() -> None:
 
 
 def test_poi_info_stored_nothing_found_keeps_the_card_and_does_not_look_again() -> None:
-    agent = _Unknown(FactRecord(_U["우도"], None, _NOW, _NOW + timedelta(days=1)))
+    agent = _Unknown(FactRecord(_U["우도"], None, _NOW, _NOW + timedelta(days=1), ("hours", "last_entry")))
     facts = _unknown_run("우도 몇 시까지 해?", agent)
     assert agent.requests == [] and facts.quick_replies == () and not any("웹" in n for n in facts.notes)
 
