@@ -8,13 +8,15 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timedelta
 
 from fastapi.testclient import TestClient
 
 from tests.fakes.fake_llm import FakeLlm
 from trippilot.api.wiring import StaticPoiDb, build_dev_app
-from trippilot.assembly_engine.travel import haversine_km
-from trippilot.domain.common import GeoPoint, PoiId
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.travel import TravelEstimator, haversine_km
+from trippilot.domain.common import GeoPoint, PoiId, TransportMode
 from trippilot.domain.poi import NIGHTLIFE_TAG, DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 
 _DAY = "2026-10-21"  # 수요일(weekday 2)
@@ -364,3 +366,39 @@ def test_unreadable_position_with_a_cue_is_not_appended() -> None:
 def test_neighbourhood_station_resolves_to_its_neighbourhood() -> None:
     body = _post(_body(utterance="홍대입구역 가기 전에 카페 하나 넣어줘"))
     assert body["status"] == "APPLIED" and _ids(body)[2] == str(GONGDEOK_CAFE.poi_id), body
+
+
+# ── 여행 당일 편집 — 지난 곳은 그 시각 그대로 ─────────────────────────────
+
+
+def test_trip_day_button_edits_keep_visited_slots_and_flow_the_rest_from_now() -> None:
+    """앱 교체 버튼(REPLACE)·빼기·끝 추가가 하루를 첫 슬롯부터 다시 흘려 다녀온 곳의 시각까지 바꿨다(develop 부터). BE 의 UTC(…Z) 지금을
+    현지 분 올림으로 — 그 전에 시작한 곳은 그대로, 뒤만 지금부터 다시 흘린다. 지난 예약(경복궁)도 ⑤ 검증(HC3)을 막지 않는다."""
+    visited = [{**_SLOTS[0], "is_fixed": True}, _SLOTS[1]]  # 09:00 예약 · 11:00~12:30 — 13:10 엔 둘 다 끝났다
+    for command in ({"op": "REPLACE_SLOT", "params": {"targetPoiId": str(HYOCHANG.poi_id)},
+                     "affected_slots": [str(YEONNAM.poi_id)]},
+                    {"op": "REMOVE_SLOT", "params": {}, "affected_slots": [str(YEONNAM.poi_id)]},
+                    {"op": "ADD_SLOT", "params": {"targetPoiId": str(HYOCHANG.poi_id)}, "affected_slots": []}):
+        body = _body(command=command, at=f"{_DAY}T04:10:37Z")  # = 13:10:37 KST
+        body = _post({**body, "itinerary": {**body["itinerary"], "days": [{"date": _DAY, "slots": [*visited, *_SLOTS[2:]]}]}})
+        assert body["status"] == "APPLIED", (command["op"], body)
+        slots = body["itinerary"]["days"][0]["slots"]
+        assert [(s["poi_id"], s["start_at"], s["end_at"], s["is_fixed"]) for s in slots[:2]] == [
+            (s["poi_id"], s["start_at"], s["end_at"], s["is_fixed"]) for s in visited], command["op"]
+        assert all(s["start_at"] >= "13:11:00" for s in slots[2:]), (command["op"], slots)
+
+
+def test_trip_day_leaving_where_you_are_counts_the_trip_from_there() -> None:
+    """지금 있는 곳(경리단길 11:00~12:30, 지금 11:30)을 바꾸거나 빼면 다음 곳은 거기서 지금 떠나 닿는 시각부터다. 그 앞 닻(경복궁)에서
+    커서를 흘리면 효창공원·연남동이 지금 바로(11:30) 시작한다 — 경리단길에서 이동 30·52분 거리다(2026-10-30 리뷰 재현)."""
+    est = TravelEstimator(AssemblyConfig())
+    for command, first in (({"op": "REPLACE_SLOT", "params": {"targetPoiId": str(HYOCHANG.poi_id)},
+                             "affected_slots": [str(GYEONGNI.poi_id)]}, HYOCHANG),
+                           ({"op": "REMOVE_SLOT", "params": {}, "affected_slots": [str(GYEONGNI.poi_id)]}, YEONNAM)):
+        body = _post(_body(command=command, at=f"{_DAY}T02:30:00Z"))  # = 11:30 KST
+        assert body["status"] == "APPLIED", (command["op"], body)
+        slots = body["itinerary"]["days"][0]["slots"]
+        arrive = datetime(2026, 10, 21, 11, 30) + timedelta(
+            minutes=est.estimate(GYEONGNI.coord, first.coord, TransportMode.PUBLIC).internal_minutes)
+        assert (slots[0]["start_at"], slots[1]["poi_id"]) == ("09:00:00", str(first.poi_id)), (command["op"], slots)
+        assert slots[1]["start_at"] == f"{arrive:%H:%M:%S}", (command["op"], slots)
