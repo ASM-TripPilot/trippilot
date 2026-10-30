@@ -182,3 +182,33 @@ def test_rate_limit_stop_counts_only_consecutive_episodes() -> None:
     b.hit(rate_limited=True)
     b.ok()
     assert b.rate_limited == 0
+
+
+def test_claude_turn_paused_by_dynamic_filtering_is_continued_and_counted_whole(monkeypatch) -> None:
+    from types import SimpleNamespace as N
+
+    def resp(stop, text, cite, seen):
+        return N(stop_reason=stop, usage=N(input_tokens=100, output_tokens=10, server_tool_use=N(web_search_requests=1)),
+                 content=[N(type="web_search_tool_result", content=[N(url=seen)]), N(type="text", text=text, citations=[N(url=cite)])])
+
+    class _Client:
+        def __init__(self) -> None:
+            self.calls, self.messages = [], N(create=self.create)
+            self.replies = [resp("pause_turn", "찾는 중", "u1", "s1"), resp("end_turn", '{"found": false}', "u2", "s2")]
+
+        def create(self, **kw):
+            self.calls.append(kw)
+            return self.replies[len(self.calls) - 1]
+
+    monkeypatch.setattr(c, "MODEL", "claude-haiku-5-5")
+    client = _Client()
+    text, cites, tokens_in, tokens_out, searches = c.ask_claude(client, "질문")
+    assert (text, tokens_in, tokens_out, searches) == ('{"found": false}', 200, 20, 2)  # 본문은 끝 응답, 셈은 둘 다
+    assert set(cites) == {"u1", "s1", "u2", "s2"} and len(client.calls) == 2
+    assert client.calls[1]["messages"][-1] == {"role": "assistant", "content": client.replies[0].content}  # 받은 그대로 되돌린다
+    assert client.calls[0]["thinking"] == {"type": "disabled"}
+    monkeypatch.setattr(c, "MODEL", "claude-sonnet-5-5")
+    client = _Client()
+    client.replies[0] = client.replies[1]
+    c.ask_claude(client, "질문")
+    assert len(client.calls) == 1 and "thinking" not in client.calls[0]  # sonnet-5-5 는 끄기를 400 으로 거부한다
