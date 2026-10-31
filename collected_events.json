@@ -204,20 +204,6 @@
    "collected_at": "2026-08-26T04:58:05.910208+09:00"
   },
   {
-   "event_id": "evx-80dad97b57d43cfb",
-   "name": "강원 RED FRYS 2026",
-   "event_type": "PERFORMANCE",
-   "start": "2026-10-24",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 37.8051380887932,
-    "lng": 128.907803615147
-   },
-   "address": "강릉 경포해변 중앙광장",
-   "region": "강원",
-   "collected_at": "2026-08-26T04:58:05.910208+09:00"
-  },
-  {
    "event_id": "evx-e6c9b73fe33aac06",
    "name": "2026 하반기 팝업놀이터",
    "event_type": "OTHER",
@@ -371,20 +357,6 @@
    "collected_at": "2026-09-01T08:19:13.796216+09:00"
   },
   {
-   "event_id": "tourapi-2867300",
-   "name": "평택 원평나루 억새축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-24",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 36.9842467192,
-    "lng": 127.0810967851
-   },
-   "address": "경기도 평택시 평택동 238-2",
-   "region": "경기",
-   "collected_at": "2026-10-21T07:46:03.381070+09:00"
-  },
-  {
    "event_id": "tourapi-825295",
    "name": "강릉커피축제",
    "event_type": "FESTIVAL",
@@ -486,17 +458,6 @@
    "address": null,
    "region": "제주",
    "collected_at": "2026-09-02T06:57:42.655806+09:00"
-  },
-  {
-   "event_id": "evx-ea4d61396851894d",
-   "name": "IFEZ 글로벌 페스티벌 I♥FEsta(아이페스타)",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-12",
-   "end": "2026-10-24",
-   "coord": null,
-   "address": null,
-   "region": "인천",
-   "collected_at": "2026-09-03T06:57:06.254663+09:00"
   },
   {
    "event_id": "evx-1ca95d0d17121b30",
@@ -786,17 +747,6 @@
    "collected_at": "2026-10-29T08:31:46.552519+09:00"
   },
   {
-   "event_id": "evx-101730af05c26a11",
-   "name": "미시령 힐링가도 모터사이클 페스타",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-23",
-   "end": "2026-10-24",
-   "coord": null,
-   "address": null,
-   "region": "강원",
-   "collected_at": "2026-09-15T07:42:43.250752+09:00"
-  },
-  {
    "event_id": "evx-9e1a1dd9fefd67fc",
    "name": "앙리마티스와 파리의 화가들",
    "event_type": "EXHIBITION",
@@ -1037,20 +987,6 @@
    "collected_at": "2026-10-21T07:46:03.381070+09:00"
   },
   {
-   "event_id": "evx-e762f30fef77c8b6",
-   "name": "2026 서울 러너스 페스티벌",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-24",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 37.524630704323,
-    "lng": 126.920336120685
-   },
-   "address": "여의도공원 문화의마당",
-   "region": "서울",
-   "collected_at": "2026-09-23T07:23:14.946677+09:00"
-  },
-  {
    "event_id": "evx-a5a33628ddd03d7b",
    "name": "2026 서울 바비큐 페스티벌",
    "event_type": "FESTIVAL",
@@ -1139,10 +1075,7 @@
    "event_type": "FESTIVAL",
    "start": "2026-10-31",
    "end": "2026-10-31",
-   "coord": {
-    "lat": 34.7509493146,
-    "lng": 127.7470910959
-   },
+   "coord": null,
    "address": "전남광주통합특별시 여수시 박람회길 1 (덕충동)",
    "region": "전남",
    "collected_at": "2026-10-23T07:53:54.446449+09:00"
@@ -1275,17 +1208,6 @@
    "coord": null,
    "address": "대전컨벤션센터(DCC) 및 일원",
    "region": "대전",
-   "collected_at": "2026-10-01T08:10:25.471050+09:00"
-  },
-  {
-   "event_id": "evx-b598a1fd0934bec5",
-   "name": "PLUG AND PLAY KOREA EXPO 플러그앤플레이코리아 엑스포",
-   "event_type": "EXHIBITION",
-   "start": "2026-10-21",
-   "end": "2026-10-24",
-   "coord": null,
-   "address": null,
-   "region": "대구",
    "collected_at": "2026-10-01T08:10:25.471050+09:00"
   },
   {
@@ -1688,17 +1610,6 @@
    "collected_at": "2026-10-02T08:23:24.272540+09:00"
   },
   {
-   "event_id": "evx-44158eb845f2abdc",
-   "name": "대구국제로봇산업전 (ROBEX)",
-   "event_type": "EXHIBITION",
-   "start": "2026-10-21",
-   "end": "2026-10-24",
-   "coord": null,
-   "address": null,
-   "region": "대구",
-   "collected_at": "2026-10-02T08:23:24.272540+09:00"
-  },
-  {
    "event_id": "evx-f02fb3c79eca0dfa",
    "name": "대구점자도서관 개관 30주년 및 제100주년 점자의 날 기념 축제",
    "event_type": "FESTIVAL",
@@ -1919,17 +1830,6 @@
    "coord": null,
    "address": "대전광역시 유성구 대전컨벤션센터(DCC) 및 일원",
    "region": "대전",
-   "collected_at": "2026-10-05T07:28:45.640028+09:00"
-  },
-  {
-   "event_id": "evx-94bc0390fe237c02",
-   "name": "PNP KOREA EXPO - FIX 픽스 2026",
-   "event_type": "EXHIBITION",
-   "start": "2026-10-21",
-   "end": "2026-10-24",
-   "coord": null,
-   "address": null,
-   "region": "대구",
    "collected_at": "2026-10-05T07:28:45.640028+09:00"
   },
   {
@@ -2233,20 +2133,6 @@
    "collected_at": "2026-10-12T08:06:24.225174+09:00"
   },
   {
-   "event_id": "evx-2ffb27f514f35470",
-   "name": "30주년 울산고래축제 기념 아카이브전",
-   "event_type": "EXHIBITION",
-   "start": "2026-10-13",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 35.50341075963201,
-    "lng": 129.36727831552406
-   },
-   "address": "장생포문화창고",
-   "region": "울산",
-   "collected_at": "2026-10-12T08:06:24.225174+09:00"
-  },
-  {
    "event_id": "evx-5046b7b8b2e87fe5",
    "name": "2026 춘천연극제",
    "event_type": "FESTIVAL",
@@ -2312,20 +2198,6 @@
    "address": "서울특별시 중구 회현동1가 100-115",
    "region": "서울",
    "collected_at": "2026-10-21T07:46:03.381070+09:00"
-  },
-  {
-   "event_id": "evx-dc66be36ffc6f4a3",
-   "name": "2026 성북밀로장",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-23",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 37.5910466093958,
-    "lng": 127.003274531869
-   },
-   "address": "성북동 일대",
-   "region": "서울",
-   "collected_at": "2026-10-12T15:30:52.992470+09:00"
   },
   {
    "event_id": "evx-1faf2ca25999acbc",
@@ -2404,17 +2276,6 @@
    "address": "대전광역시 유성구 온천로 89 (봉명동)",
    "region": "대전",
    "collected_at": "2026-10-21T07:46:03.381070+09:00"
-  },
-  {
-   "event_id": "evx-8548cca65cf7c191",
-   "name": "한마음축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-24",
-   "end": "2026-10-24",
-   "coord": null,
-   "address": null,
-   "region": "경기",
-   "collected_at": "2026-10-14T08:24:00.985346+09:00"
   },
   {
    "event_id": "evx-ade34041ac13dfcd",
@@ -2531,20 +2392,6 @@
    "coord": null,
    "address": null,
    "region": "대전",
-   "collected_at": "2026-10-15T07:33:42.150036+09:00"
-  },
-  {
-   "event_id": "evx-e6acf5ba981b6631",
-   "name": "2026 미래혁신기술박람회(FIX 2026)",
-   "event_type": "EXHIBITION",
-   "start": "2026-10-21",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 35.9080476200807,
-    "lng": 128.614586966895
-   },
-   "address": "대구 엑스코(EXCO)",
-   "region": "대구",
    "collected_at": "2026-10-15T07:33:42.150036+09:00"
   },
   {
@@ -2844,17 +2691,6 @@
    "address": "강진군 병영시장 일원",
    "region": "전남",
    "collected_at": "2026-10-16T07:38:49.524248+09:00"
-  },
-  {
-   "event_id": "evx-5165326ad05b917a",
-   "name": "10월 외국어 전시해설",
-   "event_type": "OTHER",
-   "start": "2026-10-16",
-   "end": "2026-10-24",
-   "coord": null,
-   "address": null,
-   "region": "서울",
-   "collected_at": "2026-10-17T07:10:37.606218+09:00"
   },
   {
    "event_id": "evx-22a9135bff9aea16",
@@ -3746,20 +3582,6 @@
    "collected_at": "2026-10-18T23:15:44.118779+09:00"
   },
   {
-   "event_id": "tourapi-3382929",
-   "name": "2026 지리산걷기축제 ‘지리산소풍’",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-24",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 35.4102248219,
-    "lng": 127.8726964875
-   },
-   "address": "경상남도 산청군 산청읍 웅석봉로86번길 7",
-   "region": "경남",
-   "collected_at": "2026-10-18T23:15:44.118779+09:00"
-  },
-  {
    "event_id": "tourapi-1937428",
    "name": "예천활축제",
    "event_type": "FESTIVAL",
@@ -3830,20 +3652,6 @@
    "collected_at": "2026-10-18T23:15:44.118779+09:00"
   },
   {
-   "event_id": "tourapi-3536325",
-   "name": "EX펌킨나잇：화니&워니x십이지신",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-24",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 35.8340147657,
-    "lng": 129.2895153224
-   },
-   "address": "경상북도 경주시 경감로 614 (천군동)",
-   "region": "경북",
-   "collected_at": "2026-10-18T23:15:44.118779+09:00"
-  },
-  {
    "event_id": "tourapi-3370452",
    "name": "2026 수성국제비엔날레",
    "event_type": "FESTIVAL",
@@ -3854,20 +3662,6 @@
     "lng": 128.6205920321
    },
    "address": "대구광역시 수성구 무학로 112 (두산동)",
-   "region": "대구",
-   "collected_at": "2026-10-18T23:15:44.118779+09:00"
-  },
-  {
-   "event_id": "tourapi-4109218",
-   "name": "「인각사」와 함께하는 제5회 군위 삼국유사 전국 가족걷기대회",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-24",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 36.1280793877,
-    "lng": 128.7784271308
-   },
-   "address": "대구광역시 군위군 삼국유사면 삼국유사로 250",
    "region": "대구",
    "collected_at": "2026-10-18T23:15:44.118779+09:00"
   },
@@ -4012,20 +3806,6 @@
    "collected_at": "2026-10-18T23:15:44.118779+09:00"
   },
   {
-   "event_id": "tourapi-2648460",
-   "name": "경복궁 별빛야행",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-02",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 37.5760307,
-    "lng": 126.9767218661
-   },
-   "address": "서울특별시 종로구 사직로 161 (세종로)",
-   "region": "서울",
-   "collected_at": "2026-10-18T23:15:44.118779+09:00"
-  },
-  {
    "event_id": "tourapi-4060434",
    "name": "국악공연 진연",
    "event_type": "FESTIVAL",
@@ -4050,20 +3830,6 @@
     "lng": 126.983677617361
    },
    "address": "서울특별시 종로구 종로 54 (관철동)",
-   "region": "서울",
-   "collected_at": "2026-10-18T23:15:44.118779+09:00"
-  },
-  {
-   "event_id": "tourapi-3018924",
-   "name": "도곡 메타세쿼이아 로드 페스타",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-24",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 37.483104035,
-    "lng": 127.0472656803
-   },
-   "address": "서울특별시 강남구 양재천로 199 (도곡동)",
    "region": "서울",
    "collected_at": "2026-10-18T23:15:44.118779+09:00"
   },
@@ -4376,20 +4142,6 @@
    "collected_at": "2026-10-18T23:15:44.118779+09:00"
   },
   {
-   "event_id": "tourapi-2857763",
-   "name": "2026 서울뮤직페스티벌",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-24",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 37.5176636234,
-    "lng": 126.9580359449
-   },
-   "address": "서울특별시 용산구 양녕로 445",
-   "region": "서울",
-   "collected_at": "2026-10-18T23:15:44.118779+09:00"
-  },
-  {
    "event_id": "tourapi-3107059",
    "name": "2026 숭례문 파수의식",
    "event_type": "FESTIVAL",
@@ -4572,20 +4324,6 @@
    "collected_at": "2026-10-18T23:15:44.118779+09:00"
   },
   {
-   "event_id": "tourapi-3381612",
-   "name": "전주막걸리축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-23",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 35.8108759894,
-    "lng": 127.0909664478
-   },
-   "address": "전북특별자치도 전주시 완산구 천잠로 235 (효자동2가)",
-   "region": "전북",
-   "collected_at": "2026-10-18T23:15:44.118779+09:00"
-  },
-  {
    "event_id": "tourapi-2547013",
    "name": "전주한옥마을 전통연희 퍼레이드-노상놀이야",
    "event_type": "FESTIVAL",
@@ -4681,20 +4419,6 @@
    },
    "address": "충청남도 서천군 장항읍 장항로161번길 27",
    "region": "충남",
-   "collected_at": "2026-10-18T23:15:44.118779+09:00"
-  },
-  {
-   "event_id": "tourapi-4117505",
-   "name": "국가유산 미디어아트 청주",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-03",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 36.6330946217,
-    "lng": 127.4897577706
-   },
-   "address": "충청북도 청주시 상당구 남문로2가 48-19",
-   "region": "충북",
    "collected_at": "2026-10-18T23:15:44.118779+09:00"
   },
   {
@@ -4801,10 +4525,7 @@
    "event_type": "FESTIVAL",
    "start": "2026-09-11",
    "end": "2026-10-31",
-   "coord": {
-    "lat": 34.7555508881,
-    "lng": 127.7081166574
-   },
+   "coord": null,
    "address": "전남광주통합특별시 여수시 문수로 124 (여서동)",
    "region": "전남",
    "collected_at": "2026-10-18T23:34:11.543439+09:00"
@@ -4896,31 +4617,6 @@
    "coord": null,
    "address": null,
    "region": "부산",
-   "collected_at": "2026-10-19T06:46:38.883754+09:00"
-  },
-  {
-   "event_id": "evx-88f063de1c782d31",
-   "name": "제23회 무룡예술제",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-07",
-   "end": "2026-10-24",
-   "coord": null,
-   "address": null,
-   "region": "울산",
-   "collected_at": "2026-10-19T06:46:38.883754+09:00"
-  },
-  {
-   "event_id": "evx-194c2ff4d131472b",
-   "name": "태화강의 전설 선바위 축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-23",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 35.5832447675248,
-    "lng": 129.234520292051
-   },
-   "address": "울산 울주군 선바위공원 일원",
-   "region": "울산",
    "collected_at": "2026-10-19T06:46:38.883754+09:00"
   },
   {
@@ -5185,20 +4881,6 @@
    "collected_at": "2026-10-21T07:46:03.381070+09:00"
   },
   {
-   "event_id": "evx-055db58e4d1c3b16",
-   "name": "2026 성안올레 걷기 축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-24",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 33.504539021344044,
-    "lng": 126.53189744943664
-   },
-   "address": "성안올레 3코스 일대",
-   "region": "제주",
-   "collected_at": "2026-10-20T08:02:29.997041+09:00"
-  },
-  {
    "event_id": "evx-59e66553c29a3ad0",
    "name": "로컬트립 가을소풍",
    "event_type": "OTHER",
@@ -5227,17 +4909,6 @@
    "collected_at": "2026-10-21T07:35:15.820364+09:00"
   },
   {
-   "event_id": "evx-2708c6d7f57068c8",
-   "name": "2026 대학로 소나무길 거리예술제",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-24",
-   "end": "2026-10-24",
-   "coord": null,
-   "address": null,
-   "region": "서울",
-   "collected_at": "2026-10-21T07:35:15.820364+09:00"
-  },
-  {
    "event_id": "tourapi-3348362",
    "name": "성북거리문화축제 다다페스타",
    "event_type": "FESTIVAL",
@@ -5250,17 +4921,6 @@
    "address": "서울특별시 성북구 장월로 149 (장위동)",
    "region": "서울",
    "collected_at": "2026-10-24T07:44:46.157531+09:00"
-  },
-  {
-   "event_id": "evx-b907c64e329149c1",
-   "name": "2026 인천무형유산대축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-24",
-   "end": "2026-10-24",
-   "coord": null,
-   "address": null,
-   "region": "인천",
-   "collected_at": "2026-10-21T07:35:15.820364+09:00"
   },
   {
    "event_id": "evx-d50731c028a2a388",
@@ -5292,17 +4952,6 @@
    "end": "2026-11-12",
    "coord": null,
    "address": null,
-   "region": "광주",
-   "collected_at": "2026-10-21T07:35:15.820364+09:00"
-  },
-  {
-   "event_id": "evx-29ef280765eea1e0",
-   "name": "제6회 다북다북 책축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-23",
-   "end": "2026-10-24",
-   "coord": null,
-   "address": "운암도서관과 운암제3근린공원 일대",
    "region": "광주",
    "collected_at": "2026-10-21T07:35:15.820364+09:00"
   },
@@ -5359,20 +5008,6 @@
    "coord": null,
    "address": null,
    "region": "경북",
-   "collected_at": "2026-10-21T07:35:15.820364+09:00"
-  },
-  {
-   "event_id": "evx-dc3aad3adcaee8b0",
-   "name": "2026 아트 커넥션 페스타 경남",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-22",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 34.8422179598973,
-    "lng": 128.428376295876
-   },
-   "address": "통영시민문화회관",
-   "region": "경남",
    "collected_at": "2026-10-21T07:35:15.820364+09:00"
   },
   {
@@ -5457,20 +5092,6 @@
    "collected_at": "2026-10-21T07:46:03.381070+09:00"
   },
   {
-   "event_id": "tourapi-3551000",
-   "name": "2026 에듀의왕 어울림축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-24",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 37.3056173114,
-    "lng": 126.9537683373
-   },
-   "address": "경기도 의왕시 왕송못동로 307 (월암동)",
-   "region": "경기",
-   "collected_at": "2026-10-21T07:46:03.381070+09:00"
-  },
-  {
    "event_id": "tourapi-3563389",
    "name": "죽변항 수산물축제",
    "event_type": "FESTIVAL",
@@ -5482,20 +5103,6 @@
    },
    "address": "경상북도 울진군 죽변면 죽변항길 150",
    "region": "경북",
-   "collected_at": "2026-10-21T07:46:03.381070+09:00"
-  },
-  {
-   "event_id": "tourapi-4130910",
-   "name": "대전 서구 책축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-24",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 36.3570872057,
-    "lng": 127.372170888
-   },
-   "address": "대전광역시 서구 한밭대로 664 (갈마동)",
-   "region": "대전",
    "collected_at": "2026-10-21T07:46:03.381070+09:00"
   },
   {
@@ -5523,48 +5130,6 @@
     "lng": 126.9445243157
    },
    "address": "서울특별시 동작구 노들로 688 (노량진동)",
-   "region": "서울",
-   "collected_at": "2026-10-21T07:46:03.381070+09:00"
-  },
-  {
-   "event_id": "tourapi-3390190",
-   "name": "2026 동작 미래과학페스티벌",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-24",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 37.5077517549,
-    "lng": 126.9267361406
-   },
-   "address": "서울특별시 동작구 여의대방로36길 71 (대방동)",
-   "region": "서울",
-   "collected_at": "2026-10-21T07:46:03.381070+09:00"
-  },
-  {
-   "event_id": "tourapi-3368863",
-   "name": "2026 연남동 주민화합 대축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-24",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 37.5615826676,
-    "lng": 126.9243067392
-   },
-   "address": "서울특별시 마포구 연남동 255-30",
-   "region": "서울",
-   "collected_at": "2026-10-21T07:46:03.381070+09:00"
-  },
-  {
-   "event_id": "tourapi-4128762",
-   "name": "2026 자원순환 시민행사 : 앨리스와 떠나는 에코 원더랜드",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-24",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 37.549077736,
-    "lng": 127.165427204
-   },
-   "address": "서울특별시 강동구 상일동 185",
    "region": "서울",
    "collected_at": "2026-10-21T07:46:03.381070+09:00"
   },
@@ -5742,17 +5307,6 @@
    "collected_at": "2026-10-22T07:40:20.155296+09:00"
   },
   {
-   "event_id": "evx-b686918a38f876ca",
-   "name": "2026 대한민국 소상공인대회",
-   "event_type": "OTHER",
-   "start": "2026-10-23",
-   "end": "2026-10-24",
-   "coord": null,
-   "address": "부산 벡스코 제2전시장 4홀과 2층 야외 전시관",
-   "region": "부산",
-   "collected_at": "2026-10-22T07:40:20.155296+09:00"
-  },
-  {
    "event_id": "evx-9fcad23357f118a5",
    "name": "커튼콜영화제",
    "event_type": "FESTIVAL",
@@ -5904,28 +5458,6 @@
    "collected_at": "2026-10-22T07:50:35.828990+09:00"
   },
   {
-   "event_id": "evx-827c11d9d60d6f9e",
-   "name": "월드뮤직콘서트 〈Plastic Island〉",
-   "event_type": "PERFORMANCE",
-   "start": "2026-10-23",
-   "end": "2026-10-24",
-   "coord": null,
-   "address": null,
-   "region": "서울",
-   "collected_at": "2026-10-23T07:41:21.580425+09:00"
-  },
-  {
-   "event_id": "evx-5a7ea99a32ed97cc",
-   "name": "2026 대한민국 미래모빌리티엑스포",
-   "event_type": "EXHIBITION",
-   "start": "2026-10-21",
-   "end": "2026-10-24",
-   "coord": null,
-   "address": null,
-   "region": "대구",
-   "collected_at": "2026-10-23T07:41:21.580425+09:00"
-  },
-  {
    "event_id": "evx-702c0222de133fa2",
    "name": "대구 국화전시회",
    "event_type": "EXHIBITION",
@@ -5995,31 +5527,6 @@
    "collected_at": "2026-10-23T07:41:21.580425+09:00"
   },
   {
-   "event_id": "evx-e1239776d62ecffe",
-   "name": "2026 임실 도자기축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-23",
-   "end": "2026-10-24",
-   "coord": null,
-   "address": null,
-   "region": "전북",
-   "collected_at": "2026-10-23T07:41:21.580425+09:00"
-  },
-  {
-   "event_id": "tourapi-4132933",
-   "name": "수원특례시 반려동물 한마음축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-24",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 37.2907652402,
-    "lng": 127.0640032492
-   },
-   "address": "경기도 수원시 영통구 광교중앙로 216 (하동)",
-   "region": "경기",
-   "collected_at": "2026-10-23T07:53:54.446449+09:00"
-  },
-  {
    "event_id": "tourapi-3555835",
    "name": "안산사이언스밸리(ASV) 과학축제",
    "event_type": "FESTIVAL",
@@ -6073,20 +5580,6 @@
    },
    "address": "부산광역시 동구 이순신대로 164 (초량동)",
    "region": "부산",
-   "collected_at": "2026-10-23T07:53:54.446449+09:00"
-  },
-  {
-   "event_id": "tourapi-3382981",
-   "name": "서초책있는거리 10월 북캠핑",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-24",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 37.4976289493,
-    "lng": 127.0045323824
-   },
-   "address": "서울특별시 서초구 반포대로 201 (반포동)",
-   "region": "서울",
    "collected_at": "2026-10-23T07:53:54.446449+09:00"
   },
   {
@@ -6151,39 +5644,6 @@
    "coord": null,
    "address": null,
    "region": "인천",
-   "collected_at": "2026-10-24T07:34:15.172199+09:00"
-  },
-  {
-   "event_id": "evx-16c3cad11a8bb568",
-   "name": "빛고을 어린이 연극잔치〈늑대야 친구하자〉",
-   "event_type": "PERFORMANCE",
-   "start": "2026-03-12",
-   "end": "2026-10-24",
-   "coord": null,
-   "address": null,
-   "region": "광주",
-   "collected_at": "2026-10-24T07:34:15.172199+09:00"
-  },
-  {
-   "event_id": "evx-c90ad73377053540",
-   "name": "[대관공연] 치유 심리연극 “공감”",
-   "event_type": "PERFORMANCE",
-   "start": "2026-08-01",
-   "end": "2026-10-24",
-   "coord": null,
-   "address": null,
-   "region": "광주",
-   "collected_at": "2026-10-24T07:34:15.172199+09:00"
-  },
-  {
-   "event_id": "evx-50b5ec9bf5e64c0b",
-   "name": "교차하는 삶들",
-   "event_type": "PERFORMANCE",
-   "start": "2026-09-05",
-   "end": "2026-10-24",
-   "coord": null,
-   "address": null,
-   "region": "광주",
    "collected_at": "2026-10-24T07:34:15.172199+09:00"
   },
   {
@@ -6367,20 +5827,6 @@
    },
    "address": "부산광역시 부산진구 시민공원로 73 (범전동)",
    "region": "부산",
-   "collected_at": "2026-10-24T07:44:46.157531+09:00"
-  },
-  {
-   "event_id": "tourapi-4134805",
-   "name": "광희로드 페스타",
-   "event_type": "FESTIVAL",
-   "start": "2026-10-24",
-   "end": "2026-10-24",
-   "coord": {
-    "lat": 37.5647198779,
-    "lng": 127.0064555293
-   },
-   "address": "서울특별시 중구 을지로44길 31 (광희동1가)",
-   "region": "서울",
    "collected_at": "2026-10-24T07:44:46.157531+09:00"
   },
   {
