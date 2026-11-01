@@ -18,6 +18,8 @@
  */
 import { useCallback, useMemo, useState, type ReactElement } from 'react';
 import { router } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 
@@ -187,7 +189,7 @@ export function SavedStayPage(): ReactElement {
         onPressBrowse={() => router.push('/stays')}
         onRetry={() => void query.refetch()}
         onPressLogin={() => router.push('/(auth)/login')}
-        onBack={() => router.back()}
+        onBack={() => goBackOr(router, shellTabHref('explore'))}
       />
       {outbound.sheetProps !== null ? (
         <OtaChoiceSheet {...outbound.sheetProps} />
