@@ -74,3 +74,44 @@ def test_mentions_are_regions_said_not_names_that_contain_one() -> None:
     assert [n for _, n in region_mentions("부산 사람들이 자주 가는 제주 맛집")] == ["부산", "제주"]  # 말한 순서
     assert [n for _, n in region_mentions("홍대입구역에서 서귀포시까지")] == ["홍대", "서귀포"]
     assert [n for _, n in region_mentions("서울엔 요즘 핫한 곳 어디야? 부산에선 강릉에서는")] == ["서울", "부산", "강릉"]  # 겹친 조사
+
+
+@pytest.mark.parametrize("text", ["제주랑 부산 사이에서 여행지 고민 중이야 가볼 만한 곳", "제주랑 부산 사이에서 어디 갈지 고민 중이야",
+                                  "홍대랑 이태원 사이에서 고민 중인데 어디가 더 재밌어?", "강릉이랑 속초 사이에서 아직 결정 못 했어"])
+def test_choosing_between_two_places_is_not_a_place_between(text: str) -> None:
+    assert region_pair(text) is None
+
+
+@pytest.mark.parametrize("text", ["홍대랑 이태원 사이에서 맛집 골라 줘", "홍대랑 이태원 사이에서 친구랑 만나기로 결정했어 카페 추천해줘",
+                                  "홍대랑 이태원 사이에서 만날 곳 정하자",
+                                  # 찾을 곳을 말한 뒤의 결정 말은 그곳을 정하는 말이다(#1713 재리뷰 — develop 은 짝이었다)
+                                  "홍대랑 이태원 사이에서 맛집 정하자", "홍대랑 이태원 사이에서 맛집 결정해 줘", "홍대랑 이태원 사이에서 어느 카페 갈지 추천해줘",
+                                  "홍대랑 이태원 사이에서 카페 찾는데 결정장애라", "홍대랑 이태원 사이에서 중간 지점 정하자",
+                                  "홍대랑 이태원 사이에서 점심 먹을 데 결정 좀", "홍대랑 이태원 사이에서 모일 곳 정하자",
+                                  "홍대랑 이태원 사이에서 어디서 볼지 정하자", "홍대랑 이태원 사이에서 회식 장소 정하려고",
+                                  "홍대랑 이태원 사이에서 점심 먹을 식당 정할래", "홍대랑 이태원 사이에서 브런치 카페 정할 거야 추천해"])
+def test_asking_for_a_pick_or_a_meeting_point_between_two_places_is_still_between(text: str) -> None:
+    """만남·요청 말을 넘어 '결정·정하'를 보면 가운데를 찾는 말을 고르기로 읽었다(#1713 반박 리뷰)."""
+    assert [n for n, _ in region_pair(text)] == ["홍대", "이태원"]
+
+
+@pytest.mark.parametrize("text", ["홍대 보고나서 이태원 가는 길에", "홍대 먹고 나서 이태원 가는 길에", "홍대 다음에 이태원 가는 길에",
+                                  "홍대 친구 만나서 이태원 가는 길에", "홍대 그다음에 이태원 가는 길에", "홍대 구경한 다음에 이태원 가는 길에",
+                                  "홍대 간 다음에 이태원 가는 길에", "홍대 들른 다음에 이태원 가는 길에", "홍대는 구경한 다음에 이태원 가는 길에"])
+def test_route_departure_markers_include_after_and_next(text: str) -> None:
+    assert [n for n, _ in region_pair(text)] == ["홍대", "이태원"]
+
+
+@pytest.mark.parametrize("text", ["홍대는 다음에 가고 이태원 가는 길에 카페 추천", "홍대는 다음에 갈게 이태원 가는 길에 맛집 알려줘",
+                                  "홍대 가는 건 다음에 하고 이태원 가는 길에 카페",
+                                  # 동사를 뺀 미룸도 미룸이다 — 주제 조사·'건' 뒤의 '다음에'(#1713 재리뷰)
+                                  "홍대는 다음에 이태원 가는 길에 카페 추천", "홍대 가는 건 다음에 이태원 가는 길에 카페",
+                                  "홍대도 다음에 이태원 가는 길에 카페", "홍대는 이번엔 패스하고 다음에 이태원 가는 길에 카페",
+                                  "해운대 들르는 건 다음에 광안리 가는 길에 맛집", "홍대 구경은 다음에 이태원 가는 길에 카페",
+                                  "홍대 맛집은 다음에 이태원 가는 길에 카페 추천",
+                                  # 까닭의 '-나서'는 떠나는 말이 아니다(같은 재리뷰)
+                                  "홍대 가기 겁나서 이태원 가는 길에 카페", "홍대 사람 많다고 소문나서 이태원 가는 길에 카페 추천",
+                                  "홍대 생각나서 이태원 가는 길에 카페"])
+def test_putting_a_place_off_for_next_time_is_not_a_departure(text: str) -> None:
+    """'다음에'는 두 이름 사이 글의 끝일 때만 순서다 — 가운데면 미룸이다(#1713 반박 리뷰)."""
+    assert region_pair(text) is None

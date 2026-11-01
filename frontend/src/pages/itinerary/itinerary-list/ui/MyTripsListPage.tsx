@@ -19,7 +19,7 @@ import {
 } from '@/shared/api/index.hooks';
 import { isNotFound, isOfflineWaiting } from '@/shared/api';
 import { isLargeText } from '@/shared/lib/fontScale';
-import { seoulDate } from '@/shared/lib/seoulDate';
+import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { readStringValue, writeStringValue } from '@/shared/storage';
 import { readDoneBarSeen, writeDoneBarSeen } from '@/entities/trip';
 import { pickDoneBar, type DoneBarEntry } from '../model/doneBar';
@@ -198,7 +198,8 @@ export function MyTripsListPage(): ReactElement {
           generationState: itineraries[i].data?.generationState,
         },
   }));
-  const today = seoulDate(new Date());
+  // 오늘(KST) — 상태로 들어 자정을 넘기면 바뀐다(TRIP-1639 · TRIP-1364 선례). 렌더 중 `seoulDate(new Date())` 는 마운트에 굳는다.
+  const today = useSeoulToday();
 
   const pick =
     shown || !focused || seen === null || trips.isPending

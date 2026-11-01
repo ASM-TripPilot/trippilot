@@ -51,14 +51,16 @@ generate 봉투 부가 필드 산출 규칙(TRIP-341 — 코드가 실제로 아
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import pathlib
 import os
 import random
 import re
+import threading
 import time
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 import zlib
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
@@ -80,7 +82,7 @@ from trippilot.api.route_budget import (
 from trippilot.llm_gateway.adapters.backend_persona import _to_summary as _persona_to_summary
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver, ContextStore
-from trippilot.llm_gateway.gates.explanation import ExplanationGate
+from trippilot.llm_gateway.gates.explanation import ExplanationGate, hashtag_line
 from trippilot.llm_gateway.gates.reminder_copy import ReminderCopyGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
@@ -165,8 +167,10 @@ from trippilot.agents.edit.day_area import DayArea
 from trippilot.agents.edit.commands import EditStatus
 from trippilot.agents.planb import composition
 from trippilot.agents.planb import request_verification as nl_verify
+from trippilot.agents.planb.place_knowledge import kb5_counts
 from trippilot.agents.planb.rag import PlanBAgent, PlanBRagRequest, SavedPlace
 from trippilot.agents.schedule.agent import ScheduleAgent, trim_planb_rank_for_add_one
+from trippilot.agents.schedule.family import normalize_name, same_place
 from trippilot.agents.planb.directives import (
     DirectiveSpec,
     index_of,
@@ -201,6 +205,7 @@ from trippilot.domain.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
 from trippilot.llm_gateway.gates.numbered_selection import NumberedScoringGate, NumberedSelectionGate
 from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
+from trippilot.poi_curation import place_fallback
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.place_fees import load_fee_table
 from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql
@@ -410,7 +415,7 @@ def _request_findings(request: schemas.GenerateItineraryRequest) -> list[str]:
 
 
 def _transport_of(tokens: list[str]) -> TransportMode:
-    """첫 인식 토큰 → 수단, 없으면 PUBLIC. generate·repair 가 같은 규칙을 쓴다."""
+    """첫 인식 토큰 → 수단, 없으면 PUBLIC. generate·validate·repair 가 같은 규칙을 쓴다."""
     for text in tokens:
         mode = _TRANSPORT_TOKENS.get(text.strip().upper())
         if mode is not None:
@@ -726,13 +731,33 @@ def _payload_alternative_pairs(
 _PLACEMENT_REASON_MAX = 500
 
 
+def _one_per_place(pool: CandidatePool, prefer: frozenset[PoiId], notes: list[str]) -> CandidatePool:
+    """출처만 다른 같은 장소(이름까지 같은 200m 안, `family.same_place`)는 풀에 하나만 — 원 일정에 있는 쪽을 남긴다.
+    생성은 계열 강등 단계가 쌍둥이를 빼지만(#1624) 다시 짜기는 그 단계가 꺼져 있어 구성 LLM·솔버가 둘 다 고를 수 있었다.
+    풀이 수천 곳이라 정규화 이름이 같은 것끼리만 견준다."""
+    kept: dict[str, list[Poi]] = {}
+    drop: set[PoiId] = set()
+    for p in sorted(pool.pois, key=lambda p: (p.poi_id not in prefer, str(p.poi_id))):
+        same = kept.setdefault(normalize_name(p.name), [])
+        if any(same_place(p, q) for q in same):
+            drop.add(p.poi_id)
+        else:
+            same.append(p)
+    if not drop:
+        return pool
+    notes.append(f"same_place_dropped: {len(drop)}")
+    pois = tuple(p for p in pool.pois if p.poi_id not in drop)
+    return replace(pool, poi_ids=frozenset(p.poi_id for p in pois), pois=pois)
+
+
 def _pick_reasons(picks) -> dict[PoiId, str]:
-    """구성 LLM 이 고른 곳 → 이유. 게이트가 비운 이유(시간 표현·연락처 꼴)는 뺀다 — 빈 이유로 원래 이유를 덮지 않게.
+    """구성 LLM 이 고른 곳 → 추천 이유(해시태그 5개 — 생성 EXPLANATION 과 같은 `hashtag_line` 규칙, 10-23 사용자 결정).
+    태그가 하나도 안 남은 이유(게이트가 비운 것·문장으로 답한 것)는 뺀다 — 빈 이유로 원래 이유를 덮지 않게.
     같은 곳이 두 번이면 첫 이유(고른 순서와 같다)."""
     out: dict[PoiId, str] = {}
     for pick in picks:
-        if pick.reason.strip():
-            out.setdefault(pick.poi_id, pick.reason.strip())
+        if line := hashtag_line(pick.reason.split()):
+            out.setdefault(pick.poi_id, line)
     return out
 
 
@@ -750,6 +775,56 @@ def _keyed_explanations(
             continue  # 배치되지 않은 POI의 설명은 표시 대상이 아니다
         keyed[f"{placed_on.isoformat()}#{exp.poi_id}"] = exp.text
     return keyed
+
+
+# 여러 날 `/explanations` 의 **요청 하나당** 날 묶음 동시 상한 — 풀은 요청마다 따로 둔다(취향 점수 청크
+# `PreferenceScoringWorker` 선례). 프로세스 공용 FIFO 풀이면 긴 여행 한 건이 뒤 요청의 날을 줄 세우고, 백엔드가
+# 읽기 시한으로 포기한 요청도 남은 날을 끝까지 돌며 자리를 쥔다(반박 리뷰 재현). 8 이면 한 주(7일) 여행이 한 번에
+# 돈다 — 더 긴 여행만 제 안에서 줄을 서고, 시한 안에 못 끝난 날은 실패로 센다(`explanation_partial`).
+_EXPLAIN_DAY_WORKERS = 8
+
+
+def _explain_days(
+    explainer: ExplanationWorker,
+    pool: CandidatePool,
+    chunks: Sequence[tuple[PoiId, ...]],
+    persona: PersonaSummary,
+    trace_id: TraceId,
+    now: datetime,
+    *,
+    budget_ms: int,
+) -> list[tuple[PoiExplanation, ...] | str]:
+    """날 묶음마다 설명 — 묶음 순서대로 (설명 | 실패 사유). 사유 어휘는 종전 한 번 호출 그대로다.
+
+    하루짜리는 이 스레드에서 한 번 부른다(종전 그대로). 여러 날은 풀에서 나란히 돌고 묶음마다 같은 예산을
+    받으므로 시한은 합이 아니라 최댓값이다 — 줄 서서 늦게 시작한 날이 그 시한을 넘기지 않게 기다림도 같은
+    예산에서 끊는다(못 끝난 날은 `deadline:` 사유, 줄 선 것은 취소하고 도는 것은 결과를 버린다 —
+    `route_budget.measure_within` 선례).
+    """
+    def one(chunk: tuple[PoiId, ...]) -> tuple[PoiExplanation, ...] | str:
+        try:
+            result = explainer.explain(
+                pool, chunk, persona, trace_id, now, timeout_sec=budget_ms / 1000.0)
+        except Exception as e:  # 설정 버그 등 — 그 묶음은 설명 없음으로 정직 보고
+            return f"explain_error: {type(e).__name__}: {e}"
+        if result.is_fallback or not result.value:
+            return f"explanation_fallback: {result.error}"
+        return result.value
+
+    if len(chunks) == 1:
+        return [one(chunks[0])]
+    # 문맥을 복사해 넘긴다 — 요청 단위 contextvar 계측(도우미 턴 `llm_calls` 등)이 풀 스레드에서도 잡히게. 사본은
+    # 낼 때마다 새로 뜬다(한 사본을 두 스레드가 같이 쓰면 RuntimeError — 도우미 `_submit` 선례).
+    # with(=shutdown(wait=True)) 금지 — 시한 넘긴 날을 기다리면 벽시계 보장이 깨진다(점수 청크 선례).
+    executor = ThreadPoolExecutor(
+        max_workers=min(len(chunks), _EXPLAIN_DAY_WORKERS), thread_name_prefix="explain-day")
+    try:
+        futures = [executor.submit(contextvars.copy_context().run, one, c) for c in chunks]
+        # 기다림은 플랫폼 상한 안으로 — 스키마는 deadline_ms 의 gt=0 만 봐서 아주 큰 값이면 wait 가 OverflowError(500)
+        done, _ = wait(futures, timeout=min(budget_ms / 1000.0, threading.TIMEOUT_MAX))
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)  # 줄 선 날은 빠지고, 도는 날은 결과를 버린다
+    return [f.result() if f in done else f"deadline:budget={budget_ms}ms" for f in futures]
 
 
 def _envelope(
@@ -1035,7 +1110,7 @@ def _problem_for(solution: ItinerarySolution, tz: timezone,
       휴일 규칙을 본다. 출처가 없거나 모드 off 면 None(공휴일 규칙 없음).
 
     - transport=PUBLIC · day_window=당일 00:00~23:59: 와이어에 원값이 없다(간극 —
-      HC2·HC4 판정이 원 요청과 다를 수 있음 — repair 는 `transport_modes` 가 오면 덮어쓴다). 자정 초과 슬롯은 HC4로 표시될 수 있다
+      HC2·HC4 판정이 원 요청과 다를 수 있음 — validate·repair 는 `transport_modes` 가 오면 덮어쓴다). 자정 초과 슬롯은 HC4로 표시될 수 있다
       (HC4 정본도 "시작일 창 귀속"이라 방향은 같다).
     - candidates=(): validate/repair는 POI를 재선택하지 않는다 — HC 판정에 미사용.
     - fixed_blocks: 와이어 `is_fixed` 슬롯을 그대로 승격 — repair가 이를 고정(HC3)한다.
@@ -1869,6 +1944,20 @@ def _inline_persona(
     return persona
 
 
+def _persona_gap(
+    profile: schemas.PreferenceProfileSchema | None, inline: PersonaSummary | None,
+) -> str | None:
+    """실린 취향을 못 쓴 까닭 — `_inline_persona` 의 None 두 갈래를 가른다. 썼으면 None.
+
+    필드 없음(옛 백엔드이거나 백엔드가 못 실었다)은 `persona_inline_absent`, 왔는데 전 축 미설정은
+    `persona_unset`. 내려간 종전 재조회는 운영에선 고정 요약(`StaticPersonaStore`)인데 정상 값처럼
+    보여서 이 표지가 없으면 흔적이 없다(INV-4).
+    """
+    if inline is not None:
+        return None
+    return "persona_inline_absent" if profile is None else "persona_unset"
+
+
 class WiredItineraryOrchestrator:
     """실 오케스트레이터·C2 퍼사드를 API Protocol 모양으로 감싸는 경계 어댑터."""
 
@@ -2199,6 +2288,8 @@ class WiredItineraryOrchestrator:
             request.itinerary, request.request_meta,
             untimed="skip",  # 미정 슬롯은 시각 주장이 없다 — 배치분만 검증
         )
+        # 수단은 선택 필드(2026-10-30) — repair 와 같은 칸·규칙. 없으면 종전(PUBLIC).
+        problem = replace(problem, transport=_transport_of(request.transport_modes))
         facade = self._assembly_provider.for_pool(poi_index)
         return WiredValidateOutcome(
             violations=tuple(facade.validate(
@@ -2320,6 +2411,8 @@ class WiredItineraryOrchestrator:
             target = request.target_poi_id or next(iter(request.affected_reasons), None)
             pool, role_notes = restrict_pool_to_target_role(
                 pool, target, frozenset(PoiId(p) for p in request.excluded_poi_ids))
+        inline = _inline_persona(request.preference_profile, request.companion_type)
+        gap = _persona_gap(request.preference_profile, inline)
         result = self._rag.run(
             PlanBRagRequest(
                 trigger=TriggerParams(
@@ -2345,8 +2438,7 @@ class WiredItineraryOrchestrator:
                 # 야외를 안 내리면 화면과 모순된다. 실값은 정도를 더하는 데만 쓴다.
                 rain_prob_by_date=self._rain_from(packets, dates, now),
                 # 그 여행의 취향이 실려 오면 그것이 이 요청의 페르소나다 — 없으면 종전 재조회(하위호환).
-                persona=(_inline_persona(request.preference_profile, request.companion_type)
-                         or self._persona_from(packets)),
+                persona=inline or self._persona_from(packets),
                 saved_places=tuple(
                     SavedPlace(poi_id=sp.poi_id, name=sp.name) for sp in request.saved_places
                 ),
@@ -2368,7 +2460,7 @@ class WiredItineraryOrchestrator:
             fallback_level=result.fallback_level,
             notes=list(result.notes) + role_notes + (
                 [f"categories_ignored:{','.join(ignored_categories)}"]
-                if ignored_categories else []),
+                if ignored_categories else []) + ([gap] if gap else []),
             retrieved=dict(result.retrieved),
             dropped_out_of_pool=list(result.dropped_out_of_pool),
             empty_reason=result.empty_reason,
@@ -2901,7 +2993,7 @@ class WiredItineraryOrchestrator:
         return self._replan_projection(
             request, outcome, notes, resolved, unknown,
             # KB-5 는 구성 후보로 찾는다 — 건수도 그쪽 것이다(PlanB 는 선택 LLM 이 없으면 찾지 않는다).
-            retrieved={**planb.retrieved, "POI_DESC": len(compose_ctx[0][0].place_knowledge)}
+            retrieved={**planb.retrieved, **kb5_counts(compose_ctx[0][0].place_knowledge)}
             if compose_ctx else planb.retrieved,
             planb_fallback=planb.is_fallback, started_ms=t0, past=past,
             composed=bool(composed), reasons=why,
@@ -3522,6 +3614,17 @@ class WiredItineraryOrchestrator:
         now: datetime,
         notes: list[str],
     ) -> CandidatePool:
+        """원 일정 합류 + 같은 장소는 하나만(`_one_per_place`) — 다시 짜기 풀이 모두 이 길로 온다."""
+        return _one_per_place(self._join_current_slots(pool, request, now, notes),
+                              frozenset(PoiId(s.poi_id) for s in request.current_slots), notes)
+
+    def _join_current_slots(
+        self,
+        pool: CandidatePool,
+        request: schemas.ReplanRequest,
+        now: datetime,
+        notes: list[str],
+    ) -> CandidatePool:
         """원 일정 POI 를 풀에 합집합으로 넣는다.
 
         설계 §4 — 원 일정 POI 가 **같은 점수 호출**에 들어가야 대안과 같은 척도로
@@ -3858,6 +3961,8 @@ class WiredItineraryOrchestrator:
 
         설명은 부가 정보라 실패도 200 + 빈 맵 + 사유다(침묵 금지). 페르소나는
         generate와 같은 trip_id 파생 참조(D31)로 해석 — 소유 검증 규칙 재사용.
+        여러 날이면 날마다 한 번씩 나란히 부른다(`_explain_days`) — 일부 날만 실패하면 성공한 날 이유 +
+        `explanation_partial` 사유(is_fallback=False)이고, 전부 실패해야 빈 맵이다.
         """
         meta = request.request_meta
         now = _tz_aware(meta.requested_at, self._tz)
@@ -3885,43 +3990,58 @@ class WiredItineraryOrchestrator:
             poi_ids=frozenset(p.poi_id for p in pois), pois=pois, generated_at=now)
         owner = f"trip:{request.trip_id}"
         # 그 여행의 취향이 실려 오면 그것으로 설명한다 — 없으면 종전 재조회(하위호환).
-        persona = _inline_persona(request.preference_profile, request.companion_type) or self._resolver.resolve(
+        inline = _inline_persona(request.preference_profile, request.companion_type)
+        if gap := _persona_gap(request.preference_profile, inline):
+            # 응답에 notes 칸이 없어 로그로 드러낸다 — WARN 은 필드 없음만(미설정은 취향을 안 넣은 사용자라 정상)
+            _logger.log(logging.WARNING if request.preference_profile is None else logging.INFO,
+                        "explanations %s trace_id=%s trip_id=%s", gap, trace_id, request.trip_id)
+        persona = inline or self._resolver.resolve(
             Principal(user_id=owner),
             ResourceRef(kind="persona", ref_id=request.trip_id, owner_id=owner),
         )
+        # 날 단위 묶음 — 같은 POI 는 처음 나온 날에서 한 번(종전 중복 제거 그대로). 여행 전체를 한 번에 보내면 일정이
+        # 길수록 출력이 상한(EXPLANATION 4096 — 끌 수 없는 사고 토큰도 그 안이다)을 넘어 잘리고, 잘린 JSON 은 통째로
+        # 버려져 그 여행은 이유가 0건이었다(운영 ai.log 2026-10-29~30: 30건 중 4건이 ~35s 에 `truncated: parse_error`).
+        # 하루 ≤ 8~10곳(속도 배율 실측 09~21시 7~9슬롯 — assembly_engine/config.py) × 슬롯당 ≈ 75 토큰(poiId UUID
+        # 베끼기 ≈ 30 — 점수 워커 실측 건당 34~35 — + 태그 5개, 추정) ≈ 750 토큰이라 상한 안에 사고 몫이 3,000 남짓 남는다.
         seen: set[PoiId] = set()
-        ordered = tuple(
-            slot.poi_id
-            for day in solution.days for slot in day.slots
-            if pool.contains(slot.poi_id)
-            and not (slot.poi_id in seen or seen.add(slot.poi_id))
-        )
+        chunks: list[tuple[PoiId, ...]] = []
+        for day in solution.days:
+            chunk = tuple(
+                slot.poi_id for slot in day.slots
+                if pool.contains(slot.poi_id)
+                and not (slot.poi_id in seen or seen.add(slot.poi_id))
+            )
+            if chunk:
+                chunks.append(chunk)
         budget_ms = _deadline_budget(meta)
         t0 = self._clock.monotonic_ms()
-        try:
-            result = self._explainer.explain(
-                pool, ordered, persona, trace_id, now,
-                timeout_sec=budget_ms / 1000.0,
-            )
-        except Exception as e:  # 설정 버그 등 — 설명 없음으로 정직 보고
+        outcomes = _explain_days(
+            self._explainer, pool, chunks, persona, trace_id, now, budget_ms=budget_ms)
+        failed = [o for o in outcomes if isinstance(o, str)]
+        if failed and len(outcomes) > 1:
+            # 백엔드는 is_fallback=true 일 때만 사유를 로그한다 — 부분 실패·시한에 끊긴 날은 여기서 남긴다(INV-4)
+            _logger.info("explanation_partial %s", json.dumps({
+                "trace_id": str(trace_id), "failed": len(failed), "days": len(outcomes), "first": failed[0],
+            }, ensure_ascii=False))
+        if len(failed) == len(outcomes):  # 전부 실패 — 종전처럼 빈 맵 + 사유(하루짜리는 사유도 종전 문자열 그대로)
             return schemas.ExplanationsResponse(
                 explanations={}, is_fallback=True,
-                reason=f"explain_error: {type(e).__name__}: {e}",
-                alternatives_reason=alt_skipped)
-        if result.is_fallback or not result.value:
-            return schemas.ExplanationsResponse(
-                explanations={}, is_fallback=True,
-                reason=f"explanation_fallback: {result.error}",
+                reason=failed[0] if len(failed) == 1
+                else f"explanation_fallback: 실패 {len(failed)}/{len(outcomes)} — {failed[0]}",
                 alternatives_reason=alt_skipped)
         keyed = _keyed_explanations(
-            solution, tuple(x for x in result.value if pool.contains(x.poi_id)))
-        # 차선책 문장은 두 번째 호출 — 첫 호출이 실패하면 시도하지 않고(위 사유), 성공했으면
+            solution, tuple(x for o in outcomes if not isinstance(o, str)
+                            for x in o if pool.contains(x.poi_id)))
+        # 차선책 문장은 두 번째 호출 — 날 묶음이 전부 실패하면 시도하지 않고(위 사유), 성공했으면
         # **잔여 예산**만 준다(DL-2 — 두 호출의 합이 deadline 을 넘지 않게, 에이전트 ⑥′ 와 동형).
         alt_keyed, alt_reason = self._alternative_explanations(
             pool, alt_pairs, persona, trace_id, now,
             remaining_ms=budget_ms - (self._clock.monotonic_ms() - t0))
         return schemas.ExplanationsResponse(
-            explanations=dict(keyed), is_fallback=False, reason=None,
+            explanations=dict(keyed), is_fallback=False,
+            # 일부 날만 실패 — 성공한 날 이유는 싣고 실패는 사유로 남긴다(INV-4 침묵 금지)
+            reason=f"explanation_partial: 실패 {len(failed)}/{len(outcomes)} — {failed[0]}" if failed else None,
             alternative_explanations=alt_keyed, alternatives_reason=alt_reason)
 
     def _alternative_explanations(
@@ -4038,10 +4158,10 @@ class WiredItineraryOrchestrator:
             # 날마다 동네 — 그 날들을 동네 풀로 ScheduleAgent 가 다시 푼다(spec 004). 에이전트가 날·동네를 확인했을 때만 부른다
             rebuild_days=lambda pairs: self._rebuild_days(request, solution, pool, poi_index, pool_request, transport, now, t0, pairs),
         ))
-        return self._edit_response(outcome)
+        return self._edit_response(outcome, self._edit_distances(request, outcome, transport, t0))
 
     def _edit_response(
-        self, outcome: EditOutcome
+        self, outcome: EditOutcome, distance_ranges: Mapping[str, str] | None = None
     ) -> schemas.EditItineraryResponse:
         """EditOutcome → 와이어. 상태값 사영뿐 — 판단은 이미 에이전트가 끝냈다."""
         command_schema = None
@@ -4060,7 +4180,7 @@ class WiredItineraryOrchestrator:
             return schemas.EditItineraryResponse(
                 status=outcome.status.value, command=command_schema,
                 apply_mode=apply_mode,
-                itinerary=to_payload(_envelope(outcome.solution)),
+                itinerary=to_payload(_envelope(outcome.solution, distance_ranges=distance_ranges)),
             )
         return schemas.EditItineraryResponse(
             status=outcome.status.value, command=command_schema,
@@ -4075,6 +4195,37 @@ class WiredItineraryOrchestrator:
             ],
             reason=outcome.reason,
         )
+
+    def _edit_distances(
+        self, request: schemas.EditItineraryRequest, outcome: EditOutcome, transport: TransportMode, started_ms: int,
+    ) -> dict[str, str] | None:
+        """APPLIED 일정의 **바뀐 날** 구간 거리 — 생성·repair 와 같은 렌더·시한 회계(`_render_distances`·`_walk_first`). 그 밖 상태는 None.
+
+        바뀐 날 = 날마다 동네(①b)는 다시 짠 날들(명령 params 의 날짜), 그 밖은 편집한 날. 각 날 첫 슬롯은 null 이다 — 편집 요청의 anchor 는
+        후보 풀 중심이지 그 날 출발점이 아니다(교체 제안은 새 장소로 옮겨 온다). 좌표는 에이전트 ⑤ 검증이 본 장소(`outcome.pois`)라 다시
+        조회하지 않는다. 실경로는 남은 시한 안(≤1.5s)에서만 재고 예산이 없으면 부르지 않는다 — 못 잰 구간은 '… 추정'(생성과 같은 규칙, 사유는
+        FallbackEvent). 렌더가 터지면 거리 없이 내고 사유를 남긴다(INV-4) — 표시용이라 편집을 막지 않는다. 거리만, 소요 시간 0(INV-3).
+        """
+        if outcome.solution is None:  # APPLIED 만(불변식: APPLIED ⇔ solution)
+            return None
+        try:
+            command = outcome.command
+            days = ({date.fromisoformat(k) for k in command.params}
+                    if command is not None and command.op is EditOp.SET_DAY_AREAS else {request.target_date})
+            # 손 안 댄 날은 재지 않고 비워 둔다 — BE 제안 카드 diff 는 바뀐 슬롯만 그리고, 다시 재면 실경로 일일 한도(ODsay)만 쓴다
+            edited = replace(outcome.solution, days=tuple(d for d in outcome.solution.days if d.date in days))
+            coords = {pid: p.coord for pid, p in outcome.pois.items()}
+            walk = self._walk_first(None)  # 편집 재타이밍·⑤ 검증과 같은 공용 추정기(기본 도보 상한·주차 계획 없음)
+            (ranges,), _ = self._render_distances(
+                lambda port: (_distance_ranges(edited, {}, coords, walk(port), transport),),
+                request.request_meta, started_ms,
+            )
+        except Exception as e:  # 예외 문장은 싣지 않는다 — 실경로 오류 문장에 요청 주소(서비스 키)가 섞일 수 있다
+            _logger.warning("edit_distance %s", json.dumps({
+                "trace_id": request.request_meta.request_id, "outcome": "omitted",
+                "reason": f"render_error: {type(e).__name__}"}, ensure_ascii=False))
+            return None
+        return ranges
 
     def _rebuild_days(
         self, request: schemas.EditItineraryRequest, solution: ItinerarySolution, pool: CandidatePool,
@@ -4418,6 +4569,7 @@ def build_orchestrator(
     memory_store: MemoryStorePort | None = None,
     place_sql: PgPlaceSql | None = None,  # 도우미 장소 조회(NL2SQL) 실행기 — DSN 은 main.py, 켜기는 DIALOGUE_SQL 배정
     place_fact_store: object | None = None,  # 미확인 칸 웹 확인 저장소(PlaceFactStore) — DSN 은 main.py, 켜기는 PLACE_FACT_LOOKUP 배정
+    injection_shadow: object | None = None,  # 도우미 0′ 인젝션 그림자(InjectionShadow) — 주소는 main.py, 판정값만 로그
     dialogue_orchestrator_enabled: bool = False,  # 도우미 턴을 AI 안에서 끝낸다(ANSWER) — env 해석은 main.py
     shadow_rate: float = 1.0,  # 3단 라우터 섀도 표본율 (DEV 1.0 · 운영 0.2)
     shadow_rng: random.Random | None = None,  # 테스트 결정론용, None 이면 SystemRandom
@@ -4456,6 +4608,7 @@ def build_orchestrator(
         alternative_worker=AlternativeSelectionWorker(GatewayFacade(
             llm, renderer, AlternativeSelectionGate(), c1_config, trace)),
     )
+    place_fallback.warm()  # KB-5 대체 문서 표(켜져 있을 때만) — 첫 대안 요청이 파일 읽기를 떠안지 않게
     if weather is not None:
         providers[ProviderKind.WEATHER] = WeatherProvider(weather)
     # Transit Provider — travel_port 주입 여부 무관하게 항상 등록 (TRIP-432,
@@ -4603,6 +4756,7 @@ def build_orchestrator(
         bank_ready=lambda: bank_index.indexed, bank=bank, confident_intent=router.confident_intent,
         providers=providers, pool_builder=pool_builder, rag=rag, memory_store=memory_store, clock=clock, tz=tz,
         shadow_rate=shadow_rate, shadow_rng=shadow_rng, place_sql=place_sql, place_fact_store=place_fact_store,
+        injection_shadow=injection_shadow,
         kb_store=vector_store if vector_store is not None else None,
     ) if dialogue_orchestrator_enabled else None
     return WiredItineraryOrchestrator(
@@ -4803,6 +4957,7 @@ def build_dev_app(
     memory_store: MemoryStorePort | None = None,  # 도우미 장기 기억 스토어 — None 이면 InMemory
     place_sql: PgPlaceSql | None = None,  # 도우미 장소 조회(NL2SQL) 실행기 — None 이면 장소 탐색은 반경 풀만
     place_fact_store: object | None = None,  # 미확인 칸 웹 확인 저장소 — None 이면 InMemory(켜기는 PLACE_FACT_LOOKUP 배정)
+    injection_shadow: object | None = None,  # 도우미 0′ 인젝션 그림자 — None 이면 없음(판정값만 로그, 응답 무영향)
     dialogue_orchestrator_enabled: bool = False,  # 도우미 턴을 AI 안에서 끝낸다 — env 해석은 main.py, 기본 off(종전 해석 경로)
     shadow_rate: float = 1.0,
     shadow_rng: random.Random | None = None,
@@ -4865,6 +5020,7 @@ def build_dev_app(
         memory_store=memory_store,
         place_sql=place_sql,
         place_fact_store=place_fact_store,
+        injection_shadow=injection_shadow,
         dialogue_orchestrator_enabled=dialogue_orchestrator_enabled,
         shadow_rate=shadow_rate,
         shadow_rng=shadow_rng,

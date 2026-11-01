@@ -133,7 +133,12 @@ def _hashtag_text(item: dict, i: int) -> str:
     tags = item.get("tags")
     if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
         raise ValueError(f"explanations[{i}].tags 비정상")
-    # 순서 보존 중복 제거 → 태그 단위 검사 → 앞에서 HASHTAG_COUNT 개
+    return hashtag_line(tags)
+
+
+def hashtag_line(tags) -> str:
+    """슬롯 추천 이유 한 줄 — 순서 보존 중복 제거 → 태그 단위 검사 → 앞에서 HASHTAG_COUNT 개(공백 join).
+    생성(EXPLANATION)과 다시 짜기(구성 LLM 이유, `wiring._pick_reasons`)가 같은 규칙을 쓴다(10-23 형식 통일)."""
     kept = [t for t in dict.fromkeys(t.strip() for t in tags) if _tag_ok(t)]
     return " ".join(kept[:HASHTAG_COUNT])
 

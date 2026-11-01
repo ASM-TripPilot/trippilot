@@ -1189,6 +1189,151 @@ class AssistantTurnServiceTest : StringSpec({
     }
 
     /**
+     * 편집 되묻기 대역 — [asks] 의 말이면 날을 되묻고(상대 보류 프레임에는 원문 칸이 없다), 그 밖의 말은 상대처럼 그 되묻기의 답으로 읽어
+     * `CLARIFY_ANSWER` 프레임(물은 날만 채운 인자)을 돌려준다 — 상대도 문장 어디서든 날을 주워 새 명령까지 답으로 읽는다. [other] 가 답하면 그것이 먼저다.
+     */
+    fun askingDay(
+        asks: Set<String> = setOf("카페 하나 빼줘"), options: List<String> = listOf("1일차", "2일차"), other: (InterpretRequest) -> Interpretation? = { null },
+    ) = Interpreter { r ->
+        other(r) ?: if (r.utterance in asks) {
+            Interpretation(
+                InterpretOutcome.ARGUMENT_CLARIFY, listOf(IntentFrame(Intent.EDIT_SCHEDULE, emptyMap(), "LLM_DIRECT")),
+                Clarify("day", "며칠째 일정을 바꿀까요?", options), r.dialogueContext, 1,
+            )
+        } else {
+            Interpretation(InterpretOutcome.FRAME, listOf(IntentFrame(Intent.EDIT_SCHEDULE, mapOf("day" to "$today"), "CLARIFY_ANSWER")), null, r.dialogueContext, 0)
+        }
+    }
+
+    /**
+     * 되묻기의 답 턴에는 원문이 없다 — 상대 보류 프레임에 발화 칸이 없어서다(SEC-U8-06). 답('1일차')만 편집에 가면 번역기가 무엇을 바꿀지
+     * 몰라 "알아듣지 못했어요"로 끝났다. 그 되묻기를 낳은 말을 대화 기록에서 읽어 함께 보낸다 — 해석에는 여전히 답만 간다.
+     */
+    "되묻기의 답으로 온 편집은 그 되묻기를 낳은 말과 함께 간다 — 보기를 눌러도, 말로 답해도" {
+        val w = world(interpreter = askingDay())
+        val s = w.session()
+        w.offerBookCafe()
+
+        val asked = w.say(s, "카페 하나 빼줘")
+        asked.messages[1].kind shouldBe MessageKind.CLARIFY
+        w.press(s, asked.quickReplies.first().id).messages[1].kind shouldBe MessageKind.PROPOSAL
+        w.say(s, "카페 하나 빼줘")
+        w.say(s, "첫째 날")
+
+        w.editing.proposed.map { it.date to it.request } shouldContainExactly listOf(
+            today to EditProposalRequest.Utterance("1일차 카페 하나 빼줘"),
+            today to EditProposalRequest.Utterance("첫째 날 카페 하나 빼줘"),
+        )
+        w.interpreter!!.requests.map { it.utterance } shouldContainExactly listOf("카페 하나 빼줘", "1일차", "카페 하나 빼줘", "첫째 날")
+    }
+
+    /**
+     * 답이 이미 완결 명령문이면 덧붙이지 않는다. 날마다 동네의 되묻기는 보기가 완결 명령문이고 보류를 남기지 않아, 상대가 그 보기를 새
+     * 요청으로 읽는다(`CLARIFY_ANSWER` 가 아니다). 원문을 다시 말한 답도 그대로다 — 두 번 실으면 번역기가 같은 요청을 두 번 읽는다.
+     */
+    "되묻기 답이 이미 완결 명령문이면 그대로 간다 — 날마다 동네 보기·원문을 다시 말한 답" {
+        val label = "1일차는 종로, 2일차는 강남 쪽으로 바꿔줘"
+        val w = world(interpreter = askingDay { r ->
+            when (r.utterance) {
+                "1일차는 종로 3일차는 강남 쪽으로 바꿔줘" -> Interpretation(
+                    InterpretOutcome.ARGUMENT_CLARIFY, listOf(IntentFrame(Intent.EDIT_SCHEDULE, emptyMap(), "LLM_DIRECT")),
+                    Clarify("day_areas", "이번 여행은 2일차까지예요. 어느 날을 강남 쪽으로 바꿀까요?", listOf(label)), r.dialogueContext, 1,
+                )
+                label -> Interpretation(
+                    InterpretOutcome.FRAME,
+                    listOf(IntentFrame(Intent.EDIT_SCHEDULE, mapOf("day" to "$today", "day_areas" to "$today=종로;${today.plusDays(1)}=강남"), "LLM_DIRECT")),
+                    null, r.dialogueContext, 1,
+                )
+                else -> null
+            }
+        })
+        val s = w.session()
+        w.offerBookCafe()
+
+        w.press(s, w.say(s, "1일차는 종로 3일차는 강남 쪽으로 바꿔줘").quickReplies.single().id)
+        w.say(s, "카페 하나 빼줘")
+        w.say(s, "1일차 카페 하나 빼줘")
+
+        w.editing.proposed.map { it.request } shouldContainExactly listOf(
+            EditProposalRequest.Utterance(label),
+            EditProposalRequest.Utterance("1일차 카페 하나 빼줘"),
+        )
+    }
+
+    /** 그 말이 이 되묻기를 낳았는지 확실하지 않거나 붙일 수 없으면 답만 보낸다 — 엉뚱한 옛 말을 붙이지 않는다(넘겨짚지 않는다, INV-4). */
+    "되묻기를 낳은 말을 확실히 모르거나 붙일 수 없으면 답만 간다 — 앞선 말 없음·되묻기 뒤에 다른 턴·버튼이 태운 요청·500자 초과" {
+        val long = "카".repeat(497) + " 빼줘" // 발화 상한(500자) 그대로 — 답을 붙이면 넘친다
+        val chip = InterpretedQuickReply("카페 하나 빼줘", QuickReplyAction.SEND_TEXT, emptyMap())
+        var down = false
+        val w = world(interpreter = askingDay(setOf("카페 하나 빼줘", long)) { r ->
+            when {
+                down -> throw DialogueInterpretFailed("down")
+                r.utterance == "오늘 날씨 어때" -> Interpretation(
+                    InterpretOutcome.ANSWER, listOf(IntentFrame(Intent.GET_WEATHER, emptyMap(), "LLM_DIRECT")), null, r.dialogueContext, 1,
+                    InterpretedAnswer(AnswerKind.TEXT, "오늘 부산은 맑아요.", null, listOf(openItinerary), listOf(chip), null),
+                )
+                else -> null
+            }
+        })
+        val s = w.session()
+        w.offerBookCafe()
+
+        w.say(s, "1일차") // 앞선 말이 없다
+        w.say(s, "카페 하나 빼줘")
+        down = true
+        w.say(s, "1일차").messages[1].kind shouldBe MessageKind.FALLBACK // 해석이 실패해도 보류는 남는다 — 다음 답은 되묻기 바로 뒤가 아니다
+        down = false
+        w.say(s, "첫째 날")
+        // 버튼이 태운 요청 — 사용자 행만으로는 그 버튼이 무슨 말을 태웠는지([다시 시도]인지 보기인지) 모른다. 직전의 직접 한 말은 날씨다
+        w.press(s, w.say(s, "오늘 날씨 어때").quickReplies.single().id)
+        w.say(s, "1일차")
+        w.say(s, long)
+        w.say(s, "1일차")
+
+        w.editing.proposed.map { it.request } shouldContainExactly listOf("1일차", "첫째 날", "1일차", "1일차").map { EditProposalRequest.Utterance(it) }
+    }
+
+    /**
+     * 되묻기에 **새 명령**으로 답하면 옛 요청을 붙이지 않는다. 상대는 문장 어디서든 날을 주워("아니 2일차 경복궁 빼줘"의 '2일차') 그 말도 이
+     * 되묻기의 답(`CLARIFY_ANSWER`)으로 읽는다 — 붙이면 서로 다른 두 편집이 한 말로 가고 '아니'로 물린 옛 요청까지 되살아났다(리뷰 재현).
+     * 끝말(…줘)이 없는 짧은 명령("2일차 박물관 추가")도 새 명령이다. 날 한마디(조사·'일정'이 붙어도)로 답했을 때만 붙인다.
+     */
+    "되묻기에 새 명령으로 답하면 옛 요청을 붙이지 않는다 — 날 한마디로 답했을 때만 붙는다" {
+        val w = world(interpreter = askingDay())
+        val s = w.session()
+        w.offerBookCafe()
+
+        listOf("아니 2일차 경복궁 빼줘", "2일차에 박물관 하나 추가해줘", "2일차 일정 보여줘", "2일차 박물관 추가", "둘째 날이요", "2일차예요", "2일차 일정", "토요일").forEach {
+            w.say(s, "카페 하나 빼줘").messages[1].kind shouldBe MessageKind.CLARIFY
+            w.say(s, it)
+        }
+
+        w.editing.proposed.map { it.request } shouldContainExactly listOf(
+            "아니 2일차 경복궁 빼줘", "2일차에 박물관 하나 추가해줘", "2일차 일정 보여줘", "2일차 박물관 추가",
+            "둘째 날이요 카페 하나 빼줘", "2일차예요 카페 하나 빼줘", "2일차 일정 카페 하나 빼줘", "토요일 카페 하나 빼줘",
+        ).map { EditProposalRequest.Utterance(it) }
+    }
+
+    /**
+     * 상대가 낸 보기는 그대로 맨 답이다 — 보기 꼴이 날 한마디 표에 없어도(눌러도, 그대로 쳐도) 붙인다. 지금 상대 보기는 'N일차'라 표에도
+     * 있지만, 보기 꼴이 바뀌어도(날짜를 함께 적는 등) 되묻기에 답하는 주된 길인 보기 누르기는 그대로 붙어야 한다.
+     */
+    "되묻기의 보기 그대로 답하면 보기 꼴과 상관없이 붙는다" {
+        val w = world(interpreter = askingDay(options = listOf("10월 13일 (화)", "10월 14일 (수)")))
+        val s = w.session()
+        w.offerBookCafe()
+
+        w.press(s, w.say(s, "카페 하나 빼줘").quickReplies.first().id)
+        w.say(s, "카페 하나 빼줘")
+        w.say(s, "10월 14일 (수)")
+
+        w.editing.proposed.map { it.request } shouldContainExactly listOf(
+            EditProposalRequest.Utterance("10월 13일 (화) 카페 하나 빼줘"),
+            EditProposalRequest.Utterance("10월 14일 (수) 카페 하나 빼줘"),
+        )
+    }
+
+    /**
      * PBT-U8-1 ★ — **단독 확정 없음.** 말·버튼·상대의 답(`AUTO_APPLY` 포함)이 어떻게 섞여도, [적용]을 누르지 않는 한
      * 일정 저장은 0번이다. 턴 서비스에는 저장으로 가는 길이 아예 없어야 한다.
      */

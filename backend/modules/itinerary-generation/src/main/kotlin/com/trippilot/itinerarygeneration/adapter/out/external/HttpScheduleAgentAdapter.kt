@@ -101,9 +101,13 @@ class HttpScheduleAgentAdapter(
 
     /** 같은 호출 — 상대가 판정하지 못한 장소(`unverified_slots`)까지 돌려준다. */
     override fun validateWithUnverified(solution: ScheduleAgentOutput): ValidationResult =
+        validateWithUnverified(solution, emptyList())
+
+    /** 수단을 싣는다 — repair 와 같은 `transport_modes`(목록 그대로, 상대가 아는 첫 값을 고른다). 비면 상대 기본(대중교통). */
+    override fun validateWithUnverified(solution: ScheduleAgentOutput, transportModes: List<String>): ValidationResult =
         post(
             VALIDATE_PATH,
-            AiValidateRequest(solution.toWire(), requestMeta(VALIDATE_DEADLINE_MS)),
+            AiValidateRequest(solution.toWire(), requestMeta(VALIDATE_DEADLINE_MS), transportModes),
             AiValidateResponse::class.java,
             scheduleAgentBoundedRestClient,
         ).toDomain()
@@ -349,6 +353,11 @@ class HttpScheduleAgentAdapter(
         res.notes.filter { it.startsWith("categories_ignored:") }
             .forEach { log.warn("AI 가 모르는 카테고리를 무시했습니다 — {} concept={}", it, input.concept) }
         if (res.droppedOutOfPool.isNotEmpty()) log.warn("AI 가 자기 풀 기준으로 버린 참조: {}", res.droppedOutOfPool)
+        // KB·DB 장애(`pipeline_error`)는 "주변에 없다"가 아니라 "확인 못 했다"다 — NO_NEARBY 로 떨어뜨리면
+        // 반경을 넓혀 보라는 거짓 안내가 된다. 미도달과 같은 일이라 같은 로컬 폴백으로 보낸다(INV-4).
+        if (res.emptyReason == "pipeline_error") {
+            throw ScheduleAgentCallFailed(null, retryable = true, message = "AI 파이프라인 장애: ${res.notes}")
+        }
         if (res.emptyReason != null && res.emptyReason != "no_candidates" && res.emptyReason != "all_excluded") {
             log.warn("모르는 empty_reason '{}' — NO_NEARBY 로 떨어뜨립니다.", res.emptyReason)
         }

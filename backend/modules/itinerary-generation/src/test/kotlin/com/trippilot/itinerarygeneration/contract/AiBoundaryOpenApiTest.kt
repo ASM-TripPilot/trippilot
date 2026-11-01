@@ -27,6 +27,7 @@ import com.trippilot.itinerarygeneration.adapter.out.external.AiSlotAlternative
 import com.trippilot.itinerarygeneration.adapter.out.external.AiTrigger
 import com.trippilot.itinerarygeneration.adapter.out.external.AiUnplacedMustVisit
 import com.trippilot.itinerarygeneration.adapter.out.external.AiUnverifiedSlot
+import com.trippilot.itinerarygeneration.adapter.out.external.AiValidateRequest
 import com.trippilot.itinerarygeneration.adapter.out.external.AiValidateResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiViolation
 import com.trippilot.itinerarygeneration.adapter.out.external.HttpScheduleAgentAdapter
@@ -185,6 +186,13 @@ class AiBoundaryOpenApiTest : StringSpec({
         wireKeys(sampleRepairRequest.timeWindows.single()) shouldContainExactly props("TimeWindowSchema")
         mismatches(sampleRepairRequest, "RepairItineraryRequest") shouldContainExactly emptyList()
         required("RepairItineraryRequest").forEach { wireKeys(sampleRepairRequest) shouldContain it }
+    }
+
+    /** validate 요청(2026-10-30) — 수단이 선택 필드로 붙었다(repair 와 같은 이름·어휘). 비우면 모양을 안 재므로 표본은 채운다. */
+    "validate 요청 키가 계약과 정확히 일치한다" {
+        wireKeys(sampleValidateRequest) shouldContainExactly props("ValidateItineraryRequest")
+        mismatches(sampleValidateRequest, "ValidateItineraryRequest") shouldContainExactly emptyList()
+        required("ValidateItineraryRequest").forEach { wireKeys(sampleValidateRequest) shouldContain it }
     }
 
     /**
@@ -454,6 +462,8 @@ private val sampleRepairRequest = AiRepairRequest(
     timeWindows = listOf(TimeWindow(LocalDate.parse("2026-08-01"), LocalTime.parse("09:00"), LocalTime.parse("21:00"))),
     transportModes = listOf("렌터카"),
 )
+
+private val sampleValidateRequest = AiValidateRequest(samplePayload, sampleRequestMeta, transportModes = listOf("렌터카"))
 
 private val sampleEditCommand =
     AiEditCommand("REPLACE_SLOT", mapOf("targetPoiId" to UUID.randomUUID().toString()), listOf(UUID.randomUUID().toString()))

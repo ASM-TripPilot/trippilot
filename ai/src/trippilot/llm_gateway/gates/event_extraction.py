@@ -57,9 +57,10 @@ class EventExtractionContext:
     아니라 원문 스니펫이라 컨텍스트 실체만 다르다.)
     """
 
-    snippets_text: str  # LLM이 본 스니펫 원문 그대로 (행사명 실재 대조)
+    snippets_text: str  # LLM이 본 스니펫 원문 그대로 (행사명 실재 대조) — 한 줄 = 스니펫 하나
     period_start: date  # 대상 기간 시작
     period_end: date    # 대상 기간 끝
+    region: str = ""    # 질의 지역 — 행사명 앞의 지역명은 다른 스니펫에 있어도 된다(⑤)
 
     def __post_init__(self) -> None:
         if self.period_end < self.period_start:
@@ -71,17 +72,24 @@ def _normalize(text: str) -> str:
     return "".join(text.split()).lower()
 
 
-def _name_in_snippets(name: str, normalized_snippets: str) -> bool:
-    """행사명 핵심 토큰(정규화 2자 이상)이 **전부** 원문에 부분 문자열로 존재해야 생존.
+def _name_in_snippets(name: str, snippet_lines: list[str], region: str = "") -> bool:
+    """행사명 핵심 토큰(정규화 2자 이상)이 **전부** 원문 **한 스니펫 줄** 안에 부분 문자열로 존재해야 생존.
 
     "부산 불꽃 축제" ↔ 원문 "부산불꽃축제"처럼 띄어쓰기 차이는 흡수하고,
     원문에 없는 토큰이 하나라도 섞인 이름은 지어낸 것으로 본다 (보수적).
     핵심 토큰이 없으면(전부 1자) 이름 전체 정규화 문자열로 대조한다.
+
+    한 줄 안에서 본다 — 스니펫 전체를 이어 붙여 보면 「부산 불꽃축제」「서울 재즈 페스티벌」 두 줄의
+    토큰을 섞은 「부산 재즈 페스티벌」이 통과했다(2026-10-30 Codex 리뷰). 질의 지역명 토큰("부산")은
+    예외 — 모델이 질의 맥락의 지역을 이름 앞에 붙이는 것은 지어낸 것이 아니므로 어느 줄에든 있으면 된다.
     """
     core = [t for t in (_normalize(tok) for tok in name.split()) if len(t) >= 2]
     if not core:
         core = [_normalize(name)]
-    return all(t in normalized_snippets for t in core)
+    area = _normalize(region)
+    local = [t for t in core if not (area and t in area)] or core
+    return all(any(t in line for line in snippet_lines) for t in core) and any(
+        all(t in line for t in local) for line in snippet_lines)
 
 
 class EventExtractionGate:
@@ -109,11 +117,11 @@ class EventExtractionGate:
         except ValueError as e:
             return GateOutcome(value=(), drop_event=None, error=f"parse_error: {e}")
 
-        normalized_snippets = _normalize(pool.snippets_text)
+        snippet_lines = [_normalize(line) for line in pool.snippets_text.splitlines()]
         survivors: list[EventInfo] = []
         dropped_count = 0
         for item in items:
-            event = self._to_event(item, pool, normalized_snippets)
+            event = self._to_event(item, pool, snippet_lines)
             if event is None:
                 dropped_count += 1  # 카운트만 — 행사명을 유사 ID로 지표에 넣지 않는다 (TRIP-260 #3 동형)
             else:
@@ -132,7 +140,7 @@ class EventExtractionGate:
     def _to_event(
         item: object,
         ctx: EventExtractionContext,
-        normalized_snippets: str,
+        snippet_lines: list[str],
     ) -> EventInfo | None:
         if not isinstance(item, dict):
             return None
@@ -159,7 +167,7 @@ class EventExtractionGate:
         if address is not None and not isinstance(address, str):
             return None
         # ⑤ 지어낸 행사명 차단 — 원문 스니펫 대조 (closed-set 정신)
-        if not _name_in_snippets(name, normalized_snippets):
+        if not _name_in_snippets(name, snippet_lines, ctx.region):
             return None
         # event_id는 name+start 결정론 해시 (같은 입력 → 같은 id, 재수집 멱등)
         event_id = "evx-" + hashlib.sha256(

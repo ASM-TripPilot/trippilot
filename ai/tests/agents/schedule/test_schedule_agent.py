@@ -33,7 +33,7 @@ from tests.fakes.fake_clock import FakeClock
 from tests.fakes.fake_llm import FakeLlm
 from tests.fakes.in_memory_poi import InMemoryPoi
 from tests.fakes.in_memory_trace import InMemoryTrace
-from tests.orchestrator.test_schedule_coordinator import (
+from tests.orchestrator.schedule.test_schedule_coordinator import (
     _C1CFG,
     _NOW,
     _PERSONA,
@@ -196,7 +196,7 @@ from trippilot.ports.place_hours_port import HoursVerdict
 from trippilot.domain.common import ScheduleId
 
 from tests.generators.poi import candidate_pools
-from tests.orchestrator.test_schedule_coordinator import _DAY1, _KST, _poi
+from tests.orchestrator.schedule.test_schedule_coordinator import _DAY1, _KST, _poi
 
 _WED = _DAY1  # 2026-08-05 = 수요일 (weekday 2)
 assert _WED.weekday() == 2
@@ -956,7 +956,7 @@ from trippilot.domain.common import BudgetLevel
 from trippilot.domain.persona import ACTIVITY_LABELS, CUISINE_LABELS, PersonaSummary, TasteTag
 from trippilot.domain.poi import PoiCategory as _Cat
 
-from tests.orchestrator.test_schedule_coordinator import (
+from tests.orchestrator.schedule.test_schedule_coordinator import (
     _PROMPTS_DIR,
     _ChunkFailLlm,
     _build,

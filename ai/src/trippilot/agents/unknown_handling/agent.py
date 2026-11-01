@@ -10,9 +10,11 @@
 출처와 함께 답한다.
 
 ```
-UnknownTask ─▶ ① 저장된 결과 조회   찾음 → facts / 못 찾음(하루 보관) → 없음 / 저장소 장애 → 없는 것으로 보고 ② (INV-4)
+UnknownTask ─▶ ① 저장된 결과 조회   물은 칸을 다 찾아봤으면 찾음 → facts / 못 찾음(하루 보관) → 없음
+                                   안 찾아본 칸이 있으면 저장된 칸까지 함께 ② / 저장소 장애 → 없는 것으로 보고 ② (INV-4)
             ─▶ ② 뒤에서 찾기 제출   냈거나 이미 찾는 중 → pending / 하루 상한·제출 실패 → 없음 (이번 턴은 기다리지 않는다)
-            ─▶ (뒤에서) 워커 lookup → 출처 있는 값만 저장(찾음 7일·못 찾음 1일) · 시한·형식·출처 없음은 저장하지 않고 다음에 다시 찾는다
+            ─▶ (뒤에서) 워커 lookup → 1차 실패(벤더 장애·unsupported·timeout)면 2차(Claude)로 한 번 더(2026-10-30, 벤더 폴백) →
+               출처 있는 값만 저장(찾음 7일·못 찾음 1일) · 시한·형식·출처 없음은 저장하지 않고 다음에 다시 찾는다
 KnowledgeTask ─▶ 지식 워커 answer(이번 턴, 웹 검색 없음) → answer / 모른다고 닫음·실패·미배선 → 없음
 ```
 
@@ -34,13 +36,13 @@ import logging
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 
 from trippilot.domain.common import TraceId
 from trippilot.llm_gateway.workers.dialogue_knowledge import DialogueKnowledgeWorker
 from trippilot.llm_gateway.workers.place_fact_lookup import PlaceFactLookupWorker
-from trippilot.ports.place_fact_store_port import FactRecord, PlaceFacts, PlaceFactStore
+from trippilot.ports.place_fact_store_port import FIELDS, FactRecord, PlaceFacts, PlaceFactStore
 
 log = logging.getLogger(__name__)
 
@@ -113,6 +115,12 @@ class UnknownOutcome:
             raise ValueError("빈 지식 답")
 
 
+def _seen(record: FactRecord) -> frozenset[str]:
+    """저장된 기록이 찾아본 칸 — 그 조회가 찾은 칸과 값이 있는 칸(2026-10-30 전 행은 searched 가 비어 값으로만 안다).
+    기록이 살아 있는 동안(찾음 7일·못 찾음 1일) 그대로다 — 찾은 기록 안의 빈 칸(입장 마감 없음 등)을 따로 일찍 풀면 영업시간 물음마다 다시 찾는다."""
+    return frozenset(record.searched) | {f for f in FIELDS if record.facts is not None and getattr(record.facts, f)}
+
+
 class UnknownHandlingAgent:
     """`worker`(장소 사실 웹 확인, PLACE_FACT_LOOKUP)·`knowledge`(일반 지식 즉답, DIALOGUE_KNOWLEDGE)는 각자 배정이 곧 켜기라 둘 다
     없을 수 있다 — 없는 쪽 일은 "없음"으로 답한다(기능 부재는 강등이 아니다). `knows_general` 은 호출측이 지식 답을 시도할지 가르는 창."""
@@ -136,9 +144,12 @@ class UnknownHandlingAgent:
         if self._worker is None or self._store is None:  # 장소 사실 웹 확인 미배선(지식만 켜진 조립) — 종전 "미확인"
             return UnknownOutcome()
         stored = self._known(task.poi_id, task.now)
-        if stored is not None:  # 찾았거나 못 찾음이 저장돼 있다 — 못 찾음이면 하루는 다시 찾지 않는다
+        seen = _seen(stored) if stored is not None else frozenset()
+        if stored is not None and seen >= set(task.fields):  # 물은 칸을 다 찾아봤다 — 못 찾음이면 하루는 다시 찾지 않는다
             return UnknownOutcome(facts=stored.facts)
-        return UnknownOutcome(pending=self._request(task))
+        # 안 찾아본 칸이 있다 — 저장된 칸까지 함께 찾아 한 번에 덮는다(출처 칸이 하나라 두 조회의 값을 한 기록에 섞지 않는다)
+        fields = tuple(f for f in FIELDS if f in seen or f in task.fields)
+        return UnknownOutcome(pending=self._request(replace(task, fields=fields)))
 
     def _answer(self, task: KnowledgeTask) -> UnknownOutcome:
         """일반 지식 즉답 — 게이트를 지난 문장이면 answer, 모른다고 닫았거나 실패면 없음. 실패의 FallbackEvent 는 게이트웨이가 냈다
@@ -168,6 +179,8 @@ class UnknownHandlingAgent:
         """뒤에서 찾기를 낸다 — 이미 찾는 중이거나 오늘 상한이면 내지 않는다(False). 이번 턴은 기다리지 않는다."""
         with self._lock:
             day, spent = self._spent if self._spent[0] == task.now.date() else (task.now.date(), 0)
+            # ponytail: 찾는 중은 장소 단위 — 그곳의 다른 칸을 찾는 중이면 이번 칸은 다음 물음에 낸다("찾는 중"이 한 번 더).
+            # 같은 곳을 다른 칸으로 겹쳐 묻는 일이 잦으면 찾는 칸까지 들고 있다가 모자라면 뒤이어 낸다.
             if task.poi_id in self._inflight or spent >= DAILY_CAP:
                 return task.poi_id in self._inflight  # 찾는 중이면 "찾는 중"이 맞다 — 상한이면 아니다
             self._inflight.add(task.poi_id)
@@ -184,12 +197,17 @@ class UnknownHandlingAgent:
 
     def _lookup(self, task: UnknownTask) -> None:
         try:
-            result = self._worker.lookup(task.place, task.fields, task.on, task.trace_id, task.now, timeout_sec=LOOKUP_TIMEOUT_S)
+            # retry_timeout_sec=LOOKUP_TIMEOUT_S — 1차(sonnet)가 벤더 장애·unsupported·timeout 으로
+            # 죽으면 같은 예산으로 2차(opus, `C1Config.retry_models[PLACE_FACT_LOOKUP]`)를 한 번
+            # 더 부른다(뒤에서 도는 조회라 두 번 합쳐 길어져도 턴을 막지 않는다). 2차도 없으면(미설정)
+            # 게이트웨이가 종전처럼 1회만 시도한다.
+            result = self._worker.lookup(task.place, task.fields, task.on, task.trace_id, task.now,
+                                          timeout_sec=LOOKUP_TIMEOUT_S, retry_timeout_sec=LOOKUP_TIMEOUT_S)
             if result.is_fallback:  # 시한·형식·출처 없음 — 저장하지 않고 다음에 물으면 다시 찾는다
                 log.info("unknown_handling lookup_failed trace=%s reason=%s", task.trace_id, result.error)
                 return
             facts = result.value if isinstance(result.value, PlaceFacts) and result.value.any() else None
-            self._store.put(FactRecord(task.poi_id, facts, task.now, task.now + (FOUND_TTL if facts else MISS_TTL)))
+            self._store.put(FactRecord(task.poi_id, facts, task.now, task.now + (FOUND_TTL if facts else MISS_TTL), task.fields))
             log.info("unknown_handling lookup_done trace=%s found=%s source=%s", task.trace_id, facts is not None,
                      facts.source_host if facts else "-")
         except Exception as e:  # noqa: BLE001 — 뒤에서 도는 일이라 위로 던질 곳이 없다. 사유만 남긴다

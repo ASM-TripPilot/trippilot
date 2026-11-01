@@ -25,7 +25,7 @@
 ## 지키는 것
 
 - **예외는 경계 밖으로 나가지 않는다**(DL-5, BR-AO-22) — 외부 호출은 전부 상태값으로 수렴하고, 자체 버그는
-  `OUT_OF_SCOPE(reason="orchestrator_error: …")` 로 수렴한다(BR §5 미결 #14 A안). `PermissionDeniedError` 만
+  분류 전이면 `OUT_OF_SCOPE(reason="orchestrator_error: …")`, 분류 뒤면 다시 시도 ANSWER 로 수렴한다(BR §5 미결 #14 B안). `PermissionDeniedError` 만
   관통한다(fail-closed, TRIP-333 — `InfoCollector` 와 같은 예외 1건).
 - **시계는 주입**(`Clock.monotonic_ms`) — 잔여 = `deadline_ms − (now_ms − started_ms)`, 모든 하위 호출에 `timeout_sec` 로
   내리고 잔여 ≤0 이면 부르지 않는다(DL-4, BR-AO-01).
@@ -44,11 +44,13 @@ import contextvars
 import json
 import logging
 import re
+import unicodedata
 import threading
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Executor, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, replace
 from datetime import date, datetime, tzinfo
+from typing import Protocol
 
 from trippilot.agents.schedule.agent import Clock
 from trippilot.agents.unknown_handling.agent import KnowledgeTask
@@ -58,6 +60,13 @@ from trippilot.domain.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent, 
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.region_centers import region_mentions
 from trippilot.llm_gateway.gates.base import has_injection_like
+
+
+class InjectionShadow(Protocol):
+    """0′ 정규식을 통과한 말의 인젝션 그림자 분류(응답 무영향) — 던지지 않고 기다리지 않는 계약.
+    구현: `llm_gateway/adapters/http_injection_shadow.HttpInjectionShadow`(ai/docs/security/injection-classifier-shadow.md)."""
+
+    def submit(self, text: str, trace_id: str) -> None: ...
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, clock_spans, clock_times
 from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanDraft
 from trippilot.llm_gateway.gates.intent import NULL_INTENT
@@ -69,6 +78,7 @@ from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
 from trippilot.orchestrator.dialogue_handlers import (
     HANDLERS,
     AnswerKind,
+    asks_more,
     FactStatus,
     Facts,
     HandlerPorts,
@@ -85,6 +95,7 @@ from trippilot.orchestrator.dialogue_handlers import (
 )
 from trippilot.orchestrator.edit_day_areas import DayAreaTurn, check_day_areas
 from trippilot.orchestrator.dialogue_interpreter import (
+    SHOWN_MAX,
     Clarify,
     DialogueContext,
     Frame,
@@ -101,11 +112,13 @@ from trippilot.orchestrator.dialogue_memory import (
     due,
     expires_at_for,
     gist_lines,
+    is_turn_fragment,
     kept_lines,
     legacy_lines,
     material,
 )
 from trippilot.orchestrator.dialogue_plan import has_facts, merge_facts, step_results, step_tasks
+from trippilot.orchestrator.intent_eval import _REFUSAL_MARKERS
 from trippilot.orchestrator.intent_router import normalize
 from trippilot.orchestrator.shadow_probe import ShadowIntentProbe
 from trippilot.ports.embedding_port import EmbeddingPort
@@ -196,10 +209,14 @@ _GREETS = frozenset({
 })
 THANKS_TEXT = "천만에요! 더 궁금한 게 생기면 언제든 물어봐 주세요."
 ACK_TEXT = "알겠어요! 필요한 게 생기면 언제든 말씀해 주세요."
+# 웃음·이모지만 보낸 말("ㅋㅋ"·"👍"·"😂") — 낱말이 하나도 안 남아 "도와드리기 어려워요"(범위 밖 카드)로 끝났다(10-19 리뷰 한계)
+# '네,'·'좋아요!' 머리는 빼다 — 제안 뒤의 모호한 이모지(😊·❤️)에 동의처럼 들려 수락을 삼킨 것처럼 보였다(#1713 재리뷰)
+LAUGH_TEXT = "더 궁금한 게 생기면 언제든 물어봐 주세요!"
 # 감사·맞장구도 같은 말이 이어지지 않게(`unrepeated` 표에 더한다 — #1510 이 LLM 으로 돌리지 않고 남긴 자리, 2026-10-22)
 _CLOSER_VARIANTS = {
     THANKS_TEXT: ("별말씀을요! 여행하다 궁금한 게 생기면 또 불러 주세요.", "도움이 됐다니 다행이에요. 또 필요하면 말씀해 주세요."),
     ACK_TEXT: ("네, 알겠어요. 필요할 때 편하게 불러 주세요.", "좋아요! 궁금한 게 생기면 언제든지요."),
+    LAUGH_TEXT: ("여행하다 궁금한 게 생기면 불러 주세요.", "필요할 때 언제든 말씀해 주세요."),
 }
 # 인사·잡담 답 — 여행이 있으면 지금 여행으로, 없으면 여행 만들기로 잇는다(버튼은 `_home_action` 과 같은 갈래). DIALOGUE_SMALLTALK 이
 # 배정돼 있으면 LLM 이 즉석에서 짓고(`_smalltalk`), 미배정·실패·목록 밖 장소면 이 고정 문장이다(INV-4 마지막 계단, BR-AO-26 개정 10-22).
@@ -223,6 +240,11 @@ _MEMORY_MODES = ("llm_dialogue_memory", "kept_previous")
 _PLAN_MODES = ("llm_dialogue_plan", "out_of_scope")
 _SMALLTALK_MODES = ("llm_dialogue_smalltalk", "fixed_text")
 _KNOWLEDGE_MODES = ("llm_dialogue_knowledge", "out_of_scope")
+# 지식 답의 말하지 않은 장소 이름은 장소 DB 에 등록돼 있으면 통과(사용자 결정 2026-10-30 "등록된 장소면 허용") — 이름 찾기(LLM 없는
+# 매개변수 SQL, 문장 시한 1.5s)를 한 답에 셋까지만. 넷 이상이면 지어냈을 공산이 커 찾지 않고 막는다. 한 번 찾기 전마다 잔여가
+# 문장 시한 + 여유만큼 있어야 한다(없으면 종전처럼 막는다 — 응답이 deadline 을 넘지 않게)
+_REGISTERED_LOOKUP_MAX = 3
+_REGISTERED_MIN_REMAINING_MS = 1_700
 # 2‴ 계획이 도구 없이 닫은 말 중 지식 즉답(BR-AO-32)이 받는 gap — 정보성이면 일반 지식으로 답하고, 대신 해 달라는 일(예약·결제·표 끊기·
 # 호출·번역)과 실시간 값은 지식 LLM 이 {"text": null} 로 닫아 종전 범위 밖 카드다. 장소·실시간에 묶인 gap(AMENITY·EVENTS·PLACE_DETAIL·
 # REGION_WEATHER)과 ACCOUNT 는 넣지 않는다 — 일반 지식으로는 틀린 답이 된다. CHAT 은 잡담 경로다. 사용자 지시(2026-10-23, 다른 세션 경유)
@@ -402,6 +424,21 @@ def _day_area_outcome(turn: DayAreaTurn, match: IntentMatch | None, cleared: Dia
                        None, cleared, 0, reason)
 
 
+def _remember_shown(outcome: TurnOutcome, inp: TurnInput) -> TurnOutcome:
+    """이번 답의 카드(후보 payload·장소 보기 버튼)에 보인 poi_id 를 맥락에 싣는다 — 이어 묻기면 사슬 것에 잇고, 새 말이면 새로 시작한다
+    (사슬 밖에서 보인 곳은 빼지 않는다 — 이름 빼기와 같은 범위, BR-AO-27 개정 2026-10-30)."""
+    answer = outcome.answer
+    new: list[str] = []
+    if answer is not None:
+        for c in (answer.payload or {}).get("candidates") or ():
+            if isinstance(c, Mapping) and c.get("poiId"):
+                new.append(str(c["poiId"]))
+        new += [str(a.params["poiId"]) for a in answer.next_actions if a.type == "OPEN_PLACE" and a.params.get("poiId")]
+    kept = inp.context.shown if asks_more(inp.utterance) else ()
+    shown = tuple(dict.fromkeys((*kept, *new)))[-SHOWN_MAX:]
+    return outcome if shown == outcome.context.shown else replace(outcome, context=replace(outcome.context, shown=shown))
+
+
 def _not_repeating(outcome: TurnOutcome, inp: TurnInput) -> TurnOutcome:
     """답 문장이 직전 도우미 말과 똑같은 결정론 문장이면 같은 뜻의 다른 말로(2026-10-22 사용자 "계속 같은 말만"). 버튼·카드·칩은
     그대로 — 문장만. 첫 턴·다른 말이면 그대로라 기존 결정론은 변하지 않는다."""
@@ -421,11 +458,35 @@ def capabilities_answer(has_trip: bool) -> DialogueAnswer:
     return DialogueAnswer(AnswerKind.TEXT, CAPABILITIES_TEXT, None, (_home_action(has_trip),), None, None)
 
 
+_ACCEPT_MARKS = frozenset("👍👌⭕🙆🆗✅🙏✔☑💯")  # 수락 이모지 — 😊·😍·❤️·👏 는 반응일 수 있어 한마디로 닫는다(#1713 재리뷰)
+_GENDER_SIGNS = frozenset("♀♂")  # 🙆‍♀️ 의 ZWJ 꼴 성별 기호 — 홀로 오면 수락이 아니다
+
+
+def _accepts_proposal(inp: "TurnInput") -> bool:
+    """이모지만 보낸 말이 수락 이모지뿐이고, 직전 도우미 말이 제안 물음으로 끝났는가 — 그러면 "응"과 같다(#1713 반박 리뷰).
+    보류 되묻기 뒤는 아니다 — 되묻기는 값(장소·날·일정)을 물어 "응"이 그대로 그 값이 됐다(#1713 재리뷰)."""
+    marks = {c for c in inp.utterance if unicodedata.category(c) == "So"} - _GENDER_SIGNS
+    # 이모지만 보낸 말인가는 낱말마다 본다 — 정리(`normalize`)는 변이 선택자(U+FE0F)를 남겨 키보드가 보내는 완전형 🙆‍♀️·⭕️ 가 빠졌다
+    if inp.context.pending is not None or not marks or not marks <= _ACCEPT_MARKS \
+            or not all(_emoji_only(w) for w in inp.utterance.split()):
+        return False
+    last = next((t.text for t in reversed(inp.recent_turns) if t.role == "ASSISTANT"), "")
+    return last.rstrip().endswith("?")
+
+
+def _emoji_only(word: str) -> bool:
+    """이모지·기호 글자만(👍·😂·❤️ — 변이 선택자·ZWJ·피부색 포함). 정리가 이모지를 지우고 남긴 변이 선택자("❤️" → U+FE0F)도 같다."""
+    return bool(word) and {unicodedata.category(c) for c in word} <= {"So", "Sk", "Mn", "Cf"}
+
+
 def closer_answer(text: str, has_trip: bool) -> DialogueAnswer | None:
     """2″ — 정규화된 발화가 맞장구·인사 낱말뿐이면 받아 주는 한마디(BR-AO-26), 아니면 None. 감사가 하나라도 있으면 감사 답.
     버튼·칩은 능력 안내와 같다."""
-    words = _CLOSER_NOISE.sub(" ", text.lower().replace("thank you", "thanks")).split()
-    if not words or not all(w in _THANKS or w in _ACKS or w in _GREETS for w in words):
+    words = [w for w in _CLOSER_NOISE.sub(" ", text.lower().replace("thank you", "thanks")).split() if not _emoji_only(w)]
+    if not words:  # 웃음·이모지만 — 되묻는 "?"가 섞이지 않았을 때
+        return DialogueAnswer(AnswerKind.TEXT, LAUGH_TEXT, None, (_home_action(has_trip),), None, None) \
+            if text.strip() and "?" not in text else None
+    if not all(w in _THANKS or w in _ACKS or w in _GREETS for w in words):
         return None
     if any(w in _THANKS for w in words):
         reply = THANKS_TEXT
@@ -540,6 +601,23 @@ def _plannable(reason: str) -> bool:
     return _judged_nothing(reason) or _CLOSED_SET_REASON in reason
 
 
+# 다시 시도 — 분류 뒤 버그·분류와 계획의 인프라 실패(시한·벤더)에 범위 밖 카드("도와드리기 어려워요")를 내지 않는다(BR §5 미결 #14·#22
+# B안, 2026-10-30 "결정은 추천안으로 진행"). 운영 Opus 전환 뒤 분류 시한 초과가 실사용 8건 중 3건이었다(10-28~30 CloudWatch). 문장·버튼은
+# BE `AssistantTemplates.fallback(AI_UNAVAILABLE)` 그대로(DEC-U8-6 — 화면 문장은 한 벌), FE RETRY_TURN 은 마지막 발화를 다시 보낸다.
+RETRY_TEXT = "지금 도우미가 응답하지 못했어요."
+
+
+def retry_answer() -> DialogueAnswer:
+    return DialogueAnswer(AnswerKind.TEXT, RETRY_TEXT, None,
+                          (NextAction("RETRY_TURN", "다시 시도"), NextAction("CONTINUE_WITHOUT_ASSISTANT", "도우미 없이 계속")), None, None)
+
+
+def _infra_failure(reason: str) -> bool:
+    """분류가 판단하지 못한 것이 아니라 **부르지 못했다**(시한·벤더 예외·잔여 0) — 판단한 거절은 표지(`intent_eval._REFUSAL_MARKERS`)를
+    단다(`_refusal_reason`). 표지 없는 폴백만 다시 시도할 일이다."""
+    return not any(marker in reason for marker in _REFUSAL_MARKERS)
+
+
 def _home_action(has_trip: bool) -> NextAction:
     return NextAction("OPEN_ITINERARY", "일정 보기") if has_trip else NextAction("CREATE_TRIP", "여행 만들기")
 
@@ -568,8 +646,11 @@ def _memory_lines(current: DialogueMemory | None, others: Sequence[DialogueMemor
     """꺼내기 없는 `$memory` — 현재 세션 줄 전부 + 헤더 + 다른 세션(≤2) 줄 전부 (DE §6 `$memory`). 임베딩이 배선되지 않았거나
     꺼내기가 실패했을 때 쓴다(2026-10-23 전의 모양 그대로). 줄의 `inline()` 은 워커가 한다.
     지시 주입 꼴 줄은 싣지 않는다 — 기억 게이트가 이제 막지만 그 전에 저장된 줄(TTL 90일)이 남아 있을 수 있다."""
-    lines = [line for line in current.summary if not has_injection_like(line)] if current is not None else []
-    other_lines = [line for m in others for line in m.summary if not has_injection_like(line)]
+    def keep(line: str) -> bool:  # 옛 압축의 원문 조각도 뺀다 — 꺼내기 경로(`_recalled_lines`)와 같은 규칙
+        return not is_turn_fragment(line) and not has_injection_like(line)
+
+    lines = [line for line in current.summary if keep(line)] if current is not None else []
+    other_lines = [line for m in others for line in m.summary if keep(line)]
     if other_lines:
         lines += [OTHER_SESSIONS_HEADER, *other_lines]
     return tuple(lines)
@@ -623,6 +704,16 @@ def _slot_times(value: object) -> tuple[tuple[str | None, str], ...]:
 _SEGMENT = re.compile(r"[,，·/;→\n]|\s그리고\s")
 
 
+def _segments(text: str) -> list[tuple[str, list[tuple[int, int, str]]]]:
+    """구획(쉼표·줄 등)마다 (구획 글, 그 안의 시각 — 구획 안 위치). 시각은 **원문 전체로** 읽는다 — 구획을 먼저 자르면 "점심·저녁
+    11:30"의 나열 부호가 잘려 나가 저녁 11:30(23:30)이 됐다(#1713 재리뷰). 구획은 이름 귀속에만 쓴다."""
+    spans, out, start = clock_spans(text), [], 0
+    for end, nxt in [*((m.start(), m.end()) for m in _SEGMENT.finditer(text)), (len(text), len(text))]:
+        out.append((text[start:end], [(s - start, e - start, hm) for s, e, hm in spans if start <= s and e <= end]))
+        start = nxt
+    return out
+
+
 def _hours_pairs(value: object) -> tuple[tuple[str | None, str], ...]:
     """Facts 안의 (장소 이름, 영업시간 시각) 짝 — `{"name", "hours_label"}` 를 가진 dict 전부(장소 정보의 places). "해녀의집은 18:00까지
     열어요"처럼 이름 붙은 영업시간을 그 장소의 시각으로 받는다(C5 ⓒ). 짝 검사(`_misplaced_time`·`_unpaired_time`)에만 쓴다 — 순서
@@ -643,8 +734,7 @@ def _hours_pairs(value: object) -> tuple[tuple[str | None, str], ...]:
 def _misplaced_time(text: str, pairs: tuple[tuple[str | None, str], ...]) -> bool:
     """구획(쉼표·줄 등) 안에서 시각에 가장 가까운 장소 이름이 Facts 에서 그 시각과 짝이 아니면 참. 이름이 없으면 판정하지 않는다."""
     names = sorted({name for name, _ in pairs if name}, key=len, reverse=True)
-    for segment in _SEGMENT.split(text):
-        times = clock_spans(segment)
+    for segment, times in _segments(text):
         if not times:
             continue
         spots: list[tuple[int, int, str]] = []
@@ -696,10 +786,10 @@ def _out_of_order(text: str, pairs: tuple[tuple[str | None, str], ...]) -> bool:
     names = [name for name, _ in pairs if name]
     order = [hm for _, hm in pairs]
     at = 0
-    for segment in _SEGMENT.split(text):
+    for segment, times in _segments(text):
         if any(name in segment for name in names):
             continue  # 이름에 붙은 시각 — 짝 검사 몫
-        for _, _, hm in clock_spans(segment):
+        for _, _, hm in times:
             if hm not in order:
                 continue  # 영업시간처럼 슬롯이 아닌 Facts 시각
             nxt = next((i for i in range(at, len(order)) if order[i] == hm), None)
@@ -756,12 +846,13 @@ def _foreign_place(text: str, known: Sequence[str]) -> bool:
     return False
 
 
-def _knowledge_foreign_place(text: str, slot_names: Sequence[str], said: Sequence[str]) -> bool:
-    """지식 답(BR-AO-32)의 장소 검사 — 사실 칸이 없어 아는 이름은 스냅샷 슬롯 이름(`slot_names`, `_foreign_place` 와 같은 대조)과 사용자가
-    이미 한 말(`said` — 이번 말·창 안 최근 대화·꺼낸 기억 줄, 공백 뗀 글)이다. 한 말은 **부분 문자열로만** 본다 — 접두 대조면 발화 "부산"이
-    "부산시민공원"을 통과시켰다. 말한 이름을 정식 명칭으로 늘린 꼴("해운대" → "해운대해수욕장")은 아는 이름이고, 일반명사(`_GENERIC_PLACE`)는
-    장소 이름이 아니다. 앞 턴·기억에서 말한 곳을 "거기"로 이어 물으면 그 이름은 지어낸 게 아니다(2026-10-23 리뷰 재현).
-    ponytail: 등록 이름 대조는 없다 — 말하지 않은 고유 이름은 등록돼 있어도 막는다(프롬프트가 금지한 꼴, `place_sql.find_place` 로 넓힐 수 있다)."""
+def _knowledge_unknown_places(text: str, slot_names: Sequence[str], said: Sequence[str]) -> list[str]:
+    """지식 답(BR-AO-32)에서 아는 이름이 아닌 장소 이름(`_PLACE_LIKE` 꼴, 나온 순서·중복 없이) — 아는 이름은 스냅샷 슬롯 이름(`slot_names`,
+    `_foreign_place` 와 같은 대조)과 사용자가 이미 한 말(`said` — 이번 말·창 안 최근 대화·꺼낸 기억 줄, 공백 뗀 글)이다. 한 말은 **부분
+    문자열로만** 본다 — 접두 대조면 발화 "부산"이 "부산시민공원"을 통과시켰다. 말한 이름을 정식 명칭으로 늘린 꼴("해운대" →
+    "해운대해수욕장")은 아는 이름이고, 일반명사(`_GENERIC_PLACE`)는 장소 이름이 아니다. 앞 턴·기억에서 말한 곳을 "거기"로 이어 물으면 그
+    이름은 지어낸 게 아니다(2026-10-23 리뷰 재현). 여기 남은 이름은 호출측이 장소 DB 에 등록돼 있는지 본다(`_registered`)."""
+    unknown: list[str] = []
     for word in re.findall(r"[가-힣]+", text):
         m = _PLACE_LIKE.match(word)
         if m is None or _GENERIC_PLACE.fullmatch(m.group(0)):
@@ -772,8 +863,9 @@ def _knowledge_foreign_place(text: str, slot_names: Sequence[str], said: Sequenc
             continue
         if any(name in t or (len(stem) >= 2 and stem in t) for t in said):
             continue
-        return True
-    return False
+        if name not in unknown:
+            unknown.append(name)
+    return unknown
 
 
 def _refusal_reason(error: str) -> str:
@@ -827,8 +919,10 @@ class DialogueOrchestrator:
         smalltalk: DialogueSmalltalkWorker | None = None,
         embedding: EmbeddingPort | None = None,
         memory_pool: Executor | None = None,
+        injection_shadow: InjectionShadow | None = None,
     ) -> None:
         self._intent = intent_worker
+        self._injection_shadow = injection_shadow
         self._smalltalk_worker = smalltalk
         self._answer = answer_worker
         self._memory = memory_worker
@@ -864,9 +958,9 @@ class DialogueOrchestrator:
                 outcome = self._core(windowed, current, others, counter)
             except PermissionDeniedError:
                 raise
-            except Exception as e:  # noqa: BLE001 — DL-5: 버그도 경계 밖으로 내지 않는다(BR §5 미결 #14 A안)
-                outcome = self._crashed(inp, e)
-            outcome = _not_repeating(outcome, windowed)
+            except Exception as e:  # noqa: BLE001 — DL-5: 버그도 경계 밖으로 내지 않는다(BR §5 미결 #14 B안)
+                outcome = self._crashed(inp, e, classified=counter[0] > 0)  # LLM 을 한 번이라도 불렀으면 분류는 지났다
+            outcome = _remember_shown(_not_repeating(outcome, windowed), inp)
             if writable:  # 기억을 못 읽은 턴은 요약을 내지 않는다 — 없는 줄 알고 빈 기억에서 다시 쓰면 이전 줄을 잃는다(다음 차례에)
                 said = (outcome.answer.text if outcome.answer is not None
                         else outcome.clarify.question if outcome.clarify is not None else None)
@@ -889,11 +983,18 @@ class DialogueOrchestrator:
         counter: list[int],
     ) -> TurnOutcome:
         cleared = DialogueContext(turn_index=inp.context.turn_index)  # 보류는 이 턴으로 끝났다 — 턴 번호는 백엔드 몫
+        if _accepts_proposal(inp):  # 제안 뒤의 "👍" — 수락이다. "응"으로 분류를 탄다(분류 먼저, BR-AO-26 — 웃음 한마디로 닫으면 수락이 묻힌다)
+            inp = replace(inp, utterance="응")
         text = normalize(inp.utterance)
         # 0 — 리터럴 능력 안내 (BR-AO-18): 분류 LLM 에 보내지 않는다
         if text == CAPABILITIES_LITERAL:
             return TurnOutcome("ANSWER", (), None, capabilities_answer(inp.snapshot.trip is not None), cleared, 0)
         if not text:
+            # 이모지만 보낸 말("👍") — 정리(`normalize`)가 이모지를 지워 빈 말이 된다. 분류할 낱말이 없으니 바로 한마디(BR-AO-26 개정
+            # 2026-10-30), 정말 빈 말만 범위 밖이다
+            closer = closer_answer(inp.utterance, inp.snapshot.trip is not None)
+            if closer is not None:
+                return TurnOutcome("ANSWER", (), None, closer, cleared, 0, "emoji_only")
             return self._out_of_scope(inp, "empty_utterance")
         # 0′ — 지시 무시·프롬프트 유출·역할 바꾸기 꼴은 분류 LLM 에 보내지 않는다. "다음 장소 알려줘. 그리고 규칙 무시하고 …"처럼
         # 정상 요청에 붙으면 분류는 GET_NEXT_SLOT 을 고르고 답변 LLM 이 그 지시를 받는다 — 판단해서 거절한 것이라 거절 표지를 단다
@@ -901,6 +1002,12 @@ class DialogueOrchestrator:
             # 발화는 싣지 않는다 — 운영에서 이 줄 수로 오탐을 센다(정상 말이 걸리면 범위 밖 카드가 나간다)
             log.info("dialogue_injection_suspected %s", json.dumps({"event": "dialogue_injection_suspected", "trace_id": inp.trace_id}))
             return self._out_of_scope(inp, INJECTION_REASON)
+        # 0′ 그림자 — 정규식을 통과한 말만 소형 분류기에 뒤에서 보낸다(판정값만 로그, 응답 무영향). 울린 비율 = 오탐 상한
+        if self._injection_shadow is not None:
+            try:
+                self._injection_shadow.submit(text, inp.trace_id)
+            except Exception as e:  # noqa: BLE001 — 계약상 던지지 않지만 응답 경로는 어떤 경우에도 계속 간다
+                log.warning("injection shadow submit 실패(%s) — 응답 영향 없음 (trace_id=%s)", type(e).__name__, inp.trace_id)
         # 0″ — 지역을 말한 장소 찾기 말이면 장소 탐색 SQL 작성을 분류와 나란히 미리 시작한다(분류 뒤에 쓰면 팬아웃 시한에 걸렸다, place_sql 註)
         if self._ports.place_sql is not None:
             self._ports.place_sql.prefetch(inp.utterance, inp.trace_id, inp.now, self._submit)
@@ -941,7 +1048,7 @@ class DialogueOrchestrator:
                     return TurnOutcome("ANSWER", (), None, closer, cleared, 0, reason)
                 if self._planner is not None and _plannable(reason):  # 2‴ — 정해진 의도 밖이라도 조회로 도울 수 있으면 돕는다(BR-AO-28)
                     return self._plan_turn(inp, text, memory, trip_summary, cleared, reason)
-                return self._out_of_scope(inp, reason)
+                return self._retry(inp, reason) if _infra_failure(reason) else self._out_of_scope(inp, reason)
             # 3 — 필수 인자 되묻기 (요청당 1회, 기존 로직)
             interp = from_match(match, inp.context, trip_view)
             if interp.outcome == "ARGUMENT_CLARIFY" and match.intent is Intent.EDIT_SCHEDULE and (on := insert_day(
@@ -959,7 +1066,7 @@ class DialogueOrchestrator:
             snapshot=inp.snapshot, arguments=_without_deictic_region(frame.arguments), now=inp.now, tz=self._tz,
             trace_id=inp.trace_id,
             remaining_ms=lambda: self._remaining(inp), ports=self._ports, utterance=inp.utterance,
-            earlier=tuple((turn.role, turn.text) for turn in inp.recent_turns),
+            earlier=tuple((turn.role, turn.text) for turn in inp.recent_turns), shown=frozenset(inp.context.shown),
         )
         if handler.handoff_frame:  # EDIT_SCHEDULE — 1단계 FRAME (BR-AO-17): 인자만 정리하고 BE 제안 경로로
             tidy = replace(frame, arguments=edit_arguments(ctx))
@@ -1233,7 +1340,7 @@ class DialogueOrchestrator:
         remaining = self._remaining(inp)
         if remaining < _PLAN_MIN_REMAINING_MS:
             self._fallback(inp, "llm", *_PLAN_MODES, f"budget_exhausted(remaining_ms={remaining})")
-            return self._plan_declined(inp, reason, "SKIPPED")
+            return self._plan_declined(inp, reason, "SKIPPED", retry=True)
         timeout_ms = min(_PLAN_CAP_MS, int(remaining * _PLAN_SHARE))
         started = self._clock.monotonic_ms()
         try:
@@ -1241,11 +1348,13 @@ class DialogueOrchestrator:
                                         timeout_sec=timeout_ms / 1000)
         except Exception as e:  # noqa: BLE001 — 프롬프트 미등록 ValueError 는 게이트웨이 render 가 호출보다 먼저 던진다
             self._fallback(inp, "llm", *_PLAN_MODES, f"plan_error: {type(e).__name__}")
-            return self._plan_declined(inp, reason, "FALLBACK")
+            return self._plan_declined(inp, reason, "FALLBACK", retry=True)
         plan_ms = self._clock.monotonic_ms() - started
         draft = result.value
         if result.is_fallback or not isinstance(draft, DialoguePlanDraft):  # FallbackEvent·LlmCallRecord 는 게이트웨이가 냈다
-            return self._plan_declined(inp, reason, "FALLBACK", plan_ms=plan_ms)
+            # 시한·벤더 실패만 다시 시도 — 깨진 JSON·전량 드롭은 분류와 같이 판단 실패라 종전 범위 밖(`_refusal_reason` 과 같은 경계)
+            return self._plan_declined(inp, reason, "FALLBACK", plan_ms=plan_ms,
+                                       retry=(result.error or "").startswith(_INFRA_PREFIXES))
         if draft.refused or not draft.calls:  # 판단한 거절·도구 없음 — 의도된 결정론, 이벤트 없음
             if not draft.refused and draft.gap == "CHAT":  # 잡담은 범위 밖 카드 대신 받아 준다(2″ 인사와 같은 결정론 문장)
                 self._log_plan(inp, "NO_TOOL", plan_ms=plan_ms, gap=draft.gap)
@@ -1271,7 +1380,7 @@ class DialogueOrchestrator:
         ctxs = [TurnContext(snapshot=inp.snapshot, arguments=_without_deictic_region(_grounded_args(call.slots, said)),
                             now=inp.now, tz=self._tz,
                             trace_id=inp.trace_id, remaining_ms=lambda: self._remaining(inp), ports=self._ports,
-                            earlier=earlier, heard=text, solo=len(calls) == 1)
+                            earlier=earlier, heard=text, solo=len(calls) == 1, shown=frozenset(inp.context.shown))
                 for call in calls]
         n = len(ctxs)
         results = self._fanout(inp, step_tasks([h.plan(ctx) for h, ctx in zip(handlers, ctxs, strict=True)]))
@@ -1283,6 +1392,21 @@ class DialogueOrchestrator:
                        task_status={name: r.status for name, r in results.items()})
         return TurnOutcome("ANSWER", (), None, answer, cleared, 0,
                            f"{reason}; plan:{'+'.join(call.intent.value for call in draft.calls)}")
+
+    def _registered(self, inp: TurnInput, names: Sequence[str]) -> bool:
+        """말하지 않은 장소 이름이 모두 장소 DB 에 등록된 곳인가 — 이름 찾기(`place_sql.find_place`, 공백 뗀 완전 일치). 장소 DB 미배선·
+        이름 넷 이상·잔여 부족이면 False(종전처럼 막는다). DB 오류는 `find_place` 가 None 으로 접는다(INV-4 — 막는 쪽)."""
+        lookup = self._ports.place_sql
+        if lookup is None or len(names) > _REGISTERED_LOOKUP_MAX:
+            return False
+        trip = inp.snapshot.trip
+        area = trip.regions[0] if trip is not None and trip.regions else None  # 같은 이름이 여럿이면 여행 지역으로 좁힌다
+        for name in names:
+            if self._remaining(inp) < _REGISTERED_MIN_REMAINING_MS:
+                return False
+            if lookup.find_place(name, area, inp.trace_id) is None:
+                return False
+        return True
 
     def _knows_general(self) -> bool:
         """지식 즉답이 닿는가 — 계획 단계(gap KNOWLEDGE 를 내는 자리)와 지식 워커가 둘 다 조립됐다."""
@@ -1319,7 +1443,8 @@ class DialogueOrchestrator:
         if times or unverifiable:  # 사실이 없는 자리 — 시각은 전부 지어낸 것(INV-2)
             self._fallback(inp, "llm", *_KNOWLEDGE_MODES, "time_not_in_facts")
             return None
-        if _knowledge_foreign_place(text, slot_names, said):
+        unknown = _knowledge_unknown_places(text, slot_names, said)
+        if unknown and not self._registered(inp, unknown):
             self._fallback(inp, "llm", *_KNOWLEDGE_MODES, "place_not_in_facts")
             return None
         try:
@@ -1330,10 +1455,12 @@ class DialogueOrchestrator:
             return None
 
     def _plan_declined(self, inp: TurnInput, reason: str, decision: str, *, plan_ms: int | None = None,
-                       gap: str | None = None) -> TurnOutcome:
-        """계획이 답을 만들지 않았다 — 종전 범위 밖. 분류 사유를 앞에 그대로 둬 거절 표지(`not_classifiable`)를 잃지 않는다."""
+                       gap: str | None = None, retry: bool = False) -> TurnOutcome:
+        """계획이 답을 만들지 않았다 — 거절·도구 없음·깨진 출력은 종전 범위 밖, 인프라 실패(시한 부족·시한·벤더·예외)는 다시 시도
+        (미결 #22 B안). 분류 사유를 앞에 그대로 둬 거절 표지(`not_classifiable`)를 잃지 않는다."""
         self._log_plan(inp, decision, plan_ms=plan_ms, gap=gap)
-        return self._out_of_scope(inp, f"{reason}; plan:{decision.lower()}")
+        full = f"{reason}; plan:{decision.lower()}"
+        return self._retry(inp, full) if retry else self._out_of_scope(inp, full)
 
     def _log_plan(self, inp: TurnInput, decision: str, *, calls=(), arg_keys: Sequence[Sequence[str]] | None = None,
                   primary: Intent | None = None,
@@ -1529,13 +1656,17 @@ class DialogueOrchestrator:
     def _out_of_scope(self, inp: TurnInput, reason: str) -> TurnOutcome:
         return TurnOutcome("OUT_OF_SCOPE", (), None, None, DialogueContext(turn_index=inp.context.turn_index), 0, reason)
 
-    def _crashed(self, inp: TurnInput, e: Exception) -> TurnOutcome:
-        """오케스트레이터 자체 예외(버그) — OUT_OF_SCOPE 로 수렴하고 보고한다(미결 #14 A안). 로그에 발화는 없다."""
-        log.error("dialogue turn 실패 — OUT_OF_SCOPE 로 수렴 (trace_id=%s, %s)", inp.trace_id, type(e).__name__,
-                  exc_info=True)
+    def _retry(self, inp: TurnInput, reason: str) -> TurnOutcome:
+        return TurnOutcome("ANSWER", (), None, retry_answer(), DialogueContext(turn_index=inp.context.turn_index), 0, reason)
+
+    def _crashed(self, inp: TurnInput, e: Exception, *, classified: bool) -> TurnOutcome:
+        """오케스트레이터 자체 예외(버그) — 분류(LLM)를 부른 뒤면 다시 시도, 그 전이면 OUT_OF_SCOPE 로 수렴하고 보고한다(미결 #14 B안).
+        로그에 발화는 없다."""
+        to = "retry_turn" if classified else "out_of_scope"
+        log.error("dialogue turn 실패 — %s 로 수렴 (trace_id=%s, %s)", to, inp.trace_id, type(e).__name__, exc_info=True)
         reason = f"orchestrator_error: {type(e).__name__}: {e}"
-        self._fallback(inp, "orchestrator", "dialogue_orchestrator", "out_of_scope", reason)
-        return self._out_of_scope(inp, reason)
+        self._fallback(inp, "orchestrator", "dialogue_orchestrator", to, reason)
+        return self._retry(inp, reason) if classified else self._out_of_scope(inp, reason)
 
     def _fallback(self, inp: TurnInput, stage: str, from_mode: str, to_mode: str, reason: str) -> None:
         """INV-4 — 폴백은 보고와 짝이다. 계측 실패는 비즈니스 실패가 아니다(TracePort 계약)."""

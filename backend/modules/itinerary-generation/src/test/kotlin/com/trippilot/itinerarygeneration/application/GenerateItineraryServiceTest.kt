@@ -222,7 +222,7 @@ internal fun genRevisions(
     trips: TripFacade,
     clock: Clock = Clock.fixed(Instant.parse("2026-07-25T00:00:00Z"), ZoneOffset.UTC),
     log: ItineraryRevisionRepository = GenFakeRevisions(),
-) = ItineraryRevisionService(log, repo, trips, NoopValidateAgent(), NOOP_TX, clock)
+) = ItineraryRevisionService(log, repo, trips, NoopValidateAgent(), NOOP_TX, clock, modesOnlyRepairContexts(trips))
 
 /** 리비전 기록을 관찰하는 인메모리 저장소 — seq 는 순서대로 부여. */
 internal class GenFakeRevisions : ItineraryRevisionRepository {

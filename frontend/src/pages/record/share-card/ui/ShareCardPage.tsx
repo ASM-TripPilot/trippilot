@@ -6,6 +6,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { SHARE_FORMATS, buildShareCard } from '@/features/reflection';
 import { shareEnabled } from '@/features/reflection';
 import { useTripSummary } from '@/features/reflection';
+import {
+  CAPTION_MAX_LENGTH,
+  HASHTAG_MAX_COUNT,
+  type ShareCardVM,
+} from '@/features/reflection/index.view';
+import { useShareCardCopy } from '../model/useShareCardCopy';
 import { ShareCardScreen } from './ShareCardScreen';
 import { useGetTripsTripId } from '@/shared/api/index.hooks';
 import { StateNotice } from '@/shared/ui/StateNotice';
@@ -120,19 +126,51 @@ export function ShareCardPage({ tripId }: ShareCardPageProps): ReactElement {
     format: SHARE_FORMATS[0],
   });
 
-  // TRIP-766: 캡션 카드는 해시태그만 — 문장 시드 제거. 해시태그는 지역으로 조립(온디바이스만, §7).
-  const caption = '';
-  const hashtagText = (trip.data?.destinations ?? [])
+  // TRIP-766: 해시태그는 지역으로 조립(온디바이스) — 서버 문구가 없을 때의 대체값.
+  const onDeviceHashtags = (trip.data?.destinations ?? [])
     .map((dest) => `#${dest.region}여행`)
     .join(' ');
+
+  return (
+    <ShareCardFace
+      tripId={tripId}
+      card={card}
+      onDeviceHashtags={onDeviceHashtags}
+      onBack={handleBack}
+    />
+  );
+}
+
+/**
+ * 카드 얼굴 — 이 컴포넌트가 처음 그려질 때 서버 문구를 1회 부른다(TRIP-1605: 조회 중·오류·미준비 얼굴엔 마운트되지
+ * 않으므로 그 얼굴에선 호출 0). 카드는 문구를 기다리지 않고 먼저 그린다. 서버 값은 가공 없이 쓰되 계약(캡션 150자·
+ * 해시태그 10개)을 어긴 응답만 앞에서 자른다. 실패·폴백·빈 해시태그는 온디바이스 해시태그 + 빈 캡션으로 대체한다.
+ */
+function ShareCardFace({
+  tripId,
+  card,
+  onDeviceHashtags,
+  onBack,
+}: {
+  tripId: string;
+  card: ShareCardVM;
+  onDeviceHashtags: string;
+  onBack: () => void;
+}): ReactElement {
+  const { copy, waiting, dailyLimit } = useShareCardCopy(tripId);
+  const serverTags = copy?.hashtags.slice(0, HASHTAG_MAX_COUNT) ?? [];
 
   return (
     <ShareCardScreen
       card={card}
       formats={SHARE_FORMATS}
-      caption={caption}
-      hashtagText={hashtagText}
-      onBack={handleBack}
+      caption={copy?.caption.slice(0, CAPTION_MAX_LENGTH) ?? ''}
+      hashtagText={
+        serverTags.length > 0 ? serverTags.join(' ') : onDeviceHashtags
+      }
+      copyPending={waiting}
+      copyLimitReached={dailyLimit}
+      onBack={onBack}
     />
   );
 }

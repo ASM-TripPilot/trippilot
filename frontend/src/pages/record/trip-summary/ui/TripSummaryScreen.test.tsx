@@ -16,6 +16,7 @@ import {
   flushOsAnswer,
   holdReduceMotionOn,
 } from '@/test-support/barMotionProbe';
+import { revealValues } from '@/test-support/revealProbe';
 
 import { DayHighlightCard } from './DayHighlightCard';
 import {
@@ -538,6 +539,46 @@ describe('TRIP-1386 · 모션', () => {
     expect(statTexts()).toEqual(['0', '—', '0']);
     await advance(300);
     expect(statTexts()).toEqual(['0', '—', '0']);
+  });
+
+  // 등장 래퍼는 `shared/ui/RevealItem` 이 한 벌로 맡는다 — 곡선·지연 계산은 그쪽 테스트, 여기는 이 화면이 넘기는 첫 지연(1050 = 경로 0.15+0.9초 뒤)과
+  // 카드 순번(내레이션이 있으면 일차 카드가 한 칸 뒤)만 잰다. 1050 대신 h14 의 500 을 넘기면 1000ms 시점에 이미 보여 red.
+  it('내레이션·일차 카드는 경로가 다 그려진 뒤(1050ms) 차례로(150ms 간격) 등장한다', async () => {
+    probe.setReduceMotion(false);
+    renderScreen({
+      narrative: '3일 동안 12곳을 다녀왔어요.',
+      dayCards: [
+        {
+          key: '2026-06-11',
+          dayLabel: '1일차',
+          visitCountLabel: '5곳',
+          subtitle: '광안리 해변',
+        },
+        {
+          key: '2026-06-12',
+          dayLabel: '2일차',
+          visitCountLabel: '4곳',
+          subtitle: '전포 카페거리',
+        },
+      ],
+    });
+    await advance(0);
+    const narrative = screen.getByTestId('reflection-summary-narrative');
+    const [day1, day2] = screen.getAllByTestId('reflection-summary-day-card');
+    const opacities = () =>
+      [narrative, day1, day2].map((node) => revealValues(node).opacity);
+
+    await advance(1000);
+    expect(opacities()).toEqual([0, 0, 0]); // 경로가 그려지는 동안(첫 카드 1050ms 전) 모두 대기
+
+    await advance(130); // 1130ms — 내레이션(1050)만 시작, 1일차(1200)·2일차(1350)는 아직
+    const [first, second, third] = opacities();
+    expect(first).toBeGreaterThan(0);
+    expect(second).toBe(0);
+    expect(third).toBe(0);
+
+    await advance(770); // 1900ms — 마지막 카드(1350+450)까지 끝
+    expect(opacities()).toEqual([1, 1, 1]);
   });
 
   it('지도에 다녀온 길 다시 그리기 옵션(0.9초, 0.15초 뒤)이 전달된다', () => {

@@ -349,6 +349,10 @@ class ValidateItineraryRequest(BoundaryModel):
 
     itinerary: ItineraryPayload
     request_meta: RequestMetaSchema
+    # 수단(2026-10-30) — additive optional, repair 의 `transport_modes` 와 **같은 이름·목록·번역표**(첫 인식 토큰).
+    # HC2(이동 시간)를 이 수단으로 잰다 — 종전엔 칸이 없어 대중교통으로 재 자차 여행의 편집 재검증이 HC2 를 잘못 표시했다.
+    # 없으면 종전 동작(PUBLIC).
+    transport_modes: list[str] = Field(default_factory=list)
 
 
 class ValidateItineraryResponse(BoundaryModel):
@@ -671,7 +675,8 @@ class ExplanationsRequest(BoundaryModel):
 
 class ExplanationsResponse(BoundaryModel):
     """slot_key(BR-U2-04: "날짜#poi_id") → 추천 이유 해시태그(공백 구분, 최대 5개 — 예 `"#뷰맛집 #혼자여행"`).
-    실패는 빈 맵 + 사유(침묵 금지).
+    실패는 빈 맵 + 사유(침묵 금지). 여러 날은 날마다 따로 설명해, 일부 날만 실패하면 성공한 날 이유 +
+    `reason="explanation_partial: …"` 이고 `is_fallback=false` 다(전부 실패해야 빈 맵).
 
     `alternative_explanations`(TRIP-887, additive): 요청 payload 의 슬롯별 차선책
     (`slots[].alternatives[]`)에 대한 "이 자리 대신 골라도 좋은 이유" 1문장 — 키는

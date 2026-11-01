@@ -38,7 +38,11 @@ import com.trippilot.itinerarygeneration.api.PlannedSlotView
 import com.trippilot.placedata.api.FrozenPoiView
 import com.trippilot.placedata.api.PoiSurfaceFacade
 import com.trippilot.placedata.api.PoiSurfaceView
+import com.trippilot.placedata.api.RegionCenter
+import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.weathercontext.api.ContextFacade
+import com.trippilot.weathercontext.api.HourlyForecastFacade
+import com.trippilot.weathercontext.api.PointForecast
 import com.trippilot.weathercontext.api.WeatherReading
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
@@ -144,7 +148,7 @@ internal class FakeEditing : ItineraryEditProposalFacade, SlotCandidateFacade, I
 }
 
 internal fun dispatcher(data: FakeTripData, editing: FakeEditing = FakeEditing(), properties: AssistantProperties = AssistantProperties()) =
-    IntentDispatcher(QueryCards(data, data, data, data), ProposalCards(editing, editing, data, data, properties))
+    IntentDispatcher(QueryCards(data, data, data, data, data, data), ProposalCards(editing, editing, data, data, properties))
 
 internal fun proposedSlot(poiId: UUID, start: String, distance: String? = null) =
     ProposedSlot(poiId, LocalTime.parse(start), LocalTime.parse(start).plusHours(1), isFixed = false, endsNextDay = false, distanceRange = distance)
@@ -263,8 +267,11 @@ internal class FakeTripData(
     var reading: WeatherReading? = null,
     var generationState: String = "COMPLETE",
     var status: String = "PLANNED",
-) : ItineraryFacade, ItineraryPlanFacade, PoiSurfaceFacade, ContextFacade {
+) : ItineraryFacade, ItineraryPlanFacade, PoiSurfaceFacade, ContextFacade, HourlyForecastFacade, RegionLookupFacade {
     var failItinerary = false
+    /** 시간별 예보 — 기본 null = 모름(종전 카드 그대로). */
+    var forecast: PointForecast? = null
+    var failForecast = false
     var failPlan = false
     var failWeather = false
 
@@ -290,6 +297,18 @@ internal class FakeTripData(
         check(!failWeather) { "weather down" }
         return reading
     }
+
+    override fun isLive() = true
+    override fun gridKeyOf(lat: Double, lng: Double) = "98,76"
+    override fun forecastForTrigger(lat: Double, lng: Double, at: Instant): PointForecast? {
+        check(!failForecast) { "forecast down" }
+        return forecast
+    }
+
+    override fun codesOf(regionName: String) = emptyList<String>()
+    override fun isSelectableCode(regionCode: String) = false
+    override fun centerOf(regionName: String) = RegionCenter(35.18, 129.08).takeIf { regionName == "부산" }
+    override fun centerOfCode(regionCode: String): RegionCenter? = null
 }
 
 internal fun plannedSlot(

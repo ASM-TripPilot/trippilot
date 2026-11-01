@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working in `fro
 
 ## 하네스: TripPilot 개발 사이클
 
-**목표:** 루프 엔지니어링 기반 TDD 개발 사이클(인지→메모리→설계→테스트→구현(리뷰·리팩토링)→검증→학습→기록)을 사이클 끝 학습 검토 1회(아티팩트+퀴즈)와 함께 운영한다. 중간 승인 게이트는 없다 — 검증에서 판단성 이상이 나오면 되돌리지 않고 새 티켓·새 사이클로 전진한다.
+**목표:** 루프 엔지니어링 기반 TDD 개발 사이클(인지→메모리→설계→테스트→구현(리뷰·리팩토링)→검증→끝 보고→기록)을 운영한다. 사이클 끝 사람 자리는 끝 보고 1회(결정 항목)다 — 7 [학습](아티팩트+퀴즈)은 2026-11-01 폐지됐다(상세는 하네스 변경이력). 중간 승인 게이트는 없다 — 검증에서 판단성 이상이 나오면 되돌리지 않고 새 티켓·새 사이클로 전진한다.
 
 **트리거:** TripPilot **frontend** 코드 변경 작업(기능/화면/티켓/버그/리팩토링/스캐폴딩) 요청 시 `trippilot-dev-cycle` 스킬을 사용하라(하네스 소재: `frontend/.claude/`). backend/ai 코드 작업용 하네스는 아직 없다 — 해당 요청 시 하네스 부재를 알리고 일반 워크플로우로 진행하라. 단순 질문·문서 열람·문서 편집은 직접 응답 가능(단, 의미 있는 문서 변경은 옵시디언 `로그.md`에 한 줄 기록).
 
@@ -16,21 +16,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working in `fro
 
 **모델 배치:** 자리별 모델의 정본은 **각 에이전트 frontmatter**다(`frontend/.claude/agents/*.md`). **예외는 없다** — 사이클 SKILL이 오버라이드하던 한 자리(구 4-b)는 2026-07-31 [테스트] 통합 복귀로 사라졌다. 배치를 두 군데 적으면 갈라진다. ⚠️ **메타 스킬 `harness:harness`의 "모든 에이전트는 `model: "opus"`" 지침보다 현재 frontmatter가 우선한다.** 하네스 정비 중 그 스킬이 로드돼도 일괄 opus로 되돌리지 마라 — 배치 원칙(자리별 실패 가시성·되돌리기 비용·호출 빈도)은 이전 모델 세대의 12사이클 실측에서 나왔고, 코드를 쓰고 심판하는 4자리(spec-analyst·test-designer·implementer·code-critic)는 2026-10-20 사용자 결정으로 Sonnet 5.5 로 내렸고(effort 는 `high` 유지), 이 배치는 아래 「sonnet 전환 유지 판정」으로 관찰한다. 근거·관찰 상태는 변경이력에 있다.
 
-**effort 배치:** 같은 원리로 자리별이다 — **에이전트는 frontmatter `effort:`, 오케스트레이터(메인 루프)는 `frontend/.claude/settings.json`의 `effortLevel`**. 전역 `~/.claude/settings.json`은 건드리지 않는다(다른 프로젝트가 딸려간다). 가르는 기준은 모델 배치와 같다 — **실패 가시성 × 되돌리기 비용**. 코드를 쓰거나 심판을 설계하는 자리(spec-analyst·test-designer·implementer·code-critic)는 얕아져도 조용히 통과하고 되돌리려면 새 사이클을 열어야 하므로 effort를 **명시해 상속을 끊는다**(`high`). 메인 루프는 학습 제시·주해·RESUME 기록이라 실패가 즉시 눈에 보이고, 캐시 읽기의 절반을 쓰는 자리다(`medium`). 판독 자리(figma-qa)도 `medium`이다.
+**effort 배치:** 같은 원리로 자리별이다 — **에이전트는 frontmatter `effort:`, 오케스트레이터(메인 루프)는 `frontend/.claude/settings.json`의 `effortLevel`**. 전역 `~/.claude/settings.json`은 건드리지 않는다(다른 프로젝트가 딸려간다). 가르는 기준은 모델 배치와 같다 — **실패 가시성 × 되돌리기 비용**. 코드를 쓰거나 심판을 설계하는 자리(spec-analyst·test-designer·implementer·code-critic)는 얕아져도 조용히 통과하고 되돌리려면 새 사이클을 열어야 하므로 effort를 **명시해 상속을 끊는다**(`high`). 메인 루프는 끝 보고·RESUME 기록·3-c 채점이라 실패가 즉시 눈에 보이고, 캐시 읽기의 절반을 쓰는 자리다(`medium`). **단 5-d 영향 반경이 발동하면 메인 루프가 공용 모듈의 파급을 읽고 증명 스크립트를 쓰는 자리가 되므로 `/effort high`로 올린다** — 경량 사이클 단서와 같은 이유다. 판독 자리(figma-qa)도 `medium`이다.
 
 **단계 이름은 모델 간에 같은 양이 아니다** — Opus 5.5는 같은 단계에서 이전 모델보다 더 오래 생각하고(xhigh에서 특히), 기본값이 `medium`이다(정본: claude-api 스킬 「Migrating to Claude Opus 5.5」). 모델을 바꿀 때 이전 모델의 effort 값을 그대로 옮기지 말고 한 칸 내려서 시작해 실측한다.
 
 ⚠️ **경량 사이클에서는 오케스트레이터가 직접 구현한다** — 그때 메인 루프는 "코드를 안 쓰는 자리"라는 전제가 깨지므로 `/effort high`로 올리고 시작한다. 이 단서를 빼면 규칙이 조용히 물린다.
 
-*유지 판정: 3사이클 관찰 — 메인 루프 요청 수·피크 컨텍스트·사이클 소요 시간을 센다(기준선 151요청/391k). 안 줄면 되돌린다. 줄더라도 code-critic의 심판 사각지대 지적이 줄거나 퀴즈 오답·막힘이 늘면 코드 자리를 `xhigh`로 되돌린다. 지표가 유지되면 코드 자리를 `medium`으로 한 칸 더 내려 본다.*
+*유지 판정: 3사이클 관찰 — 메인 루프 요청 수·피크 컨텍스트·사이클 소요 시간을 센다(기준선 151요청/391k). 안 줄면 되돌린다. 줄더라도 code-critic의 심판 사각지대 지적이 줄면 코드 자리를 `xhigh`로 되돌린다. 지표가 유지되면 코드 자리를 `medium`으로 한 칸 더 내려 본다.*
 
-*sonnet 전환 유지 판정(2026-10-20): 3사이클 관찰 — code-critic 차단·경고 건수, 5-b 이후 [검증]에서 새로 나온 결함, 구현 재시도 횟수, 퀴즈 오답·막힘을 센다(기준선 = 2026-10-17 QA 7회차 배치의 Opus 5.5 사이클). 차단·재시도가 늘거나 심판 사각 지적이 줄면 code-critic·test-designer 부터 Opus 5.5 로 되돌린다. 지표가 유지되면 spec-analyst 를 `medium` 으로 한 칸 더 내려 본다.*
+*sonnet 전환 유지 판정(2026-10-20): 3사이클 관찰 — code-critic 차단·경고 건수, 5-b 이후 [검증]에서 새로 나온 결함, 구현 재시도 횟수를 센다(기준선 = 2026-10-17 QA 7회차 배치의 Opus 5.5 사이클). 차단·재시도가 늘거나 심판 사각 지적이 줄면 code-critic·test-designer 부터 Opus 5.5 로 되돌린다. 지표가 유지되면 spec-analyst 를 `medium` 으로 한 칸 더 내려 본다.*
 
 **Ponytail(게으른 구현 사다리):** 플러그인이 정본이다 — **사다리 7단·하드룰 본문을 하네스에 옮겨 적지 마라**(사본은 갈라진다). 하네스가 정하는 것은 배선뿐이고, 그 정본은 `frontend/.claude/settings.json`의 `env` 두 줄이다.
 
-- **모드 `lite`**(`PONYTAIL_DEFAULT_MODE`) — full의 *"가장 짧은 설명"*은 전줄 주해·학습자 모드와, ultra의 *"요구사항에 도전"*은 test-designer가 확정한 AC와 충돌한다. lite의 *"더 게으른 대안을 한 줄로 제시하고 고르는 것은 사용자"*만 3-a 맹점 훑기와 결이 같다.
+- **모드 `lite`**(`PONYTAIL_DEFAULT_MODE`) — full의 *"가장 짧은 설명"*은 서브 에이전트 학습자 톤과, ultra의 *"요구사항에 도전"*은 test-designer가 확정한 AC와 충돌한다. lite의 *"더 게으른 대안을 한 줄로 제시하고 고르는 것은 사용자"*만 3-a 맹점 훑기와 결이 같다.
 - **거는 자리는 implementer뿐**(`PONYTAIL_SUBAGENT_MATCHER=^implementer$`) — spec-analyst·test-designer에 사다리를 걸면 AC가 흔들린다. 오케스트레이터는 SessionStart로 항상 받는다(플러그인 구조상 분리 불가 — 코드를 쓰지 않는 자리라 무해).
-- **"부채"가 두 장부다** — `/ponytail-debt`(미룬 코드 단축)과 이해부채(사용자가 이해하지 못한 개념)는 다르다. 섞어 세지 마라.
 - **유지 판정 없음 — 상시 존치**(사용자 결정). 위 「장치 판정 규칙」의 명시적 예외다. **다시 판정 조건을 달지 마라** — 떼는 조건이 없으므로 실적 집계도 제거 근거로 쓰지 않는다(집계 자체의 존폐는 scribe 소관).
 
 **변경 이력:** 하네스(에이전트·스킬·settings·이 파일)를 변경하면 **반드시** 옵시디언 `TripPilot/하네스 변경이력.md` 표에 행을 추가하라(append-only). 기록 서식과 압축 전 원장 확인 순서는 `harness-rule-edit` 스킬.

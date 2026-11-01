@@ -420,6 +420,7 @@ export { isOfflineWaiting } from './isOfflineWaiting';
 export {
   isGenerationDailyLimit,
   isRateLimited,
+  isShareCardDailyLimit,
   retryAfterSeconds,
 } from './isRateLimited';
 export {

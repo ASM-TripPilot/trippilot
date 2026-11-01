@@ -1,5 +1,5 @@
 {
-  "_doc": "웹 검색으로 \"요즘 많이 가는 곳\"을 고른 목록(2026-10-18, 낮·밤). 속성은 여기 적지 않는다 — collect_curated_kakao.py 가 카카오 로컬로 채운다. 실린 행·이미 있던 행 모두 태그 \"요즘 인기\"를 받는다(규칙 점수 인기 항 바닥). 클럽은 이 목록에 있는 것만 공유본에 남는다(merge_pois_docs.drop_bad_nightlife). 팝업스토어처럼 기간 한정인 곳은 넣지 않는다.",
+  "_doc": "웹 검색으로 \"요즘 많이 가는 곳\"을 고른 목록(2026-10-18, 낮·밤). 속성은 여기 적지 않는다 — collect_curated_kakao.py 가 카카오 로컬로 채운다. 실린 행·이미 있던 행 모두 태그 \"요즘 인기\"를 받는다(규칙 점수 인기 항 바닥). 클럽은 이 목록에 있는 것만 공유본에 남는다(merge_pois_docs.drop_bad_nightlife). 팝업스토어처럼 기간 한정인 곳은 넣지 않는다. 체인이라도 지점 자체가 가 볼 곳인 매장(한옥·옛 극장·시장 안 스타벅스, 올리브영N 성수)은 여기 싣고 이름 조각을 mapping._DISTINCTIVE_BRANCHES 에 둔다 — 그래야 체인 규칙이 비켜간다(2026-10-23).",
   "evidence": {
     "hongdae": "https://www.threads.com/@dogcare0615/post/DVh3D7Fj1lY",
     "hongdae_tiktok": "https://www.tiktok.com/@holycow.co.kr/video/7600085581841829128",
@@ -50,7 +50,12 @@
     "gq_jongno": "https://www.gqkorea.co.kr/2026/02/13/%ED%98%BC%EC%9E%90-%EB%B3%B4%EB%82%B4%EB%8A%94-%EC%84%A4-%EC%97%B0%ED%9C%B4-%ED%98%BC%EC%88%A0%ED%95%98%EA%B8%B0-%EC%A2%8B%EC%9D%80-%EC%A2%85%EB%A1%9C-%EC%9D%84%EC%A7%80%EB%A1%9C-%EB%B0%94-5",
     "seongsu_bars": "https://www.marieclairekorea.com/newnew/2026/03/cocktail",
     "seongsu_mugeunbon": "https://www.tourtoctoc.com/news/articleView.html?idxno=2837",
-    "hongdae_bars": "https://kr.trip.com/blog/best-bars-in-seoul-guide/"
+    "hongdae_bars": "https://kr.trip.com/blog/best-bars-in-seoul-guide/",
+    "starbucks_heritage5": "https://v.daum.net/v/BP9R9ftswB",
+    "starbucks_gwangjang": "https://www.shinsegaegroupnewsroom.com/starbucks-marketplace-taste-style-opening/",
+    "starbucks_gyeongdong": "https://www.diningcode.com/profile.php?rid=kpfcAzV6Z5iL",
+    "starbucks_yangpyeong": "https://www.econovill.com/news/articleView.html?idxno=405810",
+    "oliveyoung_seongsu": "https://zdnet.co.kr/view/?no=20251117155045"
   },
   "places": [
     {"query": "홍대 어텐션", "name": "어텐션", "sido": "서울", "kind": "클럽", "evidence": "hongdae_tiktok"},
@@ -211,6 +216,14 @@
     {"query": "성수 무근본", "name": "무근본", "sido": "서울", "kind": "칵테일바", "evidence": "seongsu_mugeunbon"},
     {"query": "홍대 루프탑 어반비치", "name": "어반비치", "sido": "서울", "kind": "라운지바", "evidence": "hongdae_bars", "addr": "서교동 403-4"},
     {"query": "연남마실", "name": "연남마실", "sido": "서울", "kind": "칵테일바", "evidence": "hongdae_bars"},
-    {"query": "슈퍼노바 합정", "name": "슈퍼노바", "sido": "서울", "kind": "와인바", "evidence": "hongdae_bars"}
+    {"query": "슈퍼노바 합정", "name": "슈퍼노바", "sido": "서울", "kind": "와인바", "evidence": "hongdae_bars"},
+    {"query": "스타벅스 경주대릉원점", "name": "스타벅스 경주대릉원", "sido": "경북", "kind": "CAFE", "evidence": "starbucks_heritage5"},
+    {"query": "스타벅스 광장마켓점", "name": "스타벅스 광장마켓", "sido": "서울", "kind": "CAFE", "evidence": "starbucks_gwangjang"},
+    {"query": "스타벅스 경동1960점", "name": "스타벅스 경동1960", "sido": "서울", "kind": "CAFE", "evidence": "starbucks_gyeongdong"},
+    {"query": "스타벅스 대구종로고택점", "name": "스타벅스 대구종로고택", "sido": "대구", "kind": "CAFE", "evidence": "starbucks_heritage5"},
+    {"query": "스타벅스 환구단점", "name": "스타벅스 환구단", "sido": "서울", "kind": "CAFE", "evidence": "starbucks_heritage5"},
+    {"query": "스타벅스 더북한강R점", "name": "스타벅스 더북한강", "sido": "경기", "kind": "CAFE", "evidence": "starbucks_heritage5"},
+    {"query": "스타벅스 더양평DTR점", "name": "스타벅스 더양평", "sido": "경기", "kind": "CAFE", "evidence": "starbucks_yangpyeong"},
+    {"query": "올리브영N 성수", "name": "올리브영N", "sido": "서울", "kind": "SHOPPING", "evidence": "oliveyoung_seongsu"}
   ]
 }

@@ -1903,3 +1903,32 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — situation-awareness NFR Requirements 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
+
+## Functional Design·NFR Requirements 사후 개정 — situation-awareness 정본 기록 정리 (BLM §9·§10 · BR §11 · NFR §7)
+**Timestamp**: 2026-10-30T12:30:00+09:00 (작업 시점)
+**User Input**: (사용자 원문) "지적받은것중에 처리 안한거 있는지 다 확인해봐바!! 모든 세션들에게 다 뒤져보라고해!"
+**AI Response**: 정본 전수 대조(origin/develop 1f5600380). 블록 4개를 덧붙였다(원문·기존 블록 삭제·수정 0줄).
+- `functional-design/business-logic-model.md` §9: 코드로 닫혔는데 해소 줄이 없던 G-SA-1·2·3·4·6·9·10·13·14
+- `functional-design/business-logic-model.md` §10: O-SA-2~15 확정 기록 · 남은 O-SA-13·14
+- `functional-design/business-rules.md` §11: 같은 기록을 가리키는 줄
+- `nfr-requirements/nfr-requirements.md` §7: 켜는 순서 판독값(코드 밖 사실)
+코드 변경 없음(TRIP-1660).
+**Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(기록 정리), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — U5 공유 카드 서버 AI 문구 경로 (frontend-components §7)
+**Timestamp**: 2026-10-30T12:21:09+09:00 (작업 시점)
+**User Input**: (사용자 원문) "정본 반영 해줘" — 같은 사이클(앱 세션, 공유 카드 서버 문구 구현) 설계 단계 3-a 에서 사용자가 고른 정본 반영 항목 ④-1 의 승인이다.
+**AI Response**: `construction/u5-records-reflection/functional-design/frontend-components.md` §7 폼 검증 표 바로 아래에 `[개정 · 2026-10-30]` 블록 1개를 덧붙였다(원문 표·기존 줄 삭제·수정 0줄). 내용: 공유 카드 얼굴이 처음 그려질 때 `POST /trips/{tripId}/share-card/copy` 를 1회 호출 · 응답 처리(`isFallback`·빈 해시태그 대체) · 429 두 갈래(`SHARE_CARD_DAILY_LIMIT` 재시도 없음 / `RATE_LIMITED` `Retry-After` 뒤 1회) · 그 밖 실패의 조용한 대체 · 고친 해시태그 보존. 근거를 외부 사실(openapi `ShareCardCopy`)과 우리가 정한 구현 결정(호출 시점·재시도 규칙·고친 값 보존·한도 안내 문구)으로 갈라 적었다. 코드 변경 없음(구현은 별도 PR #1685).
+**Context**: CONSTRUCTION — U5 Functional Design 사후 개정(구현 반영). 사용자 승인("정본 반영 해줘") 뒤 같은 PR 머지로 확정(#1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — situation-awareness 판단 기록 (BR-SA-07·08 · BLM §4.3·§10)
+**Timestamp**: 2026-10-30T14:30:00+09:00 (작업 시점)
+**User Input**: (사용자 원문) "뭐를 하라고?? 결정이 필요한것들은 웬만해서는 다 진행하는 방향으로 하자"
+**AI Response**: 열려 있던 판단을 추천안으로 닫고 블록 4개를 덧붙였다(원문·기존 블록 삭제·수정 0줄) — `functional-design/business-rules.md` BR-SA-07(만료 기준을 코드의 '끝 시각'에 맞춤) · BR-SA-08(폐업 승격은 제자리 갱신만 — 시도했다가 블로킹 PBT T-D1-P1·P4 약화가 필요해 두었다) · `functional-design/business-logic-model.md` §4.3(만료 기준 정정) · §10(O-SA-6 유지·O-SA-13 관찰·FE-A 잔상 수용·작은 후속 보류 기록). `TriggerLifecycleTest` 에 현재 동작을 고정하는 시험 2건을 더했다. 운영 코드 변경은 없다. 또 #1689 가 NFR §7 판독 기록에 쓴 요일 표기('평일 12:00~19:00')를 실제 값(화~토, `day_of_week` 월=0)으로 정정했다. TRIP-1675.
+**Context**: CONSTRUCTION — situation-awareness Functional Design 사후 개정(판단 기록), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---

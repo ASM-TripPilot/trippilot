@@ -83,6 +83,10 @@ import { PlaceAddPage } from './PlaceAddPage';
  *  - 🔴 **N9** 응답 전에 화면을 떠나도 성공이면 캐시가 바뀌고 토스트가 뜬다. **N10** 저장 중엔 다른 추가를 안 받는다.
  *  - 토스트는 모듈 싱글턴이라 리셋을 **파일 최상위** `afterEach` 에 건다(toastHarness 머리말).
  *
+ * TRIP-1640 추가 — 한 화면에서 연달아 담기(삽입 자리·기본 시각이 저장에 성공한 만큼 밀린다):
+ *  - 🔴 **S1·S2·S3** 담은 순서대로 선행 카드 뒤에 이어 붙고, 기본 시각은 앞서 담은 곳 종료부터이며, dirty 초안도 같다.
+ *  - 🟢선제 **S4** 첫 저장이 실패하면 자리가 안 밀린다(시도가 아니라 성공을 센다).
+ *
  * 왜 통합 버킷인가: 최종 직렬화된 URL·나간 PUT 바디·재요청 횟수·캐시 무효화는 msw/스파이만 본다.
  * 3동작 뼈대: 준비=핸들러/래퍼/params → 실행=렌더/입력/칩/add → 단언=나간 URL·PUT 바디·보이는 트리.
  */
@@ -2132,6 +2136,169 @@ describe('TRIP-1424 · 장소 추가 결과 안내 — 토스트 · 실패 안�
     },
     SLOW
   );
+
+  /**
+   * TRIP-1640 (M-37) — 한 화면에서 여러 곳을 연달아 담는다. 라우트 `insertAfter` 는 화면이 떠 있는 동안 안 바뀌므로
+   * 둘째부터는 "선행 카드 바로 뒤"가 이미 첫째의 자리다 — 저장에 성공한 추가 수만큼 삽입 자리를 뒤로 밀어야
+   * 둘째가 첫째 앞에 끼지 않고, 기본 시각도 첫째 종료부터가 된다. 실패한 추가는 세지 않는다.
+   * 이 describe 는 위 TRIP-1424 describe 의 `echo`·`serveDays`·`ready`·`add`·`sent` 를 그대로 쓰려고 그 안에 둔다.
+   *
+   * 3동작 뼈대: 준비 = 08:00–09:30 sA · 13:00–14:00 sB 와 라우트 insertAfter=0(sA 뒤 「+」) → 실행 = 같은 화면에서
+   * 장소를 연달아 [적용] → 단언 = 나간 PUT 들의 슬롯 순서·시각, 편집 초안 순서.
+   */
+  describe('연달아 담기 — 삽입 자리가 저장에 성공한 만큼 뒤로 밀린다', () => {
+    const SA = slotAt('sA', '08:00:00', '09:30:00');
+    const SB = slotAt('sB', '13:00:00', '14:00:00');
+
+    beforeEach(() => {
+      mockParams = { tripId: 't1', insertAfter: '0' };
+      serveDays([{ date: D1, slots: [SA, SB] }]);
+    });
+
+    /** 「+ 추가」 → [적용] → 그 PUT 이 끝난 것(행이 "추가됨")까지 기다린다 — 끝나기 전 다음 「+ 추가」는 무시된다(저장 중 잠금). */
+    async function addAndSettle(poiId: string): Promise<void> {
+      await add(poiId);
+      await screen.findByTestId(`itinerary-place-added-${poiId}`);
+      // 한 틱 더 — 행 표시(onSuccess)와 저장 중 잠금 해제(onSettled) 사이를 건넌다.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    }
+
+    it(
+      '🔴 S1 · 연달아 세 곳을 담으면 담은 순서대로 선행 카드 바로 뒤에 이어 붙는다 [sA, p1, p2, p3, sB]',
+      async () => {
+        const { client } = renderTree();
+        await ready(client);
+
+        await addAndSettle('p1');
+        // 앵커 — 첫 저장은 원래 자리(sA 바로 뒤)에 들어갔고 편집기 대역(같은 캐시)도 그렇게 본다.
+        expect(sent(0, D1).map(([poiId]) => poiId)).toEqual(['sA', 'p1', 'sB']);
+        expect(screen.getByTestId(EDITOR)).toHaveTextContent('sA,p1,sB');
+
+        await addAndSettle('p2');
+        await addAndSettle('p3');
+
+        await waitFor(() => expect(putBodies).toHaveLength(3));
+        // 둘째는 첫째 뒤, 셋째는 둘째 뒤 — 고정 자리면 [sA, p2, p1, sB] · [sA, p3, p2, p1, sB] 로 거꾸로 쌓인다.
+        expect(sent(1, D1).map(([poiId]) => poiId)).toEqual([
+          'sA',
+          'p1',
+          'p2',
+          'sB',
+        ]);
+        expect(sent(2, D1).map(([poiId]) => poiId)).toEqual([
+          'sA',
+          'p1',
+          'p2',
+          'p3',
+          'sB',
+        ]);
+      },
+      SLOW
+    );
+
+    it(
+      '🔴 S2 · 둘째 장소의 기본 시각은 첫째 종료부터 1시간이다 — 첫째와 겹치지 않는다 (09:30–10:30 → 10:30–11:30)',
+      async () => {
+        const { client } = renderTree();
+        await ready(client);
+
+        await addAndSettle('p1');
+        await addAndSettle('p2');
+
+        await waitFor(() => expect(putBodies).toHaveLength(2));
+        // 앵커 — 첫째는 sA 종료(09:30)부터, 둘째 PUT 에도 그대로 실려 간다.
+        expect(sent(0, D1)).toContainEqual(['p1', '09:30:00']);
+        expect(sent(1, D1)).toContainEqual(['p1', '09:30:00']);
+        // 둘째 = 첫째 종료(10:30)부터. 고정 기준(sA)이면 09:30 으로 첫째와 같은 시각이 된다.
+        const second = putBodies[1].days
+          .find((day) => day.date === D1)
+          ?.slots.find((one) => one.poiId === 'p2');
+        expect({ startAt: second?.startAt, endAt: second?.endAt }).toEqual({
+          startAt: '10:30:00',
+          endAt: '11:30:00',
+        });
+      },
+      SLOW
+    );
+
+    it(
+      '🔴 S3 · 저장 안 한 편집 초안이 있어도 둘째 성공 추가가 초안에서 첫째 바로 뒤에 들어가고, 저장 안 한 변경(dirty)은 그대로다',
+      async () => {
+        // 준비 — 초안을 서버와 같은 [sA, sB] 로 심고 시각을 하나 바꿔 dirty 로 만든다(seed 만으론 dirty=false 다).
+        const store = useItineraryEditStore.getState();
+        store.seed([{ date: D1, slots: [SA, SB] }]);
+        store.adjustSlotTime(D1, 'sB', {
+          startAt: '13:10:00',
+          endAt: '14:00:00',
+          endsNextDay: false,
+        });
+        const draftIds = (): string[] =>
+          useItineraryEditStore
+            .getState()
+            .days.find((day) => day.date === D1)
+            ?.slots.map((one) => one.poiId) ?? [];
+        expect(useItineraryEditStore.getState().dirty).toBe(true);
+        const { client } = renderTree();
+        await ready(client);
+
+        await addAndSettle('p1');
+        // 앵커 — 첫째는 초안에서도 sA 바로 뒤다.
+        expect(draftIds()).toEqual(['sA', 'p1', 'sB']);
+
+        await addAndSettle('p2');
+
+        // 고정 자리면 초안이 [sA, p2, p1, sB] 로 뒤집혀 서버(캐시)와 어긋난다.
+        expect(draftIds()).toEqual(['sA', 'p1', 'p2', 'sB']);
+        expect(useItineraryEditStore.getState().dirty).toBe(true);
+        expect(sent(1, D1).map(([poiId]) => poiId)).toEqual([
+          'sA',
+          'p1',
+          'p2',
+          'sB',
+        ]);
+      },
+      SLOW
+    );
+
+    it(
+      '🟢 S4 · 첫 저장이 실패하면 자리가 밀리지 않는다 — 다음 담기는 원래 자리(sA 바로 뒤)·원래 기준 시각 (선제 green · 성공만 세는지 지키는 짝)',
+      async () => {
+        let calls = 0;
+        respond = (body) => {
+          calls += 1;
+          return calls === 1
+            ? HttpResponse.json(
+                { error: { code: 'INTERNAL' } },
+                { status: 500 }
+              )
+            : HttpResponse.json(echo(body));
+        };
+        const { client } = renderTree();
+        await ready(client);
+
+        await add('p1');
+        // 앵커 — 첫 저장이 실패 안내까지 갔고, 실패한 p1 은 PUT 에 [sA, p1, sB] 로 실려 갔다.
+        await screen.findByTestId(ERROR);
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+        expect(sent(0, D1).map(([poiId]) => poiId)).toEqual(['sA', 'p1', 'sB']);
+
+        await addAndSettle('p2');
+
+        await waitFor(() => expect(putBodies).toHaveLength(2));
+        // 시도를 세면 자리가 하나 밀려 [sA, sB, p2] 가 된다. 캐시엔 p1 이 없으니 앞 장소는 여전히 sA(09:30 종료).
+        expect(sent(1, D1)).toEqual([
+          ['sA', '08:00:00'],
+          ['p2', '09:30:00'],
+          ['sB', '13:00:00'],
+        ]);
+      },
+      SLOW
+    );
+  });
 });
 
 /**

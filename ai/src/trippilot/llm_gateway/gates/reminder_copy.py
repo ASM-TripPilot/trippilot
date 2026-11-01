@@ -60,6 +60,28 @@ _DURATION = re.compile(
     r"|duration"
 )
 
+# 시계 시각 (INV-2). 이 프롬프트는 시각을 주지 않는다(워커 `_vars` — 좌표·시각 미포함) — 문구에 시각이 있으면 전부 지어낸
+# 것이고, 잠금화면에 조립이 확인한 적 없는 시각이 뜬다. `_DURATION` 은 소요(INV-3)만 보고 "오후 3시"·"15:00"·"3시쯤"을
+# 통과시켰다(2026-10-23 재현 4/4). "24시 감자탕"처럼 허용 장소명 안의 시각 꼴은 장소명을 지운 뒤 보므로 걸리지 않는다
+# (09-19 에 이 충돌 때문에 미뤄 둔 것).
+_KO_HOUR = r"(?:열한|열두|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)"
+_HOUR_TAIL = r"(?=에|쯤|반|부터|까지|경|정각|이후|이전|전|후)"
+_CLOCK = re.compile(
+    r"(?<!\d)\d{1,2}\s*:\s*\d{2}(?!\d)"  # 15:00
+    rf"|(?<!\d)\d{{1,2}}\s*시(?:(?![가-힣])|{_HOUR_TAIL})"  # 3시 · 3시에 · 3시쯤 ("3시간"·"시장"은 아님)
+    rf"|(?:오전|오후|새벽|아침|낮|저녁|밤)\s*(?:\d{{1,2}}|{_KO_HOUR})\s*시"  # 오후 3시 · 아침 아홉 시
+    rf"|(?<![가-힣]){_KO_HOUR}\s*시\s*{_HOUR_TAIL}"  # 세 시에 · 다섯 시쯤
+    r"|정오|자정"
+)
+
+
+def _without_names(text: str, names: set[str]) -> str:
+    """허용 장소명(표시형 포함)을 지운 글 — 이름 속 "24시"·"자정"이 시각 검사에 걸리지 않게. 긴 이름부터 지운다."""
+    for name in sorted(names, key=len, reverse=True):
+        if name:
+            text = text.replace(name, " ")
+    return text
+
 
 # 괄호 부기(동명이지역 구분 등)를 뗀 표시형. 수집 POI 이름의 8.5%가 괄호를 달고
 # 있는데("약수암(부산)"·"금룡사(제주)"), 알림 문구에 그대로 쓰는 사람은 없다 —
@@ -198,6 +220,7 @@ class ReminderCopyGate:
             or len(title) > _MAX_TITLE
             or len(body) > _MAX_BODY
             or _DURATION.search(lowered) is not None  # INV-3
+            or _CLOCK.search(_without_names(title + " " + body, allowed)) is not None  # INV-2 — 지어낸 시각
             or any(name not in allowed for name in declared)  # INV-1
             or any(
                 not any(v in body for v in _name_variants(name)) for name in declared

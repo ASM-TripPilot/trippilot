@@ -8,6 +8,7 @@ import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.profile.api.overriddenBy
 import com.trippilot.savedaccommodation.api.BaseAnchorFacade
 import com.trippilot.trip.api.TripFacade
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.time.LocalDate
 import java.util.UUID
@@ -39,6 +40,20 @@ class RepairContexts(
     }
 
     /**
+     * 재검증(validate)에 실을 수단(2026-10-30) — [of] 와 **같은 출처**의 취향 `transport_modes` 를, 상대가 **자차로 풀 때만**(아는 첫 값이
+     * 렌터카) 목록 그대로 싣는다. 앵커는 안 싣는다(상대 HC2 는 앵커→첫 슬롯 구간을 재지 않는다).
+     * 도보·대중교통 여행은 비운다 = 종전 재검증(상대 기본 대중교통). 도보로 재면 오탐이 새로 생긴다 — 재계획은 수단을 싣지 않아
+     * 상대가 대중교통으로 짜고(손 안 댄 재계획 날의 1.5km 미만 구간이 대개 HC2 가 된다), 상대 도보 추정은 걷는 구간에도 여유 15분을
+     * 더해 대중교통의 걷기(도로 700m 이하, 여유 없음)보다 길다. 자차(계획 없는 추정)는 어느 구간도 대중교통보다 더 요구하지 않는다.
+     * 조회가 깨지면 빈 목록 = 종전 재검증으로 내려간다 — 수리 컨텍스트처럼 보탬이라, 우리 쪽 조회 장애를 재검증 실패(판정 보류)로 바꾸지 않는다.
+     */
+    fun transportModes(accountId: UUID, tripId: UUID): List<String> =
+        runCatching { of(accountId, tripId, emptySet()).transportModes }.getOrElse { e ->
+            log.warn("재검증 수단 조회 실패 — 수단 없이(대중교통) 재검증합니다. tripId={}", tripId, e)
+            emptyList()
+        }.takeIf { modes -> modes.firstOrNull { it in AI_TRANSPORT_MODES } == "렌터카" }.orEmpty()
+
+    /**
      * 편집 제안(U8)에 실을 컨텍스트 — 수리와 **같은 출처**에서 그 날 하나만 뽑는다. 상대는 이 앵커에 후보 풀을
      * 매달아 추가·교체 대상을 검사한다(INV-1). 앵커를 못 정하면 null — 계약상 필수라 부를 수 없다.
      */
@@ -66,7 +81,11 @@ class RepairContexts(
             ?: if (date == ctx.endDate) stays.firstOrNull { it.date == date.minusDays(1) } else null
         return SlotSpace(
             districtCodes = destination?.regionCode?.let { regions.districtCodesOf(it) }.orEmpty(),
-            regionCenter = destination?.let { RegionAnchors.centerOf(regions, it) },
+            // 코드 없는 옛 여행이 동명이지역(중구·동구·고성군…)이면 이름 첫 일치가 다른 도시 중심을 집는다 — 생성 앵커는 앵커를
+            // 잃지 않으려 그 길을 남겼지만(RegionAnchors), 여기는 사용자가 "고른 구 중심"이라 추측하지 않고 없음(409)으로 둔다.
+            regionCenter = destination
+                ?.takeIf { it.regionCode != null || regions.codesOf(it.name).size <= 1 }
+                ?.let { RegionAnchors.centerOf(regions, it) },
             stay = stay?.let { RegionCenter(it.lat, it.lng) },
         )
     }
@@ -74,6 +93,7 @@ class RepairContexts(
     private companion object {
         /** 상대 `_TRANSPORT_TOKENS` 가 아는 값 중 우리 취향 어휘에 있는 것(택시·자전거는 상대가 모른다). */
         val AI_TRANSPORT_MODES = setOf("도보", "대중교통", "렌터카")
+        val log = LoggerFactory.getLogger(RepairContexts::class.java)
     }
 }
 

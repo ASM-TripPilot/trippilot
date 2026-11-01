@@ -105,6 +105,7 @@ const SAVE_PHOTOS_COPY =
   'TripPilot이 여행 공유 카드를 사진 앨범에 저장하기 위해 사진 추가 권한을 사용합니다.';
 
 let infoPlist: Record<string, unknown> = {};
+let entitlements: Record<string, unknown> = {};
 let introspectedExtra: Record<string, unknown> = {};
 
 beforeAll(() => {
@@ -125,6 +126,7 @@ beforeAll(() => {
   );
   const introspected = JSON.parse(stdout);
   infoPlist = introspected._internal.modResults.ios.infoPlist;
+  entitlements = introspected._internal.modResults.ios.entitlements ?? {};
   introspectedExtra = introspected.extra ?? {};
 }, 60_000);
 
@@ -253,6 +255,17 @@ describe('AC-5 privacy manifest', () => {
   });
 });
 
+describe('TRIP-1668 푸시 켬 · aps-environment', () => {
+  // 1.0 은 번들 ID 에 Push 권한이 없어 이 entitlement 를 지웠다(TRIP-935). 지운 채 나가면 빌드·심사는
+  // 통과하는데 푸시 토큰이 안 나와 알림만 조용히 안 온다(운영 기기 토큰 iOS 2개, 2026-10-30) — 그래서 해석 결과로 굳힌다.
+  // 값은 development|production 둘 다 받는다: 스토어 빌드가 production 으로 나가는지는 서명된 앱의 entitlements 로만 확인된다.
+  it('해석된 iOS entitlements 에 aps-environment 가 있다', () => {
+    expect(entitlements['aps-environment']).toMatch(
+      /^(development|production)$/
+    );
+  });
+});
+
 describe('TRIP-1370 Sentry 운영 켬', () => {
   it('production 은 Sentry 자동 업로드를 켜고(소스맵·dSYM), preview 는 문자열 "true"로 끈 채이며, Sentry 플러그인 등록은 그대로다', () => {
     const eas = JSON.parse(
@@ -318,6 +331,33 @@ describe('TRIP-935 AC-2 · expo-router 사이트맵 끔', () => {
 
     expect(router).toBeDefined();
     expect(router?.sitemap).toBe(false);
+  });
+});
+
+// TRIP-1646 — 웹 출시본 설정. 'single' 이 아니면(static) export 가 경로마다 HTML 을 만들어 CloudFront 의 "모든 경로 →
+// index.html" 규칙과 어긋나고, 템플릿이 Expo 치환 자리를 잃으면 제목·언어가 기본값(Expo App·en)으로 조용히 바뀐다.
+// 빌드는 둘 다 성공한다. PC 폭 고정·확대 금지 같은 생김새는 웹 육안 몫이라 여기서 굳히지 않는다.
+describe('TRIP-1646 · 웹 export 설정', () => {
+  it('웹은 metro 번들러로 index.html 하나짜리 SPA(output single)를 만들고, 파비콘 원본 파일이 실재한다', () => {
+    expect(config.web?.bundler).toBe('metro');
+    expect(config.web?.output).toBe('single');
+    const favicon = config.web?.favicon;
+    expect(favicon).toBeDefined();
+    expect(fs.existsSync(path.join(ROOT, favicon ?? ''))).toBe(true);
+  });
+
+  it('package.json 에 웹 개발 서버 스크립트가 있고, 웹 템플릿(public/index.html)이 Expo 치환 자리(제목·언어)와 #root 를 갖는다', () => {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')
+    ) as { scripts: Record<string, string> };
+    expect(pkg.scripts.web).toBe('expo start --web');
+
+    // Expo 는 public/index.html 이 있으면 기본 템플릿 대신 이것을 쓰고, %WEB_TITLE%·%LANG_ISO_CODE% 를 설정값으로 바꾼다.
+    const html = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8');
+    expect(html).toContain('%WEB_TITLE%');
+    expect(html).toContain('%LANG_ISO_CODE%');
+    expect(html).toContain('<div id="root"></div>');
+    expect(config.web?.lang).toBe('ko');
   });
 });
 

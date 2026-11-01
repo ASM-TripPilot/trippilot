@@ -21,6 +21,9 @@ FD 가 지정한 초기 collection 3종(`intent_bank`·`persona`·`poi_desc`) �
 **그래도 문서가 없는 후보는 남는다** — 원천 커버리지가 균일하지 않다(위키백과 실측:
 문화 25% ↔ 카페 2.5%). 검색 전략으로 못 고치므로 **프롬프트가 그 사실을 말한다** —
 "문서가 없는 것은 정보가 없다는 뜻이지 부적합하다는 뜻이 아니다."
+**[2026-10-23] 그 자리는 대체 문서로 채울 수 있다**(`poi_curation.place_fallback` — 장소 카드 + 웹 확인 사실, 기본 꺼짐). 진짜
+문서가 붙은 뒤 남은 자리에만, 숏리스트 순서대로 진짜 문서와 합쳐 `MAX_DOCS` 까지. 점수로 겨루지 않는다 — 짧은 글이 긴 개요 조각을
+밀어낸다. 건수(`retrieved.POI_DESC`)는 진짜 문서만 센다 — 대체 문서는 `POI_DESC_FALLBACK` 으로 따로(`kb5_counts`).
 
 **조인 키는 `source_ref`**(TourAPI contentid)다. POI 정본은 백엔드 단독 소유이므로
 (PR #76) AI 는 파생 지식을 자기 스토어에 들고 이 번호로 런타임 후보에 붙인다 —
@@ -35,6 +38,7 @@ from collections.abc import Mapping, Sequence
 from trippilot.agents.planb.kb_retrieval import retrieve
 from trippilot.domain.kb import KbKind
 from trippilot.domain.poi import Poi
+from trippilot.poi_curation import place_fallback
 from trippilot.poi_curation.chunking import chunk_ids, split_sentences
 from trippilot.poi_curation.place_docs import SOURCE_OVERVIEW, SOURCE_WIKI, SOURCES
 from trippilot.ports.embedding_port import EmbeddingPort
@@ -81,7 +85,26 @@ CHUNKED_SOURCES = frozenset({SOURCE_WIKI, SOURCE_OVERVIEW})
 # 2026-10-04 부터 호출측(`rag._shortlist`)이 LLM 후보를 규칙 랭킹 앞 60곳(+ 원 일정)으로
 # 좁힌 뒤 그 후보 것만 묻는다 — 문서 보유 ≈ 5곳이라 이 상한에 닿지 않고 위 "풀 전원"이
 # 다시 참이 된다. 풀 전원이 후보 줄로 실려 입력 63k 토큰이던 문제가 그 숏리스트로 풀렸다.
+#
+# 대체 문서도 이 상한 안이다(진짜 + 대체 합계 — KB-5 담당 세션 조건, 2026-10-30). 숏리스트(60)+원 일정이 다 받지는 못하고,
+# 규칙 랭킹 앞쪽부터 받는다(임베딩 유사도가 아니라 숏리스트 순서라 이 모듈이 막으려던 편향은 아니다).
 MAX_DOCS = 40
+POI_DESC_FALLBACK = "POI_DESC_FALLBACK"
+
+
+class PlaceKnowledge(dict):
+    """`{source_ref: 문서}` — 그중 대체 문서 수를 `fallback` 에 든다(건수 집계가 진짜 문서와 가른다)."""
+
+    def __init__(self, docs: Mapping[str, str] | None = None, fallback: int = 0) -> None:
+        super().__init__(docs or {})
+        self.fallback = fallback
+
+
+def kb5_counts(knowledge: Mapping[str, str]) -> dict[str, int]:
+    """`retrieved` 의 KB-5 칸. POI_DESC = 진짜 문서가 붙은 후보 수(적재 전·스토어 장애를 보는 칸이라 대체 문서를 섞지 않는다),
+    대체 문서는 붙었을 때만 `POI_DESC_FALLBACK` 으로 — 꺼져 있으면 종전 응답과 같다."""
+    fallback = getattr(knowledge, "fallback", 0)
+    return {KbKind.POI_DESC.value: len(knowledge) - fallback, **({POI_DESC_FALLBACK: fallback} if fallback else {})}
 
 
 def fetch_place_knowledge(
@@ -90,6 +113,8 @@ def fetch_place_knowledge(
     embedding: EmbeddingPort,
     store: VectorStorePort,
     vector: Sequence[float] | None = None,
+    *,
+    fallback: Mapping[str, str] | None = None,
 ) -> tuple[Mapping[str, str], str]:
     """풀 전원의 장소 지식. 반환: ({source_ref: 문서}, 강등 사유).
 
@@ -100,6 +125,7 @@ def fetch_place_knowledge(
     refs = _pool_refs(pois)
     if not refs:
         return {}, ""
+    extra = (place_fallback.fallback_docs() if fallback is None else fallback) if place_fallback.enabled() else {}
     # 스토어의 `item_id` 는 `doc_id`(`{출처}:{source_ref}`)다 — 한 장소에 출처가 여럿
     # 공존하기 때문이다. 그래서 조인 키만으로는 못 거르고 **출처 × 조인키**로 편다.
     # SOURCES 가 닫힌 목록(넷)이라 추측이 아니라 전개다.
@@ -124,9 +150,9 @@ def fetch_place_knowledge(
             item_ids=doc_ids,
             vector=vector,  # 상황 질의와 같은 문자열이라 호출측이 이미 임베딩했다
         )
-    except Exception as e:  # 임베딩·스토어 장애 — 문서 없이 진행한다
+    except Exception as e:  # 임베딩·스토어 장애 — 진짜 문서 없이(대체 문서만) 진행한다
         _logger.warning("place_knowledge degraded: %s: %s", type(e).__name__, e)
-        return {}, f"place_knowledge_unavailable: {type(e).__name__}"
+        return _fill({}, pois, extra)[0], f"place_knowledge_unavailable: {type(e).__name__}"
 
     # 키는 `poi_ref`(= source_ref)다. `doc_id` 는 출처별 접두사가 붙어 있어 후보와
     # 직접 안 맞는다 — 한 장소에 여러 출처의 문서가 생길 수 있기 때문이다.
@@ -146,12 +172,31 @@ def fetch_place_knowledge(
     # 고유 장소 수라 hits 길이로는 못 센다. `hits` 자체도 top_k 에 잘려 있으므로
     # 이 수는 **하한**이다 — 그래서 노트에 "이상"이라 적는다(모르는 것을 아는 척하지 않는다).
     distinct = len({h.poi_ref for h in hits if h.poi_ref and h.text})
-    if distinct > len(out):
-        return out, (
-            f"place_knowledge_truncated: {len(out)}곳 채택 / {distinct}곳 이상 해당 "
-            f"(상한 {MAX_DOCS} · 나머지는 문서 없이 간다)"
-        )
-    return out, ""
+    truncated = distinct > len(out)
+    note = (f"place_knowledge_truncated: {len(out)}곳 채택 / {distinct}곳 이상 해당 "
+            f"(상한 {MAX_DOCS} · 나머지는 문서 없이 간다)") if truncated else ""
+    filled, left_out = _fill(out, pois, extra)
+    return filled, note or _fallback_note(left_out)
+
+
+def _fill(out: dict[str, str], pois: Sequence[Poi], extra: Mapping[str, str]) -> tuple[PlaceKnowledge, int]:
+    """진짜 문서가 없는 자리에 대체 문서 — 숏리스트 순서대로, 진짜 문서와 합쳐 `MAX_DOCS` 까지. 반환: (문서, 상한에 밀린 대체 문서 수)."""
+    filled, left_out = PlaceKnowledge(out), 0
+    for p in pois:
+        ref = p.source_ref or ""
+        if not ref or ref in filled or not extra.get(ref):
+            continue
+        if len(filled) >= MAX_DOCS:
+            left_out += 1
+            continue
+        filled[ref] = _clip(extra[ref])
+        filled.fallback += 1
+    return filled, left_out
+
+
+def _fallback_note(left_out: int) -> str:
+    """상한에 밀린 대체 문서도 보이게 — 조용한 축소 금지(INV-4, 진짜 문서의 `place_knowledge_truncated` 와 같은 표지)."""
+    return f"place_knowledge_truncated: 대체 문서 {left_out}곳은 상한 {MAX_DOCS} 에 걸려 문서 없이 간다" if left_out else ""
 
 
 def attach(poi: Poi, knowledge: Mapping[str, str]) -> str:

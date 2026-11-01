@@ -7,7 +7,7 @@ import { getInstallId } from '@/shared/storage/installId';
  *  - 자산 메타 shape(`PhotoAssetMeta`) 를 한 곳에서 정의한다 — photoAttach(model)·피커가 함께 문다.
  *    shared 는 features 보다 아래 층이라 여기 두어야 record.model 이 위로 가져다 쓸 수 있다.
  *  - `pickPhotoAsset` 은 앨범에서 1장을 고르게 하고 서버로 보낼 **메타만** 뽑는다(파일 본문은 요청하지
- *    않는다 — INV-U5-03). 결과는 여섯 갈래이고 reject 하지 않는다(재빌드 전 앱 = 네이티브 모듈 부재도 failed).
+ *    않는다 — INV-U5-03). 결과는 일곱 갈래이고 reject 하지 않는다(재빌드 전 앱 = 네이티브 모듈 부재도 failed).
  *  - `resolvePhotoUri` 는 자산 번호로 이 기기 앨범의 파일 주소를 찾는다. 권한을 요청하지 않는다(보기만
  *    하는 화면에서 팝업 금지).
  *  - 두 모듈은 **호출 시점에 `require`** 한다 — 둘 다 로드 순간 `requireNativeModule` 로 던지므로, 정적
@@ -36,7 +36,9 @@ export type PhotoPickResult =
   | { kind: 'denied' }
   | { kind: 'limited' }
   | { kind: 'no-asset-id' }
-  | { kind: 'failed' };
+  | { kind: 'failed' }
+  // TRIP-1648 · 웹 — 앨범 자산 번호 모델이 성립하지 않는다(index.web.ts). 네이티브는 이 갈래를 만들지 않는다.
+  | { kind: 'unsupported' };
 
 const loadMediaLibrary = () =>
   require('expo-media-library') as typeof import('expo-media-library');

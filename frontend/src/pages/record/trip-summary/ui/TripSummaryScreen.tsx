@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MapView, type MapCenter, type MapPin } from '@/shared/map';
+import { RevealItem } from '@/shared/ui/RevealItem';
 import { RecordNavBar } from '@/widgets/bottom-nav-bar';
 
 import {
@@ -10,7 +11,6 @@ import {
   type RecordBarNav,
 } from '@/features/reflection/index.view';
 import { CountUpText } from './CountUpText';
-import { DayCardReveal } from './DayCardReveal';
 import { DayHighlightCard } from './DayHighlightCard';
 import type { SummaryStatCells } from '@/features/reflection/index.view';
 import type { OrderedVisit } from '@/features/reflection/index.view';
@@ -225,13 +225,17 @@ export function TripSummaryScreen({
             )}
 
             {narrativeText ? (
-              <DayCardReveal index={0}>
+              <RevealItem index={0} firstDelayMs={1050}>
                 <NarrativeCard text={narrativeText} />
-              </DayCardReveal>
+              </RevealItem>
             ) : null}
 
             {dayCards.map((card, index) => (
-              <DayCardReveal key={card.key} index={index + narrativeOffset}>
+              <RevealItem
+                key={card.key}
+                index={index + narrativeOffset}
+                firstDelayMs={1050}
+              >
                 <DayHighlightCard
                   dayLabel={card.dayLabel}
                   visitCountLabel={card.visitCountLabel}
@@ -239,7 +243,7 @@ export function TripSummaryScreen({
                   distanceSourceLabel={card.distanceSourceLabel}
                   date={card.key}
                 />
-              </DayCardReveal>
+              </RevealItem>
             ))}
           </>
         ) : (

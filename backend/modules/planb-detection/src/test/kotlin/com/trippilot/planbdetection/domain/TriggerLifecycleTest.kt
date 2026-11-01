@@ -172,6 +172,40 @@ class TriggerLifecycleTest : StringSpec({
         plan(actives = listOf(a), sightings = listOf(sighting(reason = a.reason))).updates shouldBe emptyList()
     }
 
+    /**
+     * 6행의 한 경우 — 영업시간·휴무로 알린 슬롯이 폐업으로 확인돼도 **알림은 늘지 않는다**(BR-SA-08 2026-10-30 블록).
+     * 제자리에서 변형·문구만 폐업으로 바뀌어 배너가 갱신된다. 다시 알리려면 '알린 최고 심각도' 하나뿐인 알림 기억(PBT T-D1-P1·P4,
+     * 대상·심각도별 알림 ≤ 1)과 되풀이 방지를 함께 바꿔야 해서 일부러 두지 않았다 — 읽지 않고 알림을 더하지 않는다.
+     */
+    "6행의 한 경우 — 영업시간 경고가 떠 있는 슬롯이 폐업으로 확인되면 제자리에서 폐업으로 갱신하되 새로 알리지 않는다" {
+        val a = stored(kind = TriggerKind.CLOSURE, slotKey = evening.slotKey, variant = TriggerVariant.OUT_OF_HOURS, detector = "place")
+        val closed = sighting(
+            kind = TriggerKind.CLOSURE, slotKey = evening.slotKey, variant = TriggerVariant.PERMANENTLY_CLOSED,
+            source = "place", reason = "‘국립제주박물관’은 폐업한 곳으로 확인됐어요",
+        )
+
+        val p = plan(actives = listOf(a), sightings = listOf(closed))
+        val up = p.updates.single()
+        up.triggerId shouldBe a.triggerId
+        up.variant shouldBe TriggerVariant.PERMANENTLY_CLOSED
+        up.reason shouldBe "‘국립제주박물관’은 폐업한 곳으로 확인됐어요"
+        up.severity shouldBe TriggerSeverity.RISK
+        p.inserts shouldBe emptyList()
+        p.announcement shouldBe null
+    }
+
+    "이미 폐업으로 떠 있는 슬롯이 다시 폐업으로 보이면 알리지 않는다 — 폐업 알림은 변형이 바뀔 때 한 번이다" {
+        val closed = sighting(
+            kind = TriggerKind.CLOSURE, slotKey = evening.slotKey, variant = TriggerVariant.PERMANENTLY_CLOSED,
+            source = "place", reason = "‘국립제주박물관’은 폐업한 곳으로 확인됐어요",
+        )
+        val a = stored(kind = TriggerKind.CLOSURE, slotKey = evening.slotKey, variant = TriggerVariant.PERMANENTLY_CLOSED, detector = "place")
+
+        val p = plan(actives = listOf(a), sightings = listOf(closed))
+        p.announcement shouldBe null
+        p.inserts shouldBe emptyList()
+    }
+
     "주의로 내려가도 제자리 갱신만 — 다시 오를 때 이미 위험으로 알렸으면 알리지 않는다" {
         val a = stored()
         val down = plan(actives = listOf(a), sightings = listOf(sighting(severity = TriggerSeverity.CAUTION, variant = TriggerVariant.CLOUD)))

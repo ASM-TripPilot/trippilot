@@ -134,15 +134,22 @@ class PendingFrame:
                    asked=asked, confidence=float(d.get("confidence", 0.5)))
 
 
+# 이어 묻기 사슬에서 카드로 보인 장소 id — "더 알려줘"가 문장에 이름이 없던 카드도 다시 내지 않게(BR-AO-27 개정 2026-10-30). 백엔드는
+# 이 칸을 읽지 않고 그대로 싣고 받는다(INV-U8-07, `bumpTurnIndex` 도 모르는 칸을 지우지 않는다). 상한 — 사슬 몇 턴 분량이면 충분하다
+SHOWN_MAX = 30
+
+
 @dataclass(frozen=True, slots=True)
 class DialogueContext:
     pending: PendingFrame | None = None
     turn_index: int = 0
     clarify_count: int = 0
+    shown: tuple[str, ...] = ()
 
     def to_dict(self) -> dict:
-        return {"pending": self.pending.to_dict() if self.pending else None,
-                "turn_index": self.turn_index, "clarify_count": self.clarify_count}
+        out = {"pending": self.pending.to_dict() if self.pending else None,
+               "turn_index": self.turn_index, "clarify_count": self.clarify_count}
+        return {**out, "shown": list(self.shown)} if self.shown else out  # 비면 종전 직렬형 그대로
 
     @classmethod
     def from_dict(cls, d: Mapping | None) -> "DialogueContext":
@@ -156,13 +163,15 @@ class DialogueContext:
         except (ValueError, TypeError, OverflowError) as e:
             log.warning("dialogue_context turn_index 를 읽지 못해 0 으로 둔다: %s: %s", type(e).__name__, e)
             turn = 0
+        raw = d.get("shown")
+        shown = tuple(str(x)[:64] for x in raw if isinstance(x, str) and x)[-SHOWN_MAX:] if isinstance(raw, list) else ()
         try:
             pending = PendingFrame.from_dict(d["pending"]) if d.get("pending") else None
             clarify = int(d.get("clarify_count") or 0)
         except (KeyError, ValueError, TypeError, OverflowError) as e:
             log.warning("dialogue_context 보류 프레임을 읽지 못해 버린다: %s: %s", type(e).__name__, e)
-            return cls(turn_index=turn)
-        return cls(pending=pending, turn_index=turn, clarify_count=clarify)
+            return cls(turn_index=turn, shown=shown)
+        return cls(pending=pending, turn_index=turn, clarify_count=clarify, shown=shown)
 
 
 # ── 결과 ────────────────────────────────────────────────────────────────────

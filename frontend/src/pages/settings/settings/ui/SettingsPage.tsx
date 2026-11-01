@@ -41,6 +41,7 @@ import {
   registerPushIfGranted,
   unregisterStoredPushToken,
 } from '@/shared/push';
+import { isPushSupported } from '@/shared/push/index.support';
 import { showToast } from '@/shared/ui/Toast';
 import { validateNicknameFormat } from '@/shared/lib/nicknameFormat';
 
@@ -276,6 +277,7 @@ export function SettingsPage(): ReactElement {
           email: account.data?.email ?? null,
           preferences: preferences.data,
           locationConsent: locationConsent.data?.gpsRecordingOptIn,
+          pushAvailable: isPushSupported(),
           personalizationOn:
             personalizationReason === undefined
               ? undefined

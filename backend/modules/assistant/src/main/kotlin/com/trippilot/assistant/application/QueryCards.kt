@@ -6,10 +6,16 @@ import com.trippilot.itinerarygeneration.api.ItineraryFacade
 import com.trippilot.itinerarygeneration.api.ItineraryPlanFacade
 import com.trippilot.itinerarygeneration.api.PlannedSlotView
 import com.trippilot.placedata.api.PoiSurfaceFacade
+import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.weathercontext.api.ContextFacade
+import com.trippilot.weathercontext.api.HourlyForecastFacade
+import com.trippilot.weathercontext.api.Precipitation
+import com.trippilot.weathercontext.api.Sky
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
+import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -31,6 +37,8 @@ class QueryCards(
     private val plans: ItineraryPlanFacade,
     private val poiSurfaces: PoiSurfaceFacade,
     private val weather: ContextFacade,
+    private val hourly: HourlyForecastFacade,
+    private val regions: RegionLookupFacade,
 ) {
     private val editItinerary = NextAction("OPEN_ITINERARY_EDIT", "일정 편집")
     private val viewItinerary = NextAction("OPEN_ITINERARY", "일정 보기")
@@ -188,8 +196,31 @@ class QueryCards(
         if (region == null || reading == null || reading.stale) {
             return AssistantTemplates.handoff("지금 날씨를 확인할 수 없어요.", viewItinerary)
         }
-        val rows = listOfNotNull("오늘 최대 강수확률" to "${reading.precipProbability}%", reading.warning?.takeIf { it.isNotBlank() }?.let { "특보" to it })
+        val rows = todayDetail(region, ctx.now) + listOfNotNull(
+            "오늘 최대 강수확률" to "${reading.precipProbability}%", reading.warning?.takeIf { it.isNotBlank() }?.let { "특보" to it },
+        )
         return AssistantTemplates.info("WEATHER", "오늘 예보예요.", "$region 날씨", rows, viewItinerary)
+    }
+
+    /**
+     * 하늘·기온·강수 형태 — 여행지 중심 격자의 시간별 예보로(감지와 같은 원천). 하늘·강수는 **남은 시간**, 기온은 오늘 전체 범위다.
+     * 못 받거나 모르는 값은 행을 빼고 지어내지 않는다 — 그러면 종전 카드(강수확률·특보) 그대로다.
+     */
+    private fun todayDetail(region: String, now: Instant): List<Pair<String, String>> {
+        val center = regions.centerOf(region) ?: return emptyList()
+        val forecast = runCatching { hourly.forecastForTrigger(center.lat, center.lng, now) }
+            .onFailure { log.warn("도우미 시간별 예보 조회 실패. type={}", it.javaClass.simpleName) }.getOrNull()
+            ?: return emptyList()
+        val at = LocalDateTime.ofInstant(now, TRAVEL_ZONE)
+        val today = forecast.hourly.filterKeys { it.toLocalDate() == at.toLocalDate() }
+        val ahead = today.filterKeys { it.hour >= at.hour }.values
+        val temps = today.values.mapNotNull { it.tmp }.map { Math.round(it) }
+        return listOfNotNull(
+            ahead.mapNotNull { it.sky }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.let { "하늘" to SKY_LABEL.getValue(it.key) },
+            temps.takeIf { it.isNotEmpty() }?.let { t -> "기온" to (if (t.min() == t.max()) "${t.min()}℃" else "${t.min()}~${t.max()}℃") },
+            ahead.mapNotNull { it.precipitation }.filter { it != Precipitation.NONE }.distinct()
+                .takeIf { it.isNotEmpty() }?.let { p -> "강수" to p.joinToString("·") { PTY_LABEL.getValue(it) } },
+        )
     }
 
     /** 표시 순서대로의 계획 슬롯. **null 이면 못 읽은 것이다**(빈 목록 = 일정이 없거나 비었다). */
@@ -216,6 +247,10 @@ class QueryCards(
         const val ARG_ORIGIN = "origin"
         const val ARG_PLACE = "place"
         val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
+        val SKY_LABEL = mapOf(Sky.CLEAR to "맑음", Sky.MOSTLY_CLOUDY to "구름많음", Sky.OVERCAST to "흐림")
+        val PTY_LABEL = mapOf(
+            Precipitation.RAIN to "비", Precipitation.RAIN_SNOW to "비/눈", Precipitation.SNOW to "눈", Precipitation.SHOWER to "소나기",
+        )
         val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
         val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("M월 d일")
         private val log = LoggerFactory.getLogger(QueryCards::class.java)

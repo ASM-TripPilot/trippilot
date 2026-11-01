@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ComponentProps, ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 import {
   Image,
@@ -291,6 +291,23 @@ try {
 
 // 프리뷰는 보기 전용이라 화면이 요구하는 콜백을 전부 빈 함수로 채운다.
 const noop = () => {};
+
+/** j06 서버 문구 프리뷰 3키가 공유하는 카드 VM(TRIP-1605). */
+const SHARE_CARD_COPY_PREVIEW: ComponentProps<typeof ShareCardScreen>['card'] =
+  {
+    title: '사흘의 기록',
+    periodText: '2026.06.10 ~ 06.12',
+    regionText: '부산',
+    statsCells: { totalVisits: 12, distanceText: '38km', totalPhotos: 24 },
+    distanceSourceLabel: '근사',
+    orderedVisits: [
+      { order: 1, dayLabel: 'Day1', place: '광안리 해변' },
+      { order: 2, dayLabel: 'Day1', place: '감천문화마을' },
+    ],
+    mode: 'default',
+    watermark: 'TripPilot',
+    aspectRatio: 9 / 16,
+  };
 // TRIP-1584 j03·j04 하단 바(기록·회고·요약) — 프리뷰라 칸 이동은 no-op. 바는 이 묶음이 있을 때만 그려진다.
 const PREVIEW_RECORD_BAR = {
   onBack: noop,
@@ -3825,6 +3842,20 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
+    key: 'map-default-mylocation',
+    band: '기타',
+    label: '기타 · 지도 내 위치(map-default 변형)',
+    login: null,
+    // TRIP-1652 — 웹 지도 내 위치 점(권한이 이미 허용된 브라우저에서만 뜬다 — 묻지 않는다, BR-U10-53). 육안용.
+    render: () => (
+      <MapView
+        center={{ lat: 37.5665, lng: 126.978 }}
+        pins={MAP_STATE_PREVIEW_PINS}
+        showMyLocation
+      />
+    ),
+  },
+  {
     key: 'records-default',
     band: 'j',
     label: 'j01 · 방문 기록 default',
@@ -4669,6 +4700,55 @@ export const PREVIEW_STATES: PreviewState[] = [
         formats={SHARE_FORMATS}
         caption=""
         hashtagText="#부산여행"
+        onBack={noop}
+      />
+    ),
+  },
+  // j06 서버 문구 3키(TRIP-1605) — 같은 순수 뷰에 문구 prop 만 얹는다. AI 문구가 도착한 모양 · 캡션 자리 Skeleton(문구 대기
+  // 중) · 하루 상한 한 줄 안내. 대기 중에도 카드와 온디바이스 해시태그는 먼저 보인다. Skeleton 박자·한 줄 안내 위치는 육안 몫.
+  {
+    key: 'share-card-ai-copy',
+    band: 'j',
+    label: 'j06 · 공유 카드 서버 문구',
+    login: null,
+    render: () => (
+      <ShareCardScreen
+        card={SHARE_CARD_COPY_PREVIEW}
+        formats={SHARE_FORMATS}
+        caption="광안리에서 노을을 보고 감천문화마을 골목을 걸었어요"
+        hashtagText="#광안리노을 #감천문화마을"
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'share-card-copy-pending',
+    band: 'j',
+    label: 'j06 · 공유 카드 문구 대기',
+    login: null,
+    render: () => (
+      <ShareCardScreen
+        card={SHARE_CARD_COPY_PREVIEW}
+        formats={SHARE_FORMATS}
+        caption=""
+        hashtagText="#부산여행"
+        copyPending
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'share-card-copy-limit',
+    band: 'j',
+    label: 'j06 · 공유 카드 문구 하루 상한',
+    login: null,
+    render: () => (
+      <ShareCardScreen
+        card={SHARE_CARD_COPY_PREVIEW}
+        formats={SHARE_FORMATS}
+        caption=""
+        hashtagText="#부산여행"
+        copyLimitReached
         onBack={noop}
       />
     ),
@@ -6659,6 +6739,23 @@ export const PREVIEW_STATES: PreviewState[] = [
         rows={[]}
         isEmpty
         onConfirmBaseToggle={noop}
+        onPressExplore={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // l04 조회 실패(TRIP-1637) — Figma 프레임 없음, 알림함·내 여행 오류 얼굴 선례. 재시도 중 비활성은 retrying.
+  {
+    key: 'my-stays-error',
+    band: 'l',
+    label: 'l04 · 등록 숙소 조회 실패(TRIP-1637, Figma 프레임 없음 — 선례)',
+    login: null,
+    render: () => (
+      <MyStaysScreen
+        rows={[]}
+        isEmpty={false}
+        loadFailed
+        onRetry={noop}
         onPressExplore={noop}
         onPressBack={noop}
       />

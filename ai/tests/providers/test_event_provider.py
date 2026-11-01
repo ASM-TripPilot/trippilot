@@ -234,7 +234,7 @@ def test_problem_serialization_roundtrip_and_backward_compat() -> None:
 
 def test_orchestrator_lands_event_bonus_on_problem() -> None:
     from trippilot.domain.common import TraceId
-    from tests.orchestrator.test_schedule_coordinator import (
+    from tests.orchestrator.schedule.test_schedule_coordinator import (
         _ANCHOR as ORCH_ANCHOR, _NOW as ORCH_NOW, _TRACE_ID, _build, _request,
     )
 
@@ -256,7 +256,7 @@ def test_orchestrator_lands_event_bonus_on_problem() -> None:
 
 
 def test_orchestrator_event_store_failure_degrades_not_fails() -> None:
-    from tests.orchestrator.test_schedule_coordinator import (
+    from tests.orchestrator.schedule.test_schedule_coordinator import (
         _NOW as ORCH_NOW, _TRACE_ID, _build, _request,
     )
 

@@ -44,6 +44,8 @@ class PoiEntity(
     @Column(name = "created_at") var createdAt: Instant,
     @Column(name = "updated_at") var updatedAt: Instant,
     @Column(name = "image_url") var imageUrl: String? = null,
+    /** V2.87 — CDN 썸네일. 배치가 채우고 Poi.refreshed 가 원본이 바뀌면 비운다. */
+    @Column(name = "image_thumb_url") var imageThumbUrl: String? = null,
     // text[] 매핑은 preference_set(V1.5) 선례와 동일 — 컨버터 없이 Hibernate 네이티브 배열.
     @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(name = "tags") var tags: Array<String> = emptyArray(),
@@ -246,6 +248,7 @@ class PoiRepositoryAdapter(
         openingHours = openingHours, dataStatus = dataStatus.name, source = source.name,
         savedCount = savedCount, createdAt = createdAt, updatedAt = updatedAt,
         imageUrl = imageUrl, tags = tags.toTypedArray(), sourceRef = sourceRef, address = address,
+        imageThumbUrl = imageThumbUrl,
     )
 
     private fun PoiEntity.toDomain() = Poi.reconstitute(
@@ -254,6 +257,7 @@ class PoiRepositoryAdapter(
         openingHours = openingHours, dataStatus = DataStatus.valueOf(dataStatus), source = PoiSource.valueOf(source),
         savedCount = savedCount, createdAt = createdAt, updatedAt = updatedAt,
         imageUrl = imageUrl, tags = tags.toList(), sourceRef = sourceRef, address = address,
+        imageThumbUrl = imageThumbUrl,
     )
 
     private companion object {

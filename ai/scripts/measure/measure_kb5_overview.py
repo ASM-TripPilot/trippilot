@@ -5,6 +5,8 @@ r"""KB-5 관광공사 개요 효과 측정 — '다른 후보'(`/planb/alternati
         uv run python scripts/measure/measure_kb5_overview.py coverage
     … measure_kb5_overview.py ab wiki full [반복=2]          # 위키만 vs 위키+개요
     … measure_kb5_overview.py ab full <변형> [반복=2]          # 개선 변형 비교(아래 `VARIANTS`)
+    … measure_kb5_overview.py ab full fallback [반복=2]      # 진짜 문서만 vs 대체 문서 추가 — `place_fallback` 켜기 조건
+    (Claude 로 재려면 EVAL_SELECT_MODEL·EVAL_JUDGE_MODEL 에 claude-* 를 주고 ANTHROPIC_API_KEY 를 넘긴다)
 
 **상황**은 백엔드가 실제로 부르는 꼴이다 — 트리거 `MANUAL` 고정·사용자 말 없음·사유는 FE 키(날씨·피로·휴무·교체), 바꿀
 슬롯은 기준점에서 가장 가까운 볼거리. 6개 도시 × 사유 4 = 24상황. 숏리스트는 운영 함수(`rag._shortlist`), 장소 설명은
@@ -53,6 +55,7 @@ from trippilot.agents.adapters.memory_vector_store import InMemoryVectorStore  #
 from trippilot.agents.planb import rag  # noqa: E402
 from trippilot.agents.planb.kb_retrieval import collection_for  # noqa: E402
 from trippilot.agents.planb.place_knowledge import fetch_place_knowledge  # noqa: E402
+from trippilot.poi_curation import place_fallback  # noqa: E402
 from trippilot.assembly_engine.travel import haversine_km  # noqa: E402
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TraceId  # noqa: E402
 from trippilot.domain.kb import KbKind  # noqa: E402
@@ -110,7 +113,11 @@ VARIANTS: dict[str, dict] = {
     "need": {"corpora": "full", "query": _need_query},
     "cite": {"corpora": "full", "prompts": os.environ.get("EVAL_CITE_PROMPTS", "prompts")},
     "need_cite": {"corpora": "full", "query": _need_query, "prompts": os.environ.get("EVAL_CITE_PROMPTS", "prompts")},
+    # `fallback`: 진짜 문서 뒤 빈 자리에 KB-5 대체 문서(장소 카드 + 웹 확인 사실, `place_fallback`) — 켜기 전 조건(2026-10-30 KB-5
+    #   담당 세션: 같은 입력끼리의 흔들림 ≈12:7 보다 확실히 이겨야 켠다). 다른 팔은 대체 문서를 명시적으로 빼서 env 와 무관하다
+    "fallback": {"corpora": "full", "fallback": True},
 }
+os.environ[place_fallback.SWITCH] = "on"  # 팔마다 `fallback=` 로 직접 고른다 — 스위치는 그 인자를 읽게 할 뿐이다
 
 
 def _pois() -> list[Poi]:
@@ -121,8 +128,9 @@ def _pois() -> list[Poi]:
         if str(p.poi_id) in seen or p.quality is DataQuality.MINIMAL or p.category is PoiCategory.STAY:
             continue
         seen.add(str(p.poi_id))
-        # 공유본 `poi.source_ref` 는 비어 있다 — 운영 풀은 백엔드가 관광공사 contentid 를 `sourceRef` 로 준다(KB-5 조인 키)
-        ref = (pr.get("provenance") or {}).get("content_id") if pr.get("source") == "TOURAPI" else None
+        # 공유본 `poi.source_ref` 는 비어 있다 — 운영 풀은 백엔드가 원천 id(관광공사 contentid·LOCALDATA 관리번호·Overture id)를
+        # `sourceRef` 로 준다(KB-5 조인 키). 카카오 숫자 id 는 관광공사 id 와 공간이 겹쳐 뺀다(카드 빌드도 충돌 id 를 뺀다)
+        ref = (pr.get("provenance") or {}).get("content_id") if pr.get("source") != "KAKAO_LOCAL" else None
         out.append(replace(p, tags=tuple(pr.get("tags") or ()), source_ref=p.source_ref or ref))
     return out
 
@@ -165,7 +173,7 @@ class _Knowledge:
             self.rows[name] = {r["poi_ref"]: r for r in map(json.loads, gzip.open(path, "rt", encoding="utf-8"))}
             self.vectors[name] = load_chunk_vectors(vectors_path(path))
 
-    def fetch(self, pois, query: str | None, corpora: str, max_docs: int | None = None) -> dict:
+    def fetch(self, pois, query: str | None, corpora: str, max_docs: int | None = None, fallback: bool = False):
         """`query=None` 이면 도입부(#0)만 둔다 — 장소마다 '이곳이 무엇인지'가 붙는다."""
         refs = {p.source_ref for p in pois if p.source_ref}
         store, coll = InMemoryVectorStore(), collection_for(KbKind.POI_DESC, self.emb.model_id)
@@ -180,10 +188,11 @@ class _Knowledge:
         saved = pk.MAX_DOCS
         pk.MAX_DOCS = max_docs or saved  # 조회는 실행 전에 차례로 하므로 바꿔 끼워도 안전하다
         try:
-            knowledge, _ = fetch_place_knowledge(pois, query or "장소 소개", self.emb, store)
+            knowledge, _ = fetch_place_knowledge(pois, query or "장소 소개", self.emb, store,
+                                                 fallback=place_fallback.fallback_docs() if fallback else {})
         finally:
             pk.MAX_DOCS = saved
-        return dict(knowledge)
+        return knowledge  # PlaceKnowledge — 대체 문서 수(`fallback`)를 그대로 들고 간다
 
     def reference(self, poi: Poi) -> str:
         """판정자용 참고 설명 — 두 조건에 똑같이(개요 우선, 없으면 위키 도입부)."""
@@ -191,7 +200,8 @@ class _Knowledge:
             row = self.rows[name].get(poi.source_ref or "")
             if row and row.get("sections"):
                 return " ".join(row["sections"][0]["text"].split())[:400]
-        return "설명 없음"
+        # 진짜 문서가 없으면 대체 문서 — 두 조건에 똑같이 준다(대체 문서 팔의 이유가 그 사실과 맞는지 판정자가 볼 수 있게)
+        return place_fallback.fallback_docs().get(poi.source_ref or "") or "설명 없음"
 
 
 def _situation_text(case: dict) -> str:
@@ -228,8 +238,12 @@ def _judge(client, case: dict, a: list[tuple[Poi, str]], b: list[tuple[Poi, str]
         "② 이유가 참고 설명과 맞고 그 장소만의 특징을 짚는가 ③ 사실과 다른 말이 없는가. 길이·문체는 보지 마세요.\n"
         '답은 JSON 한 줄: {"winner": "A" 또는 "B" 또는 "같음", "why": "한 문장"}'
     )
-    out = client.chat.completions.create(model=JUDGE, messages=[{"role": "user", "content": prompt}])
-    text = (out.choices[0].message.content or "").strip()
+    if JUDGE.startswith("claude"):
+        out = client.messages.create(model=JUDGE, max_tokens=400, messages=[{"role": "user", "content": prompt}])
+        text = "".join(b.text for b in out.content if getattr(b, "type", None) == "text").strip()
+    else:
+        out = client.chat.completions.create(model=JUDGE, messages=[{"role": "user", "content": prompt}])
+        text = (out.choices[0].message.content or "").strip()
     try:
         got = json.loads(text[text.index("{"): text.rindex("}") + 1])
     except ValueError:
@@ -263,7 +277,8 @@ def run_ab(left: str, right: str, repeat: int) -> None:
         for name in (left, right):
             v = VARIANTS[name]
             query = v.get("query", rag._situation_query)(_request(case))
-            case["knowledge"][name] = kn.fetch(case["shortlist"].pois, query, v["corpora"], v.get("max_docs"))
+            case["knowledge"][name] = kn.fetch(case["shortlist"].pois, query, v["corpora"], v.get("max_docs"),
+                                               v.get("fallback", False))
 
     def one(item):
         i, (case, rep) = item
@@ -281,15 +296,22 @@ def run_ab(left: str, right: str, repeat: int) -> None:
         w = verdict.get("winner", "같음")
         winner = a if w == "A" else b if w == "B" else "="
         return dict(name=case["name"], winner=winner, why=verdict.get("why", ""), res=res,
-                    docs={n: len(case["knowledge"][n]) for n in (left, right)})
+                    docs={n: len(case["knowledge"][n]) for n in (left, right)},
+                    fallback={n: getattr(case["knowledge"][n], "fallback", 0) for n in (left, right)})
 
-    judge_client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"], max_retries=1)
+    if JUDGE.startswith("claude"):
+        import anthropic
+
+        judge_client = anthropic.Anthropic(max_retries=1)
+    else:
+        judge_client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"], max_retries=1)
     rows = _run(one, [(c, k) for k in range(repeat) for c in cases])
     n = len(rows)
     tally = {left: sum(r["winner"] == left for r in rows), right: sum(r["winner"] == right for r in rows),
              "=": sum(r["winner"] == "=" for r in rows)}
     print(json.dumps(dict(model=MODEL, judge=JUDGE, n=n, win={k: f"{v}/{n}" for k, v in tally.items()},
                           docs_mean={x: round(sum(r["docs"][x] for r in rows) / n, 1) for x in (left, right)},
+                          fallback_mean={x: round(sum(r["fallback"][x] for r in rows) / n, 1) for x in (left, right)},
                           errors={x: sum(1 for r in rows if r["res"][x]["err"]) for x in (left, right)},
                           p50_ms={x: sorted(r["res"][x]["wall"] for r in rows)[n // 2] for x in (left, right)},
                           p90_ms={x: sorted(r["res"][x]["wall"] for r in rows)[int(n * 0.9)] for x in (left, right)},

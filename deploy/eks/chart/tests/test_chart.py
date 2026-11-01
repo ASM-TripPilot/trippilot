@@ -340,11 +340,14 @@ class ChartTests(unittest.TestCase):
                          "LOCATION_AUTOMATION_ENABLED",
                          # Plan-B 상황 감시 4종(situation-awareness §7) — 빠지면 시크릿에 on 을 넣어도 스윕이 기본 off 로 돈다.
                          "PLANB_SITUATION_SWEEP", "PLANB_SITUATION_HORIZON", "PLANB_SITUATION_SWEEP_ACCOUNT_IDS",
-                         "PLANB_PREPARED_REPLAN"):
+                         "PLANB_PREPARED_REPLAN",
+                         # 웹 출시 3종(TRIP-1657) — 빠지면 시크릿에 넣어도 CORS·구글 웹 로그인이 꺼진 채 돈다.
+                         "GOOGLE_WEB_CLIENT_ID", "GOOGLE_WEB_CLIENT_SECRET", "CORS_ALLOWED_ORIGINS"):
                 ref = env[name]["valueFrom"]["secretKeyRef"]
                 self.assertEqual(ref["name"], "trippilot-backend")
                 self.assertEqual(ref["key"], name)
                 self.assertTrue(ref["optional"])
+                self.assertNotIn("value", env[name])  # 값은 시크릿 참조로만 — 렌더된 매니페스트에 평문이 없다
 
 
     def test_backend_calls_the_ai_opportunity_path_by_fixed_env(self):
@@ -435,6 +438,16 @@ class DevTargetValuesTests(unittest.TestCase):
         kinds = [item["kind"] for item in documents]
         self.assertNotIn("PodDisruptionBudget", kinds)
         self.assertNotIn("HorizontalPodAutoscaler", kinds)
+
+    def test_injection_guard_is_on_only_for_the_dev_target(self):
+        """인젝션 그림자 분류기는 개발 서버에서만 먼저 켠다(2026-10-30) — 운영 임베딩 파드는 그 모델을 읽지 않는다."""
+        for environment, expected in (("dev-target", True), ("dev", False), ("prd", False)):
+            deployments = {item["metadata"]["name"]: item for item in render(environment, embedding=True)
+                           if item["kind"] == "Deployment"}
+            env = {e["name"]: e for e in deployments["embedding"]["spec"]["template"]["spec"]["containers"][0]["env"]}
+            self.assertEqual("INJECTION_GUARD_DIR" in env, expected, environment)
+            if expected:
+                self.assertEqual(env["INJECTION_GUARD_DIR"]["value"], "/models/injection-guard")
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ const PICK_NOTICE = {
   'no-asset-id':
     '선택한 사진을 기록에 붙일 수 없어요. 다른 사진을 고르거나 설정에서 사진 접근 범위를 확인해 주세요',
   failed: '사진을 불러올 수 없어요',
+  unsupported: '사진 붙이기는 앱에서만 쓸 수 있어요',
 } as const;
 
 export async function pickPhotoForVisit(): Promise<PhotoPickOutcome> {

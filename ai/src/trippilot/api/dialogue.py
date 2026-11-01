@@ -58,6 +58,7 @@ from trippilot.orchestrator.dialogue_orchestrator import (
     DEFAULT_DEADLINE_MS,
     DialogueAnswer,
     DialogueOrchestrator,
+    InjectionShadow,
     RecentTurn,
     TurnInput,
 )
@@ -221,6 +222,7 @@ def build_dialogue_orchestrator(
     place_sql: PgPlaceSql | None = None,
     kb_store: VectorStorePort | None = None,
     place_fact_store: PlaceFactStore | None = None,
+    injection_shadow: InjectionShadow | None = None,
 ) -> DialogueOrchestrator:
     """서비스 워커(분류·답변 — `counted` 공유, 백엔드 사용량 상한의 원천) + 뒤에서 도는 기억 요약(`llm`) + 섀도 전용 3단 라우터 +
     핸들러 포트를 묶는다.
@@ -294,6 +296,9 @@ def build_dialogue_orchestrator(
                  ",".join(sorted(i.value for i in tools)), len(unwired), ",".join(unwired) or "-")
     else:
         log.info("도우미 계획 단계 off — DIALOGUE_PLAN 미배정이라 미배선(범위 밖·두 가지를 같이 묻는 말은 SCOPE 카드)")
+    # 0′ 인젝션 그림자(판정값만 로그) — 임베딩 http 경로가 있을 때만 main.py 가 만든다. 분류기를 안 켠 서비스면 첫 404 에 스스로 끈다
+    log.info("도우미 인젝션 그림자 %s", "on(분류기 없으면 첫 404 에 off)" if injection_shadow is not None
+             else "off — 임베딩 http 경로 없음이라 미배선")
     return DialogueOrchestrator(
         # 분류는 기존 IntentGate(closed-set) 재사용 — 프롬프트만 다르다(dialogue_intent.yaml, BR-AO-14)
         intent_worker=DialogueIntentWorker(GatewayFacade(counted, renderer, IntentGate(), c1_config, trace)),
@@ -305,6 +310,7 @@ def build_dialogue_orchestrator(
         ports=ports,
         planner=planner,
         smalltalk=smalltalk,
+        injection_shadow=injection_shadow,
         clock=clock, trace=trace, tz=tz,
         shadow=ShadowIntentProbe(shadow_router, rate=shadow_rate, rng=shadow_rng, counting=shadow_llm),
         shadow_meta=shadow_meta(renderer, bank, shadow_cfg),

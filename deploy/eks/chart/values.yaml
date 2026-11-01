@@ -54,6 +54,9 @@ embedding:
   # Optional CPU KURE service. Requires the vector database bootstrap and vector data ingestion.
   enabled: false
   replicas: 1
+  # 도우미 입구 인젝션 그림자 분류기(이미지에 구운 int8 ONNX ≈0.3GiB) — 켜면 /classify/injection 이 점수를 내고 AI 가 판정값만
+  # 로그한다(ai/docs/security/injection-classifier-shadow.md). 끄면 404 → AI 가 한 번 보고 스스로 끈다. 개발 대상만 켠다.
+  injectionGuard: false
   resources:
     # 메모리는 AI 팀 실측(모델 프로세스 4.2~4.4GiB, ai/docs/임베딩-사이징-근거.md)대로 둔다. CPU 는 평균 12m 이고
     # 2코어를 쓰는 것은 KB 적재·배치 인코딩 순간뿐이라 요청만 1코어로 — 상한 2코어는 그대로다.

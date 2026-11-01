@@ -27,7 +27,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import replace
-from datetime import date
+from datetime import date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -37,7 +37,8 @@ from trippilot.api.app import create_app
 from trippilot.api.wiring import build_dev_app, build_orchestrator, DEMO_ANCHOR
 from trippilot.llm_gateway.config import C1Config
 from trippilot.assembly_engine.config import AssemblyConfig
-from trippilot.domain.common import BudgetLevel, GeoPoint
+from trippilot.assembly_engine.travel import TravelEstimator
+from trippilot.domain.common import BudgetLevel, GeoPoint, TransportMode
 from trippilot.domain.llm import ModelTier
 from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
 from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
@@ -514,6 +515,29 @@ def test_validate_reports_violations_with_day_index() -> None:
     assert hc2["slot_ref"] == "p2"
     assert (hc2["day_index"], hc2["slot_index"]) == (0, 1)
     assert hc2["detail"]                               # 침묵 금지 — 사유가 있다
+
+
+def test_validate_measures_hc2_with_the_trip_transport() -> None:
+    """편집·되돌리기 재검증 — 수단이 오면 HC2 를 그 수단으로 잰다(repair 와 같은 `transport_modes`·첫 인식 토큰).
+
+    간격을 자차 이동에 딱 맞췄다. 종전엔 수단 칸이 없어 대중교통으로 재 자차 여행의 [적용]·수동 편집이 HC2 로 표시됐다.
+    칸이 없으면 종전 그대로(대중교통) — 같은 간격이 HC2 다.
+    """
+    p1, p6 = _POIS[0].coord, _POIS[5].coord  # ≈3.5km
+    car, public = (TravelEstimator(AssemblyConfig()).estimate(p1, p6, m).internal_minutes
+                   for m in (TransportMode.CAR, TransportMode.PUBLIC))
+    assert car < public  # 전제 — 자차로는 닿고 대중교통으로는 모자란 간격
+    arrive = (datetime(2026, 8, 5, 11, 0) + timedelta(minutes=car)).time().isoformat()
+    body = _validate_body(_payload([_slot("p1", "10:00:00", "11:00:00"), _slot("p6", arrive, "13:00:00")]))
+    with make_client() as client:
+        by_car = client.post("/ai/v1/itinerary/validate", json={**body, "transport_modes": ["택시", "자가용"]})
+        absent = client.post("/ai/v1/itinerary/validate", json=body)
+        by_public = client.post("/ai/v1/itinerary/validate", json={**body, "transport_modes": ["대중교통"]})
+
+    assert by_car.status_code == absent.status_code == 200, (by_car.text, absent.text)
+    assert by_car.json()["violations"] == []
+    assert [v["code"] for v in absent.json()["violations"]] == ["HC2"]
+    assert absent.json() == by_public.json()  # 칸이 없으면 대중교통 — 종전 판정과 같다
 
 
 def test_repair_fixes_then_revalidates_clean() -> None:
