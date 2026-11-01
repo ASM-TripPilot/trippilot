@@ -313,11 +313,6 @@
       "count": 1
     }
   },
-  "src/pages/onboarding/onboarding-terms/ui/TermsScreen.test.tsx": {
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
   "src/pages/onboarding/onboarding-tour/ui/OnboardingTourView.test.tsx": {
     "no-restricted-properties": {
       "count": 2

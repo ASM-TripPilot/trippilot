@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react-native';
 
 import { BASE } from '@/test-support/apiBase';
@@ -247,6 +248,13 @@ describe('TermsPage — 저장 실패 (AC A8 · INV-4)', () => {
     // 조용한 실패 금지 — 오류를 보여줄 뿐 아니라 다음 단계로 새어 나가지 않아야 한다.
     expect(navigationTargets().some((t) => /nickname/.test(t))).toBe(false);
     expect(screen.getByTestId('onboarding-terms-retry')).toBeOnTheScreen();
+
+    // 다시 시도가 실제로 저장을 다시 보낸다 — 서버가 회복하면 닉네임 단계로 넘어간다(옛 TermsScreen.test 이전).
+    setOnboardingScenario('onboarding-happy');
+    fireEvent.press(screen.getByTestId('onboarding-terms-retry'));
+    await waitFor(() =>
+      expect(navigationTargets().some((t) => /nickname/.test(t))).toBe(true)
+    );
   });
 });
 
@@ -392,5 +400,36 @@ describe('🔴 TRIP-1023 #002 — 미동의 안내는 다음을 시도했을 때
 
     expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
     expect(screen.queryByText(MISSING_NOTICE)).toBeNull();
+  });
+});
+
+// 옛 TermsScreen.test.tsx(뷰 단위)를 B안으로 옮겼다 — 머리 글자·필수 배지·탈출구 없음·보기 버튼 이름.
+describe('TermsPage — 화면 얼굴 · 탈출구 없음 · 보기 버튼', () => {
+  it('제목 "약관 동의"·필수 배지 3개가 있고, 선택 배지·건너뛰기·뒤로 수단은 없다 (BR-U0-10 · C6 · TRIP-1023 #005)', async () => {
+    await renderLoaded();
+
+    expect(screen.getByText('약관 동의')).toBeOnTheScreen();
+    expect(screen.getAllByText('필수')).toHaveLength(3);
+    expect(screen.queryByText('선택')).toBeNull();
+    expect(screen.queryByTestId('onboarding-terms-skip')).toBeNull();
+    expect(screen.queryByText(/건너뛰기|나중에 하기|건너뛰고/)).toBeNull();
+    expect(screen.queryAllByTestId(/back/).length).toBe(0);
+  });
+
+  it('"보기"는 체크박스 밖 형제 버튼이고 이름이 "{약관명} 보기"다 (TRIP-1430 Q-012)', async () => {
+    await renderLoaded();
+
+    const checkbox = screen.getByTestId(ROW.privacy);
+    const viewButton = screen.getByRole('button', {
+      name: /개인정보.* 보기$/,
+    });
+    expect(viewButton).toBe(
+      screen.getByTestId('onboarding-terms-view-PRIVACY_POLICY')
+    );
+    expect(
+      within(checkbox).queryByTestId('onboarding-terms-view-PRIVACY_POLICY')
+    ).toBeNull();
+    expect(checkbox.props.accessibilityRole).toBe('checkbox');
+    expect(within(checkbox).queryByText('보기')).toBeNull();
   });
 });
