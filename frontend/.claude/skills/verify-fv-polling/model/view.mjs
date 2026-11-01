@@ -3,9 +3,13 @@ const SCREEN = { Entry: "진입 화면", Gen: "생성 중 화면", Obs: "생성 
 const ROW = { None: "없음", Old: "예전 완성본", Partial: "1일차만(만드는 중)", Complete: "완성", Failed: "실패", NoData: "비어 있음" };
 
 const posts = (v) => Object.values(v.post).filter((p) => p.cli !== "idle");
+// MaxPoll 은 cfg 값(2) — 상한 도달 여부만 라벨에 쓴다.
+const MAX_POLL = 2;
 const draftFace = (v) => {
+  const capped = v.polls >= MAX_POLL;
   if (v.cache.st === "NoData") return v.err ? "실패" : "불러오는 중";
-  if (v.cache.st === "Partial") return "「만드는 중」 카드";
+  if (v.cache.st === "Partial") return v.err || capped ? "「만드는 중」 카드 + 실패 안내·[다시 시도]" : "「만드는 중」 카드";
+  if (v.cache.run) return !v.err && !capped ? "불러오는 중(다시 만드는 중)" : "결과 + 실패 안내";
   if (v.cache.st === "Failed" || v.err) return "결과 + 실패 안내";
   return v.cache.st === "Old" ? "예전 일정을 완성본으로" : "완성된 일정";
 };
@@ -20,6 +24,7 @@ export const state = (v) => {
   const extra = [];
   if (waiting > 0) extra.push(`생성 요청 ${waiting}건 대기`);
   if (v.get.ph !== "none") extra.push("일정 조회 중");
+  if (v.stale) extra.push("다시 물어야 함");
   if (v.sent > v.intents) extra.push(`누름 ${v.intents}번에 요청 ${v.sent}건`);
   extra.push(`서버: ${ROW[v.row.st]}`);
   return `${SCREEN[v.scr]}${face ? ` — ${face}` : ""} · ${extra.join(" · ")}`;
@@ -37,7 +42,7 @@ export const step = (action, from, to) => {
     case "EchoTap": return "화면이 바뀌기 전에 같은 버튼을 한 번 더 친다";
     case "Leave": return "‹ 로 홈에 나간다";
     case "Return": return "홈 카드로 다시 연다";
-    case "Reload": return "브라우저 새로고침";
+    case "Reload": return from.scr === "Gen" && to.scr === "Obs" ? "브라우저 새로고침(주소에 mode 없음 — 관찰 모드)" : "브라우저 새로고침";
     case "ServePost": return "서버가 생성 요청을 받아 AI 를 돌린다";
     case "CommitPost": return "서버가 1일차를 저장한다";
     case "FailPostServer": return "서버의 1일차 생성이 실패한다";

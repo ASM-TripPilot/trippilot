@@ -19,8 +19,11 @@ CONSTANTS
   MaxPost,      \* 나가는 POST 수 상한(모델 크기 제한 — 누름보다 하나 많게 둔다)
   MaxPoll,      \* 초안 화면 폴링 상한(코드 DRAFT_POLL_MAX_COUNT = 30 의 축소)
   Web,          \* 웹(브라우저 새로고침이 있다)
-  EntryGuarded, \* 생성 진입 버튼(꼭 갈 곳 「다음」·거점 「다시 만들기」)에 연타 잠금이 있나 — 코드: FALSE
-  RetryGuarded  \* 생성 화면 [다시 시도]에 연타 잠금이 있나 — 코드: FALSE
+  EntryGuarded, \* 생성 진입 버튼(꼭 갈 곳 「다음」·거점 「다시 만들기」)에 연타 잠금이 있나 — 코드: TRUE(guardPress, TRIP-1690)
+  RetryGuarded, \* 생성 화면 [다시 시도]에 연타 잠금이 있나 — 코드: TRUE(inFlightRef, TRIP-1690)
+  ReloadRefires, \* 새로고침이 주소의 mode= 로 생성을 다시 쏘나 — 코드: FALSE(쏜 뒤 setParams 로 mode 를 지운다, TRIP-1690)
+  ServerChecksSession \* 서버가 1차를 저장하기 전에 자기 세션이 아직 현재인지 보나 — 코드: FALSE
+                      \* (GenerateItineraryService.generate 의 replaceForTrip — 닫힌 세션의 1차도 행을 갈아끼운다)
 
 VARIABLES
   row,     \* 서버 일정 행: [st |-> "None"|"Old"|"Partial"|"Complete"|"Failed", g |-> 몇 번째 생성의 것인가]
@@ -37,9 +40,10 @@ VARIABLES
   cache,   \* 일정 쿼리 캐시 칸: [st, g, run(세션 id 있음)] — st = "NoData" 면 비었다
   err,     \* 그 칸이 오류 상태인가(마지막 조회 실패 — data 는 남는다)
   polls,   \* 초안 화면이 열린 뒤 받은 응답 수(dataUpdateCount − 기준선), MaxPoll 에서 멈춘다
-  get      \* 나가 있는 일정 GET: [ph |-> "none"|"sent"|"served", snap |-> 서버가 읽은 값, ctx]
+  get,     \* 나가 있는 일정 GET: [ph |-> "none"|"sent"|"served", snap |-> 서버가 읽은 값, ctx]
+  stale    \* 캐시가 무효화돼 다시 물어야 한다(POST 실패의 invalidateQueries — TRIP-1690)
 
-vars == <<row, run, gen, post, sent, intents, ctx, scr, live, top, echo, cache, err, polls, get>>
+vars == <<row, run, gen, post, sent, intents, ctx, scr, live, top, echo, cache, err, polls, get, stale>>
 
 Ids == 1..MaxPost
 NoData == [st |-> "NoData", g |-> 0, run |-> FALSE]
@@ -53,16 +57,19 @@ Bump(n) == IF n < MaxPoll THEN n + 1 ELSE MaxPoll
 (***************************************************************************)
 
 \* pages/itinerary/itinerary-draft/ui/DraftPage.tsx refetchInterval
-\*   shouldKeepPollingDraft(generationState === 'PARTIAL' && 받은 수 < DRAFT_POLL_MAX_COUNT)
-\*   — 조회 오류(status === 'error')는 보지 않는다.
-DraftPollDue == cache.st = "Partial" /\ polls < MaxPoll
+\*   shouldKeepPollingDraft((generationState === 'PARTIAL' || generationSessionId != null) && 받은 수 < DRAFT_POLL_MAX_COUNT)
+\*   — 조회 오류(status === 'error')는 보지 않는다. 세션 술어는 TRIP-1690 FV-POLL-01.
+DraftPollDue == (cache.st = "Partial" \/ cache.run) /\ polls < MaxPoll
 
-\* DraftPage.tsx 얼굴 — resolveDraftView + `view.kind === 'listed' && isPartial` 갈래.
-\*   PARTIAL 이면 staleFailed(조회 오류·폴링 상한)와 상관없이 진행 카드(generation-progress-card)를 그린다.
-\*   (1일차에 장소가 있다고 둔다 — 0곳 PARTIAL 은 범위 밖)
+\* DraftPage.tsx 얼굴 — resolveDraftView + `regenerating` 로딩 덮기 + `view.kind === 'listed' && isPartial` 갈래.
+\*   PARTIAL: staleFailed(조회 오류·폴링 상한)면 진행 카드 + 실패 안내 + [다시 시도](TRIP-1690 FV-POLL-02) = "progressFailed".
+\*   PARTIAL 아님 + 세션 돎(regenerating): 상한 전·오류 아님이면 로딩 얼굴, 아니면 옛 목록 + 실패 안내.
+\*   (1일차·옛 행에 장소가 있다고 둔다 — 0곳은 범위 밖)
+DraftCapped == polls >= MaxPoll
 DraftFace ==
   CASE cache.st = "NoData" -> IF err THEN "failed" ELSE "loading"
-    [] cache.st = "Partial" -> "progress"
+    [] cache.st = "Partial" -> IF err \/ DraftCapped THEN "progressFailed" ELSE "progress"
+    [] cache.run            -> IF ~err /\ ~DraftCapped THEN "loading" ELSE "resultFailed"
     [] cache.st = "Failed"  -> "resultFailed"   \* listed + staleFailed(h08 셸)
     [] OTHER                -> IF err THEN "resultFailed" ELSE "result"
 
@@ -74,8 +81,9 @@ ShellPollDue ==
   /\ ~err
 
 \* pages/itinerary/itinerary-generating/ui/GeneratingPage.tsx — 화면이 트리에 있으면 mutate 의
-\*   호출별 onSuccess 가 router.replace(초안)를 부른다. 훅 옵션 onSuccess(setQueryData)는 화면이
-\*   떠나도 같은 JS 실행이면 불린다. 둘 다 진행 중 GET 을 취소하지 않는다(cancelQueries 없음).
+\*   호출별 onSuccess 가 router.replace(초안)를 부른다. 훅 옵션 onSuccess 는 화면이 떠나도 같은 JS 실행이면
+\*   불린다 — 먼저 진행 중 일정 GET 을 취소(cancelQueries)하고 setQueryData 한다(TRIP-1690 FV-POLL-01).
+\*   훅 옵션 onError 는 일정 캐시를 무효화(invalidateQueries — 진행 중 GET 은 취소하고 다시 묻는다)한다.
 PostWritesCache(i) == post[i].ctx = ctx
 
 (* ========================== CODE MIRROR 끝 ============================= *)
@@ -83,7 +91,8 @@ PostWritesCache(i) == post[i].ctx = ctx
 GenFace == IF post[top].cli = "err" THEN "failed" ELSE "progress"
 ObsFace == IF err THEN "failed" ELSE "progress"
 \* 화면이 처음 열리며 묻는 조회(캐시가 비었을 때) — react-query 가 마운트 때 반드시 보낸다.
-MountFetchDue == scr \in {"Draft", "Obs"} /\ cache.st = "NoData" /\ ~err
+\* 무효화된 캐시(stale)도 보이는 화면이 다시 묻는다(활성 관찰자 재조회 · 마운트 재조회).
+MountFetchDue == scr \in {"Draft", "Obs"} /\ ((cache.st = "NoData" /\ ~err) \/ stale)
 
 (***************************************************************************)
 (* ASSUMPTION(서버) — backend/modules/itinerary-generation                 *)
@@ -97,6 +106,7 @@ MountFetchDue == scr \in {"Draft", "Obs"} /\ cache.st = "NoData" /\ ~err
 (*     세션이 닫힌 PARTIAL 은 스위퍼가 FAILED 로 내린다(StalePartialSweeper). *)
 (*  A5 행이 없으면 GET 은 404.                                            *)
 (*  네트워크 실패는 어느 요청에나 올 수 있다(서버는 이미 받았을 수도 있다). *)
+(*  단 클라이언트가 실패를 본 요청을 서버가 그 뒤에 받지는 않는다("lost").   *)
 (***************************************************************************)
 
 Init ==
@@ -115,6 +125,7 @@ Init ==
   /\ err = FALSE
   /\ polls = 0
   /\ get = NoGet
+  /\ stale = FALSE
 
 \* 새 POST 한 건을 JS 실행 c 에서 보낸다(번호 = sent + 1).
 Fire(n, c) ==
@@ -135,7 +146,7 @@ PressStart ==
   /\ Fire(NewId, ctx)
   /\ scr' = "Gen" /\ live' = live \cup {NewId} /\ top' = NewId
   /\ echo' = IF EntryGuarded THEN "no" ELSE "entry"
-  /\ UNCHANGED <<ctx, cache, err, polls, get>> /\ ServerUnchanged
+  /\ UNCHANGED <<ctx, cache, err, polls, get>> /\ ServerUnchanged /\ UNCHANGED stale
 
 \* 초안에서 [다시 짜기] → 생성 화면(replace). DraftPage.handleRetry 는 leavingRef 로 잠근다.
 PressRegenerate ==
@@ -143,7 +154,7 @@ PressRegenerate ==
   /\ intents' = intents + 1
   /\ Fire(NewId, ctx)
   /\ scr' = "Gen" /\ live' = live \cup {NewId} /\ top' = NewId /\ echo' = "no"
-  /\ UNCHANGED <<ctx, cache, err, polls, get>> /\ ServerUnchanged
+  /\ UNCHANGED <<ctx, cache, err, polls, get>> /\ ServerUnchanged /\ UNCHANGED stale
 
 \* 생성 실패 얼굴의 [다시 시도] = fire() — 같은 화면의 mutation 을 새 호출로 바꾼다.
 PressRetry ==
@@ -152,7 +163,7 @@ PressRetry ==
   /\ Fire(NewId, ctx)
   /\ live' = (live \ {top}) \cup {NewId} /\ top' = NewId
   /\ echo' = IF RetryGuarded THEN "no" ELSE "retry"
-  /\ UNCHANGED <<ctx, scr, cache, err, polls, get>> /\ ServerUnchanged
+  /\ UNCHANGED <<ctx, scr, cache, err, polls, get>> /\ ServerUnchanged /\ UNCHANGED stale
 
 \* 같은 버튼을 화면이 다시 그려지기 전에 한 번 더 친다(누름 의도는 그대로 하나).
 \*   entry: 생성 화면이 하나 더 쌓이고 그 화면도 마운트 때 POST.  retry: fire() 가 한 번 더.
@@ -161,13 +172,13 @@ EchoTap ==
   /\ Fire(NewId, ctx)
   /\ live' = IF echo = "entry" THEN live \cup {NewId} ELSE (live \ {top}) \cup {NewId}
   /\ top' = NewId /\ echo' = "no"
-  /\ UNCHANGED <<intents, ctx, scr, cache, err, polls, get>> /\ ServerUnchanged
+  /\ UNCHANGED <<intents, ctx, scr, cache, err, polls, get>> /\ ServerUnchanged /\ UNCHANGED stale
 
 \* ‹ (생성 화면은 dismissTo 홈 — POST 는 계속 간다) / 초안 뒤로.
 Leave ==
   /\ scr \in {"Gen", "Obs", "Draft"}
   /\ scr' = "Away" /\ live' = {} /\ top' = 0 /\ echo' = "no"
-  /\ UNCHANGED <<post, sent, intents, ctx, cache, err, polls, get>> /\ ServerUnchanged
+  /\ UNCHANGED <<post, sent, intents, ctx, cache, err, polls, get>> /\ ServerUnchanged /\ UNCHANGED stale
 
 \* 홈 카드로 다시 연다(planState 목적지). 캐시에 일정이 있으면 초안(관찰 모드는 곧장 초안으로 replace),
 \* 비었으면 관찰 모드(GET 한 번) 또는 생성 방식 화면.
@@ -175,18 +186,19 @@ Return ==
   /\ scr = "Away"
   /\ IF cache.st = "NoData" THEN scr' \in {"Obs", "Entry"} ELSE scr' = "Draft"
   /\ polls' = 0 /\ echo' = "no"
-  /\ UNCHANGED <<post, sent, intents, ctx, live, top, cache, err, get>> /\ ServerUnchanged
+  /\ UNCHANGED <<post, sent, intents, ctx, live, top, cache, err, get>> /\ ServerUnchanged /\ UNCHANGED stale
 
-\* 웹 새로고침 — JS 실행이 새로 뜨고 캐시가 빈다. 주소에 mode= 가 남은 생성 화면이면 다시 마운트돼 POST.
+\* 웹 새로고침 — JS 실행이 새로 뜨고 캐시가 빈다. 생성 화면은 쏜 뒤 주소에서 mode 를 지웠으므로
+\* (router.setParams, TRIP-1690 FV-POLL-04) 관찰 모드로 다시 뜬다. ReloadRefires 면 옛 코드처럼 다시 POST.
 Reload ==
   /\ Web /\ scr \in {"Gen", "Draft", "Obs"} /\ ctx < MaxPost
-  /\ scr = "Gen" => CanFire   \* 모델 크기 제한: POST 상한에 닿았으면 생성 화면 새로고침은 뺀다
+  /\ (scr = "Gen" /\ ReloadRefires) => CanFire   \* 모델 크기 제한: POST 상한에 닿았으면 생성 화면 새로고침은 뺀다
   /\ ctx' = ctx + 1
-  /\ cache' = NoData /\ err' = FALSE /\ get' = NoGet /\ polls' = 0 /\ echo' = "no"
-  /\ IF scr = "Gen"
-       THEN /\ Fire(NewId, ctx + 1) /\ live' = {NewId} /\ top' = NewId
+  /\ cache' = NoData /\ err' = FALSE /\ get' = NoGet /\ polls' = 0 /\ echo' = "no" /\ stale' = FALSE
+  /\ IF scr = "Gen" /\ ReloadRefires
+       THEN /\ Fire(NewId, ctx + 1) /\ live' = {NewId} /\ top' = NewId /\ scr' = scr
        ELSE /\ UNCHANGED <<post, sent>> /\ live' = {} /\ top' = 0
-  /\ scr' = scr
+            /\ scr' = IF scr = "Gen" THEN "Obs" ELSE scr
   /\ UNCHANGED intents /\ ServerUnchanged
 
 (* ---------------- POST ---------------- *)
@@ -195,55 +207,64 @@ ServePost(i) ==   \* A1·A2: 서버가 받아 세션을 연다(행은 그대로)
   /\ i <= sent /\ post[i].srv = "none"
   /\ gen' = gen + 1 /\ run' = gen + 1
   /\ post' = [post EXCEPT ![i].srv = "served", ![i].g = gen + 1]
-  /\ UNCHANGED <<row, sent, intents, ctx, scr, live, top, cache, err, polls, get>> /\ echo' = "no"
+  /\ UNCHANGED <<row, sent, intents, ctx, scr, live, top, cache, err, polls, get>> /\ echo' = "no" /\ UNCHANGED stale
 
-CommitPost(i) ==  \* A2: 1일차 완성 — 행을 PARTIAL 로 갈아끼운다
+CommitPost(i) ==  \* A2: 1일차 완성 — 행을 PARTIAL 로 갈아끼운다(세션이 이미 닫혔어도 — ServerChecksSession = FALSE)
   /\ post[i].srv = "served"
+  /\ ServerChecksSession => run = post[i].g
   /\ row' = [st |-> "Partial", g |-> post[i].g]
   /\ post' = [post EXCEPT ![i].srv = "committed"]
-  /\ UNCHANGED <<run, gen, sent, intents, ctx, scr, live, top, cache, err, polls, get>> /\ echo' = "no"
+  /\ UNCHANGED <<run, gen, sent, intents, ctx, scr, live, top, cache, err, polls, get>> /\ echo' = "no" /\ UNCHANGED stale
 
 FailPostServer(i) ==  \* A3
   /\ post[i].srv = "served"
   /\ run' = IF run = post[i].g THEN 0 ELSE run
   /\ post' = [post EXCEPT ![i].srv = "failed"]
-  /\ UNCHANGED <<row, gen, sent, intents, ctx, scr, live, top, cache, err, polls, get>> /\ echo' = "no"
+  /\ UNCHANGED <<row, gen, sent, intents, ctx, scr, live, top, cache, err, polls, get>> /\ echo' = "no" /\ UNCHANGED stale
 
-\* 201 이 클라이언트에 닿는다. 훅 옵션 onSuccess = setQueryData(응답) — 같은 JS 실행일 때만.
-\* 그 POST 의 화면이 아직 트리에 있으면 호출별 onSuccess = router.replace(초안).
+\* 201 이 클라이언트에 닿는다. 훅 옵션 onSuccess = cancelQueries(진행 중 GET 버림) → setQueryData(응답) — 같은 JS
+\* 실행일 때만. 그 POST 의 화면이 아직 트리에 있으면 호출별 onSuccess = router.replace(초안).
 PostOk(i) ==
   /\ post[i].srv = "committed" /\ post[i].cli = "waiting"
   /\ post' = [post EXCEPT ![i].cli = "ok"]
   /\ IF PostWritesCache(i)
        THEN /\ cache' = [st |-> "Partial", g |-> post[i].g, run |-> run = post[i].g]
-            /\ err' = FALSE
+            /\ err' = FALSE /\ get' = NoGet /\ stale' = FALSE
             /\ IF i \in live
                  THEN /\ scr' = "Draft" /\ live' = live \ {i} /\ top' = 0 /\ polls' = 0
                \* 관찰 모드는 data 가 어디서 오든(여기선 setQueryData) 생기는 순간 초안으로 replace 한다.
                ELSE IF scr = "Obs"
                  THEN /\ scr' = "Draft" /\ polls' = 0 /\ UNCHANGED <<live, top>>
                  ELSE /\ polls' = Bump(polls) /\ UNCHANGED <<scr, live, top>>
-       ELSE UNCHANGED <<cache, err, scr, live, top, polls>>
-  /\ UNCHANGED <<sent, intents, ctx, get>> /\ ServerUnchanged /\ echo' = "no"
+       ELSE UNCHANGED <<cache, err, scr, live, top, polls, get, stale>>
+  /\ UNCHANGED <<sent, intents, ctx>> /\ ServerUnchanged /\ echo' = "no"
 
 \* 오류 응답(1차 실패) 또는 네트워크 실패 — 서버가 받았든 아니든. 실패 얼굴은 top 일 때만 보인다.
+\* 훅 옵션 onError = invalidateQueries(같은 JS 실행일 때만) — 진행 중 GET 은 취소하고 다시 묻게 한다(TRIP-1690).
 PostErr(i) ==
   /\ post[i].cli = "waiting"
-  /\ post' = [post EXCEPT ![i].cli = "err"]
-  /\ UNCHANGED <<sent, intents, ctx, scr, live, top, cache, err, polls, get>> /\ ServerUnchanged /\ echo' = "no"
+  \* 서버가 아직 안 받은 요청이 클라이언트에서 실패로 끝나면 그 요청은 사라진다 — 실패를 본 뒤에 서버가 받는 일은
+  \* 없다(TRIP-1690 모델 정정: 옛 모델은 실패 뒤 늦은 수신을 허용해 거짓 반례 9단계를 냈다). 새로고침으로 버린
+  \* 요청(다른 JS 실행)은 실패를 보지 않으므로 여전히 늦게 닿을 수 있다 — 아래 P1 의 웹 잔여 반례.
+  /\ post' = [post EXCEPT ![i].cli = "err",
+                          ![i].srv = IF post[i].srv = "none" THEN "lost" ELSE post[i].srv]
+  /\ IF post[i].ctx = ctx
+       THEN /\ stale' = TRUE /\ get' = NoGet
+       ELSE UNCHANGED <<stale, get>>
+  /\ UNCHANGED <<sent, intents, ctx, scr, live, top, cache, err, polls>> /\ ServerUnchanged /\ echo' = "no"
 
 (* ---------------- 일정 GET (쿼리 키 하나 — 한 번에 하나) ---------------- *)
 
 \* 누가 묻든(초안 폴링·셸 감시·마운트·포커스 복귀·홈 카드) 이미 나가 있지 않으면 하나 나간다.
 StartGet ==
   /\ get.ph = "none"
-  /\ get' = [ph |-> "sent", snap |-> NoData, ctx |-> ctx]
+  /\ get' = [ph |-> "sent", snap |-> NoData, ctx |-> ctx] /\ stale' = FALSE
   /\ UNCHANGED <<post, sent, intents, ctx, scr, live, top, cache, err, polls>> /\ ServerUnchanged /\ echo' = "no"
 
 ServeGet ==   \* 서버가 읽는 순간의 행 + 세션 유무
   /\ get.ph = "sent"
   /\ get' = [get EXCEPT !.ph = "served", !.snap = [st |-> row.st, g |-> row.g, run |-> run # 0]]
-  /\ UNCHANGED <<post, sent, intents, ctx, scr, live, top, cache, err, polls>> /\ ServerUnchanged /\ echo' = "no"
+  /\ UNCHANGED <<post, sent, intents, ctx, scr, live, top, cache, err, polls>> /\ ServerUnchanged /\ echo' = "no" /\ UNCHANGED stale
 
 \* 응답이 닿는다 — 요청을 보낸 JS 실행이 살아 있을 때만 캐시에 들어간다.
 GetOk ==
@@ -254,12 +275,12 @@ GetOk ==
             /\ scr' = IF scr = "Obs" THEN "Entry" ELSE scr  \* 관찰 모드 404 → 생성 방식
        ELSE /\ cache' = get.snap /\ err' = FALSE
             /\ IF scr = "Obs" THEN scr' = "Draft" /\ polls' = 0 ELSE scr' = scr /\ polls' = Bump(polls)
-  /\ UNCHANGED <<post, sent, intents, ctx, live, top>> /\ ServerUnchanged /\ echo' = "no"
+  /\ UNCHANGED <<post, sent, intents, ctx, live, top>> /\ ServerUnchanged /\ echo' = "no" /\ UNCHANGED stale
 
 GetFail ==   \* 재시도까지 다 실패(서버는 읽었을 수도 있다) — data 는 남고 오류 상태가 된다
   /\ get.ph # "none" /\ get' = NoGet
   /\ err' = IF get.ctx = ctx THEN TRUE ELSE err
-  /\ UNCHANGED <<post, sent, intents, ctx, scr, live, top, cache, polls>> /\ ServerUnchanged /\ echo' = "no"
+  /\ UNCHANGED <<post, sent, intents, ctx, scr, live, top, cache, polls>> /\ ServerUnchanged /\ echo' = "no" /\ UNCHANGED stale
 
 (* ---------------- 서버 2차 ---------------- *)
 
@@ -267,12 +288,12 @@ SecondPhaseDone ==  \* A4
   /\ row.st = "Partial" /\ run = row.g /\ run # 0
   /\ \E s \in {"Complete", "Failed"} : row' = [row EXCEPT !.st = s]
   /\ run' = 0
-  /\ UNCHANGED <<gen, post, sent, intents, ctx, scr, live, top, cache, err, polls, get>> /\ echo' = "no"
+  /\ UNCHANGED <<gen, post, sent, intents, ctx, scr, live, top, cache, err, polls, get>> /\ echo' = "no" /\ UNCHANGED stale
 
 Sweep ==  \* A4 스위퍼
   /\ row.st = "Partial" /\ run # row.g
   /\ row' = [row EXCEPT !.st = "Failed"]
-  /\ UNCHANGED <<run, gen, post, sent, intents, ctx, scr, live, top, cache, err, polls, get>> /\ echo' = "no"
+  /\ UNCHANGED <<run, gen, post, sent, intents, ctx, scr, live, top, cache, err, polls, get>> /\ echo' = "no" /\ UNCHANGED stale
 
 Next ==
   \/ PressStart \/ PressRegenerate \/ PressRetry \/ EchoTap
@@ -297,10 +318,14 @@ Quiet ==
   /\ ~MountFetchDue
 
 \* P1 생성 결과는 서버가 완료를 알린 뒤에만 보인다.
-\*   조용해진 초안 화면이 「완성된 일정」 얼굴이면, 그것은 마지막으로 시작한 생성의 COMPLETE 다.
+\*   조용해진 초안 화면이 「완성된 일정」 얼굴이면, 그것은 서버의 지금 일정이고 서버에서 도는 생성이 없다
+\*   (= 서버가 새 일정을 만드는 중인데 예전 일정을 완성본으로 보이지 않는다).
+\*   TRIP-1690 정정: 옛 식은 "마지막으로 시작한 생성의 COMPLETE" 였다 — 그 식은 서버 1차가 실패해(A3) 서버 행이
+\*   예전 일정 그대로일 때 그 예전 일정을 보이는 것까지 깨짐으로 셌다. 서버가 가진 일정을 그대로 보이는 것은 이
+\*   속성이 막으려던 피해(REPORT P1)가 아니다 — 그 경우 화면을 떠나 있었으면 실패 안내가 없다는 점은 끝 보고 관측.
 ResultOnlyAfterComplete ==
   (Quiet /\ scr = "Draft" /\ DraftFace = "result" /\ gen > 0)
-    => cache.st = "Complete" /\ cache.g = gen
+    => cache.st = row.st /\ cache.g = row.g /\ run = 0
 
 \* P2 실패하면 생성 중 화면에 갇히지 않는다.
 \*   조용해졌는데 화면이 아직 「만드는 중」(생성 화면 진행·관찰 진행·초안 진행 카드·초안 로딩)이 아니다.
@@ -321,4 +346,5 @@ TypeOK ==
   /\ cache.st \in {"NoData", "Old", "Partial", "Complete", "Failed", "None"}
   /\ err \in BOOLEAN /\ polls \in 0..MaxPoll /\ get.ph \in {"none", "sent", "served"}
   /\ scr = "Gen" => top \in live
+  /\ stale \in BOOLEAN
 =============================================================================

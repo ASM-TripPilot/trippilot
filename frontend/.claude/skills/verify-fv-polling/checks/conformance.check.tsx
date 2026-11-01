@@ -1,8 +1,8 @@
 /**
  * 적합성 — 모델(model/GenPolling.tla)의 CODE MIRROR 식이 실제 코드와 같은 판정을 하는지 **조합 전수**로 대조한다.
- *   DraftFace·DraftPollDue  ↔ 실제 DraftPage 렌더(얼굴 testID) + 그 관찰자의 refetchInterval(query)
+ *   DraftFace·DraftPollDue  ↔ 실제 DraftPage 렌더(얼굴 testID) + 그 관찰자의 refetchInterval(query) — TRIP-1690 부터 세션(run) 축 포함
  *   ShellPollDue            ↔ 실제 useGenerationWatch 가 붙인 관찰자의 refetchInterval(query)
- * 입력 공간이 작아(초안 12, 셸 48) 생성 입력 대신 전부 돈다. 아래 model* 함수는 TLA 의 같은 이름 식을 글자 그대로 옮긴 것 —
+ * 입력 공간이 작아(초안 24, 셸 48) 생성 입력 대신 전부 돈다. 아래 model* 함수는 TLA 의 같은 이름 식을 글자 그대로 옮긴 것 —
  * 모델을 고치면 여기도 함께 고친다.
  */
 import { act, cleanup, render, screen } from '@testing-library/react-native';
@@ -40,9 +40,13 @@ const CODE_STATE: Record<St, ItineraryGenerationState> = { Complete: 'COMPLETE',
 
 // ── CODE MIRROR (GenPolling.tla 와 같은 식) ─────────────────────────────────
 // 모델의 "Old"(예전 완성본)는 코드에선 COMPLETE 다 — 같은 값이라 Complete 로 대조한다.
-const modelDraftPollDue = (st: St, capped: boolean) => st === 'Partial' && !capped;
-const modelDraftFace = (st: St, err: boolean) =>
-  st === 'Partial' ? 'progress' : st === 'Failed' ? 'resultFailed' : err ? 'resultFailed' : 'result';
+const modelDraftPollDue = (st: St, run: boolean, capped: boolean) => (st === 'Partial' || run) && !capped;
+const modelDraftFace = (st: St, run: boolean, err: boolean, capped: boolean) =>
+  st === 'Partial'
+    ? err || capped ? 'progressFailed' : 'progress'
+    : run
+      ? !err && !capped ? 'loading' : 'resultFailed'
+      : st === 'Failed' ? 'resultFailed' : err ? 'resultFailed' : 'result';
 const modelShellPollDue = (scr: Scr, st: St, run: boolean, err: boolean) =>
   !['Gen', 'Obs', 'Draft'].includes(scr) && (st === 'Partial' || run) && !err;
 
@@ -94,26 +98,34 @@ const STS: St[] = ['Complete', 'Partial', 'Failed'];
 const BOOLS = [false, true];
 
 describe('DraftFace·DraftPollDue == DraftPage', () => {
-  const cases = STS.flatMap((st) => BOOLS.flatMap((err) => BOOLS.map((capped) => ({ st, err, capped }))));
-  it.each(cases)('%o', async ({ st, err, capped }) => {
+  const cases = STS.flatMap((st) =>
+    BOOLS.flatMap((run) => BOOLS.flatMap((err) => BOOLS.map((capped) => ({ st, run, err, capped }))))
+  );
+  it.each(cases)('%o', async ({ st, run, err, capped }) => {
     const client = newTestQueryClient({ staleTime: Infinity });
     client.setQueryData(getGetTripsTripIdQueryKey(TRIP_ID), trip());
-    client.setQueryData(KEY, data(st, false));
+    client.setQueryData(KEY, data(st, run));
     render(<DraftPage tripId={TRIP_ID} />, { wrapper: createWrapper(client) });
     if (capped) {
       act(() => {
-        for (let i = 0; i < DRAFT_POLL_MAX_COUNT; i += 1) client.setQueryData(KEY, data(st, false));
+        for (let i = 0; i < DRAFT_POLL_MAX_COUNT; i += 1) client.setQueryData(KEY, data(st, run));
       });
     }
     if (err) markError(client);
     await settle(); // react-query 알림은 setTimeout(0) 뒤에 온다 — 여러 틱 흘린다
 
+    const failedNote = screen.queryByTestId('itinerary-draft-stale-failed') !== null;
     const face = screen.queryByTestId('generation-progress-card')
-      ? 'progress'
+      ? failedNote && screen.queryByTestId('itinerary-draft-partial-retry') ? 'progressFailed' : 'progress'
       : screen.queryByTestId('sheet-cta-root')
-        ? screen.queryByTestId('itinerary-draft-stale-failed') ? 'resultFailed' : 'result'
-        : 'other';
-    expect({ face, poll: pollDue(client) }).toEqual({ face: modelDraftFace(st, err), poll: modelDraftPollDue(st, capped) });
+        ? failedNote ? 'resultFailed' : 'result'
+        : screen.queryByTestId('itinerary-draft-loading')
+          ? 'loading'
+          : 'other';
+    expect({ face, poll: pollDue(client) }).toEqual({
+      face: modelDraftFace(st, run, err, capped),
+      poll: modelDraftPollDue(st, run, capped),
+    });
   });
 });
 

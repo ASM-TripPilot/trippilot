@@ -3,7 +3,7 @@
 #   1) 동기화 확인: 덮는 파일이 sync 커밋 뒤 바뀌었나(바뀌었으면 경고 — 모델을 다시 읽어 대조할 것)
 #   2) 적합성(jest integration): 모델 CODE MIRROR 식 == 실제 코드(초안 얼굴·초안 폴링·셸 감시, 조합 전수)
 #   3) 모델 체크(TLC): 속성마다 따로 돌려 성립/깨짐을 기준선과 비교(+ 원인 가르기 변형 2개)
-#   4) 반례 재현(jest integration): 깨진 속성의 반례가 실제 코드에서 아직 그대로 일어나나(R1~R5)
+#   4) 반례 재현(jest integration): 고친 반례(R1~R5)는 고친 동작 그대로인가, 남은 반례(R6)는 아직 그대로인가
 # 끝에 표 하나. 기준선과 모두 같으면 exit 0, 하나라도 다르면 exit 1.
 #
 # 옵션: --frontend DIR  (node_modules 가 있는 frontend. 기본 = 이 스킬이 든 frontend)
@@ -27,7 +27,7 @@ while [ $# -gt 0 ]; do
 done
 
 # ── 동기화 기록(SKILL.md 「동기화」와 같은 값) ─────────────────────────────────
-SYNC=f153fe2458645aff9ac73701a411125505e33999
+SYNC=e752601a317a104cbe43a40fcf5e3a66786d9887
 COVERED="src/pages/itinerary/itinerary-generating/ui/GeneratingPage.tsx
 src/pages/itinerary/itinerary-generating/ui/GeneratingScreen.tsx
 src/pages/itinerary/itinerary-draft/ui/DraftPage.tsx
@@ -46,14 +46,17 @@ app/trips/[tripId]/itinerary/generating.tsx
 ../backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/StalePartialSweeper.kt"
 
 # ── 기준선: 검사 → 기대 결과 ────────────────────────────────────────────────
-#   깨짐 = 알려진 결함(보고됨). 결함을 고치면 여기와 SKILL.md 「결과 기준선」을 함께 바꾼다.
+#   FV-POLL-01~04 는 TRIP-1690 에서 고쳤다 — 세 속성 성립. 변형 둘은 고친 장치를 빼면 다시 깨지는지(원인 증명).
+#   결함을 새로 찾거나 고치면 여기와 SKILL.md 「결과 기준선」을 함께 바꾼다.
 #   이름:상수덮기 — 상수덮기는 cfg 의 값을 바꿔 원인을 가른다(빈칸 = cfg 그대로).
 BASELINE="TypeOK - 성립
 ResultOnlyAfterComplete - 깨짐
-NoStuckProgress - 깨짐
-OnePostPerPress - 깨짐
-OnePostPerPress 잠금있다면·웹 깨짐
-OnePostPerPress 잠금있다면·앱 성립"
+ResultOnlyAfterComplete 앱이면 깨짐
+ResultOnlyAfterComplete 앱·서버세션확인 성립
+NoStuckProgress - 성립
+OnePostPerPress - 성립
+OnePostPerPress 잠금없다면 깨짐
+OnePostPerPress 새로고침재요청이면 깨짐"
 REPRO_BASELINE="기대대로"
 
 # TLC 도구 버전 고정(TLC 1.7.4 · Temurin 25). TLA2TOOLS·JAVA 로 바꿔 쓸 수 있다.
@@ -116,9 +119,9 @@ if [ "$DO_JEST" = 1 ]; then
   echo "-- 반례 재현(jest integration)"
   # shellcheck disable=SC2086
   if pnpm exec jest --config jest.integration.config.js $ROOTS "$WORK/jest/fv-polling.repro.integration.test.tsx" > "$WORK/repro.log" 2>&1; then
-    row "반례 재현(R1~R5)" "기대대로" "$REPRO_BASELINE" ""
+    row "반례 재현(R1~R6)" "기대대로" "$REPRO_BASELINE" ""
   else
-    row "반례 재현(R1~R5)" "어긋남" "$REPRO_BASELINE" "→ 결함이 고쳐졌거나 화면·요청이 바뀜. 로그 아래"
+    row "반례 재현(R1~R6)" "어긋남" "$REPRO_BASELINE" "→ 결함이 고쳐졌거나 화면·요청이 바뀜. 로그 아래"
     grep -v '^\s*at ' "$WORK/repro.log" | grep '✓\|✕' | head
   fi
 fi
@@ -141,8 +144,11 @@ if [ "$DO_TLC" = 1 ]; then
     N=$((N + 1))
     C=$CONSTS
     case $VARIANT in
-      잠금있다면·웹) C=$(echo "$C" | sed -e 's/EntryGuarded = FALSE/EntryGuarded = TRUE/' -e 's/RetryGuarded = FALSE/RetryGuarded = TRUE/') ;;
-      잠금있다면·앱) C=$(echo "$C" | sed -e 's/EntryGuarded = FALSE/EntryGuarded = TRUE/' -e 's/RetryGuarded = FALSE/RetryGuarded = TRUE/' -e 's/Web = TRUE/Web = FALSE/') ;;
+      # 고친 장치를 하나씩 빼 보면 다시 깨지는가 — 그 장치가 속성을 지키는 이유라는 증명(TRIP-1690).
+      잠금없다면) C=$(echo "$C" | sed -e 's/EntryGuarded = TRUE/EntryGuarded = FALSE/' -e 's/RetryGuarded = TRUE/RetryGuarded = FALSE/') ;;
+      앱이면) C=$(echo "$C" | sed -e 's/Web = TRUE/Web = FALSE/') ;;
+      앱·서버세션확인) C=$(echo "$C" | sed -e 's/Web = TRUE/Web = FALSE/' -e 's/ServerChecksSession = FALSE/ServerChecksSession = TRUE/') ;;
+      새로고침재요청이면) C=$(echo "$C" | sed -e 's/ReloadRefires = FALSE/ReloadRefires = TRUE/') ;;
     esac
     CFG=$WORK/run$N.cfg
     printf '%s\nSPECIFICATION Spec\nINVARIANT %s\n' "$C" "$INV" > "$CFG"
