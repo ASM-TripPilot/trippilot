@@ -1015,6 +1015,159 @@ describe('저장 — 직접 쓴 회고를 저장한 뒤 같은 화면', () => {
       expect(screen.queryByText(SAVE_FAILED)).toBeNull();
     });
   });
+
+  // B안(2026-11-01) — 옛 `DailyReflectionScreen.test.tsx`(뷰 단위)가 보던 화면 동작을 서버 응답·오늘 날짜만 바꿔 이 페이지 위에서 본다.
+  describe('화면 동작 — 얼굴별 표면·편집 검증·일차 칩·하단 바 (옛 뷰 단위 흡수)', () => {
+    const BAR = 'reflection-daily-bottom-bar';
+    const GUIDE =
+      '이 날은 기록된 방문이 없어요. 다녀온 곳을 남기면 회고가 채워져요.';
+    const SCENE = '광안리 바다를 오래 봤다';
+
+    function withScenes(item: Reflection, stats = {}): Reflection {
+      const card: ReflectionCard = {
+        ...RULE_CARD,
+        payload: JSON.stringify({
+          ...JSON.parse(RULE_CARD.payload),
+          scenes: [{ layout: 'TEXT', caption: SCENE }],
+        }),
+      };
+      return {
+        ...item,
+        card,
+        draftCard: card,
+        stats: { ...item.stats, ...stats },
+      };
+    }
+
+    function renderOn(today: string) {
+      const client = newTestQueryClient({ gcTime: 0 });
+      function Wrapper({ children }: { children: ReactNode }) {
+        return (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        );
+      }
+      render(
+        <DailyReflectionPage tripId={TRIP_ID} date={DAY} today={today} />,
+        { wrapper: Wrapper }
+      );
+    }
+
+    it('기본 얼굴 — 장면 블록이 있고 [직접 회고 작성]·위치 박스는 없으며, 하단 바는 회고 칸이 선택돼 있다', async () => {
+      serverItems = [withScenes(EXISTING)];
+      renderPage();
+      await waitForNarrative(EXISTING_TEXT);
+
+      expect(
+        within(screen.getByTestId('reflection-daily-scenes')).getByText(SCENE)
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId('reflection-daily-compose')).toBeNull();
+      expect(screen.queryByTestId('reflection-daily-map-notice')).toBeNull();
+      expect(screen.getByTestId(`${BAR}-tab-reflection`)).toBeSelected();
+      expect(screen.getByTestId(`${BAR}-tab-records`)).not.toBeSelected();
+    });
+
+    it('방문이 적은 날 — 위치 박스에 제목과 사유 줄(few-visits)이 따로 있고, 장면 블록도 그린다', async () => {
+      serverItems = [withScenes(EXISTING, { visitCount: 1 })];
+      renderPage();
+
+      const notice = await screen.findByTestId('reflection-daily-map-notice');
+      expect(
+        within(notice).getByTestId(
+          'reflection-daily-map-notice-reason-few-visits'
+        )
+      ).toBeOnTheScreen();
+      expect(within(notice).getAllByText(/\S/).length).toBeGreaterThanOrEqual(
+        2
+      );
+      expect(
+        within(screen.getByTestId('reflection-daily-scenes')).getByText(SCENE)
+      ).toBeOnTheScreen();
+    });
+
+    it('편집 — 상한 4000, 빈 글·공백·서버 안내문은 [저장]이 잠기고 PUT 이 없으며, 편집 중엔 하단 바가 빠졌다가 취소하면 돌아온다', async () => {
+      serverItems = [EXISTING];
+      renderPage();
+      await waitForNarrative(EXISTING_TEXT);
+
+      fireEvent.press(screen.getByTestId('reflection-daily-edit'));
+      const input = screen.getByTestId('reflection-daily-edit-input');
+      expect(input.props.maxLength).toBe(4000);
+      expect(screen.queryByTestId(BAR)).toBeNull();
+
+      for (const text of ['', '   ', GUIDE]) {
+        fireEvent.changeText(input, text);
+        expect(screen.getByTestId('reflection-daily-edit-save')).toBeDisabled();
+        fireEvent.press(screen.getByTestId('reflection-daily-edit-save'));
+      }
+      expect(putCount()).toBe(0);
+
+      fireEvent.changeText(input, WRITTEN);
+      expect(
+        screen.getByTestId('reflection-daily-edit-save')
+      ).not.toBeDisabled();
+
+      fireEvent.press(screen.getByTestId('reflection-daily-edit-cancel'));
+      expect(screen.getByTestId(BAR)).toBeOnTheScreen();
+    });
+
+    it('서버 표시본이 안내문(기록 없는 날)이면 [직접 회고 작성]을 열어도 입력칸이 비어 있다', async () => {
+      const guideCard: ReflectionCard = {
+        ...BASIC_DRAFT,
+        subtitle: GUIDE,
+      };
+      serverItems = [
+        {
+          ...EXISTING,
+          card: guideCard,
+          draftCard: guideCard,
+          stats: { ...EXISTING.stats, visitCount: 0, photoCount: 0 },
+        },
+      ];
+      renderPage();
+      await screen.findByTestId('reflection-daily-empty');
+
+      fireEvent.press(screen.getByTestId('reflection-daily-compose'));
+      expect(
+        screen.getByTestId('reflection-daily-edit-input').props.value
+      ).toBe('');
+    });
+
+    it('일차 칩 — 보는 날만 선택, 오늘 칩엔 "오늘 ·", 다른 날 칩을 누르면 그 날 회고로 바꿔 간다', async () => {
+      serverItems = [EXISTING];
+      renderOn('2026-09-25');
+      await waitForNarrative(EXISTING_TEXT);
+      (router.replace as jest.Mock).mockClear();
+
+      const day1 = screen.getByTestId('reflection-daily-day-tab-1');
+      const day2 = screen.getByTestId('reflection-daily-day-tab-2');
+      expect(day1).toBeSelected();
+      expect(day2).not.toBeSelected();
+      expect(within(day1).getByText('1일차')).toBeOnTheScreen();
+      expect(within(day2).getByText('오늘 · 2일차')).toBeOnTheScreen();
+
+      fireEvent.press(day2);
+      expect(router.replace).toHaveBeenCalledWith(
+        `/trips/${TRIP_ID}/records/reflection/2026-09-25`
+      );
+    });
+
+    it('일차 칩 — 아직 오지 않은 날은 누를 수 없다(오늘이 1일차)', async () => {
+      serverItems = [EXISTING];
+      renderOn(DAY);
+      await waitForNarrative(EXISTING_TEXT);
+      (router.replace as jest.Mock).mockClear();
+
+      expect(
+        within(screen.getByTestId('reflection-daily-day-tab-1')).getByText(
+          '오늘 · 1일차'
+        )
+      ).toBeOnTheScreen();
+      const day2 = screen.getByTestId('reflection-daily-day-tab-2');
+      expect(day2).toBeDisabled();
+      fireEvent.press(day2);
+      expect(router.replace).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려준다 (TRIP-828 · V2.63)', () => {
