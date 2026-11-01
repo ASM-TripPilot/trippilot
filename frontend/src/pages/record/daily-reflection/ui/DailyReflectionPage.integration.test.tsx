@@ -1355,12 +1355,13 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
     expect(selected('sad')).toBe(false);
   });
 
+  // TRIP-1693 — "입력을 마침" 신호는 blur 다. react-native-web 은 onEndEditing 을 부르지 않아 웹에서 메모가 저장되지 않았다.
   it('한 줄은 입력을 마치면 PUT 바디 { shortMemo } 뿐으로 저장된다', async () => {
     renderPage();
     const input = await screen.findByTestId('reflection-daily-memo-input');
 
     fireEvent.changeText(input, '  바다가 좋았다  ');
-    fireEvent(input, 'endEditing');
+    fireEvent(input, 'blur');
 
     await waitFor(() => expect(putBodies).toHaveLength(1));
     expect(putBodies[0]).toEqual({ shortMemo: '바다가 좋았다' });
@@ -1371,9 +1372,9 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
     renderPage();
     const input = await screen.findByTestId('reflection-daily-memo-input');
 
-    fireEvent(input, 'endEditing');
+    fireEvent(input, 'blur');
     fireEvent.changeText(input, ' 바다가 좋았다 ');
-    fireEvent(input, 'endEditing');
+    fireEvent(input, 'blur');
 
     expect(putBodies).toHaveLength(0);
   });
@@ -1384,7 +1385,7 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
     const input = await screen.findByTestId('reflection-daily-memo-input');
 
     fireEvent.changeText(input, '   ');
-    fireEvent(input, 'endEditing');
+    fireEvent(input, 'blur');
 
     await waitFor(() => expect(putBodies).toHaveLength(1));
     expect(putBodies[0]).toEqual({ shortMemo: '' });
@@ -1417,7 +1418,7 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
 
       // 실행
       fireEvent.changeText(input, '바다가 좋았다');
-      fireEvent(input, 'endEditing');
+      fireEvent(input, 'blur');
 
       // 단언
       expect(
@@ -1438,11 +1439,11 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
       renderPage();
       const input = await screen.findByTestId('reflection-daily-memo-input');
       fireEvent.changeText(input, '바다가 좋았다');
-      fireEvent(input, 'endEditing');
+      fireEvent(input, 'blur');
       await waitFor(() => expect(putBodies).toHaveLength(1));
 
       // 실행 — 응답 전에 같은 글로 한 번 더 마침.
-      fireEvent(input, 'endEditing');
+      fireEvent(input, 'blur');
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
       });
@@ -1468,11 +1469,11 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
       renderPage();
       const input = await screen.findByTestId('reflection-daily-memo-input');
       fireEvent.changeText(input, 'A글');
-      fireEvent(input, 'endEditing');
+      fireEvent(input, 'blur');
       await waitFor(() => expect(putBodies).toHaveLength(1));
 
       fireEvent.changeText(input, 'A글 더');
-      fireEvent(input, 'endEditing');
+      fireEvent(input, 'blur');
       putGate = Promise.resolve();
       await act(async () => {
         releasePut();
@@ -1492,9 +1493,9 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
       const input = await screen.findByTestId('reflection-daily-memo-input');
 
       // 실행 ① — 그대로 마침 · 같은 글(앞뒤 공백만 다름)로 마침.
-      fireEvent(input, 'endEditing');
+      fireEvent(input, 'blur');
       fireEvent.changeText(input, ' 바다가 좋았다 ');
-      fireEvent(input, 'endEditing');
+      fireEvent(input, 'blur');
       // "안 바뀜"도 Promise 로 끝난다 — 한 바퀴 흘려야 잘못 건 안내가 보인다(02a ★11).
       await act(async () => {});
 
@@ -1505,7 +1506,7 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
       // 실행 ② — 짝: 다른 글(센티널).
       const again = screen.getByTestId('reflection-daily-memo-input');
       fireEvent.changeText(again, '노을도 좋았다');
-      fireEvent(again, 'endEditing');
+      fireEvent(again, 'blur');
 
       // 단언 ② — 이번엔 저장되고 안내가 뜬다.
       expect(
@@ -1522,7 +1523,7 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
 
       // 실행
       fireEvent.changeText(input, '바다가 좋았다');
-      fireEvent(input, 'endEditing');
+      fireEvent(input, 'blur');
       expect(await screen.findByText(FAILED)).toBeOnTheScreen();
       await act(async () => {});
 
@@ -1549,7 +1550,7 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
       // 실행 ② — 짝: 한 줄 저장.
       const input = screen.getByTestId('reflection-daily-memo-input');
       fireEvent.changeText(input, '바다가 좋았다');
-      fireEvent(input, 'endEditing');
+      fireEvent(input, 'blur');
 
       // 단언 ②
       expect(
