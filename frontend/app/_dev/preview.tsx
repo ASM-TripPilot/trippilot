@@ -5632,7 +5632,7 @@ export const PREVIEW_STATES: PreviewState[] = [
             { key: 'here', title: '서울특별시 숙소', candidates: [jw] },
             {
               key: 'other',
-              title: '다른 지역 · 위치 확인 안 됨',
+              title: '위치 확인 안 됨',
               candidates: others,
             },
           ]}
@@ -5645,7 +5645,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       );
     },
   },
-  // g02 숙소 선택 시트 그 밤 지역 0곳(TRIP-1273 B-14) — QA 재현: 부산 밤에 서울 숙소만 2곳. 안내 문구는
+  // g02 숙소 선택 시트 그 밤 지역 0곳(TRIP-1273 B-14) — QA 재현: 부산 밤에 서울 숙소만 2곳(지금은 후보에서 빠져 0건 + 안내만). 안내 문구는
   // Figma 노드가 없는 발명 문구(01b Q2)라 6-b 육안이 "섹션 위에서 튀지 않나·시트 안에 보이나"를 보는 자리.
   {
     key: 'trip-new-step2-staysheet-region-empty',
@@ -5653,30 +5653,12 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'g02 · 숙소 선택 시트 region-empty',
     login: null,
     render: () => {
-      const stay = (
-        savedStayId: string,
-        name: string
-      ): StaySelectCandidate => ({
-        savedStayId,
-        name,
-        coordConfirmed: true,
-        linkedTripIds: [],
-        checkIn: null,
-        checkOut: null,
-        registerRoute: 'MAP_SEARCH',
-        createdAt: '2026-08-01T00:00:00Z',
-        updatedAt: '2026-08-01T00:00:00Z',
-      });
-      const seoul = [
-        stay('jongno', '종로 인 호텔'),
-        stay('jw', 'JW 메리어트 동대문'),
-      ];
+      // TRIP-1703 — 전부 지역 밖이면 후보가 0건으로 빠지고 안내만 남는다(「저장한 숙소가 아직 없어요」 없음).
       return (
         <StaySelectSheet
           title="2번째 밤 · 부산광역시"
           dateLabel="9/27(일)"
-          candidates={seoul}
-          sections={[{ key: 'other', title: '다른 지역', candidates: seoul }]}
+          candidates={[]}
           regionNotice="부산광역시에 저장한 숙소가 없어요"
           selectedSavedStayId={null}
           onSelect={noop}

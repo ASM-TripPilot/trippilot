@@ -5,6 +5,7 @@ import { isAxiosError } from 'axios';
 import { nightlyBaseCards, toBaseSections } from '../model/baseSections';
 import { sigunguLabel } from '@/features/trip';
 import {
+  staySheetCandidates,
   staySheetRegionNotice,
   staySheetSections,
 } from '../model/staySheetSections';
@@ -240,7 +241,15 @@ export function BaseNightsFlow({
     const chosen = savedStayList.find(
       (stay) => stay.savedStayId === selectedSavedStayId
     );
+    // TRIP-1703 — 고른 뒤 주소가 지역 밖으로 판명된 숙소(응답 전 평면에서 골랐던 경우)는 요청 없이 끝낸다.
+    // 선택은 지우지 않는다 — 지우면 [지정]이 꺼져 이 문구가 뜰 길이 없다.
+    const outside =
+      openCard !== undefined &&
+      chosen !== undefined &&
+      staySheetCandidates([chosen], stayAddresses, openCard.region).length ===
+        0;
     if (
+      outside ||
       isOptimisticSavedStayId(selectedSavedStayId) ||
       chosen?.coordConfirmed === false
     ) {
@@ -274,9 +283,14 @@ export function BaseNightsFlow({
     variant === 'error'
       ? undefined
       : cards.find((card) => card.nightNumber === openNight);
+  // TRIP-1703 — 주소가 확인돼 그 밤 지역 밖인 숙소는 후보에서 뺀다(평면·섹션 모두 이 목록). 안내 문구만
+  // 거르기 전 목록으로 판정한다 — 걸러 넘기면 전부 지역 밖일 때 안내가 안 뜬다.
+  const sheetStays = openCard
+    ? staySheetCandidates(savedStayList, stayAddresses, openCard.region)
+    : savedStayList;
   // TRIP-1074 — 섹션 판정용으로 이미 받은 주소에서 카드 동네 라벨(시군구)을 붙인다(새 요청 0). 평면
   // 목록(`candidates`)과 섹션(`section.candidates`)이 따로 그려지므로 둘 다 이 목록을 넘긴다.
-  const candidates: StaySelectCandidate[] = savedStayList.map((stay) => {
+  const candidates: StaySelectCandidate[] = sheetStays.map((stay) => {
     const address = stayAddresses[stay.savedStayId];
     const region =
       address?.status === 'known' ? sigunguLabel(address.address) : null;
@@ -323,7 +337,7 @@ export function BaseNightsFlow({
             undefined
           }
           regionNotice={staySheetRegionNotice(
-            candidates,
+            savedStayList,
             stayAddresses,
             openCard.region
           )}
