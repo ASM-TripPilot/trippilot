@@ -1124,7 +1124,7 @@ describe('탈출구 — 뒤로·일정 만들기', () => {
       fireEvent.press(screen.getByTestId('itinerary-view-back'));
 
       // 단언 — 딥링크 폴백 목적지(홈 탭) 자체를 잠근다(확정 얼굴의 [돌아가기]만 일정 탭 목록으로 간다).
-      expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+      expect(mockReplace).toHaveBeenCalledWith('/itinerary'); // TRIP-1685 — 홈 → 일정 탭
       // 침묵 no-op도, back+replace 이중 호출도 아님 — replace만.
       expect(mockBack).not.toHaveBeenCalled();
     });
@@ -1154,7 +1154,7 @@ describe('탈출구 — 뒤로·일정 만들기', () => {
 
       // 실행 + 단언.
       fireEvent.press(screen.getByTestId('sheet-daychip-back'));
-      expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+      expect(mockReplace).toHaveBeenCalledWith('/itinerary'); // TRIP-1685 — 홈 → 일정 탭
       expect(mockBack).not.toHaveBeenCalled();
     });
   });
@@ -2290,7 +2290,7 @@ describe('삭제된 여행 안내', () => {
       fireEvent.press(screen.getByTestId(BACK));
 
       // 단언 — 침묵 무동작도, back+replace 이중 호출도 아니다.
-      expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+      expect(mockReplace).toHaveBeenCalledWith('/itinerary'); // TRIP-1685 — 홈 → 일정 탭
       expect(mockBack).not.toHaveBeenCalled();
     });
   });

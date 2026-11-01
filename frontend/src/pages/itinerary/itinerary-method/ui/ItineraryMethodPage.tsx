@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 
@@ -77,7 +78,7 @@ export function ItineraryMethodPage({
 
   return (
     <MethodPickerScreen
-      onBack={() => router.back()}
+      onBack={() => goBackOr(router, `/trips/${tripId}/itinerary`)}
       // TRIP-1032: 생성 중이거나 아직 모르면(로딩 — copick 와 같은 fail-safe) 확인부터. 그 밖엔 확인 없이
       // 곧장 h05 — 완성 일정 덮어쓰기 확인은 원래 완전 AI 에 없다(브리프 맹점 7, 이번 범위 밖).
       onPressFullAi={() => {
