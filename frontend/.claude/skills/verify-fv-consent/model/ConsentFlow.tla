@@ -57,7 +57,7 @@ ShownPers(d) ==
   IF data[d]["pers"] = "none" THEN "off" ELSE data[d]["pers"]
 
 \* pages/settings/settings/ui/SettingsPage.tsx → settingsSections.ts consentChip(
-\*   locationConsent.isError ? undefined : locationConsent.data?.gpsRecordingOptIn) — 다시 받기 실패면 칩을 숨긴다
+\*   locationConsent.isError ? undefined : locationConsent.data?.legalConsent) — 다시 받기 실패면 칩을 숨긴다(TRIP-1696: L2 로 통일)
 \*   (TRIP-1689 FV-CONSENT-03). 개인화 `사용 중` 은 ShownPers 와 같은 캐시·같은 식.
 ChipLoc(d) == IF err[d]["loc"] \/ data[d]["loc"] = "none" THEN "hidden" ELSE data[d]["loc"]
 

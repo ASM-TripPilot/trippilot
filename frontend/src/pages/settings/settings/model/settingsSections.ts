@@ -20,7 +20,7 @@ export interface SettingsInput {
   email: string | null;
   /** GET /me/preferences. 없으면(응답 전·실패) 취향 행은 값 없음. */
   preferences?: PreferenceView;
-  /** GET /me/location-consent 의 gpsRecordingOptIn(L3 — 행 라벨과 같은 것). 없으면 칩 없음(D4). */
+  /** GET /me/location-consent 의 legalConsent(허브·l06 과 같은 값, TRIP-1696). 없으면 칩 없음(D4). */
   locationConsent?: boolean;
   /** 개인화 동의(reason !== CONSENT_MISSING). true 일 때만 `사용 중`(D3). */
   personalizationOn?: boolean;

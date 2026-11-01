@@ -326,7 +326,10 @@ export function LiveItineraryPage({
     })),
     visits:
       liveDate === today ? automationVisitRefs(visits.data?.visits ?? []) : [],
-    consentOn: locationConsent.data?.legalConsent === true,
+    // 조회 전·실패면 null(모름) — false 로 넘기면 훅이 철회로 판정해 강등·기록 삭제를 한다(TRIP-1696).
+    consentOn: locationConsent.data
+      ? locationConsent.data.legalConsent === true
+      : null,
     onHub: true,
   });
   // [켜기]·[나중에] 처리 중 연타 잠금 + 이 화면에서 한 번 닫은 설명은 판정이 늦게 따라와도 다시 그리지 않는다.

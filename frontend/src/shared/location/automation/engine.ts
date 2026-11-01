@@ -72,6 +72,15 @@ export interface ArmingCallInput {
 const today = (deps: EngineDeps) => seoulDate(new Date(deps.now()));
 const iso = (deps: EngineDeps) => new Date(deps.now()).toISOString();
 
+/**
+ * 지금 문맥 여행의 안내만 돌려준다(TRIP-1696). 저장 슬롯은 하나라 다른 여행 허브를 열어도 지우지 않고 가린다 —
+ * 지우면 원래 여행으로 돌아왔을 때 "자동 기록이 꺼진 이유" 줄이 사라진다.
+ */
+export function noticeFor(state: AutomationState): AutomationNotice | null {
+  const { notice, ctx } = state;
+  return notice && ctx && notice.tripId === ctx.tripId ? notice : null;
+}
+
 const status = (
   state: AutomationState,
   armingState: ArmingState,
@@ -79,7 +88,7 @@ const status = (
 ): EngineStatus => ({
   state: armingState,
   reason,
-  notice: state.notice,
+  notice: noticeFor(state),
   droppedCount: state.droppedCount,
 });
 
@@ -285,7 +294,8 @@ async function degrade(
   return {
     ...state,
     intervals: [],
-    notice: wasArmed || force ? { kind: 'degraded', reason } : state.notice,
+    notice:
+      wasArmed || force ? { kind: 'degraded', reason, tripId } : state.notice,
   };
 }
 
@@ -432,7 +442,8 @@ export function evaluate(
     } else if (state.intervals.length > 0) {
       state = await degrade(deps, state, arming.reason);
     }
-    // 위치 동의 철회 즉시 원시 표본·미전송 결과를 지운다(BR-U10-42).
+    // 위치 동의 철회 즉시 원시 표본·미전송 결과를 지운다(BR-U10-42). 무장 여부와 무관하다 — 무장이 풀린 뒤 남은
+    // 전날 경로도 철회 뒤엔 올리면 안 된다. ctx.consentOn 은 조회가 끝난 값만 온다(훅이 "모름"이면 판정을 보류, TRIP-1696).
     if (!ctx.consentOn) state = wipeLocal(deps, state);
     deps.store.save(state);
     return status(state, armingState, reason);
@@ -570,7 +581,10 @@ export function uploadPendingRoutes(deps: EngineDeps): Promise<void> {
         const expired = date > ctx.endDate || day > addDays(ctx.endDate, 1);
         if (expired) {
           deps.store.removeRaw(date);
-          state = { ...state, notice: { kind: 'route-expired', reason: date } };
+          state = {
+            ...state,
+            notice: { kind: 'route-expired', reason: date, tripId: ctx.tripId },
+          };
         } else {
           keep.push(date);
         }
