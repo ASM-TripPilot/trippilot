@@ -167,6 +167,8 @@ let mockAutomation: MockAutomation | null = null;
 const mockAutomationLater = jest.fn(async () => undefined);
 const mockAutomationEnable = jest.fn(async () => undefined);
 const mockAutomationDismiss = jest.fn(async () => undefined);
+// TRIP-1696 — 페이지가 훅에 넘긴 consentOn 을 렌더마다 적는다(조회 전 null 인지 본다).
+const mockAutomationConsent: unknown[] = [];
 // 내부 소비처(useTripRoutes 등)가 같은 판독을 보게 플래그 모듈도 같은 값으로 묶는다.
 jest.mock('@/shared/location/automation/flag', () => ({
   isLocationAutomationEnabled: () => mockAutomation !== null,
@@ -177,16 +179,17 @@ jest.mock('@/shared/location', () => {
     ...actual,
     isLocationAutomationEnabled: () =>
       mockAutomation !== null || actual.isLocationAutomationEnabled(),
-    useLocationAutomation: (input: unknown) =>
+    useLocationAutomation: (input: { consentOn?: unknown }) =>
       mockAutomation
-        ? {
+        ? (mockAutomationConsent.push(input.consentOn),
+          {
             ...mockAutomation,
             reason: 'explainer',
             enabled: true,
             enable: mockAutomationEnable,
             later: mockAutomationLater,
             dismissNotice: mockAutomationDismiss,
-          }
+          })
         : actual.useLocationAutomation(input),
   };
 });
@@ -618,6 +621,66 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       mockAutomationLater.mockClear();
       mockAutomationEnable.mockClear();
       mockAutomationDismiss.mockClear();
+      mockAutomationConsent.length = 0;
+    });
+
+    // TRIP-1696 AC1 — 조회가 끝나기 전엔 "동의 안 함(false)"이 아니라 "모름(null)"을 넘긴다. 훅은 null 이면 판정을 보류한다.
+    it('U7 동의 조회 전엔 consentOn=null(false 아님), legalConsent=true 가 오면 true 를 넘긴다', async () => {
+      mockAutomation = { state: 'MANUAL', notice: null, droppedCount: 0 };
+      let release: () => void = () => undefined;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      server.use(
+        itineraryOk(),
+        tripHandler(),
+        visitsHandler(),
+        http.get(`${BASE}/me/location-consent`, async () => {
+          await gate;
+          return HttpResponse.json({ legalConsent: true });
+        })
+      );
+      await renderActive();
+
+      // 준비 확인 — 조회는 나갔고 아직 안 끝났다.
+      await waitFor(() =>
+        expect(hitCount('GET /api/v1/me/location-consent')).toBe(1)
+      );
+      expect(mockAutomationConsent.length).toBeGreaterThan(0);
+      expect(mockAutomationConsent).not.toContain(false);
+      expect(mockAutomationConsent[mockAutomationConsent.length - 1]).toBe(
+        null
+      );
+
+      await act(async () => {
+        release();
+      });
+      await waitFor(() =>
+        expect(mockAutomationConsent[mockAutomationConsent.length - 1]).toBe(
+          true
+        )
+      );
+      expect(mockAutomationConsent).not.toContain(false);
+    });
+
+    // TRIP-1696 AC5 짝 — 실제 철회(legalConsent=false)는 false 로 넘겨야 훅이 강등·삭제를 한다(null 로 접으면 보류된다).
+    it('U8 legalConsent=false 응답이면 consentOn=false 를 넘긴다', async () => {
+      mockAutomation = { state: 'MANUAL', notice: null, droppedCount: 0 };
+      server.use(
+        itineraryOk(),
+        tripHandler(),
+        visitsHandler(),
+        http.get(`${BASE}/me/location-consent`, () =>
+          HttpResponse.json({ legalConsent: false })
+        )
+      );
+      await renderActive();
+
+      await waitFor(() =>
+        expect(mockAutomationConsent[mockAutomationConsent.length - 1]).toBe(
+          false
+        )
+      );
     });
 
     it('U1 플래그 OFF(기본) → 설명·안내 없음, 자동 기록 훅 효과 0(BR-U10-07) — 동의 조회는 내 위치 표시 몫으로 1회(TRIP-1535)', async () => {

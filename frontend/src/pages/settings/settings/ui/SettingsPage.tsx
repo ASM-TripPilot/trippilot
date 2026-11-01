@@ -277,9 +277,10 @@ export function SettingsPage(): ReactElement {
           email: account.data?.email ?? null,
           preferences: preferences.data,
           // 다시 받기 실패면 캐시가 옛 값이다 — 칩을 숨긴다(TRIP-1689 FV-CONSENT-03, D4).
+          // 값은 legalConsent — 허브(i01)·위치정보 화면(l06)과 같은 필드(TRIP-1696 사용자 결정).
           locationConsent: locationConsent.isError
             ? undefined
-            : locationConsent.data?.gpsRecordingOptIn,
+            : locationConsent.data?.legalConsent,
           pushAvailable: isPushSupported(),
           personalizationOn:
             personalizationReason === undefined
