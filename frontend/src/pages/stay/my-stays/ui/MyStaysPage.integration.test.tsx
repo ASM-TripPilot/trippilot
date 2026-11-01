@@ -964,4 +964,110 @@ describe('실 화면 + msw — 거점 변경·출처 칩 (옛 .release)', () => 
       }
     );
   });
+
+  // B안(2026-11-01) — 지운 MyStaysScreen.test.tsx 가 props 로 만들던 얼굴을 응답 모양으로 만든다.
+  // 주소 줄(location) 단언은 옮기지 않았다 — 페이지가 늘 빈 주소를 내려(SavedStay 에 주소 필드가 없다) 실앱에 없는 길이다.
+  describe('화면 얼굴 — 응답 모양마다 무엇을 그리나', () => {
+    /** 미등록(거점 없음)·날짜 없음·OTA 출처·예약번호 비어 있음. */
+    const OTA_STAY: SavedStay = {
+      ...STAY,
+      savedStayId: 's2',
+      name: '남포동 게스트하우스',
+      linkedTripIds: [],
+      checkIn: null,
+      checkOut: null,
+      externalSource: 'NAVER',
+      externalId: 'N-2',
+      memo: null,
+    };
+
+    function serveStays(stays: SavedStay[]): void {
+      installServer();
+      server.use(
+        http.get(`${BASE}/saved-stays`, () => HttpResponse.json(stays))
+      );
+    }
+
+    it('등록 행은 이름·날짜·배지·"거점 변경"을, 미등록 행은 날짜·배지·버튼 없이 출처·메모·"연결된 여행 없음"을 그린다', async () => {
+      // 준비
+      serveStays([STAY, OTA_STAY]);
+
+      // 실행
+      renderPage();
+      await waitAssignedRow();
+
+      // 단언 ① — 등록 행(s1). 버튼 글자는 정확히 "거점 변경"이고 "›" 조각이 따로 없다.
+      expect(within(row()).getByText('해운대 오션뷰')).toBeOnTheScreen();
+      expect(within(row()).getByText('6.10 ~ 6.13')).toBeOnTheScreen();
+      expect(
+        within(screen.getByRole('button', { name: '거점 변경' })).getByText(
+          '거점 변경'
+        )
+      ).toBeOnTheScreen();
+      expect(screen.queryAllByText(/›/)).toHaveLength(0);
+
+      // 단언 ② — 미등록 행(s2). 행은 있고, 배지·버튼·날짜(대체 문구 포함)는 없다.
+      const other = screen.getByTestId('my-stays-row-s2');
+      expect(within(other).getByText('남포동 게스트하우스')).toBeOnTheScreen();
+      expect(within(other).getByText('예약 사이트')).toBeOnTheScreen();
+      expect(within(other).getByText('예약번호 미입력')).toBeOnTheScreen();
+      expect(within(other).getByText('연결된 여행 없음')).toBeOnTheScreen();
+      expect(within(other).queryByText('거점')).toBeNull();
+      expect(within(other).queryAllByRole('button')).toHaveLength(0);
+      expect(
+        within(other).queryAllByText(/\d+\.\d+\s*~|날짜 없음|날짜 미입력/)
+      ).toHaveLength(0);
+    });
+
+    it('좌표 미확정 숙소의 "거점 변경"은 잠겨 있고 눌러도 거점 화면으로 가지 않는다 (INV-U1-08)', async () => {
+      // 준비
+      serveStays([{ ...STAY, coordConfirmed: false }]);
+      renderPage();
+      await waitAssignedRow();
+
+      // 실행
+      const toggle = screen.getByTestId('my-stays-base-toggle-s1');
+      fireEvent.press(toggle);
+
+      // 단언 — 짝(확정이면 push 1회)은 위 AC-6 이 본다.
+      expect(toggle).toBeDisabled();
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('저장 숙소가 0건이면 제목 없는 안내와 "숙소 탐색"을 그리고, 누르면 숙소 탐색으로 간다 (US-NOTIF-06)', async () => {
+      // 준비
+      serveStays([]);
+
+      // 실행
+      renderPage();
+      const empty = await screen.findByTestId('my-stays-empty');
+      await settleNetwork();
+
+      // 단언 — 문구는 완전 일치, 옛 제목은 없다.
+      expect(
+        within(empty).getByText(
+          '숙소를 탐색하고 등록하면\n일정을 만들 수 있어요'
+        )
+      ).toBeOnTheScreen();
+      expect(screen.queryByText('아직 등록된 숙소가 없어요')).toBeNull();
+      const explore = screen.getByTestId('my-stays-explore');
+      expect(within(explore).getByText('숙소 탐색')).toBeOnTheScreen();
+
+      fireEvent.press(explore);
+      expect(mockPush.mock.calls).toEqual([['/stays']]);
+    });
+
+    it('앱바 뒤로는 "뒤로" 버튼으로 읽히고 누르면 이전 화면으로 간다 (TRIP-991)', async () => {
+      // 준비
+      installServer();
+      renderPage();
+      await waitAssignedRow();
+
+      // 실행
+      fireEvent.press(screen.getByRole('button', { name: '뒤로' }));
+
+      // 단언
+      expect(mockBack).toHaveBeenCalledTimes(1);
+    });
+  });
 });
