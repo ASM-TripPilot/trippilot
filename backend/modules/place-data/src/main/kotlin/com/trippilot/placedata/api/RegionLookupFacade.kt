@@ -63,6 +63,9 @@ interface RegionLookupFacade {
      * 못 정하면 null — 가까운 지역으로 밀어 넣지 않는다. 기본 구현 null = 판정 불가(지역 대역 테스트용, 소비측은 fail-open).
      */
     fun codeOfAddress(address: String): String? = null
+
+    /** 코드 → 사람이 읽는 이름(시도 `부산광역시` · 시군구 `부산광역시 동구`). 카탈로그에 없으면 null(TRIP-1706 회고 서술 지역). */
+    fun displayNameOfCode(regionCode: String): String? = null
 }
 
 /** 지역 대표 좌표(api-safe). */

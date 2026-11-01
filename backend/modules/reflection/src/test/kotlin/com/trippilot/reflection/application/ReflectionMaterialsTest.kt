@@ -67,7 +67,7 @@ class ReflectionMaterialsTest : StringSpec({
 
     fun changeLogOf(entries: List<ChangeLogEntryView>) = CountingChangeLog(entries)
 
-    fun materials(preferences: PreferenceFacade, changeLogs: ChangeLogFacade) = ReflectionMaterials(preferences, changeLogs)
+    fun materials(preferences: PreferenceFacade, changeLogs: ChangeLogFacade) = ReflectionMaterials(preferences, changeLogs, RegionNames)
 
     fun snapshot(vararg days: Pair<LocalDate, UUID>) = ItinerarySnapshotView(
         days.map { (date, poi) -> DaySnapshotView(date, listOf(SlotSnapshotView(poi, LocalTime.NOON, LocalTime.of(13, 0), false, false))) },
@@ -91,6 +91,16 @@ class ReflectionMaterialsTest : StringSpec({
         m.regionOn(context(), day2) shouldBe "부산"
         m.regionOn(context(), start.plusDays(3)) shouldBe "부산" // 박수 합을 넘는 체크아웃일은 마지막 목적지
         m.regionOn(null, day2) shouldBe ""
+    }
+
+    // TRIP-1706 — 서울 여행 1일차에 부산 장소(피아크)만 갔는데 회고가 「서울특별시에서 2곳」이라고 썼다.
+    "방문이 전부 그날 목적지 밖이면 서술 지역은 실제 방문 지역이다 — 여행 제목이 아니다" {
+        val m = materials(preferencesOf(prefs()), changeLogOf(emptyList()))
+        val seoul = context().copy(destinationRefs = listOf(TripDestinationRef("서울특별시", "11", 3)))
+        m.regionOn(seoul, start, listOf("26170", "26170", "11110")) shouldBe "서울특별시" // 하나라도 안이면 목적지
+        m.regionOn(seoul, start, listOf("26170", "26170", null)) shouldBe "부산광역시 동구" // 전부 밖 → 가장 많은 방문 지역
+        m.regionOn(seoul, start, listOf(null, null)) shouldBe "서울특별시" // 방문 코드를 모르면 목적지
+        m.regionOn(seoul, start, listOf("99999")) shouldBe "" // 밖인데 이름을 모르면 지어내지 않는다(규칙 카드로)
     }
 
     /** #995 · BR-U1-38 이 고친 결함이 회고로 되살아나지 않는다 — 계정엔 "액티비티", 이 여행에선 "미식"을 골랐다. */
@@ -259,7 +269,7 @@ class ReflectionMaterialsTest : StringSpec({
         }
         val surfaces = object : PoiSurfaceFacade {
             override fun findSurfaces(poiIds: Collection<UUID>) = poiIds.associateWith {
-                PoiSurfaceView(it, names.getValue(it), 35.1, 129.1, "자연", "NATURE", null, null, emptyList())
+                PoiSurfaceView(it, names.getValue(it), 35.1, 129.1, "자연", "NATURE", null, null, emptyList(), regionCode = "26170")
             }
             override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
         }
@@ -303,6 +313,17 @@ class ReflectionMaterialsTest : StringSpec({
         input.toString().contains("광안리") shouldBe false
     }
 
+    "서울 여행인데 부산 장소만 간 날 — AI 요청의 지역은 방문 지역이다(TRIP-1706)" {
+        val agent = CapturingAgent()
+        dailyService(
+            listOf(visit(went, skipped = false)),
+            context().copy(destinationRefs = listOf(TripDestinationRef("서울특별시", "11", 3))),
+            preferencesOf(prefs()), changeLogOf(emptyList()), agent,
+        ).generateDaily(acc, tripId, day2)
+
+        agent.sent!!.region shouldBe "부산광역시 동구"
+    }
+
     /** 상대가 받지 않을 입력(실을 방문 0곳 · 목적지 없음)이면 AI 도, 그 재료(취향·변경 이력)도 부르지 않는다 — 개발 서버 회고 호출의 절반이 그런 날이었다. */
     "부르지 않을 호출을 위해 재료를 읽지 않는다 — 방문이 전부 건너뛴 날·목적지 없는 여행" {
         for ((visits, ctx) in listOf(
@@ -321,3 +342,12 @@ class ReflectionMaterialsTest : StringSpec({
         }
     }
 })
+
+/** 지역 코드 → 표시 이름 대역(부산 동구만 안다). 다른 회고 테스트도 쓴다. */
+internal object RegionNames : com.trippilot.placedata.api.RegionLookupFacade {
+    override fun codesOf(regionName: String) = emptyList<String>()
+    override fun isSelectableCode(regionCode: String) = true
+    override fun centerOf(regionName: String): com.trippilot.placedata.api.RegionCenter? = null
+    override fun centerOfCode(regionCode: String): com.trippilot.placedata.api.RegionCenter? = null
+    override fun displayNameOfCode(regionCode: String): String? = if (regionCode == "26170") "부산광역시 동구" else null
+}

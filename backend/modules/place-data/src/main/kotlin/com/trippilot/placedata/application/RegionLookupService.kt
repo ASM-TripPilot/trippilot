@@ -33,6 +33,9 @@ class RegionLookupService(
     // ponytail: 거점 배정마다 전 카탈로그(+POI 집계 1회)를 읽는다 — 배정은 사람 손 한 번이라 감당한다. 잦은 경로에 붙이면 시도·시군구만 읽는 조회로 바꾼다.
     override fun codeOfAddress(address: String): String? = RegionResolver.resolve(address, catalog.find(null, null))
 
+    override fun displayNameOfCode(regionCode: String): String? =
+        catalog.findByCode(regionCode)?.let { if (it.level == RegionLevel.SIGUNGU) "${it.sidoName} ${it.name}" else it.name }
+
     override fun centerOf(regionName: String): RegionCenter? =
         catalog.findExact(regionName).firstNotNullOfOrNull { r ->
             val lat = r.lat

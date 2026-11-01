@@ -202,7 +202,7 @@ class TripSummaryNarratorTest : StringSpec({
         }
         val narrator = TripSummaryNarrator(
             owners, trips, archive, surfaces, summaries, agent, ReflectionCardCodec(ObjectMapper()),
-            ReflectionMaterials(preferences, changeLog), ReflectionMetrics(registry), ObjectMapper(),
+            ReflectionMaterials(preferences, changeLog, RegionNames), ReflectionMetrics(registry), ObjectMapper(),
             TransactionOperations.withoutTransaction(), executor,
         )
         return Fixture(summaries, agent, executor, registry, narrator, clock)

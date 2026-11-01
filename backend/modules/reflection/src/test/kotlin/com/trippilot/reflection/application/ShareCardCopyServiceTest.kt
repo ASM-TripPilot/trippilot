@@ -124,7 +124,7 @@ class ShareCardCopyServiceTest : StringSpec({
             override fun findPreferences(accountId: UUID) =
                 PreferenceSnapshot(listOf("사진"), emptyList(), emptyList(), emptyList(), null, emptyList(), false, null)
         }
-        return ShareCardCopyService(trips, archive, surfaces, summaries, ReflectionMaterials(preferences, changeLogs), copier, usage, properties, clock)
+        return ShareCardCopyService(trips, archive, surfaces, summaries, ReflectionMaterials(preferences, changeLogs, RegionNames), copier, usage, properties, clock)
     }
 
     val aiCopy = ShareCardCopy("바다와 골목을 담은 사흘", listOf("#부산여행", "#해운대"), isFallback = false)
