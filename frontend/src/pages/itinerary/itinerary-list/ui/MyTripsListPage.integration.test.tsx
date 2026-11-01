@@ -996,6 +996,8 @@ describe('TRIP-1615 · GET /trips 조회 실패 — "여행 없음"으로 접지
     expect(screen.queryByTestId(ERROR)).toBeNull();
     expect(screen.queryByTestId(RETRY)).toBeNull();
     expect(count(TRIPS_GET)).toBe(1);
+    // 빈 얼굴엔 정렬 줄이 없다(옛 MyTripsListScreen.test 이전 — B안).
+    expect(screen.queryByTestId('my-trips-sort')).toBeNull();
   });
 });
 
@@ -2339,6 +2341,8 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
       renderPage();
       await loaded();
       expect(trigger()).toHaveTextContent('최신순');
+      // 정렬 줄이 곧 버튼이다(스크린리더 역할 — 옛 MyTripsListScreen.test 이전).
+      expect(screen.getAllByRole('button')).toContain(trigger());
       expect(screen.queryByTestId('my-trips-sort-sheet')).toBeNull();
       expect(cardOrder()).toEqual(RECENT);
 
