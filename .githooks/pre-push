@@ -1,0 +1,11 @@
+#!/bin/sh
+# pre-push(추적본): 구조 지도 생성물 드리프트를 push 전에 잡는다 — CI `structure map drift gate` 와 같은 검사.
+# 파일 추가·삭제·export 변경 뒤 structure-index --write 를 빠뜨리면 실패하고, 재생성된 docs/structure.generated.md 가
+# 작업 트리에 남는다 → 그 파일을 커밋하고 다시 push. 이 훅은 `git config core.hooksPath .githooks` 를 쓴 사람에게만 돈다.
+# 긴급 우회(비권장): git push --no-verify
+unset GIT_DIR GIT_WORK_TREE GIT_PREFIX
+cd "$(git rev-parse --show-toplevel)/frontend" || exit 1
+pnpm -s structure:drift || {
+  echo "[pre-push] ❌ docs/structure.generated.md 가 커밋본과 다르다 — 재생성된 파일을 커밋하고 다시 push"
+  exit 1
+}
