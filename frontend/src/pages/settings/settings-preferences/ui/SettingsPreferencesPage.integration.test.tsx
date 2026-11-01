@@ -34,7 +34,7 @@ const { back: mockBack, push: mockPush } = routerSpies;
 jest.mock('expo-router', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('@/test-support/expoRouterMock').createExpoRouterMock({
-    useRouter: ['push', 'back'],
+    useRouter: ['push', 'back', 'replace', 'canGoBack'],
     router: ['push', 'back'],
   })
 );

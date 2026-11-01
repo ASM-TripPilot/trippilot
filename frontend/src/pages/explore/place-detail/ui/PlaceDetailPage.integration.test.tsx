@@ -280,7 +280,8 @@ describe('D6 · 뒤로가기 딥링크 탈출', () => {
     renderDetail('p1');
     const backs = await screen.findAllByTestId('explore-place-back');
     fireEvent.press(backs[backs.length - 1]);
-    expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+    // TRIP-1685 — 폴백이 홈(/(tabs))에서 탐색 탭으로 바뀌었다(장소 상세의 입구는 탐색).
+    expect(mockReplace).toHaveBeenCalledWith('/explore');
     expect(mockBack).not.toHaveBeenCalled();
   });
 });
@@ -422,7 +423,7 @@ describe('D8·D9·D10 · 얼굴 판정', () => {
 
     fireEvent.press(screen.getByTestId('explore-place-error-back'));
 
-    expect(mockReplace.mock.calls).toEqual([['/(tabs)']]);
+    expect(mockReplace.mock.calls).toEqual([['/explore']]);
     expect(mockBack).not.toHaveBeenCalled();
   });
 });
@@ -492,7 +493,7 @@ describe('🔴 1015-D · d06 장소 없음 얼굴의 뒤로 (explore-place-notfo
 
     fireEvent.press(screen.getByTestId('explore-place-notfound-back'));
 
-    expect(mockReplace.mock.calls).toEqual([['/(tabs)']]);
+    expect(mockReplace.mock.calls).toEqual([['/explore']]);
     expect(mockBack).not.toHaveBeenCalled();
   });
 });

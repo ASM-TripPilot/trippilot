@@ -1,6 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SHARE_FORMATS, buildShareCard } from '@/features/reflection';
@@ -61,7 +62,7 @@ export function ShareCardPage({ tripId }: ShareCardPageProps): ReactElement {
   const trip = useGetTripsTripId(tripId);
 
   const handleBack = () => {
-    if (router.canGoBack()) router.back();
+    goBackOr(router, `/trips/${tripId}/records`);
   };
 
   if (summary.isPending || trip.isPending) {

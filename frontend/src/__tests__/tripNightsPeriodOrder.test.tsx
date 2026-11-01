@@ -35,10 +35,11 @@ jest.mock('expo-router', () => {
   const back = jest.fn();
   const replace = jest.fn();
   const dismissTo = jest.fn();
+  const canGoBack = jest.fn(() => true);
   return {
     __esModule: true,
-    useRouter: () => ({ push, back, replace, dismissTo }),
-    router: { push, back, replace, dismissTo },
+    useRouter: () => ({ push, back, replace, dismissTo, canGoBack }),
+    router: { push, back, replace, dismissTo, canGoBack },
     useLocalSearchParams: () => ({ ...mockParams }),
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     useNavigation: require('@/test-support/preventRemoveMock').useNavigation,

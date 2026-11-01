@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { violationNotice } from '@/entities/itinerary-slot';
@@ -60,13 +62,9 @@ import { NoBaseNoticeCard } from './NoBaseNoticeCard';
  *     쿼리는 리렌더에 다시 나가지 않는다. Zustand 는 pages 층 금지라 로컬 상태로 든다.
  *  4. **탈출구는 얼굴 전부에 있다**(TRIP-402) — 삭제된 여행(TRIP-1075)·loading·notFound·failed·listed 어디에 착지해도
  *     `handleBack` 을 공유하는 뒤로가기가 있고, 뒤로 갈 히스토리가 없으면(딥링크로 직접 진입)
- *     조용히 무동작하지 않고 홈(`/(tabs)`)으로 간다(침묵 no-op 금지 · INV-4). 빈 얼굴(notFound)은
+ *     조용히 무동작하지 않고 일정 탭(`/itinerary`)으로 간다(침묵 no-op 금지 · INV-4). 빈 얼굴(notFound)은
  *     나갈 길 대신 "일정 만들기" 다음 행동도 준다.
  */
-
-/** 딥링크로 뒤로 갈 히스토리 없이 열렸을 때의 홈 폴백 목적지(홈 탭). 확정 얼굴의 [돌아가기]만 일정 탭
- * 목록(`/(tabs)/itinerary`)으로 간다(`handleBack`). */
-const HOME_FALLBACK = '/(tabs)';
 
 /** 탈출구 앱바 — loading·notFound·failed 얼굴 위에 얹는 뒤로가기 한 줄. `TimelineScreen`(listed)
  * 앱바와 같은 형태·같은 `itinerary-view-back` testID 를 쓴다 — 얼굴은 상호 배타라 한 번에 하나만
@@ -152,20 +150,16 @@ export function ItineraryPlanPage({
 
   // 4얼굴 공통 뒤로가기. `router.canGoBack()` 은 expo-router 가 주는, 뒤로 갈 히스토리 유무를
   // boolean 으로 답하는 함수다 — 있으면 이전 화면으로, 없으면(딥링크로 직접 진입) 조용히
-  // 무동작하지 않고 홈으로 `replace`(현재 화면을 히스토리에 안 남김) 한다(침묵 no-op 금지 · INV-4).
+  // 무동작하지 않고 일정 탭으로 `replace`(현재 화면을 히스토리에 안 남김) 한다(침묵 no-op 금지 · INV-4).
   function handleBack(): void {
     // 확정(CONFIRMED) 얼굴은 생성/확정 흐름 스택으로 되돌아가지 않고 내 여행 목록으로 간다
     // (TRIP-505 AC-1). `/(tabs)/itinerary` 는 `GeneratingPage.tsx` 가 이미 쓰는 typedRoutes 통과
-    // 목적지다. 그 외 얼굴은 기존 딥링크 폴백(`canGoBack()?back():replace(HOME_FALLBACK)`) 그대로.
+    // 목적지다. 그 외 얼굴은 `goBackOr` 로 뒤로 가거나 일정 탭으로 간다.
     if (itinerary.data?.status === 'CONFIRMED' && !fromNotification) {
       router.dismissTo('/(tabs)/itinerary'); // TRIP-1243 — replace 면 생성·확정 화면이 스택에 남는다
       return;
     }
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace(HOME_FALLBACK);
-    }
+    goBackOr(router, shellTabHref('itinerary'));
   }
 
   // 빈 얼굴(notFound)의 "일정 만들기" 다음 행동 — 방식 선택(h04)으로 push. 리포 동적 라우트 push

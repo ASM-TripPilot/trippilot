@@ -64,7 +64,7 @@ const {
 jest.mock('expo-router', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('@/test-support/expoRouterMock').createExpoRouterMock({
-    useRouter: ['push', 'replace', 'back', 'dismissTo'],
+    useRouter: ['push', 'replace', 'back', 'dismissTo', 'canGoBack'],
   })
 );
 

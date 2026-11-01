@@ -17,6 +17,7 @@ import type { StayItem } from '@/shared/api/index.schemas';
 import { getAccessToken } from '@/shared/api';
 import { guardPress } from '@/shared/lib/pressGuard';
 import { shellTabHref, type ShellTabKey } from '@/shared/ui/BottomTabBar';
+import { goBackOr } from '@/shared/lib/goBackOr';
 
 import { regionPickerHref } from '@/features/explore';
 import {
@@ -198,7 +199,7 @@ export function StaySearchPage(): ReactElement {
         // 목이 `useLocalSearchParams`와 정적 `router`만 주고 `useRouter`는 없어, 훅으로 바꾸면
         // 렌더 시점에 즉시 깨진다(TRIP-1148 합본 기준). `router.push`는 실제로 눌렸을 때만 평가된다.
         onPressRegister={() => router.push('/stays/register')}
-        onPressBack={() => router.back()}
+        onPressBack={() => goBackOr(router, shellTabHref('explore'))}
         // 하단 탭바(TRIP-413) — /stays 는 (tabs) 밖 라우트라 진짜 탭바가 없어 화면이 복제본을
         // 그린다. 그 복제 탭바를 실 라우팅에 잇는다: 탭 key → 해당 탭 URL 로 dismissTo(스택 밑의
         // (tabs)까지 걷어낸다 — replace 면 이 화면만 바뀌어 (tabs) 가 두 겹이 됐다, TRIP-1262 · QA F3).

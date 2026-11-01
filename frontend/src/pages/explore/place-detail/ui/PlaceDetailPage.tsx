@@ -17,6 +17,8 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { Pressable, Share, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useGetPlacesPoiId } from '@/shared/api/index.hooks';
@@ -31,10 +33,6 @@ import {
 import { useSavedPlaces } from '@/features/save-place';
 import { BackChevronGlyph } from '@/features/explore';
 import { PlaceDetailScreen } from './PlaceDetailScreen';
-
-// 딥링크로 이 화면에 직접 떨어지면(explore/** 는 (tabs) 밖) 뒤로 갈 히스토리가 없다 — 홈으로
-// replace 해 탈출구를 준다(개념 [[router.canGoBack() — 딥링크 히스토리 없음 폴백]]).
-const HOME_FALLBACK = '/(tabs)';
 
 const OPEN_NAVER_ERROR =
   '네이버 지도를 열 수 없어요. 잠시 후 다시 시도해 주세요.';
@@ -55,11 +53,7 @@ export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
   const place = detail.data ?? null;
 
   function handleBack(): void {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace(HOME_FALLBACK);
-    }
+    goBackOr(router, shellTabHref('explore'));
   }
 
   if (detail.isPending) {

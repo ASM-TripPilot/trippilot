@@ -166,7 +166,7 @@
   },
   "src/pages/itinerary/itinerary-edit/ui/ItineraryEditPage.tsx": {
     "no-restricted-syntax": {
-      "count": 3
+      "count": 2
     }
   },
   "src/pages/itinerary/itinerary-generating/ui/GeneratingPage.hookMock.test.tsx": {

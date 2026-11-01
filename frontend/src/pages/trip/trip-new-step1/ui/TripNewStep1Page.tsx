@@ -28,6 +28,8 @@ import { getAccessToken } from '@/shared/api';
 import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { shiftMonth } from '@/shared/lib/monthGrid';
+import { goBackOr } from '@/shared/lib/goBackOr';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { toggleMulti } from '@/features/edit-preferences';
 import { showToast } from '@/shared/ui/Toast';
 
@@ -126,9 +128,6 @@ function classifyServerFailure(error: unknown): ServerSubmitFailure {
   }
   return 'banner';
 }
-
-/** 위저드를 나간 뒤 뒤로 갈 곳이 없을 때(딥링크 진입) 가는 곳 — `ItineraryPlanPage` 선례. */
-const HOME_FALLBACK = '/(tabs)';
 
 /**
  * TRIP-1114 · 이탈 확인 다이얼로그의 요청·잠금 배선. 다이얼로그가 열릴 때만 마운트된다 —
@@ -351,8 +350,7 @@ export function TripNewStep1Page({
   const leaveChosenRef = useRef(false);
   const exitWizard = (): void => {
     leaveChosenRef.current = true;
-    if (router.canGoBack()) router.back();
-    else router.replace(HOME_FALLBACK);
+    goBackOr(router, shellTabHref('home'));
   };
 
   // TRIP-1272 · iOS 가장자리 스와이프·Android 하드웨어 뒤로는 ‹(onBack)를 거치지 않는다 — 초안이 있으면
@@ -783,7 +781,9 @@ export function TripNewStep1Page({
         onNext={submit}
         // 여행을 안 만들었으면 지금처럼 바로 나간다(01b Q5). 스와이프·하드웨어 뒤로는 위 usePreventRemove 가 같은 다이얼로그로 보낸다(TRIP-1272).
         onBack={() =>
-          createdTripId === undefined ? router.back() : setLeaveOpen(true)
+          createdTripId === undefined
+            ? goBackOr(router, shellTabHref('home'))
+            : setLeaveOpen(true)
         }
         isLoading={isLoading}
         submitError={submitError}

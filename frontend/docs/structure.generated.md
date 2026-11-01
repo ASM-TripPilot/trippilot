@@ -157,6 +157,7 @@
 
 ## src/__tests__/
 - `src/__tests__/affiliateNoticeOneTruth.integration.test.tsx`  →  (export 없음)
+- `src/__tests__/backFallback.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/copickHrefRoundTrip.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/deletionScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/destinationRedirectRoute.test.tsx`  →  (export 없음)
@@ -1661,6 +1662,7 @@
 - `src/shared/lib/countUp.ts`  →  easeOutCubic · countUpInt · isCountable · countUpText
 - `src/shared/lib/fontScale.ts`  →  isLargeText
 - `src/shared/lib/formatRelativeTime.ts`  →  formatRelativeTime
+- `src/shared/lib/goBackOr.ts`  →  BackRouter · goBackOr
 - `src/shared/lib/monthGrid.ts`  →  MonthCell · daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · buildMonthGrid
 - `src/shared/lib/nicknameFormat.ts`  →  NicknameFormatReason · NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
 - `src/shared/lib/placeCover.ts`  →  fnv1a32 · placeCoverSource
@@ -1915,4 +1917,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1237개 파일
+합계 1239개 파일

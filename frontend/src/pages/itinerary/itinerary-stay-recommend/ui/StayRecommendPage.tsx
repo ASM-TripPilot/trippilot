@@ -2,6 +2,7 @@ import { type ReactElement, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 
 import type { StayRecommendView as StayRecommendViewModel } from '../model/stayRecommend';
 import { LocationOffGlyph } from '@/features/itinerary';
@@ -77,11 +78,7 @@ export function StayRecommendPage({
   const assignLockRef = useRef(false);
 
   function goBack(): void {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace(`/trips/${tripId}/itinerary`);
-    }
+    goBackOr(router, `/trips/${tripId}/itinerary`);
   }
 
   function browseStays(): void {

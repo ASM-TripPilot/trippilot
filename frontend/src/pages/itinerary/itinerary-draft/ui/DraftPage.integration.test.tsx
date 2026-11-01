@@ -175,6 +175,22 @@ function renderPage(tripId: string = TRIP_ID) {
   );
 }
 
+/**
+ * Href 두 모양을 도착 경로 글자로 편다 — 문자열(`/trips/t1/itinerary`) 또는 `{ pathname: '/trips/[tripId]/itinerary',
+ * params: { tripId } }`. (개념: Href = expo-router 가 받는 이동 목적지. 대괄호 자리 `[tripId]` 는 params 로 채운다.)
+ */
+function hrefPath(href: unknown): string {
+  if (typeof href === 'string') return href;
+  const { pathname, params } = href as {
+    pathname: string;
+    params?: Record<string, string>;
+  };
+  return pathname.replace(
+    /\[(\w+)\]/g,
+    (_match, key: string) => params?.[key] ?? ''
+  );
+}
+
 beforeEach(() => {
   mockPush.mockClear();
   mockBack.mockClear();
@@ -1151,9 +1167,12 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
 
         fireEvent.press(screen.getByTestId(backTestId));
 
-        // 홈 목적지 자체를 잠근다 — `/(tabs)/itinerary` 는 trips[0] 리다이렉트 함정이라 금지
-        // (`ItineraryPlanPage.escape` AC-4 동형). 침묵 no-op 도, back+replace 이중호출도 아님.
-        expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+        // TRIP-1685 — 폴백이 홈(/(tabs))에서 "그 여행의 일정 보기"로 바뀌었다. 침묵 no-op 도, back+replace
+        // 이중호출도 아님. Href 모양(문자열 / `{pathname, params}`)은 구현이 고르므로 도착 경로 글자로 비교한다.
+        expect(mockReplace).toHaveBeenCalledTimes(1);
+        expect(hrefPath(mockReplace.mock.calls[0]?.[0])).toBe(
+          `/trips/${TRIP_ID}/itinerary`
+        );
         expect(mockBack).not.toHaveBeenCalled();
       }
     );
