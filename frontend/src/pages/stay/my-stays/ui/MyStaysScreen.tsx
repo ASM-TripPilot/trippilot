@@ -9,6 +9,8 @@ import {
   ChevronRightGlyph,
   MUTED,
 } from '@/features/settings';
+import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
+import { StateNotice } from '@/shared/ui/StateNotice';
 
 /**
  * TRIP-605 · l04 등록 숙소 화면 — 순수 프레젠테이션(VM 주입). 조회·조합·N+1·포맷은
@@ -19,6 +21,10 @@ import {
  * Figma 확인 다이얼로그(1606 「일정 다시 생성」)를 안 띄우는 이유: 거점 화면은 일정을 재생성하지 않아 그
  * 문구가 거짓 안내가 된다(INV-4). 옛 해제 다이얼로그(`BaseToggleDialog`)는 TRIP-1191 로 삭제됐고
  * `onConfirmBaseToggle` 은 타입만 남은 고아다 — 이 화면은 쓰지 않는다.
+ *
+ * TRIP-1637(INV-4): 조회 실패는 `loadFailed` 가 `isEmpty`·`rows` 보다 먼저 실패 얼굴(`my-stays-error`·
+ * `my-stays-retry`)로 그린다 — 실패를 "등록한 숙소가 없어요"로 접어 거짓말하지 않는다. 판정은 페이지 몫.
+ * Figma l04 에 오류 프레임이 없어 알림함·내 여행 오류 얼굴 선례를 따른다.
  *
  * 좌표 미확정(INV-U1-08, `canAssignBase=false`)이면 토글이 real `disabled` 라 콜백이 나가지 않는다.
  */
@@ -47,6 +53,12 @@ export interface MyStaysScreenProps {
   onConfirmBaseToggle?: (row: MyStayRowVM) => void;
   onPressExplore: () => void;
   onPressBack?: () => void;
+  /** 조회 실패(페이지가 판정). true 면 `isEmpty`·`rows` 보다 먼저 실패 얼굴. */
+  loadFailed?: boolean;
+  /** 실패 얼굴의 [다시 시도] press 콜백. */
+  onRetry?: () => void;
+  /** 다시 시도 진행 중 — [다시 시도] 비활성. */
+  retrying?: boolean;
 }
 
 /** 채움/아웃라인 칩 — 날짜·출처·메모 상태를 한 형태로. `filled` 는 채움(surface-strong·body 글자),
@@ -153,6 +165,9 @@ export function MyStaysScreen({
   onPressChangeBase,
   onPressExplore,
   onPressBack,
+  loadFailed = false,
+  onRetry,
+  retrying = false,
 }: MyStaysScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -171,7 +186,25 @@ export function MyStaysScreen({
           <Text className="text-[18px] font-noto-bold text-ink">등록 숙소</Text>
         </View>
 
-        {isEmpty ? (
+        {loadFailed ? (
+          <View className="w-full flex-1 items-center justify-center px-lg">
+            <StateNotice
+              testID="my-stays-error"
+              icon={<WarningTriangleGlyph size={32} color="primary" />}
+              title="등록 숙소를 불러올 수 없어요"
+              description="잠시 후 다시 시도해 주세요"
+              actions={[
+                {
+                  testID: 'my-stays-retry',
+                  label: '다시 시도',
+                  variant: 'filled',
+                  onPress: onRetry,
+                  disabled: retrying,
+                },
+              ]}
+            />
+          </View>
+        ) : isEmpty ? (
           // Figma 1605 는 제목 없이 원·설명·내용 폭 CTA 라 공용 StateNotice(제목 필수·고정 폭 버튼) 대신 로컬로.
           <View className="flex-1 justify-center px-2xl">
             <View testID="my-stays-empty" className="items-center gap-lg">

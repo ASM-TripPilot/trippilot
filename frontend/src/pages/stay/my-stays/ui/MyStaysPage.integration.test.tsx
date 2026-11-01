@@ -15,7 +15,12 @@ import type {
   BaseAssignment,
   Trip,
 } from '@/shared/api/index.schemas';
-import { useGetSavedStays, useGetTrips } from '@/shared/api/index.hooks';
+import {
+  getGetSavedStaysQueryKey,
+  getGetTripsQueryKey,
+  useGetSavedStays,
+  useGetTrips,
+} from '@/shared/api/index.hooks';
 import type { MyStayRowVM, MyStaysScreen } from './MyStaysScreen';
 import { MyStaysPage } from './MyStaysPage';
 import { http, HttpResponse } from 'msw';
@@ -631,5 +636,332 @@ describe('실 화면 + msw — 거점 변경·출처 칩 (옛 .release)', () => 
       expect(within(row()).queryByText('예약 사이트')).toBeNull();
       expect(within(row()).queryByText('예약번호 미입력')).toBeNull();
     });
+  });
+
+  // TRIP-1637 · `GET /saved-stays`·`GET /trips` 조회 실패가 "숙소를 탐색하고 등록하면…"(empty)으로 접히던 문제(INV-4).
+  // 테스트 클라이언트는 재시도 0 이라 실패 응답 1개 = 실패 1회다(앱 전역은 자동 재시도 3회 ≈7초 뒤 — jest 사각, 6-b).
+  // *(개념 — 응답 큐)* 요청마다 줄 맨 앞 응답을 꺼내 돌려주고, 줄이 비면 평소 응답. 'hold' 는 열쇠(gate)가 풀릴 때까지 답을 미룬다.
+  describe('TRIP-1637 · 조회 실패 — empty 로 접지 않고 실패 얼굴 + 다시 시도', () => {
+    const ERROR = 'my-stays-error';
+    const RETRY = 'my-stays-retry';
+    const EMPTY = 'my-stays-empty';
+    const EXPLORE = 'my-stays-explore';
+    const TITLE = '등록 숙소를 불러올 수 없어요';
+    const DESCRIPTION = '잠시 후 다시 시도해 주세요';
+
+    type Reply = 'ok' | 500 | 'network' | 'hold';
+    let savedReplies: Reply[] = [];
+    let tripsReplies: Reply[] = [];
+    let savedBody: SavedStay[] = [];
+    /** 경로별 GET 횟수 — 핸들러 안에서 센다(바깥 `started` 는 bases 까지 합산이라 경로를 못 가른다). */
+    let hits = { saved: 0, trips: 0 };
+    let release: () => void = () => {};
+    let gate: Promise<void> = Promise.resolve();
+
+    function failure(): Response {
+      return HttpResponse.json(
+        { error: { code: 'INTERNAL', message: '서버 오류' } },
+        { status: 500 }
+      );
+    }
+
+    beforeEach(() => {
+      savedReplies = [];
+      tripsReplies = [];
+      savedBody = [STAY];
+      hits = { saved: 0, trips: 0 };
+      gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      // 평소 서버(bases 포함)를 깔고, 같은 경로 큐 핸들러를 그 위에 얹는다(server.use 는 앞에 끼운다).
+      installServer();
+      server.use(
+        http.get(`${BASE}/saved-stays`, async () => {
+          hits.saved += 1;
+          const reply = savedReplies.shift() ?? 'ok';
+          if (reply === 'network') return HttpResponse.error();
+          if (reply === 500) return failure();
+          if (reply === 'hold') await gate;
+          return HttpResponse.json(savedBody);
+        }),
+        http.get(`${BASE}/trips`, async () => {
+          hits.trips += 1;
+          const reply = tripsReplies.shift() ?? 'ok';
+          if (reply === 'network') return HttpResponse.error();
+          if (reply === 500) return failure();
+          if (reply === 'hold') await gate;
+          return HttpResponse.json([TRIP]);
+        })
+      );
+    });
+
+    // 실패해 중간에 죽은 케이스가 보류 요청을 남기지 않게(02a ★8).
+    afterEach(() => {
+      release();
+    });
+
+    /** react-query 는 상태 변화를 setTimeout 0 으로 구독자에게 알린다 — 그 뒤까지 흘려 화면에 반영시킨다(02a ★2). */
+    async function pause(ms = 30): Promise<void> {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, ms));
+      });
+    }
+
+    const rowTestIds = () => screen.queryAllByTestId(/^my-stays-row-/);
+
+    it.each<[string, Reply]>([
+      ['서버 오류(500)', 500],
+      ['네트워크 실패', 'network'],
+    ])(
+      '저장 숙소 첫 조회가 %s 이면 실패 얼굴과 다시 시도가 보이고 empty·숙소 탐색·행은 없다',
+      async (_label, reply) => {
+        // 준비
+        savedReplies = [reply];
+
+        // 실행
+        renderPage();
+
+        // 단언 — 얼굴이 먼저 도착해야 "empty 없음"이 의미가 있다(02a ★1).
+        const face = await screen.findByTestId(ERROR);
+        expect(within(face).getByText(TITLE)).toBeOnTheScreen();
+        expect(within(face).getByText(DESCRIPTION)).toBeOnTheScreen();
+        expect(
+          within(screen.getByTestId(RETRY)).getByText('다시 시도')
+        ).toBeOnTheScreen();
+        expect(screen.queryByTestId(EMPTY)).toBeNull();
+        expect(screen.queryByTestId(EXPLORE)).toBeNull();
+        expect(rowTestIds()).toHaveLength(0);
+        expect(screen.getByTestId('my-stays-back')).toBeOnTheScreen();
+        await settleNetwork();
+      }
+    );
+
+    it('다시 시도를 누르면 저장 숙소만 한 번 더 받아 행이 나타나고 실패 얼굴은 사라진다', async () => {
+      // 준비 — 첫 GET 만 실패. 실패 얼굴이 뜬 상태가 출발점이다(앵커).
+      savedReplies = [500, 'ok'];
+      renderPage();
+      await screen.findByTestId(ERROR);
+      expect(hits.saved).toBe(1);
+
+      // 실행
+      fireEvent.press(screen.getByTestId(RETRY));
+
+      // 단언 — 행이 뜨고 얼굴·버튼이 사라진다. 실패하지 않은 /trips 는 다시 부르지 않았다(02a ★5).
+      expect(await screen.findByTestId('my-stays-row-s1')).toBeOnTheScreen();
+      expect(screen.queryByTestId(ERROR)).toBeNull();
+      expect(screen.queryByTestId(RETRY)).toBeNull();
+      await settleNetwork();
+      expect(hits.saved).toBe(2);
+      expect(hits.trips).toBe(1);
+    });
+
+    it('다시 시도도 실패하면 실패 얼굴로 돌아오고 버튼이 다시 눌리며 empty 로 접히지 않는다', async () => {
+      // 준비 — 두 번 다 실패.
+      savedReplies = [500, 500];
+      renderPage();
+      await screen.findByTestId(ERROR);
+
+      // 실행 — 누르고, 두 번째 요청이 도착해 끝날 때까지 기다린다. 누른 직후엔 옛 얼굴이 아직 화면에 있어서
+      // 바로 단언하면 버튼이 아무것도 안 해도 통과한다(02a ★2·★4).
+      fireEvent.press(screen.getByTestId(RETRY));
+      await waitFor(() => expect(hits.saved).toBe(2));
+      await settleNetwork();
+      await pause();
+
+      // 단언 — 앵커: 재시도가 실제로 실패로 끝났다.
+      const state = queryClient.getQueryState(getGetSavedStaysQueryKey());
+      expect(state?.status).toBe('error');
+      expect(state?.fetchStatus).toBe('idle');
+      expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(RETRY)).not.toBeDisabled();
+      expect(screen.queryByTestId(EMPTY)).toBeNull();
+      expect(rowTestIds()).toHaveLength(0);
+      expect(hits.saved).toBe(2);
+    });
+
+    it('재시도 응답이 오기 전에도 실패 얼굴이 그대로이고 버튼은 비활성이며, 연타해도 요청은 늘지 않는다', async () => {
+      // 준비 — 두 번째 응답을 붙들어 둔다. 데이터 없는 쿼리를 refetch 하면 status 가 pending 으로 돌아가
+      // `isError` 가 꺼진다 — "1615 복제" 구현은 여기서 앱바만 남은 빈 화면이 된다(02a ★2).
+      savedReplies = [500, 'hold'];
+      renderPage();
+      await screen.findByTestId(ERROR);
+      expect(hits.saved).toBe(1);
+
+      // 실행 ① — 누르고, 재조회 요청이 서버에 도착한 뒤 화면에 반영될 시간을 준다.
+      fireEvent.press(screen.getByTestId(RETRY));
+      await waitFor(() => expect(hits.saved).toBe(2));
+      await pause();
+
+      // 단언 ① — 보류 중: 얼굴 유지 · 버튼 비활성 · 다른 얼굴이 끼어들지 않는다.
+      expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(RETRY)).toBeDisabled();
+      expect(screen.queryByTestId(EMPTY)).toBeNull();
+      expect(screen.queryByTestId(EXPLORE)).toBeNull();
+
+      // 실행 ② — 연타. refetch 는 진행 중 요청을 취소하고 새로 쏘므로 가드가 새면 hits 가 늘어난다(02a ★3).
+      fireEvent.press(screen.getByTestId(RETRY));
+      fireEvent.press(screen.getByTestId(RETRY));
+      await pause();
+
+      // 단언 ②
+      expect(hits.saved).toBe(2);
+
+      // 열쇠를 풀면 응답이 오고 행이 나타난다.
+      release();
+      expect(await screen.findByTestId('my-stays-row-s1')).toBeOnTheScreen();
+      expect(screen.queryByTestId(ERROR)).toBeNull();
+      expect(screen.queryByTestId(RETRY)).toBeNull();
+      await settleNetwork();
+    });
+
+    it('서버가 준 진짜 0건은 실패가 아니라 기존 empty 얼굴이다 (선제 green)', async () => {
+      // 준비
+      savedBody = [];
+
+      // 실행
+      renderPage();
+
+      // 단언
+      expect(await screen.findByTestId(EMPTY)).toBeOnTheScreen();
+      expect(screen.getByTestId(EXPLORE)).toBeOnTheScreen();
+      expect(screen.queryByTestId(ERROR)).toBeNull();
+      expect(screen.queryByTestId(RETRY)).toBeNull();
+      await settleNetwork();
+      expect(hits.saved).toBe(1);
+    });
+
+    it('/trips 가 실패하면 저장 숙소는 받았어도 같은 실패 얼굴이고 "연결된 여행 없음" 행을 그리지 않는다', async () => {
+      // 준비 — 저장 숙소 정상(1건), 여행 목록만 실패. 지금은 모든 행이 "연결된 여행 없음"으로 거짓 표시된다.
+      tripsReplies = [500];
+
+      // 실행
+      renderPage();
+
+      // 단언 — 얼굴 먼저, 그다음 저장 숙소 응답까지 가라앉은 뒤에 "행 없음"을 본다(02a ★1).
+      const face = await screen.findByTestId(ERROR);
+      expect(within(face).getByText(TITLE)).toBeOnTheScreen();
+      await settleNetwork();
+      await pause();
+      expect(hits.saved).toBe(1);
+      expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+      expect(screen.queryByTestId(EMPTY)).toBeNull();
+      expect(rowTestIds()).toHaveLength(0);
+      expect(screen.queryByText('연결된 여행 없음')).toBeNull();
+    });
+
+    it('/trips 실패 뒤 다시 시도하면 실패한 /trips 만 다시 받아 행과 연결 여행이 나타난다', async () => {
+      // 준비
+      tripsReplies = [500, 'ok'];
+      renderPage();
+      await screen.findByTestId(ERROR);
+      await settleNetwork();
+
+      // 실행
+      fireEvent.press(screen.getByTestId(RETRY));
+
+      // 단언 — 등록 행 + 「연결 여행 · 부산 여행」(waitAssignedRow 가 앵커 포함). 저장 숙소는 다시 받지 않았다(02a ★5).
+      await waitAssignedRow();
+      expect(screen.queryByTestId(ERROR)).toBeNull();
+      expect(screen.queryByTestId(RETRY)).toBeNull();
+      expect(hits.trips).toBe(2);
+      expect(hits.saved).toBe(1);
+    });
+
+    it('/trips 재시도 응답이 오기 전에도 실패 얼굴이 그대로이고 버튼은 비활성이며, 저장 숙소 행을 "연결된 여행 없음"으로 그리지 않는다', async () => {
+      // 준비 — 저장 숙소는 정상, 여행 목록의 두 번째 응답을 붙들어 둔다. /trips 도 데이터가 없어 refetch 하면
+      // pending 으로 돌아가므로, 판정이 isError 만 보거나 retrying 이 trips 를 빼먹으면 이 구간에서 거짓 행이 되살아난다.
+      tripsReplies = [500, 'hold'];
+      renderPage();
+      await screen.findByTestId(ERROR);
+      await settleNetwork();
+      expect(hits.trips).toBe(1);
+
+      // 실행 ① — 누르고, 재조회 요청이 서버에 도착한 뒤 화면에 반영될 시간을 준다.
+      fireEvent.press(screen.getByTestId(RETRY));
+      await waitFor(() => expect(hits.trips).toBe(2));
+      await pause();
+
+      // 단언 ① — 보류 중: 얼굴 유지 · 버튼 비활성 · 거짓 행 없음.
+      expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(RETRY)).toBeDisabled();
+      expect(screen.queryByTestId(EMPTY)).toBeNull();
+      expect(rowTestIds()).toHaveLength(0);
+      expect(screen.queryByText('연결된 여행 없음')).toBeNull();
+
+      // 실행 ② — 연타. 요청이 늘지 않고, 실패하지 않은 저장 숙소도 다시 부르지 않는다.
+      fireEvent.press(screen.getByTestId(RETRY));
+      fireEvent.press(screen.getByTestId(RETRY));
+      await pause();
+
+      // 단언 ②
+      expect(hits.trips).toBe(2);
+      expect(hits.saved).toBe(1);
+
+      // 열쇠를 풀면 응답이 오고 연결 여행까지 나타난다.
+      release();
+      await waitAssignedRow();
+      expect(screen.queryByTestId(ERROR)).toBeNull();
+      expect(screen.queryByTestId(RETRY)).toBeNull();
+    });
+
+    it('저장 숙소만 실패했고 /trips 는 아직 응답 전이면, 다시 시도는 눌린다 — 비활성은 실패한 쿼리가 다시 받는 중일 때만', async () => {
+      // 준비 — saved 는 500, trips 는 응답을 붙든다(첫 요청부터 진행 중). 실패한 쪽(saved)은 쉬고 있다.
+      savedReplies = [500];
+      tripsReplies = ['hold'];
+      renderPage();
+      await screen.findByTestId(ERROR);
+      await waitFor(() => expect(hits.trips).toBe(1));
+      await pause();
+
+      // 단언 ① — trips 가 진행 중이어도 버튼은 활성이다(retrying 이 "아무 쿼리의 isFetching" 이면 red).
+      expect(screen.getByTestId(RETRY)).not.toBeDisabled();
+
+      // 실행 — 누른다. 실패한 saved 만 다시 받고 trips 는 건드리지 않는다.
+      fireEvent.press(screen.getByTestId(RETRY));
+      await waitFor(() => expect(hits.saved).toBe(2));
+      await pause();
+
+      // 단언 ②
+      expect(hits.trips).toBe(1);
+
+      // 마무리 — trips 응답이 오면 등록 행이 선다.
+      release();
+      await waitAssignedRow();
+      expect(screen.queryByTestId(ERROR)).toBeNull();
+    });
+
+    it.each<[string, boolean, () => readonly unknown[]]>([
+      ['저장 숙소', true, getGetSavedStaysQueryKey],
+      ['여행 목록', false, getGetTripsQueryKey],
+    ])(
+      '%s 를 이미 받은 뒤 재조회가 실패해도 행은 그대로고 실패 얼굴은 없다 — 판정은 "데이터가 없다"',
+      async (_label, isSaved, queryKey) => {
+        // 준비 — 첫 GET 성공(등록 행이 뜬다), 다음 GET 은 500.
+        if (isSaved) savedReplies = ['ok', 500];
+        else tripsReplies = ['ok', 500];
+        renderPage();
+        await waitAssignedRow();
+
+        // 실행 — 외부 무효화(다른 화면의 저장·삭제 성공 등이 하는 일)로 재조회를 일으킨다.
+        await act(async () => {
+          await queryClient.invalidateQueries({ queryKey: queryKey() });
+        });
+
+        // 단언 ① — 앵커: 재조회가 실제로 실패했고(error) 받아 둔 데이터는 남았다(02a ★6).
+        expect(isSaved ? hits.saved : hits.trips).toBe(2);
+        expect(queryClient.getQueryState(queryKey())?.status).toBe('error');
+        expect(queryClient.getQueryData(queryKey())).toHaveLength(1);
+        await pause();
+
+        // 단언 ② — 그 위에서 화면은 목록을 유지한다.
+        expect(screen.getByTestId('my-stays-row-s1')).toBeOnTheScreen();
+        expect(
+          within(row()).getByText('연결 여행 · 부산 여행')
+        ).toBeOnTheScreen();
+        expect(screen.queryByTestId(ERROR)).toBeNull();
+        expect(screen.queryByTestId(RETRY)).toBeNull();
+        expect(screen.queryByTestId(EMPTY)).toBeNull();
+      }
+    );
   });
 });

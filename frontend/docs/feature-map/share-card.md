@@ -40,7 +40,7 @@ Preconditions:
 - 캡처 3종이 들어간 dev build(재빌드 전 빌드는 j04 `공유` 와 j06 하단 버튼이 둘 다 없다 — 크래시 아님).
 - `sc-not-ready` 는 여행 전·진행 중 여행 id 로 딥링크를 연다.
 - 서버 추천 문구는 하루 횟수 제한이 있다 — 한 계정으로 여러 번 열면 `sc-copy` 상한 얼굴이 된다.
-- 조작 절차·셀렉터 함정은 `trippilot-sim-qa` 스킬 §2·§4.
+- 조작 절차·셀렉터 함정은 `trippilot-sim-qa` 스킬 §2.
 
 - **진입.** j04 에서 testID: `reflection-summary-share`(`공유`)를 누른다. 헤더 `공유 카드`, 포맷 세그먼트 testID: `reflection-share-format-seg`, 미리보기 testID: `reflection-share-preview-frame` 이 보인다.
 - **포맷 전환.** testID: `reflection-share-format-{square}`(`정방형 1:1`) → `reflection-share-format-{feed}`(`피드 4:5`) → `reflection-share-format-{story}`(`스토리 9:16`)를 차례로 누른다. 프레임 비율이 바뀌고 1:1·4:5 에서 카드가 화면 좌우를 넘치지 않는다(과거 QA 087).

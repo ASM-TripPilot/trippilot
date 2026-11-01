@@ -17,6 +17,7 @@ import type {
   PastTripCardVM,
 } from '../model/recordsCalendar';
 import type { MonthCell } from '@/shared/lib/monthGrid';
+import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 /**
@@ -37,6 +38,9 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  * TRIP-1120 · 앱바 아래·캘린더 위 진행 중 여행 카드(`ongoingTrip`, Figma 4761:3065)와 legend 줄 끝 `›`
  * (`openableTripIds` 에 든 줄만 — 미래 줄엔 없다, INV-4). 둘 다 판정은 페이지 몫이고 여기선 그리기만 한다.
  * legend 줄은 32 높이로 붙어 있어 세로 hitSlop 을 주지 않는다(이웃 줄을 덮는다).
+ *
+ * TRIP-1638 · `RecordsCalendarOfflineFace` — 오프라인으로 처음 켜 여행 목록 요청이 보류된 얼굴(버튼 없음: 보류 요청에 다시 시도는
+ * 무동작). 페이지의 오류 얼굴처럼 앱바 없는 전체 화면이고, 프리뷰가 격리 렌더하려고 이 파일에 둔다. Figma 프레임 없음 — 코드 선례.
  */
 
 export interface RecordsCalendarScreenProps {
@@ -308,6 +312,20 @@ function MonthLegendBlock({
           </View>
         </Pressable>
       )}
+    </View>
+  );
+}
+
+export function RecordsCalendarOfflineFace(): ReactElement {
+  return (
+    <View className="flex-1 items-center justify-center bg-canvas px-lg">
+      <StateNotice
+        testID="record-calendar-offline"
+        icon={<WarningTriangleGlyph size={32} color="primary" />}
+        title="인터넷에 연결되어 있지 않아요"
+        description="연결되면 자동으로 불러올게요"
+        actions={[]}
+      />
     </View>
   );
 }

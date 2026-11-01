@@ -57,6 +57,7 @@ import { savedPlace } from '@/test-support/mustVisitFixtures';
 import { resetToast } from '@/test-support/toastHarness';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { freezeDate } from '@/test-support/freezeDate';
+import { revealValues } from '@/test-support/revealProbe';
 import {
   createWrapper,
   newTestQueryClient,
@@ -4935,8 +4936,12 @@ describe('같은 날 같은 장소 두 번', () => {
 });
 
 // TRIP-1385 · 완성 일정 공개 — 생성 직후 첫 진입에만 경로 그려지기 옵션과 카드 등장이 걸린다.
+// TRIP-1641 · 등장 래퍼가 항상 같은 요소(RevealItem)라 "등장이 걸렸나"를 `entering` 개수가 아니라 카드·커넥터 래퍼의 투명도로 잰다
+// (등장 대기 = 0 · 이미 보임 = 1). 곡선·지연 상수는 `shared/ui/RevealItem.test`, 여기는 이 화면이 언제 켜고 안 켜는지만 본다.
 describe('TRIP-1385 · 완성 일정 공개(reveal)', () => {
   const reduceMotionMock = jest.mocked(AccessibilityInfo.isReduceMotionEnabled);
+  /** 등장 래퍼 안에 있는 카드 루트·거리 커넥터 루트(`…-<날짜>#<poiId>`). 안쪽 필드 testID(`-time-`·`-distance-` 등)는 날짜로 시작하지 않아 걸리지 않는다. */
+  const REVEALED = /^(slot-stopcard|sheet-connector)-\d{4}-\d{2}-\d{2}#/;
 
   function renderRevealPage(reveal: boolean) {
     return renderWithQueryClient(
@@ -4945,9 +4950,11 @@ describe('TRIP-1385 · 완성 일정 공개(reveal)', () => {
     );
   }
 
-  /** `entering`(reanimated 등장 애니메이션)이 걸린 노드 수 — 카드 + 거리 커넥터 묶음. */
-  function enteringCount(): number {
-    return screen.root.findAll((node) => node.props?.entering != null).length;
+  /** 화면에 있는 카드·커넥터 래퍼의 투명도 — 비어 있으면 공허하므로 최소 1개를 요구한다. */
+  function revealOpacities(): number[] {
+    const nodes = screen.getAllByTestId(REVEALED);
+    expect(nodes.length).toBeGreaterThan(0);
+    return nodes.map((node) => revealValues(node).opacity);
   }
 
   beforeEach(() => {
@@ -4973,32 +4980,38 @@ describe('TRIP-1385 · 완성 일정 공개(reveal)', () => {
     });
   });
 
-  it('생성 직후 첫 진입이면 지도에 그려지기 옵션이 켜지고 카드에 등장 애니메이션이 걸린다', async () => {
+  it('생성 직후 첫 진입이면 지도에 그려지기 옵션이 켜지고 카드·커넥터가 투명하게 대기한다(등장 전)', async () => {
     renderRevealPage(true);
 
     await screen.findAllByTestId(/^slot-stopcard-time-/);
-    await waitFor(() => expect(enteringCount()).toBeGreaterThan(0));
+    // 첫 카드 지연이 500ms 라 지금은 전부 아직 안 보인다.
+    expect(revealOpacities().every((opacity) => opacity === 0)).toBe(true);
     expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(true);
   });
 
-  it('다른 진입(목록·재진입)이면 옵션도 등장도 없다', async () => {
+  it('다른 진입(목록·재진입)이면 옵션도 등장도 없이 카드가 처음부터 보인다', async () => {
     renderRevealPage(false);
 
     await screen.findAllByTestId(/^slot-stopcard-time-/);
-    expect(enteringCount()).toBe(0);
+    expect(revealOpacities().every((opacity) => opacity === 1)).toBe(true);
     expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(false);
   });
 
-  it('이미 재생된 뒤 일차 칩을 바꾸면 다시 재생하지 않는다', async () => {
+  it('이미 재생된 뒤 일차 칩을 바꾸면 새로 보이는 날의 카드는 다시 재생하지 않고 처음부터 보인다', async () => {
     renderRevealPage(true);
-    await waitFor(() => expect(enteringCount()).toBeGreaterThan(0));
+    await screen.findAllByTestId(/^slot-stopcard-time-/);
+    // 앵커 — 처음엔 대기 중(0)이었다.
+    expect(revealOpacities().every((opacity) => opacity === 0)).toBe(true);
 
     fireEvent.press(screen.getByTestId('sheet-daychip-1'));
 
     await waitFor(() =>
       expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차')
     );
-    expect(enteringCount()).toBe(0);
+    expect(
+      screen.getAllByTestId(new RegExp(`^slot-stopcard-${DAY2}#`)).length
+    ).toBeGreaterThan(0);
+    expect(revealOpacities().every((opacity) => opacity === 1)).toBe(true);
     expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(false);
   });
 
@@ -5006,44 +5019,54 @@ describe('TRIP-1385 · 완성 일정 공개(reveal)', () => {
   // [취소] 뒤 셸이 처음부터 다시 그려지며 경로 그려지기·카드 등장이 한 번 더 재생될 수 있다 — 그걸 막는다.
   it('🔴 RG6 [다시 짜기] 확인을 열었다가 [취소]로 돌아와도 경로 그려지기·카드 등장을 다시 재생하지 않는다', async () => {
     renderRevealPage(true);
-    // 앵커 — 처음엔 재생 중이었다.
-    await waitFor(() => expect(enteringCount()).toBeGreaterThan(0));
+    // 앵커 — 처음엔 재생 대기 중(0)이었다.
+    await screen.findAllByTestId(/^slot-stopcard-time-/);
+    expect(revealOpacities().every((opacity) => opacity === 0)).toBe(true);
     expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(true);
 
     fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
     fireEvent.press(screen.getByTestId(REGEN_CANCEL));
     await screen.findByTestId('map-sheet-shell-root');
 
-    // ★ 동작 줄이기 답(비동기)이 오기 전엔 등장 껍데기가 비어 있어 "0"이 공허하다 — 한 틱 흘린 뒤에 잰다(02a ★7).
+    // 새로 마운트된 카드는 동작 줄이기 답(비동기)이 오기 전부터 보여야 한다 — 답이 오는 한 틱을 act 로 흘린 뒤 잰다(act 경고 방지).
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
-    expect(enteringCount()).toBe(0);
+    expect(revealOpacities().every((opacity) => opacity === 1)).toBe(true);
     expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(false);
   });
 
-  it('동작 줄이기가 켜져 있으면 카드는 등장 애니메이션 없이 곧장 보인다', async () => {
+  it('동작 줄이기가 켜져 있으면 카드는 등장 없이 곧장 보인다', async () => {
     reduceMotionMock.mockResolvedValue(true);
     renderRevealPage(true);
 
-    const times = await screen.findAllByTestId(/^slot-stopcard-time-/);
+    await screen.findAllByTestId(/^slot-stopcard-time-/);
     await act(async () => {});
-    expect(times.length).toBeGreaterThan(0);
-    expect(enteringCount()).toBe(0);
+    // 등장이 걸렸다면 첫 카드 기준 1초 가까이 걸려야 보인다 — 짧은 창(300ms) 안에 전부 1 이면 곧장 보인 것이다.
+    await waitFor(
+      () =>
+        expect(revealOpacities().every((opacity) => opacity === 1)).toBe(true),
+      { timeout: 300 }
+    );
   });
 
   it('애니메이션이 걸린 카드의 시간 텍스트는 서버 값 그대로다(INV-2·INV-3)', async () => {
     renderRevealPage(true);
 
     await screen.findAllByTestId(/^slot-stopcard-time-/);
-    await waitFor(() => expect(enteringCount()).toBeGreaterThan(0));
+    expect(revealOpacities().every((opacity) => opacity === 0)).toBe(true); // 등장이 걸려 있다
     const read = (): string[] =>
       screen
         .getAllByTestId(/^slot-stopcard-time-/)
         .map((node) => String(node.props.children ?? ''));
     const first = read();
     expect(first).toHaveLength(2);
-    await act(async () => {});
+    // 등장이 끝날 때까지(마지막 커넥터 지연 650ms + 450ms) 기다려 모든 카드가 결국 보이게 되는지, 그동안 값이 안 변하는지 본다.
+    await waitFor(
+      () =>
+        expect(revealOpacities().every((opacity) => opacity === 1)).toBe(true),
+      { timeout: 4000 }
+    );
     expect(read()).toEqual(first);
     first.forEach((text) => expect(text).toMatch(/^\d{2}:\d{2}.\d{2}:\d{2}$/));
   });

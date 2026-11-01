@@ -23,13 +23,13 @@ Phase 0(컨텍스트 확인) 진입 시 읽는다. 사이클 ID 결정, 재개 �
 
 ## 데이터 전달 프로토콜
 
-- 파일 기반, 모두 `<리포 루트>/_workspace/{cycle-id}/`: `01_spec-analyst_brief.md` / `01b_ouroboros_seed.md` / `02_test-designer_map.md` / `03_implementer_notes.md` / `03b_code-critic_findings.md`(적대적 리뷰 — 차단 0건이어야 6 [검증]) / `04_qa-verifier_report_{n}_{PASS|FAIL}.md` / `04b_smoke_{n}_{PASS|FAIL|SKIP|실행불가}.md`(실기 스모크 — 조건부) / `RESUME.md`(이어하기 인덱스)
+- 파일 기반, 모두 `<리포 루트>/_workspace/{cycle-id}/`: `01_spec-analyst_brief.md` / `01b_ouroboros_seed.md` / `01c_shape.md`(형태 비교 — 조건부) / `02_test-designer_map.md` / `03_implementer_notes.md` / `03b_code-critic_findings.md`(적대적 리뷰 — 차단 0건이어야 6 [검증]) / `03c_blast-radius.md`(영향 반경 — 조건부) / `04_qa-verifier_report_{n}_{PASS|FAIL}.md` / `04b_smoke_{n}_{PASS|FAIL|SKIP|실행불가}.md`(실기 스모크 — 조건부) / `05_end-report.md`(끝 보고) / `RESUME.md`(이어하기 인덱스)
   - `<리포 루트>/_workspace`는 옵시디언 볼트 `TripPilot/사이클/`으로의 심볼릭 링크다 — 경로는 그대로 쓰고, 볼트에서 같은 파일을 `[[사이클/{cycle-id}/…]]`로 링크할 수 있다.
 - **RESUME.md — `/clear` 후 무맥락 재개용 지시서**. **매 단계 종료 시 오케스트레이터가 갱신**한다(append 아닌 덮어쓰기 — 항상 "현재 상태" 1장). 고정 형식:
   ```
   cycle-id: {id}   작업: {한 줄}   갱신: {YYYY-MM-DD 단계명}
   완료: [인지·메모리·설계·테스트…]   현재: {단계}   다음 할 일: {구체 행동}
-  학습: {대기|완료}   검증: 최신 n={n} {PASS|FAIL}
+  보고: {대기|완료}   검증: 최신 n={n} {PASS|FAIL}
   종료: {미완료 | 완료 YYYY-MM-DD}   블로킹: {사용자 응답 대기 | 없음}
   ```
   종료 필드가 "미완료"인 폴더만 Phase 0 자동 탐지 대상이다. 사이클 종료([기록] 후) 시 `완료 YYYY-MM-DD`로 마킹한다.

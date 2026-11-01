@@ -395,3 +395,133 @@ describe('Figma l04 정합 (옛 .l04parity)', () => {
     });
   });
 });
+
+// TRIP-1637 · 조회 실패가 empty 로 접히던 문제(INV-4) — 화면 계약. 실제 실패 판정·재시도 배선은 페이지 통합 테스트가 본다.
+// 생김새(가운데 정렬·연핑크 원)는 jest 사각이라 안 본다(README 판정 4) — 프리뷰 `my-stays-error` 육안 몫.
+describe('TRIP-1637 · 조회 실패 얼굴 (loadFailed·retrying·onRetry)', () => {
+  const ERROR = 'my-stays-error';
+  const RETRY = 'my-stays-retry';
+
+  function listRow(): MyStayRowVM {
+    return {
+      savedStayId: 's1',
+      name: '해운대 오션뷰',
+      location: '',
+      dateRangeLabel: null,
+      sourceLabel: '예약 사이트',
+      memoLabel: null,
+      linkedTripLabel: '연결된 여행 없음',
+      baseState: 'unassigned',
+      canAssignBase: true,
+      tripId: null,
+      baseAssignmentId: null,
+    };
+  }
+
+  function renderFace(over: Partial<MyStaysScreenProps> = {}) {
+    const onRetry = jest.fn();
+    const onPressBack = jest.fn();
+    render(
+      <MyStaysScreen
+        rows={[]}
+        isEmpty={false}
+        loadFailed
+        onRetry={onRetry}
+        onPressBack={onPressBack}
+        onPressExplore={jest.fn()}
+        {...over}
+      />
+    );
+    return { onRetry, onPressBack };
+  }
+
+  it('loadFailed 면 실패 얼굴·문구·다시 시도가 보이고 empty·숙소 탐색·행은 없으며 앱바 뒤로는 살아 있다', () => {
+    // 준비 + 실행
+    const { onPressBack } = renderFace();
+
+    // 단언 — 문구는 완전 일치(getByText).
+    const face = screen.getByTestId(ERROR);
+    expect(
+      within(face).getByText('등록 숙소를 불러올 수 없어요')
+    ).toBeOnTheScreen();
+    expect(
+      within(face).getByText('잠시 후 다시 시도해 주세요')
+    ).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId(RETRY)).getByText('다시 시도')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('my-stays-empty')).toBeNull();
+    expect(screen.queryByTestId('my-stays-explore')).toBeNull();
+    expect(screen.queryAllByTestId(/^my-stays-row-/)).toHaveLength(0);
+
+    // 실패 얼굴에서도 화면을 떠날 수 있어야 한다.
+    fireEvent.press(screen.getByTestId('my-stays-back'));
+    expect(onPressBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('loadFailed 는 isEmpty·rows 보다 이긴다 — 페이지가 empty/행을 같이 내려도 실패 얼굴만 그린다', () => {
+    // 준비 + 실행 — 실패 시 페이지가 실제로 내리는 조합(rows 0 → isEmpty true) + /trips 실패 때의 저장 숙소 행.
+    renderFace({ rows: [listRow()], isEmpty: true });
+
+    // 단언
+    expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+    expect(screen.queryByTestId('my-stays-empty')).toBeNull();
+    expect(screen.queryByTestId('my-stays-row-s1')).toBeNull();
+  });
+
+  it('다시 시도를 누르면 onRetry 가 1회 불린다', () => {
+    // 준비
+    const { onRetry } = renderFace();
+    expect(screen.getByTestId(RETRY)).not.toBeDisabled();
+
+    // 실행
+    fireEvent.press(screen.getByTestId(RETRY));
+
+    // 단언
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('재시도 중(retrying)엔 다시 시도가 비활성이고, 눌러도 onRetry 는 0회, 실패 얼굴은 그대로다', () => {
+    // 준비
+    const { onRetry } = renderFace({ retrying: true });
+
+    // 실행
+    fireEvent.press(screen.getByTestId(RETRY));
+
+    // 단언
+    expect(screen.getByTestId(RETRY)).toBeDisabled();
+    expect(onRetry).not.toHaveBeenCalled();
+    expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+  });
+
+  it('loadFailed 가 아니면(false·미지정) 실패 얼굴은 없고 행이 보인다 (선제 green 긍정 짝)', () => {
+    // 준비 + 실행 — loadFailed false 명시.
+    const { unmount } = render(
+      <MyStaysScreen
+        rows={[listRow()]}
+        isEmpty={false}
+        loadFailed={false}
+        onPressExplore={jest.fn()}
+      />
+    );
+
+    // 단언
+    expect(screen.getByTestId('my-stays-row-s1')).toBeOnTheScreen();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+    expect(screen.queryByTestId(RETRY)).toBeNull();
+    unmount();
+
+    // 준비 + 실행 — 미지정.
+    render(
+      <MyStaysScreen
+        rows={[listRow()]}
+        isEmpty={false}
+        onPressExplore={jest.fn()}
+      />
+    );
+
+    // 단언
+    expect(screen.getByTestId('my-stays-row-s1')).toBeOnTheScreen();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+  });
+});

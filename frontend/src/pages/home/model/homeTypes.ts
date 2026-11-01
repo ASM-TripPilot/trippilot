@@ -219,6 +219,11 @@ export interface HomeScreenProps {
    * `retrying` 이면 재조회 중이라 [다시 시도]를 비활성으로 흐리게 그린다(눌러도 무반응처럼 보이지 않게).
    */
   tripsError?: { onRetry: () => void; retrying?: boolean };
+  /**
+   * 오프라인 콜드스타트(TRIP-1638, 옵셔널) — true 면 discovery 얼굴 위에 오류 안내 자리에 "인터넷에 연결되어 있지 않아요"(버튼 없음)를
+   * 띄운다. 요청이 보류된 채라 [다시 시도]는 무동작이 되므로 `tripsError` 와 달리 콜백이 없다. 연결이 돌아오면 page 가 끈다.
+   */
+  tripsOffline?: boolean;
   /** 여행 단계 판별값(TRIP-317) — 미전달/discovery면 316 얼굴, 그 외 kind면 단계 얼굴 */
   phase?: HomePhase;
   /**

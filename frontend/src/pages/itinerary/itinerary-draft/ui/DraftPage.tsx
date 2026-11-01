@@ -48,7 +48,7 @@ import { SheetHeader } from '@/widgets/map-sheet-shell';
 import { resolveRegenerateRoute } from '../model/regenerateRoute';
 import type { RegenerateRoute } from '../model/regenerateRoute';
 import { DraftFallbackBanner } from './DraftFallbackBanner';
-import { RevealItem } from './RevealItem';
+import { RevealItem } from '@/shared/ui/RevealItem';
 import { SlotCandidatePanelContainer } from './SlotCandidatePanelContainer';
 
 /** 진행 게이지 셀 라벨의 상태부 — `{n}일차 {완성|생성 중|대기}`(한글 · AC-6). 위젯은 features 를
@@ -807,6 +807,7 @@ export function DraftPage({
                   key={`card-${index}-${slot.poiId}`}
                   revealing={revealing}
                   index={index}
+                  firstDelayMs={500}
                 >
                   <SlotStopCard
                     // 순번을 섞는다 — 같은 날 같은 장소 2회(BR-U2-04 위반 데이터, TRIP-1296)면 poiId 만으론 겹친다. 끌어 옮기지 않는 목록이라 순번 key 가 안전하다.
@@ -840,6 +841,7 @@ export function DraftPage({
                     key={`conn-${index}-${slot.poiId}`}
                     revealing={revealing}
                     index={index}
+                    firstDelayMs={500}
                   >
                     <DistanceConnector
                       slotKey={buildSlotKey(selectedDate, slot.poiId)}

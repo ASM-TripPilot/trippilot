@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react-native';
+import { act, fireEvent, screen, within } from '@testing-library/react-native';
 
 import type { Itinerary, Trip } from '@/shared/api/index.schemas';
 import { useTripWizardStore } from '@/features/create-trip';
@@ -767,5 +767,72 @@ describe('🔴 TRIP-1120 · 기록 캘린더 진행 중 카드 + legend `›`', 
       )
     ).toBeOnTheScreen();
     expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+// TRIP-1639 · 기록 탭을 연 채 자정(KST)을 넘기면 "오늘" 기준 판정(진행 중 카드·지난 여행 카드)이 새 날로 바뀐다.
+// 앞 describe 들의 freezeDate 는 setTimeout 을 진짜로 남기지만, 여기서는 자정 타이머가 돌아야 하므로 완전 가짜 시계다.
+// 그래서 settle()(진짜 setTimeout) 대신 가짜 시계를 흘리며 약속을 푸는 advance() 를 쓴다.
+describe('🔴 자정을 넘기면 진행 중 카드가 지난 여행으로 넘어간다 (보고 있는 달은 그대로, D3)', () => {
+  const ENDING = trip({
+    tripId: 't-end',
+    title: '월말 여행',
+    startDate: '2026-10-29',
+    endDate: '2026-10-31',
+    // 서버 status 는 날짜 파생이라 ACTIVE 로 남겨 둔다 — "지난 여행" 판정이 endDate < 오늘로만 갈리게.
+    status: 'ACTIVE',
+  });
+
+  /** 가짜 시계를 ms 만큼 흘리고 그 사이 약속(일정 조회)을 함께 푼다. */
+  async function advance(ms: number): Promise<void> {
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  it('10-31 23:59 에 연 화면이 61초 뒤(11-01 00:00:01)엔 진행 중 카드가 사라지고 지난 여행 카드가 뜨며, 달 라벨은 10월 그대로고 일정은 다시 받지 않는다', async () => {
+    // 준비 — KST 2026-10-31 23:59:00 (= UTC 14:59). 확정 여행 하나가 오늘(10-31)까지 진행 중.
+    jest.useFakeTimers({ now: new Date('2026-10-31T14:59:00Z') });
+    try {
+      let fetched = 0;
+      setTrips([ENDING]);
+      mockItineraryOptions.mockImplementation((tripId: string) => ({
+        queryKey: [`/trips/${tripId}/itinerary`],
+        queryFn: () => {
+          fetched += 1;
+          return Promise.resolve(CONFIRMED);
+        },
+      }));
+      renderPage();
+      await advance(100);
+
+      // 앵커 — 자정 전에는 진행 중 카드이고 지난 여행 카드는 없다(이게 서야 아래 "바뀜"이 의미를 갖는다).
+      expect(screen.getByTestId('record-calendar-ongoing')).toBeOnTheScreen();
+      expect(
+        screen.queryByTestId('record-calendar-past-trip-t-end')
+      ).toBeNull();
+      expect(
+        screen.getByTestId('record-calendar-month-label')
+      ).toHaveTextContent('2026년 10월');
+      const fetchedBeforeMidnight = fetched;
+      expect(fetchedBeforeMidnight).toBe(1);
+
+      // 실행 — 자정을 넘긴다.
+      await advance(61_000);
+
+      // 단언 ① 오늘이 11-01 로 바뀌어 같은 여행이 "지난 여행"이 된다.
+      expect(screen.queryByTestId('record-calendar-ongoing')).toBeNull();
+      expect(
+        screen.getByTestId('record-calendar-past-trip-t-end')
+      ).toBeOnTheScreen();
+      // 단언 ② D3 — 사용자가 보던 달은 자정에 따라 넘어가지 않는다(오늘은 11월인데 라벨은 10월).
+      expect(
+        screen.getByTestId('record-calendar-month-label')
+      ).toHaveTextContent('2026년 10월');
+      // 단언 ③ AC2 — 오늘이 바뀌어도 일정 조회 키는 오늘과 무관해 다시 받지 않는다.
+      expect(fetched).toBe(fetchedBeforeMidnight);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

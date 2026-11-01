@@ -18,10 +18,13 @@ import {
   recordsTripIdForDate,
 } from '../model/recordsCalendar';
 import { useRecordsCalendar } from '../model/useRecordsCalendar';
-import { RecordsCalendarScreen } from './RecordsCalendarScreen';
+import {
+  RecordsCalendarOfflineFace,
+  RecordsCalendarScreen,
+} from './RecordsCalendarScreen';
 import { useTripWizardStore } from '@/features/create-trip';
 import { buildMonthGrid, shiftMonth } from '@/shared/lib/monthGrid';
-import { seoulDate } from '@/shared/lib/seoulDate';
+import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 /**
@@ -43,7 +46,7 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  * 않는다). legend `›` 와 legend 누름은 같은 `openableTripIds` 집합을 본다.
  */
 export function RecordsCalendarPage(): ReactElement {
-  const { trips, isPending, isError } = useRecordsCalendar();
+  const { trips, isPending, isError, isOffline } = useRecordsCalendar();
   const router = useRouter();
   // 훅 호출 순서 규칙 — 아래 일찍 return 들보다 위.
   const itineraries = useQueries({
@@ -52,7 +55,9 @@ export function RecordsCalendarPage(): ReactElement {
     ),
   });
 
-  const today = seoulDate(new Date());
+  // 오늘(KST) — 상태로 들어 자정을 넘기면 바뀐다(TRIP-1639 · TRIP-1364 선례). 렌더 중 `seoulDate(new Date())` 는 마운트에 굳는다.
+  const today = useSeoulToday();
+  // 보고 있는 달은 사용자 탐색 상태라 첫 렌더의 오늘에서만 정한다 — 자정을 넘겨도 넘기지 않는다(TRIP-1639 D3).
   const [yearMonth, setYearMonth] = useState(today.slice(0, 7));
 
   // INV-4 · trips=[] 는 로딩·에러에서도 나온다 — isError·isPending 을 빈 상태보다 먼저 갈라
@@ -70,6 +75,9 @@ export function RecordsCalendarPage(): ReactElement {
       />
     );
   }
+
+  // TRIP-1638 · 오프라인 콜드스타트는 요청이 보류된 isPending 이라 스피너가 끝나지 않는다 — 로딩보다 먼저 가른다.
+  if (isOffline) return <RecordsCalendarOfflineFace />;
 
   if (isPending) {
     return (
