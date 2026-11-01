@@ -63,7 +63,7 @@ frontend/.claude/skills/verify-fv-consent/scripts/run.sh [--frontend <node_modul
 | `src/shared/location/consentPutBody.ts` | L2·L3 같은 값 | `ServerApply` 의 한 값 `v` (적합성: PUT 바디) |
 | `src/pages/settings/settings-location/ui/LocationConsentPage.tsx` · `LocationConsentScreen.tsx` | 로딩·오류 얼굴, 토글 off→`onGrant`, on→다이얼로그→`onRevokeConfirmed`, `saveFailed` | `ShownLoc = "hidden"` · `Intent` (재현) |
 | `src/pages/settings/settings-personalization/model/usePersonalization.ts` · `ui/PersonalizationPage.tsx` · `ui/PersonalizationScreen.tsx` | `consentOn` 도출(isError 무시 — 오류 얼굴 없음) · `onToggle`(`inFlightRef` 잠금 · `try/catch` → `saveFailed` · `finally` 무효화 뒤 해제) · `saveFailed` 안내 | `ShownPers` · `CanTap` · `Intent` (적합성) · `Release`·`SendFail`·`ServerApply` · R1·R2 |
-| `src/pages/settings/settings/model/settingsSections.ts` · `ui/SettingsPage.tsx` | `consentChip(locationConsent.isError ? undefined : …gpsRecordingOptIn)` · 같은 쿼리 구독(가정 C1) | `ChipLoc` (적합성은 값→칩만, isError→숨김은 R4 가 실제 SettingsPage 로) |
+| `src/pages/settings/settings/model/settingsSections.ts` · `ui/SettingsPage.tsx` | `consentChip(locationConsent.isError ? undefined : …legalConsent)`(TRIP-1696 — l06·허브와 같은 필드) · 같은 쿼리 구독(가정 C1) | `ChipLoc` (적합성은 값→칩만, isError→숨김은 R4 가 실제 SettingsPage 로) |
 | `src/shared/api/index.ts` | `patchConsent`·`fetchTerms` | 개인화 요청(읽어서 대조) |
 | `backend/modules/auth/.../application/LocationConsentService.kt` · `ConsentService.kt` · `domain/location/LocationConsent.kt` | 서버 규칙 — 가정 S1~S4 | 가정. 바뀌면 `ConsentFlow.tla` ASSUMPTION 주석·`ServerApply` 의 `logs` 식과 재현의 가짜 서버를 함께 고친다 |
 
