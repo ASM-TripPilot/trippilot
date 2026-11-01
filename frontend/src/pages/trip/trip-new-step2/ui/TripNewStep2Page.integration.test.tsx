@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -312,6 +313,63 @@ describe('TRIP-1028 P2 · 처음 열 때 좌표 중복을 걷은 수만큼만 �
     await waitForSections();
     expect(requested).toHaveLength(2);
   });
+
+  // TRIP-1703(AC1·AC6) — 지역 밖 known 숙소는 후보에서 빠진다. 응답 전 평면 목록엔 아직 보이지만(조회 중은 숨기지
+  // 않는다, D2) 응답이 오면 사라지고, 그 사이에 고른 숙소는 지정 직전 가드가 막는다(QA 재현 경로).
+  it('TRIP-1703 AC1 · 응답이 오면 부산 숙소(para-1·2) 카드가 사라지고 서울(jw)·위치 확인 안 됨(no-coord)만 남는다', async () => {
+    holdResponses = true;
+    render(page());
+    openNight(1);
+    await waitFor(() => expect(requested).toHaveLength(2));
+    // 앵커 — 응답 전 평면 목록엔 부산 숙소까지 4장이 보인다(조회 중은 숨기지 않는다).
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(4);
+
+    act(() => releaseAll());
+    await waitForSections();
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId('trip-base-staysheet-cand-para-1')
+      ).not.toBeOnTheScreen();
+      expect(
+        screen.queryByTestId('trip-base-staysheet-cand-para-2')
+      ).not.toBeOnTheScreen();
+    });
+    const here = screen.getByTestId('trip-base-staysheet-section-here');
+    const other = screen.getByTestId('trip-base-staysheet-section-other');
+    expect(
+      within(here).getByTestId('trip-base-staysheet-cand-jw')
+    ).toBeOnTheScreen();
+    expect(
+      within(other).getByTestId('trip-base-staysheet-cand-no-coord')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('trip-base-staysheet-section-other-title')
+    ).toHaveTextContent('위치 확인 안 됨');
+    expect(requested).toHaveLength(2);
+  });
+
+  it('TRIP-1703 AC6 · 응답 전 평면에서 고른 부산 숙소가 응답 뒤 지역 밖으로 판명되면 [지정]은 permanent 문구로 끝난다', async () => {
+    holdResponses = true;
+    render(page());
+    openNight(1);
+    await waitFor(() => expect(requested).toHaveLength(2));
+    fireEvent.press(screen.getByTestId('trip-base-staysheet-cand-para-1'));
+
+    act(() => releaseAll());
+    await waitForSections();
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId('trip-base-staysheet-cand-para-1')
+      ).not.toBeOnTheScreen()
+    );
+    // 이 파일의 지정 훅 목은 `jest.fn()`(콜백을 안 부른다)이라, 가드가 없으면 아무 문구도 뜨지 않는다.
+    fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
+
+    expect(screen.getByTestId('trip-base-staysheet-error')).toHaveTextContent(
+      '이 숙소는 지금 거점으로 지정할 수 없어요 · 다른 숙소를 골라 주세요'
+    );
+  });
 });
 
 describe('TRIP-1028 P3 · 한 번 켜진 조회는 닫아도 켜져 있다 (AC-3)', () => {
@@ -414,7 +472,7 @@ describe('TRIP-1028 P4 · 받은 주소는 앱 세션 동안 기억한다 (AC-4)
 });
 
 describe('🔴 TRIP-1074 P5 · 받은 주소로 카드 동네 라벨을 붙여도 요청은 늘지 않는다 (AC-6)', () => {
-  it('섹션이 뜬 뒤 카드 서브라인이 시군구 라벨이고, reverse-geocode 는 여전히 2건이다', async () => {
+  it('섹션이 뜬 뒤 서울 카드 서브라인이 시군구 라벨이고(부산 카드는 후보에서 빠졌다), reverse-geocode 는 여전히 2건이다', async () => {
     render(page());
 
     openNight(1);
@@ -424,12 +482,16 @@ describe('🔴 TRIP-1074 P5 · 받은 주소로 카드 동네 라벨을 붙여�
     expect(
       screen.getByTestId('trip-base-staysheet-cand-jw-meta')
     ).toHaveTextContent('종로구');
+    // TRIP-1703 — 옛 단언(para-1·para-2 의 「해운대구」 라벨)은 그 카드들이 지역 밖이라 후보에서 빠져 사라졌다.
+    // 부산 카드가 안 그려진 것은 응답이 반영된 뒤에야 성립하므로 기다려서 본다.
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId('trip-base-staysheet-cand-para-1')
+      ).not.toBeOnTheScreen()
+    );
     expect(
-      screen.getByTestId('trip-base-staysheet-cand-para-1-meta')
-    ).toHaveTextContent('해운대구');
-    expect(
-      screen.getByTestId('trip-base-staysheet-cand-para-2-meta')
-    ).toHaveTextContent('해운대구');
+      screen.queryByTestId('trip-base-staysheet-cand-para-2')
+    ).not.toBeOnTheScreen();
     // 좌표 없는 숙소 — 주소도 날짜도 없어 서브라인이 없다.
     expect(
       screen.queryByTestId('trip-base-staysheet-cand-no-coord-meta')

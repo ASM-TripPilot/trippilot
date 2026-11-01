@@ -337,7 +337,7 @@ export function ItineraryPlanPage({
   });
 
   // meta = "[확정됨 · ]N곳[ · X.Xkm]". N 은 **선택일 슬롯 중 고정 숙소를 뺀 수**(01b D3 —
-  // totalPlaces·coPickProgress 재사용 금지 · 숙소 판정은 아래 `hasBase` 와 같다, TRIP-1234 R3-03).
+  // totalPlaces·coPickProgress 재사용 금지 · 숙소 판정은 아래 `hasBase` 의 슬롯 항과 같다, TRIP-1234 R3-03).
   // km·접힘 규칙은 `sheetMeta`(01b D3·D5 · TRIP-1110 INV-4), 확정(h16)이면 "확정됨 · " 접두(TRIP-801 AC-3).
   const meta = sheetMeta(slots, {
     count: 'excludeFixedStay',
@@ -345,11 +345,14 @@ export function ItineraryPlanPage({
     confirmed: isConfirmed,
   });
 
-  // 거점 없음 판정 = 선택일 슬롯에 고정 숙소 부재(클라 휴리스틱 · 01b D4 — itinerary 응답에
-  // baseAssignment 필드가 없어 슬롯만으로 유추한다).
-  const hasBase = slots.some(
-    (slot) => slot.isFixed && slot.category === '숙소'
-  );
+  // 거점 없음 판정(01b D4) — 선택일 슬롯의 고정 숙소 **또는** 그날 밤을 덮는 거점 배정(TRIP-1704: j01 방문 기록
+  // `deriveStayAttribution` 과 같은 근거·같은 구간 dateFrom ≤ D < dateTo — 체크아웃일은 덮지 않는다, 종전처럼 그날 밤
+  // 숙소가 없으면 안내가 뜬다). 거점 조회 대기·실패면 슬롯 판정만 남는다(종전 동작).
+  const hasBase =
+    slots.some((slot) => slot.isFixed && slot.category === '숙소') ||
+    (bases.data ?? []).some(
+      (base) => base.dateFrom <= selectedDate && selectedDate < base.dateTo
+    );
 
   return (
     <MapSheetShell
@@ -433,8 +436,8 @@ export function ItineraryPlanPage({
               timeLabel={timeLabel}
               fixed={slot.isFixed}
               subtitle={
-                // "…· 숙소 · 변경 불가" 부제는 **고정 숙소**에만(거점없음 판정 hasBase 와 같은
-                // isFixed&&숙소 정의). 시각 고정 must-visit(비숙소)까지 붙이면 미술관을 "숙소"로
+                // "…· 숙소 · 변경 불가" 부제는 **고정 숙소**에만(거점없음 판정 hasBase 의 슬롯 항과
+                // 같은 isFixed&&숙소 정의). 시각 고정 must-visit(비숙소)까지 붙이면 미술관을 "숙소"로
                 // 오표기한다(5-b 경고-1). 고정 비숙소는 부제 없음(정본 카피 부재).
                 slot.isFixed && slot.category === '숙소'
                   ? fixedSlotSubtitle(slot.startAt)

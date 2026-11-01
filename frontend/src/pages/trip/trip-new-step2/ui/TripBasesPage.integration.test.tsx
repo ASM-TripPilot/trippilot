@@ -11,6 +11,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import type { StayAddressState } from '../model/staySheetSections';
 import type {
   AssignBaseRequest,
   SavedStay,
@@ -76,8 +77,10 @@ jest.mock('expo-router', () => ({
   },
 }));
 
+// TRIP-1703 — 기본 `{}`(전부 조회 중)라 기존 케이스는 그대로다. 지역 밖 숙소 케이스만 주소를 채운다.
+let mockAddressById: Record<string, StayAddressState> = {};
 jest.mock('../model/useStayAddresses', () => ({
-  useStayAddresses: () => ({}),
+  useStayAddresses: () => mockAddressById,
 }));
 
 // 교체 흐름은 DELETE→POST→재조회 왕복이 여럿이라 로컬 ~1.7s, CI 러너에서 5s 기본 제한을 넘는다
@@ -91,7 +94,17 @@ afterEach(() => {
   resetPressGuard();
   useTripWizardStore.getState().reset();
   server.resetHandlers();
+  mockAddressById = {};
 });
+
+/** TRIP-1703 — 서울특별시 여행에서 stay-a 는 서울, stay-b 는 부산으로 주소가 확인된 상태. */
+const SEOUL_A_BUSAN_B: Record<string, StayAddressState> = {
+  'stay-a': { status: 'known', address: '서울특별시 종로구 청계천로 279' },
+  'stay-b': {
+    status: 'known',
+    address: '부산광역시 해운대구 해운대해변로 296',
+  },
+};
 
 afterAll(() => server.close());
 
@@ -259,6 +272,25 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
   });
 
   // ── AC-C3 ────────────────────────────────────────────────────────────────────
+
+  // ── TRIP-1703 AC8 — 3/4 「거점 숙소 다시 고르기」 입구 ──────────────────────────────
+
+  describe('TRIP-1703 AC8 · 지역 밖 숙소는 이 입구의 시트에도 후보로 안 뜬다', () => {
+    it('서울특별시 여행의 1박 시트 → 서울 숙소(stay-a)만 후보, 부산 숙소(stay-b)는 없고 「다른 지역」도 없다', async () => {
+      mockAddressById = SEOUL_A_BUSAN_B;
+      await renderTripBases();
+
+      fireEvent.press(screen.getByTestId('trip-base-night-card-1'));
+
+      expect(
+        screen.getByTestId('trip-base-staysheet-cand-stay-a')
+      ).toBeOnTheScreen();
+      expect(
+        screen.queryByTestId('trip-base-staysheet-cand-stay-b')
+      ).toBeNull();
+      expect(screen.queryByText(/다른 지역/)).toBeNull();
+    });
+  });
 
   describe('AC-C3 · 조회 중이면 loading, 실패하면 error — notrip 은 없다', () => {
     it('여행 조회가 끝나기 전엔 박별 스켈레톤을 그리고 notrip 얼굴이 아니다', async () => {
@@ -1002,6 +1034,24 @@ describe('편집 모드 (TRIP-1082)', () => {
       expect(screen.getByTestId('trip-base-edit-done')).toBeOnTheScreen();
       expect(screen.queryByTestId('trip-base-generate')).toBeNull();
       expect(screen.queryByTestId('trip-wizard-progress-seg-1')).toBeNull();
+    });
+  });
+
+  // ── TRIP-1703 AC8 — 거점 편집(mode=edit) 입구 ───────────────────────────────────
+
+  describe('TRIP-1703 AC8 · 편집 모드 시트도 지역 밖 숙소를 후보에서 뺀다', () => {
+    it('1박 시트 → 서울 숙소(stay-a)만 후보, 부산 숙소(stay-b)는 없다', async () => {
+      mockAddressById = SEOUL_A_BUSAN_B;
+      await renderEdit();
+
+      fireEvent.press(screen.getByTestId('trip-base-night-card-1'));
+
+      expect(
+        screen.getByTestId('trip-base-staysheet-cand-stay-a')
+      ).toBeOnTheScreen();
+      expect(
+        screen.queryByTestId('trip-base-staysheet-cand-stay-b')
+      ).toBeNull();
     });
   });
 

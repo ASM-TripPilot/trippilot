@@ -1091,12 +1091,13 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
     /^trip-base-staysheet-cand-(?!.*-(photo|photo-placeholder|base-badge|meta|price)$)/;
 
   /**
-   * TRIP-1011(#036 · D8 · 브리프 AC-4·AC-6 · 01b Q2·Q3·Q5) — 시트 섹션 분리 배선.
+   * TRIP-1011(#036 · 01b Q5) — 시트 후보의 "그 밤 지역" 기준은 여행 첫 지역이 아니라 **연 밤의 지역**이다.
+   * TRIP-1703 이 D8("숨기지 않는다")의 known·밖 부분을 뒤집어, 옛 「다른 지역」 섹션 단언을 "후보에 없다"로 고쳤다.
    *
-   * 준비: 서울 1박 + 강릉 1박 여행 · 저장 숙소 서울·강릉 각 1곳. 섹션 판정(숨김·중복 0)은 `staySheetSections.test`(PBT)가
-   * 잠그고, 여기선 페이지가 **연 밤의 지역**으로 섹션을 내려 시트에 넘기는지(배선)만 본다.
+   * 준비: 서울 1박 + 강릉 1박 여행 · 저장 숙소 서울·강릉 각 1곳(주소 확인). 후보 거르기 판정(순서·fail-open)은
+   * `staySheetSections.test`(PBT)가 잠그고, 여기선 페이지가 **연 밤의 지역**으로 거른 목록을 시트에 넘기는지(배선)만 본다.
    */
-  describe('TRIP-1011 AC-4 · 시트가 "그 밤 지역 숙소" / "다른 지역"으로 나뉜다 (숨김 없음)', () => {
+  describe('TRIP-1011 AC-4 · 시트 후보의 "그 밤 지역"은 연 밤의 지역이다 (TRIP-1703: 밖 숙소는 후보에 없다)', () => {
     const JW: SavedStay = {
       ...STAY_A,
       savedStayId: 'jw',
@@ -1108,40 +1109,42 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
       status: 'known',
       address: '서울특별시 종로구 청계천로 279',
     };
+    const GANGNEUNG: SavedStay = {
+      ...STAY_A,
+      savedStayId: 'gn',
+      name: '강릉 씨마크',
+      lat: 37.79,
+      lng: 128.92,
+    };
 
-    it('01b Q5 · "그 밤 지역"은 여행 첫 지역이 아니라 연 밤의 지역이다 (강릉 밤 → 강릉 숙소가 위)', () => {
-      const GANGNEUNG: SavedStay = {
-        ...STAY_A,
-        savedStayId: 'gn',
-        name: '강릉 씨마크',
-        lat: 37.79,
-        lng: 128.92,
-      };
-      mockSavedStaysResult = loaded([JW, GANGNEUNG]);
-      mockAddressById = {
-        jw: SEOUL,
-        gn: { status: 'known', address: '강원특별자치도 강릉시 해안로 406' },
-      };
-      seedDraft('2026-06-10', '2026-06-12', [
-        ['서울특별시', 1],
-        ['강릉시', 1],
-      ]);
-      render(<TripNewStep2Page />);
+    it.each<[string, number, string, string]>([
+      ['강릉 밤(2번째)', 2, 'gn', 'jw'],
+      ['서울 밤(1번째)', 1, 'jw', 'gn'],
+    ])(
+      '01b Q5 · %s → 그 밤 지역 숙소만 후보이고 다른 밤 지역 숙소는 후보에 없다',
+      (_, night, shown, hidden) => {
+        mockSavedStaysResult = loaded([JW, GANGNEUNG]);
+        mockAddressById = {
+          jw: SEOUL,
+          gn: { status: 'known', address: '강원특별자치도 강릉시 해안로 406' },
+        };
+        seedDraft('2026-06-10', '2026-06-12', [
+          ['서울특별시', 1],
+          ['강릉시', 1],
+        ]);
+        render(<TripNewStep2Page />);
 
-      fireEvent.press(screen.getByTestId('trip-base-night-card-2'));
+        fireEvent.press(screen.getByTestId(`trip-base-night-card-${night}`));
 
-      expect(
-        screen.getByTestId('trip-base-staysheet-section-here-title')
-      ).toHaveTextContent('강릉시 숙소');
-      const here = screen.getByTestId('trip-base-staysheet-section-here');
-      expect(
-        within(here).getByTestId('trip-base-staysheet-cand-gn')
-      ).toBeOnTheScreen();
-      const other = screen.getByTestId('trip-base-staysheet-section-other');
-      expect(
-        within(other).getByTestId('trip-base-staysheet-cand-jw')
-      ).toBeOnTheScreen();
-    });
+        expect(
+          screen.getByTestId(`trip-base-staysheet-cand-${shown}`)
+        ).toBeOnTheScreen();
+        expect(
+          screen.queryByTestId(`trip-base-staysheet-cand-${hidden}`)
+        ).toBeNull();
+        expect(screen.queryAllByTestId(CARD_ROOT)).toHaveLength(1);
+      }
+    );
   });
 
   /**
@@ -1151,7 +1154,7 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
    * 준비: 서울 1박 + 부산 1박(9/26–9/28) 여행, 저장 숙소는 서울 두 곳(종로인·JW). 주소 상태만 케이스마다 바꾼다.
    * 실행: 2번째 밤(부산) 카드를 눌러 시트를 연다. 단언: 섹션 구성·제목·안내 문구(완전 일치)·지정 요청.
    */
-  describe('그 밤 지역 숙소가 0곳이면 "다른 지역" 섹션 + 안내 문구 (결정 1 · AC-B1~B6)', () => {
+  describe('그 밤 지역 숙소가 0곳이면 후보 없이 안내 문구만 (결정 1 · AC-B1~B6 → TRIP-1703 AC5)', () => {
     const NOTICE = '부산광역시에 저장한 숙소가 없어요';
     const JONGNO: SavedStay = {
       ...STAY_A,
@@ -1189,42 +1192,34 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
       mockSavedStaysResult = loaded([JONGNO, JW_DDM]);
     });
 
-    it('AC-B1 · 서울 숙소만(주소 확인) → "다른 지역" 섹션에 2장, "부산광역시 숙소" 섹션 없음, 안내 문구', () => {
+    it('AC-B1 · 서울 숙소만(주소 확인) → 카드 0장, "부산광역시 숙소"·「다른 지역」 섹션 없음, 안내 문구만 (TRIP-1703 AC5)', () => {
       mockAddressById = { jongno: SEOUL_JONGNO, 'jw-ddm': SEOUL_DDM };
       openBusanNight();
 
-      const other = screen.getByTestId('trip-base-staysheet-section-other');
-      expect(
-        screen.getByTestId('trip-base-staysheet-section-other-title')
-      ).toHaveTextContent('다른 지역');
-      expect(within(other).queryAllByTestId(CARD_ROOT)).toHaveLength(2);
-      expect(
-        screen.queryByTestId('trip-base-staysheet-section-here')
-      ).toBeNull();
       expect(
         screen.getByTestId('trip-base-staysheet-region-empty')
       ).toHaveTextContent(NOTICE);
+      expect(screen.queryAllByTestId(CARD_ROOT)).toHaveLength(0);
+      expect(screen.queryAllByTestId(/^trip-base-staysheet-section-/)).toEqual(
+        []
+      );
+      expect(screen.queryByText(/다른 지역/)).toBeNull();
     });
 
-    it('AC-B2 · 다른 지역 숙소를 골라 지정하면 평소처럼 지정 요청이 1회 나간다 (막지 않음)', () => {
+    it('AC-B2 → TRIP-1703 AC5 · 지역 밖이 전부 알려졌으면 고를 카드도 지정 버튼도 없고, 「저장한 숙소가 아직 없어요」도 거짓이라 안 띄운다', () => {
       mockAddressById = { jongno: SEOUL_JONGNO, 'jw-ddm': SEOUL_DDM };
       openBusanNight();
-      // 앵커 — 안내가 떠 있는 상태에서 고른다(안내가 지정을 막는지 보는 것이 요점).
+
+      // 앵커 — 안내와 둘러보기는 떠 있다(시트가 통째로 안 그려진 공짜 통과 차단).
       expect(
         screen.getByTestId('trip-base-staysheet-region-empty')
       ).toBeOnTheScreen();
-
-      const other = screen.getByTestId('trip-base-staysheet-section-other');
-      fireEvent.press(
-        within(other).getByTestId('trip-base-staysheet-cand-jongno')
-      );
-      fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
-
-      expect(mockAssignMutate).toHaveBeenCalledTimes(1);
       expect(
-        (mockAssignMutate.mock.calls[0][0] as { data: { savedStayId: string } })
-          .data.savedStayId
-      ).toBe('jongno');
+        screen.getByTestId('trip-base-staysheet-browse')
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId('trip-base-staysheet-assign')).toBeNull();
+      expect(screen.queryByTestId('trip-base-staysheet-empty')).toBeNull();
+      expect(mockAssignMutate).not.toHaveBeenCalled();
     });
   });
 
@@ -1264,16 +1259,18 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
       fireEvent.press(screen.getByTestId('trip-base-night-card-1'));
     }
 
-    it('AC-2 · AC-4 섹션 경로 — "그 밤 지역"과 "다른 지역" 두 섹션 카드 모두 라벨로 시작한다', () => {
+    it('AC-2 · AC-4 섹션 경로 — "그 밤 지역" 카드는 시군구 라벨로 시작하고, 지역 밖 known 카드는 없고, 모름 카드는 라벨이 없다 (TRIP-1703)', () => {
       mockSavedStaysResult = loaded([
         saved('jw', 'JW 메리어트 동대문', 37.57),
         saved('denba', '덴바스타 구서점', 35.26),
         saved('para-1', '파라다이스호텔', 35.16),
+        saved('unk', '주소 모르는 호텔', 37.6),
       ]);
       mockAddressById = {
         jw: SEOUL,
         denba: known('부산 금정구 구서동 1'),
         'para-1': known('부산광역시 해운대구 해운대해변로 296'),
+        unk: { status: 'unknown' },
       };
       openSeoulNight();
 
@@ -1282,13 +1279,17 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
       expect(
         within(here).getByTestId('trip-base-staysheet-cand-jw-meta')
       ).toHaveTextContent(`종로구 · ${DATES}`);
+      // 옛 단언(금정구·해운대구 라벨이 「다른 지역」 카드에 붙음)은 그 카드들이 후보에서 빠져 사라졌다.
+      expect(screen.queryByTestId('trip-base-staysheet-cand-denba')).toBeNull();
       expect(
-        within(other).getByTestId('trip-base-staysheet-cand-denba-meta')
-      ).toHaveTextContent(`금정구 · ${DATES}`);
+        screen.queryByTestId('trip-base-staysheet-cand-para-1')
+      ).toBeNull();
+      // 둘째 섹션은 주소를 모르는 카드뿐 — 라벨 자리가 비고 날짜만 남는다.
+      expect(within(other).queryAllByTestId(CARD_ROOT)).toHaveLength(1);
       expect(
-        within(other).getByTestId('trip-base-staysheet-cand-para-1-meta')
-      ).toHaveTextContent(`해운대구 · ${DATES}`);
-      // 실데이터 경로엔 가격 줄이 없다 — 배선이 priceLabel 을 지어내지 않는다(결정 4(a)).
+        within(other).getByTestId('trip-base-staysheet-cand-unk-meta')
+      ).toHaveTextContent(DATES);
+      // 실데이터 경로엔 가격 줄이 없다 — 배선이 priceLabel 을 지어내지 않는다(결정 4(a), TRIP-1703 5-c 복원).
       expect(screen.queryAllByTestId(/-price$/)).toHaveLength(0);
     });
 
@@ -1340,6 +1341,237 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
       expect(
         screen.queryByTestId('trip-base-staysheet-cand-pending-meta')
       ).toBeNull();
+    });
+  });
+
+  /**
+   * TRIP-1703(01b AC1~6 · D1~D6) — 거점 시트는 그 밤 지역 **밖으로 확인된** 숙소를 후보에서 뺀다. TRIP-1011 D8
+   * ("지역 밖도 보이고 고를 수 있다")을 뒤집는다. 판정 함수 자체(순서·fail-open)는 `staySheetSections.test`(PBT)가
+   * 잠그고, 여기선 페이지가 **시트에 넘기는 후보**(평면·섹션 두 길 모두)와 **지정 직전 가드**를 잰다.
+   *
+   * 준비: 서울특별시 1박 + 부산광역시 1박(9/26–9/28) · 저장 숙소는 케이스마다 고르고 주소 상태만 바꾼다
+   *   (`mockAddressById` — 항목 없음이 조회 중, `loading` 객체도 조회 중, `unknown` 은 조회 끝·모름).
+   * 실행: 밤 카드를 눌러 시트를 연다(가드 케이스는 고른 뒤 주소 상태를 바꿔 다시 그린다).
+   * 단언: 카드 testID 유무·섹션 제목(완전 일치)·`useAssignBase().mutate` 호출 수·실패 문구.
+   * ⚠️ 없다는 단언은 시트가 통째로 안 그려진 경우와 구분이 안 되므로 같은 시트의 다른 카드·안내·둘러보기를 앵커로 짝지었다.
+   */
+  describe('TRIP-1703 · 지역 밖 숙소는 후보에 없고, 지정 직전에도 한 번 더 막는다', () => {
+    const SEOUL: StayAddressState = {
+      status: 'known',
+      address: '서울특별시 종로구 청계천로 279',
+    };
+    const BUSAN: StayAddressState = {
+      status: 'known',
+      address: '부산광역시 해운대구 해운대해변로 296',
+    };
+    const UNKNOWN: StayAddressState = { status: 'unknown' };
+    const LOADING: StayAddressState = { status: 'loading' };
+    const OTHER_TITLE = 'trip-base-staysheet-section-other-title';
+    const PERMANENT_COPY =
+      '이 숙소는 지금 거점으로 지정할 수 없어요 · 다른 숙소를 골라 주세요';
+
+    function stayAt(savedStayId: string, name: string, lat: number): SavedStay {
+      return { ...STAY_A, savedStayId, name, lat, lng: 127 };
+    }
+    const JW = stayAt('jw', 'JW 메리어트 동대문', 37.57);
+    const PARA = stayAt('para', '파라다이스호텔 부산', 35.16);
+    const PARA_2 = stayAt('para-2', '해운대 그랜드', 35.17);
+    const UNK = stayAt('unk', '주소 모르는 호텔', 37.6);
+    const PEND = stayAt('pend', '조회 중 호텔', 37.61);
+    const MISS = stayAt('miss', '항목 없는 호텔', 37.62);
+
+    /** 서울 1박 + 부산 1박 여행에서 `night`번째 밤 시트를 연다. */
+    function openNight(
+      night: 1 | 2,
+      stays: SavedStay[],
+      addresses: Record<string, StayAddressState>
+    ) {
+      seedDraft('2026-09-26', '2026-09-28', [
+        ['서울특별시', 1],
+        ['부산광역시', 1],
+      ]);
+      mockSavedStaysResult = loaded(stays);
+      mockAddressById = addresses;
+      const view = render(<TripNewStep2Page />);
+      fireEvent.press(screen.getByTestId(`trip-base-night-card-${night}`));
+      return view;
+    }
+
+    const cand = (id: string) => `trip-base-staysheet-cand-${id}`;
+
+    describe('AC1 · 밖 숙소는 평면·섹션 어느 길로도 그려지지 않는다', () => {
+      it('P1 평면 길 — 서울 밤에 [서울, 부산](둘 다 주소 확인) → 서울 카드 1장, 부산 카드·섹션·「다른 지역」 없음', () => {
+        openNight(1, [JW, PARA], { jw: SEOUL, para: BUSAN });
+
+        expect(screen.getByTestId(cand('jw'))).toBeOnTheScreen();
+        expect(screen.queryByTestId(cand('para'))).toBeNull();
+        expect(screen.queryAllByTestId(CARD_ROOT)).toHaveLength(1);
+        expect(
+          screen.queryAllByTestId(/^trip-base-staysheet-section-/)
+        ).toEqual([]);
+        expect(screen.queryByText(/다른 지역/)).toBeNull();
+      });
+
+      it('P2 섹션 길 — [서울, 부산, 모름] → 서울은 here, 모름은 「위치 확인 안 됨」 섹션, 부산은 어디에도 없다', () => {
+        openNight(1, [JW, PARA, UNK], {
+          jw: SEOUL,
+          para: BUSAN,
+          unk: UNKNOWN,
+        });
+
+        const here = screen.getByTestId('trip-base-staysheet-section-here');
+        const other = screen.getByTestId('trip-base-staysheet-section-other');
+        expect(within(here).getByTestId(cand('jw'))).toBeOnTheScreen();
+        expect(within(other).getByTestId(cand('unk'))).toBeOnTheScreen();
+        expect(screen.queryByTestId(cand('para'))).toBeNull();
+        expect(screen.getByTestId(OTHER_TITLE)).toHaveTextContent(
+          '위치 확인 안 됨'
+        );
+        expect(screen.queryByText(/다른 지역/)).toBeNull();
+      });
+
+      it('P3 평면 길(섹션 함수가 null 을 주는 경우) — [부산, 조회 중] → 조회 중 카드만 1장, 부산 카드는 안 샌다', () => {
+        openNight(1, [PARA, PEND], { para: BUSAN, pend: LOADING });
+
+        expect(screen.getByTestId(cand('pend'))).toBeOnTheScreen();
+        expect(screen.queryByTestId(cand('para'))).toBeNull();
+        expect(screen.queryAllByTestId(CARD_ROOT)).toHaveLength(1);
+        expect(
+          screen.queryAllByTestId(/^trip-base-staysheet-section-/)
+        ).toEqual([]);
+      });
+    });
+
+    describe('AC2 · 기준은 연 밤의 지역이다', () => {
+      it.each<[string, 1 | 2, string, string]>([
+        ['서울 밤(1번째)', 1, 'jw', 'para'],
+        ['부산 밤(2번째)', 2, 'para', 'jw'],
+      ])('P4 · %s → 그 밤 지역 숙소만', (_, night, shown, hidden) => {
+        openNight(night, [JW, PARA], { jw: SEOUL, para: BUSAN });
+
+        expect(screen.getByTestId(cand(shown))).toBeOnTheScreen();
+        expect(screen.queryByTestId(cand(hidden))).toBeNull();
+      });
+    });
+
+    describe('AC3 · 모르면 숨기지 않고 「위치 확인 안 됨」으로 보이며 고를 수 있다', () => {
+      it('P5 · 모름 숙소만 있어도 「위치 확인 안 됨」 섹션 한 개로 보이고, 골라 지정하면 평소 요청이 1회 나간다', () => {
+        openNight(1, [UNK], { unk: UNKNOWN });
+
+        expect(screen.getByTestId(OTHER_TITLE)).toHaveTextContent(
+          '위치 확인 안 됨'
+        );
+        expect(
+          screen.queryByTestId('trip-base-staysheet-section-here')
+        ).toBeNull();
+        fireEvent.press(screen.getByTestId(cand('unk')));
+        fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
+
+        expect(mockAssignMutate).toHaveBeenCalledTimes(1);
+        expect(
+          (
+            mockAssignMutate.mock.calls[0][0] as {
+              data: { savedStayId: string };
+            }
+          ).data.savedStayId
+        ).toBe('unk');
+      });
+    });
+
+    describe('AC4 · 조회 중은 지금처럼 숨기지 않는다', () => {
+      it('P6a · here 가 있고 조회 중·항목 없음이 섞이면 here + 「위치 확인 안 됨」 두 섹션에 모두 보인다', () => {
+        openNight(1, [JW, PEND, MISS], { jw: SEOUL, pend: LOADING });
+
+        const here = screen.getByTestId('trip-base-staysheet-section-here');
+        const other = screen.getByTestId('trip-base-staysheet-section-other');
+        expect(within(here).getByTestId(cand('jw'))).toBeOnTheScreen();
+        expect(within(other).getByTestId(cand('pend'))).toBeOnTheScreen();
+        expect(within(other).getByTestId(cand('miss'))).toBeOnTheScreen();
+      });
+
+      it('P6b · here 가 0곳이고 조회 중뿐이면 섹션 없는 평면 목록으로 전부 보인다', () => {
+        openNight(1, [PEND, MISS], { pend: LOADING });
+
+        expect(screen.queryAllByTestId(CARD_ROOT)).toHaveLength(2);
+        expect(
+          screen.queryAllByTestId(/^trip-base-staysheet-section-/)
+        ).toEqual([]);
+      });
+    });
+
+    describe('AC5 · 안 숙소가 0곳이고 밖만 확인되면 안내와 둘러보기만 남는다', () => {
+      it('P7 · [부산, 부산] 서울 밤 → 카드 0장, 안내 완전 일치, 「저장한 숙소가 아직 없어요」·지정 CTA 없음, 둘러보기 있음', () => {
+        openNight(1, [PARA, PARA_2], { para: BUSAN, 'para-2': BUSAN });
+
+        expect(
+          screen.getByTestId('trip-base-staysheet-region-empty')
+        ).toHaveTextContent('서울특별시에 저장한 숙소가 없어요');
+        expect(screen.queryAllByTestId(CARD_ROOT)).toHaveLength(0);
+        expect(screen.queryByTestId('trip-base-staysheet-empty')).toBeNull();
+        expect(screen.queryByTestId('trip-base-staysheet-assign')).toBeNull();
+        expect(
+          screen.getByTestId('trip-base-staysheet-browse')
+        ).toBeOnTheScreen();
+      });
+
+      it('짝 · 밖 + 모름이 섞이면 모름 숙소가 실제로 서울일 수 있어 안내를 내지 않는다', () => {
+        openNight(1, [PARA, UNK], { para: BUSAN, unk: UNKNOWN });
+
+        expect(screen.getByTestId(cand('unk'))).toBeOnTheScreen();
+        expect(
+          screen.queryByTestId('trip-base-staysheet-region-empty')
+        ).toBeNull();
+      });
+    });
+
+    /**
+     * AC6 — QA 재현 경로: 조회 전 평면 목록에서 고른 숙소가 응답이 오고 보니 지역 밖이었다. 선택은 페이지가 지우지
+     * 않으므로 [지정]은 눌린다 — 그 순간 요청 없이 permanent 문구로 끝나야 한다(TRIP-1235 AC-5 와 같은 자리).
+     */
+    describe('AC6 · 지정 직전 가드', () => {
+      it.each<[string, 1 | 2, SavedStay]>([
+        ['서울 밤에서 부산 숙소', 1, PARA],
+        ['부산 밤에서 서울 숙소', 2, JW],
+      ])(
+        'P8 · %s 를 조회 전에 고르고 응답이 지역 밖으로 판명되면 → 요청 0건 + permanent 문구',
+        (_, night, chosen) => {
+          const view = openNight(night, [JW, PARA], {});
+          fireEvent.press(screen.getByTestId(cand(chosen.savedStayId)));
+          expect(
+            screen.getByTestId('trip-base-staysheet-assign')
+          ).toBeEnabled();
+
+          mockAddressById = { jw: SEOUL, para: BUSAN };
+          view.rerender(<TripNewStep2Page />);
+          // 앵커 — 응답이 반영돼 고른 카드는 후보에서 사라졌다(가드가 아니라 후보 거르기가 한 일).
+          expect(screen.queryByTestId(cand(chosen.savedStayId))).toBeNull();
+          fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
+
+          expect(mockAssignMutate).not.toHaveBeenCalled();
+          expect(
+            screen.getByTestId('trip-base-staysheet-error')
+          ).toHaveTextContent(PERMANENT_COPY);
+        }
+      );
+
+      it.each<[string, Record<string, StayAddressState>]>([
+        ['지역 안으로 판명', { jw: SEOUL, para: BUSAN }],
+        ['모름으로 판명(fail-open)', { jw: UNKNOWN, para: BUSAN }],
+      ])(
+        '짝 · 서울 밤에 조회 전 고른 JW 가 %s 이면 가드가 막지 않고 요청이 1회 나간다',
+        (_, resolved) => {
+          const view = openNight(1, [JW, PARA], {});
+          fireEvent.press(screen.getByTestId(cand('jw')));
+
+          mockAddressById = resolved;
+          view.rerender(<TripNewStep2Page />);
+          expect(screen.getByTestId(cand('jw'))).toBeOnTheScreen();
+          fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
+
+          expect(mockAssignMutate).toHaveBeenCalledTimes(1);
+          expect(screen.queryByTestId('trip-base-staysheet-error')).toBeNull();
+        }
+      );
     });
   });
 });

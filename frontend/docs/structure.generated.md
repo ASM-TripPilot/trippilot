@@ -1331,7 +1331,7 @@
 ## src/pages/trip/trip-new-step2/model/
 - `src/pages/trip/trip-new-step2/model/baseSections.ts`  →  BaseSection · toBaseSections · NightlyBaseCard · nightlyBaseCards
 - `src/pages/trip/trip-new-step2/model/basesChanged.ts`  →  basesChanged
-- `src/pages/trip/trip-new-step2/model/staySheetSections.ts`  →  StayAddressState · StaySheetSection · staySheetSections · staySheetRegionNotice
+- `src/pages/trip/trip-new-step2/model/staySheetSections.ts`  →  StayAddressState · StaySheetSection · staySheetCandidates · staySheetSections · staySheetRegionNotice
 - `src/pages/trip/trip-new-step2/model/useStayAddresses.ts`  →  useStayAddresses
 
 ## src/pages/trip/trip-new-step2/ui/

@@ -152,3 +152,21 @@ describe('🔴 C4 · 지역 커버 그림 — 사진이 없을 때만 썸네일 
     expect(screen.queryByTestId(`${ROOT}-photo`)).toBeNull();
   });
 });
+
+describe('🔴 C9 · 마이 탭 행의 접근성 라벨에 사진 수도 들어간다 (TRIP-1697)', () => {
+  it('사진 라벨이 있으면 「제목, 기간 · 사진 N」 한 문자열이다', () => {
+    // 준비 — 마이 탭 VM(박수 없음 + 사진 라벨) → 실행
+    render(
+      <PastTripRow
+        vm={vm({ photoLabel: '사진 24' })}
+        onPress={noop}
+        testID={ROOT}
+        compact
+      />
+    );
+    // 단언 — 화면에 보이는 사진 수가 라벨에서도 빠지지 않는다
+    expect(screen.getByTestId(ROOT).props.accessibilityLabel).toBe(
+      '제주 여행, 2026.5.1–5.3 · 사진 24'
+    );
+  });
+});
