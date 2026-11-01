@@ -139,11 +139,6 @@
       "count": 2
     }
   },
-  "src/pages/home/ui/HomeScreen.test.tsx": {
-    "no-restricted-properties": {
-      "count": 9
-    }
-  },
   "src/pages/itinerary/itinerary-copick/ui/CoPickCompletePage.tsx": {
     "no-restricted-syntax": {
       "count": 2
