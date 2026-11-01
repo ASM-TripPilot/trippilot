@@ -1914,6 +1914,63 @@ describe('완성 셸(h14) 얼굴', () => {
 
       expect(screen.queryByTestId('itinerary-plan-no-base')).toBeNull();
     });
+
+    // TRIP-1704 — j01(방문 기록)은 거점 배정 조회로 숙소를 보이는데, 여기는 슬롯만 봐서 거점이 있어도 「없어요」라 했다.
+    // 근거를 j01 과 같은 거점 배정 조회·같은 구간(dateFrom ≤ D < dateTo)으로 맞춘다.
+    it('T7c · 고정 숙소 슬롯이 없어도 그날 밤을 덮는 거점 배정이 있으면 카드가 없다', async () => {
+      // 준비 — 슬롯엔 숙소가 없고(plannedNoBase), 이 여행 거점 배정이 DAY1 밤을 덮는다
+      let basesCalls = 0;
+      useItinerary(() => HttpResponse.json(plannedNoBase()));
+      server.use(
+        http.get(`${BASE}/trips/${TRIP_ID}/bases`, () => {
+          basesCalls += 1;
+          const assignment: BaseAssignment = {
+            baseAssignmentId: 'ba-1704',
+            savedStayId: 's-1704',
+            dateFrom: DAY1,
+            dateTo: DAY2,
+          };
+          return HttpResponse.json([assignment]);
+        })
+      );
+      // 실행
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      await waitFor(() => expect(basesCalls).toBe(1));
+      // 단언 — 거점 조회가 도착하면 「거점 숙소가 없어요」가 없다
+      await waitFor(() =>
+        expect(screen.queryByTestId('itinerary-plan-no-base')).toBeNull()
+      );
+    });
+
+    // 짝 — 그날 밤을 덮지 않는 배정이면 카드는 그대로다. 체크아웃일(dateTo=DAY1)은 j01 처럼 덮지 않는다.
+    it.each([
+      ['뒤 날만', DAY2, DAY3],
+      ['체크아웃일(dateTo)', '2026-06-09', DAY1],
+      ['앞 날만', '2026-06-08', '2026-06-09'],
+    ])(
+      'T7d · 거점 배정이 그날 밤을 안 덮으면(%s) 카드가 그대로 뜬다 (짝)',
+      async (_case, dateFrom, dateTo) => {
+        let basesCalls = 0;
+        useItinerary(() => HttpResponse.json(plannedNoBase()));
+        server.use(
+          http.get(`${BASE}/trips/${TRIP_ID}/bases`, () => {
+            basesCalls += 1;
+            const assignment: BaseAssignment = {
+              baseAssignmentId: 'ba-1704',
+              savedStayId: 's-1704',
+              dateFrom,
+              dateTo,
+            };
+            return HttpResponse.json([assignment]);
+          })
+        );
+        renderPage();
+        await screen.findByTestId('map-sheet-shell-root');
+        await waitFor(() => expect(basesCalls).toBe(1));
+        expect(screen.getByTestId('itinerary-plan-no-base')).toBeOnTheScreen();
+      }
+    );
   });
 
   describe('🔴 T5b · TRIP-1110 AC-4·AC-6 — 커넥터 구간(slice(1))에 null 이 섞이면 meta km 를 접는다', () => {
