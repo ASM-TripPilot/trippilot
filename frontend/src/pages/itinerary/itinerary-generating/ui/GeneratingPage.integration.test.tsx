@@ -1,5 +1,5 @@
 import type { ReactNode, ReactElement } from 'react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { focusManager, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
@@ -314,6 +314,98 @@ describe('다른 여행 생성 중(409) 안내', () => {
     );
   }
 
+  // 옛 GeneratingScreen.test.tsx(뷰 단위)를 B안으로 옮겼다 — 진행 얼굴 골격·숫자 어휘 없음·펄스 원·장식 그림.
+  describe('진행 얼굴 — 골격 · 숫자 어휘 없음 · 펄스 원 · 장식 그림', () => {
+    const PULSE = /^itinerary-generating-pulse-/;
+    const ILLUSTRATION = 'itinerary-generating-illustration';
+
+    it('생성 응답 전에는 앱바·진행 바·체크리스트 3행(행마다 펄스 원 1개)·숨김 장식 그림이 서고, 퍼센트·초·소요시간이 없다', async () => {
+      // 응답이 영영 안 오는 생성 POST — 바깥 핸들러보다 앞에 끼운다(server.use). 진행 얼굴에 머문다.
+      server.use(
+        http.post(`${BASE}/trips/:tripId/itinerary`, async () => {
+          await delay('infinite');
+          return HttpResponse.json({});
+        })
+      );
+
+      renderPage();
+
+      expect(
+        await screen.findByTestId('itinerary-generating-progress')
+      ).toBeOnTheScreen();
+      expect(
+        screen.getByTestId('itinerary-generating-appbar')
+      ).toBeOnTheScreen();
+      expect(
+        screen.queryAllByTestId(/^itinerary-generating-step-/)
+      ).toHaveLength(3);
+      ['장소 수집', '동선 계산', '시간 배치'].forEach((label) =>
+        expect(screen.getByText(label)).toBeOnTheScreen()
+      );
+      [1, 2, 3].forEach((n) => {
+        const dots = within(
+          screen.getByTestId(`itinerary-generating-step-${n}`)
+        ).getAllByTestId(PULSE);
+        expect(dots.map((dot) => dot.props.testID)).toEqual([
+          `itinerary-generating-pulse-${n}`,
+        ]);
+      });
+
+      // 장식 그림 — 카드 3장, 글자 0, 스크린리더에서 숨김(기본 질의엔 안 잡힌다).
+      const illustration = screen.getByTestId(ILLUSTRATION, {
+        includeHiddenElements: true,
+      });
+      expect(
+        within(illustration).queryAllByTestId(
+          /^itinerary-generating-illustration-card-/,
+          { includeHiddenElements: true }
+        )
+      ).toHaveLength(3);
+      expect(
+        within(illustration).queryAllByText(/.*/, {
+          includeHiddenElements: true,
+        })
+      ).toHaveLength(0);
+      expect(illustration.props.accessibilityElementsHidden).toBe(true);
+      expect(illustration.props.importantForAccessibility).toBe(
+        'no-hide-descendants'
+      );
+      expect(screen.queryByTestId(ILLUSTRATION)).toBeNull();
+
+      // 숫자 어휘 — 자리 앵커 `\d` 필수(`시간 배치` 라벨은 통과해야 한다).
+      const text = renderedText();
+      expect(text).not.toMatch(/\d\s*%/);
+      expect(text).not.toMatch(/\d\s*초/);
+      expect(text).not.toMatch(/\d\s*분|\d\s*시간/);
+      expect(screen.queryByTestId('itinerary-generating-failed')).toBeNull();
+    });
+
+    it('실패 얼굴·409 안내에는 펄스 원·장식 그림이 없다', async () => {
+      postQueue = [
+        () =>
+          HttpResponse.json(
+            { error: { code: 'INTERNAL_ERROR', message: '서버 오류' } },
+            { status: 500 }
+          ),
+      ];
+      const { unmount } = renderPage();
+      await screen.findByTestId('itinerary-generating-failed');
+      expect(screen.queryAllByTestId(PULSE)).toHaveLength(0);
+      expect(
+        screen.queryByTestId(ILLUSTRATION, { includeHiddenElements: true })
+      ).toBeNull();
+      unmount();
+
+      postQueue = [busy];
+      renderPage();
+      await screen.findByTestId('itinerary-generation-busy');
+      expect(screen.queryAllByTestId(PULSE)).toHaveLength(0);
+      expect(
+        screen.queryByTestId(ILLUSTRATION, { includeHiddenElements: true })
+      ).toBeNull();
+    });
+  });
+
   describe('🔴 G1 · AC-1·AC-5·AC-10 — 다른 여행 생성 중(409)이면 일반 실패가 아니라 안내가 뜬다', () => {
     it('안내 얼굴·제목·두 버튼이 뜨고, 뜨기만 해서는 조회·취소가 0이다', async () => {
       postQueue = [busy];
@@ -418,10 +510,19 @@ describe('다른 여행 생성 중(409) 안내', () => {
 
       const notice = await screen.findByTestId('ai-limit-notice');
       expect(
+        within(notice).getByText('오늘 AI 일정 만들기를 모두 썼어요')
+      ).toBeOnTheScreen();
+      expect(
         within(notice).getByText(/내일 00:00 이후에 다시 쓸 수 있어요/)
       ).toBeOnTheScreen();
-      expect(screen.getByTestId('ai-limit-manual-cta')).toBeOnTheScreen();
-      expect(screen.getByTestId('ai-limit-close')).toBeOnTheScreen();
+      expect(
+        within(screen.getByTestId('ai-limit-manual-cta')).getByText(
+          '직접 짜기 이어가기'
+        )
+      ).toBeOnTheScreen();
+      expect(
+        within(screen.getByTestId('ai-limit-close')).getByText('닫기')
+      ).toBeOnTheScreen();
       // 부정 — 일반 실패·409 안내·다시 시도는 없다.
       expect(screen.queryByTestId('itinerary-generating-failed')).toBeNull();
       expect(screen.queryByTestId('itinerary-generation-busy')).toBeNull();

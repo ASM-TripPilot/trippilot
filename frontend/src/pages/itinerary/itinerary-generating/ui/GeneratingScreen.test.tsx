@@ -12,186 +12,21 @@ import { hostNodes, useAnimatedProbe } from '@/test-support/animatedProbe';
 import { GeneratingScreen } from './GeneratingScreen';
 
 /**
- * h07(라이브 Figma · 구 h09) "AI가 일정 짜는 중" 화면의 **렌더 계약**(TRIP-305 → TRIP-789 정합).
- * 화면은 완성된 콜백·데이터만 받는다 — 조회도 POST 도 라우팅도 하지 않는다(배선은 `GeneratingPage` 몫).
+ * h07 "AI가 일정 짜는 중" 화면 — **페이지 통합으로 못 만드는 것만** 남긴 뷰 단위 파일(B안 (c), 2026-11-01).
  *
- * *(개념)* **testID** — 화면 요소에 붙이는 테스트 전용 이름표. 사용자에게는 안 보이고, 테스트가
- * "그 요소"를 정확히 집어 오는 손잡이다. **queryAllByText(정규식)** 은 텍스트를 **부분(포함)** 으로
- * 훑어 매칭 배열을 준다(0건이면 빈 배열) — "화면에 그 문자열이 하나도 없다"를 재는 데 쓴다.
- * **queryByTestId** 는 못 찾으면 **null**(부재 단언용, `getByTestId` 는 못 찾으면 throw).
- *
- * 무엇을 보장하나 — 이 칸의 존재 이유부터(TRIP-789 Figma 정합 재작성):
- *  - 🔴 진행 표면 골격이 실재한다(AC-3): 앱바 · 비결정형 진행 표시 · 체크리스트 3행(장소 수집·동선 계산·시간 배치).
- *    옛 하단(footer·[취소]·[백그라운드로]) 부재 단언은 삭제된 표면 잔존이라 2026-11-01 지웠다.
- *  - 🔴 **화면에 퍼센트(`48%`)·시간추정(`10초쯤`)·소요시간(`N분`/`N시간`) 문자열이 하나도 없다**
- *    (AC-1·AC-2 · INV-3 · ⚑C). 부제는 **현행 유지**(Q3 — '10초쯤' 미추가, 동결 `초` 가드 유지).
- *    소스 가드(`itineraryTimeStructure`)는 `%`·`초`를 아예 안 봐서 이 **렌더 결과** 단언이 유일한 그물.
- *  - 🔴 실패는 삼켜지지 않는다(AC-7 · INV-4): `failed` 면 실패 표면 + [다시 시도]가 뜬다(핸들링 무변경).
- *  - 🔴 앱바 뒤로 셰브론이 **onBackground** 를 부른다(AC-4 — 취소 개념 소멸, 뒤로=백그라운드).
- *
- * 3동작 뼈대: 준비 = 콜백 spy 로 렌더 → 실행 = 렌더만/버튼 press → 단언 = 보이는 것·불린 콜백.
- * (SafeAreaProvider 래핑은 불필요 — `DraftScreen.test.tsx` 선례대로 직접 렌더.)
- *
- * 한 파일로 합친 기록(TRIP-1150): 옛 `.bar`·`.pulse` 두 파일을 바깥 describe 로 붙였다. 두 파일은
- * 최상위에서 가짜 타이머·`Animated` 스파이를 켰는데, 그대로 두면 S1~S6 까지 그 아래서 돈다 — 그래서 각자의
- * describe 안 beforeEach/afterEach 로 가뒀다.
+ * 나머지(진행 골격·숫자 어휘 없음·실패/한도 얼굴·버튼 배선·펄스 원 개수·장식 그림 숨김/글자 0)는
+ * `GeneratingPage.integration.test.tsx` 가 실 react-query + MSW 로 본다. 남긴 이유:
+ *  - 동작 줄이기(진행 바·단계 펄스·장식 그림): 가짜 타이머 + JS 드라이버 강제(`useAnimatedProbe`)가 필요한데
+ *    가짜 타이머는 MSW 응답을 멈춘다 — 통합 버킷에서 못 돈다.
+ *  - 한도 > 409 > 실패 판정 순서: 페이지가 세 얼굴 값을 한꺼번에 넘기는 응답 조합이 없다.
  */
-
-/** 진행 화면에 있어선 안 되는 숫자 어휘 — 자리 앵커 `\d` 가 필수다: 체크리스트 라벨 `시간 배치` 가
- * `시간` 을 포함하므로 bare `시간` 은 정당 라벨을 red 로 만든다. `\d\s*시간` 이라야 "N시간"만 잡고
- * `시간 배치` 는 통과한다. */
-const PERCENT = /\d\s*%/; // "48%" → "8%" 에 걸림
-const SECONDS = /\d\s*초/; // "10초쯤" → "0초" 에 걸림
-const DURATION = /\d\s*분|\d\s*시간/; // "이동 30분"·"2시간" 에 걸림, "시간 배치" 는 아님
 
 const noop = () => {};
 
-describe('🔴 S1 · AC-3 — 진행 골격이 있다', () => {
-  it('앱바·진행 표시·체크리스트 3행이 있다', () => {
-    render(<GeneratingScreen onBackground={noop} onRetry={noop} />);
-
-    // 긍정 — 남는 골격.
-    expect(screen.getByTestId('itinerary-generating-appbar')).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('itinerary-generating-progress')
-    ).toBeOnTheScreen();
-
-    // 체크리스트는 정확히 3행이고, 각 행의 라벨이 Figma 정본 문구다(정확 문자열 일치).
-    expect(screen.queryAllByTestId(/^itinerary-generating-step-/)).toHaveLength(
-      3
-    );
-    expect(screen.getByText('장소 수집')).toBeOnTheScreen();
-    expect(screen.getByText('동선 계산')).toBeOnTheScreen();
-    expect(screen.getByText('시간 배치')).toBeOnTheScreen();
-  });
-});
-
-describe('🔴 S2 · AC-1·AC-2 — 숫자·시간 어휘를 그리지 않는다 (결과 심판)', () => {
-  it('진행 화면에 퍼센트·초 추정·소요시간 문자열이 하나도 없다', () => {
-    render(<GeneratingScreen onBackground={noop} onRetry={noop} />);
-
-    // 긍정 짝 — 진행 표면이 실제로 떴다(없으면 아래 "0건"이 빈 렌더에서 공허하게 통과한다).
-    expect(
-      screen.getByTestId('itinerary-generating-progress')
-    ).toBeOnTheScreen();
-
-    // 부정 — 계약에 없는 퍼센트(48%)·지어낸 시간추정(10초쯤)·소요시간(N분/N시간)이 0건이다.
-    // ⚑C(가짜 진척 금지) + Q3(동결 `초` 가드 유지 = '10초쯤' 미추가).
-    expect(screen.queryAllByText(PERCENT)).toHaveLength(0);
-    expect(screen.queryAllByText(SECONDS)).toHaveLength(0);
-    expect(screen.queryAllByText(DURATION)).toHaveLength(0);
-  });
-});
-
-describe('🔴 S3 · AC-7 — 실패는 삼켜지지 않는다 (INV-4)', () => {
-  it('failed 면 실패 표면과 [다시 시도] 버튼이 뜨고 onRetry 를 부른다', () => {
-    const onRetry = jest.fn();
-    render(<GeneratingScreen onBackground={noop} onRetry={onRetry} failed />);
-
-    expect(screen.getByTestId('itinerary-generating-failed')).toBeOnTheScreen();
-
-    fireEvent.press(screen.getByTestId('itinerary-generating-retry'));
-    expect(onRetry).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('🔴 S4 · AC-7 짝 — 기본은 실패 표면이 없다', () => {
-  it('failed 미지정이면 실패 표면이 없고, 진행 표면은 그대로 뜬다', () => {
-    render(<GeneratingScreen onBackground={noop} onRetry={noop} />);
-
-    // 부정 — 실패가 아닌데 실패 표면이 뜨면 안 된다.
-    expect(screen.queryByTestId('itinerary-generating-failed')).toBeNull();
-    // 긍정 짝 — 빈 렌더에서 위 부정이 공짜로 통과하는 것을 막는다.
-    expect(
-      screen.getByTestId('itinerary-generating-progress')
-    ).toBeOnTheScreen();
-  });
-});
-
-describe('🔴 S5 · AC-4 — 앱바 뒤로 셰브론이 onBackground 를 부른다 (취소 개념 소멸)', () => {
-  it('앱바 뒤로 press → onBackground 만 1회 부른다', () => {
-    const onBackground = jest.fn();
-    render(<GeneratingScreen onBackground={onBackground} onRetry={noop} />);
-
-    fireEvent.press(screen.getByTestId('itinerary-generating-back'));
-    expect(onBackground).toHaveBeenCalledTimes(1);
-  });
-});
-
-// TRIP-1368 · AI 일정 생성 일일 한도(서버 429 수신) — 한도 얼굴의 렌더 계약(TRIP-1268 이 그린 얼굴을 승계).
-describe('AI 일일 한도 얼굴', () => {
-  /**
-   * 무엇을 보장하나:
-   *  - `aiLimit` 이 오면 한도 얼굴(`ai-limit-notice`)만 그린다 — 제목·본문(시각으로만 말함, INV-3)·
-   *    [직접 짜기 이어가기]·[닫기]. **[다시 시도]는 없다**(눌러도 또 막히는 버튼은 거짓말이다).
-   *  - 얼굴 우선순위는 **한도 > 409 안내(busy) > 실패 > 진행**. 이전 POST 실패가 남아 있어도 한도가 이긴다.
-   *  - 두 버튼은 각자 자기 콜백만 1회 부른다.
-   *
-   * *(개념)* `getByText('문자열')` 은 Text 하나의 글자 전체와 **완전 일치**, `getByText(/정규식/)` 은
-   * **부분 일치**다. 본문은 두 문장을 한 줄로 합쳐 그릴 수도 있어 정규식으로, 제목·버튼 글자는 완전 일치로 잰다.
-   *
-   * 3동작 뼈대: 준비 = 콜백 spy 로 `aiLimit` 을 넘겨 렌더 → 실행 = 렌더만/버튼 press → 단언 = 보이는 얼굴·불린 콜백.
-   */
-  const TITLE = '오늘 AI 일정 만들기를 모두 썼어요';
-
+describe('AI 일일 한도 얼굴 — 판정 순서', () => {
   function limitProps() {
     return { onContinueManual: jest.fn(), onClose: jest.fn() };
   }
-
-  describe('🔴 L1 · AC-7·AC-9 — 한도 얼굴의 글자와 버튼', () => {
-    it('제목·본문 두 문장·두 버튼이 있고, [다시 시도]·진행 표면은 없다', () => {
-      render(
-        <GeneratingScreen
-          onBackground={noop}
-          onRetry={noop}
-          aiLimit={{ ...limitProps(), retryAt: { day: '내일', time: '00:00' } }}
-        />
-      );
-
-      const notice = screen.getByTestId('ai-limit-notice');
-      expect(within(notice).getByText(TITLE)).toBeOnTheScreen();
-      expect(
-        within(notice).getByText(/내일 00:00 이후에 다시 쓸 수 있어요/)
-      ).toBeOnTheScreen();
-      expect(
-        within(notice).getByText(/직접 짜기는 계속 쓸 수 있어요/)
-      ).toBeOnTheScreen();
-      expect(
-        within(screen.getByTestId('ai-limit-manual-cta')).getByText(
-          '직접 짜기 이어가기'
-        )
-      ).toBeOnTheScreen();
-      expect(
-        within(screen.getByTestId('ai-limit-close')).getByText('닫기')
-      ).toBeOnTheScreen();
-
-      // 부정 — 다시 시도·진행 표면(진행 바·단계 펄스)이 한 조각도 없다.
-      expect(screen.queryByTestId('itinerary-generating-retry')).toBeNull();
-      expect(screen.queryByTestId('itinerary-generating-progress')).toBeNull();
-      expect(screen.queryByTestId('itinerary-generating-pulse-1')).toBeNull();
-    });
-  });
-
-  describe('🔴 L1b · Retry-After 가 없으면 — 시각 없이 안내만 한다 (INV-4)', () => {
-    it('retryAt 이 null 이면 시각 문장이 없고 나머지 얼굴은 그대로다', () => {
-      render(
-        <GeneratingScreen
-          onBackground={noop}
-          onRetry={noop}
-          aiLimit={{ ...limitProps(), retryAt: null }}
-        />
-      );
-
-      const notice = screen.getByTestId('ai-limit-notice');
-      expect(within(notice).getByText(TITLE)).toBeOnTheScreen();
-      expect(within(notice).queryByText(/이후에 다시 쓸 수 있어요/)).toBeNull();
-      expect(
-        within(notice).getByText(/직접 짜기는 계속 쓸 수 있어요/)
-      ).toBeOnTheScreen();
-      expect(screen.getByTestId('ai-limit-manual-cta')).toBeOnTheScreen();
-      expect(screen.getByTestId('ai-limit-close')).toBeOnTheScreen();
-    });
-  });
 
   describe('🔴 L2 · AC-17 — 한도 > 409 안내 > 실패 (판정 순서)', () => {
     it('한도·409·실패가 한꺼번에 와도 한도 얼굴만 그린다', () => {
@@ -212,32 +47,6 @@ describe('AI 일일 한도 얼굴', () => {
       expect(screen.getByTestId('ai-limit-notice')).toBeOnTheScreen();
       expect(screen.queryByTestId('itinerary-generation-busy')).toBeNull();
       expect(screen.queryByTestId('itinerary-generating-failed')).toBeNull();
-    });
-  });
-
-  describe('🔴 L3 · AC-9 — 두 버튼은 자기 콜백만 부른다', () => {
-    it('[직접 짜기 이어가기] → onContinueManual 1회, onClose 0회', () => {
-      const props = limitProps();
-      render(
-        <GeneratingScreen onBackground={noop} onRetry={noop} aiLimit={props} />
-      );
-
-      fireEvent.press(screen.getByTestId('ai-limit-manual-cta'));
-
-      expect(props.onContinueManual).toHaveBeenCalledTimes(1);
-      expect(props.onClose).not.toHaveBeenCalled();
-    });
-
-    it('[닫기] → onClose 1회, onContinueManual 0회', () => {
-      const props = limitProps();
-      render(
-        <GeneratingScreen onBackground={noop} onRetry={noop} aiLimit={props} />
-      );
-
-      fireEvent.press(screen.getByTestId('ai-limit-close'));
-
-      expect(props.onClose).toHaveBeenCalledTimes(1);
-      expect(props.onContinueManual).not.toHaveBeenCalled();
     });
   });
 });
@@ -338,20 +147,6 @@ describe('단계 펄스', () => {
     await act(async () => {});
   }
 
-  describe('🔴 P-1a · AC-1 — 단계 행마다 펄스 원 1개', () => {
-    it('각 단계 행 안에 itinerary-generating-pulse-n 이 정확히 1개씩, 모두 3개다', async () => {
-      await renderProgress();
-
-      [1, 2, 3].forEach((n) => {
-        const step = screen.getByTestId(`itinerary-generating-step-${n}`);
-        const dots = within(step).getAllByTestId(PULSE);
-        expect(dots).toHaveLength(1);
-        expect(dots[0].props.testID).toBe(`itinerary-generating-pulse-${n}`);
-      });
-      expect(screen.getAllByTestId(PULSE)).toHaveLength(3);
-    });
-  });
-
   describe('🔴 P-4 · AC-4 — 동작 줄이기가 켜져 있으면 펄스를 멈춘 완전한 원', () => {
     it('시간이 흘러도 세 원이 그대로이고, 같은 모양이며, 흐려지거나 줄지 않았다', async () => {
       probe.setReduceMotion(true);
@@ -386,32 +181,6 @@ describe('단계 펄스', () => {
           });
         });
       });
-    });
-  });
-
-  describe('P-6 · AC-6 — 실패·409 얼굴엔 펄스 원이 없다', () => {
-    it('failed 면 실패 표면만 있고 펄스 원은 0개다', async () => {
-      render(<GeneratingScreen onBackground={noop} onRetry={noop} failed />);
-      await act(async () => {});
-
-      expect(
-        screen.getByTestId('itinerary-generating-failed')
-      ).toBeOnTheScreen();
-      expect(screen.queryAllByTestId(PULSE)).toHaveLength(0);
-    });
-
-    it('busy(다른 여행 생성 중)면 안내만 있고 펄스 원은 0개다', async () => {
-      render(
-        <GeneratingScreen
-          onBackground={noop}
-          onRetry={noop}
-          busy={{ cancelable: true, onCancelAndRetry: noop, onWait: noop }}
-        />
-      );
-      await act(async () => {});
-
-      expect(screen.getByTestId('itinerary-generation-busy')).toBeOnTheScreen();
-      expect(screen.queryAllByTestId(PULSE)).toHaveLength(0);
     });
   });
 });
@@ -454,57 +223,6 @@ describe('빈 일정 카드 섞기 일러스트', () => {
     return JSON.stringify(faces);
   }
 
-  it('진행 카드·3단계와 함께 일러스트가 뜬다 (긍정 짝)', async () => {
-    await renderProgress();
-
-    expect(
-      screen.getByTestId(ILLUSTRATION, { includeHiddenElements: true })
-    ).toBeTruthy();
-    expect(
-      screen.getByTestId('itinerary-generating-progress')
-    ).toBeOnTheScreen();
-    expect(screen.queryAllByTestId(/^itinerary-generating-step-/)).toHaveLength(
-      3
-    );
-    [1, 2, 3].forEach((n) =>
-      expect(
-        screen.getByTestId(`itinerary-generating-pulse-${n}`)
-      ).toBeOnTheScreen()
-    );
-  });
-
-  it('일러스트 안에는 글자가 하나도 없다 (INV-1/2/3)', async () => {
-    await renderProgress();
-
-    const illustration = screen.getByTestId(ILLUSTRATION, {
-      includeHiddenElements: true,
-    });
-    // 짝 — 카드 3장이 실제로 있다(없으면 "글자 0" 이 공허하게 통과한다).
-    expect(
-      within(illustration).queryAllByTestId(
-        /^itinerary-generating-illustration-card-/,
-        { includeHiddenElements: true }
-      )
-    ).toHaveLength(3);
-    expect(
-      within(illustration).queryAllByText(/.*/, { includeHiddenElements: true })
-    ).toHaveLength(0);
-  });
-
-  it('접근성 트리에서 숨겨져 스크린리더가 읽지 않는다', async () => {
-    await renderProgress();
-
-    const illustration = screen.getByTestId(ILLUSTRATION, {
-      includeHiddenElements: true,
-    });
-    expect(illustration.props.accessibilityElementsHidden).toBe(true);
-    expect(illustration.props.importantForAccessibility).toBe(
-      'no-hide-descendants'
-    );
-    // 기본 질의(숨김 제외)로는 보이지 않는다.
-    expect(screen.queryByTestId(ILLUSTRATION)).toBeNull();
-  });
-
   it('동작 줄이기가 꺼져 있으면 카드가 움직이고 (긍정 짝)', async () => {
     probe.setReduceMotion(false);
     await renderProgress();
@@ -533,14 +251,5 @@ describe('빈 일정 카드 섞기 일러스트', () => {
       faces.add(wrapperFace());
     }
     expect(faces.size).toBe(1);
-  });
-
-  it('실패 얼굴에는 일러스트가 없다', async () => {
-    render(<GeneratingScreen onBackground={noop} onRetry={noop} failed />);
-    await act(async () => {});
-
-    expect(
-      screen.queryByTestId(ILLUSTRATION, { includeHiddenElements: true })
-    ).toBeNull();
   });
 });
