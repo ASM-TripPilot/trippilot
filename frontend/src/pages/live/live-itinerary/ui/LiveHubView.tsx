@@ -333,14 +333,15 @@ export function LiveHubView({
     popupWidth: EDIT_POPUP_WIDTH,
   });
   // TRIP-1561 — [도착]·[방문 완료]를 한 술어가 정한다. 진행 중 슬롯 뒤의 '예정'(건너뛰지 않음)이 [도착] 대상이고,
-  // 대상이 하나라도 있으면 수동 허브의 [방문 완료]는 숨는다(다음 [도착]이 앞 장소를 완료한다). 진행 중이 없으면 모든 예정이 대상.
-  // 건너뛴 슬롯은 허브에서 '예정'으로 보이므로 skippedPoiIds 로 가른다. 무장(ARMED)이면 [방문 완료]를 늘 둔다(BR-U10-17).
+  // 대상이 하나라도 있으면 수동 허브의 [방문 완료]는 숨는다(다음 [도착]이 앞 장소를 완료한다). 진행 중이 없으면 건너뛰지 않은 모든 예정이 대상.
+  // 건너뛴 슬롯은 허브에서 '예정'으로 보이므로 skippedPoiIds 로 가른다 — 진행 중 여부와 무관하게 뺀다(BR-U10-54, 누르면 409인 죽은 버튼).
+  // 무장(ARMED)이면 [방문 완료]를 늘 둔다(BR-U10-17).
   const activeIndex = slots.findIndex(({ state }) => state === 'active');
   const canArriveAt = (index: number): boolean =>
     onPressArrive !== undefined &&
     slots[index].state === 'upcoming' &&
-    (activeIndex < 0 ||
-      (index > activeIndex && !skippedPoiIds?.has(slots[index].slot.poiId)));
+    !skippedPoiIds?.has(slots[index].slot.poiId) &&
+    (activeIndex < 0 || index > activeIndex);
   const arriveAfterActive =
     activeIndex >= 0 && slots.some((_slot, index) => canArriveAt(index));
   const showComplete = automationArmed || !arriveAfterActive;
