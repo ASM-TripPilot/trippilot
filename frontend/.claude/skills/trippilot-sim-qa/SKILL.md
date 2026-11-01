@@ -50,7 +50,7 @@ description: TripPilot 앱을 iOS 시뮬레이터 실화면으로 QA하는 루�
 - **testID와 접근성 라벨이 둘 다 있는 요소는 트리에 라벨만 보인다** → `role=button label="…"`(설정 행은 `role=cell`)로 잡는다. 토글 켜짐·칩 선택은 `snapshot -i`에 없다 — `snapshot --json`의 `value`·`selected`로 본다.
 - 같은 라벨이 여럿이면 `role=button label="…"`. 참조(`@e12`)는 다음 변경 뒤 무효 — 스크립트에선 셀렉터를 쓴다.
 - **탭바는 좌표로**(홈 72·탐색 137·일정 201·기록 265·마이 329, y=835). 화면 루트 [other]가 "홈"·"1일차" 라벨을 가져 `label="홈"`이 화면 중앙을 누른다.
-- **`agent-device back`(기본)은 루트 홈에서 검색바를 누른다.** `back --system`·`swipe`는 엣지 스와이프가 아니다. 뒤로는 화면의 `*-back` id를 누르거나 내장 MCP `swipe x=2→300`.
+- **`agent-device back`(기본)은 루트 홈에서 검색바를 누른다.** `back --system`·`gesture swipe left-edge`·`gesture pan`(가장자리에서 시작해도)은 엣지 스와이프가 아니다. **가장자리 스와이프 뒤로는 `agent-device gesture swipe right`** 가 먹는다 — "스와이프 뒤로 꺼짐" 판정 전엔 꺼지지 않은 화면(설정 등)에서 같은 조작이 뒤로 가는지 대조군으로 먼저 본다(실측, 상세는 하네스 변경이력). 그냥 뒤로는 화면의 `*-back` id나 `nav.mjs --back`.
 - **`find`는 찾기만 하지 않고 탭한다.**
 - 지도 화면(여행 중 라이브·편집기·장소 추가)은 접근성 캡처가 워치독 타임아웃 → 스크린샷+좌표. 스크린샷 좌표는 402×874 포인트(`scale` 줘도 좌표계는 그대로). 러너가 "still finishing" 에러면 10~15초 쉬고 재시도.
 - 키보드가 떠 있으면 첫 탭은 키보드만 닫는다. `keyboard dismiss`는 안 되니 '검색'/'Return 키' 버튼을 누른다.
@@ -80,7 +80,10 @@ description: TripPilot 앱을 iOS 시뮬레이터 실화면으로 QA하는 루�
 - **사진 선택기를 연 직후 시뮬레이터가 멈출 수 있다**(실측 1회, 상세는 하네스 변경이력) → `killall -9 com.apple.CoreSimulator.CoreSimulatorService` → 기기 Shutdown → `xcrun simctl boot <UDID>` → 앱 launch → `agent-device open … --udid`. 재부팅 직후 「Apple 계정 확인」은 「지금 안 함」. 로그인·데이터는 유지된다. 사진 추가는 꼭 필요할 때만 한다.
 - **이 Mac엔 `timeout` 명령이 없다** — 오래 걸릴 수 있는 스크린샷·녹화는 백그라운드로 돌리고 15초 뒤 끊는다. 순간 깜빡임(첫 조회 빈 얼굴 등)은 `xcrun simctl io booted recordVideo` + `ffmpeg` 프레임으로 본다.
 - 공유 이미지 결과물은 시뮬 앨범(`data/Media/DCIM/100APPLE`) 최신 파일을 직접 열어 확인한다.
-- **실패·로딩 얼굴은 네트워크를 끊지 말고 실패 주입으로 연다(개발 빌드 전용)** — `xcrun simctl openurl booted "com.trippilot.travel://_dev/fault?path=/trips/*/itinerary&status=500"`(`&delay=5000` 로딩 · `&code=GENERATION_IN_PROGRESS` 에러 코드 · `*`=경로 한 칸 `**`=여러 칸, `/api/v1` 은 붙여도 빼도 된다). GET 에만 걸리고 앱을 재시작해도 남으며, 켜져 있으면 오른쪽 위에 「실패 주입 켜짐 · N」이 뜬다. 확인 화면에서 [돌아가기] → 대상 화면을 다시 연다(이미 받은 캐시는 안 바뀐다). 끝나면 반드시 `…://_dev/fault?clear=1` — 표시가 사라졌는지 본다.
+- **실패·로딩 얼굴은 네트워크를 끊지 말고 실패 주입으로 연다(개발 빌드 전용)** — `xcrun simctl openurl booted "com.trippilot.travel://_dev/fault?path=/trips/*/itinerary&status=500"`(`&delay=5000` 로딩 · `&code=GENERATION_IN_PROGRESS` 에러 코드 · `*`=경로 한 칸 `**`=여러 칸, `/api/v1` 은 붙여도 빼도 된다). GET 에만 걸리고 앱을 재시작해도 남으며, 켜져 있으면 오른쪽 위에 「실패 주입 켜짐 · N」이 뜬다. 확인 화면에서 [돌아가기] → 대상 화면을 다시 연다(이미 받은 캐시는 안 바뀐다). **캐시가 있으면 JS 리로드(Metro 창에 `r`)로 비운 뒤 `nav.mjs '<경로>'` 로 그 화면을 연다** — 리로드해도 규칙은 남는다. `status` 없이 `delay` 만 주면 늦게 정상 응답한다(로딩 얼굴). 경로 하나에 규칙 하나라 여러 API 는 딥링크를 여러 번 보낸다. `path=/**` 처럼 넓게 걸면 스플래시(부트스트랩)부터 멈춘다 — 그 화면의 API 경로만 건다(목록은 `src/shared/api/generated` 의 `url:`). 끝나면 반드시 `…://_dev/fault?clear=1` — 표시가 사라졌는지 본다.
+- **`nav.mjs --eval` 로 할 수 있는 것** — 지금 경로 읽기(`expo-router/build/global-state/router-store.js` 의 `store.getRouteInfo().pathname`), LogBox 경고 배너 끄기(`Libraries/LogBox/LogBox.js` `ignoreAllLogs(true)` — 배너가 탭 바를 가린다, 리로드마다 다시), API 직접 조회(`generated/trips/trips.ts` 의 `getTrips…` — 칸 키·poiId 같은 딥링크 재료를 얻는다, 결과는 전역 변수에 두고 다음 `--eval` 로 읽는다). 토스트를 띄울 조작이 없는 화면의 "토스트가 FAB 위에 뜨는가"도 `showToast` 를 불러 본다.
+- **`xcrun simctl privacy booted revoke location …` 뒤 앱을 다시 띄워도 앱이 권한을 허용으로 읽을 수 있다**(iOS 26.5 실측 1건) — 거부 얼굴(위치 잠김·수동 체크인)은 이 도구로 못 연 것으로 적고, 끝나면 `grant location-always` 로 되돌린다.
+- 글자 크기 최대: `xcrun simctl ui booted content_size accessibility-extra-extra-extra-large`(되돌리기 `medium`). 화면 전환·모션은 `xcrun simctl io booted recordVideo` 를 백그라운드로 켜고 조작한 뒤 `pkill -INT -f recordVideo` → `ffmpeg … tile=` 로 프레임을 한 장에 모아 본다.
 
 ## 3. 루프 (한 바퀴 = 기능 파일 하나)
 
@@ -137,7 +140,7 @@ description: TripPilot 앱을 iOS 시뮬레이터 실화면으로 QA하는 루�
 **고치는 범위:** `frontend/docs/feature-map/`과 이 스킬 폴더(SKILL.md·`scripts/`)만. **제품 코드는 손대지 않는다** — 지도가 적은 동작을 앱이 안 하면 지도가 틀린 것(drift — 지도를 고친다)이거나 앱이 깨진 것(결함 — 보고만 한다, 지도에 덮어 쓰지 않는다)이다.
 
 **언제·얼마나:**
-- **변경분 모드(기본)** — develop에 배치가 머지된 뒤. 각 기능 파일의 `live_verified_at` 커밋 이후 `git log --name-only <그 커밋>..HEAD -- src app`이 그 기능의 화면을 건드린 파일만 대상이다. 어느 기능인지는 그 파일 `routes`와 testID로 가른다.
+- **변경분 모드(기본)** — develop에 배치가 머지된 뒤. 각 기능 파일의 `live_verified_at` 커밋 이후 `git log --name-only <그 커밋>..HEAD -- src app`(frontend/ 에서)이 그 기능의 화면을 건드린 파일만 대상이다. 어느 기능인지는 그 파일 `routes`와 testID로 가른다. 테스트 파일만 바꾼 커밋은 빼고 센다. 실화면으로 다시 밟은 기능 파일만 `live_verified_at`을 올린다 — 소스로만 본 파일을 올리면 다음 변경분 모드가 그 사이 커밋을 놓친다.
 - **전체 모드** — 사용자가 요청할 때. README 목록 전부.
 
 **절차:**

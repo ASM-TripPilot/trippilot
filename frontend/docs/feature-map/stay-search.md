@@ -28,8 +28,8 @@ routes:
 - `stay-search-open-detail` 카드를 누르면 testID: `stay-detail`로 간다.
 - `stay-search-fab` 흰 하트 FAB → 저장한 숙소(e04), 분홍 ＋ FAB → 숙소 등록(e05).
 - `stay-search-tabbar` 하단 탭바 복제본의 탭을 누르면 스택 밑 `(tabs)`의 해당 탭으로 돌아간다.
-- `stay-toast-above-fab` FAB 가 있는 화면에서 토스트는 FAB 묶음 위에 떠서 가려지지 않는다. *(2026-11-01 jest 축소로 실화면 전용)*
-- `stay-price-chip` 가격대를 고르면 칩이 연핑크·선택됨으로 바뀌고, 가격대 시트는 아래로 끌어 닫을 수 있다. *(2026-11-01 jest 축소로 실화면 전용)*
+- `stay-toast-above-fab` FAB 가 있는 화면에서 토스트는 FAB 묶음 위에 떠서 가려지지 않는다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
+- `stay-price-chip` 가격대를 고르면 칩이 연핑크·선택됨으로 바뀌고, 가격대 시트는 아래로 끌어 닫을 수 있다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 도달 불가 — Gotchas)*
 
 ## How to get to it (user POV)
 
@@ -89,3 +89,5 @@ Preconditions:
 - **[실화면] 2026-10-31 딥링크는 `com.trippilot.travel://…` 스킴으로만 화면이 바뀐다** — `simctl openurl "trippilot:///…"` 는 앱만 앞으로 오고 라우팅되지 않았다(이 dev build Info.plist 에 `trippilot` 스킴이 네이버 로그인 urlScheme 으로 한 번 더 등록돼 있다, [결함 의심 FM-L1-04]). `stays`·`stays?region=부산` 도 같은 스킴으로 열었다.
 - [실화면] 2026-10-31 도달 불가 — `stay-search-loading`(순간 상태)·`stay-search-error`·`stay-search-partial`(네트워크 차단·`degraded` 응답 없음)·`stay-search-filter-zero`(`filterZeroReasons` 응답 조건 미확보)·`stay-search-price`(dev-api 숙소에 가격이 없어 칩이 숨음 — 숨김은 확인)·`stay-search-empty`(가격대 없이 0곳 조합을 못 만듦, 이름 검색 0건은 별 얼굴).
 - [실화면] 2026-10-31 숙소 이름 검색 중 0건 안내의 [검색어 지우기]를 키보드가 뜬 채 누르면 탭이 예측 단어 막대에 들어가 입력이 바뀐다(`zzzz`→`zzzzero`) — return 으로 키보드를 내리고 누른다. [필터 초기화]는 필터만 풀고 검색어는 남긴다.
+- [실화면] 2026-11-02 동작구·중구·해운대구·제주시·강남구·종로구 모두 가격 있는 숙소가 0곳이라 [가격대] 칩이 숨는다 — `stay-price-chip` 도달 불가(실패 주입은 응답 본문을 못 바꾼다). FAB 위 토스트는 화면에 토스트를 띄울 조작이 없어 `nav.mjs --eval` 로 `shared/ui/Toast` `showToast` 를 불러 봤다(sim-qa §2).
+- [실화면] 2026-11-02 실패 주입(sim-qa §2 `_dev/fault`)으로 열림 — `stay-search-loading`·`stay-search-error`(`/stays/search` 지연·500).

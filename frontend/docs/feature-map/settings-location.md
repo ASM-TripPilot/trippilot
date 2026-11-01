@@ -25,7 +25,7 @@ routes:
 - `loc-save-error` 저장 실패: 토글 아래 "저장하지 못했어요. 잠시 후 다시 시도해 주세요."
 - `loc-automation` (플래그 ON 빌드) "자동 기록" 행: 상태 `켜짐`/`꺼짐` + 사유 문구 + 필요 시 [켜기] 또는 [설정 열기].
 - `loc-automation-explainer` [켜기] → "앱을 닫아도 방문을\n자동으로 기록할까요?" 설명 화면 → [자동 기록 켜기]는 OS '항상 허용' 요청, [나중에]는 닫기.
-- `loc-toggle-track` 토글이 켜지면 분홍 트랙, 기기 권한 거부로 잠기면 회색 트랙이다. *(2026-11-01 jest 축소로 실화면 전용)*
+- `loc-toggle-track` 토글이 켜지면 분홍 트랙, 기기 권한 거부로 잠기면 회색 트랙이다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass(일부 — Gotchas))*
 
 ## How to get to it (user POV)
 
@@ -65,3 +65,4 @@ Preconditions:
 - 저장 중 같은 PUT 연타는 ref 잠금이 막는다(법정 로그 중복 방지) — 연타 결과는 실화면 전용으로 본다. [실화면 전용]
 - [실화면] 2026-10-31 이 시뮬 빌드는 플래그 ON 이었다 — 자동 기록 행 `켜짐`·"여행 날짜 동안 기록 중이에요", 용도 4번째 행, 철회 다이얼로그 4번째 멈춤 항목 "자동 방문 기록·이동 경로 (저장된 경로 삭제)"가 모두 보였다.
 - [실화면] 2026-10-31 도달 불가 — `loc-loading`(진입 즉시 정상 얼굴), `loc-error`·`loc-save-error`(실패 유도 수단 없음), `loc-off`·`loc-grant`·`loc-revoke-confirm`(동의 켜진 계정·토글 실행 금지), `loc-denied`(권한 회수는 앱을 죽이고 부작용), `loc-automation-explainer`(상태가 `켜짐`이라 [켜기]가 없다).
+- [실화면] 2026-11-02 `simctl privacy booted revoke location com.trippilot.travel` 뒤 앱을 다시 띄우고 화면을 두 번 다시 열어도 「동의함 · 정확한 위치 사용」·분홍 트랙 그대로였다 — 회색 잠김(`loc-denied`)은 이 도구로 못 연다(sim-qa §2). 진입마다 미러 PATCH 가 나가니 재진입은 최소로.
