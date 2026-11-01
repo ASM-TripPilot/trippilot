@@ -3,7 +3,7 @@
 #   1) 동기화 확인: 덮는 파일이 sync 커밋 뒤 바뀌었나(바뀌었으면 경고 — 모델을 다시 읽어 대조할 것)
 #   2) 적합성(jest node): 모델 CODE MIRROR 식 == 실제 훅·함수(fast-check 생성 입력)
 #   3) 모델 체크(TLC): 속성마다 따로 돌려 성립/깨짐을 기준선과 비교
-#   4) 반례 재현(jest integration): 실제 화면 + MSW 가짜 서버에서 R1~R5(결함)·R6(지켜짐)이 기대대로인가
+#   4) 반례 재현(jest integration): 실제 화면 + MSW 가짜 서버에서 R1~R5(TRIP-1689 고쳐짐)·R5b·R6(지켜짐)이 기대대로인가
 # 끝에 표 하나. 기준선과 모두 같으면 exit 0, 하나라도 다르면 exit 1.
 #
 # 옵션: --frontend DIR  (node_modules 가 있는 frontend. 기본 = 이 스킬이 든 frontend)
@@ -33,6 +33,7 @@ src/shared/location/consentPutBody.ts
 src/pages/settings/settings-location/ui/LocationConsentPage.tsx
 src/pages/settings/settings-location/ui/LocationConsentScreen.tsx
 src/pages/settings/settings-personalization/model/usePersonalization.ts
+src/pages/settings/settings-personalization/ui/PersonalizationPage.tsx
 src/pages/settings/settings-personalization/ui/PersonalizationScreen.tsx
 src/pages/settings/settings/model/settingsSections.ts
 src/pages/settings/settings/ui/SettingsPage.tsx
@@ -43,12 +44,13 @@ src/shared/api/index.ts
 
 # ── 기준선: 속성 → 기대 결과 ────────────────────────────────────────────────
 #   깨짐 = 알려진 결함(보고됨). 결함을 고치면 여기와 SKILL.md 「결과 기준선」을 함께 바꾼다.
+#   TRIP-1689 수정 뒤: Loc P1·미러 성립. Pers 증적 중복은 BE PR 대기(S2), Pers P1 은 개인화 오류 얼굴 부재(다시 받기 실패).
 BASELINE="TypeOK 성립
 NoDuplicateRecordLoc 성립
 NoDuplicateRecordPers 깨짐
-ShownMatchesServerLoc 깨짐
+ShownMatchesServerLoc 성립
 ShownMatchesServerPers 깨짐
-MirrorFollowsApp 깨짐"
+MirrorFollowsApp 성립"
 REPRO_BASELINE="기대대로"
 
 # TLC 도구 버전 고정(TLC 1.7.4 · Temurin 25). TLA2TOOLS·JAVA 로 바꿔 쓸 수 있다.
@@ -109,7 +111,7 @@ if [ "$DO_JEST" = 1 ]; then
   if pnpm exec jest --config jest.integration.config.js $ROOTS "$WORK/jest/fv-consent.repro.integration.test.tsx" > "$WORK/repro.log" 2>&1; then
     row "반례 재현(R1~R6)" "기대대로" "$REPRO_BASELINE" ""
   else
-    row "반례 재현(R1~R6)" "어긋남" "$REPRO_BASELINE" "→ 결함이 고쳐졌거나(R1~R5), 지켜지던 것이 깨졌거나(R6), 화면이 바뀜. 로그 아래"
+    row "반례 재현(R1~R6)" "어긋남" "$REPRO_BASELINE" "→ 고친 동작이 되돌아갔거나(R1~R5), 지켜지던 것이 깨졌거나(R5b·R6), 화면이 바뀜. 로그 아래"
     grep -v '^\s*at ' "$WORK/repro.log" | grep '✓\|✕' | head
   fi
 fi

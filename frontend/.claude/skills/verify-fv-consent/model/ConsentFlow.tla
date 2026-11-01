@@ -30,7 +30,7 @@ VARIABLES
   data,     \* 기기별 react-query 캐시: dev -> kind -> "none"(미수신)|"on"|"off"
   err,      \* 기기별 조회 오류 표시(isError — 재조회 실패 뒤 데이터는 남고 오류가 선다)
   req,      \* 동의 변경 요청: id -> [d, k, v(보낸 값), ph]
-  busy,     \* 위치 화면 잠금(inFlightRef/isPending): dev -> 잠금을 쥔 요청 id 또는 0
+  busy,     \* 진행 잠금(위치 inFlightRef/isPending · 개인화 inFlightRef): dev -> kind -> 잠금을 쥔 요청 id 또는 0
   mounted,  \* 위치 화면이 떠 있나: dev -> BOOLEAN
   mir,      \* 서버 L1 OS 권한 미러
   mp,       \* 진입 미러 보고(PATCH os-permission) 요청 중인가: dev -> BOOLEAN
@@ -56,9 +56,10 @@ ShownLoc(d) ==
 ShownPers(d) ==
   IF data[d]["pers"] = "none" THEN "off" ELSE data[d]["pers"]
 
-\* pages/settings/settings/model/settingsSections.ts consentChip(locationConsent.data?.gpsRecordingOptIn) —
-\*   l05 목록의 위치 칩은 isError 를 보지 않는다(데이터가 있으면 칩). 개인화 `사용 중` 은 ShownPers 와 같은 캐시·같은 식.
-ChipLoc(d) == IF data[d]["loc"] = "none" THEN "hidden" ELSE data[d]["loc"]
+\* pages/settings/settings/ui/SettingsPage.tsx → settingsSections.ts consentChip(
+\*   locationConsent.isError ? undefined : locationConsent.data?.gpsRecordingOptIn) — 다시 받기 실패면 칩을 숨긴다
+\*   (TRIP-1689 FV-CONSENT-03). 개인화 `사용 중` 은 ShownPers 와 같은 캐시·같은 식.
+ChipLoc(d) == IF err[d]["loc"] \/ data[d]["loc"] = "none" THEN "hidden" ELSE data[d]["loc"]
 
 Shown(d, k) == IF k = "loc" THEN ShownLoc(d) ELSE ShownPers(d)
 
@@ -66,13 +67,17 @@ Shown(d, k) == IF k = "loc" THEN ShownLoc(d) ELSE ShownPers(d)
 \*                    개인화: consentOn ? 'REVOKE' : 'GRANT'.  둘 다 "보이는 값의 반대".
 Intent(d, k) == Shown(d, k) # "on"
 
-\* useLocationConsent.save: inFlightRef.current || put.isPending 이면 무시. 개인화 onToggle 엔 잠금이 없다.
+\* useLocationConsent.save: inFlightRef.current || put.isPending 이면 무시.
+\* usePersonalization.onToggle: inFlightRef.current 면 무시(TRIP-1689 FV-CONSENT-01). 둘 다 재조회 뒤에 푼다.
 CanTap(d, k) ==
-  IF k = "loc" THEN mounted[d] /\ ShownLoc(d) # "hidden" /\ busy[d] = 0
-  ELSE TRUE
+  /\ busy[d][k] = 0
+  /\ k = "loc" => (mounted[d] /\ ShownLoc(d) # "hidden")
 
 \* useLocationConsent toOsPermission — 진입 미러 보고 값. 기기 권한을 그대로 옮긴다.
 Reported(d) == Perm[d]
+
+\* useLocationConsent 진입 효과: Platform.OS === 'web' 이면 미러 보고를 하지 않는다(TRIP-1689 FV-CONSENT-04).
+Reports(d) == d # "web"
 
 (* ========================== CODE MIRROR 끝 ============================= *)
 
@@ -82,6 +87,10 @@ Reported(d) == Perm[d]
 (*     consent_record·location_legal_log 를 쌓는다. 같은 값 PUT 은 무기록.  *)
 (*  S2 개인화 PATCH(ConsentService.changeConsent): 현재 상태와 무관하게      *)
 (*     매번 consent_record 를 한 행 쌓는다(append-only, 중복 거름 없음).     *)
+(*     ⏳ BE PR 대기 — 같은 동작이면 증적을 쌓지 않게(S1 과 같은 규칙) 고치는 *)
+(*     별도 BE 레인이 있다. 머지되면 ServerApply 의 logs 를 (v # srv[k]) 하나로 *)
+(*     바꾸고 재현 가짜 서버 S2 도 맞춘다 → NoDuplicateRecordPers 성립(모델  *)
+(*     사본에서 측정 — SKILL.md 「결과 기준선」).                            *)
 (*  S3 미러 PATCH(mirrorOsPermission): L1 만 덮어쓴다. 증적·법정 로그 없음.  *)
 (*  S4 서버는 요청 하나를 한 덩어리로 처리한다 — 위치 update 는 find 에 잠금이 *)
 (*     없어 같은 계정 PUT 두 개가 동시에 들어오면 둘 다 기록할 수 있으나 이  *)
@@ -109,7 +118,7 @@ Init ==
   /\ data = [d \in Devs |-> [k \in Kinds |-> "none"]]
   /\ err = [d \in Devs |-> [k \in Kinds |-> FALSE]]
   /\ req = [i \in Reqs |-> [d |-> None, k |-> None, v |-> FALSE, ph |-> "unused"]]
-  /\ busy = [d \in Devs |-> 0]
+  /\ busy = [d \in Devs |-> [k \in Kinds |-> 0]]
   /\ mounted = [d \in Devs |-> FALSE]
   /\ mir = "NOT_DETERMINED"
   /\ mp = [d \in Devs |-> FALSE]
@@ -122,17 +131,18 @@ Busy(d, k) == \E i \in Reqs : InFlight(i) /\ req[i].d = d /\ req[i].k = k
 Free == {i \in Reqs : req[i].ph = "unused"}
 VB(b) == IF b THEN "on" ELSE "off"
 
-\* 요청이 끝나면 위치 잠금을 푼다 — 같은 마운트의 잠금일 때만(재진입하면 새 ref·새 observer).
-\* useMutation onSettled 는 onSuccess(invalidateQueries 재조회)를 await 한 뒤에 돈다(query-core mutation.js).
-Release(i) == busy' = [busy EXCEPT ![req[i].d] = IF @ = i THEN 0 ELSE @]
+\* 재조회가 끝나면 잠금을 푼다 — 같은 마운트의 잠금일 때만(재진입하면 새 ref·새 observer).
+\* 위치: onSettled 가 invalidateQueries 재조회를 await 한 뒤 inFlightRef 를 푼다(성공·실패 모두).
+\* 개인화: onToggle 의 finally 가 invalidateQueries 를 await 한 뒤 inFlightRef 를 푼다(성공·실패 모두).
+Release(i) == busy' = [busy EXCEPT ![req[i].d][req[i].k] = IF @ = i THEN 0 ELSE @]
 
 (* ---------------- 화면 진입·이탈 (위치 l06) ------------------------------ *)
-\* 진입 = 새 마운트: 잠금은 새 ref(false), 진입 미러 보고 1회(mirroredRef), 조회는 아래 Load 로.
+\* 진입 = 새 마운트: 위치 잠금은 새 ref(false), 진입 미러 보고 1회(mirroredRef — 웹 제외), 조회는 아래 Load 로.
 Enter(d) ==
   /\ ~mounted[d]
   /\ mounted' = [mounted EXCEPT ![d] = TRUE]
-  /\ busy' = [busy EXCEPT ![d] = 0]
-  /\ mp' = [mp EXCEPT ![d] = TRUE]
+  /\ busy' = [busy EXCEPT ![d]["loc"] = 0]
+  /\ mp' = [mp EXCEPT ![d] = Reports(d)]
   /\ lf' = [lf EXCEPT ![d] = TRUE]
   /\ UNCHANGED <<srv, last, dup, writer, data, err, req, mir, appMir>>
 
@@ -157,10 +167,11 @@ Tap(d, k) ==
   /\ Free # {}
   /\ LET i == CHOOSE j \in Free : \A j2 \in Free : j <= j2 IN
        /\ req' = [req EXCEPT ![i] = [d |-> d, k |-> k, v |-> Intent(d, k), ph |-> "send"]]
-       /\ busy' = IF k = "loc" THEN [busy EXCEPT ![d] = i] ELSE busy
+       /\ busy' = [busy EXCEPT ![d][k] = i]
   /\ UNCHANGED <<srv, last, dup, writer, data, err, mounted, mir, mp, appMir, lf>>
 
-\* 서버가 요청을 반영한다(S1·S2). ok = 응답이 온다 → 재조회 단계, ok = FALSE = 응답 유실(클라 실패로 끝).
+\* 서버가 요청을 반영한다(S1·S2). ok = 응답이 온다, ok = FALSE = 응답 유실(클라는 실패 — 위치 saveFailed ·
+\* 개인화 saveFailed). 둘 다 끝에 재조회한다(위치 onSettled · 개인화 finally — TRIP-1689 FV-CONSENT-02·03).
 ServerApply(i, ok) ==
   /\ req[i].ph = "send"
   /\ LET k == req[i].k
@@ -172,21 +183,18 @@ ServerApply(i, ok) ==
        /\ last' = IF logs THEN [last EXCEPT ![k] = act] ELSE last
        /\ dup' = IF logs /\ last[k] = act THEN [dup EXCEPT ![k] = TRUE] ELSE dup
        /\ writer' = [writer EXCEPT ![k] = req[i].d]
-  /\ IF ok
-     THEN /\ req' = [req EXCEPT ![i].ph = "refetch"]
-          /\ UNCHANGED busy
-     ELSE /\ req' = [req EXCEPT ![i].ph = "done"]
-          /\ Release(i)
-  /\ UNCHANGED <<data, err, mounted, mir, mp, appMir, lf>>
+  \* ok 는 이제 다음 상태를 가르지 않는다 — 응답이 와도 끊겨도 다음은 재조회다(실패 안내 유무만 다르고 모델 밖).
+  \* 두 액션(ServerSaves·ServerSavesReplyLost)으로 남겨 반례 라벨에서 응답 유실을 구별한다.
+  /\ req' = [req EXCEPT ![i].ph = "refetch"]
+  /\ UNCHANGED <<busy, data, err, mounted, mir, mp, appMir, lf>>
 
-\* 서버에 닿기 전 실패(네트워크·약관 조회 실패) — 서버 무변화. 위치는 saveFailed, 개인화는 아무 표시 없음.
+\* 서버에 닿기 전 실패(네트워크·약관 조회 실패) — 서버 무변화. 둘 다 saveFailed 를 띄우고 재조회한다.
 SendFail(i) ==
   /\ req[i].ph = "send"
-  /\ req' = [req EXCEPT ![i].ph = "done"]
-  /\ Release(i)
-  /\ UNCHANGED <<srv, last, dup, writer, data, err, mounted, mir, mp, appMir, lf>>
+  /\ req' = [req EXCEPT ![i].ph = "refetch"]
+  /\ UNCHANGED <<srv, last, dup, writer, data, err, busy, mounted, mir, mp, appMir, lf>>
 
-\* 성공 뒤 invalidateQueries 재조회. 활성 쿼리만 다시 받는데, l06 을 떠나도 스택 아래 l05(SettingsPage)가
+\* 정착 뒤 invalidateQueries 재조회. 활성 쿼리만 다시 받는데, l06 을 떠나도 스택 아래 l05(SettingsPage)가
 \* 같은 쿼리(useGetMeLocationConsent·useGetMePersonalization)를 구독하고 있어 늘 활성이다(ASSUMPTION C1).
 \* (첫 모델은 "l06 을 떠나면 재조회 없음"으로 적어 거짓 반례를 냈다 — 모델 오류였다.)
 RefetchOk(i) ==
@@ -246,7 +254,7 @@ TypeOK ==
   /\ last \in [Kinds -> {"none", "grant", "revoke"}]
   /\ data \in [Devs -> [Kinds -> {"none", "on", "off"}]]
   /\ \A i \in Reqs : req[i].ph \in Ph
-  /\ busy \in [Devs -> 0..MaxReq]
+  /\ busy \in [Devs -> [Kinds -> 0..MaxReq]]
   /\ mir \in {"GRANTED", "DENIED", "NOT_DETERMINED"}
 
 \* P1 요청이 다 끝난 뒤, 마지막으로 동의를 바꾼 기기의 화면은 서버 동의 상태와 같은 값을 보인다

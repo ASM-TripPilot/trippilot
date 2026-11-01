@@ -276,7 +276,10 @@ export function SettingsPage(): ReactElement {
           nickname: currentNickname,
           email: account.data?.email ?? null,
           preferences: preferences.data,
-          locationConsent: locationConsent.data?.gpsRecordingOptIn,
+          // 다시 받기 실패면 캐시가 옛 값이다 — 칩을 숨긴다(TRIP-1689 FV-CONSENT-03, D4).
+          locationConsent: locationConsent.isError
+            ? undefined
+            : locationConsent.data?.gpsRecordingOptIn,
           pushAvailable: isPushSupported(),
           personalizationOn:
             personalizationReason === undefined

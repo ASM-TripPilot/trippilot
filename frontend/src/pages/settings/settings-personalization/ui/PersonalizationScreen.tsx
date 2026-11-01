@@ -32,6 +32,8 @@ export interface PersonalizationScreenProps {
   consentOn: boolean;
   reason: PersonalizationInfoReason;
   sharedItems: PersonalizationItem[];
+  /** 마지막 저장 실패 — 토글 카드 아래 안내(위치 l06 `saveFailed` 선례, TRIP-1689). */
+  saveFailed?: boolean;
   onToggle: () => void;
   onPressBack?: () => void;
 }
@@ -40,6 +42,7 @@ export function PersonalizationScreen({
   consentOn,
   reason,
   sharedItems,
+  saveFailed = false,
   onToggle,
   onPressBack,
 }: PersonalizationScreenProps): ReactElement {
@@ -82,6 +85,16 @@ export function PersonalizationScreen({
             onPress={onToggle}
           />
         </View>
+
+        {saveFailed ? (
+          <Text
+            testID="settings-personalization-save-error"
+            accessibilityRole="alert"
+            className="font-noto text-caption text-primary-text"
+          >
+            저장하지 못했어요. 잠시 후 다시 시도해 주세요.
+          </Text>
+        ) : null}
 
         {/* 안내 문구 — reason 에 따라 있을 때만. APPLIED 는 null 이라 그리지 않는다(목록이 대신 말함). */}
         {copy !== null ? (

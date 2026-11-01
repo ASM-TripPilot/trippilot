@@ -41,16 +41,15 @@ export const step = (action, from, to) => {
     case "Leave": return `${DEV[changedDev(from, to, "mounted")]}에서 위치 동의 화면을 나간다`;
     case "FetchConsent":
     case "Load": return "동의 상태를 다시 받는다";
+    case "ServerSavesReplyLost": return `서버가 ${who(r)} 요청을 저장했는데 응답이 끊긴다`;
     case "ServerSaves":
-    case "ServerSavesReplyLost":
-    case "ServerApply":
-      return r.ph === "done" ? `서버가 ${who(r)} 요청을 저장했는데 응답이 끊긴다` : `서버가 ${who(r)} 요청을 저장한다`;
+    case "ServerApply": return `서버가 ${who(r)} 요청을 저장한다`;
     case "SaveFails":
     case "SendFail": return `${who(r)} 요청이 서버에 닿기 전에 실패한다`;
     case "RefetchArrives":
-    case "RefetchOk": return `${who(r)} 저장 뒤 다시 받기가 끝난다`;
+    case "RefetchOk": return `${who(r)} 요청 뒤 다시 받기가 끝난다`;
     case "RefetchFails":
-    case "RefetchFail": return `${who(r)} 저장 뒤 다시 받기가 실패한다`;
+    case "RefetchFail": return `${who(r)} 요청 뒤 다시 받기가 실패한다`;
     case "MirrorReported":
     case "MirrorOk": return `${DEV[changedDev(from, to, "mp")]} 위치 권한(${to.mir})이 서버에 보고된다`;
     case "MirrorReportFails":
