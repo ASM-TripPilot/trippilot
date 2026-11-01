@@ -36,10 +36,10 @@ AI 일정(완전 AI·같이 짜기)을 만들기 직전, 이 여행에 꼭 넣�
 - `mvt-duplicate` 등록이 409(이미 있음)면 `이미 추가된 곳이에요` 안내, 화면에 남는다.
 - `mvt-leave-warning` 고른 값이 있는데 저장 없이 뒤로 → 첫 누름은 경고만, 두 번째에 나간다.
 - `mvt-load-failed` 여행·꼭 갈 곳 조회 실패 문구.
-- `mvt-start-sheet` 시트를 열면 휠이 저장된 시각에 서 있고, 값이 없으면 그 여행 일과 시작 시각에 서 있다(선택 표시는 없다). 시트 아래 여백이 홈 인디케이터에 가리지 않는다. *(2026-11-01 jest 축소로 실화면 전용)*
-- `mvt-error-banner` 저장 실패 줄(`mvt-kept-error`/`mvt-lost-error`)은 안내 배너 아래에 흰 바탕으로 뜬다. *(2026-11-01 jest 축소로 실화면 전용)*
-- `mv-empty-cta` [꼭 갈 곳 추가]는 점선 안내 박스 밖, 안내와 진행 CTA 사이에 있다. *(2026-11-01 jest 축소로 실화면 전용)*
-- `mv-loading-face` 카드 자리표시는 3장이고 장마다 원·사각·글줄 2개다. *(2026-11-01 jest 축소로 실화면 전용)*
+- `mvt-start-sheet` 시트를 열면 휠이 저장된 시각에 서 있고, 값이 없으면 그 여행 일과 시작 시각에 서 있다(선택 표시는 없다). 시트 아래 여백이 홈 인디케이터에 가리지 않는다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
+- `mvt-error-banner` 저장 실패 줄(`mvt-kept-error`/`mvt-lost-error`)은 안내 배너 아래에 흰 바탕으로 뜬다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 도달 불가 — Gotchas)*
+- `mv-empty-cta` [꼭 갈 곳 추가]는 점선 안내 박스 밖, 안내와 진행 CTA 사이에 있다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
+- `mv-loading-face` 카드 자리표시는 3장이고 장마다 원·사각·글줄 2개다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
 
 ## How to get to it (user POV)
 
@@ -90,3 +90,5 @@ Preconditions:
 - [실화면] 2026-10-31 카드 testID `itinerary-mustvisit-${sourcePoiId}` 는 트리에서 접근성 라벨(「N, 필수, 이름, …」)에 가려 안 보이지만 id 탭은 통한다. 보이는 testID는 `itinerary-mustvisit-chip-must-*`·`itinerary-mustvisit-timemode-anytime-*`·`itinerary-mustvisit-image-*` 다.
 - [실화면] 2026-10-31 빼기 뒤 [꼭 갈 곳 추가] → 고르기 화면 머리 「담은 곳 5곳 · 1곳 선택됨」으로 ♥ 유지를 확인했고, 다시 골라 [완료]하면 목록이 2곳으로 갱신됐다.
 - [실화면] 2026-10-31 도달 불가 — `mv-loading`(순간 상태)·`mv-failed`·`mvt-kept-error`·`mvt-lost-error`·`mvt-load-failed`(네트워크 차단 수단 없음)·`mvt-duplicate`(409 재현 경로 없음)·`mv-no-coords`·`mv-name-missing`(해당 데이터 없음). 뒤로 경고는 첫 누름 경고까지만 보고 두 번째 누름 대신 저장했다.
+- [실화면] 2026-11-02 로딩 얼굴은 실패 주입 지연(`_dev/fault?path=/trips/*/must-visits&delay=12000` → 앱 리로드 → 화면 다시 열기)으로 열린다(지도 자리 + 카드 3장, [이 구성으로 일정 짜기] 잠김). 저장 실패 줄(`mvt-kept-error`·`mvt-lost-error`)은 쓰기(DELETE/POST) 실패라 주입(GET 전용) 밖 — 도달 불가 유지. 꼭 갈 곳 고르기의 지역 밖 행은 **이미 선택된 채 들어온 행만** 체크가 보이고 새로 켤 수 없다(여행지를 바꾼 뒤에만 생김, BR-U1-58).
+- [실화면] 2026-11-02 실패 주입(sim-qa §2 `_dev/fault`)으로 열림 — `mv-failed`(`/trips/*/must-visits` 500)·`mvt-load-failed`(같은 규칙으로 시각 지정 화면 — 「여행 정보를 불러오지 못했어요」).

@@ -84,3 +84,4 @@ Preconditions:
 - [실화면] 2026-10-31 기본 얼굴이어도 사진이 이 기기 앨범에 없으면 `reflection-daily-photo-grid` 가 아예 없다(제주 2일차: 통계 `사진 2` 인데 격자 없음, 안내 없음). 1일차는 이 시뮬레이터에서 붙인 사진이라 격자가 있었다.
 - [실화면] 2026-10-31 `편집`·`수정`·`직접 회고 작성` 은 testID 대신 접근성 라벨로 [other] 에 잡히지만 `id="reflection-daily-…"` 셀렉터가 통한다. 입력칸을 비우면 `저장` 이 `enabled:false` 다. 키보드가 떠 있어도 `저장` 첫 탭이 먹었다.
 - [실화면] 2026-10-31 도달 불가 — `rf-error`(네트워크 차단 수단 없음), 지도 사유 `permission`·`no-route`(위치 권한 거부 상태를 만들지 않았다), 빈 얼굴에서 `직접 회고 작성` 저장(빈 날은 다른 여행 강남구뿐이라 열고 `취소` 만 했다 — 저장 흐름은 제주 2일차 서술 `수정` 으로 확인), 푸시 탭 `REFLECTION_DAILY`(푸시 발송 미확인), 도우미 `OPEN_REFLECTION`(재현 수단 없음).
+- [실화면] 2026-11-02 실패 주입(sim-qa §2 `_dev/fault`)으로 열림 — `rf-error`(`/trips/*/reflections` 500 → `reflection-daily-error`).

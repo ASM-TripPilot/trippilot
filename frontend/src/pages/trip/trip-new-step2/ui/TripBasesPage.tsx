@@ -6,6 +6,7 @@ import { useTripBases } from '@/features/assign-trip-base';
 import { BaseRegenerateDialog } from './BaseRegenerateDialog';
 import type { BaseAssignment } from '@/shared/api/index.schemas';
 import { useGetTripsTripId } from '@/shared/api/index.hooks';
+import { guardPress } from '@/shared/lib/pressGuard';
 
 import { BaseNightsFlow } from './TripNewStep2Page';
 
@@ -83,14 +84,15 @@ export function TripBasesPage({
     leaveEdit();
   }
 
-  function regenerate(): void {
+  // TRIP-1690 FV-POLL-03 — 두 번째 탭이 생성 화면을 하나 더 열면 그 화면도 POST 를 쏜다(하루 한도 2회) — 연타 창.
+  const regenerate = guardPress((): void => {
     // TRIP-1263 — 홈까지 걷고 push(MustVisitListPage.goToGenerating 과 같은 진입 정리).
     router.dismissTo('/(tabs)');
     router.push({
       pathname: '/trips/[tripId]/itinerary/generating',
       params: { tripId, mode: 'FULLY_AI' },
     });
-  }
+  });
 
   return (
     <>

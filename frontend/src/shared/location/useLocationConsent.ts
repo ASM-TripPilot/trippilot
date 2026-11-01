@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 import * as Location from 'expo-location';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -39,24 +40,26 @@ function toOsPermission(status: string): OsPermission {
 /**
  * 위치 동의 상태 훅(shared/location — TRIP-567·576 cross-feature 소비 + features 경계). PUT 은 반드시
  * `consentPutBody` 를 거쳐 L2·L3 분리 전송을 구조적으로 막는다. 마운트 시 device 권한을 1회 읽어
- * 서버에 미러 보고한다(PATCH).
+ * 서버에 미러 보고한다(PATCH — 웹 제외).
  */
 export function useLocationConsent(): LocationConsentModel {
   const consent = useGetMeLocationConsent();
   const queryClient = useQueryClient();
-  // 저장 성공 뒤 조회를 낡음 표시 — 스택에 남은 설정(l05)의 동의 칩이 옛 값을 보이지 않게 한다(TRIP-778 D11).
+  // 저장이 끝나면(성공·실패 모두) 조회를 낡음 표시 — 스택에 남은 설정(l05)의 동의 칩이 옛 값을 보이지 않게 한다
+  // (TRIP-778 D11). 실패도 다시 받는다: 응답이 끊겨도 서버는 이미 저장했을 수 있다(TRIP-1689 FV-CONSENT-03).
   // 키는 `getGetMeLocationConsentQueryKey()` 와 같은 값의 리터럴이다 — 생성 모듈을 자동 목하는 테스트에서
   // 그 함수는 undefined 를 돌려줘 전체 무효화로 번진다.
   // 저장 진행 잠금 — 법정 로그(append-only)라 같은 PUT 2회는 중복 행이다. isPending 은 리렌더 뒤에야
-  // 서므로 같은 틱 연타는 ref 가 막는다(TRIP-1194). 정착(성공·실패)에서 푼다.
+  // 서므로 같은 틱 연타는 ref 가 막는다(TRIP-1194). 정착 뒤 재조회가 끝나면 푼다.
   const inFlightRef = useRef(false);
   const [saveFailed, setSaveFailed] = useState(false);
   const put = usePutMeLocationConsent({
     mutation: {
-      onSuccess: () =>
-        queryClient.invalidateQueries({ queryKey: ['/me/location-consent'] }),
       onError: () => setSaveFailed(true),
-      onSettled: () => {
+      onSettled: async () => {
+        await queryClient.invalidateQueries({
+          queryKey: ['/me/location-consent'],
+        });
         inFlightRef.current = false;
       },
     },
@@ -82,6 +85,9 @@ export function useLocationConsent(): LocationConsentModel {
       try {
         const perm = await Location.getForegroundPermissionsAsync();
         setDeviceStatus(perm.status);
+        // 웹은 위치를 기록하지 않는 클라이언트다 — 브라우저 권한을 보고하면 같은 계정 앱의 미러를 덮는다
+        // (TRIP-1689 FV-CONSENT-04). 권한은 토글 비활성 판정에만 쓴다.
+        if (Platform.OS === 'web') return;
         patch.mutate({ data: { osPermission: toOsPermission(perm.status) } });
       } catch {
         // 권한 조회 실패는 미러 보고를 건너뛴다(온보딩 LocationPage 선례) — 화면은 계속 동작.

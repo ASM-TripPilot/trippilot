@@ -492,6 +492,48 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
   });
 
   /**
+   * TRIP-1689 FV-CONSENT-03 — 위치 동의를 다시 받다 실패하면 캐시의 옛 값으로 칩을 그리지 않는다.
+   * l06 에서 저장한 뒤 다시 받기가 실패하면 l06 은 오류 얼굴인데, 스택 아래 l05 칩은 옛 「미동의」를 보였다
+   * (형식 검증 반례 R4 — 서버는 동의). 모를 때 말하지 않는다(D4).
+   */
+  describe('TRIP-1689 FV-CONSENT-03 · 위치 동의 다시 받기 실패면 칩을 숨긴다', () => {
+    it('W4 처음엔 "미동의" 칩 → 다시 받기 실패 → 칩이 사라지고 행은 남는다', async () => {
+      // 준비 — 첫 조회는 미동의.
+      installServer({ legalConsent: false, reason: 'APPLIED' });
+      renderPage();
+      await waitFor(() =>
+        expect(
+          within(
+            screen.getByTestId('settings-chip-location-consent')
+          ).getByText('미동의')
+        ).toBeOnTheScreen()
+      );
+
+      // 실행 — 서버가 조회에 실패하게 바꾸고, l06 저장 뒤처럼 위치 동의 조회를 무효화한다.
+      server.use(
+        http.get(`${BASE}/me/location-consent`, () =>
+          HttpResponse.json({ message: 'fail' }, { status: 500 })
+        )
+      );
+      await act(async () => {
+        await queryClient.invalidateQueries({
+          queryKey: ['/me/location-consent'],
+        });
+      });
+
+      // 단언 — 칩은 없고(옛 값 주장 금지) 행은 그대로 있다(긍정 앵커).
+      await waitFor(() =>
+        expect(
+          screen.queryByTestId('settings-chip-location-consent')
+        ).toBeNull()
+      );
+      expect(
+        screen.getByTestId('settings-nav-location-consent')
+      ).toBeOnTheScreen();
+    });
+  });
+
+  /**
    * TRIP-1051 AC-3(실패) — 취향 GET 이 500 이면 행은 남고 "N/6"을 지어내지 않는다.
    *
    * ★ 요청 카운터 앵커(02a ★7): "요청이 실제로 나갔고 실패했다"를 먼저 확인한다. 요청을 안 보내는 구현도

@@ -62,7 +62,8 @@ let mockSuccessData: Itinerary | undefined;
 
 type SuccessFn = (...args: unknown[]) => void;
 /** 'state' — 훅 레벨 옵션(`usePostTripsTripIdItinerary({ mutation })`) — 성공 순서 재현용(옛 leaveToast 02a ★13). */
-let mockHookOptions: { mutation?: { onSuccess?: SuccessFn } } | undefined;
+let mockHookOptions:
+  { mutation?: { onSuccess?: SuccessFn; onSettled?: () => void } } | undefined;
 /** 'state' — 마지막 mutate 의 변수·호출별 옵션. */
 let mockLastCall:
   { vars: unknown; options?: { onSuccess?: SuccessFn } } | undefined;
@@ -257,6 +258,8 @@ jest.mock('expo-router', () => ({
     dismissTo: mockDismissTo,
     back: mockBack,
     navigate: mockNavigate,
+    // TRIP-1690 FV-POLL-04 — 생성을 쏜 뒤 주소에서 mode 를 지운다(검사는 통합 R4).
+    setParams: jest.fn(),
   }),
   router: {
     push: mockPush,
@@ -541,7 +544,13 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
   /** 성공 도착 — react-query 순서대로 훅 레벨 → 호출별 onSuccess. 목 phase 는 그대로 둬
    * "재렌더 전에 화면이 빠지는" 실기 순서를 재현한다(02a ★13). */
   function succeed(data: Itinerary): void {
-    const context = { client: { setQueryData: jest.fn() } };
+    const context = {
+      client: {
+        setQueryData: jest.fn(),
+        // TRIP-1690 FV-POLL-01 — 훅 옵션 onSuccess 가 쓰기 전에 진행 중 일정 GET 을 취소한다.
+        cancelQueries: jest.fn(() => Promise.resolve()),
+      },
+    };
     act(() => {
       mockHookOptions?.mutation?.onSuccess?.(
         data,
@@ -603,6 +612,9 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
       ).toBeOnTheScreen();
       // TRIP-1268: 마운트 POST(사전 검사 뒤)를 기다린 뒤에 재시도를 누른다(02a ★4).
       await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
+      // 실물 react-query 는 실패로 끝나면 훅 옵션 onSettled 를 부른다 — 'state' 목은 결과를 phase 로만 흉내 내므로
+      // 그 정산을 직접 태운다(TRIP-1690 FV-POLL-03: [다시 시도] 잠금은 그 정산에서 풀린다).
+      act(() => mockHookOptions?.mutation?.onSettled?.());
 
       fireEvent.press(screen.getByTestId('itinerary-generating-retry'));
       mockPhase = 'pending';
@@ -781,7 +793,13 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
           itinerary('FULLY_AI', [slot('a', false)]),
           mockLastCall?.vars,
           undefined,
-          { client: { setQueryData: jest.fn() } }
+          {
+            client: {
+              setQueryData: jest.fn(),
+              // TRIP-1690 FV-POLL-01 — 훅 옵션 onSuccess 가 쓰기 전에 진행 중 일정 GET 을 취소한다.
+              cancelQueries: jest.fn(() => Promise.resolve()),
+            },
+          }
         );
       });
 

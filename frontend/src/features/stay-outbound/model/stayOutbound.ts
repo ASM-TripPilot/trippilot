@@ -1,4 +1,4 @@
-import * as Linking from 'expo-linking';
+import { openExternal } from '@/shared/external-link';
 
 import { API_BASE_URL } from '@/shared/api';
 
@@ -93,7 +93,7 @@ async function openOutbound(
   fallback: () => void
 ): Promise<'web' | 'failed'> {
   try {
-    await Linking.openURL(url);
+    await openExternal(url);
     return 'web';
   } catch {
     // 브라우저조차 못 열면 침묵하지 않고 위로 알린다(BR-U1-55) — 전용 실패 화면은 없어

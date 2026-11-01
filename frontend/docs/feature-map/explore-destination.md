@@ -37,8 +37,8 @@ routes:
 - `region-picker-covers` 서울·부산·제주와 그 구군 카드·인기 카드는 지역 사진(장소 0곳 흐린 카드도 사진), 그 밖 지역은 색 그라데이션이고, 「인기」 배지는 첫 인기 카드에만 붙는다. *(2026-11-01 B안 시범으로 실화면 전용)*
 - `region-picker-loading` 카탈로그 조회 중 스켈레톤 4칸 / `region-picker-error` 「지역을 불러오지 못했어요」 + 「다시 시도」.
 - `destination-redirect` 옛 주소 `/explore/destination/{코드}` → 같은 코드로 거른 탐색 탭으로 즉시 리다이렉트.
-- `dest-lane-layout` 숙소·장소 레인 카드와 로딩 스켈레톤은 같은 폭으로 줄 서고, 검색창은 알약 모양이며, ♥·＋ FAB 묶음은 탭바 바로 위에 붙는다. *(2026-11-01 jest 축소로 실화면 전용)*
-- `dest-toast-above-fab` FAB 가 있는 화면에서 토스트는 FAB 묶음 위에 떠서 가려지지 않는다. *(2026-11-01 jest 축소로 실화면 전용)*
+- `dest-lane-layout` 숙소·장소 레인 카드와 로딩 스켈레톤은 같은 폭으로 줄 서고, 검색창은 알약 모양이며, ♥·＋ FAB 묶음은 탭바 바로 위에 붙는다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
+- `dest-toast-above-fab` FAB 가 있는 화면에서 토스트는 FAB 묶음 위에 떠서 가려지지 않는다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
 - `explore-landing-look` 지역 필터 중 검색창은 칩 오른쪽에 「›」를 두고, 숙소 카드 사진 칸은 숙소마다 고른 그림이며, 세로 스크롤 중 ♥·＋ 묶음이 숨었다가 멈추면 돌아온다(담은 곳 메뉴가 열려 있으면 그대로). *(2026-11-01 B안으로 실화면 전용)*
 
 ## How to get to it (user POV)
@@ -97,3 +97,4 @@ Preconditions:
 - [실화면] 2026-10-31 지역 필터 중 숙소 레인은 「인기 숙소」 + 인기 숙소 줄이어도 레인 머리 「모두 보기 ›」(`explore-lane-stay-seeall`)는 그대로 있다. 없는 것은 인기 숙소 위젯의 「Trip.com에서 전체 숙소 보기」다.
 - [결함 의심 FM-L1-03] 이 화면에서 인기 숙소 카드로 연 제휴 시트의 버튼이 탭바 아래 깔린다(tab-bar.md).
 - [결함 의심 FM-L1-05] ♥ 메뉴 딤이 탭바를 덮지 않는다(home.md).
+- [실화면] 2026-11-02 실패 주입(sim-qa §2 `_dev/fault`)으로 열림 — `explore-loading`(`/stays/search`·`/places` 지연 — 스켈레톤이 카드와 같은 폭)·`explore-place-error`(`/places` 500)·`region-picker-loading`·`region-picker-error`(`/regions` 지연·500, 「지역을 불러오지 못했어요」).

@@ -2,7 +2,7 @@
 id: copick
 band: h
 status: live-verified
-live_verified_at: 2026-10-31 (8b50db304)
+live_verified_at: 2026-11-02 (f153fe245)
 routes:
   - app/trips/[tripId]/itinerary/copick/[slotKey].tsx
   - app/trips/[tripId]/itinerary/copick/complete.tsx
@@ -32,8 +32,8 @@ AI가 먼저 초안(`CO_PLAN`)을 만들고, 사용자는 고정되지 않은 �
 - `copick-complete` 완성 화면 — 제목 = 여행 이름, `N일차 · 날짜 · N곳`, 일차 칩, 카드 + 거리 연결선, 숙소 고정 칸 부제 `{시간대} · 숙소 · 변경 불가`.
 - `copick-complete-error` 완성 화면 조회 실패 → `일정을 불러올 수 없어요` + [다시 시도].
 - `copick-to-plan` [완성 일정 보기] → 완성 일정 보기 화면 push.
-- `copick-stepper` 지금 고르는 칸만 빨강으로 강조되고, 이전·다음 칸의 상태 글자는 회색이다. *(2026-11-01 jest 축소로 실화면 전용)*
-- `copick-slot-fill` 후보를 기다리는 동안 글자 없는 스켈레톤 카드 3장이 은은히 깜빡이며(공용 펄스) 보인다. 반경 밖 후보만 이름이 흐리게 보이고, 반경 밖 표지가 없으면 거리 문자열이 멀어 보여도 흐리지 않다. 칸 채우기 지도는 보기 전용이고 핀 사이 연결선이 없다. *(2026-11-01 jest 축소로 실화면 전용)*
+- `copick-stepper` 지금 고르는 칸만 빨강으로 강조되고, 이전·다음 칸의 상태 글자는 회색이다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
+- `copick-slot-fill` 후보를 기다리는 동안 글자 없는 스켈레톤 카드 3장이 은은히 깜빡이며(공용 펄스) 보인다. 반경 밖 후보만 이름이 흐리게 보이고, 반경 밖 표지가 없으면 거리 문자열이 멀어 보여도 흐리지 않다. 칸 채우기 지도는 보기 전용이고 핀 사이 연결선이 없다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass(일부 — Gotchas))*
 
 ## How to get to it (user POV)
 
@@ -88,3 +88,5 @@ Preconditions:
 - [실화면] 2026-10-31 후보 행은 트리에서 `itinerary-candidate-${poiId}` cell(라벨 「A, 이름, 설명, #태그, ·, 이동, 약 1.0km」)로 보이고 선택은 selected로 읽는다. `itinerary-candidate-radio-${poiId}` id 탭은 통한다. 반경 `최대` 를 고르면 셋째 칸이 `약 3.0km` 로 바뀌었다. 같은 칸·같은 반경이라도 다시 물을 때 후보 수가 달라졌다(실 AI, 2곳 → 1곳).
 - [실화면] 2026-10-31 부산 1박 2일 15칸(1일차 8 · 2일차 7)을 모두 [A로 선택]으로 채워 완성 화면(제목 여행 이름, `8곳`, 거리 없음)까지 갔다. 거점 미지정이라 숙소 고정 칸은 없었다.
 - [실화면] 2026-10-31 도달 불가 — `copick-seed`(생성 직후 첫 칸 착지: 백그라운드로 나가 보지 못함)·`copick-locked`(PARTIAL을 못 봄)·`copick-zero`(0건 반경 없음)·`copick-confirm-error`·`copick-candidates-error`·`copick-complete-error`(네트워크 차단 수단 없음). 이탈 확인은 [머무르기]까지만 눌렀고 [나가기]·0칸 이탈은 누르지 않았다.
+- [실화면] 2026-11-02 버릴 여행 확정 일정의 칸 딥링크(`…/itinerary/copick/2026-11-03%23<poiId>`)로 둘째 칸 테마 화면·스텝퍼를 열었다(완성 일정 위에서도 열린다). [식사] 뒤 후보가 오기 전 글자 없는 카드 3장이 보였고, 서버가 1.1km → 약 10.0km 로 넓혀 반경 밖 표지 후보가 없어 흐림은 못 봤다. 지도는 끌어도 안 움직이고 핀 사이 선이 없다.
+- [실화면] 2026-11-02 실패 주입(sim-qa §2 `_dev/fault`)으로 열림 — `copick-complete-error`(완성 화면 딥링크 + `/trips/*/itinerary` 500).

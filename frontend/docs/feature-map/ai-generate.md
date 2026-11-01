@@ -2,7 +2,7 @@
 id: ai-generate
 band: h
 status: live-verified
-live_verified_at: 2026-10-31 (8b50db304)
+live_verified_at: 2026-11-02 (f153fe245)
 routes:
   - app/trips/[tripId]/itinerary/generating.tsx
   - app/trips/[tripId]/itinerary/draft.tsx
@@ -41,11 +41,11 @@ routes:
 - `draft-manual-redirect` 직접 짜기(MANUAL) 일정이 0곳이면 추천안 대신 직접 짜기 편집기로 replace.
 - `draft-to-plan` [완성 일정 보기] → 완성 일정 보기 화면 push(확정은 거기서).
 - `stay-recommend` (현재 앱 안 진입 없음) 동선 기준 숙소 추천 — 추천 데이터 미배선이라 인기 숙소 또는 안내 얼굴만 뜬다.
-- `draft-header-actions` 헤더의 [직접 고르기]와 [다시 만들기] 사이에 구분자가 있어 두 버튼으로 읽힌다([직접 고르기]가 없으면 구분자도 없다). 폴백이면 안내 아이콘이 ✓가 아니라 주의 표시다. *(2026-11-01 jest 축소로 실화면 전용)*
-- `draft-day-tabs-scroll` 일차 탭이 7일 이상이면 가로로 밀리고, 다른 날을 고르면 그 탭이 화면 안으로 스크롤된다. *(2026-11-01 jest 축소로 실화면 전용)*
+- `draft-header-actions` 헤더의 [직접 고르기]와 [다시 만들기] 사이에 구분자가 있어 두 버튼으로 읽힌다([직접 고르기]가 없으면 구분자도 없다). 폴백이면 안내 아이콘이 ✓가 아니라 주의 표시다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass(일부 — Gotchas))*
+- `draft-day-tabs-scroll` 일차 탭이 7일 이상이면 가로로 밀리고, 다른 날을 고르면 그 탭이 화면 안으로 스크롤된다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass(일부 — Gotchas))*
 - `draft-empty-day-select` 0곳 얼굴(빈·로딩)에서 도착한 날의 일차 탭을 누르면 그 탭으로 선택 표시가 옮겨 간다(안 온 날 탭은 눌리지 않는다). *(2026-11-01 B안 — 선택 표시는 생김새라 실화면 전용)*
-- `draft-alt-states` 후보 조회 실패 카드는 0건 카드와 같은 점선 카드 모양이다. *(2026-11-01 jest 축소로 실화면 전용)*
-- `gen-progress-track` 생성 중 카드의 진행 막대는 끝난 날이 빨강으로 차고, 짓는 중·대기 날은 회색이다. *(2026-11-01 jest 축소로 실화면 전용)*
+- `draft-alt-states` 후보 조회 실패 카드는 0건 카드와 같은 점선 카드 모양이다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 도달 불가 — Gotchas)*
+- `gen-progress-track` 생성 중 카드의 진행 막대는 끝난 날이 빨강으로 차고, 대기 날은 회색이다. 짓는 중인 날은 회색 트랙 안에서 짧은 빨강 막대가 흐른다(비결정형). *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 — 지도 정정)*
 
 ## How to get to it (user POV)
 
@@ -119,3 +119,5 @@ Preconditions:
 - [실화면] 2026-10-31 셸 토스트 `일정이 완성됐어요` 는 백그라운드 이탈 뒤 약 48초에 홈에 떴지만 몇 초 만에 사라져 `보기` 를 누르기 전에 걷혔다 — 토스트 `보기` 경로는 뜨자마자 누른다. 다른 후보 시트는 차선책 없이 요청을 보내 스켈레톤 → 약 10초 안에 후보 1곳이 왔다.
 - [실화면] 2026-10-31 409 얼굴 본문은 `한 번에 하나만 만들 수 있어요. 기존 생성을 멈추고 이 여행을 만들까요?` 였다(다른 여행 생성 중에 두 번째 여행 생성을 시작해 재현). [기다리기]는 홈으로 갔다.
 - [실화면] 2026-10-31 도달 불가 — `gen-failed`·`draft-loading/failed/empty`(네트워크 차단 수단 없음)·`gen-ai-limit`(한도 남은 계정)·`gen-refused`·`gen-planb-handoff`·`gen-replan`(여행 중 여행은 제주뿐이고 수정 금지)·`draft-partial`(생성이 빨라 완성으로 바로 착지)·`draft-fallback-interstitial`·`draft-fallback-banner`·`draft-shortfall`·`draft-stale-failed`·`draft-unplaced`(실 AI가 해당 신호를 안 냄)·`draft-manual-redirect`(0곳 MANUAL 일정 미준비). [다시 짜기]는 확인 다이얼로그와 [취소]까지만 봤다(AI 한도).
+- [실화면] 2026-11-02 실패 주입(`_dev/fault?path=/trips/*/itinerary&status=500` · `&delay=15000`)으로 추천안 실패·로딩 얼굴(`itinerary-draft-failed`·`추천안을 만드는 중`)이 열린다 — 헤더 [직접 고르기] │ [다시 만들기] 구분자와 ✓ 아이콘, 8일 탭 가로 밀림까지 봤다. 이 두 얼굴의 일차 탭은 전부 비활성이라 「고르면 따라감」은 빈 얼굴(0곳 일정) 데이터가 있어야 본다. 폴백 얼굴의 주의 아이콘은 폴백 신호가 응답 데이터라 주입으로 못 연다. 후보 조회는 POST `slot-candidates` 라 실패 카드(`draft-alt-states`)도 주입 밖이다. 8일짜리 완전 AI 생성은 1일차 도착 뒤 약 1분 반 PARTIAL 진행 카드(`1일차 완성 · 2일차 생성 중 · 3일차 대기 …`)를 보였다.
+- [실화면] 2026-11-02 실패 주입(sim-qa §2 `_dev/fault`)으로 열림 — `draft-loading`·`draft-failed`(`/trips/*/itinerary` 지연·500).

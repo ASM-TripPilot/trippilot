@@ -479,19 +479,24 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       expect(screen.queryByTestId('itinerary-draft-empty')).toBeNull();
     });
 
-    it('COMPLETE 인데 세션 id 가 남아 있어도(폴링이 안 도는 조합) 로딩이 고착되지 않고 빈 안내다', async () => {
-      itineraryScript = () =>
+    // TRIP-1690 FV-POLL-01 로 뒤집혔다 — COMPLETE + 세션은 재생성 1차(서버가 옛 행에 새 세션 id 를 붙임)라 이제 묻기를
+    // 잇는다(옛 서술 "폴링이 안 도는 조합"은 낡았다). 고착 방지 취지는 그대로: 세션이 닫히면 빈 안내로 넘어간다.
+    it('COMPLETE 인데 세션 id 가 있으면 로딩 얼굴로 묻기를 잇고, 세션이 닫히면 고착 없이 빈 안내다', async () => {
+      itineraryScript = (call) =>
         itinerary({
           generationState: 'COMPLETE',
           days: [],
-          generationSessionId: 'session-1',
+          generationSessionId: call <= 1 ? 'session-1' : null,
         });
 
       renderPage();
 
-      await screen.findByTestId('itinerary-draft-empty');
+      await screen.findByTestId('itinerary-draft-loading');
+      await screen.findByTestId('itinerary-draft-empty', undefined, {
+        timeout: DRAFT_POLL_INTERVAL_MS * 3,
+      });
       expect(screen.queryByTestId('itinerary-draft-loading')).toBeNull();
-    });
+    }, 20000);
 
     it('COMPLETE + 일자 없음 + 세션 없음(진짜 0곳) → 빈 안내 그대로', async () => {
       itineraryScript = () =>
@@ -1412,6 +1417,151 @@ describe('폴링 상한 기준점', () => {
         client.setQueryData(ITINERARY_KEY, emptyPartial());
       });
       expect(screen.queryByTestId('itinerary-draft-failed')).not.toBeNull();
+    }, 20000);
+  });
+
+  /**
+   * TRIP-1690 형식 검증 반례(FV-POLL-02 · P2 NoStuckProgress) — 상한·조회 오류로 폴링이 멈췄는데 PARTIAL 이면
+   * 진행 카드만 남아 「만드는 중」에 갇혔다. 이제 시트 맨 위에 실패 안내 + [다시 시도](일정 GET 1회)가 선다.
+   * 3동작: 준비 = PARTIAL 을 상한까지 쌓는다 → 실행 = [다시 시도] → 단언 = 안내·GET·서버가 닫은 FAILED 얼굴.
+   */
+  describe('🔴 C4·C5 · FV-POLL-02 — 생성 중(PARTIAL) 셸도 실패(상한·조회 오류)를 말하고 다시 묻는다', () => {
+    it('C4 상한 뒤 PARTIAL 이면 안내 + [다시 시도] — 누르면 GET 1회, 서버가 FAILED 로 닫았으면 h08 셸 + 안내', async () => {
+      const client = newTestQueryClient();
+      renderDraft(client);
+      await screen.findByTestId('generation-progress-card');
+      await waitFor(() => expect(getCalls).toBeGreaterThanOrEqual(1));
+      expect(screen.queryByTestId('itinerary-draft-partial-retry')).toBeNull(); // 앵커 — 상한 전엔 없다
+
+      act(() => {
+        for (let i = 0; i < 30; i += 1) {
+          client.setQueryData(ITINERARY_KEY, itineraryFor('PARTIAL'));
+        }
+      });
+      expect(screen.getByTestId('generation-progress-card')).toBeOnTheScreen();
+      expect(
+        screen.getByTestId('itinerary-draft-stale-failed')
+      ).toBeOnTheScreen();
+      const before = getCalls;
+
+      stateForCall = () => 'FAILED';
+      fireEvent.press(screen.getByTestId('itinerary-draft-partial-retry'));
+      await waitFor(() => expect(getCalls).toBe(before + 1));
+      await screen.findByTestId('sheet-cta-root');
+      expect(screen.queryByTestId('generation-progress-card')).toBeNull();
+      expect(
+        screen.getByTestId('itinerary-draft-stale-failed')
+      ).toBeOnTheScreen();
+    }, 20000);
+
+    it('C5 PARTIAL 폴링 중 조회가 실패하면 진행 카드 곁에 안내가 선다(조회 오류를 숨기지 않는다 · INV-4)', async () => {
+      const client = newTestQueryClient();
+      renderDraft(client);
+      await screen.findByTestId('generation-progress-card');
+      await waitFor(() => expect(getCalls).toBeGreaterThanOrEqual(1));
+      server.use(
+        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+          HttpResponse.json({}, { status: 500 })
+        )
+      );
+      await screen.findByTestId('itinerary-draft-stale-failed', undefined, {
+        timeout: DRAFT_POLL_INTERVAL_MS * 3,
+      });
+      expect(screen.getByTestId('generation-progress-card')).toBeOnTheScreen();
+      expect(
+        screen.getByTestId('itinerary-draft-partial-retry')
+      ).toBeOnTheScreen();
+    }, 20000);
+  });
+
+  /**
+   * TRIP-1690 형식 검증 반례(FV-POLL-01 · P1 ResultOnlyAfterComplete) — 재생성 1차(AI) 동안 서버는 옛 COMPLETE 행에
+   * 새 세션 id 를 붙여 준다. 초안이 세션을 안 봐 예전 일정을 완성본으로 그리고 폴링을 멈췄다. 이제 세션이 돌면
+   * 묻기를 이어 가고, 그동안은 로딩 얼굴이다(예전 일정을 완성본으로 보이지 않는다).
+   */
+  describe('🔴 C6 · FV-POLL-01 — 세션이 돌고 있으면 COMPLETE 로 보여도 묻기를 잇는다', () => {
+    it('옛 COMPLETE + 진행 중 세션이면 확정 CTA 없이 로딩 얼굴로 묻다가, 1일차(PARTIAL)가 오면 진행 카드로 넘어간다', async () => {
+      serveItinerary(server, {
+        trip: () => BUSAN_TRIP,
+        itinerary: () => {
+          getCalls += 1;
+          return getCalls <= 1
+            ? { ...itineraryFor('COMPLETE'), generationSessionId: 'sess-2' }
+            : { ...itineraryFor('PARTIAL'), generationSessionId: 'sess-2' };
+        },
+      });
+      renderDraft(newTestQueryClient());
+      await screen.findByTestId('itinerary-draft-loading');
+      expect(screen.queryByTestId('sheet-cta-root')).toBeNull();
+      await screen.findByTestId('generation-progress-card', undefined, {
+        timeout: DRAFT_POLL_INTERVAL_MS * 3,
+      });
+      expect(getCalls).toBeGreaterThanOrEqual(2);
+    }, 20000);
+
+    // 5-b W-1 — 옛 행이 폴백 일정이어도 재생성 중이면 지난 생성의 폴백 인터스티셜을 띄우지 않는다.
+    it('C7 옛 행이 폴백(isFallback)이어도 세션이 돌면 인터스티셜이 아니라 로딩 얼굴이다', async () => {
+      serveItinerary(server, {
+        trip: () => BUSAN_TRIP,
+        itinerary: () => {
+          getCalls += 1;
+          return {
+            ...itineraryFor('COMPLETE'),
+            isFallback: true,
+            solveMode: 'MINIMAL',
+            generationSessionId: 'sess-2',
+          };
+        },
+      });
+      renderDraft(newTestQueryClient());
+      await screen.findByTestId('itinerary-draft-loading');
+      expect(screen.queryByTestId('itinerary-fallback-root')).toBeNull();
+    }, 20000);
+
+    // 5-b W-2 — 로딩 덮기의 두 탈출 조건. 하나라도 빠지면 상한·조회 오류 뒤에도 로딩에 갇힌다.
+    it('C8 세션이 도는 옛 행도 상한에 닿으면 로딩을 끝내고 옛 목록 + 실패 안내로 말한다', async () => {
+      const client = newTestQueryClient();
+      const running = () => ({
+        ...itineraryFor('COMPLETE'),
+        generationSessionId: 'sess-2',
+      });
+      serveItinerary(server, {
+        trip: () => BUSAN_TRIP,
+        itinerary: () => {
+          getCalls += 1;
+          return running();
+        },
+      });
+      renderDraft(client);
+      await screen.findByTestId('itinerary-draft-loading');
+      act(() => {
+        for (let i = 0; i < 30; i += 1)
+          client.setQueryData(ITINERARY_KEY, running());
+      });
+      expect(screen.queryByTestId('itinerary-draft-loading')).toBeNull();
+      expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
+      expect(
+        screen.getByTestId('itinerary-draft-stale-failed')
+      ).toBeOnTheScreen();
+    }, 20000);
+
+    it('C9 세션이 도는 옛 행에서 조회가 실패하면 로딩을 끝내고 옛 목록 + 실패 안내로 말한다', async () => {
+      serveItinerary(server, {
+        trip: () => BUSAN_TRIP,
+        itinerary: () => {
+          getCalls += 1;
+          return getCalls <= 1
+            ? { ...itineraryFor('COMPLETE'), generationSessionId: 'sess-2' }
+            : HttpResponse.json({}, { status: 500 });
+        },
+      });
+      renderDraft(newTestQueryClient());
+      await screen.findByTestId('itinerary-draft-loading');
+      await screen.findByTestId('itinerary-draft-stale-failed', undefined, {
+        timeout: DRAFT_POLL_INTERVAL_MS * 3,
+      });
+      expect(screen.queryByTestId('itinerary-draft-loading')).toBeNull();
+      expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
     }, 20000);
   });
 });

@@ -2,7 +2,7 @@
 id: records-tab
 band: j
 status: live-verified
-live_verified_at: 2026-10-31 (8b50db304)
+live_verified_at: 2026-11-02 (f153fe245)
 routes:
   - app/(tabs)/records.tsx
 ---
@@ -23,6 +23,7 @@ routes:
 - `rt-past-empty` 여행은 있으나 지난 여행이 0건이면 점선 박스 한 줄 `여행이 끝나면 여기에 기록이 쌓여요`.
 - `rt-empty` 여행이 0건이면 `아직 기록된 여행이 없어요` 안내 + `새 여행 만들기`(새 여행 위저드 1단계로, 직전 드래프트 초기화).
 - `rt-error` 여행 목록 조회 실패면 `기록을 불러오지 못했어요` 안내(다시 시도 버튼 없음).
+- `rt-offline` 오프라인 콜드스타트(받은 목록 없음)면 testID: `record-calendar-offline` 안내(스피너·빈 얼굴 없음).
 
 ## How to get to it (user POV)
 
@@ -54,7 +55,7 @@ Preconditions:
 - **지난 여행 → 요약.** '지난 여행' 헤더 오른쪽에 `N건`. 카드 testID: `record-calendar-past-trip-{tripId}` 를 누르면 j04 요약(testID: `reflection-summary-pending` 또는 요약 본문)이 열린다.
 - **지난 여행 0건.** 진행·예정 여행만 있는 계정에서 testID: `record-past-empty` 와 `여행이 끝나면 여기에 기록이 쌓여요` 가 보인다.
 - **빈 상태.** 여행 0건 계정에서 testID: `record-calendar-empty`(`아직 기록된 여행이 없어요`)가 보이고 캘린더는 없다. testID: `record-calendar-empty-create`(`새 여행 만들기`)를 누르면 새 여행 1단계가 열린다.
-- **오류.** 네트워크를 끊고 탭에 들어오면 testID: `record-calendar-error`(`기록을 불러오지 못했어요`)가 보이고 빈 상태 얼굴이 새지 않는다.
+- **오류.** 실패 주입 `_dev/fault?path=/trips&status=500` 뒤 리로드하고 탭에 들어오면 testID: `record-calendar-error`(2026-11-02 확인 — 네트워크를 끊으면 오류가 아니라 `record-calendar-offline` 이다. 오프라인 판정은 NetInfo `isConnected` 가 묶인 react-query `onlineManager` 이고 받아 둔 데이터가 없을 때만이다 — 시뮬에서 `nav.mjs --eval` 로 `onlineManager.setOnline(false)` 를 리로드 직후에 걸어 봤지만(2026-11-02) 첫 조회가 이미 나가 있어 오프라인 얼굴은 못 열었다. 프리뷰 키로 본다.)(`기록을 불러오지 못했어요`)가 보이고 빈 상태 얼굴이 새지 않는다.
 
 ## Gotchas
 
@@ -72,3 +73,4 @@ Preconditions:
 - [실화면] 2026-10-31 도달 불가 — `rt-empty`(여행 0건 계정 아님)·`rt-past-empty`(지난 여행 8건)·`rt-error`(시뮬레이터 네트워크 차단 수단 없음). 홈 `전체 보기` 진입(진행 중 여행이 있어 홈이 여행 중 얼굴)·마이 `캘린더 ›` 진입(예정 여행 4건이라 섹션 없음)도 못 밟았다.
 - [결함 의심 FM-L5-01] 진행 중 카드 `오늘 기록 보기` 가 오늘 일차가 아니라 1일차 탭으로 j01 을 연다(제주 10/30–31, 오늘 10/31 → `1일차 · 10월 30일` 선택).
 - [결함 의심 FM-L5-03] 지난 여행 카드의 접근성 라벨에 빈 조각이 끼어 있다 — `강남구 여행, 2026.10.26–10.27,  · , 1박 2일`. 화면 글자는 정상이다(VoiceOver 낭독만 영향).
+- [실화면] 2026-11-02 실패 주입(sim-qa §2 `_dev/fault`)으로 열림 — `rt-error`(`/trips` 500 → `record-calendar-error`, `/me/records` 에 걸면 안 바뀐다).

@@ -2,7 +2,7 @@
 id: itinerary-view
 band: h
 status: live-verified
-live_verified_at: 2026-10-31 (8b50db304)
+live_verified_at: 2026-11-02 (f153fe245)
 routes:
   - app/trips/[tripId]/itinerary/index.tsx
 ---
@@ -32,8 +32,8 @@ routes:
 - `view-trip-deleted` 여행 삭제됨(여행 404) — `삭제된 여행이에요`.
 - `view-map-fallback` 지도 로드 실패 — `지도를 불러올 수 없어요 · 일정은 아래 목록에서 볼 수 있어요` + [다시 시도], 시트·칩·CTA 는 유지. 지도 키 부재면 지도 자리에 실패 표면.
 - `view-from-notification` 알림 진입(`?from=notification`) — 오늘(KST) 일차로 열리고, 확정이어도 [돌아가기]가 이전 화면(알림함)으로 간다.
-- `view-statusbar-cover` 지도 화면 맨 위 상태바 자리는 흰 막으로 덮인다 — 시트를 내려 지도가 드러나도 상태바 글자가 지도에 묻히지 않는다. *(2026-11-01 jest 축소로 실화면 전용)*
-- `view-pin-face` 지도 번호 핀은 분홍 물방울 안의 번호로 보이고 네이버 기본 초록 마커가 나오지 않는다. *(2026-11-01 jest 축소로 실화면 전용)*
+- `view-statusbar-cover` 지도 화면 맨 위 상태바 자리는 흰 막으로 덮인다 — 시트를 내려 지도가 드러나도 상태바 글자가 지도에 묻히지 않는다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
+- `view-pin-face` 지도 번호 핀은 분홍 물방울 안의 번호로 보이고 네이버 기본 초록 마커가 나오지 않는다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
 
 ## How to get to it (user POV)
 
@@ -94,3 +94,4 @@ Preconditions:
 - [실화면] 2026-10-31 일정 탭 카드 동선 확인: 미확정 부산 카드 → 초안(h08), 확정 뒤 같은 카드 → 여행 중 허브(`execution-live-screen`, 시작 전 여행이어도 허브). 머리줄은 PLANNED 얼굴에서 제목 줄 오른쪽(`9곳 · 19.5km`), 확정 얼굴에서는 제목 아래 줄(`확정됨 · 3곳`)에 놓인다. 서울 일정은 커넥터 하나가 `거리 정보 없음`이라 머리줄이 `확정됨 · 3곳`으로 km 가 빠졌다.
 - [실화면] 2026-10-31 도달 불가 — `view-confirm-locked`(PARTIAL 일정 없음 — 실 AI 생성이 빨라 완성으로 바로 착지)·`view-confirm-error`(실패 유도 수단 없음)·`view-unplaced`·`view-violation`·`view-fixed-stay`·휴관 경고(dev-api 데이터에 해당 신호가 있는 일정 없음 — 부산의 `고정` 카드는 시각 고정 꼭 갈 곳이지 숙소가 아니었다)·`view-loading`(로딩이 짧아 연속 스크린샷에도 안 잡힘)·`view-failed`·`view-map-fallback`(네트워크·지도 차단 수단 없음). 히스토리 없는 콜드 딥링크에서 PLANNED 얼굴 `뒤로`→홈도 PLANNED 테스트 여행이 남지 않아 못 봤다.
 - [실화면] 2026-10-31 판단 필요(FM-L3-04) — 서울 확정 일정 지도에서 2번 핀이 `경복궁` 카드인데 용산(국립중앙박물관 부근)에 꽂혔다. 경복궁→의릉 커넥터 `약 14.4km`도 실제 거리보다 길어 POI 좌표 데이터 문제로 추정한다(앱 결함인지 미판정).
+- [실화면] 2026-11-02 실패 주입(sim-qa §2 `_dev/fault`)으로 열림 — `view-loading`(빈 화면 + 뒤로)·`view-failed`(`/trips/*/itinerary` 지연·500).

@@ -25,8 +25,10 @@ jest.mock('expo-router', () =>
   })
 );
 
+import { Platform } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -284,6 +286,47 @@ describe('TRIP-609 · 진입 미러 보고(AC-4)', () => {
     });
   });
 
+  // TRIP-1689 FV-CONSENT-04 — 웹은 위치를 기록하지 않는 클라이언트다. 웹 브라우저 권한(NOT_DETERMINED)을 보고하면
+  // 같은 계정 앱의 GRANTED 미러를 덮어 서버 능력(serverLocationService)이 꺼진다(형식 검증 반례 R5).
+  it('웹에서는 진입해도 위치 권한 미러를 보고하지 않는다', async () => {
+    const replaced = jest.replaceProperty(Platform, 'OS', 'web');
+    try {
+      mockGetForeground.mockResolvedValue({
+        status: 'undetermined',
+        granted: false,
+        canAskAgain: true,
+      });
+      renderPage();
+
+      // 앵커 — 권한은 읽었다(토글 비활성 판정에 쓴다). 그래도 서버로는 보내지 않는다.
+      await waitFor(() => expect(mockGetForeground).toHaveBeenCalledTimes(1));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(patchSpy).not.toHaveBeenCalled();
+    } finally {
+      replaced.restore();
+    }
+  });
+
+  // 03b W3 — 웹은 보고만 안 할 뿐 권한은 읽어 토글 비활성 판정에 쓴다. 앱이 남긴 미러 DENIED 를 웹 브라우저
+  // 허용으로 풀 수 있는 유일한 길이다(BR-U6-31 자가치유).
+  it('웹이어도 단말 권한이 granted 면 서버 미러 DENIED 에 토글이 막히지 않는다(보고는 안 함)', async () => {
+    const replaced = jest.replaceProperty(Platform, 'OS', 'web');
+    try {
+      primeConsent({ osPermissionMirror: 'DENIED', legalConsent: false });
+      mockGetForeground.mockResolvedValue(GRANTED);
+      renderPage();
+
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('settings-location-toggle')
+        ).not.toBeDisabled()
+      );
+      expect(patchSpy).not.toHaveBeenCalled();
+    } finally {
+      replaced.restore();
+    }
+  });
+
   it('device 가 denied 면 DENIED 로 미러한다(매핑)', async () => {
     primeConsent({ osPermissionMirror: 'DENIED', legalConsent: false });
     mockGetForeground.mockResolvedValue(DENIED);
@@ -341,18 +384,24 @@ describe('TRIP-778 · 저장 뒤 위치 동의 조회 무효화 (D11)', () => {
     );
   });
 
-  it('짝: PUT 이 실패하면 무효화하지 않는다(실패를 성공처럼 갱신하지 않음)', async () => {
+  // TRIP-1689 FV-CONSENT-03 — 옛 짝("실패면 무효화 안 함")을 뒤집었다. 응답이 끊겨도 서버는 이미 저장했을 수 있어
+  // 실패 뒤에도 서버 값을 다시 받아야 토글·l05 칩이 서버와 같다(형식 검증 반례 R3: 서버 동의인데 토글 꺼짐).
+  it('PUT 이 실패해도 위치 동의 조회를 무효화한다(서버가 이미 저장했을 수 있다)', async () => {
     primeConsent({ osPermissionMirror: 'GRANTED', legalConsent: false });
-    primeMutation(mockUsePut, { spy: putSpy, error: new Error('500') });
+    primeMutation(mockUsePut, {
+      spy: putSpy,
+      error: new Error('Network Error'),
+    });
     renderPage();
     await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
     const before = locationInvalidations();
 
     fireEvent.press(screen.getByTestId('settings-location-toggle'));
     expect(putSpy).toHaveBeenCalledTimes(1);
-    await new Promise((resolve) => setTimeout(resolve, 20));
 
-    expect(locationInvalidations()).toBe(before);
+    await waitFor(() =>
+      expect(locationInvalidations()).toBeGreaterThan(before)
+    );
   });
 });
 
@@ -480,6 +529,27 @@ describe('TRIP-1194 · 연타 잠금', () => {
     fireEvent.press(screen.getByTestId('settings-location-toggle'));
 
     expect(putSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // 03b W1 — 잠금은 정착 뒤 재조회가 끝나야 풀린다. 재조회 중 화면은 아직 옛 값이라 다시 누르면 같은 PUT 이 또
+  // 나간다. onSettled 의 해제를 무효화 앞으로 옮기는 "정리"를 막는다.
+  it('PUT 이 정착해도 다시 받기가 끝나기 전에는 다시 눌러도 PUT 은 1회', async () => {
+    const invalidateSpy = jest
+      .spyOn(QueryClient.prototype, 'invalidateQueries')
+      .mockReturnValue(new Promise<void>(() => {}));
+    try {
+      primeConsent({ osPermissionMirror: 'GRANTED', legalConsent: false });
+      renderPage();
+      await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
+
+      fireEvent.press(screen.getByTestId('settings-location-toggle'));
+      await act(async () => {});
+      fireEvent.press(screen.getByTestId('settings-location-toggle'));
+
+      expect(putSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      invalidateSpy.mockRestore();
+    }
   });
 
   it('철회 확정을 연타해도 PUT 은 1회', async () => {
