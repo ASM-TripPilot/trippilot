@@ -20,6 +20,12 @@ import { isOtaSource } from '@/entities/stay';
  * 「거점 변경」(TRIP-1076 결정 2(A))은 그 여행의 거점 화면(`/trips/[tripId]/bases`)으로 push 만 한다 —
  * 이 페이지는 거점을 쓰지 않는다(옛 해제 DELETE 배선 제거). push 라서 거점 화면 CTA 의 `back()` 이 여기로
  * 돌아온다(`ItineraryMethodPage` onPressRebase 선례).
+ *
+ * TRIP-1637(INV-4): 조회 실패(saved-stays·trips 어느 쪽이든)는 빈 목록·"연결된 여행 없음"으로 접지 않고
+ * 실패 얼굴로 올린다. 쿼리별 판정 `data === undefined && (isError || errorUpdateCount > 0)` — 재시도 중엔
+ * status 가 pending 으로 돌아가 isError 가 꺼지므로 실패 이력 카운터를 같이 본다(알림함 TRIP-1501 선례).
+ * 받은 목록이 있으면(`data` 있음) 재조회가 실패해도 목록을 유지한다. [다시 시도]는 실패한 쿼리만 refetch.
+ * bases N+1 부분 실패는 범위 밖이다.
  */
 
 /** 여행 1건의 거점 목록을 조회해 페이지로 올린다(N+1 훅-per-여행 — 훅이 루프를 못 도는 우회). */
@@ -111,6 +117,22 @@ export function MyStaysPage(): ReactElement {
     toRowVM(stay, links.get(stay.savedStayId))
   );
 
+  const savedFailed =
+    savedQuery.data === undefined &&
+    (savedQuery.isError || savedQuery.errorUpdateCount > 0);
+  const tripsFailed =
+    tripsQuery.data === undefined &&
+    (tripsQuery.isError || tripsQuery.errorUpdateCount > 0);
+  const loadFailed = savedFailed || tripsFailed;
+  const retrying =
+    (savedFailed && savedQuery.isFetching) ||
+    (tripsFailed && tripsQuery.isFetching);
+
+  const handleRetry = (): void => {
+    if (savedFailed) void savedQuery.refetch();
+    if (tripsFailed) void tripsQuery.refetch();
+  };
+
   const isEmpty = !savedQuery.isPending && rows.length === 0;
 
   const handleChangeBase = (row: MyStayRowVM): void => {
@@ -138,6 +160,9 @@ export function MyStaysPage(): ReactElement {
         onPressChangeBase={handleChangeBase}
         onPressExplore={() => router.push('/stays')}
         onPressBack={() => router.back()}
+        loadFailed={loadFailed}
+        retrying={retrying}
+        onRetry={handleRetry}
       />
     </>
   );
