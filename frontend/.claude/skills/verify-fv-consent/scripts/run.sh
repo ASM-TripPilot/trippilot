@@ -27,7 +27,7 @@ while [ $# -gt 0 ]; do
 done
 
 # ── 동기화 기록(SKILL.md 「동기화」와 같은 값) ─────────────────────────────────
-SYNC=f153fe2458645aff9ac73701a411125505e33999
+SYNC=4461179ba35d4534428ca3871d22b7aabb796655
 COVERED="src/shared/location/useLocationConsent.ts
 src/shared/location/consentPutBody.ts
 src/pages/settings/settings-location/ui/LocationConsentPage.tsx
