@@ -125,8 +125,9 @@ export function MustVisitListPage({
       onBack={() => router.back()}
       // 다음/건너뛰기 둘 다 h09(생성 중)로 잇는다(TRIP-454 AC-2 · TRIP-504 AC-5). copick 갈래면
       // CO_PLAN 신호+첫 슬롯 successRoute 를 싣는다(위 `goToGenerating`). 화면 계약은 무수정.
-      onProceed={goToGenerating}
-      onSkip={goToGenerating}
+      // TRIP-1690 FV-POLL-03 — 두 번째 탭이 생성 화면을 하나 더 열면 그 화면도 POST 를 쏜다(하루 한도 2회) — 연타 창.
+      onProceed={guardPress(goToGenerating)}
+      onSkip={guardPress(goToGenerating)}
       // TRIP-1013 #042 수신 — 시각 지정 '저장'의 창 안이면 무시(행·시각 칩·연필이 같은 콜백).
       onPressItem={guardPress((sourcePoiId: string) =>
         router.push({

@@ -1157,6 +1157,8 @@ describe('편집 모드 (TRIP-1082)', () => {
       await changeNight1ToB();
       pressDone();
       await screen.findByTestId('trip-base-regen-dialog', {}, NETWORK_WAIT);
+      // TRIP-1690 — [일정 다시 만들기]에 연타 창이 걸렸다. 앞 누름([지정])의 창 밖에서 누른다(사람의 간격).
+      resetPressGuard();
 
       fireEvent.press(screen.getByTestId('trip-base-regen-confirm'));
       await settle();
@@ -1166,6 +1168,24 @@ describe('편집 모드 (TRIP-1082)', () => {
       expect(mockReplace).not.toHaveBeenCalled();
       expect(mockBack).not.toHaveBeenCalled();
       expect(fake.hitCount(ITINERARY_POST_HIT)).toBe(0);
+    });
+
+    // TRIP-1690 FV-POLL-03 — 화면이 바뀌기 전 두 번째 탭이 생성 화면을 하나 더 열면 그 화면도 POST 를 쏜다(한도 2회).
+    it('[일정 다시 만들기]를 같은 틱에 두 번 쳐도 생성 화면 push 는 1회다', async () => {
+      await renderEdit();
+      await changeNight1ToB();
+      pressDone();
+      await screen.findByTestId('trip-base-regen-dialog', {}, NETWORK_WAIT);
+      resetPressGuard(); // 창 밖(=앞 누름에서 400ms 이상 지남)에서 확인을 누른다
+
+      const confirm = screen.getByTestId('trip-base-regen-confirm');
+      act(() => {
+        fireEvent.press(confirm);
+        fireEvent.press(confirm);
+      });
+      await settle();
+
+      expect(mockPush.mock.calls).toEqual([[GENERATING_ROUTE]]);
     });
   });
 

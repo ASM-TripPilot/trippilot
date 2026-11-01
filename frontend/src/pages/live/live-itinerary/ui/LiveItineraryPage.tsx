@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
 
 import { assistantHref } from '@/features/open-assistant';
-import { Linking, View } from 'react-native';
+import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { resolveLiveState } from '../model/liveState';
@@ -49,6 +49,7 @@ import {
   useGetTripsTripIdVisitsDaysDay,
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
+import { openAppSettings } from '@/shared/external-link';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { useDepartureTab } from '@/widgets/bottom-nav-bar';
 import { StateNotice } from '@/shared/ui/StateNotice';
@@ -325,7 +326,10 @@ export function LiveItineraryPage({
     })),
     visits:
       liveDate === today ? automationVisitRefs(visits.data?.visits ?? []) : [],
-    consentOn: locationConsent.data?.legalConsent === true,
+    // 조회 전·실패면 null(모름) — false 로 넘기면 훅이 철회로 판정해 강등·기록 삭제를 한다(TRIP-1696).
+    consentOn: locationConsent.data
+      ? locationConsent.data.legalConsent === true
+      : null,
     onHub: true,
   });
   // [켜기]·[나중에] 처리 중 연타 잠금 + 이 화면에서 한 번 닫은 설명은 판정이 늦게 따라와도 다시 그리지 않는다.
@@ -780,7 +784,7 @@ export function LiveItineraryPage({
         doneMediaPoiIds={new Set(Object.keys(doneVisitIds))}
         photoNotice={photoNotice}
         onPressPhotoSettings={
-          photoNotice?.settings ? () => void Linking.openSettings() : undefined
+          photoNotice?.settings ? () => void openAppSettings() : undefined
         }
         memoNotice={
           !memoSheetOpen && memoFailedPoiId !== undefined
@@ -845,7 +849,7 @@ export function LiveItineraryPage({
                 onPressSettings: automationCopy.settings
                   ? () => {
                       void automation.dismissNotice();
-                      void Linking.openSettings();
+                      void openAppSettings();
                     }
                   : undefined,
               }

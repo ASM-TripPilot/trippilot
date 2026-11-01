@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
@@ -13,6 +13,7 @@ import {
   pollIntervalMs,
   foldGenerationGauge,
   formatDraftDayHeader,
+  isGenerationRunning,
   resolveDraftView,
   resolveFallbackNotice,
   resolvePlanMapCenter,
@@ -21,7 +22,7 @@ import {
   sheetRowKeys,
   shouldKeepPollingDraft,
 } from '@/features/itinerary';
-import type { GenerationDayState } from '@/features/itinerary';
+import type { DraftView, GenerationDayState } from '@/features/itinerary';
 import { resolveUnplacedNames } from '@/features/itinerary';
 import { DraftScreen } from './DraftScreen';
 import { GenerationFallbackScreen } from './GenerationFallbackScreen';
@@ -174,6 +175,7 @@ export function DraftPage({
       refetchInterval: (query) =>
         shouldKeepPollingDraft({
           generationState: query.state.data?.generationState,
+          generationSessionId: query.state.data?.generationSessionId,
           dataUpdateCount: pollsSinceBaseline(query.state.dataUpdateCount),
         })
           ? pollIntervalMs(pollsSinceBaseline(query.state.dataUpdateCount))
@@ -222,10 +224,17 @@ export function DraftPage({
   const pollCount = pollsSinceBaseline(
     useQueryDataUpdateCount(itineraryQueryKey)
   );
+  // TRIP-1690 FV-POLL-01 — 재생성 1차(AI) 동안 서버는 옛 행(COMPLETE 등)에 새 세션 id 를 붙여 준다. 그 옛 행을
+  // 완성본으로 그리면 "다시 만들기 결과"처럼 보인다 — 세션이 도는 동안은 로딩 얼굴로 묻기를 잇는다.
+  const regenerating =
+    itinerary.data !== undefined &&
+    itinerary.data.generationState !== 'PARTIAL' &&
+    isGenerationRunning(itinerary.data);
   const pollExhausted =
-    itinerary.data?.generationState === 'PARTIAL' &&
+    (itinerary.data?.generationState === 'PARTIAL' || regenerating) &&
     !shouldKeepPollingDraft({
-      generationState: itinerary.data.generationState,
+      generationState: itinerary.data?.generationState,
+      generationSessionId: itinerary.data?.generationSessionId,
       dataUpdateCount: pollCount,
     });
 
@@ -234,15 +243,20 @@ export function DraftPage({
   // 다르게 진화한다.
   const summary = itinerary.data?.candidatesSummary;
 
-  const view = resolveDraftView({
-    days,
-    loading: trip.isPending || itinerary.isPending,
-    failed:
-      trip.isError ||
-      itinerary.isError ||
-      itinerary.data?.generationState === 'FAILED' ||
-      pollExhausted,
-  });
+  // 세션이 도는 옛 행은 상한 전까지 로딩 얼굴이다(옛 목록을 완성본으로 그리지 않는다) — 상한·조회 오류면
+  // 옛 목록 + 실패 안내(staleFailed)로 말한다. `resolveDraftView` 는 슬롯이 있으면 로딩보다 목록을 먼저 고르므로 여기서 덮는다.
+  const regenLoading = regenerating && !pollExhausted && !itinerary.isError;
+  const view: DraftView = regenLoading
+    ? { kind: 'loading' }
+    : resolveDraftView({
+        days,
+        loading: trip.isPending || itinerary.isPending,
+        failed:
+          trip.isError ||
+          itinerary.isError ||
+          itinerary.data?.generationState === 'FAILED' ||
+          pollExhausted,
+      });
 
   // TRIP-1506 — 안이 비었어도 생성이 진행 중이면(PARTIAL 이고 진행 중 세션이 있으면 — 세션 없는 PARTIAL 은 생성 중이
   // 아니다 TRIP-1037 플립) "추천안이 없어요" 빈 안내가 아니라 로딩 얼굴이다. 폴링(PARTIAL 일 때만 돈다)과 같은 축이라
@@ -603,6 +617,27 @@ export function DraftPage({
         }
       >
         <View className="gap-md px-lg pb-2xl pt-xs">
+          {/* TRIP-1690 FV-POLL-02 — 상한·조회 오류로 묻기가 멈췄거나 실패하면 진행 카드만 남기지 않는다(INV-4).
+              [다시 시도]는 일정을 한 번 다시 묻는다 — 서버가 실패로 닫았으면 h08 셸이, 아직이면 이 안내가 남는다. */}
+          {view.staleFailed ? (
+            <View className="gap-sm">
+              <DraftFallbackBanner
+                fallback={false}
+                shortfall={null}
+                staleFailed
+              />
+              <Pressable
+                testID="itinerary-draft-partial-retry"
+                accessibilityRole="button"
+                onPress={() => void itinerary.refetch()}
+                className="self-start rounded-button border border-hairline-strong bg-canvas px-md py-sm"
+              >
+                <Text className="font-noto-bold text-label font-bold text-ink">
+                  다시 시도
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
           {partialSlots.flatMap((slot, index) => {
             const items: ReactElement[] = [
               <SlotStopCard
@@ -647,7 +682,8 @@ export function DraftPage({
    * 0 이면 미표시한다(0곳 오표기보다 미표기가 정직 · D4). 하드실패(POST 오류) 라우팅은 이번 무심판
    * (화면 `failed` 변형 배선은 재량 · 02a §3) — 이 배선은 폴백 신호만 인터스티셜로 보낸다.
    */
-  if (fallbackNotice !== null && !fallbackDismissed) {
+  // 재생성 중(regenLoading)엔 옛 행의 폴백 신호로 인터스티셜을 띄우지 않는다 — 그건 지난 생성의 결과다(TRIP-1690 5-b W-1).
+  if (fallbackNotice !== null && !fallbackDismissed && !regenLoading) {
     const fixedCount = days.reduce(
       (sum, day) => sum + day.slots.filter((slot) => slot.isFixed).length,
       0

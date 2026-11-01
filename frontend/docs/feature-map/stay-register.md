@@ -2,7 +2,7 @@
 id: stay-register
 band: e
 status: live-verified
-live_verified_at: 2026-10-31 (8b50db304)
+live_verified_at: 2026-11-02 (f153fe245)
 routes:
   - app/stays/register.tsx
   - app/my/stays.tsx
@@ -69,7 +69,7 @@ Preconditions:
 
 ## Gotchas
 
-- 등록 숙소 목록(l04)에는 로딩·조회 실패 얼굴이 없다. 응답 전엔 빈 화면, 조회가 실패하면 빈 상태 「숙소를 탐색하고 등록하면…」이 뜬다 — 빈 상태를 보고 "0곳"이라 판정하기 전에 저장한 숙소(e04)에서 개수를 한 번 더 읽는다.
+- 등록 숙소 목록(l04)에는 로딩 얼굴이 없다(응답 전 빈 화면). 저장 숙소·여행 조회가 실패하면(받아 둔 목록이 없을 때) testID: `my-stays-error` 「등록 숙소를 불러올 수 없어요」/「잠시 후 다시 시도해 주세요」 + testID: `my-stays-retry` [다시 시도]가 뜬다(2026-11-02 실패 주입 `/saved-stays` 500 으로 확인). 받아 둔 목록이 있으면 재조회 실패에도 목록을 유지한다.
 - 마이 메뉴 행 testID testID: `my-stays-row`는 등록 숙소 행 접두 testID: `my-stays-row-{id}`와 앞부분이 같다. 정확히 일치하는 id로 누른다.
 - 「거점 변경」 행은 첫 여행 기준이다 — 한 숙소가 여러 여행의 거점이면 목록상 먼저 나온 여행만 보인다.
 - 이 기능은 서버에 저장 숙소를 만든다. 지우지 않으면 저장한 숙소(e04)·여행 위저드 거점 후보에 계속 남는다. 거점으로 지정한 뒤엔 409로 해제가 막힌다.
