@@ -1,6 +1,7 @@
 package com.trippilot.archive.api
 
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 /**
@@ -28,6 +29,14 @@ interface ArchiveFacade {
      * 아직 떠날 수 있는 도착을 풀어 주지만, 되돌리기는 이미 남은 도착 기록을 고아로 만들면 안 된다.
      */
     fun getVisitedSlots(tripId: UUID): Set<String>
+
+    /**
+     * **그 날짜에 건너뛴 POI** — 재계획이 후보에서 뺄 곳(U4 BR-U4-17 개정 2026-11-01). 잠금([getCompletedSlots])과
+     * 반대 방향이다: 건너뛴 곳은 잠그지 않지만(바꿔도 된다) **다시 넣지도 않는다**. 같은 날 같은 곳을 다시 넣으면 새 슬롯의
+     * 키(`{date}#{poiId}`)가 건너뜀 기록과 같아져 그 칸은 도착할 수 없다(BR-U5-02 · 유니크 `(trip_id, slot_key)` → 409).
+     * 날짜는 슬롯 키의 날짜로 가른다 — 다른 날 건너뛴 같은 곳은 키가 달라 충돌하지 않으므로 빼지 않는다.
+     */
+    fun getSkippedPois(tripId: UUID, date: LocalDate): Set<UUID>
 
     /**
      * 기준점 사다리 3단의 **마지막 완료 방문지**(BR-U4-19). 좌표가 아니라 `poiId` 를 준다 —

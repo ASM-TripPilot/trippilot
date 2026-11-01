@@ -1946,3 +1946,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U1·U4·U8 설계 문서 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
+
+## Functional Design 사후 개정 — U4 재계획에서 그날 건너뛴 곳 제외 (BR-U4-17)
+**Timestamp**: 2026-11-01T23:30:00+09:00 (작업 시점)
+**User Input**: (사용자 원문) "버그 3건 고쳐라" — 같은 날 버그 원인 리포트(P2: 재계획이 그날 이미 건너뛴 곳을 다시 넣는다)를 서버에서 고치기로 한 결정의 정본 반영이다.
+**AI Response**: `construction/u4-in-trip-planb/functional-design/business-rules.md` §3 표(BR-U4-17~27) 바로 아래에 `[개정 · 2026-11-01]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 대상 일자에 건너뛴 POI 는 서버가 산출 시점에 실적(`ArchiveFacade.getSkippedPois`)을 읽어 `excludedPoiIds` 에 앱 값과 합집합으로 싣는다 · 다른 날 건너뜀은 빼지 않는다 · 잠금 규칙(BR-U4-18·INV-U4-04)은 그대로 · §3.1 `excludedPoiIds` 의 뜻은 유지하고 채우는 주체에 서버 실적 수집이 더해진다 · AI 가 제외를 원 일정 슬롯보다 우선함을 확인했다. 코드 변경은 같은 브랜치의 `fix(be)` 커밋이다.
+**Context**: CONSTRUCTION — U4 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---

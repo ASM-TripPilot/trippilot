@@ -14,6 +14,7 @@ import com.trippilot.recalculation.domain.ReplanSessionRepository
 import com.trippilot.recalculation.domain.ReplanStatus
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import org.slf4j.LoggerFactory
@@ -63,6 +64,18 @@ class PreparedReplanServiceTest : StringSpec({
         s.directives shouldContainExactly listOf("AVOID_OUTDOOR")
         f.replans.commands.single().directives shouldContainExactly listOf("AVOID_OUTDOOR")
         f.replans.applied shouldBe emptyList()
+    }
+
+    // 선계산은 앱을 거치지 않는다 — 건너뛴 곳을 빼는 일은 산출 시점의 서버 몫이다(U4 BR-U4-17 개정 2026-11-01).
+    "선계산 산출도 그날 건너뛴 곳을 제외 목록에 싣는다" {
+        val f = RecalcFixture(today, "07:15")
+        val skipped = UUID.randomUUID()
+        f.skipped[today] = setOf(skipped)
+        f.replans.proposal = FakeReplans.sampleProposal(today)
+
+        f.prepared().onRisk(f.riskEvent(today, risks = listOf(ReplanMaterial.Risk("WEATHER", "WIND", emptyList(), null))), f.clock.now)
+
+        f.replans.commands.single().excludedPoiIds shouldContain skipped
     }
 
     "스위치가 꺼져 있으면 아무것도 하지 않는다 — 세션도 AI 호출도 없다" {
