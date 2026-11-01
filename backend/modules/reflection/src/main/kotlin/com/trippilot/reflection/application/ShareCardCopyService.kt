@@ -61,7 +61,11 @@ class ShareCardCopyService(
         if (!summaries.exists(tripId)) throw ConflictDetected(message = "여행이 끝나 요약이 생긴 뒤에 공유할 수 있어요.")
         val destinations = ctx.destinationRefs.map { it.name.trim() }.filter(String::isNotEmpty).distinct()
         val rule = ruleCopy(destinations)
-        if (!copier.enabled) return rule
+        // 규칙 문구로 가는 갈래마다 사유를 남긴다(INV-4) — 빈 캡션만 보고는 꺼짐·재료 부족·AI 실패를 가를 수 없었다(TRIP-1701).
+        if (!copier.enabled) {
+            log.info("공유 문구 AI 가 꺼져 있어 규칙 문구로 갑니다(trippilot.ai.reflection.mode). tripId={}", tripId)
+            return rule
+        }
 
         val days = archive.findDailyVisits(tripId)
         val surfaces = poiSurfaces.findSurfaces(days.flatMap { d -> d.visits.map { it.poiId } })
@@ -75,7 +79,14 @@ class ShareCardCopyService(
         // 목적지를 이어 붙인 "서울·부산"은 `#서울여행` 어디에도 들어가지 않아 지역 태그가 전부 위반이 된다. 다목적지 여행의 둘째
         // 목적지 태그는 그래서 상대가 거를 수 있다 — 거르면 아래 규칙 문구(목적지마다 태그)로 간다.
         val region = destinations.firstOrNull().orEmpty()
-        if (!ReflectionAgentInput.callable(region, shown)) return rule
+        if (!ReflectionAgentInput.callable(region, shown)) {
+            val all = days.flatMap { it.visits }
+            log.info(
+                "공유 문구 재료가 없어 AI 를 부르지 않고 규칙 문구로 갑니다. tripId={} 목적지={} 간곳={} 건너뜀={} 장소없음={}",
+                tripId, region.ifEmpty { "(없음)" }, shown.size, all.count { it.skipped }, all.count { it.poiId !in surfaces },
+            )
+            return rule
+        }
         val input = ReflectionAgentInput(
             kind = KIND,
             region = region,

@@ -3,6 +3,7 @@ package com.trippilot.reflection.application
 import com.trippilot.changelog.api.ChangeLogFacade
 import com.trippilot.changelog.api.ChangeSourceType
 import com.trippilot.changelog.api.ItinerarySnapshotView
+import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.profile.api.PreferenceSnapshot
 import com.trippilot.profile.api.overriddenBy
@@ -35,10 +36,23 @@ import java.util.UUID
 class ReflectionMaterials(
     private val preferences: PreferenceFacade,
     private val changeLogs: ChangeLogFacade,
+    private val regions: RegionLookupFacade,
 ) {
-    /** 그날의 목적지 이름 — 다목적지 여행이면 박수로 펼친 그날의 것이다(FE `regionForDay` 와 같은 규칙). 모르면 빈 문자열. */
-    fun regionOn(ctx: TripGenerationContext?, date: LocalDate): String =
-        ctx?.destinationRefs?.destinationOn(ctx.startDate, date)?.name.orEmpty()
+    /**
+     * 그날 서술의 지역 — 기본은 그날의 목적지 이름이다(다목적지면 박수로 펼친 그날의 것, FE `regionForDay` 와 같은 규칙). 모르면 빈 문자열.
+     *
+     * **방문이 전부 그 목적지 밖이면 실제 방문 지역이다**(TRIP-1706) — 서울 여행에 부산 장소만 간 날을 「서울특별시에서 2곳」이라 쓰던 것을 고쳤다.
+     * 밖/안 판정은 담은 장소와 같은 코드 양방향 접두사(INV-U1-21)이고, 하나라도 안이거나 코드를 모르면 목적지 그대로다(이름 단위가 바뀌지 않게).
+     * 밖인데 그 지역 이름을 모르면 빈 문자열 — 틀린 지역을 쓰느니 규칙 카드로 간다(지어내지 않는다).
+     */
+    fun regionOn(ctx: TripGenerationContext?, date: LocalDate, visitRegionCodes: List<String?> = emptyList()): String {
+        val dest = ctx?.destinationRefs?.destinationOn(ctx.startDate, date) ?: return ""
+        val destCode = dest.regionCode ?: return dest.name
+        val codes = visitRegionCodes.filterNotNull()
+        if (codes.isEmpty() || codes.any { it.startsWith(destCode) || destCode.startsWith(it) }) return dest.name
+        val top = codes.groupingBy { it }.eachCount().maxBy { it.value }.key
+        return regions.displayNameOfCode(top).orEmpty()
+    }
 
     /** 여행 전체의 지역 — 목적지 이름을 순서대로 `·` 로 잇는다(같은 이름은 한 번). 상대 `region` 은 한 칸뿐이다. 모르면 빈 문자열. */
     fun regionOfTrip(ctx: TripGenerationContext?): String =

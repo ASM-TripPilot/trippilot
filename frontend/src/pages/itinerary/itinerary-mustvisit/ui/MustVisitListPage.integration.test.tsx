@@ -515,6 +515,21 @@ describe('🔴 I13 · TRIP-454·TRIP-785 — listed 는 CTA 활성·건너뛰기
     expect(hitsFor('DELETE', '/must-visits')).toBe(0);
   });
 
+  // TRIP-1690 FV-POLL-03 — 화면이 바뀌기 전 두 번째 탭이 생성 화면을 하나 더 열면 그 화면도 마운트 때 POST 를 쏜다
+  // (서버는 첫 세션을 닫고 새로 돌려 AI 하루 한도를 두 번 쓴다). 「다음」은 연타 창(guardPress)으로 한 번만 간다.
+  it('I13-c 「다음」을 같은 틱에 두 번 쳐도 생성 화면은 한 번만 열린다', async () => {
+    await openList();
+    const proceed = screen.getByTestId('itinerary-mustvisit-screen-proceed');
+    act(() => {
+      fireEvent.press(proceed);
+      fireEvent.press(proceed);
+    });
+    const toGenerating = mockPush.mock.calls.filter(([to]) =>
+      JSON.stringify(to).includes('generating')
+    );
+    expect(toGenerating).toHaveLength(1);
+  });
+
   it('I13-b failed — 건너뛰기가 앱바에 뜨고 눌러 h09 로 나간다 (에러 탈출문)', async () => {
     // 준비 — 첫 조회부터 실패시켜 error 얼굴을 띄운다. 건너뛰기는 이 얼굴에서만 렌더된다.
     listStatus = 500;

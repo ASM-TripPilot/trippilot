@@ -995,12 +995,17 @@ paths:
         그래서 400 의 `error.fields` 는 **어느 칸이 왜 틀렸는지**를 담는다:
         시작일이 앞서면 `dateFrom`, 종료일이 넘으면 `dateTo` 이며 reason 에 여행 시작일·종료일이 들어간다
         (화면이 "여행은 8/4까지예요, 늘릴까요?"를 그릴 근거). 양쪽 다 벗어나면 둘 다 담는다.
+
+        **여행 지역 밖 숙소는 거부한다**(409 `STAY_OUTSIDE_TRIP_REGION`, TRIP-1703). 숙소 좌표의 주소를 행정구역 코드로 바꿔
+        목적지 코드와 양방향 접두사로 비교한다(INV-U1-21, 다목적지는 하나에라도 들면 안). 판정할 수 없으면(목적지 코드 누락 ·
+        주소 없음 · 주소 조회 장애) 막지 않는다. 400 과 코드를 나눈 이유: 400 은 "기간을 늘릴까요?" 확인으로 읽힌다.
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/AssignBaseRequest' } } }
       responses:
         '201': { description: 배정됨, content: { application/json: { schema: { $ref: '#/components/schemas/BaseAssignment' } } } }
         '400': { $ref: '#/components/responses/ValidationError' }
+        '409': { description: '`STAY_OUTSIDE_TRIP_REGION` — 여행 지역 밖 숙소(앱은 "이 여행 지역 숙소를 골라 주세요"로 안내)' }
         '404': { description: 없음/타 계정(여행 또는 숙소) }
     get:
       tags: [trips]

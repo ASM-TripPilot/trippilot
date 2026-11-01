@@ -190,6 +190,7 @@ describe('useLocationAutomation', () => {
     expect(result.current.notice).toEqual({
       kind: 'degraded',
       reason: 'background-blocked',
+      tripId: 'trip-1',
     });
     expect(t.nativeCalls).toContain('disarm');
     const ends = t.sink.calls.filter(
@@ -250,7 +251,7 @@ describe('useLocationAutomation — 포그라운드 복귀 wake (TRIP-1517)', ()
     let clock = T0;
     t.deps.now = () => clock;
     overrideEngineDeps(t.deps);
-    await setContext(t.deps, { ...input, tripId: 'trip-1' });
+    await setContext(t.deps, { ...input, tripId: 'trip-1', consentOn: true });
     await evaluate(t.deps, { flagOn: true, snapshot: ARMED_SNAP, onHub: true });
     // 결함 순서 그대로: 라우트 표본이 먼저 처리되고(슬롯 IDLE), 그다음 진입.
     await handleLocations(t.deps, [
@@ -335,5 +336,93 @@ describe('useLocationAutomation — 포그라운드 복귀 wake (TRIP-1517)', ()
       appStateListener?.('active');
     });
     await waitFor(() => expect(sendsOf(t)).toHaveLength(1));
+  });
+});
+
+/**
+ * TRIP-1696 · 동의 조회가 끝나기 전(consentOn=null)에는 판정하지 않는다 — "모름"을 "철회"로 읽으면 무장 중인 기기가
+ * 허브를 열 때마다 강등(CONSENT_REVOKED END)·원시 표본 삭제를 당한다(BR-U10-42 위반).
+ * 3동작 뼈대: 준비=엔진으로 무장 + 원시 표본 1건 → 실행=consentOn null 로 마운트, 그다음 true 로 다시 렌더 → 단언=END·삭제·안내 0, 그 뒤 ARMED.
+ */
+describe('useLocationAutomation — 동의 조회 전 판정 보류 (TRIP-1696)', () => {
+  const ARMED_SNAP: PermissionSnapshot = { ...WIU, background: 'granted' };
+  const endsOf = (t: ReturnType<typeof makeDeps>) =>
+    t.sink.calls.filter(
+      (c) => c.op === 'reportInterval' && c.report.phase === 'END'
+    );
+
+  async function armedWithRaw() {
+    const t = makeDeps();
+    overrideEngineDeps(t.deps);
+    await setContext(t.deps, { ...input, tripId: 'trip-1', consentOn: true });
+    await evaluate(t.deps, { flagOn: true, snapshot: ARMED_SNAP, onHub: true });
+    await handleLocations(t.deps, [{ t: T0, lat: 37.5, lng: 127, acc: 10 }]);
+    // 전제 — 무장돼 있고 원시 표본이 있다(아래 "안 지움"이 공짜로 참이 되지 않게).
+    expect(t.deps.store.readRaw(TODAY)).toHaveLength(1);
+    t.nativeCalls.length = 0;
+    return t;
+  }
+
+  it('HC1 consentOn=null 이면 강등·END 보고·원시 표본 삭제·안내가 일어나지 않는다', async () => {
+    mockSnapshot = ARMED_SNAP;
+    const t = await armedWithRaw();
+    const { result } = renderHook(
+      () => useLocationAutomation({ ...input, consentOn: null }),
+      { wrapper }
+    );
+    await act(async () => {});
+    await act(async () => {});
+
+    expect(endsOf(t)).toHaveLength(0);
+    expect(t.nativeCalls).not.toContain('disarm');
+    expect(t.deps.store.readRaw(TODAY)).toHaveLength(1);
+    expect(result.current.notice).toBeNull();
+    expect(result.current.reason).not.toBe('consent-off');
+    expect(mockRead).not.toHaveBeenCalled();
+  });
+
+  it('HC2 조회가 legalConsent=true 로 끝나면 그때 판정해 consent-off 없이 ARMED 로 이어진다', async () => {
+    mockSnapshot = ARMED_SNAP;
+    const t = await armedWithRaw();
+    const { result, rerender } = renderHook(
+      (p: { consentOn: boolean | null }) =>
+        useLocationAutomation({ ...input, consentOn: p.consentOn }),
+      { wrapper, initialProps: { consentOn: null } }
+    );
+    await act(async () => {});
+
+    rerender({ consentOn: true });
+
+    await waitFor(() => expect(result.current.state).toBe('ARMED'));
+    expect(endsOf(t)).toHaveLength(0);
+    expect(t.deps.store.readRaw(TODAY)).toHaveLength(1);
+  });
+
+  it('HC3 조회가 legalConsent=false(실제 철회)로 끝나면 지금처럼 강등 안내 「consent-off」 + 원시 표본 삭제', async () => {
+    mockSnapshot = ARMED_SNAP;
+    const t = await armedWithRaw();
+    const { result, rerender } = renderHook(
+      (p: { consentOn: boolean | null }) =>
+        useLocationAutomation({ ...input, consentOn: p.consentOn }),
+      { wrapper, initialProps: { consentOn: null } }
+    );
+    await act(async () => {});
+
+    rerender({ consentOn: false });
+
+    await waitFor(() =>
+      expect(result.current.notice).toEqual({
+        kind: 'degraded',
+        reason: 'consent-off',
+        tripId: 'trip-1',
+      })
+    );
+    expect(t.deps.store.readRaw(TODAY)).toEqual([]);
+    endsOf(t).forEach(
+      (c) =>
+        c.op === 'reportInterval' &&
+        expect(c.report.endReason).toBe('CONSENT_REVOKED')
+    );
+    expect(endsOf(t).length).toBeGreaterThan(0);
   });
 });

@@ -80,7 +80,7 @@ class CoverageResolveDayTest : StringSpec({
 
     fun fixture(): Fixture = Fixture().apply {
         trips.periods[acc to tripId] = TripPeriod(start, end)
-        service = BaseAssignmentService(bases, stays, trips, days, events, clock)
+        service = BaseAssignmentService(bases, stays, trips, days, events, clock, NoPlaceSearch, NoRegions)
         anchors = BaseAnchorQueryFacade(bases, stays, days)
     }
 
@@ -257,3 +257,16 @@ class CoverageResolveDayTest : StringSpec({
         cov.days.single { it.date == start }.resolution shouldBe BaseResolution.AUTO
     }
 })
+
+/** 이 테스트는 지역 판정을 쓰지 않는다 — 목적지가 없어(findGenerationContext=null) 판정 전에 통과한다. */
+private object NoPlaceSearch : com.trippilot.savedaccommodation.domain.PlaceSearchPort {
+    override fun geocode(query: String) = error("미사용")
+    override fun reverseGeocode(lat: Double, lng: Double) = error("미사용")
+}
+
+private object NoRegions : com.trippilot.placedata.api.RegionLookupFacade {
+    override fun codesOf(regionName: String) = error("미사용")
+    override fun isSelectableCode(regionCode: String) = error("미사용")
+    override fun centerOf(regionName: String) = error("미사용")
+    override fun centerOfCode(regionCode: String) = error("미사용")
+}

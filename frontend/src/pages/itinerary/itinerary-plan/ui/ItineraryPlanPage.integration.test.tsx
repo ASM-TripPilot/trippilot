@@ -1604,6 +1604,119 @@ describe('연타 가드 — 저장 직후 일정 수정 관통 차단', () => {
       expect(confirmPostCalls).toBe(1);
     });
   });
+
+  /**
+   * TRIP-1688 FV-TAP-01 — 형식 검증(verify-fv-tap)이 찾은 반례: 확정 응답이 창(400ms)보다 늦을 때 다시 누른 탭.
+   * 창이 이미 닫혔으니 가드만으로는 못 막는다 — 요청 중엔 버튼이 잠겨 있어야 한다.
+   * 시계는 `clock.mockReturnValue(FROZEN_NOW + ms)` 로 손으로 움직인다(가드가 보는 유일한 시계).
+   * 3동작: 준비=응답을 붙잡고 첫 탭 → 실행=400ms 뒤 다시 탭 → 단언=POST 수·안내·토스트·편집 push.
+   */
+  describe('FV-TAP-01 · 확정 응답이 창보다 늦어도 요청 중 다시 누른 탭은 무시된다', () => {
+    const at = (ms: number) => clock.mockReturnValue(FROZEN_NOW + ms);
+
+    it('400ms 뒤 다시 눌러도 POST 는 1건, 확정 뒤 「확정 실패」 안내 없이 확정 토스트가 뜬다', async () => {
+      // 준비 — 토스트를 보려고 호스트를 함께 그린다.
+      activeClient = newTestQueryClient({ gcTime: 0 });
+      render(
+        <WithToastHost>
+          <ItineraryPlanPage tripId={TRIP_ID} />
+        </WithToastHost>,
+        { wrapper: createWrapper(activeClient) }
+      );
+      await screen.findByTestId('sheet-cta-button-0');
+      holdConfirm();
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0')); // 0ms
+      await waitFor(() => expect(confirmPostCalls).toBe(1));
+
+      // 실행 — 창이 닫힌 뒤(400ms) 같은 버튼을 다시 누른다.
+      at(400);
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+      releaseConfirm?.();
+      await waitForEditCta();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+      });
+
+      // 단언
+      expect(confirmPostCalls).toBe(1);
+      expect(screen.queryByTestId('itinerary-confirm-error')).toBeNull();
+      expect(screen.getByTestId('itinerary-confirmed-toast')).toBeOnTheScreen();
+    });
+
+    it('요청 중엔 [일정 확정하기]가 비활성이다', async () => {
+      await openPlanned();
+      holdConfirm();
+
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+      await waitFor(() =>
+        expect(screen.getByTestId('sheet-cta-button-0')).toBeDisabled()
+      );
+    });
+
+    it('응답이 500ms 에 와도 CTA 가 바뀐 지 300ms 뒤의 탭은 편집으로 들어가지 않는다', async () => {
+      // 준비 — 첫 요청은 문(confirmGate)에서, 둘째가 나간다면 끝날 때까지 붙잡는다(409 직전 — 반례 R2).
+      let releaseSecond: () => void = () => {};
+      const second = new Promise<void>((resolve) => (releaseSecond = resolve));
+      server.use(
+        http.post(
+          'http://localhost:8080/api/v1/trips/:tripId/itinerary/confirm',
+          async () => {
+            confirmPostCalls += 1;
+            if (confirmPostCalls === 1) {
+              await confirmGate;
+              return HttpResponse.json(itinerary({ status: 'CONFIRMED' }));
+            }
+            await second;
+            return new HttpResponse(null, { status: 409 });
+          }
+        )
+      );
+      await openPlanned();
+      holdConfirm();
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0')); // 0ms
+      at(400);
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0')); // 400ms — 연타의 남은 탭
+
+      at(500);
+      releaseConfirm?.(); // 500ms — 확정, CTA 가 [일정 수정]으로
+      await waitForEditCta();
+
+      at(800); // 바뀐 지 300ms
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+      expect(mockPush).toHaveBeenCalledTimes(0);
+      releaseSecond();
+    });
+
+    it('확정이 실패하면 잠금이 풀려 안내를 본 뒤 다시 눌러 재시도할 수 있다', async () => {
+      // 준비 — 첫 요청은 500, 둘째는 성공.
+      server.use(
+        http.post(
+          'http://localhost:8080/api/v1/trips/:tripId/itinerary/confirm',
+          async () => {
+            confirmPostCalls += 1;
+            return confirmPostCalls === 1
+              ? new HttpResponse(null, { status: 500 })
+              : HttpResponse.json(itinerary({ status: 'CONFIRMED' }));
+          }
+        )
+      );
+      await openPlanned();
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+      await waitFor(() =>
+        expect(screen.getByTestId('itinerary-confirm-error')).toBeOnTheScreen()
+      );
+
+      // 실행 — 창이 지난 뒤 다시 누른다.
+      at(400);
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+      // 단언 — 두 번째 요청이 나가 확정된다.
+      await waitForEditCta();
+      expect(confirmPostCalls).toBe(2);
+    });
+  });
 });
 
 // TRIP-799 · 옛 ItineraryPlanPage.timeline.integration.test.tsx

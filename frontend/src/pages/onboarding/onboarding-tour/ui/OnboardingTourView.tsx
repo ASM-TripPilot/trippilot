@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import {
   BackHandler,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -48,6 +49,10 @@ const FRAGMENTS: Record<number, () => ReactElement> = {
   5: TourRecordFragment,
   6: TourAssistantFragment,
 };
+
+// TRIP-1695 — 웹(react-native-web)은 `pagingEnabled` 자식마다 스냅 래퍼 View 를 한 겹 더 씌운다. 그 래퍼(세로 축) 안에서 장 View 는
+// 높이가 내용만큼이라 무대(`flex-1`)가 0 이 되고 그림이 화면 위로 나갔다. 네이티브엔 래퍼가 없어 가로 콘텐츠가 장 높이를 이미 늘려 주므로 웹만 채운다.
+const PAGE_FILL = Platform.OS === 'web' ? { flex: 1 } : null;
 
 function clampPage(page: number): number {
   return Math.min(TOUR_PAGE_COUNT, Math.max(1, page));
@@ -142,7 +147,7 @@ export function OnboardingTourView({
               <View
                 key={spec.page}
                 testID={`onboarding-tour-page-${spec.page}`}
-                style={{ width }}
+                style={[{ width }, PAGE_FILL]}
               >
                 <TourPageMotion
                   page={spec.page}

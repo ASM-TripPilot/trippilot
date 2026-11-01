@@ -9,7 +9,8 @@ import { PersonalizationScreen } from './PersonalizationScreen';
  * `PersonalizationScreen`(무상태)에 잇는다. 뒤로가기만 라우터에서 얹는다(LocationConsentPage 준용).
  */
 export function PersonalizationPage(): ReactElement {
-  const { consentOn, reason, sharedItems, onToggle } = usePersonalization();
+  const { consentOn, reason, sharedItems, saveFailed, onToggle } =
+    usePersonalization();
   const router = useRouter();
 
   return (
@@ -17,6 +18,7 @@ export function PersonalizationPage(): ReactElement {
       consentOn={consentOn}
       reason={reason}
       sharedItems={sharedItems}
+      saveFailed={saveFailed}
       onToggle={onToggle}
       onPressBack={() => router.back()}
     />

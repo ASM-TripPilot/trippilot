@@ -2,7 +2,7 @@
 id: home
 band: a
 status: live-verified
-live_verified_at: 2026-10-31 (8b50db304)
+live_verified_at: 2026-11-02 (f153fe245)
 routes:
   - app/(tabs)/index.tsx
 ---
@@ -29,6 +29,7 @@ routes:
 - `home-past-trips-more` 여행 후 「전체 보기」 → 기록 탭.
 - `home-loading` 여행 조회 중 — 히어로 통짜 스켈레톤·섹션 스켈레톤, FAB 두 개 미렌더.
 - `home-trips-error` 여행 조회 실패(캐시 없음) — 발견 얼굴 위에 「여행 정보를 불러오지 못했어요」 + 「다시 시도」.
+- `home-trips-offline` 오프라인 콜드스타트(받은 여행 없음) — 「인터넷에 연결되어 있지 않아요」/「연결되면 자동으로 불러올게요」(버튼 없음), 장소 레인은 숨는다. 연결되면 저절로 얼굴이 정해진다.
 - `home-lane-error` 장소 조회 실패 — 섹션 자리에 「장소를 불러오지 못했어요 · 다시 시도」(누르면 재조회).
 - `home-spot-save-error` ♥ 실패 — 섹션 위 안내 행(누르면 닫힘).
 - `home-fab-scroll-hide` 세로 스크롤 중 FAB 묶음이 투명·터치 불가가 되고 멈춘 뒤 250ms에 돌아온다(메뉴가 열려 있으면 유지).
@@ -50,7 +51,7 @@ Preconditions:
 - 로그인 완료 계정(가드 HOME). 얼굴을 고르려면 계정 여행 상태를 맞춘다: 발견 = 비-ENDED 여행 0건 ∧ 최근 종료가 8일 이상 전(또는 여행 0건) / 계획 중 = 시작일이 미래인 비-ENDED 여행 / 여행 중 = 오늘(KST)이 시작~종료일 안 / 여행 후 = 비-ENDED 0건 ∧ 최근 종료일이 오늘로부터 0~7일. 얼굴은 가장 이른 시작일의 비-ENDED 여행 하나로만 정해진다.
 - 여행 카드 CTA 목적지는 지배 여행 일정(`GET /trips/{id}/itinerary`) 응답이 정착한 뒤에만 정해진다.
 - 장소 레인은 서버 장소가 있어야 그려진다(발견·계획 중·여행 후 = 서울·부산·제주 3지역 각 200곳, 여행 중 = 여행 첫 목적지 지역 200곳).
-- 서버를 못 맞추는 얼굴(여행 후·조회 실패·로딩)은 프리뷰 `trippilot:///_dev/preview?state=home-post-trip`·`home-trips-error`·`home-loading`·`home-planning`·`home-traveling`·`home-saved-menu` 로 본다 — 실서버 증명과 섞지 않는다.
+- 서버를 못 맞추는 얼굴(여행 후·조회 실패·로딩)은 프리뷰 `trippilot:///_dev/preview?state=home-post-trip`·`home-trips-error`·`home-trips-offline`·`home-loading`·`home-planning`·`home-traveling`·`home-saved-menu` 로 본다 — 실서버 증명과 섞지 않는다.
 
 - **루트 확인.** 홈 탭을 연다. `home-dashboard-root` 와 인사 `home-greeting` 이 보인다.
 - **발견 얼굴.** 여행 없는 계정. `home-greeting` 안에 「오늘은 어디를 상상해볼까요」·「떠나지 않아도, 구경하고 모으는 즐거움」, 검색바 `home-search-bar` 에 「가고 싶은 도시를 검색해보세요」, 첫 도시 카드 testID: `home-magazine-hero` (「서울 · 남산과 한옥」), 나머지는 testID: `home-hero-slide-${i}`, 페이지 컨테이너 testID: `home-hero-page-${i}`, 도트 testID: `home-hero-dot-${i}`.
@@ -67,7 +68,7 @@ Preconditions:
 - **담은 곳 메뉴.** testID: `home-saved-menu-toggle`(라벨 「담은 곳」)를 누른다. 라벨이 「담은 곳 메뉴 닫기」로 바뀌고 딤 testID: `home-saved-menu-backdrop`, 미니 FAB testID: `home-saved-places-fab`(「담은 장소」)·`home-saved-stays-fab`(「저장한 숙소」)이 뜬다. 개수 ≥1 이면 배지 testID: `home-saved-places-badge`·`home-saved-stays-badge`(100 이상은 「99+」). 「담은 장소」 → `/explore/saved-places`, 「저장한 숙소」 → `/stays/saved`, 딤 탭 → 닫힘.
 - **여행 만들기.** testID: `home-create-trip-fab`(라벨 「여행 만들기」)를 누른다. `/trips/new/step1` 이 빈 드래프트로 열린다.
 - **로딩.** 여행 조회 대기 중 testID: `home-hero-skeleton`·`home-collections-skeleton`·`home-spots-skeleton` 이 보이고 `home-fab-layer` 가 없다.
-- **여행 조회 실패.** 네트워크를 끊고 콜드 스타트. testID: `home-trips-error` 에 「여행 정보를 불러오지 못했어요」, testID: `home-trips-retry` 「다시 시도」(재조회 중 비활성). 나머지는 발견 얼굴로 그려진다.
+- **여행 조회 실패.** 실패 주입 `_dev/fault?path=/trips&status=500` 뒤 리로드(네트워크를 끊고 콜드 스타트하면 실패가 아니라 오프라인 얼굴 `home-trips-offline` 이 뜬다). 오프라인 판정은 NetInfo `isConnected` 가 묶인 react-query `onlineManager` 이고 받아 둔 데이터가 없을 때만이다 — 시뮬에서 `nav.mjs --eval` 로 `onlineManager.setOnline(false)` 를 리로드 직후에 걸어 봤지만(2026-11-02) 첫 조회가 이미 나가 있어 오프라인 얼굴은 못 열었다. 프리뷰 키로 본다. 실패 얼굴은 testID: `home-trips-error` 에 「여행 정보를 불러오지 못했어요」, testID: `home-trips-retry` 「다시 시도」(재조회 중 비활성). 나머지는 발견 얼굴로 그려진다.
 - **장소 레인 실패.** testID: `home-collections-error`·`home-spots-error` 에 「장소를 불러오지 못했어요 · 다시 시도」, 누르면 재조회.
 - **담기 실패.** ♥ 실패 시 testID: `home-spot-save-error` 에 안내(예 「연결이 불안정해 담지 못했어요」, 해제면 「연결이 불안정해 해제하지 못했어요」), 누르면 닫힘.
 
@@ -90,3 +91,4 @@ Preconditions:
 - [실화면] 2026-10-31 도달 불가 — `home-loading`(순간 상태, 캡처 지연보다 짧음)·`home-trips-error`·`home-lane-error`·`home-spot-save-error`(시뮬 네트워크 차단 수단 없음)·`home-fab-scroll-hide`(250ms 창이 agent-device 조작 지연보다 짧음).
 - [실화면] 2026-10-31 여행 중 얼굴의 「지금 뜨는 장소」·「요즘 사람들이 담는 곳」은 제주 장소로 찬다. 여행 카드 CTA 는 확정 일정이라 「여행 일정 보기」 → 여행 중 허브(지도+시트)로 간다.
 - [결함 의심 FM-L1-05] ♥ 메뉴를 펼치면 딤이 본문·＋ FAB 은 덮지만 하단 탭바는 밝게 남고 눌린다(탐색 탭 ♥ 메뉴도 같음, 증거 `home/saved-menu-open.png`).
+- [실화면] 2026-11-02 실패 주입(sim-qa §2 `_dev/fault`)으로 열림 — `home-loading`(`/trips` 지연)·`home-trips-error`(`/trips` 500)·`home-lane-error`(`/places` 500, 「장소를 불러오지 못했어요 · 다시 시도」).

@@ -24,6 +24,7 @@ jest.mock('expo-router', () =>
 
 import { QueryClientProvider } from '@tanstack/react-query';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -160,5 +161,145 @@ describe('TRIP-612 · 급소: 기록 부족(NOT_ENOUGH_RECORDS)', () => {
       expect(mockPatch).toHaveBeenCalledWith('PERSONALIZATION', 'v7', 'REVOKE')
     );
     expect(mockPatch).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * TRIP-1689 FV-CONSENT-01 — 개인화 동의는 법적 증적(append-only)이라 같은 GRANT 2회는 지울 수 없는 중복 행이다.
+ * 서버(changeConsent)는 매번 쌓으므로 클라가 진행 중 누름을 막는다(위치 useLocationConsent inFlightRef 와 같은 잠금).
+ * 형식 검증 반례: 응답 전 연타 → PATCH 2회 → 증적 GRANT 2줄(verify-fv-consent R1).
+ */
+describe('TRIP-1689 FV-CONSENT-01 · 진행 중 연타 잠금', () => {
+  it('응답 전 토글을 두 번 눌러도 PATCH 는 1회', async () => {
+    // 준비 — 토글 OFF, PATCH 는 끝나지 않는다(응답 기다리는 중).
+    primeInfo({ applied: false, reason: 'CONSENT_MISSING', sharedItems: [] });
+    mockPatch.mockReturnValue(new Promise(() => {}));
+    renderPage();
+
+    // 실행 — 같은 화면에서 연달아 두 번.
+    fireEvent.press(screen.getByTestId('settings-personalization-toggle'));
+    fireEvent.press(screen.getByTestId('settings-personalization-toggle'));
+
+    // 단언 — 첫 요청이 실제로 나간 뒤에도 두 번째는 없다.
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mockPatch).toHaveBeenCalledTimes(1);
+  });
+
+  // 03b W1 — 잠금은 재조회가 끝난 뒤에 푼다. 재조회 중 화면은 아직 옛 값(OFF)이라 다시 누르면 같은 GRANT 가
+  // 또 나간다(서버는 매번 쌓는다). 해제를 재조회 앞으로 옮기는 "정리"를 막는다.
+  it('PATCH 가 끝나도 다시 받기가 끝나기 전에는 다시 눌러도 PATCH 는 1회', async () => {
+    // 준비 — 다시 받기(무효화)가 끝나지 않는다.
+    primeInfo({ applied: false, reason: 'CONSENT_MISSING', sharedItems: [] });
+    const { invalidateSpy } = renderPage();
+    invalidateSpy.mockReturnValue(new Promise<void>(() => {}));
+
+    // 실행 — 첫 누름이 무효화까지 간 뒤 한 번 더.
+    fireEvent.press(screen.getByTestId('settings-personalization-toggle'));
+    await waitFor(() =>
+      expect(invalidatedPersonalization(invalidateSpy)).toBe(true)
+    );
+    await act(async () => {});
+    fireEvent.press(screen.getByTestId('settings-personalization-toggle'));
+
+    // 단언
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mockPatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('짝: 앞 요청이 끝나면 잠금이 풀려 다시 누를 수 있다', async () => {
+    primeInfo({ applied: false, reason: 'CONSENT_MISSING', sharedItems: [] });
+    const { invalidateSpy } = renderPage();
+
+    fireEvent.press(screen.getByTestId('settings-personalization-toggle'));
+    await waitFor(() =>
+      expect(invalidatedPersonalization(invalidateSpy)).toBe(true)
+    );
+    await act(async () => {});
+    fireEvent.press(screen.getByTestId('settings-personalization-toggle'));
+
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledTimes(2));
+  });
+});
+
+/**
+ * TRIP-1689 FV-CONSENT-02 — 저장 실패(응답 유실 포함)를 조용히 삼키지 않는다(INV-4). 서버가 이미 저장했을 수 있으니
+ * 성공·실패 모두 끝에 조회를 무효화해 서버 값을 다시 받고, 실패면 안내를 띄운다.
+ * 형식 검증 반례: 응답 유실 → 화면 꺼짐·서버 동의·안내 없음(verify-fv-consent R2).
+ */
+describe('TRIP-1689 FV-CONSENT-02 · 저장 실패 안내 + 실패해도 다시 받기', () => {
+  it('PATCH 가 실패하면 실패 안내가 보이고 개인화 조회를 무효화한다', async () => {
+    primeInfo({ applied: false, reason: 'CONSENT_MISSING', sharedItems: [] });
+    mockPatch.mockRejectedValue(new Error('Network Error'));
+    const { invalidateSpy } = renderPage();
+    expect(
+      screen.queryByTestId('settings-personalization-save-error')
+    ).toBeNull();
+
+    fireEvent.press(screen.getByTestId('settings-personalization-toggle'));
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('settings-personalization-save-error')
+      ).toBeOnTheScreen()
+    );
+    await waitFor(() =>
+      expect(invalidatedPersonalization(invalidateSpy)).toBe(true)
+    );
+  });
+
+  it('약관 버전을 못 찾아도 조용히 끝내지 않고 실패 안내를 띄운다', async () => {
+    primeInfo({ applied: false, reason: 'CONSENT_MISSING', sharedItems: [] });
+    mockFetchTerms.mockResolvedValue([TERMS[0]]);
+    renderPage();
+
+    fireEvent.press(screen.getByTestId('settings-personalization-toggle'));
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('settings-personalization-save-error')
+      ).toBeOnTheScreen()
+    );
+    expect(mockPatch).not.toHaveBeenCalled();
+  });
+
+  it('짝: 성공하면 실패 안내가 없다', async () => {
+    primeInfo({ applied: false, reason: 'CONSENT_MISSING', sharedItems: [] });
+    const { invalidateSpy } = renderPage();
+
+    fireEvent.press(screen.getByTestId('settings-personalization-toggle'));
+
+    await waitFor(() =>
+      expect(invalidatedPersonalization(invalidateSpy)).toBe(true)
+    );
+    expect(
+      screen.queryByTestId('settings-personalization-save-error')
+    ).toBeNull();
+  });
+
+  // 03b W2 — 안내는 다음 누름 때 걷힌다. 걷히지 않으면 재시도가 성공해도 「저장하지 못했어요」가 남는다.
+  it('실패 뒤 다시 눌러 성공하면 실패 안내가 걷힌다', async () => {
+    primeInfo({ applied: false, reason: 'CONSENT_MISSING', sharedItems: [] });
+    mockPatch.mockRejectedValueOnce(new Error('Network Error'));
+    const { invalidateSpy } = renderPage();
+
+    fireEvent.press(screen.getByTestId('settings-personalization-toggle'));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('settings-personalization-save-error')
+      ).toBeOnTheScreen()
+    );
+    await waitFor(() =>
+      expect(invalidatedPersonalization(invalidateSpy)).toBe(true)
+    );
+    await act(async () => {});
+    fireEvent.press(screen.getByTestId('settings-personalization-toggle'));
+
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId('settings-personalization-save-error')
+      ).toBeNull()
+    );
   });
 });

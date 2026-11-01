@@ -17,7 +17,7 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
-import * as Linking from 'expo-linking';
+import { openExternal } from '@/shared/external-link';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Share } from 'react-native';
 
@@ -116,7 +116,7 @@ export function StayDetailPage(): ReactElement {
         // 전화 앱이 없으면(시뮬레이터 등) 열기가 실패한다 — 부가 동선이라 삼킨다(TRIP-940 Q5).
         onPressPhone={() => {
           if (item?.phone != null) {
-            Linking.openURL(`tel:${item.phone}`).catch(() => undefined);
+            openExternal(`tel:${item.phone}`).catch(() => undefined);
           }
         }}
         onRetry={() => void detailQuery.refetch()}

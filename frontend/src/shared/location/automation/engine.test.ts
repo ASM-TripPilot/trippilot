@@ -152,7 +152,11 @@ describe('engine — 무장·해제', () => {
         c.op === 'reportInterval' &&
         expect(c.report.endReason).toBe('PERMISSION_DOWNGRADE')
     );
-    expect(status.notice).toEqual({ kind: 'degraded', reason: 'when-in-use' });
+    expect(status.notice).toEqual({
+      kind: 'degraded',
+      reason: 'when-in-use',
+      tripId: 'trip-1',
+    });
   });
 
   it('E3 네이티브 등록 실패는 throw 하지 않고 MANUAL·사유로 돌려준다(INV-4)', async () => {
@@ -205,6 +209,95 @@ describe('engine — 무장·해제', () => {
   });
 });
 
+/**
+ * TRIP-1696 · 남은 강등 안내는 그 여행·그 여행 기간 안에서만 보인다 + 확정된 철회는 무장과 무관하게 지운다.
+ * 3동작 뼈대: 준비=trip-1 을 무장했다가 강등시켜 안내를 남김 → 실행=다른 여행 문맥·기간 밖 시각으로 evaluate → 단언=돌려준 안내.
+ */
+describe('engine — 남은 안내의 문맥 (TRIP-1696)', () => {
+  const WIU = { ...ARMED_SNAPSHOT, background: 'undetermined' as const };
+
+  async function degradedOnTrip1(t: ReturnType<typeof setup>) {
+    await setContext(t.deps, ctx());
+    await run(t.deps);
+    await markExplainerAsked(t.deps, 'trip-1');
+    const s = await run(t.deps, WIU);
+    // 전제 — trip-1 에 강등 안내가 실제로 남았다(아래 "없음" 단언이 공짜로 참이 되지 않게).
+    expect(s.notice).toEqual({
+      kind: 'degraded',
+      reason: 'when-in-use',
+      tripId: 'trip-1',
+    });
+  }
+
+  it('N1 다른 여행 허브를 열면 이전 여행의 강등 안내가 보이지 않는다', async () => {
+    const t = setup();
+    await degradedOnTrip1(t);
+
+    await setContext(t.deps, ctx({ tripId: 'trip-2' }));
+    const s = await run(t.deps, WIU);
+
+    expect(s.notice).toBeNull();
+  });
+
+  it('N2 여행 기간 밖(D-6) 다른 여행 허브에서도 이전 여행의 강등 안내가 보이지 않는다(QA 재현 모양)', async () => {
+    const t = setup();
+    await degradedOnTrip1(t);
+
+    await setContext(
+      t.deps,
+      ctx({ tripId: 'trip-2', startDate: '2026-08-26', endDate: '2026-08-28' })
+    );
+    const s = await run(t.deps, WIU);
+
+    expect(s.reason).toBe('outside-trip');
+    expect(s.notice).toBeNull();
+  });
+
+  it('N5 다른 여행을 봤다가 원래 여행으로 돌아오면 그 여행의 안내가 다시 보인다(지우지 않고 가린다)', async () => {
+    const t = setup();
+    await degradedOnTrip1(t);
+    await setContext(t.deps, ctx({ tripId: 'trip-2' }));
+    expect((await run(t.deps, WIU)).notice).toBeNull();
+
+    await setContext(t.deps, ctx());
+    const s = await run(t.deps, WIU);
+
+    expect(s.notice).toEqual({
+      kind: 'degraded',
+      reason: 'when-in-use',
+      tripId: 'trip-1',
+    });
+  });
+
+  it('N3 같은 여행·기간 안 재진입이면 안내는 그대로 남는다(짝 — 안내를 무조건 지우는 구현 차단)', async () => {
+    const t = setup();
+    await degradedOnTrip1(t);
+
+    await setContext(t.deps, ctx());
+    const s = await run(t.deps, WIU);
+
+    expect(s.notice).toEqual({
+      kind: 'degraded',
+      reason: 'when-in-use',
+      tripId: 'trip-1',
+    });
+  });
+
+  it('N4 무장 중이 아니어도 확정된 철회(consentOn=false)면 남은 원시 표본을 지운다(BR-U10-42 — 철회 뒤 업로드 0)', async () => {
+    const t = setup();
+    await setContext(t.deps, ctx());
+    await run(t.deps);
+    await handleLocations(t.deps, [{ t: T0, lat: 37.5, lng: 127, acc: 10 }]);
+    await run(t.deps, WIU); // 강등 — 무장 해제, 원시 표본은 업로드 대기로 남음
+    expect(t.store.readRaw(TODAY)).toHaveLength(1);
+
+    await setContext(t.deps, ctx({ consentOn: false }));
+    await run(t.deps, WIU);
+
+    expect(t.store.readRaw(TODAY)).toEqual([]);
+  });
+});
+
 describe('engine — 판정 → 큐 → 전송', () => {
   it('E7 진입 · 근거 표본 · 3분 뒤 wake → ARRIVE 배치 1요청, 큐 비움', async () => {
     const t = setup();
@@ -249,7 +342,11 @@ describe('engine — 판정 → 큐 → 전송', () => {
     expect(s.queue).toEqual([]);
     expect(t.store.readRaw(TODAY)).toEqual([]);
     expect(s.intervals).toEqual([]);
-    expect(s.notice).toEqual({ kind: 'degraded', reason: 'consent-rejected' });
+    expect(s.notice).toEqual({
+      kind: 'degraded',
+      reason: 'consent-rejected',
+      tripId: 'trip-1',
+    });
     expect(t.n.calls).toContain('disarm');
   });
 
@@ -393,7 +490,11 @@ describe('engine — START 409 강등 (TRIP-1409)', () => {
     expect(s.intervals).toEqual([]);
     expect(s.pendingReports).toEqual([]);
     expect(s.serverEnabled).toBe(false);
-    expect(s.notice).toEqual({ kind: 'degraded', reason: 'server-disabled' });
+    expect(s.notice).toEqual({
+      kind: 'degraded',
+      reason: 'server-disabled',
+      tripId: 'trip-1',
+    });
     // 서버엔 구간이 없으니 END 도 보내지 않는다.
     expect(
       t.sink.calls.some(

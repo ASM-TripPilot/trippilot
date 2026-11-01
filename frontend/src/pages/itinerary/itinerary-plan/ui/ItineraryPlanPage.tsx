@@ -399,7 +399,11 @@ export function ItineraryPlanPage({
                 variant: 'primary',
                 // TRIP-1013 #057 — '일정 저장하기'가 창을 열고, 창 안의 '일정 수정'(위 두 갈래)은 무시된다.
                 onPress: guardPress(handleConfirm),
-                disabled: isConfirmLocked(itinerary.data?.generationState),
+                // TRIP-1688 FV-TAP-01 — 요청 중엔 잠근다. 확정 응답이 창(400ms)보다 늦으면 가드만으로는 다시 누른 탭이
+                // POST 를 또 보내고, 그 409 가 확정된 화면에 실패 안내를 남긴다. 창 안(첫 렌더 전)은 가드가, 그 뒤는 이 비활성이 막는다.
+                disabled:
+                  isConfirmLocked(itinerary.data?.generationState) ||
+                  confirm.isPending,
               },
             ]
       }

@@ -41,6 +41,8 @@ data class PoiSurfaceView(
     val openingHours: String?,
     val imageUrl: String?,
     val tags: List<String>,
+    /** 행정구역 코드(시군구 5자리 또는 시도 2자리, 모르면 null) — 회고가 "어디서" 를 실제 방문 지역으로 쓴다(TRIP-1706). */
+    val regionCode: String? = null,
 )
 
 /** 동결 표면 — 확정 일정이 원본 변화에 흔들리지 않게 하는 값(INV-U1-03). */
