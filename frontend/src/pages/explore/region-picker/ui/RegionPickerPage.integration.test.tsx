@@ -1,4 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import type { Region } from '@/shared/api/index.schemas';
 import { RegionLevel } from '@/shared/api/index.schemas';
@@ -909,5 +914,181 @@ describe('서비스 지역 — 지역 피커는 서울·부산·제주만 보인
     // 앵커 — 무언가 그려진 화면이다(빈 화면이라 '준비 중'이 없는 게 아님).
     expect(sidoRowCodes().length + regionCardCodes().length).toBeGreaterThan(0);
     expect(screen.queryByText(/준비 중/)).toBeNull();
+  });
+});
+
+// ── B안 시범(2026-11-01) — 옛 `RegionPickerScreen.test.tsx` 를 지우며 옮긴 것 ─────────────────────
+// 그 파일의 `it` 이 잡던 결함 중 위 묶음이 못 잡던 것(뮤테이션 실측)을 페이지 렌더 + 카탈로그 응답으로 옮겼다.
+// 화면 로컬 상태(드릴다운)·카피·부제·선택 불가 카드는 응답 모양만 바꾸면 페이지에서 그대로 만들어진다.
+// 생김새(인기 배지 위치·커버 그림 vs 그라데이션)는 README 판정 4 로 옮기지 않았다 — 실화면 QA 몫.
+describe('화면 동작 — 카피 · 드릴다운 · 뒤로 · 카드 갈래 · 부제', () => {
+  const search = (text: string) =>
+    fireEvent.changeText(screen.getByTestId('explore-region-search'), text);
+  const drillInto = (code: string) =>
+    fireEvent.press(screen.getByTestId(`explore-region-sido-${code}`));
+
+  it('숙소(기본)는 "지역 선택"·"인기 지역", 여행지는 "여행지 선택"·"인기 여행지" 카피다', () => {
+    const { unmount } = render(<RegionPickerPage />);
+    expect(screen.getByText('지역 선택')).toBeOnTheScreen();
+    expect(screen.getByText('인기 지역')).toBeOnTheScreen();
+    expect(screen.queryByText('여행지 선택')).toBeNull();
+    unmount();
+
+    mockParams = { purpose: 'trip' };
+    render(<RegionPickerPage />);
+    expect(screen.getByText('여행지 선택')).toBeOnTheScreen();
+    expect(screen.getByText('인기 여행지')).toBeOnTheScreen();
+  });
+
+  it('1단엔 시/도 행만 있고 선택 카드는 하나도 없다 — 시/도 행을 눌러야 그 안이 열린다', () => {
+    render(<RegionPickerPage />);
+    expect(regionCardCodes()).toEqual([]);
+
+    drillInto('26');
+
+    expect(regionCardCodes()).toEqual(['26', '26110', '26350']);
+  });
+
+  it('인기 카드는 시/도 이름으로 읽히는 버튼이고 태그라인을 달며, 누르면 그 시/도로 들어간다', () => {
+    render(<RegionPickerPage />);
+    expect(screen.getByText('도심 · 감성')).toBeOnTheScreen();
+    expect(screen.getByText('바다 · 야경')).toBeOnTheScreen();
+    expect(screen.getByText('섬 · 자연')).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByRole('button', { name: /^제주특별자치도/ }));
+
+    expect(screen.getByText('제주특별자치도 전체')).toBeOnTheScreen();
+    expect(regionCardCodes()).toEqual(['50', '50110', '50130']);
+  });
+
+  it('상세의 "지역 목록" 뒤로는 1단으로만 돌아가고 피커를 나가지 않는다', () => {
+    render(<RegionPickerPage />);
+    drillInto('11');
+
+    fireEvent.press(screen.getByTestId('explore-region-drilldown-back'));
+
+    expect(sidoRowCodes()).toEqual(['11', '26', '50']);
+    expect(regionCardCodes()).toEqual([]);
+    expect(mockBack).not.toHaveBeenCalled();
+  });
+
+  it('앱바 "뒤로" 버튼은 상세에선 1단으로, 1단에선 피커를 나간다(router.back 1회)', () => {
+    render(<RegionPickerPage />);
+    drillInto('11');
+
+    fireEvent.press(screen.getByRole('button', { name: '뒤로' }));
+    expect(sidoRowCodes()).toEqual(['11', '26', '50']);
+    expect(mockBack).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByRole('button', { name: '뒤로' }));
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('선택 불가 시/도의 "전체" 자리는 보이되 눌러도 아무 데도 안 가고, 그 안 구/군은 골라진다', () => {
+    mockRegionsResult = {
+      ...mockRegionsResult,
+      data: [{ ...SEOUL, selectable: false }, JONGNO],
+    };
+    render(<RegionPickerPage />);
+    drillInto('11');
+
+    fireEvent.press(screen.getByTestId('explore-region-11'));
+    expect(mockDismissTo).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('explore-region-11110'));
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+  });
+
+  it('추천 장소 없는 서귀포시는 "추천 장소 없음"을 달고 눌러도 안 가며, 제주시는 골라진다', () => {
+    render(<RegionPickerPage />);
+    drillInto('50');
+
+    const seogwipo = screen.getByTestId('explore-region-50130');
+    expect(seogwipo).toHaveTextContent(/추천 장소 없음/);
+    fireEvent.press(seogwipo);
+    expect(mockDismissTo).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('explore-region-50110'));
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+  });
+
+  it('드릴인한 뒤 검색하면 상세가 사라지고 평면 검색 결과가 나온다', () => {
+    render(<RegionPickerPage />);
+    drillInto('11');
+
+    // '구' 는 연 시/도(서울)의 구도 걸린다 — 상세가 남아 있으면 그 구만 보인다.
+    search('구');
+
+    expect(screen.queryByTestId('explore-region-drilldown-back')).toBeNull();
+    expect(regionCardCodes()).toEqual([
+      '11110',
+      '11140',
+      '11680',
+      '26110',
+      '26350',
+    ]);
+  });
+
+  it('섹션 제목 — 검색어가 있으면(0건 포함) "검색 결과", 비거나 공백뿐이거나 상세 안이면 "지역별 둘러보기"', () => {
+    render(<RegionPickerPage />);
+    search('강남');
+    expect(screen.getByText('검색 결과')).toBeOnTheScreen();
+    expect(screen.queryByText('지역별 둘러보기')).toBeNull();
+
+    search('광주');
+    expect(screen.getByText('검색 결과')).toBeOnTheScreen();
+
+    search('   ');
+    expect(sidoRowCodes()).toEqual(['11', '26', '50']);
+    expect(screen.getByText('지역별 둘러보기')).toBeOnTheScreen();
+    expect(screen.queryByText('검색 결과')).toBeNull();
+
+    drillInto('26');
+    expect(screen.getByText('지역별 둘러보기')).toBeOnTheScreen();
+  });
+
+  it('검색 결과의 구/군 카드는 자기 시도명을 부제로 단다 — 동명 "중구" 둘이 각자', () => {
+    render(<RegionPickerPage />);
+    search('중구');
+
+    const seoul = screen.getByTestId('explore-region-11140');
+    const busan = screen.getByTestId('explore-region-26110');
+    expect(within(seoul).getByText('서울특별시')).toBeOnTheScreen();
+    expect(within(seoul).queryByText('부산광역시')).toBeNull();
+    expect(within(busan).getByText('부산광역시')).toBeOnTheScreen();
+    expect(within(busan).queryByText('서울특별시')).toBeNull();
+  });
+
+  it('선택 불가 묶음 행도 검색 결과에선 시도명 부제를 단다', () => {
+    mockRegionsResult = {
+      ...mockRegionsResult,
+      data: [SEOUL, { ...SEOUL_JUNG, selectable: false }],
+    };
+    render(<RegionPickerPage />);
+    search('중구');
+
+    const jung = screen.getByTestId('explore-region-11140');
+    expect(within(jung).getByText('중구')).toBeOnTheScreen();
+    expect(within(jung).getByText('서울특별시')).toBeOnTheScreen();
+  });
+
+  it('부제를 안 다는 자리 — 검색 결과의 시도 카드, 상세의 구/군 카드, 인기 카드는 시도명이 한 번뿐이다', () => {
+    render(<RegionPickerPage />);
+    expect(
+      within(screen.getByTestId('explore-region-popular-11')).getAllByText(
+        '서울특별시'
+      )
+    ).toHaveLength(1);
+
+    search('부산');
+    expect(
+      within(screen.getByTestId('explore-region-26')).getAllByText('부산광역시')
+    ).toHaveLength(1);
+
+    search('');
+    drillInto('11');
+    const jongno = screen.getByTestId('explore-region-11110');
+    expect(within(jongno).getByText('종로구')).toBeOnTheScreen();
+    expect(within(jongno).queryByText('서울특별시')).toBeNull();
   });
 });
