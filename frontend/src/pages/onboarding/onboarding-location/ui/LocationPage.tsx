@@ -8,7 +8,7 @@
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
-import * as Linking from 'expo-linking';
+import { openAppSettings } from '@/shared/external-link';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 
@@ -110,7 +110,7 @@ export function LocationPage({
       // 컴포넌트 계약상 default 의 "허용" 과 denied 의 "계속" 이 둘 다 onProceed 에 걸린다.
       onProceed={state === 'permission-denied' ? goToPushGuarded : handleAllow}
       onOpenSettings={() => {
-        void Linking.openSettings();
+        void openAppSettings();
       }}
     />
   );

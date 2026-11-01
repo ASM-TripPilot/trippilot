@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import Constants from 'expo-constants';
-import * as Linking from 'expo-linking';
+import { openExternal } from '@/shared/external-link';
 import { type ReactElement, useRef, useState } from 'react';
 import { Keyboard } from 'react-native';
 
@@ -321,7 +321,7 @@ export function SettingsPage(): ReactElement {
       appVersion={Constants.expoConfig?.version}
       onPressOsmCopyright={() => {
         // 브라우저를 못 열어도 설정 화면은 그대로 둔다(TRIP-886 Q3 — 링크 실패는 무시).
-        Linking.openURL(OSM_COPYRIGHT_URL).catch(() => undefined);
+        openExternal(OSM_COPYRIGHT_URL).catch(() => undefined);
       }}
     />
   );
