@@ -14,8 +14,9 @@ import {
   buildDraftDayTabs,
   buildDraftPins,
   formatDraftDayHeader,
+  sheetMeta,
+  sheetRowKeys,
 } from '@/features/itinerary';
-import { legDistance } from '@/entities/place';
 import {
   isConfirmLocked,
   resolvePlanMapCenter,
@@ -336,21 +337,13 @@ export function ItineraryPlanPage({
   });
 
   // meta = "[확정됨 · ]N곳[ · X.Xkm]". N 은 **선택일 슬롯 중 고정 숙소를 뺀 수**(01b D3 —
-  // totalPlaces·coPickProgress 재사용 금지). 숙소 판정은 아래 `hasBase` 와 같다 — 서버가 꼭 갈 곳을
-  // `isFixed` 로 내려도 카드 수와 맞는다(TRIP-1234 R3-03). km 은 커넥터가 그리는 leg(`slots.slice(1)`)의
-  // `legDistance` 합에서 "이동 " 접두를 뗀 값, 그중 한 구간이라도 거리를 모르면(거리 계산 중·교체 직후)
-  // 곳 수만 그린다(01b D3·D5 · h08 선례 · TRIP-1110 INV-4). 확정(h16)이면 앞에 "확정됨 · " 접두를
-  // 단다(TRIP-801 AC-3).
-  const nonFixedCount = slots.filter(
-    (slot) => !(slot.isFixed && slot.category === '숙소')
-  ).length;
-  const legLabel = legDistance(
-    slots.slice(1).map((slot) => slot.distanceRange)
-  );
-  const kmPart = legLabel === null ? null : legLabel.replace('이동 ', '');
-  const metaBody =
-    kmPart === null ? `${nonFixedCount}곳` : `${nonFixedCount}곳 · ${kmPart}`;
-  const meta = isConfirmed ? `확정됨 · ${metaBody}` : metaBody;
+  // totalPlaces·coPickProgress 재사용 금지 · 숙소 판정은 아래 `hasBase` 와 같다, TRIP-1234 R3-03).
+  // km·접힘 규칙은 `sheetMeta`(01b D3·D5 · TRIP-1110 INV-4), 확정(h16)이면 "확정됨 · " 접두(TRIP-801 AC-3).
+  const meta = sheetMeta(slots, {
+    count: 'excludeFixedStay',
+    km: true,
+    confirmed: isConfirmed,
+  });
 
   // 거점 없음 판정 = 선택일 슬롯에 고정 숙소 부재(클라 휴리스틱 · 01b D4 — itinerary 응답에
   // baseAssignment 필드가 없어 슬롯만으로 유추한다).
@@ -429,7 +422,7 @@ export function ItineraryPlanPage({
           const items: ReactElement[] = [
             <SlotStopCard
               // 순번을 섞는다 — 같은 날 같은 장소 2회(BR-U2-04 위반 데이터, TRIP-1296)면 poiId 만으론 겹친다. 끌어 옮기지 않는 목록이라 순번 key 가 안전하다.
-              key={`card-${index}-${slot.poiId}`}
+              key={sheetRowKeys(index, slot.poiId).card}
               slot={slot}
               date={selectedDate}
               index={index}
@@ -458,7 +451,7 @@ export function ItineraryPlanPage({
             const nextSlot = slots[index + 1];
             items.push(
               <DistanceConnector
-                key={`conn-${index}-${slot.poiId}`}
+                key={sheetRowKeys(index, slot.poiId).conn}
                 slotKey={buildSlotKey(selectedDate, slot.poiId)}
                 distanceRange={nextSlot.distanceRange}
               />

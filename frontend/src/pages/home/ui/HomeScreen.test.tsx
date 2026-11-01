@@ -17,7 +17,7 @@ import type {
   HomeSpotCard,
   HomeSpotsLane,
 } from '../model/homeTypes';
-import { HeartFilledGlyph, HeartOutlineGlyph } from '@/features/home';
+import { HeartFilledGlyph, HeartOutlineGlyph } from './HomeGlyphs';
 import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
 import { HomeScreen } from './HomeScreen';
 import {

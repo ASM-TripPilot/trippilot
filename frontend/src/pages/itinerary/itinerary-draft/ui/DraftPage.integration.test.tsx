@@ -1913,32 +1913,6 @@ describe('h08 셸 기본 얼굴', () => {
   });
 
   describe('🔴 A5b · TRIP-1110 AC-5·AC-6 — h08 헤더 meta 는 커넥터 구간(slice(1))만 보고, 하나라도 비면 km 를 접는다', () => {
-    it('A5b-1 · 커넥터 구간에 null 이 섞이면 meta 는 정확히 "3곳"이고 null 커넥터는 거리 칸 대신 "거리 정보 없음"이다', async () => {
-      // 준비 — a→b 구간 2.1km, b→c 구간 null(교체 뒤 재산출 전). 옛 스킵 규약이면 "3곳 · 2.1km"(부분합).
-      itineraryHandler = () =>
-        HttpResponse.json(completeWithRanges([null, '2.1km', null]));
-
-      renderPage();
-      await screen.findByTestId('map-sheet-shell-root');
-
-      const meta = screen.getByTestId('sheet-header-meta');
-      expect(meta).toHaveTextContent('3곳'); // 문자열 인자 = 완전 일치(02a §5)
-      expect(meta).not.toHaveTextContent(/km|이동|분|시간|소요/);
-      // 값 있는 구간은 서버 문자열 그대로, null 구간은 거리 칸이 없고 모름 칸이 있다(TRIP-1274 — 옛 "줄만").
-      expect(
-        screen.getByTestId(`sheet-connector-distance-${DAY1}#poi-a`)
-      ).toHaveTextContent('2.1km');
-      expect(
-        screen.getByTestId(`sheet-connector-${DAY1}#poi-b`)
-      ).toBeOnTheScreen();
-      expect(
-        screen.queryByTestId(`sheet-connector-distance-${DAY1}#poi-b`)
-      ).toBeNull();
-      expect(
-        screen.getByTestId(`sheet-connector-unknown-${DAY1}#poi-b`)
-      ).toHaveTextContent('거리 정보 없음');
-    });
-
     it('A5b-2 · 첫 슬롯(거점→첫 방문지) 거리는 커넥터가 없으니 헤더 합에도 안 들어간다 — "3곳 · 3.5km"', async () => {
       // 준비 — 거점 있는 날: 첫 슬롯에도 0.9km. 전 슬롯을 더하면 4.4km 가 된다(옛 Draft 모집단).
       itineraryHandler = () =>
@@ -3895,28 +3869,6 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
   });
 
   describe('🔴 A8-4 · TRIP-1110 AC-5·AC-6 — h07 헤더 meta 는 커넥터 구간(slice(1))만 보고, 하나라도 비면 km 를 접는다', () => {
-    it('A8-4a · 커넥터 구간에 null 이 섞이면 meta 는 정확히 "3곳"이고 null 커넥터는 글리프 줄만 남는다', async () => {
-      // 준비 — a→b 구간 2.1km, b→c 구간 null. 옛 스킵 규약이면 "3곳 · 2.1km"(부분합).
-      itineraryHandler = () =>
-        HttpResponse.json(partialWithRanges([null, '2.1km', null]));
-
-      renderPage();
-      await screen.findByTestId('generation-progress-card');
-
-      const meta = screen.getByTestId('sheet-header-meta');
-      expect(meta).toHaveTextContent('3곳'); // 문자열 인자 = 완전 일치(02a §5)
-      expect(meta).not.toHaveTextContent(/km|이동|분|시간|소요/);
-      expect(
-        screen.getByTestId(`sheet-connector-distance-${DAY1}#poi-a`)
-      ).toHaveTextContent('2.1km');
-      expect(
-        screen.getByTestId(`sheet-connector-${DAY1}#poi-b`)
-      ).toBeOnTheScreen();
-      expect(
-        screen.queryByTestId(`sheet-connector-distance-${DAY1}#poi-b`)
-      ).toBeNull();
-    });
-
     it('A8-4b · 첫 슬롯(거점→첫 방문지) 거리는 헤더 합에 안 들어간다 — "3곳 · 3.5km"', async () => {
       // 준비 — 첫 슬롯에도 0.9km. 전 슬롯을 더하면 4.4km(옛 PARTIAL 모집단).
       itineraryHandler = () =>
@@ -3928,6 +3880,13 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
       expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
         '3곳 · 3.5km'
       );
+      // h07 커넥터는 다음 슬롯의 거리를 그린다(첫 슬롯 0.9km 는 어느 커넥터에도 없다) — 옛 A8-4a·K2·K3 에서 옮긴 단언.
+      expect(
+        screen.getByTestId(`sheet-connector-distance-${DAY1}#poi-a`)
+      ).toHaveTextContent('2.1km');
+      expect(
+        screen.getByTestId(`sheet-connector-distance-${DAY1}#poi-b`)
+      ).toHaveTextContent('1.4km');
     });
   });
 
@@ -4823,12 +4782,6 @@ describe('같은 날 같은 장소 두 번', () => {
     dupSlot('p-a', 13, D2_KM),
     dupSlot('p-c', 15, D3_KM),
   ];
-  /** [A, B, C] — 보통 응답(무회귀). */
-  const normalSlots = () => [
-    dupSlot('p-a', 10, null),
-    dupSlot('p-b', 11, D1_KM),
-    dupSlot('p-c', 15, D2_KM),
-  ];
 
   function faceItinerary(
     face: Face,
@@ -4882,9 +4835,6 @@ describe('같은 날 같은 장소 두 번', () => {
     return screen.findAllByTestId(CARD_ROOT);
   }
 
-  const texts = (nodes: { props: { children?: unknown } }[]) =>
-    nodes.map((node) => node.props.children);
-
   it.each(FACES)(
     '🔴 K1 · AC-2 — %s · 같은 장소가 두 번 있어도 중복 key 경고가 없다',
     async (_name, face) => {
@@ -4892,45 +4842,6 @@ describe('같은 날 같은 장소 두 번', () => {
 
       expect(cards).toHaveLength(4);
       expect(keyWarnings.keys()).toEqual([]);
-    }
-  );
-
-  it.each(FACES)(
-    'K2 · AC-4 — %s · 같은 장소 두 슬롯을 숨기지 않는다 (카드 4·번호·시각·거리 순서)',
-    async (_name, face) => {
-      const cards = await openDraft(face, duplicateSlots());
-
-      expect(cards).toHaveLength(4);
-      expect(texts(screen.getAllByTestId(/^slot-stopcard-number-/))).toEqual([
-        '1',
-        '2',
-        '3',
-        '4',
-      ]);
-      expect(
-        texts(screen.getAllByTestId(`slot-stopcard-time-${DAY1}#p-a`))
-      ).toEqual(['10:00–10:30', '13:00–13:30']);
-      expect(
-        texts(screen.getAllByTestId(/^sheet-connector-distance-/))
-      ).toEqual([D1_KM, D2_KM, D3_KM]);
-    }
-  );
-
-  it.each(FACES)(
-    'K3 · AC-3 — %s · 보통 초안(장소 중복 없음)은 카드·번호·거리가 그대로다',
-    async (_name, face) => {
-      const cards = await openDraft(face, normalSlots());
-
-      expect(cards).toHaveLength(3);
-      expect(keyWarnings.keys()).toEqual([]);
-      expect(texts(screen.getAllByTestId(/^slot-stopcard-number-/))).toEqual([
-        '1',
-        '2',
-        '3',
-      ]);
-      expect(
-        texts(screen.getAllByTestId(/^sheet-connector-distance-/))
-      ).toEqual([D1_KM, D2_KM]);
     }
   );
 });

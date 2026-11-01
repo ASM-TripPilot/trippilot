@@ -47,13 +47,6 @@ const PINS: MapPin[] = [
   { number: 2, lat: 33.515, lng: 126.526 },
 ];
 
-const GESTURE_TOGGLES = [
-  'isScrollGesturesEnabled',
-  'isZoomGesturesEnabled',
-  'isRotateGesturesEnabled',
-  'isTiltGesturesEnabled',
-] as const;
-
 describe('🔴 AC1 — 정상: center + pins 2개 → map-native, 마커 2개, 경로선 1개', () => {
   it('map-root 아래 map-native·마커 pins개·경로선 1개가 그려지고 실패 표면은 없다', () => {
     // Arrange + Act
@@ -85,27 +78,7 @@ describe('🔴 AC1 — 정상: center + pins 2개 → map-native, 마커 2개, �
 
 // TRIP-876 커스텀 핀(번호 SVG·caption·anchor)은 jest-cut 에서 지웠다 — 마커 생김새라 실화면 QA 몫(itinerary-view.md). 번호 렌더는 AC-3(b) 짝이 본다.
 
-describe('🔴 AC2 — viewOnly: 켜면 제스처 4토글 전부 false, 안 켜면 전부 false는 아니다', () => {
-  it('viewOnly=true → NaverMapView가 4토글을 개별로 전부 false 로 받는다', () => {
-    render(<MapView center={CENTER} pins={PINS} viewOnly />);
-
-    const native = screen.getByTestId('map-native');
-    for (const toggle of GESTURE_TOGGLES) {
-      // 하나라도 빠지면 위반 — 개별 단언으로 어느 토글인지 실패 메시지에 드러나게.
-      expect(native.props[toggle]).toBe(false);
-    }
-  });
-
-  it('viewOnly 미전달 → 4토글이 전부 false 는 아니다(기본은 조작 가능)', () => {
-    render(<MapView center={CENTER} pins={PINS} />);
-
-    const native = screen.getByTestId('map-native');
-    for (const toggle of GESTURE_TOGGLES) {
-      // seed AC2 "true 또는 미전달" — toBe(true)로 과잉 고정하지 않고 not.toBe(false).
-      expect(native.props[toggle]).not.toBe(false);
-    }
-  });
-});
+// AC2(viewOnly → 제스처 4토글)는 jest-cut A 에서 지웠다 — 같은 사상을 MapSheetShell SH14(닫힘 칸에서만 풀림)가 map-native 4 prop 으로 잰다.
 
 describe('🔴 AC3 — connectPins: false면 경로선 없음, 기본이면 경로선 1개', () => {
   it('connectPins={false} → 경로선(map-path) 없음, 단 마커는 그대로', () => {
