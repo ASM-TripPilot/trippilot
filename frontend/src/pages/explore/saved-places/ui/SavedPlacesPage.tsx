@@ -26,6 +26,8 @@ import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
 import { View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { useQueryClient } from '@tanstack/react-query';
 
 import type { SavedPlace } from '@/shared/api/index.schemas';
@@ -196,7 +198,7 @@ function MustVisitPickSection({
       onPressAddMore={() => router.push(exploreHref)}
       onRetry={onRetry}
       onPressBrowse={() => router.push(exploreHref)}
-      onBack={() => router.back()}
+      onBack={() => goBackOr(router, shellTabHref('explore'))}
     />
   );
 }
@@ -362,7 +364,7 @@ function TripMustVisitPick({
     }
     // 성공이면 잠금을 풀지 않는다 — 재조회를 기다리지 않아 잠금 목록이 아직 옛 값이라, 화면이
     // 사라지기 전 한 번 더 누르면 같은 곳을 또 보내고 back() 이 두 번 불린다(AC-12).
-    router.back();
+    goBackOr(router, shellTabHref('explore'));
   }
 
   return (
@@ -547,7 +549,7 @@ export function SavedPlacesPage(): ReactElement {
       onRetry={handleRetry}
       onPressLogin={() => router.push('/(auth)/login')}
       onPressRemoveErrorAction={handlePressRemoveErrorAction}
-      onBack={() => router.back()}
+      onBack={() => goBackOr(router, shellTabHref('explore'))}
     />
   );
 }
