@@ -109,11 +109,6 @@
       "count": 7
     }
   },
-  "src/pages/explore/explore-landing/ui/ExploreLandingScreen.test.tsx": {
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
   "src/pages/explore/place-explore/ui/PlaceExplorePage.tsx": {
     "no-restricted-syntax": {
       "count": 6

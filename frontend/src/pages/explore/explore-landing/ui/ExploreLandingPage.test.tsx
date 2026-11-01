@@ -1189,3 +1189,64 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
     });
   });
 });
+
+// B안(2026-11-01) — 뷰 단위 `ExploreLandingScreen.test.tsx` 를 지우며 페이지 테스트가 못 잡던 결함을 옮겼다.
+describe('화면 동작 — 레인 제목 · 담은 곳 메뉴 이름 · 로딩 얼굴', () => {
+  it('필터가 없으면 장소 레인 제목은 "장소"다("가볼 곳" 아님)', () => {
+    render(<ExploreLandingPage />);
+
+    const lane = screen.getByTestId('explore-lane-place');
+    expect(within(lane).getByText('장소')).toBeOnTheScreen();
+    expect(screen.queryByText('가볼 곳')).toBeNull();
+  });
+
+  // TRIP-1019 #024 · 01b Q5 — 열린 메뉴는 장소·숙소를 둘 다 담으므로 "담은 곳" 이 맞다.
+  it('메뉴를 펼치면 토글은 "담은 곳 메뉴 닫기", 미니 FAB 은 "담은 장소 N곳"·"저장한 숙소" 로 읽힌다', () => {
+    mockUseSavedPlaces.mockReturnValue({ savedPoiIds: ['p1', 'p2'] });
+    render(<ExploreLandingPage />);
+
+    fireEvent.press(screen.getByTestId('explore-saved-menu-toggle'));
+
+    expect(
+      screen.getByTestId('explore-saved-menu-toggle')
+    ).toHaveAccessibleName('담은 곳 메뉴 닫기');
+    expect(screen.getByTestId('explore-saved-places-fab')).toHaveAccessibleName(
+      '담은 장소 2곳'
+    );
+    expect(screen.getByTestId('explore-saved-stays-fab')).toHaveAccessibleName(
+      '저장한 숙소'
+    );
+  });
+
+  it('조회 대기 중이면 ♥·＋ FAB 둘 다 없다', () => {
+    mockUseStaySearch.mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+    });
+    render(<ExploreLandingPage />);
+
+    expect(
+      screen.getByTestId('explore-landing-skeleton-stay-0')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('explore-saved-menu-toggle')).toBeNull();
+    expect(screen.queryByTestId('explore-create-trip-fab')).toBeNull();
+  });
+
+  // 숙소 실패 + 장소 대기가 겹치면 로딩 얼굴이 이긴다(삼항을 재배열하면 red).
+  it('숙소가 실패해도 장소가 아직 대기면 숙소 재시도가 아니라 스켈레톤이다', () => {
+    mockUseStaySearch.mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+      refetch: mockStayRefetch,
+    });
+    multiResult = { ...MULTI_DISABLED };
+    render(<ExploreLandingPage />);
+
+    expect(
+      screen.getByTestId('explore-landing-skeleton-stay-0')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('explore-lane-stay-retry')).toBeNull();
+  });
+});

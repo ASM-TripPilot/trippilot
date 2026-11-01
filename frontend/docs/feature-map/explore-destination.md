@@ -39,6 +39,7 @@ routes:
 - `destination-redirect` 옛 주소 `/explore/destination/{코드}` → 같은 코드로 거른 탐색 탭으로 즉시 리다이렉트.
 - `dest-lane-layout` 숙소·장소 레인 카드와 로딩 스켈레톤은 같은 폭으로 줄 서고, 검색창은 알약 모양이며, ♥·＋ FAB 묶음은 탭바 바로 위에 붙는다. *(2026-11-01 jest 축소로 실화면 전용)*
 - `dest-toast-above-fab` FAB 가 있는 화면에서 토스트는 FAB 묶음 위에 떠서 가려지지 않는다. *(2026-11-01 jest 축소로 실화면 전용)*
+- `explore-landing-look` 지역 필터 중 검색창은 칩 오른쪽에 「›」를 두고, 숙소 카드 사진 칸은 숙소마다 고른 그림이며, 세로 스크롤 중 ♥·＋ 묶음이 숨었다가 멈추면 돌아온다(담은 곳 메뉴가 열려 있으면 그대로). *(2026-11-01 B안으로 실화면 전용)*
 
 ## How to get to it (user POV)
 
