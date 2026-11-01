@@ -9,3 +9,17 @@ pnpm -s structure:drift || {
   echo "[pre-push] ❌ docs/structure.generated.md 가 커밋본과 다르다 — 재생성된 파일을 커밋하고 다시 push"
   exit 1
 }
+
+# 기록 게이트(2026-11-02): 볼트가 있는 기계에서만 — 로컬 공용 훅 `.git/hooks/pre-push` 와 같은 검사(정본 설명은 frontend/CLAUDE.md 「기록 게이트」).
+VAULT_ROOT="${TRIPPILOT_VAULT:-$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian}/TripPilot"
+ROOT="$(git rev-parse --show-toplevel)"
+if [ -d "$VAULT_ROOT/사이클" ]; then
+  [ -e "$ROOT/_workspace" ] || ln -s "$VAULT_ROOT/사이클" "$ROOT/_workspace"
+  if [ "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ] && [ -n "$(ls -A "$ROOT/frontend/_workspace" 2>/dev/null)" ]; then
+    echo "[pre-push] ❌ 작업 노트가 워크트리 안 frontend/_workspace 에 있다 — $ROOT/_workspace/<id>/ 로 옮기고 다시 push"; exit 1
+  fi
+  branch="$(git rev-parse --abbrev-ref HEAD)"
+  if ! grep -qF -- "$branch" "$VAULT_ROOT/로그.md" 2>/dev/null && ! grep -rqlF -- "$branch" "$VAULT_ROOT/개발로그" 2>/dev/null; then
+    echo "[pre-push] ❌ 브랜치 $branch 작업이 옵시디언(로그.md·개발로그)에 없다 — 기록하고 다시 push"; exit 1
+  fi
+fi

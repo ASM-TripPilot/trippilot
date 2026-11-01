@@ -11,7 +11,7 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 
 **실행 모드: 하이브리드** — 오케스트레이터(메인 세션)가 사용자 상호작용과 MCP 호출(Ouroboros/Obsidian/Figma)을 직접 관리하고, 단계별 전문 작업은 서브 에이전트(`Agent` 도구)에 위임한다.
 
-**작업 공간은 LLM 위키의 원본층이다** — `<리포 루트>/_workspace`는 옵시디언 볼트 `TripPilot/사이클/`으로의 심볼릭 링크다. 경로는 그대로 쓰고, 산출물은 자동으로 위키에 들어간다(검색 본문·링크 종점 — 정본은 `obsidian-second-brain`).
+**작업 공간은 LLM 위키의 원본층이다** — `<리포 루트>/_workspace`는 옵시디언 볼트 `TripPilot/사이클/`으로의 심볼릭 링크다. 경로는 그대로 쓰고, 산출물은 자동으로 위키에 들어간다(검색 본문·링크 종점 — 정본은 `obsidian-second-brain`). **새 워크트리에도 이 링크가 있어야 한다** — gitignore 라 `git worktree add`(herdr 포함)가 만들어 주지 않는다. 로컬 `post-checkout` 훅(추적본 `.githooks/post-checkout`)이 만들고, 빠지면 pre-push 가 만든다. **`frontend/_workspace`(링크 아님)에 쓰지 마라** — 워크트리를 지울 때 같이 사라진다(실측 14폴더, 상세는 하네스 변경이력). 서브에이전트·레인 지시서의 산출 경로도 `<워크트리 루트>/_workspace/{id}/` 절대 경로로 준다.
 
 ## 참조 파일 — 해당 시점에 반드시 읽는다
 
