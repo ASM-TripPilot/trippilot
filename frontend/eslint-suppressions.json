@@ -308,11 +308,6 @@
       "count": 2
     }
   },
-  "src/pages/onboarding/onboarding-nickname/ui/NicknameScreen.test.tsx": {
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
   "src/pages/onboarding/onboarding-terms/ui/TermsPage.tsx": {
     "no-restricted-syntax": {
       "count": 1
