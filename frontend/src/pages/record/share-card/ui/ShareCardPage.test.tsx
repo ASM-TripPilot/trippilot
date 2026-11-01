@@ -27,7 +27,7 @@ import { ShareCardPage } from './ShareCardPage';
 jest.mock('expo-router', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('@/test-support/expoRouterMock').createExpoRouterMock({
-    router: ['push', 'back', 'canGoBack'],
+    router: ['push', 'back', 'canGoBack', 'replace'],
   })
 );
 

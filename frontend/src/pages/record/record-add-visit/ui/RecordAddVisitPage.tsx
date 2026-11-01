@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
@@ -114,7 +115,7 @@ export function RecordAddVisitPage({
     });
     // 성공이면 가드를 쥔 채 돌아간다(뒤로 가는 동안 다른 행이 눌리지 않게).
     if (outcome.kind === 'arrived') {
-      router.back();
+      goBackOr(router, `/trips/${tripId}/records`);
       return;
     }
     picking.current = false;
@@ -130,7 +131,7 @@ export function RecordAddVisitPage({
         center={center}
         pins={pins}
         fitPins
-        onBack={() => router.back()}
+        onBack={() => goBackOr(router, `/trips/${tripId}/records`)}
         // TRIP-1204 — 시트가 열린 채로도 손가락 확대·이동(셸 기본은 열림=잠금). 6-b 실기 전용.
         mapViewOnly={false}
         header={
