@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { useWindowDimensions, View } from 'react-native';
-import type { ListRenderItem } from 'react-native';
+import type { LayoutChangeEvent, ListRenderItem } from 'react-native';
 import {
   SafeAreaInsetsContext,
   SafeAreaView,
@@ -39,6 +39,9 @@ export type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot';
  * 3스냅 바텀시트(닫힘·peek·펼침, `header`·`children`) + 하단 고정 CTA 바를 **조립만** 한다. 시각·합산 같은
  * 판단은 전부 소비처로 밀어냈다(셸은 받은 ReactNode·문자열·콜백만 배치한다). 예외 둘 — 셸이 상태를 쥔다: ① 지도 로드 실패(TRIP-919) — 소비처 배선 없이 폴백을 얻게 하려고.
  * ② 시트가 멈춘 칸(TRIP-920) — 기본 배열의 닫힘(0번)에서만 지도 잠금을 풀고 CTA 바를 뺀다.
+ * TRIP-1694 — 웹에서 이 셸이 `display:none` 으로 숨으면(편집기 위에 화면을 push) 루트 높이가 0 이 되고, gorhom 이 세 칸을 모두 0 으로 겹쳐
+ * 어떤 이동이든 `onChange(0)` 을 낸다. 셸이 그걸 "닫힘"으로 믿으면 CTA(저장 바)가 사라지므로, 루트가 높이 0 인 동안의 도착은 무시하고
+ * 다시 보일 때 숨기기 전 칸으로 되돌린다.
  *
  * ⚠️ 원리적 사각(6-b 실기 전용): 스냅 실개폐·딤·`enableContentPanningGesture`(E6) 는 `@gorhom/
  * bottom-sheet` 통과형 목이, 지도 제스처·타일은 네이버 목이 못 본다. 지도는 시트 **뒤 형제**로 두어
@@ -231,6 +234,10 @@ export function MapSheetShell<T = unknown>({
   const startIndex = initialIndex ?? (snapPoints ? 0 : DEFAULT_INDEX);
   // 시트가 멈춘 칸(TRIP-920). 초기값 = 진입 칸 — 라이브러리가 마운트 때 onChange 를 부르는지 jest 는 모른다.
   const [snapIndex, setSnapIndex] = useState(startIndex);
+  // TRIP-1694 — 루트가 숨겨졌나(높이 0)와 숨기기 전 마지막 도착 칸. 화면을 다시 그릴 일이 없어 state 가 아닌 ref 다
+  // (새 state 는 memo(MapView) 재렌더만 늘린다). 칸 초기값 = 진입 칸 — 도착 알림이 한 번도 없었을 때의 복원 대상.
+  const rootHiddenRef = useRef(false);
+  const arrivedIndexRef = useRef(startIndex);
   // TRIP-1494 — 신호가 바뀌면 진입 칸으로 다시 스냅(첫 렌더는 건너뛴다 — 마운트는 index 가 이미 정한다).
   const sheetRef = useRef<ComponentRef<typeof BottomSheet>>(null);
   const seenExpandSignal = useRef(expandSignal);
@@ -313,6 +320,21 @@ export function MapSheetShell<T = unknown>({
     [bottomInset]
   );
   const sheetSnapPoints = snapPoints ?? defaultSnapPoints;
+  // TRIP-1694 — 루트 높이 0 이면 숨김. 숨김→보임 전이에서만 숨기기 전 칸으로 snapToIndex 1회(−1·범위 밖이면 안 함).
+  // ponytail: 복원이 gorhom 의 레이아웃 재계산(isLayoutCalculated)보다 먼저 와 웹에서 무시될 수 있다(미검증 — 6-b).
+  // 무시돼도 CTA 는 남는다(숨김 중 도착을 걸러서). 막히면 아래 snapToIndex 를 requestAnimationFrame 으로 한 틱 미룬다.
+  const handleRootLayout = (e: LayoutChangeEvent) => {
+    if (e.nativeEvent.layout.height === 0) {
+      rootHiddenRef.current = true;
+      return;
+    }
+    if (!rootHiddenRef.current) return;
+    rootHiddenRef.current = false;
+    const index = arrivedIndexRef.current;
+    if (index >= 0 && index < sheetSnapPoints.length) {
+      sheetRef.current?.snapToIndex(index);
+    }
+  };
   // TRIP-1416 · 핀 맞춤의 보이는 띠. 아래 가림 = 배열의 첫 '%' 칸(진입 칸·지금 멈춘 칸이 아니다 — 시트를 끌 때마다
   // 카메라가 튀지 않게, 허브가 펼침으로 진입해도 중간 칸 기준). gorhom '%' 는 (화면 − topInset) 기준이라 실제 가림은
   // 조금 작다 — 보수적이다. 화면 비율은 창 크기로만 정한다(측정 없음). 원시값으로 memo 해 같은 띠면 같은 객체다
@@ -333,7 +355,11 @@ export function MapSheetShell<T = unknown>({
   );
 
   return (
-    <View testID="map-sheet-shell-root" className="flex-1 bg-canvas">
+    <View
+      testID="map-sheet-shell-root"
+      className="flex-1 bg-canvas"
+      onLayout={handleRootLayout}
+    >
       {/* 전면 지도 — 시트 뒤 형제(절대 배치, 풀블리드). connectPins 무언급=기본 선.
           지도 자리 우선순위: 소비처 mapFallback > 셸 기본 폴백 바(로드 실패 시) > MapView. 어느 쪽이든
           day-chip·시트·CTA 는 유지된다(화면을 안 비운다, INV-4 · TRIP-799 D5 · TRIP-919). */}
@@ -410,6 +436,8 @@ export function MapSheetShell<T = unknown>({
         keyboardBlurBehavior="restore"
         topInset={topInset}
         onChange={(index) => {
+          if (rootHiddenRef.current) return; // 숨김 중 도착은 가짜 — 칸으로도 소비처 알림으로도 받지 않는다(TRIP-1694)
+          arrivedIndexRef.current = index;
           setSnapIndex(index);
           onSheetChange?.(index);
         }}
