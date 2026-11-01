@@ -51,7 +51,6 @@ src/pages/settings/settings/model/settingsSections.release.test.ts
 src/pages/settings/settings/ui/SettingsPage.hookMock.test.tsx
 src/pages/settings/settings/ui/SettingsPage.pushSupport.test.tsx
 src/pages/stay/stay-saved/ui/SavedStayListScreen.list.test.tsx
-src/pages/stay/stay-search/ui/StaySearchScreen.separator.test.tsx
 src/shared/map/MapView.actualRoute.test.tsx
 src/shared/map/MapView.candidatePin.test.tsx
 src/shared/map/MapView.drawPath.test.tsx

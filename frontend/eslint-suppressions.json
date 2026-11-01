@@ -468,11 +468,6 @@
       "count": 4
     }
   },
-  "src/pages/stay/stay-search/ui/StaySearchScreen.separator.test.tsx": {
-    "no-restricted-properties": {
-      "count": 2
-    }
-  },
   "src/pages/trip/trip-new-step1/ui/TripNewStep1Page.tsx": {
     "no-restricted-syntax": {
       "count": 4
