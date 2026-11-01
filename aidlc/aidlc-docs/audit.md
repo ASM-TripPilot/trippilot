@@ -1952,11 +1952,29 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **User Input**: (사용자 원문) "버그 3건 고쳐라" — 같은 날 버그 원인 리포트(P2: 재계획이 그날 이미 건너뛴 곳을 다시 넣는다)를 서버에서 고치기로 한 결정의 정본 반영이다.
 **AI Response**: `construction/u4-in-trip-planb/functional-design/business-rules.md` §3 표(BR-U4-17~27) 바로 아래에 `[개정 · 2026-11-01]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 대상 일자에 건너뛴 POI 는 서버가 산출 시점에 실적(`ArchiveFacade.getSkippedPois`)을 읽어 `excludedPoiIds` 에 앱 값과 합집합으로 싣는다 · 다른 날 건너뜀은 빼지 않는다 · 잠금 규칙(BR-U4-18·INV-U4-04)은 그대로 · §3.1 `excludedPoiIds` 의 뜻은 유지하고 채우는 주체에 서버 실적 수집이 더해진다 · AI 가 제외를 원 일정 슬롯보다 우선함을 확인했다. 코드 변경은 같은 브랜치의 `fix(be)` 커밋이다.
 **Context**: CONSTRUCTION — U4 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
 ## Functional Design 사후 개정 — U10 수동 허브 [도착] 술어·완료 중 잠금 (BR-U10-54·55)
 **Timestamp**: 2026-11-01T23:30:00+09:00 (작업 시점)
 **User Input**: (사용자 원문) "버그 3건 고쳐라" — 방문 체크 결함 원인 확인(P1·P2·P3) 뒤 앱 2건(P1·P3)은 앱에서 고친다는 결정이다.
 **AI Response**: `construction/u10-gps-location-automation/functional-design/business-rules.md` TRIP-1561 개정 블록 뒤에 `[개정 · 2026-11-01 · 방문 체크 결함 수정]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: BR-U10-54 건너뜀 제외는 진행 중 여부와 무관(FM-L4-01) · BR-U10-55 단독 [방문 완료]가 도는 동안에도 [도착] 잠금(이중 진행 중). 코드 변경은 같은 브랜치(`fix/FE-visit-flow-bugs`)의 `LiveHubView.tsx` `canArriveAt` · `LiveItineraryPage.tsx` `pressArrive` 수정이다. P2(재계획이 건너뛴 곳을 다시 넣음)는 서버 몫이라 여기서 다루지 않았다.
 **Context**: CONSTRUCTION — U10 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
-||||||| 99b4b7492
 
 ---
+
+---
+
+## Functional Design 사후 개정 — U0 동의 증적 멱등 (BR-U0-12)
+**Timestamp**: 2026-11-02T03:00:00+09:00 (작업 시점)
+**User Input**: (사용자 원문) "ㄱㄱ" — 같은 날 형식 검증 리포트(FV-CONSENT-01: 개인화 연타·두 기기 동시 요청이 같은 동의 증적을 2줄 남긴다)의 서버 수정 승인이다.
+**AI Response**: `construction/u0-foundation/functional-design/business-rules.md` 동의·약관 표(BR-U0-10~14) 바로 아래에 `[개정 · 2026-11-02 · TRIP-1689]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 최신 증적과 같은 버전·같은 동작이면 기록하지 않음(200 무기록, 위치 `update` 선례) · 적용 경로 3곳(온보딩·개별 변경·마케팅 토글) · 동시 요청은 계정 단위 권고 잠금 뒤 판정 · 행 잠금·유니크 제약을 쓰지 않은 이유. 코드 변경은 같은 브랜치(`fix/BE-TRIP-1689-consent-dedupe`)의 `fix(be)` 커밋이다. 참고: 이 파일 바로 앞 줄의 `||||||| 99b4b7492` 는 #1748 에서 섞여 들어온 병합 잔재로, append-only 규칙에 따라 지우지 않았다.
+**Context**: CONSTRUCTION — U0 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — U1 거점 숙소는 그 밤 여행 지역 안만 (TRIP-1703)
+**Timestamp**: 2026-11-02T04:17:00+09:00 (작업 시점)
+**User Input**: (사용자 원문, 2026-11-02 결정) "지역 밖 숙소를 거점으로 고르는 것은 막는다" — 11-01 웹 QA(서울 1박 여행에 부산 숙소를 거점으로 지정 → 1일차가 부산 장소·일과 밖 시각) 결함 수정 결정이다. TRIP-1011 D8 「숨기지 않는다」를 뒤집는다.
+**AI Response**: `construction/u1-accommodation-trip/functional-design/business-rules.md` 「저장·등록·거점 (BR-U1-19~28 · 59)」 절 끝(제휴 링크 절 바로 앞)에 `[개정 · 2026-11-02 · TRIP-1703]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 거점 시트(g02) 후보는 그 밤 지역 안으로 확인된 저장 숙소 · 지역 밖으로 확인된 숙소는 후보에서 뺀다(흐림 아님) · 주소 모름·조회 중은 「위치 확인 안 됨」으로 보이고 서버가 최종 판정 · [지정] 직전 가드 · 지역 안 0곳이면 지역 안내 + 둘러보기 · 서버 거부는 같은 결정의 BE 칸 몫 · 동명 시군구 한계. BR 번호는 붙이지 않았다(같은 결정의 BE 칸이 따로 정본을 고칠 수 있어 번호 충돌을 피함). 코드 변경은 같은 브랜치(`fix/TRIP-1691-FE-misc`)의 `fix(fe)` 커밋(TRIP-1703)이다. 이 파일은 develop(#1758 병합 잔재 정리 뒤) 판에 맞춘 뒤 덧붙였다.
+**Context**: CONSTRUCTION — U1 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
