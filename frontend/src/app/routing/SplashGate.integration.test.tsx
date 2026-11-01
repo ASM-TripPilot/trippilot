@@ -23,15 +23,19 @@ import {
   primeOsPermission,
   type OsPermission,
 } from '@/test-support/pushOsFake';
+import { itinerary } from '@/test-support/itineraryFixtures';
 import { SPLASH_GATE_STUB_ROUTES } from '@/test-support/splashGateRoutes';
 
 import {
   PERMISSION_LOOKUP_WAIT_MAX_MS,
   usePermissionCatchUp,
 } from '@/app/model/usePermissionCatchUp';
+import { useGenerationWatch } from '@/app/model/useGenerationWatch';
 import { OnboardingTourPage } from '@/pages/onboarding/onboarding-tour';
+import { getGetTripsTripIdItineraryQueryKey } from '@/shared/api/index.hooks';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { promptAndRegisterPush } from '@/shared/push';
+import * as ToastModule from '@/shared/ui/Toast';
 
 import { SPLASH_MIN_VISIBLE_MS, SplashGate } from './SplashGate';
 
@@ -68,6 +72,7 @@ jest.mock('@/shared/push', () => ({
 }));
 
 // 생성 완료 감지(TRIP-1618)는 useGenerationWatch.integration.test 가 본다 — 이 파일의 라우터·캐시 흐름과 섞이지 않게 끈다.
+// 맨 아래 'SplashGate → 생성 완료 감지 배선' describe 만 실물로 되돌린다.
 jest.mock('@/app/model/useGenerationWatch', () => ({
   useGenerationWatch: jest.fn(),
 }));
@@ -1229,5 +1234,67 @@ describe('권한 안내는 진짜 라우터에서 홈보다 먼저, 한 번만 (
       expect(screen.queryByTestId('shell-splash-root')).toBeNull();
       expect(screen.getByTestId('login-root')).toBeOnTheScreen();
     });
+  });
+});
+
+/**
+ * TRIP-1618 — SplashGate → 생성 완료 감지 훅 배선. 훅만 실물로 켜고, 스플래시가 걷히기 전(하한 전 · 권한 안내가 붙잡는 동안)의
+ * 생성 전이는 알리지 않고 화면이 그려진 뒤의 전이만 한 번 알리는지 본다. 훅 자체의 전이 규칙은 useGenerationWatch.integration.test 몫.
+ * (옛 SplashGate.test G1~G4 의 "훅 호출 인자" 단언을 이 동작 단언 하나로 바꿨다.)
+ */
+describe('SplashGate → 생성 완료 감지 배선 (TRIP-1618)', () => {
+  const realGenerationWatch = jest.requireActual(
+    '@/app/model/useGenerationWatch'
+  ).useGenerationWatch as typeof useGenerationWatch;
+  const key = getGetTripsTripIdItineraryQueryKey('trip-a');
+  const running = itinerary({ tripId: 'trip-a', generationState: 'PARTIAL' });
+  const complete = itinerary({
+    tripId: 'trip-a',
+    generationState: 'COMPLETE',
+    generationSessionId: null,
+  });
+
+  let toast: jest.SpyInstance;
+
+  afterEach(() => {
+    (useGenerationWatch as jest.Mock).mockReset();
+    toast.mockRestore();
+  });
+
+  it('G 하한 전·권한 안내가 붙잡는 동안의 완료는 알리지 않고, 그려진 뒤의 완료는 한 번 알린다', () => {
+    // 준비 — 캐시에 생성 중 칸 하나. 요청이 나가지 않게 캐시를 신선하게 둔다. 권한 안내는 붙잡은 상태로 시작한다.
+    (useGenerationWatch as jest.Mock).mockImplementation(realGenerationWatch);
+    toast = jest.spyOn(ToastModule, 'showToast').mockImplementation(() => {});
+    queryClient.setDefaultOptions({ queries: { staleTime: Infinity } });
+    queryClient.setQueryData(key, running);
+    let holding = true;
+    mockCatchUp.mockImplementation(() =>
+      useSyncExternalStore(subscribeGate, () => holding)
+    );
+    renderRouter(ROUTES, { initialUrl: '/' });
+
+    // 실행 1 — 하한 전 완료 · 하한 뒤(붙잡힌 채) 재생성→완료
+    act(() => queryClient.setQueryData(key, complete));
+    act(() => {
+      jest.advanceTimersByTime(SPLASH_MIN_VISIBLE_MS);
+    });
+    expect(screen.getByTestId('shell-splash-root')).toBeOnTheScreen();
+    act(() => queryClient.setQueryData(key, running));
+    act(() => queryClient.setQueryData(key, complete));
+
+    // 단언 1
+    expect(toast).not.toHaveBeenCalled();
+
+    // 실행 2 — 권한 안내가 풀려 홈이 그려진 뒤 재생성→완료
+    act(() => {
+      holding = false;
+      gateListeners.forEach((listener) => listener());
+    });
+    expect(screen.queryByTestId('shell-splash-root')).toBeNull();
+    act(() => queryClient.setQueryData(key, running));
+    act(() => queryClient.setQueryData(key, complete));
+
+    // 단언 2
+    expect(toast).toHaveBeenCalledTimes(1);
   });
 });

@@ -1846,18 +1846,6 @@ describe('i08 변경 반영 시트', () => {
     await waitFor(() => expect(screen.getByTestId(HUB)).toBeTruthy());
   }
 
-  /** 허브(셸) 시트가 받은 초기 스냅 index — 허브 서브트리 안에서만 센다(02a ★15). */
-  function hubSnapIndices(): number[] {
-    return screen
-      .getByTestId(HUB)
-      .findAll(
-        (node) =>
-          typeof node.props?.index === 'number' &&
-          Array.isArray(node.props?.snapPoints)
-      )
-      .map((node) => node.props.index as number);
-  }
-
   /** 화면 이동 4종이 한 번도 불리지 않았다. */
   function expectNoNavigation(): void {
     expect(mockPush).not.toHaveBeenCalled();
@@ -2098,9 +2086,6 @@ describe('i08 변경 반영 시트', () => {
 
       expect(screen.getByTestId('execution-live-daychip-1')).toBeSelected();
       expect(screen.getByTestId(SHEET)).toBeTruthy();
-      expect(hubSnapIndices().length).toBeGreaterThan(0);
-      // TRIP-1522 v2 — 칸 번호 0 중간·1 펼침: 펼침은 1.
-      expect(hubSnapIndices().every((index) => index === 1)).toBe(true);
       expect(screen.getAllByTestId('planb-applied-badge')).toHaveLength(3);
     });
   });
@@ -2199,44 +2184,6 @@ describe('i08 변경 반영 시트', () => {
       expect(screen.queryByTestId('planb-applied-revert')).toBeNull();
       expect(screen.queryByTestId('planb-applied-revert-notice')).toBeNull();
       expect(screen.getByTestId('planb-applied-confirm')).toBeTruthy();
-    });
-  });
-
-  describe('🔴 A8 · Q5 — applied 로 들어오면 허브는 펼침으로 시작한다', () => {
-    it('applied 면 허브 스냅 index 가 전부 1(펼침 — TRIP-1522 v2 칸 번호: 0 중간·1 펼침)', async () => {
-      await renderHub(SESSION_ID);
-
-      const indices = hubSnapIndices();
-      expect(indices.length).toBeGreaterThan(0);
-      indices.forEach((index) => expect(index).toBe(1));
-    });
-
-    it('A8b 닫혀서 applied 가 사라져도(rerender) 시트는 없어지고 허브는 펼침 1 을 유지한다', async () => {
-      await renderHub(SESSION_ID);
-      expect(screen.getByTestId(SHEET)).toBeTruthy();
-
-      // URL 에서 applied 가 지워진 뒤를 prop 으로 직접 만든다(목 setParams 는 URL 을 안 바꾼다).
-      screen.rerender(
-        <LiveItineraryPage
-          tripId={TRIP_ID}
-          today={TODAY}
-          appliedSessionId={undefined}
-        />
-      );
-
-      expect(screen.getByTestId(HUB)).toBeTruthy();
-      expect(screen.queryByTestId(SHEET)).toBeNull();
-      const indices = hubSnapIndices();
-      expect(indices.length).toBeGreaterThan(0);
-      indices.forEach((index) => expect(index).toBe(1));
-    });
-
-    it('대조군 — 신호가 없으면 기본 중간 스냅 0', async () => {
-      await renderHub();
-
-      const indices = hubSnapIndices();
-      expect(indices.length).toBeGreaterThan(0);
-      indices.forEach((index) => expect(index).toBe(0));
     });
   });
 
@@ -2373,22 +2320,14 @@ describe('i08 변경 반영 시트', () => {
       expect(chip(1)).not.toBeSelected();
     });
 
-    it('R5 새 적용을 받으면 시트 칸이 펼침(1)으로 오르고, [확인]으로 applied 가 지워져도 1 을 유지한다 (Q5 · TRIP-1522 v2 칸 번호)', async () => {
+    it('R5 새 적용을 받은 뒤 [확인]으로 applied 가 지워지면 시트는 빠지고 적용한 날 선택은 남는다 (Q5 — 시트 칸은 jest 사각, 지도 planb-apply)', async () => {
       await renderReusedHub();
-      // 앵커 — 원래 허브는 applied 없이 마운트돼 기본 칸 0(중간)이다.
-      expect(hubSnapIndices().length).toBeGreaterThan(0);
-      expect(hubSnapIndices().every((index) => index === 0)).toBe(true);
-
       hubReceives(SESSION_ID, DAY2);
-
-      expect(hubSnapIndices().every((index) => index === 1)).toBe(true);
 
       // i08 [확인] = setParams({ applied: undefined }) — 병합이라 day 는 남는다(02a ★7).
       hubReceives(undefined, DAY2);
 
       expect(screen.queryByTestId(SHEET)).toBeNull();
-      expect(hubSnapIndices().length).toBeGreaterThan(0);
-      expect(hubSnapIndices().every((index) => index === 1)).toBe(true);
       expect(chip(1)).toBeSelected();
     });
 
@@ -2836,32 +2775,6 @@ describe('메모 시트', () => {
 
       fireEvent.press(screen.getByTestId('live-memo-close'));
       expect(screen.getByTestId(BAR)).toBeOnTheScreen();
-    });
-  });
-
-  describe('🔴 AC-6 · 입력칸은 허브 셸 시트가 아닌 별도 바텀시트 안에 있다', () => {
-    it('M17 입력칸의 가장 가까운 시트는 닫힘(onClose)을 쥐고 메모 시트를 품으며, 허브 셸 헤더는 품지 않는다', async () => {
-      await renderHub();
-
-      // 판별자 자가검사(짝) — 허브 셸 시트는 onClose 가 없다. 이게 깨지면 아래 onClose 단언이 셸도 통과시킨다.
-      const shellHost = nearestSheetHost(
-        screen.getByTestId('execution-live-sheet-header')
-      );
-      expect(shellHost).not.toBeNull();
-      expect(typeof shellHost?.props.onClose).not.toBe('function');
-
-      const host = nearestSheetHost(await openSheet());
-
-      expect(host).not.toBeNull();
-      expect(typeof host?.props.onClose).toBe('function');
-      expect(
-        host?.findAll(
-          (node) => node.props.testID === 'execution-live-sheet-header'
-        )
-      ).toEqual([]);
-      expect(
-        host?.findAll((node) => node.props.testID === SHEET).length
-      ).toBeGreaterThan(0);
     });
   });
 

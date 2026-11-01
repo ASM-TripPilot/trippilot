@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { act, render, screen, within } from '@testing-library/react-native';
+import { act, render, screen } from '@testing-library/react-native';
 import { QueryClient } from '@tanstack/react-query';
 import { AxiosError } from 'axios';
 import * as Notifications from 'expo-notifications';
@@ -17,14 +17,14 @@ import {
  * ── 부팅 골격 ─────────────────────────────────────────────────────────
  *  (1) **첫 렌더에 곧바로** SplashGate 가 그려진다(부팅을 붙잡는 비동기 게이트가 없다 — 폰트는 expo-font 플러그인이
  *      네이티브 번들에 넣어 JS 가 기다리지 않는다, TRIP-1361),
- *  (2) 그 시점에 네이티브 스플래시가 내려간다(무한 정지 화면 금지),
- *  (3) GestureHandlerRootView 래핑이 남아 있다(로그인 바텀시트 동작의 전제).
+ *  (2) 그 시점에 네이티브 스플래시가 내려간다(무한 정지 화면 금지).
+ *  GestureHandlerRootView·SafeAreaProvider 감싸는 순서와 테마 배경색은 생김새·트리라 jest 가 아니라 실화면 QA 가 본다
+ *  (기능 지도 app-launch `launch-safe-area` · 바텀시트는 빠지면 실화면에서 바로 죽는다).
  *
  * ── SafeAreaProvider (D4) ────────────────────────────────────────────
  * ⚠️ "SafeAreaProvider 가 있으면서도 첫 렌더에 자식이 그려진다"는 형식적 회귀 문구가 아니라 **실측된 함정**이다.
  *    SafeAreaProvider 는 네이티브 레이아웃에서 인셋 값을 받기 전까지 **자식을 렌더하지 않는다** — jest 에는
- *    레이아웃 패스가 없어 그 값이 영영 오지 않으므로 `initialMetrics` 를 줘야 자식이 그려진다. 그 짝은 위 (2) 가
- *    SafeAreaProvider 가 실재하는 트리에서 지킨다(E1 이 그 실재를 잠근다).
+ *    레이아웃 패스가 없어 그 값이 영영 오지 않으므로 `initialMetrics` 를 줘야 자식이 그려진다. 그 짝은 위 (1) 이 지킨다.
  *
  * ── QueryClientProvider (TRIP-179 AC-3 · D4) ─────────────────────────
  * Provider 가 `SplashGate` 바깥에 있어야 프로브가 진짜 QueryClient 를 쥔다. 잠그는 것은 "값의 위치"가 아니라
@@ -55,7 +55,7 @@ jest.mock('expo-splash-screen', () => ({
   hideAsync: mockHideAsync,
 }));
 
-// 네비게이션 라이브러리는 ESM 배포라 node 버킷 jest 가 못 읽는다 — 테마 값만 확인하는 대역(TRIP-1434).
+// 네비게이션 라이브러리는 ESM 배포라 node 버킷 jest 가 못 읽는다 — 대역으로 바꾼다(TRIP-1434).
 jest.mock('@react-navigation/native', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('@/test-support/navigationThemeMock')
@@ -69,10 +69,6 @@ jest.mock('@/app/routing/SplashGate', () =>
 );
 
 // jestSetup 이 먼저 돌아야 하므로 import 문(호이스팅) 대신 require 로 순서를 고정한다.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { GestureHandlerRootView } = require('react-native-gesture-handler');
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { SafeAreaProvider } = require('react-native-safe-area-context');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const RootLayout = require('@routes/_layout').default as ComponentType;
 type ToastModule = typeof import('@/shared/ui/Toast');
@@ -106,42 +102,6 @@ describe('루트 레이아웃 — 부팅 골격', () => {
 
     expect(screen.getByTestId('query-client-probe')).toBeOnTheScreen();
     expect(mockHideAsync).toHaveBeenCalled();
-  });
-
-  it('GestureHandlerRootView 로 감싸 그린다(바텀시트 동작의 전제)', () => {
-    render(<RootLayout />);
-
-    expect(screen.UNSAFE_getByType(GestureHandlerRootView)).toBeTruthy();
-  });
-});
-
-describe('루트 레이아웃 — 앱 테마 배경 (TRIP-1434 Q-002)', () => {
-  it('내비게이션 테마 배경을 canvas 흰색으로 덮어 안전영역에 회색이 비치지 않게 한다', () => {
-    const { ThemeProvider } = require('@react-navigation/native') as {
-      ThemeProvider: jest.Mock;
-    };
-    ThemeProvider.mockClear();
-
-    render(<RootLayout />);
-
-    const theme = ThemeProvider.mock.calls[0][0].value;
-    expect(theme.colors.background).toBe('#FFFFFF');
-    // 배선 짝 — 테마가 화면 Stack(SplashGate) 을 실제로 감싼다(토스트 호스트만 감싸도 값 단언은 green 이다).
-    expect(
-      within(screen.getByTestId('mock-theme-provider')).getByTestId(
-        'query-client-probe'
-      )
-    ).toBeOnTheScreen();
-  });
-});
-
-describe('루트 레이아웃 — SafeAreaProvider 전역 도입 (AC E1)', () => {
-  it('SafeAreaProvider 가 GestureHandlerRootView 안쪽에 존재한다 (D4)', () => {
-    render(<RootLayout />);
-
-    const gestureRoot = screen.UNSAFE_getByType(GestureHandlerRootView);
-    // 바깥/안쪽 순서가 뒤바뀌면 제스처 루트가 인셋 컨텍스트 밖으로 나가 바텀시트 계산이 어긋난다.
-    expect(within(gestureRoot).UNSAFE_getByType(SafeAreaProvider)).toBeTruthy();
   });
 });
 

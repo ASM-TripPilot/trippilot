@@ -28,6 +28,8 @@ routes:
 - `stay-search-open-detail` 카드를 누르면 testID: `stay-detail`로 간다.
 - `stay-search-fab` 흰 하트 FAB → 저장한 숙소(e04), 분홍 ＋ FAB → 숙소 등록(e05).
 - `stay-search-tabbar` 하단 탭바 복제본의 탭을 누르면 스택 밑 `(tabs)`의 해당 탭으로 돌아간다.
+- `stay-toast-above-fab` FAB 가 있는 화면에서 토스트는 FAB 묶음 위에 떠서 가려지지 않는다. *(2026-11-01 jest 축소로 실화면 전용)*
+- `stay-price-chip` 가격대를 고르면 칩이 연핑크·선택됨으로 바뀌고, 가격대 시트는 아래로 끌어 닫을 수 있다. *(2026-11-01 jest 축소로 실화면 전용)*
 
 ## How to get to it (user POV)
 

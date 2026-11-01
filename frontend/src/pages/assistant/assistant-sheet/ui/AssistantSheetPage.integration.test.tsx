@@ -57,15 +57,8 @@ import { routerSpies } from '@/test-support/expoRouterMock';
 jest.setTimeout(20000);
 
 // 생성 클라이언트의 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다(선례 동형).
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 const { back: mockBack, replace: mockReplace, push: mockPush } = routerSpies;
 jest.mock('expo-router', () =>

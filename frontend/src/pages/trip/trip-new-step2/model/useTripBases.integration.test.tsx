@@ -1,6 +1,4 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -9,7 +7,8 @@ import type { BaseAssignment, SavedStay } from '@/shared/api/index.schemas';
 
 import { useSavedStays } from '@/features/trip';
 import { useAssignBase, useTripBases } from '@/features/assign-trip-base';
-import { newTestQueryClient } from '@/test-support/queryRender';
+import { createWrapper } from '@/test-support/mswHookHarness';
+import { BASE } from '@/test-support/apiBase';
 
 /**
  * TRIP-225 g02 — 거점 조회·배정 훅이 **실제로 나간 요청**으로 계약을 지킨다.
@@ -51,7 +50,6 @@ jest.mock('@/shared/storage', () => ({
 }));
 
 /** authWiring.integration.test.ts:59 와 같은 값(리포 관례). */
-const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = 'trip-1';
 
 const STAY_FIXTURE: SavedStay = {
@@ -124,21 +122,6 @@ afterEach(() => {
 });
 
 afterAll(() => server.close());
-
-function createWrapper() {
-  const client = newTestQueryClient({
-    // gcTime: 0 — 기본값이 만드는 타이머가 테스트 종료 후에도 살아남아 Node 프로세스를
-    // 붙잡는다. mutation 기본 gcTime은 5분이라 그쪽도 반드시 0으로 둔다
-    // (`useCreateTrip.integration.test.tsx:157-162` 실측).
-    gcTime: 0,
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return Wrapper;
-}
 
 /** 두 조회를 **활성**으로 띄운 관찰용 훅 — 무효화가 실제 재요청으로 이어지는지 보려면 그
  * 쿼리가 활성이어야 한다(활성 쿼리만 무효화 즉시 다시 받는다). */

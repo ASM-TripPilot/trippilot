@@ -1,0 +1,410 @@
+{
+  "src/__tests__/devPreviewReleaseGate.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/__tests__/locationAutomationBuildConfig.test.ts": {
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
+  "src/app/routing/SplashGate.accountBoundary.test.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/routing/SplashGate.integration.test.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/routing/SplashGate.test.tsx": {
+    "no-restricted-properties": {
+      "count": 7
+    }
+  },
+  "src/entities/itinerary-slot/ui/SlotProgressCard.test.tsx": {
+    "no-restricted-properties": {
+      "count": 6
+    }
+  },
+  "src/entities/itinerary-slot/ui/SlotStopCard.test.tsx": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "src/entities/stay/ui/StaySearchCard.test.tsx": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "src/entities/trip/ui/PastTripRow.compact.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/entities/trip/ui/PastTripRow.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/entities/trip/ui/TripCard.cover.test.tsx": {
+    "no-restricted-properties": {
+      "count": 5
+    }
+  },
+  "src/features/auth/model/prefetchTrips.test.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/assistant/assistant-sheet/ui/AssistantCards.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/pages/assistant/assistant-sheet/ui/AssistantSheetPage.integration.test.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/assistant/assistant-sheet/ui/AssistantSheetPage.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/pages/assistant/assistant-sheet/ui/MessageList.test.tsx": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "src/pages/auth/login/lib/nativeSdkLazyBoundary.test.ts": {
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
+  "src/pages/auth/reconsent/ui/ReconsentPage.test.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/explore/explore-landing/ui/ExploreLandingScreen.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/pages/explore/place-explore/ui/PlaceExploreScreen.memo.test.tsx": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "src/pages/explore/place-explore/ui/PlaceExploreScreen.test.tsx": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "src/pages/home/ui/HomeScreen.heroMemo.test.tsx": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "src/pages/home/ui/HomeScreen.test.tsx": {
+    "no-restricted-properties": {
+      "count": 9
+    }
+  },
+  "src/pages/itinerary/itinerary-copick/ui/SlotFillScreen.test.tsx": {
+    "no-restricted-properties": {
+      "count": 4
+    }
+  },
+  "src/pages/itinerary/itinerary-draft/ui/DraftPage.integration.test.tsx": {
+    "no-restricted-properties": {
+      "count": 5
+    }
+  },
+  "src/pages/itinerary/itinerary-generating/ui/GeneratingPage.hookMock.test.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/itinerary/itinerary-generating/ui/GeneratingScreen.test.tsx": {
+    "no-restricted-properties": {
+      "count": 5
+    }
+  },
+  "src/pages/itinerary/itinerary-list/ui/MyTripsListPage.integration.test.tsx": {
+    "no-restricted-properties": {
+      "count": 3
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/itinerary/itinerary-manual/ui/ManualPlanPage.integration.test.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "src/pages/itinerary/itinerary-manual/ui/PlaceAddPage.integration.test.tsx": {
+    "no-restricted-properties": {
+      "count": 3
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "src/pages/itinerary/itinerary-method/ui/ItineraryMethodPage.integration.test.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "src/pages/live/live-itinerary/ui/LiveBottomBar.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/pages/live/live-itinerary/ui/LiveHubView.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/pages/live/live-itinerary/ui/LiveItineraryPage.directions.integration.test.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/live/live-itinerary/ui/LiveItineraryPage.integration.test.tsx": {
+    "no-restricted-properties": {
+      "count": 4
+    }
+  },
+  "src/pages/live/live-itinerary/ui/MemoSheet.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/pages/live/live-place/ui/PlaceDetailScreen.test.tsx": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "src/pages/live/planb-draft/model/useReplanSession.integration.test.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/live/planb-draft/ui/PlanbDraftPage.integration.test.tsx": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "src/pages/live/planb-draft/ui/PlanbSolvingPage.integration.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/pages/live/planb-draft/ui/ReplanDraftView.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/pages/live/planb-request/ui/PlanbRequestPage.integration.test.tsx": {
+    "no-restricted-properties": {
+      "count": 2
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "src/pages/magazine/ui/MagazinePage.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/pages/magazine/ui/MagazineScreen.test.tsx": {
+    "no-restricted-properties": {
+      "count": 5
+    }
+  },
+  "src/pages/onboarding/onboarding-nickname/ui/NicknameScreen.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/pages/onboarding/onboarding-terms/ui/TermsScreen.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/pages/onboarding/onboarding-tour/ui/OnboardingTourView.test.tsx": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "src/pages/record/share-card/ui/ShareCardPage.integration.test.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/record/share-card/ui/ShareCardScreen.test.tsx": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "src/pages/record/trip-records/ui/TripRecordsPage.integration.test.tsx": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "src/pages/record/trip-records/ui/TripRecordsView.test.tsx": {
+    "no-restricted-properties": {
+      "count": 4
+    }
+  },
+  "src/pages/record/trip-records/ui/VisitRecordCard.checkPop.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/pages/record/trip-records/ui/VisitRecordCard.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/pages/record/trip-summary/ui/TripSummaryPage.integration.test.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/settings/my-page/ui/MyPage.test.tsx": {
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "src/pages/settings/settings/model/preferenceSummary.test.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/pages/settings/settings/ui/DeleteAccountDialog.test.tsx": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "src/pages/settings/settings/ui/NicknameEditRow.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/pages/settings/settings/ui/SettingsPage.hookMock.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/pages/stay/stay-detail/ui/StayDetailPage.integration.test.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/stay/stay-search/ui/StaySearchScreen.separator.test.tsx": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "src/pages/trip/trip-new-step2/ui/StaySelectSheet.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/pages/trip/trip-new-step2/ui/TripNewStep2Page.integration.test.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/shared/map/MapView.test.tsx": {
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "src/shared/ui/GlassSurface.test.tsx": {
+    "no-restricted-properties": {
+      "count": 8
+    }
+  },
+  "src/shared/ui/HeartButton.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/shared/ui/PlacePhoto.test.tsx": {
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "src/shared/ui/Skeleton.test.tsx": {
+    "no-restricted-properties": {
+      "count": 4
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/shared/ui/Toast.test.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "src/test-support/barMotionProbe.ts": {
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "src/test-support/editDragList.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/test-support/fabAnchorProbe.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/widgets/map-sheet-shell/ui/DistanceConnector.test.tsx": {
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "src/widgets/map-sheet-shell/ui/EditorView.test.tsx": {
+    "no-restricted-properties": {
+      "count": 12
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/widgets/map-sheet-shell/ui/GenerationProgressCard.indeterminate.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/widgets/map-sheet-shell/ui/GenerationProgressCard.test.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/widgets/map-sheet-shell/ui/MapSheetShell.test.tsx": {
+    "no-restricted-properties": {
+      "count": 2
+    },
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  },
+  "src/widgets/time-sheet/ui/TimeSheet.test.tsx": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  }
+}

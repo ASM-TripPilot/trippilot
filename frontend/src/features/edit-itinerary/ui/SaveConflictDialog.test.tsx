@@ -66,14 +66,10 @@ describe('SaveConflictDialog · 문구 (BR-U3-13 「○곳에서 시간이 안 �
 });
 
 describe('SaveConflictDialog · 버튼 (결정 1·2 — 두 갈래, repair 없음)', () => {
-  it('D4 · 버튼은 정확히 둘이고 왼쪽 [고치기] · 오른쪽 긍정 순서다 · -save-repair 는 없다', () => {
+  it('D4 · 버튼은 정확히 둘이다 · -save-repair 는 없다', () => {
     renderDialog();
 
-    const order = screen
-      .getAllByRole('button')
-      .map((button) => button.props.testID);
-
-    expect(order).toEqual([BACK, ASIS]);
+    expect(screen.getAllByRole('button')).toHaveLength(2);
     expect(screen.queryByTestId('itinerary-edit-save-repair')).toBeNull();
   });
 

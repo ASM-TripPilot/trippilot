@@ -1,10 +1,6 @@
-import type { ReactElement, ReactNode } from 'react';
+import type { ReactElement } from 'react';
 import { http, HttpResponse } from 'msw';
-import {
-  QueryClient,
-  QueryClientProvider,
-  useQueryClient,
-} from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -27,6 +23,7 @@ import type {
   Itinerary,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { createGcZeroWrapper } from '@/test-support/queryRender';
 
 import { ItineraryEditPage } from './ItineraryEditPage';
 
@@ -36,15 +33,8 @@ import { ItineraryEditPage } from './ItineraryEditPage';
  * 그대로다(언마운트 안 됨) — 그래서 추가 PUT 을 내는 쪽은 같은 QueryClient 의 별도 훅 호출자(AddInFlight)로 흉내낸다.
  * 서버는 PUT 본문을 그대로 "저장된 일정"으로 삼는다(전체 교체 계약) — 마지막에 서버에 남은 슬롯으로 잰다.
  */
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 const mockBack = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({
@@ -199,18 +189,12 @@ describe('TRIP-1498 후속 · 장소 추가 PUT 중 편집기 [저장]', () => {
   });
 
   it('추가 PUT 이 응답 전일 때 [저장]을 눌러도 추가한 장소는 서버에 남는다', async () => {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
-    const Wrapper = ({ children }: { children: ReactNode }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
     render(
       <>
         <ItineraryEditPage tripId={TRIP_ID} />
         <AddInFlight />
       </>,
-      { wrapper: Wrapper }
+      { wrapper: createGcZeroWrapper() }
     );
     await screen.findByTestId(`slot-stopcard-${buildSlotKey(DAY, 'poi-a')}`);
 

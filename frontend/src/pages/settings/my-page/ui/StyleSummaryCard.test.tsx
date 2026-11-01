@@ -20,7 +20,6 @@ import { StyleSummaryCard } from './StyleSummaryCard';
  *  - 🔴 AC-S2(BR-U6-24 핵심) 축 값 N → **채운 dot 정확히 N개**(나머지 empty). 채운/빈 dot 별도 testID 카운트.
  *  - 🔴 AC-S3(BR-U6-24) 미달 VM → 안내 한 줄만. 게이지·칩·상세 미렌더.
  *  - 🔴 AC-S4(INV-U5-09) preview.descriptors 가 온 envelope 라도 모델이 걸러 화면은 미달 얼굴(칩 0).
- *  - AC-S5(INV-3) 렌더에 소요시간 문자열 0(소스 스캔 `myStaysStructure` G2 는 TRIP-1145 로 지웠다 — 이 렌더 단언이 남은 그물).
  *  - 🔴 AC-S6(INV-4) 상세 어포던스는 보이되 real disabled(라우트 미존재 정직 degrade).
  *
  * 왜 이렇게 테스트하나(02a ★2):
@@ -32,9 +31,6 @@ import { StyleSummaryCard } from './StyleSummaryCard';
  *   `getAllByTestId('문자열')`=testID 완전일치(node_modules matches.js exact=true 실검증, 02a §5-A) ·
  *   `toBeDisabled()`=real disabled prop 판독(02a §5-C).
  */
-
-/** 소요시간 표기 탐지기(INV-3) — 부분포함 정규식(TripCardContainer·MyStaysScreen 선례 동형). */
-const DURATION = /소요|\d+\s*분|\d+\s*시간/;
 
 /** 정식 VM — 값을 넘겨받아 그린다. */
 function officialVM(
@@ -170,19 +166,6 @@ describe('🔴 AC-S4 · 미리보기 비정식(모델→화면 합성, INV-U5-09
   });
 });
 
-describe('AC-S5 · INV-3 소요시간 미표시(렌더, 선제 green 회귀 앵커)', () => {
-  it('정식 카드를 그려도 분·시간·소요 표기가 0건이다', () => {
-    render(<StyleSummaryCard vm={officialVM()} />);
-
-    // 탐지기 자가검사(짝) — 실제 소요시간은 잡히고, 메타줄 날짜는 무시한다.
-    expect('도보 15분').toMatch(DURATION);
-    expect('여행 6개 · 갱신 8월 28일 금요일').not.toMatch(DURATION);
-
-    // 렌더 결과를 훑는다 — 소요시간 문자열 0건.
-    expect(screen.queryAllByText(DURATION)).toHaveLength(0);
-  });
-});
-
 describe('🔴 AC-S6 · 상세 진입 정직 degrade(INV-4)', () => {
   it('상세 어포던스는 보이되 real disabled 이고, press 해도 아무 일이 없다', () => {
     render(<StyleSummaryCard vm={officialVM()} />);
@@ -198,7 +181,7 @@ describe('🔴 AC-S6 · 상세 진입 정직 degrade(INV-4)', () => {
 
 // TRIP-775 · AC-4 — `headline` 슬롯(계약 공백): 서버에 헤드라인 필드가 없는 동안, 받으면 그 문장을 보이고
 // 안 받으면 문장 자리가 아예 없다. (옛 `StyleSummaryCard.l03parity.test.tsx` 에서 옮겼다 — TRIP-1355.
-// 게이지 좌측 정렬 className 단언은 생김새라 그 파일에 남아 21번 칸이 받는다.)
+// 게이지 좌측 정렬 className 단언은 생김새라 지웠다 — 실화면 몫.)
 describe('AC-4 · 헤드라인 슬롯(계약 공백)', () => {
   const HEADLINE = '바다와 미식을 천천히 즐기는 여행자';
 

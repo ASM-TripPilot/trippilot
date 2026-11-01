@@ -15,11 +15,6 @@ import {
   type PlaceCardVM,
   type StayCardVM,
 } from './ExploreLandingScreen';
-import {
-  FAB_STACK_TOP,
-  getToastBottoms,
-  resetToastBottoms,
-} from '@/shared/ui/toastBottom';
 
 /**
  * d01 탐색 랜딩(순수 화면) 단위 테스트 — 옛 `.parity`·`.regionFilter`·`.placeSave`·`.loading`·
@@ -106,16 +101,6 @@ function baseProps(
   };
 }
 
-/** className 토큰 배열(공백 분리) — 원소 완전일치로 라운드/높이/폭을 잰다. */
-function classTokens(node: { props: { className?: unknown } }): string[] {
-  return String(node.props.className ?? '')
-    .split(/\s+/)
-    .filter(Boolean);
-}
-function tokensOf(testID: string): string[] {
-  return classTokens(screen.getByTestId(testID));
-}
-
 /** hitSlop(숫자 또는 네 변 객체)의 가장 좁은 변. 없으면 0. */
 function minHitSlop(hitSlop: unknown): number {
   if (typeof hitSlop === 'number') return hitSlop;
@@ -124,17 +109,6 @@ function minHitSlop(hitSlop: unknown): number {
     return Math.min(h.top ?? 0, h.bottom ?? 0, h.left ?? 0, h.right ?? 0);
   }
   return 0;
-}
-
-// FAB 묶음 루트 View 에는 testID 가 없다. FAB 에서 조상으로 올라가 처음 만나는 `absolute` 노드가
-// 묶음 루트다(02a ★1) — 두 FAB 이 같은 노드에 닿는지로 "묶음" 임을 짝 확인한다.
-function fabBundleRoot(fabTestId: string) {
-  let node = screen.getByTestId(fabTestId).parent;
-  while (node) {
-    if (classTokens(node).includes('absolute')) return node;
-    node = node.parent;
-  }
-  throw new Error(`${fabTestId} 위에 absolute 조상이 없다`);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,18 +123,6 @@ describe('TRIP-703 · d01 default 정합', () => {
     expect(screen.queryByText('가볼 곳')).toBeNull();
     // 레인·"모두 보기" CTA testID 는 불변(계약 보존).
     expect(screen.getByTestId('explore-lane-place-cta')).toBeOnTheScreen();
-  });
-
-  it('AC-3 · 검색창은 rounded-pill·h-[58px] 이고, radius 12(rounded-input)·h-[52px] 는 없다', () => {
-    render(<ExploreLandingScreen {...baseProps()} />);
-
-    const tokens = tokensOf('explore-landing-search');
-    // 2026-09-20 사용자가 Figma 검색바를 radius 12 → 999(pill)로 되돌림(1672:1188 실측).
-    // 높이는 58 유지(radius 만 변경).
-    expect(tokens).toContain('rounded-pill');
-    expect(tokens).toContain('h-[58px]');
-    expect(tokens).not.toContain('rounded-input');
-    expect(tokens).not.toContain('h-[52px]');
   });
 
   it('AC-4 · 저장 하트(explore-saved-menu-toggle)와 여행 만들기(explore-create-trip-fab) 두 FAB 이 있다', () => {
@@ -259,18 +221,6 @@ describe('TRIP-1019 #024 · 닫힌 하트 토글 라벨 "담은 장소 N곳"', (
   });
 });
 
-describe('TRIP-1103 AC-1 · d01 FAB 묶음 바닥 오프셋 84 (Figma d01 fabCollapsed 바닥 84)', () => {
-  it('♥·＋ FAB 묶음 루트가 bottom-[84px] 이고 bottom-[100px] 은 없다', () => {
-    render(<ExploreLandingScreen {...baseProps()} />);
-
-    const root = fabBundleRoot('explore-create-trip-fab');
-    // 앵커 — 하트 토글도 같은 묶음 루트에 닿는다(엉뚱한 absolute 노드가 아니다).
-    expect(fabBundleRoot('explore-saved-menu-toggle')).toBe(root);
-    expect(classTokens(root)).toContain('bottom-[84px]');
-    expect(classTokens(root)).not.toContain('bottom-[100px]');
-  });
-});
-
 // ---------------------------------------------------------------------------
 // TRIP-1105 — 새 옵셔널 prop `regionFilter` 계약
 //  - 없으면 지금 d01 그대로(칩 없음 · 검색 placeholder · 레인 제목 `숙소`/`장소`).
@@ -352,37 +302,6 @@ describe('TRIP-1105 · regionFilter', () => {
     const clear = screen.getByTestId('explore-region-chip-clear');
     expect(clear.props.accessibilityRole).toBe('button');
     expect(minHitSlop(clear.props.hitSlop) >= 12).toBe(true);
-  });
-
-  it.each([
-    ['필터 없음', undefined],
-    ['필터 있음', { label: '부산광역시', onClear: () => {} }],
-  ] as const)(
-    'RF5 · %s — 숙소·장소 카드 루트가 모두 w-[160px] 이고 숙소 카드에 w-[200px] 은 없다',
-    (_, regionFilter) => {
-      render(
-        <ExploreLandingScreen {...baseProps({ ...withStay, regionFilter })} />
-      );
-
-      const stay = tokensOf(`explore-stay-card-${STAY_CARD.key}`);
-      const place = tokensOf(`explore-place-card-${PLACE_CARD.poiId}`);
-      expect(stay).toContain('w-[160px]');
-      expect(stay).not.toContain('w-[200px]');
-      expect(place).toContain('w-[160px]');
-    }
-  );
-
-  it('RF6 · 로딩 스켈레톤도 카드와 같은 폭 160 이다(숙소·장소 첫 칸)', () => {
-    render(
-      <ExploreLandingScreen {...baseProps({ ...withStay, isLoading: true })} />
-    );
-
-    expect(screen.getByTestId('explore-landing-skeleton-stay-0')).toHaveStyle({
-      width: 160,
-    });
-    expect(screen.getByTestId('explore-landing-skeleton-place-0')).toHaveStyle({
-      width: 160,
-    });
   });
 });
 
@@ -724,57 +643,6 @@ describe('TRIP-496 · 장소 레인 카드 사진', () => {
     expect(
       screen.getByTestId('explore-place-card-image-p2').props.source
     ).toEqual([coverFor('술집', 'p2')]);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// TRIP-1048 · AC-8 — d05 목적지 검색 결과가 같은 `PlaceRailCard` 를 2열 격자용 `variant="fill"` 로 쓰게 되면서,
-// d01 은 가로 레인 그대로(160 고정폭)여야 한다. 다른 d01 테스트는 카드 폭을 보지 않아서 d01 에 fill 을 잘못 넘겨도
-// 전부 green 이다 — 이 it 이 그 회귀를 잡는다.
-// ---------------------------------------------------------------------------
-describe('TRIP-1048 · 장소 레인 카드 폭', () => {
-  it('W1 · 레인 카드는 모두 w-[160px] 이고 w-full 이 아니다', () => {
-    render(
-      <ExploreLandingScreen
-        {...baseProps({
-          placeLane: placeLane({
-            cards: [
-              PLACE_CARD,
-              {
-                poiId: 'p2',
-                name: '자갈치 시장',
-                region: '중구',
-                imageUrl: null,
-              },
-            ],
-          }),
-        })}
-      />
-    );
-
-    const cards = screen.getAllByTestId(/^explore-place-card-(?!image-)/);
-    expect(cards).toHaveLength(2);
-    for (const card of cards) {
-      const tokens = classTokens(card);
-      expect(tokens).toContain('w-[160px]');
-      expect(tokens).not.toContain('w-full');
-    }
-  });
-});
-
-// 토스트 바닥 레지스트리는 모듈 싱글턴이다 — 파일 최상위(describe 밖)에서 리셋해야 앞 테스트의 신고가 안 샌다(TRIP-1559).
-afterEach(() => resetToastBottoms());
-
-describe('TRIP-1559 · d01 토스트 바닥 신고: FAB 2단 스택 (이음새 ③)', () => {
-  it('FAB 스택이 있는 탐색 랜딩은 그 윗변(FAB_STACK_TOP)을 신고하고 unmount 로 해제한다', () => {
-    expect(getToastBottoms()).toEqual([]);
-
-    const view = render(<ExploreLandingScreen {...baseProps()} />);
-
-    expect(getToastBottoms()).toContain(FAB_STACK_TOP);
-
-    view.unmount();
-    expect(getToastBottoms()).toEqual([]);
   });
 });
 

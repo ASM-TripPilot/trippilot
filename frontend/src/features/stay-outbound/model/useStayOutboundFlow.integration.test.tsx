@@ -22,15 +22,8 @@ import { useStayOutboundFlow } from './useStayOutboundFlow';
  * 3동작 뼈대: 준비=로그인·서버 저장값 → 실행=request(target) / 시트 콜백 → 단언=openURL 인자·sheetProps.
  */
 
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 jest.mock('expo-linking', () => ({
   openURL: jest.fn().mockResolvedValue(true),

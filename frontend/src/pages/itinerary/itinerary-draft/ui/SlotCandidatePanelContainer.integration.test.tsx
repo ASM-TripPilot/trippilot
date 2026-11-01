@@ -1,6 +1,4 @@
-import type { ReactNode } from 'react';
 import { delay, http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -23,6 +21,14 @@ import type {
 } from '@/shared/api/index.schemas';
 import { getGetTripsTripIdItineraryQueryKey } from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
+import {
+  DAY1,
+  DAY2,
+  itinerary as baseItinerary,
+  TRIP_ID,
+} from '@/test-support/itineraryFixtures';
+import { BASE, serveItinerary } from '@/test-support/mswItinerary';
 
 import { SlotCandidatePanelContainer } from './SlotCandidatePanelContainer';
 
@@ -38,15 +44,8 @@ import { SlotCandidatePanelContainer } from './SlotCandidatePanelContainer';
  */
 
 // 생성 클라이언트의 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다(선례 동형).
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
@@ -74,10 +73,6 @@ describe('후보 조회·선택·교체 배선', () => {
    * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=열고 라디오+확정 → 단언=나간 요청·보이는 것.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-  const DAY1 = '2026-06-10';
-  const DAY2 = '2026-06-11';
   const CURRENT_SLOT_KEY = buildSlotKey(DAY1, 'a');
 
   /** day1=[a(09:30–11:00 · category 문화) · b] · day2=[c](endsNextDay). 교체 대상은 day1 의 a. */
@@ -126,18 +121,11 @@ describe('후보 조회·선택·교체 배선', () => {
         ],
       },
     ];
-    return {
+    return baseItinerary({
       itineraryId: 'itin-1',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days,
-    };
+    });
   }
 
   const CANDIDATES = {
@@ -170,11 +158,13 @@ describe('후보 조회·선택·교체 배선', () => {
     setAccessToken('valid-access');
     putHandler = () => HttpResponse.json(itinerary());
 
-    server.use(
-      http.get(`${BASE}/trips/:tripId/itinerary`, () => {
+    serveItinerary(server, {
+      itinerary: () => {
         getCalls += 1;
         return HttpResponse.json(itinerary());
-      }),
+      },
+    });
+    server.use(
       http.post(
         `${BASE}/trips/:tripId/itinerary/slot-candidates`,
         async ({ request }) => {
@@ -197,21 +187,14 @@ describe('후보 조회·선택·교체 배선', () => {
   });
 
   function renderContainer() {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
+    const client = newTestQueryClient({ gcTime: 0 });
     return render(
       <SlotCandidatePanelContainer
         tripId={TRIP_ID}
         slotKey={CURRENT_SLOT_KEY}
         onClose={mockClose}
       />,
-      { wrapper: Wrapper }
+      { wrapper: createWrapper(client) }
     );
   }
 
@@ -338,12 +321,12 @@ describe('후보 조회·선택·교체 배선', () => {
     });
 
     it('K9 · 경고3 — GET 미도착 중 확정 → PUT 0(빈 days 전체교체 방지)', async () => {
-      server.use(
-        http.get(`${BASE}/trips/:tripId/itinerary`, async () => {
+      serveItinerary(server, {
+        itinerary: async () => {
           await delay('infinite');
           return HttpResponse.json(itinerary());
-        })
-      );
+        },
+      });
       renderContainer();
       await selectAndConfirm('X');
 
@@ -366,15 +349,15 @@ describe('후보 조회·선택·교체 배선', () => {
     it('K11 · AC-11(★ PARTIAL 게이트 handleConfirm) — PARTIAL 중 라디오+확정 → PUT 0', async () => {
       // 준비 — GET 이 PARTIAL(day1 도착)로 정착. data 는 있어 콜드캐시(K9)와 달리 throw 안 나고,
       // 가드가 없으면 "교체하기"가 그대로 day1-only 전체교체 PUT 을 쏜다(traps-itinerary TRIP-467/483 잔여).
-      server.use(
-        http.get(`${BASE}/trips/:tripId/itinerary`, () => {
+      serveItinerary(server, {
+        itinerary: () => {
           getCalls += 1;
           return HttpResponse.json({
             ...itinerary(),
             generationState: 'PARTIAL',
           });
-        })
-      );
+        },
+      });
       renderContainer();
       await screen.findByTestId('itinerary-candidate-radio-X');
       await waitFor(() => expect(getCalls).toBe(1));
@@ -422,9 +405,6 @@ describe('조회 중·실패·지연', () => {
    * 3동작 뼈대: 준비=POST 호출 순번별 응답 계획 → 실행=시트 열기·시간 흘리기·[다시 시도] → 단언=얼굴·요청 수.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-  const DAY1 = '2026-06-10';
   const SLOT_KEY = buildSlotKey(DAY1, 'a');
 
   /** `resolveSlotSwapError` 문구(slotSwapError.ts MESSAGE) — 화면에 그대로 떠야 한다. */
@@ -448,16 +428,9 @@ describe('조회 중·실패·지연', () => {
   } as const;
 
   function itinerary(): Itinerary {
-    return {
+    return baseItinerary({
       itineraryId: 'itin-1',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days: [
         {
           date: DAY1,
@@ -477,7 +450,7 @@ describe('조회 중·실패·지연', () => {
           ],
         },
       ],
-    };
+    });
   }
 
   const CANDIDATES = {
@@ -559,10 +532,8 @@ describe('조회 중·실패·지연', () => {
     putHandler = () => HttpResponse.json(itinerary());
     setAccessToken('valid-access');
 
+    serveItinerary(server, { itinerary: () => itinerary() });
     server.use(
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(itinerary())
-      ),
       http.post(
         `${BASE}/trips/:tripId/itinerary/slot-candidates`,
         async ({ request }) => {
@@ -583,21 +554,14 @@ describe('조회 중·실패·지연', () => {
   });
 
   function renderContainer() {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
+    const client = newTestQueryClient({ gcTime: 0 });
     return render(
       <SlotCandidatePanelContainer
         tripId={TRIP_ID}
         slotKey={SLOT_KEY}
         onClose={jest.fn()}
       />,
-      { wrapper: Wrapper }
+      { wrapper: createWrapper(client) }
     );
   }
 
@@ -883,9 +847,6 @@ describe('후보 이름·태그·사진', () => {
    * 3동작: 준비=가짜 서버 응답(GET 일정 + POST 후보) → 실행=컨테이너 마운트(=시트 열림) → 단언=보이는 leaf.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-  const DAY1 = '2026-06-10';
   const CURRENT_SLOT_KEY = buildSlotKey(DAY1, 'a');
 
   const CURRENT_IMG = 'https://img.example/current.jpg';
@@ -894,16 +855,9 @@ describe('후보 이름·태그·사진', () => {
   const RAW_ID = 'poi-raw-7788';
 
   function itinerary(): Itinerary {
-    return {
+    return baseItinerary({
       itineraryId: 'itin-1',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days: [
         {
           date: DAY1,
@@ -924,7 +878,7 @@ describe('후보 이름·태그·사진', () => {
           ],
         },
       ],
-    };
+    });
   }
 
   /** 값이 다 있는 X · 값이 없는 RAW_ID · 사진만 빈 문자열인 Z(Q4). */
@@ -966,10 +920,8 @@ describe('후보 이름·태그·사진', () => {
 
   beforeEach(() => {
     setAccessToken('valid-access');
+    serveItinerary(server, { itinerary: () => itinerary() });
     server.use(
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(itinerary())
-      ),
       http.post(`${BASE}/trips/:tripId/itinerary/slot-candidates`, () =>
         HttpResponse.json(CANDIDATES)
       )
@@ -982,21 +934,14 @@ describe('후보 이름·태그·사진', () => {
   });
 
   function renderContainer() {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
+    const client = newTestQueryClient({ gcTime: 0 });
     return render(
       <SlotCandidatePanelContainer
         tripId={TRIP_ID}
         slotKey={CURRENT_SLOT_KEY}
         onClose={jest.fn()}
       />,
-      { wrapper: Wrapper }
+      { wrapper: createWrapper(client) }
     );
   }
 
@@ -1056,19 +1001,17 @@ describe('후보 이름·태그·사진', () => {
 
     it('H3b · AC-5 — 현재 슬롯에 사진이 없으면 현재 행은 슬롯의 카테고리(문화)·진짜 poiId(a)로 고른 그림이다 — 카드의 가짜 "current" 가 아니다', async () => {
       const base = itinerary();
-      server.use(
-        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-          HttpResponse.json({
-            ...base,
-            days: [
-              {
-                ...base.days[0],
-                slots: [{ ...base.days[0].slots[0], imageUrl: null }],
-              },
-            ],
-          })
-        )
-      );
+      serveItinerary(server, {
+        itinerary: () => ({
+          ...base,
+          days: [
+            {
+              ...base.days[0],
+              slots: [{ ...base.days[0].slots[0], imageUrl: null }],
+            },
+          ],
+        }),
+      });
       await renderAndWaitCandidates();
 
       // GET 과 POST 도착 순서는 보장이 없다 — 현재 슬롯 정보가 들어올 때까지 기다린다.
@@ -1129,10 +1072,6 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
    * 3동작 뼈대: 준비=GET 캐시·서버 응답 계획 → 실행=시트 열기·행 탭·확정 → 단언=보이는 행·나간 요청.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-  const DAY1 = '2026-06-10';
-  const DAY2 = '2026-06-11';
   const SLOT_KEY = buildSlotKey(DAY1, 'a');
 
   const P_IMG = 'https://img.example/p.jpg';
@@ -1232,16 +1171,11 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
   function itinerary(
     slotAlternatives: ItineraryDaysItemSlotsItemAlternativesItem[] = alternatives
   ): Itinerary {
-    return {
+    return baseItinerary({
       itineraryId: 'itin-1',
       tripId: TRIP_ID,
       status,
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
       generationState,
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days: [
         {
           date: DAY1,
@@ -1276,7 +1210,7 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
           ],
         },
       ],
-    };
+    });
   }
 
   /**
@@ -1337,11 +1271,13 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
     mockClose.mockClear();
     setAccessToken('valid-access');
 
-    server.use(
-      http.get(`${BASE}/trips/:tripId/itinerary`, () => {
+    serveItinerary(server, {
+      itinerary: () => {
         getCalls += 1;
         return HttpResponse.json(itinerary(serverAlternatives ?? alternatives));
-      }),
+      },
+    });
+    server.use(
       http.post(
         `${BASE}/trips/:tripId/itinerary/slot-candidates`,
         async ({ request }) => {
@@ -1369,18 +1305,11 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
 
   /** GET 캐시를 채운 뒤(초안 화면이 이미 받아 둔 상태) 시트를 연다. `seed: false` 면 빈 캐시. */
   function renderWithItinerary({ seed = true }: { seed?: boolean } = {}) {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
-    });
+    const client = newTestQueryClient();
     if (seed) {
       client.setQueryData(
         getGetTripsTripIdItineraryQueryKey(TRIP_ID),
         itinerary()
-      );
-    }
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
       );
     }
     const view = render(
@@ -1389,7 +1318,7 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
         slotKey={SLOT_KEY}
         onClose={mockClose}
       />,
-      { wrapper: Wrapper }
+      { wrapper: createWrapper(client) }
     );
     return { ...view, client };
   }

@@ -1,10 +1,5 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import {
-  defaultScheduler,
-  notifyManager,
-  QueryClientProvider,
-} from '@tanstack/react-query';
+import { defaultScheduler, notifyManager } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -15,7 +10,12 @@ import { flushNotifications } from '@/test-support/flushNotifications';
 
 import { deriveVisitStatus } from './visitStatus';
 import { useVisitCheck, type VisitCheckOutcome } from './useVisitCheck';
-import { newTestQueryClient } from '@/test-support/queryRender';
+import { BASE } from '@/test-support/apiBase';
+import {
+  createGate,
+  createHitLog,
+  createWrapper,
+} from '@/test-support/mswHookHarness';
 
 /**
  * TRIP-565 · AC-1·AC-2·AC-5·skip — record 소관 방문 체크 훅의 낙관적 갱신 + 레코드 단위 롤백.
@@ -40,16 +40,9 @@ import { newTestQueryClient } from '@/test-support/queryRender';
  */
 
 // authedClient(mutator 인증 계층)가 @/shared/storage 를 정적으로 문다.
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest
-    .fn()
-    .mockResolvedValue({ accessToken: 'a', refreshToken: 'r' }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
-const BASE = 'http://localhost:8080/api/v1';
 const TRIP = 'trip-1';
 const DAY = '2026-08-31';
 const T = '2026-08-31T14:20:00';
@@ -69,30 +62,18 @@ const vc = (
   ...over,
 });
 
-/** 테스트가 열어 줄 때까지 응답하지 않는 문 — "응답 전"을 시간이 아닌 신호로. */
-function createGate() {
-  let release!: () => void;
-  const opened = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  return { opened, release };
-}
-
-let observedHits: string[] = [];
+const hits = createHitLog(server);
 let capturedBodies: ArriveRequest[] = [];
-const hitCount = (needle: string) =>
-  observedHits.filter((hit) => hit === needle).length;
+const hitCount = hits.count;
 
 beforeAll(() => {
   notifyManager.setScheduler((cb) => setTimeout(cb, 5));
   server.listen({ onUnhandledRequest: 'error' });
-  server.events.on('request:start', ({ request }) => {
-    observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
-  });
+  hits.attach();
 });
 
 beforeEach(() => {
-  observedHits = [];
+  hits.reset();
   capturedBodies = [];
   setAccessToken('a');
 });
@@ -106,16 +87,6 @@ afterAll(() => {
   notifyManager.setScheduler(defaultScheduler);
   server.close();
 });
-
-function createWrapper() {
-  const client = newTestQueryClient({ gcTime: 0 });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return Wrapper;
-}
 
 /** 그 날 방문 기록 조회 + 훅을 함께 띄운다 — 낙관 캐시를 visits.data.visits 로 직접 관찰. */
 function useProbe() {
@@ -199,7 +170,7 @@ describe('AC-1 · BR-U5-01 — 완료는 실적에만 적재, plan 미접촉', (
       expect(hitCount(`POST /api/v1/trips/${TRIP}/visits/v1/complete`)).toBe(1)
     );
     // 단언 ③ — plan(visit_slot=itinerary) 은 어떤 요청도 안 나갔다(BR-U5-01).
-    expect(observedHits.filter((h) => /\/itinerary/.test(h))).toEqual([]);
+    expect(hits.all().filter((h) => /\/itinerary/.test(h))).toEqual([]);
 
     // 실행 ② — 문 열고 마무리.
     gate.release();
@@ -507,7 +478,7 @@ describe('TRIP-1561 — 완료→도착 사슬(completeThenArrive)', () => {
 
     // 단언 ② — 요청 순서는 완료 → 도착, 각 1회. 도착 본문은 다음 장소의 슬롯 키를 실은 수동 도착이다.
     expect(outcome).toEqual({ kind: 'arrived' });
-    expect(observedHits.filter((hit) => hit.startsWith('POST '))).toEqual([
+    expect(hits.all().filter((hit) => hit.startsWith('POST '))).toEqual([
       COMPLETE_HIT,
       ARRIVE_HIT,
     ]);
@@ -711,7 +682,7 @@ describe('TRIP-1561 — 완료→도착 사슬(completeThenArrive)', () => {
     await flushNotifications();
 
     expect(outcome).toEqual({ kind: 'ignored' });
-    expect(observedHits.filter((hit) => hit.startsWith('POST '))).toEqual([]);
+    expect(hits.all().filter((hit) => hit.startsWith('POST '))).toEqual([]);
     expect(cacheStatus(result.current.visits, 'optimistic:p1')).toBe(
       'IN_PROGRESS'
     );

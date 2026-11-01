@@ -1,6 +1,4 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -21,7 +19,7 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 
 import { MustVisitListPage } from './MustVisitListPage';
-import { newTestQueryClient } from '@/test-support/queryRender';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
 import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
@@ -50,15 +48,8 @@ import { routerSpies } from '@/test-support/expoRouterMock';
 
 // 생성 클라이언트의 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다 — 실물
 // 로드를 피하려면 목킹해야 한다(선례와 동형).
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 // jest.mock 팩토리는 파일 맨 위로 끌어올려지므로 바깥 변수를 못 본다 — 이름이 `mock` 으로
 // 시작하는 변수만 예외다(리포 확립 규칙).
@@ -209,14 +200,9 @@ afterAll(() => server.close());
  */
 function renderPage(props?: { mode?: GenerateItineraryRequestGenerationMode }) {
   const client = newTestQueryClient({ gcTime: 0 });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
   const utils = render(
     <MustVisitListPage tripId={TRIP_ID} mode={props?.mode} />,
-    { wrapper: Wrapper }
+    { wrapper: createWrapper(client) }
   );
   return { ...utils, client };
 }

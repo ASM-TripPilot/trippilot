@@ -8,6 +8,7 @@ import {
   within,
 } from '@testing-library/react-native';
 import { BASE } from '@/test-support/apiBase';
+import { createGate } from '@/test-support/mswHookHarness';
 import { createGcZeroWrapper } from '@/test-support/queryRender';
 
 import { server } from '@/mocks/server';
@@ -66,14 +67,6 @@ const mockUseStaySearch = useStaySearch as jest.MockedFunction<
 
 /** 네트워크 도착을 기다리는 한도 — 로컬 기본 1000ms 의 CI 러너(약 4배 느림) 환산. */
 const WAIT = { timeout: 4000 };
-
-function createGate() {
-  let release!: () => void;
-  const opened = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  return { opened, release };
-}
 
 let observedHits: string[] = [];
 function hitCount(needle: string): number {

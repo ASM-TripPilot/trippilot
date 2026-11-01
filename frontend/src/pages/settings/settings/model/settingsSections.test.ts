@@ -11,7 +11,10 @@ import {
   type PreferenceView,
 } from '@/shared/api/index.schemas';
 
-import { buildSettingsSections } from './settingsSections';
+import {
+  buildSettingsSections,
+  filterReadySettingsSections,
+} from './settingsSections';
 
 /**
  * TRIP-608 AC-1 · AC-11 — l05 설정 그룹 뷰모델 조립.
@@ -538,4 +541,44 @@ describe('TRIP-778 AC-6 · 개인화 행 값 (모델, D3)', () => {
     // 개인화 행은 칩을 쓰지 않는다("사용 안 함" 같은 문구 발명 금지).
     expect(row.chip ?? null).toBeNull();
   });
+});
+
+// TRIP-1648 · A5 — 웹에서는 "알림" 그룹이 통째로 숨는다(옛 `ui/SettingsPage.pushSupport.test.tsx` 에서 옮김).
+// 위치 동의 행은 웹에서도 남는다(Q3 — 위치 정보 법적 동의를 받을 길을 막지 않는다).
+describe('설정 모델 — pushAvailable', () => {
+  const INPUT = { nickname: '여행자123', email: 'a@b.com' };
+
+  it('false 면 "알림" 그룹이 통째로 빠지고 나머지 그룹·위치 동의 행은 그대로다', () => {
+    const groups = filterReadySettingsSections(
+      buildSettingsSections({ ...INPUT, pushAvailable: false })
+    );
+
+    expect(groups.map((group) => group.key)).toEqual([
+      'account',
+      'preferences',
+      'location',
+      'affiliate',
+      'app-info',
+      'danger',
+    ]);
+    const location = groups.find((group) => group.key === 'location');
+    expect(location?.rows.map((row) => row.key)).toContain('location-consent');
+  });
+
+  it.each([
+    ['생략', INPUT],
+    ['true', { ...INPUT, pushAvailable: true }],
+  ])(
+    '%s 이면 "알림" 그룹이 알림 설정 행 하나로 남는다 (지금과 같다)',
+    (_, input) => {
+      const groups = filterReadySettingsSections(buildSettingsSections(input));
+
+      const notifications = groups.find(
+        (group) => group.key === 'notifications'
+      );
+      expect(notifications?.rows.map((row) => row.key)).toEqual([
+        'notifications',
+      ]);
+    }
+  );
 });

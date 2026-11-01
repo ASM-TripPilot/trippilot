@@ -35,15 +35,8 @@ import { routerSpies } from '@/test-support/expoRouterMock';
  *  - S7 regionCode 가 없으면 city(이름)로 조회한다.
  */
 
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 const { push: mockPush } = routerSpies;
 jest.mock('expo-router', () =>

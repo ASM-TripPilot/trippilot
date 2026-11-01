@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react-native';
+import { render, screen } from '@testing-library/react-native';
 
 import { MapView } from '@/shared/map';
 import type { MapCenter, MapPin } from '@/shared/map';
@@ -41,41 +41,7 @@ afterEach(() => {
 
 const CENTER: MapCenter = { lat: 35.1587, lng: 129.1604 };
 
-describe('🔴 MC1 — candidate 핀: 흰 채움 + 빨강 테두리, 번호 없음', () => {
-  it('래퍼(collapsable=false) 안에 후보 Svg · 빨강 stroke · 흰 fill, 빨강 채움·번호·사진·침대 없음', () => {
-    // 준비 — 후보 핀 하나(번호 12 — 화면이 동선 번호와 겹치지 않게 매긴 값).
-    const pins: MapPin[] = [
-      { number: 12, lat: 35.1631, lng: 129.1636, kind: 'candidate' },
-    ];
-
-    // 실행
-    render(<MapView center={CENTER} pins={pins} />);
-
-    // 단언 — 공용 래퍼가 래스터 조건을 지킨다.
-    const pin = screen.getByTestId('map-marker-pin-12');
-    expect(pin.props.collapsable).toBe(false);
-    // 후보 모양은 testID 로 식별한다.
-    expect(within(pin).queryByTestId('map-marker-candidate-12')).not.toBeNull();
-    // 빨강 테두리 + 흰 채움(아웃라인).
-    expect(
-      within(pin).UNSAFE_queryAllByProps({ stroke: '#FF385C' }).length
-    ).toBeGreaterThan(0);
-    expect(
-      within(pin).UNSAFE_queryAllByProps({ fill: '#FFFFFF' }).length
-    ).toBeGreaterThan(0);
-    // 빨강으로 **채우면** 선택 핀(current)·숙소 핀과 구분이 안 된다.
-    expect(
-      within(pin).UNSAFE_queryAllByProps({ fill: '#FF385C' })
-    ).toHaveLength(0);
-    // 번호를 그리지 않는다(Figma 후보 핀은 빈 물방울).
-    expect(within(pin).UNSAFE_queryAllByProps({ content: '12' })).toHaveLength(
-      0
-    );
-    // 다른 마커족으로 새지 않았다.
-    expect(within(pin).queryByTestId('map-marker-stay-12')).toBeNull();
-    expect(within(pin).queryByTestId('map-marker-photo-12')).toBeNull();
-  });
-});
+// MC1(흰 채움·빨강 테두리·번호 없음)·MC4(기존 핀엔 후보 마커 없음)는 jest-cut 에서 지웠다 — 마커 생김새라 실화면 QA 몫(copick.md).
 
 describe('🔴 MC3 — 후보·숙소 핀은 경로선 밖, 동선 핀만 잇는다', () => {
   it('동선 2 + 숙소 1 + 후보 2 → map-path coords 는 동선 2점(순서 그대로)', () => {
@@ -101,19 +67,5 @@ describe('🔴 MC3 — 후보·숙소 핀은 경로선 밖, 동선 핀만 잇는
       { latitude: 35.1532, longitude: 129.1187 },
       { latitude: 35.1587, longitude: 129.1604 },
     ]);
-  });
-});
-
-describe('🟢 MC4 — kind 없는 기존 핀엔 후보 마커가 없다 (무회귀 앵커)', () => {
-  it('state 물방울 핀 둘 → map-marker-candidate-* 0', () => {
-    const pins: MapPin[] = [
-      { number: 1, lat: 35.1532, lng: 129.1187 },
-      { number: 2, lat: 35.1587, lng: 129.1604 },
-    ];
-
-    render(<MapView center={CENTER} pins={pins} />);
-
-    expect(screen.getByTestId('map-marker-pin-1')).toBeOnTheScreen();
-    expect(screen.queryAllByTestId(/^map-marker-candidate-/)).toHaveLength(0);
   });
 });

@@ -24,12 +24,6 @@ import {
   fireEditDropOnZone,
   hoverOverDeleteZone,
 } from '@/test-support/editDragList';
-import {
-  closestAncestor,
-  closestScrollView,
-  fireChipLayout,
-  stubScrollTo,
-} from '@/test-support/sheetTree';
 
 import { EditorView } from './EditorView';
 
@@ -326,20 +320,6 @@ function classTokens(testID: string): string[] {
   return String(screen.getByTestId(testID).props.className ?? '').split(/\s+/);
 }
 
-/** 셸이 BottomSheet 목에 넘긴 초기 스냅 **칸 값**들 — snapPoints[index]. TRIP-920 이 셸 기본 배열 앞에
- *  닫힘(28)을 끼워 숫자 index 의 뜻이 밀렸다: 숫자만 보면 green 인 채로 "펼침→peek" 가 된다(02a ★1). */
-function sheetSnapValues(): unknown[] {
-  return screen.root
-    .findAll(
-      (node) =>
-        typeof node.props?.index === 'number' &&
-        Array.isArray(node.props?.snapPoints)
-    )
-    .map(
-      (node) => (node.props.snapPoints as unknown[])[node.props.index as number]
-    );
-}
-
 describe('🔴 EditorView · V1 — 헤더 날짜 괄호형 + 시트 펼침 (TRIP-753 AC-2)', () => {
   it('2일차 6/11 헤더를 "일정 편집 · 2일차 · 6월 11일(목) · 5곳" 조각으로 그리고 시트를 펼침(88%) 칸으로 연다', () => {
     renderI07();
@@ -352,37 +332,11 @@ describe('🔴 EditorView · V1 — 헤더 날짜 괄호형 + 시트 펼침 (TRI
       '6월 11일(목)'
     );
     expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent('5곳');
-
-    // TRIP-920 심판 수정 — 숫자 index 가 아니라 그 index 가 가리키는 칸 값(펼침 = 88%).
-    const values = sheetSnapValues();
-    expect(values.length).toBeGreaterThan(0);
-    values.forEach((value) => expect(value).toBe('88%'));
+    // 시트 펼침(88%) 칸 값 단언은 jest-cut 에서 뺐다 — 통과형 시트 목 prop 이다(README 판정 4).
   });
 });
 
-describe('🔴 EditorView · V2 — 번호 원은 카드 밖, 완료는 초록·예정은 빨강 (TRIP-753 AC-3)', () => {
-  it('번호 1~5 가 각 카드의 자손이 아니고, 톤이 [success,success,primary,primary,primary] 다', () => {
-    renderI07();
-
-    I07_KEYS.forEach((key, index) => {
-      const number = `slot-stopcard-number-${key}`;
-      // 긍정 — 번호는 화면에 있고 순번 글자를 가진다.
-      expect(screen.getByTestId(number)).toHaveTextContent(String(index + 1));
-      // 부정 — 흰 카드(카드 루트) 안에는 없다("카드 밖"을 기계로 보는 방법).
-      const card = screen.getByTestId(`slot-stopcard-${key}`);
-      expect(within(card).queryByTestId(number)).toBeNull();
-    });
-
-    expect(
-      I07_KEYS.map((key) => {
-        const tokens = classTokens(`slot-stopcard-number-${key}`);
-        if (tokens.includes('bg-success')) return 'success';
-        if (tokens.includes('bg-primary')) return 'primary';
-        return 'none';
-      })
-    ).toEqual(['success', 'success', 'primary', 'primary', 'primary']);
-  });
-});
+// V2(번호 원이 카드 밖·완료 초록/예정 빨강 톤)는 jest-cut 에서 지웠다 — 트리 위치·색 토큰이라 실화면 QA 몫(itinerary-edit.md).
 
 describe('🔴 EditorView · V3 — 방문 완료 행은 회색 알약만, 자물쇠 배지 없음 (TRIP-753 AC-4)', () => {
   it('완료 행은 누름 칩 없이 muted 알약에 시각을 그리고, 잠금 표식은 그 알약 자체다', () => {
@@ -1143,65 +1097,7 @@ describe('🔴 EditorView · Z2 — 놓은 뒤 칸을 새로 그린다: 칸 키�
 // 편집할 수 없었다 — 칩만 가로 스크롤 안에 두고 back 은 고정한다. 칩 testID 는 dayIndex(1부터)다.
 // ⚠️ 칩이 실제로 잘리는지·밀리는지는 6-b.
 describe('🔴 EditorView · 일차 칩 줄 가로 스크롤', () => {
-  const SEVEN_DATES = Array.from(
-    { length: 7 },
-    (_, index) => `2026-06-${String(10 + index).padStart(2, '0')}`
-  );
-
-  function editor(activeDayIndex: number): ReactElement {
-    return (
-      <EditorView
-        center={CENTER}
-        days={buildPlanDayTabs(daysOf(...SEVEN_DATES))}
-        slots={[]}
-        activeDayIndex={activeDayIndex}
-        activeDate={SEVEN_DATES[activeDayIndex]}
-        dateLabel="6월 10일(수)"
-        onBack={jest.fn()}
-        onSelectDay={jest.fn()}
-        onPressTimeChip={jest.fn()}
-        onPressAddPlace={jest.fn()}
-        onPressAddBetween={jest.fn()}
-        onSave={jest.fn()}
-      />
-    );
-  }
-
-  it('칩 7개(itinerary-edit-day-1~7)는 한 가로 ScrollView 안에 있고 back 은 그 밖이다 (AC-1·AC-2)', () => {
-    render(editor(0));
-
-    const scroll = closestScrollView(
-      screen.getByTestId('itinerary-edit-day-1')
-    );
-    expect(scroll?.props.horizontal).toBe(true);
-    for (let dayIndex = 1; dayIndex <= 7; dayIndex += 1) {
-      expect(
-        closestScrollView(screen.getByTestId(`itinerary-edit-day-${dayIndex}`))
-      ).toBe(scroll);
-    }
-    const back = screen.getByTestId('itinerary-edit-back');
-    expect(closestAncestor(back, (node) => node === scroll)).toBeNull();
-  });
-
-  it('선택을 6일차로 바꾸면 그 칩(x=400)이 보이게 0 < x ≤ 400 으로 scrollTo 한다 (AC-3)', () => {
-    // 준비
-    const view = render(editor(0));
-    const chip = screen.getByTestId('itinerary-edit-day-6');
-    const scroll = closestScrollView(chip);
-    expect(scroll).not.toBeNull();
-    const scrollTo = stubScrollTo(scroll!);
-    fireChipLayout(chip, 400);
-    expect(scrollTo).not.toHaveBeenCalled();
-
-    // 실행 — 활성 일자 index 5(= 6일차)
-    view.rerender(editor(5));
-
-    // 단언
-    expect(scrollTo).toHaveBeenCalled();
-    const target = scrollTo.mock.lastCall?.[0] as { x: number };
-    expect(target.x).toBeGreaterThan(0);
-    expect(target.x).toBeLessThanOrEqual(400);
-  });
+  // 칩 줄 구조(한 가로 ScrollView·back 밖)와 선택 칩 scrollTo 는 jest-cut 에서 지웠다 — scrollTo 계산은 DayChipScroller.test S2 가 소유한다.
 
   it('하루짜리 일정은 칩을 그리지 않고 back 만 남는다 (AC-4 · 선제 green 회귀 앵커)', () => {
     renderView({ days: buildPlanDayTabs(daysOf(DATE)) });

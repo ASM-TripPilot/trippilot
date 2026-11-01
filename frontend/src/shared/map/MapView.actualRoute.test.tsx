@@ -52,22 +52,7 @@ describe('MapView actualRoute (TRIP-1342)', () => {
     expect(segs[1].props.coords).toHaveLength(3);
   });
 
-  it('AR3 실제 경로가 켜지면 계획 연결선은 muted-soft 로 낮아지고 외곽선이 없다', () => {
-    render(<MapView center={CENTER} pins={PINS} actualRoute={[SEG_A]} />);
-    const plan = screen.getByTestId('map-path');
-    expect(plan.props.color).toBe('#9AA1AB');
-    expect(plan.props.outlineWidth ?? 0).toBe(0);
-    expect(plan.props.width).toBeLessThan(2.75);
-  });
-
-  it('AR4 미전달이면 지금 그대로(빨강 2.75 + 흰 외곽선, 실제 경로 0)', () => {
-    render(<MapView center={CENTER} pins={PINS} />);
-    expect(screen.queryAllByTestId('map-route-segment')).toHaveLength(0);
-    const plan = screen.getByTestId('map-path');
-    expect(plan.props.color).toBe('#FF385C');
-    expect(plan.props.width).toBe(2.75);
-    expect(plan.props.outlineColor).toBe('#FFFFFF');
-  });
+  // AR3(계획선 muted-soft·외곽선 없음)·AR4(기본 빨강 2.75 + 흰 외곽선)는 jest-cut 에서 지웠다 — 선 색·두께라 실화면 QA 몫(live-location.md loc-actual-route).
 
   it('AR5 점이 2개 미만인 세그먼트는 그리지 않는다(SDK 는 coords ≥ 2 를 요구한다)', () => {
     render(<MapView center={CENTER} actualRoute={[[SEG_A[0]], SEG_B]} />);

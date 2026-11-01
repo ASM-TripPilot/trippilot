@@ -31,13 +31,8 @@ import { TermsPage } from './TermsPage';
  */
 
 // 토큰 저장은 네이티브 secure-store 라 목킹 — 이 스위트의 관심사는 axios→MSW 경로다.
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest
-    .fn()
-    .mockResolvedValue({ accessToken: 'tok', refreshToken: 'ref' }),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 // expo-router 는 라우터 컨텍스트 없이 이동만 관찰하면 되므로 목킹한다.
 jest.mock('expo-router', () =>

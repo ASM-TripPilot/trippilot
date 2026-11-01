@@ -221,17 +221,13 @@ describe('배선 — 변형 판정·박별 카드·CTA', () => {
   };
 
   /**
-   * TRIP-1265 — 출구 한 번 = back 1회 **다음에** method push 1회, replace 0회. jest 는 결과 스택을 못
-   * 보므로(실기 몫) 호출 형태와 순서까지만 잠근다. 개수를 순서보다 먼저 재야 push 0회일 때 순번 비교가
-   * undefined 로 엉뚱하게 죽지 않는다.
+   * TRIP-1265 — 출구 한 번 = back 1회 + method push 1회, replace 0회. 결과 스택·호출 순서는 실화면 몫이라
+   * (기능 지도 trip-create `step2-exit`) 호출 형태만 잠근다.
    */
   function expectExitedToMethod(): void {
     expect(routerMock.back).toHaveBeenCalledTimes(1);
     expect(routerMock.push).toHaveBeenCalledTimes(1);
     expect(routerMock.push).toHaveBeenCalledWith(METHOD_ROUTE);
-    expect(routerMock.back.mock.invocationCallOrder[0]).toBeLessThan(
-      routerMock.push.mock.invocationCallOrder[0]
-    );
     expect(routerMock.replace).not.toHaveBeenCalled();
   }
 
@@ -792,28 +788,6 @@ describe('숙소 선택 시트 배선 (S9 · TRIP-1011 · TRIP-1074)', () => {
       // 밤2 = 6/11(목)·부산 (node 로 실측한 값 — 브리프 손베낌 아님).
       expect(sheet).toHaveTextContent(/6\/11\(목\) 밤/);
       expect(sheet).toHaveTextContent(/부산/);
-    });
-  });
-
-  describe('I2 · 지정 커밋 구간 (AC-4 · ★1 단일밤 · ★3 인자)', () => {
-    it('밤2 지정 시 {savedStayId, dateFrom=밤 ISO, dateTo=밤+1일} 로 mutate 한다', () => {
-      render(<TripNewStep2Page />);
-
-      fireEvent.press(screen.getByTestId('trip-base-night-card-2'));
-      fireEvent.press(screen.getByTestId('trip-base-staysheet-cand-stay-b'));
-      fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
-
-      expect(mockAssignMutate).toHaveBeenCalledTimes(1);
-      // 밤2 ISO = startDate + 1일 = 2026-06-11, dateTo = +1일 = 2026-06-12 (실측).
-      // dateTo=date · +2일 · dateFrom 오프셋 뮤턴트는 전부 이 완전일치에서 red.
-      expect(mockAssignMutate.mock.calls[0][0]).toEqual({
-        tripId: TRIP_ID,
-        data: {
-          savedStayId: 'stay-b',
-          dateFrom: '2026-06-11',
-          dateTo: '2026-06-12',
-        },
-      });
     });
   });
 

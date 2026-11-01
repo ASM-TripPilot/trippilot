@@ -525,7 +525,7 @@ describe('본문 줄 (옛 .body)', () => {
   });
 
   describe('🔴 B2 · AC-1·Q2 — 긴 본문은 화면에서만 두 줄로 줄이고 노드 텍스트는 자르지 않는다', () => {
-    it('180자 본문이 전부 노드에 남고, numberOfLines=2 다', () => {
+    it('180자 본문이 전부 노드에 남는다', () => {
       // 준비 — 두 줄을 넘는 긴 본문(body maxLength 400 안).
       const long = '가나다라마바사아자차카타파하 '.repeat(12).trim();
       expect(long.length).toBeGreaterThan(150);
@@ -536,8 +536,7 @@ describe('본문 줄 (옛 .body)', () => {
 
       // 단언 — FE 가 자르지 않았다(BR-U6-03).
       expect(body).toHaveTextContent(long, AS_IS);
-      // 두 줄 말줄임은 표시만(Q2).
-      expect(body.props.numberOfLines).toBe(2);
+      // 두 줄 말줄임(Q2)은 표시라 실화면 몫이다.
     });
   });
 

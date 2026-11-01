@@ -1,10 +1,5 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import {
-  defaultScheduler,
-  notifyManager,
-  QueryClientProvider,
-} from '@tanstack/react-query';
+import { defaultScheduler, notifyManager } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -16,7 +11,12 @@ import { flushNotifications } from '@/test-support/flushNotifications';
 
 import { optimisticSavedStayId } from './savedStayIndex';
 import { useSavedStays, type SavedStaysOutcome } from './savedStays';
-import { newTestQueryClient } from '@/test-support/queryRender';
+import { BASE } from '@/test-support/apiBase';
+import {
+  createGate,
+  createHitLog,
+  createWrapper,
+} from '@/test-support/mswHookHarness';
 
 /**
  * TRIP-417 AC-1·AC-2·AC-4·AC-5·AC-6·AC-7 — 숙소 저장 하트 토글 훅의 서버 상태.
@@ -56,17 +56,8 @@ import { newTestQueryClient } from '@/test-support/queryRender';
 
 // authedClient(mutator의 인증 계층)가 @/shared/storage를 정적으로 물고 있다 — expo-secure-store
 // 실물 로드를 피하려면 목킹한다(savedPlaces.integration.test.tsx:49 동형).
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
-
-const BASE = 'http://localhost:8080/api/v1';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 /** openapi `StayItem.required` 필드를 전부 채운다. */
 function makeItem(externalId: string, name: string): StayItem {
@@ -113,32 +104,18 @@ function makeSaved(item: StayItem, savedStayId: string): SavedStay {
 
 const SAVED_B = makeSaved(ITEM_B, SAVED_ID_B);
 
-/** 테스트가 풀어 줄 때까지 응답하지 않는 문 — "서버 응답 전"을 시간이 아니라 신호로 만든다. */
-function createGate() {
-  let release!: () => void;
-  const opened = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  return { opened, release };
-}
-
 /** 나간 요청의 `METHOD /경로` 누적 — 재요청 횟수·어느 id로 나갔는지를 센다. */
-let observedHits: string[] = [];
-
-function hitCount(needle: string): number {
-  return observedHits.filter((hit) => hit === needle).length;
-}
+const hits = createHitLog(server);
+const hitCount = hits.count;
 
 beforeAll(() => {
   notifyManager.setScheduler((cb) => setTimeout(cb, 5));
   server.listen({ onUnhandledRequest: 'error' });
-  server.events.on('request:start', ({ request }) => {
-    observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
-  });
+  hits.attach();
 });
 
 beforeEach(() => {
-  observedHits = [];
+  hits.reset();
   clearAccessToken();
   // handlers.ts에 saved-stays 계열이 없다 — 매 테스트마다 다시 건다(onUnhandledRequest:'error'라
   // 안 걸면 요청이 에러로 죽는다, 그 성질을 그대로 쓴다). GET /trips는 무효화 부정 짝 모집단이다.
@@ -156,20 +133,6 @@ afterAll(() => {
   notifyManager.setScheduler(defaultScheduler);
   server.close();
 });
-
-function createWrapper() {
-  const client = newTestQueryClient({
-    // gcTime:0 — 기본값 타이머가 종료 후에도 살아남아 Node 프로세스를 붙잡는다. mutations도 0
-    // (기본 5분, 빼면 이 버킷이 매달린다 — TRIP-203 실측).
-    gcTime: 0,
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return Wrapper;
-}
 
 /**
  * 두 쿼리를 함께 띄운 관찰용 훅.

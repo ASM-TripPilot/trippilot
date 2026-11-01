@@ -1,10 +1,8 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import {
   defaultScheduler,
   notifyManager,
-  QueryClient,
-  QueryClientProvider,
+  type QueryClient,
 } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
@@ -21,7 +19,12 @@ import { flushNotifications } from '@/test-support/flushNotifications';
 
 import { optimisticSavedPlaceId } from './savedPlaceIndex';
 import { useSavedPlaces, type SavedPlacesOutcome } from './savedPlaces';
-import { newTestQueryClient } from '@/test-support/queryRender';
+import { BASE } from '@/test-support/apiBase';
+import { createGate, createHitLog } from '@/test-support/mswHookHarness';
+import {
+  createWrapper as wrapClient,
+  newTestQueryClient,
+} from '@/test-support/queryRender';
 
 /**
  * TRIP-220 AC-4 · AC-5 · AC-6 · AC-7 · AC-8 (+ 01b Seed Q2) — 담기 토글 훅의 서버 상태.
@@ -62,18 +65,8 @@ import { newTestQueryClient } from '@/test-support/queryRender';
 // authedClient(생성 클라이언트가 타는 mutator의 인증 계층)가 @/shared/storage 를 정적으로
 // 물고 있다. 이 시나리오들은 401 이 없어 실제로 호출되지는 않지만, expo-secure-store 실물
 // 로드를 피하려면 useCreateTrip.integration.test.tsx:60 과 같은 형태로 목킹해야 한다.
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
-
-/** authWiring.integration.test.ts:59 와 같은 값(리포 관례). */
-const BASE = 'http://localhost:8080/api/v1';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 const POI_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const POI_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
@@ -109,36 +102,18 @@ const SAVED_B: SavedPlace = {
   place: PLACE_B,
 };
 
-/**
- * 테스트가 풀어 줄 때까지 응답하지 않는 문. "서버 응답 **전**"이라는 조건을 시간이 아니라
- * 신호로 만든다 — `delay(ms)`로 재면 느린 CI에서 흔들리고, 무엇보다 "아직 안 왔다"를
- * 결정론적으로 보장하지 못한다.
- */
-function createGate() {
-  let release!: () => void;
-  const opened = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  return { opened, release };
-}
-
 /** 나간 요청의 `METHOD /경로` 누적 — 재요청 횟수와 **어느 id로 나갔는지**를 세는 데 쓴다. */
-let observedHits: string[] = [];
-
-function hitCount(needle: string): number {
-  return observedHits.filter((hit) => hit === needle).length;
-}
+const hits = createHitLog(server);
+const hitCount = hits.count;
 
 beforeAll(() => {
   notifyManager.setScheduler((cb) => setTimeout(cb, 5));
   server.listen({ onUnhandledRequest: 'error' });
-  server.events.on('request:start', ({ request }) => {
-    observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
-  });
+  hits.attach();
 });
 
 beforeEach(() => {
-  observedHits = [];
+  hits.reset();
   clearAccessToken();
   // 기본 handlers.ts 에 places 계열이 하나도 없다. `onUnhandledRequest: 'error'` 라 안 걸면
   // 요청이 에러로 죽는데, 그 성질을 그대로 쓴다 — 예상 못 한 요청이 조용히 통과하지 않는다.
@@ -165,19 +140,10 @@ afterAll(() => {
 let lastClient: QueryClient;
 
 function createWrapper() {
-  const client = newTestQueryClient({
-    // gcTime: 0 — 기본값이 만드는 타이머가 테스트 종료 후에도 살아남아 Node 프로세스를
-    // 붙잡는다. **mutations 쪽도 반드시 0으로 둔다**: mutation 기본 gcTime 은 5분이고,
-    // 빼면 이 버킷이 300초 매달린다(TRIP-203 실측).
-    gcTime: 0,
-  });
+  // gcTime: 0 — mutations 도 0(기본 5분이면 이 버킷이 300초 매달린다, TRIP-203 실측).
+  const client = newTestQueryClient({ gcTime: 0 });
   lastClient = client;
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return Wrapper;
+  return wrapClient(client);
 }
 
 /**

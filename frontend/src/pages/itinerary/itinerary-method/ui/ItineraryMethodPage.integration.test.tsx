@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { delay, http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -16,6 +16,7 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 import { ItineraryMethodPage } from './ItineraryMethodPage';
 import { routerSpies } from '@/test-support/expoRouterMock';
+import { createWrapper } from '@/test-support/queryRender';
 
 /**
  * TRIP-986 #063 · BR-U3-18 — 일정이 없는 새 여행(GET itinerary 404)에서 "AI와 같이 짜기"를 눌러도
@@ -39,15 +40,8 @@ import { routerSpies } from '@/test-support/expoRouterMock';
  * 통합 파일 이름을 받았다(훅 목 관점은 node 버킷 `ItineraryMethodPage.hookMock.test.tsx`).
  */
 
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 const { push: mockPush } = routerSpies;
 jest.mock('expo-router', () =>
@@ -82,13 +76,8 @@ function productionLikeClient(extra: { retryDelay?: number } = {}) {
 
 function renderPage(queryClient: QueryClient) {
   client = queryClient;
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    );
-  }
   const view = render(<ItineraryMethodPage tripId={TRIP_ID} />, {
-    wrapper: Wrapper,
+    wrapper: createWrapper(queryClient),
   });
   unmount = view.unmount;
 }
@@ -228,14 +217,8 @@ function WithOtherObserver({ observerFirst }: { observerFirst: boolean }) {
 
 function renderWithOtherObserver(observerFirst: boolean): void {
   client = appLikeClient();
-  const queryClient = client;
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    );
-  }
   const view = render(<WithOtherObserver observerFirst={observerFirst} />, {
-    wrapper: Wrapper,
+    wrapper: createWrapper(client),
   });
   unmount = view.unmount;
 }

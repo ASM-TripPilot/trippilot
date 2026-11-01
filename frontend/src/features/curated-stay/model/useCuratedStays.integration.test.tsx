@@ -18,15 +18,8 @@ import { useCuratedStays } from './useCuratedStays';
  * 카탈로그 코드는 손대지 않고 regionCode 로 넘긴다(이름을 city 로 넘기면 빈 목록이 온다).
  */
 
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 const ITEM: CuratedStay = {
   rank: 1,

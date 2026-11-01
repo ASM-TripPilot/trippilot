@@ -359,7 +359,7 @@ describe('SavedStayCard — e04 vertical Figma 정합 (TRIP-729)', () => {
     expect(screen.queryByText('해운대')).toBeNull();
   });
 
-  it('🔴 AC-3 · priceLabel 지정 → 2톤 가격줄(금액 bold ink + "~" muted, View 형제)', () => {
+  it('🔴 AC-3 · priceLabel 지정 → 금액·"~" 가 두 형제 노드로 갈린 가격줄 (색은 실화면 QA 몫)', () => {
     render(
       <SavedStayCard
         testID={rootId}

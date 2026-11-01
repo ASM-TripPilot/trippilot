@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 
 import type { Trip, TripSummary } from '@/shared/api/index.schemas';
 import { customInstance } from '@/shared/api/mutator';
-import { renderWithQueryClient, settle } from '@/test-support/queryRender';
+import { renderWithQueryClient } from '@/test-support/queryRender';
 
 import { useTripSummary } from '@/features/reflection';
 import { ShareCardScreen } from './ShareCardScreen';
@@ -44,8 +44,8 @@ jest.mock('./ShareCardScreen', () => ({
 }));
 
 // TRIP-1605 — 카드 얼굴이 서버 문구(POST …/share-card/copy)를 부른다. 생성 클라이언트가 모두 지나는 `customInstance` 한 곳만
-// 목으로 막아 네트워크 0 으로 두고(끝나지 않는 Promise = 문구 대기 중), 호출 기록으로 "언제·몇 번 부르나"만 본다.
-// 어떤 훅 모양(useQuery/useMutation)으로 부르는지는 묶지 않는다.
+// 목으로 막아 네트워크 0 으로 둔다(끝나지 않는 Promise = 문구 대기 중). "언제·몇 번 부르나"는 MSW 로 보는
+// ShareCardPage.integration AC-1 이 맡는다(같은 네 경우 — 2026-11-01 jest 축소에서 이 파일 사본을 지웠다).
 jest.mock('@/shared/api/mutator', () => ({
   customInstance: jest.fn(),
 }));
@@ -112,12 +112,6 @@ beforeEach(() => {
   jest.clearAllMocks();
   customInstanceMock.mockImplementation(() => new Promise(() => undefined));
 });
-
-const COPY_URL = '/trips/trip-1/share-card/copy';
-const copyCalls = () =>
-  customInstanceMock.mock.calls.filter(
-    ([config]) => (config as { url?: string }).url === COPY_URL
-  );
 
 describe('🔴 TRIP-1071 AC-12 · 요약 미준비(ready:false) → 카드 대신 안내 (결정 4c)', () => {
   it('안내 제목이 뜨고, 카드 화면은 그리지 않는다(저장·공유·편집 어포던스 0)', () => {
@@ -209,88 +203,5 @@ describe('🔴 TRIP-1071 5-b 경고-1 · 요약 조회 오류는 "미준비"로 
     expect(screenMock).not.toHaveBeenCalled();
     expect(screen.queryByTestId('reflection-share-save')).toBeNull();
     expect(screen.queryByTestId('reflection-share-export')).toBeNull();
-  });
-});
-
-describe('🔴 TRIP-1605 AC-1 · 서버 문구는 카드 얼굴이 그려질 때만 부른다', () => {
-  it('요약 ready + 여행 도착 → POST …/share-card/copy 정확히 1회, 리렌더해도 그대로', async () => {
-    // 준비
-    givenTrip();
-    givenSummary(true);
-
-    // 실행: 렌더 → 비동기 흘리기 → 같은 props 로 다시 그리기 → 또 흘리기
-    const { rerender } = renderWithQueryClient(
-      <ShareCardPage tripId="trip-1" />
-    );
-    await settle();
-    rerender(<ShareCardPage tripId="trip-1" />);
-    await settle();
-
-    // 단언
-    expect(copyCalls()).toHaveLength(1);
-    expect(copyCalls()[0][0]).toEqual(
-      expect.objectContaining({ url: COPY_URL, method: 'POST' })
-    );
-  });
-
-  it('조회 중 얼굴이면 부르지 않다가, 카드 얼굴로 바뀌는 순간 1회 부른다', async () => {
-    // 준비: 여행·요약 모두 아직 도착 전
-    (useGetTripsTripId as jest.Mock).mockReturnValue({
-      data: undefined,
-      isPending: true,
-      isError: false,
-    });
-    (useTripSummary as jest.Mock).mockReturnValue({
-      envelope: undefined,
-      summary: undefined,
-      source: undefined,
-      isPending: true,
-      isError: false,
-      refetch: jest.fn(),
-    });
-    const { rerender } = renderWithQueryClient(
-      <ShareCardPage tripId="trip-1" />
-    );
-    await settle();
-    expect(screen.getByTestId('reflection-share-pending')).toBeOnTheScreen();
-    expect(copyCalls()).toHaveLength(0);
-
-    // 실행: 조회가 끝나 카드 얼굴이 된다
-    givenTrip();
-    givenSummary(true);
-    rerender(<ShareCardPage tripId="trip-1" />);
-    await settle();
-
-    // 단언
-    expect(copyCalls()).toHaveLength(1);
-  });
-
-  it('요약 조회 오류 얼굴에서는 부르지 않는다', async () => {
-    givenTrip();
-    (useTripSummary as jest.Mock).mockReturnValue({
-      envelope: undefined,
-      summary: undefined,
-      source: undefined,
-      isPending: false,
-      isError: true,
-      refetch: jest.fn(),
-    });
-
-    renderWithQueryClient(<ShareCardPage tripId="trip-1" />);
-    await settle();
-
-    expect(screen.getByTestId('reflection-share-error')).toBeOnTheScreen();
-    expect(copyCalls()).toHaveLength(0);
-  });
-
-  it('요약 미준비(ready:false) 얼굴에서는 부르지 않는다 — 서버가 409 를 줄 일을 만들지 않는다', async () => {
-    givenTrip();
-    givenSummary(false);
-
-    renderWithQueryClient(<ShareCardPage tripId="trip-1" />);
-    await settle();
-
-    expect(screen.getByTestId('reflection-share-not-ready')).toBeOnTheScreen();
-    expect(copyCalls()).toHaveLength(0);
   });
 });

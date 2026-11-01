@@ -37,9 +37,8 @@ import { LoginPage } from './LoginPage';
 jest.mock('@gorhom/bottom-sheet');
 
 // 토큰 저장은 native secure-store 라 목킹 — 배선 관심사는 axios→MSW 경로지 저장 계층이 아니다.
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 // expo-router 는 라우터 컨텍스트 없이 replace 만 관찰하면 되므로 목킹.
 // useRouter().replace 와 router.replace 가 같은 fn 을 공유 → 컨테이너가 무엇을 쓰든 관찰된다.
@@ -179,7 +178,7 @@ describe('code 갈래 — 배선', () => {
      * TRIP-1035 AC-2 — TRIP-248 D3·AC-13 의 화면 심판을 **뒤집은** 자리. 이전 판은 "신규 구글은 시트가
      * 아니라 배너"였다: 인가코드가 첫 요청에서 소진돼, 400 뒤에 확인을 받아도 재전송할 수 없었기 때문이다.
      * 이제는 인가 **전에** 묻고 첫 요청에 선언을 실으므로, 신규 구글 가입이 요청 한 번으로 끝난다.
-     * (선언 없이 보낸 code 요청의 400 이 error 라는 성질은 useSocialLogin.tokenPath.test.tsx 에 남는다.)
+     * (선언 없이 보낸 code 요청의 400 이 error 라는 성질은 useSocialLogin.test.tsx 의 token 갈래 describe 에 남는다(옛 .tokenPath 합본).)
      */
     it('신규 구글 → 인가 전 시트에서 확인 → 선언을 실은 첫 요청 1회로 가입이 끝나 게이트로 간다', async () => {
       // 준비 — 선언 없는 첫 요청이면 서버(목)가 400 을 주는 시나리오.

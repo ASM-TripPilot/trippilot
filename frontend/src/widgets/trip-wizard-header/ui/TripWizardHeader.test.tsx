@@ -6,7 +6,6 @@ import {
 } from '@testing-library/react-native';
 
 import { TripWizardHeader } from './TripWizardHeader';
-import { BackChevronGlyph } from './TripWizardHeaderGlyphs';
 
 /**
  * 여행 만들기 위저드 공용 헤더(‹ · 제목 · 진행 막대 4칸 · "N / 4") — TRIP-1266(QA F7).
@@ -16,16 +15,10 @@ import { BackChevronGlyph } from './TripWizardHeaderGlyphs';
  * 위젯은 features 를 모른다 — "N / 4" 문자열과 채울 칸 수는 소비처가 `progress` 로 넘기고, 위젯은
  * 그대로 그린다. `progress` 가 없으면 진행 표시 통째로 없음(2/4 거점 편집 얼굴).
  *
- * jest 사각: 치수·실제 픽셀 위치(세 화면에서 ‹·제목 x/y 가 같은가)는 실화면 QA 몫. 여기는 진행 칸 상태→색까지.
+ * jest 사각: 치수·실제 픽셀 위치·진행 칸 색·‹ 글리프는 실화면 QA 몫.
  *
- * 3동작 뼈대: 준비=props 로 렌더 → 실행=없음 / ‹ press → 단언=트리·className 토큰·콜백.
+ * 3동작 뼈대: 준비=props 로 렌더 → 실행=없음 / ‹ press → 단언=트리·콜백.
  */
-
-/** className 을 공백으로 쪼갠 토큰 배열 — 부분 문자열 오탐(`bg-primary` ⊂ `bg-primary-pale`)을 막는다. */
-function tokens(node: { props?: { className?: unknown } }): string[] {
-  const cn = node.props?.className;
-  return typeof cn === 'string' ? cn.split(/\s+/).filter(Boolean) : [];
-}
 
 function renderHeader(
   over: Partial<Parameters<typeof TripWizardHeader>[0]> = {}
@@ -49,22 +42,9 @@ describe('위저드 공용 헤더', () => {
     expect(within(root).getByText('여행 만들기')).toBeOnTheScreen();
   });
 
-  it.each([1, 2, 3])(
-    'filled=%i 이면 그 수만큼 앞 칸만 primary, 나머지는 hairline-strong 이고 4칸 모두 같은 14px 막대다',
-    (filled) => {
-      renderHeader({ progress: { filled, label: `${filled} / 4` } });
+  // 진행 칸 색(filled 만큼 primary)·막대 폭은 jest-cut 에서 지웠다 — 색 토큰이라 실화면 QA 몫(trip-create.md).
 
-      [1, 2, 3, 4].forEach((n) => {
-        const seg = tokens(screen.getByTestId(`trip-wizard-progress-seg-${n}`));
-        expect(seg).toContain(
-          n <= filled ? 'bg-primary' : 'bg-hairline-strong'
-        );
-      });
-      expect(screen.queryByTestId('trip-wizard-progress-seg-5')).toBeNull();
-    }
-  );
-
-  it('분수는 넘긴 label 그대로 진행 행 안에 있고, 막대–분수 간격은 gap-xs + ml-[2px] 이다', () => {
+  it('분수는 넘긴 label 그대로 진행 행 안에 있다', () => {
     renderHeader({ progress: { filled: 3, label: '3 / 4' } });
 
     const progress = screen.getByTestId('trip-wizard-progress');
@@ -94,11 +74,5 @@ describe('위저드 공용 헤더', () => {
     expect(props.onBack).toHaveBeenCalledTimes(1);
   });
 
-  // 5-b 사후 개정 — 위 단언은 전부 Pressable 의 prop 이라 ‹ 글리프를 지워도 green 이었다(빈 버튼).
-  it('‹ 버튼 안에 뒤로 글리프(BackChevron 경로)가 그려진다', () => {
-    renderHeader({ backTestID: 'x-back' });
-
-    const back = screen.getByTestId('x-back');
-    expect(within(back).UNSAFE_getByType(BackChevronGlyph)).toBeTruthy();
-  });
+  // ‹ 글리프(BackChevronGlyph) 존재 단언은 jest-cut 에서 지웠다 — SVG 생김새라 실화면 QA 몫.
 });

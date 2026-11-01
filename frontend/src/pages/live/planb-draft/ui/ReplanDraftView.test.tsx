@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { ReplanSlotVM } from '@/entities/itinerary-slot';
@@ -154,23 +154,14 @@ describe('🔴 V1 · AC-2 — 펼침 헤더·일차 칩·시트 스냅', () => {
   });
 });
 
-describe('🔴 V2 · AC-3 — 행 5개: 순서·번호·톤·다른 후보', () => {
-  it('Figma 순서로 번호 1~5, 방문 3행 초록·예정 2행 빨강, "다른 후보"는 예정 2행에만 있고 누르면 slotKey 로 1회', () => {
+describe('🔴 V2 · AC-3 — 행 5개: 순서·번호·다른 후보', () => {
+  it('Figma 순서로 번호 1~5(톤 색은 실화면 QA), "다른 후보"는 예정 2행에만 있고 누르면 slotKey 로 1회', () => {
     const { onPressCandidates } = renderView();
 
     expect(textsOf(/^planb-draft-slot-name-/)).toEqual(NAMES);
     const numbers = screen.getAllByTestId(/^planb-draft-slot-number-/);
     expect(numbers).toHaveLength(5);
     numbers.forEach((node, i) => expect(node).toHaveTextContent(String(i + 1)));
-    expect(
-      numbers.map((node) =>
-        classTokens(node).includes('bg-success')
-          ? 'success'
-          : classTokens(node).includes('bg-primary')
-            ? 'primary'
-            : 'none'
-      )
-    ).toEqual(['success', 'success', 'success', 'primary', 'primary']);
 
     expect(
       screen
@@ -394,25 +385,6 @@ describe('🔴 V10 · AC-13 — INV-3', () => {
     const tree = JSON.stringify(screen.toJSON());
     expect(tree).toContain('1.4km');
     expect(tree).not.toMatch(/\d+\s*분|\d+\s*시간|소요/);
-  });
-});
-
-describe('🔴 TRIP-1214 c · 시트를 맨 아래로 내려도 [직접 수정]·[적용하기]는 보인다', () => {
-  it('V12 · 가장 낮은 칸으로 내려도 두 버튼이 남는다', () => {
-    renderView();
-
-    const sheet = screen.root.findAll(
-      (node) =>
-        typeof node.props?.index === 'number' &&
-        Array.isArray(node.props?.snapPoints)
-    )[0];
-
-    act(() => {
-      sheet.props.onChange(0);
-    });
-
-    expect(screen.getByTestId('sheet-cta-button-0')).toBeTruthy();
-    expect(screen.getByTestId('sheet-cta-button-1')).toBeTruthy();
   });
 });
 

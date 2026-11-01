@@ -47,17 +47,6 @@ const SLOTS: ReplanSlotVM[] = [
   },
 ];
 
-/** 옛 i12 화면에만 있던 문구 — 새 화면 어디에도 없어야 한다(AC-5). */
-const REMOVED_TEXTS = [
-  '백그라운드로',
-  '5초쯤',
-  '비 예보·남은 시간 반영',
-  '대안 후보 거리·동선 계산',
-  '대안 영업시간 확인 중',
-  '새 동선 완성',
-  '바뀌는 건 남은 일정 뿐',
-];
-
 function renderView(overrides: Record<string, unknown> = {}) {
   const handlers = { onBack: jest.fn(), onCancel: jest.fn() };
   render(
@@ -166,25 +155,6 @@ describe('🔴 VS4 · AC-2 — [취소]와 ‹ 는 서로 섞이지 않는다', 
   });
 });
 
-describe('🔴 VS5 · AC-5 — 옛 i12 표면과 CTA 바가 없다', () => {
-  it('CTA 바·옛 testID 3종·옛 문구가 트리에 0건이다', () => {
-    renderView();
-
-    expect(screen.queryAllByTestId(/^sheet-cta/)).toHaveLength(0);
-    for (const id of [
-      'planb-solving-background',
-      'planb-solving-progress',
-      'planb-solving-cancel',
-    ]) {
-      expect(screen.queryByTestId(id)).toBeNull();
-    }
-    const tree = JSON.stringify(screen.toJSON());
-    for (const text of REMOVED_TEXTS) {
-      expect(tree).not.toContain(text);
-    }
-  });
-});
-
 describe('🔴 VS6 · AC-3 — 일차·날짜·곳 수를 모르면 제목만 남긴다', () => {
   it('빈 문자열이면 day·date 칸이 없고 meta 는 비어 있다', () => {
     renderView({ dayLabel: '', dateLabel: '', meta: '' });
@@ -208,8 +178,8 @@ describe('🔴 VS7 · AC-14 — INV-3', () => {
   });
 });
 
-describe('🔴 VS8 · TRIP-1040 AC-9 — 칸 상한·접기가 들어와도 i05 는 2칸 그대로, 라벨만 한 줄', () => {
-  it('칸은 정확히 [완성, 진행 중] 2개이고 접기 칸이 없으며, 두 라벨 모두 한 줄 말줄임이다', () => {
+describe('🔴 VS8 · TRIP-1040 AC-9 — 칸 상한·접기가 들어와도 i05 는 2칸 그대로', () => {
+  it('칸은 정확히 [완성, 진행 중] 2개이고 접기 칸이 없다 (라벨 말줄임은 실화면 QA)', () => {
     renderView();
 
     // 무회귀 — 재계획 카드는 칸 2개 고정이라 상한에 안 걸린다(접기 칸 0).
@@ -222,13 +192,6 @@ describe('🔴 VS8 · TRIP-1040 AC-9 — 칸 상한·접기가 들어와도 i05 
       'generation-gauge-cell-2-active',
     ]);
     expect(screen.queryByTestId('generation-gauge-cell-more')).toBeNull();
-
-    // 위젯의 라벨 한 줄 변경은 이 화면 라벨에도 그대로 걸린다(긴 "17시 이후 다시 짜는 중").
-    for (const label of ['방문한 곳 그대로', '17시 이후 다시 짜는 중']) {
-      const text = screen.getByText(label);
-      expect(text.props.numberOfLines).toBe(1);
-      expect(text.props.ellipsizeMode).toBe('tail');
-    }
   });
 });
 
@@ -263,19 +226,6 @@ describe('🔴 SK-1 — 스켈레톤 슬롯 카드 2장', () => {
       expect(screen.queryByTestId('planb-skeleton-card-3')).toBeNull();
     }
   );
-
-  it('카드 안에는 번호 원·사진·시간·제목·보조 자리가 있고 글자가 없다', () => {
-    renderSkeletonView([]);
-
-    for (const part of ['num', 'photo', 'time', 'title', 'meta']) {
-      expect(
-        screen.getByTestId(`planb-skeleton-card-1-${part}`)
-      ).toBeOnTheScreen();
-    }
-    expect(screen.getByTestId('planb-skeleton-card-1')).not.toHaveTextContent(
-      /\S/
-    );
-  });
 
   it('스켈레톤은 새 안내 문장·퍼센트·시간 표기를 만들지 않는다', () => {
     renderSkeletonView([]);

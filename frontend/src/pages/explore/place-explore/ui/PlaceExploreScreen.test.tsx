@@ -1,6 +1,8 @@
 import { Image } from '@/shared/ui/Image';
+import { StyleSheet } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -16,11 +18,6 @@ import {
   PlaceExploreScreen,
   type PlaceExploreScreenProps,
 } from './PlaceExploreScreen';
-import {
-  FAB_STACK_TOP,
-  getToastBottoms,
-  resetToastBottoms,
-} from '@/shared/ui/toastBottom';
 
 /**
  * AC-1 · AC-2 · AC-3 · AC-4 · AC-5 · AC-6 · AC-G1 · AC-G2 · AC-V1(01b Seed) —
@@ -552,6 +549,16 @@ describe('다섯 얼굴 · 실패 배너 · 대기 하트', () => {
           '‘맛집’ 필터 해제'
         )
       ).toBeOnTheScreen();
+    });
+
+    // 옛 `.chipScroll` 파일에서 옮겼다 — 옛 정규식 /필터가 함께/ 는 실제 문구("필터도 함께")와 안 맞아 늘 통과했다.
+    it('검색어만 걸리면 카테고리 문구는 없다', () => {
+      renderState(
+        { kind: 'filter-zero', blame: 'search' },
+        { searchText: '경복궁', selectedCategory: null }
+      );
+      const notice = screen.getByTestId('explore-places-filterzero');
+      expect(within(notice).queryByText(/필터도 함께/)).toBeNull();
     });
   });
 
@@ -1187,17 +1194,70 @@ describe('카드 press 버블링', () => {
   });
 });
 
-// 토스트 바닥 레지스트리는 모듈 싱글턴이다 — 파일 최상위(describe 밖)에서 리셋해야 앞 테스트의 신고가 안 샌다(TRIP-1559).
-afterEach(() => resetToastBottoms());
+// TRIP-1555 · 카드 목록(세로 FlatList)을 스크롤하는 동안 ♥·＋ FAB 숨김 — 옛 `.fabScroll` 파일을 합쳤다.
+// 훅 자체(디바운스·정리)는 `useScrollHide.test.ts` 가 맡고, 여기는 "FlatList 와 FAB 래퍼에 이었는가"만 본다.
+// 칩 줄(가로)이 FAB 를 안 숨기는 것은 jest 로 못 잰다(`fireEvent.scroll` 이 조상 onScroll 로 올라간다) → 6-b.
+// pointerEvents·opacity 는 터치 통과 계약 + 숨김 자체다(02a ★5). FlatList scroll 이벤트는 `contentSize`·
+// `layoutMeasurement` 가 없으면 VirtualizedList 가 throw 한다(02a ★3).
+// pointerEvents 와 opacity 가 같은 편을 들 때만 'hidden'/'shown' — 어긋나면 'mixed'(유령 FAB·터치 삼킴).
+function fabVisibility(testID: string): 'hidden' | 'shown' | 'mixed' {
+  const { pointerEvents, style } = screen.getByTestId(testID).props;
+  const opacity = StyleSheet.flatten(style)?.opacity ?? 1;
+  if (pointerEvents === 'none' && opacity === 0) return 'hidden';
+  if (pointerEvents !== 'none' && opacity === 1) return 'shown';
+  return 'mixed';
+}
+const scrollDown = () =>
+  fireEvent.scroll(screen.getByTestId('explore-places-grid'), {
+    nativeEvent: {
+      contentOffset: { x: 0, y: 120 },
+      contentSize: { width: 390, height: 5000 },
+      layoutMeasurement: { width: 390, height: 800 },
+    },
+  });
 
-describe('PlaceExploreScreen — 토스트 바닥 신고: FAB 2단 스택 (TRIP-1559 이음새 ③)', () => {
-  it('FAB 스택이 있는 장소 탐색은 그 윗변(FAB_STACK_TOP)을 신고하고 unmount 로 해제한다', () => {
-    expect(getToastBottoms()).toEqual([]);
+describe('장소 탐색 — 스크롤하는 동안 FAB 숨김', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
 
+  it('FAB 묶음이 ♥·＋ 를 감싸고, 처음엔 보인다(앵커)', () => {
     renderScreen();
-    expect(getToastBottoms()).toContain(FAB_STACK_TOP);
 
-    screen.unmount();
-    expect(getToastBottoms()).toEqual([]);
+    const stack = screen.getByTestId('explore-places-fab-stack');
+    expect(within(stack).getByTestId('explore-places-saved-fab')).toBeTruthy();
+    expect(within(stack).getByTestId('explore-places-create-fab')).toBeTruthy();
+    expect(fabVisibility('explore-places-fab-stack')).toBe('shown');
+  });
+
+  it('목록을 스크롤하면 숨고 터치를 막지 않으며, 멈춘 지 250ms 뒤에 다시 보인다', () => {
+    renderScreen();
+
+    scrollDown();
+    expect(fabVisibility('explore-places-fab-stack')).toBe('hidden');
+
+    act(() => jest.advanceTimersByTime(249));
+    expect(fabVisibility('explore-places-fab-stack')).toBe('hidden');
+
+    act(() => jest.advanceTimersByTime(1));
+    expect(fabVisibility('explore-places-fab-stack')).toBe('shown');
+  });
+
+  it('＋ 가 빠진 위저드 출처(hideCreateTrip)에서도 ♥ 묶음이 똑같이 숨었다 돌아온다', () => {
+    renderScreen({ hideCreateTrip: true });
+    // 앵커 — ＋ 는 없고 ♥ 만 묶음 안에 있다.
+    expect(screen.queryByTestId('explore-places-create-fab') === null).toBe(
+      true
+    );
+    expect(
+      within(screen.getByTestId('explore-places-fab-stack')).getByTestId(
+        'explore-places-saved-fab'
+      )
+    ).toBeTruthy();
+
+    scrollDown();
+    expect(fabVisibility('explore-places-fab-stack')).toBe('hidden');
+
+    act(() => jest.advanceTimersByTime(250));
+    expect(fabVisibility('explore-places-fab-stack')).toBe('shown');
   });
 });

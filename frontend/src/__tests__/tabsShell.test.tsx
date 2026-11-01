@@ -7,16 +7,15 @@ import { TAB_BAR_TOP } from '@/shared/ui/BottomTabBar';
 import { capturedTabsProps } from '@/test-support/expoRouterTabsMock';
 
 /**
- * AC-6~AC-8 · SC-1 · SC-4 · SC-5 — `(tabs)` 레이아웃·어댑터·라우트 래퍼.
+ * AC-6~AC-8 · SC-5 — `(tabs)` 레이아웃·어댑터.
  *
  * 무엇을 보장하나:
  *  (1) `_layout.tsx`가 여전히 5탭을 index·explore·itinerary·records·my 순서로 등록한다
  *      (교체 작업이 깨뜨리면 안 되는 회귀 가드),
- *  (2) `Tabs`에 `tabBar` 렌더프롭을 넘겨 탭바를 전면 커스텀한다(Q4),
- *  (3) 그 렌더프롭이 네비게이션 상태(state.index)를 `shell-tabbar-*` 활성 탭으로 정확히
- *      매핑하고, press 시 `navigation.navigate(라우트 이름)`을 호출한다,
- *  (4) `(tabs)/index.tsx`가 실물 `HomeScreen`을 그린다. explore·records 라우트 래퍼를 렌더하던 it 은 TRIP-1350 에서 지웠다 —
- *      라우트는 page 를 꽂기만 하고, 그 탭 동작은 `pages/explore/explore-landing/ui/ExploreLandingPage.test.tsx`·
+ *  (2) `Tabs`에 넘긴 `tabBar` 렌더프롭(Q4 전면 커스텀)이 네비게이션 상태(state.index)를 `shell-tabbar-*` 활성 탭으로 정확히
+ *      매핑하고, press 시 `navigation.navigate(라우트 이름)`을 호출한다.
+ *  라우트 래퍼(`(tabs)/index`·explore·records)를 렌더하던 it 은 지웠다(TRIP-1350 · 2026-11-01 축소) —
+ *      라우트는 page 를 꽂기만 하고, 그 탭 동작은 `pages/home/ui/HomePage.test.tsx`·`pages/explore/explore-landing/ui/ExploreLandingPage.test.tsx`·
  *      `pages/record/records-calendar/ui/RecordsCalendarPage.test.tsx`·`src/__tests__/tabsItineraryRoute.test.tsx` 가 잠근다.
  *
  * 왜 라우트 폴더(`app/`) 밖에 두는가: expo-router의 require.context가 `.test.tsx`를 라우트로
@@ -31,45 +30,8 @@ jest.mock('expo-router', () =>
   require('@/test-support/expoRouterTabsMock')
 );
 
-// (tabs)/index.tsx 가 TRIP-371 로 useGetTrips·useSavedPlaces 를 물면서, IndexRoute 를 직접
-// 렌더하는 아래 SC-1 이 QueryClient 부재로 크래시한다 — discovery(빈 목록·담김 0)로 목킹해
-// home-dashboard-root 만 뜨게 둔다. 목적지 왕복·얼굴 판정은 pages/home/ui/HomePage.test.tsx 가 진다.
-jest.mock('@/shared/api/generated/trips/trips', () => ({
-  useGetTrips: () => ({ data: [], isPending: false, isError: false }),
-}));
-jest.mock('@/features/save-place/model/savedPlaces', () => ({
-  useSavedPlaces: () => ({ savedPoiIds: [] }),
-}));
-// TRIP-1049 — 홈 라우트가 '지금 뜨는 장소' 실데이터로 `useGetPlaces` 를 문다. 빈 목록 무해 스텁
-// (0건 → 스팟 섹션 숨김, 이 파일 단언은 홈 루트 존재뿐이라 무영향).
-jest.mock('@/shared/api/generated/places/places', () => ({
-  useGetPlaces: () => ({
-    data: { items: [], nextCursor: null },
-    isPending: false,
-    isError: false,
-    refetch: () => {},
-  }),
-}));
-// TRIP-1432 — 여행 없는 홈 장소 레인은 서비스 지역 3곳 병렬 조회 훅(useQuery 직접)을 문다. 빈 목록 무해 스텁.
-jest.mock('@/features/explore/model/useMultiRegionPlaces', () => ({
-  useMultiRegionPlaces: () => ({
-    items: [],
-    degraded: false,
-    isPending: false,
-    isError: false,
-    refetch: () => {},
-  }),
-}));
-// TRIP-695 — (tabs)/index.tsx 가 useSavedStays().savedCount 를 물게 되면서 SC-1 이 QueryClient
-// 부재로 크래시한다 — 저장 숙소 0(배지 미표시)로 목킹해 무해 스텁만 둔다(위 useGetTrips·
-// useSavedPlaces 스텁과 동일 계열, 단언 무변경).
-jest.mock('@/features/save-stay/model/savedStays', () => ({
-  useSavedStays: () => ({ savedCount: 0 }),
-}));
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const TabsLayout = require('@routes/(tabs)/_layout').default;
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const IndexRoute = require('@routes/(tabs)/index').default;
 
 // 라우트 이름 5개 → 조작 네비 상태(state.routes)에 쓸 최소 형태.
 const ROUTE_NAMES = ['index', 'explore', 'itinerary', 'records', 'my'];
@@ -115,16 +77,6 @@ describe('(tabs)/_layout — 라우트 등록 순서 (AC-6 · SC-5 · 선제 gre
   });
 });
 
-describe('(tabs)/_layout — tabBar 렌더프롭 배선 (SC-4)', () => {
-  it('Tabs에 tabBar 함수 prop을 넘긴다', () => {
-    render(<TabsLayout />);
-
-    // 렌더프롭 = "이 자리를 무엇으로 그릴지" 함수를 통째로 넘기는 패턴.
-    // 이것이 함수여야 Q4가 요구하는 "전면 커스텀"이 성립한다.
-    expect(typeof capturedTabsProps.current?.tabBar).toBe('function');
-  });
-});
-
 describe('(tabs)/_layout — 어댑터 활성 매핑 (AC-7)', () => {
   it('현재 라우트 index=0(index) → 탭 key home이 selected로 매핑된다', () => {
     render(<TabsLayout />);
@@ -166,16 +118,6 @@ describe('(tabs)/_layout — 어댑터 press→navigate (AC-8)', () => {
 
     expect(screen.getByTestId('shell-tabbar-tab-itinerary')).toBeSelected();
     expect(screen.getByTestId('shell-tabbar-tab-home')).not.toBeSelected();
-  });
-});
-
-describe('(tabs)/index.tsx — 홈 라우트 래퍼 (SC-1 · SC-5)', () => {
-  it('기본 export가 홈 화면 루트를 그린다', () => {
-    // 홈은 라우터 무의존이라 준비할 목이 없다 — 어느 상태 픽스처인지는 단언하지 않는다
-    // (그건 4-b 대상이 아니라 [구현]의 재량, 02a §7 G-1).
-    render(<IndexRoute />);
-
-    expect(screen.getByTestId('home-dashboard-root')).toBeOnTheScreen();
   });
 });
 

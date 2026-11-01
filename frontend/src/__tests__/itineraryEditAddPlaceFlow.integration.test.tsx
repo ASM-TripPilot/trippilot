@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
 import { View } from 'react-native';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { type QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -35,6 +35,7 @@ import {
   fireEditDropOnZone,
 } from '@/test-support/editDragList';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
+import { newTestQueryClient, settle } from '@/test-support/queryRender';
 
 /**
  * TRIP-1498 (a) — 일정 편집기에서 [저장] 전에 바꾼 것(순서·시각·삭제)이 장소 추가 뒤에도 남는다.
@@ -69,15 +70,8 @@ import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 
 jest.setTimeout(30000);
 
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
@@ -319,16 +313,10 @@ function Flow({ kind }: { kind: Kind }): ReactElement {
   );
 }
 
-function newClient(gcTime: number = 0): QueryClient {
-  return new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime },
-      mutations: { gcTime: 0 },
-    },
-  });
-}
-
-function renderFlow(kind: Kind, client: QueryClient = newClient()) {
+function renderFlow(
+  kind: Kind,
+  client: QueryClient = newTestQueryClient({ gcTime: 0 })
+) {
   const view = render(
     <QueryClientProvider client={client}>
       <Flow kind={kind} />
@@ -364,12 +352,6 @@ function sentIds(index: number, date: string): string[] {
       .find((day) => day.date === date)
       ?.slots.map((one) => one.poiId) ?? []
   );
-}
-
-async function settle(): Promise<void> {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
 }
 
 /** 편집기의 버튼을 눌러 장소 추가 화면을 연다(`push` 목이 그 위에 얹는다). */
@@ -555,7 +537,7 @@ describe('ItineraryEditPage — 로컬 변경 뒤 장소 추가 (변형·무회�
 
   it('F5 · AC-a6 — 변경한 채 편집기를 버리고 다시 열면 옛 변경이 되살아나지 않고 서버 일정으로 시드된다', async () => {
     // 준비 — 캐시가 살아남는 클라이언트(gcTime 무한 = 타이머 없음). 재마운트의 첫 렌더에 시드가 도는 경로를 잰다.
-    const client = newClient(Infinity);
+    const client = newTestQueryClient();
     const first = renderFlow('edit', client);
     await ready();
     fireEditDragEnd(2, 0);

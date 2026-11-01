@@ -1,13 +1,12 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { getStaysSearch } from '@/shared/api/index.hooks';
 import { useStaySearch } from './useStaySearch';
-import { newTestQueryClient } from '@/test-support/queryRender';
+import { BASE } from '@/test-support/apiBase';
+import { createWrapper } from '@/test-support/mswHookHarness';
 
 /**
  * TRIP-179 AC-4 · AC-5 — 생성 클라이언트가 나가는 실제 요청(인증·baseURL·배열 직렬화) +
@@ -33,18 +32,8 @@ import { newTestQueryClient } from '@/test-support/queryRender';
 // authedClient(생성 클라이언트가 타는 mutator의 인증 계층)가 @/shared/storage 를 정적으로
 // 물고 있다. 이 시나리오는 401 이 없어 실제로 호출되지는 않지만, expo-secure-store 실물
 // 로드를 피하려면 authWiring.integration.test.ts:45 와 같은 형태로 목킹해야 한다.
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
-
-/** authWiring.integration.test.ts:59 와 같은 값(리포 관례). */
-const BASE = 'http://localhost:8080/api/v1';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 /** price: null 을 일부러 넣어 BR-U1-14(가격 부재는 카드 제외 사유 아님) 모양을 픽스처에도
  * 남긴다. */
@@ -135,23 +124,6 @@ describe('AC-4 · 생성 클라이언트가 나가는 경로 — 인증·baseURL
 });
 
 describe('AC-5 · useStaySearch가 생성 클라이언트 경로를 경유한다 (D-2)', () => {
-  /** useBootstrapGate.test.tsx:53 의 것을 복제한다(그 함수는 그 파일 로컬이고 공용 헬퍼가
-   * 아니다) — 사용처가 둘뿐이라 이번 칸에서 공용 헬퍼로 승격시키지 않는다(선행 투자 회피). */
-  function createWrapper() {
-    const client = newTestQueryClient({
-      // gcTime: 0 — 기본값(5분)이 만드는 타이머가 테스트 종료 후에도 살아남아 Node
-      // 프로세스를 300초 붙잡는다(게이트①-2 보정 W-2, 03b 실측). 검증력·테스트 의미
-      // 변화는 없는 위생 수정이다.
-      gcTime: 0,
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return Wrapper;
-  }
-
   it('useStaySearch를 호출하면 /stays/search가 호출되고 응답이 그대로 반환된다', async () => {
     // 준비
     setAccessToken('valid-access');

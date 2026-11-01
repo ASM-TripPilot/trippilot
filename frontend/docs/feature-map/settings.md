@@ -27,6 +27,8 @@ routes:
 - `settings-nav` 하위 화면 진입: 여행 취향·GPS 이동경로 기록·개인화·알림 설정·약관 3종.
 - `settings-footer` 하단 `TripPilot v<버전>`(버전을 알 때만)과 데이터 출처 블록, `© OpenStreetMap contributors` 링크는 외부 브라우저.
 - `settings-web-no-push` 푸시가 없는 플랫폼(웹)에서는 "알림" 그룹이 통째로 빠진다.
+- `settings-row-look` 위치 동의 칩은 `동의`면 분홍, `미동의`면 회색이고, 여행 취향 행 앞에는 반원 아이콘 하나, 개인화 행 앞에도 아이콘 하나가 있다. *(2026-11-01 jest 축소로 실화면 전용)*
+- `settings-chevron` 설정·마이 목록 행 오른쪽 `›` 화살표는 연한 회색이고, 저장한 숙소(l04) 행만 한 단계 진한 회색이다. *(2026-11-01 jest 축소로 실화면 전용)*
 
 ## How to get to it (user POV)
 

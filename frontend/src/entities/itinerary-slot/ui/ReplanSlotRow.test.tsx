@@ -1,5 +1,4 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import type { ReactTestInstance } from 'react-test-renderer';
 
 import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
 
@@ -33,12 +32,8 @@ const PLANNED: ReplanSlotVM = {
   isFixed: false,
 };
 
-function classTokens(node: ReactTestInstance): string[] {
-  return String(node.props.className ?? '').split(/\s+/);
-}
-
 describe('🔴 ReplanSlotRow · 예정 행 + 다른 후보 (AC-3)', () => {
-  it('R1 · 번호 4·빨강 톤·시간/이름/카테고리·사진을 그리고, "다른 후보"를 누르면 slotKey 로 1회 부른다', () => {
+  it('R1 · 번호 4·시간/이름/카테고리·사진을 그리고, "다른 후보"를 누르면 slotKey 로 1회 부른다', () => {
     const onPressCandidates = jest.fn();
     render(
       <ReplanSlotRow
@@ -51,8 +46,6 @@ describe('🔴 ReplanSlotRow · 예정 행 + 다른 후보 (AC-3)', () => {
     expect(screen.getByTestId('planb-draft-slot-s4')).toBeOnTheScreen();
     const number = screen.getByTestId('planb-draft-slot-number-s4');
     expect(number).toHaveTextContent('4');
-    expect(classTokens(number)).toContain('bg-primary');
-    expect(classTokens(number)).not.toContain('bg-success');
 
     expect(screen.getByTestId('planb-draft-slot-time-s4')).toHaveTextContent(
       '15:00–16:30'
@@ -79,7 +72,7 @@ describe('🔴 ReplanSlotRow · 예정 행 + 다른 후보 (AC-3)', () => {
 });
 
 describe('🔴 ReplanSlotRow · 방문 톤 (AC-3)', () => {
-  it('R2 · visited 는 번호 원이 bg-success 이고 index 0 이면 번호 1 이다', () => {
+  it('R2 · visited 행도 index 0 이면 번호 1 이다 (번호 원 색은 실화면 QA 몫)', () => {
     render(
       <ReplanSlotRow
         vm={{ ...PLANNED, slotKey: 's1', tone: 'visited' }}
@@ -89,8 +82,6 @@ describe('🔴 ReplanSlotRow · 방문 톤 (AC-3)', () => {
 
     const number = screen.getByTestId('planb-draft-slot-number-s1');
     expect(number).toHaveTextContent('1');
-    expect(classTokens(number)).toContain('bg-success');
-    expect(classTokens(number)).not.toContain('bg-primary');
   });
 });
 

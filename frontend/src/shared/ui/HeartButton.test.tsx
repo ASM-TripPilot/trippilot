@@ -196,9 +196,6 @@ describe('🔴 H-1 · AC-11·AC-13 — 누른 뒤 안 담김 → 담김으로 �
     // AC-13 — 튐을 얹어도 담김 판정은 루트 한 노드에 그대로 있다(HomeScreen.spotSave H-5).
     const root = screen.getByTestId(ROOT);
     expect(root).toBeSelected();
-    expect(root.props.className.split(/\s+/)).toEqual(
-      expect.arrayContaining(['h-8', 'w-8', 'rounded-pill', 'bg-on-primary'])
-    );
     expect(screen.getByTestId(FILLED)).toBeOnTheScreen();
     expect(screen.queryByTestId(OUTLINE)).toBeNull();
   });
