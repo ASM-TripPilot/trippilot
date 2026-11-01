@@ -5,7 +5,7 @@ description: TripPilot 앱을 iOS 시뮬레이터 실화면으로 QA하는 루�
 
 # TripPilot 실화면 QA 루프
 
-2026-09-25~26 첫 실행(발견 67건 → TRIP-976 서브 15칸)에서 굳힌 절차다. 원본 리포트·증거: `frontend/_workspace/qa-dogfood/20260925/` (report.md가 리포트 서식의 실물).
+첫 실행(발견 67건 → TRIP-976 서브 15칸)에서 굳힌 절차다. 원본 리포트·증거: `frontend/_workspace/qa-dogfood/20260925/` (report.md가 리포트 서식의 실물).
 
 ## 기능 지도 (커버리지 정본)
 
@@ -55,7 +55,7 @@ description: TripPilot 앱을 iOS 시뮬레이터 실화면으로 QA하는 루�
 - 지도 화면(여행 중 라이브·편집기·장소 추가)은 접근성 캡처가 워치독 타임아웃 → 스크린샷+좌표. 스크린샷 좌표는 402×874 포인트(`scale` 줘도 좌표계는 그대로). 러너가 "still finishing" 에러면 10~15초 쉬고 재시도.
 - 키보드가 떠 있으면 첫 탭은 키보드만 닫는다. `keyboard dismiss`는 안 되니 '검색'/'Return 키' 버튼을 누른다.
 - 스크린샷 직후 즉시 press는 씹힐 수 있다 — 1초 쉼.
-- **지도+시트 화면(MapSheetShell) 위 중첩 시트는 다음 터치 전까지 안 그려질 수 있다**(2026-09-26 실측 3곳) — 누른 뒤 무반응이면 `snapshot -i`에 "Bottom Sheet"/시트 testID가 있는지 먼저 보고, 빈 곳을 한 번 더 눌러 확인한 뒤 "무반응"으로 판정한다.
+- **지도+시트 화면(MapSheetShell) 위 중첩 시트는 다음 터치 전까지 안 그려질 수 있다**(실측 3곳, 상세는 하네스 변경이력) — 누른 뒤 무반응이면 `snapshot -i`에 "Bottom Sheet"/시트 testID가 있는지 먼저 보고, 빈 곳을 한 번 더 눌러 확인한 뒤 "무반응"으로 판정한다.
 - 시트가 전체 높이로 올라가 뒤로 버튼을 가려도 `press @e<뒤로 ref>`(좌상단 34,88)는 통한다. 핸들을 끌어내려도 안 내려갈 수 있다.
 - **시트를 올리고 내리는 것은 `swipe`가 아니라 `gesture pan`으로 핸들을 천천히** — `swipe`는 시트 아래 지도만 끈다(예 최상단으로 `gesture pan 201 521 0 -440 800`, 시트 안 목록 `gesture pan 201 700 0 -400 500`). 전면 스크림(딤)은 `id=`로 누르면 가운데(=시트 위)를 누르므로 **좌표로** 누른다(예 y≈120). 시트 안 화면 밖 버튼은 `scroll down 0.3` 뒤 ref로.
 - **OS 공유 시트는 바깥 빈 곳을 탭해 닫지 마라** — 그 탭이 아래 화면 행까지 눌린다(설정에서 로그아웃 다이얼로그가 열린 실측 1건, 상세는 하네스 변경이력). 시트 안 닫기 버튼이나 아래로 끌기로 닫는다.
@@ -64,16 +64,16 @@ description: TripPilot 앱을 iOS 시뮬레이터 실화면으로 QA하는 루�
 - 딥링크로 연 화면은 스택에 계속 쌓인다 — 루트 딥링크로는 초기화가 안 되니 화면별 뒤로·엣지 스와이프로 하나씩 닫는다.
 - **앱을 끈 상태에서 딥링크로 연 화면(콜드 진입)은 뒤로가 무반응일 수 있다**(여러 화면 실측, 결함 의심 FM-L1-02 계열) — 갇히면 앱 재기동으로 빠져나온다. 이걸 그 화면만의 결함으로 새로 적지 말고 기존 ID에 붙인다.
 - 탭바 좌표(y=835)는 탭바가 숨는 스택 화면(저장한 숙소 등)에선 그 자리의 하단 CTA를 누른다 — 탭 이동 전에 탭바가 보이는지 확인.
-- **산출물을 `frontend/_workspace/` 안에 쓰면 Metro 「Refreshing...」가 뜰 수 있다**(2026-09-29 실측 1회, 원인 추정) — 화면 갱신 지연·상태 초기화 같은 가짜 증상이 섞인다. 스크린샷·리포트는 frontend 밖(scratchpad)에 쓰고 끝에 옮긴다.
+- **산출물을 `frontend/_workspace/` 안에 쓰면 Metro 「Refreshing...」가 뜰 수 있다**(실측 1회·원인 추정, 상세는 하네스 변경이력) — 화면 갱신 지연·상태 초기화 같은 가짜 증상이 섞인다. 스크린샷·리포트는 frontend 밖(scratchpad)에 쓰고 끝에 옮긴다.
 - 연타 스크립트(`dt.sh`)의 둘째 탭이 새 화면의 같은 좌표를 누를 수 있다(연타 관통) — 「DUP?/?」가 나오면 새 화면에서 시트가 저절로 열렸는지부터 본다.
-- **내장 시뮬 MCP `tap`이 어느 순간부터 씹힐 수 있다**(2026-09-30 실측 — LogBox 경고 배너가 뜬 뒤 탭바·지도 화면 버튼 무반응). 같은 좌표를 `agent-device press <x> <y>`로 누르면 통한다. 지도 화면(허브·편집기)의 버튼은 처음부터 agent-device 좌표 탭을 쓴다.
+- **내장 시뮬 MCP `tap`이 어느 순간부터 씹힐 수 있다**(실측 — LogBox 경고 배너가 뜬 뒤 탭바·지도 화면 버튼 무반응). 같은 좌표를 `agent-device press <x> <y>`로 누르면 통한다. 지도 화면(허브·편집기)의 버튼은 처음부터 agent-device 좌표 탭을 쓴다.
 - 허브(i01) 메모 입력칸은 이제 `[text-view]`로 잡힌다 — `fill @ref`. j01 인라인 메모는 `fill 'id="…"'`도 된다. 키보드가 떠 있어도 `완료`·`저장` 첫 탭은 먹는다.
 - 시뮬레이터 위치: `xcrun simctl location booted set 37.5663,126.9779`, 권한: `xcrun simctl privacy booted grant location com.trippilot.travel`.
-- **`xcrun simctl openurl` 딥링크가 앱에 닿는데 화면이 안 바뀔 수 있다**(2026-11-01 실측 — 프리뷰·`_dev/fault`·`trips/…` 전부, 앱 로그엔 `UIOpenURLAction` 수신) → `node scripts/nav.mjs '<경로>'` 로 JS 런타임에서 `router.push` 한다(`--back`, `--eval '<식>'`). 같은 길로 `__r.getModules()` 를 뒤져 모듈을 직접 부를 수 있다 — 오프라인 흉내(`@tanstack/query-core` `onlineManager.setOnline(false)`)·토스트 띄우기(`shared/ui/Toast` `showToast`). 개발 빌드·Metro 8081 에서만 된다.
-- **8081을 도커 `trippilot-collect-backend`가 쥐고 있을 수 있다**(2026-10-16 실측 — preflight의 "Metro cwd"가 Docker 경로로 찍힘). 컨테이너는 끄지 말고 `pnpm start --port 8082` 후 `xcrun simctl openurl booted "com.trippilot.travel://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8082"`로 붙인다. 이 상태에선 딥링크가 화면을 안 바꿨다 — 딥링크 화면은 UI로 들어가거나 미확인으로 적는다.
+- **`xcrun simctl openurl` 딥링크가 앱에 닿는데 화면이 안 바뀔 수 있다**(실측 — 프리뷰·`_dev/fault`·`trips/…` 전부, 앱 로그엔 `UIOpenURLAction` 수신) → `node scripts/nav.mjs '<경로>'` 로 JS 런타임에서 `router.push` 한다(`--back`, `--eval '<식>'`). 같은 길로 `__r.getModules()` 를 뒤져 모듈을 직접 부를 수 있다 — 오프라인 흉내(`@tanstack/query-core` `onlineManager.setOnline(false)`)·토스트 띄우기(`shared/ui/Toast` `showToast`). 개발 빌드·Metro 8081 에서만 된다.
+- **8081을 도커 `trippilot-collect-backend`가 쥐고 있을 수 있다**(실측 — preflight의 "Metro cwd"가 Docker 경로로 찍힘). 컨테이너는 끄지 말고 `pnpm start --port 8082` 후 `xcrun simctl openurl booted "com.trippilot.travel://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8082"`로 붙인다. 이 상태에선 딥링크가 화면을 안 바꿨다 — 딥링크 화면은 UI로 들어가거나 미확인으로 적는다.
 - **agent-device 세션은 cwd에 묶인다** — 다른 폴더에서 `open`하면 DEVICE_IN_USE. 기기 세션을 연 폴더(`trippilot/frontend`)에서 실행하면 기존 세션을 그대로 쓴다 — 다른 워크트리를 QA할 때도 명령은 그 폴더에서 친다.
 - **`xcrun simctl privacy booted reset location`은 앱을 죽인다** — 위치 권한을 초기화하면 dev-client URL로 다시 띄운다.
-- **같은 폴더에서도 DEVICE_IN_USE가 날 수 있다**(2026-10-21 — 다른 cwd 세션이 기기를 쥔 채 남음, `session list`엔 안 보임). 에러에 찍힌 이름으로 `agent-device close --session <이름>` 하면 풀린다.
+- **같은 폴더에서도 DEVICE_IN_USE가 날 수 있다**(다른 cwd 세션이 기기를 쥔 채 남음, `session list`엔 안 보임). 에러에 찍힌 이름으로 `agent-device close --session <이름>` 하면 풀린다.
 - **Metro 포트를 바꿨던 시뮬은 앱 기본값이 남는다** — 다른 포트로 띄우면 앱이 옛 포트를 찾는다. `xcrun simctl spawn <UDID> defaults read com.trippilot.travel RCT_jsLocation`으로 보고 `defaults write … RCT_jsLocation localhost:8081`(앱 종료 상태에서). 부팅된 시뮬이 여러 대면 `booted` 대신 UDID를 쓴다.
 - **푸시 탭 라우팅은 `xcrun simctl push <UDID> com.trippilot.travel <파일>`로 볼 수 있다** — 데이터는 Expo 형식으로 `"body": {"actionType":"REFLECTION_DAILY","tripId":…,"dayDate":…}` 안에 넣어야 한다(최상위 키에 두면 탭해도 이동 없음). 배너는 1초 안에 사라지므로 push 직후 바로 `agent-device press 150 90`(상단)으로 누른다.
 - **자동 도착(U10) 재생 좌표는 로컬 DB에서 가져오면 안 된다** — dev-api의 POI id·좌표가 로컬 `app.poi`와 달라(같은 이름 다른 id) 반경 밖이 된다. 좌표는 `frontend/docs/u10-location-sim.md` 절차대로 그 서버 데이터 기준으로 잡는다.
