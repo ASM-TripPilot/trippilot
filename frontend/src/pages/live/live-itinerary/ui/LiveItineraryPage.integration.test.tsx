@@ -6774,9 +6774,7 @@ describe('방문 체크', () => {
           wrapper,
         });
         await waitFor(() =>
-          expect(
-            within(card('p3')).getByTestId(COMPLETE_BTN)
-          ).toBeOnTheScreen()
+          expect(within(card('p3')).getByTestId(COMPLETE_BTN)).toBeOnTheScreen()
         );
 
         // 실행 ① — p3 [방문 완료](응답 대기). 낙관 완료로 진행 중이 사라져 p1 에 [도착]이 선다.
