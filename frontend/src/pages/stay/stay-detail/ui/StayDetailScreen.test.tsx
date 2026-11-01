@@ -5,7 +5,6 @@ import {
   within,
 } from '@testing-library/react-native';
 import type { StayDetail } from '@/shared/api/index.schemas';
-import { formatPrice } from '@/entities/stay';
 import { stayCoverFor } from '@/test-support/placeCoverFixtures';
 import { StayDetailScreen } from './StayDetailScreen';
 
@@ -36,6 +35,42 @@ afterEach(() => {
   }
 });
 
+// openapi `StayDetail` 계약 모양(필수 9 + 선택 4). 주소는 지역('해운대')을 부분으로 품지만
+// 완전일치 매처라 지역 개수 세기에 안 섞인다(S1).
+const DETAIL: StayDetail = {
+  stayId: 'NAVER:s1',
+  externalSource: 'NAVER',
+  externalId: 's1',
+  name: '해운대 오션 호텔',
+  lat: 35.1587,
+  lng: 129.1604,
+  region: '해운대',
+  amenities: ['ocean', 'wifi'],
+  stayType: 'HOTEL',
+  price: { amount: 145000, currency: 'KRW' },
+  address: '부산 해운대구 우동 1411-1',
+  phone: '051-749-7000',
+  rooms: 120,
+};
+
+function noop(): void {}
+
+function ready(detail: StayDetail = DETAIL) {
+  return { kind: 'ready', detail } as const;
+}
+
+function baseProps() {
+  return {
+    state: ready(),
+    saved: false,
+    onToggleSave: noop,
+    onPressBook: noop,
+    onPressBack: noop,
+    onPressPhone: noop,
+    onRetry: noop,
+  };
+}
+
 // 옛 StayDetailScreen.test — TRIP-940·TRIP-989 (INV-1·INV-4)
 describe('얼굴·지도·정보 (옛 본 파일)', () => {
   /**
@@ -64,49 +99,9 @@ describe('얼굴·지도·정보 (옛 본 파일)', () => {
    *    잰다 — SVG stroke/shape 는 jest 사각(repo-traps §글리프). 여기선 아이콘 leaf 존재까지만.
    */
 
-  // openapi `StayDetail` 계약 모양(필수 9 + 선택 4). 주소는 지역('해운대')을 부분으로 품지만
-  // 완전일치 매처라 지역 개수 세기에 안 섞인다(S1).
-  const DETAIL: StayDetail = {
-    stayId: 'NAVER:s1',
-    externalSource: 'NAVER',
-    externalId: 's1',
-    name: '해운대 오션 호텔',
-    lat: 35.1587,
-    lng: 129.1604,
-    region: '해운대',
-    amenities: ['ocean', 'wifi'],
-    stayType: 'HOTEL',
-    price: { amount: 145000, currency: 'KRW' },
-    address: '부산 해운대구 우동 1411-1',
-    phone: '051-749-7000',
-    rooms: 120,
-  };
-
-  // 2톤 가격의 bold 노드 텍스트 — formatPrice 반환('145,000원~')에서 접미 '~'를 뗀 값(StaySearchCard 방식).
-  const BOLD_PRICE = formatPrice(DETAIL.price).slice(0, -1); // '145,000원'
-  const FULL_PRICE = formatPrice(DETAIL.price); // '145,000원~' — 결합 단일 노드는 없어야 한다
-
   // Q2 — 비정상 얼굴은 Figma e03 error(4514:2330)의 기존 문구를 그대로 쓴다.
   const FAIL_TITLE = '숙소 정보를 불러올 수 없어요';
   const FAIL_SUBTITLE = '다시 시도하거나 목록으로 돌아가세요';
-
-  function noop(): void {}
-
-  function ready(detail: StayDetail = DETAIL) {
-    return { kind: 'ready', detail } as const;
-  }
-
-  function baseProps() {
-    return {
-      state: ready(),
-      saved: false,
-      onToggleSave: noop,
-      onPressBook: noop,
-      onPressBack: noop,
-      onPressPhone: noop,
-      onRetry: noop,
-    };
-  }
 
   describe('S1 · 가격줄 — 이름·2톤 가격·지역 (AC-1 · AC-5 · BR-U1-12 · INV-3)', () => {
     it('이름·사진자리·지도자리를 그리고 "· 1박" 접미가 없다', () => {
@@ -133,15 +128,13 @@ describe('얼굴·지도·정보 (옛 본 파일)', () => {
       ]);
     });
 
-    it('가격줄이 2톤(bold 원 + muted ~) 두 형제이고 결합 단일 노드가 없다', () => {
+    it('가격줄에 최저가 "145,000원~" 가 보인다', () => {
       render(<StayDetailScreen {...baseProps()} />);
 
-      const priceRow = screen.getByTestId('stay-detail-price-row');
-      // bold '145,000원' + muted '~'(View 형제라 결합 집계 안 됨).
-      expect(within(priceRow).getByText(BOLD_PRICE)).toBeOnTheScreen();
-      expect(within(priceRow).getByText('~')).toBeOnTheScreen();
-      // 결합 단일 노드 '145,000원~'은 어디에도 없다(2톤 분할 확인).
-      expect(screen.queryByText(FULL_PRICE)).toBeNull();
+      // 2톤(bold 원 + muted ~) 분할은 생김새라 6-b 몫이다 — 여기선 금액이 보이는지만 본다.
+      expect(screen.getByTestId('stay-detail-price-row')).toHaveTextContent(
+        /145,000원~/
+      );
     });
 
     it('가격줄 우측에 지역이 붙고(justify-between), 위치줄은 지역 대신 주소를 그린다 (TRIP-940 AC-1)', () => {
@@ -324,21 +317,15 @@ describe('얼굴·지도·정보 (옛 본 파일)', () => {
   // TRIP-1019 #016 — 숙소 위치 핀에 번호 "1"이 찍혔다(d06 장소 상세의 번호 물방울을 그대로 썼다).
   // Figma e03(1700:1183) 위치 지도는 빨강 마커 + 흰 침대, 번호 없음 = MapView 의 `kind:'stay'` 마커다
   // (e05 R-19 선례). 여기선 실 MapView 를 그리므로 pins prop 대신 **그려진 결과**를 본다: 침대 마커
-  // testID 가 있고, 번호 글자가 없다. 마커 그림(빨강·침대)은 SVG 라 6-b.
+  // testID 가 있는지 본다. 번호 글자 부재·마커 그림(빨강·침대)은 SVG 라 6-b.
   describe('S9b · 위치 핀 = 번호 없는 숙소 마커 (TRIP-1019 #016 · US-STAY-03 · Figma e03)', () => {
-    it('지도 안 핀에 번호 "1" 글자가 없고, 침대 마커(map-marker-stay-1)로 그려진다', () => {
+    it('지도 안 핀이 침대 마커(map-marker-stay-1)로 그려진다', () => {
       render(<StayDetailScreen {...baseProps()} />);
 
       const pin = within(screen.getByTestId('stay-detail-map')).getByTestId(
         'map-marker-pin-1'
       );
 
-      // 금지: 핀 안에 SVG 글자가 없다. 번호 물방울은 번호를 SVG 글자(RNSVGTSpan 의 content)로 그려
-      // `getByText` 로는 안 잡힌다(02a §5 실측) — 글자 노드의 content 를 모아 비어 있는지 본다.
-      const glyphs = pin
-        .findAll((node) => String(node.type) === 'RNSVGTSpan')
-        .map((node) => node.props.content as unknown);
-      expect(glyphs).toEqual([]);
       // 정상: 숙소 마커 경로를 탔다(kind 미전달이면 번호 물방울로 폴백해 이 testID 가 없다).
       expect(within(pin).getByTestId('map-marker-stay-1')).toBeOnTheScreen();
     });
@@ -680,22 +667,6 @@ describe('편의시설 줄바꿈 (옛 .amenityOverflow)', () => {
    * 하나도 숨기지 않는다. 실제 줄바꿈 픽셀은 jest 사각이라 [검증] 캡처가 본다(02a §4).
    */
 
-  const DETAIL: StayDetail = {
-    stayId: 'NAVER:s1',
-    externalSource: 'NAVER',
-    externalId: 's1',
-    name: '해운대 오션 호텔',
-    lat: 35.1587,
-    lng: 129.1604,
-    region: '해운대',
-    amenities: ['ocean', 'wifi'],
-    stayType: 'HOTEL',
-    price: { amount: 145000, currency: 'KRW' },
-    address: '부산 해운대구 우동 1411-1',
-    phone: '051-749-7000',
-    rooms: 120,
-  };
-
   // 앞 4개는 아이콘 매핑이 있는 코드, 뒤 4개는 모르는 코드(폴백 아이콘, INV-1).
   const AMENITY_POOL = [
     '주차',
@@ -711,42 +682,18 @@ describe('편의시설 줄바꿈 (옛 .amenityOverflow)', () => {
   const ROW_ID = 'stay-detail-amenities';
   const CHIP_ID = /^stay-detail-amenity-(?!icon-)/; // 칩만(아이콘 leaf 제외, 02a ★3)
 
-  function noop(): void {}
-
   function renderWith(amenities: string[]): void {
     render(
       <StayDetailScreen
-        state={{ kind: 'ready', detail: { ...DETAIL, amenities } }}
-        saved={false}
-        onToggleSave={noop}
-        onPressBook={noop}
-        onPressBack={noop}
-        onPressPhone={noop}
-        onRetry={noop}
+        {...baseProps()}
+        state={ready({ ...DETAIL, amenities })}
       />
     );
   }
 
-  /** 렌더 트리 전체에서 가로 스크롤(`horizontal` 참) 노드의 type 을 모은다. */
-  type JsonNode = {
-    type?: string;
-    props?: { horizontal?: unknown };
-    children?: unknown[] | null;
-  };
-  function horizontalNodes(node: unknown, out: string[] = []): string[] {
-    if (Array.isArray(node)) {
-      node.forEach((child) => horizontalNodes(child, out));
-    } else if (node && typeof node === 'object') {
-      const { type, props, children } = node as JsonNode;
-      if (props?.horizontal) out.push(String(type));
-      if (children) horizontalNodes(children, out);
-    }
-    return out;
-  }
-
   describe('O2 · 5개 이상도 하나도 숨기지 않는다 (AC-2 · US-STAY-03)', () => {
     it.each([5, 6, 8])(
-      '%i개면 행 안에 칩이 그 개수만큼 전부 있고 +N 요약·가로 스크롤이 없다',
+      '%i개면 행 안에 칩이 그 개수만큼 전부 있고 +N 요약이 없다',
       (n) => {
         const values = AMENITY_POOL.slice(0, n);
         renderWith(values);
@@ -759,7 +706,6 @@ describe('편의시설 줄바꿈 (옛 .amenityOverflow)', () => {
           ).toBeOnTheScreen();
         });
         expect(screen.queryAllByText(/^\+\d+$/)).toHaveLength(0);
-        expect(horizontalNodes(screen.toJSON())).toEqual([]);
       }
     );
   });

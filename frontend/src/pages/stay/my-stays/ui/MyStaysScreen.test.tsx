@@ -16,7 +16,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
  *
  * 한 파일로 합친 기록(TRIP-1148): 옛 `MyStaysScreen.test.tsx`·`.l04parity.test.tsx` 를 각자의 바깥 describe 로
  * 옮겼다. l04parity 안에 있던 남의 컴포넌트 테스트 둘은 소스 옆으로 떼었다(01b Q4) — 출발점 다이얼로그 →
- * `BaseToggleDialog.test.tsx`(TRIP-1191 로 컴포넌트째 삭제), `ChevronRightGlyph` 기본색 → `SettingsGlyphs.test.tsx`.
+ * `BaseToggleDialog.test.tsx`(TRIP-1191 로 컴포넌트째 삭제), `ChevronRightGlyph` 기본색 → 실화면 QA(기능 지도 `settings.md` `settings-chevron`).
  * INV-3 "분·시간·소요 0건" 렌더 it 은 지웠다 — 숙소 계약(`SavedStay`)에 시간·거리 재료가 없다(README 판정 4 하위 규칙).
  */
 

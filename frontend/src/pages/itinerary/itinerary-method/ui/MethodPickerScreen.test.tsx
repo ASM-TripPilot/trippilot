@@ -5,8 +5,6 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import { TripWizardHeader } from '@/widgets/trip-wizard-header';
-
 import { MethodPickerScreen } from './MethodPickerScreen';
 
 /**
@@ -156,11 +154,8 @@ describe('위저드 공용 헤더 (3/4)', () => {
     ).toHaveLength(0);
   });
 
-  it('헤더는 공용 TripWizardHeader 하나이고, 제목은 "일정 만들기"·‹ 는 기존 testID + "뒤로" 라벨이다', () => {
+  it('헤더 제목은 "일정 만들기"·‹ 는 기존 testID + "뒤로" 라벨이다', () => {
     renderPicker();
-
-    // 같은 컴포넌트 함수를 그렸는가 — testID·className 복사로는 못 속인다(0개·2개면 throw).
-    expect(screen.UNSAFE_getByType(TripWizardHeader)).toBeTruthy();
 
     const header = screen.getByTestId('trip-wizard-header');
     expect(within(header).getByText('일정 만들기')).toBeOnTheScreen();
@@ -207,7 +202,7 @@ describe('TRIP-784 · h01 시작 방법 Figma 재정합', () => {
     ).toBeNull();
   });
 
-  it('AC-4 · 추천 배지가 0개다(copick 제목·설명은 유지)', () => {
+  it('AC-4 · copick 카드 제목·설명 (옛 추천 배지 부재 단언은 2026-11-01 지웠다 — 삭제된 표면)', () => {
     render(
       <MethodPickerScreen
         onBack={noop}
@@ -217,13 +212,6 @@ describe('TRIP-784 · h01 시작 방법 Figma 재정합', () => {
       />
     );
 
-    // 배지 소멸 — testID 와 '추천' 텍스트 둘 다 0. queryByText(문자열) 은 완전 일치라
-    // 설명 속 "AI 추천 위에서…" 에는 안 걸린다(그건 배지가 아니라 본문).
-    expect(screen.queryByTestId('itinerary-method-copick-badge')).toBeNull();
-    expect(screen.queryByText('추천')).toBeNull();
-
-    // 짝 — copick 카드의 제목·설명은 유지된다(배지만 뗀다). 설명 안의
-    // "AI 추천" 은 배지가 아니라 본문이라 살아남는다(Seed AC-4 · 지우지 말 것).
     expect(screen.getByText('AI와 같이 짜기')).toBeOnTheScreen();
     expect(screen.getByText('AI 추천 위에서 골라가며 완성')).toBeOnTheScreen();
   });

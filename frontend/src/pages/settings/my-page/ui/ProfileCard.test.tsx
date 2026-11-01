@@ -7,7 +7,6 @@ import {
 import { ProfileCard } from './ProfileCard';
 import type { ReactTestInstance } from 'react-test-renderer';
 import type { TripBucket } from '../model/tripBuckets';
-import { PencilGlyph } from '@/features/settings/ui/SettingsGlyphs';
 
 /**
  * l03 프로필 카드 단위 테스트.
@@ -192,17 +191,6 @@ describe('숫자 3칸 (옛 .counts)', () => {
       expect(onPressCount).toHaveBeenCalledWith('ended');
     });
   });
-
-  describe('🔴 AC-11 · › 는 라벨과 따로 된 글자다', () => {
-    it.each(BUCKETS)('%s 칸: 라벨 Text 와 › Text 가 따로 있다', (bucket) => {
-      render(<ProfileCard {...BASE} onPressCount={jest.fn()} />);
-      const cell = screen.getByTestId(`my-profile-count-${bucket}`);
-
-      // 라벨은 글자 그대로 한 Text(› 를 붙이면 '예정 ›' 이 되어 0개).
-      expect(hostTexts(cell, LABEL[bucket])).toHaveLength(1);
-      expect(hostTexts(cell, '›')).toHaveLength(1);
-    });
-  });
 });
 
 // TRIP-775
@@ -213,7 +201,6 @@ describe('Figma 정합 (옛 .l03parity)', () => {
    * 무엇을 보장하나:
    *  - AC-1 `tags` 로 받은 문자열만 칩으로 그린다(서버가 `#` 를 붙여 주므로 그대로 — `##` 없음).
    *    안 받으면 태그 줄이 없다.
-   *  - AC-2 [편집]은 아이콘 없이 "편집" 글자 하나다.
    *  (AC-3 카운트 세로 구분선 수·순서는 TRIP-1367 로 지웠다 — 실화면 몫.)
    *
    * 모서리·그림자·Inter 숫자 같은 픽셀은 jest 가 못 본다 — [검증] 스크린샷 대조 몫.
@@ -249,17 +236,6 @@ describe('Figma 정합 (옛 .l03parity)', () => {
       // 짝 앵커 — 카드가 안 그려져서 0인 것이 아니다.
       expect(screen.getByTestId('my-profile-card')).toBeOnTheScreen();
       expect(screen.getByText('여행자123')).toBeOnTheScreen();
-    });
-  });
-
-  describe('AC-2 · [편집] 버튼 모양', () => {
-    it('연필 아이콘 없이 "편집" 글자 하나만 있다', () => {
-      render(<ProfileCard {...BASE} onPressEdit={jest.fn()} />);
-
-      const edit = screen.getByTestId('my-profile-edit');
-      expect(edit.findAllByType(PencilGlyph)).toHaveLength(0);
-      // 완전 일치 — 버튼 안 글자 전체가 "편집"이다.
-      expect(edit).toHaveTextContent('편집');
     });
   });
 });

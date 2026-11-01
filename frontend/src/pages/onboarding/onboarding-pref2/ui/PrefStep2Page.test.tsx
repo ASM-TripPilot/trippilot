@@ -137,46 +137,6 @@ describe('PrefStep2Page — 복귀 시 선택값 보존 (AC2 · AC3 · 5-4)', ()
   });
 });
 
-describe('PrefStep2Page — 완료 내비게이션 (AC3 · AC-done-1 · 5-5)', () => {
-  it('0개 선택에도 완료를 탭하면 기능 안내로 replace한다', async () => {
-    // 준비 — 아무 것도 고르지 않은 채 렌더.
-    render(<PrefStep2Page />);
-
-    // 실행 — CTA 탭.
-    fireEvent.press(screen.getByTestId('onboarding-pref2-done'));
-
-    // 단언 — 완료 응답·게이트 전환 뒤 replace('/onboarding-tour') 정확히 1회('/' 0회).
-    await waitFor(() =>
-      expect(routerMock.replace.mock.calls).toEqual([[TOUR_ROUTE]])
-    );
-  });
-});
-
-describe('PrefStep2Page — 완료 시 서버에 취향 PUT (TRIP-471)', () => {
-  it('완료를 탭하면 slug→서버값으로 번역한 취향을 PUT 하고, 기능 안내로도 이동한다', async () => {
-    // 준비 — 2축 선택(style + 동행 pet 특례).
-    usePreferenceStore.getState().toggleStyle('rest');
-    usePreferenceStore.getState().toggleCompanion('pet');
-    render(<PrefStep2Page />);
-
-    // 실행 — 완료 탭.
-    fireEvent.press(screen.getByTestId('onboarding-pref2-done'));
-
-    // 단언 — PUT 이 번역된 바디로 정확히 1회, 완료 흐름(replace)도 그대로 진행.
-    expect(mockPutMutate).toHaveBeenCalledTimes(1);
-    const body = mockPutMutate.mock.calls[0][0].data;
-    expect(body.styles).toEqual(['휴양']);
-    // 예산 입력이 없어졌으니 키 자체를 보내지 않는다 — 생략은 서버에서 변경 없음(저장된 등급 유지).
-    expect(body).not.toHaveProperty('budgetTier');
-    expect(body).not.toHaveProperty('budgetRawAmount');
-    expect(body.petFlag).toBe(true); // pet 은 companionTypes 가 아니라 petFlag
-    expect(body.companionTypes).toEqual([]);
-    await waitFor(() =>
-      expect(routerMock.replace.mock.calls).toEqual([[TOUR_ROUTE]])
-    );
-  });
-});
-
 // TRIP-1500 — 재진입(앱 재시작 뒤 2/2)에선 스토어가 비어 있다. 그 상태로 PUT 하면 7키가 전부 null 이라 서버에
 // 저장된 취향이 지워진다. 비어 있으면 PUT 을 건너뛰고 완료만 보낸다(부분 선택 보존은 범위 밖 — 02a ★12).
 describe('PrefStep2Page — 빈 스토어 [완료]는 취향 PUT 을 보내지 않는다 (TRIP-1500 AC1)', () => {
@@ -388,36 +348,6 @@ describe('PrefStep2Page — 이동 축 탭↔스토어 왕복 (AC2 · US-ONB-09 
     ).toBeSelected();
     // 단언 ② — 쓰기 경로: transports 배열에 담긴다.
     expect(usePreferenceStore.getState().transports).toEqual(['walk']);
-  });
-});
-
-describe('PrefStep2Page — 온보딩 완료 재평가 신호 발화 (AC-A2 · TRIP-353)', () => {
-  it('완료(done)를 탭하면 재평가 신호를 발화하고 여전히 기능 안내로 replace 한다', async () => {
-    // 준비 — 렌더.
-    render(<PrefStep2Page />);
-
-    // 실행 — 완료 CTA 탭.
-    fireEvent.press(screen.getByTestId('onboarding-pref2-done'));
-
-    // 단언 — 재평가 신호를 정확히 1회 발화(결함 A 수정) + 기존 계약(replace, 목적지만 기능 안내로 바뀜) 유지.
-    await waitFor(() =>
-      expect(routerMock.replace.mock.calls).toEqual([[TOUR_ROUTE]])
-    );
-    expect(mockNotifyReeval).toHaveBeenCalledTimes(1);
-  });
-
-  it('일괄 탈출(skip-top)을 탭해도 재평가 신호를 발화하고 기능 안내로 replace 한다', async () => {
-    // 준비 — 렌더.
-    render(<PrefStep2Page />);
-
-    // 실행 — 상단 '나중에 설정하고 시작' 탭(TRIP-719로 하단 링크 제거).
-    fireEvent.press(screen.getByTestId('onboarding-pref2-skip-top'));
-
-    // 단언 — 탈출 경로도 반드시 신호를 발화한다(하나만 고치면 다른 쪽 사용자가 갇힘) + replace 유지.
-    await waitFor(() =>
-      expect(routerMock.replace.mock.calls).toEqual([[TOUR_ROUTE]])
-    );
-    expect(mockNotifyReeval).toHaveBeenCalledTimes(1);
   });
 });
 

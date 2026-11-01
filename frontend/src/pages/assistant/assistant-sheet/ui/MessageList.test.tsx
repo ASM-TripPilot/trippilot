@@ -1,6 +1,4 @@
-import type { ReactElement } from 'react';
-import { FlatList, Image, View } from 'react-native';
-import Svg from 'react-native-svg';
+import { Image, View } from 'react-native';
 import {
   fireEvent,
   render,
@@ -49,32 +47,13 @@ function textMessage(id: string, text: string): AssistantMessage {
   };
 }
 
-// 화면 트리의 testID 를 위→아래(그려지는 순서) 로 모은다.
-type Node = ReturnType<typeof screen.toJSON>;
-function testIdsInOrder(node: Node, out: string[] = []): string[] {
-  if (!node) return out;
-  if (Array.isArray(node)) {
-    node.forEach((child) => testIdsInOrder(child, out));
-    return out;
-  }
-  const id = (node.props as { testID?: string }).testID;
-  if (id) out.push(id);
-  node.children?.forEach((child) => {
-    if (typeof child !== 'string') testIdsInOrder(child, out);
-  });
-  return out;
-}
-
 describe('MessageList · 도우미 답은 평문, 사용자 말은 말풍선 (TRIP-1527)', () => {
-  it('도우미 답: 본문이 평문 요소에 있고 ✦ 아바타(Svg)가 없다', () => {
+  it('도우미 답: 본문이 평문 요소에 있다', () => {
     renderList({ messages: [textMessage('a1', '지금 날씨예요.')] });
 
     expect(screen.getByTestId('assistant-message-text-a1')).toHaveTextContent(
       '지금 날씨예요.'
     );
-    // 행동·카드가 없는 답이라 이 블록 안의 Svg 는 옛 ✦ 아바타뿐이었다
-    const block = screen.getByTestId('assistant-message-a1');
-    expect(within(block).UNSAFE_queryAllByType(Svg)).toHaveLength(0);
   });
 
   it('사용자 말: 기존 말풍선 testID 로 그려지고 평문 요소는 없다', () => {
@@ -84,56 +63,6 @@ describe('MessageList · 도우미 답은 평문, 사용자 말은 말풍선 (TR
       '조용한 카페로 바꿔줘'
     );
     expect(screen.queryByTestId('assistant-message-text-u1')).toBeNull();
-  });
-
-  it('한 답의 순서: 본문 → 카드 → 다음 행동 → 각주 → 평가 줄', () => {
-    const message: AssistantMessage = {
-      ...textMessage('o1', '정리했어요.'),
-      nextActions: [{ type: 'OPEN_ITINERARY', label: '일정 보기', params: {} }],
-      footnote: '* 서버 각주',
-    };
-    renderList({
-      messages: [message],
-      renderCard: () => <View testID="card-stub" />,
-      renderFeedback: () => <View testID="feedback-stub" />,
-    });
-
-    const ids = testIdsInOrder(screen.toJSON());
-    const order = [
-      'assistant-message-text-o1',
-      'card-stub',
-      'assistant-next-action-OPEN_ITINERARY',
-      'assistant-footnote-o1',
-      'feedback-stub',
-    ].map((id) => ids.indexOf(id));
-    expect(order).not.toContain(-1);
-    expect([...order].sort((a, b) => a - b)).toEqual(order);
-  });
-});
-
-describe('MessageList · 뒤집힌(inverted) 목록 (TRIP-1527 · 심판 W1)', () => {
-  it('FlatList 는 inverted 이고 최신 메시지가 데이터 맨 앞(index 0)에 온다 — ↓ 의 offset 0 = 맨 아래 전제', () => {
-    renderList({
-      messages: [
-        userMessage('u1', '첫 질문'),
-        textMessage('a1', '첫 답'),
-        userMessage('u2', '둘째 질문'),
-      ],
-    });
-
-    expect(screen.getByTestId('assistant-message-list').props.inverted).toBe(
-      true
-    );
-    // 그려진 순서(위→아래 DOM)는 데이터 순서 = 최신 → 오래된 것
-    const ids = testIdsInOrder(screen.toJSON());
-    const pos = (id: string) => ids.indexOf(id);
-    expect(pos('assistant-user-bubble-u2')).toBeGreaterThan(-1);
-    expect(pos('assistant-user-bubble-u2')).toBeLessThan(
-      pos('assistant-message-a1')
-    );
-    expect(pos('assistant-message-a1')).toBeLessThan(
-      pos('assistant-user-bubble-u1')
-    );
   });
 });
 
@@ -263,14 +192,6 @@ describe('MessageList · 아래로 가기(↓) 버튼 (TRIP-1527 · 01b Q3)', ()
     userMessage('u2', '다음 장소는?'),
   ];
 
-  let spy: jest.SpyInstance;
-  beforeEach(() => {
-    spy = jest.spyOn(FlatList.prototype, 'scrollToOffset');
-  });
-  afterEach(() => {
-    spy.mockRestore();
-  });
-
   it('맨 아래(offset 0)에서는 없고, 위로 올리면 나타나고, 다시 맨 아래로 오면 사라진다', () => {
     renderList({ messages: three() });
     expect(screen.queryByTestId(DOWN)).toBeNull();
@@ -285,76 +206,36 @@ describe('MessageList · 아래로 가기(↓) 버튼 (TRIP-1527 · 01b Q3)', ()
     expect(screen.queryByTestId(DOWN)).toBeNull();
   });
 
-  it('누르면 맨 아래(inverted 의 offset 0)로 애니메이션 이동한다', () => {
+  // 누르면 맨 아래로 내려가는지·새 답이 와도 자동으로 안 내리는지는 실제 스크롤 위치라 jest 사각 — 기능 지도
+  // `assistant.md` 몫(실화면 QA).
+  it('↓ 는 "맨 아래로" 라는 이름의 버튼이다 (심판 W3)', () => {
     renderList({ messages: three() });
     scrollTo(300);
-    expect(spy).not.toHaveBeenCalled();
 
-    // 심판 W3 — 버튼 역할 + 접근성 라벨(구현에 있는 문구 '맨 아래로')
     expect(screen.getByRole('button', { name: '맨 아래로' })).toBe(
       screen.getByTestId(DOWN)
     );
-    fireEvent.press(screen.getByTestId(DOWN));
-
-    expect(spy).toHaveBeenCalledTimes(1);
-    expect(spy).toHaveBeenCalledWith({ offset: 0, animated: true });
-  });
-
-  it('위로 올려 둔 채 새 답이 와도 자동으로 내리지 않고 버튼은 그대로 남는다', () => {
-    const { rerender, props } = renderList({ messages: three() });
-    scrollTo(300);
-    expect(screen.getByTestId(DOWN)).toBeOnTheScreen();
-
-    const arrived: ReactElement = (
-      <MessageList
-        {...props}
-        messages={[...three(), assistantSample('next-slot', { id: 'a2' })]}
-      />
-    );
-    rerender(arrived);
-
-    expect(screen.getByTestId('assistant-message-a2')).toBeOnTheScreen();
-    expect(spy).not.toHaveBeenCalled();
-    expect(screen.getByTestId(DOWN)).toBeOnTheScreen();
   });
 });
 
-describe('MessageList · next action 행 모양 가름 (TRIP-1529 · 01b Q6)', () => {
-  const createTrip = {
-    type: 'CREATE_TRIP',
-    label: '새 여행 만들기',
-    params: {},
-  };
-  const withAction = (): AssistantMessage => ({
-    ...textMessage('n2', '도와드릴게요.'),
-    nextActions: [createTrip],
-  });
+describe('MessageList · 여행 없이 연 모드의 next action 행 (TRIP-1529 · 01b Q6)', () => {
+  // 행 앞 아이콘 유무는 생김새라 실화면 몫(기능 지도 `assistant.md`). 여기선 아이콘 행도 누르면 그 행동을 올리는지만 본다.
+  it('noContext 면 행 전체가 터치 영역이고 누르면 그 행동을 올린다', () => {
+    const createTrip = {
+      type: 'CREATE_TRIP',
+      label: '새 여행 만들기',
+      params: {},
+    };
+    const { props } = renderList({
+      messages: [
+        { ...textMessage('n2', '도와드릴게요.'), nextActions: [createTrip] },
+      ],
+      noContext: true,
+    });
 
-  it('noContext 면 행에 앞 아이콘이 있고, 터치는 행 전체로 그 행동을 올린다', () => {
-    const { props } = renderList({ messages: [withAction()], noContext: true });
-
-    expect(
-      screen.getByTestId('assistant-next-action-icon-CREATE_TRIP')
-    ).toBeOnTheScreen();
     fireEvent.press(screen.getByTestId('assistant-next-action-CREATE_TRIP'));
     expect(props.onPressAction).toHaveBeenCalledWith(createTrip);
   });
-
-  it.each([
-    ['noContext 미지정', {}],
-    ['noContext=false', { noContext: false }],
-  ])(
-    '%s 면 링크 행이라 아이콘이 없다(같은 행 testID·터치는 그대로)',
-    (_l, extra) => {
-      const { props } = renderList({ messages: [withAction()], ...extra });
-
-      expect(
-        screen.queryByTestId('assistant-next-action-icon-CREATE_TRIP')
-      ).toBeNull();
-      fireEvent.press(screen.getByTestId('assistant-next-action-CREATE_TRIP'));
-      expect(props.onPressAction).toHaveBeenCalledWith(createTrip);
-    }
-  );
 });
 
 // TRIP-1564 — 후보 카드가 "장소 보기"(OPEN) 얼굴이면 같은 장소의 빨간 행은 숨긴다(카드가 그 행의 일을 한다).

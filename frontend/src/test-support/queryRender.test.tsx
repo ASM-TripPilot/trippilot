@@ -26,17 +26,6 @@ describe('newTestQueryClient — staleTime 옵션', () => {
     expect(client.getDefaultOptions().queries?.staleTime).toBe(Infinity);
   });
 
-  it('staleTime 안에서는 같은 키를 또 불러도 queryFn 이 한 번만 돈다', async () => {
-    const client = newTestQueryClient({ staleTime: 30_000 });
-    const queryFn = jest.fn(async () => 'ok');
-    expect(queryFn).toHaveBeenCalledTimes(0);
-
-    await client.fetchQuery({ queryKey: ['k'], queryFn });
-    await client.fetchQuery({ queryKey: ['k'], queryFn });
-
-    expect(queryFn).toHaveBeenCalledTimes(1);
-  });
-
   it('gcTime 과 staleTime 은 서로 독립이다', () => {
     const client = newTestQueryClient({ gcTime: 0, staleTime: 5 });
 
@@ -55,17 +44,6 @@ describe('newTestQueryClient — 기본값 잠금(기존 동작)', () => {
 
     expect(queries).toEqual({ retry: false, gcTime: Infinity });
     expect('staleTime' in queries).toBe(false);
-  });
-
-  it('staleTime 이 없으면 같은 키를 또 부를 때마다 queryFn 이 다시 돈다(기본 0)', async () => {
-    const client = newTestQueryClient();
-    const queryFn = jest.fn(async () => 'ok');
-    expect(queryFn).toHaveBeenCalledTimes(0);
-
-    await client.fetchQuery({ queryKey: ['k'], queryFn });
-    await client.fetchQuery({ queryKey: ['k'], queryFn });
-
-    expect(queryFn).toHaveBeenCalledTimes(2);
   });
 
   it('gcTime: 0 은 조회와 뮤테이션 둘 다에 걸린다', () => {

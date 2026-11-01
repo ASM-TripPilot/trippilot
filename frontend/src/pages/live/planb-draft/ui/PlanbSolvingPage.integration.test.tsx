@@ -663,14 +663,6 @@ describe('🔴 TRIP-1195 · 오늘이 아닌 날 세션 — 일차·날짜·캡�
     ).toHaveTextContent('3일차 일정 다시 짜는 중');
   });
 
-  it('F3 INV-3 — 어떤 라벨에도 소요시간 표현이 없다', () => {
-    renderFutureSession();
-
-    expect(
-      screen.getByTestId('generation-gauge-cell-2-active')
-    ).not.toHaveTextContent(/분|소요/);
-  });
-
   it('F4 targetDate 가 일정에 없으면 일차·날짜는 비우되 캡션은 "일정 다시 짜는 중"으로 거짓 없이 그린다', () => {
     mockScope = 'FULL_DAY';
     mockTargetDate = '2026-06-30';
@@ -1256,7 +1248,7 @@ describe('🔴 ‹ 확인 [나가기] — 뒤가 없어도 나가고, 연타해�
 
 describe('🔴 TRIP-1277 AC5 · INV-3 — 새 얼굴 어디에도 소요시간이 없고, 느림 안내엔 숫자가 없다', () => {
   // I1(오류 얼굴)·I2(종료 얼굴)의 소요시간 렌더 스캔은 지웠다(TRIP-1354 — 거리·시각 화면이 아니라 INV-3 렌더 단언 대상이 아님;
-  // 시간·거리 화면의 스캔은 F3, 숫자 카운터 금지는 I3).
+  // 캡션의 소요 글자는 F2 정확 일치가 잡는다 — 옛 F3 는 그 뮤테이션에서 F2 와 같이 red 라 합쳤다; 숫자 카운터 금지는 I3).
   it('I3 느림 안내 — 경과·남은 시간 숫자 0("90초째" 같은 카운터 금지), 화면 전체 N분·N시간·소요 0', () => {
     jest.useFakeTimers();
     renderPage();

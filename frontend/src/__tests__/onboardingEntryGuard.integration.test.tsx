@@ -51,14 +51,8 @@ jest.mock('expo-router', () => {
   };
 });
 
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest
-    .fn()
-    .mockResolvedValue({ accessToken: 'tok', refreshToken: 'ref' }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 /** openapi `ConsentState` 모양(termsType · granted · termsVersion). */
 interface ConsentRow {

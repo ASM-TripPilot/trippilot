@@ -45,11 +45,6 @@ const REMOVED: AppliedDiffRow = {
 
 const SHEET = 'planb-applied-sheet';
 
-function classTokens(node: ReactTestInstance): string[] {
-  const cn = node.props?.className;
-  return typeof cn === 'string' ? cn.split(/\s+/).filter(Boolean) : [];
-}
-
 function callbacks() {
   return { onConfirm: jest.fn() };
 }
@@ -75,20 +70,16 @@ function expectTexts(testID: string, expected: string[]): void {
   );
 }
 
-/** 내역 행 하나 — 점 색·종류 글자·이름·메타. */
+/** 내역 행 하나 — 종류 글자·이름·메타(점 색은 생김새 — 실화면 QA 몫). */
 function expectDiffRow(
   row: ReactTestInstance,
   kind: '추가' | '삭제',
-  dotClass: 'bg-success' | 'bg-primary',
   name: string,
   meta: string
 ): void {
   expect(within(row).getByTestId('planb-applied-diff-kind')).toHaveTextContent(
     kind
   );
-  expect(
-    classTokens(within(row).getByTestId('planb-applied-diff-dot'))
-  ).toContain(dotClass);
   expect(within(row).getByTestId('planb-applied-diff-name')).toHaveTextContent(
     name
   );
@@ -118,14 +109,14 @@ describe('🔴 S1·S2 · AC-1 — 픽스처 전부를 Figma 순서로 그린다'
     );
   });
 
-  it('S2 변경 내역 2행 — 추가(초록 점)·삭제(빨강 점) + 이름 + 메타', () => {
+  it('S2 변경 내역 2행 — 추가·삭제 + 이름 + 메타', () => {
     renderFull();
 
     expect(screen.getByTestId('planb-applied-diff')).toBeOnTheScreen();
     const rows = screen.getAllByTestId('planb-applied-diff-row');
     expect(rows).toHaveLength(2);
-    expectDiffRow(rows[0], '추가', 'bg-success', ADDED.name, ADDED.meta);
-    expectDiffRow(rows[1], '삭제', 'bg-primary', REMOVED.name, REMOVED.meta);
+    expectDiffRow(rows[0], '추가', ADDED.name, ADDED.meta);
+    expectDiffRow(rows[1], '삭제', REMOVED.name, REMOVED.meta);
   });
 });
 
@@ -142,8 +133,8 @@ describe('🔴 S3 · AC-1 — 배지·내역은 받은 순서 그대로(정렬�
     expectTexts('planb-applied-badge', ['이동 −6.9km', '바뀐 곳 1곳']);
     const rows = screen.getAllByTestId('planb-applied-diff-row');
     expect(rows).toHaveLength(2);
-    expectDiffRow(rows[0], '삭제', 'bg-primary', REMOVED.name, REMOVED.meta);
-    expectDiffRow(rows[1], '추가', 'bg-success', ADDED.name, ADDED.meta);
+    expectDiffRow(rows[0], '삭제', REMOVED.name, REMOVED.meta);
+    expectDiffRow(rows[1], '추가', ADDED.name, ADDED.meta);
   });
 });
 

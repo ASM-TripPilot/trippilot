@@ -27,6 +27,7 @@ routes:
 - `my-menu-stays` `등록 숙소` 행 → 등록 숙소 목록(상세는 `stay-register.md`).
 - `my-menu-style` `여행 스타일 분석` 행 → 스타일 분석 화면(상세는 `record-style.md`).
 - `my-menu-settings` 헤더 톱니와 하단 `설정` 행 → 설정(`settings.md`).
+- `my-profile-look` 프로필 숫자 칸의 ›는 라벨 옆 별도 글자이고, [편집]은 연필 아이콘 없이 "편집" 글자 하나다. 스타일 게이지 점은 라벨 바로 뒤에 붙는다(양끝 벌림 아님). *(2026-11-01 jest 축소로 실화면 전용)*
 
 ## How to get to it (user POV)
 

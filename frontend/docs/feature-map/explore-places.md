@@ -33,6 +33,8 @@ routes:
 - `place-detail-naver` 「네이버 지도에서 보기」 → 외부 네이버 지도, 실패 시 안내 배너.
 - `place-detail-loading` 조회 중 빈 화면 / `place-detail-notfound` 404 / `place-detail-error` 비-404 실패 + 「다시 시도」.
 - `place-detail-back` 뒤로 — 히스토리 없으면 홈으로 교체.
+- `places-toast-above-fab` FAB 가 있는 화면에서 토스트는 FAB 묶음 위에 떠서 가려지지 않는다. *(2026-11-01 jest 축소로 실화면 전용)*
+- `places-chip-follow` 카테고리 칩을 고르면 칩 줄이 그 칩이 보이도록 가로로 따라간다. *(2026-11-01 jest 축소로 실화면 전용)*
 
 ## How to get to it (user POV)
 

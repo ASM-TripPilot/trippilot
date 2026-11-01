@@ -1,10 +1,12 @@
 import { Platform } from 'react-native';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
-import { act, renderHook } from '@testing-library/react-native';
+import { renderHook } from '@testing-library/react-native';
 
 import { getPushPermission } from '@/shared/push';
 import { readInstallFlag, writeInstallFlag } from '@/shared/storage';
+
+import { settle } from '@/test-support/queryRender';
 
 import { usePermissionCatchUp } from './usePermissionCatchUp';
 
@@ -63,13 +65,6 @@ beforeEach(() => {
   mockWrite.mockReset().mockResolvedValue(undefined);
   mockReplace.mockReset();
 });
-
-/** 비동기 조회·한 틱 양보·이동까지 끝나도록 매크로태스크를 한 번 흘린다. */
-async function settle(): Promise<void> {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-}
 
 describe('usePermissionCatchUp — 플랫폼', () => {
   it('(대조) iOS 는 미결정 위치 권한이면 홈 직후 위치 안내로 보낸다', async () => {

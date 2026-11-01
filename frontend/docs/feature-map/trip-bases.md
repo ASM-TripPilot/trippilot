@@ -24,6 +24,7 @@ routes:
 - `bases-from-method` 3/4에서 연 여행 단위 화면: 두 CTA와 ‹가 모두 3/4로 돌아간다.
 - `bases-edit` 거점 편집 얼굴: 진행 표시·안내·생성 CTA 없이 [완료] 하나. 바뀌지 않았으면 그냥 나간다.
 - `bases-regen-ask` 거점 편집에서 바뀌었고 일정이 있는 여행(PLANNED·CONFIRMED)이면 「일정도 다시 만들까요?」를 묻고 [일정 다시 만들기]면 생성 화면으로 간다.
+- `bases-regen-back` [일정 다시 만들기]를 누르면 생성 화면으로 가고, 거기서 뒤로 가면 홈이다(편집 스택을 걷고 간다). *(2026-11-01 jest 축소로 실화면 전용)*
 
 ## How to get to it (user POV)
 

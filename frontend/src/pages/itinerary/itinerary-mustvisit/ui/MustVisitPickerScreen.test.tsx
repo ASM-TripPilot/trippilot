@@ -492,36 +492,10 @@ describe('🔴 C-AC7 · AC-7 — loading 에서 지도 자리 회색 스켈레�
   });
 });
 
-describe('🔴 C-AC8 · AC-8 — loading 카드 스켈레톤 3장, 각 내부 = 원+사각+바2', () => {
-  it('스켈레톤 개수와 카드별 내부 구조를 개수로 잠근다 (단일 회색 사각 거짓통과 차단)', () => {
+describe('C-AC8 · AC-8 — loading 스켈레톤은 카드로 세어지지 않는다', () => {
+  it('loading 이면 실제 카드는 0장이다 (스켈레톤 장수·내부 골격은 생김새라 2026-11-01 지웠다 — 실화면 QA 몫)', () => {
     render(<MustVisitPickerScreen view={{ kind: 'loading' }} />);
 
-    // 🔴 전역 개수 — 같은 testID 다중 반환은 완전일치 매칭이다(02a §5 실검증). 숫자로만 비교한다.
-    const cards = screen.queryAllByTestId(
-      'itinerary-mustvisit-screen-card-skeleton'
-    );
-    expect(cards.length).toBe(3);
-    expect(countTestId('itinerary-mustvisit-screen-skeleton-thumb')).toBe(3);
-    expect(countTestId('itinerary-mustvisit-screen-skeleton-box')).toBe(3);
-    expect(countTestId('itinerary-mustvisit-screen-skeleton-bar')).toBe(6);
-
-    // 🔴 카드별 내부 구조 — 첫 카드 안에 원 1·사각 1·바 2. 개수만으로는 "바 6개가 한 카드에
-    //    몰려도" 통과하므로 within 으로 카드 단위 구조를 못박는다(진행점 fill 함정 계열).
-    //    위 `cards.length===3` 이 먼저 통과해야 여기 닿는다(red 면 그 줄에서 멈춘다).
-    const first = cards[0];
-    expect(
-      within(first).queryAllByTestId(
-        'itinerary-mustvisit-screen-skeleton-thumb'
-      )
-    ).toHaveLength(1);
-    expect(
-      within(first).queryAllByTestId('itinerary-mustvisit-screen-skeleton-box')
-    ).toHaveLength(1);
-    expect(
-      within(first).queryAllByTestId('itinerary-mustvisit-screen-skeleton-bar')
-    ).toHaveLength(2);
-
-    // 짝 — 스켈레톤은 카드로 세어지지 않는다(실제 카드 0장).
     expect(cardTestIds()).toEqual([]);
   });
 });
@@ -848,8 +822,8 @@ describe('🔴 TRIP-1093 A1 · 목록 얼굴 — 마지막 카드와 CTA 사이�
   });
 });
 
-describe('🔴 TRIP-1093 A2 · 0곳 얼굴 — 버튼이 점선 안내 밖, 안내와 CTA 사이', () => {
-  it('안내 안에는 없고 화면에 하나 있으며, 문구가 정확하고, 누르면 추가 콜백 1회·CTA 콜백 0회', () => {
+describe('🔴 TRIP-1093 A2 · 0곳 얼굴 — 추가 버튼', () => {
+  it('화면에 하나 있으며, 문구가 정확하고, 누르면 추가 콜백 1회·CTA 콜백 0회', () => {
     // 준비
     const onPressAdd = jest.fn();
     const onProceed = jest.fn();
@@ -861,9 +835,7 @@ describe('🔴 TRIP-1093 A2 · 0곳 얼굴 — 버튼이 점선 안내 밖, 안�
       />
     );
 
-    // 단언 ① — 안내 블록 **밖**(Figma: 점선 박스 안에는 버튼·링크가 없다).
-    const empty = screen.getByTestId('itinerary-mustvisit-screen-empty');
-    expect(within(empty).queryAllByTestId(EMPTY_ADD).length).toBe(0);
+    // 단언 ① — 화면에 하나(점선 안내 밖·안내와 CTA 사이라는 위치는 생김새라 2026-11-01 뗐다).
     expect(countTestId(EMPTY_ADD)).toBe(1);
 
     // 단언 ② — 문구가 바뀌었다(옛 링크 문구는 어디에도 없다).

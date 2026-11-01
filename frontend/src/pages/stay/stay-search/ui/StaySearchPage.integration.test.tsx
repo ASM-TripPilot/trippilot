@@ -8,6 +8,7 @@ import {
   within,
 } from '@testing-library/react-native';
 import { BASE } from '@/test-support/apiBase';
+import { createGate, createHitLog } from '@/test-support/mswHookHarness';
 import {
   createGcZeroWrapper,
   newTestQueryClient,
@@ -1209,34 +1210,17 @@ describe('저장 하트 (옛 .save)', () => {
     };
   }
 
-  function createGate() {
-    let release!: () => void;
-    const opened = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    return { opened, release };
-  }
-
-  let observedHits: string[] = [];
+  const hitLog = createHitLog(server);
   let postedBodies: unknown[] = [];
 
   function hitCount(needle: string): number {
-    return observedHits.filter((hit) => hit === needle).length;
+    return hitLog.count(needle);
   }
 
-  function onRequestStart({ request }: { request: Request }): void {
-    observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
-  }
-
-  beforeAll(() => {
-    server.events.on('request:start', onRequestStart);
-  });
-  afterAll(() => {
-    server.events.removeListener('request:start', onRequestStart);
-  });
+  beforeAll(() => hitLog.attach());
 
   beforeEach(() => {
-    observedHits = [];
+    hitLog.reset();
     postedBodies = [];
     mockSearchParams = { region: '부산' };
     mockPush.mockClear();

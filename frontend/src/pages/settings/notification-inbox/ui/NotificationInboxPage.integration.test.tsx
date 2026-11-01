@@ -55,15 +55,8 @@ import { NotificationInboxPage } from './NotificationInboxPage';
  */
 
 // 생성 클라이언트의 인증 계층(authedClient)이 @/shared/storage 를 정적으로 문다.
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'a',
-    refreshToken: 'r',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 jest.mock('expo-router', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -280,6 +273,79 @@ const ERROR = 'notification-inbox-error';
 const RETRY = 'notification-inbox-retry';
 const EMPTY = 'notification-inbox-empty';
 const ROW = 'notification-inbox-row';
+
+// 옛 `NotificationInboxPage.hookMock.test.tsx`(TRIP-576·946·1075)에서 옮김 — 목적지 표는
+// `model/notificationAction.test.ts` 가, 행 press → push 는 아래 "개별 읽음" 묶음이 잠근다.
+// 여기엔 그 둘이 못 잡는 조립(메타·본문)·인라인 라벨 판정(Q2)·진입 표시 없음(AC-11)만 남긴다.
+describe('조립 · 응답 한 건이 행 한 줄이 되는 모양', () => {
+  const READ_AT = '2026-08-29T00:00:00.000Z';
+  const base = (overrides: Partial<Notification>): Notification => ({
+    notificationId: U1,
+    kind: 'SYSTEM',
+    title: '알림',
+    body: '',
+    actionType: null,
+    actionPayload: null,
+    occurredAt: new Date(Date.now() - (10 * 60000 + 30000)).toISOString(),
+    readAt: READ_AT,
+    ...overrides,
+  });
+
+  it('메타는 "라벨 · 상대시각", 본문은 서버 body 와 글자 그대로 같다(비우기·자르기 없음)', async () => {
+    // 준비 — PLAN_B 10분30초 전(→ "재계획 · 10분 전") + 20자를 넘는 일정 본문(자르기 회귀용).
+    const planB = base({
+      kind: 'PLAN_B',
+      body: '대안을 확인해 주세요',
+      actionType: 'PLANB_REPLAN',
+      actionPayload: { tripId: 't1', triggerId: 'tr1' },
+    });
+    const reminder = base({
+      notificationId: U2,
+      body: '다음 일정: 경복궁 · 14:30 · 840m',
+    });
+    items = [planB, reminder];
+
+    // 실행
+    await renderReady(2);
+
+    // 단언 — 행 순서대로 서버 body 완전일치(항등 normalizer 로 공백 가공도 금지).
+    expect(screen.getByText('재계획 · 10분 전')).toBeOnTheScreen();
+    const asIs = { normalizer: (text: string) => text };
+    const rows = screen.getAllByTestId(ROW);
+    [planB, reminder].forEach((item, index) => {
+      expect(
+        within(rows[index]).getByTestId('notification-inbox-body')
+      ).toHaveTextContent(item.body, asIs);
+    });
+  });
+
+  it('Q2 · "대안 일정 보기" 는 kind 가 아니라 actionType 에 붙는다 — 옛 행(kind PLAN_B + TRIP_ITINERARY)은 인라인 링크 없이 행 press 로 일정 화면', async () => {
+    items = [
+      base({
+        kind: 'PLAN_B',
+        actionType: 'TRIP_ITINERARY',
+        actionPayload: { tripId: 't1' },
+      }),
+    ];
+    await renderReady(1);
+
+    expect(screen.queryByTestId('notification-inbox-action')).toBeNull();
+    fireEvent.press(screen.getByTestId(ROW));
+
+    expect(pushMock).toHaveBeenCalledTimes(1);
+    expect(pushMock).toHaveBeenCalledWith(
+      '/trips/t1/itinerary?from=notification'
+    );
+  });
+
+  it('AC-11 · 진입할 곳이 없는 행은 버튼이 아니고 인라인 링크도 없다 (INV-4)', async () => {
+    items = [base({ kind: 'REFLECTION' })];
+    await renderReady(1);
+
+    expect(screen.queryByTestId('notification-inbox-action')).toBeNull();
+    expect(screen.getByTestId(ROW).props.accessibilityRole).not.toBe('button');
+  });
+});
 
 // TRIP-1501 · 조회 실패 얼굴. 클라이언트 재시도 0 이라 실패 응답 1개 = 실패 1회(앱 전역은 3회 재시도 ≈7초 뒤).
 describe('조회 실패 — "알림 없음"으로 접지 않고 오류 얼굴 + 다시 시도', () => {

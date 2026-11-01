@@ -83,27 +83,7 @@ describe('🔴 AC1 — 정상: center + pins 2개 → map-native, 마커 2개, �
   });
 });
 
-describe('🔴 TRIP-876 — 커스텀 분홍 번호 핀(네이버 기본 초록 마커 아님)', () => {
-  it('각 마커가 번호를 담은 커스텀 핀 자식을 그리고, caption 없이 anchor 로 끝을 맞춘다', () => {
-    // Arrange + Act
-    render(<MapView center={CENTER} pins={PINS} />);
-
-    // Assert — 마커마다 커스텀 핀 자식(map-marker-pin-{번호})이 있고 그 안에 번호가 보인다.
-    // 네이버 기본 마커는 caption 텍스트만이라 이 자식 testID 가 없다(그래서 이게 초록마커 회귀를 잡는다).
-    // 번호는 SVG 로 그린다(iOS 마커 래스터가 RN <Text> 글리프를 못 잡아 SVG 로 전환, 6-b 실측) —
-    // react-native-svg 는 문자열을 RNSVGTSpan 의 `content` prop 으로 넣어 toHaveTextContent 로는
-    // 안 보이므로, 핀 뷰 안에서 content===번호인 노드가 있는지로 확인한다.
-    for (const pin of PINS) {
-      const pinView = screen.getByTestId(`map-marker-pin-${pin.number}`);
-      const labels = within(pinView).UNSAFE_queryAllByProps({
-        content: String(pin.number),
-      });
-      expect(labels.length).toBeGreaterThan(0);
-    }
-
-    expect(screen.getAllByTestId('map-marker')).toHaveLength(PINS.length);
-  });
-});
+// TRIP-876 커스텀 핀(번호 SVG·caption·anchor)은 jest-cut 에서 지웠다 — 마커 생김새라 실화면 QA 몫(itinerary-view.md). 번호 렌더는 AC-3(b) 짝이 본다.
 
 describe('🔴 AC2 — viewOnly: 켜면 제스처 4토글 전부 false, 안 켜면 전부 false는 아니다', () => {
   it('viewOnly=true → NaverMapView가 4토글을 개별로 전부 false 로 받는다', () => {
@@ -255,118 +235,7 @@ describe('TRIP-748 — onTapMap: 지도 빈 곳 탭을 부모에 알린다(허�
   });
 });
 
-// ── TRIP-745 · 핀 3상태 + 경로선 색 (01b AC-1~3 — 현재위치 점 AC-4 는 TRIP-1536 에서 삭제) ──────────────────
-//
-// 무엇을 보장하나: MapPin.state 로 핀이 done/current/upcoming 세 얼굴로 갈리고(색·번호·체크),
-// 연결 경로선이 빨강(#FF385C)으로
-// 그려진다. 인프라 확장만이라 화면 배선은 이번 범위 밖(TRIP-746).
-//
-// ★ 색은 SVG fill/stroke 리터럴로만 실측 가능(className 은 SVG 에 안 붙는 map 트랩) — 각 상태의
-//   물방울 채움·테두리를 상태별로 단언하고 교차-부재로 "색 바꿔도 green" 가짜통과를 막는다
-//   (TRIP-876 03b 참고-1 선례). 번호·체크·라벨은 전부 react-native-svg 여야 iOS 마커 래스터에
-//   찍힌다(RN <Text> 는 안 찍힘, TRIP-876 실측) — 그래서 라벨도 getByText 가 아니라 content prop 으로
-//   검증한다(RNTL 은 SVG 문자열을 못 읽고 목이 RNSVGTSpan.props.content 에 넣는다).
-//   ⚠️ content 쿼리는 SVG text 하나당 2노드(Text+TSpan)라 present=`>0`, 부재=`length 0` 로만 판정한다.
-
-/** done 마커는 번호 대신 흰 체크(SVG Path)를 그린다 — 체크는 text 가 아니라 testID 로 식별한다. */
-const CHECK_TESTID = (n: number) => `map-marker-check-${n}`;
-
-const STATE_PINS: MapPin[] = [
-  { number: 1, lat: 33.51, lng: 126.52, state: 'done' },
-  { number: 2, lat: 33.515, lng: 126.526, state: 'current' },
-  { number: 3, lat: 33.52, lng: 126.53, state: 'upcoming' },
-];
-
-describe('🔴 AC-1 — 핀 state → 상태별 렌더(색·번호·체크)', () => {
-  it('done: 번호 leaf 없이 흰 체크 + 초록(#0E9384) 물방울, 분홍 아님', () => {
-    // Arrange + Act
-    render(<MapView center={CENTER} pins={STATE_PINS} />);
-
-    // Assert
-    const pin = screen.getByTestId('map-marker-pin-1');
-    // 완료는 번호를 안 그린다(흰 체크로 대체). content='1' 노드가 하나도 없어야 한다.
-    expect(within(pin).UNSAFE_queryAllByProps({ content: '1' })).toHaveLength(
-      0
-    );
-    // 흰 체크가 present 하고 그 stroke 가 흰색이다(체크는 SVG Path 라 testID 로 식별).
-    const check = within(pin).queryByTestId(CHECK_TESTID(1));
-    expect(check).not.toBeNull();
-    expect((check as { props: { stroke?: string } }).props.stroke).toBe(
-      '#FFFFFF'
-    );
-    // 초록 물방울(success). 있어야 하고, 분홍이면 안 된다(done 을 분홍으로 그리는 스왑 차단).
-    expect(
-      within(pin).UNSAFE_queryAllByProps({ fill: '#0E9384' }).length
-    ).toBeGreaterThan(0);
-    expect(
-      within(pin).UNSAFE_queryAllByProps({ fill: '#FF385C' })
-    ).toHaveLength(0);
-  });
-
-  it('current: 번호 "2" + 분홍(#FF385C) 물방울, 초록·회색 아님, 체크 없음', () => {
-    render(<MapView center={CENTER} pins={STATE_PINS} />);
-
-    const pin = screen.getByTestId('map-marker-pin-2');
-    expect(
-      within(pin).UNSAFE_queryAllByProps({ content: '2' }).length
-    ).toBeGreaterThan(0);
-    expect(within(pin).queryByTestId(CHECK_TESTID(2))).toBeNull();
-    // 분홍 물방울(primary). done(초록)·upcoming(회색 아웃라인)과 갈린다.
-    expect(
-      within(pin).UNSAFE_queryAllByProps({ fill: '#FF385C' }).length
-    ).toBeGreaterThan(0);
-    expect(
-      within(pin).UNSAFE_queryAllByProps({ fill: '#0E9384' })
-    ).toHaveLength(0);
-    expect(
-      within(pin).UNSAFE_queryAllByProps({ stroke: '#9AA1AB' })
-    ).toHaveLength(0);
-  });
-
-  it('upcoming: 번호 "3"(회색 #9AA1AB) + 회색 아웃라인, 분홍·초록 아님, 체크 없음', () => {
-    render(<MapView center={CENTER} pins={STATE_PINS} />);
-
-    const pin = screen.getByTestId('map-marker-pin-3');
-    expect(
-      within(pin).UNSAFE_queryAllByProps({ content: '3' }).length
-    ).toBeGreaterThan(0);
-    expect(within(pin).queryByTestId(CHECK_TESTID(3))).toBeNull();
-    // 회색 아웃라인(stroke)과 회색 번호(fill)가 upcoming 을 가른다.
-    expect(
-      within(pin).UNSAFE_queryAllByProps({ stroke: '#9AA1AB' }).length
-    ).toBeGreaterThan(0);
-    expect(
-      within(pin).UNSAFE_queryAllByProps({ fill: '#9AA1AB' }).length
-    ).toBeGreaterThan(0);
-    // 분홍·초록 물방울이면 안 된다(current/done 으로 스왑 차단).
-    expect(
-      within(pin).UNSAFE_queryAllByProps({ fill: '#FF385C' })
-    ).toHaveLength(0);
-    expect(
-      within(pin).UNSAFE_queryAllByProps({ fill: '#0E9384' })
-    ).toHaveLength(0);
-  });
-});
-
-describe('🟢 AC-2 — state 미전달 = 기존 분홍 핀(무회귀 선제 앵커)', () => {
-  it('state 없는 핀은 분홍(#FF385C) 물방울 + 번호를 그린다(기본 거동 보존)', () => {
-    // Arrange + Act — state 를 안 준다. 기본은 분홍 물방울에 번호(무번호 done 만 예외).
-    render(
-      <MapView center={CENTER} pins={[{ number: 1, lat: 33.5, lng: 126.5 }]} />
-    );
-
-    // Assert
-    const pin = screen.getByTestId('map-marker-pin-1');
-    expect(
-      within(pin).UNSAFE_queryAllByProps({ fill: '#FF385C' }).length
-    ).toBeGreaterThan(0);
-    expect(
-      within(pin).UNSAFE_queryAllByProps({ content: '1' }).length
-    ).toBeGreaterThan(0);
-    // 기본 핀에 done 체크가 붙으면 안 된다(무번호 완료로 오인 금지).
-    expect(within(pin).queryByTestId(CHECK_TESTID(1))).toBeNull();
-  });
-});
+// TRIP-745 핀 3상태 색(AC-1)·기본 분홍 핀(AC-2)은 jest-cut 에서 지웠다 — SVG fill/stroke 색이라 실화면 QA 몫(live-hub.md).
 
 // ── TRIP-795 · h10 반경 점선 원(additive) + letter 라벨 핀(additive) ─────────────
 //
@@ -601,23 +470,7 @@ describe('맞춤·카메라 모드가 바뀌면 네이티브 지도를 새로 �
   });
 });
 
-describe('TRIP-1522 v2 — logoMargin: 지도 로고 위치 옵션(옵트인) — 안 주면 지금과 같다', () => {
-  it('LG1 logoMargin 을 주면 네이티브 지도로 그대로 가고, 안 주면 logoMargin·logoAlign 둘 다 달지 않는다 (공용 기본값 회귀 가드)', () => {
-    // 준비·실행 — 안 준 지도(모든 지도 화면의 지금 모양).
-    render(<MapView center={CENTER} pins={PINS} />);
-    const bare = screen.getByTestId('map-native');
-    // 안 주면 prop 자체를 안 단다 — 네이버 SDK 기본(좌하단 로고)을 건드리지 않는다.
-    expect(bare.props.logoMargin).toBeUndefined();
-    expect(bare.props.logoAlign).toBeUndefined();
-    screen.unmount();
-
-    // 준 지도 — 시트가 내려가 지도가 드러났을 때 로고가 하단 바에 안 가리게 아래 여백을 올린다(허브만 준다).
-    render(<MapView center={CENTER} pins={PINS} logoMargin={{ bottom: 78 }} />);
-    expect(screen.getByTestId('map-native').props.logoMargin).toEqual({
-      bottom: 78,
-    });
-  });
-});
+// TRIP-1522 LG1(logoMargin 통과)은 jest-cut 에서 지웠다 — 지도 목 prop 통과뿐이다(README 판정 4).
 
 // TRIP-1535 · 내 위치(네이버 기본 현위치) — 옵트인. 권한은 조회만 하고 묻지 않는다.
 const mockGetForegroundPermission = jest.fn();

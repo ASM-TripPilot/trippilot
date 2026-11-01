@@ -12,7 +12,6 @@ import {
   firstSeen,
   flushOsAnswer,
   frameSample,
-  hiddenSpacingClasses,
   holdReduceMotionOn,
   isMounted,
   joinWatches,
@@ -167,14 +166,6 @@ describe('LiveBottomBar · 구성과 배선', () => {
     expect(handlers.onPressEdit).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId(SCHEDULE)).toBeSelected();
     expect(screen.getByTestId(EDIT)).not.toBeSelected();
-  });
-
-  it('렌더된 글자는 정확히 일정·수정·챗봇·행사(이 순서)이고 시각·소요시간 글자가 없다 (INV-3)', () => {
-    renderBar();
-
-    const lines = renderedText(screen.root).split('\n');
-    expect(lines).toEqual(['일정', '수정', '챗봇', '행사']);
-    expect(lines.join(' ')).not.toMatch(/분|시간|소요|:/);
   });
 });
 
@@ -630,44 +621,6 @@ describe('LiveBottomBar · 모프 (BM)', () => {
     gate.finish();
     expect(errors).not.toHaveBeenCalled(); // 언마운트 뒤 상태 갱신·act 경고 없음
     errors.mockRestore();
-  });
-});
-
-// ── 간격·폭 합 (BS) ──────────────────────────────────────────────────────────────────────────────────────────────────
-// 사이클 3 은 루트 className `gap-sm`(8)과 캡슐 `marginLeft`(8)를 둘 다 둬 간격이 16 이 됐다(jest 는 className 을 style 로 안 바꿔 안 읽혔다).
-// 설계: 뒤로 58 + 간격 8 + 캡슐 264 = 330. 시작 5칸·퇴장 끝은 뒤로 0 + 간격 0 + 캡슐 풀폭. 가로 간격은 style 숫자 한 곳에서만 내고(유리 바깥
-// 노드 className 에 gap/space-x/m·p 클래스 금지), 어디서 내든 읽은 합이 설계값이다 — className 으로 모양을 못 박지 않는 부정형 가드.
-describe('LiveBottomBar · 간격·폭 합 (BS)', () => {
-  const probe = useAnimatedProbe();
-  useInteractionGate();
-
-  it('최종 모양: 뒤로 58 + 간격 8 이고 캡슐이 나머지를 채우며 숨은 가로 오프셋 style·간격 className 이 없다', () => {
-    renderBar();
-
-    const row = readRow();
-
-    expect(row.backWidth).toBe(58);
-    expect(row.spacing).toBe(8); // 16 이면 간격이 두 번 — 캡슐 256·칸 59·팝업 5pt 어긋남
-    expect(row.capsuleFills).toBe(true);
-    expect(row.strayKeys).toEqual([]);
-    expect(hiddenSpacingClasses()).toEqual([]);
-  });
-
-  it('퇴장이 끝난 모양은 시작 5칸이다 — 뒤로 0 + 간격 0(탭 바 pill 자리)에 활성은 출발 탭이고, 시작 칸 레이어에도 간격 className 이 없다', async () => {
-    probe.setReduceMotion(false);
-    renderBar({ departureTab: 'records' });
-    await flushOsAnswer();
-    fireEvent.press(screen.getByTestId(BACK));
-    watchMotion(40);
-
-    const row = readRow();
-    expect(row.backWidth).toBe(0);
-    expect(row.spacing).toBe(0);
-    expect(row.capsuleFills).toBe(true);
-    expect(row.strayKeys).toEqual([]);
-    expect(hiddenSpacingClasses()).toEqual([]);
-    expect(visibleIds()).toEqual(START5_IDS);
-    expect(selectedStartIds()).toEqual([START_RECORDS]);
   });
 });
 

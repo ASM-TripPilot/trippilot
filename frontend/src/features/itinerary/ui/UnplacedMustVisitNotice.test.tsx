@@ -11,7 +11,7 @@ import { UnplacedMustVisitNotice } from './UnplacedMustVisitNotice';
  *  - 0건이면 아무것도 안 그린다(AC-7 — 빈 배열 = 전부 배치됨).
  *  - 제목 한 줄 + 항목마다 (이름) + 서버 문구. 이름이 없으면 이름 자리 없이 문구만 — 대체 이름 0(AC-3).
  *  - 클라가 만든 사유 문장·제안 버튼이 없다(AC-8 · AC-5 · 결정 2).
- *  - 소요시간 표기가 없다(AC-11 · INV-3).
+ *  - 소요시간 표기가 없다(AC-11 · INV-3) — 클라가 덧붙인 글자는 N5 완전 일치가 잡는다.
  *
  * 글자 단언은 전부 완전 일치다 — `toHaveTextContent(문자열)`은 자식 글자를 구분자 없이 이어 붙인 값과
  * 통째로 비교하고, `getByText(문자열)`은 Text 하나의 글자와 통째로 비교한다(02a ★1·★2).
@@ -33,11 +33,6 @@ const MSG = {
     '남은 시간과 이동을 고려하면 넣을 자리가 없었어요. 시각 고정을 풀거나 일정을 줄여 보세요.',
   UNKNOWN: '넣지 못했어요. 사유를 확인하지 못했습니다.',
 } as const;
-
-/** 소요시간 표기 — 단어 「시간」이 아니라 숫자+단위다. 서버 문구의 「남은 시간과」는 정당하다(02a ★5). */
-const DURATION_TEXT = /\d+\s*(분|시간)|소요/;
-/** US-SCHED-04 제안 버튼 문구 — 결정 2 로 이 칸엔 없다(서버 문구에 안 걸림 실측, 02a ★6). */
-const SUGGESTION_TEXT = /다른 날짜|시각 고정 해제|인접 조정/;
 
 const itemId = (poiId: string): string => `${ROOT}-${poiId}`;
 
@@ -100,13 +95,11 @@ describe('N3 · AC-3 — 이름이 없으면 이름 자리 없이 서버 문구�
     expect(screen.getByTestId(itemId('poi-1'))).toHaveTextContent(
       MSG.NO_FEASIBLE_SLOT
     );
-    expect(screen.queryByText('이름을 불러오지 못한 곳')).toBeNull();
-    expect(screen.queryByText('알 수 없는 장소')).toBeNull();
   });
 });
 
 describe('N4 · AC-5 — 블록 안에 누를 수 있는 요소가 0개다 (결정 2)', () => {
-  it('onPress·onLongPress 를 가진 노드 0 · 버튼 역할 0 · 제안 문구 0', () => {
+  it('onPress·onLongPress 를 가진 노드 0 · 버튼 역할 0 (제안 문구 0 은 N5 완전 일치가 잡는다)', () => {
     render(
       <UnplacedMustVisitNotice
         rows={[
@@ -125,7 +118,6 @@ describe('N4 · AC-5 — 블록 안에 누를 수 있는 요소가 0개다 (결�
     );
     expect(pressables).toHaveLength(0);
     expect(within(root).queryAllByRole('button')).toHaveLength(0);
-    expect(within(root).queryAllByText(SUGGESTION_TEXT)).toHaveLength(0);
   });
 });
 
@@ -145,25 +137,5 @@ describe('N5 · AC-8·AC-9 — 블록의 글자는 제목 + 서버가 준 것뿐
       TITLE + rows.map((row) => `${row.name ?? ''}${row.message}`).join('');
     expect(screen.getByTestId(ROOT)).toHaveTextContent(expected);
     expect(itemIds()).toHaveLength(4);
-  });
-});
-
-describe('N6 · AC-11 — 블록에 소요시간 표기가 없다 (INV-3)', () => {
-  it('서버 문구 4종을 그려도 숫자+분/시간·「소요」가 0건이다', () => {
-    render(
-      <UnplacedMustVisitNotice
-        rows={Object.values(MSG).map((message, index) => ({
-          poiId: `poi-${index}`,
-          name: index % 2 === 0 ? `장소-${index}` : null,
-          message,
-        }))}
-      />
-    );
-
-    const root = screen.getByTestId(ROOT);
-    // 긍정 짝 — 블록에 글자가 있다(빈 블록에서 "0건"이 공짜로 통과하지 않게).
-    expect(root).toHaveTextContent(/\S/);
-    expect(within(root).queryAllByText(DURATION_TEXT)).toHaveLength(0);
-    expect(root).not.toHaveTextContent(DURATION_TEXT);
   });
 });

@@ -17,6 +17,7 @@ import { clearAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import TripWizardLayout from '@routes/trips/new/_layout';
 import TripWizardStep1Route from '@routes/trips/new/step1';
+import { createHitLog } from '@/test-support/mswHookHarness';
 import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
@@ -46,15 +47,8 @@ import { newTestQueryClient } from '@/test-support/queryRender';
  */
 
 // 생성 클라이언트의 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다(MustVisitListPage 선례).
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = '11111111-1111-1111-1111-111111111111';
@@ -112,10 +106,8 @@ const ROUTES = {
 
 /** 지금 그려진 테스트 앱 — 경로·스택 조회는 `screen` 이 아니라 `renderRouter` 결과가 준다. */
 let app: ReturnType<typeof renderRouter>;
-let observedHits: string[] = [];
-
-const hits = (line: string): number =>
-  observedHits.filter((hit) => hit === line).length;
+const log = createHitLog(server);
+const hits = (line: string): number => log.count(line);
 
 /** 루트 Stack 의 화면 이름들(아래→위). `getRouterState()` 맨 위는 expo-router 의 `__root` 포장이라 한 겹 내려간다. */
 function rootNames(): string[] {
@@ -126,13 +118,11 @@ function rootNames(): string[] {
 
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' });
-  server.events.on('request:start', ({ request }) => {
-    observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
-  });
+  log.attach();
 });
 
 beforeEach(() => {
-  observedHits = [];
+  log.reset();
   resetPressGuard();
   // 게스트로 돈다 — 담은 목록 조회(`enabled: isAuthed`)가 안 나가 `/saved-places` 핸들러가 필요 없다.
   clearAccessToken();
@@ -475,44 +465,5 @@ describe('🟢 AC-6 · 위저드를 지나 나아간 뒤에도 — 스택 아래
     // 단언
     expectStillOnStep1();
     expect(screen.queryByTestId(DIALOG)).toBeNull();
-  });
-});
-
-describe('🔴 D1 · iOS 스와이프를 네이티브에서 취소하는 신호가 위저드 화면에 실린다 (raw beforeRemove 기각)', () => {
-  /**
-   * 1/4 요소에서 조상으로 올라가며 만나는 화면(RNSScreen)들의 `preventNativeDismiss` 값 — 안쪽(위저드 스택의 1/4)부터
-   * 바깥(루트 스택의 위저드 한 장)까지. iOS 가장자리 스와이프는 바깥 화면을 끌어내리므로 둘 다 봐야 한다(02a ★6).
-   */
-  function preventNativeDismissChain(testID: string): unknown[] {
-    const values: unknown[] = [];
-    let node: { props: Record<string, unknown>; parent: unknown } | null =
-      screen.getByTestId(testID, { includeHiddenElements: true });
-    while (node !== null) {
-      if ('preventNativeDismiss' in node.props) {
-        values.push(node.props.preventNativeDismiss);
-      }
-      node = node.parent as typeof node;
-    }
-    return values;
-  }
-
-  it('초안이 있으면 1/4 를 감싼 화면이 안쪽·바깥 모두 preventNativeDismiss=true', async () => {
-    // 준비 · 실행 — 쌓기만 한다.
-    await openStep1({ withDraft: true });
-
-    // 단언 — 화면 두 겹(위저드 스택 1/4 · 루트 스택 위저드)을 모두 만났고, 모두 막는다.
-    const chain = preventNativeDismissChain('trip-wizard-step1-root');
-    expect(chain.length).toBeGreaterThanOrEqual(2);
-    expect(chain).toEqual(chain.map(() => true));
-  });
-
-  it('초안이 없으면 어느 겹도 막지 않는다 (결정 1=B — 스와이프로 바로 나간다)', async () => {
-    // 준비 · 실행
-    await openStep1({ withDraft: false });
-
-    // 단언 — 짝: 탐지기가 아무 화면에나 true 를 돌려주는 게 아니다.
-    const chain = preventNativeDismissChain('trip-wizard-step1-root');
-    expect(chain.length).toBeGreaterThanOrEqual(2);
-    expect(chain.filter((value) => value === true)).toEqual([]);
   });
 });

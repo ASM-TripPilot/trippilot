@@ -162,16 +162,11 @@
 - `src/__tests__/deletionScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/destinationRedirectRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewReleaseGate.test.tsx`  →  (export 없음)
-- `src/__tests__/draftRouteDayPassthrough.test.tsx`  →  (export 없음)
 - `src/__tests__/eslintReleaseRules.test.ts`  →  (export 없음)
 - `src/__tests__/generatingEntryStack.integration.test.tsx`  →  (export 없음)
-- `src/__tests__/generatingRouteModePassthrough.test.tsx`  →  (export 없음)
 - `src/__tests__/itineraryEditAddPlaceFlow.integration.test.tsx`  →  (export 없음)
-- `src/__tests__/itineraryEditRoute.test.tsx`  →  (export 없음)
-- `src/__tests__/liveHubRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/locationAutomationBuildConfig.test.ts`  →  (export 없음)
 - `src/__tests__/locationConsentPutBodyOwnership.test.ts`  →  (export 없음)
-- `src/__tests__/manualRouteFreshPassthrough.test.tsx`  →  (export 없음)
 - `src/__tests__/nicknameMyPageSync.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/notFoundRoute.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/oauthRedirectRoute.test.tsx`  →  (export 없음)
@@ -180,7 +175,6 @@
 - `src/__tests__/openapiContract.test.ts`  →  (export 없음)
 - `src/__tests__/photoUploadGuard.test.ts`  →  (export 없음)
 - `src/__tests__/planbApplyStack.integration.test.tsx`  →  (export 없음)
-- `src/__tests__/planbManualRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/planbRequestRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/planbSessionRoutes.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardMustVisit.integration.test.tsx`  →  (export 없음)
@@ -190,11 +184,11 @@
 - `src/__tests__/recordAddVisitFlow.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/recordBarStack.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/releaseBuildConfig.test.ts`  →  (export 없음)
+- `src/__tests__/routeParamMapping.test.tsx`  →  (export 없음)
 - `src/__tests__/shellTabDismiss.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/socialSdkSecrets.test.ts`  →  (export 없음)
 - `src/__tests__/tabsItineraryRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsShell.test.tsx`  →  (export 없음)
-- `src/__tests__/tripBasesRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tripNightsPeriodOrder.test.tsx`  →  (export 없음)
 - `src/__tests__/tripWizardEntryReset.test.tsx`  →  (export 없음)
 - `src/__tests__/tripWizardLeaveSwipe.integration.test.tsx`  →  (export 없음)
@@ -1933,4 +1927,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1243개 파일
+합계 1237개 파일

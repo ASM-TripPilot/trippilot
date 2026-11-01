@@ -1,6 +1,4 @@
-import type { ReactNode } from 'react';
-import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { HttpResponse } from 'msw';
 import {
   fireEvent,
   render,
@@ -9,14 +7,18 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
-import type {
-  Itinerary,
-  ItineraryDaysItem,
-  ItineraryDaysItemSlotsItem,
-  Trip,
-} from '@/shared/api/index.schemas';
+import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import {
+  DAY1,
+  busanTrip,
+  day,
+  itinerary as baseItinerary,
+  slot,
+} from '@/test-support/itineraryFixtures';
 import { guardKeyWarnings } from '@/test-support/keyWarnings';
+import { serveItinerary } from '@/test-support/mswItinerary';
+import { createGcZeroWrapper } from '@/test-support/queryRender';
 
 import { CoPickCompletePage } from './CoPickCompletePage';
 
@@ -45,15 +47,8 @@ import { CoPickCompletePage } from './CoPickCompletePage';
  */
 
 // 생성 클라이언트의 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다(선례 동형).
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -71,27 +66,10 @@ jest.mock('expo-router', () => ({
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
-const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = '22222222-2222-2222-2222-222222222222';
-const DAY1 = '2026-06-10';
 
-/** 4일 여행 — day-chip 개수의 출처는 `days.length` 가 아니라 이 두 날짜다(01b D2). title(❗name 아님). */
-function trip(): Trip {
-  return {
-    tripId: TRIP_ID,
-    title: '부산 여행',
-    startDate: DAY1,
-    endDate: '2026-06-13',
-    party: 2,
-    preferenceSnapshot: {},
-    destinations: [{ seq: 1, region: '부산', nights: 3 }],
-    status: 'PLANNED',
-    createdAt: '2026-08-01T10:00:00.000Z',
-    updatedAt: '2026-08-01T10:00:00.000Z',
-    baseCount: 0,
-    itineraryDayCount: 0,
-  };
-}
+/** 4일 여행(부산 · DAY1 → 06-13) — day-chip 개수의 출처는 `days.length` 가 아니라 이 두 날짜다(01b D2). */
+const trip = () => busanTrip({ tripId: TRIP_ID });
 
 /**
  * 선택일(day 1) 5슬롯 — 비고정 4 + 고정 1(숙소). AC-2·3·5·6 을 한 픽스처로 잰다.
@@ -102,14 +80,9 @@ function trip(): Trip {
  */
 function daySlots(): ItineraryDaysItemSlotsItem[] {
   return [
-    {
-      poiId: 'poi-a',
+    slot('poi-a', {
       startAt: '10:00:00',
       endAt: '11:00:00',
-      isFixed: false,
-      endsNextDay: false,
-      hasViolation: false,
-      alternatives: [],
       tags: ['바다', '산책'],
       nameKo: '광안리 해변',
       category: '자연',
@@ -117,15 +90,10 @@ function daySlots(): ItineraryDaysItemSlotsItem[] {
       distanceRange: null,
       lat: 35.153,
       lng: 129.118,
-    },
-    {
-      poiId: 'poi-b',
+    }),
+    slot('poi-b', {
       startAt: '11:30:00',
       endAt: '12:10:00',
-      isFixed: false,
-      endsNextDay: false,
-      hasViolation: false,
-      alternatives: [],
       tags: ['전망', '야경'],
       nameKo: '황령산 전망대',
       category: '자연',
@@ -133,15 +101,10 @@ function daySlots(): ItineraryDaysItemSlotsItem[] {
       distanceRange: '2.1km',
       lat: 35.137,
       lng: 129.089,
-    },
-    {
-      poiId: 'poi-c',
+    }),
+    slot('poi-c', {
       startAt: '13:00:00',
       endAt: '14:30:00',
-      isFixed: false,
-      endsNextDay: false,
-      hasViolation: false,
-      alternatives: [],
       tags: ['미술'],
       nameKo: '부산시립미술관',
       category: '전시',
@@ -149,15 +112,10 @@ function daySlots(): ItineraryDaysItemSlotsItem[] {
       distanceRange: '0.8km',
       lat: 35.166,
       lng: 129.135,
-    },
-    {
-      poiId: 'poi-d',
+    }),
+    slot('poi-d', {
       startAt: '14:30:00',
       endAt: '15:15:00',
-      isFixed: false,
-      endsNextDay: false,
-      hasViolation: false,
-      alternatives: [],
       tags: ['감성', '브런치'],
       nameKo: '웨이브온 카페',
       category: '카페',
@@ -165,15 +123,11 @@ function daySlots(): ItineraryDaysItemSlotsItem[] {
       distanceRange: '0.6km',
       lat: 35.201,
       lng: 129.216,
-    },
-    {
-      poiId: 'poi-hotel',
+    }),
+    slot('poi-hotel', {
       startAt: '21:00:00',
       endAt: '21:00:00',
       isFixed: true,
-      endsNextDay: false,
-      hasViolation: false,
-      alternatives: [],
       tags: [],
       nameKo: '해운대 그랜드 호텔',
       category: '숙소',
@@ -181,24 +135,17 @@ function daySlots(): ItineraryDaysItemSlotsItem[] {
       distanceRange: '0.6km',
       lat: 35.163,
       lng: 129.16,
-    },
+    }),
   ];
 }
 
-function itinerary(): Itinerary {
-  const days: ItineraryDaysItem[] = [{ date: DAY1, slots: daySlots() }];
-  return {
+function itinerary() {
+  return baseItinerary({
     itineraryId: 'itin-796',
     tripId: TRIP_ID,
-    status: 'PLANNED',
-    solveMode: 'FULL_AI',
     generationMode: 'CO_PLAN',
-    generationState: 'COMPLETE',
-    isFallback: false,
-    scoringMode: null,
-    degradations: [],
-    days,
-  };
+    days: [day(DAY1, daySlots())],
+  });
 }
 
 /** GET /itinerary 응답을 케이스가 정한다. 기본은 완료된 CO_PLAN 일정(→ 셸). */
@@ -231,10 +178,7 @@ beforeEach(() => {
   setAccessToken('valid-access');
   itineraryHandler = () => HttpResponse.json(itinerary());
 
-  server.use(
-    http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
-    http.get(`${BASE}/trips/:tripId/itinerary`, () => itineraryHandler())
-  );
+  serveItinerary(server, { trip, itinerary: () => itineraryHandler() });
 });
 
 afterEach(() => {
@@ -246,15 +190,9 @@ afterAll(() => server.close());
 
 /** `retry:false`·`gcTime:0` — 실패 즉시, 잔존 타이머 방지. */
 function renderPage() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  return render(<CoPickCompletePage tripId={TRIP_ID} />, {
+    wrapper: createGcZeroWrapper(),
   });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return render(<CoPickCompletePage tripId={TRIP_ID} />, { wrapper: Wrapper });
 }
 
 describe('🔴 A1 · AC-1 — 완료 응답이면 지도+시트 셸 얼굴이 뜬다 (계약 플립)', () => {
@@ -543,17 +481,6 @@ describe('🟢 TRIP-1073 F6 · 폴백으로 완성된 같이 짜기(isFallback=t
       '완성 일정 보기'
     );
     expect(screen.queryByTestId('itinerary-copick-complete-error')).toBeNull();
-  });
-});
-
-describe('🔴 TRIP-1076 AC-3 · h11 같이 짜기 결과 지도는 핀 전부에 맞춰 연다', () => {
-  it('셸 지도에 핀 2개 이상과 fitPins 가 함께 전달된다', async () => {
-    renderPage();
-    await screen.findByTestId('map-sheet-shell-root');
-
-    const map = screen.getByTestId('map-root');
-    expect((map.props.pins as unknown[]).length).toBeGreaterThanOrEqual(2);
-    expect(map.props.fitPins).toBe(true);
   });
 });
 

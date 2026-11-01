@@ -153,7 +153,7 @@ frontend/
 1. **PBT** → property(`fc.assert`)는 **하나도 지우지 않는다**(루트 CLAUDE.md — PBT는 차단 게이트). 같은 함수를 보는 PBT가 여러 파일이면 한 파일로 **합친다**.
 2. **개발 도구(`_dev` 프리뷰) 테스트** → **스모크 1파일만 남기고 지운다** — 프리뷰 화면이 뜨고, 키 장부에 중복이 없고, 없는 키는 splash로 떨어지는지만 본다(키별 렌더 없음). 운영 빌드에서 프리뷰를 막는 출시 계약도 같은 파일에 있다. 프리뷰는 사람이 눈으로 보는 도구라 세부 동작 검사는 실제 화면 테스트의 몫이다.
 3. **소스 스캔**(파일을 텍스트로 읽고 렌더하지 않는 테스트) — 기능이 구현·QA된 뒤의 회귀 감시는 스캔이 아니라 QA가 맡는다(TRIP-1145).
-   - **출시·보안 계약**(키·시크릿이 git에 안 들어감, 출시 빌드 설정, API 명세, 운영 빌드의 프리뷰 차단, 법정 동의·고지, 사진·공유 카드 서버 업로드 금지) → ESLint로 표현되면 **ESLint 규칙으로 옮기고** 규칙 발동을 `eslintReleaseRules.test.ts`의 `lintText` 탐침으로 지킨다. 표현 못 하면 **남긴다**. 지금 남은 스캔: `socialSdkSecrets`(옛 `mapBridgeStructure` A-3 합본)·`releaseBuildConfig`(옛 `socialSdkConfigPlugin` 합본)·`openapiContract`·`devPreviewReleaseGate`·`photoUploadGuard`(옛 `recordPhotoBinaryGuard`+`shareCardStructure` 합본)·`locationConsentPutBodyOwnership`·`deletionScopeStructure`·`eslintReleaseRules`(옛 `importBoundaryLayers` 중 **출시·보안 규칙 발동 탐침만** — FSD 층·딥 import 탐침은 TRIP-1350 에서 지웠고, FSD 층 구조는 ESLint zone·Steiger(`pnpm fsd`)가 지킨다)(모두 `src/__tests__`).
+   - **출시·보안 계약**(키·시크릿이 git에 안 들어감, 출시 빌드 설정, API 명세, 운영 빌드의 프리뷰 차단, 법정 동의·고지, 사진·공유 카드 서버 업로드 금지) → ESLint로 표현되면 **ESLint 규칙으로 옮기고** 규칙 발동을 `eslintReleaseRules.test.ts`의 `lintText` 탐침으로 지킨다. 표현 못 하면 **남긴다**. 남은 스캔 목록의 정본은 `eslint.config.js` `SCAN_ALLOW` 다(테스트 파일의 `fs`·`child_process` import 는 그 목록 밖에서 lint error). 2026-11-01 기준: `socialSdkSecrets`(옛 `mapBridgeStructure` A-3 합본)·`releaseBuildConfig`(옛 `socialSdkConfigPlugin` 합본)·`openapiContract`·`devPreviewReleaseGate`·`photoUploadGuard`(옛 `recordPhotoBinaryGuard`+`shareCardStructure` 합본)·`locationConsentPutBodyOwnership`·`deletionScopeStructure`·`eslintReleaseRules`(옛 `importBoundaryLayers` 중 **출시·보안 규칙 발동 탐침만** — FSD 층·딥 import 탐침은 TRIP-1350 에서 지웠고, FSD 층 구조는 ESLint zone·Steiger(`pnpm fsd`)가 지킨다)(모두 `src/__tests__`).
    - **구조 규칙**(층·슬라이스·세그먼트·props-only 시트 등) → 스캔을 두지 않는다. 층 방향은 ESLint zone, 나머지는 Steiger(TRIP-1158).
    - **기능 회귀**(이미 지운 것의 재등장, 화면 금칙어·소요시간 글자, 바텀시트 prop 결합 등) → 스캔을 두지 않는다. QA가 본다(실화면 QA는 `trippilot-sim-qa` 스킬 — Maestro 묶음은 2026-10-12 삭제).
    - **출시 게이트로 남기는 생김새 검사 4건**(이 목록 밖의 생김새 단언은 아래 판정 4의 "두지 않는다" 대상이다): ① 버튼 role 전수 census(App Store 2.1) · ② 애플 로고 SVG Path `d`(Apple HIG) · ③ 계정 삭제 고지 9항목 잘림 없음(BR-U6-25) · ④ 실결함 폴링 심판 1 `it`(`DraftPage` C2 · `MyTripsList` error 정지). 출시 심사·법정 고지·실결함 재발을 막는 것이라 jest 에 남긴다(TRIP-1366 결정 D).
@@ -163,9 +163,15 @@ frontend/
    - **같은 파일 안에서만** 지운다. 단위↔통합 사이 겹침은 둘 다 남긴다 — 단위는 행 수·문구·콜백·상태 전이를, 통합은 배선을 본다.
    - **생김새 단언은 두지 않는다** — className 토큰·레이아웃 수치·SVG stroke/path·트리 순서·Figma 정합 단언은 단위에도 통합에도 두지 않는다(위 "출시 게이트로 남기는 생김새 검사 4건"만 예외). 생김새 회귀는 실화면 테스트가 잡는다 — `trippilot-sim-qa` 스킬 · 6-b 육안 · Figma parity QA(TRIP-1366 결정 A).
    - **통과형 목 위에서 prop 전달만 보는 `it` 은 두지 않는다** — gorhom 바텀시트·네이버 지도·드래그리스트 목은 어떤 prop 을 줘도 children 을 그대로 그려서(`.claude/rules/repo-traps.md` 바텀시트 절) prop 전달 단언은 실제 동작을 못 지킨다. 실기 결함에서 나온 것도 실화면이 잡는다(결정 B).
-   - 옛 파일은 `git rm`으로 지운다(추적 파일 전수를 여는 스캔이 있어 작업트리에서만 지우면 ENOENT).
+   - 옛 파일은 `git rm`으로 지운다.
    - **소요시간 비표시(INV-3) 렌더 테스트는 시간·거리 데이터를 그리는 화면(일정·경로)에만 둔다.** 받는 데이터에 시간·거리 재료가 없는 화면(담은 장소·고르기·확인 대화상자 등)의 "분·시간·소요 글자 0건" 테스트는 지운다 — 일어날 수 없는 일을 지키는 테스트이고, 코드 쪽 `duration` 금지는 서버 DTO(INV-3)와 QA 몫이다.
-5. 그 밖(순수 함수 단위 테스트 등) → **남긴다**.
+5. **jest가 원리적으로 못 보는 동작**(통과형 목 위의 시트 열림·딤·제스처·키보드·스크롤 위치, 라우터 목 호출 순서로만 보는 화면 이동 흐름) → **지우고 기능 지도로 옮긴다** — 그 동작을 `docs/feature-map/<기능>.md` 의 Sub-features 한 줄(사용자 관점 문장)로 적고, 실화면 QA(`trippilot-sim-qa`·6-b)가 그 줄을 본다. 판정 4의 생김새·prop 전달 규칙을 동작까지 넓힌 것이다(2026-11-01 결정). 지도에 줄이 없는데 테스트만 지우면 아무도 안 보게 되므로 **지도 줄 추가와 테스트 삭제는 같은 커밋**이다.
+6. **구현에 묶인 테스트**(같은 slice 안 훅·함수를 `jest.mock` 으로 갈아 끼우고 그 호출 인자만 보는 것, 내부 상태·ref를 직접 보는 것) → 같은 동작을 사용자 관점 테스트(렌더·탭·결과)나 통합(MSW)이 보면 **지운다**(뮤테이션으로 확인 — 판정 4와 같은 방법). 아무도 안 보면 동작 단언으로 **고쳐 쓴다**. 내부만 바뀌어도 깨지는 테스트는 리팩터를 막는다(dev-cycle 5-c가 export·파일 위치·모듈 경계를 못 건드리는 이유가 이것이다).
+7. 그 밖(순수 함수 단위 테스트 등) → **남긴다**.
+
+**기계가 막는 것** — 테스트 파일(`*.test.*`·`__tests__`·`test-support`)에서 `UNSAFE_*` 쿼리·`className`/`style` 읽기·`toHaveStyle`·통과형 목 prop 읽기·손 조립 `new QueryClient`·`fs` import 는 ESLint error 다(`eslint.config.js` 「테스트 재팽창 방지」, 발동 탐침은 `eslintReleaseRules.test.ts`). 2026-11-01 이전 위반은 `eslint-suppressions.json` 에 얼려 있어 **늘어날 때만** 실패한다. 테스트를 지워 위반이 줄면 `pnpm exec eslint . --prune-suppressions` 를 같은 커밋에 싣는다 — 안 싣으면 lint 가 낡은 얼림으로 실패한다(장부는 줄기만 한다). 파일 손편집·`--suppress-all` 금지. 출시 게이트 생김새 4건은 그 줄에 `// eslint-disable-next-line <규칙> -- 출시 게이트 ②` 처럼 사유를 단다.
+
+**새 테스트를 쓸 때도 같은 기준이다** — 버그 회귀 테스트는 새 파일을 만들기 전에 그 동작을 맡은 기존 테스트에 반례를 더한다(티켓마다 새 파일이 생기면 같은 동작의 테스트가 흩어져 늘기만 한다). 실측: 2026-10-12 정리 뒤 3주 만에 테스트가 약 20만 줄 → 22.7만 줄로 다시 늘었다.
 
 ### 합격선 — 정리해도 덜 잡지 않았는가
 

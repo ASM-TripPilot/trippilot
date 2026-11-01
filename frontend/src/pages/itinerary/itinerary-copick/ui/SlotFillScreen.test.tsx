@@ -238,13 +238,6 @@ describe('🔴 SlotFillScreen (h10) — 동적 제목·헤드라인 제거', () 
 
     expect(screen.getByText('후보 고르기')).toBeTruthy();
   });
-
-  it('T-HEADLINE · 옛 헤드라인 문구가 사라진다(D11)', () => {
-    renderScreen();
-
-    // 옛 TITLE 은 제거 대상 — 렌더 트리에 없어야 한다.
-    expect(screen.queryByText('근처에서 어디로 갈까요?')).toBeNull();
-  });
 });
 
 describe('🔴 SlotFillScreen (h10) — 진행줄·스텝퍼 슬롯(재사용)', () => {
@@ -306,7 +299,7 @@ describe('🔴 SlotFillScreen (h10) — 후보 카드 픽스처 + 반경 밖 톤
     D4: { nameKo: '감천문화마을', tags: ['전시', '포토'], dimmed: true },
   };
 
-  it('T-CARD · 이름·태그 픽스처가 카드에 뜨고, 반경 밖(D4)만 톤다운(글자 muted)이다', () => {
+  it('T-CARD · 이름·태그 픽스처가 카드에 뜬다', () => {
     renderScreen({ candidates: CARDS, candidateViews: VIEWS });
 
     // 이름 픽스처 — placeholder 가 아니라 실이름(래퍼가 nameKo 를 관통).
@@ -318,13 +311,7 @@ describe('🔴 SlotFillScreen (h10) — 후보 카드 픽스처 + 반경 밖 톤
       /^#미술 · 실내 · 취향매칭$/
     );
 
-    // 톤다운 관통(★5) — A1(비톤다운)은 잉크, D4(톤다운)는 muted 로 갈린다.
-    expect(
-      screen.getByTestId('itinerary-candidate-name-A1').props.className
-    ).toContain('text-ink');
-    const dimmed = screen.getByTestId('itinerary-candidate-name-D4');
-    expect(dimmed.props.className).not.toContain('text-ink');
-    expect(dimmed.props.className).toContain('text-muted');
+    // 반경 밖 톤다운(글자 muted)은 생김새라 2026-11-01 지웠다 — 실화면 QA 몫(copick.md).
   });
 });
 
@@ -641,18 +628,13 @@ describe('🔴 SlotFillScreen — 0건 사유 얼굴(TRIP-948)', () => {
  *
  * 무엇을 보장하나:
  *  - AC-1: 0건 + 조회 중이면 스켈레톤 하나가 뜨고, 0건·실패 얼굴·라디오·확정 버튼은 없다.
- *  - AC-2·결정 2: 카드 3장, 장마다 배지 원 1·사진 1·글줄 2, 글자 0(곧 올 후보에게 거짓말 금지).
- *  - 결정 3: 블록은 bg-hairline, 카드는 테두리·그림자 없음(h02 코드 선례 bg-surface-soft·border 복사 차단).
+ *  - AC-2·결정 2: 글자 0(곧 올 후보에게 거짓말 금지). 카드 3장·골격 수(생김새)는 2026-11-01 지웠다 — 실화면 QA 몫.
  *  - 결정 5: 스크린리더 라벨은 h02 선례 문구 재사용.
  *  - AC-3: 후보가 도착하면 스켈레톤이 사라지고 후보 카드가 보인다.
  *  - AC-4·AC-5(INV-4): 진짜 0건이면 0건 얼굴, 조회 실패면 실패 얼굴 — 어느 쪽도 스켈레톤이 아니다.
  */
 describe('🔴 SlotFillScreen (h10) — 후보를 기다리는 얼굴(스켈레톤)', () => {
   const SKEL = 'itinerary-copick-slotfill-skeleton';
-  const CARD = 'itinerary-copick-slotfill-skeleton-card';
-  const BADGE = 'itinerary-copick-slotfill-skeleton-badge';
-  const PHOTO = 'itinerary-copick-slotfill-skeleton-photo';
-  const LINE = 'itinerary-copick-slotfill-skeleton-line';
   const LOADING = { candidates: [], candidatesPending: true };
   const FETCH_ERROR = '후보를 불러오지 못했어요';
 
@@ -699,22 +681,12 @@ describe('🔴 SlotFillScreen (h10) — 후보를 기다리는 얼굴(스켈레�
     ).toBeNull();
   });
 
-  it('K2 · 스켈레톤은 카드 3장이고 장마다 배지 원 1·사진 1·글줄 2, 보이는 글자는 0이다', () => {
+  it('K2 · 스켈레톤 안에 보이는 글자는 0이다(곧 올 후보에게 거짓말 금지)', () => {
     renderScreen(LOADING);
 
-    const skel = screen.getByTestId(SKEL);
-    const cards = within(skel).getAllByTestId(CARD);
-    expect(cards).toHaveLength(3);
-    expect(screen.queryAllByTestId(BADGE)).toHaveLength(3);
-    expect(screen.queryAllByTestId(PHOTO)).toHaveLength(3);
-    expect(screen.queryAllByTestId(LINE)).toHaveLength(6);
-
-    // 전역 개수만으로는 "한 카드에 몰림"이 통과한다 — 첫 카드 골격을 따로 못박는다.
-    expect(within(cards[0]).queryAllByTestId(BADGE)).toHaveLength(1);
-    expect(within(cards[0]).queryAllByTestId(PHOTO)).toHaveLength(1);
-    expect(within(cards[0]).queryAllByTestId(LINE)).toHaveLength(2);
-
-    expect(within(skel).queryAllByText(/\S/)).toHaveLength(0);
+    expect(within(screen.getByTestId(SKEL)).queryAllByText(/\S/)).toHaveLength(
+      0
+    );
   });
 
   it('K4 · 스크린리더는 스켈레톤을 "목록을 불러오는 중"으로 읽는다', () => {

@@ -38,14 +38,8 @@ import { useApplyReplan } from './useApplyReplan';
  */
 
 // authedClient(인증 계층)가 @/shared/storage 를 정적으로 문다(useReplanDiff.integration 선례).
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest
-    .fn()
-    .mockResolvedValue({ accessToken: 'a', refreshToken: 'r' }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 const TRIP = 'trip-1';
 const APPLY_URL = `${BASE}/trips/${TRIP}/replan-sessions/s9/apply`;

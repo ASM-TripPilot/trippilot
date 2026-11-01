@@ -436,31 +436,40 @@ describe('SlotProgressCard · upcoming (AC-5)', () => {
 });
 
 describe('SlotProgressCard · INV-3 (C9)', () => {
-  it('세 상태 어디에도 소요시간(N분·N시간·소요)이 렌더되지 않는다', () => {
-    // 영업시간 픽스처는 HH:mm 범위만 — "24시간 개방" 은 이 정규식에 걸리는 오탐이라 뺀다(02a ★8).
-    const DURATION = /(\d+\s*분|\d+\s*시간|소요)/;
-    const states = ['done', 'active', 'upcoming'] as const;
+  // jest-cut — 옛 「큰 글자 — INV-3 (TRIP-1270 AC-7)」(배율 3.571 · visitedLabel)를 행으로 합쳤다.
+  it.each<[number, string | undefined]>([
+    [1, undefined],
+    [3.571, '09:30'],
+  ])(
+    '배율 %s 에서 세 상태 어디에도 소요시간(N분·N시간·소요)이 렌더되지 않는다',
+    (fontScale, visitedLabel) => {
+      // 영업시간 픽스처는 HH:mm 범위만 — "24시간 개방" 은 이 정규식에 걸리는 오탐이라 뺀다(02a ★8).
+      const DURATION = /(\d+\s*분|\d+\s*시간|소요)/;
+      const states = ['done', 'active', 'upcoming'] as const;
 
-    for (const state of states) {
-      const { toJSON, unmount } = render(
-        <SlotProgressCard
-          slot={mkSlot({
-            openingHours: '11:00 - 22:00',
-            distanceRange: '약 1.2km',
-          })}
-          date={DATE}
-          state={state}
-          photos={PHOTOS}
-          memo="좋았다"
-        />
-      );
-      const text = JSON.stringify(toJSON());
-      // 짝 — 렌더가 비지 않았다(이름이 있다).
-      expect(text).toContain('감천문화마을');
-      expect(DURATION.test(text)).toBe(false);
-      unmount();
+      for (const state of states) {
+        setFontScale(fontScale);
+        const { toJSON, unmount } = render(
+          <SlotProgressCard
+            slot={mkSlot({
+              openingHours: '11:00 - 22:00',
+              distanceRange: '약 1.2km',
+            })}
+            date={DATE}
+            state={state}
+            photos={PHOTOS}
+            memo="좋았다"
+            visitedLabel={visitedLabel}
+          />
+        );
+        const text = JSON.stringify(toJSON());
+        // 짝 — 렌더가 비지 않았다(이름이 있다).
+        expect(text).toContain('감천문화마을');
+        expect(DURATION.test(text)).toBe(false);
+        unmount();
+      }
     }
-  });
+  );
 });
 
 // ── TRIP-1419 · 관람 중 상태줄의 시각은 실제 도착 시각 (Q-086) ─────────────────────────────
@@ -555,22 +564,8 @@ describe('SlotProgressCard · 관람 중 시각 (TRIP-1419)', () => {
 // ── TRIP-748 · 영향 카드 배지 (AC-5 · Seed Q1) ──────────────────────────────
 //
 // 트리거가 가리키는 **예정** 카드는 "예정" 알약 대신 트리거 라벨(비 예보·이동 지연·휴무)을 분홍으로
-// 보인다(Figma 4135:2745). 알약 기하(rounded-button·px 10·py 5)는 그대로, 색 두 클래스만 바뀐다.
-// active·done 카드엔 배지를 새로 만들지 않는다(Q1).
-// ⚠️ 글자색은 `text-primary`(#FF385C)다 — `text-primary-text`(#C13515)가 아니다(02a ★12).
-
-function classTokens(node: { props?: { className?: unknown } }): string[] {
-  const cn = node.props?.className;
-  return typeof cn === 'string' ? cn.split(/\s+/).filter(Boolean) : [];
-}
-
-/** status 글자(Text)를 감싼 알약 박스 — `rounded-button` 을 가진 가장 가까운 조상(02a ★11). */
-function badgeBox(): { props?: { className?: unknown } } {
-  let up = screen.getByTestId(id('status')).parent;
-  while (up && !classTokens(up).includes('rounded-button')) up = up.parent;
-  if (!up) throw new Error('status 를 감싼 rounded-button 박스가 없다');
-  return up;
-}
+// 보인다(Figma 4135:2745). active·done 카드엔 배지를 새로 만들지 않는다(Q1).
+// 알약 색(primary-pale·text-primary vs surface-strong·text-muted) 단언은 jest-cut 에서 뺐다 — 생김새라 실화면 QA 몫.
 
 describe('SlotProgressCard · 배지 override (TRIP-748 C10)', () => {
   const upcomingSlot = mkSlot({
@@ -580,7 +575,7 @@ describe('SlotProgressCard · 배지 override (TRIP-748 C10)', () => {
   });
 
   it.each(['비 예보', '이동 지연', '휴무'])(
-    'C10a upcoming + badgeLabel "%s" → 그 글자를 분홍 알약(primary-pale 바탕 + primary 글자)으로',
+    'C10a upcoming + badgeLabel "%s" → "예정" 대신 그 글자를 배지로 그린다',
     (label) => {
       render(
         <SlotProgressCard
@@ -591,30 +586,16 @@ describe('SlotProgressCard · 배지 override (TRIP-748 C10)', () => {
         />
       );
 
-      const status = screen.getByTestId(id('status'));
-      expect(status).toHaveTextContent(label);
-      expect(classTokens(status)).toContain('text-primary');
-      expect(classTokens(status)).not.toContain('text-muted');
-
-      const box = classTokens(badgeBox());
-      expect(box).toContain('bg-primary-pale');
-      expect(box).not.toContain('bg-surface-strong');
-      // 기하는 "예정" 알약과 같다 — 색만 바뀐다.
-      expect(box).toEqual(
-        expect.arrayContaining(['rounded-button', 'px-[10px]', 'py-[5px]'])
-      );
+      expect(screen.getByTestId(id('status'))).toHaveTextContent(label);
     }
   );
 
-  it('C10b badgeLabel 이 없으면 지금처럼 "예정" + 회색 알약이다 (회귀 앵커)', () => {
+  it('C10b badgeLabel 이 없으면 지금처럼 "예정" 이다 (회귀 앵커)', () => {
     render(
       <SlotProgressCard slot={upcomingSlot} date={DATE} state="upcoming" />
     );
 
-    const status = screen.getByTestId(id('status'));
-    expect(status).toHaveTextContent('예정');
-    expect(classTokens(status)).toContain('text-muted');
-    expect(classTokens(badgeBox())).toContain('bg-surface-strong');
+    expect(screen.getByTestId(id('status'))).toHaveTextContent('예정');
   });
 
   it.each(['active', 'done'] as const)(
@@ -1300,40 +1281,8 @@ describe('SlotProgressCard · done [사진]·[메모] (TRIP-1203)', () => {
   });
 });
 
-// ── TRIP-1270 · 큰 글자 대응 (AC-4 · AC-5 · AC-7) ─────────────────────────────
-//
-// 머리 줄·아래 줄에는 testID 가 없다(신규 금지). 대신 "두 testID 를 함께 품은 가장 안쪽 호스트 View" 로 정의한다 —
-// 합성 노드(css-interop·Pressable)가 끼어 부모 단계 수가 구현마다 다르므로 `.parent.parent` 로 고정하지 않는다(02a ★3).
-// 이름 testID 는 onPressName 이 없을 때만 Text 에 붙으므로 여기 카드는 onPressName 을 주지 않는다(02a ★4).
-
-function commonHostAncestor(
-  a: ReactTestInstance,
-  b: ReactTestInstance
-): ReactTestInstance {
-  for (let up = a.parent; up; up = up.parent) {
-    if (typeof up.type === 'string' && up.findAll((n) => n === b).length > 0) {
-      return up;
-    }
-  }
-  throw new Error('두 노드를 함께 품은 호스트 조상이 없다');
-}
-
-/** done 은 이름 + 방문 시각, upcoming 은 이름 + 예정 배지가 한 머리 줄을 이룬다. */
-const HEAD_CASES = [
-  { state: 'done', partner: 'visit-time', partnerText: '09:30' },
-  { state: 'upcoming', partner: 'status', partnerText: '예정' },
-] as const;
-
-function renderHead(state: 'done' | 'upcoming') {
-  return render(
-    <SlotProgressCard
-      slot={mkSlot()}
-      date={DATE}
-      state={state}
-      visitedLabel="09:30"
-    />
-  );
-}
+// TRIP-1270 큰 글자 머리 줄 배율 분기(AC-5)·upcoming 아래 줄 줄바꿈(AC-4)은 jest-cut 에서 지웠다 — flex-row·flex-wrap·numberOfLines
+// 레이아웃이라 실화면 QA 몫(live-hub.md). INV-3(AC-7)은 위 C9 의 배율 3.571 행으로 합쳤다.
 
 // TRIP-1629 — 배율 매트릭스(1·1.353·1.786·3.571). 동작만 본다: 어느 배율에서도 글자·testID 가 그려지고 눌린 콜백이 나간다.
 // 잘림·겹침은 jest 가 레이아웃을 못 재서 단언하지 않는다 — 실화면 캡처(6-b)가 맡는다(README §테스트 전략 판정 4).
@@ -1391,133 +1340,6 @@ describeAtFontScales('SlotProgressCard · 배율 매트릭스 (TRIP-1629)', () =
     fireEvent.press(screen.getByTestId(id('arrive')));
 
     expect(onPressArrive).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('SlotProgressCard · 큰 글자 — 머리 줄 배율 분기 (TRIP-1270 AC-5)', () => {
-  it.each([1, 1.49])(
-    '배율 %s(보통 글자)에서는 done·upcoming 머리 줄이 지금 그대로 가로 한 줄이고 이름은 한 줄 말줄임이다',
-    (fontScale) => {
-      for (const { state, partner } of HEAD_CASES) {
-        // 준비 — 배율은 렌더 전에.
-        setFontScale(fontScale);
-        // 실행
-        const { unmount } = renderHead(state);
-        const name = screen.getByTestId(id('name'));
-        const head = commonHostAncestor(name, screen.getByTestId(id(partner)));
-
-        // 단언 — className 완전 일치: 기본 크기에서는 한 글자도 바뀌면 안 된다(Figma 정합 무회귀).
-        expect({ state, className: head.props.className }).toEqual({
-          state,
-          className: 'flex-row items-center justify-between gap-sm',
-        });
-        expect(name.props.numberOfLines).toBe(1);
-        expect(classTokens(name)).toContain('shrink');
-        unmount();
-      }
-    }
-  );
-
-  it.each([1.5, 3.571])(
-    '배율 %s(큰 글자)에서는 머리 줄이 세로로 쌓이고(이름이 위) 이름 줄 제한이 풀리며, testID·글자는 그대로다',
-    (fontScale) => {
-      for (const { state, partner, partnerText } of HEAD_CASES) {
-        // 준비
-        setFontScale(fontScale);
-        // 실행
-        const { unmount } = renderHead(state);
-        const name = screen.getByTestId(id('name'));
-        const head = commonHostAncestor(name, screen.getByTestId(id(partner)));
-
-        // 단언 ① 가로 배치가 아니다 — RN 기본 방향은 세로(column)라 flex-row 가 없으면 쌓인다.
-        expect({ state, tokens: classTokens(head) }).toEqual({
-          state,
-          tokens: expect.not.arrayContaining(['flex-row']),
-        });
-        expect(classTokens(head)).not.toContain('flex-row-reverse');
-        // 단언 ② 이름 줄 제한 해제 — undefined·0 모두 "제한 없음"이라 거짓 값으로 본다(02a ★7).
-        expect(Boolean(name.props.numberOfLines)).toBe(false);
-        // 단언 ③ 세로 배치에서 트리 순서 = 위→아래. 이름이 시각·배지보다 먼저다.
-        expect(
-          screen
-            .queryAllByTestId(
-              new RegExp(`^execution-live-slot-(name|${partner})-`)
-            )
-            .map((el) => el.props.testID)
-        ).toEqual([id('name'), id(partner)]);
-        // 단언 ④ 형제 테스트(LiveHubView 등)가 기대는 testID·글자 보존.
-        expect(name).toHaveTextContent('감천문화마을');
-        expect(screen.getByTestId(id(partner))).toHaveTextContent(partnerText);
-        if (state === 'done') {
-          expect(screen.getByTestId(id('visit-label'))).toHaveTextContent(
-            '방문'
-          );
-        }
-        unmount();
-      }
-    }
-  );
-});
-
-describe('SlotProgressCard · 큰 글자 — upcoming 아래 줄 줄바꿈 (TRIP-1270 AC-4)', () => {
-  it.each([1, 3.571])(
-    '배율 %s 에서도 비활성 아이콘과 [길찾기]·[도착]이 있는 아래 줄은 넘치면 꺾인다(flex-wrap, 배율 무관)',
-    (fontScale) => {
-      // 준비
-      setFontScale(fontScale);
-      render(
-        <SlotProgressCard
-          slot={mkSlot()}
-          date={DATE}
-          state="upcoming"
-          onPressArrive={jest.fn()}
-          onPressDirections={jest.fn()}
-        />
-      );
-
-      // 실행 — [도착]과 비활성 아이콘을 함께 품은 가장 안쪽 줄.
-      const row = commonHostAncestor(
-        screen.getByTestId(id('arrive')),
-        screen.getByTestId(id('disabled-check'))
-      );
-
-      // 단언 — 'flex-row' 는 그 가로 줄을 집었다는 앵커.
-      expect(classTokens(row)).toEqual(
-        expect.arrayContaining(['flex-row', 'flex-wrap'])
-      );
-    }
-  );
-});
-
-describe('SlotProgressCard · 큰 글자 — INV-3 (TRIP-1270 AC-7)', () => {
-  it('배율 3.571 에서도 세 상태 어디에도 소요시간(N분·N시간·소요)이 렌더되지 않는다', () => {
-    // C9 와 같은 정규식·픽스처 — 영업시간은 HH:mm 범위만("24시간" 오탐 회피, C9 주석 참고).
-    const DURATION = /(\d+\s*분|\d+\s*시간|소요)/;
-
-    for (const state of ['done', 'active', 'upcoming'] as const) {
-      // 준비
-      setFontScale(3.571);
-      // 실행
-      const { toJSON, unmount } = render(
-        <SlotProgressCard
-          slot={mkSlot({
-            openingHours: '11:00 - 22:00',
-            distanceRange: '약 1.2km',
-          })}
-          date={DATE}
-          state={state}
-          photos={PHOTOS}
-          memo="좋았다"
-          visitedLabel="09:30"
-        />
-      );
-      const text = JSON.stringify(toJSON());
-
-      // 단언 — 짝: 렌더가 비지 않았다.
-      expect(text).toContain('감천문화마을');
-      expect(DURATION.test(text)).toBe(false);
-      unmount();
-    }
   });
 });
 

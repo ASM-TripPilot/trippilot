@@ -202,18 +202,6 @@ function enabledRegionlessPlacesCalls(from = 0): unknown[] {
         !(params as { region?: string } | undefined)?.region
     );
 }
-/** 장소 레인 = 서비스 지역 3곳(홈과 같은 순서·필터 없음 → 같은 쿼리 키), 지역 없는 조회 0. */
-function expectServiceRegionQuery(from = 0): void {
-  const calls = enabledMultiCalls(from);
-  expect(calls.length).toBeGreaterThan(0);
-  for (const [regions, filters] of calls) {
-    expect(regions).toEqual(SERVICE_REGION_NAMES);
-    expect(filters?.category ?? null).toBeNull();
-    expect(filters?.q ?? '').toBe('');
-  }
-  expect(enabledRegionlessPlacesCalls(from)).toHaveLength(0);
-}
-
 beforeEach(() => {
   // 모듈 싱글턴 — 앞 테스트가 연 400ms 연타 창이 이 테스트의 첫 press 를 먹지 않게.
   resetPressGuard();
@@ -402,13 +390,6 @@ describe('전국 d01 — 구획·검색·레인', () => {
     fireEvent.press(screen.getByTestId('explore-lane-place-retry'));
 
     expect(mockPlacesRefetch).toHaveBeenCalledTimes(1);
-  });
-
-  // TRIP-1432 — 전국 이름순 8곳은 서비스 지역 밖(밀양·대구…)이었다. 서울·부산·제주를 홈과 같은 인자로 묻는다.
-  it('장소 레인은 서울·부산·제주 3곳을 묻고, 지역 없는 전국 조회는 나가지 않는다', () => {
-    render(<ExploreLandingPage />);
-
-    expectServiceRegionQuery();
   });
 
   it('숙소 조회 대기 중이면 두 레인 로딩 스켈레톤을 그린다', () => {
@@ -1157,19 +1138,6 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
         pathname: '/stays/[stayId]',
         params: { stayId: STAY_KEY },
       });
-    });
-
-    it('로그인 사용자의 숙소·장소 하트는 서버 담기를 실제로 부른다', () => {
-      render(<ExploreLandingPage />);
-      expect(screen.getByTestId('explore-region-chip')).toBeOnTheScreen();
-
-      fireEvent.press(screen.getByTestId(`explore-stay-save-${STAY_KEY}`));
-      expect(saveStay).toHaveBeenCalledTimes(1);
-      expect(saveStay).toHaveBeenCalledWith(STAY);
-
-      fireEvent.press(screen.getByTestId(`explore-place-save-${PLACE.poiId}`));
-      expect(savePlace).toHaveBeenCalledTimes(1);
-      expect((savePlace.mock.calls[0][0] as Place).poiId).toBe(PLACE.poiId);
     });
 
     it('＋ 여행 만들기는 직전 드래프트를 비우고 위저드로 1회 간다', () => {

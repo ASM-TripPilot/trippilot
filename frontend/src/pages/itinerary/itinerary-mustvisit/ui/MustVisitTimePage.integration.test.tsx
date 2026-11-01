@@ -1,6 +1,4 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -22,7 +20,7 @@ import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { coverFor } from '@/test-support/placeCoverFixtures';
 
 import { MustVisitTimePage } from './MustVisitTimePage';
-import { newTestQueryClient } from '@/test-support/queryRender';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
 import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
@@ -48,15 +46,8 @@ import { routerSpies } from '@/test-support/expoRouterMock';
  * 3동작 뼈대: 준비=가짜 서버 응답 지정 → 실행=날짜·시각을 고르고 저장 → 단언=나간 요청·본문·화면.
  */
 
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 const { push: mockPush, back: mockBack } = routerSpies;
 
@@ -195,13 +186,8 @@ afterAll(() => server.close());
 
 function renderPage() {
   const client = newTestQueryClient({ gcTime: 0 });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
   return render(<MustVisitTimePage tripId={TRIP_ID} sourcePoiId={POI_ID} />, {
-    wrapper: Wrapper,
+    wrapper: createWrapper(client),
   });
 }
 

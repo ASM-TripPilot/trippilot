@@ -63,10 +63,6 @@ function sheetProps(
   };
 }
 
-function classesOf(testID: string): string[] {
-  return String(screen.getByTestId(testID).props.className ?? '').split(/\s+/);
-}
-
 describe('T1 · l07 default 고지 문구 (TRIP-781 AC-1 · BR-U1-30)', () => {
   it('제목·본문·안내 박스 문구를 완전일치로 그린다', () => {
     render(<OtaChoiceSheet {...sheetProps()} />);
@@ -137,7 +133,7 @@ describe('T3 · [취소]/[이동] 배선과 이동 라벨 (AC-9 · TRIP-781 AC-3
 });
 
 describe('T4 · OTA 행 선두 라디오 (TRIP-728 · AC-1 · AC-2)', () => {
-  it('선두가 selected 라디오이고 채움 inner 가 존재한다 (AC-1)', () => {
+  it('선두가 selected 라디오다 (AC-1)', () => {
     render(<OtaChoiceSheet {...sheetProps()} />);
 
     // 라디오 = View 조합(accessibilityRole="radio" + accessibilityState.selected) — StayPriceSheet 미러.
@@ -145,8 +141,6 @@ describe('T4 · OTA 행 선두 라디오 (TRIP-728 · AC-1 · AC-2)', () => {
     // SVG 글리프가 아니라 View 라서 선택을 관측할 수 있다 — 글리프 fill 은 렌더 트리에 안 남아
     // 무심판이다(★F-3, 725 저장 하트 선례).
     expect(screen.getByTestId('stay-ota-radio-NAVER')).toBeSelected();
-    // 채움 inner = 두 번째 신호(존재). 채움 색(분홍)은 6-b/TRIP-831 육안 몫이다(★F-1).
-    expect(screen.getByTestId('stay-ota-radio-fill-NAVER')).toBeOnTheScreen();
   });
 });
 
@@ -157,12 +151,10 @@ describe('T5 · "다시 보지 않기" 체크박스 = 제어 prop (TRIP-781 AC-2
     const row = screen.getByTestId('stay-ota-dont-show');
     expect(row).not.toBeChecked();
     expect(within(row).getByText(DONT_SHOW)).toBeOnTheScreen();
-    expect(classesOf('stay-ota-dont-show-box')).toContain('bg-canvas');
 
     rerender(<OtaChoiceSheet {...sheetProps({ dontShowAgain: true })} />);
 
     expect(screen.getByTestId('stay-ota-dont-show')).toBeChecked();
-    expect(classesOf('stay-ota-dont-show-box')).toContain('bg-primary');
   });
 
   it('누르면 onToggleDontShowAgain 만 부르고, prop 이 그대로면 체크 모양도 그대로다', () => {
@@ -232,12 +224,6 @@ describe('T8 · "다시 보지 않기" 표시 여부 prop (TRIP-778 D9 — 게�
     // 단언: 체크박스와 그 문구가 없다.
     expect(screen.queryByTestId('stay-ota-dont-show')).toBeNull();
     expect(screen.queryByText(DONT_SHOW)).toBeNull();
-  });
-
-  it('prop 을 생략하면(기본값) 체크박스가 있다 — 로그인 사용자·기존 소비처 무회귀', () => {
-    render(<OtaChoiceSheet {...sheetProps()} />);
-
-    expect(screen.getByTestId('stay-ota-dont-show')).toBeOnTheScreen();
   });
 });
 

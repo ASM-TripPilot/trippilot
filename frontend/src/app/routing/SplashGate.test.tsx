@@ -4,7 +4,6 @@ import { act, render, screen } from '@testing-library/react-native';
 import { answerReduceMotionSynchronously } from '@/test-support/animatedProbe';
 import { Stack } from 'expo-router';
 
-import { useGenerationWatch } from '@/app/model/useGenerationWatch';
 import { usePermissionCatchUp } from '@/app/model/usePermissionCatchUp';
 import { useBootstrapGate } from '@/features/auth';
 import {
@@ -90,7 +89,6 @@ const mockUseBootstrapGate = useBootstrapGate as jest.MockedFunction<
 >;
 const mockRegisterIfGranted = registerPushIfGranted as jest.Mock;
 const mockCatchUp = usePermissionCatchUp as jest.Mock;
-const mockGenerationWatch = useGenerationWatch as jest.Mock;
 
 type GateState = ReturnType<typeof useBootstrapGate>;
 
@@ -460,7 +458,7 @@ describe.each([
  * 비쳐 이중으로 보이므로 `none` 이다. 바 없는 풀스크린(상세·위저드 등)은 슬라이드 그대로다.
  * 허브: 허브 바가 홈 탭 바와 같은 5칸으로 시작해 모프를 혼자 재생하려면 허브가 즉시 그 자리를 대체해야 한다.
  * 도우미: 시트가 아래에서 올라오지 않고 즉시 뜨게 한다 — `presentation: 'transparentModal'` 은 그대로 둔다(위 describe 가 잠근다).
- * 선언 위치가 `SplashGate` 인 이유: planb·assistant 선례, 라우트 파일 안에서 하면 `liveHubRoute.test` 의 expo-router 목이 깨진다.
+ * 선언 위치가 `SplashGate` 인 이유: planb·assistant 선례, 라우트 파일 안에서 하면 `routeParamMapping.test` 의 expo-router 목이 깨진다.
  * jest 가 잠그는 것은 선언까지다(스택 목은 options 를 그리지 않는다) — 실제 전환·스와이프 뒤로·탭 바와의 겹침은 6-b.
  * 새로 "바를 자기 화면 안에 그리는 라우트"를 만들면 이 목록과 `SplashGate.tsx` 의 `BAR_SCREEN_ROUTES` 에 이름을 더해야 한다 — 빠지면 슬라이드로 조용히 돌아간다(소스 스캔 가드는 두지 않는다).
  */
@@ -625,8 +623,7 @@ describe('SplashGate · 기능 안내 라우트 선언 (TRIP-1595)', () => {
  *  (1) 안내 화면 두 개(`permission-location`·`permission-push`)는 HOME 가드 **안**에서 선언된다 — 가드 밖이면 미인증 딥링크로 열리고,
  *      로그아웃·401 때 가드가 치워 주지 않는다. 스와이프 뒤로는 꺼져 있고 전환 animation 은 없다(기능 안내 투어와 같은 이유).
  *  (2) HOME 이 아닌 목적지에서는 이 두 화면이 마운트되지 않는다.
- *  (3) 훅에 `(ready, destination)` 을 넘기고 — ready 는 "스플래시를 걷어도 되는 상태"(결정됨 ∧ 목적지 있음 ∧ 하한 경과) —
- *      훅이 true(= 붙잡기)를 돌려주는 동안에는 하한이 지났어도 스플래시를 유지한다. 풀리면 스택이 마운트된다.
+ * 훅이 스플래시를 붙잡는 동안의 유지·하한 전 조회 시작은 SplashGate.integration.test(T1~T4)가 실물 훅으로 본다.
  * jest 가 못 보는 것: 안내가 실제 스택에서 한 장만 남는지·홈이 번쩍이는지(진짜 라우터 / 6-b).
  */
 describe('SplashGate · 권한 안내 라우트 선언·스플래시 유지 (TRIP-1601)', () => {
@@ -675,124 +672,4 @@ describe('SplashGate · 권한 안내 라우트 선언·스플래시 유지 (TRI
       }
     }
   );
-
-  it('P3 훅에 ready 를 넘긴다 — 하한 전에는 false, 하한이 지나면 true, 목적지는 그대로', () => {
-    // 준비
-    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
-
-    // 실행 1 — 마운트 직후(하한 전)
-    render(<SplashGate />);
-
-    // 단언 1
-    expect(mockCatchUp).toHaveBeenLastCalledWith(false, 'HOME');
-
-    // 실행 2
-    passFloor();
-
-    // 단언 2
-    expect(mockCatchUp).toHaveBeenLastCalledWith(true, 'HOME');
-  });
-
-  it('P3b 부트스트랩이 아직 결정 전(loading)이면 하한이 지나도 ready 는 false 다', () => {
-    // 준비
-    mockUseBootstrapGate.mockReturnValue(
-      gate({ phase: 'loading', destination: null })
-    );
-
-    // 실행
-    render(<SplashGate />);
-    passFloor();
-
-    // 단언
-    expect(mockCatchUp).toHaveBeenLastCalledWith(false, null);
-  });
-
-  it('P4 훅이 붙잡는 동안(true)에는 하한이 지나도 스플래시를 유지하고, 풀리면(false) 스택이 마운트된다', () => {
-    // 준비
-    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
-    mockCatchUp.mockReturnValue(true);
-
-    // 실행 1
-    const view = render(<SplashGate />);
-    passFloor();
-
-    // 단언 1 — 앵커: 하한은 지났는데도 스플래시, 스택 없음
-    expect(screen.getByTestId('shell-splash-root')).toBeOnTheScreen();
-    expect(screen.queryByTestId('gate-stack')).toBeNull();
-
-    // 실행 2 — 훅이 풀어 준다
-    mockCatchUp.mockReturnValue(false);
-    view.rerender(<SplashGate />);
-
-    // 단언 2
-    expect(screen.queryByTestId('shell-splash-root')).toBeNull();
-    expect(screen.getByTestId('gate-route-(tabs)')).toBeOnTheScreen();
-  });
-});
-
-/**
- * TRIP-1618 — 앱 셸 생성 완료 감지 훅의 **SplashGate 쪽 배선**(훅 `useGenerationWatch` 는 목 — 동작은 useGenerationWatch.integration.test 가 본다).
- *
- * 무엇을 보장하나: 훅에 `(drawn, destination)` 을 넘긴다 — 스플래시가 걷히기 전(하한 전·부트스트랩 미결)에는 `drawn=false`,
- * 그려지면 `drawn=true` 와 목적지 그대로. 훅 안에서 `HOME` 이 아니면 감시하지 않으므로 목적지를 가공 없이 넘기는 것이 계약이다.
- * jest 가 못 보는 것: 실제 스택에서 경로가 바뀔 때 훅이 다시 그려지는지.
- */
-describe('SplashGate · 생성 완료 감지 훅 배선 (TRIP-1618)', () => {
-  it('G1 하한 전에는 (false, HOME), 하한이 지나 그려지면 (true, HOME) 을 넘긴다', () => {
-    // 준비
-    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
-
-    // 실행 1 — 마운트 직후(하한 전)
-    render(<SplashGate />);
-
-    // 단언 1
-    expect(mockGenerationWatch).toHaveBeenLastCalledWith(false, 'HOME');
-
-    // 실행 2
-    passFloor();
-
-    // 단언 2
-    expect(mockGenerationWatch).toHaveBeenLastCalledWith(true, 'HOME');
-  });
-
-  it('G2 부트스트랩이 아직 결정 전(loading)이면 하한이 지나도 (false, null) 이다', () => {
-    mockUseBootstrapGate.mockReturnValue(
-      gate({ phase: 'loading', destination: null })
-    );
-
-    render(<SplashGate />);
-    passFloor();
-
-    expect(mockGenerationWatch).toHaveBeenLastCalledWith(false, null);
-  });
-
-  it('G3 로그인 목적지는 가공 없이 그대로 넘긴다(HOME 판정은 훅 안의 몫)', () => {
-    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'LOGIN' }));
-
-    render(<SplashGate />);
-    passFloor();
-
-    expect(mockGenerationWatch).toHaveBeenLastCalledWith(true, 'LOGIN');
-  });
-
-  it('G4 권한 안내가 스플래시를 붙잡는 동안(ready 는 true, 스플래시는 아직)에는 (false, HOME) 이다', () => {
-    // 준비 — 하한은 지났지만 권한 안내 훅이 스플래시를 붙잡는다(`ready` 와 `drawn` 이 갈리는 유일한 순간)
-    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
-    mockCatchUp.mockReturnValue(true);
-
-    // 실행 1
-    const view = render(<SplashGate />);
-    passFloor();
-
-    // 단언 1 — 앵커: 붙잡힌 채라 스플래시가 보이고, 감시 훅에는 아직 false 가 간다
-    expect(screen.getByTestId('shell-splash-root')).toBeOnTheScreen();
-    expect(mockGenerationWatch).toHaveBeenLastCalledWith(false, 'HOME');
-
-    // 실행 2 — 훅이 풀어 준다
-    mockCatchUp.mockReturnValue(false);
-    view.rerender(<SplashGate />);
-
-    // 단언 2 — 그려지는 순간 true 로 바뀐다
-    expect(mockGenerationWatch).toHaveBeenLastCalledWith(true, 'HOME');
-  });
 });

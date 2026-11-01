@@ -4,13 +4,11 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import type { ReactTestInstance } from 'react-test-renderer';
 import {
   buildSettingsSections,
   type SettingsInput,
 } from '../model/settingsSections';
 import { SettingsScreen } from './SettingsScreen';
-import { ContrastGlyph } from '@/features/settings';
 
 /**
  * l05 설정 화면(프레젠테이션) 단위 테스트.
@@ -211,95 +209,6 @@ describe('행·그룹·다이얼로그 (옛 .test)', () => {
       }
       // 단언(부분포함): 약관 행은 준비 중이 아니다.
       expect(within(appInfo!).queryByText(/준비 중/)).toBeNull();
-    });
-  });
-
-  /**
-   * TRIP-1051 AC-5 · AC-6 — 여행 취향은 머리글 없는 카드에 한 행(결정 (a)).
-   *
-   * ★ 우연 통과 차단(02a ★1): 옛 "그룹 안에 '여행 취향'이 있다"는 머리글을 지워도 행 라벨에 걸려 green 이었다.
-   *   그래서 ① 그룹 안 '여행 취향'이 **정확히 1개** ② 그 1개가 행 안 ③ 그룹 안 모든 글자(host Text)가 행 안
-   *   — 세 겹으로 본다. ③은 "머리글 자리에 빈 Text 를 남긴 것"(카드가 아래로 밀린다)까지 잡는다.
-   * ★ 부재 단언은 칩이 실제로 뜰 입력(취향 설정)으로, 새 행이 있다는 앵커를 먼저 본다(02a ★2·★3).
-   *
-   * (개념) host Text — 화면에 실제로 그려지는 글자 노드. `node.type === 'Text'`(문자열)로 고른다.
-   * (개념) 조상 판정 — 노드에서 `.parent` 를 따라 올라가다 행을 만나면 그 행 안이다.
-   */
-
-  /** 여섯 축 전부 설정 — 옛 구현이면 `settings-chip-budget` 이 실제로 뜨는 입력(02a ★3). */
-  const PREFERENCES_BUDGET_UNSET = {
-    styles: { value: ['휴양', '자연'], isNeutralDefault: false },
-    companion: {
-      companionTypes: ['친구'],
-      petFlag: false,
-      isNeutralDefault: false,
-    },
-    activities: { value: ['맛집투어', '전시'], isNeutralDefault: false },
-    transportModes: { value: ['대중교통'], isNeutralDefault: false },
-    foodTastes: { value: ['일식'], isNeutralDefault: false },
-    pace: { value: '느긋하게', isNeutralDefault: false },
-  };
-
-  const OLD_PREFERENCE_ROW_KEYS = [
-    'style',
-    'budget',
-    'companions',
-    'activities',
-    'transport',
-    'food',
-    'pace',
-  ];
-
-  function renderWithPreferences() {
-    return renderScreen({
-      groups: buildSettingsSections({
-        nickname: '여행자123',
-        email: 'a@b.com',
-        preferences: PREFERENCES_BUDGET_UNSET,
-      }),
-    });
-  }
-
-  function isInside(node: ReactTestInstance, ancestor: ReactTestInstance) {
-    let current: ReactTestInstance | null = node;
-    while (current !== null) {
-      if (current === ancestor) return true;
-      current = current.parent;
-    }
-    return false;
-  }
-
-  describe('TRIP-1051 · 여행 취향 한 행 (AC-5 · AC-6)', () => {
-    it('S1 AC-5: 옛 7행(settings-nav-style 등)·그 chevron·칩이 화면에 없다', () => {
-      renderWithPreferences();
-
-      // 긍정 앵커: 새 한 행은 있다(화면이 통째로 비어서 통과하는 것을 막는다).
-      expect(screen.getByTestId('settings-nav-preferences')).toBeOnTheScreen();
-
-      for (const key of OLD_PREFERENCE_ROW_KEYS) {
-        expect(screen.queryByTestId(`settings-nav-${key}`)).toBeNull();
-        expect(screen.queryByTestId(`settings-nav-${key}-chevron`)).toBeNull();
-        expect(screen.queryByTestId(`settings-chip-${key}`)).toBeNull();
-      }
-    });
-
-    it('S2 AC-6: 두 번째 그룹 안 "여행 취향"은 정확히 1개이고 행 안에 있다 — 그룹의 모든 글자가 행 안이다(머리글 없음)', () => {
-      renderWithPreferences();
-
-      const group = screen.getAllByTestId('settings-group')[1];
-      const row = within(group).getByTestId('settings-nav-preferences');
-
-      // ① 정확히 1개(머리글이 살아나면 2개 → red).
-      expect(within(group).getAllByText('여행 취향')).toHaveLength(1);
-      // ② 그 1개는 행 라벨이다.
-      expect(within(row).getByText('여행 취향')).toBeOnTheScreen();
-      // ③ 그룹 안 글자 노드가 전부 행 안이다 — 빈 머리글 Text 도 여기서 걸린다.
-      const texts = group.findAll((node) => String(node.type) === 'Text');
-      expect(texts.length).toBeGreaterThan(0); // 앵커: 탐지기가 빈손이 아니다
-      // 실패 시 읽기 쉽게 글자(children)만 뽑아 비교한다 — 빈 Text 면 [null] 같은 값이 남아 red.
-      expect(
-        texts.filter((t) => !isInside(t, row)).map((t) => t.props.children)
-      ).toEqual([]);
     });
   });
 
@@ -513,20 +422,6 @@ describe('Figma 행 표면 (옛 .l05parity)', () => {
     return group!;
   }
 
-  /** className 을 공백으로 쪼갠 토큰 배열 — 부분 문자열 오탐(`bg-primary` ⊂ `bg-primary-pale`) 차단. */
-  function tokensOf(testID: string): string[] {
-    return String(screen.getByTestId(testID).props.className ?? '').split(
-      /\s+/
-    );
-  }
-
-  /** 행 안의 SVG 수(리딩 글리프 + chevron). host 타입 이름은 §5 실측. */
-  function svgCount(testID: string): number {
-    return screen
-      .getByTestId(testID)
-      .findAll((node) => String(node.type) === 'RNSVGSvgView').length;
-  }
-
   /**
    * ★ 행 안에서만 찾는다(`within(row)`) — '설정됨' 같은 글자가 다른 곳에 생겨도 헷갈리지 않게.
    * ★ AC-3 은 정규식 `/\/6/` 로 "숫자/6" 모양 전부를 막는다 — 문자열 인자는 완전일치라 `'0/6 설정됨'` 하나만
@@ -573,15 +468,6 @@ describe('Figma 행 표면 (옛 .l05parity)', () => {
       // 단언
       expect(onPressPreferences).toHaveBeenCalledTimes(1);
     });
-
-    it('A5 AC-8(구조): 리딩 아이콘은 반원(ContrastGlyph) 1개 — SVG 는 아이콘+chevron 2개', () => {
-      renderScreen({ preferences: THREE_SET });
-
-      const row = screen.getByTestId(PREF_ROW);
-      // 컴포넌트 종류로 센다 — SVG 개수만 보면 다른 글리프가 들어가도 통과한다(02a ★10).
-      expect(row.findAllByType(ContrastGlyph)).toHaveLength(1);
-      expect(svgCount(PREF_ROW)).toBe(2);
-    });
   });
 
   describe('TRIP-778 AC-5 · 위치정보 수집 동의 칩 (D4)', () => {
@@ -592,9 +478,6 @@ describe('Figma 행 표면 (옛 .l05parity)', () => {
       const row = screen.getByTestId('settings-nav-location-consent');
       const chip = within(row).getByTestId('settings-chip-location-consent');
       expect(within(chip).getByText('동의')).toBeOnTheScreen();
-      expect(tokensOf('settings-chip-location-consent')).toContain(
-        'bg-primary-pale'
-      );
       expect(
         within(row).getByTestId('settings-nav-location-consent-chevron')
       ).toBeOnTheScreen();
@@ -611,9 +494,6 @@ describe('Figma 행 표면 (옛 .l05parity)', () => {
       ).getByTestId('settings-chip-location-consent');
       expect(within(chip).getByText('미동의')).toBeOnTheScreen();
       expect(within(chip).queryByText('동의')).toBeNull();
-      expect(tokensOf('settings-chip-location-consent')).toContain(
-        'bg-surface-strong'
-      );
     });
 
     it('B3 모르면(응답 전·실패) 칩을 그리지 않는다 — 행은 그대로 있다', () => {
@@ -642,8 +522,6 @@ describe('Figma 행 표면 (옛 .l05parity)', () => {
       expect(
         within(row).getByTestId('settings-nav-personalization-chevron')
       ).toBeOnTheScreen();
-      // 단언: 리딩 글리프 + chevron = SVG 2개(LEADING_GLYPHS 에 personalization 이 없으면 1개).
-      expect(svgCount('settings-nav-personalization')).toBe(2);
 
       fireEvent.press(row);
       expect(onPressPersonalization).toHaveBeenCalledTimes(1);

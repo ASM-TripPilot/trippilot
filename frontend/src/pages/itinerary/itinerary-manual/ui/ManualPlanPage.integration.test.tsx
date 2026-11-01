@@ -8,7 +8,6 @@ import {
   waitFor,
   within,
 } from '@testing-library/react-native';
-import type { ReactNode } from 'react';
 
 import { server } from '@/mocks/server';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
@@ -31,6 +30,12 @@ import {
   fireEditDragEnd,
   fireEditDropOnZone,
 } from '@/test-support/editDragList';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
+import {
+  itinerary as baseItinerary,
+  trip as baseTrip,
+} from '@/test-support/itineraryFixtures';
+import { BASE, serveItinerary } from '@/test-support/mswItinerary';
 
 import { ManualPlanPage } from './ManualPlanPage';
 
@@ -50,15 +55,8 @@ import { ManualPlanPage } from './ManualPlanPage';
  */
 
 // 생성 클라이언트의 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다(선례 동형).
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 // POST 성공 콜백 쪽 알림 권한 루틴을 실물로 태우지 않는다(옛 `.emptyStart`·`.fresh` 목 — 도달 0).
 jest.mock('@/shared/push', () => ({
@@ -148,7 +146,6 @@ describe('저장하고 확정하기', () => {
    * 3동작 뼈대: 준비=가짜 서버(MANUAL 초안 a·b, PUT·확정 핸들러) → 실행=CTA press → 단언=요청 순서·라우터·캐시·안내.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
   const TRIP_ID = '55555555-5555-5555-5555-555555555555';
   const DAY = '2026-06-10';
 
@@ -181,20 +178,16 @@ describe('저장하고 확정하기', () => {
   }
 
   function manualDraft(status: Itinerary['status'] = 'PLANNED'): Itinerary {
-    return {
+    return baseItinerary({
       itineraryId: 'itin-m',
       tripId: TRIP_ID,
       status,
       solveMode: 'MINIMAL',
       generationMode: 'MANUAL',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days: [
         { date: DAY, slots: [slot('a', '09:00:00'), slot('b', '11:00:00')] },
       ],
-    };
+    });
   }
 
   /** 요청 도착 순서 — PUT 이 먼저 끝나야 확정이 나간다(B2). */
@@ -229,11 +222,13 @@ describe('저장하고 확정하기', () => {
     putHandler = () => HttpResponse.json(manualDraft());
     confirmHandler = () => HttpResponse.json(manualDraft('CONFIRMED'));
 
-    server.use(
-      http.get(`${BASE}/trips/:tripId/itinerary`, () => {
+    serveItinerary(server, {
+      itinerary: () => {
         itineraryGets += 1;
         return HttpResponse.json(manualDraft());
-      }),
+      },
+    });
+    server.use(
       http.get(`${BASE}/trips/:tripId/bases`, () => HttpResponse.json([])),
       http.put(`${BASE}/trips/:tripId/itinerary`, () => {
         putCalls += 1;
@@ -519,7 +514,6 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
    * 3동작 뼈대: 준비=가짜 서버(MANUAL 초안 한 날) → 실행=끌기·누르기·저장 → 단언=화면·나간 요청·라우터.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
   const TRIP_ID = '22222222-2222-2222-2222-222222222222';
   const DAY = '2026-06-10';
 
@@ -557,36 +551,23 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
   ];
 
   function trip(): Trip {
-    return {
+    return baseTrip({
       tripId: TRIP_ID,
       title: '부산 여행',
       startDate: DAY,
-      endDate: '2026-06-12',
-      party: 2,
-      preferenceSnapshot: {},
       destinations: [{ seq: 1, region: '부산', nights: 2 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
+    });
   }
 
   /** 직접 짜기 초안 — (MANUAL, MINIMAL, false). days>0 이라 페이지가 생성 POST 를 쏘지 않는다. */
   function manualDraft(slots: ItineraryDaysItemSlotsItem[]): Itinerary {
-    return {
+    return baseItinerary({
       itineraryId: 'itin-m',
       tripId: TRIP_ID,
-      status: 'PLANNED',
       solveMode: 'MINIMAL',
       generationMode: 'MANUAL',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days: [{ date: DAY, slots }],
-    };
+    });
   }
 
   let putCalls = 0;
@@ -609,11 +590,11 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
     confirmHandler = () =>
       HttpResponse.json({ ...manualDraft(daySlots), status: 'CONFIRMED' });
 
+    serveItinerary(server, {
+      trip: () => trip(),
+      itinerary: () => manualDraft(daySlots),
+    });
     server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(manualDraft(daySlots))
-      ),
       // TRIP-1022 — 페이지가 빈 편집기 지도 중심용 거점을 조회한다(단언 무관 준비). `/saved-stays` 는
       // 기본 핸들러(`[]`)가 받는다. 없으면 `onUnhandledRequest:'error'` 에 걸린다(02a §3).
       http.get(`${BASE}/trips/:tripId/bases`, () => HttpResponse.json([])),
@@ -637,15 +618,10 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
   });
 
   function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    const client = newTestQueryClient({ gcTime: 0 });
+    return render(<ManualPlanPage tripId={TRIP_ID} />, {
+      wrapper: createWrapper(client),
     });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<ManualPlanPage tripId={TRIP_ID} />, { wrapper: Wrapper });
   }
 
   async function ready(): Promise<void> {
@@ -867,11 +843,7 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
           { date: '2026-06-11', slots: [slot('u2', null, '12:00:00')] },
         ],
       };
-      server.use(
-        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-          HttpResponse.json(twoDays)
-        )
-      );
+      serveItinerary(server, { itinerary: () => twoDays });
       putHandler = () => HttpResponse.json(twoDays);
       renderPage();
       await ready();
@@ -1011,11 +983,7 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
           },
         ],
       };
-      server.use(
-        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-          HttpResponse.json(twoDays)
-        )
-      );
+      serveItinerary(server, { itinerary: () => twoDays });
       renderPage();
       await ready();
 
@@ -1035,17 +1003,15 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
     // TRIP-1233 AC-1a — 2일짜리라야 "항상 첫 날 날짜"를 박는 구현과 갈린다(위 M7 첫 케이스는 1일짜리).
     it('2일차 칩으로 옮긴 뒤 말미 장소 추가는 2일차 date 를 싣는다', async () => {
       const DAY2 = '2026-06-11';
-      server.use(
-        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-          HttpResponse.json({
-            ...manualDraft(PLAIN),
-            days: [
-              { date: DAY, slots: PLAIN },
-              { date: DAY2, slots: [slot('d', '09:00:00', '10:00:00')] },
-            ],
-          })
-        )
-      );
+      serveItinerary(server, {
+        itinerary: () => ({
+          ...manualDraft(PLAIN),
+          days: [
+            { date: DAY, slots: PLAIN },
+            { date: DAY2, slots: [slot('d', '09:00:00', '10:00:00')] },
+          ],
+        }),
+      });
       renderPage();
       await ready();
 
@@ -1072,11 +1038,10 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
           { date: '2026-07-01', slots: [slot('ax', '10:00:00', '11:00:00')] },
         ]);
       let postCalls = 0;
+      serveItinerary(server, {
+        itinerary: () => new HttpResponse(null, { status: 404 }),
+      });
       server.use(
-        http.get(
-          `${BASE}/trips/:tripId/itinerary`,
-          () => new HttpResponse(null, { status: 404 })
-        ),
         http.post(`${BASE}/trips/:tripId/itinerary`, () => {
           postCalls += 1;
           return HttpResponse.json(manualDraft([]), { status: 201 });
@@ -1117,9 +1082,7 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
    */
   describe('🔴 S1 · 저장 성공 토스트 + 확정 화면으로 이동 (#043 · TRIP-1038 B)', () => {
     function renderPageWithToast() {
-      const client = new QueryClient({
-        defaultOptions: { queries: { retry: false, gcTime: 0 } },
-      });
+      const client = newTestQueryClient({ gcTime: 0 });
       return render(
         <QueryClientProvider client={client}>
           <WithToastHost>
@@ -1240,25 +1203,19 @@ describe('빈 일정으로 시작 — POST 성공 뒤 헤더·일차 칩', () =>
    * 3동작 뼈대: 준비=가짜 서버(404→POST→200) → 실행=페이지 렌더 → 단언=헤더·칩·POST 건수.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
   const TRIP_ID = '33333333-3333-3333-3333-333333333333';
 
   /** 1박 2일 MANUAL — 서버가 POST 에 즉시 돌려주는 모양(전 일자 빈 슬롯 · COMPLETE). */
-  const MANUAL_TWO_DAYS: Itinerary = {
+  const MANUAL_TWO_DAYS: Itinerary = baseItinerary({
     itineraryId: 'itin-new',
     tripId: TRIP_ID,
-    status: 'PLANNED',
     solveMode: 'MINIMAL',
     generationMode: 'MANUAL',
-    generationState: 'COMPLETE',
-    isFallback: false,
-    scoringMode: null,
-    degradations: [],
     days: [
       { date: '2026-10-20', slots: [] },
       { date: '2026-10-21', slots: [] },
     ],
-  };
+  });
 
   let posted = false;
   let postCalls = 0;
@@ -1271,12 +1228,13 @@ describe('빈 일정으로 시작 — POST 성공 뒤 헤더·일차 칩', () =>
     useItineraryEditStore.getState().reset();
 
     // 통합 버킷은 핸들러가 없으면 준비 단계에서 죽는다 — 페이지가 부르는 네 경로를 전부 건다(02a ★17).
-    server.use(
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+    serveItinerary(server, {
+      itinerary: () =>
         posted
           ? HttpResponse.json(MANUAL_TWO_DAYS)
-          : HttpResponse.json({}, { status: 404 })
-      ),
+          : HttpResponse.json({}, { status: 404 }),
+    });
+    server.use(
       http.post(`${BASE}/trips/:tripId/itinerary`, () => {
         postCalls += 1;
         posted = true;
@@ -1294,18 +1252,10 @@ describe('빈 일정으로 시작 — POST 성공 뒤 헤더·일차 칩', () =>
   });
 
   function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
+    const client = newTestQueryClient({ gcTime: 0 });
+    return render(<ManualPlanPage tripId={TRIP_ID} />, {
+      wrapper: createWrapper(client),
     });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<ManualPlanPage tripId={TRIP_ID} />, { wrapper: Wrapper });
   }
 
   describe('🔴 E1 · AC-A1·A2 — POST 가 성공하면 장소 없이도 헤더 날짜와 2일차 칩이 뜬다', () => {
@@ -1409,7 +1359,6 @@ describe('새로 짜기(startFresh) — 옛 일정 비우기', () => {
    * 3동작 뼈대: 준비=가짜 서버(옛 AI 일정 1일 → POST 뒤 빈 MANUAL 2일) → 실행=startFresh 렌더 → 단언=POST 건수·본문·화면.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
   const TRIP_ID = '66666666-6666-6666-6666-666666666666';
   const DAY1 = '2026-10-20';
   const DAY2 = '2026-10-21';
@@ -1439,37 +1388,28 @@ describe('새로 짜기(startFresh) — 옛 일정 비우기', () => {
 
   /** 비우기 전 일정 — AI 초안 1일(옛 장소 `old`). */
   function oldDraft(status: Itinerary['status'] = 'PLANNED'): Itinerary {
-    return {
+    return baseItinerary({
       itineraryId: 'itin-old',
       tripId: TRIP_ID,
       status,
       solveMode: 'DETERMINISTIC',
-      generationMode: 'FULLY_AI',
-      generationState: 'COMPLETE',
       isFallback: true,
-      scoringMode: null,
-      degradations: [],
       days: [{ date: DAY1, slots: [slot('old')] }],
-    };
+    });
   }
 
   /** 비운 뒤 서버 일정 — MANUAL 은 전 일자를 빈 슬롯으로 깐다(emptyStart 선례). */
   function freshManual(slots: ItineraryDaysItemSlotsItem[] = []): Itinerary {
-    return {
+    return baseItinerary({
       itineraryId: 'itin-new',
       tripId: TRIP_ID,
-      status: 'PLANNED',
       solveMode: 'MINIMAL',
       generationMode: 'MANUAL',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days: [
         { date: DAY1, slots },
         { date: DAY2, slots: [] },
       ],
-    };
+    });
   }
 
   let requestLog: string[] = [];
@@ -1518,8 +1458,8 @@ describe('새로 짜기(startFresh) — 옛 일정 비우기', () => {
     setAccessToken('valid-access');
     useItineraryEditStore.getState().reset();
 
-    server.use(
-      http.get(`${BASE}/trips/:tripId/itinerary`, async () => {
+    serveItinerary(server, {
+      itinerary: async () => {
         itineraryGets += 1;
         requestLog.push('GET');
         if (posted) await getAfterPostDoor;
@@ -1530,7 +1470,9 @@ describe('새로 짜기(startFresh) — 옛 일정 비우기', () => {
         if (posted && getAfterPostFails)
           return new HttpResponse(null, { status: 500 });
         return HttpResponse.json(getScript());
-      }),
+      },
+    });
+    server.use(
       http.post(`${BASE}/trips/:tripId/itinerary`, async ({ request }) => {
         postCalls += 1;
         requestLog.push('POST');
@@ -1560,19 +1502,9 @@ describe('새로 짜기(startFresh) — 옛 일정 비우기', () => {
   });
 
   function renderPage(props: { startFresh?: boolean } = {}) {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
+    const client = newTestQueryClient({ gcTime: 0 });
     const utils = render(<ManualPlanPage tripId={TRIP_ID} {...props} />, {
-      wrapper: Wrapper,
+      wrapper: createWrapper(client),
     });
     return { ...utils, client };
   }
@@ -1813,7 +1745,6 @@ describe('저장 뒤 위반 요약 게이트', () => {
    * → 단언=요청 순서·수·라우터·게이트/토스트 testID.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
   const TRIP_ID = '66666666-6666-6666-6666-666666666666';
   const DAY = '2026-06-10';
 
@@ -1860,16 +1791,12 @@ describe('저장 뒤 위반 요약 게이트', () => {
     violated = false,
     status: Itinerary['status'] = 'PLANNED'
   ): Itinerary {
-    return {
+    return baseItinerary({
       itineraryId: 'itin-m',
       tripId: TRIP_ID,
       status,
       solveMode: 'MINIMAL',
       generationMode: 'MANUAL',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days: [
         {
           date: DAY,
@@ -1883,7 +1810,7 @@ describe('저장 뒤 위반 요약 게이트', () => {
           ],
         },
       ],
-    };
+    });
   }
 
   /** 요청 도착 순서 — 게이트가 확정을 붙잡았는지 본다. */
@@ -1916,10 +1843,8 @@ describe('저장 뒤 위반 요약 게이트', () => {
     putHandler = () => HttpResponse.json(manualDraft(true));
     confirmHandler = () => HttpResponse.json(manualDraft(true, 'CONFIRMED'));
 
+    serveItinerary(server, { itinerary: () => manualDraft() });
     server.use(
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(manualDraft())
-      ),
       // 빈 편집기 지도 중심용 거점 조회(단언 무관 준비). `/saved-stays` 는 기본 핸들러가 받는다.
       http.get(`${BASE}/trips/:tripId/bases`, () => HttpResponse.json([])),
       http.put(`${BASE}/trips/:tripId/itinerary`, () => {
@@ -2301,21 +2226,15 @@ describe('저장 뒤 위반 요약 게이트', () => {
 // 대신하던 지도 중심(M1/M2/C1~C5)은 `editorMapCenter` PBT 와 위 E3 가, 위반 배지(V1·V2)는 V3·V4 가, 폴백 배너
 // 부재(I2)는 판별력이 없어(traps-itinerary: 공허 통과) 옛 파일과 함께 지웠다.
 describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMock)', () => {
-  const BASE = 'http://localhost:8080/api/v1';
   const TRIP_ID = 't1';
 
-  const EMPTY_MANUAL: Itinerary = {
+  const EMPTY_MANUAL: Itinerary = baseItinerary({
     itineraryId: 'it1',
     tripId: TRIP_ID,
-    status: 'PLANNED',
     solveMode: 'MINIMAL',
     generationMode: 'MANUAL',
-    isFallback: false,
-    scoringMode: null,
-    degradations: [],
-    generationState: 'COMPLETE',
     days: [{ date: '2026-06-10', slots: [] }],
-  };
+  });
 
   /** 조회 응답 차례 — 테스트가 바꾼다. `'held'` 는 `openGet` 이 풀 때까지 붙잡는다. */
   let getReply: 'held' | 'notFound' | Itinerary = 'notFound';
@@ -2333,8 +2252,8 @@ describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMo
     (promptAndRegisterPush as jest.Mock).mockClear();
     setAccessToken('valid-access');
     useItineraryEditStore.getState().reset();
-    server.use(
-      http.get(`${BASE}/trips/:tripId/itinerary`, async () => {
+    serveItinerary(server, {
+      itinerary: async () => {
         getCount += 1;
         if (getReply === 'held') {
           await new Promise<void>((resolve) => {
@@ -2348,7 +2267,9 @@ describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMo
             : HttpResponse.json({}, { status: 404 });
         }
         return HttpResponse.json(getReply);
-      }),
+      },
+    });
+    server.use(
       http.post(`${BASE}/trips/:tripId/itinerary`, async ({ request }) => {
         postBodies.push(await request.text());
         return postStatus === 201
@@ -2371,20 +2292,10 @@ describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMo
   });
 
   function renderPage(props: { startFresh?: boolean } = {}) {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
+    const client = newTestQueryClient({ gcTime: 0 });
     return render(
       <ManualPlanPage tripId={TRIP_ID} startFresh={props.startFresh} />,
-      { wrapper: Wrapper }
+      { wrapper: createWrapper(client) }
     );
   }
   const settleMs = async (ms = 150): Promise<void> => {

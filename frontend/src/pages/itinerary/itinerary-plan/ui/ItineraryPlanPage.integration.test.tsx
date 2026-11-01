@@ -577,59 +577,6 @@ describe('확정 CTA·재조회 배선', () => {
       expect(confirmPostCalls).toBe(1);
     });
   });
-
-  describe('🔴 TRIP-1204 · h14·h16 일정 지도는 시트가 열린 채로도 손가락으로 움직인다', () => {
-    it('셸 지도가 viewOnly=false 로 열려 있다', async () => {
-      renderPageWithToast();
-      await screen.findByTestId('map-sheet-shell-root');
-
-      expect(screen.getByTestId('map-root').props.viewOnly).toBe(false);
-    });
-  });
-
-  describe('🔴 TRIP-1076 AC-3 · h16 확정 일정 지도는 핀 전부에 맞춰 연다', () => {
-    it('셸 지도에 핀 2개 이상과 fitPins 가 함께 전달된다', async () => {
-      // 준비 — day1 두 곳에 좌표를 명시해 핀 2개를 만든다(기본 좌표에 기대지 않는다).
-      const plan = confirmedItinerary();
-      const DAY1_COORDS = [
-        { lat: 33.458, lng: 126.942 },
-        { lat: 33.512, lng: 126.529 },
-      ];
-      itineraryHandler = () =>
-        HttpResponse.json({
-          ...plan,
-          days: plan.days.map((day, dayIndex) =>
-            dayIndex === 0
-              ? {
-                  ...day,
-                  slots: day.slots.map((slot, i) => ({
-                    ...slot,
-                    ...DAY1_COORDS[i],
-                  })),
-                }
-              : day
-          ),
-        });
-
-      renderPageWithToast();
-      await screen.findByTestId('map-sheet-shell-root');
-
-      const map = screen.getByTestId('map-root');
-      expect((map.props.pins as unknown[]).length).toBeGreaterThanOrEqual(2);
-      expect(map.props.fitPins).toBe(true);
-    });
-  });
-
-  // TRIP-1553 — 일정 상세의 ✦ 도우미(TRIP-1321, 지도 우상단 카드 슬롯)는 헤더로 옮기지 않고 없앴다(사용자 결정 2026-10-22).
-  describe('✦ 도우미 FAB 는 없다 (TRIP-1553)', () => {
-    it('지도+시트 셸은 뜨는데 ✦ 는 없다', async () => {
-      renderPageWithToast();
-
-      // 짝 앵커 — 셸이 그려진 뒤에도 ✦ 만 없음을 보인다.
-      await screen.findByTestId('map-sheet-shell-root');
-      expect(screen.queryByTestId('assistant-fab')).toBeNull();
-    });
-  });
 });
 
 // TRIP-801 · TRIP-939 · 옛 ItineraryPlanPage.confirmed.integration.test.tsx — 확정(h16) 셸 얼굴.
@@ -961,16 +908,6 @@ describe('확정 셸(h16) 얼굴', () => {
       fireEvent.press(screen.getByTestId('sheet-daychip-0'));
 
       expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('1일차');
-    });
-
-    it('확정 얼굴은 헤더 meta 를 제목 줄 아래로 내린다(TRIP-1237 e) — 가로 행이 아니다', async () => {
-      useItinerary(() => HttpResponse.json(confirmedDefault()));
-      renderPage();
-      await screen.findByTestId('map-sheet-shell-root');
-
-      expect(
-        String(screen.getByTestId('sheet-header-root').props.className)
-      ).not.toContain('flex-row');
     });
 
     it('같은 날이어도 알림 표식이 없으면(직접 진입) 1일차로 연다', async () => {

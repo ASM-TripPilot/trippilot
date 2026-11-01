@@ -8,6 +8,7 @@ import {
   within,
 } from '@testing-library/react-native';
 import { BASE } from '@/test-support/apiBase';
+import { createGate } from '@/test-support/mswHookHarness';
 import {
   createGcZeroWrapper,
   createWrapper,
@@ -176,18 +177,6 @@ function savedRowOf(poiId: string): SavedPlace {
     savedAt: '2026-08-01T00:00:00Z',
     place: PLACES.find((place) => place.poiId === poiId) ?? PLACES[0],
   };
-}
-
-/**
- * 테스트가 풀어 줄 때까지 응답하지 않는 문(`savedPlaces.integration.test.tsx:101` 선례).
- * `delay(ms)` 로 재면 느린 CI 에서 흔들리고, "아직 안 왔다"를 결정론적으로 보장하지 못한다.
- */
-function createGate() {
-  let release!: () => void;
-  const opened = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  return { opened, release };
 }
 
 /** 서버가 실제로 들고 있는 담은 목록 — POST/DELETE 가 이 배열을 고친다(★ 겹②). */

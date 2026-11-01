@@ -1,4 +1,3 @@
-import { Pressable, Text, View } from 'react-native';
 import {
   fireEvent,
   render,
@@ -18,7 +17,7 @@ import { GenerationFallbackScreen } from './GenerationFallbackScreen';
  *    원인을 특정하지 않고 알림 약속 안내바는 없다(TRIP-1008 A1~A3 — 옛 AC-2 본문·AC-5 안내바 플립).
  *  - 🔴 실패(하드) 변형: 체크리스트 대신 실패 히어로 + CTA 갈림(AC-7). 성공/실패 상호배타(AC-8).
  *  - (TRIP-1150) 옛 AC-9 "소요시간 표기 0건" 렌더 스캔은 지웠다 — 이 화면엔 시간·거리 재료가 없다
- *    (README 판정 4 INV-3 하위 규칙). S0 의 소요시간 탐지기 자가검사도 짝이라 함께 걷었다.
+ *    (README 판정 4 INV-3 하위 규칙). S0 자가검사(완전일치 헬퍼 자기검증)도 걷었다(2026-11-01).
  *  - 초록 체크·회색 대시 마커의 **색은 심판하지 않는다**(글리프 raw-hex 사각 · 02a ★4) — 마커
  *    testID 존재·개수·회색 행 텍스트까지만. 색 회귀는 6-b 프리뷰 육안 전용.
  *
@@ -66,29 +65,6 @@ beforeEach(() => {
   onManualPlan.mockClear();
   onRetry.mockClear();
   onBack.mockClear();
-});
-
-describe('S0 · 자가검사 — 이게 통과해야 아래 카피 단언이 의미를 갖는다', () => {
-  it('문자열 인자는 완전일치다', () => {
-    render(
-      <View>
-        <View testID="probe-copy">
-          <Text>AI 추천은 </Text>
-          <Text>잠시 쉬어요</Text>
-        </View>
-      </View>
-    );
-
-    // ① ★ 완전일치 — `toHaveTextContent` 는 자손 텍스트를 구분자 없이 이어붙여 **전체가 정확히**
-    //    같은지 본다(02a §5, node_modules `matches.js` 실측: string→exact `===`). 쪼개 그려도 잡힌다.
-    expect(screen.getByTestId('probe-copy')).toHaveTextContent(
-      'AI 추천은 잠시 쉬어요'
-    );
-    // 부분포함으로 오해하면 안 된다 — 짧은 조각은 완전일치가 아니라 통과하지 않는다.
-    expect(screen.getByTestId('probe-copy')).not.toHaveTextContent('AI 추천은');
-    // 부분포함이 필요하면 정규식이다(matcher.test = substring).
-    expect(screen.getByTestId('probe-copy')).toHaveTextContent(/추천은/);
-  });
 });
 
 describe('🔴 AC-1 · 성공 — 앱바 제목과 진행 표시가 뜬다', () => {

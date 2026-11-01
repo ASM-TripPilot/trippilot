@@ -719,3 +719,64 @@ describe('음성 코드 묶음과 같은 파일에서 양성은 자기 줄에서
     expect(Array.from(new Set(lines))).toEqual([anchorLine]);
   });
 });
+
+describe('테스트 재팽창 방지 (2026-11-01 jest 축소 — README 판정 3~6)', () => {
+  // 기존 위반은 eslint-suppressions.json 에 얼려 있다(CLI 전용) — lintText 는 얼림을 적용하지 않아 규칙 발동만 본다.
+  const T = 'src/__tests__/zzRegrowthProbe.test.tsx';
+  it.each([
+    [
+      'UNSAFE 쿼리',
+      'screen.UNSAFE_getByType(View);',
+      'no-restricted-properties',
+    ],
+    [
+      'className 읽기',
+      'expect(el.props.className).toContain("x");',
+      'no-restricted-properties',
+    ],
+    [
+      'style 읽기',
+      'expect(el.props.style).toEqual({});',
+      'no-restricted-properties',
+    ],
+    [
+      'toHaveStyle',
+      'expect(el).toHaveStyle({ opacity: 1 });',
+      'no-restricted-syntax',
+    ],
+    [
+      '통과형 목 prop',
+      'expect(sheet.props.snapPoints).toEqual([]);',
+      'no-restricted-syntax',
+    ],
+    [
+      '손 조립 QueryClient',
+      'const qc = new QueryClient();',
+      'no-restricted-syntax',
+    ],
+    ['소스 스캔 import', "import fs from 'fs';", 'no-restricted-imports'],
+  ])('%s → error', async (_label, code, rule) => {
+    expect(await lint(code, T)).toContain(rule);
+  });
+  it('test-support 는 QueryClient 를 만들어도 error 0 (정의처)', async () => {
+    expect(
+      await lint('const qc = new QueryClient();', 'src/test-support/zzProbe.ts')
+    ).toEqual([]);
+  });
+  it('남은 출시·보안 스캔 파일은 fs 를 써도 error 0 (SCAN_ALLOW)', async () => {
+    expect(
+      await lint(
+        "import fs from 'fs';",
+        'src/__tests__/socialSdkSecrets.test.ts'
+      )
+    ).not.toContain('no-restricted-imports');
+  });
+  it('앱 코드에는 이 금지를 걸지 않는다 (props.style 을 쓰는 프로덕션 코드)', async () => {
+    expect(
+      await lint(
+        'export const s = (p: { style: unknown }) => p.style;',
+        'src/shared/ui/zzProbe.ts'
+      )
+    ).toEqual([]);
+  });
+});

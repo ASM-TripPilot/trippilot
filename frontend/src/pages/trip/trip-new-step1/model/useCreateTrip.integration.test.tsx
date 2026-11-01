@@ -1,6 +1,4 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -18,7 +16,8 @@ import {
 } from './createTripRequest';
 import { useCreateTrip } from './useCreateTrip';
 import { usePreferencePrefill } from './usePreferencePrefill';
-import { newTestQueryClient } from '@/test-support/queryRender';
+import { createWrapper } from '@/test-support/mswHookHarness';
+import { BASE } from '@/test-support/apiBase';
 
 /**
  * TRIP-203 AC-2 (+ TRIP-207 AC-2 · AC-3 갱신) — 여행 생성 훅이 성공 경로를 끝까지 잇는다.
@@ -74,7 +73,6 @@ jest.mock('@/shared/storage', () => ({
 }));
 
 /** authWiring.integration.test.ts:59 와 같은 값(리포 관례). */
-const BASE = 'http://localhost:8080/api/v1';
 
 /**
  * 서버가 돌려주는 여행. openapi `Trip.required` 10필드를 그대로 채운다(상상해서 만들지 않는다).
@@ -158,21 +156,6 @@ afterEach(() => {
 });
 
 afterAll(() => server.close());
-
-function createWrapper() {
-  const client = newTestQueryClient({
-    // gcTime: 0 — 기본값이 만드는 타이머가 테스트 종료 후에도 살아남아 Node 프로세스를
-    // 붙잡는다. **mutations 쪽도 반드시 0으로 둔다**: mutation 기본 gcTime 은 5분이고,
-    // 빼면 이 버킷이 300초 매달린다(02a ★3 실측 — 2분 타임아웃 → 0.5초 종료).
-    gcTime: 0,
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return Wrapper;
-}
 
 /** 목록 캐시까지 띄운 관찰용 훅 — 무효화가 **실제 재요청**으로 이어지는지 보려면 그 쿼리가
  * 활성 상태여야 한다(활성 쿼리만 무효화 즉시 다시 받는다). */

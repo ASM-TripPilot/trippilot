@@ -903,3 +903,28 @@ describe('연타 관통 표적 — 창 안의 카드·resume 누름은 무시된
     }
   );
 });
+
+// TRIP-1208 · 컨테이너가 커버 도시를 VM 에 싣는다 — 첫 목적지(seq 최소) region. 옛 `TripCardContainer.cover.test.tsx`
+// 를 합쳤다(2026-11-01, README 판정 4). 그라데이션·톤 색(생김새)은 실화면 QA 몫(my-trips.md).
+describe('컨테이너 → 커버 도시', () => {
+  it('첫 목적지(seq 최소) 도시 이름이 커버에 뜬다', () => {
+    mockUseItinerary.mockReturnValue(itinOk(itin('COMPLETE', 'CONFIRMED')));
+    render(
+      <TripCardContainer
+        trip={trip({
+          destinations: [
+            { seq: 2, region: '서귀포', nights: 1 },
+            { seq: 1, region: '제주', nights: 2 },
+          ],
+        })}
+      />
+    );
+    expect(screen.getByTestId('my-trip-city-t1')).toHaveTextContent('제주');
+  });
+
+  it('목적지가 비면 도시 글자가 없다', () => {
+    mockUseItinerary.mockReturnValue(itinOk(itin('COMPLETE', 'CONFIRMED')));
+    render(<TripCardContainer trip={trip({ destinations: [] })} />);
+    expect(screen.queryByTestId('my-trip-city-t1')).toBeNull();
+  });
+});

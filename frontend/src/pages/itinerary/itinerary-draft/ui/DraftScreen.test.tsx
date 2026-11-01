@@ -1,12 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { DraftDayTab, DraftView } from '@/features/itinerary/index.view';
-import { CheckCircleGlyph } from '@/features/itinerary/index.view';
-import {
-  closestScrollView,
-  fireChipLayout,
-  stubScrollTo,
-} from '@/test-support/sheetTree';
 
 import { DraftScreen } from './DraftScreen';
 
@@ -22,8 +16,8 @@ import { DraftScreen } from './DraftScreen';
  *  - 일차 탭은 여행 기간만큼이고 데이터 없는 날은 눌러도 선택이 안 바뀐다(AC-4).
  *  - 확정된 일정에서는 다시 시도가 눌리지 않는다(01b D8) — 회색만 칠하고 눌리면 확정 일정이 사라진다.
  *  - 진행 표시는 평범한 것 하나뿐이다(BR-U3-04·05 는 보류 칸).
- *  - 헤더 두 텍스트 버튼 사이 구분자 · 폴백 안내 아이콘이 ✓ 가 아니다(QA #033).
- *  - 일차 탭 줄은 가로 스크롤 안에 있다(TRIP-1260).
+ *  - (2026-11-01) 헤더 구분자·폴백 안내 아이콘 글리프(생김새)와 일차 탭 가로 스크롤(jest 사각)은 지웠다 —
+ *    실화면 QA 몫(`docs/feature-map/ai-generate.md`).
  *
  * *(개념)* **testID** — 화면 요소에 붙이는 테스트 전용 이름표. 사용자에게는 안 보이고, 테스트가
  * "그 요소"를 정확히 집어 오는 손잡이다.
@@ -42,11 +36,6 @@ const TABS: DraftDayTab[] = [
 ];
 
 const LOADING: DraftView = { kind: 'loading' };
-const REMAINING_FACES: { name: string; view: DraftView }[] = [
-  { name: 'loading', view: LOADING },
-  { name: 'failed', view: { kind: 'failed' } },
-  { name: 'empty', view: { kind: 'empty' } },
-];
 
 /** 렌더된 텍스트 전부. 부정 스캔의 모집단이다 — 소스가 아니라 **보이는 글자**를 훑는다. */
 function renderedTexts(): string[] {
@@ -72,8 +61,6 @@ type ScreenOverrides = {
   tabs?: DraftDayTab[];
   selectedDate?: string;
   canRetry?: boolean;
-  onManualPlan?: () => void;
-  fallback?: boolean;
 };
 
 function screenElement(over: ScreenOverrides = {}) {
@@ -162,109 +149,5 @@ describe('C14 · 진행 표시 — 평범한 것 하나뿐이다 (티켓 스코�
     ['백그라운드', '취소', '%'].forEach((forbidden) => {
       expect(texts).not.toContain(forbidden);
     });
-  });
-});
-
-describe('남는 얼굴 헤더·안내 아이콘', () => {
-  /**
-   * TRIP-1039 · 셸로 옮긴 뒤 DraftScreen 에 **남는 얼굴**(loading·failed·empty)의 정리(QA #033).
-   *
-   * 무엇을 보장하나:
-   *  - 🔴 헤더 우상단 「직접 고르기」와 「다시 만들기」 사이에 구분자가 있어 두 버튼으로 읽힌다(AC-9).
-   *    「직접 고르기」가 없으면 구분자도 없다(짝).
-   *  - 🔴 폴백 목록의 안내 아이콘이 ✓(CheckCircleGlyph)가 아니다(AC-7).
-   *
-   * 구분자가 실제로 "둘로 읽히게" 보이는지는 6-b 육안 몫이다 — 여기선 트리 순서만 잰다.
-   */
-  describe('🔴 H1 · AC-9 — 헤더 두 텍스트 버튼 사이에 구분자가 있다 (QA #033)', () => {
-    it.each(REMAINING_FACES)(
-      '$name 얼굴 — 직접 고르기 · 구분자 · 다시 만들기 순서다',
-      ({ view }) => {
-        renderScreen({ view, onManualPlan: jest.fn() });
-
-        // getAllByTestId 는 트리 전위 순서로 돌려준다(02a §5 실측) — 구분자가 둘 **사이**에 있어야 한다.
-        const order = screen
-          .getAllByTestId(
-            /^itinerary-draft-(pick-manual|header-divider|retry)$/
-          )
-          .map((node) => String(node.props.testID));
-
-        expect(order).toEqual([
-          'itinerary-draft-pick-manual',
-          'itinerary-draft-header-divider',
-          'itinerary-draft-retry',
-        ]);
-      }
-    );
-
-    it('H2 · 「직접 고르기」가 없으면 구분자도 없다 (무조건 구분자 구현 차단)', () => {
-      renderScreen({ view: { kind: 'empty' } });
-
-      expect(screen.getByTestId('itinerary-draft-retry')).toBeOnTheScreen();
-      expect(screen.queryByTestId('itinerary-draft-header-divider')).toBeNull();
-    });
-  });
-
-  describe('🔴 I1 · AC-7 — 폴백 안내 아이콘은 ✓ 가 아니다 (QA #033)', () => {
-    it.each(REMAINING_FACES.filter((face) => face.name !== 'loading'))(
-      '$name 얼굴 + fallback — 안내 제목은 기본 일정 결이고 CheckCircleGlyph 는 0개다',
-      ({ view }) => {
-        renderScreen({ view, fallback: true });
-
-        // 긍정 앵커 — 폴백 안내가 실제로 그려졌다(빈 화면 공허 통과 방지).
-        expect(
-          screen.getByTestId('itinerary-draft-reason-title')
-        ).toHaveTextContent('취향 반영 없이 만든 기본 일정이에요');
-        expect(screen.UNSAFE_queryAllByType(CheckCircleGlyph)).toHaveLength(0);
-      }
-    );
-  });
-});
-
-// TRIP-1260 · 로딩·실패·빈 얼굴의 일차 탭 줄(01b D6). 탭은 여행 기간 전체 수만큼 그려지므로 7일 여행이면
-// 7개다 — 지금은 화면 세로 스크롤 안의 가로 줄이라 6일차부터 잘린다. 탭만 가로 스크롤 안에 둔다.
-// ⚠️ 탭이 실제로 잘리는지·밀리는지·세로 간격이 그대로인지는 6-b.
-describe('🔴 일차 탭 줄 가로 스크롤 (TRIP-1260)', () => {
-  const SEVEN_TABS: DraftDayTab[] = Array.from({ length: 7 }, (_, index) => ({
-    date: `2026-06-${String(10 + index).padStart(2, '0')}`,
-    dayNumber: index + 1,
-    hasData: true,
-  }));
-
-  it('로딩 얼굴에서 탭 7개(itinerary-draft-day-1~7)의 가장 가까운 ScrollView 는 한 가로 ScrollView 다 (AC-1 · D6)', () => {
-    render(screenElement({ view: LOADING, tabs: SEVEN_TABS }));
-
-    const scroll = closestScrollView(
-      screen.getByTestId('itinerary-draft-day-1')
-    );
-    // 지금은 화면 세로 스크롤(itinerary-draft-scroll)이 가장 가깝다 — 그래서 horizontal 이 아니다.
-    expect(scroll?.props.horizontal).toBe(true);
-    for (let day = 1; day <= 7; day += 1) {
-      expect(
-        closestScrollView(screen.getByTestId(`itinerary-draft-day-${day}`))
-      ).toBe(scroll);
-    }
-  });
-
-  it('선택 날짜를 6일차로 바꾸면 그 탭(x=400)이 보이게 0 < x ≤ 400 으로 scrollTo 한다 (AC-3)', () => {
-    // 준비
-    const view = render(screenElement({ tabs: SEVEN_TABS }));
-    const tab = screen.getByTestId('itinerary-draft-day-6');
-    const scroll = closestScrollView(tab);
-    expect(scroll?.props.horizontal).toBe(true);
-    const scrollTo = stubScrollTo(scroll!);
-    fireChipLayout(tab, 400);
-    expect(scrollTo).not.toHaveBeenCalled();
-
-    // 실행 — 선택은 날짜로 내려온다(6일차 = 2026-06-15)
-    view.rerender(
-      screenElement({ tabs: SEVEN_TABS, selectedDate: SEVEN_TABS[5].date })
-    );
-
-    // 단언
-    expect(scrollTo).toHaveBeenCalled();
-    const target = scrollTo.mock.lastCall?.[0] as { x: number };
-    expect(target.x).toBeGreaterThan(0);
-    expect(target.x).toBeLessThanOrEqual(400);
   });
 });

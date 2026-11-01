@@ -26,13 +26,8 @@ import { NicknamePage } from './NicknamePage';
  * 3동작: 준비(시나리오 set + 렌더) → 실행(칩/다음 탭) → 단언(입력값 / 요청 순서 / 오류).
  */
 
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest
-    .fn()
-    .mockResolvedValue({ accessToken: 'tok', refreshToken: 'ref' }),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 jest.mock('expo-router', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports

@@ -2,7 +2,6 @@ import { render, screen } from '@testing-library/react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { TripCard } from './TripCard';
-import { COVER_GRADIENTS } from '../config/coverGradients';
 import type { MyTripCardVM } from '../model';
 
 /**
@@ -31,42 +30,10 @@ describe('TC1 · 사진이 없으면 그라데이션 커버 + 도시 이름', ()
     renderCard(vm());
     expect(screen.UNSAFE_getByType(LinearGradient)).toBeTruthy();
     expect(screen.getByTestId('my-trip-city-t1')).toHaveTextContent('부산');
-    expect(screen.getByTestId('my-trip-city-t1').props.className).toContain(
-      'text-on-primary'
-    );
     expect(screen.queryByTestId('my-trip-photo-t1')).toBeNull();
   });
 
-  it('회색 박스(bg-surface-soft)가 커버에 남지 않는다', () => {
-    renderCard(vm());
-    expect(
-      screen
-        .getByTestId('my-trip-card-t1')
-        .findAll(
-          (n) =>
-            typeof n.props.className === 'string' &&
-            n.props.className.includes('bg-surface-soft')
-        )
-    ).toHaveLength(0);
-  });
-
-  it.each(['live', 'upcoming', 'ended'] as const)(
-    '%s 톤은 그 톤의 stop 두 개를 가로로 잇는다',
-    (tone) => {
-      renderCard(vm({ coverTone: tone }));
-      const g = screen.UNSAFE_getByType(LinearGradient);
-      expect(g.props.colors).toEqual([...COVER_GRADIENTS[tone]]);
-      expect(g.props.start.y).toBe(g.props.end.y);
-      expect(g.props.start.x).toBeLessThan(g.props.end.x);
-    }
-  );
-
-  it('톤이 안 오면 upcoming 으로 그린다', () => {
-    renderCard(vm({ coverTone: undefined }));
-    expect(screen.UNSAFE_getByType(LinearGradient).props.colors).toEqual([
-      ...COVER_GRADIENTS.upcoming,
-    ]);
-  });
+  // 흰 글자 className·회색 박스 부재·톤별 stop/가로 방향·기본 톤(upcoming) 단언은 jest-cut 에서 지웠다 — 생김새라 실화면 QA 몫(my-trips.md).
 });
 
 describe('TC2 · imageUrl 이 있으면 지금처럼 Image', () => {

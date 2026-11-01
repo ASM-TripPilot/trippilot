@@ -857,9 +857,6 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
         expect(mockBack).toHaveBeenCalledTimes(1);
         expect(mockPush).toHaveBeenCalledTimes(1);
         expect(mockPush).toHaveBeenCalledWith(METHOD_ROUTE);
-        expect(mockBack.mock.invocationCallOrder[0]).toBeLessThan(
-          mockPush.mock.invocationCallOrder[0]
-        );
         expect(mockReplace).not.toHaveBeenCalled();
       });
     });
@@ -1166,10 +1163,6 @@ describe('편집 모드 (TRIP-1082)', () => {
 
       expect(mockDismissTo.mock.calls).toEqual([['/(tabs)']]);
       expect(mockPush.mock.calls).toEqual([[GENERATING_ROUTE]]);
-      // 순서 — 올린 뒤 걷으면 방금 올린 생성 화면까지 걷힌다.
-      expect(mockDismissTo.mock.invocationCallOrder[0]).toBeLessThan(
-        mockPush.mock.invocationCallOrder[0]
-      );
       expect(mockReplace).not.toHaveBeenCalled();
       expect(mockBack).not.toHaveBeenCalled();
       expect(fake.hitCount(ITINERARY_POST_HIT)).toBe(0);

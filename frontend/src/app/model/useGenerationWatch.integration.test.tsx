@@ -70,13 +70,8 @@ jest.mock('expo-router', () => ({
 // 생성 클라이언트의 인증 계층이 @/shared/storage 를 정적으로 문다(MyTripsListPage.integration 과 같은 목).
 jest.mock('@/shared/storage', () => ({
   ...jest.requireActual('@/shared/storage'),
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  ...require('@/test-support/storageMock'),
 }));
 
 const POLL = DRAFT_POLL_INTERVAL_MS;

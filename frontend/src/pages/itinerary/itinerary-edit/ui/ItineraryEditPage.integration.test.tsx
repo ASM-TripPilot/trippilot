@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -29,6 +29,15 @@ import {
   fireEditDragEnd,
   fireEditDropOnZone,
 } from '@/test-support/editDragList';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
+import {
+  DAY1,
+  DAY2,
+  itinerary as baseItinerary,
+  trip as baseTrip,
+  TRIP_ID,
+} from '@/test-support/itineraryFixtures';
+import { BASE, serveItinerary } from '@/test-support/mswItinerary';
 
 import { ItineraryEditPage } from './ItineraryEditPage';
 
@@ -51,15 +60,8 @@ import { ItineraryEditPage } from './ItineraryEditPage';
  */
 
 // 생성 클라이언트의 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다(선례 동형).
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 // jest.mock 팩토리는 파일 맨 위로 끌어올려져 바깥 변수를 못 본다 — `mock` 접두 변수만 예외.
 const mockBack = jest.fn();
@@ -120,18 +122,13 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
    *
    * ⚠️ 재조립으로 **삭제·재정렬은 이 편집기에서 드래그(→드롭존 삭제)** 가 됐다 — 목이 원리적 사각이라
    * jest 밖(6-b `h12-editor-dragging` 프리뷰). 옛 II2(휴지통)·II3(onDragEnd 리스트) 케이스는 그래서
-   * 뺐고, 저장이 **현재 스토어 순서**를 싣는지는 R2 가 스토어를 직접 재정렬해(`reorderSlots`) GET 과
+   * 뺐고, 저장이 **현재 편집 순서**를 싣는지는 R2 가 리스트 onDragEnd(`fireEditDragEnd`)로 GET 과
    * 다른 순서로 벌린 뒤 PUT 본문으로 잰다. 위반 배지 지속(옛 IS3)은 h12 표면이 위반 배지를 그리지
    * 않아(브리프 §요청1 — 배지는 h16 형태) 여기서 잴 대상이 아니고, 성공 재-시드의 "재조회 0" 계약은
    * R2 가 대신 잠근다.
    *
    * 3동작 뼈대: 준비=가짜 서버 응답(핸들러) 지정 → 실행=열고 편집/저장 → 단언=나간 요청·보이는 것.
    */
-
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-  const DAY1 = '2026-06-10';
-  const DAY2 = '2026-06-11';
 
   const cardId = (poiId: string) =>
     `slot-stopcard-${buildSlotKey(DAY1, poiId)}`;
@@ -142,20 +139,13 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
   const SAVE_ERROR = 'itinerary-edit-save-error';
 
   function trip(): Trip {
-    return {
+    return baseTrip({
       tripId: TRIP_ID,
       title: '제주 여행',
       startDate: DAY1,
       endDate: '2026-06-13',
-      party: 2,
-      preferenceSnapshot: {},
       destinations: [{ seq: 1, region: '제주', nights: 3 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
+    });
   }
 
   /** day1 = [a, b](둘 다 비고정, 시각에 초 포함) · day2 = [c](endsNextDay:true — 자정 넘김 실어나르기 확인용). */
@@ -205,18 +195,11 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
         ],
       },
     ];
-    return {
+    return baseItinerary({
       itineraryId: 'itin-1',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days,
-    };
+    });
   }
 
   /** day1 poi-a 를 위반으로 표시한 변형 — 서버 재검증 결과를 흉내낸다(비차단 저장 확인용). */
@@ -273,12 +256,14 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
     getHandler = () => HttpResponse.json(itinerary());
     putHandler = () => HttpResponse.json(itinerary());
 
-    server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () => {
+    serveItinerary(server, {
+      trip: () => trip(),
+      itinerary: () => {
         itineraryGetCalls += 1;
         return getHandler();
-      }),
+      },
+    });
+    server.use(
       // 완료 잠금 조회 — 이 스위트는 방문 0(잠금 없음). completion-lock 은 별 파일이 잠근다.
       http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
         HttpResponse.json({ visits: [] })
@@ -297,15 +282,10 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
   });
 
   function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    const client = newTestQueryClient({ gcTime: 0 });
+    return render(<ItineraryEditPage tripId={TRIP_ID} />, {
+      wrapper: createWrapper(client),
     });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<ItineraryEditPage tripId={TRIP_ID} />, { wrapper: Wrapper });
   }
 
   describe('🔴 R1 · AC1·AC5 — GET → 스토어 시드 → 활성 날 슬롯 카드', () => {
@@ -323,19 +303,14 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
   });
 
   describe('🔴 R2 · AC1·AC2·AC5 — 저장: 편집 스토어 전체를 5필드로 조립해 PUT, 성공은 재조회 0', () => {
-    it('스토어를 [b,a] 로 재정렬한 뒤 저장하면 PUT 에 두 일자·그 순서·전체 정밀도·endsNextDay 가 실리고 재조회는 없다', async () => {
+    it('[b,a] 로 끌어 바꾼 뒤 저장하면 PUT 에 두 일자·그 순서·전체 정밀도·endsNextDay 가 실리고 재조회는 없다', async () => {
       renderPage();
       await screen.findByTestId(cardId('poi-a'));
       await waitFor(() => expect(itineraryGetCalls).toBe(1));
 
-      // 스토어를 GET([a,b]) 과 다른 순서 [b,a] 로 벌린다 — 저장이 "현재 스토어" 를 싣는지 가른다
-      // (드래그 UI 는 6-b 사각이라 스토어 액션을 직접 태운다, 02a-C ★C3).
-      const slots = itinerary().days[0].slots;
-      act(() => {
-        useItineraryEditStore
-          .getState()
-          .reorderSlots(DAY1, [slots[1], slots[0]]);
-      });
+      // GET([a,b]) 과 다른 순서 [b,a] 로 벌린다 — 저장이 "현재 편집 순서" 를 싣는지 가른다.
+      // 스토어 액션 직접 호출 대신 리스트 onDragEnd 로 태운다(2026-11-01 — E1 과 같은 사용자 경로).
+      fireEditDragEnd(1, 0);
 
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(1));
@@ -530,17 +505,10 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
      */
 
     function renderWith(initialDate?: string) {
-      const client = new QueryClient({
-        defaultOptions: { queries: { retry: false, gcTime: 0 } },
-      });
-      function Wrapper({ children }: { children: ReactNode }) {
-        return (
-          <QueryClientProvider client={client}>{children}</QueryClientProvider>
-        );
-      }
+      const client = newTestQueryClient({ gcTime: 0 });
       return render(
         <ItineraryEditPage tripId={TRIP_ID} initialDate={initialDate} />,
-        { wrapper: Wrapper }
+        { wrapper: createWrapper(client) }
       );
     }
 
@@ -800,28 +768,17 @@ describe('완료 슬롯 잠금 실연동', () => {
    * 3동작 뼈대: 준비=방문 픽스처(완료 poi-a)+일정 → 실행=페이지 렌더 → 단언=잠긴 카드·짝(미완료 카드).
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-  const DAY1 = '2026-06-10';
-
   const lockedKey = buildSlotKey(DAY1, 'poi-a');
   const openKey = buildSlotKey(DAY1, 'poi-b');
 
   function trip(): Trip {
-    return {
+    return baseTrip({
       tripId: TRIP_ID,
       title: '제주 여행',
       startDate: DAY1,
       endDate: '2026-06-13',
-      party: 2,
-      preferenceSnapshot: {},
       destinations: [{ seq: 1, region: '제주', nights: 3 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
+    });
   }
 
   /** day1 = [a, b] 둘 다 비고정 — a 만 방문 완료로 잠기고 b 는 편집 가능해야 한다(짝). */
@@ -855,18 +812,11 @@ describe('완료 슬롯 잠금 실연동', () => {
         ],
       },
     ];
-    return {
+    return baseItinerary({
       itineraryId: 'itin-1',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days,
-    };
+    });
   }
 
   /**
@@ -895,11 +845,11 @@ describe('완료 슬롯 잠금 실연동', () => {
     setAccessToken('valid-access');
     useItineraryEditStore.getState().reset();
 
+    serveItinerary(server, {
+      trip: () => trip(),
+      itinerary: () => itinerary(),
+    });
     server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(itinerary())
-      ),
       http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
         HttpResponse.json(visitsWithCompleted())
       )
@@ -912,15 +862,10 @@ describe('완료 슬롯 잠금 실연동', () => {
   });
 
   function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    const client = newTestQueryClient({ gcTime: 0 });
+    return render(<ItineraryEditPage tripId={TRIP_ID} />, {
+      wrapper: createWrapper(client),
     });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<ItineraryEditPage tripId={TRIP_ID} />, { wrapper: Wrapper });
   }
 
   describe('🔴 CL1 · AC-11 — 방문 완료 슬롯이 잠기고 미완료 슬롯은 편집 가능하다', () => {
@@ -986,22 +931,22 @@ describe('완료 슬롯 잠금 실연동', () => {
       const base = itinerary();
       const [day1] = base.days;
       const [plannedDone] = visitsWithCompleted().visits;
+      serveItinerary(server, {
+        itinerary: () => ({
+          ...base,
+          days: [
+            day1,
+            {
+              date: DAY2,
+              slots: day1.slots.map((s, i) => ({
+                ...s,
+                poiId: i === 0 ? 'poi-c' : 'poi-d',
+              })),
+            },
+          ],
+        }),
+      });
       server.use(
-        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-          HttpResponse.json({
-            ...base,
-            days: [
-              day1,
-              {
-                date: DAY2,
-                slots: day1.slots.map((s, i) => ({
-                  ...s,
-                  poiId: i === 0 ? 'poi-c' : 'poi-d',
-                })),
-              },
-            ],
-          })
-        ),
         // 날짜마다 그 날의 기록만 준다 — 2일차 기록의 slotKey 는 2일차 날짜다.
         http.get(`${BASE}/trips/:tripId/visits/days/:day`, ({ params }) =>
           HttpResponse.json(
@@ -1065,8 +1010,6 @@ describe('드래그 실배선', () => {
    * 3동작 뼈대: 준비=가짜 서버(GET 한 날) → 실행=리스트 onDragEnd·저장 press → 단언=곳수·PUT 순서.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
   const DAY = '2026-06-10';
 
   const SAVE = 'sheet-cta-button-0';
@@ -1105,35 +1048,20 @@ describe('드래그 실배선', () => {
   ];
 
   function trip(): Trip {
-    return {
+    return baseTrip({
       tripId: TRIP_ID,
       title: '제주 여행',
       startDate: DAY,
-      endDate: '2026-06-12',
-      party: 2,
-      preferenceSnapshot: {},
       destinations: [{ seq: 1, region: '제주', nights: 2 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
+    });
   }
 
   function itinerary(slots: ItineraryDaysItemSlotsItem[]): Itinerary {
-    return {
+    return baseItinerary({
       itineraryId: 'itin-1',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days: [{ date: DAY, slots }],
-    };
+    });
   }
 
   let putCalls = 0;
@@ -1148,11 +1076,11 @@ describe('드래그 실배선', () => {
     // 편집 스토어는 모듈 싱글턴 — 앞 케이스의 재정렬·삭제가 새지 않게 비운다(02a ★10).
     useItineraryEditStore.getState().reset();
 
+    serveItinerary(server, {
+      trip: () => trip(),
+      itinerary: () => itinerary(daySlots),
+    });
     server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(itinerary(daySlots))
-      ),
       http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
         HttpResponse.json({ visits: [] })
       ),
@@ -1170,15 +1098,10 @@ describe('드래그 실배선', () => {
   });
 
   function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    const client = newTestQueryClient({ gcTime: 0 });
+    return render(<ItineraryEditPage tripId={TRIP_ID} />, {
+      wrapper: createWrapper(client),
     });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<ItineraryEditPage tripId={TRIP_ID} />, { wrapper: Wrapper });
   }
 
   /** 첫 슬롯 카드가 뜰 때까지 기다린다 — 시드는 GET 도착 뒤다. */
@@ -1289,8 +1212,6 @@ describe('여행 중 직접 수정(i07)', () => {
    * 3동작 뼈대: 준비=가짜 서버(일정·방문·저장) → 실행=열고 누르거나 콜백 발화 → 단언=화면·나간 요청.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
   const DAY = '2026-06-11';
 
   const k = (poiId: string): string => buildSlotKey(DAY, poiId);
@@ -1327,35 +1248,20 @@ describe('여행 중 직접 수정(i07)', () => {
   ];
 
   function trip(): Trip {
-    return {
+    return baseTrip({
       tripId: TRIP_ID,
       title: '부산 여행',
-      startDate: '2026-06-10',
-      endDate: '2026-06-12',
-      party: 2,
-      preferenceSnapshot: {},
       destinations: [{ seq: 1, region: '부산', nights: 2 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
+    });
   }
 
   function itinerary(status: ItineraryStatus = 'PLANNED'): Itinerary {
-    return {
+    return baseItinerary({
       itineraryId: 'itin-1',
       tripId: TRIP_ID,
       status,
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days: [{ date: DAY, slots: SLOTS }],
-    };
+    });
   }
 
   /**
@@ -1394,9 +1300,11 @@ describe('여행 중 직접 수정(i07)', () => {
     getHandler = () => HttpResponse.json(itinerary());
     putHandler = () => HttpResponse.json(itinerary());
 
+    serveItinerary(server, {
+      trip: () => trip(),
+      itinerary: () => getHandler(),
+    });
     server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () => getHandler()),
       http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
         HttpResponse.json(visits())
       ),
@@ -1414,16 +1322,9 @@ describe('여행 중 직접 수정(i07)', () => {
   });
 
   function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
+    const client = newTestQueryClient({ gcTime: 0 });
     return render(<ItineraryEditPage tripId={TRIP_ID} inTrip />, {
-      wrapper: Wrapper,
+      wrapper: createWrapper(client),
     });
   }
 
@@ -1550,16 +1451,9 @@ describe('여행 중 직접 수정(i07)', () => {
             },
           ],
         });
-      const client = new QueryClient({
-        defaultOptions: { queries: { retry: false, gcTime: 0 } },
-      });
-      function Wrapper({ children }: { children: ReactNode }) {
-        return (
-          <QueryClientProvider client={client}>{children}</QueryClientProvider>
-        );
-      }
+      const client = newTestQueryClient({ gcTime: 0 });
       render(<ItineraryEditPage tripId={TRIP_ID} inTrip initialDate={DAY2} />, {
-        wrapper: Wrapper,
+        wrapper: createWrapper(client),
       });
 
       await screen.findByTestId(`slot-stopcard-${buildSlotKey(DAY2, 'q1')}`);
@@ -1709,10 +1603,6 @@ describe('저장 뒤 위반 요약 게이트', () => {
    * → 단언=게이트·토스트 testID·라우터·요청 수.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-  const DAY1 = '2026-06-10';
-  const DAY2 = '2026-06-11';
   const SAVE = 'sheet-cta-button-0';
   const GATE = 'itinerary-edit-save-conflict';
   const ASIS = 'itinerary-edit-save-asis';
@@ -1752,18 +1642,11 @@ describe('저장 뒤 위반 요약 게이트', () => {
       slot('poi-b', '13:00:00', '14:00:00'),
     ]
   ): Itinerary {
-    return {
+    return baseItinerary({
       itineraryId: 'itin-1',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days: [{ date: DAY1, slots }],
-    };
+    });
   }
 
   /** 서버 재검증이 poi-b 를 위반으로 판정한 응답(PUT 200 — 비차단). */
@@ -1792,8 +1675,8 @@ describe('저장 뒤 위반 요약 게이트', () => {
     getHandler = () => HttpResponse.json(itinerary());
     putHandler = () => HttpResponse.json(violatedResponse());
 
+    serveItinerary(server, { itinerary: () => getHandler() });
     server.use(
-      http.get(`${BASE}/trips/:tripId/itinerary`, () => getHandler()),
       http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
         HttpResponse.json({ visits: [] })
       ),
@@ -1816,9 +1699,7 @@ describe('저장 뒤 위반 요약 게이트', () => {
   });
 
   function renderPage(inTrip?: boolean) {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     function Wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>
@@ -2104,9 +1985,6 @@ describe('저장 성공 뒤 토스트·복귀', () => {
    * 3동작 뼈대: 준비=가짜 서버 응답 + 라우터 목의 canGoBack 값 → 실행=저장 누름 → 단언=토스트·라우터·요청 수.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-  const DAY1 = '2026-06-10';
   const SAVE = 'sheet-cta-button-0';
   const SAVED = 'itinerary-edit-saved';
   const SAVE_ERROR = 'itinerary-edit-save-error';
@@ -2143,18 +2021,11 @@ describe('저장 성공 뒤 토스트·복귀', () => {
       slot('poi-b', '13:00:00', '14:00:00'),
     ]
   ): Itinerary {
-    return {
+    return baseItinerary({
       itineraryId: 'itin-1',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days: [{ date: DAY1, slots }],
-    };
+    });
   }
 
   /** 서버 재검증이 poi-b 를 위반으로 판정한 응답(PUT 200 — 비차단). */
@@ -2183,8 +2054,8 @@ describe('저장 성공 뒤 토스트·복귀', () => {
     getHandler = () => HttpResponse.json(itinerary());
     putHandler = () => HttpResponse.json(itinerary());
 
+    serveItinerary(server, { itinerary: () => getHandler() });
     server.use(
-      http.get(`${BASE}/trips/:tripId/itinerary`, () => getHandler()),
       http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
         HttpResponse.json({ visits: [] })
       ),
@@ -2207,9 +2078,7 @@ describe('저장 성공 뒤 토스트·복귀', () => {
   });
 
   function renderPage(inTrip?: boolean) {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     function Wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>
@@ -2544,10 +2413,6 @@ describe('시각 조정 시트', () => {
    * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=시각칩/탭/휠/적용·닫힘·저장 → 단언=시트 개폐·카드·PUT.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-  const DAY1 = '2026-06-10';
-
   /** 편집 시각칩(누름 Pressable) — 비고정만 존재한다. */
   const timeChip = (poiId: string) =>
     `slot-stopcard-timechip-${buildSlotKey(DAY1, poiId)}`;
@@ -2559,20 +2424,13 @@ describe('시각 조정 시트', () => {
   const B_IMAGE = 'https://example.com/blueline.jpg';
 
   function trip(): Trip {
-    return {
+    return baseTrip({
       tripId: TRIP_ID,
       title: '제주 여행',
       startDate: DAY1,
       endDate: '2026-06-13',
-      party: 2,
-      preferenceSnapshot: {},
       destinations: [{ seq: 1, region: '제주', nights: 3 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
+    });
   }
 
   /**
@@ -2622,18 +2480,11 @@ describe('시각 조정 시트', () => {
         ],
       },
     ];
-    return {
+    return baseItinerary({
       itineraryId: 'itin-1',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days,
-    };
+    });
   }
 
   let putCalls = 0;
@@ -2646,11 +2497,11 @@ describe('시각 조정 시트', () => {
     setAccessToken('valid-access');
     useItineraryEditStore.getState().reset();
 
+    serveItinerary(server, {
+      trip: () => trip(),
+      itinerary: () => itinerary(),
+    });
     server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(itinerary())
-      ),
       http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
         HttpResponse.json({ visits: [] })
       ),
@@ -2668,15 +2519,10 @@ describe('시각 조정 시트', () => {
   });
 
   function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    const client = newTestQueryClient({ gcTime: 0 });
+    return render(<ItineraryEditPage tripId={TRIP_ID} />, {
+      wrapper: createWrapper(client),
     });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<ItineraryEditPage tripId={TRIP_ID} />, { wrapper: Wrapper });
   }
 
   /** 비고정 시각칩을 눌러 시트를 연다 — 여러 케이스가 공유하는 준비 동작. */
@@ -2937,30 +2783,18 @@ describe('미지정 슬롯 저장 제외 안내', () => {
    * 3동작 뼈대: 준비=미지정 슬롯 섞은 일정 → 실행=저장 press → 단언=PUT 제외 + 안내 렌더(+짝: 미지정 0 → 안내 부재).
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
-  const DAY1 = '2026-06-10';
-  const DAY2 = '2026-06-11';
-
   const SAVE = 'sheet-cta-button-0';
   const NOTICE = 'itinerary-edit-unspecified-notice';
   const SAVED = 'itinerary-edit-saved';
 
   function trip(): Trip {
-    return {
+    return baseTrip({
       tripId: TRIP_ID,
       title: '제주 여행',
       startDate: DAY1,
       endDate: '2026-06-13',
-      party: 2,
-      preferenceSnapshot: {},
       destinations: [{ seq: 1, region: '제주', nights: 3 }],
-      status: 'PLANNED',
-      createdAt: '2026-08-01T10:00:00.000Z',
-      updatedAt: '2026-08-01T10:00:00.000Z',
-      baseCount: 0,
-      itineraryDayCount: 0,
-    };
+    });
   }
 
   function slot(
@@ -2993,18 +2827,11 @@ describe('미지정 슬롯 저장 제외 안내', () => {
         ],
       },
     ];
-    return {
+    return baseItinerary({
       itineraryId: 'itin-1',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days,
-    };
+    });
   }
 
   /**
@@ -3022,18 +2849,11 @@ describe('미지정 슬롯 저장 제외 안내', () => {
       },
       { date: DAY2, slots: [slot('poi-u2', null, '미정 장소 2')] },
     ];
-    return {
+    return baseItinerary({
       itineraryId: 'itin-3',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days,
-    };
+    });
   }
 
   /** day1 = [a · b] 둘 다 지정 — 미지정 0 이라 저장해도 안내가 없어야 한다(짝). */
@@ -3047,18 +2867,11 @@ describe('미지정 슬롯 저장 제외 안내', () => {
         ],
       },
     ];
-    return {
+    return baseItinerary({
       itineraryId: 'itin-2',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days,
-    };
+    });
   }
 
   let putCalls = 0;
@@ -3072,9 +2885,11 @@ describe('미지정 슬롯 저장 제외 안내', () => {
     useItineraryEditStore.getState().reset();
     getHandler = () => HttpResponse.json(itineraryWithUnspecified());
 
+    serveItinerary(server, {
+      trip: () => trip(),
+      itinerary: () => getHandler(),
+    });
     server.use(
-      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () => getHandler()),
       http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
         HttpResponse.json({ visits: [] })
       ),
@@ -3093,9 +2908,7 @@ describe('미지정 슬롯 저장 제외 안내', () => {
   });
 
   function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     function Wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>

@@ -1,4 +1,3 @@
-import { ActivityIndicator } from 'react-native';
 import { http, HttpResponse } from 'msw';
 import { onlineManager } from '@tanstack/react-query';
 import { act, screen, waitFor, within } from '@testing-library/react-native';
@@ -145,7 +144,7 @@ describe('TRIP-1638 · 기록 탭 오프라인 콜드스타트', () => {
     goOffline();
 
     // 실행
-    const { client, UNSAFE_queryByType } = renderPage();
+    const { client } = renderPage();
 
     // 단언 — 얼굴이 먼저 도착해야 아래 "없음" 단언이 의미가 있다.
     const face = await screen.findByTestId(OFFLINE);
@@ -153,7 +152,7 @@ describe('TRIP-1638 · 기록 탭 오프라인 콜드스타트', () => {
     expect(within(face).getByText(DESC_OFFLINE)).toBeOnTheScreen();
     // 보류 요청에 refetch 는 무동작이다 — 버튼을 두면 "눌렀는데 아무 일도 없는" 새 침묵 실패(D4).
     expect(within(face).queryAllByRole('button')).toHaveLength(0);
-    expect(UNSAFE_queryByType(ActivityIndicator)).toBeNull();
+    expect(screen.queryByTestId('record-calendar-loading')).toBeNull();
     expect(screen.queryByTestId('record-calendar-error')).toBeNull();
     expect(screen.queryByTestId('record-calendar-month')).toBeNull();
     // 증거 — 요청이 안 나갔고(보류), 데이터는 못 받았다.
@@ -211,7 +210,7 @@ describe('TRIP-1638 · 기록 탭 오프라인 콜드스타트', () => {
     tripsReplies = ['gate'];
 
     // 실행
-    const { client, UNSAFE_queryByType } = renderPage();
+    const { client } = renderPage();
     await waitFor(() => expect(count(TRIPS_GET)).toBe(1));
 
     // 단언 — 요청이 나가는 중이다(앵커: fetching ≠ paused). 스피너가 *있음* = R1 의 "스피너 없음"이 항상 참이 아님을 대조한다.
@@ -219,7 +218,7 @@ describe('TRIP-1638 · 기록 탭 오프라인 콜드스타트', () => {
       status: 'pending',
       fetchStatus: 'fetching',
     });
-    expect(UNSAFE_queryByType(ActivityIndicator)).not.toBeNull();
+    expect(screen.queryByTestId('record-calendar-loading')).not.toBeNull();
     expect(screen.queryByTestId(OFFLINE)).toBeNull();
 
     // 실행 — 응답이 오면 캘린더로 바뀐다.

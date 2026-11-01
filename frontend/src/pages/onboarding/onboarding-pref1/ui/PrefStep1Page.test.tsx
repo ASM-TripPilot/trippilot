@@ -171,25 +171,6 @@ describe('PrefStep1Page — 페이스 축 탭↔스토어 왕복 (AC3 · US-ONB-
   });
 });
 
-describe('PrefStep1Page — 온보딩 완료 재평가 신호 발화 (ticket AC-A · US-ONB-11 · TRIP-353)', () => {
-  it.each([['상단', 'onboarding-pref1-skip-top']])(
-    '%s 일괄 탈출을 탭하면 재평가 신호를 발화하고 기능 안내로 replace 한다',
-    async (_label, testId) => {
-      // 준비 — 렌더.
-      render(<PrefStep1Page />);
-
-      // 실행 — 일괄 탈출 탭.
-      fireEvent.press(screen.getByTestId(testId));
-
-      // 단언 — 취향 1/2 탈출도 재평가 신호를 발화(결함 A — pref2 뿐 아니라 여기서도) + replace 유지.
-      await waitFor(() =>
-        expect(routerMock.replace.mock.calls).toEqual([[TOUR_ROUTE]])
-      );
-      expect(mockNotifyReeval).toHaveBeenCalledTimes(1);
-    }
-  );
-});
-
 describe('PrefStep1Page — 일괄 탈출은 기존 선택을 보존한다 (AC4 · US-ONB-11 · US-ONB-14 · 5-12)', () => {
   it('이미 고른 값이 있어도 skip은 그 값을 지우지 않고 기능 안내로 replace한다', async () => {
     // 준비 — 화면을 거치지 않고 스토어에 직접 선주입(여기 관심사는 "skip 핸들러가

@@ -399,19 +399,6 @@ describe('default 얼굴 재구성 — 표면·일차 탭·통계·지도·서�
     });
   });
 
-  describe('🔴 AC-3 · 기분 3택은 그리지 않는다(TRIP-935 — 저장되지 않는 입력 숨김)', () => {
-    it('기분 3택 버튼과 "오늘 어땠어요?" 제목이 없다', () => {
-      renderScreen();
-
-      // 앵커 — default 얼굴 본문은 그려졌다.
-      expect(screen.getByTestId('reflection-daily-stats')).toBeOnTheScreen();
-      expect(screen.queryByTestId('reflection-daily-mood-sad')).toBeNull();
-      expect(screen.queryByTestId('reflection-daily-mood-soso')).toBeNull();
-      expect(screen.queryByTestId('reflection-daily-mood-good')).toBeNull();
-      expect(screen.queryAllByText('오늘 어땠어요?')).toHaveLength(0);
-    });
-  });
-
   describe('🔴 AC-4(거동) · 통계는 거리만(INV-3)', () => {
     it('distanceDash 면 이동값이 "—" 이고 소요시간은 없다', () => {
       render(
@@ -490,20 +477,32 @@ describe('default 얼굴 재구성 — 표면·일차 탭·통계·지도·서�
     });
   });
 
-  describe('🔴 AC-8 · 메모 입력은 그리지 않는다(TRIP-935) — 변경요약 행도 default 에선 여전히 없다', () => {
-    it('changeSummary 를 줘도 메모 입력·카운터·변경요약 행이 모두 없다', () => {
-      renderScreen({ changeSummary: '이날 휴무로 1곳을 변경했어요' });
+  // TRIP-1372 — 기분·한 줄 메모는 저장할 곳(두 콜백)이 다 있을 때만 그린다(`extrasOn`). 옛 AC-3·AC-8("TRIP-935 숨김")을
+  // 이 분기 하나로 합쳤다 — 콜백이 하나만 와도 블록이 없어야 한다(`&&` → `||` 뮤테이션을 잡는다).
+  describe('🔴 AC-3·AC-8 · 기분·한 줄 메모는 두 콜백이 다 있을 때만 — 변경요약 행은 default 에 없다', () => {
+    it.each([
+      ['기분 콜백만', { onChangeMood: jest.fn(async () => true) }],
+      ['한 줄 콜백만', { onSaveShortMemo: jest.fn(async () => true) }],
+    ] as const)(
+      '%s 오면 기분 3택·메모 입력이 없고, changeSummary 를 줘도 변경요약 행이 없다',
+      (_label, extra) => {
+        renderScreen({
+          ...extra,
+          changeSummary: '이날 휴무로 1곳을 변경했어요',
+        });
 
-      // 앵커 — default 얼굴 본문은 그려졌다.
-      expect(
-        screen.getByTestId('reflection-daily-narrative')
-      ).toBeOnTheScreen();
-      expect(screen.queryByTestId('reflection-daily-memo-input')).toBeNull();
-      expect(screen.queryAllByText(/\d+\/60/)).toHaveLength(0);
-      expect(
-        screen.queryByTestId('reflection-daily-change-summary')
-      ).toBeNull();
-    });
+        // 앵커 — default 얼굴 본문은 그려졌다.
+        expect(
+          screen.getByTestId('reflection-daily-narrative')
+        ).toBeOnTheScreen();
+        expect(screen.queryByTestId('reflection-daily-mood-sad')).toBeNull();
+        expect(screen.queryByTestId('reflection-daily-mood-good')).toBeNull();
+        expect(screen.queryByTestId('reflection-daily-memo-input')).toBeNull();
+        expect(
+          screen.queryByTestId('reflection-daily-change-summary')
+        ).toBeNull();
+      }
+    );
   });
 
   // TRIP-1584 AC-12 — 홈 5칸 탭바(`BottomTabBar`)를 허브식 3칸 바로 갈아 끼운다. 칸 이동 판단(스택·날짜)은 페이지 훅 몫이라 여기선 콜백 호출만 본다.
@@ -825,71 +824,6 @@ describe('지도 자리 사유 leaf', () => {
         expect(screen.queryAllByTestId(REASON_LEAF)).toHaveLength(1);
       }
     );
-  });
-});
-
-describe('헤더 공유 아이콘 없음', () => {
-  // TRIP-762 AC-11 (옛 DailyReflectionScreen.share.test.tsx)
-  /**
-   * TRIP-762 · AC-11 — j03 오늘의 회고 **헤더 공유 제거**(구 TRIP-574 additive 공유 아이콘 폐기).
-   *
-   * 라이브 j03 4프레임에 공유가 0 이고 공유는 j04/j06 소관이라, 화면 `canShare`/`onShare` prop 과
-   * `reflection-daily-share` 아이콘을 **제거**한다(페이지의 status==='ENDED' 게이트도 함께 —
-   * `DailyReflectionPage.hookMock.test.tsx` 공유 묶음). 이 파일은 TRIP-574 시절 공유 거동 테스트를 **제거 반영**으로
-   * 갱신한 것이다.
-   *
-   * 무엇을 보장하나(승인 계약):
-   *  - 재구성된 default 얼굴에 공유 아이콘(`reflection-daily-share`) 표면이 없다(재도입 방지 렌더 가드).
-   *
-   * ★ red/선제green 판정: 이 렌더 가드는 **선제-green** 이다 — 화면이 onShare 를 안 받으면 예전에도
-   *   아이콘을 안 그렸다. 제거의 **red 잠금**은 소스 스캔(옛 `shareCardStructure.test.ts` G4 — TRIP-1145 로 지움)과 페이지 배선 테스트
-   *   (`DailyReflectionPage.hookMock.test.tsx` 공유 묶음 — onShare/canShare prop 부재)가 진다. 이 파일은 화면
-   *   렌더 층에 "공유 표면 재도입 금지" 그물을 영구히 남긴다.
-   *
-   * (개념) `queryByTestId` = 없으면 null(getBy 는 throw) → `.toBeNull()` 로 부재를 단언.
-   */
-
-  const Screen = DailyReflectionScreen as unknown as (
-    props: ExtendedProps
-  ) => ReactElement;
-
-  const NARRATIVE = '오늘은 광안리와 미술관을 둘러본 하루였어요.';
-
-  function baseProps(): ExtendedProps {
-    return {
-      face: 'default',
-      narrative: NARRATIVE,
-      editableText: NARRATIVE,
-      stats: {
-        visitCount: 4,
-        distanceKm: 12,
-        distanceSource: 'VISIT_LINE',
-        photoCount: 6,
-      },
-      distanceDash: false,
-      mapNotice: null,
-      hidePhotoGrid: false,
-      photos: [{ uri: 'file://p1.jpg' }],
-      changeSummary: null,
-      dayTabs: [{ day: 1, today: true }],
-      activeDay: 1,
-      onSelectDay: jest.fn(),
-      recordBar: makeRecordBar(),
-      onEnterEdit: jest.fn(),
-      onConfirm: jest.fn(),
-      onSaveEdit: jest.fn(),
-    };
-  }
-
-  describe('🔴 AC-11 · 헤더 공유 아이콘 제거(렌더 가드)', () => {
-    it('재구성된 default 얼굴에 reflection-daily-share 가 없다(편집 진입점은 유지)', () => {
-      render(<Screen {...baseProps()} />);
-
-      // 부정 — 공유 표면 부재.
-      expect(screen.queryByTestId('reflection-daily-share')).toBeNull();
-      // 긍정 짝 — 헤더 편집 진입점(공유와 다름, AC-12)은 그대로 남는다.
-      expect(screen.getByTestId('reflection-daily-edit')).toBeOnTheScreen();
-    });
   });
 });
 

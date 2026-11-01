@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import BottomSheet, { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import {
   act,
   fireEvent,
@@ -10,7 +9,6 @@ import {
   waitFor,
   within,
 } from '@testing-library/react-native';
-import type { ReactTestInstance } from 'react-test-renderer';
 import { router } from 'expo-router';
 
 import { server } from '@/mocks/server';
@@ -38,7 +36,8 @@ import { newTestQueryClient } from '@/test-support/queryRender';
  *  - AC-9  진행 중엔 같은 곳·다른 곳 모두 두 번째 POST 가 없다(01b E7).
  *  - AC-10 404·네트워크 실패면 오류 안내 + 머묾 + j01 캐시에 낙관 카드 없음, 다시 누르면 재시도된다.
  *  - AC-11·12 j01 과 같은 (tripId, day) 캐시를 봐서 재조회 없이 카드가 늘고, 제목은 poiId 가 아니라 고른 이름.
- *  - AC-14 검색칸이 바텀시트 안에 있다(밖이면 실기기에서 즉시 크래시 — 목은 못 봄, 구조로만 잰다).
+ *  - AC-14 검색칸이 바텀시트 안에 있는지·지도가 시트 아래서 손가락으로 움직이는지(TRIP-1204)는 통과형 목 위라 jest 가 못 본다 —
+ *    기능 지도 add-visit `av-search-keyboard`·`av-map-pan` 으로 옮겼다(실화면 QA).
  *
  * ★ 하니스 — 실제 앱은 j01 이 스택에 마운트된 채 피커가 위에 뜬다. 테스트 클라이언트는 gcTime 0 이라 관찰자
  *   없는 캐시는 다음 틱에 지워지므로, 두 화면을 한 트리·한 QueryClient 로 함께 그린다. 클라이언트를 wrapper
@@ -48,12 +47,8 @@ import { newTestQueryClient } from '@/test-support/queryRender';
 // TRIP-1157: 배럴이 idSet·stringValue·installId 도 재수출한다 — 통째로 갈아끼우면 그 함수들이 지워지므로 실물을 펼친 뒤 토큰 함수만 덮는다.
 jest.mock('@/shared/storage', () => ({
   ...jest.requireActual('@/shared/storage'),
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest
-    .fn()
-    .mockResolvedValue({ accessToken: 'a', refreshToken: 'r' }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  ...require('@/test-support/storageMock'),
 }));
 
 // router 와 useRouter() 가 같은 jest.fn(공용 목 기록장)에 기록된다 — 구현이 어느 쪽을 써도 관측된다. canGoBack 은 true
@@ -781,42 +776,6 @@ describe('🔴 AC-11·AC-12 · j01 카드가 재조회 없이 늘고, 제목은 
       within(screen.getByTestId(cardId('v-new-2'))).getByText('해운대 해수욕장')
     ).toBeTruthy();
     expect(dayVisitHits()).toHaveLength(listFetches);
-  });
-});
-
-describe('🔴 TRIP-1204 · 방문 추가 지도는 시트가 열린 채로도 손가락으로 움직인다', () => {
-  it('P15: 셸 지도(map-root)가 viewOnly=false 로 열려 있다', async () => {
-    await renderPicker();
-
-    expect(screen.getByTestId('map-root').props.viewOnly).toBe(false);
-  });
-});
-
-describe('🔴 AC-14 · 검색칸은 바텀시트 안에 있다', () => {
-  /** 요소에서 부모를 따라 올라가며 바텀시트(목) 조상을 찾는다. */
-  function insideSheet(element: ReactTestInstance): boolean {
-    let node: ReactTestInstance | null = element.parent;
-    while (node) {
-      if (node.type === (BottomSheet as unknown)) return true;
-      node = node.parent;
-    }
-    return false;
-  }
-
-  it('P14: 루트가 서고, 검색칸·카테고리 칩이 시트 조상 아래에 있으며 검색칸은 BottomSheetTextInput 이다', async () => {
-    await renderPicker();
-
-    expect(screen.getByTestId('record-add-visit-screen')).toBeOnTheScreen();
-    expect(insideSheet(screen.getByTestId('record-add-visit-search'))).toBe(
-      true
-    );
-    expect(
-      insideSheet(screen.getByTestId('record-add-visit-category-all'))
-    ).toBe(true);
-    const inputIds = screen
-      .UNSAFE_getAllByType(BottomSheetTextInput)
-      .map((node) => node.props.testID);
-    expect(inputIds).toContain('record-add-visit-search');
   });
 });
 

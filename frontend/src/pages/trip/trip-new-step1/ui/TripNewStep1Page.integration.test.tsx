@@ -25,6 +25,7 @@ import {
   wizardStep1Harness,
 } from '@/test-support/wizardStep1Harness';
 import { server } from '@/mocks/server';
+import { savedPlace } from '@/test-support/mustVisitFixtures';
 import type {
   CompanionType,
   PreferenceView,
@@ -406,30 +407,6 @@ describe('꼭 갈 곳 자동 시드 폐지 (로그인)', () => {
   afterEach(expectNoExitWizard);
 
   const { tracker, renderPage, next, seedValidDraft } = wizardStep1Harness();
-
-  function makePlace(poiId: string, nameKo: string): Place {
-    return {
-      poiId,
-      nameKo,
-      category: '명소',
-      lat: 35.1587,
-      lng: 129.1604,
-      region: '수영구',
-      openingHours: null,
-      imageUrl: null,
-      tags: [],
-      savedCount: 0,
-      dataStatus: 'ACTIVE',
-    };
-  }
-
-  function savedPlace(poiId: string, nameKo: string): SavedPlace {
-    return {
-      savedPlaceId: `sp-${poiId}`,
-      savedAt: '2026-08-01T10:00:00.000Z',
-      place: makePlace(poiId, nameKo),
-    };
-  }
 
   const THREE: SavedPlace[] = [
     savedPlace('poi-1', '감천마을'),

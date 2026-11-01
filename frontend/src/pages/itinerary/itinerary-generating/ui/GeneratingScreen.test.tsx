@@ -21,8 +21,8 @@ import { GeneratingScreen } from './GeneratingScreen';
  * **queryByTestId** 는 못 찾으면 **null**(부재 단언용, `getByTestId` 는 못 찾으면 throw).
  *
  * 무엇을 보장하나 — 이 칸의 존재 이유부터(TRIP-789 Figma 정합 재작성):
- *  - 🔴 진행 표면 골격이 실재하고(AC-3) **하단(footer·2버튼)은 사라졌다**(AC-4): 앱바 · 비결정형 진행
- *    표시 · 체크리스트 3행(장소 수집·동선 계산·시간 배치)만 있고 footer·[취소]·[백그라운드로]는 없다.
+ *  - 🔴 진행 표면 골격이 실재한다(AC-3): 앱바 · 비결정형 진행 표시 · 체크리스트 3행(장소 수집·동선 계산·시간 배치).
+ *    옛 하단(footer·[취소]·[백그라운드로]) 부재 단언은 삭제된 표면 잔존이라 2026-11-01 지웠다.
  *  - 🔴 **화면에 퍼센트(`48%`)·시간추정(`10초쯤`)·소요시간(`N분`/`N시간`) 문자열이 하나도 없다**
  *    (AC-1·AC-2 · INV-3 · ⚑C). 부제는 **현행 유지**(Q3 — '10초쯤' 미추가, 동결 `초` 가드 유지).
  *    소스 가드(`itineraryTimeStructure`)는 `%`·`초`를 아예 안 봐서 이 **렌더 결과** 단언이 유일한 그물.
@@ -46,8 +46,8 @@ const DURATION = /\d\s*분|\d\s*시간/; // "이동 30분"·"2시간" 에 걸림
 
 const noop = () => {};
 
-describe('🔴 S1 · AC-3·AC-4 — 진행 골격은 있고 하단(footer·2버튼)은 사라졌다', () => {
-  it('앱바·진행 표시·체크리스트 3행은 있고 footer·[취소]·[백그라운드로]는 없다', () => {
+describe('🔴 S1 · AC-3 — 진행 골격이 있다', () => {
+  it('앱바·진행 표시·체크리스트 3행이 있다', () => {
     render(<GeneratingScreen onBackground={noop} onRetry={noop} />);
 
     // 긍정 — 남는 골격.
@@ -63,11 +63,6 @@ describe('🔴 S1 · AC-3·AC-4 — 진행 골격은 있고 하단(footer·2버�
     expect(screen.getByText('장소 수집')).toBeOnTheScreen();
     expect(screen.getByText('동선 계산')).toBeOnTheScreen();
     expect(screen.getByText('시간 배치')).toBeOnTheScreen();
-
-    // 부정 — Figma 정합으로 제거된 하단 안내박스·2버튼이 트리에서 사라졌다(AC-4).
-    expect(screen.queryByTestId('itinerary-generating-footer')).toBeNull();
-    expect(screen.queryByTestId('itinerary-generating-cancel')).toBeNull();
-    expect(screen.queryByTestId('itinerary-generating-background')).toBeNull();
   });
 });
 

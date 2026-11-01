@@ -1,8 +1,5 @@
 import type { ComponentProps } from 'react';
-import { StyleSheet } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import type { ReactTestInstance } from 'react-test-renderer';
-import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
 import { coverFor } from '@/test-support/placeCoverFixtures';
@@ -471,42 +468,6 @@ describe('C33 · AC-b3 — errorText 는 에러 행에 뜨고 onRetry 는 다시
   });
 });
 
-describe('🔴 C34 · AC-b1 · AC-b2 — 저장 실패 행이 안내 배너 아래로 가고 흰 배경이 된다', () => {
-  it('안내 배너 다음에 에러 행이 온다 (형제 순서 · 현재는 위라 red)', () => {
-    renderScreen({ errorText: '저장하지 못했어요' });
-
-    // ★ `getAllByTestId(/regex/)` 는 렌더 트리 pre-order 로 돌아온다(node_modules
-    //    `find-all.js` 실측 — 부모→자식, 형제는 순서 보존). `$` 앵커라 `-error-row`·`-retry`·
-    //    `-duplicate` 는 안 걸리고 `-notice`·`-error` 두 Text 만 뽑힌다.
-    const order = screen
-      .getAllByTestId(/^itinerary-mustvisit-time-(notice|error)$/)
-      .map((node) => String(node.props.testID));
-
-    // 현재 에러 행이 안내 배너 **위**라 배열이 [error, notice] → red. Figma 는 안내 아래다.
-    expect(order).toEqual([
-      'itinerary-mustvisit-time-notice',
-      'itinerary-mustvisit-time-error',
-    ]);
-  });
-
-  it('C34-b 에러 행 배경이 흰색(bg-canvas)이고 회색이 아니다', () => {
-    renderScreen({ errorText: '저장하지 못했어요' });
-
-    // 배경은 에러 행 **컨테이너 View** 에 얹힌다(메시지 `-error` Text 는 `text-*` 뿐이라 못 본다).
-    // 구현자가 그 컨테이너에 신규 testID `-error-row` 를 부여해야 이 축이 unambiguous 하게 잠긴다.
-    // className 은 렌더 트리에 평문 prop 으로 남는다(HomeScreen.test.tsx:186 선례).
-    const row = screen.getByTestId('itinerary-mustvisit-time-error-row');
-    const className = String(row.props.className);
-
-    // 변경 축 — 흰 배경(현재 bg-surface-soft 회색 → red).
-    expect(className).toContain('bg-canvas');
-    expect(className).not.toContain('bg-surface-soft');
-    // 앵커 — hairline 테두리 + r12(rounded-button=12px 실측). 실제 흰 렌더·픽셀은 6-b 대조.
-    expect(className).toContain('border-hairline');
-    expect(className).toContain('rounded-button');
-  });
-});
-
 /**
  * TRIP-990 · W3 (D21 · 01b Q6) — h07 시작 시각 시트: 휠을 굴리다 멈추면 그 값이 확정되고, 시트는
  * 휠 정지·셀 탭으로는 닫히지 않는다(딤·끌기 닫힘은 아래 A 가 잠근다 — TRIP-1014).
@@ -621,21 +582,6 @@ describe('🔴 A · S1 시트가 딤·끌기로 닫혀도 다시 열린다 (TRIP
     expect(screen.getAllByTestId(SHEET).length).toBe(1);
     expect(screen.getByTestId(hourCell('13'))).toBeOnTheScreen();
   });
-
-  it('A3 · 닫힘을 쥔 엘리먼트가 아래로 끌어 닫기를 켜고 본문 끌기는 끈다', () => {
-    openSheet();
-
-    // onClose 를 가진 가장 가까운 조상 = 닫힘을 쥔 BottomSheet(TimeSheet H7 선례).
-    let owner: ReactTestInstance | null = screen.getByTestId(SHEET);
-    while (owner !== null && typeof owner.props.onClose !== 'function') {
-      owner = owner.parent;
-    }
-
-    expect(owner).not.toBeNull();
-    expect(owner?.props.enablePanDownToClose).toBe(true);
-    // not.toBe(true) 가 아니라 toBe(false) — prop 을 지우면(undefined) 라이브러리 기본값 true 로 돌아간다.
-    expect(owner?.props.enableContentPanningGesture).toBe(false);
-  });
 });
 
 /**
@@ -643,9 +589,9 @@ describe('🔴 A · S1 시트가 딤·끌기로 닫혀도 다시 열린다 (TRIP
  *
  * 무엇을 보장하나:
  *  - AC-5 시작 시각 칸은 `HH:mm` 한 가지로만 보인다("오후 1:00 (13:00)" 이중 표기 폐기).
- *  - AC-7 값이 비어 있으면 휠은 배선이 내린 자리(`startAnchor`, 그 여행 일과 시작)에 서고 선택 표시는 없다.
+ *  - AC-7 값이 비어 있으면 선택 표시가 없다(휠이 일과 시작 자리에 서는지 = 스크롤 위치는 2026-11-01 실화면 QA 몫으로 뺐다).
  *  - AC-8 시트를 열고 레이아웃만 받고 닫으면 값이 정해지지 않는다(BR-U1-49 — 보기만으로 값 설정 금지).
- *  - AC-9 값이 있으면 그 값이 선택·위치이고 일과 시작 자리는 무시된다.
+ *  - AC-9 값이 있으면 그 값이 선택이고 일과 시작 자리는 무시된다.
  *  - AC-10 한 열만 고르면 다른 열은 화면에 서 있던 값이다(01b Q3 — 값이 비었으면 세운 자리의 값).
  *  - AC-11 '고정' 배지는 토글이 켜졌을 때만 있다(BR-U1-48 — 꺼짐 = ANYTIME).
  *  - AC-12 토글은 행 전체가 누름 대상이고 role switch·checked 는 그 행 하나(testID 그대로)에 있다.
@@ -684,9 +630,6 @@ describe('🔴 TRIP-1437 · 방문 시각 지정 — 24시간 표기·휠 위치
     return { h, m };
   }
 
-  const offsetY = (wheel: string): unknown =>
-    screen.getByTestId(wheel).props.contentOffset?.y;
-
   it('AC-5 · 시작 시각 13:00 은 칸에 정확히 "13:00" 으로만 보인다 — 오전·오후·괄호 없음', () => {
     renderScreen();
 
@@ -700,25 +643,13 @@ describe('🔴 TRIP-1437 · 방문 시각 지정 — 24시간 표기·휠 위치
     expect(renderedTexts().filter((t) => /오전|오후/.test(t))).toEqual([]);
   });
 
-  it('AC-7 · 값이 비면 시 열은 10칸(440)·분 열은 30칸(1320)에 서고, 어떤 셀도 선택돼 있지 않다', () => {
+  it('AC-7 · 값이 비면 시트를 열고 레이아웃을 받아도 어떤 셀도 선택돼 있지 않다', () => {
     const onPickStart = jest.fn();
     renderScreen({ form: { ...FORM, fixedStart: null }, onPickStart });
     openSheet();
+    layoutBothColumns();
 
-    // 첫 프레임 위치(contentOffset) — 자정(0)이 아니라 일과 시작 10:30.
-    expect(offsetY(H_WHEEL)).toBe(10 * WHEEL_CELL_HEIGHT);
-    expect(offsetY(M_WHEEL)).toBe(30 * WHEEL_CELL_HEIGHT);
-
-    // 레이아웃 뒤 다시 맞추기(1417 L 패턴)도 같은 자리로.
-    const { h, m } = layoutBothColumns();
-    expect(h).toHaveBeenCalledWith(
-      expect.objectContaining({ y: 10 * WHEEL_CELL_HEIGHT, animated: false })
-    );
-    expect(m).toHaveBeenCalledWith(
-      expect.objectContaining({ y: 30 * WHEEL_CELL_HEIGHT, animated: false })
-    );
-
-    // 위치일 뿐 선택이 아니다.
+    // 일과 시작 자리는 위치일 뿐 선택이 아니다(휠이 서는 자리 = 스크롤 위치는 실화면 QA 몫).
     expect(selectedStartCells()).toEqual([]);
     expect(onPickStart).not.toHaveBeenCalled();
   });
@@ -744,21 +675,11 @@ describe('🔴 TRIP-1437 · 방문 시각 지정 — 24시간 표기·휠 위치
     ).toHaveTextContent('시각 선택');
   });
 
-  it('AC-9 · 값 13:07 이 있으면 시 13·분 07 이 선택이고 그 자리(572 / 308)에 선다 — 일과 시작은 무시', () => {
+  it('AC-9 · 값 13:07 이 있으면 시 13·분 07 이 선택이다 — 일과 시작은 무시', () => {
     renderScreen({ form: { ...FORM, fixedStart: '13:07' } });
     openSheet();
 
     expect(selectedStartCells()).toEqual([hourCell('13'), minuteCell('07')]);
-    expect(offsetY(H_WHEEL)).toBe(13 * WHEEL_CELL_HEIGHT);
-    expect(offsetY(M_WHEEL)).toBe(7 * WHEEL_CELL_HEIGHT);
-
-    const { h, m } = layoutBothColumns();
-    expect(h).toHaveBeenCalledWith(
-      expect.objectContaining({ y: 13 * WHEEL_CELL_HEIGHT, animated: false })
-    );
-    expect(m).toHaveBeenCalledWith(
-      expect.objectContaining({ y: 7 * WHEEL_CELL_HEIGHT, animated: false })
-    );
   });
 
   it.each<[string | null, 'h' | 'm', string, string, string]>([
@@ -837,46 +758,6 @@ describe('🔴 TRIP-1437 · 방문 시각 지정 — 24시간 표기·휠 위치
     expect(
       screen.getByTestId('itinerary-mustvisit-time-toggle')
     ).not.toBeChecked();
-  });
-});
-
-// TRIP-1507 — 시트를 안전 영역 밖(루트 형제)으로 옮겼으니 홈 인디케이터 여백을 시트가 직접 가진다(16 + 하단 안전 영역).
-describe('TRIP-1507 · 시각 시트 하단 여백 = 16 + 하단 안전 영역', () => {
-  function paddingBottomWith(bottom: number | null): number {
-    const screenEl = (
-      <MustVisitTimeScreen
-        sourcePoiId="poi-a"
-        placeName="부산시립미술관"
-        region="부산진구"
-        imageUrl={null}
-        dayChips={DAY_CHIPS}
-        startOptions={START_OPTIONS}
-        startAnchor={START_ANCHOR}
-        form={FORM}
-      />
-    );
-    render(
-      bottom === null ? (
-        screenEl
-      ) : (
-        <SafeAreaInsetsContext.Provider
-          value={{ top: 47, bottom, left: 0, right: 0 }}
-        >
-          {screenEl}
-        </SafeAreaInsetsContext.Provider>
-      )
-    );
-    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-field'));
-    const style = screen.getByTestId('itinerary-mustvisit-time-start-sheet')
-      .props.style;
-    return StyleSheet.flatten(style).paddingBottom as number;
-  }
-
-  it('하단 안전 영역 34 → 50', () => {
-    expect(paddingBottomWith(34)).toBe(50);
-  });
-  it('Provider 없음(jest 기본) → 16 그대로', () => {
-    expect(paddingBottomWith(null)).toBe(16);
   });
 });
 

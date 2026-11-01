@@ -1,6 +1,5 @@
-import type { ReactNode } from 'react';
 import { delay, http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -31,6 +30,14 @@ import {
 } from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { DRAFT_POLL_INTERVAL_MS } from '@/features/itinerary';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
+import {
+  DAY1,
+  DAY2,
+  itinerary as baseItinerary,
+  trip as baseTrip,
+} from '@/test-support/itineraryFixtures';
+import { BASE, serveItinerary } from '@/test-support/mswItinerary';
 
 import { SlotFillPage } from './SlotFillPage';
 
@@ -50,15 +57,8 @@ import { SlotFillPage } from './SlotFillPage';
  */
 
 // 생성 클라이언트의 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다(선례 동형).
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 // jest.mock 팩토리는 파일 맨 위로 끌어올려져 바깥 변수를 못 본다 — `mock` 접두 변수만 예외.
 const mockBack = jest.fn();
@@ -108,27 +108,21 @@ describe('컨셉·후보·확정 순회 배선', () => {
    * 3동작: 준비=MSW 응답 → 실행=컨셉·반경·라디오·확정 → 단언=나간 요청 바디·이동.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
   const TRIP_ID = '22222222-2222-2222-2222-222222222222';
 
   // TRIP-1043 — 페이지가 진행 줄 여행지 접두를 위해 여행(`GET /trips/:tripId`)을 조회한다. 이 파일은 접두를
   // 재지 않으므로 여행지 없는 여행으로 답한다(접두 생략 degrade — 기존 `N일차` 단언이 그대로 유효). 핸들러를
   // 빼면 MSW 'error' 전략이 console.error 만 찍고 쿼리를 조용히 실패시켜 누락이 드러나지 않는다(02a ★1).
-  const TRIP_NO_DESTINATIONS: Trip = {
+  const TRIP_NO_DESTINATIONS: Trip = baseTrip({
     tripId: TRIP_ID,
     title: '테스트 여행',
-    startDate: '2026-06-10',
     endDate: '2026-06-11',
     party: 1,
-    preferenceSnapshot: {},
     destinations: [],
-    status: 'PLANNED',
     createdAt: '2026-06-01T00:00:00Z',
     updatedAt: '2026-06-01T00:00:00Z',
-    baseCount: 0,
     itineraryDayCount: 1,
-  };
-  const DAY1 = '2026-06-10';
+  });
   const SLOT_KEY = buildSlotKey(DAY1, 'a');
 
   function itinerary(): Itinerary {
@@ -160,18 +154,12 @@ describe('컨셉·후보·확정 순회 배선', () => {
         ],
       },
     ];
-    return {
+    return baseItinerary({
       itineraryId: 'itin-2',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
       generationMode: 'CO_PLAN',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days,
-    };
+    });
   }
 
   // 테스트별로 바꿔 끼우는 후보 응답(핸들러 클로저가 요청 시점에 읽는다).
@@ -206,13 +194,11 @@ describe('컨셉·후보·확정 순회 배선', () => {
     };
     setAccessToken('valid-access');
 
+    serveItinerary(server, {
+      trip: () => TRIP_NO_DESTINATIONS,
+      itinerary: () => itinerary(),
+    });
     server.use(
-      http.get(`${BASE}/trips/:tripId`, () =>
-        HttpResponse.json(TRIP_NO_DESTINATIONS)
-      ),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(itinerary())
-      ),
       http.post(
         `${BASE}/trips/:tripId/itinerary/slot-candidates`,
         async ({ request }) => {
@@ -235,19 +221,9 @@ describe('컨셉·후보·확정 순회 배선', () => {
   });
 
   function renderPage(slotKey: string = SLOT_KEY) {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
+    const client = newTestQueryClient({ gcTime: 0 });
     return render(<SlotFillPage tripId={TRIP_ID} slotKey={slotKey} />, {
-      wrapper: Wrapper,
+      wrapper: createWrapper(client),
     });
   }
 
@@ -386,12 +362,12 @@ describe('컨셉·후보·확정 순회 배선', () => {
     });
 
     it('C9 · E1 콜드캐시 가드 — GET 미도착 중 확정 → PUT 0(빈 days 전체교체 방지)', async () => {
-      server.use(
-        http.get(`${BASE}/trips/:tripId/itinerary`, async () => {
+      serveItinerary(server, {
+        itinerary: async () => {
           await delay('infinite');
           return HttpResponse.json(itinerary());
-        })
-      );
+        },
+      });
       renderPage();
       await pickConcept('culture');
       await screen.findByTestId('itinerary-candidate-radio-X'); // POST 는 도착
@@ -409,11 +385,9 @@ describe('컨셉·후보·확정 순회 배선', () => {
     it('C14 · TRIP-601 가드 b — generationState=PARTIAL 이면 확정 PUT 0(생성 중 전체교체 차단)', async () => {
       // 준비 — GET 이 PARTIAL(day1 도착, 뒷날 생성 중)로 정착한다. day1 data 는 있으므로 콜드캐시(C9)와
       // 달리 throw 가 안 나고, 가드가 없으면 확정이 그대로 day1-only 전체교체 PUT 을 쏜다(★b-2).
-      server.use(
-        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-          HttpResponse.json({ ...itinerary(), generationState: 'PARTIAL' })
-        )
-      );
+      serveItinerary(server, {
+        itinerary: () => ({ ...itinerary(), generationState: 'PARTIAL' }),
+      });
       renderPage();
       await pickConcept('culture');
       await screen.findByTestId('itinerary-candidate-radio-X');
@@ -486,10 +460,10 @@ describe('컨셉·후보·확정 순회 배선', () => {
       // 확정하는 순회에서 "다음 SlotFillPage 가 최신 days 를 읽는가"를 재려면 GET 이 앞 확정을 반영해야
       // 하고, 그러려면 확정 성공(onSuccess)이 GET 캐시를 무효화(재조회)해야 한다.
       let serverDays = itinerary().days; // [a, b] 로 시작.
+      serveItinerary(server, {
+        itinerary: () => ({ ...itinerary(), days: serverDays }),
+      });
       server.use(
-        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-          HttpResponse.json({ ...itinerary(), days: serverDays })
-        ),
         http.put(`${BASE}/trips/:tripId/itinerary`, async ({ request }) => {
           putCalls += 1;
           const body = (await request.json()) as EditItineraryRequest;
@@ -510,23 +484,13 @@ describe('컨셉·후보·확정 순회 배선', () => {
       // onSuccess 의 무효화뿐이라 그 효과만 격리해 잰다(안 끄면 다음 화면 마운트가 알아서 재조회해 무효화가
       // 없어도 통과 → 회귀를 못 잡는다). gcTime: Infinity 는 첫 화면이 언마운트돼도 stale 캐시가 살아남게
       // 해 실서비스 remount 상황을 재현한다.
-      const client = new QueryClient({
-        defaultOptions: {
-          queries: { retry: false, staleTime: Infinity, gcTime: Infinity },
-          mutations: { gcTime: 0 },
-        },
-      });
-      function Wrapper({ children }: { children: ReactNode }) {
-        return (
-          <QueryClientProvider client={client}>{children}</QueryClientProvider>
-        );
-      }
+      const client = newTestQueryClient({ staleTime: Infinity });
 
       // 1) slot a 진입 → a 를 X 로 확정.
       const first = render(
         <SlotFillPage tripId={TRIP_ID} slotKey={SLOT_KEY} />,
         {
-          wrapper: Wrapper,
+          wrapper: createWrapper(client),
         }
       );
       await pickConcept('culture');
@@ -551,7 +515,7 @@ describe('컨셉·후보·확정 순회 배선', () => {
       render(
         <SlotFillPage tripId={TRIP_ID} slotKey={buildSlotKey(DAY1, 'b')} />,
         {
-          wrapper: Wrapper,
+          wrapper: createWrapper(client),
         }
       );
       await pickConcept('culture');
@@ -821,10 +785,7 @@ describe('진행 줄 여행지 접두·지도', () => {
    * 글자·지도에 넘어간 값.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
   const TRIP_ID = '44444444-4444-4444-4444-444444444444';
-  const DAY1 = '2026-06-10';
-  const DAY2 = '2026-06-11';
   const SLOT_A = { lat: 37.5796, lng: 126.977 };
   const MAX_RADIUS_USED = 11300;
 
@@ -843,18 +804,12 @@ describe('진행 줄 여행지 접두·지도', () => {
   }
 
   function itineraryOf(days: ItineraryDaysItem[]): Itinerary {
-    return {
+    return baseItinerary({
       itineraryId: 'itin-ctx',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
       generationMode: 'CO_PLAN',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days,
-    };
+    });
   }
 
   // 2일 일정 — day1 [a 경복궁 09:30(좌표 가변), b 13:00] · day2 [c 10:00].
@@ -908,20 +863,17 @@ describe('진행 줄 여행지 접두·지도', () => {
   }
 
   function tripWith(destinations: TripDestination[], endDate: string): Trip {
-    return {
+    return baseTrip({
       tripId: TRIP_ID,
       title: '맥락 테스트 여행',
       startDate: DAY1,
       endDate,
       party: 1,
-      preferenceSnapshot: {},
       destinations,
-      status: 'PLANNED',
       createdAt: '2026-06-01T00:00:00Z',
       updatedAt: '2026-06-01T00:00:00Z',
-      baseCount: 0,
       itineraryDayCount: 2,
-    };
+    });
   }
 
   type TripMode = 'gangjin' | 'shuffled' | 'pending' | 'error' | 'empty';
@@ -946,13 +898,8 @@ describe('진행 줄 여행지 접두·지도', () => {
     holdPosts = false;
     setAccessToken('valid-access');
 
-    server.use(
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(
-          itineraryMode === 'twoDay' ? twoDayItinerary() : fourDayItinerary()
-        )
-      ),
-      http.get(`${BASE}/trips/:tripId`, async () => {
+    serveItinerary(server, {
+      trip: async () => {
         switch (tripMode) {
           case 'pending':
             await delay('infinite');
@@ -981,7 +928,11 @@ describe('진행 줄 여행지 접두·지도', () => {
               tripWith([{ seq: 1, region: '강진군', nights: 1 }], DAY2)
             );
         }
-      }),
+      },
+      itinerary: () =>
+        itineraryMode === 'twoDay' ? twoDayItinerary() : fourDayItinerary(),
+    });
+    server.use(
       // 요청 반경을 그대로 radiusMUsed 로 돌려준다(에코). 최대(null)는 서버 기본 11.3km. 테스트가
       // radiusUsedOverride 로 "서버가 넓힘"을, holdPosts 로 "조회 중"을 만든다(02a ★4·★5).
       http.post(
@@ -1006,19 +957,9 @@ describe('진행 줄 여행지 접두·지도', () => {
   });
 
   function renderPage(slotKey: string): QueryClient {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
+    const client = newTestQueryClient({ gcTime: 0 });
     render(<SlotFillPage tripId={TRIP_ID} slotKey={slotKey} />, {
-      wrapper: Wrapper,
+      wrapper: createWrapper(client),
     });
     return client;
   }
@@ -1162,7 +1103,7 @@ describe('진행 줄 여행지 접두·지도', () => {
   });
 
   describe('🔴 B1 · 후보 화면 지도 — 기준점은 지금 채우는 슬롯, 보여주기 전용', () => {
-    it('슬롯 좌표를 중심·원 중심으로, 기본 반경 1100m 원과 기준 핀 1개만 넘기고 "현재 위치"는 없다', async () => {
+    it('슬롯 좌표를 중심·원 중심으로, 기본 반경 1100m 원과 기준 핀 1개만 넘기고 "현재 위치" 글자는 없다', async () => {
       renderPage(buildSlotKey(DAY1, 'a'));
       await pickConcept();
       await screen.findByTestId('itinerary-candidate-radio-X');
@@ -1170,9 +1111,7 @@ describe('진행 줄 여행지 접두·지도', () => {
       const map = mapInCard();
       // 중심 = 슬롯 a 좌표(목은 center 를 텍스트로 낸다).
       expect(map).toHaveTextContent(`${SLOT_A.lat},${SLOT_A.lng}`);
-      // 보여주기 전용 + 선 없음.
-      expect(map.props.viewOnly).toBe(true);
-      expect(map.props.connectPins).toBe(false);
+      // 보여주기 전용·선 없음(viewOnly·connectPins 설정 prop)은 통과형 목 위라 2026-11-01 뗐다 — 실화면 몫.
       // 반경 원 — 중심은 슬롯, 반경은 기본(mid) 1100m.
       expect(map.props.radiusCircle).toEqual({
         center: { lat: SLOT_A.lat, lng: SLOT_A.lng },
@@ -1187,8 +1126,7 @@ describe('진행 줄 여행지 접두·지도', () => {
       expect(pins).toHaveLength(1);
       expect({ lat: pins[0].lat, lng: pins[0].lng }).toEqual(SLOT_A);
       expect(/^[A-Z]$/.test(pins[0].label ?? '')).toBe(false);
-      // 사용자 위치가 아니다 — 현재위치 점도 '현재 위치' 글자도 없다(Seed Q1).
-      expect(map.props.currentLocation).toBeUndefined();
+      // 사용자 위치가 아니다 — '현재 위치' 글자가 없다(Seed Q1).
       expect(screen.queryByText(/현재 위치/)).toBeNull();
     });
   });
@@ -1494,26 +1432,21 @@ describe('후보 기본 선택', () => {
    * 3동작: 준비=MSW 응답(요청 반경·컨셉별 대본) → 실행=컨셉·반경·라디오·확정 → 단언=선택 표지·버튼·PUT 바디.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
   const TRIP_ID = '44444444-4444-4444-4444-444444444444';
-  const DAY1 = '2026-06-10';
   const SLOT_KEY = buildSlotKey(DAY1, 'a');
   const LOCKED_TEXT = '나머지 일정을 만드는 중이에요';
 
-  const TRIP_NO_DESTINATIONS: Trip = {
+  const TRIP_NO_DESTINATIONS: Trip = baseTrip({
     tripId: TRIP_ID,
     title: '테스트 여행',
     startDate: DAY1,
     endDate: '2026-06-11',
     party: 1,
-    preferenceSnapshot: {},
     destinations: [],
-    status: 'PLANNED',
     createdAt: '2026-06-01T00:00:00Z',
     updatedAt: '2026-06-01T00:00:00Z',
-    baseCount: 0,
     itineraryDayCount: 1,
-  };
+  });
 
   /** 같이 짜기 일정 — 1일차 비고정 [a, b]. slot a 를 채운다(다음 = b). */
   function itinerary(
@@ -1535,18 +1468,13 @@ describe('후보 기본 선택', () => {
         })),
       },
     ];
-    return {
+    return baseItinerary({
       itineraryId: 'itin-1073',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
       generationMode: 'CO_PLAN',
       generationState,
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days,
-    };
+    });
   }
 
   /** 후보 한 건 — 이름을 채워 둔다(이름 leaf 의 흐림 톤 판정용, D). */
@@ -1588,13 +1516,11 @@ describe('후보 기본 선택', () => {
     candidatesScript = () => ok([cand('X'), cand('Y'), cand('Z')]);
     setAccessToken('valid-access');
 
+    serveItinerary(server, {
+      trip: () => TRIP_NO_DESTINATIONS,
+      itinerary: () => itinerary(itineraryState),
+    });
     server.use(
-      http.get(`${BASE}/trips/:tripId`, () =>
-        HttpResponse.json(TRIP_NO_DESTINATIONS)
-      ),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(itinerary(itineraryState))
-      ),
       http.post(
         `${BASE}/trips/:tripId/itinerary/slot-candidates`,
         async ({ request }) => {
@@ -1618,19 +1544,9 @@ describe('후보 기본 선택', () => {
   });
 
   function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
+    const client = newTestQueryClient({ gcTime: 0 });
     return render(<SlotFillPage tripId={TRIP_ID} slotKey={SLOT_KEY} />, {
-      wrapper: Wrapper,
+      wrapper: createWrapper(client),
     });
   }
 
@@ -2064,29 +1980,6 @@ describe('후보 기본 선택', () => {
       expect(mockReplace).toHaveBeenCalledTimes(0);
     });
   });
-
-  /** className 을 공백으로 쪼갠 토큰 — `text-muted-soft` 같은 부분 일치 오탐을 막는다(★D-1). */
-  const classTokens = (testID: string): string[] =>
-    String(screen.getByTestId(testID).props.className ?? '').split(/\s+/);
-
-  describe('🟢 TRIP-1073 D · 반경 밖 표지가 없으면 어느 카드도 흐리지 않다 (선제 green)', () => {
-    it('거리 문자열이 "약 9.9km" 여도 이름 글자는 흐림 톤(text-muted)이 아니라 기본 톤(text-ink)이다', async () => {
-      // 준비 — 계약엔 반경 밖 표지·숫자 거리가 없다. 문자열만 멀어 보인다.
-      candidatesScript = () => ok([cand('X', '420m'), cand('D', '약 9.9km')]);
-
-      // 실행
-      renderPage();
-      await pickConcept();
-      await screen.findByTestId('itinerary-candidate-radio-D');
-
-      // 단언 — distanceRange 를 파싱해 흐림을 지어내면 red.
-      for (const id of ['X', 'D']) {
-        const tokens = classTokens(`itinerary-candidate-name-${id}`);
-        expect(tokens).toContain('text-ink');
-        expect(tokens).not.toContain('text-muted');
-      }
-    });
-  });
 });
 
 // TRIP-1006 · 옛 SlotFillPage.leave.integration.test.tsx
@@ -2119,28 +2012,21 @@ describe('‹ 떠나기 확인', () => {
    *   라우터 호출·나간 요청 수.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
   const TRIP_ID = '55555555-5555-5555-5555-555555555555';
 
   // TRIP-1043 — 페이지가 진행 줄 여행지 접두를 위해 여행(`GET /trips/:tripId`)을 조회한다. 이 파일은 접두를
   // 재지 않으므로 여행지 없는 여행으로 답한다(접두 생략 degrade — 기존 `N일차` 단언이 그대로 유효). 핸들러를
   // 빼면 MSW 'error' 전략이 console.error 만 찍고 쿼리를 조용히 실패시켜 누락이 드러나지 않는다(02a ★1).
-  const TRIP_NO_DESTINATIONS: Trip = {
+  const TRIP_NO_DESTINATIONS: Trip = baseTrip({
     tripId: TRIP_ID,
     title: '테스트 여행',
-    startDate: '2026-06-10',
     endDate: '2026-06-11',
     party: 1,
-    preferenceSnapshot: {},
     destinations: [],
-    status: 'PLANNED',
     createdAt: '2026-06-01T00:00:00Z',
     updatedAt: '2026-06-01T00:00:00Z',
-    baseCount: 0,
     itineraryDayCount: 1,
-  };
-  const DAY1 = '2026-06-10';
-  const DAY2 = '2026-06-11';
+  });
 
   const KEY_A = buildSlotKey(DAY1, 'a');
   const KEY_B = buildSlotKey(DAY1, 'b');
@@ -2167,16 +2053,10 @@ describe('‹ 떠나기 확인', () => {
   }
 
   function itinerary(): Itinerary {
-    return {
+    return baseItinerary({
       itineraryId: 'itin-leave',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
       generationMode: 'CO_PLAN',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days: [
         {
           date: DAY1,
@@ -2191,7 +2071,7 @@ describe('‹ 떠나기 확인', () => {
           slots: [slot('c', '10:00:00', false), slot('d', '14:00:00', false)],
         },
       ],
-    };
+    });
   }
 
   let generatePosts = 0;
@@ -2208,13 +2088,11 @@ describe('‹ 떠나기 확인', () => {
     mockDismissTo.mockClear();
     setAccessToken('valid-access');
 
+    serveItinerary(server, {
+      trip: () => TRIP_NO_DESTINATIONS,
+      itinerary: () => itinerary(),
+    });
     server.use(
-      http.get(`${BASE}/trips/:tripId`, () =>
-        HttpResponse.json(TRIP_NO_DESTINATIONS)
-      ),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(itinerary())
-      ),
       // 생성 POST — 이 화면에서 나가면 안 된다(재생성 = 고른 슬롯 소실). 세려고 핸들러를 둔다.
       http.post(`${BASE}/trips/:tripId/itinerary`, () => {
         generatePosts += 1;
@@ -2242,19 +2120,9 @@ describe('‹ 떠나기 확인', () => {
   });
 
   function renderSlot(slotKey: string) {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
+    const client = newTestQueryClient({ gcTime: 0 });
     return render(<SlotFillPage tripId={TRIP_ID} slotKey={slotKey} />, {
-      wrapper: Wrapper,
+      wrapper: createWrapper(client),
     });
   }
 
@@ -2442,27 +2310,21 @@ describe('후보 카드 이름·태그·사진', () => {
    * 3동작: 준비=가짜 서버 응답(GET 일정 + POST 후보) → 실행=페이지 마운트 후 컨셉 탭 → 단언=보이는 leaf.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
   const TRIP_ID = '22222222-2222-2222-2222-222222222222';
 
   // TRIP-1043 — 페이지가 진행 줄 여행지 접두를 위해 여행(`GET /trips/:tripId`)을 조회한다. 이 파일은 접두를
   // 재지 않으므로 여행지 없는 여행으로 답한다(접두 생략 degrade — 기존 `N일차` 단언이 그대로 유효). 핸들러를
   // 빼면 MSW 'error' 전략이 console.error 만 찍고 쿼리를 조용히 실패시켜 누락이 드러나지 않는다(02a ★1).
-  const TRIP_NO_DESTINATIONS: Trip = {
+  const TRIP_NO_DESTINATIONS: Trip = baseTrip({
     tripId: TRIP_ID,
     title: '테스트 여행',
-    startDate: '2026-06-10',
     endDate: '2026-06-11',
     party: 1,
-    preferenceSnapshot: {},
     destinations: [],
-    status: 'PLANNED',
     createdAt: '2026-06-01T00:00:00Z',
     updatedAt: '2026-06-01T00:00:00Z',
-    baseCount: 0,
     itineraryDayCount: 1,
-  };
-  const DAY1 = '2026-06-10';
+  });
   const SLOT_KEY = buildSlotKey(DAY1, 'a');
 
   const X_IMG = 'https://img.example/x.jpg';
@@ -2470,16 +2332,10 @@ describe('후보 카드 이름·태그·사진', () => {
   const RAW_ID = 'poi-raw-7788';
 
   function itinerary(): Itinerary {
-    return {
+    return baseItinerary({
       itineraryId: 'itin-2',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
       generationMode: 'CO_PLAN',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days: [
         {
           date: DAY1,
@@ -2498,7 +2354,7 @@ describe('후보 카드 이름·태그·사진', () => {
           ],
         },
       ],
-    };
+    });
   }
 
   /** 값이 다 있는 X · 값이 없는 RAW_ID · 사진만 빈 문자열인 Z(Q4). */
@@ -2540,13 +2396,11 @@ describe('후보 카드 이름·태그·사진', () => {
 
   beforeEach(() => {
     setAccessToken('valid-access');
+    serveItinerary(server, {
+      trip: () => TRIP_NO_DESTINATIONS,
+      itinerary: () => itinerary(),
+    });
     server.use(
-      http.get(`${BASE}/trips/:tripId`, () =>
-        HttpResponse.json(TRIP_NO_DESTINATIONS)
-      ),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(itinerary())
-      ),
       http.post(`${BASE}/trips/:tripId/itinerary/slot-candidates`, () =>
         HttpResponse.json(CANDIDATES)
       )
@@ -2559,19 +2413,9 @@ describe('후보 카드 이름·태그·사진', () => {
   });
 
   function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
+    const client = newTestQueryClient({ gcTime: 0 });
     return render(<SlotFillPage tripId={TRIP_ID} slotKey={SLOT_KEY} />, {
-      wrapper: Wrapper,
+      wrapper: createWrapper(client),
     });
   }
 
@@ -2671,27 +2515,21 @@ describe('진행줄·스텝퍼 배선', () => {
    * 3동작: 준비=MSW 로 GET 고정 → 실행=SlotFillPage 마운트(컨셉 화면) → 단언=진행줄·스텝퍼 렌더값.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
   const TRIP_ID = '33333333-3333-3333-3333-333333333333';
 
   // TRIP-1043 — 페이지가 진행 줄 여행지 접두를 위해 여행(`GET /trips/:tripId`)을 조회한다. 이 파일은 접두를
   // 재지 않으므로 여행지 없는 여행으로 답한다(접두 생략 degrade — 기존 `N일차` 단언이 그대로 유효). 핸들러를
   // 빼면 MSW 'error' 전략이 console.error 만 찍고 쿼리를 조용히 실패시켜 누락이 드러나지 않는다(02a ★1).
-  const TRIP_NO_DESTINATIONS: Trip = {
+  const TRIP_NO_DESTINATIONS: Trip = baseTrip({
     tripId: TRIP_ID,
     title: '테스트 여행',
-    startDate: '2026-06-10',
     endDate: '2026-06-11',
     party: 1,
-    preferenceSnapshot: {},
     destinations: [],
-    status: 'PLANNED',
     createdAt: '2026-06-01T00:00:00Z',
     updatedAt: '2026-06-01T00:00:00Z',
-    baseCount: 0,
     itineraryDayCount: 1,
-  };
-  const DAY1 = '2026-06-10';
+  });
 
   const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
 
@@ -2729,18 +2567,12 @@ describe('진행줄·스텝퍼 배선', () => {
         ],
       },
     ];
-    return {
+    return baseItinerary({
       itineraryId: 'itin-3',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
       generationMode: 'CO_PLAN',
-      generationState: 'COMPLETE',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days,
-    };
+    });
   }
 
   let currentHasCategory = true;
@@ -2748,14 +2580,10 @@ describe('진행줄·스텝퍼 배선', () => {
   beforeEach(() => {
     currentHasCategory = true;
     setAccessToken('valid-access');
-    server.use(
-      http.get(`${BASE}/trips/:tripId`, () =>
-        HttpResponse.json(TRIP_NO_DESTINATIONS)
-      ),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(itinerary(currentHasCategory))
-      )
-    );
+    serveItinerary(server, {
+      trip: () => TRIP_NO_DESTINATIONS,
+      itinerary: () => itinerary(currentHasCategory),
+    });
   });
 
   afterEach(() => {
@@ -2765,17 +2593,10 @@ describe('진행줄·스텝퍼 배선', () => {
 
   // slotKey=b(가운데 비고정 슬롯) 로 진입 — prev=a, current=b, next=c.
   function renderAtSlotB() {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
+    const client = newTestQueryClient({ gcTime: 0 });
     return render(
       <SlotFillPage tripId={TRIP_ID} slotKey={buildSlotKey(DAY1, 'b')} />,
-      { wrapper: Wrapper }
+      { wrapper: createWrapper(client) }
     );
   }
 
@@ -2864,26 +2685,21 @@ describe('PARTIAL 폴링·확정 잠금·조회 실패', () => {
    * 폴링은 실타이머로 한 간격(2초)만 흘린다(DraftPage.integration I1 선례).
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
   const TRIP_ID = '33333333-3333-3333-3333-333333333333';
 
   // TRIP-1043 — 페이지가 진행 줄 여행지 접두를 위해 여행(`GET /trips/:tripId`)을 조회한다. 이 파일은 접두를
   // 재지 않으므로 여행지 없는 여행으로 답한다(접두 생략 degrade — 기존 `N일차` 단언이 그대로 유효). 핸들러를
   // 빼면 MSW 'error' 전략이 console.error 만 찍고 쿼리를 조용히 실패시켜 누락이 드러나지 않는다(02a ★1).
-  const TRIP_NO_DESTINATIONS: Trip = {
+  const TRIP_NO_DESTINATIONS: Trip = baseTrip({
     tripId: TRIP_ID,
     title: '테스트 여행',
-    startDate: '2026-06-10',
     endDate: '2026-06-11',
     party: 1,
-    preferenceSnapshot: {},
     destinations: [],
-    status: 'PLANNED',
     createdAt: '2026-06-01T00:00:00Z',
     updatedAt: '2026-06-01T00:00:00Z',
-    baseCount: 0,
     itineraryDayCount: 1,
-  };
+  });
   const DAY1 = '2026-10-12';
   const DAY2 = '2026-10-13';
   const POLL_TEST_TIMEOUT = 30000;
@@ -2926,18 +2742,13 @@ describe('PARTIAL 폴링·확정 잠금·조회 실패', () => {
       date: DAY2,
       slots: [slot('c', '10:00:00', '11:30:00')],
     };
-    return {
+    return baseItinerary({
       itineraryId: 'itin-978',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
       generationMode: 'CO_PLAN',
       generationState: state,
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       days: state === 'COMPLETE' ? [day1, day2] : [day1],
-    };
+    });
   }
 
   const CANDIDATES = {
@@ -2975,15 +2786,15 @@ describe('PARTIAL 폴링·확정 잠금·조회 실패', () => {
     candidatesScript = () => HttpResponse.json(CANDIDATES);
     setAccessToken('valid-access');
 
-    server.use(
-      http.get(`${BASE}/trips/:tripId`, () =>
-        HttpResponse.json(TRIP_NO_DESTINATIONS)
-      ),
-      http.get(`${BASE}/trips/:tripId/itinerary`, () => {
+    serveItinerary(server, {
+      trip: () => TRIP_NO_DESTINATIONS,
+      itinerary: () => {
         const call = getCalls;
         getCalls += 1;
         return HttpResponse.json(itineraryScript(call));
-      }),
+      },
+    });
+    server.use(
       http.post(
         `${BASE}/trips/:tripId/itinerary/slot-candidates`,
         async ({ request }) => {
@@ -3009,20 +2820,10 @@ describe('PARTIAL 폴링·확정 잠금·조회 실패', () => {
   let lastClient: QueryClient | null = null;
 
   function renderPage(slotKey: string = buildSlotKey(DAY1, 'a')) {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
+    const client = newTestQueryClient({ gcTime: 0 });
     lastClient = client;
     return render(<SlotFillPage tripId={TRIP_ID} slotKey={slotKey} />, {
-      wrapper: Wrapper,
+      wrapper: createWrapper(client),
     });
   }
 

@@ -6,7 +6,6 @@ import {
   act,
 } from '@testing-library/react-native';
 
-import type { TripWizardStep1ScreenProps } from '@/pages/trip/trip-new-step1/ui/TripWizardStep1Screen';
 import type {
   SavedPlace,
   PreferenceView,
@@ -28,8 +27,6 @@ import { TripNewStep1Page } from './TripNewStep1Page';
  * 옛 3파일(본 · `.mustVisit` · `.loading`)을 하나로 합쳤다. 옛 파일 하나 = 바깥 describe 하나다.
  *
  * 공유 목 — jest.mock 은 파일 전체에 걸리므로 갈래가 갈리면 팩토리 안에서 `mock` 변수를 읽는다:
- *  - 화면(`TripWizardStep1Screen`): `mockStubScreen` 이 true 일 때만 props 를 붙잡고 null 을 낸다(옛 `.loading`
- *    props-캡처 목). false(기본)면 실물 화면을 그린다. `isLoading 파생` describe 만 켠다.
  *  - 조회 훅: prefill 은 `mockPreference`·`mockPrefillPending`, 담은목록은 `mockSavedPlaces` 하나로 갈아 끼운다.
  *  - 로그인: tokenManager 는 실물이다. 로그인 describe 가 beforeEach 에서 setAccessToken 을 부르고,
  *    최상위 afterEach 가 clearAccessToken 으로 되돌린다(모듈 전역이라 안 지우면 다음 describe 로 샌다).
@@ -99,26 +96,6 @@ jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: () => mockSavedPlaces,
 }));
 
-/** true 면 화면을 props-캡처 목으로 바꾼다(null 반환 — NativeWind interop 함정 회피). */
-let mockStubScreen = false;
-const mockScreenProps: { props?: { isLoading?: boolean } } = {};
-
-jest.mock('@/pages/trip/trip-new-step1/ui/TripWizardStep1Screen', () => {
-  const actual = jest.requireActual(
-    '@/pages/trip/trip-new-step1/ui/TripWizardStep1Screen'
-  );
-  return {
-    ...actual,
-    // 실물은 상태 훅 없는 함수 컴포넌트라 그대로 불러 그린다(팩토리 안 JSX·createElement 는 NativeWind
-    // babel 이 바깥 변수로 바꿔 jest.mock 호이스트 검사에 걸린다).
-    TripWizardStep1Screen: (props: TripWizardStep1ScreenProps) => {
-      if (!mockStubScreen) return actual.TripWizardStep1Screen(props);
-      mockScreenProps.props = props;
-      return null;
-    },
-  };
-});
-
 function loaded(places: SavedPlace[]) {
   return {
     savedPlaces: places,
@@ -153,13 +130,10 @@ beforeEach(() => {
   mockRefetch.mockClear();
   mockRemove.mockClear();
   mockSavedPlaces = loaded([]);
-  mockStubScreen = false;
-  mockScreenProps.props = undefined;
 });
 
 afterEach(() => {
   clearAccessToken();
-  mockStubScreen = false;
   // TRIP-1624 — 화면이 아직 마운트돼 있는 때(RNTL 정리는 이 훅 뒤)라 reset 이 구독자를 갱신한다 → act 로 감싼다.
   act(() => useTripWizardStore.getState().reset());
 });
@@ -716,9 +690,8 @@ describe('담은목록 게이트 + 더 담기 목적지 (로그인 기본)', () 
  * combined). **둘 중 하나만 pending 이어도** 화면 isLoading=true, **둘 다 도착하면** false. 뮤턴트
  * (항상 false / 한쪽만 봄)가 각각 red 로 걸린다.
  *
- * 왜 props 캡처인가: 시드 심판이 "화면 isLoading true **전달**"이다. `TripWizardStep1Screen` 을 props-캡처
- * 목(null 반환, `MyStaysPage.integration` 선례)으로 치환하고 두 조회 훅의 `isPending` 을 독립 제어해
- * 페이지의 파생 한 줄만 격리해 잰다(스켈레톤 실렌더는 `TripWizardStep1Screen.test.tsx` 「두 상태 얼굴」 몫).
+ * 실물 화면을 그리고 두 조회 훅의 `isPending` 을 독립 제어해, 요약 첫 칸 스켈레톤(`trip-wizard-summary-skeleton-1`)
+ * 이 뜨는지로 본다(옛 화면 props-캡처 목은 지웠다 — 같은 slice 화면을 갈아 끼우면 리팩터를 막는다, README 판정 6).
  *
  * ⚠️ isAuthed 게이트 우회(02a §4-★9): 현행 페이지는 `savedPlacesLoading = isAuthed && savedPlaces.isPending`.
  * 이 describe 의 beforeEach 가 실물 토큰을 심어 isAuthed=true 로 돌린다 — 구현이 `savedPlaces.isPending` 을 raw 로
@@ -726,26 +699,24 @@ describe('담은목록 게이트 + 더 담기 목적지 (로그인 기본)', () 
  *
  * ⚠️ `jest.mock` 팩토리는 최상단으로 끌어올려진다. 바깥 변수는 이름이 `mock` 으로 시작해야 참조 예외다.
  *
- * 화면 props-캡처 목은 최상위 `mockStubScreen` 스위치다 — 이 describe 의 beforeEach 만 켠다. 옛 tokenManager 목 대신 실물 setAccessToken.
+ * 옛 tokenManager 목 대신 실물 setAccessToken.
  */
-describe('isLoading 파생 (화면 props 캡처)', () => {
+describe('isLoading 파생 (요약 스켈레톤)', () => {
   const BASE = '2026-06-10';
 
   beforeEach(() => {
     useTripWizardStore.getState().reset();
     mockPrefillPending = false;
     mockSavedPlaces = loaded([]);
-    mockScreenProps.props = undefined;
-    mockStubScreen = true;
     // isAuthed=true — savedPlaces.isPending 이 그대로 게이트에 반영되게(★9). 실물 토큰을 심는다.
     setAccessToken('test-token');
   });
 
   afterEach(() => clearAccessToken());
 
-  function renderAndCapture(): boolean | undefined {
+  function renderAndCapture(): boolean {
     render(<TripNewStep1Page baseDate={BASE} />);
-    return mockScreenProps.props?.isLoading;
+    return screen.queryByTestId('trip-wizard-summary-skeleton-1') !== null;
   }
 
   describe('W · isLoading 파생 = prefill.isPending || savedPlaces.isPending (combined)', () => {

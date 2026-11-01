@@ -1,6 +1,4 @@
-import type { ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, screen } from '@testing-library/react-native';
 
 import type {
   Itinerary,
@@ -21,6 +19,7 @@ import {
   resetWizardDraft,
   wizardDraftData,
 } from '@/test-support/wizardDraftFixture';
+import { renderWithQueryClient } from '@/test-support/queryRender';
 
 /**
  * (tabs)/일정 진입 라우트 — TRIP-468로 "첫 여행 리다이렉트 문지기"를 **내 여행 목록 뷰**(h37)로
@@ -103,15 +102,7 @@ jest.mock('expo-secure-store', () => ({
 
 /** 매 렌더 새 QueryClient — 페이지의 `useQueries` 가 Provider 를 요구한다. */
 function renderTab() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: Infinity } },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return render(<ItineraryTab />, { wrapper: Wrapper });
+  return renderWithQueryClient(<ItineraryTab />);
 }
 
 const mockUseGetTrips = useGetTrips as jest.MockedFunction<typeof useGetTrips>;
@@ -434,37 +425,6 @@ describe('🔴 AC-5 · 배지·상태문은 카드별 itinerary 에서 파생된
     // 미도착(degrade) — 배지 미정(부재) + 짝: 카드 자체는 뜬다.
     expect(screen.queryByTestId('my-trip-badge-trip-load')).toBeNull();
     expect(screen.getByTestId('my-trip-card-trip-load')).toBeOnTheScreen();
-  });
-});
-
-describe('🔴 AC-8 · empty 얼굴 — 캘린더 글리프(회색 원 72) + 부제 2줄 강제', () => {
-  it('illustration 슬롯이 회색 원(surface-soft 72)+캘린더를 그리고, 부제가 2줄이며, testID 는 보존된다', () => {
-    mockUseGetTrips.mockReturnValue(tripsData([]));
-
-    renderTab();
-
-    // testID 보존(구 계약 계승) — StateNotice 자체는 무수정(stay·explore 회귀 방지).
-    expect(screen.getByTestId('itinerary-tab-empty')).toBeOnTheScreen();
-    expect(screen.getByTestId('itinerary-tab-create-trip')).toBeOnTheScreen();
-
-    // illustration 슬롯 — 회색 원 72(핑크 원 우회). NativeWind className 은 렌더 트리에 평문 prop 으로
-    // 남으므로 직독한다(HomeScreen.test.tsx:186 선례) — SVG 색은 못 봐도 배경/치수 토큰은 잠긴다.
-    const illustration = screen.getByTestId('itinerary-tab-empty-illustration');
-    expect(illustration.props.className).toContain('bg-surface-soft'); // 회색
-    expect(illustration.props.className).toContain('h-[72px]'); // 72
-    expect(illustration.props.className).not.toContain('bg-primary-pale'); // 핑크 아님
-
-    // 캘린더 글리프(신규, 핑크 InfoCircle 교체) 실재.
-    expect(
-      screen.getByTestId('itinerary-tab-empty-calendar')
-    ).toBeOnTheScreen();
-
-    // 부제 2줄 강제 — `toHaveTextContent`/`getByText` 는 개행을 공백으로 정규화해 못 본다(02a ★4·§5-2).
-    // 정규식으로 노드를 잡고 정규화 전 원문(`.props.children`)을 직단언해 `\n` 을 잠근다.
-    const subtitle = screen.getByText(/여행을 만들면 확정·작성중 상태를/);
-    expect(subtitle.props.children).toBe(
-      '여행을 만들면 확정·작성중 상태를\n여기서 한눈에 볼 수 있어요'
-    );
   });
 });
 

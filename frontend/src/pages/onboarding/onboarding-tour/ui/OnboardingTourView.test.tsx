@@ -761,63 +761,6 @@ describe('TRIP-1596 · 모션 (AC1~AC7)', () => {
     return view;
   }
 
-  it('A1 1장: 경로가 먼저 그려지고(0–1s) 핀이 내려앉은 뒤(1–1.4s) 하트가 채워지며, 2.4초 뒤엔 끝 모양이다', async () => {
-    // 준비 — 동작 줄이기 꺼짐(false) 답 + 1장
-    await mount(1);
-
-    // 단언 0 — 출발 프레임
-    expectStartFrame(1);
-
-    // 실행·단언 1 — 0.5초: 경로는 일부만, 핀은 아직 안 보임
-    advance(500);
-    expect(routeWidth(1)).toBeGreaterThan(0);
-    expect(routeWidth(1)).toBeLessThan(fullRoute(1));
-    expect(stopEffect(1).opacity).toBe(0);
-
-    // 실행·단언 2 — 1.15초: 경로는 끝, 핀은 내려오는 중(투명도 0과 1 사이)
-    advance(650);
-    expect(routeWidth(1)).toBeCloseTo(fullRoute(1), 4);
-    expect(stopEffect(1).opacity).toBeGreaterThan(0);
-    expect(stopEffect(1).opacity).toBeLessThan(1);
-    expect(itemEffect(1, 'heart-fill').opacity).toBe(0); // 장별 조각은 1.4초부터
-
-    // 실행·단언 3 — 2.5초: 끝 모양(S1 정지 화면과 같은 값)
-    advance(1350);
-    expectEndFrame(1);
-  });
-
-  it.each(PAGE_IDS)(
-    'A2 %i장: 장이 처음 보이면 모든 조각이 출발 프레임에서 시작해 2.4초 뒤 표의 끝값에 닿는다',
-    async (page) => {
-      // 준비
-      await mount(page);
-
-      // 단언 1 — 출발
-      expectStartFrame(page);
-
-      // 실행·단언 2 — 끝(2.4초 + 여유)
-      advance(2500);
-      expectEndFrame(page);
-    }
-  );
-
-  it('A3 한 번도 안 본 장은 시작 프레임으로 있고, 무대 글자는 그대로 트리에 있다', async () => {
-    // 준비·실행 — 1장을 끝까지 재생
-    await mount(1);
-    advance(3000);
-
-    // 단언 — 앵커(1장은 끝까지 갔다) + 2~6장은 시작 프레임
-    expectEndFrame(1);
-    [2, 3, 4, 5, 6].forEach((page) => {
-      expectStartFrame(page);
-      STAGE_TEXTS[page].forEach((text) =>
-        expect(
-          within(stageOf(page)).getByText(text, { hidden: true })
-        ).toBeTruthy()
-      );
-    });
-  });
-
   it('A4 동작 줄이기 답을 뷰가 한 번만 묻는다(6장 × 훅 6번 금지)', async () => {
     // 준비
     const ask = jest.mocked(AccessibilityInfo.isReduceMotionEnabled);
@@ -957,32 +900,6 @@ describe('TRIP-1596 · 모션 (AC1~AC7)', () => {
     });
   });
 
-  describe('AC4 · 숫자와 거리는 카운트업이 없다', () => {
-    it.each([3, 5])(
-      'A10 %i장의 무대 글자는 0·중간·끝 시각 모두 같은 문자열이다(투명도만 변한다)',
-      async (page) => {
-        // 준비
-        await mount(page);
-        const textAt = () => renderedText(stageOf(page));
-        const samples = [textAt()];
-
-        // 실행 — 0 · 1.7초 · 2.5초
-        advance(1700);
-        samples.push(textAt());
-        advance(800);
-        samples.push(textAt());
-
-        // 단언 — 앵커(숫자/거리가 실제로 있다) + 세 시각 동일
-        const anchors =
-          page === 3 ? ['2.1km', '0.8km', '0.6km'] : ['12', '38km', '24'];
-        anchors.forEach((a) => expect(samples[0]).toContain(a));
-        expect(new Set(samples).size).toBe(1);
-        // 앵커 2 — 조각이 정말 움직였다(공허 방지)
-        expectEndFrame(page);
-      }
-    );
-  });
-
   describe('AC5 · 장이 보일 때마다 그 장을 처음부터', () => {
     it('A11 다음을 누르면 다음 장이 0 부터 재생되고, 떠난 장은 슬라이드 동안 끝 모양으로 남다가 지연 뒤 시작 프레임으로 돌아간다', async () => {
       // 준비 — 1장을 끝까지 본다
@@ -1069,58 +986,7 @@ describe('TRIP-1596 · 모션 (AC1~AC7)', () => {
     });
   });
 
-  describe('AC7 · 반복하지 않는다', () => {
-    it('A14 끝난 뒤 6초가 흘러도 값이 변하지 않는다', async () => {
-      // 준비·실행
-      await mount(4);
-      advance(2500);
-      expectEndFrame(4);
-      const seen = new Set<string>([fingerprint()]);
-      for (let i = 0; i < 30; i += 1) {
-        advance(200);
-        seen.add(fingerprint());
-      }
-
-      // 단언
-      expect(seen.size).toBe(1);
-    });
-  });
-
   describe('AC6 · 기존 계약 보존', () => {
-    it('A15 제목·본문·진행 점·버튼은 움직이는 스타일(불투명도·이동·확대) 아래에 없다', async () => {
-      // 준비 — 재생 중간 시점과 시작 시점 둘 다
-      await mount(1);
-      const ids = [
-        'onboarding-tour-title-1',
-        'onboarding-tour-body-1',
-        'onboarding-tour-title-3',
-        TESTID.progress,
-        TESTID.skip,
-        TESTID.next,
-      ];
-      const moving = (testID: string): string[] => {
-        const found: string[] = [];
-        let node: ReactTestInstance | null = screen.getByTestId(testID, {
-          hidden: true,
-        });
-        for (; node; node = node.parent) {
-          if (typeof node.type !== 'string') continue;
-          const style = styleOf(node);
-          if ('opacity' in style || 'transform' in style)
-            found.push(String(node.props.testID ?? node.type));
-        }
-        return found;
-      };
-
-      // 실행·단언 — 시작과 한창일 때 모두
-      [0, 1200].forEach((ms) => {
-        if (ms > 0) advance(ms);
-        ids.forEach((id) => expect([id, moving(id)]).toEqual([id, []]));
-      });
-      // 앵커: 그 시점에 무대는 실제로 움직이고 있다
-      expect(stopEffect(1).opacity).toBeGreaterThan(0);
-    });
-
     it('A16 모션 중에도 무대는 장식이다 — 숨김 속성 3종 유지, 누를 수 있는 것 0개', async () => {
       // 준비
       await mount(3);
@@ -1137,20 +1003,5 @@ describe('TRIP-1596 · 모션 (AC1~AC7)', () => {
       ).toHaveLength(0);
       expect(routeWidth(3)).toBeGreaterThan(0); // 앵커: 모션 노드가 실제로 있다
     });
-
-    it.each(PAGE_IDS)(
-      'A17 %i장 경로 클립은 넘치는 부분을 잘라 숨긴다(overflow hidden) — 폭만 자라고 안쪽 점선이 처음부터 다 보이면 안 된다',
-      async (page) => {
-        // 준비
-        await mount(page);
-        const clip = screen.getByTestId(`onboarding-tour-route-${page}`, {
-          hidden: true,
-        });
-
-        // 단언 — 앵커: 지금 폭이 0(그려지기 전)인 바로 그 노드가 잘라 숨기는 상자다
-        expect(routeWidth(page)).toBe(0);
-        expect(StyleSheet.flatten(clip.props.style).overflow).toBe('hidden');
-      }
-    );
   });
 });

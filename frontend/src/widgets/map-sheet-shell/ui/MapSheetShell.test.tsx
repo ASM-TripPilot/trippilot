@@ -230,24 +230,7 @@ describe('MapSheetShell · SH5 — initialIndex 가 BottomSheet 초기 스냅 �
   beforeEach(withMapKey);
   afterEach(restoreMapKey);
 
-  it('SH5a · initialIndex 미전달이면 peek(45%) 칸으로 열리고 지도는 잠겨 있다 (AC-2 · 선제 green · 심판 수정)', () => {
-    // 준비/실행 — 기존 소비처 형태(initialIndex 안 줌).
-    renderShell();
-
-    // 단언 — 기본 진입은 여전히 peek. 셸이 배열만 바꾸고 기본 index 를 0 으로 두면 여기서 28 이 나와 red.
-    expectSnapValue('45%');
-    expectMapLocked(true);
-    expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
-  });
-
-  it('🔴 SH5b · initialIndex={2} 면 펼침(88%) 칸으로 열리고 지도는 잠겨 있다 (AC-9 셸 쪽)', () => {
-    // 준비/실행 — 펼침 진입(h08 펼침·i06·i07 이 새 배열에서 주는 값).
-    renderShell({ initialIndex: 2 });
-
-    // 단언 — 새 배열의 마지막 칸. 현행 2칸 배열엔 index 2 가 없어 undefined → red.
-    expectSnapValue('88%');
-    expectMapLocked(true);
-  });
+  // SH5a(기본 peek)·SH5b(initialIndex 2 → 88%)는 jest-cut 에서 지웠다 — 통과형 시트 목에 넘긴 칸 값만 봤다. 기본 진입·initialIndex 반영은 SH1·SH6b·SH13a(기본 CTA)·SX1(initialIndex 2)이 잰다.
 
   it('🔴 SH5c · initialIndex={0} 이면 닫힘(28)으로 진입해 onChange 없이도 처음부터 지도가 풀리고 CTA 가 없다 (셸 상태 초기값 = 초기 index · 02a ★5)', () => {
     // 준비/실행 — 닫힘으로 진입. 라이브러리가 마운트 때 onChange 를 부르는지는 jest 가 모르므로 부르지 않는다.
@@ -437,29 +420,10 @@ const GESTURE_TOGGLES = [
 
 // SH9(snapPoints 미전달 3스냅 · 전달 그대로)은 TRIP-1356 에서 지웠다 — 파일 끝 합본의 CS3(기본 28)·CS4(직접 전달) 가 같은 prop 통과를 잠근다.
 
-describe('MapSheetShell · SH10 — mapViewOnly 로 지도 잠금을 끈다 (TRIP-746 · Seed Q1)', () => {
-  beforeEach(withMapKey);
-  afterEach(restoreMapKey);
+// SH10b(mapViewOnly={false} → 제스처 4종 on)는 jest-cut 에서 지웠다 — SH14e 가 진입 직후 expectMapLocked(false) 로 같은 것을 잰다.
 
-  // SH10a(mapViewOnly 미전달 = 제스처 4종 꺼짐)는 TRIP-1356 에서 지웠다 — SH5a·SH14b 의 expectMapLocked(true) 가 같은 기본 잠금을 잰다.
-
-  it('🔴 SH10b · mapViewOnly={false} 면 제스처 4종이 전부 켜진다(여행 중 자유 탐색)', () => {
-    renderShell({ mapViewOnly: false });
-
-    const map = screen.getByTestId('map-native');
-    GESTURE_TOGGLES.forEach((toggle) => expect(map.props[toggle]).toBe(true));
-  });
-});
-
-/* ──────────────── TRIP-748 · 알약 숨김 입구 3개(가산) ────────────────
- * i02 허브는 지도 위 트리거 알약을 "시트를 끌거나 스크롤하거나 지도를 탭하면" 로컬로 숨긴다(D3).
- * 셸은 그 세 사건을 **판단 없이 흘려보내기만** 한다 — 마운트 가드(from ≥ 0 && from ≠ to)는 허브 몫.
- *   onSheetAnimate         → <BottomSheet onAnimate>
- *   onSheetScrollBeginDrag → <BottomSheetScrollView onScrollBeginDrag>
- *   onMapTap               → <MapView onTapMap>
- * 통과형 시트 목은 이 이벤트를 스스로 쏘지 않는다 — 테스트가 넘겨진 prop 을 직접 부른다(02a ★2·★3).
- * 시트 목은 3겹(forwardRef·함수·host)이라 host(문자열 타입)를 고른다.
- * ─────────────────────────────────────────────────────────────────────── */
+// SH12(TRIP-748 onSheetAnimate·onSheetScrollBeginDrag·onMapTap 흘려보내기)는 jest-cut 에서 지웠다 — 통과형 시트·지도 목의 prop 에 달렸는지와
+// 테스트가 그 prop 을 직접 부른 결과만 봤다(README 판정 4). 알약 숨김은 실화면 QA 몫(live-hub.md).
 
 /** snapPoints 를 가진 host(문자열 타입) 노드 — BottomSheet 본체. */
 function sheetHost() {
@@ -469,82 +433,6 @@ function sheetHost() {
   if (!host) throw new Error('시트 host 노드가 없다');
   return host;
 }
-
-function scrollBeginDragNodes() {
-  return screen.root.findAll(
-    (node) => typeof node.props?.onScrollBeginDrag === 'function'
-  );
-}
-
-describe('MapSheetShell · SH12 — 시트 끌기·본문 스크롤·지도 탭을 흘려보낸다 (TRIP-748)', () => {
-  beforeEach(withMapKey);
-  afterEach(restoreMapKey);
-
-  // TRIP-1356 — 네 it(a 미전달 · b onSheetAnimate · c onSheetScrollBeginDrag · d onMapTap)을 한 흐름으로 합쳤다. 단언은 하나도 줄이지 않았다.
-  it('SH12 · 세 prop 은 미전달이면 어디에도 콜백을 달지 않고(6 소비처 무회귀), 주면 각자 제 자리로 흘러간다', () => {
-    // a) 미전달 — 짝 앵커: 지도와 시트가 실제로 떴다.
-    const bare = render(
-      <MapSheetShell
-        center={CENTER}
-        pins={PINS}
-        onBack={jest.fn()}
-        header={<Text testID="fake-header">헤더</Text>}
-      >
-        <Text testID="fake-body">본문</Text>
-      </MapSheetShell>
-    );
-    expect(screen.getByTestId('map-native')).toBeOnTheScreen();
-    expect(sheetHost().props.onAnimate).toBeUndefined();
-    expect(scrollBeginDragNodes()).toHaveLength(0);
-    expect(screen.getByTestId('map-native').props.onTapMap).toBeUndefined();
-    bare.unmount();
-
-    // b) onSheetAnimate 는 BottomSheet onAnimate 로 흘러 (from, to) 를 그대로 올린다.
-    const onSheetAnimate = jest.fn();
-    renderShell({ onSheetAnimate });
-    const onAnimate = sheetHost().props.onAnimate as
-      ((from: number, to: number, fp: number, tp: number) => void) | undefined;
-    expect(onAnimate).toBeDefined();
-    onAnimate?.(1, 2, 0, 0);
-    expect(onSheetAnimate).toHaveBeenCalledTimes(1);
-    expect(onSheetAnimate.mock.calls[0].slice(0, 2)).toEqual([1, 2]);
-    screen.unmount();
-
-    // c) onSheetScrollBeginDrag 는 시트 본체가 아니라 본문 스크롤 뷰에 달린다.
-    const onSheetScrollBeginDrag = jest.fn();
-    renderShell({ onSheetScrollBeginDrag });
-    const nodes = scrollBeginDragNodes();
-    expect(nodes.length).toBeGreaterThan(0);
-    // 본문 스크롤 뷰 = snapPoints 가 없는 노드(시트 본체에 달면 이 단언이 깨진다).
-    nodes.forEach((node) =>
-      expect(Array.isArray(node.props.snapPoints)).toBe(false)
-    );
-    // 본문 children 을 품은 노드여야 한다.
-    expect(
-      nodes[nodes.length - 1].findAll(
-        (node) => node.props?.testID === 'fake-body'
-      ).length
-    ).toBeGreaterThan(0);
-    (nodes[nodes.length - 1].props.onScrollBeginDrag as (e: unknown) => void)({
-      nativeEvent: {},
-    });
-    expect(onSheetScrollBeginDrag).toHaveBeenCalledTimes(1);
-    screen.unmount();
-
-    // d) onMapTap 은 지도 onTapMap 으로 흐른다.
-    const onMapTap = jest.fn();
-    renderShell({ onMapTap });
-    const native = screen.getByTestId('map-native');
-    expect(native.props.onTapMap).toBeDefined();
-    (native.props.onTapMap as (p: unknown) => void)({
-      latitude: 35.15,
-      longitude: 129.11,
-      x: 1,
-      y: 2,
-    });
-    expect(onMapTap).toHaveBeenCalledTimes(1);
-  });
-});
 
 /* ──────────────── TRIP-919 · 셸이 지도 실패를 스스로 폴백한다 ────────────────
  * 지금까지 `mapFallback` 은 프리뷰가 강제로 넣을 때만 채워졌다. 이제 셸이 `<MapView onLoadFailed>` 로
@@ -942,23 +830,7 @@ function firstSheetSnapPoints(): unknown[] {
   return node.props.snapPoints as unknown[];
 }
 
-// TRIP-1507 — 지도가 풀블리드라 상태바 영역에 비치던 것을 흰 막으로 가린다(높이 = 상단 안전 영역).
-describe('MapSheetShell · 상태바 영역 흰 막 (TRIP-1507)', () => {
-  beforeEach(withMapKey);
-  afterEach(restoreMapKey);
-
-  it('상단 안전 영역 47 → 높이 47 의 막이 있고 터치를 통과시킨다', () => {
-    renderWithBottomInset(34);
-    const cover = screen.getByTestId('map-sheet-shell-statusbar-cover');
-    expect(cover.props.style).toEqual(expect.objectContaining({ height: 47 }));
-    expect(cover.props.pointerEvents).toBe('none');
-  });
-
-  it('Provider 없음(안전 영역 0) → 막을 그리지 않는다', () => {
-    renderWithBottomInset(null);
-    expect(screen.queryByTestId('map-sheet-shell-statusbar-cover')).toBeNull();
-  });
-});
+// TRIP-1507 상태바 흰 막(높이·pointerEvents)은 jest-cut 에서 지웠다 — 레이아웃이라 실화면 QA 몫(itinerary-view.md).
 
 describe('MapSheetShell · 닫힘 스냅이 홈 인디케이터 위에 온다', () => {
   beforeEach(withMapKey);
@@ -1067,69 +939,7 @@ describe('TRIP-1076 · 셸 핀 맞추기 통과 (AC-3)', () => {
   });
 });
 
-/* ──── TRIP-1356 · 옛 MapSheetShell.radius.test 합침 ──── */
-/**
- * TRIP-800 · AC-7 · 01b Q5 — 셸이 반경 원(`radiusCircle`)을 지도까지 흘린다(옵셔널 additive).
- *
- * 무엇을 보장하나:
- *  - 🔴 SR1 `radiusCircle` 을 주면 셸이 소유한 `<MapView>` 가 원을 그린다(네이버 목 `map-circle`) — 반경·중심이
- *    그대로 닿는다. h15 가 `mapFallback` 에 자체 지도를 끼우는 우회(폴백 슬롯 의미 오용)를 하지 않게 하는 자리.
- *  - 🟢 SR2 미전달이면 원이 없다 — 기존 셸 소비처(h07·h08·h11·h13·h14·h16·i 밴드) 무회귀 앵커.
- *
- * 기존 `MapSheetShell.test.tsx` 는 건드리지 않는다 — 새 prop 만 이 파일에서 잠근다.
- * 실 MapView 를 태우므로(목 아님) 네이버 목(`__mocks__/@mj-studio/react-native-naver-map.tsx`, 자동 적용)의
- * `map-circle` 에 props 가 그대로 실린다. 키가 없으면 MapView 가 실패 표면으로 떨어지므로 키를 넣고 돈다.
- * ⚠️ 원의 점선·색·실제 크기는 jest 사각(6-b 실기).
- *
- * 3동작 뼈대: 준비=키 + 원 prop → 실행=셸 렌더 → 단언=map-circle 의 radius·좌표.
- */
-
-const RADIUS_CENTER = { lat: 35.1587, lng: 129.1604 };
-
-function renderRadiusShell(radiusCircle?: {
-  center: { lat: number; lng: number };
-  radiusM: number;
-}) {
-  render(
-    <MapSheetShell
-      center={RADIUS_CENTER}
-      pins={[{ number: 1, lat: 35.16, lng: 129.16 }]}
-      onBack={jest.fn()}
-      header={<Text>헤더</Text>}
-      radiusCircle={radiusCircle}
-    >
-      <Text>본문</Text>
-    </MapSheetShell>
-  );
-}
-
-describe('TRIP-800 · 셸 반경 원 통과 (AC-7 · Q5)', () => {
-  beforeEach(withMapKey);
-  afterEach(restoreMapKey);
-
-  it('🔴 SR1 radiusCircle 을 주면 셸 지도에 원 1개 — 반경·중심이 그대로 닿는다', () => {
-    // 준비·실행 — 무게중심 + 반경 1200m.
-    renderRadiusShell({
-      center: { lat: 35.1601, lng: 129.1502 },
-      radiusM: 1200,
-    });
-
-    // 단언 — 원이 하나 그려지고, 넘긴 값이 네이티브 원 오버레이까지 닿았다.
-    const circles = screen.queryAllByTestId('map-circle');
-    expect(circles).toHaveLength(1);
-    expect(circles[0].props.radius).toBe(1200);
-    expect(circles[0].props.latitude).toBe(35.1601);
-    expect(circles[0].props.longitude).toBe(129.1502);
-  });
-
-  it('🟢 SR2 미전달이면 원이 없다 (기존 셸 소비처 무회귀)', () => {
-    renderRadiusShell();
-
-    // 도달 앵커 — 지도는 실제로 떴다(원이 없는 이유가 "지도가 없어서"가 아니다).
-    expect(screen.getByTestId('map-native')).toBeOnTheScreen();
-    expect(screen.queryAllByTestId('map-circle')).toHaveLength(0);
-  });
-});
+// TRIP-800 반경 원 통과(SR1·SR2)는 jest-cut 에서 지웠다 — 셸→MapView prop 통과라 원 유무·반경은 MapView.test AC-3 가 소유한다.
 
 /* ──── TRIP-1356 · 옛 MapSheetShell.bodyScroll.test 합침 ──── */
 /**
@@ -1524,23 +1334,7 @@ describe('MapSheetShell · SR 시트 끝까지 내림 옵션 (TRIP-1522 v2)', ()
     expect(spy()).toHaveBeenLastCalledWith(1);
   });
 
-  it('enablePanDownToClose·mapLogoMargin 은 안 주면 기본값 그대로(시트는 안 켜지고 지도엔 로고 마진이 없다), 주면 시트·지도로 그대로 간다', () => {
-    render(shell());
-    expect(sheetHost().props.enablePanDownToClose).not.toBe(true);
-    expect(screen.getByTestId('map-native').props.logoMargin).toBeUndefined();
-    screen.unmount();
-
-    const margin = { bottom: 78 };
-    render(shell({ enablePanDownToClose: true, mapLogoMargin: margin }));
-    expect(sheetHost().props.enablePanDownToClose).toBe(true);
-    expect(screen.getByTestId('map-native').props.logoMargin).toEqual(margin);
-  });
-
-  it('IN1 initialIndex=-1 이면 시트는 완전 내림(index -1)으로 마운트한다 — 시트 내림 시작 프리뷰·테스트 입구', () => {
-    render(shell({ initialIndex: -1 }));
-
-    expect(sheetHost().props.index).toBe(-1);
-  });
+  // enablePanDownToClose·mapLogoMargin 통과와 IN1(initialIndex −1)은 jest-cut 에서 지웠다 — 시트·지도 목 prop 통과뿐이다(README 판정 4).
 });
 
 /* ──────────────── TRIP-1558 · 핀 탭 통과 + 본문 스크롤 요청 — 전부 옵트인("안 주면 지금과 똑같다") ────────────────

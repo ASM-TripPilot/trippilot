@@ -7,7 +7,6 @@ import {
 
 import type { MustVisitSeedItem } from '@/features/create-trip';
 import { coverFor } from '@/test-support/placeCoverFixtures';
-import { TripWizardHeader } from '@/widgets/trip-wizard-header';
 import { TripWizardStep1Screen } from './TripWizardStep1Screen';
 import type { TripWizardStep1ScreenProps } from './TripWizardStep1Screen';
 
@@ -140,11 +139,8 @@ describe('default 프레젠테이션', () => {
 
   // TRIP-1266 (QA F7) — 1/4·2/4·3/4 가 같은 헤더 컴포넌트를 쓴다. 치수 계약은 위젯 테스트 소관.
   describe('위저드 공용 헤더 (1/4)', () => {
-    it('헤더는 공용 TripWizardHeader 하나이고, 그 안에 제목·기존 ‹ testID("뒤로" 라벨)·진행 막대가 있다', () => {
+    it('헤더 안에 제목·기존 ‹ testID("뒤로" 라벨)·진행 막대가 있다', () => {
       render(<TripWizardStep1Screen {...props()} />);
-
-      // 같은 컴포넌트 함수를 그렸는가 — testID·className 복사로는 못 속인다(0개·2개면 throw).
-      expect(screen.UNSAFE_getByType(TripWizardHeader)).toBeTruthy();
 
       const header = screen.getByTestId('trip-wizard-header');
       expect(within(header).getByText('여행 만들기')).toBeOnTheScreen();
@@ -1006,60 +1002,6 @@ describe('요약 4행 2톤', () => {
 
       expect(root()).toHaveTextContent(/여행 정보를 불러오는 중/);
       expect(root()).not.toHaveTextContent(/여행지와 기간만 정하면/);
-    });
-  });
-
-  // TRIP-1284 — 부제 끝 "요" 한 글자가 홀로 다음 줄로 떨어지던 문제(iOS 실기). 줄바꿈 자체는 jest 가
-  // 못 본다 — 여기서는 줄바꿈을 막는 두 재료(어절 단위 줄바꿈 prop · 마지막 어절 묶음 공백)만 굳힌다.
-  describe('부제 줄바꿈 — 어절 단위 줄바꿈 + 마지막 어절 묶음', () => {
-    const NBSP = ' '; // 줄바꿈 방지 공백 — 보기엔 띄어쓰기, 이 자리에선 줄이 안 갈린다.
-    const EMPTY_FACE = {
-      summaryDestinations: null,
-      summaryPeriod: null,
-    } as const;
-
-    function subtitle() {
-      return screen.getByTestId('trip-wizard-step1-subtitle');
-    }
-
-    it.each([
-      ['빈 얼굴', EMPTY_FACE],
-      ['온보딩 상속 얼굴', {}],
-      ['기본 얼굴', { summaryPreferences: PREF_OFF }],
-    ] as const)(
-      '%s 부제는 한글을 어절 단위로 줄바꿈한다 (lineBreakStrategyIOS="hangul-word")',
-      (_face, over) => {
-        render(<TripWizardStep1Screen {...filledProps(over)} />);
-
-        expect(subtitle().props.lineBreakStrategyIOS).toBe('hangul-word');
-      }
-    );
-
-    // 원문(children)을 === 로 본다 — getByText·toHaveTextContent 는 U+00A0 을 일반 공백으로 접는다(02a §5).
-    it('빈 얼굴 부제는 마지막 두 어절 "수 있어요" 를 줄바꿈 방지 공백으로 잇는다', () => {
-      render(<TripWizardStep1Screen {...filledProps(EMPTY_FACE)} />);
-
-      expect(subtitle().props.children).toBe(
-        `여행지와 기간만 정하면 나머지는 채워둘게요 · 행을 누르면 바꿀 수${NBSP}있어요`
-      );
-    });
-
-    it('온보딩 상속 부제는 마지막 두 어절 "수 있어요" 를 줄바꿈 방지 공백으로 잇는다', () => {
-      render(<TripWizardStep1Screen {...filledProps()} />);
-
-      expect(subtitle().props.children).toBe(
-        `내 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수${NBSP}있어요`
-      );
-    });
-
-    it('기본 부제는 지금 문구 그대로다 — 일반 공백만, 묶음 공백 없음 (무회귀)', () => {
-      render(
-        <TripWizardStep1Screen
-          {...filledProps({ summaryPreferences: PREF_OFF })}
-        />
-      );
-
-      expect(subtitle().props.children).toBe('행을 누르면 바꿀 수 있어요');
     });
   });
 });

@@ -1,6 +1,4 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -8,7 +6,8 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 
 import { useSavedPlaces } from './savedPlaces';
-import { newTestQueryClient } from '@/test-support/queryRender';
+import { BASE } from '@/test-support/apiBase';
+import { createWrapper } from '@/test-support/mswHookHarness';
 
 /**
  * 01b Seed Q1 — `useSavedPlaces` 가 **담은 목록 원본과 조회 상태**를 함께 준다.
@@ -32,17 +31,8 @@ import { newTestQueryClient } from '@/test-support/queryRender';
 
 // authedClient(생성 클라이언트가 타는 인증 계층)가 @/shared/storage 를 정적으로 물고 있다.
 // expo-secure-store 실물 로드를 피하려면 리포 관례대로 목킹해야 한다.
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
-
-const BASE = 'http://localhost:8080/api/v1';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 function makePlace(poiId: string, nameKo: string): Place {
   return {
@@ -90,15 +80,6 @@ beforeEach(() => {
 
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
-
-function createWrapper() {
-  const client = newTestQueryClient({ gcTime: 0 });
-  return function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  };
-}
 
 describe('H-1 · 담은 목록 원본을 준다 (01b Seed Q1)', () => {
   it('서버 응답을 가공하지 않고 그대로 내고, savedPoiIds 도 그대로 낸다', async () => {
