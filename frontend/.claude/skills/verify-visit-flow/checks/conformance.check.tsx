@@ -49,7 +49,7 @@ function modelArriveTargets(plan: string[], cache: Record<string, Rec>, opt: Set
   const state = (i: number) => (completed(plan[i]) ? 'done' : i === active ? 'active' : 'upcoming');
   const skipped = new Set(plan.filter((p) => cache[p] === 'skipped'));
   return plan.filter(
-    (p, i) => state(i) === 'upcoming' && (active < 0 || (i > active && !skipped.has(p)))
+    (p, i) => state(i) === 'upcoming' && !skipped.has(p) && (active < 0 || i > active)
   );
 }
 function modelShowComplete(plan: string[], cache: Record<string, Rec>, opt: Set<string>, armed: boolean): boolean {

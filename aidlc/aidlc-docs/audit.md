@@ -1946,3 +1946,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — U1·U4·U8 설계 문서 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
+
+## Functional Design 사후 개정 — U10 수동 허브 [도착] 술어·완료 중 잠금 (BR-U10-54·55)
+**Timestamp**: 2026-11-01T23:30:00+09:00 (작업 시점)
+**User Input**: (사용자 원문) "버그 3건 고쳐라" — 방문 체크 결함 원인 확인(P1·P2·P3) 뒤 앱 2건(P1·P3)은 앱에서 고친다는 결정이다.
+**AI Response**: `construction/u10-gps-location-automation/functional-design/business-rules.md` TRIP-1561 개정 블록 뒤에 `[개정 · 2026-11-01 · 방문 체크 결함 수정]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: BR-U10-54 건너뜀 제외는 진행 중 여부와 무관(FM-L4-01) · BR-U10-55 단독 [방문 완료]가 도는 동안에도 [도착] 잠금(이중 진행 중). 코드 변경은 같은 브랜치(`fix/FE-visit-flow-bugs`)의 `LiveHubView.tsx` `canArriveAt` · `LiveItineraryPage.tsx` `pressArrive` 수정이다. P2(재계획이 건너뛴 곳을 다시 넣음)는 서버 몫이라 여기서 다루지 않았다.
+**Context**: CONSTRUCTION — U10 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---

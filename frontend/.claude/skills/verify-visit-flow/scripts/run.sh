@@ -3,7 +3,7 @@
 #   1) 동기화 확인: 덮는 파일이 sync 커밋 뒤 바뀌었나(바뀌었으면 경고 — 모델을 다시 읽어 대조할 것)
 #   2) 적합성(jest node): 모델 CODE MIRROR 식 == 실제 코드(fast-check 생성 입력)
 #   3) 모델 체크(TLC): 속성마다 따로 돌려 성립/깨짐을 기준선과 비교
-#   4) 반례 재현(jest integration): 알려진 결함 3건이 실제 페이지 코드에서 아직 재현되나
+#   4) 반례 재현(jest integration): 고친 결함(R1·R3)은 고쳐진 동작대로, 남은 결함(R2)은 아직 재현되나
 # 끝에 표 하나. 기준선과 모두 같으면 exit 0, 하나라도 다르면 exit 1.
 #
 # 옵션: --frontend DIR  (node_modules 가 있는 frontend. 기본 = 이 스킬이 든 frontend)
@@ -48,10 +48,10 @@ src/features/apply-replan/model/useApplyReplan.ts
 #   깨짐 = 알려진 결함(보고됨). 결함을 고치면 여기와 SKILL.md 「결과 기준선」을 함께 바꾼다.
 BASELINE="TypeOK 성립
 ActiveCanFinish 성립
-NoArriveOnSkipped 깨짐
+NoArriveOnSkipped 성립
 ReplanKeepsSkippedOut 깨짐
-OneOpenVisit 깨짐"
-REPRO_BASELINE="재현됨"
+OneOpenVisit 성립"
+REPRO_BASELINE="기대대로"
 
 # TLC 도구 버전 고정(TLC 1.7.4 · Temurin 25). TLA2TOOLS·JAVA 로 바꿔 쓸 수 있다.
 TLC_SPEC="http:tla2tools[url=https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar,checksum=sha256:936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88]@1.7.4"
@@ -109,9 +109,9 @@ if [ "$DO_JEST" = 1 ]; then
   echo "-- 반례 재현(jest integration)"
   # shellcheck disable=SC2086
   if pnpm exec jest --config jest.integration.config.js $ROOTS "$WORK/jest/visit-flow.repro.integration.test.tsx" > "$WORK/repro.log" 2>&1; then
-    row "반례 재현(R1~R3)" "재현됨" "$REPRO_BASELINE" ""
+    row "반례 재현(R1~R3)" "기대대로" "$REPRO_BASELINE" ""
   else
-    row "반례 재현(R1~R3)" "안됨" "$REPRO_BASELINE" "→ 결함이 고쳐졌거나 화면이 바뀜. 로그 아래"
+    row "반례 재현(R1~R3)" "어긋남" "$REPRO_BASELINE" "→ 고친 결함이 되살아났거나(R1·R3), 남은 결함이 고쳐졌거나(R2), 화면이 바뀜. 로그 아래"
     grep -v '^\s*at ' "$WORK/repro.log" | grep '✓\|✕' | head
   fi
 fi
@@ -153,7 +153,7 @@ printf '%-24s %-8s %-8s %s\n' "검사" "결과" "기준선" "비고"
 cat "$RESULT"
 echo
 if [ "$FAIL" = 0 ]; then
-  echo "결론: 기준선과 같다 (깨짐 = 이미 보고된 결함 FM-L4-01·FM-L4-05·이중 진행 중)"
+  echo "결론: 기준선과 같다 (깨짐 = 이미 보고된 결함 FM-L4-05)"
 else
   echo "결론: 기준선과 다르다 — SKILL.md 「결과 읽기」대로 실제 버그인지 모델 오류인지 가른다"
   echo "      반례 경로·상태도는 /statechart 스킬로 $MODEL/MCVisitFlow.tla (view = view.mjs) 를 돌려 읽는다"
