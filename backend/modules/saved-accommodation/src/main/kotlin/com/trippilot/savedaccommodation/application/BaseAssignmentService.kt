@@ -15,6 +15,12 @@ import com.trippilot.savedaccommodation.domain.TripBaseDayRepository
 import com.trippilot.savedaccommodation.domain.BaseResolution
 import com.trippilot.savedaccommodation.api.event.TripBaseResolved
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.ErrorCode
+import com.trippilot.core.error.UpstreamUnavailable
+import com.trippilot.placedata.api.RegionLookupFacade
+import com.trippilot.savedaccommodation.domain.PlaceSearchPort
+import com.trippilot.savedaccommodation.domain.SavedStay
+import org.slf4j.LoggerFactory
 import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.trip.api.TripFacade
 import org.springframework.stereotype.Service
@@ -48,6 +54,8 @@ class BaseAssignmentService(
     private val baseDays: TripBaseDayRepository,
     private val events: DomainEventPublisher,
     private val clock: Clock,
+    private val placeSearch: PlaceSearchPort,
+    private val regions: RegionLookupFacade,
 ) {
     fun assign(accountId: UUID, tripId: UUID, cmd: AssignBaseCommand): BaseAssignment {
         val period = ownedTripPeriod(accountId, tripId)
@@ -57,6 +65,7 @@ class BaseAssignmentService(
         if (!stay.coordConfirmed) {
             throw ValidationFailed(listOf(FieldError("savedStayId", "좌표가 확정되지 않은 숙소는 거점으로 배정할 수 없습니다(INV-U1-08).")))
         }
+        requireInTripRegion(accountId, tripId, stay)
         return bases.save(
             BaseAssignment.assign(
                 tripId, stay.savedStayId, cmd.dateFrom, cmd.dateTo,
@@ -121,7 +130,40 @@ class BaseAssignmentService(
         bases.delete(base)
     }
 
+    /**
+     * 여행 지역 밖 숙소는 거점이 될 수 없다(TRIP-1703, 2026-11-02 사용자 결정 — FE TRIP-1011 "다른 지역도 보여 준다"를 뒤집는다).
+     * 서울 여행에 부산 숙소가 거점이 되면 일정이 부산에서 돌고 하루 이동이 수백 km 가 된다.
+     *
+     * 판정은 담은 장소와 같은 **코드 양방향 접두사**(INV-U1-21)다 — 숙소 좌표를 주소로 바꿔 POI 와 같은 규칙으로 코드를 붙인다.
+     * **판정할 수 없으면 막지 않는다**(fail-open): 목적지 코드가 하나라도 없음 · 주소 없는 좌표 · 코드 미해결 · 벤더 장애.
+     * 벤더 장애로 막으면 지역 안 숙소까지 배정이 전부 멈춘다 — 그 경우만 로그로 남긴다.
+     * 409 인 이유: 400 은 이미 "기간 밖 → 늘릴까요?"(dateFrom·dateTo)로 앱이 읽는다. 다른 코드여야 엉뚱한 확인창이 안 뜬다.
+     */
+    private fun requireInTripRegion(accountId: UUID, tripId: UUID, stay: SavedStay) {
+        val codes = trips.findGenerationContext(accountId, tripId)?.destinationRefs?.map { it.regionCode } ?: return
+        if (codes.isEmpty() || codes.any { it == null }) return
+        val lat = stay.lat ?: return
+        val lng = stay.lng ?: return
+        val address = try {
+            placeSearch.reverseGeocode(lat, lng)
+        } catch (e: UpstreamUnavailable) {
+            log.warn("거점 지역 판정 생략 — 주소 조회 실패(fail-open) trip={} stay={}", tripId, stay.savedStayId, e)
+            return
+        } ?: return
+        val stayCode = regions.codeOfAddress(address) ?: return
+        if (codes.filterNotNull().none { stayCode.startsWith(it) || it.startsWith(stayCode) }) {
+            throw ConflictDetected(
+                message = "이 여행 지역 밖 숙소는 거점으로 고를 수 없어요.",
+                errorCode = ErrorCode.STAY_OUTSIDE_TRIP_REGION,
+            )
+        }
+    }
+
     /** 여행이 없거나 삭제됐거나 타 계정이면 404(존재 은닉). */
     private fun ownedTripPeriod(accountId: UUID, tripId: UUID) =
         trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
+
+    private companion object {
+        private val log = LoggerFactory.getLogger(BaseAssignmentService::class.java)
+    }
 }
