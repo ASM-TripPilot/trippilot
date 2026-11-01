@@ -17,6 +17,7 @@
 - 대상: develop 빌드의 dev build, iOS 시뮬레이터 iPhone 17 Pro, 번들 ID `com.trippilot.travel`.
 - 조작 도구: `agent-device`(접근성 트리 ref 탭·한글 `fill`) — 절차와 셀렉터 함정은 `trippilot-sim-qa` 스킬(`frontend/.claude/skills/trippilot-sim-qa/`) 소관이고 여기 옮겨 적지 않는다. 그 스킬이 이 지도를 커버리지 정본으로 읽는다.
 - 서버: 개발 서버 `dev-api`. 로그인은 소셜 로그인만(MVP).
+- 실패·로딩 얼굴(서버 5xx·조회 실패·로딩 중)은 네트워크를 끊지 않고 웹 드라이버의 `fail`·`delay`로 연다(`trippilot-sim-qa` 「웹 버전 QA」).
 - 화면 정본은 Figma다 — 각 기능 파일은 밴드 코드(a–m)만 가리키고 화면 스펙을 복제하지 않는다.
 
 ## 조작 규약
@@ -45,7 +46,7 @@ frontmatter(`id`·`band`·`status`·`live_verified_at`·`routes`) 다음 H1 제�
 
 ## 기능 목록
 
-기능 47개 · 라우트 70개 전부 배정. 한 라우트를 두 기능이 함께 쓰면 양쪽 `routes`에 적는다(예: 방문 기록 화면 = `trip-record`·`visit-check`).
+기능 46개 · 라우트 68개 전부 배정. 한 라우트를 두 기능이 함께 쓰면 양쪽 `routes`에 적는다(예: 방문 기록 화면 = `trip-record`·`visit-check`).
 
 ### 진입·계정
 
@@ -63,7 +64,6 @@ frontmatter(`id`·`band`·`status`·`live_verified_at`·`routes`) 다음 H1 제�
 |---|---|---|
 | [홈](./home.md) | a | 1 |
 | [하단 탭바](./tab-bar.md) | a | 1 |
-| [매거진 (여행지 둘러보기)](./magazine.md) | a | 1 |
 | [탐색 랜딩 · 지역 선택 · 여행지 상세](./explore-destination.md) | d | 3 |
 | [장소 탐색 · 장소 상세 · 장소 저장](./explore-places.md) | d | 2 |
 | [담은 장소 · 이 장소들로 여행 만들기](./saved-places.md) | d | 1 |
@@ -112,7 +112,7 @@ frontmatter(`id`·`band`·`status`·`live_verified_at`·`routes`) 다음 H1 제�
 | [여행 중 장소 상세](./live-place.md) | i | 1 |
 | [방문 체크 (도착·완료·건너뛰기·사진·메모)](./visit-check.md) | i | 2 |
 | [Plan-B 재계획 요청 (AI에게 맡기기 · 직접 수정)](./planb-request.md) | i | 2 |
-| [Plan-B 재계획 진행·초안·적용](./planb-apply.md) | i | 4 |
+| [Plan-B 재계획 진행·초안·적용](./planb-apply.md) | i | 3 |
 
 ### 기록·회고
 

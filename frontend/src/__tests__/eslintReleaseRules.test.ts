@@ -55,7 +55,7 @@ const RESTRICTED_IMPORTS = 'no-restricted-imports';
 const RESTRICTED_SYNTAX = 'no-restricted-syntax';
 const NO_CONSOLE = 'no-console';
 
-const PROD_PROBE = 'src/features/home/__release_probe__.ts';
+const PROD_PROBE = 'src/features/settings/__release_probe__.ts';
 const PHOTO_PROBE = 'src/shared/photo/__release_probe__.ts';
 const REFLECTION_UI_PROBE =
   'src/features/share-trip-card/ui/__release_probe__.ts';
@@ -98,7 +98,7 @@ describe('msw·목은 앱 코드에 들어오지 않는다 (noMswInStaticGraph �
   it.each([
     [
       '통합 테스트 파일',
-      'src/features/home/__release_probe__.integration.test.ts',
+      'src/features/settings/__release_probe__.integration.test.ts',
     ],
     ['src/mocks 안', 'src/mocks/__release_probe__.ts'],
   ])(
@@ -544,7 +544,7 @@ describe('pages·app 은 아무것도 안 하는 핸들러를 넘기지 않는�
 const WORKLET_TAG = 'TRIP-1522';
 const WORKLET_TSX_PROBE = 'src/features/auth/ui/__release_probe__.tsx';
 const APP_TS_PROBE = 'app/__release_probe__.ts';
-const TEST_FILE_PROBE = 'src/features/home/__release_probe__.test.ts';
+const TEST_FILE_PROBE = 'src/features/settings/__release_probe__.test.ts';
 
 async function lintWorklet(
   code: string,
@@ -717,6 +717,32 @@ describe('음성 코드 묶음과 같은 파일에서 양성은 자기 줄에서
 
     expect(fatal).toEqual([]);
     expect(Array.from(new Set(lines))).toEqual([anchorLine]);
+  });
+});
+
+describe('누름 이동 연타 관통 (TRIP-1013) — 인라인 화살표의 router 이동만 error', () => {
+  // 얼린 기존 위반은 lintText 에 적용되지 않는다 — 규칙 발동과 오탐 제외(서버 응답 뒤 onSuccess)만 본다.
+  const page = (attr: string) =>
+    [
+      "import { useRouter } from 'expo-router';",
+      "import { Pressable } from 'react-native';",
+      'declare function save(o: { onSuccess: () => void }): void;',
+      'export function Probe() {',
+      '  const router = useRouter();',
+      `  return <Pressable onPress={${attr}} />;`,
+      '}',
+      '',
+    ].join('\n');
+  it('onPress={() => router.push(…)} 는 error, mutate onSuccess 안 이동은 error 0', async () => {
+    expect(await lint(page("() => router.push('/')"), PAGE_PROBE)).toContain(
+      RESTRICTED_SYNTAX
+    );
+    expect(
+      await lint(
+        page("() => save({ onSuccess: () => router.replace('/') })"),
+        PAGE_PROBE
+      )
+    ).toEqual([]);
   });
 });
 

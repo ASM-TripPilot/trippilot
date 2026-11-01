@@ -9,7 +9,7 @@ export { SuitcaseGlyph, CloseGlyph } from '@/shared/ui/glyphs';
 
 // 홈 "발견·영감 피드" 전용 인라인 벡터 글리프(AuthGlyphs/OnboardingGlyphs 패턴 계승 · TRIP-316).
 // features 간 직접 import 금지(importBoundary)라 화면끼리 글리프를 공유하지 않는다 — 이 파일은
-// features/home 전용이며 shared/ui/BottomTabBar(탭 아이콘)와는 별개다.
+// 홈 전용이며 shared/ui/BottomTabBar(탭 아이콘)와는 별개다.
 // 색은 이 파일 안에서만 raw hex로 고정한다(OnboardingGlyphs 선례 — `ui/` 안이지만
 // `*Screen.tsx` 파일명 필터 밖이라 D-3(raw-hex 가드) 대상이 아니다).
 
@@ -66,28 +66,6 @@ export function SearchGlyph({ size = 19, testID }: GlyphProps) {
         stroke={MUTED_SOFT}
         strokeWidth={1.6}
         strokeLinecap="round"
-      />
-    </Svg>
-  );
-}
-
-// a02 매거진 앱바 뒤로가기 꺾쇠(‹) — 흰 배경 위라 ink. HomeGlyphs 에 없어 신규(features 간
-// 글리프 공유 금지, importBoundary — 다른 feature 의 같은 꺾쇠를 가져오지 않고 여기 다시 적는다).
-export function BackChevronGlyph({ size = 24, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M15 5L8 12L15 19"
-        stroke={INK}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
       />
     </Svg>
   );

@@ -4,7 +4,7 @@
  *
  * 하는 일: `expo export`(NODE_ENV=production, --no-bytecode, 소스맵 포함)를 임시 폴더에 돌려
  * JS 바이트·에셋 바이트·상위 20 모듈을 `dist/bundle-report/{report.json,report.md,summary.txt}` 로 쓰고,
- * 원본 소스맵 `sources` 에 금지 경로(`app/_dev`·`src/mocks`·`src/test-support`·`__fixtures__`·`*.test.*`·assistant fake)가 있으면 실패한다.
+ * 원본 소스맵 `sources` 에 금지 경로(`app/_dev`·`src/mocks`·`src/test-support`·`src/shared/dev-fault`·`__fixtures__`·`*.test.*`·assistant fake)가 있으면 실패한다.
  * 종료코드: 0 통과 · 1 금지 경로 검출 · 2 도구 오류(export 실패·맵 0/복수·빈 sources·에셋 0개·s-m-e 실패·예기치 못한 예외).
  *
  * 사용: `node scripts/bundle-report.cjs [--project <frontend 디렉토리>]`
@@ -22,6 +22,7 @@ const { spawnSync } = require('child_process');
 const FORBIDDEN_PATTERNS = [
   /app[\\/]_dev[\\/]/,
   /^[\\/]src[\\/](mocks|test-support)[\\/]/,
+  /^[\\/]src[\\/]shared[\\/]dev-fault[\\/]/,
   /^[\\/](src|app)[\\/](.*[\\/])?__fixtures__[\\/]/,
   /^[\\/](src|app)[\\/].*\.test\.[jt]sx?$/,
   /assistant-sheet[\\/]api[\\/](fakeAssistantAdapter|assistantSamples)\.ts$/,

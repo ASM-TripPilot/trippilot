@@ -340,6 +340,29 @@ const WORKLET_DEFAULT_PARAM_GATE = [
   },
 ];
 
+// 누름 이동 연타 관통 금지(TRIP-1013 · 2026-11-01) — `on*` JSX 핸들러와 `onPress*` 객체 속성의 **인라인 화살표 안**
+// `router.push|navigate|replace|dismissTo|back` 을 막는다. `guardPress(() => router.…)` 로 감싸면 화살표가 컨테이너의
+// 직속 자식이 아니라 걸리지 않는다. 핸들러 안 **중첩 함수**(mutate 의 `onSuccess` 등 서버 응답 뒤 프로그램 이동)는
+// `:not(...)` 으로 뺀다 — 단 중첩 함수가 그 자체로 JSX 핸들러·속성 화살표면(renderItem 안 `onPress`) 여전히 잡는다.
+// 기존 위반은 eslint-suppressions.json 에 얼렸다(늘어날 때만 실패). router 전역 가드는 두지 않는다(400ms 창이
+// 서버 응답 뒤 replace 를 삼킨다).
+const PRESS_NAV_MESSAGE =
+  '누름 이동은 `guardPress(() => router.…)`로 감싼다(TRIP-1013) — 인라인 화살표의 router 이동은 연타 시 화면이 두 번 쌓인다.';
+const ROUTER_NAV =
+  "CallExpression[callee.object.name='router'][callee.property.name=/^(push|navigate|replace|dismissTo|back)$/]";
+const HANDLER_ARROW =
+  'JSXExpressionContainer > ArrowFunctionExpression, Property[key.name=/^onPress/] > ArrowFunctionExpression';
+const PRESS_NAV_GATE = [
+  {
+    selector: `JSXAttribute[name.name=/^on[A-Z]/] > JSXExpressionContainer > ArrowFunctionExpression ${ROUTER_NAV}:not(JSXExpressionContainer > ArrowFunctionExpression :function:not(${HANDLER_ARROW}) CallExpression)`,
+    message: PRESS_NAV_MESSAGE,
+  },
+  {
+    selector: `Property[key.name=/^onPress/] > ArrowFunctionExpression ${ROUTER_NAV}:not(Property[key.name=/^onPress/] > ArrowFunctionExpression :function:not(${HANDLER_ARROW}) CallExpression)`,
+    message: PRESS_NAV_MESSAGE,
+  },
+];
+
 // ── 테스트 재팽창 방지 재료(아래 테스트 블록에서 쓴다) ──────────────────────────────────────
 const TEST_FILES = [
   'src/**/*.test.{ts,tsx}',
@@ -526,6 +549,7 @@ module.exports = defineConfig([
         'error',
         ...DELETE_DIALOG_ALIAS_GATE,
         ...WORKLET_DEFAULT_PARAM_GATE,
+        ...PRESS_NAV_GATE,
       ],
     },
   },
@@ -537,6 +561,7 @@ module.exports = defineConfig([
         'error',
         ...DELETE_DIALOG_GATE,
         ...WORKLET_DEFAULT_PARAM_GATE,
+        ...PRESS_NAV_GATE,
       ],
     },
   },
@@ -550,6 +575,7 @@ module.exports = defineConfig([
         ...DELETE_DIALOG_GATE,
         ...DEAD_HANDLER,
         ...WORKLET_DEFAULT_PARAM_GATE,
+        ...PRESS_NAV_GATE,
       ],
     },
   },
@@ -564,7 +590,7 @@ module.exports = defineConfig([
   // ── 테스트 재팽창 방지(2026-11-01 jest 축소 · README §테스트 전략 판정 3~6) ───────────────
   // 기존 위반은 eslint-suppressions.json 에 얼려 두고 "늘어날 때만" 실패한다(ESLint bulk suppressions).
   // 테스트를 지워 위반이 줄면 `pnpm exec eslint . --prune-suppressions` 를 같은 커밋에 싣는다(파일 손편집 금지).
-  // 출시 게이트 생김새 4건(README 판정 3)은 그 줄에 `// eslint-disable-next-line <규칙> -- 출시 게이트 ②` 처럼 사유를 단다.
+  // 출시 게이트 생김새 5건(README 판정 3)은 그 줄에 `// eslint-disable-next-line <규칙> -- 출시 게이트 ②` 처럼 사유를 단다.
   {
     files: TEST_FILES,
     rules: {

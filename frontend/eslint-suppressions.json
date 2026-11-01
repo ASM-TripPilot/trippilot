@@ -1,11 +1,11 @@
 {
-  "src/__tests__/devPreviewReleaseGate.test.tsx": {
-    "no-restricted-properties": {
+  "app/+not-found.tsx": {
+    "no-restricted-syntax": {
       "count": 1
     }
   },
-  "src/__tests__/locationAutomationBuildConfig.test.ts": {
-    "no-restricted-imports": {
+  "app/permission-push.tsx": {
+    "no-restricted-syntax": {
       "count": 1
     }
   },
@@ -21,12 +21,12 @@
   },
   "src/app/routing/SplashGate.test.tsx": {
     "no-restricted-properties": {
-      "count": 7
+      "count": 2
     }
   },
   "src/entities/itinerary-slot/ui/SlotProgressCard.test.tsx": {
     "no-restricted-properties": {
-      "count": 6
+      "count": 2
     }
   },
   "src/entities/itinerary-slot/ui/SlotStopCard.test.tsx": {
@@ -74,6 +74,11 @@
       "count": 1
     }
   },
+  "src/pages/assistant/assistant-sheet/ui/AssistantSheetPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
   "src/pages/assistant/assistant-sheet/ui/MessageList.test.tsx": {
     "no-restricted-properties": {
       "count": 2
@@ -89,9 +94,29 @@
       "count": 1
     }
   },
+  "src/pages/auth/reconsent/ui/ReconsentPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/auth/terms-viewer/ui/TermsViewerPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/explore/explore-landing/ui/ExploreLandingPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 7
+    }
+  },
   "src/pages/explore/explore-landing/ui/ExploreLandingScreen.test.tsx": {
     "no-restricted-properties": {
       "count": 1
+    }
+  },
+  "src/pages/explore/place-explore/ui/PlaceExplorePage.tsx": {
+    "no-restricted-syntax": {
+      "count": 6
     }
   },
   "src/pages/explore/place-explore/ui/PlaceExploreScreen.memo.test.tsx": {
@@ -104,6 +129,21 @@
       "count": 2
     }
   },
+  "src/pages/explore/region-picker/ui/RegionPickerPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/explore/saved-places/ui/SavedPlacesPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 8
+    }
+  },
+  "src/pages/home/ui/HomePage.tsx": {
+    "no-restricted-syntax": {
+      "count": 6
+    }
+  },
   "src/pages/home/ui/HomeScreen.heroMemo.test.tsx": {
     "no-restricted-properties": {
       "count": 2
@@ -114,6 +154,16 @@
       "count": 9
     }
   },
+  "src/pages/itinerary/itinerary-copick/ui/CoPickCompletePage.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "src/pages/itinerary/itinerary-copick/ui/SlotFillPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
   "src/pages/itinerary/itinerary-copick/ui/SlotFillScreen.test.tsx": {
     "no-restricted-properties": {
       "count": 4
@@ -122,6 +172,21 @@
   "src/pages/itinerary/itinerary-draft/ui/DraftPage.integration.test.tsx": {
     "no-restricted-properties": {
       "count": 5
+    }
+  },
+  "src/pages/itinerary/itinerary-draft/ui/DraftPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "src/pages/itinerary/itinerary-draft/ui/SlotCandidatePanelContainer.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/itinerary/itinerary-edit/ui/ItineraryEditPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 3
     }
   },
   "src/pages/itinerary/itinerary-generating/ui/GeneratingPage.hookMock.test.tsx": {
@@ -147,6 +212,11 @@
       "count": 2
     }
   },
+  "src/pages/itinerary/itinerary-manual/ui/ManualPlanPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
   "src/pages/itinerary/itinerary-manual/ui/PlaceAddPage.integration.test.tsx": {
     "no-restricted-properties": {
       "count": 3
@@ -155,7 +225,22 @@
       "count": 2
     }
   },
+  "src/pages/itinerary/itinerary-manual/ui/PlaceAddPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
   "src/pages/itinerary/itinerary-method/ui/ItineraryMethodPage.integration.test.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "src/pages/itinerary/itinerary-method/ui/ItineraryMethodPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "src/pages/itinerary/itinerary-mustvisit/ui/MustVisitListPage.tsx": {
     "no-restricted-syntax": {
       "count": 2
     }
@@ -180,6 +265,11 @@
       "count": 4
     }
   },
+  "src/pages/live/live-itinerary/ui/LiveItineraryPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 6
+    }
+  },
   "src/pages/live/live-itinerary/ui/MemoSheet.test.tsx": {
     "no-restricted-properties": {
       "count": 1
@@ -200,13 +290,28 @@
       "count": 2
     }
   },
+  "src/pages/live/planb-draft/ui/PlanbDraftPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
   "src/pages/live/planb-draft/ui/PlanbSolvingPage.integration.test.tsx": {
     "no-restricted-properties": {
       "count": 1
     }
   },
+  "src/pages/live/planb-draft/ui/PlanbSolvingPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
   "src/pages/live/planb-draft/ui/ReplanDraftView.test.tsx": {
     "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/pages/live/planb-request/ui/PlanbEntryGate.tsx": {
+    "no-restricted-syntax": {
       "count": 1
     }
   },
@@ -218,18 +323,13 @@
       "count": 2
     }
   },
-  "src/pages/magazine/ui/MagazinePage.test.tsx": {
+  "src/pages/onboarding/onboarding-nickname/ui/NicknameScreen.test.tsx": {
     "no-restricted-properties": {
       "count": 1
     }
   },
-  "src/pages/magazine/ui/MagazineScreen.test.tsx": {
-    "no-restricted-properties": {
-      "count": 5
-    }
-  },
-  "src/pages/onboarding/onboarding-nickname/ui/NicknameScreen.test.tsx": {
-    "no-restricted-properties": {
+  "src/pages/onboarding/onboarding-terms/ui/TermsPage.tsx": {
+    "no-restricted-syntax": {
       "count": 1
     }
   },
@@ -243,6 +343,21 @@
       "count": 2
     }
   },
+  "src/pages/record/daily-reflection/ui/DailyReflectionPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/record/record-add-visit/ui/RecordAddVisitPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/record/records-calendar/ui/RecordsCalendarPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 6
+    }
+  },
   "src/pages/record/share-card/ui/ShareCardPage.integration.test.tsx": {
     "no-restricted-syntax": {
       "count": 1
@@ -251,6 +366,11 @@
   "src/pages/record/share-card/ui/ShareCardScreen.test.tsx": {
     "no-restricted-properties": {
       "count": 2
+    }
+  },
+  "src/pages/record/travel-style/ui/TravelStylePage.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
     }
   },
   "src/pages/record/trip-records/ui/TripRecordsPage.integration.test.tsx": {
@@ -278,9 +398,44 @@
       "count": 1
     }
   },
+  "src/pages/record/trip-summary/ui/TripSummaryPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
   "src/pages/settings/my-page/ui/MyPage.test.tsx": {
     "no-restricted-properties": {
       "count": 3
+    }
+  },
+  "src/pages/settings/my-page/ui/MyPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "src/pages/settings/notification-inbox/ui/NotificationInboxPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/settings/settings-location/ui/LocationConsentPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/settings/settings-notifications/ui/NotificationSettingsPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/settings/settings-personalization/ui/PersonalizationPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/settings/settings-preferences/ui/SettingsPreferencesPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
     }
   },
   "src/pages/settings/settings/model/preferenceSummary.test.ts": {
@@ -303,14 +458,44 @@
       "count": 1
     }
   },
+  "src/pages/stay/my-stays/ui/MyStaysPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
   "src/pages/stay/stay-detail/ui/StayDetailPage.integration.test.tsx": {
     "no-restricted-syntax": {
       "count": 1
     }
   },
+  "src/pages/stay/stay-detail/ui/StayDetailPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/stay/stay-register/ui/StayRegisterPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/stay/stay-saved/ui/SavedStayPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
+  "src/pages/stay/stay-search/ui/StaySearchPage.tsx": {
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
   "src/pages/stay/stay-search/ui/StaySearchScreen.separator.test.tsx": {
     "no-restricted-properties": {
       "count": 2
+    }
+  },
+  "src/pages/trip/trip-new-step1/ui/TripNewStep1Page.tsx": {
+    "no-restricted-syntax": {
+      "count": 4
     }
   },
   "src/pages/trip/trip-new-step2/ui/StaySelectSheet.test.tsx": {
@@ -323,14 +508,14 @@
       "count": 1
     }
   },
+  "src/pages/trip/trip-new-step2/ui/TripNewStep2Page.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
   "src/shared/map/MapView.test.tsx": {
     "no-restricted-properties": {
       "count": 3
-    }
-  },
-  "src/shared/ui/GlassSurface.test.tsx": {
-    "no-restricted-properties": {
-      "count": 8
     }
   },
   "src/shared/ui/HeartButton.test.tsx": {
@@ -378,10 +563,7 @@
   },
   "src/widgets/map-sheet-shell/ui/EditorView.test.tsx": {
     "no-restricted-properties": {
-      "count": 12
-    },
-    "no-restricted-syntax": {
-      "count": 1
+      "count": 4
     }
   },
   "src/widgets/map-sheet-shell/ui/GenerationProgressCard.indeterminate.test.tsx": {

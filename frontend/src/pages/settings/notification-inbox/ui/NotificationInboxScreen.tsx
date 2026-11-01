@@ -22,7 +22,7 @@ import { NotificationRow } from './NotificationRow';
  */
 
 // l01 카드 그림자(§8.2 MISS raw 허용 — 그림자는 토큰 대상 아님, RN shadow prop). features 경계로
-// features/home 의 동형 softCardShadow 를 import 못 해 동일 값을 지역 상수로 둔다. '#000000'은 raw-hex 예외.
+// 홈의 동형 softCardShadow 를 import 못 해 동일 값을 지역 상수로 둔다. '#000000'은 raw-hex 예외.
 const cardShadow = {
   shadowColor: '#000000',
   shadowOffset: { width: 0, height: 2 },

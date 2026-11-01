@@ -51,6 +51,8 @@ export {
   resolvePlanState,
 } from './model/planState';
 export { resolvePlanMapCenter } from './model/planMapCenter';
+export { isFixedStay, sheetMeta, sheetRowKeys } from './model/sheetMeta';
+export type { SheetCountRule } from './model/sheetMeta';
 export { placeAddSubtitle } from './model/placeAddSubtitle';
 export { resolveUnplacedNames } from './model/unplacedMustVisits';
 export {

@@ -202,7 +202,7 @@ describe('TRIP-784 · h01 시작 방법 Figma 재정합', () => {
     ).toBeNull();
   });
 
-  it('AC-4 · copick 카드 제목·설명 (옛 추천 배지 부재 단언은 2026-11-01 지웠다 — 삭제된 표면)', () => {
+  it('AC-4 · 세 카드 제목·설명 (옛 추천 배지 부재 단언은 2026-11-01 지웠다 — 삭제된 표면)', () => {
     render(
       <MethodPickerScreen
         onBack={noop}
@@ -212,8 +212,15 @@ describe('TRIP-784 · h01 시작 방법 Figma 재정합', () => {
       />
     );
 
+    expect(screen.getByText('완전 AI가 짜기')).toBeOnTheScreen();
+    expect(screen.getByText('취향·동선 맞춰 자동으로 완성')).toBeOnTheScreen();
     expect(screen.getByText('AI와 같이 짜기')).toBeOnTheScreen();
     expect(screen.getByText('AI 추천 위에서 골라가며 완성')).toBeOnTheScreen();
+    // 2026-11-01 — 옛 page hookMock 의 카드 문구 describe 에서 옮겼다(그쪽만 이 두 카드 문구를 봤다).
+    expect(screen.getByText('직접 짜기')).toBeOnTheScreen();
+    expect(
+      screen.getByText('빈 일정에 원하는 장소를 직접 추가')
+    ).toBeOnTheScreen();
   });
 
   it('AC-5 · copick·manual press 가 각 콜백을 1회 부르고 soon 폴백은 없다', () => {

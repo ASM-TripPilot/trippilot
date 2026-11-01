@@ -7,7 +7,7 @@ import { HeartFilledGlyph, HeartOutlineGlyph } from './HeartGlyphs';
 
 /**
  * 카드 사진 위 저장 하트(TRIP-1049) — Figma HeartButton `4462:1407`: 32 흰 원 + 18 하트.
- * 장소 카드(entities/place)와 홈 스팟 카드(features/home)·숙소 카드(entities/stay, TRIP-1599)가 함께 쓴다. 위치는 소비처가
+ * 장소 카드(entities/place)와 홈 스팟 카드(pages/home)·숙소 카드(entities/stay, TRIP-1599)가 함께 쓴다. 위치는 소비처가
  * `className` 으로 주고, 모양은 여기서 고정한다.
  *
  * 담김/안 담김은 색이 아니라 `accessibilityState.selected` + 서로 다른 글리프 testID 로 갈린다

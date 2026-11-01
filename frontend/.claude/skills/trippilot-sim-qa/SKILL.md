@@ -69,6 +69,7 @@ description: TripPilot 앱을 iOS 시뮬레이터 실화면으로 QA하는 루�
 - **내장 시뮬 MCP `tap`이 어느 순간부터 씹힐 수 있다**(2026-09-30 실측 — LogBox 경고 배너가 뜬 뒤 탭바·지도 화면 버튼 무반응). 같은 좌표를 `agent-device press <x> <y>`로 누르면 통한다. 지도 화면(허브·편집기)의 버튼은 처음부터 agent-device 좌표 탭을 쓴다.
 - 허브(i01) 메모 입력칸은 이제 `[text-view]`로 잡힌다 — `fill @ref`. j01 인라인 메모는 `fill 'id="…"'`도 된다. 키보드가 떠 있어도 `완료`·`저장` 첫 탭은 먹는다.
 - 시뮬레이터 위치: `xcrun simctl location booted set 37.5663,126.9779`, 권한: `xcrun simctl privacy booted grant location com.trippilot.travel`.
+- **`xcrun simctl openurl` 딥링크가 앱에 닿는데 화면이 안 바뀔 수 있다**(2026-11-01 실측 — 프리뷰·`_dev/fault`·`trips/…` 전부, 앱 로그엔 `UIOpenURLAction` 수신) → `node scripts/nav.mjs '<경로>'` 로 JS 런타임에서 `router.push` 한다(`--back`, `--eval '<식>'`). 같은 길로 `__r.getModules()` 를 뒤져 모듈을 직접 부를 수 있다 — 오프라인 흉내(`@tanstack/query-core` `onlineManager.setOnline(false)`)·토스트 띄우기(`shared/ui/Toast` `showToast`). 개발 빌드·Metro 8081 에서만 된다.
 - **8081을 도커 `trippilot-collect-backend`가 쥐고 있을 수 있다**(2026-10-16 실측 — preflight의 "Metro cwd"가 Docker 경로로 찍힘). 컨테이너는 끄지 말고 `pnpm start --port 8082` 후 `xcrun simctl openurl booted "com.trippilot.travel://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8082"`로 붙인다. 이 상태에선 딥링크가 화면을 안 바꿨다 — 딥링크 화면은 UI로 들어가거나 미확인으로 적는다.
 - **agent-device 세션은 cwd에 묶인다** — 다른 폴더에서 `open`하면 DEVICE_IN_USE. 기기 세션을 연 폴더(`trippilot/frontend`)에서 실행하면 기존 세션을 그대로 쓴다 — 다른 워크트리를 QA할 때도 명령은 그 폴더에서 친다.
 - **`xcrun simctl privacy booted reset location`은 앱을 죽인다** — 위치 권한을 초기화하면 dev-client URL로 다시 띄운다.
@@ -79,6 +80,7 @@ description: TripPilot 앱을 iOS 시뮬레이터 실화면으로 QA하는 루�
 - **사진 선택기를 연 직후 시뮬레이터가 멈출 수 있다**(실측 1회, 상세는 하네스 변경이력) → `killall -9 com.apple.CoreSimulator.CoreSimulatorService` → 기기 Shutdown → `xcrun simctl boot <UDID>` → 앱 launch → `agent-device open … --udid`. 재부팅 직후 「Apple 계정 확인」은 「지금 안 함」. 로그인·데이터는 유지된다. 사진 추가는 꼭 필요할 때만 한다.
 - **이 Mac엔 `timeout` 명령이 없다** — 오래 걸릴 수 있는 스크린샷·녹화는 백그라운드로 돌리고 15초 뒤 끊는다. 순간 깜빡임(첫 조회 빈 얼굴 등)은 `xcrun simctl io booted recordVideo` + `ffmpeg` 프레임으로 본다.
 - 공유 이미지 결과물은 시뮬 앨범(`data/Media/DCIM/100APPLE`) 최신 파일을 직접 열어 확인한다.
+- **실패·로딩 얼굴은 네트워크를 끊지 말고 실패 주입으로 연다(개발 빌드 전용)** — `xcrun simctl openurl booted "com.trippilot.travel://_dev/fault?path=/trips/*/itinerary&status=500"`(`&delay=5000` 로딩 · `&code=GENERATION_IN_PROGRESS` 에러 코드 · `*`=경로 한 칸 `**`=여러 칸, `/api/v1` 은 붙여도 빼도 된다). GET 에만 걸리고 앱을 재시작해도 남으며, 켜져 있으면 오른쪽 위에 「실패 주입 켜짐 · N」이 뜬다. 확인 화면에서 [돌아가기] → 대상 화면을 다시 연다(이미 받은 캐시는 안 바뀐다). 끝나면 반드시 `…://_dev/fault?clear=1` — 표시가 사라졌는지 본다.
 
 ## 3. 루프 (한 바퀴 = 기능 파일 하나)
 
@@ -121,6 +123,8 @@ description: TripPilot 앱을 iOS 시뮬레이터 실화면으로 QA하는 루�
 - **입력은 페이지 안 합성 이벤트다** — CDP `Input.dispatch*`(진짜 터치·휠·키)는 가려지거나 뒤에 깔린 창에서 렌더 프레임을 기다리며 무기한 멈추고, 멈춘 입력이 나중에 실행될 수 있다(실측 — 로그아웃 행 터치가 2분 걸려 있었다). `web.mjs`는 그래서 포인터/키 이벤트를 JS로 쏜다. 위험 행(로그아웃·계정 삭제)은 웹에서 아예 누르지 않는다. 스크래치패드에 래퍼를 만들면 **갈래 고유 이름**으로 — 공용 이름 래퍼를 덮어써 남의 탭을 조작한 실측 1건.
 - **합성 이벤트의 한계:** gorhom 시트 끌기·휠 피커 끌기는 합성 swipe로 안 움직일 수 있다(실측) — 그 판정은 도구 한계로 적고 실기기 크롬으로 넘긴다. 합성 press는 진짜 blur를 안 일으킨다(저장이 blur에 걸린 입력은 `eval`로 `document.activeElement.blur()`). `eval`은 전역이라 IIFE로 감싼다. `geo`는 드라이버를 재시작하면 풀린다.
 - **딥링크 = URL 경로:** `com.trippilot.travel://<경로>` → `https://app.trippilot.co.kr/<경로>`(괄호 그룹 세그먼트는 빠진다).
+- **실패·로딩 얼굴은 `fail`·`delay`로 연다** — 네트워크를 끊으면 조작 세션도 끊기므로 요청을 CDP로 가로챈다. `fail <경로glob> <status|net> [본문JSON]`(본문 기본 = 백엔드 `ErrorResponse` 봉투, 코드는 상태에 맞춰 `INTERNAL`·`RESOURCE_NOT_FOUND` 등) · `delay <경로glob> <ms>` · `fail-list`(맞은 횟수) · `fail-clear`. glob은 pathname만(`*`=한 마디, `**`=여러 마디, 예 `fail '/api/v1/trips/*/itinerary' 500` → `reload` → `hub-error`). **GET만 가로챈다**(쓰기 요청은 그대로 서버로). 규칙은 드라이버 메모리에만 있어 서버를 끄면 사라지지만, 켜 둔 채 다음 기능으로 넘어가면 그 판정이 오염되니 끝나면 `fail-clear`.
+- 조회 화면은 재시도(첫 실패 뒤 3회)가 끝나야 실패 얼굴이 뜬다 — `fail` 뒤 10초쯤 기다리고 `fail-list`의 맞은 횟수로 요청이 실제로 걸렸는지 본다. 401은 토큰 갱신·로그아웃 흐름을 탈 수 있어(미실측) 쓰지 않는다.
 - **판정 칸:** `same` / `web-diff` / `web-broken` / `web-n/a`(푸시·Apple 로그인·앨범처럼 웹에 없는 게 당연 — 대체 안내가 있는지도 본다) / `unreachable`.
 - **웹에서 꼭 볼 것:** 브라우저 뒤로·새로고침 후 상태, URL 직접 진입, 지도 타일·핀, 바텀시트 끌기·시트 안 스크롤, 외부 링크(새 창/같은 창), 공유·다운로드·파일 선택, `console` 예외.
 - 배포 웹과 시뮬레이터 앱은 **빌드 시점이 다를 수 있다** — 웹 번들의 `last-modified`와 앱 커밋을 리포트 머리에 적고, 차이가 버전 탓인지 가른다. 계정이 다르면 데이터 차이는 결함으로 치지 않는다.
