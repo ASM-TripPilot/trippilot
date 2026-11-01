@@ -81,7 +81,10 @@ export function RecordsCalendarPage(): ReactElement {
 
   if (isPending) {
     return (
-      <View className="flex-1 items-center justify-center bg-canvas">
+      <View
+        testID="record-calendar-loading"
+        className="flex-1 items-center justify-center bg-canvas"
+      >
         <ActivityIndicator />
       </View>
     );
