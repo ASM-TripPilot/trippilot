@@ -9,6 +9,26 @@ that cannot reasonably be removed, not a second way of working.
 Treat a cross-import as a code smell rather than an impossible state:
 some are deliberate, and those should be explicit and rare.
 
+## 목차
+
+- What is a cross-import?
+- Why is this a code smell?
+- Entities layer: prefer boundary merge over @x
+  - How @x works (when boundary merge is genuinely impossible)
+  - Rules when using @x
+- Features and widgets: four strategies
+  - Strategy A: slice merge
+  - Strategy B: move a shared domain responsibility into an entity
+  - Strategy C: compose from an upper layer (IoC)
+  - Strategy D: cross-feature reuse only via Public API
+- When to treat a cross-import as a problem
+- Strictness depends on project context
+- Decision flow for AI agents
+- Anti-patterns
+- See also
+
+---
+
 ## What is a cross-import?
 
 A cross-import is an import between different slices within the same layer.
