@@ -731,6 +731,266 @@ describe('검색 후보로 등록 — 실물 훅 + msw (옛 본 파일)', () => 
       expect(mockBack).not.toHaveBeenCalled();
     });
   });
+
+  // B안(2026-11-01) — 지운 StayRegisterScreen.test.tsx 가 flow 를 손으로 넣어 만들던 얼굴을 조작·응답으로 만든다.
+  // 인라인 지도 center·핀 prop 단언은 옮기지 않았다(README 판정 4 — 통과형 지도 목 위 prop 전달) →
+  // 기능 지도 `stay-register.md` 의 `stay-register-map-pin` 줄로 실화면 QA 에 넘겼다.
+  describe('화면 동작 — 탭 · 검색 버튼 · 후보 · 시트 · 제출 얼굴', () => {
+    /** 다음 geocode/POST 응답을 테스트가 풀 때까지 멈춘다. */
+    function holdNext(method: 'get' | 'post'): () => void {
+      let release: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      if (method === 'get') {
+        server.use(
+          http.get(`${BASE}/stays/geocode`, async () => {
+            await gate;
+            return HttpResponse.json([BUSAN_CANDIDATE]);
+          })
+        );
+      } else {
+        server.use(
+          http.post(`${BASE}/saved-stays`, async ({ request }) => {
+            postedBodies.push(
+              (await request.json()) as Record<string, unknown>
+            );
+            await gate;
+            return HttpResponse.json(SAVED_STAY, { status: 201 });
+          })
+        );
+      }
+      return () => release();
+    }
+
+    it('탭은 지도 검색·핀 지정 둘뿐이고, 검색 입력의 키보드 키는 "검색"이며 지도 미리보기가 처음부터 떠 있다 (TRIP-1429 · TRIP-730)', () => {
+      // 준비 + 실행
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
+
+      // 단언
+      expect(
+        screen.getByTestId('stay-register-tab-mapsearch')
+      ).toBeOnTheScreen();
+      expect(screen.getByTestId('stay-register-tab-pin')).toBeOnTheScreen();
+      expect(screen.queryByTestId('stay-register-tab-linkpaste')).toBeNull();
+      expect(screen.queryByText('링크 붙여넣기')).toBeNull();
+      expect(screen.getByTestId('stay-register-search-input')).toHaveProp(
+        'returnKeyType',
+        'search'
+      );
+      expect(screen.getByTestId('stay-register-map-preview')).toBeOnTheScreen();
+    });
+
+    it('[검색] 버튼은 빈 검색어면 잠겨 요청이 없고, 검색어를 넣고 누르면 검색 키와 같이 한 번 찾는다 (Q-042)', async () => {
+      // 준비
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
+      const button = screen.getByRole('button', { name: '검색' });
+
+      // 실행 ① — 빈 검색어
+      expect(button).toBeDisabled();
+      fireEvent.press(button, { nativeEvent: {} });
+
+      // 단언 ①
+      expect(geocodeHits()).toHaveLength(0);
+
+      // 실행 ② — 검색어 입력 후 버튼
+      fireEvent.changeText(
+        screen.getByTestId('stay-register-search-input'),
+        'busan'
+      );
+      fireEvent.press(screen.getByRole('button', { name: '검색' }), {
+        nativeEvent: {},
+      });
+
+      // 단언 ②
+      await waitFor(() => expect(geocodeHits()).toHaveLength(1));
+      expect(
+        await screen.findByTestId('stay-register-candidate-0')
+      ).toBeOnTheScreen();
+    });
+
+    it('검색 응답 전엔 후보 자리에 스켈레톤 2장이 뜨고 후보·실패 배너는 없다', async () => {
+      // 준비
+      const release = holdNext('get');
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
+
+      // 실행
+      searchFor('busan');
+
+      // 단언
+      await waitFor(() =>
+        expect(
+          screen.queryAllByTestId(/^stay-register-candidate-skeleton-/)
+        ).toHaveLength(2)
+      );
+      expect(
+        screen.queryAllByTestId(/^stay-register-candidate-\d+$/)
+      ).toHaveLength(0);
+      expect(screen.queryByTestId('stay-register-searchfail')).toBeNull();
+
+      release();
+      expect(
+        await screen.findByTestId('stay-register-candidate-0')
+      ).toBeOnTheScreen();
+    });
+
+    it('다중 후보는 안내·이름·주소로 그리고 고르기 전 버튼은 "등록하기", 고르면 "이 숙소 등록"과 선택 카드가 뜬다 (AC-2 · AC-S4)', async () => {
+      // 준비 + 실행 ① — 후보 2건
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
+      searchFor('seoul');
+      const first = await screen.findByTestId('stay-register-candidate-0');
+      const second = screen.getByTestId('stay-register-candidate-1');
+
+      // 단언 ① — 안내·이름·주소, 아직 미확정 CTA
+      expect(
+        within(screen.getByTestId('stay-register-candidate-hint')).getByText(
+          '여러 숙소가 검색됐어요. 정확한 곳을 선택해 주세요'
+        )
+      ).toBeOnTheScreen();
+      expect(within(first).getByText('명동 시티 호텔')).toBeOnTheScreen();
+      expect(within(first).getByText('서울 중구 명동길 1')).toBeOnTheScreen();
+      expect(within(second).getByText('명동 스테이')).toBeOnTheScreen();
+      expect(within(second).getByText('서울 중구 명동길 20')).toBeOnTheScreen();
+      const submit = screen.getByTestId('stay-register-submit');
+      expect(within(submit).getByText('등록하기')).toBeOnTheScreen();
+      expect(within(submit).queryByText(/이 숙소 등록/)).toBeNull();
+      expect(screen.queryByTestId('stay-register-selected-card')).toBeNull();
+      // 고르기 전에도 지도 미리보기는 떠 있다(항상 표시 — TRIP-730).
+      expect(screen.getByTestId('stay-register-map-preview')).toBeOnTheScreen();
+
+      // 실행 ② — 둘째 후보 선택
+      fireEvent.press(second);
+
+      // 단언 ② — 확정 얼굴. 지운 캡션("핀 위치를 확인하세요")은 없다(TRIP-1429 결정 ⑤).
+      await waitFor(() =>
+        expect(
+          within(screen.getByTestId('stay-register-submit')).getByText(
+            /이 숙소 등록/
+          )
+        ).toBeOnTheScreen()
+      );
+      expect(
+        within(screen.getByTestId('stay-register-submit')).queryByText(
+          '등록하기'
+        )
+      ).toBeNull();
+      const card = screen.getByTestId('stay-register-selected-card');
+      expect(within(card).getByText('명동 스테이')).toBeOnTheScreen();
+      expect(within(card).getByText('서울 중구 명동길 20')).toBeOnTheScreen();
+      expect(screen.queryByText(/핀 위치를 확인하세요/)).toBeNull();
+    });
+
+    it('검색 결과가 0건이면 "검색 결과가 없어요"만 보이고 등록은 잠겨 있다', async () => {
+      // 준비
+      server.use(
+        http.get(`${BASE}/stays/geocode`, () => HttpResponse.json([]))
+      );
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
+
+      // 실행
+      searchFor('nowhere');
+
+      // 단언
+      const empty = await screen.findByTestId('stay-register-candidate-empty');
+      expect(within(empty).getByText('검색 결과가 없어요')).toBeOnTheScreen();
+      expect(screen.getByTestId('stay-register-submit')).toBeDisabled();
+      expect(screen.queryByTestId('stay-register-searchfail')).toBeNull();
+    });
+
+    it('검색 실패 배너의 [핀으로 직접 지정]을 누르면 핀 지정 탭으로 간다 (BR-U1-23)', async () => {
+      // 준비
+      server.use(
+        http.get(
+          `${BASE}/stays/geocode`,
+          () => new HttpResponse(null, { status: 500 })
+        )
+      );
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
+      searchFor('busan');
+      const fallback = await screen.findByTestId('stay-register-pinfallback');
+      expect(within(fallback).getByText('핀으로 직접 지정')).toBeOnTheScreen();
+
+      // 실행
+      fireEvent.press(fallback);
+
+      // 단언
+      expect(screen.getByTestId('stay-register-pin-panel')).toBeOnTheScreen();
+      expect(screen.queryByTestId('stay-register-searchfail')).toBeNull();
+    });
+
+    it('시트는 열기 전엔 마운트되지 않고, [닫기]를 누르면 확정 없이 사라진다 (§3-2 · §3-3)', async () => {
+      // 준비 — 후보를 고른다(선택만으로 확정, 시트는 아직 안 열었다).
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
+      searchFor('busan');
+      fireEvent.press(await screen.findByTestId('stay-register-candidate-0'));
+
+      // 단언 ① — 열기 전 시트 0
+      expect(screen.queryByTestId('stay-register-mapsheet')).toBeNull();
+
+      // 실행 — 열고 닫는다
+      fireEvent.press(screen.getByTestId('stay-register-mapconfirm'));
+      expect(screen.getByTestId('stay-register-mapsheet')).toBeOnTheScreen();
+      fireEvent.press(screen.getByTestId('stay-register-mapsheet-close'));
+
+      // 단언 ② — 시트도 확인 버튼도 없다
+      expect(screen.queryByTestId('stay-register-mapsheet')).toBeNull();
+      expect(screen.queryByTestId('stay-register-mapsheet-confirm')).toBeNull();
+    });
+
+    it('제출 응답 전엔 버튼이 "등록 중…"으로 잠기고 다시 눌러도 요청은 한 번이다 (§3-5)', async () => {
+      // 준비
+      const release = holdNext('post');
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
+      searchFor('busan');
+      fireEvent.press(await screen.findByTestId('stay-register-candidate-0'));
+
+      // 실행
+      fireEvent.press(screen.getByTestId('stay-register-submit'));
+      await waitFor(() => expect(postHits()).toHaveLength(1));
+
+      // 단언
+      const submit = screen.getByTestId('stay-register-submit');
+      expect(within(submit).getByText('등록 중…')).toBeOnTheScreen();
+      expect(submit).toBeDisabled();
+      fireEvent.press(submit);
+      expect(postHits()).toHaveLength(1);
+
+      release();
+      await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
+    });
+
+    it('제출 실패 배너의 [다시 시도]가 같은 본문으로 다시 등록한다 (§3-5 · INV-4)', async () => {
+      // 준비 — 첫 POST 만 400.
+      let posts = 0;
+      server.use(
+        http.post(`${BASE}/saved-stays`, async ({ request }) => {
+          posts += 1;
+          postedBodies.push((await request.json()) as Record<string, unknown>);
+          return posts === 1
+            ? HttpResponse.json(
+                { code: 'VALIDATION_ERROR', message: 'bad request' },
+                { status: 400 }
+              )
+            : HttpResponse.json(SAVED_STAY, { status: 201 });
+        })
+      );
+      render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
+      searchFor('busan');
+      fireEvent.press(await screen.findByTestId('stay-register-candidate-0'));
+      fireEvent.press(screen.getByTestId('stay-register-submit'));
+      const retry = within(
+        await screen.findByTestId('stay-register-submitfail')
+      ).getByTestId('stay-register-submitfail-retry');
+
+      // 실행
+      fireEvent.press(retry);
+
+      // 단언
+      await waitFor(() => expect(postedBodies).toHaveLength(2));
+      expect(postedBodies[1]).toEqual(postedBodies[0]);
+      await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
+    });
+  });
 });
 
 // 옛 StayRegisterPage.pin — TRIP-866 S4 (IP-1~IP-4 · BR-U1-22/23)
@@ -1322,6 +1582,30 @@ describe('핀으로 등록 — 훅 목 (옛 .pin)', () => {
       }
     );
   });
+
+  // B안(2026-11-01) — 지운 StayRegisterScreen.test.tsx SR-2·SR-3·P-1 을 조작으로 만든다.
+  describe('핀 탭 표면 — 조작 안내와 검색 입력 (TRIP-369 · TRIP-866)', () => {
+    it('핀을 맞추기 전엔 "움직여" 안내가 있고 검색 입력은 없으며, 지도를 멈추면 안내가 사라진다', () => {
+      // 준비
+      mockReverse.mockReturnValue(REVERSE_SUCCESS);
+      render(<StayRegisterPage />);
+
+      // 실행 ① — 핀 탭에 막 들어왔다
+      goToPinTab();
+
+      // 단언 ①
+      expect(screen.getByTestId('stay-register-pin-hint')).toHaveTextContent(
+        /움직여/
+      );
+      expect(screen.queryByTestId('stay-register-search-input')).toBeNull();
+
+      // 실행 ② — 지도를 움직여 멈춘다
+      panTo(PIN);
+
+      // 단언 ②
+      expect(screen.queryByTestId('stay-register-pin-hint')).toBeNull();
+    });
+  });
 });
 
 // 옛 StayRegisterPage.back — SB-1 (이 배선을 누르는 유일한 통합)
@@ -1362,7 +1646,10 @@ describe('뒤로가기 배선 (옛 .back)', () => {
       render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
 
       // 실행 — 화면이 그린 뒤로가기 컨트롤을 누른다(없으면 getByTestId가 throw).
-      fireEvent.press(screen.getByTestId('stay-register-back'));
+      // B안 — 아이콘만 있는 컨트롤이라 이름(「뒤로 가기」)으로 찾는다(옛 SR-1 라벨 단언 흡수).
+      const back = screen.getByRole('button', { name: '뒤로 가기' });
+      expect(back).toHaveProp('testID', 'stay-register-back');
+      fireEvent.press(back);
 
       // 단언 — 화면의 onBack이 페이지의 router.back()으로 이어져 있다(목 mockBack).
       expect(mockBack).toHaveBeenCalledTimes(1);

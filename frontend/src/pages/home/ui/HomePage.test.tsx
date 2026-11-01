@@ -1768,3 +1768,119 @@ describe('헤더 ✦ 도우미 (TRIP-1553)', () => {
     expect(screen.queryByTestId('assistant-fab')).toBeNull();
   });
 });
+
+// B안(2026-11-01) — 뷰 단위 `HomeScreen.test.tsx` 를 지우며 페이지 테스트가 못 잡던 결함을 옮겼다.
+describe('화면 동작 — 인사·문구·이름 · 담은 곳 메뉴 · 얼굴별 요소', () => {
+  function endedTrip(daysAgo: number, overrides: Partial<Trip> = {}): Trip {
+    const end = addDays(seoulDate(new Date()), -daysAgo);
+    return trip({
+      tripId: TRIP_ID,
+      title: '부산 여행',
+      status: 'ENDED',
+      startDate: addDays(end, -2),
+      endDate: end,
+      ...overrides,
+    });
+  }
+
+  it('발견 얼굴 — 인사 2줄·검색바 문구·"지금 뜨는 장소" 헤더, ＋ 는 "여행 만들기"·✦ 는 "AI 도우미" 로 읽힌다', () => {
+    render(<HomePage />);
+
+    expect(screen.getByText('오늘은 어디를 상상해볼까요')).toBeOnTheScreen();
+    expect(
+      screen.getByText('떠나지 않아도, 구경하고 모으는 즐거움')
+    ).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('home-search-bar')).getByText(
+        '가고 싶은 도시를 검색해보세요'
+      )
+    ).toBeOnTheScreen();
+    expect(screen.getByText('지금 뜨는 장소')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-create-trip-fab')).toHaveAccessibleName(
+      '여행 만들기'
+    );
+    expect(screen.getByRole('button', { name: 'AI 도우미' })).toHaveProp(
+      'testID',
+      'home-dashboard-assistant'
+    );
+  });
+
+  // TRIP-695 — 배지는 1곳부터 뜨고(경계 1) 100 이상은 '99+'로 접는다.
+  it.each([
+    [1, '1'],
+    [100, '99+'],
+  ])('담은 장소 %i곳 → 메뉴를 펼치면 장소 배지가 "%s"', (count, text) => {
+    savedPlacesReturns(Array.from({ length: count }, (_, i) => `p${i}`));
+    render(<HomePage />);
+    fireEvent.press(screen.getByTestId('home-saved-menu-toggle'));
+
+    expect(screen.getByTestId('home-saved-places-badge')).toHaveTextContent(
+      text
+    );
+  });
+
+  it('메뉴를 펼치면 딤이 깔리고, 저장한 숙소 미니 FAB 는 저장한 숙소로 · 딤을 누르면 메뉴가 닫힌다', () => {
+    render(<HomePage />);
+    fireEvent.press(screen.getByTestId('home-saved-menu-toggle'));
+
+    fireEvent.press(screen.getByTestId('home-saved-menu-backdrop'));
+    expect(screen.queryByTestId('home-saved-places-fab')).toBeNull();
+    expect(screen.queryByTestId('home-saved-menu-backdrop')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('home-saved-menu-toggle'));
+    fireEvent.press(screen.getByTestId('home-saved-stays-fab'));
+    expect(mockPush.mock.calls).toEqual([['/stays/saved']]);
+  });
+
+  it('여행 전 계획 중 — 배지 보조 "· D-N" 이 있고, 본문에 "지금 뜨는 장소" 는 없다', () => {
+    mockUseGetTrips.mockReturnValue(tripsOk([beforeTrip()]));
+    render(<HomePage />);
+
+    expect(
+      within(screen.getByTestId('home-trip-hero-badge')).getByText(/^· D-\d+$/)
+    ).toBeOnTheScreen();
+    // 앵커 — 여행 전 기본 레인(장소 1곳)은 발견 얼굴이면 스팟 섹션이 뜨는 데이터다.
+    expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
+    expect(screen.queryByText('지금 뜨는 장소')).toBeNull();
+  });
+
+  it('여행 후 — 인사 부제·지난 여행 날짜 줄이 있고, ✦ 를 누르면 도우미로 1회 간다', () => {
+    mockUseGetTrips.mockReturnValue(
+      tripsOk([
+        endedTrip(1),
+        endedTrip(30, { tripId: 'older', title: '옛 여행' }),
+      ])
+    );
+    render(<HomePage />);
+
+    expect(screen.getByTestId('home-greeting')).toHaveTextContent(
+      /기록을 정리하고 나눠볼까요/
+    );
+    const card = screen.getByTestId('home-past-trip-card-0');
+    expect(within(card).getByText('옛 여행')).toBeOnTheScreen();
+    expect(card).toHaveTextContent(/\d/);
+
+    fireEvent.press(screen.getByTestId('home-dashboard-assistant'));
+    expect(mockPush.mock.calls).toEqual([
+      [{ pathname: '/assistant', params: { surface: 'HOME' } }],
+    ]);
+  });
+
+  // TRIP-1281 — 하트는 "{제목} 저장", 카드는 보이는 글자 그대로 "제목, 태그".
+  it('뜨는 장소 — 하트·카드 이름, 담기 실패 배너는 누르면 닫힌다', async () => {
+    lanePlaces([place('p4', '감천문화마을', 9, ['골목'])]);
+    mockSave.mockResolvedValue({ kind: 'failed', reason: 'network' });
+    render(<HomePage />);
+
+    expect(screen.getByTestId('home-spot-save-p4')).toHaveAccessibleName(
+      '감천문화마을 저장'
+    );
+    expect(screen.getByTestId('home-spot-card-0')).toHaveAccessibleName(
+      '감천문화마을, #골목'
+    );
+
+    fireEvent.press(screen.getByTestId('home-spot-save-p4'));
+    fireEvent.press(await screen.findByTestId('home-spot-save-error'));
+    expect(screen.queryByTestId('home-spot-save-error')).toBeNull();
+  });
+});

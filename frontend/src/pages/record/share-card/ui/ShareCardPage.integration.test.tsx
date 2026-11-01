@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -53,10 +54,12 @@ jest.mock('expo-router', () => ({
 jest.mock('expo-linking', () => ({ openSettings: jest.fn() }));
 
 // 저장·공유 버튼 줄은 캡처가 장전돼야 그려진다 — 이 파일은 늘 장전(실제 캡처는 목, 호출 횟수만 본다).
+// B안: 미장전 빌드 케이스 하나만 `mockShareArmed.value = false` 로 바꾼다(파일 최상위 beforeEach 가 true 로 되돌림).
+const mockShareArmed = { value: true };
 const mockSave = jest.fn();
 const mockShare = jest.fn();
 jest.mock('@/features/share-trip-card/model/shareCapture', () => ({
-  isShareCaptureArmed: () => true,
+  isShareCaptureArmed: () => mockShareArmed.value,
   saveShareCardImage: (...args: unknown[]) => mockSave(...args),
   shareShareCardImage: (...args: unknown[]) => mockShare(...args),
 }));
@@ -203,6 +206,7 @@ beforeEach(() => {
   setAccessToken('a');
   hitLog.reset();
   requestBodies.length = 0;
+  mockShareArmed.value = true;
   mockSave.mockReset().mockResolvedValue({ status: 'saved' });
   mockShare.mockReset().mockResolvedValue({ status: 'shared' });
   server.use(tripOk(), summaryReady());
@@ -625,4 +629,209 @@ describe('🔴 TRIP-1605 AC-8 · 429 RATE_LIMITED — Retry-After 뒤 정확히 
     expect(copyHits()).toBe(1);
     expectOnDeviceCard();
   }, 15000);
+});
+
+// B안(2026-11-01) — 옛 `ShareCardScreen.test.tsx`(뷰 단위)가 보던 화면 동작을 요약 응답·캡처 결과만 바꿔 이 페이지 위에서 본다.
+// 포맷별 프레임 비율(aspectRatio)은 생김새(README 판정 4)라 옮기지 않고 기능 지도 `sc-format` 이 실화면으로 본다.
+describe('화면 동작 — 포맷·사진 없음·통계·편집 한도·저장/공유 (옛 뷰 단위 흡수)', () => {
+  const VISIT_ORDER_NOTICE = '사진이 없어 방문 순서로 카드를 만들었어요';
+  const NO_VISIT_NOTICE =
+    '사진과 방문 기록이 없어 여행 정보로 카드를 만들었어요';
+  const FAILED_TEXT = '이미지를 만들지 못했어요. 다시 시도해 주세요';
+
+  function serveSummary(over: Partial<TripSummary>, stats = {}) {
+    server.use(
+      http.get(`${BASE}/trips/:tripId/summary`, () =>
+        HttpResponse.json({
+          ready: true,
+          summary: {
+            ...SUMMARY,
+            ...over,
+            stats: { ...SUMMARY.stats, ...stats },
+          },
+        })
+      )
+    );
+  }
+
+  async function openEditor() {
+    await waitFor(() =>
+      expect(hashtagLine()).toHaveTextContent(AI_HASHTAG_LINE)
+    );
+    fireEvent.press(screen.getByTestId('reflection-share-caption-edit'));
+    return screen.getByTestId('reflection-share-caption-input');
+  }
+
+  beforeEach(() => serveCopy(copyOk(AI_COPY)));
+
+  it('헤더·제목이 서고, 포맷은 스토리부터 선택돼 있으며 누른 포맷으로 선택이 옮겨 간다 · 뒤로는 router.back', async () => {
+    renderPage();
+    await frame();
+
+    expect(screen.getByText('공유 카드')).toBeOnTheScreen();
+    expect(screen.getByText('부산 여행')).toBeOnTheScreen();
+    expect(screen.getByTestId('reflection-share-format-story')).toBeSelected();
+    fireEvent.press(screen.getByTestId('reflection-share-format-square'));
+    expect(screen.getByTestId('reflection-share-format-square')).toBeSelected();
+    expect(
+      screen.getByTestId('reflection-share-format-story')
+    ).not.toBeSelected();
+
+    fireEvent.press(screen.getByTestId('reflection-share-back'));
+    const { router } = jest.requireMock<{ router: { back: jest.Mock } }>(
+      'expo-router'
+    );
+    expect(router.back).toHaveBeenCalled();
+  });
+
+  it('사진이 있으면 기본 카드 — 사진 없음 안내가 없고, 통계 줄은 "N곳 · 거리 · 사진 N장"(위치 없음이라 거리는 —), 방문 순서 박스가 있다', async () => {
+    renderPage();
+    await frame();
+
+    expect(screen.queryByTestId('reflection-share-no-photo-notice')).toBeNull();
+    expect(screen.getByText('12곳 · — · 사진 24장')).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('reflection-share-visit-order')).getByText(
+        '광안리 해변'
+      )
+    ).toBeOnTheScreen();
+  });
+
+  it('사진 0장 + 방문 있음 → 방문 순서 안내, 통계 줄은 "방문 N · 이동 · 사진 N", 방문 순서 박스가 있다', async () => {
+    serveSummary({}, { totalPhotos: 0 });
+    renderPage();
+    await frame();
+
+    expect(
+      within(screen.getByTestId('reflection-share-no-photo-notice')).getByText(
+        VISIT_ORDER_NOTICE
+      )
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(NO_VISIT_NOTICE)).toBeNull();
+    expect(screen.getByText('방문 12 · 이동 — · 사진 0')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('reflection-share-visit-order')
+    ).toBeOnTheScreen();
+  });
+
+  it('사진 0장 + 방문 0곳 → 여행 정보 안내, 방문 순서 박스는 없고 카드 프레임·제목은 남는다', async () => {
+    serveSummary({ highlights: [] }, { totalPhotos: 0 });
+    renderPage();
+    await frame();
+
+    expect(screen.getByText(NO_VISIT_NOTICE)).toBeOnTheScreen();
+    expect(screen.queryByText(VISIT_ORDER_NOTICE)).toBeNull();
+    expect(screen.queryByTestId('reflection-share-visit-order')).toBeNull();
+    expect(screen.getByText('부산 여행')).toBeOnTheScreen();
+  });
+
+  it('사진 있음 + 방문 0곳 → 방문 순서 박스가 없다(박스 판정은 사진이 아니라 방문)', async () => {
+    serveSummary({ highlights: [] });
+    renderPage();
+    await frame();
+
+    expect(screen.queryByTestId('reflection-share-visit-order')).toBeNull();
+    expect(screen.queryByTestId('reflection-share-no-photo-notice')).toBeNull();
+  });
+
+  it(`해시태그 11개·151자는 [완료]가 안 되고 안내가 뜨며, 두 칸 간격 10개·"#" 없는 단어는 그대로 확정된다`, async () => {
+    renderPage();
+    await frame();
+    const input = await openEditor();
+
+    fireEvent.changeText(
+      input,
+      Array.from({ length: 11 }, (_, i) => `#t${i}`).join(' ')
+    );
+    fireEvent.press(screen.getByTestId('reflection-share-caption-save'));
+    expect(
+      within(screen.getByTestId('reflection-share-caption-error')).getByText(
+        '해시태그는 10개까지 넣을 수 있어요'
+      )
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('reflection-share-caption-input')
+    ).toBeOnTheScreen();
+
+    fireEvent.changeText(input, `#${'가'.repeat(150)}`);
+    fireEvent.press(screen.getByTestId('reflection-share-caption-save'));
+    expect(screen.getByText('150자까지 쓸 수 있어요')).toBeOnTheScreen();
+
+    const tenTags = Array.from({ length: 10 }, (_, i) => `#t${i}`).join('  ');
+    fireEvent.changeText(input, tenTags);
+    fireEvent.press(screen.getByTestId('reflection-share-caption-save'));
+    expect(hashtagLine()).toHaveTextContent(tenTags);
+
+    fireEvent.press(screen.getByTestId('reflection-share-caption-edit'));
+    fireEvent.changeText(
+      screen.getByTestId('reflection-share-caption-input'),
+      '바다 노을'
+    );
+    fireEvent.press(screen.getByTestId('reflection-share-caption-save'));
+    expect(hashtagLine()).toHaveTextContent('바다 노을');
+    expect(screen.queryByTestId('reflection-share-caption-error')).toBeNull();
+  });
+
+  it('[이미지 저장] → 프리뷰 프레임을 담은 ref 로 저장 1회 · 성공 안내, [공유하기] → 같은 프레임으로 공유 1회 · 안내 없음', async () => {
+    renderPage();
+    await frame();
+
+    fireEvent.press(screen.getByTestId('reflection-share-save'));
+    expect(await screen.findByText('사진 앨범에 저장했어요')).toBeOnTheScreen();
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    expect(mockShare).not.toHaveBeenCalled();
+    const saveTarget = mockSave.mock.calls[0][0] as { current: unknown };
+    expect(saveTarget.current).not.toBeNull();
+
+    fireEvent.press(screen.getByTestId('reflection-share-export'));
+    await waitFor(() =>
+      expect(screen.queryByTestId('reflection-share-result')).toBeNull()
+    );
+    expect(mockShare).toHaveBeenCalledTimes(1);
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    expect(mockShare.mock.calls[0][0]).toBe(saveTarget);
+  });
+
+  it('저장 권한 거부 → 거부 안내 + [설정 열기](설정 앱 1회), 실패·예외 → 실패 안내, 공유 실패 → 실패 안내', async () => {
+    const { openSettings } = jest.requireMock<{ openSettings: jest.Mock }>(
+      'expo-linking'
+    );
+    openSettings.mockClear();
+    mockSave.mockResolvedValueOnce({ status: 'permission-denied' });
+    renderPage();
+    await frame();
+
+    fireEvent.press(screen.getByTestId('reflection-share-save'));
+    expect(
+      await screen.findByText('사진 앨범 권한이 없어 저장하지 못했어요')
+    ).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId('reflection-share-open-settings'));
+    expect(openSettings).toHaveBeenCalledTimes(1);
+
+    mockSave.mockRejectedValueOnce(new Error('capture'));
+    fireEvent.press(screen.getByTestId('reflection-share-save'));
+    expect(await screen.findByText(FAILED_TEXT)).toBeOnTheScreen();
+    expect(screen.queryByTestId('reflection-share-open-settings')).toBeNull();
+
+    mockShare.mockResolvedValueOnce({ status: 'shared' });
+    fireEvent.press(screen.getByTestId('reflection-share-export'));
+    await waitFor(() =>
+      expect(screen.queryByTestId('reflection-share-result')).toBeNull()
+    );
+    mockShare.mockResolvedValueOnce({ status: 'failed' });
+    fireEvent.press(screen.getByTestId('reflection-share-export'));
+    expect(await screen.findByText(FAILED_TEXT)).toBeOnTheScreen();
+  });
+
+  it('캡처가 장전되지 않은 빌드면 [이미지 저장]·[공유하기]가 없다 — [편집]은 있다', async () => {
+    mockShareArmed.value = false;
+    renderPage();
+    await frame();
+
+    expect(screen.queryByTestId('reflection-share-save')).toBeNull();
+    expect(screen.queryByTestId('reflection-share-export')).toBeNull();
+    expect(
+      screen.getByTestId('reflection-share-caption-edit')
+    ).toBeOnTheScreen();
+  });
 });

@@ -109,22 +109,12 @@
       "count": 7
     }
   },
-  "src/pages/explore/explore-landing/ui/ExploreLandingScreen.test.tsx": {
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
   "src/pages/explore/place-explore/ui/PlaceExplorePage.tsx": {
     "no-restricted-syntax": {
       "count": 6
     }
   },
   "src/pages/explore/place-explore/ui/PlaceExploreScreen.memo.test.tsx": {
-    "no-restricted-properties": {
-      "count": 2
-    }
-  },
-  "src/pages/explore/place-explore/ui/PlaceExploreScreen.test.tsx": {
     "no-restricted-properties": {
       "count": 2
     }
@@ -147,11 +137,6 @@
   "src/pages/home/ui/HomeScreen.heroMemo.test.tsx": {
     "no-restricted-properties": {
       "count": 2
-    }
-  },
-  "src/pages/home/ui/HomeScreen.test.tsx": {
-    "no-restricted-properties": {
-      "count": 9
     }
   },
   "src/pages/itinerary/itinerary-copick/ui/CoPickCompletePage.tsx": {
@@ -363,11 +348,6 @@
       "count": 1
     }
   },
-  "src/pages/record/share-card/ui/ShareCardScreen.test.tsx": {
-    "no-restricted-properties": {
-      "count": 2
-    }
-  },
   "src/pages/record/travel-style/ui/TravelStylePage.tsx": {
     "no-restricted-syntax": {
       "count": 1
@@ -486,11 +466,6 @@
   "src/pages/stay/stay-search/ui/StaySearchPage.tsx": {
     "no-restricted-syntax": {
       "count": 4
-    }
-  },
-  "src/pages/stay/stay-search/ui/StaySearchScreen.separator.test.tsx": {
-    "no-restricted-properties": {
-      "count": 2
     }
   },
   "src/pages/trip/trip-new-step1/ui/TripNewStep1Page.tsx": {

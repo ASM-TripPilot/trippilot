@@ -1245,3 +1245,193 @@ describe('W1 · 기본 얼굴 = 제휴 — 수수료 고지 있음 · 서버 아
     expect(screen.queryByText('검색 결과로 이동')).toBeNull();
   });
 });
+
+// B안(2026-11-01) — 지운 StayDetailScreen.test.tsx 가 props 로 만들던 얼굴을 응답 모양으로 만든다.
+// 지도 center·핀 kind·실 MapView 단언은 옮기지 않았다(README 판정 4 — 통과형 지도 목 위 prop 전달) →
+// 기능 지도 `stay-detail.md` 의 `stay-detail-map` 줄로 실화면 QA 에 넘겼다.
+describe('화면 얼굴 — 응답 모양마다 무엇을 그리나', () => {
+  const FAIL_TITLE = '숙소 정보를 불러올 수 없어요';
+  const FAIL_SUBTITLE = '다시 시도하거나 목록으로 돌아가세요';
+
+  function answerDetail(detail: StayDetail): void {
+    server.use(
+      http.get(`${BASE}/stays/:stayId`, () => HttpResponse.json(detail))
+    );
+  }
+
+  it('ready 얼굴 — "1박"·리뷰·평점·일정에 추가 없이 칩마다 아이콘·제휴 고지·이름 붙은 원 버튼 셋을 그린다', async () => {
+    // 준비 + 실행
+    render(<StayDetailPage />, { wrapper: createGcZeroWrapper() });
+    await ready();
+
+    // 단언 — 금지 표면(TRIP-940 AC-12 · TRIP-1041 AC-1 · Q6)
+    expect(screen.queryByText(/1박/)).toBeNull();
+    expect(screen.queryAllByText(/리뷰|평점/)).toHaveLength(0);
+    expect(screen.queryByText('일정에 추가')).toBeNull();
+    expect(screen.queryByTestId('stay-detail-addtotrip')).toBeNull();
+    // 단언 — 칩마다 아이콘 leaf · 하단 제휴 고지
+    DETAIL.amenities.forEach((value) => {
+      expect(
+        within(screen.getByTestId(`stay-detail-amenity-${value}`)).getByTestId(
+          `stay-detail-amenity-icon-${value}`
+        )
+      ).toBeOnTheScreen();
+    });
+    expect(
+      screen.getByTestId('stay-detail-affiliate-notice')
+    ).toBeOnTheScreen();
+    // 단언 — 원 버튼 이름(TRIP-1302). 라벨이 없으면 iOS 가 testID 를 읽는다.
+    expect(screen.getByRole('button', { name: '뒤로' })).toHaveProp(
+      'testID',
+      'stay-detail-back'
+    );
+    expect(screen.getByRole('button', { name: '공유' })).toHaveProp(
+      'testID',
+      'stay-detail-share'
+    );
+    expect(
+      screen.getByRole('button', { name: `${DETAIL.name} 저장` })
+    ).toHaveProp('testID', 'stay-detail-save');
+  });
+
+  it('담으면 하트가 selected 가 되고 이름은 그대로다 (TRIP-1281)', async () => {
+    // 준비
+    signInWithDismissed(false);
+    installSaveServer({ hold: false });
+    render(<StayDetailPage />, { wrapper: createGcZeroWrapper() });
+    await ready();
+    const name = `${DETAIL.name} 저장`;
+    expect(screen.getByRole('button', { name })).not.toBeSelected();
+
+    // 실행
+    fireEvent.press(screen.getByTestId('stay-detail-save'));
+    await waitFor(() =>
+      expect(screen.getByTestId('stay-detail-save-filled')).toBeOnTheScreen()
+    );
+    await settleAll();
+
+    // 단언
+    expect(screen.getByRole('button', { name })).toBeSelected();
+  });
+
+  it('편의시설 8개(모르는 코드 섞임)도 하나도 숨기지 않고 칩마다 아이콘을 그린다 (TRIP-918)', async () => {
+    // 준비 — 앞 4개는 아이콘 매핑이 있는 값, 뒤 4개는 폴백.
+    const POOL = [
+      '주차',
+      '조식',
+      '와이파이',
+      '오션뷰',
+      '사우나',
+      '수영장',
+      '피트니스',
+      '바베큐',
+    ];
+    answerDetail({ ...DETAIL, amenities: POOL });
+
+    // 실행
+    render(<StayDetailPage />, { wrapper: createGcZeroWrapper() });
+    await ready();
+
+    // 단언
+    const row = screen.getByTestId('stay-detail-amenities');
+    expect(
+      within(row).getAllByTestId(/^stay-detail-amenity-(?!icon-)/)
+    ).toHaveLength(POOL.length);
+    POOL.forEach((value) => {
+      expect(
+        within(screen.getByTestId(`stay-detail-amenity-${value}`)).getByTestId(
+          `stay-detail-amenity-icon-${value}`
+        )
+      ).toBeOnTheScreen();
+    });
+    expect(screen.queryAllByText(/^\+\d+$/)).toHaveLength(0);
+  });
+
+  it('주소·객실이 null 이면 "미확인", 전화가 null 이면 줄째 없고 "미확인"을 따로 늘리지 않는다 (BR-U1-18)', async () => {
+    // 준비
+    answerDetail({ ...DETAIL, address: null, rooms: null, phone: null });
+
+    // 실행
+    render(<StayDetailPage />, { wrapper: createGcZeroWrapper() });
+    await ready();
+
+    // 단언 — 미확인은 주소·객실 두 자리뿐("null실"·전화 미확인 없음).
+    expect(screen.getByTestId('stay-detail-address')).toHaveTextContent(
+      /미확인/
+    );
+    const rooms = screen.getByTestId('stay-detail-rooms');
+    expect(rooms).toHaveTextContent(/미확인/);
+    expect(rooms).not.toHaveTextContent(/실$/);
+    expect(screen.queryByTestId('stay-detail-phone')).toBeNull();
+    expect(screen.queryAllByText(/미확인/)).toHaveLength(2);
+  });
+
+  it('로딩 얼굴엔 실패 문구가 없고 뒤로는 "뒤로"로 읽힌다', async () => {
+    // 준비
+    const release = holdDetail();
+
+    // 실행
+    render(<StayDetailPage />, { wrapper: createGcZeroWrapper() });
+    const face = await screen.findByTestId('stay-detail-loading');
+
+    // 단언 — 공유 원도 ready 얼굴에만 있다(TRIP-989).
+    expect(screen.queryByText(FAIL_TITLE)).toBeNull();
+    expect(screen.queryByTestId('stay-detail-share')).toBeNull();
+    expect(
+      within(face).getByRole('button', { name: '뒤로' })
+    ).toBeOnTheScreen();
+
+    release();
+    await ready();
+  });
+
+  it.each([
+    [404, 'stay-detail-notfound'],
+    [400, 'stay-detail-invalid'],
+    [500, 'stay-detail-error'],
+  ] as const)(
+    '%s 얼굴은 Figma e03 문구를 그대로 쓰고 뒤로는 "뒤로"로 읽힌다 (TRIP-940 Q2)',
+    async (status, faceId) => {
+      // 준비
+      answerDetailWith(status);
+
+      // 실행
+      render(<StayDetailPage />, { wrapper: createGcZeroWrapper() });
+      const face = await screen.findByTestId(faceId);
+
+      // 단언
+      expect(within(face).getByText(FAIL_TITLE)).toBeOnTheScreen();
+      expect(within(face).getByText(FAIL_SUBTITLE)).toBeOnTheScreen();
+      expect(
+        within(face).getByRole('button', { name: '뒤로' })
+      ).toBeOnTheScreen();
+    }
+  );
+
+  it('ready 얼굴의 공유는 공유만 하고(하트·로그인 이동 없음), 뒤로는 이전 화면으로 간다', async () => {
+    // 준비 — 게스트라 하트가 잘못 눌리면 로그인 push 가 찍힌다.
+    const spy = jest
+      .spyOn(Share, 'share')
+      .mockResolvedValue({ action: 'sharedAction' } as never);
+    try {
+      render(<StayDetailPage />, { wrapper: createGcZeroWrapper() });
+      await ready();
+
+      // 실행 ① — 공유
+      fireEvent.press(screen.getByTestId('stay-detail-share'));
+      await act(async () => {});
+
+      // 단언 ①
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(mockPush).not.toHaveBeenCalled();
+
+      // 실행 ② — 뒤로
+      fireEvent.press(screen.getByTestId('stay-detail-back'));
+
+      // 단언 ②
+      expect(mockBack).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
