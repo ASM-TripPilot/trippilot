@@ -34,6 +34,7 @@ private class FakeConsentRecordRepository : ConsentRecordRepository {
     val appended = mutableListOf<ConsentRecord>()
     override fun append(record: ConsentRecord) { appended.add(record) }
     override fun findByAccount(accountId: AccountId): List<ConsentRecord> = appended.filter { it.accountId == accountId }
+    override fun lockAccount(accountId: AccountId) {}
 }
 
 private class FakeMarketingConsentRepository : MarketingConsentRepository {
@@ -181,5 +182,38 @@ class ConsentServiceTest : StringSpec({
         shouldThrow<ResourceNotFound> {
             svc.changeConsent(account, TermsType.GPS_RECORDING, ConsentAction.GRANT, "1.0")
         }
+    }
+    // TRIP-1689 — 연타·두 기기가 같은 값을 보내도 법적 증적은 한 줄이다(위치 update 와 같은 규칙: 200 무기록).
+    "같은 동의를 두 번 보내도 증적은 1줄 — 연타가 법적 증적을 두 줄로 만들지 않는다" {
+        val (svc, records, _) = fixture(baseTerms + term(TermsType.PERSONALIZATION))
+        svc.changeConsent(account, TermsType.PERSONALIZATION, ConsentAction.GRANT, "1.0")
+        svc.changeConsent(account, TermsType.PERSONALIZATION, ConsentAction.GRANT, "1.0")
+        records.appended shouldHaveSize 1
+    }
+
+    "동의 후 철회는 증적 2줄 — 다른 동작은 그대로 남는다" {
+        val (svc, records, _) = fixture(baseTerms + term(TermsType.PERSONALIZATION))
+        svc.changeConsent(account, TermsType.PERSONALIZATION, ConsentAction.GRANT, "1.0")
+        svc.changeConsent(account, TermsType.PERSONALIZATION, ConsentAction.REVOKE, "1.0")
+        records.appended.map { it.action } shouldBe listOf(ConsentAction.GRANT, ConsentAction.REVOKE)
+    }
+
+    "마케팅 토글을 같은 값으로 두 번 보내도 증적은 1줄 — 수신 상태는 켜져 있다" {
+        val (svc, records, marketing) = fixture(baseTerms)
+        svc.toggleMarketing(account, optIn = true)
+        svc.toggleMarketing(account, optIn = true)
+        records.appended shouldHaveSize 1
+        marketing.find(account)!!.optIn shouldBe true
+    }
+
+    "온보딩 동의를 두 번 제출해도 항목별 증적은 1줄씩" {
+        val (svc, records, _) = fixture(baseTerms)
+        val submissions = listOf(
+            ConsentSubmission(TermsType.TERMS_OF_SERVICE, "1.0", ConsentAction.GRANT),
+            ConsentSubmission(TermsType.PRIVACY_POLICY, "1.0", ConsentAction.GRANT),
+        )
+        svc.submitOnboarding(account, submissions)
+        svc.submitOnboarding(account, submissions)
+        records.appended shouldHaveSize 2
     }
 })
