@@ -149,11 +149,6 @@
       "count": 1
     }
   },
-  "src/pages/itinerary/itinerary-copick/ui/SlotFillScreen.test.tsx": {
-    "no-restricted-properties": {
-      "count": 4
-    }
-  },
   "src/pages/itinerary/itinerary-draft/ui/DraftPage.integration.test.tsx": {
     "no-restricted-properties": {
       "count": 5
