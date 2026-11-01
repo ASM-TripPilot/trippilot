@@ -22,6 +22,8 @@ import {
 } from './StaySelectSheet';
 import type { TripDestination } from '@/shared/api/index.schemas';
 import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
+import { goBackOr } from '@/shared/lib/goBackOr';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import {
   TripWizardStep2Screen,
   type Step2Variant,
@@ -70,7 +72,7 @@ export function TripNewStep2Page(): ReactElement {
    * 항상 정의되지만, 그 사실을 컴파일러에 알리는 가드를 둔다. */
   function goToMethod(): void {
     if (tripId === undefined) return;
-    router.back();
+    goBackOr(router, shellTabHref('home'));
     router.push({
       pathname: '/trips/[tripId]/itinerary/method',
       params: { tripId },
@@ -86,7 +88,7 @@ export function TripNewStep2Page(): ReactElement {
       // TRIP-1013 #038 수신 — 지정 직후의 창 안이면 무시. `BaseNightsFlow` 안(onGenerate)이 아니라
       // 여기서 건다: 여행 단위 화면(`TripBasesPage`)의 출구는 관찰 밖이라 가드 밖에 둔다.
       onExit={guardPress(goToMethod)}
-      onBack={() => router.back()}
+      onBack={() => goBackOr(router, shellTabHref('home'))}
       onRestart={() => router.push('/trips/new/step1')}
     />
   );
