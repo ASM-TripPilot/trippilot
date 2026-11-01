@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Linking from 'expo-linking';
+import { openAppSettings } from '@/shared/external-link';
 
 import { FormatSegment } from './FormatSegment';
 import { BackArrowGlyph } from '@/features/reflection/index.view';
@@ -262,7 +262,7 @@ export function ShareCardScreen({
                 testID="reflection-share-open-settings"
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 onPress={() => {
-                  void Linking.openSettings();
+                  void openAppSettings();
                 }}
               >
                 <Text className="font-noto-bold text-label text-primary">

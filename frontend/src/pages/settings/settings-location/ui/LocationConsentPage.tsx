@@ -1,6 +1,6 @@
 import { useState, type ReactElement } from 'react';
 import { View } from 'react-native';
-import * as Linking from 'expo-linking';
+import { openAppSettings } from '@/shared/external-link';
 import { useRouter } from 'expo-router';
 
 import { LocationConsentScreen } from './LocationConsentScreen';
@@ -41,13 +41,13 @@ export function LocationConsentPage(): ReactElement {
           void automation.stopForRevoke();
         }}
         onOpenSettings={() => {
-          void Linking.openSettings();
+          void openAppSettings();
         }}
         onPressBack={() => router.back()}
         automation={automation.view}
         onPressAutomationEnable={() => setExplainerOpen(true)}
         onPressAutomationSettings={() => {
-          void Linking.openSettings();
+          void openAppSettings();
         }}
       />
       {explainerOpen ? (
