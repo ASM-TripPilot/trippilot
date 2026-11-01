@@ -198,14 +198,19 @@ export function buildDraftPins(
  * `state`), 우리가 카운터 상태를 따로 만들 이유가 없다.
  *
  * 첫 응답 전에도 이 판정이 불린다(그때 `generationState` 는 `undefined`) — 아직 채워지는
- * 중임이 확인된 `PARTIAL` 일 때만 true 다. `COMPLETE` 도 `FAILED` 도 종착이다(INV-4).
+ * 중임이 확인된 `PARTIAL` 이거나 생성 세션이 돌고 있을 때만 true 다. 세션 없는 `COMPLETE`·`FAILED` 는
+ * 종착이다(INV-4).
  */
 export function shouldKeepPollingDraft(input: {
   generationState?: ItineraryGenerationState;
+  /** 진행 중 생성 세션(TRIP-1690 FV-POLL-01) — 재생성 1차 동안 서버는 옛 COMPLETE 행에 새 세션 id 를 붙여 준다.
+   *  세션이 돌면 COMPLETE·FAILED 로 보여도 끝난 게 아니다(셸 감시 `isInFlight` 와 같은 술어). */
+  generationSessionId?: string | null;
   dataUpdateCount: number;
 }): boolean {
   return (
-    input.generationState === 'PARTIAL' &&
+    (input.generationState === 'PARTIAL' ||
+      input.generationSessionId != null) &&
     input.dataUpdateCount < DRAFT_POLL_MAX_COUNT
   );
 }
