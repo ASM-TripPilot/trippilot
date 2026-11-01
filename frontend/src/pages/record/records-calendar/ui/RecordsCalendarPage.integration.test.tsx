@@ -1,12 +1,24 @@
 import { http, HttpResponse } from 'msw';
 import { onlineManager } from '@tanstack/react-query';
-import { act, screen, waitFor, within } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { getGetTripsQueryKey } from '@/shared/api/index.hooks';
 import type { Trip } from '@/shared/api/index.schemas';
 import { BASE } from '@/test-support/apiBase';
+import { routerSpies } from '@/test-support/expoRouterMock';
+import { freezeDate } from '@/test-support/freezeDate';
+import {
+  itinerary as itineraryFixture,
+  trip as tripFixture,
+} from '@/test-support/itineraryFixtures';
 import {
   newTestQueryClient,
   renderWithQueryClient,
@@ -243,5 +255,224 @@ describe('TRIP-1638 · 기록 탭 오프라인 콜드스타트', () => {
       await screen.findByTestId('record-calendar-error')
     ).toBeOnTheScreen();
     expect(screen.queryByTestId(OFFLINE)).toBeNull();
+  });
+});
+
+// B안(2026-11-01) — 옛 `RecordsCalendarScreen.test.tsx`(뷰 단위)가 보던 화면 동작을 여행·일정 응답과 오늘 날짜만 바꿔 이 페이지 위에서 본다.
+// 오늘 = 2026-06-15(KST). 같은 기간 둘(부산·제주) + 지난 둘 + 진행 중 하나(일정 확정) + 미래 하나 → legend 5줄(앞 3줄 + 더 보기 2).
+describe('화면 동작 — 캘린더·legend·진행 중 카드·지난 여행·빈 상태 (옛 뷰 단위 흡수)', () => {
+  const ended = (tripId: string, title: string, start: string, end: string) =>
+    tripFixture({
+      tripId,
+      title,
+      startDate: start,
+      endDate: end,
+      status: 'ENDED',
+      itineraryDayCount: 2,
+    });
+  const G1 = ended('g1', '부산 여행', '2026-06-01', '2026-06-03');
+  const G2 = ended('g2', '제주 여행', '2026-06-01', '2026-06-03');
+  const P3 = ended('p3', '여수 여행', '2026-06-05', '2026-06-06');
+  const P4 = ended('p4', '경주 여행', '2026-06-08', '2026-06-09');
+  const NOW = tripFixture({
+    tripId: 'now',
+    title: '서울 여행',
+    startDate: '2026-06-14',
+    endDate: '2026-06-16',
+    status: 'ACTIVE',
+    itineraryDayCount: 3,
+  });
+  const FUT = tripFixture({
+    tripId: 'fut',
+    title: '강릉 여행',
+    startDate: '2026-06-25',
+    endDate: '2026-06-27',
+    status: 'PLANNED',
+    itineraryDayCount: 3,
+  });
+  const ALL = [G1, G2, P3, P4, NOW, FUT];
+  const GROUP = 'record-calendar-legend-group-2026-06-01_2026-06-03';
+  const { push: mockPush } = routerSpies;
+
+  function serveTrips(trips: Trip[]) {
+    server.use(
+      http.get(`${BASE}/trips`, () => HttpResponse.json(trips)),
+      http.get(`${BASE}/trips/:tripId/itinerary`, ({ params }) =>
+        params.tripId === 'now'
+          ? HttpResponse.json(
+              itineraryFixture({ tripId: 'now', status: 'CONFIRMED' })
+            )
+          : HttpResponse.json(
+              { error: { code: 'NOT_FOUND', message: '일정이 없어요' } },
+              { status: 404 }
+            )
+      )
+    );
+  }
+
+  async function renderReady(trips: Trip[] = ALL) {
+    serveTrips(trips);
+    renderPage();
+    await settle();
+  }
+
+  beforeEach(() => {
+    freezeDate('2026-06-15T03:00:00Z');
+    mockPush.mockClear();
+  });
+  afterEach(() => jest.useRealTimers());
+
+  it('캘린더 — 앱바·월 라벨, 여행 날만 선택 표시, 지난 여행 건수', async () => {
+    await renderReady();
+
+    expect(screen.getByText('여행 캘린더')).toBeOnTheScreen();
+    expect(screen.getByTestId('record-calendar-month-label')).toHaveTextContent(
+      '2026년 6월'
+    );
+    expect(screen.getByTestId('record-calendar-day-2026-06-02')).toBeSelected();
+    expect(
+      screen.getByTestId('record-calendar-day-2026-06-11')
+    ).not.toBeSelected();
+    expect(screen.getByText('4건')).toBeOnTheScreen();
+    expect(screen.queryByTestId('record-past-empty')).toBeNull();
+  });
+
+  it('legend — 앞 3줄 + "더 보기 2", 누르면 5줄과 "접기", 다시 누르면 접힌다 · 박수가 줄에 붙는다', async () => {
+    await renderReady();
+
+    expect(screen.getByTestId(GROUP)).toBeOnTheScreen();
+    expect(screen.getByTestId('record-calendar-legend-p3')).toHaveTextContent(
+      /1박/
+    );
+    expect(screen.queryByTestId('record-calendar-legend-now')).toBeNull();
+    expect(screen.getByText('더 보기 2')).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId('record-calendar-legend-more'));
+    expect(screen.getByTestId('record-calendar-legend-now')).toBeOnTheScreen();
+    expect(screen.getByTestId('record-calendar-legend-fut')).toBeOnTheScreen();
+    expect(screen.getByText('접기')).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId('record-calendar-legend-more'));
+    expect(screen.queryByTestId('record-calendar-legend-fut')).toBeNull();
+  });
+
+  it('같은 기간 묶음 — "대표 외 1" 한 줄, 누르면 구성원 줄이 펼쳐지고 어디로도 가지 않으며, 달을 넘겼다 오면 접혀 있다', async () => {
+    await renderReady();
+
+    const group = screen.getByTestId(GROUP);
+    expect(group).toHaveTextContent(/^부산 여행 외 1/);
+    expect(screen.queryByTestId('record-calendar-legend-g2')).toBeNull();
+
+    fireEvent.press(group);
+    expect(screen.getByTestId('record-calendar-legend-g1')).toBeOnTheScreen();
+    expect(screen.getByTestId('record-calendar-legend-g2')).toBeOnTheScreen();
+    expect(mockPush).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('record-calendar-next'));
+    expect(screen.getByTestId('record-calendar-month-label')).toHaveTextContent(
+      '2026년 7월'
+    );
+    fireEvent.press(screen.getByTestId('record-calendar-prev'));
+    fireEvent.press(screen.getByTestId('record-calendar-prev'));
+    expect(screen.getByTestId('record-calendar-month-label')).toHaveTextContent(
+      '2026년 5월'
+    );
+    fireEvent.press(screen.getByTestId('record-calendar-next'));
+    expect(screen.queryByTestId('record-calendar-legend-g2')).toBeNull();
+  });
+
+  it('legend `›` 는 갈 수 있는 줄에만 — 지난·진행 줄과 지난 묶음엔 있고 미래 줄엔 없으며, 그 줄만 기록으로 간다', async () => {
+    await renderReady();
+    fireEvent.press(screen.getByTestId('record-calendar-legend-more'));
+
+    expect(
+      screen.getByTestId('record-calendar-legend-chevron-p3')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('record-calendar-legend-chevron-now')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId(
+        'record-calendar-legend-group-chevron-2026-06-01_2026-06-03'
+      )
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId('record-calendar-legend-chevron-fut')
+    ).toBeNull();
+
+    fireEvent.press(screen.getByTestId('record-calendar-legend-fut'));
+    expect(mockPush).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByTestId('record-calendar-legend-p3'));
+    expect(mockPush.mock.calls).toEqual([['/trips/p3/records']]);
+  });
+
+  it('누름 — 마킹 날짜는 그 여행 기록으로, 지난 여행 카드는 그 여행 요약으로 간다', async () => {
+    await renderReady();
+
+    fireEvent.press(screen.getByTestId('record-calendar-day-2026-06-05'));
+    fireEvent.press(screen.getByTestId('record-calendar-past-trip-p4'));
+
+    expect(mockPush.mock.calls).toEqual([
+      ['/trips/p3/records'],
+      ['/trips/p4/records/summary'],
+    ]);
+  });
+
+  it('진행 중 카드 — 제목·"여행 중"·"기간 · N일차", [오늘 기록 보기]는 기록으로 · [일정 허브로]는 여행 중 허브로', async () => {
+    await renderReady();
+
+    const card = await screen.findByTestId('record-calendar-ongoing');
+    expect(within(card).getByText('서울 여행')).toBeOnTheScreen();
+    expect(within(card).getByText('여행 중')).toBeOnTheScreen();
+    expect(within(card).getByText('2026.6.14–6.16 · 2일차')).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId('record-calendar-ongoing-records'));
+    fireEvent.press(screen.getByTestId('record-calendar-ongoing-hub'));
+    expect(mockPush.mock.calls).toEqual([
+      ['/trips/now/records'],
+      ['/trips/now/live'],
+    ]);
+  });
+
+  it('달을 걸친 미래 묶음 — `›` 가 없고, 펼친 채 다음 달로 넘기면 같은 묶음도 접혀 있다', async () => {
+    const span = (tripId: string, title: string) =>
+      tripFixture({
+        tripId,
+        title,
+        startDate: '2026-06-30',
+        endDate: '2026-07-02',
+        status: 'PLANNED',
+        itineraryDayCount: 3,
+      });
+    await renderReady([span('s1', '목포 여행'), span('s2', '광주 여행')]);
+    const SPAN = 'record-calendar-legend-group-2026-06-30_2026-07-02';
+
+    expect(
+      screen.queryByTestId(
+        'record-calendar-legend-group-chevron-2026-06-30_2026-07-02'
+      )
+    ).toBeNull();
+    fireEvent.press(screen.getByTestId(SPAN));
+    expect(screen.getByTestId('record-calendar-legend-s2')).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId('record-calendar-next'));
+    expect(screen.getByTestId(SPAN)).toBeOnTheScreen(); // 앵커 — 7월에도 같은 묶음
+    expect(screen.queryByTestId('record-calendar-legend-s2')).toBeNull();
+  });
+
+  it('지난 여행이 0개면 안내 박스가 뜬다(캘린더는 그대로)', async () => {
+    await renderReady([FUT]);
+
+    expect(screen.getByTestId('record-past-empty')).toBeOnTheScreen();
+    expect(screen.getByText('0건')).toBeOnTheScreen();
+  });
+
+  it('여행이 하나도 없으면 캘린더 대신 안내 + [새 여행 만들기] → 위저드', async () => {
+    await renderReady([]);
+
+    expect(screen.getByText('아직 기록된 여행이 없어요')).toBeOnTheScreen();
+    expect(screen.queryByTestId('record-calendar-month')).toBeNull();
+    fireEvent.press(screen.getByTestId('record-calendar-empty-create'));
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
   });
 });
