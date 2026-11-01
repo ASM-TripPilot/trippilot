@@ -19,7 +19,11 @@ class KeyAndSql(unittest.TestCase):
     def test_키는_URL_해시라_같은_URL_이면_같고_다르면_다르다(self):
         self.assertEqual(t.thumb_key("https://a/1.jpg"), t.thumb_key("https://a/1.jpg"))
         self.assertNotEqual(t.thumb_key("https://a/1.jpg"), t.thumb_key("https://a/2.jpg"))
-        self.assertRegex(t.thumb_key("https://a/1.jpg"), r"^poi/[0-9a-f]{20}\.webp$")
+        self.assertRegex(t.thumb_key("https://a/1.jpg"), r"^poi/w940/[0-9a-f]{20}\.webp$")
+
+    def test_키에_폭이_들어가_폭을_바꾸면_새_키다(self):
+        # TRIP-1702 — 키가 URL 해시뿐이면 폭을 바꿔 다시 돌려도 "이미 있음"으로 전부 건너뛰고(CDN 도 immutable 캐시) 560px 가 남는다.
+        self.assertIn(f"/w{t.WIDTH}/", t.thumb_key("https://a/1.jpg"))
 
     def test_SQL_은_따옴표를_이스케이프하고_원본이_같은_행만_고친다(self):
         sql = t.update_sql("https://a/it's.jpg", "https://cdn.example.net/")
@@ -41,12 +45,17 @@ class Resize(unittest.TestCase):
         Image.new("RGB", (w, h), (200, 30, 30)).save(buf, "JPEG", quality=95)
         return buf.getvalue()
 
-    def test_940px_는_560px_WebP_로_줄고_비율을_지킨다(self):
+    def test_940px_원본은_줄이지_않고_WebP_로만_바꾼다(self):
+        # TRIP-1702 — 상세 히어로(1206px)에 560px 를 늘려 흐렸다. TourAPI 원본 상한이 940px 라 그 이상은 만들 수 없다.
         src = self.jpeg(940, 705)
         out = t.resize(src)
         img = Image.open(io.BytesIO(out))
-        self.assertEqual((img.format, img.width, img.height), ("WEBP", 560, 420))
+        self.assertEqual((img.format, img.width, img.height), ("WEBP", 940, 705))
         self.assertLess(len(out), len(src))
+
+    def test_940px_보다_큰_원본은_940px_로_줄고_비율을_지킨다(self):
+        img = Image.open(io.BytesIO(t.resize(self.jpeg(1880, 1410))))
+        self.assertEqual((img.width, img.height), (940, 705))
 
     def test_작은_원본은_키우지_않는다(self):
         self.assertEqual(Image.open(io.BytesIO(t.resize(self.jpeg(300, 200)))).width, 300)
