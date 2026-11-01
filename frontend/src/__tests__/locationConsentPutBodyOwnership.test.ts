@@ -5,17 +5,16 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 
 /**
- * TRIP-609 AC-2(구조) · AC-5(배치) · PBT-U6-F3 · BR-U6-29 — PUT 바디 **단일 통로** + shared 배치 가드.
+ * TRIP-609 AC-2(구조) · PBT-U6-F3 · BR-U6-29 — PUT 바디 **단일 통로** 가드.
  *
  * 무엇을 보장하나:
  *  (단일 통로) 위치 동의 PUT 바디(`{legalConsent, gpsRecordingOptIn}`)를 **객체 리터럴로 조립하는
  *   유일한 곳이 `consentPutBody.ts`** 다. PBT(consentPutBody.test.ts)는 그 함수가 옳음을 증명하지만,
  *   누가 다른 곳에서 `mutate({data:{legalConsent:true}})` 처럼 직접 조립하면 L2·L3 분리 전송이 새고
  *   PBT 게이트가 red 가 된다. 그 "샐 곳"을 소스 층에서 0으로 못 박는다(deletionScope 단일 소유 동형).
- *  (배치) `useLocationConsent`·`revokeImpact`·`consentPutBody` 가 `features/settings` 가 아니라
- *   `shared/location` 에 산다(TRIP-567·576 cross-feature 소비 + features 경계). 라우트·페이지 배럴도 실재.
+ *  (배치 AC-5 — 파일이 shared/location 에 있는지·라우트·배럴 실재 — 는 구조 규칙이라 jest 가 아니라 import 경로(tsc)·Steiger 가 본다.)
  *
- * 왜 소스 스캔인가: "조립이 한 곳에만 있다"·"파일이 shared 에 있다"는 런타임 동작이 아니라 코드 배치의
+ * 왜 소스 스캔인가: "조립이 한 곳에만 있다"는 런타임 동작이 아니라 코드 배치의
  * 성질이라 렌더 테스트로 표현 못 한다.
  *
  * 왜 **shared/location 스코프**인가(whole-repo 아님): 생성 스키마 `putMeLocationConsentBody.ts` 는
@@ -71,45 +70,12 @@ function collectSources(dir: string): string[] {
   return out;
 }
 
-describe('TRIP-609 · consentPutBody 단일 통로 + shared 배치 가드', () => {
+describe('TRIP-609 · consentPutBody 단일 통로', () => {
   it('consentPutBody.ts 가 실재하고 실제로 PUT 바디를 조립한다(양성 짝 — 빈 스텁 차단)', () => {
     expect(existsSync(CONSENT_PUT_BODY_FILE)).toBe(true);
     expect(assemblesPutBody(readFileSync(CONSENT_PUT_BODY_FILE, 'utf8'))).toBe(
       true
     );
-  });
-
-  it('AC-5 배치 — 순수/훅 모듈이 shared/location 에 산다(features/settings 아님)', () => {
-    for (const file of [
-      'consentPutBody.ts',
-      'revokeImpact.ts',
-      'useLocationConsent.ts',
-    ]) {
-      expect(existsSync(join(SHARED_LOCATION, file))).toBe(true);
-    }
-  });
-
-  it('AC-5 배치 — 라우트·슬라이스 배럴·페이지가 관례대로 실재한다', () => {
-    expect(
-      existsSync(join(SRC_ROOT, '..', 'app', 'settings', 'location.tsx'))
-    ).toBe(true);
-    expect(
-      existsSync(
-        join(SRC_ROOT, 'pages', 'settings', 'settings-location', 'index.ts')
-      )
-    ).toBe(true);
-    expect(
-      existsSync(
-        join(
-          SRC_ROOT,
-          'pages',
-          'settings',
-          'settings-location',
-          'ui',
-          'LocationConsentPage.tsx'
-        )
-      )
-    ).toBe(true);
   });
 
   it('shared/location 의 다른 소스는 PUT 바디를 인라인 조립하지 않는다(consentPutBody.ts 가 유일 통로)', () => {

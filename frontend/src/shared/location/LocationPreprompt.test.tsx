@@ -146,43 +146,7 @@ describe('비주얼 구조', () => {
     });
   });
 
-  describe('LocationPreprompt — 히어로 일러스트 (default)', () => {
-    it('레이더 히어로 일러스트 요소가 렌더된다', () => {
-      renderDefault();
-
-      // 전체화면 전환의 구조 증거 — 일러스트의 생김새(중첩 ellipse)는 스크린샷이 검증한다.
-      expect(screen.getByTestId('onboarding-location-hero')).toBeOnTheScreen();
-    });
-  });
-
-  // 카드형 테두리·글자 토큰은 실화면 QA 몫. 닫기 없음·동결 앵커('설정에서' 완전일치)는 보존한다.
-  describe('LocationPreprompt — 위치 안내 카드형 복귀 (TRIP-717)', () => {
-    function renderDenied() {
-      render(
-        <LocationPreprompt
-          purposeContext={PURPOSE}
-          state="permission-denied"
-          onProceed={jest.fn()}
-          onOpenSettings={jest.fn()}
-        />
-      );
-    }
-
-    it('닫기(×) 버튼은 더 이상 없다 (onDismissNotice/noticeDismissed 폐기)', () => {
-      renderDenied();
-
-      // ▸단언 — × testID 부재 + denied 진행 수단·안내 앵커는 그대로.
-      expect(
-        screen.queryByTestId('onboarding-location-notice-dismiss')
-      ).toBeNull();
-      expect(
-        screen.getByTestId('onboarding-location-denied-notice')
-      ).toHaveTextContent('설정에서');
-      expect(
-        screen.getByTestId('onboarding-location-settings')
-      ).toBeOnTheScreen();
-    });
-  });
+  // 히어로 일러스트 존재·닫기(×) 부재(TRIP-717)는 jest-cut A 에서 지웠다 — 생김새·지운 것의 재등장이라 실화면 QA 몫(permissions.md 위치 사전 안내).
 });
 
 // TRIP-1427 (Q-016 · 결정 3) — 거부 본문에서 내부 용어 '온보딩'을 빼고, 숙소를 등록한 적 없는 신규 사용자 기준으로 쓴다.

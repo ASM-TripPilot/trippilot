@@ -1932,3 +1932,17 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — situation-awareness Functional Design 사후 개정(판단 기록), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
+
+## Functional Design·NFR Design 사후 개정 — 매거진·재계획 비교 화면 삭제 반영 (U1·U4·U8)
+**Timestamp**: 2026-11-01T22:10:00+09:00 (작업 시점)
+**User Input**: (사용자 원문) "1742 머지 -> aidlc 정리 -> 버그 원인만 파악 -> …" · "7 2 12 10 11 실수 방지하고 1742 머지하고 계속 ㄱ" — 같은 날 화면 삭제 결정("매거진 화면, 재계획 비교(planb/diff)")의 정본 반영이다.
+**AI Response**: 지운 화면을 가리키던 정본 5곳에 `[개정 · 2026-11-01]` 블록을 덧붙였다(원문·기존 블록 삭제·수정 0줄).
+- `construction/u1-accommodation-trip/functional-design/frontend-components.md` — `magazine.tsx` 삭제
+- `construction/u4-in-trip-planb/functional-design/frontend-components.md` §1·§2 — `planb/diff`(i18·i19) 삭제, 실재 슬라이스 5개, 확정은 `planb-draft` [적용하기] 하나
+- `construction/u4-in-trip-planb/functional-design/business-logic-model.md` — 흐름도의 「i18 비교 → 확정 → i19」 화면 없음, i13 [이대로 적용]이 확정
+- `construction/u4-in-trip-planb/nfr-design/nfr-design-patterns.md` — `useApplyReplan` 호출 화면(PlanbDraftPage·GeneratingPage)
+- `construction/u8-conversational-assistant/functional-design/business-logic-model.md` — 「재계획 확정은 `planb/diff`」 낡음
+코드 변경은 같은 PR(#1743)의 화면 삭제다.
+**Context**: CONSTRUCTION — U1·U4·U8 설계 문서 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---

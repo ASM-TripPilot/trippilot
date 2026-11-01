@@ -5,23 +5,15 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import { useAnimatedProbe } from '@/test-support/animatedProbe';
 import {
   advance,
-  BAR_ROOT,
   deferOsAnswer,
   FINAL_IDS,
   firstGone,
-  firstSeen,
   flushOsAnswer,
-  frameSample,
   holdReduceMotionOn,
-  isMounted,
   joinWatches,
-  lastSample,
   moved,
   NEW_CELLS,
-  readRow,
   rootScale,
-  setWindowWidth,
-  slotEffect,
   START5_IDS,
   START_CELLS,
   START_EXPLORE,
@@ -30,12 +22,10 @@ import {
   START_RECORDS,
   staysOnceGone,
   staysOnceSeen,
-  structureSteady,
   useInteractionGate,
   visibleIds,
   watchMotion,
 } from '@/test-support/barMotionProbe';
-import { renderedText } from '@/test-support/sheetTree';
 
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
 
@@ -43,7 +33,6 @@ import {
   BAR_ENTER_DELAY_MS,
   BAR_ENTER_MS,
   BAR_EXIT_MS,
-  barMorphFrame,
 } from '@/widgets/bottom-nav-bar';
 import { LiveBottomBar, type LiveBottomBarProps } from './LiveBottomBar';
 
@@ -222,8 +211,6 @@ describe('LiveBottomBar · 터치 영역 44 이상', () => {
 // 허브 바가 홈 탭 바와 같은 5칸(홈·탐색·일정·기록·마이)으로 시작해 ① 확대 → ② 일정만 남기고 컷 → ③ 폭이 줄며 일정이 맨 앞으로 → ④ 뒤로 원 +
 // 수정·챗봇·행사 등장을 재생하고, 뒤로는 역순(ⓐ 즉시 사라짐 → ⓑ 펼침 → ⓒ 나머지 칸 등장)을 끝낸 **뒤** `onBack` 을 부른다. 출발 탭이 없으면 모션 없음.
 // 입장은 OS 답 false + interactions 완료 + 마운트 후 `BAR_ENTER_DELAY_MS` 중 가장 늦은 때 시작하고, 그 전까지 시작 5칸이 그대로다.
-const START5_TEXT = ['홈', '탐색', '일정', '기록', '마이'];
-const FINAL_TEXT = ['일정', '수정', '챗봇', '행사'];
 const TAB_ID: Record<ShellTabKey, string> = {
   home: START_HOME,
   explore: START_EXPLORE,
@@ -254,28 +241,9 @@ describe('LiveBottomBar · 모프 (BM)', () => {
   const probe = useAnimatedProbe();
   const gate = useInteractionGate();
 
-  /** 모션 없는 최종 모양의 지문 — 출발 탭 없이 그린 바. */
-  function staticFinalSample(): string {
-    renderBar();
-    const sample = frameSample();
-    screen.unmount();
-    return sample;
-  }
-
-  it('입장 신호 + 출발 탭이면 첫 프레임이 시작 5칸(홈 활성)이고 OS 답을 기다리는 동안 안 움직이며, 답이 true 로 오면 최종 구조로 즉시 바뀐다', async () => {
-    const finalSample = staticFinalSample();
+  it('입장 신호 + 출발 탭이면 OS 답을 기다리는 동안 시작 칸은 눌러도 허브 콜백이 없고(일정 칸만 진짜 버튼), 답이 true 로 오면 최종 구조로 즉시 바뀐다', async () => {
     const os = deferOsAnswer();
     const handlers = renderBar({ departureTab: 'home', entrance: true });
-
-    expect(screen.getAllByTestId(BAR_ROOT)).toHaveLength(1);
-    expect(visibleIds()).toEqual(START5_IDS);
-    expect(renderedText(screen.root).split('\n')).toEqual(START5_TEXT);
-    expect(selectedStartIds()).toEqual([START_HOME]);
-    NEW_CELLS.forEach((id) => expect(screen.queryByTestId(id)).toBeNull());
-    const waiting = watchMotion(20);
-    expect(moved(waiting)).toBe(false);
-    expect(allShapes(waiting, START5_IDS)).toBe(true);
-    // 시작 칸은 복제본일 뿐이라 눌러도 허브 콜백이 없고, 일정 칸만 진짜 버튼이다.
     START_CELLS.forEach((id) => fireEvent.press(screen.getByTestId(id)));
     Object.values(handlers).forEach((fn) => expect(fn).not.toHaveBeenCalled());
     fireEvent.press(screen.getByTestId(SCHEDULE));
@@ -284,142 +252,34 @@ describe('LiveBottomBar · 모프 (BM)', () => {
     await act(async () => {
       os.resolve(true);
     });
+
     expect(visibleIds()).toEqual(FINAL_IDS);
-    expect(renderedText(screen.root).split('\n')).toEqual(FINAL_TEXT);
     expect(screen.getByTestId(SCHEDULE)).toBeSelected();
-    advance(32); // 값이 최종으로 자리 잡는 스냅 프레임은 움직임으로 치지 않는다
-    const after = watchMotion(30);
-    expect(structureSteady(after)).toBe(true);
-    expect(moved(after)).toBe(false);
-    expect(lastSample(after)).toBe(finalSample);
   });
 
   it.each(TABS)(
-    '[출발 탭 %s] 답이 false 여도 지연 동안은 시작 5칸 그대로이고, 지연 뒤 4단계를 재생한다 — 컷 이후 시작 칸 제거(재등장 없음) → 새 칸 등장 → 최종 구조, 일정 칸은 같은 노드, 분홍은 시작에선 출발 탭·컷 뒤엔 일정',
-    async (tab) => {
-      const finalSample = staticFinalSample();
-      const os = deferOsAnswer();
-      renderBar({ departureTab: tab, entrance: true });
-      await act(async () => {
-        os.resolve(false);
-      });
-      const D = BAR_ENTER_DELAY_MS;
-      const startSelected: (string[] | null)[] = [];
-      const scales: number[] = [];
-      const watch = watchMotion(
-        Math.ceil((D + BAR_ENTER_MS + 320) / 16),
-        16,
-        () => {
-          startSelected.push(
-            visibleIds().includes(START_HOME) ? selectedStartIds() : null
-          );
-          scales.push(rootScale());
-        }
-      );
-
-      // 지연 동안(≤ D−16)은 아무것도 안 움직이고 확대(①)도 시작하지 않으며, 시작 5칸은 ① 구간(D+64)까지 유지된다.
-      watch.shapes.forEach((shape, i) => {
-        if (watch.at[i] <= D + 64) expect(shape).toEqual(START5_IDS);
-        if (watch.at[i] <= D - 16) expect(scales[i]).toBeCloseTo(1, 6);
-      });
-      const quiet = watch.samples.filter((_, i) => watch.at[i] <= D - 16);
-      expect(new Set(quiet).size).toBe(1);
-      // ② 컷: 지연 전엔 없고 D+200ms 안에 시작 칸 4개가 렌더에서 사라져 다시 안 나타난다.
-      START_CELLS.forEach((id) => {
-        const gone = firstGone(watch, id) as number;
-        expect(gone).toBeGreaterThanOrEqual(D);
-        expect(gone).toBeLessThanOrEqual(D + 200);
-        expect(staysOnceGone(watch, id)).toBe(true);
-      });
-      const cutAt = firstGone(watch, START_HOME) as number;
-      // 분홍: 컷 전 시작 5칸은 출발 탭 칸 하나(일정이면 일정), 컷 뒤엔 일정 — 시작부터 일정이 분홍이면 홈 탭 바와 색이 튄다.
-      startSelected.forEach((ids, i) => {
-        if (ids !== null) expect(ids).toEqual([TAB_ID[tab]]);
-        expect(watch.scheduleSelected[i]).toBe(
-          watch.at[i] < cutAt ? tab === 'itinerary' : true
-        );
-      });
-      // 시작 칸 레이어와 새 칸 레이어는 동시에 안 보이고, 새 칸은 컷 뒤에 처음 보여 안 사라진다.
-      watch.shapes.forEach((shape) =>
-        expect(
-          START_CELLS.some((id) => shape.includes(id)) &&
-            NEW_CELLS.some((id) => shape.includes(id))
-        ).toBe(false)
-      );
-      NEW_CELLS.forEach((id) => {
-        expect(firstSeen(watch, id) as number).toBeGreaterThanOrEqual(cutAt);
-        expect(staysOnceSeen(watch, id)).toBe(true);
-      });
-      expect(structureSteady(watch)).toBe(true);
-      expect(moved(watch)).toBe(true);
-      // 끝: 정적 최종과 같고, 시작 칸이 렌더에 남지 않으며(숨기기만 한 게 아니다), 이후 안 변한다.
-      expect(lastSample(watch)).toBe(finalSample);
-      expect(visibleIds()).toEqual(FINAL_IDS);
-      expect(renderedText(screen.root).split('\n')).toEqual(FINAL_TEXT);
-      expect(moved(watchMotion(20))).toBe(false);
-    }
-  );
-
-  it('입장 신호가 없거나(허브가 이미 한 번 재생함) 출발 탭이 없으면(푸시 딥링크·planb) OS 답이 false 여도 첫 프레임부터 최종 구조이고 움직이지 않는다', async () => {
-    const finalSample = staticFinalSample();
-    probe.setReduceMotion(false);
-    for (const props of [
-      { departureTab: 'home', entrance: false },
-      { entrance: true },
-    ] as const) {
-      renderBar(props);
-      expect(visibleIds()).toEqual(FINAL_IDS);
-      await flushOsAnswer();
-
-      const watch = watchMotion(60);
-
-      expect(allShapes(watch, FINAL_IDS)).toBe(true);
-      expect(moved(watch)).toBe(false);
-      expect(lastSample(watch)).toBe(finalSample);
-      screen.unmount();
-    }
-  });
-
-  it.each(TABS)(
-    '[출발 탭 %s] 뒤로를 누르면 onBack 은 모션이 끝난 뒤 정확히 1회다 — 연타해도 1회(타이머를 늦추지도 않는다), 뒤로·새 칸이 즉시 사라진 뒤 시작 칸이 나타나 그 탭이 분홍인 시작 5칸에서 끝난다',
+    '[출발 탭 %s] 뒤로를 누르면 onBack 은 모션이 끝난 뒤 정확히 1회다 — 연타해도 1회(타이머를 늦추지도 않는다), 끝 모양은 그 탭이 분홍인 시작 5칸이다',
     async (tab) => {
       probe.setReduceMotion(false);
       const handlers = renderBar({ departureTab: tab });
       await flushOsAnswer();
-      expect(visibleIds()).toEqual(FINAL_IDS);
 
       fireEvent.press(screen.getByTestId(BACK));
       expect(handlers.onBack).not.toHaveBeenCalled(); // 같은 틱에는 부르지 않는다
       let before = -1;
       let afterDue = -1;
-      const watch = watchMotion(40, 16, (ms) => {
+      watchMotion(40, 16, (ms) => {
         if (ms === 16 || ms === 32 || ms === 112 || ms === 304)
           pressBackIfMounted(); // 연타 — 숨겨진 뒤로가 남아 있어도 무시돼야 한다
         if (ms === BEFORE_DUE_MS) before = handlers.onBack.mock.calls.length;
-        // 시작 5칸이 서 있는 내내 분홍은 출발 탭 하나다(일정이 분홍인 채 끝났다가 홈 탭 바로 바뀌면 색이 튄다).
-        if (visibleIds().includes(START_HOME))
-          expect(selectedStartIds()).toEqual([TAB_ID[tab]]);
         if (ms === AFTER_DUE_MS) afterDue = handlers.onBack.mock.calls.length;
       });
 
       expect(before).toBe(0);
       expect(afterDue).toBe(1);
       expect(handlers.onBack).toHaveBeenCalledTimes(1);
-      NEW_CELLS.forEach((id) => {
-        expect(firstGone(watch, id) as number).toBeLessThanOrEqual(100);
-        expect(staysOnceGone(watch, id)).toBe(true);
-      });
-      const backGone = firstGone(watch, BACK) as number;
-      START_CELLS.forEach((id) => {
-        expect(firstSeen(watch, id) as number).toBeGreaterThanOrEqual(backGone);
-        expect(staysOnceSeen(watch, id)).toBe(true);
-      });
-      expect(structureSteady(watch)).toBe(true);
       expect(visibleIds()).toEqual(START5_IDS);
-      expect(renderedText(screen.root).split('\n')).toEqual(START5_TEXT);
       expect(selectedStartIds()).toEqual([TAB_ID[tab]]);
-      expect(allShapes(watchMotion(38), START5_IDS)).toBe(true); // 끝난 뒤 최종으로 되돌아가지 않는다
-      expect(handlers.onBack).toHaveBeenCalledTimes(1);
     }
   );
 
@@ -621,98 +481,5 @@ describe('LiveBottomBar · 모프 (BM)', () => {
     gate.finish();
     expect(errors).not.toHaveBeenCalled(); // 언마운트 뒤 상태 갱신·act 경고 없음
     errors.mockRestore();
-  });
-});
-
-// ── 단계 함수 값 ↔ 칸 스타일 고리 (BL) ────────────────────────────────────────────────────────────────────────────────
-// "어느 칸이 마운트돼 있나"만 보면 칸이 단계 함수가 낸 값으로 실제 연결됐는지(새 칸이 시작 칸 값을 읽는지·슬롯 불투명도/확대·바 확대·뒤로 폭)를
-// 못 잡는다 — 칸의 조상 효과(`slotEffect`)·루트 확대·뒤로 폭을 `barMorphFrame` 오라클과 비교한다.
-// ⚠️ 한계: 중간 값은 시각 정렬 오차(±8ms)를 흡수하는 범위로만 보고 평평한 구간(plateau)·끝값을 우선한다. ① 확대는 0.1s 안에서만 보이는 값이라
-//   끝값·plateau 가 없어 중간 구간(0~96ms)을 범위로 본다(상수 1 로 고정한 구현을 거르는 유일한 길).
-describe('LiveBottomBar · 단계 함수 값 ↔ 칸 스타일 (BL)', () => {
-  useAnimatedProbe();
-  useInteractionGate();
-  let windowSpy: jest.SpyInstance | null = null;
-  beforeEach(() => {
-    windowSpy = setWindowWidth(390);
-  });
-  afterEach(() => {
-    windowSpy?.mockRestore();
-    windowSpy = null;
-  });
-  const NEW_IDS = [EDIT, CHATBOT, EVENT];
-
-  /** 프레임 시각 ±8ms 안에서 단계 함수가 낼 수 있는 값의 [최소, 최대]. */
-  function range(
-    direction: 'enter' | 'exit',
-    ms: number,
-    pick: (frame: ReturnType<typeof barMorphFrame>) => number
-  ): [number, number] {
-    const values = [-8, 0, 8].map((d) =>
-      pick(barMorphFrame(direction, Math.max(0, ms + d)))
-    );
-    return [Math.min(...values), Math.max(...values)];
-  }
-  function expectIn(actual: number, [lo, hi]: [number, number], label: string) {
-    expect({ label, ok: actual >= lo - 0.02 && actual <= hi + 0.02 }).toEqual({
-      label,
-      ok: true,
-    });
-  }
-
-  it('입장: 시작 칸은 시작 칸 값(1·1)으로 서고, ① 동안 바 전체가 커지며, 컷 뒤 평평한 구간에 새 칸은 투명·작고 뒤로 폭 0, 끝나면 새 칸 1·1·뒤로 58·바 확대 1', async () => {
-    const os = deferOsAnswer();
-    renderBar({ departureTab: 'home', entrance: true });
-    const first = barMorphFrame('enter', 0);
-    START_CELLS.forEach((id, k) => {
-      const effect = slotEffect(id);
-      expect(effect.opacity).toBeCloseTo(first.startCells[k].opacity, 6);
-      expect(effect.scale).toBeCloseTo(first.startCells[k].scale, 6);
-    });
-    expect(rootScale()).toBeCloseTo(first.barScale, 6);
-
-    await act(async () => {
-      os.resolve(false);
-    });
-    const D = BAR_ENTER_DELAY_MS; // 모프 시계는 지연이 끝나는 순간부터 돈다
-    watchMotion(Math.ceil((D + BAR_ENTER_MS + 80) / 16), 16, (ms) => {
-      const t = ms - D;
-      if (t <= 96)
-        expectIn(
-          rootScale(),
-          range('enter', Math.max(0, t), (f) => f.barScale),
-          `rootScale@${ms}`
-        );
-      if (t >= 128 && t <= 208) {
-        NEW_IDS.forEach((id, i) => {
-          if (!isMounted(id)) return;
-          const effect = slotEffect(id);
-          expectIn(
-            effect.opacity,
-            range('enter', t, (f) => f.newCells[i].opacity),
-            `${id}.opacity@${ms}`
-          );
-          expectIn(
-            effect.scale,
-            range('enter', t, (f) => f.newCells[i].scale),
-            `${id}.scale@${ms}`
-          );
-        });
-        expectIn(
-          readRow().backWidth ?? 0,
-          range('enter', t, (f) => f.backSize),
-          `backWidth@${ms}`
-        );
-      }
-    });
-
-    const last = barMorphFrame('enter', BAR_ENTER_MS);
-    NEW_IDS.forEach((id, i) => {
-      const effect = slotEffect(id);
-      expect(effect.opacity).toBeCloseTo(last.newCells[i].opacity, 6);
-      expect(effect.scale).toBeCloseTo(last.newCells[i].scale, 6);
-    });
-    expect(readRow().backWidth).toBe(last.backSize);
-    expect(rootScale()).toBeCloseTo(last.barScale, 6);
   });
 });

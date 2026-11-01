@@ -74,8 +74,6 @@ import {
   type AssistantScenario,
   type SheetState,
 } from '@/pages/assistant/assistant-sheet/index.view';
-import { MAGAZINE_DEFAULT_PROPS } from '@/pages/magazine/model/magazineFixtures';
-import { MagazineScreen } from '@/pages/magazine/ui/MagazineScreen';
 import {
   buildDraftPins,
   buildGenerationGauge,
@@ -3811,17 +3809,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         />
       ),
   },
-  // ── a02 매거진 목록(TRIP-700) — 홈에서 push 로 진입하는 별 화면. 순수 뷰라 콜백 없이 렌더
-  //    (프리뷰는 시각 대조 전용, 칩 토글·항법은 실앱/컨테이너 몫). withShellTabBar 는 Figma 탭바
-  //    문맥 재현(실앱은 (tabs) 밖이라 탭바 없음 — 01b Q1). 매서너리 불균등·핑크 알약은 6-b 육안. ──
-  {
-    key: 'magazine-default',
-    band: 'a',
-    label: 'a02 · 여행지 둘러보기',
-    login: null,
-    render: () =>
-      withShellTabBar(<MagazineScreen {...MAGAZINE_DEFAULT_PROPS} />),
-  },
   // 지도 계층 선행(TRIP-197 D9) — 층 C(실기) 진입점. 키/로드 실패 분기는 렌더 안 해봐야
   // 알 수 없어 여기서는 해피패스 1키만 둔다(env 키는 빌드 시 번들에 인라인되므로 preview가
   // 런타임에 비울 수 없다 — 실패 분기는 MapView.test.tsx가, C-2는 .env를 실제로 비우고
@@ -4814,7 +4801,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'd04 · 장소 탐색 default',
     login: null,
     // TRIP-708 완료 조건: d04 는 (tabs) 밖 라우트라 복제 탭바가 프리뷰에도 보여야 한다. 탭바는
-    // page 소유(화면 순수성)라 순수 화면만 태우면 안 보이므로, magazine 선례처럼 withShellTabBar
+    // page 소유(화면 순수성)라 순수 화면만 태우면 안 보이므로, withShellTabBar
     // 로 감싸 셸 탭바(탐색 활성)를 얹는다(실 라우트는 PlaceExplorePage 가 동일 탭바를 그린다).
     render: () =>
       withShellTabBar(

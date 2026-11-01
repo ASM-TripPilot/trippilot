@@ -17,10 +17,11 @@ import {
   resolveFallbackNotice,
   resolvePlanMapCenter,
   resolveShortfallNotice,
+  sheetMeta,
+  sheetRowKeys,
   shouldKeepPollingDraft,
 } from '@/features/itinerary';
 import type { GenerationDayState } from '@/features/itinerary';
-import { legDistance } from '@/entities/place';
 import { resolveUnplacedNames } from '@/features/itinerary';
 import { DraftScreen } from './DraftScreen';
 import { GenerationFallbackScreen } from './GenerationFallbackScreen';
@@ -568,17 +569,8 @@ export function DraftPage({
     );
     const selectedDayNumber =
       tabs.find((tab) => tab.date === selectedDate)?.dayNumber ?? 1;
-    // 헤더 meta = "N곳 · X.Xkm". `legDistance` 는 "이동 3.5km" 를 주지만 헤더는 **km 부만** 쓴다
-    // (D8 · INV-3 — "이동" 접두·소요 어휘 금지). 합 대상은 커넥터가 그리는 구간(`slice(1)`)뿐이고,
-    // 그중 하나라도 거리를 모르면 "N곳"만(TRIP-1110 · INV-4).
-    const legLabel = legDistance(
-      partialSlots.slice(1).map((slot) => slot.distanceRange)
-    );
-    const kmPart = legLabel === null ? null : legLabel.replace('이동 ', '');
-    const meta =
-      kmPart === null
-        ? `${partialSlots.length}곳`
-        : `${partialSlots.length}곳 · ${kmPart}`;
+    // 헤더 meta = "N곳 · X.Xkm"(전부 셈 · 커넥터 구간 km — 규칙은 `sheetMeta`, D8 · INV-3 · TRIP-1110).
+    const meta = sheetMeta(partialSlots, { count: 'all', km: true });
     // 지도 center — 그날 첫 핀, 없으면 사다리(TRIP-1295). 거점·숙소는 조회하지 않는다(③ 건너뜀).
     const center = resolvePlanMapCenter({
       days,
@@ -615,7 +607,7 @@ export function DraftPage({
             const items: ReactElement[] = [
               <SlotStopCard
                 // 순번을 섞는다 — 같은 날 같은 장소 2회(BR-U2-04 위반 데이터, TRIP-1296)면 poiId 만으론 겹친다. 끌어 옮기지 않는 목록이라 순번 key 가 안전하다.
-                key={`card-${index}-${slot.poiId}`}
+                key={sheetRowKeys(index, slot.poiId).card}
                 slot={slot}
                 date={selectedDate}
                 index={index}
@@ -633,7 +625,7 @@ export function DraftPage({
               const nextSlot = partialSlots[index + 1];
               items.push(
                 <DistanceConnector
-                  key={`conn-${index}-${slot.poiId}`}
+                  key={sheetRowKeys(index, slot.poiId).conn}
                   slotKey={buildSlotKey(selectedDate, slot.poiId)}
                   distanceRange={nextSlot.distanceRange}
                 />
@@ -709,16 +701,8 @@ export function DraftPage({
     );
     const selectedDayNumber =
       tabs.find((tab) => tab.date === selectedDate)?.dayNumber ?? 1;
-    // 헤더 meta = "N곳 · X.Xkm". `legDistance` 의 "이동 " 접두는 떼고 km 부만(D8 · INV-3).
-    // 합 대상은 커넥터 구간(`slice(1)`)뿐, 하나라도 모르면 "N곳"만(TRIP-1110 · INV-4).
-    const legLabel = legDistance(
-      listedSlots.slice(1).map((slot) => slot.distanceRange)
-    );
-    const kmPart = legLabel === null ? null : legLabel.replace('이동 ', '');
-    const meta =
-      kmPart === null
-        ? `${listedSlots.length}곳`
-        : `${listedSlots.length}곳 · ${kmPart}`;
+    // 헤더 meta = "N곳 · X.Xkm"(전부 셈 · 커넥터 구간 km — 규칙은 `sheetMeta`, D8 · INV-3 · TRIP-1110).
+    const meta = sheetMeta(listedSlots, { count: 'all', km: true });
     const center = resolvePlanMapCenter({
       days,
       selectedDate,
@@ -804,7 +788,7 @@ export function DraftPage({
             {listedSlots.flatMap((slot, index) => {
               const items: ReactElement[] = [
                 <RevealItem
-                  key={`card-${index}-${slot.poiId}`}
+                  key={sheetRowKeys(index, slot.poiId).card}
                   revealing={revealing}
                   index={index}
                   firstDelayMs={500}
@@ -838,7 +822,7 @@ export function DraftPage({
                 const nextSlot = listedSlots[index + 1];
                 items.push(
                   <RevealItem
-                    key={`conn-${index}-${slot.poiId}`}
+                    key={sheetRowKeys(index, slot.poiId).conn}
                     revealing={revealing}
                     index={index}
                     firstDelayMs={500}
