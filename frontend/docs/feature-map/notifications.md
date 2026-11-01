@@ -2,7 +2,7 @@
 id: notifications
 band: l
 status: live-verified
-live_verified_at: 2026-10-31 (8b50db304)
+live_verified_at: 2026-11-02 (f153fe245)
 routes:
   - app/notifications.tsx
 ---
@@ -68,3 +68,4 @@ Preconditions:
 - [실화면] 2026-10-31 푸시 탭(`simctl push` `REFLECTION_DAILY` 2일차)은 홈에서 회고 화면으로 바로 갔고, 그 화면 뒤로는 홈이 아니라 **기록 탭(여행 캘린더)** 으로 돌아왔다(판단 필요 — 회고 화면이 기록 스택 소속인 것으로 보인다). 배너는 1초 안에 눌러야 한다(늦으면 사라진다). 증거 `notifications/09-push-tap-result.png`.
 - [실화면] 2026-10-31 도달 불가 — `inbox-planb-link`(재계획 알림 없음), `inbox-mark-all-error`·`inbox-error`(실패 유도 수단 없음), `inbox-empty`(알림 있는 계정), `push-receive`(재조회는 화면으로 구분 불가).
 - [실화면] 2026-10-31 [결함 의심 FM-L6-01] 콜드 딥링크로 이 화면을 바로 열면(`simctl terminate` → `simctl openurl com.trippilot.travel://…`) 헤더 뒤로가 무반응이고 엣지 스와이프도 안 먹어 화면에 갇힌다 — 개발 콘솔에 `The action 'GO_BACK' was not handled by any navigator`. 뒤로가 `router.back()` 뿐이라 쌓인 화면이 없으면 갈 곳이 없다. 실측: `settings`·`settings/personalization`·`settings/notifications`·`notifications`. 앱이 떠 있을 때(웜) 딥링크는 정상. 증거 `settings/07-cold-deeplink-back.png`, `settings-preferences/08-pers-cold-back.png`.
+- [실화면] 2026-11-02 실패 주입(sim-qa §2 `_dev/fault`)으로 열림 — `inbox-error`(`/me/notifications` 500).
