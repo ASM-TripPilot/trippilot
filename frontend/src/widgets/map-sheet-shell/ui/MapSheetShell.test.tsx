@@ -1690,3 +1690,260 @@ describe('MapSheetShell · 토스트 바닥 신고 — CTA 바가 그려지는 �
     expect(getToastBottoms()).toEqual([]);
   });
 });
+
+/* ──────────────── TRIP-1694 · 루트가 숨겨진 동안(높이 0) 온 가짜 onChange 는 칸으로 받지 않는다 ────────────────
+ * 웹에서 편집기 위에 화면을 push 하면 편집기가 display:none 으로 숨는다 → 셸 루트 onLayout 높이 0 → gorhom 의 세 칸이 전부 0 으로
+ * 겹쳐 어떤 이동이든 완료 때 `onChange(0)` 이 나온다. 셸이 그걸 "닫힘"으로 믿으면 CTA 바(저장 버튼)가 사라진다.
+ * 셸 방어: ① 숨김 동안의 onChange 는 `snapIndex`·`onSheetChange` 둘 다 거른다 ② 숨김→보임 전이에서만 마지막으로 도착한 칸으로 `snapToIndex` 1회.
+ * 숨김 = 루트가 높이 0 을 보고한 상태, 보임 = 높이 > 0 이거나 아직 한 번도 안 잰 상태(jest·첫 렌더·네이티브 기본).
+ * 흉내: 루트 호스트에 `fireEvent(…, 'layout', …)` 로 높이를 보내고, 가짜 도착은 기존 `changeSnap(0)` 으로 보낸다.
+ * ⚠️ 원리적 사각: 통과형 목은 실제 display:none·세 칸이 0 으로 겹침·`indexOf` 첫 칸 선택을 재현 못 하고, 복원 `snapToIndex` 가 웹에서 실제로
+ *   먹히는지(gorhom isLayoutCalculated)도 못 본다 → 웹 실화면 6-b(AC-W1·W2). 여기는 "셸이 높이에 따라 거르고 복원을 요청한다"까지.
+ * 3동작: 준비=칸에 두고 렌더 → 실행=높이 보고(0/양수)·changeSnap → 단언=CTA·지도 잠금·onSheetChange·snapToIndex 스파이. */
+describe('MapSheetShell · SHH — 루트가 숨겨진 동안의 가짜 onChange 방어', () => {
+  beforeEach(() => {
+    withMapKey();
+    spy().mockClear();
+  });
+  afterEach(restoreMapKey);
+
+  function shell(
+    props: Partial<Parameters<typeof MapSheetShell>[0]> = {}
+  ): ReactElement {
+    return (
+      <MapSheetShell
+        center={CENTER}
+        pins={PINS}
+        days={DAYS}
+        selectedDayIndex={0}
+        onSelectDay={jest.fn()}
+        onBack={jest.fn()}
+        header={<Text>헤더</Text>}
+        cta={[{ label: '저장', variant: 'primary', onPress: jest.fn() }]}
+        initialIndex={2}
+        {...props}
+      >
+        <Text>본문</Text>
+      </MapSheetShell>
+    );
+  }
+
+  /** 루트가 이 높이를 보고했다고 흉내 낸다(RN 은 onLayout 의 nativeEvent.layout 을 준다). */
+  function setRootHeight(height: number): void {
+    fireEvent(screen.getByTestId('map-sheet-shell-root'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 390, height } },
+    });
+  }
+  const hide = () => setRootHeight(0);
+  const show = () => setRootHeight(800);
+
+  it('H1 · 숨김 동안 온 onChange(0) 는 닫힘으로 안 받는다 — CTA 바가 남고 지도는 잠긴 채다 (AC-1)', () => {
+    // 준비 — 편집기 모양(기본 배열, 펼침 2 로 진입).
+    render(shell());
+    expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
+
+    // 실행 — 루트가 숨겨지고, 그 사이 가짜 도착(0)이 온다.
+    hide();
+    changeSnap(0);
+
+    // 단언
+    expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
+    expectMapLocked(true);
+  });
+
+  it('H2 · 같은 상황에서 소비처 onSheetChange 도 부르지 않는다 (AC-2)', () => {
+    // 준비
+    const onSheetChange = jest.fn();
+    render(shell({ onSheetChange }));
+
+    // 실행
+    hide();
+    changeSnap(0);
+
+    // 단언 — 허브·j01 이 도착 칸 기억(arrivedIndexRef)을 가짜 값으로 오염시키지 않는다.
+    expect(onSheetChange).not.toHaveBeenCalled();
+  });
+
+  it('H3 · 숨겼다가 다시 보이면 숨기기 전에 마지막으로 도착한 칸으로 snapToIndex 를 정확히 1회 요청한다 (AC-3)', () => {
+    // 준비
+    render(shell());
+    hide();
+    changeSnap(0); // 가짜 도착 — 복원 대상이 이 0 이 아니라 숨기기 전 2 여야 한다.
+    expect(spy()).not.toHaveBeenCalled(); // 숨김 자체는 스냅 요청이 아니다(앵커)
+
+    // 실행
+    show();
+
+    // 단언
+    expect(spy()).toHaveBeenCalledTimes(1);
+    expect(spy()).toHaveBeenCalledWith(2);
+  });
+
+  it('H3b · 복원 칸은 진입 칸(initialIndex)이 아니라 숨기기 전 마지막 도착 칸이다 — 1 로 옮겨 뒀으면 1 (AC-3)', () => {
+    // 준비 — 2 로 진입해 사용자가 1 로 내려 둔다.
+    render(shell());
+    changeSnap(1);
+
+    // 실행
+    hide();
+    changeSnap(0);
+    show();
+
+    // 단언
+    expect(spy()).toHaveBeenCalledTimes(1);
+    expect(spy()).toHaveBeenCalledWith(1);
+  });
+
+  it('H3c · 숨김 안에서 높이 0 을 또 보고해도 복원은 보임 전이 때 1회뿐이고, 복원 뒤의 새 도착 칸이 다음 숨김의 복원 칸이 된다 (AC-3·AC-5)', () => {
+    // 준비/실행 ① — 0 을 두 번 보고 → 보임.
+    render(shell());
+    hide();
+    hide();
+    expect(spy()).not.toHaveBeenCalled();
+    show();
+    expect(spy()).toHaveBeenCalledTimes(1);
+    expect(spy()).toHaveBeenLastCalledWith(2);
+
+    // 실행 ② — 사용자가 1 로 옮기고 한 번 더 숨겼다 돌아온다(한 번 복원하고 영원히 막히는 구현 차단).
+    changeSnap(1);
+    hide();
+    changeSnap(0);
+    show();
+
+    // 단언
+    expect(spy()).toHaveBeenCalledTimes(2);
+    expect(spy()).toHaveBeenLastCalledWith(1);
+  });
+
+  it('H4 · 보이는 동안(미측정·높이>0)에 온 onChange(0) 는 종전처럼 받는다 — CTA 사라짐·지도 풀림·onSheetChange(0) (AC-4 · 선제 green)', () => {
+    // 준비 — 높이를 한 번도 안 보낸 채(= jest·네이티브 기본).
+    const onSheetChange = jest.fn();
+    render(shell({ onSheetChange }));
+
+    // 실행/단언 ① — 미측정.
+    changeSnap(0);
+    expect(screen.queryByTestId('sheet-cta-root')).toBeNull();
+    expectMapLocked(false);
+    expect(onSheetChange).toHaveBeenLastCalledWith(0);
+
+    // 실행/단언 ② — 높이 > 0 을 보고한 뒤에도 같다.
+    changeSnap(2);
+    show();
+    onSheetChange.mockClear();
+    changeSnap(0);
+    expect(screen.queryByTestId('sheet-cta-root')).toBeNull();
+    expectMapLocked(false);
+    expect(onSheetChange).toHaveBeenCalledTimes(1);
+    expect(onSheetChange).toHaveBeenLastCalledWith(0);
+  });
+
+  it('H4b · 한 번 숨겼다 돌아온 뒤에는 진짜 onChange(0) 를 다시 받는다 — "영원히 무시" 금지 (AC-4)', () => {
+    // 준비 — 숨김 동안의 가짜 0 은 거르고(여기서 구현 전 red), 보임으로 돌아온다.
+    const onSheetChange = jest.fn();
+    render(shell({ onSheetChange }));
+    hide();
+    changeSnap(0);
+    expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
+    show();
+
+    // 실행 — 이제 보이는 상태에서 사용자가 핸들까지 내려 0 에 도착.
+    changeSnap(0);
+
+    // 단언
+    expect(screen.queryByTestId('sheet-cta-root')).toBeNull();
+    expectMapLocked(false);
+    expect(onSheetChange).toHaveBeenCalledTimes(1);
+    expect(onSheetChange).toHaveBeenLastCalledWith(0);
+  });
+
+  it('H5 · 복원은 숨김→보임 전이에서만 — 처음 측정이 곧바로 >0 이거나 보임→보임 높이 변화는 snapToIndex 0회 (AC-5 · 선제 green)', () => {
+    render(shell());
+
+    setRootHeight(800); // 첫 측정이 양수
+    setRootHeight(600); // 보임 → 보임
+    setRootHeight(800);
+
+    expect(spy()).not.toHaveBeenCalled();
+  });
+
+  it('H5b · 처음 측정이 곧바로 0 이었다가 보이면 진입 칸(initialIndex)으로 복원한다 — 도착 기록이 없을 때의 출발값 (AC-5)', () => {
+    // 준비 — 도착 알림(onChange)이 한 번도 없었다.
+    render(shell({ initialIndex: 2 }));
+
+    // 실행
+    hide();
+    show();
+
+    // 단언
+    expect(spy()).toHaveBeenCalledTimes(1);
+    expect(spy()).toHaveBeenCalledWith(2);
+  });
+
+  it('H6 · (금지) 마지막 도착 칸이 −1(완전 내림)이면 복원하지 않고, 이후 0 이상 칸에 도착하면 다시 복원한다 (AC-7)', () => {
+    // 준비 — 허브 모양(직접 배열 + 끝까지 내림 허용).
+    render(
+      shell({
+        snapPoints: [28, '55%', '86%'],
+        enablePanDownToClose: true,
+        initialIndex: 1,
+      })
+    );
+    changeSnap(-1); // 보이는 동안 −1 에 도착(완전히 내림)
+
+    // 실행 ① — 이 상태로 숨겼다 돌아온다.
+    hide();
+    show();
+
+    // 단언 ① — −1 은 복원 대상이 아니다.
+    expect(spy()).not.toHaveBeenCalled();
+
+    // 실행 ②/단언 ② — 앵커: 같은 모양이 0 이상 칸이면 복원한다(위 "0회"가 공허하지 않다는 증거).
+    changeSnap(1);
+    hide();
+    changeSnap(-1); // 숨김 중 가짜 도착도 기억을 −1 로 덮지 못한다
+    show();
+    expect(spy()).toHaveBeenCalledTimes(1);
+    expect(spy()).toHaveBeenCalledWith(1);
+  });
+
+  it('H7 · (금지) snapPoints 를 직접 준 소비처는 숨김 동안의 0 으로도 닫힘이 되지 않고, 0번 칸도 복원 대상이다 — 0 은 falsy (AC-8)', () => {
+    // 준비 — i05 모양(2칸 배열, 0번 = 40% 열린 시트).
+    render(shell({ snapPoints: ['40%', '88%'], initialIndex: undefined }));
+
+    // 실행
+    hide();
+    changeSnap(0);
+
+    // 단언 ① — 숨김 중에도 잠김·CTA 유지(닫힘 규칙 비적용).
+    expectMapLocked(true);
+    expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
+
+    // 실행/단언 ② — 돌아오면 0번으로 복원 요청(`if (index)` 로 거르면 여기서 red).
+    show();
+    expect(spy()).toHaveBeenCalledTimes(1);
+    expect(spy()).toHaveBeenCalledWith(0);
+    expectMapLocked(true);
+    expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
+  });
+
+  it('H8 · (금지) 숨김 동안 snapRequest·expandSignal 이 와도 셸 칸 기억이 깨지지 않는다 — 돌아오면 여전히 숨기기 전 칸으로 복원한다 (AC-9)', () => {
+    // 준비 — 요청 값 둘의 출발값을 정해 두고 마운트.
+    const { rerender } = render(
+      shell({ snapRequest: { index: 0, id: 1 }, expandSignal: 0 })
+    );
+    hide();
+    changeSnap(0);
+
+    // 실행 — 숨김 중에 요청이 도착한다(소비되어 사라지는 것은 허용 — 01b Q6).
+    rerender(shell({ snapRequest: { index: 0, id: 2 }, expandSignal: 1 }));
+    changeSnap(0);
+
+    // 단언 ① — 셸은 여전히 열림으로 안다.
+    expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
+    expectMapLocked(true);
+
+    // 실행/단언 ② — 돌아오면 마지막 요청(0)이 아니라 숨기기 전 도착 칸 2 가 마지막 스냅 요청이다.
+    show();
+    expect(spy()).toHaveBeenLastCalledWith(2);
+  });
+});
