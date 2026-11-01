@@ -449,10 +449,102 @@ describe('컨셉·후보·확정 순회 배선', () => {
       fireEvent.press(screen.getByTestId('itinerary-candidate-radio-X'));
       fireEvent.press(screen.getByTestId('itinerary-copick-slotfill-confirm'));
 
-      await screen.findByTestId('itinerary-copick-slotfill-error');
+      // 오류 줄에 사유 글자가 있다(빈 줄 금지 — 옛 SlotFillScreen.test 이전).
+      expect(
+        await screen.findByTestId('itinerary-copick-slotfill-error')
+      ).toHaveTextContent(/\S/);
       // 실패는 이동이 없다(전진 replace 도, 구 back 도 0).
       expect(mockReplace).toHaveBeenCalledTimes(0);
       expect(mockBack).toHaveBeenCalledTimes(0);
+    });
+
+    // 옛 SlotFillScreen.test.tsx(뷰 단위)를 B안으로 옮겼다 — 앱바 제목·라디오 역할·저장 중 잠금·0건 갈래.
+    it('B-TITLE · 컨셉을 고르면 앱바가 "{컨셉} 후보 고르기"이고 후보 행은 라디오 역할이다', async () => {
+      renderPage();
+      await pickConcept('culture');
+      const row = await screen.findByTestId('itinerary-candidate-radio-X');
+
+      expect(screen.getByText(/^\S+ 후보 고르기$/)).toBeOnTheScreen();
+      expect(screen.queryByText('후보 고르기')).toBeNull();
+      expect(row.props.accessibilityRole).toBe('radio');
+    });
+
+    it('B-PENDING · 저장(PUT)이 도는 동안 확정 버튼은 비활성이다', async () => {
+      server.use(
+        http.put(`${BASE}/trips/:tripId/itinerary`, async () => {
+          await delay('infinite');
+          return HttpResponse.json({});
+        })
+      );
+      renderPage();
+      await pickConcept('culture');
+      await screen.findByTestId('itinerary-candidate-radio-X');
+      fireEvent.press(screen.getByTestId('itinerary-copick-slotfill-confirm'));
+
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('itinerary-copick-slotfill-confirm')
+        ).toBeDisabled()
+      );
+    });
+
+    it('B-ZERO-MAX · 최대 반경에서도 0건이면 넓히기는 잠기고 "더 넓혀도 없어요"로 말하며, 눌러도 재조회가 없다', async () => {
+      candidatesResponse = { candidates: [], radiusMUsed: 11300 };
+      renderPage();
+      await pickConcept('culture');
+      await waitFor(() => expect(postCalls).toBe(1));
+      fireEvent.press(screen.getByTestId('itinerary-copick-radius-seg-max'));
+      await waitFor(() => expect(postCalls).toBe(2));
+
+      const expand = await screen.findByTestId('itinerary-copick-zero-radius');
+      await waitFor(() => expect(expand).toBeDisabled());
+      expect(
+        screen.getByText('이 지역엔 더 넓혀도 후보가 없어요')
+      ).toBeOnTheScreen();
+      fireEvent.press(expand);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(postCalls).toBe(2);
+    });
+
+    it('B-ZERO-NEARBY · 사유 NO_NEARBY 면 기존 0건 얼굴에 사유 노드가 붙고 장소 검색은 없다', async () => {
+      candidatesResponse = {
+        candidates: [],
+        radiusMUsed: 1100,
+        emptyReason: 'NO_NEARBY',
+      } as typeof candidatesResponse;
+      renderPage();
+      await pickConcept('culture');
+
+      expect(
+        await screen.findByTestId('itinerary-copick-zero-no-nearby')
+      ).toBeOnTheScreen();
+      expect(
+        screen.getByTestId('itinerary-copick-zero-radius')
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId('itinerary-copick-zero-search')).toBeNull();
+    });
+
+    it('B-ZERO-ALLIN · 사유 ALL_IN_ITINERARY 면 새 문구 + 장소 검색 하나뿐이고, 누르면 직접 추가 화면으로 간다', async () => {
+      candidatesResponse = {
+        candidates: [],
+        radiusMUsed: 1100,
+        emptyReason: 'ALL_IN_ITINERARY',
+      } as typeof candidatesResponse;
+      renderPage();
+      await pickConcept('culture');
+
+      const face = await screen.findByTestId(
+        'itinerary-copick-zero-all-in-itinerary'
+      );
+      expect(
+        within(face).getByText('근처 후보가 이미 모두 일정에 있어요')
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId('itinerary-copick-zero-radius')).toBeNull();
+      expect(screen.queryByTestId('itinerary-copick-zero-concept')).toBeNull();
+
+      fireEvent.press(screen.getByTestId('itinerary-copick-zero-search'));
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(postCalls).toBe(1);
     });
 
     it('C13 · AC-7·경고-1 — 순차 확정: a→X 확정 뒤 b 확정 시 PUT 바디에 앞선 X 가 보존된다(캐시 무효화)', async () => {
@@ -1920,6 +2012,14 @@ describe('후보 기본 선택', () => {
 
       // 단언 ① 기다리는 동안 — 스켈레톤이 있고 0건 얼굴은 없다.
       expect(await screen.findByTestId(SKEL)).toBeOnTheScreen();
+      // 글자 0(곧 올 후보에게 거짓말 금지) · 스크린리더 이름(옛 SlotFillScreen.test 이전).
+      expect(
+        within(screen.getByTestId(SKEL)).queryAllByText(/\S/)
+      ).toHaveLength(0);
+      expect(screen.getByTestId(SKEL)).toHaveProp(
+        'accessibilityLabel',
+        '목록을 불러오는 중'
+      );
       expect(screen.queryByTestId('itinerary-copick-zero')).toBeNull();
 
       // 단언 ② 도착 뒤 — 후보가 보이고 스켈레톤은 사라진다.

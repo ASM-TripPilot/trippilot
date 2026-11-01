@@ -140,6 +140,10 @@ describe('NicknamePage — 서버 중복 판정과 원탭 적용 (AC B5 · B7)',
     await waitFor(() =>
       expect(screen.getByTestId('onboarding-nickname-error')).toBeOnTheScreen()
     );
+    // 사유 문구가 중복의 것이다(금칙어 문구와 섞이면 안 된다 — 옛 NicknameScreen.test 이전).
+    expect(screen.getByTestId('onboarding-nickname-error')).toHaveTextContent(
+      '이미 사용 중인 닉네임이에요'
+    );
     expect(
       screen.getByTestId('onboarding-nickname-suggest-1')
     ).toBeOnTheScreen();
@@ -234,6 +238,8 @@ describe('NicknamePage — return 제출·제출 잠금 (AC-N1 · AC-N2 · AC-N3
     fireEvent.changeText(screen.getByTestId('onboarding-nickname-input'), '가');
     // 앵커 — 형식 오류가 떠 있다(1자가 실제로 들어갔다).
     expect(screen.getByTestId('onboarding-nickname-error')).toBeOnTheScreen();
+    // [다음]도 잠긴다(눌리는 것처럼 보이면 안 된다 — 옛 NicknameScreen.test 이전).
+    expect(screen.getByTestId('onboarding-nickname-next')).toBeDisabled();
 
     // 실행
     fireEvent(screen.getByTestId('onboarding-nickname-input'), 'submitEditing');
@@ -382,5 +388,34 @@ describe('NicknamePage — 저장 실패 (AC B9 · INV-4)', () => {
     // 저장이 안 됐는데 온보딩을 완료로 찍으면 닉네임 없는 계정이 홈으로 나간다.
     expect(requestLog).not.toContain('POST /api/v1/onboarding/complete');
     expect(routerMock.replace).not.toHaveBeenCalled();
+  });
+});
+
+// 옛 NicknameScreen.test.tsx(뷰 단위)를 B안으로 옮겼다 — 화면 글자·탈출구 없음·재생성.
+describe('NicknamePage — 화면 얼굴 · 탈출구 없음 · 재생성', () => {
+  it('제목·부제·필드 라벨·도움말이 보이고, 건너뛰기·뒤로 수단은 없다 (AC B3 · C6 · TRIP-1023 #005)', async () => {
+    await renderPrefilled();
+
+    expect(screen.getByText('닉네임 설정')).toBeOnTheScreen();
+    expect(screen.getByText('2~20자로 입력할 수 있어요')).toBeOnTheScreen();
+    expect(screen.getByText('닉네임')).toBeOnTheScreen();
+    expect(screen.getByTestId('onboarding-nickname-helper')).toHaveTextContent(
+      '나중에 설정에서 바꿀 수 있어요'
+    );
+    expect(screen.queryByTestId('onboarding-nickname-skip')).toBeNull();
+    expect(screen.queryByText(/건너뛰기|건너뛰고 시작/)).toBeNull();
+    expect(screen.queryAllByTestId(/back/).length).toBe(0);
+  });
+
+  it('재생성을 누르면 후보를 한 번 더 받는다', async () => {
+    await renderPrefilled();
+    const asks = () =>
+      requestLog.filter((r) => r === 'POST /api/v1/nickname/suggestions')
+        .length;
+    expect(asks()).toBe(1);
+
+    fireEvent.press(screen.getByTestId('onboarding-nickname-regenerate'));
+
+    await waitFor(() => expect(asks()).toBe(2));
   });
 });

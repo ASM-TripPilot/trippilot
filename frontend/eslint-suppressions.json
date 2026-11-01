@@ -149,11 +149,6 @@
       "count": 1
     }
   },
-  "src/pages/itinerary/itinerary-copick/ui/SlotFillScreen.test.tsx": {
-    "no-restricted-properties": {
-      "count": 4
-    }
-  },
   "src/pages/itinerary/itinerary-draft/ui/DraftPage.integration.test.tsx": {
     "no-restricted-properties": {
       "count": 5
@@ -308,18 +303,8 @@
       "count": 2
     }
   },
-  "src/pages/onboarding/onboarding-nickname/ui/NicknameScreen.test.tsx": {
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
   "src/pages/onboarding/onboarding-terms/ui/TermsPage.tsx": {
     "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "src/pages/onboarding/onboarding-terms/ui/TermsScreen.test.tsx": {
-    "no-restricted-properties": {
       "count": 1
     }
   },
