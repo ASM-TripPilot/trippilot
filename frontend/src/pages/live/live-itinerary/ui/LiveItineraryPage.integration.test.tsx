@@ -6751,6 +6751,65 @@ describe('방문 체크', () => {
       await waitFor(() => expect(doneTimeOf('p1')).not.toBeNull());
       expect(screen.queryAllByTestId(NOTICE_ANY)).toHaveLength(0);
     });
+
+    // 형식 검증 반례 R3(OneOpenVisit) — 낙관 완료가 진행 중을 지워 앞 예정 카드에 [도착]이 서는 동안 그걸 누르면,
+    // 완료가 실패했을 때 서버에 진행 중 2곳이 남았다(서버는 하루 open 1개를 막지 않는다 — 책임은 클라). BR-U10-55 개정.
+    it('P14 단독 [방문 완료] 응답을 기다리는 동안 다른 카드 [도착]을 눌러도 도착 POST 는 0회고, 완료가 실패해도 0회다 — 진행 중 2곳을 만들지 않는다 (BR-U10-55 · R3)', async () => {
+      const gate = createGate();
+      server.use(
+        ...baseHandlers(plan(3)),
+        // p3(마지막)에 먼저 도착해 있다 — p1·p2 는 진행 중 앞 예정이라 [도착]이 없고, p3 에 [방문 완료]가 선다.
+        visitsGet(() => [
+          vc({ visitCheckId: 'v3', poiId: 'p3', arrivedAt: T_NEXT }),
+        ]),
+        completeHandler(async () => {
+          await gate.opened;
+          return HttpResponse.error();
+        }),
+        arriveHandler()
+      );
+
+      try {
+        render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+          wrapper,
+        });
+        await waitFor(() =>
+          expect(
+            within(card('p3')).getByTestId(COMPLETE_BTN)
+          ).toBeOnTheScreen()
+        );
+
+        // 실행 ① — p3 [방문 완료](응답 대기). 낙관 완료로 진행 중이 사라져 p1 에 [도착]이 선다.
+        fireEvent.press(within(card('p3')).getByTestId(COMPLETE_BTN));
+        await waitFor(() =>
+          expect(
+            hitCount(`POST /api/v1/trips/${TRIP_ID}/visits/v3/complete`)
+          ).toBe(1)
+        );
+        // 실행 ② — 완료 응답 전에 p1 [도착].
+        fireEvent.press(await screen.findByTestId(arriveId(TODAY, 'p1')));
+        await settle();
+
+        // 단언 ① — 완료가 도는 동안 도착은 나가지 않는다.
+        expect(hitCount(VISITS_PATH)).toBe(0);
+
+        // 실행 ③ — 완료가 네트워크로 실패한다.
+        gate.release();
+        await waitFor(() =>
+          expect(screen.getByTestId(noticeId('p3'))).toHaveTextContent(
+            COMPLETE_FAILED
+          )
+        );
+        await settle();
+
+        // 단언 ② — 끝나도 도착 0회(누름은 줄 세우지 않고 삼킨다), p3 는 관람 중으로 돌아왔다.
+        expect(hitCount(VISITS_PATH)).toBe(0);
+        expect(arriveBodies).toHaveLength(0);
+        expect(timeOf('p3')).toHaveTextContent(/지금 방문 중/);
+      } finally {
+        gate.release();
+      }
+    });
   });
 
   describe('LiveItineraryPage · 즉석 방문은 허브 판정에서 빠진다 (TRIP-1079)', () => {
