@@ -18,7 +18,10 @@ import {
   recordsTripIdForDate,
 } from '../model/recordsCalendar';
 import { useRecordsCalendar } from '../model/useRecordsCalendar';
-import { RecordsCalendarScreen } from './RecordsCalendarScreen';
+import {
+  RecordsCalendarOfflineFace,
+  RecordsCalendarScreen,
+} from './RecordsCalendarScreen';
 import { useTripWizardStore } from '@/features/create-trip';
 import { buildMonthGrid, shiftMonth } from '@/shared/lib/monthGrid';
 import { useSeoulToday } from '@/shared/lib/useSeoulToday';
@@ -43,7 +46,7 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  * 않는다). legend `›` 와 legend 누름은 같은 `openableTripIds` 집합을 본다.
  */
 export function RecordsCalendarPage(): ReactElement {
-  const { trips, isPending, isError } = useRecordsCalendar();
+  const { trips, isPending, isError, isOffline } = useRecordsCalendar();
   const router = useRouter();
   // 훅 호출 순서 규칙 — 아래 일찍 return 들보다 위.
   const itineraries = useQueries({
@@ -72,6 +75,9 @@ export function RecordsCalendarPage(): ReactElement {
       />
     );
   }
+
+  // TRIP-1638 · 오프라인 콜드스타트는 요청이 보류된 isPending 이라 스피너가 끝나지 않는다 — 로딩보다 먼저 가른다.
+  if (isOffline) return <RecordsCalendarOfflineFace />;
 
   if (isPending) {
     return (

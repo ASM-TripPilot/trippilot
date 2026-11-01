@@ -34,7 +34,10 @@ import { TriggerChip } from '@/pages/live/live-itinerary/ui/TriggerChip';
 import { MemoInline } from '@/features/attach-visit-media/index.view';
 import { MemoSheet } from '@/pages/live/live-itinerary/ui/MemoSheet';
 import { PhotoThumbStrip } from '@/pages/record/trip-records/ui/PhotoThumbStrip';
-import { RecordsCalendarScreen } from '@/pages/record/records-calendar/ui/RecordsCalendarScreen';
+import {
+  RecordsCalendarOfflineFace,
+  RecordsCalendarScreen,
+} from '@/pages/record/records-calendar/ui/RecordsCalendarScreen';
 import { VisitRecordCard } from '@/pages/record/trip-records/ui/VisitRecordCard';
 import { VisitTimeSheet } from '@/pages/record/trip-records/ui/VisitTimeSheet';
 import { missingParts } from '@/pages/record/daily-reflection/model/missingParts';
@@ -3709,6 +3712,24 @@ export const PREVIEW_STATES: PreviewState[] = [
         />
       ),
   },
+  // TRIP-1638 — 오프라인으로 처음 켠 홈: 오류 배너 자리에 버튼 없는 안내, 히어로 스켈레톤 없음. 실제 HomePage 는 레인 status 를
+  // 'ready'+카드 0장으로 덮어 두 레인을 숨기므로 같은 빈 레인을 넘긴다(안 넘기면 픽스처 카드가 보인다). Figma 프레임 없음 — 코드 선례.
+  {
+    key: 'home-trips-offline',
+    band: 'a',
+    label:
+      'a01 · 오프라인 콜드스타트(TRIP-1638, Figma 프레임 없음 — 코드 선례)',
+    login: null,
+    render: () =>
+      withShellTabBar(
+        <HomeScreen
+          {...HOME_DEFAULT_PROPS}
+          tripsOffline
+          spotsLane={{ status: 'ready', cards: [], onRetry: noop }}
+          collectionsLane={{ status: 'ready', cards: [], onRetry: noop }}
+        />
+      ),
+  },
   // ── 홈 여행 단계 얼굴 2종(TRIP-317; collecting·upcoming은 TRIP-701 제거) — 실기 판정 전용 진입점 ──
   {
     key: 'home-planning',
@@ -6548,6 +6569,15 @@ export const PREVIEW_STATES: PreviewState[] = [
       <MyTripsListScreen mode="error" onPressCreateTrip={noop} onRetry={noop} />
     ),
   },
+  // TRIP-1638 — 오프라인으로 처음 켠 일정 탭(버튼 없음). 보류 요청에 다시 시도는 무동작이라 두지 않는다.
+  {
+    key: 'h06-my-trips-offline',
+    band: 'h',
+    label:
+      'h06 · 내 여행 오프라인 콜드스타트(TRIP-1638, Figma 프레임 없음 — 코드 선례)',
+    login: null,
+    render: () => <MyTripsListScreen mode="offline" onPressCreateTrip={noop} />,
+  },
   // h06 삭제 메뉴·삭제 확인(TRIP-1055, Figma 4682:2573·4682:3206) — Figma 와 같은 작성중(부산)+완성 2카드.
   // 작성중 카드만 ⋯ 를 받는다. 메뉴 위치·그림자·딤 덮임·중앙 정렬은 jest 사각(6-b 대조 자리).
   {
@@ -8553,6 +8583,15 @@ export const PREVIEW_STATES: PreviewState[] = [
         onRetry={noop}
       />
     ),
+  },
+  // TRIP-1638 — 오프라인으로 처음 켠 기록 탭(버튼 없음).
+  {
+    key: 'records-calendar-offline',
+    band: 'j',
+    label:
+      'j07 · 기록 탭 오프라인 콜드스타트(TRIP-1638, Figma 프레임 없음 — 코드 선례)',
+    login: null,
+    render: () => <RecordsCalendarOfflineFace />,
   },
   // j07 기록 탭 허브 default 키(TRIP-575·767) — 순수 뷰(`RecordsCalendarScreen`)를 격리 렌더한다
   // (`@/shared/api`·`@/features/*` 값 import 0 이라 프리뷰 지뢰 목 통과). 커스텀 월 그리드·코랄 pill 마킹
