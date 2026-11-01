@@ -22,6 +22,7 @@ import com.trippilot.trip.api.TripPeriod
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
 import java.time.Clock
 import java.time.Instant
@@ -87,8 +88,7 @@ class ReplanExecutionTest : StringSpec({
         lateinit var service: ReplanSessionService
     }
 
-    fun fixture(replans: FakeReplans = FakeReplans()): Fixture = Fixture(replans).apply {
-        val archive = FakeArchive()
+    fun fixture(replans: FakeReplans = FakeReplans(), archive: FakeArchive = FakeArchive()): Fixture = Fixture(replans).apply {
         service = ReplanSessionService(
             trips, itineraries, sessions, OriginResolver(noAnchors), archive, surfaces,
             ReplanSolver(sessions, archive, replans, NOOP_TX, clock), replans, FakeLocationConsents(), CapturingLegalLogs(), FakeTripPurgeScope(), events, clock,
@@ -99,11 +99,12 @@ class ReplanExecutionTest : StringSpec({
     fun Fixture.start(
         scope: ReplanScope = ReplanScope.PARTIAL_SLOTS,
         targetDate: LocalDate? = null,
+        excludedPoiIds: List<UUID> = emptyList(),
     ) = service.start(
         acc, trip,
         StartReplan(
             triggerId = null, scope = scope, targetDate = targetDate, origin = ReplanOrigin(OriginKind.GPS, 33.45, 126.56),
-            reasons = listOf("비가 와요"), directives = listOf("실내로"), freeText = null, excludedPoiIds = emptyList(),
+            reasons = listOf("비가 와요"), directives = listOf("실내로"), freeText = null, excludedPoiIds = excludedPoiIds,
         ),
     )
 
@@ -124,6 +125,39 @@ class ReplanExecutionTest : StringSpec({
         f.start()
 
         f.replans.commands.single().targetDate shouldBe today
+    }
+
+    // U4 BR-U4-17 개정(2026-11-01) — 앱은 수동 진입에서 빈 제외 목록을 보낸다. 서버가 안 채우면 그날 건너뛴 곳이
+    // 새 일정에 다시 들어와, 같은 슬롯 키의 건너뜀 기록과 부딪혀 [도착]이 영원히 409 인 칸이 된다.
+    "그날 건너뛴 곳은 앱이 안 보내도 산출 요청의 제외 목록에 실린다" {
+        val skipped = UUID.randomUUID()
+        val f = fixture(archive = FakeArchive(skippedPois = mapOf(today to setOf(skipped))))
+
+        f.start()
+
+        f.replans.commands.single().excludedPoiIds shouldContainExactly listOf(skipped)
+    }
+
+    "앱이 보낸 제외와 합쳐진다 — 겹치면 한 번만" {
+        val sent = UUID.randomUUID()
+        val skipped = UUID.randomUUID()
+        val f = fixture(archive = FakeArchive(skippedPois = mapOf(today to setOf(skipped, sent))))
+
+        f.start(excludedPoiIds = listOf(sent))
+
+        f.replans.commands.single().excludedPoiIds shouldContainExactlyInAnyOrder listOf(sent, skipped)
+    }
+
+    // 다른 날 건너뛴 같은 곳은 슬롯 키가 달라 충돌하지 않는다 — 빼면 그날 갈 수 있는 곳을 괜히 잃는다.
+    "다른 날짜의 건너뜀은 섞이지 않는다 — 대상 일자로 묻는다" {
+        val skippedToday = UUID.randomUUID()
+        val skippedTomorrow = UUID.randomUUID()
+        val tomorrow = today.plusDays(1)
+        val f = fixture(archive = FakeArchive(skippedPois = mapOf(today to setOf(skippedToday), tomorrow to setOf(skippedTomorrow))))
+
+        f.start(scope = ReplanScope.FULL_DAY, targetDate = tomorrow)
+
+        f.replans.commands.single().excludedPoiIds shouldContainExactly listOf(skippedTomorrow)
     }
 
     // 단위 테스트엔 Spring 프록시가 없어 @Async 가 안 걸린다 → 산출이 그 자리에서 끝난다(결정론).
