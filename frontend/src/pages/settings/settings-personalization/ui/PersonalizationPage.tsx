@@ -1,5 +1,6 @@
 import { type ReactElement } from 'react';
 import { useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 
 import { usePersonalization } from '../model/usePersonalization';
 import { PersonalizationScreen } from './PersonalizationScreen';
@@ -20,7 +21,7 @@ export function PersonalizationPage(): ReactElement {
       sharedItems={sharedItems}
       saveFailed={saveFailed}
       onToggle={onToggle}
-      onPressBack={() => router.back()}
+      onPressBack={() => goBackOr(router, '/settings')}
     />
   );
 }

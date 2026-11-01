@@ -7,6 +7,7 @@
  */
 import { type ReactElement, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 
 import { showToast } from '@/shared/ui/Toast';
 import { type PreferenceView } from '@/shared/api/index.schemas';
@@ -66,7 +67,7 @@ export function SettingsPreferencesPage(): ReactElement {
     if (baseView && selection) {
       // 성공하면 설정으로 돌아가고 토스트로 알린다(TRIP-990 · 루트 호스트라 돌아간 뒤에도 보인다).
       save(buildPreferenceInput(baseView, selection), () => {
-        router.back();
+        goBackOr(router, '/settings');
         showToast({ message: PREF_SAVED_TOAST, testID: 'settings-pref-saved' });
       });
     }
@@ -79,7 +80,7 @@ export function SettingsPreferencesPage(): ReactElement {
       onToggle={handleToggle}
       onTogglePet={handleTogglePet}
       onSave={handleSave}
-      onBack={() => router.back()}
+      onBack={() => goBackOr(router, '/settings')}
     />
   );
 }

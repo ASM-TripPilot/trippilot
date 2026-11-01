@@ -1,6 +1,8 @@
 import { useState, type ReactElement } from 'react';
 import { router } from 'expo-router';
 import type { Href } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
 import { groupByDay } from '../model/groupByDay';
 import { notificationAction } from '../model/notificationAction';
@@ -99,7 +101,7 @@ export function NotificationInboxPage(): ReactElement {
       sections={buildSections(items, now)}
       isEmpty={items.length === 0}
       onNavigate={handleNavigate}
-      onPressBack={() => router.back()}
+      onPressBack={() => goBackOr(router, shellTabHref('home'))}
       onMarkAllRead={() => void handleMarkAllRead()}
       markAllPending={markAllPending}
       markAllError={markAllError}

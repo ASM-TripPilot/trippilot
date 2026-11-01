@@ -8,6 +8,7 @@ import {
 import { AppState } from 'react-native';
 import { openAppSettings } from '@/shared/external-link';
 import { useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 
 import {
   type PushPermission,
@@ -110,7 +111,7 @@ export function NotificationSettingsPage(): ReactElement {
           await readPermission();
         })();
       }}
-      onPressBack={() => router.back()}
+      onPressBack={() => goBackOr(router, '/settings')}
     />
   );
 }
