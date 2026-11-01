@@ -16,6 +16,7 @@ import type {
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { BASE } from '@/test-support/apiBase';
+import { routerSpies } from '@/test-support/expoRouterMock';
 import { primeExpoToken, primeOsPermission } from '@/test-support/pushOsFake';
 import { createGcZeroWrapper, settle } from '@/test-support/queryRender';
 
@@ -380,5 +381,146 @@ describe('NotificationSettingsPage · 설정 앱에 다녀옴 (결정 2 · AppSt
     await settle();
 
     expect(getPermissionsMock.mock.calls.length).toBe(lookupsBefore);
+  });
+});
+
+// B안(2026-11-01) — 옛 `NotificationSettingsScreen.test.tsx`(뷰 단위)가 보던 화면 동작을 서버 응답·OS 권한만 바꿔
+// 이 페이지 위에서 본다. 6종 행·스위치 이름·COMMUNITY·SYSTEM 미렌더·권한별 문구·토글 PATCH 바디·뒤로.
+describe('NotificationSettingsPage · 화면 동작 (옛 뷰 단위 흡수)', () => {
+  const TOP_COPY = '변경한 알림 설정은 다음 알림부터 바로 반영돼요';
+  const BOTTOM_COPY = '모든 알림을 꺼도 보안·계정 관련 알림은 알림함에 보여요';
+  const DENIED_TOP_COPY = '기기 설정에서 알림 권한을 허용하세요';
+  const pushId = (kind: string) => `notification-settings-toggle-push-${kind}`;
+  const inAppId = (kind: string) =>
+    `notification-settings-toggle-inapp-${kind}`;
+
+  let patches: { kind: string; body: unknown }[] = [];
+  beforeEach(() => {
+    patches = [];
+    server.use(
+      http.patch(
+        `${BASE}/me/notification-settings/:kind`,
+        async ({ request, params }) => {
+          patches.push({
+            kind: String(params.kind),
+            body: await request.json(),
+          });
+          return HttpResponse.json({
+            kind: params.kind,
+            pushEnabled: true,
+            inAppEnabled: true,
+          });
+        }
+      )
+    );
+  });
+
+  it('권한 허용이면 6종 행마다 "{라벨} 푸시/인앱" 스위치가 있고 COMMUNITY·SYSTEM 은 없으며, 허용 얼굴 문구만 보인다', async () => {
+    primeOsPermission(Notifications, 'granted');
+    server.use(
+      http.get(`${BASE}/me/notification-settings`, () =>
+        HttpResponse.json({
+          items: [
+            ...SERVER_ITEMS.map((item) =>
+              item.kind === 'SLOT_PRE' || item.kind === 'TRIP_PRE'
+                ? { ...item, inAppEnabled: false }
+                : item
+            ),
+            { kind: 'SYSTEM', pushEnabled: true, inAppEnabled: true },
+          ],
+        })
+      )
+    );
+
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId(PUSH_STAY)).toBeChecked());
+
+    VISIBLE_KINDS.forEach((kind) => {
+      expect(screen.getByTestId(pushId(kind))).toBeOnTheScreen();
+      expect(screen.getByTestId(inAppId(kind))).not.toBeDisabled();
+    });
+    expect(screen.getAllByRole('switch', { name: / 푸시$/ })).toHaveLength(6);
+    expect(screen.getAllByRole('switch', { name: / 인앱$/ })).toHaveLength(6);
+    for (const kind of ['COMMUNITY', 'SYSTEM']) {
+      expect(screen.queryByTestId(pushId(kind))).toBeNull();
+      expect(screen.queryByTestId(inAppId(kind))).toBeNull();
+    }
+    // 인앱은 서버 값 그대로(SLOT_PRE·TRIP_PRE 만 꺼짐 — TRIP_PRE 는 푸시 켜짐이라 채널이 섞이면 red).
+    expect(screen.getByTestId(inAppId('TRIP_PRE'))).not.toBeChecked();
+    expect(screen.getByTestId(inAppId('SLOT_PRE'))).not.toBeChecked();
+    expect(screen.getByTestId(inAppId('PLAN_B'))).toBeChecked();
+
+    expect(screen.getByText(TOP_COPY)).toBeOnTheScreen();
+    expect(screen.getByText('푸시')).toBeOnTheScreen();
+    expect(screen.getByText('인앱')).toBeOnTheScreen();
+    expect(screen.getByText(BOTTOM_COPY)).toBeOnTheScreen();
+    expect(screen.queryByText('권한 필요')).toBeNull();
+    expect(screen.queryByText(DENIED_BOTTOM_COPY)).toBeNull();
+  });
+
+  it('권한 거부면 6종 푸시가 전부 꺼짐·잠김, 인앱은 값대로 켜짐·조작 가능, 거부 얼굴 문구만 보인다', async () => {
+    renderPage();
+    await waitForServerValues();
+    await waitFor(() =>
+      expect(screen.getByTestId(BANNER_ID)).toBeOnTheScreen()
+    );
+
+    VISIBLE_KINDS.forEach((kind) => {
+      expect(screen.getByTestId(pushId(kind))).not.toBeChecked();
+      expect(screen.getByTestId(pushId(kind))).toBeDisabled();
+      expect(screen.getByTestId(inAppId(kind))).toBeChecked();
+      expect(screen.getByTestId(inAppId(kind))).not.toBeDisabled();
+    });
+    expect(screen.getByText(DENIED_TOP_COPY)).toBeOnTheScreen();
+    expect(screen.getByText('설정 이동')).toBeOnTheScreen();
+    expect(screen.getByText('인앱')).toBeOnTheScreen();
+    expect(screen.getByText(DENIED_BOTTOM_COPY)).toBeOnTheScreen();
+    expect(screen.queryByText(TOP_COPY)).toBeNull();
+    expect(screen.queryByText('푸시')).toBeNull();
+    expect(screen.queryByText(BOTTOM_COPY)).toBeNull();
+  });
+
+  it('권한 허용이면 스위치를 누를 때 그 kind·그 채널의 반대 값 하나만 PATCH 로 나간다', async () => {
+    primeOsPermission(Notifications, 'granted');
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId(PUSH_STAY)).toBeChecked());
+
+    fireEvent.press(screen.getByTestId(inAppId('REFLECTION'))); // 켜짐 → 끄기(STAY 가 아닌 kind — 다른 행으로 새면 red)
+    fireEvent.press(screen.getByTestId(PUSH_SLOT_PRE)); // 꺼짐 → 켜기
+    fireEvent.press(screen.getByTestId(pushId('TRIP_DAY'))); // 켜짐 → 끄기
+    await waitFor(() => expect(patches).toHaveLength(3));
+
+    expect(patches).toEqual(
+      expect.arrayContaining([
+        { kind: 'REFLECTION', body: { inAppEnabled: false } },
+        { kind: 'SLOT_PRE', body: { pushEnabled: true } },
+        { kind: 'TRIP_DAY', body: { pushEnabled: false } },
+      ])
+    );
+  });
+
+  it('권한 거부면 푸시 스위치를 눌러도 요청이 없고, 인앱 스위치는 PATCH 가 나간다', async () => {
+    renderPage();
+    await waitForServerValues();
+    await waitFor(() =>
+      expect(screen.getByTestId(BANNER_ID)).toBeOnTheScreen()
+    );
+
+    fireEvent.press(screen.getByTestId(PUSH_STAY));
+    fireEvent.press(screen.getByTestId(INAPP_STAY)); // 앵커
+    await waitFor(() => expect(patches).toHaveLength(1));
+    await settle();
+
+    expect(patches).toEqual([{ kind: 'STAY', body: { inAppEnabled: false } }]);
+  });
+
+  it('뒤로를 누르면 라우터 back 이 1회 나간다', async () => {
+    routerSpies.back.mockClear();
+    renderPage();
+    await waitForServerValues();
+
+    fireEvent.press(screen.getByTestId('notification-settings-back'));
+
+    expect(routerSpies.back).toHaveBeenCalledTimes(1);
   });
 });
