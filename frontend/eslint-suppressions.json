@@ -348,11 +348,6 @@
       "count": 1
     }
   },
-  "src/pages/record/share-card/ui/ShareCardScreen.test.tsx": {
-    "no-restricted-properties": {
-      "count": 2
-    }
-  },
   "src/pages/record/travel-style/ui/TravelStylePage.tsx": {
     "no-restricted-syntax": {
       "count": 1
