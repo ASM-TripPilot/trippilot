@@ -830,7 +830,6 @@
 - `src/pages/itinerary/itinerary-draft/ui/DraftPage.tsx`  →  DraftPage
 - `src/pages/itinerary/itinerary-draft/ui/DraftScreen.tsx`  →  DraftScreenProps · DraftScreen
 - `src/pages/itinerary/itinerary-draft/ui/GenerationFallbackScreen.tsx`  →  GenerationFallbackScreenProps · GenerationFallbackScreen
-- `src/pages/itinerary/itinerary-draft/ui/RevealItem.tsx`  →  RevealItem
 - `src/pages/itinerary/itinerary-draft/ui/SlotCandidatePanelContainer.tsx`  →  SlotCandidatePanelContainerProps · SlotCandidatePanelContainer
 - `src/pages/itinerary/itinerary-draft/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetRow · SlotCandidateSheetProps · SlotCandidateSheet
 
@@ -1182,7 +1181,6 @@
 
 ## src/pages/record/trip-summary/ui/
 - `src/pages/record/trip-summary/ui/CountUpText.tsx`  →  COUNT_UP_DURATION_MS · CountUpText
-- `src/pages/record/trip-summary/ui/DayCardReveal.tsx`  →  DayCardReveal
 - `src/pages/record/trip-summary/ui/DayHighlightCard.tsx`  →  DayHighlightCardProps · DayHighlightCard
 - `src/pages/record/trip-summary/ui/TripSummaryPage.tsx`  →  TripSummaryPageProps · TripSummaryPage
 - `src/pages/record/trip-summary/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayReflectionVM · DayCardVM · TripSummaryScreenProps · TripSummaryScreen
@@ -1796,6 +1794,7 @@
 - `src/shared/ui/NoticeBanner.tsx`  →  NoticeBannerNotice · NoticeBanner · DismissNotice
 - `src/shared/ui/OpenNaverMapButton.tsx`  →  OpenNaverMapButton
 - `src/shared/ui/PlacePhoto.tsx`  →  PlacePhoto
+- `src/shared/ui/RevealItem.tsx`  →  RevealItem
 - `src/shared/ui/SegmentedControl.tsx`  →  SegmentedOption · SegmentedControlProps · SegmentedControl
 - `src/shared/ui/SheetShell.tsx`  →  SheetApply · SheetShellProps · SheetShell
 - `src/shared/ui/Skeleton.tsx`  →  SkeletonProps · Skeleton
@@ -1868,6 +1867,7 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/queryRender.tsx`  →  newTestQueryClient · createWrapper · createGcZeroWrapper · renderWithQueryClient · settle
 - `src/test-support/queryTimersUnref.ts`  →  (export 없음)
+- `src/test-support/revealProbe.ts`  →  revealWrapper · RevealValues · revealValues
 - `src/test-support/settingsHandlers.ts`  →  API_BASE · SettingsBodies · settingsHandlers · createNetworkTracker
 - `src/test-support/sheetTree.ts`  →  closestAncestor · isInsideSheet · sheetScrollOf · treeIndexOf · renderedText · closestScrollView · stubScrollTo · fireChipLayout
 - `src/test-support/splashGateRoutes.tsx`  →  SPLASH_GATE_STUB_ROUTES
