@@ -59,7 +59,6 @@ paths:
 | `app/trips/[tripId]/planb/index.tsx` | 재계획 요청 — `tripId`·`scope`·`triggerId`·`targetDate` params를 읽는다. **`triggerId` 가 있으면 `PlanbEntryGate`**(상황 감지 FE-B §3.1 — 알림 탭·알림함 PLAN_B 행·i03 [대안 보기]가 한 게이트를 지난다, URL 원문 scope·targetDate 도 넘김), 없거나 빈 값이면 종전대로 `PlanbRequestPage`(scope 시드는 페이지 소관). `triggerId` 가 없을 때는 `prefill`·`includePoiId` 도 읽어 `PlanbRequestPage` 로 내린다(§3.1 — 기회 카드 [넣어서 다시 짜기]가 싣는 값, FE-C 는 이 URL 을 만들기만 한다). 이 라우트의 `Stack.Screen`은 `SplashGate`에서 `presentation:'transparentModal'`로 선언돼 허브 위에 겹친다(실제 겹침은 6-b 몫). 분기는 `src/__tests__/planbRequestRoute.test.tsx` |
 | `app/assistant/index.tsx` | ✦ AI 도우미 시트(b01~b07, TRIP-1322) — `surface`·`tripId` params만 읽어 `AssistantSheetPage`에 내린다(모르는 surface → HOME). `SplashGate`에서 가드 밖 `transparentModal`로 선언돼 진입 화면 위에 겹치고 탭바를 가린다. `(tabs)` 밖이라 미인증 딥링크로 열리지만 세션 생성 401이면 시트가 스스로 닫힌다 |
 | `app/trips/[tripId]/planb/solving.tsx` | 재계획 로딩 — `tripId`·`sessionId`·`includePoiId`(상황 감지 FE-B — 넣으려던 POI, 서버엔 안 보냄)만 읽어 `@/pages/live/planb-draft` 얇은 래퍼 |
-| `app/trips/[tripId]/planb/diff.tsx` | 재계획 확정/취소 — `tripId`·`sessionId`만 읽어 `@/pages/live/planb-diff` 얇은 래퍼 |
 | `app/trips/[tripId]/planb/manual.tsx` | 여행 중 일정 편집 — `tripId`만 꺼내 `ItineraryEditPage`에 리터럴 `inTrip={true}`로 위임(params를 통째로 펼치지 않는다 — `src/__tests__/routeParamMapping.test.tsx` 표) |
 | `app/trips/[tripId]/records/index.tsx` | j01 방문 기록 — `tripId`·`day`만 읽어 `@/pages/record/trip-records` 얇은 래퍼 |
 | `app/trips/[tripId]/records/add-visit.tsx` | j01 즉석 방문 장소 피커(TRIP-1072) — `tripId`·`day`만 읽어 `@/pages/record/record-add-visit` 얇은 래퍼(RT1) |
@@ -71,4 +70,3 @@ paths:
 | `app/trips/[tripId]/live/location.tsx` | 위치 폴백(수동 입력·권한 거부) — `tripId`·`state`를 `LiveLocationPage`에 위임(`?state=`로 얼굴 선택) |
 | `app/settings/preferences.tsx` | l05 취향 전체 수정 — `@/pages/settings/settings-preferences` 얇은 래퍼. 설정 화면에서 진입 |
 | `app/settings/personalization.tsx` | l05 개인화 동의 — `@/pages/settings/settings-personalization` 얇은 래퍼. 설정 화면에서 진입 |
-| `app/magazine.tsx` | a02 매거진 목록 — `@/pages/magazine` 공개 API로 참조. 홈 매거진 히어로에서 push, 실앱은 탭바 미렌더(프리뷰만 `withShellTabBar`) |

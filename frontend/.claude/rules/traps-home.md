@@ -1,15 +1,13 @@
 ---
 paths:
-  - "src/features/home/**"
   - "app/(tabs)/index.tsx"
   - "src/pages/home/**"
-  - "src/pages/magazine/**"
 ---
 이 파일은 repo-traps.md에서 경로별로 쪼갠 함정이다 — 해당 경로 만질 때만 로드된다.
 
 ## home
 
-- **홈 히어로(`CITY_HEROES` 3장)·discovery 데이터는 픽스처다**(`homeFixtures.ts`; `/magazine`(a02) 화면은 `magazineFixtures.ts` 이고 홈에서 들어가는 길이 없다 — TRIP-1432로 홈 히어로가 도시 카드가 됐다) — planning 얼굴만 실제 itinerary GET을 탄다. 서버가 매거진을 주게 되면 픽스처를 훅으로 바꾸는 자리다.
+- **홈 히어로(`CITY_HEROES` 3장)·discovery 데이터는 픽스처다**(`homeFixtures.ts`; TRIP-1432로 홈 히어로가 도시 카드가 됐다 — a02 매거진 화면은 2026-11-01 삭제) — planning 얼굴만 실제 itinerary GET을 탄다.
 - **라이브 홈은 discovery·planning·postTrip 세 얼굴이다 — postTrip 은 "비-ENDED 0 ∧ 가장 최근 endDate 가 오늘(KST)로부터 0~7일(7일째 포함)"일 때만 뜬다**(TRIP-1369, 사용자 확정 2026-10-13) → `resolveHomePhase`(순수)가 판정하고 창 밖·endDate 형식 깨짐·endDate 미래인 ENDED 는 조용히 postTrip 이 되지 않고 `undefined`(discovery)다(INV-4). 서버가 postTrip 이라는 단계를 주는 게 아니라(가정 E) 클라가 `Trip.status==='ENDED'`+날짜로 파생한다. `pages/home/ui/HomePage.tsx`는 지배(비-ENDED 중 가장 이른) 여행이 있으면 `planning`으로 착지하고, 그때만 조건부-자식 `PlanningHome`이 itinerary GET 으로 카드 CTA 목적지를 정한다(`dominantTripId`). postTrip 은 그 자식을 태우지 않고(일정 재조회 없음) 회고 CTA 가 `/trips/{id}/records` 로, "지난 여행 · 전체 보기"가 `/records` 로 push 한다. 추천 스트립은 phase 의 고정 카드가 아니라 서버 장소 `collectionsLane` 이고(레인 없는 프리뷰만 고정 추천), 지난 여행이 0 이면 섹션이 없다. `HomeScreen.test.tsx`의 버튼-집합 동치는 discovery·planning·postTrip 을 잰다. **창 경계(7일째 포함)는 사용자 확정이 아니라 "7일 이내"의 해석**이라 바꾸려면 `POST_TRIP_WINDOW_DAYS`·`homePhase.test.ts` 경계 it 을 함께 본다.
 - **`MagazineHero`를 같은 화면에 여러 번 렌더할 땐 testID 다중매치를 조심** → discovery 히어로 캐러셀이 여러 장을 렌더하는데, `MagazineHero`가 testID를 자체 하드코딩하면 `getByTestId('home-magazine-hero')`가 다중매치로 throw한다(프로즌 다수 동시 red). 계약: `MagazineHero`는 옵셔널 `testID`(기본값 `home-magazine-hero`)를 받고, 반복 렌더 시 **첫 인스턴스만 기본값, 나머지는 다른 값**을 명시로 넘긴다. 공유 컴포넌트를 다중 인스턴스로 재사용할 때 재발 가능한 패턴 — 새 반복 렌더를 만들 때 이 계약부터 확인.
 - **캐러셀 페이지 수는 도트가 아니라 페이지 컨테이너로 잠근다** → 도트(`home-hero-dot-N`)는 정적 View 나열이라 페이지 수와 무관하게 존재 개수를 위조할 수 있다(예: 실제로는 1페이지인데 도트 5개만 정적으로 그림). 페이지 수의 진짜 앵커는 `heroes.map`이 실제로 낳는 `home-hero-page-N` 컨테이너 존재 여부다 — 새 캐러셀·페이저를 잠글 땐 도트가 아니라 컨테이너를 단언.

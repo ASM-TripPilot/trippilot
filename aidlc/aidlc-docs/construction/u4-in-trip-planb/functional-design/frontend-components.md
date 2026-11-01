@@ -62,6 +62,8 @@
 > - **i 코드는 옛 체계다** — 라이브 Figma i 밴드는 **i01~i10**으로 재번호됐다(`frontend/.claude/skills/spec-perception/reference/figma-structure.md`; 매핑은 볼트 `사이클/20260908-figma-hnew/figma-build.md`).
 > - **[이연 · 2026-10-12 → U10]** "i07 푸시 = 지오펜스가 깨웠을 때의 로컬 알림"은 U10 소관이다.
 
+> **[개정 · 2026-11-01]** `diff.tsx` 는 삭제됐다 — 아래 §2 개정 블록.
+
 > **[개정 · 2026-10-19 · situation-awareness FD]** §1 라우트
 > 새 라우트는 없다. `planb/index` 는 `triggerId` 가 있으면 진입 게이트를, 없으면 요청 시트를 그린다. 푸시 탭은 `shared/push` 탭 핸들러와 app 층 라우팅 훅이 알림 액션으로 옮긴다(홈이 그려진 뒤, 로그인 전 탭은 보류 후 1회).
 > → [BR-SA-23](../../situation-awareness/functional-design/business-rules.md) · [DEC-SA-5](../../situation-awareness/functional-design/business-logic-model.md) · [SA frontend-components](../../situation-awareness/functional-design/frontend-components.md)
@@ -89,6 +91,8 @@
 > **[개정 · 2026-10-12 · U10 FD] TRIP-396 [방문 완료] — 수동은 폴백으로 유지.** U10이 이탈 자동 완료를 더한다(Q2=A). i01 카드의 `[방문 완료]`(`execution-arrive-complete`)는 지우지 않는다 — 자동이 꺼진 사용자(권한 거부·플래그 OFF·대략 위치)와 최소 체류 미달 이탈의 바닥이다. 자동으로 기록된 도착/완료에는 "자동 기록" 표식과 [자동 기록 되돌리기]가 붙는다(Q17=A). "i07 = 지오펜스가 깨웠을 때의 로컬 알림"은 만들지 않는다 — 지연 알림은 서버 `PlanBTriggered` → U6 푸시 하나다. 상세 `construction/u10-gps-location-automation/functional-design/frontend-components.md` §3·§9.
 
 > **[개정 · 2026-10-12] §2 슬라이스 표 갱신.** 실재 슬라이스는 `src/pages/live/` 아래 6개(`live-itinerary`·`live-place`·`live-location`·`planb-request`·`planb-draft`·`planb-diff`)다. `planb-triggers`·`planb-manual`·`planb-rest`는 없다(§1 개정). `live-itinerary/ui/`의 실제 구성은 `LiveItineraryPage`·`LiveHubView`·`TriggerChip`·`RiskDetailSheet`·`ReplanAppliedSheet`·`MemoSheet`이다. `planb-diff`는 "확정의 유일한 호출 지점"이 아니다 — TRIP-751로 `planb-draft`의 [적용하기]도 `useApplyReplan`(`features/apply-replan`)으로 바로 확정한다(`src/pages/live/planb-draft/ui/PlanbDraftPage.tsx`).
+
+> **[개정 · 2026-11-01] 비교 화면 삭제.** 비교 화면 `app/trips/[tripId]/planb/diff.tsx`(`src/pages/live/planb-diff`, i18 비교·i19 반영 완료)는 사용자 결정으로 코드째 삭제됐다(앱 안에 들어오는 버튼이 없던 딥링크 전용 화면). 실재 슬라이스는 `src/pages/live/` 아래 5개(`live-itinerary`·`live-place`·`live-location`·`planb-request`·`planb-draft`)다. 재계획 확정은 재계획안 화면 `planb-draft` 의 [적용하기] 하나이고(seam `features/apply-replan` `useApplyReplan`, BR-U4-28), 성공하면 허브로 `dismissTo` 해 허브의 `ReplanAppliedSheet`(i08)가 반영 완료를 알린다. 아래 §1·§2·§3·§6 표의 `planb/diff`·`planb-diff`·i18·i19 행과 testID 는 원문 보존이다.
 
 > **[개정 · 2026-10-19 · situation-awareness FD]** §2 슬라이스
 > - `live-itinerary`: 알약은 트리거 자기 날짜의 슬롯에서 장소를 찾고 변형·날짜 라벨을 붙인다. 위험 시트에 심각도·출처를, 감시 행에 서버 감시 상태 3종을, 허브에 기회 카드 1장을 더한다(정렬은 서버 순서 그대로). → [BR-SA-13·22](../../situation-awareness/functional-design/business-rules.md) · [DEC-SA-6](../../situation-awareness/functional-design/business-logic-model.md)

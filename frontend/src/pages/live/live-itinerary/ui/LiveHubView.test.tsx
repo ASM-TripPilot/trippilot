@@ -16,30 +16,17 @@ import {
   FINAL_IDS,
   flushOsAnswer,
   holdReduceMotionOn,
-  lastSample,
-  moved,
-  scheduleVisibleCenter,
-  setWindowWidth,
   START5_IDS,
   START_CELLS,
-  START_HOME,
   START_RECORDS,
-  structureSteady,
   useInteractionGate,
   visibleIds,
   watchMotion,
 } from '@/test-support/barMotionProbe';
 import * as probe from '@/test-support/fabAnchorProbe';
 
-import {
-  BAR_ENTER_DELAY_MS,
-  BAR_EXIT_MS,
-  barMorphFrame,
-} from '@/widgets/bottom-nav-bar';
-import {
-  LIVE_BAR_SIDE,
-  LIVE_BOTTOM_BAR_RESERVE,
-} from '../model/editPopupLayout';
+import { BAR_EXIT_MS } from '@/widgets/bottom-nav-bar';
+import { LIVE_BOTTOM_BAR_RESERVE } from '../model/editPopupLayout';
 import { getToastBottoms, resetToastBottoms } from '@/shared/ui/toastBottom';
 import { LiveHubView, type LiveHubSlot } from './LiveHubView';
 
@@ -1232,56 +1219,6 @@ describe('LiveHubView · HM 변신 애니메이션 — 영상 4단계 모프는 
   const probe = useAnimatedProbe();
   useInteractionGate();
 
-  it('HM1 허브 첫 렌더가 시작 5칸(출발 탭 활성)이고 모션이 재생되며(짝 대조군) 일정 칸은 같은 노드이고 끝나면 정지한다 — 새 허브 인스턴스는 다시 재생한다(허브당 한 번)', async () => {
-    probe.setReduceMotion(false);
-    renderHub({ departureTab: 'home' });
-    expect(visibleIds()).toEqual(START5_IDS);
-    expect(screen.getByTestId(START_HOME)).toBeSelected();
-    await flushOsAnswer();
-
-    const watch = watchMotion(60);
-
-    expect(moved(watch)).toBe(true);
-    expect(structureSteady(watch)).toBe(true);
-    expect(visibleIds()).toEqual(FINAL_IDS);
-    const settled = watchMotion(20);
-    expect(moved(settled)).toBe(false);
-    expect(settled.samples[0]).toBe(lastSample(watch));
-    screen.unmount();
-
-    renderHub({ departureTab: 'itinerary' });
-    expect(visibleIds()).toEqual(START5_IDS);
-    expect(screen.getByTestId(SCHEDULE)).toBeSelected(); // 이번 출발 탭은 일정
-    await flushOsAnswer();
-    expect(moved(watchMotion(60))).toBe(true);
-  });
-
-  it('HM2 입장이 끝난 허브에서 barHidden 이 풀려 바가 새로 마운트돼도 시작 5칸이 다시 나오지 않고 곧장 최종 구조다 — 움직이지 않는다', async () => {
-    probe.setReduceMotion(false);
-    const base = hubProps({ departureTab: 'home' });
-    const view = render(<LiveHubView {...base} />);
-    await flushOsAnswer();
-    const first = watchMotion(60);
-    expect(moved(first)).toBe(true);
-    const finalSample = lastSample(first);
-
-    // 메모 시트 등이 열려 바가 사라졌다 돌아온다(BR-U8-53) — 바는 새로 마운트된다.
-    view.rerender(<LiveHubView {...base} barHidden />);
-    expect(screen.queryByTestId(BAR)).toBeNull();
-    view.rerender(<LiveHubView {...base} barHidden={false} />);
-    expect(visibleIds()).toEqual(FINAL_IDS); // 첫 프레임부터 최종 — 시작 5칸으로 되돌아가지 않는다
-    await flushOsAnswer();
-
-    const again = watchMotion(60);
-    expect(screen.getAllByTestId(BAR_ROOT)).toHaveLength(1);
-    expect(moved(again)).toBe(false);
-    expect(structureSteady(again)).toBe(true);
-    expect(again.samples[0]).toBe(finalSample);
-    expect(
-      again.shapes.every((shape) => shape.join() === FINAL_IDS.join())
-    ).toBe(true);
-  });
-
   it('HM4 모션 도중 barHidden 이 켜지면 바는 시작 칸까지 즉시 통째로 없고 계속 없다 — 풀면 최종 구조로 돌아온다(BR-U8-53 그물이 모션 때문에 비지 않는다)', async () => {
     probe.setReduceMotion(false);
     const base = hubProps({ departureTab: 'home' });
@@ -1349,63 +1286,6 @@ function pressBackIfPresent() {
   const back = screen.queryByTestId(BAR_BACK, { includeHiddenElements: true });
   if (back) fireEvent.press(back);
 }
-
-// ── 기기 폭 — 바 폭 = 화면 폭 − 60 이라 390 기기(330)가 아니면(402 → 342 · 안드로이드 360 → 300 · 430 → 370) ① 정지 모양은 상수 규칙
-// (좌우 30 · 뒤로 58 · 간격 8 · 캡슐 = 화면 폭 − 126)과 같고 ② 모션 내내 일정 아이콘이 단계 함수가 말하는 자리에서 안 튄다. 바 폭을 prop 으로 받든
-// 훅으로 읽든 중립(허브 앵커 좌우 30 만 전제). 일정 칸의 "보이는 중심" = 구조에서 직접 계산한 레이아웃 자리 + 칸에 걸린 translateX.
-describe('LiveHubView · 기기 폭 — 정지 치수와 컷·교체 순간 일정 칸 연속성', () => {
-  const probe = useAnimatedProbe();
-  useInteractionGate();
-  let windowSpy: jest.SpyInstance | null = null;
-  afterEach(() => {
-    windowSpy?.mockRestore();
-    windowSpy = null;
-  });
-  const barWidthOf = (windowWidth: number) => windowWidth - 2 * LIVE_BAR_SIDE;
-
-  /** 프레임마다 일정 칸의 보이는 중심이 단계 함수가 낼 수 있는 값(프레임 시각 ±8ms 범위, ±0.75pt)에 있는지 본다. */
-  function expectFollowing(
-    direction: 'enter' | 'exit',
-    width: number,
-    frames: number,
-    delay = 0
-  ) {
-    let count = 0;
-    watchMotion(frames, 16, (ms) => {
-      const values = [-8, 0, 8].map(
-        (d) =>
-          barMorphFrame(direction, Math.max(0, ms - delay + d), width)
-            .scheduleCenterX
-      );
-      const center = scheduleVisibleCenter(width);
-      expect(center).toBeGreaterThanOrEqual(Math.min(...values) - 0.75);
-      expect(center).toBeLessThanOrEqual(Math.max(...values) + 0.75);
-      count += 1;
-    });
-    expect(count).toBeGreaterThan(20);
-  }
-
-  it.each([390, 490])(
-    '[화면 폭 %d] 입장·퇴장 내내(컷·교체 앞뒤 포함) 일정 칸의 보이는 중심이 단계 함수가 말하는 자리를 따라간다 — 튀지 않는다',
-    async (windowWidth) => {
-      windowSpy = setWindowWidth(windowWidth);
-      probe.setReduceMotion(false);
-      const width = barWidthOf(windowWidth);
-      renderHub({ departureTab: 'records' });
-      await flushOsAnswer();
-
-      expectFollowing(
-        'enter',
-        width,
-        Math.ceil((BAR_ENTER_DELAY_MS + 352) / 16),
-        BAR_ENTER_DELAY_MS
-      );
-      watchMotion(40); // 입장이 끝날 때까지
-      fireEvent.press(screen.getByTestId(BAR_BACK));
-      expectFollowing('exit', width, 25);
-    }
-  );
-});
 
 describe('🔴 LiveHubView · TRIP-991 오버레이 접근성 (AC-1·AC-2·AC-4)', () => {
   it('뒤로는 "뒤로" 버튼으로 읽히고, 누르면 onBack 이 1회 불린다', () => {

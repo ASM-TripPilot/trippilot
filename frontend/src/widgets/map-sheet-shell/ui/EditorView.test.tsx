@@ -1,7 +1,4 @@
-import type { ReactElement } from 'react';
 import { StyleSheet } from 'react-native';
-import BottomSheet from '@gorhom/bottom-sheet';
-import type { ReactTestInstance } from 'react-test-renderer';
 import {
   fireEvent,
   render,
@@ -315,11 +312,6 @@ function renderI07(
   });
 }
 
-/** className 을 공백으로 쪼갠 토큰 — `bg-primary` 가 `bg-primary-pale` 에 걸리지 않게 원소로 비교한다. */
-function classTokens(testID: string): string[] {
-  return String(screen.getByTestId(testID).props.className ?? '').split(/\s+/);
-}
-
 describe('🔴 EditorView · V1 — 헤더 날짜 괄호형 + 시트 펼침 (TRIP-753 AC-2)', () => {
   it('2일차 6/11 헤더를 "일정 편집 · 2일차 · 6월 11일(목) · 5곳" 조각으로 그리고 시트를 펼침(88%) 칸으로 연다', () => {
     renderI07();
@@ -526,39 +518,6 @@ function insertIndices(): number[] {
     );
 }
 
-/** composite 를 벗겨 가장 가까운 host 자식만 모은다(문자열 자식 제외). */
-function hostChildren(node: ReactTestInstance): ReactTestInstance[] {
-  return node.children.flatMap((child) => {
-    if (typeof child === 'string') return [];
-    return typeof child.type === 'string' ? [child] : hostChildren(child);
-  });
-}
-
-/** 카드 한 장의 행 = 드래그 리스트 host 바로 아래 host(className 에 기대지 않는다, 02a ★4). */
-function rowOfCard(poiId: string): ReactTestInstance {
-  const list = screen.getByTestId(EDIT_LIST);
-  let row: ReactTestInstance | null = null;
-  for (
-    let cur: ReactTestInstance | null = screen.getByTestId(
-      `slot-stopcard-${k(poiId)}`
-    );
-    cur !== null && cur !== list;
-    cur = cur.parent
-  ) {
-    if (typeof cur.type === 'string') row = cur;
-  }
-  if (row === null) throw new Error(`${poiId} 카드가 리스트 안에 없다`);
-  return row;
-}
-
-/** 줄 높이가 24 로 명시돼 있다 — className 토큰 `h-[24px]` 또는 style height 24(02a §2). */
-function hasHeight24(node: ReactTestInstance): boolean {
-  const tokens = String(node.props.className ?? '').split(/\s+/);
-  const flat = StyleSheet.flatten(node.props.style) as
-    { height?: unknown } | undefined;
-  return tokens.includes('h-[24px]') || flat?.height === 24;
-}
-
 describe('🔴 EditorView · V6 — inTrip 이면 카드 사이 + 는 다음 카드가 잠기지 않은 자리에만, i07 안내가 장소 추가 아래 (TRIP-1115 · TRIP-753 AC-7)', () => {
   it('[완료 p1, 완료 p2, p3, p4, p5] → insert 가 정확히 1·2·3(0 = 완료 p2 앞, 4 = 마지막 뒤 없음) · 안내 i07 · 순서 add-place → guide', () => {
     renderI07({ inTrip: true });
@@ -606,76 +565,8 @@ describe('🔴 EditorView · V6 — inTrip 이면 카드 사이 + 는 다음 카
   });
 });
 
-describe('🔴 EditorView · V6-G — + 를 뺀 자리엔 같은 높이 빈 줄이 남는다 (TRIP-1115 결정 1)', () => {
-  it('p1 행은 [카드, 빈 줄] 두 칸(짝: p2 행 [카드, +]) · 빈 줄은 testID 없음·높이 24·눌러도 콜백 0 · 마지막 p5 행은 카드뿐', () => {
-    const cb = renderI07({ inTrip: true });
-
-    // 짝 — "+" 가 있는 p2 행은 host 자식 2개이고 두 번째가 insert-1 이다(행 찾기가 헛검사가 아님).
-    const plusRow = hostChildren(rowOfCard('p2'));
-    expect(plusRow).toHaveLength(2);
-    expect(plusRow[1].props.testID).toBe('itinerary-edit-insert-1');
-
-    // "+" 를 뺀 p1 행 — 줄 자체를 없애면(자식 1개) 카드 간격이 좁아지고 드래그 스냅샷이 흔들린다.
-    const lockedRow = hostChildren(rowOfCard('p1'));
-    expect(lockedRow).toHaveLength(2);
-    const blank = lockedRow[1];
-    expect(hasHeight24(blank)).toBe(true);
-    expect(
-      blank.findAll((node) => node.props.testID !== undefined)
-    ).toHaveLength(0);
-
-    fireEvent.press(blank);
-    expect(cb.onPressAddBetween).not.toHaveBeenCalled();
-    expect(cb.onPressTimeChip).not.toHaveBeenCalled();
-
-    // 마지막 카드 뒤엔 줄이 없다(말미는 「장소 추가」) — 빈 줄을 여기까지 깔면 말미 간격이 바뀐다.
-    expect(hostChildren(rowOfCard('p5'))).toHaveLength(1);
-  });
-
-  it('h12(inTrip 없음)는 완료 데이터가 있어도 빈 줄이 없다 — p1 행 두 번째 칸이 insert-0', () => {
-    renderI07();
-
-    const row = hostChildren(rowOfCard('p1'));
-    expect(row).toHaveLength(2);
-    expect(row[1].props.testID).toBe('itinerary-edit-insert-0');
-  });
-});
-
-describe('🔴 EditorView · V6-D — 끄는 중에도 i07 의 + 3개는 자리만 남고, 빈 줄도 그대로다 (TRIP-1115 · 03b 경고-1)', () => {
-  it('isDragging 이면 insert 1·2·3 은 숨김·누름 불가·언마운트 안 됨, p1 행의 빈 줄은 높이 24 로 자리를 지킨다', () => {
-    const cb = renderI07({ inTrip: true, isDragging: true });
-
-    expectInsertsHeldButInert(cb, 3);
-    expect(
-      screen
-        .getAllByTestId(/^itinerary-edit-insert-/, {
-          includeHiddenElements: true,
-        })
-        .map((node) => node.props.testID)
-    ).toEqual([
-      'itinerary-edit-insert-1',
-      'itinerary-edit-insert-2',
-      'itinerary-edit-insert-3',
-    ]);
-
-    const lockedRow = hostChildren(rowOfCard('p1'));
-    expect(lockedRow).toHaveLength(2);
-    expect(hasHeight24(lockedRow[1])).toBe(true);
-    const list = screen.getByTestId(EDIT_LIST);
-    for (
-      let cur: ReactTestInstance | null = lockedRow[1];
-      cur !== null && cur !== list;
-      cur = cur.parent
-    ) {
-      const flat = StyleSheet.flatten(cur.props.style) as
-        { display?: string } | undefined;
-      expect(flat?.display).not.toBe('none');
-      expect(String(cur.props.className ?? '').split(/\s+/)).not.toContain(
-        'hidden'
-      );
-    }
-  });
-});
+// V6-G(+ 뺀 자리 빈 줄 높이 24·행 host 자식 수)는 jest-cut A 에서 지웠다 — 레이아웃이라 실화면 QA 몫(itinerary-edit.md `edit-visited-lock`).
+// V6-D(i07 끄는 중 + 3개 자리 유지)는 D7 의 it.each 행으로 합쳤다.
 
 describe('🔴 EditorView · V7 — 플래그 없으면(h12) + 와 h12 안내 그대로, 안내 위치만 아래로 (TRIP-753 AC-7 · Q5)', () => {
   it('insert 4개 · 안내 문구 h12 완전일치 · 트리 순서 add-place → guide', () => {
@@ -950,121 +841,33 @@ describe('🔴 EditorView · D6 — 드래그 중 얼굴과 놓은 뒤 복귀 (T
   });
 });
 
-describe('🔴 EditorView · D7 — isDragging prop 만으로 드래그 중 얼굴 (TRIP-921 AC-5)', () => {
-  it('제스처 없이 prop 을 주면 드롭존 활성·CTA 없음·카드 사이 + 는 자리만 남고(1개) 숨김·누름 불가', () => {
-    const cb = renderView({ slots: [slot('a'), slot('b')], isDragging: true });
+describe('🔴 EditorView · D7 — isDragging prop 만으로 드래그 중 얼굴 (TRIP-921 AC-5 · TRIP-1115 03b 경고-1)', () => {
+  it.each<[string, () => ReturnType<typeof renderView>, number]>([
+    [
+      'h12 카드 2장 → + 1개',
+      () => renderView({ slots: [slot('a'), slot('b')], isDragging: true }),
+      1,
+    ],
+    [
+      'i07 완료 p1·p2 → 잠긴 자리 뺀 + 3개(1·2·3)',
+      () => renderI07({ inTrip: true, isDragging: true }),
+      3,
+    ],
+  ])(
+    '%s — 제스처 없이 prop 을 주면 드롭존 활성·CTA 없음·카드 사이 + 는 자리만 남고 숨김·누름 불가',
+    (_label, renderFace, count) => {
+      const cb = renderFace();
 
-    expect(screen.getByTestId(ACTIVE)).toBeOnTheScreen();
-    expect(screen.queryByTestId(CTA)).toBeNull();
-    expectInsertsHeldButInert(cb, 1);
-  });
-});
-
-describe('🔴 EditorView · D8 — 끌리는 카드는 떠 있는 얼굴(빨강 테두리) (TRIP-921 AC-14 구조 절반)', () => {
-  it('renderItem 에 isActive:true 를 주면 그 카드 루트가 border-primary, false 면 border-hairline', () => {
-    renderView({ slots: [slot('a'), slot('b')] });
-    const keyA = buildSlotKey(DATE, 'a');
-    const renderItem = (
-      screen.UNSAFE_getByType(DraggableFlatList).props as {
-        renderItem: (p: {
-          item: unknown;
-          getIndex: () => number;
-          drag: () => void;
-          isActive: boolean;
-        }) => ReactElement;
-      }
-    ).renderItem;
-    const first = editListData()[0];
-
-    // 목은 isActive 를 늘 false 로 주므로(02a ★5) renderItem 을 직접 불러 그 결과만 따로 그린다.
-    render(
-      renderItem({
-        item: first,
-        getIndex: () => 0,
-        drag: () => {},
-        isActive: true,
-      })
-    );
-    expect(classTokens(`slot-stopcard-${keyA}`)).toContain('border-primary');
-    expect(classTokens(`slot-stopcard-${keyA}`)).not.toContain(
-      'border-hairline'
-    );
-
-    render(
-      renderItem({
-        item: first,
-        getIndex: () => 0,
-        drag: () => {},
-        isActive: false,
-      })
-    );
-    expect(classTokens(`slot-stopcard-${keyA}`)).toContain('border-hairline');
-    expect(classTokens(`slot-stopcard-${keyA}`)).not.toContain(
-      'border-primary'
-    );
-  });
-});
-
-// ── TRIP-1112 · 시트 안 중첩 스크롤 구조(해법 A, 01b D2) ──────────────────────────────────────────
-//
-// 실기 결함: 카드 위 스와이프가 스크롤도 시트도 못 움직이고(드래그 리스트 Pan 이 활성 거리 0 으로 먼저
-// 이김), 스크롤을 고쳐도 「장소 추가」·안내줄이 CTA 바 뒤에 남는다. 고친 모양 = 셸 본문 스크롤을 끄고
-// (bodyScroll false) 시트는 손잡이로만 끌며(contentPanning false), 편집기가 `NestableScrollContainer`
-// 하나에 헤더·리스트·「장소 추가」·안내줄을 담고 리스트는 `NestableDraggableFlatList` 로 그린다.
-//
-// ⚠️ 원리적 사각: 두 목(gorhom·draggable)이 모두 통과형이라 **제스처가 누구에게 가는지는 jest 가 못 본다**
-//   — 스크롤·롱프레스·자동 스크롤·시트 불변·손잡이 스냅은 6-b 실기(AC-R1~R9). 여기선 그 판정이 라이브러리
-//   설계대로 돌 **구조**만 잠근다. 지금 전수 green 인 채로 실기가 죽어 있던 것이 그 증거다(02a ★0).
-//
-// 3동작 뼈대: 준비=i07/h12 픽스처(+안전 영역) 렌더 → 실행=렌더 → 단언=시트 본체 prop·조상 겹수·컨테이너 props.
-
-/** gorhom 통과형 조상 — 목에선 시트 본체와 셸 기본 스크롤러(BottomSheetScrollView)가 같은 타입이다(02a ★1). */
-function sheetPassthroughAncestors(
-  node: ReactTestInstance
-): ReactTestInstance[] {
-  const found: ReactTestInstance[] = [];
-  for (let cur = node.parent; cur; cur = cur.parent) {
-    if (cur.type === (BottomSheet as unknown)) found.push(cur);
-  }
-  return found;
-}
-
-function nestedContainer(): ReactTestInstance {
-  return screen.UNSAFE_getByType(DraggableModule.NestableScrollContainer);
-}
-
-describe('🔴 EditorView · N2 — 헤더·리스트·장소 추가·안내줄이 한 NestableScrollContainer 안에 차례로 (TRIP-1112 AC-J2)', () => {
-  it('컨테이너는 하나, 네 표면이 그 안에 헤더 → 리스트 → 장소 추가 → 안내줄 순서이고 헤더는 한 번만 그려진다', () => {
-    renderI07({ inTrip: true });
-
-    expect(
-      screen.UNSAFE_getAllByType(DraggableModule.NestableScrollContainer)
-    ).toHaveLength(1);
-    const inside = within(nestedContainer());
-    const ids = [
-      'sheet-header-root',
-      EDIT_LIST,
-      'itinerary-edit-add-place',
-      'itinerary-edit-guide',
-    ];
-    ids.forEach((id) => expect(inside.getByTestId(id)).toBeOnTheScreen());
-    // 셸 header 슬롯에도 넘기면 헤더가 두 번 뜬다(셸 header 는 null — 01b D2).
-    expect(screen.getAllByTestId('sheet-header-root')).toHaveLength(1);
-  });
-});
-
-describe('🔴 EditorView · N3 — 스크롤 안의 스크롤 금지: 셸 기본 스크롤러가 조상에 없다 (TRIP-1112 AC-J2)', () => {
-  it('컨테이너·리스트 위 통과형 조상은 시트 본체 한 겹뿐이다', () => {
-    renderI07({ inTrip: true });
-
-    for (const node of [nestedContainer(), screen.getByTestId(EDIT_LIST)]) {
-      const ancestors = sheetPassthroughAncestors(node);
-      // 셸이 BottomSheetScrollView 로 한 번 더 감싸면 2겹이 된다.
-      expect(ancestors).toHaveLength(1);
-      expect(Array.isArray(ancestors[0].props.snapPoints)).toBe(true);
+      expect(screen.getByTestId(ACTIVE)).toBeOnTheScreen();
+      expect(screen.queryByTestId(CTA)).toBeNull();
+      expectInsertsHeldButInert(cb, count);
     }
-  });
+  );
 });
+
+// D8(끌리는 카드 border-primary 토큰)은 jest-cut A 에서 지웠다 — 생김새라 실화면 QA 몫(itinerary-edit.md 떠 있는 얼굴).
+// N2·N3(NestableScrollContainer 안 트리 순서·통과형 조상 겹수, TRIP-1112)은 jest-cut A 에서 지웠다 — 두 목이 통과형이라
+// 제스처가 누구에게 가는지 jest 가 못 본다(green 인 채 실기가 죽어 있었다). 스크롤·말미 가림은 실화면 QA 몫(itinerary-edit.md).
 
 describe('🔴 EditorView · Z2 — 놓은 뒤 칸을 새로 그린다: 칸 키가 끌기 종료 뒤에만 바뀐다 (TRIP-1246 B)', () => {
   function keysNow(): string[] {

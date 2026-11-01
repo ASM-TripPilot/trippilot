@@ -36,7 +36,7 @@ import {
   SearchGlyph,
   SparkleGlyph,
   SuitcaseGlyph,
-} from '@/features/home';
+} from './HomeGlyphs';
 import { SparkleGlyph as AssistantSparkleGlyph } from '@/features/open-assistant';
 import { WarningTriangleGlyph } from '@/features/explore/index.view';
 import { formatCountBadge } from '../lib/formatCountBadge';

@@ -9,6 +9,8 @@ import {
   buildDraftPins,
   formatDraftDayHeader,
   resolvePlanMapCenter,
+  sheetMeta,
+  sheetRowKeys,
 } from '@/features/itinerary';
 import { timeBandLabel } from '@/entities/itinerary-slot';
 import { WarningTriangleGlyph } from '@/features/itinerary';
@@ -115,9 +117,8 @@ export function CoPickCompletePage({
   });
 
   // meta 는 고정 **숙소**만 뺀다 — 시각을 정한 꼭 갈 곳도 `isFixed` 라 그것까지 빼면 h14 와 숫자가 갈린다.
-  const placeCount = slots.filter(
-    (slot) => !(slot.isFixed && slot.category === '숙소')
-  ).length;
+  // km 는 붙이지 않는다(h11 현행 그대로).
+  const meta = sheetMeta(slots, { count: 'excludeFixedStay', km: false });
 
   return (
     <MapSheetShell
@@ -133,7 +134,7 @@ export function CoPickCompletePage({
           title={trip.data.title}
           dayLabel={`${selectedDayNumber}일차`}
           dateLabel={formatDraftDayHeader(selectedDate)}
-          meta={`${placeCount}곳`}
+          meta={meta}
         />
       }
       cta={[
@@ -157,7 +158,7 @@ export function CoPickCompletePage({
           const items: ReactElement[] = [
             <SlotStopCard
               // 순번을 섞는다 — 같은 날 같은 장소 2회(BR-U2-04 위반 데이터, TRIP-1296)면 poiId 만으론 겹친다. 끌어 옮기지 않는 목록이라 순번 key 가 안전하다.
-              key={`card-${index}-${slot.poiId}`}
+              key={sheetRowKeys(index, slot.poiId).card}
               slot={slot}
               date={selectedDate}
               index={index}
@@ -172,7 +173,7 @@ export function CoPickCompletePage({
             const nextSlot = slots[index + 1];
             items.push(
               <DistanceConnector
-                key={`conn-${index}-${slot.poiId}`}
+                key={sheetRowKeys(index, slot.poiId).conn}
                 slotKey={buildSlotKey(selectedDate, slot.poiId)}
                 distanceRange={nextSlot.distanceRange}
               />

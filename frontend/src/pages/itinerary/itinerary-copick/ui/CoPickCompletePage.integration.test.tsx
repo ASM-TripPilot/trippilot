@@ -610,12 +610,6 @@ describe('같은 날 같은 장소 두 번', () => {
     slot('p-a', 13, D2_KM),
     slot('p-c', 15, D3_KM),
   ];
-  /** [A, B, C] — 보통 응답(무회귀). */
-  const normalSlots = () => [
-    slot('p-a', 10, null),
-    slot('p-b', 11, D1_KM),
-    slot('p-c', 15, D2_KM),
-  ];
 
   async function openResult(slots: ItineraryDaysItemSlotsItem[]) {
     itineraryHandler = () =>
@@ -629,17 +623,12 @@ describe('같은 날 같은 장소 두 번', () => {
   const texts = (nodes: { props: { children?: unknown } }[]) =>
     nodes.map((node) => node.props.children);
 
-  it('🔴 K1 · AC-2 — h11 · 같은 장소가 두 번 있어도 중복 key 경고가 없다', async () => {
+  it('🔴 K1 · AC-2·AC-4 — h11 · 같은 장소가 두 번 있어도 중복 key 경고가 없고 카드를 숨기지 않는다', async () => {
     const cards = await openResult(duplicateSlots());
 
     expect(cards).toHaveLength(4);
     expect(keyWarnings.keys()).toEqual([]);
-  });
-
-  it('K2 · AC-4 — h11 · 같은 장소 두 슬롯을 숨기지 않는다 (카드 4·번호·시각·거리 순서)', async () => {
-    const cards = await openResult(duplicateSlots());
-
-    expect(cards).toHaveLength(4);
+    // 숨기지 않는다(INV-4) — 번호·시각·커넥터 거리 순서 그대로(옛 K2 에서 옮김: h11 커넥터를 지키는 유일한 단언).
     expect(texts(screen.getAllByTestId(/^slot-stopcard-number-/))).toEqual([
       '1',
       '2',
@@ -653,22 +642,6 @@ describe('같은 날 같은 장소 두 번', () => {
       D1_KM,
       D2_KM,
       D3_KM,
-    ]);
-  });
-
-  it('K3 · AC-3 — h11 · 보통 결과(장소 중복 없음)는 카드·번호·거리가 그대로다', async () => {
-    const cards = await openResult(normalSlots());
-
-    expect(cards).toHaveLength(3);
-    expect(keyWarnings.keys()).toEqual([]);
-    expect(texts(screen.getAllByTestId(/^slot-stopcard-number-/))).toEqual([
-      '1',
-      '2',
-      '3',
-    ]);
-    expect(texts(screen.getAllByTestId(/^sheet-connector-distance-/))).toEqual([
-      D1_KM,
-      D2_KM,
     ]);
   });
 });

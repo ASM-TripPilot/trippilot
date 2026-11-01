@@ -43,7 +43,7 @@ frontend/
 ├── src/
 │   ├── app/          FSD app 층 — 전역 프로바이더·SplashGate·전역 스타일 (TRIP-1161, 옛 app-shell)
 │   ├── pages/        FSD pages 층 — 화면별 배선 (TRIP-173 신설, 구 `features/*/containers` 5개가 이주)
-│   │                 슬라이스는 여정 단계 그룹 폴더 아래 `pages/<그룹>/<slice>` (TRIP-1156 — home·magazine은 그룹 없음)
+│   │                 슬라이스는 여정 단계 그룹 폴더 아래 `pages/<그룹>/<slice>` (TRIP-1156 — home은 그룹 없음)
 │   ├── widgets/      FSD widgets 층 — 여러 화면이 쓰는 화면 조각 (TRIP-804 규칙 신설, 빈 층 — 첫 입주 TRIP-805)
 │   ├── features/     도메인 기능 (auth·onboarding 실구현, 나머지 9개 빈 스텁)
 │   ├── entities/     FSD entities 층 — 여러 feature가 쓰는 도메인 단위 (TRIP-804 규칙 신설, 빈 층 — 첫 입주 TRIP-806~809)
