@@ -3,7 +3,7 @@
 #   1) 동기화 확인: 덮는 파일이 sync 커밋 뒤 바뀌었나(바뀌었으면 경고 — 모델을 다시 읽어 대조할 것)
 #   2) 적합성(jest node): 모델 GuardAllows · 전역 창 하나 == 실제 pressGuard.ts (fast-check 생성 입력)
 #   3) 모델 체크(TLC): 경로 × 속성마다 따로 돌려 성립/깨짐을 기준선과 비교
-#   4) 반례 재현(jest integration): 남은 결함 R1~R3 이 실제 페이지에서 아직 그대로 일어나나
+#   4) 반례 재현(jest integration): 고친 결함 R1~R3 의 반례 경로가 실제 페이지에서 이제 막히나
 # 끝에 표 하나. 기준선과 모두 같으면 exit 0, 하나라도 다르면 exit 1.
 #
 # 옵션: --frontend DIR  (node_modules 가 있는 frontend. 기본 = 이 스킬이 든 frontend)
@@ -27,7 +27,7 @@ while [ $# -gt 0 ]; do
 done
 
 # ── 동기화 기록(SKILL.md 「동기화」와 같은 값) ─────────────────────────────────
-SYNC=f153fe2458645aff9ac73701a411125505e33999
+SYNC=5afe34d3218d2d58baf400983d2ec513e314be82
 COVERED="src/shared/lib/pressGuard.ts
 src/pages/home/ui/HomePage.tsx
 src/pages/trip/trip-new-step2/ui/TripNewStep2Page.tsx
@@ -38,7 +38,7 @@ src/pages/onboarding/onboarding-location/ui/LocationPage.tsx
 ../backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/ConfirmItineraryService.kt"
 
 # ── 기준선: 경로 속성 → 기대 결과 ───────────────────────────────────────────
-#   깨짐 = 알려진 결함(보고됨, REPORT FV-TAP-01·02). 결함을 고치면 여기와 SKILL.md 「결과 기준선」을 함께 바꾼다.
+#   전부 성립 — FV-TAP-01·02 는 TRIP-1688 에서 고쳤다. 기준선을 바꾸면 SKILL.md 「결과 기준선」도 함께 바꾼다.
 BASELINE="nav TypeOK 성립
 nav OnceOnly 성립
 nav NoFalseFailure 성립
@@ -52,11 +52,11 @@ delete OnceOnly 성립
 delete NoFalseFailure 성립
 delete NoPassThrough 성립
 confirm TypeOK 성립
-confirm OnceOnly 깨짐
-confirm NoFalseFailure 깨짐
-confirm NoPassThrough 깨짐
+confirm OnceOnly 성립
+confirm NoFalseFailure 성립
+confirm NoPassThrough 성립
 allow TypeOK 성립
-allow OnceOnly 깨짐
+allow OnceOnly 성립
 allow NoFalseFailure 성립
 allow NoPassThrough 성립"
 REPRO_BASELINE="기대대로"
@@ -119,7 +119,7 @@ if [ "$DO_JEST" = 1 ]; then
   if pnpm exec jest --config jest.integration.config.js $ROOTS "$WORK/jest/fv-tap.repro.integration.test.tsx" > "$WORK/repro.log" 2>&1; then
     row "반례 재현(R1~R3)" "기대대로" "$REPRO_BASELINE" ""
   else
-    row "반례 재현(R1~R3)" "어긋남" "$REPRO_BASELINE" "→ 결함이 고쳐졌거나 화면·testID 가 바뀜. 로그 아래"
+    row "반례 재현(R1~R3)" "어긋남" "$REPRO_BASELINE" "→ 고친 결함이 되살아났거나 화면·testID 가 바뀜. 로그 아래"
     grep -v '^\s*at ' "$WORK/repro.log" | grep '✓\|✕' | head
   fi
 fi
@@ -162,7 +162,7 @@ printf '%-26s %-8s %-8s %s\n' "검사" "결과" "기준선" "비고"
 cat "$RESULT"
 echo
 if [ "$FAIL" = 0 ]; then
-  echo "결론: 기준선과 같다 (깨짐 = 이미 보고된 결함 FV-TAP-01 confirm · FV-TAP-02 allow)"
+  echo "결론: 기준선과 같다"
 else
   echo "결론: 기준선과 다르다 — SKILL.md 「결과 읽기」대로 실제 버그인지 모델 오류인지 가른다"
   echo "      반례 경로·상태도는 /statechart 스킬로 $MODEL/MCTapGuard.tla (view = view.mjs, cfg 의 Path 를 그 경로로) 를 돌려 읽는다"

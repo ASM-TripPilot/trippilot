@@ -22,14 +22,12 @@ description: "버튼 연타 잠금(shared/lib/pressGuard.ts guardPress 의 모�
 | 검사 | 기준선 | 뜻 |
 |---|---|---|
 | 적합성(코드==모델) | 같음 | 모델 `GuardAllows`·전역 창 하나가 실제 `guardPress`·`openPressGuardWindow` 와 생성 입력 300건(시계 되감김·버튼 둘 포함)에서 같다 |
-| 반례 재현 R1~R3 | 기대대로 | 실제 페이지 위에서 R1·R2(일정 확정)·R3(위치 허용)이 아직 그대로 일어난다 |
+| 반례 재현 R1~R3 | 기대대로 | 실제 페이지 위에서 R1·R2(일정 확정)·R3(위치 허용)의 반례 경로가 막힌다(고친 동작을 단언 — red 면 결함이 되살아났다) |
 | `nav`·`assign`·`delete` × 4속성 | 성립 | 홈 이동(161 상태)·숙소 지정(405)·위저드 삭제(405) |
-| `confirm` `TypeOK` | 성립 | 961 상태 |
-| `confirm` `OnceOnly`·`NoFalseFailure`·`NoPassThrough` | 깨짐 | 결함 **FV-TAP-01** — `ItineraryPlanPage` [일정 확정하기]는 guardPress 뿐 잠금 ref·pending 비활성이 없다. 확정 응답이 400ms 보다 늦으면 다시 누른 탭이 POST 를 또 보내고(P1), 둘째의 409 가 확정된 화면에 실패 안내를 남기고 토스트를 지우며(P2 — TanStack `mutate` 호출별 콜백은 마지막 호출에만 돈다), 첫 응답의 창 다시 열기도 건너뛰어 [일정 수정]이 관통된다(P3) |
-| `allow` `OnceOnly` | 깨짐 | 결함 **FV-TAP-02** — `LocationPage` default [허용](`handleAllow`)은 가드·잠금이 없다. 이미 허용된 기기(OS 창 없음)에서 같은 프레임 두 번 누르면 권한 조회 2회·`router.replace('/(onboarding)/push')` 2회 |
-| `allow` 나머지 | 성립 | 4,262 상태 |
+| `confirm` × 4속성 | 성립 | 405 상태. 결함 **FV-TAP-01**(첫 실행 「깨짐」 — 응답이 창보다 늦을 때 다시 누른 탭이 POST 를 또 보내 409 가 확정된 화면에 실패 안내를 남기고 [일정 수정]이 관통)을 CTA `disabled: … \|\| confirm.isPending` 으로 고쳤다 |
+| `allow` × 4속성 | 성립 | 527 상태. 결함 **FV-TAP-02**(첫 실행 「깨짐」 — 이미 허용된 기기에서 [허용] 연타 시 권한 조회·replace 2회)를 풀지 않는 `allowLockRef` 로 고쳤다 |
 
-남은 깨짐은 **보고된 결함**이다(리포트 볼트 `사이클/20261102-trip1688-fv-tap/REPORT.md`). 모델이나 속성을 약하게 고쳐 통과시키지 마라. 제품 코드는 사용자가 요청할 때만 고친다.
+새로 「깨짐」이 나오면 결함 후보다(첫 실행 리포트 볼트 `사이클/20261102-trip1688-fv-tap/REPORT.md`, 수정 `사이클/20261102-trip1688-fix/`). 모델이나 속성을 약하게 고쳐 통과시키지 마라. 제품 코드는 사용자가 요청할 때만 고친다.
 
 ## 실행 — 명령 하나
 
@@ -53,16 +51,16 @@ frontend/.claude/skills/verify-fv-tap/scripts/run.sh [--frontend <node_modules �
 | `src/pages/home/ui/HomePage.tsx` | `pushDestination`(이동 전용 guardPress 대표) | `MCFlags.nav` | 읽기 |
 | `src/pages/trip/trip-new-step2/ui/TripNewStep2Page.tsx` | `handleAssign` · `assignLockRef` · `onAssign={guardPress(handleAssign)}` | `MCFlags.assign` | 읽기 |
 | `src/pages/trip/trip-new-step1/ui/TripNewStep1Page.tsx` | `LeaveDialogContainer` `remove` · `lockedRef` · `done` | `MCFlags.delete` | 읽기 |
-| `src/pages/itinerary/itinerary-plan/ui/ItineraryPlanPage.tsx` | `handleConfirm` · CTA `guardPress(handleConfirm)` · `goEdit` | `MCFlags.confirm` · `YouTapNext` | 읽기 + 재현 R1·R2 |
+| `src/pages/itinerary/itinerary-plan/ui/ItineraryPlanPage.tsx` | `handleConfirm` · CTA `guardPress(handleConfirm)` · CTA `disabled`(`confirm.isPending`) · `goEdit` | `MCFlags.confirm` · `YouTapNext` | 읽기 + 재현 R1·R2 |
 | `src/features/edit-itinerary/model/useConfirmItinerary.ts` | 훅 `onSuccess`(setQueryData → CTA 바뀜) | `flipOnHookOk` | 읽기 + 재현 R1 |
-| `src/pages/onboarding/onboarding-location/ui/LocationPage.tsx` | `handleAllow` · `goToPushGuarded` | `MCFlags.allow` | 읽기 + 재현 R3 |
+| `src/pages/onboarding/onboarding-location/ui/LocationPage.tsx` | `handleAllow` · `allowLockRef` · `goToPushGuarded` | `MCFlags.allow` | 읽기 + 재현 R3 |
 | `backend/.../itinerarygeneration/application/ConfirmItineraryService.kt` | PLANNED 가 아니면 `ConflictDetected`(409) | 가정 A3 `conflict` | 가정 — 바뀌면 `TapGuard.tla` ASSUMPTION 과 재현의 가짜 서버를 함께 고친다 |
 
-guardPress 를 쓰는 다른 파일(`grep -rln guardPress src`)은 위 다섯 모양 중 하나로 읽힌다 — 이동 전용(`nav`), 잠금 ref + 성공 시 창 열기(`assign`/`delete`), 잠금 없는 mutate(`confirm`). 새 버튼이 어느 모양인지 모르겠으면 `MCFlags` 에 경로를 하나 더하고 `run.sh` `BASELINE` 에 네 줄을 더한다.
+guardPress 를 쓰는 다른 파일(`grep -rln guardPress src`)은 위 다섯 모양 중 하나로 읽힌다 — 이동 전용(`nav`), 잠금 ref + 성공 시 창 열기(`assign`/`delete`), 요청 중 `disabled` + mutate(`confirm`), 풀지 않는 잠금 ref(`allow`). 새 버튼이 어느 모양인지 모르겠으면 `MCFlags` 에 경로를 하나 더하고 `run.sh` `BASELINE` 에 네 줄을 더한다.
 
 ## 동기화
 
-- **sync 커밋: `f153fe2458645aff9ac73701a411125505e33999`** (develop, 2026-11-02). 이 커밋에서 위 표의 코드와 모델이 같다는 것을 적합성·재현·읽기로 확인했다.
+- **sync 커밋: `5afe34d3218d2d58baf400983d2ec513e314be82`** (TRIP-1688 수정 커밋, 2026-11-02). 이 커밋에서 위 표의 코드와 모델이 같다는 것을 적합성·재현·읽기로 확인했다.
 - sync 커밋은 **위 표의 코드를 새 커밋에서 다시 읽어 모델이 그 코드를 그대로 기술한다고 확인한 뒤에만** 앞으로 옮긴다(이 파일과 `scripts/run.sh` 의 `SYNC=` 두 곳). 스크립트가 exit 0 이라는 것만으로 옮기지 마라 — 적합성은 `pressGuard.ts` 만 기계로 보고, 페이지 배선(`MCFlags`)은 읽어서 맞춰야 한다.
 
 ## 결과 읽기 — 실제 버그인가, 모델 오류인가
@@ -89,10 +87,10 @@ guardPress 를 쓰는 다른 파일(`grep -rln guardPress src`)은 위 다섯 �
 ## 모델 파일
 
 - `model/TapGuard.tla` — 명세(변수·CODE MIRROR `GuardAllows`·ASSUMPTION·액션·속성). `model/MCTapGuard.tla` — 경로별 배선 `MCFlags`(CODE MIRROR, 읽어서 대조). `model/MCTapGuard.cfg` — 상수(`run.sh` 가 `Path` 줄만 갈아 끼운다). `model/view.mjs` — `/statechart` 용 한국어 라벨.
-- `checks/conformance.check.ts` — 적합성(jest node 버킷). `checks/repro.integration.check.tsx` — 반례 재현 R1~R3(jest integration 버킷, MSW 가짜 서버). 셋 다 "지금 일어난다"를 단언한다.
+- `checks/conformance.check.ts` — 적합성(jest node 버킷). `checks/repro.integration.check.tsx` — 반례 재현 R1~R3(jest integration 버킷, MSW 가짜 서버). 셋 다 반례 경로가 "이제 막힌다"를 단언한다(수정 전 코드에선 셋 다 red — 실측).
 
 ## 증명 기록
 
-sync 커밋에서 ① `pressGuard.ts` 의 `elapsed >= 0` 을 `elapsed > 0` 으로 깨자(같은 프레임 두 탭이 통과) → `!! 동기화` + 적합성 「다름」(반례: 같은 시각 탭 A 두 번 → 실제 AA / 모델 A). 모델 사본 `GuardAllows` 를 같게 맞추자 `nav`·`assign`·`delete` `NoPassThrough` 「깨짐」(4~9 상태). ② `TripNewStep2Page.tsx` 의 `if (assignLockRef.current) return;` 을 지우자 → `!! 동기화`(그 파일). 모델 사본 `assign.lock = FALSE` 로 맞추자 `assign` `OnceOnly`·`NoFalseFailure` 「깨짐」. 둘 다 `cp` 사본으로 원복 → 기준선 그대로(exit 0).
+첫 sync(`f153fe2`)에서 ① `pressGuard.ts` 의 `elapsed >= 0` 을 `elapsed > 0` 으로 깨자(같은 프레임 두 탭이 통과) → `!! 동기화` + 적합성 「다름」(반례: 같은 시각 탭 A 두 번 → 실제 AA / 모델 A). 모델 사본 `GuardAllows` 를 같게 맞추자 `nav`·`assign`·`delete` `NoPassThrough` 「깨짐」(4~9 상태). ② `TripNewStep2Page.tsx` 의 `if (assignLockRef.current) return;` 을 지우자 → `!! 동기화`(그 파일). 모델 사본 `assign.lock = FALSE` 로 맞추자 `assign` `OnceOnly`·`NoFalseFailure` 「깨짐」. 둘 다 `cp` 사본으로 원복 → 기준선 그대로(exit 0). 수정 sync(`5afe34d`)에서 ③ 두 페이지를 수정 전으로 되돌리자 재현 R1~R3 셋 다 「어긋남」(적합성은 「같음」) → `cp` 원복.
 
 *유지 판정: maintain-formal-verification-skill 결과로 판정한다 — 3회 연속 `in sync` 이고 그 사이 이 영역 결함 0 이면 실행 주기를 늘린다. 6개월 동안 결함을 1건도 못 내면 이 스킬을 뗀다(첫 실행에서 결함 2건 — FV-TAP-01 일정 확정·FV-TAP-02 위치 허용, 둘 다 실제 페이지에서 재현).*

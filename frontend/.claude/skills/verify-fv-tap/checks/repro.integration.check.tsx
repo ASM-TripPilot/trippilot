@@ -1,14 +1,14 @@
 /**
  * verify-fv-tap 반례 재현 — TLC 가 낸 가장 짧은 반례를 **실제 페이지** 위에서 한 단계씩 다시 밟는다.
- * 재현되면 결함, 안 되면 모델 오류를 먼저 의심한다. 각 it 은 "지금 코드에서 반례가 그대로 일어난다"를 단언한다 —
- * 결함을 고치면 이 it 이 red 가 되고, 그때 "고쳐진 동작"을 단언하도록 뒤집는다(SKILL.md 「결과 읽기」 3).
+ * 첫 실행(sync f153fe2)에선 R1~R3 이 그대로 일어났고(결함 FV-TAP-01·02), TRIP-1688 에서 고친 뒤
+ * "고쳐진 동작"을 단언하도록 뒤집었다(SKILL.md 「결과 읽기」 3). 이 it 이 red 면 고친 결함이 되살아난 것이다.
  *
- *  R1 confirm · OnceOnly + NoFalseFailure — 확정 응답이 400ms 보다 늦을 때 다시 누르면 POST 가 두 번 나가고,
- *     첫 요청이 확정을 해내도 둘째의 409 가 「확정 실패」 안내를 확정된 화면에 남긴다(확정 토스트도 안 뜬다).
- *  R2 confirm · NoPassThrough — 그 두 번째 탭 때문에 첫 응답의 호출별 onSuccess(창 다시 열기)가 돌지 않아,
- *     CTA 가 [일정 수정]으로 바뀐 지 400ms 안의 탭이 편집 화면으로 들어간다.
- *  R3 allow · OnceOnly — 위치 권한이 이미 허용된 기기에서 [허용]을 같은 프레임에 두 번 누르면 권한 조회 2회 ·
- *     푸시 안내로 replace 2회.
+ *  R1 confirm · OnceOnly + NoFalseFailure — 확정 응답이 400ms 보다 늦을 때 다시 눌러도 POST 는 1건이고
+ *     (요청 중 CTA 비활성), 확정된 화면에 「확정 실패」 안내가 없고 확정 토스트가 뜬다.
+ *  R2 confirm · NoPassThrough — 같은 반례 경로에서 첫 응답의 호출별 onSuccess 가 창을 다시 열어,
+ *     CTA 가 [일정 수정]으로 바뀐 지 400ms 안의 탭은 편집 화면으로 들어가지 않는다.
+ *  R3 allow · OnceOnly — 위치 권한이 이미 허용된 기기에서 [허용]을 같은 프레임에 두 번 눌러도 권한 조회 1회 ·
+ *     푸시 안내로 replace 1회.
  *
  * 시간은 `Date.now` 를 손으로 움직여 만든다(가드가 보는 유일한 시계). 응답 시점은 MSW 핸들러의 문(gate)으로 정한다.
  */
@@ -87,7 +87,7 @@ afterEach(() => {
 });
 
 // ── R1 · R2 일정 확정 ────────────────────────────────────────────────────────
-describe('confirm — ItineraryPlanPage [일정 확정하기] (guardPress 만, 잠금 없음)', () => {
+describe('confirm — ItineraryPlanPage [일정 확정하기] (guardPress + 요청 중 비활성)', () => {
   let client: QueryClient | null = null;
   let calls = 0;
   /** 요청 n 번째의 응답을 쥔 문 — release(n) 로 연다. */
@@ -141,29 +141,30 @@ describe('confirm — ItineraryPlanPage [일정 확정하기] (guardPress 만, �
   const waitConfirmedFace = () =>
     waitFor(() => expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(/^확정됨 · /));
 
-  it('R1 — 400ms 뒤 다시 누르면 POST 2건, 확정된 화면에 「확정 실패」 안내가 남고 확정 토스트는 없다', async () => {
+  it('R1 — 400ms 뒤 다시 눌러도 POST 1건, 확정된 화면에 「확정 실패」 안내가 없고 확정 토스트가 뜬다', async () => {
     await openPlanned();
     tap(); // 0ms — 요청 1
+    await waitFor(() => expect(calls).toBe(1));
     now = T0 + 400;
-    tap(); // 400ms — 창이 닫혔고 잠금이 없어 요청 2
-    await waitFor(() => expect(calls).toBe(2));
+    tap(); // 400ms — 창은 닫혔지만 요청 중이라 CTA 비활성
 
     gates[0].open(); // 서버가 요청 1 을 받아들인다(확정)
     await waitConfirmedFace();
-    gates[1].open(); // 요청 2 는 409
-    await waitFor(() => expect(screen.getByTestId('itinerary-confirm-error')).toBeOnTheScreen());
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 80)); // 둘째 요청이 나갔다면 도착할 틈
+    });
 
-    expect(calls).toBe(2);
-    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(/^확정됨 · /);
-    expect(screen.queryByTestId('itinerary-confirmed-toast')).toBeNull();
+    expect(calls).toBe(1);
+    expect(screen.queryByTestId('itinerary-confirm-error')).toBeNull();
+    expect(screen.getByTestId('itinerary-confirmed-toast')).toBeOnTheScreen();
   });
 
-  it('R2 — 첫 응답이 창을 다시 열지 못해, CTA 가 바뀐 지 300ms 뒤의 탭이 [일정 수정]으로 편집에 들어간다', async () => {
+  it('R2 — 첫 응답이 창을 다시 열어, CTA 가 바뀐 지 300ms 뒤의 탭은 [일정 수정]으로 들어가지 않는다', async () => {
     await openPlanned();
     tap(); // 0ms
+    await waitFor(() => expect(calls).toBe(1));
     now = T0 + 400;
-    tap(); // 400ms
-    await waitFor(() => expect(calls).toBe(2));
+    tap(); // 400ms — 비활성이라 요청이 안 나간다
 
     now = T0 + 500;
     gates[0].open(); // 500ms — 확정, CTA 가 [일정 수정]으로 바뀐다
@@ -172,25 +173,26 @@ describe('confirm — ItineraryPlanPage [일정 확정하기] (guardPress 만, �
 
     now = T0 + 800; // 바뀐 지 300ms — 연타의 남은 탭
     tap();
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(mockPush).toHaveBeenCalledWith(
-      expect.objectContaining({ pathname: '/trips/[tripId]/itinerary/edit' })
-    );
+    expect(mockPush).toHaveBeenCalledTimes(0);
+    expect(calls).toBe(1);
   });
 });
 
 // ── R3 위치 허용 ─────────────────────────────────────────────────────────────
-describe('allow — LocationPage default [허용] (가드·잠금 없음)', () => {
-  it('R3 — 이미 허용된 기기에서 같은 프레임 두 번 누르면 권한 조회 2회 · 푸시 안내 replace 2회', async () => {
+describe('allow — LocationPage default [허용] (진행 중 잠금)', () => {
+  it('R3 — 이미 허용된 기기에서 같은 프레임 두 번 눌러도 권한 조회 1회 · 푸시 안내 replace 1회', async () => {
     mockGetForeground.mockResolvedValue({ status: 'granted', granted: true, canAskAgain: true });
     mockRequestForeground.mockResolvedValue({ status: 'granted', granted: true, canAskAgain: true });
     render(<LocationPage />);
     const allow = screen.getByTestId('onboarding-location-allow');
     fireEvent.press(allow);
     fireEvent.press(allow);
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(2));
-    expect(mockRequestForeground).toHaveBeenCalledTimes(2);
-    expect(mockReplace).toHaveBeenNthCalledWith(2, '/(onboarding)/push');
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/(onboarding)/push'));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50)); // 둘째 요청·이동이 있었다면 도착할 틈
+    });
+    expect(mockRequestForeground).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledTimes(1);
   });
 });
 

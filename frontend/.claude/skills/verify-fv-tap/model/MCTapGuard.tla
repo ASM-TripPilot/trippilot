@@ -33,15 +33,19 @@ MCFlags == [
               latestOnly |-> FALSE, openOnOk |-> TRUE, leaveOnOk |-> TRUE,
               flipOnHookOk |-> FALSE, conflict |-> FALSE, noteOnNext |-> FALSE],
   \* pages/itinerary/itinerary-plan/ui/ItineraryPlanPage.tsx onPress: guardPress(handleConfirm)
-  \*   잠금 ref 없음 · disabled 는 isConfirmLocked(PARTIAL)뿐 · confirm.mutate(..., {onSuccess: openPressGuardWindow+토스트,
-  \*   onError: setConfirmError}) · 훅 useConfirmItinerary onSuccess = setQueryData(CONFIRMED) → CTA 가 [일정 수정]으로
-  confirm |-> [guard |-> TRUE, lock |-> FALSE, pendingDisabled |-> FALSE, request |-> TRUE,
+  \*   잠금 ref 없음 · disabled: isConfirmLocked(PARTIAL) || confirm.isPending(TRIP-1688 FV-TAP-01 수정) ·
+  \*   confirm.mutate(..., {onSuccess: openPressGuardWindow+토스트, onError: setConfirmError}) ·
+  \*   훅 useConfirmItinerary onSuccess = setQueryData(CONFIRMED) → CTA 가 [일정 수정]으로
+  \*   (누른 뒤 isPending 이 렌더되기 전 틈은 guardPress 창 안이라 모델처럼 곧바로 비활성으로 본다)
+  confirm |-> [guard |-> TRUE, lock |-> FALSE, pendingDisabled |-> TRUE, request |-> TRUE,
                latestOnly |-> TRUE, openOnOk |-> TRUE, leaveOnOk |-> FALSE,
                flipOnHookOk |-> TRUE, conflict |-> TRUE, noteOnNext |-> TRUE],
   \* pages/onboarding/onboarding-location/ui/LocationPage.tsx default 얼굴 onProceed={handleAllow}
-  \*   가드·잠금 없음 · requestForegroundPermissionsAsync().then(granted → openPressGuardWindow(); goToPush())
+  \*   가드 없음 · allowLockRef: 누를 때 true, 풀지 않는다(TRIP-1688 FV-TAP-02 수정) — 거부·오류면 denied 프레임으로
+  \*   바뀌어 이 버튼이 사라진다(모델의 "실패에서 풂"은 사라진 버튼의 재시도를 허용하는 쪽이라 더 느슨하다) ·
+  \*   requestForegroundPermissionsAsync().then(granted → openPressGuardWindow(); goToPush())
   \*   이미 허용된 기기 = OS 창 없이 곧장 granted(A3: 다시 물어도 granted)
-  allow |-> [guard |-> FALSE, lock |-> FALSE, pendingDisabled |-> FALSE, request |-> TRUE,
+  allow |-> [guard |-> FALSE, lock |-> TRUE, pendingDisabled |-> FALSE, request |-> TRUE,
              latestOnly |-> FALSE, openOnOk |-> TRUE, leaveOnOk |-> TRUE,
              flipOnHookOk |-> FALSE, conflict |-> FALSE, noteOnNext |-> FALSE]
 ]
