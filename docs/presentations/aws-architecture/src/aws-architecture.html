@@ -1,0 +1,341 @@
+<!doctype html>
+<!--
+  TripPilot AWS 아키텍처 다이어그램 (develop 7ce2a53 기준)
+  정본: infra/terraform/stack/*.tf · infra/terraform/environments/dev.tfvars · deploy/eks/chart/ · .github/workflows/aws-deploy.yml
+  고정 캔버스 2100x1260 — build.py 가 헤드리스 Chrome 으로 2배 PNG 를 뽑는다.
+  아이콘: AWS Architecture Icons(aws-icons 3.3.0, MIT 재배포본) · 브랜드 로고 simple-icons(CC0)
+-->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>TripPilot AWS 아키텍처</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+  :root {
+    --ink: #232F3E;
+    --muted: #545B64;
+    --line: #D5DBDB;
+    --cloud: #232F3E;
+    --region: #00A4A6;
+    --vpc: #8C4FFF;
+    --public: #7AA116;
+    --private: #00A4A6;
+    --eks: #ED7100;
+    --generic: #7D8998;
+    --req: #E8622C;
+    --internal: #14213D;
+    --egress: #7D8998;
+    --deploy: #2F6FDE;
+    --alarm: #D13212;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #fff; font-family: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", sans-serif; color: var(--ink); }
+  #canvas { position: relative; width: 2100px; height: 1260px; background: #fff; overflow: hidden; }
+
+  /* ── 헤더 ── */
+  .title { position: absolute; left: 30px; top: 22px; }
+  .title h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
+  .title p { font-size: 15px; color: var(--muted); margin-top: 4px; }
+  .legend { position: absolute; right: 24px; top: 26px; display: flex; gap: 22px; font-size: 13.5px; color: var(--muted); align-items: center; }
+  .legend i { display: inline-block; width: 34px; height: 0; border-top: 3px solid; vertical-align: middle; margin-right: 6px; }
+  .legend i.dash { border-top-style: dashed; }
+
+  /* ── 그룹(AWS 표준 그룹 스타일) ── */
+  .grp { position: absolute; border: 2px solid; }
+  .grp > .hd { position: absolute; left: -2px; top: -2px; display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; white-space: nowrap; }
+  .grp > .hd img { width: 32px; height: 32px; display: block; }
+  .grp > .hd.text-only { left: 12px; top: 8px; }
+  .grp > .hd small { font-weight: 500; font-size: 12.5px; opacity: .85; }
+  .g-cloud { border-color: var(--cloud); } .g-cloud > .hd { color: var(--cloud); }
+  .g-region { border-color: var(--region); border-style: dashed; } .g-region > .hd { color: #007D7F; }
+  .g-vpc { border-color: var(--vpc); } .g-vpc > .hd { color: #6B2FE0; }
+  .g-az { border-color: var(--region); border-style: dashed; border-width: 1.5px; } .g-az > .hd { color: #007D7F; font-size: 14px; }
+  .g-public { border-color: var(--public); background: #F2F6E8; } .g-public > .hd { color: #4E6B0B; font-size: 13.5px; }
+  .g-private { border-color: var(--private); background: #E6F6F7; } .g-private > .hd { color: #007D7F; font-size: 13.5px; }
+  .g-data { border-color: var(--private); background: #EAF1F7; } .g-data > .hd { color: #0B5D7A; font-size: 13.5px; }
+  .g-eks { border-color: var(--eks); background: rgba(255,255,255,.72); } .g-eks > .hd { color: #B45309; }
+  .g-ns { border-color: var(--eks); border-style: dashed; border-width: 1.5px; background: #FFF8F1; } .g-ns > .hd { color: #B45309; font-size: 13px; }
+  .g-generic { border-color: var(--generic); border-style: dashed; } .g-generic > .hd { color: #4B5563; }
+  .g-ext { border-color: #9CA3AF; background: #F8F9FA; } .g-ext > .hd { color: #374151; }
+
+  /* ── 노드(아이콘 + 이름 + 설명) ── */
+  .node { position: absolute; display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .node img { width: 52px; height: 52px; display: block; }
+  .node b { font-size: 14.5px; margin-top: 6px; line-height: 1.25; }
+  .node span { font-size: 12.5px; color: var(--muted); line-height: 1.35; margin-top: 2px; }
+  .node.onborder img { background: #fff; border-radius: 6px; box-shadow: 0 0 0 4px #fff; }
+  .hnode { position: absolute; display: flex; align-items: center; gap: 10px; }
+  .hnode img { width: 44px; height: 44px; }
+  .hnode b { display: block; font-size: 14px; }
+  .hnode span { display: block; font-size: 12px; color: var(--muted); }
+
+  /* ── 카드(파드·데이터 저장소) ── */
+  .card { position: absolute; background: #fff; border: 1.5px solid var(--line); border-radius: 8px; box-shadow: 0 1px 3px rgba(35,47,62,.10);
+          display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 8px 6px; }
+  .card img { width: 44px; height: 44px; }
+  .card.pod img { width: 36px; height: 36px; padding: 6px; background: #F3F4F6; border-radius: 50%; box-sizing: content-box; }
+  .card b { font-size: 14.5px; margin-top: 6px; }
+  .card span { font-size: 12px; color: var(--muted); line-height: 1.35; }
+  .card .rep { position: absolute; right: -8px; top: -9px; background: var(--internal); color: #fff; font-size: 11.5px; font-weight: 700;
+               border-radius: 10px; padding: 2px 8px; }
+  .card .rep.opt { background: #6B7280; }
+
+  .chip { position: absolute; display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; font-size: 12.5px; line-height: 1.3; }
+  .chip img { width: 22px; height: 22px; flex: none; }
+  .chip b { font-size: 13px; }
+  .chip .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; margin: 0 5px; }
+  .mini { position: absolute; display: flex; gap: 6px; flex-wrap: wrap; }
+  .mini em { font-style: normal; font-size: 12px; background: #fff; border: 1px solid #F3C9A3; color: #9A4A0B; border-radius: 4px; padding: 2px 7px; }
+  .note { position: absolute; font-size: 12px; color: var(--muted); line-height: 1.45; }
+  .sticky { position: absolute; background: #FFF8DB; border: 1px solid #E9D98A; border-radius: 4px; padding: 12px 14px; font-size: 12.5px; line-height: 1.55; color: #3F3A1E;
+            box-shadow: 0 2px 4px rgba(0,0,0,.06); }
+  .sticky b { display: block; font-size: 13.5px; margin-bottom: 4px; }
+  .sticky table { border-collapse: collapse; width: 100%; }
+  .sticky td { padding: 1px 0; vertical-align: top; }
+  .sticky td:first-child { color: #7A6A1F; padding-right: 8px; white-space: nowrap; }
+
+  /* ── 화살표 레이어 ── */
+  svg.wires { position: absolute; inset: 0; pointer-events: none; }
+  .w { fill: none; stroke-width: 2.6; }
+  .w.req { stroke: var(--req); stroke-width: 3.2; }
+  .w.req.soft { stroke-dasharray: 7 5; stroke-width: 2.4; }
+  .w.int { stroke: var(--internal); }
+  .w.int.dash { stroke-dasharray: 6 5; stroke: #6B7A99; }
+  .w.egr { stroke: var(--egress); stroke-dasharray: 7 6; }
+  .w.dep { stroke: var(--deploy); stroke-dasharray: 8 6; }
+  .w.alm { stroke: var(--alarm); stroke-dasharray: 6 5; stroke-width: 2.2; }
+  .wl { font-size: 12.5px; font-weight: 600; paint-order: stroke; stroke: #fff; stroke-width: 5px; stroke-linejoin: round; }
+  .badge circle { fill: var(--req); }
+  .badge text { fill: #fff; font-size: 14px; font-weight: 800; text-anchor: middle; dominant-baseline: central; }
+</style>
+</head>
+<body>
+<div id="canvas">
+
+  <!-- 헤더 -->
+  <div class="title">
+    <h1>TripPilot AWS 아키텍처</h1>
+    <p>develop(7ce2a53) 기준 · 출시 앱이 쓰는 스택 <b>trippilot-dev</b> · 서울 리전 · 논리 구성도: 파드·DB·캐시의 실제 AZ 배치는 고정하지 않음</p>
+  </div>
+  <div class="legend">
+    <span><i style="border-color:var(--req)"></i>사용자 요청</span>
+    <span><i style="border-color:var(--internal)"></i>내부 호출</span>
+    <span><i class="dash" style="border-color:var(--egress)"></i>외부 API 호출</span>
+    <span><i class="dash" style="border-color:var(--deploy)"></i>배포</span>
+    <span><i class="dash" style="border-color:var(--alarm)"></i>로그·알람</span>
+  </div>
+
+  <!-- ═════ AWS 밖: 왼쪽 열 ═════ -->
+  <div class="grp g-ext" style="left:30px;top:110px;width:230px;height:250px">
+    <div class="hd text-only"><img src="../assets/icons/tint-github.svg" style="width:20px;height:20px">GitHub</div>
+  </div>
+  <div class="node" style="left:40px;top:150px;width:210px">
+    <img src="../assets/icons/tint-githubactions.svg" style="width:46px;height:46px"><b>GitHub Actions</b><span>CI · 서버 수동 배포 · 웹 자동 배포</span>
+  </div>
+  <div class="node" style="left:40px;top:255px;width:210px">
+    <img src="../assets/icons/tint-github.svg" style="width:34px;height:34px"><b>GitHub Pages</b><span>약관 · 개인정보 페이지</span>
+  </div>
+
+  <div class="grp g-ext" style="left:30px;top:430px;width:230px;height:300px">
+    <div class="hd text-only"><img src="../assets/icons/res-users.svg" style="width:22px;height:22px">사용자</div>
+  </div>
+  <div class="node" style="left:40px;top:470px;width:210px">
+    <img src="../assets/icons/res-mobile.svg"><b>모바일 앱</b><span>iOS · Android (Expo)</span>
+  </div>
+  <div class="node" style="left:40px;top:600px;width:210px">
+    <img src="../assets/icons/res-client.svg"><b>웹 브라우저</b><span>Expo Web 번들</span>
+  </div>
+
+  <div class="grp g-ext" style="left:30px;top:800px;width:230px;height:430px">
+    <div class="hd text-only">외부 API (인터넷)</div>
+  </div>
+  <div class="chip" style="left:44px;top:845px;width:202px"><img src="../assets/icons/tint-claude.svg"><div><b>LLM</b><br>Claude · GPT</div></div>
+  <div class="chip" style="left:44px;top:918px;width:202px"><img src="../assets/icons/tint-kakaotalk.svg"><div><b>지도 · 경로</b><br>Kakao · TMAP · ODsay</div></div>
+  <div class="chip" style="left:44px;top:991px;width:202px"><span class="dot" style="background:#1F8A84"></span><div><b>공공데이터</b><br>기상청 · 특일 · 대기질</div></div>
+  <div class="chip" style="left:44px;top:1064px;width:202px"><img src="../assets/icons/tint-expo.svg"><div><b>푸시 알림</b><br>Expo Push</div></div>
+  <div class="chip" style="left:44px;top:1137px;width:202px"><img src="../assets/icons/tint-apple.svg"><div><b>소셜 로그인</b><br>Google · Kakao · Naver · Apple</div></div>
+
+  <!-- ═════ AWS Cloud ═════ -->
+  <div class="grp g-cloud" style="left:300px;top:100px;width:1600px;height:1145px">
+    <div class="hd"><img src="../assets/icons/grp-cloud.svg">AWS Cloud</div>
+  </div>
+
+  <!-- 웹 정적 호스팅(전역) -->
+  <div class="grp g-generic" style="left:330px;top:150px;width:560px;height:128px">
+    <div class="hd text-only">웹 정적 호스팅 <small>· CloudFront 전역 · S3 원본</small></div>
+  </div>
+  <div class="hnode" style="left:370px;top:196px"><img src="../assets/icons/svc-cloudfront.svg"><div><b>CloudFront</b><span>전 세계 엣지 캐시</span></div></div>
+  <div class="hnode" style="left:620px;top:196px"><img src="../assets/icons/res-bucket.svg"><div><b>S3 버킷</b><span>Expo Web 정적 파일</span></div></div>
+
+  <!-- 규모 설정 메모 -->
+  <div class="sticky" style="left:1650px;top:140px;width:230px">
+    <b>규모는 설정 파일 하나로</b>
+    <table>
+      <tr><td>지금(dev)</td><td>AZ 2개 · NAT 1개<br>DB 단일 AZ · 캐시 1노드</td></tr>
+      <tr><td>prd 준비</td><td>AZ 3개 · AZ마다 NAT<br>DB Multi-AZ<br>캐시 3노드 자동 장애조치<br>전환은 별도 준비·검증</td></tr>
+    </table>
+  </div>
+
+  <!-- 서울 리전 -->
+  <div class="grp g-region" style="left:320px;top:305px;width:1310px;height:920px">
+    <div class="hd"><img src="../assets/icons/grp-region.svg">아시아 태평양(서울) ap-northeast-2</div>
+  </div>
+
+  <!-- VPC -->
+  <div class="grp g-vpc" style="left:345px;top:355px;width:960px;height:850px">
+    <div class="hd"><img src="../assets/icons/grp-vpc.svg">VPC <small>10.40.0.0/16 · 서브넷 3계층</small></div>
+  </div>
+
+  <!-- 가용 영역 -->
+  <div class="grp g-az" style="left:380px;top:400px;width:905px;height:375px"><div class="hd text-only" style="left:auto;right:12px">가용 영역 1</div></div>
+  <div class="grp g-az" style="left:380px;top:800px;width:905px;height:385px"><div class="hd text-only" style="left:auto;right:12px;top:auto;bottom:6px">가용 영역 2</div></div>
+
+  <!-- 서브넷: 퍼블릭 / 프라이빗(컴퓨팅) / 데이터(격리) -->
+  <div class="grp g-public" style="left:400px;top:430px;width:170px;height:325px"><div class="hd"><img src="../assets/icons/grp-public.svg" style="width:26px;height:26px">퍼블릭 서브넷</div></div>
+  <div class="grp g-public" style="left:400px;top:830px;width:170px;height:330px"><div class="hd" style="top:auto;bottom:-2px"><img src="../assets/icons/grp-public.svg" style="width:26px;height:26px">퍼블릭 서브넷</div></div>
+  <div class="grp g-private" style="left:595px;top:430px;width:465px;height:325px"><div class="hd"><img src="../assets/icons/grp-private.svg" style="width:26px;height:26px">프라이빗 서브넷 · 컴퓨팅</div></div>
+  <div class="grp g-private" style="left:595px;top:830px;width:465px;height:330px"><div class="hd" style="top:auto;bottom:-2px;left:auto;right:-2px;flex-direction:row-reverse"><img src="../assets/icons/grp-private.svg" style="width:26px;height:26px">프라이빗 서브넷 · 컴퓨팅</div></div>
+  <div class="grp g-data" style="left:1085px;top:430px;width:185px;height:325px"><div class="hd"><img src="../assets/icons/grp-private.svg" style="width:26px;height:26px">데이터 서브넷</div></div>
+  <div class="grp g-data" style="left:1085px;top:830px;width:185px;height:330px"><div class="hd" style="top:auto;bottom:-2px"><img src="../assets/icons/grp-private.svg" style="width:26px;height:26px">데이터 서브넷</div></div>
+
+  <!-- 인터넷 게이트웨이(VPC 경계) -->
+  <div class="node onborder" style="left:285px;top:572px;width:120px"><img src="../assets/icons/res-igw.svg"><b style="background:#fff;padding:0 4px">인터넷<br>게이트웨이</b></div>
+
+  <!-- NAT · NLB -->
+  <div class="node" style="left:410px;top:486px;width:150px"><img src="../assets/icons/res-nat.svg"><b>NAT 게이트웨이</b><span>나가는 길 · 1개 공유</span></div>
+  <div class="card" style="left:410px;top:700px;width:150px;height:160px">
+    <img src="../assets/icons/res-nlb.svg"><b>Network Load<br>Balancer</b><span>HTTPS 443 · ACM<br>개발용 NLB는 별도</span>
+  </div>
+  <div class="note" style="left:412px;top:960px;width:148px">이 AZ에는 NAT를 두지 않는다 — 비용 절감용 단일 NAT(prd는 AZ마다 1개)</div>
+
+  <!-- EKS 클러스터 -->
+  <div class="grp g-eks" style="left:615px;top:470px;width:425px;height:650px">
+    <div class="hd"><img src="../assets/icons/svc-eks.svg">Amazon EKS · Auto Mode <small>k8s 1.35</small></div>
+  </div>
+  <div class="grp g-ns" style="left:633px;top:520px;width:389px;height:370px"><div class="hd text-only">namespace trippilot · 운영 서버</div></div>
+  <div class="card pod" style="left:652px;top:560px;width:165px;height:132px"><span class="rep">×2</span>
+    <img src="../assets/icons/tint-nginx.svg"><b>gateway</b><span>nginx · API·상태 확인만<br>IP당 10r/s (burst 60)</span></div>
+  <div class="card pod" style="left:840px;top:560px;width:165px;height:132px"><span class="rep">×2</span>
+    <img src="../assets/icons/tint-springboot.svg"><b>backend</b><span>Spring Boot · Kotlin<br>모듈러 모놀리스</span></div>
+  <div class="card pod" style="left:652px;top:735px;width:165px;height:132px"><span class="rep opt">×1 · 선택</span>
+    <img src="../assets/icons/tint-python.svg"><b>embedding</b><span>KURE-v1 한국어 임베딩<br>CPU · 메모리 요청 5GiB</span></div>
+  <div class="card pod" style="left:840px;top:735px;width:165px;height:132px"><span class="rep">×2~3 HPA</span>
+    <img src="../assets/icons/tint-fastapi.svg"><b>ai</b><span>FastAPI · LLM 게이트웨이<br>일정 조립 엔진</span></div>
+
+  <div class="grp g-ns" style="left:633px;top:905px;width:389px;height:92px"><div class="hd text-only">namespace trippilot-dev · 개발 서버</div></div>
+  <div class="mini" style="left:648px;top:938px;width:360px"><em>gateway</em><em>backend</em><em>ai</em><em>embedding</em><em style="border-color:#D1D5DB;color:#6B7280">별도 NLB·개발 RDS · 검증 후 0대</em></div>
+
+  <div class="note" style="left:635px;top:1010px;width:390px;font-weight:600;color:#9A4A0B">클러스터 운영 구성</div>
+  <div class="mini" style="left:635px;top:1032px;width:395px">
+    <em>metrics-server · 자동 확장 지표</em><em>CloudWatch 에이전트 · 로그 수집</em><em>Pod Identity · AI→Bedrock 권한</em><em>NetworkPolicy · 파드 간 허용 목록</em><em>PDB · 계획된 교체 때 최소 1개</em>
+  </div>
+
+  <!-- 데이터 계층 -->
+  <div class="card" style="left:1100px;top:465px;width:155px;height:150px">
+    <img src="../assets/icons/svc-rds.svg"><b>RDS PostgreSQL 16</b><span>운영 DB + AI 지식베이스<br>(pgvector) · 암호화 · 백업 14일</span>
+  </div>
+  <div class="card" style="left:1100px;top:635px;width:155px;height:100px">
+    <b style="margin-top:0">RDS (개발 서버용)</b><span>db.t4g.micro · 운영과 분리된 별도 장비</span>
+  </div>
+  <div class="card" style="left:1100px;top:865px;width:155px;height:150px">
+    <img src="../assets/icons/svc-elasticache.svg"><b>ElastiCache Redis</b><span>TLS 필수 · 캐시 자리<br>(연결만 해 두고 아직 미사용)</span>
+  </div>
+  <div class="note" style="left:1100px;top:1030px;width:162px">인터넷·NAT 기본 경로 없음. EKS 노드의 5432·6379만 허용. 인스턴스는 단일 AZ(서브넷 그룹 2 AZ)</div>
+
+  <!-- 리전 관리형 서비스 -->
+  <div class="grp g-generic" style="left:1325px;top:355px;width:285px;height:810px">
+    <div class="hd text-only" style="top:auto;bottom:8px">리전 관리형 서비스</div>
+  </div>
+  <div class="node" style="left:1335px;top:400px;width:125px"><img src="../assets/icons/svc-ecr.svg"><b>ECR</b><span>컨테이너 이미지<br>(덮어쓰기 금지)</span></div>
+  <div class="node" style="left:1475px;top:400px;width:125px"><img src="../assets/icons/svc-secrets.svg"><b>Secrets Manager</b><span>API 키 · DB 암호</span></div>
+  
+  <div class="node" style="left:1405px;top:590px;width:125px"><img src="../assets/icons/svc-acm.svg"><b>ACM</b><span>HTTPS 인증서</span></div>
+  <div class="node" style="left:1335px;top:780px;width:125px"><img src="../assets/icons/svc-cloudwatch.svg"><b>CloudWatch</b><span>로그 90일 보관<br>지표 · 알람</span></div>
+  <div class="node" style="left:1475px;top:780px;width:125px"><img src="../assets/icons/svc-sns.svg"><b>SNS</b><span>알람 토픽</span></div>
+  <div class="node" style="left:1335px;top:970px;width:125px"><img src="../assets/icons/svc-s3.svg"><b>S3</b><span>Terraform 상태<br>(버전 관리 · 잠금)</span></div>
+  <div class="node" style="left:1475px;top:970px;width:125px"><img src="../assets/icons/svc-cloudformation.svg"><b>CloudFormation</b><span>최초 권한·버킷<br>부트스트랩</span></div>
+
+  <!-- 전역 서비스 -->
+  <div class="node" style="left:1690px;top:440px;width:150px"><img src="../assets/icons/svc-iam.svg"><b>IAM · 전역</b><span>OIDC 배포 역할<br>워크로드별 최소 권한</span></div>
+
+  <!-- 다른 리전 -->
+  <div class="grp g-region" style="left:1650px;top:640px;width:230px;height:230px">
+    <div class="hd"><img src="../assets/icons/grp-region.svg">미국 동부(오하이오)</div>
+  </div>
+  <div class="node" style="left:1665px;top:705px;width:200px"><img src="../assets/icons/svc-chatbot.svg"><b>AWS Chatbot</b><span>알람을 Slack으로<br>(권한은 읽기 전용으로 묶음)</span></div>
+
+  <div class="grp g-region" style="left:1650px;top:965px;width:230px;height:255px">
+    <div class="hd"><img src="../assets/icons/grp-region.svg">미국 리전 <small>(서울 미지원)</small></div>
+  </div>
+  <div class="node" style="left:1665px;top:1030px;width:200px"><img src="../assets/icons/svc-bedrock.svg"><b>Amazon Bedrock</b><span>Custom Model Import<br>알림 문구용 자체 모델<br>(Qwen3-4B 파인튜닝)</span></div>
+
+  <!-- Slack (AWS 밖) -->
+  <div class="grp g-ext" style="left:1925px;top:690px;width:155px;height:130px"><div class="hd text-only">Slack</div></div>
+  <div class="node" style="left:1935px;top:728px;width:135px"><svg width="44" height="44" viewBox="0 0 44 44"><rect x="2" y="6" width="40" height="28" rx="7" fill="#4A154B"/><path d="M12 34 L12 42 L21 34Z" fill="#4A154B"/><text x="22" y="26" font-size="18" font-weight="800" fill="#fff" text-anchor="middle" font-family="sans-serif">#</text></svg><b>운영 알람 채널</b></div>
+
+  <!-- ═════ 화살표 ═════ -->
+  <svg class="wires" width="2100" height="1260" viewBox="0 0 2100 1260">
+    <defs>
+      <marker id="a-req" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#E8622C"/></marker>
+      <marker id="a-int" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#14213D"/></marker>
+      <marker id="a-int2" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6B7A99"/></marker>
+      <marker id="a-egr" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7D8998"/></marker>
+      <marker id="a-dep" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2F6FDE"/></marker>
+      <marker id="a-alm" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#D13212"/></marker>
+    </defs>
+
+    <!-- 배포: GitHub Actions → (OIDC) → ECR · EKS API -->
+    <path class="w dep" d="M196,176 C 250,176 250,290 320,290 L 1397,290 L 1397,394" marker-end="url(#a-dep)"/>
+    <path class="w dep" d="M985,290 L 985,466" marker-end="url(#a-dep)"/>
+    <text class="wl" x="1010" y="282" fill="#2F6FDE">OIDC 임시 자격 → Terraform · 이미지 빌드 · Helm 배포</text>
+    <path class="w dep" d="M1397,290 L 1640,290 L 1640,466 L 1733,466" marker-end="url(#a-dep)"/>
+    <text class="wl" x="978" y="455" fill="#2F6FDE" text-anchor="end">EKS API · IAM 인증</text>
+    <path class="w dep" d="M196,160 C 240,160 250,140 300,140 L 862,140 L 862,218 L 818,218" marker-end="url(#a-dep)"/>
+    <text class="wl" x="470" y="128" fill="#2F6FDE">웹 자동 배포 (main 반영 시 S3 업로드 · 캐시 무효화)</text>
+    <path class="w req soft" d="M548,218 L 612,218" marker-end="url(#a-req)"/>
+    <text class="wl" x="560" y="210" fill="#E8622C">원본</text>
+
+    <!-- 사용자 요청 -->
+    <path class="w req" d="M178,498 C 245,498 250,598 312,598" marker-end="url(#a-req)"/>
+    <path class="w req" d="M178,628 C 240,628 255,606 312,604" marker-end="url(#a-req)"/>
+    <path class="w req soft" d="M178,640 L 282,640 L 282,220 L 364,220" marker-end="url(#a-req)"/>
+    <text class="wl" x="290" y="262" fill="#E8622C">웹 화면 파일</text>
+    <path class="w req" d="M372,624 C 395,660 395,740 406,760" marker-end="url(#a-req)"/>
+    <path class="w req" d="M562,770 C 610,770 600,640 648,628" marker-end="url(#a-req)"/>
+    <path class="w req" d="M818,626 L 836,626" marker-end="url(#a-req)"/>
+
+    <!-- 내부 호출 -->
+    <path class="w int" d="M922,694 L 922,731" marker-start="url(#a-int)" marker-end="url(#a-int)"/>
+    <path class="w int" d="M837,800 L 821,800" marker-end="url(#a-int)"/>
+    <path class="w int" d="M1007,600 C 1050,600 1055,540 1096,540" marker-end="url(#a-int)"/>
+    <path class="w int" d="M1007,775 C 1065,770 1060,580 1096,580" marker-end="url(#a-int)"/>
+    <path class="w int dash" d="M1007,680 C 1070,700 1060,935 1096,935" marker-end="url(#a-int2)"/>
+    <text class="wl" x="934" y="718" fill="#14213D">서비스 토큰</text>
+
+    <!-- 외부 API 호출: 파드 → NAT → IGW → 인터넷 -->
+    <path class="w egr" d="M613,520 C 585,520 580,512 562,512" marker-end="url(#a-egr)"/>
+    <path class="w egr" d="M432,512 C 405,512 395,560 372,585"/>
+    <path class="w egr" d="M318,620 C 290,700 300,830 264,860" marker-end="url(#a-egr)"/>
+    <text class="wl" x="268" y="772" fill="#5B6573" transform="rotate(-72 268 772)">외부 API 호출</text>
+
+    <!-- AI 파드 → Bedrock (Pod Identity) -->
+    <path class="w egr" style="stroke:#7A3FF2" d="M1007,830 L 1075,830 L 1075,1215 L 1640,1215 L 1640,1100 L 1690,1100" marker-end="url(#a-egr)"/>
+    <text class="wl" x="1180" y="1200" fill="#7A3FF2">AI → Bedrock · 권한 Pod Identity · 경로 NAT 경유 HTTPS</text>
+
+    <!-- 로그 · 알람 -->
+    <path class="w alm" d="M1028,1060 C 1055,1060 1055,1125 1090,1125 L 1315,1125 L 1315,812 L 1360,812" marker-end="url(#a-alm)"/>
+    <path class="w alm" d="M1427,806 L 1503,806" marker-end="url(#a-alm)"/>
+    <path class="w alm" d="M1567,806 C 1610,806 1640,740 1708,734" marker-end="url(#a-alm)"/>
+    <path class="w alm" d="M1820,734 C 1880,734 1900,760 1958,760" marker-end="url(#a-alm)"/>
+
+    <!-- 요청 흐름 번호 -->
+    <g class="badge"><circle cx="250" cy="540" r="13"/><text x="250" y="540">1</text></g>
+    <g class="badge"><circle cx="384" cy="700" r="13"/><text x="384" y="700">2</text></g>
+    <g class="badge"><circle cx="605" cy="700" r="13"/><text x="605" y="700">3</text></g>
+    <g class="badge"><circle cx="827" cy="604" r="13"/><text x="827" y="604">4</text></g>
+    <g class="badge"><circle cx="905" cy="712" r="13"/><text x="905" y="712">5</text></g>
+    <g class="badge"><circle cx="1052" cy="560" r="13"/><text x="1052" y="560">6</text></g>
+  </svg>
+</div>
+</body>
+</html>
