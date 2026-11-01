@@ -1,4 +1,4 @@
-import * as Linking from 'expo-linking';
+import { openExternal } from '@/shared/external-link';
 
 import type { ProjectedSlot } from '@/entities/itinerary-slot';
 
@@ -119,14 +119,14 @@ export async function openNextNav(
   const webUrl = buildWebNavUrl(dest);
 
   try {
-    await Linking.openURL(appUrl);
+    await openExternal(appUrl);
     return 'app';
   } catch {
     // 네이버 앱 없음/열기 실패 → 웹 지도로 강등.
   }
 
   try {
-    await Linking.openURL(webUrl);
+    await openExternal(webUrl);
     return 'web';
   } catch {
     fallback(dest.distanceRange);
