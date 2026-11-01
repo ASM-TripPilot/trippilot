@@ -8,6 +8,31 @@ The steps reveal where code already belongs; they are not a folder rename
 script. Where a step names a destination, the placement rules in
 `SKILL.md` still decide whether the code goes there.
 
+## 목차
+
+- Part 1: FSD v2.0 → v2.1 (non-breaking)
+  - Step 1. Audit existing slices
+  - Step 2. Move single-use code back to its consumer
+  - Step 3. Keep genuinely reused code in place
+  - Step 4. Deprecate the processes layer
+  - Post-migration verification
+- Phasing out a small widgets layer (optional)
+- Part 2: custom architecture → FSD
+  - Before you start
+  - Step 1. Divide the code by pages
+  - Step 2. Separate everything else from pages
+  - Step 3. Tackle cross-imports between pages
+  - Step 4. Unpack the Shared layer
+  - Step 5. Organize code by technical purpose (segments)
+- Optional steps
+  - Step 6. Form entities/features from Redux slices used on several pages
+  - Step 7. Refactor your modules
+  - Step 8. Form a clean UI foundation in `shared/ui`
+- Common pitfalls during migration
+- Migrating from FSD v1 to v2
+
+---
+
 ## Part 1: FSD v2.0 → v2.1 (non-breaking)
 
 The v2.1 update emphasizes **"pages first"**: most logic stays in pages,
