@@ -61,7 +61,7 @@ const UNSAVED_EDITS_TAIL = ' · 다른 수정은 저장해야 남아요';
  * 추가 저장(TRIP-338 무심판 해소 — AC-6 통합 심판이 이 플로우를 잠근다): "추가" → `TimeSheet` 로 시각
  * 자유입력 → **삽입 index 분기**(AC-7): 라우트 `insertAfter`(선행 슬롯 index)가 있으면
  * `insertSlotAt(slots, slot, Number(insertAfter) + 1)`(797 "카드 사이 +" 가 넘긴 선행 index 의 다음
- * 자리), 없으면 `addSlot`(말미 append, 후방호환) → `buildEditItineraryRequest`(5필드 픽) →
+ * 자리 — 같은 화면에서 연달아 담으면 성공한 추가 수만큼 뒤로 민다, TRIP-1640), 없으면 `addSlot`(말미 append, 후방호환) → `buildEditItineraryRequest`(5필드 픽) →
  * `PUT /trips/{tripId}/itinerary`(전체 교체) → 성공 시 일정 GET 캐시 무효화로 h19 가 갱신 재조회한다
  * (없으면 추가가 화면에 영영 안 보인다, W-1). 서버 재검증 결과(`hasViolation`)는 그 재조회가 표시한다
  * (INV-2 — 클라는 시각 타당성을 판정하지 않는다). 일정 GET 미도착·실패(`notReady`)면 추가를 조용히
@@ -83,7 +83,16 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
   );
   const [searchText, setSearchText] = useState('');
   const [pendingPlace, setPendingPlace] = useState<Place | null>(null);
+  // 저장에 성공한 추가마다 하나씩(중복 poiId 도) — 행의 "담김" 표시이자 아래 insertAt 오프셋(길이 = 성공 수)이다.
+  // 줄이거나 중복을 거르면 연달아 담기 자리가 어긋난다(TRIP-1640).
   const [addedPoiIds, setAddedPoiIds] = useState<string[]>([]);
+  // 카드 사이 「+」로 들어온 삽입 자리(선행 index 의 다음). 라우트 파라미터 insertAfter 는 화면이 떠 있는 동안
+  // 고정이라, 저장에 성공한 추가 수만큼 뒤로 민다 — 안 밀면 연달아 담은 둘째가 첫째 앞에 끼고 시각도 겹친다
+  // (TRIP-1640). 실패한 추가는 끼지 않았으니 세지 않는다. 없으면(말미 추가) undefined.
+  const insertAt =
+    insertAfter !== undefined
+      ? Number(insertAfter) + 1 + addedPoiIds.length
+      : undefined;
   // TRIP-1424 — 마지막 추가 저장이 실패했나. 다음 저장이 시작되면 지운다(01b Q7).
   const [addFailed, setAddFailed] = useState(false);
   // 저장 중인 추가(null = 없음) — 응답과 견줄 그날 요청 슬롯·추가한 자리를 들고 있다. 값이 있는 동안은 다른 추가를
@@ -97,6 +106,8 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
     addedIndex: number;
     /** 요청에 넣은 새 슬롯 — 편집기 초안에 끼울 때 응답에서 못 찾으면 이걸 쓴다. */
     slot: ItineraryDaysItemSlotsItem;
+    /** 요청 때의 삽입 자리 — 초안에도 같은 자리에 끼운다(없으면 말미). */
+    insertAt: number | undefined;
   } | null>(null);
 
   // 검색은 서버가 한다(q) + 커서 무한 스크롤(TRIP-502) — 클라 이름 필터·전량 수신을 없앤다.
@@ -123,7 +134,7 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
         setAddedPoiIds((ids) => [...ids, added.poiId]);
         // 편집기에 저장 안 한 변경(dirty)이 있으면 편집기는 이 응답으로 초안을 다시 채우지 않는다 — 그러면 추가한
         // 장소가 초안에 없어 이어 누른 [저장]이 서버에서 그 장소를 지운다. 그래서 초안에도 같은 자리(초안 기준
-        // insertAfter 의 다음, 없으면 말미)에 끼운다. dirty 가 아니면 편집기가 응답으로 시드하므로 손대지 않는다.
+        // 삽입 자리 insertAt, 없으면 말미)에 끼운다. dirty 가 아니면 편집기가 응답으로 시드하므로 손대지 않는다.
         const draft = useItineraryEditStore.getState();
         const hasUnsavedEdits = draft.dirty;
         if (hasUnsavedEdits) {
@@ -132,7 +143,7 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
             data.days
               .find((day) => day.date === added.date)
               ?.slots.find((slot) => slot.poiId === added.poiId) ?? added.slot,
-            insertAfter !== undefined ? Number(insertAfter) + 1 : undefined
+            added.insertAt
           );
         }
         // 서버가 이동을 반영해 시각을 밀었으면 응답 시각 그대로 말한다(INV-2). 응답엔 "밀었다" 필드가 없어
@@ -196,11 +207,11 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
   const pins = buildDraftPins(targetSlots);
   const center =
     pins.length > 0 ? { lat: pins[0].lat, lng: pins[0].lng } : FALLBACK_CENTER;
-  // 시트 기본값 = 새 장소 바로 앞 슬롯(insertAfter 가 가리키는 카드, 없으면 마지막)의 종료부터 1시간
+  // 시트 기본값 = 새 장소 바로 앞 슬롯(insertAt 앞 카드 — 연달아 담으면 방금 담은 장소, 없으면 마지막)의 종료부터 1시간
   // (TRIP-1009). 제안값일 뿐 시각 재추정이 아니다 — 저장 후 서버가 재검증한다(INV-2).
   const suggested = suggestNextSlotTime(
-    insertAfter !== undefined
-      ? targetSlots[Number(insertAfter)]
+    insertAt !== undefined
+      ? targetSlots[insertAt - 1]
       : targetSlots[targetSlots.length - 1]
   );
 
@@ -230,10 +241,10 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
       day.date === targetDate
         ? {
             ...day,
-            // insertAfter(선행 index)가 있으면 그 다음 자리에 splice, 없으면 말미 append(후방호환).
+            // 삽입 자리(insertAt)가 있으면 그 자리에 splice, 없으면 말미 append(후방호환).
             slots:
-              insertAfter !== undefined
-                ? insertSlotAt(day.slots, newSlot, Number(insertAfter) + 1)
+              insertAt !== undefined
+                ? insertSlotAt(day.slots, newSlot, insertAt)
                 : addSlot(day.slots, newSlot),
           }
         : day
@@ -251,6 +262,7 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
           .find((day) => day.date === targetDate)
           ?.slots.indexOf(newSlot) ?? -1,
       slot: newSlot,
+      insertAt,
     };
     setAddFailed(false);
     save.mutate({ tripId, data: request });
