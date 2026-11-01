@@ -5,6 +5,28 @@ request handling within FSD structure. State management patterns (Redux,
 TanStack Query) are in `references/state-management.md`. Code samples are
 React; the placement rules are framework-agnostic.
 
+## 목차
+
+- Authentication
+  - Auth data: `shared/auth/` or `shared/api/`
+  - Auth UI: pages (single use) or features (multi-use)
+  - Dialog for login
+  - When to use shared/auth vs a user entity
+  - In Pages/Widgets (not recommended)
+  - Logout and token invalidation
+  - Automatic logout
+- Type definitions
+  - Where to define types
+  - Example: API types in shared
+  - Example: domain types in entities
+- API request handling
+  - Basic pattern: API calls in the consuming slice
+  - Shared API client setup
+  - CRUD helpers in shared
+  - Request placement rule
+
+---
+
 ## Authentication
 
 Auth is one of the most common sources of confusion in FSD. The key question

@@ -4,6 +4,32 @@ Detailed folder structures, code examples, and naming conventions for each
 FSD layer. Use this reference when creating, reviewing, or reorganizing
 project structure.
 
+## 목차
+
+- App layer
+- Pages layer
+  - Page layout patterns
+- Widgets layer (discouraged)
+- Where should layouts be placed?
+- Features layer
+- Entities layer
+- Shared layer structure
+- Segments
+  - Group by what it is *for*, not by what it *is*
+- Naming conventions
+  - Domain-based file naming
+  - Single-concern segments
+  - Index files as public API
+- Slice groups
+  - When to use
+  - When NOT to use
+  - Example: grouping payment-related entities
+  - Features: use with caution
+  - Anti-patterns
+- Path aliases
+
+---
+
 ## App layer
 
 App-wide initialization: providers, routing, global styles, entry point.

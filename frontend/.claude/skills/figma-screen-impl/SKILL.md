@@ -20,10 +20,10 @@ Figma 생성 CSS를 그대로 붙이면 두 가지가 망가진다: (1) RN엔 CS
 
 ### 1. 추출
 
-- `get_screenshot(node)` → 대조 기준 PNG. curl로 스크래치패드에 저장 후 **Read로 육안 확인**(무엇을 짓는지 눈으로 본다).
-- `get_design_context(node, excludeScreenshot:true, clientFrameworks:"react-native")` → 레이아웃 구조 + raw 값(#hex·px·font 패밀리/크기·radius) + 에셋 URL 상수(`const imgX = "...asset/..."`).
-- **디자인 시스템 우선 — 값보다 이름.** 먼저 `get_variable_defs(node)`로 변수 바인딩을 확인한다. **이름이 나오면 그쪽이 정본**(토큰 이름을 직접 주므로 스냅 추측 불필요) → 우리 tailwind 미러 토큰으로 직행한다. **빈 `{}`면 미바인딩** → 그때만 design_context의 raw 값 + 스냅퍼(2단계)로 역매핑한다.
-- **관측(대상 화면마다 다시 확인)**: 화면 노드는 대부분 변수 미바인딩(`get_variable_defs`→`{}`)이라 **raw + 스냅퍼(2단계)가 실작동 경로다.** 공통 컴포넌트는 DS 섹션 `1230:1045`에 있고 새 화면은 그 인스턴스로 그려진다(`figma-build/references/design-kit.md` §0·§10) — `get_design_context`가 인스턴스 이름을 주면 대응 코드 컴포넌트부터 찾는다. `search_design_system`/`get_code_connect_map`은 게시 라이브러리·Code Connect가 없어 빈 결과가 정상이다.
+- `mcp__figma__get_screenshot(node)` → 대조 기준 PNG. curl로 스크래치패드에 저장 후 **Read로 육안 확인**(무엇을 짓는지 눈으로 본다).
+- `mcp__figma__get_design_context(node, excludeScreenshot:true, clientFrameworks:"react-native")` → 레이아웃 구조 + raw 값(#hex·px·font 패밀리/크기·radius) + 에셋 URL 상수(`const imgX = "...asset/..."`).
+- **디자인 시스템 우선 — 값보다 이름.** 먼저 `mcp__figma__get_variable_defs(node)`로 변수 바인딩을 확인한다. **이름이 나오면 그쪽이 정본**(토큰 이름을 직접 주므로 스냅 추측 불필요) → 우리 tailwind 미러 토큰으로 직행한다. **빈 `{}`면 미바인딩** → 그때만 design_context의 raw 값 + 스냅퍼(2단계)로 역매핑한다.
+- **관측(대상 화면마다 다시 확인)**: 화면 노드는 대부분 변수 미바인딩(`mcp__figma__get_variable_defs`→`{}`)이라 **raw + 스냅퍼(2단계)가 실작동 경로다.** 공통 컴포넌트는 DS 섹션 `1230:1045`에 있고 새 화면은 그 인스턴스로 그려진다(`figma-build/references/design-kit.md` §0·§10) — `mcp__figma__get_design_context`가 인스턴스 이름을 주면 대응 코드 컴포넌트부터 찾는다. `search_design_system`/`get_code_connect_map`은 게시 라이브러리·Code Connect가 없어 빈 결과가 정상이다.
 - 노드 메타/컨텍스트가 크면(수백 KB~MB) 파일로 저장됨 → **서브에이전트/jq로 증류**해 main 컨텍스트 오염을 막는다.
 
 ### 2. 토큰 스냅
@@ -106,7 +106,7 @@ testID가 green이어도 화면은 와이어프레임일 수 있다(jest가 못 
 
 1. **대상 화면 조준** — 프리뷰 하네스(`src/app/_dev/preview.tsx`)가 딥링크 `trippilot://_dev/preview?state=<키>`로 화면을 격리 렌더한다(알 수 없는 키는 splash로 폴백).
 2. **앱 스크린샷** — 키마다 `xcrun simctl terminate booted com.trippilot.travel` → `xcrun simctl openurl booted "trippilot://_dev/preview?state=<키>"` → 7초 대기 → `xcrun simctl io booted screenshot <리포 루트>/_workspace/preview-capture/<키>.png`. **키마다 재기동이 필수다** — 프리뷰는 진입 시 딥링크 상태를 1회만 읽는다(traps-shell). 상단 dev 오버레이(~156pt, @3x ≈ 470px)는 대조 시 무시하거나 잘라 본다. 시뮬 부팅·앱 설치·Metro(8081) 중 하나라도 없으면 실행 불가(FAIL 아님, §0 정신). 오버레이가 상단 ~156pt를 덮으므로 헤더대는 이 경로로 대조하지 못한다(`verify-gates` 자동 육안 게이트의 한계와 같다).
-3. **Figma 기준** — `get_screenshot(node, contentsOnly:true, maxDimension:1600)` → 반환된 URL을 **즉시** `curl -sL -o "<스크래치패드>/fig-<키>.png" "<url>"`. ⚠️ 이 URL은 **단시간 만료**다(에셋 URL의 7일과 다르다 — 훨씬 짧으니 바로 받는다).
+3. **Figma 기준** — `mcp__figma__get_screenshot(node, contentsOnly:true, maxDimension:1600)` → 반환된 URL을 **즉시** `curl -sL -o "<스크래치패드>/fig-<키>.png" "<url>"`. ⚠️ 이 URL은 **단시간 만료**다(에셋 URL의 7일과 다르다 — 훨씬 짧으니 바로 받는다).
 4. **나란히 대조** — 두 PNG를 Read로 나란히 놓고 **어긋남을 목록화**(누락 요소·간격·색·크기·정렬·폰트·모양). **행위 테스트가 신경 안 쓰는 요소가 먼저 빠진다** — 상단 내비바·보조 링크(`보기>`)·배지 pill·부제·필드 라벨·긍정 상태 메시지·아이콘 vs 텍스트를 특히 확인.
 5. **코드 수정 → 2로 복귀** → 어긋남 목록 빌 때까지 반복. 목표 **90~98%**(한눈에 구별 불가) — 문자 그대로 100% 픽셀은 RN 렌더 한계로 보장 못 함.
 
@@ -114,7 +114,7 @@ testID가 green이어도 화면은 와이어프레임일 수 있다(jest가 못 
 
 하나라도 비면 [구현]을 끝내지 않는다:
 
-- [ ] `get_variable_defs`로 디자인 시스템 바인딩 먼저 확인 (빈 `{}`면 raw + 스냅퍼 경로)
+- [ ] `mcp__figma__get_variable_defs`로 디자인 시스템 바인딩 먼저 확인 (빈 `{}`면 raw + 스냅퍼 경로)
 - [ ] 스냅퍼 MISS 전부 사유대로 처리 — **raw hex/px 하드코딩 0** (그라디언트·브랜드색·반투명·의도적 일회성만 예외)
 - [ ] 기존 testID 1:1 보존 (행위 테스트 수정 없이 green)
 - [ ] 에셋 만료(7일) 전 `src/assets/<feature>/`에 저장, 정체성당 1개
@@ -129,7 +129,7 @@ testID가 green이어도 화면은 와이어프레임일 수 있다(jest가 못 
 
 ## 실전 함정
 
-- **변수 미바인딩** → `get_variable_defs` 빈 `{}`. raw 값 사용(위 1단계).
+- **변수 미바인딩** → `mcp__figma__get_variable_defs` 빈 `{}`. raw 값 사용(위 1단계).
 - **컴포넌트 스펙 ↔ 화면 스펙 충돌** → **화면이 정본**(컴포넌트가 구버전·플레이스홀더일 수 있음. 예: SocialLoginButton 컴포넌트는 글자 플레이스홀더지만 화면은 실 로고).
 - **브랜드색은 의도적 raw** — 토큰화 금지(SVG 안에 색이 있으면 토큰 불필요).
 - **동일 요소 2스케일**(앱아이콘 94px/56px 등) → 비례 축소인지 사이즈 토큰 2종인지 확인.
