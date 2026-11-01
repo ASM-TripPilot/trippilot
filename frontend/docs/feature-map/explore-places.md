@@ -37,6 +37,7 @@ routes:
 - `place-detail-minimap` 미니맵은 그 장소 위치에 핀 하나를 찍고 손으로 움직이지 않는다. *(2026-11-01 jest 축소로 실화면 전용)*
 - `places-toast-above-fab` FAB 가 있는 화면에서 토스트는 FAB 묶음 위에 떠서 가려지지 않는다. *(2026-11-01 jest 축소로 실화면 전용)*
 - `places-chip-follow` 카테고리 칩을 고르면 칩 줄이 그 칩이 보이도록 가로로 따라간다. *(2026-11-01 jest 축소로 실화면 전용)*
+- `places-fab-scroll-hide` 목록을 세로로 스크롤하는 동안 ♥·＋ 묶음이 투명·터치 불가가 되고, 멈춘 뒤 250ms 에 돌아온다(위저드 출처라 ♥ 만 있어도 같다). *(2026-11-01 B안으로 실화면 전용)*
 
 ## How to get to it (user POV)
 

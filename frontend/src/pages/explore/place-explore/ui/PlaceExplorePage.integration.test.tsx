@@ -1579,6 +1579,15 @@ describe('상태·예외 배선 (S-1~S-12)', () => {
         4
       );
       expect(cardTestIdsOrNone()).toEqual([]);
+      // B안 — 뷰 단위에서 옮김: 라벨·검색 placeholder, 그리고 로딩 얼굴에도 ♥·＋ FAB·지역 칩이 남는다.
+      expect(screen.getByText('장소를 모으는 중')).toBeOnTheScreen();
+      expect(screen.getByPlaceholderText('장소 · 명소 · 맛집 검색')).toHaveProp(
+        'testID',
+        'explore-places-search'
+      );
+      expect(screen.getByTestId('explore-places-saved-fab')).toBeOnTheScreen();
+      expect(screen.getByTestId('explore-places-create-fab')).toBeOnTheScreen();
+      expect(screen.getByTestId('explore-places-region')).toBeOnTheScreen();
 
       placesGate.release();
 
@@ -1602,6 +1611,11 @@ describe('상태·예외 배선 (S-1~S-12)', () => {
       await waitFor(() =>
         expect(screen.getByTestId('explore-places-empty')).toBeOnTheScreen()
       );
+      expect(
+        within(screen.getByTestId('explore-places-empty')).getByText(
+          '담긴 장소가 없어요'
+        )
+      ).toBeOnTheScreen();
 
       fireEvent.press(screen.getByTestId('explore-places-empty-region'));
 
@@ -1681,6 +1695,19 @@ describe('상태·예외 배선 (S-1~S-12)', () => {
         ).toBeOnTheScreen()
       );
 
+      // 제목은 검색어를 지목하고, 부제가 함께 걸린 카테고리를, 지목 해제 버튼은 검색어를 가리킨다.
+      const notice = screen.getByTestId('explore-places-filterzero');
+      expect(
+        within(notice).getByText(
+          '‘카페’ 필터도 함께 걸려 있어요 · 조건을 해제하면 더 많은 장소를 볼 수 있어요'
+        )
+      ).toBeOnTheScreen();
+      expect(
+        within(screen.getByTestId('explore-places-filterzero-clear')).getByText(
+          '검색어 지우기'
+        )
+      ).toBeOnTheScreen();
+
       fireEvent.press(
         screen.getByTestId('explore-places-filterzero-clear-all')
       );
@@ -1700,6 +1727,46 @@ describe('상태·예외 배선 (S-1~S-12)', () => {
         q: null,
         category: null,
       });
+    });
+  });
+
+  // B안 — 뷰 단위에서 옮김. 카테고리만 0건을 만들면 카테고리를 지목하고, 공백 검색어는 조건이 아니다.
+  describe('S-13 · 카테고리가 0건을 만들면 카테고리를 지목한다', () => {
+    it('쇼핑 0건이면 "‘쇼핑’ 때문에 0건"·"‘쇼핑’ 필터 해제"이고, 공백만 쳐도 "조건 모두 해제" 는 없다', async () => {
+      setAccessToken('valid-access');
+      server.use(
+        http.get(`${BASE}/places`, ({ request }) => {
+          const category = new URL(request.url).searchParams.get('category');
+          const result = PLACES.filter(
+            (p) => !category || p.category === category
+          );
+          return HttpResponse.json({ items: result, nextCursor: null });
+        })
+      );
+
+      await renderPage();
+      fireEvent.press(screen.getByTestId('explore-places-category-shopping'));
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('explore-places-filterzero')
+        ).toBeOnTheScreen()
+      );
+
+      const notice = screen.getByTestId('explore-places-filterzero');
+      expect(
+        within(notice).getByText('‘쇼핑’ 때문에 0건이에요')
+      ).toBeOnTheScreen();
+      expect(
+        within(screen.getByTestId('explore-places-filterzero-clear')).getByText(
+          '‘쇼핑’ 필터 해제'
+        )
+      ).toBeOnTheScreen();
+
+      fireEvent.changeText(screen.getByTestId('explore-places-search'), '   ');
+      expect(screen.getByTestId('explore-places-filterzero')).toBeOnTheScreen();
+      expect(
+        screen.queryByTestId('explore-places-filterzero-clear-all')
+      ).toBeNull();
     });
   });
 
@@ -1726,6 +1793,14 @@ describe('상태·예외 배선 (S-1~S-12)', () => {
       // 빈 목록으로 위장하면 위반이다(INV-4). 배너(부분 실패)와도 섞이지 않는다.
       expect(cardTestIdsOrNone()).toEqual([]);
       expect(screen.queryByTestId('explore-places-partialfailure')).toBeNull();
+      expect(
+        within(screen.getByTestId('explore-places-error')).getByText(
+          '지금 장소 정보를 불러올 수 없어요'
+        )
+      ).toBeOnTheScreen();
+      // 오류 얼굴에도 ＋ FAB·지역 칩이 남는다(B안 — 뷰 단위에서 옮김).
+      expect(screen.getByTestId('explore-places-create-fab')).toBeOnTheScreen();
+      expect(screen.getByTestId('explore-places-region')).toBeOnTheScreen();
       // 앵커 — 실패한 파도는 지역별로 정확히 WAVE 건이었다(재시도 증분을 가르는 기준선).
       expect(hitsOf('GET', '/api/v1/places')).toHaveLength(WAVE);
 
