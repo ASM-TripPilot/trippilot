@@ -1172,6 +1172,65 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       }
     );
   });
+
+  // 옛 DraftScreen.test.tsx(뷰 단위)를 B안으로 옮겼다 — 남는 얼굴(loading·empty)의 일차 탭·다시 만들기 잠금·진행 표시.
+  describe('DraftScreen 얼굴 — 일차 탭 · 확정 일정 잠금 · 진행 표시', () => {
+    it('3일 여행에 1일차만 도착(0곳)하면 탭 3개가 서고, 안 온 날은 비활성이다 (AC-4)', async () => {
+      itineraryScript = () =>
+        itinerary({ generationState: 'COMPLETE', days: [day(DAY1, [])] });
+
+      renderPage();
+      await screen.findByTestId('itinerary-draft-empty');
+
+      expect(screen.queryAllByTestId(/^itinerary-draft-day-/)).toHaveLength(3);
+      expect(screen.getByTestId('itinerary-draft-day-1')).toBeEnabled();
+      expect(screen.getByTestId('itinerary-draft-day-2')).toBeDisabled();
+      expect(screen.getByTestId('itinerary-draft-day-3')).toBeDisabled();
+    });
+
+    it('확정(CONFIRMED) 일정에서는 다시 만들기가 비활성이고 눌러도 POST·이동이 0이다 (01b D8) — 짝: PLANNED 면 활성', async () => {
+      itineraryScript = () =>
+        itinerary({
+          status: 'CONFIRMED',
+          generationState: 'COMPLETE',
+          days: [],
+        });
+
+      const { unmount } = renderPage();
+      await screen.findByTestId('itinerary-draft-empty');
+
+      const retry = screen.getByTestId('itinerary-draft-retry');
+      expect(retry).toBeDisabled();
+      fireEvent.press(retry);
+      await sleep(300);
+      expect(log.hitsFor('POST', '/itinerary')).toBe(0);
+      expect(generatingMoves()).toBe(0);
+
+      unmount();
+      itineraryScript = () =>
+        itinerary({ generationState: 'COMPLETE', days: [] });
+      renderPage();
+      await screen.findByTestId('itinerary-draft-empty');
+      expect(screen.getByTestId('itinerary-draft-retry')).toBeEnabled();
+    });
+
+    it('진행 표시는 평범한 것 하나뿐 — 단계·진행률·백그라운드·취소 글자가 없다 (C14)', async () => {
+      itineraryScript = () =>
+        itinerary({
+          generationState: 'PARTIAL',
+          days: [],
+          generationSessionId: 'session-1',
+        });
+
+      renderPage();
+      await screen.findByTestId('itinerary-draft-loading');
+
+      const texts = renderedText();
+      ['백그라운드', '취소', '%'].forEach((forbidden) =>
+        expect(texts).not.toContain(forbidden)
+      );
+    });
+  });
 });
 
 // TRIP-1006 (C) #084 · 옛 DraftPage.baseline.integration.test.tsx
