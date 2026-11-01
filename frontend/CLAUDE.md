@@ -32,4 +32,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working in `fro
 - **거는 자리는 implementer뿐**(`PONYTAIL_SUBAGENT_MATCHER=^implementer$`) — spec-analyst·test-designer에 사다리를 걸면 AC가 흔들린다. 오케스트레이터는 SessionStart로 항상 받는다(플러그인 구조상 분리 불가 — 코드를 쓰지 않는 자리라 무해).
 - **유지 판정 없음 — 상시 존치**(사용자 결정). 위 「장치 판정 규칙」의 명시적 예외다. **다시 판정 조건을 달지 마라** — 떼는 조건이 없으므로 실적 집계도 제거 근거로 쓰지 않는다(집계 자체의 존폐는 scribe 소관).
 
+**기록 게이트(사이클 밖 작업 포함, 볼트가 있는 기계만 — 옵시디언 볼트가 없는 팀원 환경에는 해당 없음, 훅도 볼트가 없으면 아무것도 안 한다):** frontend 코드를 바꾸는 작업은 `trippilot-dev-cycle` 을 거치지 않은 오케 직접 배치(레인·서브에이전트·herdr 워크트리)라도 옵시디언에 남긴다 — 작업 노트는 `<워크트리 루트>/_workspace/{id}/`(볼트 `사이클/` 링크), **PR 을 열기 전에** 개발로그 1건(또는 묶음 1건) + `로그.md` 한 줄, 둘 중 하나에 **브랜치명**을 적는다. 사이클 밖 배치는 [기록](scribe)이 돌지 않아 기록이 통째로 빠졌다(실측 2026-11-01 PR 9건, 상세는 하네스 변경이력). 로컬 pre-push 가 막는다 — 볼트가 있는 기계에서 frontend 변경 push 인데 브랜치명이 `로그.md`·`개발로그/` 어디에도 없거나, 워크트리 안 `frontend/_workspace` 에 노트가 있으면 실패. *유지 판정: 6배치 관찰 — 게이트가 막은 건수와 우회(`--no-verify`) 건수를 로그.md 한 줄 `record-gate — 막음 n·우회 n` 으로 센다. 막음 0·소급 기록 0이 이어지면 실패를 경고로 격하한다. 우회가 막음보다 많으면 게이트 시점(push → PR 생성)을 다시 본다.*
+
 **변경 이력:** 하네스(에이전트·스킬·settings·이 파일)를 변경하면 **반드시** 옵시디언 `TripPilot/하네스 변경이력.md` 표에 행을 추가하라(append-only). 기록 서식과 압축 전 원장 확인 순서는 `harness-rule-edit` 스킬.
