@@ -1458,14 +1458,19 @@ describe('LiveHubView · HV10 [방문 완료]는 마지막 장소에만 (TRIP-15
     expect(screen.queryByTestId(COMPLETE)).toBeNull();
   });
 
-  it('HV10f 진행 중이 없으면 건너뜀 여부와 무관하게 예정 카드마다 [도착]이 선다 (종전 동작 — 진행 중 슬롯 뒤 기준은 진행 중이 있을 때만)', () => {
+  // BR-U10-54 건너뜀 제외는 진행 중 여부와 무관하다(2026-11-01 개정) — 건너뛴 슬롯 [도착]은 누르면 반드시 409(BR-U5-02)인 죽은 버튼이다.
+  it('HV10f 진행 중이 없어도 건너뛴 예정 카드에는 [도착]이 없고, 건너뛰지 않은 예정 카드마다 [도착]이 선다 (BR-U10-54)', () => {
     renderHub({
       slots: NO_ACTIVE,
       onPressArrive: jest.fn(),
       skippedPoiIds: new Set(['jeonpo']),
     });
 
-    for (const poiId of ['museum', 'jeonpo', 'haeundae']) {
+    expect(
+      screen.getByTestId(`execution-live-slot-status-${DATE}#jeonpo`)
+    ).toHaveTextContent('예정');
+    expect(screen.queryByTestId(arriveId('jeonpo'))).toBeNull();
+    for (const poiId of ['museum', 'haeundae']) {
       expect(screen.getByTestId(arriveId(poiId))).toBeOnTheScreen();
     }
   });
@@ -1485,8 +1490,8 @@ describe('LiveHubView · HV10 [방문 완료]는 마지막 장소에만 (TRIP-15
 });
 
 // TRIP-1561 5-b 보강(경고-3) — 술어의 두 절을 각각 잠근다: `index > activeIndex`(진행 중 슬롯 **앞** 카드는 [도착] 대상이 아니다)와
-// `state === 'upcoming'`(진행 중 슬롯 **뒤**여도 이미 '완료'인 카드는 대상이 아니다). 진행 중이 없을 때 [도착]이 모든 예정 카드에
-// 서므로(HV10f) p2 에 먼저 도착하면 p1 은 '예정'인 채 p2 가 관람 중이 되는 순서 바꿈 화면이 실제로 도달 가능하다 — 그때 p2 가
+// `state === 'upcoming'`(진행 중 슬롯 **뒤**여도 이미 '완료'인 카드는 대상이 아니다). 진행 중이 없을 때 [도착]이 건너뛰지 않은 모든 예정
+// 카드에 서므로(HV10f) p2 에 먼저 도착하면 p1 은 '예정'인 채 p2 가 관람 중이 되는 순서 바꿈 화면이 실제로 도달 가능하다 — 그때 p2 가
 // 마지막이면 [방문 완료]가 남아야 하고, 두 절이 빠지면 그 버튼이 조용히 사라져 마무리할 길이 없어진다.
 // 앵커: 카드 수 + 진행 중 상태줄 + (앞 카드) '예정' 상태줄 — 부재 단언이 빈 렌더에서 공허하게 통과하지 않게 한다.
 describe('LiveHubView · HV12 진행 중 앞의 예정·뒤의 완료는 [도착] 대상이 아니다 (TRIP-1561 5-b 보강)', () => {

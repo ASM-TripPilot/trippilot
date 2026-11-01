@@ -187,6 +187,8 @@ export function LiveItineraryPage({
   // (conflict)는 여기까지 안 오므로, 훅이 돌려주는 failed 는 진짜 실패다.
   const arriveBusy = useRef(false);
   // 단독 [방문 완료] 연타 잠금 — 같은 틱 두 번째 누름은 둘째 complete POST(409)를 만들어 서버는 완료인데 거짓 실패 안내가 뜬다. 무시는 안내가 아니다.
+  // 이 잠금은 [도착]도 막는다(BR-U10-55 개정) — 단독 낙관 완료도 '진행 중 없음'을 만들어 다른 카드 [도착]을 세우고, 그 완료가
+  // 실패하면 서버에 진행 중 2곳이 남는다(서버는 하루 open 1개를 막지 않는다).
   const completeBusy = useRef(false);
   const [actionNotice, setActionNotice] = useState<{
     poiId: string;
@@ -547,7 +549,7 @@ export function LiveItineraryPage({
   // TRIP-1561 수동 [도착] — 진행 중 슬롯이 있으면 그 완료 → 도착 사슬, 없으면 평범한 도착. 실패는 침묵하지 않는다:
   // 완료 실패는 앞 장소 카드, 도착 실패는 도착을 시도한 카드에 안내한다(`ignored` 는 요청 0 이라 안내 없음).
   const pressArrive = async (poiId: string) => {
-    if (arriveBusy.current) return;
+    if (arriveBusy.current || completeBusy.current) return;
     arriveBusy.current = true;
     setActionNotice(null);
     const input = {

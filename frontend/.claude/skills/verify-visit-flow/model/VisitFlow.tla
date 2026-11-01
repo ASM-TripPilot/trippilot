@@ -68,11 +68,13 @@ SkippedC == {p \in Pois : cache[p] = "skipped"}
 \* pages/live/live-itinerary/ui/LiveHubView.tsx canArriveAt
 \*   onPressArrive !== undefined (오늘 ∧ 방문 기록 수신 — 가정으로 늘 참)
 \*   ∧ state === 'upcoming'
-\*   ∧ (activeIndex < 0 ∨ (index > activeIndex ∧ !skippedPoiIds.has(poi)))
+\*   ∧ !skippedPoiIds.has(poi)
+\*   ∧ (activeIndex < 0 ∨ index > activeIndex)
 CanArriveAt(i) ==
   /\ SlotState(i) = "upcoming"
+  /\ plan[i] \notin SkippedC
   /\ \/ ActiveIdx = 0
-     \/ (i > ActiveIdx /\ plan[i] \notin SkippedC)
+     \/ i > ActiveIdx
 
 \* LiveHubView.tsx arriveAfterActive / showComplete
 ArriveAfterActive == ActiveIdx > 0 /\ \E i \in Idx : CanArriveAt(i)
@@ -119,11 +121,11 @@ Init ==
 ReplanUnchanged == UNCHANGED <<plan, rp, sent, draft, skippedBack>>
 
 (* ---------------- 허브 [도착] (LiveItineraryPage.tsx pressArrive) -------- *)
-\* arriveBusy 가 서 있으면 무시. 진행 중이 있으면 completeThenArrive, 없으면 arrive.
+\* arriveBusy 또는 completeBusy 가 서 있으면 무시. 진행 중이 있으면 completeThenArrive, 없으면 arrive.
 \* 진행 중 레코드가 낙관 id 면 completeThenArrive 는 요청 0(ignored) — 허브가 한가할 땐
 \* 낙관 레코드가 없으므로(opt = {}) 그 갈래는 나타나지 않는다.
 PressArrive(i) ==
-  /\ HubVisible /\ HubIdle /\ CanArriveAt(i)
+  /\ HubVisible /\ HubIdle /\ cmp = None /\ CanArriveAt(i)
   /\ LET p == plan[i] IN
        IF ActiveIdx > 0
        THEN LET a == plan[ActiveIdx] IN
@@ -184,7 +186,8 @@ ArriveRejected ==
   /\ UNCHANGED <<srv, cache, cmp, skp>> /\ ReplanUnchanged
 
 (* ------------- 허브 단독 [방문 완료] (pressComplete, completeBusy) -------- *)
-\* arriveBusy 와 다른 잠금이다. 낙관 도착 레코드에 누르는 경로(서버 404 → 무변화)는 뺀다.
+\* completeBusy — [방문 완료]는 이것만 본다(arriveBusy 와 다른 잠금). [도착]은 이 잠금도 본다(PressArrive 의 cmp = None).
+\* 낙관 도착 레코드에 누르는 경로(서버 404 → 무변화)는 뺀다.
 PressComplete ==
   /\ HubVisible /\ cmp = None /\ ActiveIdx > 0 /\ ShowComplete
   /\ LET a == plan[ActiveIdx] IN

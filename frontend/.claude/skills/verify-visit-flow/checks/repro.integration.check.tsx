@@ -50,14 +50,12 @@ const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = 'trip-1';
 const TODAY = '2026-08-20';
 const T = '2026-08-20T04:00:00Z';
-const ARRIVE_FAILED = '도착을 기록하지 못했어요. 다시 눌러 주세요.';
 const arriveId = (poiId: string) => `execution-live-slot-arrive-${TODAY}#${poiId}`;
 // renderHook 이 screen 을 훅 트리로 바꾸므로, 페이지 렌더 결과(page)로 찾는다.
 let page: ReturnType<typeof render>;
 const q = () => page;
 const statusOf = (poiId: string) => q().getByTestId(`execution-live-slot-status-${TODAY}#${poiId}`);
 const cardOf = (poiId: string) => q().getByTestId(`execution-live-slot-${TODAY}#${poiId}`);
-const noticeOf = (poiId: string) => q().queryByTestId(`execution-live-slot-action-notice-${TODAY}#${poiId}`);
 const COMPLETE_BTN = 'execution-arrive-complete';
 
 // ── 가짜 서버(S1~S3) ────────────────────────────────────────────────────────
@@ -148,7 +146,8 @@ const renderHub = () =>
   render(<><LiveItineraryPage tripId={TRIP_ID} today={TODAY} /><J01Probe /></>, { wrapper });
 
 describe('반례 재현', () => {
-  it('R1 NoArriveOnSkipped — A 도착 → j01 에서 A 건너뛰기 → 허브 A 카드에 [도착]이 서고, 누르면 409 로 실패가 반복된다 (FM-L4-01)', async () => {
+  // 2026-11-01 고침(BR-U10-54 개정) — 재현 대신 고쳐진 동작을 단언한다.
+  it('R1 NoArriveOnSkipped(고쳐짐) — A 도착 → j01 에서 A 건너뛰기 → 허브 A 카드는 예정이지만 [도착]이 서지 않는다 (FM-L4-01)', async () => {
     page = renderHub();
     // 1. A [도착]
     fireEvent.press(await q().findByTestId(arriveId('p1')));
@@ -158,19 +157,16 @@ describe('반례 재현', () => {
     // 3·4. 기록 화면에서 A 건너뛰기 확정 → 기록됨
     await skipInJ01('v-p1');
     expect(rows.get('p1')?.skippedAt).toBe(T);
-    // 위반 상태: A 는 '예정' 칸, 진행 중이 없으니 A 카드에 [도착]
-    await waitFor(() => expect(q().getByTestId(arriveId('p1'))).not.toBeNull());
-    expect(statusOf('p1')).toHaveTextContent('예정');
-    // 피해: 누를 때마다 서버 409 → 같은 안내
-    for (let i = 0; i < 2; i++) {
-      fireEvent.press(q().getByTestId(arriveId('p1')));
-      await waitFor(() => expect(noticeOf('p1')).toHaveTextContent(ARRIVE_FAILED));
-      await settle();
-    }
-    expect(hits.filter((h) => h === 'arrive p1')).toHaveLength(3);
+    // 고쳐진 상태: A 는 '예정' 칸이고 진행 중이 없지만 [도착]이 없다. 건너뛰지 않은 B 에는 선다.
+    await waitFor(() => expect(statusOf('p1')).toHaveTextContent('예정'));
+    await waitFor(() => expect(q().getByTestId(arriveId('p2'))).not.toBeNull());
+    expect(q().queryByTestId(arriveId('p1'))).toBeNull();
+    await settle();
+    expect(hits.filter((h) => h === 'arrive p1')).toHaveLength(1);
   });
 
-  it('R2 ReplanKeepsSkippedOut — A 건너뜀 뒤 재계획 초안이 A 를 다시 넣어 적용되면, 새 일정의 A 가 예정·[도착](409) 칸으로 남는다 (FM-L4-05 클라이언트 쪽)', async () => {
+  // R1 수정(2026-11-01) 뒤로는 되돌아온 A 에 [도착](409)이 서지 않는다 — 갈 수 없는 '예정' 칸이 새 일정에 남는 것 자체가 재현이다.
+  it('R2 ReplanKeepsSkippedOut — A 건너뜀 뒤 재계획 초안이 A 를 다시 넣어 적용되면, 새 일정의 A 가 갈 수 없는 예정 칸으로 남는다 (FM-L4-05 클라이언트 쪽)', async () => {
     page = renderHub();
     fireEvent.press(await q().findByTestId(arriveId('p1')));
     await waitFor(() => expect(open()).toEqual(['p1']));
@@ -180,11 +176,13 @@ describe('반례 재현', () => {
     await act(async () => { await client.invalidateQueries({ queryKey: getGetTripsTripIdItineraryQueryKey(TRIP_ID) }); });
     await waitFor(() => expect(q().queryByTestId(`execution-live-slot-${TODAY}#p2`)).toBeNull());
     expect(statusOf('p1')).toHaveTextContent('예정');
-    fireEvent.press(q().getByTestId(arriveId('p1')));
-    await waitFor(() => expect(noticeOf('p1')).toHaveTextContent(ARRIVE_FAILED));
+    // 건너뜀 기록이 그대로라(slotKey 같음) 이 칸은 도착할 수도 끝낼 수도 없다 — [도착]도 [방문 완료]도 없다.
+    expect(q().queryByTestId(arriveId('p1'))).toBeNull();
+    expect(q().queryByTestId(COMPLETE_BTN)).toBeNull();
   });
 
-  it('R3 OneOpenVisit — C 도착 → C [방문 완료](응답 대기) → A [도착] → A 도착 기록 → C 완료 네트워크 실패: 서버에 진행 중 2곳, C 는 예정·[도착](409)', async () => {
+  // 2026-11-01 고침(BR-U10-55 개정) — 재현 대신 고쳐진 동작을 단언한다.
+  it('R3 OneOpenVisit(고쳐짐) — C 도착 → C [방문 완료](응답 대기) → A [도착] 누름은 삼켜진다 → C 완료 네트워크 실패: 서버에 진행 중은 C 하나', async () => {
     page = renderHub();
     // 1·2. C [도착] → 기록
     fireEvent.press(await q().findByTestId(arriveId('p3')));
@@ -195,25 +193,19 @@ describe('반례 재현', () => {
     await waitFor(() => expect(within(cardOf('p3')).getByTestId(COMPLETE_BTN)).not.toBeNull());
     fireEvent.press(within(cardOf('p3')).getByTestId(COMPLETE_BTN));
     await waitFor(() => expect(hits).toContain('complete v-p3'));
-    // 4. 낙관 완료로 진행 중이 사라져 A 에 [도착]이 선다 — arriveBusy 는 단독 완료를 막지 않는다
+    // 4. 낙관 완료로 진행 중이 사라져 A 에 [도착]이 서지만, completeBusy 가 누름을 삼킨다
     await waitFor(() => expect(q().getByTestId(arriveId('p1'))).not.toBeNull());
     fireEvent.press(q().getByTestId(arriveId('p1')));
-    // 5. A 도착 기록
-    await waitFor(() => expect(open()).toEqual(['p1', 'p3']));
-    // 6. C 완료가 네트워크로 실패
+    await settle();
+    expect(hits).not.toContain('arrive p1');
+    // 5. C 완료가 네트워크로 실패 — 서버 진행 중은 C 하나, 화면도 C 진행 중([방문 완료] 복귀)
     completeGate.release();
     await settle();
     await settle();
-    expect(open()).toEqual(['p1', 'p3']);
-    // 화면: A 진행 중, C 는 '예정' 칸에 [도착] → 누르면 409
-    await waitFor(() => expect(statusOf('p3')).toHaveTextContent('예정'));
+    expect(open()).toEqual(['p3']);
+    expect(hits).not.toContain('arrive p1');
+    await waitFor(() => expect(within(cardOf('p3')).getByTestId(COMPLETE_BTN)).not.toBeNull());
     completeGate = null;
-    completeNetFail = false; // 네트워크가 돌아왔다
-    fireEvent.press(q().getByTestId(arriveId('p3')));
-    await waitFor(() => expect(hits.filter((h) => h.startsWith('complete'))).toHaveLength(2));
-    // 사슬: 진행 중 A 를 먼저 완료하고 C 도착 → 서버 409. A 는 원치 않게 완료된다.
-    await waitFor(() => expect(hits[hits.length - 1]).toBe('arrive p3'));
-    await waitFor(() => expect(noticeOf('p3')).toHaveTextContent(ARRIVE_FAILED));
-    expect(rows.get('p1')?.completedAt).toBe(T);
+    completeNetFail = false;
   });
 });
