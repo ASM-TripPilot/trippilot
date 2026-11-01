@@ -18,6 +18,8 @@
  * 대조가 잡는 것:
  *   - 파일은 있는데 문서에 행이 없다  → 새 파일 누락
  *   - 문서에 행은 있는데 파일이 없다  → 삭제·이동 미반영(이 문서의 가장 흔한 실패)
+ *   - 관점 접미사 테스트 파일(`Xxx.<접미사>.test.ts(x)`, 접미사 ∉ integration·property·web)이
+ *     허용 목록(`test-suffix-allow.txt`)에 없다 → 화면 테스트에 describe 로 붙여야 할 것을 새 파일로 냈다.
  *   - 개념 노트의 `설명하는코드`가 없는 파일을 가리킨다 → 볼트 쪽 같은 실패.
  *     [메모리]의 코드→개념 조인이 여기 걸려 있어, 썩으면 조회가 조용히 빈손이 된다.
  *     볼트가 없는 환경에서는 이 검사만 건너뛴다(TRIPPILOT_VAULT로 경로 지정 가능).
@@ -92,6 +94,33 @@ function exportsOf(rel) {
     }
   }
   return [...found];
+}
+
+// 관점 접미사 테스트 파일(T2, 2026-11-01) — README §테스트 전략 판정 4 "화면 단위 1 + 통합 1"을 기계로 지킨다.
+// 버킷 접미사(별도 jest 설정·환경)는 허용, 그 밖의 접미사는 허용 목록에 있어야 한다.
+const SUFFIX_ALLOW = path.join(__dirname, 'test-suffix-allow.txt');
+const BUCKET_SUFFIXES = new Set(['integration', 'property', 'web']);
+
+/** 접미사 칸 중 버킷이 아닌 것이 하나라도 있는 테스트 파일 목록. */
+function suffixTestFiles() {
+  return SCAN_DIRS.flatMap((d) => walk(path.join(ROOT, d)))
+    .filter((f) => {
+      const m = /^[^.]+\.(.+)\.test\.tsx?$/.exec(path.basename(f));
+      return m && !m[1].split('.').every((seg) => BUCKET_SUFFIXES.has(seg));
+    })
+    .sort();
+}
+
+/** 허용 목록 — 한 줄 한 경로, `#` 뒤는 사유(주석). */
+function suffixAllowList() {
+  if (!fs.existsSync(SUFFIX_ALLOW)) return new Set();
+  return new Set(
+    fs
+      .readFileSync(SUFFIX_ALLOW, 'utf8')
+      .split('\n')
+      .map((l) => l.replace(/#.*/, '').trim())
+      .filter(Boolean)
+  );
 }
 
 /** 문서 본문의 백틱 안에서 리포 상대 경로만 뽑는다.
@@ -193,6 +222,23 @@ function check() {
     for (const f of ghost) console.log(`  - ${f}`);
   }
 
+  const allow = suffixAllowList();
+  const suffixed = suffixTestFiles();
+  const newSuffix = suffixed.filter((f) => !allow.has(f));
+  if (newSuffix.length) {
+    console.log(`\n관점 접미사 테스트 — 허용 목록에 없는 새 파일 (${newSuffix.length}):`);
+    for (const f of newSuffix) console.log(`  + ${f}`);
+    console.log(
+      `  → 같은 화면 \`XxxScreen.test.tsx\` 에 describe 로 붙여라 — 버킷 사유가 있으면 ${path.relative(ROOT, SUFFIX_ALLOW)} 에 사유와 함께.`
+    );
+  }
+  // 지워진 파일의 허용 줄은 경고만 — 다른 브랜치가 테스트를 합칠 때 CI 를 깨지 않게(정리는 그 커밋이 한다).
+  const staleAllow = [...allow].filter((f) => !fs.existsSync(path.join(ROOT, f))).sort();
+  if (staleAllow.length) {
+    console.log(`\n(경고) 접미사 허용 목록에 없는 파일이 남아 있다 — 줄을 지워라 (${staleAllow.length}):`);
+    for (const f of staleAllow) console.log(`  - ${f}`);
+  }
+
   // 개념 노트의 `설명하는코드` 유령 — 구조 지도와 같은 실패(삭제·이동 미반영)가
   // 볼트 쪽에서 일어난 것이다. 여기가 썩으면 [메모리]의 코드→개념 조인이 빈손이 된다.
   const concepts = conceptCodePaths();
@@ -209,12 +255,12 @@ function check() {
     }
   }
 
-  const total = missing.length + ghost.length + conceptGhost.length;
+  const total = missing.length + ghost.length + newSuffix.length + conceptGhost.length;
   console.log(
     total === 0
       ? `\nOK — 문서 ${documented.size}행 ↔ 실제 ${actual.length}파일 일치` +
           (concepts ? ` · 개념 경로 ${concepts.size}개 전부 실존` : '')
-      : `\nFAIL — 불일치 ${total}건 (누락 ${missing.length} · 유령 ${ghost.length} · 개념 유령 ${conceptGhost.length})`
+      : `\nFAIL — 불일치 ${total}건 (누락 ${missing.length} · 유령 ${ghost.length} · 접미사 ${newSuffix.length} · 개념 유령 ${conceptGhost.length})`
   );
   process.exit(total === 0 ? 0 : 1);
 }

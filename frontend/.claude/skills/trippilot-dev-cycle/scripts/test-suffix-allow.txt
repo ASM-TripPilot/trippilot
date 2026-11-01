@@ -1,0 +1,63 @@
+# 관점 접미사 테스트 파일 허용 목록 — structure-index.cjs --check 가 읽는다(T2, 2026-11-01).
+# `Xxx.<접미사>.test.ts(x)` 중 접미사가 integration·property·web 이 아닌 파일은 여기 있어야 한다.
+# 새 파일은 기본적으로 같은 화면 `Xxx.test.tsx` 에 describe 로 붙인다(README §테스트 전략 판정 4).
+# 버킷 사유(별도 jest 환경·모듈 목 격리 등)가 있을 때만 한 줄 추가: `<경로>  # <사유>`.
+# 파일을 지우거나 합치면 그 줄도 지운다(남아 있으면 --check 가 경고한다).
+# 유지 판정: 6사이클 관찰 — 이 검사의 FAIL 건수와, 사유를 달고 여기 추가된 줄 수를 센다(scribe 개발로그).
+#   사유 추가가 FAIL 보다 많으면(통과용 사유 남발) 추가를 사람 확인으로 올리고, 6사이클 FAIL 0·추가 0 이면 그대로 둔다(비용 ≈0).
+# ── 2026-11-01 동결분(사유 미기재 — 장치 도입 시점에 이미 있던 파일) ──
+src/app/entrypoint/AppProviders.queryWiring.test.tsx
+src/app/routing/SplashGate.accountBoundary.test.tsx
+src/entities/place/ui/PlaceGridCard.memo.test.tsx
+src/entities/trip/ui/PastTripRow.compact.test.tsx
+src/entities/trip/ui/TripCard.cover.test.tsx
+src/entities/trip/ui/TripCard.live.test.tsx
+src/features/create-trip/model/tripWizardStore.mustVisit.test.ts
+src/features/create-trip/model/tripWizardStore.periodFromNights.test.ts
+src/features/create-trip/model/tripWizardStore.prefOverride.test.ts
+src/features/create-trip/model/tripWizardStore.regionCode.test.ts
+src/features/create-trip/model/tripWizardStore.setNights.test.ts
+src/features/edit-itinerary/model/buildEditItineraryRequest.unspecified.test.ts
+src/features/edit-itinerary/model/itineraryEditStore.addSlot.test.ts
+src/features/edit-itinerary/model/itineraryEditStore.adjustTime.test.ts
+src/features/edit-itinerary/model/itineraryEditStore.insertSlotAt.test.ts
+src/features/save-place/model/savedPlaces.savedList.integration.test.tsx
+src/features/trip/model/regionMatch.code.test.ts
+src/features/trip/model/regionMatch.sigungu.test.ts
+src/pages/auth/login/lib/makeAuthorize.apple.test.ts
+src/pages/auth/login/lib/makeAuthorize.flow.test.ts
+src/pages/auth/login/lib/makeAuthorize.nativeSdk.test.ts
+src/pages/auth/login/lib/makeAuthorize.realOauth.test.ts
+src/pages/auth/login/lib/makeAuthorize.webNaver.test.ts
+src/pages/auth/login/ui/LoginPage.apple.test.tsx
+src/pages/auth/oauth-redirect/ui/OAuthRedirectPage.fragment.test.tsx
+src/pages/explore/place-explore/ui/PlaceExploreScreen.memo.test.tsx
+src/pages/home/ui/HomeScreen.cardPress.test.tsx
+src/pages/home/ui/HomeScreen.collectionsLane.test.tsx
+src/pages/home/ui/HomeScreen.heroMemo.test.tsx
+src/pages/home/ui/HomeScreen.spotSave.test.tsx
+src/pages/itinerary/itinerary-edit/ui/ItineraryEditPage.addRace.integration.test.tsx
+src/pages/itinerary/itinerary-generating/ui/GeneratingPage.hookMock.test.tsx
+src/pages/itinerary/itinerary-list/model/tripCardFace.ongoing.test.ts
+src/pages/live/live-itinerary/ui/LiveHubView.automation.test.tsx
+src/pages/live/live-itinerary/ui/LiveItineraryPage.directions.integration.test.tsx
+src/pages/record/trip-records/ui/TripRecordsView.route.test.tsx
+src/pages/record/trip-records/ui/VisitRecordCard.checkPop.test.tsx
+src/pages/record/trip-summary/ui/DayHighlightCard.distanceSource.test.tsx
+src/pages/settings/my-page/model/styleCardModel.face.test.ts
+src/pages/settings/my-page/model/styleCardModel.progress.test.ts
+src/pages/settings/settings-location/ui/LocationConsentScreen.automation.test.tsx
+src/pages/settings/settings/model/settingsSections.release.test.ts
+src/pages/settings/settings/ui/SettingsPage.hookMock.test.tsx
+src/pages/settings/settings/ui/SettingsPage.pushSupport.test.tsx
+src/pages/stay/stay-saved/ui/SavedStayListScreen.list.test.tsx
+src/pages/stay/stay-search/ui/StaySearchScreen.separator.test.tsx
+src/shared/map/MapView.actualRoute.test.tsx
+src/shared/map/MapView.candidatePin.test.tsx
+src/shared/map/MapView.drawPath.test.tsx
+src/shared/map/MapView.fitPins.test.tsx
+src/shared/map/MapView.fitRadius.test.tsx
+src/shared/map/MapView.memo.test.tsx
+src/shared/map/MapView.recordMarkers.test.tsx
+src/shared/ui/BottomTabBar.shellTabHref.test.ts
+src/widgets/map-sheet-shell/ui/GenerationProgressCard.indeterminate.test.tsx
