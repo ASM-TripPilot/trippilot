@@ -10,3 +10,5 @@ pnpm-lock.yaml
 
 # 팀이 손으로 관리하는 마크다운 문서(canon·하네스)는 포맷 대상 아님
 *.md
+# ESLint bulk suppressions 장부 — ESLint 가 --prune-suppressions 때마다 자기 형식으로 다시 쓴다
+eslint-suppressions.json
