@@ -8,7 +8,11 @@
   "effortLevel": "medium",
   "permissions": {
     "deny": [
-      "mcp__obsidian__obsidian_delete_file"
+      "mcp__obsidian__obsidian_delete_file",
+      "Bash(git stash:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git checkout -- :*)",
+      "Bash(git restore:*)"
     ]
   }
 }
