@@ -70,7 +70,12 @@ class ReplanSolver(
                     reasons = session.reasons,
                     directives = session.directives,
                     freeText = session.freeText,
-                    excludedPoiIds = session.excludedPoiIds,
+                    // 그날 건너뛴 곳은 서버가 합친다(U4 BR-U4-17 개정 2026-11-01). 앱은 수동 진입에서 빈 목록을 보내고
+                    // 선계산(SYSTEM)은 앱을 거치지 않는다 — 안 빼면 새 일정에 다시 들어와, 같은 슬롯 키의 건너뜀 기록과
+                    // 부딪혀 [도착]이 영원히 409 인 칸이 된다(BR-U5-02). 세션 저장값이 아니라 **산출 시점**에 읽는다 —
+                    // 선계산 세션도 산출 때의 최신 실적을 본다. AI 는 제외를 원 일정 슬롯보다 우선하므로(합류·남은 방문·진행 중
+                    // 잠금 전부 제외를 거른다) `currentSlots` 에서 따로 빼지 않는다.
+                    excludedPoiIds = (session.excludedPoiIds + archive.getSkippedPois(session.tripId, session.targetDate)).distinct(),
                 ),
             )
             settle(sessionId) { fresh ->
