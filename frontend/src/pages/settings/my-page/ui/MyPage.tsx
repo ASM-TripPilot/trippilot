@@ -13,7 +13,7 @@ import {
   useGetTrips,
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
-import { seoulDate } from '@/shared/lib/seoulDate';
+import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { formatTripDateRange } from '@/entities/trip';
 import { classifyTripPhase, type TripPhase } from '@/entities/trip';
@@ -94,7 +94,8 @@ export function MyPage(): ReactElement {
       getGetTripsTripIdItineraryQueryOptions(trip.tripId)
     ),
   });
-  const today = seoulDate(new Date());
+  // 오늘(KST) — 상태로 들어 자정을 넘기면 바뀐다(TRIP-1639 · TRIP-1364 선례). 렌더 중 `seoulDate(new Date())` 는 마운트에 굳는다.
+  const today = useSeoulToday();
 
   // 여행 목록이나 일정 하나라도 모르면 null — 세 칸 모두 `–`(일부만 센 숫자는 거짓, INV-4).
   const buckets =

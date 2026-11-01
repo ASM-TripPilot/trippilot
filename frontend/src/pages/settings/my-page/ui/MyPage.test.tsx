@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react-native';
+import { act, fireEvent, screen, within } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 import type {
   Itinerary,
@@ -622,6 +622,61 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
       fireEvent.press(screen.getByTestId('my-trip-reflection-e1'));
       expect(mockPush).toHaveBeenCalledTimes(1);
       expect(String(mockPush.mock.calls[0][0])).toBe('/trips/e1/records');
+    });
+  });
+
+  // TRIP-1639
+  describe('🔴 마이 탭을 연 채 자정(KST)을 넘기면 숫자 3칸이 새 날로 바뀐다', () => {
+    /** 가짜 시계를 ms 만큼 흘리고 그 사이 약속(일정 조회)을 함께 푼다 — settle() 은 진짜 setTimeout 이라 가짜 시계 아래선 멈춘다. */
+    async function advance(ms: number): Promise<void> {
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(ms);
+      });
+    }
+
+    it('10-13 23:59 에 진행 중 1이던 확정 여행이 61초 뒤(10-14)엔 종료 1이 되고, 지난 여행 섹션이 열리며, 일정은 다시 받지 않는다', async () => {
+      // 준비 — KST 2026-10-13 23:59:00 (= UTC 14:59). 확정 여행 하나가 오늘(10-13)까지 진행 중.
+      jest.useFakeTimers({ now: new Date('2026-10-13T14:59:00Z') });
+      try {
+        let fetched = 0;
+        mockUseTrips.mockReturnValue(
+          asQuery([
+            myPageTrip('night', {
+              startDate: '2026-10-11',
+              endDate: '2026-10-13',
+            }),
+          ]) as ReturnType<typeof useGetTrips>
+        );
+        mockQueryOptions.mockImplementation((tripId: string) => ({
+          queryKey: [`/trips/${tripId}/itinerary`],
+          queryFn: () => {
+            fetched += 1;
+            return Promise.resolve(CONFIRMED);
+          },
+        }));
+        renderPage();
+        await advance(100);
+
+        // 앵커 — 자정 전: [예정, 진행 중, 종료] = 0·1·0 이고 지난 여행 섹션은 닫혀 있다.
+        expect(values()).toEqual(['0', '1', '0']);
+        expect(pastCardRoots()).toHaveLength(0);
+        const fetchedBeforeMidnight = fetched;
+        expect(fetchedBeforeMidnight).toBe(1);
+
+        // 실행 — 자정을 넘긴다.
+        await advance(61_000);
+
+        // 단언 ① 같은 여행이 진행 중에서 종료로 옮겨 간다.
+        expect(values()).toEqual(['0', '0', '1']);
+        // 단언 ② 종료 숫자와 같은 "지난 여행" 카드가 열린다(예정 0건이라 섹션이 열리는 규칙).
+        expect(pastCardRoots().map((n) => String(n.props.testID))).toEqual([
+          'my-trip-reflection-night',
+        ]);
+        // 단언 ③ AC2 — 오늘이 바뀌어도 일정 조회 키는 오늘과 무관해 다시 받지 않는다.
+        expect(fetched).toBe(fetchedBeforeMidnight);
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 });
