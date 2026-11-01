@@ -44,7 +44,7 @@ description: "TripPilot 지라 [FE] 서브태스크를 정본 대조해 작성·
 
 | 쓰려는 문장 | 실행해서 확인 | 못 하면 |
 |---|---|---|
-| "Figma: {밴드} · {변형} (라이브 확인 완료)" | 밴드 맵(`frontend/.claude/skills/spec-perception/reference/figma-structure.md`)으로 밴드를 정하고 `mcp__figma__get_metadata`/`get_screenshot`으로 **실제 조회** | "Figma 미확인 — 밴드 {코드} 추정, 확인 필요". **폴백 없음**: 리포에 화면 명세 사본이 없으므로 조회 실패는 곧 근거 부재다 |
+| "Figma: {밴드} · {변형} (라이브 확인 완료)" | 밴드 맵(`frontend/.claude/skills/spec-perception/reference/figma-structure.md`)으로 밴드를 정하고 `mcp__figma__get_metadata`/`mcp__figma__get_screenshot`으로 **실제 조회** | "Figma 미확인 — 밴드 {코드} 추정, 확인 필요". **폴백 없음**: 리포에 화면 명세 사본이 없으므로 조회 실패는 곧 근거 부재다 |
 | "리포 거리: {파일}이 {상태}" | `ls`·`wc -l`·`grep -rn "^export" src/shared src/features` | 적지 않는다. 실측 없는 "리포 거리"는 이 절의 존재 이유를 무효화한다 |
 | "응답 계약 {필드}" · "GET {경로}" | `git show origin/develop:backend/docs/design/openapi.yaml` — **develop이 기준이다.** main과 프론트 브랜치 사본은 develop보다 낡았을 수 있다 | "계약 미확인 — {경로}가 openapi에 없음"을 스코프가 아니라 **막힌 이유**로 적는다 |
 | "construction {문서} §{절}이 {내용}" | 해당 파일을 열어 절 번호까지 확인 | 절 번호를 지어내지 않는다. 문서명까지만 적는다 |
