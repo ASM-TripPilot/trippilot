@@ -55,7 +55,7 @@ const RESTRICTED_IMPORTS = 'no-restricted-imports';
 const RESTRICTED_SYNTAX = 'no-restricted-syntax';
 const NO_CONSOLE = 'no-console';
 
-const PROD_PROBE = 'src/features/home/__release_probe__.ts';
+const PROD_PROBE = 'src/features/settings/__release_probe__.ts';
 const PHOTO_PROBE = 'src/shared/photo/__release_probe__.ts';
 const REFLECTION_UI_PROBE =
   'src/features/share-trip-card/ui/__release_probe__.ts';
@@ -98,7 +98,7 @@ describe('msw·목은 앱 코드에 들어오지 않는다 (noMswInStaticGraph �
   it.each([
     [
       '통합 테스트 파일',
-      'src/features/home/__release_probe__.integration.test.ts',
+      'src/features/settings/__release_probe__.integration.test.ts',
     ],
     ['src/mocks 안', 'src/mocks/__release_probe__.ts'],
   ])(
@@ -544,7 +544,7 @@ describe('pages·app 은 아무것도 안 하는 핸들러를 넘기지 않는�
 const WORKLET_TAG = 'TRIP-1522';
 const WORKLET_TSX_PROBE = 'src/features/auth/ui/__release_probe__.tsx';
 const APP_TS_PROBE = 'app/__release_probe__.ts';
-const TEST_FILE_PROBE = 'src/features/home/__release_probe__.test.ts';
+const TEST_FILE_PROBE = 'src/features/settings/__release_probe__.test.ts';
 
 async function lintWorklet(
   code: string,

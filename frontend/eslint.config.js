@@ -590,7 +590,7 @@ module.exports = defineConfig([
   // ── 테스트 재팽창 방지(2026-11-01 jest 축소 · README §테스트 전략 판정 3~6) ───────────────
   // 기존 위반은 eslint-suppressions.json 에 얼려 두고 "늘어날 때만" 실패한다(ESLint bulk suppressions).
   // 테스트를 지워 위반이 줄면 `pnpm exec eslint . --prune-suppressions` 를 같은 커밋에 싣는다(파일 손편집 금지).
-  // 출시 게이트 생김새 4건(README 판정 3)은 그 줄에 `// eslint-disable-next-line <규칙> -- 출시 게이트 ②` 처럼 사유를 단다.
+  // 출시 게이트 생김새 5건(README 판정 3)은 그 줄에 `// eslint-disable-next-line <규칙> -- 출시 게이트 ②` 처럼 사유를 단다.
   {
     files: TEST_FILES,
     rules: {

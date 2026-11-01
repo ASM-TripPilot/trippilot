@@ -1,7 +1,7 @@
 # 이미지 출처 (src/shared/ui/placeholders/home)
 
-**개발/프리뷰 전용 생성 플레이스홀더다.** a01(홈) default 얼굴의 컬렉션 카드·스팟 그리드와
-a02 매거진이 사진 자리를 채우는 데 쓴다(홈 히어로는 TRIP-1432 부터 번들 도시 그림 `assets/region-covers/hero/`) — Figma `2091:1357`과 육안 대조할 때 사진 칸이
+**개발/프리뷰 전용 생성 플레이스홀더다.** a01(홈) default 얼굴의 컬렉션 카드·스팟 그리드가
+사진 자리를 채우는 데 쓴다(홈 히어로는 TRIP-1432 부터 번들 도시 그림 `assets/region-covers/hero/`) — Figma `2091:1357`과 육안 대조할 때 사진 칸이
 회색 토큰 View로만 비어 있으면 "피그마 실행 중" 대조가 불가능해서 들인 값이다(TRIP-694).
 
 **실사진이 아니다.** 9장 전부 Pillow(PIL)로 그린 **대각선 2색 그라디언트**다 — 부산 테마
@@ -11,7 +11,7 @@ a02 매거진이 사진 자리를 채우는 데 쓴다(홈 히어로는 TRIP-143
 
 | 파일 | 용도 | 출처 |
 |---|---|---|
-| `hero-night.jpg`·`hero-view.jpg` | a02 매거진 카드(`magazineFixtures.ts`) | PIL 생성 그라디언트 |
+| `hero-night.jpg`·`hero-view.jpg` | 프리뷰(`app/_dev/preview.tsx`)·`MapView.recordMarkers.test` 직접 require (a02 매거진 카드는 2026-11-01 삭제) | PIL 생성 그라디언트 |
 | `collection-gamcheon.jpg`·`collection-haeundae.jpg`·`collection-yonggungsa.jpg` | 컬렉션 카드 3장 | PIL 생성 그라디언트 |
 | `spot-jeonpo.jpg`·`spot-jagalchi.jpg`·`spot-sup.jpg`·`spot-hwangnyeong.jpg` | 스팟 그리드 4장 | PIL 생성 그라디언트 |
 

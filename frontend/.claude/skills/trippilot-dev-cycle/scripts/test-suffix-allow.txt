@@ -39,7 +39,6 @@ src/pages/home/ui/HomeScreen.spotSave.test.tsx
 src/pages/itinerary/itinerary-edit/ui/ItineraryEditPage.addRace.integration.test.tsx
 src/pages/itinerary/itinerary-generating/ui/GeneratingPage.hookMock.test.tsx
 src/pages/itinerary/itinerary-list/model/tripCardFace.ongoing.test.ts
-src/pages/itinerary/itinerary-method/ui/ItineraryMethodPage.hookMock.test.tsx
 src/pages/live/live-itinerary/ui/LiveHubView.automation.test.tsx
 src/pages/live/live-itinerary/ui/LiveItineraryPage.directions.integration.test.tsx
 src/pages/record/trip-records/ui/TripRecordsView.route.test.tsx

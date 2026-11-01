@@ -9,16 +9,6 @@
       "count": 1
     }
   },
-  "src/__tests__/devPreviewReleaseGate.test.tsx": {
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
-  "src/__tests__/locationAutomationBuildConfig.test.ts": {
-    "no-restricted-imports": {
-      "count": 1
-    }
-  },
   "src/app/routing/SplashGate.accountBoundary.test.tsx": {
     "no-restricted-syntax": {
       "count": 1
@@ -31,12 +21,12 @@
   },
   "src/app/routing/SplashGate.test.tsx": {
     "no-restricted-properties": {
-      "count": 7
+      "count": 2
     }
   },
   "src/entities/itinerary-slot/ui/SlotProgressCard.test.tsx": {
     "no-restricted-properties": {
-      "count": 6
+      "count": 2
     }
   },
   "src/entities/itinerary-slot/ui/SlotStopCard.test.tsx": {
@@ -333,21 +323,6 @@
       "count": 2
     }
   },
-  "src/pages/magazine/ui/MagazinePage.test.tsx": {
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
-  "src/pages/magazine/ui/MagazinePage.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "src/pages/magazine/ui/MagazineScreen.test.tsx": {
-    "no-restricted-properties": {
-      "count": 5
-    }
-  },
   "src/pages/onboarding/onboarding-nickname/ui/NicknameScreen.test.tsx": {
     "no-restricted-properties": {
       "count": 1
@@ -543,11 +518,6 @@
       "count": 3
     }
   },
-  "src/shared/ui/GlassSurface.test.tsx": {
-    "no-restricted-properties": {
-      "count": 8
-    }
-  },
   "src/shared/ui/HeartButton.test.tsx": {
     "no-restricted-properties": {
       "count": 1
@@ -593,10 +563,7 @@
   },
   "src/widgets/map-sheet-shell/ui/EditorView.test.tsx": {
     "no-restricted-properties": {
-      "count": 12
-    },
-    "no-restricted-syntax": {
-      "count": 1
+      "count": 4
     }
   },
   "src/widgets/map-sheet-shell/ui/GenerationProgressCard.indeterminate.test.tsx": {

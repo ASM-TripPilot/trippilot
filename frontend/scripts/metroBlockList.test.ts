@@ -74,6 +74,8 @@ const MUST_BLOCK: [string, string][] = [
   ['app 아래 테스트', 'app/(tabs)/index.test.tsx'],
   ['app 아래 __fixtures__ 폴더 속 픽스처', 'app/(tabs)/__fixtures__/a.ts'],
   ['기존 app/_dev 프리뷰', 'app/_dev/preview.tsx'],
+  ['실패 주입 딥링크 라우트', 'app/_dev/fault.tsx'],
+  ['실패 주입 모듈(개발 빌드 전용)', 'src/shared/dev-fault/interceptor.ts'],
 ];
 
 // 막으면 안 되는 것.
@@ -87,6 +89,7 @@ const MUST_PASS: [string, string][] = [
   ['접두만 같은 폴더 src/mocksmith', 'src/mocksmith/a.ts'],
   ['접두만 같은 폴더 src/test-supporter', 'src/test-supporter/a.ts'],
   ['.test. 가 아닌 파일명', 'src/pages/home/model/latest.tsx'],
+  ['운영 API 계층(실패 주입을 require 로만 문다)', 'src/shared/api/index.ts'],
 ];
 
 describe('운영 번들(NODE_ENV=production) blockList', () => {

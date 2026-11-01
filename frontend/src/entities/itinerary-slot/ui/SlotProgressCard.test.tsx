@@ -9,7 +9,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot/model';
 import { describeAtFontScales, setFontScale } from '@/test-support/fontScale';
 
-import { ChevronRightGlyph, MemoGlyph, PhotoGlyph } from './SlotGlyphs';
+import { ChevronRightGlyph } from './SlotGlyphs';
 import { SlotProgressCard } from './SlotProgressCard';
 
 /**
@@ -386,17 +386,7 @@ describe('SlotProgressCard · upcoming (AC-5)', () => {
     );
   });
 
-  it('C13 TRIP-1021 AC-9 상태줄은 한 줄로 잘린다 (numberOfLines=1 — 실제 절단은 6-b)', () => {
-    render(
-      <SlotProgressCard
-        slot={upcoming('11:00 - 22:00')}
-        date={DATE}
-        state="upcoming"
-      />
-    );
-
-    expect(screen.getByTestId(id('time')).props.numberOfLines).toBe(1);
-  });
+  // C13(상태줄 numberOfLines=1)은 jest-cut A 에서 지웠다 — 절단은 생김새라 실화면 QA 몫.
 
   it('C8 아이콘 3개는 비활성이고 눌러도 아무 콜백이 없다 · 거리 줄·[방문 완료]가 없고, onPressArrive 미주입이면 [도착]도 없다', () => {
     const onPressComplete = jest.fn();
@@ -827,28 +817,7 @@ describe('SlotProgressCard · active 메모 (TRIP-1117)', () => {
     expect(screen.getByTestId(id('memo'))).toHaveTextContent('바다가 예뻤다');
   });
 
-  it('🔴 C16 Q9: 버튼 줄 → 사진 안내 → 메모 박스 순서다', () => {
-    render(
-      <SlotProgressCard
-        slot={activeSlot}
-        date={DATE}
-        state="active"
-        onPressPhoto={jest.fn()}
-        onPressMemo={jest.fn()}
-        photoNotice="사진을 기록하지 못했어요. 다시 시도해 주세요"
-        memo="바다가 예뻤다"
-      />
-    );
-
-    const order = testIdOrder();
-    const at = (testID: string) => order.indexOf(testID);
-    // 앵커 — 이미 있는 두 요소의 순서(추출기가 위→아래 순서를 낸다는 자가검사).
-    expect(at('execution-arrive-memo')).toBeGreaterThanOrEqual(0);
-    expect(at('execution-arrive-photo-notice')).toBeGreaterThan(
-      at('execution-arrive-memo')
-    );
-    expect(at(id('memo'))).toBeGreaterThan(at('execution-arrive-photo-notice'));
-  });
+  // C16(버튼 줄 → 사진 안내 → 메모 박스 트리 순서)은 jest-cut A 에서 지웠다 — 트리 순서라 실화면 QA 몫(live-hub.md).
 
   it('🔴 C17 Q3: memoNotice 를 주면 버튼 줄 아래에 그 문구 그대로 한 줄이 서고, 안 주면 없다', () => {
     const { rerender } = render(
@@ -1106,44 +1075,7 @@ describe('SlotProgressCard · done [사진]·[메모] (TRIP-1203)', () => {
     expect(onPressDirections).not.toHaveBeenCalled();
   });
 
-  it('C20 done [사진]·[메모]는 관람 중 카드의 버튼과 className 이 같고, 글리프는 PhotoGlyph·MemoGlyph 16 이다', () => {
-    // 준비 — 같은 슬롯을 관람 중으로 먼저 그려 그 버튼 className 을 읽는다(리터럴 복사 금지, 02a ★15).
-    const activeView = render(
-      <SlotProgressCard
-        slot={mkSlot()}
-        date={DATE}
-        state="active"
-        onPressPhoto={jest.fn()}
-        onPressMemo={jest.fn()}
-      />
-    );
-    const activePhotoClass = screen.getByTestId('execution-arrive-photo').props
-      .className as string;
-    const activeMemoClass = screen.getByTestId('execution-arrive-memo').props
-      .className as string;
-    activeView.unmount();
-    // 앵커 — 빈 문자열끼리 같아지는 공허 통과 차단.
-    expect(activePhotoClass).toContain('rounded-[10px]');
-
-    // 실행 — 같은 슬롯을 완료로 그린다.
-    render(
-      <SlotProgressCard
-        slot={mkSlot()}
-        date={DATE}
-        state="done"
-        onPressPhoto={jest.fn()}
-        onPressMemo={jest.fn()}
-      />
-    );
-
-    // 단언
-    const photo = screen.getByTestId(id('done-photo'));
-    const memo = screen.getByTestId(id('done-memo'));
-    expect(photo.props.className).toBe(activePhotoClass);
-    expect(memo.props.className).toBe(activeMemoClass);
-    expect(photo.findByType(PhotoGlyph).props.size).toBe(16);
-    expect(memo.findByType(MemoGlyph).props.size).toBe(16);
-  });
+  // C20(done 버튼 className 이 관람 중과 같음·글리프 크기)은 jest-cut A 에서 지웠다 — 생김새라 실화면 QA 몫.
 
   it('C21 done 이 사진·메모 콜백·안내를 안 받으면 done 버튼·안내가 하나도 없다 (TRIP-939 무회귀)', () => {
     render(<SlotProgressCard slot={mkSlot()} date={DATE} state="done" />);
@@ -1196,7 +1128,7 @@ describe('SlotProgressCard · done [사진]·[메모] (TRIP-1203)', () => {
     expect(screen.queryByTestId(id('done-photo-settings'))).toBeNull();
   });
 
-  it('C23 done 메모 안내는 그 문구 그대로 한 줄이고, 순서는 사진 행 → 버튼 → 사진 안내 → [설정 열기] → 메모 안내 → 메모 박스다', () => {
+  it('C23 done 메모 안내는 그 문구 그대로 한 줄이고, 관람 중 카드의 안내 testID 는 쓰지 않는다 (순서는 실화면 QA 몫)', () => {
     render(
       <SlotProgressCard
         slot={mkSlot()}
@@ -1216,22 +1148,6 @@ describe('SlotProgressCard · done [사진]·[메모] (TRIP-1203)', () => {
       DONE_MEMO_FAILED
     );
     expect(screen.queryByTestId('execution-arrive-memo-notice')).toBeNull();
-
-    const order = testIdOrder();
-    const at = (testID: string) => order.indexOf(testID);
-    // 앵커 — 이미 있는 두 요소(사진 행 < 메모 박스)가 위→아래로 나온다(추출기 자가검사).
-    expect(at(id('photos'))).toBeGreaterThanOrEqual(0);
-    expect(at(id('memo'))).toBeGreaterThan(at(id('photos')));
-    expect(at(id('done-photo'))).toBeGreaterThan(at(id('photos')));
-    expect(at(id('done-memo'))).toBeGreaterThan(at(id('done-photo')));
-    expect(at(id('done-photo-notice'))).toBeGreaterThan(at(id('done-memo')));
-    expect(at(id('done-photo-settings'))).toBeGreaterThan(
-      at(id('done-photo-notice'))
-    );
-    expect(at(id('done-memo-notice'))).toBeGreaterThan(
-      at(id('done-photo-settings'))
-    );
-    expect(at(id('memo'))).toBeGreaterThan(at(id('done-memo-notice')));
   });
 
   it('C24 upcoming 은 사진·메모 콜백·안내를 받아도 done 버튼·안내도 고정 버튼도 그리지 않는다 (누설 앵커)', () => {

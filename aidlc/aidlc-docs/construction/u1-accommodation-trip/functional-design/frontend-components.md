@@ -35,6 +35,8 @@ src/app/
 
 > **[개정 · 2026-10-12]** 현행 라우트와의 차이(원문 보존, 정본은 `ls frontend/app`): ① 라우트는 `src/app/` 이 아니라 **리포 `frontend/app/`**(Expo Router `root: './app'`). ② **`explore/community.tsx` 없음** — U7 커뮤니티는 폐기됐고(2026-10-12 사용자 결정) d05 자리도 없다. 대신 `explore/places/[poiId].tsx`(장소 상세)가 있다. ③ 필수 방문지는 `trips/[tripId]/must-visits.tsx` 가 아니라 **`frontend/app/trips/[tripId]/itinerary/must-visits/{index,[poiId]}.tsx`**(일정 흐름 아래). ④ `explore/region.tsx`·`destination/[region].tsx`·`places.tsx`·`saved-places.tsx`·`stays/{index,[stayId],saved,register}.tsx`·`trips/new/{_layout,step1,step2}.tsx`·`trips/[tripId]/bases.tsx` 는 그대로 실재. 추가로 `my/stays.tsx`·`magazine.tsx` 가 있다.
 
+> **[개정 · 2026-11-01]** 위 개정의 `magazine.tsx`(a02 매거진)는 사용자 결정으로 코드째 삭제됐다 — 서버 매거진 API 가 없어 픽스처로만 돌던 화면이다.
+
 - 위저드·등록·상세는 **몰입 화면**이므로 탭바를 숨긴다(U0 BR-U0-29 상속).
 
 ## 2. 탐색 컴포넌트 (밴드 d · C7)

@@ -6,13 +6,12 @@ live_verified_at: 2026-10-31 (8b50db304)
 routes:
   - app/trips/[tripId]/planb/solving.tsx
   - app/trips/[tripId]/planb/draft.tsx
-  - app/trips/[tripId]/planb/diff.tsx
   - app/trips/[tripId]/live/index.tsx
 ---
 
 # Plan-B 재계획 진행·초안·적용
 
-재계획 세션을 연 뒤의 흐름이다. **진행 화면**(i05, `planb/solving`)은 지도 위 진행 카드 「AI가 일정을 다시 짜고 있어요」와 시트(「AI 재계획안」 · 방문한 곳 행 + 뼈대 카드)를 띄우고 세션을 폴링한다. 결과가 나오면 **재계획안 화면**(i06, `planb/draft`)으로 replace 되어 초안(행·빠지는 곳·`N곳 · 총거리`)·대안 없음·실패 세 얼굴 중 하나를 그린다. 초안의 「적용하기」가 일정을 바꾸는 유일한 지점이고, 성공하면 허브로 돌아가 「변경 반영됨 · 새 일정이 반영됐어요」 시트(i08)가 한 번 뜬다. 진행·초안에서 나가면 확인 다이얼로그가 붙잡고, 「나가기」는 서버에 아무것도 보내지 않는다(원래 일정 그대로). `planb/diff`(옛 i18 확정 화면)는 지금 앱 안 진입이 없고 딥링크로만 열린다.
+재계획 세션을 연 뒤의 흐름이다. **진행 화면**(i05, `planb/solving`)은 지도 위 진행 카드 「AI가 일정을 다시 짜고 있어요」와 시트(「AI 재계획안」 · 방문한 곳 행 + 뼈대 카드)를 띄우고 세션을 폴링한다. 결과가 나오면 **재계획안 화면**(i06, `planb/draft`)으로 replace 되어 초안(행·빠지는 곳·`N곳 · 총거리`)·대안 없음·실패 세 얼굴 중 하나를 그린다. 초안의 「적용하기」가 일정을 바꾸는 유일한 지점이고, 성공하면 허브로 돌아가 「변경 반영됨 · 새 일정이 반영됐어요」 시트(i08)가 한 번 뜬다. 진행·초안에서 나가면 확인 다이얼로그가 붙잡고, 「나가기」는 서버에 아무것도 보내지 않는다(원래 일정 그대로).
 
 ## Sub-features
 
@@ -35,7 +34,6 @@ routes:
 - `draft-error`·`draft-closed` 세션 조회 실패·이미 끝난 세션 → 진행 화면과 같은 문구의 얼굴(「다시 시도」·「나가기」 / 「나가기」).
 - `draft-manual` 「직접 수정」 → 그 날짜로 편집기(`planb-request`의 `manual-edit`).
 - `applied-sheet` 허브 위 반영 시트 「변경 반영됨」·「새 일정이 반영됐어요」(+ 초안 캐시가 있으면 요약 배지) → 「확인」으로 닫는다. 시트가 열린 동안 하단 바가 숨는다. 반영 시트가 뜰 때 허브 시트는 펼침으로 열리고, 시트를 닫아도 펼침이 유지된다. 초안 화면은 시트를 가장 낮게 내려도 「직접 수정」·「적용하기」가 보인다.
-- `diff-confirm` (딥링크 전용) 「변경 확정」 화면 → 「확정」(적용 → 허브 + 반영 시트)·「취소」(세션 취소 → 허브). 실패면 「변경을 반영하지 못했어요」 + 「다시 시도」(실패한 쪽을 다시).
 
 ## How to get to it (user POV)
 
@@ -43,8 +41,8 @@ routes:
 - 진입 게이트(위험 상세 「대안 보기」·푸시·알림함 Plan-B 행)가 준비 세션 상태로 진행 화면 또는 재계획안 화면으로 바로 보낸다.
 - 진행 화면이 결과를 받으면 재계획안 화면으로 자동 replace.
 - 재계획안의 「새 대안 보기」·「다시 시도」·「내일 일정 다시 짜기」 → 새 진행 화면.
-- 반영 시트: 「적용하기」(또는 diff 「확정」) 성공 뒤 허브(`live?applied=<sessionId>`).
-- 딥링크 `trippilot:///trips/<tripId>/planb/solving?sessionId=<id>`·`…/planb/draft?sessionId=<id>`·`…/planb/diff?sessionId=<id>`.
+- 반영 시트: 「적용하기」 성공 뒤 허브(`live?applied=<sessionId>`).
+- 딥링크 `trippilot:///trips/<tripId>/planb/solving?sessionId=<id>`·`…/planb/draft?sessionId=<id>`.
 
 ## Driving it with agent-device
 
@@ -70,7 +68,6 @@ Preconditions:
 - **실패 얼굴.** 「다시 짜지 못했어요」 + 「다시 시도」(testID: `sheet-cta-button-1`) → 새 진행 화면. 이 얼굴의 뒤로는 확인 없이 나간다.
 - **낡은 초안.** 적용이 409 로 거절되면 「시간이 지나 이 대안은 지금 일정과 맞지 않아요」(testID: `planb-draft-stale`) + 「새 대안 보기」(testID: `planb-draft-stale-retry`), 「적용하기」 비활성.
 - **끝난 세션 딥링크.** 이미 적용한 세션 id 로 `…/planb/draft?sessionId=<id>`. 「이미 끝난 재계획이에요」(testID: `planb-draft-closed`) + 「나가기」(testID: `planb-draft-closed-leave`). solving 경로면 testID: `planb-solving-closed`·`planb-solving-closed-leave`.
-- **diff 화면(딥링크).** 초안 상태 세션 id 로 `trippilot:///trips/<tripId>/planb/diff?sessionId=<id>`. 「변경 확정」 + 「확정」(testID: `planb-diff-confirm`)·「취소」(testID: `planb-diff-cancel`). 「확정」 → 허브 + 반영 시트. 실패면 「변경을 반영하지 못했어요」(testID: `planb-diff-error`) + 「다시 시도」(testID: `planb-diff-retry`).
 
 ## Gotchas
 
@@ -82,7 +79,6 @@ Preconditions:
 - 적용 직후 허브 트리거 알약이 잠깐 남을 수 있다(서버 소비가 적용 응답보다 늦다 — 트리거 목록을 한 번도 받지 않은 채 적용한 경우).
 - 하단 CTA 는 위치 testID(`sheet-cta-button-0`·`-1`)라 얼굴마다 뜻이 바뀐다 — 라벨(「적용하기」/「조건 바꿔 다시 짜기」/「다시 시도」)로 교차 확인한다.
 - 다이얼로그 버튼 id(`…-leave-confirm-stay`·`…-leave`)는 루트 testID 에 꼬리가 붙은 값이라 `check.mjs` 대조 밖이다 — 루트 testID 로 다이얼로그를 확인한 뒤 라벨(「계속 기다리기」·「계속 보기」·「나가기」)로 누른다. `${slotKey}` 는 실행 값이다(`slotKey` = `YYYY-MM-DD#<poiId>`).
-- `planb/diff` 는 앱 안 진입이 없다 — 딥링크 결과를 앱 경로 검증으로 세지 않는다. 이 화면엔 뒤로 버튼이 없다(가장자리 스와이프로 나간다).
 - 8분 상한·90초 느림 안내는 실시간 대기가 필요하다 — 기다리기 어렵다면 프리뷰 `planb-solving-slow` 로 표면만 보고 "실시간 미검증"으로 남긴다.
 - 세션 id 를 얻는 방법·대안 없음/실패/낡음을 서버에서 재현하는 방법은 **확인 필요**.
 - [실화면] 2026-10-31 — 실 AI 재계획 3회 모두 약 5초 만에 초안이 나왔다(폴백·실패 없음). 1회째(위치 화면 경유): `6곳 · 52.9km`, 빠지는 곳 2곳(건너뛴 곳·불탑사) → 「나가기」로 미적용. 2회째(요청 시트, 체력 저하·여유 있게·자유 입력): `5곳 · 55.3km`, 빠지는 곳 1곳(불탑사) → **적용**, 반영 시트 배지 「바뀐 곳 2곳」·「방문지 6→5곳」. 3회째는 제출 직후 「취소」를 눌렀는데 1초 안에 허브로 돌아와 취소가 실제로 갔는지 판별 못 했다.
@@ -90,6 +86,4 @@ Preconditions:
 - [실화면] 2026-10-31 — 없는 sessionId 로 `planb/draft`·`planb/solving` 을 열면 「이미 끝난 재계획이에요」가 아니라 오류 얼굴(`planb-draft-error`/`planb-solving-error`, 「재계획 상태를 불러오지 못했어요」·「네트워크를 확인해 주세요…」)이 뜬다. 「나가기」/「취소」 → 허브.
 - [결함 의심 FM-L4-03] (판단 필요) 재계획안에서 이미 방문한 장소가 방문 시각이 아니라 계획 시각(`09:34–10:49`)·빨간 번호·「고정」으로 그려진다. 직전 진행 화면 시트는 같은 장소를 초록 번호·「06:58 방문」으로 그렸다.
 - [결함 의심 FM-L4-05] 기록(j01)에서 건너뛴 장소가 2회째 초안에 다시 일정(`12:19–13:43`)으로 들어갔고 적용 뒤 허브에 예정으로 남는다. 건너뛴 방문은 [도착]이 서버에서 거절돼(`visit-check` FM-L4-01) 새 일정에 갈 수 없는 칸이 생긴다. 1회째 초안은 같은 장소를 「빠지는 곳」으로 뺐다.
-- [결함 의심 FM-L4-04] `planb/diff` 는 sessionId 를 검증하지 않고 아무 값으로도 「변경 확정」 얼굴을 그린다. 「확정」이 실패하면 오류 얼굴엔 「다시 시도」 하나만 남아 나갈 버튼이 없다(가장자리 스와이프 전용 — 도구로는 앱 재기동으로만 빠져나옴). 딥링크 전용 화면이라 사용자 영향은 낮다.
-- [실화면] 2026-10-31 — 앱 안 진입 없음 확인: 앱 안에 diff 화면으로 가는 버튼이 없고, 초안 「적용하기」는 diff 를 거치지 않고 허브로 간다.
-- [실화면] 2026-10-31 도달 불가 — `solve-slow`·`solve-cap`(90초·8분 대기 전에 끝남), `solve-error`·`draft-apply-failed`(네트워크 차단 불가), `draft-prepared`(트리거 없음), `draft-include-missing`(기회 없음), `draft-no-solution`·`draft-failed`·`draft-stale`(서버가 매번 성공 — 그래서 대안 없음·실패 얼굴의 콜드 진입 뒤로 무반응 의심도 재현 못 함), `draft-closed`(끝난 세션 id 를 얻을 길 없음), `diff-confirm` 성공 경로(초안 세션 id 를 얻을 길 없음).
+- [실화면] 2026-10-31 도달 불가 — `solve-slow`·`solve-cap`(90초·8분 대기 전에 끝남), `solve-error`·`draft-apply-failed`(네트워크 차단 불가), `draft-prepared`(트리거 없음), `draft-include-missing`(기회 없음), `draft-no-solution`·`draft-failed`·`draft-stale`(서버가 매번 성공 — 그래서 대안 없음·실패 얼굴의 콜드 진입 뒤로 무반응 의심도 재현 못 함), `draft-closed`(끝난 세션 id 를 얻을 길 없음).

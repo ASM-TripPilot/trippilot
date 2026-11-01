@@ -952,28 +952,6 @@ describe('확정 셸(h16) 얼굴', () => {
     });
   });
 
-  describe('🔴 C3c · TRIP-1110 AC-4 — 확정 헤더도 커넥터 구간에 null 이 섞이면 km 를 접는다', () => {
-    it('일부 구간만 null 이면 meta 는 정확히 "확정됨 · 4곳"이다', async () => {
-      // 준비 — b→c 구간만 null. 옛 스킵 규약이면 "확정됨 · 4곳 · 3.3km"(2.1+0.6+0.6 부분합).
-      useItinerary(() =>
-        HttpResponse.json(
-          confirmed([
-            ...busanFourPois([null, '2.1km', null, '0.6km'], {
-              aTags: ['바다'],
-            }),
-            busanHotel('0.6km'),
-          ])
-        )
-      );
-      renderPage();
-      await screen.findByTestId('map-sheet-shell-root');
-
-      const meta = screen.getByTestId('sheet-header-meta');
-      expect(meta).toHaveTextContent('확정됨 · 4곳'); // 완전 일치
-      expect(meta).not.toHaveTextContent(/km|이동|분|시간|소요/);
-    });
-  });
-
   // TRIP-1234 R3-03 — 헤더 곳 수는 "고정 숙소"만 뺀다(같은 파일 hasBase 의 숙소 정의, 01b 결정 4). 서버가 아무 때나
   // 꼭 갈 곳을 isFixed=true 로 내려도 카드는 그려지므로, isFixed 하나로 빼면 "헤더 0곳 · 카드 1장"이 된다.
   describe('🔴 C3d · 헤더 곳 수 = 카드 수 — 고정 숙소만 빼고 고정 꼭 갈 곳은 센다', () => {
@@ -985,21 +963,6 @@ describe('확정 셸(h16) 얼굴', () => {
         category: '명소',
       };
     }
-
-    it('C3d-1 · 선택일이 고정 꼭 갈 곳 하나뿐이면 meta 는 "확정됨 · 1곳"이고 카드도 1장이다 (QA r3 재현)', async () => {
-      // 준비
-      useItinerary(() => HttpResponse.json(confirmed([fixedMustVisit()])));
-
-      // 실행
-      renderPage();
-      await screen.findByTestId('map-sheet-shell-root');
-
-      // 단언 — 완전 일치. `!slot.isFixed` 식이면 "확정됨 · 0곳"으로 red.
-      expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
-        '확정됨 · 1곳'
-      );
-      expect(screen.queryAllByTestId(/^slot-stopcard-time-/)).toHaveLength(1);
-    });
 
     it('C3d-2 · 비고정 4 + 고정 꼭 갈 곳 1 + 고정 숙소 1 이면 "확정됨 · 5곳"이다 (숙소만 빠진다)', async () => {
       useItinerary(() =>
@@ -1954,40 +1917,6 @@ describe('완성 셸(h14) 얼굴', () => {
   });
 
   describe('🔴 T5b · TRIP-1110 AC-4·AC-6 — 커넥터 구간(slice(1))에 null 이 섞이면 meta km 를 접는다', () => {
-    it('T5b-1 · 일부 구간만 null 이면 meta 는 정확히 "4곳"이고 null 커넥터는 글리프 줄만 남는다', async () => {
-      // 준비 — b→c·c→d 구간 null(교체 뒤), a→b 2.1km·d→숙소 0.6km. 옛 스킵 규약이면 "4곳 · 2.7km".
-      useItinerary(() =>
-        HttpResponse.json(
-          itineraryOf('PLANNED', [
-            ...busanFourPois([null, '2.1km', null, null]),
-            busanHotel('0.6km'),
-          ])
-        )
-      );
-      renderPage();
-      await screen.findByTestId('map-sheet-shell-root');
-
-      const meta = screen.getByTestId('sheet-header-meta');
-      expect(meta).toHaveTextContent('4곳'); // 문자열 인자 = 완전 일치(02a §5)
-      expect(meta).not.toHaveTextContent(/km|이동|분|시간|소요/);
-      // 커넥터는 무변경(결정 2=A): 값 구간은 문구 칸, null 구간은 줄만.
-      expect(
-        screen.getByTestId(`sheet-connector-distance-${DAY1}#poi-a`)
-      ).toHaveTextContent('2.1km');
-      expect(
-        screen.getByTestId(`sheet-connector-distance-${DAY1}#poi-d`)
-      ).toHaveTextContent('0.6km');
-      for (const poiId of ['poi-b', 'poi-c']) {
-        expect(
-          screen.getByTestId(`sheet-connector-${DAY1}#${poiId}`)
-        ).toBeOnTheScreen();
-        expect(
-          screen.queryByTestId(`sheet-connector-distance-${DAY1}#${poiId}`)
-        ).toBeNull();
-      }
-      expect(renderedText()).not.toMatch(/\d+\s*(분|시간)|소요/);
-    });
-
     it('T5b-2 · 첫 슬롯(거점→첫 방문지) 거리는 헤더 합에 안 들어간다 — 커넥터 합 "4곳 · 4.1km" 그대로', async () => {
       // 준비 — 첫 슬롯에 9.9km. slice(1) 을 버리고 전 슬롯을 더하면 14.0km 가 된다.
       useItinerary(() =>
@@ -2794,61 +2723,26 @@ describe('빈 일차 지도 중심', () => {
     await screen.findByTestId('map-sheet-shell-root');
   }
 
-  function pressDay(index: number) {
-    fireEvent.press(screen.getByTestId(`sheet-daychip-${index}`));
-    // 정말 그 날로 왔는지 먼저 확인한다 — 기대 중심이 이전 날과 같을 수 있다(02a ★2).
-    expect(screen.getByTestId('sheet-header-day')).toHaveTextContent(
-      `${index + 1}일차`
-    );
-  }
-
-  const pinCount = () =>
-    (screen.getByTestId('map-root').props.pins as unknown[]).length;
-
-  /**
-   * 중심 사다리 ①②④ 표 — 일정 한 벌을 열고 `visit` 의 날(또는 처음 열린 날)마다 지도 중심(·핀 수)을 잰다.
-   * (옛 M1·M2·M6·M9·M10 — 입력만 다르고 단언 모양이 같아 한 표로 접었다. 거점 조회가 끼는 M3~M5 는 따로 둔다.)
-   *  - `day: null` = 처음 열린 1일차, 숫자 = 그 일차 칩(0 기반)을 누른 뒤.
-   *  - `pins` 를 주면 핀 수까지, `notZero` 면 `0,0` 이 아님까지 잰다.
-   */
-  const CENTER_ROWS: {
-    name: string;
-    plan: () => Itinerary;
-    visit: { day: number | null; center: string; pins?: number }[];
-    notZero?: boolean;
-  }[] = [
-    {
-      // 5-b 경고-1 — 페이지가 "선택한 날"을 중심 함수에 넘기는지. 다른 날 M 케이스는 ①과 ②가 같은 답을 내서 못 본다.
-      name: 'M10 · AC-4 배선 — 1일차 A·B · 2일차 C 한 곳 → 2일차 칩 → 핀 1개 · 지도 중심 = C (1일차 첫 장소 아님)',
-      plan: () =>
+  describe('🔴 M10 · AC-4 배선 — 선택한 날의 지도 중심', () => {
+    // 5-b 경고-1 — 페이지가 "선택한 날"을 중심 함수에 넘기는지. 다른 날 케이스는 ①과 ②가 같은 답을 내서 못 본다.
+    // 핀이 1개면 지도가 핀 맞춤 대신 중심 좌표로 카메라를 연다 — 중심이 1일차로 가면 C 가 화면 밖일 수 있다.
+    it('1일차 A·B · 2일차 C 한 곳 → 2일차 칩 → 핀 1개 · 지도 중심 = C (1일차 첫 장소 아님)', async () => {
+      serve(
         planned([
           day(DAY1, [stop('p-a', 10, A), stop('p-b', 12, B)]),
           day(DAY2, [stop('p-c', 10, C)]),
           day(DAY3, []),
-        ]),
-      // 핀이 1개면 지도가 핀 맞춤 대신 중심 좌표로 카메라를 연다 — 중심이 1일차로 가면 C 가 화면 밖일 수 있다.
-      visit: [{ day: 1, center: text(C), pins: 1 }],
-    },
-  ];
-
-  describe('🔴 M1·M2·M6·M9·M10 · 중심 사다리 — 선택한 날(또는 처음 열린 날)의 지도 중심', () => {
-    it.each(CENTER_ROWS)('$name', async ({ plan, visit, notZero }) => {
-      serve(plan());
+        ])
+      );
       await openShell();
 
-      for (const step of visit) {
-        if (step.day === null) {
-          expect(screen.getByTestId('sheet-header-day')).toHaveTextContent(
-            '1일차'
-          );
-        } else {
-          pressDay(step.day);
-        }
-        const map = screen.getByTestId('map-root');
-        if (step.pins !== undefined) expect(pinCount()).toBe(step.pins);
-        if (notZero) expect(map).not.toHaveTextContent('0,0');
-        expect(map).toHaveTextContent(step.center);
-      }
+      fireEvent.press(screen.getByTestId('sheet-daychip-1'));
+
+      // 정말 그 날로 왔는지 먼저 확인한다 — 기대 중심이 이전 날과 같을 수 있다(02a ★2).
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+      const map = screen.getByTestId('map-root');
+      expect((map.props.pins as unknown[]).length).toBe(1);
+      expect(map).toHaveTextContent(text(C));
     });
   });
 
@@ -2985,12 +2879,6 @@ describe('같은 날 같은 장소 두 번', () => {
     dupSlot('p-a', 13, D2_KM),
     dupSlot('p-c', 15, D3_KM),
   ];
-  /** [A, B, C] — 보통 응답(무회귀). */
-  const normalSlots = () => [
-    dupSlot('p-a', 10, null),
-    dupSlot('p-b', 11, D1_KM),
-    dupSlot('p-c', 15, D2_KM),
-  ];
 
   let activeClient: QueryClient | null = null;
 
@@ -3030,9 +2918,6 @@ describe('같은 날 같은 장소 두 번', () => {
     return screen.findAllByTestId(CARD_ROOT);
   }
 
-  const texts = (nodes: { props: { children?: unknown } }[]) =>
-    nodes.map((node) => node.props.children);
-
   it.each(['PLANNED', 'CONFIRMED'] as const)(
     '🔴 K1 · AC-1 — %s 일정에 같은 장소가 두 번 있어도 중복 key 경고가 없다',
     async (status) => {
@@ -3040,45 +2925,6 @@ describe('같은 날 같은 장소 두 번', () => {
 
       expect(cards).toHaveLength(4);
       expect(keyWarnings.keys()).toEqual([]);
-    }
-  );
-
-  it.each(['PLANNED', 'CONFIRMED'] as const)(
-    'K2 · AC-4 — %s 일정의 같은 장소 두 슬롯을 숨기지 않는다 (카드 4·번호·시각·거리 순서)',
-    async (status) => {
-      const cards = await openShell(status, duplicateSlots());
-
-      expect(cards).toHaveLength(4);
-      expect(texts(screen.getAllByTestId(/^slot-stopcard-number-/))).toEqual([
-        '1',
-        '2',
-        '3',
-        '4',
-      ]);
-      expect(
-        texts(screen.getAllByTestId(`slot-stopcard-time-${DAY1}#p-a`))
-      ).toEqual(['10:00–10:30', '13:00–13:30']);
-      expect(
-        texts(screen.getAllByTestId(/^sheet-connector-distance-/))
-      ).toEqual([D1_KM, D2_KM, D3_KM]);
-    }
-  );
-
-  it.each(['PLANNED', 'CONFIRMED'] as const)(
-    'K3 · AC-3 — %s 보통 일정(장소 중복 없음)은 카드·번호·거리가 그대로다',
-    async (status) => {
-      const cards = await openShell(status, normalSlots());
-
-      expect(cards).toHaveLength(3);
-      expect(keyWarnings.keys()).toEqual([]);
-      expect(texts(screen.getAllByTestId(/^slot-stopcard-number-/))).toEqual([
-        '1',
-        '2',
-        '3',
-      ]);
-      expect(
-        texts(screen.getAllByTestId(/^sheet-connector-distance-/))
-      ).toEqual([D1_KM, D2_KM]);
     }
   );
 });
