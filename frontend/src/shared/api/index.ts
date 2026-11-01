@@ -364,6 +364,15 @@ export const authedClient = createAuthedApiClient({
   onSessionExpired,
 });
 
+// 실패 주입(개발 빌드 전용 — `/_dev/fault` 딥링크). 운영 변환은 `__DEV__` 를 false 로 접은 뒤 의존성을 모아 이 require 가
+// 그래프에 안 들어가고, 남으면 metro blockList 가 export 를 깨뜨린다. jest 는 저장소 부분 목이 많아 설치하지 않는다.
+if (__DEV__ && process.env.NODE_ENV !== 'test') {
+  const devFault =
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('@/shared/dev-fault') as typeof import('@/shared/dev-fault');
+  devFault.installFaultInjection(authedClient, devFault.faultStore);
+}
+
 export async function fetchConsents(): Promise<ConsentState[]> {
   const response = await authedClient.get<ConsentState[]>('/me/consents');
   return response.data;

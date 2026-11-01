@@ -8,6 +8,9 @@
 //     swipe x1 y1 x2 y2 [ms] ·  scroll <testID|-> <dy>
 //     geo <lat> <lng>  위치 권한 허용 + 좌표 고정
 //     nav <url|/경로>  ·  back  ·  reload  ·  url  ·  shot <파일.png>  ·  eval '<js>'  ·  console(최근 오류)
+//     fail <경로glob> <status|net> [본문JSON]  GET 응답을 가짜로(본문 기본 = 백엔드 ErrorResponse 봉투) · net = 네트워크 실패
+//     delay <경로glob> <ms>  ·  fail-list(규칙·맞은 횟수)  ·  fail-clear   — 규칙은 서버 메모리에만, 끄면 사라진다
+//       glob: 경로(pathname)에만 맞춘다. * = 한 마디(/ 제외), ** = 여러 마디. 예 /api/trips/*/itinerary**
 // 환경: CDP=http://[::1]:9333 (Aside), PORT=9444, 뷰 412×915 (갤럭시급 안드로이드 크롬)
 import http from 'node:http';
 const CDP = process.env.CDP ?? 'http://[::1]:9333';
@@ -40,6 +43,7 @@ ws.onmessage = (m) => {
     logs.push(d.params.type + ' ' + d.params.args.map((a) => a.value ?? a.description ?? '').join(' ').slice(0, 300));
   if (d.method === 'Network.loadingFailed' && !d.params.canceled) logs.push('NETFAIL ' + d.params.errorText);
   if (d.method === 'Network.responseReceived' && d.params.response.status >= 400) logs.push(`HTTP ${d.params.response.status} ${d.params.response.url.slice(0, 160)}`);
+  if (d.method === 'Fetch.requestPaused') onPaused(d.params).catch((e) => logs.push('FAULT ' + e.message));
   if (logs.length > 200) logs.shift();
 };
 const send = (method, params = {}) => new Promise((r) => { const i = ++id; pending.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); }).then((d) => { if (d.error) throw new Error(`${method}: ${d.error.message}`); return d.result; });
@@ -87,6 +91,30 @@ const swipe = async (x1, y1, x2, y2, ms = 400) => {
     await ev(`(() => { const t = document.elementFromPoint(${x}, ${y}) ?? document.body; t.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, composed: true, clientX: ${x}, clientY: ${y}, pointerId: 1, pointerType: 'touch', isPrimary: true, buttons: 1 })); })()`); }
   await ev(`__ptr('pointerup', ${x2}, ${y2})`);
 };
+// 실패 주입 — CDP Fetch 로 XHR/fetch 를 요청 단계에서 세운다. GET 만 건드린다(쓰기 요청을 가짜 성공·실패로 만들면
+// 서버에 갔는지 헷갈린다). 예비 요청(OPTIONS)도 통과 — 진짜 서버가 CORS 를 답한다.
+const rules = []; // { glob, re, kind: 'fail'|'delay', status, body, ms, hits }
+const globRe = (g) => new RegExp('^' + g.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '\0').replace(/\*/g, '[^/]*').replace(/\0/g, '.*') + '$');
+const CODE = { 400: 'VALIDATION_ERROR', 401: 'AUTHENTICATION_REQUIRED', 403: 'PERMISSION_DENIED', 404: 'RESOURCE_NOT_FOUND', 409: 'CONFLICT', 429: 'RATE_LIMITED', 502: 'UPSTREAM_UNAVAILABLE', 503: 'UPSTREAM_UNAVAILABLE' };
+const errBody = (st) => ({ error: { code: CODE[st] ?? 'INTERNAL', message: `[실패 주입] ${st}`, traceId: 'fault-injected' } });
+const onPaused = async (p) => {
+  const go = () => send('Fetch.continueRequest', { requestId: p.requestId });
+  const path = new URL(p.request.url).pathname;
+  const r = p.request.method === 'GET' && rules.find((x) => x.re.test(path));
+  if (!r) return go();
+  r.hits++;
+  if (r.kind === 'delay') { await sleep(r.ms); return go(); }
+  if (r.status === 'net') return send('Fetch.failRequest', { requestId: p.requestId, errorReason: 'Failed' });
+  const origin = Object.entries(p.request.headers).find(([k]) => k.toLowerCase() === 'origin')?.[1];
+  const headers = [{ name: 'Content-Type', value: 'application/json' }];
+  if (origin) headers.push({ name: 'Access-Control-Allow-Origin', value: origin }, { name: 'Access-Control-Allow-Credentials', value: 'true' }); // 교차 출처 API — 없으면 브라우저가 응답을 막아 네트워크 실패로 보인다
+  return send('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: r.status, responseHeaders: headers, body: Buffer.from(JSON.stringify(r.body)).toString('base64') });
+};
+const syncFetch = () => rules.length
+  ? send('Fetch.enable', { patterns: [{ urlPattern: '*', resourceType: 'XHR', requestStage: 'Request' }, { urlPattern: '*', resourceType: 'Fetch', requestStage: 'Request' }] })
+  : send('Fetch.disable');
+const addRule = async (rule) => { const i = rules.findIndex((x) => x.glob === rule.glob); if (i >= 0) rules.splice(i, 1); rules.push({ ...rule, re: globRe(rule.glob), hits: 0 }); await syncFetch(); };
+const listRules = () => rules.map((x) => `${x.kind} ${x.glob} ${x.kind === 'delay' ? x.ms + 'ms' : x.status} (맞음 ${x.hits})`).join('\n') || '(규칙 없음)';
 const H_ = {
   tree: async (f) => { const t = await ev(TREE); if (!f) return t; const re = new RegExp(f); const out = t.split('\n').filter((l) => re.test(l)).join('\n'); return out || `(일치 없음: ${f})`; },
   // testID 로 누르면 그 요소에 직접 쏜다 — 좌표(elementFromPoint)로 쏘면 위에 덮인 탭바·하단 바가 대신 눌린다(실측).
@@ -114,6 +142,12 @@ const H_ = {
   eval: (...js) => ev(js.join(' ')),
   geo: async (lat, lng) => { await send('Browser.grantPermissions', { origin: await ev('location.origin'), permissions: ['geolocation'] }).catch(() => {}); await send('Emulation.setGeolocationOverride', { latitude: +lat, longitude: +lng, accuracy: 20 }); return `geo ${lat},${lng}`; },
   console: () => { const out = logs.splice(0).join('\n'); return out || '(없음)'; },
+  fail: async (glob, st, ...json) => { if (!glob?.startsWith('/') || !st) throw new Error('fail <경로glob> <status|net> [본문JSON]');
+    const status = st === 'net' ? 'net' : +st; if (status !== 'net' && !(status >= 200 && status < 600)) throw new Error('status 는 200~599 또는 net');
+    await addRule({ glob, kind: 'fail', status, body: json.length ? JSON.parse(json.join(' ')) : errBody(status) }); return listRules(); },
+  delay: async (glob, ms) => { if (!glob?.startsWith('/') || !(+ms >= 0)) throw new Error('delay <경로glob> <ms>'); await addRule({ glob, kind: 'delay', ms: +ms }); return listRules(); },
+  'fail-list': () => listRules(),
+  'fail-clear': async () => { rules.length = 0; await syncFetch(); return '(규칙 없음) — 가로채기 꺼짐'; },
 };
 http.createServer(async (req, res) => {
   let b = ''; for await (const c of req) b += c;
