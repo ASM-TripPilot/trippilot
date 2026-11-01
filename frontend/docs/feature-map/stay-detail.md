@@ -80,5 +80,5 @@ Preconditions:
 - 본문 「외부 OTA 사이트로 이동하며 … 진행됩니다.」·「… 받을 수 있습니다 (추가 비용 없음).」 문구는 법정성 문구로 테스트가 리터럴을 잠근다. 2026-10-21 QA N-013이 'OTA' 노출·합니다체를 지적했으나 지금도 그대로다.
 - **[실화면] 2026-10-31 딥링크는 `com.trippilot.travel://…` 스킴으로만 화면이 바뀐다** — `simctl openurl "trippilot:///…"` 는 앱만 앞으로 오고 라우팅되지 않았다(이 dev build Info.plist 에 `trippilot` 스킴이 네이버 로그인 urlScheme 으로 한 번 더 등록돼 있다, [결함 의심 FM-L1-04]).
 - [실화면] 2026-10-31 도달 불가 — `stay-detail-loading`(순간 상태)·`stay-detail-error`(네트워크 차단 수단 없음)·`stay-detail-invalid`(400 키 미확보)·`stay-outbound-dont-show`(계정 설정 오염 금지)·`stay-outbound-error`(Safari 있는 시뮬에서 openURL 실패 재현 불가)·`stay-detail-phone`은 줄 존재만 확인(시뮬 무반응이 정상).
-- [실화면] 2026-10-31 가격 없는 `LOCALDATA` 숙소는 OTA 행이 「외부 사이트」 한 덩어리(` · {가격}` 없음)다. [외부 사이트로 이동]은 Safari 에서 Google 「{숙소명} 예약」 검색으로 갔다(서버 리다이렉트 결과).
+- [실화면] 2026-10-31 가격 없는 `LOCALDATA` 숙소는 OTA 행이 「외부 사이트 · 가격 미확인」이다(2026-10-31 웹 QA 대조 때 앱 화면으로 정정). [외부 사이트로 이동]은 Safari 에서 Google 「{숙소명} 예약」 검색으로 갔다(서버 리다이렉트 결과).
 - [실화면] 2026-10-31 공유 시트 미리보기엔 숙소 이름 한 줄만 보였다(주소 둘째 줄은 시트 미리보기로 판정 못 함).

@@ -31,7 +31,12 @@ module.exports = {
   // ESLint 설정 로드가 필요 — TRIP-1350 실측: flag 없이는 50건 이상 `dynamic import callback` 로 죽는다).
   // MSW 통합테스트(.integration.test)는 그 flag 아래서 ESM 이 안 떠서
   // 여기서 제외하고, flag 없는 jest.integration.config.js 로 따로 돌린다.
-  testPathIgnorePatterns: ['/node_modules/', '\\.integration\\.test\\.'],
+  // .claude/** = 하네스 스킬 스크립트 — statechart 의 frontends/spec.ts 가 jest 기본 testRegex(spec)에 걸린다.
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '\\.integration\\.test\\.',
+    '/\\.claude/',
+  ],
   // 로그 소음 예산(TRIP-1624): 범주별 console.error/warn 건수가 scripts/noise-budget.cjs 예산을 넘으면 테스트가 전부 통과해도 실패.
   // 'default' 를 빼면 jest 기본 출력이 사라진다. 통합 설정은 `...base` 로 이 값을 물려받으므로 bucket 을 덮어쓴다.
   reporters: [

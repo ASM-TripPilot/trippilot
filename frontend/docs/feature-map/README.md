@@ -15,7 +15,7 @@
 ## 공통 전제
 
 - 대상: develop 빌드의 dev build, iOS 시뮬레이터 iPhone 17 Pro, 번들 ID `com.trippilot.travel`.
-- 조작 도구: `agent-device`(접근성 트리 ref 탭·한글 `fill`) — 절차와 셀렉터 함정은 `trippilot-sim-qa` 스킬 소관이고 여기 옮겨 적지 않는다.
+- 조작 도구: `agent-device`(접근성 트리 ref 탭·한글 `fill`) — 절차와 셀렉터 함정은 `trippilot-sim-qa` 스킬(`frontend/.claude/skills/trippilot-sim-qa/`) 소관이고 여기 옮겨 적지 않는다. 그 스킬이 이 지도를 커버리지 정본으로 읽는다.
 - 서버: 개발 서버 `dev-api`. 로그인은 소셜 로그인만(MVP).
 - 화면 정본은 Figma다 — 각 기능 파일은 밴드 코드(a–m)만 가리키고 화면 스펙을 복제하지 않는다.
 

@@ -60,7 +60,7 @@ Preconditions:
   - j04 요약 ready: 종료일이 KST 오늘 이전인 여행이 있어야 하고, 서버 스위퍼(기본 10분 주기)가 종료를 찍어야 요약이 생긴다. 스위퍼가 붙기 전에 끝난 여행은 영영 `ready:false` 다(openapi `/trips/{tripId}/summary`). 오늘 끝나는 여행을 만들고 다음 날 확인하거나, 이미 끝난 여행이 있는 계정을 쓴다.
   - j04 위치 없는 목록 얼굴: 요약 `hasLocationData:false` 인 여행(확인 필요: 서버 판정 조건).
 - 사진 첨부는 `expo-image-picker`·`expo-media-library` 가 들어간 dev build 여야 한다(재빌드 전 빌드는 조용히 `사진을 불러올 수 없어요`). 공유 버튼은 캡처 3종이 들어간 빌드여야 보인다.
-- 조작 절차·셀렉터 함정은 `trippilot-sim-qa` 스킬 §2·§4.
+- 조작 절차·셀렉터 함정은 `trippilot-sim-qa` 스킬 §2.
 
 - **j01 진입.** 캘린더에서 칠한 날을 누른다. testID: `record-trip-view` 와 시트 헤더 testID: `record-trip-sheet-header`(`여행명 · N일차 · 날짜 · N곳`)가 보인다. 딥링크 `?day=` 를 주면 그 일차 칩이 선택돼 있다.
 - **일차 전환.** 좌상단 칩 testID: `sheet-daychip-{index}`(index=1, 0부터) 을 누르면 칩의 `selected` 가 옮겨 가고 헤더의 `N일차`·날짜가 바뀐다. j01 엔 좌상단 뒤로 칩(`sheet-daychip-back`)이 없다.
