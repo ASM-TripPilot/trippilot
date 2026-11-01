@@ -27,8 +27,8 @@ routes:
 - `settings-nav` 하위 화면 진입: 여행 취향·GPS 이동경로 기록·개인화·알림 설정·약관 3종.
 - `settings-footer` 하단 `TripPilot v<버전>`(버전을 알 때만)과 데이터 출처 블록, `© OpenStreetMap contributors` 링크는 외부 브라우저.
 - `settings-web-no-push` 푸시가 없는 플랫폼(웹)에서는 "알림" 그룹이 통째로 빠진다.
-- `settings-row-look` 위치 동의 칩은 `동의`면 분홍, `미동의`면 회색이고, 여행 취향 행 앞에는 반원 아이콘 하나, 개인화 행 앞에도 아이콘 하나가 있다. *(2026-11-01 jest 축소로 실화면 전용)*
-- `settings-chevron` 설정·마이 목록 행 오른쪽 `›` 화살표는 연한 회색이고, 저장한 숙소(l04) 행만 한 단계 진한 회색이다. *(2026-11-01 jest 축소로 실화면 전용)*
+- `settings-row-look` 위치 동의 칩은 `동의`면 분홍, `미동의`면 회색이고, 여행 취향 행 앞에는 반원 아이콘 하나, 개인화 행 앞에도 아이콘 하나가 있다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass(일부 — Gotchas))*
+- `settings-chevron` 설정·마이 목록 행 오른쪽 `›` 화살표는 연한 회색이고, 등록 숙소(l04, `/my/stays`) 행의 「거점 변경 ›」만 한 단계 진한 회색이다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 — 지도 정정)*
 
 ## How to get to it (user POV)
 
@@ -74,3 +74,4 @@ Preconditions:
 - [실화면] 2026-10-31 행은 접근성 트리에 testID가 아니라 라벨(`닉네임, 큐에이여행자`·`여행 취향, 6/6 설정됨`·`GPS 이동경로 기록, 동의`·`데이터 내보내기`·`계정 삭제`)로 잡힌다 — `role=cell label="…"` 로 누른다. 칩·하위 testID(`settings-chip-location-consent`·`settings-nav-*-chevron`)는 보인다. 이 계정의 개인화 행에는 `사용 중`이 없다(미동의 계정 — `settings-preferences.md`).
 - [실화면] 2026-10-31 도달 불가 — `settings-nickname-save`(규칙상 닉네임을 바꾸지 않음), `settings-nickname-server`(다른 계정 닉네임·모더레이션 장애 없음), `settings-export-truncated`·`settings-export-error`(정상 86KB 파일만 나옴), `settings-affiliate`(값 확인만 — 켜짐 `1`, 바꾸지 않음), `settings-web-no-push`(iOS).
 - [실화면] 2026-10-31 [결함 의심 FM-L6-01] 콜드 딥링크로 이 화면을 바로 열면(`simctl terminate` → `simctl openurl com.trippilot.travel://…`) 헤더 뒤로가 무반응이고 엣지 스와이프도 안 먹어 화면에 갇힌다 — 개발 콘솔에 `The action 'GO_BACK' was not handled by any navigator`. 뒤로가 `router.back()` 뿐이라 쌓인 화면이 없으면 갈 곳이 없다. 실측: `settings`·`settings/personalization`·`settings/notifications`·`notifications`. 앱이 떠 있을 때(웜) 딥링크는 정상. 증거 `settings/07-cold-deeplink-back.png`, `settings-preferences/08-pers-cold-back.png`.
+- [실화면] 2026-11-02 「미동의」 회색 칩은 동의 토글 금지(sim-qa §5)라 못 봤다.

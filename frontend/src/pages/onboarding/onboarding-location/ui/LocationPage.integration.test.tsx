@@ -309,6 +309,48 @@ describe('🔴 TRIP-1108 R6 · 즉시 넘어가는 버튼은 연타해도 1회',
   });
 });
 
+/**
+ * TRIP-1688 FV-TAP-02 — 형식 검증(verify-fv-tap)이 찾은 반례: 이미 허용된 기기(OS 창 없음)에서 [허용]을 연타하면
+ * 권한 요청·푸시 안내 이동이 두 번 나갔다. 요청이 진행 중인 동안 [허용]은 잠겨 있어야 한다.
+ * 3동작: 준비=곧장 granted 를 주는 OS → 실행=[허용] 두 번 → 단언=요청 1회·replace 1회.
+ */
+describe('🔴 FV-TAP-02 · 권한 요청 중 [허용]을 다시 눌러도 1회', () => {
+  it('같은 프레임에 두 번 눌러도 권한 요청 1회 · 푸시 안내 replace 1회', async () => {
+    mockRequestForeground.mockResolvedValue(GRANTED);
+    render(<LocationPage />);
+    const allow = screen.getByTestId('onboarding-location-allow');
+
+    fireEvent.press(allow);
+    fireEvent.press(allow);
+
+    await waitFor(() =>
+      expect(routerMock.replace).toHaveBeenCalledWith(PUSH_ROUTE)
+    );
+    await flushAsync();
+    expect(mockRequestForeground).toHaveBeenCalledTimes(1);
+    expect(routerMock.replace).toHaveBeenCalledTimes(1);
+  });
+
+  it('응답이 늦어(400ms 넘게) 다시 눌러도 권한 요청 1회 · replace 1회', async () => {
+    const request = deferred<typeof GRANTED>();
+    mockRequestForeground.mockReturnValue(request.promise);
+    render(<LocationPage />);
+    const allow = screen.getByTestId('onboarding-location-allow');
+
+    fireEvent.press(allow);
+    resetPressGuard(); // 400ms 이상 흐른 것과 같다
+    fireEvent.press(allow);
+    request.resolve(GRANTED);
+
+    await waitFor(() =>
+      expect(routerMock.replace).toHaveBeenCalledWith(PUSH_ROUTE)
+    );
+    await flushAsync();
+    expect(mockRequestForeground).toHaveBeenCalledTimes(1);
+    expect(routerMock.replace).toHaveBeenCalledTimes(1);
+  });
+});
+
 // TRIP-1427 — 마운트 조회(재진입 시 "다시 물을 수 없게" 거부된 상태 감지)는 지금까지 무심판이었다(traps-onboarding-auth).
 // 재조회를 더하면서 같은 조회 조건을 건드리므로 두 갈래 심판을 함께 세운다(AC-R2).
 describe('LocationPage — 마운트 권한 감지 (AC-R2)', () => {

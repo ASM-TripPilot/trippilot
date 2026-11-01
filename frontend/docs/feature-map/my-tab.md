@@ -2,7 +2,7 @@
 id: my-tab
 band: l
 status: live-verified
-live_verified_at: 2026-10-31 (8b50db304)
+live_verified_at: 2026-11-02 (f153fe245)
 routes:
   - app/(tabs)/my.tsx
 ---
@@ -27,7 +27,7 @@ routes:
 - `my-menu-stays` `등록 숙소` 행 → 등록 숙소 목록(상세는 `stay-register.md`).
 - `my-menu-style` `여행 스타일 분석` 행 → 스타일 분석 화면(상세는 `record-style.md`).
 - `my-menu-settings` 헤더 톱니와 하단 `설정` 행 → 설정(`settings.md`).
-- `my-profile-look` 프로필 숫자 칸의 ›는 라벨 옆 별도 글자이고, [편집]은 연필 아이콘 없이 "편집" 글자 하나다. 스타일 게이지 점은 라벨 바로 뒤에 붙는다(양끝 벌림 아님). *(2026-11-01 jest 축소로 실화면 전용)*
+- `my-profile-look` 프로필 숫자 칸의 ›는 라벨 옆 별도 글자다(프로필 [편집] 버튼은 화면에 없다 — Gotchas). 스타일 게이지 점은 라벨 바로 뒤에 붙는다(양끝 벌림 아님). *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 — 지도 정정)*
 
 ## How to get to it (user POV)
 
@@ -68,3 +68,4 @@ Preconditions:
 - 스타일 조회가 실패하면 카드가 조용히 사라진다(오류 표면 없음). 카드가 없다고 "미달"로 판정하지 않는다.
 - [실화면] 2026-10-31 숫자 3칸은 접근성 트리에 testID 대신 라벨 `4, 예정, ›`·`1, 진행 중, ›`·`6, 종료, ›` 로 잡힌다 — `role=button label="<값>, 예정, ›"` 로 누른다(값이 바뀌면 라벨도 바뀐다). `-value` testID는 트리에 따로 없다. 헤더 톱니도 라벨 "설정"이 하단 `설정` 행과 겹치니 `role=button`(톱니)·`role=cell`(행)로 가른다.
 - [실화면] 2026-10-31 도달 불가 — `my-past`·`my-past-empty`·`my-past-row`: 계정에 예정(확정) 여행이 4건이라 "지난 여행" 섹션이 닫혀 있다. `my-profile-unknown`·`my-counts-unknown`·`my-style-missing`: 조회 중·실패 얼굴은 만들 수단이 없었다(네트워크 차단 미실시). `my-style-insufficient`: 계정이 정식 분석 상태.
+- [실화면] 2026-11-02 실패 주입(sim-qa §2 `_dev/fault`)으로 열림 — `my-profile-unknown`·`my-style-missing`(`/me/profile`·`/me/style` 500 — 이름 자리 회색 막대, 스타일 카드 없음)·`my-counts-unknown`(`/trips` 500 — 세 칸 `–`).

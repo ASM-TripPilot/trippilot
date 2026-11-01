@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
 
 import { assistantHref } from '@/features/open-assistant';
-import { Linking, View } from 'react-native';
+import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { resolveLiveState } from '../model/liveState';
@@ -49,6 +49,7 @@ import {
   useGetTripsTripIdVisitsDaysDay,
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
+import { openAppSettings } from '@/shared/external-link';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { useDepartureTab } from '@/widgets/bottom-nav-bar';
 import { StateNotice } from '@/shared/ui/StateNotice';
@@ -780,7 +781,7 @@ export function LiveItineraryPage({
         doneMediaPoiIds={new Set(Object.keys(doneVisitIds))}
         photoNotice={photoNotice}
         onPressPhotoSettings={
-          photoNotice?.settings ? () => void Linking.openSettings() : undefined
+          photoNotice?.settings ? () => void openAppSettings() : undefined
         }
         memoNotice={
           !memoSheetOpen && memoFailedPoiId !== undefined
@@ -845,7 +846,7 @@ export function LiveItineraryPage({
                 onPressSettings: automationCopy.settings
                   ? () => {
                       void automation.dismissNotice();
-                      void Linking.openSettings();
+                      void openAppSettings();
                     }
                   : undefined,
               }

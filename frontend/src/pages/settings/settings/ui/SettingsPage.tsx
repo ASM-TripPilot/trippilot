@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import Constants from 'expo-constants';
-import * as Linking from 'expo-linking';
+import { openExternal } from '@/shared/external-link';
 import { type ReactElement, useRef, useState } from 'react';
 import { Keyboard } from 'react-native';
 
@@ -276,7 +276,10 @@ export function SettingsPage(): ReactElement {
           nickname: currentNickname,
           email: account.data?.email ?? null,
           preferences: preferences.data,
-          locationConsent: locationConsent.data?.gpsRecordingOptIn,
+          // 다시 받기 실패면 캐시가 옛 값이다 — 칩을 숨긴다(TRIP-1689 FV-CONSENT-03, D4).
+          locationConsent: locationConsent.isError
+            ? undefined
+            : locationConsent.data?.gpsRecordingOptIn,
           pushAvailable: isPushSupported(),
           personalizationOn:
             personalizationReason === undefined
@@ -321,7 +324,7 @@ export function SettingsPage(): ReactElement {
       appVersion={Constants.expoConfig?.version}
       onPressOsmCopyright={() => {
         // 브라우저를 못 열어도 설정 화면은 그대로 둔다(TRIP-886 Q3 — 링크 실패는 무시).
-        Linking.openURL(OSM_COPYRIGHT_URL).catch(() => undefined);
+        openExternal(OSM_COPYRIGHT_URL).catch(() => undefined);
       }}
     />
   );

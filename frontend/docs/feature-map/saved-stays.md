@@ -67,3 +67,4 @@ Preconditions:
 - 이 화면 하트 모양(`StayGlyphs`)은 검색 카드 하트와 다르다(traps-stay).
 - [실화면] 2026-10-31 도달 불가 — `saved-stays-loading`(순간 상태)·`saved-stays-error`·`saved-stays-unsave-network`(네트워크 차단 수단 없음)·`saved-stays-empty`(계정에 저장 3곳)·`saved-stays-guest`(로그아웃 금지).
 - [실화면] 2026-10-31 목록은 최근 저장이 맨 위다. [숙소 직접 등록]은 목록 끝이 아니라 화면 하단 고정 버튼이다. Trip.com 카드 [Trip.com으로 이동]은 Safari 에서 Google 「{숙소명}」 검색으로 갔다(서버 리다이렉트 결과 — 제휴 링크가 아니다).
+- [실화면] 2026-11-02 실패 주입(sim-qa §2 `_dev/fault`)으로 열림 — `saved-stays-loading`·`saved-stays-error`(`/saved-stays` 지연·500).
