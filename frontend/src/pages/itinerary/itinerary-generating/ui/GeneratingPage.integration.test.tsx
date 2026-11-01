@@ -12,7 +12,10 @@ import {
 import { Text } from 'react-native';
 
 import { server } from '@/mocks/server';
-import { useGetTripsTripIdItinerary } from '@/shared/api/index.hooks';
+import {
+  getGetTripsTripIdItineraryQueryKey,
+  useGetTripsTripIdItinerary,
+} from '@/shared/api/index.hooks';
 import type {
   GenerateItineraryRequestGenerationMode,
   GenerationSession,
@@ -82,6 +85,7 @@ const mockPush = jest.fn();
 const mockReplace = jest.fn();
 const mockDismissTo = jest.fn();
 const mockBack = jest.fn();
+const mockSetParams = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: mockPush,
@@ -89,6 +93,7 @@ jest.mock('expo-router', () => ({
     dismissTo: mockDismissTo,
     back: mockBack,
     navigate: jest.fn(),
+    setParams: mockSetParams,
   }),
 }));
 
@@ -99,6 +104,7 @@ beforeEach(() => {
   mockReplace.mockClear();
   mockDismissTo.mockClear();
   mockBack.mockClear();
+  mockSetParams.mockClear();
 });
 
 // 토스트는 모듈 싱글턴이다 — 진행 중에 화면이 빠지는 케이스(홈 캐시 H1)가 띄운 토스트·타이머가
@@ -1809,3 +1815,157 @@ describe('재계획 모드(replan)', () => {
 });
 
 // TRIP-1268 · AI 일정 생성 일일 한도 — 클라이언트 임시 장치(BE 일일 한도 + 429 처리 FE 칸이 배포되면 지운다).
+
+/**
+ * TRIP-1690 형식 검증 반례(verify-fv-polling R1·R1b·R3·R4) — 생성 POST 와 일정 GET 이 섞이는 순서.
+ * 가짜 서버는 백엔드 규칙만 흉내 낸다: POST 를 받으면 세션을 새로 열고(A1), 1일차를 저장하면 행이 PARTIAL(A2).
+ * 3동작: 준비 = 서버 행·지연 → 실행 = 생성 화면 렌더·이탈·연타·재마운트 → 단언 = 캐시·요청 수·주소 정리.
+ */
+describe('FV-POLL — 생성 POST 와 일정 조회 순서 (TRIP-1690)', () => {
+  const OLD: Itinerary = baseItinerary({
+    itineraryId: 'itin-old',
+    generationState: 'COMPLETE',
+    generationSessionId: null,
+  });
+  const partial = (session: string | null): Itinerary =>
+    baseItinerary({
+      itineraryId: 'itin-new',
+      generationState: 'PARTIAL',
+      generationSessionId: session,
+    });
+  let row: Itinerary;
+  let running: string | null;
+  let gets: number;
+  let posts: number;
+  let getDelay: (n: number) => number;
+  let postReply: (n: number) => Promise<Response>;
+
+  beforeEach(() => {
+    row = OLD;
+    running = null;
+    gets = 0;
+    posts = 0;
+    getDelay = () => 0;
+    postReply = async (n) => {
+      await delay(50);
+      row = partial(`sess-${n}`);
+      return HttpResponse.json(row, { status: 201 });
+    };
+    setAccessToken('valid-access');
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, async () => {
+        gets += 1;
+        const snap = { ...row, generationSessionId: running };
+        await delay(getDelay(gets));
+        return HttpResponse.json(snap);
+      }),
+      http.post(`${BASE}/trips/:tripId/itinerary`, () => {
+        posts += 1;
+        running = `sess-${posts}`;
+        return postReply(posts);
+      })
+    );
+  });
+  afterEach(() => {
+    server.resetHandlers();
+    clearAccessToken();
+  });
+
+  const sleep = (ms: number) =>
+    act(() => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const KEY = getGetTripsTripIdItineraryQueryKey(TRIP_ID);
+  const holder: { refetch: (() => Promise<unknown>) | null } = {
+    refetch: null,
+  };
+  /** 생성 화면 밑에 깔린 홈 탭의 일정 관찰자 — 포커스 복귀 재조회를 테스트가 직접 일으킨다. */
+  function HomeObserver(): null {
+    holder.refetch = useGetTripsTripIdItinerary(TRIP_ID).refetch;
+    return null;
+  }
+
+  it('R1 POST 응답 전에 나간 늦은 GET 이 1일차(PARTIAL)를 예전 완성본으로 덮지 않는다', async () => {
+    const client = newTestQueryClient({ staleTime: 30_000 });
+    client.setQueryData(KEY, OLD);
+    getDelay = (n) => (n === 1 ? 400 : 0);
+    render(<HomeObserver />, { wrapper: createWrapper(client) });
+    void act(() => void holder.refetch?.());
+    await waitFor(() => expect(gets).toBe(1));
+
+    const gen = render(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />, {
+      wrapper: createWrapper(client),
+    });
+    await waitFor(() =>
+      expect(JSON.stringify(mockReplace.mock.calls)).toContain(
+        '/itinerary/draft'
+      )
+    );
+    gen.unmount();
+    await sleep(500);
+
+    expect(client.getQueryData<Itinerary>(KEY)?.itineraryId).toBe('itin-new');
+    expect(client.getQueryData<Itinerary>(KEY)?.generationState).toBe(
+      'PARTIAL'
+    );
+  }, 20000);
+
+  it('R1b 화면을 떠난 뒤 POST 가 네트워크로 끊기면 일정을 다시 물어 서버의 새 1일차를 본다', async () => {
+    const client = newTestQueryClient({ staleTime: 30_000 });
+    client.setQueryData(KEY, OLD);
+    let finishPost!: () => void;
+    postReply = async () => {
+      await new Promise<void>((resolve) => (finishPost = resolve));
+      row = partial(running);
+      return HttpResponse.error();
+    };
+    render(<HomeObserver />, { wrapper: createWrapper(client) });
+    const gen = render(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />, {
+      wrapper: createWrapper(client),
+    });
+    await waitFor(() => expect(posts).toBe(1));
+    gen.unmount();
+    expect(gets).toBe(0); // 앵커 — 캐시가 신선해 아무도 아직 안 묻는다
+
+    await act(async () => finishPost());
+    await waitFor(() => expect(gets).toBe(1));
+    await waitFor(() =>
+      expect(client.getQueryData<Itinerary>(KEY)?.itineraryId).toBe('itin-new')
+    );
+  }, 20000);
+
+  it('R3 실패 얼굴 [다시 시도]를 다시 그려지기 전에 두 번 쳐도 POST 는 한 건만 더 나간다', async () => {
+    postReply = async (n) =>
+      n === 1
+        ? HttpResponse.json({}, { status: 500 })
+        : new Promise<Response>(() => undefined);
+    render(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />, {
+      wrapper: createWrapper(newTestQueryClient()),
+    });
+    const retry = await screen.findByTestId('itinerary-generating-retry');
+    act(() => {
+      fireEvent.press(retry);
+      fireEvent.press(retry);
+    });
+    await waitFor(() => expect(posts).toBe(2));
+    await sleep(100);
+    expect(posts).toBe(2);
+  }, 20000);
+
+  it('R4 생성을 쏜 뒤 주소에서 mode 를 지운다 — 새로고침하면 관찰 모드로 뜬다 · 주소가 바뀌어도 이 화면은 생성 화면 그대로다', async () => {
+    postReply = () => new Promise<Response>(() => undefined);
+    const view = render(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />, {
+      wrapper: createWrapper(newTestQueryClient()),
+    });
+    await waitFor(() => expect(posts).toBe(1));
+    expect(mockSetParams).toHaveBeenCalledTimes(1);
+    expect(mockSetParams).toHaveBeenCalledWith({ mode: undefined });
+
+    // 주소 정리로 라우트가 mode 없이 다시 그린다 — 이 화면은 관찰 모드(GET)로 바뀌지 않는다.
+    view.rerender(<GeneratingPage tripId={TRIP_ID} mode={undefined} />);
+    await sleep(100);
+    expect(
+      screen.getByTestId('itinerary-generating-progress')
+    ).toBeOnTheScreen();
+    expect(gets).toBe(0);
+    expect(posts).toBe(1);
+  }, 20000);
+});

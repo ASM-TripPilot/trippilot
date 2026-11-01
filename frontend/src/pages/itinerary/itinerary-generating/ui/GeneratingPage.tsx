@@ -90,7 +90,7 @@ function resolveRetryAt(error: unknown, now: Date): AiLimitRetryAt | null {
  */
 export function GeneratingPage({
   tripId,
-  mode,
+  mode: modeParam,
   successRoute = '/trips/[tripId]/itinerary/draft',
   targetDate,
   replan = false,
@@ -111,15 +111,32 @@ export function GeneratingPage({
   replan?: boolean;
 }): ReactElement {
   const router = useRouter();
+  // TRIP-1690 FV-POLL-04 — 생성을 쏜 뒤 주소에서 `mode` 를 지운다(웹 새로고침이 같은 생성을 또 쏘지 않게). 그 정리로
+  // 라우트가 mode 없이 다시 그려도 이 화면은 생성 화면이다 — 마운트 순간의 mode 를 한 번 굳혀 쓴다.
+  const [mode] = useState(modeParam);
+  // 생성 POST 가 응답을 기다리는 중인가 — `isPending` 은 다음 렌더에야 참이라 같은 틱 두 번째 [다시 시도]를 못 막는다
+  // (TRIP-1690 FV-POLL-03). 훅 옵션 onSettled 가 풀어 화면이 떠나도 남지 않는다.
+  const inFlightRef = useRef(false);
   // 캐시 반영은 훅 옵션 자리에 둔다 — `mutate(…, { onSuccess })` 콜백은 화면이 떠나면 불리지 않아,
   // 생성 중 홈으로 이탈하면 홈이 들고 있던 404 가 남는다(TRIP-1015 A · QA #046).
   const generate = usePostTripsTripIdItinerary({
     mutation: {
-      onSuccess: (data, vars, _onMutateResult, context) => {
-        context.client.setQueryData(
-          getGetTripsTripIdItineraryQueryKey(vars.tripId),
-          data
-        );
+      onSuccess: async (data, vars, _onMutateResult, context) => {
+        const queryKey = getGetTripsTripIdItineraryQueryKey(vars.tripId);
+        // TRIP-1690 FV-POLL-01 — POST 전에 나간 일정 GET(홈 포커스 복귀 등)이 늦게 와 1일차를 예전 일정으로 덮지 않게
+        // 먼저 취소한다. 취소의 되돌림은 비동기라 기다린 뒤에 쓴다(안 기다리면 되돌림이 방금 쓴 값을 덮는다).
+        await context.client.cancelQueries({ queryKey });
+        context.client.setQueryData(queryKey, data);
+      },
+      // TRIP-1690 FV-POLL-01 — POST 가 실패(네트워크 끊김 포함)하면 서버가 이미 1일차를 만들었을 수 있다. 캐시의 예전
+      // 일정을 믿지 않고 다시 묻게 한다 — 화면을 떠난 뒤에도 돈다(훅 옵션 자리).
+      onError: (_error, vars, _onMutateResult, context) => {
+        void context.client.invalidateQueries({
+          queryKey: getGetTripsTripIdItineraryQueryKey(vars.tripId),
+        });
+      },
+      onSettled: () => {
+        inFlightRef.current = false;
       },
     },
   });
@@ -140,7 +157,8 @@ export function GeneratingPage({
   );
 
   const fire = useCallback(() => {
-    if (mode === undefined) return;
+    if (mode === undefined || inFlightRef.current) return;
+    inFlightRef.current = true;
     generate.mutate(
       { tripId, data: { generationMode: mode } },
       {
@@ -214,7 +232,18 @@ export function GeneratingPage({
     if (firedRef.current) return;
     firedRef.current = true;
     fire();
-  }, [fire]);
+    // TRIP-1690 FV-POLL-04 — 주소에 `mode=` 가 남으면 웹 새로고침이 이 화면을 새로 마운트해 생성을 또 쏜다(서버는 이전
+    // 세션을 닫고 새로 돌려 하루 한도를 또 쓴다). 쏜 뒤 지우면 새로고침은 관찰 모드(GET 만)로 뜬다.
+    // 웹 콜드 스타트 딥링크에서 내비게이션 준비 전이면 던질 수 있다(5-b 참고 R-1, 미실측) — 그때는 주소만 못 지우고(옛 동작)
+    // 생성 화면은 그대로 산다. 화면을 죽이는 것보다 낫다.
+    if (mode !== undefined) {
+      try {
+        router.setParams({ mode: undefined });
+      } catch {
+        // 주소 정리 실패 = 새로고침이 다시 쏠 수 있는 옛 동작으로 남을 뿐이다.
+      }
+    }
+  }, [fire, mode, router]);
 
   // 앱바 뒤로 = 백그라운드 이탈(화면만 홈으로). 관찰 모드도 같은 결이다.
   const goHome = (): void => {
