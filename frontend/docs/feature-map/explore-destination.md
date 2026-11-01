@@ -34,6 +34,7 @@ routes:
 - `region-picker-search` 검색어 입력 → 「검색 결과」 평면 카드(구군엔 시도명 부제), 0건이면 「검색 결과가 없어요」.
 - `region-picker-select` 선택 가능 카드 press → 목적별 복귀(explore = 탐색 탭 필터).
 - `region-picker-disabled` 장소 0곳 지역 = 흐린 카드 「추천 장소 없음」(눌러도 무반응), 묶음(선택 불가) 지역 = 회색 행.
+- `region-picker-covers` 서울·부산·제주와 그 구군 카드·인기 카드는 지역 사진(장소 0곳 흐린 카드도 사진), 그 밖 지역은 색 그라데이션이고, 「인기」 배지는 첫 인기 카드에만 붙는다. *(2026-11-01 B안 시범으로 실화면 전용)*
 - `region-picker-loading` 카탈로그 조회 중 스켈레톤 4칸 / `region-picker-error` 「지역을 불러오지 못했어요」 + 「다시 시도」.
 - `destination-redirect` 옛 주소 `/explore/destination/{코드}` → 같은 코드로 거른 탐색 탭으로 즉시 리다이렉트.
 - `dest-lane-layout` 숙소·장소 레인 카드와 로딩 스켈레톤은 같은 폭으로 줄 서고, 검색창은 알약 모양이며, ♥·＋ FAB 묶음은 탭바 바로 위에 붙는다. *(2026-11-01 jest 축소로 실화면 전용)*

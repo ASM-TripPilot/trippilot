@@ -1012,3 +1012,117 @@ describe('개별 읽음 — 누른 알림 하나를 읽음 요청하고, 응답 
     });
   });
 });
+
+// B안 시범(2026-11-01) — 옛 `NotificationInboxScreen.test.tsx` 를 지우며, 그 `it` 이 잡던 결함 중 위 묶음이
+// 못 잡던 것(뮤테이션 실측 8건)을 응답만 바꿔 여기로 옮겼다. 행 고르기는 제목 글자로 한다.
+describe('화면 얼굴 — 응답 모양마다 무엇을 그리나', () => {
+  const ROW_A = '00000000-0000-4000-8000-000000000021';
+  const ROW_B = '00000000-0000-4000-8000-000000000022';
+  const one = (overrides: Partial<Notification>): Notification => ({
+    notificationId: ROW_A,
+    kind: 'SYSTEM',
+    title: '알림 A',
+    body: '',
+    actionType: null,
+    actionPayload: null,
+    occurredAt: new Date().toISOString(),
+    readAt: null,
+    ...overrides,
+  });
+
+  function rowOf(title: string) {
+    const row = screen
+      .getAllByTestId(ROW)
+      .find((candidate) => within(candidate).queryByText(title) != null);
+    if (row == null) throw new Error(`행을 못 찾았다: ${title}`);
+    return row;
+  }
+
+  it('오늘 받은 것과 그 전 것은 "오늘"·"이전" 두 묶음 라벨 아래 나뉜다', async () => {
+    items = [
+      one({ title: '오늘 것' }),
+      one({
+        notificationId: ROW_B,
+        title: '지난 것',
+        occurredAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+      }),
+    ];
+    await renderReady(2);
+
+    expect(screen.getByText('오늘')).toBeOnTheScreen();
+    expect(screen.getByText('이전')).toBeOnTheScreen();
+  });
+
+  it('빈 목록이면 헤더 "알림"과 빈 얼굴 문구가 보이고 "모두 읽음"은 없다', async () => {
+    items = [];
+    renderPage();
+
+    const empty = await screen.findByTestId(EMPTY);
+    expect(
+      within(empty).getByText('아직 받은 알림이 없어요')
+    ).toBeOnTheScreen();
+    expect(
+      within(empty).getByText('새로운 소식이 오면 여기에서 알려드릴게요')
+    ).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('notification-inbox-header')).getByText('알림')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId(MARK_ALL)).toBeNull();
+  });
+
+  it('긴 본문은 자르지 않고, 빈·공백 본문 행엔 본문 줄이 없다', async () => {
+    const long = '가나다라마바사아자차카타파하 '.repeat(12).trim();
+    items = [
+      one({ title: '긴 본문', body: long }),
+      one({ notificationId: ROW_B, title: '빈 본문', body: '  \n ' }),
+    ];
+    await renderReady(2);
+
+    expect(
+      within(rowOf('긴 본문')).getByTestId('notification-inbox-body')
+    ).toHaveTextContent(long, { normalizer: (text: string) => text });
+    expect(
+      within(rowOf('빈 본문')).queryByTestId('notification-inbox-body')
+    ).toBeNull();
+  });
+
+  it('회고 행은 본문을 눌러도 행 press 로 이어져 이동 1회 + 읽음 요청 1회', async () => {
+    items = [
+      one({
+        kind: 'REFLECTION',
+        title: '어제를 돌아봐요',
+        body: '어제 여행을 돌아봐요',
+        actionType: 'REFLECTION_DAILY',
+        actionPayload: { tripId: 't1', dayDate: '2026-10-16' },
+      }),
+    ];
+    await renderReady(1);
+
+    fireEvent.press(screen.getByTestId('notification-inbox-body'));
+
+    await waitFor(() => expect(perIdPosts).toEqual([ROW_A]));
+    expect(pushMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('PLAN_B 행은 행·본문 press 로는 이동하지 않고 "대안 일정 보기"만 이동한다', async () => {
+    items = [
+      one({
+        kind: 'PLAN_B',
+        title: '비 예보',
+        body: '대안을 확인해 주세요',
+        actionType: 'PLANB_REPLAN',
+        actionPayload: { tripId: 't1', triggerId: 'tr1' },
+      }),
+    ];
+    await renderReady(1);
+
+    fireEvent.press(screen.getByTestId('notification-inbox-body'));
+    fireEvent.press(screen.getByTestId(ROW));
+    await settle();
+    expect(pushMock).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('notification-inbox-action'));
+    expect(pushMock).toHaveBeenCalledTimes(1);
+    expect(pushMock).toHaveBeenCalledWith('/trips/t1/planb?triggerId=tr1');
+  });
+});
