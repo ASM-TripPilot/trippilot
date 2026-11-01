@@ -251,6 +251,7 @@ describe('FORBIDDEN_PATTERNS 확장 — 테스트·프리뷰 전용 경로', () 
     ],
     ['src/mocks', '/src/mocks/server.ts'],
     ['src/test-support', '/src/test-support/freezeDate.ts'],
+    ['실패 주입(개발 빌드 전용)', '/src/shared/dev-fault/interceptor.ts'],
     ['src 아래 단위 테스트', '/src/pages/home/ui/HomeScreen.test.tsx'],
     ['src 아래 통합 테스트', '/src/a/b.integration.test.tsx'],
     ['app 아래 테스트', '/app/(tabs)/index.test.tsx'],
