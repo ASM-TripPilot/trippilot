@@ -87,7 +87,7 @@ class Poi private constructor(
     val sourceRef: String? = null,
     /** 지번·도로명 주소(TRIP-1062 · 1003 F). 미확보=null — 지어내지 않는다. */
     val address: String? = null,
-    /** 560px WebP 썸네일(CDN). 미생성 null — 그때 화면에는 원본 [imageUrl] 을 준다. 배치(poi_thumbs.py)가 채운다. */
+    /** 940px 상한 WebP 썸네일(CDN, TRIP-1702 — 이전 560px). 미생성 null — 그때 화면에는 원본 [imageUrl] 을 준다. 배치(poi_thumbs.py)가 채운다. */
     val imageThumbUrl: String? = null,
 ) {
     /** 화면에 내려줄 사진 — 썸네일이 있으면 그것, 없으면 원본. 저장·수집은 항상 [imageUrl] 만 본다. */

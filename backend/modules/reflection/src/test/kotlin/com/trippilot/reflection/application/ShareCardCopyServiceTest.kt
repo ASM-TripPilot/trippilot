@@ -124,7 +124,7 @@ class ShareCardCopyServiceTest : StringSpec({
             override fun findPreferences(accountId: UUID) =
                 PreferenceSnapshot(listOf("사진"), emptyList(), emptyList(), emptyList(), null, emptyList(), false, null)
         }
-        return ShareCardCopyService(trips, archive, surfaces, summaries, ReflectionMaterials(preferences, changeLogs), copier, usage, properties, clock)
+        return ShareCardCopyService(trips, archive, surfaces, summaries, ReflectionMaterials(preferences, changeLogs, RegionNames), copier, usage, properties, clock)
     }
 
     val aiCopy = ShareCardCopy("바다와 골목을 담은 사흘", listOf("#부산여행", "#해운대"), isFallback = false)
@@ -214,6 +214,22 @@ class ShareCardCopyServiceTest : StringSpec({
         val noDestination = Copier(aiCopy)
         service(noDestination, ctx = context(destinations = emptyList())).copy(acc, tripId) shouldBe ShareCardCopyService.ruleCopy(emptyList())
         noDestination.sent shouldBe null
+    }
+
+    // TRIP-1701 — 실화면 3연속 빈 캡션인데 서버 로그에 아무것도 없어 꺼짐인지·재료 부족인지 가를 수 없었다(INV-4).
+    "AI 를 안 부르고 규칙 문구로 가는 두 갈래(꺼짐·재료 부족)도 사유를 로그로 남긴다" {
+        val appender = ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>().apply { start() }
+        val logger = org.slf4j.LoggerFactory.getLogger(ShareCardCopyService::class.java) as ch.qos.logback.classic.Logger
+        logger.addAppender(appender)
+        try {
+            service(Copier(aiCopy, enabled = false)).copy(acc, tripId)
+            service(Copier(aiCopy), archive = CountingArchive(listOf(ArchiveDayView(start, listOf(visit(skippedPoi, skipped = true)))))).copy(acc, tripId)
+        } finally {
+            logger.detachAppender(appender)
+        }
+        val messages = appender.list.map { it.formattedMessage }
+        messages.count { it.contains("꺼져") && it.contains(tripId.toString()) } shouldBe 1
+        messages.count { it.contains("재료") && it.contains("간곳=0") && it.contains("건너뜀=1") } shouldBe 1
     }
 
     "남의 여행이면 404, 요약 전이면 409(BR-U5-48) — 둘 다 AI 를 부르지 않는다" {

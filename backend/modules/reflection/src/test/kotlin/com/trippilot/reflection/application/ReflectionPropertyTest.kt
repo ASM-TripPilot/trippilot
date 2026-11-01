@@ -175,6 +175,7 @@ class ReflectionPropertyTest : StringSpec({
             override fun append(command: com.trippilot.changelog.api.AppendChangeLog) = Unit
             override fun findTimeline(accountId: UUID, tripId: UUID, limit: Int) = emptyList<com.trippilot.changelog.api.ChangeLogEntryView>()
         },
+        RegionNames,
     )
 
     /** 단위 테스트에는 트랜잭션이 없다 — 쓰기 트랜잭션의 경계는 실 Postgres IT(`ReflectionMaterialsIsolationIT`)가 잰다. */

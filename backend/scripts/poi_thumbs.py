@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""POI 사진 썸네일 배치 — 원본(TourAPI 940px·100~215KB)을 560px WebP 로 줄여 S3 에 올리고, DB 에 반영할 SQL 을 쓴다.
+"""POI 사진 썸네일 배치 — 원본(TourAPI 940px·100~215KB)을 940px 상한 WebP 로 바꿔 S3 에 올리고, DB 에 반영할 SQL 을 쓴다.
 
 DB 에는 직접 붙지 않는다(운영 DB 는 비공개) — 파일 입력 → S3 업로드 → SQL 파일 출력. DB 쪽은 기존 psql 일회성 Job 으로:
   1) 내보내기:  SELECT image_url FROM poi WHERE image_url IS NOT NULL AND image_thumb_url IS NULL GROUP BY 1;  (한 줄에 URL 하나)
   2) 이 스크립트:  python3 poi_thumbs.py urls.txt --bucket trippilot-img-prd --cdn https://dxxxx.cloudfront.net --sql thumbs.sql
   3) 적용:     thumbs.sql 을 psql Job 으로 실행
-키는 원본 URL 의 해시라 다시 돌려도 같은 파일이다 — 이미 올라간 키는 건너뛴다(멱등). 실패한 URL 은 SQL 에 넣지 않는다
+키는 폭 + 원본 URL 해시라 다시 돌려도 같은 파일이다 — 이미 올라간 키는 건너뛴다(멱등). 폭을 바꾸면 키가 바뀌어 전부 새로 만든다. 실패한 URL 은 SQL 에 넣지 않는다
 (= image_thumb_url 이 NULL 로 남아 서버가 원본을 그대로 준다). 원본이 바뀐 장소는 Poi.refreshed 가 썸네일을 비워 다음 배치가 다시 만든다.
 의존: Pillow (S3 는 boto3, --out-dir 로 로컬에 쓰면 불필요).
 """
@@ -18,14 +18,17 @@ import pathlib
 import sys
 import urllib.request
 
-WIDTH = 560           # 카드·상세 모두 이 한 장(폰 카드 폭 ≈ 510px@3x). 실측 3장 451KB → 118KB
+# 카드·상세 모두 이 한 장. TRIP-1702: 560 은 카드(≈510px@3x)엔 맞았지만 상세 히어로(1206px@3x)를 2배 넘게 늘려 흐렸다.
+# TourAPI 원본이 940px 라 그 이상은 만들 수 없다 — 사실상 "줄이지 않고 WebP 로만" 이다(히어로는 1.28배로 줄어든다).
+WIDTH = 940
 QUALITY = 72
 MAX_BYTES = 8 * 1024 * 1024   # 원본이 이보다 크면 받지 않는다
 PREFIX = "poi/"
 
 
 def thumb_key(url: str) -> str:
-    return f"{PREFIX}{hashlib.sha1(url.encode()).hexdigest()[:20]}.webp"
+    # 폭을 키에 넣는다 — 빼면 폭을 바꿔 다시 돌려도 exists() 가 옛 파일을 보고 건너뛰고, CDN 도 immutable 캐시라 옛 그림을 준다.
+    return f"{PREFIX}w{WIDTH}/{hashlib.sha1(url.encode()).hexdigest()[:20]}.webp"
 
 
 def sql_literal(s: str) -> str:

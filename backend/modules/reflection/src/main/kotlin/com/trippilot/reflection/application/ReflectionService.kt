@@ -300,12 +300,12 @@ class ReflectionService internal constructor(
         surfaces: Map<UUID, PoiSurfaceView>,
     ): ReflectionAgentInput? {
         val ctx = trips.findGenerationContext(accountId, tripId)
-        val region = materials.regionOn(ctx, dayDate)
         val shown = visits.filterNot { it.skipped }.mapIndexedNotNull { index, v ->
             surfaces[v.poiId]?.let { poi ->
                 ReflectionVisit(v.poiId, dayDate, poi.nameKo, poi.category, index + 1, v.photoCount)
             }
         }
+        val region = materials.regionOn(ctx, dayDate, shown.map { surfaces[it.poiId]?.regionCode })
         if (!ReflectionAgentInput.callable(region, shown)) {
             log.debug("목적지나 실을 방문이 없어 회고 AI 를 부르지 않습니다 — 규칙 카드로 갑니다. tripId={} date={}", tripId, dayDate)
             return null

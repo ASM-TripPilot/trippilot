@@ -1970,3 +1970,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **User Input**: (사용자 원문) "ㄱㄱ" — 같은 날 형식 검증 리포트(FV-CONSENT-01: 개인화 연타·두 기기 동시 요청이 같은 동의 증적을 2줄 남긴다)의 서버 수정 승인이다.
 **AI Response**: `construction/u0-foundation/functional-design/business-rules.md` 동의·약관 표(BR-U0-10~14) 바로 아래에 `[개정 · 2026-11-02 · TRIP-1689]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 최신 증적과 같은 버전·같은 동작이면 기록하지 않음(200 무기록, 위치 `update` 선례) · 적용 경로 3곳(온보딩·개별 변경·마케팅 토글) · 동시 요청은 계정 단위 권고 잠금 뒤 판정 · 행 잠금·유니크 제약을 쓰지 않은 이유. 코드 변경은 같은 브랜치(`fix/BE-TRIP-1689-consent-dedupe`)의 `fix(be)` 커밋이다. 참고: 이 파일 바로 앞 줄의 `||||||| 99b4b7492` 는 #1748 에서 섞여 들어온 병합 잔재로, append-only 규칙에 따라 지우지 않았다.
 **Context**: CONSTRUCTION — U0 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — U1 거점 숙소 여행 지역 제한 (TRIP-1703)
+**Timestamp**: 2026-11-02T22:00:00+09:00 (작업 시점)
+**User Input**: (사용자 결정 2026-11-02) "지역 밖 숙소를 거점으로 고르는 것은 막는다" — 11-01 웹 QA S-01(서울 여행 + 부산 거점 → 872km) 수정 결정이다.
+**AI Response**: `construction/u1-accommodation-trip/functional-design/business-rules.md` 저장·등록·거점 절의 TRIP-1052 원문 보존 인용 바로 아래에 `[개정 · 2026-11-02, TRIP-1703]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 거점은 여행 지역 안 숙소만(INV-U1-21 코드 양방향 접두사, 목적지 하나에라도 들면 안) · 판정 불가는 막지 않음(fail-open) · 서버 409 `STAY_OUTSIDE_TRIP_REGION` 이 정본, 시트 후보 제외는 UX 사본 · FE TRIP-1011 D8 "숨기지 않는다"를 뒤집음 · 기존 배정 소급 삭제 없음. 코드 변경은 같은 브랜치(`fix/TRIP-1691-BE-batch`)의 `fix(be)` 커밋이다. 이 항목 위의 develop 판 병합 정리(#1758)를 그대로 받아 그 끝에 덧붙였다.
+**Context**: CONSTRUCTION — U1 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
