@@ -36,6 +36,7 @@ routes:
 ## How to get to it (user POV)
 
 - 앱 콜드 스타트(홈 화면 아이콘 탭 또는 `xcrun simctl launch`). 모든 목적지는 이 한 경로로만 열린다 — 강제 업데이트·재동의 화면으로 가는 버튼·딥링크는 없다. 홈 계정이 `com.trippilot.travel://force-update`·`reconsent`·`login`·`nickname`·`terms`·`pref1` 을 열면 not-found 도 아니고 **아무 일도 없다**(지금 화면 유지, 2026-10-31 실측).
+- **웹은 다르다 — 로그인 계정이 주소창에 `/login`·`/force-update`·`/reconsent`·`/nickname`·`/terms`·`/pref1`·`/permission-push` 를 직접 넣으면 홈 탭으로 바뀐다**(2026-11-01 웹 QA W-07 실측, 2026-11-02 사용자 결정으로 이 동작 유지 · TRIP-1698). 웹 주소 입력은 새로 불러오기라 게이트가 처음부터 다시 판정하고, 지금 목적지(HOME) 가드 밖 화면(`SplashGate` 의 `Stack.Protected` 그룹)은 열리지 않아 홈 묶음으로 간다. `/permission-push` 는 HOME 가드 안이지만 웹 대체 파일 `app/permission-push.web.tsx` 가 홈으로 `Redirect` 한다(웹엔 푸시가 없다, TRIP-1648). not-found 화면은 뜨지 않는다.
 - 앱 안 로그아웃(설정 `로그아웃` 확정) 또는 세션 만료(401) → 게이트가 로그인으로 전환(설정 화면 흐름은 설정 레인 소관).
 - 로그인 성공·재동의 완료·온보딩 완료 → 게이트 재판정으로 다음 묶음이 열린다.
 - 딥링크 `trippilot:///<존재하지 않는 경로>`(예: `trippilot:///no-such-page`) → not-found 화면.
