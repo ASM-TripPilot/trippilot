@@ -44,11 +44,14 @@ export function PastTripRow({
   const subtitle = [dateRangeLabel, nightsLabel, photoLabel].filter(
     (label): label is string => label !== null
   );
+  // TRIP-1697 — 라벨 없는 Pressable 은 스크린리더가 Text 조각(「 · 」 포함)을 쉼표로 이어 읽는다.
+  const a11yLabel = [title, subtitle.join(' · ')].filter(Boolean).join(', ');
 
   return (
     <Pressable
       testID={testID}
       accessibilityRole="button"
+      accessibilityLabel={a11yLabel}
       onPress={onPress}
       className={
         compact
