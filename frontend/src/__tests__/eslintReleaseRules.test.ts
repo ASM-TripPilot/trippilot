@@ -720,6 +720,32 @@ describe('음성 코드 묶음과 같은 파일에서 양성은 자기 줄에서
   });
 });
 
+describe('누름 이동 연타 관통 (TRIP-1013) — 인라인 화살표의 router 이동만 error', () => {
+  // 얼린 기존 위반은 lintText 에 적용되지 않는다 — 규칙 발동과 오탐 제외(서버 응답 뒤 onSuccess)만 본다.
+  const page = (attr: string) =>
+    [
+      "import { useRouter } from 'expo-router';",
+      "import { Pressable } from 'react-native';",
+      'declare function save(o: { onSuccess: () => void }): void;',
+      'export function Probe() {',
+      '  const router = useRouter();',
+      `  return <Pressable onPress={${attr}} />;`,
+      '}',
+      '',
+    ].join('\n');
+  it('onPress={() => router.push(…)} 는 error, mutate onSuccess 안 이동은 error 0', async () => {
+    expect(await lint(page("() => router.push('/')"), PAGE_PROBE)).toContain(
+      RESTRICTED_SYNTAX
+    );
+    expect(
+      await lint(
+        page("() => save({ onSuccess: () => router.replace('/') })"),
+        PAGE_PROBE
+      )
+    ).toEqual([]);
+  });
+});
+
 describe('테스트 재팽창 방지 (2026-11-01 jest 축소 — README 판정 3~6)', () => {
   // 기존 위반은 eslint-suppressions.json 에 얼려 있다(CLI 전용) — lintText 는 얼림을 적용하지 않아 규칙 발동만 본다.
   const T = 'src/__tests__/zzRegrowthProbe.test.tsx';
