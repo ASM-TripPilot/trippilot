@@ -1,5 +1,7 @@
 # System Architecture
 
+> **대체됨 (2026-11-02)** — AI 아키텍처 개요는 [`ai/ARCHITECTURE.md`](../../../ARCHITECTURE.md) 한 곳으로 합쳤다. 이 문서는 이력·세부 참고용이며, 어긋나면 ARCHITECTURE.md(와 코드)가 이긴다.
+
 ## System Overview
 
 TripPilot AI는 **LLM + 최적화 어셈블리 하이브리드** 아키텍처다. 독립 Python AI 서비스(C1 LLM Gateway + C2 Assembly Engine + M7 Place Data)를 중심으로, Kotlin 백엔드가 기능별 오케스트레이션(M8·M9·M10·M13·M16)을 수행한다. 4대 불변식(INV-1~4)이 LLM과 어셈블리의 역할 경계를 구조적으로 강제한다.

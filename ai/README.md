@@ -1,5 +1,7 @@
 # TripPilot AI — 서비스 · 설계 저장소
 
+> **대체됨 (2026-11-02)** — AI 아키텍처 개요는 [`ai/ARCHITECTURE.md`](ARCHITECTURE.md) 한 곳으로 합쳤다. 이 문서는 이력·세부 참고용이며, 어긋나면 ARCHITECTURE.md(와 코드)가 이긴다.
+
 TripPilot의 **AI 서비스(FastAPI)와 그 설계 저장소**. 일정 생성·여행 중 변수 대응·회고 기능의 AI 아키텍처를 소유하고, 구현은 `src/trippilot/` 에 있다.
 
 ---

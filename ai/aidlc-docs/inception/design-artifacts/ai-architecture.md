@@ -1,5 +1,7 @@
 # TripPilot AI 아키텍처·전략
 
+> **대체됨 (2026-11-02)** — AI 아키텍처 개요는 [`ai/ARCHITECTURE.md`](../../../ARCHITECTURE.md) 한 곳으로 합쳤다. 이 문서는 이력·세부 참고용이며, 어긋나면 ARCHITECTURE.md(와 코드)가 이긴다.
+
 > 출처: TripPilot 기획 정본에서 2026-07-07 종합 — decisions.md(ADR-0008·0009·0011·0015, D11·D25·D27·D28·D29·D31·D37·D38, G106·G115·G181)·architecture.md(§1~§4)·nfr.md(§1.1·§3.5·§7)·aidlc(components.md, u5-itinerary/functional-design).
 >
 > ⚠️ **위 출처 경로(`aidlc-docs/planning/`)는 2026-07-17 팀 결정으로 삭제됐다** — 본 문서는 그 삭제 이전에
