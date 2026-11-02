@@ -361,18 +361,6 @@ class EditItineraryServiceTest : StringSpec({
         log.appended.last().summary shouldBe "일정을 직접 수정함"
     }
 
-    "편집이 거부되면 이력도 남지 않는다(여행 전 확정 일정)" {
-        val preTrip = Clock.fixed(Instant.parse("2026-07-20T00:00:00Z"), ZoneOffset.UTC) // 여행(08-01) 전이라 확정 잠금이 산다
-        val base = current()
-        val snapshots = base.days.flatMap { it.slots }.associate { it.sourcePoiId to UUID.randomUUID() }
-        val repo = repoWith(base.confirm(snapshots, clock.instant()))
-        val log = FakeRevisions()
-        shouldThrow<ConflictDetected> {
-            EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(log, repo, NOOP_TX, preTrip), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), preTrip, NO_CONTEXTS).edit(acc, tripId, editReq)
-        }
-        log.appended shouldBe emptyList()
-    }
-
     "편집해도 추천 근거·후보 요약·점수 신호가 살아남는다(TRIP-306 · TRIP-1173 회귀 가드)" {
         // 편집안의 장소 중 하나에 근거를 달아두고, 편집 후에도 그 장소에 붙어 있는지 본다
         val poi = editReq.days.single().slots.first().poiId
@@ -426,10 +414,17 @@ class EditItineraryServiceTest : StringSpec({
         slot.endAt shouldBe LocalTime.parse("01:00")
     }
 
-    "여행 시작 전에는 확정 일정 편집 불가 409 — 잠금은 여행 전에만 남는다(TRIP-999)" {
+    "여행 시작 전에도 확정 일정은 편집된다 — 상태 유지·새 장소 동결, 변경 이력은 여행 중만(TRIP-1710)" {
+        // 종전엔 409 였다(BR-U3-28). 화면은 [직접 수정]으로 들여보내 놓고 저장에서 막혀 이유 없는 실패만 봤다.
         val preTrip = Clock.fixed(Instant.parse("2026-07-20T00:00:00Z"), ZoneOffset.UTC) // 여행(08-01) 전
         val repo = repoWith(current { it.confirm(clock.instant()) })
-        shouldThrow<ConflictDetected> { EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, preTrip), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), preTrip, NO_CONTEXTS).edit(acc, tripId, editReq) }
+        val logs = CapturingChangeLogs()
+        val saved = EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, preTrip), logs, FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), preTrip, NO_CONTEXTS)
+            .edit(acc, tripId, editReq)
+
+        saved.status shouldBe ItineraryStatus.CONFIRMED // 편집이 확정을 풀지 않는다
+        saved.days.single().slots.forEach { it.poiSnapshotId shouldNotBe null } // 확정 동결은 시작 전 편집에도 잇는다
+        logs.appended shouldBe emptyList() // 여행 전 편집은 변경 이력(BR-U4-30) 대상이 아니다 — 리비전이 담당
     }
 
     "여행 중에는 확정 일정도 편집된다 — 상태 유지·동결 승계·새 장소 동결·MANUAL 이력 1행(TRIP-999)" {
@@ -680,7 +675,7 @@ class EditItineraryServiceTest : StringSpec({
         saved.days.single().slots.map { it.sourcePoiId } shouldBe listOf(poiB, poiA)
     }
 
-    "생성 중에 아직 없는 일자를 실으면 409 — 2차와 누가 이길지 정의가 없다" {
+    "생성 중에 아직 없는 일자를 실으면 409 — 2차와 누가 이길지 정의가 없고, 거부된 편집은 이력도 남기지 않는다" {
         val partial = Itinerary.create(
             tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
             listOf(ItineraryDay.of(day, 0, listOf(VisitSlot.of(poiA, null, 0, LocalTime.parse("09:00"), LocalTime.parse("10:00"))))),
@@ -693,10 +688,12 @@ class EditItineraryServiceTest : StringSpec({
                 EditDay(day.plusDays(1), listOf(EditSlot(poiB, LocalTime.parse("10:00"), LocalTime.parse("11:00"), isFixed = false, endsNextDay = false))),
             ),
         )
+        val log = FakeRevisions()
         shouldThrow<ConflictDetected> {
-            EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+            EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(log, repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
                 .edit(acc, tripId, withNewDay)
         }
+        log.appended shouldBe emptyList()
     }
 
     // ───── 거리 보존 (TRIP-1002 결정 (a)) ──────────────────────────────────
