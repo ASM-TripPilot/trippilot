@@ -327,10 +327,13 @@ class SlotCandidateService(
      * - 판정이 예외면 그 후보와 **남은 후보 전부**를 판정 없이 남긴다 — 판정 못 함 ≠ 부적합. 상대 불통은 후보마다
      *   다르지 않아, 계속 부르면 후보 수만큼 읽기 상한(편집 대기 60s)을 다시 기다린다(즉답 갈래는 원래 AI 호출 0회다).
      * - 전부 부적합이면(TRIP-1724 — 운영 14일 대안 요청의 19%, 사유 81% 가 HC1 영업시간) 두 가지를 더 본다.
-     *   1. **대상 칸을 뺀 그 날**이 수리되는가 — 안 되면 그 날의 다른 칸이 이미 깨져 있어(위반 표시로 저장된 칸) 어떤 후보도
-     *      맞을 수 없다. 더 찾지 않고 원래 목록을 주되 그 사유로 로그를 남긴다(종전 로그는 이 경우도 "후보가 시각에 안 맞는다"로 읽혔다).
-     *   2. 수리되면 [more] 로 풀에서 이어 판정한다 — 판정 총 [MAX_REPAIR_CALLS] 회까지. 끝내 없으면 원래 목록 그대로 —
-     *      0건으로 접으면 "주변에 없음" 같은 거짓 사유가 되고 지금보다 나빠진다.
+     *   1. **대상 칸을 뺀 그 날**이 수리되는가 — 안 되면 대개 그 날의 다른 칸이 이미 깨져 있어(위반 표시로 저장된 칸) 어떤 후보도
+     *      맞지 않는다. 더 찾지 않고 원래 목록을 주되 그 사실로 로그를 남긴다(종전 로그는 이 경우도 "후보가 시각에 안 맞는다"로 읽혔다).
+     *      근사다 — 마감·이동(늦어지는 쪽) 위반에서만 성립하고, 뒤 칸이 영업 시작 전이라 깨진 날은 이동이 긴 후보가 오히려 맞출 수
+     *      있다(repair 는 앞으로만 민다). 그런 후보를 놓쳐도 결과는 종전과 같다(원래 목록).
+     *   2. 수리되면 [more] 로 풀에서 이어 판정한다. 끝내 없으면 원래 목록 그대로 — 0건으로 접으면 "주변에 없음" 같은 거짓
+     *      사유가 되고 지금보다 나빠진다.
+     *   1·2의 판정은 이미 쓴 판정이 [MAX_REPAIR_CALLS] 회 미만일 때만 더한다 — 요청당 판정은 max(처음 후보 판정 수, 상한) 이하다.
      *   1번을 맨 앞이 아니라 여기서 하는 것은, 후보가 하나라도 맞는 요청(대다수)에 판정 1회를 더 얹지 않기 위해서다.
      * 후보는 이미 상한으로 작아 순차로 부른다.
      */
@@ -385,9 +388,10 @@ class SlotCandidateService(
         if (fit.isEmpty()) {
             val original = out.copy(candidates = out.candidates.take(limit))
             val rest = current.copy(days = current.days.map { d -> d.copy(slots = d.slots.filterIndexed { i, _ -> i != index }) })
+            if (calls >= MAX_REPAIR_CALLS) return original
             val restFits = if (rest.days.all { it.slots.isEmpty() }) true else repairable(rest)
             if (restFits == false) {
-                log.warn("그 날의 다른 칸이 이미 수리 불가라 어떤 후보도 맞을 수 없습니다 — 원래 목록을 그대로 줍니다. tripId={} slotKey={}", tripId, slotKey)
+                log.warn("대상 칸을 빼도 그 날이 수리 불가입니다 — 더 찾지 않고 원래 목록을 그대로 줍니다. tripId={} slotKey={}", tripId, slotKey)
                 return original
             }
             if (restFits == null) return original
@@ -634,7 +638,8 @@ class SlotCandidateService(
 
         /**
          * 적합 판정(repair) 총 상한 — 처음 후보 판정 + 대상 칸 뺀 날 판정 + 이어 판정. 운영 repair p50 23ms·p95 377ms 라
-         * 최악 15회도 수 초 안쪽이다. 처음 후보가 이미 이만큼이면 이어 판정하지 않는다.
+         * 최악 15회도 수 초 안쪽이다. 처음 후보 판정은 이 상한으로 자르지 않는다(종전 동작) — 그것만으로 이미 이만큼이면
+         * 더 판정하지 않는다.
          * ponytail: 고정 상한 — 풀이 그 시각에 맞는 곳을 거의 안 가진 지역이면 못 찾는다. 근본은 AI 에 슬롯 시각창을 싣는 것(TRIP-1724 B안).
          */
         private const val MAX_REPAIR_CALLS = 15

@@ -837,9 +837,12 @@ class SlotCandidateServiceTest : StringSpec({
             .candidates.map { it.poiId } shouldContainExactly listOf(a, b)
     }
 
-    /** 상한(INV — 판정 총 15회) — 처음 후보 수·풀 크기·부적합 분포가 무엇이든 넘지 않고, 결과는 원래 목록이거나 맞는 풀 후보뿐이다. */
-    "이어 판정은 총 15회를 넘지 않고, 결과는 원래 목록이거나 판정을 통과한 풀 후보다" {
-        checkAll(Arb.int(1..5), Arb.list(Arb.int(0..1), 0..30)) { n, extraMisfit ->
+    /**
+     * 상한 — 처음 후보 판정은 자르지 않고(종전 동작), 더하는 판정(그 날·이어 판정)은 그때까지 15회 미만일 때만이다.
+     * 처음 후보 수·풀 크기·부적합 분포가 무엇이든 요청당 판정 ≤ max(처음 후보 수, 15), 결과는 원래 목록이거나 맞는 풀 후보뿐이다.
+     */
+    "더하는 판정은 총 15회를 넘기지 않고, 결과는 원래 목록이거나 판정을 통과한 풀 후보다" {
+        checkAll(Arb.int(1..20), Arb.list(Arb.int(0..1), 0..30)) { n, extraMisfit ->
             val first = List(n) { UUID(2, it.toLong()) }
             val extras = extraMisfit.indices.map { UUID(3, it.toLong()) }
             val misfit = first.toSet() + extras.filterIndexed { i, _ -> extraMisfit[i] == 1 }
@@ -848,11 +851,76 @@ class SlotCandidateServiceTest : StringSpec({
 
             val out = fitSvc(agent, candidates = pool).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
 
-            (agent.repaired.size <= 15) shouldBe true
-            val budget = 15 - n - 1
+            (agent.repaired.size <= maxOf(n, 15)) shouldBe true
+            val budget = (15 - n - 1).coerceAtLeast(0)
             val expectedFits = extras.take(budget).filterNot { it in misfit }.take(n)
             out.candidates.map { it.poiId } shouldBe expectedFits.ifEmpty { first }
         }
+    }
+
+    "이어 찾기는 컨셉 카테고리로, 컨셉이 없으면 교체 대상 카테고리로 찾는다 — 교체 대상 카테고리를 모르면 풀을 보지 않는다" {
+        val (f1, f2) = ids(2)
+        val (sightNear, foodFar) = List(2) { UUID(4, it.toLong()) }
+        val refill = listOf(
+            GroundedPlace(sightNear, "가까운 명소", 33.45, 126.56, "명소", null, 100.0),
+            GroundedPlace(foodFar, "먼 맛집", 33.45, 126.56, "맛집", null, 900.0),
+        )
+        class Pool(val byId: Map<UUID, String>) : CandidatePoolPort {
+            var resolved = 0
+            override fun resolve(area: Area, categories: Set<String>) =
+                refill.filter { categories.isEmpty() || it.category in categories }.also { resolved++ }
+            override fun ground(poiIds: List<UUID>) = poiIds.mapNotNull { id -> byId[id]?.let { GroundedPlace(id, "장소", 33.45, 126.56, it, null, null) } }
+        }
+        fun run(byId: Map<UUID, String>, concept: String?): Pair<List<UUID>, Int> {
+            val p = Pool(byId)
+            val out = fitSvc(FitAgent(proposed = listOf(f1, f2), misfit = setOf(f1, f2)), candidates = p)
+                .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, concept, null))
+            return out.candidates.map { it.poiId } to p.resolved
+        }
+
+        run(mapOf(f1 to "맛집", f2 to "맛집", target to "명소"), "식사").first shouldContainExactly listOf(foodFar) // 매핑 컨셉 — 대상이 명소여도 맛집
+        run(mapOf(f1 to "맛집", f2 to "맛집", target to "맛집"), null).first shouldContainExactly listOf(foodFar)  // 가까운 명소가 점심 자리에 끼지 않는다
+        run(mapOf(f1 to "맛집", f2 to "맛집"), null) shouldBe (listOf(f1, f2) to 0)                               // 대상 비활성 — 풀 조회 안 함
+    }
+
+    "대상 칸 뺀 그 날 판정이 예외면 더 찾지 않고 원래 목록 — 판정 못 함은 '그 날 멀쩡함'이 아니다" {
+        val (a, b) = ids(2)
+        val pool = RadiusPool(listOf(near(UUID.randomUUID(), 100.0)))
+        // 후보를 넣은 날은 전부 수리 불가, 대상 칸을 뺀 날(이웃 둘만 남은 날)만 예외 — FitAgent 는 장소 단위라 이 구분을 못 한다.
+        val agent = object : StubScheduleAgent() {
+            val calls = mutableListOf<Set<UUID>>()
+            override fun proposeSlotCandidates(input: SlotCandidatesInput) = SlotCandidatesOutput(
+                listOf(a, b).map { SlotCandidate(it, "약 1.0km", "주변 명소") }, radiusMUsed = 3_000,
+                freshness = FreshnessMeta(now, degraded = false), emptyReason = null,
+            )
+            override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult {
+                val placed = solution.days.flatMap { d -> d.slots.map { it.poiId } }.toSet().also { calls += it }
+                if (target !in placed && a !in placed && b !in placed && placed.size == 2) throw ScheduleAgentCallFailed("TIMEOUT", retryable = true, message = "불통")
+                return RepairResult(solution, emptyList(), unrepairable = true)
+            }
+        }
+        val out = SlotCandidateService(trips, Repo(itinerary), agent, surfaces, pool, FakeScoredCandidatePoolStore(), clock, accountPrefs, NoHints, contexts())
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        out.candidates.map { it.poiId } shouldContainExactly listOf(a, b)
+        agent.calls.size shouldBe 3
+        pool.radii shouldBe emptyList()
+    }
+
+    "이어 판정 중 예외면 거기서 멈춘다 — 앞에서 찾은 것은 주고, 불통에 남은 후보 수만큼 기다리지 않는다" {
+        val first = ids(2)
+        val (p1, p2, p3) = List(3) { UUID(5, it.toLong()) }
+        val pool = RadiusPool(listOf(near(p1, 100.0), near(p2, 200.0), near(p3, 300.0)))
+        val agent = FitAgent(
+            proposed = first,
+            misfit = first.toSet(),
+            broken = mapOf(p2 to ScheduleAgentCallFailed("TIMEOUT", retryable = true, message = "불통")),
+        )
+
+        val out = fitSvc(agent, candidates = pool).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        out.candidates.map { it.poiId } shouldContainExactly listOf(p1)
+        agent.repaired.size shouldBe 5 // 2 + 그 날 1 + p1 + p2(예외) — p3 는 부르지 않는다
     }
 
     "판정이 예외면 그 후보부터 끝까지 판정 없이 남긴다 — 판정 못 함은 부적합이 아니고, 불통에 후보 수만큼 기다리지 않는다" {
