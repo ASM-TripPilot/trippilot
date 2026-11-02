@@ -45,6 +45,15 @@ import {
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
+// 로그인 deviceId 의 설치 id — 사진 테스트들과 같이 고정값으로 갈아끼운다(실물은 키체인·localStorage).
+// 실패 경로를 보는 케이스는 `mockGetInstallId.mockRejectedValueOnce` 로 한 번만 거절시킨다.
+const mockGetInstallId = jest.fn(() =>
+  Promise.resolve('3f1c2a9e-7b4d-4e2a-9c1f-0a5b6c7d8e9f')
+);
+jest.mock('@/shared/storage/installId', () => ({
+  getInstallId: () => mockGetInstallId(),
+}));
+const INSTALL_ID = '3f1c2a9e-7b4d-4e2a-9c1f-0a5b6c7d8e9f';
 
 /** 경로 → 그 요청이 실었던 Authorization 헤더(없으면 null). 키의 존재 = 그 엔드포인트를 때렸다는 뜻. */
 const authByPath: Record<string, string | null> = {};
@@ -230,8 +239,8 @@ describe('AC-6 · SDK 토큰 경로도 무인증으로 나간다 (openapi securi
   });
 });
 
-describe('AC-1·AC-2 (배선) · 실제로 나가는 본문은 accessToken 하나뿐이다', () => {
-  it('요청 본문에 accessToken 만 담기고 code 경로 필드·deviceId 는 실리지 않는다', async () => {
+describe('AC-1·AC-2 (배선) · 실제로 나가는 본문은 accessToken + 플랫폼 접두 deviceId 뿐이다', () => {
+  it('요청 본문에 accessToken 과 deviceId(`{Platform.OS}-{uuid}`)만 담기고 code 경로 필드는 실리지 않는다', async () => {
     // 준비 — 본문을 캡처하는 핸들러로 덮어쓴다(afterEach 의 resetHandlers 가 원복한다).
     // 훅·API 래퍼 층의 목 단언과 달리, 여기서는 **직렬화되어 실제로 나간 JSON** 을 본다.
     let capturedBody: unknown = null;
@@ -264,10 +273,89 @@ describe('AC-1·AC-2 (배선) · 실제로 나가는 본문은 accessToken 하�
     // 실행
     await postSocialTokenLogin('kakao', { accessToken: 'wire-access-token' });
 
-    // 단언 — 완전 일치. authorizationCode·codeVerifier·redirectUri 가 섞여 들어가거나
-    // deviceId(D7: 미전송)가 붙으면 실패한다.
+    // 단언 — 완전 일치. authorizationCode·codeVerifier·redirectUri 가 섞여 들어가면 실패한다.
+    // deviceId 는 jest 기본 플랫폼(ios) 접두 + 설치 id(uuid) — 서버가 refresh_session.device_id 에 저장해
+    // 운영 DB 에서 앱/웹 가입자를 가른다(2026-11-02).
     expect(capturedProvider).toBe('kakao');
-    expect(capturedBody).toEqual({ accessToken: 'wire-access-token' });
+    expect(capturedBody).toEqual({
+      accessToken: 'wire-access-token',
+      deviceId: `ios-${INSTALL_ID}`,
+    });
+  });
+
+  it('설치 id 를 못 읽으면(시크릿 모드 등) deviceId 키 없이 받은 본문 그대로 나간다 — 로그인은 막지 않는다', async () => {
+    // 준비 — 이번 한 번만 설치 id 읽기가 거절된다.
+    let capturedBody: unknown = null;
+    mockGetInstallId.mockRejectedValueOnce(new Error('SecurityError'));
+    server.use(
+      http.post(`${BASE}/auth/social/:provider/token`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({
+          accessToken: 'server-access',
+          tokenType: 'Bearer',
+          expiresIn: 3600,
+          refreshToken: 'server-refresh',
+          refreshExpiresIn: 7776000,
+          isNewUser: false,
+          account: {
+            accountId: '00000000-0000-0000-0000-000000000001',
+            status: 'ACTIVE',
+            email: null,
+            socialProviders: ['KAKAO'],
+            onboardingCompleted: true,
+          },
+        });
+      })
+    );
+
+    // 실행 — 로그인이 끝까지 성공한다.
+    const pair = await postSocialTokenLogin('kakao', {
+      accessToken: 'wire-access-token',
+    });
+
+    // 단언 — 키 자체가 없다(toEqual 은 값이 undefined 인 키와 없는 키를 같게 보므로 키 목록으로 잰다).
+    expect(pair.accessToken).toBe('server-access');
+    expect(Object.keys(capturedBody as object)).toEqual(['accessToken']);
+  });
+
+  it('code 경로(/auth/social/{provider})도 받은 본문 그대로 + deviceId 를 싣는다', async () => {
+    // 준비 — code 경로 본문을 캡처한다(afterEach 의 resetHandlers 가 원복).
+    let capturedBody: unknown = null;
+    server.use(
+      http.post(`${BASE}/auth/social/:provider`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({
+          accessToken: 'server-access',
+          tokenType: 'Bearer',
+          expiresIn: 3600,
+          refreshToken: 'server-refresh',
+          refreshExpiresIn: 7776000,
+          isNewUser: false,
+          account: {
+            accountId: '00000000-0000-0000-0000-000000000001',
+            status: 'ACTIVE',
+            email: null,
+            socialProviders: ['GOOGLE'],
+            onboardingCompleted: true,
+          },
+        });
+      })
+    );
+
+    // 실행
+    await postSocialLogin('google', {
+      authorizationCode: 'code-abc',
+      codeVerifier: 'verifier-xyz',
+      redirectUri: 'https://app.trippilot.co.kr/oauth/google',
+    });
+
+    // 단언 — 완전 일치(본문 세 필드 + deviceId 하나만 더해진다).
+    expect(capturedBody).toEqual({
+      authorizationCode: 'code-abc',
+      codeVerifier: 'verifier-xyz',
+      redirectUri: 'https://app.trippilot.co.kr/oauth/google',
+      deviceId: `ios-${INSTALL_ID}`,
+    });
   });
 });
 

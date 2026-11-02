@@ -1639,6 +1639,7 @@
 - `src/shared/api/isNotFound.ts`  →  isNotFound · retryUnlessNotFound
 - `src/shared/api/isOfflineWaiting.ts`  →  isOfflineWaiting
 - `src/shared/api/isRateLimited.ts`  →  isRateLimited · retryAfterSeconds · isGenerationDailyLimit · isShareCardDailyLimit
+- `src/shared/api/loginDeviceId.ts`  →  loginDeviceId
 - `src/shared/api/mutator.ts`  →  customInstance
 - `src/shared/api/tokenManager.ts`  →  getAccessToken · setAccessToken · clearAccessToken · hydrate · subscribeAccessToken
 - `src/shared/api/useAccessToken.ts`  →  useAccessToken
@@ -1917,4 +1918,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1239개 파일
+합계 1240개 파일
