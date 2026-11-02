@@ -92,6 +92,32 @@ describe('c02-social-login — 기본 화면 (AC-ONB-01-12 · §10 이메일 버
     expect(screen.queryByTestId('auth-login-terms')).toBeNull();
   });
 
+  it('inAppNotice 면 버튼 위에 앱 안 브라우저 안내를 띄우고 버튼은 그대로 눌린다 — 없으면 안내 없음', async () => {
+    // 준비 + 실행 — 앱 안 브라우저(인스타그램 등)로 들어온 웹.
+    const props = renderScreen({ inAppNotice: true });
+
+    // 단언 — 안내 문구 두 줄이 정확히 이 글자이고, 네이버처럼 되는 로그인이 있으니 버튼은 막지 않는다.
+    const notice = screen.getByTestId('auth-login-inapp-notice');
+    expect(
+      within(notice).getByText(
+        '앱 안 브라우저에서는 구글·카카오 로그인이 안 될 수 있어요'
+      )
+    ).toBeOnTheScreen();
+    expect(
+      within(notice).getByText(
+        '오른쪽 위 ⋯ 메뉴에서 「외부 브라우저로 열기」를 눌러 주세요'
+      )
+    ).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId('auth-login-naver'));
+    expect(props.onSignIn).toHaveBeenCalledWith('naver');
+
+    // 준비·실행·단언 — 평범한 브라우저(기본값)는 안내가 없다.
+    await cleanupAsync();
+    renderScreen();
+    expect(screen.queryByTestId('auth-login-inapp-notice')).toBeNull();
+    expect(screen.getByTestId('auth-login-root')).toBeOnTheScreen();
+  });
+
   it('hideNaver 면 네이버 버튼만 빠지고 나머지 둘은 그대로다 (TRIP-1371)', () => {
     renderScreen({ hideNaver: true });
 
