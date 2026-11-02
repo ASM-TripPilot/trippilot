@@ -14,6 +14,7 @@ session_name: 재계획 담당 세션 (다시 짜기 배선·구성 프롬프트
 handed_to:
   - "trippilot-7f — 다시 짜기 후속(아래 1~3)"
   - "trippilot-79 — 푸시 전달 후속(아래 4)"
+picked_up_by: "trippilot-7f (PlanB RAG·KB-5 세션) — 1~3, 11-02"
 ---
 # 다시 짜기 추천 이유·같은 장소·푸시 전달 — 코드는 다 머지, 남은 것은 확인·외부 작업
 
@@ -39,7 +40,8 @@ handed_to:
 
 ## 다음에 이어서 할 일
 1. **[7f] 개발 서버 확인** — 다시 짜기 한 번 뒤 BE 로그 `replan notes:` 와 그날 슬롯 `placement_reason` 이 `#… #…` 꼴(최대 5개)인지, 같은 장소 쌍둥이가 걸리면 노트 `same_place_dropped: N`. 운영은 다음 출시 묶음 뒤 같은 확인.
-2. **[7f] TRIP-1609 FE 답 오면** — 형식·개수 요청이 있으면 `HASHTAG_COUNT`(gates/explanation.py) 한 곳 + 생성 EXPLANATION·구성 0.9.0 프롬프트 문구(테스트가 알려준다). 바꾸면 Opus 로 기준 판과 나란히 실측(아래 함정).
+   - **개발 확인 끝(11-02, 7f):** 배포 1162b240 뒤 개발 다시 짜기 2건(11-02 02:08·02:28 UTC, 서울·부산). BE 로그 `same_place_dropped: 64`·`28`, `llm_composed: 3/3`·`6/6`, KB 적중 `POI_DESC=8`·`26`. `replan_session.draft` 의 슬롯 이유 12개가 모두 해시태그 5개 꼴. 개발 DB 의 해시태그 1,900개 가운데 장소가 아니라 과정을 말하는 태그(`#기존일정`)는 1개뿐이라 게이트를 손대지 않았다. **남은 것은 운영 확인(다음 출시 묶음 뒤)뿐이다.**
+2. **[7f] TRIP-1609 FE 답 오면** (11-02 확인: 담당자 답 아직 없음, 상태 '해야 할 일') — 형식·개수 요청이 있으면 `HASHTAG_COUNT`(gates/explanation.py) 한 곳 + 생성 EXPLANATION·구성 0.9.0 프롬프트 문구(테스트가 알려준다). 바꾸면 Opus 로 기준 판과 나란히 실측(아래 함정).
 3. **[7f] KB-3 상황 문서를 구성 LLM 에 싣기 — 보수안으로 보류 중**(10-30, 사용자 "결정이 필요한것들은 웬만해서는 다 진행하는 방향으로 하자" 를 상황 감지 세션이 전달 → 추천안 없음 → 현행 유지). 사용자가 KB-5 때처럼 "실어서 써야지" 하면 진행. 부딪침: KB-3 "성격 유지 교체" vs 구성 규칙 "절반 이상 새 곳"(`composition.CHANGE_REFRESH`).
 4. **[79] 푸시 전달 마무리(TRIP-1668)** — 순서는 티켓 11018 댓글: ① EAS 프로비저닝 프로파일이 Push 켠 뒤 재발급됐는지(`eas credentials`, #1598 서명 실패 재발 방지) ② 스토어/TestFlight 빌드의 `aps-environment` 가 production 인지 ③ **APNs 키(.p8)를 expo.dev → trippilot → Credentials → iOS 에 업로드**(사용자·백엔드 담당자 몫) ④ 새 빌드 실기기 알림 허용 → 운영 `app.push_token` 증가(읽기 전용 psql 파드) → expo.dev 푸시 도구 직접 시험 → 백엔드 경유(리마인드·상황 알림). 4까지 확인되면 TRIP-1668 닫기.
 
