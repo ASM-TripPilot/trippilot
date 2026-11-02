@@ -1359,6 +1359,39 @@ def test_poi_info_on_another_day_names_the_day() -> None:
     assert facts.payload["rows"][0] == {"label": "날짜", "value": "10월 18일"}
 
 
+class _ClosedPoiInfo(_PoiInfo):
+    """그 요일 휴무가 증명된 행 — `providers.poi_info.hours_label` 이 None 을 싣는다."""
+
+    def fetch(self, params: dict) -> InfoPacket:
+        packet = super().fetch(params)
+        pois = [{**p, "hours_label": None} for p in packet.data["pois"]]
+        return InfoPacket(packet.provider, packet.status, {**packet.data, "pois": pois}, packet.freshness)
+
+
+@pytest.mark.parametrize(("place", "when"), [("해녀의집", "오늘(10월 19일 월요일)이"), ("제주민속촌", "10월 20일 화요일이"),
+                                             ("성산", None)])  # 성산일출봉은 지난날(10-18) — 물을 일이 아니다
+def test_poi_info_closed_weekday_names_the_day_for_the_answer(place, when) -> None:
+    """"휴무일 수 있음" 행만 두면 답변 LLM 이 "운영 시간은 확인되지 않았어요"로 읽었다(2026-11-02 개발 haiku-5-5 창경궁 월요일
+    8/8) — 그날(오늘이면 오늘)이 등록 휴무 요일로 읽혔다는 노트를 싣는다. 단정하지 않는 행 문구는 그대로다."""
+    facts = _run(HANDLERS[Intent.GET_POI_INFO], _ctx(arguments={"place": place}, ports=HandlerPorts(poi_info=_ClosedPoiInfo())))
+    assert {r["label"]: r["value"] for r in facts.payload["rows"]}["영업시간"] == "휴무일 수 있음"
+    notes = [n for n in facts.notes if "휴무 요일" in n]
+    assert [when in n and ("오늘" in n) == when.startswith("오늘") for n in notes] == ([True] if when else [])
+
+
+def test_poi_info_closed_weekday_leaves_the_day_to_a_stored_web_closed_value() -> None:
+    """웹 휴무일 칸이 있으면 그쪽이 정확하다 — DB 파서는 '매월 둘째·넷째 월요일'을 매주로 넓혀 읽어, 노트가 "오늘 쉴 수 있다"로 밀면
+    첫째 월요일에 웹 칸과 엇갈렸다(리뷰 재현)."""
+    web = PlaceFacts(hours=None, last_entry=None, closed="매월 둘째·넷째 월요일", fee=None,
+                     source_url="https://example.org/haenyeo", source_host="example.org")
+    agent = _Unknown(FactRecord(_U["해녀의집"], web, _NOW, _NOW + timedelta(days=7), ("closed",)))
+    ctx = replace(_ctx(arguments={"place": "해녀의집"}, ports=HandlerPorts(poi_info=_ClosedPoiInfo(), unknown=agent)),
+                  utterance="해녀의집 쉬는 날 언제야?")
+    facts = _run(HANDLERS[Intent.GET_POI_INFO], ctx)
+    assert {r["label"]: r["value"] for r in facts.payload["rows"]}["휴무일"] == "매월 둘째·넷째 월요일"
+    assert not any("휴무 요일" in n for n in facts.notes)
+
+
 def test_next_slot_without_any_itinerary_offers_to_make_one() -> None:
     """일정 자체가 없는데 "남은 일정이 없어요"·[일정 보기]로 답하면 틀린다 — 사실이 비어 템플릿 직행이라(BR-AO-25) LLM 이
     고쳐 말해 주지도 않는다(셀프 리뷰). 만들기로 보낸다(BE QueryCards.noItinerary)."""

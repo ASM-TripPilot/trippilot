@@ -1250,6 +1250,12 @@ def _assemble_poi_info(ctx: TurnContext, results: Mapping[str, TaskResult]) -> F
     status, notes = (FactStatus.OK, ()) if row else (FactStatus.PARTIAL, ("장소 정보 미확인 — 일정 값만 보인다",))
     if slot is None:
         notes = notes + ("일정 밖 장소 — 등록 장소에서 이름으로 찾았다",)
+    # 행만 두면 답변 LLM 이 "운영 시간 미확인"으로 읽었다(2026-11-02 개발 haiku-5-5 창경궁 월요일 8/8) — 그날을 밝힌다. 지난날은 물을 일이
+    # 아니고, 웹 휴무일 칸이 있으면 그쪽이 정확하다(월 단위 휴무를 DB 파서는 매주로 넓힌다 — 노트가 "오늘 쉴 수 있다"로 밀면 엇갈렸다, 리뷰 재현)
+    if hours == _CLOSED and on >= ctx.today and not (web is not None and web.closed):
+        day = f"{_date_label(on)} {'월화수목금토일'[on.weekday()]}요일"
+        when = f"오늘({day})" if on == ctx.today else day
+        notes = notes + (f"영업시간 '{_CLOSED}' = {when}이 그곳의 등록된 휴무 요일로 읽혔다 — 쉬는 날일 수 있다고 그날 기준으로 말한다",)
     quick: tuple[QuickReplyDraft, ...] = ()
     template, footnote = _template(intent, status), None
     if web is not None:

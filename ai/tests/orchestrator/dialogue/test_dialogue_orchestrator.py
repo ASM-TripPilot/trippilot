@@ -66,6 +66,7 @@ from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
 from trippilot.orchestrator.dialogue.dialogue_handlers import (
     HANDLERS,
     NEXT_ACTION_TYPES,
+    WEB_PENDING_TEXT,
     AnswerKind,
     DayView,
     HandlerPorts,
@@ -100,7 +101,7 @@ from trippilot.orchestrator.dialogue.dialogue_orchestrator import (
 from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanGate
 from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
 from trippilot.llm_gateway.workers.dialogue_smalltalk import DialogueSmalltalkWorker
-from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent
+from trippilot.agents.unknown_handling.agent import KnowledgeTask, UnknownHandlingAgent, UnknownOutcome
 from trippilot.llm_gateway.gates.dialogue_knowledge import DialogueKnowledgeGate
 from trippilot.llm_gateway.workers.dialogue_knowledge import DialogueKnowledgeWorker
 from trippilot.domain.dialogue.plan_tools import plan_tool_specs_json
@@ -1728,6 +1729,25 @@ def test_closed_weekday_reads_maybe_closed_not_unknown() -> None:
     out = b.orch.turn(_input("우도 오늘 문 열어?"))
     rows = {r["label"]: r["value"] for r in out.answer.payload["rows"]}
     assert rows["영업시간"] == "휴무일 수 있음"
+
+
+class _PendingUnknown:
+    """웹 확인 대역 — 저장된 기록이 없어 뒤에서 찾기를 받아 준다("찾는 중")."""
+
+    knows_general = False
+
+    def run(self, task):
+        return UnknownOutcome() if isinstance(task, KnowledgeTask) else UnknownOutcome(pending=True)
+
+
+def test_web_notice_footnote_wins_over_an_llm_footnote() -> None:
+    """결정론 각주('찾는 중')가 이긴다 — 답변 LLM 이 각주를 따로 쓰면 안내가 사라졌다(리뷰 재현). 휴무일 노트가 붙은 턴은 본문에서
+    '찾는 중' 문장도 자주 빠져(2026-11-02 개발 4회 중 3회) 각주가 마지막 안내다."""
+    answer = json.dumps({"text": "우도는 오늘 쉬는 날일 수 있어요.", "footnote": "방문 전에 한 번 더 확인해 주세요."}, ensure_ascii=False)
+    b = _build(_canned(Intent.GET_POI_INFO, place="우도", answer=answer),
+               ports=HandlerPorts(poi_info=_ClosedPoiInfo(), unknown=_PendingUnknown()))
+    out = b.orch.turn(_input("우도 쉬는 날 언제야?"))
+    assert out.answer.text == "우도는 오늘 쉬는 날일 수 있어요." and out.answer.footnote == WEB_PENDING_TEXT
 
 
 @pytest.mark.parametrize("intent", [Intent.GENERATE_SCHEDULE, Intent.REGENERATE, Intent.REPLAN,
