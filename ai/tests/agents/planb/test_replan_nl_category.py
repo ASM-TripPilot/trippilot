@@ -15,7 +15,7 @@ from trippilot.api.wiring import DEMO_ANCHOR, StaticPoiDb, build_dev_app, demo_p
 from trippilot.domain.common import GeoPoint, PoiId, TraceId
 from trippilot.domain.llm.llm import LlmFeature, TypedResult
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
-from trippilot.llm_gateway.gates.replan_request_extraction import (
+from trippilot.llm_gateway.gates.replan.replan_request_extraction import (
     ExtractedCategory, ExtractedRequest, ReplanRequestExtractionGate,
 )
 
@@ -215,7 +215,7 @@ _SEONGSAN = "e0000000-0000-4000-8000-000000000001"
 
 
 def test_counted_kind_prefers_the_far_named_place_surroundings() -> None:
-    from trippilot.llm_gateway.gates.replan_request_extraction import ExtractedPlace
+    from trippilot.llm_gateway.gates.replan.replan_request_extraction import ExtractedPlace
     from tests.fakes.fake_existence import FakeExistence
 
     ss = next(p for p in demo_poi_seed() if str(p.poi_id) == _SEONGSAN)

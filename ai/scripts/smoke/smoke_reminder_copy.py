@@ -21,9 +21,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm.llm import LlmFeature
-from trippilot.llm_gateway.gates.reminder_copy import ReminderCopyContext, ReminderCopyGate
+from trippilot.llm_gateway.gates.content.reminder_copy import ReminderCopyContext, ReminderCopyGate
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.reminder_copy import (
+from trippilot.llm_gateway.workers.content.reminder_copy import (
     ReminderCopyItem,
     build_reminder_copy_vars,
 )

@@ -32,14 +32,14 @@ from hypothesis import strategies as st
 
 from trippilot.agents.reflect.highlight_rule import select_highlights
 from trippilot.llm_gateway.config import C1Config, default_tier_map
-from trippilot.llm_gateway.gates.photo_highlight import (
+from trippilot.llm_gateway.gates.content.photo_highlight import (
     DEFAULT_HIGHLIGHT_LIMIT,
     PhotoHighlightContext,
     PhotoHighlightGate,
 )
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.photo_highlight import (
+from trippilot.llm_gateway.workers.content.photo_highlight import (
     PhotoHighlightWorker,
     build_photo_highlight_vars,
 )

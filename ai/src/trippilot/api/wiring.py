@@ -82,32 +82,32 @@ from trippilot.api.route_budget import (
 from trippilot.llm_gateway.adapters.backend_persona import _to_summary as _persona_to_summary
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver, ContextStore
-from trippilot.llm_gateway.gates.explanation import ExplanationGate, hashtag_line
-from trippilot.llm_gateway.gates.reminder_copy import ReminderCopyGate
+from trippilot.llm_gateway.gates.replan.explanation import ExplanationGate, hashtag_line
+from trippilot.llm_gateway.gates.content.reminder_copy import ReminderCopyGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.alternative_explanation import (
+from trippilot.llm_gateway.workers.replan.alternative_explanation import (
     AlternativeExplanationWorker,
 )
-from trippilot.llm_gateway.workers.alternative_selection import AlternativeSelectionWorker
-from trippilot.llm_gateway.workers.explanation import ExplanationWorker
-from trippilot.llm_gateway.workers.reminder_copy import (
+from trippilot.llm_gateway.workers.replan.alternative_selection import AlternativeSelectionWorker
+from trippilot.llm_gateway.workers.replan.explanation import ExplanationWorker
+from trippilot.llm_gateway.workers.content.reminder_copy import (
     ReminderCopyInput,
     ReminderCopyItem,
     ReminderCopyWorker,
 )
 from trippilot.agents.reflect.agent import ReflectAgent, ReflectTask
 from trippilot.agents.reflect.composer import bind_share_card_copy
-from trippilot.llm_gateway.gates.reflection_nudge import ReflectionNudgeGate
-from trippilot.llm_gateway.gates.photo_highlight import PhotoHighlightGate
-from trippilot.llm_gateway.gates.reflection_template import ReflectionTemplateGate
-from trippilot.llm_gateway.workers.reflection_nudge import (
+from trippilot.llm_gateway.gates.content.reflection_nudge import ReflectionNudgeGate
+from trippilot.llm_gateway.gates.content.photo_highlight import PhotoHighlightGate
+from trippilot.llm_gateway.gates.content.reflection_template import ReflectionTemplateGate
+from trippilot.llm_gateway.workers.content.reflection_nudge import (
     FALLBACK_NUDGE_MESSAGE, ReflectionNudgeInput, ReflectionNudgeWorker,
 )
-from trippilot.llm_gateway.workers.photo_highlight import PhotoHighlightWorker
-from trippilot.llm_gateway.workers.reflection_template import ReflectionTemplateWorker
-from trippilot.llm_gateway.gates.share_card_copy import ShareCardCopyGate
-from trippilot.llm_gateway.workers.share_card_copy import (
+from trippilot.llm_gateway.workers.content.photo_highlight import PhotoHighlightWorker
+from trippilot.llm_gateway.workers.content.reflection_template import ReflectionTemplateWorker
+from trippilot.llm_gateway.gates.content.share_card_copy import ShareCardCopyGate
+from trippilot.llm_gateway.workers.content.share_card_copy import (
     ShareCardCopyWorker, fallback_share_card_copy,
 )
 from trippilot.ports.poi_db_port import PoiLookup, PoiMiss, lookup_from
@@ -116,7 +116,7 @@ from trippilot.domain.reflection import (
     ReflectionKind, ReflectionRequest, SourceEventKind, TripEventRecord,
     VisitRecord, VisitRef,
 )
-from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
+from trippilot.llm_gateway.workers.preference.preference import PreferenceScoringWorker
 from trippilot.assembly_engine.config import RAIN_OUTDOOR, AssemblyConfig, stay_for
 from trippilot.assembly_engine.constraints import hc1_unjudged, open_hours_ok
 from trippilot.assembly_engine.day_focus import FOCUS_MIN
@@ -179,32 +179,32 @@ from trippilot.agents.planb.directives import (
     resolve_chips,
 )
 from trippilot.domain.edit import EditCommand, EditOp
-from trippilot.llm_gateway.gates.edit_translation import EditTranslationGate
-from trippilot.llm_gateway.gates.replan_directive_translation import ReplanDirectiveTranslationGate
-from trippilot.llm_gateway.workers.edit_translation import EditTranslationWorker
-from trippilot.llm_gateway.workers.replan_directive_translation import (
+from trippilot.llm_gateway.gates.content.edit_translation import EditTranslationGate
+from trippilot.llm_gateway.gates.replan.replan_directive_translation import ReplanDirectiveTranslationGate
+from trippilot.llm_gateway.workers.content.edit_translation import EditTranslationWorker
+from trippilot.llm_gateway.workers.replan.replan_directive_translation import (
     MAX_DIRECTIVES,
     DirectiveTranslationInput,
     ReplanDirectiveTranslationWorker,
     options_from,
 )
-from trippilot.llm_gateway.gates.replan_request_extraction import (
+from trippilot.llm_gateway.gates.replan.replan_request_extraction import (
     ExtractedRequest,
     ReplanRequestExtractionGate,
 )
-from trippilot.llm_gateway.workers.replan_request_extraction import (
+from trippilot.llm_gateway.workers.replan.replan_request_extraction import (
     ReplanRequestExtractionWorker,
 )
-from trippilot.llm_gateway.workers.replan_composition import (
+from trippilot.llm_gateway.workers.replan.replan_composition import (
     ComposeDayInput,
     ReplanCompositionWorker,
     ScheduleLine,
 )
 from trippilot.domain.poi.poi_curation import CandidatePoolRequest
 from trippilot.domain.dialogue.trigger import TriggerKind, TriggerParams
-from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
-from trippilot.llm_gateway.gates.numbered_selection import NumberedScoringGate, NumberedSelectionGate
-from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
+from trippilot.llm_gateway.gates.replan.alternative_selection import AlternativeSelectionGate
+from trippilot.llm_gateway.gates.preference.numbered_selection import NumberedScoringGate, NumberedSelectionGate
+from trippilot.llm_gateway.workers.preference.preference_cache import CachingScoringWorker
 from trippilot.poi_curation import place_fallback
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.place_fees import load_fee_table
@@ -214,8 +214,8 @@ from trippilot.poi_curation.pool_builder import (
 from trippilot.orchestrator.schedule import schedule_coordinator as core
 from trippilot.agents.adapters.memory_vector_store import InMemoryVectorStore
 from trippilot.agents.adapters.memory_memory_store import InMemoryDialogueMemoryStore
-from trippilot.llm_gateway.gates.intent import IntentGate
-from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
+from trippilot.llm_gateway.gates.dialogue.intent import IntentGate
+from trippilot.llm_gateway.gates.dialogue.paraphrase import ParaphraseGate
 from trippilot.orchestrator.dialogue.dialogue_interpreter import BankIndex, CountingLlm, DialogueInterpreter
 from trippilot.orchestrator.dialogue.dialogue_orchestrator import DialogueOrchestrator
 from trippilot.orchestrator.intent.intent_router import IntentRouter

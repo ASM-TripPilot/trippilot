@@ -28,23 +28,23 @@ from trippilot.domain.dialogue.intent import Intent
 from trippilot.domain.llm.llm import LlmFeature
 from trippilot.domain.dialogue.plan_tools import PLAN_TOOLS, plan_tool_specs_json
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerGate
-from trippilot.llm_gateway.gates.dialogue_knowledge import DialogueKnowledgeGate
-from trippilot.llm_gateway.gates.dialogue_memory import DialogueMemoryGate
-from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanGate
-from trippilot.llm_gateway.gates.dialogue_sql import DialogueSqlGate
+from trippilot.llm_gateway.gates.dialogue.dialogue_answer import DialogueAnswerGate
+from trippilot.llm_gateway.gates.dialogue.dialogue_knowledge import DialogueKnowledgeGate
+from trippilot.llm_gateway.gates.dialogue.dialogue_memory import DialogueMemoryGate
+from trippilot.llm_gateway.gates.dialogue.dialogue_plan import DialoguePlanGate
+from trippilot.llm_gateway.gates.dialogue.dialogue_sql import DialogueSqlGate
 from trippilot.llm_gateway.gates.place_fact import PlaceFactGate
-from trippilot.llm_gateway.gates.intent import IntentGate
-from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
+from trippilot.llm_gateway.gates.dialogue.intent import IntentGate
+from trippilot.llm_gateway.gates.dialogue.paraphrase import ParaphraseGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker
-from trippilot.llm_gateway.workers.dialogue_intent import DialogueIntentWorker
-from trippilot.llm_gateway.workers.dialogue_knowledge import DialogueKnowledgeWorker
-from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
-from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
-from trippilot.llm_gateway.workers.dialogue_smalltalk import DialogueSmalltalkWorker
-from trippilot.llm_gateway.workers.dialogue_sql import DialogueSqlWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_answer import DialogueAnswerWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_intent import DialogueIntentWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_knowledge import DialogueKnowledgeWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_memory import DialogueMemoryWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_plan import DialoguePlanWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_smalltalk import DialogueSmalltalkWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_sql import DialogueSqlWorker
 from trippilot.llm_gateway.workers.place_fact_lookup import PlaceFactLookupWorker
 from trippilot.orchestrator.dialogue.dialogue_handlers import DayView, HandlerPorts, SlotView, TripInfo, TurnSnapshot
 from trippilot.orchestrator.dialogue.dialogue_interpreter import (

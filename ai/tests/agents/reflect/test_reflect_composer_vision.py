@@ -45,15 +45,15 @@ from trippilot.agents.reflect.composer import (
 from trippilot.agents.reflect.fallback import build_fallback_template
 from trippilot.agents.reflect.highlight_rule import select_highlights
 from trippilot.llm_gateway.config import C1Config, default_fallback_modes
-from trippilot.llm_gateway.gates.photo_highlight import (
+from trippilot.llm_gateway.gates.content.photo_highlight import (
     DEFAULT_HIGHLIGHT_LIMIT,
     PhotoHighlightGate,
 )
-from trippilot.llm_gateway.gates.reflection_template import ReflectionTemplateGate
+from trippilot.llm_gateway.gates.content.reflection_template import ReflectionTemplateGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.photo_highlight import PhotoHighlightWorker
-from trippilot.llm_gateway.workers.reflection_template import ReflectionTemplateWorker
+from trippilot.llm_gateway.workers.content.photo_highlight import PhotoHighlightWorker
+from trippilot.llm_gateway.workers.content.reflection_template import ReflectionTemplateWorker
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent

@@ -20,7 +20,7 @@ from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.kb import KbKind
 from trippilot.domain.llm.llm import CandidatePool
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
-from trippilot.llm_gateway.workers.alternative_selection import (
+from trippilot.llm_gateway.workers.replan.alternative_selection import (
     AlternativeSelectionInput,
     build_alternative_selection_vars,
 )

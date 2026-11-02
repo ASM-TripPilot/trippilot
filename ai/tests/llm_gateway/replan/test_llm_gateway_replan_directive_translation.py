@@ -14,14 +14,14 @@ import pytest
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.llm_gateway.config import C1Config, default_fallback_modes, default_tier_map
-from trippilot.llm_gateway.gates.replan_directive_translation import (
+from trippilot.llm_gateway.gates.replan.replan_directive_translation import (
     DirectiveContext,
     DirectiveTranslation,
     ReplanDirectiveTranslationGate,
 )
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.replan_directive_translation import (
+from trippilot.llm_gateway.workers.replan.replan_directive_translation import (
     DirectiveTranslationInput,
     ReplanDirectiveTranslationWorker,
     build_directive_translation_vars,
@@ -244,6 +244,6 @@ def test_feature_is_registered_in_both_config_maps() -> None:
 def test_max_directives_matches_embedding_path() -> None:
     """두 통로가 다른 상한을 가지면 같은 발화인데 경로에 따라 지시 수가 달라진다."""
     from trippilot.agents.planb.directives import MAX_RESOLVED
-    from trippilot.llm_gateway.workers.replan_directive_translation import MAX_DIRECTIVES
+    from trippilot.llm_gateway.workers.replan.replan_directive_translation import MAX_DIRECTIVES
 
     assert MAX_DIRECTIVES == MAX_RESOLVED

@@ -35,11 +35,11 @@ from trippilot.llm_gateway.config import (
     default_feature_max_tokens,
     default_tier_map,
 )
-from trippilot.llm_gateway.gates.intent import IntentGate
+from trippilot.llm_gateway.gates.dialogue.intent import IntentGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.prompts import inline
-from trippilot.llm_gateway.workers.dialogue_intent import (
+from trippilot.llm_gateway.workers.dialogue.dialogue_intent import (
     DialogueIntentWorker,
     build_dialogue_intent_vars,
     history_lines,

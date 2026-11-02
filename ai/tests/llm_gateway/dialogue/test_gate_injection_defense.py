@@ -35,16 +35,16 @@ import yaml
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.dialogue.intent import Intent
 from trippilot.domain.llm.llm import LlmFeature
-from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
+from trippilot.llm_gateway.gates.replan.alternative_selection import AlternativeSelectionGate
 from trippilot.llm_gateway.gates.base import has_contact_like, has_injection_like
-from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerGate
-from trippilot.llm_gateway.gates.dialogue_memory import DialogueMemoryGate
-from trippilot.llm_gateway.workers.dialogue_answer import fallback_answer_text
-from trippilot.llm_gateway.gates.explanation import ExplanationGate
-from trippilot.llm_gateway.gates.reflection_nudge import ReflectionNudgeGate
-from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
-from trippilot.llm_gateway.gates.reminder_copy import ReminderCopyContext, ReminderCopyGate
-from trippilot.llm_gateway.gates.share_card_copy import (
+from trippilot.llm_gateway.gates.dialogue.dialogue_answer import DialogueAnswerGate
+from trippilot.llm_gateway.gates.dialogue.dialogue_memory import DialogueMemoryGate
+from trippilot.llm_gateway.workers.dialogue.dialogue_answer import fallback_answer_text
+from trippilot.llm_gateway.gates.replan.explanation import ExplanationGate
+from trippilot.llm_gateway.gates.content.reflection_nudge import ReflectionNudgeGate
+from trippilot.llm_gateway.gates.content.reflection_template import _TIME_EXPR
+from trippilot.llm_gateway.gates.content.reminder_copy import ReminderCopyContext, ReminderCopyGate
+from trippilot.llm_gateway.gates.content.share_card_copy import (
     ShareCardCopyContext,
     ShareCardCopyGate,
 )

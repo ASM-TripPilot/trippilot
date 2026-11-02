@@ -23,7 +23,7 @@ from trippilot.api.wiring import DEMO_ANCHOR, build_dev_app, demo_poi_seed
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.llm.llm import LlmFeature, TypedResult
 from trippilot.domain.poi.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
-from trippilot.llm_gateway.gates.replan_request_extraction import (
+from trippilot.llm_gateway.gates.replan.replan_request_extraction import (
     ExtractedCategory,
     ExtractedPlace,
     ExtractedRequest,

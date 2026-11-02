@@ -17,9 +17,9 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta
 
 from trippilot.llm_gateway.gates.base import has_contact_like, has_injection_like
-from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
+from trippilot.llm_gateway.gates.content.reflection_template import _TIME_EXPR
 from trippilot.llm_gateway.prompts import inline
-from trippilot.llm_gateway.workers.dialogue_intent import PROMPT_TURNS, ROLE_LABELS, last_turns
+from trippilot.llm_gateway.workers.dialogue.dialogue_intent import PROMPT_TURNS, ROLE_LABELS, last_turns
 from trippilot.ports.memory_store_port import (
     GIST_KIND,
     SUMMARY_LINE_CHARS,

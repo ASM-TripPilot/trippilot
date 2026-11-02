@@ -21,7 +21,7 @@ from trippilot.domain.common import GeoPoint, PoiId, TraceId
 from trippilot.domain.llm.llm import CandidatePool, ScoredPoi, TypedResult
 from trippilot.domain.persona import BudgetLevel, CompanionType, PersonaSummary
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
-from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
+from trippilot.llm_gateway.workers.preference.preference_cache import CachingScoringWorker
 
 _NOW = dt.datetime(2026, 8, 21, 9, 0, tzinfo=dt.timezone.utc)
 _TRACE = TraceId("t-477")

@@ -67,14 +67,14 @@ class InjectionShadow(Protocol):
     구현: `llm_gateway/adapters/http_injection_shadow.HttpInjectionShadow`(ai/docs/security/injection-classifier-shadow.md)."""
 
     def submit(self, text: str, trace_id: str) -> None: ...
-from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, clock_spans, clock_times
-from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanDraft
-from trippilot.llm_gateway.gates.intent import NULL_INTENT
-from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker, unrepeated
-from trippilot.llm_gateway.workers.dialogue_intent import PROMPT_TURNS, DialogueIntentWorker, last_turns
-from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
-from trippilot.llm_gateway.workers.dialogue_smalltalk import DialogueSmalltalkWorker
-from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
+from trippilot.llm_gateway.gates.dialogue.dialogue_answer import _MAX_FOOTNOTE, clock_spans, clock_times
+from trippilot.llm_gateway.gates.dialogue.dialogue_plan import DialoguePlanDraft
+from trippilot.llm_gateway.gates.dialogue.intent import NULL_INTENT
+from trippilot.llm_gateway.workers.dialogue.dialogue_answer import DialogueAnswerWorker, unrepeated
+from trippilot.llm_gateway.workers.dialogue.dialogue_intent import PROMPT_TURNS, DialogueIntentWorker, last_turns
+from trippilot.llm_gateway.workers.dialogue.dialogue_memory import DialogueMemoryWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_smalltalk import DialogueSmalltalkWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_plan import DialoguePlanWorker
 from trippilot.orchestrator.dialogue.dialogue_handlers import (
     HANDLERS,
     AnswerKind,

@@ -85,7 +85,7 @@ def test_refusal_markers_match_real_router_fallback_reasons() -> None:
     from pathlib import Path
 
     from trippilot.llm_gateway.config import C1Config
-    from trippilot.llm_gateway.gates.intent import IntentGate
+    from trippilot.llm_gateway.gates.dialogue.intent import IntentGate
     from trippilot.llm_gateway.gateway import GatewayFacade
     from trippilot.llm_gateway.prompts import PromptRegistry
     from trippilot.domain.common import TraceId

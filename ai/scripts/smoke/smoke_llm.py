@@ -54,7 +54,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from trippilot.llm_gateway.gates.intent import IntentGate
+from trippilot.llm_gateway.gates.dialogue.intent import IntentGate
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.domain.common import TraceId
 from trippilot.domain.dialogue.intent import ROUTABLE_INTENTS

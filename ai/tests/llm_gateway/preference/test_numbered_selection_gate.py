@@ -15,8 +15,8 @@ from trippilot.domain.llm.llm import CandidatePool, LlmFeature
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.persona import PersonaSummary
 from trippilot.domain.common import BudgetLevel
-from trippilot.llm_gateway.gates.numbered_selection import NumberedScoringGate, NumberedSelectionGate, numbered
-from trippilot.llm_gateway.workers.preference import build_prompt_vars
+from trippilot.llm_gateway.gates.preference.numbered_selection import NumberedScoringGate, NumberedSelectionGate, numbered
+from trippilot.llm_gateway.workers.preference.preference import build_prompt_vars
 
 _NOW = datetime(2026, 10, 21, tzinfo=timezone.utc)
 _IDS = ("c-uuid-3", "a-uuid-1", "b-uuid-2")  # 정렬하면 a, b, c

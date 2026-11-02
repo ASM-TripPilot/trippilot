@@ -63,8 +63,8 @@ from trippilot.domain.llm.llm import CandidatePool, LlmFeature  # noqa: E402
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory  # noqa: E402
 from trippilot.domain.dialogue.trigger import TriggerKind, TriggerParams  # noqa: E402
 from trippilot.poi_curation.pool_builder import restrict_pool_to_target_role  # noqa: E402
-from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate  # noqa: E402
-from trippilot.llm_gateway.workers.alternative_selection import (  # noqa: E402
+from trippilot.llm_gateway.gates.replan.alternative_selection import AlternativeSelectionGate  # noqa: E402
+from trippilot.llm_gateway.workers.replan.alternative_selection import (  # noqa: E402
     AlternativeSelectionInput, AlternativeSelectionWorker,
 )
 from trippilot.poi_curation.chunking import chunk_corpus, load_chunk_vectors, vectors_path  # noqa: E402

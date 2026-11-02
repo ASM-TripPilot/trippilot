@@ -219,9 +219,9 @@ def _run_agent(clock: FakeClock, poi_db: InMemoryPoi):
     from trippilot.agents.schedule.agent import ScheduleAgent, ScheduleTask
     from trippilot.agents.schedule.budget import OrchestratorConfig, allocate
     from trippilot.agents.schedule.outcome import candidates_report
-    from trippilot.llm_gateway.gates.scoring import ClosedSetGate
+    from trippilot.llm_gateway.gates.preference.scoring import ClosedSetGate
     from trippilot.llm_gateway.gateway import GatewayFacade
-    from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
+    from trippilot.llm_gateway.workers.preference.preference import PreferenceScoringWorker
     from tests.agents.schedule.test_schedule_agent import _pool
     from tests.orchestrator.schedule.test_schedule_coordinator import (
         _DAY1, _KST as KST, _NOW, _TRACE_ID, _AssemblyProvider, _Renderer, _Sink,

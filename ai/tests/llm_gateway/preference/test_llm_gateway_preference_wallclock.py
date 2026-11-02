@@ -28,10 +28,10 @@ import pytest
 
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver
-from trippilot.llm_gateway.gates.numbered_selection import NumberedScoringGate
+from trippilot.llm_gateway.gates.preference.numbered_selection import NumberedScoringGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.preference import (
+from trippilot.llm_gateway.workers.preference.preference import (
     PreferenceScoringWorker,
     adaptive_chunk_size,
 )

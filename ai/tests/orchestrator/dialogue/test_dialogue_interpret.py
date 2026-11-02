@@ -32,7 +32,7 @@ from trippilot.domain.dialogue.dialogue import CLARIFY_QUESTIONS, specs_of
 from trippilot.domain.dialogue.intent import ROUTABLE_INTENTS, Intent
 from trippilot.domain.llm.llm import ModelTier
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.intent import IntentGate
+from trippilot.llm_gateway.gates.dialogue.intent import IntentGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.orchestrator.dialogue.dialogue_interpreter import (

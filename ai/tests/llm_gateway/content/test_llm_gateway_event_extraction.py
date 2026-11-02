@@ -14,13 +14,13 @@ from pathlib import Path
 import pytest
 
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.event_extraction import (
+from trippilot.llm_gateway.gates.content.event_extraction import (
     EventExtractionContext,
     EventExtractionGate,
 )
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.event_extraction import (
+from trippilot.llm_gateway.workers.content.event_extraction import (
     EventExtractionWorker,
     build_event_extraction_vars,
 )

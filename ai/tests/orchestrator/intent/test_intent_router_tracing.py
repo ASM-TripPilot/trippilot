@@ -22,7 +22,7 @@ from langsmith import traceable
 from langsmith.run_helpers import get_current_run_tree, tracing_context
 
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
+from trippilot.llm_gateway.gates.dialogue.paraphrase import ParaphraseGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.domain.common import TraceId

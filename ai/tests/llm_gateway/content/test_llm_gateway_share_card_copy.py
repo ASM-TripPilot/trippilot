@@ -28,7 +28,7 @@ from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.share_card_copy import (
+from trippilot.llm_gateway.gates.content.share_card_copy import (
     CAPTION_MAX_LENGTH,
     _display_length,
     HASHTAG_MAX_COUNT,
@@ -37,7 +37,7 @@ from trippilot.llm_gateway.gates.share_card_copy import (
 )
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.share_card_copy import (
+from trippilot.llm_gateway.workers.content.share_card_copy import (
     ShareCardCopyWorker,
     build_share_card_copy_vars,
     fallback_share_card_copy,
