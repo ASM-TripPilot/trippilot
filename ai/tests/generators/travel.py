@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from hypothesis import strategies as st
 
-from trippilot.domain.travel import TravelEstimate
+from trippilot.domain.itinerary.travel import TravelEstimate
 
 
 @st.composite

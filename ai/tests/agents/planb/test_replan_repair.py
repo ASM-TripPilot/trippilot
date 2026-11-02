@@ -18,8 +18,8 @@ from trippilot.agents.planb.composition import REPAIR_LABELS
 from trippilot.api.wiring import DEMO_ANCHOR, StaticPoiDb, build_dev_app, demo_poi_seed
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.itinerary import SolveMode
-from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.domain.itinerary.itinerary import SolveMode
+from trippilot.domain.poi.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 from trippilot.llm_gateway.gates.replan_request_extraction import ExtractedPlace, ExtractedRequest
 from trippilot.ports.llm_port import LlmRequest, LlmResponse
 

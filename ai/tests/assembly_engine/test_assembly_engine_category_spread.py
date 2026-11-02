@@ -38,9 +38,9 @@ from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
 from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId, ScheduleId, TransportMode
-from trippilot.domain.itinerary import ItineraryProblem, TimeWindow
-from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.itinerary.itinerary import ItineraryProblem, TimeWindow
+from trippilot.domain.llm.llm import ScoredPoi
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 
 from tests.generators.assembly import skewed_category_setups
 

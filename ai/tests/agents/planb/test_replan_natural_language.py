@@ -32,8 +32,8 @@ from trippilot.agents.schedule.agent import (
 from trippilot.api.wiring import build_dev_app
 from trippilot.assembly_engine.scorer import DIRECTIVE_STEP, near_fit
 from trippilot.domain.common import GeoPoint, PoiId, Rejection, RejectionKind
-from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.poi import OpenHour, PoiCategory
+from trippilot.domain.llm.llm import ScoredPoi
+from trippilot.domain.poi.poi import OpenHour, PoiCategory
 from trippilot.llm_gateway.gates.replan_directive_translation import DirectiveTranslation
 from trippilot.llm_gateway.gates.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade

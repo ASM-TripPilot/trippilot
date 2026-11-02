@@ -61,8 +61,8 @@ from trippilot.agents.schedule.agent import (
 from trippilot.agents.schedule.budget import OrchestratorConfig, allocate
 from trippilot.agents.schedule.outcome import Degradation, GenerationStatus
 from trippilot.domain.common import PoiId
-from trippilot.domain.itinerary import FixedBlock, TimeWindow
-from trippilot.domain.llm import CandidatePool, ScoredPoi
+from trippilot.domain.itinerary.itinerary import FixedBlock, TimeWindow
+from trippilot.domain.llm.llm import CandidatePool, ScoredPoi
 from trippilot.domain.observability import FallbackEvent
 from trippilot.llm_gateway.gates.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade

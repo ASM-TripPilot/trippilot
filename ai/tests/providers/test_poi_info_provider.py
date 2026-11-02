@@ -30,8 +30,8 @@ from tests.generators.poi import pois
 from trippilot.agents.planb import composition
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.freshness import FreshnessMeta, ProviderKind, ProviderStatus
-from trippilot.domain.intent import Intent
-from trippilot.domain.poi import (
+from trippilot.domain.dialogue.intent import Intent
+from trippilot.domain.poi.poi import (
     NIGHTLIFE_TAG,
     DataQuality,
     OpenHour,

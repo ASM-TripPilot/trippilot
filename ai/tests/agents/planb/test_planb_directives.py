@@ -27,7 +27,7 @@ from trippilot.agents.planb.directives import (
 )
 from trippilot.agents.planb.kb_retrieval import KbLoadError, index_documents
 from trippilot.domain.kb import KbKind
-from trippilot.domain.poi import PoiCategory
+from trippilot.domain.poi.poi import PoiCategory
 
 from tests.fakes.in_memory_vector_store import InMemoryVectorStore
 

@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature
+from trippilot.domain.llm.llm import LlmFeature
 from trippilot.domain.observability import GateDropEvent
 from trippilot.llm_gateway.gates.base import (
     GateOutcome,

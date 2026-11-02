@@ -18,7 +18,7 @@ from tests.fakes.fake_llm import FakeLlm
 from trippilot.api.wiring import StaticPoiDb, build_dev_app
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 
 D1, D2, D3 = "2026-10-24", "2026-10-25", "2026-10-26"  # 토·일·월
 JONGNO, GANGNAM = GeoPoint(37.5703, 126.9910), GeoPoint(37.4979, 127.0276)  # 다시 짜기 동네 표(KNOWN_AREAS)와 같은 중심

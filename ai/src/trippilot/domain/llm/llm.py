@@ -15,7 +15,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.poi import Poi
+from trippilot.domain.poi.poi import Poi
 from trippilot.domain.serialization import from_iso, to_iso
 
 if TYPE_CHECKING:

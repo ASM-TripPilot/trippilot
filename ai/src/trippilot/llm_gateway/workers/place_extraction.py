@@ -11,7 +11,7 @@ from datetime import datetime
 
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature, TypedResult
+from trippilot.domain.llm.llm import LlmFeature, TypedResult
 
 
 def build_extraction_vars(document: str, region: str, category_hint: str) -> dict[str, str]:

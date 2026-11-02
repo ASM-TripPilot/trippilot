@@ -50,8 +50,8 @@ from local_embedding import build_local_embedding  # noqa: E402
 from smoke_llm import _build_adapter  # noqa: E402
 from tests.fakes.in_memory_trace import InMemoryTrace  # noqa: E402
 from trippilot.domain.common import TraceId  # noqa: E402
-from trippilot.domain.intent import Intent  # noqa: E402
-from trippilot.domain.llm import LlmFeature, ModelTier  # noqa: E402
+from trippilot.domain.dialogue.intent import Intent  # noqa: E402
+from trippilot.domain.llm.llm import LlmFeature, ModelTier  # noqa: E402
 from trippilot.llm_gateway.config import C1Config  # noqa: E402
 from trippilot.llm_gateway.feature_model_env import ENV_VAR, feature_models_from_env  # noqa: E402
 from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate  # noqa: E402

@@ -14,7 +14,7 @@ import json
 import sys
 from pathlib import Path
 
-from trippilot.domain.intent import Intent, IntentMatch, MatchRoute
+from trippilot.domain.dialogue.intent import Intent, IntentMatch, MatchRoute
 from trippilot.orchestrator.shadow_probe import ShadowRecord, ShadowSide
 
 _spec = importlib.util.spec_from_file_location(

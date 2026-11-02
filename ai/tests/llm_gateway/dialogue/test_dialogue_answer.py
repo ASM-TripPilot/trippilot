@@ -27,8 +27,8 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.intent import Intent
-from trippilot.domain.llm import LlmFeature, ModelTier
+from trippilot.domain.dialogue.intent import Intent
+from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.base import has_contact_like
 from trippilot.llm_gateway.gates.dialogue_answer import (

@@ -44,8 +44,8 @@ from trippilot.domain.edit import (
     EditTranslation,
     resolve_apply_mode,
 )
-from trippilot.domain.llm import CandidatePool, LlmFeature, ModelTier
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature, ModelTier
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from tests.fakes.fake_llm import FailingLlm, FakeLlm
 from tests.fakes.in_memory_trace import InMemoryTrace
 from tests.generators.edit import edit_commands

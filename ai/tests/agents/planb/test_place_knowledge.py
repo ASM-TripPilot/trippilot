@@ -18,8 +18,8 @@ from trippilot.agents.planb.kb_retrieval import index_documents
 from trippilot.agents.planb.place_knowledge import fetch_place_knowledge
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.kb import KbKind
-from trippilot.domain.llm import CandidatePool
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.llm.llm import CandidatePool
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.llm_gateway.workers.alternative_selection import (
     AlternativeSelectionInput,
     build_alternative_selection_vars,

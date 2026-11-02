@@ -16,10 +16,10 @@ from typing import Mapping
 from trippilot.agents.schedule.budget import DeadlineBudget
 from trippilot.assembly_engine.parking import ParkingPlan
 from trippilot.domain.common import PoiId
-from trippilot.domain.itinerary import ItinerarySolution
-from trippilot.domain.llm import CandidatePool, PoiExplanation
+from trippilot.domain.itinerary.itinerary import ItinerarySolution
+from trippilot.domain.llm.llm import CandidatePool, PoiExplanation
 from trippilot.domain.persona import PersonaSummary, TasteTag
-from trippilot.domain.poi import Poi, PoiCategory
+from trippilot.domain.poi.poi import Poi, PoiCategory
 from trippilot.ports.place_existence_port import ExistenceVerdict
 
 

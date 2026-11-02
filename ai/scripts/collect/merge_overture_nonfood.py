@@ -50,7 +50,7 @@ sys.path.insert(0, str(_AI / "src"))
 sys.path.insert(0, str(_AI / "scripts" / "collect"))
 
 from trippilot.domain.common import GeoPoint  # noqa: E402
-from trippilot.domain.poi import PoiCategory  # noqa: E402
+from trippilot.domain.poi.poi import PoiCategory  # noqa: E402
 from trippilot.poi_curation.sourcing.collection_gate import SourcingCandidate  # noqa: E402
 from trippilot.poi_curation.sourcing.localdata import (  # noqa: E402
     gate_against_tourapi,

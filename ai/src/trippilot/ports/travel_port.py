@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from trippilot.domain.common import GeoPoint, TransportMode
-from trippilot.domain.travel import TravelEstimate
+from trippilot.domain.itinerary.travel import TravelEstimate
 
 
 class TravelPort(Protocol):

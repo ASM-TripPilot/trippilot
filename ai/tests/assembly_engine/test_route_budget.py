@@ -36,8 +36,8 @@ from trippilot.api.wiring import MonotonicClock, _distance_ranges, _render_dista
 from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.travel import WALKED_SOURCE, TravelEstimator
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TransportMode
-from trippilot.domain.itinerary import DaySolution, ItinerarySolution, SolveMode, VisitSlot
-from trippilot.domain.travel import TravelEstimate
+from trippilot.domain.itinerary.itinerary import DaySolution, ItinerarySolution, SolveMode, VisitSlot
+from trippilot.domain.itinerary.travel import TravelEstimate
 from trippilot.ports.travel_time_port import TravelTimeError
 
 EST = TravelEstimator(AssemblyConfig())

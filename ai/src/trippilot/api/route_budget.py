@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from trippilot.domain.common import GeoPoint, TransportMode
-from trippilot.domain.travel import TravelEstimate
+from trippilot.domain.itinerary.travel import TravelEstimate
 from trippilot.ports.travel_port import TravelPort
 
 POST_ASSEMBLY_CAP_MS = 1_500   # 시한 미전송(600s)에서도 이 이상 안 쓴다 — ②′ 실재 검증과 같은 값

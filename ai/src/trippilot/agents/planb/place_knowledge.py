@@ -37,7 +37,7 @@ from collections.abc import Mapping, Sequence
 
 from trippilot.agents.planb.kb_retrieval import retrieve
 from trippilot.domain.kb import KbKind
-from trippilot.domain.poi import Poi
+from trippilot.domain.poi.poi import Poi
 from trippilot.poi_curation import place_fallback
 from trippilot.poi_curation.chunking import chunk_ids, split_sentences
 from trippilot.poi_curation.place_docs import SOURCE_OVERVIEW, SOURCE_WIKI, SOURCES

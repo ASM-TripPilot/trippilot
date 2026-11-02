@@ -26,7 +26,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from trippilot.domain.poi import PoiCategory
+from trippilot.domain.poi.poi import PoiCategory
 from trippilot.poi_curation.sourcing.localdata import (
     ADOPTED_TYPES,
     DROP_FRANCHISE,

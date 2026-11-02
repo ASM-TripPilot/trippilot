@@ -17,12 +17,12 @@ from typing import Mapping
 
 from trippilot.assembly_engine.constraints import check_all
 from trippilot.domain.common import PoiId
-from trippilot.domain.itinerary import (
+from trippilot.domain.itinerary.itinerary import (
     ItineraryProblem,
     ItinerarySolution,
     QualityScore,
 )
-from trippilot.domain.poi import Poi
+from trippilot.domain.poi.poi import Poi
 
 # ── 초기 상수 (캘리브레이션은 후속 — O-SOLVER) ──────────────────
 _W_PREFERENCE = 0.4       # composite 가중치: 선호 적합

@@ -71,15 +71,15 @@ from trippilot.domain.common import TraceId
 from trippilot.orchestrator.arguments import extract_arguments  # noqa: I001
 # 1·2차 추출도 3차 게이트와 **같은 표**(`asked_specs_of`)를 본다 — 묻지 않는 인자(주인이 핸들러인
 # `EDIT_SCHEDULE.op`, 받을 칸이 없는 것)가 1·2차로만 새어 나가지 않게 (실측 2026-10-14).
-from trippilot.domain.dialogue import asked_specs_of, tool_specs_json
-from trippilot.domain.intent import (
+from trippilot.domain.dialogue.dialogue import asked_specs_of, tool_specs_json
+from trippilot.domain.dialogue.intent import (
     ROUTABLE_INTENTS,
     Intent,
     IntentDraft,
     IntentMatch,
     MatchRoute,
 )
-from trippilot.domain.llm import LlmFeature
+from trippilot.domain.llm.llm import LlmFeature
 from trippilot.orchestrator.question_bank import BANK_COLLECTION
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.vector_store_port import VectorStorePort

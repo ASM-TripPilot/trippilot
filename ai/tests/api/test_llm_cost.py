@@ -32,7 +32,7 @@ from trippilot.api.middleware import MiddlewareSettings, parse_wire_meta
 from trippilot.api.wiring import LoggingTrace
 from trippilot.domain.common import TraceId
 from trippilot.domain.observability import FallbackEvent, LlmCallRecord
-from trippilot.domain.prompt import PromptRef
+from trippilot.domain.llm.prompt import PromptRef
 
 from tests.api.test_api_contract import BACKEND_REQUEST, FakeOrchestrator, make_outcome
 from tests.api.test_api_replan import _body as replan_body

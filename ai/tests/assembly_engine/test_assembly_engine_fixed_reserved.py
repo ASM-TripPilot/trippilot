@@ -26,9 +26,9 @@ from trippilot.domain.common import (
     ScheduleId,
     TransportMode,
 )
-from trippilot.domain.itinerary import FixedBlock, ItineraryProblem, TimeWindow
-from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.itinerary.itinerary import FixedBlock, ItineraryProblem, TimeWindow
+from trippilot.domain.llm.llm import ScoredPoi
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 
 _KST = timezone(timedelta(hours=9))
 _CFG = AssemblyConfig(or_tools_limit_ms=1000, or_tools_min_ms=50)

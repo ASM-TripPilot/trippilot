@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 from trippilot.agents.planb.composition import recent_change_lines
 from trippilot.api.wiring import build_dev_app
 from trippilot.domain.common import PoiId
-from trippilot.domain.llm import TypedResult
+from trippilot.domain.llm.llm import TypedResult
 from trippilot.llm_gateway.workers.replan_composition import build_compose_vars
 
 from tests.api.test_api_replan_wired import _DIRECTIVES, _body

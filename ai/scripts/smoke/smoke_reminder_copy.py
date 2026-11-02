@@ -20,7 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature
+from trippilot.domain.llm.llm import LlmFeature
 from trippilot.llm_gateway.gates.reminder_copy import ReminderCopyContext, ReminderCopyGate
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.reminder_copy import (

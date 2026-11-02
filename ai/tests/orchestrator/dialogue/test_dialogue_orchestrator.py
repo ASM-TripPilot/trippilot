@@ -46,12 +46,12 @@ from tests.fakes.fake_llm import FakeLlm, FeatureRoutingLlm
 from tests.fakes.in_memory_trace import InMemoryTrace
 from trippilot.agents.adapters.memory_memory_store import InMemoryDialogueMemoryStore
 from trippilot.domain.common import GeoPoint, TraceId
-from trippilot.domain.dialogue import CLARIFY_QUESTIONS
+from trippilot.domain.dialogue.dialogue import CLARIFY_QUESTIONS
 from trippilot.domain.freshness import FreshnessMeta, InfoPacket, ProviderKind, ProviderStatus
-from trippilot.domain.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent, IntentMatch, MatchRoute
-from trippilot.domain.llm import LlmFeature, ModelTier
+from trippilot.domain.dialogue.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent, IntentMatch, MatchRoute
+from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent
-from trippilot.domain.prompt import PromptRef
+from trippilot.domain.llm.prompt import PromptRef
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.base import has_contact_like
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, _MAX_LENGTH, DialogueAnswerGate
@@ -103,7 +103,7 @@ from trippilot.llm_gateway.workers.dialogue_smalltalk import DialogueSmalltalkWo
 from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent
 from trippilot.llm_gateway.gates.dialogue_knowledge import DialogueKnowledgeGate
 from trippilot.llm_gateway.workers.dialogue_knowledge import DialogueKnowledgeWorker
-from trippilot.domain.plan_tools import plan_tool_specs_json
+from trippilot.domain.dialogue.plan_tools import plan_tool_specs_json
 from trippilot.orchestrator.dialogue_plan import plan_tools
 from trippilot.orchestrator.intent_eval import is_refusal
 from trippilot.orchestrator.shadow_probe import ShadowCountingLlm, ShadowIntentProbe
@@ -1751,8 +1751,8 @@ class _ExplorePool:
 
     def build(self, request, now):
         from trippilot.domain.common import PoiId
-        from trippilot.domain.llm import CandidatePool
-        from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+        from trippilot.domain.llm.llm import CandidatePool
+        from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 
         pois = tuple(Poi(poi_id=PoiId(str(uuid.uuid5(uuid.NAMESPACE_DNS, n))), name=n, category=c, coord=request.anchor,
                          open_hours=(), avg_cost=None, rating=None, quality=DataQuality.FULL, source=PoiSource.SEED,
@@ -1817,7 +1817,7 @@ class _RecordingPool(_ExplorePool):
 def test_explore_follow_up_turn_keeps_the_area_from_recent_turns_not_the_itinerary() -> None:
     """"더 알려줘"에 분류가 지역을 비워도 앞 요청(홍대·이태원 사이)을 잇는다 — 일정(제주) 근처가 아니다(2026-10-21 테스트 화면).
     이미 보인 곳은 뺀다 — 최근 대화가 핸들러까지 간다."""
-    from trippilot.domain.region_centers import region_center
+    from trippilot.domain.poi.region_centers import region_center
 
     answer = json.dumps({"text": "흰여울 카페도 가 볼 만해요.", "footnote": None}, ensure_ascii=False)
     pool = _RecordingPool()
@@ -1972,7 +1972,7 @@ def test_a_deterministic_answer_does_not_repeat_the_last_assistant_line_word_for
     """같은 넘기기·감사 문장이 연달아 나가면 같은 뜻의 다른 말로 — 버튼은 그대로(2026-10-22 "계속 같은 말만")."""
     from trippilot.llm_gateway.workers.dialogue_answer import _ANSWER_TEXT, unrepeated
     from trippilot.orchestrator.dialogue_orchestrator import THANKS_TEXT, _CLOSER_VARIANTS
-    from trippilot.domain.intent import Intent
+    from trippilot.domain.dialogue.intent import Intent
 
     style = _ANSWER_TEXT[Intent.STYLE_ANALYSIS]
     assert unrepeated(style, []) == style  # 처음엔 원문(BE 화면 문장과 한 벌)

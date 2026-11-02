@@ -18,7 +18,7 @@ from datetime import date
 from typing import Literal, Protocol
 
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.poi import OpenHour, Poi, PoiCategory
+from trippilot.domain.poi.poi import OpenHour, Poi, PoiCategory
 
 MissReason = Literal["not_found", "mapping_failed"]
 

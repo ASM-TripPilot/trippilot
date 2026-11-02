@@ -27,7 +27,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.domain.common import GeoPoint
-from trippilot.domain.poi import DataQuality, PoiCategory
+from trippilot.domain.poi.poi import DataQuality, PoiCategory
 from trippilot.poi_curation.sourcing.collection_gate import (
     DROP_POLICY_NON_TRAVEL,
     CollectionGate,

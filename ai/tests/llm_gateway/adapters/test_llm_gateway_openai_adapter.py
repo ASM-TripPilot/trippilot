@@ -14,7 +14,7 @@ import openai
 import pytest
 
 from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter
-from trippilot.domain.prompt import PromptRef
+from trippilot.domain.llm.prompt import PromptRef
 from trippilot.ports.llm_port import LlmRequest, LlmTimeoutError
 
 _REQUEST = LlmRequest(

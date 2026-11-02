@@ -14,7 +14,7 @@ import pytest
 import yaml
 
 from trippilot.agents.adapters.memory_vector_store import InMemoryVectorStore
-from trippilot.domain.intent import Intent
+from trippilot.domain.dialogue.intent import Intent
 from trippilot.orchestrator.dialogue_interpreter import BankIndex
 from trippilot.orchestrator.question_bank import (
     BANK_COLLECTION,

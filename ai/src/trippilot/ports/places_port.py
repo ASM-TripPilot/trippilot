@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from trippilot.domain.common import GeoPoint
-from trippilot.domain.poi import PoiCategory, SourcedPoi
+from trippilot.domain.poi.poi import PoiCategory, SourcedPoi
 
 
 class PlacesPort(Protocol):

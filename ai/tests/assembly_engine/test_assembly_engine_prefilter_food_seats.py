@@ -37,9 +37,9 @@ from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import _PREFILTER_TOP_K, OrToolsAssembler
 from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId, ScheduleId, TransportMode
-from trippilot.domain.itinerary import ItineraryProblem, SolveMode, TimeWindow
-from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.poi import counts_as_food, DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.domain.itinerary.itinerary import ItineraryProblem, SolveMode, TimeWindow
+from trippilot.domain.llm.llm import ScoredPoi
+from trippilot.domain.poi.poi import counts_as_food, DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 
 _KST = timezone(timedelta(hours=9))
 _DAY = date(2026, 8, 5)                 # 수요일 (weekday 2)

@@ -23,10 +23,10 @@ from datetime import date, datetime, tzinfo
 
 from trippilot.api import schemas
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.event import EventInfo
+from trippilot.domain.itinerary.event import EventInfo
 from trippilot.domain.freshness import ProviderKind, ProviderStatus
-from trippilot.domain.intent import Intent
-from trippilot.domain.poi import Poi
+from trippilot.domain.dialogue.intent import Intent
+from trippilot.domain.poi.poi import Poi
 from trippilot.orchestrator.info_collector import InfoCollector
 from trippilot.orchestrator.opportunity import NEAR_KM, Opportunity, find_opportunities
 from trippilot.ports.holiday_calendar_port import HolidaySource

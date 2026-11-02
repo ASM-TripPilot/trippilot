@@ -20,7 +20,7 @@ from trippilot.assembly_engine.constraints import check_all
 from trippilot.assembly_engine.fallback_assembler import placed_fixed_blocks
 from trippilot.assembly_engine.repair import repair
 from trippilot.domain.common import PoiId, TraceId
-from trippilot.domain.itinerary import (
+from trippilot.domain.itinerary.itinerary import (
     DaySolution,
     ItineraryProblem,
     ItinerarySolution,
@@ -28,8 +28,8 @@ from trippilot.domain.itinerary import (
     VisitSlot,
 )
 from trippilot.domain.observability import GateDropEvent, LlmCallRecord
-from trippilot.domain.poi import Poi
-from trippilot.domain.prompt import PromptRef
+from trippilot.domain.poi.poi import Poi
+from trippilot.domain.llm.prompt import PromptRef
 from trippilot.llm_gateway.gates.base import strip_code_fence
 from trippilot.ports.llm_port import LlmPort, LlmRequest
 

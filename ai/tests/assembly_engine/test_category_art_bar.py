@@ -13,7 +13,7 @@ from trippilot.assembly_engine.config import RAIN_INDOOR, RAIN_OUTDOOR, STAY_DEF
 from trippilot.assembly_engine.scorer import CATEGORY_WEIGHT
 from trippilot.domain.common import BudgetLevel
 from trippilot.domain.persona import PersonaSummary, TasteTag
-from trippilot.domain.poi import PoiCategory
+from trippilot.domain.poi.poi import PoiCategory
 from trippilot.orchestrator import dialogue_handlers as dh
 
 

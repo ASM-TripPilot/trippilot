@@ -25,9 +25,9 @@ from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.domain.common import TraceId
-from trippilot.domain.dialogue import specs_of, tool_specs, tool_specs_json
-from trippilot.domain.intent import ROUTABLE_INTENTS, Intent, IntentDraft, MatchRoute
-from trippilot.domain.llm import LlmFeature, ModelTier
+from trippilot.domain.dialogue.dialogue import specs_of, tool_specs, tool_specs_json
+from trippilot.domain.dialogue.intent import ROUTABLE_INTENTS, Intent, IntentDraft, MatchRoute
+from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent, GateDropEvent, LlmCallRecord
 from trippilot.orchestrator.intent_router import IntentRouter
 from trippilot.orchestrator.question_bank import BANK_COLLECTION

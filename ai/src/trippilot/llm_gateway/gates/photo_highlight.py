@@ -24,7 +24,7 @@ from datetime import datetime
 
 from trippilot.llm_gateway.gates.base import GateOutcome, empty_result_error, _load_json_object
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature
+from trippilot.domain.llm.llm import LlmFeature
 from trippilot.domain.observability import GateDropEvent
 from trippilot.domain.reflection import PhotoId
 

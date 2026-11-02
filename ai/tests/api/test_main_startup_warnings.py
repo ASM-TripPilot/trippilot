@@ -101,7 +101,7 @@ def _infos(monkeypatch, caplog, *, feature_models: str) -> list[str]:
 
 def test_assignment_count_and_missing_features_are_logged_once(monkeypatch, caplog):
     """새 feature 가 들어왔는데 시크릿 배정이 안 따라오면 미배정 목록에 이름이 보인다."""
-    from trippilot.domain.llm import LlmFeature
+    from trippilot.domain.llm.llm import LlmFeature
 
     [line] = _infos(monkeypatch, caplog,
                     feature_models="ALTERNATIVE_SELECTION=m1,INTENT=m2")
@@ -110,7 +110,7 @@ def test_assignment_count_and_missing_features_are_logged_once(monkeypatch, capl
 
 
 def test_full_assignment_logs_no_missing_list(monkeypatch, caplog):
-    from trippilot.domain.llm import LlmFeature
+    from trippilot.domain.llm.llm import LlmFeature
 
     everything = ",".join(f"{f.value}=m" for f in LlmFeature)
     [line] = _infos(monkeypatch, caplog, feature_models=everything)

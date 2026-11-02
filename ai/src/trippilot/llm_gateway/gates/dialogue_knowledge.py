@@ -25,7 +25,7 @@ import re
 from datetime import datetime
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import CandidatePool, LlmFeature
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature
 from trippilot.domain.observability import GateDropEvent
 from trippilot.llm_gateway.gates.base import GateOutcome, empty_result_error, strip_code_fence
 from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerGate

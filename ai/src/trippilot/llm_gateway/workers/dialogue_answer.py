@@ -20,8 +20,8 @@ from datetime import datetime
 from typing import Protocol
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.intent import Intent
-from trippilot.domain.llm import LlmFeature, TypedResult
+from trippilot.domain.dialogue.intent import Intent
+from trippilot.domain.llm.llm import LlmFeature, TypedResult
 from trippilot.llm_gateway.gates.base import has_contact_like, has_injection_like
 from trippilot.llm_gateway.gates.dialogue_answer import _DURATION_EN
 from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR

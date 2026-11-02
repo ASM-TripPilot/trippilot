@@ -33,8 +33,8 @@ import pytest
 import yaml
 
 from trippilot.domain.common import PoiId, TraceId
-from trippilot.domain.intent import Intent
-from trippilot.domain.llm import LlmFeature
+from trippilot.domain.dialogue.intent import Intent
+from trippilot.domain.llm.llm import LlmFeature
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
 from trippilot.llm_gateway.gates.base import has_contact_like, has_injection_like
 from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerGate

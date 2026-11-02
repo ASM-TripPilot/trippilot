@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature, ModelTier
+from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.llm_gateway.config import C1Config, default_fallback_modes, default_tier_map
 from trippilot.llm_gateway.gates.replan_directive_translation import (
     DirectiveContext,

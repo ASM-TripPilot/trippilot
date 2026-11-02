@@ -20,10 +20,10 @@ from trippilot.domain.edit import (
     EditOp,
     resolve_apply_mode,
 )
-from trippilot.domain.evals import EvalCase, EvalRun, EvalScore
+from trippilot.domain.llm.evals import EvalCase, EvalRun, EvalScore
 from trippilot.domain.execution import AgentKind, ExecutionPlan
-from trippilot.domain.poi import PoiCategory, SourcedPoi
-from trippilot.domain.trigger import TriggerEvalResult, TriggerParams
+from trippilot.domain.poi.poi import PoiCategory, SourcedPoi
+from trippilot.domain.dialogue.trigger import TriggerEvalResult, TriggerParams
 
 from tests.fakes.fake_places import FakePlaces
 from tests.fakes.in_memory_cache import InMemoryCache

@@ -16,9 +16,9 @@ from trippilot.agents.schedule.outcome import (
     candidates_report,
 )
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId
-from trippilot.domain.llm import CandidatePool
+from trippilot.domain.llm.llm import CandidatePool
 from trippilot.domain.persona import ACTIVITY_LABELS, CUISINE_LABELS, PersonaSummary, TasteTag
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 
 _NOW = datetime(2026, 10, 2, 9, 0, tzinfo=timezone(timedelta(hours=9)))
 _BOUNDARY = tuple(c for c in PoiCategory if c is not PoiCategory.STAY)

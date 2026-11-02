@@ -84,17 +84,17 @@ from trippilot.domain.common import (
     RejectionKind,
 )
 from trippilot.domain.context import PermissionDeniedError, Principal, ResourceRef
-from trippilot.domain.itinerary import (
+from trippilot.domain.itinerary.itinerary import (
     FixedBlock,
     ItineraryProblem,
     ItinerarySolution,
     RequiredVisit,
     TimeWindow,
 )
-from trippilot.domain.llm import CandidatePool, PoiExplanation, ScoredPoi
+from trippilot.domain.llm.llm import CandidatePool, PoiExplanation, ScoredPoi
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.persona import PersonaSummary
-from trippilot.domain.poi import NIGHTLIFE_TAG, HolidayCalendar, OpenHour, Poi, PoiCategory, open_windows_on
+from trippilot.domain.poi.poi import NIGHTLIFE_TAG, HolidayCalendar, OpenHour, Poi, PoiCategory, open_windows_on
 from trippilot.llm_gateway.workers.alternative_explanation import (
     AlternativeExplanationWorker,
 )

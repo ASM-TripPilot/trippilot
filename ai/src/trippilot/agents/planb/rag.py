@@ -50,11 +50,11 @@ from trippilot.llm_gateway.workers.alternative_selection import (
 from trippilot.llm_gateway.workers.reminder_copy import _CATEGORY_LABELS
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.kb import KbHit, KbKind
-from trippilot.domain.llm import AlternativePick, CandidatePool, ScoredPoi
+from trippilot.domain.llm.llm import AlternativePick, CandidatePool, ScoredPoi
 from trippilot.domain.persona import PersonaSummary
-from trippilot.domain.poi import Poi, PoiCategory, reputation_bonus
-from trippilot.domain.theme_tags import themes_in
-from trippilot.domain.trigger import TriggerParams
+from trippilot.domain.poi.poi import Poi, PoiCategory, reputation_bonus
+from trippilot.domain.poi.theme_tags import themes_in
+from trippilot.domain.dialogue.trigger import TriggerParams
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.vector_store_port import VectorStorePort
 from trippilot.assembly_engine.config import RAIN_OUTDOOR

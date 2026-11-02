@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from trippilot.domain.itinerary import ItineraryProblem, ItinerarySolution
+from trippilot.domain.itinerary.itinerary import ItineraryProblem, ItinerarySolution
 
 
 class FixedAssembler:

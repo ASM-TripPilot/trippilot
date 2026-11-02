@@ -40,7 +40,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from trippilot.domain.common import PoiId
-from trippilot.domain.poi import OpenHour
+from trippilot.domain.poi.poi import OpenHour
 
 
 @dataclass(frozen=True, slots=True)

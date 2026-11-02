@@ -34,14 +34,14 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.dialogue import (
+from trippilot.domain.dialogue.dialogue import (
     CLARIFY_QUESTIONS,
     ArgumentKind,
     ArgumentSpec,
     missing_arguments,
     specs_of,
 )
-from trippilot.domain.intent import DIALOGUE_INTENTS, Intent, IntentMatch, MatchRoute
+from trippilot.domain.dialogue.intent import DIALOGUE_INTENTS, Intent, IntentMatch, MatchRoute
 from trippilot.orchestrator.arguments import extract_argument
 from trippilot.orchestrator.intent_router import IntentRouter, normalize
 from trippilot.orchestrator.question_bank import BankEntry, BankLoadError, BankVectors, index_bank

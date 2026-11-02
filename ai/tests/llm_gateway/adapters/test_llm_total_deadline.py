@@ -24,7 +24,7 @@ import openai
 import pytest
 
 import main
-from trippilot.domain.llm import LlmFeature
+from trippilot.domain.llm.llm import LlmFeature
 from trippilot.llm_gateway.adapters.anthropic_adapter import AnthropicAdapter
 from trippilot.llm_gateway.adapters.deadline_http import DeadlineTransport
 from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter

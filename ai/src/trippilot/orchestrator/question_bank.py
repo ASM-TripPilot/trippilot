@@ -23,7 +23,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from trippilot.domain.intent import ROUTABLE_INTENTS, Intent, RoutingMode, route_for
+from trippilot.domain.dialogue.intent import ROUTABLE_INTENTS, Intent, RoutingMode, route_for
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.vector_store_port import VectorStorePort
 

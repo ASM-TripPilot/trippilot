@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from trippilot.domain.delegation import AgentResult, AgentTask
+from trippilot.domain.dialogue.delegation import AgentResult, AgentTask
 
 
 class Agent(Protocol):

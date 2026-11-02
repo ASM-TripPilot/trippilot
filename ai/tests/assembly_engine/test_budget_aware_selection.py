@@ -21,7 +21,7 @@ import json
 
 from trippilot.assembly_engine.scorer import admission_fit, build_rule_score
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.poi_curation.place_fees import EMPTY, FeeTable, load_fee_table
 
 

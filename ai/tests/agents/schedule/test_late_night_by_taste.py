@@ -18,9 +18,9 @@ import pytest
 
 from trippilot.agents.schedule.agent import _is_late_day, late_night_candidates
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.itinerary import TimeWindow
-from trippilot.domain.llm import CandidatePool
-from trippilot.domain.poi import NIGHTLIFE_TAG, DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.itinerary.itinerary import TimeWindow
+from trippilot.domain.llm.llm import CandidatePool
+from trippilot.domain.poi.poi import NIGHTLIFE_TAG, DataQuality, Poi, PoiCategory, PoiSource
 
 from tests.agents.schedule.test_schedule_agent import _agent, _persona, _task
 from tests.orchestrator.schedule.test_schedule_coordinator import _ANCHOR, _DAY1, _KST, _NOW, _request

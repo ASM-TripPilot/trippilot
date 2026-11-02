@@ -33,7 +33,7 @@ from collections.abc import Callable, Mapping
 from datetime import date, timedelta
 from typing import Protocol
 
-from trippilot.domain.poi import BUDDHA, CHUSEOK, PUBLIC_HOLIDAY, SEOLLAL
+from trippilot.domain.poi.poi import BUDDHA, CHUSEOK, PUBLIC_HOLIDAY, SEOLLAL
 
 _URL = "https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo"
 _OK_CODE = "00"

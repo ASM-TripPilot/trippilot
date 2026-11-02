@@ -14,7 +14,7 @@ from trippilot.agents.adapters.memory_place_fact_store import InMemoryPlaceFactS
 from trippilot.agents.unknown_handling import agent as uh
 from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent, UnknownOutcome, UnknownTask
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import TypedResult
+from trippilot.domain.llm.llm import TypedResult
 from trippilot.ports.place_fact_store_port import FIELDS, FactRecord, PlaceFacts
 
 _NOW = datetime(2026, 10, 22, 6, 0, tzinfo=timezone.utc)

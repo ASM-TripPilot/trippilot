@@ -16,8 +16,8 @@ import json
 from datetime import datetime
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import CandidatePool, LlmFeature
-from trippilot.domain.poi import Poi
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature
+from trippilot.domain.poi.poi import Poi
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
 from trippilot.llm_gateway.gates.base import GateOutcome, _load_json_object
 from trippilot.llm_gateway.gates.scoring import ClosedSetGate

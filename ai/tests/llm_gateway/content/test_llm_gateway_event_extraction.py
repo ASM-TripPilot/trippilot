@@ -25,8 +25,8 @@ from trippilot.llm_gateway.workers.event_extraction import (
     build_event_extraction_vars,
 )
 from trippilot.domain.common import TraceId
-from trippilot.domain.event import EventInfo, EventType
-from trippilot.domain.llm import LlmFeature, ModelTier
+from trippilot.domain.itinerary.event import EventInfo, EventType
+from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent, GateDropEvent
 from tests.fakes.fake_llm import FailingLlm, FakeLlm
 from tests.fakes.in_memory_trace import InMemoryTrace

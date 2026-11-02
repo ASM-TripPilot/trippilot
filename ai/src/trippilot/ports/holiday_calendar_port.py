@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Protocol
 
-from trippilot.domain.poi import UNREAD_CALENDAR, HolidayCalendar
+from trippilot.domain.poi.poi import UNREAD_CALENDAR, HolidayCalendar
 
 
 class HolidayCalendarPort(Protocol):

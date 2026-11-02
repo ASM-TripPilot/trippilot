@@ -16,10 +16,10 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.dialogue import asked_argument_names, asked_specs_of, missing_arguments
-from trippilot.domain.intent import Intent, IntentDraft
-from trippilot.domain.llm import LlmFeature
-from trippilot.domain.plan_tools import MAX_ARG_CHARS, MAX_PLAN_CALLS, PLAN_GAPS, PLAN_TOOLS, plan_argument_names
+from trippilot.domain.dialogue.dialogue import asked_argument_names, asked_specs_of, missing_arguments
+from trippilot.domain.dialogue.intent import Intent, IntentDraft
+from trippilot.domain.llm.llm import LlmFeature
+from trippilot.domain.dialogue.plan_tools import MAX_ARG_CHARS, MAX_PLAN_CALLS, PLAN_GAPS, PLAN_TOOLS, plan_argument_names
 from trippilot.llm_gateway.gates.dialogue_answer import _violates, clock_times
 from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanDraft, DialoguePlanGate
 

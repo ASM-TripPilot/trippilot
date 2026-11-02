@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "collec
 import resolve_place_ids as R  # noqa: E402
 
 from trippilot.domain.common import GeoPoint, PoiId  # noqa: E402
-from trippilot.domain.poi import (  # noqa: E402
+from trippilot.domain.poi.poi import (  # noqa: E402
     DataQuality,
     OpenHour,
     Poi,

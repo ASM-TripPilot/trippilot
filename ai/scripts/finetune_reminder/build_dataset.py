@@ -25,7 +25,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from trippilot.domain.common import TraceId  # noqa: E402
-from trippilot.domain.llm import LlmFeature  # noqa: E402
+from trippilot.domain.llm.llm import LlmFeature  # noqa: E402
 from trippilot.llm_gateway.gates.reminder_copy import (  # noqa: E402
     ReminderCopyContext,
     ReminderCopyGate,

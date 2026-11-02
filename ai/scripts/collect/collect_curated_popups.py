@@ -30,7 +30,7 @@ sys.path.insert(0, str(_AI / "src"))
 from trippilot.background.event_store import JsonEventStore  # noqa: E402
 from trippilot.background.kakao_local import KakaoLocalClient  # noqa: E402
 from trippilot.background.naver_search import UrllibHttpClient  # noqa: E402
-from trippilot.domain.event import EventInfo, EventType  # noqa: E402
+from trippilot.domain.itinerary.event import EventInfo, EventType  # noqa: E402
 
 KST = dt.timezone(dt.timedelta(hours=9))
 

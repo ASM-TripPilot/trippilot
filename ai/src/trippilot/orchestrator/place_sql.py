@@ -15,7 +15,7 @@ from concurrent.futures import Future
 from datetime import datetime
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.region_centers import region_center, region_mentions, region_pair
+from trippilot.domain.poi.region_centers import region_center, region_mentions, region_pair
 from trippilot.orchestrator.intent_router import normalize
 from trippilot.llm_gateway.workers.dialogue_sql import DialogueSqlWorker
 from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql, PlaceRow

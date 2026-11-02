@@ -23,8 +23,8 @@ from hypothesis import strategies as st
 
 from trippilot.assembly_engine.constraints import check_hc1, hc1_unjudged
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId
-from trippilot.domain.itinerary import DaySolution, ItinerarySolution, SolveMode, VisitSlot
-from trippilot.domain.poi import HOLIDAY_TAGS, UNREAD_CALENDAR, DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.domain.itinerary.itinerary import DaySolution, ItinerarySolution, SolveMode, VisitSlot
+from trippilot.domain.poi.poi import HOLIDAY_TAGS, UNREAD_CALENDAR, DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 
 _KST = timezone(timedelta(hours=9))
 _HANGUL = date(2026, 10, 9)  # 한글날 — 금요일

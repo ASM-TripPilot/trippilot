@@ -30,9 +30,9 @@ from trippilot.assembly_engine.ortools_assembler import (
 )
 from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId, ScheduleId, TransportMode
-from trippilot.domain.itinerary import ItineraryProblem, TimeWindow
-from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.domain.itinerary.itinerary import ItineraryProblem, TimeWindow
+from trippilot.domain.llm.llm import ScoredPoi
+from trippilot.domain.poi.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 
 _KST = timezone(timedelta(hours=9))
 _DAY = date(2026, 8, 5)
@@ -168,7 +168,7 @@ def test_prefilter_cut_properties(counts) -> None:
 def test_pace_retry_does_not_double_count_the_cut(caplog, monkeypatch) -> None:
     """pace 로 해가 없어 무보정 재시도해도 같은 날 절단 기록은 1줄 — 빈도가 두 배로 세지면 안 된다."""
     from dataclasses import replace
-    from trippilot.domain.itinerary import Pace
+    from trippilot.domain.itinerary.itinerary import Pace
 
     index, cands = _pool([(PoiCategory.SIGHT, 70, 0.9), (PoiCategory.FOOD, 5, 0.1)])
     calls = []

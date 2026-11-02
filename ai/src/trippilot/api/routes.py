@@ -68,7 +68,7 @@ from trippilot.api.schemas import (
 )
 from trippilot.domain.common import PoiId
 from trippilot.domain.freshness import FreshnessMeta
-from trippilot.domain.itinerary import Violation
+from trippilot.domain.itinerary.itinerary import Violation
 
 router = APIRouter(prefix="/ai/v1/itinerary", tags=["itinerary"])
 

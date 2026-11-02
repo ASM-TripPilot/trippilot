@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Sequence
 
-from trippilot.domain.poi import OpenHour, PoiCategory
+from trippilot.domain.poi.poi import OpenHour, PoiCategory
 
 # ── 카테고리 매핑표 ──────────────────────────────────────────────
 # TourAPI contentTypeId → PoiCategory (경계 8종). cat 코드로 세분:
