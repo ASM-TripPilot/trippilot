@@ -1274,7 +1274,8 @@ class DialogueOrchestrator:
             self._fallback(inp, "llm", *_ANSWER_MODES, "place_not_in_facts")
             return DialogueAnswer.from_facts(facts)
         try:
-            return DialogueAnswer.from_facts(facts, text=draft.text, footnote=draft.footnote)
+            # 결정론 각주(웹 확인 '찾는 중'·'웹에서 확인한 정보')가 있으면 그것이 이긴다 — LLM 이 각주를 따로 쓰면 안내가 사라졌다(리뷰 재현)
+            return DialogueAnswer.from_facts(facts, text=draft.text, footnote=facts.footnote or draft.footnote)
         except ValueError as e:  # 게이트와 같은 검사라 여기 오면 게이트가 어긋난 것 — 그래도 템플릿
             self._fallback(inp, "llm", *_ANSWER_MODES, f"answer_shape: {e}")
             return DialogueAnswer.from_facts(facts)
