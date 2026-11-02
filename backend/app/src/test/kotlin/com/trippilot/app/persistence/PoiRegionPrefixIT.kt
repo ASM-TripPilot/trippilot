@@ -1,11 +1,13 @@
 package com.trippilot.app.persistence
 
+import com.trippilot.placedata.adapter.out.persistence.PoiEntity
 import com.trippilot.placedata.adapter.out.persistence.PoiJpaRepository
 import com.trippilot.placedata.application.PoiQueryService
 import com.trippilot.placedata.domain.DataStatus
 import com.trippilot.placedata.domain.Poi
 import com.trippilot.placedata.domain.PoiCategory
 import com.trippilot.placedata.domain.PoiRepository
+import com.trippilot.placedata.domain.PoiSearchOrder
 import com.trippilot.placedata.domain.PoiSource
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.collections.shouldNotContainDuplicates
@@ -71,7 +73,9 @@ class PoiRegionPrefixIT : AbstractPostgresIntegrationTest() {
     }
 
     /**
-     * 전후 지연 측정 — 옵트인(`MEASURE_POI_REGION=1`). 이전 경로(길이별 두 쿼리 + 앱 병합 정렬)를 같은 저장소로 재연한다.
+     * 전후 지연 측정 — 옵트인(`MEASURE_POI_REGION=1`). 이전 병합 분기(길이별 두 쿼리 → distinctBy → toDomain →
+     * PoiSearchOrder 3축 비교자 정렬 → take)를 같은 저장소로 그대로 재연한다. 어댑터의 `toDomain` 은 private 이라
+     * [toDomain] 사본을 쓴다(필드 그대로). 한 쿼리 쪽도 같은 매핑을 거친다(어댑터 단일 경로와 같다).
      * 단언하지 않는다(머신마다 다르다). 수치는 PR 본문에 적는다.
      */
     @Test
@@ -80,12 +84,28 @@ class PoiRegionPrefixIT : AbstractPostgresIntegrationTest() {
         val n = 3_000
         pois.saveAll((1..n).map { poi("측정$it", if (it % 2 == 0) "50110" else "50130") })
         val first = UUID(0, 0)
+        val q = ""
+        val seed: String? = null
+        val limit = 51
         fun old() = listOf(2 to listOf("50"), 5 to listOf("50110"))
-            .flatMap { (len, codes) -> jpa.findActiveByRegionPrefixes(len, codes, null, "", -1, "", first, 51, "") }
-            .distinctBy { it.poiId }.sortedBy { it.nameKo }.take(51)
-        fun new() = jpa.findActiveByRegionPrefixes(2, listOf("50"), null, "", -1, "", first, 51, "")
+            .flatMap { (len, codes) -> jpa.findActiveByRegionPrefixes(len, codes, null, q, -1, "", first, limit, seed ?: "") }
+            .distinctBy { it.poiId }
+            .map { it.toDomain() }
+            .sortedWith(compareBy({ PoiSearchOrder.rank(q, it.nameKo) }, { PoiSearchOrder.key(it.nameKo, it.poiId, seed) }, { it.poiId }))
+            .take(limit)
+        fun new() = jpa.findActiveByRegionPrefixes(2, listOf("50"), null, q, -1, "", first, limit, seed ?: "").map { it.toDomain() }
+        old().map { it.poiId } shouldBe new().map { it.poiId }   // 재연이 같은 답을 내야 비교가 의미 있다
         repeat(20) { old(); new() }   // 워밍업
         fun p50(f: () -> Any): Double = (1..100).map { val t = System.nanoTime(); f(); (System.nanoTime() - t) / 1e6 }.sorted()[50]
         println("MEASURE poi-region rows=$n old_p50_ms=${"%.2f".format(p50(::old))} new_p50_ms=${"%.2f".format(p50(::new))}")
     }
+
+    /** 어댑터 `PoiRepositoryAdapter.toDomain`(private) 사본 — 측정 재연용. */
+    private fun PoiEntity.toDomain() = Poi.reconstitute(
+        poiId = poiId, nameKo = nameKo, lat = lat, lng = lng, category = PoiCategory.valueOf(category), region = region,
+        regionCode = regionCode,
+        openingHours = openingHours, dataStatus = DataStatus.valueOf(dataStatus), source = PoiSource.valueOf(source),
+        savedCount = savedCount, createdAt = createdAt, updatedAt = updatedAt,
+        imageUrl = imageUrl, tags = tags.toList(), sourceRef = sourceRef, address = address,
+    )
 }
