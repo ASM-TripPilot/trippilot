@@ -182,6 +182,8 @@ async function advance(ms: number): Promise<void> {
 }
 
 interface MountOptions {
+  /** 안 주면 운영 전역과 같은 staleTime 30초 클라이언트 — K18 은 앱이 실제로 쓰는 클라이언트(`createAppQueryClient`)를 넘긴다(TRIP-1714). */
+  client?: QueryClient;
   /** 훅을 띄우기 전에 캐시에 심는 일정 — 다른 화면이 이미 받아 둔 칸. */
   seed?: Record<string, Itinerary>;
   path?: string;
@@ -191,13 +193,13 @@ interface MountOptions {
 }
 
 function mount({
+  client = newClient(),
   seed = {},
   path = '/',
   gate = HOME,
   cardOf,
 }: MountOptions = {}) {
   mockPathname = path;
-  const client = newClient();
   Object.entries(seed).forEach(([id, data]) =>
     client.setQueryData(keyOf(id), data)
   );
@@ -767,5 +769,83 @@ describe('K17 · 같은 칸을 읽는 관찰자가 둘이어도 한 간격에 �
 
     await advance(POLL);
     expect(count(A)).toBe(2);
+  });
+});
+
+// TRIP-1714 — 복귀 재조회 정책(키 함수)이 생성 감시를 해치지 않는다. 클라이언트가 K12 의 `newClient()` 사본이 아니라 앱이 쓰는 그것이어야
+// 일정 키가 "복귀 때 부른다" 쪽에 남아 있다는 것이 잠긴다(사본이면 정책이 어떻게 바뀌어도 이 케이스는 green 이다).
+// 클라이언트 모듈을 케이스 안에서 늦게 불러온다 — 정적 import 면 모듈이 없는 동안 K1~K17 까지 import 오류로 같이 죽는다.
+describe('K18 · 생성 중에 백그라운드를 다녀와도 따라잡고 토스트는 한 번, 폴링은 이어진다 (TRIP-1714 AC5)', () => {
+  function appClient(): QueryClient {
+    return jest
+      .requireActual<typeof import('@/app/entrypoint/queryClient')>(
+        '@/app/entrypoint/queryClient'
+      )
+      .createAppQueryClient();
+  }
+
+  it('다른 탭이 같은 일정 칸을 읽는 중, 백그라운드 사이 서버가 끝났으면 복귀 즉시(간격 전에) 1건으로 따라잡고 토스트 1회 — 더 묻지 않는다', async () => {
+    // 준비 — 생성 중인 일정을 셸(감시)과 다른 탭(카드 대역) 둘이 읽는다.
+    script = { [A]: running(A) };
+    const h = mount({
+      client: appClient(),
+      seed: { [A]: running(A) },
+      cardOf: A,
+      path: '/',
+    });
+    expect(h.card()?.generationState).toBe('PARTIAL');
+
+    // 실행 ① — 백그라운드로 가서 한참 지난다. 그 사이 서버가 완료한다(앵커: 묻지 않았으니 토스트·요청 0).
+    act(() => focusManager.setFocused(false));
+    await advance(119_000);
+    script[A] = complete(A);
+    expect(count(A)).toBe(0);
+    expect(screen.queryByTestId(GENERATION_COMPLETE_TOAST_ID)).toBeNull();
+
+    // 실행 ② — 복귀. 폴링 간격(2초)이 오기 전 100ms 만 흘린다 — 그 안에 따라잡았다면 복귀 재조회가 일정 칸을 "부른다"로 둔 것이다.
+    act(() => focusManager.setFocused(true));
+    await advance(100);
+
+    // 단언 — 요청 1건·카드(다른 탭)도 COMPLETE·토스트 정확히 1회.
+    expect(count(A)).toBe(1);
+    expect(h.card()?.generationState).toBe('COMPLETE');
+    expect(showSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId(GENERATION_COMPLETE_TOAST_ID)).toBeOnTheScreen();
+
+    // 끝난 여행은 더 묻지 않고 토스트도 늘지 않는다.
+    await advance(POLL * 3);
+    expect(count(A)).toBe(1);
+    expect(showSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('복귀했는데 서버가 아직 생성 중이면 복귀 즉시 1건 뒤에도 간격 폴링이 이어지고, 그 뒤 끝나면 토스트 1회', async () => {
+    // 준비
+    script = { [A]: running(A) };
+    mount({
+      client: appClient(),
+      seed: { [A]: running(A) },
+      cardOf: A,
+      path: '/',
+    });
+
+    // 실행 ① — 백그라운드 → 복귀(아직 생성 중이다).
+    act(() => focusManager.setFocused(false));
+    await advance(119_000);
+    act(() => focusManager.setFocused(true));
+    await advance(100);
+    expect(count(A)).toBe(1);
+    expect(showSpy).not.toHaveBeenCalled();
+
+    // 실행 ② — 간격 한 번이 지난다: 폴링이 멈추지 않았다(복귀 재조회를 껐어도 폴링은 별개라는 짝).
+    await advance(POLL + 100);
+    expect(count(A)).toBe(2);
+
+    // 실행 ③ — 서버가 끝내고 다음 간격이 온다.
+    script[A] = complete(A);
+    await advance(POLL + 100);
+
+    // 단언 — 토스트 정확히 1회.
+    expect(showSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId(GENERATION_COMPLETE_TOAST_ID)).toBeOnTheScreen();
   });
 });
