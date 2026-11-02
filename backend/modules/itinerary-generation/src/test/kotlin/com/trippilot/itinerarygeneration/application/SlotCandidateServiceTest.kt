@@ -721,7 +721,8 @@ class SlotCandidateServiceTest : StringSpec({
         candidates: CandidatePoolPort = pool,
         tripFacade: TripFacade = trips,
         repairContexts: RepairContexts = contexts(),
-    ) = SlotCandidateService(tripFacade, Repo(stored), agent, surfaces, candidates, scored, clock, accountPrefs, NoHints, repairContexts)
+        poiSurfaces: PoiSurfaceFacade = surfaces,
+    ) = SlotCandidateService(tripFacade, Repo(stored), agent, poiSurfaces, candidates, scored, clock, accountPrefs, NoHints, repairContexts)
 
     // 순서 단언용 고정 ID — 기대 순서와 자연 정렬이 반대라, 정렬로 순서를 바꾸는 구현이 우연히 통과하지 않는다.
     fun ids(n: Int) = List(n) { UUID(0, (n - it).toLong()) }
@@ -832,6 +833,23 @@ class SlotCandidateServiceTest : StringSpec({
         agent.repaired.size shouldBe 3 // 후보 2 + p — 그 날 판정(빈 날) 없음
         agent.repaired.none { (sent, _) -> sent.days.all { it.slots.isEmpty() } } shouldBe true
         pool.radii shouldBe listOf(3_000.0)
+    }
+
+    "이어 찾기는 영업시간을 아는 곳을 먼저 본다 — 상대 HC1 은 정보가 없으면 통과시켜, 거리순만 쓰면 '몰라서 통과한' 곳이 올라온다" {
+        val a = UUID(7, 0)
+        val (unknownNear, knownFar) = List(2) { UUID(7, it + 1L) }
+        val pool = RadiusPool(listOf(near(unknownNear, 100.0), near(knownFar, 900.0)))
+        val withHours = object : PoiSurfaceFacade by surfaces {
+            override fun findSurfaces(poiIds: Collection<UUID>) = surfaces.findSurfaces(poiIds).mapValues { (id, v) ->
+                if (id == knownFar) v.copy(openingHours = "09:00~21:00") else v
+            }
+        }
+        val agent = FitAgent(proposed = listOf(a), misfit = setOf(a))
+
+        val out = fitSvc(agent, candidates = pool, poiSurfaces = withHours)
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        out.candidates.map { it.poiId } shouldContainExactly listOf(knownFar) // 개수는 처음 목록(1)대로
     }
 
     "처음 후보가 하나라도 맞으면 이어 판정하지 않는다 — 대다수 요청에 판정을 더 얹지 않는다" {

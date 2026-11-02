@@ -468,7 +468,10 @@ class SlotCandidateService(
 
     /**
      * 이어 판정할 풀 후보(TRIP-1724) — 같은 중심·같은 반경, 컨셉 카테고리(없으면 교체 대상과 같은 카테고리 — 점심 자리에
-     * 명소가 끼지 않게, [inDistrictFirst] 와 같은 판단), 거리순. 교체 대상이 비활성이라 카테고리를 모르면 찾지 않는다.
+     * 명소가 끼지 않게, [inDistrictFirst] 와 같은 판단). 교체 대상이 비활성이라 카테고리를 모르면 찾지 않는다.
+     * 순서는 **영업시간을 아는 곳 먼저, 그다음 거리순** — 상대 HC1 은 영업시간 정보가 없으면 통과시켜서, 거리순만 쓰면
+     * 처음 후보가 영업시간으로 다 떨어진 바로 그 자리에 "몰라서 통과한" 곳이 체계적으로 올라온다(DEV 영업시간 보유 46%).
+     * ponytail: 반경 안 풀 전체의 표면을 한 번에 읽는다 — 풀이 수천 건으로 커지면 거리순 앞쪽 N건으로 자른다.
      */
     private fun morePoolCandidates(
         concept: String?,
@@ -483,10 +486,13 @@ class SlotCandidateService(
         val conceptSet = ConceptCategories.of(concept)
         val categories = conceptSet ?: candidatePool.ground(listOf(targetPoiId)).firstOrNull()?.let { setOf(it.category) } ?: return emptyList()
         val taken = seen + inItinerary + targetPoiId
-        return candidatePool
+        val found = candidatePool
             .resolve(Area.Radius(center.lat, center.lng, radiusM.toDouble()), categories)
             .filter { it.poiId !in taken }
-            .sortedBy { it.distanceM ?: Double.MAX_VALUE }
+        if (found.isEmpty()) return emptyList()
+        val surfaces = poiSurfaces.findSurfaces(found.map { it.poiId })
+        return found
+            .sortedWith(compareBy<GroundedPlace> { surfaces[it.poiId]?.openingHours.isNullOrBlank() }.thenBy { it.distanceM ?: Double.MAX_VALUE })
             .take(max)
             .map { it.toSlotCandidate(concept.takeIf { conceptSet != null }) }
     }
