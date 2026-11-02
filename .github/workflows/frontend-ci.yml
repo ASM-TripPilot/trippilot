@@ -92,6 +92,10 @@ jobs:
       # cwd 기준으로만 찾으므로 working-directory(frontend)에서 돈다. 진단 1건이라도 있으면 실패(--fail-on-warnings).
       - if: matrix.part == 'checks'
         run: pnpm fsd
+      # 안 쓰는 의존성 게이트(TRIP-1715): package.json 에 선언했는데 아무도 안 쓰는 패키지(또는 쓰는데 선언 안 한 패키지)가
+      # 있으면 실패. 설정·예외 이유는 knip.jsonc. 안 쓰는 파일·export 는 게이트가 아니다(`pnpm exec knip` 으로 집계만).
+      - if: matrix.part == 'checks'
+        run: pnpm knip
       # 웹 번들 게이트(TRIP-1646): 웹(react-native-web) 출시본이 만들어지는지 본다. 네이티브 전용 모듈을 웹 대체 파일
       # (*.web.ts) 없이 정적 import 하면 iOS·jest 는 green 인데 웹 export 만 깨진다 — 여기서 PR 을 빨갛게 만든다.
       # 결과물은 버린다(배포는 따로). 운영 번들 규칙(metro.config.js blockList)도 같이 탄다(export 는 NODE_ENV=production).

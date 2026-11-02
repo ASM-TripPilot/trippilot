@@ -13,13 +13,20 @@ import { mark } from '@/shared/lib/startupMarks';
 // TRIP-1717 P2 — import 평가가 끝나 루트 레이아웃 모듈 본문에 닿은 시점.
 mark('rootLayout');
 
-// 개발 빌드 전용 「실패 주입 켜짐」 표시 — 운영 변환은 `__DEV__` 를 false 로 접어 이 require 를 그래프에서 지운다
-// (남으면 metro 운영 blockList 가 export 를 깨뜨린다, `src/shared/dev-fault`).
+// 개발 빌드 전용 「실패 주입 켜짐」·「요청 카운터」 표시 — 운영 변환은 `__DEV__` 를 false 로 접어 이 require 를 그래프에서 지운다
+// (남으면 metro 운영 blockList 가 export 를 깨뜨린다, `src/shared/dev-fault`). 카운터 배지는 jest 에서 렌더하지 않는다
+// (인터셉터 설치와 같은 `NODE_ENV !== 'test'` 가드).
 const DevFaultBadge: ComponentType | null = __DEV__
   ? // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('@/shared/dev-fault') as { FaultInjectionBadge: ComponentType })
       .FaultInjectionBadge
   : null;
+const DevRequestCountBadge: ComponentType | null =
+  __DEV__ && process.env.NODE_ENV !== 'test'
+    ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+      (require('@/shared/dev-fault') as { RequestCountBadge: ComponentType })
+        .RequestCountBadge
+    : null;
 
 // 루트 레이아웃은 조립만 한다 — 전역 프로바이더(쿼리 캐시·폰트·네이티브 스플래시·SafeArea·제스처·토스트)는
 // FSD app 층(`src/app/entrypoint`), 부팅 결과에 따른 라우팅은 `src/app/routing/SplashGate` 가 맡는다(TRIP-1161).
@@ -28,6 +35,7 @@ export default function RootLayout() {
     <AppProviders>
       <SplashGate />
       {DevFaultBadge ? <DevFaultBadge /> : null}
+      {DevRequestCountBadge ? <DevRequestCountBadge /> : null}
     </AppProviders>
   );
 }

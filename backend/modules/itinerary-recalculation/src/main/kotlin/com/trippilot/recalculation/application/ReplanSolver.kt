@@ -54,6 +54,7 @@ class ReplanSolver(
             return
         }
         try {
+            val skipped = archive.getSkippedPois(session.tripId, session.targetDate)
             val proposal = replans.propose(
                 ReplanCommand(
                     accountId = accountId,
@@ -75,7 +76,9 @@ class ReplanSolver(
                     // 부딪혀 [도착]이 영원히 409 인 칸이 된다(BR-U5-02). 세션 저장값이 아니라 **산출 시점**에 읽는다 —
                     // 선계산 세션도 산출 때의 최신 실적을 본다. AI 는 제외를 원 일정 슬롯보다 우선하므로(합류·남은 방문·진행 중
                     // 잠금 전부 제외를 거른다) `currentSlots` 에서 따로 빼지 않는다.
-                    excludedPoiIds = (session.excludedPoiIds + archive.getSkippedPois(session.tripId, session.targetDate)).distinct(),
+                    excludedPoiIds = (session.excludedPoiIds + skipped).distinct(),
+                    // 단, **고정 잠금은 제외를 이긴다** — 건너뛴 곳이 시각 고정이면 C8 이 잠금을 풀어야 빠진다(TRIP-1711).
+                    skippedPoiIds = skipped.toList(),
                 ),
             )
             settle(sessionId) { fresh ->

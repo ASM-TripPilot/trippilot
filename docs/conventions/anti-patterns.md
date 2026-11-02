@@ -29,6 +29,7 @@
 - **생성 시드의 `ON CONFLICT DO UPDATE SET` 에 새 컬럼을 빠뜨리지 말 것 → INSERT 절과 같은 커밋에서 함께 늘린다.** 정본 행이 이미 있는 환경(DEV·로컬)에서는 시드 재실행이 **전부 충돌 경로로 간다.** INSERT 절만 고치면 마이그레이션은 컬럼을 만들고 시드는 통과하는데 **값이 영원히 NULL 로 남는다** — 빌드도 실 DB IT 도 전부 초록이다(Testcontainers 는 빈 DB 라 INSERT 경로만 탄다). 한 행만 비우고 시드를 실제로 다시 태워 되돌아오는지 보는 IT 를 함께 둔다. (V2.51 `R__seed_stay.sql`, 역검증으로 확인)
 - **입력 크기를 따라 늘어나는 컬렉션을 `IN (:list)` 한 문장에 통째로 싣지 말 것 → 1,000건씩 `chunked` 로 나눠 보낸다.** PostgreSQL JDBC 는 한 문장에 바인드 변수 65,535개까지만 받는다. 실측(2026-10-20): 공유본에 카페 9,105곳을 합쳐 69,587건이 되자 `PoiRepositoryAdapter.findBySourceRefs` 가 `PreparedStatement can have at most 65,535 parameters` 로 500 을 냈다(`PoiProposalRealDocumentIT`). 같은 파일의 `closeActive` 는 이미 나눠 보내고 있었는데 조회 쪽만 빠져 있었다 — 6만 건까지는 증상이 없어 지나쳤다. (#1457)
 - **마이그레이션은 반드시 실제 PostgreSQL에 V1→최신 전체 체인으로 적용해 검증할 것.** 파일 단독 문법 검사로는 FK cascade·권한·제약 상호작용 버그를 못 잡는다. Testcontainers 통합테스트(`SchemaMigrationIT`)나 로컬 docker DB로 실 적용. (TRIP-174)
+- **재시도가 정상 경로인 쓰기에 UNIQUE 만 걸어 두고 "DB 가 막는다"로 끝내지 말 것 → 같은 키면 있던 행을 돌려주고(`ON CONFLICT DO NOTHING` 뒤 재조회), 경합은 행 잠금 대기 테스트로 본다.** 방문 사진 메타는 `(방문, 기기, 자산)` UNIQUE 위반이 그대로 500 이었고(운영 10/20~11/03 1건), 계약은 409 라고 적었으며, IT 는 `DataIntegrityViolationException` 을 **기대값으로** 단언해 결함을 고정하고 있었다 — 앱은 응답을 못 받으면 같은 자산을 다시 보내 "실패" 카드가 영영 안 지워진다. (TRIP-1721)
 
 ## 설계 · 문서
 

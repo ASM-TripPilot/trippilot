@@ -1,18 +1,11 @@
 import { act, fireEvent, screen, within } from '@testing-library/react-native';
 
-import type { Itinerary, Trip } from '@/shared/api/index.schemas';
+import type { Trip } from '@/shared/api/index.schemas';
 import { useTripWizardStore } from '@/features/create-trip';
-import {
-  CONFIRMED,
-  PLANNED,
-  deferred,
-  scriptItineraryOptions,
-  type ItinScript,
-} from '@/test-support/myPageItineraries';
+import { CONFIRMED_COLS, PLANNED_COLS } from '@/test-support/myPageItineraries';
 import {
   newTestQueryClient,
   renderWithQueryClient,
-  settle,
 } from '@/test-support/queryRender';
 import { freezeDate } from '@/test-support/freezeDate';
 import {
@@ -30,10 +23,9 @@ import { routerSpies } from '@/test-support/expoRouterMock';
  *
  * *(개념)* 페이지를 직접 렌더해 실제 네비게이션을
  * 관찰한다. 페이지가 `useGetTrips`(조회)와 `useRouter().push`(항법)를 물므로, 그 둘을
- * 파일-로컬 목으로 통제한다. TRIP-1120 부터 페이지가 여행마다 일정도 조회한다(`useQueries` +
- * `getGetTripsTripIdItineraryQueryOptions`) — 그래서 실 `QueryClientProvider` 아래에서 그리고
- * (`renderPage`), 옵션 함수 목이 대본대로 `queryFn` 을 돌린다. 기본 대본은 "영영 안 옴"이라 일정을
- * 다루지 않는 케이스는 조회 전과 똑같이 돈다(카드 없음 = 기존 화면).
+ * 파일-로컬 목으로 통제한다. TRIP-1677 부터 진행 중 카드의 일정 상태는 목록(`GET /trips`)의 `itinerary*` 네 칸에서 읽으므로
+ * 여행별 일정 조회가 없다 — `getGetTripsTripIdItineraryQueryOptions` 목(`mockItineraryOptions`)은 **호출 0** 앵커로만 남겼다.
+ * (기본 구현은 "영영 안 옴"이라, 옛 길로 일정을 묻는 구현이 있어도 이 파일의 다른 케이스가 죽지 않고 앵커만 잡는다.)
  *
  * 무엇을 보장하나:
  *  - AC-4: 지난 여행 카드를 누르면 그 여행의 요약으로 push('/trips/{id}/records/summary').
@@ -452,12 +444,12 @@ describe('🔴 TRIP-1084 · 기록 캘린더 legend — 제외·묶음·3줄+더
 
 // ── TRIP-1120 · 진행 중 여행 카드 + legend `›` 배선 (US-REC-14 · INV-3 · INV-4 · 01b 확정 결정) ─────────
 // 순수 함수(`pickOngoingTrip`·`openableTripIds`)와 화면은 각자 단위 테스트가 잠근다. 여기선 **페이지가**
-// ① 여행마다 일정을 조회해 "확정·없음(404)·모름"으로 접는지 ② 카드 버튼 목적지를 맞게 잇는지
-// ③ `›` 와 누름 이동이 같은 판정을 보는지만 본다. 오늘 = KST 2026-06-11(1015-C 와 같은 고정 — Date 만 가짜,
+// ① 목록 칸(`itineraryStatus` 등)을 "확정·없음"으로 접는지(TRIP-1677 — 여행별 일정 조회 없음) ② 카드 버튼 목적지를 맞게 잇는지
+// ③ `›` 와 누름 이동이 같은 판정을 보는지, ④ 폴링 틱이 실패해도 받아 둔 목록으로 계속 그리는지만 본다. 오늘 = KST 2026-06-11(1015-C 와 같은 고정 — Date 만 가짜,
 // 타이머는 진짜: react-query 알림이 setTimeout(0) 이라 settle() 이 흘러야 한다).
 //
-// "카드 없음" 단언은 페이지가 조회를 안 해도 참이다 — 그래서 조회가 실제로 끝났음(`getQueryState`)을
-// 먼저 앵커로 확인한다(공짜 통과 차단).
+// "카드 없음" 단언은 페이지가 일정을 읽지 않아도 참이다 — 그래서 같은 화면에서 확정 여행의 카드가 뜨는 짝 케이스(AC-11)를
+// 앵커로 둔다(공짜 통과 차단).
 describe('🔴 TRIP-1120 · 기록 캘린더 진행 중 카드 + legend `›`', () => {
   const NOW = trip({
     tripId: 't-now',
@@ -491,12 +483,14 @@ describe('🔴 TRIP-1120 · 기록 캘린더 진행 중 카드 + legend `›`', 
   });
 
   const CARD = 'record-calendar-ongoing';
-  const key = (tripId: string) => [`/trips/${tripId}/itinerary`];
 
-  function script(trips: Trip[], itins: Record<string, ItinScript>): void {
-    setTrips(trips);
-    scriptItineraryOptions(mockItineraryOptions, itins);
-  }
+  /** 목록 칸으로 일정 상태를 싣는다 — 확정(완료) / 확정 전 초안(완료) / 기본(일정 없음). */
+  const confirmed = (t: Trip, over: Partial<Trip> = {}): Trip => ({
+    ...t,
+    ...CONFIRMED_COLS,
+    ...over,
+  });
+  const draftOf = (t: Trip): Trip => ({ ...t, ...PLANNED_COLS });
 
   beforeEach(() => {
     freezeDate('2026-06-11T03:00:00Z');
@@ -507,36 +501,28 @@ describe('🔴 TRIP-1120 · 기록 캘린더 진행 중 카드 + legend `›`', 
   });
 
   // ── AC-11 정상 ──
-  it('확정 여행이 오늘 기간 안이면 일정이 도착한 뒤 카드가 뜨고, [오늘 기록 보기]는 /trips/t-now/records 로 1회 간다', async () => {
-    // 준비
-    script([NOW, PAST, FUTURE], {
-      't-now': CONFIRMED,
-      't-past': CONFIRMED,
-      't-fut': CONFIRMED,
-    });
+  it('확정 여행이 오늘 기간 안이면 목록이 도착한 그 렌더에서 카드가 뜨고(일정 조회 0), [오늘 기록 보기]는 /trips/t-now/records 로 1회 간다', () => {
+    // 준비 — 일정 상태는 목록 칸에 실려 있다.
+    setTrips([confirmed(NOW), confirmed(PAST), confirmed(FUTURE)]);
 
-    // 실행 ① 렌더 직후 — 일정이 오기 전엔 날짜만으로 먼저 그리지 않는다.
+    // 실행 — 한 번 그린다(일정 대기 단계가 없다).
     renderPage();
-    expect(screen.queryByTestId(CARD)).toBeNull();
 
-    // 실행 ② 도착
-    await settle();
-
-    // 단언 ① 카드 얼굴
+    // 단언 ① 카드 얼굴 — 첫 렌더부터. 일정 단건 조회는 만들지 않는다(AC-1).
     const card = screen.getByTestId(CARD);
     expect(within(card).getByText('부산 여행')).toBeOnTheScreen();
     expect(within(card).getByText('여행 중')).toBeOnTheScreen();
     expect(within(card).getByText('2026.6.10–6.12 · 2일차')).toBeOnTheScreen();
+    expect(mockItineraryOptions).not.toHaveBeenCalled();
 
-    // 실행 ③ → 단언 ② 버튼 목적지(j01)
+    // 실행 → 단언 ② 버튼 목적지(j01)
     fireEvent.press(screen.getByTestId('record-calendar-ongoing-records'));
     expect(mockPush.mock.calls).toEqual([['/trips/t-now/records']]);
   });
 
-  it('다음 달로 넘겨도 카드는 그대로다(보고 있는 달이 아니라 오늘 기준)', async () => {
-    script([NOW], { 't-now': CONFIRMED });
+  it('다음 달로 넘겨도 카드는 그대로다(보고 있는 달이 아니라 오늘 기준)', () => {
+    setTrips([confirmed(NOW)]);
     renderPage();
-    await settle();
     expect(screen.getByTestId(CARD)).toBeOnTheScreen();
 
     fireEvent.press(screen.getByTestId('record-calendar-next'));
@@ -548,22 +534,25 @@ describe('🔴 TRIP-1120 · 기록 캘린더 진행 중 카드 + legend `›`', 
   });
 
   // ── AC-12 허브 ──
-  it('[일정 허브로] — 확정·생성 완료 일정이면 여행 중 허브(/trips/t-now/live)로 1회 간다', async () => {
-    script([NOW], { 't-now': CONFIRMED });
+  it('[일정 허브로] — 확정·생성 완료 일정이면 여행 중 허브(/trips/t-now/live)로 1회 간다 (일정 조회 없이)', () => {
+    setTrips([confirmed(NOW)]);
     renderPage();
-    await settle();
 
     fireEvent.press(screen.getByTestId('record-calendar-ongoing-hub'));
 
     expect(mockPush.mock.calls).toEqual([['/trips/t-now/live']]);
+    expect(mockItineraryOptions).not.toHaveBeenCalled();
   });
 
-  it('[일정 허브로] — 확정이어도 생성 중(PARTIAL)이면 h06·홈과 같은 목적지(생성 중 화면)로 간다', async () => {
+  it('[일정 허브로] — 확정이어도 생성 중(PARTIAL)이면 h06·홈과 같은 목적지(생성 중 화면)로 간다', () => {
     // 준비 — /live 를 박아 넣은 구현과 resolveItineraryDestination 을 거친 구현을 가른다.
-    const partial: Itinerary = { ...CONFIRMED, generationState: 'PARTIAL' };
-    script([NOW], { 't-now': partial });
+    setTrips([
+      confirmed(NOW, {
+        itineraryGenerationState: 'PARTIAL',
+        itineraryGenerating: true,
+      }),
+    ]);
     renderPage();
-    await settle();
 
     fireEvent.press(screen.getByTestId('record-calendar-ongoing-hub'));
 
@@ -572,120 +561,81 @@ describe('🔴 TRIP-1120 · 기록 캘린더 진행 중 카드 + legend `›`', 
     ]);
   });
 
-  it('[일정 허브로] — 앞자리에 다른 여행이 있어도 누른 여행(카드)의 일정으로 목적지를 판정한다', async () => {
+  it('[일정 허브로] — 앞자리에 다른 여행이 있어도 누른 여행(카드)의 일정으로 목적지를 판정한다', () => {
     // 준비 — 목록 첫 자리는 지난 여행(확정·생성 완료 → 혼자면 /live), 카드 여행은 둘째 자리(생성 중).
-    // 첫 자리 일정을 읽는 구현은 /trips/t-now/live 로 가서 갈린다(03b W1).
-    const partial: Itinerary = { ...CONFIRMED, generationState: 'PARTIAL' };
-    script([PAST, NOW], { 't-past': CONFIRMED, 't-now': partial });
+    // 첫 자리 칸을 읽는 구현은 /trips/t-now/live 로 가서 갈린다(03b W1).
+    setTrips([
+      confirmed(PAST),
+      confirmed(NOW, {
+        itineraryGenerationState: 'PARTIAL',
+        itineraryGenerating: true,
+      }),
+    ]);
     renderPage();
-    await settle();
 
     // 실행
     fireEvent.press(screen.getByTestId('record-calendar-ongoing-hub'));
 
-    // 단언 — 카드 여행(t-now)의 PARTIAL 일정 → 생성 중 화면
+    // 단언 — 카드 여행(t-now)의 PARTIAL 칸 → 생성 중 화면
     expect(mockPush.mock.calls).toEqual([
       ['/trips/t-now/itinerary/generating'],
     ]);
   });
 
-  // ── AC-13 모름 ──
-  it('ⓐ 일정이 아직 안 왔으면 카드 없이 캘린더·legend 가 뜨고, 도착하면 카드가 나타난다', async () => {
-    // 준비
-    const late = deferred<Itinerary>();
-    script([NOW], { 't-now': late.promise });
+  // ── AC-13 폴링 틱 오류 · 모름 ──
+  // 옛 ⓐ~ⓓ(여행별 일정 대기·500·옛 데이터 있는데 다시 받다 500·다른 여행 일정 모름·미래 여행 일정 모름)는 지웠다 —
+  // 일정 상태가 목록에 실려 한꺼번에 오므로 "여행별 모름"이 없다. 모름은 "목록 자체를 모름" 하나다.
+  it('🔴 ⓑ 폴링 틱이 실패해도(받아 둔 목록 + isError) 캘린더·legend·진행 중 카드를 그대로 그린다 — 오류 얼굴로 뒤집지 않는다', () => {
+    // 준비 — 셸의 목록 폴링 틱이 500 이었다: TanStack 은 마지막 성공 data 를 남긴 채 isError 로 알린다.
+    mockUseGetTrips.mockReturnValue({
+      data: [confirmed(NOW)],
+      isPending: false,
+      isError: true,
+    });
 
-    // 실행 ① 대기
+    // 실행
     renderPage();
-    await settle();
 
-    // 단언 ① 모름 — 카드 없음, 나머지 화면은 있음.
-    expect(screen.queryByTestId(CARD)).toBeNull();
+    // 단언 — 오류 얼굴은 없고 받아 둔 목록으로 계속 그린다.
+    expect(screen.queryByTestId('record-calendar-error')).toBeNull();
     expect(screen.getByTestId('record-calendar-month')).toBeOnTheScreen();
     expect(
       screen.getByTestId('record-calendar-legend-t-now')
     ).toBeOnTheScreen();
-
-    // 실행 ② 도착 → 단언 ②
-    late.resolve(CONFIRMED);
-    await settle();
     expect(screen.getByTestId(CARD)).toBeOnTheScreen();
   });
 
-  it('ⓑ 일정 조회가 500 이면 카드 없음(404 가 아니면 "없음"이 아니라 "모름")', async () => {
-    script([NOW], { 't-now': 'serverError' });
-    const { client } = renderPage();
-    await settle();
-
-    // 앵커 — 페이지가 조회했고 실패로 끝났다.
-    expect(client.getQueryState(key('t-now'))?.status).toBe('error');
-    expect(screen.queryByTestId(CARD)).toBeNull();
-  });
-
-  it("ⓑ' 받아 둔 확정 일정이 있어도 다시 받다 500 이면 카드 없음(남은 데이터를 믿지 않는다)", async () => {
-    // 준비 — 같은 키 캐시에 확정 일정, 마운트 재조회(staleTime 0)는 500.
-    script([NOW], { 't-now': 'serverError' });
-    const client = newTestQueryClient();
-    client.setQueryData(key('t-now'), CONFIRMED);
-
-    renderPage(client);
-    await settle();
-
-    // 앵커 — 실패가 확정됐고 옛 데이터는 남아 있다.
-    expect(client.getQueryState(key('t-now'))?.status).toBe('error');
-    expect(client.getQueryData(key('t-now'))).toEqual(CONFIRMED);
-    expect(screen.queryByTestId(CARD)).toBeNull();
-  });
-
-  // 500 을 404 처럼 "일정 없음"으로 접는 구현은 t-now 자신이 500 일 때(ⓑ)는 결과가 같아 안 잡힌다 —
-  // 다른 여행이 500 일 때만 갈린다(모름이면 막고, 없음이면 안 막는다).
-  it.each([
-    ['아직 안 왔으면(대기)', 'never' as ItinScript],
-    ['500 으로 실패했으면', 'serverError' as ItinScript],
-  ])(
-    'ⓒ 오늘 기간 안 다른 여행의 일정이 %s, 확정 여행이 있어도 카드 없음',
-    async (_l, other) => {
-      script([NOW, DRAFT_NOW], { 't-now': CONFIRMED, 't-draft-now': other });
-      const { client } = renderPage();
-      await settle();
-
-      // 앵커 — 확정 여행 쪽 조회는 성공으로 끝났다.
-      expect(client.getQueryState(key('t-now'))?.status).toBe('success');
-      expect(screen.queryByTestId(CARD)).toBeNull();
-    }
-  );
-
-  it('ⓔ 오늘 기간 안 다른 여행이 404(일정 없음)면 "아는 값"이라 막지 않고 카드가 뜬다', async () => {
-    script([NOW, DRAFT_NOW], {
-      't-now': CONFIRMED,
-      't-draft-now': 'notFound',
+  it("ⓑ' 받아 둔 목록 없이 조회가 실패했으면 오류 얼굴이다(기존 INV-4 — 앞 케이스의 짝)", () => {
+    mockUseGetTrips.mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
     });
-    renderPage();
-    await settle();
 
-    expect(screen.getByTestId(CARD)).toBeOnTheScreen();
+    renderPage();
+
+    expect(screen.getByTestId('record-calendar-error')).toBeOnTheScreen();
+    expect(screen.queryByTestId(CARD)).toBeNull();
   });
 
-  it('ⓓ 기간 밖(미래) 여행의 일정만 모르면 카드는 뜬다(과하게 막지 않는다)', async () => {
-    script([NOW, FUTURE], { 't-now': CONFIRMED, 't-fut': 'never' });
+  it('ⓔ 오늘 기간 안 다른 여행이 일정 없음(null)이어도 확정 여행이 있으면 카드가 뜬다', () => {
+    setTrips([confirmed(NOW), DRAFT_NOW]);
     renderPage();
-    await settle();
 
     expect(screen.getByTestId(CARD)).toBeOnTheScreen();
   });
 
   // ── AC-14 초안 ──
-  it.each([
-    ['미확정 초안(PLANNED)', PLANNED as ItinScript, 'success'],
-    ['일정 없음(404)', 'notFound' as ItinScript, 'error'],
-  ])('%s 이면 오늘이 기간 안이어도 카드 없음', async (_l, itin, settled) => {
-    script([NOW], { 't-now': itin });
-    const { client } = renderPage();
-    await settle();
+  // 앵커: 위 AC-11 이 "같은 화면에서 확정이면 카드가 뜬다"를 잡는다. 이 두 케이스는 옛 구현(일정이 안 오는 기본 대본)에서도 카드가 없어 선제 green.
+  it.each<[string, (t: Trip) => Trip]>([
+    ['미확정 초안(PLANNED)', draftOf],
+    ['일정 없음(null)', (t) => t],
+  ])('%s 이면 오늘이 기간 안이어도 카드 없음', (_l, shape) => {
+    setTrips([shape(NOW)]);
+    renderPage();
 
-    // 앵커 — 조회가 끝났다(대기 중이라 없는 게 아니다).
-    expect(client.getQueryState(key('t-now'))?.status).toBe(settled);
     expect(screen.queryByTestId(CARD)).toBeNull();
+    expect(screen.getByTestId('record-calendar-month')).toBeOnTheScreen();
   });
 
   // ── AC-15 legend `›` ──
@@ -790,19 +740,11 @@ describe('🔴 자정을 넘기면 진행 중 카드가 지난 여행으로 넘�
     });
   }
 
-  it('10-31 23:59 에 연 화면이 61초 뒤(11-01 00:00:01)엔 진행 중 카드가 사라지고 지난 여행 카드가 뜨며, 달 라벨은 10월 그대로고 일정은 다시 받지 않는다', async () => {
+  it('10-31 23:59 에 연 화면이 61초 뒤(11-01 00:00:01)엔 진행 중 카드가 사라지고 지난 여행 카드가 뜨며, 달 라벨은 10월 그대로다', async () => {
     // 준비 — KST 2026-10-31 23:59:00 (= UTC 14:59). 확정 여행 하나가 오늘(10-31)까지 진행 중.
     jest.useFakeTimers({ now: new Date('2026-10-31T14:59:00Z') });
     try {
-      let fetched = 0;
-      setTrips([ENDING]);
-      mockItineraryOptions.mockImplementation((tripId: string) => ({
-        queryKey: [`/trips/${tripId}/itinerary`],
-        queryFn: () => {
-          fetched += 1;
-          return Promise.resolve(CONFIRMED);
-        },
-      }));
+      setTrips([{ ...ENDING, ...CONFIRMED_COLS }]);
       renderPage();
       await advance(100);
 
@@ -814,8 +756,6 @@ describe('🔴 자정을 넘기면 진행 중 카드가 지난 여행으로 넘�
       expect(
         screen.getByTestId('record-calendar-month-label')
       ).toHaveTextContent('2026년 10월');
-      const fetchedBeforeMidnight = fetched;
-      expect(fetchedBeforeMidnight).toBe(1);
 
       // 실행 — 자정을 넘긴다.
       await advance(61_000);
@@ -829,8 +769,8 @@ describe('🔴 자정을 넘기면 진행 중 카드가 지난 여행으로 넘�
       expect(
         screen.getByTestId('record-calendar-month-label')
       ).toHaveTextContent('2026년 10월');
-      // 단언 ③ AC2 — 오늘이 바뀌어도 일정 조회 키는 오늘과 무관해 다시 받지 않는다.
-      expect(fetched).toBe(fetchedBeforeMidnight);
+      // 단언 ③ — 오늘이 바뀌어도 일정 단건 조회는 만들어지지 않는다(목록 칸만 읽는다).
+      expect(mockItineraryOptions).not.toHaveBeenCalled();
     } finally {
       jest.useRealTimers();
     }

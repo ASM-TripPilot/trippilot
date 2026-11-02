@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 
-import { getGetTripsQueryOptions } from '@/shared/api/index.hooks';
+import { getGetTripsQueryOptions } from '@/shared/api/index.trips';
 
 /**
  * 홈이 첫 렌더에 쓰는 `GET /trips` 를 /bootstrap 과 나란히 미리 받아 캐시에 둔다(TRIP-1362) — 홈 1 RTT 절감.

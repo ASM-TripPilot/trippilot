@@ -475,8 +475,8 @@ class GenerateItineraryService(
      * `canTransitionTo` 를 부르는 프로덕션 코드가 없다. 상태로 막으면 영원히 발화하지 않는 죽은 가드가 된다.
      * 이 리포가 "여행 중"을 판정하는 방식은 날짜다 — `ReplanSessionService`·`TriggerService` 가 같은 식을 쓴다.
      *
-     * **확정(`CONFIRMED`) 일정은 막지 않는다.** 편집도 복원도 이미 409 라, 재생성까지 막으면 확정한 여행은
-     * 손댈 방법이 하나도 없는 막다른 길이 된다. 확정 해제 API 가 생기기 전까지 재생성이 유일한 탈출구다.
+     * **확정(`CONFIRMED`) 일정은 막지 않는다.** 확정 일정은 복원이 409 라 통째로 다시 짜는 길은 재생성뿐이다
+     * (부분 수정은 편집이 받는다 — TRIP-1710 이 시작 전 확정 잠금을 풀었다). 확정 해제 API 는 없다.
      */
     private fun guardTripPeriod(startDate: LocalDate, endDate: LocalDate) {
         val today = LocalDate.ofInstant(clock.instant(), TRAVEL_ZONE)

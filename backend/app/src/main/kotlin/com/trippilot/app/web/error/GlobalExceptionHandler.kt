@@ -26,6 +26,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 import org.springframework.web.servlet.resource.NoResourceFoundException
 
@@ -178,9 +179,20 @@ class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(requestRejectedBody())
     }
 
-    /** 미처리 예외 — 침묵 금지: 로깅 + 일반화 봉투(내부 정보 비노출). */
+    /**
+     * 미처리 예외 — 침묵 금지: 로깅 + 일반화 봉투(내부 정보 비노출).
+     *
+     * **앱이 먼저 끊은 연결은 예외다(TRIP-1722).** 응답을 쓰다 클라이언트가 사라지면(화면 이탈·검색어 변경으로 앱이 요청을
+     * 취소) 여기로 오는데, 실패한 것은 서버가 아니고 봉투를 써 봐야 받을 상대가 없어 또 실패한다. 운영 14일(10/20~11/03)
+     * '미처리 예외' ERROR 228건 중 227건이 이것이라 진짜 오류 1건이 묻혀 있었다. 그 요청은 게이트웨이 접근 로그에 499 로
+     * 남으므로 침묵이 아니다(ADR-0011) — 여기서는 DEBUG 한 줄만 남기고 아무것도 쓰지 않는다(null = 처리 끝, 본문 없음).
+     */
     @ExceptionHandler(Exception::class)
-    fun handleUnexpected(ex: Exception): ResponseEntity<ErrorResponse> {
+    fun handleUnexpected(ex: Exception): ResponseEntity<ErrorResponse>? {
+        if (isClientGone(ex)) {
+            log.debug("클라이언트가 응답 전에 연결을 끊었습니다: {}", ex.toString())
+            return null
+        }
         log.error("미처리 예외", ex)
         val body = ErrorResponse(
             ErrorResponse.Body(ErrorCode.INTERNAL.name, "내부 오류가 발생했습니다.", traceId(), null),
@@ -236,6 +248,21 @@ class GlobalExceptionHandler {
     }
 
     private fun traceId(): String? = MDC.get(CorrelationIdFilter.MDC_KEY)
+
+    /**
+     * 응답 쓰기 쪽 예외만 끊김으로 본다 — 스프링의 `AsyncRequestNotUsableException` 과 Tomcat 의 `ClientAbortException`
+     * (원인 체인 어디든). 스프링의 `DisconnectedClientHelper` 는 `EOFException` 이나 "broken pipe"·"connection reset by peer"
+     * 문구까지 끊김으로 보는데, 그건 DB·외부 소켓의 실패일 수도 있어 진짜 오류를 숨긴다 — 그래서 쓰지 않는다.
+     */
+    private fun isClientGone(ex: Throwable): Boolean =
+        generateSequence(ex) { it.cause?.takeIf { c -> c !== it } }
+            .take(MAX_CAUSE_DEPTH)
+            .any { it is AsyncRequestNotUsableException || it.javaClass.simpleName == "ClientAbortException" }
+
+    private companion object {
+        /** 원인 체인 순환 방어. 실측 체인은 2~3단이다. */
+        const val MAX_CAUSE_DEPTH = 16
+    }
 }
 
 /** 방화벽 거부의 봉투 — 디스패치 안(위 핸들러)과 필터 체인(`SecurityConfig`) 두 곳이 같은 모양을 내도록 한 벌만 둔다. */

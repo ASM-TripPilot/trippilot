@@ -76,6 +76,11 @@ export function basesTrip(
     updatedAt: '2026-09-01T10:00:00.000Z',
     baseCount: 1,
     itineraryDayCount,
+    // 일정이 있으면(일수>0) 완료 초안, 없으면 null — 목록이 싣는 네 칸(TRIP-1677).
+    itineraryStatus: itineraryDayCount > 0 ? 'PLANNED' : null,
+    itineraryGenerationState: itineraryDayCount > 0 ? 'COMPLETE' : null,
+    itineraryGenerationMode: itineraryDayCount > 0 ? 'FULLY_AI' : null,
+    itineraryGenerating: false,
   };
 }
 
