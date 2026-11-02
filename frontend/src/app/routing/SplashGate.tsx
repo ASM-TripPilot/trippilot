@@ -8,6 +8,7 @@ import { usePermissionCatchUp } from '@/app/model/usePermissionCatchUp';
 import { usePushRouting } from '@/app/model/usePushRouting';
 import { useBootstrapGate } from '@/features/auth';
 import { SplashScreen } from '@/features/auth';
+import { flushMarks, mark } from '@/shared/lib/startupMarks';
 import { registerPushIfGranted } from '@/shared/push';
 
 import { BOOT_MODULE_LOADED_AT } from './bootClock';
@@ -53,14 +54,29 @@ const NO_SWIPE_ROUTES: ReadonlySet<string> = new Set([
  * 토큰으로 즉시 resolve 돼도 첫 화면이 한 프레임은 보이고, 그 뒤의 목적지 교정은 지연시키지 않는다.
  */
 export function SplashGate() {
-  const { phase, destination } = useBootstrapGate();
+  const { phase, destination, isProvisional } = useBootstrapGate();
   const [floorElapsed, setFloorElapsed] = useState(false);
+
+  // 시작 마크(TRIP-1717) — effect·타이머 콜백에서만 찍는다(렌더 본문 금지). effect 는 선언 순서로 돌아 P3 가 P4 보다 앞서야 한다.
+  useEffect(() => {
+    mark('rootMounted');
+  }, []);
+
+  useEffect(() => {
+    if (phase === 'loading') return;
+    mark('bootstrapResolved', { destination, isProvisional });
+    // 첫 확정 순간만 남는다 — destination 교정 같은 이후 변화는 mark 가 첫 기록 우선이라 무시된다.
+    // deps 억제 주석을 쓰지 않는다: 있으면 React Compiler 가 이 컴포넌트 최적화를 조용히 건너뛴다(03b W1).
+  }, [phase, destination, isProvisional]);
 
   useEffect(() => {
     // 이미 흐른 시간만큼 덜어 낸다. 시계가 뒤로 가도(음수 경과) 하한을 넘겨 기다리지 않게 SPLASH_MIN_VISIBLE_MS 로 막는다.
     const elapsed = Date.now() - BOOT_MODULE_LOADED_AT;
     const timer = setTimeout(
-      () => setFloorElapsed(true),
+      () => {
+        mark('floorElapsed');
+        setFloorElapsed(true);
+      },
       Math.min(
         SPLASH_MIN_VISIBLE_MS,
         Math.max(0, SPLASH_MIN_VISIBLE_MS - elapsed)
@@ -91,6 +107,16 @@ export function SplashGate() {
   // 기존 계정 HOME 진입 전 미결정 권한 안내(TRIP-1601) — 조회가 안 끝났으면 첫 화면만 최대 1초 더 스플래시를 붙잡는다.
   const holdSplash = usePermissionCatchUp(ready, destination);
   const drawn = ready && !holdSplash;
+
+  // 스플래시가 풀려 스택이 처음 그려지는 커밋 — 다음 프레임에 firstFrame 을 찍고 파일로 내린다(TRIP-1717).
+  useEffect(() => {
+    if (!drawn) return;
+    mark('splashReleased');
+    requestAnimationFrame(() => {
+      mark('firstFrame');
+      flushMarks();
+    });
+  }, [drawn]);
   useAccountBoundaryReset(drawn, destination);
   usePushRouting(drawn, destination);
   useGenerationWatch(drawn, destination);
