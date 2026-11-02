@@ -128,6 +128,65 @@ def test_cold_start_narrowed_to_timeout() -> None:
         BedrockAdapter(client, ARN).invoke(_request())
 
 
+class ConnectionClosedError(Exception):
+    """botocore 이름 그대로 — 어댑터는 이름으로 판정한다(벤더 격리)."""
+
+
+class SSLError(Exception):
+    pass
+
+
+class _FlakyClient(_FakeClient):
+    """첫 호출만 `first` 를 던지고 그다음은 성공 — 쉬는 동안 끊긴 keep-alive 연결."""
+
+    def __init__(self, first: Exception) -> None:
+        super().__init__(_ok("본문"))
+        self._first = first
+
+    def invoke_model(self, **kwargs):
+        self.calls.append(kwargs)
+        if len(self.calls) == 1:
+            raise self._first
+        return {"body": _Body(self._payload)}
+
+
+@pytest.mark.parametrize("first", [
+    ConnectionClosedError("Connection was closed before we received a valid response from endpoint URL"),
+    SSLError("SSL validation failed ... [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol"),
+])
+def test_stale_keepalive_connection_is_retried_once(first) -> None:
+    """배치 첫 요청이 끊긴 재사용 연결로 1~2ms 만에 실패하던 것(2026-11-02 운영 46건) — 새 연결로 한 번만 다시 보낸다."""
+    client = _FlakyClient(first)
+    out = BedrockAdapter(client, ARN).invoke(_request())
+    assert out.raw_text == "본문" and len(client.calls) == 2
+
+
+def test_stale_connection_that_fails_twice_is_not_retried_again() -> None:
+    client = _FakeClient(raises=ConnectionClosedError("closed"))
+    with pytest.raises(ConnectionClosedError):
+        BedrockAdapter(client, ARN).invoke(_request())
+    assert len(client.calls) == 2  # 한 번만 더 — 재시도 사다리를 만들지 않는다(09-29 504)
+
+
+def test_slow_connection_failure_is_not_retried(monkeypatch) -> None:
+    """늦게 끊긴 것은 서버가 받았을 수 있다 — 다시 보내면 예산을 두 번 쓴다."""
+    import trippilot.llm_gateway.adapters.bedrock_adapter as mod
+
+    ticks = iter([0.0, 2.0, 2.0])  # 시작 → 실패 시점(2초 뒤) → (쓰이지 않음)
+    monkeypatch.setattr(mod.time, "monotonic", lambda: next(ticks))
+    client = _FakeClient(raises=ConnectionClosedError("closed"))
+    with pytest.raises(ConnectionClosedError):
+        BedrockAdapter(client, ARN).invoke(_request())
+    assert len(client.calls) == 1
+
+
+def test_other_ssl_errors_are_not_retried() -> None:
+    client = _FakeClient(raises=SSLError("certificate verify failed"))
+    with pytest.raises(SSLError):
+        BedrockAdapter(client, ARN).invoke(_request())
+    assert len(client.calls) == 1
+
+
 def test_non_timeout_vendor_error_propagates() -> None:
     """설정 오류까지 삼키지 않는다 — 원인이 지워진다."""
 
