@@ -1,5 +1,7 @@
 # Agent 구조 v2 — 4상자 파이프라인 (도구 배타 원칙)
 
+> **대체됨 (2026-11-02)** — AI 아키텍처 개요는 [`ai/ARCHITECTURE.md`](../../../ARCHITECTURE.md) 한 곳으로 합쳤다. 이 문서는 이력·세부 참고용이며, 어긋나면 ARCHITECTURE.md(와 코드)가 이긴다.
+
 > **정본.** `agent-hierarchy-design.md`(v1, 2계층 agent-as-tool)를 **대체**한다.
 > 개정일: 2026-08-02 · 근거: 멘토 피드백 — "에이전트 간 도구가 겹치면 Orchestrator가 위임 대상을 혼동한다. 도구 겹침 금지."
 > v1의 겹침 실태: place_scout 4곳 공유·assembly.validate 4곳 공유 등 → 본 개정으로 **겹침 0**.

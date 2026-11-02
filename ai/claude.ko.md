@@ -6,12 +6,6 @@
 
 TripPilot AI는 LLM + 최적화 어셈블리 하이브리드 아키텍처로 여행 일정을 생성·재계획·회고하는 **독립 Python AI 서비스**입니다.
 
-## 핵심 구조
-
-- `aidlc-docs/` — AI-DLC 워크플로우 산출물 (설계·요구사항·계획)
-- `.kiro/` — Kiro IDE steering + AI-DLC 규칙 상세
-- `README.md` — 전체 설계 개요 (최신 정보의 기준)
-
 ## 4대 불변식
 
 1. **INV-1**: LLM은 closed-set 후보 안에서만 선택 (환각 0)
@@ -19,95 +13,33 @@ TripPilot AI는 LLM + 최적화 어셈블리 하이브리드 아키텍처로 여
 3. **INV-3**: 소요시간 미표시 — 거리만
 4. **INV-4**: AI 실패 시 결정론 폴백 (침묵 실패 금지)
 
-## 멀티에이전트 구조
+## 아키텍처 — 정본은 하나
 
-> **정본은 `agent-structure-v2.md`** (TRIP-530, 2026-08-25). 아래의 2계층
-> "agent-as-tool" 모델은 `agent-hierarchy-design.md`(v1) 서술인데 **v2가 대체**했다 —
-> 정보원은 깊이 2로 호출되는 하위 에이전트가 아니라 `InfoCollector`가 모으는
-> **Provider**이고, 결과는 봉투로만 전달된다(도구 겹침 0).
+**AI 아키텍처의 단일 정본은 `ARCHITECTURE.md`(2026-11-02)다.** 층, 백엔드↔AI 경계, 요청 흐름, 에이전트 6종,
+오케스트레이터·Provider, LLM 게이트웨이, 조립 엔진, 데이터·KB, 배포, "설계됐지만 미배선" 목록이 모두 거기 있다 —
+여기나 새 문서에 다시 쓰지 않는다. 옛 개요(README 구조 절·`ai-architecture`·`agent-structure-v2`·`agent-redesign`·`components` 등)는
+"대체됨" 안내를 단 이력 문서다. 코드와 문서가 어긋나면 코드가 이기고 `ARCHITECTURE.md` 를 고친다.
 
-**업무 계층** (agent-redesign.md):
-- **Orchestrator**: 의도 파악(하이브리드 질문뱅크 매칭) + Fast Path + AgentTask 봉투로 병렬 디스패치
-- **ScheduleAgent**: 일정 생성 (Generation 패턴) — **배선됨** (2026-09-09): `agents/schedule/agent.py`
-  `ScheduleAgent.run(ScheduleTask)`. `ScheduleCoordinator` 가 소유 검증·시한 배분·정보 수집·소화 후
-  위임한다. 어셈블리 엔진은 독립 층 그대로 — 에이전트는 `solve()` 를 부를 뿐
-- **PlanBAgent**: 변수 대응 (RAG 패턴, KB 3종 + pgvector) — `agents/planb/rag.py` `PlanBRagPipeline.run(PlanBRagRequest)`
-- **ReflectAgent**: 회고 생성 — `agents/reflect/agent.py` `ReflectAgent.run(ReflectTask)`. 텍스트·vision(Phase 2)이 `ReflectTask.vision` 유무로 한 진입점
-- **EditAgent**: 일정 편집 (번역 → 검증 → 확인 게이트 → 재타이밍 → 어셈블리 검증) — `agents/edit/agent.py` `EditAgent.run(EditTask) -> EditOutcome`
-- **UnknownHandlingAgent**: 카드에 "미확인"인 장소 사실(영업시간·휴무일·입장료)을 답한 **뒤에** 벤더 웹 검색으로 찾는다 — `agents/unknown_handling/agent.py` `UnknownHandlingAgent.run(UnknownTask) -> UnknownOutcome(facts, pending)`. 도우미 GET_POI_INFO 핸들러가 부른다(`ROUTING_TABLE` 행 아님), 결과는 ai_kb `place_fact_cache` 에 저장해 다음 물음에 쓴다. 둘째 일(2026-10-23): 여행 일반 지식을 이번 턴에 답한다 — `run(KnowledgeTask) -> UnknownOutcome(answer)`(feature `DIALOGUE_KNOWLEDGE`, 웹 검색 없음)
-- **RecommendationAgent**: 도우미 추천 의도 둘의 고르기(어느 후보 묶음·순서·몇 곳 / 어느 지역과 근거) — `agents/recommendation/agent.py` `RecommendationAgent.run(RecommendTask) -> RecommendOutcome`. LLM 0, 재료는 도우미 핸들러가 모으고 답(Facts)도 핸들러가 짓는다. 2026-10-23 편입(사용자 결정)
-
-> **여섯 에이전트 모두 게이트웨이 워커를 감싸는 객체다** (2026-09-09 — RecommendationAgent 는 감쌀 워커 없이 고르기만): 생성자 주입, `run(<Task>) -> <Outcome>`
-> 단일 진입, 경계 밖으로 예외를 던지지 않는다(DL-5). 문자 그대로의 `Agent.handle(AgentTask) -> AgentResult`
-> 봉투는 여섯 다 아직 미구현 — IntentRouter 배선과 함께 온다(business-rules 미결 #8).
-> 단, **판단 없는 단발 변환은 경계→워커 직행이 정식 패턴**(`reflection_nudge` — u6-reflect FD §2.1, 2026-09-09).
-
-**정보원** (v2 — `orchestrator/info_collector.py` + `providers/`):
-Place · Weather · Transit · Persona · Event Provider. Orchestrator가
-INFO_REQUIREMENTS 표에 따라 모아 **AgentTask 봉투에 실어** 넘긴다 — 업무 에이전트가
-Provider를 직접 부르지 않는다. 각 Provider는 `ProviderStatus`
-(`OK`/`LOW`/`NO_CANDIDATES`/`WEATHER_UNKNOWN`/`COLD_START`/`UNAVAILABLE`)를 함께 낸다.
-
-`IntentRouter`(질문뱅크 매칭)는 **배선됐다**(2026-10-14) — 경계는 하나뿐이다:
-U8 도우미의 `POST /ai/v1/dialogue/interpret`(`orchestrator/dialogue_interpreter.py`).
-AI 는 해석만, 디스패치는 백엔드 `assistant` 모듈(U8 DEC-U8-1). 질문뱅크는 기동 때 미리 계산한
-벡터(`data/intent_question_bank.vectors.json.gz`)로 메모리 스토어에 색인한다(실 DB 적재 없음). 뱅크를 고치면
-`scripts/intent/build_bank_vectors.py` 로 재생성 — 옛 파일은 싣지 않고 원격 색인으로 넘어간다.
-
-> **Orchestrator 갱신 (2026-10-17 — `assistant-orchestrator` FD)**: 이 경계의 호출자는 여전히
-> `POST /ai/v1/dialogue/interpret`(TRIP-1410, 2026-10-14)다. 이 PR 로 그 뒤에 `orchestrator/dialogue_orchestrator.py`
-> `DialogueOrchestrator.turn(TurnInput) -> TurnOutcome` 이 선다: LLM 직접 분류(`DIALOGUE_INTENT`, IntentGate closed-set)
-> → Provider(Weather·Transit·신규 PoiInfo)·인프로세스 PlanBAgent 를 공유 풀에 **병렬** 팬아웃(`request_meta.deadline_ms`
-> 9,000ms 안) → LLM 답변 조합(`DIALOGUE_ANSWER`, 출구 게이트 ≤400자·INV-3·연락처 패턴, 결정론 템플릿 폴백)을
-> `outcome=ANSWER` 로 → 10턴마다 20줄 요약을 자체 DB `ai_kb.dialogue_memory` 에 저장(90일 TTL,
-> `DELETE /ai/v1/dialogue/memory` 로 파기). 3단 `IntentRouter` 는 **서비스 경로에서 빠진다** — `ShadowIntentProbe` 가
-> 샘플(DEV 1.0·운영 0.2)로 배경에서 돌려 `intent_shadow` 로그 1줄/턴으로 일치율만 재고, 섀도 LLM 호출은 `llm_calls` 에
-> 넣지 않는다. `EDIT_SCHEDULE` 은 1단계에서 `FRAME`(백엔드 제안 경로) 유지. env `TRIPPILOT_DIALOGUE_ORCHESTRATOR`(기본 off) ·
-> `TRIPPILOT_DIALOGUE_SHADOW_RATE`. 왜: 사용자 결정(2026-10-17) — LLM 이 바로 분류하고 병렬 결과를 AI 안에서 답변으로
-> 조합한다. FD: `aidlc-docs/construction/assistant-orchestrator/functional-design/`.
-
-## 핵심 설계 문서 (application-design/)
-
-- 위임 프로토콜: `orchestrator-delegation-design.md` (AgentTask/AgentResult, deadline 상속, trace_id)
-- 입출력 계약: `agent-io-contracts.md` (FE↔BE↔Agent 대응)
-- 의도 파악: `intent-matching-design.md` / 평가 지표(최신성·신속도): `evaluation-metrics-design.md`
-- MLOps/LLMOps + ML 유형화: `mlops-llmops-design.md`
-
-## Assembly 하이브리드 전략
-
-OR-Tools (1차 결정론) → LLM (2차 창의적 제안) → 규칙 폴백 (최후 보장)
-모든 출력은 HC1~HC4 검증 통과 필수.
-
-⚠️ **LLM 2차 단계는 미배선이다** (TRIP-529, 2026-08-25). `api/wiring.py`가
-`stages = (OrToolsAssembler, RuleFallbackAssembler)`로 조립한다 — 어셈블리 프롬프트 정본과 모델
-설정이 아직 없기 때문이다. 따라서 AI-D07의 "잔여 ≥ 2.5s면 2차 실행" 분기는 **어떤
-경로에서도 발생할 수 없다**.
+세션이 가장 자주 틀리는 사실(믿기 전에 코드로 확인):
+- **에이전트 6종**, 모두 `run(<Task>)` 객체(명단 정본 `agents/__init__.py`). `Agent.handle(AgentTask) -> AgentResult` 봉투는 여섯 다 미구현.
+- 도우미 턴은 `TRIPPILOT_DIALOGUE_ORCHESTRATOR=on`(개발·운영 on, 코드 기본 off)이면 `DialogueOrchestrator`(LLM 직접 분류
+  `DIALOGUE_INTENT`)를 탄다. 이때 3단 `IntentRouter` 는 섀도로만 돈다. 스위치가 off 면 `IntentRouter` 가 서비스 경로다.
+- 조립 체인은 **2단**(`OrToolsAssembler` → `RuleFallbackAssembler`), LLM 2차 단계는 미배선.
+- 판단 없는 단발 변환(공유 카드 문구·넛지·알림 문구)은 에이전트 없이 경계 → 워커 직행.
+- 모델 배정은 배포 환경변수(`TRIPPILOT_LLM_FEATURE_MODELS`)가 정본 — 문서에 모델 이름을 박지 않는다.
 
 ## 기술 스택
 
-- Python 3.11+ / Anthropic API 직접 (Claude — AI-D06) / OR-Tools / FastAPI
-- pgvector + **로컬 `nlpai-lab/KURE-v1` 임베딩** (AI-D06 부기 2026-08-23, TRIP-514
-  배선 완료). Titan은 폴백 어댑터이고 Bedrock 전용이다.
-- pytest + Hypothesis — 속성 개수는 문서에 박지 않는다(늘 때마다 스테일이 된다, TRIP-530).
-  세려면 `grep -rc --include="*.py" "@given" ai/tests`. 종전 "19"·"52"·"170개/41개" 표기는
-  모두 스테일이었다.
-- **테스트 폴더는 `src/trippilot/` 를 따라간다**: 주로 시험하는 패키지 폴더 `tests/<패키지>/` 에 둔다
-  (에이전트는 `tests/agents/<schedule|planb|reflect|edit|unknown_handling|recommendation>/`). `ai/scripts` 를 시험하는 것은 `tests/scripts/`.
-  `fakes/`·`fixtures/`·`generators/` 와 `test_architecture.py` 는 루트에 둔다.
-- LangChain: **선언만 있고 쓰지 않는다** — `pyproject.toml`에 의존성이 없고 `src/`에
-  import 0건. RAG는 psycopg + pgvector로 직접 구현했다 (철회 기록은 TRIP-522).
+- Python 3.11+ / FastAPI / OR-Tools / `llm_gateway` 어댑터 뒤의 LLM 벤더(Anthropic · OpenAI · Bedrock).
+- pgvector(`ai_kb` DB) + 별도 임베딩 서비스의 **`nlpai-lab/KURE-v1`**.
+- pytest + Hypothesis — 개수를 박지 않는다. `grep -rc --include="*.py" "@given" ai/tests` 로 센다.
+- **테스트 배치는 `src/trippilot/` 를 거울로 한다**: 주로 다루는 패키지 폴더 `tests/<package>/` 에 둔다(에이전트는 에이전트별
+  `tests/agents/<schedule|planb|reflect|edit|unknown_handling|recommendation>/`). `ai/scripts` 테스트는 `tests/scripts/`.
+  `fakes/`·`fixtures/`·`generators/`·`test_architecture.py` 는 루트에 둔다.
+- LangChain: **쓰지 않는다** — 의존성 0, import 0. RAG 는 psycopg + pgvector 로 직접 만들었다.
 
-## 현재 상태
-
-**U1~U6 구축·가동 중** (2026-08-25 기준). FastAPI 경계가 열려 있고 백엔드가 실제로
-왕복 호출한다: `POST /ai/v1/itinerary/{generate,validate,repair,alternatives,
-explanations,edit}` + `/health` + `POST /ai/v1/reflection/{generate,nudge}`
-+ `POST /ai/v1/notification/copies`(TRIP-836 — 리마인드 문구).
-CI(`ai-ci`)가 "실행 앱 스키마 == 커밋된 `docs/openapi.json`"을 강제하고 외부 API는
-전부 fake다(실호출 0). develop 푸시에서 GHCR 이미지가 발행된다.
-
-**와이어 정본은 `docs/openapi.json`** — 손으로 고치지 말고 `scripts/export_openapi.py`로
-재생성한다.
+**와이어 정본은 `docs/openapi.json`** — 손으로 고치지 않는다. `scripts/export_openapi.py` 로 다시 만든다.
+CI(`ai-ci`)가 "실행 앱 스키마 == 커밋된 계약"을 강제하고, 외부 API 는 전부 가짜로 돈다.
 
 ## 개발 워크플로우 (spec-kit + 서브에이전트)
 
