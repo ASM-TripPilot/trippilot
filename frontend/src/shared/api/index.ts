@@ -8,6 +8,7 @@ import {
 
 import { clearTokens, getTokens, saveTokens } from '@/shared/storage';
 import type { ErrorResponseErrorFieldsItem } from './generated/schemas';
+import { loginDeviceId } from './loginDeviceId';
 import {
   clearAccessToken,
   getAccessToken,
@@ -45,8 +46,9 @@ export interface SocialLoginBody {
 }
 
 /** `/auth/social/{provider}/token`(네이티브 SDK access token 경로, TRIP-210) 요청 바디.
- * deviceId 는 openapi 상 선택 필드지만 프론트에 기기 식별자 개념이 없어 의도적으로 넣지 않는다
- * (D7 — 미제공 시 서버가 임의 부여). 필드에 없으면 실수로라도 실릴 수 없다. */
+ * 선택 필드 deviceId 는 호출부가 아니라 `postSocialLogin`·`postSocialTokenLogin` 이 `loginDeviceId()`
+ * (`{플랫폼}-{설치 id}`)로 붙인다 — 서버가 refresh_session.device_id 에 저장해 앱/웹 가입자를 가른다
+ * (2026-11-02, 옛 D7 "미전송·서버 임의 부여"를 대체). 못 읽으면 빼고 보낸다. */
 export interface SocialTokenLoginBody {
   accessToken: string;
   // 애플만 보낸다(TRIP-933 선택 필드).
@@ -278,7 +280,7 @@ export async function postSocialLogin(
   try {
     const response = await baseClient.post<TokenPair>(
       `/auth/social/${provider}`,
-      body
+      { ...body, deviceId: await loginDeviceId() }
     );
     return response.data;
   } catch (error) {
@@ -296,7 +298,7 @@ export async function postSocialTokenLogin(
   try {
     const response = await baseClient.post<TokenPair>(
       `/auth/social/${provider}/token`,
-      body
+      { ...body, deviceId: await loginDeviceId() }
     );
     return response.data;
   } catch (error) {

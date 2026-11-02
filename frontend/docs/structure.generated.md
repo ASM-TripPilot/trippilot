@@ -670,6 +670,7 @@
 
 ## src/pages/auth/login/lib/
 - `src/pages/auth/login/lib/appleAuthorize.tsx`  →  appleAuthorize · isAppleSignInAvailable · AppleSignInButton
+- `src/pages/auth/login/lib/inAppBrowser.ts`  →  STAY_MARKER · withStayMarker · isInAppBrowser · externalBrowserUrl
 - `src/pages/auth/login/lib/isNaverLoginAvailable.ts`  →  isNaverLoginAvailable
 - `src/pages/auth/login/lib/kakaoAuthorize.ts`  →  kakaoAuthorize
 - `src/pages/auth/login/lib/kakaoAuthorize.web.ts`  →  kakaoAuthorize
@@ -1639,6 +1640,7 @@
 - `src/shared/api/isNotFound.ts`  →  isNotFound · retryUnlessNotFound
 - `src/shared/api/isOfflineWaiting.ts`  →  isOfflineWaiting
 - `src/shared/api/isRateLimited.ts`  →  isRateLimited · retryAfterSeconds · isGenerationDailyLimit · isShareCardDailyLimit
+- `src/shared/api/loginDeviceId.ts`  →  loginDeviceId
 - `src/shared/api/mutator.ts`  →  customInstance
 - `src/shared/api/tokenManager.ts`  →  getAccessToken · setAccessToken · clearAccessToken · hydrate · subscribeAccessToken
 - `src/shared/api/useAccessToken.ts`  →  useAccessToken
@@ -1917,4 +1919,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1239개 파일
+합계 1241개 파일
