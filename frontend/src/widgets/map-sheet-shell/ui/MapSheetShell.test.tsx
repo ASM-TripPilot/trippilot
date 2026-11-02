@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
+import { useEffect } from 'react';
 import {
   act,
   fireEvent,
@@ -6,7 +7,7 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import { Dimensions, FlatList, Text } from 'react-native';
+import { Dimensions, FlatList, Platform, Text } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import type { MapPin } from '@/shared/map';
@@ -1691,21 +1692,36 @@ describe('MapSheetShell · 토스트 바닥 신고 — CTA 바가 그려지는 �
   });
 });
 
-/* ──────────────── TRIP-1694 · 루트가 숨겨진 동안(높이 0) 온 가짜 onChange 는 칸으로 받지 않는다 ────────────────
- * 웹에서 편집기 위에 화면을 push 하면 편집기가 display:none 으로 숨는다 → 셸 루트 onLayout 높이 0 → gorhom 의 세 칸이 전부 0 으로
- * 겹쳐 어떤 이동이든 완료 때 `onChange(0)` 이 나온다. 셸이 그걸 "닫힘"으로 믿으면 CTA 바(저장 버튼)가 사라진다.
- * 셸 방어: ① 숨김 동안의 onChange 는 `snapIndex`·`onSheetChange` 둘 다 거른다 ② 숨김→보임 전이에서만 마지막으로 도착한 칸으로 `snapToIndex` 1회.
- * 숨김 = 루트가 높이 0 을 보고한 상태, 보임 = 높이 > 0 이거나 아직 한 번도 안 잰 상태(jest·첫 렌더·네이티브 기본).
- * 흉내: 루트 호스트에 `fireEvent(…, 'layout', …)` 로 높이를 보내고, 가짜 도착은 기존 `changeSnap(0)` 으로 보낸다.
- * ⚠️ 원리적 사각: 통과형 목은 실제 display:none·세 칸이 0 으로 겹침·`indexOf` 첫 칸 선택을 재현 못 하고, 복원 `snapToIndex` 가 웹에서 실제로
- *   먹히는지(gorhom isLayoutCalculated)도 못 본다 → 웹 실화면 6-b(AC-W1·W2). 여기는 "셸이 높이에 따라 거르고 복원을 요청한다"까지.
- * 3동작: 준비=칸에 두고 렌더 → 실행=높이 보고(0/양수)·changeSnap → 단언=CTA·지도 잠금·onSheetChange·snapToIndex 스파이. */
-describe('MapSheetShell · SHH — 루트가 숨겨진 동안의 가짜 onChange 방어', () => {
+/* ──────────────── TRIP-1694 · 웹에서 루트가 숨겨진 동안(높이 0) 온 가짜 onChange 는 칸으로 받지 않고, 다시 보이면 시트를 새로 마운트한다 ────────────────
+ * 웹에서 편집기 위에 화면을 push 하면 편집기가 display:none 으로 숨는다 → 셸 루트 onLayout 높이 0 → gorhom 이 높이 0 으로 위치를 다시 계산해
+ * 칸 기억을 잃고 `onChange(0)`(또는 −1)을 낸다. 셸이 그걸 "닫힘"으로 믿으면 CTA 바(저장 버튼)가 사라진다.
+ * 셸 방어(웹만): ① 숨김 동안의 onChange 는 `snapIndex`·`onSheetChange` 둘 다 거른다 ② 숨김→보임 전이에서 시트를 숨기기 전 마지막 도착 칸으로
+ * **새로 마운트**한다(key 교체 + `index`). 종전 ②는 `snapToIndex` 요청이었는데 웹 실화면에서 gorhom 의 보임 직후 재계산에 덮여 시트가 화면 밖에 남았다
+ * (재QA R-07, 로컬 웹 대조 재현) — 그래서 이 describe 는 스냅 요청 0회와 재마운트·진입 칸을 함께 본다.
+ * 숨김 = 루트가 높이 0 을 보고한 상태, 보임 = 높이 > 0 이거나 아직 한 번도 안 잰 상태. 네이티브(ios)는 높이를 아예 안 본다(H9).
+ * 흉내: `Platform.OS` 를 web 으로 바꾸고, 루트 호스트에 `fireEvent(…, 'layout', …)` 로 높이를 보내고, 가짜 도착은 기존 `changeSnap(0)` 으로 보낸다.
+ *   재마운트는 시트 본문 자식의 마운트 횟수(`mounts`)로, 새 시트의 진입 칸은 시트 host 의 `index` prop 으로 읽는다.
+ * ⚠️ 원리적 사각: 통과형 목은 실제 display:none·gorhom 의 높이 0 재계산·새 마운트가 실제로 그 칸에 서는지를 재현 못 한다 → 웹 실화면(6-b).
+ * 3동작: 준비=웹으로 두고 칸에 렌더 → 실행=높이 보고(0/양수)·changeSnap → 단언=CTA·지도 잠금·onSheetChange·재마운트 횟수·index·스냅 스파이. */
+describe('MapSheetShell · SHH — 웹에서 루트가 숨겨진 동안의 가짜 onChange 방어와 재마운트 복원', () => {
+  let mounts = 0;
+  function MountProbe(): ReactElement {
+    useEffect(() => {
+      mounts += 1;
+    }, []);
+    return <Text>본문</Text>;
+  }
+
   beforeEach(() => {
     withMapKey();
     spy().mockClear();
+    mounts = 0;
+    jest.replaceProperty(Platform, 'OS', 'web');
   });
-  afterEach(restoreMapKey);
+  afterEach(() => {
+    jest.restoreAllMocks();
+    restoreMapKey();
+  });
 
   function shell(
     props: Partial<Parameters<typeof MapSheetShell>[0]> = {}
@@ -1723,7 +1739,7 @@ describe('MapSheetShell · SHH — 루트가 숨겨진 동안의 가짜 onChange
         initialIndex={2}
         {...props}
       >
-        <Text>본문</Text>
+        <MountProbe />
       </MapSheetShell>
     );
   }
@@ -1736,6 +1752,8 @@ describe('MapSheetShell · SHH — 루트가 숨겨진 동안의 가짜 onChange
   }
   const hide = () => setRootHeight(0);
   const show = () => setRootHeight(800);
+  /** 새 시트가 서는 칸 — 통과형 목은 받은 `index` 를 host prop 으로 그대로 둔다. */
+  const sheetIndex = () => sheetHost().props.index as number;
 
   it('H1 · 숨김 동안 온 onChange(0) 는 닫힘으로 안 받는다 — CTA 바가 남고 지도는 잠긴 채다 (AC-1)', () => {
     // 준비 — 편집기 모양(기본 배열, 펼침 2 로 진입).
@@ -1764,22 +1782,25 @@ describe('MapSheetShell · SHH — 루트가 숨겨진 동안의 가짜 onChange
     expect(onSheetChange).not.toHaveBeenCalled();
   });
 
-  it('H3 · 숨겼다가 다시 보이면 숨기기 전에 마지막으로 도착한 칸으로 snapToIndex 를 정확히 1회 요청한다 (AC-3)', () => {
+  it('H3 · 숨겼다가 다시 보이면 시트를 숨기기 전 마지막 도착 칸으로 정확히 1회 새로 마운트한다 — 스냅 요청은 0회 (AC-3)', () => {
     // 준비
     render(shell());
+    expect(mounts).toBe(1);
     hide();
-    changeSnap(0); // 가짜 도착 — 복원 대상이 이 0 이 아니라 숨기기 전 2 여야 한다.
-    expect(spy()).not.toHaveBeenCalled(); // 숨김 자체는 스냅 요청이 아니다(앵커)
+    changeSnap(0); // 가짜 도착 — 새 시트의 칸이 이 0 이 아니라 숨기기 전 2 여야 한다.
+    expect(mounts).toBe(1); // 숨김 자체는 재마운트가 아니다(앵커)
 
     // 실행
     show();
 
-    // 단언
-    expect(spy()).toHaveBeenCalledTimes(1);
-    expect(spy()).toHaveBeenCalledWith(2);
+    // 단언 — 덮이는 snapToIndex 대신 재마운트(R-07).
+    expect(mounts).toBe(2);
+    expect(sheetIndex()).toBe(2);
+    expect(spy()).not.toHaveBeenCalled();
+    expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
   });
 
-  it('H3b · 복원 칸은 진입 칸(initialIndex)이 아니라 숨기기 전 마지막 도착 칸이다 — 1 로 옮겨 뒀으면 1 (AC-3)', () => {
+  it('H3b · 새 시트의 칸은 진입 칸(initialIndex)이 아니라 숨기기 전 마지막 도착 칸이다 — 1 로 옮겨 뒀으면 1 (AC-3)', () => {
     // 준비 — 2 로 진입해 사용자가 1 로 내려 둔다.
     render(shell());
     changeSnap(1);
@@ -1790,19 +1811,19 @@ describe('MapSheetShell · SHH — 루트가 숨겨진 동안의 가짜 onChange
     show();
 
     // 단언
-    expect(spy()).toHaveBeenCalledTimes(1);
-    expect(spy()).toHaveBeenCalledWith(1);
+    expect(mounts).toBe(2);
+    expect(sheetIndex()).toBe(1);
   });
 
-  it('H3c · 숨김 안에서 높이 0 을 또 보고해도 복원은 보임 전이 때 1회뿐이고, 복원 뒤의 새 도착 칸이 다음 숨김의 복원 칸이 된다 (AC-3·AC-5)', () => {
+  it('H3c · 숨김 안에서 높이 0 을 또 보고해도 재마운트는 보임 전이 때 1회뿐이고, 그 뒤의 새 도착 칸이 다음 숨김의 복원 칸이 된다 (AC-3·AC-5)', () => {
     // 준비/실행 ① — 0 을 두 번 보고 → 보임.
     render(shell());
     hide();
     hide();
-    expect(spy()).not.toHaveBeenCalled();
+    expect(mounts).toBe(1);
     show();
-    expect(spy()).toHaveBeenCalledTimes(1);
-    expect(spy()).toHaveBeenLastCalledWith(2);
+    expect(mounts).toBe(2);
+    expect(sheetIndex()).toBe(2);
 
     // 실행 ② — 사용자가 1 로 옮기고 한 번 더 숨겼다 돌아온다(한 번 복원하고 영원히 막히는 구현 차단).
     changeSnap(1);
@@ -1811,12 +1832,12 @@ describe('MapSheetShell · SHH — 루트가 숨겨진 동안의 가짜 onChange
     show();
 
     // 단언
-    expect(spy()).toHaveBeenCalledTimes(2);
-    expect(spy()).toHaveBeenLastCalledWith(1);
+    expect(mounts).toBe(3);
+    expect(sheetIndex()).toBe(1);
   });
 
   it('H4 · 보이는 동안(미측정·높이>0)에 온 onChange(0) 는 종전처럼 받는다 — CTA 사라짐·지도 풀림·onSheetChange(0) (AC-4 · 선제 green)', () => {
-    // 준비 — 높이를 한 번도 안 보낸 채(= jest·네이티브 기본).
+    // 준비 — 높이를 한 번도 안 보낸 채.
     const onSheetChange = jest.fn();
     render(shell({ onSheetChange }));
 
@@ -1838,7 +1859,7 @@ describe('MapSheetShell · SHH — 루트가 숨겨진 동안의 가짜 onChange
   });
 
   it('H4b · 한 번 숨겼다 돌아온 뒤에는 진짜 onChange(0) 를 다시 받는다 — "영원히 무시" 금지 (AC-4)', () => {
-    // 준비 — 숨김 동안의 가짜 0 은 거르고(여기서 구현 전 red), 보임으로 돌아온다.
+    // 준비 — 숨김 동안의 가짜 0 은 거르고, 보임으로 돌아온다.
     const onSheetChange = jest.fn();
     render(shell({ onSheetChange }));
     hide();
@@ -1846,7 +1867,7 @@ describe('MapSheetShell · SHH — 루트가 숨겨진 동안의 가짜 onChange
     expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
     show();
 
-    // 실행 — 이제 보이는 상태에서 사용자가 핸들까지 내려 0 에 도착.
+    // 실행 — 이제 보이는 상태에서 사용자가 핸들까지 내려 0 에 도착(새 시트의 onChange).
     changeSnap(0);
 
     // 단언
@@ -1856,17 +1877,18 @@ describe('MapSheetShell · SHH — 루트가 숨겨진 동안의 가짜 onChange
     expect(onSheetChange).toHaveBeenLastCalledWith(0);
   });
 
-  it('H5 · 복원은 숨김→보임 전이에서만 — 처음 측정이 곧바로 >0 이거나 보임→보임 높이 변화는 snapToIndex 0회 (AC-5 · 선제 green)', () => {
+  it('H5 · 재마운트는 숨김→보임 전이에서만 — 처음 측정이 곧바로 >0 이거나 보임→보임 높이 변화는 0회 (AC-5 · 선제 green)', () => {
     render(shell());
 
     setRootHeight(800); // 첫 측정이 양수
     setRootHeight(600); // 보임 → 보임
     setRootHeight(800);
 
-    expect(spy()).not.toHaveBeenCalled();
+    expect(mounts).toBe(1);
+    expect(sheetIndex()).toBe(2);
   });
 
-  it('H5b · 처음 측정이 곧바로 0 이었다가 보이면 진입 칸(initialIndex)으로 복원한다 — 도착 기록이 없을 때의 출발값 (AC-5)', () => {
+  it('H5b · 처음 측정이 곧바로 0 이었다가 보이면 진입 칸(initialIndex)으로 새로 마운트한다 — 도착 기록이 없을 때의 출발값 (AC-5)', () => {
     // 준비 — 도착 알림(onChange)이 한 번도 없었다.
     render(shell({ initialIndex: 2 }));
 
@@ -1875,11 +1897,11 @@ describe('MapSheetShell · SHH — 루트가 숨겨진 동안의 가짜 onChange
     show();
 
     // 단언
-    expect(spy()).toHaveBeenCalledTimes(1);
-    expect(spy()).toHaveBeenCalledWith(2);
+    expect(mounts).toBe(2);
+    expect(sheetIndex()).toBe(2);
   });
 
-  it('H6 · (금지) 마지막 도착 칸이 −1(완전 내림)이면 복원하지 않고, 이후 0 이상 칸에 도착하면 다시 복원한다 (AC-7)', () => {
+  it('H6 · 마지막 도착 칸이 −1(완전 내림)이면 새 시트도 −1 로 선다 — 숨김 중 가짜 −1 은 기억을 덮지 못한다 (AC-7)', () => {
     // 준비 — 허브 모양(직접 배열 + 끝까지 내림 허용).
     render(
       shell({
@@ -1894,19 +1916,19 @@ describe('MapSheetShell · SHH — 루트가 숨겨진 동안의 가짜 onChange
     hide();
     show();
 
-    // 단언 ① — −1 은 복원 대상이 아니다.
-    expect(spy()).not.toHaveBeenCalled();
+    // 단언 ① — 사용자가 내려 둔 그대로(다시 펼치지 않는다).
+    expect(sheetIndex()).toBe(-1);
 
-    // 실행 ②/단언 ② — 앵커: 같은 모양이 0 이상 칸이면 복원한다(위 "0회"가 공허하지 않다는 증거).
+    // 실행 ②/단언 ② — 앵커: 0 이상 칸에 도착한 뒤면 그 칸으로, 숨김 중 가짜 −1 은 무시.
     changeSnap(1);
     hide();
-    changeSnap(-1); // 숨김 중 가짜 도착도 기억을 −1 로 덮지 못한다
+    changeSnap(-1);
     show();
-    expect(spy()).toHaveBeenCalledTimes(1);
-    expect(spy()).toHaveBeenCalledWith(1);
+    expect(mounts).toBe(3);
+    expect(sheetIndex()).toBe(1);
   });
 
-  it('H7 · (금지) snapPoints 를 직접 준 소비처는 숨김 동안의 0 으로도 닫힘이 되지 않고, 0번 칸도 복원 대상이다 — 0 은 falsy (AC-8)', () => {
+  it('H7 · (금지) snapPoints 를 직접 준 소비처는 숨김 동안의 0 으로도 닫힘이 되지 않고, 0번 칸도 복원 칸이다 — 0 은 falsy (AC-8)', () => {
     // 준비 — i05 모양(2칸 배열, 0번 = 40% 열린 시트).
     render(shell({ snapPoints: ['40%', '88%'], initialIndex: undefined }));
 
@@ -1918,15 +1940,15 @@ describe('MapSheetShell · SHH — 루트가 숨겨진 동안의 가짜 onChange
     expectMapLocked(true);
     expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
 
-    // 실행/단언 ② — 돌아오면 0번으로 복원 요청(`if (index)` 로 거르면 여기서 red).
+    // 실행/단언 ② — 돌아오면 0번으로 새로 마운트.
     show();
-    expect(spy()).toHaveBeenCalledTimes(1);
-    expect(spy()).toHaveBeenCalledWith(0);
+    expect(mounts).toBe(2);
+    expect(sheetIndex()).toBe(0);
     expectMapLocked(true);
     expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
   });
 
-  it('H8 · (금지) 숨김 동안 snapRequest·expandSignal 이 와도 셸 칸 기억이 깨지지 않는다 — 돌아오면 여전히 숨기기 전 칸으로 복원한다 (AC-9)', () => {
+  it('H8 · (금지) 숨김 동안 snapRequest·expandSignal 이 와도 셸 칸 기억이 깨지지 않는다 — 돌아오면 여전히 숨기기 전 칸으로 선다 (AC-9)', () => {
     // 준비 — 요청 값 둘의 출발값을 정해 두고 마운트.
     const { rerender } = render(
       shell({ snapRequest: { index: 0, id: 1 }, expandSignal: 0 })
@@ -1942,8 +1964,25 @@ describe('MapSheetShell · SHH — 루트가 숨겨진 동안의 가짜 onChange
     expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
     expectMapLocked(true);
 
-    // 실행/단언 ② — 돌아오면 마지막 요청(0)이 아니라 숨기기 전 도착 칸 2 가 마지막 스냅 요청이다.
+    // 실행/단언 ② — 돌아오면 마지막 요청(0)이 아니라 숨기기 전 도착 칸 2 로 새 시트가 선다.
     show();
-    expect(spy()).toHaveBeenLastCalledWith(2);
+    expect(sheetIndex()).toBe(2);
+  });
+
+  it('H9 · 네이티브(ios)는 높이를 보지 않는다 — 높이 0 뒤의 onChange(0) 도 종전처럼 닫힘이고 재마운트 0회 (앱 무변경)', () => {
+    // 준비 — 플랫폼을 네이티브로 되돌린다(웹 전용 방어가 앱으로 새지 않는다).
+    jest.replaceProperty(Platform, 'OS', 'ios');
+    const onSheetChange = jest.fn();
+    render(shell({ onSheetChange }));
+
+    // 실행
+    hide();
+    changeSnap(0);
+    show();
+
+    // 단언
+    expect(screen.queryByTestId('sheet-cta-root')).toBeNull();
+    expect(onSheetChange).toHaveBeenLastCalledWith(0);
+    expect(mounts).toBe(1);
   });
 });
