@@ -208,9 +208,9 @@ def publish_pois(repo: Path, numbers: dict, wait_s: float = 5) -> str:
     if state != "MERGED":
         raise RuntimeError(f"공유본 PR #{pr} 이 머지되지 않았다(상태 {state or '?'}) — 상태를 영속하지 않는다")
     # backend-ci 를 디스패치하지 않는다. Actions 판은 GITHUB_TOKEN 이라 봇 PR 의 런이 승인 대기로 멈추고(0회) 머지 push 도 런을
-    # 만들지 않아, 디스패치 런(test 잡만)으로 실문서 계약 IT 를 돌린다. 여기 GH_TOKEN 은 PAT·App 토큰이라 PR 이벤트로 backend-ci·
-    # ai-ci PR 런이, 머지 push 로 develop push 런(backend-ci 는 image 잡까지 — ghcr develop 태그를 머지마다 발행)이 저절로 돈다 —
-    # 머지 하루마다 backend-ci 2·ai-ci 2. 계약 IT 는 그 안에서 돌므로 디스패치를 더하면 세 번째 backend-ci 다.
+    # 만들지 않아, 디스패치 런(test 잡만)으로 실문서 계약 IT 를 돌린다. 여기 GH_TOKEN 은 PAT·App 토큰이라 PR 이벤트로 PR 런이,
+    # 머지 push 로 develop push 런이 저절로 돈다 — 머지 하루마다 backend-ci 2·ai-ci 2(PR·push — 두 push 런 모두 image 잡이
+    # ghcr develop 이미지를 발행). 계약 IT 는 그 안에서 돌므로 디스패치를 더하면 세 번째 backend-ci 다.
     return pr
 
 
