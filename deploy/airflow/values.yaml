@@ -4,7 +4,7 @@
 #   - 노드: EKS Auto(Karpenter)가 노드를 고른다. 수집 전용 노드를 둘지(m5a.large 1 ≈ 월 15만원) — 두면 아래
 #     nodeSelector 의 NodePool 이름을 그것으로. 안 두면 nodeSelector 를 지운다.
 #   - 메타 DB: 기존 RDS 에 `airflow` DB·역할을 따로 만든다(앱 DB 와 섞지 않는다). 접속 문자열은 시크릿으로만.
-#   - GitHub 토큰: 공유본 PR·머지·collect-state push 용(contents·pull-requests·actions 쓰기, 이 리포 한정).
+#   - GitHub 토큰: 공유본 PR·머지·collect-state push 용(contents·pull-requests 쓰기만, 이 리포 한정 — backend-ci 를 디스패치하지 않으므로 actions 는 필요 없다).
 #   - OPENAI_BASE_URL: 행사 수집 LLM 401(2026-10-24~, 17곳 모두 폴백) 원인을 정리한 뒤 다시 확인한다 — 아래 값은 지금의
 #     vars.AZURE_OPENAI_ENDPOINT 를 옮긴 것이고, 401 이 키가 아니라 엔드포인트 탓이면 함께 바뀐다.
 #   - Actions 스케줄 끄기: `BATCH_LIVE=1` 은 그 뒤에만 — 둘이 함께 실 수집하면 한도를 두 번 쓰고 collect-state 를 덮는다.
