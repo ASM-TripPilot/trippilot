@@ -41,6 +41,8 @@ jobs:
     steps:
       # 변수가 비면 조용히 빈 값으로 굽지 않는다 — API 주소가 빠진 번들은 뜨기만 하고 모든 요청이 실패한다(INV-4 취지).
       - name: require web build variables
+        # checkout 전이라 잡 기본 working-directory(frontend)가 아직 없다 — 이 스텝만 작업 공간 루트에서 돈다.
+        working-directory: .
         run: |
           missing=()
           for name in EXPO_PUBLIC_API_BASE_URL EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID EXPO_PUBLIC_KAKAO_CLIENT_ID \
