@@ -228,12 +228,14 @@ trippilot:
     public-data-key: ${PUBLIC_DATA_API_KEY:}
   # Plan-B 상황 감시 스윕(situation-awareness · 설계서 §7). 기본 꺼짐 — 켜는 순서는 dry-run(요약 로그로 1~2일 잼) → on.
   # mode = off | dry-run(판정·요약 로그만, 쓰기 0) | on. horizon = today | tomorrow(저녁 회차가 진행 중 여행의 내일도 본다)
-  # | pre-trip(내일 시작하는 여행의 첫날까지). account-ids = 쉼표 구분 UUID, 비면 전원(운영 카나리).
+  # | pre-trip(시작 전 여행의 첫날까지 — 오늘 + pre-trip-days 일 안, 기본 1 = 내일 시작). account-ids = 쉼표 구분 UUID, 비면 전원(운영 카나리).
   # 모르는 모드·지평 값과 UUID 오타는 기동 실패다 — 켰다고 믿는데 꺼진 채 도는 것보다 낫다.
   planb:
     situation-sweep:
       mode: ${PLANB_SITUATION_SWEEP:off}
       horizon: ${PLANB_SITUATION_HORIZON:today}
+      # 지평 pre-trip 일 때 저녁 회차가 보는 시작 전 여행의 창(일, 1~7). 1 = 내일 시작(D-1)만 — 현행. 아래 replan 쪽 창과 같은 값이어야 한다.
+      pre-trip-days: ${PLANB_SITUATION_PRE_TRIP_DAYS:1}
       account-ids: ${PLANB_SITUATION_SWEEP_ACCOUNT_IDS:}
       # 부를 감지기와, 결과를 요약 로그에만 남길 출처. 특보·대기질은 키 등록·실응답 확인 뒤 여기서 빼는 커밋이 '켜기'다 — 2026-10-23 둘 다 뺐다.
       # 출처 이름은 닫힌 집합(kma-forecast·kma-warning·airkorea·place) — 오타는 기동 실패다(관찰 전용 오타가 쓰기를 켜지 않게).
