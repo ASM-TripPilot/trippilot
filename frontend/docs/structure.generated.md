@@ -433,11 +433,12 @@
 - `src/features/execution/ui/ExecutionGlyphs.tsx`  →  RailDoneGlyph · RailActiveGlyph · RailUpcomingGlyph · BackArrowGlyph · ShareGlyph · WarningFilledGlyph · WeatherCloudGlyph · HeroPinGlyph · EventGlyph · HeroPhotoGlyph
 
 ## src/features/explore/
-- `src/features/explore/index.ts`  →  useMultiRegionPlaces · usePlacesInfinite
+- `src/features/explore/index.ts`  →  PLACE_LANE_STALE_TIME · useMultiRegionPlaces · usePlacesInfinite
 - `src/features/explore/index.view.ts`  →  resolvePlaceListState · regionPickerHref · filterRegions · groupRegionsBySido · regionTint · useRegions · BackChevronGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · CloseGlyph · FilterSlidersGlyph · InfoGlyph · MapPinGlyph · PlusGlyph · SearchGlyph · ShareGlyph · SuitcaseGlyph · WarningTriangleGlyph
 
 ## src/features/explore/model/
 - `src/features/explore/model/mergePlaces.ts`  →  mergePlacesByPoiId · interleavePlacesByRegion
+- `src/features/explore/model/placeLaneStaleTime.ts`  →  PLACE_LANE_STALE_TIME
 - `src/features/explore/model/placeListState.ts`  →  PlaceListState · resolvePlaceListState
 - `src/features/explore/model/regionPickerPurpose.ts`  →  RegionPickerPurpose · regionPickerHref
 - `src/features/explore/model/regions.ts`  →  useRegions · filterRegions · limitRegionsWhenEmpty · RegionGroup · groupRegionsBySido · regionTint
@@ -1852,7 +1853,7 @@
 - `src/test-support/preventRemoveMock.ts`  →  mockNavigation · useNavigation · usePreventRemove
 - `src/test-support/pushOsFake.ts`  →  OsPermission · primeOsPermission · primeExpoToken · fakePushNotification · fakePushResponse · lastPushTapListener · primeOsLastResponse · lastPushReceiveListener
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
-- `src/test-support/queryRender.tsx`  →  newTestQueryClient · createWrapper · createGcZeroWrapper · renderWithQueryClient · settle
+- `src/test-support/queryRender.tsx`  →  newTestQueryClient · createWrapper · createGcZeroWrapper · renderWithQueryClient · settle · createClockSkew
 - `src/test-support/queryTimersUnref.ts`  →  (export 없음)
 - `src/test-support/revealProbe.ts`  →  revealWrapper · RevealValues · revealValues
 - `src/test-support/settingsHandlers.ts`  →  API_BASE · SettingsBodies · settingsHandlers · createNetworkTracker
@@ -1919,4 +1920,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1241개 파일
+합계 1242개 파일

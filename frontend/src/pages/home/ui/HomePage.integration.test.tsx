@@ -10,10 +10,14 @@ import {
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import { getGetTripsQueryKey } from '@/shared/api/index.hooks';
+import {
+  getGetPlacesQueryKey,
+  getGetTripsQueryKey,
+} from '@/shared/api/index.hooks';
 import type { Place, Trip } from '@/shared/api/index.schemas';
 import { BASE } from '@/test-support/apiBase';
 import {
+  createClockSkew,
   newTestQueryClient,
   renderWithQueryClient,
   settle,
@@ -294,5 +298,171 @@ describe('TRIP-1638 · 홈 오프라인 콜드스타트', () => {
     expectLanesGone();
     await settle();
     expect(count(TRIPS_GET)).toBe(1);
+  });
+});
+
+/**
+ * TRIP-1713 · 홈 장소 레인 캐시 정책 — 레인 카드 7장을 고르려고 받는 `GET /places` 를 10분 동안 재사용한다.
+ *
+ * 무엇을 보장하나: 홈을 다시 열었을 때(① 30초는 넘고 10분은 안 넘음) 장소를 다시 받지 않고 캐시로 카드를 그린다(여행 없음 3지역·여행 중 1지역 모두),
+ * ② 10분을 넘기면 다시 받는다(무한 캐시 아님), ③ 하트 담기가 남기는 "낡음 표시"는 10분 안에서도 재조회를 낳는다(기존 그대로).
+ * 개념: **재마운트** = 화면을 닫았다가 같은 캐시 저장소로 다시 여는 것. 새로 붙는 화면은 "내 staleTime(신선 유지 시간)보다 오래된
+ * 데이터면 다시 받는다" — 그 staleTime 을 홈이 10분으로 주는지가 심판 대상. 시계는 `Date.now` 만 감는다(02a ★3).
+ * 전역 기본 30초는 앱(`AppProviders`)과 같게 클라이언트에 심는다 — 안 심으면 기본 0 이라 변경 전후 차이가 안 보인다(02a ★2).
+ */
+describe('TRIP-1713 · 홈 장소 레인 캐시 정책', () => {
+  const PLACES_GET = 'GET /api/v1/places';
+  const MIN = 60_000;
+  const GLOBAL_STALE = 30_000; // AppProviders.tsx 의 전역 staleTime 과 같다.
+  const DURING_TRIP = {
+    tripId: '33333333-3333-3333-3333-333333333333',
+    title: '부산 여행',
+    startDate: '2020-01-01',
+    endDate: '2099-12-31',
+    party: 2,
+    preferenceSnapshot: {},
+    destinations: [{ seq: 1, region: '부산', nights: 3 }],
+    status: 'ACTIVE',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    baseCount: 0,
+    itineraryDayCount: 0,
+  } as Trip;
+
+  let clock: ReturnType<typeof createClockSkew>;
+  let placeQueries: { region: string | null; limit: string | null }[] = [];
+
+  beforeEach(() => {
+    clock = createClockSkew();
+    placeQueries = [];
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const url = new URL(request.url);
+        const region = url.searchParams.get('region');
+        placeQueries.push({ region, limit: url.searchParams.get('limit') });
+        return HttpResponse.json({
+          items: PLACES_BY_REGION[region ?? ''] ?? [],
+          nextCursor: null,
+        });
+      })
+    );
+  });
+  afterEach(() => clock.restore());
+
+  /** 여행 중 홈 — 지배 여행의 일정 조회(CTA 목적지용)는 "아직 일정 없음"(404)으로 답한다. */
+  function duringTrip(): void {
+    server.use(
+      http.get(`${BASE}/trips`, () => HttpResponse.json([DURING_TRIP])),
+      http.get(
+        `${BASE}/trips/:tripId/itinerary`,
+        () => new HttpResponse(null, { status: 404 })
+      )
+    );
+  }
+
+  /** 홈을 열어 레인 카드가 그려질 때까지 기다린 뒤 닫는다(캐시는 남는다). */
+  async function openAndClose(client: ReturnType<typeof newTestQueryClient>) {
+    const view = renderWithQueryClient(<HomePage />, client);
+    expect(await screen.findByTestId('home-spot-card-0')).toBeOnTheScreen();
+    await settle();
+    view.unmount();
+  }
+  /** 같은 캐시 저장소로 다시 연다. 이 시점부터의 요청만 세도록 기록을 비운다. */
+  async function reopen(client: ReturnType<typeof newTestQueryClient>) {
+    hits = [];
+    placeQueries = [];
+    renderWithQueryClient(<HomePage />, client);
+    expect(await screen.findByTestId('home-spot-card-0')).toBeOnTheScreen();
+    await settle();
+  }
+  const newClient = () => newTestQueryClient({ staleTime: GLOBAL_STALE });
+
+  it('HC1 (선제 green) 여행이 없으면 첫 진입에 GET /places 는 서울·부산·제주 3건, 각 limit=200', async () => {
+    // 준비 → 실행
+    await openAndClose(newClient());
+
+    // 단언 — 변경 전후 같은 측정값(PR 표에 쓸 값).
+    expect(count(PLACES_GET)).toBe(3);
+    expect(placeQueries.map((q) => q.region).sort()).toEqual(
+      ['부산', '서울', '제주'].sort()
+    );
+    expect(placeQueries.every((q) => q.limit === '200')).toBe(true);
+  });
+
+  it('HC2 (선제 green) 여행 중이면 첫 진입에 GET /places 는 첫 목적지(부산) 1건, limit=200', async () => {
+    // 준비
+    duringTrip();
+
+    // 실행
+    await openAndClose(newClient());
+
+    // 단언
+    expect(count(PLACES_GET)).toBe(1);
+    expect(placeQueries).toEqual([{ region: '부산', limit: '200' }]);
+  });
+
+  it('HC3 30초는 넘고 10분 안에 홈을 다시 열면 GET /places 를 다시 받지 않고 카드 4+3장을 캐시로 그린다', async () => {
+    // 준비 — 첫 진입으로 3지역을 받아 둔다(앵커: 3건).
+    const client = newClient();
+    await openAndClose(client);
+    expect(count(PLACES_GET)).toBe(3);
+
+    // 실행 — 5분 뒤 다시 연다.
+    clock.advance(5 * MIN);
+    await reopen(client);
+
+    // 단언 — 새 요청 0건인데 카드는 앞 4 + 다음 3장(INV-4: 얼굴 불변).
+    expect(count(PLACES_GET)).toBe(0);
+    expect(screen.getAllByTestId(/^home-spot-card-\d+$/)).toHaveLength(4);
+    expect(screen.getAllByTestId(/^home-collection-card-\d+$/)).toHaveLength(3);
+  });
+
+  it('HC4 (선제 green) 10분을 넘기고 다시 열면 3지역을 다시 받는다 — 무한 캐시가 아니다', async () => {
+    // 준비
+    const client = newClient();
+    await openAndClose(client);
+
+    // 실행
+    clock.advance(10 * MIN + 1000);
+    await reopen(client);
+
+    // 단언
+    expect(count(PLACES_GET)).toBe(3);
+  });
+
+  it('HC5 여행 중 1지역도 같은 정책이다 — 10분 안에는 0건, 10분을 넘기면 1건', async () => {
+    // 준비
+    duringTrip();
+    const client = newClient();
+    await openAndClose(client);
+    expect(count(PLACES_GET)).toBe(1);
+
+    // 실행·단언 ① — 5분 뒤: 다시 받지 않는다(재조회가 없으니 받은 시각은 그대로).
+    clock.advance(5 * MIN);
+    await reopen(client);
+    expect(count(PLACES_GET)).toBe(0);
+
+    // 실행·단언 ② — 첫 응답 기준 10분 1초(5분 1초 더): 다시 받는다.
+    clock.advance(5 * MIN + 1000);
+    await reopen(client);
+    expect(count(PLACES_GET)).toBe(1);
+  });
+
+  it('HC6 (선제 green) 하트 담기가 남기는 낡음 표시가 있으면 10분 안이어도 여행 중 1지역은 다시 받는다', async () => {
+    // 준비 — savedPlaces.invalidateBoth 가 하는 것: 즉시 재조회 없이 낡음 표시만(refetchType 'none').
+    duringTrip();
+    const client = newClient();
+    await openAndClose(client);
+    await client.invalidateQueries({
+      queryKey: getGetPlacesQueryKey(),
+      refetchType: 'none',
+    });
+
+    // 실행 — 5초 뒤(전역 30초·새 10분 어느 쪽으로도 신선) 다시 연다.
+    clock.advance(5000);
+    await reopen(client);
+
+    // 단언 — 낡음 표시 때문에만 다시 받는다.
+    expect(count(PLACES_GET)).toBe(1);
   });
 });
