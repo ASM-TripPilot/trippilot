@@ -75,7 +75,7 @@ from trippilot.llm_gateway.workers.dialogue_intent import PROMPT_TURNS, Dialogue
 from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
 from trippilot.llm_gateway.workers.dialogue_smalltalk import DialogueSmalltalkWorker
 from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
-from trippilot.orchestrator.dialogue_handlers import (
+from trippilot.orchestrator.dialogue.dialogue_handlers import (
     HANDLERS,
     AnswerKind,
     asks_more,
@@ -93,8 +93,8 @@ from trippilot.orchestrator.dialogue_handlers import (
     validate_answer_shape,
     validate_answer_text,
 )
-from trippilot.orchestrator.edit_day_areas import DayAreaTurn, check_day_areas
-from trippilot.orchestrator.dialogue_interpreter import (
+from trippilot.orchestrator.dialogue.edit_day_areas import DayAreaTurn, check_day_areas
+from trippilot.orchestrator.dialogue.dialogue_interpreter import (
     SHOWN_MAX,
     Clarify,
     DialogueContext,
@@ -105,7 +105,7 @@ from trippilot.orchestrator.dialogue_interpreter import (
     from_match,
     llm_call_counter,
 )
-from trippilot.orchestrator.dialogue_memory import (
+from trippilot.orchestrator.dialogue.dialogue_memory import (
     DialogueMemory,
     MemoryStorePort,
     context_lines,
@@ -117,10 +117,10 @@ from trippilot.orchestrator.dialogue_memory import (
     legacy_lines,
     material,
 )
-from trippilot.orchestrator.dialogue_plan import has_facts, merge_facts, step_results, step_tasks
-from trippilot.orchestrator.intent_eval import _REFUSAL_MARKERS
-from trippilot.orchestrator.intent_router import normalize
-from trippilot.orchestrator.shadow_probe import ShadowIntentProbe
+from trippilot.orchestrator.dialogue.dialogue_plan import has_facts, merge_facts, step_results, step_tasks
+from trippilot.orchestrator.intent.intent_eval import _REFUSAL_MARKERS
+from trippilot.orchestrator.intent.intent_router import normalize
+from trippilot.orchestrator.intent.shadow_probe import ShadowIntentProbe
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.memory_store_port import SUMMARY_MAX_LINES, MemoryHit, split_kind
 from trippilot.ports.trace_port import TracePort

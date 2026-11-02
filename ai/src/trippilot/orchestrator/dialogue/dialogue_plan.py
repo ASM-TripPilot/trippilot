@@ -21,7 +21,7 @@ from dataclasses import fields, replace
 
 from trippilot.domain.dialogue.intent import Intent
 from trippilot.domain.dialogue.plan_tools import PLAN_TOOLS, PlanTool
-from trippilot.orchestrator.dialogue_handlers import (
+from trippilot.orchestrator.dialogue.dialogue_handlers import (
     HANDLERS,
     AnswerKind,
     Facts,

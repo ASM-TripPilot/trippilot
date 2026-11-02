@@ -14,7 +14,7 @@ from trippilot.assembly_engine.scorer import CATEGORY_WEIGHT
 from trippilot.domain.common import BudgetLevel
 from trippilot.domain.persona import PersonaSummary, TasteTag
 from trippilot.domain.poi.poi import PoiCategory
-from trippilot.orchestrator import dialogue_handlers as dh
+from trippilot.orchestrator.dialogue import dialogue_handlers as dh
 
 
 def test_경계_코드는_ART_BAR_를_포함해_열_개다() -> None:

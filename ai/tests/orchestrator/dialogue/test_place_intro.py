@@ -5,8 +5,8 @@ from __future__ import annotations
 import threading
 import time
 
-from trippilot.orchestrator import place_intro as pi
-from trippilot.orchestrator.place_intro import PlaceIntro, clean_intro
+from trippilot.orchestrator.dialogue import place_intro as pi
+from trippilot.orchestrator.dialogue.place_intro import PlaceIntro, clean_intro
 
 
 def test_clean_intro_drops_sentences_with_clock_times_durations_contacts_or_injection() -> None:

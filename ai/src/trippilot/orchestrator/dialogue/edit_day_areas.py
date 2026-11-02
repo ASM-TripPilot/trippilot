@@ -19,7 +19,7 @@ from datetime import date, timedelta
 
 from trippilot.agents.edit.day_area import DayAreaIssue, day_of, encode, parse_day_areas, resolve_day_areas
 from trippilot.agents.planb.request_verification import KNOWN_AREAS
-from trippilot.orchestrator.dialogue_handlers import TurnSnapshot
+from trippilot.orchestrator.dialogue.dialogue_handlers import TurnSnapshot
 
 MAX_OPTIONS = 4
 MAX_LABEL = 30  # BE 보기 라벨 상한(HttpDialogueInterpreter)

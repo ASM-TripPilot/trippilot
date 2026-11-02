@@ -821,7 +821,7 @@ _BANK_VECTORS_PATH = _BANK_PATH.with_name("intent_question_bank.vectors.json.gz"
 def _bank_vectors():
     """못 읽으면 None — 원격 색인으로 기동한다(기동을 막지 않고, 로그에 남는다)."""
     try:
-        from trippilot.orchestrator.question_bank import load_bank_vectors
+        from trippilot.orchestrator.intent.question_bank import load_bank_vectors
 
         return load_bank_vectors(_BANK_VECTORS_PATH)
     except Exception as e:  # noqa: BLE001 — 기동을 막지 않는다
@@ -848,7 +848,7 @@ def _intent_bank() -> tuple:
     try:
         import yaml
 
-        from trippilot.orchestrator.question_bank import load_bank_file
+        from trippilot.orchestrator.intent.question_bank import load_bank_file
 
         return load_bank_file(_BANK_PATH, yaml.safe_load)
     except Exception as e:  # noqa: BLE001 — 기동을 막지 않는다

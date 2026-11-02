@@ -16,7 +16,7 @@ from trippilot.domain.common import GeoPoint, TransportMode
 from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
 from trippilot.domain.dialogue.intent import Intent
 from trippilot.domain.itinerary.transit import TransitInfo, TransitRequest
-from trippilot.orchestrator.info_collector import InfoCollector
+from trippilot.orchestrator.schedule.info_collector import InfoCollector
 from trippilot.providers.transit import TransitProvider
 
 _ORIGIN = GeoPoint(33.5, 126.5)

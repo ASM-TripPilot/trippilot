@@ -43,8 +43,8 @@ from trippilot.domain.dialogue.dialogue import (
 )
 from trippilot.domain.dialogue.intent import DIALOGUE_INTENTS, Intent, IntentMatch, MatchRoute
 from trippilot.orchestrator.arguments import extract_argument
-from trippilot.orchestrator.intent_router import IntentRouter, normalize
-from trippilot.orchestrator.question_bank import BankEntry, BankLoadError, BankVectors, index_bank
+from trippilot.orchestrator.intent.intent_router import IntentRouter, normalize
+from trippilot.orchestrator.intent.question_bank import BankEntry, BankLoadError, BankVectors, index_bank
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.llm_port import LlmPort, LlmRequest, LlmResponse
 from trippilot.ports.vector_store_port import VectorStorePort

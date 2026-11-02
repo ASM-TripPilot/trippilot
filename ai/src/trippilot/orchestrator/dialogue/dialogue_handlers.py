@@ -61,11 +61,11 @@ from trippilot.domain.dialogue.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, _MAX_LENGTH, _violates, clock_times
 from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEXT, REGION_ASK_TASTE_TEXT, fallback_answer_text
 from trippilot.orchestrator.arguments import extract_kind
-from trippilot.orchestrator.intent_router import normalize
-from trippilot.orchestrator.opportunity import _displayable, shown_event
-from trippilot.orchestrator.place_intro import PlaceIntro, clean_intro
+from trippilot.orchestrator.intent.intent_router import normalize
+from trippilot.orchestrator.dialogue.opportunity import _displayable, shown_event
+from trippilot.orchestrator.dialogue.place_intro import PlaceIntro, clean_intro
 from trippilot.ports.place_fact_store_port import PlaceFacts
-from trippilot.orchestrator.place_sql import PlaceSqlLookup, asks_for_places
+from trippilot.orchestrator.dialogue.place_sql import PlaceSqlLookup, asks_for_places
 from trippilot.poi_curation import place_fallback
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder, restrict_pool_to_target_role
 from trippilot.providers.base import Provider

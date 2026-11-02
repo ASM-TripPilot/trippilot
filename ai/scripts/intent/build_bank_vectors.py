@@ -23,7 +23,7 @@ _AI_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_AI_ROOT / "scripts" / "measure"))
 
 from embedding_ab_gate import COSINE_FLOOR, TOP_K  # noqa: E402 — 게이트 상수 한 벌
-from trippilot.orchestrator.question_bank import dump_bank_vectors, load_bank_file  # noqa: E402
+from trippilot.orchestrator.intent.question_bank import dump_bank_vectors, load_bank_file  # noqa: E402
 
 _BANK = _AI_ROOT / "data" / "intent_question_bank.yaml"
 _OUT = _BANK.with_name("intent_question_bank.vectors.json.gz")

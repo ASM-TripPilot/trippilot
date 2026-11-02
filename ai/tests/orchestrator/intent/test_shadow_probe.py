@@ -39,9 +39,9 @@ from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.intent import IntentGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.orchestrator.intent_eval import is_refusal
-from trippilot.orchestrator.intent_router import IntentRouter, normalize
-from trippilot.orchestrator.shadow_probe import (
+from trippilot.orchestrator.intent.intent_eval import is_refusal
+from trippilot.orchestrator.intent.intent_router import IntentRouter, normalize
+from trippilot.orchestrator.intent.shadow_probe import (
     ShadowCountingLlm,
     ShadowIntentProbe,
     ShadowRecord,

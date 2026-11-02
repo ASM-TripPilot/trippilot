@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import main
-import trippilot.orchestrator.question_bank as question_bank
+import trippilot.orchestrator.intent.question_bank as question_bank
 
 
 def _boom(*_args, **_kwargs):

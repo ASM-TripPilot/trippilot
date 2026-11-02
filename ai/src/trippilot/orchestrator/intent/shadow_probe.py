@@ -38,8 +38,8 @@ from datetime import datetime
 
 from trippilot.domain.common import TraceId
 from trippilot.domain.dialogue.intent import IntentMatch
-from trippilot.orchestrator.intent_eval import is_refusal
-from trippilot.orchestrator.intent_router import IntentRouter, normalize
+from trippilot.orchestrator.intent.intent_eval import is_refusal
+from trippilot.orchestrator.intent.intent_router import IntentRouter, normalize
 from trippilot.ports.llm_port import LlmPort, LlmRequest, LlmResponse
 from trippilot.ports.trace_port import TracePort
 

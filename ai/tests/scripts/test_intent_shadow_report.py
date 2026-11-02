@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 from trippilot.domain.dialogue.intent import Intent, IntentMatch, MatchRoute
-from trippilot.orchestrator.shadow_probe import ShadowRecord, ShadowSide
+from trippilot.orchestrator.intent.shadow_probe import ShadowRecord, ShadowSide
 
 _spec = importlib.util.spec_from_file_location(
     "intent_shadow_report", Path(__file__).resolve().parents[2] / "scripts" / "mlops" / "intent_shadow_report.py"

@@ -35,7 +35,7 @@ from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.intent import IntentGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.orchestrator.dialogue_interpreter import (
+from trippilot.orchestrator.dialogue.dialogue_interpreter import (
     BankIndex,
     CountingLlm,
     DialogueContext,
@@ -44,8 +44,8 @@ from trippilot.orchestrator.dialogue_interpreter import (
     PendingFrame,
     TripView,
 )
-from trippilot.orchestrator.intent_router import IntentRouter
-from trippilot.orchestrator.question_bank import BANK_COLLECTION, BankEntry
+from trippilot.orchestrator.intent.intent_router import IntentRouter
+from trippilot.orchestrator.intent.question_bank import BANK_COLLECTION, BankEntry
 
 _TID = TraceId("t-dialogue")
 _NOW = datetime(2026, 10, 14, 3, 0, tzinfo=timezone.utc)
@@ -410,7 +410,7 @@ def test_boundary_rejects_overlong_utterance() -> None:
 
 def test_깨진_turn_index_는_빈_상태로_시작한다():
     """dialogue_context 의 turn_index 가 정수가 아니어도 턴 전체를 실패시키지 않는다(깨진 상태는 버린다)."""
-    from trippilot.orchestrator.dialogue_interpreter import DialogueContext
+    from trippilot.orchestrator.dialogue.dialogue_interpreter import DialogueContext
 
     for bad in ("x", [1], {"a": 1}):
         ctx = DialogueContext.from_dict({"turn_index": bad, "pending": None})

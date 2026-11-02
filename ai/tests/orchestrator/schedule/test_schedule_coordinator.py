@@ -54,7 +54,7 @@ from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.llm.prompt import PromptRef
 from trippilot.domain.freshness import ProviderKind
-from trippilot.orchestrator.info_collector import InfoCollector
+from trippilot.orchestrator.schedule.info_collector import InfoCollector
 from trippilot.poi_curation.config import M7Config
 from trippilot.providers.event import EventProvider
 from trippilot.providers.persona import PersonaProvider
@@ -62,7 +62,7 @@ from trippilot.providers.place import PlaceProvider
 from trippilot.providers.weather import WeatherProvider
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.agents.schedule.agent import ScheduleAgent
-from trippilot.orchestrator.schedule_coordinator import (
+from trippilot.orchestrator.schedule.schedule_coordinator import (
     GenerateItineraryRequest,
     GenerationOutcome,
     GenerationStatus,

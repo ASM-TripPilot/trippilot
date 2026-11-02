@@ -211,15 +211,15 @@ from trippilot.poi_curation.place_fees import load_fee_table
 from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql
 from trippilot.poi_curation.pool_builder import (
     CandidatePoolBuilder, base_radius_km, restrict_pool_to_target_role, widened_radius_km)
-from trippilot.orchestrator import schedule_coordinator as core
+from trippilot.orchestrator.schedule import schedule_coordinator as core
 from trippilot.agents.adapters.memory_vector_store import InMemoryVectorStore
 from trippilot.agents.adapters.memory_memory_store import InMemoryDialogueMemoryStore
 from trippilot.llm_gateway.gates.intent import IntentGate
 from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
-from trippilot.orchestrator.dialogue_interpreter import BankIndex, CountingLlm, DialogueInterpreter
-from trippilot.orchestrator.dialogue_orchestrator import DialogueOrchestrator
-from trippilot.orchestrator.intent_router import IntentRouter
-from trippilot.orchestrator.question_bank import BankEntry, BankVectors
+from trippilot.orchestrator.dialogue.dialogue_interpreter import BankIndex, CountingLlm, DialogueInterpreter
+from trippilot.orchestrator.dialogue.dialogue_orchestrator import DialogueOrchestrator
+from trippilot.orchestrator.intent.intent_router import IntentRouter
+from trippilot.orchestrator.intent.question_bank import BankEntry, BankVectors
 from trippilot.providers.poi_info import PoiInfoProvider
 from trippilot.ports.llm_port import LlmPort
 from trippilot.ports.llm_port import LlmRequest, LlmResponse
@@ -229,7 +229,7 @@ from trippilot.ports.memory_store_port import MemoryStorePort
 from trippilot.ports.trace_port import TracePort
 from trippilot.ports.travel_port import TravelPort
 from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
-from trippilot.orchestrator.info_collector import InfoCollector
+from trippilot.orchestrator.schedule.info_collector import InfoCollector
 from trippilot.ports.weather_port import WeatherPort
 from trippilot.ports.event_port import EventPort
 from trippilot.ports.holiday_calendar_port import HolidaySource

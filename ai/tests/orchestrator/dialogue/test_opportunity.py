@@ -40,7 +40,7 @@ from trippilot.domain.poi.poi import (
     PoiCategory,
     PoiSource,
 )
-from trippilot.orchestrator.opportunity import OpportunityKind, find_opportunities
+from trippilot.orchestrator.dialogue.opportunity import OpportunityKind, find_opportunities
 
 _DAY = date(2026, 10, 20)  # 화요일
 _BASE = GeoPoint(37.5665, 126.9780)  # 서울시청 근방 (값 자체는 임의)

@@ -40,12 +40,12 @@ from trippilot.domain.dialogue.intent import (
     RoutingMode,
 )
 from trippilot.domain.llm.llm import LlmFeature, ModelTier
-from trippilot.orchestrator.intent_router import (
+from trippilot.orchestrator.intent.intent_router import (
     IntentRouter,
     IntentRouterConfig,
     normalize,
 )
-from trippilot.orchestrator.question_bank import (
+from trippilot.orchestrator.intent.question_bank import (
     BANK_COLLECTION,
     BankLoadError,
     UnreviewedBankError,

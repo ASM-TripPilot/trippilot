@@ -28,8 +28,8 @@ from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.domain.common import TraceId
 from trippilot.domain.dialogue.intent import Intent, MatchRoute
 from trippilot.domain.llm.llm import ModelTier
-from trippilot.orchestrator.intent_router import IntentRouter, IntentRouterConfig
-from trippilot.orchestrator.question_bank import BANK_COLLECTION
+from trippilot.orchestrator.intent.intent_router import IntentRouter, IntentRouterConfig
+from trippilot.orchestrator.intent.question_bank import BANK_COLLECTION
 from tests.fakes.fake_embedding import FakeEmbedding
 from tests.fakes.fake_llm import FakeLlm
 from tests.fakes.in_memory_trace import InMemoryTrace
@@ -115,7 +115,7 @@ def test_router_works_without_langsmith_installed(monkeypatch) -> None:
     import importlib
     import sys
 
-    import trippilot.orchestrator.intent_router as ir
+    import trippilot.orchestrator.intent.intent_router as ir
 
     expected = _ambiguous_router().route(_TEXT, _TID, _NOW)  # langsmith 설치 상태 기준값
     monkeypatch.setitem(sys.modules, "langsmith", None)  # import langsmith → ImportError

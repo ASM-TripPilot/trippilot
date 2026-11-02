@@ -17,8 +17,8 @@ from hypothesis import strategies as st
 
 from trippilot.domain.dialogue.intent import Intent, IntentDraft
 from trippilot.domain.dialogue.plan_tools import PLAN_TOOLS, PlanTool
-from trippilot.orchestrator import dialogue_plan as dp
-from trippilot.orchestrator.dialogue_handlers import (
+from trippilot.orchestrator.dialogue import dialogue_plan as dp
+from trippilot.orchestrator.dialogue.dialogue_handlers import (
     HANDLERS,
     AnswerKind,
     Facts,
@@ -220,9 +220,9 @@ from trippilot.domain.context import PermissionDeniedError  # noqa: E402
 from trippilot.domain.llm.llm import LlmFeature  # noqa: E402
 from trippilot.domain.observability import FallbackEvent, GateDropEvent, LlmCallRecord  # noqa: E402
 from trippilot.llm_gateway.gates.intent import NULL_INTENT  # noqa: E402
-from trippilot.orchestrator import dialogue_orchestrator as orch_mod  # noqa: E402
-from trippilot.orchestrator.dialogue_interpreter import DialogueContext  # noqa: E402
-from trippilot.orchestrator.dialogue_handlers import NEXT_ACTION_TYPES  # noqa: E402
+from trippilot.orchestrator.dialogue import dialogue_orchestrator as orch_mod  # noqa: E402
+from trippilot.orchestrator.dialogue.dialogue_interpreter import DialogueContext  # noqa: E402
+from trippilot.orchestrator.dialogue.dialogue_handlers import NEXT_ACTION_TYPES  # noqa: E402
 from trippilot.ports.llm_port import LlmResponse  # noqa: E402
 
 _PLAN_PORTS = HandlerPorts(poi_info=to._PoiInfo(), weather=to._Weather(), pool_builder=to._ExplorePool())

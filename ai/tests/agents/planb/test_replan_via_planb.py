@@ -564,7 +564,7 @@ def test_current_slots_reach_planb_as_the_itinerary_context() -> None:
 
 import dataclasses  # noqa: E402
 
-from trippilot.orchestrator import schedule_coordinator as _core  # noqa: E402
+from trippilot.orchestrator.schedule import schedule_coordinator as _core  # noqa: E402
 
 
 class _LlmScoredScheduleAgent:
