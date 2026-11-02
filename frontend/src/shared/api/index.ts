@@ -373,6 +373,13 @@ if (__DEV__ && process.env.NODE_ENV !== 'test') {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('@/shared/dev-fault') as typeof import('@/shared/dev-fault');
   devFault.installFaultInjection(authedClient, devFault.faultStore);
+  // 요청 카운터(TRIP-1714) — 두 클라이언트 모두 센다.
+  for (const client of [authedClient, baseClient]) {
+    client.interceptors.request.use((config) => {
+      devFault.requestCount.hit();
+      return config;
+    });
+  }
 }
 
 export async function fetchConsents(): Promise<ConsentState[]> {

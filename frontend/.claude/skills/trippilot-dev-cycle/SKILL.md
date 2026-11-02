@@ -13,6 +13,8 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 
 **작업 공간은 LLM 위키의 원본층이다** — `<리포 루트>/_workspace`는 옵시디언 볼트 `TripPilot/사이클/`으로의 심볼릭 링크다. 경로는 그대로 쓰고, 산출물은 자동으로 위키에 들어간다(검색 본문·링크 종점 — 정본은 `obsidian-second-brain`). **새 워크트리에도 이 링크가 있어야 한다** — gitignore 라 `git worktree add`(herdr 포함)가 만들어 주지 않는다. 로컬 `post-checkout` 훅(추적본 `.githooks/post-checkout`)이 만들고, 빠지면 pre-push 가 만든다. **`frontend/_workspace`(링크 아님)에 쓰지 마라** — 워크트리를 지울 때 같이 사라진다(실측 14폴더, 상세는 하네스 변경이력). 서브에이전트·레인 지시서의 산출 경로도 `<워크트리 루트>/_workspace/{id}/` 절대 경로로 준다.
 
+**레인 에이전트는 `<워크트리>/frontend/` 에서 띄운다**(herdr 패인 `--cwd` 또는 지시서 첫 줄 `cd <워크트리>/frontend`). 하네스 에이전트 정의(`frontend/.claude/agents/`)는 세션 시작 디렉토리 기준으로만 잡혀서, 워크트리 루트에서 띄우면 spec-analyst·implementer 등이 Agent 타입으로 안 보인다. 그러면 모든 자리가 general-purpose 에 정의 파일을 읽혀 대체 실행되고, 자리별 모델·effort 배치가 적용되지 않아 그 배치의 관측값을 쓸 수 없다(실측 레인 3곳, 상세는 하네스 변경이력).
+
 ## 참조 파일 — 해당 시점에 반드시 읽는다
 
 | 파일 | 읽는 시점 |

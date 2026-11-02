@@ -11,31 +11,18 @@ import * as SplashScreen from 'expo-splash-screen';
 import {
   focusManager,
   onlineManager,
-  QueryClient,
   QueryClientProvider,
 } from '@tanstack/react-query';
 
-import { retryUnlessNotFound } from '@/shared/api';
 import { installForegroundPresentation } from '@/shared/push';
 import { ToastHost } from '@/shared/ui/Toast';
 
 import { initSentry } from './initSentry';
+import { createAppQueryClient } from './queryClient';
 
-// 서버 상태(TanStack Query)의 앱 전역 캐시 저장소 — 모듈 스코프에서 한 번만 만들어 리렌더마다
-// 다시 만들지 않는다. 기본 옵션은 retry 하나만 연다(TRIP-986 #063) — 404("없다")는 다시 물어도
-// 답이 같고, 같은 캐시 키의 관찰자들은 요청 하나를 공유해 그 요청을 시작한 관찰자의 retry 가
-// 적용되므로 페이지 단독 옵션만으로는 막히지 않는다. staleTime 등 나머지는 여전히 그 값을 실제로
-// 쓰는 소비 화면이 붙는 칸에서 근거와 함께 정한다(TRIP-179 D5).
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: retryUnlessNotFound,
-      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
-      staleTime: 30_000,
-      gcTime: 10 * 60_000,
-    },
-  },
-});
+// 서버 상태(TanStack Query)의 앱 전역 캐시 저장소 — 모듈 스코프에서 한 번만 만들어 리렌더마다 다시 만들지 않는다.
+// 기본 옵션(retry·staleTime·복귀 재조회 정책)의 근거는 `./queryClient`.
+const queryClient = createAppQueryClient();
 
 // 스택·탭 화면 배경은 React Navigation 테마 색(기본 #F2F2F2)이 깔린다 — 화면 루트 SafeAreaView 에 배경이 없으면
 // 상태바·홈 인디케이터 영역에 그 회색이 비친다(TRIP-1434 Q-002). 앱 테마 배경을 canvas(tailwind.config.js)로

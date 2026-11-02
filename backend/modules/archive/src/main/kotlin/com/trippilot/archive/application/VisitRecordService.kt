@@ -54,21 +54,27 @@ class VisitRecordService(
         command: AddVisitPhoto,
     ): VisitPhotoMeta {
         ownedVisit(accountId, tripId, visitCheckId)
-        if (photos.findByVisit(visitCheckId).size >= MAX_PHOTOS_PER_VISIT) {
+        val current = photos.findByVisit(visitCheckId)
+        // 재시도는 멱등이다(TRIP-1721) — 응답을 못 받은 앱이 같은 자산을 다시 보낸다. 상한보다 먼저 봐야
+        // 꽉 찬 방문에서 이미 붙은 사진의 재시도가 400 이 되지 않는다.
+        current.firstOrNull { it.deviceId == command.deviceId && it.localAssetId == command.localAssetId }
+            ?.let { return it }
+        if (current.size >= MAX_PHOTOS_PER_VISIT) {
             throw ValidationFailed(listOf(FieldError("photos", "한 방문에 사진은 최대 ${MAX_PHOTOS_PER_VISIT}장까지 붙일 수 있습니다")))
         }
-        val saved = photos.save(
-            VisitPhotoMeta.attach(
-                visitCheckId = visitCheckId,
-                localAssetId = command.localAssetId,
-                deviceId = command.deviceId,
-                takenAt = command.takenAt,
-                exifLat = command.exifLat,
-                exifLng = command.exifLng,
-                sortOrder = command.sortOrder ?: nextSortOrder(visitCheckId),
-                gpsRecordingOptIn = locationConsents.hasGpsRecordingOptIn(accountId),
-            ),
+        val attached = VisitPhotoMeta.attach(
+            visitCheckId = visitCheckId,
+            localAssetId = command.localAssetId,
+            deviceId = command.deviceId,
+            takenAt = command.takenAt,
+            exifLat = command.exifLat,
+            exifLng = command.exifLng,
+            sortOrder = command.sortOrder ?: nextSortOrder(visitCheckId),
+            gpsRecordingOptIn = locationConsents.hasGpsRecordingOptIn(accountId),
         )
+        val saved = photos.insertIfAbsent(attached)
+        // 경합에서 졌다 — 먼저 들어간 사진을 돌려주고, 이번 요청이 보관하지 않은 좌표의 수집 기록은 남기지 않는다.
+        if (saved.visitPhotoMetaId != attached.visitPhotoMetaId) return saved
         // 위치를 **실제로 보관했을 때만** 수집 사실을 남긴다(TRIP-857).
         //
         // 판정을 요청(`command.exifLat`)이 아니라 **저장 결과**로 하는 이유가 둘이다:

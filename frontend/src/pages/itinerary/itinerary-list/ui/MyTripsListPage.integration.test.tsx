@@ -17,18 +17,27 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import { DRAFT_POLL_INTERVAL_MS } from '@/features/itinerary';
-import { server } from '@/mocks/server';
 import {
-  getGetTripsQueryKey,
-  getGetTripsTripIdItineraryQueryKey,
-} from '@/shared/api/index.hooks';
+  DRAFT_POLL_INTERVAL_MS,
+  ITINERARY_OPEN_FAILED_TOAST_ID,
+} from '@/features/itinerary';
+import { server } from '@/mocks/server';
+import { getGetTripsQueryKey } from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Itinerary, Trip } from '@/shared/api/index.schemas';
 import { MyTripsListPage } from '@/pages/itinerary/itinerary-list';
 import * as fontScaleModule from '@/shared/lib/fontScale';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { readIdSet, writeIdSet } from '@/shared/storage';
 import { describeAtFontScales, setFontScale } from '@/test-support/fontScale';
+import { resetToast, WithToastHost } from '@/test-support/toastHarness';
+import {
+  NO_ITINERARY,
+  itineraryCols,
+  itineraryHits,
+  listHits,
+  type ItineraryCols,
+} from '@/test-support/tripItineraryCols';
 
 /**
  * TRIP-1055 · 작성중 여행 삭제 — ⋯ → '삭제' → 확인 다이얼로그 → `DELETE /trips/{tripId}` 흐름을 실제로
@@ -132,7 +141,13 @@ const A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 const C = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 
-function trip(tripId: string, title: string, updatedAt: string): Trip {
+function trip(
+  tripId: string,
+  title: string,
+  updatedAt: string,
+  /** TRIP-1677 — 서버가 `GET /trips` 에 싣는 일정 상태 네 칸. 기본은 일정 없음. */
+  cols: ItineraryCols = NO_ITINERARY
+): Trip {
   return {
     tripId,
     title,
@@ -146,14 +161,9 @@ function trip(tripId: string, title: string, updatedAt: string): Trip {
     updatedAt,
     baseCount: 0,
     itineraryDayCount: 0,
+    ...cols,
   };
 }
-
-/** A = 작성중(일정 없음 → 404) · B = 확정. A 가 더 최근이라 목록 맨 위. */
-const TRIP_A = trip(A, '부산 여행', '2026-09-02T00:00:00Z');
-const TRIP_B = trip(B, '제주 여행', '2026-09-01T00:00:00Z');
-/** C = 작성중(일정 없음). 셋 중 가장 오래돼 목록 맨 아래 — "첫 카드가 아닌" 삭제 대상(5-b 경고-1·4). */
-const TRIP_C = trip(C, '강릉 여행', '2026-08-31T00:00:00Z');
 
 const CONFIRMED_B: Itinerary = {
   itineraryId: 'itin-b',
@@ -168,6 +178,17 @@ const CONFIRMED_B: Itinerary = {
   generationSessionId: null,
   days: [{ date: '2099-06-10', slots: [] }],
 };
+
+/** A = 작성중(일정 없음 = 목록 네 칸 null) · B = 확정. A 가 더 최근이라 목록 맨 위. */
+const TRIP_A = trip(A, '부산 여행', '2026-09-02T00:00:00Z');
+const TRIP_B = trip(
+  B,
+  '제주 여행',
+  '2026-09-01T00:00:00Z',
+  itineraryCols(CONFIRMED_B)
+);
+/** C = 작성중(일정 없음). 셋 중 가장 오래돼 목록 맨 아래 — "첫 카드가 아닌" 삭제 대상(5-b 경고-1·4). */
+const TRIP_C = trip(C, '강릉 여행', '2026-08-31T00:00:00Z');
 
 const TITLE = '이 여행을 삭제할까요?';
 const BODY = '작성 중인 일정도 함께 지워지고 되돌릴 수 없어요.';
@@ -242,15 +263,9 @@ beforeEach(() => {
   clearAccessToken();
   setAccessToken('valid-access');
   server.use(
+    // TRIP-1677 — 일정 상태는 목록 응답의 네 칸에 실려 온다. 여행별 `GET /trips/:id/itinerary` 핸들러는 일부러 두지 않는다:
+    // 페이지가 옛 길로 일정을 물으면 통합 서버(`onUnhandledRequest: 'error'`)가 그 요청에서 바로 빨갛게 만든다.
     http.get(`${BASE}/trips`, () => HttpResponse.json(serverTrips)),
-    http.get(`${BASE}/trips/:tripId/itinerary`, ({ params }) =>
-      params.tripId === B
-        ? HttpResponse.json(CONFIRMED_B)
-        : HttpResponse.json(
-            { error: { code: 'NOT_FOUND', message: '일정이 없어요' } },
-            { status: 404 }
-          )
-    ),
     http.delete(`${BASE}/trips/:tripId`, async ({ params }) => {
       const removeIt = () => {
         serverTrips = serverTrips.filter((t) => t.tripId !== params.tripId);
@@ -291,6 +306,9 @@ afterEach(() => {
   // 단언이 문을 열기 전에 실패해도 붙잡힌 요청을 남기지 않는다 — 안 풀면 jest 가 red 대신 멈춘다(5-b 경고-3).
   openGates();
   server.resetHandlers();
+  // 모듈 싱글턴 — 연타 가드 창과 토스트 스토어는 파일 안에서 새므로 최상위에서 되돌린다(02a ★2).
+  resetPressGuard();
+  resetToast();
   // TRIP-1271 — 폴링 describe 의 가짜 시계와 포커스 레지스트리가 아래 실타이머 케이스로 새지 않게.
   jest.useRealTimers();
   mockFocus.clear();
@@ -306,18 +324,16 @@ afterEach(() => {
 /** 마지막으로 렌더한 페이지의 QueryClient — 떠나 있는 사이 캐시가 바뀐 상황을 만들 때만 쓴다(TRIP-1352). */
 let lastClient: QueryClient | null = null;
 
-/** `cached` — 다른 탭(홈)이 이미 받아 둔 여행 목록·여행별 일정을 캐시에 넣고 시작한다(TRIP-1271 AC-5a). */
+/** `cached` — 다른 탭(홈)이 이미 받아 둔 여행 목록을 캐시에 넣고 시작한다. 일정 상태도 이 목록의 네 칸에 실려 있다(TRIP-1677). */
 function renderPage(
-  cached?: {
-    trips: Trip[];
-    itineraries: Record<string, Itinerary>;
-  },
+  cached?: { trips: Trip[] },
   /**
    * `staleTime` — 기본 0(앱 기본값). 탭 복귀가 "낡은 것만" 다시 묻는지 볼 때만 올린다(TRIP-1348).
-   * `shell` — 앱 셸 감시 훅(`useGenerationWatch`)을 페이지 옆에 함께 그린다(TRIP-1618). 셸이 붙으면 새 관찰자가 낡은 칸을 마운트 즉시
+   * `shell` — 앱 셸 감시 훅(`useGenerationWatch`)을 페이지 옆에 함께 그린다(TRIP-1618). 셸이 붙으면 새 관찰자가 낡은 목록을 마운트 즉시
    * 한 번 더 받으므로 요청 수를 세는 케이스는 `staleTime: 30_000` 과 함께 쓴다.
+   * `toast` — 토스트 호스트를 함께 그린다(copick 누름 실패 안내를 볼 때만 — 다른 케이스의 트리를 건드리지 않는다).
    */
-  options?: { staleTime?: number; shell?: boolean }
+  options?: { staleTime?: number; shell?: boolean; toast?: boolean }
 ) {
   const client = new QueryClient({
     defaultOptions: {
@@ -335,13 +351,12 @@ function renderPage(
   lastClient = client;
   if (cached) {
     client.setQueryData(getGetTripsQueryKey(), cached.trips);
-    Object.entries(cached.itineraries).forEach(([tripId, data]) =>
-      client.setQueryData(getGetTripsTripIdItineraryQueryKey(tripId), data)
-    );
   }
   function Wrapper({ children }: { children: ReactNode }) {
     return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      <QueryClientProvider client={client}>
+        {options?.toast ? <WithToastHost>{children}</WithToastHost> : children}
+      </QueryClientProvider>
     );
   }
   return render(
@@ -1114,7 +1129,7 @@ describe('TRIP-1638 · 오프라인 콜드스타트 — 스켈레톤 대신 오�
     goOffline();
 
     // 실행
-    renderPage({ trips: [TRIP_A, TRIP_B], itineraries: { [B]: CONFIRMED_B } });
+    renderPage({ trips: [TRIP_A, TRIP_B] });
 
     // 단언
     expect(await screen.findByTestId(`my-trip-card-${A}`)).toBeOnTheScreen();
@@ -1194,67 +1209,344 @@ describe('TRIP-1638 · 오프라인 콜드스타트 — 스켈레톤 대신 오�
   });
 });
 
-// TRIP-1271 · 생성이 끝났는데 카드가 "AI가 일정을 짜는 중"으로 남던 문제 — 목록이 일정을 스스로 다시 묻는다.
-// 생성이 도는 여행(PARTIAL 이거나 세션 있음)만 2초마다 묻고, 탭으로 돌아오면 전부 다시 묻는다(01b 결정 2).
-// TRIP-1618 · 생성 중 일정을 2초마다 다시 묻는 일은 앱 셸 훅이 한다 — 이 describe 의 폴링 케이스는 셸 프로브(`shell: true`)를 함께 그려서 본다.
-// 탭 복귀 재조회(AC-5·TRIP-1348)는 페이지 몫으로 남아 있어 페이지 단독 렌더 그대로다.
-describe('생성 중 여행 — 셸 감시(폴링)와 페이지의 탭 복귀 재조회', () => {
+// TRIP-1677 · 일정 상태(확정 여부·생성 상태·생성 방식·생성 중 여부)는 `GET /trips` 의 각 여행에 네 칸으로 실려 온다. 그래서 목록 화면은
+// 여행마다 `GET /trips/{id}/itinerary` 를 묻지 않는다(여행이 N개면 N번 나가던 요청 → 개발 서버 429). 아래 describe 들은 그 약속을 요청 수로 잰다.
+//
+// *(개념)* "요청 수" — 테스트 서버(MSW)가 받은 요청을 `hits` 에 쌓고 `listHits`(목록) · `itineraryHits`(일정 단건)로 센다.
+// 일정 단건 핸들러는 파일 최상위에 일부러 없다 — 나가면 통합 서버가 그 자리에서 빨갛게 만든다(copick 누름 케이스만 자기 핸들러를 건다).
+describe('🔴 TRIP-1677 · 진입하면 목록 1번만 묻고 일정 단건은 묻지 않는다 (AC-1·2)', () => {
+  const RUN = 'run-1';
+  const DRAFT = 'draft-1';
+  const mkTrip = (id: string, title: string, cols: ItineraryCols) =>
+    trip(id, title, '2026-08-10T00:00:00Z', cols);
+  const running = itineraryCols({
+    status: 'PLANNED',
+    generationState: 'PARTIAL',
+    generationMode: 'FULLY_AI',
+    generationSessionId: 'sess-1',
+  });
+  const draft = itineraryCols({
+    status: 'PLANNED',
+    generationState: 'COMPLETE',
+    generationMode: 'FULLY_AI',
+    generationSessionId: null,
+  });
+
+  it('L1 일정 없음·생성 중·완료 초안·확정 네 여행 → 목록 GET 1 · 일정 GET 0, 카드 얼굴은 목록 칸대로 선다', async () => {
+    // 준비 — 네 여행: A 일정 없음(null) · RUN 생성 중 · DRAFT 완료 초안 · B 확정.
+    serverTrips = [
+      TRIP_A,
+      mkTrip(RUN, '여수 여행', running),
+      mkTrip(DRAFT, '강릉 여행', draft),
+      TRIP_B,
+    ];
+
+    // 실행 — 일정 탭을 연다.
+    renderPage();
+    expect(await screen.findByTestId(`my-trip-card-${B}`)).toBeOnTheScreen();
+    await settle();
+
+    // 단언 — 요청: 목록 1번뿐, 일정 단건 0번(여행이 몇 개든).
+    expect(listHits(hits)).toBe(1);
+    expect(itineraryHits(hits)).toBe(0);
+    // 단언 — 얼굴: null 행과 값 행이 모두 있어 "전부 일정 없음으로 읽는" 회귀를 가른다.
+    expect(screen.getByTestId(`my-trip-extra-${A}`)).toHaveTextContent(
+      '아직 일정이 없어요'
+    );
+    expect(screen.getByTestId(`my-trip-extra-${RUN}`)).toHaveTextContent(
+      'AI가 일정을 짜는 중'
+    );
+    expect(screen.getByTestId(`my-trip-extra-${DRAFT}`)).toHaveTextContent(
+      '추천안 준비 중'
+    );
+    expect(screen.getByTestId(`my-trip-extra-${B}`)).toHaveTextContent(
+      '일정 확정'
+    );
+  });
+});
+
+describe('🔴 TRIP-1677 · 카드를 누르면 목적지로 간다 — copick 만 그 순간 일정을 1번 묻는다 (AC-3)', () => {
+  const X = 'x-trip';
+  const P = 'copick-trip';
+  const cols = (
+    generationState: ItineraryCols['itineraryGenerationState'],
+    status: ItineraryCols['itineraryStatus'],
+    mode: ItineraryCols['itineraryGenerationMode'] = 'FULLY_AI',
+    generating = false
+  ): ItineraryCols => ({
+    itineraryStatus: status,
+    itineraryGenerationState: generationState,
+    itineraryGenerationMode: mode,
+    itineraryGenerating: generating,
+  });
+  const one = (id: string, c: ItineraryCols) => [
+    trip(id, '여수 여행', '2026-08-10T00:00:00Z', c),
+  ];
+
+  it.each<[string, ItineraryCols, string]>([
+    ['일정 없음(null)', NO_ITINERARY, `/trips/${X}/itinerary/method`],
+    [
+      '생성 중 + 완전 AI',
+      cols('PARTIAL', 'PLANNED', 'FULLY_AI', true),
+      `/trips/${X}/itinerary/generating`,
+    ],
+    [
+      '생성 중 + 직접 짜기',
+      cols('PARTIAL', 'PLANNED', 'MANUAL', true),
+      `/trips/${X}/itinerary/generating`,
+    ],
+    ['실패 FAILED', cols('FAILED', 'PLANNED'), `/trips/${X}/itinerary/draft`],
+    [
+      '완료 초안 COMPLETE + PLANNED',
+      cols('COMPLETE', 'PLANNED'),
+      `/trips/${X}/itinerary/draft`,
+    ],
+    ['확정 CONFIRMED', cols('COMPLETE', 'CONFIRMED'), `/trips/${X}/live`],
+    [
+      '같이 짜기 완성(COMPLETE + CO_PLAN + 미확정)',
+      cols('COMPLETE', 'PLANNED', 'CO_PLAN'),
+      `/trips/${X}/itinerary/copick/complete`,
+    ],
+  ])('L3 %s → push 정확히 1회 · 일정 GET 0', async (_label, c, href) => {
+    // 준비
+    serverTrips = one(X, c);
+    renderPage();
+    const card = await screen.findByTestId(`my-trip-card-${X}`);
+    await settle();
+    expect(mockPush).not.toHaveBeenCalled();
+
+    // 실행
+    fireEvent.press(card);
+    await settle();
+
+    // 단언 — 일정을 묻지 않고 곧바로 한 번 이동한다.
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe(href);
+    expect(itineraryHits(hits)).toBe(0);
+  });
+
+  describe('copick(같이 짜기 생성 중) — 첫 비고정 슬롯 키는 일정의 days 에만 있다', () => {
+    const copickCols = cols('PARTIAL', 'PLANNED', 'CO_PLAN', true);
+    const slot = (poiId: string, isFixed: boolean) => ({
+      poiId,
+      startAt: '09:00:00',
+      endAt: '10:00:00',
+      isFixed,
+      endsNextDay: false,
+      hasViolation: false,
+      alternatives: [],
+      tags: [],
+    });
+    const copickItinerary = (over: Partial<Itinerary> = {}): Itinerary => ({
+      ...CONFIRMED_B,
+      itineraryId: 'itin-p',
+      tripId: P,
+      status: 'PLANNED',
+      generationMode: 'CO_PLAN',
+      generationState: 'PARTIAL',
+      generationSessionId: 'sess-1',
+      days: [
+        {
+          date: '2099-06-10',
+          slots: [slot('hotel', true), slot('poi-1', false)],
+        },
+      ],
+      ...over,
+    });
+    const COPICK_HREF = `/trips/${P}/itinerary/copick/${encodeURIComponent('2099-06-10#poi-1')}`;
+
+    /** 이 케이스만의 일정 단건 핸들러 — `gate` 를 열 때까지 응답을 붙잡을 수 있다. */
+    let reply: Itinerary | 404 | 500 = copickItinerary();
+    let openGate: () => void = () => {};
+    let gate: Promise<void> | null = null;
+    function holdReply(): void {
+      gate = new Promise<void>((resolve) => {
+        openGate = resolve;
+      });
+    }
+    beforeEach(() => {
+      reply = copickItinerary();
+      gate = null;
+      openGate = () => {};
+      serverTrips = one(P, copickCols);
+      server.use(
+        http.get(`${BASE}/trips/:tripId/itinerary`, async () => {
+          if (gate) await gate;
+          if (reply === 404 || reply === 500) {
+            return HttpResponse.json(
+              { error: { code: 'X', message: 'x' } },
+              { status: reply }
+            );
+          }
+          return HttpResponse.json(reply);
+        })
+      );
+    });
+    afterEach(() => openGate()); // 붙잡힌 응답을 남기지 않는다.
+
+    it('L3 누르기 전 0 → 누르면 일정 GET 1, 응답 전엔 이동 0 → 응답 뒤 첫 비고정 슬롯(# 는 %23)으로 1회', async () => {
+      // 준비 — 응답을 붙잡아 "응답 전"을 만든다.
+      holdReply();
+      renderPage();
+      const card = await screen.findByTestId(`my-trip-card-${P}`);
+      await settle();
+      expect(itineraryHits(hits)).toBe(0); // 앵커 — 진입만으로는 안 묻는다.
+
+      // 실행 ① — 누른다.
+      fireEvent.press(card);
+      await waitFor(() => expect(itineraryHits(hits)).toBe(1));
+
+      // 단언 ① — 응답 전: 이동 없음(로딩 중 엉뚱한 곳으로 새지 않는다).
+      expect(mockPush).not.toHaveBeenCalled();
+
+      // 실행 ② — 응답이 온다.
+      openGate();
+      await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+
+      // 단언 ② — 인코딩된 리터럴을 손으로 적는다.
+      expect(String(mockPush.mock.calls[0][0])).toBe(COPICK_HREF);
+      expect(itineraryHits(hits)).toBe(1);
+    });
+
+    it('L3 연타 — 같은 틱에 두 번 눌러도 일정 GET 1 · push 1', async () => {
+      holdReply();
+      renderPage();
+      const card = await screen.findByTestId(`my-trip-card-${P}`);
+      await settle();
+      expect(itineraryHits(hits)).toBe(0); // 앵커 — 누르기 전엔 묻지 않는다.
+
+      fireEvent.press(card);
+      fireEvent.press(card);
+      openGate();
+      await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+      await settle();
+
+      expect(itineraryHits(hits)).toBe(1);
+      expect(mockPush).toHaveBeenCalledTimes(1);
+    });
+
+    it('L3 잠금 — 응답을 기다리는 동안 연타 창(400ms)이 닫힌 뒤 다시 눌러도 일정 GET 1 · push 1 (W3)', async () => {
+      // 준비 — 같은 틱 연타는 `guardPress` 창이 먼저 막아 처리 중 잠금(`openingRef`)을 못 겨눈다. 그래서 창을 일부러 닫고 다시 누른다.
+      holdReply();
+      renderPage();
+      const card = await screen.findByTestId(`my-trip-card-${P}`);
+      await settle();
+      expect(itineraryHits(hits)).toBe(0); // 앵커 — 누르기 전엔 묻지 않는다.
+
+      // 실행 — 한 번 누르고 응답 전에 창을 닫은 뒤 두 번 더 누른다.
+      fireEvent.press(card);
+      await waitFor(() => expect(itineraryHits(hits)).toBe(1));
+      resetPressGuard();
+      fireEvent.press(card);
+      resetPressGuard();
+      fireEvent.press(card);
+      await settle();
+
+      // 단언 ① — 응답 전: 일정 GET 은 그대로 1, 이동 0.
+      expect(itineraryHits(hits)).toBe(1);
+      expect(mockPush).not.toHaveBeenCalled();
+
+      // 실행 ② — 응답이 온다.
+      openGate();
+      await waitFor(() => expect(mockPush).toHaveBeenCalled());
+      await settle();
+
+      // 단언 ② — 이동은 한 번(두 번 쌓이면 슬롯 채우기 화면이 스택에 두 번 올라간다).
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(String(mockPush.mock.calls[0][0])).toBe(COPICK_HREF);
+    });
+
+    it('L3 그사이 생성이 끝났으면(응답이 COMPLETE + CO_PLAN) 재판정해 완성 확인으로 간다 — 첫 슬롯 키로 새지 않는다', async () => {
+      reply = copickItinerary({ generationState: 'COMPLETE' });
+      renderPage();
+      const card = await screen.findByTestId(`my-trip-card-${P}`);
+      await settle();
+      expect(itineraryHits(hits)).toBe(0); // 앵커 — 누르기 전엔 묻지 않는다.
+      fireEvent.press(card);
+      await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+      expect(itineraryHits(hits)).toBe(1);
+
+      expect(String(mockPush.mock.calls[0][0])).toBe(
+        `/trips/${P}/itinerary/copick/complete`
+      );
+    });
+
+    it('L3 일정이 그사이 사라졌으면(404) 방식 선택으로 간다', async () => {
+      reply = 404;
+      renderPage();
+      const card = await screen.findByTestId(`my-trip-card-${P}`);
+      await settle();
+      expect(itineraryHits(hits)).toBe(0); // 앵커 — 누르기 전엔 묻지 않는다.
+      fireEvent.press(card);
+      await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+      expect(itineraryHits(hits)).toBe(1);
+
+      expect(String(mockPush.mock.calls[0][0])).toBe(
+        `/trips/${P}/itinerary/method`
+      );
+    });
+
+    it('L3 조회가 500 이면 이동하지 않고 안내를 띄운다(INV-4) — 다시 누르면 다시 묻는다', async () => {
+      // 준비 — 500.
+      reply = 500;
+      renderPage(undefined, { toast: true });
+      const card = await screen.findByTestId(`my-trip-card-${P}`);
+      await settle();
+      expect(screen.queryByTestId(ITINERARY_OPEN_FAILED_TOAST_ID)).toBeNull(); // 앵커
+
+      // 실행 ① — 누른다.
+      fireEvent.press(card);
+      await waitFor(() =>
+        expect(
+          screen.getByTestId(ITINERARY_OPEN_FAILED_TOAST_ID)
+        ).toBeOnTheScreen()
+      );
+
+      // 단언 ① — 이동 0, 요청 1(재시도 없음: 이 호출만 `retry:false`).
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(itineraryHits(hits)).toBe(1);
+
+      // 실행 ② — 서버가 돌아왔고(연타 창이 지난 뒤) 다시 누른다.
+      reply = copickItinerary();
+      resetPressGuard();
+      fireEvent.press(card);
+      await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+
+      // 단언 ② — 다시 물었고(2) 이동은 한 번.
+      expect(itineraryHits(hits)).toBe(2);
+      expect(String(mockPush.mock.calls[0][0])).toBe(COPICK_HREF);
+    });
+  });
+});
+
+// TRIP-1271 · 생성이 끝났는데 카드가 "AI가 일정을 짜는 중"으로 남던 문제 — 목록이 스스로 갱신된다.
+// TRIP-1618 · 생성 중 폴링은 앱 셸 훅(`useGenerationWatch`)의 몫이다 — 이 describe 의 폴링 케이스는 셸 프로브(`shell: true`)를 함께 그려서 본다.
+// TRIP-1677 · 셸은 이제 일정 캐시가 아니라 **목록 한 건**을 간격 폴링한다(목록에 생성 중 여행이 있을 때만). 탭 복귀 재조회도 목록 한 건이다.
+describe('생성 중 여행 — 셸 감시(목록 폴링)와 페이지의 탭 복귀 재조회', () => {
   const POLL = DRAFT_POLL_INTERVAL_MS;
-  const D = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
-  const TRIP_D = trip(D, '여수 여행', '2026-08-30T00:00:00Z');
   const RUNNING_TEXT = 'AI가 일정을 짜는 중';
+  const R = 'run-1';
+  const D = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
 
-  type Reply = Itinerary | 404 | 500;
-  /** 여행별 서버 응답 대본 — 요청마다 여기서 읽으므로 테스트 중간에 바꾸면 "서버가 바뀌었다"가 된다. */
-  let script: Record<string, Reply> = {};
-
-  function itinerary(
-    tripId: string,
-    generationState: Itinerary['generationState'],
-    status: Itinerary['status'],
-    generationSessionId: string | null
-  ): Itinerary {
-    return {
-      itineraryId: `itin-${tripId}`,
-      tripId,
+  const colsOf = (
+    generationState: NonNullable<ItineraryCols['itineraryGenerationState']>,
+    status: NonNullable<ItineraryCols['itineraryStatus']>,
+    generating: boolean
+  ): ItineraryCols =>
+    itineraryCols({
       status,
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      isFallback: false,
-      scoringMode: null,
-      degradations: [],
       generationState,
-      generationSessionId,
-      days: [{ date: '2099-06-10', slots: [] }],
-    };
-  }
-  const running = (id: string) => itinerary(id, 'PARTIAL', 'PLANNED', 'sess-1');
-  const draft = (id: string) => itinerary(id, 'COMPLETE', 'PLANNED', null);
-  const confirmed = (id: string) =>
-    itinerary(id, 'COMPLETE', 'CONFIRMED', null);
-
-  const itinPath = (id: string) => `GET /api/v1/trips/${id}/itinerary`;
+      generationMode: 'FULLY_AI',
+      generationSessionId: generating ? 'sess-1' : null,
+    });
+  const RUNNING = colsOf('PARTIAL', 'PLANNED', true);
+  const DRAFT = colsOf('COMPLETE', 'PLANNED', false);
+  const FAILED = colsOf('FAILED', 'PLANNED', false);
+  const CONFIRMED = colsOf('COMPLETE', 'CONFIRMED', false);
+  const tripR = (cols: ItineraryCols) =>
+    trip(R, '여수 여행', '2026-08-30T00:00:00Z', cols);
 
   beforeEach(() => {
-    script = {};
-    server.use(
-      http.get(`${BASE}/trips/:tripId/itinerary`, ({ params }) => {
-        const reply = script[String(params.tripId)];
-        if (reply === 404 || reply === undefined) {
-          return HttpResponse.json(
-            { error: { code: 'NOT_FOUND', message: '일정이 없어요' } },
-            { status: 404 }
-          );
-        }
-        if (reply === 500) {
-          return HttpResponse.json(
-            { error: { code: 'INTERNAL', message: '서버 오류' } },
-            { status: 500 }
-          );
-        }
-        return HttpResponse.json(reply);
-      })
-    );
     jest.useFakeTimers();
   });
 
@@ -1294,212 +1586,194 @@ describe('생성 중 여행 — 셸 감시(폴링)와 페이지의 탭 복귀 �
     });
   }
 
-  describe('🔴 AC-1·2 · (셸 감시와 함께) 생성이 끝나면 화면을 떠나지 않아도 카드가 바뀌고, 그 뒤엔 더 묻지 않는다', () => {
-    it.each<[string, Itinerary, string, boolean]>([
-      ['완료(COMPLETE + PLANNED)', draft(A), '추천안 준비 중', true],
-      [
-        '실패(FAILED + PLANNED)',
-        itinerary(A, 'FAILED', 'PLANNED', null),
-        '추천안 준비 중',
-        true,
-      ],
-      ['확정(COMPLETE + CONFIRMED)', confirmed(A), '일정 확정', false],
+  describe('🔴 AC-6 · (셸 감시와 함께) 생성이 끝나면 화면을 떠나지 않아도 카드가 바뀌고, 그 뒤엔 더 묻지 않는다', () => {
+    it.each<[string, ItineraryCols, string, boolean]>([
+      ['완료(COMPLETE + PLANNED)', DRAFT, '추천안 준비 중', true],
+      ['실패(FAILED + PLANNED)', FAILED, '추천안 준비 중', true],
+      ['확정(COMPLETE + CONFIRMED)', CONFIRMED, '일정 확정', false],
     ])(
       '%s 로 끝나면 낡은 "짜는 중"이 끝난 얼굴로 바뀐다',
       async (_label, terminal, faceText, hasResume) => {
-        // 준비 — A 는 생성 중. 첫 조회 1번에 "짜는 중" 얼굴(앵커). 셸 훅 프로브가 옆에서 같은 칸을 감시한다.
-        script = { [A]: running(A), [B]: confirmed(B) };
+        // 준비 — R 은 생성 중. 첫 조회 1번에 "짜는 중" 얼굴(앵커). 셸 훅 프로브가 옆에서 목록을 감시한다.
+        serverTrips = [tripR(RUNNING), TRIP_B];
         await load(WITH_SHELL);
-        expect(screen.getByTestId(`my-trip-extra-${A}`)).toHaveTextContent(
+        expect(screen.getByTestId(`my-trip-extra-${R}`)).toHaveTextContent(
           RUNNING_TEXT
         );
-        expect(count(itinPath(A))).toBe(1);
+        expect(listHits(hits)).toBe(1);
 
         // 실행 ① — 서버에서 생성이 끝나고, 폴링 간격 하나가 지난다.
-        script[A] = terminal;
+        serverTrips = [tripR(terminal), TRIP_B];
         await advance(POLL + 100);
 
-        // 단언 ① — 낡은 "짜는 중"이 내려가고 끝난 얼굴이 된다(AC-1).
-        expect(screen.getByTestId(`my-trip-extra-${A}`)).toHaveTextContent(
+        // 단언 ① — 낡은 "짜는 중"이 내려가고 끝난 얼굴이 된다. 목록만 한 번 더 물었다.
+        expect(screen.getByTestId(`my-trip-extra-${R}`)).toHaveTextContent(
           faceText
         );
         expect(screen.queryByText(RUNNING_TEXT)).toBeNull();
         if (hasResume) {
-          expect(screen.getByTestId(`my-trip-resume-${A}`)).toBeOnTheScreen();
+          expect(screen.getByTestId(`my-trip-resume-${R}`)).toBeOnTheScreen();
         } else {
-          expect(screen.queryByTestId(`my-trip-resume-${A}`)).toBeNull();
+          expect(screen.queryByTestId(`my-trip-resume-${R}`)).toBeNull();
         }
+        expect(listHits(hits)).toBe(2);
 
         // 실행 ② — 간격 세 번이 더 지난다.
-        const afterDone = count(itinPath(A));
         await advance(POLL * 3);
 
-        // 단언 ② — 종착에 닿은 여행은 더 묻지 않는다(AC-2).
-        expect(count(itinPath(A))).toBe(afterDone);
+        // 단언 ② — 종착에 닿았으니 더 묻지 않는다. 일정 단건은 처음부터 끝까지 0.
+        expect(listHits(hits)).toBe(2);
+        expect(itineraryHits(hits)).toBe(0);
       }
     );
   });
 
-  describe('AC-3 · 생성이 도는 여행이 없으면 첫 조회 뒤에 더 묻지 않는다', () => {
-    it('일정 없음·확정·완료 초안·실패 초안(전부 세션 없음) → 간격 세 번이 지나도 여행마다 1번', async () => {
+  describe('AC-6 · 생성이 도는 여행이 없으면 첫 조회 뒤에 더 묻지 않는다', () => {
+    it('일정 없음·확정·완료 초안·실패 초안(전부 세션 없음) → (셸이 있어도) 간격 세 번이 지나도 목록은 1번', async () => {
       // 준비
-      serverTrips = [TRIP_A, TRIP_B, TRIP_C, TRIP_D];
-      script = {
-        [A]: 404,
-        [B]: confirmed(B),
-        [C]: draft(C),
-        [D]: itinerary(D, 'FAILED', 'PLANNED', null),
-      };
-      await load();
+      serverTrips = [
+        TRIP_A,
+        TRIP_B,
+        trip(C, '강릉 여행', '2026-08-31T00:00:00Z', DRAFT),
+        trip(D, '여수 여행', '2026-08-30T00:00:00Z', FAILED),
+      ];
+      await load(WITH_SHELL);
       expect(screen.getByTestId(`my-trip-card-${D}`)).toBeOnTheScreen();
 
       // 실행
       await advance(POLL * 3);
 
       // 단언
-      expect([A, B, C, D].map((id) => count(itinPath(id)))).toEqual([
-        1, 1, 1, 1,
-      ]);
+      expect(listHits(hits)).toBe(1);
+      expect(itineraryHits(hits)).toBe(0);
     });
   });
 
-  describe('AC-5a · 처음 열 때(첫 포커스) 첫 조회를 취소하거나 겹쳐 보내지 않는다', () => {
-    it.each<[string, boolean]>([
-      ['여행 목록을 처음 받는다', false],
-      // 홈 탭이 받아 둔 목록·일정이 캐시에 있으면 첫 렌더에 일정 재조회가 곧바로 출발한다 — 첫 포커스 재조회가
-      // 겹칠 수 있는 실제 진입 경로(01 맹점 ①).
-      ['홈 탭이 받아 둔 여행 목록·일정이 캐시에 있다', true],
-    ])(
-      '%s → 생성 중 A·확정 B 의 일정 조회가 여행마다 정확히 1번',
-      async (_label, cached) => {
-        // 준비
-        script = { [A]: running(A), [B]: confirmed(B) };
+  describe('AC-5 · 탭 복귀 재조회는 목록 한 건이다 (첫 포커스는 건너뜀)', () => {
+    it('처음 열 때(첫 포커스) 첫 조회를 겹쳐 보내지 않는다 — 홈이 받아 둔 목록이 캐시에 있어도 목록 GET 정확히 1', async () => {
+      // 준비 — 다른 탭이 받아 둔 목록(낡음: staleTime 0).
+      serverTrips = [TRIP_A, TRIP_B];
 
-        // 실행
-        renderPage(
-          cached
-            ? {
-                trips: [TRIP_A, TRIP_B],
-                itineraries: { [A]: running(A), [B]: confirmed(B) },
-              }
-            : undefined
-        );
-        await advance(100);
+      // 실행
+      renderPage({ trips: [TRIP_A, TRIP_B] });
+      await advance(100);
 
-        // 단언 — 화면이 떴고(앵커), 네트워크로 나간 일정 GET 은 여행마다 1번.
-        expect(screen.getByTestId(`my-trip-extra-${A}`)).toHaveTextContent(
-          RUNNING_TEXT
-        );
-        expect(count(itinPath(A))).toBe(1);
-        expect(count(itinPath(B))).toBe(1);
-      }
-    );
-  });
+      // 단언 — 마운트 재조회 1번. 첫 포커스 재조회가 더해지면 2.
+      expect(screen.getByTestId(`my-trip-card-${A}`)).toBeOnTheScreen();
+      expect(listHits(hits)).toBe(1);
+      expect(itineraryHits(hits)).toBe(0);
+    });
 
-  describe('🔴 AC-5 · 탭으로 돌아오면 생성 중이 아닌 여행도 다시 묻는다', () => {
-    it('다른 곳에서 확정된 초안 B 는 폴링으론 안 바뀌고, 탭 복귀 때 "일정 확정"으로 바뀐다', async () => {
-      // 준비 — A 는 일정 없음(404), B 는 초안.
-      script = { [A]: 404, [B]: draft(B) };
+    it('🔴 다른 곳에서 확정된 초안 B 는 폴링으론 안 바뀌고, 탭 복귀 때 목록을 한 번 다시 받아 "일정 확정"으로 바뀐다', async () => {
+      // 준비 — A 는 일정 없음, B 는 초안.
+      const draftB = trip(B, '제주 여행', '2026-09-01T00:00:00Z', DRAFT);
+      serverTrips = [TRIP_A, draftB];
       await load();
       expect(screen.getByTestId(`my-trip-extra-${B}`)).toHaveTextContent(
         '추천안 준비 중'
       );
+      expect(listHits(hits)).toBe(1);
 
       // 실행 ① — 상세 화면 등에서 B 가 확정되고, 목록은 다른 탭 뒤에서 간격 두 번을 보낸다.
-      script[B] = confirmed(B);
+      serverTrips = [TRIP_A, TRIP_B];
       await advance(POLL * 2);
 
       // 단언 ① — 생성 중이 아니라 폴링하지 않는다 → 아직 옛 얼굴(앵커).
       expect(screen.getByTestId(`my-trip-extra-${B}`)).toHaveTextContent(
         '추천안 준비 중'
       );
-      expect(count(itinPath(B))).toBe(1);
+      expect(listHits(hits)).toBe(1);
 
       // 실행 ② — 일정 탭으로 돌아온다.
       refocus();
       await advance(100);
 
-      // 단언 ② — 여행마다 다시 묻고(404 여행 포함), B 는 확정 얼굴이 된다.
+      // 단언 ② — 여행 수와 무관하게 목록 한 건만 다시 묻고, B 는 확정 얼굴이 된다. 일정 단건은 0.
       expect(screen.getByTestId(`my-trip-extra-${B}`)).toHaveTextContent(
         '일정 확정'
       );
-      expect(count(itinPath(A))).toBe(2);
-      expect(count(itinPath(B))).toBe(2);
+      expect(listHits(hits)).toBe(2);
+      expect(itineraryHits(hits)).toBe(0);
     });
-  });
 
-  describe('TRIP-1348 · 탭 복귀는 낡은 일정만 다시 묻는다', () => {
-    it('방금 받은(신선한) 일정은 건너뛰고, 실패한 일정만 다시 묻는다', async () => {
-      // 준비 — staleTime 1분이면 방금 받은 B 는 신선하다. A 는 500(데이터 없음 = 낡음).
-      script = { [A]: 500, [B]: confirmed(B) };
+    it('TRIP-1348 · 방금 받은(신선한) 목록은 복귀해도 다시 묻지 않는다', async () => {
+      // 준비 — staleTime 1분이면 방금 받은 목록은 신선하다.
+      serverTrips = [TRIP_A, TRIP_B];
       renderPage(undefined, { staleTime: 60_000 });
       await advance(100);
-      expect(count(itinPath(A))).toBe(1);
-      expect(count(itinPath(B))).toBe(1);
+      expect(listHits(hits)).toBe(1);
 
       // 실행 — 탭을 떠났다가 곧바로 돌아온다.
-      script[A] = draft(A);
       refocus();
       await advance(100);
 
-      // 단언 — 신선한 B 는 안 묻고(1 유지), 실패했던 A 만 다시 물었다.
-      expect(count(itinPath(B))).toBe(1);
-      expect(count(itinPath(A))).toBe(2);
+      // 단언
+      expect(listHits(hits)).toBe(1);
     });
   });
 
-  describe('🔴 AC-6 · (셸 감시와 함께) 폴링 중 조회가 실패하면 낡은 "짜는 중"을 내리고 폴링을 멈춘다 (INV-4)', () => {
-    it('500 → "모름" 얼굴 · 이후 간격이 지나도 다시 묻지 않음 · 탭 복귀 때 다시 묻는다', async () => {
-      // 준비 — A 는 생성 중(앵커).
-      script = { [A]: running(A), [B]: confirmed(B) };
+  describe('🔴 AC-6 · (셸 감시와 함께) 폴링 틱이 실패해도 받아 둔 목록을 그대로 그리고, 멈추지 않고 천천히 계속 묻는다 (INV-4)', () => {
+    it('500 → 카드 유지(오류 얼굴 없음) · 5초 간격으로 계속 시도 · 서버가 돌아오면 끝난 얼굴', async () => {
+      // 준비 — R 은 생성 중(앵커). 틱이 500 을 받게 목록 핸들러를 바꿀 수 있게 한다.
+      let status: 200 | 500 = 200;
+      server.use(
+        http.get(`${BASE}/trips`, () =>
+          status === 500
+            ? HttpResponse.json(
+                { error: { code: 'INTERNAL', message: '서버 오류' } },
+                { status: 500 }
+              )
+            : HttpResponse.json(serverTrips)
+        )
+      );
+      serverTrips = [tripR(RUNNING), TRIP_B];
       await load(WITH_SHELL);
-      expect(screen.getByTestId(`my-trip-extra-${A}`)).toHaveTextContent(
+      expect(screen.getByTestId(`my-trip-extra-${R}`)).toHaveTextContent(
         RUNNING_TEXT
       );
 
       // 실행 ① — 다음 폴링이 500 을 받는다.
-      script[A] = 500;
+      status = 500;
       await advance(POLL + 100);
 
-      // 단언 ① — 실패 요청이 나갔고(2번), 카드는 남되 상태문·배지가 없는 "모름" 얼굴이다.
-      expect(count(itinPath(A))).toBe(2);
-      expect(screen.getByTestId(`my-trip-card-${A}`)).toBeOnTheScreen();
-      expect(screen.queryByTestId(`my-trip-extra-${A}`)).toBeNull();
-      expect(screen.queryByTestId(`my-trip-badge-${A}`)).toBeNull();
-      expect(screen.queryByText(RUNNING_TEXT)).toBeNull();
+      // 단언 ① — 실패 요청이 나갔고(2번), 카드는 옛 값 그대로, 오류 얼굴로 뒤집히지 않는다.
+      expect(listHits(hits)).toBe(2);
+      expect(screen.getByTestId(`my-trip-extra-${R}`)).toHaveTextContent(
+        RUNNING_TEXT
+      );
+      expect(screen.queryByTestId('itinerary-tab-error')).toBeNull();
 
-      // 실행 ② — 간격 세 번이 더 지난다.
-      await advance(POLL * 3);
+      // 실행 ② — 2.1초 뒤엔 아직(느린 간격 5초), 5초가 차면 다시 시도한다.
+      await advance(POLL + 100);
+      expect(listHits(hits)).toBe(2);
+      await advance(3_000);
 
-      // 단언 ② — 조용한 무한 재시도가 없다.
-      expect(count(itinPath(A))).toBe(2);
+      // 단언 ② — 멈추지 않는다.
+      expect(listHits(hits)).toBe(3);
 
-      // 실행 ③ — 서버가 회복했고, 30초가 흘러 마지막 응답이 낡았고(운영 staleTime), 사용자가 탭으로 돌아온다.
-      script[A] = draft(A);
-      await advance(30_000);
-      refocus();
-      await advance(100);
+      // 실행 ③ — 서버가 돌아와 생성이 끝났다.
+      status = 200;
+      serverTrips = [tripR(DRAFT), TRIP_B];
+      await advance(5_100);
 
-      // 단언 ③ — 다시 묻고 끝난 얼굴을 보인다.
-      expect(count(itinPath(A))).toBe(3);
-      expect(screen.getByTestId(`my-trip-extra-${A}`)).toHaveTextContent(
+      // 단언 ③ — 따라잡았다.
+      expect(screen.getByTestId(`my-trip-extra-${R}`)).toHaveTextContent(
         '추천안 준비 중'
       );
     });
   });
 
-  // TRIP-1618 AC4 · TRIP-1614 가 "탭이 보일 때만" 으로 줄였던 폴링은 이제 셸 몫이다. 페이지는 타이머를 두지 않고, 셸은 탭 포커스를 모른다 —
-  // 그래서 옛 "떠나면 0건 / 돌아오면 따라잡기" 케이스(T1~T3)는 반대로 뒤집혔다(떠나도 셸은 계속 묻는다). 복귀 재조회는 AC-5·TRIP-1348 이 그대로 지킨다.
+  // TRIP-1618 AC4 · 폴링은 페이지가 아니라 셸이 한다. 페이지는 타이머를 두지 않고, 셸은 탭 포커스를 모른다 — 그래서 일정 탭을 떠나도 셸은 계속 묻는다.
   describe('🔴 TRIP-1618 AC4 · 폴링은 페이지가 아니라 셸이 한다', () => {
     const STALE_30S = { staleTime: 30_000 };
 
-    it('AC4① 페이지만 렌더하면(셸 없음) 생성 중 A 가 있어도 간격 세 번 동안 일정 GET 이 늘지 않는다', async () => {
-      // 준비 — 생성 중 A·확정 B. 첫 조회 1번씩(앵커).
-      script = { [A]: running(A), [B]: confirmed(B) };
+    it('AC4① 페이지만 렌더하면(셸 없음) 생성 중 R 이 있어도 간격 세 번 동안 목록 GET 이 늘지 않는다', async () => {
+      // 준비 — 생성 중 R·확정 B. 첫 조회 1번(앵커).
+      serverTrips = [tripR(RUNNING), TRIP_B];
       renderPage(undefined, STALE_30S);
       await advance(100);
-      expect(count(itinPath(A))).toBe(1);
-      expect(screen.getByTestId(`my-trip-extra-${A}`)).toHaveTextContent(
+      expect(listHits(hits)).toBe(1);
+      expect(screen.getByTestId(`my-trip-extra-${R}`)).toHaveTextContent(
         RUNNING_TEXT
       );
 
@@ -1507,47 +1781,81 @@ describe('생성 중 여행 — 셸 감시(폴링)와 페이지의 탭 복귀 �
       await advance(POLL * 3 + 100);
 
       // 단언 — 페이지는 스스로 묻지 않는다.
-      expect(count(itinPath(A))).toBe(1);
-      expect(count(itinPath(B))).toBe(1);
+      expect(listHits(hits)).toBe(1);
     });
 
-    it('AC4② 셸과 함께 렌더하면 간격 하나마다 A 의 일정 GET 은 정확히 1건씩이다 (이중 폴링 없음)', async () => {
-      // 준비 — 셸 프로브 + 페이지. 첫 조회 1번(앵커).
-      script = { [A]: running(A), [B]: confirmed(B) };
+    it('AC4② 셸과 함께 렌더하면 간격 하나마다 목록 GET 은 정확히 1건씩이다 (이중 폴링 없음 · 여행 수와 무관)', async () => {
+      // 준비 — 생성 중이 두 여행이어도 목록은 1건이다.
+      serverTrips = [
+        tripR(RUNNING),
+        trip(C, '강릉 여행', '2026-08-31T00:00:00Z', RUNNING),
+        TRIP_B,
+      ];
       await load(WITH_SHELL);
-      expect(count(itinPath(A))).toBe(1);
+      expect(listHits(hits)).toBe(1);
 
       // 실행 ① — 간격 하나.
       await advance(POLL + 100);
 
-      // 단언 ① — 페이지 관찰자 + 셸 관찰자가 같은 칸을 물어도 한 건이다.
-      expect(count(itinPath(A))).toBe(2);
+      // 단언 ① — 페이지 관찰자 + 셸 관찰자가 같은 목록을 물어도 한 건이다.
+      expect(listHits(hits)).toBe(2);
 
       // 실행 ② — 간격 하나 더.
       await advance(POLL);
 
-      // 단언 ② — 또 한 건. 확정 B 는 처음부터 묻지 않는다.
-      expect(count(itinPath(A))).toBe(3);
-      expect(count(itinPath(B))).toBe(1);
+      // 단언 ② — 또 한 건. 일정 단건은 없다.
+      expect(listHits(hits)).toBe(3);
+      expect(itineraryHits(hits)).toBe(0);
     });
 
     it('AC4③ 일정 탭을 떠나 다른 탭에 있어도 셸은 계속 묻는다 (TRIP-1614 T1 의 뒤집기)', async () => {
-      // 준비 — 셸 + 페이지, 포커스 중 폴링이 도는 것까지 확인(앵커). 이후 홈 탭에 있다고 보고 경로를 '/' 로 둔다.
-      script = { [A]: running(A), [B]: confirmed(B) };
+      // 준비 — 셸 + 페이지, 포커스 중 폴링이 도는 것까지 확인(앵커).
+      serverTrips = [tripR(RUNNING), TRIP_B];
       await load(WITH_SHELL);
       await advance(POLL + 100);
-      expect(count(itinPath(A))).toBe(2);
-      const baseA = count(itinPath(A));
-      const baseB = count(itinPath(B));
+      expect(listHits(hits)).toBe(2);
+      const base = listHits(hits);
 
       // 실행 — 탭을 떠난다(blur). 간격 세 번이 지난다.
       mockPathname = '/';
       leaveTab();
       await advance(POLL * 3 + 300);
 
-      // 단언 — 떠난 뒤에도 A 는 간격마다 한 건씩 늘고, 원래 안 묻던 B 는 그대로다.
-      expect(count(itinPath(A))).toBe(baseA + 3);
-      expect(count(itinPath(B))).toBe(baseB);
+      // 단언 — 떠난 뒤에도 간격마다 한 건씩 늘었다.
+      expect(listHits(hits)).toBe(base + 3);
+    });
+  });
+
+  describe('🔴 AC-7 · 목록이 무효화되면 카드·완료 배너가 새 값을 보인다', () => {
+    it('B 가 초안에서 확정으로 바뀐 서버 상태에서 목록 키를 무효화하면, 카드가 바뀌고 완료 배너가 B 로 뜬다', async () => {
+      // 준비 — B 는 초안이라 배너가 없다(앵커).
+      serverTrips = [
+        TRIP_A,
+        trip(B, '제주 여행', '2026-09-01T00:00:00Z', DRAFT),
+      ];
+      await load();
+      expect(screen.queryByTestId('generation-done-bar')).toBeNull();
+      expect(screen.getByTestId(`my-trip-extra-${B}`)).toHaveTextContent(
+        '추천안 준비 중'
+      );
+
+      // 실행 — 서버에서 확정됐고(확정 훅이 하는 일), 목록 무효화가 일어난다.
+      serverTrips = [TRIP_A, TRIP_B];
+      await act(async () => {
+        await lastClient?.invalidateQueries({
+          queryKey: getGetTripsQueryKey(),
+        });
+      });
+      await advance(100);
+
+      // 단언 — 카드는 새 값, 배너는 B.
+      expect(screen.getByTestId(`my-trip-extra-${B}`)).toHaveTextContent(
+        '일정 확정'
+      );
+      expect(screen.getByTestId('generation-done-bar-text')).toHaveTextContent(
+        new RegExp(TRIP_B.title)
+      );
+      expect(itineraryHits(hits)).toBe(0);
     });
   });
 });
@@ -1555,23 +1863,19 @@ describe('생성 중 여행 — 셸 감시(폴링)와 페이지의 탭 복귀 �
 // TRIP-1271 · 결정 1=A — 생성 중인 여행도 지울 수 있다(US-TRIP-10 개정의 "생성 중 ⋯ 숨김"을 뒤집는다).
 describe('🔴 AC-7 · 생성 중 카드도 ⋯ → 삭제 → 확인 다이얼로그로 지운다', () => {
   it('생성 중 A 의 ⋯ 와 "삭제"를 눌러도 DELETE 0번, 확인하면 DELETE /trips/{A} 1번', async () => {
-    // 준비 — A 는 생성 중(PARTIAL · 세션 있음), B 는 확정.
-    server.use(
-      http.get(`${BASE}/trips/:tripId/itinerary`, ({ params }) =>
-        HttpResponse.json(
-          params.tripId === A
-            ? {
-                ...CONFIRMED_B,
-                itineraryId: 'itin-a',
-                tripId: A,
-                status: 'PLANNED',
-                generationState: 'PARTIAL',
-                generationSessionId: 'sess-1',
-              }
-            : CONFIRMED_B
-        )
-      )
-    );
+    // 준비 — A 는 생성 중(PARTIAL · 세션 있음), B 는 확정. 일정 상태는 목록 네 칸에 실려 온다.
+    serverTrips = [
+      {
+        ...TRIP_A,
+        ...itineraryCols({
+          status: 'PLANNED',
+          generationState: 'PARTIAL',
+          generationMode: 'FULLY_AI',
+          generationSessionId: 'sess-1',
+        }),
+      },
+      TRIP_B,
+    ];
     renderPage();
     expect(await screen.findByText('AI가 일정을 짜는 중')).toBeOnTheScreen();
 
@@ -1633,45 +1937,35 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
   const done = (id: string) => itin(id, 'CONFIRMED');
   const planned = (id: string) => itin(id, 'PLANNED');
 
-  /** 여행별 일정 응답 대본. `'held'` 는 `release` 가 풀 때까지 응답을 붙잡는다(도착 순서를 테스트가 정한다). */
-  type Script = Itinerary | 404 | 500 | 'held';
+  /**
+   * 여행별 일정 상태 대본 — 일정 조회 응답 모양(`Itinerary`)으로 적으면 서버처럼 목록 네 칸으로 옮겨 실린다(`itineraryCols`).
+   * `404` 는 일정 없음(네 칸 null). TRIP-1677 로 여행별 일정 단건 핸들러는 없다.
+   */
+  type Script = Itinerary | 404;
   let script: Record<string, Script> = {};
-  const gates = new Map<string, () => void>();
+
+  /** 대본을 읽어 여행에 네 칸을 실은다 — 요청마다 읽으므로 테스트 중간에 대본을 바꾸면 "서버가 바뀌었다"가 된다. */
+  function withCols(t: Trip): Trip {
+    const reply = script[t.tripId];
+    return {
+      ...t,
+      ...(reply === undefined || reply === 404
+        ? NO_ITINERARY
+        : itineraryCols(reply)),
+    };
+  }
+
+  /** 서버가 지금 내려 주는 여행들 — 테스트 중간에 바꾸면 "서버에 새 여행이 생겼다"가 된다(탭 복귀 재조회가 이걸 받는다). */
+  let servedList: Trip[] = [];
 
   function serve(list: Trip[], itins: Record<string, Script>): void {
     script = itins;
-    gates.clear();
+    servedList = list;
     server.use(
-      http.get(`${BASE}/trips`, () => HttpResponse.json(list)),
-      http.get(`${BASE}/trips/:tripId/itinerary`, async ({ params }) => {
-        const id = String(params.tripId);
-        if (script[id] === 'held') {
-          await new Promise<void>((resolve) => gates.set(id, resolve));
-        }
-        const reply = script[id];
-        if (reply === 500) {
-          return HttpResponse.json(
-            { error: { code: 'INTERNAL', message: '서버 오류' } },
-            { status: 500 }
-          );
-        }
-        if (reply === undefined || reply === 404 || reply === 'held') {
-          return HttpResponse.json(
-            { error: { code: 'NOT_FOUND', message: '일정이 없어요' } },
-            { status: 404 }
-          );
-        }
-        return HttpResponse.json(reply);
-      })
+      http.get(`${BASE}/trips`, () =>
+        HttpResponse.json(servedList.map(withCols))
+      )
     );
-  }
-  /** 붙잡힌 응답을 `value` 로 푼다 — 요청이 이미 도착해 붙잡혔을 때까지 기다린다. */
-  async function release(id: string, value: Script): Promise<void> {
-    await waitFor(() => expect(gates.has(id)).toBe(true));
-    script[id] = value;
-    await act(async () => {
-      gates.get(id)?.();
-    });
   }
 
   let isLargeTextSpy: jest.SpyInstance | null = null;
@@ -1681,7 +1975,6 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
     lastClient = null;
   });
   afterEach(() => {
-    gates.forEach((open) => open()); // 붙잡힌 응답을 남기지 않는다 — 안 풀면 jest 가 red 대신 멈춘다.
     // 아직 마운트된 화면이 배율 변화를 듣는다 — 헬퍼의 setFontScale 이 act 로 감싼다.
     setFontScale(1);
     isLargeTextSpy?.mockRestore();
@@ -1757,6 +2050,8 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
 
       expect(mockPush).toHaveBeenCalledTimes(1);
       expect(String(mockPush.mock.calls[0][0])).toBe('/trips/trip-b/live');
+      // TRIP-1677 — 배너 [보기]는 COMPLETE/FAILED/CONFIRMED 여행이라 copick 이 아니다: 일정 단건을 묻지 않는다.
+      expect(itineraryHits(hits)).toBe(0);
     });
 
     it('목록을 떠나면 배너가 사라지고, 돌아와도 같은 여행은 다시 안 뜬다 (추가 쓰기 없음)', async () => {
@@ -1786,14 +2081,11 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
       expect(bar()).toBeNull();
 
       leaveTab();
-      // 떠나 있는 사이 목록과 B 의 일정이 캐시에 새로 들어온다.
+      // 떠나 있는 사이 새 여행 B(확정)가 들어온 목록이 캐시에 쓰인다.
       await act(async () => {
         script['trip-b'] = done('trip-b');
-        lastClient?.setQueryData(getGetTripsQueryKey(), [TA, TB]);
-        lastClient?.setQueryData(
-          getGetTripsTripIdItineraryQueryKey('trip-b'),
-          done('trip-b')
-        );
+        servedList = [TA, TB];
+        lastClient?.setQueryData(getGetTripsQueryKey(), [TA, TB].map(withCols));
       });
       await settle();
       expect(screen.getByTestId('my-trip-card-trip-b')).toBeOnTheScreen();
@@ -1847,25 +2139,6 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
       await settle();
       expect(barText()).toHaveTextContent('제주 여행 일정이 완성됐어요');
       expect(screen.getByTestId('my-trip-card-trip-a')).toBeOnTheScreen();
-    });
-
-    it('여행 하나의 일정이 아직 안 왔으면 먼저 온 완성이 있어도 띄우지도 쓰지도 않고, 마저 오면 최신 완성 B 를 띄운다', async () => {
-      serve([TA, TB], { 'trip-a': done('trip-a'), 'trip-b': 'held' });
-      renderPage();
-
-      expect(
-        await screen.findByTestId('my-trip-card-trip-a')
-      ).toBeOnTheScreen();
-      await settle();
-      expect(bar()).toBeNull();
-      expect(writeIdSet).not.toHaveBeenCalled();
-
-      await release('trip-b', done('trip-b'));
-      expect(
-        await screen.findByTestId('generation-done-bar')
-      ).toBeOnTheScreen();
-      expect(barText()).toHaveTextContent('부산 여행 일정이 완성됐어요');
-      expect(seenWrites()).toEqual([[SEEN_KEY, ['trip-a', 'trip-b']]]);
     });
 
     it.each([1, 1.49])(
@@ -2023,16 +2296,20 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
       await settle();
     }
 
-    /** 떠나 있는 사이 확정된 여행 — 서버 대본과 캐시(확정 응답이 캐시에 쓴 것과 같은 자리)를 함께 바꾼다. */
+    /**
+     * 떠나 있는 사이 확정된 여행 — 서버 대본을 바꾸고, 확정 쪽이 목록 캐시에 반영한 것과 같은 자리(`GET /trips` 키)에
+     * 새 네 칸을 쓴다. 돌아오면 탭 복귀 재조회가 같은 값을 다시 받는다.
+     */
     async function confirmedWhileAway(ids: string[]): Promise<void> {
       await act(async () => {
         ids.forEach((id) => {
           script[id] = done(id);
-          lastClient?.setQueryData(
-            getGetTripsTripIdItineraryQueryKey(id),
-            done(id)
-          );
         });
+        const cached = lastClient?.getQueryData<Trip[]>(getGetTripsQueryKey());
+        lastClient?.setQueryData(
+          getGetTripsQueryKey(),
+          (cached ?? []).map(withCols)
+        );
       });
     }
 
@@ -2165,24 +2442,13 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
       updatedAt: '2026-08-15T00:00:00.000Z',
     });
 
-    it('일정이 도착하기 전엔 최신순이고, 도착하면 여행 중 A 가 맨 위 · 배지 "여행 중" · ⋯/resume 없음', async () => {
+    it('목록이 도착하면 여행 중 A 가 처음부터 맨 위 · 배지 "여행 중" · ⋯/resume 없음 — 일정이 따로 올 때까지 기다리지 않는다', async () => {
       // 완료 배너는 이 describe 의 관심 밖 — seen 읽기를 막아 끈다.
       (readIdSet as jest.Mock).mockImplementation(() => new Promise(() => {}));
-      serve([PC, PA, PB], { A: 'held', B: done('B'), C: done('C') });
+      serve([PC, PA, PB], { A: done('A'), B: done('B'), C: done('C') });
       renderPage();
 
-      // 판정 재료(A 의 일정)가 없으면 고정하지 않는다 — 최신순 B·C·A, A 배지 없음.
-      expect(await screen.findByTestId('my-trip-badge-B')).toHaveTextContent(
-        '확정'
-      );
-      expect(cardOrder()).toEqual([
-        'my-trip-card-B',
-        'my-trip-card-C',
-        'my-trip-card-A',
-      ]);
-      expect(screen.queryByTestId('my-trip-badge-A')).toBeNull();
-
-      await release('A', done('A'));
+      // 일정 상태가 목록에 실려 오니 첫 렌더부터 판정이 선다(옛: A 일정이 올 때까지 최신순 B·C·A → 도착 뒤 A 가 올라옴).
       expect(await screen.findByTestId('my-trip-badge-A')).toHaveTextContent(
         '여행 중'
       );
@@ -2194,9 +2460,10 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
       expect(screen.queryByTestId('my-trip-menu-A')).toBeNull();
       expect(screen.queryByTestId('my-trip-resume-A')).toBeNull();
       expect(screen.getByTestId('my-trip-badge-C')).toHaveTextContent('확정');
+      expect(itineraryHits(hits)).toBe(0);
     });
 
-    it('기간 안 A 의 일정 조회가 500 이면 고정·배지 없음 (INV-4), 기간 안 초안·일정 없음은 "작성중"이고 고정 안 함', async () => {
+    it('기간 안 초안·일정 없음은 "작성중"이고 여행 중으로 고정하지 않는다', async () => {
       (readIdSet as jest.Mock).mockImplementation(() => new Promise(() => {}));
       const A2 = mk('A2', 'A2 여행', {
         ...DURING,
@@ -2207,7 +2474,7 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
         updatedAt: '2026-07-05T00:00:00.000Z',
       });
       serve([PA, A2, A3, PB], {
-        A: 500,
+        A: done('A'),
         A2: 404,
         A3: planned('A3'),
         B: done('B'),
@@ -2223,12 +2490,15 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
       expect(screen.getByTestId('my-trip-badge-A2')).toHaveTextContent(
         '작성중'
       );
-      expect(screen.queryByTestId('my-trip-badge-A')).toBeNull();
+      // 확정+기간 안인 A 만 고정되고, 초안 A3·일정 없음 A2 는 최신순 자리를 지킨다.
+      expect(screen.getByTestId('my-trip-badge-A')).toHaveTextContent(
+        '여행 중'
+      );
       expect(cardOrder()).toEqual([
+        'my-trip-card-A',
         'my-trip-card-B',
         'my-trip-card-A2',
         'my-trip-card-A3',
-        'my-trip-card-A',
       ]);
       expect(screen.getByTestId('my-trip-menu-A3')).toBeOnTheScreen();
     });
@@ -2269,7 +2539,7 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
           '여행 중'
         );
         expect(cardOrder()).toEqual(['my-trip-card-O', 'my-trip-card-N']);
-        const itinFetchesBefore = count('GET /api/v1/trips/O/itinerary');
+        const listBefore = listHits(hits);
 
         // 실행 — 자정을 넘긴다.
         await advance(61_000);
@@ -2280,8 +2550,9 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
         expect(screen.getByTestId('my-trip-badge-O')).not.toHaveTextContent(
           '여행 중'
         );
-        // 단언 ③ AC2 — 오늘이 바뀌어도 일정 조회 키는 오늘과 무관해 다시 받지 않는다.
-        expect(count('GET /api/v1/trips/O/itinerary')).toBe(itinFetchesBefore);
+        // 단언 ③ — 오늘이 바뀌어도 서버에 다시 묻지 않는다(목록도, 일정 단건도): 판정은 받아 둔 칸 + 새 오늘로 다시 계산할 뿐이다.
+        expect(listHits(hits)).toBe(listBefore);
+        expect(itineraryHits(hits)).toBe(0);
       } finally {
         jest.useRealTimers();
       }
@@ -2331,9 +2602,9 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
     }
 
     beforeEach(() => {
-      // 완료 배너·일정 판정은 관심 밖 — seen 읽기와 일정 응답을 막아 "여행 중 고정"이 끼지 않게 한다(S9 만 예외).
+      // 완료 배너·일정 판정은 관심 밖 — seen 읽기를 막고 여행을 전부 일정 없음으로 둬 "여행 중 고정"이 끼지 않게 한다(S9 만 예외).
       (readIdSet as jest.Mock).mockImplementation(() => new Promise(() => {}));
-      serve([Z, X, Y], { Z: 'held', X: 'held', Y: 'held' });
+      serve([Z, X, Y], {}); // 일정 없음(네 칸 null)이라 여행 중 고정이 끼지 않는다.
       storedSort(() => Promise.resolve(null));
     });
 

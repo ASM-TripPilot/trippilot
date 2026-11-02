@@ -31,6 +31,7 @@ import {
   fireEditDropOnZone,
 } from '@/test-support/editDragList';
 import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
+import { watchTripsList } from '@/test-support/tripItineraryCols';
 import {
   itinerary as baseItinerary,
   trip as baseTrip,
@@ -2242,13 +2243,21 @@ describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMo
   let getCount = 0;
   let postBodies: string[] = [];
   let postStatus = 201;
+  /** TRIP-1677 — `GET /trips` 요청 수. 목록 관찰자(`watchTripsList`)를 붙인 테스트에서만 오른다. */
+  let tripsGets = 0;
+  /** 값이 있으면 POST 응답을 이 약속이 풀릴 때까지 붙잡는다 — "응답 전에 화면을 떠난다"(TRIP-1677 W2)를 만든다. */
+  let postGate: Promise<void> | null = null;
+  let openPostGate: () => void = () => {};
 
   beforeEach(() => {
+    postGate = null;
+    openPostGate = () => {};
     getReply = 'notFound';
     openGet = null;
     getCount = 0;
     postBodies = [];
     postStatus = 201;
+    tripsGets = 0;
     (promptAndRegisterPush as jest.Mock).mockClear();
     setAccessToken('valid-access');
     useItineraryEditStore.getState().reset();
@@ -2272,6 +2281,7 @@ describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMo
     server.use(
       http.post(`${BASE}/trips/:tripId/itinerary`, async ({ request }) => {
         postBodies.push(await request.text());
+        if (postGate) await postGate;
         return postStatus === 201
           ? HttpResponse.json(EMPTY_MANUAL, { status: 201 })
           : HttpResponse.json(
@@ -2280,19 +2290,26 @@ describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMo
             );
       }),
       http.get(`${BASE}/trips/:tripId/bases`, () => HttpResponse.json([])),
-      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([]))
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])),
+      http.get(`${BASE}/trips`, () => {
+        tripsGets += 1;
+        return HttpResponse.json([]);
+      })
     );
   });
 
   afterEach(() => {
     openGet?.(); // 붙잡힌 응답을 남기지 않는다.
+    openPostGate();
     server.resetHandlers();
     clearAccessToken();
     act(() => useItineraryEditStore.getState().reset());
   });
 
-  function renderPage(props: { startFresh?: boolean } = {}) {
-    const client = newTestQueryClient({ gcTime: 0 });
+  function renderPage(
+    props: { startFresh?: boolean; client?: QueryClient } = {}
+  ) {
+    const client = props.client ?? newTestQueryClient({ gcTime: 0 });
     return render(
       <ManualPlanPage tripId={TRIP_ID} startFresh={props.startFresh} />,
       { wrapper: createWrapper(client) }
@@ -2305,9 +2322,19 @@ describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMo
   };
 
   describe('🔴 G-a2·a3 · 조회가 끝나기 전엔 POST 를 보류하고, 일정 없음으로 정착하면 MANUAL 한 건만 쏜다', () => {
-    it('조회 중 POST 0 → 404 정착 뒤 POST 1건, 본문은 { generationMode:"MANUAL" } 하나뿐', async () => {
+    it('조회 중 POST 0 → 404 정착 뒤 POST 1건, 본문은 { generationMode:"MANUAL" } 하나뿐 · 응답 전에 화면을 떠나도 성공하면 목록을 정확히 한 번 다시 받는다 (TRIP-1677 W2)', async () => {
+      // TRIP-1677 W2 — 목록(`GET /trips`)의 일정 상태 네 칸이 직접 짜기 POST 로 처음 생긴다. 무효화가 빠지면 방금 만든 일정이 목록 카드에
+      // "아직 일정이 없어요"로 남는다(첫 생성은 일정 조회도 404 였으므로 다른 갱신 계기가 없다). 그리고 무효화는 "호출별 콜백"이 아니라
+      // 훅 옵션에 있어야 한다 — 호출별 `mutate(…, { onSuccess })` 는 그 컴포넌트가 이미 사라졌으면 불리지 않는다(TRIP-1015 와 같은 함정).
+      // 편집기를 한 번 더 그리면 reanimated 소음 예산(174)이 넘어 새 `it` 대신 기존 케이스에 얹었다(마운트 유지 성공·실패는 아래 `it.each`).
+      const client = newTestQueryClient({ gcTime: 0 });
+      const unwatch = watchTripsList(client);
+      await waitFor(() => expect(tripsGets).toBe(1)); // 앵커: 목록 관찰자가 붙어 1건
+      postGate = new Promise<void>((resolve) => {
+        openPostGate = resolve;
+      });
       getReply = 'held';
-      renderPage();
+      const view = renderPage({ client });
 
       // 도착 전 덮어쓰기 금지 — 조회가 붙잡힌 동안(요청은 나갔다) POST 는 0건이다.
       await waitFor(() => expect(getCount).toBeGreaterThan(0));
@@ -2321,6 +2348,21 @@ describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMo
       });
       await waitFor(() => expect(postBodies).toHaveLength(1));
       expect(JSON.parse(postBodies[0])).toEqual({ generationMode: 'MANUAL' });
+
+      // 실행 — POST 응답이 오기 전에 화면을 떠난다(언마운트). 그다음 서버가 일정을 만들고 201 을 준다.
+      view.unmount();
+      await settleMs();
+      expect(tripsGets).toBe(1); // 앵커 — 아직 무효화 전
+      await act(async () => {
+        openPostGate();
+      });
+
+      // 단언 — 화면이 없어도 무효화가 재조회로 이어진다(+1), 무효화가 POST 를 늘리지 않는다.
+      await waitFor(() => expect(tripsGets).toBe(2));
+      await settleMs();
+      expect(tripsGets).toBe(2);
+      expect(postBodies).toHaveLength(1);
+      unwatch();
     });
   });
 
@@ -2328,17 +2370,26 @@ describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMo
     it.each<[string, number]>([
       ['성공(201)', 201],
       ['실패(500)', 500],
-    ])('MANUAL POST %s → 루틴 0회', async (_label, status) => {
-      postStatus = status;
-      renderPage();
+    ])(
+      'MANUAL POST %s → 루틴 0회 · 목록 재조회 +1 (TRIP-1677 W2)',
+      async (_label, status) => {
+        postStatus = status;
+        // TRIP-1677 W2 — 실패(500)도 서버가 이미 일정을 만들었을 수 있어 목록을 다시 받는다(성공만 갱신하면 목록 카드가 옛 값으로 남는다).
+        const client = newTestQueryClient({ gcTime: 0 });
+        const unwatch = watchTripsList(client);
+        await waitFor(() => expect(tripsGets).toBe(1)); // 앵커: 목록 관찰자가 붙어 1건
+        renderPage({ client });
 
-      // 앵커 — POST 가 나갔고, 성공이면 그 콜백이 하는 재조회(GET 두 번째)까지 도달했다.
-      await waitFor(() => expect(postBodies).toHaveLength(1));
-      if (status === 201)
-        await waitFor(() => expect(getCount).toBeGreaterThan(1));
-      await settleMs();
-      expect(promptAndRegisterPush).not.toHaveBeenCalled();
-    });
+        // 앵커 — POST 가 나갔고, 성공이면 그 콜백이 하는 재조회(GET 두 번째)까지 도달했다.
+        await waitFor(() => expect(postBodies).toHaveLength(1));
+        if (status === 201)
+          await waitFor(() => expect(getCount).toBeGreaterThan(1));
+        await settleMs();
+        expect(promptAndRegisterPush).not.toHaveBeenCalled();
+        expect(tripsGets).toBe(2);
+        unwatch();
+      }
+    );
   });
 
   // TRIP-1264 · QA F2 — 스와이프·하드웨어 뒤로는 ‹(onBack)를 거치지 않고 네비게이터가 바로 한 칸 뒤로 보낸다.
