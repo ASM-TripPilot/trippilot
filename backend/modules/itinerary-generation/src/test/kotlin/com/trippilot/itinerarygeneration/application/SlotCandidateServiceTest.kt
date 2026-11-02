@@ -362,8 +362,8 @@ class SlotCandidateServiceTest : StringSpec({
         }
     }
 
-    /** 잠금 범위는 편집(EditItineraryService)과 같다 — 확정 일정은 여행 시작 전만 잠긴다(TRIP-999 결정 (a)). */
-    "확정된 일정은 여행 시작 전에는 후보를 제안하지 않고, 시작한 날부터는 제안한다" {
+    /** 잠금 범위는 편집(EditItineraryService)과 같다 — 확정 잠금이 풀렸다(TRIP-1710, 종전엔 여행 시작 전 409). */
+    "확정된 일정도 여행 시작 전후 모두 후보를 제안한다" {
         val confirmed = itinerary.confirm(
             itinerary.days.flatMap { it.slots }.associate { it.sourcePoiId to UUID.randomUUID() }, now,
         )
@@ -372,7 +372,7 @@ class SlotCandidateServiceTest : StringSpec({
         val eve = Clock.fixed(Instant.parse("2026-07-31T14:59:59Z"), ZoneOffset.UTC)
         val firstDay = Clock.fixed(Instant.parse("2026-07-31T15:00:00Z"), ZoneOffset.UTC)
 
-        shouldThrow<ConflictDetected> { service(CapturingAgent(), stored = confirmed, at = eve).propose(acc, tripId, request) }
+        service(CapturingAgent(), stored = confirmed, at = eve).propose(acc, tripId, request).candidates.shouldNotBeEmpty()
         service(CapturingAgent(), stored = confirmed, at = firstDay).propose(acc, tripId, request).candidates.shouldNotBeEmpty()
     }
 
