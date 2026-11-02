@@ -1,5 +1,7 @@
 import fc from 'fast-check';
 
+import { NO_ITINERARY } from '@/test-support/tripItineraryCols';
+
 import type {
   ItineraryGenerationState,
   ItineraryStatus,
@@ -33,6 +35,7 @@ function trip(tripId: string, updatedAt: string): Trip {
     updatedAt,
     baseCount: 0,
     itineraryDayCount: 0,
+    ...NO_ITINERARY, // 이 모델은 일정 상태를 trip 이 아니라 entry.itinerary 로 받는다 — 네 칸은 자리만 채운다.
   };
 }
 

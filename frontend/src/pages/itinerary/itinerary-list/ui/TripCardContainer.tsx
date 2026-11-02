@@ -1,17 +1,17 @@
-import { useState, type ReactElement } from 'react';
+import { useRef, useState, type ReactElement } from 'react';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 
 import type { Trip } from '@/shared/api/index.schemas';
-import { useGetTripsTripIdItinerary } from '@/shared/api/index.hooks';
-import { isNotFound } from '@/shared/api';
 import { guardPress } from '@/shared/lib/pressGuard';
+import { showToast } from '@/shared/ui/Toast';
 import {
   TripCard,
   classifyTripPhase,
   formatNightsLabel,
   pickCoverCity,
+  tripItinerarySummary,
   type CoverTone,
-  type MyTripBadge,
   type MyTripCardVM,
 } from '@/entities/trip';
 import {
@@ -20,21 +20,22 @@ import {
   pickRegionCover,
 } from '@/entities/trip';
 import {
+  ITINERARY_OPEN_FAILED_MESSAGE,
+  ITINERARY_OPEN_FAILED_TOAST_ID,
+  fetchTripItineraryHref,
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary';
 import { deriveTripCardFace } from '../model/tripCardFace';
 
 /**
- * TRIP-468 · 여행 1건 담당 컨테이너 — 그 여행의 `useGetTripsTripIdItinerary` 를 물어
+ * TRIP-468 · 여행 1건 담당 컨테이너 — 목록(`GET /trips`)이 여행에 실어 준 일정 상태 네 칸으로
  * VM(배지·부가정보·목적지)을 조립해 `entities/trip` 의 순수 `TripCard`(testIDPrefix="my-trip")에 내린다.
  *
- * **N+1 훅-per-카드**: React 훅은 배열 루프 안에서 못 부르니(훅 규칙), 여행 하나를 담당하는 이
- * 컴포넌트를 카드 수만큼 렌더해 각자 자기 훅을 부른다(목록 1회 + 카드 N회). 여행 수가 적고(실사용
- * 2~5) 병렬·react-query 캐시라 수용(01b Q2 — 백엔드 목록 요약 필드가 생기면 제거 가능).
+ * TRIP-1677 · 예전엔 카드마다 그 여행의 일정을 따로 물었다(N+1 — 개발 서버 429 의 원인). 이제 일정 조회는 0건이고
+ * 일정 상태는 목록 한 칸에서 온다. 같이 짜기(copick) 생성 중인 여행을 누를 때만 슬롯 키를 위해 일정을 한 번 받는다(`fetchTripItineraryHref`).
  *
- * 얼굴 파생(TRIP-788 · TRIP-986): pending(미도착)·404 아닌 조회 실패→배지 미정 degrade · 그 외는
- * `deriveTripCardFace`(순수)가 상태문·배지·resume 를 함께 낸다(일정 없음/생성중/완성/초안, Mapping A).
+ * 얼굴 파생(TRIP-788 · TRIP-986): `deriveTripCardFace`(순수)가 상태문·배지·resume 를 함께 낸다(일정 없음/생성중/완성/초안, Mapping A).
  * 목적지: `resolveItineraryDestination`(확정만 live) → `itineraryDestinationHref`. 두 규칙을 홈 카드
  * CTA·일정 탭이 공유한다. 구 "오늘이 여행 구간이면 무조건 live" 특례는 미확정 초안까지 live 로 보내
  * 지워졌다(TRIP-986 D3).
@@ -75,73 +76,71 @@ export function TripCardContainer({
   today,
 }: TripCardContainerProps): ReactElement {
   const router = useRouter();
-  const itinerary = useGetTripsTripIdItinerary(trip.tripId);
+  const queryClient = useQueryClient();
   const [menuOpen, setMenuOpen] = useState(false);
+  // copick 누름이 일정 응답을 기다리는 동안의 잠금 — isPending 은 다음 렌더에야 알려져 같은 틱 두 번째 누름을 못 막는다.
+  const openingRef = useRef(false);
 
-  // 미도착·404 아닌 조회 실패("모른다")면 배지·상태문·resume 전부 없는 degrade — 실패를 "일정 없음"
-  // 으로 말하지 않는다(INV-4). 그 외(404 = "없다" 포함)는 얼굴을 순수 함수가 낸다(seam 포함).
-  const notFound = isNotFound(itinerary.error);
-  let badge: MyTripBadge;
-  let extra: string | null;
-  let resume: boolean;
-  if (itinerary.isPending || (itinerary.isError && !notFound)) {
-    badge = null;
-    extra = null;
-    resume = false;
-  } else {
-    const face = deriveTripCardFace(
-      itinerary.data?.status,
-      itinerary.data?.generationState,
-      notFound,
-      itinerary.data?.generationMode,
-      today !== undefined && isTripOngoing(trip, itinerary.data?.status, today)
-    );
-    badge = face.badge;
-    extra = face.statusLine;
-    resume = face.resume;
-  }
+  const summary = tripItinerarySummary(trip);
+  const face = deriveTripCardFace(
+    summary.status,
+    summary.generationState,
+    summary.notFound,
+    summary.generationMode,
+    today !== undefined && isTripOngoing(trip, summary.status, today)
+  );
+  const { badge } = face;
 
   const vm: MyTripCardVM = {
     tripId: trip.tripId,
     title: trip.title,
     metaLine: `${formatCardDateRange(trip.startDate, trip.endDate)} · ${formatNightsLabel(trip.startDate, trip.endDate)} · ${trip.party}명`,
     badge,
-    extra,
-    resume,
+    extra: face.statusLine,
+    resume: face.resume,
     // TRIP-1208 · 커버 — 첫 목적지 도시 + 단계 톤(확정 × 오늘: 여행 중=live · 종료=ended · 그 외=upcoming).
     coverCity: pickCoverCity(trip.destinations),
     coverSource: pickRegionCover(trip.destinations),
-    coverTone: coverTone(trip, itinerary.data?.status, today),
+    coverTone: coverTone(trip, summary.status, today),
   };
 
   // TRIP-1282 — 마이 숫자 칸의 창 안이면 무시(연타 관통 표적, resume CTA 도 이 함수로 폴백).
   const onPress = guardPress((): void => {
-    router.push(
-      itineraryDestinationHref(
-        trip.tripId,
-        resolveItineraryDestination({
-          notFound,
-          generationState: itinerary.data?.generationState,
-          status: itinerary.data?.status,
-          generationMode: itinerary.data?.generationMode,
-        }),
-        itinerary.data?.days
+    const destination = resolveItineraryDestination(summary);
+    if (destination !== 'copick') {
+      router.push(
+        itineraryDestinationHref(trip.tripId, destination, undefined)
+      );
+      return;
+    }
+    // 같이 짜기 생성 중 — 첫 비고정 슬롯 키가 일정 days 에만 있어 누르는 순간 한 번 받는다. 실패하면 이동하지 않고 알린다(INV-4).
+    if (openingRef.current) return;
+    openingRef.current = true;
+    fetchTripItineraryHref(queryClient, trip.tripId)
+      .then(
+        (href) => router.push(href),
+        () =>
+          showToast({
+            message: ITINERARY_OPEN_FAILED_MESSAGE,
+            testID: ITINERARY_OPEN_FAILED_TOAST_ID,
+            tone: 'error',
+          })
       )
-    );
+      .finally(() => {
+        openingRef.current = false;
+      });
   });
 
   // TRIP-1055 · 삭제 진입점(UX 사본 — 판정 정본은 서버 BR-U1-57, 상태 가드 TRIP-1061 전까진 이게 유일한
   // 방어). 보이는 배지가 '작성중'이면(Q3 — 날짜 지난 초안 포함) 생성 세션이 돌아도 연다(TRIP-1271 결정 1=A).
-  // 배지가 null 인 "모른다"(조회 중·404 아닌 실패)는 draft 가 아니라 닫힌 쪽으로 빠진다.
   // TRIP-1441 — 확정했지만 아직 시작 전인 여행('upcoming', 서울 날짜 기준)에도 연다(사용자 결정 2026-10-16,
   // US-TRIP-10 2026-10-01 개정 — 노출 제한은 FE 화면 정책). 여행 중·지난 여행은 닫힌 채. today 가 없으면
-  // (컨테이너는 시계를 읽지 않는다) 확정 카드는 닫힌 쪽이다. 배지 null("모른다")은 식 안의 badge !== null 가드가 거른다.
+  // (컨테이너는 시계를 읽지 않는다) 확정 카드는 닫힌 쪽이다.
   const deletable =
     onPressDelete !== undefined &&
     (badge === 'draft' ||
-      (badge !== null &&
-        today !== undefined &&
-        classifyTripPhase(trip, itinerary.data?.status, today) === 'upcoming'));
+      (today !== undefined &&
+        classifyTripPhase(trip, summary.status, today) === 'upcoming'));
 
   return (
     <TripCard
