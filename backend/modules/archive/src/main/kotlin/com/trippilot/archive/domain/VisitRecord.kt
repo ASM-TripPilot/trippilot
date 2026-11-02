@@ -94,6 +94,12 @@ data class VisitMemo(
 interface VisitPhotoMetaRepository {
     fun save(photo: VisitPhotoMeta): VisitPhotoMeta
 
+    /**
+     * 같은 (방문·기기·자산)이 이미 있으면 넣지 않고 **있던 행**을 돌려준다(TRIP-1721). 동시에 넣어도 하나만 남고,
+     * 늦은 쪽은 먼저 들어간 행을 받는다 — 돌려받은 id 가 [photo] 의 id 와 다르면 이번 요청은 아무것도 넣지 않은 것이다.
+     */
+    fun insertIfAbsent(photo: VisitPhotoMeta): VisitPhotoMeta
+
     /** 정렬 순서대로. 같은 순서는 등록 순으로 갈라 결정론을 유지한다. */
     fun findByVisit(visitCheckId: UUID): List<VisitPhotoMeta>
 
