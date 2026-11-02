@@ -1,10 +1,11 @@
 import {
   act,
   fireEvent,
-  render,
+  render as rntlRender,
   screen,
   within,
 } from '@testing-library/react-native';
+import type { ReactElement } from 'react';
 
 import type { Place, Trip } from '@/shared/api/index.schemas';
 import {
@@ -30,6 +31,8 @@ import {
 } from '@/test-support/wizardDraftFixture';
 import { HomePage } from '@/pages/home';
 import { routerSpies } from '@/test-support/expoRouterMock';
+import { createWrapper } from '@/test-support/queryRender';
+import { NO_ITINERARY } from '@/test-support/tripItineraryCols';
 
 /**
  * 홈 page — 여행 목록으로 얼굴(discovery·planning·로딩)을 고르고, 지배 여행의 일정 상태로 카드 CTA
@@ -41,7 +44,16 @@ import { routerSpies } from '@/test-support/expoRouterMock';
  *
  * 여기 없는 것: 일정 훅을 조건부 자식에서만 부르는지는 `src/__tests__/tabsShell.test.tsx` 홈 래퍼가
  * 잰다 — 이 파일은 일정 훅을 목하므로 최상위에서 불러도 모른다.
+ *
+ * TRIP-1677 · 일정 상태는 `GET /trips` 의 `Trip` 네 칸에서 읽고 지배 여행의 일정 단건 조회는 없다(`mockUseItinerary` 호출 0).
+ * 같이 짜기(CO_PLAN) 생성 중 카드를 *누를 때*만 일정을 한 번 묻는데, 그건 실 `fetchQuery` 가 필요하다 — `HomePage.integration.test.tsx`
+ * 가 잰다. 그 누름 때문에 홈이 `useQueryClient()` 를 쓸 수 있으므로 이 파일의 `render` 는 QueryClientProvider 로 감싼다(아래 `render`).
  */
+
+/** RNTL render 를 QueryClientProvider 로 감싼다 — 홈의 copick 누름이 `useQueryClient()` 를 써도 이 목 버킷이 죽지 않게. */
+function render(ui: ReactElement) {
+  return rntlRender(ui, { wrapper: createWrapper() });
+}
 
 const {
   push: mockPush,
@@ -56,6 +68,7 @@ jest.mock('expo-router', () =>
 );
 
 const mockUseGetTrips = jest.fn();
+// TRIP-1677 · 지배 여행의 일정 상태는 목록 칸(`itinerary*`)에서 읽는다 — 이 단건 일정 훅은 **불리면 안 된다**(호출 0 앵커).
 const mockUseItinerary = jest.fn();
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTrips: (...args: unknown[]) => mockUseGetTrips(...args),
@@ -104,6 +117,7 @@ function trip(overrides: Partial<Trip> = {}): Trip {
     updatedAt: '2026-01-01T00:00:00.000Z',
     baseCount: 0,
     itineraryDayCount: 0,
+    ...NO_ITINERARY,
     ...overrides,
   };
 }
@@ -286,47 +300,29 @@ type GenerationState =
   (typeof ItineraryGenerationState)[keyof typeof ItineraryGenerationState];
 type ItinStatus = (typeof ItineraryStatus)[keyof typeof ItineraryStatus];
 
-function itineraryOk(
+/**
+ * 일정이 있는 여행의 목록 네 칸 — 서버(`TripDtos.kt`)와 같은 규칙: 생성 중(PARTIAL)이면 세션이 있어 `itineraryGenerating=true`.
+ * 일정 없음은 `NO_ITINERARY`(null/false = 옛 404 와 같은 뜻).
+ */
+function itinCols(
   generationState: GenerationState,
   status: ItinStatus,
-  data: Record<string, unknown> = {}
-) {
+  over: Partial<Trip> = {}
+): Partial<Trip> {
   return {
-    data: {
-      itineraryId: 'itin-1',
-      tripId: TRIP_ID,
-      status,
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
-      isFallback: false,
-      generationState,
-      days: [],
-      ...data,
-    },
-    error: null,
-    isPending: false,
-    isError: false,
+    itineraryStatus: status,
+    itineraryGenerationState: generationState,
+    itineraryGenerationMode: 'FULLY_AI',
+    itineraryGenerating: generationState === ItineraryGenerationState.PARTIAL,
+    ...over,
   };
 }
-/** 404 = 일정 없음. 실 isNotFound 가 이 axios 모양을 판정한다. */
-const ITIN_NOT_FOUND = {
-  data: undefined,
-  error: { isAxiosError: true, response: { status: 404 } },
-  isPending: false,
-  isError: true,
-};
-const ITIN_PENDING = {
+/** 단건 일정 훅 목의 기본 반환 — 불리면 안 되는 훅이라 값은 의미 없다(옛 구현이 불러도 죽지 않게만 둔다). */
+const ITIN_UNUSED = {
   data: undefined,
   error: null,
   isPending: true,
   isError: false,
-};
-/** 500 — 404 가 아니라 상태를 알 수 없다. */
-const ITIN_SERVER_ERROR = {
-  data: undefined,
-  error: { isAxiosError: true, response: { status: 500 } },
-  isPending: false,
-  isError: true,
 };
 
 beforeEach(() => {
@@ -346,9 +342,7 @@ beforeEach(() => {
   // 기본값 — 여행 없음(discovery) · 담김 0 · 저장 숙소 0 · 뜨는 장소 1곳.
   // 장소가 0곳이면 스팟 섹션이 숨어 "더 보기"를 못 찾는다.
   mockUseGetTrips.mockReturnValue(tripsOk([]));
-  mockUseItinerary.mockReturnValue(
-    itineraryOk(ItineraryGenerationState.COMPLETE, ItineraryStatus.PLANNED)
-  );
+  mockUseItinerary.mockReturnValue(ITIN_UNUSED);
   lanePlaces([place('poi-stub', '스텁 장소')]);
   mockUseGetPlaces.mockImplementation(
     (_params: unknown, options?: { query?: { enabled?: boolean } }) =>
@@ -1251,15 +1245,17 @@ describe('장소 레인 — 서비스 지역 3곳 · 사진 먼저', () => {
   });
 });
 
-// TRIP-401 · 453 · 986 · 1006 · 1073 — 라벨·부제·목적지가 같은 판정(itinerary.status)을 쓴다.
+// TRIP-401 · 453 · 986 · 1006 · 1073 — 라벨·부제·목적지가 같은 판정(지배 여행의 일정 상태)을 쓴다.
 // 일정 탭(`tabsItineraryRoute`)과 같은 순수함수(resolveItineraryDestination)를 공유한다.
+// TRIP-1677 · 일정 상태의 출처는 목록의 `Trip` 네 칸이다 — 단건 조회 없이 목록이 도착한 첫 렌더부터 라벨·목적지가 정해진다.
 describe('여행 카드 CTA — 일정 상태 하나로 라벨·부제·목적지를 정한다', () => {
   const SUBTITLE = /일정을 이어서 짜볼까요/;
 
-  function renderHome(t: Trip, itinerary: unknown): void {
-    mockUseGetTrips.mockReturnValue(tripsOk([t]));
-    mockUseItinerary.mockReturnValue(itinerary);
+  /** 지배 여행 하나(`t`)에 일정 네 칸(`cols`)을 실어 홈을 그린다. 단건 일정 훅은 불리지 않아야 한다(AC-1). */
+  function renderHome(t: Trip, cols: Partial<Trip>): void {
+    mockUseGetTrips.mockReturnValue(tripsOk([{ ...t, ...cols }]));
     render(<HomePage />);
+    expect(mockUseItinerary).not.toHaveBeenCalled();
   }
 
   function pressCta(): void {
@@ -1274,10 +1270,7 @@ describe('여행 카드 CTA — 일정 상태 하나로 라벨·부제·목적�
     it('여행 전 + 확정 → "확정 일정 보기" · 부제 없음 · 배지 "계획 중" 유지 · live', () => {
       renderHome(
         beforeTrip(),
-        itineraryOk(
-          ItineraryGenerationState.COMPLETE,
-          ItineraryStatus.CONFIRMED
-        )
+        itinCols(ItineraryGenerationState.COMPLETE, ItineraryStatus.CONFIRMED)
       );
 
       expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
@@ -1302,10 +1295,7 @@ describe('여행 카드 CTA — 일정 상태 하나로 라벨·부제·목적�
     it('Trip.status 가 CONFIRMED 로 와도 확정 일정이면 live 로 1회 — replace·navigate 는 안 쓴다', () => {
       renderHome(
         busanTrip('CONFIRMED', '2099-06-10', '2099-06-13'),
-        itineraryOk(
-          ItineraryGenerationState.COMPLETE,
-          ItineraryStatus.CONFIRMED
-        )
+        itinCols(ItineraryGenerationState.COMPLETE, ItineraryStatus.CONFIRMED)
       );
 
       pressCta();
@@ -1318,7 +1308,7 @@ describe('여행 카드 CTA — 일정 상태 하나로 라벨·부제·목적�
 
     // 카드 본체 안의 알약 — 중첩 Pressable 이 두 번 발화하지 않는지도 이 1회가 잰다(TRIP-453).
     it('여행 전 + 일정 없음(404) → "일정 만들기" · 부제 없음 · 생성 방식(method)으로 1회', () => {
-      renderHome(beforeTrip(), ITIN_NOT_FOUND);
+      renderHome(beforeTrip(), NO_ITINERARY);
 
       expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
         '일정 만들기'
@@ -1340,7 +1330,7 @@ describe('여행 카드 CTA — 일정 상태 하나로 라벨·부제·목적�
     it('초안(PLANNED · COMPLETE) → "일정 이어서 짜기" · 부제 있음 · draft', () => {
       renderHome(
         beforeTrip(),
-        itineraryOk(ItineraryGenerationState.COMPLETE, ItineraryStatus.PLANNED)
+        itinCols(ItineraryGenerationState.COMPLETE, ItineraryStatus.PLANNED)
       );
 
       expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
@@ -1357,7 +1347,7 @@ describe('여행 카드 CTA — 일정 상태 하나로 라벨·부제·목적�
     it('완전 AI 생성 중(PARTIAL) → "일정 이어서 짜기" · mode 꼬리 없는 generating(관찰 모드)', () => {
       renderHome(
         beforeTrip(),
-        itineraryOk(ItineraryGenerationState.PARTIAL, ItineraryStatus.PLANNED)
+        itinCols(ItineraryGenerationState.PARTIAL, ItineraryStatus.PLANNED)
       );
 
       expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
@@ -1370,82 +1360,30 @@ describe('여행 카드 CTA — 일정 상태 하나로 라벨·부제·목적�
       );
     });
 
-    // 1일차 맨 앞은 고정 숙소, 첫 비고정은 poi-a. 인코딩된 리터럴을 손으로 적는다(# → %23).
-    it('같이 짜기 생성 중(PARTIAL · CO_PLAN) → 라벨 유지 · 첫 비고정 슬롯 채우기로 1회', () => {
-      const slot = {
-        endsNextDay: false,
-        hasViolation: false,
-        alternatives: [],
-        tags: [],
-      };
+    // 같이 짜기 생성 중은 목적지를 만들려면 일정의 첫 비고정 슬롯(`days`)이 필요하다 — 목록 칸에는 days 가 없으므로 *누를 때* 한 번 묻는다.
+    // 그 누름(일정 GET 1회·`copick/<슬롯>` push·연타 1·실패 토스트)은 실 fetchQuery 가 필요해 `HomePage.integration.test.tsx` 가 잰다.
+    // 여기서는 라벨·부제가 목록 칸만으로 정해지는 것(첫 프레임, 단건 조회 0)까지 본다.
+    it('같이 짜기 생성 중(PARTIAL · CO_PLAN) → 라벨 "일정 이어서 짜기" · 부제 있음 (목록 칸만으로, 단건 조회 없이)', () => {
       renderHome(
         beforeTrip(),
-        itineraryOk(ItineraryGenerationState.PARTIAL, ItineraryStatus.PLANNED, {
-          generationMode: 'CO_PLAN',
-          days: [
-            {
-              date: '2099-06-10',
-              slots: [
-                {
-                  ...slot,
-                  poiId: 'hotel',
-                  startAt: '00:00:00',
-                  endAt: '00:00:00',
-                  isFixed: true,
-                },
-                {
-                  ...slot,
-                  poiId: 'poi-a',
-                  startAt: '09:30:00',
-                  endAt: '11:00:00',
-                  isFixed: false,
-                },
-              ],
-            },
-          ],
+        itinCols(ItineraryGenerationState.PARTIAL, ItineraryStatus.PLANNED, {
+          itineraryGenerationMode: 'CO_PLAN',
         })
       );
 
       expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
         '일정 이어서 짜기'
       );
-
-      pressCta();
-      expect(mockPush).toHaveBeenCalledTimes(1);
-      expect(mockPush).toHaveBeenCalledWith(
-        `/trips/${TRIP_ID}/itinerary/copick/2099-06-10%23poi-a`
-      );
+      expect(screen.getByTestId('home-greeting')).toHaveTextContent(SUBTITLE);
     });
 
-    // #051 실측 경로(isFallback=true). 비고정 슬롯이 남아 있어야 'copick' 오답이 complete 로 새지 않는다.
-    it('같이 짜기 완성(COMPLETE · CO_PLAN · 폴백 일정) → 라벨·부제 유지 · copick/complete 로 1회', () => {
+    // #051 실측 경로. TRIP-1677: 목록 칸은 days 를 안 싣고, copickComplete 는 days 가 필요 없다 — 조회 없이 바로 이동.
+    it('같이 짜기 완성(COMPLETE · CO_PLAN) → 라벨·부제 유지 · copick/complete 로 1회 (일정 조회 없이)', () => {
       renderHome(
         beforeTrip(),
-        itineraryOk(
-          ItineraryGenerationState.COMPLETE,
-          ItineraryStatus.PLANNED,
-          {
-            generationMode: 'CO_PLAN',
-            isFallback: true,
-            days: [
-              {
-                date: '2099-06-10',
-                slots: [
-                  {
-                    poiId: 'poi-a',
-                    startAt: '09:30:00',
-                    endAt: '11:00:00',
-                    isFixed: false,
-                    endsNextDay: false,
-                    hasViolation: false,
-                    alternatives: [],
-                    tags: [],
-                  },
-                ],
-              },
-            ],
-          }
-        )
+        itinCols(ItineraryGenerationState.COMPLETE, ItineraryStatus.PLANNED, {
+          itineraryGenerationMode: 'CO_PLAN',
+        })
       );
 
       expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
@@ -1458,12 +1396,13 @@ describe('여행 카드 CTA — 일정 상태 하나로 라벨·부제·목적�
       expect(mockPush).toHaveBeenCalledWith(
         `/trips/${TRIP_ID}/itinerary/copick/complete`
       );
+      expect(mockUseItinerary).not.toHaveBeenCalled();
     });
 
     // 카드 본체 press 는 합성 컴포넌트의 onPress 로 올라가 배선과 무관하게 발화할 수 있다(RNTL) —
     // "본체가 버튼이 됐다"는 판정은 `HomeScreen.test.tsx` 버튼 집합이 지고, 여기선 목적지만 본다.
     it('카드 본체를 눌러도 알약과 같은 목적지(404 → method)로 1회 간다', () => {
-      renderHome(beforeTrip(), ITIN_NOT_FOUND);
+      renderHome(beforeTrip(), NO_ITINERARY);
 
       fireEvent.press(screen.getByTestId('home-trip-hero'));
 
@@ -1478,10 +1417,7 @@ describe('여행 카드 CTA — 일정 상태 하나로 라벨·부제·목적�
     it('확정 → 배지 "여행 중" · "여행 일정 보기" · live', () => {
       renderHome(
         duringTrip(),
-        itineraryOk(
-          ItineraryGenerationState.COMPLETE,
-          ItineraryStatus.CONFIRMED
-        )
+        itinCols(ItineraryGenerationState.COMPLETE, ItineraryStatus.CONFIRMED)
       );
 
       expect(screen.getByTestId('home-trip-hero-badge')).toHaveTextContent(
@@ -1498,7 +1434,7 @@ describe('여행 카드 CTA — 일정 상태 하나로 라벨·부제·목적�
     it('미확정 초안 → "일정 이어서 짜기" · draft', () => {
       renderHome(
         duringTrip(),
-        itineraryOk(ItineraryGenerationState.COMPLETE, ItineraryStatus.PLANNED)
+        itinCols(ItineraryGenerationState.COMPLETE, ItineraryStatus.PLANNED)
       );
 
       expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
@@ -1512,7 +1448,7 @@ describe('여행 카드 CTA — 일정 상태 하나로 라벨·부제·목적�
     });
 
     it('일정 없음(404) → "일정 만들기" · method', () => {
-      renderHome(duringTrip(), ITIN_NOT_FOUND);
+      renderHome(duringTrip(), NO_ITINERARY);
 
       expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
         '일정 만들기'
@@ -1525,60 +1461,37 @@ describe('여행 카드 CTA — 일정 상태 하나로 라벨·부제·목적�
     });
   });
 
-  // 로딩·500·404 는 셋 다 data 가 없다. 목적지를 모른 채 미는 오이동(기본값 draft)과, 라벨을 data 만
-  // 보고 "일정 만들기"로 접는 오답을 함께 막는다 — 404 는 오류 코드로만 판정한다(INV-4).
-  describe('일정이 미정착(로딩·404 아닌 오류)이면 여행 상태 폴백 라벨이고 이동하지 않는다', () => {
-    it('여행 전 + 로딩 → "일정 이어서 짜기" · 부제 있음 · 눌러도 이동 없음', () => {
-      renderHome(beforeTrip(), ITIN_PENDING);
+  // 옛 "일정이 미정착(로딩·404 아닌 오류)이면 폴백 라벨이고 이동하지 않는다" 6케이스(여행 전·여행 중 × 로딩·500, 카드 본체 로딩)는 지웠다 —
+  // 일정 상태가 목록에 실려 와서 지배 여행 단건의 로딩·오류 상태가 없다(모름은 "목록 자체를 모름" 하나 = 홈의 기존 로딩·오류 얼굴이 맡는다).
+  // 대신 그 자리에서 달라진 "첫 프레임부터 정해진다"를 잠근다.
+  describe('목록이 도착한 첫 렌더부터 라벨이 정해지고 바로 누를 수 있다 (옛 정착 대기 소멸)', () => {
+    it('여행 전 + 일정 없음 → 첫 렌더에서 바로 "일정 만들기" (폴백 라벨 "일정 이어서 짜기" 깜빡임 없음) · 누르면 method', () => {
+      renderHome(beforeTrip(), NO_ITINERARY);
 
       expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
-        '일정 이어서 짜기'
+        '일정 만들기'
       );
-      expect(screen.getByTestId('home-greeting')).toHaveTextContent(SUBTITLE);
-
-      pressCta();
-      expect(mockPush).not.toHaveBeenCalled();
-    });
-
-    it('여행 전 + 500 → "일정 이어서 짜기" · 부제 있음 · 눌러도 draft 로 오이동하지 않는다', () => {
-      renderHome(beforeTrip(), ITIN_SERVER_ERROR);
-
-      expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
-        '일정 이어서 짜기'
-      );
-      expect(screen.getByTestId('home-greeting')).toHaveTextContent(SUBTITLE);
-
-      pressCta();
-      expect(mockPush).not.toHaveBeenCalled();
-    });
-
-    it('여행 중 + 로딩 → "여행 일정 보기"', () => {
-      renderHome(duringTrip(), ITIN_PENDING);
-
-      expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
-        '여행 일정 보기'
-      );
-    });
-
-    // 여행 전 + 500 은 폴백 라벨이 초안 라벨과 글자까지 같아 "500 → 초안" 오답을 못 가른다.
-    it('여행 중 + 500 → "여행 일정 보기" · 눌러도 이동 없음(500 을 초안으로 접지 않는다)', () => {
-      renderHome(duringTrip(), ITIN_SERVER_ERROR);
-
-      expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
-        '여행 일정 보기'
+      expect(screen.getByTestId('home-greeting')).not.toHaveTextContent(
+        SUBTITLE
       );
 
       pressCta();
-      expect(mockPush).not.toHaveBeenCalled();
+      expect(mockPush.mock.calls).toEqual([
+        [`/trips/${TRIP_ID}/itinerary/method`],
+      ]);
     });
 
-    // 카드 본체가 알약의 가드 든 콜백을 재사용하지 않고 새 함수로 배선되면 여기서 push 가 샌다.
-    it('카드 본체도 로딩 중이면 눌러도 이동하지 않는다', () => {
-      renderHome(beforeTrip(), ITIN_PENDING);
+    it('여행 중 + 일정 없음 → 첫 렌더에서 바로 "일정 만들기" · 카드 본체를 눌러도 method 로 1회', () => {
+      renderHome(duringTrip(), NO_ITINERARY);
+
+      expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+        '일정 만들기'
+      );
 
       fireEvent.press(screen.getByTestId('home-trip-hero'));
-
-      expect(mockPush).not.toHaveBeenCalled();
+      expect(mockPush.mock.calls).toEqual([
+        [`/trips/${TRIP_ID}/itinerary/method`],
+      ]);
     });
   });
 });
@@ -1619,12 +1532,16 @@ describe('연타 관통 — 홈 쪽 반쪽', () => {
   it.each(['home-trip-hero', 'home-trip-hero-cta'])(
     '⑤ 창 안의 여행 카드(%s) 누름은 라이브로 가지 않고, 창이 닫힌 뒤 한 번 누르면 라이브로 정확히 1회 간다',
     (testID) => {
-      mockUseGetTrips.mockReturnValue(tripsOk([beforeTrip()]));
-      mockUseItinerary.mockReturnValue(
-        itineraryOk(
-          ItineraryGenerationState.COMPLETE,
-          ItineraryStatus.CONFIRMED
-        )
+      mockUseGetTrips.mockReturnValue(
+        tripsOk([
+          {
+            ...beforeTrip(),
+            ...itinCols(
+              ItineraryGenerationState.COMPLETE,
+              ItineraryStatus.CONFIRMED
+            ),
+          },
+        ])
       );
       render(<HomePage />);
       expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
@@ -1644,75 +1561,25 @@ describe('연타 관통 — 홈 쪽 반쪽', () => {
     }
   );
 
-  // TRIP-1306 — 목적지를 모르는(일정 조회 중) 누름은 아무것도 안 하므로 창도 열지 않는다.
-  // 시계는 위 beforeEach 가 렌더 전에 멈춰 둔다 — 실제 시계로 연 창은 과거 FROZEN_NOW 기준 음수 경과로 닫힌 것으로 판정된다.
-  describe('일정 조회 중 누름은 창을 열지 않는다', () => {
+  // TRIP-1306(목적지를 모르는 조회 중 누름은 창을 안 연다)은 TRIP-1677 로 전제가 사라졌다 — 목적지는 목록이 도착한 첫 렌더부터 알려져 "조회 중 누름"이
+  // 없다. 옛 4케이스(조회 중 카드 누름·응답 직후 재누름·조회 중/500 뒤 "더 보기"·)는 지웠고, 남은 연타 계약은 아래 한 줄이다.
+  // (copick 누름은 *응답을 기다리는 동안* 목적지를 모르는 구간이 새로 생긴다 — 그 구간의 잠금·창은 HomePage.integration 이 잰다.)
+  describe('목적지가 정해진 카드의 연타', () => {
     const LIVE = `/trips/${TRIP_ID}/live`;
 
     it.each(['home-trip-hero', 'home-trip-hero-cta'])(
-      '조회 중 카드(%s) 누름은 이동이 없고, 응답 직후(300ms) 다시 누르면 일정 화면으로 정확히 1회 간다',
+      '확정 일정 카드(%s)를 60ms 간격으로 2연타하면 이동은 1회다',
       (testID) => {
-        mockUseGetTrips.mockReturnValue(tripsOk([beforeTrip()]));
-        mockUseItinerary.mockReturnValue(ITIN_PENDING);
-        const { rerender } = render(<HomePage />);
-        expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
-          '일정 이어서 짜기'
-        );
-
-        fireEvent.press(screen.getByTestId(testID));
-
-        expect(mockPush).not.toHaveBeenCalled();
-
-        // 응답이 와서 목적지가 정해진다 — 조회 중 누름을 기억했다가 지금 이동하지 않는다.
-        mockUseItinerary.mockReturnValue(
-          itineraryOk(
-            ItineraryGenerationState.COMPLETE,
-            ItineraryStatus.CONFIRMED
-          )
-        );
-        rerender(<HomePage />);
-        clock.mockReturnValue(FROZEN_NOW + 300);
-        expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
-          '확정 일정 보기'
-        );
-        expect(mockPush).not.toHaveBeenCalled();
-
-        fireEvent.press(screen.getByTestId(testID));
-
-        expect(mockPush.mock.calls).toEqual([[LIVE]]);
-      }
-    );
-
-    // 500 줄: 404 아닌 오류로 끝나도 목적지는 null 이다 — 바깥 검사를 "조회 중"으로만 좁히면 여기서 창이 다시 열린다.
-    it.each([
-      ['조회 중', ITIN_PENDING],
-      ['500 오류로 끝난 뒤', ITIN_SERVER_ERROR],
-    ])(
-      '%s 카드를 누른 직후(100ms) "더 보기"를 누르면 장소 탐색으로 간다',
-      (_label, itinerary) => {
-        // "더 보기"는 여행 중 얼굴에만 있다.
-        mockUseGetTrips.mockReturnValue(tripsOk([duringTrip()]));
-        mockUseItinerary.mockReturnValue(itinerary);
-        render(<HomePage />);
-        expect(screen.getByTestId('home-spots-more')).toBeOnTheScreen();
-
-        fireEvent.press(screen.getByTestId('home-trip-hero'));
-        clock.mockReturnValue(FROZEN_NOW + 100);
-        fireEvent.press(screen.getByTestId('home-spots-more'));
-
-        expect(mockPush.mock.calls).toEqual([['/explore/places']]);
-      }
-    );
-
-    it.each(['home-trip-hero', 'home-trip-hero-cta'])(
-      '목적지가 정해진 카드(%s)를 60ms 간격으로 2연타하면 이동은 1회다',
-      (testID) => {
-        mockUseGetTrips.mockReturnValue(tripsOk([beforeTrip()]));
-        mockUseItinerary.mockReturnValue(
-          itineraryOk(
-            ItineraryGenerationState.COMPLETE,
-            ItineraryStatus.CONFIRMED
-          )
+        mockUseGetTrips.mockReturnValue(
+          tripsOk([
+            {
+              ...beforeTrip(),
+              ...itinCols(
+                ItineraryGenerationState.COMPLETE,
+                ItineraryStatus.CONFIRMED
+              ),
+            },
+          ])
         );
         render(<HomePage />);
 

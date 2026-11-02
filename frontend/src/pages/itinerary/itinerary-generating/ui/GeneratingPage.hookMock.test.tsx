@@ -179,6 +179,8 @@ function mockHookContextResult(hookOptions?: { mutation?: MutationCallbacks }) {
 }
 
 jest.mock('@/shared/api/generated/trips/trips', () => ({
+  // TRIP-1677 — 생성 POST 훅 옵션이 목록(`GET /trips`)을 무효화하려고 키 함수를 부른다. 목록 키는 생성물 모양(`['/trips']`).
+  getGetTripsQueryKey: () => ['/trips'],
   usePostTripsTripIdItinerary: (hookOptions?: {
     mutation?: MutationCallbacks & { onSuccess?: SuccessFn };
   }) => {
@@ -543,12 +545,17 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
 
   /** 성공 도착 — react-query 순서대로 훅 레벨 → 호출별 onSuccess. 목 phase 는 그대로 둬
    * "재렌더 전에 화면이 빠지는" 실기 순서를 재현한다(02a ★13). */
+  /** 마지막 `succeed` 가 넘긴 가짜 client 의 `invalidateQueries` — TRIP-1677 목록 무효화 단언용. */
+  let lastInvalidate: jest.Mock;
   function succeed(data: Itinerary): void {
+    lastInvalidate = jest.fn(() => Promise.resolve());
     const context = {
       client: {
         setQueryData: jest.fn(),
         // TRIP-1690 FV-POLL-01 — 훅 옵션 onSuccess 가 쓰기 전에 진행 중 일정 GET 을 취소한다.
         cancelQueries: jest.fn(() => Promise.resolve()),
+        // TRIP-1677 — 훅 옵션 onSuccess 가 목록(`GET /trips`)을 무효화한다.
+        invalidateQueries: lastInvalidate,
       },
     };
     act(() => {
@@ -653,6 +660,12 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
       // 짝 — 성공 갈래가 실제로 돌았다.
       expect(replaceTargets().some((t) => t.includes('/itinerary/draft'))).toBe(
         true
+      );
+      // TRIP-1677 — 생성 POST 성공은 여행 목록 키(`GET /trips`)를 무효화한다(방금 시작한 생성이 목록 폴링 대상에 오르는 유일한 계기).
+      // 실제 재조회까지는 GeneratingPage.integration 이 요청 수로 잠근다 — 여기는 훅 옵션이 가짜 client 에 건 호출 인자만 본다.
+      // (일정 GET 취소를 기다린 뒤에 부르므로 한 틱 뒤에 보인다.)
+      await waitFor(() =>
+        expect(lastInvalidate).toHaveBeenCalledWith({ queryKey: ['/trips'] })
       );
 
       page.leave();
@@ -798,6 +811,7 @@ describe('화면을 떠날 때 백그라운드 토스트', () => {
               setQueryData: jest.fn(),
               // TRIP-1690 FV-POLL-01 — 훅 옵션 onSuccess 가 쓰기 전에 진행 중 일정 GET 을 취소한다.
               cancelQueries: jest.fn(() => Promise.resolve()),
+              invalidateQueries: jest.fn(() => Promise.resolve()),
             },
           }
         );

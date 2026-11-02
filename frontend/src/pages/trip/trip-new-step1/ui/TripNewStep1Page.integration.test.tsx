@@ -845,6 +845,11 @@ describe('기간 편집 시트 (W-1~W-5)', () => {
     updatedAt: '2026-08-02T00:00:00Z',
     baseCount: 0,
     itineraryDayCount: 0,
+    // 일정이 없는 여행 — 목록이 싣는 일정 상태 네 칸(TRIP-1677).
+    itineraryStatus: null,
+    itineraryGenerationState: null,
+    itineraryGenerationMode: null,
+    itineraryGenerating: false,
   };
 
   describe('W-5 · 제출 바디의 기간은 시작 + 박수 합이다 (TRIP-1027 AC-9)', () => {
@@ -3130,6 +3135,11 @@ describe('TRIP-1210 · 다도시 여행 제목이 생성·수정 본문에 실�
     updatedAt: '2026-08-02T00:00:00Z',
     baseCount: 0,
     itineraryDayCount: 0,
+    // 일정이 없는 여행 — 목록이 싣는 일정 상태 네 칸(TRIP-1677).
+    itineraryStatus: null,
+    itineraryGenerationState: null,
+    itineraryGenerationMode: null,
+    itineraryGenerating: false,
   };
 
   let postedBodies: Record<string, unknown>[] = [];
@@ -3311,6 +3321,11 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
     updatedAt: '2026-08-02T00:00:00Z',
     baseCount: 0,
     itineraryDayCount: 0,
+    // 일정이 없는 여행 — 목록이 싣는 일정 상태 네 칸(TRIP-1677).
+    itineraryStatus: null,
+    itineraryGenerationState: null,
+    itineraryGenerationMode: null,
+    itineraryGenerating: false,
   };
 
   const GYEONGBOK = 'poi-gyeongbok';

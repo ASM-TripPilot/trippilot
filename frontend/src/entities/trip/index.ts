@@ -17,6 +17,8 @@ export {
 } from './lib/formatTripPeriod';
 export { regionForDay } from './lib/regionForDay';
 export { tripDayNumber } from './lib/tripDayNumber';
+export { tripItinerarySummary } from './lib/tripItinerarySummary';
+export type { TripItinerarySummary } from './lib/tripItinerarySummary';
 export { classifyTripPhase, isTripOngoing } from './lib/tripPhase';
 export type { TripPhase } from './lib/tripPhase';
 export type { MyTripBadge, MyTripCardVM, PastTripCardVM } from './model';
