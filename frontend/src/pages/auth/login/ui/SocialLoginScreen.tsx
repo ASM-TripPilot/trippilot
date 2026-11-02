@@ -29,6 +29,9 @@ export interface SocialLoginScreenProps {
   // 네이버 SDK 키가 없는 빌드는 네이버 버튼을 그리지 않는다(TRIP-1371 — 서버가 네이버 code 경로를 닫았다).
   // 기본은 보임 — 판정은 컨테이너(LoginPage)가 `isNaverLoginAvailable` 로 한다.
   hideNaver?: boolean;
+  // 웹이 앱 안 브라우저(인스타그램 등)에서 열렸을 때 버튼 위 안내 — 구글은 앱 안 웹뷰 로그인을 막는다.
+  // 판정은 컨테이너(LoginPage)가 `isInAppBrowser` 로 한다. 버튼은 막지 않는다(네이버는 된다).
+  inAppNotice?: boolean;
 }
 
 type BrandIcon = ComponentType<{ size?: number; testID?: string }>;
@@ -166,6 +169,7 @@ export function SocialLoginScreen({
   onAgeCancel,
   AppleButton,
   hideNaver = false,
+  inAppNotice = false,
 }: SocialLoginScreenProps) {
   const showCancelNotice = phase === 'cancelled';
   const showConflictSheet =
@@ -206,6 +210,20 @@ export function SocialLoginScreen({
           여행의 모든 순간을, TripPilot
         </Text>
       </View>
+
+      {inAppNotice ? (
+        <View
+          testID="auth-login-inapp-notice"
+          className="gap-xs rounded-button bg-surface-soft px-lg py-md"
+        >
+          <Text className="font-noto-bold text-label font-bold text-ink">
+            앱 안 브라우저에서는 구글·카카오 로그인이 안 될 수 있어요
+          </Text>
+          <Text className="font-noto text-body text-muted">
+            오른쪽 위 ⋯ 메뉴에서 「외부 브라우저로 열기」를 눌러 주세요
+          </Text>
+        </View>
+      ) : null}
 
       <View className="gap-md">
         {SOCIAL_BUTTONS.filter(

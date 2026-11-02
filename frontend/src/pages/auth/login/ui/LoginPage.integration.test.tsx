@@ -4,6 +4,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react-native';
+import { Platform } from 'react-native';
 import { http, HttpResponse } from 'msw';
 
 import type { SocialProvider } from '@/shared/api';
@@ -412,5 +413,92 @@ describe('token 갈래 — 연령확인 도달', () => {
       // 단언 ④ 연령확인 전에는 게이트('/')로 보내지 않는다 — 계정이 아직 확정되지 않았다.
       expect(mockReplace).not.toHaveBeenCalled();
     });
+  });
+});
+
+/**
+ * 웹이 앱 안 브라우저(인스타그램·카카오톡 등)에서 열렸을 때 — 안내 문구와 바깥 브라우저 이동 배선.
+ * 판정 함수는 `lib/inAppBrowser.test.ts` 가 전수로 보고, 여기서는 페이지가 그 결과를 화면·주소 이동으로
+ * 잇는지만 본다(이 배선에서 "표식 붙인 주소를 넘겨 한 번도 안 나가던" 결함이 실제로 났다).
+ * 3동작: 준비(Platform·UA·location 가짜) → 실행(LoginPage 렌더) → 단언(안내 유무·이동한 주소).
+ */
+describe('웹 · 앱 안 브라우저', () => {
+  const IOS_INSTAGRAM =
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 357.0.0.25.101';
+  const ANDROID_INSTAGRAM =
+    'Mozilla/5.0 (Linux; Android 14; SM-S918N; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0 Mobile Safari/537.36 Instagram 357.0.0.25.101 Android';
+  const LOGIN_HREF = 'https://app.trippilot.co.kr/login';
+
+  // 페이지가 `location.href = …` 로 이동하면 여기에 쌓인다(진짜 이동 대신 기록).
+  let assigned: string[] = [];
+  const saved = {
+    location: Object.getOwnPropertyDescriptor(globalThis, 'location'),
+    navigator: Object.getOwnPropertyDescriptor(globalThis, 'navigator'),
+  };
+
+  function fakeBrowser(os: 'web' | 'ios', userAgent: string) {
+    jest.replaceProperty(Platform, 'OS', os);
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: { userAgent },
+    });
+    Object.defineProperty(globalThis, 'location', {
+      configurable: true,
+      value: {
+        get href() {
+          return LOGIN_HREF;
+        },
+        set href(next: string) {
+          assigned.push(next);
+        },
+      },
+    });
+  }
+
+  beforeEach(() => {
+    assigned = [];
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    for (const key of ['location', 'navigator'] as const) {
+      const descriptor = saved[key];
+      if (descriptor) {
+        Object.defineProperty(globalThis, key, descriptor);
+      } else {
+        delete (globalThis as Record<string, unknown>)[key];
+      }
+    }
+  });
+
+  it('웹 · iOS 인스타그램 → 안내를 띄우고 주소는 안 바꾼다(iOS 는 강제로 못 나간다)', () => {
+    fakeBrowser('web', IOS_INSTAGRAM);
+
+    render(<LoginPage />);
+
+    expect(screen.getByTestId('auth-login-inapp-notice')).toBeOnTheScreen();
+    expect(assigned).toEqual([]);
+  });
+
+  it('웹 · 안드로이드 인스타그램 → 안내 + 마운트 때 Chrome intent 로 한 번 이동(돌아올 주소엔 표식)', () => {
+    fakeBrowser('web', ANDROID_INSTAGRAM);
+
+    render(<LoginPage />);
+
+    expect(screen.getByTestId('auth-login-inapp-notice')).toBeOnTheScreen();
+    expect(assigned).toEqual([
+      'intent://app.trippilot.co.kr/login#Intent;scheme=https;package=com.android.chrome;' +
+        `S.browser_fallback_url=${encodeURIComponent(`${LOGIN_HREF}?inapp=stay`)};end`,
+    ]);
+  });
+
+  it('네이티브 앱(Platform ios)은 UA 가 인스타그램 모양이어도 안내·이동 없음 — 판정은 웹에서만', () => {
+    fakeBrowser('ios', ANDROID_INSTAGRAM);
+
+    render(<LoginPage />);
+
+    expect(screen.queryByTestId('auth-login-inapp-notice')).toBeNull();
+    expect(screen.getByTestId('auth-login-root')).toBeOnTheScreen();
+    expect(assigned).toEqual([]);
   });
 });
