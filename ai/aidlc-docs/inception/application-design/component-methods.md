@@ -1,5 +1,7 @@
 # Application Design — Component Methods
 
+> **대체됨 (2026-11-02)** — AI 아키텍처 개요는 [`ai/ARCHITECTURE.md`](../../../ARCHITECTURE.md) 한 곳으로 합쳤다. 이 문서는 이력·세부 참고용이며, 어긋나면 ARCHITECTURE.md(와 코드)가 이긴다.
+
 > 각 컴포넌트의 구현 클래스 구조, 공개/내부 메서드 시그니처, 비즈니스 규칙을 정의한다.
 > 표기: `[public]` = 외부 호출 가능 · `[internal]` = 모듈 내부 전용
 

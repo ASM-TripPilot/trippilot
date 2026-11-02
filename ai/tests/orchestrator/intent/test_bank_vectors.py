@@ -15,8 +15,8 @@ import yaml
 
 from trippilot.agents.adapters.memory_vector_store import InMemoryVectorStore
 from trippilot.domain.dialogue.intent import Intent
-from trippilot.orchestrator.dialogue_interpreter import BankIndex
-from trippilot.orchestrator.question_bank import (
+from trippilot.orchestrator.dialogue.dialogue_interpreter import BankIndex
+from trippilot.orchestrator.intent.question_bank import (
     BANK_COLLECTION,
     BankEntry,
     BankLoadError,
@@ -94,7 +94,7 @@ def test_stale_file_is_not_loaded(tmp_path: Path, change: str) -> None:
 def test_broken_file_falls_back_instead_of_crashing_startup() -> None:
     """지문·모델·차원은 맞는데 벡터 개수가 모자란 파일 — 종전엔 `BankLoadError` 가 배선까지 올라가 AI 기동이
     실패했다(Codex 리뷰). 싣지 않고 원격 색인으로 넘긴다."""
-    from trippilot.orchestrator.question_bank import BankVectors
+    from trippilot.orchestrator.intent.question_bank import BankVectors
 
     entries = _entries("날씨", "거리")
     broken = BankVectors(model="m", dim=3, fingerprint=bank_fingerprint(entries), vectors=((0.0, 1.0, 0.0),))

@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm.llm import TypedResult
-from trippilot.orchestrator import place_sql as ps
-from trippilot.orchestrator.place_sql import PlaceSqlLookup
+from trippilot.orchestrator.dialogue import place_sql as ps
+from trippilot.orchestrator.dialogue.place_sql import PlaceSqlLookup
 from trippilot.poi_curation.adapters.pg_place_sql import PlaceRow
 
 _NOW = datetime(2026, 10, 20, 9, 0, tzinfo=timezone.utc)
@@ -106,7 +106,7 @@ from types import SimpleNamespace  # noqa: E402
 
 import pytest  # noqa: E402
 
-from trippilot.orchestrator.place_sql import looks_like_place_query  # noqa: E402
+from trippilot.orchestrator.dialogue.place_sql import looks_like_place_query  # noqa: E402
 
 
 def _now_submit(fn) -> Future:
@@ -172,8 +172,8 @@ def test_a_prefetch_that_does_not_finish_in_time_falls_back_to_the_radius_pool()
 
 
 def test_orchestrator_submit_carries_the_llm_call_counter_into_pool_threads() -> None:
-    from trippilot.orchestrator.dialogue_interpreter import _llm_calls, llm_call_counter
-    from trippilot.orchestrator.dialogue_orchestrator import DialogueOrchestrator
+    from trippilot.orchestrator.dialogue.dialogue_interpreter import _llm_calls, llm_call_counter
+    from trippilot.orchestrator.dialogue.dialogue_orchestrator import DialogueOrchestrator
 
     fake = SimpleNamespace(_pool=ThreadPoolExecutor(1))
     with llm_call_counter() as counter:

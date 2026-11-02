@@ -39,7 +39,7 @@ from trippilot.domain.poi.poi import (
     PoiCategory,
     PoiSource,
 )
-from trippilot.orchestrator.info_collector import INFO_REQUIREMENTS, InfoCollector
+from trippilot.orchestrator.schedule.info_collector import INFO_REQUIREMENTS, InfoCollector
 from trippilot.poi_curation.place_fees import FeeTable
 from trippilot.providers import poi_info
 from trippilot.providers.poi_info import PoiInfoProvider

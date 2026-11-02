@@ -83,13 +83,13 @@ from trippilot.domain.llm.llm import LlmFeature, ModelTier  # noqa: E402
 from trippilot.domain.observability import LlmCallRecord  # noqa: E402
 from trippilot.llm_gateway.config import C1Config  # noqa: E402
 from trippilot.llm_gateway.feature_model_env import ENV_VAR, feature_models_from_env  # noqa: E402
-from trippilot.llm_gateway.gates.intent import IntentGate  # noqa: E402
-from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate  # noqa: E402
+from trippilot.llm_gateway.gates.dialogue.intent import IntentGate  # noqa: E402
+from trippilot.llm_gateway.gates.dialogue.paraphrase import ParaphraseGate  # noqa: E402
 from trippilot.llm_gateway.gateway import GatewayFacade  # noqa: E402
 from trippilot.llm_gateway.prompts import PromptRegistry  # noqa: E402
-from trippilot.orchestrator.intent_eval import Sample, format_report, score  # noqa: E402
-from trippilot.orchestrator.intent_router import IntentRouter, IntentRouterConfig  # noqa: E402
-from trippilot.orchestrator.question_bank import (  # noqa: E402
+from trippilot.orchestrator.intent.intent_eval import Sample, format_report, score  # noqa: E402
+from trippilot.orchestrator.intent.intent_router import IntentRouter, IntentRouterConfig  # noqa: E402
+from trippilot.orchestrator.intent.question_bank import (  # noqa: E402
     BANK_COLLECTION,
     index_bank,
     load_bank_file,

@@ -14,7 +14,7 @@ from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.llm.llm import CandidatePool
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.poi.theme_tags import THEME_TAGS, themes_in
-from trippilot.orchestrator import dialogue_handlers as dh
+from trippilot.orchestrator.dialogue import dialogue_handlers as dh
 
 _A = GeoPoint(37.5, 127.0)
 

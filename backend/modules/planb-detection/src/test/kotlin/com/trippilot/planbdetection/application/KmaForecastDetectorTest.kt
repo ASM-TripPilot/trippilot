@@ -54,6 +54,8 @@ class KmaForecastDetectorTest : StringSpec({
         detector.source shouldBe SweepSource.KMA_FORECAST
         detector.kind shouldBe TriggerKind.WEATHER
         SweepPhase.entries.forEach { phase -> (0..1).forEach { detector.wants(phase, it) shouldBe true } }
+        // 어댑터가 시간별은 오늘·내일만 읽는다 — 그 밖의 날짜는 모름이 쌓이므로 부르지 않는다(여행 전 창이 넓을 때).
+        SweepPhase.entries.forEach { phase -> (2..7).forEach { detector.wants(phase, it) shouldBe false } }
         detector.isLive() shouldBe true
         forecasts.live = false
         detector.isLive() shouldBe false

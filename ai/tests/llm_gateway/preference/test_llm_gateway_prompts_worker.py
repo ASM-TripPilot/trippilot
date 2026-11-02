@@ -16,10 +16,10 @@ from hypothesis import given
 
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver
-from trippilot.llm_gateway.gates.scoring import ClosedSetGate
+from trippilot.llm_gateway.gates.preference.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker, build_prompt_vars
+from trippilot.llm_gateway.workers.preference.preference import PreferenceScoringWorker, build_prompt_vars
 from trippilot.domain.common import BudgetLevel, TraceId
 from trippilot.domain.context import PermissionDeniedError, Principal, ResourceRef
 from trippilot.domain.llm.llm import CandidatePool, LlmFeature, ModelTier

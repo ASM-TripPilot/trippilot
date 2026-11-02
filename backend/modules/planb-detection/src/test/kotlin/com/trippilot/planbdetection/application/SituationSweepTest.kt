@@ -256,7 +256,8 @@ private fun props(
     observeOnly: Set<String> = setOf(SweepSource.KMA_WARNING, SweepSource.AIRKOREA),
     parallelism: Int = 1,
     budget: Duration = Duration.ofMinutes(20),
-) = SituationSweepProperties(mode, horizon, accountIds, sources, observeOnly, parallelism, budget)
+    preTripDays: Int = 1,
+) = SituationSweepProperties(mode, horizon, accountIds, sources, observeOnly, parallelism, budget, preTripDays)
 
 /** 스윕 로거의 INFO 줄(포맷된 문장) — 여행 처리 스레드의 줄도 잡힌다. */
 private fun sweepLogs(block: () -> Unit): List<String> {
@@ -684,6 +685,38 @@ class SituationSweepTest : StringSpec({
             (setOf("진행 중" to DAY, "진행 중" to DAY.plusDays(1), "D-1" to DAY.plusDays(1)) to setOf(DAY.plusDays(1)))
     }
 
+    "지평 pre-trip 의 창이 N일이면 저녁 회차는 N일 안에 시작하는 여행의 첫날까지 본다 — 장소는 부르고 예보는 내일까지만 부른다" {
+        val world = World()
+        val inThree = world.trip(
+            start = DAY.plusDays(3), end = DAY.plusDays(4), slots = listOf(DAY.plusDays(3) to "10:00-11:00", DAY.plusDays(4) to "10:00-11:00"),
+        )
+        world.trip(start = DAY.plusDays(4), end = DAY.plusDays(5), slots = listOf(DAY.plusDays(4) to "10:00-11:00"))
+        // 실 감지기의 wants 와 같은 모양(PlaceDetectorTest·KmaForecastDetectorTest 가 실물을 고정한다).
+        val place = FakeDetector(
+            SweepSource.PLACE, kind = TriggerKind.CLOSURE,
+            wanted = { phase, offset -> (phase == SweepPhase.MORNING && offset == 0) || (phase == SweepPhase.EVENING && offset >= 1) },
+        )
+        val forecast = FakeDetector(SweepSource.KMA_FORECAST, wanted = { _, offset -> offset <= 1 })
+
+        world.sweep(props(mode = SweepMode.DRY_RUN, horizon = SweepHorizon.PRE_TRIP, preTripDays = 3), listOf(place, forecast), StepClock(at("20:15")))
+            .sweep(at("20:15"))
+
+        place.calls.map { it.tripId to it.date } shouldBe listOf(inThree to DAY.plusDays(3)) // 첫날만 — 나흘 뒤 시작 여행은 창 밖
+        forecast.calls.shouldBeEmpty() // 예보는 내일까지만 있다 — 모름이 쌓이지 않게 부르지 않는다
+        world.watched.queries.map { it.second }.toSet() shouldBe setOf(DAY.plusDays(3))
+    }
+
+    "창이 1 이면 사흘 뒤 시작하는 여행은 저녁에도 보지 않는다 — 기본값은 현행과 같다" {
+        val world = World()
+        world.trip(start = DAY.plusDays(3), end = DAY.plusDays(4), slots = listOf(DAY.plusDays(3) to "10:00-11:00"))
+        val place = FakeDetector(SweepSource.PLACE, kind = TriggerKind.CLOSURE)
+
+        world.sweep(props(mode = SweepMode.DRY_RUN, horizon = SweepHorizon.PRE_TRIP), listOf(place), StepClock(at("20:15"))).sweep(at("20:15"))
+
+        place.calls.shouldBeEmpty()
+        world.watched.queries.map { it.second }.toSet() shouldBe setOf(DAY.plusDays(1))
+    }
+
     "감지기는 단계·날짜로 고른다 — 저녁의 내일만 원하는 감지기는 오늘을 부르지 않는다(CD2)" {
         val world = World()
         world.trip(slots = listOf(DAY to "21:00-22:00", DAY.plusDays(1) to "10:00-11:00"))
@@ -933,6 +966,9 @@ class SituationSweepTest : StringSpec({
         // 살아 있어도 출처 목록 밖이면 live 가 아니다(부르지 않는다).
         val outside = world.sweep(props(sources = listOf(SweepSource.PLACE)), detectors, clock)
         outside.announcement() shouldBe "상황 감시 = 켜짐 · 지평=today · 대상=전원 · 감지기 live=[] · 관찰 전용=[airkorea,kma-warning]"
+        // 창이 넓으면 몇 일 전부터인지 안내에 싣는다 — 기본(1)은 그대로다.
+        world.sweep(props(horizon = SweepHorizon.PRE_TRIP, preTripDays = 7), detectors, clock).announcement() shouldBe
+            "상황 감시 = 켜짐 · 지평=pre-trip(7일 전부터) · 대상=전원 · 감지기 live=[kma-forecast] · 관찰 전용=[airkorea,kma-warning]"
         outside.announce() // 기동 이벤트 진입점 — 로그만 남기고 아무것도 쓰지 않는다
         world.watches.all.shouldBeEmpty()
     }

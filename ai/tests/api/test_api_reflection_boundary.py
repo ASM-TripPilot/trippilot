@@ -32,7 +32,7 @@ from trippilot.domain.common import BudgetLevel
 from trippilot.domain.llm.llm import ModelTier
 from trippilot.domain.persona import CompanionType, PersonaSummary
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.workers.reflection_nudge import FALLBACK_NUDGE_MESSAGE
+from trippilot.llm_gateway.workers.content.reflection_nudge import FALLBACK_NUDGE_MESSAGE
 
 from tests.fakes.fake_llm import FakeLlm, TimeoutForModelsLlm
 from tests.fakes.in_memory_trace import InMemoryTrace

@@ -20,9 +20,9 @@ from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.llm.llm import CandidatePool, LlmFeature
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.replan_composition import ComposeDayInput, build_compose_vars
-from trippilot.orchestrator import place_intro as pi
-from trippilot.orchestrator.place_intro import PlaceIntro
+from trippilot.llm_gateway.workers.replan.replan_composition import ComposeDayInput, build_compose_vars
+from trippilot.orchestrator.dialogue import place_intro as pi
+from trippilot.orchestrator.dialogue.place_intro import PlaceIntro
 from trippilot.poi_curation import place_fallback
 from trippilot.poi_curation.place_docs import make_doc
 

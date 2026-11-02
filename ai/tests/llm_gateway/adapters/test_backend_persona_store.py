@@ -127,7 +127,7 @@ def test_fetched_every_call_no_caching() -> None:
 
 def test_prompt_context_renders_unset_companion_as_misseol() -> None:
     from trippilot.domain.llm.llm import CandidatePool
-    from trippilot.llm_gateway.workers.preference import build_prompt_vars
+    from trippilot.llm_gateway.workers.preference.preference import build_prompt_vars
 
     persona = PersonaSummary(taste_tags=(), companion=None, budget=BudgetLevel.MID)
     pool = CandidatePool(poi_ids=frozenset(), pois=(),
@@ -221,7 +221,7 @@ def test_unset_renders_as_misseol_in_the_prompt() -> None:
     import datetime as _dt
 
     from trippilot.domain.llm.llm import CandidatePool
-    from trippilot.llm_gateway.workers.preference import build_prompt_vars
+    from trippilot.llm_gateway.workers.preference.preference import build_prompt_vars
 
     persona = PersonaSummary(taste_tags=(), companion=None, budget=BudgetLevel.MID)
     pool = CandidatePool(poi_ids=frozenset(), pois=(),

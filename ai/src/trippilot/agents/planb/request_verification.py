@@ -31,7 +31,7 @@ from trippilot.agents.planb.composition import hours_label
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.poi.poi import Poi, PoiCategory
-from trippilot.llm_gateway.gates.replan_request_extraction import (
+from trippilot.llm_gateway.gates.replan.replan_request_extraction import (
     ExtractedPlace,
     ExtractedRequest,
 )

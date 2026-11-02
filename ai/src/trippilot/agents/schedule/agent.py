@@ -95,11 +95,11 @@ from trippilot.domain.llm.llm import CandidatePool, PoiExplanation, ScoredPoi
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.persona import PersonaSummary
 from trippilot.domain.poi.poi import NIGHTLIFE_TAG, HolidayCalendar, OpenHour, Poi, PoiCategory, open_windows_on
-from trippilot.llm_gateway.workers.alternative_explanation import (
+from trippilot.llm_gateway.workers.replan.alternative_explanation import (
     AlternativeExplanationWorker,
 )
-from trippilot.llm_gateway.workers.explanation import ExplanationWorker
-from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
+from trippilot.llm_gateway.workers.replan.explanation import ExplanationWorker
+from trippilot.llm_gateway.workers.preference.preference import PreferenceScoringWorker
 from trippilot.ports.place_hours_port import HoursQuery, HoursVerdict, PlaceHoursPort
 from trippilot.ports.place_existence_port import (
     ExistenceQuery,

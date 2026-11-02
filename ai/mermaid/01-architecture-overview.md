@@ -1,5 +1,7 @@
 # 전체 계층 구조
 
+> **대체됨 (2026-11-02)** — AI 아키텍처 개요는 [`ai/ARCHITECTURE.md`](../ARCHITECTURE.md) 한 곳으로 합쳤다. 이 문서는 이력·세부 참고용이며, 어긋나면 ARCHITECTURE.md(와 코드)가 이긴다.
+
 > 코드 구조도 — 노드 라벨은 `ai/src/trippilot/` 실제 클래스·모듈명, 괄호는 파일/패키지 경로.
 
 ```mermaid

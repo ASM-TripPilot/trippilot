@@ -24,10 +24,10 @@ from hypothesis import strategies as st
 
 from trippilot.agents.planb.rag import PlanBAgent, PlanBRagRequest
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
+from trippilot.llm_gateway.gates.replan.alternative_selection import AlternativeSelectionGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.alternative_selection import (
+from trippilot.llm_gateway.workers.replan.alternative_selection import (
     AlternativeSelectionInput,
     AlternativeSelectionWorker,
     build_alternative_selection_vars,
@@ -606,7 +606,7 @@ def test_한글_수사로_쓴_소요시간도_이유를_비운다(reason: str) -
 
 def test_시간표현_판정은_reflection_template_것과_같다() -> None:
     """판정을 두 벌 쓰면 한쪽만 고쳐져 조용히 갈라진다 — 같은 정규식인지 고정한다."""
-    from trippilot.llm_gateway.gates.alternative_selection import _TIME_EXPR as here
-    from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR as canon
+    from trippilot.llm_gateway.gates.replan.alternative_selection import _TIME_EXPR as here
+    from trippilot.llm_gateway.gates.content.reflection_template import _TIME_EXPR as canon
 
     assert here is canon

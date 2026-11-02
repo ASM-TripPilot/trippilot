@@ -22,8 +22,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from trippilot.domain.dialogue.intent import Intent, IntentMatch, MatchRoute
-from trippilot.orchestrator.intent_eval import Sample, format_report, score
-from trippilot.orchestrator.shadow_probe import ShadowRecord, ShadowSide
+from trippilot.orchestrator.intent.intent_eval import Sample, format_report, score
+from trippilot.orchestrator.intent.shadow_probe import ShadowRecord, ShadowSide
 
 _RECORD = "intent_shadow {"
 _SKIPPED = "intent_shadow_skipped {"

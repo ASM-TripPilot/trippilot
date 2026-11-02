@@ -9,6 +9,7 @@ import io.kotest.property.arbitrary.bind
 import io.kotest.property.arbitrary.choice
 import io.kotest.property.arbitrary.element
 import io.kotest.property.arbitrary.enum
+import io.kotest.property.arbitrary.int
 import io.kotest.property.arbitrary.long
 import io.kotest.property.checkAll
 import java.time.Instant
@@ -74,6 +75,35 @@ class SweepScopeTest : StringSpec({
             scope.datesOf(tomorrow, tomorrow.plusDays(2)) shouldBe listOfNotNull(tomorrow.takeIf { preTrip })
             scope.queryTo shouldBe if (preTrip) tomorrow else scope.today
         }
+    }
+
+    "시작 전 여행의 첫날은 20시대 회차 ∧ pre-trip ∧ 시작이 오늘 + N 안일 때만 본다 — 조회 구간도 그때만 오늘 + N 까지다(PBT)" {
+        checkAll(instants, Arb.enum<SweepHorizon>(), Arb.int(1..MAX_PRE_TRIP_DAYS), Arb.int(1..12)) { secs, horizon, window, startsIn ->
+            val scope = scopeAt(Instant.ofEpochSecond(secs), horizon, window) ?: return@checkAll
+            val start = scope.today.plusDays(startsIn.toLong())
+            val evening = scope.phase == SweepPhase.EVENING && horizon == SweepHorizon.PRE_TRIP
+            scope.datesOf(start, start.plusDays(2)) shouldBe listOfNotNull(start.takeIf { evening && startsIn <= window })
+            scope.queryTo shouldBe if (evening) scope.today.plusDays(window.toLong()) else scope.today
+        }
+    }
+
+    "진행 중 여행이 보는 날짜는 창 크기와 무관하다 — 오늘과, 지평이 tomorrow 이상인 저녁 회차의 내일(PBT)" {
+        checkAll(instants, Arb.enum<SweepHorizon>(), Arb.int(1..MAX_PRE_TRIP_DAYS)) { secs, horizon, window ->
+            val scope = scopeAt(Instant.ofEpochSecond(secs), horizon, window) ?: return@checkAll
+            val today = scope.today
+            val wantsTomorrow = scope.phase == SweepPhase.EVENING && horizon != SweepHorizon.TODAY
+            scope.datesOf(today.minusDays(1), today.plusDays(1)) shouldBe listOfNotNull(today, today.plusDays(1).takeIf { wantsTomorrow })
+        }
+    }
+
+    "창 3 이면 사흘 뒤 시작하는 여행의 첫날을 저녁에 보고, 나흘 뒤 시작은 보지 않는다 — 둘째 날부터는 보지 않는다" {
+        val scope = scopeAt(at("20:15"), SweepHorizon.PRE_TRIP, preTripDays = 3)!!
+        scope.datesOf(day.plusDays(3), day.plusDays(6)) shouldBe listOf(day.plusDays(3))
+        scope.datesOf(day.plusDays(4), day.plusDays(6)).shouldBeEmpty()
+        scope.queryTo shouldBe day.plusDays(3)
+        // 아침·낮 회차는 창이 넓어도 시작 전 여행을 보지 않는다.
+        scopeAt(at("07:00"), SweepHorizon.PRE_TRIP, 3)!!.datesOf(day.plusDays(2), day.plusDays(4)).shouldBeEmpty()
+        scopeAt(at("13:15"), SweepHorizon.PRE_TRIP, 3)!!.queryTo shouldBe day
     }
 
     "쓰기는 그 날 20:58 전까지만이다 — 회차가 20:40 에 시작해도 20:58 이후에는 쓰지 않는다(PBT)" {

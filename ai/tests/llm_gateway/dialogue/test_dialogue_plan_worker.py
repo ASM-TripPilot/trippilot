@@ -28,10 +28,10 @@ from trippilot.llm_gateway.config import (
     default_feature_max_tokens,
     default_tier_map,
 )
-from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanDraft, DialoguePlanGate
+from trippilot.llm_gateway.gates.dialogue.dialogue_plan import DialoguePlanDraft, DialoguePlanGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.dialogue_plan import (
+from trippilot.llm_gateway.workers.dialogue.dialogue_plan import (
     PLAN_HISTORY,
     DialoguePlanWorker,
     build_dialogue_plan_vars,

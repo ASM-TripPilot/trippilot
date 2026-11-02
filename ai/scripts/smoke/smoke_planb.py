@@ -77,7 +77,7 @@ from trippilot.domain.llm.llm import CandidatePool, ModelTier  # noqa: E402
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource  # noqa: E402
 from trippilot.domain.dialogue.trigger import TriggerKind, TriggerParams  # noqa: E402
 from trippilot.llm_gateway.config import C1Config  # noqa: E402
-from trippilot.llm_gateway.gates.alternative_selection import (  # noqa: E402
+from trippilot.llm_gateway.gates.replan.alternative_selection import (  # noqa: E402
     AlternativeSelectionGate,
 )
 from trippilot.llm_gateway.feature_model_env import (  # noqa: E402
@@ -86,7 +86,7 @@ from trippilot.llm_gateway.feature_model_env import (  # noqa: E402
     feature_models_from_env,
 )
 from trippilot.llm_gateway.gateway import GatewayFacade  # noqa: E402
-from trippilot.llm_gateway.workers.alternative_selection import AlternativeSelectionWorker  # noqa: E402
+from trippilot.llm_gateway.workers.replan.alternative_selection import AlternativeSelectionWorker  # noqa: E402
 from trippilot.llm_gateway.prompts import PromptRegistry  # noqa: E402
 from trippilot.ports.llm_port import LlmResponse  # noqa: E402
 from trippilot.assembly_engine.config import RAIN_OUTDOOR  # noqa: E402

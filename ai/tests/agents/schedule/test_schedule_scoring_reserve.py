@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from trippilot.agents.schedule.agent import ScheduleAgent
 from trippilot.agents.schedule.outcome import ScoringMode
-from trippilot.llm_gateway.gates.scoring import ClosedSetGate
+from trippilot.llm_gateway.gates.preference.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
-from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
+from trippilot.llm_gateway.workers.preference.preference import PreferenceScoringWorker
 
 from tests.fakes.fake_clock import FakeClock
 from tests.fakes.in_memory_trace import InMemoryTrace

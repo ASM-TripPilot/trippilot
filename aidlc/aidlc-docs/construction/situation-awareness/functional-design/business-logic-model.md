@@ -159,6 +159,8 @@ Q3 의 승인 회신 뒤 2026-10-19 10:12 실측: `WEATHER_API` 키로 특보·�
 | **DEC-SA-7** | **지평 스위치 하나.** `today` \| `tomorrow` \| `pre-trip`(기본 `today`)를 C9 스윕(어느 날짜를 보나)과 C10 진입(전날 창)이 **함께** 읽는다. `tomorrow` = 저녁 회차가 내일을 본다. `pre-trip` = 저녁 회차가 내일 시작 여행의 첫날을 보고 C10 이 전날 창을 연다. `pre-trip` 은 BR-U3-28·INV-U3-04 개정 승인 뒤에만 켠다(O-SA-6) | Q2 답 "여행 전날(D-1) 점검". 점검과 진입이 따로 켜지면 D-1 알림 탭이 409 막다른 길이 된다 — 재계획 시작은 여행 기간 밖이면 409 다(`backend/modules/itinerary-recalculation/src/main/kotlin/com/trippilot/recalculation/application/ReplanSessionService.kt:81-84`). 반대로 감지 스위치만으로 여행 전 확정 일정 쓰기까지 열리면 INV-U3-04 를 깬다(G-SA-6) |
 | **DEC-SA-8** | **플래그 체계.** 백엔드 env 4(`PLANB_SITUATION_SWEEP` · `PLANB_SITUATION_HORIZON` · `PLANB_SITUATION_SWEEP_ACCOUNT_IDS` · `PLANB_PREPARED_REPLAN`) + AI 1(`HOLIDAY_CLOSURE_MODE`). 감지기 목록·관찰 전용 목록은 설정 파일, 기회는 배포 차트 고정 env(`AI_OPPORTUNITY_MODE`), 외부 API 감지기의 live 조건은 기존 `WEATHER_MODE=kma`. 코드는 전부 꺼진 채 들어가고 켜는 순서가 있다(§7) | 3중 게이트와 이름 불일치는 배포 거부·조용한 꺼짐을 만든다 — 허용목록에 없는 키를 시크릿에 먼저 쓰면 배포 전체가 거부된다(`deploy/eks/runtime_secrets.py:203-207`). develop 머지는 개발 배포로, 승격 뒤 운영 배포로 이어지므로 코드는 전부 꺼진 채 들어간다. 회수는 값 되돌리기 + 재배포이고, 스윕을 끄면 트리거 목록이 스윕 출처 트리거를 즉시 숨긴다(BR-SA-13) — 일괄 만료 명령을 두지 않는다 |
 
+> **[개정 · 2026-11-02 — 사용자 결정 반영]** DEC-SA-7 — 지평 `pre-trip` 의 창을 N일로 넓힐 수 있다. 사용자 지시(2026-10-30) "여행 시작 며칠 전부터도 열기 → **7일 전부터**"(재계획 창)의 점검 쪽이다. 새 스위치 `PLANB_SITUATION_PRE_TRIP_DAYS`(1~7, 기본 **1** = 현행)를 C9 스윕(`trippilot.planb.situation-sweep.pre-trip-days`)과 C10 진입(`trippilot.replan.pre-trip-days`)이 **같은 키로 함께** 읽는다 — 지평과 같은 이유다(점검만 먼저 넓으면 D-N 알림 탭이 409 막다른 길이고, 선계산도 같은 진입 검증이라 거절된다). `pre-trip` = 저녁 회차가 **오늘 + N일 안에 시작하는 여행의 첫날**을 보고 C10 이 '시작 − N ≤ 오늘 < 시작' 창을 연다(N=1 이면 종전 '내일 시작 여행의 첫날 · 전날 창'과 같은 말). 시작 전 여행은 **첫날만** 본다 — 재계획 창이 받는 날이 첫날뿐이다(BR-SA-20). **실제로 늘어나는 것은 장소 알림(휴무·영업시간·폐업)뿐이다** — 단기예보 어댑터가 시간별은 오늘·내일(자정을 넘긴 슬롯 몫의 모레 0시까지)만 읽어(`KmaWeatherAdapter.kt`) 예보는 D-1 까지이고, 특보는 오늘, 대기질은 오늘·내일이다. 그래서 감지기의 `wants(phase, dayOffset)` 가 장소는 `EVENING ∧ offset ≥ 1`, 단기예보는 `offset ≤ 1` 로 갈린다 — 예보가 없는 날은 '모름'이 아니라 부르지 않는다(안 그러면 N 을 넓힐수록 모름이 회차마다 쌓인다). 고르지 않은 안: 사용자가 직접 눌러 여행 전 재계획에 들어오는 것(별도 결정 — BR-U3-28 확정 잠금 개정이 따른다) · 둘째 날 이후까지 보기.
+
 ### 2.1 기각·보류한 대안
 
 | 대안 | 처리 | 이유 |
@@ -582,6 +584,11 @@ planb.PlanBTriggered --> 선계산 구독자(신설)
 
 > **[개정 · 2026-10-22 — 구현 반영]** 위 블록의 갱신 — **관찰 전용에서 특보 제거** 전에 정할 것에서 G-SA-18 이 빠진다. 특보 통보문 실응답 표본(2026-10-16~22 · t6 71개)으로 t6 광역 줄이 행정 광역임을 확인했다(TRIP-1590 — `business-rules.md` BR-SA-16 개정 블록). 관서 묶음 꼴의 흔적이 보이는 줄은 종전대로 모름이고 WARN 이 난다. 같은 표본으로 과잉 경보 하나(제 구역이 있는 광역시의 군)와 거짓 '특보 없음' 하나(광역 줄 안의 섬이 남는 제외 줄)를 함께 고쳤다. 남은 결정은 G-SA-24 · G-SA-20 이다.
 
+> **[개정 · 2026-11-02 — 사용자 결정 반영]** §7 — 스위치 하나를 더한다: `PLANB_SITUATION_PRE_TRIP_DAYS`(backend 시크릿 → `…situation-sweep.pre-trip-days` · 재계획 쪽 `trippilot.replan.pre-trip-days`, 1~7, 기본 `1`). 지평이 `pre-trip` 일 때만 뜻이 있다.
+> - **켜는 순서** — ① 점검 쪽(이 개정)과 재계획 쪽 창(별도 변경 — Jira TRIP-1662)이 **둘 다** develop 에 있고 기본 1 로 돈다 → ② 배포 배선(`deploy/eks/runtime_secrets.py` 허용목록·값 검증 · 차트 `backend.yaml` 환경 목록 · compose · `.env.example`)을 더한다 → ③ 개발에서 둘을 함께 7 으로 올려 저녁 회차 요약 줄과 알림함에서 장소 알림이 D-N 에 오는지, 그 탭이 막히지 않는지 본다 → ④ 운영. 한쪽만 올리면 막다른 길이다(BR-SA-20).
+> - **지금 상태** — 앱 기본값은 1(현행과 같다). 배포 배선은 아직 없다 — 허용목록에 없는 키는 배포가 거부하므로(두 번 배포 규칙) 시크릿에 먼저 쓰지 않는다.
+> - **재는 것** — 저녁 회차 요약 줄의 `trips`(시작 전 여행이 더해진다) · `detectorMs` 의 place · `announced` 의 장소 비중. 장소의 AI 검증 호출이 (시작 전 여행 수 × 저녁 두 회차)만큼 늘어난다.
+
 ---
 
 ## 8. U4·U6·U3·U10 와의 관계 — 개정 블록 목록
@@ -636,6 +643,8 @@ planb.PlanBTriggered --> 선계산 구독자(신설)
 **같은 정본 변경에 싣는 문서**: `aidlc-docs/construction/shared-infrastructure.md` 「situation-awareness 증분 (2026-10-19)」 절(신규 AWS 자원 0 · 런타임 키 · 스케줄러 1 · 마이그레이션 3 · 외부 호출 증가).
 
 **그 밖의 문서**(해당 구현 변경과 함께 고친다): U2 FD·AI construction FD(기회 경로 계약 · 위반 `reason_code` · 날짜 단위 휴무와 단일 헬퍼 — TRIP-1230 휴무 파서 결정과 함께 읽는다) · `backend/docs/design/ai-backend-경계-계약-확정.md`(검증 `reason_code` · 기회 경로) · 루트 `CLAUDE.md`·`backend/docs/design/실사용-모드-스위치.md`·AI 경로표 3종(경로 정본 서술 G-SA-9 · 스위치 표 · 새 경로) · 인셉션(상신만 — G-SA-8).
+
+> **[개정 · 2026-11-02 — 사용자 결정 반영]** §8 — 위 결정(DEC-SA-7 · §7)에 같이 단 블록: 이 FD `business-rules.md` BR-SA-01·BR-SA-20 · U3 `functional-design/business-rules.md` BR-U3-28 · U3 `functional-design/domain-entities.md` INV-U3-04 · `nfr-requirements/tech-stack-decisions.md` 델타 6 · `backend/docs/design/실사용-모드-스위치.md`(스위치 표) · `aidlc/aidlc-docs/audit.md`. 승인 시점: 재계획 쪽 변경이 머지된 뒤 N>1 을 켤 때.
 
 ---
 

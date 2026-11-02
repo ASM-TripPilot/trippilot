@@ -24,14 +24,14 @@ from hypothesis import strategies as st
 
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.base import has_contact_like
-from trippilot.llm_gateway.gates.reflection_nudge import (
+from trippilot.llm_gateway.gates.content.reflection_nudge import (
     _MAX_LENGTH,
     ReflectionNudgeGate,
 )
-from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
+from trippilot.llm_gateway.gates.content.reflection_template import _TIME_EXPR
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.reflection_nudge import (
+from trippilot.llm_gateway.workers.content.reflection_nudge import (
     FALLBACK_NUDGE_MESSAGE,
     ReflectionNudgeInput,
     ReflectionNudgeWorker,

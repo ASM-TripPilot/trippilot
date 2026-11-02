@@ -35,7 +35,7 @@ from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.itinerary.event import EventInfo, EventType
 from trippilot.domain.freshness import ProviderKind
 from trippilot.domain.poi.poi import TRENDING_TAG, DataQuality, Poi, PoiCategory, PoiSource
-from trippilot.orchestrator.info_collector import InfoCollector
+from trippilot.orchestrator.schedule.info_collector import InfoCollector
 from trippilot.poi_curation.adapters.backend_poi_db import BackendPoiDbError
 from trippilot.providers.event import EventProvider
 

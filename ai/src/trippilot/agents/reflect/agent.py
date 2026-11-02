@@ -35,9 +35,9 @@ from trippilot.domain.reflection import (
     TemplateCandidate,
     VisionInput,
 )
-from trippilot.llm_gateway.gates.photo_highlight import DEFAULT_HIGHLIGHT_LIMIT
-from trippilot.llm_gateway.workers.photo_highlight import PhotoHighlightWorker
-from trippilot.llm_gateway.workers.reflection_template import ReflectionTemplateWorker
+from trippilot.llm_gateway.gates.content.photo_highlight import DEFAULT_HIGHLIGHT_LIMIT
+from trippilot.llm_gateway.workers.content.photo_highlight import PhotoHighlightWorker
+from trippilot.llm_gateway.workers.content.reflection_template import ReflectionTemplateWorker
 from trippilot.ports.trace_port import TracePort
 
 _COMPONENT = "agents.reflect"

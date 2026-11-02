@@ -13,7 +13,7 @@ from hypothesis import strategies as st
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm.llm import LlmFeature
 from trippilot.llm_gateway.gates.place_fact import PlaceFactGate
-from trippilot.orchestrator import dialogue_handlers as dh
+from trippilot.orchestrator.dialogue import dialogue_handlers as dh
 
 _NOW = datetime(2026, 10, 22, 6, 0, tzinfo=timezone.utc)
 _VALUES = st.one_of(st.none(), st.text(max_size=30), st.sampled_from([

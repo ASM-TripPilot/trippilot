@@ -27,8 +27,8 @@ from trippilot.domain.itinerary.event import EventInfo
 from trippilot.domain.freshness import ProviderKind, ProviderStatus
 from trippilot.domain.dialogue.intent import Intent
 from trippilot.domain.poi.poi import Poi
-from trippilot.orchestrator.info_collector import InfoCollector
-from trippilot.orchestrator.opportunity import NEAR_KM, Opportunity, find_opportunities
+from trippilot.orchestrator.schedule.info_collector import InfoCollector
+from trippilot.orchestrator.dialogue.opportunity import NEAR_KM, Opportunity, find_opportunities
 from trippilot.ports.holiday_calendar_port import HolidaySource
 from trippilot.providers.transit import _format_distance_range
 

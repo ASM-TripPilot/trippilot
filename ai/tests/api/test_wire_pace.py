@@ -58,9 +58,9 @@ from dataclasses import replace as _replace  # noqa: E402
 
 from trippilot.agents.schedule.agent import ScheduleAgent, ScheduleTask  # noqa: E402
 from trippilot.agents.schedule.budget import OrchestratorConfig, allocate  # noqa: E402
-from trippilot.llm_gateway.gates.scoring import ClosedSetGate  # noqa: E402
+from trippilot.llm_gateway.gates.preference.scoring import ClosedSetGate  # noqa: E402
 from trippilot.llm_gateway.gateway import GatewayFacade  # noqa: E402
-from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker  # noqa: E402
+from trippilot.llm_gateway.workers.preference.preference import PreferenceScoringWorker  # noqa: E402
 from trippilot.poi_curation.config import M7Config  # noqa: E402
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder  # noqa: E402
 from trippilot.domain.poi.poi_curation import CandidatePoolRequest  # noqa: E402

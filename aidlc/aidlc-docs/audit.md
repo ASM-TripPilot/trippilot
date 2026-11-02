@@ -1985,3 +1985,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **User Input**: (사용자 원문, 2026-11-02 결정) "지역 밖 숙소를 거점으로 고르는 것은 막는다" — 11-01 웹 QA(서울 1박 여행에 부산 숙소를 거점으로 지정 → 1일차가 부산 장소·일과 밖 시각) 결함 수정 결정이다. TRIP-1011 D8 「숨기지 않는다」를 뒤집는다.
 **AI Response**: `construction/u1-accommodation-trip/functional-design/business-rules.md` 「저장·등록·거점 (BR-U1-19~28 · 59)」 절 끝(제휴 링크 절 바로 앞)에 `[개정 · 2026-11-02 · TRIP-1703]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 거점 시트(g02) 후보는 그 밤 지역 안으로 확인된 저장 숙소 · 지역 밖으로 확인된 숙소는 후보에서 뺀다(흐림 아님) · 주소 모름·조회 중은 「위치 확인 안 됨」으로 보이고 서버가 최종 판정 · [지정] 직전 가드 · 지역 안 0곳이면 지역 안내 + 둘러보기 · 서버 거부는 같은 결정의 BE 칸 몫 · 동명 시군구 한계. BR 번호는 붙이지 않았다(같은 결정의 BE 칸이 따로 정본을 고칠 수 있어 번호 충돌을 피함). 코드 변경은 같은 브랜치(`fix/TRIP-1691-FE-misc`)의 `fix(fe)` 커밋(TRIP-1703)이다. 이 파일은 develop(#1758 병합 잔재 정리 뒤) 판에 맞춘 뒤 덧붙였다.
 **Context**: CONSTRUCTION — U1 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — situation-awareness 여행 전 점검 창을 N일로 (DEC-SA-7 · BR-SA-01 · BR-SA-20)
+**Timestamp**: 2026-11-02T16:00:00+09:00 (작업 시점)
+**User Input**: (사용자 결정 2026-10-30, 재계획 창 티켓 본문 인용) "여행 시작 며칠 전부터도 열기 → 7일 전부터" — 재계획 창을 시작 7일 전으로 넓히는 결정이다. 이어 "결정이 필요한것들은 웬만해서는 다 진행하는 방향으로 하자"(2026-10-30)에 따라 미결은 가장 좁은 안(알림 트리거 진입만 · 첫날만 · FULL_DAY 만 · 사용자 [적용]만)으로 정해 두었다. 그 창을 닫으려던 세션의 종료 인계(2026-11-02)로 점검 쪽을 상황 감지 세션이 이었다.
+**AI Response**: situation-awareness `business-logic-model.md` DEC-SA-7 뒤(§2.1 앞)·§7 끝·§8 끝에, `business-rules.md` BR-SA-01·BR-SA-20 뒤에, `nfr-requirements/tech-stack-decisions.md` 델타 6 뒤에 `[개정 · 2026-11-02 — 사용자 결정 반영]` 블록을 덧붙이고, U3 `business-rules.md` BR-U3-28 · `domain-entities.md` INV-U3-04 에 같은 날 블록을 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 새 스위치 `PLANB_SITUATION_PRE_TRIP_DAYS`(1~7, 기본 1 = 현행) · 지평 `pre-trip` = 오늘 + N일 안에 시작하는 여행의 첫날(첫날만) · 늘어나는 것은 장소 알림뿐(예보는 어댑터가 오늘·내일만 읽어 D-1 까지) · 재계획 쪽 창(별도 변경)이 같은 값을 읽기 전에는 N>1 을 켜지 않는다(점검만 넓으면 D-N 알림 탭과 선계산이 409) · 사용자 직접 진입은 이번 결정에 없다. 코드는 같은 PR 의 점검 쪽(`SweepScope`·`PlaceDetector.wants`·`KmaForecastDetector.wants`·설정)이다. 코드 밖 사실로 남는 것: 재계획 쪽 변경과 배포 배선(허용목록·차트)은 아직 없다.
+**Context**: CONSTRUCTION — situation-awareness Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.

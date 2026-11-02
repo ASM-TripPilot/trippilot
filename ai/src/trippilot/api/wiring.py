@@ -82,32 +82,32 @@ from trippilot.api.route_budget import (
 from trippilot.llm_gateway.adapters.backend_persona import _to_summary as _persona_to_summary
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver, ContextStore
-from trippilot.llm_gateway.gates.explanation import ExplanationGate, hashtag_line
-from trippilot.llm_gateway.gates.reminder_copy import ReminderCopyGate
+from trippilot.llm_gateway.gates.replan.explanation import ExplanationGate, hashtag_line
+from trippilot.llm_gateway.gates.content.reminder_copy import ReminderCopyGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.alternative_explanation import (
+from trippilot.llm_gateway.workers.replan.alternative_explanation import (
     AlternativeExplanationWorker,
 )
-from trippilot.llm_gateway.workers.alternative_selection import AlternativeSelectionWorker
-from trippilot.llm_gateway.workers.explanation import ExplanationWorker
-from trippilot.llm_gateway.workers.reminder_copy import (
+from trippilot.llm_gateway.workers.replan.alternative_selection import AlternativeSelectionWorker
+from trippilot.llm_gateway.workers.replan.explanation import ExplanationWorker
+from trippilot.llm_gateway.workers.content.reminder_copy import (
     ReminderCopyInput,
     ReminderCopyItem,
     ReminderCopyWorker,
 )
 from trippilot.agents.reflect.agent import ReflectAgent, ReflectTask
 from trippilot.agents.reflect.composer import bind_share_card_copy
-from trippilot.llm_gateway.gates.reflection_nudge import ReflectionNudgeGate
-from trippilot.llm_gateway.gates.photo_highlight import PhotoHighlightGate
-from trippilot.llm_gateway.gates.reflection_template import ReflectionTemplateGate
-from trippilot.llm_gateway.workers.reflection_nudge import (
+from trippilot.llm_gateway.gates.content.reflection_nudge import ReflectionNudgeGate
+from trippilot.llm_gateway.gates.content.photo_highlight import PhotoHighlightGate
+from trippilot.llm_gateway.gates.content.reflection_template import ReflectionTemplateGate
+from trippilot.llm_gateway.workers.content.reflection_nudge import (
     FALLBACK_NUDGE_MESSAGE, ReflectionNudgeInput, ReflectionNudgeWorker,
 )
-from trippilot.llm_gateway.workers.photo_highlight import PhotoHighlightWorker
-from trippilot.llm_gateway.workers.reflection_template import ReflectionTemplateWorker
-from trippilot.llm_gateway.gates.share_card_copy import ShareCardCopyGate
-from trippilot.llm_gateway.workers.share_card_copy import (
+from trippilot.llm_gateway.workers.content.photo_highlight import PhotoHighlightWorker
+from trippilot.llm_gateway.workers.content.reflection_template import ReflectionTemplateWorker
+from trippilot.llm_gateway.gates.content.share_card_copy import ShareCardCopyGate
+from trippilot.llm_gateway.workers.content.share_card_copy import (
     ShareCardCopyWorker, fallback_share_card_copy,
 )
 from trippilot.ports.poi_db_port import PoiLookup, PoiMiss, lookup_from
@@ -116,7 +116,7 @@ from trippilot.domain.reflection import (
     ReflectionKind, ReflectionRequest, SourceEventKind, TripEventRecord,
     VisitRecord, VisitRef,
 )
-from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
+from trippilot.llm_gateway.workers.preference.preference import PreferenceScoringWorker
 from trippilot.assembly_engine.config import RAIN_OUTDOOR, AssemblyConfig, stay_for
 from trippilot.assembly_engine.constraints import hc1_unjudged, open_hours_ok
 from trippilot.assembly_engine.day_focus import FOCUS_MIN
@@ -171,6 +171,7 @@ from trippilot.agents.planb.place_knowledge import kb5_counts
 from trippilot.agents.planb.rag import PlanBAgent, PlanBRagRequest, SavedPlace
 from trippilot.agents.schedule.agent import ScheduleAgent, trim_planb_rank_for_add_one
 from trippilot.agents.schedule.family import normalize_name, same_place
+from trippilot.agents.schedule.outcome import _wanted_categories
 from trippilot.agents.planb.directives import (
     DirectiveSpec,
     index_of,
@@ -179,47 +180,47 @@ from trippilot.agents.planb.directives import (
     resolve_chips,
 )
 from trippilot.domain.edit import EditCommand, EditOp
-from trippilot.llm_gateway.gates.edit_translation import EditTranslationGate
-from trippilot.llm_gateway.gates.replan_directive_translation import ReplanDirectiveTranslationGate
-from trippilot.llm_gateway.workers.edit_translation import EditTranslationWorker
-from trippilot.llm_gateway.workers.replan_directive_translation import (
+from trippilot.llm_gateway.gates.content.edit_translation import EditTranslationGate
+from trippilot.llm_gateway.gates.replan.replan_directive_translation import ReplanDirectiveTranslationGate
+from trippilot.llm_gateway.workers.content.edit_translation import EditTranslationWorker
+from trippilot.llm_gateway.workers.replan.replan_directive_translation import (
     MAX_DIRECTIVES,
     DirectiveTranslationInput,
     ReplanDirectiveTranslationWorker,
     options_from,
 )
-from trippilot.llm_gateway.gates.replan_request_extraction import (
+from trippilot.llm_gateway.gates.replan.replan_request_extraction import (
     ExtractedRequest,
     ReplanRequestExtractionGate,
 )
-from trippilot.llm_gateway.workers.replan_request_extraction import (
+from trippilot.llm_gateway.workers.replan.replan_request_extraction import (
     ReplanRequestExtractionWorker,
 )
-from trippilot.llm_gateway.workers.replan_composition import (
+from trippilot.llm_gateway.workers.replan.replan_composition import (
     ComposeDayInput,
     ReplanCompositionWorker,
     ScheduleLine,
 )
 from trippilot.domain.poi.poi_curation import CandidatePoolRequest
 from trippilot.domain.dialogue.trigger import TriggerKind, TriggerParams
-from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
-from trippilot.llm_gateway.gates.numbered_selection import NumberedScoringGate, NumberedSelectionGate
-from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
+from trippilot.llm_gateway.gates.replan.alternative_selection import AlternativeSelectionGate
+from trippilot.llm_gateway.gates.preference.numbered_selection import NumberedScoringGate, NumberedSelectionGate
+from trippilot.llm_gateway.workers.preference.preference_cache import CachingScoringWorker
 from trippilot.poi_curation import place_fallback
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.place_fees import load_fee_table
 from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql
 from trippilot.poi_curation.pool_builder import (
     CandidatePoolBuilder, base_radius_km, restrict_pool_to_target_role, widened_radius_km)
-from trippilot.orchestrator import schedule_coordinator as core
+from trippilot.orchestrator.schedule import schedule_coordinator as core
 from trippilot.agents.adapters.memory_vector_store import InMemoryVectorStore
 from trippilot.agents.adapters.memory_memory_store import InMemoryDialogueMemoryStore
-from trippilot.llm_gateway.gates.intent import IntentGate
-from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
-from trippilot.orchestrator.dialogue_interpreter import BankIndex, CountingLlm, DialogueInterpreter
-from trippilot.orchestrator.dialogue_orchestrator import DialogueOrchestrator
-from trippilot.orchestrator.intent_router import IntentRouter
-from trippilot.orchestrator.question_bank import BankEntry, BankVectors
+from trippilot.llm_gateway.gates.dialogue.intent import IntentGate
+from trippilot.llm_gateway.gates.dialogue.paraphrase import ParaphraseGate
+from trippilot.orchestrator.dialogue.dialogue_interpreter import BankIndex, CountingLlm, DialogueInterpreter
+from trippilot.orchestrator.dialogue.dialogue_orchestrator import DialogueOrchestrator
+from trippilot.orchestrator.intent.intent_router import IntentRouter
+from trippilot.orchestrator.intent.question_bank import BankEntry, BankVectors
 from trippilot.providers.poi_info import PoiInfoProvider
 from trippilot.ports.llm_port import LlmPort
 from trippilot.ports.llm_port import LlmRequest, LlmResponse
@@ -229,7 +230,7 @@ from trippilot.ports.memory_store_port import MemoryStorePort
 from trippilot.ports.trace_port import TracePort
 from trippilot.ports.travel_port import TravelPort
 from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
-from trippilot.orchestrator.info_collector import InfoCollector
+from trippilot.orchestrator.schedule.info_collector import InfoCollector
 from trippilot.ports.weather_port import WeatherPort
 from trippilot.ports.event_port import EventPort
 from trippilot.ports.holiday_calendar_port import HolidaySource
@@ -2768,6 +2769,9 @@ class WiredItineraryOrchestrator:
                 window_start=nl.window_start, window_end=day_end,  # 솔버 `day_window` 와 같은 창
                 rules=_category_rule_lines(nl), ctx_out=compose_ctx, why_out=why, holidays=holidays,
                 planb_request=planb_request,
+                # 생성(`ScheduleAgent._rule_scores`)과 같은 규칙: 이번 요청이 카테고리 축을 정했으면 취향을 얹지 않고,
+                # "한 곳 추가" 카테고리는 뺀다(BR-U4-47).
+                taste=frozenset() if (prefer or avoid) else frozenset(_wanted_categories(persona)) - add_one,
             )
         except Exception as e:  # 설정 버그·렌더 실패도 재계획을 죽이지 않는다 — 종전 경로로(INV-4)
             notes.append(f"llm_compose_error: {type(e).__name__}")
@@ -3268,6 +3272,9 @@ class WiredItineraryOrchestrator:
         why_out: dict[PoiId, str] | None = None,  # 고른 곳의 이유(게이트가 시간 표현을 비운 뒤) — 슬롯 추천 이유
         holidays: Mapping[date, frozenset[str]] | None = None,  # 공휴일 달력 — 진입점이 1회 조회(상황 감지 H1)
         planb_request: PlanBRagRequest | None = None,  # 후보의 장소 지식(KB-5)을 같은 상황 질의로 찾는다
+        # 취향 카테고리 — 후보 40곳 점수에 생성과 같은 `taste_fit` 을 준다. 없으면 취향이 LLM 프롬프트 한 줄로만
+        # 닿아 "카페·전시" 취향도 40곳이 취향과 무관하게 뽑혔다(2026-11-02).
+        taste: frozenset[PoiCategory] = frozenset(),
     ) -> tuple[PoiId, ...]:
         """다시 짜기 — 기존 일정·사유·요청·상황 추천을 보고 LLM 이 남은 하루의 방문 목록을 고른다.
 
@@ -3314,7 +3321,7 @@ class WiredItineraryOrchestrator:
         shortlist = composition.shortlist(
             pool, keep=keep, excluded=excluded, day=day, holidays=holidays,
             score=lambda p: build_rule_score(p, budget_level, anchor, seed,
-                                             prefer=prefer, avoid=avoid))
+                                             prefer=prefer, avoid=avoid, taste=taste))
         if not shortlist.pois:
             notes.append("llm_compose_skipped: no_candidates")
             self._compose_event(request.request_meta, "no_candidates")

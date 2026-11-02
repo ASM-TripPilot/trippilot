@@ -25,12 +25,12 @@ from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.base import has_contact_like
-from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerDraft
-from trippilot.llm_gateway.gates.dialogue_knowledge import DialogueKnowledgeGate, has_specific_value
-from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
+from trippilot.llm_gateway.gates.dialogue.dialogue_answer import DialogueAnswerDraft
+from trippilot.llm_gateway.gates.dialogue.dialogue_knowledge import DialogueKnowledgeGate, has_specific_value
+from trippilot.llm_gateway.gates.content.reflection_template import _TIME_EXPR
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.dialogue_knowledge import DialogueKnowledgeWorker, build_dialogue_knowledge_vars
+from trippilot.llm_gateway.workers.dialogue.dialogue_knowledge import DialogueKnowledgeWorker, build_dialogue_knowledge_vars
 
 _NOW = datetime(2026, 10, 23, 9, 0, tzinfo=timezone.utc)
 _TID = TraceId("t-knowledge")
