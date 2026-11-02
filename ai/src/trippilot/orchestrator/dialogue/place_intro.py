@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from trippilot.agents.planb.place_knowledge import MAX_DOC_CHARS, fetch_place_knowledge
-from trippilot.llm_gateway.gates.dialogue_answer import _violates, clock_times
+from trippilot.llm_gateway.gates.dialogue.dialogue_answer import _violates, clock_times
 from trippilot.poi_curation import place_fallback
 from trippilot.poi_curation.chunking import split_sentences
 from trippilot.ports.embedding_port import EmbeddingPort

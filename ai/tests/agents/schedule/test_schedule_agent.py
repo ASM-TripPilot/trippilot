@@ -23,9 +23,9 @@ from trippilot.agents.schedule.outcome import (
 )
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.poi.poi_curation import CandidatePoolRequest
-from trippilot.llm_gateway.gates.scoring import ClosedSetGate
+from trippilot.llm_gateway.gates.preference.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
-from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
+from trippilot.llm_gateway.workers.preference.preference import PreferenceScoringWorker
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 

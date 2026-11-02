@@ -210,7 +210,7 @@ def _ask(question: str = "부산은 언제 가는 게 좋아?") -> uh.KnowledgeT
 
 
 def test_knowledge_is_answered_this_turn_without_touching_the_place_fact_side() -> None:
-    from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerDraft
+    from trippilot.llm_gateway.gates.dialogue.dialogue_answer import DialogueAnswerDraft
 
     knowing = _Knowing(_ok(DialogueAnswerDraft("부산은 보통 봄과 가을이 걷기 좋아요.")))
     agent = UnknownHandlingAgent(None, None, knowledge=knowing)

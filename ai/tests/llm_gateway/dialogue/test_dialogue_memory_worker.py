@@ -31,15 +31,15 @@ from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent, GateDropEvent
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.base import has_contact_like, has_injection_like
-from trippilot.llm_gateway.gates.dialogue_memory import (
+from trippilot.llm_gateway.gates.dialogue.dialogue_memory import (
     _MAX_LINE_CHARS,
     _MAX_LINES,
     DialogueMemoryGate,
 )
-from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
+from trippilot.llm_gateway.gates.content.reflection_template import _TIME_EXPR
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.dialogue_memory import (
+from trippilot.llm_gateway.workers.dialogue.dialogue_memory import (
     DialogueMemoryWorker,
     build_dialogue_memory_vars,
 )

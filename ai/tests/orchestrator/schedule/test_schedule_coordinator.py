@@ -27,12 +27,12 @@ from hypothesis import strategies as st
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver
 from trippilot.llm_gateway.gates.base import GateOutcome
-from trippilot.llm_gateway.gates.explanation import ExplanationGate
-from trippilot.llm_gateway.gates.numbered_selection import NumberedScoringGate
+from trippilot.llm_gateway.gates.replan.explanation import ExplanationGate
+from trippilot.llm_gateway.gates.preference.numbered_selection import NumberedScoringGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.explanation import ExplanationWorker
-from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
+from trippilot.llm_gateway.workers.replan.explanation import ExplanationWorker
+from trippilot.llm_gateway.workers.preference.preference import PreferenceScoringWorker
 from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.facade import HybridAssemblyFacade
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler

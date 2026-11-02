@@ -43,11 +43,11 @@ from trippilot.agents.planb.kb_retrieval import (
     retrieve_persona,
     retrieve_situation,
 )
-from trippilot.llm_gateway.workers.alternative_selection import (
+from trippilot.llm_gateway.workers.replan.alternative_selection import (
     AlternativeSelectionInput,
     AlternativeSelectionWorker,
 )
-from trippilot.llm_gateway.workers.reminder_copy import _CATEGORY_LABELS
+from trippilot.llm_gateway.workers.content.reminder_copy import _CATEGORY_LABELS
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.kb import KbHit, KbKind
 from trippilot.domain.llm.llm import AlternativePick, CandidatePool, ScoredPoi

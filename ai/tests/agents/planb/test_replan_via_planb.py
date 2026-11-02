@@ -37,9 +37,9 @@ from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary.itinerary import TimeWindow
 from trippilot.domain.llm.llm import ScoredPoi
 from trippilot.domain.poi.poi_curation import CandidatePoolRequest
-from trippilot.llm_gateway.gates.scoring import ClosedSetGate
+from trippilot.llm_gateway.gates.preference.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
-from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
+from trippilot.llm_gateway.workers.preference.preference import PreferenceScoringWorker
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 
@@ -505,7 +505,7 @@ def test_rule_ranking_is_not_passed_as_a_rank() -> None:
 # ── ⑨ PlanBAgent 가 실제로 ranked_poi_ids 를 낸다 ──────────────────────
 
 from trippilot.agents.planb.rag import PlanBAgent, PlanBRagConfig  # noqa: E402
-from trippilot.llm_gateway.workers.alternative_selection import (  # noqa: E402
+from trippilot.llm_gateway.workers.replan.alternative_selection import (  # noqa: E402
     AlternativeSelectionWorker,
 )
 from tests.fakes.fake_embedding import FakeEmbedding  # noqa: E402

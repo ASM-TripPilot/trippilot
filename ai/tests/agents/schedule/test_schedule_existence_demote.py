@@ -64,9 +64,9 @@ from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary.itinerary import FixedBlock, TimeWindow
 from trippilot.domain.llm.llm import CandidatePool, ScoredPoi
 from trippilot.domain.observability import FallbackEvent
-from trippilot.llm_gateway.gates.scoring import ClosedSetGate
+from trippilot.llm_gateway.gates.preference.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
-from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
+from trippilot.llm_gateway.workers.preference.preference import PreferenceScoringWorker
 from trippilot.poi_curation.adapters.kakao_existence import KakaoExistenceAdapter
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder

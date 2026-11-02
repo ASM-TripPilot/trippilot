@@ -47,8 +47,8 @@ from trippilot.domain.common import TraceId
 from trippilot.domain.dialogue.intent import Intent, MatchRoute
 from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.intent import IntentGate
-from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
+from trippilot.llm_gateway.gates.dialogue.intent import IntentGate
+from trippilot.llm_gateway.gates.dialogue.paraphrase import ParaphraseGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.orchestrator.intent.intent_eval import Sample, score

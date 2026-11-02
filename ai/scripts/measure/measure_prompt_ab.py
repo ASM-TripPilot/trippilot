@@ -76,29 +76,29 @@ from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag  # 
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory  # noqa: E402
 from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter  # noqa: E402
 from trippilot.llm_gateway.config import C1Config  # noqa: E402
-from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate  # noqa: E402
-from trippilot.llm_gateway.gates.numbered_selection import NumberedScoringGate, NumberedSelectionGate  # noqa: E402
-from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerGate  # noqa: E402
-from trippilot.llm_gateway.gates.explanation import HASHTAG_COUNT, hashtag_line  # noqa: E402
-from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanGate  # noqa: E402
-from trippilot.llm_gateway.gates.intent import IntentGate  # noqa: E402
+from trippilot.llm_gateway.gates.replan.alternative_selection import AlternativeSelectionGate  # noqa: E402
+from trippilot.llm_gateway.gates.preference.numbered_selection import NumberedScoringGate, NumberedSelectionGate  # noqa: E402
+from trippilot.llm_gateway.gates.dialogue.dialogue_answer import DialogueAnswerGate  # noqa: E402
+from trippilot.llm_gateway.gates.replan.explanation import HASHTAG_COUNT, hashtag_line  # noqa: E402
+from trippilot.llm_gateway.gates.dialogue.dialogue_plan import DialoguePlanGate  # noqa: E402
+from trippilot.llm_gateway.gates.dialogue.intent import IntentGate  # noqa: E402
 from trippilot.llm_gateway.gateway import GatewayFacade  # noqa: E402
 from trippilot.llm_gateway.prompts import PromptRegistry  # noqa: E402
-from trippilot.llm_gateway.workers.alternative_selection import AlternativeSelectionInput, AlternativeSelectionWorker  # noqa: E402,E501
-from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker  # noqa: E402
-from trippilot.llm_gateway.workers.dialogue_intent import DialogueIntentWorker  # noqa: E402
-from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker  # noqa: E402
-from trippilot.llm_gateway.workers.preference import (  # noqa: E402
+from trippilot.llm_gateway.workers.replan.alternative_selection import AlternativeSelectionInput, AlternativeSelectionWorker  # noqa: E402,E501
+from trippilot.llm_gateway.workers.dialogue.dialogue_answer import DialogueAnswerWorker  # noqa: E402
+from trippilot.llm_gateway.workers.dialogue.dialogue_intent import DialogueIntentWorker  # noqa: E402
+from trippilot.llm_gateway.workers.dialogue.dialogue_plan import DialoguePlanWorker  # noqa: E402
+from trippilot.llm_gateway.workers.preference.preference import (  # noqa: E402
     adaptive_chunk_size, build_prompt_vars, plan_chunks, score_chunk_cap,
 )
-from trippilot.llm_gateway.workers.replan_composition import (  # noqa: E402
+from trippilot.llm_gateway.workers.replan.replan_composition import (  # noqa: E402
     ComposeDayInput, ReplanCompositionWorker, ScheduleLine)
 from trippilot.orchestrator.dialogue import dialogue_orchestrator as orch  # noqa: E402
 from trippilot.orchestrator.dialogue import dialogue_plan as dplan  # noqa: E402
 from trippilot.domain.observability import GateDropEvent  # noqa: E402
 from trippilot.domain.dialogue.plan_tools import plan_tool_specs_json  # noqa: E402
 from trippilot.llm_gateway.gates.base import has_contact_like  # noqa: E402
-from trippilot.llm_gateway.gates.dialogue_answer import clock_times  # noqa: E402
+from trippilot.llm_gateway.gates.dialogue.dialogue_answer import clock_times  # noqa: E402
 from trippilot.orchestrator.dialogue.dialogue_handlers import HandlerPorts  # noqa: E402
 
 MODEL = os.environ.get("EVAL_MODEL", "gpt-5.6-luna")
@@ -530,8 +530,8 @@ def run_directive(prompts: Path, repeat: int) -> None:
     import measure_directive_match as mdm  # 같은 디렉토리 — 라벨 한 벌을 두 측정이 같이 쓴다
 
     from trippilot.agents.planb.directives import load_directive_file
-    from trippilot.llm_gateway.gates.replan_directive_translation import ReplanDirectiveTranslationGate
-    from trippilot.llm_gateway.workers.replan_directive_translation import (
+    from trippilot.llm_gateway.gates.replan.replan_directive_translation import ReplanDirectiveTranslationGate
+    from trippilot.llm_gateway.workers.replan.replan_directive_translation import (
         DirectiveTranslationInput, ReplanDirectiveTranslationWorker, options_from)
 
     options = options_from(load_directive_file(_AI_ROOT / "data/replan_directives.yaml", yaml.safe_load))

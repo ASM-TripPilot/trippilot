@@ -54,15 +54,15 @@ from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.llm.prompt import PromptRef
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.base import has_contact_like
-from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, _MAX_LENGTH, DialogueAnswerGate
-from trippilot.llm_gateway.gates.dialogue_memory import DialogueMemoryGate
-from trippilot.llm_gateway.gates.intent import IntentGate
-from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
+from trippilot.llm_gateway.gates.dialogue.dialogue_answer import _MAX_FOOTNOTE, _MAX_LENGTH, DialogueAnswerGate
+from trippilot.llm_gateway.gates.dialogue.dialogue_memory import DialogueMemoryGate
+from trippilot.llm_gateway.gates.dialogue.intent import IntentGate
+from trippilot.llm_gateway.gates.content.reflection_template import _TIME_EXPR
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.dialogue_answer import NEED_TRIP_TEXT, DialogueAnswerWorker
-from trippilot.llm_gateway.workers.dialogue_intent import DialogueIntentWorker
-from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_answer import NEED_TRIP_TEXT, DialogueAnswerWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_intent import DialogueIntentWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_memory import DialogueMemoryWorker
 from trippilot.orchestrator.dialogue.dialogue_handlers import (
     HANDLERS,
     NEXT_ACTION_TYPES,
@@ -98,12 +98,12 @@ from trippilot.orchestrator.dialogue.dialogue_orchestrator import (
     TurnInput,
     TurnOutcome,
 )
-from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanGate
-from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
-from trippilot.llm_gateway.workers.dialogue_smalltalk import DialogueSmalltalkWorker
+from trippilot.llm_gateway.gates.dialogue.dialogue_plan import DialoguePlanGate
+from trippilot.llm_gateway.workers.dialogue.dialogue_plan import DialoguePlanWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_smalltalk import DialogueSmalltalkWorker
 from trippilot.agents.unknown_handling.agent import KnowledgeTask, UnknownHandlingAgent, UnknownOutcome
-from trippilot.llm_gateway.gates.dialogue_knowledge import DialogueKnowledgeGate
-from trippilot.llm_gateway.workers.dialogue_knowledge import DialogueKnowledgeWorker
+from trippilot.llm_gateway.gates.dialogue.dialogue_knowledge import DialogueKnowledgeGate
+from trippilot.llm_gateway.workers.dialogue.dialogue_knowledge import DialogueKnowledgeWorker
 from trippilot.domain.dialogue.plan_tools import plan_tool_specs_json
 from trippilot.orchestrator.dialogue.dialogue_plan import plan_tools
 from trippilot.orchestrator.intent.intent_eval import is_refusal
@@ -1874,7 +1874,7 @@ def test_follow_up_turn_leaves_out_cards_the_sentence_did_not_name() -> None:
 @pytest.mark.parametrize("region", ["이 근처", "여기", "숙소 근처", "이 주변"])
 def test_a_deictic_region_is_not_a_region_so_explore_asks_instead_of_saying_it_cannot_find_it(region: str) -> None:
     """분류가 "이 근처"를 region 칸에 담아도 지역이 아니다 — 여행·일정이 없으면 지역을 되묻는다("그 지역은 아직…" EMPTY 가 아니다)."""
-    from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEXT
+    from trippilot.llm_gateway.workers.dialogue.dialogue_answer import EXPLORE_ASK_REGION_TEXT
 
     b = _build(_canned(Intent.EXPLORE_PLACES, region=region, theme="맛집"),
                ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool()))
@@ -1884,7 +1884,7 @@ def test_a_deictic_region_is_not_a_region_so_explore_asks_instead_of_saying_it_c
 
 def test_explore_without_any_anchor_asks_for_the_region_once_and_the_answer_runs_without_classifying() -> None:
     """앵커(지역·일정·여행 목적지)가 하나도 없으면 지역을 되묻는다(요청당 1회) — 다음 턴의 "부산"은 분류 없이 그 답이다(LLM 0)."""
-    from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEXT
+    from trippilot.llm_gateway.workers.dialogue.dialogue_answer import EXPLORE_ASK_REGION_TEXT
 
     ports = HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool())
     b = _build(_canned(Intent.EXPLORE_PLACES, theme="요즘 핫한"), ports=ports)
@@ -1990,7 +1990,7 @@ def test_meal_list_hours_are_read_from_the_whole_sentence_before_cutting_segment
 
 def test_a_deterministic_answer_does_not_repeat_the_last_assistant_line_word_for_word() -> None:
     """같은 넘기기·감사 문장이 연달아 나가면 같은 뜻의 다른 말로 — 버튼은 그대로(2026-10-22 "계속 같은 말만")."""
-    from trippilot.llm_gateway.workers.dialogue_answer import _ANSWER_TEXT, unrepeated
+    from trippilot.llm_gateway.workers.dialogue.dialogue_answer import _ANSWER_TEXT, unrepeated
     from trippilot.orchestrator.dialogue.dialogue_orchestrator import THANKS_TEXT, _CLOSER_VARIANTS
     from trippilot.domain.dialogue.intent import Intent
 

@@ -45,13 +45,13 @@ from trippilot.agents.reflect.fallback import (
     build_fallback_template,
 )
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.reflection_template import (
+from trippilot.llm_gateway.gates.content.reflection_template import (
     ReflectionTemplateContext,
     ReflectionTemplateGate,
 )
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.reflection_template import ReflectionTemplateWorker
+from trippilot.llm_gateway.workers.content.reflection_template import ReflectionTemplateWorker
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent, LlmCallRecord

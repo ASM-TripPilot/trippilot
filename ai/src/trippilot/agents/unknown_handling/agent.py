@@ -40,7 +40,7 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 
 from trippilot.domain.common import TraceId
-from trippilot.llm_gateway.workers.dialogue_knowledge import DialogueKnowledgeWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_knowledge import DialogueKnowledgeWorker
 from trippilot.llm_gateway.workers.place_fact_lookup import PlaceFactLookupWorker
 from trippilot.ports.place_fact_store_port import FIELDS, FactRecord, PlaceFacts, PlaceFactStore
 

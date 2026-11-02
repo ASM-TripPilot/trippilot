@@ -34,8 +34,8 @@ from trippilot.domain.llm.llm import CandidatePool
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.poi.region_centers import region_center
 from trippilot.domain.dialogue.trigger import TriggerKind
-from trippilot.llm_gateway.gates.dialogue_answer import _MAX_LENGTH, _violates
-from trippilot.llm_gateway.workers.dialogue_answer import (
+from trippilot.llm_gateway.gates.dialogue.dialogue_answer import _MAX_LENGTH, _violates
+from trippilot.llm_gateway.workers.dialogue.dialogue_answer import (
     EXPLORE_ASK_REGION_TEXT,
     NEED_TRIP_TEXT,
     REGION_ASK_TASTE_TEXT,
@@ -1600,7 +1600,7 @@ def test_explore_without_region_or_slots_uses_the_trip_destination() -> None:
 
 
 def test_explore_without_any_anchor_asks_for_a_region_without_calling_anything() -> None:
-    from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEXT
+    from trippilot.llm_gateway.workers.dialogue.dialogue_answer import EXPLORE_ASK_REGION_TEXT
 
     facts, builder = _explore({}, snapshot=_snapshot((), trip=None, status=None))
     assert builder.requests == [] and facts.template_text == EXPLORE_ASK_REGION_TEXT and not facts.needs_trip
