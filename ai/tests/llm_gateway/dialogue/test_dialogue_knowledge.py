@@ -21,7 +21,7 @@ from hypothesis import strategies as st
 from tests.fakes.fake_llm import FailingLlm, FakeLlm
 from tests.fakes.in_memory_trace import InMemoryTrace
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature, ModelTier
+from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.base import has_contact_like

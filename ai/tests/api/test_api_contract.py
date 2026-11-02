@@ -23,7 +23,7 @@ from trippilot.api.app import create_app
 from trippilot.api.schemas import GenerateItineraryRequest, ItineraryPayload
 from trippilot.domain.common import PoiId, ScheduleId
 from trippilot.domain.freshness import FreshnessMeta
-from trippilot.domain.itinerary import (
+from trippilot.domain.itinerary.itinerary import (
     DaySolution,
     FixedBlock,
     ItinerarySolution,

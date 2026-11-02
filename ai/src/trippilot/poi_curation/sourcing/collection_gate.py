@@ -34,7 +34,7 @@ from trippilot.poi_curation.sourcing.mapping import (
     normalize_business_name,
     same_business_name,
 )
-from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 
 # 서비스 권역 bbox (제주 남단 마라도 ~ 최북단, 서해 ~ 독도 포함)
 _KR_LAT = (32.5, 39.5)

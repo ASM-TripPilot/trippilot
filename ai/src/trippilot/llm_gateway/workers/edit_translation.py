@@ -25,8 +25,8 @@ from trippilot.llm_gateway.gates.reminder_copy import _display_form
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.edit import TRANSLATABLE_OPS, EditOp
-from trippilot.domain.llm import CandidatePool, LlmFeature, TypedResult
-from trippilot.domain.poi import Poi
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature, TypedResult
+from trippilot.domain.poi.poi import Poi
 
 # op 별 뜻과 채울 자리. 이름만 주입하던 동안(0.1.0) 모델은 "카페 하나 추가해줘" 를
 # ADD_SLOT 으로 잇지 못하고 전 모델이 번역 불가를 냈다(2026-10-14 실측 12발화 중

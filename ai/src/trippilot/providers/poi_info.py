@@ -25,7 +25,7 @@ from trippilot.domain.freshness import (
     ProviderKind,
     ProviderStatus,
 )
-from trippilot.domain.poi import Poi, hours_label
+from trippilot.domain.poi.poi import Poi, hours_label
 from trippilot.poi_curation.place_fees import EMPTY, FeeTable
 from trippilot.ports.poi_db_port import PoiDbPort
 

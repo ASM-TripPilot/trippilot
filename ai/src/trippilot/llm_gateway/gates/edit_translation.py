@@ -50,7 +50,7 @@ from trippilot.domain.edit import (
     EditTranslation,
     resolve_apply_mode,
 )
-from trippilot.domain.llm import CandidatePool, LlmFeature
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature
 from trippilot.domain.observability import GateDropEvent
 
 # INV-2(시각)·INV-3 방어 — 편집 명령은 "무엇을"만 표현한다 (시각·소요시간은 어셈블리 소유).

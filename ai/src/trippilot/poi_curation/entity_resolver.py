@@ -10,8 +10,8 @@ from __future__ import annotations
 import unicodedata
 from typing import Sequence
 
-from trippilot.domain.poi_curation import EntityMatch, MatchDecision
-from trippilot.domain.poi import Poi
+from trippilot.domain.poi.poi_curation import EntityMatch, MatchDecision
+from trippilot.domain.poi.poi import Poi
 from trippilot.poi_curation.config import M7Config
 
 _CHO = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"

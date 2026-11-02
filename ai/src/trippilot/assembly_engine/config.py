@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from trippilot.domain.common import Pace, TransportMode
-from trippilot.domain.poi import Poi, PoiCategory, counts_as_food
+from trippilot.domain.poi.poi import Poi, PoiCategory, counts_as_food
 
 
 def _default_speeds() -> dict[TransportMode, float]:

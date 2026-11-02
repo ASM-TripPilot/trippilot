@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import date
 
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.poi import OpenHour, Poi, PoiCategory
+from trippilot.domain.poi.poi import OpenHour, Poi, PoiCategory
 from trippilot.poi_curation.config import M7Config
 from trippilot.ports.poi_db_port import PoiLookup, lookup_from
 

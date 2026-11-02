@@ -71,10 +71,10 @@ from trippilot.llm_gateway.feature_model_env import feature_models_from_env
 from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.travel import TravelEstimator, haversine_km
 from trippilot.domain.common import BudgetLevel, TransportMode
-from trippilot.domain.llm import ModelTier
+from trippilot.domain.llm.llm import ModelTier
 from trippilot.domain.observability import LlmCallRecord
 from trippilot.domain.persona import CompanionType, PersonaSummary
-from trippilot.domain.poi import Poi
+from trippilot.domain.poi.poi import Poi
 from trippilot.ports.llm_port import LlmPort, LlmRequest, LlmResponse
 from trippilot.ports.travel_time_port import TravelTimeError, TravelTimePort
 

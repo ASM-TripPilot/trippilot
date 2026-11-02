@@ -11,7 +11,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature
+from trippilot.domain.llm.llm import LlmFeature
 from trippilot.llm_gateway.gates.place_fact import PlaceFactGate
 from trippilot.orchestrator import dialogue_handlers as dh
 

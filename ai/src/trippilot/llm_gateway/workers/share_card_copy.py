@@ -22,7 +22,7 @@ from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.gates.share_card_copy import ShareCardCopyContext
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature, TypedResult
+from trippilot.domain.llm.llm import LlmFeature, TypedResult
 from trippilot.domain.reflection import ReflectionRequest, ShareCardCopy
 
 # 지역명을 못 쓸 때의 태그 — `_tag_allowed`가 항상 허용하는 브랜드 고정 태그.

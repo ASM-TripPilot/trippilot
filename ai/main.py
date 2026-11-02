@@ -49,7 +49,7 @@ from fastapi import FastAPI
 
 from trippilot.api.app import create_app
 from trippilot.api.wiring import build_dev_app
-from trippilot.domain.llm import LlmFeature
+from trippilot.domain.llm.llm import LlmFeature
 
 PORT = 8000
 
@@ -801,7 +801,7 @@ def _warn_unwired(*, weather, embedding, feature_models: Mapping | None, memory=
     elif feature_models:
         # 종수·미배정 목록 한 줄 — 새 feature 가 들어왔는데 시크릿 배정이 안 따라오면 그 기능만
         # 조용히 티어 기본 모델로 돈다. 배포 smoke(`ai-wiring:`)가 이 줄을 끌어올린다.
-        from trippilot.domain.llm import LlmFeature
+        from trippilot.domain.llm.llm import LlmFeature
 
         missing = [f.value for f in LlmFeature if f not in feature_models]
         log.info("기능별 모델 배정 %d종 / 미배정 %d종%s", len(feature_models), len(missing),

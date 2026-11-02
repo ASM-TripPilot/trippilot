@@ -60,7 +60,7 @@ from trippilot.llm_gateway.gates.reflection_template import (
     _tag_allowed,
 )
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature
+from trippilot.domain.llm.llm import LlmFeature
 from trippilot.domain.observability import GateDropEvent
 from trippilot.domain.reflection import PLACEHOLDER_VOCAB, ShareCardCopy
 

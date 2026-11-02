@@ -38,7 +38,7 @@ import urllib.request
 from collections.abc import Mapping
 
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.poi_curation.sourcing.holiday_rules import parse_holiday_rules
 from trippilot.poi_curation.sourcing.mapping import parse_opening_hours_raw, split_opening_hours_raw
 from trippilot.ports.http_json_port import HttpJson

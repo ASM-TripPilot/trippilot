@@ -22,7 +22,7 @@ from tests.api.test_api_alternatives import _post
 from trippilot.api.wiring import build_dev_app, demo_poi_seed, restrict_pool_to_target_role
 from trippilot.poi_curation.pool_builder import SAME_CATEGORY_MIN
 from trippilot.ports.llm_port import LlmRequest, LlmResponse
-from trippilot.domain.poi import counts_as_food
+from trippilot.domain.poi.poi import counts_as_food
 
 _SEED = {str(p.poi_id): p for p in demo_poi_seed()}
 _FOOD = "e0000000-0000-4000-8000-000000000002"  # 제주 흑돼지거리 (FOOD)

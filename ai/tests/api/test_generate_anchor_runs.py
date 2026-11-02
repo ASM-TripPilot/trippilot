@@ -20,7 +20,7 @@ from dataclasses import replace
 from datetime import date, timedelta
 
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.poi import Poi
+from trippilot.domain.poi.poi import Poi
 
 from tests.api.test_e2e_boundary import _ANCHOR, _POIS, _poi, _request, make_client
 

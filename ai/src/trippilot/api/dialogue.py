@@ -24,9 +24,9 @@ from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent
 from trippilot.api import schemas
 from trippilot.domain.common import TraceId
 from trippilot.domain.freshness import ProviderKind
-from trippilot.domain.intent import Intent
-from trippilot.domain.llm import LlmFeature
-from trippilot.domain.plan_tools import PLAN_TOOLS, plan_tool_specs_json
+from trippilot.domain.dialogue.intent import Intent
+from trippilot.domain.llm.llm import LlmFeature
+from trippilot.domain.dialogue.plan_tools import PLAN_TOOLS, plan_tool_specs_json
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerGate
 from trippilot.llm_gateway.gates.dialogue_knowledge import DialogueKnowledgeGate

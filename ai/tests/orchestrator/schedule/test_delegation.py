@@ -14,7 +14,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from trippilot.domain.delegation import (
+from trippilot.domain.dialogue.delegation import (
     AgentResult,
     AgentStatus,
     AgentTask,

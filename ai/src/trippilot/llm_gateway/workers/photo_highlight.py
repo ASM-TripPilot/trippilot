@@ -25,7 +25,7 @@ from trippilot.llm_gateway.gates.photo_highlight import (
 )
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature, TypedResult
+from trippilot.domain.llm.llm import LlmFeature, TypedResult
 from trippilot.domain.reflection import PhotoId, PhotoRef, VisionInput
 from trippilot.ports.llm_port import LlmImagePart
 

@@ -34,7 +34,7 @@ from trippilot.api.wiring import (
 )
 from trippilot.llm_gateway.config import C1Config
 from trippilot.domain.common import BudgetLevel
-from trippilot.domain.llm import ModelTier, TypedResult
+from trippilot.domain.llm.llm import ModelTier, TypedResult
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.persona import CompanionType, PersonaSummary
 

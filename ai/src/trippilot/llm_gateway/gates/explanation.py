@@ -13,7 +13,7 @@ from trippilot.llm_gateway.gates.base import (
 )
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
-from trippilot.domain.llm import CandidatePool, LlmFeature, PoiExplanation
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature, PoiExplanation
 from trippilot.domain.observability import GateDropEvent
 
 # 슬롯당 해시태그 개수 — **고정** (팀 결정 2026-09-24, "차후 필요하면 바꾼다"). 프롬프트가

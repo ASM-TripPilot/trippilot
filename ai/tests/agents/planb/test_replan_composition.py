@@ -24,8 +24,8 @@ from trippilot.agents.planb import composition
 from trippilot.agents.planb.directives import load_directive_file
 from trippilot.api.wiring import DEMO_ANCHOR, StaticPoiDb, build_dev_app, demo_poi_seed
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.llm import CandidatePool
-from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.domain.llm.llm import CandidatePool
+from trippilot.domain.poi.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 from trippilot.ports.llm_port import LlmRequest, LlmResponse
 
 _DIRECTIVES = load_directive_file(

@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import re
 
-from trippilot.domain.poi import BUDDHA, CHUSEOK, PUBLIC_HOLIDAY, SEOLLAL, is_holiday_rule
+from trippilot.domain.poi.poi import BUDDHA, CHUSEOK, PUBLIC_HOLIDAY, SEOLLAL, is_holiday_rule
 from trippilot.poi_curation.sourcing.mapping import (
     _HOLIDAY_TAIL,
     _HOURS_REST_WORD,

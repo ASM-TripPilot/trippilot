@@ -19,7 +19,7 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
-from trippilot.domain.intent import Intent, IntentMatch, MatchRoute
+from trippilot.domain.dialogue.intent import Intent, IntentMatch, MatchRoute
 
 # §6 이 중점 추적하라는 경계 3종 — 리포트에서 따로 표시한다
 BOUNDARY_INTENTS = frozenset({Intent.EDIT_SCHEDULE, Intent.REPLAN, Intent.GENERATE_SCHEDULE})

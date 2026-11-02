@@ -17,9 +17,9 @@ from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
 from trippilot.assembly_engine.scorer import build_rule_score
 from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId, ScheduleId, TransportMode
-from trippilot.domain.itinerary import ItineraryProblem, TimeWindow
-from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.itinerary.itinerary import ItineraryProblem, TimeWindow
+from trippilot.domain.llm.llm import ScoredPoi
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 
 KST = timezone(timedelta(hours=9))
 CFG = AssemblyConfig()

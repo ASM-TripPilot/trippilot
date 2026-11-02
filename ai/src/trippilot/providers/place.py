@@ -26,8 +26,8 @@ from trippilot.domain.freshness import (
     ProviderKind,
     ProviderStatus,
 )
-from trippilot.domain.llm import CandidatePool
-from trippilot.domain.poi_curation import CandidatePoolRequest
+from trippilot.domain.llm.llm import CandidatePool
+from trippilot.domain.poi.poi_curation import CandidatePoolRequest
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 
 

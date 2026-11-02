@@ -32,10 +32,10 @@ import re
 from collections.abc import Callable, Sequence
 
 from trippilot.domain.common import BudgetLevel, TransportMode
-from trippilot.domain.dialogue import ArgumentKind, ArgumentSpec
+from trippilot.domain.dialogue.dialogue import ArgumentKind, ArgumentSpec
 from trippilot.domain.edit import EditOp
 from trippilot.domain.persona import CompanionType
-from trippilot.domain.trigger import ReplanScope
+from trippilot.domain.dialogue.trigger import ReplanScope
 
 Extractor = Callable[[str], str | None]
 

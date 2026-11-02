@@ -30,8 +30,8 @@ from trippilot.api.wiring import _replan_fixed_blocks, demo_poi_seed
 from trippilot.assembly_engine.constraints import check_all
 from trippilot.assembly_engine.facade import AssemblyConflictError, HybridAssemblyFacade
 from trippilot.domain.common import PoiId
-from trippilot.domain.itinerary import FixedBlock, TimeWindow
-from trippilot.domain.llm import ScoredPoi
+from trippilot.domain.itinerary.itinerary import FixedBlock, TimeWindow
+from trippilot.domain.llm.llm import ScoredPoi
 
 from tests.fakes.fake_clock import FakeClock
 from tests.fakes.in_memory_trace import InMemoryTrace

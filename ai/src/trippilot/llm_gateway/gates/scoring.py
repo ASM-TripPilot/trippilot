@@ -14,7 +14,7 @@ from trippilot.llm_gateway.gates.base import (
     empty_result_error,
 )
 from trippilot.domain.common import PoiId, TraceId
-from trippilot.domain.llm import CandidatePool, LlmFeature, ScoredPoi
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature, ScoredPoi
 from trippilot.domain.observability import GateDropEvent
 
 

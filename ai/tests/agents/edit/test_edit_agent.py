@@ -18,14 +18,14 @@ from trippilot.agents.edit.agent import EditAgent, EditOutcome, EditTask
 from trippilot.agents.edit.commands import EditStatus
 from trippilot.domain.common import PoiId, ScheduleId, TraceId, TransportMode
 from trippilot.domain.edit import ApplyMode, EditCommand, EditOp
-from trippilot.domain.itinerary import (
+from trippilot.domain.itinerary.itinerary import (
     DaySolution,
     ItinerarySolution,
     SolveMode,
     Violation,
     VisitSlot,
 )
-from trippilot.domain.llm import CandidatePool
+from trippilot.domain.llm.llm import CandidatePool
 
 _KST = timezone(timedelta(hours=9))
 _NOW = datetime(2026, 8, 5, 8, 0, tzinfo=_KST)

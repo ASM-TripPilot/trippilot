@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature, TypedResult
+from trippilot.domain.llm.llm import LlmFeature, TypedResult
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import inline
 

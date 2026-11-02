@@ -35,7 +35,7 @@ from trippilot.assembly_engine.constraints import (
 )
 from trippilot.assembly_engine.day_focus import focus_candidates
 from trippilot.domain.common import PoiId
-from trippilot.domain.itinerary import (
+from trippilot.domain.itinerary.itinerary import (
     DaySolution,
     FixedBlock,
     ItineraryProblem,
@@ -44,7 +44,7 @@ from trippilot.domain.itinerary import (
     TimeWindow,
     VisitSlot,
 )
-from trippilot.domain.poi import OpenHour, Poi, PoiCategory, counts_as_food, open_windows_on
+from trippilot.domain.poi.poi import OpenHour, Poi, PoiCategory, counts_as_food, open_windows_on
 
 
 def placed_fixed_blocks(

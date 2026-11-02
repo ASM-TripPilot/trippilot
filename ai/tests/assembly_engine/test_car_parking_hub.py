@@ -22,7 +22,7 @@ from trippilot.assembly_engine.config import WALK_HARD_MAX_KM, AssemblyConfig
 from trippilot.assembly_engine.parking import plan_parking
 from trippilot.assembly_engine.travel import PARKED_SOURCE, WALKED_SOURCE, TravelEstimator, WalkFirst, haversine_km
 from trippilot.domain.common import GeoPoint, TransportMode
-from trippilot.domain.travel import TravelEstimate
+from trippilot.domain.itinerary.travel import TravelEstimate
 
 C, W = TransportMode.CAR, TransportMode.WALK
 _CFG = AssemblyConfig()

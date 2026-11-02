@@ -22,13 +22,13 @@ from typing import Mapping
 
 from trippilot.assembly_engine.constraints import open_hours_ok
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.itinerary import (
+from trippilot.domain.itinerary.itinerary import (
     DaySolution,
     ItineraryProblem,
     ItinerarySolution,
     VisitSlot,
 )
-from trippilot.domain.poi import Poi
+from trippilot.domain.poi.poi import Poi
 
 
 class MinimalChangePolicy(Enum):

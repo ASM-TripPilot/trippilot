@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from trippilot.domain.common import GeoPoint
-from trippilot.domain.poi import PoiCategory, SourcedPoi
+from trippilot.domain.poi.poi import PoiCategory, SourcedPoi
 
 
 class FakePlaces:

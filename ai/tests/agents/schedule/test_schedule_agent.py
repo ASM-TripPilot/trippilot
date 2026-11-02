@@ -22,7 +22,7 @@ from trippilot.agents.schedule.outcome import (
     candidates_report,
 )
 from trippilot.domain.observability import FallbackEvent
-from trippilot.domain.poi_curation import CandidatePoolRequest
+from trippilot.domain.poi.poi_curation import CandidatePoolRequest
 from trippilot.llm_gateway.gates.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
@@ -182,7 +182,7 @@ from hypothesis import strategies as st
 from trippilot.agents.schedule.agent import pick_slot_alternatives
 from trippilot.agents.schedule.outcome import MAX_SLOT_ALTERNATIVES
 from trippilot.domain.common import PoiId
-from trippilot.domain.itinerary import (
+from trippilot.domain.itinerary.itinerary import (
     DaySolution,
     FixedBlock,
     ItinerarySolution,
@@ -190,8 +190,8 @@ from trippilot.domain.itinerary import (
     TimeWindow,
     VisitSlot,
 )
-from trippilot.domain.llm import CandidatePool, ScoredPoi
-from trippilot.domain.poi import OpenHour, PoiCategory
+from trippilot.domain.llm.llm import CandidatePool, ScoredPoi
+from trippilot.domain.poi.poi import OpenHour, PoiCategory
 from trippilot.ports.place_hours_port import HoursVerdict
 from trippilot.domain.common import ScheduleId
 
@@ -391,7 +391,7 @@ def test_failed_outcome_has_no_alternatives() -> None:
 
 # ── ⑥′ 차선책 LLM 문장 (TRIP-887) ──────────────────────────────────
 
-from trippilot.domain.llm import PoiExplanation, TypedResult
+from trippilot.domain.llm.llm import PoiExplanation, TypedResult
 
 
 class _SpyAltExplainer:
@@ -648,7 +648,7 @@ def test_map_verify_contract_breaking_port_never_fails_generation() -> None:
 def test_demotion_never_raises_a_nonpositive_score() -> None:
     """음수 점수(원거리 규칙 점수)는 배율을 곱하면 **올라간다** — 0 이하는 그대로 둔다."""
     from trippilot.agents.schedule.agent import demote_missing_on_map
-    from trippilot.domain.llm import ScoredPoi
+    from trippilot.domain.llm.llm import ScoredPoi
     from trippilot.ports.place_existence_port import ExistenceVerdict
 
     cands = (ScoredPoi(PoiId("neg"), -0.1, False), ScoredPoi(PoiId("zero"), 0.0, False),
@@ -722,7 +722,7 @@ def test_규칙_점수가_source_ref_로_입장료를_조회한다() -> None:
     # 안 채우면 이 테스트가 **아무것도 안 보면서 통과**한다.
     from dataclasses import replace as _replace
 
-    from trippilot.domain.llm import CandidatePool as _Pool
+    from trippilot.domain.llm.llm import CandidatePool as _Pool
 
     base = _pool()
     pois = tuple(_replace(p, source_ref=f"ref-{p.poi_id}") for p in base.pois)
@@ -778,7 +778,7 @@ def test_요청의_지시_카테고리가_규칙_점수에_실린다() -> None:
     """
     from dataclasses import replace as _replace
 
-    from trippilot.domain.poi import PoiCategory
+    from trippilot.domain.poi.poi import PoiCategory
 
     pool = _pool()
     agent, _, _ = _agent()
@@ -954,7 +954,7 @@ from trippilot.agents.schedule.outcome import _wanted_categories
 from trippilot.assembly_engine.scorer import CATEGORY_WEIGHT, DIRECTIVE_STEP
 from trippilot.domain.common import BudgetLevel
 from trippilot.domain.persona import ACTIVITY_LABELS, CUISINE_LABELS, PersonaSummary, TasteTag
-from trippilot.domain.poi import PoiCategory as _Cat
+from trippilot.domain.poi.poi import PoiCategory as _Cat
 
 from tests.orchestrator.schedule.test_schedule_coordinator import (
     _PROMPTS_DIR,

@@ -38,7 +38,7 @@ from trippilot.llm_gateway.workers.reflection_nudge import (
     build_reflection_nudge_vars,
 )
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature, ModelTier
+from trippilot.domain.llm.llm import LlmFeature, ModelTier
 
 from tests.fakes.fake_llm import FailingLlm, FakeLlm
 from tests.fakes.in_memory_trace import InMemoryTrace

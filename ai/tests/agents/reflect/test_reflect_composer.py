@@ -53,7 +53,7 @@ from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.reflection_template import ReflectionTemplateWorker
 from trippilot.domain.common import PoiId, TraceId
-from trippilot.domain.llm import LlmFeature, ModelTier
+from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent, LlmCallRecord
 from trippilot.domain.reflection import (
     ReflectionKind,

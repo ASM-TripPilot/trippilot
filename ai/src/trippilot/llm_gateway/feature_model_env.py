@@ -18,7 +18,7 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 
-from trippilot.domain.llm import LlmFeature
+from trippilot.domain.llm.llm import LlmFeature
 
 ENV_VAR = "TRIPPILOT_LLM_FEATURE_MODELS"
 RETRY_ENV_VAR = "TRIPPILOT_LLM_RETRY_MODELS"

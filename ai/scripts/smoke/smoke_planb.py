@@ -73,9 +73,9 @@ from trippilot.agents.planb.rag import (  # noqa: E402
 )
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TraceId  # noqa: E402
 from trippilot.domain.kb import KbDocument, KbKind  # noqa: E402
-from trippilot.domain.llm import CandidatePool, ModelTier  # noqa: E402
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource  # noqa: E402
-from trippilot.domain.trigger import TriggerKind, TriggerParams  # noqa: E402
+from trippilot.domain.llm.llm import CandidatePool, ModelTier  # noqa: E402
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource  # noqa: E402
+from trippilot.domain.dialogue.trigger import TriggerKind, TriggerParams  # noqa: E402
 from trippilot.llm_gateway.config import C1Config  # noqa: E402
 from trippilot.llm_gateway.gates.alternative_selection import (  # noqa: E402
     AlternativeSelectionGate,
@@ -431,7 +431,7 @@ def main() -> int:
         if os.environ.get("LLM_PROVIDER"):
             llm_ran = True
             adapter, model_id = _build_adapter()
-            from trippilot.domain.llm import LlmFeature
+            from trippilot.domain.llm.llm import LlmFeature
 
             effective = feature_models_from_env().get(
                 LlmFeature.ALTERNATIVE_SELECTION, model_id)

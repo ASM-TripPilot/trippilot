@@ -20,7 +20,7 @@ from datetime import date, datetime
 from typing import Sequence
 
 from trippilot.domain.common import GeoPoint
-from trippilot.domain.event import EventInfo
+from trippilot.domain.itinerary.event import EventInfo
 from trippilot.domain.freshness import (
     FreshnessMeta,
     InfoPacket,

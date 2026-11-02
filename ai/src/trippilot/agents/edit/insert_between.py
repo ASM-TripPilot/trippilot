@@ -22,7 +22,7 @@ from enum import Enum
 
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint, PoiId, TransportMode
-from trippilot.domain.poi import (
+from trippilot.domain.poi.poi import (
     NIGHTLIFE_TAG,
     TRENDING_TAG,
     HolidayCalendar,
@@ -32,7 +32,7 @@ from trippilot.domain.poi import (
     open_windows_on,
     reputation_bonus,
 )
-from trippilot.domain.region_centers import region_center
+from trippilot.domain.poi.region_centers import region_center
 from trippilot.llm_gateway.gates.base import has_contact_like
 
 

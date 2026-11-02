@@ -41,8 +41,8 @@ from datetime import date, datetime
 
 from trippilot.llm_gateway.gates.base import GateOutcome, _load_json_object
 from trippilot.domain.common import TraceId
-from trippilot.domain.event import EventInfo, EventType
-from trippilot.domain.llm import LlmFeature
+from trippilot.domain.itinerary.event import EventInfo, EventType
+from trippilot.domain.llm.llm import LlmFeature
 from trippilot.domain.observability import GateDropEvent
 
 # 관대 매핑 금지 — enum 값 문자열과 정확 일치만 통과 (대소문자 보정도 안 한다)

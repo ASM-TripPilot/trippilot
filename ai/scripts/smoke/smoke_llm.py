@@ -57,8 +57,8 @@ from pathlib import Path
 from trippilot.llm_gateway.gates.intent import IntentGate
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.domain.common import TraceId
-from trippilot.domain.intent import ROUTABLE_INTENTS
-from trippilot.domain.llm import LlmFeature
+from trippilot.domain.dialogue.intent import ROUTABLE_INTENTS
+from trippilot.domain.llm.llm import LlmFeature
 from trippilot.ports.llm_port import LlmPort, LlmRequest, LlmTimeoutError
 
 _PROMPTS_DIR = Path(__file__).resolve().parents[2] / "prompts"

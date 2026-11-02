@@ -18,7 +18,7 @@ from hypothesis import given
 
 from trippilot.domain.common import GeoPoint, TransportMode
 from trippilot.domain.freshness import ProviderKind, ProviderStatus
-from trippilot.domain.transit import (
+from trippilot.domain.itinerary.transit import (
     Confidence,
     DelayTrigger,
     TransitInfo,

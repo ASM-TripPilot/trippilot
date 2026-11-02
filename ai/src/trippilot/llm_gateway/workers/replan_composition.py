@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from trippilot.domain.common import PoiId, TraceId
-from trippilot.domain.llm import CandidatePool, LlmFeature, TypedResult
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature, TypedResult
 from trippilot.llm_gateway.gates.numbered_selection import numbered
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import inline

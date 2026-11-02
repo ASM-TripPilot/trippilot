@@ -70,10 +70,10 @@ from trippilot.agents.planb import composition, rag, request_verification  # noq
 from trippilot.assembly_engine.scorer import build_rule_score  # noqa: E402
 from trippilot.assembly_engine.travel import haversine_km  # noqa: E402
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId, TraceId  # noqa: E402
-from trippilot.domain.intent import Intent  # noqa: E402
-from trippilot.domain.llm import CandidatePool, LlmFeature, ModelTier  # noqa: E402
+from trippilot.domain.dialogue.intent import Intent  # noqa: E402
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature, ModelTier  # noqa: E402
 from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag  # noqa: E402
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory  # noqa: E402
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory  # noqa: E402
 from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter  # noqa: E402
 from trippilot.llm_gateway.config import C1Config  # noqa: E402
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate  # noqa: E402
@@ -96,7 +96,7 @@ from trippilot.llm_gateway.workers.replan_composition import (  # noqa: E402
 from trippilot.orchestrator import dialogue_orchestrator as orch  # noqa: E402
 from trippilot.orchestrator import dialogue_plan as dplan  # noqa: E402
 from trippilot.domain.observability import GateDropEvent  # noqa: E402
-from trippilot.domain.plan_tools import plan_tool_specs_json  # noqa: E402
+from trippilot.domain.dialogue.plan_tools import plan_tool_specs_json  # noqa: E402
 from trippilot.llm_gateway.gates.base import has_contact_like  # noqa: E402
 from trippilot.llm_gateway.gates.dialogue_answer import clock_times  # noqa: E402
 from trippilot.orchestrator.dialogue_handlers import HandlerPorts  # noqa: E402

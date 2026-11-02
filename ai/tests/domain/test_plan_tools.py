@@ -12,9 +12,9 @@ from dataclasses import fields
 
 import pytest
 
-from trippilot.domain.dialogue import ArgumentKind, asked_specs_of, tool_specs, tool_specs_json
-from trippilot.domain.intent import DIALOGUE_INTENTS, Intent
-from trippilot.domain.plan_tools import (
+from trippilot.domain.dialogue.dialogue import ArgumentKind, asked_specs_of, tool_specs, tool_specs_json
+from trippilot.domain.dialogue.intent import DIALOGUE_INTENTS, Intent
+from trippilot.domain.dialogue.plan_tools import (
     MAX_ARG_CHARS,
     MAX_PLAN_CALLS,
     NEVER_TOOLS,

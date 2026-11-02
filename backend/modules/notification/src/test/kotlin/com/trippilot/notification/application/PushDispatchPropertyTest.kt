@@ -1,5 +1,8 @@
 package com.trippilot.notification.application
 
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.trippilot.notification.domain.DevicePlatform
 import com.trippilot.notification.domain.Notification
 import com.trippilot.notification.domain.PushedCounts
@@ -18,6 +21,7 @@ import com.trippilot.notification.domain.PushTokenRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
 import io.kotest.property.Arb
@@ -27,6 +31,7 @@ import io.kotest.property.arbitrary.int
 import io.kotest.property.arbitrary.list
 import io.kotest.property.arbitrary.boolean
 import io.kotest.property.checkAll
+import org.slf4j.LoggerFactory
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -249,6 +254,28 @@ class PushDispatchPropertyTest : StringSpec({
 
         // 쏠 기기가 없는 경로(NO_DEVICE)도 세어야 한다 — "안 갔다"의 사유가 지표에서 갈려야 한다.
         registry.find(NotificationMetrics.PUSH_DISPATCH).counters().sumOf { it.count() } shouldBe 1.0
+    }
+
+    /**
+     * **결말이 로그에도 남는가.** 지표(OTLP)가 닿지 않는 곳에서는 `NO_DEVICE` 가 어디에도 흔적이 없어,
+     * 푸시가 아무에게도 안 가도(10-30 운영: 계정 120 중 기기 2) 밖에서는 보이지 않았다. 계정은 싣지 않는다 —
+     * 건수를 세려는 줄이다. 한 사람을 따라가는 건 알림함 행(`push_sent_at`·`push_failed_reason`)의 몫이다.
+     */
+    "발송 결말이 한 줄 로그로 남는다 — 기기가 없으면 NO_DEVICE, 나가면 SENT" {
+        val appender = ListAppender<ILoggingEvent>().apply { start() }
+        val logger = LoggerFactory.getLogger(PushDispatchService::class.java) as Logger
+        logger.addAppender(appender)
+        try {
+            serviceOf(Tokens(), Sender(), Notifications()).dispatch(notification())
+            serviceOf(Tokens(listOf(token(deliverable = true))), Sender(), Notifications()).dispatch(notification())
+        } finally {
+            logger.detachAppender(appender)
+        }
+
+        appender.list.map { it.formattedMessage }.filter { it.startsWith("push.dispatch ") } shouldContainExactly listOf(
+            "push.dispatch outcome=NO_DEVICE kind=TRIP_DAY reason=- real=true",
+            "push.dispatch outcome=SENT kind=TRIP_DAY reason=- real=true",
+        )
     }
 
     /**

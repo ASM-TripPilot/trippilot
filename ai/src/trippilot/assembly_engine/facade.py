@@ -31,7 +31,7 @@ from trippilot.assembly_engine.quality import compute_quality
 from trippilot.assembly_engine.repair import MinimalChangePolicy, RepairResult
 from trippilot.assembly_engine.repair import repair as _repair_engine
 from trippilot.domain.common import GeoPoint, PoiId, TraceId
-from trippilot.domain.itinerary import (
+from trippilot.domain.itinerary.itinerary import (
     FixedBlock,
     ItineraryProblem,
     ItinerarySolution,
@@ -40,7 +40,7 @@ from trippilot.domain.itinerary import (
     VisitSlot,
 )
 from trippilot.domain.observability import FallbackEvent, AssemblyRunRecord
-from trippilot.domain.poi import Poi
+from trippilot.domain.poi.poi import Poi
 
 
 class ChainStage(Protocol):

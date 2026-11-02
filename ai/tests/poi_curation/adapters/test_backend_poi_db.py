@@ -25,7 +25,7 @@ import pytest
 from pathlib import Path
 
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.poi import DataQuality, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import DataQuality, PoiCategory, PoiSource
 from trippilot.poi_curation.adapters.backend_poi_db import (
     _SOURCE_MAP,
     BackendPoiDb,

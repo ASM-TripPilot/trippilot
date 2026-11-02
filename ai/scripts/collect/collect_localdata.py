@@ -39,7 +39,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from trippilot.domain.common import GeoPoint  # noqa: E402
-from trippilot.domain.poi import PoiCategory  # noqa: E402
+from trippilot.domain.poi.poi import PoiCategory  # noqa: E402
 from trippilot.poi_curation.sourcing.localdata import (  # noqa: E402
     DROP_TYPE_NOT_ADOPTED,
     GAP_MIN_FOOD,

@@ -12,7 +12,7 @@ from collect_curated_kakao import already, pick, tags_for  # noqa: E402
 from merge_pois_docs import mark_trending  # noqa: E402
 
 from trippilot.assembly_engine.scorer import _popularity_norm  # noqa: E402
-from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG  # noqa: E402
+from trippilot.domain.poi.poi import NIGHTLIFE_TAG, TRENDING_TAG  # noqa: E402
 
 
 def _doc(name: str, addr: str, category: str = "") -> dict:

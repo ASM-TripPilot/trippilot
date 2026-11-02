@@ -21,8 +21,8 @@ from tests.fakes.in_memory_vector_store import InMemoryVectorStore
 from trippilot.agents.planb.kb_retrieval import index_documents
 from trippilot.api.wiring import build_dev_app, demo_poi_seed
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.llm import CandidatePool
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.llm.llm import CandidatePool
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.llm_gateway.workers.replan_composition import ComposeDayInput, build_compose_vars
 from trippilot.poi_curation.place_docs import make_doc
 

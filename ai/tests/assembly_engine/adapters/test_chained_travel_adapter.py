@@ -19,7 +19,7 @@ import urllib.error
 import pytest
 
 from trippilot.domain.common import GeoPoint, TransportMode
-from trippilot.domain.travel import TravelEstimate
+from trippilot.domain.itinerary.travel import TravelEstimate
 from trippilot.ports.travel_time_port import MeasuredTravel, TravelTimeError
 from trippilot.assembly_engine.adapters.chained_travel import ChainedTravelAdapter
 

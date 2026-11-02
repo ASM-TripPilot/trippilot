@@ -13,8 +13,8 @@ from fastapi.testclient import TestClient
 from trippilot.agents.planb import request_verification as v
 from trippilot.api.wiring import DEMO_ANCHOR, StaticPoiDb, build_dev_app, demo_poi_seed
 from trippilot.domain.common import GeoPoint, PoiId, TraceId
-from trippilot.domain.llm import LlmFeature, TypedResult
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.llm.llm import LlmFeature, TypedResult
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.llm_gateway.gates.replan_request_extraction import (
     ExtractedCategory, ExtractedRequest, ReplanRequestExtractionGate,
 )

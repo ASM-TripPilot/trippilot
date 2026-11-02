@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 
 from trippilot.domain.common import GeoPoint, TransportMode
-from trippilot.domain.travel import TravelEstimate
+from trippilot.domain.itinerary.travel import TravelEstimate
 
 _DETOUR = 1.3  # 직선거리 우회계수 (G106)
 _EARTH_KM = 6371.0088

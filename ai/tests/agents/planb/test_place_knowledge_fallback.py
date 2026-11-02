@@ -17,8 +17,8 @@ from trippilot.agents.planb.kb_retrieval import index_documents
 from trippilot.agents.planb.place_knowledge import MAX_DOC_CHARS, fetch_place_knowledge, kb5_counts
 from trippilot.agents.planb.rag import RagContext
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.llm import CandidatePool, LlmFeature
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.replan_composition import ComposeDayInput, build_compose_vars
 from trippilot.orchestrator import place_intro as pi

@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from hypothesis import strategies as st
 
 from trippilot.domain.freshness import FreshnessMeta
-from trippilot.domain.transit import (
+from trippilot.domain.itinerary.transit import (
     Confidence,
     DelayTrigger,
     TransitInfo,

@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "collec
 import merge_pois_docs as M  # noqa: E402
 from collect_place_fees import _OVERNIGHT  # noqa: E402
 from collect_pois import load_closed_refs  # noqa: E402
-from trippilot.domain.poi import Poi  # noqa: E402
+from trippilot.domain.poi.poi import Poi  # noqa: E402
 from merge_pois_docs import (  # noqa: E402
     drop_closed,
     drop_non_travel,

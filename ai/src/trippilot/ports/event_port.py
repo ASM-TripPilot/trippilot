@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Protocol
 
-from trippilot.domain.event import EventInfo
+from trippilot.domain.itinerary.event import EventInfo
 
 
 class EventError(Exception):

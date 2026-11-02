@@ -17,7 +17,7 @@ from trippilot.api.wiring import StaticPoiDb, build_dev_app
 from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.travel import TravelEstimator, haversine_km
 from trippilot.domain.common import GeoPoint, PoiId, TransportMode
-from trippilot.domain.poi import NIGHTLIFE_TAG, DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import NIGHTLIFE_TAG, DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 
 _DAY = "2026-10-21"  # 수요일(weekday 2)
 

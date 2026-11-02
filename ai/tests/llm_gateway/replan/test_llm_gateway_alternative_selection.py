@@ -33,9 +33,9 @@ from trippilot.llm_gateway.workers.alternative_selection import (
     build_alternative_selection_vars,
 )
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TraceId
-from trippilot.domain.llm import AlternativePick, CandidatePool, LlmFeature, ModelTier
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
-from trippilot.domain.trigger import TriggerKind, TriggerParams
+from trippilot.domain.llm.llm import AlternativePick, CandidatePool, LlmFeature, ModelTier
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.dialogue.trigger import TriggerKind, TriggerParams
 from trippilot.domain.observability import FallbackEvent, GateDropEvent, LlmCallRecord
 
 from tests.fakes.fake_embedding import FakeEmbedding

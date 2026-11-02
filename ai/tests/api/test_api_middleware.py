@@ -29,7 +29,7 @@ from trippilot.api.middleware import (
     backstop_ms,
     parse_wire_meta,
 )
-from trippilot.domain.itinerary import SolveMode
+from trippilot.domain.itinerary.itinerary import SolveMode
 
 from tests.api.test_api_contract import (
     BACKEND_REQUEST,

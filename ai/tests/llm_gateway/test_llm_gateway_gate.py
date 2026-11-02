@@ -18,8 +18,8 @@ from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import CandidatePool, LlmFeature, ModelTier
-from trippilot.domain.prompt import PromptRef
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature, ModelTier
+from trippilot.domain.llm.prompt import PromptRef
 from tests.fakes.fake_llm import FakeLlm
 from tests.fakes.in_memory_trace import InMemoryTrace
 from tests.generators.poi import candidate_pools, polluted_scored_pois

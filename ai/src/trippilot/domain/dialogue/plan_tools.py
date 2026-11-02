@@ -20,8 +20,8 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from trippilot.domain.dialogue import ArgumentKind, asked_specs_of, tool_specs
-from trippilot.domain.intent import DIALOGUE_INTENTS, Intent
+from trippilot.domain.dialogue.dialogue import ArgumentKind, asked_specs_of, tool_specs
+from trippilot.domain.dialogue.intent import DIALOGUE_INTENTS, Intent
 
 MAX_PLAN_CALLS = 2  # 한 턴의 도구 호출 상한 — 팬아웃 1회(한 파, 병렬), 호출끼리 결과를 주고받지 않는다
 MAX_ARG_CHARS = 40  # 인자 값 상한 — 발화에 나온 짧은 표현만(시각·연락처·주입 꼴은 게이트가 버린다)

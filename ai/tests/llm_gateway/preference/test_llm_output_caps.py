@@ -26,10 +26,10 @@ from hypothesis import strategies as st
 from trippilot.agents.schedule.agent import ScheduleAgent
 from trippilot.agents.schedule.budget import OrchestratorConfig, allocate
 from trippilot.domain.common import GeoPoint, PoiId, TraceId
-from trippilot.domain.llm import CandidatePool, LlmFeature, ModelTier, ScoredPoi, TypedResult
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature, ModelTier, ScoredPoi, TypedResult
 from trippilot.domain.observability import FallbackEvent
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
-from trippilot.domain.prompt import PromptRef
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.llm.prompt import PromptRef
 from trippilot.llm_gateway.adapters.anthropic_adapter import AnthropicAdapter
 from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter
 from trippilot.llm_gateway.config import C1Config

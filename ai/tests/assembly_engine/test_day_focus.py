@@ -11,8 +11,8 @@ from datetime import date, datetime, timedelta, timezone
 from trippilot.assembly_engine.day_focus import FOCUS_KM, focus_candidates, pick_day_focus
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.llm.llm import ScoredPoi
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 
 _D = (date(2026, 10, 30), date(2026, 10, 31), date(2026, 11, 1))
 _CITY_HALL = GeoPoint(37.5665, 126.9780)

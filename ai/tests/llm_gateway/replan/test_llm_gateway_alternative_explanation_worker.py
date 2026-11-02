@@ -16,9 +16,9 @@ from pathlib import Path
 import pytest
 
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId, TraceId
-from trippilot.domain.llm import CandidatePool, LlmFeature, ModelTier, PoiExplanation
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature, ModelTier, PoiExplanation
 from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.explanation import ExplanationGate
 from trippilot.llm_gateway.gateway import GatewayFacade

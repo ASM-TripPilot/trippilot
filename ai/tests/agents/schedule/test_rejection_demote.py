@@ -38,7 +38,7 @@ from trippilot.agents.schedule.agent import (
 )
 from trippilot.agents.schedule.budget import OrchestratorConfig
 from trippilot.domain.common import PoiId, Rejection, RejectionKind
-from trippilot.domain.llm import ScoredPoi
+from trippilot.domain.llm.llm import ScoredPoi
 
 from tests.agents.planb.test_replan_via_planb import _agent, _case, _placed
 from tests.agents.schedule.test_schedule_agent import _task

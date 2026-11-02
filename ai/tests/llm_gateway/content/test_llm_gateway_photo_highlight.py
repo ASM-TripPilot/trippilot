@@ -44,7 +44,7 @@ from trippilot.llm_gateway.workers.photo_highlight import (
     build_photo_highlight_vars,
 )
 from trippilot.domain.common import GeoPoint, PoiId, TraceId
-from trippilot.domain.llm import LlmFeature, ModelTier
+from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent, GateDropEvent
 from trippilot.domain.reflection import (
     PhotoConsent,

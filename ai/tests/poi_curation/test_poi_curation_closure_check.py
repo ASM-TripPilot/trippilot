@@ -13,7 +13,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 from trippilot.poi_curation.cached_repo import CachedPoiRepository
 from trippilot.poi_curation.closure_check import (
     ClosureCheckResult,

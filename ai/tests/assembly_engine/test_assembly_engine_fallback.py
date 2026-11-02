@@ -27,7 +27,7 @@ from trippilot.domain.common import (
     ScheduleId,
     TransportMode,
 )
-from trippilot.domain.itinerary import (
+from trippilot.domain.itinerary.itinerary import (
     DaySolution,
     FixedBlock,
     ItineraryProblem,
@@ -36,7 +36,7 @@ from trippilot.domain.itinerary import (
     TimeWindow,
     VisitSlot,
 )
-from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 
 from tests.generators.assembly import assembly_setups
 

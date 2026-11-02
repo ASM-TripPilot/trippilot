@@ -44,15 +44,15 @@ from trippilot.assembly_engine.constraints import (
 from trippilot.assembly_engine.day_focus import focus_candidates
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler, placed_fixed_blocks
 from trippilot.domain.common import PoiId
-from trippilot.domain.itinerary import (
+from trippilot.domain.itinerary.itinerary import (
     DaySolution,
     ItineraryProblem,
     ItinerarySolution,
     SolveMode,
     VisitSlot,
 )
-from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.poi import Poi, PoiCategory, counts_as_food, open_windows_on
+from trippilot.domain.llm.llm import ScoredPoi
+from trippilot.domain.poi.poi import Poi, PoiCategory, counts_as_food, open_windows_on
 
 _log = logging.getLogger(__name__)
 

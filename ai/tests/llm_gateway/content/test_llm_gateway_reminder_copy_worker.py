@@ -16,7 +16,7 @@ import json
 from datetime import datetime, timezone
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature, TypedResult
+from trippilot.domain.llm.llm import LlmFeature, TypedResult
 from trippilot.llm_gateway.gates.reminder_copy import (
     ReminderCopyContext,
     ReminderCopyDraft,

@@ -63,12 +63,17 @@ class PushDispatchService(
     /**
      * 발송 결과를 **한 자리에서** 센다(OBS-U6-02). 반환 지점이 다섯이라 각 자리에서 세면 하나를
      * 빠뜨려도 드러나지 않는다 — 빠뜨린 경로만 지표에서 조용히 사라진다.
+     *
+     * 같은 자리에서 **로그도 한 줄** 남긴다. 지표가 닿지 않는 곳에서는 `NO_DEVICE` 가 어디에도 흔적이
+     * 없어, 푸시가 아무에게도 안 가도 밖에서는 보이지 않았다(10-30 운영: 계정 120 중 기기 2). 건수를 세려는
+     * 줄이라 계정은 싣지 않는다 — 한 사람을 따라가는 건 알림함 행(`push_sent_at`·`push_failed_reason`)의 몫이다.
      */
     @Transactional
     fun dispatch(notification: Notification): PushOutcome {
         var reason: String? = null
         val outcome = doDispatch(notification) { reason = it }
         metrics.pushDispatched(outcome, reason, push.deliversExternally)
+        log.info("push.dispatch outcome={} kind={} reason={} real={}", outcome, notification.kind, reason ?: "-", push.deliversExternally)
         return outcome
     }
 

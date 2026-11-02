@@ -34,7 +34,7 @@ from trippilot.llm_gateway.gates.base import (
 )
 from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import CandidatePool, LlmFeature
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature
 from trippilot.domain.observability import GateDropEvent
 
 # 푸시 알림 1문장 상한 (TRIP-347 규칙 — 프롬프트의 "60자 이내"와 동일 값)
