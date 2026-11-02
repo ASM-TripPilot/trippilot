@@ -57,15 +57,20 @@ def publish(candidate: Path, target: Path) -> Path:
     except BaseException:
         staging.unlink(missing_ok=True)
         raise
-    run = candidate.parent.resolve()
-    if run.parent.parent == (OUT / "runs").resolve():   # run_dir 이 만든 깊이의 폴더만 — runs/ 나 runs/<dag> 는 지우지 않는다
+    clear_run(candidate.parent)
+    return target
+
+
+def clear_run(run: Path) -> None:
+    """끝난 실행의 후보 폴더를 지운다. run_dir 이 만든 깊이의 폴더만 — runs/ 나 runs/<dag> 는 지우지 않는다."""
+    run = run.resolve()
+    if run.parent.parent == (OUT / "runs").resolve():
         # 게시는 이미 끝났다 — 정리 실패가 게시를 실패로 보이게 하면 안 된다(재실행이 성공한 게시를 다시 하게 된다).
         # 어떤 예외든 로그만 남긴다(onexc 는 3.12+ 라 쓰지 않는다 — 옛 인터프리터에서는 TypeError 가 게시 뒤에 났다).
         try:
             shutil.rmtree(run)
         except Exception as exc:
             log.warning("후보 정리 실패(게시는 끝났다): %s — %s", run, exc)
-    return target
 
 
 def run_day(context: dict, tz) -> datetime:

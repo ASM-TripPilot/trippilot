@@ -1,0 +1,91 @@
+# Airflow 운영 이전 2단계 **초안** — 공식 차트(apache-airflow/airflow) 값 파일. TRIP-1725.
+#
+# ⚠️ 아직 적용하지 않는다. 적용 전에 사람이 정할 것(PR 본문 "남은 결정"):
+#   - 노드: EKS Auto(Karpenter)가 노드를 고른다. 수집 전용 노드를 둘지(m5a.large 1 ≈ 월 15만원) — 두면 아래
+#     nodeSelector 의 NodePool 이름을 그것으로. 안 두면 nodeSelector 를 지운다.
+#   - 메타 DB: 기존 RDS 에 `airflow` DB·역할을 따로 만든다(앱 DB 와 섞지 않는다). 접속 문자열은 시크릿으로만.
+#   - GitHub 토큰: 공유본 PR·머지·collect-state push 용(contents·pull-requests·actions 쓰기, 이 리포 한정).
+#   - Actions 스케줄 끄기: `BATCH_LIVE=1` 은 그 뒤에만 — 둘이 함께 실 수집하면 한도를 두 번 쓰고 collect-state 를 덮는다.
+#
+#   helm repo add apache-airflow https://airflow.apache.org
+#   helm template airflow apache-airflow/airflow --version 1.22.0 -n trippilot-batch -f deploy/airflow/values.yaml
+#
+# 시크릿(값은 여기 두지 않는다 — 클러스터에 사람이 만든다):
+#   airflow-metadata   connection=postgresql://airflow:<pw>@<rds-endpoint>:5432/airflow
+#   batch-collect      GH_TOKEN · TOUR_API_KEY(2·3) · NAVER_SEARCH_CLIENT_ID/SECRET · KAKAO_REST_API_KEY · OPENAI_API_KEY
+
+executor: LocalExecutor   # 하루 DAG 2개·태스크 7개 — 스케줄러 한 파드 안에서 돈다. 태스크 사이 파일(복제본)도 같은 디스크에 있다.
+
+# 이미지: 공식 이미지 + git·gh·uv. 수집기(ai/)는 실행마다 develop 을 복제해 `uv sync --locked` 로 깐다.
+images:
+  airflow:
+    repository: ghcr.io/asm-trippilot/trippilot-airflow   # 아직 없다 — 이미지 빌드는 적용 단계에서
+    tag: 3.3.2-python3.12
+
+# 메타 DB 는 기존 RDS — 차트의 내장 PostgreSQL 은 끈다.
+postgresql:
+  enabled: false
+data:
+  metadataSecretName: airflow-metadata
+
+# DAG 코드: develop 의 batch/ 를 git-sync 로. DAG 가 batch/checks.py·백엔드 지역 시드·수집기 목록을 리포 경로로 읽으므로
+# 리포 통째를 받고 dags 폴더만 가리킨다(로컬 compose 의 ./:/opt/trippilot 마운트와 같은 모양).
+dags:
+  persistence:
+    enabled: false
+  gitSync:
+    enabled: true
+    repo: https://github.com/ASM-TripPilot/trippilot.git
+    branch: develop
+    subPath: batch/dags
+    period: 300s
+
+env:
+  - name: AIRFLOW__CORE__LOAD_EXAMPLES
+    value: "False"
+  - name: BATCH_OUTPUT
+    value: /opt/airflow/batch-out
+  # 그림자(기본) → 실 수집 전환 스위치. Actions 스케줄을 끈 뒤 "1" 로.
+  - name: BATCH_LIVE
+    value: "0"
+  # 비밀 아닌 수집 설정 — ai-poi-collect·ai-event-collect 가 Repository Variables 로 주던 값(2026-10-20 `gh variable list`).
+  - name: TOURAPI_MAX_CALLS
+    value: "1000"
+  - name: NAVER_MAX_CALLS
+    value: "1000"
+  - name: EVENT_REGIONS_PER_RUN
+    value: "17"
+  - name: KAKAO_MAX_CALLS
+    value: "300"
+  - name: LLM_PROVIDER
+    value: openai
+  - name: OPENAI_MODEL
+    value: gpt-5.6-sol
+  - name: OPENAI_API
+    value: responses
+  - name: OPENAI_BASE_URL
+    value: ""   # vars.AZURE_OPENAI_ENDPOINT 값 — 적용 때 채운다
+extraEnvFrom: |
+  - secretRef:
+      name: batch-collect
+
+# 실행 폴더(복제본·후보) — 실패한 실행의 후보를 원인 보라고 남기므로 디스크가 필요하다.
+scheduler:
+  replicas: 1
+  nodeSelector:
+    karpenter.sh/nodepool: batch   # 미정 — 위 "노드" 결정
+  extraVolumes:
+    - name: batch-out
+      emptyDir:
+        sizeLimit: 10Gi
+  extraVolumeMounts:
+    - name: batch-out
+      mountPath: /opt/airflow/batch-out
+
+# LocalExecutor 라 워커·트리거러·Redis 가 필요 없다.
+workers:
+  replicas: 0
+triggerer:
+  enabled: false
+redis:
+  enabled: false
