@@ -166,3 +166,47 @@ def test_images_become_base64_blocks_before_text() -> None:
         assert block["source"]["media_type"] == "image/png"
         assert base64.b64decode(block["source"]["data"]) == data
     assert content[2] == {"type": "text", "text": "점수를 매겨라"}
+
+
+# ── 웹 검색 (2026-10-30 — PLACE_FACT_LOOKUP 벤더 폴백, OpenAI responses 표면과 같은 자리) ─────
+
+
+class _WebSearchClient(RecordingClient):
+    """웹 검색 응답 꼴 — 본문 인용(TextBlock.citations)과 검색 결과 블록(web_search_tool_result) 둘 다 낸다."""
+
+    def __init__(self) -> None:
+        cite = lambda url: SimpleNamespace(type="web_search_result_location", url=url)  # noqa: E731
+        result = lambda url: SimpleNamespace(type="web_search_result", url=url)  # noqa: E731
+        super().__init__(blocks=[
+            SimpleNamespace(type="web_search_tool_result", content=[
+                result("https://gyeongbokgungtickets.com/g"), result("https://royal.khs.go.kr/a")]),
+            SimpleNamespace(type="text", text='{"hours": "09:00~18:00"}',
+                             citations=[cite("https://royal.khs.go.kr/a"), cite("https://blog.example.com/b"),
+                                        cite("https://royal.khs.go.kr/a")]),
+        ])
+
+
+def test_web_search_sends_the_server_tool_and_returns_cited_urls_only() -> None:
+    client = _WebSearchClient()
+    response = AnthropicAdapter(client).invoke(replace(_REQUEST, web_search=True))
+
+    assert client.kwargs["tools"] == [{"type": "web_search_20250305", "name": "web_search"}]
+    # 본문 인용 먼저, 그다음 검색이 본 결과 블록 — 순서 유지·중복 제거 (openai_adapter._citations 와 동형)
+    assert response.citations == (
+        "https://royal.khs.go.kr/a", "https://blog.example.com/b", "https://gyeongbokgungtickets.com/g",
+    )
+
+
+def test_without_web_search_sends_no_tool_and_no_citations() -> None:
+    client = _WebSearchClient()
+    response = AnthropicAdapter(client).invoke(_REQUEST)
+
+    assert "tools" not in client.kwargs and response.citations == ()
+
+
+def test_web_search_text_blocks_without_citations_still_join() -> None:
+    """검색이 아무것도 못 찾았을 때도(citations 없는 text 블록) 본문은 그대로 이어붙는다 — 폭 보수."""
+    client = RecordingClient(blocks=[SimpleNamespace(type="text", text="{}", citations=None)])
+    response = AnthropicAdapter(client).invoke(replace(_REQUEST, web_search=True))
+
+    assert response.raw_text == "{}" and response.citations == ()

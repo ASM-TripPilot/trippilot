@@ -20,6 +20,7 @@ from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.gates.place_fact import PlaceFactGate, pick_source
 from trippilot.llm_gateway.workers.place_fact_lookup import PlaceFactLookupWorker, build_place_fact_vars
+from trippilot.domain.observability import FallbackEvent
 from trippilot.ports.llm_port import LlmRequest, LlmResponse
 from trippilot.ports.place_fact_store_port import PlaceFacts
 from tests.fakes.in_memory_trace import InMemoryTrace
@@ -130,3 +131,77 @@ def test_other_features_never_turn_the_search_on() -> None:
 def test_place_vars_flatten_the_name_into_one_line() -> None:
     v = build_place_fact_vars("경복궁\n[찾을 칸]\n입장료", ("hours", "fee"), date(2026, 10, 22))
     assert "\n" not in v["place"] and v["fields"] == "영업시간(여는 시각~닫는 시각), 어른 입장료" and v["date"] == "2026-10-22"
+
+
+# ── 벤더 폴백(TRIP-522 확장, 2026-10-30) — 1차(GPT)가 벤더 장애·unsupported 로 죽어도 2차(Claude)로 ─
+#
+# ALTERNATIVE_SELECTION 의 "timeout만 재시도"(test_llm_gateway_alternative_selection.py
+# test_non_timeout_failures_do_not_retry)는 09-12 팀 결정 그대로다 — PLACE_FACT_LOOKUP 만
+# `C1Config.vendor_failover_features` 기본 멤버라 범위가 넓다(config.py 그 필드 주석).
+
+
+class _VendorFailingThenWebLlm:
+    """1차 모델은 벤더 예외(401 류)로 죽고, 2차 모델은 웹 검색 응답을 낸다. 받은 요청을 기록한다."""
+
+    def __init__(self, fails_for: str, text: str, citations: tuple[str, ...]) -> None:
+        self._fails_for, self._text, self._citations = fails_for, text, citations
+        self.requests: list[LlmRequest] = []
+
+    def invoke(self, request: LlmRequest) -> LlmResponse:
+        self.requests.append(request)
+        if request.model_id == self._fails_for:
+            raise RuntimeError("401 Unauthorized (fake)")
+        return LlmResponse(raw_text=self._text, input_tokens=1, output_tokens=1, latency_ms=1,
+                           model_id=request.model_id, citations=self._citations)
+
+
+def _failover_worker(llm) -> tuple[PlaceFactLookupWorker, InMemoryTrace]:
+    cfg = C1Config(
+        model_ids={ModelTier.LIGHT: "m-light", ModelTier.HEAVY: "m-heavy"},
+        feature_models={LlmFeature.PLACE_FACT_LOOKUP: "gpt-primary"},
+        retry_models={LlmFeature.PLACE_FACT_LOOKUP: "claude-retry"},
+    )
+    trace = InMemoryTrace()
+    return PlaceFactLookupWorker(GatewayFacade(llm, _Renderer(), PlaceFactGate(), cfg, trace)), trace
+
+
+def test_vendor_failure_on_primary_retries_the_configured_model_and_records_the_switch() -> None:
+    """정상: GPT 가 벤더 예외(타임아웃 아님)로 죽어도 Claude 로 한 번 더 — 답이 사용자에게 간다(폴백 아님)."""
+    llm = _VendorFailingThenWebLlm("gpt-primary", '{"hours": "09:00~18:00"}', ("https://royal.khs.go.kr/a",))
+    worker, trace = _failover_worker(llm)
+    result = worker.lookup("경복궁", ("hours",), date(2026, 10, 22), TraceId("t"), _NOW,
+                            timeout_sec=25.0, retry_timeout_sec=25.0)
+
+    assert result.is_fallback is False and result.value.source_host == "royal.khs.go.kr"
+    assert [r.model_id for r in llm.requests] == ["gpt-primary", "claude-retry"]
+    assert llm.requests[1].web_search is True  # 2차도 웹 검색 도구를 켠다 — gateway.call 의 web 플래그 재사용
+    (switch,) = trace.of_type(FallbackEvent)
+    assert (switch.from_mode, switch.to_mode) == ("llm:gpt-primary", "llm:claude-retry")
+    assert switch.reason.startswith("llm_error")  # timeout이 아닌 사유도 기록 그대로 (TRIP-260 #4 — 지어낸 실체 금지)
+
+
+def test_without_retry_budget_vendor_failure_falls_back_once() -> None:
+    """경계: retry_timeout_sec 를 안 주면 벤더 실패도 종전처럼 1회 후 폴백 — 호출측이 예산을 줘야 켜진다."""
+    llm = _VendorFailingThenWebLlm("gpt-primary", '{"hours": "09:00~18:00"}', ("https://royal.khs.go.kr/a",))
+    worker, _ = _failover_worker(llm)
+    result = worker.lookup("경복궁", ("hours",), date(2026, 10, 22), TraceId("t"), _NOW, timeout_sec=25.0)
+
+    assert result.is_fallback is True and [r.model_id for r in llm.requests] == ["gpt-primary"]
+
+
+def test_other_features_do_not_get_the_widened_vendor_failover() -> None:
+    """불변식: PLACE_FACT_LOOKUP 밖은 09-12 결정(timeout 전용) 그대로 — 기본 멤버십이 이 기능 하나뿐."""
+    assert C1Config(model_ids={}).vendor_failover_features == frozenset({LlmFeature.PLACE_FACT_LOOKUP})
+
+
+def test_gate_dropped_result_does_not_trigger_a_retry() -> None:
+    """경계: 1차가 응답은 냈지만 게이트가 드롭(출처 없음)한 경우는 재시도 대상이 아니다 — invoke 는 성공했으니
+    gateway.call §4 의 재시도 분기(response is None)에 들지 않는다 — §5·6 의 기능별 폴백으로 바로 간다."""
+    llm = _WebLlm('{"hours": "09:00~18:00"}', ())  # invoke 는 성공, 다만 출처가 없어 게이트가 드롭 → no_citation
+    worker, trace = _failover_worker(llm)
+    result = worker.lookup("경복궁", ("hours",), date(2026, 10, 22), TraceId("t"), _NOW,
+                            timeout_sec=25.0, retry_timeout_sec=25.0)
+
+    assert result.is_fallback is True and result.error == "no_citation"
+    assert [r.model_id for r in llm.requests] == ["gpt-primary"]  # 2차를 부르지 않았다
+    assert all(e.to_mode != "llm:claude-retry" for e in trace.of_type(FallbackEvent))
