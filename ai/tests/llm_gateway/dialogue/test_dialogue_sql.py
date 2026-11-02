@@ -205,8 +205,8 @@ class _OneQueryConn(_Conn):
     """find_by_name 용 — fetchall 한 번."""
 
 
-def _hit(pid: str, sido: str, sigungu: str = "종로구", rich: bool = True) -> tuple:
-    return (pid, "광장시장", "쇼핑", sido, sigungu, [], rich)
+def _hit(pid: str, sido: str, sigungu: str = "종로구", rich: bool = True, category: str = "쇼핑") -> tuple:
+    return (pid, "광장시장", category, sido, sigungu, [], rich)
 
 
 @pytest.mark.parametrize("hits,sido,expected", [
@@ -221,6 +221,13 @@ def _hit(pid: str, sido: str, sigungu: str = "종로구", rich: bool = True) -> 
     ([_hit("a", "서울특별시", rich=False), _hit("b", "서울특별시", rich=False)], "서울", None),  # 다 빈약하면 고르지 않는다
     ([_hit("a", "서울특별시", rich=False), _hit("b", "서울특별시", rich=False), _hit("c", "부산광역시")], "서울", None),
     ([], "서울", None),
+    # 그래도 여럿이면 관광 종류가 하나뿐일 때 그곳 — 여행 없이 "경복궁"(궁궐·울산 식당 둘 다 rich, 2026-11-02 개발 DB)
+    ([_hit("a", "울산광역시", "남구", category="맛집"), _hit("b", "서울특별시", category="명소")], None, "b"),
+    ([_hit("a", "서울특별시", rich=False, category="명소"), _hit("b", "서울특별시", rich=False, category="맛집")], None, "a"),
+    ([_hit("a", "서울특별시", category="명소"), _hit("b", "부산광역시", category="자연")], None, None),  # 관광지끼리면 고르지 않는다
+    # rich 가 둘 이상이면 rich 안에서만 — 빈약한 관광지를 rich 둘보다 앞세우지 않는다
+    ([_hit("a", "서울특별시", category="맛집"), _hit("b", "부산광역시", category="카페"), _hit("c", "서울특별시", rich=False, category="명소")],
+     None, None),
 ])
 def test_find_by_name_is_exact_and_never_guesses_among_many(hits, sido, expected) -> None:
     conn = _OneQueryConn([hits])

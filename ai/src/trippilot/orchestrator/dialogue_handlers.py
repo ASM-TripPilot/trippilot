@@ -112,6 +112,8 @@ CANDIDATE_REASON = "근처의 대안"
 # 대상 슬롯을 못 푼 EMPTY 의 notes — "없다"가 아니라 "못 풀었다"(spec Edge Case: 여럿 겹치면 지어내지 않는다). LLM 재료이자 관측 표지.
 _UNRESOLVED = "대상 슬롯 미해소 — 일정에서 찾지 못했거나 이름이 여럿에 걸렸다(없다는 뜻이 아니다)"
 _UNRESOLVED_LEG = "구간 미해소 — 목적지를 일정에서 찾지 못했거나 직전 구간이 없다(없다는 뜻이 아니다)"
+# 여행 없이 이름을 댄 조회(#1684)가 못 풀렸을 때 — 위 두 줄의 '일정'을 실으면 "일정에 추가하면 알려 드릴게요"가 된다(2026-11-02 개발)
+_UNFOUND_NO_TRIP = "이름으로 등록 장소를 찾지 못했다 — 없거나 같은 이름이 여럿이다(없다는 뜻이 아니다). 여행이 없으니 일정 이야기는 하지 않는다"
 # 스냅샷 category 는 BE 한글 정본(PlannedSlotView.category) — POI_INFO 패킷의 경계 코드를 같은 어휘로 접는다
 _CATEGORY_KO: Mapping[str, str] = {
     "SIGHT": "명소", "FOOD": "맛집", "CAFE": "카페", "NIGHT_VIEW": "야경", "NATURE": "자연", "SHOPPING": "쇼핑",
@@ -1020,7 +1022,8 @@ def _assemble_free_distance(ctx: TurnContext, results: Mapping[str, TaskResult])
     value = _value(results, "transit")
     ends = value.get("ends") if isinstance(value, Mapping) else None
     if not (isinstance(ends, list) and len(ends) == 2):
-        return _text_facts(intent, FactStatus.EMPTY, (_action("OPEN_ITINERARY"),), notes=(_UNRESOLVED_LEG,))
+        note = _UNRESOLVED_LEG if ctx.snapshot.trip is not None else _UNFOUND_NO_TRIP
+        return _text_facts(intent, FactStatus.EMPTY, (_action("OPEN_ITINERARY"),), notes=(note,))
     origin, dest = ends
     mode, assumed = _transport_mode(ctx)
     notes = (f"이동 수단 가정: {mode}",) if assumed else ()
@@ -1215,7 +1218,8 @@ def _assemble_poi_info(ctx: TurnContext, results: Mapping[str, TaskResult]) -> F
     value = _value(results, "poi_info")
     lookup = value.get("lookup") if slot is None and isinstance(value, Mapping) else None
     if slot is None and not isinstance(lookup, Mapping):
-        return _text_facts(intent, FactStatus.EMPTY, (_action("OPEN_ITINERARY"),), notes=(_UNRESOLVED,))
+        note = _UNRESOLVED if ctx.snapshot.trip is not None else _UNFOUND_NO_TRIP
+        return _text_facts(intent, FactStatus.EMPTY, (_action("OPEN_ITINERARY"),), notes=(note,))
     # 일정 밖이면 이름·분류·poi_id 는 등록 장소(DB) 값 — 발화 원문이 아니다(INV-1·INV-2)
     poi_id = slot.poi_id if slot is not None else str(lookup["poi_id"])
     row = None
