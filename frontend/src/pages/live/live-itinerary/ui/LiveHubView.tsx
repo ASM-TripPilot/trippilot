@@ -1,6 +1,8 @@
 import {
+  useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -294,10 +296,11 @@ export function LiveHubView({
   const [hiddenPillKey, setHiddenPillKey] = useState<string | null>(null);
   // 알약 숨김 + 떠 있는 층 닫힘이 같은 사건 목록을 쓴다. 칸(일정·수정·챗봇·행사)은 층만 닫고 알약은 둔다(Q-D).
   const closeFloating = () => setFloating(null);
-  const hidePill = () => {
+  // TRIP-1737 — 지도 탭(onMapTap)으로도 넘어가므로 참조를 고정한다(memo(MapView)).
+  const hidePill = useCallback(() => {
     setHiddenPillKey(pillKey);
-    closeFloating();
-  };
+    setFloating(null);
+  }, [pillKey]);
   // 바가 숨는 순간 층도 닫는다 — 안 그러면 시트가 닫혀 바가 돌아올 때 되살아난다.
   useEffect(() => {
     if (barHidden) setFloating(null);
@@ -355,12 +358,23 @@ export function LiveHubView({
     .filter((piece) => piece !== '')
     .join(' · ');
 
-  const pins = buildStatePins(
+  // TRIP-1737 — 지도(memo(MapView))로 가는 값은 내용이 같으면 같은 참조를 준다. 허브는 시트를 끌 때마다(알약·sheetClosed)
+  // 다시 그려지고 페이지는 조회 갱신마다 새 slots 배열을 넘기므로, 핀 재료를 문자열 키 하나로 만들고 그 키에서 핀을 되살린다 —
+  // 재료가 한 벌이라 키에 빠진 값이 생길 수 없고, 바뀌면 같은 렌더에서 다시 만든다(늦게 반영 금지).
+  // 이 파일은 React Compiler 가 포기한다(렌더 중 entranceRef 읽기) — 손으로 붙잡는 이유다.
+  const pinKey = JSON.stringify(
     slots.map(({ slot, state }) => ({
       lat: slot.lat,
       lng: slot.lng,
       progress: state,
     }))
+  );
+  const pins = useMemo(
+    () =>
+      buildStatePins(
+        JSON.parse(pinKey) as Parameters<typeof buildStatePins>[0]
+      ),
+    [pinKey]
   );
   // `onPinTap(index)` 의 index 는 pins 배열(좌표 없는 슬롯이 빠진) 위치다 — 카드와는 pins[index].number(= 슬롯 위치+1)로 잇는다.
   const handlePinTap = (index: number) => {
@@ -382,9 +396,17 @@ export function LiveHubView({
       id: (prev?.id ?? 0) + 1,
     }));
   };
-  const center = pins[0]
-    ? { lat: pins[0].lat, lng: pins[0].lng }
-    : FALLBACK_CENTER;
+  // 핀 탭은 최신 slots·pins 를 읽어야 해서(옛 클로저 금지) 지도엔 고정 함수를 주고 ref 로 최신 핸들러를 부른다.
+  // 레이아웃 효과라 그려진 화면이 보이기 전에 바뀐다(탭이 옛 핀 배열을 볼 틈이 없다).
+  const pinTapRef = useRef(handlePinTap);
+  useLayoutEffect(() => {
+    pinTapRef.current = handlePinTap;
+  });
+  const onPinTap = useCallback((index: number) => pinTapRef.current(index), []);
+  const center = useMemo(
+    () => (pins[0] ? { lat: pins[0].lat, lng: pins[0].lng } : FALLBACK_CENTER),
+    [pins]
+  );
 
   const overlay = (
     <View
@@ -441,7 +463,7 @@ export function LiveHubView({
         // 시트를 끝까지 내릴 수 있다 — 되올리는 길은 일정 칸(`snapRequest`). 지도 로고는 바 위로 비킨다.
         enablePanDownToClose
         snapRequest={snapRequest}
-        onPinTap={handlePinTap}
+        onPinTap={onPinTap}
         scrollRequest={scrollRequest}
         mapLogoMargin={MAP_LOGO_MARGIN}
         // TRIP-1416 · 그날 핀 전부를 시트 중간(55%) 칸 위 띠에 맞춘다(Q-088 — 첫 핀 중심 고정 줌이면 나머지가 시트 뒤).
