@@ -838,9 +838,10 @@ def test_distance_to_a_registered_place_outside_the_itinerary_finds_it_by_exact_
     assert transit.calls[0]["destination"] == _COORD["천지연폭포"] and facts.detail["destination"] == "천지연폭포"
 
 
-@pytest.mark.parametrize("name", ["세종문화회관", "인천공항", "서울대공원"])
+@pytest.mark.parametrize("name", ["세종문화회관", "인천공항", "서울대공원", "서울역", "부산 역"])
 def test_a_place_name_containing_a_region_name_is_looked_up_not_taken_as_that_region(name: str) -> None:
-    """표 이름 뒤에 다른 낱말이 붙으면 지역이 아니다 — "세종문화회관"이 세종시 중심(124km 밖)이 되던 것(2026-10-30 Codex 리뷰)."""
+    """표 이름 뒤에 다른 낱말이 붙으면 지역이 아니다 — "세종문화회관"이 세종시 중심(124km 밖)이 되던 것(2026-10-30 Codex 리뷰).
+    시·군 이름의 역도 — "서울역→경복궁"이 서울 중심에서 재 약 1.2km(실제 직선 2.8km, 2026-11-02 개발). 동네 역은 위 강남역처럼 중심."""
     found = [PlaceRow(_U["천지연폭포"], name, "문화", "서울특별시", "종로구", False, False)]
     facts, transit, finder = _free_distance({"origin": "우도", "destination": name}, found)
     assert finder.calls == [("find", name, "제주")] and facts.detail["destination"] == name
