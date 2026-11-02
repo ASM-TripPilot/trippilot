@@ -662,6 +662,17 @@ def test_옛_분류가_빈_관광지는_새_분류로_카테고리를_정한다(
     assert map_category("12", codes) is expected
 
 
+@pytest.mark.parametrize("codes,expected", [
+    (("AC", "AC05"), None),                  # 레포츠로 등록된 캠핑 숙박 — 11-01 leports_lcls 실측
+    (("AC", "AC03"), None),                  # 펜션
+    (("LS", "LS01"), PoiCategory.ACTIVITY),  # 진짜 레저는 그대로
+    (("VE", "VE10"), PoiCategory.ACTIVITY),
+    ((), PoiCategory.ACTIVITY),              # 분류 없는 레포츠는 종전대로
+])
+def test_레포츠의_새_분류_숙박은_싣지_않는다(codes, expected) -> None:
+    assert map_category("28", codes) is expected
+
+
 def test_옛_분류가_있으면_옛_판정이_이긴다_그리고_카페는_새_코드로도() -> None:
     assert map_category("12", ("A01", "A0101", "A01010400", "HS", "HS01")) is PoiCategory.NATURE
     assert map_category("39", ("FD", "FD05", "FD050100")) is PoiCategory.CAFE
