@@ -14,6 +14,7 @@
  *  5. 첫 회는 예열이라 집계에서 뺀다. p90 은 최근접 순위 sorted[ceil(0.9n)-1] 이다(보간 없음).
  *  6. metro.config.js 의 inlineRequires 설정이 다른 빌드끼리는 구간 비교가 안 된다(점의 의미가 이동) — 총합만 비교한다.
  *  7. 시뮬레이터 부하가 숫자를 흔든다 — 회마다 loadAvg1 을 같이 저장하니 이상치는 그걸로 본다.
+ *  8. 홈 여행 데이터까지 재려면 `--until homeTrips`(TRIP-1719) — 그 점이 파일에 들어올 때까지 기다리고, 표에 보조 행이 붙는다.
  */
 const fs = require('fs');
 const os = require('os');
@@ -100,13 +101,17 @@ function analyze(runs) {
     invalid: 0,
   };
   const oks = [];
+  const okRecords = [];
   for (const r of runs.slice(1)) {
     const v = segmentsOf(r.record, r.launchEpoch);
     counts[v.status] += 1;
-    if (v.status === 'ok') oks.push(v.segments);
+    if (v.status === 'ok') {
+      oks.push(v.segments);
+      okRecords.push(r.record);
+    }
   }
   if (!oks.length) throw new Error('ok 회가 0 이다 — 집계할 수 없다');
-  return { buildKind: [...kinds][0], counts, oks };
+  return { buildKind: [...kinds][0], counts, oks, okRecords };
 }
 
 const stat = (xs) => ({
@@ -116,11 +121,26 @@ const stat = (xs) => ({
   max: Math.max(...xs),
 });
 
+// 보조 지표(TRIP-1719) — 부트스트랩 확정(P4) → 홈이 여행 데이터를 처음 가진 커밋(homeTrips). 유효 회 전부에 점이 있을 때만 낸다.
+function homeTripsStat(okRecords) {
+  if (!okRecords.every((r) => r.marks.homeTrips)) return undefined;
+  return stat(
+    okRecords.map(
+      (r) => r.marks.homeTrips.perfNow - r.marks.bootstrapResolved.perfNow
+    )
+  );
+}
+
 function summarize(runs) {
-  const { buildKind, counts, oks } = analyze(runs);
+  const { buildKind, counts, oks, okRecords } = analyze(runs);
   const segments = {};
   for (const n of NAMES) segments[n] = stat(oks.map((s) => s[n]));
-  return { buildKind, counts, segments };
+  return {
+    buildKind,
+    counts,
+    segments,
+    extras: { homeTrips: homeTripsStat(okRecords) },
+  };
 }
 
 function renderMarkdown(runs) {
@@ -137,6 +157,9 @@ function renderMarkdown(runs) {
     '|---|---|---|---|---|',
     ...NAMES.map((n) => row(LABELS[n], summary.segments[n])),
     row('합계(S1..S6)', total),
+    ...(summary.extras.homeTrips
+      ? [row('(보조) 부트스트랩 확정→홈 여행 데이터', summary.extras.homeTrips)]
+      : []),
   ].join('\n');
 }
 
@@ -165,7 +188,7 @@ function report(runs) {
   }
 }
 
-function measure(label, n, outDir) {
+function measure(label, n, outDir, until) {
   const udid = process.env.SIM_UDID || 'booted';
   const got = simctl('get_app_container', udid, BUNDLE_ID, 'data');
   if (got.status !== 0)
@@ -182,7 +205,9 @@ function measure(label, n, outDir) {
     for (let waited = 0; waited < 20000 && !record; waited += 200) {
       sleep(200);
       try {
-        record = JSON.parse(fs.readFileSync(file, 'utf8'));
+        const got = JSON.parse(fs.readFileSync(file, 'utf8'));
+        // 앱이 파일을 여러 번 덮어쓴다 — 첫 프레임과 (주면) --until 점이 다 들어온 판만 받는다.
+        if (got.marks.firstFrame && (!until || got.marks[until])) record = got;
       } catch {
         // 파일 없음 또는 쓰는 도중 — 다음 폴링에서 다시 읽는다.
       }
@@ -210,12 +235,13 @@ function main() {
     const label = flag('--label');
     if (!label)
       throw new Error(
-        '사용: --label <이름> [--runs 11] [--out <dir>] | report <runs.json>'
+        '사용: --label <이름> [--runs 11] [--out <dir>] [--until <마크>] | report <runs.json>'
       );
     measure(
       label,
       Number(flag('--runs', 11)),
-      flag('--out', path.join(__dirname, '../../_workspace/startup-bench'))
+      flag('--out', path.join(__dirname, '../../_workspace/startup-bench')),
+      flag('--until')
     );
   } catch (e) {
     console.error(e.message);

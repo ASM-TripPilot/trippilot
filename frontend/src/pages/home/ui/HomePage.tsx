@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 
 import {
@@ -8,6 +8,7 @@ import {
 import { useGetPlaces } from '@/shared/api/index.hooks';
 import { isNotFound, isOfflineWaiting } from '@/shared/api';
 import { guardPress } from '@/shared/lib/pressGuard';
+import { flushMarks, mark } from '@/shared/lib/startupMarks';
 import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { formatNightsLabel } from '@/entities/trip';
 import { formatTripRange } from '@/entities/trip';
@@ -124,6 +125,12 @@ function PlanningHome({
 export function HomePage() {
   const router = useRouter();
   const trips = useGetTrips();
+  // 시작 마크(TRIP-1719) — 여행 데이터가 처음 손에 들어온 커밋 뒤(= 홈 카드가 그려진 시점 근사). 측정 빌드 밖에선 no-op.
+  useEffect(() => {
+    if (trips.data === undefined) return;
+    mark('homeTrips');
+    flushMarks();
+  }, [trips.data]);
   // 홈은 (tabs) 라 로그인 뒤에만 열린다(SplashGate HOME 가드) — 게스트 분기 없이 로그인으로 넘긴다(TRIP-1164).
   const savedPlaces = useSavedPlaces({ isAuthed: true });
   const { savedPoiIds } = savedPlaces;
