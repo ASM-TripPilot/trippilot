@@ -14,7 +14,7 @@ session_name: 재계획 담당 세션 (다시 짜기 배선·구성 프롬프트
 handed_to:
   - "trippilot-7f — 다시 짜기 후속(아래 1~3)"
   - "trippilot-79 — 푸시 전달 후속(아래 4)"
-picked_up_by: "trippilot-7f (PlanB RAG·KB-5 세션) — 1~3, 11-02"
+picked_up_by: "trippilot-7f (PlanB RAG·KB-5 세션) — 1~3, 11-02 · trippilot-79 (상황 감지 세션) — 4, 11-02 14:20"
 ---
 # 다시 짜기 추천 이유·같은 장소·푸시 전달 — 코드는 다 머지, 남은 것은 확인·외부 작업
 
@@ -44,6 +44,7 @@ picked_up_by: "trippilot-7f (PlanB RAG·KB-5 세션) — 1~3, 11-02"
 2. **[7f] TRIP-1609 FE 답 오면** (11-02 확인: 담당자 답 아직 없음, 상태 '해야 할 일') — 형식·개수 요청이 있으면 `HASHTAG_COUNT`(gates/explanation.py) 한 곳 + 생성 EXPLANATION·구성 0.9.0 프롬프트 문구(테스트가 알려준다). 바꾸면 Opus 로 기준 판과 나란히 실측(아래 함정).
 3. **[7f] KB-3 상황 문서를 구성 LLM 에 싣기 — 보수안으로 보류 중**(10-30, 사용자 "결정이 필요한것들은 웬만해서는 다 진행하는 방향으로 하자" 를 상황 감지 세션이 전달 → 추천안 없음 → 현행 유지). 사용자가 KB-5 때처럼 "실어서 써야지" 하면 진행. 부딪침: KB-3 "성격 유지 교체" vs 구성 규칙 "절반 이상 새 곳"(`composition.CHANGE_REFRESH`).
 4. **[79] 푸시 전달 마무리(TRIP-1668)** — 순서는 티켓 11018 댓글: ① EAS 프로비저닝 프로파일이 Push 켠 뒤 재발급됐는지(`eas credentials`, #1598 서명 실패 재발 방지) ② 스토어/TestFlight 빌드의 `aps-environment` 가 production 인지 ③ **APNs 키(.p8)를 expo.dev → trippilot → Credentials → iOS 에 업로드**(사용자·백엔드 담당자 몫) ④ 새 빌드 실기기 알림 허용 → 운영 `app.push_token` 증가(읽기 전용 psql 파드) → expo.dev 푸시 도구 직접 시험 → 백엔드 경유(리마인드·상황 알림). 4까지 확인되면 TRIP-1668 닫기.
+   - **진행(11-02, 79):** 티켓은 이 문서 PR(#1768) 머지로 14:15 에 자동 완료돼 있어 진행 중으로 되돌렸다(댓글 11060). 이 세션은 Expo 에 로그인돼 있지 않아(`eas whoami` = Not logged in) ①·②·③ 은 못 보고 앱 담당·백엔드 담당자 몫으로 남는다 — 사용자 페이지 「내가 할 일」 2번에 Expo 자격 증명 링크와 함께 올렸다. ④ 는 운영 DB(AWS 자격 만료)가 아니라 **로그로** 볼 수 있게 #1773 을 올렸다 — 푸시 결말을 `push.dispatch outcome=… kind=…` 한 줄로 남긴다(`NO_DEVICE` 는 지금 로그·DB 어디에도 흔적이 없고 지표(OTLP)로만 센다). 출시 열차에 실리면 새 빌드 뒤 `SENT` 가 늘어나는지를 CloudWatch 로 센다. **남은 것: ①②③ 의 외부 작업과 새 빌드, 그다음 ④.**
 
 ## 함정 / 주의
 - **iOS 에 GoogleService-Info.plist 는 필요 없다** — 백엔드 담당자 메모의 Firebase 단계는 FCM 직발송 기준이다. Expo 푸시는 .p8 을 Expo 자격 증명에서 쓴다. 안드로이드 출시 때만 google-services.json + FCM V1 키를 EAS 에.
