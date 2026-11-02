@@ -656,7 +656,7 @@ describe('SplashGate · 시작 마크 배선 (TRIP-1717)', () => {
     expect(mockFlush).toHaveBeenCalledTimes(1);
   });
 
-  it('W4 같은 상태로 다시 그리고 타이머를 더 흘려도 마크·flush 가 늘지 않는다', () => {
+  it('W4 같은 상태로 다시 그리고 타이머를 더 흘려도 6구간 마크는 늘지 않는다 — 늘어나는 건 지연 푸시 등록 점(pushRegister) 하나뿐', () => {
     // 준비 — W1 이 끝난 상태
     mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
     const { rerender } = render(<SplashGate />);
@@ -671,8 +671,44 @@ describe('SplashGate · 시작 마크 배선 (TRIP-1717)', () => {
       jest.advanceTimersByTime(5000);
     });
 
-    // 단언
-    expect(names()).toEqual(before);
-    expect(mockFlush).toHaveBeenCalledTimes(1);
+    // 단언 — TRIP-1720: 푸시 지연(2500)이 지나 pushRegister 가 한 번 붙고 파일을 한 번 더 쓴다
+    expect(names()).toEqual([...before, 'pushRegister']);
+    expect(mockFlush).toHaveBeenCalledTimes(2);
+  });
+
+  it('W5 pushRegister 는 HOME 진입 뒤 PUSH_REGISTER_DELAY_MS 가 지나 등록 루틴을 부르는 그 자리에서 찍히고 곧바로 파일에 쓴다 — HOME 이 아니면 없다 (TRIP-1720)', () => {
+    // 준비 — HOME, 하한·첫 프레임까지 지난 상태
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
+    render(<SplashGate />);
+    passFloor();
+    passFrame();
+    expect(countOf('pushRegister')).toBe(0); // 앵커: 지연 전엔 없다
+
+    // 실행
+    passPushDelay();
+
+    // 단언 — 마크 → flush → 등록 루틴 순서, 각 1회
+    expect(countOf('pushRegister')).toBe(1);
+    expect(mockRegisterIfGranted).toHaveBeenCalledTimes(1);
+    const markAt = orderOf('pushRegister');
+    expect(mockFlush.mock.invocationCallOrder.at(-1)).toBeGreaterThan(markAt);
+    expect(mockRegisterIfGranted.mock.invocationCallOrder[0]).toBeGreaterThan(
+      markAt
+    );
+  });
+
+  it('W6 목적지가 HOME 이 아니면 지연이 지나도 pushRegister 가 없다 (TRIP-1720)', () => {
+    // 준비
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'LOGIN' }));
+    render(<SplashGate />);
+    passFloor();
+    passFrame();
+
+    // 실행
+    passPushDelay();
+
+    // 단언 — 앵커: 6구간 마크는 찍혔다
+    expect(countOf('firstFrame')).toBe(1);
+    expect(countOf('pushRegister')).toBe(0);
   });
 });
