@@ -670,6 +670,7 @@
 
 ## src/pages/auth/login/lib/
 - `src/pages/auth/login/lib/appleAuthorize.tsx`  →  appleAuthorize · isAppleSignInAvailable · AppleSignInButton
+- `src/pages/auth/login/lib/inAppBrowser.ts`  →  STAY_MARKER · withStayMarker · isInAppBrowser · externalBrowserUrl
 - `src/pages/auth/login/lib/isNaverLoginAvailable.ts`  →  isNaverLoginAvailable
 - `src/pages/auth/login/lib/kakaoAuthorize.ts`  →  kakaoAuthorize
 - `src/pages/auth/login/lib/kakaoAuthorize.web.ts`  →  kakaoAuthorize
