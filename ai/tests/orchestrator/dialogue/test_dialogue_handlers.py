@@ -373,6 +373,17 @@ def test_resolve_day_reads_a_weekday_only_when_the_trip_has_exactly_one() -> Non
     assert resolve_day("수요일", long_trip, _D2) == date(2026, 10, 21)
 
 
+def test_resolve_day_reads_a_month_day_inside_a_year_crossing_trip() -> None:
+    """연도 없는 날은 여행 기간 안의 그 날짜가 먼저다 — 12-31 에 "1월 1일"을 올해(지난 1월 1일, 목요일)로 읽어 다른 요일의 영업시간을
+    말했다(리뷰 재현). 여행 밖 날짜는 종전처럼 올해, 두 자리 연도는 서기 2000년대다."""
+    new_year = _snapshot((), trip=replace(_TRIP, start_date=date(2026, 12, 30), end_date=date(2027, 1, 2)))
+    eve = date(2026, 12, 31)
+    assert resolve_day("1월 1일", new_year, eve) == resolve_day("1/1", new_year, eve) == date(2027, 1, 1)
+    assert resolve_day("12월 30일", new_year, eve) == date(2026, 12, 30)
+    assert resolve_day("3월 1일", new_year, eve) == date(2026, 3, 1)  # 여행 밖 — 넘겨짚지 않는다
+    assert resolve_day("26년 11월 3일", _SNAP, _D2) == date(2026, 11, 3)
+
+
 def _wd_slot(on: date, name: str, hhmm: str, category: str) -> SlotView:
     h, m = hhmm.split(":")
     return SlotView.from_wire(f"{on.isoformat()}#{uuid.uuid5(uuid.NAMESPACE_DNS, 'wd-' + name)}", name, time(int(h), int(m)), category)
