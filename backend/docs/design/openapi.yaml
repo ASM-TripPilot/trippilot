@@ -1423,10 +1423,15 @@ paths:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/AddPhotoRequest' } } }
       responses:
-        '201': { description: 등록됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitPhoto' } } } }
+        '201':
+          description: >
+            등록됨. **재시도는 멱등이다**(TRIP-1721) — 같은 방문에 같은 기기의 같은 자산(`deviceId`·`localAssetId`)이
+            이미 붙어 있으면 새로 넣지 않고 있던 사진을 그대로 돌려준다(요청의 다른 값은 반영하지 않는다). 응답을 못 받은
+            앱이 다시 보내는 것이 정상 경로라, 거절하면 이미 붙은 사진이 "실패"로 남는다. 방문당 상한이 찼어도 이미 붙은
+            사진의 재시도는 거절하지 않는다.
+          content: { application/json: { schema: { $ref: '#/components/schemas/VisitPhoto' } } }
         '400': { description: 입력 검증 실패 · 방문당 상한 초과 }
         '404': { description: 여행 없음/타 계정/방문 기록 없음 }
-        '409': { description: 같은 기기의 같은 자산이 이미 붙어 있음 }
     get:
       tags: [trips]
       summary: 방문 사진 메타 목록 + 개수

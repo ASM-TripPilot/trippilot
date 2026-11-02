@@ -10,6 +10,7 @@ import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AccountId
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
+import com.trippilot.core.error.ValidationFailed
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripDestination
@@ -18,21 +19,27 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.TimeUnit
 
 /**
  * 방문 사진 메타·메모 실 DB 검증(TRIP-542 · V2.33·V2.34).
  *
  * 여기서만 드러나는 것 — 인메모리 대역으로는 **원리적으로** 못 본다:
  * - **INV-U5-04 좌표 차단이 실제 동의 상태와 물려 있는지** — 대역은 불리언 하나라 배선이 끊겨도 통과한다
- * - **같은 자산 중복 UNIQUE** — 앱이 놓쳐도 DB 가 막는다
+ * - **같은 자산 재시도·경합이 멱등인지** — 유니크 제약과 행 잠금은 실 DB 에만 있다(TRIP-1721)
  * - **메모 PK 가 한 방문 한 개를 보장** — Map 대역은 언제나 덮어써 이 성질이 존재하지 않는다
  * - **CASCADE 파기** — 방문이 지워지면 사진·메모도 함께 간다(BR-U5-52). 앱 롤에 DELETE 가 있어야 성립한다
  * - **`created_at` 이 upsert 로 밀리지 않는지** — JPA save 였다면 갱신 시각으로 덮인다
@@ -47,6 +54,7 @@ class VisitRecordPersistenceIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var memos: com.trippilot.archive.domain.VisitMemoRepository
     @Autowired private lateinit var jdbc: JdbcTemplate
+    @Autowired private lateinit var transactions: PlatformTransactionManager
 
     private val now = Instant.parse("2026-08-11T01:00:00Z")
 
@@ -167,19 +175,98 @@ class VisitRecordPersistenceIT : AbstractPostgresIntegrationTest() {
         Int::class.java, accountId,
     )!!
 
+    /**
+     * 재시도는 멱등이다(TRIP-1721). 앱은 업로드 응답을 못 받으면 같은 자산으로 다시 POST 한다 —
+     * 예전에는 유니크 위반이 500 으로 올라가 "실패" 카드가 영영 안 지워졌다(운영 10/20~11/03 실측 1건).
+     */
     @Test
-    fun `같은 기기의 같은 자산은 한 방문에 한 번만 붙는다`() {
+    fun `같은 자산을 다시 붙이면 기존 사진을 돌려주고 행·수집 기록은 하나다`() {
         val accountId = newAccount()
         val tripId = newTrip(accountId)
         val visit = newVisit(tripId)
-        records.addPhoto(accountId, tripId, visit, photo("same-asset"))
+        locationConsents.update(AccountId(accountId), legalConsent = true, gpsRecordingOptIn = true)
+        val first = records.addPhoto(accountId, tripId, visit, photo("same-asset"))
 
-        shouldThrow<DataIntegrityViolationException> {
-            records.addPhoto(accountId, tripId, visit, photo("same-asset"))
-        }
+        val retried = records.addPhoto(accountId, tripId, visit, photo("same-asset"))
 
+        retried.visitPhotoMetaId shouldBe first.visitPhotoMetaId
+        photoRows(visit) shouldBe 1
+        collectionLogs(accountId) shouldBe 1
         // 다른 방문에는 같은 자산을 붙일 수 있다 — 제약은 방문 단위다.
-        records.addPhoto(accountId, tripId, newVisit(tripId), photo("same-asset"))
+        records.addPhoto(accountId, tripId, newVisit(tripId), photo("same-asset")).visitPhotoMetaId shouldNotBe first.visitPhotoMetaId
+    }
+
+    @Test
+    fun `상한까지 찬 방문에서도 이미 붙은 사진의 재시도는 거절되지 않는다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        val visit = newVisit(tripId)
+        val photos = (1..VisitRecordService.MAX_PHOTOS_PER_VISIT).map { records.addPhoto(accountId, tripId, visit, photo("a$it")) }
+
+        records.addPhoto(accountId, tripId, visit, photo("a1")).visitPhotoMetaId shouldBe photos.first().visitPhotoMetaId
+        // 대조군 — 새 사진은 여전히 상한에 걸린다.
+        shouldThrow<ValidationFailed> { records.addPhoto(accountId, tripId, visit, photo("new")) }
+    }
+
+    /**
+     * 경합 — 두 요청이 모두 "없다"를 보고 넣으면 예전에는 늦은 쪽이 500 이었다. 먼저 넣은 트랜잭션을 커밋 전에
+     * 붙잡아 두고 늦은 요청이 그 행 잠금을 **실제로 기다리게** 만든 뒤 풀어 준다(고정 sleep 아님).
+     */
+    @Test
+    fun `동시에 같은 자산을 붙이면 늦은 요청도 먼저 들어간 사진을 받는다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        val visit = newVisit(tripId)
+        locationConsents.update(AccountId(accountId), legalConsent = true, gpsRecordingOptIn = true)
+        val winnerId = UUID.randomUUID()
+        val pool = Executors.newFixedThreadPool(2)
+        val held = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        try {
+            val first = pool.submit {
+                TransactionTemplate(transactions).executeWithoutResult {
+                    jdbc.update(
+                        // 좌표가 있는 행이라야 "늦은 쪽이 남의 행으로 수집 기록을 남기는가"가 드러난다(없으면 기록 조건에서 빠진다).
+                        "INSERT INTO visit_photo_meta (visit_photo_meta_id, visit_check_id, local_asset_id, device_id, exif_lat, exif_lng, sort_order) " +
+                            "VALUES (?, ?, 'race', 'device-1', 33.45, 126.57, 0)",
+                        winnerId, visit,
+                    )
+                    held.countDown()
+                    release.await(15, TimeUnit.SECONDS)
+                }
+            }
+            held.await(10, TimeUnit.SECONDS) shouldBe true
+            val late = pool.submit<UUID> { records.addPhoto(accountId, tripId, visit, photo("race")).visitPhotoMetaId }
+            awaitLockWait(late)
+            release.countDown()
+            first.get(15, TimeUnit.SECONDS)
+
+            late.get(15, TimeUnit.SECONDS) shouldBe winnerId
+        } finally {
+            release.countDown()
+            pool.shutdownNow()
+        }
+        photoRows(visit) shouldBe 1
+        // 늦은 요청은 아무것도 넣지 않았다 — 먼저 들어간 행으로 수집 기록을 남기면 "모은 적 없는 위치"가 된다.
+        collectionLogs(accountId) shouldBe 0
+    }
+
+    private fun photoRows(visit: UUID): Int =
+        jdbc.queryForObject("SELECT count(*) FROM visit_photo_meta WHERE visit_check_id = ?", Int::class.java, visit)!!
+
+    /** 다른 트랜잭션의 행 잠금을 기다리는 쿼리가 생길 때까지 — 상대가 먼저 끝나면 기다리지 않은 것이다. */
+    private fun awaitLockWait(waiter: Future<*>) {
+        val deadline = System.nanoTime() + java.time.Duration.ofSeconds(10).toNanos()
+        while (System.nanoTime() < deadline && !waiter.isDone) {
+            val waiting = jdbc.queryForObject(
+                "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' " +
+                    "AND query ILIKE '%visit_photo_meta%'",
+                Int::class.java,
+            )!!
+            if (waiting > 0) return
+            Thread.sleep(20)
+        }
+        error("사진 행 잠금 대기가 생기지 않았습니다(상대 끝남=${waiter.isDone})")
     }
 
     @Test
