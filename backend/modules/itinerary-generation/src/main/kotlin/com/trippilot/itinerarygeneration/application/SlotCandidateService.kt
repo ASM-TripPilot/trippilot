@@ -256,7 +256,10 @@ class SlotCandidateService(
         }
         // 구 안 우선은 대체 후보를 **뒤에 덧붙여** 넘기고, 개수는 판정 뒤에 원래대로 자른다 — 먼저 자르면 시각에 맞던 후보가
         // 판정 전에 사라진다.
-        return keepFitting(placed, itinerary, date, index, accountId, tripId, request.slotKey, limit = chosen.candidates.size)
+        return keepFitting(
+            placed, itinerary, date, index, accountId, tripId, request.slotKey, limit = chosen.candidates.size,
+            more = { seen, n -> morePoolCandidates(request.concept, center, inItinerary, targetPoiId, placed.radiusMUsed, seen, n) },
+        )
     }
 
     /** closed-set 재확인 → 컨셉 필터·풀 채움. [answered] 는 즉답이거나 AI 응답이다. */
@@ -317,8 +320,15 @@ class SlotCandidateService(
      * 재는 구간 거리(외부 경로 API)도 그 날 것으로 준다.
      * - 판정이 예외면 그 후보와 **남은 후보 전부**를 판정 없이 남긴다 — 판정 못 함 ≠ 부적합. 상대 불통은 후보마다
      *   다르지 않아, 계속 부르면 후보 수만큼 읽기 상한(편집 대기 60s)을 다시 기다린다(즉답 갈래는 원래 AI 호출 0회다).
-     * - 전부 부적합이면 원래 목록 그대로 — 0건으로 접으면 "주변에 없음" 같은 거짓 사유가 되고 지금보다 나빠진다.
-     *   그 날의 다른 칸이 이미 수리 불가면(위반 표시로 저장된 칸) 후보와 무관하게 이 갈래로 온다.
+     * - 전부 부적합이면(TRIP-1724 — 운영 14일 대안 요청의 19%, 사유 81% 가 HC1 영업시간) 두 가지를 더 본다.
+     *   1. **대상 칸을 뺀 그 날**이 수리되는가 — 안 되면 대개 그 날의 다른 칸이 이미 깨져 있어(위반 표시로 저장된 칸) 어떤 후보도
+     *      맞지 않는다. 더 찾지 않고 원래 목록을 주되 그 사실로 로그를 남긴다(종전 로그는 이 경우도 "후보가 시각에 안 맞는다"로 읽혔다).
+     *      근사다 — 마감·이동(늦어지는 쪽) 위반에서만 성립하고, 뒤 칸이 영업 시작 전이라 깨진 날은 이동이 긴 후보가 오히려 맞출 수
+     *      있다(repair 는 앞으로만 민다). 그런 후보를 놓쳐도 결과는 종전과 같다(원래 목록).
+     *   2. 수리되면 [more] 로 풀에서 이어 판정한다. 끝내 없으면 원래 목록 그대로 — 0건으로 접으면 "주변에 없음" 같은 거짓
+     *      사유가 되고 지금보다 나빠진다.
+     *   1·2의 판정은 이미 쓴 판정이 [MAX_REPAIR_CALLS] 회 미만일 때만 더한다 — 요청당 판정은 max(처음 후보 판정 수, 상한) 이하다.
+     *   1번을 맨 앞이 아니라 여기서 하는 것은, 후보가 하나라도 맞는 요청(대다수)에 판정 1회를 더 얹지 않기 위해서다.
      * 후보는 이미 상한으로 작아 순차로 부른다.
      */
     private fun keepFitting(
@@ -331,6 +341,8 @@ class SlotCandidateService(
         slotKey: String,
         /** 남길 최대 개수 — 앞에서부터 이만큼 맞으면 나머지는 판정하지 않는다(판정 1회 = AI repair 1회). */
         limit: Int,
+        /** 이어 판정할 후보 — (이미 본 poiId, 최대 개수) → 거리순 후보. */
+        more: (Set<UUID>, Int) -> List<SlotCandidate>,
     ): SlotCandidatesOutput {
         if (out.candidates.isEmpty()) return out
         // 저장 경로(attemptRepair)와 같은 규칙 — 앵커는 첫 구간이 바뀐 날만 싣고, 장소 하나 교체에서 그런 날은 첫 칸 교체의 그날뿐이다.
@@ -342,6 +354,18 @@ class SlotCandidateService(
             itinerary.days.filter { it.date == date }
                 .map { d -> EditDay(d.date, d.slots.map { EditSlot(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }) },
         )
+        var calls = 0
+        /** 수리 불가가 아닌가 — null 은 판정 못 함(예외). */
+        fun repairable(day: EditItinerary): Boolean? = try {
+            calls++
+            !scheduleAgent.repair(day.toOutput(itinerary.solveMode, itinerary.isFallback, clock.instant()), emptyList(), context).unrepairable
+        } catch (e: Exception) {
+            log.warn("슬롯 후보 적합 판정(repair) 실패 — 판정 없이 둡니다. tripId={} slotKey={}", tripId, slotKey, e)
+            null
+        }
+        fun swappedWith(poiId: UUID) = current.copy(
+            days = current.days.map { d -> d.copy(slots = d.slots.mapIndexed { i, s -> if (i == index) s.copy(poiId = poiId) else s }) },
+        )
         var unjudged = false
         var misfit = 0
         val fit = mutableListOf<SlotCandidate>()
@@ -351,21 +375,43 @@ class SlotCandidateService(
                 fit += c
                 continue
             }
-            val swapped = current.copy(
-                days = current.days.map { d -> d.copy(slots = d.slots.mapIndexed { i, s -> if (i == index) s.copy(poiId = c.poiId) else s }) },
-            )
-            val fits = try {
-                !scheduleAgent.repair(swapped.toOutput(itinerary.solveMode, itinerary.isFallback, clock.instant()), emptyList(), context).unrepairable
-            } catch (e: Exception) {
-                log.warn("슬롯 후보 적합 판정(repair) 실패 — 이 후보부터 판정 없이 남깁니다. tripId={} slotKey={} poiId={}", tripId, slotKey, c.poiId, e)
-                unjudged = true
-                true
-            }
+            // 판정 못 함 ≠ 부적합 — 이 후보부터 판정 없이 남긴다(위 설명).
+            val fits = repairable(swappedWith(c.poiId)) ?: true.also { unjudged = true }
             if (fits) fit += c else misfit++
         }
         if (fit.isEmpty()) {
-            log.warn("슬롯 후보 {}건이 전부 그 슬롯 시각에 맞지 않습니다 — 원래 목록을 그대로 줍니다. tripId={} slotKey={}", out.candidates.size, tripId, slotKey)
-            return out.copy(candidates = out.candidates.take(limit))
+            val original = out.copy(candidates = out.candidates.take(limit))
+            val rest = current.copy(days = current.days.map { d -> d.copy(slots = d.slots.filterIndexed { i, _ -> i != index }) })
+            if (calls >= MAX_REPAIR_CALLS) {
+                log.warn("처음 후보 판정만으로 판정 상한({}회)에 닿아 더 찾지 않습니다 — 원래 목록을 그대로 줍니다. tripId={} slotKey={}", MAX_REPAIR_CALLS, tripId, slotKey)
+                return original
+            }
+            val restFits = if (rest.days.all { it.slots.isEmpty() }) true else repairable(rest)
+            if (restFits == false) {
+                log.warn("대상 칸을 빼도 그 날이 수리 불가입니다 — 더 찾지 않고 원래 목록을 그대로 줍니다. tripId={} slotKey={}", tripId, slotKey)
+                return original
+            }
+            if (restFits == null) return original
+            // 풀 조회 실패로 종전 답(원래 목록)까지 잃지 않는다 — 이어 찾기는 덤이다.
+            val extra = runCatching { more(out.candidates.map { it.poiId }.toSet(), MAX_REPAIR_CALLS - calls) }.getOrElse { e ->
+                log.warn("이어 판정할 풀 후보 조회 실패 — 원래 목록을 그대로 줍니다. tripId={} slotKey={}", tripId, slotKey, e)
+                emptyList()
+            }
+            for (c in extra) {
+                if (fit.size == limit) break
+                when (repairable(swappedWith(c.poiId))) {
+                    true -> fit += c
+                    false -> {}
+                    null -> break // 상대 불통 — 계속 부르면 후보 수만큼 기다린다
+                }
+            }
+            if (fit.isEmpty()) {
+                log.warn("슬롯 후보 {}건과 풀 후보 {}건이 전부 그 슬롯 시각에 맞지 않습니다 — 원래 목록을 그대로 줍니다. tripId={} slotKey={}", out.candidates.size, extra.size, tripId, slotKey)
+                return original
+            }
+            log.info("처음 후보 {}건이 전부 시각에 맞지 않아 풀에서 이어 판정해 {}건을 찾았습니다(판정 {}회). tripId={} slotKey={}", out.candidates.size, fit.size, calls, tripId, slotKey)
+            // 이어 찾은 것은 AI 순위가 아니라 거리순이다(INV-4).
+            return out.copy(candidates = fit, freshness = FreshnessMeta(clock.instant(), degraded = true))
         }
         if (misfit > 0) {
             log.info("슬롯 시각에 맞지 않는 후보 {}건을 뺐습니다. tripId={} slotKey={}", misfit, tripId, slotKey)
@@ -412,6 +458,38 @@ class SlotCandidateService(
                 else -> SlotCandidatesEmptyReason.ALL_IN_ITINERARY
             },
         )
+    }
+
+    /**
+     * 이어 판정할 풀 후보(TRIP-1724) — 같은 중심·같은 반경, 컨셉 카테고리(없으면 교체 대상과 같은 카테고리 — 점심 자리에
+     * 명소가 끼지 않게, [inDistrictFirst] 와 같은 판단). 교체 대상이 비활성이라 카테고리를 모르면 찾지 않는다.
+     * 순서는 **영업시간을 아는 곳 먼저, 그다음 거리순** — 상대 HC1 은 영업시간 정보가 없으면 통과시켜서, 거리순만 쓰면
+     * 처음 후보가 영업시간으로 다 떨어진 바로 그 자리에 "몰라서 통과한" 곳이 체계적으로 올라온다(DEV 영업시간 보유 46%).
+     * ponytail: 반경 안 풀 전체의 표면을 한 번에 읽는다 — 서울시청 10km 전 카테고리가 약 1.3k(18.6k 기준, anti-patterns.md:73),
+     * 카테고리 필터 뒤엔 그 이하다. 풀이 수천 건으로 커지면 거리순 앞쪽 N건으로 자른다.
+     */
+    private fun morePoolCandidates(
+        concept: String?,
+        center: RegionCenter,
+        inItinerary: List<UUID>,
+        targetPoiId: UUID,
+        radiusM: Int,
+        seen: Set<UUID>,
+        max: Int,
+    ): List<SlotCandidate> {
+        if (max <= 0) return emptyList()
+        val conceptSet = ConceptCategories.of(concept)
+        val categories = conceptSet ?: candidatePool.ground(listOf(targetPoiId)).firstOrNull()?.let { setOf(it.category) } ?: return emptyList()
+        val taken = seen + inItinerary + targetPoiId
+        val found = candidatePool
+            .resolve(Area.Radius(center.lat, center.lng, radiusM.toDouble()), categories)
+            .filter { it.poiId !in taken }
+        if (found.isEmpty()) return emptyList()
+        val surfaces = poiSurfaces.findSurfaces(found.map { it.poiId })
+        return found
+            .sortedWith(compareBy<GroundedPlace> { surfaces[it.poiId]?.openingHours.isNullOrBlank() }.thenBy { it.distanceM ?: Double.MAX_VALUE })
+            .take(max)
+            .map { it.toSlotCandidate(concept.takeIf { conceptSet != null }) }
     }
 
     /** 풀에서 바로 꺼낸 후보. */
@@ -559,6 +637,14 @@ class SlotCandidateService(
 
         /** 즉답 후보 상한 — 로컬 폴백([LocalSlotCandidateSource])과 같은 개수를 준다. */
         private const val MAX_STORED_CANDIDATES = 5
+
+        /**
+         * 적합 판정(repair) 총 상한 — 처음 후보 판정 + 대상 칸 뺀 날 판정 + 이어 판정. 운영 repair p50 23ms·p95 377ms 라
+         * 최악 15회도 수 초 안쪽이다. 처음 후보 판정은 이 상한으로 자르지 않는다(종전 동작) — 그것만으로 이미 이만큼이면
+         * 더 판정하지 않는다.
+         * ponytail: 고정 상한 — 풀이 그 시각에 맞는 곳을 거의 안 가진 지역이면 못 찾는다. 근본은 AI 에 슬롯 시각창을 싣는 것(TRIP-1724 B안).
+         */
+        private const val MAX_REPAIR_CALLS = 15
 
         /** 풀 채움의 넓힌 반경(컨셉 채움·0건 확장) — 로컬 폴백(h15 "반경 넓힘")과 같은 값. */
         private const val WIDENED_RADIUS_M = 12_000
