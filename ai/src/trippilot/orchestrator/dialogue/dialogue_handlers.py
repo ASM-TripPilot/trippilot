@@ -543,10 +543,13 @@ def resolve_day(text: str, snapshot: TurnSnapshot, today: date) -> date | None:
             return today + timedelta(days=offset)
     m = _MONTH_DAY.search(t)
     if m:
-        return _safe_date(int(m.group(1)) if m.group(1) else today.year, int(m.group(2)), int(m.group(3)))
+        if m.group(1):
+            year = int(m.group(1))
+            return _safe_date(year + 2000 if year < 100 else year, int(m.group(2)), int(m.group(3)))  # "26년" 은 서기 26년이 아니다
+        return _month_day(int(m.group(2)), int(m.group(3)), snapshot, today)
     m = _SLASH.fullmatch(t)
     if m:
-        return _safe_date(today.year, int(m.group(1)), int(m.group(2)))
+        return _month_day(int(m.group(1)), int(m.group(2)), snapshot, today)
     trip_days = _trip_days(snapshot)
     if trip_days is None:
         return None
@@ -570,6 +573,19 @@ def _safe_date(y: int, m: int, d: int) -> date | None:
         return date(y, m, d)
     except ValueError:
         return None
+
+
+def _month_day(month: int, day: int, snapshot: TurnSnapshot, today: date) -> date | None:
+    """연도 없는 'M월 D일'·'M/D' — 여행 기간 안의 그 날짜가 먼저다(편집 `day_area` 도 여행 날짜에서 고른다). 연말·연초에 걸친 여행에서
+    12-31 에 "1월 1일"을 물으면 지난 1월 1일(다른 요일의 영업시간)로 읽었다(리뷰 재현). 여행 밖이면 올해 — 넘겨짚지 않는다."""
+    trip_days = _trip_days(snapshot)
+    if trip_days is not None:
+        first, last = trip_days
+        for year in (first.year, last.year):
+            on = _safe_date(year, month, day)
+            if on is not None and first <= on <= last:
+                return on
+    return _safe_date(today.year, month, day)
 
 
 def _trip_days(snapshot: TurnSnapshot) -> tuple[date, date] | None:
