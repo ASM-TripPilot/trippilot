@@ -95,7 +95,10 @@ def keep_on_failure(run: Path):
     try:
         yield
     except BaseException as exc:
-        keep_run(run, f"{type(exc).__name__}: {exc}")
+        try:
+            keep_run(run, f"{type(exc).__name__}: {exc}")
+        except OSError as marker:   # 보존 상한 밖으로 이미 지워진 실행의 재시도 — 표시를 못 남겨도 원래 실패를 보인다
+            log.warning("실패 표시를 남기지 못했다(%s) — 원래 실패를 그대로 올린다", marker)
         raise
 
 

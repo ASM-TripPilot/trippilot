@@ -60,7 +60,7 @@ def checkout(dest: Path) -> Path:
     url = os.environ.get("BATCH_REPO_URL", "https://github.com/ASM-TripPilot/trippilot.git")
     shutil.rmtree(dest, ignore_errors=True)   # 같은 실행의 재시도가 반쯤 받은 복제를 남겼을 수 있다
     sh(["git", "clone", "--depth", "1", "--branch", "develop", "--single-branch", url, str(dest)], dest.parent)
-    sh(["uv", "sync", "--locked"], dest / "ai")
+    sh(["uv", "sync", "--locked"], dest / "ai", env=plain_env())
     # 복제 때 develop 공유본 — 게시 재시도가 "그사이 develop 이 다른 실행으로 바뀌었는가"를 이것과 비교한다.
     (dest.parent / "develop.base").write_text(blob_at(dest, f"HEAD:{SHARED}"), encoding="utf-8")
     return dest
@@ -106,9 +106,13 @@ def restore(repo: Path, name: str) -> bool:
 
 def collect(repo: Path, script: str, *args: str, env: dict[str, str] | None = None) -> None:
     """수집 스크립트를 Actions 와 같은 자리(ai/)·같은 인자로 부른다. 키·상한은 파드 환경변수에서 온다(Helm values)."""
-    # 토큰·git 헤더는 넘기지 않는다 — 수집기는 GitHub 을 부르지 않는다(Actions 판도 GH_TOKEN 을 이 스텝에 주지 않는다).
-    plain = {k: v for k, v in os.environ.items() if k != "GH_TOKEN"}
-    sh(["uv", "run", "python", f"scripts/collect/{script}", *args], repo / "ai", env=plain | (env or {}))
+    sh(["uv", "run", "python", f"scripts/collect/{script}", *args], repo / "ai", env=plain_env() | (env or {}))
+
+
+def plain_env() -> dict[str, str]:
+    """uv(의존성 설치·수집기)에 주는 환경 — 토큰·git 헤더를 뺀다. 둘 다 GitHub 을 부르지 않는다(Actions 판도 GH_TOKEN 을
+    이 스텝들에 주지 않는다). 의존성 설치는 서드파티 패키지 빌드 스크립트를 돌린다 — 쓰기 토큰을 볼 이유가 없다."""
+    return {k: v for k, v in os.environ.items() if k != "GH_TOKEN"}
 
 
 def require_key(name: str) -> None:
@@ -193,6 +197,8 @@ def publish_pois(repo: Path, numbers: dict, wait_s: float = 5) -> str:
     if state != "MERGED":
         raise RuntimeError(f"공유본 PR #{pr} 이 머지되지 않았다(상태 {state or '?'}) — 상태를 영속하지 않는다")
     # 봇 머지 push 로는 backend-ci 런이 안 생긴다 — 공유본을 읽는 실문서 계약 IT 를 직접 띄운다.
+    # 이것은 GITHUB_TOKEN 에만 해당한다(그 토큰의 push 는 런을 만들지 않는다). 여기 GH_TOKEN 이 PAT·GitHub App 토큰이면 머지
+    # push 가 backend-ci 의 push 필터로 저절로 돌아 이 디스패치와 **중복**된다 — 2단계에서 토큰 종류를 정할 때 이 줄을 정리한다.
     if gh(["workflow", "run", "backend-ci.yml", "--ref", "develop"], repo, check=False).returncode != 0:
         log.warning("backend-ci 디스패치 실패 — Actions 에서 backend-ci 를 develop 으로 수동 실행할 것")
     return pr

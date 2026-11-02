@@ -42,7 +42,7 @@ FAKE_UV = textwrap.dedent("""\
     import json, os, sys
     args = sys.argv[1:]
     with open(os.environ["FAKE_LOG"], "a", encoding="utf-8") as f:
-        f.write("uv " + " ".join(args) + "\\n")
+        f.write("uv " + " ".join(args) + (" [GH_TOKEN]" if "GH_TOKEN" in os.environ else "") + "\\n")
     if args[0] == "sync":
         sys.exit(0)
     name = os.path.basename(args[2])
@@ -110,6 +110,17 @@ class Origin:
 
     def has(self, ref: str) -> bool:
         return subprocess.run(["git", "rev-parse", "--verify", "-q", ref], cwd=self.bare, capture_output=True).returncode == 0
+
+
+def drop_from_state(origin: "Origin", root: Path, name: str) -> None:
+    """collect-state 를 `name` 이 **한 번도 없던** 이력으로 바꾼다(남의 파일은 그대로) — 그 파일의 첫 영속 경로."""
+    work = root / "drop"
+    git(root, "clone", "-q", "-b", "collect-state", origin.url, str(work))
+    git(work, "checkout", "-q", "--orphan", "fresh")
+    git(work, "rm", "-q", "--cached", name)
+    (work / name).unlink()
+    git(work, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "fresh")
+    git(work, "push", "-q", "-f", "origin", "fresh:collect-state")
 
 
 class Sandbox(unittest.TestCase):
@@ -236,6 +247,8 @@ class RestorePersistTest(Sandbox):
         os.environ["GH_TOKEN"] = "ghs_비밀"
         repo = self.clone()
         self.assertNotIn("ghs_", (repo / ".git/config").read_text())
+        self.assertIn("uv sync --locked", self.calls())
+        self.assertNotIn("[GH_TOKEN]", self.calls())   # 의존성 설치(서드파티 빌드 스크립트)는 쓰기 토큰을 못 본다
         self.assertIn("AUTHORIZATION: basic", live.git_env()["GIT_CONFIG_VALUE_0"])
 
     def test_게시를_다시_돌려도_머지_확인_전에는_unchanged_로_넘어가지_않는다_1475(self):
@@ -291,6 +304,13 @@ class RestorePersistTest(Sandbox):
             left = sorted(d.name for d in (self.root / "out/runs/poi_collect_live").iterdir())
         self.assertEqual(left, sorted(["now", "running", *(r.name for r in runs[-pipeline.KEPT_RUNS:])]))
         self.assertFalse(orphan.exists())
+
+    def test_표시를_못_남겨도_원래_실패가_보인다(self):
+        # 보존 상한 밖으로 이미 지워진 실행 폴더에서 재시도가 실패한 경우 — FileNotFoundError 가 원래 예외를 덮으면 안 된다.
+        gone = self.root / "지워진_실행"
+        with self.assertRaisesRegex(RuntimeError, "원래 실패"), self.assertLogs(pipeline.log, "WARNING"):
+            with pipeline.keep_on_failure(gone):
+                raise RuntimeError("원래 실패")
 
     def test_축소_가드(self):
         self.assertIsNone(live.shrink_failure({"before": 10, "after": 8, "dropped": 2}))
@@ -405,6 +425,20 @@ class LiveDagTest(Sandbox):
         self.assertEqual(len(kept), 1)   # 검증에 실패한 실행은 원인 보라고 남긴다
         self.assertIn("시도를 정할 수 없는 주소 1건", kept[0].read_text(encoding="utf-8"))
 
+    def test_POI_첫_영속_브랜치가_없으면_만든다(self):
+        origin = self.origin(state_branch=False)
+        run = self.live_poi()
+        self.assertEqual(run.state, "success")
+        self.assertEqual(json.loads(origin.show("collect-state:collect_state.json")), {"cursor": "new"})
+
+    def test_POI_첫_영속_파일이_없던_브랜치면_남의_파일을_두고_더한다(self):
+        origin = self.origin()
+        drop_from_state(origin, self.root, "collect_state.json")
+        run = self.live_poi()
+        self.assertEqual(run.state, "success")
+        self.assertEqual(json.loads(origin.show("collect-state:collect_state.json")), {"cursor": "new"})
+        self.assertEqual(origin.show("collect-state:rehearsal_log.jsonl"), "{}")
+
     def test_POI_실_모드에_키가_없으면_실패한다(self):
         self.origin()
         os.environ["BATCH_LIVE"] = "1"
@@ -432,6 +466,20 @@ class LiveDagTest(Sandbox):
         self.assertEqual(set(self.states(run).values()), {"success"})
         self.assertEqual(len(json.loads(origin.show("collect-state:collected_events.json"))["events"]), 40)
         self.assertEqual(origin.show("collect-state:rehearsal_log.jsonl"), "{}")
+
+    def test_행사_첫_영속_브랜치가_없으면_만든다(self):
+        origin = self.origin(state_branch=False)
+        run = self.run_events(self.events(40))
+        self.assertEqual((run.state, self.states(run)["publish"]), ("success", "success"))
+        self.assertEqual(len(json.loads(origin.show("collect-state:collected_events.json"))["events"]), 40)
+
+    def test_행사_첫_영속_파일이_없던_브랜치면_남의_파일을_두고_더한다(self):
+        origin = self.origin()
+        drop_from_state(origin, self.root, "collected_events.json")
+        run = self.run_events(self.events(40))
+        self.assertEqual((run.state, self.states(run)["publish"]), ("success", "success"))
+        self.assertEqual(len(json.loads(origin.show("collect-state:collected_events.json"))["events"]), 40)
+        self.assertEqual(origin.show("collect-state:collect_state.json"), '{"cursor": "old"}')
 
     def test_행사_신선도가_낡아도_저장소는_영속하고_경보만_빨개진다(self):
         # 폴백이 이어져 coverage 가 안 찍혀도 포인터는 전진해야 한다 — 영속을 막으면 원인이 풀려도 같은 낡은 저장소로 돌아간다.

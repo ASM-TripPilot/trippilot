@@ -88,7 +88,7 @@ def event_collect_live():
     def publish(repo: str) -> str:
         if not live.live():
             raise AirflowSkipException("그림자 모드 — 영속하지 않는다")
-        with pipeline.keep_on_failure(Path(repo).parent):   # 실패하면 남긴다 — publish 만 다시 돌리면 같은 저장소를 영속한다
+        with pipeline.keep_on_failure(Path(repo).parent):   # 실패하면 남긴다 — 하류와 함께 clear 해 다시 돌리면 같은 저장소를 영속한다
             return live.persist(Path(repo), STORE, f"chore(ai): 행사 저장소 갱신 — airflow {DAG_ID} (TRIP-421)")
 
     @task(trigger_rule="none_failed")   # 그림자(publish 건너뜀)에서도 돈다. 영속이 실패하면 돌 이유가 없다

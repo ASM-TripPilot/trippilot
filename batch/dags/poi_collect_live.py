@@ -86,7 +86,7 @@ def poi_collect_live():
     def publish(repo: str) -> str:
         if not live.live():
             raise AirflowSkipException("그림자 모드 — 게시·커서 저장을 하지 않는다")
-        # 실패하면 복제본을 남긴다 — 이 태스크만 지우고 다시 돌리면(clear) 그 복제본에서 push·머지 확인을 다시 한다.
+        # 실패하면 복제본을 남긴다 — 이 태스크를 하류와 함께 clear 해 다시 돌리면 그 복제본에서 push·머지 확인을 다시 한다.
         with pipeline.keep_on_failure(Path(repo).parent):
             return live.publish_pois(Path(repo), json.loads((Path(repo).parent / "merge.json").read_text(encoding="utf-8")))
 
