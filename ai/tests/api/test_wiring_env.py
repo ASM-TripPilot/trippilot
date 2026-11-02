@@ -315,9 +315,36 @@ def test_env_anthropic_provider_assembles(monkeypatch):
     assert calls == {"api_key": "k-test", "max_retries": 0}  # 재시도 무익 정책 (TRIP-381)
 
 
+def test_env_anthropic_keys_list_builds_one_client_per_key(monkeypatch):
+    """ANTHROPIC_API_KEYS(쉼표) — 키마다 client 하나, 값은 그대로 SDK 로 간다(찍지 않는다)."""
+    import sys
+    import types
+
+    keys: list[str] = []
+
+    class _FakeAnthropicClient:
+        def __init__(self, **kwargs):
+            keys.append(kwargs["api_key"])
+
+    fake_sdk = types.ModuleType("anthropic")
+    fake_sdk.Anthropic = _FakeAnthropicClient
+    fake_sdk.DefaultHttpxClient = lambda **kwargs: kwargs["transport"]
+    monkeypatch.setitem(sys.modules, "anthropic", fake_sdk)
+    monkeypatch.setenv("TRIPPILOT_LLM_PROVIDER", "anthropic")
+    monkeypatch.setenv("ANTHROPIC_API_KEYS", "k-a, k-b ,k-c,")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "k-old")  # KEYS 가 이긴다
+
+    import main as main_mod
+    llm, _ = main_mod._anthropic_llm_and_model()
+
+    assert keys == ["k-a", "k-b", "k-c"]
+    assert len(llm._clients) == 3
+
+
 def test_env_anthropic_without_key_fails_fast(monkeypatch):
     monkeypatch.setenv("TRIPPILOT_LLM_PROVIDER", "anthropic")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEYS", raising=False)
 
     import main as main_mod
     import pytest as _pytest
