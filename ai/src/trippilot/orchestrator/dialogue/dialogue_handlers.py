@@ -952,6 +952,10 @@ def _known_end(ctx: TurnContext, said: str) -> _End | None:
     # 표 이름 뒤에 다른 낱말이 붙은 것(세종문화회관·인천공항·서울대)은 지역이 아니다 — 등록 장소 찾기로 넘긴다
     named = " ".join(name for _, name in region_mentions(normalize(said)))
     hit = region_center(named) if named else None
+    # 시·군 이름의 역(서울역·부산역·강릉역)은 도심 한 점이 아니라 따로 있는 곳이다 — 서울 중심으로 재 "서울역→경복궁"이 약 1.2km(실제 직선
+    # 2.8km, 2026-11-02 개발). 반경 4km 이상이 시·군 단위다. 동네 역("강남역"·"홍대입구역")은 그 동네 중심 그대로
+    if hit and hit[2] >= 4.0 and f"{hit[0]}역" in "".join(said.split()):
+        return None
     return _End(hit[0], None, hit[1]) if hit else None
 
 
